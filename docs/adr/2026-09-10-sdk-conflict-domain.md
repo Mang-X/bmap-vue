@@ -34,6 +34,15 @@
 9. **所有 JSAPI 4.0 Provider 共享同一个进程级 `BMap` 域。** 迁移期 legacy Provider 使用独立的 `BMapGL` 域，因为两者对应两个不同的全局对象；M3A.3（#26）删除 legacy 实现后，`BMapGL` 域随之消失。
 10. **v4 Provider 返回结构化 `LoadedJsapiV4`**（engine / version / namespace / load metadata），不再返回裸 `unknown`；复用的结果形状由此统一，跨 Provider 复用同一任务才成立。
 11. **指纹只剔除「由 Loader 管理」的回调参数。** JSONP 模式下该参数会被本次回调名覆盖，属实现细节；`load` 模式下 `callback` 只是入口 URL 的普通 query，必须参与身份判定，否则两个租户入口会被错误合并。
+
+> **注（2026-09-13 起，`cancellable` 模型；取代上面第 2 / 4 / 7 条里的「取消 ⇒ 释放」表述）**
+>
+> 「最后一个消费者取消 ⇒ 同步释放条目与占用」只对**可取消**的底层任务成立。官方
+> `@baidumap/jsapi-loader` 没有公开取消接口，因此 `SdkRegistryLoadRequest.cancellable: false`
+> 的任务在最后一个消费者离开时**只结算消费者**，保留 entry、占用与在飞任务：同指纹后来者复用原
+> 任务，另一份指纹在**启动前**就被冲突拒绝，直到任务真正成功 / 失败。**失败**仍然一律释放条目与
+> 占用（第 7 条的后半句不变）。取值、理由与配套取舍见
+> [ADR 2026-09-13 默认在线路径委托官方 Loader](./2026-09-13-default-online-loader-cutover.md) 决策 5。
 12. **AK 脱敏覆盖 URL 参数路径**：入口 URL 自带的 `ak` 以 URL 参数为准脱敏（而不是只替换 `options.ak` 这个已知串），`akRef` 反映真正生效的那个 AK。
 13. **`./core` 子路径的 Loader 契约在 3.0.0-beta 内直接变更，不保留兼容层**：`SdkLoader` 由 `(options, signal)` 变为请求级 `(signal)`、`SdkRegistry` 构造签名改为 options 对象、`getProcessSdkRegistry(domain, options)` 取代 `(namespace, loader, fingerprintFn)`、移除 `SdkRegistry.global` getter 与未被读取的 entry 字段。
 14. **engine 标识的可见范围沿用既有分层**：`./advanced` 已导出 `BMapEngine` / `BMapClient`，因此 `./core` 的 Loader 边界可以导出 `JsapiV4Engine`；**根入口 `src/index.ts` 仍然不导出任何 engine 枚举**，与 ADR 2026-09-10-jsapi-v4-only-baseline 的「面向使用者的公共 API 不得泄漏 engine 枚举」一致。

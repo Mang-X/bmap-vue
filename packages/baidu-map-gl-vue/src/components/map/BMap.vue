@@ -27,10 +27,10 @@ import { logger } from "../../core/logger";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
 import {
-  baiduCdnProvider,
   existingGlobalProvider,
   hasExistingGlobalSdk,
 } from "../../core/loader/Provider";
+import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
 import type { AnyBMapProviderLike, BMapClient, CreateBMapClientOptions } from "../../client/types";
 import { withMigrationDriver } from "../../client/migration";
 import { normalizeMapMouseEvent } from "../../driver/normalize";
@@ -108,7 +108,9 @@ if (props.client) {
   clientContext = createClientContext({ definition: props.definition });
   ownClientContext = true;
 } else if (props.provider || props.ak || props.apiUrl) {
-  const provider = (props.provider as BMapClientContext extends never ? never : AnyBMapProviderLike) ?? appConfig?.provider ?? baiduCdnProvider();
+  // R25-B（issue #71）：无显式 Provider 时默认落到 v4 家族（内部委托官方 `@baidumap/jsapi-loader`）。
+  // `props.apiUrl` 是「自定义入口」，默认路径无法表达，会在加载前显式报错并指向 customScriptV4Provider()。
+  const provider = (props.provider as BMapClientContext extends never ? never : AnyBMapProviderLike) ?? appConfig?.provider ?? baiduJsapiV4Provider();
   const loadOptions: BMapLoadOptions = {
     ak: props.ak ?? appConfig?.defaults?.ak,
     apiUrl: props.apiUrl ?? appConfig?.defaults?.apiUrl,

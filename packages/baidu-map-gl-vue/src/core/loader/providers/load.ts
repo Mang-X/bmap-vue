@@ -36,8 +36,12 @@ export interface LoadJsapiV4ScriptInput {
  * 与进入加载前的快照做身份比较：相同即宿主原有对象（或仍是上一次的残留），不动；不同说明本次
  * 加载期间出现了新的全局对象，而它没能通过契约——登记它，让下一次重试不被这份残缺对象挡住。
  * 只登记、不删除。
+ *
+ * 两个 script 型入口共用它：自研 `ScriptLoader` 路径（CustomScript）与官方 Loader 路径（默认）。
+ * 后者同样可能「脚本执行了但命名空间不可用」，若只登记不区分，这份残缺全局会被
+ * `reuseExistingJsapiV4()` 当成宿主全局而永久挡住重试。
  */
-function registerLoadResidue(before: unknown): void {
+export function registerJsapiV4LoadResidue(before: unknown): void {
   const current = readJsapiV4Global();
   if (current !== undefined && current !== before) markRejectedJsapiV4Global(current);
 }
@@ -52,7 +56,7 @@ export async function loadJsapiV4Script(
   try {
     await input.loader.load(input.loadOptions, input.signal);
   } catch (error) {
-    registerLoadResidue(before);
+    registerJsapiV4LoadResidue(before);
     throw error;
   }
 
@@ -61,7 +65,7 @@ export async function loadJsapiV4Script(
   } catch (error) {
     // 成功已提交、但命名空间不可用：这份成功缓存已过期，只失效它，不动 inFlight 登记。
     input.loader.invalidateCompleted(key);
-    registerLoadResidue(before);
+    registerJsapiV4LoadResidue(before);
     throw error;
   }
 }

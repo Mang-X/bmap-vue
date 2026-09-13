@@ -151,11 +151,35 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | UI Kit 的主题变量与多地图共享 | **未验证** | 主题写入页面级变量，多图场景的影响未测 |
 | `RoutePlan` 的 `navclick`（含微信 `wx-open-launch-app` 路径） | **未验证** | 该路径会按需注入 `res.wx.qq.com/open/js/jweixin-1.6.0.js` 并挂 `document` 监听，只在点击时发生；未纳入本轮探针 |
 
+## 默认路径的配置面（R25-B / issue #71）
+
+默认在线路径（`baiduJsapiV4Provider()`）**逐项**按上表处置 `BMapLoadOptions`：
+
+| 配置 | 处置 | 依据 |
+| --- | --- | --- |
+| `ak` / `version` / `timeout` | 映射给官方 `load()`；`version` **只接受 `'4.0'`**（官方版本表里唯一的 v4 值），`timeout: 0` 原样传递 | 契约表「load(options) 参数」 |
+| `serviceHost` | 映射给官方 `load()`（代理模式，与 `ak` 二选一）；末尾斜杠按官方行为规范化（官方会 warn 后补 `/`），故 `/svc` 与 `/svc/` 是同一份配置。**参与指纹但只出现哈希**（`host:${hash(...)}`）——指纹会进错误消息与 `onConflict`，代理地址可能含内部域名 / userinfo / token；入口 metadata 记 `<serviceHost>/api?v=4.0` 且**不带 `ak`**，`akRef` 记 `none`。代理入口的 userinfo 在三处出口都被抹掉（`message` / `cause` / 指纹按哈希） | 同上；官方 React 封装 `react-bmap` 的 `<BMapProvider serviceHost>` 与 `stableHash` 的 load key 也是这个口径 |
+| `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引「外部预加载 + `existingGlobalV4Provider()`」 | 上游没有入口（ADR 决策 7） |
+| `apiUrl` / `callbackParam` / `language` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引 `customScriptV4Provider()` | 入口 URL / 回调名 / 语言都不由本库决定 |
+
+清单的单一事实源是 `src/core/loader/providers/official.ts` 的 `OFFICIAL_LOADER_UNSUPPORTED_KEYS`：
+单元测试（`official.test.ts`，逐项断言 code 与指引）直接引用它，行为测试
+（`v3-official-loader-default.test.ts`）按同一列表构造用例，静态门禁
+（`v3-default-loader-boundary.test.ts`）锁住默认 Provider 里不再出现自建 transport 的痕迹。
+**改这张表就必须同步改代码**（反之亦然）。
+
+默认路径**不**自己判定「是否已有全局」「是否要插 script」——那是官方 Loader 的状态机（ADR 决策 2）；
+本库只在官方结算后校验命名空间可用性、组装 `LoadedJsapiV4` 并脱敏 metadata。
+
+**「已有全局」这一支的版本口径**：真实 4.0 的 `BMap.version` 是构建标记 `"gl"`（上表实测），
+因此版本探测只接受**形如版本号**的取值（`4.0` / `4.0.4`）；`"gl"` 一律按「探测不到」处理并标
+`versionSource: "declared"`。否则「宿主预加载 / 同页复用」会被误判成「不是 JSAPI 4.0」。
+
 ## 与本轮拆分任务的对应
 
 | 任务 | 本页提供的输入 |
 | --- | --- |
-| #71 / R25-B（默认 Provider 委托官方 Loader） | Loader 契约表全部；单例 / 冲突 / 重试 / reset / script 记账的**实测**行为；`nonce` / SRI / timeout 的处置口径 |
+| #71 / R25-B（默认 Provider 委托官方 Loader） | Loader 契约表全部；单例 / 冲突 / 重试 / reset / script 记账的**实测**行为；`nonce` / SRI / timeout 的处置口径；默认路径配置面（上一节） |
 | #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」。落地决策见 ADR [2026-09-13 删除 SDK 私有面嗅探](../../adr/2026-09-13-private-sdk-surface-removal.md) |
 | #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径。**已落地**：见下节 |
 | #74 / R25-E（同一候选提交重新验收） | 「已验证 vs 未验证」列表；探针命令与退出码语义；四 widget 结论 |

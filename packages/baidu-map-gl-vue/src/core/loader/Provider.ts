@@ -30,7 +30,7 @@ import {
 } from "./url";
 import { loadedLegacySdk, type LoadedLegacySdk } from "./loaded";
 import { ScriptLoader, scriptOptions } from "./ScriptLoader";
-import { SdkRegistry, getProcessSdkRegistry } from "./SdkRegistry";
+import { SdkRegistry, createConsumerAbortError, getProcessSdkRegistry } from "./SdkRegistry";
 
 export interface BMapProvider {
   readonly id: string;
@@ -86,6 +86,11 @@ export class BaiduCdnProvider implements BMapProvider {
     options: BMapLoadOptions,
     signal?: AbortSignal,
   ): Promise<LoadedLegacySdk> {
+    // 取消优先于同步复用：registry 在 microtask 里调用 loader，若这里不看聚合 signal，
+    // 「调用方 load 后立刻 abort」会让被取消的任务仍然成功并抢走域记账（契约见
+    // `SdkRegistryLoadRequest.cancellable`）。
+    if (signal?.aborted) throw createConsumerAbortError();
+
     const present = isClient() ? readGlobalSdk() : undefined;
     if (present) return loadedLegacySdk(present);
 
@@ -164,6 +169,9 @@ export class CustomScriptProvider implements BMapProvider {
     options: BMapLoadOptions,
     signal?: AbortSignal,
   ): Promise<LoadedLegacySdk> {
+    // 同上：同步复用已有全局之前先尊重聚合 signal。
+    if (signal?.aborted) throw createConsumerAbortError();
+
     const present = isClient() ? readGlobalSdk() : undefined;
     if (present) return loadedLegacySdk(present);
 

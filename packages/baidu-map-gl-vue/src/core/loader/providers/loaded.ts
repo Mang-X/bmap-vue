@@ -5,7 +5,13 @@
  * load metadata」的形状、脱敏规则与来源标注完全一致，不会随 Provider 漂移。
  */
 import { redactAk } from "../../logger";
-import { normalizeApiUrl, resolveBrowserUrl, type BMapLoadOptions } from "../url";
+import {
+  maskUserinfo,
+  normalizeApiUrl,
+  readUrlUserinfo,
+  resolveBrowserUrl,
+  type BMapLoadOptions,
+} from "../url";
 import { JSAPI_V4_DOMAIN } from "./namespace";
 import type {
   JsapiV4LoadMetadata,
@@ -34,19 +40,21 @@ function readAkParam(url: string): string | undefined {
 }
 
 /**
- * URL 脱敏，两条路径都要走：
+ * URL 脱敏，三条路径都要走：
  *
+ * 0. **抹掉 userinfo**——代理 / 自托管入口可能带 HTTP 认证凭据（与 AK 同类）；
  * 1. **按 URL 参数**脱敏真实的 `ak`——入口自带 AK 时它以 URL 为准，此时 `options.ak`
  *    可能完全是另一个值，只做「替换已知 AK 字符串」会把它整段漏出去；
  * 2. 再兜底替换已知 AK 字符串（可能出现在路径、其它参数或无法解析的 URL 中）。
  */
 function redactUrl(url: string, ak?: string): string {
   if (!url) return url;
-  let redacted = url;
-  const embedded = readAkParam(url);
+  const withoutUserinfo = maskUserinfo(url, readUrlUserinfo(url));
+  let redacted = withoutUserinfo;
+  const embedded = readAkParam(withoutUserinfo);
   if (embedded) {
     try {
-      const parsed = resolveBrowserUrl(url);
+      const parsed = resolveBrowserUrl(withoutUserinfo);
       parsed.searchParams.set("ak", akRef(embedded));
       redacted = parsed.toString();
     } catch {

@@ -35,7 +35,12 @@ export class ExistingGlobalV4Provider implements JsapiV4Provider {
   load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4> {
     const fingerprint = fingerprintConfig(options);
     return this.domain.load<LoadedJsapiV4>(
-      { fingerprint, loader: () => this.performLoad(options, fingerprint) },
+      {
+        fingerprint,
+        // 这里的「加载」只是同步采纳页面已有的全局，没有任何可取消的底层工作 ⇒ 按
+        // `cancellable: true` 的约定执行：聚合 signal abort 之后不得再成功结算。
+        loader: (requestSignal) => this.performLoad(options, fingerprint, requestSignal),
+      },
       signal,
     );
   }
@@ -43,9 +48,10 @@ export class ExistingGlobalV4Provider implements JsapiV4Provider {
   private async performLoad(
     options: BMapLoadOptions,
     fingerprint: string,
+    signal?: AbortSignal,
   ): Promise<LoadedJsapiV4> {
     assertSupportedJsapiV4Version(options, this.id);
-    const reused = reuseExistingJsapiV4({ providerId: this.id, options, fingerprint });
+    const reused = reuseExistingJsapiV4({ providerId: this.id, options, fingerprint, signal });
     if (reused) return reused;
     throw new BMapError(
       "BMAP_SDK_LOAD_FAILED",

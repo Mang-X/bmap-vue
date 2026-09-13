@@ -11,6 +11,7 @@
 import type { ScriptLoader } from "../ScriptLoader";
 import type { SdkRegistry } from "../SdkRegistry";
 import type { BMapLoadOptions } from "../url";
+import type { OfficialJsapiLoader } from "./official";
 
 /** v4 Provider 家族标识（写入 load metadata，便于排障定位）。 */
 export type JsapiV4ProviderId = "baidu-jsapi-v4" | "existing-global-v4" | "custom-script-v4";
@@ -74,10 +75,29 @@ export interface JsapiV4Provider {
 /**
  * v4 Provider 的公共注入点（测试 / 高级用法）。
  * 三个 Provider 统一接受这一形状，避免各自一套构造参数。
+ *
+ * 注意：`loader` 是**自研 `ScriptLoader`**，只有还走自研 transport 的 CustomScript 用得上；
+ * 默认在线路径（官方 Loader）的注入点见 `BaiduJsapiV4ProviderOptions`。
  */
 export interface JsapiV4ProviderOptions {
   /** 底层 script 加载器；缺省每个 Provider 自建一个。 */
   loader?: ScriptLoader;
+  /** 共享的冲突域；缺省用进程级 `BMap` 域。 */
+  registry?: SdkRegistry;
+}
+
+/**
+ * 默认在线路径（`baiduJsapiV4Provider`）的注入点。
+ *
+ * 与 `JsapiV4ProviderOptions` 分开是刻意的：默认路径的加载实现**不是** `ScriptLoader`，
+ * 而是官方 `@baidumap/jsapi-loader`；把两者塞进同一个字段会得到一个「类型不匹配但看起来
+ * 能传」的入口。这里只接受官方的 `load` 注入点（见 `./official`）。
+ *
+ * `reset()` 不进注入点：它是进程级破坏性操作，组件生命周期里任何一处都不许调用（ADR 决策 6）。
+ */
+export interface BaiduJsapiV4ProviderOptions {
+  /** 官方 Loader 的 `load` 注入点（测试 / 高级用法）；缺省用官方具名导出。 */
+  loader?: OfficialJsapiLoader;
   /** 共享的冲突域；缺省用进程级 `BMap` 域。 */
   registry?: SdkRegistry;
 }

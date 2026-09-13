@@ -28,6 +28,9 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: true,
     rollupOptions: {
+      // 只 external `vue`：官方 `@baidumap/jsapi-loader` 没有 IIFE/global 产物，无法映射成
+      // 一个全局变量，因此 CDN 产物把它**内联**进来（ESM 产物则保持 external，见
+      // `vite.config.build.ts`）。CDN 场景下页面里只有本库一份副本，不存在两套加载状态机。
       external: ['vue'],
       output: {
         globals: {

@@ -1,6 +1,7 @@
 /**
  * Playground mock provider:在无外网/AK 环境用 fake BMapGL 跑通 v3 组件。
- * 生产环境请用 baiduCdnProvider({ ak })。
+ * 生产环境请用 `createBMapPlugin({ ak })`（默认走官方 `@baidumap/jsapi-loader` 加载 v4），
+ * 或显式传入 `baiduJsapiV4Provider()`；fake v4 模式属 M3A3-04。
  */
 import { createFakeBMapGl } from '@test-utils'
 

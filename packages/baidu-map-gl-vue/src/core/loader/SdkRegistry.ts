@@ -8,12 +8,15 @@
  *   就被拒绝，避免首次并发请求不同 AK / 版本时各自插入一个 script；
  * - 同一 fingerprint 只启动一次底层任务，但**每个消费者独立订阅**：`signal` 一一对应，
  *   取消某个消费者不影响其它消费者，只有最后一个消费者离开时才取消底层任务；
- * - 最后一个消费者取消时**同步**释放条目与配置占用（不等底层 Promise 异步收尾），
- *   因此「abort 之后同一同步回合内重试」既不会命中已取消的任务，也不会被过期占用挡住；
- *   旧任务的异步收尾带代次所有权检查，不会清掉新任务的状态；
+ * - 最后一个消费者取消时，按请求声明的 `cancellable` 分流：可取消的任务**同步**释放条目与
+ *   配置占用（不等底层 Promise 异步收尾），因此「abort 之后同一同步回合内重试」既不会命中
+ *   已取消的任务，也不会被过期占用挡住（旧任务的异步收尾带所有权检查，不会清掉新任务的状态）；
+ *   **不可取消**的任务（官方 Loader）保留条目 + 占用 + 任务，只结算消费者——同指纹后来者复用
+ *   原任务，另一份指纹继续冲突，直到任务真正成功 / 失败；
  * - 加载只接受**请求级 loader**，registry 不再持有具体加载实现，也不再读取
  *   `window` / `document`，因此 SSR 导入安全、可脱离 DOM 单测；
- * - 失败 / 取消后条目与占用一并释放，允许下一次重试，不残留半成品状态。
+ * - **失败**后条目与占用一并释放，允许下一次重试，不残留半成品状态；**取消**则按请求声明的
+ *   `cancellable` 分流（可取消 → 同步释放；不可取消 → 保留条目 / 占用 / 任务），见上一条。
  *
  * 域划分：所有 JSAPI 4.0 Provider 共用 `BMap` 域（见 `providers/namespace.ts`）；
  * 迁移期 legacy Provider 使用独立的 `BMapGL` 域，由 M3A.3 的默认切换一并删除。
@@ -34,6 +37,20 @@ export interface SdkRegistryLoadRequest<T = unknown> {
   fingerprint: string;
   /** 真正的加载实现；只在无同指纹 in-flight / 已就绪结果时调用一次。 */
   loader: SdkLoader<T>;
+  /**
+   * 底层任务是否**能随聚合 signal 一起结束**（缺省 `true`）。
+   *
+   * 这一位决定「最后一个消费者离开时怎么处理条目」：
+   * - `true`（自研 `ScriptLoader` 等）：同步释放条目与占用，并 abort 聚合 signal；
+   *   调用方随后可以立刻重试（重试会起新任务）。
+   * - `false`（官方 `@baidumap/jsapi-loader`——它没有公开取消接口）：**只拒绝消费者，
+   *   保留 entry + occupancy + task**。同指纹后来者复用原任务，另一份指纹继续被冲突拒绝，
+   *   直到该任务真正成功 / 失败。这样「已取消但仍在飞」的任务不会和另一份配置同时进入
+   *   同一全局冲突域，也不会出现「任务成功了但域里没有它的记录」。
+   *
+   * 声明 `true` 的一方需要保证：聚合 signal abort 之后，该任务**不会**再成功结算。
+   */
+  cancellable?: boolean;
 }
 
 /** 域内已就绪配置与请求配置冲突时的处理策略。 */
@@ -67,6 +84,8 @@ interface RegistryEntry {
   task: Promise<unknown>;
   settled: boolean;
   result?: unknown;
+  /** 底层任务是否可随之取消；`false` 时最后一个消费者离开也不释放条目与占用。 */
+  readonly cancellable: boolean;
 }
 
 const DEFAULT_CONFLICT_POLICY: SdkConflictPolicy = "throw";
@@ -78,8 +97,11 @@ type GlobalWithRegistry = typeof globalThis & {
   [PROCESS_SDK_REGISTRY_SYMBOL]?: Map<string, SdkRegistry>;
 };
 
-/** 消费者级取消：只拒绝该消费者，不影响同任务上的其它消费者。 */
-function createConsumerAbortError(): BMapError {
+/**
+ * 取消类错误（消费者取消 / 聚合 signal 已 abort）：只拒绝该消费者，不影响同任务上的其它消费者。
+ * Provider 的同步捷径（`reuseExistingJsapiV4`）复用同一错误口径，避免出现第二个 `BMAP_PROVIDER_ABORTED` 文案。
+ */
+export function createConsumerAbortError(): BMapError {
   return new BMapError("BMAP_PROVIDER_ABORTED", "SDK load aborted by consumer");
 }
 
@@ -185,6 +207,7 @@ export class SdkRegistry {
       controller,
       task: Promise.resolve(),
       settled: false,
+      cancellable: request.cancellable !== false,
     };
     this.entries.set(fingerprint, entry);
     this.occupiedFingerprint ??= fingerprint;
@@ -214,8 +237,13 @@ export class SdkRegistry {
     if (ok) {
       entry.status = "ready";
       entry.result = value;
-      // 先登记「已就绪配置」，再唤醒消费者，避免消费者重入时读到空的占用。
-      if (isCurrent) this.loadedFingerprint ??= fingerprint;
+      // 「域内已就绪配置」按**任务是否真的成功**登记：不可取消的底层任务（官方 Loader）在
+      // 消费者全部离开后仍会完成，此时全局 SDK 确实已按这份指纹就绪，登记它才能让后续
+      // 「另一份配置」的请求被挡住。可取消的任务若在其 signal abort 后仍然成功（违反
+      // `cancellable: true` 的约定），同样是既成事实，一样登记——**真实成功永远不被遗忘**。
+      //
+      // 域内同一时刻只可能有一份配置真正就绪，`??=` 让第一个真实成功者留下记录。
+      this.loadedFingerprint ??= fingerprint;
     } else if (isCurrent) {
       // 失败后移除，允许下次重试。
       this.entries.delete(fingerprint);
@@ -226,8 +254,10 @@ export class SdkRegistry {
   }
 
   /**
-   * 同步释放一个被取消的任务：**不能**等底层 Promise 异步 settle。
+   * 同步释放一个**可取消**任务的条目与占用：**不能**等底层 Promise 异步 settle。
    * 否则「abort 之后同一同步回合内重试」会命中已取消的 entry，或被尚未释放的占用挡住。
+   *
+   * 不可取消的任务不会走到这里（见 `SdkRegistryLoadRequest.cancellable`）。
    */
   private cancelEntry(entry: RegistryEntry, fingerprint: string): void {
     entry.settled = true;
@@ -239,7 +269,8 @@ export class SdkRegistry {
 
   /**
    * 为单个消费者登记等待。`signal` 只影响该消费者；
-   * 同一任务上的最后一个消费者离开时，才同步释放 entry / 占用并取消底层任务。
+   * 同一任务上的最后一个消费者离开时，才按 `cancellable` 决定是否同步释放 entry / 占用
+   * 并取消底层任务（不可取消的任务保留一切，只把消费者结算掉）。
    */
   private subscribe(
     entry: RegistryEntry,
@@ -254,7 +285,9 @@ export class SdkRegistry {
         done = true;
         signal?.removeEventListener("abort", onAbort);
         entry.consumers--;
-        if (entry.consumers === 0 && !entry.settled) this.cancelEntry(entry, fingerprint);
+        if (entry.consumers === 0 && !entry.settled && entry.cancellable) {
+          this.cancelEntry(entry, fingerprint);
+        }
       };
       const onAbort = () => {
         if (done) return;

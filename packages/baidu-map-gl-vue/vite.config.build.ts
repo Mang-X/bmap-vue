@@ -155,7 +155,13 @@ export default defineConfig({
       // （含 js-md5 与 DOM 求值期副作用），「不装也能用根入口」立刻失效；保持 external 后
       // 由 `./ui-kit` 的 `import('@baidumap/jsapi-ui-kit')` 在运行时按需解析，
       // 消费方的打包器才能把它当作可选依赖处理。
-      external: ['vue', '@baidumap/jsapi-ui-kit'],
+      //
+      // `@baidumap/jsapi-loader` 是本包的**运行时依赖**（精确锁定 1.0.0），同样保持 external：
+      // 它是模块级单例（script 单例 + 状态机），内联会让「同一页面出现两份加载状态机」
+      // ——这正是 ADR 2026-09-13 要消除的情况。
+      // CDN/IIFE 产物无法 external（两个官方包都没有 IIFE/global 产物），那份构建仍内联，见
+      // `vite.config.global.ts`。
+      external: ['vue', '@baidumap/jsapi-ui-kit', '@baidumap/jsapi-loader'],
       output: {
         entryFileNames: '[name].mjs',
         chunkFileNames: 'chunks/[name]-[hash].mjs',

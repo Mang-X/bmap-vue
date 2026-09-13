@@ -26,16 +26,28 @@ lang: zh-CN
 目前支持三种方式：全局 `app.use` 默认定义、`<BMapProvider>` 子树覆盖、组件 props 传入。
 当同时指定时，按上面的查找顺序，就近优先。
 
-### 迁移期：Driver 选择
+### Driver 选择与默认加载器
 
-组件默认路径（`app.use` / `<BMapProvider>` / `<BMap>`）在迁移期按**加载结果的 engine** 分派 Driver：
+组件默认路径（`app.use` / `<BMapProvider>` / `<BMap>`）按**加载结果的 engine** 分派 Driver：
 
-- `webgl-v1`（迁移期 legacy）：**可分派且可运行**；
-- `jsapi-v4`（Stable 基线）：**分派契约已接通**——Provider 换成 v4 家族会被正确路由到 v4 工厂，
-  但 v4 Facet Driver 本体仍在 M3A.2（#19~#23）实现中，因此当前会抛出
-  `BMAP_CAPABILITY_UNSUPPORTED`（错误信息指向 M3A.2），而不是静默降级。
+- `jsapi-v4`（Stable 基线）：**默认路径**，由官方 `@baidumap/jsapi-loader`（精确锁定 `1.0.0`）加载；
+- `webgl-v1`（迁移期 legacy）：只有**显式**传入 legacy Provider（如 `baiduCdnProvider()`）才会走到，
+  随 #26 删除。
 
-默认 cutover（把默认 Provider 换成 v4 家族）在 M3A.3（#25）完成。
+默认 Provider 自 R25-B（#71）起是 `baiduJsapiV4Provider()`：`createBMapPlugin()` 不传 `provider`、
+`<BMap>` 只给 `ak`、以及 `<BMapProvider>` 未覆盖时，用的都是它。决策与回滚见
+[ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)。
+
+::: warning 默认路径的配置面
+默认路径只表达官方 Loader 支持的配置：`ak`、`version`（只接受 `'4.0'`）、`timeout`（`0` = 不超时）、
+`serviceHost`（代理模式，与 `ak` 二选一；用它隐藏 `ak` 时需另给 `window.BMAP_AUTHENTIC_KEY` 供 UI Kit 使用）。
+
+`nonce` / `integrity` / `crossOrigin` / `referrerPolicy` / `apiUrl` / `language` 在上游**没有入口**，
+传了会在加载前显式报 `BMAP_INVALID_ARGUMENT`（不再静默忽略）。替代路径：
+
+- 自托管 / 非标准资源入口 → `customScriptV4Provider(scriptSrc)`；
+- 宿主自己加载 SDK / 需要 `nonce` / SRI → 外部预加载后 `existingGlobalV4Provider()`。
+:::
 
 `./advanced` 的 `createBMapClient()` 则已经收口：**默认只接受 `jsapi-v4` 并注入 JSAPI 4.0 Driver 工厂**，
 `provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedSdk`：
@@ -61,11 +73,11 @@ lang: zh-CN
 | 属性               | 说明                                             | 类型               | 默认值 |
 | ------------------ | ------------------------------------------------ | ------------------ | ------ |
 | ak                 | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string`           | -      |
-| apiUrl             | 自建地图 api 资源地址（一般用于离线地图）        | `string`           | -      |
+| apiUrl             | 自建地图 api 资源地址（默认路径已不表达，见上方提示；请改用 `customScriptV4Provider`） | `string` | - |
 | version            | SDK 版本                                         | `string`           | `4.0`  |
-| provider           | 自定义加载器（默认百度 CDN）                     | `BMapProvider`     | -      |
+| provider           | 自定义加载器（默认 `baiduJsapiV4Provider()`，内部委托官方 Loader） | `BMapProvider` | - |
 | plugins            | 需要注册的插件                                   | `string[]`         | -      |
-| defaults           | 透传的加载选项                                   | `BMapLoadOptions`  | -      |
+| defaults           | 透传的加载选项（`BMapLoadOptions`，如 `timeout` / `serviceHost`） | `BMapLoadOptions` | - |
 | allowExistingGlobal| 显式允许复用已存在的全局 `BMapGL`                | `boolean`          | -      |
 | client             | 完整自定义 Client 定义（覆盖以上组装）           | `CreateBMapClientOptions` | - |
 
