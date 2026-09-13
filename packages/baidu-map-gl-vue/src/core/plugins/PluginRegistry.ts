@@ -185,7 +185,14 @@ export function createPluginRegistry(
     async whenPlugin(name, signal) {
       if (!records.has(name))
         throw new BMapError("BMAP_PLUGIN_LOAD_FAILED", `Plugin "${name}" is not registered`);
+      // `collectDeps(name)` 会把**目标自己**也放进集合，而 `loadPluginsInOrder()` 会真的加载它一次。
+      // 于是下面那句 `loadPlugin(target)` 对成功路径是多余的（状态已是 ready，会短路），
+      // 但对 **optional 失败**路径不是：那时状态是 `error`，`loadPlugin` 的短路条件
+      // （ready / loading）都不成立，**目标会被真的加载第二次** —— 一次 CDN 失败产生两次请求与
+      // 两次 script 注入机会，并重复发 `plugin:error`（评审 #85 P1-1）。
+      // 因此这里只按拓扑序加载**依赖**，目标留到最后单独加载一次。
       const deps = collectDeps(name);
+      deps.delete(name);
       await loadPluginsInOrder([...deps]);
       return loadPlugin(records.get(name) as PluginRecord<any>);
     },

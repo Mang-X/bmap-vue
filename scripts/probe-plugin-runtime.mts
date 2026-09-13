@@ -10,36 +10,45 @@
  * - 副作用：例如 DrawingManager 会不会**自己**注入额外脚本；
  * - 以及本页能顺带证实的环境事实（`BMap.version`、`BMapGL === BMap`、私有回调表是否存在）。
  *
+ * ## 每个插件一个**独立页面**（评审 #85 P2-2）
+ *
+ * 第一版把四个插件跑在同一个页面里，顺序是 `TrackAnimation → DrawingManager → GeoUtils → Mapvgl`。
+ * 这会让 GeoUtils 的证据不独立：DrawingManager 打开 `enableCalculate` / `enableGpc` 时会**自己**
+ * 注入 `GeoUtils.min.js` 与 `gpc.js`，随后 GeoUtils 那一步直接从 `BMapGLLib.GeoUtils` 取全局，
+ * 于是无法区分「我们的 `BUILTIN_PLUGIN_URLS.geoUtils` 那支脚本生效了」与「捡了 DrawingManager 的副作用」。
+ *
+ * 现在每个插件导航到一个**全新文档**（`?only=<id>`）再跑，并额外记录 `globalExistedBeforeLoad`：
+ * 它必须为 `false`，即「加载我们这支脚本之前，那个全局并不存在」——这就是证据独立性的**前置断言**。
+ * 顺带也消掉了「四个第三方脚本同页互相影响」这类隐患。
+ *
  * ## 为什么需要 AK
  *
  * 页面必须真的把 JSAPI 4.0 拉起来才能谈插件行为。AK 从 `BAIDU_MAP_AK` 读，**不落库**；
- * 仓库里 `docs/.vitepress/theme/index.ts` 有一支已入库的浏览器端 AK，本地冒烟可以用它
- * （`BAIDU_MAP_AK=$(grep -oE 'ak: "[A-Za-z0-9]{16,}"' docs/.vitepress/theme/index.ts | head -1 | sed -E 's/ak: "//; s/"//')`）。
+ * 仓库里 `docs/.vitepress/theme/index.ts` 有一支已入库的浏览器端 AK，本地冒烟可以用它。
  *
  * ## 与「插件页」的区别（ADR 2026-09-13-plugin-compat-inventory 决策 8）
  *
- * 本脚本是**证据生成器**，不是 smoke harness 的插件页：它不登记进
- * `tests/browser/jsapi-v4` 的检查表、不进任何 CI job、不参与必需链路的放行判定。
- * 把插件脚本塞进必需页面会让跨域脚本异常直接染红必需链路——那正是决策 8 要避免的。
- * 把结论搬进 nightly / CI 属 #43。
+ * 本脚本是**证据生成器**，不是 smoke harness 的插件页：它不登记进 `tests/browser/jsapi-v4` 的
+ * 检查表、不进任何 CI job、不参与必需链路的放行判定。把插件脚本塞进必需页面会让跨域脚本异常直接
+ * 染红必需链路——那正是决策 8 要避免的。把结论搬进 nightly / CI 属 #43。
  *
  * ## 判定与退出码
  *
  * | 结论 | 触发 | 退出码 |
  * | --- | --- | --- |
- * | `pass` | 每个插件的脚本加载 + 全局暴露 + 最小路径都没抛错 | 0 |
- * | `fail` | 有插件在运行时抛错（记下错误文本） | 1 |
- * | `blocked` | SDK 没起来（AK / 网络 / 浏览器不成立）⇒ 本轮无法判定 | 3 |
+ * | `pass` | 每个插件的脚本加载 + 全局暴露 + 最小路径都没抛错，且独立性断言成立 | 0 |
+ * | `fail` | 有插件在运行时抛错（记下错误文本），或独立性断言被打破 | 1 |
+ * | `blocked` | SDK 没起来 / 脚本取不到（AK、网络、浏览器不成立）⇒ 本轮无法判定 | 3 |
  * | 脚手架失败 | 读不到数据模块 / 找不到浏览器 / 页面没写报告 | 2 |
  *
- * 输出里的 `ak=` 与 `BAIDU_MAP_AK` 一律脱敏（页面记录的是插件 URL，本来不含 AK；这里仍做兜底）。
+ * 输出里的 `ak=` 与 `BAIDU_MAP_AK` 一律脱敏。
  *
  * 用法：
  *   BAIDU_MAP_AK=<ak> pnpm probe:plugin-runtime
  *   BAIDU_MAP_AK=<ak> pnpm probe:plugin-runtime -- --out=/tmp/plugin-runtime.json
  */
 import { spawn, type ChildProcess } from "node:child_process"
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -58,13 +67,25 @@ const builtins = (await import(freshModuleUrl(resolve(repoRoot, "packages/baidu-
 }
 const urls = builtins.BUILTIN_PLUGIN_URLS
 
+/** 插件 → （`BUILTIN_PLUGIN_URLS` 的键, 应暴露的全局路径）。 */
+const PLUGIN_SPECS = [
+  { id: "TrackAnimation", key: "trackAnimation", global: "BMapGLLib.TrackAnimation" },
+  { id: "GeoUtils", key: "geoUtils", global: "BMapGLLib.GeoUtils" },
+  { id: "DrawingManager", key: "drawingManager", global: "BMapGLLib.DrawingManager" },
+  { id: "Mapvgl", key: "mapvgl", global: "mapvgl" },
+] as const
+
 /* ------------------------------------------------------------------ 页面 */
 
 const PAGE_JS = `
 (function () {
+  var SPECS = __SPECS__;
   var URLS = __URLS__;
   var AK = __AK__;
-  var out = (window.__PLUGIN_PROBE__ = { env: {}, results: {}, steps: [], done: false });
+  var only = new URLSearchParams(location.search).get("only");
+  var spec = null;
+  for (var i = 0; i < SPECS.length; i++) if (SPECS[i].id === only) spec = SPECS[i];
+  var out = (window.__PLUGIN_PROBE__ = { only: only, env: {}, result: null, steps: [], done: false });
   function step(name, detail) { out.steps.push({ name: name, detail: detail || null }); }
   function loadScript(url) {
     return new Promise(function (res) {
@@ -83,26 +104,22 @@ const PAGE_JS = `
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   (async function () {
-    // 1) 真实 SDK（走官方入口 URL，与官方 loader 注入的形状一致）
+    if (!spec) { out.fatal = "unknown only=" + only; out.done = true; return; }
+
     var cb = "__probeSdkCb_" + Date.now();
     window[cb] = function () { window.__probeSdkReady = true; };
     var sdk = document.createElement("script");
     sdk.src = "https://api.map.baidu.com/api?v=4.0&ak=" + AK + "&callback=" + cb;
     document.head.appendChild(sdk);
     var t0 = Date.now();
-    while (
-      !(window.BMap && typeof window.BMap.Map === "function") &&
-      Date.now() - t0 < 25000
-    ) await sleep(100);
+    while (!(window.BMap && typeof window.BMap.Map === "function") && Date.now() - t0 < 25000) await sleep(100);
     out.env.sdkLoaded = !!(window.BMap && typeof window.BMap.Map === "function");
-    out.env.namespaceKeysRightAfterBMap = window.BMap ? Object.keys(window.BMap).length : 0;
     out.env.aliasIsSameObject = window.BMapGL === window.BMap;
     out.env.bmapVersion = window.BMap ? String(window.BMap.version) : null;
+    out.env.namespaceKeys = window.BMap ? Object.keys(window.BMap).length : 0;
     out.env.namespaceHasPrivateCallbackTable = !!(window.BMap && (window.BMap._rd || window.BMapGL._rd));
     if (!out.env.sdkLoaded) { out.done = true; return; }
-    step("sdk", { version: out.env.bmapVersion, alias: out.env.aliasIsSameObject, hasRd: out.env.namespaceHasPrivateCallbackTable });
 
-    // 2) 真实地图 + 折线（TrackAnimation 需要）
     var div = document.createElement("div");
     div.style.cssText = "width:420px;height:320px";
     document.body.appendChild(div);
@@ -121,17 +138,16 @@ const PAGE_JS = `
       out.env.mapCreated = false;
       out.env.mapError = msg(e);
     }
-    step("map", { created: out.env.mapCreated, error: out.env.mapError || null });
 
-    // 3) 逐个插件：加载 → 暴露 → 最小使用
-    // 注意：BUILTIN_PLUGIN_URLS 的键是小驼峰（trackAnimation / mapvgl...），别拿 id 去取，
-    // 否则 s.src = undefined ⇒ 请求打到同源 /undefined ⇒ 404 ⇒ 四个插件全部 "script error event"
-    var order = [
-      { id: "TrackAnimation", key: "trackAnimation", global: "BMapGLLib.TrackAnimation" },
-      { id: "DrawingManager", key: "drawingManager", global: "BMapGLLib.DrawingManager" },
-      { id: "GeoUtils", key: "geoUtils", global: "BMapGLLib.GeoUtils" },
-      { id: "Mapvgl", key: "mapvgl", global: "mapvgl" },
-    ];
+    // 独立性前置断言：加载**我们这支**脚本之前，那个全局必须还不存在。
+    out.env.globalExistedBeforeLoad = !!getPath(spec.global);
+    step("precondition", { global: spec.global, existedBefore: out.env.globalExistedBeforeLoad });
+
+    var r = { id: spec.id, url: URLS[spec.key], urlLoaded: null, globalExposed: null, probe: null };
+    var load = await loadScript(URLS[spec.key]);
+    r.urlLoaded = load.ok ? "ok" : (load.error || "error");
+    r.globalExposed = !!getPath(spec.global);
+
     var probes = {
       TrackAnimation: async function () {
         var C = getPath("BMapGLLib.TrackAnimation");
@@ -141,9 +157,9 @@ const PAGE_JS = `
         ta.start();
         await sleep(400);
         var midPath = polyline.getPath().length;
-        var zooms = map.getZoom();
+        var zoom = map.getZoom();
         ta.cancel();
-        return { statusAfter400ms: ta._status, pathBefore: before, pathAfterStart: midPath, zoomDuringAnim: zooms };
+        return { statusAfter400ms: ta._status, pathBefore: before, pathAfterStart: midPath, zoomDuringAnim: zoom };
       },
       DrawingManager: async function () {
         var C = getPath("BMapGLLib.DrawingManager");
@@ -198,30 +214,13 @@ const PAGE_JS = `
       },
     };
 
-    for (var k = 0; k < order.length; k++) {
-      var spec = order[k];
-      var id = spec.id;
-      var r = { id: id, url: URLS[spec.key], urlLoaded: null, globalExposed: null, probe: null };
-      var load = await loadScript(URLS[spec.key]);
-      r.urlLoaded = load.ok ? "ok" : (load.error || "error");
-      r.globalExposed = !!getPath(spec.global);
-      if (r.globalExposed) {
-        try { r.probe = await probes[id](); } catch (e) { r.probe = "THREW: " + msg(e); }
-      } else {
-        r.probe = "skipped: global missing";
-      }
-      out.results[id] = r;
-      step("plugin", r);
+    if (r.globalExposed) {
+      try { r.probe = await probes[spec.id](); } catch (e) { r.probe = "THREW: " + msg(e); }
+    } else {
+      r.probe = "skipped: global missing";
     }
-
-    out.env.thirdPartyScriptsOnPage = (function () {
-      var n = 0, scripts = document.scripts;
-      for (var i = 0; i < scripts.length; i++) {
-        var src = String(scripts[i].src || "");
-        if (src.indexOf("BMapGLLib") >= 0 || src.indexOf("unpkg") >= 0) n++;
-      }
-      return n;
-    })();
+    out.result = r;
+    step("plugin", r);
     out.done = true;
   })().catch(function (e) {
     out.fatal = String((e && e.stack) || e);
@@ -232,23 +231,19 @@ const PAGE_JS = `
 
 const pageHtml = `<!doctype html>
 <html><head><meta charset="utf-8"><title>plugin runtime probe</title></head>
-<body><script>${PAGE_JS.replace("__URLS__", JSON.stringify(urls)).replace("__AK__", JSON.stringify(ak))}</script></body></html>`
+<body><script>${PAGE_JS.replace("__SPECS__", JSON.stringify(PLUGIN_SPECS))
+  .replace("__URLS__", JSON.stringify(urls))
+  .replace("__AK__", JSON.stringify(ak))}</script></body></html>`
 
 /* ------------------------------------------------------------------ 服务与浏览器 */
 
 const workDir = mkdtempSync(join(tmpdir(), "plugin-probe-"))
 const userDataDir = mkdtempSync(join(tmpdir(), "plugin-probe-chrome-"))
 writeFileSync(join(workDir, "index.html"), pageHtml)
-writeFileSync(join(workDir, "probe.js"), "")
 
 const server = createServer((req, res) => {
-  const path = (req.url ?? "/").split("?")[0]
-  if (path === "/" || path === "/index.html") {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
-    res.end(pageHtml)
-    return
-  }
-  res.writeHead(404).end("not found")
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
+  res.end(pageHtml)
 })
 await new Promise<void>((done) => server.listen(0, "localhost", () => done()))
 const address = server.address()
@@ -257,7 +252,7 @@ if (address === null || typeof address === "string") {
   process.exitCode = 2
 }
 const port = typeof address === "object" && address ? address.port : 0
-const url = `http://localhost:${port}/`
+const baseUrl = `http://localhost:${port}/`
 
 const browser = process.env.SMOKE_BROWSER ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 if (!existsSync(browser)) {
@@ -265,29 +260,28 @@ if (!existsSync(browser)) {
   process.exitCode = 2
 }
 
+interface RunReport {
+  only: string | null
+  env: Record<string, unknown>
+  result: { id: string; urlLoaded?: string; globalExposed?: boolean; probe?: unknown } | null
+  steps: Array<{ name: string; detail: unknown }>
+  done: boolean
+  fatal?: string
+}
+
 let chrome: ChildProcess | null = null
 let session: Awaited<ReturnType<typeof connectCdpSession>> | null = null
-let report: Record<string, unknown> | null = null
+const runs: RunReport[] = []
 try {
-  // 沙箱给 Node 设了 HTTP(S)_PROXY，但 Chrome 不读 env 代理 ⇒ 必须显式传，否则第三方 CDN 脚本
-  // 一律 "script error event"（而 api.map.baidu.com 是直连可达的，所以 live smoke 不需要它）。
-  // 实测：这些 CDN 与本机**直连可达**（不经代理），所以默认不给 Chrome 传代理；
-  // 需要时用 SMOKE_PROXY=1 显式打开（Chrome 不读 env 代理，必须用 --proxy-server）。
-  const proxy = process.env.HTTPS_PROXY ?? process.env.https_proxy ?? process.env.HTTP_PROXY ?? process.env.http_proxy
-  const proxyArgs = process.env.SMOKE_PROXY === "1" && proxy
-    ? [`--proxy-server=${proxy}`, "--proxy-bypass-list=localhost;127.0.0.1"]
-    : []
-  console.log(`[plugin-runtime] proxy=${proxy ? "explicit" : "none"}`)
-
   chrome = spawn(browser, [
-    "--headless", ...proxyArgs,
+    "--headless",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--enable-unsafe-swiftshader",
     "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
-    url,
+    baseUrl,
   ], { stdio: "ignore" })
 
   const portFile = join(userDataDir, "DevToolsActivePort")
@@ -295,7 +289,7 @@ try {
   let devtoolsPort = 0
   for (;;) {
     if (existsSync(portFile)) {
-      devtoolsPort = Number((await import("node:fs")).readFileSync(portFile, "utf8").split("\n")[0])
+      devtoolsPort = Number(readFileSync(portFile, "utf8").split("\n")[0])
       if (devtoolsPort) break
     }
     if (Date.now() - startedAt > 30_000) throw new Error("等待 DevToolsActivePort 超时")
@@ -307,22 +301,31 @@ try {
   for (;;) {
     try {
       const list = (await (await fetch(`http://127.0.0.1:${devtoolsPort}/json/list`)).json()) as Array<{ type: string; url: string; webSocketDebuggerUrl?: string }>
-      target = list.find((t) => t.type === "page" && t.url.startsWith(`http://localhost:${port}`))
+      target = list.find((t) => t.type === "page" && t.url.startsWith(baseUrl))
       if (target?.webSocketDebuggerUrl) break
     } catch { /* CDP 还没起来 */ }
     if (Date.now() - t1 > 30_000) throw new Error("等待 page target 超时")
     await sleep(300)
   }
 
-  const deadline = Date.now() + 120_000
+  const deadline = Date.now() + 240_000
   session = await connectCdpSession(target!.webSocketDebuggerUrl!, { deadline, commandTimeoutMs: 30_000 })
-  report = await readProbeReport<Record<string, unknown>>(session, {
-    deadline,
-    // 必须等到 `done === true`：只要对象存在就返回，会拿到「刚建好、还没跑任何一步」的空壳
-    expression:
-      "(window.__PLUGIN_PROBE__ && window.__PLUGIN_PROBE__.done) ? JSON.stringify(window.__PLUGIN_PROBE__) : null",
-    pollIntervalMs: 1000,
-  })
+
+  // 每个插件一个**全新文档**（`?only=<id>`），并且只认「那个 id 写完了」为本轮结束 —— 这样既消除
+  // 插件之间的副作用串扰，也不会误读上一轮遗留的报告。
+  for (const spec of PLUGIN_SPECS) {
+    await session.send("Page.navigate", { url: `${baseUrl}?only=${spec.id}` })
+    const report = await readProbeReport<RunReport>(session, {
+      deadline,
+      pollIntervalMs: 1000,
+      expression:
+        "(window.__PLUGIN_PROBE__ && window.__PLUGIN_PROBE__.done && window.__PLUGIN_PROBE__.only === " +
+        JSON.stringify(spec.id) +
+        ") ? JSON.stringify(window.__PLUGIN_PROBE__) : null",
+    })
+    if (!report) throw new Error(`插件 ${spec.id} 没有写出报告`)
+    runs.push(report)
+  }
 } finally {
   try { session?.close() } catch { /* ignore */ }
   try { chrome?.kill("SIGKILL") } catch { /* ignore */ }
@@ -330,6 +333,8 @@ try {
   try { rmSync(workDir, { recursive: true, force: true }) } catch { /* ignore */ }
   try { rmSync(userDataDir, { recursive: true, force: true }) } catch { /* ignore */ }
 }
+
+/* ------------------------------------------------------------------ 报告 */
 
 function redact(text: string): string {
   return text
@@ -339,41 +344,50 @@ function redact(text: string): string {
 
 const outPath = process.argv.find((a) => a.startsWith("--out="))?.slice("--out=".length)
 
-if (!report) {
-  console.error("[plugin-runtime] 页面没有写出报告（脚手架失败）")
+if (runs.length !== PLUGIN_SPECS.length) {
+  console.error("[plugin-runtime] 页面没有写全报告（脚手架失败）")
   process.exitCode = 2
 } else {
-  const payload = JSON.stringify(report, null, 2)
+  const payload = JSON.stringify({ runs }, null, 2)
   console.log(redact(payload))
   if (outPath) {
-    const { writeFileSync } = await import("node:fs")
     writeFileSync(outPath, redact(payload) + "\n")
     console.log(`\n[plugin-runtime] wrote ${outPath}`)
   }
-  const env = (report.env ?? {}) as Record<string, unknown>
-  const results = (report.results ?? {}) as Record<
-    string,
-    { urlLoaded?: string; globalExposed?: boolean; probe?: unknown }
-  >
-  const ids = Object.keys(results)
-  const notLoaded = ids.filter((id) => results[id]?.urlLoaded !== "ok")
-  const notExposed = ids.filter((id) => !results[id]?.globalExposed)
-  const threw = ids.filter(
-    (id) => typeof results[id]?.probe === "string" && String(results[id]!.probe).startsWith("THREW"),
+
+  const env = runs[0]?.env ?? {}
+  const results = runs
+    .map((run) => run.result)
+    .filter((r): r is NonNullable<RunReport["result"]> => r !== null)
+  const notIndependent = runs
+    .filter((run) => run.env.globalExistedBeforeLoad === true)
+    .map((run) => run.only)
+  const notLoaded = results.filter((r) => r.urlLoaded !== "ok")
+  const notExposed = results.filter((r) => !r.globalExposed)
+  const threw = results.filter(
+    (r) => typeof r.probe === "string" && String(r.probe).startsWith("THREW"),
   )
+
   console.log(
-    `\n[plugin-runtime] sdk=${env.sdkLoaded === true ? "ok" : "failed"} plugins=${ids.length} ` +
-      `scriptFailed=${notLoaded.length} globalMissing=${notExposed.length} threw=${threw.length}`,
+    `\n[plugin-runtime] sdk=${env.sdkLoaded === true ? "ok" : "failed"} plugins=${results.length} ` +
+      `notIndependent=${notIndependent.length} scriptFailed=${notLoaded.length} ` +
+      `globalMissing=${notExposed.length} threw=${threw.length}`,
   )
+
   if (env.sdkLoaded !== true) {
     console.error("[plugin-runtime] SDK 没起来，本轮无法判定（blocked 不是通过）")
     process.exitCode = 3
+  } else if (notIndependent.length > 0) {
+    // 独立性断言失败：全局在加载我们这支脚本之前就存在 ⇒ 本轮的读数不能归因给我们那个 URL
+    console.error(`[plugin-runtime] 证据不独立（全局先于脚本存在）：${notIndependent.join(", ")}`)
+    process.exitCode = 1
   } else if (notLoaded.length > 0 || notExposed.length > 0) {
-    // 脚本加载失败 / 全局缺失：CDN 或网络问题，本轮拿不到结论
-    console.error(`[plugin-runtime] blocked: ${[...notLoaded, ...notExposed].join(", ")}`)
+    console.error(
+      `[plugin-runtime] blocked: ${[...notLoaded, ...notExposed].map((r) => r.id).join(", ")}`,
+    )
     process.exitCode = 3
   } else if (threw.length > 0) {
-    console.error(`[plugin-runtime] 运行时抛错：${threw.join(", ")}`)
+    console.error(`[plugin-runtime] 运行时抛错：${threw.map((r) => r.id).join(", ")}`)
     process.exitCode = 1
   } else {
     process.exitCode = 0

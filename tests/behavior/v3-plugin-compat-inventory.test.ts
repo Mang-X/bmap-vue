@@ -139,6 +139,61 @@ describe("依据与结论不留空", () => {
     ).toBe(false);
   });
 
+  it("成员核对分两层：命名空间级自动、实例成员人工（形态 + 渲染都锁住）", () => {
+    for (const entry of ENTRIES) {
+      // 命名空间级成员名里不该出现 `#`（那是实例成员的写法）
+      expect(
+        entry.sdkNamespaceMembers.every((name) => !name.includes("#")),
+        `${entry.id} 的 sdkNamespaceMembers 混进了实例成员写法`,
+      ).toBe(true);
+      for (const member of entry.manualInstanceChecks) {
+        expect(member, `${entry.id} 的实例成员要写成 Owner#member`).toMatch(
+          /^[A-Za-z][A-Za-z0-9]*#[A-Za-z][A-Za-z0-9]*$/,
+        );
+      }
+    }
+    // 先证明这条断言不是空转：至少有一条真的有人工清单
+    expect(ENTRIES.some((entry) => entry.manualInstanceChecks.length > 0)).toBe(true);
+
+    // 生成物必须把「自动只到命名空间级」写清楚，并且不再钉死上游版本号
+    const markdown = readFileSync(DOC_MD, "utf8");
+    expect(markdown).toContain("成员核对");
+    expect(markdown).toContain("不在自动门禁内");
+    expect(markdown, "生成物不该钉死上游版本（依赖升级即漂移）").not.toMatch(
+      /@baidumap\/jsapi-v4-types@\d/,
+    );
+  });
+
+  it("catalog 与 inventory 的运行时状态不得互相矛盾（评审 #85 P2-3）", () => {
+    let checked = 0;
+    for (const entry of ENTRIES) {
+      if (!entry.capability) continue;
+      const description = CAPABILITY_CATALOG[entry.capability].description;
+      if (entry.runtime?.status === "verified") {
+        checked += 1;
+        expect(description, `${entry.capability} 仍写着「运行时未验证」`).not.toContain(
+          "运行时未验证",
+        );
+        expect(description, `${entry.capability} 未写明最小运行时路径已跑通`).toContain(
+          "最小运行时路径已验证",
+        );
+      }
+    }
+    // 空转守卫：至少真的比对过一条（否则「没有矛盾」可能只是没比）
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("用户可见的 hook 文档跟着 inventory 的运行时状态走（评审 #85 P2-3）", () => {
+    const trackAnimation = ENTRIES.find((entry) => entry.id === "TrackAnimation")!;
+    expect(trackAnimation.runtime?.status).toBe("verified");
+    const doc = readFileSync(
+      resolve(ROOT, "docs/zh-CN/hooks/useBMapTrackAnimation.md"),
+      "utf8",
+    );
+    expect(doc, "hook 文档还写着「运行时未验证」").not.toContain("运行时未验证");
+    expect(doc).toContain("最小运行时路径已验证");
+  });
+
   it("runtime 读数与 `basis` 里的 runtime 档双向一致，且读数不是一句话", () => {
     const withRuntime = ENTRIES.filter((entry) => entry.runtime !== undefined);
     // 先证明这条断言不是空转：清单里确实有运行时读数

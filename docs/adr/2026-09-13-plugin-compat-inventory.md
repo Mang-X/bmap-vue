@@ -46,7 +46,7 @@ CI 的 `quality` job 跑 `--check` 校验无漂移——与 `generate:capability
 | 依据 | 含义 |
 | --- | --- |
 | `artifact` | 对 `BUILTIN_PLUGIN_URLS` 锁定 URL 的**真实发布产物**做静态抽取（`pnpm probe:plugin-compat`） |
-| `declaration` | 与官方 `@baidumap/jsapi-v4-types@4.0.4` 的**逐成员**核对（同一条命令的第二个落点） |
+| `declaration` | 与官方类型声明核对。**自动部分只到命名空间级成员**（`BMapGL.<Member>` 是否存在）；`Owner#member` 形态的实例成员由**人工**逐条对照声明，记在 `manualInstanceChecks` |
 | `runtime` | 真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`，需 AK + 浏览器） |
 
 没跑过的档位不写进依据。这条是刻意的：把「声明面没缺口」说成「兼容」，是把结论说得比证据强。
@@ -56,7 +56,7 @@ CI 的 `quality` job 跑 `--check` 校验无漂移——与 `generate:capability
 | 结论 | 含义 |
 | --- | --- |
 | `incompatible` | 有决定性依据说明它在 4.0 上不可用（必须给出决定性的私有面，见决策 4） |
-| `no-declaration-gap` | 脚本引用的 SDK 成员在 4.0.4 声明里没有缺口、也没有私有面 |
+| `no-declaration-gap` | 脚本引用的命名空间级成员在官方声明里没有缺口、也没有私有面 |
 | `undetermined` | 既有缺口也有不确定项 |
 
 `no-declaration-gap` 只承诺「按声明面核对没有缺口」。真实的 MapVGL 就是反例：它的成员引用面
@@ -109,8 +109,11 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 
 - `pnpm probe:plugin-compat`（需要网络）：从锁定 URL 拉真实产物，抽三列（引用的 SDK 命名空间成员 /
   私有面 / 副作用标记）、与官方声明逐成员核对、再与 inventory 比对；
-- `pnpm probe:plugin-runtime`（需要 AK + 浏览器）：起一个本机页面，真实加载 JSAPI 4.0 与四个插件
-  脚本，跑最小可用路径，产出 inventory 的**运行时读数**。它**不是** smoke harness 的插件页
+- `pnpm probe:plugin-runtime`（需要 AK + 浏览器）：起本机页面，真实加载 JSAPI 4.0 与**单个**插件脚本，
+  跑最小可用路径，产出 inventory 的**运行时读数**。**每个插件一个全新文档**（`?only=<id>`），并要求
+  `globalExistedBeforeLoad === false` —— 这是证据独立性的前置断言：DrawingManager 会自己注入
+  GeoUtils / gpc 脚本，同页串跑会让「GeoUtils 那支 URL 生效了」与「捡了别人的副作用」无法区分
+  （评审 #85 P2-2）。它**不是** smoke harness 的插件页
   （决策 8）：不登记进 `tests/browser/jsapi-v4` 的检查表、不进任何 CI job、不参与必需链路的放行判定。
 
 两个探针的判定与退出码沿用 `scripts/probe-official-packages.mts` 的口径：
@@ -187,6 +190,10 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 - **插件加载没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`
   （`scope.signal`），脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证
   「失败被隔离」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策。
+- **实例成员没有被自动校验**：`probe:plugin-compat` 只做命名空间级存在性核对（`BMapGL.<Member>`）；
+  `Map#getViewport` 这类实例成员是**人工**对照声明核对的（见各条目的 `manualInstanceChecks`）。
+  上游若新增一个不存在的实例方法调用，nightly **不会**报——owner/member 级的 AST / 类型校验属 #43
+  与工具收敛项，本轮采用「收窄口径 + 结构化区分」而不是硬做一个不可靠的推断器。
 - **探针的三列抽取是文本级的**：它从 minified 产物里按正则抽，对「换一种写法但语义相同」的脚本
   可能漏读（保守方向是少报，不会假绿）。`exposedGlobal` 的核对也只证「脚本会创建这个全局」，
   不证「它挂在 window 上」。

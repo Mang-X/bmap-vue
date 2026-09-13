@@ -12,7 +12,8 @@ import { useBMapTrackAnimation } from 'baidu-map-gl-vue'
 `BMAP_CAPABILITY_UNSUPPORTED`。4.0 的对应能力是原生图层 `layer.track-line`
 （`BPointLayer` 同族的 `driver.nativeLayers.create('track-line')`）。
 
-脚本本身的兼容结论（声明面无缺口、运行时未验证）与复现方式见
+脚本本身的兼容结论是**声明面无缺口；最小运行时路径已验证，完整功能链路仍未验证**
+（真实 4.0 上已跑通「构造 → `start()` → 折线展开 + 视角跟随」），复现方式见
 [插件兼容 inventory](../contributing/plugin-compat-inventory)。
 :::
 

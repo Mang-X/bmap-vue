@@ -48,7 +48,11 @@ export type PluginUrlKey = "trackAnimation" | "drawingManager" | "geoUtils" | "m
 export type PluginEvidenceBasis =
   /** 对锁定 URL 的**真实发布产物**做静态抽取（`pnpm probe:plugin-compat`，可复现）。 */
   | "artifact"
-  /** 与官方 `@baidumap/jsapi-v4-types` 的声明逐成员核对（同一条探针命令的第二个落点）。 */
+  /**
+   * 与官方 `@baidumap/jsapi-v4-types` 的声明核对。**自动部分只覆盖命名空间级成员**
+   * （`BMapGL.<Member>` 是否存在）；`Owner#member` 形态的**实例成员**没有被自动校验，
+   * 由人工逐条对照声明，写在每条目的 `manualInstanceChecks` 里（评审 #85 P2-1）。
+   */
   | "declaration"
   /** 真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`：需 AK + 浏览器；不进 PR 门禁）。 */
   | "runtime";
@@ -99,6 +103,16 @@ export interface PluginCompatEntry {
   /** 私有面的人读说明（写成员名即可，不要写成完整访问形态，见上）。 */
   readonly privateSurfaceNote: string;
   /**
+   * **人工**逐条对照官方声明的实例成员（`Owner#member` 形态）。
+   *
+   * 为什么单独列出来：`probe:plugin-compat` 只做命名空间级存在性核对（抽取 `BMapGL.<Member>` 再与
+   * 声明索引比对），它**不会**校验 `Map#getViewport` 这类实例成员——被调用的方法名在 minified 产物里
+   * 无法可靠地归到 owner 类型上。把两者分开写，读者才不会以为「实例成员也在自动门禁里」。
+   * 这一栏是人工核对结果（对照 `@baidumap/jsapi-v4-types@4.0.4` 的 `core/Map.d.ts` 等），
+   * owner/member 级自动校验属 #43 / 工具收敛项。
+   */
+  readonly manualInstanceChecks: readonly string[];
+  /**
    * 脚本**自身**在运行期产生的副作用标记（子串）。
    *
    * 这些是自动注入外部脚本 / 统计代码的痕迹，不受本库的加载与取消路径管控。探针会逐个在
@@ -131,14 +145,15 @@ export interface PluginCompatEntry {
 /** 依据档位的解释（生成文档时用，避免文档与代码两套说法）。 */
 export const PLUGIN_EVIDENCE_BASIS_MEANING: Record<PluginEvidenceBasis, string> = {
   artifact: "对锁定 URL 的真实发布产物做静态抽取（`pnpm probe:plugin-compat`，可复现）",
-  declaration: "与官方 `@baidumap/jsapi-v4-types@4.0.4` 的逐成员核对（同一条命令）",
+  declaration:
+    "与官方 `@baidumap/jsapi-v4-types` 的声明核对——**自动部分只证明命名空间级成员存在**；实例成员（`Owner#member`）是人工核对的，见各条的 `manualInstanceChecks`",
   runtime: "真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`，需 AK + 浏览器；不进 PR 门禁）",
 };
 
 /** 结论的解释（同上）。 */
 export const PLUGIN_VERDICT_MEANING: Record<PluginVerdict, string> = {
   incompatible: "有决定性依据说明它在 4.0 上不可用",
-  "no-declaration-gap": "引用的 SDK 成员在 4.0.4 声明里没有缺口（≠ 运行时已验证）",
+  "no-declaration-gap": "引用的 SDK 成员在**官方类型声明**里没有缺口（≠ 运行时已验证）",
   // 刻意不说「既有缺口」：本条目的引用面并没有缺口（成员全在声明内、也没有命名空间级私有面），
   // 不确定项在别处（例如构造期用法与自注入脚本）。释义必须与唯一一条 undetermined 条目对得上，
   // 否则读者会按「有缺口」去读它。
@@ -161,6 +176,18 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     sdkNamespaceMembers: ["Point", "ViewAnimation"],
     hasPrivateSurface: false,
     privateSurfaceNote: "无命名空间级私有成员；实例级私有字段见残余风险。",
+    manualInstanceChecks: [
+      "Map#getViewport",
+      "Map#getDistance",
+      "Map#getMaxZoom",
+      "Map#startViewAnimation",
+      "Map#pauseViewAnimation",
+      "Map#continueViewAnimation",
+      "Map#cancelViewAnimation",
+      "Map#addOverlay",
+      "Map#removeOverlay",
+      "ViewAnimation#addEventListener",
+    ],
     selfInjectedMarkers: [],
     capability: "service.track-animation",
     verdict: "no-declaration-gap",
@@ -169,14 +196,16 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
       status: "verified",
       detail:
         "真实 4.0 页面上 `new BMapGLLib.TrackAnimation(map, polyline, { duration: 1500, " +
-        "overallView: false })` 构造成功；`start()` 后折线 path 由 2 个点增长到 39 个点、" +
-        "`map.getZoom()` 由 13 变为约 15.15（视角跟随生效），无抛错。",
+        "overallView: false })` 构造成功；`start()` 后折线 path 由 2 个点增长到约 40 个点" +
+        "（随动画帧数略有浮动）、`map.getZoom()` 由 13 变为约 15.15（视角跟随生效），无抛错。",
     },
     summary:
       "加载期只写 `window.BMapGLLib`，不碰 SDK；引用的 `BMapGL.Point` / `BMapGL.ViewAnimation` " +
       "与它调用的 `Map` 方法（`getViewport` / `getDistance` / `getMaxZoom` / " +
       "`startViewAnimation` / `pauseViewAnimation` / `continueViewAnimation` / " +
-      "`cancelViewAnimation` / `addOverlay` / `removeOverlay`）在 4.0.4 声明里**全部存在**；" +
+      "`cancelViewAnimation` / `addOverlay` / `removeOverlay`）在官方类型声明里**全部存在**——" +
+      "命名空间成员由 `probe:plugin-compat` 自动核对，其中 10 个**实例成员**是人工对照声明核对的" +
+      "（见 `manualInstanceChecks`，自动化的 owner/member 级校验属 #43）。" +
       "真实 4.0 上已跑通「构造 → `start()` → 折线展开 + 视角跟随」。",
     residualRisks: [
       "`setSpeed()` 依赖上游**未声明**的 `ViewAnimation` 私有成员（`animation` / `_options` / " +
@@ -207,6 +236,26 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     ],
     hasPrivateSurface: false,
     privateSurfaceNote: "无。",
+    manualInstanceChecks: [
+      "Map#addOverlay",
+      "Map#removeOverlay",
+      "Map#addControl",
+      "Map#getPanes",
+      "Map#getContainer",
+      "Map#pointToPixel",
+      "Map#pointToOverlayPixel",
+      "Map#getDistance",
+      "Map#getBounds",
+      "Map#getCenter",
+      "Map#setCenter",
+      "Map#getSize",
+      "Map#getViewport",
+      "Map#setViewport",
+      "Map#enableDragging",
+      "Overlay#initialize",
+      "Overlay#draw",
+      "Overlay#dispose",
+    ],
     selfInjectedMarkers: [
       "BMapGLLib/GeoUtils/src/GeoUtils.min.js",
       "BMapGLLib/DrawingManager/src/gpc.js",
@@ -223,7 +272,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
         "（各出现两次：构造选项与显式 `enable*()` 各触发一次）。",
     },
     summary:
-      "引用的命名空间成员全部在 4.0.4 声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），" +
+      "引用的命名空间成员全部在官方类型声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），" +
       "不依赖 SDK 内部模块。但它用 `prototype = new BMapGL.Overlay` 继承覆盖物基类，而官方声明明写" +
       "「此类不可实例化」；且 `enableCalculate()` / `enableGpc()` 会**由脚本自己**动态注入" +
       " GeoUtils 与 GPC 两个外部脚本，不受本库管控（已在真实 4.0 上观察到）。",
@@ -242,6 +291,16 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     sdkNamespaceMembers: ["Bounds", "Circle", "Polygon", "Polyline"],
     hasPrivateSurface: false,
     privateSurfaceNote: "无。",
+    manualInstanceChecks: [
+      "Bounds#getSouthWest",
+      "Bounds#getNorthEast",
+      "Bounds#getCenter",
+      "Circle#getCenter",
+      "Circle#getRadius",
+      "Polyline#getPath",
+      "Polygon#getPath",
+      "Point#equals",
+    ],
     selfInjectedMarkers: [],
     capability: undefined,
     verdict: "no-declaration-gap",
@@ -272,6 +331,8 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     required: false,
     sdkNamespaceMembers: [],
     hasPrivateSurface: true,
+    // MapVGL 没有用到我们 SDK 的实例成员（它引入失败在 View 构造那一步），故为空。
+    manualInstanceChecks: [],
     privateSurfaceNote:
       "私有 JSONP 回调表（成员名 `_rd`）：脚本把函数注册进这张表，并把 `callback=` 指过去。",
 

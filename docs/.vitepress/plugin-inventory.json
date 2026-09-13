@@ -3,12 +3,12 @@
   "source": "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts",
   "basisMeaning": {
     "artifact": "对锁定 URL 的真实发布产物做静态抽取（`pnpm probe:plugin-compat`，可复现）",
-    "declaration": "与官方 `@baidumap/jsapi-v4-types@4.0.4` 的逐成员核对（同一条命令）",
+    "declaration": "与官方 `@baidumap/jsapi-v4-types` 的声明核对——**自动部分只证明命名空间级成员存在**；实例成员（`Owner#member`）是人工核对的，见各条的 `manualInstanceChecks`",
     "runtime": "真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`，需 AK + 浏览器；不进 PR 门禁）"
   },
   "verdictMeaning": {
     "incompatible": "有决定性依据说明它在 4.0 上不可用",
-    "no-declaration-gap": "引用的 SDK 成员在 4.0.4 声明里没有缺口（≠ 运行时已验证）",
+    "no-declaration-gap": "引用的 SDK 成员在**官方类型声明**里没有缺口（≠ 运行时已验证）",
     "undetermined": "引用面无决定性缺口，但存在**依据不足**的不确定项（构造期用法 / 自注入脚本等），结论留给 M8（#43）"
   },
   "plugins": [
@@ -22,6 +22,18 @@
         "Point",
         "ViewAnimation"
       ],
+      "manualInstanceChecks": [
+        "Map#getViewport",
+        "Map#getDistance",
+        "Map#getMaxZoom",
+        "Map#startViewAnimation",
+        "Map#pauseViewAnimation",
+        "Map#continueViewAnimation",
+        "Map#cancelViewAnimation",
+        "Map#addOverlay",
+        "Map#removeOverlay",
+        "ViewAnimation#addEventListener"
+      ],
       "hasPrivateSurface": false,
       "privateSurfaceNote": "无命名空间级私有成员；实例级私有字段见残余风险。",
       "selfInjectedMarkers": [],
@@ -34,9 +46,9 @@
       ],
       "runtime": {
         "status": "verified",
-        "detail": "真实 4.0 页面上 `new BMapGLLib.TrackAnimation(map, polyline, { duration: 1500, overallView: false })` 构造成功；`start()` 后折线 path 由 2 个点增长到 39 个点、`map.getZoom()` 由 13 变为约 15.15（视角跟随生效），无抛错。"
+        "detail": "真实 4.0 页面上 `new BMapGLLib.TrackAnimation(map, polyline, { duration: 1500, overallView: false })` 构造成功；`start()` 后折线 path 由 2 个点增长到约 40 个点（随动画帧数略有浮动）、`map.getZoom()` 由 13 变为约 15.15（视角跟随生效），无抛错。"
       },
-      "summary": "加载期只写 `window.BMapGLLib`，不碰 SDK；引用的 `BMapGL.Point` / `BMapGL.ViewAnimation` 与它调用的 `Map` 方法（`getViewport` / `getDistance` / `getMaxZoom` / `startViewAnimation` / `pauseViewAnimation` / `continueViewAnimation` / `cancelViewAnimation` / `addOverlay` / `removeOverlay`）在 4.0.4 声明里**全部存在**；真实 4.0 上已跑通「构造 → `start()` → 折线展开 + 视角跟随」。",
+      "summary": "加载期只写 `window.BMapGLLib`，不碰 SDK；引用的 `BMapGL.Point` / `BMapGL.ViewAnimation` 与它调用的 `Map` 方法（`getViewport` / `getDistance` / `getMaxZoom` / `startViewAnimation` / `pauseViewAnimation` / `continueViewAnimation` / `cancelViewAnimation` / `addOverlay` / `removeOverlay`）在官方类型声明里**全部存在**——命名空间成员由 `probe:plugin-compat` 自动核对，其中 10 个**实例成员**是人工对照声明核对的（见 `manualInstanceChecks`，自动化的 owner/member 级校验属 #43）。真实 4.0 上已跑通「构造 → `start()` → 折线展开 + 视角跟随」。",
       "residualRisks": [
         "`setSpeed()` 依赖上游**未声明**的 `ViewAnimation` 私有成员（`animation` / `_options` / `_beginTime` / `_pauseTime` 与 `setBeginTime` / `setDuration`）⇒ 该方法按「依据不足」处理，本库不承诺它；构造函数 / `start` / `pause` / `continue` 路径不碰私有面。",
         "`Polyline#_config.linkRight` 是实例私有字段，用于判断折线是否跨 180° 经线。",
@@ -62,6 +74,26 @@
         "Polyline",
         "Size"
       ],
+      "manualInstanceChecks": [
+        "Map#addOverlay",
+        "Map#removeOverlay",
+        "Map#addControl",
+        "Map#getPanes",
+        "Map#getContainer",
+        "Map#pointToPixel",
+        "Map#pointToOverlayPixel",
+        "Map#getDistance",
+        "Map#getBounds",
+        "Map#getCenter",
+        "Map#setCenter",
+        "Map#getSize",
+        "Map#getViewport",
+        "Map#setViewport",
+        "Map#enableDragging",
+        "Overlay#initialize",
+        "Overlay#draw",
+        "Overlay#dispose"
+      ],
       "hasPrivateSurface": false,
       "privateSurfaceNote": "无。",
       "selfInjectedMarkers": [
@@ -78,7 +110,7 @@
         "status": "verified",
         "detail": "真实 4.0 页面上 `new BMapGLLib.DrawingManager(map, { isOpen: false, enableCalculate: true, enableGpc: true })` 构造成功，`getDrawingMode()` 返回 `marker`；**证实了「脚本自行注入外部脚本」**——页面上多出 `GeoUtils/src/GeoUtils.min.js` 与 `DrawingManager/src/gpc.js` 两个 `<script>`（各出现两次：构造选项与显式 `enable*()` 各触发一次）。"
       },
-      "summary": "引用的命名空间成员全部在 4.0.4 声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），不依赖 SDK 内部模块。但它用 `prototype = new BMapGL.Overlay` 继承覆盖物基类，而官方声明明写「此类不可实例化」；且 `enableCalculate()` / `enableGpc()` 会**由脚本自己**动态注入 GeoUtils 与 GPC 两个外部脚本，不受本库管控（已在真实 4.0 上观察到）。",
+      "summary": "引用的命名空间成员全部在官方类型声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），不依赖 SDK 内部模块。但它用 `prototype = new BMapGL.Overlay` 继承覆盖物基类，而官方声明明写「此类不可实例化」；且 `enableCalculate()` / `enableGpc()` 会**由脚本自己**动态注入 GeoUtils 与 GPC 两个外部脚本，不受本库管控（已在真实 4.0 上观察到）。",
       "residualRisks": [
         "`new BMapGL.Overlay` 与官方「不可实例化」的表述冲突；**真实 4.0 上构造成功、未抛错**，但「能继承基类」≠「绘制交互可用」——实际画一个圆/多边形的路径未覆盖，归 #43。",
         "运行时自行注入的两个外部脚本会绕过本库的加载与清理路径（不写进 `BUILTIN_PLUGIN_URLS`、不参与取消）⇒ 文档必须写明这一点（已由运行时观察证实，不再是推断）。"
@@ -95,6 +127,16 @@
         "Circle",
         "Polygon",
         "Polyline"
+      ],
+      "manualInstanceChecks": [
+        "Bounds#getSouthWest",
+        "Bounds#getNorthEast",
+        "Bounds#getCenter",
+        "Circle#getCenter",
+        "Circle#getRadius",
+        "Polyline#getPath",
+        "Polygon#getPath",
+        "Point#equals"
       ],
       "hasPrivateSurface": false,
       "privateSurfaceNote": "无。",
@@ -122,6 +164,7 @@
       "exposedGlobal": "window.mapvgl",
       "required": false,
       "sdkNamespaceMembers": [],
+      "manualInstanceChecks": [],
       "hasPrivateSurface": true,
       "privateSurfaceNote": "私有 JSONP 回调表（成员名 `_rd`）：脚本把函数注册进这张表，并把 `callback=` 指过去。",
       "selfInjectedMarkers": [

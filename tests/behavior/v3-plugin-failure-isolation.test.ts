@@ -1,34 +1,48 @@
 /**
- * 插件失败隔离的**组件级**契约（M3A3-07 / issue #25）
+ * 插件失败隔离的**组件级**契约（M3A3-07 / issue #25；评审 #85 P1-2 重写）
  *
- * `PluginRegistry` 那一层已有用例证明「optional 插件失败只发事件、不抛」。但组件还可能在两处把
- * 结论说反：
+ * `PluginRegistry` 那一层已经有用例证明「optional 插件失败只发事件、不抛」。组件层还要钉三件事：
  *
- * 1. **把 map ready 挂在插件上** —— `BMap.vue` 的承诺是「ready 不等插件」（`loadPluginsInBackground`）；
- * 2. **把失败回执成成功** —— 对 optional 插件，注册表在失败时是以 `undefined` **resolve** 的
- *    （失败策略见 `PluginRegistry.loadPlugin`），所以 `await` 拿到返回值**不等于**成功。
- *    此处曾经据此发 `plugin-ready`：插件没加载起来，组件 API 上却报「加载成功」。
- *    内置插件一律改 optional（M3A3-07）之后，这个坑的暴露面从两个插件扩到四个，必须一起修。
+ * 1. **失败不得阻断地图** —— `BMap.vue` 的承诺是「ready 不等插件」（`loadPluginsInBackground`）；
+ * 2. **失败不得被回执成成功** —— 对 optional 插件，注册表在失败时是以 `undefined` **resolve** 的
+ *    （`PluginRegistry.loadPlugin`），所以 `await` 拿到返回值**不等于**成功；
+ * 3. **但 `undefined` 也不等于失败**（评审 #85 P1-2 抓到的反向错误）—— 只注入副作用、不产出资源的
+ *    「void 插件」本来就是这种合法形态。曾用 `loaded === undefined` 判失败，会把它们一起否掉；
+ *    正确判据是**注册表状态**（`getStatus(name) === "ready"`）。
  *
- * 本文件刻意**不用 `vi.mock`**：`BMap.vue` 里那句 `stringToPluginDefinitions(props.plugins)` 是
- * 相对 `.vue` 文件的导入，mock 的 specifier 要从测试文件解析到同一个模块 id，很容易看着生效、
- * 实则没拦住（第一版就是这么写错的）。改成走**真实代码路径**：
+ * ## 为什么不用 `vi.mock` 造失败样本
  *
- * - 加载成功：`loadScriptWithExport` 会先看全局导出在不在，在就直接 resolve（不碰网络）——
- *   预置 `window.mapvgl` 就能确定性地拿到「成功」这一半；
- * - 加载失败：用一个**未知插件名**（`stringToPluginDefinitions` 对它返回 optional 空实现，
- *   resolve `undefined`）——这正是上面第 2 条的触发形态。
+ * 第一版用 `vi.mock("…/plugins/builtins")` 返回受控 definition，加计数器后发现 **`mock calls: 0`**
+ * —— mock 拦不住 `.vue` 里那句相对导入（specifier 带不带 `.ts` 都试过），于是组件实际用的是真实
+ * 名字表，而「未知插件 → noop → resolve undefined」被误读成「我的修复没生效」。
  *
- * 两半都在同一个 `describe` 里，互为对照：如果组件干脆不看注册表状态、只按返回值回执，
- * 第一半仍会绿、第二半会红。
+ * 现在改成走**真实代码路径**造两种样本，全程不 mock 模块：
+ * - **失败**：挑一个**真工厂**（`TrackAnimation`；不能挑 `Mapvgl` —— 它走的是
+ *   `fetch(url)` + 内联的 `mapvgl` 专用分支，根本不产生带 `src` 的 `<script>`，打桩拦不到），
+ *   并在测试里把 `document.createElement` 对非百度脚本的
+ *   `<script>` 打成「派发 `error`」——`loadScriptWithExport` 的 `onerror` 分支因此真的 reject，
+ *   这是**确定性、不碰网络**的真实失败；
+ * - **成功（void）**：用一个未知插件名（名字表给 noop，resolve `undefined`，状态是 `ready`）。
+ *
+ * 两个样本互为对照：把判据写回 `loaded === undefined`，第二个样本立刻变红。
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import { getFakeBMapGl, resetLifecycleState } from "../../packages/test-utils";
 
 const fake = getFakeBMapGl();
+
+/**
+ * 模块级缓存原始 `createElement`。
+ *
+ * 必须在**任何 spy 安装之前**取一次：`vi.spyOn` 对同一个 (对象, 方法) 会返回**同一个 spy**，
+ * 所以在用例里再 `document.createElement.bind(document)` 拿到的其实是「被替换后的那份」，
+ * 于是 `mockImplementation` 里再调它 = 自递归（`Maximum call stack size exceeded`）。
+ * `tests/setup.ts` 出于同样原因也是模块级缓存。
+ */
+const realCreateElement = document.createElement.bind(document);
 
 function makeGlobalProvider() {
   return {
@@ -47,6 +61,26 @@ function createHost(): HTMLElement {
   return host;
 }
 
+/**
+ * 让**非百度**脚本的 `<script>` 注入确定性失败（派发 `error`），从而走真实 reject 分支。
+ *
+ * 百度入口脚本不受影响（本用例也不需要它：provider 直接给 fake SDK）。
+ */
+function failThirdPartyScripts(): void {
+  vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: unknown) => {
+    const element = realCreateElement(tag as never, options as never) as HTMLElement;
+    if (tag === "script") {
+      setTimeout(() => {
+        const script = element as HTMLScriptElement;
+        if (script.src && !script.src.includes("api.map.baidu.com")) {
+          script.dispatchEvent(new Event("error"));
+        }
+      }, 0);
+    }
+    return element;
+  }) as never);
+}
+
 function mountMap(plugins: string[]) {
   const wrapper = mount(
     defineComponent({
@@ -58,11 +92,10 @@ function mountMap(plugins: string[]) {
   return {
     wrapper,
     readyEvents: () => inner.emitted("ready") ?? [],
-    readyNames: () => inner.emitted("plugin-ready") ?? [],
-    // `emitted()` 返回的是「每次 emit 的参数数组」，所以每条事件取 args[0]
+    readyNames: () => (inner.emitted("plugin-ready") ?? []).map((args) => args[0]),
     errorEvents: () =>
       ((inner.emitted("plugin-error") ?? []) as unknown[][]).map(
-        (args) => args[0] as { name: string; error: unknown },
+        (args) => args[0] as { name: string; error: { cause?: unknown } },
       ),
   };
 }
@@ -74,48 +107,53 @@ describe("插件失败不阻断地图，且失败不被回执成成功", () => {
   });
 
   afterEach(() => {
-    // 预置的全局导出要还原：否则会漏进别的用例，让「加载成功」变成假象
-    delete (window as unknown as { mapvgl?: unknown }).mapvgl;
+    vi.restoreAllMocks();
   });
 
-  it("加载成功（全局导出已存在 ⇒ 不碰网络）：发 plugin-ready，不发 plugin-error", async () => {
-    (window as unknown as { mapvgl: unknown }).mapvgl = { fake: true };
-    const mounted = mountMap(["Mapvgl"]);
+  it("真实失败（脚本注入 error）：ready 照发，回执 plugin-error 而不是 plugin-ready", async () => {
+    failThirdPartyScripts();
+    const mounted = mountMap(["TrackAnimation"]);
+    await flushPromises();
     await flushPromises();
 
-    expect(mounted.readyEvents().length, "地图本身必须 ready").toBeGreaterThan(0);
-    expect(mounted.readyNames().map((args) => args[0])).toEqual(["Mapvgl"]);
-    expect(mounted.errorEvents()).toEqual([]);
+    expect(mounted.readyEvents().length, "插件失败不得阻断 map ready").toBeGreaterThan(0);
+    expect(mounted.readyNames(), "真实失败不得回执 plugin-ready").toEqual([]);
+    const errors = mounted.errorEvents();
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]!.name).toBe("TrackAnimation");
+    // 原始错误经 PluginRegistry.getError() 带出来，而不是另造一个没有 cause 的替代品
+    const cause = errors[0]!.error.cause as Error | undefined;
+    expect(cause, "cause 应当是插件加载的真实错误").toBeInstanceOf(Error);
+    expect(String(cause!.message)).toMatch(/plugin/i);
     mounted.wrapper.unmount();
   });
 
-  it("加载失败（未知插件 = optional 空实现）：ready 照发，回执 plugin-error 而不是 plugin-ready", async () => {
+  it("void 插件（load resolve undefined）是**成功**：回执 plugin-ready，绝不报错", async () => {
+    // 名字表对未知插件的定义是 `{ required: false, load: async () => undefined }` ——
+    // 「只注册副作用、不产出资源」的合法形态。用 `loaded === undefined` 判失败会把这条语义否掉。
     const mounted = mountMap(["NoSuchPlugin"]);
     await flushPromises();
 
-    // 隔离：插件失败不得阻断地图
-    expect(mounted.readyEvents().length, "插件失败不得阻断 map ready").toBeGreaterThan(0);
-    // 不许把失败报成成功：注册表对它 resolve 的是 `undefined`、status 也不是 ready
-    expect(mounted.readyNames(), "optional 失败不得回执 plugin-ready").toEqual([]);
-    const errors = mounted.errorEvents();
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]!.name).toBe("NoSuchPlugin");
+    expect(mounted.readyEvents().length).toBeGreaterThan(0);
+    expect(mounted.readyNames(), "void 插件必须回执 plugin-ready").toEqual(["NoSuchPlugin"]);
+    expect(mounted.errorEvents(), "void 插件不是失败").toEqual([]);
     mounted.wrapper.unmount();
   });
 
-  it("两种插件的回执互不相同（证明上面两条不是同一件事的两种说法）", async () => {
-    (window as unknown as { mapvgl: unknown }).mapvgl = { fake: true };
-    const ok = mountMap(["Mapvgl"]);
+  it("两种样本的回执互不相同（证明上面两条不是同一件事的两种说法）", async () => {
+    failThirdPartyScripts();
+    const failing = mountMap(["TrackAnimation"]);
     await flushPromises();
-    const failed = mountMap(["NoSuchPlugin"]);
+    await flushPromises();
+    const voidPlugin = mountMap(["NoSuchPlugin"]);
     await flushPromises();
 
-    expect(ok.readyNames().length).toBe(1);
-    expect(ok.errorEvents().length).toBe(0);
-    expect(failed.readyNames().length).toBe(0);
-    expect(failed.errorEvents().length).toBeGreaterThan(0);
+    expect(failing.readyNames()).toEqual([]);
+    expect(failing.errorEvents().length).toBeGreaterThan(0);
+    expect(voidPlugin.readyNames()).toEqual(["NoSuchPlugin"]);
+    expect(voidPlugin.errorEvents()).toEqual([]);
 
-    ok.wrapper.unmount();
-    failed.wrapper.unmount();
+    failing.wrapper.unmount();
+    voidPlugin.wrapper.unmount();
   });
 });

@@ -215,7 +215,18 @@ function fetchArtifact(url: string): Promise<{ source: string; bytes: number }> 
 async function main(): Promise<number> {
   const { entries, urls, typesVersion, declarationNames } = await loadData()
 
-  console.log(`[plugin-compat] official types: @baidumap/jsapi-v4-types@${typesVersion}`)
+  /**
+ * 核对范围声明（评审 #85 P2-1）。本探针**只**做命名空间级存在性核对：抽取产物里的
+ * `BMapGL.<Member>`，再与官方声明索引比对。`Map#getViewport` 这类**实例成员不在其中** ——
+ * minified 产物里被调用的方法名无法可靠归到 owner 类型上。这条边界必须印在输出里，
+ * 否则读者会以为「实例成员也被自动校验了」（owner/member 级校验属 #43）。
+ */
+const CHECK_SCOPE =
+  "namespace-level members only（BMapGL.<Member> 的存在性核对）；" +
+  "实例成员（Owner#member）不在自动门禁内 —— 见 inventory 的 manualInstanceChecks"
+
+console.log(`[plugin-compat] official types: @baidumap/jsapi-v4-types@${typesVersion}`)
+console.log(`[plugin-compat] check scope: ${CHECK_SCOPE}`)
   console.log(`[plugin-compat] inventory: ${entries.length} plugins, timeout ${timeoutMs}ms`)
   console.log('')
 
@@ -341,6 +352,11 @@ async function main(): Promise<number> {
   if (jsonOut) {
     const payload = {
       officialTypesVersion: typesVersion,
+      checkScope: CHECK_SCOPE,
+      // 人工核对的实例成员也带上：机读报告里同样能看出「哪些是自动结论、哪些是人工结论」
+      manualInstanceChecks: Object.fromEntries(
+        entries.map((entry) => [entry.id, entry.manualInstanceChecks]),
+      ),
       timeoutMs,
       observations,
     }

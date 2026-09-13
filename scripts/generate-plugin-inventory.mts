@@ -37,6 +37,7 @@ interface Entry {
   exposedGlobal: string
   required: boolean
   sdkNamespaceMembers: readonly string[]
+  manualInstanceChecks: readonly string[]
   hasPrivateSurface: boolean
   privateSurfaceNote: string
   selfInjectedMarkers: readonly string[]
@@ -79,7 +80,8 @@ function renderMarkdown(): string {
     '这份清单覆盖 `plugins: [...]` 能识别的四个内置插件脚本。它区分**三类依据**：对锁定 URL 的',
   )
   lines.push(
-    '真实发布产物的观察、与官方 `@baidumap/jsapi-v4-types@4.0.4` 的逐成员核对、以及真实运行时观察。',
+    '真实发布产物的观察、与官方 `@baidumap/jsapi-v4-types` 声明的核对（**自动部分只到命名空间级成员**）、'
+      + '以及真实运行时观察。',
   )
   lines.push('没有跑过的档位不写进依据——把「声明面没缺口」说成「兼容」是把结论说得比证据强。')
   lines.push('')
@@ -150,6 +152,14 @@ function renderMarkdown(): string {
     lines.push(`私有面：${entry.privateSurfaceNote}`)
     lines.push('')
     lines.push(
+      entry.manualInstanceChecks.length === 0
+        ? '成员核对：命名空间级成员由 `pnpm probe:plugin-compat` 自动核对；本条目的执行路径没有用到实例成员。'
+        : '成员核对：命名空间级成员由 `pnpm probe:plugin-compat` 自动核对；**实例成员**（' +
+            entry.manualInstanceChecks.join('、') +
+            '）是**人工**对照 `@baidumap/jsapi-v4-types` 声明核对的，**不在自动门禁内**。',
+    )
+    lines.push('')
+    lines.push(
       entry.runtime
         ? `运行时（\`pnpm probe:plugin-runtime\`）：${
             entry.runtime.status === 'threw' ? '**抛错**' : '**已验证最小路径**'
@@ -169,7 +179,7 @@ function renderMarkdown(): string {
   lines.push('')
   lines.push('```bash')
   lines.push('# 从锁定 URL 拉取真实发布产物，重新抽取「引用的 SDK 成员 / 私有面 / 自注入脚本」，')
-  lines.push('# 并与官方 4.0.4 声明逐成员核对（需要网络；不进 PR 门禁）。')
+  lines.push('# 并与官方类型声明核对命名空间级成员（需要网络；不进 PR 门禁）。')
   lines.push('pnpm probe:plugin-compat')
   lines.push('')
   lines.push('# 只做本地无网络校验：数据模块、生成文档与 BUILTIN_PLUGIN_URLS 是否一致。')
@@ -193,6 +203,7 @@ function renderJson(): string {
       exposedGlobal: entry.exposedGlobal,
       required: entry.required,
       sdkNamespaceMembers: entry.sdkNamespaceMembers,
+      manualInstanceChecks: entry.manualInstanceChecks,
       hasPrivateSurface: entry.hasPrivateSurface,
       privateSurfaceNote: entry.privateSurfaceNote,
       selfInjectedMarkers: entry.selfInjectedMarkers,

@@ -275,11 +275,13 @@ onActivated(() => {
 async function loadPluginsInBackground() {
   for (const name of props.plugins ?? []) {
     try {
-      const loaded = await runtime.plugins.whenPlugin(name, runtime.resources.signal);
-      // **不能把「拿到了返回值」当成成功**：optional 插件失败时注册表会以 `undefined` resolve
-      // （失败策略见 `PluginRegistry.loadPlugin`），据此发 `plugin-ready` 等于把失败报成成功。
-      // 以注册表状态为准；失败时带上它记录到的原始错误，而不是另造一个没有 cause 的替代品。
-      if (loaded === undefined || runtime.plugins.getStatus(name) !== "ready") {
+      await runtime.plugins.whenPlugin(name, runtime.resources.signal);
+      // **只以注册表状态判定成败**。两点都要注意（评审 #85 P1-2）：
+      // - optional 插件失败时注册表以 `undefined` resolve ⇒ 不能把「拿到了返回值」当成成功；
+      // - 但反过来也不行：`undefined` **不等于**失败 —— 只注入副作用、不产出资源的「void 插件」
+      //   本来就是这种合法形态，用 `loaded === undefined` 判失败会把它们一起否掉。
+      // 失败（required 抛错、optional 被吞）统一由状态识别，并带回注册表记录到的原始错误。
+      if (runtime.plugins.getStatus(name) !== "ready") {
         throw new BMapError(
           "BMAP_RESOURCE_CREATE_FAILED",
           `plugin "${name}" 未加载成功（status: ${runtime.plugins.getStatus(name) ?? "unknown"}）`,

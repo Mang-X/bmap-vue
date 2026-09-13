@@ -89,7 +89,7 @@
 | service | `service.local-city` | native | — | ✓ | ✓ | ✓ | LocalCity | — | IP 定位城市（LocalCity） |
 | service | `service.boundary` | native | — | ✓ | ✓ | ✓ | Boundary | — | 行政区边界（Boundary） |
 | service | `service.convertor` | native | — | ✓ | ✓ | ✓ | Convertor | — | 坐标转换（Convertor） |
-| service | `service.track-animation` | unsupported | ✓ | ✓ | ✓ | ✓ | — | — | 轨迹动画（BMapGLLib 插件）；脚本引用面在 4.0.4 声明里没有缺口，但**运行时未验证**，本阶段不装配（4.0 的对应能力是原生图层 `layer.track-line`）；依据与复现见 plugin-compat-inventory（M3A3-07 / #25） |
+| service | `service.track-animation` | unsupported | ✓ | ✓ | ✓ | ✓ | — | — | 轨迹动画（BMapGLLib 插件）；脚本引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随跑通），**完整功能链路仍未验证**；本阶段不装配（4.0 的对应能力是原生图层 `layer.track-line`）；依据与复现见 plugin-compat-inventory（M3A3-07 / #25） |
 | panorama | `panorama.viewer` | native | — | ✓ | — | ✓ | Panorama | — | 全景查看器（Panorama） |
 | panorama | `panorama.service` | native | — | ✓ | — | ✓ | PanoramaService | — | 全景服务（PanoramaService） |
 | panorama | `panorama.label` | experimental | — | — | — | ✓ | PanoramaLabel | — | 全景标注（PanoramaLabel） |
