@@ -391,16 +391,73 @@ describe("交互开关", () => {
 });
 
 describe("底图类型与样式", () => {
-  it("语义地图类型映射到 MapTypeId 常量", () => {
+  it("语义地图类型映射到运行时那组 MapTypeId 成员（NORMAL / SATELLITE / EARTH）", () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     map.setMapType(handle, "normal");
     map.setMapType(handle, "satellite");
     map.setMapType(handle, "earth");
 
-    expect(fake.createdMaps[0].mapType).toBe("BMAP_EARTH_MAP");
-    expect(fake.createdMaps[0].callLog).toContain("setMapType:BMAP_NORMAL_MAP");
-    expect(fake.createdMaps[0].callLog).toContain("setMapType:BMAP_SATELLITE_MAP");
+    expect(fake.createdMaps[0].mapType).toBe("earth");
+    expect(fake.createdMaps[0].callLog).toContain("setMapType:normal");
+    expect(fake.createdMaps[0].callLog).toContain("setMapType:satellite");
+  });
+
+  /**
+   * 反证守卫：夹具的形状必须与**真实运行时**一致。
+   *
+   * 真实 `v=4.0` 的 `BMap.MapTypeId` 没有 `BMAP_*_MAP`（那组常量挂在全局）。如果夹具同时提供
+   * 两套名字，「只读声明名」的实现会在这里一路绿、直到真实 smoke 才炸（#71 的教训）。
+   */
+  it("夹具的 MapTypeId 只有运行时那三个成员，没有上游声明里的 BMAP_*_MAP", () => {
+    const { fake } = setup();
+    const keys = Object.keys(fake.namespace.MapTypeId);
+    expect(keys.sort()).toEqual(["EARTH", "NORMAL", "SATELLITE"]);
+  });
+
+  it("命名空间只提供上游声明名（BMAP_*_MAP）时仍能解析（候选后备）", () => {
+    const fake = createFakeBMapV4();
+    const namespace = {
+      ...fake.namespace,
+      MapTypeId: {
+        BMAP_NORMAL_MAP: "BMAP_NORMAL_MAP",
+        BMAP_SATELLITE_MAP: "BMAP_SATELLITE_MAP",
+        BMAP_EARTH_MAP: "BMAP_EARTH_MAP",
+      },
+    };
+    const registry = createJsapiV4HandleRegistry();
+    const geometry = createJsapiV4GeometryDriver(namespace);
+    const events = createJsapiV4EventDriver({ registry, geometry });
+    const capabilities = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: namespace,
+      unsupported: "silent",
+    });
+    const map = createJsapiV4MapDriver({ rawSdk: namespace, geometry, capabilities, registry, events });
+    const handle = map.create(ctx.container);
+    expect(() => map.setMapType(handle, "normal")).not.toThrow();
+  });
+
+  it("运行时名优先于上游声明名（两者同时存在时取运行时名）", () => {
+    const fake = createFakeBMapV4();
+    const namespace = {
+      ...fake.namespace,
+      MapTypeId: { NORMAL: "runtime-normal", BMAP_NORMAL_MAP: "declared-normal" },
+    };
+    const registry = createJsapiV4HandleRegistry();
+    const geometry = createJsapiV4GeometryDriver(namespace);
+    const events = createJsapiV4EventDriver({ registry, geometry });
+    const capabilities = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: namespace,
+      unsupported: "silent",
+    });
+    const map = createJsapiV4MapDriver({ rawSdk: namespace, geometry, capabilities, registry, events });
+    const handle = map.create(ctx.container);
+    map.setMapType(handle, "normal");
+    expect(fake.createdMaps[0].mapType).toBe("runtime-normal");
   });
 
   it("未知地图类型按非法参数拒绝", () => {
@@ -411,7 +468,7 @@ describe("底图类型与样式", () => {
     );
   });
 
-  it("mapTypeId 缺失时报 SDK 边界错误", () => {
+  it("mapTypeId 缺失时报 SDK 边界错误，并把试过的候选名带进 detail", () => {
     const fake = createFakeBMapV4();
     const { MapTypeId, ...withoutMapTypeId } = fake.namespace;
     void MapTypeId;
@@ -433,7 +490,11 @@ describe("底图类型与样式", () => {
     });
     const handle = map.create(ctx.container);
     expect(() => map.setMapType(handle, "normal")).toThrowError(
-      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+      expect.objectContaining({
+        code: "BMAP_SDK_CALL_FAILED",
+        // 错误文案要把「试过哪些候选名」写出来，否则下次再踩只能靠猜。
+        message: expect.stringContaining("NORMAL / BMAP_NORMAL_MAP"),
+      }),
     );
   });
 

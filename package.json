@@ -5,6 +5,8 @@
   "scripts": {
     "test:unit": "vitest run tests/behavior tests/__smoke__.test.ts packages",
     "test:performance": "vitest run tests/performance",
+    "smoke:v4:fixture": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=fixture",
+    "smoke:v4": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=live",
     "verify:manifest": "node scripts/collect-api-manifest.mts --check",
     "check:raw-sdk": "node --experimental-strip-types scripts/check-raw-sdk.mts",
     "check:raw-sdk:tree": "node --experimental-strip-types scripts/check-raw-sdk.mts --src packages/baidu-map-gl-vue/src",
