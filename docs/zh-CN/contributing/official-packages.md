@@ -146,10 +146,13 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | UI Kit 的 SSR | **不可用** | 只能浏览器内动态 import；根入口与 SSR 模块图不得静态引入 |
 | UI Kit 的 AK 前置 | **强依赖** | 需要带 `ak=` 的 SDK `<script>` 或 `window.BMAP_AUTHENTIC_KEY`；代理模式务必补后者 |
 | UI Kit 的 CSS | **需消费方引入** | 不引入不会报错，只会「无样式」；UI 消费者 fixture 必须覆盖这一点 |
-| `RoutePlan` 的公交 / 步行 / 骑行 | **锁定版本未开放** | `switchType` no-op + warn；需要时走 headless 路线能力 |
+| `RoutePlan` 的公交 / 步行 / 骑行 | **锁定版本未开放** | `switchType` no-op + warn；需要时走 headless 路线能力。本库**不暴露** `switchType()`，`typechange` 转发但不可达 |
 | UI Kit 在 proxy（`serviceHost`）模式下的端到端可用性 | **未验证** | 本次探针只验证了代理模式 URL 形状与全局声明，未在真实代理后端上跑四个 widget |
 | UI Kit 的主题变量与多地图共享 | **未验证** | 主题写入页面级变量，多图场景的影响未测 |
 | `RoutePlan` 的 `navclick`（含微信 `wx-open-launch-app` 路径） | **未验证** | 该路径会按需注入 `res.wx.qq.com/open/js/jweixin-1.6.0.js` 并挂 `document` 监听，只在点击时发生；未纳入本轮探针 |
+| `PlaceDetailOptions.layout`（`'default' \| 'compact'`） | **纸面支持** | 声明存在（`dist/types/options.d.ts`），但 `1.1.2` 的 ESM 与 IIFE 产物里 `layout` / `compact` 各出现 **0 次** ⇒ 传了不生效。本库**不暴露**该 prop：假支持不如没有 |
+| `PlaceDetail` 的请求失败与「uid 找不到」 | **没有事件出口** | `fetchDetailByUid()` 无 `catch`（Promise 被丢弃），`!n` 分支直接 `return` 不发 `load`。本库**不合成** `error` 事件，如实记录为已知限制 |
+| `RoutePlan` 的 `typechange` | **锁定版本不可达** | `enabledTypes` 硬编码 `["driving"]`，且本库不暴露 `switchType()`；事件照常转发（不丢上游信息） |
 
 ## 默认路径的配置面（R25-B / issue #71）
 
@@ -183,20 +186,24 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」。落地决策见 ADR [2026-09-13 删除 SDK 私有面嗅探](../../adr/2026-09-13-private-sdk-surface-removal.md) |
 | #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径。**已落地**：见下节 |
 | #74 / R25-E（同一候选提交重新验收） | 「已验证 vs 未验证」列表；探针命令与退出码语义；四 widget 结论 |
+| #75 / UIKIT-02（`PlaceDetail` / `RoutePlan` 薄封装与四组件收口） | UI Kit 契约表；两个 widget 的构造前提、公开面、事件载荷形状；`layout` 纸面支持与「uid 找不到不发事件」两条边界。**已落地**：见下节与 ADR [详情与路线封装](../../adr/2026-09-13-ui-kit-detail-route-wrappers) |
 
-## 本库侧落地（R25-D / issue #73）
+## 本库侧落地（R25-D / #73 与 UIKIT-02 / #75）
 
-`./ui-kit` 子入口与两个薄封装的实现边界见
-[ADR 2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)，
+`./ui-kit` 子入口与四个薄封装的实现边界见
+ADR [2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)
+与 ADR [2026-09-13：详情 / 路线 Vue 封装](/adr/2026-09-13-ui-kit-detail-route-wrappers)，
 使用方式见[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)。本页只登记「上游契约 → 本库行为」的对应：
 
 | 上游契约（本页上文） | 本库的处置 | 可复现证据 |
 | --- | --- | --- |
-| `options.map` 必传、构造前须有可用地图 | 桥等 `whenReady()` 后构造；map handle 换代时先释放旧 widget 再重建 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
+| `options.map` 必传、构造前须有可用地图 | 桥等 `whenReady()` 后构造；map handle 换代时先释放旧 widget 再重建 | `tests/behavior/v3-ui-kit-lifecycle.test.ts`、`v3-ui-kit-place-detail.test.ts`、`v3-ui-kit-route-plan.test.ts` |
 | UI Kit 只能浏览器内动态 import（无 DOM 时 import 即崩） | `./ui-kit` 入口及其依赖图**不含**上游包的静态 import；`loadUiKit()` 在无 DOM 时以 `BMAP_UI_KIT_UNAVAILABLE` 拒绝且不缓存失败 | `tests/behavior/v3-ui-kit-ssr.test.ts`（无 DOM 子进程 + DOM 访问记账）、`tests/behavior/v3-ui-kit-entry.test.ts` |
 | CSS 不在 JS 里注入 | `./ui-kit` 不自动引入样式；`UI_KIT_STYLE_PATH` 导出官方路径，消费方显式 `import` | `tests/behavior/v3-ui-kit-entry.test.ts`（真实 Vite 生产构建断言样式仍在） |
 | `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
 | **事件载荷形状**：`highlight` 是 `{ from: HighlightItem \| null, to: HighlightItem }` 变更对；`suggest` 是 `toEventSuggestion()` 生成的数组；`load` 是 POI 数组、`select` 是单条 POI（可能为 `undefined`） | 公共事件按同一形状投影（`PlaceHighlightChangeDTO { from, to }`，不压平）；POI/建议字段逐项对齐（`street` 等 deprecated 别名不转发） | `tests/behavior/v3-ui-kit-widget-contract.test.ts`（**发布产物形状锁**）、`v3-ui-kit-events.test.ts` |
 | 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/v3-ui-kit-events.test.ts`（`driver.services` 从未被读取） |
-| `RoutePlan` 只开放驾车 | 本轮不给 `PlaceDetail` / `RoutePlan` 提供 Vue 封装，只经 `loadUiKit()` 原生使用 | `tests/behavior/v3-ui-kit-entry.test.ts`（断言入口没有这两个组件） |
+| `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless（#39） | `tests/behavior/v3-ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`v3-ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
+| `PlaceDetailOptions.layout` 纸面支持；`setPlace(uid)` 找不到时不发事件；详情请求失败无出口 | 不暴露 `layout`；不合成 `error`/空 `load`；文档写明「`setPlace` 是发起而不是完成」 | `v3-ui-kit-place-detail.test.ts`、`v3-ui-kit-widget-contract.test.ts`（`layout` 在产物里 0 命中、`!n` 分支先于 `emit("load")` 的形状锁） |
+| `RoutePlan` 的事件用 `type`、`search()` 返回值用 `routeType`；`search()` 先 emit `error` 再抛 | 统一成 `type`；`WeakMap` 按上游错误身份缓存，保证「事件载荷 === 动作拒绝」；`cause` 只挂过 `redactAk` 的副本 | `v3-ui-kit-route-plan.test.ts`（同一条错误、脱敏三处出口） |
 | 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts` |

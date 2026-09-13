@@ -166,6 +166,14 @@ export class FakeUiKitWidget {
   goToPage(page: number): void {
     this.record("goToPage", page);
   }
+
+  /* --- PlaceDetail 公开面 --- */
+  setPlace(uidOrPoi: unknown): void {
+    this.record("setPlace", uidOrPoi);
+  }
+  clear(): void {
+    this.record("clear");
+  }
 }
 
 /** 自动补全：`search` 是同步的。 */
@@ -187,6 +195,97 @@ export class FakeUiKitSearch extends FakeUiKitWidget {
     this.record("search", keyword, option);
     return Promise.resolve();
   }
+}
+
+/** 地点详情：`setPlace` / `clear` 都是同步的（上游 `fetchDetailByUid` 的 Promise 被丢弃）。 */
+export class FakeUiKitPlaceDetail extends FakeUiKitWidget {
+  constructor(stats: FakeWidgetStats, host: HTMLElement | string, options: Record<string, unknown>) {
+    super("detail", stats, host, options);
+  }
+}
+
+/**
+ * 路径规划：`search` 是 async 的，且**上游是先 `emit("error")` 再抛** ——
+ * 夹具必须照抄这个顺序，否则「事件载荷与动作拒绝是同一条错误对象」这条契约在测试里
+ * 就是自证（很容易被实现写成两条不同的错误还能过）。
+ */
+export class FakeUiKitRoutePlan extends FakeUiKitWidget {
+  /** `search()` 成功时的返回值（默认一条最小可用的驾车结果）。 */
+  searchResult: unknown = upstreamRouteResult();
+  /** 非 null 时 `search()` 会 `emit("error", …)` 并以它拒绝。 */
+  searchError: unknown = null;
+  /** 上游的 `lastResult` 缓存（`clear()` 与成功搜索会改写它）。 */
+  lastRouteResult: unknown = null;
+
+  constructor(stats: FakeWidgetStats, host: HTMLElement | string, options: Record<string, unknown>) {
+    super("route-plan", stats, host, options);
+  }
+
+  search(options: object): Promise<unknown> {
+    this.record("search", options);
+    if (this.searchError) {
+      this.emit("error", this.searchError);
+      return Promise.reject(this.searchError);
+    }
+    this.lastRouteResult = this.searchResult;
+    return Promise.resolve(this.searchResult);
+  }
+
+  clear(): void {
+    this.record("clear");
+    this.lastRouteResult = null;
+  }
+
+  getCurrentType(): string {
+    this.record("getCurrentType");
+    return "driving";
+  }
+
+  getLastResult(): unknown {
+    this.record("getLastResult");
+    return this.lastRouteResult;
+  }
+}
+
+/**
+ * 上游 `RoutePlan` 的归一化回包形状（`NormalizedRouteResult`）。
+ *
+ * 注意字段名是 `routeType`：上游 `search()` 的**返回值**用它，而 `result` **事件**载荷
+ * 用的是 `type`（两者相等）。夹具两种都给，避免把「本库的归一化」变成夹具自证。
+ */
+export function upstreamRouteResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    routeType: "driving",
+    start: { title: "起点", location: { lng: 116.404, lat: 39.915 } },
+    end: { title: "终点", location: { lng: 116.305, lat: 39.982 } },
+    plans: [
+      {
+        distance: 1234,
+        distanceText: "1.2公里",
+        duration: 300,
+        durationText: "5分钟",
+        toll: 0,
+        trafficLights: 3,
+        path: [
+          { lng: 116.404, lat: 39.915 },
+          { lng: 116.305, lat: 39.982 },
+        ],
+        segments: [
+          {
+            type: "drive",
+            distance: 1234,
+            distanceText: "1.2公里",
+            description: "沿上地十街行驶",
+            roadName: "上地十街",
+            duration: 300,
+            location: { lng: 116.404, lat: 39.915 },
+            path: [{ lng: 116.404, lat: 39.915 }],
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
 }
 
 export interface FakeUiKit {
@@ -233,12 +332,13 @@ export function createFakeUiKit(): FakeUiKit {
     PlaceSearch: function (host: HTMLElement | string, options: Record<string, unknown>) {
       return track(new FakeUiKitSearch(stats, host, options));
     },
-    // 详情 / 路线：本轮不做 Vue 封装，但模块里必须存在（用于「进阶用户可原生构造」的用例）。
-    PlaceDetail: function () {
-      return { destroy() {}, on() {}, off() {} };
+    // 详情 / 路线：与另两个一样是**会记账的假 widget**（而不是空壳）——
+    // 「构造了但没绑事件」「销毁了但没解绑」必须能被计数看见。
+    PlaceDetail: function (host: HTMLElement | string, options: Record<string, unknown>) {
+      return track(new FakeUiKitPlaceDetail(stats, host, options));
     },
-    RoutePlan: function () {
-      return { destroy() {}, on() {}, off() {} };
+    RoutePlan: function (host: HTMLElement | string, options: Record<string, unknown>) {
+      return track(new FakeUiKitRoutePlan(stats, host, options));
     },
   };
   return {

@@ -24,6 +24,7 @@ import { useRequiredMapContext } from "../../core/context/inject";
 import { ResourceScope } from "../../core/lifecycle/ResourceScope";
 import { unwrapRaw } from "../../driver/types/handles";
 import { loadUiKit } from "./loadUiKit";
+import { canonicalKey } from "./points";
 import type { PlacePointDTO, UiKitModule, UiKitWidgetHandle, UiKitWidgetOptions } from "./types";
 
 /** 桥的状态机；`disposed` 只有在组件卸载后才会出现。 */
@@ -42,6 +43,20 @@ export interface UseUiKitWidgetOptions<TWidget extends UiKitWidgetHandle> {
   host: Ref<HTMLElement | null>;
   /** 构造选项，不含 `map`（`map` 由桥注入且优先级最高）。 */
   buildOptions: () => Record<string, unknown>;
+  /**
+   * **构造期**选项（上游没有对应 setter 的那部分）。
+   *
+   * 内容变化 → 重建 widget（口径与官方 react-bmap 的 `ctorKey` 一致：构造期参数进 key、
+   * 其余走 setter），比较用的是稳定串，所以「每次渲染传新的对象字面量、内容相同」不会触发重建。
+   *
+   * 为什么与 `buildOptions()` 分开：`buildOptions()` 里还包含**有 setter 的运行期选项**
+   * （例如 `BPlaceAutocomplete` 的 `location`），拿它当重建依据会让「改城市」也重建，
+   * 从而吃掉输入值 / 焦点 / 下拉展开状态。
+   *
+   * 为什么放在桥里：这是四个组件**共有**的一条语义（上游的构造期参数都没有 setter），
+   * 各写一份的话，改重建口径要同时改四个 SFC，且很容易新写的组件漏掉。
+   */
+  constructorOptions: () => Record<string, unknown>;
   /** 用已加载的模块与最终选项构造 widget。 */
   create: (module: UiKitModule, host: HTMLElement, options: UiKitWidgetOptions) => TWidget;
   /** 绑定公开事件；返回的订阅会在释放时逐条 `off`。 */
@@ -235,6 +250,15 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
   onMounted(() => {
     void start();
   });
+
+  // 构造期输入变化 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
+  // 语义只有这一份：四个组件都靠它，不再各自 watch。
+  watch(
+    () => canonicalKey(options.constructorOptions()),
+    () => {
+      rebuild();
+    },
+  );
 
   // 换 Map：`<BMap>` 的 runtime 被重建（retry / 重新初始化）时 map handle 会换代，
   // 旧 widget 仍握着旧地图实例 —— 必须重建，否则 PlaceSearch 会对着失效的地图取视野。

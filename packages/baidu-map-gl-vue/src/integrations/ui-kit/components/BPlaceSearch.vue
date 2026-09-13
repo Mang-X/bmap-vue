@@ -18,9 +18,9 @@
  * props 都是**构造期选项**（上游没有对应 setter）：变更即重建 widget，不会静默保留旧值
  * （口径与官方 react-bmap 的 `ctorKey` 一致）。检索与翻页都是公开动作，不需要重建。
  */
-import { computed, ref, watch } from "vue";
+import { ref } from "vue";
 import { useUiKitWidget } from "../useUiKitWidget";
-import { canonicalKey, toPoiDTO, toPoiList } from "../points";
+import { toPoiDTO, toPoiList } from "../points";
 import type { PlacePointDTO, PlacePoiDTO, PlaceSearchDisplayDTO, UiKitSearchWidget } from "../types";
 
 export interface BPlaceSearchProps {
@@ -49,14 +49,14 @@ export interface PlaceBoundsDTO {
 
 const hostRef = ref<HTMLElement | null>(null);
 
-/** 构造期选项的键名表（单一来源：`buildOptions()` 与 `constructionKey` 都从这里取）。 */
+/** 构造期选项的键名表（单一来源：`buildOptions()` 由它取值，桥按同一份内容判断是否重建）。 */
 const CONSTRUCTOR_OPTION_KEYS = [
   "pageCapacity",
   "pageNum",
   "display",
 ] as const satisfies readonly (keyof BPlaceSearchProps)[];
 
-/** 构造期选项：内容（而不是对象引用）变化即重建；`canonicalKey()` 保证内容相同的内联对象不触发。 */
+/** 构造期选项：值透传给上游构造器；桥按内容的稳定串判断是否重建（内容相同的内联对象不触发）。 */
 function buildOptions(): Record<string, unknown> {
   const options: Record<string, unknown> = {};
   for (const key of CONSTRUCTOR_OPTION_KEYS) {
@@ -66,10 +66,12 @@ function buildOptions(): Record<string, unknown> {
   return options;
 }
 
-const { status, withWidget, toRawPoint, rebuild } = useUiKitWidget<UiKitSearchWidget>({
+const { status, withWidget, toRawPoint } = useUiKitWidget<UiKitSearchWidget>({
   component: "BPlaceSearch",
   host: hostRef,
   buildOptions,
+  // 本组件的 props 全是构造期选项，因此两份取的是同一个函数。
+  constructorOptions: buildOptions,
   create: (module, host, options) => new module.PlaceSearch(host, options),
   bind: () => [
     {
@@ -86,12 +88,7 @@ const { status, withWidget, toRawPoint, rebuild } = useUiKitWidget<UiKitSearchWi
   ],
 });
 
-const constructionKey = computed(() => canonicalKey(buildOptions()));
-
-// 构造期选项变更 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
-watch(constructionKey, () => {
-  rebuild();
-});
+// 构造期选项变更 → 重建由桥负责（`constructorOptions`）。
 
 /** 关键字检索；`city` 可限定城市。 */
 function search(keyword: string, option?: { city?: string }): Promise<void> {

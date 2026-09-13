@@ -184,3 +184,10 @@ Vue 的 `resolvePropValue` 对 `Boolean` 类型有 `isAbsent && !hasDefault → 
    有牙齿的证据是直接读 `dist/ui-kit.d.ts` 的断言（`v3-ui-kit-entry.test.ts`）。
 5. **文档措辞**：`PlaceSearch` 的翻页是**API 而不是内置 UI**（上游只提供
    `prevPage` / `nextPage` / `goToPage`，没有翻页控件），文档不再暗示会自动出现翻页按钮。
+
+## 后续（2026-09-13）
+
+**决策 7（「详情与路线：不提供 Vue 封装」）已被取代**，见 ADR
+[2026-09-13 `./ui-kit` 的详情 / 路线 Vue 封装](./2026-09-13-ui-kit-detail-route-wrappers.md)
+（issue #75）。本文正文按 ADR 约定保持冻结不改写；决策 1–6、8 与「已知限制」的其它条目继续有效，
+其中「`RoutePlan` 在 `1.1.2` 只开放驾车」的结论被新 ADR 沿用为「不暴露 `switchType()`」的依据。
