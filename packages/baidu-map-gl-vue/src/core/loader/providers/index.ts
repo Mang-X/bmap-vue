@@ -13,8 +13,20 @@ export {
 } from "./CustomScriptV4Provider";
 export { createLoadedJsapiV4 } from "./loaded";
 export type { CreateLoadedJsapiV4Input } from "./loaded";
-export { loadJsapiV4Script } from "./load";
+export { loadJsapiV4Script, registerJsapiV4LoadResidue } from "./load";
 export type { LoadJsapiV4ScriptInput } from "./load";
+export {
+  OFFICIAL_LOADER_UNSUPPORTED_KEYS,
+  officialJsapiLoader,
+  toOfficialLoadError,
+  toOfficialLoadOptions,
+  resolveOfficialNamespace,
+} from "./official";
+export type {
+  OfficialJsapiLoadOptions,
+  OfficialJsapiLoader,
+  OfficialLoaderUnsupportedKey,
+} from "./official";
 export { reuseExistingJsapiV4 } from "./reuse";
 export type { ReuseExistingJsapiV4Input } from "./reuse";
 export {
@@ -33,6 +45,7 @@ export {
   resolveExistingJsapiV4Version,
 } from "./namespace";
 export type {
+  BaiduJsapiV4ProviderOptions,
   JsapiV4Engine,
   JsapiV4LoadMetadata,
   JsapiV4LoadMode,

@@ -23,8 +23,21 @@ export const JSAPI_V4_REQUIRED_MEMBERS = ["Map", "Point", "Marker"] as const;
  *
  * 官方 `@baidumap/jsapi-v4-types@4.0.4` 未声明版本常量，因此这里是**尽力探测**：
  * 探测不到时回退到基线声明值，并由 `versionSource: "declared"` 如实标注。
+ *
+ * `version` 也列在候选里，但它**只在整个取值确实形如版本号时才作数**：真实 4.0 的
+ * `BMap.version` 是构建标记 `"gl"`（#70 实测，见
+ * `docs/zh-CN/contributing/official-packages.md`），拿它当版本号会让「宿主预加载 /
+ * 同页复用既有全局」这整条路径被判成「不是 JSAPI 4.0」。
  */
 export const JSAPI_V4_VERSION_PROBE_KEYS = ["VERSION", "version"] as const;
+
+/**
+ * 形如版本号的探测值（`4.0` / `4.0.4`）。
+ *
+ * 只有这种取值才参与「是不是 4.x」的判定：`"gl"` 这类构建标记、以及任何非纯数字串都
+ * 只说明「探测不到版本」，而不是「版本不对」。
+ */
+const VERSION_NUMBER_SHAPE = /^\d+(\.\d+)*$/;
 
 /** 读取 v4 全局命名空间；未就绪返回 `undefined`。 */
 export function readJsapiV4Global(): unknown {
@@ -105,13 +118,13 @@ export function assertJsapiV4Namespace(
   return value as Record<string, unknown>;
 }
 
-/** 从全局对象尽力读取版本号字符串；读不到返回 `undefined`。 */
+/** 从全局对象尽力读取版本号字符串；读不到（含非版本号形状的取值）返回 `undefined`。 */
 export function probeJsapiV4Version(value: unknown): string | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const namespace = value as Record<string, unknown>;
   for (const key of JSAPI_V4_VERSION_PROBE_KEYS) {
     const found = namespace[key];
-    if (typeof found === "string" && found.length > 0) return found;
+    if (typeof found === "string" && VERSION_NUMBER_SHAPE.test(found)) return found;
   }
   return undefined;
 }

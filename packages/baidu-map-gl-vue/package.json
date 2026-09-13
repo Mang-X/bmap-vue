@@ -57,6 +57,9 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "@baidumap/jsapi-loader": "1.0.0"
+  },
   "engines": {
     "node": ">=24"
   },

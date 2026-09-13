@@ -15,6 +15,8 @@
  * 不会把任务留在 `loading` 状态。
  */
 import { BMapError } from "../errors/BMapError";
+import { redactAk } from "../logger";
+import { maskUserinfo, readUrlUserinfo } from "./url";
 
 export type ScriptLoaderMode = "load" | "jsonp";
 
@@ -284,7 +286,19 @@ export class SharedLoadTask {
       const onLoad = () => this.succeed(undefined);
       const onError = () =>
         this.fail(
-          new BMapError("BMAP_SDK_LOAD_FAILED", `Failed to load script: ${this.options.src}`),
+          new BMapError(
+            "BMAP_SDK_LOAD_FAILED",
+            // 入口 URL 可能自带 `ak=` 或 userinfo（企业自托管入口很常见，含 HTTP 认证），
+            // 失败文案同样不得把它们带出去。这里没有「已知 AK」可用（Loader 只拿到 src），
+            // 因此 AK 走 `ak=` 模式脱敏、userinfo 走形状 + 已知值两条。
+            redactAk(
+              maskUserinfo(
+                `Failed to load script: ${this.options.src}`,
+                readUrlUserinfo(this.options.src),
+              ),
+              null,
+            ),
+          ),
         );
       // 先登记释放路径，再执行可能抛错的安装动作。
       this.detachScriptListeners = () => {

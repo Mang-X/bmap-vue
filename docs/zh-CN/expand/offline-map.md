@@ -62,6 +62,12 @@ window.BMapGL.apiLoad = function () {
 ```
 
 ::: tip v3 推荐写法
-`apiUrl` prop 仍可用；更明确的方式是用 `customScriptProvider(scriptSrc)` 构造 Provider，
-经 `createBMapPlugin({ provider })` 或 Client 定义传入，见[配置](../guide/config#更换插件资源链接)。
+`apiUrl` prop 仍可用于**自建入口**，但它不属于默认加载路径（默认路径的入口由官方 Loader 决定）：
+
+- `<BMap api-url="...">` / `createBMapPlugin({ apiUrl })` 会在加载前显式报 `BMAP_INVALID_ARGUMENT`；
+- 正确做法是用 `customScriptProvider(scriptSrc)`（v4 用 `customScriptV4Provider(scriptSrc, { mode })`）
+  构造 Provider，经 `createBMapPlugin({ provider })` 或 Client 定义传入，见[配置](../guide/config#更换插件资源链接)。
+
+如果 SDK 由宿主页面自己加载好（例如已有的离线入口脚本），改用 `existingGlobalProvider()`
+（v4：`existingGlobalV4Provider()`）即可，本库只消费全局、不另插 script。
 :::

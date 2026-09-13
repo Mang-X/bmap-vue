@@ -38,6 +38,7 @@ export {
   reuseExistingJsapiV4,
 } from "./loader/providers/index";
 export type {
+  BaiduJsapiV4ProviderOptions,
   CreateLoadedJsapiV4Input,
   CustomScriptV4ProviderOptions,
   JsapiV4Engine,

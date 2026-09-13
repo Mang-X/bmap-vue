@@ -3,7 +3,8 @@
  *
  * - 组件注册由 Manifest 生成的 `components/index.ts` 驱动（单一事实源），不再维护手写数组；
  * - 默认版本取 `DEFAULT_VERSION`（JSAPI 4.0 基线）；
- * - 默认 Client definition 走**显式** legacy 工厂（默认 cutover 属 #25）；
+ * - 默认 Client definition 走迁移归一（按加载结果 engine 分派）；R25-B（#71）起默认 Provider 是
+ *   `baiduJsapiV4Provider()`（内部委托官方 Loader），显式传入的 legacy Provider 仍可用；
  * - 旧 globalProperties 只保留迁移期兼容，并给出明确的 beta 警告。
  */
 import { createApp, inject } from "vue";

@@ -7,6 +7,7 @@ import {
   fingerprintApiUrl,
   fingerprintConfig,
   hash,
+  maskUserinfo,
   normalizeApiUrl,
   resolveBrowserUrl,
 } from "./url";
@@ -108,6 +109,73 @@ describe("fingerprintConfig", () => {
     expect(fingerprintConfig({ apiUrl: "https://a.com/api" })).not.toBe(
       fingerprintConfig({ apiUrl: "https://b.com/api" }),
     );
+  });
+
+  it("代理模式（serviceHost）参与身份判定，但只以哈希入指纹（不进日志 / 错误消息）", () => {
+    // 官方 Loader 的 `serviceHost` 决定 SDK 从哪个代理入口加载，属「影响全局语义」的配置；
+    // 不进指纹会让两个不同代理的请求被当成同一份配置，冲突判不出来。
+    const a = fingerprintConfig({ serviceHost: "https://proxy-a.example/_BMapService/" });
+    const b = fingerprintConfig({ serviceHost: "https://proxy-b.example/_BMapService/" });
+    expect(a).not.toBe(b);
+
+    // 指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息与 `onConflict`，代理地址里可能有内部域名、
+    // 路径甚至 userinfo / token query：只以哈希入指纹（官方封装的 `stableHash` 同一口径）。
+    expect(a).not.toContain("proxy-a.example");
+    expect(a).not.toContain("_BMapService");
+    expect(a).toContain(`host:${hash("https://proxy-a.example/_BMapService/")}`);
+
+    // 末尾斜杠由官方 Loader 自动补（并 warn），因此 `/svc` 与 `/svc/` 是同一个入口、同一份配置。
+    expect(fingerprintConfig({ serviceHost: "https://proxy-a.example/svc" })).toBe(
+      fingerprintConfig({ serviceHost: "https://proxy-a.example/svc/" }),
+    );
+
+    // 未设置时不引入额外字段（既有指纹形状不变）。
+    expect(fingerprintConfig({ ak: "keyA" })).toBe(
+      fingerprintConfig({ ak: "keyA", serviceHost: undefined }),
+    );
+  });
+
+  it("userinfo 也是凭据：指纹里只留哈希，不同凭据仍是不同身份", () => {
+    // CustomScript 的 scriptSrc 会经这里进 fingerprint，而 fingerprint 会进 conflict 文本与
+    // onConflict ⇒ userinfo 不能带原文。但也**不能**统一抹成同一个值：不同凭据是不同入口。
+    const a = fingerprintApiUrl("https://alice:s3cret@corp.example.com/api");
+    const b = fingerprintApiUrl("https://bob:s3cret@corp.example.com/api");
+    const same = fingerprintApiUrl("https://alice:s3cret@corp.example.com/api");
+
+    expect(a).not.toContain("alice");
+    expect(a).not.toContain("s3cret");
+    expect(a).not.toBe(b);
+    expect(a).toBe(same);
+    // host / path 等非凭据信息保留（诊断价值），只有 userinfo 被换掉。
+    expect(a).toContain("corp.example.com/api");
+  });
+
+  it("maskUserinfo：按 URL 形状抹掉 userinfo，并按已知值兜底", () => {
+    expect(maskUserinfo("Failed: https://alice:s3cret@corp.example.com/api?v=4.0")).toBe(
+      "Failed: https://***@corp.example.com/api?v=4.0",
+    );
+    // 没有 userinfo 的文本原样返回（`@` 出现在别的上下文里不算）。
+    expect(maskUserinfo("contact a@b.com; see https://corp.example.com/api")).toBe(
+      "contact a@b.com; see https://corp.example.com/api",
+    );
+    // 形状之外的形态（百分比编码等）按已知值兜底。
+    expect(maskUserinfo("alice%3As3cret appears here", "alice%3As3cret")).toBe("*** appears here");
+  });
+
+  it("非法 URL 也不得泄漏凭据：整串哈希成不透明标识", () => {
+    // 解析不了的入口没法逐项脱敏（`new URL` 抛错），而 fingerprint 会直接进
+    // `BMAP_SDK_CONFIG_CONFLICT` 文本与 `onConflict({requested, active})` ——
+    // 也就是说「域里已有另一份配置」时，凭据会在真正尝试加载之前就被打进日志。
+    const unparseable = "https://alice:s3cret@[invalid?ak=secret-ak-123456";
+    const fp = fingerprintApiUrl(unparseable);
+
+    expect(fp).not.toContain("s3cret");
+    expect(fp).not.toContain("alice");
+    expect(fp).not.toContain("secret-ak-123456");
+    expect(fp).toContain("invalid-url");
+    // 身份区分能力保留：同一个非法入口稳定、换一份凭据仍算另一份配置。
+    expect(fp).toBe(fingerprintApiUrl(unparseable));
+    expect(fp).not.toBe(fingerprintApiUrl(unparseable.replace("alice", "bob")));
   });
 
   it("AK 脱敏：指纹不包含原始 AK", () => {

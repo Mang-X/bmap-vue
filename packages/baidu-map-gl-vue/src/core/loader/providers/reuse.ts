@@ -5,6 +5,7 @@
  * 页面、其他构建产物或其他 Provider 加载好 `BMap`，此时不应该再插入 script，而是
  * 校验结构、解析版本来源后直接复用。抽在这里，避免三个 Provider 各写一份而漂移。
  */
+import { createConsumerAbortError } from "../SdkRegistry";
 import type { BMapLoadOptions } from "../url";
 import { createLoadedJsapiV4 } from "./loaded";
 import {
@@ -19,6 +20,15 @@ export interface ReuseExistingJsapiV4Input {
   readonly providerId: JsapiV4ProviderId;
   readonly options: BMapLoadOptions;
   readonly fingerprint: string;
+  /**
+   * 本次加载的**聚合** signal（`SdkRegistry` 在「最后一个消费者离开」时 abort 它）。
+   *
+   * 复用已有全局是**同步成功**的捷径，而 `SdkRegistry.start()` 是在 microtask 里调用 loader 的：
+   * 若这里不看 signal，「调用方 load 后立刻 abort」的时序下，被取消的任务仍会在那个 microtask 里
+   * 成功结算，把域记账抢到自己头上，与随后启动的另一份配置形成「两份同时成功、只记住一份」的
+   * 不一致状态。看了 signal，声明 `cancellable: true` 的 Provider 才真正满足「abort 之后不会成功」。
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -32,6 +42,9 @@ export interface ReuseExistingJsapiV4Input {
 export function reuseExistingJsapiV4(
   input: ReuseExistingJsapiV4Input,
 ): LoadedJsapiV4 | undefined {
+  // 取消优先于复用：见 `ReuseExistingJsapiV4Input.signal`。
+  if (input.signal?.aborted) throw createConsumerAbortError();
+
   const present = readJsapiV4Global();
   if (present === undefined) return undefined;
 

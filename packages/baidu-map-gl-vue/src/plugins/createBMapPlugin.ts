@@ -10,12 +10,12 @@
  * - 默认版本改用 `DEFAULT_VERSION`（JSAPI 4.0 基线），不再硬编码 `1.0`；插件自身报告的
  *   库版本改用 `LIBRARY_VERSION`，与 `package.json` 单一事实源对齐；
  * - 默认 Client definition 经迁移期归一（`withMigrationDriver`）：按**加载结果的
- *   engine** 分派 Driver，因此 `provider: baiduJsapiV4Provider()` 不会被破坏；默认
- *   cutover（默认 Provider 换成 v4 家族）属 M3A.3（#25）；
+ *   engine** 分派 Driver，因此显式传入的 legacy Provider 不会被破坏；R25-B（issue #71）
+ *   起**默认 Provider 已是 v4 家族**（`baiduJsapiV4Provider()`，内部委托官方 Loader）；
  * - 旧 `globalProperties` 映射保留，但只作为迁移期兼容并给出明确的 beta 警告。
  */
 import type { App, Component } from "vue";
-import { baiduCdnProvider } from "../core/loader/Provider";
+import { baiduJsapiV4Provider } from "../core/loader/providers/index";
 import { DEFAULT_VERSION, type BMapLoadOptions } from "../core/loader/url";
 import { logger } from "../core/logger";
 import { bmapConfigKey, type BMapPluginConfig } from "../core/context/pluginConfig";
@@ -50,7 +50,10 @@ export type { BMapPluginConfig } from "../core/context/pluginConfig";
 export { defaultClientDefinitionKey } from "../core/context/client";
 
 export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
-  const provider = options.provider ?? baiduCdnProvider();
+  // R25-B（issue #71）：默认 Provider 是 `baiduJsapiV4Provider()`——它内部真的调用官方
+  // `@baidumap/jsapi-loader`，不再走自研 JSONP transport。legacy `baiduCdnProvider()`
+  // 仍可从根入口显式传入（删除属 #26），但不再是默认值。
+  const provider = options.provider ?? baiduJsapiV4Provider();
   const defaults: BMapLoadOptions = {
     ak: options.ak,
     apiUrl: options.apiUrl,

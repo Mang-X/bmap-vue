@@ -301,6 +301,156 @@ describe("SdkRegistry", () => {
     expect(other).toHaveBeenCalledTimes(1);
   });
 
+  it("records the loaded config even when the entry was released by a cancel (uncancellable task)", async () => {
+    const registry = new SdkRegistry({ domain: "BMap" });
+    const c1 = new AbortController();
+    let settleUnderlying!: (value: string) => void;
+    // 底层任务**不可取消**：signal 被 abort 也不结算，稍后才成功。
+    // 这正是默认在线路径的形态——官方 Loader 没有公开取消接口（ADR 2026-09-13 决策 5）。
+    const uncancellable = vi.fn(() => new Promise<string>((resolve) => (settleUnderlying = resolve)));
+
+    const first = registry.load({ fingerprint: CONFIG_A, loader: uncancellable }, c1.signal);
+    await Promise.resolve();
+    c1.abort();
+    await expect(first).rejects.toMatchObject({ code: "BMAP_PROVIDER_ABORTED" });
+    // 消费者全走了 ⇒ 条目与占用都已释放，但底层任务还在飞。
+    expect(registry.size).toBe(0);
+
+    settleUnderlying("sdk-a");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 全局 SDK 事实上已按 CONFIG_A 就绪：域记账必须跟上，否则另一份配置会被误判成无冲突。
+    expect(registry.activeFingerprint).toBe(CONFIG_A);
+    await expect(
+      registry.load({ fingerprint: CONFIG_B, loader: async () => "sdk-b" }),
+    ).rejects.toMatchObject({ code: "BMAP_SDK_CONFIG_CONFLICT" });
+  });
+
+  it("a late success from a released entry never overwrites the config already recorded", async () => {
+    const registry = new SdkRegistry({ domain: "BMap" });
+    const c1 = new AbortController();
+    let settleA!: (value: string) => void;
+    const uncancellable = vi.fn(() => new Promise<string>((resolve) => (settleA = resolve)));
+
+    const first = registry.load({ fingerprint: CONFIG_A, loader: uncancellable }, c1.signal);
+    await Promise.resolve();
+    c1.abort();
+    await expect(first).rejects.toMatchObject({ code: "BMAP_PROVIDER_ABORTED" });
+
+    // 另一份配置先成功并登记：域内此后只承认它。
+    await expect(registry.load({ fingerprint: CONFIG_B, loader: async () => "sdk-b" })).resolves.toBe(
+      "sdk-b",
+    );
+    expect(registry.activeFingerprint).toBe(CONFIG_B);
+
+    // A 的任务晚到：不得把已登记的 B 改写成 A（域只能声称一份配置已就绪）。
+    settleA("sdk-a");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(registry.activeFingerprint).toBe(CONFIG_B);
+  });
+
+  it("an uncancellable task keeps its entry and occupancy after the last consumer leaves", async () => {
+    const registry = new SdkRegistry({ domain: "BMap" });
+    const c1 = new AbortController();
+    let settleA!: (value: string) => void;
+    // 不可取消：signal 被 abort 也不结算（官方 Loader 就没有公开取消接口）。
+    const uncancellable = vi.fn(() => new Promise<string>((resolve) => (settleA = resolve)));
+
+    const a = registry.load(
+      { fingerprint: CONFIG_A, loader: uncancellable, cancellable: false },
+      c1.signal,
+    );
+    await Promise.resolve();
+    c1.abort();
+    await expect(a).rejects.toMatchObject({ code: "BMAP_PROVIDER_ABORTED" });
+
+    // 任务不可取消 ⇒ 不能同步释放条目与占用：否则「已取消但仍在飞」的任务会与另一份配置
+    // 同时进入同一全局冲突域。
+    expect(registry.size).toBe(1);
+
+    // 另一份配置在任务结算前必须被冲突拒绝，**不是**自己起一个加载。
+    const b = vi.fn(async () => "sdk-b");
+    await expect(registry.load({ fingerprint: CONFIG_B, loader: b })).rejects.toMatchObject({
+      code: "BMAP_SDK_CONFIG_CONFLICT",
+    });
+    expect(b).not.toHaveBeenCalled();
+
+    // 同指纹重新订阅复用原任务，不会重复发起。
+    const again = registry.load({ fingerprint: CONFIG_A, loader: uncancellable });
+    await Promise.resolve();
+    expect(uncancellable).toHaveBeenCalledTimes(1);
+
+    // 任务真正成功：保留的条目仍是当前条目 ⇒ 记账落在这份配置上。
+    settleA("sdk-a");
+    await expect(again).resolves.toBe("sdk-a");
+    expect(registry.activeFingerprint).toBe(CONFIG_A);
+
+    // 之后的同配置请求复用结果，其它配置继续冲突。
+    await expect(registry.load({ fingerprint: CONFIG_A, loader: uncancellable })).resolves.toBe(
+      "sdk-a",
+    );
+    await expect(registry.load({ fingerprint: CONFIG_B, loader: b })).rejects.toMatchObject({
+      code: "BMAP_SDK_CONFIG_CONFLICT",
+    });
+  });
+
+  it("an uncancellable task that fails frees the domain for the next config", async () => {
+    const registry = new SdkRegistry({ domain: "BMap" });
+    const c1 = new AbortController();
+    let rejectA!: (error: Error) => void;
+    const uncancellable = vi.fn(
+      () => new Promise<string>((_resolve, reject) => (rejectA = reject)),
+    );
+
+    const a = registry.load(
+      { fingerprint: CONFIG_A, loader: uncancellable, cancellable: false },
+      c1.signal,
+    );
+    await Promise.resolve();
+    c1.abort();
+    await expect(a).rejects.toMatchObject({ code: "BMAP_PROVIDER_ABORTED" });
+
+    rejectA(new Error("official load failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 失败后条目与占用都要释放：否则域会被一个永远不会成功的任务永久占住。
+    expect(registry.size).toBe(0);
+    const b = vi.fn(async () => "sdk-b");
+    await expect(registry.load({ fingerprint: CONFIG_B, loader: b })).resolves.toBe("sdk-b");
+    expect(b).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stale success may fill the record when the in-flight config is the same one", async () => {
+    const registry = new SdkRegistry({ domain: "BMap" });
+    const c1 = new AbortController();
+    let settleOld!: (value: string) => void;
+    const oldTask = vi.fn(() => new Promise<string>((resolve) => (settleOld = resolve)));
+
+    const first = registry.load({ fingerprint: CONFIG_A, loader: oldTask }, c1.signal);
+    await Promise.resolve();
+    c1.abort();
+    await expect(first).rejects.toMatchObject({ code: "BMAP_PROVIDER_ABORTED" });
+
+    // 同一份配置的新任务在飞（占用仍是 A）：此时 stale 成功与当前占用**同指纹**，
+    // 记录它是事实，不该被守卫挡住。
+    let settleNew!: (value: string) => void;
+    const newTask = vi.fn(() => new Promise<string>((resolve) => (settleNew = resolve)));
+    const retried = registry.load({ fingerprint: CONFIG_A, loader: newTask });
+    await Promise.resolve();
+
+    settleOld("sdk-old");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(registry.activeFingerprint).toBe(CONFIG_A);
+
+    settleNew("sdk-new");
+    await expect(retried).resolves.toBe("sdk-new");
+    expect(registry.activeFingerprint).toBe(CONFIG_A);
+  });
+
   it("keeps enforcement after clear() and isolates domains", async () => {
     const registry = new SdkRegistry({ domain: "BMap" });
     await registry.load({ fingerprint: CONFIG_A, loader: async () => "a" });

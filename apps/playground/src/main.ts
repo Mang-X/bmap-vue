@@ -36,13 +36,25 @@ import {
 } from 'baidu-map-gl-vue'
 import { mockProvider } from './mock-provider'
 
-const plugin = createBMapPlugin({ provider: mockProvider() as any })
-const provider = (plugin as any).config.provider
+/**
+ * 两种模式，与官方 react-bmapgl 的「`<Map>` 不收 ak + `MapApiLoaderHOC({ ak })` 负责异步加载」
+ * 同一个分工：地图组件自己不携带密钥，加载方式由应用级装配决定。
+ *
+ * - 配了 `VITE_BMAP_AK`：**走默认路径**——`createBMapPlugin({ ak })` 的默认 Provider 就是
+ *   `baiduJsapiV4Provider()`，内部委托官方 `@baidumap/jsapi-loader` 注入 SDK script；
+ * - 没配 AK（本地 / CI）：显式注入 fake provider，让无外网环境也能跑通全部场景。
+ *
+ * 两种模式都**不给 `<BMap>` 传 `provider`**：解析始终落在 `app.use` 的默认 definition 上，
+ * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到。
+ */
+const viteEnv = (import.meta as unknown as { env?: { VITE_BMAP_AK?: string } }).env ?? {}
+const ak = viteEnv.VITE_BMAP_AK?.trim()
+const mode = ak ? '真实 v4（默认路径 / 官方 Loader）' : 'Fake BMapGL'
+const plugin = ak ? createBMapPlugin({ ak }) : createBMapPlugin({ provider: mockProvider() as any })
 const center = { lng: 116.404, lat: 39.915 }
 const centerRef = ref(center)
 
 const baseMapProps = (extra: Record<string, unknown> = {}) => ({
-  provider,
   center: centerRef.value,
   zoom: 14,
   style: { width: '100%', height: '440px' },
@@ -170,7 +182,7 @@ const App = defineComponent({
     const current = computed(() => scenes.find((s) => s.id === active.value)!)
     return () => [
       h('div', { style: 'font-family:system-ui;padding:12px;background:#f5f5f5;border-bottom:1px solid #ddd' }, [
-        h('h3', { style: 'margin:0 0 8px' }, 'baidu-map-gl-vue v3 playground'),
+        h('h3', { style: 'margin:0 0 8px' }, `baidu-map-gl-vue v3 playground（${mode}）`),
         h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
           ...scenes.map((s) =>
             h('button', {

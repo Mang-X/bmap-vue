@@ -12,7 +12,7 @@
  *   node scripts/verify-package.mts
  */
 import { execSync } from 'node:child_process'
-import { readdirSync, existsSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -71,7 +71,33 @@ function main() {
     'v3-consumer typecheck + ESM import (v3 tarball)',
   )
 
-  // 6) 负向消费测试:消费者未安装官方类型包时,全局 `BMap.*` 必须不可用
+  // 6) 运行时依赖契约：默认在线路径委托官方 Loader（#71），因此发布包必须把它作为
+  //    **精确锁定的运行时依赖**声明，并且真的能被消费者解析。
+  //    只断言「能 import」不够：依赖漏声明时 tarball 里的 import 仍然会通过（产物内联），
+  //    于是「普通消费者不额外手动配置」这条契约会静默失效。
+  const installedPkgPath = resolve(v3Consumer, 'node_modules/baidu-map-gl-vue/package.json')
+  const installedPkg = JSON.parse(readFileSync(installedPkgPath, 'utf8')) as {
+    dependencies?: Record<string, string>
+  }
+  const declared = installedPkg.dependencies?.['@baidumap/jsapi-loader']
+  if (declared !== '1.0.0') {
+    throw new Error(
+      `[verify-package] 发布包必须以 dependencies 精确锁定 @baidumap/jsapi-loader@1.0.0，实际为 ${String(declared)}`,
+    )
+  }
+  const loaderPkgPath = resolve(v3Consumer, 'node_modules/@baidumap/jsapi-loader/package.json')
+  if (!existsSync(loaderPkgPath)) {
+    throw new Error(
+      '[verify-package] 消费者的 node_modules 里没有 @baidumap/jsapi-loader：运行时依赖没有被解析',
+    )
+  }
+  const loaderPkg = JSON.parse(readFileSync(loaderPkgPath, 'utf8')) as { version?: string }
+  if (loaderPkg.version !== '1.0.0') {
+    throw new Error(`[verify-package] 装到的 loader 版本不是 1.0.0：${String(loaderPkg.version)}`)
+  }
+  console.log('\n[verify-package] runtime dependency OK: @baidumap/jsapi-loader@1.0.0 已精确锁定并被消费者解析')
+
+  // 7) 负向消费测试:消费者未安装官方类型包时,全局 `BMap.*` 必须不可用
   //    (公共声明不得泄漏官方命名空间;泄漏会让下面的类型检查意外通过)
   const negativeFile = resolve(v3Consumer, 'src/global-namespace-negative.ts')
   writeFileSync(negativeFile, 'export declare const leaked: BMap.Point\n')

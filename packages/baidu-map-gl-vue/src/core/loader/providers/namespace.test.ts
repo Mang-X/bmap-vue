@@ -122,6 +122,19 @@ describe("版本来源", () => {
     });
   });
 
+  it("真实 4.0 全局（无 VERSION、`version` 是构建标记 gl）按 declared 处理，不判失败", () => {
+    // #70 的实测结论（docs/zh-CN/contributing/official-packages.md）：真实加载 4.0 后
+    // `window.BMap` **没有** `VERSION` 键，而 `BMap.version === "gl"` —— 那是构建标记，
+    // 不是版本号。若把它当版本号，宿主预加载 / 同页复用这类场景会被整条判成
+    // 「不是 JSAPI 4.0」而失败（`/^4(\.|$)/` 判否）。
+    const realShape = { Map: () => {}, Point: () => {}, Marker: () => {}, version: "gl" };
+    expect(probeJsapiV4Version(realShape)).toBeUndefined();
+    expect(resolveExistingJsapiV4Version(realShape, "p")).toEqual({
+      version: DEFAULT_VERSION,
+      source: "declared",
+    });
+  });
+
   it("非 4.x 版本直接失败（Stable 单引擎）", () => {
     expect(() => assertJsapiV4Version("1.0", "p")).toThrow(/not JSAPI 4\.0/);
     expect(() => resolveExistingJsapiV4Version({ VERSION: "3.0" }, "p")).toThrow(BMapError);
@@ -210,6 +223,26 @@ describe("createLoadedJsapiV4", () => {
     expect(loaded.load.akRef).toBe("***4321");
     expect(JSON.stringify(loaded.load)).not.toContain("Ak654321");
     expect(JSON.stringify(loaded.load)).not.toContain("Ak123456");
+  });
+
+  it("入口 URL 的 userinfo 也是凭据：metadata 必须脱敏", () => {
+    // 代理 / 自托管入口可能带 `https://user:pass@host/...`（HTTP 认证），metadata 会进日志与
+    // 遥测，userinfo 与 ak 同属凭据，不能原样带出去。
+    const loaded = createLoadedJsapiV4({
+      providerId: "baidu-jsapi-v4",
+      mode: "jsonp",
+      version: "4.0",
+      versionSource: "declared",
+      options: { serviceHost: "https://agent:s3cret@proxy.example/svc/" },
+      fingerprint: "fp",
+      apiUrl: "https://agent:s3cret@proxy.example/svc/api?v=4.0",
+      namespace: { Map: 1 },
+    });
+
+    expect(loaded.load.apiUrl).not.toContain("s3cret");
+    expect(loaded.load.apiUrl).not.toContain("agent:");
+    expect(loaded.load.apiUrl).toContain("***@");
+    expect(JSON.stringify(loaded.load)).not.toContain("s3cret");
   });
 
   it("akRef 只保留末四位", () => {

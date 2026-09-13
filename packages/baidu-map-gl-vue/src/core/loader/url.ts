@@ -28,6 +28,14 @@ export type BMapLoadOptions = {
   version?: string;
   language?: string;
   timeout?: number;
+  /**
+   * 代理模式的服务地址（官方 Loader 的 `serviceHost`，末尾需带 `/`，缺了由官方补并 warn）。
+   *
+   * 官方契约：`ak` 与 `serviceHost` 二选一；代理模式下入口 URL **不带** `ak`，
+   * 改由 `window._BMapSecurityConfig = { serviceHost }` 声明。这也是官方 React 封装
+   * （`react-bmap` 的 `<BMapProvider serviceHost>`）公开的「隐藏 ak / 走代理」入口。
+   */
+  serviceHost?: string;
   nonce?: string;
   integrity?: string;
   crossOrigin?: CrossOriginValue;
@@ -133,19 +141,72 @@ export function fingerprintApiUrl(
     const url = resolveBrowserUrl(normalized);
     const embedded = url.searchParams.get("ak");
     if (embedded) url.searchParams.set("ak", hash(embedded));
+    // userinfo 与 AK 同属凭据，指纹又会进 conflict 文本与 `onConflict` ⇒ 不能带原文。
+    // 但**不能**统一抹成同一个值：不同凭据是不同的入口身份，合并会让冲突漏判 ⇒ 换成哈希。
+    const userinfo = `${url.username}${url.password ? `:${url.password}` : ""}`;
+    if (userinfo) {
+      url.username = `***h${hash(userinfo)}`;
+      url.password = "";
+    }
     return url.toString();
   } catch {
-    // 非法 URL 交给加载流程报告错误，fingerprint 保留归一化后的原始输入。
-    return normalized;
+    // 解析不了的入口没法逐项脱敏（`new URL` 直接抛错），而 fingerprint 会进
+    // `BMAP_SDK_CONFIG_CONFLICT` 文本与 `onConflict({ requested, active })` ⇒ 这里**不保留
+    // 任何原文**：把整串哈希成不透明标识。身份区分能力保留（不同非法入口仍是不同配置），
+    // 泄漏面归零（加载流程仍会用原始输入去报错，那条路径由脱敏函数处理）。
+    return `invalid-url:${hash(normalized)}`;
   }
+}
+
+/**
+ * 读取 URL 里的 userinfo（`user[:pass]@`）；没有则返回 `null`。
+ *
+ * userinfo 是 HTTP 认证凭据，与 `ak` 同属「不得进日志 / 遥测」的内容：**展示用途**只保留
+ * `***@`（见 `maskUserinfo`），**身份用途**只保留哈希（见 `fingerprintApiUrl`）。
+ */
+export function readUrlUserinfo(url: string | undefined | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = resolveBrowserUrl(url);
+    if (!parsed.username && !parsed.password) return null;
+    return `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 抹掉**文本里**出现的 URL userinfo：`https://user:pass@host/...` → `https://***@host/...`。
+ *
+ * 错误消息 / 调用栈里嵌的是一整段文本（官方文案 + 栈帧），不是一个纯 URL，所以先按形状匹配
+ * （`scheme://` 之后、第一个 `/` 或空白之前的那一段），再按**已知 userinfo** 兜底替换一次，
+ * 覆盖连字符编码 / 百分号编码等形状变化。这里宁可多抹一点：错误文本少几个字符可以接受，
+ * 凭据漏一次不行。
+ */
+export function maskUserinfo(text: string, known?: string | null): string {
+  let out = text.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@\s]+@/g, "$1***@");
+  if (known) out = out.split(known).join("***");
+  return out;
+}
+
+/**
+ * 代理服务地址（`serviceHost`）的**规范形式**：末尾缺 `/` 时补上。
+ *
+ * 官方 `@baidumap/jsapi-loader@1.0.0` 自己就会这么做（末尾无 `/` 时 warn 后补），补出来的
+ * 入口 URL 是同一个，因此 `/svc` 与 `/svc/` 必须算**同一份配置**。指纹与 metadata 共用它，
+ * 避免两处口径漂移。
+ */
+export function canonicalServiceHost(serviceHost: string): string {
+  return serviceHost.endsWith("/") ? serviceHost : `${serviceHost}/`;
 }
 
 /**
  * 计算配置 fingerprint，用于 SDK Registry 去重 / 冲突检测。
  *
- * 覆盖影响全局 SDK 语义的所有配置（版本、AK、apiUrl、语言）；AK 仅以哈希出现，
- * 不存原始值。callback / timeout / nonce 等 script 级细节不参与——**除非**该回调
- * 参数不由 Loader 管理（见 `managedCallbackParam`）。
+ * 覆盖影响全局 SDK 语义的所有配置（版本、AK、apiUrl、serviceHost、语言）；AK 与
+ * serviceHost 仅以哈希出现（指纹会进错误消息与 `onConflict`，不得外泄原始值）；
+ * callback / timeout / nonce 等 script 级细节不参与——**除非**该回调参数不由 Loader 管理
+ * （见 `managedCallbackParam`）。
  *
  * @param managedCallbackParam 由 Loader 管理的回调参数名，缺省按 `options.callbackParam`
  *   或 `callback` 推断；传 `null` 表示本次加载不管理回调参数。
@@ -163,6 +224,13 @@ export function fingerprintConfig(
     `ak:${options.ak ? hash(options.ak) : "none"}`,
     `url:${fingerprintApiUrl(options.apiUrl, managed)}`,
   ];
+  // 代理地址决定 SDK 从哪个入口加载，属「影响全局语义」的配置：不参与身份判定会让两个不同
+  // 代理的请求被当成同一份配置（冲突漏判）。但指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息与
+  // `onConflict`，而代理地址可能含内部域名 / 路径 / userinfo / token query——因此**只以哈希
+  // 入指纹**（官方 React 封装的 `stableHash({...})` 是同一口径）。
+  if (options.serviceHost) {
+    parts.push(`host:${hash(canonicalServiceHost(options.serviceHost))}`);
+  }
   if (options.language) parts.push(`lang:${options.language}`);
   return parts.join("|");
 }

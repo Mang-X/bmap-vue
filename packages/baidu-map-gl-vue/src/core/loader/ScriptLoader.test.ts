@@ -156,6 +156,32 @@ describe("ScriptLoader — 显式 load/jsonp 模式", () => {
     await expect(second).resolves.toBe("sdk");
   });
 
+  it("error 文案里的 AK 必须脱敏（自研 transport 同样不得经错误文本外泄）", async () => {
+    const loader = new ScriptLoader();
+    const src = `${SRC}?v=4.0&ak=secretak123456&callback=cb_leak`;
+    const first = loader.load({ mode: "load", src, exportGetter: () => "sdk" });
+    created[0].dispatchEvent(new Event("error"));
+    const error = (await first.catch((e: unknown) => e)) as { message: string };
+
+    // 失败文案会带上入口 URL，而入口 URL 带 `ak=`：这条路径必须与官方路径同一口径地脱敏。
+    expect(error.message).toContain("Failed to load script");
+    expect(error.message).not.toContain("secretak123456");
+    expect(error.message).toContain("ak=***3456");
+  });
+
+  it("error 文案里的 userinfo 必须脱敏（自托管入口可能带 HTTP 认证凭据）", async () => {
+    const loader = new ScriptLoader();
+    const src = "https://agent:s3cret@corp.example.com/api?v=4.0";
+    const first = loader.load({ mode: "load", src, exportGetter: () => "sdk" });
+    created[0].dispatchEvent(new Event("error"));
+    const error = (await first.catch((e: unknown) => e)) as { message: string };
+
+    expect(error.message).toContain("Failed to load script");
+    expect(error.message).not.toContain("s3cret");
+    expect(error.message).not.toContain("agent:");
+    expect(error.message).toContain("***@corp.example.com");
+  });
+
   it("timeout 后移除失败缓存并可重试", async () => {
     const loader = new ScriptLoader();
     const options: ScriptLoaderOptions = {

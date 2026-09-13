@@ -90,7 +90,8 @@ export class CustomScriptV4Provider implements JsapiV4Provider {
     assertSupportedJsapiV4Version(options, this.id);
 
     // 页面已存在 v4 全局：直接校验并复用，不再插入 script。
-    const reused = reuseExistingJsapiV4({ providerId: this.id, options, fingerprint });
+    // 这条捷径是同步成功的，因此必须先把聚合 signal 交给它（见 `reuseExistingJsapiV4`）。
+    const reused = reuseExistingJsapiV4({ providerId: this.id, options, fingerprint, signal });
     if (reused) return reused;
 
     const target = this.scriptSrc;
