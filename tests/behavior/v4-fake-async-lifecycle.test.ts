@@ -121,22 +121,20 @@ describe("Fake v4 异步窗口：迟到回调", () => {
 /* -------------------------------------------------------------- 失败重试 */
 
 describe("Fake v4 异步窗口：失败与重试", () => {
-  it("服务失败只回 null + JSONP 错误码：调用以 failed 结算，重试可成功", async () => {
+  it("服务失败只回 null（没有公开错误码入口）：调用以 empty 结算，重试可成功", async () => {
     const geocoder = driver.services.createGeocoder();
     const raw = fake.createdGeocoders[0]!;
-    // 真实服务失败的形态是「回包是 null，错误码藏在 `_rd` 回调注册表的参数里」
-    // （驱动侧的嗅探配方在 `jsapi-v4/services.test.ts`；这里断言的是 Fake 侧异步窗口的收支）
+    // 真实服务失败的形态是「回调参数就是 `null`」——错误码只在私有回调注册表里，
+    // 而本库不嗅探私有面（R25-C / #72）。这里断言的是 Fake 侧异步窗口的收支。
     raw.pointResult = null;
-    raw.jsonpError = { code: 302, message: "配额校验失败" };
 
-    const failed = await driver.services.geocode(geocoder, { address: "北京市" }).result;
-    expect(failed.status).toBe("failed");
-    expect(failed.error).toEqual({ code: 302, message: "配额校验失败" });
+    const unavailable = await driver.services.geocode(geocoder, { address: "北京市" }).result;
+    expect(unavailable.status).toBe("empty");
+    expect(unavailable.error).toBeNull();
     // 失败与成功都要把在飞窗口收干净，否则诊断会在重试前就一直挂着
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
 
     raw.pointResult = POINT;
-    raw.jsonpError = null;
     const retried = await driver.services.geocode(geocoder, { address: "北京市" }).result;
     expect(retried.status).toBe("success");
     expect(retried.data).toEqual(POINT);

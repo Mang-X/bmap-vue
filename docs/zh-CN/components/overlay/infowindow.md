@@ -78,9 +78,32 @@ v3 子组件没有 `initd/unload` 事件；以下为 `BInfoWindow` 实际发出�
 </BInfoWindow>
 ```
 
+::: warning 打开气泡必须给出 `position`
+官方 4.0 的打开入口是 `Map#openInfoWindow(infoWnd, point)`，`point` **没有默认值**，`InfoWindow`
+实例也没有公开的 `openInfoWindow()` —— 所以「没有位置就打开」没有可解释的语义。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
+:::
+
+**状态同步是一条声明式规则**（没有隐藏状态）：
+
+| `open` | `position` | 结果 |
+| --- | --- | --- |
+| `true` | 有效坐标 | 打开；已打开时按新坐标移动 |
+| `true` | 缺失 | 不打开（已经开着就关掉），并把 `BMAP_INVALID_ARGUMENT` 交给内部诊断总线 |
+| `false` | 任意 | 关闭 |
+
+两个推论值得注意：
+
+- **`position` 晚到会自动补开**：`open=true` 先到、`position` 由异步数据后到是常见形态，组件按「期望
+  状态」判断，不需要手动把 `open` 切成 `false → true` 来恢复；
+- **`position` 变回 `undefined` 会关闭气泡并报错**（而不是悄悄停在旧位置）——`open=true` 但缺位置就是
+  「想开却打不开」；
+- `position` **不是**实例 option：它由 `openInfoWindow(map, infoWindow, position)` 提供，因此动态移动
+  走的是重新打开，不会出现「position 在当前引擎不支持」这类告警。
+
 - `title`、`width`、`height` 和 `position` 更新后会同步到已经创建的 InfoWindow；`offset` 作为创建参数应用。
 - SDK 自己打开或关闭窗口时，组件会回写 `update:open` 和 `update:show`，不会重复发出相同状态。
-- 组件卸载时会关闭并从地图移除 InfoWindow。
+- 组件卸载时会**关闭** InfoWindow 并释放自己的事件订阅与观察器。
+- 气泡走**地图级**专用入口（`openInfoWindow` / `closeInfoWindow`），不是 `addOverlay` / `removeOverlay`——这一点在 JSAPI 4.0 上是硬要求（气泡不是普通覆盖物）。slot 内容容器由打开状态驱动可见性，打开时不会被内联样式隐藏。
 - slot 内容变化会触发 redraw；内部观察器会在卸载时断开。
 
 <!-- maximize	event{type, target}	信息窗口最大化后触发此事件

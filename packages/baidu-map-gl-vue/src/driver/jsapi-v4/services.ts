@@ -13,8 +13,16 @@
  * - `Geocoder#getPoint/getLocation`、`Convertor#translate`、`Boundary#get`、`LocalCity#get`、
  *   `Geolocation#getCurrentPosition` + `getStatus`、`Autocomplete#search` /
  *   `AutocompleteOptions.onSearchComplete` 是各自唯一的调用入口；
- * - 前四者失败时**只回 `null`**，服务端错误码只在 JSONP 回调注册表里——因此「空结果」与
- *   「失败」的区分靠 `../normalize/jsonpProbe` 的嗅探（与 webgl-v1 共用同一实现）；
+ * - `Autocomplete#setLocation` / `#setTypes` 是官方声明里的实例更新入口（`serviceDriver.
+ *   setAutocompleteOptions` 的落点），组件因此不需要碰 `.raw`；
+ * - **只看公开回调参数与实例状态**（R25-C / #72）：`Geocoder#getPoint/getLocation`、
+ *   `Boundary#get`、`LocalCity#get` 失败时只回 `null`，**没有**公开的错误码入口
+ *   （服务端错误码在 JSONP 私有回调注册表里）。因此归一化结果只有两种：
+ *   有结果 → `success`；回 `null` 或空容器 → `empty`（「没有结果或服务当前不可用」）。
+ *   本库**不**去嗅探 `_rd` 之类的私有面，也不制造精确错误码——见 ADR
+ *   `2026-09-13-private-sdk-surface-removal.md`。只有 SDK 公开给出状态码的服务
+ *   （`Geolocation#getStatus()` → `BMAP_STATUS_*`、`Convertor#translate` 回包的 `status`）
+ *   才走 `failed` 并带上那个码；
  * - `Geolocation` 是唯一自带状态码的服务（`getStatus()` → `BMAP_STATUS_*`），因此它的
  *   `sdkStatus` 恒有值；
  * - `Autocomplete` 是**事件式**服务：`search()` 只负责发起请求，结果经构造选项的
@@ -26,7 +34,6 @@
  *   而不是静默给一个不能用的实例——4.0 的对应能力是原生图层 `TrackLine`。
  */
 import { BMapError } from "../../core/errors/BMapError";
-import { captureJsonpServiceError, type JsonpErrorCapture } from "../normalize/jsonpProbe";
 import { createServiceCall } from "../normalize/serviceCall";
 import { toPlainPoint } from "../normalize/results";
 import type { Capability } from "../capability/catalog";
@@ -35,6 +42,7 @@ import type { GeometryDriver, Point } from "../types/geometry";
 import { HANDLE_BRAND, type MapHandle, type SdkHandle, type ServiceHandle } from "../types/handles";
 import type {
   AutocompleteOptions,
+  AutocompleteUpdateOptions,
   BoundaryRequest,
   ConvertorRequest,
   GeocodeRequest,
@@ -226,6 +234,15 @@ export function createJsapiV4ServiceDriver(
 
   /**
    * 同一 `Autocomplete` 实例的 pending 结算**队列**。
+   *
+   * > **这是未经真实运行时证明的假设（R25-C / #72 的显式标注）。** 下面的归属规则成立的前提是
+   * > `AutocompleteResult.keyword` 确实等于「本次检索所用的关键字」、且同关键字的回包与请求一一
+   * > 对应。这两条**都不在官方 4.0 文档的承诺范围内**（`keyword` 被声明为可选字段，运行时是否
+   * > 填充未说明），本仓库也**没有**在真实 AK 上验证过。因此：
+   * > - Capability Catalog 把 `service.autocomplete` 标为 `experimental`（不是 `native`）；
+   * > - 归属规则只按「够用且可解释」设计（见下 1/2/3），并在无法归因时**拒绝**而不是猜；
+   * > - 彻底的隔离（每次请求一个独立实例 + 回调闭包）属 M7（#38 / #41），本 issue 只做
+   * >   「串行化 + 上界 + 标注」，不新增隐式请求调度框架。
    *
    * `Autocomplete#search()` **不带请求身份**：回包除了可选的 `keyword` 之外没有任何可用于
    * 归因的信息。因此归属规则必须与「同一关键词最多只有一个槽位」这条**不变式**配套使用
@@ -450,19 +467,18 @@ export function createJsapiV4ServiceDriver(
     return null;
   };
 
-  /** 空结果还是失败：`null` 回包 + JSONP 注册表里的错误码 ⇒ 失败。 */
-  const settleNull = <T>(
-    settle: ServiceCallSettle<T>,
-    probe: JsonpErrorCapture,
-    label: string,
-  ): void => {
-    const error = probe.getLastError();
-    if (error) {
-      settle.failed({ code: error.code, message: error.message || `${label} 服务端返回错误` });
-      return;
-    }
-    settle.empty();
-  };
+  /**
+   * 空回包的统一结算：`null` / 空容器 → `empty`。
+   *
+   * 这里**刻意不区分**「真的查不到」与「服务当前不可用」——官方对这几个服务只给了「回调参数
+   * 是不是 `null`」这一条公开信息，错误码只在私有回调注册表里。R25-C / #72 的处置是：
+   * 不嗅探私有面、不编造精确错误码，把「没有可用的结果」如实报成 `empty`；需要更细的服务健康度
+   * 时由调用方自己按业务口径重试或提示（超时路径已经由适配器的 `timeout` 覆盖）。
+   *
+   * 为什么不做成 `failed({ code: "BMAP_SERVICE_UNAVAILABLE", … })`：那会让调用方以为拿到了
+   * 一个可判定的失败原因（配额？Referer？网络？），实际上我们并不知道——`empty` 至少诚实。
+   */
+  const settleUnavailable = <T>(settle: ServiceCallSettle<T>): void => settle.empty();
 
   /** 参数不合法的调用：适配器不抛错，因此以 `failed` 结算（`BMAP_INVALID_ARGUMENT`）。 */
   const invalidCall = <T>(label: string, message: string): ServiceCall<T> =>
@@ -481,6 +497,27 @@ export function createJsapiV4ServiceDriver(
       (settle) => settle.failed({ code: "BMAP_SERVICE_FAILED", message: `${label}: ${message}` }),
       { label },
     );
+
+  /**
+   * 运行期句柄种类校验（类型是编译期契约，JS 调用方仍需在边界拦住）。
+   *
+   * 与 layers / controls / native-layers 同源，按 Handle 品牌判断，避免把别的服务句柄悄悄
+   * 当成 Autocomplete 处理。`disposeAutocomplete` 与 `setAutocompleteOptions` 共用一份，
+   * 两条入口的判据不允许分叉。
+   */
+  const assertAutocompleteHandle = (
+    handle: ServiceHandle<"service:autocomplete">,
+    operation: string,
+  ): void => {
+    const brand = String(handle[HANDLE_BRAND]);
+    if (brand === "service:autocomplete") return;
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      `${operation} 只接受 createAutocomplete 的句柄，收到 "${brand}"；` +
+        "其他服务当前没有 Driver 侧资源需要管理（统一的服务生命周期属 M7 #38）",
+      { engine: "jsapi-v4" },
+    );
+  };
 
   const resolve = <T>(handle: SdkHandle<string>, facet: string): T => {
     try {
@@ -506,6 +543,23 @@ export function createJsapiV4ServiceDriver(
     resolve<Record<string, unknown>>(handle, "ServiceDriver.locate");
   const localCityOf = (handle: ServiceHandle<"service:local-city">) =>
     resolve<Record<string, unknown>>(handle, "ServiceDriver.locateCity");
+
+  /**
+   * Autocomplete 的 `location` 归一化。
+   *
+   * 官方 `AutocompleteOptions.location` 接受 `string | Map | Point`，而本库调用方手里的是**句柄**
+   * （`<BAutoComplete>` 直接传 `ready.map`）。把句柄对象原样透传给 SDK 是非法值（R25-C / #72 之前
+   * 的形态），所以这里按身份分派：本 Client 的句柄 → 解析成 raw；`{lng, lat}` → raw Point；其余
+   * （城市名字符串、宿主自备的 raw 对象）原样透传。
+   */
+  const normalizeAutocompleteLocation = (value: unknown): unknown => {
+    if (value === null || typeof value !== "object") return value;
+    if (typeof (value as Record<PropertyKey, unknown>)[HANDLE_BRAND] === "string") {
+      return registry.resolve<unknown>(value as SdkHandle<string>);
+    }
+    if ("lng" in (value as Record<string, unknown>)) return geometry.toRawPoint(value as Point);
+    return value;
+  };
 
   return {
     /* ------------------------------------------------------------ 创建面 */
@@ -549,10 +603,7 @@ export function createJsapiV4ServiceDriver(
     createAutocomplete(options: AutocompleteOptions) {
       capabilities.require(SERVICE_CAPABILITIES.createAutocomplete);
       const Autocomplete = namespaceCtor(namespace, "Autocomplete");
-      const location =
-        options.location && typeof options.location === "object" && "lng" in options.location
-          ? geometry.toRawPoint(options.location as Point)
-          : options.location;
+      const location = normalizeAutocompleteLocation(options.location);
 
       // 内部分发器：先按 FIFO 结算属于自己的那个 pending，再把同一个回调转给调用方自己的监听。
       let raw: Record<string, unknown> | null = null;
@@ -562,6 +613,12 @@ export function createJsapiV4ServiceDriver(
           input: options.input,
           types: options.types,
           onSearchComplete: (results: RawAutocompleteResult) => {
+            // **已释放的实例一律不再回写**（R25-C 复审 P1）：SDK 的回包可能在
+            // `disposeAutocomplete()` 之后才到达（取消 / 卸载都收不回请求），也可能在 dispose()
+            // 内部**同步**触发（真实销毁流程会走回调）。`disposed` 在 dispose 的第一步就置位，
+            // 因此两条路径都在这里被挡住。「卸载后不再回写」是 Driver 的契约，不能依赖调用方
+            // （Vue 组件）自己再判一次——更不能依赖「Vue 卸载后 emit 恰好是 no-op」这种内部实现。
+            if (raw && disposed.has(raw)) return;
             let settle: ServiceCallSettle<PlaceSuggestion[]> | null = null;
             if (raw) {
               // 独占在**每次回包**时重新校验：等待期间输入框变回可输入 ⇒ 这个回包可能来自用户输入，
@@ -583,6 +640,56 @@ export function createJsapiV4ServiceDriver(
       boundInput.set(raw, options.input);
       watchInputActivity(raw, options.input);
       return registry.adopt("service:autocomplete", instance);
+    },
+
+    /**
+     * 更新已创建实例的检索区域 / 数据类型（官方 4.0.4 声明的 `Autocomplete#setLocation` /
+     * `#setTypes`）。
+     *
+     * 为什么收在 Driver（R25-C / #72 的「组件 raw setter 回到集成边界」）：组件侧的
+     * `inst.raw.setLocation(...)` 把 raw 成员访问摊在组件里，既越过了 raw SDK 边界，又让
+     * 「某个 setter 在某个引擎上不存在」变成组件作者的记忆负担。这里统一：
+     *
+     * - **前置状态校验**：已被 `disposeAutocomplete()` 释放的实例一律拒绝——写入一个已销毁的
+     *   SDK 对象是没有意义的行为，静默成功会骗人；
+     * - **失去回调通道独占**（输入框曾可输入）**不**拒绝：这是纯配置写入，不发起请求、也不影响
+     *   回包归属，把它算成错误只会让「用户改过输入框」的实例连检索区域都改不了；
+     * - 成员缺失时**告警一次**而不是静默 no-op（与 `setOptions` 的 mutable 分支同口径）：
+     *   官方声明了该成员，运行时没有说明声明与实现不一致，调用方有权知道这次更新没生效。
+     */
+    setAutocompleteOptions(handle, options: AutocompleteUpdateOptions) {
+      // 先按句柄种类拦（纯元数据判断），再解析：否则外来句柄会在 resolve 里先抛
+      // `BMAP_HANDLE_FOREIGN`，品牌判据永远不可达，两条入口的「共用一份判据」就名不副实。
+      assertAutocompleteHandle(handle, "setAutocompleteOptions");
+      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.setAutocompleteOptions");
+      if (disposed.has(raw)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "setAutocompleteOptions: 该 Autocomplete 实例已被 disposeAutocomplete() 释放，" +
+            "拒绝在已销毁的实例上写入；请重建实例",
+          { engine: "jsapi-v4" },
+        );
+      }
+
+      const apply = (key: "setLocation" | "setTypes", value: unknown): void => {
+        const fn = readNamespaceMember(raw, key);
+        if (typeof fn !== "function") {
+          warnOnce(
+            `autocomplete:${key}-missing`,
+            `ServiceDriver.setAutocompleteOptions: 当前 Autocomplete 实例没有 ${key}()（4.0.4 的 ` +
+              `Autocomplete 声明里存在该成员），本次更新被忽略`,
+          );
+          return;
+        }
+        sdkCall(`Autocomplete.${key}`, () => callRequired(raw, key, value));
+      };
+
+      if (options.location !== undefined) {
+        apply("setLocation", normalizeAutocompleteLocation(options.location));
+      }
+      if (options.types !== undefined) {
+        apply("setTypes", options.types);
+      }
     },
 
     createViewAnimation(keyFrames, options = {}) {
@@ -628,18 +735,9 @@ export function createJsapiV4ServiceDriver(
      * 「不再接受业务调用」，再次 dispose 会**重试**未完成的 SDK 清理（八轮复审 P2-2）。
      */
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">) {
+      // 先按句柄种类拦（纯元数据判断），再解析；与 setAutocompleteOptions 共用一份判据
+      assertAutocompleteHandle(handle, "disposeAutocomplete");
       const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeAutocomplete");
-      // 运行期种类校验（类型是编译期契约，JS 调用方仍需在边界拦住）：与 layers / controls /
-      // native-layers 同源，按 Handle 品牌判断，避免把别的服务句柄悄悄当 Autocomplete 处理
-      const brand = String(handle[HANDLE_BRAND]);
-      if (brand !== "service:autocomplete") {
-        throw new BMapError(
-          "BMAP_INVALID_ARGUMENT",
-          `disposeAutocomplete 只接受 createAutocomplete 的句柄，收到 "${brand}"；` +
-            "其他服务当前没有 Driver 侧资源需要释放（统一释放入口属 M7 #38）",
-          { engine: "jsapi-v4" },
-        );
-      }
 
       disposed.add(raw); // 先停止接受业务调用（这一个是「一旦释放就不再恢复」的状态）
       // 正在清理期间的重入直接短路（SDK 销毁钩子里再次 dispose 的场景，见 `disposing`）
@@ -703,9 +801,6 @@ export function createJsapiV4ServiceDriver(
         return invalidCall<Point>("Geocoder.getPoint", "address 必须是非空字符串");
       }
       const raw = geocoderOf(handle);
-      // 顺序与 composable 层一致：SDK 在调用内同步注册 _rd 回调，先调用再 rescan 包装；
-      // JSONP 回包恒为异步，因此 rescan 必定先于回包执行。
-      const probe = captureJsonpServiceError(rawSdk);
       return createServiceCall<Point>(
         (settle) => {
           callRequired(
@@ -714,14 +809,13 @@ export function createJsapiV4ServiceDriver(
             address,
             (point: RawPoint | null) => {
               if (!point) {
-                settleNull(settle, probe, "Geocoder.getPoint");
+                settleUnavailable(settle);
                 return;
               }
               settle.success(toPlainPoint(point));
             },
             request.city,
           );
-          probe.rescan();
         },
         { label: "Geocoder.getPoint" },
       );
@@ -733,7 +827,6 @@ export function createJsapiV4ServiceDriver(
         return invalidCall<GeocodedAddress>("Geocoder.getLocation", "point 必须是 { lng, lat }");
       }
       const raw = geocoderOf(handle);
-      const probe = captureJsonpServiceError(rawSdk);
       const options: Record<string, unknown> = {};
       if (typeof request.poiRadius === "number") options.poiRadius = request.poiRadius;
       if (typeof request.numPois === "number") options.numPois = request.numPois;
@@ -753,7 +846,7 @@ export function createJsapiV4ServiceDriver(
               } | null,
             ) => {
               if (!result) {
-                settleNull(settle, probe, "Geocoder.getLocation");
+                settleUnavailable(settle);
                 return;
               }
               settle.success({
@@ -767,7 +860,6 @@ export function createJsapiV4ServiceDriver(
             },
             options,
           );
-          probe.rescan();
         },
         { label: "Geocoder.getLocation" },
       );
@@ -839,12 +931,11 @@ export function createJsapiV4ServiceDriver(
         return invalidCall<Point[][]>("Boundary.get", "name 必须是非空字符串");
       }
       const raw = boundaryOf(handle);
-      const probe = captureJsonpServiceError(rawSdk);
       return createServiceCall<Point[][]>(
         (settle) => {
           callRequired(raw, "get", name, (result: RawBoundaryPayload | null) => {
             if (!result || !Array.isArray(result.boundaries)) {
-              settleNull(settle, probe, "Boundary.get");
+              settleUnavailable(settle);
               return;
             }
             const rings = (result.boundaries as unknown[])
@@ -853,7 +944,6 @@ export function createJsapiV4ServiceDriver(
             if (rings.length === 0) settle.empty();
             else settle.success(rings);
           });
-          probe.rescan();
         },
         { label: "Boundary.get" },
       );
@@ -909,16 +999,13 @@ export function createJsapiV4ServiceDriver(
 
     locateCity(handle) {
       const raw = localCityOf(handle);
-      // 与 Geocoder / Boundary 同源：失败时官方只回 null，服务端错误码只在 JSONP 注册表里，
-      // 不接探针就会把「服务失败」归类成「查不到城市」（PR #63 复审 P2-3）。
-      const probe = captureJsonpServiceError(rawSdk);
       return createServiceCall<LocalCityFix>(
         (settle) => {
           callRequired(raw, "get", (result: RawLocalCityPayload | null) => {
             const name = typeof result?.name === "string" ? result.name : "";
             if (!name) {
-              // 先看错误码：有错误 ⇒ failed（业务才能提示 / 重试），没有 ⇒ 真的查不到
-              settleNull(settle, probe, "LocalCity.get");
+              // 官方没有公开的错误码入口（R25-C / #72）：回包非空但没有城市名 ⇒ 没有可用的结果
+              settle.empty();
               return;
             }
             settle.success({
@@ -927,7 +1014,6 @@ export function createJsapiV4ServiceDriver(
               level: typeof result?.level === "number" ? result.level : null,
             });
           });
-          probe.rescan();
         },
         { label: "LocalCity.get" },
       );

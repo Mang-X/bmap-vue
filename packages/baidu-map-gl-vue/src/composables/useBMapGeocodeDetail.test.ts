@@ -146,37 +146,25 @@ describe("useBMapGeocodeDetail", () => {
     wrapper.unmount();
   });
 
-  it("surfaces server quota error (302) instead of silent empty", async () => {
-    // 模拟真机 _rd 机制:SDK 在调用内同步注册回调；回包带 error 时业务回调收 null
+  it("不触碰 SDK 的 `_rd` 私有回调表（R25-C / #72：不嗅探、不包装）", async () => {
+    // 真实 SDK 在调用内同步注册 JSONP 回调，服务端错误码只写在私有表里。
+    // 反向守卫：本库既不许**读**它，更不许把里面的函数换成包装器——换掉就是 monkey-patch。
     const rd: Record<string, unknown> = {};
-    const pending: Array<(r: null) => void> = [];
+    const original = () => "ok";
     const ctx = stubContext({
       rawSdk: { _rd: rd },
       toRawPoint: (p) => p,
       getLocation: (_point, cb) => {
-        (rd as Record<string, unknown>)._cbk9 = () => {};
-        pending.push(cb as (r: null) => void);
+        rd._cbk9 = original;
+        cb({ point: { lng: 1, lat: 2 }, address: "A", business: "B" });
       },
     });
-    let hookRef: ReturnType<typeof useBMapGeocodeDetail> | null = null;
-    const wrapper = mountWithHook(ctx, (hook) => {
-      hookRef = hook;
-      void hook.get({ lng: 1, lat: 2 }).catch(() => {});
+    const wrapper = mountWithHook(ctx, async (hook) => {
+      await hook.get({ lng: 1, lat: 2 });
     });
     await flushPromises();
-    expect(pending).toHaveLength(1);
-    // composable 已在调用后 rescan 并包装 _cbk9；模拟服务端配额回包
-    const wrapped = rd._cbk9 as (payload: unknown) => void;
-    expect(typeof wrapped).toBe("function");
-    wrapped({ result: { error: 302, error_msg: "当天配额已用完" } });
-    // SDK 随后以 null 调业务回调
-    pending[0](null);
-    await flushPromises();
-    expect(hookRef!.status.value).toBe("error");
-    expect(String((hookRef!.error.value as { message?: string })?.message ?? "")).toContain(
-      "302",
-    );
-    expect(hookRef!.error.value).toMatchObject({ code: "BMAP_SERVICE_FAILED" });
+
+    expect(rd._cbk9, "本库不得包装/替换 SDK 私有回调表里的函数").toBe(original);
     wrapper.unmount();
   });
 

@@ -15,7 +15,8 @@
 | `BMAP_PARENT_CONTEXT_MISSING` | 上下文 | ❌ | 子组件未挂在 `BMap` 内(缺少 map context) |
 | `BMAP_RESOURCE_CREATE_FAILED` | 资源 | ❌ | Overlay/Control/Layer 创建失败 |
 | `BMAP_PLUGIN_LOAD_FAILED` | 插件 | ✅ | 插件脚本加载或初始化失败 |
-| `BMAP_SERVICE_FAILED` | 服务 | ✅ | 地理编码/转换等服务端接口失败（配额用尽、Referer 白名单、超时） |
+| `BMAP_SERVICE_FAILED` | 服务 | ✅ | 服务调用失败：SDK 公开状态码非 0、或服务端在 `timeout` 内未回包 |
+| `BMAP_INVALID_ARGUMENT` | 参数 | ❌ | 参数与官方 API 契约不符（例如 `<BInfoWindow open>` 没给 `position`） |
 | `BMAP_INVALID_POINT` | 参数 | ❌ | 传入非法坐标(缺 lng/lat) |
 | `BMAP_UI_KIT_UNAVAILABLE` | 依赖/环境 | ❌ | `./ui-kit` 在无 DOM 环境被调用，或未安装 optional peer `@baidumap/jsapi-ui-kit` |
 
@@ -86,12 +87,27 @@ interface BMapErrorLike {
 
 ### `BMAP_SERVICE_FAILED`
 
-**原因**:地理编码 / 逆地理编码 / 坐标转换等服务端接口失败。百度 JSAPI 失败时只回空结果，
-库内会还原服务端错误码，常见取值：
-- `302 当天配额已用完`：该 AK 当日配额耗尽，到开放平台申请提高配额或更换 AK；
-- `200 版本过低`：多为 AK Referer 白名单拦截（非白名单域名请求被拒），检查白名单是否包含当前域名；
-- `... timed out after 15000ms`：服务端 15s 内未回包，检查网络后重试。
-**解决**:按上述错误信息处理；空结果（无错误码）多为 genuinely 无匹配，可按 `isEmpty` 展示。
+**原因**：服务调用没有得到可用结果，且**能给出公开的原因**：
+
+- `Geolocation#getStatus()` 返回非 0 的 `BMAP_STATUS_*`（权限被拒、服务不可用、定位超时等）；
+- `Convertor#translate` 的回包 `status ≠ 0`（如坐标超出范围）；
+- `... timed out after 15000ms`：服务端 15s 内没有回包，检查网络后重试。
+
+**关于「配额用尽 / Referer 白名单拦截」**：百度 JSAPI 在这类失败时只回**空结果**，官方没有公开的错误码入口（错误码在它的私有回调表里，本库**不**去嗅探——见 [ADR 2026-09-13](../../adr/2026-09-13-private-sdk-surface-removal.md)）。因此：
+
+- `useBMapGeocoder` / `useBMapGeocodeDetail` 等服务在服务端失败时**不会报错**，而是解析出 `null`（`isEmpty` 为 `true`）——它与「真的查无结果」在公开面上**不可区分**；
+- 需要区分时只能按业务口径处理（重试、提示、或换 AK / 查 Referer 白名单），并在自己的埋点里记录调用上下文。
+
+**解决**：按 `message` 与你的业务上下文处理；`isEmpty` 为 true 时按「没有结果」展示，同时留意配额与白名单这两个最常见的环境原因。
+
+### `BMAP_INVALID_ARGUMENT`
+
+**原因**：调用与官方 API 的契约不符，最典型的是**打开气泡没给位置** —— `<BInfoWindow open>` 没有
+`position`。官方 4.0 的 `Map#openInfoWindow(infoWnd, point)` 要求 `point`，`InfoWindow` 实例也没有
+公开的 `openInfoWindow()`，因此没有「用一个默认位置打开」的语义；组件不会打开气泡，而是把这条错误交到
+内部诊断总线（见下方[统一捕获](#统一捕获)）。
+
+**解决**：给 `<BInfoWindow>` 传 `position`。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
 
 ### `BMAP_INVALID_POINT`
 

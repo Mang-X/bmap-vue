@@ -11,9 +11,9 @@
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 44 |
+| `native` | SDK 原生能力，直接映射官方 API | 43 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 4 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 14 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 15 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -78,7 +78,7 @@
 | layer | `layer.heatmap` | experimental | ✓ | — | — | ✓ | Heatmap | — | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |
 | layer | `layer.track-line` | experimental | ✓ | — | — | ✓ | TrackLine | — | 轨迹线（TrackLine）；数据的绘制/播放/跟随，属扩展 API；播放控制与迁移结论见 M8（#43） |
 | service | `service.local-search` | native | — | ✓ | ✓ | ✓ | LocalSearch | — | 本地检索（LocalSearch） |
-| service | `service.autocomplete` | native | — | ✓ | ✓ | ✓ | Autocomplete | — | 输入提示（Autocomplete） |
+| service | `service.autocomplete` | experimental | — | ✓ | ✓ | ✓ | Autocomplete | — | 输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38） |
 | service | `service.driving-route` | native | — | ✓ | ✓ | ✓ | DrivingRoute | — | 驾车路线规划（DrivingRoute） |
 | service | `service.walking-route` | native | — | ✓ | ✓ | ✓ | WalkingRoute | — | 步行路线规划（WalkingRoute） |
 | service | `service.riding-route` | native | — | ✓ | ✓ | ✓ | RidingRoute | — | 骑行路线规划（RidingRoute） |
