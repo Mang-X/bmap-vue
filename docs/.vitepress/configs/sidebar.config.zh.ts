@@ -194,7 +194,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/hooks/",
       items: [
         {
-          text: "usePoint 地图实例点",
+          text: "usePoint 地图实例点（v2 已移除，仅留迁移说明）",
           link: "usePoint",
         },
         {

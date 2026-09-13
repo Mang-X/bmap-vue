@@ -1,6 +1,6 @@
 # useBMapMarkerIcons
 
-通过该 hooks 可获取一些内置的地图图标 (BMapGL.Icon)。
+通过该 hooks 可获取一些内置的地图图标（`BMap.Icon`，JSAPI 4.0 下 `BMapGL` 是同一命名空间的别名）。
 
 ```ts
 import { useBMapMarkerIcons } from 'baidu-map-gl-vue'
@@ -28,7 +28,7 @@ const icons = useBMapMarkerIcons(client) // client 可在 ready 事件或 useBMa
 
 | 返回值 | 描述                                    | 类型                                      |
 | ------ | --------------------------------------- | ----------------------------------------- |
-| icons  | 所有内置的 `BMapGL.Icon` 实例对象键值对 | `Record<DefaultMarkerIcons, BMapGL.Icon>` |
+| icons   | 所有内置的 `BMap.Icon` 实例对象键值对 | `Record<DefaultMarkerIcons, unknown>`（SDK 图标句柄，类型由 Driver 决定） |
 
 ## 代码示例
 

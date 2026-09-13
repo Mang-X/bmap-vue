@@ -48,13 +48,17 @@ window.BMapGL.apiLoad = function () {
 ```vue
 <script setup lang="ts">
   import { BMap, BMarker } from 'baidu-map-gl-vue'
+  // 自建入口经 v4 Provider 表达（`apiUrl` 在默认路径下会在加载前报错）
+  import { customScriptV4Provider } from 'baidu-map-gl-vue/core'
+
+  const offlineProvider = customScriptV4Provider('自建地址/getApiScripts.js')
 </script>
 
 <template>
   <BMap
     :center="{ lng: 106.53637853629937, lat: 29.464275891815767 }"
     enableScrollWheelZoom
-    apiUrl="自建地址/getApiScripts.js"
+    :provider="offlineProvider"
   >
     <BMarker :position="{ lng: 121.56847909, lat: 29.8100979777 }"></BMarker>
   </BMap>
@@ -62,12 +66,13 @@ window.BMapGL.apiLoad = function () {
 ```
 
 ::: tip v3 推荐写法
-`apiUrl` prop 仍可用于**自建入口**，但它不属于默认加载路径（默认路径的入口由官方 Loader 决定）：
+自建入口**不**通过 `apiUrl` 表达：默认路径的入口由官方 Loader 决定，`apiUrl` 在上游没有这个入口。
 
-- `<BMap api-url="...">` / `createBMapPlugin({ apiUrl })` 会在加载前显式报 `BMAP_INVALID_ARGUMENT`；
-- 正确做法是用 `customScriptProvider(scriptSrc)`（v4 用 `customScriptV4Provider(scriptSrc, { mode })`）
-  构造 Provider，经 `createBMapPlugin({ provider })` 或 Client 定义传入，见[配置](../guide/config#更换插件资源链接)。
+- `<BMap api-url="...">` / `createBMapPlugin({ apiUrl })` 会在加载前显式报 `BMAP_INVALID_ARGUMENT`
+  （`apiUrl` 只对显式传入的 legacy Provider 有意义）；
+- 正确做法是用 `customScriptV4Provider(scriptSrc)` 构造 Provider，经 `createBMapPlugin({ provider })`
+  或 Client 定义传入，见[配置](../guide/config#更换插件资源链接)。
 
-如果 SDK 由宿主页面自己加载好（例如已有的离线入口脚本），改用 `existingGlobalProvider()`
-（v4：`existingGlobalV4Provider()`）即可，本库只消费全局、不另插 script。
+如果 SDK 由宿主页面自己加载好（例如已有的离线入口脚本），改用 `existingGlobalV4Provider()`
+即可，本库只消费全局、不另插 script。
 :::

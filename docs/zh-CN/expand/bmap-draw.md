@@ -5,7 +5,7 @@ BMap Draw 是一个基于百度地图 JSAPI 的轻量级鼠标绘制库，提供
 > 使用方式请参考官方文档：https://lbsyun.baidu.com/bmap-draw/
 
 :::warning 注意
-该组件库中 `BMapGL` 是异步加载，而 `bmap-draw` 中配置文件中包含同步调用 `BMapGL` 相关构造函数，所以只能使用异步加载。
+该组件库中 SDK 命名空间是异步加载的（JSAPI 4.0 的全局名是 `BMap`，`BMapGL` 是同对象的别名），而 `bmap-draw` 的配置文件里包含同步调用这些构造函数的代码，所以只能使用异步加载。
 
 ```ts
 import('bmap-draw').then(({ DrawScene }) => {

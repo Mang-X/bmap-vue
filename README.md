@@ -27,13 +27,13 @@
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Activities/Sparkles.png" alt="Sparkles" width="25" height="25" /> 特性
 
-- 🚀 自动加载百度地图 SDK，将百度地图繁琐的 Api 封装进组件，你只需关注组件本身
+- 🚀 自动通过官方 `@baidumap/jsapi-loader` 加载百度地图 JSAPI 4.0，将繁琐的 Api 封装进组件，你只需关注组件本身
 - 📦 20+ 高质量的开箱即用 Vue 3 组件以及 8+ hooks 封装
 - 📐 遵循直觉的、简约的 Api 设计
 - ⚡ Composition Api，更好的性能
 - 🔨 完整的 TypeScript 支持，更好的体验
 - 🧩 tree shaking 支持，模块分包，只打包你想要的的
-- 🌏 基于百度地图 JavaScript API，通过 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图
+- 🌏 基于百度地图 JSAPI 4.0，通过 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图
 - 🚀 支持 volar，组件提供完善的代码提示
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" alt="Gear" width="25" height="25" /> 安装

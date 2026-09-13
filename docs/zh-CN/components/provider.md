@@ -14,7 +14,7 @@ import { BMapProvider } from 'baidu-map-gl-vue'
 
 ```vue
 <template>
-  <BMapProvider :definition="definition" @ready="onReady" @error="onError">
+  <BMapProvider @ready="onReady" @error="onError">
     <template #loading>SDK 加载中…</template>
     <template #error="{ error, retry }">
       <button @click="retry">加载失败：{{ error.message }}，点击重试</button>
@@ -24,16 +24,16 @@ import { BMapProvider } from 'baidu-map-gl-vue'
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, baiduCdnProvider } from 'baidu-map-gl-vue'
+import { BMapProvider } from 'baidu-map-gl-vue'
 
-const definition = {
-  provider: baiduCdnProvider(),
-  loadOptions: { ak: '百度地图ak' }
-}
 function onReady() {}
 function onError() {}
 </script>
 ```
+
+不传 `definition` / `provider` 时复用 `app.use(createBMapPlugin(...))` 的默认定义
+（`baiduJsapiV4Provider()`，官方 Loader）。需要子树换入口时才显式传 `provider`：
+`customScriptV4Provider(src)`（自托管）或 `existingGlobalV4Provider()`（宿主已加载）。
 
 ## 静态组件 props
 

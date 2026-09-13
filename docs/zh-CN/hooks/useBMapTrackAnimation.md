@@ -6,6 +6,16 @@
 import { useBMapTrackAnimation } from 'baidu-map-gl-vue'
 ```
 
+::: danger 在 JSAPI 4.0 默认路径上尚未验证
+`useBMapTrackAnimation` 走 `TrackAnimation`（BMapGLLib 插件），而能力清单里
+`service.track-animation` 在 4.0 上是 `unsupported`：本库不装配它，调用会得到
+`BMAP_CAPABILITY_UNSUPPORTED`。4.0 的对应能力是原生图层 `layer.track-line`
+（`BPointLayer` 同族的 `driver.nativeLayers.create('track-line')`）。
+
+脚本本身的兼容结论（声明面无缺口、运行时未验证）与复现方式见
+[插件兼容 inventory](../contributing/plugin-compat-inventory)。
+:::
+
 ::: warning 注意
 
 1. 使用该 hooks 前，请确保 `TrackAnimation` 插件正确的[注册](../guide/config)了。

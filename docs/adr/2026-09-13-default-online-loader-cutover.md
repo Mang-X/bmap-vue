@@ -175,11 +175,14 @@ Official-first ADR 已经把「默认加载委托官方 Loader」定成决策，
 - **「官方 resolve 成功但命名空间不可用」不可重试**：官方此时状态已是 `loaded`，其公开契约只在
   `failed` 时重置状态，而 `reset()` 属禁用项。本库如实报 `BMAP_SDK_LOAD_FAILED` 并登记残留标记，
   不做 `reset()`。
-- **代理模式（`serviceHost`）没有公共配置入口**：`BMapLoadOptions` 未透出该字段，本库不新增；
-  需要时按「新增公共配置」单独讨论（UI Kit 在代理模式下的端到端可用性仍是未验证项）。
+- ~~**代理模式（`serviceHost`）没有公共配置入口**~~：**本条已被后续实现推翻**（`serviceHost` 已作为
+  `BMapLoadOptions` 字段公开、经 `createBMapPlugin({ defaults })` 可达，并以哈希参与指纹，
+  见本文决策 3 与对照表）。**仍然成立的是后半句**：UI Kit 在代理模式下的端到端可用性未验证。
 - **Playground 的「无 AK 也跑 v4」场景**仍属 `M3A3-04`：无 AK 模式目前注入 Fake BMapGL（`webgl-v1`），
   真实 v4 模式需配 `VITE_BMAP_AK`（该模式同时受 #72 的 InfoWindow / Autocomplete 修复影响）。
-- **真实 AK 的浏览器默认路径 smoke** 未在本 PR 执行（需 `BAIDU_MAP_AK`），归 #74 的重新验收。
+- ~~**真实 AK 的浏览器默认路径 smoke** 未在本 PR 执行~~：**已由 #74 完成**（真实档结论见
+  `docs/zh-CN/contributing/v4-browser-smoke.md` 与 ADR `2026-09-13-v4-required-smoke`）；
+  nightly 会持续重跑，PR 门禁跑同 harness 的 fixture 档。
 
 ## 非目标
 

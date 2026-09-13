@@ -19,7 +19,7 @@ export const nav: DefaultTheme.Config["nav"] = [
       {
         text: "Hooks",
         activeMatch: "/hooks/",
-        link: "/zh-CN/hooks/usePoint",
+        link: "/zh-CN/hooks/useBMapMarkerIcons",
       },
     ],
   },

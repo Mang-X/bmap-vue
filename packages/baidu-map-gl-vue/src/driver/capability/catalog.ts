@@ -384,7 +384,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "overlay.mapvgl": {
     id: "overlay.mapvgl",
     family: "overlay",
-    description: "MapVGL 渲染叠加层；迁移结论待定（M8），本阶段明确不支持",
+    description:
+      "MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**——脚本的 JSONP 传输层依赖 SDK 的私有回调表" +
+      "（成员名 `_rd`），本库明令不得访问私有面（M3A3-07 / #25，依据与复现见 plugin-compat-inventory）",
     engines: ALL,
     status: "unsupported",
     runtimeOnly: true,
@@ -652,7 +654,10 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "service.track-animation": {
     id: "service.track-animation",
     family: "service",
-    description: "轨迹动画（BMapGLLib 插件）；迁移结论待定（M8），本阶段明确不支持",
+    description:
+      "轨迹动画（BMapGLLib 插件）；脚本引用面在 4.0.4 声明里没有缺口，但**运行时未验证**，" +
+      "本阶段不装配（4.0 的对应能力是原生图层 `layer.track-line`）；依据与复现见 " +
+      "plugin-compat-inventory（M3A3-07 / #25）",
     engines: ALL,
     status: "unsupported",
     runtimeOnly: true,

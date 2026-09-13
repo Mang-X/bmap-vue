@@ -1,0 +1,387 @@
+/**
+ * 插件兼容 inventory 契约测试（M3A3-07 / issue #25）
+ *
+ * 这份清单要能替代 catalog 里原来那句「迁移结论待定（M8）」——也就是读者打开文档就能知道
+ * **已经查过什么、依据是哪一档、还差什么**。因此这里钉住四类东西：
+ *
+ * 1. **数据 ↔ 生成物 ↔ URL 单一事实源三者不漂移**（含脚本 `--check` 实跑）；
+ * 2. **能力与清单互锁**：catalog 里标了 `unsupported` 的插件类能力必须在这里有依据，
+ *    反向也不能凭空声明一个不存在的能力；
+ * 3. **依据不许留空**：每条结论至少一档依据；写了 `incompatible` 就必须给出决定性的私有面；
+ * 4. **隔离是真的**（本文件里唯一一条行为断言）：可选插件失败只发 `plugin:error`，不抛；
+ *    必需插件失败才抛。**正证与反证在同一个用例内**——否则「隔离成立」可能只是没跑到。
+ *
+ * 另外把「这条门禁真的被某个 workflow 的 `run:` 跑起来」也钉住：`generate:plugin-inventory:check`
+ * 曾经在别的 PR 里出现过「文档说进门禁、其实没有任何 job 跑它」的情况（#74 实测）。
+ */
+import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  BUILTIN_PLUGIN_URLS,
+  geoUtilsPlugin,
+  PLUGIN_COMPAT_INVENTORY,
+  stringToPluginDefinitions,
+} from "../../packages/baidu-map-gl-vue/src/plugins";
+import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability";
+import { createPluginRegistry } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginRegistry";
+import { ResourceScope } from "../../packages/baidu-map-gl-vue/src/core/lifecycle/ResourceScope";
+
+const ROOT = resolve(import.meta.dirname, "../..");
+const DOC_MD = resolve(ROOT, "docs/zh-CN/contributing/plugin-compat-inventory.md");
+const DOC_JSON = resolve(ROOT, "docs/.vitepress/plugin-inventory.json");
+const WORKFLOW = resolve(ROOT, ".github/workflows/quality.yml");
+
+const ENTRIES = PLUGIN_COMPAT_INVENTORY;
+
+describe("生成物与数据同源", () => {
+  it("生成器 --check 无漂移（文档确实来自数据模块）", () => {
+    const script = resolve(ROOT, "scripts/generate-plugin-inventory.mts");
+    expect(() =>
+      execFileSync(process.execPath, ["--experimental-strip-types", script, "--check"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    ).not.toThrow();
+  });
+
+  it("生成产物存在、带 Generated 标记、且逐个包含四个插件", () => {
+    expect(existsSync(DOC_MD)).toBe(true);
+    expect(existsSync(DOC_JSON)).toBe(true);
+
+    const markdown = readFileSync(DOC_MD, "utf8");
+    expect(markdown).toContain("Generated file. Do not edit directly.");
+    for (const entry of ENTRIES) {
+      expect(markdown, `清单缺少 ${entry.id}`).toContain(`\`${entry.id}\``);
+    }
+
+    const json = JSON.parse(readFileSync(DOC_JSON, "utf8")) as {
+      plugins: { id: string; url: string | null }[];
+    };
+    expect(json.plugins.map((p) => p.id).sort()).toEqual(ENTRIES.map((e) => e.id).sort());
+    expect(json.plugins.every((p) => typeof p.url === "string" && p.url.startsWith("https://"))).toBe(
+      true,
+    );
+  });
+
+  it("urlKey 集合与 BUILTIN_PLUGIN_URLS 的键集合相等（URL 只有一份事实源）", () => {
+    const inventoryKeys = new Set(ENTRIES.map((entry) => entry.urlKey));
+    const builtinKeys = new Set(Object.keys(BUILTIN_PLUGIN_URLS));
+    expect([...inventoryKeys].sort()).toEqual([...builtinKeys].sort());
+    // 先证明两边都非空，否则上一条会在「两个空集合」上恒真
+    expect(builtinKeys.size).toBe(4);
+  });
+
+  it("锁定的 URL 不含浮动版本（不许出现 latest / next / *）", () => {
+    for (const url of Object.values(BUILTIN_PLUGIN_URLS)) {
+      expect(url, `${url} 用了浮动版本`).not.toMatch(/latest|@next|\*/);
+      expect(url).toMatch(/^https:\/\//);
+    }
+  });
+});
+
+describe("依据与结论不留空", () => {
+  it("每条至少一档依据，且没有未定义的依据名", () => {
+    const known = new Set(["artifact", "declaration", "runtime"]);
+    for (const entry of ENTRIES) {
+      expect(entry.basis.length, `${entry.id} 没有依据`).toBeGreaterThan(0);
+      for (const basis of entry.basis) {
+        expect(known.has(basis), `${entry.id} 依据名未定义：${basis}`).toBe(true);
+      }
+    }
+  });
+
+  it("声明面结论必须有 artifact + declaration 两档依据", () => {
+    for (const entry of ENTRIES) {
+      if (entry.verdict === "no-declaration-gap" || entry.verdict === "incompatible") {
+        expect(entry.basis, `${entry.id} 的结论强于依据`).toContain("artifact");
+        expect(entry.basis, `${entry.id} 的结论强于依据`).toContain("declaration");
+      }
+    }
+  });
+
+  it("标 incompatible 必须给出决定性的私有面（正证与反证共用同一条判定）", () => {
+    // 判定写成纯谓词：反证必须走**同一条**规则，否则「反证」只是在断言两个字面量
+    const violatesDecisiveEvidenceRule = (entry: {
+      id: string;
+      verdict: string;
+      hasPrivateSurface: boolean;
+    }): boolean => entry.verdict === "incompatible" && !entry.hasPrivateSurface;
+
+    for (const entry of ENTRIES) {
+      expect(
+        violatesDecisiveEvidenceRule(entry),
+        `${entry.id} 说不兼容却没给出决定性的私有面`,
+      ).toBe(false);
+    }
+
+    // 反证：同一个谓词喂进「不兼容但没有私有面」的假数据必须报违规，
+    // 说明上面那条断言不是因为谓词写死成 false 而恒过
+    expect(
+      violatesDecisiveEvidenceRule({ id: "Bogus", verdict: "incompatible", hasPrivateSurface: false }),
+    ).toBe(true);
+    // 反向也不能误报：不兼容 + 有私有面 → 合规
+    expect(
+      violatesDecisiveEvidenceRule({ id: "Bogus2", verdict: "incompatible", hasPrivateSurface: true }),
+    ).toBe(false);
+  });
+
+  it("每条都写清残余风险（不许只写「存在风险」四个字）", () => {
+    for (const entry of ENTRIES) {
+      expect(entry.residualRisks.length, `${entry.id} 没有残余风险条目`).toBeGreaterThan(0);
+      for (const risk of entry.residualRisks) {
+        expect(risk.length, `${entry.id} 的残余风险过短`).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it("内置插件一律 optional（必需功能不依赖插件脚本）", () => {
+    for (const entry of ENTRIES) {
+      expect(entry.required, `${entry.id} 应为 optional`).toBe(false);
+    }
+  });
+});
+
+describe("与 Capability Catalog 双向互锁", () => {
+  it("清单声明的能力都真实存在于 Catalog", () => {
+    for (const entry of ENTRIES) {
+      if (!entry.capability) continue;
+      expect(
+        Object.prototype.hasOwnProperty.call(CAPABILITY_CATALOG, entry.capability),
+        `${entry.id} 声明了不存在的能力 ${entry.capability}`,
+      ).toBe(true);
+    }
+  });
+
+  it("Catalog 标 unsupported 的插件类能力必须在清单里有依据，且说明指向清单", () => {
+    const pluginCapabilities = Object.values(CAPABILITY_CATALOG).filter(
+      (descriptor) =>
+        descriptor.status === "unsupported" &&
+        (descriptor.id.endsWith(".mapvgl") || descriptor.id.endsWith(".track-animation")),
+    );
+    // 先证明这条断言不是空转：Catalog 里确实有这类能力
+    expect(pluginCapabilities.length).toBeGreaterThan(0);
+
+    for (const descriptor of pluginCapabilities) {
+      const entry = ENTRIES.find((candidate) => candidate.capability === descriptor.id);
+      expect(entry, `Catalog 标了 ${descriptor.id} 为 unsupported，但清单里没有依据`).toBeDefined();
+      // 说明文字必须指向这份清单，而不是继续写「结论待定」
+      expect(descriptor.description).not.toContain("待定");
+      expect(descriptor.description).toContain("plugin-compat-inventory");
+    }
+  });
+
+  it("清单判 incompatible 的能力，Catalog 也必须是 unsupported（反向也不许矛盾）", () => {
+    const incompatible = ENTRIES.filter((entry) => entry.verdict === "incompatible");
+    // 先证明这条断言不是空转：清单里确实有 incompatible 条目
+    expect(incompatible.length).toBeGreaterThan(0);
+
+    for (const entry of incompatible) {
+      expect(entry.capability, `${entry.id} 判不兼容却没有关联能力`).toBeDefined();
+      const descriptor = CAPABILITY_CATALOG[entry.capability!];
+      expect(descriptor, `${entry.id} 关联的能力不存在`).toBeDefined();
+      expect(descriptor.status, `${entry.id} 判不兼容，Catalog 却仍标 ${descriptor.status}`).toBe(
+        "unsupported",
+      );
+    }
+  });
+
+  it("清单里的每个 id 都由**真工厂**构造，而不是未知插件的空实现", () => {
+    // 关键：`stringToPluginDefinitions` 对未知名字返回 `{ name, required: false, load: noop }`，
+    // 它与真工厂**同名、同 required**。只断言 name/required 的话，把 `GeoUtils` 从名字表里删掉
+    // （即回退 M3A3-07 的修复）测试照样全绿。真工厂经 `urlPluginDefinition` 构造，`scope` 是
+    // `'global'`；空实现没有这个字段 —— 拿它当判据，回退才会红。
+    const defs = stringToPluginDefinitions(ENTRIES.map((entry) => entry.id));
+    for (const def of defs) {
+      expect(def.scope, `${def.name} 不是由内置工厂构造的（疑似退化成未知插件的空实现）`).toBe(
+        "global",
+      );
+    }
+    // 每个真工厂还必须有 `load`（空实现的 load 是 async () => undefined，但真工厂也一样有；
+    // 因此这里只作为存在性检查，真正的判据是上面的 scope）
+    for (const def of defs) expect(typeof def.load).toBe("function");
+
+    // GeoUtils 此前只有 URL、没有工厂，也没有名字表条目 —— 这条防止再退回去
+    expect(geoUtilsPlugin().scope).toBe("global");
+    expect(geoUtilsPlugin().name).toBe("GeoUtils");
+  });
+});
+
+describe("可选插件故障与必需功能隔离", () => {
+  const makeContext = () => ({ client: null, map: null, api: {} });
+
+  it("optional 插件失败不抛、只发 plugin:error；required 插件失败才抛（同一用例内正证 + 反证）", async () => {
+    const boom = new Error("plugin script unavailable");
+
+    // 反证（已证伪的那一半）：把同一个失败插件标成 required，它必须抛。
+    // 没有这一半，「optional 不抛」可能只是因为失败根本没被观察到。
+    const requiredRegistry = createPluginRegistry(
+      makeContext(),
+      { emit: () => {} },
+      new ResourceScope(),
+    );
+    requiredRegistry.register({
+      name: "RequiredFail",
+      required: true,
+      load: async () => {
+        throw boom;
+      },
+    });
+    await expect(requiredRegistry.whenPlugin("RequiredFail")).rejects.toBe(boom);
+
+    // 正证：内置插件用的形态（required 缺省 = optional）必须只发事件、不抛。
+    const events: { type: string; payload: unknown }[] = [];
+    const optionalRegistry = createPluginRegistry(
+      makeContext(),
+      {
+        emit: (type, payload) => {
+          events.push({ type, payload });
+        },
+      },
+      new ResourceScope(),
+    );
+    optionalRegistry.register({
+      name: "OptionalFail",
+      required: false,
+      load: async () => {
+        throw boom;
+      },
+    });
+
+    await expect(optionalRegistry.whenPlugin("OptionalFail")).resolves.toBeUndefined();
+    expect(optionalRegistry.getStatus("OptionalFail")).toBe("error");
+    // 只锁「发的是 plugin:error」与「带的是同一个错误对象」，不锁次数：
+    // `whenPlugin` 会先按依赖序结算、再结算目标本身，一次失败因此可能发两次事件。
+    // 把次数写死会让这条用例在无关的注册表实现调整时假红。
+    expect(new Set(events.map((e) => e.type))).toEqual(new Set(["plugin:error"]));
+    expect(events.length).toBeGreaterThan(0);
+    expect((events[0]!.payload as { error: unknown }).error).toBe(boom);
+  });
+
+  it("四个内置插件在注册表里的失败都不阻断（用真实名字表 + 被打桩的加载）", async () => {
+    const registry = createPluginRegistry(
+      makeContext(),
+      { emit: () => {} },
+      new ResourceScope(),
+    );
+    // 走 `stringToPluginDefinitions`：它同时验证「名字表认得这四个插件」，而不只是
+    // 「工厂单独可用」——此前 GeoUtils 有 URL 却没有名字表条目，会被静默当成未知插件。
+    const definitions = stringToPluginDefinitions(ENTRIES.map((entry) => entry.id));
+    expect(definitions.length).toBe(4);
+    expect(definitions.map((d) => d.name)).toEqual(ENTRIES.map((entry) => entry.id));
+    for (const def of definitions) {
+      registry.register({
+        ...def,
+        load: async () => {
+          throw new Error("boom");
+        },
+      });
+    }
+    for (const def of definitions) {
+      await expect(registry.whenPlugin(def.name)).resolves.toBeUndefined();
+      expect(registry.getStatus(def.name)).toBe("error");
+    }
+  });
+});
+
+describe("门禁真的被 workflow 跑起来", () => {
+  it("quality job 里有一条未被架空的 run: generate-plugin-inventory --check", () => {
+    const lines = readFileSync(WORKFLOW, "utf8").split(/\r?\n/);
+    const start = lines.findIndex((line) => line === "  quality:");
+    expect(start, "找不到 quality job 段").toBeGreaterThanOrEqual(0);
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[i]!)) {
+        end = i;
+        break;
+      }
+    }
+    const job = lines.slice(start, end);
+
+    // 定位式只写一次，正证与反证共用它 —— 否则「反证」可能只是在断言另一条更严的正则
+    const locateCheckRun = (lines: readonly string[]): number =>
+      lines.findIndex((line) =>
+        /^\s*run:\s*.*scripts\/generate-plugin-inventory\.mts --check/.test(line),
+      );
+
+    const runIndex = locateCheckRun(job);
+    expect(runIndex, "quality job 里没有跑 plugin-inventory 的 --check").toBeGreaterThanOrEqual(0);
+
+    // 该 step 不得被 if / continue-on-error 架空：往上找最近的 `- name:`
+    let stepStart = runIndex;
+    while (stepStart > 0 && !/^\s*- /.test(job[stepStart]!)) stepStart -= 1;
+    const stepLines = job.slice(stepStart, runIndex);
+    // 切片非空：切空的话下面的 filter 也是 []，`toEqual([])` 会恒过
+    expect(stepLines.length, "没有切出 step 区块，架空检查无从判断").toBeGreaterThan(0);
+    // 切片确实从 step 边界开始（`- name:` / `- uses:` 那一行），不是从文件开头切上来的
+    expect(stepLines.some((line) => /^\s*-\s/.test(line))).toBe(true);
+    const blockers = stepLines.filter((line) => /^\s*(if|continue-on-error):/.test(line));
+    expect(blockers, "该 step 被开关架空").toEqual([]);
+
+    // 反证：把同一个 job 文本里的 `--check` 换成 `--nope`，**同一条定位式**必须找不到
+    const renamed = job.map((line) => line.replace("--check", "--nope"));
+    expect(locateCheckRun(renamed)).toBe(-1);
+  });
+
+  it("nightly 里有一条未被架空的 run: probe:plugin-compat（真实产物核对有归属）", () => {
+    const nightly = resolve(ROOT, ".github/workflows/nightly-v4-smoke.yml");
+    const lines = readFileSync(nightly, "utf8").split(/\r?\n/);
+    const runIndex = lines.findIndex((line) =>
+      /^\s*run:\s*.*probe:plugin-compat/.test(line),
+    );
+    expect(runIndex, "nightly 里没有跑 probe:plugin-compat").toBeGreaterThanOrEqual(0);
+
+    // 往前找该 step 的起点，断言它没有被 if / continue-on-error 架空
+    let stepStart = runIndex;
+    while (stepStart > 0 && !/^\s*- /.test(lines[stepStart]!)) stepStart -= 1;
+    const stepLines = lines.slice(stepStart, runIndex);
+    expect(stepLines.length, "没有切出 step 区块，架空检查无从判断").toBeGreaterThan(0);
+    expect(stepLines.some((line) => /^\s*-\s/.test(line))).toBe(true);
+    expect(stepLines.filter((line) => /^\s*(if|continue-on-error):/.test(line))).toEqual([]);
+
+    // 反证：同一文件里必须存在一条**会**被架空的 step，证明上面的过滤器不是恒空
+    // （`Upload` 的 `if: always()` 是 upload-artifact 的正常用法，与门禁判定无关）
+    const alwaysIndex = lines.findIndex((line) => /^\s*if: always\(\)/.test(line));
+    expect(alwaysIndex, "夹具里应当存在一条带 if 的 step，否则上一条断言可能只是没扫到")
+      .toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("文档承诺的命令真的存在（防空口承诺）", () => {
+  it("inventory 文档里出现的每条 `pnpm <script>` 都能在根 package.json 里找到", () => {
+    const markdown = readFileSync(DOC_MD, "utf8");
+    const scripts = (
+      JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+
+    const mentioned = [...markdown.matchAll(/pnpm\s+([a-z][\w:-]*)/g)].map((m) => m[1]!);
+    // 先证明这条断言不是空转：文档里确实提到了命令
+    expect(mentioned.length).toBeGreaterThan(0);
+    for (const name of new Set(mentioned)) {
+      expect(scripts[name], `文档提到的 \`pnpm ${name}\` 在 package.json 里不存在`).toBeDefined();
+    }
+  });
+
+  it("清单源码里指向的 ADR 与 legacy 声明文件都在仓库里", () => {
+    const sourceFile = resolve(
+      ROOT,
+      "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts",
+    );
+    const source = readFileSync(sourceFile, "utf8");
+    const mentioned = [
+      "docs/adr/2026-09-13-plugin-compat-inventory.md",
+      "docs/adr/2026-09-13-private-sdk-surface-removal.md",
+      "packages/baidu-map-gl-vue/types/BMapGL/lib.d.ts",
+    ];
+    for (const path of mentioned) {
+      // 先证明这条断言真的在检查东西：文件名主干确实在源码里被提到。
+      // 比对主干（去掉 .md）是因为源码里引用 ADR 时本来就不写扩展名。
+      const marker = path.split("/").pop()!.replace(/\.md$/, "");
+      expect(source, `清单源码没有指向 ${marker}`).toContain(marker);
+      expect(existsSync(resolve(ROOT, path)), `${path} 不存在`).toBe(true);
+    }
+  });
+});

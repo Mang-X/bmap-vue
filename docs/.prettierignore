@@ -3,3 +3,4 @@
 public/**
 .vitepress/dist/**
 .vitepress/cache/**
+.vitepress/plugin-inventory.json

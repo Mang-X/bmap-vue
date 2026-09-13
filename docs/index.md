@@ -4,7 +4,7 @@ title: Vue3 Baidu Map Gl
 
 hero:
   name: Vue3 Baidu Map Gl 
-  text: Vue3 & BMapGL 组件库 + hooks 库
+  text: Vue3 & 百度地图 JSAPI 4.0 组件库 + hooks 库
   tagline: 易用 & 完整 & 性能不错
   image:
     src: /logo.svg
@@ -40,7 +40,7 @@ features:
 
   - icon: <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20Showing%20Asia-Australia.png" alt="Globe Showing Asia-Australia" width="25" height="25" />
     title: WebGL
-    details: 基于百度地图Gl版SDK，WebGL对地图、覆盖物等进行渲染，支持3D视角展示地图
+    details: 基于百度地图 JSAPI 4.0（WebGL 渲染），支持 3D 视角展示地图
 ---
 
 <script lang="ts" setup>

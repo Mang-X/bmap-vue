@@ -17,7 +17,7 @@ lang: zh-CN
 3. 显式 `provider/ak/apiUrl` props（就地组装定义）
 4. 最近的 `<BMapProvider>` 提供的 Client 上下文
 5. `app.use(createBMapPlugin(...))` 提供的默认定义
-6. 否则报错（默认不再静默读取 `window.BMapGL`；离线/存量全局场景请显式使用 `existingGlobalProvider()` 或 `allowExistingGlobal`）
+6. 否则报错（默认不再静默读取 `window.BMapGL`；离线/存量全局场景请显式使用 `existingGlobalV4Provider()` 或 `allowExistingGlobal`）
 
 服务类 hooks（如 `useBMapGeocoder`）只需要 Client，可在 `<BMap>` 或 `<BMapProvider>` 子树内直接使用，无需地图实例。
 
@@ -87,18 +87,19 @@ import App from './App.vue'
 import { createBMapPlugin } from 'baidu-map-gl-vue'
 
 const app = createApp(App)
-app.use(createBMapPlugin({
-  ak: '百度地图ak',
-  plugins: ['TrackAnimation']
-}))
+app.use(createBMapPlugin({ ak: '百度地图ak' }))
 app.mount('#app')
 ```
+
+`plugins` 是可选的，且**内置插件一律 optional**：插件脚本加载失败只发 `plugin-error`，
+不会让地图失败。要真的用某个插件，先确认它在 JSAPI 4.0 上的状态，见
+[插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
 ### 2。用 `<BMapProvider>` 覆盖子树默认
 
 ```vue
 <template>
-  <BMapProvider :definition="definition" @ready="onReady" @error="onError">
+  <BMapProvider @ready="onReady" @error="onError">
     <template #loading>SDK 加载中…</template>
     <template #error="{ error, retry }">
       <button @click="retry">加载失败：{{ error.message }}，点击重试</button>
@@ -108,15 +109,23 @@ app.mount('#app')
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, baiduCdnProvider } from 'baidu-map-gl-vue'
+import { BMapProvider } from 'baidu-map-gl-vue'
 
-const definition = {
-  provider: baiduCdnProvider(),
-  loadOptions: { ak: '百度地图ak' }
-}
 function onReady() {}
 function onError() {}
 </script>
+```
+
+不传 `definition` / `provider` 时，Provider 复用 `app.use(createBMapPlugin(...))` 的默认定义，
+也就是 `baiduJsapiV4Provider()`（官方 Loader）。只有子树需要用**别的入口**时才显式传：
+
+```ts
+import { customScriptV4Provider, existingGlobalV4Provider } from 'baidu-map-gl-vue/core'
+
+// 自托管 / 非标准资源入口
+const selfHosted = { provider: customScriptV4Provider('https://self.hosted/bmap.js') }
+// 宿主页面自己加载好了 SDK，本库只消费全局
+const hostLoaded = { provider: existingGlobalV4Provider() }
 ```
 
 ### 3。组件 `BMap` 传入 [`props`](/zh-CN/components/map#%E9%9D%99%E6%80%81%E7%BB%84%E4%BB%B6-props) 配置
@@ -125,7 +134,6 @@ function onError() {}
 ```html
 <BMap
   ak='百度地图ak'
-  :plugins="['TrackAnimation']"
 />
 ```
 
@@ -133,17 +141,21 @@ function onError() {}
 
 配置插件后，地图实例 ready 不会等待插件加载。请通过 [BMap 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
 
-| PluginId                                                                                 | 插件名称         | 描述                                                                               | 版本                               |
-| ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
-| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        |                                    |
-| [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                      |                                    |
-| [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。               | <Badge type="tip" text="^2.5.0" /> |
-| [DistanceTool](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#测距工具)       | 测距工具         | 测距工具类                                                                         | <Badge type="tip" text="^2.5.0" /> |
-| [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | <Badge type="tip" text="^2.5.0" /> |
-| [AreaRestriction](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#区域限制)    | 区域限制         | 浏览区域限制类                                                                     | <Badge type="tip" text="^2.5.0" /> |
-| [InfoBox](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#自定义信息窗口)      | 自定义信息窗口   | 类似于 infoWindow，比 infoWindow 更有灵活性，比如可以定制 border，关闭按钮样式等。 | <Badge type="tip" text="^2.5.0" /> |
-| [RichMarker](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#富标注)           | 富标注           | 富 Marker 类                                                                       | <Badge type="tip" text="^2.5.0" /> |
-| [LuShu](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#路书)                  | 路书             | 路书类，实现 Marker 沿路线运动                                                     | <Badge type="tip" text="^2.5.0" /> |
+**只有下表 `plugins` 列标 ✅ 的名字是内置的**，其余字符串会被当成未知插件、静默变成空实现
+（不报错，也不会加载任何脚本）。每个内置插件的 JSAPI 4.0 状态与依据见
+[插件兼容 inventory](../contributing/plugin-compat-inventory)。
+
+| PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态                     |
+| ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | -------------- | ---------------------------------- |
+| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 声明面无缺口，运行时未验证          |
+| [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                              | ✅             | 不兼容（依赖 `_rd` 私有回调表）     |
+| [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。                | ✅             | 运行时未验证（会自行注入两个脚本）  |
+| [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | ✅             | 声明面无缺口，运行时未验证          |
+| [DistanceTool](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#测距工具)       | 测距工具         | 测距工具类                                                                         | —              | 未内置，未评估                     |
+| [AreaRestriction](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#区域限制)    | 区域限制         | 浏览区域限制类                                                                     | —              | 未内置，未评估                     |
+| [InfoBox](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#自定义信息窗口)      | 自定义信息窗口   | 类似于 infoWindow，比 infoWindow 更有灵活性，比如可以定制 border，关闭按钮样式等。 | —              | 未内置，未评估                     |
+| [RichMarker](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#富标注)           | 富标注           | 富 Marker 类                                                                       | —              | 未内置，未评估                     |
+| [LuShu](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#路书)                  | 路书             | 路书类，实现 Marker 沿路线运动                                                     | —              | 未内置，未评估                     |
 
 ### 更换插件资源链接
 
@@ -151,27 +163,28 @@ function onError() {}
 再经 `createBMapPlugin({ provider })` 或 Client 定义传入：
 
 ```ts
-import { createBMapPlugin, customScriptProvider } from 'baidu-map-gl-vue'
+import { createBMapPlugin } from 'baidu-map-gl-vue'
+// v4 Provider 家族在 `baidu-map-gl-vue/core` 子入口公开
+import { customScriptV4Provider } from 'baidu-map-gl-vue/core'
 
 app.use(createBMapPlugin({
-  provider: customScriptProvider('https://self.hosted/bmapgl.js'),
+  provider: customScriptV4Provider('https://self.hosted/bmap.js'),
   defaults: { ak: '百度地图ak' }
 }))
 ```
 
-同样支持组件级覆盖：
+组件级的「换入口」不是传 `apiUrl`——默认路径下 `apiUrl` 会在加载前显式报
+`BMAP_INVALID_ARGUMENT`（上游 Loader 没有这个入口）。要按组件覆盖，传 `provider`：
 
 <!-- prettier-ignore -->
 ```html
-<BMap
-  :plugins="['TrackAnimation']"
-  apiUrl="https://self.hosted/bmapgl.js"
-/>
+<BMap :provider="selfHostedProvider" />
 ```
 
 ### 自定义插件定义
 
-除了内置插件（`TrackAnimation` / `Mapvgl` / `DrawingManager`，经 `plugins: ['xxx']` 声明），
+除了内置插件（`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，经 `plugins: ['xxx']` 声明，
+均为 optional），
 你还可以通过插件定义扩展。插件定义 shape 见 `BMapPluginDefinition`（`name/scope/dependencies/required/load/setup/dispose`），
 用 `urlPluginDefinition` 或 `stringToPluginDefinitions` 构造，并在需要地图的组件内经 PluginRegistry 注册。
 插件加载结果通过 `plugin-ready` / `plugin-error` 事件回执。
