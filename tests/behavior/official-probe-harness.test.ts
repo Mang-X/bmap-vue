@@ -10,6 +10,9 @@
  *   否则判定逻辑恒真或恒假都能骗过测试；
  * - 超时用短真实时间（20~200ms），保证红灯信息可读。
  */
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import {
   CdpClosedError,
@@ -237,5 +240,191 @@ describe("CDP 会话的时间语义", () => {
     expect(settled.kind, "CDP 断连后 readProbeReport 仍然挂起，finally 清理不会执行").not.toBe(
       "hung",
     );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 复审第 3 轮：截止时间「已耗尽」不能被当成「没有限制」                  */
+/* ------------------------------------------------------------------ */
+
+describe("CDP 截止时间已耗尽的边界", () => {
+  it("截止时间已耗尽：立即以超时拒绝，且不把命令发出去", async () => {
+    const socket = createFakeSocket();
+    // 评审复现：deadline 已过期 + 正数 commandTimeoutMs
+    const session = createCdpSession(socket, {
+      deadline: Date.now() - 50,
+      commandTimeoutMs: 20,
+    });
+    const started = Date.now();
+    const error = await session.send("Runtime.evaluate").then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(CdpTimeoutError);
+    expect(Date.now() - started, "已耗尽的截止时间被当成了「不限时」").toBeLessThan(200);
+    expect(socket.sent(), "截止时间已耗尽却仍然把命令发出去了").toHaveLength(0);
+  });
+
+  it("剩余时间恰好为 0：同样按超时拒绝", async () => {
+    const socket = createFakeSocket();
+    const deadline = Date.now();
+    const session = createCdpSession(socket, {
+      deadline,
+      commandTimeoutMs: 20,
+      now: () => deadline, // 恰好等于截止时间
+    });
+    const error = await session.send("Runtime.evaluate").then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(CdpTimeoutError);
+    expect(socket.sent()).toHaveLength(0);
+  });
+
+  it("结束之后同一会话的后续命令也立即拒绝（不会退回挂起）", async () => {
+    const socket = createFakeSocket();
+    const deadline = Date.now() + 40;
+    const session = createCdpSession(socket, { deadline, commandTimeoutMs: 10 });
+    await session.send("Runtime.enable").then(
+      () => null,
+      (error: Error) => error,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const error = await session.send("Runtime.evaluate").then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(CdpTimeoutError);
+  });
+
+  it("对照组：既无 deadline 也无 commandTimeoutMs 时仍然不限时（不误拒）", async () => {
+    const socket = createFakeSocket();
+    const session = createCdpSession(socket);
+    const pending = session.send("Runtime.enable");
+    const settled = await Promise.race([
+      pending.then(
+        () => "settled" as const,
+        () => "settled" as const,
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 60)),
+    ]);
+    expect(settled, "没有配置任何限制时不应自行拒绝").toBe("pending");
+    expect(socket.sent()).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 复审第 3 轮：就绪等待必须能被「退出信号」与「截止时间」打断            */
+/* ------------------------------------------------------------------ */
+
+/** 一个永不返回响应头、但会在 signal 被 abort 时拒绝的 fetch（模拟真实 Node fetch 的语义）。 */
+function hangingFetch(onAbort?: () => void): typeof fetch {
+  return ((_url: string, init?: { signal?: AbortSignal }) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        onAbort?.();
+        reject(new Error("The operation was aborted."));
+      });
+    })) as unknown as typeof fetch;
+}
+
+describe("就绪等待被退出信号 / 截止时间打断", () => {
+  it("HTTP 一直不回应 + 子进程退出：立刻结束并说明退出原因", async () => {
+    const exited = deferred<ChildExit>();
+    let aborted = false;
+    const started = Date.now();
+    const pending = waitForViteReady({
+      url: "http://localhost:5211/",
+      runId: RUN_ID,
+      timeoutMs: 5_000,
+      pollIntervalMs: 10,
+      exited: exited.promise,
+      fetchImpl: hangingFetch(() => {
+        aborted = true;
+      }),
+    });
+    setTimeout(() => exited.resolve({ code: 1, signal: null }), 20);
+
+    const error = await pending.then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(ViteNotReadyError);
+    expect(String(error?.message)).toContain("1");
+    expect(Date.now() - started, "子进程已退出却还在等那个不返回的请求").toBeLessThan(1_000);
+    expect(aborted, "结束时应通过 AbortController 取消在飞请求").toBe(true);
+  });
+
+  it("HTTP 一直不回应 + 超时：按超时结束并给出诊断", async () => {
+    let aborted = false;
+    const started = Date.now();
+    const error = await waitForViteReady({
+      url: "http://localhost:5211/",
+      runId: RUN_ID,
+      timeoutMs: 60,
+      pollIntervalMs: 10,
+      fetchImpl: hangingFetch(() => {
+        aborted = true;
+      }),
+    }).then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(ViteNotReadyError);
+    expect(String(error?.message)).toContain("超时");
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(aborted).toBe(true);
+  });
+
+  it("对照组：HTTP 不回应但子进程仍在运行 → 只按超时结束，不误报退出", async () => {
+    const error = await waitForViteReady({
+      url: "http://localhost:5211/",
+      runId: RUN_ID,
+      timeoutMs: 60,
+      pollIntervalMs: 10,
+      exited: new Promise<ChildExit>(() => {}),
+      fetchImpl: hangingFetch(),
+    }).then(
+      () => null,
+      (thrown: Error) => thrown,
+    );
+    expect(error).toBeInstanceOf(ViteNotReadyError);
+    expect(String(error?.message)).toContain("超时");
+    expect(String(error?.message)).not.toContain("子进程已退出");
+  });
+
+  it("真实 TCP 不回应 + 真实子进程退出（评审同形的本地故障模拟）", async () => {
+    // 接受连接但永不响应：真实 fetch 会一直挂着（undici 没有默认超时）。
+    const server = createServer(() => {
+      /* 刻意不响应 */
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as AddressInfo).port;
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => process.exit(1), 40)"], {
+      stdio: "ignore",
+    });
+    const exited = new Promise<ChildExit>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+
+    const started = Date.now();
+    try {
+      const error = await waitForViteReady({
+        url: `http://127.0.0.1:${port}/`,
+        runId: RUN_ID,
+        timeoutMs: 5_000, // 远大于子进程退出时间：必须靠退出信号结束
+        pollIntervalMs: 10,
+        exited,
+      }).then(
+        () => null,
+        (thrown: Error) => thrown,
+      );
+      expect(error).toBeInstanceOf(ViteNotReadyError);
+      expect(String(error?.message)).toContain("1");
+      expect(Date.now() - started, "真实在飞请求没有被退出信号打断").toBeLessThan(2_000);
+    } finally {
+      server.close();
+      child.kill("SIGKILL");
+    }
   });
 });

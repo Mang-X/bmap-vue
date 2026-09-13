@@ -48,6 +48,18 @@ interface PendingEntry {
 }
 
 /**
+ * 一次命令的可用时间。
+ *
+ * ⚠️ 「已耗尽」与「没有配置限制」必须分开：把已耗尽的剩余时间截成 `0` 再判 `> 0 才建计时器`，
+ * 等于**把「截止时间到了」变成「没有超时限制」**，命令不回应、连接又不关时就会一直挂着，
+ * `finally` 的清理永远不执行（复审第 3 轮）。
+ */
+type Budget =
+  | { kind: "none" }
+  | { kind: "expired"; reason: string }
+  | { kind: "timer"; ms: number };
+
+/**
  * 在一条已连接的 socket 上建立 CDP 会话。
  *
  * 契约：`send()` 一定会在「命令超时 / 全局截止 / socket 断开」三者之一先到时被拒绝，
@@ -58,6 +70,29 @@ export function createCdpSession(socket: SocketLike, options: CdpSessionOptions 
   const pending = new Map<number, PendingEntry>();
   let messageId = 0;
   let closed = false;
+
+  /** `commandTimeoutMs <= 0` 视为「没配置」（负数没有意义，0 与「不限时」等价以免歧义）。 */
+  const configuredTimeout =
+    options.commandTimeoutMs && options.commandTimeoutMs > 0 ? options.commandTimeoutMs : undefined;
+
+  const computeBudget = (method: string): Budget => {
+    const remaining = options.deadline === undefined ? undefined : options.deadline - now();
+    if (remaining !== undefined && remaining <= 0) {
+      return {
+        kind: "expired",
+        reason: `CDP deadline already passed by ${Math.abs(remaining)}ms; refusing to send ${method}`,
+      };
+    }
+    const limits: number[] = [];
+    if (remaining !== undefined) limits.push(remaining);
+    if (configuredTimeout !== undefined) limits.push(configuredTimeout);
+    if (limits.length === 0) return { kind: "none" };
+    const ms = Math.min(...limits);
+    if (ms <= 0) {
+      return { kind: "expired", reason: `CDP time budget for ${method} is exhausted` };
+    }
+    return { kind: "timer", ms };
+  };
 
   const rejectAll = (error: Error): void => {
     for (const entry of pending.values()) {
@@ -96,26 +131,23 @@ export function createCdpSession(socket: SocketLike, options: CdpSessionOptions 
       if (closed) {
         return Promise.reject(new CdpClosedError("CDP socket is already closed"));
       }
+      const budget = computeBudget(method);
+      // 已耗尽 ⇒ 登记等待之前就拒绝，且**不发命令**。
+      if (budget.kind === "expired") {
+        return Promise.reject(new CdpTimeoutError(budget.reason));
+      }
       const id = ++messageId;
-      const budget = (): number => {
-        const remaining = options.deadline === undefined ? undefined : options.deadline - now();
-        const configured = options.commandTimeoutMs;
-        if (remaining === undefined) return configured ?? 0;
-        if (configured === undefined) return Math.max(0, remaining);
-        return Math.max(0, Math.min(configured, remaining));
-      };
       return new Promise<CdpMessage>((resolve, reject) => {
-        const budgetMs = budget();
         const timer =
-          budgetMs > 0
+          budget.kind === "timer"
             ? setTimeout(() => {
                 pending.delete(id);
                 reject(
                   new CdpTimeoutError(
-                    `CDP command ${method} did not answer within ${budgetMs}ms`,
+                    `CDP command ${method} did not answer within ${budget.ms}ms`,
                   ),
                 );
-              }, budgetMs)
+              }, budget.ms)
             : null;
         pending.set(id, { resolve, reject, timer });
         try {
