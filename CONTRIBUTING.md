@@ -60,10 +60,15 @@ pnpm check:raw-sdk              # 禁区目录静态扫描
 pnpm check:raw-sdk:tree         # 按白名单扫描整棵 src
 pnpm generate:manifest:check    # v3 组件 manifest 无漂移
 pnpm generate:capability-matrix:check
+pnpm typecheck:v3               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
 pnpm build:v3
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
 pnpm test:unit
 ```
+
+顺序不是随意的：`typecheck:v3` 会把声明 emit 到 `dist/`，所以它要排在 `build:v3` **之前**
+（`build:v3` 会先清空 `dist`）；而 `check:public-dts` 与 `test:unit` 依赖 `dist/` 产物，必须排在
+`build:v3` 之后。
 
 如果 `generate:*:check` 报漂移，而你**确实**是有意改的，用对应的生成命令（`pnpm generate:manifest`、
 `pnpm generate:capability-matrix`）重新生成并一起提交；生成物不要手改。
@@ -75,9 +80,10 @@ pnpm --filter baidu-map-gl-vue pack --pack-destination .artifacts
 pnpm verify:package
 ```
 
-已知情况：`pnpm typecheck:v3` 目前在 Linux 上无法通过，原因在上游包
-`@baidumap/jsapi-v4-types@4.0.4` 的路径大小写缺陷（见 issue #50），因此它**暂未**进入 CI 门禁。
-如果你要动公共类型，请留意这一点。
+`pnpm typecheck:v3` 依赖 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`：上游 `4.0.4` 的
+`index.d.ts` 有一处文件名大小写缺陷，只在大小写敏感的文件系统上暴露（issue #50）。补丁清单与
+删除条件见 [`patches/README.md`](./patches/README.md)，决策见
+[ADR 2026-09-13](./docs/adr/2026-09-13-upstream-types-case-patch.md)。升级类型包时请一并处理这个补丁。
 
 ## 代码约束（会被静态扫描挡住）
 

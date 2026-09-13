@@ -71,7 +71,7 @@ npx skills update bmap-jsapi-v4
 - 入口文件 `src/driver/jsapi-v4/types-reference.d.ts` 只用三斜线引用官方类型与 augmentation 目录，本身不再内联声明。
 - 保持 `skipLibCheck: false`。升级类型包后必须重新核对 augmentation，官方补齐的声明要删除。
 
-### 已知问题：官方 `4.0.4` 的大小写引用缺陷
+### 已知问题：官方 `4.0.4` 的大小写引用缺陷（已处置）
 
 `@baidumap/jsapi-v4-types@4.0.4/index.d.ts:67` 写的是 `/// <reference path="core/displayOptions.d.ts" />`，
 而发布产物中的真实文件名是 `core/DisplayOptions.d.ts`。在 macOS（默认大小写不敏感）上解析正常，
@@ -82,11 +82,19 @@ error TS6053: File '.../core/displayOptions.d.ts' not found.
 error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ```
 
-因此 `pnpm typecheck:v3` **只能在大小写不敏感的文件系统上通过**，暂未纳入 CI
-（见 `.github/workflows/quality.yml` 中的 NOTE）。在修复前不要把它加回门禁，否则 CI 必然红。
+处置（issue #50，决策见 [ADR 2026-09-13](../../adr/2026-09-13-upstream-types-case-patch.md)）：仓库用
+`patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行，因此
+`pnpm typecheck:v3` 在任何平台都成立，并已重新纳入 `.github/workflows/quality.yml`。
 
-修复路径：等上游发布修正大小写的版本；或本仓库确定一个最小 workaround（例如绕过官方 `index.d.ts`
-入口、改引用 `core/DisplayOptions.d.ts`），并把结论补进本页与 ADR。
+- 补丁只改文件名大小写、不改声明内容；清单、生成方式与删除条件见仓库根目录的
+  `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。
+- 「补丁已生效」由 `tests/behavior/v3-upstream-types-case-patch.test.ts` 把关：它用 `readdirSync`
+  的精确名字比对核对已安装上游声明的全部三斜线引用（`existsSync` 在大小写不敏感卷上会误判），
+  因此 macOS 与 Linux 结论一致。
+- 删除条件：上游发布修正大小写的版本后，升级精确版本并删除补丁与 `pnpm-workspace.yaml` 的
+  `patchedDependencies` 条目。
+- 回滚：删除补丁后 `pnpm typecheck:v3` 会在 Linux 上重新失败，回滚必须同时把该 step 从 CI 摘掉，
+  并更新本页与 `CONTRIBUTING.md`。
 
 ## SDK 边界：raw SDK 与公共声明
 
@@ -150,7 +158,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ## 提交前验证
 
 ```bash
-pnpm typecheck:v3          # 官方类型接入后仍要求通过（Linux 受上游包大小写缺陷影响，见「已知问题」）
+pnpm typecheck:v3          # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并（须排在 build:v3 之前）
 pnpm test:unit
 pnpm build:v3
 pnpm check:raw-sdk         # 禁区目录 raw SDK 边界

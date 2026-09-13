@@ -5,3 +5,5 @@ packages:
 allowBuilds:
   esbuild: true
   vue-demi: true
+patchedDependencies:
+  '@baidumap/jsapi-v4-types@4.0.4': patches/@baidumap__jsapi-v4-types@4.0.4.patch

@@ -105,6 +105,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@baidumap/jsapi-v4-types@4.0.4': 45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8
+
 importers:
 
   .:
@@ -241,7 +244,7 @@ importers:
     devDependencies:
       '@baidumap/jsapi-v4-types':
         specifier: 4.0.4
-        version: 4.0.4
+        version: 4.0.4(patch_hash=45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8)
       '@microsoft/api-extractor':
         specifier: ^7.52.0
         version: 7.59.0(@types/node@26.4.1)
@@ -5144,7 +5147,7 @@ snapshots:
 
   '@baidumap/jsapi-plugin-draw@2.0.0': {}
 
-  '@baidumap/jsapi-v4-types@4.0.4': {}
+  '@baidumap/jsapi-v4-types@4.0.4(patch_hash=45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8)': {}
 
   '@blazediff/core@1.9.1': {}
 

@@ -1,0 +1,13 @@
+diff --git a/index.d.ts b/index.d.ts
+index d8de9afde77cc952621fa3d5422ad5681d469752..abbb1c8cd9848970f102e4c83025dc876eb9f8c1 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -64,7 +64,7 @@
+ /// <reference path="core/MapStyleConfig.d.ts" />
+ /// <reference path="core/Viewport.d.ts" />
+ /// <reference path="core/ViewportOptions.d.ts" />
+-/// <reference path="core/displayOptions.d.ts" />
++/// <reference path="core/DisplayOptions.d.ts" />
+ /// <reference path="layer/DOMLayer.d.ts" />
+ /// <reference path="layer/DistrictLayer.d.ts" />
+ /// <reference path="layer/FillLayer.d.ts" />

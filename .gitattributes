@@ -1,0 +1,6 @@
+# 补丁文件必须保持 LF：Windows 上 core.autocrlf=true（git for Windows 的默认建议值）会把
+# 文本文件按 CRLF 检出，.patch 的上下文行就会带上 \r，pnpm patch 应用时容易失配。
+# 实测（2026-09-13）：不加这一行时 `git -c core.autocrlf=true checkout` 出来的 .patch 首行
+# 是 `b'diff --git a/x b/x\r'`；加上 `text eol=lf` 后为纯 LF。
+# 其它文件不在此处收口：workflow / 测试都已按 `\r?\n` 处理，YAML 与 TS 工具链本身也不挑换行符。
+patches/*.patch text eol=lf

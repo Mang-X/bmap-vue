@@ -63,6 +63,7 @@
   - 保留在声明构建的编译输入中（不得用 `exclude` 将其移出 Program），仅在声明写入阶段过滤，避免公共 `dist/*.d.ts` 泄漏 `BMap.*` 或官方类型包引用。
 - 迁移期冲突处理：构建 tsconfig 的 `include` 暂时收窄为 `types/shared/**/*.d.ts`，避免旧 `types/BMapGL` 的全局常量与官方 `BMap` 声明冲突；`types/BMapGL` 将在 M3A.3 删除。
 - 已验证：`pnpm typecheck:v3` 在 `skipLibCheck: false` 下通过；类型包为纯 `.d.ts`，构建产物与 npm tarball 均不含其运行时代码或 `BMap.*` 声明，consumer 包类型检查通过。
+  - **平台前提（2026-09-13 更正）**：`4.0.4` 的入口存在一处文件名大小写缺陷（`core/displayOptions.d.ts`），因此上述验证当时**只在大小写不敏感的文件系统（macOS APFS）上成立**，Linux 上会失败。现由 `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 修补，并重新纳入 CI；见 [ADR 2026-09-13](./2026-09-13-upstream-types-case-patch.md)（issue #50）。
 
 ## Skill 使用细则
 
