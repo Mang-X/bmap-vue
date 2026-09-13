@@ -12,8 +12,22 @@
 | SDK engine | 项目内部驱动引擎枚举（`webgl-v1` / `jsapi-v3` / `jsapi-v4`） | 迁移期并存，Stable 目标 `jsapi-v4` |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
 | 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.4`（精确锁定） |
+| 官方加载器版本 | `@baidumap/jsapi-loader` | `1.0.0`（精确锁定，默认在线加载） |
+| 官方 UI Kit 版本 | `@baidumap/jsapi-ui-kit` | `1.1.2`（精确锁定，optional peer） |
 
 决策依据见 [ADR 2026-09-10：冻结 JSAPI 4.0 单引擎基线](/adr/2026-09-10-jsapi-v4-only-baseline)。
+
+## 官方包：Loader 与 UI Kit
+
+除官方 Skill 与类型包之外，还有两个**运行时相关**的官方包，规则与类型包不同：
+
+- `@baidumap/jsapi-loader` 是**默认在线加载通道**（运行时依赖，精确锁定）。默认 Provider 必须真的调用它的 `load()`；
+- `@baidumap/jsapi-ui-kit` 是**标准 UI 的唯一实现**（optional peer + 开发期精确锁定）。「optional」只表示不使用 UI 的消费者可以不安装，不表示可以改走自研实现。
+
+两者的发布契约、`nonce` / SRI 等不支持项、SSR 与 CSS 口径、四个 widget 的真实 v4 结论，
+以及可复现的验证命令都收在 [官方包发布契约](/zh-CN/contributing/official-packages)；
+决策与边界见 [ADR 2026-09-13：Official-first](/adr/2026-09-13-official-first-loader-and-ui-kit)。
+**不要**按文档或示例转述推断这两个包的行为——上游改版时先更新契约表，再改实现。
 
 ## 官方 Skill：`bmap-jsapi-v4`
 

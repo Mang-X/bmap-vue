@@ -267,6 +267,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "Capability Catalog 能力矩阵",
           link: "capability-matrix",
         },
+        {
+          text: "官方包发布契约（Loader / UI Kit）",
+          link: "official-packages",
+        },
       ],
     },
   ],
