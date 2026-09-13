@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  classifyBootstrapFailure,
   evaluateSmokeReport,
   SmokeBlocked,
   SmokeFailure,
   SmokeRun,
+  bootstrapDeclarations,
+  checkReportEnvelope,
+  withBlockedTimeout,
   type SmokeCheckResult,
   type SmokeReport,
   type SmokeUnhandledEntry,
@@ -264,6 +268,106 @@ describe("#74 smoke 收集器：blocked 与 fail 必须分开", () => {
     expect(gate.exitCode).toBe(3);
     expect(gate.ok).toBe(false);
     expect(gate.failing).toEqual([]);
+  });
+});
+
+describe("#74 第 1 轮评审 P1：bootstrap 失败必须区分「外部前置」与「实现回归」", () => {
+  it("外部前置类错误（加载失败 / 超时）⇒ external", () => {
+    expect(classifyBootstrapFailure([{ code: "BMAP_SDK_LOAD_FAILED", message: "网络" }]).kind).toBe(
+      "external",
+    );
+    expect(classifyBootstrapFailure([{ code: "BMAP_SDK_LOAD_TIMEOUT" }]).kind).toBe("external");
+  });
+
+  it("实现/契约类错误 ⇒ library（哪怕同时存在外部错误，也按 library 处理：宁可红不可绿）", () => {
+    expect(
+      classifyBootstrapFailure([{ code: "BMAP_SDK_CALL_FAILED", message: "MapTypeId" }]).kind,
+    ).toBe("library");
+    expect(
+      classifyBootstrapFailure([
+        { code: "BMAP_SDK_LOAD_FAILED" },
+        { code: "BMAP_SDK_CALL_FAILED" },
+      ]).kind,
+    ).toBe("library");
+  });
+
+  it("一条错误都没有、ready 又没来 ⇒ external（无法归属时不冒充库回归，但结论仍是不可放行）", () => {
+    const verdict = classifyBootstrapFailure([]);
+    expect(verdict.kind).toBe("external");
+    expect(verdict.code).toBe("BMAP_READY_TIMEOUT");
+  });
+
+  it("external ⇒ 把本档 required 逐条登记成 blocked；gate 得到 exit 3 且没有 REQUIRED_CHECK_MISSING", () => {
+    const specs = [
+      { id: "map-ready", name: "map-ready" },
+      { id: "overlay-marker", name: "overlay-marker" },
+    ];
+    const declarations = bootstrapDeclarations(
+      classifyBootstrapFailure([{ code: "BMAP_SDK_LOAD_FAILED" }]),
+      specs,
+    );
+    expect(declarations.map((d) => [d.id, d.verdict])).toEqual([
+      ["map-ready", "blocked"],
+      ["overlay-marker", "blocked"],
+    ]);
+    for (const declaration of declarations) expect(declaration.reason).toBeTruthy();
+
+    const gate = evaluateSmokeReport(
+      report(declarations.map((d) => check(d.id, d.verdict, { reason: d.reason }))),
+      { required: specs.map((s) => s.id), today: TODAY },
+    );
+    expect(gate.exitCode).toBe(3);
+    expect(gate.requiredMissing).toEqual([]);
+    expect(gate.failing).toEqual([]);
+  });
+
+  it("library ⇒ 不生成 blocked 声明（缺席的 required 继续按 REQUIRED_CHECK_MISSING 判 fail）", () => {
+    const declarations = bootstrapDeclarations(
+      classifyBootstrapFailure([{ code: "BMAP_SDK_CALL_FAILED" }]),
+      [{ id: "map-ready", name: "map-ready" }],
+    );
+    expect(declarations).toEqual([]);
+    const gate = evaluateSmokeReport(report([]), { required: ["map-ready"], today: TODAY });
+    expect(gate.exitCode).toBe(1);
+    expect(gate.requiredMissing).toEqual(["map-ready"]);
+  });
+});
+
+describe("#74 第 1 轮评审 P2：网络阶段超时按 blocked 结算", () => {
+  it("withBlockedTimeout 超时 ⇒ blocked；而原 promise 自身的拒绝照原样透传（不被吞成 blocked）", async () => {
+    const run = new SmokeRun({ mode: "live", runId: "r", akUsed: true });
+    await run.check("t", "t", () =>
+      withBlockedTimeout(new Promise(() => {}), 20, "Geocoder.getPoint", "SERVICE_GEOCODE_TIMEOUT"),
+    );
+    await run.check("r", "r", () => withBlockedTimeout(Promise.reject(new Error("boom")), 1000, "x"));
+    expect(run.checks.map((c) => [c.id, c.verdict])).toEqual([
+      ["t", "blocked"],
+      ["r", "fail"],
+    ]);
+    expect(run.checks[0]!.code).toBe("SERVICE_GEOCODE_TIMEOUT");
+  });
+});
+
+describe("#74 第 1 轮评审：orchestrator 的信封自检", () => {
+  const base = report([check("a", "pass")]);
+
+  it("mode / runId / akUsed 不一致时必须报出来（否则 Node 会跟着页面换成更小的 required 集合）", () => {
+    expect(checkReportEnvelope({ ...base, mode: "fixture" }, { mode: "live", runId: "run-1" })).toEqual(
+      ["SMOKE_MODE_MISMATCH"],
+    );
+    expect(checkReportEnvelope({ ...base, runId: "other" }, { mode: "live", runId: "run-1" })).toEqual(
+      ["SMOKE_RUN_ID_MISMATCH"],
+    );
+    expect(
+      checkReportEnvelope({ ...base, akUsed: false }, { mode: "live", runId: "run-1" }),
+    ).toEqual(["SMOKE_AK_NOT_USED"]);
+  });
+
+  it("一致时没有问题；fixture 档不要求 akUsed", () => {
+    expect(checkReportEnvelope(base, { mode: "live", runId: "run-1" })).toEqual([]);
+    expect(
+      checkReportEnvelope({ ...base, mode: "fixture", akUsed: false }, { mode: "fixture", runId: "run-1" }),
+    ).toEqual([]);
   });
 });
 

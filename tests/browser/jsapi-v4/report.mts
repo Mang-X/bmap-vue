@@ -182,11 +182,40 @@ export function withTimeout<T>(
   label: string,
   code = "TIMEOUT",
 ): Promise<T> {
+  return withDeadline(promise, ms, label, code, "fail");
+}
+
+/**
+ * 同 `withTimeout`，但**本函数自己的超时**按 `blocked` 结算。
+ *
+ * 只用于**明确属于外部依赖**的阶段（服务回包、官方 UI Kit 的网络检索）：网络一直不返回与
+ * 「服务返回空」是同一类前置不成立，两者必须得到同一个结论（`blocked`），否则同一件外部问题
+ * 会一半记 blocked、一半记 fail。**promise 自身的拒绝照原样透传**——那是被测对象的结论，不能
+ * 被这里吞成「环境问题」。
+ */
+export function withBlockedTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  code = "BLOCKED_TIMEOUT",
+): Promise<T> {
+  return withDeadline(promise, ms, label, code, "blocked");
+}
+
+function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  code: string,
+  onTimeout: "fail" | "blocked",
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new SmokeFailure(code, `${label} 在 ${ms}ms 内没有结算`, { label, ms })),
-      ms,
-    );
+    const timer = setTimeout(() => {
+      const message = `${label} 在 ${ms}ms 内没有结算`;
+      reject(
+        onTimeout === "blocked" ? new SmokeBlocked(code, message, { label, ms }) : new SmokeFailure(code, message, { label, ms }),
+      );
+    }, ms);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -475,6 +504,106 @@ export function evaluateSmokeReport(
     inconclusive: [...new Set(inconclusive)],
     reasons,
   };
+}
+
+/* ------------------------------------------------------------------ bootstrap 归属 */
+
+/**
+ * 「外部前置」类错误码：加载失败 / 加载超时属于「环境不成立」，其余一律按**实现回归**处理。
+ *
+ * 判据方向刻意保守——无法归属时宁可按外部处理（结论是 `blocked`，仍然不可放行），
+ * 但只要有任何一个**非**外部码，整轮就按 `library` 处理（宁可红不可绿）。
+ */
+export const EXTERNAL_BOOTSTRAP_CODES = ["BMAP_SDK_LOAD_FAILED", "BMAP_SDK_LOAD_TIMEOUT"] as const;
+
+export interface BootstrapErrorLike {
+  code?: string;
+  message?: string;
+}
+
+export interface BootstrapVerdict {
+  kind: "external" | "library";
+  code: string;
+  reason: string;
+}
+
+/**
+ * 判定「`<BMap>` 没能 ready」这件事该归给谁。
+ *
+ * 为什么要区分（第 1 轮评审 P1）：初始挂载失败时所有 required 检查都没跑，而门禁把「缺席的
+ * required」判成 `fail`——于是网络/CDN/AK 这类**外部前置**问题会得到退出码 1（库回归），
+ * 与本文件定义的五态语义矛盾，最关键的 bootstrap 场景反而把两类问题混在一起。
+ */
+export function classifyBootstrapFailure(errors: BootstrapErrorLike[]): BootstrapVerdict {
+  const libraryError = errors.find(
+    (error) =>
+      typeof error.code === "string" &&
+      error.code.length > 0 &&
+      !(EXTERNAL_BOOTSTRAP_CODES as readonly string[]).includes(error.code),
+  );
+  if (libraryError) {
+    return {
+      kind: "library",
+      code: libraryError.code!,
+      reason: libraryError.message || libraryError.code!,
+    };
+  }
+  const external = errors.find(
+    (error) =>
+      typeof error.code === "string" &&
+      (EXTERNAL_BOOTSTRAP_CODES as readonly string[]).includes(error.code),
+  );
+  if (external) {
+    return { kind: "external", code: external.code!, reason: external.message || external.code! };
+  }
+  // 一条错误都没有、ready 又没来：无法归属 ⇒ 外部（结论是 blocked，不是「通过」）。
+  return {
+    kind: "external",
+    code: "BMAP_READY_TIMEOUT",
+    reason: "ready 未在预算内结算，且没有任何可归属的错误",
+  };
+}
+
+export interface BootstrapDeclaration {
+  id: string;
+  name: string;
+  verdict: "blocked";
+  reason: string;
+}
+
+/**
+ * 外部前置失败时，把**本档登记的全部检查**逐条登记成 `blocked`（而不是留下「缺席」）。
+ *
+ * 「缺席」与「blocked」的区别正是门禁要守的东西：缺席 ⇒ `REQUIRED_CHECK_MISSING` ⇒ `fail`；
+ * `blocked` ⇒ 退出码 3（不可放行）。外部前置失败必须落进后者。
+ */
+export function bootstrapDeclarations(
+  verdict: BootstrapVerdict,
+  checks: { id: string; name: string }[],
+): BootstrapDeclaration[] {
+  if (verdict.kind !== "external") return [];
+  const reason = `前置（<BMap> ready）不成立：${verdict.code} — ${verdict.reason}`;
+  return checks.map((spec) => ({ id: spec.id, name: spec.name, verdict: "blocked", reason }));
+}
+
+/* ------------------------------------------------------------------ 信封自检 */
+
+/**
+ * orchestrator 侧的**信封自检**（第 1 轮评审建议的防空转校验）。
+ *
+ * 页面如果意外按另一档跑（或没带 AK），Node 若跟着 `report.mode` 去取 required，就会换成一个
+ * **更小的** required 集合——门禁看着绿，其实少跑了一片。所以 mode / runId / akUsed 三者都
+ * 必须与**本轮请求**一致，不一致按脚手架失败处理。
+ */
+export function checkReportEnvelope(
+  report: Pick<SmokeReport, "mode" | "runId" | "akUsed">,
+  expected: { mode: SmokeMode; runId: string },
+): string[] {
+  const issues: string[] = [];
+  if (report.mode !== expected.mode) issues.push("SMOKE_MODE_MISMATCH");
+  if (report.runId !== expected.runId) issues.push("SMOKE_RUN_ID_MISMATCH");
+  if (expected.mode === "live" && report.akUsed !== true) issues.push("SMOKE_AK_NOT_USED");
+  return issues;
 }
 
 /* ------------------------------------------------------------------ 渲染 */

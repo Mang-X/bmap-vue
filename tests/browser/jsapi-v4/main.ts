@@ -38,11 +38,15 @@ import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 import {
   assertSmoke,
   block,
+  bootstrapDeclarations,
+  checkReportEnvelope,
+  classifyBootstrapFailure,
   evaluateSmokeReport,
   fail,
   formatReport,
   redactAk,
   SmokeRun,
+  withBlockedTimeout,
   withTimeout,
   type SmokeMode,
   type SmokeReport,
@@ -169,15 +173,17 @@ interface ModeDescriptor {
   /** 「地图真的初始化了」的可观察证据：真实 SDK 有容器 DOM，Fake 有可读账本。 */
   assertMapInitialized(raw: Record<string, unknown>, container: HTMLElement): unknown;
   /**
-   * 图层挂载的可观察证据。
+   * 控件 / 图层挂载的可观察证据。
    *
-   * - fixture：账本计数必须增长（精确断言）；
-   * - live：真实 4.0 的 `Map` **没有** `getLayers()` 读数接口，且矢量图层画在 canvas 上、
-   *   容器 DOM 不变 —— 因此只核对「能力表声明支持 + 这一步没有新的 `console.error`」，
-   *   并把读数口径如实写进 detail。**这不是放宽门禁**：同一份能力在 fixture 档用账本做精确
-   *   核对，两档差异收在这里，而不是把 live 的弱读数写成「通过」的替代品。
+   * 真实 4.0 的 `Map` **没有** `getControls()` / `getLayers()` 读数接口，矢量图层也不落 DOM，
+   * 所以 live 档的主要证据是**拦截真实 `Map.addControl` / `Map.addLayer`**：它能证明
+   * 「组件 → Driver → 真实 SDK」这条链路真的发生过，而不是「调用没抛错所以大概挂上了」
+   * （第 1 轮评审 P1：只断言能力表 + 无 console.error 会在图层静默 no-op 时假绿）。
+   *
+   * **这条证据的边界**（如实声明）：拦截只能证明调用发生了，不能证明 SDK **采纳**了它。
+   * 要证明采纳需要 SDK 提供读数入口，上游 4.0.4 没有。
    */
-  assertLayerAttached(input: LayerEvidenceInput): unknown;
+  assertAttached(input: AttachEvidenceInput): unknown;
   notes: Record<string, unknown>;
 }
 
@@ -188,14 +194,28 @@ interface UnmountSnapshot {
   client: unknown;
 }
 
-interface LayerEvidenceInput {
+interface AttachEvidenceInput {
+  kind: "control" | "layer";
+  /** 失败时使用的原因码（`BMAP_CONTROL_NOT_ATTACHED` / `BMAP_LAYER_NOT_ATTACHED`）。 */
+  code: string;
+  /** 组件名，仅用于文案。 */
+  label: string;
+  /** 被拦截的真实 SDK 方法名（`addControl` / `addLayer`）。 */
+  rawMethod: string;
+  /** 该方法的调用次数（0 = 链路没有发生）。 */
+  rawCalls: number;
+  /** 账本计数（fixture 有账本；live 为 `-1`）。 */
   countBefore: number;
   countAfter: number;
-  signatureBefore: string;
-  signatureAfter: string;
+  domChanged: boolean;
   /** 这一步新增的 `console.error` 条目。 */
   consoleErrors: string[];
-  /** 能力表是否声明支持该图层（读不到能力表时为 `null`）。 */
+  /**
+   * 能力表里的对应 id（`layer.district`）；**控件在 Catalog 里没有 id**，此时传 `null`，
+   * live 档就不做能力断言——不然会拿一个不存在的 id 去 `supports()` 得到 `false` 而假红。
+   */
+  capabilityId: string | null;
+  /** 能力表是否声明支持（读不到能力表或 `capabilityId` 为 `null` 时为 `null`）。 */
   capabilitySupported: boolean | null;
 }
 
@@ -225,13 +245,22 @@ function createDescriptor(): ModeDescriptor {
         );
         return { readApi: "fake-ledger" };
       },
-      assertLayerAttached: (input) => {
+      assertAttached: (input) => {
+        assertSmoke(
+          input.rawCalls > 0,
+          `${input.code}_NO_RAW_CALL`,
+          `${input.label} 卸载/挂载路径没有调用 SDK 的 ${input.rawMethod}`,
+        );
         assertSmoke(
           input.countAfter > input.countBefore,
-          "BMAP_LAYER_NOT_ATTACHED",
-          `<BDistrictLayer> 后图层计数没有增长：${input.countBefore} → ${input.countAfter}`,
+          input.code,
+          `${input.label} 后账本计数没有增长：${input.countBefore} → ${input.countAfter}`,
         );
-        return { layers: input.countAfter, readApi: "fake-ledger" };
+        return {
+          readApi: `fake-ledger + 拦截 ${input.rawMethod}`,
+          rawCalls: input.rawCalls,
+          count: input.countAfter,
+        };
       },
       notes: { provider: "existingGlobalV4Provider + Fake v4 命名空间", overlaysReadApi: "fake-ledger" },
     };
@@ -294,22 +323,31 @@ function createDescriptor(): ModeDescriptor {
         firstChild: container.firstElementChild?.className ?? "",
       };
     },
-    assertLayerAttached: (input) => {
+    assertAttached: (input) => {
+      // 主要证据：真实 SDK 的那次挂载调用真的发生过（而不是「没抛错所以大概挂上了」）。
       assertSmoke(
-        input.capabilitySupported === true,
-        "BMAP_LAYER_CAPABILITY",
-        `能力表没有声明支持 district 图层（读到的值：${String(input.capabilitySupported)}）`,
+        input.rawCalls > 0,
+        input.code,
+        `真实 Map.${input.rawMethod} 在 ${input.label} 挂载期间没有被调用：组件 → Driver → SDK 的链路没有发生`,
+        { rawCalls: input.rawCalls, rawMethod: input.rawMethod },
+      );
+      assertSmoke(
+        input.capabilityId === null || input.capabilitySupported === true,
+        `${input.code}_CAPABILITY`,
+        `能力表没有声明支持 ${String(input.capabilityId)}（读到的值：${String(input.capabilitySupported)}）`,
       );
       assertSmoke(
         input.consoleErrors.length === 0,
-        "BMAP_LAYER_CONSOLE_ERROR",
-        `<BDistrictLayer> 挂载期间出现 ${input.consoleErrors.length} 条 console.error`,
+        `${input.code}_CONSOLE_ERROR`,
+        `${input.label} 挂载期间出现 ${input.consoleErrors.length} 条 console.error`,
         { errors: input.consoleErrors.slice(0, 3) },
       );
       return {
-        readApi: "capability + console（真实 4.0 无 getLayers() 读数接口，容器 DOM 也不变）",
+        readApi: `拦截真实 Map.${input.rawMethod}（4.0 没有控制/图层读数接口）`,
+        rawCalls: input.rawCalls,
+        domChanged: input.domChanged,
+        capabilityId: input.capabilityId,
         capabilitySupported: input.capabilitySupported,
-        domChanged: input.signatureAfter !== input.signatureBefore,
       };
     },
     notes: { provider: "默认入口（baiduJsapiV4Provider → 官方 jsapi-loader）", overlaysReadApi: "getOverlays" },
@@ -478,6 +516,39 @@ function uiSignature(container: HTMLElement): string {
     .join("|");
 }
 
+interface RawCallRecorder {
+  /** 每次调用记录一份实参（浅拷贝），供检查断言「链路真的发生过」。 */
+  readonly calls: unknown[][];
+  restore(): void;
+}
+
+/**
+ * 临时包装真实 `rawMap` 上的一个写入方法，记录调用参数后再转调原实现。
+ *
+ * 为什么需要它：真实 4.0 的 `Map` 没有控制 / 图层读数接口，容器 DOM 又可能因为别的原因变化，
+ * 于是「没抛错」成了唯一的证据 —— 图层静默 no-op 时会假绿。拦截真实调用把证据换成
+ * 「SDK 的那次方法调用确实发生了」。**调用方必须 `finally { restore() }`**，否则包装会留在
+ * 地图对象上影响后续检查。
+ */
+function recordRawCalls(raw: Record<string, unknown>, method: string): RawCallRecorder {
+  const original = raw[method];
+  const calls: unknown[][] = [];
+  if (typeof original !== "function") {
+    // 引擎没有这个入口：`calls` 保持为空，由检查如实报「调用没发生」，而不是在这里悄悄放过。
+    return { calls, restore: () => {} };
+  }
+  raw[method] = function (this: unknown, ...args: unknown[]): unknown {
+    calls.push(args);
+    return (original as (...a: unknown[]) => unknown).apply(this, args);
+  };
+  return {
+    calls,
+    restore: () => {
+      raw[method] = original;
+    },
+  };
+}
+
 /** 读能力表；读不到（没有 capabilities / 抛错）时返回 `null`，由检查如实记录而不是当通过。 */
 function capabilitySupported(client: unknown, capability: string): boolean | null {
   const capabilities = (client as { driver?: { capabilities?: { supports?: (c: string) => boolean } } })
@@ -638,47 +709,59 @@ const CHECKS: Record<string, CheckImpl> = {
 
   "control-zoom": {
     async run(ctx) {
-      const signatureBefore = uiSignature(ctx.mounted.container());
-      const controlsBefore = descriptor.controls(ctx.mounted.raw());
-      ctx.mounted.flags.zoom = true;
-      await nextTick();
-      await sleep(400);
-      const controlsAfter = descriptor.controls(ctx.mounted.raw());
-      if (controlsBefore >= 0) {
-        assertSmoke(
-          controlsAfter > controlsBefore,
-          "BMAP_CONTROL_NOT_ATTACHED",
-          `<BZoom> 后控件计数没有增长：${controlsBefore} → ${controlsAfter}`,
-        );
-        return { controls: controlsAfter, readApi: "ledger" };
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addControl");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const countBefore = descriptor.controls(ctx.mounted.raw());
+        const mark = consoleRing.length;
+        ctx.mounted.flags.zoom = true;
+        await nextTick();
+        await sleep(400);
+        return descriptor.assertAttached({
+          kind: "control",
+          code: "BMAP_CONTROL_NOT_ATTACHED",
+          label: "<BZoom>",
+          rawMethod: "addControl",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.controls(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: null,
+          capabilitySupported: null,
+        });
+      } finally {
+        recorder.restore();
       }
-      const signatureAfter = uiSignature(ctx.mounted.container());
-      assertSmoke(
-        signatureAfter !== signatureBefore,
-        "BMAP_CONTROL_NO_DOM",
-        "<BZoom> 后地图容器的 DOM 没有任何变化，控件可能没有真正挂上",
-        { before: signatureBefore.slice(0, 300), after: signatureAfter.slice(0, 300) },
-      );
-      return { domDelta: signatureAfter.length - signatureBefore.length, readApi: "container-dom" };
     },
   },
 
   "layer-district": {
     async run(ctx) {
-      const mark = consoleRing.length;
-      const signatureBefore = uiSignature(ctx.mounted.container());
-      const countBefore = descriptor.layers(ctx.mounted.raw());
-      ctx.mounted.flags.district = true;
-      await nextTick();
-      await sleep(600);
-      return descriptor.assertLayerAttached({
-        countBefore,
-        countAfter: descriptor.layers(ctx.mounted.raw()),
-        signatureBefore,
-        signatureAfter: uiSignature(ctx.mounted.container()),
-        consoleErrors: consoleErrorsSince(mark),
-        capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.district"),
-      });
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addLayer");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const mark = consoleRing.length;
+        const countBefore = descriptor.layers(ctx.mounted.raw());
+        ctx.mounted.flags.district = true;
+        await nextTick();
+        await sleep(600);
+        return descriptor.assertAttached({
+          kind: "layer",
+          code: "BMAP_LAYER_NOT_ATTACHED",
+          label: "<BDistrictLayer>",
+          rawMethod: "addLayer",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.layers(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: "layer.district",
+          capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.district"),
+        });
+      } finally {
+        recorder.restore();
+      }
     },
   },
 
@@ -723,7 +806,7 @@ const CHECKS: Record<string, CheckImpl> = {
         globalThis as { __smokeGeocoder?: { get: (a: string, c: string) => Promise<unknown> } }
       ).__smokeGeocoder;
       assertSmoke(geocoder, "HARNESS_NO_GEOCODER", "geocode 探针没有拿到 useBMapGeocoder 实例");
-      const point = await withTimeout(
+      const point = await withBlockedTimeout(
         geocoder!.get("北京市海淀区中关村", CITY),
         SERVICE_MS,
         "Geocoder.getPoint",
@@ -760,7 +843,13 @@ const CHECKS: Record<string, CheckImpl> = {
         search(keyword: string): Promise<void>;
         getInputValue(): Promise<string>;
       };
-      await withTimeout(api.search(KEYWORD), UI_MS, "autocomplete.search", "UIKIT_AUTO_SEARCH_TIMEOUT");
+      // 官方 UI Kit 的检索是网络阶段：超时按 blocked（外部前置），promise 自身拒绝照原样透传。
+      await withBlockedTimeout(
+        api.search(KEYWORD),
+        UI_MS,
+        "autocomplete.search",
+        "UIKIT_AUTO_SEARCH_TIMEOUT",
+      );
       const inputValue = await api.getInputValue();
       const hostEl = (ctx.mounted.autoRef.value as { $el?: HTMLElement }).$el;
       assertSmoke(hostEl, "UIKIT_AUTO_NO_HOST", "拿不到 BPlaceAutocomplete 的宿主元素");
@@ -820,7 +909,12 @@ const CHECKS: Record<string, CheckImpl> = {
         "UIKIT_SEARCH_NOT_READY",
         "BPlaceSearch ready",
       )) as unknown as { search(keyword: string): Promise<void> };
-      await withTimeout(api.search(KEYWORD), UI_MS, "placesearch.search", "UIKIT_SEARCH_TIMEOUT");
+      await withBlockedTimeout(
+        api.search(KEYWORD),
+        UI_MS,
+        "placesearch.search",
+        "UIKIT_SEARCH_TIMEOUT",
+      );
       const hostEl = (ctx.mounted.searchRef.value as { $el?: HTMLElement }).$el;
       assertSmoke(hostEl, "UIKIT_SEARCH_NO_HOST", "拿不到 BPlaceSearch 的宿主元素");
       // 宿主里的 DOM 全部由官方 UI Kit 渲染：检索结算后必须有子节点（本库不渲染列表）。
@@ -968,14 +1062,33 @@ async function main(): Promise<void> {
       await run.check(spec.id, spec.name, () => impl.run(ctx));
     }
   } catch (error) {
-    // 挂载/前置阶段整体失败：登记成 blocked，让门禁给出「不可放行」而不是空报告。
-    run.declare("harness-bootstrap", "smoke 前置（挂载地图）", "blocked", {
-      reason: error instanceof Error ? error.message : String(error),
-      detail: {
-        diagnostics: smokeDiagnostics(mounted),
-        loadErrors: mounted ? mounted.treeErrors.map((e) => String(e)) : [],
-      },
+    // 初始挂载失败：**必须区分「外部前置」与「实现回归」**（第 1 轮评审 P1）。
+    // 前者把所有 required 逐条登记成 blocked（结论 = 不可放行，退出码 3）；后者只登记一条 fail
+    // 并让 required 保持缺席（`REQUIRED_CHECK_MISSING` ⇒ 退出码 1）。
+    const treeErrors = (mounted ? mounted.treeErrors : []).map((entry) => {
+      const e = entry as { code?: string; message?: string };
+      return { code: typeof e?.code === "string" ? e.code : undefined, message: e?.message };
     });
+    const verdict = classifyBootstrapFailure(treeErrors);
+    const detail = {
+      verdict,
+      diagnostics: smokeDiagnostics(mounted),
+      loadErrors: treeErrors.map((e) => `${e.code ?? "?"}: ${e.message ?? ""}`),
+      thrown: error instanceof Error ? error.message : String(error),
+    };
+    if (verdict.kind === "external") {
+      for (const declaration of bootstrapDeclarations(verdict, SMOKE_CHECKS[MODE].checks)) {
+        run.declare(declaration.id, declaration.name, "blocked", { reason: declaration.reason, detail });
+      }
+    } else {
+      await run.check("harness-bootstrap", "smoke 前置（挂载地图）", () => {
+        fail(
+          verdict.code,
+          `初始挂载失败且可归属到实现/上游契约：${verdict.reason}`,
+          detail,
+        );
+      });
+    }
   } finally {
     // 尽力回收：前置失败时 `mounted` 可能已经挂上（超时分支），不释放会把宿主 DOM 留到浏览器关闭。
     try {

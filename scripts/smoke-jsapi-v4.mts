@@ -34,7 +34,13 @@ import {
   type CdpSession,
 } from "./official-probe/cdp.mts";
 import { ViteNotReadyError, waitForViteReady, type ChildExit } from "./official-probe/readiness.mts";
-import { evaluateSmokeReport, formatReport, redactAk, type SmokeReport } from "../tests/browser/jsapi-v4/report.mts";
+import {
+  checkReportEnvelope,
+  evaluateSmokeReport,
+  formatReport,
+  redactAk,
+  type SmokeReport,
+} from "../tests/browser/jsapi-v4/report.mts";
 import { requiredChecks, UNATTRIBUTED_WHITELIST } from "../tests/browser/jsapi-v4/registry.mts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -284,16 +290,21 @@ async function main(): Promise<void> {
       process.exitCode = 2;
       return;
     }
-    if (report.runId !== runId) {
-      // 兜底：就绪判定被绕过时，报告也必须自证来自本轮页面。
-      console.error(`SMOKE_RUN_ID_MISMATCH：报告来自 ${report.runId ?? "(未标注)"}，本轮应为 ${runId}`);
+    // 信封自检（第 1 轮评审建议）：页面若意外按另一档跑（或没带 AK），跟着 `report.mode` 取
+    // required 会换成一个**更小**的集合——门禁看着绿、其实少跑了一片。三者都必须与本轮请求一致。
+    const envelopeIssues = checkReportEnvelope(report, { mode, runId });
+    if (envelopeIssues.length > 0) {
+      console.error(
+        `SMOKE_ENVELOPE_MISMATCH：${envelopeIssues.join(",")}（报告 mode=${report.mode} run=${report.runId} akUsed=${String(report.akUsed)}；本轮 mode=${mode} run=${runId}）`,
+      );
       process.exitCode = 2;
       return;
     }
 
-    // 判定在 Node 侧重算：页面的结论不可作为判退依据（页面可能被旧实例或旧模块图污染）。
+    // 判定在 Node 侧重算，且 required 取**本轮请求的档**（不是报告自报的档）：
+    // 页面的结论与自报档位都不能作为判退依据。
     const gate = evaluateSmokeReport(report, {
-      required: requiredChecks(report.mode),
+      required: requiredChecks(mode),
       whitelist: UNATTRIBUTED_WHITELIST,
     });
     const header = [

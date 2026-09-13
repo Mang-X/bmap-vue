@@ -70,10 +70,10 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `map-view-round-trip` | ✅ | ✅ | `getCenter` / `getZoom` 与传入的 `center` / `zoom` 一致 |
 | `overlay-marker` | ✅ | ✅ | 覆盖物计数增长（live 用 `getOverlays()`，fixture 用账本） |
 | `overlay-polyline` | ✅ | ✅ | 同上 |
-| `control-zoom` | ✅ | ✅ | 控件计数（fixture）/ 容器 DOM 出现 `BMap_ZoomControl`（live） |
-| `layer-district` | ✅ | ✅ | 账本计数（fixture）/ 能力表声明支持 + 无 `console.error`（live，见下） |
+| `control-zoom` | ✅ | ✅ | **拦截真实 `Map.addControl` 的调用**（live）/ 账本计数增长（fixture），另附容器 DOM 增量作为 detail |
+| `layer-district` | ✅ | ✅ | **拦截真实 `Map.addLayer` 的调用**（live）/ 账本计数增长（fixture），另附能力表声明与无 `console.error` 作为辅助 |
 | `infowindow-visible` | ✅ | ✅ | 地图**活状态**非空（轮询）+ 内容节点 `display`/`visibility` 可见 + 文本非空 |
-| `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
+| `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空或超时都记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
 | `ui-kit-autocomplete-search` | ✅ | — | widget `ready`、检索写入输入框、宿主里出现官方 UI Kit 渲染的输入框、**卸载后宿主子树从文档撤走**（回收路径，见下） |
 | `ui-kit-placesearch-load` | ✅ | — | widget `ready`、检索结算、宿主里由 UI Kit 渲染出结果 DOM |
 | `second-provider-reuses-sdk` | ✅ | — | 第二个入口不重复注入 SDK script（fixture 档从不注入 script，这条在该档恒真，故不登记） |
@@ -85,12 +85,38 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 ### live 档的读数边界（如实登记，不是放宽）
 
 真实 `v=4.0` 的 `Map` **没有** `getControls()` / `getLayers()` 读数接口（逐个成员核对过官方
-类型包 `map/core/Map.d.ts`），且矢量图层画在 canvas 上、容器 DOM 不变。因此：
+类型包 `map/core/Map.d.ts`），矢量图层也不落 DOM。因此控件与图层的主要证据是**临时拦截真实
+`Map.addControl` / `Map.addLayer`**，记录调用参数后再转调原实现：
 
-- **控件**：容器 DOM 增量（真实 SDK 的控件是 DOM widget，`BMap_ZoomControl` 之类）；
-- **图层**：只能核对「能力表声明支持 + 这一步没有新的 `console.error`」，并把读数口径写进
-  `detail`。同一份能力在 fixture 档由账本做**精确**断言——两档差异收在 `ModeDescriptor` 里，
-  而不是把弱读数当成「通过」的替代品。
+- 它证明的是「组件 → Driver → **真实 SDK 的那次调用**」确实发生过——比「没抛错所以大概挂上了」
+  或「容器 DOM 变了」强得多（第 1 轮评审：只断言能力表 + 无 `console.error` 时，图层静默 no-op
+  仍会 PASS；实测把 `<BDistrictLayer>` 的挂载改成 no-op 后，该断言现在会红）；
+- **它的边界同样要说清**：拦截只能证明调用发生了，**不能证明 SDK 采纳了它**。要证明采纳需要 SDK
+  提供读数接口，上游 4.0.4 没有。拦截器必须在 `finally` 里还原，否则会影响后续检查。
+- 能力表断言只在 Catalog 里**真有**该 id 时才做（`layer.district` 有，控件没有对应 id，因此控件
+  不做能力断言——拿一个不存在的 id 去 `supports()` 会得到 `false` 而假红）。
+
+### bootstrap 失败归谁：外部前置 ⇒ `blocked`（退出 3）
+
+`<BMap>` 在预算内没有 ready 时，**不能**让所有 required 以「缺席」收场——那会被门禁判成
+`REQUIRED_CHECK_MISSING` ⇒ `fail`（退出 1），于是网络 / CDN / AK 这类前置问题被写成「库回归」，
+恰恰在最关键的初始化场景把两类问题混在一起。处置：
+
+| bootstrap 阶段的观察 | 归属 | 结果 |
+| --- | --- | --- |
+| 只有 `BMAP_SDK_LOAD_FAILED` / `BMAP_SDK_LOAD_TIMEOUT` | 外部前置 | 本档 required **逐条登记为 `blocked`** ⇒ 退出码 3（不可放行） |
+| 出现任何**其它**错误码（如 `BMAP_SDK_CALL_FAILED`） | 实现 / 上游契约 | 登记一条 `fail`，required 保持缺席 ⇒ `REQUIRED_CHECK_MISSING` ⇒ 退出码 1 |
+| 一条错误都没有、ready 又没来 | 无法归属 | 按外部处理（`BMAP_READY_TIMEOUT`）⇒ 退出码 3：不冒充库回归，但也**不是通过** |
+
+判定方向刻意保守：**只要有任何一个非外部码，整轮就按实现回归处理**（宁可红不可绿）。
+实跑验证：`--ready-ms=1` 时全部 required 以 `BLOCKED`（`BMAP_READY_TIMEOUT`）结算、退出码 `3`。
+
+### orchestrator 的信封自检
+
+Node 侧不信任页面的自报：`mode` / `runId` / `akUsed` 三者必须与**本轮 CLI 请求**一致，否则按
+脚手架失败（退出 2）退出；required 集合也取**本轮 CLI 的档**而不是报告自报的档。否则页面若意外
+按 fixture 档跑，Node 会跟着换成一个**更小**的 required 集合——门禁看着绿、其实少跑了一片。
+
 
 ## 进 CI 的两条通道
 
