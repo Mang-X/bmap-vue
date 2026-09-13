@@ -601,3 +601,172 @@ describe("BRoutePlan：其它公开动作", () => {
     expect(fake.stats.offCount).toBe(fake.stats.onCount);
   });
 });
+
+/**
+ * 整批投影失败的**形状漂移守卫**（PR #82 评审 P2）
+ *
+ * 「坏项局部丢弃」是对的，但它在**整体漂移**时会退化成假信号：上游把 `plans` / `segments`
+ * 换成全新形状后，`collect()` 会把它们逐项丢掉，于是 `plans: []` —— 调用方看到的是
+ * 「成功，但没有路线」，而不是「契约变了」。这正好是 ADR 里明令禁止的那件事，所以补一层
+ * 「非空进 → 空出 = 漂移」的守卫：只要**一个都没投影出来**，就按不可用处理（事件不发 / 动作拒绝）。
+ *
+ * 契约依据：上游 `.d.ts` 里 `plans` 与 `segments` 都是**必填数组**，因此「不是数组」同样属于形状漂移。
+ */
+describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
+  /** 一个合法的端点（`location` 是上游必填字段）。 */
+  function endpoint(title: string, lng: number, lat: number): Record<string, unknown> {
+    return { title, location: { lng, lat } };
+  }
+
+  /** 一条合法方案；`segments` 可覆盖以构造漂移场景。 */
+  function planWith(segments: unknown): Record<string, unknown> {
+    return {
+      distance: 100,
+      distanceText: "100米",
+      duration: 60,
+      durationText: "1分钟",
+      segments,
+    };
+  }
+
+  it("result：plans 非空但整体漂移 → 不发事件（不能伪装成「没有路线」）", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BRoutePlan, harness, {});
+    await flushPromises();
+
+    routeWidget().emit("result", {
+      type: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [{ completelyChangedUpstreamShape: true }, { anotherRenamedField: 1 }],
+    });
+    await nextTick();
+
+    expect(emittedOf(mounted).result).toBeUndefined();
+    mounted.unmount();
+  });
+
+  it("search：同一载荷拒绝，而不是返回 plans: [] 冒充成功", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BRoutePlan, harness, {});
+    await flushPromises();
+    const api = mounted.exposed.value as unknown as RouteApi;
+
+    routeWidget().searchResult = {
+      routeType: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [{ completelyChangedUpstreamShape: true }],
+    };
+    const rejected = (await api.search(searchOptions()).catch((error: unknown) => error)) as RouteErrorLike;
+    expect(rejected).toMatchObject({ code: "BMAP_SERVICE_FAILED" });
+    expect(rejected.message).toContain("无法识别");
+
+    mounted.unmount();
+  });
+
+  it("getLastResult：缓存结果整体漂移时拒绝（不把漂移读成「没有结果」）", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BRoutePlan, harness, {});
+    await flushPromises();
+    const api = mounted.exposed.value as unknown as RouteApi;
+
+    routeWidget().lastRouteResult = {
+      routeType: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [{ completelyChangedUpstreamShape: true }],
+    };
+    const rejected = (await api.getLastResult().catch((error: unknown) => error)) as RouteErrorLike;
+    expect(rejected).toMatchObject({ code: "BMAP_SERVICE_FAILED" });
+    expect(rejected.message).toContain("无法识别");
+
+    mounted.unmount();
+  });
+
+  it("segments 不是数组 / 非空但整体漂移 → 该方案无效；同批的好方案照常保留", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BRoutePlan, harness, {});
+    await flushPromises();
+
+    routeWidget().emit("result", {
+      type: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [
+        planWith([{ type: "walk", distance: 10, distanceText: "10米" }]),
+        // 上游把 `segments` 从数组换成了别的形状 → 该方案不可用（不是「没有路段」）。
+        planWith("not-an-array"),
+      ],
+    });
+    await nextTick();
+
+    const emitted = emittedOf(mounted).result?.[0]?.[0] as { plans: Record<string, unknown>[] };
+    expect(emitted.plans).toHaveLength(1);
+    expect(emitted.plans[0]!.segments).toEqual([{ type: "walk", distance: 10, distanceText: "10米" }]);
+
+    // 非空数组里的项全部不认识 → 同样判该方案无效。
+    routeWidget().emit("result", {
+      type: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [
+        planWith([{ type: "walk", distance: 10, distanceText: "10米" }]),
+        planWith([{ flying: true }]),
+      ],
+    });
+    await nextTick();
+    const second = emittedOf(mounted).result?.[1]?.[0] as { plans: Record<string, unknown>[] };
+    expect(second.plans).toHaveLength(1);
+
+    // 空数组是合法的「方案里没有分段」，不能被当成漂移。
+    routeWidget().emit("result", {
+      type: "driving",
+      start: endpoint("起点", 116.404, 39.915),
+      end: endpoint("终点", 116.305, 39.982),
+      plans: [planWith([])],
+    });
+    await nextTick();
+    const third = emittedOf(mounted).result?.[2]?.[0] as { plans: Record<string, unknown>[] };
+    expect(third.plans).toHaveLength(1);
+    expect(third.plans[0]!.segments).toEqual([]);
+
+    mounted.unmount();
+  });
+
+  it("navclick：`result` / `plan` 为 null/undefined 是合法缺失，存在却解析不出来则整条不发", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BRoutePlan, harness, {});
+    await flushPromises();
+    const widget = routeWidget();
+
+    // 合法缺失：照常发（这是「还没搜索过就点导航」）。
+    widget.emit("navclick", { type: "driving", result: null, planIndex: 0, plan: undefined });
+    await nextTick();
+    expect(emittedOf(mounted).navclick?.[0]?.[0]).toEqual({
+      type: "driving",
+      result: null,
+      planIndex: 0,
+    });
+
+    // 存在但形状不认识 → 不发，不能降级成 `result: null` / 省略 `plan`。
+    widget.emit("navclick", {
+      type: "driving",
+      result: { completelyChangedUpstreamShape: true },
+      planIndex: 0,
+    });
+    await nextTick();
+    expect(emittedOf(mounted).navclick).toHaveLength(1);
+
+    widget.emit("navclick", {
+      type: "driving",
+      result: null,
+      planIndex: 0,
+      plan: { completelyChangedUpstreamShape: true },
+    });
+    await nextTick();
+    expect(emittedOf(mounted).navclick).toHaveLength(1);
+
+    mounted.unmount();
+  });
+});

@@ -433,9 +433,12 @@ export type UiKitWidgetOptions = Record<string, unknown> & { map: unknown };
 /**
  * 动态 import 得到的 UI Kit 模块面。
  *
- * 四个 widget 都有构造签名：它们是我们真正 `new` 出来的东西。**没有索引签名** ——
- * 索引签名会让「上游新增了什么」与「我们声明了什么」之间的差集永远查不出来，
- * 而本文件的存在意义正是让这份差集可被契约测试（`v3-ui-kit-widget-contract.test.ts`）看见。
+ * 四个 widget 都有**构造签名**：它们是我们真正 `new` 出来的东西。
+ *
+ * **索引签名必须保留**：`loadUiKit()` 从 #73 起就是公开的进阶逃生口（「用上游还没被本库封装的
+ * 成员时自己构造」），删掉它会让 `uiKit[someWidgetName]` 这类已有写法直接类型报错
+ * （PR #82 评审 P1）。它带来的「差集查不出来」问题不靠收窄公共 API 解决 ——
+ * 由 `v3-ui-kit-widget-contract.test.ts` 对着上游 `.d.ts` **逐成员**校验我们依赖的这四个具名成员。
  */
 export interface UiKitModule {
   PlaceAutocomplete: new (
@@ -445,4 +448,6 @@ export interface UiKitModule {
   PlaceSearch: new (container: string | HTMLElement, options: UiKitWidgetOptions) => UiKitSearchWidget;
   PlaceDetail: new (container: string | HTMLElement, options: UiKitWidgetOptions) => UiKitPlaceDetailWidget;
   RoutePlan: new (container: string | HTMLElement, options: UiKitWidgetOptions) => UiKitRoutePlanWidget;
+  /** 上游的其余导出（主题等）经这里保持可达。 */
+  [exportedName: string]: unknown;
 }

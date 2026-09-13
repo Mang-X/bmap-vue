@@ -163,19 +163,28 @@ export function toRouteSegmentDTO(value: unknown): RouteSegmentDTO | null {
   }
 }
 
-/** 方案 → DTO。`distance` / `duration` 是判据：缺任一项说明这不是一条能用的方案。 */
+/** 方案 → DTO。`distance` / `duration` / `segments` 是判据：缺任一项说明这不是一条能用的方案。 */
 export function toRoutePlanDTO(value: unknown): RoutePlanDTO | null {
   if (!isRecord(value)) return null;
   const distance = readOptionalNumber(value, "distance");
   const duration = readOptionalNumber(value, "duration");
   if (distance === undefined || duration === undefined) return null;
 
+  // `segments` 在上游声明里是**必填数组**：不是数组就不是我们认识的那条方案。
+  // 不能读成空数组 —— 那是把「契约变了」伪装成「这条方案没有分段」。
+  const rawSegments = value.segments;
+  if (!Array.isArray(rawSegments)) return null;
+  const segments = collect(rawSegments, toRouteSegmentDTO);
+  // 非空却一个都没投影出来 = 判别键/字段整体漂移，同样算这条方案不可用。
+  // （空数组是合法的「没有分段」，此时 raw.length === 0，不走这条。）
+  if (rawSegments.length > 0 && segments.length === 0) return null;
+
   const dto: RoutePlanDTO = {
     distance,
     distanceText: readString(value, "distanceText"),
     duration,
     durationText: readString(value, "durationText"),
-    segments: collect(value.segments, toRouteSegmentDTO),
+    segments,
   };
 
   const toll = readOptionalNumber(value, "toll");
@@ -209,11 +218,16 @@ export function toRoutePlanResultDTO(value: unknown): RoutePlanResultDTO | null 
   if (!isRecord(value)) return null;
   const type = toRouteMode(value.type) ?? toRouteMode(value.routeType);
   if (!type) return null;
-  if (!Array.isArray(value.plans)) return null;
+  const rawPlans = value.plans;
+  if (!Array.isArray(rawPlans)) return null;
   const start = toRoutePointDTO(value.start);
   const end = toRoutePointDTO(value.end);
   if (!start || !end) return null;
-  return { type, start, end, plans: collect(value.plans, toRoutePlanDTO) };
+  const plans = collect(rawPlans, toRoutePlanDTO);
+  // 非空却一条都没投影出来 = 整批漂移。返回 `plans: []` 会让调用方看到「成功但没有路线」，
+  // 与「契约变了」分辨不出来 —— 宁可让事件不发 / 动作拒绝（ADR 决策 5、6 的口径）。
+  if (rawPlans.length > 0 && plans.length === 0) return null;
+  return { type, start, end, plans };
 }
 
 /** `typechange` 载荷 → DTO。 */
@@ -236,20 +250,33 @@ export function toRoutePlanPlanSelectDTO(value: unknown): RoutePlanPlanSelectDTO
 /**
  * `navclick` 载荷 → DTO。
  *
- * `result` / `plan` 在上游可能为空（还没搜索过就点击），这是**合法取值**：照常发事件，
- * `result` 给 `null`、`plan` 省略 —— 不发事件会让调用方以为点击没被识别。
+ * `result` / `plan` 有**两种**「没有」必须分开：
+ * - 上游给 `null` / `undefined`（还没搜索过就点导航）→ 这是**合法缺失**，照常发事件，
+ *   `result` 给 `null`、`plan` 省略 —— 不发事件会让调用方以为点击没被识别；
+ * - **存在却解析不出来** → 那是形状漂移，整条事件不发。降级成 `null` / 省略会把漂移
+ *   伪装成「当时没有结果」，与上面那种合法缺失混成一个信号。
  */
 export function toRoutePlanNavClickDTO(value: unknown): RoutePlanNavClickDTO | null {
   if (!isRecord(value)) return null;
   const type = toRouteMode(value.type);
   const planIndex = readOptionalNumber(value, "planIndex");
   if (!type || planIndex === undefined) return null;
-  const dto: RoutePlanNavClickDTO = {
-    type,
-    planIndex,
-    result: toRoutePlanResultDTO(value.result),
-  };
-  const plan = toRoutePlanDTO(value.plan);
+
+  const rawResult = value.result;
+  let result: RoutePlanResultDTO | null = null;
+  if (rawResult !== null && rawResult !== undefined) {
+    result = toRoutePlanResultDTO(rawResult);
+    if (!result) return null;
+  }
+
+  const rawPlan = value.plan;
+  let plan: RoutePlanDTO | null = null;
+  if (rawPlan !== null && rawPlan !== undefined) {
+    plan = toRoutePlanDTO(rawPlan);
+    if (!plan) return null;
+  }
+
+  const dto: RoutePlanNavClickDTO = { type, planIndex, result };
   if (plan) dto.plan = plan;
   return dto;
 }

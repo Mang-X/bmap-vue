@@ -199,3 +199,49 @@ props、`ResourceScope` 释放、`generation` + `AbortController` 的异步窗�
 - 契约表：[官方包发布契约](/zh-CN/contributing/official-packages)
 - 使用文档：[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)
 - 对照物：[`huiyan-fe/react-bmap`](https://github.com/huiyan-fe/react-bmap)（官方 React 组件库；**不使用** UI Kit，见决策 8）
+
+## 评审后修订（PR #82）
+
+> 决策本身保持冻结、不改写历史；下面是**同一决策范围内**的修正，全部来自 PR #82 的评审意见。
+
+### 1. 桥的新字段必须是**可选**的（公共 API 兼容性）
+
+`useUiKitWidget` / `UseUiKitWidgetOptions` 从 #73 起就是公开导出，因此首版把
+`constructorOptions` 加成**必填**是一处破坏性变更（已有调用方升级后直接类型报错，
+而 PR 正文当时还写着「无破坏性变更」）。现在它是可选的，缺省时桥**不安装**重建 watch。
+
+**刻意不做的**：缺省时回退去用 `buildOptions()`。`buildOptions()` 里包含**有 setter 的运行期选项**
+（`BPlaceAutocomplete` 的 `location`），拿它当重建依据会让「改城市」也重建，
+把输入值 / 焦点 / 下拉展开一起吃掉 —— 那会静默改变老调用方的语义。四个官方 wrapper 继续显式传它。
+
+### 2. `UiKitModule` 的索引签名保留（它是公开逃生口）
+
+`loadUiKit()` 的定位就是「用上游还没被本库封装的成员时自己构造」，删掉索引签名会让
+`uiKit[someName]` 这类已有写法报错（同样是破坏性变更）。首版想用它解决「上游新增成员查不出来」，
+但那个问题**不该靠收窄公共 API 解决**：现在由契约测试对着上游 `.d.ts` 逐成员校验我们依赖的四个具名成员，
+索引签名只负责「其余导出保持可达」。
+
+### 3. 整批投影失败 = 形状漂移，不能退化成「空结果」
+
+原实现只校验 `plans` 是数组，然后逐项 `collect()`。上游把 `plans` / `segments` 换成全新形状时，
+逐项丢弃会让结果变成 `plans: []` —— 调用方读到的是「成功，但没有路线」，**与决策 5／6
+禁止的假信号是同一类**。现在补了守卫：
+
+| 位置 | 守卫 |
+| --- | --- |
+| `toRoutePlanResultDTO` | `plans` 必须是数组；**非空进、空出** ⇒ 返回 `null`（事件不发 / 动作按「形状无法识别」拒绝） |
+| `toRoutePlanDTO` | `segments` 必须是数组（上游声明里是必填）；非空进、空出 ⇒ 该方案无效 |
+| `toRoutePlanNavClickDTO` | `null` / `undefined` 是**合法缺失**（还没搜索过就点导航）；**存在却解析不出来** ⇒ 整条不发，不降级成 `null` |
+
+「坏项局部丢弃」保留不变（空数组仍是合法的「没有分段」/「没有路线」）。
+
+### 4. 本票 scope 的收窄（`Closes #75` 的依据）
+
+评审指出 `Closes #75` 与实际验收状态不一致。按「收窄本票 scope + 在承接方补欠账」处理
+（#72 的同款做法），已把两笔迁移写进 issue #75 正文与承接方 #74：
+
+- 「四个 wrapper 均有真实 v4 操作、事件和 destroy 证据」→ 由 **#74** 用同一候选提交验收；
+- 「最终类型与 #29 一致」→ #29 定型后对齐（issue 原文已写明「实施可先于 #29 完成开始」）；
+- 组件「resolver 收口」在本票的含义是**确认不放进 resolver 并把这条写进文档与门禁**
+  （ADR 2026-09-13 `./ui-kit` 子路径决策 1 早已决定 UI 组件不进 manifest / resolver），
+  而不是新增 resolver 条目。

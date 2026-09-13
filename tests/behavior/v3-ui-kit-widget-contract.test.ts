@@ -26,6 +26,8 @@ const pkgRoot = join(repoRoot, "packages/baidu-map-gl-vue");
 const virtualFile = join(repoRoot, "tests/__ui-kit-widget-contract__.ts");
 /** 相对虚拟文件的类型模块路径（平台无关，不写绝对路径）。 */
 const typesModule = "../packages/baidu-map-gl-vue/src/integrations/ui-kit/types";
+/** 桥模块路径（同样相对虚拟文件）。 */
+const bridgeModule = "../packages/baidu-map-gl-vue/src/integrations/ui-kit/useUiKitWidget";
 
 const COMPILER_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
@@ -35,7 +37,7 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2020,
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
-  lib: ["lib.es2020.d.ts", "lib.dom.d.ts"],
+  lib: ["lib.es2020.d.ts", "lib.es2022.error.d.ts", "lib.dom.d.ts"],
   baseUrl: repoRoot,
   types: [],
 };
@@ -311,6 +313,70 @@ declare const invented: Invented;
 export const mustFail: never = invented;
 `);
     expect(inventedKey.length, "检查器没有生效：多一个键竟然通过了").toBeGreaterThan(0);
+  });
+});
+
+/**
+ * `./ui-kit` 的**公共 API 兼容性**（PR #82 评审 P1）
+ *
+ * `useUiKitWidget` / `UseUiKitWidgetOptions` / `UiKitModule` 从 #73 起就是公开导出，
+ * 所以它们的新增字段必须保持向后兼容。#82 的首版踩了两处：把 `constructorOptions` 加成必填、
+ * 又把 `UiKitModule` 的索引签名删掉 —— 两者都会让已有消费方升级后直接类型报错，
+ * 而 PR 正文当时还写着「无破坏性变更」。
+ *
+ * 这两条从**消费方视角**写：用「老写法必须仍能编译」钉住，而不是断言我们内部实现长什么样。
+ */
+describe("公共 API 兼容性（已公开的导出不得被破坏）", () => {
+  it("useUiKitWidget 的老调用（不传 constructorOptions）仍然可编译", () => {
+    const diagnostics = diagnose(`
+import type { Ref } from "vue";
+import { useUiKitWidget } from ${JSON.stringify(bridgeModule)};
+declare const host: Ref<HTMLElement | null>;
+export const api = useUiKitWidget({
+  component: "LegacyConsumer",
+  host,
+  buildOptions: () => ({}),
+  create: () => ({ on() {}, off() {}, destroy() {} }),
+});
+`);
+    expect(
+      diagnostics,
+      `useUiKitWidget 的公开签名被收紧成破坏性变更（constructorOptions 必须是可选的）：\n${format(diagnostics)}`,
+    ).toEqual([]);
+  });
+
+  it("loadUiKit() 的返回值仍可按名字索引（索引签名是公开逃生口）", () => {
+    const diagnostics = diagnose(`
+import type { UiKitModule } from ${JSON.stringify(typesModule)};
+declare const uiKit: UiKitModule;
+declare const widgetName: string;
+export const widget: unknown = uiKit[widgetName];
+`);
+    expect(
+      diagnostics,
+      `UiKitModule 的索引签名被删掉了（loadUiKit() 的逃生口被破坏）：\n${format(diagnostics)}`,
+    ).toEqual([]);
+  });
+
+  it("反证：把 constructorOptions 变回必填必须被抓到", () => {
+    const diagnostics = diagnose(`
+import type { Ref } from "vue";
+declare const host: Ref<HTMLElement | null>;
+type Options = {
+  component: string;
+  host: Ref<HTMLElement | null>;
+  buildOptions: () => Record<string, unknown>;
+  constructorOptions: () => Record<string, unknown>;
+};
+declare function useStrict(options: Options): unknown;
+export const api = useStrict({
+  component: "LegacyConsumer",
+  host,
+  buildOptions: () => ({}),
+});
+`);
+    expect(diagnostics.length, "检查器没有生效：必填字段缺失竟然通过了").toBeGreaterThan(0);
+    expect(format(diagnostics)).toContain("constructorOptions");
   });
 });
 
