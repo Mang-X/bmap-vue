@@ -8,7 +8,8 @@
 官方包自身的发布契约另见 [官方包发布契约（Loader / UI Kit）](/zh-CN/contributing/official-packages)。
 
 > 分工：`probe:official` 探的是**官方两个包**；`smoke:v4` 探的是**本库**——默认入口是否真的
-> 委托官方 Loader、基础组件在真实 SDK 上是否可用、UI Kit 两个薄封装是否检索/事件/样式/销毁成立、
+> 委托官方 Loader、基础组件在真实 SDK 上是否可用、UI Kit **四个**薄封装（自动补全 / 地点检索 /
+> 详情 / 路线）是否检索·事件·样式·销毁成立、
 > 卸载后本库资源是否清干净。
 
 ## 一条命令
@@ -75,7 +76,9 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `infowindow-visible` | ✅ | ✅ | 地图**活状态**非空（轮询）+ 内容节点 `display`/`visibility` 可见 + 文本非空 |
 | `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空或超时都记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
 | `ui-kit-autocomplete-search` | ✅ | — | widget `ready`、检索写入输入框、宿主里出现官方 UI Kit 渲染的输入框、**卸载后宿主子树从文档撤走**（回收路径，见下） |
-| `ui-kit-placesearch-load` | ✅ | — | widget `ready`、检索结算、宿主里由 UI Kit 渲染出结果 DOM |
+| `ui-kit-placesearch-load` | ✅ | — | widget `ready`、检索结算、**`load` 事件带回 POI**（并从中取一个真实 uid 给下一条检查）、宿主里由 UI Kit 渲染出结果 DOM |
+| `ui-kit-placedetail-load` | ✅ | — | widget `ready`、**用上一步真实检索到的 uid 打开**、`load` 事件带回详情、宿主渲染出面板、卸载后宿主子树撤走 |
+| `ui-kit-routeplan-search` | ✅ | — | 驾车检索返回方案（`plans.length > 0`）、**`result` 事件与返回值同源**、面板渲染、卸载后宿主子树撤走；服务类失败（`BMAP_SERVICE_FAILED`）记 `blocked` |
 | `second-provider-reuses-sdk` | ✅ | — | 第二个入口不重复注入 SDK script（fixture 档从不注入 script，这条在该档恒真，故不登记） |
 | `unmount-release` | ✅ | ✅ | 容器里 SDK DOM 已撤、句柄作废（`BMAP_RESOURCE_DISPOSED`）、**官方全局不得被改写** |
 | `remount-after-unmount` | ✅ | ✅ | 重挂载后仍可用（没有复用脏状态） |
