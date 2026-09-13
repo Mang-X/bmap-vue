@@ -69,8 +69,10 @@ Capability Catalog 是能力清单的单一事实源（`src/driver/capability/ca
 - 不要删除 / 改写上游注入的 SDK `<script>`、回调全局或 namespace；
 - **组件取消等待** = 解绑消费者 + 丢弃回包；**不等于**终止上游加载。官方没有公开取消接口，
   全部消费者取消后**保留**底层在飞任务，且不得为后续请求另插重复 script；
-- 官方 Loader 不支持的配置（`nonce` / `integrity` / `crossOrigin` / `referrerPolicy`，以及 `timeout: 0` = 不超时）
-  必须明确报错或指引外部预加载，**接收后忽略属于假支持**；
+- 上游**没有**的脚本属性（`nonce` / `integrity` / `crossOrigin` / `referrerPolicy`）必须明确报错或
+  指引外部预加载，**接收后忽略属于假支持**；
+- `timeout` 与上面不同：它是**官方支持**的参数，只是语义需要显式映射——`0` = **不超时**（不是「默认超时」）。
+  契约里关于 `timeout` 的语义以 ADR / 契约表为准，不要把它归进「不支持项」；
 - UI Kit 在无 DOM 环境 **import 即失败**（无 `exports` 字段，`main` 指向 IIFE）：`./ui-kit` 与其 Vue 封装
   只能动态 import，不得进入根入口或任何 SSR 可达的模块图；
 - 泄漏门禁按**来源**归因：真实 SDK 与百度统计脚本也会往 `document` 上挂监听且不释放，

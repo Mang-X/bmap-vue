@@ -36,6 +36,8 @@ export interface SdkSnapshot {
 }
 
 export interface ProbeReport {
+  /** 本轮运行标识（从 `?run=` 读出）。orchestrator 用它证明报告来自本轮页面。 */
+  runId: string;
   ak: boolean;
   ua: string;
   /** 加载成功当时的命名空间快照（`loader.proxy-mode` 会 `reset()`，末尾再测就没有意义）。 */
@@ -213,6 +215,7 @@ async function expectThrow(body: () => unknown): Promise<string> {
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const ak = params.get("ak") ?? "";
+  const runId = params.get("run") ?? "(unset)";
   akPresent = ak.length > 0;
 
   const ledger = installListenerLedger();
@@ -657,6 +660,7 @@ async function main(): Promise<void> {
   }
 
   const report: ProbeReport = {
+    runId,
     ak: akPresent,
     ua: navigator.userAgent,
     sdk: sdkSnapshot,
@@ -672,6 +676,7 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   window.__PROBE__ = {
+    runId: new URLSearchParams(location.search).get("run") ?? "(unset)",
     ak: false,
     ua: navigator.userAgent,
     sdk: { bmap: false, bmapgl: false, same: false, versionLike: "" },

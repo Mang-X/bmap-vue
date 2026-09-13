@@ -210,6 +210,21 @@ describe("失败、超时与重试（含两条已观察行为）", () => {
     expect(getStatus()).toBe("failed");
   });
 
+  it("timeout: 0 是「不超时」（支持的参数语义），不是「默认超时」", async () => {
+    // 这条锁住的是**契约本身**：`timeout` 是官方支持的参数，`0` 表示不超时。
+    // 它容易被误读成「上游没有的能力」，从而在默认路径里被当成非法配置拒掉
+    // （AGENTS / ADR 的措辞曾经就是这么写的，评审第 2 轮指出自相矛盾）。
+    const pending = load({ ak: "test-ak", version: "4.0", timeout: 0 });
+    expect(getStatus()).toBe("loading");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(getStatus(), "timeout: 0 被当成了默认超时").toBe("loading");
+
+    // 对照组：同样的等待窗口下 timeout: 5 已经结算成 failed（见上一条用例）。
+    const namespace = deliverFakeNamespace();
+    await expect(pending).resolves.toBe(namespace);
+    expect(getStatus()).toBe("loaded");
+  });
+
   it("失败后的重试会重新注入 script（官方实现不清理上一次的 script 节点）", async () => {
     await expect(load({ ak: "test-ak", version: "4.0", timeout: 5 })).rejects.toThrow(/超时/);
     expect(scriptCount()).toBe(1);

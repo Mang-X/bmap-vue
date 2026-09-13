@@ -67,8 +67,14 @@
 
 6. **`reset()` 只允许出现在测试与热更新场景。** 这是官方对它的定位（"便于单测与热更新"），且它会删掉进程级全局；组件/应用生命周期里调用它会连带毁掉同页其它地图。
 
-7. **上游不支持的配置必须明确处理，不能「接收后忽略」。**
-   `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` 在 Loader `1.0.0` 上没有入口，`timeout` 语义也不同（`0` = 不超时）。默认路径遇到这类配置时只有两种合法处置：**明确报错**，或**指引走外部预加载 + `existingGlobalV4Provider`**。静默吞掉属于「假支持」。
+7. **上游没有的能力必须明确处理，不能「接收后忽略」；上游已有的能力不能误当成缺失。**
+   两类要分开：
+   - **上游没有入口**：`nonce` / `integrity` / `crossOrigin` / `referrerPolicy` 在 Loader `1.0.0` 上不存在。
+     默认路径只有两种合法处置：**明确报错**，或**指引走外部预加载 + `existingGlobalV4Provider`**。
+     静默吞掉属于「假支持」。
+   - **上游支持、但语义需要显式映射**：`timeout` 是合法参数，`0` 表示**不超时**（不是「默认超时」）。
+     它必须被正确映射并保持可测（`tests/behavior/official-packages-loader.test.ts` 有专门用例锁定），
+     **不得**因为「语义反直觉」而把它拒掉——那会砍掉一个受支持的配置项。
 
 8. **RoutePlan 的模式只按锁定版本实际支持开放。**
    `1.1.2` 里 `enabledTypes` 硬编码为 `["driving"]`、`showTabs: false`，`switchType("walking" | "riding" | "transit")` 是 **no-op + `console.warn`**（实测）。Vue 封装只能开放驾车；headless 的四类路线（#39）**不受** UI 模式限制，不得被 UI Kit 的驾车限制绑架。

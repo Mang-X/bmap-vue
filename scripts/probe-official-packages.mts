@@ -11,15 +11,32 @@
  * 为什么自己起浏览器而不是 `--dump-dom --virtual-time-budget`：瓦片持续加载时虚拟时间
  * 永远不会耗尽，headless_shell 会挂死（实测 2 分钟不返回、产物 0 字节）。CDP 轮询是确定性的。
  *
- * 退出码：`0` 全 pass；`1` 有 fail；`3` 只有 blocked（环境/配额），`2` 脚手架失败（没读到报告）。
+ * 退出码：`0` 全 pass；`1` 有 fail；`3` 只有 blocked（环境/配额），`2` 脚手架失败。
  * 注意 `3` **不等于**通过 —— 与 #25「blocked 不得放行」的口径一致，调用方必须区分。
+ *
+ * 可信度要求（评审第 2 轮补强，别再简化）：
+ * - **就绪判定必须指向本轮实例**：Vite 子进程退出即按脚手架失败；且必须校验响应头上的
+ *   `PROBE_RUN_ID`（见 `official-probe/readiness.mts`）。否则端口被旧服务占着时会读旧页面，
+ *   而 `packages` 字段却读当前安装版本 → 旧结果被归到当前候选版本。
+ * - **CDP 一定有截止时间**：命令超时 / 全局截止 / socket 断开三者任一先到都会拒绝并结束
+ *   （见 `official-probe/cdp.mts`），`finally` 里的清理因此必然执行。
  *
  * 约束（`node --experimental-strip-types`）：不得使用 TS 参数属性；本地模块导入必须带扩展名。
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  CdpClosedError,
+  CdpTimeoutError,
+  connectCdpSession,
+  readProbeReport,
+  sleep,
+  type CdpSession,
+} from "./official-probe/cdp.mts";
+import { ViteNotReadyError, waitForViteReady, type ChildExit } from "./official-probe/readiness.mts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const probeDir = join(repoRoot, "tests/browser/official-packages");
@@ -35,6 +52,8 @@ const outPath = argValue("out");
 const overallTimeoutMs = Number(argValue("timeout") ?? "240000");
 const ak = argValue("ak") ?? process.env.BAIDU_MAP_AK ?? "";
 const hasFlag = (name: string): boolean => process.argv.includes(`--${name}`);
+/** 本轮运行标识：Vite 经响应头回显、页面经 `?run=` 回显，两边都必须与本值一致。 */
+const runId = randomUUID();
 
 /** headless Chromium 解析顺序：显式覆盖 → Playwright 缓存 → 系统 Chrome。 */
 function resolveBrowser(): string {
@@ -56,31 +75,51 @@ function resolveBrowser(): string {
   throw new Error("找不到可用的 Chromium：设置 SMOKE_BROWSER 指向浏览器可执行文件");
 }
 
-async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
-  const started = Date.now();
-  for (;;) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      /* 还没起来 */
-    }
-    if (Date.now() - started > timeoutMs) throw new Error(`等待 ${url} 超时`);
-    await new Promise((r) => setTimeout(r, 300));
-  }
+/** 跟踪子进程退出（含 spawn 失败），供「启动失败立刻失败」使用。 */
+interface TrackedChild {
+  child: ChildProcess;
+  exited: Promise<ChildExit>;
+}
+
+function spawnTracked(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv; verbose?: boolean }): TrackedChild {
+  const child = spawn(command, args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: options.verbose ? "inherit" : "pipe",
+  });
+  const exited = new Promise<ChildExit>((settle) => {
+    let done = false;
+    const finish = (exit: ChildExit): void => {
+      if (done) return;
+      done = true;
+      settle(exit);
+    };
+    child.once("exit", (code, signal) => finish({ code, signal }));
+    child.once("error", (error) =>
+      finish({ code: null, signal: null, error: String(error.message) }),
+    );
+  });
+  return { child, exited };
 }
 
 /** `--remote-debugging-port=0`：轮询 DevToolsActivePort 第一行拿真实端口（不抢端口、慢机器不假失败）。 */
-async function waitForDevToolsPort(userDataDir: string, timeoutMs: number): Promise<number> {
+async function waitForDevToolsPort(userDataDir: string, exited: Promise<ChildExit>, timeoutMs: number): Promise<number> {
   const portFile = join(userDataDir, "DevToolsActivePort");
   const started = Date.now();
+  let exitedWith: ChildExit | null = null;
+  void exited.then((exit) => {
+    exitedWith = exit;
+  });
   for (;;) {
+    if (exitedWith) {
+      throw new Error(`Chromium 未能在本轮启动：${JSON.stringify(exitedWith)}`);
+    }
     if (existsSync(portFile)) {
       const first = readFileSync(portFile, "utf8").split("\n")[0]?.trim();
       if (first) return Number(first);
     }
     if (Date.now() - started > timeoutMs) throw new Error("等待 DevToolsActivePort 超时");
-    await new Promise((r) => setTimeout(r, 200));
+    await sleep(200);
   }
 }
 
@@ -102,61 +141,7 @@ async function waitForPageTarget(devtoolsPort: number, prefix: string, timeoutMs
       /* CDP 还没起来 */
     }
     if (Date.now() - started > timeoutMs) throw new Error("等待 CDP page target 超时");
-    await new Promise((r) => setTimeout(r, 300));
-  }
-}
-
-interface ProbeReport {
-  checks: { id: string; status: "pass" | "fail" | "blocked" }[];
-  verdicts: Record<string, string>;
-}
-
-/** 连上页面 target，轮询 `window.__PROBE__` 直到超时。 */
-async function readReport(target: CdpTarget, timeoutMs: number): Promise<ProbeReport | null> {
-  const ws = new WebSocket(target.webSocketDebuggerUrl!);
-  let messageId = 0;
-  const pending = new Map<number, (msg: { result?: unknown }) => void>();
-  ws.addEventListener("message", (event: MessageEvent) => {
-    const msg = JSON.parse(String(event.data)) as { id?: number; result?: unknown };
-    if (msg.id !== undefined && pending.has(msg.id)) {
-      pending.get(msg.id)!(msg);
-      pending.delete(msg.id);
-    }
-  });
-  const send = (method: string, params: Record<string, unknown> = {}): Promise<{ result?: unknown }> => {
-    const id = ++messageId;
-    ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolveFn) => pending.set(id, resolveFn));
-  };
-  await new Promise((resolveFn) => ws.addEventListener("open", resolveFn, { once: true }));
-  await send("Runtime.enable");
-
-  const deadline = Date.now() + timeoutMs;
-  let report: ProbeReport | null = null;
-  while (Date.now() < deadline) {
-    const res = (await send("Runtime.evaluate", {
-      expression: "JSON.stringify(window.__PROBE__ ?? null)",
-      returnByValue: true,
-    })) as { result?: { result?: { value?: string } } };
-    const value = res.result?.result?.value;
-    if (value && value !== "null") {
-      report = JSON.parse(value) as ProbeReport;
-      break;
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  ws.close();
-  return report;
-}
-
-function shutdown(children: (ChildProcess | null)[]): void {
-  for (const child of children) {
-    if (!child || child.exitCode !== null) continue;
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      /* 已经退出 */
-    }
+    await sleep(300);
   }
 }
 
@@ -177,26 +162,71 @@ function installedVersions(): Record<string, string> {
   return versions;
 }
 
+interface ProbeReport {
+  runId?: string;
+  checks: { id: string; status: "pass" | "fail" | "blocked" }[];
+  verdicts: Record<string, string>;
+}
+
+function shutdown(children: (TrackedChild | null)[], session: CdpSession | null): void {
+  try {
+    session?.close();
+  } catch {
+    /* 已经断开 */
+  }
+  for (const tracked of children) {
+    const child = tracked?.child;
+    if (!child || child.exitCode !== null) continue;
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* 已经退出 */
+    }
+  }
+}
+
 async function main(): Promise<void> {
   if (!ak) {
     console.error("缺少 AK：用 `BAIDU_MAP_AK=<ak> pnpm probe:official` 或 `--ak=<ak>` 传入。");
     console.error("（AK 只经 URL 查询参数传给页面，不落盘、不入库。）");
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
   const browser = resolveBrowser();
   const userDataDir = mkdtempSync(join(tmpdir(), "official-probe-"));
-  let vite: ChildProcess | null = null;
-  let chrome: ChildProcess | null = null;
-  const url = `http://localhost:${port}/?ak=${encodeURIComponent(ak)}`;
+  const url = `http://localhost:${port}/?ak=${encodeURIComponent(ak)}&run=${runId}`;
+  let vite: TrackedChild | null = null;
+  let chrome: TrackedChild | null = null;
+  let session: CdpSession | null = null;
 
   try {
-    vite = spawn(join(repoRoot, "node_modules/.bin/vite"), ["--config", join(probeDir, "vite.config.ts")], {
-      cwd: probeDir,
-      stdio: hasFlag("verbose") ? "inherit" : "pipe",
-    });
-    await waitForHttp(`http://localhost:${port}/`, 30_000);
+    vite = spawnTracked(
+      join(repoRoot, "node_modules/.bin/vite"),
+      ["--config", join(probeDir, "vite.config.ts")],
+      {
+        cwd: probeDir,
+        // 把本轮 run id 交给 Vite，由 vite.config.ts 通过 x-probe-run 响应头回显
+        env: { ...process.env, PROBE_RUN_ID: runId },
+        verbose: hasFlag("verbose"),
+      },
+    );
+    try {
+      await waitForViteReady({
+        url: `http://localhost:${port}/`,
+        runId,
+        timeoutMs: 30_000,
+        exited: vite.exited,
+      });
+    } catch (error) {
+      if (error instanceof ViteNotReadyError) {
+        console.error(`PROBE_VITE_NOT_READY：${error.message}`);
+        process.exitCode = 2;
+        return;
+      }
+      throw error;
+    }
 
-    chrome = spawn(
+    chrome = spawnTracked(
       browser,
       [
         "--headless",
@@ -207,21 +237,37 @@ async function main(): Promise<void> {
         `--user-data-dir=${userDataDir}`,
         url,
       ],
-      { stdio: "pipe" },
+      {},
     );
-    const devtoolsPort = await waitForDevToolsPort(userDataDir, 30_000);
+    const devtoolsPort = await waitForDevToolsPort(userDataDir, chrome.exited, 30_000);
     const target = await waitForPageTarget(devtoolsPort, `http://localhost:${port}`, 30_000);
-    const report = await readReport(target, overallTimeoutMs);
+
+    // 连接与每条命令都受同一个截止时间约束（断连/不回响应都会拒绝，不会挂死）。
+    const deadline = Date.now() + overallTimeoutMs;
+    session = await connectCdpSession(target.webSocketDebuggerUrl!, {
+      deadline,
+      commandTimeoutMs: 30_000,
+    });
+    const report = await readProbeReport<ProbeReport>(session, { deadline });
     if (!report) {
-      // 用 exitCode + return 而不是 process.exit：后者会跳过 finally，把 Chromium / Vite 留在后台。
       console.error("PROBE_REPORT_MISSING：页面没有写 window.__PROBE__（看页面控制台）");
       process.exitCode = 2;
       return;
     }
+    if (report.runId !== runId) {
+      // 兜底：即便就绪判定被绕过，报告也必须自证来自本轮页面。
+      console.error(
+        `PROBE_RUN_ID_MISMATCH：报告来自 ${report.runId ?? "(未标注)"}，本轮应为 ${runId}`,
+      );
+      process.exitCode = 2;
+      return;
+    }
+
     const envelope = {
       generatedAt: new Date().toISOString(),
+      runId,
       packages: installedVersions(),
-      browser: browser,
+      browser,
       report,
     };
     const serialized = redactAk(JSON.stringify(envelope, null, 2));
@@ -231,14 +277,22 @@ async function main(): Promise<void> {
     const failed = report.checks.filter((c) => c.status === "fail");
     const blocked = report.checks.filter((c) => c.status === "blocked");
     console.error(
-      `\n[packages] ${JSON.stringify(envelope.packages)}\n` +
+      `\n[run] ${runId}\n` +
+        `[packages] ${JSON.stringify(envelope.packages)}\n` +
         `[fail=${failed.length}] ${failed.map((c) => c.id).join(",") || "-"}\n` +
         `[blocked=${blocked.length}] ${blocked.map((c) => c.id).join(",") || "-"}\n` +
         `[verdicts] ${JSON.stringify(report.verdicts)}`,
     );
     process.exitCode = failed.length > 0 ? 1 : blocked.length > 0 ? 3 : 0;
+  } catch (error) {
+    const reason =
+      error instanceof CdpTimeoutError || error instanceof CdpClosedError
+        ? `CDP 会话在截止时间内未能完成：${error.message}`
+        : String((error as Error)?.message ?? error);
+    console.error(`PROBE_FAILED：${reason}`);
+    process.exitCode = 2;
   } finally {
-    if (!hasFlag("keep")) shutdown([chrome, vite]);
+    if (!hasFlag("keep")) shutdown([chrome, vite], session);
   }
 }
 

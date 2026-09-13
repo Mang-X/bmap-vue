@@ -69,6 +69,15 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 - 报告里的 `packages` 字段是**实际安装到的版本**（直接读 `node_modules/<pkg>/package.json`），
   因此每条结论都能追到具体产物；核对 tarball 用上面的 integrity 哈希。
 
+**为什么这些结论可信（探针自身的两条硬保证，见 `tests/behavior/official-probe-harness.test.ts`）**：
+
+1. **报告必须来自本轮 dev server 与本轮页面**。orchestrator 每次运行生成一个 run id：Vite 经
+   `x-probe-run` 响应头回显、页面经 `?run=` 写进报告，两边都要对得上；同时监听 Vite 子进程的
+   `exit` / `error`，一退出就按脚手架失败（`2`）退出。没有这层，端口被旧服务占着时会读旧页面，
+   而 `packages` 读的是当前安装版本 —— 旧结果会被归到当前候选版本上。
+2. **CDP 会话一定有截止时间**。单条命令超时、全局截止、socket 断开三者任一先到都会拒绝并结束，
+   `finally` 因此必然执行（关 Chromium / Vite / WebSocket）。否则浏览器一断连，探针就会挂死。
+
 最近一次运行（2026-09-13，macOS，node 24.21.0，headless Chromium 149 / SwiftShader，真实 AK，对照组回包正常，退出码 `0`，浏览器 UA `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36`）：
 **31 个探针全部 pass，四个 widget 结论分别为 pass / pass / pass / pass。**
 
@@ -99,7 +108,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | 依赖的 JSAPI 面 | 只要求全局 `window.BMapGL`（`new BMapGL.Point` 是裸全局引用）+ 地图实例的 `getCenter` / `getZoom` / `getProjection`（或 `getMapType().getProjection()`）。**不使用** `BMapGL.LocalSearch` |
 | 检索通道 | 自建 JSONP 到 `api.map.baidu.com`，使用私有请求码（`qt=cen/s/con/bd/nb/bda/sa/nba/inf/cur/placesug/drct` 等）与 `getSeckeyAndSign` 签名（读 `window.___abvk` / `localStorage.BMAP_SECKEY`） |
 | AK 解析链 | `window.BMAP_AUTHENTIC_KEY` → 文档里 `script[src*="api.map.baidu.com/api"]` 的 `ak=`（命中即缓存到 `window.BMAP_AUTHENTIC_KEY`）→ 都没有则抛 `BMap AK is not set` |
-| SSR | **import 即失败**：CJS/IIFE 入口 → `ReferenceError: document is not defined`；ESM 产物 → 模块求值期崩溃。只能在浏览器挂载后动态 import |
+| SSR | **import 即失败**，且两个入口的顶层崩溃点不同：CJS/IIFE 入口（`main`，Node 默认解析到它）→ `ReferenceError: document is not defined`；ESM 产物 → 更早死在打包进去的 `js-md5` / `Buffer` interop 上（`TypeError: Cannot read properties of undefined (reading 'from')`）。两者都在**模块求值期**，因此 UI Kit 只能浏览器挂载后动态 import |
 | 释放 | `destroy()` 撤除自身 DOM；四个 widget 生命周期内 UI Kit 自己只挂 **1 个** `document` 级监听（`PlaceAutocomplete` 的外点关闭），`destroy()` 同数归还，净 0 |
 
 **监听归因口径（探针里带正证守卫，别简化）**：探针只把栈帧落在 UI Kit bundle 里的调用点算作 UI Kit 的。
@@ -127,13 +136,13 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 但 `PlaceDetail` / `RoutePlan` 在后续调用里并不读它。因此 Vue 层仍需满足「构造前 Map ready」这一硬前提，
 但不要为详情 / 路线额外承诺视野联动。
 
-## 不支持项与未验证项
+## 不支持项、易误读项与未验证项
 
 | 项 | 状态 | 说明与处置 |
 | --- | --- | --- |
 | Loader 的 `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | **不支持** | 上游没有入口。默认路径必须明确报错，或指引走外部预加载 + `existingGlobalV4Provider`；接收后忽略属于假支持 |
 | Loader 的上游取消接口 | **没有公开接口** | 「取消等待」由本库自己做；全部消费者取消后保留在飞任务，不得另插重复 script |
-| Loader 的 `timeout: 0` | 语义是**不超时** | 不要把它当成「默认超时」 |
+| Loader 的 `timeout` | **支持，但语义反直觉** | `0` = **不超时**（不是「默认超时」）。属于「需要显式映射」而不是「不支持」；契约锁有专门用例（`tests/behavior/official-packages-loader.test.ts`） |
 | UI Kit 的 SSR | **不可用** | 只能浏览器内动态 import；根入口与 SSR 模块图不得静态引入 |
 | UI Kit 的 AK 前置 | **强依赖** | 需要带 `ak=` 的 SDK `<script>` 或 `window.BMAP_AUTHENTIC_KEY`；代理模式务必补后者 |
 | UI Kit 的 CSS | **需消费方引入** | 不引入不会报错，只会「无样式」；UI 消费者 fixture 必须覆盖这一点 |
