@@ -283,3 +283,81 @@ describe("评审复现：迟到的回包与打开契约（R25-C 复审 P1-1 / P1
     await unmountAndSettle(wrapper);
   });
 });
+
+describe("评审第 2 轮复现：position 的声明式同步（P1 / P2）", () => {
+  it("P1：open 一直是 true、position 晚到 ⇒ 自己补开（不需要手动切 open）", async () => {
+    const host = container();
+    const position = ref<{ lng: number; lat: number } | undefined>(undefined);
+    const { errors, Probe } = errorProbe();
+    const wrapper = await mountTree(
+      () => [h(BInfoWindow, { open: true, position: position.value, title: "late" }), h(Probe)],
+      host,
+    );
+    await flushPromises();
+
+    expect(fake.diagnostics.snapshot().leaks.infoWindows, "拿到位置之前不得打开").toBe(0);
+    expect(errors.map((error) => error.code)).toEqual(["BMAP_INVALID_ARGUMENT"]);
+
+    // 常见的异步数据路径：position 晚到，open 不变
+    position.value = POSITION;
+    await nextTick();
+    await flushPromises();
+
+    expect(
+      fake.diagnostics.snapshot().leaks.infoWindows,
+      "position 晚到后必须自己补开（受控组件的期望状态是 open=true）",
+    ).toBe(1);
+
+    await unmountAndSettle(wrapper);
+  });
+
+  it("P1 反向：已打开后 position 变 undefined ⇒ 关闭并报错（缺位置就不满足打开条件）", async () => {
+    const host = container();
+    const position = ref<{ lng: number; lat: number } | undefined>({ ...POSITION });
+    const { errors, Probe } = errorProbe();
+    const wrapper = await mountTree(
+      () => [h(BInfoWindow, { open: true, position: position.value, title: "drop" }), h(Probe)],
+      host,
+    );
+    await flushPromises();
+    expect(fake.diagnostics.snapshot().leaks.infoWindows).toBe(1);
+
+    position.value = undefined;
+    await nextTick();
+    await flushPromises();
+
+    expect(fake.diagnostics.snapshot().leaks.infoWindows, "缺位置 ⇒ 不再打开").toBe(0);
+    expect(errors.map((error) => error.code)).toEqual(["BMAP_INVALID_ARGUMENT"]);
+
+    await unmountAndSettle(wrapper);
+  });
+
+  it("P2：合法移动 position 不得打印「position 在当前引擎不支持」的误导警告", async () => {
+    const host = container();
+    const position = ref<{ lng: number; lat: number }>({ ...POSITION });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = await mountTree(
+      () => [h(BInfoWindow, { open: true, position: position.value, title: "move" })],
+      host,
+    );
+    await flushPromises();
+
+    const infoWindow = fake.createdMaps.at(-1)!.infoWindow!;
+    expect(infoWindow.openedAt, "对照组：气泡确实已经打开").toBeTruthy();
+    warn.mockClear();
+
+    position.value = { lng: 116.5, lat: 39.95 };
+    await nextTick();
+    await flushPromises();
+
+    expect(fake.diagnostics.snapshot().leaks.infoWindows, "移动不是重开").toBe(1);
+    // 位置确实跟着动了：走的是 openInfoWindow(map, iw, position)，不是实例 setter
+    expect((infoWindow.openedAt as { lng: number }).lng).toBeCloseTo(116.5);
+    expect(
+      warn.mock.calls.map((call) => String(call[0])).join("\n"),
+      "position 更新走 openInfoWindow，不该出现 setOptions 的 unsupported 警告",
+    ).not.toContain("position");
+
+    await unmountAndSettle(wrapper);
+  });
+});

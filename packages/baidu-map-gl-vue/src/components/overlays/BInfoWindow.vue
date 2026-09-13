@@ -62,40 +62,62 @@ function emitOpenState(open: boolean) {
   else emit("close");
 }
 
-/**
- * 打开气泡。
- *
- * **异步就绪保护**：句柄 / client / map 三者缺一就什么都不做——它们在 `onMounted` 的
- * `whenReady()` 之后才有值，而卸载路径（`onUnmounted` 已把 `infoWindow` 置空）之后挂在 scope
- * 上的 watcher 仍可能被触发。这里显式前置校验，而不是让 `undefined.driver` 抛进 Vue 的错误处理器。
- *
- * **`position` 是打开气泡的必需契约**（R25-C 复审 P1）：官方 4.0 的
- * `Map#openInfoWindow(infoWnd, point)` 要求位置，`InfoWindow` 实例没有公开的 `openInfoWindow()`，
- * 所以「没有位置」没有可解释的语义。缺位置时把错误交到统一的事件通道（`resource:error`），
- * 而不是依赖 Driver 的运行时回退「碰巧打开」。气泡挂到 Marker 的目标级打开属 M5 #31/#32。
- */
-function openWindow(): void {
+/** 缺位置时的统一报错出口（走组件既有的 `resource:error` 诊断通道）。 */
+function reportMissingPosition(): void {
+  try {
+    ctx.events.emit("resource:error", {
+      error: new BMapError(
+        "BMAP_INVALID_ARGUMENT",
+        "<BInfoWindow>: 打开气泡必须给出 position——官方 4.0 的 map.openInfoWindow(infoWnd, point) " +
+          "里 point 是必需参数（气泡挂到 Marker 的目标级打开属 M5 #31/#32）",
+      ),
+      component: "BInfoWindow",
+    });
+  } catch {
+    /* 事件总线已停用时不再追究 */
+  }
+}
+
+/** 在给定位置打开（或移动）气泡。`position` 已由调用方校验过。 */
+function openWindowAt(position: { lng: number; lat: number }): void {
   const iw = infoWindow.value;
   if (!iw || !readyClient || !readyMap) return;
-  const position = props.position;
-  if (!position) {
-    try {
-      ctx.events.emit("resource:error", {
-        error: new BMapError(
-          "BMAP_INVALID_ARGUMENT",
-          "<BInfoWindow>: 打开气泡必须给出 position——官方 4.0 的 map.openInfoWindow(infoWnd, point) " +
-            "里 point 是必需参数（气泡挂到 Marker 的目标级打开属 M5 #31/#32）",
-        ),
-        component: "BInfoWindow",
-      });
-    } catch {
-      /* 事件总线已停用时不再追究 */
-    }
-    return;
-  }
   readyClient.driver.overlays.openInfoWindow(readyMap, iw, position);
   contentVisible.value = true;
   emitOpenState(true);
+}
+
+/**
+ * 把**期望状态**同步到 SDK。
+ *
+ * 声明式口径（一条规则，没有隐藏状态）：
+ * `open === true` **且** `position` 有效 ⇒ 打开；任一不满足 ⇒ 不打开（已经开着就关掉；
+ * 是「想开但缺位置」时额外报一次 `BMAP_INVALID_ARGUMENT`）。
+ *
+ * 为什么按「期望状态」而不是「上一次的实际状态」判断（R25-C 复审第 2 轮 P1）：`position` 通常是
+ * 异步拿到的，`open=true` 会先于它到达。若按上一次实际状态判断，那一次失败之后 position 到了也不会
+ * 重试，气泡会一直关着，用户只能手动把 `open` 切成 `false → true` 才能恢复 —— 这不是受控组件该有的
+ * 语义。
+ *
+ * **`position` 不写进实例 option**（同轮 P2）：它在覆盖物元数据里是 `unsupported`（气泡位置由
+ * `openInfoWindow(map, iw, position)` 提供），先 `setOptions()` 会打印一条「position 在当前引擎
+ * 不支持，本次更新被忽略」的误导日志，紧接着又靠 `openInfoWindow` 真正移动。位置不进实例状态：
+ * 重新走一次 `openInfoWindow` 即可（它同时负责「打开」与「移动」）。
+ *
+ * **异步就绪保护**：句柄 / client / map 三者缺一就什么都不做——它们在 `onMounted` 的
+ * `whenReady()` 之后才有值，而卸载路径之后挂在 scope 上的 watcher 仍可能被触发。
+ */
+function applyOpenIntent(): void {
+  if (!infoWindow.value || !readyClient || !readyMap) return;
+  const position = props.position;
+  const wantOpen = isOpenProp() && !!position;
+
+  if (!wantOpen) {
+    if (lastOpenState === true) closeWindow();
+    if (isOpenProp() && !position) reportMissingPosition();
+    return;
+  }
+  openWindowAt(position);
 }
 
 function closeWindow(): void {
@@ -160,22 +182,8 @@ onMounted(async () => {
     scope.observe(observer);
   }
 
-  // open state → SDK(状态机:prop 驱动)
-  scope.add(
-    watch(
-      () => isOpenProp(),
-      (open) => {
-        if (open) {
-          if (lastOpenState === true) return;
-          openWindow();
-        } else {
-          if (lastOpenState === false) return;
-          closeWindow();
-        }
-      },
-      { immediate: true },
-    ),
-  );
+  // open / position → 期望状态同步（两个 watcher 走同一份判定，避免两条路径各有一套规则）
+  scope.add(watch(() => isOpenProp(), () => applyOpenIntent(), { immediate: true }));
 
   // 动态 props 同步
   scope.add(
@@ -224,15 +232,10 @@ onMounted(async () => {
     watch(
       [() => props.position?.lng, () => props.position?.lat],
       ([lng, lat], [oldLng, oldLat]) => {
-        if (lng == null || lat == null) return;
+        // 只在坐标**真的变了**（含变成 undefined）时同步；`position` 的移动与「打开」都由
+        // `applyOpenIntent()` 走 `openInfoWindow`，不进实例 option（见该函数的注释）
         if (lng === oldLng && lat === oldLat) return;
-        try {
-          readyClient.driver.overlays.setOptions(iw, { position: { lng, lat } });
-          // 已打开时跟随移动（`openInfoWindow` 是唯一的「带位置打开」入口）
-          if (lastOpenState) openWindow();
-        } catch {
-          /* 忽略 */
-        }
+        applyOpenIntent();
       },
     ),
   );

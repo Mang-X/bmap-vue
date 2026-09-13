@@ -39,6 +39,7 @@
 
 - 打开：`overlays.openInfoWindow(map, infoWindow, position)`；关闭：`overlays.closeInfoWindow(infoWindow)`；卸载：先关闭再释放 scope；
 - **`position` 是打开的必需参数**（评审第 1 轮 P1 后收紧）：官方 4.0 的 `Map#openInfoWindow(infoWnd, point)` 里 `point` 没有默认值，`InfoWindow` 实例也没有公开的 `openInfoWindow()` —— 「没有位置就打开」没有可解释的语义。因此取消了原先 v4 的「结构性尝试实例成员」回退（那是 **undocumented fallback**：有该成员就碰巧打开、没有就抛错；legacy 也有一条同类回退），两个引擎统一成**缺位置即抛 `BMAP_INVALID_ARGUMENT`**；组件的 `open` 为 `true` 而没有 `position` 时把这条错误交到 `resource:error`，不打开气泡。「气泡挂到 Marker 的目标级打开」（位置来自标注）是另一条路径，属 M5 #31/#32。参考实现：[`huiyan-fe/react-bmap`](https://github.com/huiyan-fe/react-bmap) 的 `InfoWindowProps.position` 注释即「地图级打开位置（不在 Marker 内嵌时必传）」。
+- **状态同步按「期望状态」而不是「上一次实际状态」**（评审第 2 轮 P1）：组件用一条规则 `open && position ⇒ 打开，否则不打开`（缺位置时报一次 `BMAP_INVALID_ARGUMENT`）。`position` 常常是异步到达的，若按上一次实际状态判断，先失败一次之后 position 到了也不会重试，气泡会一直关着、只能靠手动切 `open` 恢复。同理，**`position` 不再进 `setOptions()`**（同轮 P2）：它在覆盖物元数据里是 `unsupported`，先写实例 option 会打印一条「position 在当前引擎不支持，本次更新被忽略」的误导日志，紧接着又靠 `openInfoWindow` 真正移动 —— 位置不进实例状态，重新走一次 `openInfoWindow` 同时负责「打开」与「移动」。
 - **内容容器的可见性**：模板上不再写静态 `style="display:none"`。那个内联样式会一直留在节点上，SDK 把它挂进自己的容器之后**内容仍然是隐藏的** —— 现在由「是否打开」驱动（未打开时隐藏以避免内容在地图角落闪现，打开时把可见性交还给 SDK）；
 - **异步就绪保护**：`openWindow()` / `closeWindow()` 前置校验句柄 + client + map（`onMounted` 里 `whenReady()` 之后才有值，而卸载路径之后挂在 scope 上的 watcher 仍可能被触发）；
 - 完整状态机（Teleport、InfoWindowManager、受控 / 不受控的边界、多气泡竞争的产品级语义）仍由 M5 **#32** 收口，本决策只覆盖**最小成功路径**。
