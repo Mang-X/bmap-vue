@@ -62,15 +62,15 @@ function emitOpenState(open: boolean) {
 }
 
 /**
- * 打开气泡。返回是否真的执行了 SDK 调用。
+ * 打开气泡。
  *
  * **异步就绪保护**：句柄 / client / map 三者缺一就什么都不做——它们在 `onMounted` 的
  * `whenReady()` 之后才有值，而卸载路径（`onUnmounted` 已把 `infoWindow` 置空）之后挂在 scope
  * 上的 watcher 仍可能被触发。这里显式前置校验，而不是让 `undefined.driver` 抛进 Vue 的错误处理器。
  */
-function openWindow(): boolean {
+function openWindow(): void {
   const iw = infoWindow.value;
-  if (!iw || !readyClient || !readyMap) return false;
+  if (!iw || !readyClient || !readyMap) return;
   if (props.position) {
     readyClient.driver.overlays.openInfoWindow(readyMap, iw, props.position);
   } else {
@@ -78,7 +78,6 @@ function openWindow(): boolean {
   }
   contentVisible.value = true;
   emitOpenState(true);
-  return true;
 }
 
 function closeWindow(): void {

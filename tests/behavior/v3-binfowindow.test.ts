@@ -39,8 +39,10 @@ describe('BInfoWindow state machine', () => {
     const map = fake.createdMaps[fake.createdMaps.length - 1] as
       | { openInfoWindows: Set<{ isOpen?: () => boolean }> }
       | undefined
+    // 用 `=== true` 而不是「不等于 false」：缺 `isOpen()` 的对象不算打开，否则「读错了来源」
+    // 会被静默当成「打开着」，门禁变成空转
     return [...(map?.openInfoWindows ?? [])].filter(
-      (infoWindow) => infoWindow.isOpen?.() !== false,
+      (infoWindow) => infoWindow.isOpen?.() === true,
     ).length
   }
 

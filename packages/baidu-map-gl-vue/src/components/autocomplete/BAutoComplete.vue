@@ -46,8 +46,11 @@ const scope = new ResourceScope();
 let readyCtx: MapReadyContext | null = null;
 let disposed = false;
 
-/** 把清理/更新失败交给统一的事件通道，而不是在卸载路径里抛异常。 */
-function reportResourceError(code: "BMAP_SDK_CALL_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED", error: unknown): void {
+/** 把清理 / 更新 / 创建的失败交给统一的事件通道，而不是在卸载路径里抛异常。 */
+function reportResourceError(
+  code: "BMAP_SDK_CALL_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_RESOURCE_CREATE_FAILED",
+  error: unknown,
+): void {
   try {
     ctx.events.emit("resource:error", {
       error:
@@ -144,13 +147,7 @@ onMounted(async () => {
     });
   } catch (error) {
     if (!scope.signal.aborted && !disposed) {
-      ctx.events.emit("resource:error", {
-        error:
-          error instanceof BMapError
-            ? error
-            : new BMapError("BMAP_RESOURCE_CREATE_FAILED", String(error), { cause: error }),
-        component: "BAutoComplete",
-      });
+      reportResourceError("BMAP_RESOURCE_CREATE_FAILED", error);
     }
   }
 });

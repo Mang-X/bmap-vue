@@ -56,6 +56,11 @@ export interface ServiceDriver {
    * raw 成员访问散落在组件代码中，而 raw SDK 的访问边界是 Driver（`driver/**`）。收敛到这里之后，
    * 组件只传领域值，两个引擎各自决定怎么落到 SDK 上（v4 走结构化成员探测，legacy 走同一套
    * `callOptional` 口径），也不需要每个组件作者记得「某个 setter 在某个引擎上不存在」。
+   *
+   * **两个引擎的错误路径刻意不同**：v4 的 Driver 前置校验句柄种类与「实例是否已被释放」，
+   * 命中时同步抛 `BMAP_INVALID_ARGUMENT`；legacy 目前**不做**这两项校验（成员缺失一律
+   * silent no-op），因为它在 #26 会被整体删除，不值得为它补一套马上要消失的记账。调用方按
+   * 「更新可能失败」处理即可（组件侧把异常经 `resource:error` 交出去）。
    */
   setAutocompleteOptions(
     handle: ServiceHandle<"service:autocomplete">,
@@ -79,13 +84,17 @@ export interface ServiceDriver {
 /**
  * 归一化调用的终态。
  *
- * 刻意把「回调到了」与「业务上有没有结果」拆开：SDK 失败时经常只回 `null`
- * （配额 302 / Referer 限制），把它当成「查无结果」会让业务分不清「没有」与「失败」。
+ * **`empty` 是一个合并结论**（R25-C / #72）：百度服务在失败时经常只回 `null`（配额 302 /
+ * Referer 限制），而官方没有公开的错误码入口——因此「查无结果」与「服务当前不可用」在公开面上
+ * **不可区分**，两者都归成 `empty`。`failed` 只留给**能给出公开原因**的情形：SDK 公开的状态码
+ * （`Geolocation#getStatus()`、`Convertor#translate` 的回包 `status`）与调用方参数错误。
+ * 本库不去嗅探 `_rd` 之类的私有面来「还原」精确错误码，见
+ * `docs/adr/2026-09-13-private-sdk-surface-removal.md`。
  */
 export type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
 
 export interface ServiceErrorInfo {
-  /** SDK 状态码（`BMAP_STATUS_*` / JSONP 错误码）或项目错误码；无从获得时为 `null` */
+  /** SDK 公开的状态码（`BMAP_STATUS_*` / `Convertor` 回包 `status`）或项目错误码；无从获得时为 `null` */
   code: number | string | null;
   message: string;
 }

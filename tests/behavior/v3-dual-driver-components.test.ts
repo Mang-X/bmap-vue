@@ -198,7 +198,8 @@ describe("迁移期双 Driver：组件领域行为", () => {
       };
     });
 
-    expectSameDomainResult(results, engines, "InfoWindow 组件的领域结果");
+    // 逐引擎的字面量断言已经覆盖「两个引擎一致」，因此不再叠加 expectSameDomainResult（同一份结果
+    // 断言两遍只会让失败信息变长）
     for (const engine of engines) {
       // 修复前的形态是 `mountedWithoutError: false, errorCode: "BMAP_INVALID_ARGUMENT", openedCount: 0`
       // （组件把气泡当普通覆盖物 `add(map, iw)`，v4 OverlayDriver 直接拒绝）

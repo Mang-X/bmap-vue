@@ -67,7 +67,7 @@
 
 ## 后果
 
-- 正面：服务层不再依赖官方随时能改的内部表；`<BInfoWindow>` 在默认引擎（v4）上真的能打开并显示内容；Autocomplete 的输入框监听与实例账有了明确释放路径；raw 成员访问回到 `driver/**` 边界内；能力矩阵如实标注了未证实的归属假设；双跑矩阵里那条「已知失败也算验收」的断言被正向断言取代。
+- 正面：服务层不再依赖官方随时能改的内部表；`<BInfoWindow>` 在默认引擎（v4）上真的能打开并显示内容；Autocomplete 的输入框监听与实例账有了明确释放路径；**Autocomplete 的** raw 成员访问回到 `driver/**` 边界内；能力矩阵如实标注了未证实的归属假设；双跑矩阵里那条「已知失败也算验收」的断言被正向断言取代。
 - 代价：调用方**拿不到**服务端错误码了（`empty` 无法区分「查无结果」与「服务不可用」）。这是有意的取舍 —— 需要更细的服务健康度时，只能靠 `timeout` / 业务侧重试，或在官方补齐公开错误入口之后重做（届时按本文的决策 1 补一列，而不是回到嗅探）。
 - 回滚：把 `jsonpProbe.ts` 与四处 `settleNull` 调用还原、把 `BInfoWindow` 改回 `overlays.add/remove`、把 Autocomplete 改回 `raw.setLocation` 即可回滚；本决策不删除任何 Facet / Client 契约，回滚**不**触及驱动的分层与句柄模型。
 
@@ -84,13 +84,15 @@
 - **`empty` 是一个「合并结论」**：真实服务失败（配额 302 / Referer 限制）与真的查无结果都表现为 `empty`。API 文档与类型注释都如实写了这一点，不假装能区分。
 - **气泡的完整状态机仍缺**：本决策只保证「打开 → 显示内容 → 关闭 → 卸载无残留」这条最小路径；`offset` 仍是构造期属性（4.0 没有 `setOffset`），`position` 变化在打开状态下会重新调用 `openInfoWindow`。
 - **Autocomplete 的归属规则仍建立在未证实的假设上**（见决策 4）；`experimental` 状态不阻止使用，只是不承诺。
-- **legacy 引擎的 `setAutocompleteOptions` 依赖 SDK 成员存在性**：成员缺失时是 no-op（与组件此前 `raw.setLocation?.()` 的行为一致），不额外告警。
+- **legacy 引擎的 `setAutocompleteOptions` 依赖 SDK 成员存在性**：成员缺失时是 no-op（与组件此前 `raw.setLocation?.()` 的行为一致），不额外告警；v4 侧的句柄种类与「已释放」校验 legacy 不做（它在 #26 被整体删除，不值得补一套马上消失的记账）。这条分叉写在共享接口的注释里。
+- **composable 层的 raw 访问没有一起收口**：`useBMapGeocoder` / `useBMapGeocodeDetail` 仍直读 `geocoder.raw.getPoint/getLocation`。它们要同时在 legacy 引擎上工作，而归一化调用面（`ServiceInvocationDriver`）只在 v4 上存在——把它们改成调用面要等 #26 删除 webgl-v1 之后，与 #38 的服务生命周期一起做。本决策只保证 **Autocomplete** 的 raw 访问回到边界内。
+- **「卸载后 watcher 不再回写」只能靠代码审阅确认**：Vue 在组件卸载后不再 patch 它的 props，所以「泄漏的 watcher 被 props 变化触发」这条路径在测试里构造不出来（把它写成断言只会得到一条恒真的用例）。测试固定的是**可观测的那几条**：更新经 Driver 的公开入口、输入框监听被解绑、SDK `dispose()` 被调用、20 / 100 轮挂载卸载后资源账归零。watcher 是否进了 scope 由 `scope.add(watch(...))` 这一行代码保证。
 
 ## 欠账（交给 #74 / #25）
 
 | 欠账 | 具体要求 | 为什么不在本 PR |
 | --- | --- | --- |
-| `tests/browser/jsapi-v4/**` 的 smoke 状态机 | 五态区分（`pass` / `fail` / `blocked` / `skipped` / `expected-failure`）+ required 只接受 `pass` | 该目录只存在于 #25 分支；#72 依赖它会与 #74 → #72 → #25 形成环 |
+| `tests/browser/jsapi-v4/**` 的 smoke 状态机 | 五态区分（`pass` / `fail` / `blocked` / `skipped` / `expected-failure`）+ required 只接受 `pass`；**历史 characterization 只能作为历史证据，不得计入 required 通过**（那正是本 issue 要取消的「已知失败也可验收」） | 该目录只存在于 #25 分支；#72 依赖它会与 #74 → #72 → #25 形成环 |
 | 取消「按跨域来源一律豁免异常」 | 必需官方链路出现未归因错误要失败或阻塞；可选插件单独页面验证，白名单带原因 / 版本 / 责任人 / 到期条件 | 同上（要改的是那套 harness 的 `thirdPartyUnhandled` 口径） |
 | 真实 AK 上的气泡与 Autocomplete 基线 | 用默认官方 Loader 路径跑 required smoke，`<BInfoWindow>` 显示内容、Autocomplete 回收干净 | 真实网络 + AK 的验收本来就属于 #74（同一候选提交上证明） |
 

@@ -478,8 +478,7 @@ export function createJsapiV4ServiceDriver(
    * 为什么不做成 `failed({ code: "BMAP_SERVICE_UNAVAILABLE", … })`：那会让调用方以为拿到了
    * 一个可判定的失败原因（配额？Referer？网络？），实际上我们并不知道——`empty` 至少诚实。
    */
-  const settleUnavailable = <T>(settle: ServiceCallSettle<T>, sdkStatus: number | null = null): void =>
-    settle.empty(sdkStatus);
+  const settleUnavailable = <T>(settle: ServiceCallSettle<T>): void => settle.empty();
 
   /** 参数不合法的调用：适配器不抛错，因此以 `failed` 结算（`BMAP_INVALID_ARGUMENT`）。 */
   const invalidCall = <T>(label: string, message: string): ServiceCall<T> =>
@@ -653,8 +652,10 @@ export function createJsapiV4ServiceDriver(
      *   官方声明了该成员，运行时没有说明声明与实现不一致，调用方有权知道这次更新没生效。
      */
     setAutocompleteOptions(handle, options: AutocompleteUpdateOptions) {
-      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.setAutocompleteOptions");
+      // 先按句柄种类拦（纯元数据判断），再解析：否则外来句柄会在 resolve 里先抛
+      // `BMAP_HANDLE_FOREIGN`，品牌判据永远不可达，两条入口的「共用一份判据」就名不副实。
       assertAutocompleteHandle(handle, "setAutocompleteOptions");
+      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.setAutocompleteOptions");
       if (disposed.has(raw)) {
         throw new BMapError(
           "BMAP_INVALID_ARGUMENT",
@@ -728,9 +729,9 @@ export function createJsapiV4ServiceDriver(
      * 「不再接受业务调用」，再次 dispose 会**重试**未完成的 SDK 清理（八轮复审 P2-2）。
      */
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">) {
-      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeAutocomplete");
-      // 运行期种类校验：与 setAutocompleteOptions 共用一份判据（避免两条入口分叉）
+      // 先按句柄种类拦（纯元数据判断），再解析；与 setAutocompleteOptions 共用一份判据
       assertAutocompleteHandle(handle, "disposeAutocomplete");
+      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeAutocomplete");
 
       disposed.add(raw); // 先停止接受业务调用（这一个是「一旦释放就不再恢复」的状态）
       // 正在清理期间的重入直接短路（SDK 销毁钩子里再次 dispose 的场景，见 `disposing`）

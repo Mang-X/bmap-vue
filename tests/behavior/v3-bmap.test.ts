@@ -121,7 +121,7 @@ describe('v3 BMap runtime migration', () => {
     const map = fake.createdMaps[fake.createdMaps.length - 1] as unknown as {
       openInfoWindows: Set<{ isOpen?: () => boolean }>
     }
-    expect([...map.openInfoWindows].filter((win) => win.isOpen?.() !== false)).toHaveLength(1)
+    expect([...map.openInfoWindows].filter((win) => win.isOpen?.() === true)).toHaveLength(1)
     expect(fake.stats.overlaysCreated).toBe(0)
     wrapper.unmount()
   })

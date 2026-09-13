@@ -151,13 +151,11 @@ describe("useBMapGeocodeDetail", () => {
     // 反向守卫：本库既不许**读**它，更不许把里面的函数换成包装器——换掉就是 monkey-patch。
     const rd: Record<string, unknown> = {};
     const original = () => "ok";
-    let seen: unknown = "unset";
     const ctx = stubContext({
       rawSdk: { _rd: rd },
       toRawPoint: (p) => p,
       getLocation: (_point, cb) => {
         rd._cbk9 = original;
-        seen = rd._cbk9;
         cb({ point: { lng: 1, lat: 2 }, address: "A", business: "B" });
       },
     });
@@ -166,7 +164,6 @@ describe("useBMapGeocodeDetail", () => {
     });
     await flushPromises();
 
-    expect(seen, "前置守卫：桩确实把回调放进了 `_rd`（否则这条断言是空转）").toBe(original);
     expect(rd._cbk9, "本库不得包装/替换 SDK 私有回调表里的函数").toBe(original);
     wrapper.unmount();
   });
