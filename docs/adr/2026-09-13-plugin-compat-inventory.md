@@ -77,14 +77,23 @@ CI 的 `quality` job 跑 `--check` 校验无漂移——与 `generate:capability
 口径边界写进字段注释：**只覆盖命名空间级私有成员**。实例级私有字段（例如插件读覆盖物实例上的
 下划线字段）不进这一列，写在 `residualRisks` 里。
 
-### 5. 内置插件一律 optional
+### 5. 内置插件一律 optional（隔离口径），且失败不得被回执成成功
 
-四个内置插件的 `required` 恒为 `false`：**必需功能不得依赖任何插件脚本**。插件脚本失败只发
-`plugin:error` 事件，不抛给地图。
+四个内置插件的 `required` 恒为 `false`：**必需功能不得依赖任何插件脚本**。`required: true` 在
+`PluginRegistry` 里是「失败即抛」，只留给真正「没有它就不该继续」的插件定义 —— 目前一个内置插件
+都不属于这类。inventory 的 `required` 字段标成字面量类型 `false`，把它改回必需必须同时改数据与
+用例，不会是一次悄悄的一行改动。
 
-`required: true` 在 `PluginRegistry` 里是「失败即抛」，所以把它留给真正「没有它就不该继续」的
-插件定义——目前一个内置插件都不属于这类。inventory 的 `required` 字段标成字面量类型 `false`，
-把它改回必需必须同时改数据与用例，不会是一次悄悄的一行改动。
+不过 `required` 定成 `false` 只解决了「失败会不会阻断地图」。同一处还有第二个坑：注册表的失败策略是
+**optional 插件失败时以 `undefined` resolve**（`PluginRegistry.loadPlugin`），于是
+`await whenPlugin(name)` 拿到返回值并不等于成功 —— `BMap.vue` 曾经据此发 `plugin-ready`，
+把「插件没加载起来」回执成「加载成功」。把四个内置插件都变成 optional 之后，这个坑的暴露面从两个
+插件扩到四个，因此本次一并修掉：组件以**注册表状态**（`getStatus`）为准回执，失败时经
+`PluginRegistry.getError()` 带出原始错误，而不是另造一个没有 `cause` 的替代品。
+
+回归用例在 `tests/behavior/v3-plugin-failure-isolation.test.ts`（组件级，刻意不用 `vi.mock`：
+成功一半靠预置全局导出走真实的「不碰网络」分支，失败一半用未知插件名走 optional 空实现；
+把上面那句状态判断去掉，两条用例立刻变红）。
 
 ### 6. 能力与清单**双向互锁**
 
@@ -122,6 +131,10 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
   「某人曾经读过一遍 minified 源码」不再是一次性的。
 - 隔离变严：插件脚本失败不再能把地图带崩。代价是**失败变得更安静**（只有 `plugin:error` 事件与
   `getStatus() === 'error'`），迁移者如果原来「靠抛错发现插件没加载」，需要改成监听事件。
+- **顺带修掉一个把失败报成成功的地方**：`BMap.vue` 的插件回执改以注册表状态为准。对调用方是
+  **可观察的行为变化** —— 此前 optional 插件失败会发 `plugin-ready`，现在发 `plugin-error`
+  （载荷里的 `error.cause` 是注册表记录到的原始错误）。依赖「收到 `plugin-ready` 就认为插件可用」
+  的代码此前就已经是错的，这次只是让它显形。
 - `plugins: ['GeoUtils']` 开始真的加载脚本（此前是静默空实现）。对既有使用者是行为变化：
   原先它什么都不做也不会失败，现在它会插一个 `<script>`，失败时发 `plugin:error`。
 

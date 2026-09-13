@@ -47,8 +47,9 @@ interface BMapErrorLike {
 **排查**:
 - 检查网络能否访问 `api.map.baidu.com/api`。
 - 检查 CSP `script-src` 是否放行。
-- 检查 AK 是否有效(无效 AK 仍会注入脚本并挂上命名空间,但地图对象是半初始化的,这类失败表现为 Driver
-  在读 SDK 时抛 `TypeError`,不是本错误码)。
+- 检查 AK 是否有效。实测（真实 AK 档，见 [ADR 2026-09-13 v4 required smoke](/adr/2026-09-13-v4-required-smoke)
+  的「已知限制」）：**无效 AK 仍会注入脚本并挂上命名空间**，但地图对象是半初始化的，这类失败表现为 Driver
+  在读 SDK 时抛 `TypeError`，**不是**本错误码 —— 也就是说它无法与实现回归区分，当前按保守的 `fail` 处理。
 **解决**:使用自定义 Provider(自托管脚本),见[配置指南](./config.md#client-查找顺序)。
 
 ### `BMAP_SDK_LOAD_TIMEOUT`

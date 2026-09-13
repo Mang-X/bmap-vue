@@ -19,8 +19,10 @@
  *    （否则「不支持」是一句没有依据的话）；反过来，条目声明的能力必须真实存在于 Catalog。
  *
  * 本文件是**单一事实源**：`pnpm generate:plugin-inventory` 由它生成
- * `docs/zh-CN/contributing/plugin-compat-inventory.md` 与
- * `docs/.vitepress/plugin-inventory.json`，CI 用 `--check` 校验无漂移。
+ * `docs/zh-CN/contributing/plugin-compat-inventory.md`（人读）与
+ * `docs/.vitepress/plugin-inventory.json`（机读：给站点 / 工具链按 id 取结论用，形状由
+ * `v3-plugin-compat-inventory.test.ts` 钉住，取用方式见 `docs/zh-CN/contributing/ai-development.md`），
+ * CI 用 `--check` 校验无漂移。
  */
 import type { Capability } from "../driver/capability";
 
@@ -126,7 +128,10 @@ export const PLUGIN_EVIDENCE_BASIS_MEANING: Record<PluginEvidenceBasis, string> 
 export const PLUGIN_VERDICT_MEANING: Record<PluginVerdict, string> = {
   incompatible: "有决定性依据说明它在 4.0 上不可用",
   "no-declaration-gap": "引用的 SDK 成员在 4.0.4 声明里没有缺口（≠ 运行时已验证）",
-  undetermined: "既有缺口也有不确定项，结论留给 M8（#43）",
+  // 刻意不说「既有缺口」：本条目的引用面并没有缺口（成员全在声明内、也没有命名空间级私有面），
+  // 不确定项在别处（例如构造期用法与自注入脚本）。释义必须与唯一一条 undetermined 条目对得上，
+  // 否则读者会按「有缺口」去读它。
+  undetermined: "引用面无决定性缺口，但存在**依据不足**的不确定项（构造期用法 / 自注入脚本等），结论留给 M8（#43）",
 };
 
 /**

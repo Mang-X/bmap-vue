@@ -57,6 +57,12 @@ jobs:
       - name: Check plugin compat inventory
         run: node --experimental-strip-types scripts/generate-plugin-inventory.mts --check
 
+      # Playground 是三档离线装配（fake-v4 / legacy-fake / real-v4）的真实消费者，也是
+      # `main.ts` 里那些组件用法的唯一编译验证点——它此前不在任何 CI 里跑。
+      # 用 `@test-utils` 别名引到源码，因此不依赖 `dist`，可以放在 build 之前。
+      - name: Build playground
+        run: pnpm playground:build
+
       # v3 类型门禁：官方类型 + 最小 augmentation 必须在 `skipLibCheck: false` 下可合并。
       # 上游 `@baidumap/jsapi-v4-types@4.0.4` 的 `index.d.ts` 有一处文件名大小写缺陷
       # （引用 `core/displayOptions.d.ts`，实际文件是 `core/DisplayOptions.d.ts`，只在

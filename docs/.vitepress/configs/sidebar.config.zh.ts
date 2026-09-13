@@ -272,6 +272,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "capability-matrix",
         },
         {
+          text: "插件兼容 inventory",
+          link: "plugin-compat-inventory",
+        },
+        {
           text: "官方包发布契约（Loader / UI Kit）",
           link: "official-packages",
         },

@@ -9,7 +9,7 @@
   "verdictMeaning": {
     "incompatible": "有决定性依据说明它在 4.0 上不可用",
     "no-declaration-gap": "引用的 SDK 成员在 4.0.4 声明里没有缺口（≠ 运行时已验证）",
-    "undetermined": "既有缺口也有不确定项，结论留给 M8（#43）"
+    "undetermined": "引用面无决定性缺口，但存在**依据不足**的不确定项（构造期用法 / 自注入脚本等），结论留给 M8（#43）"
   },
   "plugins": [
     {

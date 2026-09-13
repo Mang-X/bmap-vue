@@ -46,6 +46,15 @@ export interface PluginRegistry {
   register<Resource>(definition: BMapPluginDefinition<Resource>): void;
   whenPlugin<Resource = unknown>(name: string, signal?: AbortSignal): Promise<Resource>;
   getStatus(name: string): PluginStatus | undefined;
+  /**
+   * 该插件记录到的失败原因（没有失败过则 `undefined`）。
+   *
+   * 为什么需要它：**optional 插件失败时 `whenPlugin` 以 `undefined` resolve**（见
+   * `loadPlugin` 的失败策略），调用方无法从返回值区分「成功拿到资源」与「失败被吞掉」。
+   * 组件侧要如实回执 `plugin-error`，就得能从注册表取回原始错误 —— 否则只能自己造一个
+   * 没有 `cause` 的替代错误，把诊断信息丢掉。
+   */
+  getError(name: string): unknown;
   dispose(): void;
 }
 
@@ -184,6 +193,10 @@ export function createPluginRegistry(
     getStatus(name) {
       if (disposedNames.has(name)) return "disposed";
       return records.get(name)?.status;
+    },
+
+    getError(name) {
+      return records.get(name)?.error;
     },
 
     dispose() {
