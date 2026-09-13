@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>官方 jsapi-loader / jsapi-ui-kit 发布契约探针</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        font:
+          13px/1.5 -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      #fixtures {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+      }
+      #map {
+        width: 360px;
+        height: 240px;
+      }
+      #report {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 容器必须非零宽高、且在构造前已在文档里；AK 只经 URL 查询参数传入，不落盘 -->
+    <div id="fixtures">
+      <div id="map"></div>
+      <div id="host-search"></div>
+      <div id="host-detail"></div>
+      <div id="host-autocomplete"></div>
+      <div id="host-route"></div>
+    </div>
+    <pre id="report">running…</pre>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

@@ -85,6 +85,16 @@ pnpm verify:package
 删除条件见 [`patches/README.md`](./patches/README.md)，决策见
 [ADR 2026-09-13](./docs/adr/2026-09-13-upstream-types-case-patch.md)。升级类型包时请一并处理这个补丁。
 
+改动官方包（`@baidumap/jsapi-loader` / `@baidumap/jsapi-ui-kit`）的接入方式时，另跑一次真实 v4 原生探针
+（需要真实 AK 与网络，因此**不进 CI**；`blocked` 不等于通过）：
+
+```bash
+BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
+```
+
+契约与结论记录在 `docs/zh-CN/contributing/official-packages.md`，
+不依赖网络的契约锁跑在 `pnpm test:unit` 里（`tests/behavior/official-packages-*.test.ts`）。
+
 ## 代码约束（会被静态扫描挡住）
 
 这是本仓库最关键的两条纪律，违反会直接 CI 失败：

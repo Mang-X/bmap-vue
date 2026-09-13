@@ -10,6 +10,7 @@
     "check:raw-sdk:tree": "node --experimental-strip-types scripts/check-raw-sdk.mts --src packages/baidu-map-gl-vue/src",
     "check:public-dts": "node --experimental-strip-types scripts/check-public-dts.mts",
     "verify:package": "node --experimental-strip-types scripts/verify-package.mts",
+    "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",
     "size:baseline": "node --experimental-strip-types scripts/collect-package-size.mts",
     "perf:baseline": "node --experimental-strip-types scripts/collect-performance-baseline.mts",
     "generate:manifest": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts",
@@ -69,6 +70,8 @@
     "url": "git+https://github.com/MangMax/baidu-map-gl-vue.git"
   },
   "devDependencies": {
+    "@baidumap/jsapi-loader": "1.0.0",
+    "@baidumap/jsapi-ui-kit": "1.1.2",
     "vitest": "^5.0.0",
     "happy-dom": "^20.14.0",
     "jsdom": "^30.0.1",

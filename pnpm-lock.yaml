@@ -119,6 +119,12 @@ importers:
         specifier: ^3.5.0
         version: 3.5.42(typescript@5.9.3)
     devDependencies:
+      '@baidumap/jsapi-loader':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@baidumap/jsapi-ui-kit':
+        specifier: 1.1.2
+        version: 1.1.2
       '@changesets/cli':
         specifier: ^3.0.2
         version: 3.0.2
@@ -784,8 +790,14 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
+  '@baidumap/jsapi-loader@1.0.0':
+    resolution: {integrity: sha512-f88EFIvbICW3AtnbhYcnvlpG/bIY2hZyokdCgf30RVXvs67aDkBtFJnDO/C8Bf7p4O8MvlTU6rW8jz8ev1MayA==}
+
   '@baidumap/jsapi-plugin-draw@2.0.0':
     resolution: {integrity: sha512-K9XpDpralI2hQimIwzMktm+D859NbInOu7hnT0x7WysyB5upWTJ+yr13WyL/0QTx7SkbASCuEkUizpkjTBrFlg==}
+
+  '@baidumap/jsapi-ui-kit@1.1.2':
+    resolution: {integrity: sha512-VYiipooQSuhDUKHhVA8/n3wkHmNAXKL959/jZVoiy6WliP43BJe77U9rHTW1Qj0sety/5Yf3yi9K8ieH0ghNcg==}
 
   '@baidumap/jsapi-v4-types@4.0.4':
     resolution: {integrity: sha512-zE4IDAzHK5MQJ17GIyu/m004cqWm843enqpP7xd5lkQwMsuNqrvgBxv+JbviQHJZOpp4T4mqQkabd5p/DLEkMA==}
@@ -5145,7 +5157,11 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@baidumap/jsapi-loader@1.0.0': {}
+
   '@baidumap/jsapi-plugin-draw@2.0.0': {}
+
+  '@baidumap/jsapi-ui-kit@1.1.2': {}
 
   '@baidumap/jsapi-v4-types@4.0.4(patch_hash=45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8)': {}
 

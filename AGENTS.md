@@ -51,6 +51,33 @@ Capability Catalog 是能力清单的单一事实源（`src/driver/capability/ca
 覆盖 Map / Overlay / Layer / Service / Panorama / Runtime，用 `status`（`native` / `extended` / `experimental` / `unsupported`）与 `runtimeOnly` 表达能力语义；
 能力矩阵由 `pnpm generate:capability-matrix` 生成，禁止手工编辑。
 
+## Official-first 约束
+
+**官方已经提供的能力一律不自研。** 决策与全部依据见 ADR `2026-09-13-official-first-loader-and-ui-kit`，
+锁定的发布契约见 `docs/zh-CN/contributing/official-packages.md`。
+
+| 场景 | 必须走 | 禁止 |
+| --- | --- | --- |
+| 默认在线加载 JSAPI | 官方 `@baidumap/jsapi-loader`（精确锁定 `1.0.0`） | 默认路径自研 JSONP transport / 自拼入口 URL / 自管回调；官方失败时静默回退自研 |
+| 非标准入口 / 企业自托管 / 宿主已加载 | 显式 `customScriptV4Provider` / `existingGlobalV4Provider`（自研 `ScriptLoader` 只服务这两条路径） | 把高级路径写成默认，或为「省事」复用它的实现 |
+| 标准 UI（建议、结果列表、翻页、键盘导航、详情面板、路线面板、主题） | 官方 `@baidumap/jsapi-ui-kit`（精确锁定 `1.1.2`，optional peer） | 自研标准 UI；复制官方 UI 的内部 DOM / 交互算法；UI 与 headless 同时发同一份请求 |
+| 上游没有的能力 | 按 Capability Catalog 标 `unsupported` / `unverified` | 访问 `_rd` 回调表、`qt=` 私有请求码、`getSeckeyAndSign` 等私有面来「补齐」 |
+
+生命周期与共享状态（**没有任何组件有权处置**）：
+
+- 不要调用官方 `reset()`（它会删进程级 `window.BMap` / `BMapGL`），只允许出现在测试与热更新；
+- 不要删除 / 改写上游注入的 SDK `<script>`、回调全局或 namespace；
+- **组件取消等待** = 解绑消费者 + 丢弃回包；**不等于**终止上游加载。官方没有公开取消接口，
+  全部消费者取消后**保留**底层在飞任务，且不得为后续请求另插重复 script；
+- 上游**没有**的脚本属性（`nonce` / `integrity` / `crossOrigin` / `referrerPolicy`）必须明确报错或
+  指引外部预加载，**接收后忽略属于假支持**；
+- `timeout` 与上面不同：它是**官方支持**的参数，只是语义需要显式映射——`0` = **不超时**（不是「默认超时」）。
+  契约里关于 `timeout` 的语义以 ADR / 契约表为准，不要把它归进「不支持项」；
+- UI Kit 在无 DOM 环境 **import 即失败**（无 `exports` 字段，`main` 指向 IIFE）：`./ui-kit` 与其 Vue 封装
+  只能动态 import，不得进入根入口或任何 SSR 可达的模块图；
+- 泄漏门禁按**来源**归因：真实 SDK 与百度统计脚本也会往 `document` 上挂监听且不释放，
+  只数「净增 / 归零」会得到假红或假绿。
+
 ## 测试基建（`packages/test-utils`）
 
 Fake SDK 在 raw SDK 扫描范围之外，是「组件/Facet 与 SDK 之间」的替身边界。两条约定：
