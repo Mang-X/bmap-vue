@@ -172,6 +172,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | UI Kit 只能浏览器内动态 import（无 DOM 时 import 即崩） | `./ui-kit` 入口及其依赖图**不含**上游包的静态 import；`loadUiKit()` 在无 DOM 时以 `BMAP_UI_KIT_UNAVAILABLE` 拒绝且不缓存失败 | `tests/behavior/v3-ui-kit-ssr.test.ts`（无 DOM 子进程 + DOM 访问记账）、`tests/behavior/v3-ui-kit-entry.test.ts` |
 | CSS 不在 JS 里注入 | `./ui-kit` 不自动引入样式；`UI_KIT_STYLE_PATH` 导出官方路径，消费方显式 `import` | `tests/behavior/v3-ui-kit-entry.test.ts`（真实 Vite 生产构建断言样式仍在） |
 | `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
+| **事件载荷形状**：`highlight` 是 `{ from: HighlightItem \| null, to: HighlightItem }` 变更对；`suggest` 是 `toEventSuggestion()` 生成的数组；`load` 是 POI 数组、`select` 是单条 POI（可能为 `undefined`） | 公共事件按同一形状投影（`PlaceHighlightChangeDTO { from, to }`，不压平）；POI/建议字段逐项对齐（`street` 等 deprecated 别名不转发） | `tests/behavior/v3-ui-kit-widget-contract.test.ts`（**发布产物形状锁**）、`v3-ui-kit-events.test.ts` |
 | 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/v3-ui-kit-events.test.ts`（`driver.services` 从未被读取） |
 | `RoutePlan` 只开放驾车 | 本轮不给 `PlaceDetail` / `RoutePlan` 提供 Vue 封装，只经 `loadUiKit()` 原生使用 | `tests/behavior/v3-ui-kit-entry.test.ts`（断言入口没有这两个组件） |
 | 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts` |

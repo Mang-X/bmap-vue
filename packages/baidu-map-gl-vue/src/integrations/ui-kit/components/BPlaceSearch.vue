@@ -2,8 +2,11 @@
 /**
  * BPlaceSearch —— 官方 UI Kit `PlaceSearch` 的 Vue 薄封装（R25-D / issue #73）
  *
- * 结果列表、翻页 UI、条目点击与字段显隐全部由 `@baidumap/jsapi-ui-kit` 渲染；本组件只做
+ * 结果列表（含条目点击、字段显隐）与检索本身全部由 `@baidumap/jsapi-ui-kit` 渲染；本组件只做
  * host 容器、Map ready 前提、props → 构造选项、事件 DTO 与公开动作。
+ *
+ * ⚠️ 翻页是**能力而不是内置 UI**：上游 `1.1.2` 只提供 `prevPage` / `nextPage` / `goToPage`
+ * 这三个 API，**没有**会自动出现翻页按钮的控件。需要翻页按钮请自行渲染并调用本组件的同名动作。
  *
  * 刻意不做（issue 实施步骤 6）：
  * - **不使用本库 headless 的 `LocalSearch` 服务**。上游 `PlaceSearch` 自己走
@@ -12,20 +15,20 @@
  * - **不承诺视野联动**：`options.map` 在调用期只被用来取 `getZoom()` / `getProjection()`，
  *   不做打点或视野跳转；需要联动请监听 `select` 事件后自行调用地图 API。
  *
- * `pageCapacity` / `pageNum` / `display` 是构造期选项，变更需重新挂载（给组件加 `:key`）；
- * 检索与翻页都是公开动作，不需要重建。
+ * props 都是**构造期选项**（上游没有对应 setter）：变更即重建 widget，不会静默保留旧值
+ * （口径与官方 react-bmap 的 `ctorKey` 一致）。检索与翻页都是公开动作，不需要重建。
  */
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useUiKitWidget } from "../useUiKitWidget";
-import { toPoiDTO, toPoiList } from "../points";
+import { canonicalKey, toPoiDTO, toPoiList } from "../points";
 import type { PlacePointDTO, PlacePoiDTO, PlaceSearchDisplayDTO, UiKitSearchWidget } from "../types";
 
 export interface BPlaceSearchProps {
-  /** 每页结果条数，默认由上游决定（10）。构造期选项。 */
+  /** 每页结果条数，默认由上游决定（10）。构造期选项，变更会重建 widget。 */
   pageCapacity?: number;
-  /** 请求的页码。构造期选项。 */
+  /** 请求的页码。构造期选项，变更会重建 widget。 */
   pageNum?: number;
-  /** 结果列表字段显隐。构造期选项。 */
+  /** 结果列表字段显隐。构造期选项，变更会重建 widget。 */
   display?: PlaceSearchDisplayDTO;
 }
 
@@ -46,16 +49,27 @@ export interface PlaceBoundsDTO {
 
 const hostRef = ref<HTMLElement | null>(null);
 
-const { status, withWidget, toRawPoint } = useUiKitWidget<UiKitSearchWidget>({
+/** 构造期选项的键名表（单一来源：`buildOptions()` 与 `constructionKey` 都从这里取）。 */
+const CONSTRUCTOR_OPTION_KEYS = [
+  "pageCapacity",
+  "pageNum",
+  "display",
+] as const satisfies readonly (keyof BPlaceSearchProps)[];
+
+/** 构造期选项：内容（而不是对象引用）变化即重建；`canonicalKey()` 保证内容相同的内联对象不触发。 */
+function buildOptions(): Record<string, unknown> {
+  const options: Record<string, unknown> = {};
+  for (const key of CONSTRUCTOR_OPTION_KEYS) {
+    const value = props[key];
+    if (value !== undefined) options[key] = value;
+  }
+  return options;
+}
+
+const { status, withWidget, toRawPoint, rebuild } = useUiKitWidget<UiKitSearchWidget>({
   component: "BPlaceSearch",
   host: hostRef,
-  buildOptions: () => {
-    const options: Record<string, unknown> = {};
-    if (props.pageCapacity !== undefined) options.pageCapacity = props.pageCapacity;
-    if (props.pageNum !== undefined) options.pageNum = props.pageNum;
-    if (props.display !== undefined) options.display = props.display;
-    return options;
-  },
+  buildOptions,
   create: (module, host, options) => new module.PlaceSearch(host, options),
   bind: () => [
     {
@@ -70,6 +84,13 @@ const { status, withWidget, toRawPoint } = useUiKitWidget<UiKitSearchWidget>({
       },
     },
   ],
+});
+
+const constructionKey = computed(() => canonicalKey(buildOptions()));
+
+// 构造期选项变更 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
+watch(constructionKey, () => {
+  rebuild();
 });
 
 /** 关键字检索；`city` 可限定城市。 */
@@ -106,8 +127,15 @@ function goToPage(page: number): Promise<void> {
 }
 
 defineExpose({
-  /** 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed` */
-  status,
+  /**
+   * 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。
+   *
+   * 用取值 getter 而不是直接 expose 这个 ref：`defineExpose` 会被 Vue 的 `proxyRefs` 解包，
+   * runtime 读到的本来就是取值；写成 ref 会让声明与 runtime 不一致（评审 #73 第 2 项）。
+   */
+  get status() {
+    return status.value;
+  },
   search,
   searchNearby,
   searchInBounds,
@@ -120,6 +148,6 @@ defineOptions({ name: "BPlaceSearch" });
 </script>
 
 <template>
-  <!-- host 只提供挂载点：结果列表与翻页 UI 全部由官方 UI Kit 渲染。 -->
+  <!-- host 只提供挂载点：结果列表的 DOM 全部由官方 UI Kit 渲染（翻页按钮需自行渲染并调动作）。 -->
   <div ref="hostRef" class="b-place-search"></div>
 </template>

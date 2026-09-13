@@ -110,6 +110,23 @@ describe("包清单与产物形状", () => {
     // 权威判定是 `pnpm check:public-dts`（AST 级、覆盖整个 dist），这里只做入口侧的粗筛。
     expect(dts).not.toMatch(/:\s*BMapGL\./);
   });
+
+  it("被 expose 的 status 在声明里就是取值类型（runtime 经 proxyRefs 后不是 Ref）", () => {
+    const dts = readFileSync(join(distDir, "ui-kit.d.ts"), "utf8");
+    // `defineExpose({ status })` 会经 Vue 的 proxyRefs 解包：runtime 读到的是字符串，
+    // 声明里若写 `Ref<UiKitWidgetStatus>`，声明与 runtime 就不一致。
+    // 注意区分：composable 返回值上的 `readonly status: Ref<…>` 是它本来的语义，不算。
+    // 因此按「整行以 `status:` 开头」筛（`readonly status:` 天然被排除）。
+    const declared = dts
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^status:\s*\S.*;$/.test(line));
+    expect(declared, "两个组件的 exposed status 各应有一处声明").toHaveLength(2);
+    for (const line of declared) {
+      expect(line, `status 的声明必须与 runtime 一致：${line}`).not.toContain("Ref<");
+      expect(line).toContain("UiKitWidgetStatus");
+    }
+  });
 });
 
 describe("根入口与 UI 子路径的产物隔离", () => {
