@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSAPI 4.0 默认链路 / Vue 组件 / UI Kit smoke</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        font:
+          13px/1.5 -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      /* 容器必须非零宽高、且在构造前已在文档里；AK 只经 URL 查询参数传入，不落盘。 */
+      #stage {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+      }
+      #report {
+        white-space: pre-wrap;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <pre id="report">running…</pre>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

@@ -19,6 +19,7 @@
 | [2026-09-13](./2026-09-13-ui-kit-subpath-and-type-boundary.md) | `./ui-kit` 子路径、宿主桥与「不消费上游类型入口」的类型边界 | Accepted |
 | [2026-09-13](./2026-09-13-private-sdk-surface-removal.md) | 删除 SDK 私有面嗅探，并把气泡 / Autocomplete 收回到公开可用面 | Accepted |
 | [2026-09-13](./2026-09-13-default-online-loader-cutover.md) | 默认在线路径委托官方 Loader（v4 默认切换、默认路径配置面） | Accepted |
+| [2026-09-13](./2026-09-13-v4-required-smoke.md) | v4 required smoke 的交付形态与判定口径（五态判定 / required 只接受 pass / 取消跨域豁免） | Accepted |
 
 ## 约定
 

@@ -1,0 +1,68 @@
+name: Nightly JSAPI 4.0 Smoke
+
+# 真实 SDK 的 required smoke 只在 nightly / 手动跑：它依赖 AK、外网、LBS 服务配额与浏览器
+# WebGL，这些都不是库能控制的。PR 门禁跑的是同一份 harness 的 fixture 档（无网络、结论确定），
+# 所以「基础加载失败」不会等到 nightly 才发现（见 docs/zh-CN/contributing/v4-browser-smoke.md）。
+on:
+  schedule:
+    # GitHub 的 cron 是 UTC：18:00 UTC = 次日 02:00 (UTC+8)
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    # fork / 镜像上没有 secret，跑了只会天天红；只在正式仓库跑。
+    # ⚠️ 这里必须写完整的 `owner/repo`：仓库迁到 Mang-X 组织后 `github.repository_owner`
+    # 已不是个人账号，用 owner 判断会让本 job 被**永久跳过**（看起来 CI 是绿的，其实没跑）。
+    if: github.repository == 'Mang-X/bmap-vue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # AK 缺失时给出可执行的信息，而不是让运行器以「MISSING_AK」这种像是代码问题的形态失败
+      - name: Require BAIDU_MAP_AK secret
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+        run: |
+          if [ -z "$BAIDU_MAP_AK" ]; then
+            echo "::error::缺少 secrets.BAIDU_MAP_AK。请在本仓库 Settings → Secrets and variables → Actions 添加该 secret（AK 的 Referer 白名单需允许 localhost）。"
+            exit 1
+          fi
+
+      # 真实 v4 required smoke：默认入口（只给 ak）必须真的注入官方 jsapi-loader 的入口 script，
+      # 然后逐个核对 Map / Marker / Polyline / Control / Layer / InfoWindow / 服务 / 官方 UI Kit
+      # 两封装 / 多入口复用 / 卸载释放 / 重挂载。
+      #
+      # 判定口径（issue #74）：required 只接受 pass；blocked / skipped / expected-failure 都
+      # **不可放行**。退出码 `0` 放行、`1` 有 fail、`3` 有不可放行结论、`2` 脚手架失败。
+      - name: Real JSAPI 4.0 required smoke
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+        run: |
+          node --experimental-strip-types scripts/smoke-jsapi-v4.mts \
+            --mode=live --log="$RUNNER_TEMP/v4-smoke.log"
+
+      # 报告落成 artifact（AK 已在页面与 orchestrator 两侧脱敏），便于区分「外部波动」
+      # 与「库回归」：`SERVICE_*` / `TILES_TIMEOUT` 提示配额/网络，`BMAP_*` 提示库回归。
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: v4-smoke-report
+          path: ${{ runner.temp }}/v4-smoke.log
+          if-no-files-found: warn
+          retention-days: 14

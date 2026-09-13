@@ -85,6 +85,30 @@ jobs:
 
 
 
+  # v4 浏览器 smoke 的确定性档（fixture）：无 AK、无外网，注入 Fake v4 命名空间跑同一份
+  # 组件树。真 SDK 的 required smoke 在 nightly（见 nightly-v4-smoke.yml）——把两者分开，
+  # 是因为「基础加载失败」不该等到 nightly 才发现，而真实 AK/外网又不该进 PR 门禁。
+  smoke-v4-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 浏览器不额外安装：resolveBrowser() 的候选里包含 runner 预装的 /usr/bin/google-chrome。
+      # 判定口径（report.mts）：required 只接受 pass，blocked/skipped/expected-failure 都不可放行。
+      - name: v4 browser smoke (fixture, no network)
+        run: pnpm smoke:v4:fixture
+
   # v3 package: build + type-check + publint + attw + tarball consumer
   v3:
     runs-on: ubuntu-latest

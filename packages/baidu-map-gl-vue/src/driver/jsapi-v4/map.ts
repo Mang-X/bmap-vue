@@ -76,15 +76,28 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
 };
 
 /**
- * 语义地图类型 → `BMap.MapTypeId` 静态常量名。
+ * 语义地图类型 → `BMap.MapTypeId` 静态成员名**候选**（按顺序取第一个存在的）。
  *
- * 常量从 **SDK 命名空间**读取（`MapTypeId` 的静态成员，官方类型包已声明），不读全局
- * `BMAP_*_MAP`：Driver 边界只认 `rawSdk` 传入的命名空间，避免访问未经 Provider 校验的全局值。
+ * 常量从 **SDK 命名空间**读取（`MapTypeId` 的静态成员），不读全局 `BMAP_*_MAP`：
+ * Driver 边界只认 `rawSdk` 传入的命名空间，避免访问未经 Provider 校验的全局值。
+ *
+ * **顺序由真实运行决定，不由类型声明决定**（R25-E / issue #74 的 required smoke 实测）：
+ *
+ * - 上游 `@baidumap/jsapi-v4-types@4.0.4` 的 `map-type/MapTypeId.d.ts` 声明的是
+ *   `BMAP_NORMAL_MAP` 这类成员名；
+ * - 真实 `v=4.0` 运行时的 `BMap.MapTypeId` 实际只有 `{ NORMAL, EARTH, SATELLITE }`；
+ *   带 `BMAP_` 前缀的那组常量挂在**全局**（`globalThis.BMAP_NORMAL_MAP`），
+ *   `MapTypeId.BMAP_NORMAL_MAP` 是 `undefined`。
+ *
+ * 于是「只看声明」的实现在真实 SDK 上会让 `<BMap>` 直接落到 `error` 状态（ready 永远不来）。
+ * 处置：**运行时名做主候选**，声明里的名字留作后备（不同构建/别名下仍可解析），
+ * 每个名字都只经由 `readNamespaceMember` 读命名空间成员，**不猜常量值、不读全局**。
+ * 依据见 ADR `2026-09-11-jsapi-v4-map-facet` §9 与 `docs/zh-CN/contributing/v4-browser-smoke.md`。
  */
-const MAP_TYPE_CONSTANTS: Record<MapType, string> = {
-  normal: "BMAP_NORMAL_MAP",
-  satellite: "BMAP_SATELLITE_MAP",
-  earth: "BMAP_EARTH_MAP",
+const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
+  normal: ["NORMAL", "BMAP_NORMAL_MAP"],
+  satellite: ["SATELLITE", "BMAP_SATELLITE_MAP"],
+  earth: ["EARTH", "BMAP_EARTH_MAP"],
 };
 
 /**
@@ -514,21 +527,21 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
   };
 
   const resolveMapTypeConstant = (type: MapType): unknown => {
-    const constantName = MAP_TYPE_CONSTANTS[type];
-    if (!constantName) {
+    const candidates = MAP_TYPE_CONSTANT_CANDIDATES[type];
+    if (!candidates) {
       throw new BMapError("BMAP_INVALID_ARGUMENT", `未知地图类型: ${String(type)}`, {
         engine: "jsapi-v4",
       });
     }
-    const value = readNamespaceMember(mapTypeId, constantName);
-    if (value == null) {
-      throw new BMapError(
-        "BMAP_SDK_CALL_FAILED",
-        `BMap.MapTypeId.${constantName} is not available`,
-        { engine: "jsapi-v4" },
-      );
+    for (const constantName of candidates) {
+      const value = readNamespaceMember(mapTypeId, constantName);
+      if (value != null) return value;
     }
-    return value;
+    throw new BMapError(
+      "BMAP_SDK_CALL_FAILED",
+      `BMap.MapTypeId 缺少 "${type}" 的地图类型常量（已尝试 ${candidates.join(" / ")}）`,
+      { engine: "jsapi-v4", component: "MapDriver" },
+    );
   };
 
   /**

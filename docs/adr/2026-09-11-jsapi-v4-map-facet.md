@@ -187,6 +187,11 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
 `BMAP_*_MAP`：Driver 边界只认 `rawSdk` 传入的命名空间，避免访问未经 Provider 校验的全局值。
 常量缺失时报 `BMAP_SDK_CALL_FAILED`，不猜测常量值。
 
+> **本决策的成员名部分已被取代**：真实运行时的 `BMap.MapTypeId` 只有 `{ NORMAL, EARTH, SATELLITE }`，
+> 上游声明里的 `BMAP_*_MAP` 在运行时并不存在。修正见 ADR
+> [2026-09-13 v4 required smoke](./2026-09-13-v4-required-smoke.md) 决策 5
+> （「不读全局、不猜值」这两条约束仍然有效，只换候选名与优先级）。
+
 ### 10. 契约拆成两层
 
 - `runMapFacetContract`（新）：只需要 `map` / `geometry` / `events` / `capabilities`，
@@ -238,8 +243,10 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
 
 ## 已知限制（显式接受）
 
-- **未做真实 AK smoke**：`MapTypeId` 静态常量的真实取值、`setHeading` 的 360 归一化、
-  真实投影精度、动画的安全取消窗口都只在官方文档/类型层面核对过；真实浏览器验证属 M3A.3（#25）。
+- **未做真实 AK smoke（2026-09-13 已部分兑现）**：`setHeading` 的 360 归一化、真实投影精度、
+  动画的安全取消窗口仍只在官方文档/类型层面核对过。其中 **`MapTypeId` 的成员名已被真实实测
+  推翻并修正**（见 [2026-09-13 v4 required smoke](./2026-09-13-v4-required-smoke.md) 决策 5）；
+  真实浏览器门禁已落地为 `pnpm smoke:v4`，上面这几项仍未逐条复核。
 - **动画的迟到启动窗口无法彻底关闭**：官方 `startViewAnimation` 内部 setTimeout 没有公开句柄，
   `delay > 0` 时「启动前取消」做不到。本 Facet 的处理是：有问题动画时把 `destroy` 的清理推迟到
   安全窗口（先取消再销毁），并用 0ms 兜底保证动画始终不启动时也能推进销毁；因此 **`delay > 0`

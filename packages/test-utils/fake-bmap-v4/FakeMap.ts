@@ -11,7 +11,8 @@
  *
  * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` 属后者：
  * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位）。其余官方成员等真正有
- * Facet 或组件需要时再补，避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——常量表整体镜像。
+ * Facet 或组件需要时再补，避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
+ * 的形状整体给出（不是按类型声明，见其定义处的说明）。
  *
  * 与 `fake-bmapgl` 一致，**刻意不复刻** SDK 的数值归一化（heading 归一、tilt 截断）：
  * 这些是真实运行时的内部行为，Fake 只记录「传进去了什么」，跨 Fake 的共享契约因此只断言
@@ -552,17 +553,20 @@ export class FakeV4Map extends FakeV4EventTarget {
 }
 
 /**
- * Fake 版 `BMap.MapTypeId`（官方 4.0.4 在类型包里以静态成员声明地图类型常量）。
+ * Fake 版 `BMap.MapTypeId`。
  *
- * 值为常量**名**，与 `fake-bmapgl` 对 `BMAP_*_MAP` 的取值口径一致；真实运行时的常量值由
- * #25 的浏览器 smoke 核对。
+ * **形状按真实运行时造，不按类型声明造**（#71 的教训，R25-E / #74 的真实 AK smoke 实测确认）：
+ * 真实 `v=4.0` 的 `BMap.MapTypeId` 是 `{ NORMAL, EARTH, SATELLITE }`；上游
+ * `@baidumap/jsapi-v4-types@4.0.4` 里声明的 `BMAP_*_MAP` 静态成员**在运行时并不存在**
+ * （带该前缀的常量挂在全局 `globalThis.BMAP_*_MAP` 上）。
+ *
+ * 刻意**不**同时提供两套名字：夹具比真实 SDK 宽容时，「只读声明名」的实现会在单测里一路绿、
+ * 直到真实 smoke 才炸。夹具的首要职责是如实——这里的取值就是运行时那些成员的值。
  */
 export class FakeV4MapTypeId {
-  static readonly BMAP_NORMAL_MAP = 'BMAP_NORMAL_MAP'
-  static readonly BMAP_SATELLITE_MAP = 'BMAP_SATELLITE_MAP'
-  static readonly BMAP_HYBRID_MAP = 'BMAP_HYBRID_MAP'
-  static readonly BMAP_EARTH_MAP = 'BMAP_EARTH_MAP'
-  static readonly BMAP_NONE_MAP = 'BMAP_NONE_MAP'
+  static readonly NORMAL = 'normal'
+  static readonly SATELLITE = 'satellite'
+  static readonly EARTH = 'earth'
 }
 
 export interface FakeV4AnimationOptions {
