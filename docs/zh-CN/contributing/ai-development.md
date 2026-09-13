@@ -81,7 +81,7 @@ npx skills update bmap-jsapi-v4
   ```
 
 - 官方声明缺口只在 `packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations/` 做最小 augmentation；禁止 `any`、禁止复制整套声明。
-- 每个 augmentation 文件都必须带 `@augmentation` / `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` / `@owner` 元数据，模板与删除流程见 [`augmentations/README.md`](https://github.com/MangMax/baidu-map-gl-vue/blob/main/packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations/README.md)。
+- 每个 augmentation 文件都必须带 `@augmentation` / `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` / `@owner` 元数据，模板与删除流程见 [`augmentations/README.md`](https://github.com/Mang-X/bmap-vue/blob/main/packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations/README.md)。
 - 入口文件 `src/driver/jsapi-v4/types-reference.d.ts` 只用三斜线引用官方类型与 augmentation 目录，本身不再内联声明。
 - 保持 `skipLibCheck: false`。升级类型包后必须重新核对 augmentation，官方补齐的声明要删除。
 

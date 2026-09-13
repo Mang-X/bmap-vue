@@ -9,7 +9,7 @@ export default withPwa(
     description:
       "基于百度地图 JavaScript GL 版（使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图） API 封装设计的 Vue3 组件/hooks 库。",
     lastUpdated: true,
-    base: "/baidu-map-gl-vue/",
+    base: "/bmap-vue/",
     cleanUrls: true,
     head,
     markdown: {
@@ -41,10 +41,10 @@ export default withPwa(
         message: "Released under the MIT License.",
         copyright: "Copyright © 2022-present dh and all contributors",
       },
-      socialLinks: [{ icon: "github", link: "https://github.com/MangMax/baidu-map-gl-vue" }],
+      socialLinks: [{ icon: "github", link: "https://github.com/Mang-X/bmap-vue" }],
       sidebar: sidebarConfigZh,
       editLink: {
-        pattern: "https://github.com/MangMax/baidu-map-gl-vue/edit/main/docs/:path",
+        pattern: "https://github.com/Mang-X/bmap-vue/edit/main/docs/:path",
         text: "Edit this page on GitHub",
       },
     },

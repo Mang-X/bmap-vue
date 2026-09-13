@@ -1,12 +1,12 @@
 # Vue3 BaiduMap Gl
 
 <div style="width: 100%; display:flex;justify-content:flex-start;flex-wrap:wrap; margin-top:15px;gap:10px;">
-<img src="https://img.shields.io/github/license/MangMax/baidu-map-gl-vue?style=flat-square" alt="" />
-<img src="https://img.shields.io/github/package-json/v/MangMax/baidu-map-gl-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
+<img src="https://img.shields.io/github/license/Mang-X/bmap-vue?style=flat-square" alt="" />
+<img src="https://img.shields.io/github/package-json/v/Mang-X/bmap-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
 <img alt="npm" src="https://img.shields.io/npm/dm/baidu-map-gl-vue?logo=npm&style=flat-square" />
-<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/MangMax/baidu-map-gl-vue?style=flat-square&color=%23daaa3f">
-<img alt="GitHub issues" src="https://img.shields.io/github/issues/MangMax/baidu-map-gl-vue?style=flat-square" />
-<img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/MangMax/baidu-map-gl-vue?style=flat-square">
+<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Mang-X/bmap-vue?style=flat-square&color=%23daaa3f">
+<img alt="GitHub issues" src="https://img.shields.io/github/issues/Mang-X/bmap-vue?style=flat-square" />
+<img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
 </div>
 
 基于百度地图 JavaScript GL 版 (使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图) API 封装设计的 Vue3 组件库，开发体验良好，以优雅的方式完成百度地图的接入。
@@ -43,7 +43,7 @@ import { VPTeamMembers } from 'vitepress/theme'
 
 const members = ref<any[]>([])
 const isLoading = ref(true)
-fetch('https://api.github.com/repos/MangMax/baidu-map-gl-vue/contributors?anon=1').then(res => res.json()).then(res => {
+fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1').then(res => res.json()).then(res => {
   isLoading.value = false
   members.value = res.map(({ avatar_url, login, html_url }, index) => {
     return {

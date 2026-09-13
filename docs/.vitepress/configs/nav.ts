@@ -53,15 +53,15 @@ export const nav: DefaultTheme.Config["nav"] = [
     items: [
       {
         text: "CHANGELOG",
-        link: "https://github.com/MangMax/baidu-map-gl-vue/blob/main/CHANGELOG.md",
+        link: "https://github.com/Mang-X/bmap-vue/blob/main/CHANGELOG.md",
       },
       {
         text: "V1",
-        link: "https://MangMax.github.io/baidu-map-gl-vue/v1/",
+        link: "https://Mang-X.github.io/bmap-vue/v1/",
       },
       {
         text: "历史版本",
-        link: "https://github.com/MangMax/baidu-map-gl-vue/releases",
+        link: "https://github.com/Mang-X/bmap-vue/releases",
       },
     ],
   },

@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: 提问与方案讨论（Discussions）
-    url: https://github.com/MangMax/baidu-map-gl-vue/discussions
+    url: https://github.com/Mang-X/bmap-vue/discussions
     about: 用法疑问、最佳实践、想法交流请走 Discussions；issue 留给可复现的缺陷与明确的需求。
   - name: 文档与示例
-    url: https://MangMax.github.io/baidu-map-gl-vue/zh-CN
+    url: https://Mang-X.github.io/bmap-vue/zh-CN
     about: 提问前先查文档、示例与迁移指南，很多问题这里已经有答案。
   - name: 报告安全漏洞
-    url: https://github.com/MangMax/baidu-map-gl-vue/security/advisories/new
+    url: https://github.com/Mang-X/bmap-vue/security/advisories/new
     about: 请勿在公开 issue 中披露安全漏洞，请使用这个只有维护者可见的私密表单。

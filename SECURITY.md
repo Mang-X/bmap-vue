@@ -7,13 +7,13 @@
 | `3.x`（含 `3.0.0-beta.x`） | 支持，安全修复进入最新 minor / patch |
 | `<= 2.x` | 不再维护（v2 源码已从本仓库移除，无法在此分支修复） |
 
-仍在使用 2.x 的话，请参考[从 v2 迁移](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/guide/migration-from-v2)。
+仍在使用 2.x 的话，请参考[从 v2 迁移](https://Mang-X.github.io/bmap-vue/zh-CN/guide/migration-from-v2)。
 
 ## 上报漏洞
 
 **请使用 GitHub 的私密报告表单**，不要开公开 issue、也不要在 Discussions 里贴细节：
 
-<https://github.com/MangMax/baidu-map-gl-vue/security/advisories/new>
+<https://github.com/Mang-X/bmap-vue/security/advisories/new>
 
 该表单只有维护者可见，我们会在这里与你来回沟通，并在修复后按你的意愿决定是否公开致谢。
 

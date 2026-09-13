@@ -5,13 +5,13 @@ export const pwa: Partial<PwaOptions> = {
   registerType: "prompt",
   includeManifestIcons: false,
   manifest: {
-    id: "/",
+    id: "/bmap-vue/",
     name: "Vue3 BaiduMap GL",
     short_name: "Vue3-BaiduMap-GL",
     description:
       "基于百度地图 JavaScript GL 版（使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图） API 封装设计的 Vue3 组件/hooks 库。",
     theme_color: "#ffffff",
-    start_url: "/",
+    start_url: "/bmap-vue/",
     lang: "zh-CN",
     dir: "ltr",
     orientation: "natural",

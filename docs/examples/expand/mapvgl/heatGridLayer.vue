@@ -43,7 +43,7 @@ function handlePluginReady() {
   });
   view.addLayer(grid);
 
-  fetch("/baidu-map-gl-vue/beijing.json")
+  fetch("/bmap-vue/beijing.json")
     .then((rs) => {
       return rs.json();
     })

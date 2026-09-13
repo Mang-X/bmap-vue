@@ -15,7 +15,7 @@ hero:
       link: /zh-CN/guide/introduction
     - theme: alt
       text: View on GitHub
-      link: https://github.com/MangMax/baidu-map-gl-vue
+      link: https://github.com/Mang-X/bmap-vue
 
 features:
   - icon: <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Rocket.png" alt="Rocket" width="25" height="25" />

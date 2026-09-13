@@ -83,7 +83,7 @@ const groundOverlays = ref({
     opacity: 1,
     startPoint: { lng: 117.19635, lat: 36.24093 },
     endPoint: { lng: 117.2035, lat: 36.24764 },
-    url: "/baidu-map-gl-vue/shouhuimap.png",
+    url: "/bmap-vue/shouhuimap.png",
   },
   video: {
     tilt: 0,
@@ -91,7 +91,7 @@ const groundOverlays = ref({
     opacity: 0.5,
     startPoint: { lng: 94.582033, lat: -7.989754 },
     endPoint: { lng: 145.358572, lat: 30.813867 },
-    url: "/baidu-map-gl-vue/cloud.mov",
+    url: "/bmap-vue/cloud.mov",
   },
 });
 

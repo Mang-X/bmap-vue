@@ -3,16 +3,16 @@
 感谢你愿意为 `baidu-map-gl-vue` 花时间。这份文档说明本仓库的提交约定与门禁要求；
 更深入的专题（AI 开发流程、Capability Catalog）见文档站：
 
-- [AI 开发与官方 Skill](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/contributing/ai-development)
-- [Capability Catalog 能力矩阵](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/contributing/capability-matrix)
+- [AI 开发与官方 Skill](https://Mang-X.github.io/bmap-vue/zh-CN/contributing/ai-development)
+- [Capability Catalog 能力矩阵](https://Mang-X.github.io/bmap-vue/zh-CN/contributing/capability-matrix)
 
 ## 先确认去哪儿
 
 | 你想做的事 | 去哪儿 |
 | --- | --- |
-| 提问、用法讨论、提想法 | [Discussions](https://github.com/MangMax/baidu-map-gl-vue/discussions) |
-| 报可复现的缺陷 / 提明确的需求 | [Issues](https://github.com/MangMax/baidu-map-gl-vue/issues/new/choose) |
-| 报告安全漏洞 | [私密报告表单](https://github.com/MangMax/baidu-map-gl-vue/security/advisories/new)（不要发公开 issue） |
+| 提问、用法讨论、提想法 | [Discussions](https://github.com/Mang-X/bmap-vue/discussions) |
+| 报可复现的缺陷 / 提明确的需求 | [Issues](https://github.com/Mang-X/bmap-vue/issues/new/choose) |
+| 报告安全漏洞 | [私密报告表单](https://github.com/Mang-X/bmap-vue/security/advisories/new)（不要发公开 issue） |
 
 报缺陷前请先确认是**本组件库**的问题还是**百度地图 JSAPI** 本身的问题（用官方示例对比一下即可），
 并在 issue 里写明版本、复现步骤与期望表现。
@@ -23,7 +23,7 @@
 - pnpm `>= 12.0.0`（仓库用 pnpm workspace，请不要用 npm / yarn 安装依赖）
 
 ```bash
-git clone https://github.com/MangMax/baidu-map-gl-vue
+git clone https://github.com/Mang-X/bmap-vue
 cd baidu-map-gl-vue
 pnpm install
 

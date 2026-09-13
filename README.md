@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://MangMax.github.io/baidu-map-gl-vue/zh-CN" target="_blank" rel="noopener noreferrer">
-  <img src='https://github.com/MangMax/baidu-map-gl-vue/blob/main/docs/public/logo.svg' crossorigin="anonymous" style="overflow:hidden; width:180px;height:180px;border-radius:48px;">
+  <a href="https://Mang-X.github.io/bmap-vue/zh-CN" target="_blank" rel="noopener noreferrer">
+  <img src='https://github.com/Mang-X/bmap-vue/blob/main/docs/public/logo.svg' crossorigin="anonymous" style="overflow:hidden; width:180px;height:180px;border-radius:48px;">
   </a>
 </p>
 
@@ -8,12 +8,12 @@
 
 <p align="center">易用 & 完整 & 高性能</p>
 <p align="center">
-<img src="https://img.shields.io/github/license/MangMax/baidu-map-gl-vue?style=flat-square" alt="" />
-<img src="https://img.shields.io/github/package-json/v/MangMax/baidu-map-gl-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
+<img src="https://img.shields.io/github/license/Mang-X/bmap-vue?style=flat-square" alt="" />
+<img src="https://img.shields.io/github/package-json/v/Mang-X/bmap-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
 <img alt="npm" src="https://img.shields.io/npm/dm/baidu-map-gl-vue?logo=npm&style=flat-square" />
-<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/MangMax/baidu-map-gl-vue?style=flat-square&color=%23daaa3f">
-<img alt="GitHub issues" src="https://img.shields.io/github/issues/MangMax/baidu-map-gl-vue?style=flat-square" />
-<img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/MangMax/baidu-map-gl-vue?style=flat-square">
+<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Mang-X/bmap-vue?style=flat-square&color=%23daaa3f">
+<img alt="GitHub issues" src="https://img.shields.io/github/issues/Mang-X/bmap-vue?style=flat-square" />
+<img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
 <br />
 </p>
 
@@ -53,12 +53,12 @@ npm install baidu-map-gl-vue
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Open%20Book.png" alt="Open Book" width="25" height="25" /> 文档
 
-[中文文档](https://MangMax.github.io/baidu-map-gl-vue/)
+[中文文档](https://Mang-X.github.io/bmap-vue/)
 
-- [安装](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/guide/installation)
-- [快速开始](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/guide/quick-start)
-- [从 v2 迁移](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/guide/migration-from-v2)
-- [AI 开发与官方 Skill](https://MangMax.github.io/baidu-map-gl-vue/zh-CN/contributing/ai-development)
+- [安装](https://Mang-X.github.io/bmap-vue/zh-CN/guide/installation)
+- [快速开始](https://Mang-X.github.io/bmap-vue/zh-CN/guide/quick-start)
+- [从 v2 迁移](https://Mang-X.github.io/bmap-vue/zh-CN/guide/migration-from-v2)
+- [AI 开发与官方 Skill](https://Mang-X.github.io/bmap-vue/zh-CN/contributing/ai-development)
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Hammer%20and%20Wrench.png" alt="Hammer and Wrench" width="25" height="25" /> 开发参与贡献
 
@@ -68,8 +68,8 @@ npm install baidu-map-gl-vue
 # node >= 24.0.0
 
 # clone
-git clone https://github.com/MangMax/baidu-map-gl-vue
-cd ./baidu-map-gl-vue
+git clone https://github.com/Mang-X/bmap-vue
+cd ./bmap-vue
 
 # install
 pnpm install
@@ -82,12 +82,12 @@ pnpm docs:dev
 ```
 
 完整的贡献流程、分支与提交约定、本地门禁清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)；
-用法讨论请走 [Discussions](https://github.com/MangMax/baidu-map-gl-vue/discussions)，
+用法讨论请走 [Discussions](https://github.com/Mang-X/bmap-vue/discussions)，
 安全问题请按 [SECURITY.md](./SECURITY.md) 私密上报。
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=MangMax/baidu-map-gl-vue&type=Timeline)](https://star-history.com/#MangMax/baidu-map-gl-vue&Timeline)
+[![Star History Chart](https://api.star-history.com/svg?repos=Mang-X/bmap-vue&type=Timeline)](https://star-history.com/#Mang-X/bmap-vue&Timeline)
 
 ## License
 

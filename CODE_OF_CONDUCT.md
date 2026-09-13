@@ -45,7 +45,7 @@
 为避免公开暴露当事人信息，**请优先使用仓库的私密报告表单**——该表单只有维护者可见，
 我们同样用它接收本准则相关的私密举报：
 
-<https://github.com/MangMax/baidu-map-gl-vue/security/advisories/new>
+<https://github.com/Mang-X/bmap-vue/security/advisories/new>
 
 你也可以直接联系维护者 [@MangMax](https://github.com/MangMax)。所有投诉都会被及时、公正地审阅，
 并尽最大努力保护举报者的隐私与安全。

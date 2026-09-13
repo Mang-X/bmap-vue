@@ -8,7 +8,7 @@ export const head: HeadConfig[] = [
       rel: "icon",
       type: "image/png",
       sizes: "16x16",
-      href: `/baidu-map-gl-vue/logo.svg`,
+      href: `/bmap-vue/logo.svg`,
     },
   ],
   ["meta", { name: "msapplication-TileColor", content: "#3eaf7c" }],
