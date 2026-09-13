@@ -62,9 +62,11 @@ function main() {
 
 
   // 5) v3-consumer:从 v3 tarball 安装,类型检查 + ESM 导入(发布 v3 的硬前提)
+  //    `./ui-kit` 子路径单独再 import 一次：它必须在**无 DOM 的 Node** 里可加载
+  //    （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 #73。
   const v3Consumer = setupFixture('v3-consumer')
   run(
-    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('baidu-map-gl-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('v3-consumer ESM import OK')})"`,
+    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('baidu-map-gl-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('v3-consumer ESM import OK')})" && node -e "import('baidu-map-gl-vue/ui-kit').then(m=>{for(const k of ['BPlaceAutocomplete','BPlaceSearch','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM)')})"`,
     v3Consumer,
     'v3-consumer typecheck + ESM import (v3 tarball)',
   )

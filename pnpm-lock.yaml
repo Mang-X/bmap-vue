@@ -244,6 +244,9 @@ importers:
 
   packages/baidu-map-gl-vue:
     dependencies:
+      '@baidumap/jsapi-ui-kit':
+        specifier: 1.1.2
+        version: 1.1.2
       vue:
         specifier: ^3.5.0
         version: 3.5.42(typescript@5.9.3)

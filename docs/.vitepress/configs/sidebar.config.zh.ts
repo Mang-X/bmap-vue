@@ -23,6 +23,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "config",
         },
         {
+          text: "官方 UI Kit（./ui-kit）",
+          link: "ui-kit",
+        },
+        {
           text: "全局组件事件",
           link: "com-events",
         },

@@ -17,6 +17,7 @@
 | `BMAP_PLUGIN_LOAD_FAILED` | 插件 | ✅ | 插件脚本加载或初始化失败 |
 | `BMAP_SERVICE_FAILED` | 服务 | ✅ | 地理编码/转换等服务端接口失败（配额用尽、Referer 白名单、超时） |
 | `BMAP_INVALID_POINT` | 参数 | ❌ | 传入非法坐标(缺 lng/lat) |
+| `BMAP_UI_KIT_UNAVAILABLE` | 依赖/环境 | ❌ | `./ui-kit` 在无 DOM 环境被调用，或未安装 optional peer `@baidumap/jsapi-ui-kit` |
 
 ## 错误对象结构
 
@@ -96,6 +97,22 @@ interface BMapErrorLike {
 
 **原因**:position/center 等缺少 `lng`/`lat`。
 **解决**:传入 `{ lng, lat }` 合法对象。
+
+### `BMAP_UI_KIT_UNAVAILABLE`
+
+**原因**:`./ui-kit` 的官方 UI Kit 依赖不可用。两种情形：
+
+1. **无 DOM 环境**（SSR / Node）调用了 UI 组件：上游 UI Kit 的入口在模块求值期就访问 `document`，
+   本库在 `loadUiKit()` 里前置判掉，因此拿到的是这条可读错误，而不是上游的模块崩溃；
+2. **未安装** `@baidumap/jsapi-ui-kit`（它是 optional peer），或加载失败。
+
+**排查/解决**:
+- 服务端渲染时不要渲染 `BPlaceAutocomplete` / `BPlaceSearch`（只渲染地图即可，UI 部分等挂载后再渲染）；
+- 确认已安装 `@baidumap/jsapi-ui-kit@1.1.2`：`pnpm add @baidumap/jsapi-ui-kit@1.1.2`。
+
+**可重试性**:标记为❌ —— 它不是「加载/配置类」错误，而是**环境或依赖未满足**；
+在同一个环境里重试不会有不同结果。修复环境/装好依赖后重新触发即可
+（本库不缓存这次失败，下一页/下一次调用会重新尝试加载）。
 
 ## 统一捕获
 

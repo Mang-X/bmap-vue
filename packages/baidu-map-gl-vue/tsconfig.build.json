@@ -13,7 +13,8 @@
     "verbatimModuleSyntax": true,
     "types": ["vite/client", "@baidumap/jsapi-v4-types"],
     "paths": {
-      "mitt": ["../../node_modules/mitt/index.d.ts"]
+      "mitt": ["../../node_modules/mitt/index.d.ts"],
+      "@baidumap/jsapi-ui-kit": ["./types/ui-kit/upstream.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "types/shared/**/*.d.ts"],

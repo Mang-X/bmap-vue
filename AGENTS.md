@@ -25,9 +25,16 @@
 - `core`：loader/provider、context、lifecycle、runtime、events、errors 等底座。
 - `components`、`composables`：面向使用者的 Vue 组件与 hooks。
 - `plugins`、`resolver`、`advanced`：插件适配、按需解析、raw SDK 逃生口。
+- `integrations`：对接**官方包**的薄封装（当前只有 `integrations/ui-kit` → `./ui-kit` 子入口）。
 - `types`、`manifest`：公共类型与组件清单。
 
 约定：`BMap.*` 只允许出现在 v4 Driver/Provider、Fake SDK 与最小类型边界；组件/composable/runtime 只依赖项目领域类型与 Facet Driver，不得直接访问全局 SDK。所有监听器、覆盖物、控件、图层、服务结果、Observer、Timer、RAF 与动画都必须有释放路径。
+
+`integrations/**` 与 `components` / `composables` 同属禁区（不在 raw SDK 白名单内）：它只能经
+`MapHandle`（`unwrapRaw()`）与 Facet Driver 与引擎交互。`./ui-kit` 另有两条硬约束，见
+ADR `2026-09-13-ui-kit-subpath-and-type-boundary`：根入口不重导出 UI、也不静态引入
+`@baidumap/jsapi-ui-kit`（它是 optional peer，且 import 即碰 `document`）；公共类型自持，
+构建期经 `tsconfig.build.json` 的 `paths` 把该 specifier 映射到占位文件（上游声明自身不可消费）。
 
 ## SDK 边界与门禁
 

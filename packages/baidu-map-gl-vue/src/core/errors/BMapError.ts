@@ -23,7 +23,9 @@ export type BMapErrorCode =
   | "BMAP_INVALID_ARGUMENT"
   | "BMAP_INVALID_POINT"
   | "BMAP_HANDLE_FOREIGN"
-  | "BMAP_DUPLICATE_ITEM_KEY";
+  | "BMAP_DUPLICATE_ITEM_KEY"
+  /** `./ui-kit` 的官方 UI Kit 不可用：无 DOM 环境调用，或 optional peer 未安装 / 加载失败。 */
+  | "BMAP_UI_KIT_UNAVAILABLE";
 
 export interface BMapErrorOptions {
   cause?: unknown;
@@ -92,5 +94,6 @@ export class BMapError extends Error {
     INVALID_POINT: "BMAP_INVALID_POINT" as const,
     HANDLE_FOREIGN: "BMAP_HANDLE_FOREIGN" as const,
     DUPLICATE_ITEM_KEY: "BMAP_DUPLICATE_ITEM_KEY" as const,
+    UI_KIT_UNAVAILABLE: "BMAP_UI_KIT_UNAVAILABLE" as const,
   };
 }

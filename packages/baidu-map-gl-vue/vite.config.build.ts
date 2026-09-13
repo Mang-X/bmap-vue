@@ -142,6 +142,7 @@ export default defineConfig({
         resolver: resolve(root, 'src/resolver/index.ts'),
         core: resolve(root, 'src/core/index.ts'),
         advanced: resolve(root, 'src/advanced.ts'),
+        'ui-kit': resolve(root, 'src/integrations/ui-kit/index.ts'),
       },
       formats: ['es'],
     },
@@ -149,7 +150,12 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: true,
     rollupOptions: {
-      external: ['vue'],
+      // `@baidumap/jsapi-ui-kit` 必须 external（issue #73 / ADR 2026-09-13 决策 3、4）：
+      // 它是 **optional peer**。若把它打进 dist，所有消费者都会被塞进一份 UI Kit 运行时
+      // （含 js-md5 与 DOM 求值期副作用），「不装也能用根入口」立刻失效；保持 external 后
+      // 由 `./ui-kit` 的 `import('@baidumap/jsapi-ui-kit')` 在运行时按需解析，
+      // 消费方的打包器才能把它当作可选依赖处理。
+      external: ['vue', '@baidumap/jsapi-ui-kit'],
       output: {
         entryFileNames: '[name].mjs',
         chunkFileNames: 'chunks/[name]-[hash].mjs',

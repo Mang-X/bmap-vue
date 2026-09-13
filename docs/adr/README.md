@@ -16,6 +16,7 @@
 | [2026-09-12](./2026-09-12-fake-v4-diagnostics-and-dual-driver-matrix.md) | Fake v4 诊断口径与迁移期双 Driver 矩阵（诊断门禁 / 领域结果比对） | Accepted |
 | [2026-09-13](./2026-09-13-upstream-types-case-patch.md) | 上游类型包大小写引用缺陷的补丁处置（精确版本 + pnpm patch / 重新纳入 CI） | Accepted |
 | [2026-09-13](./2026-09-13-official-first-loader-and-ui-kit.md) | Official-first：默认加载委托官方 Loader、标准 UI 委托官方 UI Kit | Accepted |
+| [2026-09-13](./2026-09-13-ui-kit-subpath-and-type-boundary.md) | `./ui-kit` 子路径、宿主桥与「不消费上游类型入口」的类型边界 | Accepted |
 
 ## 约定
 
