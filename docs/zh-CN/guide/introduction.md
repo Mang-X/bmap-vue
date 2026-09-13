@@ -45,19 +45,30 @@ import { VPTeamMembers } from 'vitepress/theme'
 
 const members = ref<any[]>([])
 const isLoading = ref(true)
-fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1').then(res => res.json()).then(res => {
-  isLoading.value = false
-  members.value = res.map(({ avatar_url, login, html_url }, index) => {
-    return {
-      avatar: avatar_url,
-      name: login,
-      title: index === 0 ? 'Creator' : 'Contributor',
-      links: [
-        { icon: 'github', link: html_url },
-      ]
-    }
+// 未认证的 GitHub API 限流是 **60 次/小时/IP**，而 CI runner 的出口 IP 是共享的。限流时这个接口
+// 返回的是 `{ message: ... }` 而不是数组，直接 `.map` 会让 `vitepress build` **整站构建失败**
+// （实测：PR #85 的 docs job 因此红过一次，报 `TypeError: res.map is not a function`）。
+// 拿不到成员列表就不渲染成员 —— 外部抖动不该挡住构建，也不该让「docs 是硬门禁」变成随机红。
+fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1')
+  .then(res => res.json())
+  .then(res => {
+    isLoading.value = false
+    if (!Array.isArray(res)) return
+    members.value = res.map(({ avatar_url, login, html_url }, index) => {
+      return {
+        avatar: avatar_url,
+        name: login,
+        title: index === 0 ? 'Creator' : 'Contributor',
+        links: [
+          { icon: 'github', link: html_url },
+        ]
+      }
+    })
   })
-})
+  .catch(() => {
+    // 网络不可达时也要收掉 loading 态（SSR 期间未处理的 rejection 同样会让构建失败）
+    isLoading.value = false
+  })
 </script>
 
 ## 贡献者
