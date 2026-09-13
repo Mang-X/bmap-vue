@@ -43,6 +43,7 @@ interface Entry {
   capability?: string
   verdict: string
   basis: readonly string[]
+  runtime?: { status: string; detail: string }
   summary: string
   residualRisks: readonly string[]
 }
@@ -82,6 +83,12 @@ function renderMarkdown(): string {
   )
   lines.push('没有跑过的档位不写进依据——把「声明面没缺口」说成「兼容」是把结论说得比证据强。')
   lines.push('')
+  lines.push(
+    '三档各有自己的复现命令：`pnpm probe:plugin-runtime`（真实 4.0 + 真实 AK + 真实浏览器）、' +
+      '`pnpm probe:plugin-compat`（真实发布产物 + 官方声明）、以及两者共用的生成物校验 ' +
+      '`pnpm generate:plugin-inventory:check`。',
+  )
+  lines.push('')
 
   lines.push('## 依据档位')
   lines.push('')
@@ -104,7 +111,7 @@ function renderMarkdown(): string {
   lines.push('## 清单')
   lines.push('')
   lines.push(
-    '| 插件 | 锁定 URL | 暴露全局 | required | 引用的 SDK 命名空间成员 | 私有面 | 副作用标记 | 关联能力 | 结论 | 依据 |',
+    '| 插件 | 锁定 URL | 暴露全局 | required | 引用的 SDK 命名空间成员 | 私有面 | 副作用标记 | 关联能力 | 结论 | 运行时 | 依据 |',
   )
   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
   for (const entry of PLUGIN_COMPAT_INVENTORY) {
@@ -122,6 +129,11 @@ function renderMarkdown(): string {
           : codeList(entry.selfInjectedMarkers),
         entry.capability ? `\`${entry.capability}\`` : '—',
         `\`${entry.verdict}\``,
+        entry.runtime
+          ? entry.runtime.status === 'threw'
+            ? '**抛错**'
+            : '已验证'
+          : '—',
         entry.basis.map((b) => `\`${b}\``).join(', '),
       ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'),
     )
@@ -136,6 +148,14 @@ function renderMarkdown(): string {
     lines.push(entry.summary)
     lines.push('')
     lines.push(`私有面：${entry.privateSurfaceNote}`)
+    lines.push('')
+    lines.push(
+      entry.runtime
+        ? `运行时（\`pnpm probe:plugin-runtime\`）：${
+            entry.runtime.status === 'threw' ? '**抛错**' : '**已验证最小路径**'
+          } —— ${entry.runtime.detail}`
+        : '运行时：未跑（依据里不含 `runtime`）。',
+    )
     lines.push('')
     if (entry.residualRisks.length > 0) {
       lines.push('残余风险（每条都写明去处）：')
@@ -179,6 +199,7 @@ function renderJson(): string {
       ...(entry.capability ? { capability: entry.capability } : {}),
       verdict: entry.verdict,
       basis: entry.basis,
+      ...(entry.runtime ? { runtime: entry.runtime } : {}),
       summary: entry.summary,
       residualRisks: entry.residualRisks,
     })),

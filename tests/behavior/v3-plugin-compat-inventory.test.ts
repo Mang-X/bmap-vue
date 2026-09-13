@@ -101,30 +101,58 @@ describe("依据与结论不留空", () => {
     }
   });
 
-  it("标 incompatible 必须给出决定性的私有面（正证与反证共用同一条判定）", () => {
-    // 判定写成纯谓词：反证必须走**同一条**规则，否则「反证」只是在断言两个字面量
-    const violatesDecisiveEvidenceRule = (entry: {
+  it("标 incompatible 必须给出决定性依据（正证与反证共用同一条判定）", () => {
+    // 判定写成纯谓词：反证必须走**同一条**规则，否则「反证」只是在断言两个字面量。
+    // 决定性依据有**两种**合法形态：引用了命名空间级私有面，或运行时直接抛错。
+    type Decisive = {
       id: string;
       verdict: string;
       hasPrivateSurface: boolean;
-    }): boolean => entry.verdict === "incompatible" && !entry.hasPrivateSurface;
+      runtime?: { status: string };
+    };
+    const violatesDecisiveEvidenceRule = (entry: Decisive): boolean =>
+      entry.verdict === "incompatible" &&
+      !entry.hasPrivateSurface &&
+      entry.runtime?.status !== "threw";
 
     for (const entry of ENTRIES) {
       expect(
         violatesDecisiveEvidenceRule(entry),
-        `${entry.id} 说不兼容却没给出决定性的私有面`,
+        `${entry.id} 说不兼容，却既没引用私有面、也没有运行时抛错`,
       ).toBe(false);
     }
 
-    // 反证：同一个谓词喂进「不兼容但没有私有面」的假数据必须报违规，
-    // 说明上面那条断言不是因为谓词写死成 false 而恒过
+    // 反证：两条都不能缺 —— 同一条谓词喂进三种假数据，判定必须分别为 违规/合规/合规
     expect(
       violatesDecisiveEvidenceRule({ id: "Bogus", verdict: "incompatible", hasPrivateSurface: false }),
     ).toBe(true);
-    // 反向也不能误报：不兼容 + 有私有面 → 合规
     expect(
       violatesDecisiveEvidenceRule({ id: "Bogus2", verdict: "incompatible", hasPrivateSurface: true }),
     ).toBe(false);
+    expect(
+      violatesDecisiveEvidenceRule({
+        id: "Bogus3",
+        verdict: "incompatible",
+        hasPrivateSurface: false,
+        runtime: { status: "threw" },
+      }),
+    ).toBe(false);
+  });
+
+  it("runtime 读数与 `basis` 里的 runtime 档双向一致，且读数不是一句话", () => {
+    const withRuntime = ENTRIES.filter((entry) => entry.runtime !== undefined);
+    // 先证明这条断言不是空转：清单里确实有运行时读数
+    expect(withRuntime.length).toBeGreaterThan(0);
+
+    for (const entry of ENTRIES) {
+      const declared = entry.basis.includes("runtime");
+      expect(declared, `${entry.id} 的 runtime 档与读数不一致`).toBe(entry.runtime !== undefined);
+      if (entry.runtime) {
+        expect(["verified", "threw"]).toContain(entry.runtime.status);
+        expect(entry.runtime.detail.length, `${entry.id} 的运行时读数过短（要求写出实测读数）`)
+          .toBeGreaterThan(30);
+      }
+    }
   });
 
   it("每条都写清残余风险（不许只写「存在风险」四个字）", () => {

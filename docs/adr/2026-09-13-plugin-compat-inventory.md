@@ -24,9 +24,13 @@
   `stringToPluginDefinitions` 的名字表里——`plugins: ['GeoUtils']` 会被静默当成未知插件，
   变成一个永远成功的空实现。
 
-本机没有 AK / WebGL，因此「真实 4.0 运行时」这一档证据本轮**取不到**。本 ADR 要解决的不是
-「凑一条证据出来」，而是让状态**如实**：查过的写成查过的，没跑的写成没跑的，并且把「怎么复现」
-交给下一个人。
+运行时那一档一开始以为取不到（当时的判断是「本机没有 AK」）——这个判断是错的：仓库
+`docs/.vitepress/theme/index.ts` 里就有一支已入库的浏览器端 AK，本机也有 Chrome。于是本轮补了
+一条**运行时探针**（`pnpm probe:plugin-runtime`），四个插件都拿到了真实 4.0 上的读数，
+结论也随之更硬（见决策 7 与「运行时读数」）。
+
+本 ADR 要解决的不是「凑一条证据出来」，而是让状态**如实**：查过的写成查过的，没跑的写成没跑的，
+并且把「怎么复现」交给下一个人。
 
 ## 决策
 
@@ -43,7 +47,7 @@ CI 的 `quality` job 跑 `--check` 校验无漂移——与 `generate:capability
 | --- | --- |
 | `artifact` | 对 `BUILTIN_PLUGIN_URLS` 锁定 URL 的**真实发布产物**做静态抽取（`pnpm probe:plugin-compat`） |
 | `declaration` | 与官方 `@baidumap/jsapi-v4-types@4.0.4` 的**逐成员**核对（同一条命令的第二个落点） |
-| `runtime` | 真实 JSAPI 4.0 运行时观察（需 AK + WebGL，仅 nightly / 手动） |
+| `runtime` | 真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`，需 AK + 浏览器） |
 
 没跑过的档位不写进依据。这条是刻意的：把「声明面没缺口」说成「兼容」，是把结论说得比证据强。
 
@@ -101,17 +105,21 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 没有依据的话）；反过来，条目声明的能力必须真实存在于 Catalog。两个方向都由behavior 用例钉住，
 并要求那些 `description` 指向 `plugin-compat-inventory` 而不是继续写「待定」。
 
-### 7. 证据生成器需要网络，因此不进 PR 门禁
+### 7. 两个证据生成器都不进 PR 门禁
 
-`pnpm probe:plugin-compat` 从锁定 URL 拉真实产物，抽三列（引用的 SDK 命名空间成员 / 私有面 /
-副作用标记）、与官方声明逐成员核对、再与 inventory 比对。判定与退出码沿用
-`scripts/probe-official-packages.mts` 的口径：
+- `pnpm probe:plugin-compat`（需要网络）：从锁定 URL 拉真实产物，抽三列（引用的 SDK 命名空间成员 /
+  私有面 / 副作用标记）、与官方声明逐成员核对、再与 inventory 比对；
+- `pnpm probe:plugin-runtime`（需要 AK + 浏览器）：起一个本机页面，真实加载 JSAPI 4.0 与四个插件
+  脚本，跑最小可用路径，产出 inventory 的**运行时读数**。它**不是** smoke harness 的插件页
+  （决策 8）：不登记进 `tests/browser/jsapi-v4` 的检查表、不进任何 CI job、不参与必需链路的放行判定。
+
+两个探针的判定与退出码沿用 `scripts/probe-official-packages.mts` 的口径：
 
 | 结论 | 触发 | 退出码 |
 | --- | --- | --- |
 | `pass` | 抽取结果与 inventory 完全一致 | 无 |
 | `fail` | 不一致，或锁定 URL 返回 4xx | 1 |
-| `blocked` | 网络 / CDN 不可用、超时、5xx | 3 |
+| `blocked` | 产物取不到（网络 / CDN 不可用、超时、5xx），或运行时档里 SDK 没起来 | 3 |
 | 脚手架失败 | 读不到数据模块 / 类型包 | 2 |
 
 **`blocked` 不是通过**，只有 `0` 放行。它放在 nightly / 手工执行；PR 门禁只跑无网络的 `--check`。
@@ -121,6 +129,33 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 [ v4 required smoke ](./2026-09-13-v4-required-smoke.md) 决策 2 已经定下「可选插件的噪声靠单独页面
 隔离」，并把这个页面记成由 #42 / #43 承接。本轮交付的是**结论与隔离口径**，不是那个页面；
 把插件脚本塞进 `tests/browser/jsapi-v4/main.ts` 会让跨域脚本异常直接染红必需链路，方向正好相反。
+
+## 运行时读数（2026-09-13，真实 JSAPI 4.0 + 真实 AK + Chrome）
+
+复现：`BAIDU_MAP_AK=<ak> pnpm probe:plugin-runtime`（AK 用 `docs/.vitepress/theme/index.ts` 里那支
+已入库的浏览器端 AK；退出码 `0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来 / `2` 脚手架失败）。
+同一次运行顺带证实了页面环境：
+
+| 环境事实 | 读数 |
+| --- | --- |
+| `BMap` 命名空间 | 就绪，278 个键 |
+| `BMapGL === BMap` | 是（同一对象别名） |
+| `BMap.version` | `"gl"`（构建标记，不是版本号 —— 与 #70 的实测一致） |
+| 私有回调表（成员名 `_rd`） | **存在**（所以 MapVGL 的问题是「它依赖私有面」，而不是「运行时没有这张表」） |
+
+| 插件 | 脚本加载 | 暴露全局 | 最小路径 |
+| --- | --- | --- | --- |
+| TrackAnimation | ok | 是 | **通过**：构造成功；`start()` 后折线 path 由 2 点增到 39 点、`getZoom()` 由 13 变到约 15.15 |
+| DrawingManager | ok | 是 | **通过**：构造成功、`getDrawingMode()` 为 `marker`；并**证实脚本自行注入** `GeoUtils.min.js` 与 `gpc.js` |
+| GeoUtils | ok | 是 | **通过**：10 个静态成员；`getDistance((0,0),(0,1))` 返回 111194.87 |
+| Mapvgl | ok | 是 | **抛错**：`new mapvgl.View({ map, mapType: "bmap" })` → `Cannot read properties of undefined (reading 'appendChild')` |
+
+同一天、同一支 AK，在候选提交上跑了 live required smoke：`gate.ok=true gate.exit=0`，
+16 项 required 全部 `pass`（含真实服务 `service-geocode` 与四个 UI Kit 项）——这同时满足 #25
+验收里「真实 required smoke 在**同一候选 commit** 通过」那一条。
+
+这两组读数都**不进仓库**（与 #74 对实跑证据的处置一致）：命令与期望写在 ADR 与生成文档里，
+原始输出落在 PR 正文 / nightly artifact。
 
 ## 后果
 
@@ -145,9 +180,10 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 
 ## 已知限制
 
-- **运行时档位仍然缺席**：四个插件的 `runtime` 依据本轮**一条都没有**。声明面与产物面都指向
-  「没有硬缺口」，但真实 4.0 上的行为（尤其 DrawingManager 的 `new BMapGL.Overlay` 与
-  TrackAnimation 的 `ViewAnimation` 私有成员）尚未证实。这属于 #43 的范围。
+- **运行时读数只覆盖「最小路径」**：每个插件只跑了「构造 + 一次真实调用」，没有覆盖完整功能链路
+  （DrawingManager 实际画一个圆/多边形、TrackAnimation 的 `pause` / `continue` / `setSpeed` /
+  播放到结尾、GeoUtils 各谓词的签名语义、MapVGL `View` 构造失败的根因）。把这些搬进 CI / nightly
+  的插件页仍属 #43。**「构造成功」不等于「功能可用」，读数里不这么写也是刻意的。**
 - **插件加载没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`
   （`scope.signal`），脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证
   「失败被隔离」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策。
