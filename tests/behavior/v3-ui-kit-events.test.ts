@@ -95,7 +95,13 @@ describe("事件 → 公共 DTO", () => {
 
     widget.emit("suggest", [upstreamSuggestion()]);
     widget.emit("select", upstreamSuggestion({ name: "选中项" }));
-    widget.emit("highlight", { index: 2, value: upstreamSuggestion({ name: "高亮项" }) });
+    // 上游真实载荷是**变更对**：`{ from: HighlightItem | null, to: HighlightItem }`
+    // （形状锁见 `v3-ui-kit-widget-contract.test.ts`；上一版这里用了 `{ index, value }`，
+    //  等于把错误假设抄进了夹具，让实现静默丢弃事件也能过）。
+    widget.emit("highlight", {
+      from: { index: 1, value: upstreamSuggestion({ name: "上一项" }) },
+      to: { index: 2, value: upstreamSuggestion({ name: "高亮项" }) },
+    });
     await nextTick();
 
     const emitted = emittedOf(mounted);
@@ -115,9 +121,36 @@ describe("事件 → 公共 DTO", () => {
     const select = emitted.select?.[0]?.[0] as Record<string, unknown>;
     expect(select.name).toBe("选中项");
 
-    const highlight = emitted.highlight?.[0]?.[0] as { index: number; value: Record<string, unknown> };
-    expect(highlight.index).toBe(2);
-    expect(highlight.value.name).toBe("高亮项");
+    const highlight = emitted.highlight?.[0]?.[0] as {
+      from: { index: number; value: Record<string, unknown> } | null;
+      to: { index: number; value: Record<string, unknown> };
+    };
+    expect(highlight.to.index).toBe(2);
+    expect(highlight.to.value.name).toBe("高亮项");
+    expect(highlight.from?.index).toBe(1);
+    expect(highlight.from?.value.name).toBe("上一项");
+
+    mounted.unmount();
+  });
+
+  it("PlaceAutocomplete：highlight 的 from 为 null（首次高亮）照常发出", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    await flushPromises();
+
+    fake.instances[0]!.emit("highlight", {
+      from: null,
+      to: { index: 0, value: upstreamSuggestion({ name: "首个高亮项" }) },
+    });
+    await nextTick();
+
+    const highlight = emittedOf(mounted).highlight?.[0]?.[0] as {
+      from: unknown;
+      to: { value: Record<string, unknown> };
+    };
+    // 上游用一个可空的 `from` 表达「之前没有高亮项」，我们保留这个语义而不是合成一个假对象。
+    expect(highlight.from).toBeNull();
+    expect(highlight.to.value.name).toBe("首个高亮项");
 
     mounted.unmount();
   });
@@ -130,7 +163,8 @@ describe("事件 → 公共 DTO", () => {
 
     widget.emit("suggest", "not-an-array");
     widget.emit("select", null);
-    widget.emit("highlight", { index: "0", value: upstreamSuggestion() });
+    // `to` 不可用（缺 value）→ 整条事件不发。
+    widget.emit("highlight", { from: { index: 0, value: upstreamSuggestion() }, to: null });
     await nextTick();
 
     const emitted = emittedOf(mounted);
@@ -139,6 +173,16 @@ describe("事件 → 公共 DTO", () => {
     // 载荷不可用时**不发**事件：不制造「看起来有一次选择」的假信号。
     expect(emitted.select).toBeUndefined();
     expect(emitted.highlight).toBeUndefined();
+
+    // `from` **存在**却解析不出来 → 同样整条不发：不能把「形状变了」伪装成「首次高亮」。
+    widget.emit("highlight", { from: { bogus: true }, to: { index: 3, value: upstreamSuggestion() } });
+    await nextTick();
+    expect(emittedOf(mounted).highlight).toBeUndefined();
+
+    // 端点里的 `index` 非法（字符串）→ 端点不可用 → 整条不发。
+    widget.emit("highlight", { from: null, to: { index: "3", value: upstreamSuggestion() } });
+    await nextTick();
+    expect(emittedOf(mounted).highlight).toBeUndefined();
 
     // 坐标非法（NaN）时点被丢弃，但其余字段照常保留。
     widget.emit("suggest", [upstreamSuggestion({ point: { lng: Number.NaN, lat: 1 } })]);
@@ -334,19 +378,89 @@ describe("props → 已验证 setter", () => {
     mounted.unmount();
   });
 
-  it("构造期选项变更不触发 setter / 重建（文档承诺「需重新挂载」）", async () => {
+  it("types 由有值变回未设置：恢复上游默认 `all`（走 setter，不重建）", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap<{ types?: "all" | "city" }>(BPlaceAutocomplete, harness, {
+      types: "city",
+    });
+    await flushPromises();
+    const widget = fake.instances[0]!;
+    expect(widget.options.types).toBe("city");
+
+    mounted.props.value = {};
+    await flushPromises();
+
+    // 上游 `types` 的默认值就是 `all`，恢复默认是**明确定义**的 setter 调用，不需要重建。
+    expect(widget.callsOf("setTypes").map((call) => call.args)).toEqual([["all"]]);
+    expect(fake.stats.created).toBe(1);
+
+    mounted.unmount();
+  });
+
+  it("构造期选项变更 → 重建 widget（官方 react-bmap 的 ctorKey 口径）", async () => {
     const harness = readyHarness();
     const mounted = mountInMap(BPlaceAutocomplete, harness, { placeholder: "搜地点", debounce: 300 });
     await flushPromises();
-    const widget = fake.instances[0]!;
+    const first = fake.instances[0]!;
 
-    expect(widget.options.placeholder).toBe("搜地点");
-    expect(widget.options.debounce).toBe(300);
+    expect(first.options.placeholder).toBe("搜地点");
+    expect(first.options.debounce).toBe(300);
 
     mounted.props.value = { placeholder: "换个提示", debounce: 800 };
-    await nextTick();
+    await flushPromises();
 
-    expect(widget.calls).toEqual([]);
+    // 构造期输入变了：旧实例被释放、按新选项重建 —— 而不是静默保留旧值。
+    // （官方 react-bmap 对构造期参数用同一口径：ctorKey 变化即重建；见 PR 说明。）
+    expect(fake.stats.created).toBe(2);
+    expect(fake.stats.destroyed).toBe(1);
+    expect(first.destroyed).toBe(true);
+    const second = fake.instances[1]!;
+    expect(second.options.placeholder).toBe("换个提示");
+    expect(second.options.debounce).toBe(800);
+    // 重建不是「先用 setter 改一遍」。
+    expect(second.calls).toEqual([]);
+    // 旧实例的监听被摘空（重建是「先释放旧的、再构造新的」，不是并存）。
+    expect([...first.listeners.values()].map((set) => set.size)).toEqual([0, 0, 0]);
+    expect(fake.stats.offCount).toBe(3);
+
+    mounted.unmount();
+    await flushPromises();
+    expect(fake.stats.offCount).toBe(fake.stats.onCount);
+  });
+
+  it("构造期选项内容没变时不重建（内联对象字面量不得触发重建风暴）", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap(BPlaceAutocomplete, harness, { display: { tag: true }, debounce: 300 });
+    await flushPromises();
+    expect(fake.stats.created).toBe(1);
+
+    // 每次渲染传一个新的对象字面量、内容相同：必须按「内容的稳定串」比对，不能按引用。
+    mounted.props.value = { display: { tag: true }, debounce: 300 };
+    await flushPromises();
+    mounted.props.value = { display: { tag: true }, debounce: 300 };
+    await flushPromises();
+
+    expect(fake.stats.created).toBe(1);
+    expect(fake.stats.destroyed).toBe(0);
+
+    mounted.unmount();
+  });
+
+  it("构造期选项：键顺序不同但内容相同 → 不重建（排序序列化真的在起作用）", async () => {
+    const harness = readyHarness();
+    const mounted = mountInMap<{ display?: Record<string, boolean>; debounce?: number }>(
+      BPlaceAutocomplete,
+      harness,
+      { display: { tag: true, address: false }, debounce: 300 },
+    );
+    await flushPromises();
+    expect(fake.stats.created).toBe(1);
+
+    // 内容相同、**键顺序相反**：朴素 JSON.stringify 会给出不同的串并触发重建，
+    // 因此这一条是 `canonicalKey()` 排序语义的机器证据（不是文档承诺）。
+    mounted.props.value = { display: { address: false, tag: true }, debounce: 300 };
+    await flushPromises();
+
     expect(fake.stats.created).toBe(1);
     expect(fake.stats.destroyed).toBe(0);
 

@@ -38,6 +38,7 @@ export type {
 
 export type {
   PlaceAutocompleteDisplayDTO,
+  PlaceHighlightChangeDTO,
   PlaceHighlightDTO,
   PlacePointDTO,
   PlacePoiDTO,

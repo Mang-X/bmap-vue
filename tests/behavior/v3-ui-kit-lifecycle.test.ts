@@ -373,4 +373,103 @@ describe("UI Kit 组件的构造与释放", () => {
     expect(api.status).toBe("disposed");
     await expect(api.search("another")).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
   });
+
+  it("location 由有值变回未设置：按构造期输入变化重建，不去猜 setLocation 的清除语义", async () => {
+    const { harness } = readyHarness();
+    const mounted = mountInMap<{ location?: string }>(BPlaceAutocomplete, harness, {
+      location: "北京",
+    });
+    await flushPromises();
+    const first = fake.instances[0]!;
+    expect(first.options.location).toBe("北京");
+
+    mounted.props.value = {};
+    await flushPromises();
+
+    // 上游没有公开、也没有被验证过的「清空城市限定」入口（`setLocation("")` 的语义未知），
+    // 因此不猜隐藏语义：把 widget 按当前 props 重建一次，回到「不传 location」的构造路径。
+    expect(fake.stats.created).toBe(2);
+    expect(first.destroyed).toBe(true);
+    expect("location" in fake.instances[1]!.options).toBe(false);
+    expect(first.callsOf("setLocation")).toEqual([]);
+    // 旧实例的监听被摘空（重建是「先释放旧的」，不是并存）。
+    expect([...first.listeners.values()].map((set) => set.size)).toEqual([0, 0, 0]);
+    expect(fake.stats.offCount).toBe(3);
+
+    mounted.unmount();
+    await flushPromises();
+    expect(fake.stats.offCount).toBe(fake.stats.onCount);
+  });
+
+  it("BPlaceSearch：构造期选项变更同样重建（不静默保留旧值）", async () => {
+    const { harness } = readyHarness();
+    const mounted = mountInMap(BPlaceSearch, harness, { pageCapacity: 10 });
+    await flushPromises();
+    const first = fake.instances[0]!;
+    expect(first.options.pageCapacity).toBe(10);
+
+    mounted.props.value = { pageCapacity: 20 };
+    await flushPromises();
+
+    expect(fake.stats.created).toBe(2);
+    expect(first.destroyed).toBe(true);
+    expect(fake.instances[1]!.options.pageCapacity).toBe(20);
+    expect([...first.listeners.values()].map((set) => set.size)).toEqual([0, 0]);
+    expect(fake.stats.offCount).toBe(2);
+
+    mounted.unmount();
+    await flushPromises();
+    expect(fake.stats.offCount).toBe(fake.stats.onCount);
+  });
+
+  it("location 由未设置变有值：同样按构造期输入变化重建（并带上 location）", async () => {
+    const { harness } = readyHarness();
+    const mounted = mountInMap<{ location?: string }>(BPlaceAutocomplete, harness, {});
+    await flushPromises();
+    const first = fake.instances[0]!;
+    expect("location" in first.options).toBe(false);
+
+    mounted.props.value = { location: "北京" };
+    await flushPromises();
+
+    expect(fake.stats.created).toBe(2);
+    expect(first.destroyed).toBe(true);
+    expect(fake.instances[1]!.options.location).toBe("北京");
+    // 不额外补一次 setter：新的构造选项已经带上了。
+    expect(fake.instances[1]!.calls).toEqual([]);
+
+    mounted.unmount();
+  });
+
+  it("地图就绪前连续变更构造期输入：不累积等待者，只保留最后一次的 widget", async () => {
+    const harness = createFakeMapHarness();
+    const mounted = mountInMap<{ placeholder?: string }>(BPlaceAutocomplete, harness, {
+      placeholder: "a",
+    });
+    await flushPromises();
+    expect(harness.pendingReady()).toBe(1);
+
+    mounted.props.value = { placeholder: "b" };
+    await flushPromises();
+    mounted.props.value = { placeholder: "c" };
+    await flushPromises();
+
+    // 每一次 start 都会取消上一次仍在等 `whenReady()` 的等待 —— 否则「重建风暴」会累积
+    // 一堆没人认领的等待者（地图就绪时它们才一起结算）。
+    expect(harness.pendingReady()).toBe(1);
+
+    harness.ready(harness.makeMapHandle("m"));
+    await flushPromises();
+
+    // 只有最后一次 start 允许落地（generation 守卫）：否则会各构造一份、留下孤儿实例。
+    expect(fake.stats.created).toBe(1);
+    expect(fake.stats.destroyed).toBe(0);
+    expect(fake.instances[0]!.options.placeholder).toBe("c");
+    // 取消不是错误：中途被取消的 start 不该往 `resource:error` 上报。
+    expect(harness.resourceErrors).toEqual([]);
+
+    mounted.unmount();
+    await flushPromises();
+    expect(fake.stats.destroyed).toBe(1);
+  });
 });

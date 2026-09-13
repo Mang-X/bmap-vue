@@ -1,6 +1,6 @@
 # 官方 UI Kit（`./ui-kit`）
 
-`baidu-map-gl-vue/ui-kit` 是**独立按需子入口**：标准 UI（输入建议、结果列表、翻页、键盘导航）
+`baidu-map-gl-vue/ui-kit` 是**独立按需子入口**：标准 UI（输入建议下拉、结果列表、键盘导航）
 全部由官方 [`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 渲染，
 本库只负责 host 容器、生命周期、props → 已验证 setter、事件数据与公开动作。
 
@@ -98,21 +98,27 @@ function onSuggest(items: PlaceSuggestionDTO[]) {
 
 ### Props
 
-| Prop | 类型 | 说明 | 挂载后可改 |
+| Prop | 类型 | 说明 | 变更时 |
 | --- | --- | --- | --- |
-| `placeholder` | `string` | 输入框提示，上游默认 `搜索地点` | ❌ 构造期选项 |
-| `debounce` | `number` | 输入防抖毫秒，上游默认 `300` | ❌ |
-| `minLength` | `number` | 触发检索的最小字符数，上游默认 `1` | ❌ |
-| `showSuggestion` | `boolean` | 是否展示建议下拉，上游默认 `true` | ❌ |
-| `suggestionCount` | `number` | 建议条数上限（移动端默认 6） | ❌ |
-| `display` | `PlaceAutocompleteDisplayDTO` | 下拉字段显隐 | ❌ |
-| `location` | `string` | 检索城市限定，如 `北京` | ✅ → `setLocation()` |
-| `citylimit` | `boolean` | 是否严格限定在城市内 | ✅ → `setCitylimit()` |
-| `types` | `'all' \| 'city'` | 结果类型过滤 | ✅ → `setTypes()` |
+| `placeholder` | `string` | 输入框提示，上游默认 `搜索地点` | 🔁 重建 |
+| `debounce` | `number` | 输入防抖毫秒，上游默认 `300` | 🔁 重建 |
+| `minLength` | `number` | 触发检索的最小字符数，上游默认 `1` | 🔁 重建 |
+| `showSuggestion` | `boolean` | 是否展示建议下拉，上游默认 `true` | 🔁 重建 |
+| `suggestionCount` | `number` | 建议条数上限（移动端默认 6） | 🔁 重建 |
+| `display` | `PlaceAutocompleteDisplayDTO` | 下拉字段显隐 | 🔁 重建 |
+| `location` | `string` | 检索城市限定，如 `北京` | ✅ `setLocation()`；改回未设置 → 🔁 重建 |
+| `citylimit` | `boolean` | 是否严格限定在城市内 | ✅ `setCitylimit()` |
+| `types` | `'all' \| 'city'` | 结果类型过滤 | ✅ `setTypes()`；改回未设置 → 恢复默认 `all` |
 
-「挂载后可改」的三项有上游的公开 setter，因此支持运行期变更；其余是构造期选项，
-变更需要重新挂载（给它加一个 `:key`）。布尔 props 都在本库侧给了与上游一致的显式默认值 ——
-Vue 对 `Boolean` 类型有「缺省即 `false`」的转换，不给默认值会把上游默认的 `true` 静默改掉。
+- **有 setter 的三项**走 `setLocation()` / `setCitylimit()` / `setTypes()` 镜像，不销毁 widget；
+- **构造期选项**上游没有对应 setter，变更即**重建 widget**（不会静默保留旧值）。重建按「内容的稳定串」
+  比对，因此每次渲染传新的对象字面量、内容相同不会引发重建。口径与官方
+  [react-bmap](https://github.com/huiyan-fe/react-bmap) 的 `ctorKey` 一致；
+- `location` 由「有值」变回「未设置」时**重建**：上游没有公开、也没有被验证过的「清除城市限定」
+  入口（`setLocation("")` 的语义未知），本库不去猜隐藏语义。
+
+布尔 props 都在本库侧给了与上游一致的显式默认值 —— Vue 对 `Boolean` 类型有「缺省即 `false`」的转换，
+不给默认值会把上游默认的 `true` 静默改掉。
 
 ### 事件
 
@@ -120,7 +126,11 @@ Vue 对 `Boolean` 类型有「缺省即 `false`」的转换，不给默认值会
 | --- | --- | --- |
 | `suggest` | `PlaceSuggestionDTO[]` | 建议列表更新 |
 | `select` | `PlaceSuggestionDTO` | 用户选中某条建议 |
-| `highlight` | `PlaceHighlightDTO` | 高亮项变化（`{ index, value }`） |
+| `highlight` | `PlaceHighlightChangeDTO` | 高亮项变化：`{ from, to }` 变更对；`from` 在首次高亮时为 `null` |
+
+`highlight` 保留上游的**变更对**语义（高亮从 `from` 移到 `to`），不压平成单条 —— 「从哪来」不是本库
+能替调用方决定的信息。载荷形状由 `tests/behavior/v3-ui-kit-widget-contract.test.ts` 对着发布产物锁定
+（上一版曾把它错当成 `{ index, value }`，导致事件在真实运行时被静默丢弃）。
 
 载荷是**纯数据**：坐标统一为 `{ lng, lat }`，上游标注 `@deprecated` 的字段（如 `street`）不转发。
 
@@ -151,11 +161,13 @@ await api.hide();
 
 ### Props
 
-| Prop | 类型 | 说明 | 挂载后可改 |
+| Prop | 类型 | 说明 | 变更时 |
 | --- | --- | --- | --- |
-| `pageCapacity` | `number` | 每页条数，上游默认 `10` | ❌ 构造期选项 |
-| `pageNum` | `number` | 请求页码 | ❌ |
-| `display` | `PlaceSearchDisplayDTO` | 列表字段显隐（图片/电话/评分/人均…） | ❌ |
+| `pageCapacity` | `number` | 每页条数，上游默认 `10` | 🔁 重建 |
+| `pageNum` | `number` | 请求页码 | 🔁 重建 |
+| `display` | `PlaceSearchDisplayDTO` | 列表字段显隐（图片/电话/评分/人均…） | 🔁 重建 |
+
+这三项都是构造期选项（上游没有 setter），变更即重建 widget。
 
 ### 事件
 
@@ -177,6 +189,10 @@ await api.goToPage(3);
 
 周边 / 范围检索的坐标由本库经 Driver 转成引擎原生点后再交给上游
 （上游把它们直接塞进请求，裸 `{ lng, lat }` 会被 SDK 的 `instanceof` 校验挡掉）。
+
+**翻页是能力而不是内置 UI**：上游 `1.1.2` 只提供 `prevPage` / `nextPage` / `goToPage` 三个 API，
+**没有**会自动出现翻页按钮的控件 —— 需要翻页按钮请自行渲染并调用上面这几个动作。
+结果列表本身（条目、字段显隐、点击）由上游渲染。
 
 ### 不会重复发请求
 
@@ -232,7 +248,8 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 | 组件渲染出来了但没有样式 | 没有显式引入官方 CSS | `import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css"` |
 | `BMAP_RESOURCE_DISPOSED` | 组件已卸载后仍调用公开动作 | 在 `onUnmounted` 之前调用，或用 `status` 判断 |
 
-`status` 会在组件 ref 上暴露（`idle` / `loading` / `ready` / `error` / `disposed`），
+组件 ref 上还会暴露 `status`：`idle` / `loading` / `ready` / `error` / `disposed`。
+它是**取值**而不是 ref（`ref.value.status === "ready"`，不要写 `.status.value` —— 声明里也是取值类型），
 加载失败会经地图上下文的事件总线发出 `resource:error`（载荷含 `component` 与 `BMapError`）。
 
 ## 验证状态与已知留白
@@ -240,8 +257,10 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 本库侧的行为都有可复现证据（命令见 ADR
 [UI Kit 子路径与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary) 的「后果」一节）：
 
-- 所有权 / 竞态 / 释放顺序 / 事件 DTO / 不重复请求 → `tests/behavior/v3-ui-kit-lifecycle.test.ts`、
-  `v3-ui-kit-events.test.ts`（用会记账的假 widget，断言落在计数与监听集合上）；
+- 所有权 / 竞态 / 释放顺序 / props 变更（重建 vs setter）/ 事件 DTO / 不重复请求 →
+  `tests/behavior/v3-ui-kit-lifecycle.test.ts`、`v3-ui-kit-events.test.ts`
+  （用会记账的假 widget，断言落在计数与监听集合上）；
+- **事件载荷形状** → `v3-ui-kit-widget-contract.test.ts` 对着官方发布产物做形状锁（不靠夹具自证）；
 - 产物隔离与消费方 → `v3-ui-kit-entry.test.ts`（含真实 Vite 生产构建）、`v3-ui-kit-ssr.test.ts`
   （无 DOM 子进程 + DOM 访问记账）、`pnpm verify:package`（tarball 消费方类型检查与子路径 import）。
 

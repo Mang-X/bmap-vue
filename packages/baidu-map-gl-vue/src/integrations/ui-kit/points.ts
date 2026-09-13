@@ -10,11 +10,35 @@
  * 投影是**纯函数**、不做网络与 DOM 访问，因此可以在无 widget 的情况下单测。
  */
 import type {
+  PlaceHighlightChangeDTO,
   PlaceHighlightDTO,
   PlacePointDTO,
   PlacePoiDTO,
   PlaceSuggestionDTO,
 } from "./types";
+
+/**
+ * 构造期输入的**稳定串**：嵌套对象按排序后的键序列化，因此「每次渲染传一个新对象字面量、
+ * 但内容相同」不会被误判成变更（否则内联对象会引发重建风暴）。
+ *
+ * 口径与官方 react-bmap 的 `stableStringify`（用作 effect 依赖 key）一致。
+ */
+export function canonicalKey(value: unknown): string {
+  return JSON.stringify(canonicalize(value));
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isRecord(value)) {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) {
+      const item = value[key];
+      if (item !== undefined) out[key] = canonicalize(item);
+    }
+    return out;
+  }
+  return value;
+}
 
 /** 读一个可能是任意值的字段并转成字符串；缺失时给空串（上游契约里这些字段必定是字符串）。 */
 function readString(source: Record<string, unknown>, key: string): string {
@@ -76,14 +100,41 @@ export function toSuggestionList(value: unknown): PlaceSuggestionDTO[] {
   return out;
 }
 
-/** `highlight` 载荷 → DTO。缺少可用的 `value` 时返回 `null`。 */
-export function toHighlightDTO(value: unknown): PlaceHighlightDTO | null {
+/**
+ * 高亮端点 `{ index, value }` → DTO。缺 `index` 或 `value` 不可解析时返回 `null`。
+ */
+export function toHighlightItemDTO(value: unknown): PlaceHighlightDTO | null {
   if (!isRecord(value)) return null;
   const suggestion = toSuggestionDTO(value.value);
   if (!suggestion) return null;
   const index = value.index;
   if (!Number.isFinite(index)) return null;
   return { index: index as number, value: suggestion };
+}
+
+/**
+ * `highlight` 载荷 → 变更对 DTO。
+ *
+ * 上游真实载荷是 `{ from: HighlightItem | null, to: HighlightItem }`
+ * （形状锁见 `v3-ui-kit-widget-contract.test.ts`）：
+ * - `to` 不可解析 → 整条事件不发（返回 `null`），不制造「看起来高亮变了」的假信号；
+ * - `from` **为 `null`** → 规范化为 `null`：这是上游表达「此前没有高亮项」的合法取值；
+ * - `from` **存在却解析不出来** → 同样整条不发。这里**不能**降级成 `null` ——
+ *   那会把「形状变了」伪装成「首次高亮」，属于同一类假信号，只是方向相反。
+ *
+ * ⚠️ 历史教训：本函数的前身按 `{ index, value }` 解析，而夹具照抄了同一个错误假设，
+ * 于是「真实运行时事件被静默丢弃」在测试里是全绿的。形状断言必须对着**发布产物**，不能对着夹具。
+ */
+export function toHighlightChangeDTO(value: unknown): PlaceHighlightChangeDTO | null {
+  if (!isRecord(value)) return null;
+  const to = toHighlightItemDTO(value.to);
+  if (!to) return null;
+
+  const rawFrom = value.from;
+  if (rawFrom === null || rawFrom === undefined) return { from: null, to };
+  const from = toHighlightItemDTO(rawFrom);
+  if (!from) return null;
+  return { from, to };
 }
 
 /** POI 对象 → DTO。输入不是对象时返回 `null`。 */

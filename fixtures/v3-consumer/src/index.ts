@@ -28,8 +28,10 @@ import {
   UI_KIT_STYLE_PATH,
   type BPlaceAutocompleteProps,
   type BPlaceSearchProps,
+  type PlaceHighlightChangeDTO,
   type PlacePoiDTO,
   type PlaceSuggestionDTO,
+  type UiKitWidgetStatus,
 } from 'baidu-map-gl-vue/ui-kit'
 
 const center = shallowRef({ lng: 116.4, lat: 39.9 })
@@ -75,3 +77,32 @@ export const uiKitSmoke = {
   searchProps,
 }
 export type { PlacePoiDTO, PlaceSuggestionDTO }
+
+// exposed API 类型 smoke（#73 评审第 2 项）：公开动作与 `status` 在消费者侧必须直接可用。
+//
+// ⚠️ 这条 smoke 的**边界**：`InstanceType<typeof Comp>` 会把 `defineExpose` 的 ref 解包
+// （Vue 的公开实例类型本来就这样），所以它**判定不了**「声明里写的是 `Ref` 还是取值」——
+// 那条由 `tests/behavior/v3-ui-kit-entry.test.ts` 直接读 `dist/ui-kit.d.ts` 锁定。
+const autocompleteInstance = null as unknown as InstanceType<typeof BPlaceAutocomplete>
+const searchInstance = null as unknown as InstanceType<typeof BPlaceSearch>
+const searchStatus: UiKitWidgetStatus = searchInstance.status
+const autocompleteStatus: UiKitWidgetStatus = autocompleteInstance.status
+const searchCall: (keyword: string, option?: { city?: string }) => Promise<void> = searchInstance.search
+const paginate: () => Promise<void> = searchInstance.nextPage
+const suggestSearch: (keyword: string) => Promise<void> = autocompleteInstance.search
+// `highlight` 载荷是变更对（评审第 1 项）
+const highlightChange: PlaceHighlightChangeDTO = {
+  from: null,
+  to: {
+    index: 0,
+    value: { name: '百度大厦', province: '', city: '', district: '', business: '', address: '' },
+  },
+}
+export const exposedApiSmoke = {
+  searchStatus,
+  autocompleteStatus,
+  searchCall,
+  paginate,
+  suggestSearch,
+  highlightChange,
+}

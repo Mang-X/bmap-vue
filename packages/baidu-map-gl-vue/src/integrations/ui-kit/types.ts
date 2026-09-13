@@ -36,10 +36,25 @@ export interface PlaceSuggestionDTO {
   point?: PlacePointDTO;
 }
 
-/** 键盘/鼠标高亮项（`highlight` 事件载荷）。 */
+/** 键盘/鼠标高亮项（`highlight` 载荷的端点）。 */
 export interface PlaceHighlightDTO {
   index: number;
   value: PlaceSuggestionDTO;
+}
+
+/**
+ * 高亮变更（`highlight` 事件载荷）。
+ *
+ * 上游 `PlaceAutocomplete` 的 `highlight` 载荷是**变更对**：高亮项从 `from` 移到 `to`，
+ * 其中 `from` 在「此前没有高亮项」（首次按方向键）时为 `null`。这里刻意保留上游语义，
+ * 不压平成单条 —— 「从哪来」不是本库能替调用方决定的信息。
+ *
+ * ⚠️ 载荷形状由 `tests/behavior/v3-ui-kit-widget-contract.test.ts` 对着发布产物锁定；
+ * 上游改形状时会先红，不要靠猜。
+ */
+export interface PlaceHighlightChangeDTO {
+  from: PlaceHighlightDTO | null;
+  to: PlaceHighlightDTO;
 }
 
 /** 检索结果单条 POI（`load` 数组元素、`select` 事件载荷）。 */

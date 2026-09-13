@@ -153,3 +153,31 @@ Vue 的 `resolvePropValue` 对 `Boolean` 类型有 `isAbsent && !hasDefault → 
 - ADR [2026-09-13 上游类型包大小写引用缺陷的补丁处置](./2026-09-13-upstream-types-case-patch.md)
 - 契约表：[官方包发布契约](/zh-CN/contributing/official-packages)
 - 使用文档：[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)
+
+## 评审后修订（2026-09-13）
+
+> 决策本身保持冻结、不改写历史；下面是**同一决策范围内**的修正，全部来自 PR #79 的审核意见，
+> 在 follow-up PR 里落地。
+
+1. **`highlight` 事件按上游真实形状投影。** 决策 3 只说「事件载荷是纯数据 DTO」，没有钉住形状：
+   首版按 `{ index, value }` 投影，而上游 `1.1.2` 的真实载荷是
+   `{ from: HighlightItem | null, to: HighlightItem }`（`moveActive()` 里 emit），
+   于是事件在真实运行时被静默丢弃 —— 更糟的是夹具照抄了同一个错误假设，测试全绿。
+   现在公开 `PlaceHighlightChangeDTO { from, to }`，并新增**发布产物形状锁**
+   （`v3-ui-kit-widget-contract.test.ts`）：事件形状必须对着上游实现断言，不能对着夹具自证。
+2. **构造期输入变化 = 重建 widget。** 桥新增 `rebuild()`；组件把上游没有 setter 的选项
+   （`placeholder` / `debounce` / `minLength` / `showSuggestion` / `suggestionCount` / `display`，
+   以及 `location` 的「有值 ↔ 无值」）合成一个 `ctorKey`（`canonicalKey()` 排序序列化，
+   内容相同的内联对象不触发重建），key 变化即重建。口径取自官方
+   [`react-bmap`](https://github.com/huiyan-fe/react-bmap)：构造期参数进 ctorKey、其余走 setter，
+   并用稳定串做依赖 key。原文档里「构造期选项变更需重新挂载」的说法作废（`BPlaceSearch` 同理）。
+3. **`location` 由有值变回未设置：重建，不猜隐藏语义。** 上游没有公开、也没有被验证过的
+   「清除城市限定」入口（`setLocation("")` 的语义未知）。`types` 则不同：它的默认值就是 `all`，
+   「改回未设置」= 恢复默认，用 `setTypes("all")` 表达，不需要重建。
+4. **expose 的 `status` 改为取值 getter。** `defineExpose` 会被 Vue 的 `proxyRefs` 解包，
+   runtime 读到的本来就是取值；现在声明与 runtime 对齐（`status: UiKitWidgetStatus`）。
+   附一条反驳意见：审核建议的 `InstanceType<typeof Comp>` 消费者侧 smoke **判不出**这件事 ——
+   Vue 的公开实例类型本来就会解包 ref，`ref.value.status.value` 在修复前**已经是**类型错误。
+   有牙齿的证据是直接读 `dist/ui-kit.d.ts` 的断言（`v3-ui-kit-entry.test.ts`）。
+5. **文档措辞**：`PlaceSearch` 的翻页是**API 而不是内置 UI**（上游只提供
+   `prevPage` / `nextPage` / `goToPage`，没有翻页控件），文档不再暗示会自动出现翻页按钮。

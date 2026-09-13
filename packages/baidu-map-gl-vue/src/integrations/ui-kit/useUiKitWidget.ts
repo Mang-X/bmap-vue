@@ -65,6 +65,17 @@ export interface UseUiKitWidgetResult<TWidget extends UiKitWidgetHandle> {
    * 用于 prop → setter 的镜像：构造选项已经带上了当前值，未就绪时不需要补一次调用。
    */
   applyIfReady(run: (widget: TWidget) => void): void;
+  /**
+   * 按**当前**的 `buildOptions()` 重建 widget（先释放旧的、再构造新的）。
+   *
+   * 用于「构造期输入变了」的场景：上游构造期参数（placeholder / debounce / display…）没有
+   * setter，改它们只能重建 —— 与官方 react-bmap 的 `ctorKey` 口径一致。已卸载后调用是 no-op。
+   *
+   * 语义说明：重建会**立即**释放旧 widget，因此已经在飞的公开动作可能落到已被销毁的实例上
+   * （上游 `destroy()` 后调用哪些方法仍安全并未被验证）。需要严格串行的场景请在调用方自己排队，
+   * 本库不承诺「重建期间动作继续可用」。
+   */
+  rebuild(): void;
   /** 纯数据坐标 → 当前地图引擎的 raw Point（经 Driver 转换，组件不接触 raw SDK）。 */
   toRawPoint(point: PlacePointDTO): Promise<unknown>;
 }
@@ -85,6 +96,8 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
 
   /** 创建代数：每次 start 自增；await 之后必须仍是当前代数才允许落地。 */
   let generation = 0;
+  /** 本次 start 的取消源：新的 start / 卸载会 abort 掉上一次仍在等 `whenReady()` 的等待。 */
+  let startAbort: AbortController | null = null;
   /** 已登记的订阅，释放时逐条 off。 */
   let subscriptions: UiKitSubscription[] = [];
   /** 与当前 widget 同代的坐标转换函数（取自本次 ready 的 client）。 */
@@ -150,9 +163,19 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
   /**
    * 构造（或重建）widget。
    *
-   * 每次 map handle 换代都会调用一次：先 `teardown()` 掉旧 widget，再等新的 map 就绪后重建。
+   * 每次 map handle 换代、或组件调用 `rebuild()` 都会走一次：先 `teardown()` 掉旧 widget，
+   * 再等新的 map 就绪后重建。
+   *
+   * 有两条守卫，缺一都会在「连续触发」下出问题：
+   * - **generation**：`await` 之后必须仍是当前代数才允许落地，否则并发 start 会各自构造一份；
+   * - **本轮的 AbortController**：新一次 start（或卸载）会取消上一次仍在等的 `whenReady()`，
+   *   否则地图就绪前连续变更会累积一堆没人认领的等待者。
    */
   async function start(): Promise<void> {
+    startAbort?.abort("restart");
+    const controller = new AbortController();
+    startAbort = controller;
+
     const gen = ++generation;
     // 重建期间不清空 waiters：它们等的是「widget 可用」，不是「这一次创建结束」。
     teardown();
@@ -160,7 +183,7 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
     status.value = "loading";
 
     try {
-      const ready = await ctx.whenReady(scope.signal);
+      const ready = await ctx.whenReady(controller.signal);
       if (!isCurrent(gen)) return;
 
       const module = await loadUiKit();
@@ -229,6 +252,8 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
 
   onUnmounted(() => {
     generation += 1;
+    startAbort?.abort("disposed");
+    startAbort = null;
     if (waiters.length > 0) settleWaiters({ error: disposedError() });
     scope.dispose();
     status.value = "disposed";
@@ -261,5 +286,10 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
     return convertPoint(point);
   }
 
-  return { widget, status, withWidget, applyIfReady, toRawPoint };
+  function rebuild(): void {
+    if (scope.isDisposed) return;
+    void start();
+  }
+
+  return { widget, status, withWidget, applyIfReady, rebuild, toRawPoint };
 }
