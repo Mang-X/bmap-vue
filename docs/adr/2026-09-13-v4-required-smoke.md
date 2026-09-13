@@ -132,6 +132,36 @@ no-op 时 PASS（评审指出；实测把 `<BDistrictLayer>` 的挂载改成 no-
 **边界（写进文档与 PR）**：拦截证明调用发生，不证明 SDK 采纳；要证明采纳需要 SDK 提供读数接口，
 上游 4.0.4 没有。拦截器必须在 `finally` 还原。
 
+### 9. 四个 wrapper 全部进 required smoke（收口 #75 之后的组件面）
+
+`#75`（PR #82）交付了第三个与第四个薄封装（`BPlaceDetail` / `BRoutePlan`），因此 required smoke
+的 UI Kit 部分从两个扩到四个，且都是**真实 AK**：
+
+| 检查 | 关键断言 |
+| --- | --- |
+| `ui-kit-autocomplete-search` | `ready`、检索写入输入框、官方 UI Kit 渲染出输入框、卸载后宿主子树撤走 |
+| `ui-kit-placesearch-load` | 检索结算 + **`load` 事件带回 POI**（并从中取一个**真实 uid** 交给下一条） |
+| `ui-kit-placedetail-load` | 用上一步的真实 uid 打开、`load` 事件带回详情、面板渲染、卸载后撤走 |
+| `ui-kit-routeplan-search` | 驾车检索返回方案、**`result` 事件与返回值同源**、面板渲染、卸载后撤走；`BMAP_SERVICE_FAILED` 记 `blocked` |
+
+细节口径：**事件也要断言**（不能只看 `search()`/`load` 的返回值或 `search()` 是否结算）——事件
+绑定断掉时返回值可能仍然正常；uid **从真实检索结果取**，不硬编码某个 POI（硬编码的 POI 会随
+数据变化而失效，让检查变成偶然通过）；四个 wrapper 的「回收」都按同一条口径检查宿主子树撤走。
+
+### 10. docs 三件套进 PR 门禁，且类型检查对着发布声明面（收口 #74 的 docs 验收）
+
+`docs:format:check` / `docs:typecheck` / `docs:build` 三样**长期是红的**，而且**没有任何 CI 跑它们**
+——「docs 通过」这条验收因此一直挂在 #25/#74 上却没人执行。三个根因与处置：
+
+| 症状 | 根因 | 处置 |
+| --- | --- | --- |
+| `docs:format:check` 报 2 个文件 | `examples/expand/bmap-draw/draw.vue`、`examples/expand/mapvgl/pointLayer.vue` 未被格式化 | 按仓库自身的 formatter 输出重排 |
+| `docs:typecheck` 23 条 `Cannot find name 'BMap'` / `BMAP_ANCHOR_*` | `docs/tsconfig.json` 的 `paths` 把 `baidu-map-gl-vue` 映射到组件库**源码**，而 docs 的 types 环境没有上游全局声明 | 改为映射**发布声明面**（`dist/index.d.ts` / `dist/ui-kit.d.ts`）：docs 示例是消费方，对着发布面检查才有意义，也不需要在 docs 侧引入上游全局声明 |
+| `docs:build` 报 `Element is missing end tag`（位置误导） | 某个 ADR 在**行内代码里写了「反斜杠转义的反引号」**：markdown-it 把被转义的字符当普通文本、不当代码跨度分隔符 ⇒ span 不闭合 ⇒ 后面的裸 `<...>` 被当作 Vue 标签（真正的元凶在第 83 行，报的却是 128 行） | 改述那一段；并加一条静态用例禁止 docs 的 markdown 出现该写法（用围栏代码块或改述代替） |
+
+三条新门禁（`quality.yml` 的 `docs` job + `tests/behavior/v3-docs-gate.test.ts`）都配了反证：
+把 `paths` 指回 `src` / 删掉 docs job 的构建步骤 / 往文档里塞回转义反引号，对应用例都会红。
+
 ## 已知限制与欠账
 
 - **live 档的图层 / 控件检查只到「调用发生过」**：真实 4.0 没有读数接口，拦截 `Map.addLayer` /
@@ -145,14 +175,8 @@ no-op 时 PASS（评审指出；实测把 `<BDistrictLayer>` 的挂载改成 no-
   （必需要求未归因错误失败/阻塞、可选插件另页验证），插件页本身仍由 #42 / #43 承接。
 - **多地图 / retry / 路由卸载**只覆盖到「第二个入口复用 SDK」与「卸载后重挂载」两条；
   完整的多地图与路由卸载矩阵仍按 #25 的保留项推进。
-- **`docs:build` / `docs:format:check` 的既存失败未在本轮处理**（与本次改动无关，基线对照证据见
-  PR 正文）；它们也**没有**接入任何 CI，所以「docs 通过」这条验收不能由本 PR 声称完成。
-  同理 `fixtures/` 下只有 `v3-consumer` 一个 consumer，**advanced / SSR 的独立 consumer 仍缺**
-  （属 #44 / #45）。
-- **仓库地址与包元数据不在本 PR 范围内**：`package.json` 的 `repository.url`、README/文档站的
-  旧地址由仍在 open 的 PR #69（`chore/repo-migration-references`）覆盖，两者文件不重叠、无冲突。
-  因此验收项「仓库链接为新地址」不能由本 PR 声称完成；本 PR 只负责**功能性**的那一条
-  ——「新组织 owner 条件不会静默跳过必要 CI」。
+- **`fixtures/` 下只有 `v3-consumer` 一个 consumer**：**advanced / SSR 的独立 consumer 仍缺**
+  （属 #44 / #45）。docs 三件套已进 CI（见决策 10），但「advanced / SSR 的消费验证」不在其中。
 - **实跑证据不进仓库**：真实的 `pnpm smoke:v4` 报告已脱敏，但仍按「不入库」处理（避免把运行时
   日志/授权信息带进版本库），落在 PR 正文与 nightly 的 artifact 里；候选 commit 以 PR head SHA
   为准。因此**证据的可复核性依赖 PR 与 CI**，读者不能只凭仓库内容复现那一次运行。

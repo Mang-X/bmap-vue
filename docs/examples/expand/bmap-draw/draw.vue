@@ -91,13 +91,7 @@ let rectangle = ref({
   },
 });
 let clearFn = ref();
-function handleInitd({
-  map,
-  client,
-}: {
-  map: { raw: unknown };
-  client: BMapClient;
-}) {
+function handleInitd({ map, client }: { map: { raw: unknown }; client: BMapClient }) {
   const BMapGL = client.rawSdk as {
     Icon: new (url: string, size: unknown, opts?: Record<string, unknown>) => unknown;
     Size: new (w: number, h: number) => unknown;

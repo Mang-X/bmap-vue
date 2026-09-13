@@ -31,7 +31,9 @@ import {
 import { existingGlobalV4Provider } from "../../../packages/baidu-map-gl-vue/src/core/index.ts";
 import {
   BPlaceAutocomplete,
+  BPlaceDetail,
   BPlaceSearch,
+  BRoutePlan,
 } from "../../../packages/baidu-map-gl-vue/src/integrations/ui-kit/index.ts";
 import { createFakeBMapV4 } from "../../../packages/test-utils/fake-bmap-v4/index.ts";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
@@ -74,6 +76,9 @@ const CENTER = { lng: 116.404, lat: 39.915 };
 const POINT = { lng: 116.44, lat: 39.93 };
 const CITY = "北京";
 const KEYWORD = "中关村";
+/** 驾车路线起终点（中关村 → 望京）：距离足够产生真实方案，且不依赖某个 POI 的 uid。 */
+const DRIVE_FROM = { lng: 116.404, lat: 39.915 };
+const DRIVE_TO = { lng: 116.4707, lat: 39.9968 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -371,6 +376,18 @@ interface Mounted {
   infoRef: { value: unknown };
   autoRef: { value: unknown };
   searchRef: { value: unknown };
+  detailRef: { value: unknown };
+  routeRef: { value: unknown };
+  /** 四个 wrapper 的状态输入（`BPlaceDetail` 的 `uid` 由真实检索结果喂进来，不硬编码）。 */
+  uiKit: { placeUid: string };
+  /** wrapper 事件落点：检查体靠它断言「事件真的到达」，而不是只看返回值。 */
+  uiKitEvents: {
+    searchLoad: unknown[];
+    searchSelect: unknown[];
+    detailLoad: unknown[];
+    routeResult: unknown[];
+    routeError: unknown[];
+  };
   unmount(): Promise<void>;
 }
 
@@ -387,12 +404,24 @@ function mountTree(): Mounted {
     district: false,
     autocomplete: false,
     placesearch: false,
+    placedetail: false,
+    routeplan: false,
   });
   const treeErrors: unknown[] = [];
   const mapRef = ref<unknown>(null);
   const infoRef = ref<unknown>(null);
   const autoRef = ref<unknown>(null);
   const searchRef = ref<unknown>(null);
+  const detailRef = ref<unknown>(null);
+  const routeRef = ref<unknown>(null);
+  const uiKit = reactive({ placeUid: "" });
+  const uiKitEvents: Mounted["uiKitEvents"] = {
+    searchLoad: [],
+    searchSelect: [],
+    detailLoad: [],
+    routeResult: [],
+    routeError: [],
+  };
   let settleReady: (value: unknown) => void = () => {};
   const ready = new Promise<unknown>((resolve) => {
     settleReady = resolve;
@@ -425,7 +454,34 @@ function mountTree(): Mounted {
     if (flags.zoom) nodes.push(h(BZoom, {}));
     if (flags.district) nodes.push(h(BDistrictLayer, { name: "北京市" }));
     if (flags.autocomplete) nodes.push(h(BPlaceAutocomplete as never, { ref: autoRef, location: CITY }));
-    if (flags.placesearch) nodes.push(h(BPlaceSearch as never, { ref: searchRef }));
+    if (flags.placesearch) {
+      nodes.push(
+        h(BPlaceSearch as never, {
+          ref: searchRef,
+          onLoad: (pois: unknown) => uiKitEvents.searchLoad.push(pois),
+          onSelect: (poi: unknown) => uiKitEvents.searchSelect.push(poi),
+        }),
+      );
+    }
+    if (flags.placedetail) {
+      nodes.push(
+        h(BPlaceDetail as never, {
+          ref: detailRef,
+          // `uid` 由真实检索结果喂进来（见 `ui-kit-placesearch-load`），不硬编码某个 POI。
+          uid: uiKit.placeUid || undefined,
+          onLoad: (detail: unknown) => uiKitEvents.detailLoad.push(detail),
+        }),
+      );
+    }
+    if (flags.routeplan) {
+      nodes.push(
+        h(BRoutePlan as never, {
+          ref: routeRef,
+          onResult: (result: unknown) => uiKitEvents.routeResult.push(result),
+          onError: (error: unknown) => uiKitEvents.routeError.push(error),
+        }),
+      );
+    }
     nodes.push(h(GeoProbe));
     return nodes;
   };
@@ -500,6 +556,10 @@ function mountTree(): Mounted {
     infoRef,
     autoRef,
     searchRef,
+    detailRef,
+    routeRef,
+    uiKit,
+    uiKitEvents,
     async unmount() {
       app.unmount();
       await nextTick();
@@ -924,7 +984,191 @@ const CHECKS: Record<string, CheckImpl> = {
         "检索结算后 BPlaceSearch 的宿主里没有任何 DOM，官方 UI Kit 可能没渲染结果列表",
         { html: (hostEl!.innerHTML ?? "").slice(0, 200) },
       );
-      return { html: (hostEl!.innerHTML ?? "").slice(0, 120), children: hostEl!.childElementCount };
+      // 必需事件必须真的到达（不能只看 `search()` 结算）：`load` 是「一轮检索完成」的公开出口。
+      const pois = await until(
+        () => {
+          const last = ctx.mounted.uiKitEvents.searchLoad.at(-1);
+          return Array.isArray(last) && last.length > 0 ? (last as { uid?: string }[]) : null;
+        },
+        UI_MS,
+        "UIKIT_SEARCH_NO_LOAD_EVENT",
+        "BPlaceSearch 的 load 事件载荷",
+      );
+      // 顺手把真实 uid 交给下一条检查（详情面板），避免硬编码某个 POI。
+      const withUid = pois.find((poi) => typeof poi.uid === "string" && poi.uid.length > 0);
+      assertSmoke(
+        withUid?.uid,
+        "UIKIT_SEARCH_NO_UID",
+        "检索结果里没有可用 uid，详情面板无法用真实数据验证",
+        { sample: pois.slice(0, 2) },
+      );
+      ctx.mounted.uiKit.placeUid = withUid!.uid!;
+      return {
+        html: (hostEl!.innerHTML ?? "").slice(0, 120),
+        children: hostEl!.childElementCount,
+        pois: pois.length,
+        uid: withUid!.uid,
+      };
+    },
+  },
+
+  /** 第三个 wrapper：详情面板 —— 用上一步真实检索到的 uid 打开，并验证回收路径。 */
+  "ui-kit-placedetail-load": {
+    async run(ctx) {
+      const mark = consoleRing.length;
+      const uid = ctx.mounted.uiKit.placeUid;
+      assertSmoke(uid, "UIKIT_DETAIL_NO_UID", "上一步没有拿到 uid（详情检查的前置）");
+      ctx.mounted.uiKitEvents.detailLoad.length = 0;
+      ctx.mounted.flags.placedetail = true;
+      await nextTick();
+      const api = (await until(
+        () => {
+          const value = ctx.mounted.detailRef.value as { status?: string } | null;
+          return value?.status === "ready" ? value : null;
+        },
+        UI_MS,
+        "UIKIT_DETAIL_NOT_READY",
+        "BPlaceDetail ready",
+      )) as unknown as { status: string };
+      assertSmoke(api.status === "ready", "UIKIT_DETAIL_STATUS", `状态应为 ready，实际 ${api.status}`);
+      // `load` 到达 = 详情真的取回来了（该 wrapper 刻意不合成 error 事件，见组件文件头）。
+      const detail = await withBlockedTimeout(
+        until(
+          () => ctx.mounted.uiKitEvents.detailLoad.at(-1) ?? null,
+          UI_MS,
+          "UIKIT_DETAIL_NO_LOAD_EVENT",
+          "BPlaceDetail 的 load 事件",
+        ),
+        UI_MS,
+        "placedetail.load",
+        "UIKIT_DETAIL_TIMEOUT",
+      );
+      const hostEl = (ctx.mounted.detailRef.value as { $el?: HTMLElement }).$el;
+      assertSmoke(hostEl, "UIKIT_DETAIL_NO_HOST", "拿不到 BPlaceDetail 的宿主元素");
+      const rendered = hostEl!.childElementCount > 0;
+      assertSmoke(
+        rendered,
+        "UIKIT_DETAIL_NO_DOM",
+        "详情面板的宿主里没有任何 DOM，官方 UI Kit 可能没渲染详情",
+        { html: (hostEl!.innerHTML ?? "").slice(0, 200) },
+      );
+      assertSmoke(
+        detail && typeof detail === "object" && Object.keys(detail as object).length > 0,
+        "UIKIT_DETAIL_EMPTY",
+        "详情载荷是空对象，形状无法核对",
+        { detail },
+      );
+      // 回收路径（与另两个 wrapper 同口径）。
+      ctx.mounted.flags.placedetail = false;
+      await nextTick();
+      await sleep(300);
+      assertSmoke(
+        !document.body.contains(hostEl!),
+        "UIKIT_DETAIL_HOST_RESIDUE",
+        "卸载 BPlaceDetail 之后宿主子树仍留在文档里",
+      );
+      assertSmoke(
+        consoleErrorsSince(mark).length === 0,
+        "UIKIT_DETAIL_CONSOLE_ERROR",
+        "详情加载 / 卸载期间出现 console.error",
+        { errors: consoleErrorsSince(mark).slice(0, 3) },
+      );
+      return { uid, hostDetached: true, detailKeys: Object.keys(detail as object).slice(0, 8) };
+    },
+  },
+
+  /** 第四个 wrapper：路线面板 —— 真实驾车检索（锁定版本只开放驾车，见组件文件头）。 */
+  "ui-kit-routeplan-search": {
+    async run(ctx) {
+      const mark = consoleRing.length;
+      ctx.mounted.uiKitEvents.routeResult.length = 0;
+      ctx.mounted.uiKitEvents.routeError.length = 0;
+      ctx.mounted.flags.routeplan = true;
+      await nextTick();
+      const api = (await until(
+        () => {
+          const value = ctx.mounted.routeRef.value as { status?: string } | null;
+          return value?.status === "ready" ? value : null;
+        },
+        UI_MS,
+        "UIKIT_ROUTE_NOT_READY",
+        "BRoutePlan ready",
+      )) as unknown as {
+        search(options: {
+          start: { lng: number; lat: number };
+          end: { lng: number; lat: number };
+          startName?: string;
+          endName?: string;
+        }): Promise<{ type: string; plans: { distance: number; duration: number }[] }>;
+        getCurrentType(): Promise<string>;
+      };
+      assertSmoke(
+        (await api.getCurrentType()) === "driving",
+        "UIKIT_ROUTE_TYPE",
+        "锁定版本的当前规划类型应为 driving",
+      );
+      const result = await withBlockedTimeout(
+        api
+          .search({ start: DRIVE_FROM, end: DRIVE_TO, startName: "中关村", endName: "望京" })
+          .catch((error: { code?: string; message?: string }) => {
+            // 服务类失败（`BMAP_SERVICE_FAILED`）= 外部前置（配额 / 权限 / 网络），与
+            // `service-geocode` 同口径记 blocked；结构性错误继续按 fail 冒泡。
+            if (error?.code === "BMAP_SERVICE_FAILED") {
+              block("UIKIT_ROUTE_SERVICE_FAILED", `路线服务未返回可用结果：${error.message ?? ""}`);
+            }
+            throw error;
+          }),
+        UI_MS,
+        "routeplan.search",
+        "UIKIT_ROUTE_TIMEOUT",
+      );
+      assertSmoke(
+        Array.isArray(result.plans) && result.plans.length > 0,
+        "UIKIT_ROUTE_NO_PLAN",
+        "驾车检索没有返回任何方案",
+        { type: result.type, plans: result.plans?.length ?? null },
+      );
+      const hostEl = (ctx.mounted.routeRef.value as { $el?: HTMLElement }).$el;
+      assertSmoke(hostEl, "UIKIT_ROUTE_NO_HOST", "拿不到 BRoutePlan 的宿主元素");
+      assertSmoke(
+        hostEl!.childElementCount > 0,
+        "UIKIT_ROUTE_NO_DOM",
+        "路线面板的宿主里没有任何 DOM，官方 UI Kit 可能没渲染面板",
+        { html: (hostEl!.innerHTML ?? "").slice(0, 200) },
+      );
+      // 事件与返回值同源（`result` 事件载荷与 `search()` 的 Promise 结果是同一形状）。
+      assertSmoke(
+        ctx.mounted.uiKitEvents.routeResult.length > 0,
+        "UIKIT_ROUTE_NO_RESULT_EVENT",
+        "`result` 事件没有到达（返回值有结果但事件没发，说明事件绑定断了）",
+      );
+      assertSmoke(
+        ctx.mounted.uiKitEvents.routeError.length === 0,
+        "UIKIT_ROUTE_ERROR_EVENT",
+        "路线检索期间收到了 error 事件",
+        { errors: ctx.mounted.uiKitEvents.routeError.slice(0, 2) },
+      );
+      // 回收路径。
+      ctx.mounted.flags.routeplan = false;
+      await nextTick();
+      await sleep(300);
+      assertSmoke(
+        !document.body.contains(hostEl!),
+        "UIKIT_ROUTE_HOST_RESIDUE",
+        "卸载 BRoutePlan 之后宿主子树仍留在文档里",
+      );
+      assertSmoke(
+        consoleErrorsSince(mark).length === 0,
+        "UIKIT_ROUTE_CONSOLE_ERROR",
+        "路线检索 / 卸载期间出现 console.error",
+        { errors: consoleErrorsSince(mark).slice(0, 3) },
+      );
+      return {
+        type: result.type,
+        plans: result.plans.length,
+        firstPlan: result.plans[0],
+        events: ctx.mounted.uiKitEvents.routeResult.length,
+      };
     },
   },
 

@@ -80,9 +80,9 @@ issue #22「目标与范围」逐条列出的控件集合：
 
 ### 3. 控件句柄品牌补成 `control:<kind>`
 
-`ControlHandle` 从 `SdkHandle<"control">` 放宽为 `SdkHandle<"control" | \`control:${string}\`>`
-（裸 `"control"` 仍合法，webgl-v1 与手工登记句柄用它），v4 与 webgl-v1 的 `create` /
-`createCustomControl` 都写 `control:<kind>` / `control:custom`——与 `OverlayHandle` /
+`ControlHandle` 从 `SdkHandle<"control">` 放宽为**品牌带种类**的形式（`SdkHandle<"control" |
+"control:<kind>">`），裸 `"control"` 仍合法（webgl-v1 与手工登记句柄用它），v4 与 webgl-v1 的
+`create` / `createCustomControl` 都写 `control:<kind>` / `control:custom`——与 `OverlayHandle` /
 `LayerHandle` 从 `#19` 起的做法同形。
 
 品牌是 `setOptions` 给出正确更新口径的**唯一依据**（§5）：没有它就只能退回 webgl-v1 时代的

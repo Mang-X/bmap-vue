@@ -55,7 +55,15 @@ const SPECS: Record<string, SmokeCheckSpec> = {
   },
   "ui-kit-placesearch-load": {
     id: "ui-kit-placesearch-load",
-    name: "BPlaceSearch：ready、检索结算、宿主由 UI Kit 渲染出结果 DOM",
+    name: "BPlaceSearch：ready、检索结算、`load` 事件带回 POI、宿主由 UI Kit 渲染出结果 DOM、卸载后撤走",
+  },
+  "ui-kit-placedetail-load": {
+    id: "ui-kit-placedetail-load",
+    name: "BPlaceDetail：用真实检索到的 uid 打开、`load` 事件带回详情、宿主由 UI Kit 渲染、卸载后撤走",
+  },
+  "ui-kit-routeplan-search": {
+    id: "ui-kit-routeplan-search",
+    name: "BRoutePlan：驾车检索返回方案、`result` 事件与返回值同源、面板由 UI Kit 渲染、卸载后撤走",
   },
   "second-provider-reuses-sdk": {
     id: "second-provider-reuses-sdk",
@@ -93,6 +101,8 @@ const liveChecks: string[] = [
   "service-geocode",
   "ui-kit-autocomplete-search",
   "ui-kit-placesearch-load",
+  "ui-kit-placedetail-load",
+  "ui-kit-routeplan-search",
   "second-provider-reuses-sdk",
   "unmount-release",
   "remount-after-unmount",

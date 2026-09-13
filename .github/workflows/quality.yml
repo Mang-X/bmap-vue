@@ -109,6 +109,42 @@ jobs:
       - name: v4 browser smoke (fixture, no network)
         run: pnpm smoke:v4:fixture
 
+  # 文档站：格式 / lint / 类型 / 构建。
+  # 此前**没有任何 CI 跑它们**，于是三样长期是红的（`docs:typecheck` 23 条 error、
+  # `docs:format:check` 2 个文件、`docs:build` 一处未闭合标签），而「docs 通过」是 #25 的验收项。
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # docs 的类型检查与运行时都对着**发布产物**（见 docs/tsconfig.json 的 paths），
+      # 因此先构建组件库；顺序反了会得到「找不到 dist/*.d.ts」的假失败。
+      - name: Build v3 package (docs 类型检查 / 站点的前置)
+        run: node --experimental-strip-types scripts/build-v3.mts
+
+      - name: Docs format check
+        run: pnpm docs:format:check
+
+      - name: Docs lint
+        run: pnpm docs:lint
+
+      - name: Docs typecheck
+        run: pnpm docs:typecheck
+
+      - name: Docs build
+        run: pnpm docs:build
+
   # v3 package: build + type-check + publint + attw + tarball consumer
   v3:
     runs-on: ubuntu-latest
