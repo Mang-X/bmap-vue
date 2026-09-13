@@ -302,6 +302,9 @@ describe("check-raw-sdk: JSAPI 4.0 `BMap` 边界（issue #15）", () => {
     expect(parsed.namespaces).toEqual(["BMap", "BMapGL"]);
     expect(parsed.allowedPatterns).toContain("driver/**");
     expect(parsed.officialTypesPackage).toBe("@baidumap/jsapi-v4-types");
+    // 新增的官方包薄封装目录（issue #73）与组件同属禁区：默认扫描必须覆盖它，
+    // 否则「本地只跑 check:raw-sdk」会漏掉整棵 integrations。
+    expect(parsed.forbiddenSrcDirs).toContain("integrations");
   });
 
   it("白名单匹配器只放行既定边界", () => {
@@ -312,6 +315,7 @@ describe("check-raw-sdk: JSAPI 4.0 `BMap` 边界（issue #15）", () => {
     expect(isRawSdkAllowedPath("components/map/BMap.vue")).toBe(false);
     expect(isRawSdkAllowedPath("composables/useBMap.ts")).toBe(false);
     expect(isRawSdkAllowedPath("core/runtime/MapRuntime.ts")).toBe(false);
+    expect(isRawSdkAllowedPath("integrations/ui-kit/loadUiKit.ts")).toBe(false);
   });
 });
 

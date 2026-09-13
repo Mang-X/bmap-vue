@@ -157,5 +157,21 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | --- | --- |
 | #71 / R25-B（默认 Provider 委托官方 Loader） | Loader 契约表全部；单例 / 冲突 / 重试 / reset / script 记账的**实测**行为；`nonce` / SRI / timeout 的处置口径 |
 | #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」 |
-| #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径 |
+| #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径。**已落地**：见下节 |
 | #74 / R25-E（同一候选提交重新验收） | 「已验证 vs 未验证」列表；探针命令与退出码语义；四 widget 结论 |
+
+## 本库侧落地（R25-D / issue #73）
+
+`./ui-kit` 子入口与两个薄封装的实现边界见
+[ADR 2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)，
+使用方式见[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)。本页只登记「上游契约 → 本库行为」的对应：
+
+| 上游契约（本页上文） | 本库的处置 | 可复现证据 |
+| --- | --- | --- |
+| `options.map` 必传、构造前须有可用地图 | 桥等 `whenReady()` 后构造；map handle 换代时先释放旧 widget 再重建 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
+| UI Kit 只能浏览器内动态 import（无 DOM 时 import 即崩） | `./ui-kit` 入口及其依赖图**不含**上游包的静态 import；`loadUiKit()` 在无 DOM 时以 `BMAP_UI_KIT_UNAVAILABLE` 拒绝且不缓存失败 | `tests/behavior/v3-ui-kit-ssr.test.ts`（无 DOM 子进程 + DOM 访问记账）、`tests/behavior/v3-ui-kit-entry.test.ts` |
+| CSS 不在 JS 里注入 | `./ui-kit` 不自动引入样式；`UI_KIT_STYLE_PATH` 导出官方路径，消费方显式 `import` | `tests/behavior/v3-ui-kit-entry.test.ts`（真实 Vite 生产构建断言样式仍在） |
+| `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
+| 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/v3-ui-kit-events.test.ts`（`driver.services` 从未被读取） |
+| `RoutePlan` 只开放驾车 | 本轮不给 `PlaceDetail` / `RoutePlan` 提供 Vue 封装，只经 `loadUiKit()` 原生使用 | `tests/behavior/v3-ui-kit-entry.test.ts`（断言入口没有这两个组件） |
+| 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts` |

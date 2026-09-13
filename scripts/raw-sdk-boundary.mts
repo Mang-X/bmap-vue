@@ -25,7 +25,14 @@ export type RawSdkNamespace = (typeof RAW_SDK_NAMESPACES)[number];
 export const GLOBAL_OBJECT_NAMES = ["window", "globalThis", "self", "global"] as const;
 
 /** 相对 `packages/baidu-map-gl-vue/src` 的禁区目录（`check-raw-sdk` 默认扫描范围）。 */
-export const FORBIDDEN_SRC_DIRS = ["components", "composables", "core/runtime"] as const;
+export const FORBIDDEN_SRC_DIRS = [
+  "components",
+  "composables",
+  "core/runtime",
+  // 对接官方包的薄封装（`integrations/ui-kit`，issue #73）与组件同属禁区：
+  // 它只能经 MapHandle（`unwrapRaw()`）与 Facet Driver 与引擎交互。
+  "integrations",
+] as const;
 
 /**
  * raw SDK 允许出现的边界（相对同一 `src` 根）。

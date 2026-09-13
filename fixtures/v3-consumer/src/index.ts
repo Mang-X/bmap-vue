@@ -19,6 +19,18 @@ import {
   existingGlobalV4Provider,
   customScriptV4Provider,
 } from 'baidu-map-gl-vue/core'
+// UI Kit 子入口（#73）：消费方**不安装** `@baidumap/jsapi-ui-kit` 也必须能拿到类型
+// —— 公共声明自持（纯数据 DTO），不引用上游类型包。
+import {
+  BPlaceAutocomplete,
+  BPlaceSearch,
+  loadUiKit,
+  UI_KIT_STYLE_PATH,
+  type BPlaceAutocompleteProps,
+  type BPlaceSearchProps,
+  type PlacePoiDTO,
+  type PlaceSuggestionDTO,
+} from 'baidu-map-gl-vue/ui-kit'
 
 const center = shallowRef({ lng: 116.4, lat: 39.9 })
 
@@ -51,3 +63,15 @@ export const resolver = Vue3BaiduMapGlResolver()
 // composable 类型 smoke
 export type { BMapProps }
 export const useBMapRef = useBMap
+
+// UI Kit 子入口类型 smoke（#73）：props 类型、事件 DTO 与样式路径都必须可用
+const autocompleteProps: BPlaceAutocompleteProps = { location: '北京', citylimit: true }
+const searchProps: BPlaceSearchProps = { pageCapacity: 10 }
+export const uiKitSmoke = {
+  components: [BPlaceAutocomplete, BPlaceSearch],
+  loader: loadUiKit,
+  stylePath: UI_KIT_STYLE_PATH,
+  autocompleteProps,
+  searchProps,
+}
+export type { PlacePoiDTO, PlaceSuggestionDTO }

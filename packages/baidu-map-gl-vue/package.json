@@ -42,10 +42,20 @@
       "types": "./dist/advanced.d.ts",
       "import": "./dist/advanced.mjs"
     },
+    "./ui-kit": {
+      "types": "./dist/ui-kit.d.ts",
+      "import": "./dist/ui-kit.mjs"
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {
+    "@baidumap/jsapi-ui-kit": "1.1.2",
     "vue": "^3.5.0"
+  },
+  "peerDependenciesMeta": {
+    "@baidumap/jsapi-ui-kit": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=24"
