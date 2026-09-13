@@ -111,6 +111,18 @@ describe("包清单与产物形状", () => {
     expect(dts).not.toMatch(/:\s*BMapGL\./);
   });
 
+  it("四个组件在声明里都是 Vue 组件（不是把上游的类透出去）", () => {
+    const dts = readFileSync(join(distDir, "ui-kit.d.ts"), "utf8");
+    for (const name of ["BPlaceAutocomplete", "BPlaceSearch", "BPlaceDetail", "BRoutePlan"]) {
+      // 上游的 widget 是普通 class（`export declare class PlaceDetail extends BaseWidget`），
+      // 若被原样重新导出，`destroy()` 的所有权就落到用户手上，`app.use` 之类的遍历也会
+      // 把它当组件；因此这里逐名断言「声明成 DefineComponent」。
+      expect(dts, `${name} 的声明应当是 Vue 组件`).toContain(`export declare const ${name}: DefineComponent<`);
+    }
+    // 上游类名不得出现在声明里（连类型引用也不该有）。
+    expect(dts).not.toMatch(/\bdeclare class (PlaceDetail|RoutePlan)\b/);
+  });
+
   it("被 expose 的 status 在声明里就是取值类型（runtime 经 proxyRefs 后不是 Ref）", () => {
     const dts = readFileSync(join(distDir, "ui-kit.d.ts"), "utf8");
     // `defineExpose({ status })` 会经 Vue 的 proxyRefs 解包：runtime 读到的是字符串，
@@ -121,7 +133,7 @@ describe("包清单与产物形状", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => /^status:\s*\S.*;$/.test(line));
-    expect(declared, "两个组件的 exposed status 各应有一处声明").toHaveLength(2);
+    expect(declared, "四个组件的 exposed status 各应有一处声明").toHaveLength(4);
     for (const line of declared) {
       expect(line, `status 的声明必须与 runtime 一致：${line}`).not.toContain("Ref<");
       expect(line).toContain("UiKitWidgetStatus");
@@ -167,12 +179,30 @@ describe("根入口与 UI 子路径的产物隔离", () => {
     expect(readFileSync(styleFile, "utf8")).toContain(UI_KIT_CSS_MARKER);
   });
 
-  it("入口导出面：两个组件 + 桥 + 加载器；不提供 PlaceDetail / RoutePlan 的 Vue 壳", async () => {
+  it("两个入口共用同一份 `BMapError` 实现（消费者 `instanceof` 跨入口可用）", () => {
+    const uiKitClosure = esmClosure(distUiKit);
+    const errorChunk = uiKitClosure.find((file) =>
+      readFileSync(file, "utf8").includes("src/core/errors/BMapError.ts"),
+    );
+    // 正证守卫：ui-kit 侧的闭包里确实带着错误类的实现（否则下面那条断言没有对象）。
+    expect(errorChunk, "ui-kit 入口的闭包里找不到 BMapError 的实现").toBeTruthy();
+    // 根入口的闭包必须含**同一个文件**：`BRoutePlan` 的 `error` 事件载荷与 `search()` 的拒绝
+    // 都是这个类的实例，消费者从 `./core` 拿到的 `BMapError` 要能 `instanceof` 通过。
+    // 两份实现会让它静默失效（类型上还长得一样，运行时判不出）。
+    expect(esmClosure(distIndex), "两个入口各带一份 BMapError，`instanceof` 会失效").toContain(
+      errorChunk,
+    );
+  });
+
+  it("入口导出面：四个组件 + 桥 + 加载器；上游新增成员不会顺手变成组件", async () => {
     const exported = (await import(distUiKit)) as Record<string, unknown>;
     expect(Object.keys(exported).sort()).toEqual(
       [
         "BPlaceAutocomplete",
+        "BPlaceDetail",
         "BPlaceSearch",
+        "BRoutePlan",
+        "RoutePlanDrivingPolicy",
         "UI_KIT_PACKAGE",
         "UI_KIT_STYLE_PATH",
         "isUiKitLoaded",
@@ -180,10 +210,9 @@ describe("根入口与 UI 子路径的产物隔离", () => {
         "useUiKitWidget",
       ].sort(),
     );
-    // #70 已给出 PlaceDetail / RoutePlan 的原生兼容结论；本轮刻意不给它们 Vue 封装，
-    // 因此这里断言「没有冒充」——不要出现半个组件。
-    expect(exported).not.toHaveProperty("BPlaceDetail");
-    expect(exported).not.toHaveProperty("BPlaceRoutePlan");
+    // 四个标准 UI 都有薄封装（#73 两个 + #75 两个）。「它们确实是组件、而不是把上游的类
+    // 原样透出去」由下一条断言读声明产物锁定（上游类被透出去会把 `destroy()` 的所有权
+    // 落到用户手上，也会被 `app.use` 之类的遍历当成组件）。
   });
 });
 
@@ -265,13 +294,13 @@ describe("真实生产构建下的消费方行为", () => {
     expect(css).toBe("");
   });
 
-  it("UI consumer：样式与运行代码都可用（样式经过生产构建没有被丢掉）", async () => {
+  it("UI consumer：样式与运行代码都可用（四个组件都进了产物）", async () => {
     const projectDir = await buildConsumer(
       "ui",
       [
-        'import { BPlaceAutocomplete, BPlaceSearch, loadUiKit } from "baidu-map-gl-vue/ui-kit";',
+        'import { BPlaceAutocomplete, BPlaceDetail, BPlaceSearch, BRoutePlan, loadUiKit } from "baidu-map-gl-vue/ui-kit";',
         'import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";',
-        "export const ok = [BPlaceAutocomplete, BPlaceSearch, loadUiKit].every(Boolean);",
+        "export const ok = [BPlaceAutocomplete, BPlaceSearch, BPlaceDetail, BRoutePlan, loadUiKit].every(Boolean);",
         "",
       ].join("\n"),
     );
@@ -282,7 +311,15 @@ describe("真实生产构建下的消费方行为", () => {
     // 运行代码：动态 import 被解析并单独成块（说明它确实只在需要时才加载）。
     const bundleHasUiKit = UI_KIT_CODE_MARKERS.some((marker) => code.includes(marker));
     expect(bundleHasUiKit, "UI consumer 产物里没有 UI Kit 运行代码").toBe(true);
-    // 组件自身也在产物里。
-    expect(code).toMatch(/BPlaceAutocomplete|b-place-autocomplete/);
+    // 组件自身也在产物里（四个 host class 名逐一点到：只查一个会让「某组件被 tree-shaking
+    // 丢掉」这件事查不出来）。
+    for (const hostClass of [
+      "b-place-autocomplete",
+      "b-place-search",
+      "b-place-detail",
+      "b-route-plan",
+    ]) {
+      expect(code, `UI consumer 产物里没有 ${hostClass}`).toContain(hostClass);
+    }
   });
 });

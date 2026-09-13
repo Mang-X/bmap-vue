@@ -22,9 +22,9 @@
  *   验证过的「清除城市限定」入口（`setLocation("")` 的语义未知），所以这种情况按
  *   构造期输入变化处理（重建），不去猜隐藏语义。
  */
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { useUiKitWidget } from "../useUiKitWidget";
-import { canonicalKey, toHighlightChangeDTO, toSuggestionDTO, toSuggestionList } from "../points";
+import { toHighlightChangeDTO, toSuggestionDTO, toSuggestionList } from "../points";
 import type {
   PlaceAutocompleteDisplayDTO,
   PlaceHighlightChangeDTO,
@@ -92,7 +92,7 @@ const CONSTRUCTOR_OPTION_KEYS = [
 /**
  * 构造期选项（上游没有 setter 的那些）的值。
  *
- * 内容（而不是对象引用）决定是否重建：配合 `canonicalKey()` 的排序序列化，
+ * 内容（而不是对象引用）决定是否重建：桥用 `canonicalKey()` 做排序序列化，
  * 保证「每次渲染传新的对象字面量、内容相同」不会触发重建。
  */
 function constructorOptions(): Record<string, unknown> {
@@ -119,6 +119,8 @@ const { status, withWidget, applyIfReady, rebuild } = useUiKitWidget<UiKitAutoco
   component: "BPlaceAutocomplete",
   host: hostRef,
   buildOptions,
+  // 构造期选项（上游没有 setter）：内容变化由桥重建 widget。
+  constructorOptions,
   create: (module, host, options) => new module.PlaceAutocomplete(host, options),
   bind: () => [
     {
@@ -143,13 +145,7 @@ const { status, withWidget, applyIfReady, rebuild } = useUiKitWidget<UiKitAutoco
   ],
 });
 
-/** 构造期输入的稳定串：内容变化 → 重建。 */
-const constructionKey = computed(() => canonicalKey(constructorOptions()));
-
-// 构造期输入变化 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
-watch(constructionKey, () => {
-  rebuild();
-});
+// 构造期输入变化 → 重建由桥负责（`constructorOptions`）。
 
 // 已验证的公开 setter → 运行期 props 镜像（不回落成重建）。
 watch(

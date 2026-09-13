@@ -23,14 +23,23 @@ import {
 // —— 公共声明自持（纯数据 DTO），不引用上游类型包。
 import {
   BPlaceAutocomplete,
+  BPlaceDetail,
   BPlaceSearch,
+  BRoutePlan,
+  RoutePlanDrivingPolicy,
   loadUiKit,
+  useUiKitWidget,
   UI_KIT_STYLE_PATH,
   type BPlaceAutocompleteProps,
+  type BPlaceDetailProps,
   type BPlaceSearchProps,
+  type BRoutePlanProps,
+  type PlaceDetailDTO,
   type PlaceHighlightChangeDTO,
   type PlacePoiDTO,
   type PlaceSuggestionDTO,
+  type RoutePlanResultDTO,
+  type UiKitModule,
   type UiKitWidgetStatus,
 } from 'baidu-map-gl-vue/ui-kit'
 
@@ -78,8 +87,7 @@ export const uiKitSmoke = {
 }
 export type { PlacePoiDTO, PlaceSuggestionDTO }
 
-// exposed API 类型 smoke（#73 评审第 2 项）：公开动作与 `status` 在消费者侧必须直接可用。
-//
+// exposed API 类型 smoke（#73 评审第 2 项）：公开动作与 `status` 在消费者侧必须直接可用。//
 // ⚠️ 这条 smoke 的**边界**：`InstanceType<typeof Comp>` 会把 `defineExpose` 的 ref 解包
 // （Vue 的公开实例类型本来就这样），所以它**判定不了**「声明里写的是 `Ref` 还是取值」——
 // 那条由 `tests/behavior/v3-ui-kit-entry.test.ts` 直接读 `dist/ui-kit.d.ts` 锁定。
@@ -106,3 +114,73 @@ export const exposedApiSmoke = {
   suggestSearch,
   highlightChange,
 }
+
+// 四个标准 UI 都要能被消费方按需导入（#75 补齐详情 / 路线）。
+const detailProps: BPlaceDetailProps = { uid: 'poi-uid', display: { comment: false } }
+// 驾车策略是自持的常量表（值 + 类型同名，与 TS 枚举同形）：消费者不该写魔法数字。
+const routePlanProps: BRoutePlanProps = {
+  drivingOptions: { policy: RoutePlanDrivingPolicy.AVOID_CONGESTION, alternatives: 2 },
+}
+export const uiKitFourComponents = {
+  components: [BPlaceAutocomplete, BPlaceSearch, BPlaceDetail, BRoutePlan],
+  detailProps,
+  routePlanProps,
+  drivingPolicy: RoutePlanDrivingPolicy.AVOID_CONGESTION,
+}
+
+// 详情 / 路线的事件载荷同样是纯数据 DTO（不引用上游类型包）。
+const detailPayload: PlaceDetailDTO = {
+  title: '百度大厦',
+  address: '上地十街 10 号',
+  point: { lng: 116.307, lat: 40.056 },
+}
+const routeResult: RoutePlanResultDTO = {
+  type: 'driving',
+  start: { title: '起点', location: { lng: 116.404, lat: 39.915 } },
+  end: { title: '终点', location: { lng: 116.305, lat: 39.982 } },
+  plans: [
+    {
+      distance: 1234,
+      distanceText: '1.2公里',
+      duration: 300,
+      durationText: '5分钟',
+      segments: [
+        {
+          type: 'drive',
+          distance: 1234,
+          distanceText: '1.2公里',
+          description: '沿上地十街行驶',
+          location: { lng: 116.404, lat: 39.915 },
+        },
+      ],
+    },
+  ],
+}
+export const detailRoutePayloadSmoke = { detailPayload, routeResult }
+
+// `BRoutePlan` 的公开动作（Promise 面）与 `BPlaceDetail` 的 uid 镜像。
+const detailInstance = null as unknown as InstanceType<typeof BPlaceDetail>
+const routePlanInstance = null as unknown as InstanceType<typeof BRoutePlan>
+const setPlaceCall: (uidOrPoi: string | object) => Promise<void> = detailInstance.setPlace
+const routeSearch: (options: {
+  start: { lng: number; lat: number } | string
+  end: { lng: number; lat: number } | string
+}) => Promise<RoutePlanResultDTO> = routePlanInstance.search
+export const detailRouteApiSmoke = { setPlaceCall, routeSearch }
+
+// 公共 API 兼容性 smoke（PR #82 评审 P1）：`useUiKitWidget` 与 `UiKitModule` 从 #73 起就是公开导出，
+// 所以「老写法必须仍然能编译」要在**真实消费方**这一侧也钉一遍（`v3` CI job 用 tarball 跑 vue-tsc）。
+// 1) 老调用不传 `constructorOptions`（它必须是可选的，且缺省时不改变已有语义）；
+
+const legacyHost = shallowRef<HTMLElement | null>(null)
+export const legacyBridgeUsage = useUiKitWidget({
+  component: 'LegacyConsumer',
+  host: legacyHost,
+  buildOptions: () => ({ pageCapacity: 10 }),
+  create: (_module, _host, _options) => ({ on() {}, off() {}, destroy() {} }),
+})
+
+// 2) `loadUiKit()` 的返回值仍可按名字索引（索引签名是公开逃生口）。
+declare const uiKitModule: UiKitModule
+declare const upstreamExportName: string
+export const escapeHatch: unknown = uiKitModule[upstreamExportName]

@@ -9,7 +9,9 @@
  *
  * 投影是**纯函数**、不做网络与 DOM 访问，因此可以在无 widget 的情况下单测。
  */
+import { collect, isRecord, readOptionalString, readString } from "./readers";
 import type {
+  PlaceDetailDTO,
   PlaceHighlightChangeDTO,
   PlaceHighlightDTO,
   PlacePointDTO,
@@ -38,22 +40,6 @@ function canonicalize(value: unknown): unknown {
     return out;
   }
   return value;
-}
-
-/** 读一个可能是任意值的字段并转成字符串；缺失时给空串（上游契约里这些字段必定是字符串）。 */
-function readString(source: Record<string, unknown>, key: string): string {
-  const value = source[key];
-  return typeof value === "string" ? value : "";
-}
-
-/** 可选字符串：缺失给 `undefined`，避免把「没有」写成空串。 */
-function readOptionalString(source: Record<string, unknown>, key: string): string | undefined {
-  const value = source[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 /**
@@ -91,13 +77,7 @@ export function toSuggestionDTO(value: unknown): PlaceSuggestionDTO | null {
 
 /** `suggest` 载荷 → DTO 数组。非数组（上游异常形态）按空数组处理，不抛。 */
 export function toSuggestionList(value: unknown): PlaceSuggestionDTO[] {
-  if (!Array.isArray(value)) return [];
-  const out: PlaceSuggestionDTO[] = [];
-  for (const item of value) {
-    const dto = toSuggestionDTO(item);
-    if (dto) out.push(dto);
-  }
-  return out;
+  return collect(value, toSuggestionDTO);
 }
 
 /**
@@ -155,11 +135,22 @@ export function toPoiDTO(value: unknown): PlacePoiDTO | null {
 
 /** `load` 载荷 → DTO 数组。上游回包为数组，异常形态按空数组处理。 */
 export function toPoiList(value: unknown): PlacePoiDTO[] {
-  if (!Array.isArray(value)) return [];
-  const out: PlacePoiDTO[] = [];
-  for (const item of value) {
-    const dto = toPoiDTO(item);
-    if (dto) out.push(dto);
-  }
-  return out;
+  return collect(value, toPoiDTO);
+}
+
+/**
+ * `PlaceDetail.load` 载荷 → DTO（UIKIT-02 / issue #75）。
+ *
+ * 与 `toPoiDTO` **逐字段同形**，这跟上游一致：`It()`（详情）与 `wt()`（POI）在上游产物里
+ * 是逐字相同的两个函数（`{ title: String(e.name ?? e.title ?? ""), address: …, uid, point, tel }`）。
+ * 所以这里直接复用那份读法，而不是抄一遍 —— 抄一遍的唯一后果是两份将来会漂移。
+ *
+ * 两者的**差异只在输入来源**：详情可能是 uid 模式（详情接口回包，`point` 是 `{lng,lat}`），
+ * 也可能是 POI 模式（本地渲染，`point` 可能是引擎原生点实例）。`toPoiDTO` 里的坐标校验
+ * 两种情况都覆盖（非有限数 → 丢弃）。
+ *
+ * 输入不是对象时返回 `null`（调用方应丢弃该事件，而不是合成一条空详情）。
+ */
+export function toPlaceDetailDTO(value: unknown): PlaceDetailDTO | null {
+  return toPoiDTO(value);
 }

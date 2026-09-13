@@ -17,18 +17,25 @@
  * import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
  * ```
  *
- * 详情（`PlaceDetail`）与路线（`RoutePlan`）本轮**不提供** Vue 封装——它们已在 #70 的原生
- * 探针里验证可用，但没有经过 Vue 层的生命周期与事件契约设计，我们不用「看起来像组件」
- * 的壳子冒充完成。需要时可用本入口导出的 `loadUiKit()` 原生构造，文档「详情与路线」一节
- * 给了示例与边界说明。
+ * 四个标准 UI widget（`PlaceAutocomplete` / `PlaceSearch` / `PlaceDetail` / `RoutePlan`）都有
+ * Vue 薄封装：`BPlaceAutocomplete` / `BPlaceSearch`（#73）与 `BPlaceDetail` / `BRoutePlan`（#75）。
+ * 上游声明了但产物里**没有入口**的能力（例如 `PlaceDetailOptions.layout`）刻意不暴露 ——
+ * 「传了不生效」属于假支持，理由与证据见 ADR 2026-09-13（`./ui-kit` 的详情 / 路线封装）。
  */
 export { default as BPlaceAutocomplete } from "./components/BPlaceAutocomplete.vue";
 export { default as BPlaceSearch } from "./components/BPlaceSearch.vue";
+export { default as BPlaceDetail } from "./components/BPlaceDetail.vue";
+export { default as BRoutePlan } from "./components/BRoutePlan.vue";
 export type { BPlaceAutocompleteProps } from "./components/BPlaceAutocomplete.vue";
 export type { BPlaceSearchProps, PlaceBoundsDTO } from "./components/BPlaceSearch.vue";
+export type { BPlaceDetailProps } from "./components/BPlaceDetail.vue";
+export type { BRoutePlanProps } from "./components/BRoutePlan.vue";
 
 export { loadUiKit, isUiKitLoaded, UI_KIT_PACKAGE, UI_KIT_STYLE_PATH } from "./loadUiKit";
 export { useUiKitWidget } from "./useUiKitWidget";
+// 既是值也是类型：让调用方写 `policy: RoutePlanDrivingPolicy.AVOID_CONGESTION` 而不是魔法数字。
+// 值导出同时携带类型含义，因此它**不在**下面的 `export type` 列表里（重复导出会报错）。
+export { RoutePlanDrivingPolicy } from "./types";
 export type {
   UiKitSubscription,
   UiKitWidgetStatus,
@@ -38,14 +45,38 @@ export type {
 
 export type {
   PlaceAutocompleteDisplayDTO,
+  PlaceDetailDTO,
+  PlaceDetailDisplayDTO,
+  PlaceDetailPlaceInput,
+  PlaceDetailPlaceObject,
   PlaceHighlightChangeDTO,
   PlaceHighlightDTO,
   PlacePointDTO,
   PlacePoiDTO,
   PlaceSearchDisplayDTO,
   PlaceSuggestionDTO,
+  RouteDriveSegmentDTO,
+  RoutePlanDTO,
+  RoutePlanDrivingOptionsDTO,
+  RoutePlanEndpointInput,
+  RoutePlanMode,
+  RoutePlanNavClickDTO,
+  RoutePlanPlanSelectDTO,
+  RoutePlanResultDTO,
+  RoutePlanSearchOptionsDTO,
+  RoutePlanTypeChangeDTO,
+  RoutePointDTO,
+  RouteRidingSegmentDTO,
+  RouteSegmentBaseDTO,
+  RouteSegmentDTO,
+  RouteSegmentType,
+  RouteTransitSegmentDTO,
+  RouteTransitSubType,
+  RouteWalkSegmentDTO,
   UiKitAutocompleteWidget,
   UiKitModule,
+  UiKitPlaceDetailWidget,
+  UiKitRoutePlanWidget,
   UiKitSearchWidget,
   UiKitWidgetHandle,
   UiKitWidgetOptions,
