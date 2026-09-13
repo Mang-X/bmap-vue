@@ -12,7 +12,7 @@
  * `status`）才会走 `failed` 并带上那个码——下面各段严格按这条口径断言。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
+import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../../../test-utils";
 import { CAPABILITY_CATALOG } from "../capability/catalog";
 import { createCapabilityRegistry } from "../capability/registry";
 import type { CapabilityRegistry } from "../capability/registry";
@@ -515,6 +515,58 @@ describe("v4 Service Facet：Autocomplete 选项更新（R25-C / #72：raw sette
 
     expect(() => services.setAutocompleteOptions(handle, { types: ["city"] })).not.toThrow();
     expect(raw.callLog).toContain("setTypes:city");
+  });
+});
+
+describe("v4 Service Facet：Autocomplete 释放后不得再回写（R25-C 复审 P1-1）", () => {
+  /** 只读输入框 + 取消独占的实例（与组件用法同形）。 */
+  function autocompleteWith(options: Record<string, unknown> = {}) {
+    const el = document.createElement("input");
+    el.readOnly = true;
+    document.body.appendChild(el);
+    return services.createAutocomplete({ input: el, ...options });
+  }
+
+  it("回调已排队 → dispose → 迟到回包：不再调用业务 onSearchComplete", async () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    // 手动时序：「请求已发、回包未到」——真实 JSONP 的最短延迟也长于一个同步回合
+    autocomplete.queue.auto = false;
+
+    const call = services.suggest(handle, "K");
+    services.disposeAutocomplete(handle);
+    expect((await call.result).status, "在飞调用被显式失败").toBe("failed");
+
+    // 回包此刻才到达：实例已释放，不得再向业务回调（组件侧就是 emit 到已卸载的组件）
+    autocomplete.queue.flush();
+    expect(onSearchComplete, "已释放的实例不得再向业务回调写回").not.toHaveBeenCalled();
+  });
+
+  it("SDK dispose() 内同步触发回调的重入路径同样不穿透", () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    // 真实 SDK 的销毁流程可能同步回调（本仓库的 Map / Panorama 都已按「可能重入」防护）
+    autocomplete.onDispose = () => {
+      const results = new FakeV4AutocompleteResult([{ business: "X", province: "北京市" }], "K");
+      (autocomplete.options.onSearchComplete as (r: unknown) => void)(results);
+    };
+
+    services.disposeAutocomplete(handle);
+    expect(onSearchComplete).not.toHaveBeenCalled();
+  });
+
+  it("对照组：未释放的实例仍然把回包转给业务回调（守卫不能把正常路径一起关掉）", async () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    autocomplete.queue.auto = false;
+
+    const call = services.suggest(handle, "K");
+    autocomplete.queue.flush();
+    expect((await call.result).status).toBe("success");
+    expect(onSearchComplete).toHaveBeenCalledTimes(1);
   });
 });
 

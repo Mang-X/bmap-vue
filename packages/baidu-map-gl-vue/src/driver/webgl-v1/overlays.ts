@@ -10,7 +10,9 @@ import {
   type MapHandle,
   type OverlayHandle,
 } from "../types/handles";
-import type { GeometryDriver } from "../types/geometry";
+import { BMapError } from "../../core/errors/BMapError";
+// 注意：本文件内部有同名局部常量 `Point`（SDK 构造器的取值器），因此类型要换个别名导入
+import type { GeometryDriver, Point as GeoPoint } from "../types/geometry";
 import type {
   CustomOverlayOptions,
   InfoWindowOptions,
@@ -408,16 +410,22 @@ export function createWebGlV1OverlayDriver(input: WebGlV1OverlayDriverInput): Ov
       return kind ? overlayPropertyPolicy(kind, key) : undefined;
     },
 
-    openInfoWindow(map: MapHandle, overlay, position?) {
-      const rawMap = map.raw as { openInfoWindow: (w: unknown, p?: unknown) => void };
-      const raw = overlay.raw as { openInfoWindow?: (p?: unknown) => void };
-      if (position) {
-        sdkCall("map.openInfoWindow", () => rawMap.openInfoWindow(overlay.raw, geometry.toRawPoint(position)));
-      } else if (typeof raw.openInfoWindow === "function") {
-        sdkCall("infoWindow.openInfoWindow", () => raw.openInfoWindow!(undefined));
-      } else {
-        callOptional(raw, "show");
+    openInfoWindow(map: MapHandle, overlay, position: GeoPoint) {
+      // 与 v4 同一份契约（R25-C 复审 P1）：位置必需，不做「实例级回退」。
+      // legacy 的 `InfoWindow#openInfoWindow(point)` 在官方文档里同样要求位置，而位置从哪来
+      // 一直是未定义的——把「碰巧打开」变成显式失败，两个引擎的公共契约才是同一条。
+      if (!position || !Number.isFinite(position.lng) || !Number.isFinite(position.lat)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "OverlayDriver.openInfoWindow: 必须给出 position——官方 map.openInfoWindow(infoWnd, point) " +
+            "里 point 是必需参数（气泡挂到 Marker 的目标级打开属 M5 #31/#32）",
+          { engine: "webgl-v1" },
+        );
       }
+      const rawMap = map.raw as { openInfoWindow: (w: unknown, p?: unknown) => void };
+      sdkCall("map.openInfoWindow", () =>
+        rawMap.openInfoWindow(overlay.raw, geometry.toRawPoint(position)),
+      );
     },
 
     closeInfoWindow(overlay: InfoWindowHandle) {

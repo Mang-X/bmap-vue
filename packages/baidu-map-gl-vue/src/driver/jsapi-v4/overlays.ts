@@ -581,32 +581,27 @@ export function createJsapiV4OverlayDriver(
       return overlayPropertyPolicy(kind, key);
     },
 
-    openInfoWindow(map: MapHandle, overlay, position) {
+    openInfoWindow(map: MapHandle, overlay, position: Point) {
+      // **位置是必需参数**（R25-C 复审 P1）：官方 4.0 的 `Map#openInfoWindow(infoWnd, point)`
+      // 要求 point，`InfoWindow` 实例也没有公开的 `openInfoWindow()`。此前这里保留了一条
+      // 「未给位置时结构性尝试实例成员」的回退，那是 **undocumented fallback**：真实运行时没有该
+      // 成员就抛 `BMAP_INVALID_ARGUMENT`，有就「碰巧打开」，组件所谓的最小成功路径只覆盖了传位置
+      // 的情形。现在取消回退，缺失即显式失败（组件侧在调这里之前就会把错误交到 `resource:error`）。
+      // 「气泡挂到 Marker 的目标级打开」不需要位置，但它是另一条路径（M5 #31/#32）。
+      if (!position || !Number.isFinite(position.lng) || !Number.isFinite(position.lat)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "OverlayDriver.openInfoWindow: 必须给出 position——官方 4.0 的 map.openInfoWindow(infoWnd, point) " +
+            "里 point 是必需参数，且 InfoWindow 实例没有公开的 openInfoWindow()（气泡挂到 Marker 的目标级" +
+            "打开属 M5 #31/#32）",
+          { engine: "jsapi-v4" },
+        );
+      }
       const rawMap = registry.resolve<object>(map);
       const raw = registry.resolve<object>(overlay);
-      if (position) {
-        sdkCall("map.openInfoWindow", () =>
-          callRequired(rawMap, "openInfoWindow", raw, geometry.toRawPoint(position)),
-        );
-      } else {
-        // 官方 4.0 的 map.openInfoWindow(infoWnd, point) 要求位置；实例级 openInfoWindow()
-        // 不在 4.0.4 声明里（运行时成员），只能结构性尝试并显式告警。
-        const fn = readNamespaceMember(raw, "openInfoWindow");
-        if (typeof fn !== "function") {
-          throw new BMapError(
-            "BMAP_INVALID_ARGUMENT",
-            "OverlayDriver.openInfoWindow: JSAPI 4.0 要求给出打开位置（map.openInfoWindow(infoWnd, point)），" +
-              "且当前 InfoWindow 实例没有可用的运行时 openInfoWindow()",
-            { engine: "jsapi-v4" },
-          );
-        }
-        warnOnce(
-          "info-window:open-without-position",
-          "OverlayDriver.openInfoWindow: 未给出位置，回退到 InfoWindow 实例级 openInfoWindow()" +
-            "（JSAPI 4.0.4 类型包未声明该成员，属运行时能力）；建议显式传入 position",
-        );
-        sdkCall("InfoWindow.openInfoWindow", () => (fn as () => unknown).apply(raw));
-      }
+      sdkCall("map.openInfoWindow", () =>
+        callRequired(rawMap, "openInfoWindow", raw, geometry.toRawPoint(position)),
+      );
       infoWindowOwners.set(raw, rawMap);
       // 记下「这张地图最后被请求打开的是谁」——closeInfoWindow 据此判断该不该动地图
       lastRequestedByMap.set(rawMap, raw);

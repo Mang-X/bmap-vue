@@ -78,6 +78,13 @@ v3 子组件没有 `initd/unload` 事件；以下为 `BInfoWindow` 实际发出�
 </BInfoWindow>
 ```
 
+::: warning 打开气泡必须给出 `position`
+官方 4.0 的打开入口是 `Map#openInfoWindow(infoWnd, point)`，`point` **没有默认值**，`InfoWindow`
+实例也没有公开的 `openInfoWindow()` —— 所以「没有位置就打开」没有可解释的语义。`open` 为 `true`
+但没有 `position` 时，组件不会打开气泡，而是把 `BMAP_INVALID_ARGUMENT` 交给内部诊断总线
+（见[错误码与排障](../../guide/errors.md)的 `resource:error` 订阅方式）。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
+:::
+
 - `title`、`width`、`height` 和 `position` 更新后会同步到已经创建的 InfoWindow；`offset` 作为创建参数应用。
 - SDK 自己打开或关闭窗口时，组件会回写 `update:open` 和 `update:show`，不会重复发出相同状态。
 - 组件卸载时会**关闭** InfoWindow 并释放自己的事件订阅与观察器。

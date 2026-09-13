@@ -320,6 +320,18 @@ export function runOverlayFacetContract(createHarness: () => OverlayFacetHarness
       expect(() => overlays.closeInfoWindow(infoWindow)).not.toThrow();
     });
 
+    it("rejects opening an InfoWindow without a position (point 是官方 API 的必需参数)", () => {
+      const harness = createHarness();
+      const overlays = harness.driver().overlays;
+      const infoWindow = overlays.createInfoWindow(document.createElement("div"));
+
+      // 运行期兜底：类型上 `position` 已是必需，但 JS 调用方 / 类型被绕过的路径仍要显式失败
+      // （两个引擎同一份契约，R25-C 复审 P1；此前 legacy 会走实例级回退、v4 也会「碰巧打开」）
+      expect(() =>
+        overlays.openInfoWindow(harness.mapHandle(), infoWindow, undefined as never),
+      ).toThrowError(expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }));
+    });
+
     it("exposes the shared property classification (mutable / recreate / unsupported)", () => {
       const harness = createHarness();
       const overlays = harness.driver().overlays;

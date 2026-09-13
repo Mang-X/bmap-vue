@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRequiredMapContext } from "../../core/context/inject";
 import { ResourceScope } from "../../core/lifecycle/ResourceScope";
+import { BMapError } from "../../core/errors/BMapError";
 import type { InfoWindowHandle } from "../../driver/types/handles";
 import type { BInfoWindowProps } from "../../types/components";
 
@@ -67,15 +68,32 @@ function emitOpenState(open: boolean) {
  * **异步就绪保护**：句柄 / client / map 三者缺一就什么都不做——它们在 `onMounted` 的
  * `whenReady()` 之后才有值，而卸载路径（`onUnmounted` 已把 `infoWindow` 置空）之后挂在 scope
  * 上的 watcher 仍可能被触发。这里显式前置校验，而不是让 `undefined.driver` 抛进 Vue 的错误处理器。
+ *
+ * **`position` 是打开气泡的必需契约**（R25-C 复审 P1）：官方 4.0 的
+ * `Map#openInfoWindow(infoWnd, point)` 要求位置，`InfoWindow` 实例没有公开的 `openInfoWindow()`，
+ * 所以「没有位置」没有可解释的语义。缺位置时把错误交到统一的事件通道（`resource:error`），
+ * 而不是依赖 Driver 的运行时回退「碰巧打开」。气泡挂到 Marker 的目标级打开属 M5 #31/#32。
  */
 function openWindow(): void {
   const iw = infoWindow.value;
   if (!iw || !readyClient || !readyMap) return;
-  if (props.position) {
-    readyClient.driver.overlays.openInfoWindow(readyMap, iw, props.position);
-  } else {
-    readyClient.driver.overlays.openInfoWindow(readyMap, iw);
+  const position = props.position;
+  if (!position) {
+    try {
+      ctx.events.emit("resource:error", {
+        error: new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "<BInfoWindow>: 打开气泡必须给出 position——官方 4.0 的 map.openInfoWindow(infoWnd, point) " +
+            "里 point 是必需参数（气泡挂到 Marker 的目标级打开属 M5 #31/#32）",
+        ),
+        component: "BInfoWindow",
+      });
+    } catch {
+      /* 事件总线已停用时不再追究 */
+    }
+    return;
   }
+  readyClient.driver.overlays.openInfoWindow(readyMap, iw, position);
   contentVisible.value = true;
   emitOpenState(true);
 }

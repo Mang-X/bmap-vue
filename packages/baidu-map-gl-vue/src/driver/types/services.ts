@@ -33,8 +33,12 @@ export interface AutocompleteOptions {
 /**
  * 已创建 Autocomplete 实例的可更新选项。
  *
- * `undefined` = 不改这一项（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.4
+ * `undefined` = **不改这一项**（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.4
  * 声明里都不接受 `null`，用 `null` 只会得到一个 SDK 侧的类型错误）。
+ *
+ * 注意「恢复默认」是**调用方**的语义，不是本接口的：`<BAutoComplete>` 会把 prop 变回 `undefined`
+ * 解释成「恢复默认」并显式传值（location → 当前地图、types → `[]`），因为 Vue 的 props 无法区分
+ * 「这次没传」与「显式传了 undefined」。
  */
 export interface AutocompleteUpdateOptions {
   /** 检索区域：城市名字符串、`MapHandle` 或领域 Point（由各引擎 Driver 归一化）。 */

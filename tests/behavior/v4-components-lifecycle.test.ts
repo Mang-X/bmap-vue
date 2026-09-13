@@ -17,7 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
+import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../packages/test-utils";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
 import BAutoComplete from "../../packages/baidu-map-gl-vue/src/components/autocomplete/BAutoComplete.vue";
@@ -194,5 +194,92 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     expect(activity.infoWindowsReleased).toBe(activity.infoWindowsOpened);
     expect(activity.infoWindowsOpened).toBeGreaterThanOrEqual(20);
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+  });
+});
+
+/** 订阅组件树里的 `resource:error`（组件把打开/创建失败经这条通道交出来）。 */
+function errorProbe() {
+  const errors: Array<{ code?: string; message?: string }> = [];
+  const Probe = defineComponent({
+    setup() {
+      const ctx = useRequiredMapContext();
+      ctx.events.on("resource:error", (payload) => {
+        errors.push((payload as { error?: { code?: string; message?: string } }).error ?? {});
+      });
+      return () => h("i");
+    },
+  });
+  return { errors, Probe };
+}
+
+describe("评审复现：迟到的回包与打开契约（R25-C 复审 P1-1 / P1-2 / P2-1）", () => {
+  it("P1-1：卸载时 SDK 在 dispose() 内同步回调，也不向正在卸载的组件 emit", async () => {
+    const host = container();
+    const onSearchComplete = vi.fn();
+    const wrapper = await mountTree(
+      () => [h(BAutoComplete, { location: "北京市", onSearchComplete })],
+      host,
+    );
+    await flushPromises();
+
+    const raw = fake.createdAutocompletes[0]!;
+    // 真实 SDK 的销毁流程可能同步回调（本仓库的 Map / Panorama 都已按「可能重入」防护）。
+    // 此刻组件的 `onUnmounted` 钩子正在执行——Vue 的 `emit` 只在 `isUnmounted` 之后短路，
+    // 所以这条路径**真的**会把回包送到正在卸载的组件上。
+    raw.onDispose = () => {
+      const results = new FakeV4AutocompleteResult([{ business: "X", province: "北京市" }], "K");
+      (raw.options.onSearchComplete as (r: unknown) => void)(results);
+    };
+
+    await unmountAndSettle(wrapper);
+
+    expect(onSearchComplete, "正在卸载的组件不得再收到检索回包").not.toHaveBeenCalled();
+  });
+
+  it("P1-2：open 未给 position ⇒ 显式报错（resource:error + BMAP_INVALID_ARGUMENT），不打开", async () => {
+    const host = container();
+    const { errors, Probe } = errorProbe();
+    const wrapper = await mountTree(
+      () => [h(BInfoWindow, { open: true, title: "no-position" }), h(Probe)],
+      host,
+    );
+    await flushPromises();
+
+    expect(
+      fake.diagnostics.snapshot().leaks.infoWindows,
+      "没有位置就没有可解释的打开方式，不能靠实例级回退「碰巧成功」",
+    ).toBe(0);
+    expect(errors.map((error) => error.code)).toEqual(["BMAP_INVALID_ARGUMENT"]);
+    expect(errors[0]?.message).toContain("position");
+
+    await unmountAndSettle(wrapper);
+    fake.diagnostics.assertNoLeaks("无 position 的 open");
+  });
+
+  it("P2-1：location / types 变回 undefined ⇒ 恢复默认（当前 Map / 官方默认 []）", async () => {
+    const host = container();
+    const location = ref<unknown>("上海市");
+    const types = ref<string[] | undefined>(["city"]);
+    const wrapper = await mountTree(
+      () => [h(BAutoComplete, { location: location.value, types: types.value })],
+      host,
+    );
+    await flushPromises();
+
+    const raw = fake.createdAutocompletes[0]!;
+    const map = fake.createdMaps.at(-1)!;
+    expect(raw.options.location, "对照组：显式值已经生效").toBe("上海市");
+
+    location.value = undefined;
+    types.value = undefined;
+    await nextTick();
+    await flushPromises();
+
+    // 与构造期 `props.location ?? ready.map` / 官方 types 默认值一致
+    // （`fake.createdMaps` 里存的就是 raw 实例，句柄的 `.raw` 与它同一身份）
+    expect(raw.options.location, "location 变回 undefined 应恢复成当前 Map").toBe(map);
+    expect(raw.options.types, "types 变回 undefined 应恢复官方默认（[]）").toEqual([]);
+
+    await unmountAndSettle(wrapper);
   });
 });

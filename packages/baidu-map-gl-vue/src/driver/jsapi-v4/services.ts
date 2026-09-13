@@ -613,6 +613,12 @@ export function createJsapiV4ServiceDriver(
           input: options.input,
           types: options.types,
           onSearchComplete: (results: RawAutocompleteResult) => {
+            // **已释放的实例一律不再回写**（R25-C 复审 P1）：SDK 的回包可能在
+            // `disposeAutocomplete()` 之后才到达（取消 / 卸载都收不回请求），也可能在 dispose()
+            // 内部**同步**触发（真实销毁流程会走回调）。`disposed` 在 dispose 的第一步就置位，
+            // 因此两条路径都在这里被挡住。「卸载后不再回写」是 Driver 的契约，不能依赖调用方
+            // （Vue 组件）自己再判一次——更不能依赖「Vue 卸载后 emit 恰好是 no-op」这种内部实现。
+            if (raw && disposed.has(raw)) return;
             let settle: ServiceCallSettle<PlaceSuggestion[]> | null = null;
             if (raw) {
               // 独占在**每次回包**时重新校验：等待期间输入框变回可输入 ⇒ 这个回包可能来自用户输入，

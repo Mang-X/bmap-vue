@@ -127,8 +127,10 @@ onMounted(async () => {
       watch(
         () => props.location,
         (loc) => {
-          if (loc === undefined) return;
-          updateOptions(instance, { location: loc });
+          // `undefined` 与构造期同义：回到当前 Map（构造时用的是 `props.location ?? ready.map`）。
+          // 契约写在组件文档里：**location 变回 undefined = 恢复默认（当前地图）**，
+          // 而不是「不改」——后者会让 `"上海市" → undefined` 之后 SDK 还停在上海。
+          updateOptions(instance, { location: loc ?? ready.map });
         },
       ),
     );
@@ -136,8 +138,8 @@ onMounted(async () => {
       watch(
         () => props.types,
         (types) => {
-          if (!types) return;
-          updateOptions(instance, { types: [...types] });
+          // 同理：types 变回 undefined = 恢复官方默认（`[]`，即全国范围；`setTypes` 的默认值）。
+          updateOptions(instance, { types: types ? [...types] : [] });
         },
       ),
     );

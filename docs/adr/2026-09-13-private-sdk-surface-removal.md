@@ -3,7 +3,7 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-13
 - 计划键：`R25-C`（issue #72，追踪 #12，收口目标 #25）
-- 取代：ADR [2026-09-12 v4 Service / Panorama / Native Layer Facet](./2026-09-12-jsapi-v4-service-panorama-native-layers.md) 的**决策 3**（「空结果 vs 失败」靠 `normalize/jsonpProbe.ts` 的 `_rd` 嗅探，两引擎共用）与该 ADR 里作为复审结论落地的「`locateCity` 接 JSONP 探针、有错误码 ⇒ `failed`」这条口径。该 ADR 的其余决策（Facet 划分、创建面 / 调用面分层、运行时注入探测、装配收口）继续有效。
+- 取代：ADR [2026-09-12 v4 Service / Panorama / Native Layer Facet](./2026-09-12-jsapi-v4-service-panorama-native-layers.md) 的**决策 3**（「空结果 vs 失败」靠 `normalize/jsonpProbe.ts` 的 `_rd` 嗅探，两引擎共用）与该 ADR 里作为复审结论落地的「`locateCity` 接 JSONP 探针、有错误码 ⇒ `failed`」这条口径；以及 ADR [2026-09-11 v4 Overlay Facet](./2026-09-11-jsapi-v4-overlay-facet.md) 中「**不给位置时**先尝试实例级 `InfoWindow#openInfoWindow()` 并告警一次」这部分（该回退在评审第 1 轮被判为 undocumented fallback，已删除）。这两份 ADR 的其余决策（Facet 划分、创建面 / 调用面分层、运行时注入探测、装配收口、覆盖物属性分类）继续有效。
 - 相关：`packages/baidu-map-gl-vue/src/driver/normalize/**`、`driver/jsapi-v4/services.ts`、`driver/webgl-v1/services.ts`、`components/overlays/BInfoWindow.vue`、`components/autocomplete/BAutoComplete.vue`、`packages/test-utils/fake-bmap-v4/**`、`tests/behavior/v3-private-sdk-surface.test.ts`、`tests/behavior/v4-components-lifecycle.test.ts`
 
 ## 背景
@@ -37,7 +37,8 @@
 
 `<BInfoWindow>` 不再调用 `overlays.add` / `overlays.remove`（两个引擎都不再需要：legacy 的打开也走 `map.openInfoWindow`，关闭落 `InfoWindow#hide()`），改为：
 
-- 打开：`overlays.openInfoWindow(map, infoWindow, position?)`；关闭：`overlays.closeInfoWindow(infoWindow)`；卸载：先关闭再释放 scope；
+- 打开：`overlays.openInfoWindow(map, infoWindow, position)`；关闭：`overlays.closeInfoWindow(infoWindow)`；卸载：先关闭再释放 scope；
+- **`position` 是打开的必需参数**（评审第 1 轮 P1 后收紧）：官方 4.0 的 `Map#openInfoWindow(infoWnd, point)` 里 `point` 没有默认值，`InfoWindow` 实例也没有公开的 `openInfoWindow()` —— 「没有位置就打开」没有可解释的语义。因此取消了原先 v4 的「结构性尝试实例成员」回退（那是 **undocumented fallback**：有该成员就碰巧打开、没有就抛错；legacy 也有一条同类回退），两个引擎统一成**缺位置即抛 `BMAP_INVALID_ARGUMENT`**；组件的 `open` 为 `true` 而没有 `position` 时把这条错误交到 `resource:error`，不打开气泡。「气泡挂到 Marker 的目标级打开」（位置来自标注）是另一条路径，属 M5 #31/#32。参考实现：[`huiyan-fe/react-bmap`](https://github.com/huiyan-fe/react-bmap) 的 `InfoWindowProps.position` 注释即「地图级打开位置（不在 Marker 内嵌时必传）」。
 - **内容容器的可见性**：模板上不再写静态 `style="display:none"`。那个内联样式会一直留在节点上，SDK 把它挂进自己的容器之后**内容仍然是隐藏的** —— 现在由「是否打开」驱动（未打开时隐藏以避免内容在地图角落闪现，打开时把可见性交还给 SDK）；
 - **异步就绪保护**：`openWindow()` / `closeWindow()` 前置校验句柄 + client + map（`onMounted` 里 `whenReady()` 之后才有值，而卸载路径之后挂在 scope 上的 watcher 仍可能被触发）；
 - 完整状态机（Teleport、InfoWindowManager、受控 / 不受控的边界、多气泡竞争的产品级语义）仍由 M5 **#32** 收口，本决策只覆盖**最小成功路径**。
@@ -48,7 +49,9 @@
   - 它是**共享契约**而不是引擎独占面：`setLocation` / `setTypes` 在 legacy SDK 上同样存在，组件此前也正是这么用的 —— 收进 Driver 只是把 raw 成员访问搬到边界内，不改变能力边界。
   - 前置状态校验：已被 `disposeAutocomplete()` 释放的实例拒绝写入（写入一个已销毁的 SDK 对象没有意义）；**失去回调通道独占不拒绝**（纯配置写入，不发起请求、不影响回包归属）。
   - `location` 归一化：本 Client 的句柄 → raw（`AutocompleteOptions.location` 只接受 `string | Map | Point`，此前组件把 `MapHandle` 原样透传，SDK 拿到的是非法值）、`{lng, lat}` → raw `Point`、其余原样透传。
+  - **`undefined` = 不改这一项**（Driver 层）；「恢复默认」由**调用方**表达 —— `<BAutoComplete>` 把 prop 变回 `undefined` 解释成「恢复默认」并显式传值（`location` → 当前地图、`types` → `[]`），因为 Vue 的 props 无法区分「这次没传」与「显式传了 `undefined`」。此前 watcher 直接 `return`，于是 `"上海市" → undefined` 之后 SDK 仍停在上海，与文档里「默认值为 Map」的契约不一致（评审第 1 轮 P2）。
 - `BAutoComplete`：两个 `watch()` 用 `scope.add()` 纳入作用域；卸载时 `scope.dispose()` → 业务订阅先下线 → 调用 Driver 的 `disposeAutocomplete()`（按**结构化能力**探测，legacy 没有这个面且没有 Driver 侧资源）；组件不再访问 `.raw`。
+- **已释放的实例一律不再回写**（评审第 1 轮 P1）：Driver 的 `onSearchComplete` 分发器在入口先判 `disposed`，因此「取消 / 卸载之后才到达的回包」与「SDK 在 `dispose()` 内**同步**触发回调」两条路径都被挡住。这是 Driver 的契约，不依赖调用方自己再判一次 —— 尤其不能依赖「Vue 卸载后 `emit` 恰好是 no-op」这种框架内部实现（实测：`emit` 只在 `instance.isUnmounted` 之后短路，而 `onUnmounted` 钩子执行期间它还是可用的）。
 
 ### 4. Autocomplete 的请求归属假设按「串行化 + 上界 + 标注」处理
 
