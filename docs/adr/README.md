@@ -17,6 +17,7 @@
 | [2026-09-13](./2026-09-13-upstream-types-case-patch.md) | 上游类型包大小写引用缺陷的补丁处置（精确版本 + pnpm patch / 重新纳入 CI） | Accepted |
 | [2026-09-13](./2026-09-13-official-first-loader-and-ui-kit.md) | Official-first：默认加载委托官方 Loader、标准 UI 委托官方 UI Kit | Accepted |
 | [2026-09-13](./2026-09-13-ui-kit-subpath-and-type-boundary.md) | `./ui-kit` 子路径、宿主桥与「不消费上游类型入口」的类型边界 | Accepted |
+| [2026-09-13](./2026-09-13-private-sdk-surface-removal.md) | 删除 SDK 私有面嗅探，并把气泡 / Autocomplete 收回到公开可用面 | Accepted |
 
 ## 约定
 

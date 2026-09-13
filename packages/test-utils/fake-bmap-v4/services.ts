@@ -6,14 +6,13 @@
  * `Geolocation#getCurrentPosition/getStatus`、`LocalCity#get`、`Autocomplete#search`）与
  * ViewAnimation 的构造选项。不补 getter 家族，避免 Fake 先于实现膨胀（同 `objects.ts` 口径）。
  *
- * 三条刻意建模的运行时事实：
+ * 两条刻意建模的运行时事实：
  *
- * 1. **回包恒为异步**：真实服务是 JSONP，回调至少在下一个微任务才到。这不只是像不像的问题
- *    ——Facet 的 JSONP 错误嗅探（`captureJsonpServiceError`）必须在 `getPoint()` **返回之后**
- *    才有机会 `rescan()` 包装注册表；如果 Fake 同步回包，错误就永远捕获不到，测试会给出
- *    「嗅探没用」的假结论。
- * 2. **失败只回 `null`**：错误码藏在 `_rd` 回调注册表的参数里（`{ result: { error, error_msg } }`），
- *    与真实 JSONP 一致——「空结果 vs 失败」的判定只能靠嗅探，Fake 必须能造出这两种情形。
+ * 1. **回包恒为异步**：真实服务是 JSONP，回调至少在下一个微任务才到。这既是真实语义，
+ *    也让「取消 / 超时之后回包才到达」这类顺序敏感的场景可以被显式摆出来。
+ * 2. **失败只回 `null`**：真实服务失败（配额 302 / Referer 限制）时回调参数就是 `null`，
+ *    **没有**公开的错误码入口。Fake 因此**不再**提供 `_rd` 注册表与错误码注入
+ *    （R25-C / #72）：那个面会诱导实现去嗅探 SDK 私有表，而本库只允许依赖公开回调参数。
  * 3. **手动时序**：`queue.auto = false` 时回调进入队列，由测试 `flush()` 触发，
  *    用来固定「取消 / 超时之后的迟到回包」这类顺序敏感的语义。
  */
@@ -24,7 +23,7 @@ import { FakeV4Diagnostics } from './diagnostics.ts'
 import { FakeV4EventTarget } from './event-target.ts'
 
 /* -------------------------------------------------------------------------- */
-/* 回调队列与 JSONP 注册表                                                      */
+/* 回调队列                                                                    */
 /* -------------------------------------------------------------------------- */
 
 export class FakeV4CallbackQueue {
@@ -89,49 +88,6 @@ export class FakeV4CallbackQueue {
   }
 }
 
-/** `_rd` 注册表：JSONP 回调注册表（错误嗅探的唯一依据）。 */
-export interface FakeV4JsonpRegistry {
-  registry: Record<string, unknown>
-  /** 模拟服务端错误：注册一个回包时会带 `error/error_msg` 的回调，并返回其 key。 */
-  registerError(code: number | string, message: string): string
-  /** 模拟成功回包：注册一个不带错误码的回调，并返回其 key。 */
-  registerSuccess(content?: unknown): string
-  /** 触发某个已注册回调（真实 SDK 由 JSONP 回包脚本调用）。 */
-  invoke(key: string, payload?: unknown): void
-}
-
-export function createFakeV4JsonpRegistry(): FakeV4JsonpRegistry {
-  const registry: Record<string, unknown> = {}
-  /** 每个回调「服务端本该回给它的响应体」——真实 JSONP 由回包脚本作为**实参**传入。 */
-  const payloads = new Map<string, unknown>()
-  let counter = 0
-
-  const register = (payload: unknown): string => {
-    counter += 1
-    const key = `_cbk${counter}`
-    payloads.set(key, payload)
-    registry[key] = () => payload
-    return key
-  }
-
-  return {
-    registry,
-    registerError(code, message) {
-      return register({ result: { error: code, error_msg: message } })
-    },
-    registerSuccess(content) {
-      return register({ result: { error: 0 }, content })
-    },
-    invoke(key, payload) {
-      // 关键：响应体必须以**参数**形式传入——错误嗅探包装的就是「参数里的 result.error」，
-      // 用返回值传会被包装器完全看不见（那会让「失败」退化成「空结果」）。
-      const value = payload === undefined ? payloads.get(key) : payload
-      const fn = registry[key]
-      if (typeof fn === 'function') (fn as (incoming: unknown) => unknown)(value)
-    },
-  }
-}
-
 /* ------------------------------------------------------------------- Geocoder */
 
 export interface FakeV4PointLike {
@@ -142,7 +98,7 @@ export interface FakeV4PointLike {
 export class FakeV4Geocoder {
   readonly callLog: string[] = []
   readonly queue: FakeV4CallbackQueue
-  /** `getPoint` 的回包；`null` = 服务失败（真实 SDK 的失败形态） */
+  /** `getPoint` 的回包；`null` = 服务失败（真实 SDK 的失败形态：没有公开错误码入口） */
   pointResult: FakeV4PointLike | null = { lng: 116.404, lat: 39.915 }
   /** `getLocation` 的回包；`null` = 服务失败 */
   locationResult: Record<string, unknown> | null = {
@@ -151,13 +107,8 @@ export class FakeV4Geocoder {
     business: '天安门',
     surroundingPois: [{ title: 'a' }, { title: 'b' }],
   }
-  /** 设为非空时，回包前先在 `_rd` 里注册一个带错误码的回调（模拟配额 302） */
-  jsonpError: { code: number | string; message: string } | null = null
 
-  constructor(
-    private readonly jsonp: FakeV4JsonpRegistry,
-    diagnostics?: FakeV4Diagnostics,
-  ) {
+  constructor(diagnostics?: FakeV4Diagnostics) {
     this.queue = new FakeV4CallbackQueue(diagnostics)
     // Geocoder 官方没有销毁入口 → 只进活动口径（见 diagnostics 的 leaks 说明）
     diagnostics?.serviceInstanceCreated()
@@ -170,15 +121,7 @@ export class FakeV4Geocoder {
   ): void {
     this.callLog.push(`getPoint:${address}:${city ?? ''}`)
     const result = this.pointResult
-    // 真实 SDK 在**调用内同步**注册 JSONP 回调（先发请求），回包再异步触发它；
-    // Facet 的 `probe.rescan()` 必须落在这两步之间才有机会包装。
-    const errorKey = this.jsonpError
-      ? this.jsonp.registerError(this.jsonpError.code, this.jsonpError.message)
-      : null
-    this.queue.dispatch(() => {
-      if (errorKey) this.jsonp.invoke(errorKey)
-      callback(result)
-    })
+    this.queue.dispatch(() => callback(result))
   }
 
   getLocation(
@@ -188,13 +131,7 @@ export class FakeV4Geocoder {
   ): void {
     this.callLog.push(`getLocation:${JSON.stringify(options ?? {})}`)
     const result = this.locationResult
-    const errorKey = this.jsonpError
-      ? this.jsonp.registerError(this.jsonpError.code, this.jsonpError.message)
-      : null
-    this.queue.dispatch(() => {
-      if (errorKey) this.jsonp.invoke(errorKey)
-      callback(result)
-    })
+    this.queue.dispatch(() => callback(result))
   }
 }
 
@@ -233,14 +170,10 @@ export class FakeV4Convertor {
 export class FakeV4Boundary {
   readonly callLog: string[] = []
   readonly queue: FakeV4CallbackQueue
-  /** `boundaries` 为空数组 = 查无结果；`null` = 服务失败 */
+  /** `boundaries` 为空数组 = 查无结果；`null` = 服务失败（没有公开错误码入口） */
   boundaries: string[] | null = ['116.30,39.90;116.31,39.91;116.30,39.90']
-  jsonpError: { code: number | string; message: string } | null = null
 
-  constructor(
-    private readonly jsonp: FakeV4JsonpRegistry,
-    diagnostics?: FakeV4Diagnostics,
-  ) {
+  constructor(diagnostics?: FakeV4Diagnostics) {
     this.queue = new FakeV4CallbackQueue(diagnostics)
     diagnostics?.serviceInstanceCreated()
   }
@@ -248,13 +181,7 @@ export class FakeV4Boundary {
   get(name: string, callback: (result: { boundaries: string[] } | null) => void): void {
     this.callLog.push(`get:${name}`)
     const value = this.boundaries
-    const errorKey = this.jsonpError
-      ? this.jsonp.registerError(this.jsonpError.code, this.jsonpError.message)
-      : null
-    this.queue.dispatch(() => {
-      if (errorKey) this.jsonp.invoke(errorKey)
-      callback(value === null ? null : { boundaries: value })
-    })
+    this.queue.dispatch(() => callback(value === null ? null : { boundaries: value }))
   }
 }
 
@@ -302,14 +229,8 @@ export class FakeV4LocalCity {
     center: { lng: 116.404, lat: 39.915 },
     level: 12,
   }
-  /** 设为非空时，回包前先在 `_rd` 里注册一个带错误码的回调（模拟配额 302 / 非法请求） */
-  jsonpError: { code: number | string; message: string } | null = null
 
-  constructor(
-    private readonly jsonp: FakeV4JsonpRegistry,
-    options: Record<string, unknown> = {},
-    diagnostics?: FakeV4Diagnostics,
-  ) {
+  constructor(options: Record<string, unknown> = {}, diagnostics?: FakeV4Diagnostics) {
     this.queue = new FakeV4CallbackQueue(diagnostics)
     diagnostics?.serviceInstanceCreated()
     this.callLog.push(`construct:${JSON.stringify(options)}`)
@@ -318,15 +239,7 @@ export class FakeV4LocalCity {
   get(callback: (result: Record<string, unknown> | null) => void): void {
     this.callLog.push('get')
     const value = this.result
-    // 与 Geocoder / Boundary 同形：真实 SDK 在**调用内同步**注册 JSONP 回调，
-    // 回包再异步触发它（Facet 的 `probe.rescan()` 落在两步之间才有机会包装）。
-    const errorKey = this.jsonpError
-      ? this.jsonp.registerError(this.jsonpError.code, this.jsonpError.message)
-      : null
-    this.queue.dispatch(() => {
-      if (errorKey) this.jsonp.invoke(errorKey)
-      callback(value)
-    })
+    this.queue.dispatch(() => callback(value))
   }
 }
 
@@ -398,6 +311,17 @@ export class FakeV4Autocomplete extends FakeV4EventTarget {
       | ((value: FakeV4AutocompleteResult) => void)
       | undefined
     this.queue.dispatch(() => onSearchComplete?.(results))
+  }
+
+  /** 官方 4.0.4 声明的实例更新入口；`ServiceDriver.setAutocompleteOptions` 的落点。 */
+  setLocation(location: unknown): void {
+    this.callLog.push(`setLocation:${String(location)}`)
+    this.options.location = location
+  }
+
+  setTypes(types: string[]): void {
+    this.callLog.push(`setTypes:${types.join(',')}`)
+    this.options.types = types
   }
 
   /** 官方 `Autocomplete#dispose()`：Driver 的 dispose 入口会调用它 */

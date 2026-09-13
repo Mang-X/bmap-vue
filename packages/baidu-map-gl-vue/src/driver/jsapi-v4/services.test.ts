@@ -1,12 +1,18 @@
 /**
  * v4 Service Facet 单测（M3A2-SERVICES-NATIVE / issue #23）
  *
- * 覆盖 issue「测试要求」的基础服务部分：**成功 / 失败 / 空结果 / 取消 / 迟到回调**，
+ * 覆盖 issue「测试要求」的基础服务部分：**成功 / 空结果 / 超时 / 取消 / 迟到回调**，
  * 外加能力守卫、句柄所有权与参数校验。断言全部落在可观测事实（Fake 的 `callLog`、
- * `_rd` 注册表、归一化结果的 `status`/`sdkStatus`）上。
+ * 归一化结果的 `status`/`sdkStatus`）上。
+ *
+ * 「服务失败」的语义在 R25-C（#72）之后是：官方对 Geocoder / Boundary / LocalCity 只给了
+ * 「回调参数是不是 `null`」这一条公开信息，因此 `null` / 空容器一律归一成 `empty`
+ * （「没有结果或服务当前不可用」），**不**去嗅探 `_rd` 私有注册表、也不编造精确错误码。
+ * 只有 SDK 公开给出状态码的服务（`Geolocation#getStatus()`、`Convertor#translate` 的回包
+ * `status`）才会走 `failed` 并带上那个码——下面各段严格按这条口径断言。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
+import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../../../test-utils";
 import { CAPABILITY_CATALOG } from "../capability/catalog";
 import { createCapabilityRegistry } from "../capability/registry";
 import type { CapabilityRegistry } from "../capability/registry";
@@ -177,14 +183,17 @@ describe("v4 Service Facet：Geocoder（正/逆地址解析）", () => {
     expect(result.error).toBeNull();
   });
 
-  it("失败：null 回包 + JSONP 注册表里的错误码 ⇒ failed（不是 empty）", async () => {
+  it("失败只表现为 empty：官方没有公开错误码入口，本库不编造精确错误码（R25-C / #72）", async () => {
     const handle = services.createGeocoder();
     fake.createdGeocoders[0].pointResult = null;
-    fake.createdGeocoders[0].jsonpError = { code: 302, message: "当天配额已用完" };
 
     const result = await services.geocode(handle, { address: "北京市海淀区中关村" }).result;
-    expect(result.status).toBe("failed");
-    expect(result.error).toEqual({ code: 302, message: "当天配额已用完" });
+    // 空结果与「服务当前不可用」在公开面上不可区分 → 一律 empty，而不是 failed + 猜出来的码
+    expect(result.status).toBe("empty");
+    expect(result.error).toBeNull();
+    expect(result.sdkStatus).toBeNull();
+    // 请求确实发出去了（不是被前置校验挡下），所以这条断言不是「没跑」的空转
+    expect(fake.createdGeocoders[0].callLog).toEqual(["getPoint:北京市海淀区中关村:"]);
   });
 
   it("参数非法：不抛错，以 BMAP_INVALID_ARGUMENT 结算", async () => {
@@ -326,7 +335,7 @@ describe("v4 Service Facet：Convertor / Boundary", () => {
     ]);
   });
 
-  it("行政区边界：空数组是 empty，null + 错误码是 failed", async () => {
+  it("行政区边界：空数组与 null 回包都是 empty（没有公开错误码入口）", async () => {
     const handle = services.createBoundary();
     const boundary = fake.createdBoundaries[0];
 
@@ -334,10 +343,9 @@ describe("v4 Service Facet：Convertor / Boundary", () => {
     expect((await services.queryBoundary(handle, { name: "北京市" }).result).status).toBe("empty");
 
     boundary.boundaries = null;
-    boundary.jsonpError = { code: 5, message: "非法请求" };
-    const failed = await services.queryBoundary(handle, { name: "北京市" }).result;
-    expect(failed.status).toBe("failed");
-    expect(failed.error).toEqual({ code: 5, message: "非法请求" });
+    const unavailable = await services.queryBoundary(handle, { name: "北京市" }).result;
+    expect(unavailable.status).toBe("empty");
+    expect(unavailable.error).toBeNull();
   });
 });
 
@@ -383,24 +391,16 @@ describe("v4 Service Facet：Geolocation / LocalCity", () => {
     expect((await services.locateCity(handle).result).status).toBe("empty");
   });
 
-  it("IP 定位：null 回包 + JSONP 错误码 ⇒ failed（不是「查不到城市」）", async () => {
+  it("IP 定位：无城市名或 null 回包都是 empty（不把「不可用」猜成 failed）", async () => {
     const handle = services.createLocalCity();
-    const localCity = fake.createdLocalCities[0];
-    localCity.result = null;
-    localCity.jsonpError = { code: 302, message: "当天配额已用完" };
 
-    const result = await services.locateCity(handle).result;
-    expect(result.status).toBe("failed");
-    expect(result.error).toEqual({ code: 302, message: "当天配额已用完" });
-  });
+    fake.createdLocalCities[0].result = { name: "" };
+    expect((await services.locateCity(handle).result).status).toBe("empty");
 
-  it("IP 定位：null 回包但没有服务端错误码 ⇒ 仍是 empty", async () => {
-    const handle = services.createLocalCity();
     fake.createdLocalCities[0].result = null;
-
-    const result = await services.locateCity(handle).result;
-    expect(result.status).toBe("empty");
-    expect(result.error).toBeNull();
+    const unavailable = await services.locateCity(handle).result;
+    expect(unavailable.status).toBe("empty");
+    expect(unavailable.error).toBeNull();
   });
 });
 
@@ -445,6 +445,127 @@ describe("v4 Service Facet：Autocomplete（事件式服务的归一化）", () 
     autocomplete.queue.flush();
 
     expect((await call.result).status).toBe("canceled");
+    expect(onSearchComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("v4 Service Facet：Autocomplete 选项更新（R25-C / #72：raw setter 回到集成边界）", () => {
+  it("setAutocompleteOptions 落到官方 setLocation / setTypes", () => {
+    const handle = services.createAutocomplete({ input: input() });
+    const raw = fake.createdAutocompletes[0];
+
+    services.setAutocompleteOptions(handle, { location: "上海市", types: ["city"] });
+
+    expect(raw.callLog).toContain("setLocation:上海市");
+    expect(raw.callLog).toContain("setTypes:city");
+    expect(raw.options.types).toEqual(["city"]);
+  });
+
+  it("location 归一化：领域 Point → raw Point；MapHandle → raw Map（不把句柄透传给 SDK）", () => {
+    const map = registry.adopt(
+      "map",
+      new fake.namespace.Map(document.createElement("div")),
+    );
+    const handle = services.createAutocomplete({ input: input() });
+    const raw = fake.createdAutocompletes[0];
+
+    services.setAutocompleteOptions(handle, { location: { lng: 116.4, lat: 39.9 } });
+    expect(raw.options.location).toBeInstanceOf(fake.namespace.Point);
+
+    services.setAutocompleteOptions(handle, { location: map });
+    // 官方 `AutocompleteOptions.location` 要的是 `Map | Point | string`：透传本库句柄是非法值
+    expect(raw.options.location).toBe(map.raw);
+  });
+
+  it("构造期的 location 走同一份归一化（MapHandle 同样解析成 raw Map）", () => {
+    const map = registry.adopt(
+      "map",
+      new fake.namespace.Map(document.createElement("div")),
+    );
+    services.createAutocomplete({ input: input(), location: map });
+
+    expect(fake.createdAutocompletes[0].options.location).toBe(map.raw);
+  });
+
+  it("只接受 Autocomplete 句柄：别的服务句柄在运行期被拦下（与 dispose 共用一份判据）", () => {
+    const geocoder = services.createGeocoder();
+
+    expect(() =>
+      // @ts-expect-error 专用入口只接受 Autocomplete 句柄（类型契约；此处验证运行期兜底）
+      services.setAutocompleteOptions(geocoder, { types: ["city"] }),
+    ).toThrowError(expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }));
+  });
+
+  it("已被 disposeAutocomplete() 释放的实例拒绝写入（不是静默成功）", () => {
+    const handle = services.createAutocomplete({ input: input() });
+    services.disposeAutocomplete(handle);
+
+    expect(() => services.setAutocompleteOptions(handle, { types: ["city"] })).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT", message: expect.stringContaining("已") }),
+    );
+  });
+
+  it("失去回调通道独占不影响纯配置写入（它不发起请求，也就没有归属问题）", async () => {
+    const el = typableInput();
+    const handle = services.createAutocomplete({ input: el });
+    const raw = fake.createdAutocompletes[0];
+
+    // 先让实例失去独占：可输入输入框上的 suggest() 会被拒绝并打上永久标记
+    expect((await services.suggest(handle, "K").result).status).toBe("failed");
+
+    expect(() => services.setAutocompleteOptions(handle, { types: ["city"] })).not.toThrow();
+    expect(raw.callLog).toContain("setTypes:city");
+  });
+});
+
+describe("v4 Service Facet：Autocomplete 释放后不得再回写（R25-C 复审 P1-1）", () => {
+  /** 只读输入框 + 取消独占的实例（与组件用法同形）。 */
+  function autocompleteWith(options: Record<string, unknown> = {}) {
+    const el = document.createElement("input");
+    el.readOnly = true;
+    document.body.appendChild(el);
+    return services.createAutocomplete({ input: el, ...options });
+  }
+
+  it("回调已排队 → dispose → 迟到回包：不再调用业务 onSearchComplete", async () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    // 手动时序：「请求已发、回包未到」——真实 JSONP 的最短延迟也长于一个同步回合
+    autocomplete.queue.auto = false;
+
+    const call = services.suggest(handle, "K");
+    services.disposeAutocomplete(handle);
+    expect((await call.result).status, "在飞调用被显式失败").toBe("failed");
+
+    // 回包此刻才到达：实例已释放，不得再向业务回调（组件侧就是 emit 到已卸载的组件）
+    autocomplete.queue.flush();
+    expect(onSearchComplete, "已释放的实例不得再向业务回调写回").not.toHaveBeenCalled();
+  });
+
+  it("SDK dispose() 内同步触发回调的重入路径同样不穿透", () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    // 真实 SDK 的销毁流程可能同步回调（本仓库的 Map / Panorama 都已按「可能重入」防护）
+    autocomplete.onDispose = () => {
+      const results = new FakeV4AutocompleteResult([{ business: "X", province: "北京市" }], "K");
+      (autocomplete.options.onSearchComplete as (r: unknown) => void)(results);
+    };
+
+    services.disposeAutocomplete(handle);
+    expect(onSearchComplete).not.toHaveBeenCalled();
+  });
+
+  it("对照组：未释放的实例仍然把回包转给业务回调（守卫不能把正常路径一起关掉）", async () => {
+    const onSearchComplete = vi.fn();
+    const handle = autocompleteWith({ onSearchComplete });
+    const autocomplete = fake.createdAutocompletes[0]!;
+    autocomplete.queue.auto = false;
+
+    const call = services.suggest(handle, "K");
+    autocomplete.queue.flush();
+    expect((await call.result).status).toBe("success");
     expect(onSearchComplete).toHaveBeenCalledTimes(1);
   });
 });

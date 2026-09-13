@@ -446,12 +446,21 @@ describe("InfoWindow 专用 open / close / redraw", () => {
     expect((ctx.rawOf(theirs).isOpen as () => boolean)()).toBe(true);
   });
 
-  it("没有位置时走运行时回退并告警一次（4.0.4 未声明 InfoWindow#openInfoWindow）", () => {
+  it("没有位置时显式失败：不保留实例级运行时回退（官方 4.0 的 point 是必需参数）", () => {
     const infoWindow = ctx.overlays.createInfoWindow(document.createElement("div"));
-    ctx.overlays.openInfoWindow(ctx.map, infoWindow);
-    expect((ctx.rawOf(infoWindow).isOpen as () => boolean)()).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toContain("openInfoWindow");
+
+    // 运行期兜底（类型已被约束成必需，这里验证 JS 调用方 / 类型被绕过的情形）
+    expect(() =>
+      ctx.overlays.openInfoWindow(ctx.map, infoWindow, undefined as never),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "BMAP_INVALID_ARGUMENT",
+        message: expect.stringContaining("position"),
+      }),
+    );
+    expect((ctx.rawOf(infoWindow).isOpen as () => boolean)(), "没有位置就不该打开").toBe(false);
+    expect(ctx.rawMap.callLog).not.toContain("openInfoWindow");
+    expect(ctx.rawMap.callLog).not.toContain("infoWindow.openInfoWindow");
   });
 
   it("redrawInfoWindow 未打开时是 no-op，打开后才真正重绘", () => {

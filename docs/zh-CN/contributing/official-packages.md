@@ -156,7 +156,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | 任务 | 本页提供的输入 |
 | --- | --- |
 | #71 / R25-B（默认 Provider 委托官方 Loader） | Loader 契约表全部；单例 / 冲突 / 重试 / reset / script 记账的**实测**行为；`nonce` / SRI / timeout 的处置口径 |
-| #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」 |
+| #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」。落地决策见 ADR [2026-09-13 删除 SDK 私有面嗅探](../../adr/2026-09-13-private-sdk-surface-removal.md) |
 | #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径。**已落地**：见下节 |
 | #74 / R25-E（同一候选提交重新验收） | 「已验证 vs 未验证」列表；探针命令与退出码语义；四 widget 结论 |
 

@@ -44,7 +44,6 @@ export {
 export type { LifecycleSnapshot } from './lifecycle-inspector'
 export {
   createFakeBMapV4,
-  createFakeV4JsonpRegistry,
   FakeV4Autocomplete,
   FakeV4AutocompleteResult,
   FakeV4BezierCurve,
@@ -98,7 +97,6 @@ export type {
   FakeV4AttachmentKind,
   FakeV4DiagnosticsSnapshot,
   FakeV4Interaction,
-  FakeV4JsonpRegistry,
   FakeV4LeakCounters,
   FakeV4LifecycleKind,
   FakeV4PointLike,

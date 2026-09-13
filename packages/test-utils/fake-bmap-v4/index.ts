@@ -60,7 +60,6 @@ import {
   FakeV4Rectangle,
 } from './objects.ts'
 import {
-  createFakeV4JsonpRegistry,
   FakeV4Autocomplete,
   FakeV4AutocompleteResult,
   FakeV4Boundary,
@@ -69,7 +68,6 @@ import {
   FakeV4Geocoder,
   FakeV4Geolocation,
   FakeV4LocalCity,
-  type FakeV4JsonpRegistry,
 } from './services.ts'
 import {
   FakeV4ClusterLayer,
@@ -137,7 +135,6 @@ export {
   FakeV4Rectangle,
 } from './objects.ts'
 export {
-  createFakeV4JsonpRegistry,
   FakeV4Autocomplete,
   FakeV4AutocompleteResult,
   FakeV4Boundary,
@@ -147,7 +144,7 @@ export {
   FakeV4Geolocation,
   FakeV4LocalCity,
 } from './services.ts'
-export type { FakeV4JsonpRegistry, FakeV4PointLike } from './services.ts'
+export type { FakeV4PointLike } from './services.ts'
 export {
   FakeV4ClusterLayer,
   FakeV4FillLayer,
@@ -249,8 +246,6 @@ export interface FakeBMapV4Namespace {
     options?: Record<string, unknown>,
   ) => FakeV4Panorama
   PanoramaService: new () => FakeV4PanoramaService
-  /** JSONP 回调注册表：服务失败时错误码只在这里出现（Facet 的嗅探入口）。 */
-  _rd: Record<string, unknown>
   VERSION: string
 }
 
@@ -285,8 +280,6 @@ export interface FakeBMapV4 {
   /** 测试辅助：记录已创建的全景查看器 / 检索实例（#23） */
   createdPanoramas: FakeV4Panorama[]
   createdPanoramaServices: FakeV4PanoramaService[]
-  /** 测试辅助：JSONP 注册表（造「失败只回 null」的服务端错误） */
-  jsonp: FakeV4JsonpRegistry
   /**
    * 测试辅助：运行时注入成员的可控开关（卸下 / 装回扩展 API 的类）。
    *
@@ -302,7 +295,6 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdOverlays: unknown[] = []
   const createdControls: FakeV4Control[] = []
   const createdLayers: FakeV4Layer[] = []
-  const jsonp = createFakeV4JsonpRegistry()
   const createdGeocoders: FakeV4Geocoder[] = []
   const createdConvertors: FakeV4Convertor[] = []
   const createdBoundaries: FakeV4Boundary[] = []
@@ -491,7 +483,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
 
   class GeocoderClass extends FakeV4Geocoder {
     constructor() {
-      super(jsonp, stats)
+      super(stats)
       createdGeocoders.push(this)
     }
   }
@@ -503,7 +495,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   }
   class BoundaryClass extends FakeV4Boundary {
     constructor() {
-      super(jsonp, stats)
+      super(stats)
       createdBoundaries.push(this)
     }
   }
@@ -515,7 +507,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   }
   class LocalCityClass extends FakeV4LocalCity {
     constructor(options?: Record<string, unknown>) {
-      super(jsonp, options ?? {}, stats)
+      super(options ?? {}, stats)
       createdLocalCities.push(this)
     }
   }
@@ -644,7 +636,6 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     TrackLine: TrackLineClass,
     Panorama: PanoramaClass,
     PanoramaService: PanoramaServiceClass,
-    _rd: jsonp.registry,
     VERSION: version,
   }
 
@@ -666,6 +657,5 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     createdNativeLayers,
     createdPanoramas,
     createdPanoramaServices,
-    jsonp,
   }
 }

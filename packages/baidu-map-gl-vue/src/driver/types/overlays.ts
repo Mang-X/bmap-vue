@@ -651,7 +651,15 @@ export interface OverlayDriver {
    */
   updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
 
-  openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position?: Point): void;
+  /**
+   * 打开气泡。`position` 是**必需**参数。
+   *
+   * 官方 4.0 的打开入口是 `Map#openInfoWindow(infoWnd, point)`，`point` 没有默认值，`InfoWindow`
+   * 实例也没有公开的 `openInfoWindow()`——因此「没有位置就打开」没有可解释的语义，本契约不允许它
+   * 发生（实现里缺位置即抛 `BMAP_INVALID_ARGUMENT`）。「气泡挂到 Marker 的目标级打开」（位置来自
+   * 标注）是另一条路径，属 M5 #31/#32。
+   */
+  openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
   closeInfoWindow(overlay: InfoWindowHandle): void;
   redrawInfoWindow(overlay: InfoWindowHandle): void;
 

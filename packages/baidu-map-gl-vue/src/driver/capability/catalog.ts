@@ -548,10 +548,15 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "service.autocomplete": {
     id: "service.autocomplete",
     family: "service",
-    description: "输入提示（Autocomplete）",
+    description:
+      "输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**" +
+      "依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38）",
     rawMembers: ["Autocomplete"],
     engines: ALL,
-    status: "native",
+    // R25-C / #72：能力本身（构造 + 输入框联想）是 native，但 `suggest()` 的归属规则建立在一个
+    // 未证实的假设上（见 `jsapi-v4/services.ts` 的 pendingSuggest 注释），因此按 `experimental`
+    // 标注——它**不**影响 `supports()`（只有 `unsupported` 会），只是让能力矩阵如实反映风险。
+    status: "experimental",
     runtimeOnly: false,
   },
   "service.driving-route": {

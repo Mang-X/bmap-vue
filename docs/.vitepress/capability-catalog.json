@@ -665,7 +665,7 @@
     {
       "id": "service.autocomplete",
       "family": "service",
-      "status": "native",
+      "status": "experimental",
       "runtimeOnly": false,
       "engines": [
         "webgl-v1",
@@ -675,7 +675,7 @@
       "rawMembers": [
         "Autocomplete"
       ],
-      "description": "输入提示（Autocomplete）"
+      "description": "输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38）"
     },
     {
       "id": "service.driving-route",
