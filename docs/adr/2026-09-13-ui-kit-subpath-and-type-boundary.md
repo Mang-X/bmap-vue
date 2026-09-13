@@ -166,14 +166,17 @@ Vue 的 `resolvePropValue` 对 `Boolean` 类型有 `isAbsent && !hasDefault → 
    现在公开 `PlaceHighlightChangeDTO { from, to }`，并新增**发布产物形状锁**
    （`v3-ui-kit-widget-contract.test.ts`）：事件形状必须对着上游实现断言，不能对着夹具自证。
 2. **构造期输入变化 = 重建 widget。** 桥新增 `rebuild()`；组件把上游没有 setter 的选项
-   （`placeholder` / `debounce` / `minLength` / `showSuggestion` / `suggestionCount` / `display`，
-   以及 `location` 的「有值 ↔ 无值」）合成一个 `ctorKey`（`canonicalKey()` 排序序列化，
-   内容相同的内联对象不触发重建），key 变化即重建。口径取自官方
+   （`placeholder` / `debounce` / `minLength` / `showSuggestion` / `suggestionCount` / `display`）
+   合成一个 `ctorKey`（`canonicalKey()` 排序序列化，内容相同的内联对象不触发重建），
+   key 变化即重建。口径取自官方
    [`react-bmap`](https://github.com/huiyan-fe/react-bmap)：构造期参数进 ctorKey、其余走 setter，
    并用稳定串做依赖 key。原文档里「构造期选项变更需重新挂载」的说法作废（`BPlaceSearch` 同理）。
-3. **`location` 由有值变回未设置：重建，不猜隐藏语义。** 上游没有公开、也没有被验证过的
-   「清除城市限定」入口（`setLocation("")` 的语义未知）。`types` 则不同：它的默认值就是 `all`，
-   「改回未设置」= 恢复默认，用 `setTypes("all")` 表达，不需要重建。
+3. **`location` 只对「有值 → 未设置」重建，不猜隐藏语义。** 上游没有公开、也没有被验证过的
+   「清除城市限定」入口（`setLocation("")` 的语义未知）。反方向（`未设置 → 有值`）与
+   `有值 → 有值` 一样走已验证的 `setLocation()` —— `location` 本身是**有 setter 的运行期选项**，
+   在它身上重建会清掉输入值 / 焦点 / 下拉展开 / 高亮项，而「异步拿到城市后再赋值」是常见用法。
+   `types` 则不同：它的默认值就是 `all`，「改回未设置」= 恢复默认，用 `setTypes("all")` 表达，
+   同样不需要重建。
 4. **expose 的 `status` 改为取值 getter。** `defineExpose` 会被 Vue 的 `proxyRefs` 解包，
    runtime 读到的本来就是取值；现在声明与 runtime 对齐（`status: UiKitWidgetStatus`）。
    附一条反驳意见：审核建议的 `InstanceType<typeof Comp>` 消费者侧 smoke **判不出**这件事 ——

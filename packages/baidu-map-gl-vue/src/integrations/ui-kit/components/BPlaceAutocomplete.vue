@@ -143,29 +143,28 @@ const { status, withWidget, applyIfReady, rebuild } = useUiKitWidget<UiKitAutoco
   ],
 });
 
-/**
- * 构造期输入的稳定串。
- *
- * `location` 只以「是否参与构造」的身份进入该 key（而不是它的值）：有值↔无值 的变化要重建，
- * 有值↔有值 的变化走 setter，不重建。
- */
-const constructionKey = computed(() =>
-  canonicalKey({ ...constructorOptions(), hasLocation: props.location !== undefined }),
-);
+/** 构造期输入的稳定串：内容变化 → 重建。 */
+const constructionKey = computed(() => canonicalKey(constructorOptions()));
 
 // 构造期输入变化 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
 watch(constructionKey, () => {
   rebuild();
 });
 
-// 已验证的公开 setter → 运行期 props 镜像。
+// 已验证的公开 setter → 运行期 props 镜像（不回落成重建）。
 watch(
   () => props.location,
   (value, previous) => {
     if (value === previous) return;
-    // 「参与构造与否」发生变化 → 交给 constructionKey 触发的重建，这里不额外补 setter。
-    if ((value === undefined) !== (previous === undefined)) return;
-    if (value === undefined) return;
+    if (value === undefined) {
+      // **只有「有值 → 未设置」这一向**需要重建：上游没有公开、也没有被验证过的清除入口
+      // （`setLocation("")` 的语义未知），不猜隐藏语义。
+      rebuild();
+      return;
+    }
+    // 「未设置 → 有值」与「有值 → 有值」都走已验证的 `setLocation()`。
+    // 这里不能重建：那会清掉输入值 / 焦点 / 下拉展开 / 高亮项，而「异步拿到城市后再赋值
+    // `location`」是常见用法。未就绪时不需要补调用 —— `buildOptions()` 已带上当前值。
     applyIfReady((widget) => widget.setLocation(value));
   },
 );

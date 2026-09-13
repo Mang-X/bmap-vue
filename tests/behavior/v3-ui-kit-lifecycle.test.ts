@@ -422,21 +422,22 @@ describe("UI Kit 组件的构造与释放", () => {
     expect(fake.stats.offCount).toBe(fake.stats.onCount);
   });
 
-  it("location 由未设置变有值：同样按构造期输入变化重建（并带上 location）", async () => {
+  it("location 由未设置变有值：走已验证的 setLocation，不重建（不吃掉用户可见状态）", async () => {
     const { harness } = readyHarness();
     const mounted = mountInMap<{ location?: string }>(BPlaceAutocomplete, harness, {});
     await flushPromises();
-    const first = fake.instances[0]!;
-    expect("location" in first.options).toBe(false);
+    const widget = fake.instances[0]!;
+    expect("location" in widget.options).toBe(false);
 
     mounted.props.value = { location: "北京" };
     await flushPromises();
 
-    expect(fake.stats.created).toBe(2);
-    expect(first.destroyed).toBe(true);
-    expect(fake.instances[1]!.options.location).toBe("北京");
-    // 不额外补一次 setter：新的构造选项已经带上了。
-    expect(fake.instances[1]!.calls).toEqual([]);
+    // `location` 是**有 setter 的运行期选项**，`undefined -> 有值` 是正常变化：
+    // 必须走 `setLocation()`。若在这里重建，输入值 / 焦点 / 下拉展开 / 高亮项都会被清掉，
+    // 而「异步拿到城市后再赋值 location」是常见用法。
+    expect(widget.callsOf("setLocation").map((call) => call.args)).toEqual([["北京"]]);
+    expect(fake.stats.created).toBe(1);
+    expect(fake.stats.destroyed).toBe(0);
 
     mounted.unmount();
   });
