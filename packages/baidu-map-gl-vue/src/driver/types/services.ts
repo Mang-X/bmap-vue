@@ -30,6 +30,18 @@ export interface AutocompleteOptions {
   onSearchComplete?: (event: unknown) => void;
 }
 
+/**
+ * 已创建 Autocomplete 实例的可更新选项。
+ *
+ * `undefined` = 不改这一项（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.4
+ * 声明里都不接受 `null`，用 `null` 只会得到一个 SDK 侧的类型错误）。
+ */
+export interface AutocompleteUpdateOptions {
+  /** 检索区域：城市名字符串、`MapHandle` 或领域 Point（由各引擎 Driver 归一化）。 */
+  location?: unknown;
+  types?: string[];
+}
+
 export interface ServiceDriver {
   createGeocoder(): ServiceHandle<"service:geocoder">;
   createConvertor(): ServiceHandle<"service:convertor">;
@@ -37,6 +49,18 @@ export interface ServiceDriver {
   createLocalCity(): ServiceHandle<"service:local-city">;
   createBoundary(): ServiceHandle<"service:boundary">;
   createAutocomplete(options: AutocompleteOptions): ServiceHandle<"service:autocomplete">;
+  /**
+   * 更新已创建 Autocomplete 实例的检索区域与数据类型（`Autocomplete#setLocation` / `#setTypes`）。
+   *
+   * **为什么放在 Driver 而不是组件里**（R25-C / #72）：组件侧的 `inst.raw.setLocation(...)` 把
+   * raw 成员访问散落在组件代码中，而 raw SDK 的访问边界是 Driver（`driver/**`）。收敛到这里之后，
+   * 组件只传领域值，两个引擎各自决定怎么落到 SDK 上（v4 走结构化成员探测，legacy 走同一套
+   * `callOptional` 口径），也不需要每个组件作者记得「某个 setter 在某个引擎上不存在」。
+   */
+  setAutocompleteOptions(
+    handle: ServiceHandle<"service:autocomplete">,
+    options: AutocompleteUpdateOptions,
+  ): void;
   createViewAnimation(
     keyFrames: readonly Record<string, unknown>[],
     options?: Record<string, unknown>,

@@ -116,7 +116,13 @@ describe('v3 BMap runtime migration', () => {
       { attachTo: host },
     )
     await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
+    // 气泡走**地图级**专用入口（map.openInfoWindow），不占 addOverlay 的账：
+    // R25-C / #72 之前组件走 `overlays.add(map, infoWindow)`，在 v4 上必抛 BMAP_INVALID_ARGUMENT
+    const map = fake.createdMaps[fake.createdMaps.length - 1] as unknown as {
+      openInfoWindows: Set<{ isOpen?: () => boolean }>
+    }
+    expect([...map.openInfoWindows].filter((win) => win.isOpen?.() !== false)).toHaveLength(1)
+    expect(fake.stats.overlaysCreated).toBe(0)
     wrapper.unmount()
   })
 })

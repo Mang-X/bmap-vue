@@ -8,7 +8,6 @@
 import { computed } from "vue";
 import { resolveMapContext } from "./resolveMapContext";
 import { SERVICE_TIMEOUT_MS, useBMapAsyncTask, withServiceTimeout } from "./useBMapAsyncTask";
-import { captureJsonpServiceError } from "../driver/webgl-v1/services";
 import { BMapError } from "../core/errors/BMapError";
 
 export interface GeocodeDetailResult {
@@ -47,24 +46,13 @@ export function useBMapGeocodeDetail(map?: unknown) {
       // 真机 SDK 的 getLocation 会校验 `point instanceof BMapGL.Point`,
       // 裸 { lng, lat } 会被直接回 null；必须经 Driver 转为 raw Point。
       const rawPoint = ready.client.driver.geometry.toRawPoint(point);
-      // 服务端错误(如配额 302)只回 null；经 _rd 嗅探还原错误码。
-      // 注意顺序:SDK 在调用内同步注册 _rd 回调，必须先调用、再 rescan 包装；
-      // JSONP 回包恒为异步，rescan 必定先于回包执行。
-      const capture = captureJsonpServiceError(ready.client.rawSdk);
+      // 服务失败（配额 302 / Referer 限制）时官方只回 null，且没有公开的错误码入口——错误码在
+      // JSONP 私有回调注册表里。R25-C / #72 的处置：不嗅探私有面、不编造精确错误码，把 null
+      // 如实归一成 `null`（`isEmpty` 为 true）；超时仍由 withServiceTimeout 单独报出。
       return withServiceTimeout<GeocodeDetailResult | null>(
-        (done, fail) => {
+        (done) => {
           const onResult = (r: Record<string, unknown> | null) => {
             if (!r) {
-              const err = capture.getLastError();
-              if (err) {
-                fail(
-                  new BMapError(
-                    "BMAP_SERVICE_FAILED",
-                    `Geocoder.getLocation failed (${err.code}): ${err.message || "service error"}`,
-                  ),
-                );
-                return;
-              }
               done(null);
               return;
             }
@@ -93,9 +81,6 @@ export function useBMapGeocodeDetail(map?: unknown) {
             });
           };
           raw.getLocation(rawPoint, onResult);
-          // SDK 在上式调用内同步注册 _rd 回调；此处 rescan 将其包装，
-          // JSONP 回包恒为异步，故包装必定先于回包执行。
-          capture.rescan();
         },
         SERVICE_TIMEOUT_MS,
         "Geocoder.getLocation",

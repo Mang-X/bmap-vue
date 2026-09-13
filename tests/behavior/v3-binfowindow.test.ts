@@ -34,6 +34,16 @@ function host() {
 describe('BInfoWindow state machine', () => {
   beforeEach(() => resetLifecycleState())
 
+  /** 当前地图上处于「打开」状态的气泡数（活状态以 SDK 对象的 `isOpen()` 为准）。 */
+  function openCount(): number {
+    const map = fake.createdMaps[fake.createdMaps.length - 1] as
+      | { openInfoWindows: Set<{ isOpen?: () => boolean }> }
+      | undefined
+    return [...(map?.openInfoWindows ?? [])].filter(
+      (infoWindow) => infoWindow.isOpen?.() !== false,
+    ).length
+  }
+
   it('opens and closes via open prop, respecting state machine', async () => {
     fake.stats.reset()
     const el = host()
@@ -51,12 +61,16 @@ describe('BInfoWindow state machine', () => {
       { attachTo: el },
     )
     await flushPromises()
-    // fake 的 infoWindow 应已打开(map.openInfoWindow 被调用)
-    expect(fake.stats.overlaysCreated).toBe(1)
+    // 气泡是**地图级** API：打开经 map.openInfoWindow(win, point)，不进 addOverlay 的账
+    // （R25-C / #72 之前组件走 `overlays.add(map, infoWindow)`，在 v4 上必抛 BMAP_INVALID_ARGUMENT）
+    expect(openCount()).toBe(1)
+    expect(fake.stats.overlaysCreated).toBe(0)
 
-    // 关闭
+    // 关闭：走地图级 close（legacy 落在实例的 hide()），活状态回到 0
     open.value = false
     await nextTick()
+    await flushPromises()
+    expect(openCount()).toBe(0)
     wrapper.unmount()
     await nextTick()
     expect(fake.stats.listeners).toBe(0)

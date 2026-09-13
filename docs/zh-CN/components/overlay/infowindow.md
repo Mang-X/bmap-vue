@@ -80,7 +80,8 @@ v3 子组件没有 `initd/unload` 事件；以下为 `BInfoWindow` 实际发出�
 
 - `title`、`width`、`height` 和 `position` 更新后会同步到已经创建的 InfoWindow；`offset` 作为创建参数应用。
 - SDK 自己打开或关闭窗口时，组件会回写 `update:open` 和 `update:show`，不会重复发出相同状态。
-- 组件卸载时会关闭并从地图移除 InfoWindow。
+- 组件卸载时会**关闭** InfoWindow 并释放自己的事件订阅与观察器。
+- 气泡走**地图级**专用入口（`openInfoWindow` / `closeInfoWindow`），不是 `addOverlay` / `removeOverlay`——这一点在 JSAPI 4.0 上是硬要求（气泡不是普通覆盖物）。slot 内容容器由打开状态驱动可见性，打开时不会被内联样式隐藏。
 - slot 内容变化会触发 redraw；内部观察器会在卸载时断开。
 
 <!-- maximize	event{type, target}	信息窗口最大化后触发此事件
