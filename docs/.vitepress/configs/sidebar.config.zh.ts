@@ -241,6 +241,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "useBMapAsyncTask 异步任务",
           link: "useBMapAsyncTask",
         },
+        {
+          text: "useControllableState 受控/非受控状态",
+          link: "useControllableState",
+        },
       ],
     },
     {

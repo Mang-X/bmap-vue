@@ -228,7 +228,7 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
 | **有待启动动画时 `destroy` 会推迟到安全窗口** | 这种情形下 `destroy()` 返回时 SDK 对象还没销毁，销毁发生在 `animationstart` 之后的微任务（或 0ms 兜底，后者**不**置 `released`） | 不要在 `destroy()` 返回后假定「底层已释放」；需要确定性时序时避免在未启动状态下销毁 |
 | 视角动画的停止/取消时机 | 未启动的动画改为「启动后微任务取消」，`stopViewAnimation` 不再同步立即生效；`stopViewAnimation` 会停止该地图上所有未结束的动画 | 判断状态请依赖 `animationend` / `animationcancel` |
 | 动画取消失败时替换新动画 | `startViewAnimation` 会抛错且不替换（旧动画仍可停） | 先解决取消失败，或销毁地图重建 |
-| `getHeading()` 返回带符号角度 | v4 的 `setHeading(270)` → `getHeading()` 为 `-90` | 不要用 heading 做 round-trip 判断；类型化事件与状态属 #28 |
+| `getHeading()` 返回带符号角度 | v4 的 `setHeading(270)` → `getHeading()` 为 `-90` | 不要用 heading 做**线性** round-trip 判断；类型化事件与状态属 #28。视野状态由 [ADR 2026-09-14](./2026-09-14-map-controlled-state.md) 的环绕判等（`-90 ≡ 270`）取代本条 |
 | `setInteraction(map, "tilt-gestures", …)` | 成员存在性在官方来源之间有分歧：有就生效，没有则告警一次并跳过 | #25 的真实 smoke 里确认该成员是否存在；存在即已自动生效，不存在时用构造 options 传 `enableTiltGestures: false` |
 | `noAnimation` prop 未贯通到 `MapView` | 初次视野固定 `noAnimation: true`（既有行为在两个引擎上都是「不读该 prop」） | 属 Vue 层（组件 props → `MapView`）的后续议题，本 issue 不改组件契约 |
 | `map.pixel-conversion` 能力在 webgl-v1 变为可用 | catalog `engines` 由 `V4_ONLY` 放宽为 `WEBGL_V4` | 能力矩阵已随之重生成（`generate:capability-matrix`） |

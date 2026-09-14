@@ -17,7 +17,7 @@
 import type { BMapClient, BMapProviderLike } from "../baidu-map-gl-vue/src/client/types";
 import { createBMapClient } from "../baidu-map-gl-vue/src/client/createBMapClient";
 import { createLoadedJsapiV4 } from "../baidu-map-gl-vue/src/core/loader/providers";
-import { createFakeBMapV4, type FakeBMapV4 } from "./fake-bmap-v4/index.ts";
+import { createFakeBMapV4, type FakeBMapV4, type FakeV4Map } from "./fake-bmap-v4/index.ts";
 
 /**
  * 组件挂在 Map 上的子资源种类（**领域读数**用的三种挂载面）。
@@ -26,6 +26,31 @@ import { createFakeBMapV4, type FakeBMapV4 } from "./fake-bmap-v4/index.ts";
  * 这类生命周期类资源），与「组件挂在哪儿」不是同一个维度。
  */
 export type FakeV4MountKind = "overlay" | "control" | "layer";
+
+/** 视野读数（领域口径）：最后一张地图当前的视野。 */
+export interface FakeV4View {
+  center: { lng: number; lat: number } | null;
+  zoom: number | null;
+  heading: number;
+  tilt: number;
+}
+
+/** 视野**写入**次数（领域口径）：组件向 SDK 下发过多少次各条视野命令。 */
+export interface FakeV4ViewWrites {
+  centerAndZoom: number;
+  setCenter: number;
+  setZoom: number;
+  setHeading: number;
+  setTilt: number;
+}
+
+/** 模拟用户交互时的目标视野（只给需要变的字段）。 */
+export interface FakeV4UserView {
+  center?: { lng: number; lat: number };
+  zoom?: number;
+  heading?: number;
+  tilt?: number;
+}
 
 export interface FakeV4Harness {
   /** 组件路径的 Provider（结构化：自述 `engine: "jsapi-v4"`）。 */
@@ -42,6 +67,21 @@ export interface FakeV4Harness {
   overlayPositions(): Array<{ lng: number; lat: number } | null>;
   /** 最后一张地图上当前打开的气泡数。 */
   openInfoWindows(): number;
+  /** 最后一张地图当前的视野（M4-STATE / #27 的领域读数）。 */
+  view(): FakeV4View;
+  /** 最后一张地图收到的视野命令次数（按字段分开计数）。 */
+  viewWrites(): FakeV4ViewWrites;
+  /**
+   * 模拟用户交互：SDK 内部状态变化 + 派发对应的**结束**事件
+   * （`moveend` / `zoomend` / `headingchange` / `tiltchange`）。
+   *
+   * 刻意**不经过** `setCenter` 一类命令入口，因此「用户操作没有触发额外写入」可以被断言。
+   */
+  simulateUserView(next: FakeV4UserView): void;
+  /** 最后一张地图当前订阅的事件类型。 */
+  subscribedEvents(): string[];
+  /** 监听相关的两个口径：`calls` = 累计订阅次数（活动），`pending` = 当前未释放（门禁）。 */
+  listenActivity(): { calls: number; pending: number };
 }
 
 function sizedContainer(): HTMLElement {
@@ -65,6 +105,44 @@ function toPositions(overlays: Iterable<unknown>): Array<{ lng: number; lat: num
     const position = (overlay as { position?: { lng: number; lat: number } }).position;
     return position ? { lng: position.lng, lat: position.lat } : null;
   });
+}
+
+/** 视野命令计数：`centerAndZoom` 一次性与四个字段级 `setXxx` 分开数。 */
+function countViewWrites(callLog: readonly string[]): FakeV4ViewWrites {
+  const count = (command: string): number =>
+    callLog.filter((entry) => entry.startsWith(command)).length;
+  return {
+    centerAndZoom: count("centerAndZoom"),
+    setCenter: count("setCenter"),
+    setZoom: count("setZoom"),
+    setHeading: count("setHeading"),
+    setTilt: count("setTilt"),
+  };
+}
+
+/**
+ * 模拟用户交互：直接改 SDK 内部状态再派发**结束**事件（真实 SDK 由地图内部完成这两步）。
+ *
+ * 用 `FakeV4Point` 而不是普通对象字面量：真实 SDK 交出的就是它自己的 `Point` 实例，
+ * 夹具如实照做，免得「组件依赖了某个只在字面量上成立的性质」这类差异被藏住。
+ */
+function simulateUserView(map: FakeV4Map, fake: FakeBMapV4, next: FakeV4UserView): void {
+  if (next.center) {
+    map.center = new fake.namespace.Point(next.center.lng, next.center.lat);
+    map.emit("moveend");
+  }
+  if (next.zoom !== undefined) {
+    map.zoom = next.zoom;
+    map.emit("zoomend");
+  }
+  if (next.heading !== undefined) {
+    map.heading = next.heading;
+    map.emit("headingchange");
+  }
+  if (next.tilt !== undefined) {
+    map.tilt = next.tilt;
+    map.emit("tiltchange");
+  }
 }
 
 /**
@@ -143,6 +221,22 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       },
       overlayPositions: () => toPositions(lastMap().overlays),
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
+      view: () => {
+        const map = lastMap();
+        return {
+          center: map.center ? { lng: map.center.lng, lat: map.center.lat } : null,
+          zoom: map.zoom,
+          heading: map.heading,
+          tilt: map.tilt,
+        };
+      },
+      viewWrites: () => countViewWrites(lastMap().callLog),
+      simulateUserView: (next) => simulateUserView(lastMap(), fake, next),
+      subscribedEvents: () => lastMap().getListenerTypes(),
+      listenActivity: () => {
+        const snapshot = fake.diagnostics.snapshot();
+        return { calls: snapshot.activity.listenCalls, pending: snapshot.leaks.listeners };
+      },
     },
   };
 }

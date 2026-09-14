@@ -1,5 +1,6 @@
 export * from "./useBMap";
 export * from "./useBMapAsyncTask";
+export * from "./useControllableState";
 export * from "./useBMapGeolocation";
 export * from "./useBMapViewAnimation";
 export * from "./useBMapMarkerIcons";

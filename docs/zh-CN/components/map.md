@@ -155,11 +155,15 @@ map/theme2
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ----------------- | ---------------------------------- |
 | width                  | 地图显示宽度                                                                                                                                                                   | `string / number`                     | `100%`            | <Badge type="tip" text="^1.0.1" /> |
 | height                 | 地图显示高度                                                                                                                                                                   | `string / number`                     | `550px`           | <Badge type="tip" text="^1.0.1" /> |
-| center                 | 地图默认中心点，可使用城市名，如：北京市，也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。                                                                    | `string / {lng: number, lat: number}` | `{ lng: 116.403901, lat: 39.915185 }` | - |
-| heading                | 地图旋转角度                                                                                                                                                                   | `number`                              | `0`               | -                                  |
-| tilt                   | 地图倾斜角度                                                                                                                                                                   | `number`                              | `0 `              | -                                  |
+| center                 | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） | - |
+| defaultCenter          | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - | <Badge type="tip" text="^3.0.0" /> |
+| heading                | 地图旋转角度（**受控**，环绕角） | `number`                              | -（缺省时用 `0`）     | - |
+| defaultHeading         | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
+| tilt                   | 地图倾斜角度（**受控**） | `number`                              | -（缺省时用 `0`） | - |
+| defaultTilt            | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
 | mapType                | 地图类型 [mapType](#地图类型)                                                                                                                                                  | `string`                              | `BMAP_NORMAL_MAP` | -                                  |
-| zoom                   | 地图缩放级别                                                                                                                                                                   | `number`                              | `14`              | -                                  |
+| zoom                   | 地图缩放级别（**受控**） | `number`                              | -（缺省时用 `14`） | - |
+| defaultZoom            | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
 | displayOptions         | 自定义地图属性 [详见](#displayoptions)                                                                                                                                         | -                                     | -                 | -                                  |
 | mapStyleId             | 个性化地图样式 ID [详见](#个性化地图)                                                                                                                                          | `string`                              | -                 | -                                  |
 | mapStyleJson           | 个性化地图样式 Json [详见](#个性化地图)                                                                                                                                        | `{featureType: string...}[]`          | -                 | -                                  |
@@ -175,14 +179,125 @@ map/theme2
 | enableAutoResize       | 保留字段，当前版本未生效（容器尺寸变化请调用暴露的 `checkResize()`）                                                                                                          | `boolean`                             | `true`            | -                                  |
 | loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
 
+## 受控 / 非受控视野
+
+`center` / `zoom` / `heading` / `tilt` 是**受控 / 非受控双模**字段，来源优先级固定为
+**受控值 > `default*` 初值 > 库默认视野**。
+
+### 状态表
+
+| 传入的 prop | 模式 | 生效值 | 用户交互（拖拽 / 缩放 / 旋转 / 倾斜） | `default*` 后续变化 | 受控值后续变化 |
+| --- | --- | --- | --- | --- | --- |
+| `center` | 受控 | 外部值 | 回写内部状态 + `update:center` | 不适用 | 与地图当前值不一致时 `setCenter` |
+| `defaultCenter` | 非受控 | 内部状态（初值 = `defaultCenter`） | 回写内部状态 + `update:center` | **不生效**（告警一次） | 不适用 |
+| 都不传 | 缺省 | 内部状态（初值 = 库默认视野） | 回写内部状态 + `update:center` | 不适用 | 不适用 |
+
+`zoom` / `heading` / `tilt` 的规则与上表逐字相同，把 `center` 换成对应字段名即可。
+
+库默认视野：`center` = `{ lng: 116.403901, lat: 39.915185 }`、`zoom` = `14`、
+`heading` = `0`、`tilt` = `0`（与 v2/v3 的 props 默认值一致，**只在首次创建视野时**应用一次）。
+
+### v-model 用法
+
+```vue
+<template>
+  <BMap
+    ak="百度地图ak"
+    v-model:center="center"
+    v-model:zoom="zoom"
+    v-model:heading="heading"
+    v-model:tilt="tilt"
+  />
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const center = ref({ lng: 116.404, lat: 39.915 })
+const zoom = ref(14)
+const heading = ref(0)
+const tilt = ref(0)
+</script>
+```
+
+只想给初值、不想自己维护状态时，用非受控写法：
+
+```vue
+<BMap ak="百度地图ak" :default-center="{ lng: 121.424333, lat: 31.228604 }" :default-zoom="12" />
+```
+
+用户交互后仍能拿到回执（非受控模式同样会 emit）：
+
+```vue
+<BMap ak="百度地图ak" :default-zoom="12" @update:zoom="(z) => console.log(z)" />
+```
+
+### 事件
+
+| 事件 | 触发时机 | 载荷 |
+| --- | --- | --- |
+| `update:center` | `moveend`（拖拽 / 惯性移动结束） | `{ lng: number, lat: number }` |
+| `update:zoom` | `zoomend` | `number` |
+| `update:heading` | `headingchange` | `number`（环绕角，可能为负值，如 `-90` 等价于 `270`） |
+| `update:tilt` | `tiltchange` | `number` |
+
+只订阅**结束**事件（不订阅 `moving` / `zooming`）：逐帧回写会让父级每帧重渲染，并与受控写入来回打架。
+
+### 三条规则（发布后不易修改，改前请先读 ADR）
+
+1. **`default*` 只在首次解析时读一次。** 之后它的变化不会覆盖当前状态——否则「用户拖到 A，
+   父级重算 default 得到 B」会把用户操作静默吃掉。发生这种情况时会有一条 dev 告警。
+2. **模式按「当前受控值是否存在」实时判定，不冻结在首次解析。** 所以
+   `:center="loaded ? spot : undefined"` 这种「异步加载完成后才开始受控」的用法是支持的。
+3. **模式切换只告警、不拒绝。** 非受控 → 受控且外部值与当前内部状态冲突时告警一次；
+   受控 → 非受控时内部状态接管（保留最后一次外部值）并告警一次。
+   父级把 `update:*` 的值原样写回（`v-model` 的正常闭环）**不会**告警。
+
+### 不做什么
+
+- **不做「用户交互后强制回退到受控值」。** 受控的含义是「外部变化驱动地图」，不是「地图必须
+  随时等于外部值」。回退需要在中途事件上持续写回，会与用户手势打架、在松手回弹时抖动。
+  代价是：**父级收到 `update:*` 却不更新自己的状态时，地图会停在用户操作后的位置**，直到
+  父级下次改变该 prop。官方参考实现 `huiyan-fe/react-bmap` 同样如此。
+- **不做 deep watch。** `center` 按 `lng` / `lat` 两个标量做字段级比较，父级传内联对象字面量
+  不会让受控写入空跑。
+- **后续 `center` 变化不调用 `centerAndZoom`。** 初始化用 `centerAndZoom`（一次），后续只用
+  `setCenter` / `setZoom` / `setHeading` / `setTilt`，避免「改中心点顺手把 zoom 重置掉」。
+
+### 相等判定与浮点抖动
+
+受控写入前会**读回地图当前值**再做容差判等，因此「相同值不同引用」「父级回写同一值」
+「SDK 读回带 ±1e-9 抖动」都不会产生多余的 SDK 命令。容差见
+`packages/baidu-map-gl-vue/src/core/utils/equality.ts`：
+
+| 字段 | 判定 | 容差 |
+| --- | --- | --- |
+| `center` | 逐坐标容差比较（字符串按整串比较，跨形态永不相等） | `1e-7` 度 |
+| `zoom` | 数值容差比较 | `1e-6` |
+| `heading` | **按 360 环绕**取最小差（`-90` ≡ `270`） | `0.01` 度 |
+| `tilt` | 数值容差比较（0..90 无环绕语义） | `0.01` 度 |
+
+`heading` 的环绕判定不是可选优化：JSAPI 4.0 的 `setHeading(270)` 之后 `getHeading()` 返回
+`-90`，线性判等会让每次自身写入都产生一条假的 `update:heading`。
+
+::: tip 字符串中心点的读回限制
+
+`getCenter()` 只给出坐标点，而字符串 `center` 要么是城市名、要么需要地理编码，因此**字符串形态
+无法**做读回判等：每次字符串值变化都会下发一次 `setCenter`（这符合「不假支持」——我们并不知道
+自己是否已经在那座城市）。点形态不受影响。
+
+:::
+
 ## v3 行为说明
 
 ### 地图初始化与更新
 
-- `center` 和 `zoom` 在地图首次创建时一起应用，初始化使用 SDK 的 `centerAndZoom`。
-- 地图创建完成后，单独更新 `center` 只调用 `setCenter`，不会重置当前 `zoom`。
-- 单独更新 `zoom` 只调用 `setZoom`。
-- `heading` 和 `tilt` 会在初始化时应用，也会在对应 prop 变化时同步到 SDK；具体是否生效取决于 SDK 能力。
+- 视野（`center` / `zoom` / `heading` / `tilt`）在**地图首次创建时一次应用**（SDK 的
+  `centerAndZoom` + `setHeading` / `setTilt`），此后不再重跑初始化路径。
+- 地图创建完成后，单独更新 `center` 只调用 `setCenter`，不会重置当前 `zoom`；
+  单独更新 `zoom` 只调用 `setZoom`。
+- 受控写入前会读回地图当前值做容差判等（见上文「相等判定与浮点抖动」），一致时不下命令。
+- `heading` 和 `tilt` 是否生效取决于 SDK 能力（JSAPI 4.0 原生支持）。
 
 ### ready 与插件事件
 
