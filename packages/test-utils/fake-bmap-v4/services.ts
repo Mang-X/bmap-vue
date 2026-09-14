@@ -821,7 +821,7 @@ export class FakeV4RoutePlan {
     private readonly routes: FakeV4Route[],
     private readonly distance: number,
     private readonly duration: number,
-    private readonly options: { toll?: number; tollDistance?: number; taxiFare?: Record<string, unknown> } = {},
+    private readonly options: { taxiFare?: Record<string, unknown> } = {},
   ) {}
 
   getNumRoutes(): number {
@@ -847,14 +847,33 @@ export class FakeV4RoutePlan {
   getTaxiFare(): Record<string, unknown> | null {
     return this.options.taxiFare ?? null
   }
+}
 
-  /** 官方 `DrivingRoutePlan` 接口里的成员（4.0.4 的 `RoutePlan` 声明里没有）——可选读取的验证点。 */
+/**
+ * 官方 `DrivingRoutePlan` 接口：比 `RoutePlan` **多** `getToll()` / `getTollDistance()`。
+ *
+ * **只有驾车**的结果用这个类。替身若给步行 / 骑行也补上这两个成员，就比真实产物**宽容** ——
+ * 「成员缺失 ⇒ 投影返回 `null`」那条分支在测试里永远走不到（4.0.4 的
+ * `DrivingRouteResult#getPlan` 返回类型写的是不含它们的 `RoutePlan`，所以「拿不到」是真实可达的形态）。
+ */
+export class FakeV4DrivingRoutePlan extends FakeV4RoutePlan {
+  constructor(
+    routes: FakeV4Route[],
+    distance: number,
+    duration: number,
+    private readonly toll: number,
+    private readonly tollDistance: number,
+    options: { taxiFare?: Record<string, unknown> } = {},
+  ) {
+    super(routes, distance, duration, options)
+  }
+
   getToll(): number {
-    return this.options.toll ?? 0
+    return this.toll
   }
 
   getTollDistance(): number {
-    return this.options.tollDistance ?? 0
+    return this.tollDistance
   }
 }
 
@@ -965,17 +984,22 @@ export class FakeV4TransitRoutePlan {
   }
 }
 
-/** 官方路线结果（驾车 / 步行 / 骑行共用形状；`policy` 是**字段**）。 */
+/** 官方路线结果（驾车 / 步行 / 骑行共用形状；`policy` 是**字段**，但只有驾车 / 公交声明了它）。 */
 export class FakeV4RouteResult<TPlan> {
-  policy: number
+  /**
+   * 官方 `DrivingRouteResult.policy` / `TransitRouteResult.policy` 是**字段**，而
+   * `WalkingRouteResult` / `RidingRouteResult` 的声明里**没有它**：因此缺省是「不给」——
+   * 替身不能替 SDK 补一个它并不提供的字段（投影会如实得到 `null`，这正是要测的分支）。
+   */
+  policy?: number
 
   constructor(
     private readonly start: FakeV4RoutePoi,
     private readonly end: FakeV4RoutePoi,
     private readonly plans: TPlan[],
-    policy: number,
+    policy?: number,
   ) {
-    this.policy = policy
+    if (policy !== undefined) this.policy = policy
   }
 
   getStart(): FakeV4RoutePoi {
@@ -1158,10 +1182,14 @@ export class FakeV4DrivingRoute extends FakeV4RouteService {
 
   protected buildResult(start: unknown, end: unknown): FakeV4RouteResult<FakeV4RoutePlan> {
     const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
-      new FakeV4RoutePlan([this.routeFor(i, 0), this.routeFor(i, 1)], 1000 + i * 100, 600 + i * 60, {
-        toll: i === 0 ? 10 : 0,
-        tollDistance: i === 0 ? 500 : 0,
-      }),
+      // 驾车结果用的是官方 `DrivingRoutePlan` 形态（带 `getToll()` / `getTollDistance()`）
+      new FakeV4DrivingRoutePlan(
+        [this.routeFor(i, 0), this.routeFor(i, 1)],
+        1000 + i * 100,
+        600 + i * 60,
+        i === 0 ? 10 : 0,
+        i === 0 ? 500 : 0,
+      ),
     )
     const policy = typeof this.options.policy === 'number' ? this.options.policy : 0
     return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, policy)
@@ -1178,7 +1206,8 @@ export class FakeV4WalkingRoute extends FakeV4RouteService {
     const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
       new FakeV4RoutePlan([this.routeFor(i, 0)], 800 + i * 100, 400 + i * 30),
     )
-    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, 0)
+    // `WalkingRouteResult` 的声明里没有 `policy` ⇒ 不传（投影如实得到 `null`）
+    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans)
   }
 }
 
@@ -1191,7 +1220,7 @@ export class FakeV4RidingRoute extends FakeV4RouteService {
     const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
       new FakeV4RoutePlan([this.routeFor(i, 0)], 1200 + i * 100, 500 + i * 30),
     )
-    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, 0)
+    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans)
   }
 }
 

@@ -156,6 +156,7 @@ export {
   FakeV4LocalResultPoi,
   FakeV4LocalSearch,
   FakeV4RidingRoute,
+  FakeV4DrivingRoutePlan,
   FakeV4RoutePlan,
   FakeV4RoutePoi,
   FakeV4RouteResult,

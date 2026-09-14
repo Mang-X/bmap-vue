@@ -56,6 +56,10 @@ interface RouteEndpointPoi { uid: string; point: Point; name?: string }
   硬套 `RoutePlan` 会逼调用方从 `description` 文本里还原换乘信息；
 - 刻意不投影 `Route#getPolyline()`（SDK 自己画的覆盖物，所有权属服务，见决策 3）与
   `Line.type` 之外的枚举对象；需要时走 `./advanced` 的 `unwrapRaw()`。
+- 刻意不投影**入参的回声字段** `TransitRouteResult.intercityPolicy` / `transitTypePolicy`：它们是调用方
+  自己传进来的两个跨城策略（官方注明「仅跨城时有值」），不是回包新增的信息；调用方本来就持有它们。
+  相比之下 `policy`（驾车 / 公交）**进** DTO —— 未显式指定时它给出服务端实际采用的那个策略，是调用方
+  拿不到的信息。这条差别是刻意的（`TransitRouteResult.policy` 同样按此投影）。
 
 ### 3. 归属：沿用「一个实例一个未结算操作」，**不**采纳按请求换回调
 

@@ -98,48 +98,66 @@ function upstreamMembers(fileName: string): Record<string, number> {
 describe("策略常量与官方声明对齐", () => {
   /**
    * 四个策略表（`DrivingPolicy` / `TransitPolicy` / `IntercityPolicy` / `TransitVehiclePolicy`）
-   * 是**自持**的（公共声明不得引用官方类型包），因此编译器不会再盯着它们。锁两条：
+   * 是**自持**的（公共声明不得引用官方类型包），因此编译器不会再盯着它们。这里做**派生式逐名比对**：
    *
-   * 1. **取值集合等价**（我们 ↔ 官方，双向）：多一个 / 少一个 / 数值被改都会失败；
-   * 2. **命名差异显式**：本库有几个成员的名字与官方不同（官方的 `BMAP_DRIVING_POLICY_DESTANCE`
-   *    是上游的拼写笔误、本库写 `LEAST_DISTANCE`），逐条断言它们指向**同一个数值**。
+   * - 我们的成员名按官方前缀**派生**出官方名（只有真实改名才登记进 `alias`）；
+   * - 要求两边**双射**：多一个 / 少一个 / 改名忘登记都会被 `toEqual(new Set(...))` 抓到；
+   * - 再逐个成员断言数值相等。
    *
-   * 为什么不逐名比对：两边名字前缀与拼写本来就不一样，硬凑一张改名表等于把表抄第二遍
-   * （抄错就一起错）。取值集合 + 显式别名断言能拦住真实漂移，且不制造第二份事实源。
+   * 为什么不是「取值集合相等」：多重集相等**不抓置换**——把两个成员的值对调，集合一模一样，而
+   * 「名字配错数字」正是这条断言要拦的那类错误。派生式比对也不新增第二份事实源：官方名是从我们
+   * 自己的键推出来的，只有真实改名才需要写一行 `alias`。
    */
-  function expectSameValueSet(ours: Record<string, number>, upstream: Record<string, number>): void {
-    expect(Object.keys(upstream).length).toBeGreaterThan(0); // 正证守卫：解析失败时不能静默通过
-    expect(Object.values(ours).sort((a, b) => a - b)).toEqual(
-      Object.values(upstream).sort((a, b) => a - b),
-    );
-    expect(new Set(Object.values(ours)).size).toBe(Object.keys(ours).length); // 无重号
+  function expectAlignedWithUpstream(
+    ours: Record<string, number>,
+    upstream: Record<string, number>,
+    prefix: string,
+    alias: Record<string, string> = {},
+  ): void {
+    // 正证守卫：解析失败（文件改名 / 正则失配）时不能静默通过
+    expect(Object.keys(upstream).length).toBeGreaterThan(0);
+
+    const derived = Object.keys(ours).map((name) => alias[name] ?? `${prefix}${name}`);
+    expect(new Set(derived).size).toBe(derived.length); // 派生名不重复，双射才有意义
+    expect(new Set(derived)).toEqual(new Set(Object.keys(upstream)));
+
+    for (const [name, value] of Object.entries(ours)) {
+      expect(upstream[alias[name] ?? `${prefix}${name}`], `${name} 的数值`).toBe(value);
+    }
   }
 
   it("DrivingPolicy", () => {
-    const upstream = upstreamMembers("DrivingPolicy.d.ts");
-    expectSameValueSet(DrivingPolicy, upstream);
-    expect(DrivingPolicy.LEAST_DISTANCE).toBe(upstream.BMAP_DRIVING_POLICY_DESTANCE);
-    expect(DrivingPolicy.DEFAULT).toBe(upstream.BMAP_DRIVING_POLICY_DEFAULT);
-    expect(DrivingPolicy.DISTANCE_PRIORITY).toBe(upstream.BMAP_DRIVING_POLICY_DISTANCE_PRIORITY);
-    expect(DrivingPolicy.TIME_PRIORITY).toBe(upstream.BMAP_DRIVING_POLICY_TIME_PRIORITY);
+    expectAlignedWithUpstream(
+      DrivingPolicy,
+      upstreamMembers("DrivingPolicy.d.ts"),
+      "BMAP_DRIVING_POLICY_",
+      // 官方把「距离最短」拼成 `DESTANCE`（上游笔误）；本库用可读的名字，改名在这里显式登记
+      { LEAST_DISTANCE: "BMAP_DRIVING_POLICY_DESTANCE" },
+    );
   });
 
   it("TransitPolicy", () => {
-    const upstream = upstreamMembers("TransitPolicy.d.ts");
-    expectSameValueSet(TransitPolicy, upstream);
-    expect(TransitPolicy.FIRST_SUBWAYS).toBe(upstream.BMAP_TRANSIT_POLICY_FIRST_SUBWAYS);
+    expectAlignedWithUpstream(
+      TransitPolicy,
+      upstreamMembers("TransitPolicy.d.ts"),
+      "BMAP_TRANSIT_POLICY_",
+    );
   });
 
   it("IntercityPolicy", () => {
-    const upstream = upstreamMembers("IntercityPolicy.d.ts");
-    expectSameValueSet(IntercityPolicy, upstream);
-    expect(IntercityPolicy.CHEAP_PRICE).toBe(upstream.BMAP_INTERCITY_POLICY_CHEAP_PRICE);
+    expectAlignedWithUpstream(
+      IntercityPolicy,
+      upstreamMembers("IntercityPolicy.d.ts"),
+      "BMAP_INTERCITY_POLICY_",
+    );
   });
 
   it("TransitVehiclePolicy（官方类型名叫 TransitVehicleType）", () => {
-    const upstream = upstreamMembers("TransitVehicleType.d.ts");
-    expectSameValueSet(TransitVehiclePolicy, upstream);
-    expect(TransitVehiclePolicy.TRAIN).toBe(upstream.BMAP_TRANSIT_TYPE_POLICY_TRAIN);
+    expectAlignedWithUpstream(
+      TransitVehiclePolicy,
+      upstreamMembers("TransitVehicleType.d.ts"),
+      "BMAP_TRANSIT_TYPE_POLICY_",
+    );
   });
 });
 
@@ -202,6 +220,30 @@ describe("v4 路线服务：创建面", () => {
     const limited = buildDriver();
     expect(() => limited.createTransitRoute("北京市")).toThrowError(/service\.transit-route/);
   });
+
+  it("创建期的参数错误点名**正确的服务**（共用归一化函数不再写死 createLocalSearch）", () => {
+    // 空字符串 / 非 map 句柄 / 非法 renderOptions.map 都要报「createDrivingRoute: …」
+    expect(() => services.createDrivingRoute("")).toThrowError(/^createDrivingRoute: /);
+    expect(() =>
+      services.createDrivingRoute(point(), { renderOptions: { map: {} as never } }),
+    ).toThrowError(/^createDrivingRoute: renderOptions\.map/);
+    // 对照：LocalSearch 那条仍然是自己的名字
+    expect(() => services.createLocalSearch("")).toThrowError(/^createLocalSearch: /);
+  });
+
+  it("驾车 + panel 只告警一次（官方文档：该属性对驾车路线规划无效）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      services.createDrivingRoute(point(), { renderOptions: { panel: "route-panel" } });
+      services.createDrivingRoute(point(), { renderOptions: { panel: "route-panel" } });
+      const panelWarnings = warn.mock.calls
+        .map((args) => String(args[0]))
+        .filter((message) => message.includes("panel 对驾车路线规划无效"));
+      expect(panelWarnings).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -249,7 +291,7 @@ describe("v4 路线服务：结果投影", () => {
     expect(leg.steps[0]!.position).toEqual({ lng: 116.4, lat: 39.9 });
   });
 
-  it("步行 / 骑行：同一套投影，routeType 区分", async () => {
+  it("步行 / 骑行：同一套投影，routeType 区分；**没有** toll 成员时为 null", async () => {
     const walking = services.createWalkingRoute("北京市");
     const walkingResult = await services.searchWalkingRoute(walking, {
       start: "天安门",
@@ -257,6 +299,12 @@ describe("v4 路线服务：结果投影", () => {
     }).result;
     expect(walkingResult.data?.plans[0]?.legs[0]?.routeType).toBe(2); // WALKING
     expect(walkingResult.data?.plans[0]?.legs[0]?.steps).toHaveLength(2);
+    // 官方只把 `getToll()` / `getTollDistance()` 声明在 `DrivingRoutePlan` 上 ⇒ 步行结果里没有它们，
+    // 投影必须如实给 `null`（替身也只给驾车这两个成员，否则这条分支永远走不到）
+    expect(walkingResult.data?.plans[0]?.toll).toBeNull();
+    expect(walkingResult.data?.plans[0]?.tollDistance).toBeNull();
+    // 步行 `WalkingRouteResult` 也没有 `policy` 字段（只有驾车 / 公交的结果声明了它）
+    expect(walkingResult.data?.policy).toBeNull();
 
     const riding = services.createRidingRoute("北京市");
     const ridingResult = await services.searchRidingRoute(riding, {
@@ -264,6 +312,7 @@ describe("v4 路线服务：结果投影", () => {
       end: point(116.5, 39.9),
     }).result;
     expect(ridingResult.data?.plans[0]?.legs[0]?.routeType).toBe(6); // RIDING
+    expect(ridingResult.data?.plans[0]?.toll).toBeNull();
   });
 
   it("公交：按官方 getTotalType 判别步行段 / 乘车段，结果与驾车**不同构**", async () => {
@@ -718,10 +767,11 @@ describe("v4 路线服务：四类共用行为", () => {
   });
 
   it.each(ROUTE_CASES)("$name：句柄种类不对时同步抛（不伪装成服务失败）", ({ create }) => {
-    const handle = create(services);
+    // 先建一个路线实例（顺带确认它的句柄品牌与 LocalSearch 不同 —— 断言不是「存在性」这种恒真的东西）
+    const route = create(services);
     const localSearch = services.createLocalSearch("北京市");
+    expect(route[HANDLE_BRAND]).not.toBe(localSearch[HANDLE_BRAND]);
     expect(() => services.clearRouteResults(localSearch as never)).toThrowError(/只接受 create/);
     expect(() => services.disposeRoute(localSearch as never)).toThrowError(/只接受 create/);
-    expect(handle).toBeDefined();
   });
 });

@@ -15,7 +15,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
@@ -330,55 +330,73 @@ const PACKAGE_SRC = resolve(
   "../../packages/baidu-map-gl-vue/src",
 );
 
+/**
+ * 递归收集目录下的 `.ts`（排除测试文件）。
+ *
+ * **目录枚举而不是写死文件名单**：写死的清单在「新增一个桥接文件」或「把引用放进子目录」时会静默失效，
+ * 而静态门禁失效是最难发现的一类问题（它继续绿）。同一理由适用于 `integrations/ui-kit` 那一侧。
+ */
+function sourcesIn(relativeDir: string): string[] {
+  const root = join(PACKAGE_SRC, relativeDir);
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) out.push(full);
+    }
+  };
+  walk(root);
+  return out.sort();
+}
+
 function sourceOf(relative: string): string {
   return readFileSync(join(PACKAGE_SRC, relative), "utf8");
 }
 
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
+}
+
 describe("UI 与 headless 分流（同一次界面操作只走一条路径）", () => {
   /**
-   * 门禁的两种失效方式都要防：
-   * 1. **判定对象错位**——「headless 不含 UI Kit」要在**源码**上判，且要剥掉注释（我们自己在注释里
-   *    讨论过 UI Kit）；
-   * 2. **空转**——文件被改名 / 内容为空时断言会恒真，因此先断言「文件确实存在且非空」，
-   *    并用一条**正证**（UI Kit 那一侧确实引用了上游包）证明判定式本身有效。
+   * 门禁的三种失效方式都要防：
+   * 1. **判定对象错位**——要在**源码**上判，且剥掉注释（我们自己在注释里讨论过 UI Kit）；
+   * 2. **判定式写歪**——用一条**正证**（同一判定式对「确实引用上游包」的文件必须命中）证明它有效；
+   * 3. **范围写错导致空转**——枚举目录并断言文件数下限 + 每个文件有实质内容，避免「一个文件都没扫到
+   *    也算通过」。
    */
-  function stripComments(source: string): string {
-    return source
-      .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
-  }
-
-  const HEADLESS_FILES = [
-    "composables/routeServices.ts",
-    "composables/useBMapDrivingRoute.ts",
-    "composables/useBMapWalkingRoute.ts",
-    "composables/useBMapRidingRoute.ts",
-    "composables/useBMapTransitRoute.ts",
-  ];
-
-  const UI_KIT_FILES = ["integrations/ui-kit/routePlan.ts"];
-
-  it("headless 路线 hooks 不引用 UI Kit（含上游包与组件）", () => {
-    for (const file of HEADLESS_FILES) {
-      const code = stripComments(sourceOf(file));
-      expect(code.length).toBeGreaterThan(200); // 正证守卫：文件真的有内容
-      expect(code).not.toMatch(/jsapi-ui-kit/);
-      expect(code).not.toMatch(/integrations\/ui-kit/);
-      expect(code).not.toMatch(/BRoutePlan/);
+  it("composables 下的任何文件都不引用 UI Kit（含上游包与 BRoutePlan）", () => {
+    const files = sourcesIn("composables");
+    expect(files.length).toBeGreaterThanOrEqual(5); // 现在 5 个路线文件之外还有既有 hooks，少于它说明枚举失效
+    const offenders: string[] = [];
+    for (const file of files) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      expect(code.length).toBeGreaterThan(100);
+      if (/jsapi-ui-kit|BRoutePlan|integrations\/ui-kit/.test(code)) offenders.push(file);
     }
+    expect(offenders).toEqual([]);
   });
 
-  it("UI Kit 路线封装不引用 headless hooks（对照的正证：UI Kit 加载点确实引用上游包）", () => {
+  it("UI Kit 集成目录下的任何文件都不引用路线 hooks（正证：加载点确实引用上游包）", () => {
     // 正证：`loadUiKit.ts` 是本库唯一的 UI Kit 加载点。用**同一套**「字符串出现」判定式对它断言，
     // 若它在这里为真、而上面的负向断言为假，说明判定式本身有效（不是恒真的空转断言）。
     expect(stripComments(sourceOf("integrations/ui-kit/loadUiKit.ts"))).toContain(
       "@baidumap/jsapi-ui-kit",
     );
-    for (const file of UI_KIT_FILES) {
-      const code = stripComments(sourceOf(file));
-      expect(code.length).toBeGreaterThan(200);
-      expect(code).not.toMatch(/useBMap(Driving|Walking|Riding|Transit)Route/);
-      expect(code).not.toMatch(/composables\/routeServices/);
+
+    const files = sourcesIn("integrations/ui-kit");
+    expect(files.length).toBeGreaterThanOrEqual(6);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      expect(code.length).toBeGreaterThan(100);
+      if (/useBMap(Driving|Walking|Riding|Transit)Route|composables\/routeServices/.test(code)) {
+        offenders.push(file);
+      }
     }
+    expect(offenders).toEqual([]);
   });
 });
