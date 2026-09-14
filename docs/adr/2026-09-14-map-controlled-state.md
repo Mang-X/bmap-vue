@@ -328,7 +328,7 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
 
 ## 验证
 
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **29 条**用例覆盖三态、初次视野只
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **21 条**用例（该文件共 29 条）覆盖三态、初次视野只
   执行一次、`centerAndZoom` 不复发、0/0 与边界 zoom、相同值不写 SDK、浮点抖动、用户交互回写与
   父级回写闭环、heading 环绕、四个 `default*` 的失效、模式切换告警、受控值优先、不重绑与卸载归零，
   以及三轮评审补的九条：**加载窗口内的受控更新**、**加载窗口内「受控 → 非受控」**、
