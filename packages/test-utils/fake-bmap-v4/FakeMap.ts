@@ -82,6 +82,8 @@ export class FakeV4Map extends FakeV4EventTarget {
   lastViewOptions: Record<string, unknown> | null = null
   resizeCalls = 0
   destroyed = false
+  /** `load` 是否已经派发过（官方只在首次 `centerAndZoom` 后派发一次）。 */
+  loadEmitted = false
   readonly callLog: string[] = []
 
   /* ------------------------------------------------------------ 子资源容器（#21） */
@@ -297,6 +299,12 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
     if (typeof zoom === 'number') this.zoom = zoom
     this.lastViewOptions = options ?? null
+    // 官方语义：`load` 在**首次** centerAndZoom 之后派发一次（后续 centerAndZoom 不再派发）。
+    // 夹具照实建模，否则「订阅者能不能收到 load」这件事在单测里无法验证（#28 评审 P1）。
+    if (!this.loadEmitted) {
+      this.loadEmitted = true
+      this.emit('load', { point: this.center, zoom: this.zoom })
+    }
   }
 
   setCenter(point: FakeV4Point | string, options?: Record<string, unknown>): void {

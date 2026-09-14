@@ -39,6 +39,8 @@ export interface DriverEvent {
   mapType?: unknown;
   /** 变化前的地图类型实例（`maptypechange`），同 `mapType` 原样透传。 */
   exMapType?: unknown;
+  /** 变化后的缩放级别（`maptypechange`）；raw 缺失时由 Driver 读回 `getZoom()` 补齐。 */
+  zoomLevel?: number;
   /** 原始 DOM 事件；部分合成事件没有对应 DOM 事件。 */
   domEvent?: Event;
   /** raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。 */
@@ -49,6 +51,32 @@ export interface DriverEvent {
 
 export interface MapMouseEvent extends DriverEvent {
   point: Point;
+}
+
+/**
+ * `load`（首次视野确定后派发一次）：`point` / `zoom` 必填。
+ *
+ * 依据：上游 `MapLoadEvent` 把两者声明为必填。**必填是可兑现的**——raw 里缺了（或引擎给了残缺值）
+ * 时由 Driver 读回 `getCenter()` / `getZoom()` 补齐（`MAP_EVENT_READBACK_FIELDS`），
+ * 而不是把字段留在 `undefined` 让类型说谎。
+ */
+export interface MapLoadEvent extends DriverEvent {
+  point: Point;
+  zoom: number;
+}
+
+/** `resize`（容器可视区域变化）：`size` 必填（raw 缺失时读回 `getSize()`）。 */
+export interface MapResizeEvent extends DriverEvent {
+  size: Size;
+}
+
+/**
+ * `maptypechange`：`zoomLevel` 必填（raw 缺失时读回 `getZoom()`）。
+ *
+ * `mapType` / `exMapType` 仍是 `unknown`：它们是 SDK 自己造的实例，原样透传（见字段注释）。
+ */
+export interface MapTypeChangeEvent extends DriverEvent {
+  zoomLevel: number;
 }
 
 export interface EventDriver {

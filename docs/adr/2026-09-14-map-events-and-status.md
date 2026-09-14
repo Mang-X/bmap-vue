@@ -86,16 +86,41 @@ issue #28 要求一次给出这三样，并且**事件命名是公共契约**—
 用 `Exclude` + 参数类型必须是 `never` 的写法，而不是「联合整体可赋值」——后者在上游只补齐一半
 声明时会静默通过（同类判据见 #75）。
 
-### 4. `<BMap>` 按需订阅：只订父级**真的绑了**的事件
+### 4. `<BMap>` **无条件订阅** Catalog 的全部事件（评审 P1 后的结论）
 
-43 个事件无条件绑 43 个 SDK 监听器是纯浪费；官方 React 封装只在传了对应 handler 时才
-`addEventListener`（`Map.tsx:413` 的 `if (!current) continue`）。Vue 侧的对应判定是
-**当前渲染的 vnode props**（`onXxx` 键）而不是 `useAttrs()`——事件在 `defineEmits` 里声明之后
-就不再属于 `attrs`。
+第一版学官方 React 封装做了「按需订阅」（只在传了 handler 时才 `addEventListener`，`Map.tsx:413`），
+**已被实测推翻**：
 
-- 键名经 `resolveMapEventName(key.slice(2))` 归一，因此 `@click` / `@mapTypeChange` /
-  `@map-type-change` / `@style_loaded` 都能命中；
+| 事实（`@vue/runtime-core@3.5.42`） | 后果 |
+| --- | --- |
+| `hasPropsChanged` 里 `hasPropValueChanged(...) && !isEmitListener(emitsOptions, key)` | **只改监听器不会让子组件重渲染** ⇒ 依赖 `onUpdated` 的增量同步看不到「监听器变了」 |
+| `setFullProps` 明确跳过 `isEmitListener` 的键，listener 不进 `props` 也不进 `attrs` | 子组件**拿不到**任何「监听器变了」的响应式信号（`useAttrs()` 也看不到） |
+| `emit` 只从 `instance.vnode.props` 读 handler；`.once` 的键是 `handlerName + 'Once'` | 「扫描 `onXxx` 前缀再归一」的判定会把 `@click.once`（`onClickOnce`）判成没绑定 |
+
+实测现象：把 `onClick` 从 `undefined` 改成函数（键始终存在、父级没改别的 prop）时，`<BMap>` 不重渲染、
+增量同步不跑、**事件直接丢失**。因此改为**地图就绪时一次订全部事件**：43 个 `addEventListener` 是每个
+地图一次的固定成本，未绑定 handler 的事件由 Vue 的 `emit` 直接丢弃（一次属性查找）。
+
+`retry()` 之类让**地图实例换新**的路径仍会重建订阅（按「事件名 + 地图身份」记账，旧句柄的订阅由
+`ResourceScope` 的 remover 释放）。
+
+- **判定键由 Vue 自己的规则生成**（`emitHandlerKeys`：`toHandlerKey` + `camelize` + `.once` 后缀，
+  与 `@vue/runtime-core` 的 `emit()` 逐行对齐），而不是「扫 `onXxx` 前缀再模糊归一」——
+  后者会把 `@click.once` 的键 `onClickOnce` 归一成 `clickonce` 而**漏掉订阅**（评审 P1，已修）；
+- **值必须是函数或函数数组**（Vue 对 `v-on="[a, b]"` 会一次调多个）；`:onClick="undefined"`
+  这种「键存在但没人听」不算绑定（评审 P1，已修）；
+- 各拼写是否可达由 Vue 的 handler key 规则决定，不是本库的自由选择（实测 `@vue/compiler-dom@3.5.42`）：
+
+  | 事件 | 能命中 handler 的写法 |
+  | --- | --- |
+  | `click` | `@click` / `@click.once` |
+  | `style-loaded`（canonical） | `@style-loaded` / `@styleLoaded` / 两者的 `.once` |
+  | `style_loaded`（别名） | `@style_loaded` / 两者的 `.once`（`camelize` 只认 `-`） |
+  | `maptypechange` | `@maptypechange`（名字没有词边界，`@mapTypeChange` 的键 `onMapTypeChange` 不在 `emit("maptypechange")` 的查找链上） |
+
 - 监听器集合变化（`v-if` 切换 handler、动态 `v-on`）由 `onUpdated` 补一次**差集**同步；
+- **订阅记账是「事件名 + 地图身份」**，解绑走 `ResourceScope.add()` 返回的 remover（评审 P1：
+  只执行原始 `off` 会把失效闭包永久留在 `scope.disposers` 里，反复绑定 / 解绑会持续堆积）；
 - 因此「父级每轮渲染都传内联箭头函数」不会新增 `addEventListener`（门禁用
   `listenActivity().calls` 钉住）。
 
@@ -150,6 +175,8 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 | 就绪即给值 | 订阅时先读一次当前状态（地图创建后一直没动过也有值） |
 | 更新判等 | 逐字段容差判等，**相等就保持原对象**（`watch(center)` 不会被同一视野的重复事件唤醒）；容差与受控视野同源：经纬度 `1e-7`、`zoom` `1e-6`、角度 `0.01` |
 | 读不出 | 句柄为 `null`（未就绪 / 销毁）⇒ 字段回 `null`、标志回 `false`，语义是**未知**而不是「保持上一次的值」 |
+| 换地图 | 句柄**身份变化**（map A → map B）时先 `reset()` 再重订：A 的 in-flight `moving` / `zooming` 不会被带到 B（评审建议，已修） |
+| 失败路径 | `bind()` 是**事务**：`refresh()` 抛错就地 `unbind()` + `reset()` 再抛。否则「订阅了 12 份、`onScopeDispose` 还没注册」的批次**没有任何释放路径**（评审 P1，已修） |
 | 读错误口径 | 复用 `core/utils/liveView.ts` 的 `readLiveView`（只忽略「资源已销毁 / 本引擎没有该能力」），`BMAP_SDK_CALL_FAILED` 一类照旧上抛 |
 
 `useMapStatus` 与 `<BMap>` 共用同一份 `readLiveView`：这条口径此前是 `<BMap>` 里的一个局部函数，
@@ -174,12 +201,25 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 | `useMapEvent` 的载荷 | `(raw: unknown) => void`，`wrapEvent()` 给出 `{ type, target, point, pixel, overlay, raw }`（`utils/event.ts`） | 逐事件载荷类型（表内事件精确、表外退化）+ 归一化底座 `DriverEvent` | **本库更严**；上游真正的清单在类型包里，React 封装没消费它 |
 | handler 更新 | `useLatest(handler)` + 订阅一次（`hooks/useMapEvent.ts:16`） | `shallowRef` 槽位；传函数=捕获一次、传 ref=每次读 `.value` | 同源（都不重绑）；差异来自框架语义 |
 | 是否重订阅 | deps `[map, driver, type, handlerRef]`（`hooks/useMapEvent.ts:21`），`type` 变化即重订 | 同（`name` 变化重订），并把「handler 不在 deps 里」写成用例 | 同源 |
-| 按需订阅 | `if (!current) continue`（`Map.tsx:413`），`eventKey` 只编码「handler 有没有」 | 同思路：vnode props 判定 + `onUpdated` 差集同步 | 同源（本条是本库向官方学的） |
+| 按需订阅 | `if (!current) continue`（`Map.tsx:413`）+ `eventKey` 只编码「handler 有没有」 | **无条件订阅**全部事件 | **本库刻意不同**：React 每次渲染都会重跑 hook，能看到 handler 变化；Vue 既不重渲染、也不把 emit listener 放进 `props`/`attrs`，按需订阅会静默丢事件（见决策 4） |
 | 状态 hook | `useMapStatus()` 返回**一个快照对象**（`MapSnapshot`，无 `moving` / `zooming`），内部 `useSyncExternalStore` + 值键缓存（`hooks/useMapStatus.ts:54`） | 返回**一组只读 refs**，新增 `moving` / `zooming` | 框架语义差异（Vue 用 refs）；`moving`/`zooming` 是 issue 要求的增量 |
 | 状态订阅的事件 | `['moveend','zoomend','resize','headingchange','tiltchange','moving','tilesloaded']` | 12 个（读值 6 + 标志 6），且标志类**不合帧** | 本库覆盖更全；`moving` 在参考实现里只是「顺便刷新快照」，本库用它驱动一个布尔标志，因此必须保证不倒置 |
 | 读错误的容错 | 每个字段 `safeNum` / `safePoint` 包一层 `try/catch { return null }` | 只忽略白名单错误码，其余上抛 | **本库更严**：`catch { return null }` 会把「读错」伪装成「读不到」 |
 | 未归一化字段 | `wrapEvent` 给出 `overlay`（SDK 覆盖物实例） | **不给** `overlay`，需要时走 `raw` | **本库更保守**：把 SDK 实例投影成句柄需要身份映射，本库没有可验证的等价表示，不做假投影 |
 | 指针事件的 `point` | `r?.point ?? r?.latlng ?? r?.latLng`，可能 `undefined` | 指针类事件兜底 `{lng:0,lat:0}`（沿用既有 `click` 契约） | 同源的历史行为，本库把它写成「哪些事件必有 `point`」的清单并用 fixture 钉住 |
+
+### 10. 生命周期事件与「事件专属载荷」的可得性（评审后新增）
+
+三处「声明了却收不到 / 声明了却补不上」的问题，都在**边界**上解决，而不是把类型放宽：
+
+| 问题 | 根因（实测） | 处置 |
+| --- | --- | --- |
+| `load` 永远收不到 | 官方 `load` 在**首次 `centerAndZoom()` 之后**派发，而 `MapRuntime` 是先 `initializeView()` 再暴露 `map` 句柄；订阅者要等 `mount()` resolve 才拿得到句柄 | `MapRuntimeOptions.onMapCreated`：建图成功、初始化视野**之前**的挂载点；`<BMap>` 在那里就把订阅挂上（`load` 于是真的到达） |
+| `destroy` 永远收不到 | `MapDriver.destroy` 的收尾顺序是「`events.release()` → 销毁 SDK 对象」，而官方 `destroy` 事件在销毁那一刻才派发 ⇒ 订阅已被摘掉 | Driver 在 `release` 之前**合成派发**一次同语义 `destroy`（走同一条归一化路径，`raw` 是被销毁的实例）；用户 handler 抛错不阻断销毁 |
+| `load.point/zoom`、`resize.size`、`maptypechange.zoomLevel` 只能是 optional | 引擎在部分触发路径给的 raw 不完整 | **读回补齐**（`MAP_EVENT_READBACK_FIELDS`：`getCenter` / `getZoom` / `getSize`），让上游声明的**事件级必填字段**在公共类型里成为事实（`MapLoadPayload` / `MapResizePayload` / `MapTypeChangePayload`） |
+
+`mousewheel.trend` 与 `zoomexceeded.targetZoom` **保持 optional**：地图答不出它们（`getZoom()` 给的是当前级别，
+不是「试图到达的级别」；滚轮方向只在 raw 里），本库不做猜测。
 
 ## 后果
 
@@ -188,7 +228,7 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 | 变更 | 影响 | 处置 |
 | --- | --- | --- |
 | `<BMap>` 新增 43 个 map 事件规范名 + 5 个 SDK 拼写兼容名（共 48 个可绑名） | 纯新增（`click` 语义不变） | 文档表格由门禁校验 |
-| `<BMap>` 只在父级绑定时才订阅事件 | **无行为变化**：父级没绑就没人观察得到；`@click` 仍照常触发 | 由「按需订阅」用例与监听器增量断言钉住 |
+| `<BMap>` 无条件订阅全部 map 事件 | **无行为变化**（未绑定 handler 的事件不产生任何回调），代价是每个地图 43 个 SDK listener | 由「订阅覆盖 Catalog 全部事件」「handler 从 undefined 变函数仍能收到」两条用例钉住 |
 | 新增公开 composable `useMapEvent` / `useMapStatus` | 纯新增（根入口） | 文档：`docs/zh-CN/hooks/useMapEvent.md`、`useMapStatus.md`、侧边栏；changeset `minor` |
 | 新增公开类型 `MapEventMap` / `MapEventPayload` / `MapEventPayloadOf` / `MapPointerEvent` / `MapEventName` 等 | 纯新增（根入口） | 同上 |
 | `DriverEvent` 新增 `trend` / `mapType` / `exMapType` 三个字段 | 纯新增（可选字段） | `mousewheel` / `maptypechange` 的载荷因此不再需要 `raw` |
@@ -223,9 +263,16 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
    而按「SDK 调用失败」上报（用例钉住）。
 7. **`bounds` 不做「空范围」的额外识别**：引擎给出有效范围就读，给不出就按上面的错误码如实上报；
    本库不替引擎判断「这个范围有没有意义」。
-8. **`<BMap>` 的 map 事件订阅按「地图身份」重建**（`retry()` 换成新地图实例时会重新订阅），
-   但 `retry()` 之后仍然**不会**重跑 `applyMapType` / `syncEnableProps` / 视野收敛——那属于
-   「重试 = 重新装配」这个更大的问题（见 ADR `2026-09-14-map-controlled-state` 已知限制 7）。
+8. **`<BMap>` 无条件订阅全部事件**：每个地图 43 个 SDK listener（换来「父级怎么改绑定都不会丢事件」，
+   见决策 4）。订阅按「事件名 + 地图身份」重建，但 `retry()` 之后仍然**不会**重跑 `applyMapType` /
+   `syncEnableProps` / 视野收敛——那属于「重试 = 重新装配」这个更大的问题（见 ADR
+   `2026-09-14-map-controlled-state` 已知限制 7）。当前 `MapRuntime` 在 ready 之后不会重建地图实例，
+   因此「按身份重建」这条分支目前是**防御性**的。
+9. **`mousewheel.trend` / `zoomexceeded.targetZoom` 是 optional**：raw-only 字段（地图答不出「试图到达的
+   缩放级别」，滚轮方向也只在 raw 里），本库不猜。其余事件级必填字段（`load.point/zoom`、`resize.size`、
+   `maptypechange.zoomLevel`）由 Driver 读回补齐，因此**在类型上是必填**（见决策 10）。
+10. **`destroy` 是 Driver 合成派发**（不是直接转发的 SDK 事件）：官方在我们摘掉订阅之后才派发它，
+    转发的路子拿不到（见决策 10）。载荷形状与其它事件一致，`raw` 是被销毁的实例。
 9. **组件事件的别名目前只有 `ready` → `initd` 一处**，它由 `emitReady()` 从 Catalog 的
    `BMAP_COMPONENT_EVENT_EMIT_ALIASES` 读；表里新增别名时需要同样接一个「唯一出口」。
    门禁只保证「组件里没有第二份手写兼容」（文本扫描），不保证「新别名已接线」。
@@ -250,12 +297,32 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
   就绪即给值、未就绪=未知、引用不变（含 `watch` 不被唤醒 + **真实变化会唤醒**的正证）、容差、
   八个字段都是 ref、四个字段各自更新、标志起止与「同帧不倒置」、`moving` 只在真变化时唤醒、
   订阅 12 份落在 10 个事件类型（精确集合）、释放后不更新、未初始化视野如实上报。
-- `tests/behavior/v3-component-scenarios.test.ts`：新增 6 条组件级场景（按需订阅与增量、
-  事件转发与别名、内联 handler 不重绑、高频合帧、**两张地图不串线**（`@` 与 `useMapEvent` 两条路径）、
-  `useMapStatus` 跟随用户交互）。既有的「不重绑与卸载归零」用例的 fixture 补了 `@click`
-  （map 事件改为按需订阅后，不绑就不断言得到订阅）。
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-EVENTS 一组 **13 条**组件级场景（无条件订阅与
+  handler 变更不丢事件、订阅覆盖全 Catalog、非函数 handler 不产生调用、事件转发与别名、`@click.once`、
+  `@load`、`@destroy`、内联 handler 不重绑、高频合帧、**两张地图不串线**（`@` 与 `useMapEvent` 两条路径）、
+  `useMapStatus` 跟随用户交互、卸载后 scope 账本归零）；既有的「不重绑与卸载归零」用例的 fixture 补了
+  `@click`（订阅语义变化后仍然要断言得到订阅）。
 - 门禁：`typecheck:v3` → `build:v3` → `check:public-dts` → `check:no-bmapgl` → `check:raw-sdk:tree`
   → `test:unit` → `smoke:v4:fixture` → docs 四件套 → `playground:build` → `pack:v3` + `verify:package`。
+
+## 评审修正（2026-09-14 第一轮）
+
+维护者给出 4 条 blocking + 4 条建议。**全部复现属实**，逐条处置（证据见 PR #92 的回复）：
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** `@click.once` 失效：判定扫 `onXxx` 前缀，而 Vue 把 `.once` 编成 `onClickOnce` ⇒ 归一成 `clickonce`，永远不订阅；且 `onClick: undefined` 被当成「已绑定」 | **成立**。实编译：`@click.once` → `onClickOnce`、`@style-loaded.once` → `onStyleLoadedOnce`；`emit()` 的查找链只有 `toHandlerKey(event)` / `toHandlerKey(camelize(event))` + `handlerName + 'Once'` | 先按 Vue 的键规则重写判定（`emitHandlerKeys`），补 `@click.once` / 别名 + `.once` / 非函数值用例；**随后在写「undefined → 函数」用例时发现更严重的问题**（见下一条），最终改为无条件订阅，判定与 `.once` 处理一并删除（由 Vue 自己负责） |
+| **[P1]** 订阅不依赖 prop 检测（原「按需订阅」的真实缺陷） | **成立且比评审描述的更严重**：`hasPropsChanged` 把 emit listener 排除在属性比较之外 ⇒ 「`onClick: undefined` → 函数」不会让 `<BMap>` 重渲染 ⇒ `onUpdated` 增量同步不跑 ⇒ **事件静默丢失**；listener 也不进 `props`/`attrs`，子组件没有任何响应式信号 | 决策 4 重写为**无条件订阅全部事件**；用例「handler 从 undefined 变成函数也不会丢事件」钉住（反证：改回按需订阅即红） |
+| **[P1]** `useMapStatus()` 初次 `refresh()` 抛错会遗留已建立的 listener | **成立**：`bind()` 先订 12 份再 `refresh()`，异常把控制流带出 `useMapStatus()`，`onScopeDispose` 都还没注册 ⇒ 这批订阅**没有任何释放路径** | `bind()` 改成事务：抛错就地 `unbind()` + `reset()` 再抛；用例断言抛错后该地图 `listenerCount() === 0` |
+| **[P1]** `load` / `destroy` 在正常生命周期下收不到 | **成立**。`load`：`MapRuntime` 先 `initializeView()`（内部首次 `centerAndZoom`）再暴露句柄，而官方 `load` 正是在那之后派发 ⇒ 永远漏；`destroy`：`MapDriver` 先 `events.release()` 再销毁 SDK 对象，官方 `destroy` 那一刻订阅已摘 | 决策 10：新增 `MapRuntimeOptions.onMapCreated`（初始化视野之前的挂载点，`load` 由此订上）；`destroy` 由 Driver 在 `release` 之前**合成派发**（不影响销毁推进）；两条用例 + Fake 照实建模 `centerAndZoom` 首次派发 `load` |
+| **[P1]** 动态增删 listener 让 `ResourceScope` 堆积失效 disposer | **成立**：`runtime.resources.add(off)` 的返回值被丢掉，提前解绑只调原始 `off`，失效闭包留在 `scope.disposers` | 订阅记录改存 `add()` 返回的 **remover**；用例断言卸载后 `scope.size === 0` |
+| **[建议]** 事件级必填字段（`load.point/zoom`、`resize.size`、`maptypechange.zoomLevel`、`mousewheel.trend`、`zoomexceeded.targetZoom`）在公共类型里都是 optional | **成立**（「typed」但只有 pointer / non-pointer 两档），且 `maptypechange.zoomLevel` 根本没归一 | 决策 10：`payload` 种类（`base`/`pointer`/`load`/`resize`/`maptypechange`）+ Driver **读回补齐**后，前三个成为必填类型；`trend`/`targetZoom` 保持 optional 并写明理由（raw-only，地图答不出） |
+| **[建议]** PR 声明导出了 `MapEventHandler`，barrel 里没有 | **成立** | `composables/index.ts` 补导出 |
+| **[建议]** `useMapStatus` 从 map A 切到 map B 没复位 `moving`/`zooming` | **成立** | `bind()` 先 `reset()` 再重订；用例断言切图后标志归零、B 的视野被读到 |
+| **[建议]** 合帧路径的 handler 抛错被 `FrameScheduler` 静默吞掉（与不合帧路径不一致） | **成立**（`FrameScheduler` 按设计 `catch {}`） | `subscribeMapEvent` 在合帧任务的投递里接住异常并 `queueMicrotask` 重抛（同样的「未捕获错误」可见性，不动调度器语义）；用例钉住 |
+
+**本轮新增单点反证 8 组**（改坏即红，全部还原）：`Once` 变体、值检查、`onMapCreated` 接线、
+`destroy` 合成派发、scope remover、`bind()` 事务回滚、`bind()` 状态复位、合帧异常外抛。
 
 ## 非目标
 

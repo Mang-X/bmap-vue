@@ -455,9 +455,11 @@ const tilt = ref(0)
 `style-loaded` / `moving` 等全部可绑，完整清单与载荷字段见
 见 [组件事件](../guide/com-events) 页的「BMap：map 事件」一节。两点行为约定：
 
-- **按需订阅**：只订阅你**真的绑了监听器**的事件；
+- **订阅固定**：地图就绪时一次订全部 map 事件（不随改绑监听器变化，原因是 Vue 不会因 emit listener
+  变化重渲染子组件，见 [组件事件](../guide/com-events) 的说明）；未绑定 handler 的事件不会触发任何回调。
 - **高频合帧**：`mousemove` / `touchmove` / `dragging` / `moving` / `zooming` 一帧最多提交一次
   （取该帧最后一次的载荷），`mousewheel` 不合帧。
+- **`.once` 可用**：`@click.once` 之类按 Vue 的语义只触发一次。
 
 需要在 setup 里按条件订阅、或订阅「别处的地图」时，用
 [`useMapEvent`](../hooks/useMapEvent)（订阅）与 [`useMapStatus`](../hooks/useMapStatus)（状态读数），

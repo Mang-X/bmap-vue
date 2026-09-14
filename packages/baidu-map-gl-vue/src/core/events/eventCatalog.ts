@@ -45,7 +45,13 @@
  * `coalesce: true` 的条目在 `useMapEvent` 里按帧合帧（一帧最多提交一次、取最后一次载荷）。
  * 标记只影响**订阅路径**，不影响事件名：SDK 侧订阅名恒为 `sdk`。
  */
-import type { DriverEvent, MapMouseEvent } from "../../driver/types/events";
+import type {
+  DriverEvent,
+  MapLoadEvent,
+  MapMouseEvent,
+  MapResizeEvent,
+  MapTypeChangeEvent,
+} from "../../driver/types/events";
 
 /**
  * 所有 map 事件的公共载荷：Driver 归一化后的领域事件 + **恒有的 `type`**。
@@ -73,8 +79,13 @@ export interface MapEventDefinition {
   readonly sdk: string;
   /** 上游 `MapEventMap` 是否声明了它（`false` = 仅运行时可观察）。 */
   readonly declared: boolean;
-  /** 载荷是否必有 `point`（指针 / 拖拽类）。 */
-  readonly pointer: boolean;
+  /**
+   * 载荷种类：决定该事件的公共载荷里哪些字段是必填（见 `MapEventPayloadKind`）。
+   *
+   * 与 Driver 侧两张表——指针兜底清单（`POINTER_EVENT_NAMES`）与读回补齐表
+   * （`MAP_EVENT_READBACK_FIELDS`）——由门禁逐项比对：两处必须同时改。
+   */
+  readonly payload: MapEventPayloadKind;
   /** 高频事件：订阅路径按帧合帧，一帧最多提交一次。 */
   readonly coalesce: boolean;
   /** 一句话说明（进文档表格与测试 fixture）。 */
@@ -91,98 +102,98 @@ export const MAP_EVENT_CATALOG = {
   load: {
     sdk: "load",
     declared: true,
-    pointer: false,
+    payload: "load",
     coalesce: false,
     description: "地图初始化完成（首次视野确定后派发一次；载荷另有 point / zoom）",
   },
   click: {
     sdk: "click",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "左键单击地图",
   },
   dblclick: {
     sdk: "dblclick",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "鼠标双击地图",
   },
   rightclick: {
     sdk: "rightclick",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "右键单击地图",
   },
   rightdblclick: {
     sdk: "rightdblclick",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "右键双击地图",
   },
   mousemove: {
     sdk: "mousemove",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: true,
     description: "鼠标在地图区域内移动（高频，按帧合帧）",
   },
   mousedown: {
     sdk: "mousedown",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "鼠标按下",
   },
   mouseup: {
     sdk: "mouseup",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "鼠标松开",
   },
   mouseover: {
     sdk: "mouseover",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "鼠标移入地图区域",
   },
   mouseout: {
     sdk: "mouseout",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "鼠标移出地图区域",
   },
   touchstart: {
     sdk: "touchstart",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "触摸开始",
   },
   touchmove: {
     sdk: "touchmove",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: true,
     description: "触摸移动（高频，按帧合帧）",
   },
   touchend: {
     sdk: "touchend",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "触摸结束",
   },
   mousewheel: {
     sdk: "mousewheel",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     // 刻意**不**合帧：滚轮是离散输入，每次都有独立的 `trend`（放大 / 缩小），
     // 合帧会把「一帧内先放大再缩小」压成一次，丢掉调用方真正需要的那次。
     coalesce: false,
@@ -191,203 +202,203 @@ export const MAP_EVENT_CATALOG = {
   zoomexceeded: {
     sdk: "zoomexceeded",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "缩放试图超出允许范围（载荷另有 targetZoom）",
   },
   dragstart: {
     sdk: "dragstart",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "开始拖拽地图",
   },
   dragging: {
     sdk: "dragging",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: true,
     description: "拖拽中（高频，按帧合帧）",
   },
   dragend: {
     sdk: "dragend",
     declared: true,
-    pointer: true,
+    payload: "pointer",
     coalesce: false,
     description: "结束拖拽",
   },
   movestart: {
     sdk: "movestart",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "地图移动开始",
   },
   moving: {
     sdk: "moving",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: true,
     description: "地图移动中（高频，按帧合帧）",
   },
   moveend: {
     sdk: "moveend",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "地图移动结束",
   },
   zoomstart: {
     sdk: "zoomstart",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "开始改变缩放级别",
   },
   zooming: {
     sdk: "zooming",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: true,
     description: "缩放中（高频，按帧合帧）",
   },
   zoomend: {
     sdk: "zoomend",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "缩放结束",
   },
   beforeaddoverlay: {
     sdk: "beforeaddoverlay",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "覆盖物添加前",
   },
   addoverlay: {
     sdk: "addoverlay",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "addOverlay() 之后",
   },
   removeoverlay: {
     sdk: "removeoverlay",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "removeOverlay() 之后",
   },
   clearoverlays: {
     sdk: "clearoverlays",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "clearOverlays() 之后",
   },
   addcontrol: {
     sdk: "addcontrol",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "addControl() 之后",
   },
   removecontrol: {
     sdk: "removecontrol",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "removeControl() 之后",
   },
   addcontextmenu: {
     sdk: "addcontextmenu",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "addContextMenu() 之后",
   },
   removecontextmenu: {
     sdk: "removecontextmenu",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "removeContextMenu() 之后",
   },
   maptypechange: {
     sdk: "maptypechange",
     declared: true,
-    pointer: false,
+    payload: "maptypechange",
     coalesce: false,
     description: "地图类型变化（载荷另有 mapType / exMapType）",
   },
   "style-willchange": {
     sdk: "style_willchange",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "个性化样式即将切换",
   },
   "style-loaded": {
     sdk: "style_loaded",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "个性化样式加载完成",
   },
   "style-loaded-error": {
     sdk: "style_loaded_error",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "个性化样式加载失败",
   },
   "style-loaded-timeout": {
     sdk: "style_loaded_timeout",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "个性化样式加载超时",
   },
   "language-change": {
     sdk: "language_change",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "地图显示语言变化",
   },
   destroy: {
     sdk: "destroy",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "地图实例销毁",
   },
   tilesloaded: {
     sdk: "tilesloaded",
     declared: true,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "瓦片加载完成",
   },
   resize: {
     sdk: "resize",
     declared: true,
-    pointer: false,
+    payload: "resize",
     coalesce: false,
     description: "容器可视区域大小变化（载荷另有 size）",
   },
   headingchange: {
     sdk: "headingchange",
     declared: false,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "旋转角变化（上游类型未声明，运行时可观察）",
   },
   tiltchange: {
     sdk: "tiltchange",
     declared: false,
-    pointer: false,
+    payload: "base",
     coalesce: false,
     description: "倾斜角变化（上游类型未声明，运行时可观察）",
   },
@@ -421,6 +432,39 @@ export type MapEventEmitAliasName = {
 export type MapEventEmitName = MapEventName | MapEventEmitAliasName;
 
 /**
+ * 「事件专属载荷」的种类（M4-EVENTS / #28 评审：公共契约发布前把事件级必填字段收紧）。
+ *
+ * 判据是「这个字段能不能被兑现」：
+ *
+ * - `pointer`：指针 / 拖拽类的 `point` 由 Driver 兜底（`POINTER_EVENT_NAMES`）；
+ * - `load` / `resize` / `maptypechange`：必填字段由 Driver **读回地图补齐**
+ *   （`MAP_EVENT_READBACK_FIELDS`：`getCenter` / `getZoom` / `getSize`）；
+ * - `base`：没有事件专属必填字段。
+ *
+ * raw-only 的字段（`mousewheel.trend`、`zoomexceeded.targetZoom`）**不在**这里：地图答不出它们，
+ * 本库不做猜测，因此它们在公共底座上保持 optional（见 ADR 已知限制）。
+ */
+export type MapEventPayloadKind = "base" | "pointer" | "load" | "resize" | "maptypechange";
+
+/** `load` 的公共载荷：`point` / `zoom` 必填。 */
+export type MapLoadPayload = MapLoadEvent & { type: string };
+/** `resize` 的公共载荷：`size` 必填。 */
+export type MapResizePayload = MapResizeEvent & { type: string };
+/** `maptypechange` 的公共载荷：`zoomLevel` 必填。 */
+export type MapTypeChangePayload = MapTypeChangeEvent & { type: string };
+
+/** 载荷种类 → 具体载荷类型。 */
+export type MapEventPayloadOfKind<K extends MapEventPayloadKind> = K extends "pointer"
+  ? MapPointerEvent
+  : K extends "load"
+    ? MapLoadPayload
+    : K extends "resize"
+      ? MapResizePayload
+      : K extends "maptypechange"
+        ? MapTypeChangePayload
+        : MapEventPayload;
+
+/**
  * `<BMap>` 的 map 事件 emits 声明（**显式键**，被 `defineEmits` 直接消费）。
  *
  * 为什么是手写接口而不是 mapped type：`@vue/compiler-sfc` 必须把 emits 类型解析成「有限个键」。
@@ -444,7 +488,7 @@ export type MapEventEmitName = MapEventName | MapEventEmitAliasName;
  * 未声明的名字会落到 `attrs`，`emit()` 唤不醒它（静默失败）。
  */
 export interface MapEventEmits {
-  load: [event: MapEventPayload];
+  load: [event: MapLoadPayload];
   click: [event: MapPointerEvent];
   dblclick: [event: MapPointerEvent];
   rightclick: [event: MapPointerEvent];
@@ -476,7 +520,7 @@ export interface MapEventEmits {
   removecontrol: [event: MapEventPayload];
   addcontextmenu: [event: MapEventPayload];
   removecontextmenu: [event: MapEventPayload];
-  maptypechange: [event: MapEventPayload];
+  maptypechange: [event: MapTypeChangePayload];
   "style-willchange": [event: MapEventPayload];
   "style-loaded": [event: MapEventPayload];
   "style-loaded-error": [event: MapEventPayload];
@@ -484,7 +528,7 @@ export interface MapEventEmits {
   "language-change": [event: MapEventPayload];
   destroy: [event: MapEventPayload];
   tilesloaded: [event: MapEventPayload];
-  resize: [event: MapEventPayload];
+  resize: [event: MapResizePayload];
   headingchange: [event: MapEventPayload];
   tiltchange: [event: MapEventPayload];
   // 兼容别名（SDK 拼写）：载荷与其规范名相同
@@ -505,7 +549,7 @@ export type MapEventPayloadOf<K extends MapEventName> = MapEventMap[K];
  *
  * 声明在类型位置、不产生运行时代码。任一条不成立都会让 `vue-tsc` 报 TS2344 —— 也就是说
  * 「手写的 emits 接口」与「Catalog 表」不可能悄悄漂移。两处的对应关系反过来也保住了
- * 运行时的 `pointer` 标记（Driver 的兜底清单由 `v3-map-event-catalog.test.ts` 对齐）。
+ * 运行时的那两张表（指针兜底清单 / 读回补齐表，由 `v3-map-event-catalog.test.ts` 对齐）。
  */
 
 /** 参数类型必须是 `never`（差集非空即编译失败）。 */
@@ -526,14 +570,12 @@ type OwningEntry<N extends string> = {
       : never;
 }[MapEventName];
 
-/** 由 Catalog 的 `pointer` 标记推出的载荷类型（**不看** `MapEventEmits`，否则断言会自我印证）。 */
+/** 由 Catalog 的 `payload` 种类推出的载荷类型（**不看** `MapEventEmits`，否则断言会自我印证）。 */
 type ExpectedEmitPayload<N extends string> = OwningEntry<N> extends infer K extends MapEventName
-  ? (typeof MAP_EVENT_CATALOG)[K] extends { pointer: true }
-    ? MapPointerEvent
-    : MapEventPayload
+  ? MapEventPayloadOfKind<(typeof MAP_EVENT_CATALOG)[K]["payload"]>
   : never;
 
-/** 断言 ②：每个键的载荷与 `pointer` 标记**双向**可赋值（等价，不是单向放宽）。 */
+/** 断言 ②：每个键的载荷与 `payload` 种类**双向**可赋值（等价，不是单向放宽）。 */
 type EmitPayloadMismatches = {
   [N in keyof MapEventEmits]: [MapEventEmits[N][0]] extends [ExpectedEmitPayload<N>]
     ? [ExpectedEmitPayload<N>] extends [MapEventEmits[N][0]]

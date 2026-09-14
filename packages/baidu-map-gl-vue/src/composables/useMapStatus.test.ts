@@ -9,6 +9,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, isRef, nextTick, ref, shallowRef, watch } from "vue";
 import { createFakeV4Client } from "../../../test-utils";
 import { BMapError } from "../core/errors/BMapError";
+import { unwrapRaw } from "../advanced";
+
+/** 读某张地图上当前的 raw 监听器数（`unwrapRaw` 是公开逃生口，测试里不用碰私有字段）。 */
+function listenersOf(map: MapHandle): number {
+  return (unwrapRaw(map) as { getListenerCount(): number }).getListenerCount();
+}
 import type { BMapClient } from "../client/types";
 import type { MapHandle } from "../driver/types/handles";
 import { useMapStatus } from "./useMapStatus";
@@ -106,7 +112,7 @@ describe("useMapStatus：订阅即给值（不必等第一个事件）", () => {
     scope.stop();
   });
 
-  it("对「没有有效视野」的地图读状态：如实上报，不把 SDK 调用失败伪装成「未知」", () => {
+  it("对「没有有效视野」的地图读状态：如实上报，且**不留下任何订阅**（事务回滚）", () => {
     // 新建但**没有** centerAndZoom 的地图：driver 的 getter 拿到 null ⇒ BMAP_SDK_CALL_FAILED
     const container = sizedContainer();
     const emptyMap = fixture.client.driver.map.create(container);
@@ -121,6 +127,37 @@ describe("useMapStatus：订阅即给值（不必等第一个事件）", () => {
     // 具体码取决于先失败的字段（center 先读 ⇒ INVALID_POINT；zoom 是 SDK_CALL_FAILED）——
     // 两者都**不在**可忽略白名单里，这正是「读错不变成读不到」这条口径的证据
     expect(["BMAP_INVALID_POINT", "BMAP_SDK_CALL_FAILED"]).toContain((error as BMapError).code);
+    // 关键：异常发生在 immediate watch 首次执行期间，`onScopeDispose` 都还没注册 ——
+    // 所以「订阅了 12 份再抛错」必须就地回滚，否则这批 listener 永远没有释放路径
+    expect(listenersOf(emptyMap), "抛错后该地图上不得残留监听器").toBe(0);
+    scope.stop();
+  });
+
+  it("从地图 A 切到地图 B：状态与标志都复位，不带 A 的 in-flight 标志过去", async () => {
+    const handle = ref<MapHandle | null>(fixture.map);
+    const scope = effectScope();
+    const status = scope.run(() =>
+      useMapStatus({ source: { map: handle, client: ref(fixture.client) } }),
+    )!;
+    fixture.emit("movestart");
+    fixture.emit("zoomstart");
+    expect(status.moving.value).toBe(true);
+    expect(status.zooming.value).toBe(true);
+
+    // 第二张地图（**已初始化视野**：未初始化的那张会让 refresh() 抛错，那是另一个用例的场景）
+    const secondMap = fixture.client.driver.map.create(sizedContainer());
+    (unwrapRaw(secondMap) as { centerAndZoom(p: unknown, z: number): void }).centerAndZoom(
+      { lng: 121.5, lat: 31.2 },
+      9,
+    );
+
+    handle.value = secondMap;
+    await Promise.resolve();
+
+    expect(status.moving.value, "A 的 moving 不得带到 B").toBe(false);
+    expect(status.zooming.value, "A 的 zooming 不得带到 B").toBe(false);
+    expect(status.center.value, "B 的视野已读到").toEqual({ lng: 121.5, lat: 31.2 });
+    expect(listenersOf(secondMap), "A 的订阅已解绑").toBe(10);
     scope.stop();
   });
 

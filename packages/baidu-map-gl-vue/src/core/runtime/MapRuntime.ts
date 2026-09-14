@@ -47,6 +47,16 @@ export interface MapRuntimeOptions {
   container: HTMLElement;
   initialView?: MapView;
   mapOptions?: InitialMapOptions;
+  /**
+   * 地图对象**创建成功之后、首次 `initializeView()` 之前**调用一次（M4-EVENTS / #28 评审 P1）。
+   *
+   * 存在的理由：官方 `load` 事件在**首次 `centerAndZoom()` 之后**派发，而 `initializeView()`
+   * 内部就会调它、并且发生在 `map` 句柄对外可见之前——订阅者若等 `mount()` resolve 才订阅，
+   * 就永远收不到 `load`。这一个挂载点把「可以订阅了」提前到初始化边界之前。
+   *
+   * 该回调抛错**不**阻断建图（只告警）：它只用来挂订阅，不是初始化的一部分。
+   */
+  onMapCreated?: (ready: MapReadyContext) => void;
 }
 
 export type KeepAliveBehavior = "suspend" | "dispose";
@@ -158,6 +168,18 @@ export class MapRuntime {
         throw new BMapError("BMAP_RUNTIME_DISPOSED", "MapRuntime disposed during map create");
       }
       this.status.value = "initializing";
+      // 初始化视野之前先放行订阅（`load` 就在 initializeView 的首次 centerAndZoom 之后派发）
+      if (this.options.onMapCreated) {
+        try {
+          this.options.onMapCreated({ client, map });
+        } catch (error) {
+          logger.warn(
+            `MapRuntime: onMapCreated 回调抛错（不阻断建图）: ${
+              (error as Error)?.message ?? String(error)
+            }`,
+          );
+        }
+      }
       if (this.options.initialView) {
         try {
           client.driver.map.initializeView(map, this.options.initialView);

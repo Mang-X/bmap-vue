@@ -949,38 +949,51 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
  * - 两张地图的订阅互不串线（`<BMap>` 的 @ 与 `useMapEvent` 两条路径都验证）。
  */
 describe("map 事件与状态（M4-EVENTS / #28）", () => {
-  it("按需订阅：父级没绑的事件一个监听器都不建，绑了的才订（解绑后摘掉）", async () => {
-    const props = ref<Record<string, unknown>>({ provider: harness.provider() });
-    const { wrapper } = await mountControlledMap(() => props.value, {
-      children: () => [h("span", "empty")],
-    });
-    // M4-STATE 的四个视野回写订阅恒在，因此基线不是 0；这里只看 map 事件的增量
-    const baseline = harness.listenActivity().pending;
-    expect(baseline).toBeGreaterThan(0);
-    expect(harness.subscribedEvents(), "没有 @ 绑定 ⇒ 没有 map 事件订阅").not.toContain("click");
+  it("map 事件无条件订阅（不依赖 prop 检测）：handler 从 undefined 变成函数也不会丢事件", async () => {
+    // 为什么不做「按需订阅」：Vue 判子组件要不要重渲染时 **emit listener 不参与属性比较**
+    // （`hasPropsChanged` 里 `!isEmitListener(...)`），于是「onClick 从 undefined 变成函数」这种
+    // 变化不会让 <BMap> 重渲染 —— 依赖 onUpdated 的增量同步看不到它，事件会静默丢失。
+    const props = ref<Record<string, unknown>>({ provider: harness.provider(), onClick: undefined });
+    const { wrapper } = await mountControlledMap(() => props.value);
 
+    const baseline = harness.listenActivity().pending;
+    expect(harness.subscribedEvents(), "订阅在挂载时就建立，与 prop 检测无关").toContain("click");
+
+    // 对照：另一个事件的 handler 不该被 click 唤醒
+    const otherEvent = vi.fn();
+    props.value = { ...props.value, onMoveend: otherEvent };
+    await settleProps();
+    harness.dispatch("click", { point: { lng: 1, lat: 2 } });
+    expect(otherEvent, "没绑 click 的事件不该被唤醒").not.toHaveBeenCalled();
+
+    // **关键回归**：同一个 key 从 undefined 变成函数。Vue 不会因此让 <BMap> 重渲染
+    // （emit listener 不参与属性比较），父级也没改任何别的 prop —— 事件仍然必须到达
     const spy = vi.fn();
     props.value = { ...props.value, onClick: spy };
     await settleProps();
-    expect(harness.subscribedEvents()).toContain("click");
-    expect(harness.listenActivity().pending, "多一个绑定 = 多一个监听器").toBe(baseline + 1);
+    harness.dispatch("click", { point: { lng: 3, lat: 4 } });
+    expect(spy, "handler 变化后事件必须照常投递").toHaveBeenCalledTimes(1);
+    expect(harness.listenActivity().pending, "订阅数不因 handler 变化而变").toBe(baseline);
 
-    // 再绑一个（`@style_loaded` 是兼容别名，SDK 侧订阅名是下划线拼写）
-    props.value = { ...props.value, onStyle_loaded: spy };
+    // 再变回 undefined：订阅还在（多一个没人听的 listener），但不会唤到 handler
+    props.value = { ...props.value, onClick: undefined };
     await settleProps();
-    expect(harness.subscribedEvents()).toContain("style_loaded");
-    expect(harness.listenActivity().pending).toBe(baseline + 2);
-
-    // 解绑：订阅随之摘掉，回到基线
-    props.value = { provider: harness.provider() };
-    await settleProps();
-    expect(harness.subscribedEvents()).not.toContain("click");
-    expect(harness.subscribedEvents()).not.toContain("style_loaded");
-    expect(harness.listenActivity().pending).toBe(baseline);
+    harness.dispatch("click", { point: { lng: 5, lat: 6 } });
+    expect(spy).toHaveBeenCalledTimes(1);
 
     await unmountAndSettle(wrapper);
     expect(harness.listenActivity().pending).toBe(0);
-    harness.assertIdle("map 事件：按需订阅");
+    harness.assertIdle("map 事件：无条件订阅");
+  });
+
+  it("订阅覆盖 Catalog 的全部事件（含 load / destroy 这类生命周期事件）", async () => {
+    const { wrapper } = await mountControlledMap(() => ({ provider: harness.provider() }));
+    const subscribed = harness.subscribedEvents();
+    for (const sdkName of ["load", "destroy", "resize", "maptypechange", "moving", "click"]) {
+      expect(subscribed, `${sdkName} 必须被订阅`).toContain(sdkName);
+    }
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("map 事件：全覆盖订阅");
   });
 
   it("事件真正转发到父级：@click 拿到归一化载荷，@style_loaded 兼容别名同样触发", async () => {
@@ -1098,6 +1111,125 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     await unmountAndSettle(treeA.wrapper);
     await unmountAndSettle(treeB.wrapper);
     harness.assertIdle("map 事件：多地图不串线");
+  });
+
+  it("`@click.once` 也能订上（Vue 把 .once 编成 onClickOnce，旧判定会漏）", async () => {
+    const once = vi.fn();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      provider: harness.provider(),
+      // 与 `@click.once` 的编译产物一致（实测 @vue/compiler-dom）
+      onClickOnce: once,
+    }));
+
+    expect(harness.subscribedEvents()).toContain("click");
+    harness.dispatch("click", { point: { lng: 1, lat: 2 } });
+    expect(once).toHaveBeenCalledTimes(1);
+    expect(bmap.emitted("click")).toHaveLength(1);
+
+    // Vue 自己维护 once 语义：第二次派发不再调用 handler（也不再有 emit）
+    harness.dispatch("click", { point: { lng: 1, lat: 2 } });
+    expect(once).toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("map 事件：@click.once");
+  });
+
+  it("handler 不是函数（undefined / null / 字符串）时不产生调用，也不报错", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.provider() });
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    // 值不是函数时：派发不抛错、也不唤任何 handler（订阅本身与「有没有人听」无关）。
+    // 只测 `undefined` / `null`：更离谱的值（字符串等）由 Vue 自己的 `callWithAsyncErrorHandling`
+    // 打 warning，那是 Vue 的判定面，不该由本库的用例背书。
+    for (const value of [undefined, null] as const) {
+      props.value = { ...props.value, onClick: value };
+      await settleProps();
+      expect(() => harness.dispatch("click", { point: { lng: 1, lat: 2 } }), `${String(value)} 不该抛错`).not.toThrow();
+    }
+
+    // 正证：换成函数后同一事件立刻可用（否则上面的断言只是「什么都没发生」）
+    const spy = vi.fn();
+    props.value = { ...props.value, onClick: spy };
+    await settleProps();
+    harness.dispatch("click", { point: { lng: 3, lat: 4 } });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("map 事件：非函数 handler");
+  });
+
+  it("kebab + camelCase + `.once` 三种拼写都能触发（`@styleLoaded.once` 与 `@style_loaded.once`）", async () => {
+    const camelOnce = vi.fn();
+    const snakeOnce = vi.fn();
+    const { wrapper } = await mountControlledMap(() => ({
+      provider: harness.provider(),
+      // `@styleLoaded.once` → onStyleLoadedOnce；`@style_loaded.once` → onStyle_loadedOnce
+      onStyleLoadedOnce: camelOnce,
+      onStyle_loadedOnce: snakeOnce,
+    }));
+
+    // 两个键对应同一条目（canonical + SDK 别名），因此一次订阅覆盖两者
+    expect(harness.subscribedEvents()).toContain("style_loaded");
+    harness.dispatch("style_loaded");
+    expect(camelOnce, "camelCase 拼写").toHaveBeenCalledTimes(1);
+    expect(snakeOnce, "SDK 下划线拼写").toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("map 事件：别名 + once");
+  });
+
+  it("`@load` 在正常生命周期下能收到（订阅发生在 initializeView 之前）", async () => {
+    const load = vi.fn();
+    const { wrapper } = await mountControlledMap(() => ({
+      provider: harness.provider(),
+      center: { ...POSITION },
+      zoom: 12,
+      onLoad: load,
+    }));
+
+    // 官方 `load` 在首次 centerAndZoom 之后派发，那时组件还没 ready ⇒ 只有把订阅前移才收得到
+    expect(load, "load 必须真的到达父级").toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0]![0]).toMatchObject({ type: "load", zoom: 12 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("map 事件：load");
+  });
+
+  it("`@destroy` 在地图销毁时收到（Driver 在摘订阅之前合成派发）", async () => {
+    const destroy = vi.fn();
+    const { wrapper } = await mountControlledMap(() => ({
+      provider: harness.provider(),
+      onDestroy: destroy,
+    }));
+    expect(harness.subscribedEvents()).toContain("destroy");
+
+    await unmountAndSettle(wrapper);
+
+    expect(destroy, "组件卸载会销毁地图 ⇒ destroy 必须到达订阅者").toHaveBeenCalledTimes(1);
+    expect(destroy.mock.calls[0]![0]).toMatchObject({ type: "destroy" });
+    harness.assertIdle("map 事件：destroy");
+  });
+
+  it("卸载后 map 事件订阅全部释放，ResourceScope 账本归零（不留失效闭包）", async () => {
+    let scopeSize = (): number => -1;
+    const ScopeProbe = defineComponent({
+      setup() {
+        const ctx = useRequiredMapContext();
+        scopeSize = () => ctx.resources.size;
+        return () => h("span", "scope-probe");
+      },
+    });
+
+    const { wrapper } = await mountControlledMap(() => ({ provider: harness.provider() }), {
+      children: () => [h(ScopeProbe)],
+    });
+    const withSubscriptions = scopeSize();
+    expect(withSubscriptions, "订阅已登记进 scope").toBeGreaterThan(0);
+    expect(harness.subscribedEvents().length, "Catalog 里的事件都订上了").toBeGreaterThan(40);
+
+    await unmountAndSettle(wrapper);
+    expect(scopeSize(), "卸载后 scope 记账归零").toBe(0);
+    harness.assertIdle("map 事件：scope 记账");
   });
 
   it("useMapStatus：Map Context 下的只读 refs 跟随用户交互，卸载后监听器归零", async () => {

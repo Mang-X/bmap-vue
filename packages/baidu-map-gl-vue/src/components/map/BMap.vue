@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import {
   computed,
-  getCurrentInstance,
   inject,
   onActivated,
   onDeactivated,
   onMounted,
   onUnmounted,
-  onUpdated,
   provide,
   readonly,
   ref,
@@ -33,7 +31,7 @@ import {
   BMAP_COMPONENT_EVENT_EMIT_ALIASES,
   MAP_EVENT_CATALOG,
   MAP_EVENT_EMIT_ALIASES,
-  resolveMapEventName,
+  MAP_EVENT_NAMES,
   type MapEventEmits,
   type MapEventName,
 } from "../../core/events/eventCatalog";
@@ -122,9 +120,6 @@ function emitReady(payload: MapReadyPayload): void {
     emitDynamic(alias, payload);
   }
 }
-
-/** 当前实例：用于读取「父级这一轮绑定了哪些 `onXxx`」（`defineEmits` 声明过的事件不在 `attrs` 里）。 */
-const instance = getCurrentInstance();
 
 const containerRef = ref<HTMLDivElement | null>(null);
 // SSR-safe DOM id(服务端只输出固定容器 shell,客户端 mounted 后加载)
@@ -531,6 +526,11 @@ const currentRuntime = new MapRuntime({
   clientContext,
   container: null as unknown as HTMLElement,
   initialView: initialViewSnapshot,
+  // 订阅挂载点（M4-EVENTS / #28 评审 P1）：官方 `load` 在首次 `centerAndZoom()` 之后派发，
+  // 而那次调用发生在 `mount()` resolve 之前、`map` 句柄对外可见之前 —— 等 ready 再订阅
+  // 就**永远收不到** `load`。这里在初始化视野之前先把订阅挂上（同一次订阅记账，身份一致时幂等）。
+  onMapCreated: ({ client: createdClient, map: createdMap }) =>
+    syncMapEventSubscriptions({ client: createdClient, map: createdMap }),
   mapOptions: {
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
@@ -645,62 +645,69 @@ async function loadPluginsInBackground() {
 
 /* ------------------------------------------------------- map 事件转发（M4-EVENTS / #28）
  *
- * `<BMap>` 声明 Catalog 里的全部 map 事件（模板/TS 都有完整提示），但**只订阅父级真的绑了
- * 监听器的那几个**：43 个事件无条件绑 43 个 SDK 监听器是纯浪费，官方 React 封装
- * `huiyan-fe/react-bmap@2.0.1` 也只在传了对应 handler 时才 `addEventListener`
- * （`src/components/Map/Map.tsx` 的 `EVENT_MAP` 循环里 `if (!current) continue`）。
+ * `<BMap>` 声明 Catalog 里的全部 map 事件（模板 / TS 都有完整提示），并在**地图就绪时一次性**
+ * 订阅 Catalog 里的所有 SDK 事件；未绑定 handler 的事件由 Vue 的 `emit` 直接丢弃（一次属性查找）。
  *
- * 判定依据是**当前渲染的 vnode props**（`onXxx` 键）而不是 `useAttrs()`：事件在
- * `defineEmits` 里声明之后就不再属于 `attrs`。键名经 `resolveMapEventName` 归一，
- * 因此 `@click` / `@mapTypeChange` / `@map-type-change` / `@style_loaded` 都能命中。
+ * ## 为什么不「按需订阅」（只订父级绑了的那种）
  *
- * 监听器集合变化（例如 `v-if` 切换 handler）由 `onUpdated` 补一次同步——**只增删差集**，
- * 因此「父级每次重渲染都传内联箭头函数」不会增加 `addEventListener` 次数。
+ * 试过，而且**不可靠**：Vue 决定子组件要不要重渲染时，**emit listener 不参与属性比较**
+ * （`@vue/runtime-core@3.5.42` 的 `hasPropsChanged`：`hasPropValueChanged(...) && !isEmitListener(...)`），
+ * 于是「监听器从 `undefined` 变成函数」这种变化**不会让 `<BMap>` 重渲染**，依赖 `onUpdated` 的
+ * 增量同步就看不到它 —— 事件会**静默丢失**。而 Vue 也没有把 emit listener 放进 `attrs`
+ * （`setFullProps` 明确跳过 `isEmitListener` 的键），所以子组件拿不到任何「监听器变了」的响应式信号。
+ *
+ * 结论：要么无条件订阅（本实现），要么漏事件。43 个 `addEventListener` 是每个地图一次的固定成本，
+ * 换来的是「父级怎么改绑定都不会丢事件」。
+ *
+ * 各拼写的可达性由 **Vue 的 handler key 规则**决定（实测 `@vue/compiler-dom@3.5.42` +
+ * `@vue/runtime-core` 的 `emit()`）：
+ *
+ * | 事件 | 能命中 handler 的写法 |
+ * | --- | --- |
+ * | `click` | `@click` / `@click.once` |
+ * | `style-loaded`（canonical） | `@style-loaded` / `@styleLoaded` / 两者的 `.once` |
+ * | `style_loaded`（别名） | `@style_loaded` / 两者的 `.once`（`camelize` 只认 `-`） |
+ * | `maptypechange` | `@maptypechange`（名字没有词边界，`@mapTypeChange` 不在查找链上） |
+ *
+ * 订阅记账按「事件名 + 地图身份」：`retry()` 之类让地图实例换新的路径会重建订阅（旧句柄上的订阅
+ * 由 `ResourceScope` 的 remover 释放），而同一个句柄上的重复同步是幂等的。
  */
 
-/** 当前渲染里父级**实际绑定**的 map 事件（规范名，去重）。 */
-function listenedMapEventNames(): MapEventName[] {
-  const props = instance?.vnode.props ?? {};
-  const names = new Set<MapEventName>();
-  for (const key of Object.keys(props)) {
-    // 只认 `onXxx` 形态；`onUpdate:center` 这类不会被命中（归一后不在 Catalog 里）
-    if (!/^on[A-Z]/.test(key)) continue;
-    const resolved = resolveMapEventName(key.slice(2));
-    if (resolved) names.add(resolved.vue);
-  }
-  return [...names];
-}
+/**
+ * 已建立的 map 事件订阅：规范名 → 订阅记录。
+ *
+ * `release` 是 **ResourceScope.add() 返回的那把 remover**（从 scope 账本里摘除 + 执行释放），
+ * 而不是原始 `off`：只调 `off` 会让 raw 监听器解绑、却把已失效的闭包永久留在
+ * `scope.disposers` 里（反复「绑定 → 解绑 → 再绑定」会持续堆积）。`off` 是幂等 disposer，
+ * 因此 scope 收尾与提前解绑重复触发是安全的。
+ */
+const mapEventSubscriptions = new Map<MapEventName, { map: MapHandle; release: () => void }>();
 
-/** 已建立的 map 事件订阅：规范名 → 订阅（disposer + 它绑在哪张地图上）。 */
-const mapEventSubscriptions = new Map<MapEventName, { map: MapHandle; off: () => void }>();
-
-/** 撤销某个事件名上的订阅（幂等：disposer 自身幂等，重复调用安全）。 */
+/** 撤销某个事件名上的订阅（幂等：remover 自身幂等，重复调用安全）。 */
 function unsubscribeMapEvent(vue: MapEventName): void {
   const current = mapEventSubscriptions.get(vue);
   if (!current) return;
   mapEventSubscriptions.delete(vue);
-  // 订阅同时被 Runtime 的 ResourceScope 持有（见下方 add），这里只负责提前释放
-  current.off();
+  current.release();
 }
 
 /**
- * 让订阅集合与「父级绑定的监听器」一致：撤销不再需要的、补上新增的、并**重建绑错地图的**。
+ * 让订阅与当前地图对齐：Catalog 里的事件全订；句柄换了身份就重建。
  *
- * 第三类很关键：键是「事件名」，而句柄在 `retry()` 之后会换成新地图实例——若只判断名字是否已存在，
- * 旧地图上的订阅会被留下、新地图一个事件都收不到。这里比较 `map` 身份，不一致就重建。
+ * `early` 来自 `MapRuntime.onMapCreated`（初始化视野之前）：那一刻组件的 `map` computed 还是 null，
+ * 但句柄已经可用 —— 用显式 ctx 才能把 `load` 订上（官方 `load` 在首次 `centerAndZoom` 之后派发）。
  */
-function syncMapEventSubscriptions(): void {
-  const m = map.value;
-  const c = client.value;
+function syncMapEventSubscriptions(early?: { client: BMapClient; map: MapHandle }): void {
+  const m = early?.map ?? map.value;
+  const c = early?.client ?? client.value;
   const scheduler = runtime.scheduler;
   if (!m || !c || !scheduler) return;
 
-  const wanted = new Set(listenedMapEventNames());
   for (const [vue, subscription] of [...mapEventSubscriptions]) {
-    if (wanted.has(vue) && subscription.map === m) continue;
-    unsubscribeMapEvent(vue);
+    if (subscription.map !== m) unsubscribeMapEvent(vue);
   }
-  for (const vue of wanted) {
+
+  for (const vue of MAP_EVENT_NAMES) {
     if (mapEventSubscriptions.has(vue)) continue;
     const entry = MAP_EVENT_CATALOG[vue];
     // 复用与 `useMapEvent` 同一份订阅原语：高频事件按帧合帧、释放路径一致
@@ -711,10 +718,10 @@ function syncMapEventSubscriptions(): void {
       (event) => forwardMapEvent(vue, event),
       { coalesce: entry.coalesce, scheduler },
     );
-    // 逐个登记进 Runtime 的 ResourceScope：卸载 / dispose 时无需再遍历，scope 自己会释放；
-    // `off` 是幂等 disposer，因此「提前释放 + scope 收尾」重复调用是安全的
-    runtime.resources.add(off);
-    mapEventSubscriptions.set(vue, { map: m, off });
+    // 逐个登记进 Runtime 的 ResourceScope，并**保留 add() 返回的 remover**：
+    // 卸载 / dispose 时 scope 自己会释放；提前解绑时也必须走 remover，否则 scope 账本会留下失效闭包
+    const release = runtime.resources.add(off);
+    mapEventSubscriptions.set(vue, { map: m, release });
   }
 }
 
@@ -725,6 +732,8 @@ async function boot() {
       map: runtime.map.value!,
       container: containerRef.value!,
     };
+    // 重入（已 ready）：订阅可能因为地图实例换新而需要重建（`retry()` 之后的路径）
+    syncMapEventSubscriptions();
     emitReady(payload);
     void loadPluginsInBackground();
     return;
@@ -739,7 +748,8 @@ async function boot() {
     syncControlledView();
     // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
     bindViewEvents(ctx);
-    // map 事件转发（M4-EVENTS / #28）：只订阅父级真的绑了监听器的事件
+    // map 事件转发（M4-EVENTS / #28）：Catalog 里的事件全订（`load` 已由 onMapCreated 提前订上，
+    // 这里是幂等的补齐：同一个句柄不重复订阅）
     syncMapEventSubscriptions();
     const payload = { client: ctx.client, map: ctx.map, container: containerRef.value! };
     // Map ready 不等待 optional plugin
@@ -761,12 +771,6 @@ onUnmounted(() => {
   runtime.dispose();
   runtimeRef.value = null;
   emit("unload");
-});
-
-// 父级绑定的 map 监听器可能随渲染变化（`v-if` 切换 handler、动态 `v-on`）：
-// 每轮更新后同步一次差集。**只增删差集**，因此内联 handler 不会造成重订阅。
-onUpdated(() => {
-  syncMapEventSubscriptions();
 });
 
 // props.enableXxx 变化时同步 SDK

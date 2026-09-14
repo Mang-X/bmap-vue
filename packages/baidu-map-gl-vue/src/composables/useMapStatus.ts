@@ -179,13 +179,21 @@ export function useMapStatus(options: UseMapStatusOptions = {}): MapStatusRefs {
     for (const off of pending) off();
   }
 
+  /**
+   * 绑定或重绑订阅（**事务语义**：任一步失败都不留半成品）。
+   *
+   * 为什么必须这样：`refresh()` 在「地图还没有有效视野」时会如实抛错（driver 的 getter 拿不到值）。
+   * 那时 12 份 listener 已经建好，若直接退出，异常会把控制流带出 `useMapStatus()` ——
+   * `onScopeDispose` 都还没注册，这批订阅**没有任何释放路径**。因此这里先 `unbind()` 再抛。
+   *
+   * 同一入口还负责**状态归属**：句柄换了身份（map A → map B）就先把状态复位，
+   * 否则 A 的 in-flight `moving` / `zooming` 会被带到 B 上。
+   */
   function bind(): void {
     unbind();
+    reset();
     const { map, client } = readEventSource(source);
-    if (!map || !client) {
-      reset();
-      return;
-    }
+    if (!map || !client) return;
     const subscribe = (sdkEventName: string, listener: (event: unknown) => void): void => {
       // 一律**不**合帧：本 composable 在同一个回调里同时处理「读值」与「翻标志」，
       // 合帧会让同一帧内的 start / end 顺序倒置（见文件头第 3 条）。
@@ -204,8 +212,15 @@ export function useMapStatus(options: UseMapStatusOptions = {}): MapStatusRefs {
     for (const name of ZOOMING_EVENTS) {
       subscribe(name, () => commit(zooming, name !== "zoomend", Object.is));
     }
-    // 就绪即给一次值：消费者不必等第一个事件（也覆盖「地图创建后一直没动过」的场景）
-    refresh();
+    try {
+      // 就绪即给一次值：消费者不必等第一个事件（也覆盖「地图创建后一直没动过」的场景）
+      refresh();
+    } catch (error) {
+      // 事务回滚：读不到就把刚建好的订阅全部撤掉，别留下「没有任何释放路径」的半成品
+      unbind();
+      reset();
+      throw error;
+    }
   }
 
   const stopWatch = watch(

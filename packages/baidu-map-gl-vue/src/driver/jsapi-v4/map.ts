@@ -347,9 +347,32 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     if (state.tornDown && recordsOf(raw).length === 0) state.released = true;
   };
 
-  /** 执行「释放订阅 + 销毁 SDK 对象」：只执行一次，重试不会二次销毁 SDK 对象。 */
+  /**
+   * 合成 `destroy` 事件（M4-EVENTS / #28 评审 P1）。
+   *
+   * 官方在**我们摘掉订阅之后**才派发 `destroy`（`release` 先于销毁 SDK 对象），所以订阅者在
+   * 正常路径下永远看不到它——「Catalog 里声明了 `destroy` 却收不到」是假支持。这里在 `release`
+   * 之前派发一次同语义事件：载荷走同一条归一化路径，`raw` 是被销毁的那个 SDK 对象。
+   *
+   * 用户 handler 抛错**不影响**销毁推进（只告警）：销毁是命令方的事，不能被订阅者打断。
+   */
+  const dispatchDestroy = (state: Teardown): void => {
+    if (!state.handle || state.tornDown) return;
+    try {
+      events.dispatch(state.handle, "destroy", state.handle.raw);
+    } catch (error) {
+      logger.warn(
+        `MapDriver: destroy 事件的订阅者抛错（不阻断销毁）: ${
+          (error as Error)?.message ?? String(error)
+        }`,
+      );
+    }
+  };
+
+  /** 执行「合成 destroy + 释放订阅 + 销毁 SDK 对象」：只执行一次，重试不会二次销毁 SDK 对象。 */
   const runTeardownSteps = (state: Teardown): void => {
     if (!state.handle) return;
+    dispatchDestroy(state);
     try {
       events.release(state.handle);
     } catch (error) {

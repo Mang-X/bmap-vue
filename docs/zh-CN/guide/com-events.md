@@ -66,8 +66,14 @@ v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总�
   两者都会发出，兼容拼写集中在 Catalog 一处，组件里没有第二份兼容代码。
 - **载荷**：`{ type, point?, pixel?, size?, zoom?, targetZoom?, trend?, mapType?, exMapType?, domEvent?, raw, preventDefault(), stopPropagation() }`。
   指针 / 拖拽类事件恒有 `point`；未归一化的原样细节走 `raw` 逃生口。
-- **按需订阅**：只有父级真的绑了监听器的 map 事件才会订阅 SDK（43 个事件不会无条件绑 43 个
-  监听器）；高频事件（上表标注「按帧合帧」的 5 个）一帧最多提交一次、取最后一次载荷。
+- **订阅是固定集合**：地图就绪时一次性订阅上表全部事件，不随你改绑监听器而变化。这么做的原因是
+  Vue 判子组件要不要重渲染时**不比较 emit listener**（`hasPropsChanged` 里显式跳过），
+  所以「监听器从 `undefined` 变成函数」这类变化不会让 `<BMap>` 重渲染 —— 依赖重渲染做增量的方案
+  会**静默丢事件**。未绑定 handler 的事件由 Vue 直接丢弃（一次属性查找）。
+- **高频事件合帧**：上表标注「按帧合帧」的 5 个事件一帧最多提交一次、取最后一次载荷。
+- **`.once` 可用**：`@click.once` / `@styleLoaded.once` 都按 Vue 的语义只触发一次
+  （`click` 这类没有词边界的名字请用原样拼写；`@mapTypeChange` 的 key 是 `onMapTypeChange`，
+  不在 `emit("maptypechange")` 的查找链上）。
 
 ```vue
 <BMap ak="xxx" @click="onClick" @maptypechange="onTypeChange" />

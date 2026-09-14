@@ -11,8 +11,10 @@
   `style_loaded_error` / `style_loaded_timeout` / `language_change` 这 5 个会变），**SDK 拼写永远可用**：
   `@style-loaded` 与 `@style_loaded` 都能绑，映射集中在一处，组件里没有第二份兼容代码。
 - `maptypechange` / `tilesloaded` 这类**没有官方词边界**的名字不拆词，原样保留。
-- **按需订阅**：只订阅你**真的绑了监听器**的事件，43 个事件不会无条件绑 43 个 SDK 监听器；
-  监听器集合变化（`v-if` 切换 handler）自动增删差集。
+- **订阅固定集合**：地图就绪时一次订全部事件（不随改绑监听器变化）。原因：Vue 判子组件要不要
+  重渲染时**不比较 emit listener**（`hasPropsChanged` 显式跳过），因此「监听器从 `undefined` 变成
+  函数」不会让 `<BMap>` 重渲染 —— 按需订阅的实现会静默丢事件。未绑定 handler 的事件由 Vue 丢弃。
+- **`.once` 可用**：`@click.once` / `@styleLoaded.once` 按 Vue 语义只触发一次。
 - 高频事件（`mousemove` / `touchmove` / `dragging` / `moving` / `zooming`）**一帧最多提交一次**，
   取该帧最后一次的载荷；`mousewheel` 刻意不合帧（每次都有独立的 `trend`）。
 - 载荷新增 `trend`（`mousewheel`）、`mapType` / `exMapType`（`maptypechange`）三个归一化字段；

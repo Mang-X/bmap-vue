@@ -12,7 +12,7 @@ export * from "./useBMapLocalSearch";
 export * from "./useBMapServiceTask";
 export * from "./useBMapTrackAnimation";
 export { useMapEvent } from "./useMapEvent";
-export type { MapEventPayloadForName, UseMapEventOptions } from "./useMapEvent";
+export type { MapEventHandler, MapEventPayloadForName, UseMapEventOptions } from "./useMapEvent";
 export { useMapStatus } from "./useMapStatus";
 export type { MapStatusRefs, UseMapStatusOptions } from "./useMapStatus";
 // 订阅源类型：`resolveMapEventSource` / `readEventSource` 是内部接线（要在 setup 里 inject），

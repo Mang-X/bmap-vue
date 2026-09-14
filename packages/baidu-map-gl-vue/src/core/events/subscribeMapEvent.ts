@@ -57,11 +57,29 @@ export function subscribeMapEvent(
     listener(event);
   };
 
+  /**
+   * 合帧路径的投递（M4-EVENTS / #28 评审）：**handler 抛错必须和不合帧路径一样可见**。
+   *
+   * 不合帧时异常会穿过 SDK 的事件派发（未捕获）；合帧时任务跑在 RAF 回调里，而 `FrameScheduler`
+   * 按设计 `catch {}`（单任务错误不阻断同帧其余任务）——于是 `moving` 的 handler 抛错会**完全消失**，
+   * 而 `click` 的同类错误照常冒出来。这里把异常重新抛到一个微任务里：同样是「未捕获错误」，
+   * 一样能被全局错误处理看到，同时不动 FrameScheduler 的语义。
+   */
+  const deliverCoalesced = (event: unknown): void => {
+    try {
+      deliver(event);
+    } catch (error) {
+      queueMicrotask(() => {
+        throw error;
+      });
+    }
+  };
+
   const raw = scheduler
     ? (event: unknown): void => {
         latest = event;
         // 同一帧内同 key 只保留最后一次任务（`FrameScheduler.schedule` 的语义）
-        scheduler!.schedule(key, () => deliver(latest));
+        scheduler!.schedule(key, () => deliverCoalesced(latest));
       }
     : deliver;
 

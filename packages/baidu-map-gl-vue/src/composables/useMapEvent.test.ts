@@ -274,6 +274,40 @@ describe("useMapEvent：高频事件按帧合帧", () => {
     scope.stop();
   });
 
+  it("合帧路径的 handler 抛错不会被吞掉（重新抛到调度器之外）", async () => {
+    frames.install();
+    const { client, map, emit } = await createMapFixture();
+    const boom = new Error("moving handler boom");
+    const scope = effectScope();
+    scope.run(() => {
+      useMapEvent(
+        "moving",
+        () => {
+          throw boom;
+        },
+        { source: { map, client } },
+      );
+    });
+
+    // FrameScheduler 按设计 `catch {}`（单任务错误不阻断同帧其余任务）。若我们不在任务里自己
+    // 接住再抛出调度器之外，这个异常就**完全消失** —— 与 click（不合帧）的可见性不一致。
+    const pending: Array<() => void> = [];
+    const original = globalThis.queueMicrotask;
+    (globalThis as { queueMicrotask: (cb: () => void) => void }).queueMicrotask = (cb) => {
+      pending.push(cb);
+    };
+    try {
+      emit("moving");
+      frames.flush();
+      expect(pending, "异常必须被抛出调度器之外").toHaveLength(1);
+      expect(() => pending[0]!()).toThrowError(boom);
+    } finally {
+      (globalThis as { queueMicrotask: typeof original }).queueMicrotask = original;
+      scope.stop();
+      frames.restore();
+    }
+  });
+
   it("释放后正在排队的载荷不再投递", async () => {
     frames.install();
     const { client, map, emit } = await createMapFixture();

@@ -38,6 +38,17 @@ import {
 } from "../../packages/baidu-map-gl-vue/src/driver/normalize/events";
 import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
 import { createFakeBMapV4 } from "../../packages/test-utils/fake-bmap-v4";
+import { createFakeV4Client } from "../../packages/test-utils/fake-v4-harness";
+import { MAP_EVENT_READBACK_FIELDS } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
+
+/** 带尺寸的容器（Fake 的 `getSize()` 从内联样式解析）。 */
+function sizedContainer(): HTMLElement {
+  const el = document.createElement("div");
+  el.style.width = "320px";
+  el.style.height = "240px";
+  document.body.appendChild(el);
+  return el;
+}
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const DOCS_EVENTS_PAGE = resolve(REPO_ROOT, "docs/zh-CN/guide/com-events.md");
@@ -222,9 +233,9 @@ describe("#28 高频事件的合帧标记", () => {
   });
 });
 
-describe("#28 pointer 标记 ↔ Driver 兜底清单", () => {
+describe("#28 payload 种类 ↔ Driver 的两张表", () => {
   const catalogPointerSdkNames = MAP_EVENT_NAMES.filter(
-    (name) => MAP_EVENT_CATALOG[name].pointer,
+    (name) => MAP_EVENT_CATALOG[name].payload === "pointer",
   ).map((name) => MAP_EVENT_CATALOG[name].sdk);
 
   it("两处逐项相等（任一方向多一个都红）", () => {
@@ -239,13 +250,73 @@ describe("#28 pointer 标记 ↔ Driver 兜底清单", () => {
       const sdk = MAP_EVENT_CATALOG[vue].sdk;
       const payload = normalizeDriverEvent(sdk, {}, geometry);
       const hasPoint = payload.point !== undefined;
-      if (hasPoint !== MAP_EVENT_CATALOG[vue].pointer) {
-        mismatches.push(`${sdk}: point=${String(hasPoint)} 而 pointer=${String(MAP_EVENT_CATALOG[vue].pointer)}`);
+      const expectsPoint = MAP_EVENT_CATALOG[vue].payload === "pointer";
+      if (hasPoint !== expectsPoint) {
+        mismatches.push(`${sdk}: point=${String(hasPoint)} 而 payload=${MAP_EVENT_CATALOG[vue].payload}`);
       }
       // 订阅名恒被写进 payload.type（`MapEventPayload` 把 `type` 收成必填的依据）
       expect(payload.type, sdk).toBe(sdk);
     }
     expect(mismatches).toEqual([]);
+  });
+
+  it("读回补齐表与 payload 种类逐项相等（两处必须同时改）", () => {
+    const readbackEntries = MAP_EVENT_NAMES.filter((name) =>
+      Object.prototype.hasOwnProperty.call(MAP_EVENT_READBACK_FIELDS, MAP_EVENT_CATALOG[name].sdk),
+    ).map((name) => MAP_EVENT_CATALOG[name].sdk);
+    const enrichedKinds = MAP_EVENT_NAMES.filter(
+      (name) => MAP_EVENT_CATALOG[name].payload === "load" ||
+        MAP_EVENT_CATALOG[name].payload === "resize" ||
+        MAP_EVENT_CATALOG[name].payload === "maptypechange",
+    ).map((name) => MAP_EVENT_CATALOG[name].sdk);
+    expect(readbackEntries.length, "读回表非空（否则下面的比对是空转）").toBeGreaterThan(0);
+    expect([...readbackEntries].sort()).toEqual([...enrichedKinds].sort());
+    // 每个种类对应的字段固定（改了字段名/数量就必须同步改 Catalog 的类型）
+    expect(MAP_EVENT_READBACK_FIELDS.load).toEqual(["point", "zoom"]);
+    expect(MAP_EVENT_READBACK_FIELDS.resize).toEqual(["size"]);
+    expect(MAP_EVENT_READBACK_FIELDS.maptypechange).toEqual(["zoomLevel"]);
+  });
+
+  it("fixture：走真实 Driver 时，raw 缺字段的必填项由读回地图补齐（load / resize / maptypechange）", async () => {
+    const { client, fake } = await createFakeV4Client();
+    const map = client.driver.map.create(sizedContainer());
+    const raw = fake.createdMaps[fake.createdMaps.length - 1]!;
+    raw.centerAndZoom(new fake.namespace.Point(116.4, 39.9), 12);
+    // 关掉 Fake 自己派发 load 的时机，这里只验证「订阅者拿到的载荷」
+    const seen: Array<Record<string, unknown>> = [];
+    const offLoad = client.driver.events.on(map, "load", (event) => seen.push(event as Record<string, unknown>));
+    const offResize = client.driver.events.on(map, "resize", (event) => seen.push(event as Record<string, unknown>));
+    const offType = client.driver.events.on(map, "maptypechange", (event) => seen.push(event as Record<string, unknown>));
+
+    raw.emit("load", {});
+    raw.emit("resize", {});
+    raw.emit("maptypechange", {});
+
+    expect(seen[0], "load.point / load.zoom 由 getCenter / getZoom 补齐").toMatchObject({
+      point: { lng: 116.4, lat: 39.9 },
+      zoom: 12,
+    });
+    expect(seen[1], "resize.size 由 getSize 补齐").toMatchObject({ size: { width: 320, height: 240 } });
+    expect(seen[2], "maptypechange.zoomLevel 由 getZoom 补齐").toMatchObject({ zoomLevel: 12 });
+    offLoad();
+    offResize();
+    offType();
+    client.driver.map.destroy(map);
+  });
+
+  it("fixture：raw 给了值就用 raw 的（读回不覆盖真实数据）", async () => {
+    const { client, fake } = await createFakeV4Client();
+    const map = client.driver.map.create(sizedContainer());
+    const raw = fake.createdMaps[fake.createdMaps.length - 1]!;
+    raw.centerAndZoom(new fake.namespace.Point(116.4, 39.9), 12);
+    let payload: Record<string, unknown> | null = null;
+    const off = client.driver.events.on(map, "load", (event) => {
+      payload = event as Record<string, unknown>;
+    });
+    raw.emit("load", { point: { lng: 1, lat: 2 }, zoom: 3 });
+    expect(payload).toMatchObject({ point: { lng: 1, lat: 2 }, zoom: 3 });
+    off();
+    client.driver.map.destroy(map);
   });
 
   it("fixture：raw 带坐标时用的是 raw 的坐标（兜底不覆盖真实值）", () => {
