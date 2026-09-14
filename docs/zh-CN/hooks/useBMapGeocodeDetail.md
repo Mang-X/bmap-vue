@@ -62,21 +62,36 @@ const { get, getBatch, result, isLoading, isEmpty } = useBMapGeocodeDetail(map)
 | ---- | -------------------------------------------- | --------- | ------ |
 | map  | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | -      |
 
+:::tip 状态与动作约定（#38 起）
+
+- `status` 的取值与含义对六个 service hooks **完全一致**：
+  `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
+  `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
+  表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
+- **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
+  与 `status` / `error` 同步。返回值里 `status === 'canceled'` 表示这次调用被更新的调用取代或被取消。
+- `sdkStatus` 只有 SDK **公开给出状态码**的服务才有值（`Geolocation` / `LocalSearch` 的
+  `BMAP_STATUS_*`、`Convertor` 回包 `status`），其余为 `null`——不伪装成 0。
+
+:::
+
 ### 返回值
 
-| 返回值    | 描述                                                          | 类型                                                   |
-| --------- | ------------------------------------------------------------- | ------------------------------------------------------ |
-| data      | 解析结果（`result` 为其别名）                                 | `Ref<GeocodeDetailResult \| null>`                     |
-| result    | 坐标点解析结果                                                | `Ref<GeocodeDetailResult \| null>`                     |
-| error     | 错误信息                                                      | `Ref<unknown>`                                         |
-| isError   | 是否出错                                                      | `boolean`                                              |
-| isEmpty   | 是否有解析结果                                                | `boolean`                                              |
-| isLoading | 是否在获取中                                                  | `boolean`                                              |
-| status    | 异步状态                                                      | `Ref<'idle' \| 'loading' \| 'success' \| 'error'>`     |
-| get       | 获取坐标点信息方法，需要在`Map`组件`ready`后才可调用          | `(point: Point) => Promise<GeocodeDetailResult>`       |
-| getBatch  | 批量反查地址详情，逐项返回 `{ point, detail, error? }`        | `(points: Point[]) => Promise<BatchItem[]>`            |
-| cancel    | 取消 pending 请求                                             | `() => void`                                           |
-| reset     | 清空 data/error                                               | `() => void`                                           |
+| 返回值    | 描述                                                                        | 类型                                                                   |
+| --------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| data      | 解析结果（`result` 为其别名）                                                | `Readonly<ShallowRef<GeocodeDetailResult \| null>>`                     |
+| result    | 坐标点解析结果                                                               | `Readonly<ShallowRef<GeocodeDetailResult \| null>>`                     |
+| error     | 有公开原因时的错误信息（`{ code, message }`）                                | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                        |
+| sdkStatus | SDK 公开状态码；本服务没有公开错误码入口，**恒为 `null`**                      | `Readonly<ShallowRef<number \| null>>`                                  |
+| isError   | 是否出错（`status === 'failed'`）                                            | `boolean`                                                               |
+| isEmpty   | 是否有解析结果（`data === null`，含 `empty` / 取消）                          | `boolean`                                                               |
+| isLoading | 是否在获取中                                                                | `boolean`                                                               |
+| supported | 当前引擎是否支持逆地理编码（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                               |
+| status    | 任务状态（见上）                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                                |
+| get       | 坐标 → 地址详情；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算        | `(point: Point) => Promise<ServiceResult<GeocodeDetailResult>>`          |
+| getBatch  | 批量反查，逐项返回 `{ point, detail, status, error }`（**部分成功**）          | `(points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>`        |
+| cancel    | 逻辑取消在飞请求                                                             | `() => void`                                                             |
+| reset     | 取消 + 清空 data/error/status                                                | `() => void`                                                             |
 
 #### Point
 
@@ -91,7 +106,7 @@ type Point = { lng: number; lat: number }
 | point             | 坐标点                       | `Point`                                 |
 | address           | 地址描述                     | `string`                                |
 | addressComponents | 结构化的地址描述             | [`AddressComponent`](#AddressComponent) |
-| surroundingPois   | 附近的 POI 点（`title`+`point`） | `Array<{ title: string; point: Point }>` |
+| surroundingPois   | 附近的 POI 点（完整的领域投影，字段见 [`LocalSearchPoi`](./useBMapLocalSearch)） | `readonly LocalSearchPoi[]` |
 | business          | 商圈字段，代表此点所属的商圈 | `string`                                |
 
 ##### AddressComponent
@@ -107,8 +122,14 @@ type Point = { lng: number; lat: number }
 ## TS 类型定义参考
 
 ```ts
-import { Ref } from 'vue'
-import { Point } from 'baidu-map-gl-vue'
+import type { ComputedRef, ShallowRef } from 'vue'
+import type {
+  BMapServiceStatus,
+  LocalSearchPoi,
+  Point,
+  ServiceErrorInfo,
+  ServiceResult,
+} from 'baidu-map-gl-vue'
 export interface GeocodeDetailResult {
   /**
    * 坐标点
@@ -129,30 +150,36 @@ export interface GeocodeDetailResult {
     streetNumber: string
   }
   /**
-   * 附近的POI点
+   * 附近的POI点（完整的领域投影）
    */
-  surroundingPois: Array<{ title: string; point: Point }>
+  surroundingPois: readonly LocalSearchPoi[]
   /**
    * 商圈字段，代表此点所属的商圈
    */
   business: string
 }
+export interface GeocodeDetailItemResult {
+  point: Point
+  detail: GeocodeDetailResult | null
+  status: BMapServiceStatus
+  error: ServiceErrorInfo | null
+}
 /**
  * 由坐标点反查地址详情
  */
 export declare function useBMapGeocodeDetail(map?: unknown): {
-  data: Ref<GeocodeDetailResult | null>
-  result: Ref<GeocodeDetailResult | null>
-  error: Ref<unknown>
-  isError: Ref<boolean>
-  isEmpty: Ref<boolean>
-  status: Ref<'idle' | 'loading' | 'success' | 'error'>
-  isLoading: Ref<boolean>
-  get: (point: Point) => Promise<GeocodeDetailResult | null>
-  getBatch: (
-    points: Point[]
-  ) => Promise<Array<{ point: Point; detail: GeocodeDetailResult | null; error?: unknown }>>
-  cancel: (reason?: unknown) => void
+  data: Readonly<ShallowRef<GeocodeDetailResult | null>>
+  result: Readonly<ShallowRef<GeocodeDetailResult | null>>
+  error: Readonly<ShallowRef<ServiceErrorInfo | null>>
+  sdkStatus: Readonly<ShallowRef<number | null>>
+  isError: ComputedRef<boolean>
+  isEmpty: ComputedRef<boolean>
+  status: Readonly<ShallowRef<BMapServiceStatus>>
+  isLoading: Readonly<ShallowRef<boolean>>
+  supported: Readonly<ShallowRef<boolean>>
+  get: (point: Point) => Promise<ServiceResult<GeocodeDetailResult>>
+  getBatch: (points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>
+  cancel: () => void
   reset: () => void
 }
 ```

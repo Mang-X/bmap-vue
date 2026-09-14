@@ -23,12 +23,32 @@
 - `driver`：raw SDK 边界与 Facet Driver。
 - `client`：`createBMapClient`，聚合 Driver 与运行时能力。
 - `core`：loader/provider、context、lifecycle、runtime、events、errors 等底座。
+- `core/services`：**框架无关**的服务层底座（状态口径 `BMapServiceStatus`、请求序列守卫
+  `createRequestGuard`、顺序批处理 `runSequential`、归一化调用面的收窄点 `jsapiV4ServicesOf`）。
+  Vue 侧的绑定是 `composables/useBMapServiceTask.ts`（能力门 / 实例缓存 / 只读 shallow refs /
+  过期保护）——七个 service composable 共用它，**不要**再各写一套 Promise + 定时器。
 - `components`、`composables`：面向使用者的 Vue 组件与 hooks。
 - `plugins`、`resolver`、`advanced`：插件适配、按需解析、raw SDK 逃生口。
 - `integrations`：对接**官方包**的薄封装（当前只有 `integrations/ui-kit` → `./ui-kit` 子入口）。
 - `types`、`manifest`：公共类型与组件清单。
 
 约定：`BMap.*` 只允许出现在 v4 Driver/Provider、Fake SDK 与最小类型边界；组件/composable/runtime 只依赖项目领域类型与 Facet Driver，不得直接访问全局 SDK。所有监听器、覆盖物、控件、图层、服务结果、Observer、Timer、RAF 与动画都必须有释放路径。
+
+**服务层的两条硬约束**（ADR `2026-09-14-service-lifecycle-and-local-search`）：
+
+- service composable **不得**读 `handle.raw`：调用一律走 Driver 的归一化调用面（`driver.services.geocode()`
+  等，返回 `ServiceCall<ServiceResult<T>>`），网络语义（超时 / 空结果 / 迟到回调 / 先到者胜）只在
+  `driver/normalize/serviceCall.ts` 一处实现；拿调用面必须经 `core/services` 的 `jsapiV4ServicesOf()`
+  收窄（可运行时检查），**不要**无条件 `as JsapiV4ServiceDriver`。
+- 服务结果的状态口径（`idle`/`loading`/`success`/`empty`/`failed`/`timeout`/`canceled`/`unsupported`）
+  只在 `core/services/serviceStatus.ts` 定义：`empty` = 没有结果**或**服务当前不可用（官方没有公开原因），
+  `unsupported` = 当前引擎没有该能力且**没有发起任何请求**；「请求发了但结果不好」是 `failed`。
+  两者的区分是调用方能不能「重试」的依据，不要合并。
+- **回调归属不许按到达顺序猜**：官方对 JSONP 风格的服务只承诺「单次调用内部的顺序」，**没有**承诺
+  多次请求之间的回调顺序（`LocalSearch` 的 4.0.4 声明里也没有）。因此归属只能靠**可验证的身份**：
+  `Autocomplete` 用「通道独占 + 同关键词互斥」（`suggest()`），`LocalSearch` 用「**一个实例一个未结算
+  操作**」+ 调用方侧「取代即换新实例」（`useBMapServiceTask` 的 `supersede` 策略）。没有身份可依据时
+  **显式拒绝**，不要排队等后来猜——见 ADR `2026-09-14-service-lifecycle-and-local-search` 决策 4。
 
 `integrations/**` 与 `components` / `composables` 同属禁区（不在 raw SDK 白名单内）：它只能经
 `MapHandle`（`unwrapRaw()`）与 Facet Driver 与引擎交互。`./ui-kit` 另有两条硬约束，见

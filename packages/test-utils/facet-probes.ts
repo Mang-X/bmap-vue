@@ -26,12 +26,14 @@ import type {
 import type {
   AutocompleteOptions,
   BoundaryRequest,
+  BoundaryRings,
   ConvertorRequest,
   GeocodeRequest,
   GeocodedAddress,
   GeolocationFix,
   JsapiV4ServiceDriver,
   LocalCityFix,
+  LocalSearchResult,
   PlaceSuggestion,
   ReverseGeocodeRequest,
   ServiceResult,
@@ -77,18 +79,20 @@ export interface ServiceFacetProbes {
   geocode: ServiceResult<Point>;
   reverseGeocode: ServiceResult<GeocodedAddress>;
   convert: ServiceResult<Point[]>;
-  boundary: ServiceResult<Point[][]>;
+  boundary: ServiceResult<BoundaryRings>;
   locate: ServiceResult<GeolocationFix>;
   locateCity: ServiceResult<LocalCityFix>;
   suggest: ServiceResult<PlaceSuggestion[]>;
+  /** 本地检索（`LocalSearch#search`，#38） */
+  search: ServiceResult<LocalSearchResult[]>;
   /** 取消之后的结算：用来固定「迟到回调不复活已取消的调用」 */
   canceled: ServiceResult<Point>;
 }
 
 /**
- * 跑一遍 Service Facet 的七个归一化调用 + 一次取消，返回结构化结果。
+ * 跑一遍 Service Facet 的八个归一化调用 + 一次取消，返回结构化结果。
  *
- * 注意 `live` 环境（真实 AK）里 `geocode` / `suggest` 的结果取决于配额与网络，
+ * 注意 `live` 环境（真实 AK）里 `geocode` / `suggest` / `search` 的结果取决于配额与网络，
  * 因此这里**只负责记录**，期望值由调用方给（vitest 侧分 fixture / live 两档）。
  */
 export async function probeServiceFacet(
@@ -102,6 +106,8 @@ export async function probeServiceFacet(
   const localCity = services.createLocalCity();
   const autocompleteOptions: AutocompleteOptions = { input: fixture.input() };
   const autocomplete = services.createAutocomplete(autocompleteOptions);
+  // 纯 headless：不传 `renderOptions.map`，因此不会在任何地图上绘制覆盖物
+  const localSearch = services.createLocalSearch(fixture.city);
 
   const geocodeRequest: GeocodeRequest = { address: fixture.address, city: fixture.city };
   const canceled = services.geocode(geocoder, geocodeRequest);
@@ -111,7 +117,7 @@ export async function probeServiceFacet(
   const reverseRequest: ReverseGeocodeRequest = { point: fixture.point };
   const boundaryRequest: BoundaryRequest = { name: fixture.boundaryName };
 
-  return {
+  const probes: ServiceFacetProbes = {
     geocode: await services.geocode(geocoder, geocodeRequest).result,
     reverseGeocode: await services.reverseGeocode(geocoder, reverseRequest).result,
     convert: await services.convert(convertor, fixture.convert).result,
@@ -119,8 +125,16 @@ export async function probeServiceFacet(
     locate: await services.locate(geolocation).result,
     locateCity: await services.locateCity(localCity).result,
     suggest: await services.suggest(autocomplete, fixture.address).result,
+    search: await services.search(localSearch, fixture.address).result,
     canceled: canceledResult,
   };
+
+  // 探针创建的实例在**有释放入口**时必须放掉：`Autocomplete` 载着输入框上的监听、
+  // `LocalSearch` 载着待回包队列，留在页面/用例里就是真实泄漏（smoke 页面尤其明显）。
+  services.disposeAutocomplete(autocomplete);
+  services.disposeLocalSearch(localSearch);
+
+  return probes;
 }
 
 /* --------------------------------------------------------------- Native Layer */

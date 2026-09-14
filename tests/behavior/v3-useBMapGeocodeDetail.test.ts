@@ -41,15 +41,17 @@ describe('useBMapGeocodeDetail', () => {
   beforeEach(() => harness.reset())
 
   it('resolves address detail for a point via driver-converted Point', async () => {
-    let detail: any = null
+    let result: any = null
     const { wrapper } = mountWithChild(async (geo) => {
-      detail = await geo.get({ lng: 116.404, lat: 39.915 })
+      // #38 起动作恒 resolve 成 ServiceResult
+      result = await geo.get({ lng: 116.404, lat: 39.915 })
     })
     await flushPromises()
     await nextTick()
+    expect(result.status).toBe('success')
     // Fake v4 Geocoder.getLocation 的默认回包地址
-    expect(detail?.address).toBe('北京市东城区天安门')
-    expect(detail?.point).toEqual({ lng: 116.404, lat: 39.915 })
+    expect(result.data?.address).toBe('北京市东城区天安门')
+    expect(result.data?.point).toEqual({ lng: 116.404, lat: 39.915 })
     wrapper.unmount()
     await nextTick()
   })
@@ -73,9 +75,11 @@ describe('useBMapGeocodeDetail', () => {
 
   it('exposes error ref (not throw) on invalid input', async () => {
     const { wrapper } = mountWithChild(async (geo) => {
-      await geo.get({ lng: 'x', lat: 1 } as any)
-      expect(geo.status.value).toBe('error')
-      expect(geo.error.value).toMatchObject({ code: 'BMAP_INVALID_POINT' })
+      const result = await geo.get({ lng: 'x', lat: 1 } as any)
+      expect(result.status).toBe('failed')
+      expect(geo.status.value).toBe('failed')
+      // Driver 的归一化调用面用 BMAP_INVALID_ARGUMENT 表达「参数非法」（不抛错）
+      expect(geo.error.value).toMatchObject({ code: 'BMAP_INVALID_ARGUMENT' })
     })
     await flushPromises()
     await nextTick()

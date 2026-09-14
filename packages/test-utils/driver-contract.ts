@@ -613,7 +613,7 @@ export interface ServiceFacetHarness {
 
 export function runServiceFacetContract(createHarness: () => ServiceFacetHarness) {
   describe("Service facet contract", () => {
-    it("七个归一化调用都结算，且每个 ServiceResult 形状自洽", async () => {
+    it("八个归一化调用都结算，且每个 ServiceResult 形状自洽", async () => {
       const harness = createHarness();
       const probes = await probeServiceFacet(
         harness.services(),
@@ -628,6 +628,7 @@ export function runServiceFacetContract(createHarness: () => ServiceFacetHarness
         ["locate", probes.locate],
         ["locateCity", probes.locateCity],
         ["suggest", probes.suggest],
+        ["search", probes.search],
         ["canceled", probes.canceled],
       ];
       for (const [label, result] of entries) assertServiceResultShape(label, result);
@@ -654,6 +655,7 @@ export function runServiceFacetContract(createHarness: () => ServiceFacetHarness
         ["locate", probes.locate],
         ["locateCity", probes.locateCity],
         ["suggest", probes.suggest],
+        ["search", probes.search],
       ];
       for (const [label, result] of entries) {
         expect(result.status, `${label} 未命中 fixture`).toBe("success");
