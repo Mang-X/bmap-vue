@@ -334,16 +334,20 @@ function applyTiltFromProps(next: number | undefined): void {
 }
 
 /**
- * 把「生效值」收敛进地图（**含非受控档**，#27 评审第二轮 P1）。
+ * ready 时的**唯一**收敛路径：把「生效值」写进地图（#27 评审第二 / 三轮）。
  *
- * `apply*FromProps` 只处理受控档（`undefined` 直接 return），但加载窗口里也可能发生
- * **受控 → 非受控**：那时内部状态已经接管（保留最后一次外部值），可 watcher 之后不会再跑
- * （prop 不再变化），于是「内部状态 = A、地图 = 首次快照」永久分叉——正好违反「受控 → 非受控
- * 由内部状态接管」这条规则。这个函数把生效值（受控时外部值、非受控时内部状态）也写进地图。
+ * 两点合起来决定了它的形状：
+ *
+ * 1. **必须覆盖非受控档**（第二轮 P1）：加载窗口里可能发生 **受控 → 非受控**——那时内部状态已经
+ *    接管（保留最后一次外部值），可 watcher 之后不会再跑（prop 不再变化），于是「内部状态 = A、
+ *    地图 = 首次快照」永久分叉，正好违反「受控 → 非受控 由内部状态接管」这条规则。因此目标是
+ *    **生效值**（受控时外部值、非受控时内部状态），而不是「props 是否有值」。
+ * 2. **不能与 `apply*FromProps` 叠加**（第三轮 P2）：字符串 `center` 无法与读回的点判等，
+ *    先跑 `apply*FromProps` 再跑这里会写两次。现在 ready 时每个字段**至多写一次**。
  *
  * 判定用的是**可证明的前提**：调用点紧接 `initializeView`，而加载窗口内没有 map 可写 ⇒ 期间
- * 没有任何视野写入落地，因此「与首次快照相同的字段」一定已经在地图上（跳过即可）。这条短路同时
- * 挡掉了「字符串中心点无法与读回值判等」造成的假写入。
+ * 没有任何视野写入落地，因此「与首次快照相同的字段」一定已经在地图上（短路即可）。这条短路同时
+ * 挡掉了「字符串中心点无法与读回值判等」造成的假写入（`center="北京市"` 且没变过 ⇒ 0 条命令）。
  */
 function convergeViewToState(): void {
   const m = map.value;
@@ -395,21 +399,23 @@ function convergeViewToState(): void {
 }
 
 /**
- * ready 之前的视野收敛（#27 评审两轮）。
+ * ready 之前的视野收敛（#27 评审两轮，第三轮统一为**一条路径**）。
  *
- * 为什么必须有这一步：四个 watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野
- * 用的是 setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
+ * 为什么必须有这一步：watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野用的是
+ * setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
  * （`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher
  * 不会重跑 ⇒ 地图永远停在旧初值。
  *
- * 两条路径：`apply*FromProps` 处理**受控**档（读回判等、幂等），`convergeViewToState` 再补
- * **非受控**档（加载窗口里切换过模式时，内部状态需要接管）。
+ * **单一收敛路径**（第三轮 P2）：这里只做「同步三态（模式 + 镜像）→ 按生效值收敛」，
+ * 不再先跑一遍 `apply*FromProps`。两条路径叠加会让**字符串 `center`** 被写两次——
+ * 字符串无法与读回的点判等，`applyCenterFromProps` 写一次、`convergeViewToState` 再写一次。
+ * 现在每个字段在 ready 时**至多写一次**（见 `convergeViewToState` 的快照短路）。
  */
 function syncControlledView(): void {
-  applyCenterFromProps(props.center);
-  applyZoomFromProps(props.zoom);
-  applyHeadingFromProps(props.heading);
-  applyTiltFromProps(props.tilt);
+  centerState.syncExternal(props.center);
+  zoomState.syncExternal(props.zoom);
+  headingState.syncExternal(props.heading);
+  tiltState.syncExternal(props.tilt);
   convergeViewToState();
 }
 
@@ -727,12 +733,25 @@ provide(mapContextKey, context);
   provide(targetContextKey, mapTarget);
 }
 
-/** 真正重置视角到初始快照 */
+/**
+ * 真正重置视角到初始快照。
+ *
+ * 除了把地图移回快照，**还要把四个状态一起重置**（#27 评审第三轮 P1）：非受控档下内部状态就是
+ * 事实源，只重置地图会让两者分叉——之后用户再拖回「重置前的那个值」时，`commit` 判等为「没变化」
+ * 而不 emit，那次真实操作就丢了。`reset()` 刻意不 emit（这是命令方决定的，不是用户交互）。
+ *
+ * 同时冻结语义：重置之后如果受控值被移除（受控 → 非受控），接管的是**重置值**（而不是重置前的外部值），
+ * 因此地图不会被拉回重置前的位置。
+ */
 function resetView() {
   const m = map.value;
   const c = client.value;
   if (!m || !c || !initialViewSnapshot) return;
   c.driver.map.initializeView(m, initialViewSnapshot);
+  centerState.reset();
+  zoomState.reset();
+  headingState.reset();
+  tiltState.reset();
 }
 
 defineExpose({

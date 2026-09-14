@@ -110,8 +110,9 @@ watch 源是 `lng,lat` 两个标量（字符串形态取整串，并加 `s:` / `
 
 ### 4. `default*` 只读一次；模式实时判定；切换只告警不拒绝
 
-1. `default*` **只在首次解析时读一次**，之后变化不覆盖内部状态（否则「用户拖到 A、父级重算
-   default 得到 B」会把用户操作静默吃掉），失效时告警一次；
+1. `default*` **只在首次解析时读一次**，之后**任何**写入都不生效（值改变、从无到有、从有到无），
+   且都会告警一次（每字段至多一次）——否则「用户拖到 A、父级重算 default 得到 B」会把用户操作
+   静默吃掉；
 2. 模式按「当前受控值是否存在」**实时**判定，**不冻结**在首次解析——`:center="loaded ? spot : undefined"`
    这种「异步数据到达后才开始受控」的用法必须能工作；
 3. 模式切换**只告警、不拒绝**，且只在「切换会造成事实源歧义」时告警：非受控 → 受控且外部值与
@@ -218,6 +219,11 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
   「字符串中心点无法与读回值判等」造成的假写入（`defaultCenter: "北京市"` 不会多出一条命令）。
 - 它只跑在 ready 之前那一次：**watcher 路径不放宽**。非受控档在 ready 之后不会再分叉
   （内部状态由 `commit` 跟随 SDK），因此不需要——也不应该——让每次 prop 变化都写一遍。
+- **ready 收敛只有这一条路径**（第三轮 P2）：早先的实现先跑四个 `apply*FromProps` 再跑
+  `convergeViewToState`，字符串 `center` 会被写两次（字符串无法与读回的点判等，两次判等都失败）。
+  现在 `syncControlledView()` = 四个 `syncExternal`（同步模式与镜像）+ `convergeViewToState()`，
+  每个字段**至多写一条命令**。所谓「幂等」在字符串形态下本来就不成立（读回是点），因此判据换成
+  更强的「与首次快照相同则短路」。
 
 三个约束：
 
@@ -246,6 +252,24 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
 
 「props 请换引用更新」是 Vue 的常规语义，组件不打算为原地 mutation 做补偿（那需要 deep watch，
 本 ADR 明令禁止）；这里要做的是**让 mutation 不会静默污染内部状态**。
+
+### 10. 「回到初值」的命令必须同时重置状态（`reset()`）
+
+`resetView()` 是一个**命令**：它把地图视野移回首次快照。但它最初只管地图，四个 `ControllableState`
+不动——而非受控档下内部状态就是事实源，于是出现（第三轮评审 P1）：
+
+```
+defaultCenter=A → 用户拖到 B   ⇒ 地图 = B、内部状态 = B、emit B
+resetView()                    ⇒ 地图 = A、内部状态仍是 B
+用户再次从 A 拖到 B              ⇒ commit(B) 判等为「没变化」⇒ 不 emit（真实操作被吃掉）
+```
+
+因此 `useControllableState` 增加 `reset()`：把内部状态恢复为 `initial`（经 `copy`），**刻意不 emit**
+——重置是命令方决定的，不是用户交互或 SDK 回写。`resetView()` 在地图重置之后调用四个 `reset()`。
+
+顺带冻结一条语义：**重置之后「受控 → 非受控」接管的是重置值**（而不是重置前的外部值），因此地图
+不会被拉回重置前的位置。`resetView()` 是公开方法，这条语义与「命令方拥有最终决定权」一致：
+命令执行后，状态与地图同源。
 
 ## 后果
 
@@ -293,11 +317,12 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
 
 ## 验证
 
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **17 条**用例覆盖三态、初次视野只
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **29 条**用例覆盖三态、初次视野只
   执行一次、`centerAndZoom` 不复发、0/0 与边界 zoom、相同值不写 SDK、浮点抖动、用户交互回写与
   父级回写闭环、heading 环绕、四个 `default*` 的失效、模式切换告警、受控值优先、不重绑与卸载归零，
-  以及两轮评审补的五条：**加载窗口内的受控更新**、**加载窗口内「受控 → 非受控」**（决策 8）、
-  **受控 center 原地 mutation**、**`defaultCenter` 原地 mutation**（决策 9）、**读回错误白名单**。
+  以及三轮评审补的九条：**加载窗口内的受控更新**、**加载窗口内「受控 → 非受控」**、
+  **受控 center 原地 mutation**、**`defaultCenter` 原地 mutation**、**读回错误白名单**、
+  **`resetView()` 状态同步**、**resetView 后的模式切换语义**、**字符串 center 的两条命令计数**。
   **放置理由**：issue 的「预计变更区域」把测试指向 `tests/behavior/v3-bmap.test.ts`，而
   `AGENTS.md` 明确要求「单一引擎的组件级场景写在 `v3-component-scenarios.test.ts`，用例只写领域
   语言、不碰字段名」。二者冲突时按 `AGENTS.md` 执行（预计区域是提示），为此
@@ -305,15 +330,15 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
   `simulateUserView()` / `subscribedEvents()` / `listenActivity()` /
   `deferredProvider()` + `releaseProvider()` + `mapsCreated()`。
 - `packages/baidu-map-gl-vue/src/core/utils/equality.test.ts`：容差、环绕、`centerKey` 的 23 条单测；
-- `packages/baidu-map-gl-vue/src/composables/useControllableState.test.ts`：三态、告警规则与
-  `copy` 语义的 10 条单测；
+- `packages/baidu-map-gl-vue/src/composables/useControllableState.test.ts`：三态、告警规则、`copy` 与
+  `reset` 语义的 13 条单测；
 - `packages/baidu-map-gl-vue/src/core/logger.test.ts`：`devWarn` 在 `NODE_ENV=development` 下输出、
   `production` 下静默的 2 条单测；
 - `scripts/verify-package.mts`：**package-consumer** 三步验证（在安装了 tarball 的
   `fixtures/v3-consumer` 里跑）——ESM 产物保留 `process.env.NODE_ENV`、IIFE 产物无裸 `process.env`、
   同一个产物在 `NODE_ENV=development` 下输出告警 / `production` 下静默；
 - `tests/behavior/v3-entry.test.ts`：根入口导出 `useControllableState`；
-- **单点反证**（改坏一处即红，逐条实测并已还原）：
+- **单点反证**（改坏一处即红，逐条实测并已还原，共 9 组）：
   1. heading 判等换回线性 + 去掉 `center` 的读回守卫 → 3 条例（相同值不写 SDK / v-model 闭环 /
      heading 环绕）失败；
   2. 去掉 ready 之前的 `syncControlledView()` → 2 条加载窗口用例失败；
@@ -322,9 +347,11 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
   5. 把读回错误白名单放宽成「所有 `BMapError`」+ 读不到仍调 setter → 读回白名单用例失败；
   6. 在 `vite.config.build.ts` 里 define `process.env.NODE_ENV` → `verify-package` 的 consumer
      验证失败（development 下不再告警）；
+  7. 去掉 `resetView()` 里的四个 `reset()` → 2 条 resetView 用例失败；
+  8. 把 ready 收敛改回「两条路径叠加」→ 2 条字符串 center 用例失败；
+  9. `default` watcher 恢复成「`previous === undefined` 直接 return」→ 「从无到有」单测失败；
 - 门禁：`typecheck:v3` → `build:v3` → `check:public-dts` → `check:no-bmapgl` → `check:raw-sdk:tree`
-  → `test:unit`（119 文件 / 1434 用例）→ `smoke:v4:fixture` → docs 四件套 → `playground:build` →
-  `pack:v3` + `verify:package`。
+  → `test:unit` → `smoke:v4:fixture` → docs 四件套 → `playground:build` → `pack:v3` + `verify:package`。
 
 ## 评审修正（2026-09-14 第一轮）
 
@@ -350,6 +377,17 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
 | **[P2]** `devWarn` 对正常 npm 消费者永远不会出现（发布构建把 `__DEV__` 定死成 `false`） | 成立：`dist/*.mjs` 是发布产物，消费方的 dev server 拿到的是已 DCE 的代码 | 决策 4 改为「判定留在消费方」（`process.env.NODE_ENV`）+ `verify-package` 的 package-consumer 三步验证 + 2 条单测 |
 
 第二轮同时确认：上一轮的 defensive copy / 读回白名单 / ready 前受控档收敛 / dev-only 方向都已修正。
+
+### 评审修正（第三轮，`<本次提交>`）
+
+第三轮给出 1 条 blocking + 2 条 P2，都成立：
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** `resetView()` 只重置地图、不重置非受控内部状态 ⇒ 重置后再拖回同一值不 emit | 成立：只调了 `initializeView`，四个 `internal` 不动（`commit` 随后判等为「没变化」） | 决策 10：新增 `useControllableState.reset()`，`resetView()` 同步四个状态（不 emit）+ 2 条用例（含「接管的是重置值」语义） |
+| **[P2]** 受控字符串 `center` 在 ready 收敛阶段被写两次 | 成立：`apply*FromProps` 与 `convergeViewToState` 叠加，而字符串无法与读回的点判等 | 决策 8：ready 收敛统一为**一条路径**（快照短路），每字段至多写一条 + 2 条字符串用例 |
+| **[P2]** `default: undefined → defined` 被忽略时没有告警 | 成立：watcher 对 `previous === undefined` 直接 return，而文档承诺「default 失效会告警」 | 决策 4 §1 改为「任何后续写入（含从无到有 / 从有到无）都告警一次」+ 1 条单测 |
+| PR 正文仍保留上一轮的 `__DEV__` / docs-playground define 描述 | 成立（描述与实现不一致） | 正文同步为「消费方 `process.env.NODE_ENV`」的最终形态 |
 
 ## 非目标
 

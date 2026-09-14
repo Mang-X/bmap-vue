@@ -768,6 +768,116 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
     harness.assertIdle("视野：defaultCenter 原地 mutation");
   });
 
+  it("resetView() 同步状态：非受控下重置后再次回到同一值仍然会 emit（第三轮 P1）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      defaultCenter: { ...POSITION },
+      defaultZoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    // 非受控档：用户拖到 B，内部状态跟随并上报
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 15 });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toEqual([[{ ...AMERICA }]]);
+    expect(bmap.emitted("update:zoom")).toEqual([[15]]);
+
+    // resetView：地图回首次快照，**状态也要回**（否则下一次真实变化会被判成「没变化」）
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    // 再次真实地拖到同一个 B：必须仍然上报
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 15 });
+    await settleProps();
+    expect(bmap.emitted("update:center"), "第二次真实变化不得被吃掉").toHaveLength(2);
+    expect(bmap.emitted("update:center")?.[1]).toEqual([{ ...AMERICA }]);
+    expect(bmap.emitted("update:zoom")).toHaveLength(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：resetView 同步状态");
+  });
+
+  it("resetView() 之后「受控 → 非受控」接管的是重置值（冻结该语义）", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    // 父级把受控值改到 AMERICA：地图跟随（1 条 setCenter）
+    props.value = { ...props.value, center: { ...AMERICA } };
+    await settleProps();
+    expect(harness.view().center).toEqual(AMERICA);
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    // resetView：地图与状态都回到首次快照
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view().center).toEqual(POSITION);
+
+    // 移除受控值（受控 → 非受控）：接管值 = 重置值 ⇒ 不产生任何写入
+    props.value = { provider: props.value.provider, zoom: 12 };
+    await settleProps();
+    expect(harness.view().center, "地图不得被拉回重置前的位置").toEqual(POSITION);
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    // 状态也确实是重置值：用户「拖到快照值」不算变化 ⇒ 不 emit
+    harness.simulateUserView({ center: { ...POSITION } });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toBeUndefined();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：resetView 后的模式切换");
+  });
+
+  it("受控字符串 center：ready 时每个字段至多写一条命令（加载期间没变过）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: "北京市",
+      zoom: 12,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 字符串无法与读回的点判等 ⇒ 读回守卫失效；但「与首次快照相同」这条短路仍然成立
+    expect(harness.viewWrites(), "字符串 center 未变过时不该有任何额外命令").toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 0,
+      setZoom: 0,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：字符串 center 未变");
+  });
+
+  it("受控字符串 center：加载期间变化时恰好写一条命令（不重复）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: "北京",
+      zoom: 12,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    props.value = { ...props.value, center: "上海" };
+    await settleProps();
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    expect(harness.viewWrites(), "同一字段在 ready 时只能写一次").toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 0,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：字符串 center 变化");
+  });
+
   it("读回失败：白名单错误码跳过命令，其余错误码上抛", async () => {
     const errors: unknown[] = [];
     const seen: { driver: Record<string, unknown> | null } = { driver: null };

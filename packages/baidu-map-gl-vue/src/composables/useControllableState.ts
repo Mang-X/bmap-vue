@@ -23,6 +23,8 @@
  *    - 受控 → 非受控：内部状态接管（保留最后一次外部值），告警一次。
  * 4. **可变值必须经 `copy` 落库**：初值、外部同步、SDK 回写三处都不与调用方的对象共享引用，
  *    否则调用方一次原地修改就绕过了整个状态机。
+ * 5. **「回到初值」的命令必须同时重置状态**（`reset()`）：只在外部世界（地图）侧重置会让非受控档的
+ *    状态与地图分叉，且随后的**真实**变化会被 `commit` 判成「没变化」而丢掉（第三轮评审 P1）。
  *
  * 每个字段每种方向最多告警一次（`warned` 集合），避免高频 prop 变化刷屏。
  *
@@ -93,6 +95,13 @@ export interface ControllableState<T> {
    * 这就是「相同值不同引用不重复更新」与「父级回写相同值不再写 SDK」的实现依据。
    */
   commit(next: T): boolean;
+  /**
+   * 把内部状态恢复为**首次解析的初值**（不通知调用方）。
+   *
+   * 调用方执行「回到初值」这类命令（如 `resetView()`）之后用它让状态跟上，
+   * 否则非受控档会出现「状态与外部世界不一致，且后续真实变化被判成没变化」。
+   */
+  reset(): void;
 }
 
 export function useControllableState<T>(
@@ -152,11 +161,26 @@ export function useControllableState<T>(
     return true;
   }
 
+  /**
+   * 把内部状态恢复为**首次解析的初值**（`initial`）。
+   *
+   * 用途：调用方执行了「回到初值」这类命令之后（如 `<BMap>` 的 `resetView()`），让状态与外部世界
+   * 保持一致。**刻意不通知**（不 emit）：那是命令方决定的，不是用户交互或 SDK 回写。
+   *
+   * 为什么必须有它：非受控档下内部状态就是事实源。若只在 SDK 侧重置而不动状态，
+   * 「重置 → 用户再次拖到重置前的那个值」会因为 `commit` 判等为「没变化」而**不 emit**，
+   * 真实操作被吃掉（#27 评审第三轮 P1）。
+   */
+  function reset(): void {
+    internal.value = copy(initial);
+  }
+
   if (defaultValue) {
     watch(defaultValue, (next, previous) => {
-      // 只对「值真的变了」告警：父级每次渲染都传内联字面量时，引用变化不代表语义变化。
-      if (next === undefined || previous === undefined) return;
-      if (equals(next, previous)) return;
+      // 首次解析之后**任何** default 写入都不生效，都该告警一次：值改变、从无到有、从有到无。
+      // 「两边都没给」与「值没变」不算写入——父级每次渲染传内联字面量时引用会变，但语义没变。
+      if (next === undefined && previous === undefined) return;
+      if (next !== undefined && previous !== undefined && equals(next, previous)) return;
       warnOnce(
         "default-ignored",
         `${name} 的 default 值只在首次解析时生效，之后的变化不会覆盖当前状态；若需要持续受控，请改用受控值（组件上即 v-model:${name}）。`,
@@ -164,5 +188,5 @@ export function useControllableState<T>(
     });
   }
 
-  return { value: model, internal, isControlled, initial, syncExternal, commit };
+  return { value: model, internal, isControlled, initial, syncExternal, commit, reset };
 }

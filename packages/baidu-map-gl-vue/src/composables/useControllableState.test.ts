@@ -209,6 +209,60 @@ describe('useControllableState', () => {
     expect(state.commit({ lng: 7, lat: 8 })).toBe(false)
   })
 
+  it('非受控：default 从无到有也不生效，但必须告警一次（第三轮 P2）', async () => {
+    const fallbackDefault = ref<number | undefined>(undefined)
+    const warn = spyWarn()
+    const state = numberState({
+      value: () => undefined,
+      defaultValue: () => fallbackDefault.value,
+      fallback: 14,
+    })
+
+    expect(state.value.value).toBe(14)
+    expect(warnLines(warn).length).toBe(0)
+
+    // 首次解析时没有 default，之后异步传入 ⇒ 值不生效，但这种「最需要提示的误用」不能静默
+    fallbackDefault.value = 9
+    await nextTick()
+
+    expect(state.value.value, '之后传入的 default 不得覆盖内部状态').toBe(14)
+    expect(warnLines(warn).filter((line) => line.includes('只在首次解析时生效')).length).toBe(1)
+  })
+
+  it('reset：把内部状态恢复为首次解析的初值（不通知）', () => {
+    const state = numberState({ fallback: 14 })
+
+    expect(state.commit(20)).toBe(true)
+    expect(state.internal.value).toBe(20)
+
+    state.reset()
+    expect(state.internal.value, 'reset 回到 initial').toBe(14)
+    // 回到初值之后再「交互到 14」不算变化（内部状态已经是 14）
+    expect(state.commit(14)).toBe(false)
+  })
+
+  it('copy：reset 恢复的初值也是独立拷贝', () => {
+    interface Spot {
+      lng: number
+      lat: number
+    }
+    const cloneSpot = (value: Spot): Spot => ({ lng: value.lng, lat: value.lat })
+    const state = inScope(() =>
+      useControllableState<Spot>({
+        name: 'center',
+        value: () => undefined,
+        fallback: { lng: 0, lat: 0 },
+        equals: (a, b) => a.lng === b.lng && a.lat === b.lat,
+        copy: cloneSpot,
+      }),
+    )
+
+    expect(state.commit({ lng: 5, lat: 6 })).toBe(true)
+    state.reset()
+    expect(state.internal.value).toEqual({ lng: 0, lat: 0 })
+    expect(state.internal.value).not.toBe(state.initial)
+  })
+
   it('warn: false 时模式切换与 default 失效都静默', async () => {
     const external = ref<number | undefined>(undefined)
     const fallbackDefault = ref<number | undefined>(1)
