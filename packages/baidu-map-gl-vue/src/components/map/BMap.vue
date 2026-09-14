@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {
   computed,
+  getCurrentInstance,
   inject,
   onActivated,
   onDeactivated,
   onMounted,
   onUnmounted,
+  onUpdated,
   provide,
   readonly,
   ref,
@@ -22,16 +24,26 @@ import {
 } from "../../core/context/client";
 import { targetContextKey, type TargetContext } from "../../core/context/target";
 import { MapRuntime } from "../../core/runtime/MapRuntime";
-import { BMapError, type BMapErrorCode } from "../../core/errors/BMapError";
+import { BMapError } from "../../core/errors/BMapError";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
 import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../../client/types";
-import { normalizeMapMouseEvent } from "../../driver/normalize";
+import {
+  BMAP_COMPONENT_EVENT_EMIT_ALIASES,
+  MAP_EVENT_CATALOG,
+  MAP_EVENT_EMIT_ALIASES,
+  resolveMapEventName,
+  type MapEventEmits,
+  type MapEventName,
+} from "../../core/events/eventCatalog";
+import { subscribeMapEvent } from "../../core/events/subscribeMapEvent";
+import { readLiveView } from "../../core/utils/liveView";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
 import type { BMapProps } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
+import type { MapHandle } from "../../driver/types/handles";
 import { useControllableState } from "../../composables/useControllableState";
 import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
 import { resolvePluginDefinition } from "../../plugins/catalog";
@@ -62,21 +74,57 @@ export interface MapReadyPayload extends MapReadyContext {
   container: HTMLElement;
 }
 
-const emit = defineEmits<{
-  ready: [payload: MapReadyPayload];
-  initd: [payload: MapReadyPayload];
-  "plugin-ready": [name: string];
-  "plugin-error": [payload: { name: string; error: unknown }];
-  click: [event: unknown];
-  unload: [];
-  error: [err: unknown];
-  // 视野回写（M4-STATE / #27）：`v-model:center` 等语法糖依赖这四个事件。
-  // 载荷永远是 SDK 读回的**具体坐标点**：即使受控值是城市名字符串，用户交互后也会变成点。
-  "update:center": [value: Point];
-  "update:zoom": [value: number];
-  "update:heading": [value: number];
-  "update:tilt": [value: number];
-}>();
+/**
+ * map 事件的 emits 声明（M4-EVENTS / #28）：名字与载荷来自 `core/events/eventCatalog` 的
+ * `MapEventEmits`（显式键的接口——`@vue/compiler-sfc` 需要可枚举的键，理由见那个接口的注释），
+ * 这里**不手抄第二份**：Catalog 增删事件时模板提示、TS 提示与 `useMapEvent` 一起变。
+ */
+const emit = defineEmits<
+  {
+    ready: [payload: MapReadyPayload];
+    initd: [payload: MapReadyPayload];
+    "plugin-ready": [name: string];
+    "plugin-error": [payload: { name: string; error: unknown }];
+    unload: [];
+    error: [err: unknown];
+    // 视野回写（M4-STATE / #27）：`v-model:center` 等语法糖依赖这四个事件。
+    // 载荷永远是 SDK 读回的**具体坐标点**：即使受控值是城市名字符串，用户交互后也会变成点。
+    "update:center": [value: Point];
+    "update:zoom": [value: number];
+    "update:heading": [value: number];
+    "update:tilt": [value: number];
+  } & MapEventEmits
+>();
+
+/**
+ * 转发一个 map 事件：先发规范名，再发兼容别名（都从 `MAP_EVENT_EMIT_ALIASES` 读）。
+ *
+ * `emit` 的键是静态类型，动态事件名在这里集中收窄一次（不让 `as` 扩散到其余代码）。
+ */
+const emitDynamic = emit as unknown as (name: string, ...args: unknown[]) => void;
+
+function forwardMapEvent(vue: MapEventName, event: unknown): void {
+  emitDynamic(vue, event);
+  for (const alias of MAP_EVENT_EMIT_ALIASES[vue] ?? []) emitDynamic(alias, event);
+}
+
+/**
+ * 发 `ready` 与它的历史别名（`initd`）。
+ *
+ * 别名从 Catalog 的 `BMAP_COMPONENT_EVENT_EMIT_ALIASES` 读，因此「旧名称的集中 deprecation」
+ * 只有这一处（issue #28 禁止组件各自兼容）。此前 `ready` / `initd` 这对组合在 `boot()` 里
+ * 写了两遍（就绪早退路径与正常路径各一次），改一处漏一处就会漂移。
+ * 其余组件事件没有别名，照常走类型化的 `emit(...)`。
+ */
+function emitReady(payload: MapReadyPayload): void {
+  emit("ready", payload);
+  for (const alias of BMAP_COMPONENT_EVENT_EMIT_ALIASES.ready ?? []) {
+    emitDynamic(alias, payload);
+  }
+}
+
+/** 当前实例：用于读取「父级这一轮绑定了哪些 `onXxx`」（`defineEmits` 声明过的事件不在 `attrs` 里）。 */
+const instance = getCurrentInstance();
 
 const containerRef = ref<HTMLDivElement | null>(null);
 // SSR-safe DOM id(服务端只输出固定容器 shell,客户端 mounted 后加载)
@@ -243,35 +291,6 @@ const initialViewSnapshot = {
   heading: headingState.initial,
   tilt: tiltState.initial,
 };
-
-/**
- * 读回视野时**允许**被忽略的错误码（#27 评审 P2：只吞明确允许的，其余重抛）。
- *
- * 只有这两种情形算「这次读本来就不成立」：资源已销毁（销毁后没有可读状态，写命令也只会抛
- * 同样的错），或该能力在本引擎不可用（读不出、也没有可写的东西）。
- *
- * 其余错误码一律上抛——`BMAP_SDK_CALL_FAILED` / `BMAP_INVALID_ARGUMENT` / `BMAP_INVALID_POINT` /
- * `BMAP_HANDLE_FOREIGN` 都是真实故障（含测试替身失真），归零成 `null` 会变成静默失效。
- */
-const IGNORABLE_VIEW_READ_ERRORS: ReadonlySet<BMapErrorCode> = new Set([
-  "BMAP_RESOURCE_DISPOSED",
-  "BMAP_RUNTIME_DISPOSED",
-  "BMAP_CAPABILITY_UNSUPPORTED",
-]);
-
-/**
- * 读回地图当前值；不可读时返回 `null`——**调用方必须显式 `return`，不写下一条命令**。
- *
- * 非 `BMapError`（`TypeError` 一类编程错误）与不在白名单里的 `BMapError` 都继续抛。
- */
-function readLiveView<T>(read: () => T): T | null {
-  try {
-    return read();
-  } catch (e) {
-    if (e instanceof BMapError && IGNORABLE_VIEW_READ_ERRORS.has(e.code)) return null;
-    throw e;
-  }
-}
 
 /**
  * 受控 `center` → SDK。
@@ -624,6 +643,81 @@ async function loadPluginsInBackground() {
   }
 }
 
+/* ------------------------------------------------------- map 事件转发（M4-EVENTS / #28）
+ *
+ * `<BMap>` 声明 Catalog 里的全部 map 事件（模板/TS 都有完整提示），但**只订阅父级真的绑了
+ * 监听器的那几个**：43 个事件无条件绑 43 个 SDK 监听器是纯浪费，官方 React 封装
+ * `huiyan-fe/react-bmap@2.0.1` 也只在传了对应 handler 时才 `addEventListener`
+ * （`src/components/Map/Map.tsx` 的 `EVENT_MAP` 循环里 `if (!current) continue`）。
+ *
+ * 判定依据是**当前渲染的 vnode props**（`onXxx` 键）而不是 `useAttrs()`：事件在
+ * `defineEmits` 里声明之后就不再属于 `attrs`。键名经 `resolveMapEventName` 归一，
+ * 因此 `@click` / `@mapTypeChange` / `@map-type-change` / `@style_loaded` 都能命中。
+ *
+ * 监听器集合变化（例如 `v-if` 切换 handler）由 `onUpdated` 补一次同步——**只增删差集**，
+ * 因此「父级每次重渲染都传内联箭头函数」不会增加 `addEventListener` 次数。
+ */
+
+/** 当前渲染里父级**实际绑定**的 map 事件（规范名，去重）。 */
+function listenedMapEventNames(): MapEventName[] {
+  const props = instance?.vnode.props ?? {};
+  const names = new Set<MapEventName>();
+  for (const key of Object.keys(props)) {
+    // 只认 `onXxx` 形态；`onUpdate:center` 这类不会被命中（归一后不在 Catalog 里）
+    if (!/^on[A-Z]/.test(key)) continue;
+    const resolved = resolveMapEventName(key.slice(2));
+    if (resolved) names.add(resolved.vue);
+  }
+  return [...names];
+}
+
+/** 已建立的 map 事件订阅：规范名 → 订阅（disposer + 它绑在哪张地图上）。 */
+const mapEventSubscriptions = new Map<MapEventName, { map: MapHandle; off: () => void }>();
+
+/** 撤销某个事件名上的订阅（幂等：disposer 自身幂等，重复调用安全）。 */
+function unsubscribeMapEvent(vue: MapEventName): void {
+  const current = mapEventSubscriptions.get(vue);
+  if (!current) return;
+  mapEventSubscriptions.delete(vue);
+  // 订阅同时被 Runtime 的 ResourceScope 持有（见下方 add），这里只负责提前释放
+  current.off();
+}
+
+/**
+ * 让订阅集合与「父级绑定的监听器」一致：撤销不再需要的、补上新增的、并**重建绑错地图的**。
+ *
+ * 第三类很关键：键是「事件名」，而句柄在 `retry()` 之后会换成新地图实例——若只判断名字是否已存在，
+ * 旧地图上的订阅会被留下、新地图一个事件都收不到。这里比较 `map` 身份，不一致就重建。
+ */
+function syncMapEventSubscriptions(): void {
+  const m = map.value;
+  const c = client.value;
+  const scheduler = runtime.scheduler;
+  if (!m || !c || !scheduler) return;
+
+  const wanted = new Set(listenedMapEventNames());
+  for (const [vue, subscription] of [...mapEventSubscriptions]) {
+    if (wanted.has(vue) && subscription.map === m) continue;
+    unsubscribeMapEvent(vue);
+  }
+  for (const vue of wanted) {
+    if (mapEventSubscriptions.has(vue)) continue;
+    const entry = MAP_EVENT_CATALOG[vue];
+    // 复用与 `useMapEvent` 同一份订阅原语：高频事件按帧合帧、释放路径一致
+    const off = subscribeMapEvent(
+      c,
+      m,
+      entry.sdk,
+      (event) => forwardMapEvent(vue, event),
+      { coalesce: entry.coalesce, scheduler },
+    );
+    // 逐个登记进 Runtime 的 ResourceScope：卸载 / dispose 时无需再遍历，scope 自己会释放；
+    // `off` 是幂等 disposer，因此「提前释放 + scope 收尾」重复调用是安全的
+    runtime.resources.add(off);
+    mapEventSubscriptions.set(vue, { map: m, off });
+  }
+}
+
 async function boot() {
   if (runtime.status.value === "ready") {
     const payload = {
@@ -631,8 +725,7 @@ async function boot() {
       map: runtime.map.value!,
       container: containerRef.value!,
     };
-    emit("ready", payload);
-    emit("initd", payload);
+    emitReady(payload);
     void loadPluginsInBackground();
     return;
   }
@@ -646,15 +739,11 @@ async function boot() {
     syncControlledView();
     // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
     bindViewEvents(ctx);
-    runtime.resources.add(
-      ctx.client.driver.events.on(ctx.map, "click", (event) => {
-        emit("click", normalizeMapMouseEvent(event, ctx.client.driver.geometry));
-      }),
-    );
+    // map 事件转发（M4-EVENTS / #28）：只订阅父级真的绑了监听器的事件
+    syncMapEventSubscriptions();
     const payload = { client: ctx.client, map: ctx.map, container: containerRef.value! };
     // Map ready 不等待 optional plugin
-    emit("ready", payload);
-    emit("initd", payload);
+    emitReady(payload);
     // 插件后台加载，逐个回执
     void loadPluginsInBackground();
   } catch (e) {
@@ -672,6 +761,12 @@ onUnmounted(() => {
   runtime.dispose();
   runtimeRef.value = null;
   emit("unload");
+});
+
+// 父级绑定的 map 监听器可能随渲染变化（`v-if` 切换 handler、动态 `v-on`）：
+// 每轮更新后同步一次差集。**只增删差集**，因此内联 handler 不会造成重订阅。
+onUpdated(() => {
+  syncMapEventSubscriptions();
 });
 
 // props.enableXxx 变化时同步 SDK

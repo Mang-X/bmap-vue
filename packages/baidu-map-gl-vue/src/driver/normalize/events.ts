@@ -63,16 +63,30 @@ function eventBase(raw: unknown): EventBase {
   };
 }
 
+/**
+ * 事件坐标的**统一取值顺序**：`point` → `latLng` → 顶层 `lng` / `lat`。
+ *
+ * 两个入口（`normalizeMapMouseEvent` 与 `normalizeDriverEvent`）必须给出同一个答案，否则同一份 raw
+ * 经不同路径会得到不同坐标（#28 自审抓到的实际不一致：前者认顶层 `lng/lat`、后者只认 `latLng`，
+ * 于是 `<BMap @click>` 换到新路径后，raw 只有顶层坐标时会把真实点变成兜底的 `{lng:0,lat:0}`）。
+ */
+function readEventPoint(shape: Record<string, unknown>, geometry: GeometryDriver): Point | undefined {
+  return (
+    convertPoint(shape.point, geometry) ??
+    convertPoint(shape.latLng, geometry) ??
+    (isFiniteNumber(shape.lng) && isFiniteNumber(shape.lat)
+      ? geometry.fromRawPoint({ lng: shape.lng, lat: shape.lat })
+      : undefined)
+  );
+}
+
 export function normalizeMapMouseEvent(
   raw: unknown,
   geometry: GeometryDriver,
 ): MapMouseEvent {
   const shape = (raw ?? {}) as Record<string, unknown>;
-  const point: Point =
-    convertPoint(shape.point, geometry) ??
-    (isFiniteNumber(shape.lng) && isFiniteNumber(shape.lat)
-      ? { lng: shape.lng, lat: shape.lat }
-      : { lng: 0, lat: 0 });
+  // `MapMouseEvent.point` 是必填：读不到真实坐标时仍给 `{lng:0,lat:0}`（历史契约，见文件头注释）
+  const point: Point = readEventPoint(shape, geometry) ?? geometry.fromRawPoint({ lng: 0, lat: 0 });
   return {
     ...eventBase(raw),
     point,
@@ -81,9 +95,42 @@ export function normalizeMapMouseEvent(
 }
 
 /**
+ * 指针 / 拖拽类事件名（SDK 拼写）：这些事件上游**声明的载荷里 `point` 是必填的**，
+ * 因此归一化必须给出 `point`——raw 里坐标残缺时补 `{lng:0,lat:0}`。
+ *
+ * 这条兜底不是新发明：`normalizeMapMouseEvent`（公开 helper，`<BMap @click>` 的既有契约）
+ * 一直这么做。放在这里是为了让公开的 `MapEventMap` 里 `click` 等条目的 `point: Point`（必填）
+ * 成为**可验证的事实**而不是类型谎话——raw 真带了坐标时用的就是那个坐标。
+ *
+ * 导出它是为了让事件 Catalog 的 `pointer` 标记与这份清单**逐项比对**（两处必须一致，
+ * 否则「哪些事件必有 point」就有了两个事实源）。
+ */
+export const POINTER_EVENT_NAMES: readonly string[] = Object.freeze([
+  "click",
+  "dblclick",
+  "rightclick",
+  "rightdblclick",
+  "mousemove",
+  "mousedown",
+  "mouseup",
+  "mouseover",
+  "mouseout",
+  "touchstart",
+  "touchmove",
+  "touchend",
+  "mousewheel",
+  "dragstart",
+  "dragging",
+  "dragend",
+]);
+
+const POINTER_EVENT_NAME_SET: ReadonlySet<string> = new Set(POINTER_EVENT_NAMES);
+
+/**
  * 任意 map / overlay / layer 事件的归一化。
  *
- * `point` 优先取 `point`，其次 `latLng`：4.0 图形覆盖物事件两者都带，取值口径一致。
+ * `point` 走 `readEventPoint` 的统一顺序；指针 / 拖拽类事件在 raw 完全没有坐标时补
+ * `{lng:0,lat:0}`（与 `normalizeMapMouseEvent` 同口径，见 `POINTER_EVENT_NAMES`）。
  */
 export function normalizeDriverEvent(
   type: string,
@@ -95,10 +142,19 @@ export function normalizeDriverEvent(
   return {
     ...eventBase(raw),
     type: type || rawType,
-    point: convertPoint(shape.point, geometry) ?? convertPoint(shape.latLng, geometry),
+    point: readEventPoint(shape, geometry) ?? fallbackPoint(type, geometry),
     pixel: convertPixel(shape.pixel, geometry),
     size: convertSize(shape.size, geometry),
     zoom: isFiniteNumber(shape.zoom) ? shape.zoom : undefined,
     targetZoom: isFiniteNumber(shape.targetZoom) ? shape.targetZoom : undefined,
+    trend: typeof shape.trend === "boolean" ? shape.trend : undefined,
+    mapType: shape.mapType,
+    exMapType: shape.exMapType,
   };
+}
+
+/** 指针类事件在 raw 缺坐标时的兜底（`{lng:0,lat:0}`）；其余事件保持 `undefined`。 */
+function fallbackPoint(type: string, geometry: GeometryDriver): Point | undefined {
+  if (!POINTER_EVENT_NAME_SET.has(type)) return undefined;
+  return geometry.fromRawPoint({ lng: 0, lat: 0 });
 }

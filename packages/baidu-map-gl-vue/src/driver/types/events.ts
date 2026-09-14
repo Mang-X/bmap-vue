@@ -27,6 +27,18 @@ export interface DriverEvent {
   zoom?: number;
   /** 本次操作试图到达的缩放级别（`zoomexceeded`）。 */
   targetZoom?: number;
+  /** 滚轮方向（`mousewheel`）：`true` = 向上滚（放大）。 */
+  trend?: boolean;
+  /**
+   * 变化后的地图类型实例（`maptypechange`）。
+   *
+   * **原样透传**：它是 SDK 自己造的 `MapType` 实例（与全局 `BMAP_NORMAL_MAP` 同源），本库
+   * 没有可验证的等价表示，因此不做归一化、也不假装成 `MapType` 字符串（那是另一回事：
+   * `driver.map.setMapType()` 收的是本库的语义枚举）。
+   */
+  mapType?: unknown;
+  /** 变化前的地图类型实例（`maptypechange`），同 `mapType` 原样透传。 */
+  exMapType?: unknown;
   /** 原始 DOM 事件；部分合成事件没有对应 DOM 事件。 */
   domEvent?: Event;
   /** raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。 */

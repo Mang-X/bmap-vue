@@ -11,6 +11,8 @@ export {
   createFakeV4Harness,
 } from './fake-v4-harness'
 export type { FakeV4Harness, FakeV4MountKind } from './fake-v4-harness'
+export { createManualFrames } from './manual-frames'
+export type { ManualFrames } from './manual-frames'
 export {
   createFakeBMapV4,
   FakeV4Autocomplete,

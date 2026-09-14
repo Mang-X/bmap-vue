@@ -250,7 +250,9 @@ const tilt = ref(0)
 | `update:heading` | `headingchange` | `number`（环绕角，可能为负值，如 `-90` 等价于 `270`） |
 | `update:tilt` | `tiltchange` | `number` |
 
-只订阅**结束**事件（不订阅 `moving` / `zooming`）：逐帧回写会让父级每帧重渲染，并与受控写入来回打架。
+**视野回写**只订阅**结束**事件（不订阅 `moving` / `zooming`）：逐帧回写会让父级每帧重渲染，并与受控写入来回打架。
+需要 `moving` / `zooming` 这类中途事件时用 map 事件（`@moving` / `@zooming`）或
+[`useMapStatus`](../hooks/useMapStatus) 的 `moving` / `zooming` 标志——它们与回写是两条独立的订阅。
 
 ### 三条规则（发布后不易修改，改前请先读 ADR）
 
@@ -434,6 +436,8 @@ const tilt = ref(0)
 
 ## 组件事件
 
+与地图无关的事件（就绪、插件、生命周期、视野 `v-model` 回写）：
+
 | 事件名          | 说明                                                                                        | 类型                                     |
 | --------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | ready           | 地图实例创建并完成初始配置后触发                                                            | `{ client, map, container }`             |
@@ -442,9 +446,20 @@ const tilt = ref(0)
 | plugin-ready    | 单个插件加载完成后触发（载荷为插件名字符串；v2 的 `@pluginReady` 已移除）                   | `name: string`                           |
 | plugin-error    | 单个插件加载失败；不会改变已经 ready 的地图状态                                             | `{ name, error }`                        |
 | error           | 地图创建失败时触发                                                                          | `BMapError`                              |
-| click           | 左键单击地图时触发，事件经归一化（`point/pixel/domEvent/raw`）                               | `MapMouseEvent`                          |
+| update:center   | 用户交互后的中心点回写（`v-model:center`）                                                  | `{ lng, lat }`                           |
+| update:zoom     | 用户交互后的缩放级别回写（`v-model:zoom`）                                                  | `number`                                 |
+| update:heading  | 用户交互后的旋转角回写（`v-model:heading`）                                                 | `number`                                 |
+| update:tilt     | 用户交互后的倾斜角回写（`v-model:tilt`）                                                    | `number`                                 |
 
-::: warning 注意
-`BMap` 仅转发以上事件。`movestart/moving/zoomstart/tilesloaded` 等原生 SDK 事件当前版本不转发，
-如需监听请经 `ready` 载荷的 `client.driver.events.on(map, name, handler)` 自行订阅并记得在卸载时取消。
-:::
+**map 事件（43 个规范名 + 5 个 SDK 拼写兼容名）**——`click` / `moveend` / `maptypechange` /
+`style-loaded` / `moving` 等全部可绑，完整清单与载荷字段见
+见 [组件事件](../guide/com-events) 页的「BMap：map 事件」一节。两点行为约定：
+
+- **按需订阅**：只订阅你**真的绑了监听器**的事件；
+- **高频合帧**：`mousemove` / `touchmove` / `dragging` / `moving` / `zooming` 一帧最多提交一次
+  （取该帧最后一次的载荷），`mousewheel` 不合帧。
+
+需要在 setup 里按条件订阅、或订阅「别处的地图」时，用
+[`useMapEvent`](../hooks/useMapEvent)（订阅）与 [`useMapStatus`](../hooks/useMapStatus)（状态读数），
+不必自己拼 `client.driver.events.on(...)`。
+
