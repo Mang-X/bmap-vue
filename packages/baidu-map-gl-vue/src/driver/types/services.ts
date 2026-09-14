@@ -819,7 +819,14 @@ export interface RouteRenderOptions {
    * 不传 = 纯 headless。运行时仍按句柄品牌校验（JS 调用方拿不到编译期保护；跨 Client 混用必须被拒绝）。
    */
   map?: MapHandle;
-  /** 结果列表容器（元素或 id）；官方声明里驾车路线规划**不支持**面板，传了按 SDK 行为处理 */
+  /**
+   * 结果列表容器（元素或 id）。
+   *
+   * 4.0.4 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
+   * `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
+   * 本库按「上游契约冲突」处理（与 `polylineStyle` 同档）：**原样转发、不替 SDK 下结论** ——
+   * 不告警，也不在文档里承诺有效或无效；等真实运行时读数再定（PR #91 评审 P2）。
+   */
   panel?: string | HTMLElement;
   /** 检索结束后是否自动调整地图视野 */
   autoViewport?: boolean;

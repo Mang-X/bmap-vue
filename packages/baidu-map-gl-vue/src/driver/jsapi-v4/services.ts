@@ -254,19 +254,25 @@ function describeLocalSearchStatus(status: number): string {
 /**
  * 路线服务的失败状态码 → 可读原因（M7-ROUTES / #39）。
  *
- * **只列 3..8**：官方对四个路线服务的 `getStatus()` 声明的是 `ServiceStatus`（`BMAP_STATUS_*`：
- * 0 成功 / 1 城市列表 / 2 位置未知 / 3 导航未知 / 4 非法密钥 …），但同一个类型包里还有一套
- * `RouteStatus`（`BMAP_ROUTE_STATUS_NORMAL` = 0 / `_EMPTY` = 1 / `_ADDRESS` = 2），**两套在 0..2
- * 区间重叠、语义却不同**（1：城市列表 vs 结果为空；2：位置未知 vs 仅返回地址信息）。官方没有说明
- * 路线服务的 `getStatus()` 到底回哪一套，因此本库**只解释两套读法一致的那一段**：
+ * 口径**以四个路线类 `getStatus()` 的声明为准**：它声明的是 `ServiceStatus`（`BMAP_STATUS_*`），
+ * 里面唯一表示成功的是 `0`，`2..8` 依次是位置未知 / 导航未知 / 非法密钥 / 非法请求 / 没有权限 /
+ * 服务不可用 / 超时——都是失败。
  *
- * - `≥ 3`：两套码表都表示失败（`BMAP_STATUS_UNKNOWN_ROUTE` / `UNKNOWN_LOCATION` / `INVALID_KEY` …），
- *   按 `failed` 上报并带上那个码——这正是「有公开原因的失败」；
- * - `0..2`（含读不到状态码时的 `null`）：两套读法都**不提供**「请求发了但结果不好」的公开原因，
- *   因此按 `empty` 上报。那正是 `empty` 的语义（没有可用结果，且**可以重试**）；报成 `failed`
- *   会让调用方以为「重试没用」，而事实上我们并不知道。
+ * 类型包里另有一套 `RouteStatus`（`0` 正常 / `1` 结果为空 / `2` 仅返回地址信息），与 `ServiceStatus`
+ * 在 0..2 上重叠、语义不同；但**没有任何路线类的 `getStatus()` 声明成 `RouteStatus`**，因此不能拿
+ * 「另一张码表存在」去覆盖明确的方法签名（PR #91 评审 P1）。处置：
+ *
+ * - `≥ 2` ⇒ `failed` 并带上官方那个码（`2` = `BMAP_STATUS_UNKNOWN_LOCATION`）；
+ * - `0`（声明里唯一的成功值）与 `1`（在 `ServiceStatus` 是「城市列表」、在 `RouteStatus` 是「结果为空」，
+ *   两种读法都表示「没有可用路线」）⇒ 由载荷决定 `success` / `empty`；
+ * - 读不到状态码（`null`）⇒ 同样由载荷决定。
+ *
+ * 若真实运行时能证明它回的是 `RouteStatus`（需要真实 AK smoke 读数：正常路线 / 无法规划 / 无法识别
+ * 起终点三种），再按新 ADR 调整口径——在那之前**不按猜测放宽**。这条欠账记在
+ * ADR `2026-09-14-route-services-headless.md` 的「已知限制」里。
  */
 const ROUTE_FAILURE_REASONS = {
+  2: "位置未知",
   3: "导航未知（无法规划出路线）",
   4: "非法密钥",
   5: "非法请求",
@@ -275,9 +281,9 @@ const ROUTE_FAILURE_REASONS = {
   8: "超时",
 } as const;
 
-/** 路线状态码按「两套码表一致的那一段」判定失败（见 `ROUTE_FAILURE_REASONS`）。 */
+/** 路线状态码：按声明（`ServiceStatus`）判定失败，`≥ 2` 即失败（见 `ROUTE_FAILURE_REASONS`）。 */
 function isRouteFailureStatus(status: number | null): status is number {
-  return status !== null && status >= 3;
+  return status !== null && status >= 2;
 }
 
 function describeRouteStatus(status: number): string {
@@ -2001,15 +2007,10 @@ export function createJsapiV4ServiceDriver(
     /* ---------------------------------------------------- 路线规划（#39） */
 
     createDrivingRoute(location, options: DrivingRouteOptions = {}) {
-      // 官方 `RenderOptions.panel` 的文档明说「驾车路线规划无效」：不静默忽略（那是假支持），也不拒绝
-      // （同一份配置在四种服务间复用是常见写法），而是**明确告警一次**。
-      if (options.renderOptions?.panel !== undefined) {
-        warnOnce(
-          "route:driving-panel",
-          "createDrivingRoute: 官方文档写明 renderOptions.panel 对驾车路线规划无效（该属性对 " +
-            "LocalSearch 与步行 / 骑行 / 公交有效）。本次仍会把它传给 SDK，但不会渲染出面板",
-        );
-      }
+      // `renderOptions.panel` 在 4.0.4 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
+      // 而 `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
+      // 因此按「上游契约冲突」处理（与 `polylineStyle` 同档）：**原样转发、不替 SDK 下结论**——
+      // 既不发确定性告警，也不在文档里承诺有效或无效；等真实运行时读数再定（PR #91 评审 P2）。
       return createRouteService<RoutePlan, "service:driving-route">({
         ctor: "DrivingRoute",
         capability: SERVICE_CAPABILITIES.createDrivingRoute,

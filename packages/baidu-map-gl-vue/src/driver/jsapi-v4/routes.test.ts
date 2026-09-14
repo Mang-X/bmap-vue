@@ -231,15 +231,17 @@ describe("v4 路线服务：创建面", () => {
     expect(() => services.createLocalSearch("")).toThrowError(/^createLocalSearch: /);
   });
 
-  it("驾车 + panel 只告警一次（官方文档：该属性对驾车路线规划无效）", () => {
+  it("驾车 + panel：**原样转发、不告警**（上游契约自相矛盾，等真实运行时验证）", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       services.createDrivingRoute(point(), { renderOptions: { panel: "route-panel" } });
-      services.createDrivingRoute(point(), { renderOptions: { panel: "route-panel" } });
-      const panelWarnings = warn.mock.calls
-        .map((args) => String(args[0]))
-        .filter((message) => message.includes("panel 对驾车路线规划无效"));
-      expect(panelWarnings).toHaveLength(1);
+      // 4.0.4 内部冲突：`RenderOptions.panel` 注释说驾车无效，`DrivingRoute.d.ts` 的示例却传了 panel
+      // 并说「结果面板已展示」。本库不替 SDK 下结论 ⇒ 不发确定性告警，但配置**确实**被转发。
+      const raw = fake.rawRoutes.DrivingRoute[0]!;
+      expect((raw.options.renderOptions as Record<string, unknown>).panel).toBe("route-panel");
+      expect(warn.mock.calls.map((args) => String(args[0])).filter((m) => m.includes("panel"))).toEqual(
+        [],
+      );
     } finally {
       warn.mockRestore();
     }
@@ -395,20 +397,49 @@ describe("v4 路线服务：状态与失败口径", () => {
     expect(result.data).toBeNull();
   });
 
-  it("状态码 0..2 一律 empty：两套码表（ServiceStatus / RouteStatus）在 0..2 重叠且语义不同", async () => {
+  it("状态码 ≥ 2 按声明判失败（`BMAP_STATUS_UNKNOWN_LOCATION` / `UNKNOWN_ROUTE` … 都是失败）", async () => {
     const handle = services.createDrivingRoute(point());
     const raw = fake.rawRoutes.DrivingRoute[0]!;
     raw.planCount = 0;
-    // 2 在 `BMAP_STATUS_UNKNOWN_LOCATION`（位置未知）与 `BMAP_ROUTE_STATUS_ADDRESS`（仅返回地址
-    // 信息）里含义不同，本库不猜，按 empty（可重试）上报。
+    // 类型包里那份 `RouteStatus(0/1/2)` 与 `ServiceStatus` 在 0..2 上重叠，但**四个路线类的
+    // `getStatus()` 声明的是 `ServiceStatus`**（唯一表示成功的是 0）：方法签名优先，2 即
+    // `BMAP_STATUS_UNKNOWN_LOCATION` ⇒ 失败。若真实运行时可证它回的是 RouteStatus，再按 ADR 调整。
     raw.status = 2;
-    const result = await services.searchDrivingRoute(handle, {
+    const withPlans = await services.searchDrivingRoute(handle, {
       start: point(),
       end: point(116.5, 39.9),
     }).result;
-    expect(result.status).toBe("empty");
-    expect(result.sdkStatus).toBe(2);
-    expect(result.error).toBeNull();
+    expect(withPlans.status).toBe("failed");
+    expect(withPlans.sdkStatus).toBe(2);
+    expect(withPlans.error?.code).toBe(2);
+    expect(withPlans.data).toBeNull();
+  });
+
+  it("状态码 0 / 1 / 读不到时由载荷决定（0 是声明里唯一的成功值；1 两套读法都表示「没有可用路线」）", async () => {
+    const handle = services.createDrivingRoute(point());
+    const raw = fake.rawRoutes.DrivingRoute[0]!;
+    raw.planCount = 0;
+
+    for (const status of [0, 1]) {
+      raw.status = status;
+      const empty = await services.searchDrivingRoute(handle, {
+        start: point(),
+        end: point(116.5, 39.9),
+      }).result;
+      expect(empty.status).toBe("empty");
+      expect(empty.error).toBeNull();
+    }
+
+    // 有方案就是成功（`1` 在 `ServiceStatus` 里是「城市列表」，在 `RouteStatus` 里是「结果为空」——
+    // 两种读法都不否认「回包里带回了路线」这一事实）。注意本用例必须用**新实例**：这一个已被
+    // 上一次 `empty` 结算过，未结算槽位只保证「同一时刻一个」，结算后可以继续用。
+    raw.status = 0;
+    raw.planCount = 1;
+    const success = await services.searchDrivingRoute(handle, {
+      start: point(),
+      end: point(116.5, 39.9),
+    }).result;
+    expect(success.status).toBe("success");
   });
 
   it("SDK 不回包 ⇒ timeout；超时后该实例不再接受新检索（迟到回包无法归属）", async () => {

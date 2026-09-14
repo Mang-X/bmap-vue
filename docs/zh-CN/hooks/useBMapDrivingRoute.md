@@ -55,8 +55,8 @@ const { data, status, sdkStatus, isLoading, supported, search, clear, cancel } =
 
 | 字段            | 描述                                                | 类型                                        | 默认值  |
 | --------------- | --------------------------------------------------- | ------------------------------------------- | ------- |
-| map             | 绘制目标：本库的 `MapHandle`（或它的 ref / getter）  | `MaybeRefOrGetter<MapHandle \| undefined>`  | -       |
-| panel           | 结果列表容器（元素或 id）。**驾车无效**（官方文档明确写着），传了会告警一次 | `string \| HTMLElement`                      | -       |
+| map             | 绘制目标：本库的 `MapHandle`（或它的 ref / getter；`null` = 现在没有绘制目标） | `MaybeRefOrGetter<MapHandle \| null \| undefined>` | -       |
+| panel           | 结果列表容器（元素或 id）。官方 4.0.4 自述矛盾（`RenderOptions.panel` 的注释说驾车无效，`DrivingRoute.d.ts` 的官方示例却传了它），**真实 AK 实测驾车有效**，本库原样转发、不告警 | `string \| HTMLElement`                      | -       |
 | autoViewport    | 检索结束后是否自动调整地图视野                       | `boolean`                                   | `false` |
 | viewportOptions | 视野计算选项（`noAnimation` / `margins` / `zoomFactor`） | `object`                                     | -       |
 

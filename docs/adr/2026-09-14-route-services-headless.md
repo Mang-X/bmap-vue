@@ -87,18 +87,30 @@ interface RouteEndpointPoi { uid: string; point: Point; name?: string }
   **成功才记账**）是两个入口，与 `disposeLocalSearch()` 共用同一实现
   （`disposeResultHolderInstance`）。`panel` 写进 DOM 的结果列表同样由 `clearResults()` 清掉。
 
-### 5. 状态码：只解释两套码表一致的那一段
+### 5. 状态码：按**声明的方法签名**判定，并用真实读数钉住
 
-官方对四个服务的 `getStatus()` 声明的是 `ServiceStatus`（`BMAP_STATUS_*`：0 成功 / 1 城市列表 /
-2 位置未知 / 3 导航未知 / …），但同一个类型包里还有一套 `RouteStatus`
-（`BMAP_ROUTE_STATUS_NORMAL`=0 / `_EMPTY`=1 / `_ADDRESS`=2）。**两套在 0..2 重叠、语义不同**
-（1：城市列表 vs 结果为空；2：位置未知 vs 仅返回地址信息），而官方没有说明路线服务的 `getStatus()`
-回哪一套。因此：
+官方对四个服务的 `getStatus()` 声明的是 `ServiceStatus`（`BMAP_STATUS_*`），里面唯一表示成功的是
+`0`，`2..8` 依次是位置未知 / 导航未知 / 非法密钥 / 非法请求 / 没有权限 / 服务不可用 / 超时。
 
-- `status ≥ 3` ⇒ `failed` 并带上官方那个码（两套读法都表示失败），且**优先于载荷**；
-- `status` 为 `0..2` 或读不到（`null`）⇒ 由载荷决定：有合法方案 ⇒ `success`，
-  否则 ⇒ **`empty`**（`empty` 的语义正是「没有可用结果**且可以重试**」）。
-  报成 `failed` 会让调用方以为「重试没用」，而事实上我们并不知道。
+同一个类型包里还有一套 `RouteStatus`（`BMAP_ROUTE_STATUS_NORMAL`=0 / `_EMPTY`=1 / `_ADDRESS`=2），
+与 `ServiceStatus` 在 0..2 上重叠、语义不同。**第一版据此按「两套一致的那一段」判定（`≥3` 才失败），
+真实读数证明这个推理是错的**：
+
+> 真实 4.0 运行时（`driving` 天安门 → 太平洋中部，即无法规划）`getStatus()` 回 **`5`**
+> （`BMAP_STATUS_INVALID_REQUEST`），而不是 `RouteStatus.EMPTY(1)` 或 `3`；正常路线回 `0`。
+> ⇒ 运行时用的就是 `ServiceStatus`，明确的方法签名优先于「另一张码表存在」。
+
+因此口径是（PR #91 评审 P1 之后的定稿）：
+
+- **`status ≥ 2` ⇒ `failed`** 并带上官方那个码，且**优先于载荷**（官方失败时仍会触发
+  `onSearchComplete`，先看载荷会把失败读成成功）；
+- `status` 为 `0`（声明里唯一的成功值）、`1`（`ServiceStatus` 的「城市列表」/ `RouteStatus` 的
+  「结果为空」，两种读法都不否认「没有可用路线」）或读不到（`null`）⇒ 由载荷决定
+  `success` / `empty`。
+
+**为什么不是「非 0 全判失败」**：把「有方案但状态码是 1」判成失败会丢掉可用结果；而 `empty`
+（没有可用结果、可以重试）在那一刻是更安全的合并结论。**残余未知**：本轮只观测到 `0` 与 `5`，
+是否存在回 `1` 的路径未验证——要继续收窄就得再补真实读数，不按猜测放宽。
 
 ### 6. 与 UI Kit 的分流
 
@@ -115,7 +127,7 @@ interface RouteEndpointPoi { uid: string; point: Point; name?: string }
 | `alternatives` | 不暴露 | 官方声明明说「仅在非 GL 模式下生效」，而 4.0 恒为 GL 模式 ⇒ 收下也不会生效 |
 | `selectFirstResult` | 不暴露 | 官方 `RenderOptions` 明说「此属性仅对 `LocalSearch` 有效」 |
 | `polylineStyle` | 本轮不暴露（欠账） | 上游声明的 `PolylineOptions`（平铺成员）与官方类文档里的具名分桶（`highlight` / `transit` / `walking` / `decorate`）互相矛盾，无法在不猜的前提下给出可信的公共形状 |
-| `panel` | 暴露，但驾车**告警一次** | 官方 `RenderOptions.panel` 的文档写着「驾车路线规划无效」；不静默忽略（假支持），也不拒绝（同一份配置在四种服务间复用是常见写法） |
+| `panel` | 暴露、**原样转发、不告警** | 4.0.4 自相矛盾：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而 `DrivingRoute.d.ts` 的官方示例传了 `panel` 并说「结果面板已展示」。真实 AK 实测**驾车有效**（容器 DOM 0 → 2417 字符、`clearResults()` 后回 0）⇒ 按上游契约冲突处理，不替 SDK 下结论 |
 | `waypoints`（非驾车） | 显式失败 | 官方两参数签名里没有它 ⇒ 收下再丢掉是假支持 |
 
 ## 后果
@@ -148,28 +160,54 @@ interface RouteEndpointPoi { uid: string; point: Point; name?: string }
   重新检索就是新建一次规划，缓存与去重留给调用方；
 - 不接管 UI Kit 内部的地图资源（面板自己画的覆盖物由它自己收回）。
 
+## 真实 AK 读数（2026-09-14，PR #91 评审 P2-3 要求的证据）
+
+驱动的是**源码 Facet Driver**（`.smoke/` 临时 harness，`@pkg` 别名，跑完移出仓库；AK 只经 URL
+参数传入，不落盘），因此这一轮同时校验了本库实现与真实 SDK 的配合。8 个探测全部完成、0 个异常：
+
+| 探测 | 读数 |
+| --- | --- |
+| driving：对照组（纯 `Point` 端点） | `success`，`getStatus()=0`，1 条方案（8284 米） |
+| **driving：POI 形态端点（uid 是合成的）** | **`success`**，`getStatus()=0`，1 条方案；结果回显 `start.uid/title` = 我们传的合成值 |
+| driving：无法规划（→ 太平洋中部） | `failed(code 5)`，**原始 `getStatus()=5`**（`BMAP_STATUS_INVALID_REQUEST`） |
+| render + `clearResults()` | `map.getOverlays()`：`20 → 42`（画了 22 个）→ **`20`**（清干净） |
+| **driving + `panel`** | 容器 `innerHTML`：`0 → 2417` 字符（`navtrans-container-v4`）→ **`0`**（清干净） |
+| walking：地名端点 | `failed(code 3)`（`getStatus()=3`，这个「地标名 → 地标名」用例拿不到路线） |
+| **walking：POI 形态端点** | **`success`**，`getStatus()=0`，1 条方案 |
+| **transit：POI 形态端点** | **`success`**，5 条方案，`transitType=0`，分段 `["walk","line","walk"]` |
+
+三条结论直接改了实现或文档：
+
+1. **POI 引用端点可用**（driving / walking / transit），不再是「未经证明的假设」；
+2. **`getStatus()` 用 `ServiceStatus`**（无法规划 ⇒ `5`，不是 `RouteStatus.EMPTY(1)`）⇒ 决策 5 的口径；
+3. **驾车 `panel` 实测有效**（`0 → 2417 → 0`）⇒ `RenderOptions.panel` 那句「驾车路线规划无效」在
+   4.0.4 上是过时描述，本库因此不告警、也不声称无效（决策 7）。
+
+顺带一条使用提示：本轮的 walking **关键字端点**用例（`'天安门' → '国贸'`）返回 `3`，而同一服务的
+POI / 坐标端点正常 ⇒ 实际使用时坐标或 POI 比裸地标名更稳（这不改变公开签名，属服务端解析行为）。
+
 ## 已知限制
 
-1. **POI 端点是未验证假设**：`search()` 真的会读我们构造的 `{ uid, title, point }` 吗？官方只声明了
-   `LocalResultPoi` 的**形状**，没有说明会读哪几个成员。本库按「uid 定位、point 兜底、title 作标题」
-   实现，尚未在真实 AK 上验证（在线路线服务受配额影响，本轮没有取得可发布读数）。
-   **只传 `point` 的纯坐标路径没有这个假设**，它是安全的回退。
-2. **`getStatus()` 的两套码表**：见决策 5。真实运行时到底回哪一套没有验证；本库只解释两套一致的
-   那一段，`0..2` 一律按 `empty`（可重试）。若将来拿到证据，应新增 ADR 细化，而不是就地改口径。
+1. **POI 端点已在真实 AK 上验证**（见上一节）：`{ uid, point, name? }` 被构造成
+   `{ uid, title, point }` 后，真实运行时接受并成功规划，结果里回显我们给的 `uid` / `title`。
+   **残余未知**：合成 uid 必然不存在，因此无法从这轮读数区分「SDK 按 uid 定位」与「uid 未命中后
+   回落到 `point`」——只传 `point` 的纯坐标路径没有这个歧义，仍是最稳的形态。
+2. **`getStatus()` 的码表**：见决策 5——真实读数（无法规划 ⇒ `5`）证明运行时用 `ServiceStatus`，
+   本库按 `≥ 2` 判失败。**残余未知**：是否存在回 `1` 的路径未观测到（本轮只见到 `0` 与 `5`）。
 3. **`clearResults()` 在宿主地图已销毁时可能抛**：官方清理会碰渲染器里的 map。本库的处置是
    「释放失败不记账、报出来、下次释放重试」（`useBMapServiceTask` 的 `pendingReleases`），
    与 `disposeLocalSearch()` 完全一致。组件卸载时若地图已被销毁，会看到一条 `BMAP_SDK_CALL_FAILED`
    告警；这不是泄漏（诊断计数不会因此非 0）。
 4. **`polylineStyle` 未暴露**（见决策 7 的欠账）。
-5. **真实服务 smoke 未覆盖四个路线服务**：`pnpm smoke:v4` 的探针注册表仍是既有 facet 的那批；
-   route 探针需要额外的配额（在线路线服务按次计费/限流），本轮不加入 required 集合。
-   `required` 之外的「没跑」必须记成 `blocked`，不得记成 pass——这条口径由既有 smoke 门禁保证，
-   本轮不改它。补 route 探针属后续票。
-6. **`panel` 对驾车的告警是「一次」**（`warnOnce`）：同一页面里多处误用只出现一条日志。
-7. **泄漏门禁的 `routeResults` 是代理指标**：Fake 的路线替身只记「未清理的结果集」，它**不真的**
-   往地图上加折线 / 标注、也不写 `panel` 的 DOM。因此 `assertIdle()` 证明的是「本库释放路径走通了、
-   公开的 `clearResults()` 被调用且成功记账」，而不是「SDK 侧画出来的覆盖物确实从地图上消失了」
-   （那要真实 AK 才能观察）。这条限制与 `localSearchResults` 同源，不因为是新计数就消失。
+5. **真实服务 smoke 未进 required**：本轮用**一次性真实 AK smoke**（`.smoke/` 临时 harness，跑完移出、
+   不入库）取到了四类服务 + render / panel 的读数（见「真实 AK 读数」一节），但没有把它做成仓库里的
+   required 探针——在线路线服务按次计费 / 限流，进 required 会让 CI 变脆。做常驻 route 探针属后续票。
+6. **`panel` 按上游契约冲突处理**：不告警、也不承诺有效或无效（真实读数表明驾车有效，见决策 7）。
+7. **泄漏门禁的 `routeResults` 仍是代理指标**：Fake 只记「未清理的结果集」，它**不真的**往地图上加
+   折线 / 标注、也不写 `panel` 的 DOM。不过本轮真实读数给了它一条外部对照：`map.getOverlays()` 在
+   `search` 后 `20 → 42`、`clearResults()` 后回到 `20`；panel 容器 `0 → 2417` 字符 → `0`。
+   因此「本库释放路径走通了」由 `assertIdle()` 证明，「SDK 侧确实清干净了」由这条真实读数证明——
+   两者合起来才是完整结论。
 8. **测试文件不进任何 typecheck 门禁**（既存欠账，不是本票引入）：`tsconfig.build.json` 排除
    `src/**/*.test.ts`，`tests/**` 与 `packages/test-utils/**` 无覆盖的 tsconfig。本票用一次性
    tsconfig（`tests/**` + `test-utils/**` + `src/**`，跑完即删）核对过：**本次改动的文件 0 错误，
