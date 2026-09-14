@@ -247,17 +247,23 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
         return instance;
       })
       .catch((error: unknown) => {
-        // `setup` 抛错：实例已经创建但没能就绪 ⇒ 由宿主就地释放（它是 global 资源的所有者）
+        // `setup` 抛错：实例已经创建但没能就绪，需要由有归属权的一侧回收
         if (instanceProduced && !setupCompleted) {
-          // 这个实例可能**同时**躺在候选里（某个旧纪元先 resolve 了同一个实例）。先把它摘掉，
-          // 否则这次释放与之后 `dispose()` 的释放会让同一个实例被 dispose 两次
-          // —— `definition.dispose` 没有幂等契约（评审第五轮 P1）。
+          // 同名下 identity 相同的候选先摘掉：不摘的话这次释放与之后 `dispose()` 的释放会让
+          // 同一个实例被 dispose 两次（`definition.dispose` 没有幂等契约，评审第五轮 P1）。
           dropOrphan(entry.name, producedInstance);
-          releaseCandidate({
-            instance: producedInstance,
-            definition: entry.definition,
-            context: entry.context,
-          });
+          if (myEpoch !== epochNumber) {
+            // `setup` 内重入了 `dispose()`（epoch 在 setup 执行期间就变了）：**不能**当场释放 ——
+            // 新纪元的同名条目完全可能 claim 同一个实例（评审第六轮 P1）。这与「旧纪元迟到成功」
+            // 是同一条 ownership 规则，只是入口换成了 setup failure。
+            abandonInstance(entry, producedInstance);
+          } else {
+            releaseCandidate({
+              instance: producedInstance,
+              definition: entry.definition,
+              context: entry.context,
+            });
+          }
         }
         entry.task = null;
         // 只删**自己**那一条：dispose 之后同名的新条目可能已经建好，按名字删会把它一起删掉 ——

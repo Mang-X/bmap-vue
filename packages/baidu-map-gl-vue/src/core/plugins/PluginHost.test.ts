@@ -619,3 +619,93 @@ describe("PluginHost：迟到成功不得执行 setup", () => {
     expect(dispose, "挂起的候选最终由 dispose 释放").toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * `setup` 失败路径也要按 **epoch 分流**（评审第六轮 P1）。
+ *
+ * 成功分支已经在 `setup()` 之后复核过 `myEpoch !== epochNumber`，但 **`setup()` 抛错会直接进 catch**，
+ * 而 catch 无条件释放刚产出的实例。于是「`setup` 内 `host.dispose()` + 用新纪元 acquire 同名插件，
+ * 新纪元最终拿到**同一个单例**」时，旧纪元的失败路径会把新纪元将要接管的实例拆掉。
+ *
+ * 这跟「旧纪元迟到成功不能当场释放」是同一条 ownership 规则，只是入口换成了 setup failure：
+ * 当前同名条目已 ready 且是同一实例 ⇒ 丢弃；还在 loading ⇒ 挂起；已 ready 且不同实例 ⇒ 才释放。
+ */
+describe("PluginHost：setup 失败路径按 epoch 分流", () => {
+  it("setup 内 dispose + 新纪元 acquire 同一个单例：不得拆掉新纪元正在接管的实例", async () => {
+    const host = createPluginHost();
+    const shared = { shared: true };
+    const oldDispose = vi.fn();
+    const freshDispose = vi.fn();
+    const fresh = deferredPlugin("G");
+    const freshDefinition: BMapPluginDefinition<unknown> = {
+      ...fresh.definition,
+      dispose: freshDispose,
+    };
+
+    const oldDefinition: BMapPluginDefinition<unknown> = {
+      name: "G",
+      scope: "global",
+      load: async () => shared,
+      setup: () => {
+        host.dispose(); // 切 epoch：旧 entry 被摘掉
+        void host.acquire("G", freshDefinition, makeContext()); // 新纪元开始加载同名插件
+        throw new Error("setup failed");
+      },
+      dispose: oldDispose,
+    };
+
+    await expect(host.acquire("G", oldDefinition, makeContext())).rejects.toBeInstanceOf(BMapError);
+
+    // 新纪元还 loading：旧实例只能挂起，不能释放
+    expect(host.inspect("G")?.status).toBe("loading");
+    expect(oldDispose, "新纪元可能 claim 同一个实例，此刻不能释放").not.toHaveBeenCalled();
+
+    // 新纪元拿到的是**同一个**实例 ⇒ 旧候选直接丢弃
+    fresh.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(host.inspect("G")?.status).toBe("ready");
+    expect(oldDispose, "新纪元正在用它").not.toHaveBeenCalled();
+
+    host.dispose();
+    expect(freshDispose, "真正的释放发生在宿主 dispose，且一次").toHaveBeenCalledTimes(1);
+    expect(oldDispose, "旧纪元的失败路径始终没有释放它").not.toHaveBeenCalled();
+  });
+
+  it("新纪元拿到的是**另一个**实例：旧实例仍要释放（不能因为分流就漏掉）", async () => {
+    const host = createPluginHost();
+    const orphan = { orphan: true };
+    const freshInstance = { fresh: true };
+    const oldDispose = vi.fn();
+    const fresh = deferredPlugin("G");
+    const freshDefinition: BMapPluginDefinition<unknown> = {
+      ...fresh.definition,
+      dispose: vi.fn(),
+    };
+
+    const oldDefinition: BMapPluginDefinition<unknown> = {
+      name: "G",
+      scope: "global",
+      load: async () => orphan,
+      setup: () => {
+        host.dispose();
+        void host.acquire("G", freshDefinition, makeContext());
+        throw new Error("setup failed");
+      },
+      dispose: oldDispose,
+    };
+
+    await expect(host.acquire("G", oldDefinition, makeContext())).rejects.toBeInstanceOf(BMapError);
+    expect(oldDispose, "还没到判定点").not.toHaveBeenCalled();
+
+    fresh.settle().resolve(freshInstance);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(oldDispose, "新纪元用的是另一个实例 ⇒ 旧实例必须释放").toHaveBeenCalledWith(
+      orphan,
+      expect.anything(),
+    );
+    expect(oldDispose).toHaveBeenCalledTimes(1);
+    host.dispose();
+    expect(oldDispose, "不得重复释放").toHaveBeenCalledTimes(1);
+  });
+});

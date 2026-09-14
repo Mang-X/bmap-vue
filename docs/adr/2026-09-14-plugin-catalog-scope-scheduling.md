@@ -112,7 +112,7 @@
 | --- | --- |
 | 入口（纪元 / generation 校验） | 迟到成功**不得**执行 `setup` —— 它的实例没有任何人接管，为一个即将释放的资源登记副作用是错的 |
 | 发布 ready **之前**再校验一次 | `setup` 可以**同步重入** owner（内部调 `host.dispose()` / `plugins.dispose()`）。缺这次复核时：宿主会把实例写进一个**已经被摘掉的条目**（实例再无归属，谁也释放不到它）；注册表会把记录从 `disposed` 写回 `ready`，并往已销毁的注册表广播 `plugin:ready`。复核失败则按各自的「无归属」处理 —— 宿主走 `abandonInstance`，注册表保持 `disposed` 并释放刚产出的 `map` 资源 |
-| 失败路径（`setup` 抛错） | 由所有者释放刚产出的实例；若同名下已挂着 **identity 相同**的候选（某个旧纪元先 resolve 了同一个实例），**先摘掉它**再释放 —— 否则这次释放与之后 `dispose()` 的释放会让同一个实例被 `dispose` 两次（`definition.dispose` 没有幂等契约） |
+| 失败路径（`setup` 抛错） | 同一条 ownership 规则必须覆盖**异常出口**（评审第六轮 P1）：① 先摘掉同名下 **identity 相同**的候选（某个旧纪元先 resolve 了同一个实例），否则这次释放与之后 `dispose()` 的释放会让同一实例被 `dispose` 两次；② 再按 **epoch 分流** —— `setup` 内重入过 `dispose()`（epoch 已切换）就交给 `abandonInstance`（新纪元的同名条目完全可能 claim 同一个实例），只有 epoch 未变才当场释放 |
 
 `disposeDefaultPluginHost()` 从 `baidu-map-gl-vue/plugins` 子路径导出（根入口保持最小面）；调用方要自己负责「此刻没有地图还在用这些插件」。
 
