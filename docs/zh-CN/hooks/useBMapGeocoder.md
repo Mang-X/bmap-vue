@@ -47,7 +47,8 @@ const { get, getBatch, point, isLoading, isEmpty } = useBMapGeocoder(map)
 ```
 
 :::tip
-该 hooks 需要地图 ready 后才能执行解析；在 `<BMap>` 子树内调用时可省略 `map` 参数
+该 hooks 只需要 **Client 上下文**（`<BMap>` 或 `<BMapProvider>` 子树内），**不需要地图实例**；
+在 `<BMap>` 子树内调用时可省略 `map` 参数
 :::
 
 ::: warning AK 域名白名单
@@ -62,21 +63,36 @@ const { get, getBatch, point, isLoading, isEmpty } = useBMapGeocoder(map)
 | ---- | -------------------------------------------- | --------- | ------ |
 | map  | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | -      |
 
+:::tip 状态与动作约定（#38 起）
+
+- `status` 的取值与含义对六个 service hooks **完全一致**：
+  `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
+  `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
+  表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
+- **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
+  与 `status` / `error` 同步。返回值里 `status === 'canceled'` 表示这次调用被更新的调用取代或被取消。
+- `sdkStatus` 只有 SDK **公开给出状态码**的服务才有值（`Geolocation` / `LocalSearch` 的
+  `BMAP_STATUS_*`、`Convertor` 回包 `status`），其余为 `null`——不伪装成 0。
+
+:::
+
 ### 返回值
 
-| 返回值    | 描述                                                                                                                  | 类型                                                     |
-| --------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| data      | 解析结果（`point`/`location`/`result` 均为其别名）                                                                     | `Ref<GeoPoint \| null>`                                  |
-| point     | 地址解析出来的坐标点                                                                                                  | `Ref<GeoPoint \| null>`                                  |
-| error     | 错误信息                                                                                                              | `Ref<unknown>`                                           |
-| isError   | 是否出错                                                                                                              | `boolean`                                                |
-| isEmpty   | 是否无解析结果                                                                                                        | `boolean`                                                |
-| isLoading | 是否在获取中                                                                                                          | `boolean`                                                |
-| status    | 异步状态                                                                                                              | `Ref<'idle' \| 'loading' \| 'success' \| 'error'>`       |
-| get       | 获取地址到坐标点方法，需要在`Map`组件`ready`后才可调用；参数 `address` 表示要解析的地址，`city` 表示地址所属的城市     | `(address: string, city: string) => Promise<GeoPoint>`   |
-| getBatch  | 批量解析，逐项返回 `{ address, point, error? }`                                                                        | `(addresses: string[], city: string) => Promise<GeocodeItemResult[]>` |
-| cancel    | 取消 pending 请求                                                                                                     | `() => void`                                             |
-| reset     | 清空 data/error                                                                                                       | `() => void`                                             |
+| 返回值    | 描述                                                                                        | 类型                                                              |
+| --------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| data      | 解析结果（`point`/`location`/`result` 均为其别名）                                            | `Readonly<ShallowRef<GeoPoint \| null>>`                          |
+| point     | 地址解析出来的坐标点                                                                         | `Readonly<ShallowRef<GeoPoint \| null>>`                          |
+| error     | 有公开原因时的错误信息（`{ code, message }`）                                                | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                  |
+| sdkStatus | SDK 公开状态码；本服务没有公开错误码入口，**恒为 `null`**                                      | `Readonly<ShallowRef<number \| null>>`                            |
+| isError   | 是否出错（`status === 'failed'`）                                                            | `boolean`                                                         |
+| isEmpty   | 是否无解析结果（`data === null`，含 `empty` / 取消）                                          | `boolean`                                                         |
+| isLoading | 是否在获取中                                                                                | `boolean`                                                         |
+| supported | 当前引擎是否支持地理编码（Client 就绪后立即判定；在此之前是乐观初值 `true` = 尚未判定）                                             | `boolean`                                                         |
+| status    | 任务状态（见上）                                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                          |
+| get       | 地址 → 坐标点；`city` **可省略**（省略即不做城市限定）                                        | `(address: string, city?: string) => Promise<ServiceResult<GeoPoint>>` |
+| getBatch  | 批量解析，逐项返回 `{ address, point, status, error }`（**部分成功**：单项失败不影响其它项）   | `(addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>` |
+| cancel    | 逻辑取消在飞请求（SDK 侧请求收不回，只承诺「放弃结果」）                                        | `() => void`                                                      |
+| reset     | 取消 + 清空 data/error/status                                                                | `() => void`                                                      |
 
 #### Point
 
@@ -87,36 +103,34 @@ type Point = { lng: number; lat: number }
 ## TS 类型定义参考
 
 ```ts
-import { Ref } from 'vue'
-import { type Point } from 'baidu-map-gl-vue'
-
-export interface GeoPoint {
-  lng: number
-  lat: number
-}
+import type { ComputedRef, ShallowRef } from 'vue'
+import type { BMapServiceStatus, GeoPoint, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
 
 export interface GeocodeItemResult {
   address: string
   point: GeoPoint | null
-  error?: unknown
+  status: BMapServiceStatus
+  error: ServiceErrorInfo | null
 }
 
 /**
  * 由地址解析坐标点
  */
 export declare function useBMapGeocoder(map?: unknown): {
-  data: Ref<GeoPoint | null>
-  location: Ref<GeoPoint | null>
-  point: Ref<GeoPoint | null>
-  result: Ref<GeoPoint | null>
-  error: Ref<unknown>
-  isError: Ref<boolean>
-  isEmpty: Ref<boolean>
-  status: Ref<'idle' | 'loading' | 'success' | 'error'>
-  isLoading: Ref<boolean>
-  get: (address: string, city: string) => Promise<GeoPoint | null>
-  getBatch: (addresses: string[], city: string) => Promise<GeocodeItemResult[]>
-  cancel: (reason?: unknown) => void
+  data: Readonly<ShallowRef<GeoPoint | null>>
+  location: Readonly<ShallowRef<GeoPoint | null>>
+  point: Readonly<ShallowRef<GeoPoint | null>>
+  result: Readonly<ShallowRef<GeoPoint | null>>
+  error: Readonly<ShallowRef<ServiceErrorInfo | null>>
+  sdkStatus: Readonly<ShallowRef<number | null>>
+  isError: ComputedRef<boolean>
+  isEmpty: ComputedRef<boolean>
+  status: Readonly<ShallowRef<BMapServiceStatus>>
+  isLoading: Readonly<ShallowRef<boolean>>
+  supported: Readonly<ShallowRef<boolean>>
+  get: (address: string, city?: string) => Promise<ServiceResult<GeoPoint>>
+  getBatch: (addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>
+  cancel: () => void
   reset: () => void
 }
 ```

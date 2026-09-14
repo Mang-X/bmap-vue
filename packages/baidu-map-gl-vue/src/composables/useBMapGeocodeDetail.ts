@@ -1,109 +1,119 @@
 /**
- * useBMapGeocodeDetail —— 坐标点反查地址详情
+ * useBMapGeocodeDetail —— 坐标点反查地址详情（逆地址解析）
  *
- * 对应 v2 usePointGeocoder 语义:点 → 地址详情
- * (point/address/addressComponents/business/surroundingPois)。
- * 统一异步状态;SDK 经 map context ready。
+ * 走 Driver 的归一化调用面（`driver.services.reverseGeocode`），不再读 `handle.raw`。
+ * 结果里 **`addressComponents` 与 `surroundingPois` 都是真的投影过的字段**——`#38` 之前 Driver
+ * 的 DTO 只暴露了 `poiCount`，结构化的地址与 POI 列表被静默丢弃。
+ *
+ * 需要 BMap 上下文；本服务只需要 Client（`<BMapProvider>` 子树亦可）。
  */
-import { computed } from "vue";
+import type { ServiceHandle } from "../driver/types/handles";
+import type {
+  GeocodedAddress,
+  GeocodedAddressComponents,
+  LocalSearchPoi,
+  ServiceErrorInfo,
+} from "../driver/types/services";
 import { resolveMapContext } from "./resolveMapContext";
-import { SERVICE_TIMEOUT_MS, useBMapAsyncTask, withServiceTimeout } from "./useBMapAsyncTask";
-import { BMapError } from "../core/errors/BMapError";
+import { useBMapServiceTask } from "./useBMapServiceTask";
+import { jsapiV4ServicesOf, runSequential, type BMapServiceStatus } from "../core/services";
+import type { GeoPoint } from "./useBMapGeocoder";
+
+export interface GeocodeDetailAddressComponents {
+  city: string;
+  district: string;
+  province: string;
+  street: string;
+  streetNumber: string;
+}
 
 export interface GeocodeDetailResult {
-  point: { lng: number; lat: number };
+  point: GeoPoint;
   address: string;
-  addressComponents: {
-    city: string;
-    district: string;
-    province: string;
-    street: string;
-    streetNumber: string;
-  };
-  surroundingPois: Array<{ title: string; point: { lng: number; lat: number } }>;
+  addressComponents: GeocodeDetailAddressComponents;
+  /** 附近的 POI（领域投影，不只是坐标） */
+  surroundingPois: readonly LocalSearchPoi[];
   business: string;
 }
 
-function toPlainPoint(p: { lng: number; lat: number }): { lng: number; lat: number } {
-  return { lng: p.lng, lat: p.lat };
+/** 批量反查里单项的结果（**部分成功**的载体）。 */
+export interface GeocodeDetailItemResult {
+  point: GeoPoint;
+  detail: GeocodeDetailResult | null;
+  status: BMapServiceStatus;
+  error: ServiceErrorInfo | null;
+}
+
+/**
+ * 把 Driver 的 `addressComponents`（缺项为 `null`）摊平成旧版形态（缺项为空串）。
+ *
+ * 旧版承诺「总有这五个字符串」，`docs/zh-CN/hooks/useBMapGeocodeDetail.md` 的示例按它写，
+ * 这里保持兼容；Driver 层则保留 `null`——只有 `null` 才表达「官方没给这个字段」。
+ */
+function toComponents(
+  components: GeocodedAddressComponents | undefined,
+): GeocodeDetailAddressComponents {
+  return {
+    city: components?.city ?? "",
+    district: components?.district ?? "",
+    province: components?.province ?? "",
+    street: components?.street ?? "",
+    streetNumber: components?.streetNumber ?? "",
+  };
+}
+
+/** Driver 结果 → 对外详情形态（回包没有坐标时回退到请求坐标，而不是伪造 `0/0`）。 */
+function toDetail(address: GeocodedAddress, requested: GeoPoint): GeocodeDetailResult {
+  return {
+    point: address.point ?? { lng: requested.lng, lat: requested.lat },
+    address: address.address,
+    addressComponents: toComponents(address.addressComponents),
+    surroundingPois: address.surroundingPois,
+    business: address.business ?? "",
+  };
 }
 
 export function useBMapGeocodeDetail(map?: unknown) {
   const ctx = resolveMapContext(map);
-  const task = useBMapAsyncTask<GeocodeDetailResult | null, [{ lng: number; lat: number }]>({
-    immediate: false,
-    runner: async (_taskContext, point) => {
-      if (!point || typeof point.lng !== "number")
-        throw new BMapError("BMAP_INVALID_POINT", "missing required params: point");
-      const ready = await ctx.whenReady();
-      const geocoder = ready.client.driver.services.createGeocoder();
-      const raw = geocoder.raw as {
-        getLocation(
-          p: unknown,
-          cb: (r: Record<string, unknown> | null) => void,
-        ): void;
-      };
-      // 真机 SDK 的 getLocation 会校验 `point instanceof BMapGL.Point`,
-      // 裸 { lng, lat } 会被直接回 null；必须经 Driver 转为 raw Point。
-      const rawPoint = ready.client.driver.geometry.toRawPoint(point);
-      // 服务失败（配额 302 / Referer 限制）时官方只回 null，且没有公开的错误码入口——错误码在
-      // JSONP 私有回调注册表里。R25-C / #72 的处置：不嗅探私有面、不编造精确错误码，把 null
-      // 如实归一成 `null`（`isEmpty` 为 true）；超时仍由 withServiceTimeout 单独报出。
-      return withServiceTimeout<GeocodeDetailResult | null>(
-        (done) => {
-          const onResult = (r: Record<string, unknown> | null) => {
-            if (!r) {
-              done(null);
-              return;
-            }
-            const g = r as unknown as {
-              point?: { lng: number; lat: number };
-              address?: string;
-              addressComponents?: GeocodeDetailResult["addressComponents"];
-              surroundingPois?: Array<{ title?: string; point?: { lng: number; lat: number } }>;
-              business?: string;
-            };
-            done({
-              point: g.point ? toPlainPoint(g.point) : { lng: point.lng, lat: point.lat },
-              address: g.address ?? "",
-              addressComponents: g.addressComponents ?? {
-                city: "",
-                district: "",
-                province: "",
-                street: "",
-                streetNumber: "",
-              },
-              surroundingPois: (g.surroundingPois ?? []).map((p) => ({
-                title: p.title ?? "",
-                point: p.point ? toPlainPoint(p.point) : { lng: 0, lat: 0 },
-              })),
-              business: g.business ?? "",
-            });
-          };
-          raw.getLocation(rawPoint, onResult);
-        },
-        SERVICE_TIMEOUT_MS,
-        "Geocoder.getLocation",
-      );
-    },
+
+  const task = useBMapServiceTask<
+    GeocodedAddress,
+    ServiceHandle<"service:geocoder">,
+    [GeoPoint],
+    GeocodeDetailResult
+  >(ctx, {
+    capability: "service.geocoder",
+    create: (context) => jsapiV4ServicesOf(context.client).createGeocoder(),
+    invoke: (context, handle, point) =>
+      jsapiV4ServicesOf(context.client).reverseGeocode(handle, { point }),
+    project: (address, requested) => toDetail(address, requested),
   });
 
-  /** 批量反查地址详情,部分失败保留每项结果 */
-  async function getBatch(
-    points: { lng: number; lat: number }[],
-  ): Promise<Array<{ point: { lng: number; lat: number }; detail: GeocodeDetailResult | null; error?: unknown }>> {
-    const results: Array<{ point: { lng: number; lat: number }; detail: GeocodeDetailResult | null; error?: unknown }> = [];
-    for (const point of points) {
-      try {
-        const detail = await task.execute(point);
-        const error = task.error.value;
-        if (error) throw error;
-        results.push({ point, detail });
-      } catch (err) {
-        results.push({ point, detail: null, error: err });
-      }
-    }
-    return results;
+  /**
+   * 坐标 → 地址详情。
+   *
+   * **恒 resolve 成 `ServiceResult`**（与其它服务的动作一致）：失败/超时/取消都在返回值里，
+   * 不 reject；`point` 非法时是 `failed(BMAP_INVALID_ARGUMENT)`，同样不抛错。
+   */
+  const get = (point: GeoPoint) => task.execute(point);
+
+  /**
+   * 批量反查：顺序执行、逐项保留结果与终态。
+   *
+   * 与 `get()` 的区别是**不吞掉失败**——单项失败时 `detail` 为 `null`，调用方从 `status` /
+   * `error` 知道原因（「部分成功」的表达方式）。
+   */
+  function getBatch(points: readonly GeoPoint[]): Promise<GeocodeDetailItemResult[]> {
+    return runSequential(points, async (point) => {
+      const result = await task.execute(point);
+      return {
+        point,
+        detail: result.data,
+        // 用本次调用的结论，不回读 `task.status`（并发时它可能已属于另一次调用）
+        status: result.status,
+        error: result.error,
+      };
+    });
   }
 
   return {
@@ -111,11 +121,14 @@ export function useBMapGeocodeDetail(map?: unknown) {
     /** 结果别名(v2 result 习惯) */
     result: task.data,
     error: task.error,
-    isError: computed(() => task.status.value === "error"),
-    isEmpty: computed(() => task.data.value === null),
+    isError: task.isError,
+    isEmpty: task.isEmpty,
     status: task.status,
+    /** `Geocoder#getLocation` 没有公开状态码入口，恒为 `null` */
+    sdkStatus: task.sdkStatus,
     isLoading: task.isLoading,
-    get: task.execute,
+    supported: task.supported,
+    get,
     getBatch,
     cancel: task.cancel,
     reset: task.reset,

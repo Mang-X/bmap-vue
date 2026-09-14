@@ -43,15 +43,18 @@ describe('useBMapConvertor', () => {
 
   it('converts coordinates and returns points', async () => {
     const { wrapper, collect } = mountChild(async (conv) => {
+      // #38 起动作恒 resolve 成 ServiceResult（失败/超时/取消都在返回值里）
       const r = await conv.convert([{ lng: 116.4, lat: 39.9 }], CoordinatesFromType.COORDINATES_WGS84, CoordinatesToType.COORDINATES_BD09)
       collect.value = r
     })
     await flushPromises()
     await nextTick()
-    expect(collect.value).toHaveLength(1)
+    expect(collect.value.status).toBe('success')
+    expect(collect.value.data).toHaveLength(1)
     // Fake v4 Convertor.translate 的默认回包（不做任何坐标偏移，坐标原样返回）
-    expect(collect.value[0].lng).toBe(116.404)
-    expect(collect.value[0].lat).toBe(39.915)
+    expect(collect.value.data[0].lng).toBe(116.404)
+    expect(collect.value.data[0].lat).toBe(39.915)
+    expect(collect.value.sdkStatus).toBe(0)
     expect(fake.createdConvertors.length).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
@@ -64,9 +67,9 @@ describe('useBMapConvertor', () => {
     })
     await flushPromises()
     await nextTick()
-    expect(collect.value.status).toBe('error')
-    // 空 points 在 composable 层就被拦下（引擎无关），不是 SDK 回包失败
-    expect(collect.value.code).toBe('BMAP_RESOURCE_CREATE_FAILED')
+    // 空 points 在 Driver 的归一化调用面就被拦下（引擎无关），不是 SDK 回包失败
+    expect(collect.value.status).toBe('failed')
+    expect(collect.value.code).toBe('BMAP_INVALID_ARGUMENT')
     wrapper.unmount()
     await nextTick()
   })

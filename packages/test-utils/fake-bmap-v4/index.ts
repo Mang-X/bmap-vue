@@ -68,6 +68,9 @@ import {
   FakeV4Geocoder,
   FakeV4Geolocation,
   FakeV4LocalCity,
+  FakeV4LocalResult,
+  FakeV4LocalResultPoi,
+  FakeV4LocalSearch,
 } from './services.ts'
 import {
   FakeV4ClusterLayer,
@@ -143,8 +146,15 @@ export {
   FakeV4Geocoder,
   FakeV4Geolocation,
   FakeV4LocalCity,
+  FakeV4LocalResult,
+  FakeV4LocalResultPoi,
+  FakeV4LocalSearch,
 } from './services.ts'
-export type { FakeV4PointLike } from './services.ts'
+export type {
+  FakeV4LocalResultOptions,
+  FakeV4LocalSearchPoiOptions,
+  FakeV4PointLike,
+} from './services.ts'
 export {
   FakeV4ClusterLayer,
   FakeV4FillLayer,
@@ -230,6 +240,10 @@ export interface FakeBMapV4Namespace {
   Geolocation: new (options?: Record<string, unknown>) => FakeV4Geolocation
   LocalCity: new (options?: Record<string, unknown>) => FakeV4LocalCity
   Autocomplete: new (options?: Record<string, unknown>) => FakeV4Autocomplete
+  LocalSearch: new (
+    location: unknown,
+    options?: Record<string, unknown>,
+  ) => FakeV4LocalSearch
   /* ---------------------------------------------- 原生数据图层（#23） */
   PointIconLayer: new (options?: Record<string, unknown>) => FakeV4PointIconLayer
   PointShapeLayer: new (options?: Record<string, unknown>) => FakeV4PointShapeLayer
@@ -275,6 +289,8 @@ export interface FakeBMapV4 {
   createdGeolocations: FakeV4Geolocation[]
   createdLocalCities: FakeV4LocalCity[]
   createdAutocompletes: FakeV4Autocomplete[]
+  /** 测试辅助：记录已创建的本地检索实例（#38） */
+  createdLocalSearches: FakeV4LocalSearch[]
   /** 测试辅助：记录已创建的原生数据图层实例（#23） */
   createdNativeLayers: FakeV4Layer[]
   /** 测试辅助：记录已创建的全景查看器 / 检索实例（#23） */
@@ -301,6 +317,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdGeolocations: FakeV4Geolocation[] = []
   const createdLocalCities: FakeV4LocalCity[] = []
   const createdAutocompletes: FakeV4Autocomplete[] = []
+  const createdLocalSearches: FakeV4LocalSearch[] = []
   const createdNativeLayers: FakeV4Layer[] = []
   const createdPanoramas: FakeV4Panorama[] = []
   const createdPanoramaServices: FakeV4PanoramaService[] = []
@@ -517,6 +534,12 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdAutocompletes.push(this)
     }
   }
+  class LocalSearchClass extends FakeV4LocalSearch {
+    constructor(location: unknown, options?: Record<string, unknown>) {
+      super(location, options ?? {}, stats)
+      createdLocalSearches.push(this)
+    }
+  }
 
   /* ---------------------------------------------- 原生数据图层（#23） */
 
@@ -626,6 +649,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     Geolocation: GeolocationClass,
     LocalCity: LocalCityClass,
     Autocomplete: AutocompleteClass,
+    LocalSearch: LocalSearchClass,
     PointIconLayer: PointIconLayerClass,
     PointShapeLayer: PointShapeLayerClass,
     LineLayer: LineLayerClass,
@@ -654,6 +678,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     createdGeolocations,
     createdLocalCities,
     createdAutocompletes,
+    createdLocalSearches,
     createdNativeLayers,
     createdPanoramas,
     createdPanoramaServices,

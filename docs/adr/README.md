@@ -23,6 +23,7 @@
 | [2026-09-13](./2026-09-13-ui-kit-detail-route-wrappers.md) | `./ui-kit` 的详情 / 路线 Vue 封装与「上游声明了但没实现」的处置（取代 `./ui-kit` ADR 决策 7） | Accepted |
 | [2026-09-13](./2026-09-13-plugin-compat-inventory.md) | 插件兼容 inventory 与「必需功能不依赖插件脚本」的隔离口径 | Accepted |
 | [2026-09-14](./2026-09-14-remove-legacy-engine.md) | 删除旧引擎（webgl-v1 / BMapGL）与迁移期归一，启用 no-bmapgl 门禁 | Accepted |
+| [2026-09-14](./2026-09-14-service-lifecycle-and-local-search.md) | 服务生命周期、统一状态口径与 headless LocalSearch（回收 composable 的 raw 访问，取代 #23 ADR 的两条保留项） | Accepted |
 | [2026-09-14](./2026-09-14-map-controlled-state.md) | Map 视野的受控 / 非受控模型（多 `v-model`、状态归属与回环抑制） | Accepted |
 
 ## 约定

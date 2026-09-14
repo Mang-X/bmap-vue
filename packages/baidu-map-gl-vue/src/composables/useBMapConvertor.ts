@@ -1,13 +1,20 @@
 /**
  * useBMapConvertor —— 坐标转换
  *
- * 复用 useBMapAsyncTask 统一异步状态。
- * 支持从/到坐标类型枚举(v2 CoordinatesFromType/ToType 断点兼容)。
+ * 走 Driver 的归一化调用面（`driver.services.convert`）：失败/超时/取消/非法参数都由
+ * `ServiceResult` 表达，不再自己拼 Promise 与超时。
+ *
+ * 需要 BMap 上下文；本服务只需要 Client。
+ *
+ * `CoordinatesFromType` / `CoordinatesToType` 是 v2 遗留的**数值枚举**（官方
+ * `Convertor#translate` 收的就是数值），因此这里继续导出同名常量以保证既有代码可编译：
+ * 数值本身由官方定义，本库不另立取值域。
  */
-import { computed } from "vue";
+import type { ServiceHandle } from "../driver/types/handles";
 import { resolveMapContext } from "./resolveMapContext";
-import { useBMapAsyncTask } from "./useBMapAsyncTask";
-import { BMapError } from "../core/errors/BMapError";
+import { useBMapServiceTask } from "./useBMapServiceTask";
+import { jsapiV4ServicesOf } from "../core/services";
+import type { CoordinateFromType, CoordinateToType } from "../driver/types/services";
 import type { GeoPoint } from "./useBMapGeocoder";
 
 export enum CoordinatesFromType {
@@ -32,55 +39,41 @@ export type { GeoPoint };
 export function useBMapConvertor(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useBMapAsyncTask<GeoPoint[], [GeoPoint[], CoordinatesFromType, CoordinatesToType]>({
-    immediate: false,
-    runner: async (_taskContext, points, from, to) => {
-      if (!points?.length)
-        throw new BMapError("BMAP_RESOURCE_CREATE_FAILED", "missing required params: points");
-      if (!from)
-        throw new BMapError("BMAP_RESOURCE_CREATE_FAILED", "missing required params: from");
-      if (!to) throw new BMapError("BMAP_RESOURCE_CREATE_FAILED", "missing required params: to");
-      const ready = await ctx.whenReady();
-      const convertor = ready.client.driver.services.createConvertor();
-      const raw = convertor.raw as {
-        translate(
-          points: unknown[],
-          from: number,
-          to: number,
-          cb: (res: { points: { lng: number; lat: number }[]; status: number }) => void,
-        ): void;
-      };
-      const pointsInstance = points.map((p) => ready.client.driver.geometry.toRawPoint(p));
-      const res = await new Promise<{ points: { lng: number; lat: number }[]; status: number }>(
-        (resolve, reject) => {
-          raw.translate(pointsInstance, from, to, (r) => {
-            if (r.status === 0) resolve(r);
-            else
-              reject(
-                new BMapError(
-                  "BMAP_RESOURCE_CREATE_FAILED",
-                  `convert failed with status ${r.status}`,
-                ),
-              );
-          });
-        },
-      );
-      return res.points.map((p) => ({ lng: p.lng, lat: p.lat }));
-    },
+  const task = useBMapServiceTask<
+    GeoPoint[],
+    ServiceHandle<"service:convertor">,
+    [readonly GeoPoint[], CoordinatesFromType, CoordinatesToType],
+    GeoPoint[]
+  >(ctx, {
+    capability: "service.convertor",
+    create: (context) => jsapiV4ServicesOf(context.client).createConvertor(),
+    invoke: (context, handle, points, from, to) =>
+      jsapiV4ServicesOf(context.client).convert(handle, {
+        points,
+        from: from as CoordinateFromType,
+        to: to as CoordinateToType,
+      }),
   });
+
+  /** 坐标互转。`points` / `from` / `to` 的非法取值由 Driver 以 `failed(BMAP_INVALID_ARGUMENT)` 结算。 */
+  const convert = (points: readonly GeoPoint[], from: CoordinatesFromType, to: CoordinatesToType) =>
+    task.execute(points, from, to);
 
   return {
     data: task.data,
     /** 结果别名(v2 习惯) */
     result: task.data,
     error: task.error,
-    isError: computed(() => task.status.value === "error"),
-    isEmpty: computed(() => !task.data.value?.length),
+    isError: task.isError,
+    isEmpty: task.isEmpty,
     status: task.status,
+    /** `Convertor#translate` 回包的公开状态码（0 = 成功） */
+    sdkStatus: task.sdkStatus,
     isLoading: task.isLoading,
-    convert: task.execute,
+    supported: task.supported,
+    convert,
     /** v2 习惯别名 */
-    get: task.execute,
+    get: convert,
     cancel: task.cancel,
     reset: task.reset,
   };

@@ -1,5 +1,4 @@
 export * from "./useBMap";
-export * from "./useBMapAsyncTask";
 export * from "./useControllableState";
 export * from "./useBMapGeolocation";
 export * from "./useBMapViewAnimation";
@@ -9,5 +8,7 @@ export * from "./useBMapIpLocation";
 export * from "./useBMapGeocoder";
 export * from "./useBMapGeocodeDetail";
 export * from "./useBMapConvertor";
+export * from "./useBMapLocalSearch";
+export * from "./useBMapServiceTask";
 export * from "./useBMapTrackAnimation";
 export * from "./resolveMapContext";

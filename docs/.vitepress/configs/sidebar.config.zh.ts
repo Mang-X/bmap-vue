@@ -230,16 +230,16 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "useBMapAreaBoundary",
         },
         {
+          text: "useBMapLocalSearch 本地检索",
+          link: "useBMapLocalSearch",
+        },
+        {
           text: "useBMapViewAnimation 3d视角动画",
           link: "useBMapViewAnimation",
         },
         {
           text: "useBMapTrackAnimation 轨迹动画",
           link: "useBMapTrackAnimation",
-        },
-        {
-          text: "useBMapAsyncTask 异步任务",
-          link: "useBMapAsyncTask",
         },
         {
           text: "useControllableState 受控/非受控状态",

@@ -43,13 +43,15 @@ describe('useBMapGeocoder', () => {
 
   it('geocodes a single address to point', async () => {
     const { wrapper, collect } = mountWithChild(async (geo) => {
-      const p = await geo.get('北京', '北京市')
-      collect.value = p
+      // #38 起动作恒 resolve 成 ServiceResult（失败/超时/取消都在返回值里）
+      const result = await geo.get('北京', '北京市')
+      collect.value = result
     })
     await flushPromises()
     await nextTick()
     // Fake v4 Geocoder.getPoint 的默认回包（不做任何坐标偏移）
-    expect(collect.value?.lng).toBe(116.404)
+    expect(collect.value?.status).toBe('success')
+    expect(collect.value?.data?.lng).toBe(116.404)
     expect(fake.createdGeocoders.length).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
