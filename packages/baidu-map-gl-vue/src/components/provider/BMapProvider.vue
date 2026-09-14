@@ -8,8 +8,7 @@ import {
   shallowRef,
   useId,
 } from "vue";
-import type { BMapClient, AnyBMapProviderLike, CreateBMapClientOptions } from "../../client/types";
-import { withMigrationDriver } from "../../client/migration";
+import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../../client/types";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { BMapError } from "../../core/errors/BMapError";
 import {
@@ -25,11 +24,11 @@ export interface BMapProviderProps {
   /**
    * 便捷 Provider 接口（与 `<BMap>` 的 `provider` prop 对称）。
    *
-   * M3A1-CLIENT（#18）：组件默认路径在迁移期走 `withMigrationDriver`——按**加载结果的
-   * engine** 分派 Driver（legacy / v4 都可用），默认 cutover 属 #25。需要固定某个
-   * Driver 实现时请直接传带 `driver` 的 `definition`。
+   * M3A3-REMOVE-LEGACY（#26）：Provider 必须是**结构化**形状（`load()` 返回
+   * `LoadedSdk`，engine = `jsapi-v4`）。需要固定某个 Driver 实现时直接传带 `driver`
+   * 的 `definition`。
    */
-  provider?: AnyBMapProviderLike;
+  provider?: BMapProviderLike;
   loadOptions?: BMapLoadOptions;
   autoLoad?: boolean;
   suspense?: boolean;
@@ -56,14 +55,11 @@ const parentClient = inject(bmapClientContextKey, undefined);
 const appDefaultDefinition = inject(defaultClientDefinitionKey, undefined);
 
 const ownDefinition = computed<CreateBMapClientOptions | undefined>(() => {
-  // 显式 definition 直接透传（迁移期 Driver 归一在 Client Context 收口）；
-  // 只有 `provider` prop 需要在此归一，因为它接受宽松 Provider 形状（类型要求结构化）。
+  // 显式 definition 直接透传；`provider` prop 与它等价，只是更方便
+  // （两者都不再经任何「宽松形状归一」，见 #26 的迁移说明）。
   if (props.definition) return props.definition;
   if (props.provider) {
-    return withMigrationDriver({
-      provider: props.provider,
-      loadOptions: props.loadOptions ?? {},
-    });
+    return { provider: props.provider, loadOptions: props.loadOptions ?? {} };
   }
   return undefined;
 });

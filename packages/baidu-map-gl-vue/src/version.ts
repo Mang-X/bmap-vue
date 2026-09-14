@@ -3,7 +3,7 @@
  *
  * 仓库里同时存在三种「版本」（见 ADR 2026-09-10-jsapi-v4-only-baseline）：
  * - **组件库版本**：本文件的 `LIBRARY_VERSION`（= `package.json` 的 `version`）；
- * - **SDK engine**：内部驱动枚举（`webgl-v1` / `jsapi-v3` / `jsapi-v4`）；
+ * - **SDK engine**：内部驱动枚举，3.0 起只剩 `jsapi-v4`（旧引擎已在 #26 删除）；
  * - **SDK version**：百度地图 JSAPI 运行时版本（来自 Provider 的结构化加载结果）。
  *
  * `BMapClient.libraryVersion` 报告这里的值，`BMapClient.sdkVersion` 报告 SDK 运行时版本，

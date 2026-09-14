@@ -1,12 +1,12 @@
 /**
  * Playground:多场景演示(方案 §15.2 / M7-05)
  *
- * 覆盖 v3 组件全家族。三档模式（见 `./providers`，M3A3-04 / issue #25）：
+ * 覆盖 v3 组件全家族。两档模式（见 `./providers`，M3A3-04 / issue #25；#26 收敛为两档）：
  * 配了 `VITE_BMAP_AK` 走默认官方 Loader 的真实 v4；否则默认走 **Fake v4**
- * （`existingGlobalV4Provider()` 复用注入的 Fake v4 全局，组件仍然在 v4 Driver 上）；
- * `VITE_BMAP_MODE=legacy-fake` 时退回旧的 Fake BMapGL legacy 对照。
+ * （`existingGlobalV4Provider()` 复用注入的 Fake v4 全局，组件仍然在 v4 Driver 上）。
+ * 原先的 `VITE_BMAP_MODE=legacy-fake` 对照档随旧引擎删除（#26）。
  *
- * 三档都不给 `<BMap>` 传 `provider` —— 解析始终落在 `app.use` 的默认 definition 上，
+ * 两档都不给 `<BMap>` 传 `provider` —— 解析始终落在 `app.use` 的默认 definition 上，
  * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到。
  */
 import { createApp, h, ref, shallowRef, defineComponent, computed } from 'vue'

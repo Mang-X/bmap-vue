@@ -17,7 +17,7 @@ lang: zh-CN
 3. 显式 `provider/ak/apiUrl` props（就地组装定义）
 4. 最近的 `<BMapProvider>` 提供的 Client 上下文
 5. `app.use(createBMapPlugin(...))` 提供的默认定义
-6. 否则报错（默认不再静默读取 `window.BMapGL`；离线/存量全局场景请显式使用 `existingGlobalV4Provider()` 或 `allowExistingGlobal`）
+6. 否则报错（默认**不读取任何全局**；宿主自己加载了 SDK 的场景请显式传 `provider: existingGlobalV4Provider()`）
 
 服务类 hooks（如 `useBMapGeocoder`）只需要 Client，可在 `<BMap>` 或 `<BMapProvider>` 子树内直接使用，无需地图实例。
 
@@ -28,15 +28,15 @@ lang: zh-CN
 
 ### Driver 选择与默认加载器
 
-组件默认路径（`app.use` / `<BMapProvider>` / `<BMap>`）按**加载结果的 engine** 分派 Driver：
-
-- `jsapi-v4`（Stable 基线）：**默认路径**，由官方 `@baidumap/jsapi-loader`（精确锁定 `1.0.0`）加载；
-- `webgl-v1`（迁移期 legacy）：只有**显式**传入 legacy Provider（如 `baiduCdnProvider()`）才会走到，
-  随 #26 删除。
-
-默认 Provider 自 R25-B（#71）起是 `baiduJsapiV4Provider()`：`createBMapPlugin()` 不传 `provider`、
-`<BMap>` 只给 `ak`、以及 `<BMapProvider>` 未覆盖时，用的都是它。决策与回滚见
-[ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)。
+3.0 只有**一个引擎**（`jsapi-v4`）：组件默认路径（`app.use` / `<BMapProvider>` / `<BMap>`）
+直接交给 `createBMapClient`，由默认的 `jsapiV4DriverFactory` 装出 v4 Driver。默认 Provider 是
+`baiduJsapiV4Provider()`——`createBMapPlugin()` 不传 `provider`、`<BMap>` 只给 `ak`、以及
+`<BMapProvider>` 未覆盖时，用的都是它；它内部真的调用官方 `@baidumap/jsapi-loader`
+（精确锁定 `1.0.0`）。决策与回滚见
+[ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)；
+旧引擎（`webgl-v1` / `BMapGL`）与迁移期的 engine 分派已在 `#26` 删除，见
+[ADR 2026-09-14 删除旧引擎](/adr/2026-09-14-remove-legacy-engine) 与
+[从 WebGL v1 迁移到 4.0](./migration-v1-to-v4)。
 
 ::: warning 默认路径的配置面
 默认路径只表达官方 Loader 支持的配置：`ak`、`version`（只接受 `'4.0'`）、`timeout`（`0` = 不超时）、
@@ -49,22 +49,22 @@ lang: zh-CN
 - 宿主自己加载 SDK / 需要 `nonce` / SRI → 外部预加载后 `existingGlobalV4Provider()`。
 :::
 
-`./advanced` 的 `createBMapClient()` 则已经收口：**默认只接受 `jsapi-v4` 并注入 JSAPI 4.0 Driver 工厂**，
+`./advanced` 的 `createBMapClient()` 与组件默认路径同一条收口：**只接受 `jsapi-v4` 的加载结果**，
 `provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedSdk`：
 
 ```ts
-// JSAPI 4.0（Stable 基线）
+// JSAPI 4.0（唯一基线）
 { engine: "jsapi-v4", version: "4.0", namespace: globalThis.BMap, load: { /* metadata */ } }
-// 迁移期 webgl-v1（版本由 Driver 创建时探测，Loader 不声明）
-{ engine: "webgl-v1", namespace: globalThis.BMapGL }
 ```
 
-需要显式走 webgl-v1 时，使用 `createLegacyBMapClient()`，或把 `withMigrationDriver(definition)` 的结果
-交给 `createBMapClient()`（后者同时接受 v2 / v3-beta 的宽松 `{ load }` Provider，并把它归一为 webgl-v1）。
+`LoadedSdk` 现在就是 `LoadedJsapiV4` 的别名（旧引擎的 `LoadedLegacySdk` 已删除），
+`assertLoadedSdk()` 是唯一收口点：缺 `engine`（裸全局对象）或 `engine !== "jsapi-v4"`
+（旧引擎结果）都会以 `BMAP_SDK_ENGINE_MISMATCH` 失败，报错文案会指出原因。
 
-`./core` 的 `createClientContext()` 也做同样的归一：**同一份 definition 在任何入口
-（`<BMap>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定 Driver
-实现时显式传 `definition.driver`。
+`./core` 的 `createClientContext()` 走同一条路：**同一份 definition 在任何入口
+（`<BMap>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定
+Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDriver` 归一已随旧引擎删除
+（`#26`），definition 现在原样交给 Client。
 
 ### 1。通过全局注册配置 ak 与插件
 
@@ -75,10 +75,9 @@ lang: zh-CN
 | ak                 | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string`           | -      |
 | apiUrl             | 自建地图 api 资源地址（默认路径已不表达，见上方提示；请改用 `customScriptV4Provider`） | `string` | - |
 | version            | SDK 版本                                         | `string`           | `4.0`  |
-| provider           | 自定义加载器（默认 `baiduJsapiV4Provider()`，内部委托官方 Loader） | `BMapProvider` | - |
+| provider           | 自定义加载器（默认 `baiduJsapiV4Provider()`，内部委托官方 Loader；类型 `BMapProviderLike`） | `BMapProviderLike` | - |
 | plugins            | 需要注册的插件                                   | `string[]`         | -      |
 | defaults           | 透传的加载选项（`BMapLoadOptions`，如 `timeout` / `serviceHost`） | `BMapLoadOptions` | - |
-| allowExistingGlobal| 显式允许复用已存在的全局 `BMapGL`                | `boolean`          | -      |
 | client             | 完整自定义 Client 定义（覆盖以上组装）           | `CreateBMapClientOptions` | - |
 
 ```ts
@@ -159,7 +158,7 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 ### 更换插件资源链接
 
-如果需要自建或其他地址的资源链接，请使用 `customScriptProvider(scriptSrc)` 构造 Provider，
+如果需要自建或其他地址的资源链接，请使用 `customScriptV4Provider(scriptSrc)` 构造 Provider，
 再经 `createBMapPlugin({ provider })` 或 Client 定义传入：
 
 ```ts

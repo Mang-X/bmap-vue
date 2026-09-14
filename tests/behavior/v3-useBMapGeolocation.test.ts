@@ -6,30 +6,16 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, onMounted, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import { useBMapGeolocation } from '../../packages/baidu-map-gl-vue/src/composables/useBMapGeolocation'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
 
 describe('useBMapGeolocation', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('locates after map ready and returns a point (as BMap child)', async () => {
-    fake.stats.reset()
     const el = host()
     const located = ref<{ lng: number; lat: number } | null>(null)
     const Child = defineComponent({
@@ -53,7 +39,8 @@ describe('useBMapGeolocation', () => {
     )
     await flushPromises()
     await nextTick()
-    expect(located.value?.lng).toBe(116.4)
+    // 原来是 fake BMapGL 的 116.4；Fake v4 的 Geolocation 回包是 116.404（FakeV4Geolocation.result）
+    expect(located.value?.lng).toBe(116.404)
     wrapper.unmount()
     await nextTick()
   })

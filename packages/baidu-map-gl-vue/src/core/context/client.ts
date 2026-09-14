@@ -4,16 +4,15 @@
  * SDK Client 层的响应式注入上下文。服务类 composable 默认只依赖 Client Context,
  * 无需 Map 即可使用 geocoder/convertor 等能力。
  *
- * 迁移期约定（M3A1-CLIENT / #18）：`definition` 在创建 Client 前统一经
- * `withMigrationDriver` 归一（宽松 Provider 归一为结构化结果 + 未声明 `driver` 时注入
- * 迁移期 Driver 工厂）。因此同一份 definition 在 `<BMap>` / `<BMapProvider>` /
- * `resolveMapContext` / 插件默认 definition 上行为一致；需要固定 Driver 实现时显式传
- * `definition.driver`。严格契约（默认只接受 jsapi-v4）仍在 `createBMapClient` 自身。
+ * M3A3-REMOVE-LEGACY（#26）：`definition` 在这里**直接**交给 `createBMapClient`
+ * （后者缺省注入 jsapi-v4 的 Driver 工厂）。迁移期的 `withMigrationDriver` 归一已随
+ * webgl-v1 删除，因此同一份 definition 在 `<BMap>` / `<BMapProvider>` /
+ * `resolveMapContext` / 插件默认 definition 上仍然行为一致，但不再有「宽松 Provider →
+ * legacy Driver」这条隐式分派。
  */
 import { inject, readonly, shallowRef, type InjectionKey, type ShallowRef } from "vue";
 import type { BMapClient, CreateBMapClientOptions } from "../../client/types";
 import { createBMapClient } from "../../client/createBMapClient";
-import { withMigrationDriver } from "../../client/migration";
 import { BMapError } from "../errors/BMapError";
 
 export type ClientStatus = "idle" | "loading" | "ready" | "error" | "disposed";
@@ -72,12 +71,11 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
     }
     status.value = "loading";
     error.value = null;
-    // 迁移期默认（M3A1-CLIENT / #18）：未显式声明 `driver` 的 definition 在这里注入
-    // 迁移期 Driver 工厂（按加载结果的 engine 分派）。这是**唯一收口点**——`<BMap>` /
-    // `<BMapProvider>` / 插件默认 definition / `resolveMapContext` 全部经此创建 Client，
-    // 因此「同一份 definition 换一个入口就报 BMAP_SDK_ENGINE_MISMATCH」不会发生。
-    // 显式传入的 `driver` 优先，`createBMapClient` 自身的严格默认不受影响。
-    const loaded = await createBMapClient(withMigrationDriver(definition), signal);
+    // 定义直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）。
+    // 这里是**唯一收口点**——`<BMap>` / `<BMapProvider>` / 插件默认 definition /
+    // `resolveMapContext` 全部经此创建 Client，因此「同一份 definition 换一个入口就报
+    // BMAP_SDK_ENGINE_MISMATCH」不会发生。显式传入的 `driver` 仍然优先。
+    const loaded = await createBMapClient(definition, signal);
     if (signal?.aborted) {
       throw toBMapError(
         (signal as AbortSignal).reason,

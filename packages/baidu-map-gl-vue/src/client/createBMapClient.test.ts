@@ -84,24 +84,28 @@ describe("createBMapClient（默认 v4 收口）", () => {
     });
   });
 
-  it("拒绝 legacy（webgl-v1）加载结果", async () => {
+  it("拒绝已删除的旧引擎加载结果（webgl-v1）", async () => {
     await expect(
       createBMapClient({
         provider: {
-          load: async () => ({ engine: "webgl-v1", namespace: v4Namespace }),
+          // 旧引擎已在 3.0 删除：这类加载结果现在只能来自「有人把旧代码加回来」
+          load: async () =>
+            ({ engine: "webgl-v1", namespace: v4Namespace }) as unknown as LoadedJsapiV4,
         },
         loadOptions: {},
       }),
     ).rejects.toMatchObject({
       code: "BMAP_SDK_ENGINE_MISMATCH",
-      message: expect.stringContaining("createLegacyBMapClient"),
+      message: expect.stringContaining("旧引擎"),
     });
   });
 
   it("拒绝裸 SDK unknown 加载结果（Provider 未结构化）", async () => {
     await expect(
       createBMapClient({
-        provider: { load: async () => v4Namespace },
+        // 刻意绕过类型：运行期给的就是**裸命名空间**（v2 / v3-beta 的宽松 Provider 形状），
+        // 类型层用断言表达「这个形状本就不该出现在这里」。
+        provider: { load: async () => v4Namespace as unknown as LoadedJsapiV4 },
         loadOptions: {},
       }),
     ).rejects.toMatchObject({
@@ -158,7 +162,7 @@ describe("createBMapClient（默认 v4 收口）", () => {
   it("default driver factory 只接受 jsapi-v4（缺省不猜测 engine）", () => {
     expect(() =>
       jsapiV4DriverFactory({
-        loaded: { engine: "webgl-v1", namespace: v4Namespace },
+        loaded: { engine: "webgl-v1", namespace: v4Namespace } as unknown as LoadedJsapiV4,
         unsupported: "warn",
       }),
     ).toThrow(/jsapi-v4/);

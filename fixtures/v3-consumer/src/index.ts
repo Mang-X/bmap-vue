@@ -9,11 +9,11 @@ import {
   BPolyline,
   useBMap,
   Vue3BaiduMapGlResolver,
-  baiduCdnProvider,
-  type BMapProvider,
+  type BMapProviderLike,
   type BMapProps,
 } from 'baidu-map-gl-vue'
-// v4 Provider 家族从 `./core` 暴露（#17）：默认 cutover（#25）之前不提升到根入口
+// v4 Provider 家族从 `./core` 暴露（#17）。M3A3-REMOVE-LEGACY（#26）之后根入口**不再**导出
+// 任何 Provider factory（原先那三个是 legacy 的 `baiduCdnProvider` 家族），这里改成 v4 家族。
 import {
   baiduJsapiV4Provider,
   existingGlobalV4Provider,
@@ -47,7 +47,9 @@ const center = shallowRef({ lng: 116.4, lat: 39.9 })
 
 // 类型 smoke
 const props: BMapProps = { zoom: 12, center: { lng: 116.4, lat: 39.9 } }
-const provider: BMapProvider = baiduCdnProvider()
+// Provider 的公共形状是**结构化**的 `BMapProviderLike`（#26 删掉了宽松的
+// `AnyBMapProviderLike` / `LooseBMapProviderLike`）。
+const provider: BMapProviderLike = baiduJsapiV4Provider()
 
 // 按需导入组件
 export const App = {
@@ -60,8 +62,8 @@ export const App = {
 // app.use 全量安装
 export const plugin = createBMapPlugin({ ak: 'test-ak' })
 
-// 迁移影响回归（PR #58 评审 P1）：三种内置 v4 Provider 必须能直接传给 createBMapPlugin
-// ——跨引擎的 AnyBMapProviderLike 契约，不能在类型层被 legacy 专用类型挡住。
+// 迁移影响回归（PR #58 评审 P1；#26 更新）：三种内置 v4 Provider 必须能直接传给 createBMapPlugin
+// ——结构化 `BMapProviderLike` 契约，不能在类型层被别的形状挡住。
 export const pluginWithV4Cdn = createBMapPlugin({ provider: baiduJsapiV4Provider() })
 export const pluginWithV4Existing = createBMapPlugin({ provider: existingGlobalV4Provider() })
 export const pluginWithV4Custom = createBMapPlugin({

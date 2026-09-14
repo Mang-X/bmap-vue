@@ -6,24 +6,44 @@
  * - ready：结算后显示默认插槽并 emit ready；
  * - error：失败时显示 error slot（带 error + retry）并 emit error；
  * - retry：从 error 恢复为 ready，且不残留上一轮错误。
+ *
+ * M3A3-REMOVE-LEGACY（#26）后的移植：`withMigrationDriver` 已随 webgl-v1 删除，definition
+ * 直接进 `createBMapClient`；Provider 必须是**结构化** v4 形状（`engine: "jsapi-v4"` +
+ * `namespace`），旧用例里的 `engine: "webgl-v1"` 断言相应换成 `"jsapi-v4"`。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { h, nextTick } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
 import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
-import { withMigrationDriver } from "../../packages/baidu-map-gl-vue/src/client/migration";
+import { createLoadedJsapiV4 } from "../../packages/baidu-map-gl-vue/src/core/loader/providers";
 import type { BMapLoadOptions } from "../../packages/baidu-map-gl-vue/src/core/loader/url";
 import type { BMapClient } from "../../packages/baidu-map-gl-vue/src/client/types";
 import type { LoadedSdk } from "../../packages/baidu-map-gl-vue/src/core/loader/loaded";
 import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
+import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 
-const legacyNamespace = { Map: class {}, Point: class {}, Marker: class {}, VERSION: "1.0" };
+// #26 后没有「宽松 Provider → legacy Driver」这条分派，engine 恒为 jsapi-v4。
+let fake: FakeBMapV4;
 
-function definitionFor(load: (options: BMapLoadOptions) => Promise<unknown>) {
-  return withMigrationDriver({
-    provider: { id: "test-legacy", getCacheKey: () => "fp", load },
-    loadOptions: { ak: "test" },
+/** 结构化 v4 加载结果（`assertLoadedSdk` 只认 engine + namespace）。 */
+function loadedV4(): LoadedSdk {
+  return createLoadedJsapiV4({
+    providerId: "custom-script-v4",
+    mode: "jsonp",
+    version: fake.namespace.VERSION,
+    versionSource: "url",
+    options: { ak: "test" },
+    fingerprint: "bmapprovider-slots",
+    namespace: fake.namespace,
+    loadedAt: 0,
   });
+}
+
+function definitionFor(load: (options: BMapLoadOptions) => Promise<LoadedSdk>) {
+  return {
+    provider: { id: "test-v4", getCacheKey: () => "fp", load },
+    loadOptions: { ak: "test" },
+  };
 }
 
 let seenRetry: (() => Promise<void>) | undefined;
@@ -44,6 +64,8 @@ function slots() {
 beforeEach(() => {
   seenRetry = undefined;
   seenError = undefined;
+  fake = createFakeBMapV4();
+  fake.diagnostics.reset();
 });
 
 describe("<BMapProvider> 状态插槽", () => {
@@ -66,7 +88,7 @@ describe("<BMapProvider> 状态插槽", () => {
     // 文档约定：默认插槽常驻（加载中也渲染），加载状态以插槽叠加形式暴露
     expect(wrapper.find('[data-test="child"]').exists()).toBe(true);
 
-    resolveLoad({ engine: "webgl-v1", namespace: legacyNamespace });
+    resolveLoad(loadedV4());
     await flushPromises();
 
     expect(wrapper.find('[data-test="loading"]').exists()).toBe(false);
@@ -74,7 +96,8 @@ describe("<BMapProvider> 状态插槽", () => {
 
     const ready = wrapper.emitted("ready") as [BMapClient][] | undefined;
     expect(ready).toHaveLength(1);
-    expect(ready![0]![0].engine).toBe("webgl-v1");
+    // 原来是 "webgl-v1"；#26 后唯一引擎是 jsapi-v4
+    expect(ready![0]![0].engine).toBe("jsapi-v4");
 
     wrapper.unmount();
   });
@@ -84,7 +107,7 @@ describe("<BMapProvider> 状态插槽", () => {
     const load = vi.fn(async () => {
       attempts += 1;
       if (attempts === 1) throw new Error("boom");
-      return legacyNamespace;
+      return loadedV4();
     });
     const wrapper = mount(BMapProvider, {
       props: { definition: definitionFor(load) },
@@ -110,10 +133,12 @@ describe("<BMapProvider> 状态插槽", () => {
     wrapper.unmount();
   });
 
-  it("provider prop 走显式 legacy 工厂（迁移期默认路径）", async () => {
+  it("provider prop 走显式 v4 Provider", async () => {
+    // 原来是「迁移期默认路径 ⇒ 显式 legacy 工厂」；#26 后 legacy 入口删除，
+    // `provider` prop 与 `definition` 等价，直接走 v4。
     const wrapper = mount(BMapProvider, {
       props: {
-        provider: { id: "test-legacy", load: async () => legacyNamespace },
+        provider: { id: "test-v4", load: async () => loadedV4() },
         loadOptions: {},
       },
       slots: slots(),
@@ -122,7 +147,7 @@ describe("<BMapProvider> 状态插槽", () => {
 
     expect(wrapper.find('[data-test="child"]').exists()).toBe(true);
     const ready = wrapper.emitted("ready") as [BMapClient][] | undefined;
-    expect(ready?.[0]?.[0].engine).toBe("webgl-v1");
+    expect(ready?.[0]?.[0].engine).toBe("jsapi-v4");
 
     wrapper.unmount();
   });

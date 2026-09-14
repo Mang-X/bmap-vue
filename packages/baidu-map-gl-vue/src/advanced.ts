@@ -6,17 +6,10 @@
  */
 import type { Capability } from "./driver/capability";
 
-export { createDriver, detectEngine, createJsapiV4Driver } from "./driver";
-export type { CreateDriverInput, CreateJsapiV4DriverInput } from "./driver";
-export {
-  assertLoadedJsapiV4,
-  assertLoadedSdk,
-  isLoadedJsapiV4,
-  isLoadedLegacySdk,
-  isLoadedSdk,
-  toLoadedLegacySdk,
-} from "./core/loader/loaded";
-export type { LoadedLegacySdk, LoadedSdk } from "./core/loader/loaded";
+export { createJsapiV4Driver } from "./driver";
+export type { CreateJsapiV4DriverInput } from "./driver";
+export { assertLoadedSdk, isLoadedSdk } from "./core/loader/loaded";
+export type { LoadedSdk } from "./core/loader/loaded";
 export { unwrapRaw, createHandle, HANDLE_BRAND } from "./driver/types/handles";
 export {
   createCapabilityRegistry,
@@ -28,23 +21,13 @@ export {
 } from "./driver/capability";
 export { normalizeProvider, createBMapClientDefinition } from "./client";
 export { createBMapClient, jsapiV4DriverFactory } from "./client/createBMapClient";
-export {
-  createLegacyBMapClient,
-  legacyDriverFactory,
-  migrationDriverFactory,
-  normalizeMigrationProvider,
-  withMigrationDriver,
-} from "./client/migration";
-export type { MigrationClientDefinition } from "./client/migration";
 
 export type {
-  AnyBMapProviderLike,
   BMapClient,
   BMapDriverFactory,
   BMapDriverInput,
   BMapProviderLike,
   CreateBMapClientOptions,
-  LooseBMapProviderLike,
 } from "./client/types";
 export type { BMapDriver, BMapEngine } from "./driver/types/bmap";
 export type {

@@ -81,7 +81,7 @@
 
 残余风险（每条都写明去处）：
 
-- **本仓库自持的 legacy 声明与真实脚本不一致**：`types/BMapGL/lib.d.ts` 把 `BMapGLLib.GeoUtils` 声明成 `new GeoUtils(map, options)` 的类，而真实脚本暴露的是**静态谓词命名空间**（没有可用的实例 API）。在 `#26` 删除 legacy 声明面之前，别照着那份声明写调用。
+- **本仓库自持的 legacy 声明曾经与真实脚本不一致**：那份声明把 `BMapGLLib.GeoUtils` 写成 `new GeoUtils(map, options)` 的类，而真实脚本暴露的是**静态谓词命名空间**（没有可用的实例 API）。记录这条是因为它解释了「为什么不能拿 legacy 类型当依据」——该声明目录已在 `#26` 删除，现在类型面只剩官方 `@baidumap/jsapi-v4-types` 与最小 augmentation。
 - `DrawingManager` 会自行注入它，属于插件之间的隐式依赖（运行时已观察到）。各静态谓词的**签名语义**未逐个核对（只证了不抛错 + `getDistance` 数值正确）。
 
 ### `Mapvgl`

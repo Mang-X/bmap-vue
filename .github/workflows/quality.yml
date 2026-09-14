@@ -81,6 +81,14 @@ jobs:
       - name: Check public d.ts boundaries
         run: node --experimental-strip-types scripts/check-public-dts.mts
 
+      # 旧引擎不变量（M3A3-REMOVE-LEGACY / #26）:运行时源码与公共声明都不得再出现 BMapGL /
+      # 已删除的 engine 取值。与上一步的分工：上一步是「边界」门禁（BMap.* / 官方类型包 /
+      # 边界目录），这一步是「删除是否可持续」的门禁，扫的是**整棵运行时源码**（含被 raw SDK
+      # 白名单放行的 driver/client/core-loader/plugins）。必须排在 `build:v3` 之后：公共声明
+      # 相位读 `dist`。
+      - name: Check no legacy BMapGL / engine ids
+        run: pnpm check:no-bmapgl
+
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
       - name: Unit & behavior tests

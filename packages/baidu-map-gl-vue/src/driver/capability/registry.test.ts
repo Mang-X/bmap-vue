@@ -9,6 +9,12 @@ import {
   type Capability,
 } from "./catalog";
 
+/**
+ * M3A3-REMOVE-LEGACY（#26）：`BMapEngine` 只剩 `jsapi-v4`，因此原先用 `webgl-v1` / `jsapi-v3`
+ * 构造 registry 的用例改为单一引擎。两处**语义**变化要显式钉住：
+ * - 目录里每条能力都必须声明当前唯一引擎（否则那张能力在运行时永远探不到）；
+ * - 白名单不命中只剩「目录未收录该 id」这一条防御路径（引擎维度的区分已随旧引擎消失）。
+ */
 const fakeSdk = {
   Map: class {},
   Marker: class {},
@@ -16,14 +22,14 @@ const fakeSdk = {
   setHeading: () => {},
   setTilt: () => {},
   checkResize: () => {},
-  VERSION: "1.0",
+  VERSION: "4.0",
 };
 
 describe("CapabilityRegistry", () => {
   it("detects raw members on namespace and Map prototype", () => {
     const registry = createCapabilityRegistry({
-      engine: "webgl-v1",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
     });
@@ -32,21 +38,28 @@ describe("CapabilityRegistry", () => {
     expect(registry.supports("service.truck-route")).toBe(false);
   });
 
-  it("engine whitelist gates capability", () => {
+  it("catalog 的每条能力都声明当前引擎（单引擎基线，M3A3-REMOVE-LEGACY）", () => {
+    for (const id of CAPABILITY_IDS) {
+      expect(CAPABILITY_CATALOG[id].engines, `${id} 未声明 jsapi-v4`).toContain("jsapi-v4");
+    }
+  });
+
+  it("目录未收录的 id 按 engine-unsupported 拒绝", () => {
     const registry = createCapabilityRegistry({
-      engine: "jsapi-v3",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
     });
-    expect(registry.supports("map.heading")).toBe(false);
-    expect(registry.explain("map.heading").reason).toBe("engine-unsupported");
+    // 白名单检查在单引擎下的**唯一**可达路径：没有描述符
+    expect(registry.supports("does.not-exist" as Capability)).toBe(false);
+    expect(registry.explain("does.not-exist" as Capability).reason).toBe("engine-unsupported");
   });
 
   it("list() returns only supported capabilities", () => {
     const registry = createCapabilityRegistry({
-      engine: "webgl-v1",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
     });
@@ -58,8 +71,8 @@ describe("CapabilityRegistry", () => {
 
   it("require() throw policy throws UnsupportedCapabilityError", () => {
     const registry = createCapabilityRegistry({
-      engine: "webgl-v1",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "throw",
     });
@@ -69,8 +82,8 @@ describe("CapabilityRegistry", () => {
   it("require() warn policy logs and does not throw", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const registry = createCapabilityRegistry({
-      engine: "webgl-v1",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "warn",
     });
@@ -80,8 +93,8 @@ describe("CapabilityRegistry", () => {
 
   it("overrides take precedence", () => {
     const registry = createCapabilityRegistry({
-      engine: "webgl-v1",
-      version: "1.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
       overrides: { "overlay.marker": false, "service.truck-route": true },
@@ -157,23 +170,21 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
     }
   });
 
-  it("status=unsupported 在任何 engine 下都不支持，除非显式 override", () => {
+  it("status=unsupported 在默认引擎下不支持，除非显式 override", () => {
     const unsupportedIds = CAPABILITY_IDS.filter(
       (id) => CAPABILITY_CATALOG[id].status === "unsupported",
     );
     expect(unsupportedIds.length).toBeGreaterThan(0);
 
-    for (const engine of ["webgl-v1", "jsapi-v3", "jsapi-v4"] as const) {
-      const registry = createCapabilityRegistry({
-        engine,
-        version: "4.0",
-        rawSdk: fullSdk,
-        unsupported: "silent",
-      });
-      for (const id of unsupportedIds) {
-        expect(registry.supports(id), `${id} @ ${engine} 应不支持`).toBe(false);
-        expect(registry.explain(id).reason).toBe("status-unsupported");
-      }
+    const registry = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: fullSdk,
+      unsupported: "silent",
+    });
+    for (const id of unsupportedIds) {
+      expect(registry.supports(id), `${id} 应不支持`).toBe(false);
+      expect(registry.explain(id).reason).toBe("status-unsupported");
     }
 
     const overridden = createCapabilityRegistry({

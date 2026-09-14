@@ -4,6 +4,11 @@
  * - SSR renderToString 不得抛 window/document 错误,仅输出容器 shell
  * - KeepAlive deactivate 不销毁 Map,suspend;activate 后 resume + checkResize
  * - MapRuntime retry/suspend/resume 单一状态来源
+ *
+ * M3A3-REMOVE-LEGACY（#26）后的移植：Provider 必须是**结构化**形状
+ * （`load()` 返回 `{ engine: "jsapi-v4", version, namespace }`），`withMigrationDriver`
+ * 已删除，definition 直接进 `createBMapClient`。原来的 `fake.stats.*` 读数改走
+ * Fake v4 的 `diagnostics`（leaks = 当前未释放，activity = 累计发生过）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createSSRApp, defineComponent, h, nextTick, ref } from 'vue'
@@ -14,28 +19,18 @@ import BMapProvider from '../../packages/baidu-map-gl-vue/src/components/provide
 import BMarker from '../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue'
 import { MapRuntime } from '../../packages/baidu-map-gl-vue/src/core/runtime/MapRuntime'
 import { createClientContext } from '../../packages/baidu-map-gl-vue/src/core/context/client'
-import { withMigrationDriver } from '../../packages/baidu-map-gl-vue/src/client/migration'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness, fake } = createFakeV4Harness()
+/** 结构化 v4 Provider（自述 engine），等价于原来的「返回裸全局」provider。 */
+const provider = () => harness.provider()
+const host = () => harness.container()
+/** 泄漏口径快照：原来直接读 `fake.stats.listeners` / `mapsDestroyed` 等。 */
+const leaks = () => fake.diagnostics.snapshot().leaks
+const activity = () => fake.diagnostics.snapshot().activity
 
 describe('SSR', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('BMapProvider SSR 不访问浏览器全局', async () => {
     const app = createSSRApp(
@@ -63,7 +58,7 @@ describe('SSR', () => {
 })
 
 describe('MapRuntime retry/suspend/resume', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   function failingRuntime(failures: number) {
     let calls = 0
@@ -75,7 +70,7 @@ describe('MapRuntime retry/suspend/resume', () => {
       return {
         driver: {
           map: {
-            create: (c: HTMLElement) => ({ raw: new (fake as any).Map(c, {}) }),
+            create: (c: HTMLElement) => ({ raw: new fake.namespace.Map(c, {}) }),
             destroy: () => {},
             initializeView: () => {},
             checkResize: vi.fn(),
@@ -107,10 +102,9 @@ describe('MapRuntime retry/suspend/resume', () => {
 })
 
 describe('KeepAlive', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('deactivated 不销毁 Map,activated 自动 checkResize', async () => {
-    fake.stats.reset()
     const el = host()
     const show = ref(true)
     let bmapRef: { suspend?: (r?: unknown) => void; resume?: (r?: unknown) => void; checkResize?: () => void } | null = null
@@ -138,19 +132,20 @@ describe('KeepAlive', () => {
     await flushPromises()
     await nextTick()
     // map 已创建
-    expect(fake.stats.mapsCreated).toBeGreaterThan(0)
-    const destroyedBefore = fake.stats.mapsDestroyed
+    expect(activity().mapsCreated).toBeGreaterThan(0)
+    // 原来读 `fake.stats.mapsDestroyed`；Fake v4 的对应读数是「当前存活的 map 数」
+    const liveMapsBefore = leaks().maps
     // 模拟 deactivate
     bmapRef?.suspend?.('keep-alive')
     await nextTick()
-    expect(fake.stats.mapsDestroyed).toBe(destroyedBefore)
+    expect(leaks().maps, 'suspend 不得销毁 Map').toBe(liveMapsBefore)
     // 模拟 activate:resume 自动 checkResize
     const checkSpy = vi.fn()
     void checkSpy
     bmapRef?.resume?.('keep-alive')
     bmapRef?.checkResize?.()
     await nextTick()
-    expect(fake.stats.mapsDestroyed).toBe(destroyedBefore)
+    expect(leaks().maps, 'resume/checkResize 不得销毁 Map').toBe(liveMapsBefore)
     show.value = false
     await nextTick()
     wrapper.unmount()
@@ -158,10 +153,9 @@ describe('KeepAlive', () => {
 })
 
 describe('PRE audit: context isolation & resource exit', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('100 次 overlay 创建/重建/卸载后无资源泄漏', async () => {
-    fake.stats.reset()
     const el = host()
     const show = ref(true)
     const clicking = ref(false)
@@ -177,69 +171,69 @@ describe('PRE audit: context isolation & resource exit', () => {
     const wrapper = mount(MarkerHost, { attachTo: el })
     await flushPromises()
     await nextTick()
-    expect(fake.stats.mapsCreated).toBe(1)
+    expect(activity().mapsCreated).toBe(1)
     // 基线:map click 监听在 runtime.resources 中存活,卸载 marker 不应影响它
-    const listenerBaseline = fake.stats.listeners
+    const listenerBaseline = leaks().listeners
 
     for (let i = 0; i < 100; i++) {
       // 卸载(实例 scope 释放)
       show.value = false
       await nextTick()
       await flushPromises()
-      expect(fake.stats.overlaysCreated - fake.stats.overlaysRemoved).toBe(0)
+      expect(leaks().overlays).toBe(0)
       // 重新创建
       show.value = true
       await nextTick()
       await flushPromises()
-      expect(fake.stats.overlaysCreated - fake.stats.overlaysRemoved).toBe(1)
+      expect(leaks().overlays).toBe(1)
       // 重建(enableClicking 变化触发 rebuild:旧 instance scope 释放再 fork 新实例 scope)
       clicking.value = i % 2 === 0
       await nextTick()
       await flushPromises()
-      expect(fake.stats.overlaysCreated - fake.stats.overlaysRemoved).toBe(1)
+      expect(leaks().overlays).toBe(1)
     }
 
     // 100 轮创建/重建后 marker 仍在:SDK listener 不随轮次累积(回到基线)
-    expect(fake.stats.listeners).toBe(listenerBaseline)
+    expect(leaks().listeners).toBe(listenerBaseline)
     show.value = false
     await nextTick()
     await flushPromises()
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.mapsCreated - fake.stats.mapsDestroyed).toBe(0)
-    expect(fake.stats.listeners).toBe(0)
+    expect(leaks().maps).toBe(0)
+    expect(leaks().listeners).toBe(0)
     el.remove()
   })
 
   it('多地图上下文互不隔离污染(实例级 client/scope)', async () => {
-    fake.stats.reset()
     const elA = host()
     const elB = host()
     const wrapperA = mount(BMap, { attachTo: elA, props: { provider: provider() } })
     const wrapperB = mount(BMap, { attachTo: elB, props: { provider: provider() } })
     await flushPromises()
-    expect(fake.stats.mapsCreated).toBe(2)
+    expect(activity().mapsCreated).toBe(2)
 
     // 卸载 A:B 仍 ready,overlay 计数不归零
     wrapperA.unmount()
     await nextTick()
-    expect(fake.stats.mapsDestroyed).toBe(1)
+    // 原来读 `fake.stats.mapsDestroyed === 1`；等价读数 = 当前仍存活 1 张 map
+    expect(leaks().maps).toBe(1)
     expect((wrapperB.vm as never as { getMapInstance(): unknown }).getMapInstance()).toBeTruthy()
 
     wrapperB.unmount()
     await nextTick()
-    expect(fake.stats.mapsCreated - fake.stats.mapsDestroyed).toBe(0)
+    expect(leaks().maps).toBe(0)
     elA.remove()
     elB.remove()
   })
 
   it('client context 与 runtime dispose 幂等(重复调用无副作用)', async () => {
     const ctx = createClientContext({
-      // 迁移期宽松 Provider：显式经 withMigrationDriver 归一（默认 createBMapClient 已收口 v4）
-      definition: withMigrationDriver({
-        provider: { load: async () => ({ ok: 1 }) },
+      // #26 后 definition 直接进 createBMapClient，Provider 必须是结构化 v4 形状
+      definition: {
+        provider: provider(),
         loadOptions: {},
-      }),
+      },
     })
     await ctx.load()
     expect(ctx.status.value).toBe('ready')
@@ -252,7 +246,7 @@ describe('PRE audit: context isolation & resource exit', () => {
       clientFactory: (async () => ({
         driver: {
           map: {
-            create: (c: HTMLElement) => ({ raw: new (fake as any).Map(c, {}) }),
+            create: (c: HTMLElement) => ({ raw: new fake.namespace.Map(c, {}) }),
             destroy: () => {},
             initializeView: () => {},
             checkResize: () => {},

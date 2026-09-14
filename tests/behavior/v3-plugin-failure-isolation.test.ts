@@ -30,9 +30,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import { getFakeBMapGl, resetLifecycleState } from "../../packages/test-utils";
+import { createFakeV4Harness } from "../../packages/test-utils";
 
-const fake = getFakeBMapGl();
+// #26 后 Provider 必须是结构化 v4 形状：harness.provider() 自述 engine + namespace。
+const { harness } = createFakeV4Harness();
 
 /**
  * 模块级缓存原始 `createElement`。
@@ -45,20 +46,13 @@ const fake = getFakeBMapGl();
 const realCreateElement = document.createElement.bind(document);
 
 function makeGlobalProvider() {
-  return {
-    load: async () => {
-      (window as unknown as { BMapGL: unknown }).BMapGL = fake;
-      return fake;
-    },
-  };
+  // 原来是「把裸 fake 挂到 window.BMapGL 再返回它」；现在结构化 Provider 直接给出
+  // `{ engine: "jsapi-v4", version, namespace }`，不再经全局。
+  return harness.provider();
 }
 
 function createHost(): HTMLElement {
-  const host = document.createElement("div");
-  host.style.width = "300px";
-  host.style.height = "300px";
-  document.body.appendChild(host);
-  return host;
+  return harness.container();
 }
 
 /**
@@ -102,8 +96,7 @@ function mountMap(plugins: string[]) {
 
 describe("插件失败不阻断地图，且失败不被回执成成功", () => {
   beforeEach(() => {
-    resetLifecycleState();
-    fake.stats.reset();
+    harness.reset();
   });
 
   afterEach(() => {

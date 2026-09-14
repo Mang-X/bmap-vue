@@ -1,29 +1,20 @@
 /**
  * BPrism 迁移验证
+ *
+ * 从 BMapGL Fake 迁到 Fake v4：Prism 仍是普通覆盖物（`map.overlays`），因此计数口径
+ * 基本不变；但 Fake v4 把 `topFillColor` 这类构造 option 记在实例的 `options` 上
+ * （实例字段是 setter 的落点，构造期不预置），读数要跟着换。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BPrism from '../../packages/baidu-map-gl-vue/src/components/overlays/BPrism.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness, type FakeV4Prism } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness, fake } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
 
 function mountPrism(altitude = ref(100)) {
   const el = host()
@@ -46,30 +37,36 @@ function mountPrism(altitude = ref(100)) {
   return { wrapper, altitude }
 }
 
+/** 当前地图上挂着的 Prism（BMapGL 的 `[...map.overlays][0]` 对应 v4 的数组下标）。 */
+function currentPrism(): FakeV4Prism {
+  return fake.createdMaps[fake.createdMaps.length - 1]!.overlays[0] as FakeV4Prism
+}
+
 describe('BPrism v3', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
 
   it('creates prism with path, altitude and colors', async () => {
-    fake.stats.reset()
     const { wrapper } = mountPrism()
     await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const prism = [...(map.overlays as Set<any>)][0]
+    expect(harness.attached('overlay')).toBe(1)
+    const prism = currentPrism()
     expect(prism.path.length).toBe(2)
     expect(prism.altitude).toBe(100)
-    expect(prism.topFillColor).toBe('#ff0000')
+    // 原来是 prism.topFillColor（BMapGL fake 把它做成实例字段）；v4 上构造 option 记在
+    // `options` 上（topFillColor 的实例字段只由 setTopFillColor 写），语义等价
+    expect(prism.options.topFillColor).toBe('#ff0000')
     wrapper.unmount()
     await nextTick()
   })
 
   it('updates altitude via field-level watch', async () => {
-    fake.stats.reset()
     const altitude = ref(100)
     const { wrapper } = mountPrism(altitude)
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const prism = [...(map.overlays as Set<any>)][0]
+    const prism = currentPrism()
     altitude.value = 200
     await nextTick()
     expect(prism.altitude).toBe(200)
@@ -78,12 +75,13 @@ describe('BPrism v3', () => {
   })
 
   it('releases listeners on unmount', async () => {
-    fake.stats.reset()
     const { wrapper } = mountPrism()
     await flushPromises()
-    expect(fake.stats.listeners).toBeGreaterThan(0)
+    // 原口径是 fake.stats.listeners > 0；v4 的对应实时读数是 leaks.listeners
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.listeners).toBe(0)
+    // 原口径是 fake.stats.listeners === 0；v4 用泄漏门禁一次覆盖「监听 + 资源」
+    harness.assertIdle('BPrism 卸载')
   })
 })

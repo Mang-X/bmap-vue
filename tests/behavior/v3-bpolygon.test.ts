@@ -1,38 +1,53 @@
 /**
- * BPolygon 迁移验证
+ * BPolygon 迁移验证（Fake v4 后端）
+ *
+ * #26 之后旧引擎 Fake BMapGL 已删除：v4 的路径字段是 `polygon.path`（旧 BMapGL fake 是
+ * `points`），构造期样式由 Driver 经构造 options 传给 SDK，因此样式读 `polygon.options.*`
+ * （Fake v4 只如实记录「传进去了什么」，字段级 setter 才会写实例字段）。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BPolygon from '../../packages/baidu-map-gl-vue/src/components/overlays/BPolygon.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import {
+  createFakeV4Harness,
+  type FakeBMapV4,
+  type FakeV4Harness,
+  type FakeV4Polygon,
+} from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
+let harness: FakeV4Harness
+let fake: FakeBMapV4
+
+beforeEach(() => {
+  ;({ harness, fake } = createFakeV4Harness())
+})
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
+
+async function settle() {
+  await flushPromises()
+  await nextTick()
 }
 
-function mountPolygon(path = ref([{ lng: 116.4, lat: 39.9 }, { lng: 116.5, lat: 39.9 }, { lng: 116.5, lat: 39.95 }])) {
-  const el = host()
+/** 最后一张地图上挂着的多边形（这些用例里就是那个唯一的 Polygon）。 */
+function firstPolygon(): FakeV4Polygon {
+  return fake.createdMaps.at(-1)!.overlays[0] as FakeV4Polygon
+}
+
+function mountPolygon(
+  path = ref([{ lng: 116.4, lat: 39.9 }, { lng: 116.5, lat: 39.9 }, { lng: 116.5, lat: 39.95 }]),
+) {
+  const el = harness.container()
   const wrapper = mount(
     defineComponent({
       components: { BMap, BPolygon },
       setup() {
         return () =>
-          h(BMap, { provider: provider() }, () => [
+          h(BMap, { provider: harness.provider() }, () => [
             h(BPolygon, { path: path.value, fillColor: '#00ff00', fillOpacity: 0.3 }),
           ])
       },
@@ -43,46 +58,44 @@ function mountPolygon(path = ref([{ lng: 116.4, lat: 39.9 }, { lng: 116.5, lat: 
 }
 
 describe('BPolygon v3', () => {
-  beforeEach(() => resetLifecycleState())
-
   it('creates polygon with path points and fill options', async () => {
-    fake.stats.reset()
     const { wrapper } = mountPolygon()
-    await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const poly = [...(map.overlays as Set<any>)][0]
-    expect(poly.points.length).toBe(3)
-    expect(poly.fillColor).toBe('#00ff00')
-    expect(poly.fillOpacity).toBe(0.3)
+    await settle()
+    // 旧口径 `fake.stats.overlaysCreated === 1`；v4 同一事实是活动口径里的挂载次数
+    expect(fake.diagnostics.snapshot().activity.overlaysAttached).toBe(1)
+    const poly = firstPolygon()
+    expect(poly.path.length).toBe(3)
+    // 旧 BMapGL fake 上构造期样式直接落在实例字段上；v4 的 Fake 把构造 options 原样记在
+    // `options` 里（`setFillColor` 之类才会写 `poly.fillColor`）
+    expect(poly.options.fillColor).toBe('#00ff00')
+    expect(poly.options.fillOpacity).toBe(0.3)
     wrapper.unmount()
     await nextTick()
   })
 
   it('updates path via root-reference replacement', async () => {
-    fake.stats.reset()
     const path = ref([{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }])
     const { wrapper } = mountPolygon(path)
-    await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const poly = [...(map.overlays as Set<any>)][0]
-    expect(poly.points.length).toBe(2)
+    await settle()
+    const poly = firstPolygon()
+    expect(poly.path.length).toBe(2)
 
     path.value = [{ lng: 10, lat: 10 }]
     await nextTick()
-    expect(poly.points.length).toBe(1)
-    expect(poly.points[0].lng).toBe(10)
+    expect(poly.path.length).toBe(1)
+    expect(poly.path[0]!.lng).toBe(10)
     wrapper.unmount()
     await nextTick()
   })
 
   it('releases listeners on unmount', async () => {
-    fake.stats.reset()
     const { wrapper } = mountPolygon()
-    await flushPromises()
-    expect(fake.stats.listeners).toBeGreaterThan(0)
+    await settle()
+    // 旧读数 `fake.stats.listeners`;Fake v4 的同一事实是诊断的存活监听器数
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.listeners).toBe(0)
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0)
+    harness.assertIdle('BPolygon 卸载')
   })
 })

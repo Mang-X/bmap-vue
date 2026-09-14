@@ -138,15 +138,17 @@ describe("Capability override / supports / require / unsupported 策略", () => 
     expect(registry.explain("service.geocoder").reason).toBe("supported");
   });
 
-  it("engine 白名单拦截 v4-only 能力", () => {
+  it("engine 白名单只剩「目录未收录」这条可达路径（单引擎基线）", () => {
     const registry = createCapabilityRegistry({
-      engine: "jsapi-v3",
-      version: "3.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: FULL_SDK,
       unsupported: "silent",
     });
-    expect(registry.supports("map.viewport")).toBe(false);
-    expect(registry.explain("map.viewport").reason).toBe("engine-unsupported");
+    // M3A3-REMOVE-LEGACY（#26）：旧引擎删除后 `BMapEngine` 只剩 jsapi-v4，
+    // 「引擎不在白名单」只可能因为该 id 根本没有描述符。
+    expect(registry.supports("does.not-exist" as Capability)).toBe(false);
+    expect(registry.explain("does.not-exist" as Capability).reason).toBe("engine-unsupported");
   });
 
   it("raw member 缺失时报告 raw-member-missing", () => {
@@ -167,17 +169,16 @@ describe("Capability override / supports / require / unsupported 策略", () => 
     );
     expect(unsupportedIds.length).toBeGreaterThan(0);
 
-    for (const engine of ["webgl-v1", "jsapi-v3", "jsapi-v4"] as const) {
-      const registry = createCapabilityRegistry({
-        engine,
-        version: "4.0",
-        rawSdk: FULL_SDK,
-        unsupported: "silent",
-      });
-      for (const id of unsupportedIds) {
-        expect(registry.supports(id), `${id} @ ${engine} 应不支持`).toBe(false);
-        expect(registry.explain(id).reason).toBe("status-unsupported");
-      }
+    // M3A3-REMOVE-LEGACY（#26）：`BMapEngine` 只剩 jsapi-v4，原先遍历三个引擎的循环收敛为一个。
+    const registry = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: FULL_SDK,
+      unsupported: "silent",
+    });
+    for (const id of unsupportedIds) {
+      expect(registry.supports(id), `${id} 应不支持`).toBe(false);
+      expect(registry.explain(id).reason).toBe("status-unsupported");
     }
 
     const overridden = baseRegistry({ "service.truck-route": true, "overlay.marker": false });

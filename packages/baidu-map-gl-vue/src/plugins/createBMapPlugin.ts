@@ -9,9 +9,11 @@
  *   一份手写数组——两处清单漂移会导致 `app.use` 少注册组件；
  * - 默认版本改用 `DEFAULT_VERSION`（JSAPI 4.0 基线），不再硬编码 `1.0`；插件自身报告的
  *   库版本改用 `LIBRARY_VERSION`，与 `package.json` 单一事实源对齐；
- * - 默认 Client definition 经迁移期归一（`withMigrationDriver`）：按**加载结果的
- *   engine** 分派 Driver，因此显式传入的 legacy Provider 不会被破坏；R25-B（issue #71）
- *   起**默认 Provider 已是 v4 家族**（`baiduJsapiV4Provider()`，内部委托官方 Loader）；
+ * - 默认 Provider 自 R25-B（issue #71）起是 `baiduJsapiV4Provider()`（内部委托官方
+ *   `@baidumap/jsapi-loader`）；
+ * - M3A3-REMOVE-LEGACY（#26）：迁移期的 `withMigrationDriver` 归一与 `allowExistingGlobal`
+ *   一并删除。默认 definition 直接交给 `createBMapClient`（缺省注入 jsapi-v4 Driver 工厂），
+ *   需要复用宿主已加载的 SDK 时显式传 `existingGlobalV4Provider()`；
  * - 旧 `globalProperties` 映射保留，但只作为迁移期兼容并给出明确的 beta 警告。
  */
 import type { App, Component } from "vue";
@@ -20,28 +22,23 @@ import { DEFAULT_VERSION, type BMapLoadOptions } from "../core/loader/url";
 import { logger } from "../core/logger";
 import { bmapConfigKey, type BMapPluginConfig } from "../core/context/pluginConfig";
 import { defaultClientDefinitionKey } from "../core/context/client";
-import { withMigrationDriver } from "../client/migration";
-import type { AnyBMapProviderLike, CreateBMapClientOptions } from "../client/types";
+import type { BMapProviderLike, CreateBMapClientOptions } from "../client/types";
 import { LIBRARY_VERSION } from "../version";
 import * as manifestComponents from "../components/index";
 
 export interface CreateBMapPluginOptions {
   /**
-   * 默认 SDK Provider。
+   * 默认 SDK Provider（结构化：`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。
    *
-   * 类型是**跨引擎**的 `AnyBMapProviderLike`：JSAPI 4.0 的 Provider 家族
-   * （`baiduJsapiV4Provider()` / `existingGlobalV4Provider()` / `customScriptV4Provider()`）
-   * 返回 `LoadedJsapiV4`，迁移期 legacy Provider 返回 `LoadedLegacySdk`，两者都合法。
-   * 具体用哪个 Driver 由 `withMigrationDriver` 按加载结果的 engine 分派。
+   * 内置 v4 家族：`baiduJsapiV4Provider()`（默认）/ `existingGlobalV4Provider()` /
+   * `customScriptV4Provider()`。
    */
-  provider?: AnyBMapProviderLike;
+  provider?: BMapProviderLike;
   ak?: string;
   apiUrl?: string;
   version?: string;
   plugins?: string[];
   defaults?: Partial<BMapLoadOptions>;
-  /** 显式 opt-in 才允许读取 window 上的既有全局 SDK(默认走 CDN);向后兼容保留 */
-  allowExistingGlobal?: boolean;
   client?: CreateBMapClientOptions;
 }
 
@@ -51,8 +48,8 @@ export { defaultClientDefinitionKey } from "../core/context/client";
 
 export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
   // R25-B（issue #71）：默认 Provider 是 `baiduJsapiV4Provider()`——它内部真的调用官方
-  // `@baidumap/jsapi-loader`，不再走自研 JSONP transport。legacy `baiduCdnProvider()`
-  // 仍可从根入口显式传入（删除属 #26），但不再是默认值。
+  // `@baidumap/jsapi-loader`，不再走自研 JSONP transport。legacy `baiduCdnProvider()` 已随
+  // webgl-v1 在 #26 删除，根入口也不再导出它。
   const provider = options.provider ?? baiduJsapiV4Provider();
   const defaults: BMapLoadOptions = {
     ak: options.ak,
@@ -61,15 +58,12 @@ export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
     ...options.defaults,
   };
   const config: BMapPluginConfig = { provider, defaults };
-  // 迁移期默认路径：显式 `client` 也要归一（否则「只有默认 definition 被包装、显式
-  // client 没被包装」会让同一份配置在 <BMap> 与 <BMapProvider> 上表现不一致）。
-  // `withMigrationDriver` 幂等：已声明 driver 时保留，宽松 Provider 归一为结构化结果。
-  const clientDefinition: CreateBMapClientOptions = withMigrationDriver(
-    options.client ?? {
-      provider,
-      loadOptions: defaults,
-    },
-  );
+  // 显式 `client` 与默认 definition 走同一条路（也是 #26 之前 `withMigrationDriver` 保证过的
+  // 「两边一致」）：两者都直接交给 `createBMapClient`，不再有裸 Provider 归一。
+  const clientDefinition: CreateBMapClientOptions = options.client ?? {
+    provider,
+    loadOptions: defaults,
+  };
 
   return {
     install(app: App) {

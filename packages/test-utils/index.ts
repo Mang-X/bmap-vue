@@ -1,58 +1,16 @@
-export { createFakeBMapGl, default as fakeBMapGl } from './fake-bmapgl'
 export {
   bootPlayground,
   describeMode,
   resolvePlaygroundMode,
 } from './playground-modes'
 export type { PlaygroundBoot, PlaygroundEnvLike, PlaygroundMode } from './playground-modes'
-export {
-  createFakeV4Provider,
-  createLegacyFakeProvider,
-} from './fake-providers'
-export type { FakeV4ProviderHandle, LegacyFakeProviderHandle } from './fake-providers'
+export { createFakeV4Provider } from './fake-providers'
+export type { FakeV4ProviderHandle } from './fake-providers'
 export {
   createFakeV4Client,
-  createJsapiV4MatrixEngine,
-  createLegacyMatrixEngine,
-  createMigrationMatrixEngines,
-  expectSameDomainResult,
-  runDriverMatrix,
-} from './driver-matrix'
-export type {
-  DriverMatrixContext,
-  DriverMatrixEngine,
-  DriverMatrixResourceKind,
-} from './driver-matrix'
-export {
-  FakeEventTarget,
-  FakeMap,
-  FakeMarker,
-  FakeInfoWindow,
-  FakeIcon,
-  FakeLabel,
-  FakeShapeOverlay,
-  FakeCircle,
-  FakePolyline,
-  FakePolygon,
-  FakeContextMenu,
-  FakeMenuItem,
-  FakeControl,
-  FakeZoomControl,
-  FakeScaleControl,
-  FakeDistrictLayer,
-  FakePrism,
-  FakeGroundOverlay,
-  FakeBounds,
-  createCallLog,
-} from './fake-bmapgl'
-export {
-  LifecycleInspector,
-  getLifecycleInspector,
-  getFakeBMapGl,
-  resetLifecycleState,
-  registerRuntimeCounters,
-} from './lifecycle-inspector'
-export type { LifecycleSnapshot } from './lifecycle-inspector'
+  createFakeV4Harness,
+} from './fake-v4-harness'
+export type { FakeV4Harness, FakeV4MountKind } from './fake-v4-harness'
 export {
   createFakeBMapV4,
   FakeV4Autocomplete,

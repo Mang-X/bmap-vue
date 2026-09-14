@@ -11,6 +11,7 @@
     "check:raw-sdk": "node --experimental-strip-types scripts/check-raw-sdk.mts",
     "check:raw-sdk:tree": "node --experimental-strip-types scripts/check-raw-sdk.mts --src packages/baidu-map-gl-vue/src",
     "check:public-dts": "node --experimental-strip-types scripts/check-public-dts.mts",
+    "check:no-bmapgl": "node --experimental-strip-types scripts/check-no-bmapgl.mts",
     "verify:package": "node --experimental-strip-types scripts/verify-package.mts",
     "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",
     "size:baseline": "node --experimental-strip-types scripts/collect-package-size.mts",

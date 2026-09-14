@@ -115,9 +115,13 @@ Official-first ADR 已经把「默认加载委托官方 Loader」定成决策，
    当成正常配置参与指纹与冲突判定，调用方拿到的可能是 `BMAP_SDK_CONFIG_CONFLICT`，而不是
    「这个配置不支持」的准确原因。
 
-10. **legacy 的显式回退分支不动。**
-    `<BMap allowExistingGlobal>` 与「页面已有全局」的兼容回退仍走 `existingGlobalProvider()`
-    （webgl-v1 语义）。它们服务迁移期宿主自定义加载的场景，随 #26 一并删除；本次切默认不触碰。
+10. **legacy 的显式回退分支不动。** ~~`<BMap allowExistingGlobal>` 与「页面已有全局」的兼容回退
+    仍走 `existingGlobalProvider()`（webgl-v1 语义）。它们服务迁移期宿主自定义加载的场景，
+    随 #26 一并删除；本次切默认不触碰。~~
+    **（2026-09-14 更新：#26 已完成——`allowExistingGlobal` prop、`createBMapPlugin` 的同名选项
+    与「页面已有全局就自动回退」全部删除，`existingGlobalProvider()` 也不存在了。宿主自己加载
+    SDK 的场景改走 v4 语义的 `existingGlobalV4Provider()`，见
+    [ADR 2026-09-14 删除旧引擎](./2026-09-14-remove-legacy-engine.md) 决策 4。）**
 
 11. **Playground 用「应用级装配决定加载方式」的形态覆盖默认路径。**
     `apps/playground` 不在 `<BMap>` 上收 `ak`，而是由应用级装配选择：配了 `VITE_BMAP_AK` 走

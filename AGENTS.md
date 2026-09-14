@@ -11,7 +11,7 @@
 | 维度 | 说明 |
 | --- | --- |
 | 组件库版本 | `packages/baidu-map-gl-vue/package.json` |
-| SDK engine（内部） | `webgl-v1` / `jsapi-v3` / `jsapi-v4`（`src/driver`） |
+| SDK engine（内部） | `jsapi-v4`（唯一；旧引擎 `webgl-v1` / `jsapi-v3` 已在 #26 删除） |
 | SDK version | `4.0`（`v=4.0`） |
 
 讨论「升级」时需说明是哪一种版本。
@@ -39,16 +39,21 @@ ADR `2026-09-13-ui-kit-subpath-and-type-boundary`：根入口不重导出 UI、�
 ## SDK 边界与门禁
 
 边界配置的单一事实源：`scripts/raw-sdk-boundary.mts`（白名单 + 命名空间/全局对象清单）；
-检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）。
+检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）；文件收集与 SFC 解析层：
+`scripts/source-scan.mts`（`check:raw-sdk` 与 `check:no-bmapgl` 共用）。
 
 raw SDK 白名单（相对 `packages/baidu-map-gl-vue/src`）：`driver/**`、`client/**`、`core/loader/**`、`plugins/**`；
 `packages/test-utils` 作为 Fake 边界在扫描范围之外。其余目录（`components`、`composables`、`core/runtime` 等）为禁区。
+
+`BMapGL`（旧引擎命名空间）自 #26 起**整棵运行时源码都不允许出现**——它不在任何白名单里，
+由 `check:no-bmapgl` 单独守（官方插件命名空间 `BMapGLLib` 与官方 runtime 自己挂的别名不受影响）。
 
 | 命令 | 作用 |
 | --- | --- |
 | `pnpm check:raw-sdk` | 禁区目录静态扫描（`BMapGL`、`window.BMap`、`new BMap.*`、`BMap.*` 类型、`namespace BMap`、官方类型包导入） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src` |
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:v3`） |
+| `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:v3`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 
 类型边界 augmentation 位于 `src/driver/jsapi-v4/augmentations/`，治理规则与元数据模板见该目录 `README.md`；

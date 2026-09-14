@@ -1,29 +1,19 @@
 /**
  * useBMapGeocodeDetail 验证(含真 Driver 全链路)
+ *
+ * #26 之后组件默认路径直接走 v4 Driver，服务读法以 `packages/test-utils/fake-bmap-v4/services.ts`
+ * 的 `FakeV4Geocoder.locationResult` 为准。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h, onMounted, nextTick, ref } from 'vue'
+import { defineComponent, h, onMounted, nextTick } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import { useBMapGeocodeDetail } from '../../packages/baidu-map-gl-vue/src/composables/useBMapGeocodeDetail'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
 
 function mountWithChild(child: (geo: ReturnType<typeof useBMapGeocodeDetail>) => Promise<void> | void) {
   const el = host()
@@ -48,24 +38,23 @@ function mountWithChild(child: (geo: ReturnType<typeof useBMapGeocodeDetail>) =>
 }
 
 describe('useBMapGeocodeDetail', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('resolves address detail for a point via driver-converted Point', async () => {
-    fake.stats.reset()
     let detail: any = null
     const { wrapper } = mountWithChild(async (geo) => {
       detail = await geo.get({ lng: 116.404, lat: 39.915 })
     })
     await flushPromises()
     await nextTick()
-    expect(detail?.address).toBe('北京市海淀区上地10街')
+    // Fake v4 Geocoder.getLocation 的默认回包地址
+    expect(detail?.address).toBe('北京市东城区天安门')
     expect(detail?.point).toEqual({ lng: 116.404, lat: 39.915 })
     wrapper.unmount()
     await nextTick()
   })
 
   it('getBatch returns per-item details', async () => {
-    fake.stats.reset()
     let results: any = null
     const { wrapper } = mountWithChild(async (geo) => {
       results = await geo.getBatch([
@@ -76,7 +65,7 @@ describe('useBMapGeocodeDetail', () => {
     await flushPromises()
     await nextTick()
     expect(results).toHaveLength(2)
-    expect(results[0].detail?.address).toBe('北京市海淀区上地10街')
+    expect(results[0].detail?.address).toBe('北京市东城区天安门')
     expect(results[0].point).toEqual({ lng: 116.404, lat: 39.915 })
     wrapper.unmount()
     await nextTick()

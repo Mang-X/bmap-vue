@@ -22,7 +22,11 @@ function createFakeClient(driverMap: unknown): BMapClient {
   } as unknown as BMapDriver;
   return {
     id: Symbol("fake-client"),
-    engine: "webgl-v1",
+    // M3A3-REMOVE-LEGACY（#26）：engine 只剩 jsapi-v4；本文件的用例只关心 runtime 的
+    // 生命周期编排，因此这里的 Client 是一个最小替身（metadata 三个维度都补齐）。
+    engine: "jsapi-v4",
+    libraryVersion: "test",
+    sdkVersion: "test",
     version: "test",
     driver,
     capabilities: driver.capabilities,
@@ -51,10 +55,10 @@ describe("MapRuntime", () => {
     expect(rt.status.value).toBe("idle");
     const p = rt.mount();
     expect(["waiting-client", "loading"]).toContain(rt.status.value);
-    deferred.resolve({ BMapGL: {} });
+    deferred.resolve({ BMap: {} });
     const ctx = await p;
     expect(rt.status.value).toBe("ready");
-    expect(ctx.client.engine).toBe("webgl-v1");
+    expect(ctx.client.engine).toBe("jsapi-v4");
     expect(ctx.map).toEqual(createMap.mock.results[0].value);
     expect(rt.map.value).toBeTruthy();
     expect(rt.handle.value).toBe(rt.map.value);

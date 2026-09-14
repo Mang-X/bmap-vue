@@ -1,14 +1,16 @@
 /**
  * 测试全局 setup:
- * - 每个用例前重置 fake BMapGL 统计
- * - 注入 fake SDK 到 window.BMapGL(组件 init 会读取)
  * - patch document.createElement:对百度脚本执行 callback,模拟 SDK 加载完成
+ *
+ * M3A3-REMOVE-LEGACY（issue #26）：这里原先还会在 `window.BMapGL` 上注入 Fake BMapGL 并重置它的
+ * 统计。旧引擎删除后，测试环境不再预置任何**假 SDK 全局**——需要 v4 命名空间时由用例显式注入
+ * （`createFakeV4Provider()` / `existingGlobalV4Provider()`），注入与还原都留在用例内，
+ * 既避免「全局脏状态跨用例泄漏」，也让「默认路径不读全局」这条不变量在测试环境里同样成立。
+ *
+ * 保留的 createElement 桩只服务自研 `ScriptLoader` 的那条路径（`customScriptV4Provider` /
+ * `existingGlobalV4Provider` 的离线脚本加载），与官方 Loader 无关。
  */
-import { beforeEach, vi, afterEach } from 'vitest'
-import { getFakeBMapGl, resetLifecycleState, registerRuntimeCounters } from '../packages/test-utils'
-
-const fake = getFakeBMapGl()
-;(window as unknown as { BMapGL: unknown }).BMapGL = fake
+import { afterEach, beforeEach, vi } from 'vitest'
 
 // 模块级缓存原始 createElement(避免 spy 链递归)
 const origCreateElement = document.createElement.bind(document)
@@ -18,8 +20,6 @@ function isBMapScript(el: HTMLScriptElement): boolean {
 }
 
 beforeEach(() => {
-  resetLifecycleState()
-  registerRuntimeCounters()
   document.body.innerHTML = ''
 
   // 拦截 script 创建,让 SDK 加载 Promise 立即 resolve(模拟)

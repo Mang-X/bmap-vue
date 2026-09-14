@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { defineComponent, h, nextTick, provide, shallowRef } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createClientContext, bmapClientContextKey } from "./client";
-import { withMigrationDriver } from "../../client/migration";
 import { useResolvedTarget, targetContextKey, type TargetContext } from "./target";
 import { mapContextKey, type MapContext } from "./types";
 import { ResourceScope } from "../lifecycle/ResourceScope";
@@ -103,11 +102,14 @@ describe("TargetContext", () => {
 
   it("client context is injectable without a map", async () => {
     const ctx = createClientContext({
-      // 迁移期宽松 Provider：显式经 withMigrationDriver 归一（默认 createBMapClient 已收口 v4）
-      definition: withMigrationDriver({
-        provider: { load: async () => ({ ok: 1 }) },
+      // 加载结果的形状按契约给全（engine + namespace）；Driver 用 stub，本用例只关心 Context 可注入
+      definition: {
+        provider: {
+          load: async () => ({ engine: "jsapi-v4", version: "4.0", namespace: {} }) as never,
+        },
         loadOptions: {},
-      }),
+        driver: () => ({ engine: "jsapi-v4" }) as never,
+      },
     });
     const Child = defineComponent({
       setup() {

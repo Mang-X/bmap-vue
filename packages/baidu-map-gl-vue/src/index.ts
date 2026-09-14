@@ -20,13 +20,8 @@ export {
   urlPluginDefinition,
   BUILTIN_PLUGIN_URLS,
 } from "./plugins/builtins";
-// Provider(公开 factory)
-export {
-  baiduCdnProvider,
-  customScriptProvider,
-  existingGlobalProvider,
-} from "./core/loader/Provider";
-export type { BMapProvider } from "./core/loader/Provider";
+// Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
+// 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
 export { Vue3BaiduMapGlResolver, componentTypeNames } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
@@ -69,15 +64,13 @@ export type { BMapProviderProps } from "./components/provider/BMapProvider.vue";
 // Client/Driver 领域类型(稳定公开,raw SDK 只在 ./advanced)
 export { createBMapClientDefinition } from "./client";
 export type {
-  AnyBMapProviderLike,
   BMapClient,
   BMapDriverFactory,
   BMapDriverInput,
   BMapProviderLike,
   CreateBMapClientOptions,
-  LooseBMapProviderLike,
 } from "./client/types";
-export type { LoadedLegacySdk, LoadedSdk } from "./core/loader/loaded";
+export type { LoadedSdk } from "./core/loader/loaded";
 export type { BMapDriver, BMapEngine } from "./driver/types/bmap";
 export type {
   MapHandle,
