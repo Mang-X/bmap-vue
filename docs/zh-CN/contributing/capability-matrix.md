@@ -95,5 +95,5 @@
 | panorama | `panorama.label` | experimental | — | ✓ | PanoramaLabel | 全景标注（PanoramaLabel） |
 | runtime | `runtime.resource-scope` | extended | ✓ | ✓ | — | 项目资源生命周期作用域（监听器/覆盖物/图层的统一释放路径） |
 | runtime | `runtime.capability-override` | extended | ✓ | ✓ | — | 运行时能力 override（显式修正能力探测结果） |
-| runtime | `runtime.fake-sdk` | experimental | ✓ | ✓ | — | Fake SDK 测试替身（M3A.3 双 Driver 行为验证） |
+| runtime | `runtime.fake-sdk` | experimental | ✓ | ✓ | — | Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证） |
 | runtime | `runtime.async-task` | experimental | ✓ | ✓ | — | 异步任务控制器（服务与动画的取消/状态统一） |

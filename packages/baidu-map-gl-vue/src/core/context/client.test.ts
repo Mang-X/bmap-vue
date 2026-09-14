@@ -2,18 +2,28 @@ import { describe, it, expect, vi } from "vitest";
 import { createClientContext } from "./client";
 import type { BMapClient, BMapDriverFactory, CreateBMapClientOptions } from "../../client/types";
 import type { BMapDriver } from "../../driver/types/bmap";
+import { createLoadedJsapiV4 } from "../loader/providers";
 import type { LoadedSdk } from "../loader/loaded";
 
 /**
  * M3A3-REMOVE-LEGACY（#26）：`withMigrationDriver` 归一已删除，definition 直接交给
  * `createBMapClient`。本文件测的是 **Context 的生命周期**（loading/ready/error/retry/dispose），
  * 与具体 Driver 实现无关，因此这里注入一个 stub Driver 工厂，避免每条用例都要造一个完整
- * 的 v4 命名空间——加载结果的**形状**（engine + namespace）仍然按契约给全。
+ * 的 v4 命名空间——加载结果仍必须是**完整**的结构化结果（`assertLoadedSdk` 是运行时边界，
+ * 少 `version` / `load` 会被拒；用公开构造成型而不是手写字面量）。
  */
 const stubDriver: BMapDriverFactory = () => ({ engine: "jsapi-v4" }) as unknown as BMapDriver;
 
 function loaded(): LoadedSdk {
-  return { engine: "jsapi-v4", version: "4.0", namespace: {} } as LoadedSdk;
+  return createLoadedJsapiV4({
+    providerId: "existing-global-v4",
+    mode: "existing-global",
+    version: "4.0",
+    versionSource: "global",
+    options: {},
+    fingerprint: "bmap-client-context-test",
+    namespace: {},
+  });
 }
 
 function definition(load: CreateBMapClientOptions["provider"]["load"]): CreateBMapClientOptions {

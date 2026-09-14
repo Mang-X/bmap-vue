@@ -444,9 +444,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "行政区划图层（DistrictLayer）",
     rawMembers: ["DistrictLayer"],
-    // M3A2-CONTROLS-LAYERS（#22）：`LayerDriver` 的共享契约要求两个引擎都能创建行政区图层，
-    // 而 webgl-v1 的驱动本就把 district 映射到 `BMapGL.DistrictLayer`（组件测试也一直在跑），
-    // 因此从 V4_ONLY 放宽为 WEBGL_V4，避免 catalog 与实际支持漂移
+    // M3A2-CONTROLS-LAYERS（#22）曾经因为「`LayerDriver` 的共享契约要求两个引擎都能创建行政区
+    // 图层」把这条从「仅 v4」放宽过一次；旧引擎删除后（#26）所有条目都只声明 `jsapi-v4`，
+    // 这里不再需要单独说明——`engines` 维度的整体退化见本文件顶部的单引擎基线注释。
     // （与 #20 对 `map.pixel-conversion` 的处理同源）。
     engines: JSAPI_V4,
     status: "native",
@@ -714,7 +714,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "runtime.fake-sdk": {
     id: "runtime.fake-sdk",
     family: "runtime",
-    description: "Fake SDK 测试替身（M3A.3 双 Driver 行为验证）",
+    description: "Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证）",
     engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: true,

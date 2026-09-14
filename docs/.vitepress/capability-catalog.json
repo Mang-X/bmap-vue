@@ -831,7 +831,7 @@
         "jsapi-v4"
       ],
       "rawMembers": [],
-      "description": "Fake SDK 测试替身（M3A.3 双 Driver 行为验证）"
+      "description": "Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证）"
     },
     {
       "id": "runtime.async-task",
