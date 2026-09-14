@@ -117,6 +117,105 @@ function main() {
   }
   console.log('\n[verify-package] negative check OK: global BMap namespace is not visible to consumers')
 
+  // 8) dev 告警的**消费方可见性**（#27 评审第二轮 P2）
+  //
+  //    `core/logger.ts` 的 `devWarn` 把开发 / 生产的判定**留给消费方**（打包器折叠
+  //    `process.env.NODE_ENV`，Node / SSR 读真实环境变量）。因此发布产物里必须保留这个标记：
+  //    一旦在 publish build 阶段定死成 `production`，npm 消费方即使在自己的 dev server 里
+  //    import 本包，拿到的也是已经 DCE 掉的产物，告警永远不会出现。
+  //
+  //    三步都验：① ESM 产物层面「标记还在」；② IIFE 档「没有裸 `process`」（那一档自己折叠）；
+  //    ③ 行为层面「同一个产物在 development 下告警、在 production 下静默」——正是消费方
+  //    打包器折叠后的两种终态。
+  const installedDist = resolve(v3Consumer, 'node_modules/baidu-map-gl-vue/dist')
+  const distFiles: string[] = []
+  const collect = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name)
+      if (entry.isDirectory()) collect(full)
+      else if (/\.(mjs|js)$/.test(entry.name)) distFiles.push(full)
+    }
+  }
+  collect(installedDist)
+
+  // ① ESM 档保留可折叠标记（`useControllableState` 会被拆进共享 chunk，因此要扫整棵 dist）
+  const esmFiles = distFiles.filter((file) => file.endsWith('.mjs'))
+  const keepsDevMarker = esmFiles.some((file) =>
+    readFileSync(file, 'utf8').includes('process.env.NODE_ENV'),
+  )
+  if (!keepsDevMarker) {
+    throw new Error(
+      '[verify-package] ESM 产物必须保留 `process.env.NODE_ENV` 这个可折叠标记：' +
+        '在库构建阶段定死开发 / 生产会让消费方的 dev server 永远看不到 dev 告警',
+    )
+  }
+
+  // ② IIFE 档（`<script>` 直引）必须已经折叠掉：浏览器里没有 `process`
+  const globalBundle = resolve(installedDist, 'index.global.js')
+  if (/[^.\w]process\.env/.test(readFileSync(globalBundle, 'utf8'))) {
+    throw new Error(
+      '[verify-package] IIFE 产物残留裸 `process.env`：浏览器里会抛 ReferenceError（见 vite.config.global.ts 的 define）',
+    )
+  }
+
+  const devProbe = resolve(v3Consumer, 'dev-warn-probe.mjs')
+  writeFileSync(
+    devProbe,
+    [
+      "import { effectScope, ref } from 'vue'",
+      "import { useControllableState } from 'baidu-map-gl-vue/composables'",
+      '',
+      'const lines = []',
+      'const original = console.warn',
+      'console.warn = (...args) => { lines.push(String(args[0])) }',
+      'try {',
+      '  const external = ref(undefined)',
+      '  const scope = effectScope()',
+      '  scope.run(() => {',
+      '    const state = useControllableState({',
+      "      name: 'center',",
+      '      value: () => external.value,',
+      '      fallback: { lng: 0, lat: 0 },',
+      '      equals: (a, b) => a.lng === b.lng && a.lat === b.lat,',
+      '      copy: (p) => ({ lng: p.lng, lat: p.lat }),',
+      '    })',
+      '    external.value = { lng: 1, lat: 2 }',
+      '    state.syncExternal(external.value)',
+      '  })',
+      '  scope.stop()',
+      '} finally {',
+      '  console.warn = original',
+      '}',
+      "process.stdout.write(JSON.stringify({ warns: lines.length, modeSwitch: lines.some((l) => l.includes('由非受控切换为受控')) }))",
+      '',
+    ].join('\n'),
+  )
+  const runDevProbe = (nodeEnv: string) => {
+    const out = execSync(`node ${JSON.stringify(devProbe)}`, {
+      cwd: v3Consumer,
+      env: { ...process.env, NODE_ENV: nodeEnv, CI: '1' },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    return JSON.parse(out.trim()) as { warns: number; modeSwitch: boolean }
+  }
+  const devRun = runDevProbe('development')
+  if (!devRun.modeSwitch) {
+    throw new Error(
+      `[verify-package] NODE_ENV=development 下发布包必须输出「模式切换」告警，实际没有（warns=${devRun.warns}）`,
+    )
+  }
+  const prodRun = runDevProbe('production')
+  if (prodRun.warns !== 0) {
+    throw new Error(
+      `[verify-package] NODE_ENV=production 下发布包不得输出任何 dev 告警，实际 ${prodRun.warns} 条`,
+    )
+  }
+  rmSync(devProbe, { force: true })
+  console.log(
+    '\n[verify-package] dev warning gate OK: 产物保留可折叠标记；development 告警 / production 静默',
+  )
+
   console.log('\n[verify-package] ALL PASSED')
 }
 

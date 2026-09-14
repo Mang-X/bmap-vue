@@ -257,8 +257,9 @@ const tilt = ref(0)
 ### 初次视野与「加载期间到达的受控值」
 
 视野在**地图创建时**一次性设定（SDK 的 `centerAndZoom` + `setHeading` / `setTilt`），此后
-不再重跑初始化路径。SDK 就绪之后、`ready` / `initd` 事件之前，组件会再按**当前** props
-把受控视野收敛一次——因此「SDK 还在加载时父级就改了 `center`」不会丢：
+不再重跑初始化路径。SDK 就绪之后、`ready` / `initd` 事件之前，组件会把**当前生效值**
+（受控时是外部值，非受控时是内部状态）收敛一次——因此「SDK 还在加载时父级就改了 `center`」，
+乃至「加载途中在受控与非受控之间切换过」都不会丢：
 
 ```vue
 <template>
@@ -269,9 +270,11 @@ const tilt = ref(0)
 收敛走的是字段级命令（`setCenter` / `setZoom` / …），**不是**重跑 `centerAndZoom`，所以
 `zoom` 不会被 center 的写入重置，初始化也仍然只发生一次。
 
-::: tip 告警只在开发构建里输出
-「`default*` 失效」「模式切换」这几条告警走的是开发期通道（构建期常量 `__DEV__`，构建产物为
-`false`），**生产产物里这段分支被构建期静态消除**——最终用户的 console 不会出现库的用法提示。
+::: tip 告警只在开发环境输出
+「`default*` 失效」「模式切换」这几条告警读 `process.env.NODE_ENV`，**判定留给消费方的构建 /
+运行时**：打包器会把它折叠成字面量，Node / SSR 下它是真实环境变量。所以自己的 dev server 里能
+看到、生产构建里会被消除。`<script>` 直引的 `index.global.js` 固定按生产处理（浏览器里没有
+`process`），看不到这几条提示。
 :::
 
 ::: tip props 请用「换引用」的方式更新

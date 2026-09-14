@@ -120,16 +120,30 @@ watch 源是 `lng,lat` 两个标量（字符串形态取整串，并加 `s:` / `
    而不是「prop 是否存在过」。
 
 告警经 `core/logger` 的 `devWarn` 输出（带 `[baidu-map-gl-vue]` 前缀与 `field` context），每字段每
-方向至多一次。门禁是构建期常量 `__DEV__`（`vite.config.build.ts` / `vite.config.global.ts` 早就
-`define` 成 `'false'`，vitest 为 `'true'`；本次给 docs / playground / browser smoke 这几份
-**直接编 src** 的配置补上同一个 `define`），因此**生产产物里这段分支被静态消除**。
+方向至多一次。
 
-**试过但放弃的方案：`import.meta.env.DEV`。** 它由 Vite 自动替换、零配置，看起来更省事，但它需要
-`vite/client` 的**环境类型** ⇒ 任何编译本包源码的 program 都被迫带上这份环境声明。仓库自己的门禁
-立刻抓到了这一点：`tests/behavior/v3-ui-kit-widget-contract.test.ts` 用 `types: []` 模拟
-「不带任何环境声明的消费方」，`import.meta.env` 在它那里报
-`TS2339: Property 'env' does not exist on type 'ImportMeta'`。`__DEV__` 只在本文件 `declare`，
-是纯模块内的构建期常量，不带环境类型依赖（代价：每份会编 src 的构建配置都要注入）。
+**判定留在消费方，不在库的发布构建里定死**（评审第二轮 P2 的核心）：`devWarn` 读
+`process.env.NODE_ENV`，由**消费方的**打包器 / 运行时决定开发还是生产。三档产物的处理不同：
+
+| 产物 | 处理 | 依据 |
+| --- | --- | --- |
+| ESM（`dist/*.mjs`，npm 消费方） | **原样保留** `process.env.NODE_ENV` | 消费方打包器折叠（本仓实测：Vite app 构建与 dev server 都折叠 → dev `"development"` / build `"production"`）；Node / SSR 下它是真实环境变量 |
+| IIFE（`dist/index.global.js`，`<script>` 直引） | 由该档构建配置 `define` 成 `"production"` | 浏览器里没有 `process`，留着就是 `ReferenceError`（见 `vite.config.global.ts`） |
+| 仓库内 app 型消费者（docs / playground / browser smoke） | 什么都不用做（Vite 自动折叠） | 实测 dev server 与 build 都会替换，因此原先为 `__DEV__` 加的那些 `define` 已撤掉 |
+
+`scripts/verify-package.mts` 用三条断言锁住这条链：ESM 产物保留标记、IIFE 无裸 `process.env`、
+同一个产物在 `NODE_ENV=development` 下告警 / `NODE_ENV=production` 下静默（真正的 package-consumer
+验证，跑在安装了 tarball 的 `fixtures/v3-consumer` 里）。
+
+**两次试错（都记下来，别重犯）**：
+
+- `__DEV__`（仓库既有的构建期常量）：在**库发布构建**里就是 `false` ⇒ npm 消费方拿到的产物已被 DCE，
+  自己的 dev server 里永远看不到告警。这正是评审第二轮 P2 抓到的问题。
+- `import.meta.env.DEV`：它需要 `vite/client` 的**环境类型** ⇒ 任何编译本包源码的 program 都被迫
+  带上这份环境声明，仓库门禁 `tests/behavior/v3-ui-kit-widget-contract.test.ts`（`types: []`）
+  直接报 `TS2339: Property 'env' does not exist on type 'ImportMeta'`。
+- 因此选了「模块内 `declare const process` + `process.env.NODE_ENV`」：不带环境类型依赖，
+  又是所有打包器都认的**可折叠标记**。
 
 `logger.warn` 自身保持无门禁——它承载的是运行时故障（能力不支持、服务失败…），那是运维与使用者
 都该看到的。
@@ -187,18 +201,29 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 **setup 阶段冻结**的快照。父级在「SDK 加载中」改 prop 是文档明确支持的用法
 （`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher 不会
 重跑 ⇒ 地图永远停在旧初值。因此 `boot()` 在 `runtime.mount()` 返回后、emit `ready` / `initd`
-**之前**执行一次 `syncControlledView()`（四个 `apply*FromProps`）。
+**之前**执行一次 `syncControlledView()`。
 
 参考实现不存在这个问题：它在 `status === 'ready'` 时才建图，effect 闭包里读到的是**当时**的
 props（没有 setup 期冻结的快照）。本库的快照是必要的（`initializeView` 与 `resetView()` 共用
 同一份「首次视野」，见决策 2），所以用一次显式收敛把差距补回来——而不是把快照改成每次都读
 当前 props（那会让 `resetView()` 失去「回到初值」的语义）。
 
+**收敛必须同时覆盖非受控档**（评审第二轮 P1）：`apply*FromProps` 对 `undefined` 直接 return，
+而加载窗口里也可能发生**受控 → 非受控**（内部状态接管、保留最后一次外部值），此时 watcher 之后
+不会再跑 ⇒ 「内部状态 = A、地图 = 首次快照」永久分叉，正好违反决策 4 的第 3 条规则。
+`convergeViewToState()` 因此把**生效值**（受控时外部值、非受控时内部状态）也写进地图：
+
+- 判定用的是**可证明的前提**：调用点紧接 `initializeView`，而加载窗口内没有 map 可写 ⇒ 期间没有
+  任何视野写入落地，因此「与首次快照相同的字段」一定已经在地图上（短路即可）。这条短路同时挡掉
+  「字符串中心点无法与读回值判等」造成的假写入（`defaultCenter: "北京市"` 不会多出一条命令）。
+- 它只跑在 ready 之前那一次：**watcher 路径不放宽**。非受控档在 ready 之后不会再分叉
+  （内部状态由 `commit` 跟随 SDK），因此不需要——也不应该——让每次 prop 变化都写一遍。
+
 三个约束：
 
 - 收敛走**字段级命令**（`setCenter` / `setZoom` / …），不是重跑 `centerAndZoom`——初始化仍然只
   发生一次，「后续 center 变化不重置 zoom」这条不变量在加载窗口里同样成立；
-- 四个 `apply*FromProps` 都是幂等的（读回判等），所以「加载期间没变过」不会产生额外命令；
+- 两条收敛路径都是幂等的（读回判等），所以「加载期间没变过」不会产生额外命令；
 - 它只覆盖**视野**。`mapType` / 样式 / 交互开关 / 插件在 `boot()` 里已经是「按当前 props 应用」
   （`applyMapType` / `applyStyleProps` / `syncEnableProps`），不受这个窗口影响。
 
@@ -262,32 +287,44 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
    由后续 issue 处理。
 7. **`retry()` 之后不重跑装配**：`defineExpose().retry()` 只透传 `runtime.retry()`，重挂之后
    `applyMapType` / `syncEnableProps` / `bindViewEvents` / 视野收敛都不会重新执行（见决策 8 末段）。
+8. **IIFE 档（`<script>` 直引）固定按生产处理**：那一档在构建时就把 `process.env.NODE_ENV` 折叠成
+   `"production"`（浏览器里没有 `process`），因此它的使用者看不到用法告警。要按环境区分就得多发一个
+   dev 文件（Vue 的 `vue.global.js` / `vue.global.prod.js` 做法），本库暂不引入。
 
 ## 验证
 
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **16 条**用例覆盖三态、初次视野只
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **17 条**用例覆盖三态、初次视野只
   执行一次、`centerAndZoom` 不复发、0/0 与边界 zoom、相同值不写 SDK、浮点抖动、用户交互回写与
   父级回写闭环、heading 环绕、四个 `default*` 的失效、模式切换告警、受控值优先、不重绑与卸载归零，
-  以及评审第一轮补的四条：**加载窗口内的受控更新**（延迟 Provider，含「加载期间才开始受控」形态）、
-  **受控 center 原地 mutation**、**`defaultCenter` 原地 mutation**、**读回错误白名单**。
+  以及两轮评审补的五条：**加载窗口内的受控更新**、**加载窗口内「受控 → 非受控」**（决策 8）、
+  **受控 center 原地 mutation**、**`defaultCenter` 原地 mutation**（决策 9）、**读回错误白名单**。
   **放置理由**：issue 的「预计变更区域」把测试指向 `tests/behavior/v3-bmap.test.ts`，而
   `AGENTS.md` 明确要求「单一引擎的组件级场景写在 `v3-component-scenarios.test.ts`，用例只写领域
   语言、不碰字段名」。二者冲突时按 `AGENTS.md` 执行（预计区域是提示），为此
-  `packages/test-utils/fake-v4-harness.ts` 补了六个领域读数：`view()` / `viewWrites()` /
+  `packages/test-utils/fake-v4-harness.ts` 补了领域读数：`view()` / `viewWrites()` /
   `simulateUserView()` / `subscribedEvents()` / `listenActivity()` /
   `deferredProvider()` + `releaseProvider()` + `mapsCreated()`。
 - `packages/baidu-map-gl-vue/src/core/utils/equality.test.ts`：容差、环绕、`centerKey` 的 23 条单测；
 - `packages/baidu-map-gl-vue/src/composables/useControllableState.test.ts`：三态、告警规则与
   `copy` 语义的 10 条单测；
+- `packages/baidu-map-gl-vue/src/core/logger.test.ts`：`devWarn` 在 `NODE_ENV=development` 下输出、
+  `production` 下静默的 2 条单测；
+- `scripts/verify-package.mts`：**package-consumer** 三步验证（在安装了 tarball 的
+  `fixtures/v3-consumer` 里跑）——ESM 产物保留 `process.env.NODE_ENV`、IIFE 产物无裸 `process.env`、
+  同一个产物在 `NODE_ENV=development` 下输出告警 / `production` 下静默；
 - `tests/behavior/v3-entry.test.ts`：根入口导出 `useControllableState`；
 - **单点反证**（改坏一处即红，逐条实测并已还原）：
   1. heading 判等换回线性 + 去掉 `center` 的读回守卫 → 3 条例（相同值不写 SDK / v-model 闭环 /
      heading 环绕）失败；
   2. 去掉 ready 之前的 `syncControlledView()` → 2 条加载窗口用例失败；
-  3. 去掉 `copy: cloneCenter` → 2 条原地 mutation 用例失败；
-  4. 把读回错误白名单放宽成「所有 `BMapError`」+ 读不到仍调 setter → 读回白名单用例失败；
+  3. 去掉 `convergeViewToState()` → 1 条「受控 → 非受控」用例失败；
+  4. 去掉 `copy: cloneCenter` → 2 条原地 mutation 用例失败；
+  5. 把读回错误白名单放宽成「所有 `BMapError`」+ 读不到仍调 setter → 读回白名单用例失败；
+  6. 在 `vite.config.build.ts` 里 define `process.env.NODE_ENV` → `verify-package` 的 consumer
+     验证失败（development 下不再告警）；
 - 门禁：`typecheck:v3` → `build:v3` → `check:public-dts` → `check:no-bmapgl` → `check:raw-sdk:tree`
-  → `test:unit` → `smoke:v4:fixture` → docs 三件套 → `playground:build` → `verify:package`。
+  → `test:unit`（119 文件 / 1434 用例）→ `smoke:v4:fixture` → docs 四件套 → `playground:build` →
+  `pack:v3` + `verify:package`。
 
 ## 评审修正（2026-09-14 第一轮）
 
@@ -302,6 +339,17 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
 
 评审未提、本轮一并记录的相邻缺口：`retry()` 之后不会重跑 `apply*` / `bindViewEvents` / 收敛
 （见决策 8 末段，留给后续 issue）。
+
+### 评审修正（第二轮，`<本次提交>`）
+
+第二轮给出 1 条 blocking + 1 条 blocking-from-consumer-view，都成立：
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** 加载窗口内「受控 → 非受控」后地图与内部状态分叉（`state.value = A` 但地图 = 首次快照） | 成立：`apply*FromProps(undefined)` 直接 return，ready 收敛只覆盖受控档 | 决策 8 补 `convergeViewToState()`（收敛目标 = 生效值）+ 1 条四字段用例（含「状态与地图一致」正证） |
+| **[P2]** `devWarn` 对正常 npm 消费者永远不会出现（发布构建把 `__DEV__` 定死成 `false`） | 成立：`dist/*.mjs` 是发布产物，消费方的 dev server 拿到的是已 DCE 的代码 | 决策 4 改为「判定留在消费方」（`process.env.NODE_ENV`）+ `verify-package` 的 package-consumer 三步验证 + 2 条单测 |
+
+第二轮同时确认：上一轮的 defensive copy / 读回白名单 / ready 前受控档收敛 / dev-only 方向都已修正。
 
 ## 非目标
 

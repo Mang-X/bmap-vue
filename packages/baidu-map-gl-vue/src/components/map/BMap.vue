@@ -30,7 +30,7 @@ import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../.
 import { normalizeMapMouseEvent } from "../../driver/normalize";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
 import type { BMapProps } from "../../types/components";
-import type { MapInteraction, MapType, MapView } from "../../driver/types/map";
+import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
 import { stringToPluginDefinitions } from "../../plugins/builtins";
 import { useControllableState } from "../../composables/useControllableState";
@@ -232,8 +232,12 @@ const tiltState = useControllableState<number>({
 /**
  * 初始视角快照：由**首次解析**的三态值构成，供 `MapRuntime` 的 `initializeView` 与
  * `resetView()` 使用。之后它不再跟随任何 prop 变化（`resetView` 的语义就是回到初值）。
+ *
+ * 类型上刻意**不标注 `MapView`**（它的 `heading` / `tilt` 是可选的，会削弱后面 `converge` 的
+ * 类型推断）：这里的四个字段都来自三态解析，heading / tilt 恒为数字（fallback 是 0），
+ * 结构上满足 `MapView`，赋给 `MapRuntime.initialView` 与 `initializeView` 都成立。
  */
-const initialViewSnapshot: MapView = {
+const initialViewSnapshot = {
   center: centerState.initial,
   zoom: zoomState.initial,
   heading: headingState.initial,
@@ -330,20 +334,83 @@ function applyTiltFromProps(next: number | undefined): void {
 }
 
 /**
- * 把**当前** props 的受控视野收敛到刚就绪的地图上（#27 评审 P1）。
+ * 把「生效值」收敛进地图（**含非受控档**，#27 评审第二轮 P1）。
+ *
+ * `apply*FromProps` 只处理受控档（`undefined` 直接 return），但加载窗口里也可能发生
+ * **受控 → 非受控**：那时内部状态已经接管（保留最后一次外部值），可 watcher 之后不会再跑
+ * （prop 不再变化），于是「内部状态 = A、地图 = 首次快照」永久分叉——正好违反「受控 → 非受控
+ * 由内部状态接管」这条规则。这个函数把生效值（受控时外部值、非受控时内部状态）也写进地图。
+ *
+ * 判定用的是**可证明的前提**：调用点紧接 `initializeView`，而加载窗口内没有 map 可写 ⇒ 期间
+ * 没有任何视野写入落地，因此「与首次快照相同的字段」一定已经在地图上（跳过即可）。这条短路同时
+ * 挡掉了「字符串中心点无法与读回值判等」造成的假写入。
+ */
+function convergeViewToState(): void {
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+
+  /** 目标与快照相同 ⇒ 初始化已经写过；否则读回判等后再写。 */
+  function converge<T>(
+    snapshotValue: T,
+    target: T,
+    equals: (a: T, b: T) => boolean,
+    read: () => T | null,
+    write: (value: T) => void,
+  ): void {
+    if (equals(target, snapshotValue)) return;
+    const current = read();
+    if (current === null || equals(current, target)) return;
+    write(target);
+  }
+
+  converge(
+    initialViewSnapshot.center,
+    centerState.value.value,
+    centerEquals,
+    () => readLiveView(() => c.driver.map.getCenter(m)),
+    (value) => c.driver.map.setCenter(m, value),
+  );
+  converge(
+    initialViewSnapshot.zoom,
+    zoomState.value.value,
+    numbersEqual,
+    () => readLiveView(() => c.driver.map.getZoom(m)),
+    (value) => c.driver.map.setZoom(m, value),
+  );
+  converge(
+    initialViewSnapshot.heading,
+    headingState.value.value,
+    anglesEqual,
+    () => readLiveView(() => c.driver.map.getHeading(m)),
+    (value) => c.driver.map.setHeading(m, value),
+  );
+  converge(
+    initialViewSnapshot.tilt,
+    tiltState.value.value,
+    tiltEquals,
+    () => readLiveView(() => c.driver.map.getTilt(m)),
+    (value) => c.driver.map.setTilt(m, value),
+  );
+}
+
+/**
+ * ready 之前的视野收敛（#27 评审两轮）。
  *
  * 为什么必须有这一步：四个 watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野
  * 用的是 setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
  * （`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher
- * 不会重跑 ⇒ 地图永远停在旧初值。这里在 ready 之前按当前 props 收敛一次。
+ * 不会重跑 ⇒ 地图永远停在旧初值。
  *
- * 四个 `apply*FromProps` 都是幂等的（读回判等），所以「加载期间没变过」的情形不会产生额外命令。
+ * 两条路径：`apply*FromProps` 处理**受控**档（读回判等、幂等），`convergeViewToState` 再补
+ * **非受控**档（加载窗口里切换过模式时，内部状态需要接管）。
  */
 function syncControlledView(): void {
   applyCenterFromProps(props.center);
   applyZoomFromProps(props.zoom);
   applyHeadingFromProps(props.heading);
   applyTiltFromProps(props.tilt);
+  convergeViewToState();
 }
 
 /**

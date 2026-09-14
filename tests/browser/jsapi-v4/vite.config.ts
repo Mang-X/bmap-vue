@@ -22,9 +22,6 @@ if (!runId) {
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [vue()],
-  // 组件库源码里的构建期常量（见 `src/core/logger.ts` 的 `devWarn`）。smoke 页用相对路径
-  // import 源码（见文件头），因此这份配置同样要注入；dev server 下按开发处理（告警可见）。
-  define: { __DEV__: JSON.stringify(process.env.NODE_ENV !== "production") },
   server: {
     host: "localhost",
     // 端口由 orchestrator 经 `SMOKE_PORT` 传入（`--port` 才能同时作用于 URL 与 dev server）；

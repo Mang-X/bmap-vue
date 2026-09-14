@@ -90,7 +90,7 @@ const state = useControllableState<{ lng: number; lat: number }>({
 | `fallback` | 既无受控值也无初值时的库默认值（只在首次解析时使用） |
 | `equals` | 相等判定；**必须容忍浮点抖动**，否则受控写入与 SDK 回写会形成往返 |
 | `copy` | 值的防御性拷贝（默认恒等）；传可变对象时应当提供 |
-| `warn` | 是否输出用法告警（默认 `true`）；即使为 `true`，也只有**开发构建**才真的打印 |
+| `warn` | 是否输出用法告警（默认 `true`）；即使为 `true`，也只有**非生产环境**才真的打印（读 `process.env.NODE_ENV`，由消费方的打包器或运行时决定） |
 
 ## 四条规则
 
@@ -104,7 +104,8 @@ const state = useControllableState<{ lng: number; lat: number }>({
 4. **可变值必须经 `copy` 落库**：初值、外部同步、SDK 回写三处都持有独立拷贝，调用方原地修改
    自己的对象不会绕过状态机。
 
-告警走开发期通道（构建期常量 `__DEV__`）：**生产产物里不包含这段代码**。
+告警只在非生产环境输出：判定读 `process.env.NODE_ENV`，**留给消费方的构建 / 运行时**去折叠
+（打包器替换成字面量、Node / SSR 读真实环境变量），因此不会因为发布构建而永远消失。
 
 相等判定的现成实现见
 `packages/baidu-map-gl-vue/src/core/utils/equality.ts`（`pointEquals` / `numbersEqual` /

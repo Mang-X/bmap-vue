@@ -647,6 +647,49 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
     harness.assertIdle("视野：加载窗口内的受控更新");
   });
 
+  it("加载期间「受控 → 非受控」时内部状态接管，地图在 ready 后与内部状态一致（四个字段）", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.deferredProvider() });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated(), "SDK 尚未放行 ⇒ 还没有地图").toBe(0);
+
+    // 加载窗口内：先变成受控（A），再切回非受控（undefined）⇒ 按规则由内部状态接管并保留 A
+    props.value = {
+      provider: props.value.provider,
+      center: { ...AMERICA },
+      zoom: 9,
+      heading: 30,
+      tilt: 20,
+    };
+    await settleProps();
+    props.value = { provider: props.value.provider };
+    await settleProps();
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 首次视野用的是缺省档（库默认），ready 时的收敛必须把**内部状态**写进地图
+    expect(harness.view()).toEqual({ center: AMERICA, zoom: 9, heading: 30, tilt: 20 });
+    expect(harness.viewWrites(), "初始化只发生一次，之后是四个字段的收敛写入").toEqual({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 1,
+      setHeading: 2, // initializeView 写了缺省的 0，收敛再写 30
+      setTilt: 2,
+    });
+
+    // 正证守卫：状态与地图一致 ⇒ 用户「回到 A」不算变化，不应 emit
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 9, heading: 30, tilt: 20 });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toBeUndefined();
+    expect(bmap.emitted("update:zoom")).toBeUndefined();
+    expect(bmap.emitted("update:heading")).toBeUndefined();
+    expect(bmap.emitted("update:tilt")).toBeUndefined();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载窗口内的受控 → 非受控");
+  });
+
   it("加载期间才出现的受控值（`loaded ? spot : undefined` 形态）在 ready 后生效", async () => {
     const props = ref<Record<string, unknown>>({ provider: harness.deferredProvider() });
     const { wrapper } = await mountControlledMap(() => props.value);

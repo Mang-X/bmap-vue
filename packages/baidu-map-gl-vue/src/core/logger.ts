@@ -51,24 +51,32 @@ export const logger: Logger = {
 };
 
 /**
- * 开发期告警：只有开发构建才输出。
+ * 是否「非生产」环境。
+ *
+ * **判定必须留在消费方的构建 / 运行阶段，不能在库的发布构建里定死**（#27 评审第二轮 P2）：
+ * 库发布的就是 `dist/*.mjs` / `dist/*.global.js`，如果在 publish build 阶段把开发标记替换成
+ * `false`，npm 消费方即使在自己的 dev server 里 import 这个包，拿到的也是已经 DCE 掉的产物，
+ * 告警永远不会出现。因此这里保留 `process.env.NODE_ENV` 这个**可被折叠的标记**：
+ *
+ * - 打包器会把它折叠成字面量（本仓实测：Vite app 构建与 dev server 都折叠，直接写法与
+ *   `globalThis.process?.env?.NODE_ENV` 写法都会——dev 得到 `"development"`、build 得到 `"production"`）；
+ * - Node / SSR 下它是真实的环境变量；
+ * - IIFE 档（`<script>` 直引）没有 `process`，由该档构建配置自己 `define` 成 `"production"`
+ *   （见 `vite.config.global.ts`）——发布产物里不允许留下裸 `process`。
+ *
+ * 本地声明而不是依赖 `@types/node`：`NodeJS.Process` 属于环境类型，本包源码不得要求编译它的
+ * program 具备该环境（仓库门禁用 `types: []` 模拟「不带环境声明的消费方」）。
+ */
+declare const process: { env?: Record<string, string | undefined> };
+
+/**
+ * 开发期告警：只有非生产环境才输出。
  *
  * 与 `logger.warn` 的分工：`logger.warn` 是**运行时故障**（能力不支持、参数被丢弃、服务失败…），
  * 无论什么环境都该被运维/使用者看到；这里是**面向库使用者的用法提示**（受控 / 非受控模式切换、
  * `default*` 被覆盖…），出现在最终用户的 console 里没有意义。
- *
- * 门禁是构建期常量 `__DEV__`（包构建与 global 构建都 `define` 为 `'false'`，vitest 为 `'true'`，
- * docs / playground / browser smoke 这几份**直接编 src** 的配置也各自注入）：生产产物里这个分支
- * 会被静态消除——不是「运行时判断后静默」，而是**代码不存在**。
- *
- * 为什么不用 `import.meta.env.DEV`：它需要 `vite/client` 的环境类型，于是**任何**编译本包源码的
- * program 都被迫带上这份环境声明——仓库里 `tests/behavior/v3-ui-kit-widget-contract.test.ts`
- * 用 `types: []` 模拟「不带任何环境声明的消费方」，会直接报 `TS2339: ImportMeta.env`。
- * `__DEV__` 只在本文件里 `declare`，是纯模块内的构建期常量，不带任何环境类型依赖。
  */
-declare const __DEV__: boolean;
-
 export function devWarn(message: string, context?: Record<string, unknown>): void {
-  if (!__DEV__) return;
+  if (process.env?.NODE_ENV === "production") return;
   logger.warn(message, context);
 }
