@@ -16,7 +16,7 @@
  * 卸载后无残留。完整状态机（Teleport / InfoWindowManager / 受控与不受控的边界）仍由 M5 **#32**
  * 收口——本文件只覆盖「最小成功路径」。
  */
-import { beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, onMounted, ref, type VNodeChild } from "vue";
 import { createFakeV4Harness, type FakeV4Harness } from "../../packages/test-utils";
@@ -27,6 +27,7 @@ import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BC
 import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
 import { useBMapGeocoder } from "../../packages/baidu-map-gl-vue/src/composables/useBMapGeocoder";
 import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
+import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
 
 const { harness, fake } = createFakeV4Harness();
 
@@ -63,6 +64,43 @@ async function unmountAndSettle(wrapper: { unmount(): void }) {
   wrapper.unmount();
   await flushPromises();
   await nextTick();
+}
+
+/**
+ * 挂一份由 `props` 驱动的 `<BMap>`（视野用例需要从外部改变 props，见 M4-STATE / #27）。
+ *
+ * `emit` 从 `<BMap>` 自己的 wrapper 上读：`wrapper.emitted()` 只记录父级 emit 的事件。
+ * `onError` 把「组件 mounted / watcher 回调里抛出的错误」收成可断言的结果
+ * （与 `mountMapTree` 同一口径：Vue 会交给 `config.errorHandler`，不接住就是 unhandled）。
+ */
+async function mountControlledMap(
+  getProps: () => Record<string, unknown>,
+  options: { children?: () => VNodeChild; onError?: (error: unknown) => void } = {},
+) {
+  const Root = defineComponent({ setup: () => () => h(BMap, getProps(), options.children) });
+  const wrapper = mount(Root, {
+    attachTo: harness.container(),
+    global: options.onError ? { config: { errorHandler: options.onError } } : undefined,
+  });
+  await flushPromises();
+  await nextTick();
+  return { wrapper, bmap: wrapper.findComponent(BMap) };
+}
+
+/** 一套受控视野 props（父级从 setup 起就传值 ⇒ 受控）。 */
+function controlledViewProps(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { provider: harness.provider(), center: { ...POSITION }, zoom: 12, ...extra };
+}
+
+/** 等一轮「父级传了新 props」的副作用（watcher 是 `flush: "post"`）。 */
+async function settleProps() {
+  await flushPromises();
+  await nextTick();
+}
+
+/** 只看 `console.warn` 的首参（`logger.warn` 把 context 作为第二参附加）。 */
+function warnLines(warn: { mock: { calls: unknown[][] } }): string[] {
+  return warn.mock.calls.map((call) => String(call[0]));
 }
 
 describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
@@ -277,5 +315,620 @@ describe("生命周期门禁（组件层）", () => {
     // 「诊断全归零」的另一半：资源账归零之外，异步窗口也必须结算干净
     // （定时器 / 回调不进泄漏门禁，见 ADR 决策 1，因此这里显式断言）
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+  });
+});
+
+/**
+ * M4-STATE / issue #27：Map 视野的受控 / 非受控三态。
+ *
+ * 用例只写领域语言（`harness.view()` / `harness.viewWrites()` / `harness.simulateUserView()` /
+ * `harness.assertIdle()`），不碰 Fake 的字段名——同 AGENTS.md 的「组件级场景」约定。
+ * 规范（三态语义、回环抑制、已知限制）见 ADR `2026-09-14-map-controlled-state` 与
+ * `docs/zh-CN/components/map.md` 的状态表。
+ */
+describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
+  const AMERICA = { lng: -74.006, lat: 40.7128 };
+
+  it("初次视野只设定一次；后续 center 变化走字段级写入且不重置 zoom", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    expect(harness.viewWrites().centerAndZoom).toBe(1);
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    props.value = { ...props.value, center: { ...AMERICA } };
+    await settleProps();
+
+    expect(harness.viewWrites().centerAndZoom, "后续 center 变化不得重跑初始化视野").toBe(1);
+    expect(harness.viewWrites().setCenter).toBe(1);
+    expect(harness.view().center).toEqual(AMERICA);
+    expect(harness.viewWrites().setZoom, "center 变化不得重置 zoom").toBe(0);
+    expect(harness.view().zoom).toBe(12);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：初始化只执行一次");
+  });
+
+  it("center 0/0 与边界 zoom 是合法值（不被当成缺省丢弃）", async () => {
+    const props = ref<Record<string, unknown>>(
+      controlledViewProps({ center: { lng: 0, lat: 0 }, zoom: 0, maxZoom: 21 }),
+    );
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    expect(harness.view()).toMatchObject({ center: { lng: 0, lat: 0 }, zoom: 0 });
+
+    props.value = { ...props.value, center: { ...POSITION }, zoom: 21 };
+    await settleProps();
+    expect(harness.viewWrites()).toMatchObject({ setCenter: 1, setZoom: 1 });
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 21 });
+
+    props.value = { ...props.value, center: { lng: 0, lat: 0 }, zoom: 0 };
+    await settleProps();
+    expect(harness.viewWrites()).toMatchObject({ setCenter: 2, setZoom: 2 });
+    expect(harness.view()).toMatchObject({ center: { lng: 0, lat: 0 }, zoom: 0 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：0/0 与边界 zoom");
+  });
+
+  it("相同值不同引用、以及容差内的浮点抖动都不写 SDK", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    // 新引用、同值（父级每次渲染传内联字面量的常见形态）
+    props.value = { ...props.value, center: { ...POSITION } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter).toBe(0);
+
+    // 容差内抖动（真实 SDK 读回常带 ±1e-9 级别的差）
+    props.value = { ...props.value, center: { lng: POSITION.lng + 1e-9, lat: POSITION.lat }, zoom: 12 + 1e-9 };
+    await settleProps();
+    expect(harness.viewWrites()).toMatchObject({ setCenter: 0, setZoom: 0 });
+
+    // 正证守卫：真的变了就必须写（否则上面的「没写」可能只是没接线）
+    props.value = { ...props.value, center: { lng: POSITION.lng + 0.01, lat: POSITION.lat } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：相同值不写 SDK");
+  });
+
+  it("用户交互回写 model 并通知父级；父级按 v-model 回写不再写 SDK", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    // `v-model:center` 编译出来就是 `center` + `onUpdate:center` 这一对；
+    // 这里按编译产物接上，父级 state 会真的被更新——链路与模板里的 v-model 一致。
+    props.value["onUpdate:center"] = (next: unknown) => {
+      props.value = { ...props.value, center: next };
+    };
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    harness.simulateUserView({ center: { lng: 116.5, lat: 40 } });
+    await settleProps();
+
+    expect(bmap.emitted("update:center")).toEqual([[{ lng: 116.5, lat: 40 }]]);
+    expect(harness.viewWrites().setCenter, "回写自身不得触发新的写入").toBe(0);
+    expect(props.value.center, "父级 state 已被 v-model 更新").toEqual({ lng: 116.5, lat: 40 });
+    expect(harness.view().center).toEqual({ lng: 116.5, lat: 40 });
+
+    // 父级显式再写一遍同一个值（新引用）：读回判定「已一致」→ 不重复命令、不重复通知
+    props.value = { ...props.value, center: { lng: 116.5, lat: 40 } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter).toBe(0);
+    expect(bmap.emitted("update:center")).toHaveLength(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：用户交互回写");
+  });
+
+  it("zoom / heading / tilt 三个字段各自回写，回写闭环后不再写 SDK", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps({ heading: 0, tilt: 0 }));
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    // 初次视野经 initializeView 写入角度（center/zoom 走 centerAndZoom）
+    expect(harness.viewWrites()).toMatchObject({ setCenter: 0, setZoom: 0, setHeading: 1, setTilt: 1 });
+
+    harness.simulateUserView({ zoom: 14, heading: 30, tilt: 45 });
+    await settleProps();
+
+    expect(bmap.emitted("update:zoom")).toEqual([[14]]);
+    expect(bmap.emitted("update:heading")).toEqual([[30]]);
+    expect(bmap.emitted("update:tilt")).toEqual([[45]]);
+    expect(harness.view()).toMatchObject({ zoom: 14, heading: 30, tilt: 45 });
+
+    props.value = { ...props.value, zoom: 14, heading: 30, tilt: 45 };
+    await settleProps();
+    expect(harness.viewWrites(), "三个字段都已一致 ⇒ 不再下发命令").toMatchObject({
+      setZoom: 0,
+      setHeading: 1,
+      setTilt: 1,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：三字段回写");
+  });
+
+  it("heading 的 -90 与 270 是同一朝向（v4 getHeading 带符号），不产生假回写", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps({ heading: 270 }));
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    expect(harness.view().heading).toBe(270);
+    const writesAfterInit = harness.viewWrites().setHeading;
+    expect(writesAfterInit).toBe(1);
+
+    // 真实 v4：`setHeading(270)` 之后 `getHeading()` 返回 -90。Fake 不复刻归一化，
+    // 因此这里显式模拟那次读回（角度值变了，朝向没变）。
+    harness.simulateUserView({ heading: -90 });
+    await settleProps();
+    expect(bmap.emitted("update:heading"), "同一朝向不得通知父级").toBeUndefined();
+    expect(harness.viewWrites().setHeading).toBe(writesAfterInit);
+
+    // 正证守卫：真的转到别的朝向就必须通知（否则上面「没通知」可能只是事件没接上）
+    harness.simulateUserView({ heading: 90 });
+    await settleProps();
+    expect(bmap.emitted("update:heading")).toEqual([[90]]);
+
+    // 外部值改成 90（地图已经在 90）：读回判定一致 ⇒ 不重复命令
+    props.value = { ...props.value, heading: 90 };
+    await settleProps();
+    expect(harness.viewWrites().setHeading).toBe(writesAfterInit);
+
+    // 真变化（90 → 270）则必须写回
+    props.value = { ...props.value, heading: 270 };
+    await settleProps();
+    expect(harness.viewWrites().setHeading).toBe(writesAfterInit + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：heading 环绕");
+  });
+
+  it("default* 只在首次解析生效：四个字段的后续变化都不覆盖当前视野，并告警一次", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      defaultCenter: { ...POSITION },
+      defaultZoom: 12,
+      defaultHeading: 30,
+      defaultTilt: 45,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    // 正证守卫：四个 default 真的进了首次视野
+    expect(harness.view()).toEqual({ center: POSITION, zoom: 12, heading: 30, tilt: 45 });
+    expect(harness.viewWrites()).toMatchObject({ centerAndZoom: 1, setHeading: 1, setTilt: 1 });
+
+    props.value = {
+      ...props.value,
+      defaultCenter: { ...AMERICA },
+      defaultZoom: 15,
+      defaultHeading: 60,
+      defaultTilt: 10,
+    };
+    await settleProps();
+
+    expect(harness.view(), "default 变化不得覆盖当前视野").toEqual({
+      center: POSITION,
+      zoom: 12,
+      heading: 30,
+      tilt: 45,
+    });
+    expect(harness.viewWrites(), "default 变化不得下发任何命令").toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 0,
+      setZoom: 0,
+      setHeading: 1,
+      setTilt: 1,
+    });
+    expect(warnLines(warn).some((line) => line.includes("只在首次解析时生效"))).toBe(true);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：default 只生效一次");
+  });
+
+  it("缺省档用库默认视野，且用户交互同样回写（不依赖受控 prop）", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.provider() });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    // 与 v2/v3 的 props 默认值一致（docs/zh-CN/components/map.md 的库默认视野）
+    expect(harness.view()).toEqual({
+      center: { lng: 116.403901, lat: 39.915185 },
+      zoom: 14,
+      heading: 0,
+      tilt: 0,
+    });
+    expect(harness.viewWrites().centerAndZoom, "缺省档也只初始化一次").toBe(1);
+
+    harness.simulateUserView({ center: { lng: 116.5, lat: 40 }, zoom: 15 });
+    await settleProps();
+
+    expect(bmap.emitted("update:center")).toEqual([[{ lng: 116.5, lat: 40 }]]);
+    expect(bmap.emitted("update:zoom")).toEqual([[15]]);
+    expect(harness.viewWrites()).toMatchObject({ setCenter: 0, setZoom: 0 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：缺省档");
+  });
+
+  it("受控与非受控模式切换给出明确告警（两个方向），且不拒绝生效", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const props = ref<Record<string, unknown>>({ provider: harness.provider() });
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    // 非受控 → 受控，且外部值与内部状态冲突
+    props.value = { ...props.value, center: { ...AMERICA } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter, "切换后外部值仍然生效（告警不等于拒绝）").toBe(1);
+    expect(
+      warnLines(warn).filter((line) => line.includes("由非受控切换为受控")),
+    ).toHaveLength(1);
+
+    // 受控 → 非受控：内部状态接管并保留最后一次外部值
+    props.value = { provider: props.value.provider };
+    await settleProps();
+    expect(warnLines(warn).filter((line) => line.includes("由受控切换为非受控"))).toHaveLength(1);
+    expect(harness.view().center, "移除受控值不会把视野退回库默认").toEqual(AMERICA);
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：模式切换");
+  });
+
+  it("受控值与 default 同时传入时以受控值为准（首次视野也听受控值）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      center: { ...POSITION },
+      defaultCenter: { ...AMERICA },
+      zoom: 5,
+      defaultZoom: 15,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 5 });
+    expect(harness.viewWrites()).toMatchObject({ centerAndZoom: 1, setCenter: 0, setZoom: 0 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：受控值优先");
+  });
+
+  it("视野写入与事件回写都不重绑监听器；卸载后监听器归零", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps({ heading: 0, tilt: 0 }));
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    expect(harness.subscribedEvents()).toEqual(
+      expect.arrayContaining(["click", "moveend", "zoomend", "headingchange", "tiltchange"]),
+    );
+
+    const listens = harness.listenActivity().calls;
+    props.value = { ...props.value, center: { ...AMERICA }, zoom: 13 };
+    await settleProps();
+    harness.simulateUserView({ center: { lng: 118, lat: 41 }, zoom: 14, heading: 10, tilt: 20 });
+    await settleProps();
+    expect(harness.listenActivity().calls, "受控更新与事件回写都必须复用同一个 raw 订阅").toBe(
+      listens,
+    );
+
+    await unmountAndSettle(wrapper);
+    expect(harness.listenActivity().pending).toBe(0);
+    harness.assertIdle("视野：不重绑与卸载归零");
+  });
+
+  /* ------------------------------------------------- 评审补测（2026-09-14 回合同步补） */
+
+  it("SDK 就绪前发生的受控值变化，会在 ready 时收敛（延迟加载 Provider）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+      heading: 0,
+      tilt: 0,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    // 正证守卫：SDK 真的还没放行（否则下面的「收敛」可能只是因为压根没走延迟路径）
+    expect(harness.mapsCreated(), "SDK 尚未放行 ⇒ 还没有地图").toBe(0);
+
+    // 加载窗口内改四个受控值：那时没有 map 可写，watcher 只能跳过
+    const later = { lng: 121.5, lat: 31.2 };
+    props.value = { ...props.value, center: { ...later }, zoom: 16, heading: 45, tilt: 30 };
+    await settleProps();
+    expect(harness.mapsCreated(), "仅改 props 不会提前建图").toBe(0);
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 最终视野必须是**最新 props**（不修的话这里会停在 POSITION / 12 / 0 / 0）
+    expect(harness.view()).toEqual({ center: later, zoom: 16, heading: 45, tilt: 30 });
+    // 而且收敛是**字段级写入**，不是重跑初始化视野
+    expect(harness.viewWrites()).toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 1,
+      setHeading: 2,
+      setTilt: 2,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载窗口内的受控更新");
+  });
+
+  it("加载期间「受控 → 非受控」时内部状态接管，地图在 ready 后与内部状态一致（四个字段）", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.deferredProvider() });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated(), "SDK 尚未放行 ⇒ 还没有地图").toBe(0);
+
+    // 加载窗口内：先变成受控（A），再切回非受控（undefined）⇒ 按规则由内部状态接管并保留 A
+    props.value = {
+      provider: props.value.provider,
+      center: { ...AMERICA },
+      zoom: 9,
+      heading: 30,
+      tilt: 20,
+    };
+    await settleProps();
+    props.value = { provider: props.value.provider };
+    await settleProps();
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 首次视野用的是缺省档（库默认），ready 时的收敛必须把**内部状态**写进地图
+    expect(harness.view()).toEqual({ center: AMERICA, zoom: 9, heading: 30, tilt: 20 });
+    expect(harness.viewWrites(), "初始化只发生一次，之后是四个字段的收敛写入").toEqual({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 1,
+      setHeading: 2, // initializeView 写了缺省的 0，收敛再写 30
+      setTilt: 2,
+    });
+
+    // 正证守卫：状态与地图一致 ⇒ 用户「回到 A」不算变化，不应 emit
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 9, heading: 30, tilt: 20 });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toBeUndefined();
+    expect(bmap.emitted("update:zoom")).toBeUndefined();
+    expect(bmap.emitted("update:heading")).toBeUndefined();
+    expect(bmap.emitted("update:tilt")).toBeUndefined();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载窗口内的受控 → 非受控");
+  });
+
+  it("加载期间才出现的受控值（`loaded ? spot : undefined` 形态）在 ready 后生效", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.deferredProvider() });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    // 文档明确支持的用法：起点是「缺省档」，异步数据到达后才开始受控
+    props.value = { provider: props.value.provider, center: { ...POSITION }, zoom: 9 };
+    await settleProps();
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    expect(harness.view()).toEqual({ center: POSITION, zoom: 9, heading: 0, tilt: 0 });
+    expect(harness.viewWrites()).toMatchObject({ centerAndZoom: 1, setCenter: 1, setZoom: 1 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载期间开始受控");
+  });
+
+  it("受控 center 的原地 mutation 不改动状态与首次快照", async () => {
+    const spot = { lng: POSITION.lng, lat: POSITION.lat };
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      center: spot,
+      zoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view().center).toEqual(POSITION);
+
+    // 用户交互把地图挪走（父级按 v-model 收到了回写）
+    props.value["onUpdate:center"] = (next: unknown) => {
+      props.value = { ...props.value, center: next };
+    };
+    harness.simulateUserView({ center: { lng: 118, lat: 41 } });
+    await settleProps();
+    expect(harness.view().center).toEqual({ lng: 118, lat: 41 });
+
+    // 父级原地改「自己那个对象」：既没有新引用、也没有新的 props 变化
+    spot.lng = 125;
+    await settleProps();
+    expect(harness.view().center, "mutation 不是 prop 变化，地图不动").toEqual({
+      lng: 118,
+      lat: 41,
+    });
+
+    // 关键断言：resetView() 回到**首次解析**的值，而不是被 mutation 改过的 125
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view().center).toEqual(POSITION);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：受控 center 原地 mutation");
+  });
+
+  it("defaultCenter 的原地 mutation 不改内部初值，也不吃掉后续 update:center", async () => {
+    const initial = { lng: POSITION.lng, lat: POSITION.lat };
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      defaultCenter: initial,
+      defaultZoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    initial.lng = 125;
+    await settleProps();
+    expect(harness.view().center, "mutation 不得静默改到内部初值").toEqual(POSITION);
+    expect(harness.viewWrites().setCenter).toBe(0);
+
+    // 用户交互到「与 mutation 后的值相同」的位置：内部状态没被改写 ⇒ 必须照常上报
+    harness.simulateUserView({ center: { lng: 125, lat: 39.9 } });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toEqual([[{ lng: 125, lat: 39.9 }]]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：defaultCenter 原地 mutation");
+  });
+
+  it("resetView() 同步状态：非受控下重置后再次回到同一值仍然会 emit（第三轮 P1）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      defaultCenter: { ...POSITION },
+      defaultZoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    // 非受控档：用户拖到 B，内部状态跟随并上报
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 15 });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toEqual([[{ ...AMERICA }]]);
+    expect(bmap.emitted("update:zoom")).toEqual([[15]]);
+
+    // resetView：地图回首次快照，**状态也要回**（否则下一次真实变化会被判成「没变化」）
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    // 再次真实地拖到同一个 B：必须仍然上报
+    harness.simulateUserView({ center: { ...AMERICA }, zoom: 15 });
+    await settleProps();
+    expect(bmap.emitted("update:center"), "第二次真实变化不得被吃掉").toHaveLength(2);
+    expect(bmap.emitted("update:center")?.[1]).toEqual([{ ...AMERICA }]);
+    expect(bmap.emitted("update:zoom")).toHaveLength(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：resetView 同步状态");
+  });
+
+  it("resetView() 之后「受控 → 非受控」接管的是重置值（冻结该语义）", async () => {
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+
+    // 父级把受控值改到 AMERICA：地图跟随（1 条 setCenter）
+    props.value = { ...props.value, center: { ...AMERICA } };
+    await settleProps();
+    expect(harness.view().center).toEqual(AMERICA);
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    // resetView：地图与状态都回到首次快照
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view().center).toEqual(POSITION);
+
+    // 移除受控值（受控 → 非受控）：接管值 = 重置值 ⇒ 不产生任何写入
+    props.value = { provider: props.value.provider, zoom: 12 };
+    await settleProps();
+    expect(harness.view().center, "地图不得被拉回重置前的位置").toEqual(POSITION);
+    expect(harness.viewWrites().setCenter).toBe(1);
+
+    // 状态也确实是重置值：用户「拖到快照值」不算变化 ⇒ 不 emit
+    harness.simulateUserView({ center: { ...POSITION } });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toBeUndefined();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：resetView 后的模式切换");
+  });
+
+  it("受控字符串 center：ready 时每个字段至多写一条命令（加载期间没变过）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: "北京市",
+      zoom: 12,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 字符串无法与读回的点判等 ⇒ 读回守卫失效；但「与首次快照相同」这条短路仍然成立
+    expect(harness.viewWrites(), "字符串 center 未变过时不该有任何额外命令").toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 0,
+      setZoom: 0,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：字符串 center 未变");
+  });
+
+  it("受控字符串 center：加载期间变化时恰好写一条命令（不重复）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: "北京",
+      zoom: 12,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    props.value = { ...props.value, center: "上海" };
+    await settleProps();
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    expect(harness.viewWrites(), "同一字段在 ready 时只能写一次").toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 0,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：字符串 center 变化");
+  });
+
+  it("读回失败：白名单错误码跳过命令，其余错误码上抛", async () => {
+    const errors: unknown[] = [];
+    const seen: { driver: Record<string, unknown> | null } = { driver: null };
+    const DriverProbe = defineComponent({
+      setup() {
+        const mapContext = useRequiredMapContext();
+        return () => {
+          // 首帧渲染时 client 还没就绪（探针挂在 `<BMap>` 的默认插槽里，先于 mount 完成渲染），
+          // 因此这里要能容忍 undefined，等 client 就绪后的那次重渲染再捕获。
+          const driver = mapContext.client.value?.driver as unknown as
+            | { map: Record<string, unknown> }
+            | undefined;
+          if (driver) seen.driver = driver.map;
+          return h("span", "driver-probe");
+        };
+      },
+    });
+
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper } = await mountControlledMap(() => props.value, {
+      children: () => h(DriverProbe),
+      onError: (error) => errors.push(error),
+    });
+    const driverMap = seen.driver;
+    expect(driverMap, "探针必须拿到 driver.map").not.toBeNull();
+
+    // ① 已销毁（白名单）：读不到 ⇒ 不下发命令，也不上抛
+    driverMap!.getCenter = () => {
+      throw new BMapError("BMAP_RESOURCE_DISPOSED", "地图已销毁");
+    };
+    props.value = { ...props.value, center: { lng: 118, lat: 41 } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter, "读不到就不写下一条命令").toBe(0);
+    expect(errors, "白名单错误码不上抛").toHaveLength(0);
+    expect(harness.view().center, "地图仍停在原处").toEqual(POSITION);
+
+    // ② 真实故障（不在白名单）：必须冒出来，而不是被静默跳过
+    driverMap!.getCenter = () => {
+      throw new BMapError("BMAP_SDK_CALL_FAILED", "读回失败");
+    };
+    props.value = { ...props.value, center: { lng: 119, lat: 42 } };
+    await settleProps();
+    expect(errors, "非白名单错误码必须上抛（Vue 交给 errorHandler）").toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(BMapError);
+    expect(harness.viewWrites().setCenter).toBe(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：读回错误白名单");
   });
 });

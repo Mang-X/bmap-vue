@@ -22,7 +22,7 @@ import {
 } from "../../core/context/client";
 import { targetContextKey, type TargetContext } from "../../core/context/target";
 import { MapRuntime } from "../../core/runtime/MapRuntime";
-import { BMapError } from "../../core/errors/BMapError";
+import { BMapError, type BMapErrorCode } from "../../core/errors/BMapError";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
@@ -31,18 +31,20 @@ import { normalizeMapMouseEvent } from "../../driver/normalize";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
 import type { BMapProps } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
+import type { Point } from "../../driver/types/geometry";
+import { useControllableState } from "../../composables/useControllableState";
+import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
 import { resolvePluginDefinition } from "../../plugins/catalog";
 
 export type { BMapProps };
 
+/** `center` 的两种输入形态：点，或 v2 兼容的城市名 / 地址字符串（由 `BMapProps` 派生，单一来源）。 */
+type MapCenter = NonNullable<BMapProps["center"]>;
+
 const props = withDefaults(defineProps<BMapProps>(), {
-  zoom: 14,
-  center: () => ({ lat: 39.915185, lng: 116.403901 }),
   width: "100%",
   height: "550px",
   mapType: "BMAP_NORMAL_MAP",
-  heading: 0,
-  tilt: 0,
   minZoom: 0,
   maxZoom: 21,
   noAnimation: false,
@@ -50,6 +52,10 @@ const props = withDefaults(defineProps<BMapProps>(), {
   enableScrollWheelZoom: false,
   loadingBgColor: "#f1f1f1",
   keepAliveBehavior: "suspend",
+  // 视野四字段（center/zoom/heading/tilt）**刻意不给默认值**（M4-STATE / #27）：
+  // `undefined` 是「当前非受控」的判定依据，给了默认值就再也区分不出「父级传了」
+  // 与「父级没传」。库默认视野移到 DEFAULT_VIEW，作为「缺省」档的兜底参与首次解析，
+  // 因此「什么都不传」的行为与旧版默认值完全一致。
 });
 
 export interface MapReadyPayload extends MapReadyContext {
@@ -64,6 +70,12 @@ const emit = defineEmits<{
   click: [event: unknown];
   unload: [];
   error: [err: unknown];
+  // 视野回写（M4-STATE / #27）：`v-model:center` 等语法糖依赖这四个事件。
+  // 载荷永远是 SDK 读回的**具体坐标点**：即使受控值是城市名字符串，用户交互后也会变成点。
+  "update:center": [value: Point];
+  "update:zoom": [value: number];
+  "update:heading": [value: number];
+  "update:tilt": [value: number];
 }>();
 
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -141,21 +153,312 @@ if (ownClientContext) {
   provide(bmapClientContextKey, clientContext);
 }
 
-// 初始视角快照，供 resetView 恢复
-const initialViewSnapshot: {
-  center: { lng: number; lat: number } | string;
-  zoom: number;
-  heading?: number;
-  tilt?: number;
-} = {
-  center:
-    typeof props.center === "string"
-      ? props.center
-      : { ...(props.center as { lng: number; lat: number }) },
-  zoom: props.zoom as number,
-  heading: props.heading,
-  tilt: props.tilt,
+/* ------------------------------------------------------------------ 视野状态（M4-STATE / #27）
+ *
+ * `center` / `zoom` / `heading` / `tilt` 走同一个三态模型：
+ *
+ * - **受控**（传了该字段）：外部值变化 → 写 SDK；SDK 的用户交互事件 → 回写 model + emit `update:*`
+ * - **非受控**（只传了 `defaultXxx`）：初值 = `defaultXxx`，之后内部状态自行演进
+ * - **缺省**（都没传）：初值 = 库默认视野（与旧版 props 默认值一致）
+ *
+ * 三条禁止（详见 ADR `2026-09-14-map-controlled-state`）：
+ * 1. 不用 `deep` 比较 center —— 父级传内联字面量时引用每次都变，deep/引用比较会让受控写入空跑；
+ * 2. 后续 center 变化不再走 `centerAndZoom` —— 那是「重置视野」，会把 zoom 一起改掉；
+ * 3. 不引入「来源标记」（如 `internalUpdate` 布尔位）来抑制回环 —— 回环抑制由**读回现值 + 容差判等**
+ *    完成，它是可观察的（不依赖「事件是否恰好在某一帧内到达」），也让「用户交互 → 父级回写同一值」
+ *    这条最常见的闭环自然收敛。
+ */
+
+/** 库默认视野（「缺省」档的兜底）：与 v2/v3 的 props 默认值保持一致。 */
+const DEFAULT_VIEW = {
+  center: { lng: 116.403901, lat: 39.915185 },
+  zoom: 14,
+  heading: 0,
+  tilt: 0,
+} as const;
+
+/**
+ * `center` 的防御性拷贝（#27 评审 P1）。
+ *
+ * 点必须拷：`center` / `defaultCenter` 是**可变对象**，父级拿到自己的对象后原地改一个字段
+ * （`spot.lng = 5`）不会触发 props 变化，却会顺着引用改到状态内部的初值 / 镜像 / 首次视野快照上，
+ * 于是「resetView 回到首次值」「default 只读一次」两条语义都被绕过。字符串是不可变的，原样返回。
+ */
+function cloneCenter(value: MapCenter): MapCenter {
+  if (typeof value === "string") return value;
+  return { lng: value.lng, lat: value.lat };
+}
+
+const centerState = useControllableState<MapCenter>({
+  name: "center",
+  value: () => props.center,
+  defaultValue: () => props.defaultCenter,
+  fallback: DEFAULT_VIEW.center,
+  equals: centerEquals,
+  copy: cloneCenter,
+});
+
+const zoomState = useControllableState<number>({
+  name: "zoom",
+  value: () => props.zoom,
+  defaultValue: () => props.defaultZoom,
+  fallback: DEFAULT_VIEW.zoom,
+  equals: numbersEqual,
+});
+
+const headingState = useControllableState<number>({
+  name: "heading",
+  value: () => props.heading,
+  defaultValue: () => props.defaultHeading,
+  fallback: DEFAULT_VIEW.heading,
+  // heading 是环绕角：v4 的 `setHeading(270)` 之后 `getHeading()` 返回 -90，
+  // 线性判等会让每次自身写入都产生一条假的 `update:heading`。
+  equals: anglesEqual,
+});
+
+/** tilt 是 0..90 的倾斜角（**无**环绕语义），容差与角度同级但用线性判等。 */
+function tiltEquals(a: number, b: number): boolean {
+  return numbersEqual(a, b, ANGLE_EPSILON);
+}
+
+const tiltState = useControllableState<number>({
+  name: "tilt",
+  value: () => props.tilt,
+  defaultValue: () => props.defaultTilt,
+  fallback: DEFAULT_VIEW.tilt,
+  equals: tiltEquals,
+});
+
+/**
+ * 初始视角快照：由**首次解析**的三态值构成，供 `MapRuntime` 的 `initializeView` 与
+ * `resetView()` 使用。之后它不再跟随任何 prop 变化（`resetView` 的语义就是回到初值）。
+ *
+ * 类型上刻意**不标注 `MapView`**（它的 `heading` / `tilt` 是可选的，会削弱后面 `converge` 的
+ * 类型推断）：这里的四个字段都来自三态解析，heading / tilt 恒为数字（fallback 是 0），
+ * 结构上满足 `MapView`，赋给 `MapRuntime.initialView` 与 `initializeView` 都成立。
+ */
+const initialViewSnapshot = {
+  center: centerState.initial,
+  zoom: zoomState.initial,
+  heading: headingState.initial,
+  tilt: tiltState.initial,
 };
+
+/**
+ * 读回视野时**允许**被忽略的错误码（#27 评审 P2：只吞明确允许的，其余重抛）。
+ *
+ * 只有这两种情形算「这次读本来就不成立」：资源已销毁（销毁后没有可读状态，写命令也只会抛
+ * 同样的错），或该能力在本引擎不可用（读不出、也没有可写的东西）。
+ *
+ * 其余错误码一律上抛——`BMAP_SDK_CALL_FAILED` / `BMAP_INVALID_ARGUMENT` / `BMAP_INVALID_POINT` /
+ * `BMAP_HANDLE_FOREIGN` 都是真实故障（含测试替身失真），归零成 `null` 会变成静默失效。
+ */
+const IGNORABLE_VIEW_READ_ERRORS: ReadonlySet<BMapErrorCode> = new Set([
+  "BMAP_RESOURCE_DISPOSED",
+  "BMAP_RUNTIME_DISPOSED",
+  "BMAP_CAPABILITY_UNSUPPORTED",
+]);
+
+/**
+ * 读回地图当前值；不可读时返回 `null`——**调用方必须显式 `return`，不写下一条命令**。
+ *
+ * 非 `BMapError`（`TypeError` 一类编程错误）与不在白名单里的 `BMapError` 都继续抛。
+ */
+function readLiveView<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch (e) {
+    if (e instanceof BMapError && IGNORABLE_VIEW_READ_ERRORS.has(e.code)) return null;
+    throw e;
+  }
+}
+
+/**
+ * 受控 `center` → SDK。
+ *
+ * 1. 先同步内部镜像（受控值优先，并触发模式切换告警）；
+ * 2. 非受控（`undefined`）直接返回，不写 SDK；
+ * 3. **读回** SDK 现值做容差判等：一致就不下命令。这一步既抑制「父级回写同一值」的重复命令，
+ *    也抑制真实 SDK 的浮点抖动；反过来，`centerAndZoom` 永远不会出现在这条路径上；
+ * 4. 读不到（地图已销毁 / 该能力不可用）也直接返回：写命令在同样条件下只会抛同样的错。
+ */
+function applyCenterFromProps(next: MapCenter | undefined): void {
+  centerState.syncExternal(next);
+  if (next === undefined) return;
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+  const current = readLiveView(() => c.driver.map.getCenter(m));
+  if (current === null) return;
+  if (centerEquals(current, next)) return;
+  c.driver.map.setCenter(m, next);
+}
+
+/** 受控 `zoom` → SDK（同 `applyCenterFromProps` 的读回判等）。 */
+function applyZoomFromProps(next: number | undefined): void {
+  zoomState.syncExternal(next);
+  if (next === undefined) return;
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+  const current = readLiveView(() => c.driver.map.getZoom(m));
+  if (current === null) return;
+  if (numbersEqual(current, next)) return;
+  c.driver.map.setZoom(m, next);
+}
+
+/** 受控 `heading` → SDK（环绕判等）。 */
+function applyHeadingFromProps(next: number | undefined): void {
+  headingState.syncExternal(next);
+  if (next === undefined) return;
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+  const current = readLiveView(() => c.driver.map.getHeading(m));
+  if (current === null) return;
+  if (anglesEqual(current, next)) return;
+  c.driver.map.setHeading(m, next);
+}
+
+/** 受控 `tilt` → SDK。 */
+function applyTiltFromProps(next: number | undefined): void {
+  tiltState.syncExternal(next);
+  if (next === undefined) return;
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+  const current = readLiveView(() => c.driver.map.getTilt(m));
+  if (current === null) return;
+  if (numbersEqual(current, next, ANGLE_EPSILON)) return;
+  c.driver.map.setTilt(m, next);
+}
+
+/**
+ * ready 时的**唯一**收敛路径：把「生效值」写进地图（#27 评审第二 / 三轮）。
+ *
+ * 两点合起来决定了它的形状：
+ *
+ * 1. **必须覆盖非受控档**（第二轮 P1）：加载窗口里可能发生 **受控 → 非受控**——那时内部状态已经
+ *    接管（保留最后一次外部值），可 watcher 之后不会再跑（prop 不再变化），于是「内部状态 = A、
+ *    地图 = 首次快照」永久分叉，正好违反「受控 → 非受控 由内部状态接管」这条规则。因此目标是
+ *    **生效值**（受控时外部值、非受控时内部状态），而不是「props 是否有值」。
+ * 2. **不能与 `apply*FromProps` 叠加**（第三轮 P2）：字符串 `center` 无法与读回的点判等，
+ *    先跑 `apply*FromProps` 再跑这里会写两次。现在 ready 时每个字段**至多写一次**。
+ *
+ * 判定用的是**可证明的前提**：调用点紧接 `initializeView`，而加载窗口内没有 map 可写 ⇒ 期间
+ * 没有任何视野写入落地，因此「与首次快照相同的字段」一定已经在地图上（短路即可）。这条短路同时
+ * 挡掉了「字符串中心点无法与读回值判等」造成的假写入（`center="北京市"` 且没变过 ⇒ 0 条命令）。
+ */
+function convergeViewToState(): void {
+  const m = map.value;
+  const c = client.value;
+  if (!m || !c) return;
+
+  /** 目标与快照相同 ⇒ 初始化已经写过；否则读回判等后再写。 */
+  function converge<T>(
+    snapshotValue: T,
+    target: T,
+    equals: (a: T, b: T) => boolean,
+    read: () => T | null,
+    write: (value: T) => void,
+  ): void {
+    if (equals(target, snapshotValue)) return;
+    const current = read();
+    if (current === null || equals(current, target)) return;
+    write(target);
+  }
+
+  converge(
+    initialViewSnapshot.center,
+    centerState.value.value,
+    centerEquals,
+    () => readLiveView(() => c.driver.map.getCenter(m)),
+    (value) => c.driver.map.setCenter(m, value),
+  );
+  converge(
+    initialViewSnapshot.zoom,
+    zoomState.value.value,
+    numbersEqual,
+    () => readLiveView(() => c.driver.map.getZoom(m)),
+    (value) => c.driver.map.setZoom(m, value),
+  );
+  converge(
+    initialViewSnapshot.heading,
+    headingState.value.value,
+    anglesEqual,
+    () => readLiveView(() => c.driver.map.getHeading(m)),
+    (value) => c.driver.map.setHeading(m, value),
+  );
+  converge(
+    initialViewSnapshot.tilt,
+    tiltState.value.value,
+    tiltEquals,
+    () => readLiveView(() => c.driver.map.getTilt(m)),
+    (value) => c.driver.map.setTilt(m, value),
+  );
+}
+
+/**
+ * ready 之前的视野收敛（#27 评审两轮，第三轮统一为**一条路径**）。
+ *
+ * 为什么必须有这一步：watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野用的是
+ * setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
+ * （`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher
+ * 不会重跑 ⇒ 地图永远停在旧初值。
+ *
+ * **单一收敛路径**（第三轮 P2）：这里只做「同步三态（模式 + 镜像）→ 按生效值收敛」，
+ * 不再先跑一遍 `apply*FromProps`。两条路径叠加会让**字符串 `center`** 被写两次——
+ * 字符串无法与读回的点判等，`applyCenterFromProps` 写一次、`convergeViewToState` 再写一次。
+ * 现在每个字段在 ready 时**至多写一次**（见 `convergeViewToState` 的快照短路）。
+ */
+function syncControlledView(): void {
+  centerState.syncExternal(props.center);
+  zoomState.syncExternal(props.zoom);
+  headingState.syncExternal(props.heading);
+  tiltState.syncExternal(props.tilt);
+  convergeViewToState();
+}
+
+/**
+ * 只订阅 SDK 的**结束**事件（`moveend` / `zoomend` / `headingchange` / `tiltchange`）：
+ * 中途事件（`moving` / `zooming`）按帧派发，逐帧回写会让父级每帧重渲染，并与受控写入来回打架。
+ *
+ * 订阅与「是否受控」无关——非受控模式下这也是「内部状态跟随用户操作」的唯一入口，
+ * `v-model` 的首次回写同样走这里。订阅经 Runtime 的 ResourceScope 记账，随卸载一并释放。
+ */
+function bindViewEvents(ctx: MapReadyContext): void {
+  const { client: c, map: m } = ctx;
+  const driver = c.driver;
+
+  runtime.resources.add(
+    driver.events.on(m, "moveend", () => {
+      const next = readLiveView(() => driver.map.getCenter(m));
+      if (!next) return;
+      if (centerState.commit(next)) emit("update:center", next);
+    }),
+  );
+  runtime.resources.add(
+    driver.events.on(m, "zoomend", () => {
+      const next = readLiveView(() => driver.map.getZoom(m));
+      if (next === null) return;
+      if (zoomState.commit(next)) emit("update:zoom", next);
+    }),
+  );
+  runtime.resources.add(
+    driver.events.on(m, "headingchange", () => {
+      const next = readLiveView(() => driver.map.getHeading(m));
+      if (next === null) return;
+      if (headingState.commit(next)) emit("update:heading", next);
+    }),
+  );
+  runtime.resources.add(
+    driver.events.on(m, "tiltchange", () => {
+      const next = readLiveView(() => driver.map.getTilt(m));
+      if (next === null) return;
+      if (tiltState.commit(next)) emit("update:tilt", next);
+    }),
+  );
+}
 
 /** v2 风格地图类型字符串 → 语义 MapType */
 function toMapType(value: string | undefined): MapType {
@@ -339,6 +642,10 @@ async function boot() {
     applyStyleProps(ctx);
     applyMapType(ctx);
     syncEnableProps(ctx);
+    // 加载期间父级可能已经改过受控视野（那时没有 map 可写），ready 之前按当前 props 收敛一次
+    syncControlledView();
+    // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
+    bindViewEvents(ctx);
     runtime.resources.add(
       ctx.client.driver.events.on(ctx.map, "click", (event) => {
         emit("click", normalizeMapMouseEvent(event, ctx.client.driver.geometry));
@@ -402,70 +709,19 @@ watch(
   { flush: "post" },
 );
 
-// 后续 center 更新只 setCenter，不重置 zoom；分别监听 lng/lat，禁止 deep
-function centerLng(value: BMapProps["center"]): number | string | undefined {
-  if (typeof value === "string") return value;
-  return value?.lng;
-}
-function centerLat(value: BMapProps["center"]): number | undefined {
-  if (typeof value === "string") return undefined;
-  return (value as { lat?: number } | undefined)?.lat;
-}
-watch(
-  [() => centerLng(props.center), () => centerLat(props.center)],
-  ([lng, lat], [oldLng, oldLat]) => {
-    const m = map.value;
-    const c = client.value;
-    if (!m || !c) return;
-    if (typeof props.center === "string") {
-      if (props.center === oldLng) return;
-      c.driver.map.setCenter(m, props.center);
-      return;
-    }
-    if (lng == null || lat == null) return;
-    if (lng === oldLng && lat === oldLat) return;
-    c.driver.map.setCenter(m, { lng: lng as number, lat });
-  },
-  { flush: "post" },
-);
+// 受控视野 → SDK（M4-STATE / #27）。
+//
+// 四个字段各自独立监听、独立判等：`center` 的 watch 源是 `lng,lat` 两个标量
+// （`core/utils/equality` 的 `centerKey`，禁止 deep / 引用比较），
+// 因此父级传内联对象字面量不会让 watch 空跑；`flush: "post"` 让「同一次父级更新里的多个字段」
+// 按 DOM 更新后的同一批执行，各自读回现值判等、互不干扰。
+watch(() => centerKey(props.center), () => applyCenterFromProps(props.center), { flush: "post" });
 
-// zoom 单独更新只 setZoom
-watch(
-  () => props.zoom,
-  (value, previous) => {
-    if (value == null || value === previous) return;
-    const m = map.value;
-    const c = client.value;
-    if (!m || !c) return;
-    c.driver.map.setZoom(m, value);
-  },
-  { flush: "post" },
-);
+watch(() => props.zoom, (next) => applyZoomFromProps(next), { flush: "post" });
 
-// heading/tilt 外部更新同步（SDK 支持才调用）
-watch(
-  () => props.heading,
-  (value, previous) => {
-    if (value == null || value === previous) return;
-    const m = map.value;
-    const c = client.value;
-    if (!m || !c) return;
-    c.driver.map.setHeading(m, value);
-  },
-  { flush: "post" },
-);
+watch(() => props.heading, (next) => applyHeadingFromProps(next), { flush: "post" });
 
-watch(
-  () => props.tilt,
-  (value, previous) => {
-    if (value == null || value === previous) return;
-    const m = map.value;
-    const c = client.value;
-    if (!m || !c) return;
-    c.driver.map.setTilt(m, value);
-  },
-  { flush: "post" },
-);
+watch(() => props.tilt, (next) => applyTiltFromProps(next), { flush: "post" });
 
 const context: MapContext = {
   id: runtime.id,
@@ -517,12 +773,25 @@ provide(mapContextKey, context);
   provide(targetContextKey, mapTarget);
 }
 
-/** 真正重置视角到初始快照 */
+/**
+ * 真正重置视角到初始快照。
+ *
+ * 除了把地图移回快照，**还要把四个状态一起重置**（#27 评审第三轮 P1）：非受控档下内部状态就是
+ * 事实源，只重置地图会让两者分叉——之后用户再拖回「重置前的那个值」时，`commit` 判等为「没变化」
+ * 而不 emit，那次真实操作就丢了。`reset()` 刻意不 emit（这是命令方决定的，不是用户交互）。
+ *
+ * 同时冻结语义：重置之后如果受控值被移除（受控 → 非受控），接管的是**重置值**（而不是重置前的外部值），
+ * 因此地图不会被拉回重置前的位置。
+ */
 function resetView() {
   const m = map.value;
   const c = client.value;
   if (!m || !c || !initialViewSnapshot) return;
   c.driver.map.initializeView(m, initialViewSnapshot);
+  centerState.reset();
+  zoomState.reset();
+  headingState.reset();
+  tiltState.reset();
 }
 
 defineExpose({

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { createApp } from 'vue'
-import { createBMapPlugin, Vue3BaiduMapGlResolver, useBMapGeolocation } from '../../packages/baidu-map-gl-vue/src'
+import { createBMapPlugin, Vue3BaiduMapGlResolver, useBMapGeolocation, useControllableState } from '../../packages/baidu-map-gl-vue/src'
 import * as root from '../../packages/baidu-map-gl-vue/src'
 
 describe('v3 public entry', () => {
@@ -46,5 +46,7 @@ describe('v3 public entry', () => {
 
   it('exports composables from root', () => {
     expect(typeof useBMapGeolocation).toBe('function')
+    // M4-STATE / #27：受控/非受控状态原语是公开 composable（组件与业务侧同一套规则）
+    expect(typeof useControllableState).toBe('function')
   })
 })

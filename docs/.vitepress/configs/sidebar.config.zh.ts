@@ -241,6 +241,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "useBMapTrackAnimation 轨迹动画",
           link: "useBMapTrackAnimation",
         },
+        {
+          text: "useControllableState 受控/非受控状态",
+          link: "useControllableState",
+        },
       ],
     },
     {

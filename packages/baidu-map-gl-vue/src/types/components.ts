@@ -38,13 +38,44 @@ export interface BMapProps {
   definition?: import("../client/types").CreateBMapClientOptions;
   /** KeepAlive 行为:suspend(默认,不销毁 WebGL Map) | dispose */
   keepAliveBehavior?: "suspend" | "dispose";
+
+  /* ---------------------------------------------------------------- 视野（M4-STATE / #27）
+   *
+   * center / zoom / heading / tilt 是**受控/非受控双模**字段，优先级：受控值 > default* > 库默认值。
+   *
+   * | 传入 | 模式 | 行为 |
+   * | --- | --- | --- |
+   * | `center` | 受控 | 外部值变化时写 SDK；用户交互回写 model 并 emit `update:center` |
+   * | `defaultCenter` | 非受控 | 只在**首次创建视野**时生效；此后 default 变化不覆盖当前状态 |
+   * | 都不传 | 缺省 | 用库默认视野初始化（center 北京 / zoom 14 / heading 0 / tilt 0） |
+   *
+   * 完整状态表与「不做什么」（例如不做「用户交互后强制回退到受控值」）见
+   * `docs/zh-CN/components/map.md`；决策与理由见 ADR `2026-09-14-map-controlled-state`。
+   */
+  /**
+   * 受控中心点：点，或 v2 兼容的城市名 / 地址字符串。
+   *
+   * 与 `v-model:center` 配对。用户交互（拖拽 / 惯性移动结束）会 emit `update:center`，
+   * 载荷为具体坐标点（字符串形态在用户交互后会被具体坐标取代）。
+   */
   center?: { lng: number; lat: number } | string;
+  /** 受控缩放级别（`v-model:zoom`）。 */
   zoom?: number;
+  /** 受控旋转角（度，`v-model:heading`）。 */
+  heading?: number;
+  /** 受控倾斜角（度，`v-model:tilt`）。 */
+  tilt?: number;
+  /** 非受控中心点初值：只在首次创建视野时生效，之后的变化不覆盖当前状态（会告警一次）。 */
+  defaultCenter?: { lng: number; lat: number } | string;
+  /** 非受控缩放级别初值：只在首次创建视野时生效。 */
+  defaultZoom?: number;
+  /** 非受控旋转角初值：只在首次创建视野时生效。 */
+  defaultHeading?: number;
+  /** 非受控倾斜角初值：只在首次创建视野时生效。 */
+  defaultTilt?: number;
   width?: string | number;
   height?: string | number;
   mapType?: string;
-  heading?: number;
-  tilt?: number;
   mapStyleId?: string;
   mapStyleJson?: Record<string, unknown>;
   displayOptions?: Record<string, unknown>;
