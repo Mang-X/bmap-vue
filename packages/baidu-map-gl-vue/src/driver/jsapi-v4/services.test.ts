@@ -1619,6 +1619,9 @@ describe("v4 Service Facet：LocalSearch 归属与释放（PR #89 评审复现�
     expect(searchCalls(), "超时之后的同实例重查不得落到 SDK").toEqual(["search:餐厅:"]);
     const settled = await retry.result;
     expect(settled.status).toBe("failed");
+    // 文案必须覆盖**两种**失效来源（cancel 与 timeout 共用 `supersededSearches`）：
+    // 只说「被 cancel() 取代」会让「超时后直接用 Driver 重试」的调用方看不懂
+    expect(settled.error?.message).toContain("取消或超时");
     expect(settled.error?.message).toContain("重建");
 
     services.disposeLocalSearch(handle);

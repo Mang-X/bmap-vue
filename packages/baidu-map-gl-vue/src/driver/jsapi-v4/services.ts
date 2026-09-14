@@ -753,10 +753,13 @@ export function createJsapiV4ServiceDriver(
    * 2. 执行 `cleanup()`（该种类专属的 Driver 侧清理：解绑监听、把在飞调用显式失败）与
    *    `events.release(handle)`——**解绑失败不阻断后续步骤，但汇总抛出**（订阅也是 Driver 侧资源，
    *    EventDriver 的 `groups` 是强引用 Map，SDK 清空自己的监听器不会删除这份记录）；
-   * 3. 调用 SDK 自身的 `dispose()`：**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
+   * 3. 执行**该服务的 SDK 公开释放步骤**（`releaseSdk`）：缺省是探测并调用 `dispose`
+   *    （`Autocomplete` 的官方声明里有该成员）；`LocalSearch` **没有** `dispose()`，因此注入的是
+   *    公开的 `clearResults()`。这一步**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
    *
    * 幂等 + 重入短路（SDK 销毁钩子里再次 dispose）都在这里统一处理。两个种类的差异只有
-   * `label`（错误信息里点名是谁）与 `cleanup`；写成两份只会让「成功才记账」这类细节各自漂移。
+   * `label`（错误信息里点名是谁）、`cleanup` 与 `releaseSdk`（第 3 步调哪个公开成员）；
+   * 写成两份只会让「成功才记账」这类细节各自漂移。
    */
   const disposeServiceInstance = (
     raw: Record<string, unknown>,
@@ -973,9 +976,11 @@ export function createJsapiV4ServiceDriver(
       return "该服务实例已被 disposeLocalSearch() 释放：请重建实例后再检索";
     }
     if (supersededSearches.has(raw)) {
+      // 这个集合有两个来源：`cancel()`（`onCancel`）与**超时**（`onTimeout`）——两者都意味着
+      // 「这一次调用已经结束，但 SDK 侧的请求可能仍在路上」，因此文案不点名 cancel。
       return (
-        `LocalSearch.${operation}: 该实例已被 cancel() 取代 —— 它的迟到回包无法与后续请求区分` +
-        "（官方没有承诺多次请求之间的回包顺序），因此不再接受新的检索；" +
+        `LocalSearch.${operation}: 该实例已因**取消或超时**失效 —— 它上一次检索的迟到回包无法与` +
+        "后续请求区分（官方没有承诺多次请求之间的回包顺序），因此不再接受新的检索；" +
         "请 disposeLocalSearch() 后重建实例（composable 的「最新者胜」正是这样做的）"
       );
     }
