@@ -1600,6 +1600,48 @@ describe("v4 Service Facet：LocalSearch 归属与释放（PR #89 评审复现�
     services.disposeLocalSearch(handle);
   });
 
+  it("超时之后的实例永久不可复用：迟到回包到达也不恢复（PR #89 复审 P1）", async () => {
+    vi.useFakeTimers();
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const first = services.search(handle, "餐厅");
+    vi.advanceTimersByTime(15000);
+    expect((await first.result).status).toBe("timeout");
+    expect(raw.queue.pending, "正证：迟到回包真的还在路上").toBe(1);
+
+    // 迟到回包到达：它**不该**让实例「恢复可用」（否则同一 handle 的行为取决于回包早晚）
+    expect(raw.queue.flush()).toBe(1);
+
+    vi.useRealTimers();
+    const retry = services.search(handle, "餐厅");
+    expect(searchCalls(), "超时之后的同实例重查不得落到 SDK").toEqual(["search:餐厅:"]);
+    const settled = await retry.result;
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.message).toContain("重建");
+
+    services.disposeLocalSearch(handle);
+  });
+
+  it("首次 gotoPage（还没有结果）也按官方语义回调：INVALID_REQUEST(5)（PR #89 复审 P2）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const paged = services.gotoPage(handle, 1);
+    // 官方声明：页码无效时**仍会触发** onSearchComplete，并把状态设为 INVALID_REQUEST
+    expect(raw.queue.pending, "Fake 也必须回调，不能建模成 timeout").toBe(1);
+    expect(raw.queue.flush()).toBe(1);
+
+    const settled = await paged.result;
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.code).toBe(5);
+    expect(settled.sdkStatus).toBe(5);
+
+    services.disposeLocalSearch(handle);
+  });
+
   it("释放必须调用公开的 clearResults（LocalSearch 没有官方 dispose）", async () => {
     const handle = localSearchWith();
     const raw = fake.createdLocalSearches[0]!;

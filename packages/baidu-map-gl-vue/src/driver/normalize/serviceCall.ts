@@ -12,7 +12,8 @@
  * - **先到者胜**：任何一次结算之后再来的回调都是迟到回包，一律忽略（真实服务在超时后
  *   仍会回包，不设这道门就会把过期结果写回去）；
  * - **超时**：回调永远不来（SDK 失败时的常见表现）时给出 `timeout`，而不是永久挂起；
- * - **取消**：`cancel()` 立刻以 `canceled` 结算并执行 `onCancel`，之后的回调被忽略。
+ * - **取消 / 超时都会通知调用方**：`onCancel` / `onTimeout` 在结算之后执行——两者都表示「这一次
+ *   调用结束了，但 SDK 侧的请求可能仍在路上」；
  *   SDK 侧大多没有取消入口（JSONP 发出去就收不回），因此这里只承诺「放弃结果 + 解绑」。
  *
  * 本模块不认识任何 SDK 成员（只在 `start` 回调里由 Facet Driver 提供），因此两个引擎
@@ -41,7 +42,7 @@ export function createServiceCall<T>(
   start: (settle: ServiceCallSettle<T>) => void,
   options: ServiceCallOptions,
 ): ServiceCall<T> {
-  const { label, timeoutMs = SERVICE_CALL_TIMEOUT_MS, onCancel } = options;
+  const { label, timeoutMs = SERVICE_CALL_TIMEOUT_MS, onCancel, onTimeout } = options;
 
   let resolveResult!: (result: ServiceResult<T>) => void;
   const result = new Promise<ServiceResult<T>>((resolve) => {
@@ -83,6 +84,8 @@ export function createServiceCall<T>(
       error: { code: "BMAP_SERVICE_FAILED", message: `${label} timed out after ${timeoutMs}ms` },
       sdkStatus: null,
     });
+    // 与 `cancel()` 对称：结算之后再通知（回调里不该再改结果），SDK 侧请求可能仍在路上。
+    onTimeout?.();
   }, timeoutMs);
 
   try {

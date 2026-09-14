@@ -29,8 +29,10 @@
    直接吃它）也在归一化时丢失。
 
 同时 `#72` 的 ADR 把「逐请求归属」这件事记在了本票名下：`Autocomplete` 的回包不带请求身份
-（`keyword` 只是**可选**），因此只能靠「通道独占 + 同关键词互斥」；而 `LocalSearch`
-**官方把 `LocalResult.keyword` 声明为必填**、也**不绑定输入框**，是真正能落地逐请求归属的地方。
+（`keyword` 只是**可选**），因此只能靠「通道独占 + 同关键词互斥」。`LocalSearch` 那边本可以更简单
+（**不绑输入框**，没有用户输入污染同一条回调通道），但它的回包**同样没有请求身份**——
+`LocalResult.keyword` 是官方必填字段，却**不是请求标识**（同关键词重查时新旧两次完全等价），
+官方也没有承诺多次请求之间的回调顺序。归属因此只能靠**实例身份**（决策 4）。
 
 参考实现：`huiyan-fe/react-bmap`（官方 React 组件库，`src/hooks/services/*`）。它给出了本库要
 对齐的三件事：**统一状态面**（`data` / `loading` / `error` / `supported` + 动作 + `cancel`）、
@@ -151,13 +153,17 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
 - `clearLocalSearch(handle)`：清 SDK 侧已产生的可见结果（标注 / 面板）与内部结果状态。**没有回包**，
   因此不是 `ServiceCall`——它清的是「已经画出来的结果」，与 `ServiceCall.cancel()` 的「放弃在飞请求」
   是两件事，两者互不代替。
-- `disposeLocalSearch(handle)`：幂等；Driver 侧清理（解绑 EventDriver 订阅 + 把在飞调用显式失败）+
-  SDK 自身 `dispose()`；**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
+- `disposeLocalSearch(handle)`：幂等；Driver 侧清理（置终态 + 解绑 EventDriver 订阅 + 把在飞调用显式失败）
+  + **公开的 `clearResults()`**（官方 `LocalSearch` **没有** `dispose()`；`clearResults()` 同时清掉它
+  画在地图上的标注与结果面板）；**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
+  `clearLocalSearch()` 保留为「只清结果、实例仍可用」的 Driver 级原语。
 - **为什么还是没有通用 `dispose(ServiceHandle<string>)`**：其余服务（Geocoder / Convertor /
   Boundary / Geolocation / LocalCity）在 Driver 侧不持有任何资源，通用入口会承诺「在飞调用会失败、
   释放后拒绝新调用」而实现做不到。契约必须与实现一致。
-- Fake v4 的泄漏门禁因此新增 `localSearches` 这一类（生命周期类，按实例销账）：**没有释放入口的
-  资源不进泄漏门禁**这条口径不变。
+- Fake v4 的泄漏门禁因此新增 `localSearchResults` 这一类：记的是**交付出去、还没被 `clearResults()`
+  清掉的结果集**（含绘制物），按实例销账。`LocalSearch` 实例本身**不进**泄漏门禁（官方没有 destroy，
+  随 GC 回收，与 Geocoder / Boundary 等同档）——**没有释放入口的资源不进泄漏门禁**这条口径不变，
+  变更的是「这个服务的资源是什么」。
 
 ### 6. 不建立在 `setSearchCompleteCallback` 上
 
@@ -165,7 +171,7 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
 闭包 + `requestId` 守卫）。本库不用它，理由是 `#72` 的真实 AK 探测**没有得出可发布结论**
 （那批检索全部无回包，对照组同样无回包，最可能是同页配额/QPS），因此「换回调能否按请求归属」
 （回调是请求时捕获还是响应时读取）在真实运行时上仍未被证实。内部分发器只在构造期挂一次，
-归属靠 FIFO + `keyword`——这两个判据都能在官方声明里核对到。
+归属靠**实例身份**这条可在声明里核对到的不变式（决策 4），与回调的注册时机无关。
 
 ### 7. DTO 收口：上游声明的字段必须真的被读进投影
 
@@ -205,16 +211,16 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
   `clearLocalSearch` / `disposeLocalSearch`。库尚未发布 1.0，且这些面都是 v3 重构中的内部契约。
 - **回滚**：删除 `core/services/**`、`useBMapServiceTask.ts`、`useBMapLocalSearch.ts`，恢复
   `useBMapAsyncTask.ts`，把六个 composable 恢复到 `handle.raw` 版本，并移除 Driver 的 LocalSearch 面
-  与 Fake 的 `FakeV4LocalSearch` / `localSearches` 诊断项即可；`dist` 不含 `driver/jsapi-v4/**`，
+  与 Fake 的 `FakeV4LocalSearch` / `localSearchResults` 诊断项即可；`dist` 不含 `driver/jsapi-v4/**`，
   回滚不影响已发布的其它消费者。
 
 ## 非目标
 
 - 不做路线服务（Driving / Walking / Riding / Transit，属 `#39`），不实现任何标准 UI
   （建议列表 / 搜索面板 / 详情，属 `#73` / `#75` 的官方 UI Kit），不读取 SDK 私有面。
-- 不改 `Autocomplete` 的归属契约（通道独占 + 同关键词互斥）。它的依据（`keyword` 可选）与本票不同，
-  一起改会把两套判据混起来（它没有 `dispose()` 的归属问题、也不允许「一个实例一个在飞操作」——
-  输入提示本来就是「边打边发」）。它是否也改用实例隔离属后续可评估项。
+- 不改 `Autocomplete` 的归属契约（通道独占 + 同关键词互斥）。它的依据与本票不同（回调通道会被用户
+  输入污染，与本票的 LocalSearch 相反），也不允许「一个实例一个在飞操作」——输入提示本来就是
+  「边打边发」。它是否也改用实例隔离属后续可评估项。
 - 不给其余服务补释放入口（官方没有 `destroy` / `dispose`）。
 - 不做 `LocalSearch` 的 `enableAutoViewport` / `enableFirstResultSelection` /
   `setPageCapacity` / `setPageNum` 的运行时开关（它们**只影响绘制与分页**，而首页容量已在构造选项里；
@@ -234,12 +240,17 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
    恒为 `null`——不伪装成 0。
 4. **`renderOptions.map` 的绘制效果未在真实 AK 上验证**：Fake 不实现标注绘制，真实 smoke 只验证
    「构造成功 + `search` 结算」。绘制（标注 / 面板 / 自动视野）的视觉正确性属 `#74` 的真实环境验收。
-5. **`LocalSearch` 的 `keyword` 回填仍未被真实 AK 证实**（同 `#72` 对 `Autocomplete` 的标注）：
-   官方声明是必填，但「运行时是否一定回填」未在真实环境验证过。回填缺失时退化为纯 FIFO
-   （顺序到达仍然正确），不会错归。
-6. `useBMapServiceTask` 的实例缓存绑定在 **Client 身份**上：`<BMapProvider>` 的 definition 变化
+5. **`LocalSearch` 的跨请求回包顺序仍未有官方保证**：官方只承诺单次多关键字检索**内部**的顺序，
+   本库的实现因此**不依赖**它（决策 4）。真实 AK 上的乱序行为属 `#74` 的 live 观察项——观察只可能
+   影响「要不要额外的容错」，不影响现在的正确性。
+6. **supersede 之后的迟到回包是否可能「重新画」**（评审的非阻塞提示，留给 `#74` 的 live 验收）：
+   `renderOptions.map` / `panel` 场景下，supersede 会先对旧实例调 `clearResults()`，但旧 JSONP 请求
+   仍可能随后回包。Fake **无法**证明它不会重新绘制 marker / panel。届时的观察点：清掉之后地图上是否
+   又出现旧标注；若是，则需要在「已终态实例」上把回调通道也断开（`setSearchCompleteCallback(() => {})`，
+   官方声明里有该成员）——当前没有证据表明需要它，因此**不**预先加上。
+7. `useBMapServiceTask` 的实例缓存绑定在 **Client 身份**上：`<BMapProvider>` 的 definition 变化
    （换 AK / 换 Provider）会产生新 Client，实例随之重建——这是正确行为，但会多一次构造。
-7. **`supported` 在 Client 就绪前是乐观初值 `true`**（= 尚未判定）：`capabilities` 来自 Driver，
+8. **`supported` 在 Client 就绪前是乐观初值 `true`**（= 尚未判定）：`capabilities` 来自 Driver，
    没有 Client 就无从探测。判定在 Client 落地的那一刻完成（`watch(..., { immediate: true })`），
    因此「读到 `false`」一定来自真实探测；但「Client 还没就绪时读到 `true`」不代表能力可用。
 
@@ -272,6 +283,15 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
 
 **评审同时确认了的判断**（保留）：`Autocomplete` 的 `dispose()` **是**官方声明里的成员（`service/Autocomplete.d.ts`），
 因此它的释放路径不变；只有 `LocalSearch` 没有。
+
+### 第三轮（复审）
+
+| 发现 | 复现结果（红） | 处置 |
+| --- | --- | --- |
+| **P1** `supersede` 漏掉「已开始但还没拿到 `ServiceCall`」的窗口：`busy` 只看 `activeCall`，在 `await whenReady()` 期间为 `false` | 原始级：`第一条不得被这条调用作废: expected 'canceled' to be 'success'`；行为级（`<BMapProvider>` 延迟加载）：`expected 5 to be 'BMAP_SERVICE_FAILED'` | `busy` 改判 `activeController !== null \|\| instanceStale`；取代时**无条件**收掉上一条 execution（含还没拿到 call 的那条）。两层各留一条回归用例 |
+| **P1** timeout 不触发 `onCancel` ⇒ 迟到回包到达后实例「又变回可用」，同一 handle 的行为取决于回包早晚 | `超时之后的同实例重查不得落到 SDK: expected [ 'search:餐厅:', 'search:餐厅:' ] to deeply equal [ 'search:餐厅:' ]` | `ServiceCallOptions` 新增 `onTimeout`（与 `onCancel` 对称），Driver 在超时时同样 `supersedeLocalSearch()` |
+| **P1（文档）** ADR 仍残留上一版被推翻的结论（决策 5 的 SDK `dispose()`、`localSearches`、决策 6 的 FIFO 归属、已知限制的 keyword 退化、回滚说明），源码注释仍写「归属可以建立在请求顺序 + 回包 keyword 上」 | `grep` 逐处核对 | 全文按当前实现清理（single-flight + 实例身份 + `clearResults()` + `localSearchResults`）；历史说明保留在「外部评审记录」里，不再出现在决策/限制正文 |
+| **P2** Fake 的 `gotoPage()` 在「还没有结果」时不回调 ⇒ 被建模成 timeout，而官方语义是回调 + `INVALID_REQUEST(5)` | `Fake 也必须回调，不能建模成 timeout: expected +0 to be 1` | Fake 改为置 `status = 5` 并回调；补一条 Driver 级用例（首次 `gotoPage` ⇒ `failed(5)`） |
 
 **刻意不采纳的建议**：评审提到「除非能找到百度对跨请求 FIFO 的明确官方保证」——查过 4.0.4 的
 `LocalSearch.d.ts` 与 `LocalResult.d.ts`，**没有**任何关于多次请求之间回调顺序的承诺（只承诺单次多关键

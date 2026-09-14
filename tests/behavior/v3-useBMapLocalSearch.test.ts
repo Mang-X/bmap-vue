@@ -91,7 +91,10 @@ function mountInMapWithOptions(
 }
 
 /** 只挂 `<BMapProvider>`（**没有地图实例**）：client-only 服务必须同样可用。 */
-function mountInProvider(options: Parameters<typeof useBMapLocalSearch>[0]) {
+function mountInProvider(
+  options: Parameters<typeof useBMapLocalSearch>[0],
+  customProvider?: ReturnType<typeof provider>,
+) {
   const el = host();
   let hook: Hook | null = null;
   const Child = defineComponent({
@@ -106,13 +109,41 @@ function mountInProvider(options: Parameters<typeof useBMapLocalSearch>[0]) {
       setup: () => () =>
         h(
           BMapProvider,
-          { definition: { provider: provider(), loadOptions: { ak: "fake-ak" } } },
+          { definition: { provider: customProvider ?? provider(), loadOptions: { ak: "fake-ak" } } },
           () => [h(Child)],
         ),
     }),
     { attachTo: el },
   );
   return { wrapper, hook: () => hook };
+}
+
+type ProviderLike = ReturnType<typeof provider>;
+
+/**
+ * 把 harness 的 provider 包一层，让 `load()` 挂起直到 `release()`。
+ *
+ * 用来复现「Client/Map 还在加载」这个窗口：那时 `whenReady()` 未兑现，调用方**已经开始**一次
+ * 检索，但还没有拿到 `ServiceCall`（PR #89 复审 P1 的真实触发场景）。
+ */
+function deferredProvider(): { provider: ProviderLike; release: () => void } {
+  const base = provider();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // 包装后的对象与 `base` 同形（只是 load 先等 gate），因此仍是同一份 provider 契约
+  const wrapped = {
+    ...(base.id !== undefined ? { id: base.id } : {}),
+    ...(base.getCacheKey !== undefined
+      ? { getCacheKey: (options: never) => base.getCacheKey?.(options) as string }
+      : {}),
+    load: async (...args: Parameters<NonNullable<ProviderLike["load"]>>) => {
+      await gate;
+      return base.load?.(...args);
+    },
+  } as unknown as ProviderLike;
+  return { provider: wrapped, release: () => release() };
 }
 
 describe("useBMapLocalSearch：headless 检索", () => {
@@ -357,6 +388,35 @@ describe("useBMapLocalSearch：与地图 / 上下文的边界", () => {
     wrapper.unmount();
     await flushPromises();
     harness.assertIdle("Provider 子树");
+  });
+
+  it("Client 还在加载时 gotoPage 必须被拒绝，且不得作废在飞的检索（PR #89 复审 P1）", async () => {
+    const deferred = deferredProvider();
+    const { wrapper, hook } = mountInProvider({ location: "上海市" }, deferred.provider);
+    await flushPromises();
+
+    // 检索已开始，但 Client/Map 还没 ready（`whenReady()` 未兑现）——此时还没有 ServiceCall
+    const pending = hook()!.search("餐厅");
+    await flushPromises();
+    expect(hook()!.status.value).toBe("loading");
+
+    const refused = hook()!.gotoPage(1);
+    await flushPromises();
+
+    // 放行加载：两条都会继续（被拒绝的那条不该发起请求）
+    deferred.release();
+    await flushPromises();
+    const [refusedResult, settled] = [await refused, await pending];
+
+    expect(refusedResult.status, "未结算时翻页必须被拒绝").toBe("failed");
+    expect(refusedResult.error?.code).toBe("BMAP_SERVICE_FAILED");
+    expect(refusedResult.error?.message).toContain("翻页");
+    expect(settled.status, "第一条检索不得被这次翻页作废").toBe("success");
+    expect(settled.data?.[0]?.keyword).toBe("餐厅");
+    expect(fake.createdLocalSearches).toHaveLength(1);
+
+    wrapper.unmount();
+    await flushPromises();
   });
 
   it("没有地图又没有 location ⇒ failed(BMAP_INVALID_ARGUMENT)，一次都不落到 SDK", async () => {

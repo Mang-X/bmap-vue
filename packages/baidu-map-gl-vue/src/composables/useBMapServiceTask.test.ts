@@ -22,6 +22,8 @@ interface StubHandle {
 }
 
 interface StubService {
+  /** `deferredReady` 时用来放行 `whenReady()` */
+  releaseReady: () => void;
   readonly stats: {
     created: number;
     released: number;
@@ -43,6 +45,8 @@ interface StubServiceOptions {
   loadFails?: boolean;
   /** 前 N 次 `release` 抛错（验证「释放失败保留引用并重试」） */
   releaseFails?: number;
+  /** `whenReady()` 挂起，直到调用 `service.releaseReady()`（验证「已开始但未拿到 ServiceCall」的窗口） */
+  deferredReady?: boolean;
   /** 取代策略（透传给 `useBMapServiceTask`） */
   supersede?: "cancel" | "recreate" | (() => "cancel" | "recreate" | "refuse");
 }
@@ -55,6 +59,10 @@ function makeService(options: StubServiceOptions = {}): StubService {
     capabilities: { supports: () => options.supports ?? true },
     driver: { services: {} },
   };
+  let releaseReadyFn: () => void = () => {};
+  const readyGate = new Promise<void>((resolve) => {
+    releaseReadyFn = resolve;
+  });
   const ctx = {
     id: Symbol("stub"),
     status: { value: "ready" },
@@ -68,11 +76,14 @@ function makeService(options: StubServiceOptions = {}): StubService {
     plugins: null,
     whenReady: options.loadFails
       ? () => Promise.reject(new BMapError("BMAP_SDK_LOAD_FAILED", "SDK 加载失败"))
-      : async () => ({ client, map: {} }),
+      : async () => {
+          if (options.deferredReady) await readyGate;
+          return { client, map: {} };
+        },
     dispose: () => {},
   } as unknown as MapContext;
 
-  const service: StubService = { stats, client, ctx };
+  const service: StubService = { stats, client, ctx, releaseReady: () => releaseReadyFn() };
   return service;
 }
 
@@ -397,6 +408,39 @@ describe("useBMapServiceTask：释放失败与取代策略（PR #89 评审 P2）
     const settled = await inflight;
     expect(settled.status, "在飞调用不受拒绝影响").toBe("success");
     expect(settled.data).toBe(7);
+
+    wrapper.unmount();
+  });
+});
+
+describe("useBMapServiceTask：取代判定必须覆盖「还没拿到 ServiceCall」的窗口（PR #89 复审 P1）", () => {
+  it('supersede="refuse"：等 whenReady 期间的调用也要算「忙」，不得作废它', async () => {
+    const service = makeService({ deferredReady: true });
+    const { wrapper, task } = mountTask(service, {
+      deferredReady: true,
+      supersede: () => "refuse",
+    });
+    await flushPromises();
+
+    // 第一次调用已经进入 loading，但还在 await whenReady()（此时还没有 ServiceCall）
+    const first = task.execute();
+    await flushPromises();
+    expect(task.status.value).toBe("loading");
+    expect(service.stats.invokes, "还没拿到实例 ⇒ 还没发起").toBe(0);
+
+    // 第二次调用：必须被拒绝（契约：上一次还没结算时不能取代它）
+    const second = task.execute();
+    await flushPromises();
+
+    // 放行 whenReady：第一条照常发起并结算
+    service.releaseReady();
+    await flushPromises();
+    const [firstResult, secondResult] = [await first, await second];
+
+    expect(firstResult.status, "第一条不得被这条调用作废").toBe("success");
+    expect(secondResult.status).toBe("failed");
+    expect(secondResult.error?.code).toBe("BMAP_SERVICE_FAILED");
+    expect(service.stats.invokes, "被拒绝的调用不得落到 SDK").toBe(1);
 
     wrapper.unmount();
   });

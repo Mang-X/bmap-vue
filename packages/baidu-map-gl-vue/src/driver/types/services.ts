@@ -155,6 +155,14 @@ export interface ServiceCallOptions {
    * 解绑监听」；`result` 会立刻以 `canceled` 结算，之后到达的回调被忽略。
    */
   onCancel?: () => void;
+  /**
+   * 超时时执行（与 `onCancel` 对称）。
+   *
+   * 为什么需要它：超时不代表 SDK 侧请求消失——回包可能**仍在路上**。需要把「这一次调用已经结束」
+   * 告知 Driver 侧归属记账的地方（`LocalSearch` 的实例身份模型）必须在这里收尾，否则同一 handle 的
+   * 行为会取决于迟到回包何时到达（PR #89 复审 P1）。
+   */
+  onTimeout?: () => void;
 }
 
 export interface ServiceCall<T> {
@@ -368,10 +376,10 @@ export interface LocalSearchResult {
 /**
  * 本地检索的请求描述。
  *
- * 四个操作**共用**一条 `onSearchComplete`（实例单例回调），而除 `gotoPage` 外的操作各自带
- * 关键字。归属因此按「请求顺序 + 关键字」判定：回包带回的 `keyword` 与队首期望的关键字
- * 不一致时，这次回包**不属于**在册请求（不消费队列槽位），见 `JsapiV4ServiceDriver.search`
- * 的契约说明。
+ * 四个操作**共用**一条 `onSearchComplete`（实例单例回调）。**归属不靠关键字也不靠到达顺序**：
+ * 官方只承诺单次多关键字检索内部的顺序，`keyword` 也不是请求身份——因此 Driver 采用
+ * 「**一个实例同一时刻只有一个未结算操作**」这条不变式，并发会被显式拒绝。完整契约见
+ * `JsapiV4ServiceDriver.search` 的说明与 ADR `2026-09-14-service-lifecycle-and-local-search` 决策 4。
  */
 export interface LocalSearchNearbyRequest {
   keyword: LocalSearchKeyword;

@@ -305,7 +305,15 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
     // **取代判定必须在 `guard.next()` 之前**：拒绝本次调用时不能作废在飞调用 —— 它还在跑，
     // 它的结果仍然属于它自己。
     const mode = resolveSupersede(args);
-    const busy = activeCall !== null || instanceStale;
+    /**
+     * 「忙」必须包含**已经进入 `execute`、但还没拿到 `ServiceCall`** 的那一步
+     * （`await ctx.whenReady()` 期间：Client/Map 还在加载）。
+     *
+     * 只判 `activeCall !== null` 会在异步加载场景漏掉它：第二次调用会以为「没人忙」，
+     * 于是既不走 `refuse`、又用 `guard.next()` 把**还在等 ready 的那条**作废 ——
+     * 与「上一次还没结算时不能取代它」的公开契约直接冲突（PR #89 复审 P1）。
+     */
+    const busy = activeController !== null || instanceStale;
     if (busy && mode === "refuse") {
       const info = {
         code: "BMAP_SERVICE_FAILED",
@@ -318,10 +326,11 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
     }
 
     const id = guard.next();
-    if (activeCall) {
-      // 上一轮仍在飞 ⇒ 逻辑取消（最新者胜）。SDK 侧请求收不回，但它的回包会被序列号挡掉，
-      // 且不会有人把它当成「本次的结果」。
-      activeCall.cancel();
+    if (busy) {
+      // 上一轮仍在跑 ⇒ 逻辑取消（最新者胜）。**无条件收掉上一次 execution**：它可能已经有
+      // `ServiceCall`（在飞请求），也可能还停在 `await whenReady()`（此时 `activeCall` 仍是
+      // null，但它的 controller 必须被 abort，否则它会继续跑到 `ensureHandle` 才发现自己已被取代）。
+      activeCall?.cancel();
       activeCall = null;
       activeController?.abort("superseded");
       activeController = null;

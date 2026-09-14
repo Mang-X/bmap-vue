@@ -952,6 +952,10 @@ export function createJsapiV4ServiceDriver(
         label,
         // 取消只影响调用方看到的结果；实例本身从此不再可用（见 `supersededSearches`）
         onCancel: () => supersedeLocalSearch(raw),
+        // **超时同理**：超时不代表 SDK 侧请求消失，迟到回包仍可能到达。若这里不收尾，
+        // 「迟到回包到达后实例又变回可用」就会让同一 handle 的行为取决于回包早晚
+        // （PR #89 复审 P1）——契约要求：取消/超时之后必须重建实例。
+        onTimeout: () => supersedeLocalSearch(raw),
       },
     );
 
@@ -1233,9 +1237,10 @@ export function createJsapiV4ServiceDriver(
     /**
      * 创建本地检索实例（`BMap.LocalSearch`）。
      *
-     * 与 `createAutocomplete` 的关键差别：**不绑输入框**，因此回调通道不被用户输入污染，回包
-     * 归属可以建立在「请求顺序 + 回包 `keyword`」上（见 `search()` 的契约）。代价是必须自己管
-     * 在飞请求的记账与释放入口（`disposeLocalSearch`）。
+     * 与 `createAutocomplete` 的关键差别：**不绑输入框**，因此回调通道不被用户输入污染，不需要
+     * 「通道独占」那套前置校验。但它的回包**同样没有请求身份**（`keyword` 不是标识、官方也没承诺
+     * 跨请求顺序），所以归属靠**实例身份**：一个实例同一时刻只允许一个未结算操作（见 `search()`
+     * 的契约与 ADR 决策 4）。代价是必须自己管在飞请求的记账与释放入口（`disposeLocalSearch`）。
      *
      * 内部分发器只挂一次（构造期）：所有操作共用它，因为它必须与实例同寿命——`setSearchCompleteCallback`
      * 虽然也在官方 `LocalSearch` 的声明里，但「换回调能否按请求归属」在 #72 的真实 AK 探测里

@@ -584,7 +584,14 @@ export class FakeV4LocalSearch {
   gotoPage(page: number): void {
     this.callLog.push('gotoPage:' + page)
     const results = this.currentResults()
-    if (results.length === 0) return
+    if (results.length === 0) {
+      // 官方语义：页码无效（含「还没有任何结果」这种）时**仍会触发** `onSearchComplete`，
+      // 并把状态设为 INVALID_REQUEST(5)。Fake 早期在这里直接 return，会把「首次翻页」建模成
+      // timeout —— 照 Fake 推导就会得到错误结论（PR #89 复审 P2）。
+      this.status = 5
+      this.dispatchPayload(null)
+      return
+    }
     const total = Math.max(...results.map((result) => result.getNumPages()))
     // 官方：页码无效时仍触发 onSearchComplete，并把状态设为 INVALID_REQUEST(5)
     if (!Number.isInteger(page) || page < 0 || page >= total) {
