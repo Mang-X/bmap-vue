@@ -36,10 +36,10 @@ pnpm docs:dev         # 起文档站，写文档 / 调试组件
 | 维度 | 说明 |
 | --- | --- |
 | 组件库版本 | `packages/baidu-map-gl-vue/package.json` |
-| SDK engine（内部） | `webgl-v1` / `jsapi-v3` / `jsapi-v4` |
+| SDK engine（内部） | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 M3A.3 / #26 删除） |
 | SDK version | 百度 JSAPI `4.0` |
 
-仓库目前正在从旧 engine 迁移到 `jsapi-v4`，所以「升级」这类说法必须指明是哪一维。
+仓库只支持 JSAPI 4.0 一个 SDK 世代（旧引擎已删除），所以「升级」这类说法必须指明是哪一维。
 
 ## 提 PR 的流程
 
@@ -63,6 +63,7 @@ pnpm generate:capability-matrix:check
 pnpm typecheck:v3               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
 pnpm build:v3
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
+pnpm check:no-bmapgl            # 运行时源码 + 公共声明不得再出现 BMapGL / 已删除的 engine 取值
 pnpm test:unit
 ```
 

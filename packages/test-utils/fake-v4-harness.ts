@@ -16,7 +16,6 @@
  */
 import type { BMapClient, BMapProviderLike } from "../baidu-map-gl-vue/src/client/types";
 import { createBMapClient } from "../baidu-map-gl-vue/src/client/createBMapClient";
-import type { UnsupportedBehavior } from "../baidu-map-gl-vue/src/driver/capability/unsupported";
 import { createLoadedJsapiV4 } from "../baidu-map-gl-vue/src/core/loader/providers";
 import { createFakeBMapV4, type FakeBMapV4 } from "./fake-bmap-v4/index.ts";
 
@@ -76,7 +75,6 @@ function toPositions(overlays: Iterable<unknown>): Array<{ lng: number; lat: num
  */
 export async function createFakeV4Client(
   fake: FakeBMapV4 = createFakeBMapV4(),
-  options: { unsupported?: UnsupportedBehavior } = {},
 ): Promise<{ client: BMapClient; fake: FakeBMapV4 }> {
   const client = await createBMapClient({
     provider: {
@@ -95,7 +93,8 @@ export async function createFakeV4Client(
         }),
     },
     loadOptions: { ak: "fake-ak" },
-    unsupported: options.unsupported ?? "warn",
+    // 默认 `unsupported: "warn"`：调用方需要 "throw" 时在用例里自己拼 definition，
+    // 不为「可能有人要传」预留一个没人用的参数。
   });
   return { client, fake };
 }

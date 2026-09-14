@@ -132,6 +132,7 @@ ADR 2026-09-13 决策 10 明确把这两条挂到了本票。它们走的是 leg
 | Playground | `VITE_BMAP_MODE=legacy-fake` 对照档 | 该档与开关删除（只剩 `real-v4` / `fake-v4`） | 无需配置；传旧档位名会被忽略并落到默认档 |
 | `BMapEngine` | `"webgl-v1" \| "jsapi-v3" \| "jsapi-v4"` | `"jsapi-v4"` | 类型收窄；Capability Catalog 的引擎列随之退化为一列 |
 | 包文件清单 | `files: ["dist", "types", "volar.d.ts"]` | `files: ["dist", "volar.d.ts"]` | `types/` 只剩构建期占位文件（`shared/`、`ui-kit/upstream.d.ts`），不再发布；**`volar.d.ts` 必须保留**——`tsconfig` 里的 `"types": ["baidu-map-gl-vue/volar"]` 靠它，删掉会静默破坏消费者的模板类型提示 |
+| 构建 tsconfig | `include` 收窄为 `types/shared/**/*.d.ts`（迁移期为了避开旧 `types/BMapGL` 的全局常量与官方 `BMap` 声明冲突） | 恢复为 `types/**/*.d.ts` | 无。收窄的前提（`types/BMapGL`）已消失，恢复后 `types/` 下的声明占位文件重新按整目录参与编译 |
 
 ## 已知限制（显式接受，带归属）
 

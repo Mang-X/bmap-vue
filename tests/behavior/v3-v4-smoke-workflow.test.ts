@@ -10,16 +10,15 @@
  * 2. **门禁步骤被架空**（`continue-on-error: true`、被 `if:` 挂住）⇒ 步骤在、判定不生效。
  *    断言落在**真正的 `run:` 所在 step 区块**上，而不是「文件里出现过这个字符串」。
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { listWorkflowNames, readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
-const WORKFLOW_DIR = resolve(import.meta.dirname, "../../.github/workflows");
 const NEW_REPO = "Mang-X/bmap-vue";
 const ORG = "Mang-X";
 
-const workflowNames = readdirSync(WORKFLOW_DIR).filter((name) => /\.ya?ml$/.test(name));
-const readWorkflow = (name: string): string => readFileSync(resolve(WORKFLOW_DIR, name), "utf8");
+const workflowNames = listWorkflowNames();
 
 /* ------------------------------------------------------------------ 判定（纯函数） */
 
@@ -46,32 +45,6 @@ export function guardIssues(text: string): string[] {
     }
   }
   return issues;
-}
-
-/** 取出包含某个字符串的 step 区块（从该 step 的 `- ` 行起到下一个同级 step 前）。 */
-export function stepBlockContaining(text: string, needle: string): string[] {
-  const lines = text.split(/\r?\n/);
-  const hit = lines.findIndex((line) => line.includes(needle));
-  if (hit === -1) return [];
-  // 命中行常常是 step 内的续行（`run: |` 之后的内容），因此要**向上**找最近的列表项行。
-  let start = -1;
-  for (let i = hit; i >= 0; i -= 1) {
-    if (/^\s*-\s/.test(lines[i]!)) {
-      start = i;
-      break;
-    }
-  }
-  if (start === -1) return [];
-  const itemIndent = /^(\s*)-\s/.exec(lines[start]!)![1]!.length;
-  const block: string[] = [];
-  for (let i = start; i < lines.length; i += 1) {
-    if (i > start) {
-      const match = /^(\s*)-\s/.exec(lines[i]!);
-      if (match && match[1]!.length === itemIndent) break;
-    }
-    block.push(lines[i]!);
-  }
-  return block;
 }
 
 /* ------------------------------------------------------------------ 负例自测（反证） */

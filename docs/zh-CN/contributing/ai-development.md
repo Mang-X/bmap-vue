@@ -9,7 +9,7 @@
 | 维度 | 含义 | 当前取值 |
 | --- | --- | --- |
 | 组件库版本 | `baidu-map-gl-vue` 包版本 | `3.0.0-beta.x` |
-| SDK engine | 项目内部驱动引擎枚举（`webgl-v1` / `jsapi-v3` / `jsapi-v4`） | 迁移期并存，Stable 目标 `jsapi-v4` |
+| SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 `#26` 删除） |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
 | 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.4`（精确锁定） |
 | 官方加载器版本 | `@baidumap/jsapi-loader` | `1.0.0`（精确锁定，默认在线加载） |
@@ -142,6 +142,14 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 
 组件同名导出 `export { BMap }`、字符串 `"BMap"`、`BMapProvider` 等复合名、以及 `h(BMap)` / `{ BMap }` 这类把 `BMap` 当组件值的用法都不会误报。注意：仅做「重命名到另一个变量再访问」的别名（如 `const M = BMap; new M.Map()`）不在静态门禁范围内——这需要数据流分析，目前依靠目录白名单约束。
 
+`no-bmapgl` 门禁在上面七条之外多一条**旧引擎专用**规则（它扫的是整棵树，因此只保留这一条，
+`BMap.*` / 全局成员访问在 `driver/**`、`client/**`、`core/loader/**`、`plugins/**` 是合法的）：
+
+| 规则 | 说明 |
+| --- | --- |
+| `legacy-namespace` | 同上的 `BMapGL` 判定，另含 `namespace BMapGL` |
+| `removed-engine-id` | 字符串字面量 `"webgl-v1"` / `"jsapi-v3"`——已删除的 engine 取值再出现就是回退旧引擎的信号 |
+
 ### 门禁
 
 | 命令 | 作用 |
@@ -149,11 +157,12 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:raw-sdk` | 扫描禁区目录（`components` / `composables` / `core/runtime`） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src`，白名单外的任何 raw SDK 引用都会失败 |
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
+| `pnpm check:no-bmapgl` | 旧引擎不变量：**运行时源码**（含被白名单放行的 `driver` / `client` / `core/loader` / `plugins`）与**公共声明**都不得再出现 `BMapGL` 或已删除的 engine 取值。扫描范围刻意不含 `node_modules`、`docs/**` 与 `tests/**`（官方 runtime 自己就挂 `BMapGL` 别名、迁移指南要能写出旧名字、Fake v4 按真实形状镜像那个别名）；官方插件命名空间 `BMapGLLib` 与注释里的提及按 AST 判定天然不命中 |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
 
-`pnpm check:public-dts` 需在 `pnpm build:v3` 之后运行；CI 的两个 job 都会在构建后执行。
+`pnpm check:public-dts` 与 `pnpm check:no-bmapgl` 的**公共声明相位**都需在 `pnpm build:v3` 之后运行；CI 的两个 job 都会在构建后执行。
 
 ## Capability Catalog
 

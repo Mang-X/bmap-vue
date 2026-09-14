@@ -39,25 +39,21 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import * as ts from "typescript";
-import { buildLineIndex, locate, matchRule, type Rule } from "./raw-sdk-detector.mts";
+import {
+  buildLineIndex,
+  locate,
+  matchRule,
+  sortViolations,
+  type Rule,
+} from "./raw-sdk-detector.mts";
 import { scanSourceDirs, type ScannableViolation } from "./source-scan.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const DEFAULT_SRC = join(ROOT, "packages/baidu-map-gl-vue/src");
 const DEFAULT_DIST = join(ROOT, "packages/baidu-map-gl-vue/dist");
 
+/** 本门禁只有两类规则；其余判定留在 `raw-sdk-detector.mts`（规则名不在这里重复定义）。 */
 type NoLegacyRule = Rule | "removed-engine-id";
-
-const RULE_LABELS: Record<NoLegacyRule, string> = {
-  "legacy-namespace": "旧引擎全局命名空间 BMapGL",
-  "removed-engine-id": "已删除的 engine 取值（webgl-v1 / jsapi-v3）",
-  "global-member": "全局对象成员访问 window/globalThis.BMap",
-  "namespace-root": "BMap.* 成员访问 / new BMap.*",
-  "type-position": "BMap.* 类型位置引用",
-  "namespace-declaration": "namespace BMap / declare global 声明",
-  "official-types-import": "具名导入官方类型包",
-  "official-types-reference": "三斜线 types 引用官方类型包",
-};
 
 /** 已删除的 engine 取值（源码里再出现就是回退旧引擎的信号）。 */
 const REMOVED_ENGINE_IDS = new Set(["webgl-v1", "jsapi-v3"]);
@@ -72,6 +68,10 @@ interface NoLegacyViolation extends ScannableViolation {
  * 只保留「旧引擎痕迹」这一类规则：raw SDK 门禁里的 `BMap.*` / 全局成员访问在
  * `driver/**`、`client/**`、`core/loader/**`、`plugins/**` 是**合法**的，本门禁扫的是整棵树，
  * 不能把它们一起拦下来。
+ *
+ * 这里自带一遍 AST walk（而不是复用 `collectViolations`）只是因为它要**过滤规则**并追加一条
+ * 自己的规则；规则语义、行列定位与排序都来自 `raw-sdk-detector.mts`
+ * （`matchRule` / `buildLineIndex` / `locate` / `sortViolations`），不另立一套判定。
  */
 function collectNoLegacy(
   file: string,
@@ -112,12 +112,6 @@ function collectNoLegacy(
     ts.forEachChild(node, visit);
   };
   visit(ast);
-}
-
-function sortViolations(violations: NoLegacyViolation[]): NoLegacyViolation[] {
-  return [...violations].sort(
-    (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column,
-  );
 }
 
 interface Phase {

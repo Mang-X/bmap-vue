@@ -175,11 +175,21 @@ describe("默认入口解析到 v4 官方 Provider", () => {
     expect(source).not.toMatch(LEGACY_FACTORY_CALL);
   });
 
+  it("legacy Provider 模块已整份删除（这两条负向断言的前提）", () => {
+    // M3A3-REMOVE-LEGACY（#26）：`core/loader/Provider.ts`（`baiduCdnProvider` 家族与
+    // 「页面已有全局」回退）整份删除。先把这件事钉住——否则「默认入口不导入它 / 不调用它」
+    // 这两条负向断言会因为**模块根本不存在**而恒真，门禁看起来在守，其实什么都没守。
+    expect(existsSync(join(PKG_SRC, "core/loader/Provider.ts"))).toBe(false);
+    expect(existsSync(join(PKG_SRC, "core/loader/providers/index.ts"))).toBe(true);
+  });
+
   it("<BMap> 隐式 Provider 的兜底也是 baiduJsapiV4Provider()", () => {
     const source = stripComments(read("components/map/BMap.vue"));
     expect(source).toMatch(/appConfig\?\.provider\s*\?\?\s*baiduJsapiV4Provider\(\)/);
-    // 兜底里不再出现 legacy 工厂调用。它仍从 legacy 模块导入 `existingGlobalProvider`
-    // （「页面已有全局」的显式回退分支，属迁移期），但不得导入 `baiduCdnProvider`。
+    // 兜底里不再出现 legacy 工厂调用，也不再从 legacy 模块导入任何东西。
+    // #26 之后组件的两条全局兜底（`allowExistingGlobal` 与「页面已有全局就自动回退」）也删掉了，
+    // 因此这里追加模块级导入断言（模块已不存在，见上一条用例）。
+    expect(source).not.toMatch(LEGACY_PROVIDER_MODULE_IMPORT);
     expect(source).not.toMatch(LEGACY_FACTORY_CALL);
     expect(source).not.toMatch(LEGACY_FACTORY_IMPORT);
   });
