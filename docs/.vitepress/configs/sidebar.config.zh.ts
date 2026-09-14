@@ -261,6 +261,14 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "useControllableState 受控/非受控状态",
           link: "useControllableState",
         },
+        {
+          text: "useMapEvent 地图事件订阅",
+          link: "useMapEvent",
+        },
+        {
+          text: "useMapStatus 地图状态",
+          link: "useMapStatus",
+        },
       ],
     },
     {

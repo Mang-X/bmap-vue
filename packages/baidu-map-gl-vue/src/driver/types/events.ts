@@ -27,9 +27,29 @@ export interface DriverEvent {
   zoom?: number;
   /** 本次操作试图到达的缩放级别（`zoomexceeded`）。 */
   targetZoom?: number;
+  /** 滚轮方向（`mousewheel`）：`true` = 向上滚（放大）。 */
+  trend?: boolean;
+  /**
+   * 变化后的地图类型实例（`maptypechange`）。
+   *
+   * **原样透传**：它是 SDK 自己造的 `MapType` 实例（与全局 `BMAP_NORMAL_MAP` 同源），本库
+   * 没有可验证的等价表示，因此不做归一化、也不假装成 `MapType` 字符串（那是另一回事：
+   * `driver.map.setMapType()` 收的是本库的语义枚举）。
+   */
+  mapType?: unknown;
+  /** 变化前的地图类型实例（`maptypechange`），同 `mapType` 原样透传。 */
+  exMapType?: unknown;
+  /** 变化后的缩放级别（`maptypechange`）；raw 缺失时由 Driver 读回 `getZoom()` 补齐。 */
+  zoomLevel?: number;
   /** 原始 DOM 事件；部分合成事件没有对应 DOM 事件。 */
   domEvent?: Event;
-  /** raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。 */
+  /**
+   * raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。
+   *
+   * **一个例外**：`destroy` 是库在销毁边界**合成派发**的生命周期事件（官方在我们摘掉订阅之后才
+   * 派发它），此时 `raw` 是**即将被销毁的 SDK Map 实例**，而不是 event object —— 形状与其它事件不同，
+   * 需要访问时请先按事件名区分。
+   */
   raw: unknown;
   preventDefault(): void;
   stopPropagation(): void;
@@ -37,6 +57,32 @@ export interface DriverEvent {
 
 export interface MapMouseEvent extends DriverEvent {
   point: Point;
+}
+
+/**
+ * `load`（首次视野确定后派发一次）：`point` / `zoom` 必填。
+ *
+ * 依据：上游 `MapLoadEvent` 把两者声明为必填。**必填是可兑现的**——raw 里缺了（或引擎给了残缺值）
+ * 时由 Driver 读回 `getCenter()` / `getZoom()` 补齐（`MAP_EVENT_READBACK_FIELDS`），
+ * 而不是把字段留在 `undefined` 让类型说谎。
+ */
+export interface MapLoadEvent extends DriverEvent {
+  point: Point;
+  zoom: number;
+}
+
+/** `resize`（容器可视区域变化）：`size` 必填（raw 缺失时读回 `getSize()`）。 */
+export interface MapResizeEvent extends DriverEvent {
+  size: Size;
+}
+
+/**
+ * `maptypechange`：`zoomLevel` 必填（raw 缺失时读回 `getZoom()`）。
+ *
+ * `mapType` / `exMapType` 仍是 `unknown`：它们是 SDK 自己造的实例，原样透传（见字段注释）。
+ */
+export interface MapTypeChangeEvent extends DriverEvent {
+  zoomLevel: number;
 }
 
 export interface EventDriver {

@@ -3,6 +3,7 @@ import {
   computed,
   inject,
   onActivated,
+  onBeforeUnmount,
   onDeactivated,
   onMounted,
   onUnmounted,
@@ -22,16 +23,26 @@ import {
 } from "../../core/context/client";
 import { targetContextKey, type TargetContext } from "../../core/context/target";
 import { MapRuntime } from "../../core/runtime/MapRuntime";
-import { BMapError, type BMapErrorCode } from "../../core/errors/BMapError";
+import { BMapError } from "../../core/errors/BMapError";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
 import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../../client/types";
-import { normalizeMapMouseEvent } from "../../driver/normalize";
+import {
+  BMAP_COMPONENT_EVENT_EMIT_ALIASES,
+  MAP_EVENT_CATALOG,
+  MAP_EVENT_EMIT_ALIASES,
+  MAP_EVENT_NAMES,
+  type MapEventEmits,
+  type MapEventName,
+} from "../../core/events/eventCatalog";
+import { subscribeMapEvent } from "../../core/events/subscribeMapEvent";
+import { readLiveView } from "../../core/utils/liveView";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
 import type { BMapProps } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
+import type { MapHandle } from "../../driver/types/handles";
 import { useControllableState } from "../../composables/useControllableState";
 import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
 import { resolvePluginDefinition } from "../../plugins/catalog";
@@ -62,21 +73,63 @@ export interface MapReadyPayload extends MapReadyContext {
   container: HTMLElement;
 }
 
-const emit = defineEmits<{
-  ready: [payload: MapReadyPayload];
-  initd: [payload: MapReadyPayload];
-  "plugin-ready": [name: string];
-  "plugin-error": [payload: { name: string; error: unknown }];
-  click: [event: unknown];
-  unload: [];
-  error: [err: unknown];
-  // 视野回写（M4-STATE / #27）：`v-model:center` 等语法糖依赖这四个事件。
-  // 载荷永远是 SDK 读回的**具体坐标点**：即使受控值是城市名字符串，用户交互后也会变成点。
-  "update:center": [value: Point];
-  "update:zoom": [value: number];
-  "update:heading": [value: number];
-  "update:tilt": [value: number];
-}>();
+/**
+ * 承载本图的地图组件是否已开始卸载（M4-EVENTS / #28）。
+ *
+ * `onBeforeUnmount` 置位 —— 早于子树卸载（Vue 的顺序：父 `beforeUnmount` → 父作用域 stop →
+ * 卸载子树 → 父 `unmounted`，地图销毁在最后一步）。`useMapEvent` 靠它区分「整图 teardown」
+ * （`destroy` 订阅要活到地图销毁）与「子组件自行卸载」（订阅照常释放）。
+ */
+let tearingDown = false;
+
+/**
+ * map 事件的 emits 声明（M4-EVENTS / #28）：名字与载荷来自 `core/events/eventCatalog` 的
+ * `MapEventEmits`（显式键的接口——`@vue/compiler-sfc` 需要可枚举的键，理由见那个接口的注释），
+ * 这里**不手抄第二份**：Catalog 增删事件时模板提示、TS 提示与 `useMapEvent` 一起变。
+ */
+const emit = defineEmits<
+  {
+    ready: [payload: MapReadyPayload];
+    initd: [payload: MapReadyPayload];
+    "plugin-ready": [name: string];
+    "plugin-error": [payload: { name: string; error: unknown }];
+    unload: [];
+    error: [err: unknown];
+    // 视野回写（M4-STATE / #27）：`v-model:center` 等语法糖依赖这四个事件。
+    // 载荷永远是 SDK 读回的**具体坐标点**：即使受控值是城市名字符串，用户交互后也会变成点。
+    "update:center": [value: Point];
+    "update:zoom": [value: number];
+    "update:heading": [value: number];
+    "update:tilt": [value: number];
+  } & MapEventEmits
+>();
+
+/**
+ * 转发一个 map 事件：先发规范名，再发兼容别名（都从 `MAP_EVENT_EMIT_ALIASES` 读）。
+ *
+ * `emit` 的键是静态类型，动态事件名在这里集中收窄一次（不让 `as` 扩散到其余代码）。
+ */
+const emitDynamic = emit as unknown as (name: string, ...args: unknown[]) => void;
+
+function forwardMapEvent(vue: MapEventName, event: unknown): void {
+  emitDynamic(vue, event);
+  for (const alias of MAP_EVENT_EMIT_ALIASES[vue] ?? []) emitDynamic(alias, event);
+}
+
+/**
+ * 发 `ready` 与它的历史别名（`initd`）。
+ *
+ * 别名从 Catalog 的 `BMAP_COMPONENT_EVENT_EMIT_ALIASES` 读，因此「旧名称的集中 deprecation」
+ * 只有这一处（issue #28 禁止组件各自兼容）。此前 `ready` / `initd` 这对组合在 `boot()` 里
+ * 写了两遍（就绪早退路径与正常路径各一次），改一处漏一处就会漂移。
+ * 其余组件事件没有别名，照常走类型化的 `emit(...)`。
+ */
+function emitReady(payload: MapReadyPayload): void {
+  emit("ready", payload);
+  for (const alias of BMAP_COMPONENT_EVENT_EMIT_ALIASES.ready ?? []) {
+    emitDynamic(alias, payload);
+  }
+}
 
 const containerRef = ref<HTMLDivElement | null>(null);
 // SSR-safe DOM id(服务端只输出固定容器 shell,客户端 mounted 后加载)
@@ -243,35 +296,6 @@ const initialViewSnapshot = {
   heading: headingState.initial,
   tilt: tiltState.initial,
 };
-
-/**
- * 读回视野时**允许**被忽略的错误码（#27 评审 P2：只吞明确允许的，其余重抛）。
- *
- * 只有这两种情形算「这次读本来就不成立」：资源已销毁（销毁后没有可读状态，写命令也只会抛
- * 同样的错），或该能力在本引擎不可用（读不出、也没有可写的东西）。
- *
- * 其余错误码一律上抛——`BMAP_SDK_CALL_FAILED` / `BMAP_INVALID_ARGUMENT` / `BMAP_INVALID_POINT` /
- * `BMAP_HANDLE_FOREIGN` 都是真实故障（含测试替身失真），归零成 `null` 会变成静默失效。
- */
-const IGNORABLE_VIEW_READ_ERRORS: ReadonlySet<BMapErrorCode> = new Set([
-  "BMAP_RESOURCE_DISPOSED",
-  "BMAP_RUNTIME_DISPOSED",
-  "BMAP_CAPABILITY_UNSUPPORTED",
-]);
-
-/**
- * 读回地图当前值；不可读时返回 `null`——**调用方必须显式 `return`，不写下一条命令**。
- *
- * 非 `BMapError`（`TypeError` 一类编程错误）与不在白名单里的 `BMapError` 都继续抛。
- */
-function readLiveView<T>(read: () => T): T | null {
-  try {
-    return read();
-  } catch (e) {
-    if (e instanceof BMapError && IGNORABLE_VIEW_READ_ERRORS.has(e.code)) return null;
-    throw e;
-  }
-}
 
 /**
  * 受控 `center` → SDK。
@@ -521,6 +545,13 @@ const currentRuntime = new MapRuntime({
   },
 });
 /**
+ * 订阅挂载点（M4-EVENTS / #28）：官方 `load` 在首次 `centerAndZoom()` 之后派发，而那次调用发生在
+ * `mount()` resolve 之前、`map` 句柄对外可见之前 —— 等 ready 再订阅就**永远收不到** `load`。
+ * 在初始化视野之前把订阅挂上（同一次订阅记账，句柄身份一致时幂等）。
+ */
+currentRuntime.whenMapCreated((ready) => syncMapEventSubscriptions(ready));
+
+/**
  * `plugins` prop 的解析结果，按**用户写的顺序**排列。
  *
  * 为什么不在 setup 里直接抛未知名字（M8-PLUGIN-CORE / #42）：Catalog 的解析**确实**会抛
@@ -624,6 +655,88 @@ async function loadPluginsInBackground() {
   }
 }
 
+/* ------------------------------------------------------- map 事件转发（M4-EVENTS / #28）
+ *
+ * `<BMap>` 声明 Catalog 里的全部 map 事件（模板 / TS 都有完整提示），并在**地图就绪时一次性**
+ * 订阅 Catalog 里的所有 SDK 事件；未绑定 handler 的事件由 Vue 的 `emit` 直接丢弃（一次属性查找）。
+ *
+ * ## 为什么不「按需订阅」（只订父级绑了的那种）
+ *
+ * 试过，而且**不可靠**：Vue 决定子组件要不要重渲染时，**emit listener 不参与属性比较**
+ * （`@vue/runtime-core@3.5.42` 的 `hasPropsChanged`：`hasPropValueChanged(...) && !isEmitListener(...)`），
+ * 于是「监听器从 `undefined` 变成函数」这种变化**不会让 `<BMap>` 重渲染**，依赖 `onUpdated` 的
+ * 增量同步就看不到它 —— 事件会**静默丢失**。而 Vue 也没有把 emit listener 放进 `attrs`
+ * （`setFullProps` 明确跳过 `isEmitListener` 的键），所以子组件拿不到任何「监听器变了」的响应式信号。
+ *
+ * 结论：要么无条件订阅（本实现），要么漏事件。43 个 `addEventListener` 是每个地图一次的固定成本，
+ * 换来的是「父级怎么改绑定都不会丢事件」。
+ *
+ * 各拼写的可达性由 **Vue 的 handler key 规则**决定（实测 `@vue/compiler-dom@3.5.42` +
+ * `@vue/runtime-core` 的 `emit()`）：
+ *
+ * | 事件 | 能命中 handler 的写法 |
+ * | --- | --- |
+ * | `click` | `@click` / `@click.once` |
+ * | `style-loaded`（canonical） | `@style-loaded` / `@styleLoaded` / 两者的 `.once` |
+ * | `style_loaded`（别名） | `@style_loaded` / 两者的 `.once`（`camelize` 只认 `-`） |
+ * | `maptypechange` | `@maptypechange`（名字没有词边界，`@mapTypeChange` 不在查找链上） |
+ *
+ * 订阅记账按「事件名 + 地图身份」：`retry()` 之类让地图实例换新的路径会重建订阅（旧句柄上的订阅
+ * 由 `ResourceScope` 的 remover 释放），而同一个句柄上的重复同步是幂等的。
+ */
+
+/**
+ * 已建立的 map 事件订阅：规范名 → 订阅记录。
+ *
+ * `release` 是 **ResourceScope.add() 返回的那把 remover**（从 scope 账本里摘除 + 执行释放），
+ * 而不是原始 `off`：只调 `off` 会让 raw 监听器解绑、却把已失效的闭包永久留在
+ * `scope.disposers` 里（反复「绑定 → 解绑 → 再绑定」会持续堆积）。`off` 是幂等 disposer，
+ * 因此 scope 收尾与提前解绑重复触发是安全的。
+ */
+const mapEventSubscriptions = new Map<MapEventName, { map: MapHandle; release: () => void }>();
+
+/** 撤销某个事件名上的订阅（幂等：remover 自身幂等，重复调用安全）。 */
+function unsubscribeMapEvent(vue: MapEventName): void {
+  const current = mapEventSubscriptions.get(vue);
+  if (!current) return;
+  mapEventSubscriptions.delete(vue);
+  current.release();
+}
+
+/**
+ * 让订阅与当前地图对齐：Catalog 里的事件全订；句柄换了身份就重建。
+ *
+ * `early` 来自 `MapRuntime.onMapCreated`（初始化视野之前）：那一刻组件的 `map` computed 还是 null，
+ * 但句柄已经可用 —— 用显式 ctx 才能把 `load` 订上（官方 `load` 在首次 `centerAndZoom` 之后派发）。
+ */
+function syncMapEventSubscriptions(early?: { client: BMapClient; map: MapHandle }): void {
+  const m = early?.map ?? map.value;
+  const c = early?.client ?? client.value;
+  const scheduler = runtime.scheduler;
+  if (!m || !c || !scheduler) return;
+
+  for (const [vue, subscription] of [...mapEventSubscriptions]) {
+    if (subscription.map !== m) unsubscribeMapEvent(vue);
+  }
+
+  for (const vue of MAP_EVENT_NAMES) {
+    if (mapEventSubscriptions.has(vue)) continue;
+    const entry = MAP_EVENT_CATALOG[vue];
+    // 复用与 `useMapEvent` 同一份订阅原语：高频事件按帧合帧、释放路径一致
+    const off = subscribeMapEvent(
+      c,
+      m,
+      entry.sdk,
+      (event) => forwardMapEvent(vue, event),
+      { coalesce: entry.coalesce, scheduler },
+    );
+    // 逐个登记进 Runtime 的 ResourceScope，并**保留 add() 返回的 remover**：
+    // 卸载 / dispose 时 scope 自己会释放；提前解绑时也必须走 remover，否则 scope 账本会留下失效闭包
+    const release = runtime.resources.add(off);
+    mapEventSubscriptions.set(vue, { map: m, release });
+  }
+}
+
 async function boot() {
   if (runtime.status.value === "ready") {
     const payload = {
@@ -631,8 +744,9 @@ async function boot() {
       map: runtime.map.value!,
       container: containerRef.value!,
     };
-    emit("ready", payload);
-    emit("initd", payload);
+    // 重入（已 ready）：订阅可能因为地图实例换新而需要重建（`retry()` 之后的路径）
+    syncMapEventSubscriptions();
+    emitReady(payload);
     void loadPluginsInBackground();
     return;
   }
@@ -646,15 +760,12 @@ async function boot() {
     syncControlledView();
     // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
     bindViewEvents(ctx);
-    runtime.resources.add(
-      ctx.client.driver.events.on(ctx.map, "click", (event) => {
-        emit("click", normalizeMapMouseEvent(event, ctx.client.driver.geometry));
-      }),
-    );
+    // map 事件转发（M4-EVENTS / #28）：Catalog 里的事件全订（`load` 已由 onMapCreated 提前订上，
+    // 这里是幂等的补齐：同一个句柄不重复订阅）
+    syncMapEventSubscriptions();
     const payload = { client: ctx.client, map: ctx.map, container: containerRef.value! };
     // Map ready 不等待 optional plugin
-    emit("ready", payload);
-    emit("initd", payload);
+    emitReady(payload);
     // 插件后台加载，逐个回执
     void loadPluginsInBackground();
   } catch (e) {
@@ -667,6 +778,11 @@ async function boot() {
     throw e;
   }
 }
+
+onBeforeUnmount(() => {
+  // 必须在子树卸载**之前**置位：子组件的作用域在子树卸载时停止，那时它们要能问出「整图在 teardown」
+  tearingDown = true;
+});
 
 onUnmounted(() => {
   runtime.dispose();
@@ -739,6 +855,11 @@ const context: MapContext = {
   controls: runtime.controls,
   plugins: runtime.plugins,
   whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
+  // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
+  whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
+    runtime.whenMapCreated(callback),
+  // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
+  isTearingDown: () => tearingDown,
   retry: () => runtime.retry(),
   dispose: () => runtime.dispose(),
 };
@@ -798,6 +919,11 @@ defineExpose({
   getMapInstance: () => map.value,
   getContainer: () => containerRef.value,
   whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
+  // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
+  whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
+    runtime.whenMapCreated(callback),
+  // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
+  isTearingDown: () => tearingDown,
   retry: () => runtime.retry(),
   suspend: (reason?: unknown) => runtime.suspend(reason),
   resume: (reason?: unknown) => runtime.resume(reason),

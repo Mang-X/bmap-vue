@@ -67,6 +67,15 @@ export interface CreateJsapiV4EventDriverInput {
 export interface JsapiV4EventDriver extends EventDriver {
   /** 释放该 target 上由 Driver 建立的全部订阅（解绑 raw listener 并删除分组）。 */
   release(target: SdkHandle<string>): void;
+  /**
+   * 向该 target 的订阅者**合成派发**一个事件（只给 Driver 内部用）。
+   *
+   * 唯一的消费者是 `map.destroy()`：官方 `destroy` 事件在**我们摘掉订阅之后**才派发
+   * （`release` 先于销毁 SDK 对象），因此订阅者在正常路径下永远看不到它。合成派发走
+   * 与真实派发**同一条**归一化路径，所以载荷形状与 `on()` 收到的完全一致；
+   * 订阅集合为空时是 no-op。
+   */
+  dispatch(target: SdkHandle<string>, type: string, raw?: unknown): void;
 }
 
 function noop(): void {}
@@ -79,6 +88,92 @@ function createDisposer(release: () => void): () => void {
     disposed = true;
     release();
   };
+}
+
+/**
+ * 事件 → 「raw 缺失时可以读回地图补齐」的字段（M4-EVENTS / #28 评审）。
+ *
+ * 依据：上游把这几个字段声明为**事件级必填**（`MapLoadEvent.point/zoom`、`MapResizeEvent.size`、
+ * `MapTypeChangeEvent.zoomLevel`），而 4.0 的 `load` / `resize` 在某些触发路径上给的 raw 并不完整。
+ * 与其把公共契约写成 optional（那就等于宣布「我们不保证」），不如**在 Driver 边界读回地图补上**：
+ * 这几个事件都是低频事件（每个会话一次 / 容器尺寸变化时），多一次 getter 调用可以忽略。
+ *
+ * 与 Catalog 的 `payload` 种类一一对应，由 `tests/behavior/v3-map-event-catalog.test.ts` 逐项比对。
+ */
+export const MAP_EVENT_READBACK_FIELDS: Readonly<Record<string, readonly ReadbackField[]>> =
+  Object.freeze({
+    load: ["point", "zoom"],
+    resize: ["size"],
+    maptypechange: ["zoomLevel"],
+  });
+
+/** 可读回补齐的字段。 */
+export type ReadbackField = "point" | "zoom" | "size" | "zoomLevel";
+
+/** 字段 → 地图 getter。 */
+const READBACK_READERS: Record<ReadbackField, string> = {
+  point: "getCenter",
+  zoom: "getZoom",
+  size: "getSize",
+  zoomLevel: "getZoom",
+};
+
+/**
+ * 读一个字段：目标没有该 getter（不是地图）或读回值不可用时返回 `undefined`。
+ *
+ * 容错口径与归一化一致：**event 路径不允许把异常抛回 SDK 的 dispatch**。读回失败只意味着
+ * 「这个字段补不上」，不意味着「事件没发生」——因此这里吞掉异常并告警一次，事件照常派发。
+ */
+function readbackField(
+  rawTarget: object,
+  field: ReadbackField,
+  geometry: GeometryDriver,
+): unknown {
+  const member = READBACK_READERS[field];
+  const reader = readNamespaceMember(rawTarget, member);
+  if (typeof reader !== "function") return undefined;
+  try {
+    const value = (reader as () => unknown).call(rawTarget);
+    switch (field) {
+      case "point":
+        return geometry.fromRawPoint(value);
+      case "size":
+        return geometry.fromRawSize(value);
+      default:
+        return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+    }
+  } catch (error) {
+    logger.warn(
+      `EventDriver: 读回 ${member}() 补齐 "${field}" 失败（事件仍会派发）: ${
+        (error as Error)?.message ?? String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * 按 `MAP_EVENT_READBACK_FIELDS` 把 raw 缺失的必填字段从地图读回补上。
+ *
+ * 其余事件原样返回（不产生额外 getter 调用）。补不上的字段保持缺失——引擎既没给也读不出属于
+ * 引擎状态异常，本库不做猜测（但类型上它仍是必填：这是**上游契约**，异常路径不该改写契约）。
+ */
+export function enrichDriverEvent(
+  rawTarget: object,
+  type: string,
+  payload: DriverEvent,
+  geometry: GeometryDriver,
+): DriverEvent {
+  const fields = MAP_EVENT_READBACK_FIELDS[type];
+  if (!fields) return payload;
+  let enriched = payload;
+  for (const field of fields) {
+    if (enriched[field] !== undefined) continue;
+    const value = readbackField(rawTarget, field, geometry);
+    if (value === undefined) continue;
+    enriched = { ...enriched, [field]: value };
+  }
+  return enriched;
 }
 
 export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): JsapiV4EventDriver {
@@ -102,11 +197,16 @@ export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): 
     removeEventListener.call(target, type, group.raw);
   };
 
-  const createGroup = (type: string): SubscriptionGroup => {
+  const createGroup = (type: string, rawTarget: object): SubscriptionGroup => {
     const group: SubscriptionGroup = {
       claims: new Map<TypedListener, number>(),
       raw: (event: unknown) => {
-        const payload = normalizeDriverEvent(type, event, geometry);
+        const payload = enrichDriverEvent(
+          rawTarget,
+          type,
+          normalizeDriverEvent(type, event, geometry),
+          geometry,
+        );
         // 复制一份再遍历：监听器内部 dispose 不影响本轮派发
         for (const listener of [...group.claims.keys()]) listener(payload);
       },
@@ -140,7 +240,7 @@ export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): 
         // handler 更新/追加：复用同一个 raw listener，不重新绑定
         group = existing;
       } else {
-        group = createGroup(type);
+        group = createGroup(type, rawTarget);
         // 先绑定、后登记：addEventListener 抛错时不在 groups 里留下空分组
         (addEventListener as RawMethod).call(rawTarget, type, group.raw);
         if (byType) {
@@ -160,6 +260,20 @@ export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): 
         else group.claims.delete(typed);
         if (group.claims.size === 0) removeGroup(rawTarget, type, group, remove);
       });
+    },
+
+    dispatch(target, type, raw) {
+      const rawTarget = registry.resolve<object>(target);
+      const group = groups.get(rawTarget)?.get(type);
+      if (!group) return;
+      const payload = enrichDriverEvent(
+        rawTarget,
+        type,
+        normalizeDriverEvent(type, raw, geometry),
+        geometry,
+      );
+      // 与真实派发同一口径：复制一份再遍历，监听器内部 dispose 不影响本轮
+      for (const listener of [...group.claims.keys()]) listener(payload);
     },
 
     release(target) {

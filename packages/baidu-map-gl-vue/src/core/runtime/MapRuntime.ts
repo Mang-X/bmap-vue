@@ -69,6 +69,14 @@ export class MapRuntime {
   readonly plugins: PluginRegistry;
 
   private waiters = new Set<Waiter>();
+  /**
+   * `whenMapCreated()` 注册的回调。
+   *
+   * **不在建图后清空**（M4-EVENTS / #28 评审第三轮 P2）：每个注册存活到它自己的 disposer 或
+   * `dispose()`。理由是「建图成功但 `initializeView()` 失败 → `retry()` 重建第二张 map」这条路径——
+   * 那时只能靠同一个注册再放行一次 `load`。
+   */
+  private mapCreatedCallbacks = new Set<(ready: MapReadyContext) => void>();
   private options: MapRuntimeOptions;
   private mountPromise: Promise<MapReadyContext> | null = null;
   private suspended = false;
@@ -105,6 +113,58 @@ export class MapRuntime {
       },
       this.resources,
     );
+  }
+
+  /**
+   * 注册「地图对象已创建」的回调（M4-EVENTS / #28 评审）。
+   *
+   * 时机是 `driver.map.create()` 之后、**首次 `initializeView()` 之前**：官方 `load` 就在
+   * `initializeView()` 内部那次 `centerAndZoom` 之后派发，而句柄要等 `mount()` resolve 才对外可见 ——
+   * 没有这个挂载点，`load` 这类「初始化期事件」在 `useMapEvent` 路径上永远收不到。
+   *
+   * 已经有地图时**立即同步调用**；返回取消注册的 disposer。回调抛错只告警，不阻断建图。
+   * 订阅者（如 `useMapEvent`）负责在自己的作用域里调用返回的 disposer。
+   */
+  whenMapCreated(callback: (ready: MapReadyContext) => void): () => void {
+    const currentMap = this.map.value;
+    const currentClient = this.client.value;
+    if (currentMap && currentClient) {
+      this.invokeMapCreated(callback, { client: currentClient, map: currentMap });
+      return () => {};
+    }
+    this.mapCreatedCallbacks.add(callback);
+    return () => {
+      this.mapCreatedCallbacks.delete(callback);
+    };
+  }
+
+  /** 单个回调的调用点：抛错只告警（它只用来挂订阅，不是初始化的一部分）。 */
+  private invokeMapCreated(
+    callback: (ready: MapReadyContext) => void,
+    ready: MapReadyContext,
+  ): void {
+    try {
+      callback(ready);
+    } catch (error) {
+      logger.warn(
+        `MapRuntime: whenMapCreated 回调抛错（不阻断建图）: ${
+          (error as Error)?.message ?? String(error)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * 放行 `whenMapCreated` 的注册。
+   *
+   * **刻意不清空**：注册活到各自的 disposer 或 `dispose()`。理由是「建图成功但 `initializeView()`
+   * 失败」这条路径 —— 那时回调已经跑过一次，而 `retry()` 会创建**第二张** map，`load` 只能靠同一个
+   * 注册再放行一次（评审第二轮 P2）。清空会让第二张图的 `load` 永远收不到。
+   */
+  private flushMapCreated(ready: MapReadyContext): void {
+    for (const callback of [...this.mapCreatedCallbacks]) {
+      this.invokeMapCreated(callback, ready);
+    }
   }
 
   async mount(): Promise<MapReadyContext> {
@@ -158,6 +218,8 @@ export class MapRuntime {
         throw new BMapError("BMAP_RUNTIME_DISPOSED", "MapRuntime disposed during map create");
       }
       this.status.value = "initializing";
+      // 初始化视野之前先放行订阅（`load` 就在 initializeView 的首次 centerAndZoom 之后派发）
+      this.flushMapCreated({ client, map });
       if (this.options.initialView) {
         try {
           client.driver.map.initializeView(map, this.options.initialView);
@@ -351,6 +413,7 @@ export class MapRuntime {
     this.scheduler.dispose();
     this.events.clear();
     // 7. dispose root scope
+    this.mapCreatedCallbacks.clear();
     this.resources.dispose();
     // 8. status = disposed
     this.suspended = false;

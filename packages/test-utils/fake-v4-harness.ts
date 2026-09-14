@@ -77,6 +77,12 @@ export interface FakeV4Harness {
   openInfoWindows(): number;
   /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
   mapsCreated(): number;
+  /**
+   * 让**下一张**地图的首次 `initializeView()` 失败（建图成功、初始化视野抛错）。
+   *
+   * 用来驱动「失败 → `retry()` 重建」这条路径（`whenMapCreated` 的注册必须在失败后仍然有效）。
+   */
+  failNextInitializeView(error?: Error): void;
   /** 最后一张地图当前的视野（M4-STATE / #27 的领域读数）。 */
   view(): FakeV4View;
   /** 最后一张地图收到的视野命令次数（按字段分开计数）。 */
@@ -90,6 +96,21 @@ export interface FakeV4Harness {
   simulateUserView(next: FakeV4UserView): void;
   /** 最后一张地图当前订阅的事件类型。 */
   subscribedEvents(): string[];
+  /**
+   * 第 `mapIndex` 张地图当前订阅的事件类型（多地图场景）。
+   *
+   * 索引落在**实例账本**（`fake.createdMaps`）上，而 `reset()` 只重置诊断计数、不清账本——
+   * 因此跨用例安全的写法是**负索引**：`-1` = 最后一张、`-2` = 倒数第二张。
+   */
+  subscribedEventsOf(mapIndex: number): string[];
+  /**
+   * 向**最后一张**地图派发一个 SDK 事件（模拟 SDK 自己派发）。
+   *
+   * `payload` 是 raw 事件上的字段（如 `{ point: { lng, lat } }`）；省略时只有 `{ type }`。
+   */
+  dispatch(name: string, payload?: Record<string, unknown>): void;
+  /** 向**第 `mapIndex` 张**地图派发事件（负索引语义同 `subscribedEventsOf`）。 */
+  dispatchTo(mapIndex: number, name: string, payload?: Record<string, unknown>): void;
   /** 监听相关的两个口径：`calls` = 累计订阅次数（活动），`pending` = 当前未释放（门禁）。 */
   listenActivity(): { calls: number; pending: number };
 }
@@ -106,6 +127,16 @@ function sizedContainer(): HTMLElement {
 function lastCreatedMap<T>(maps: readonly T[], label: string): T {
   const map = maps[maps.length - 1];
   if (!map) throw new Error(`${label}：用例必须先创建地图（BMap 组件）`);
+  return map;
+}
+
+/** 取第 `index` 张创建的 Map（`-1` = 最后一张）：多地图场景用。 */
+function createdMapAt<T>(maps: readonly T[], index: number, label: string): T {
+  const resolved = index < 0 ? maps.length + index : index;
+  const map = maps[resolved];
+  if (!map) {
+    throw new Error(`${label}：没有第 ${index} 张地图（已创建 ${maps.length} 张）`);
+  }
   return map;
 }
 
@@ -253,6 +284,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       overlayPositions: () => toPositions(lastMap().overlays),
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
+      failNextInitializeView: (error) => fake.failNextInitializeView(error),
       view: () => {
         const map = lastMap();
         return {
@@ -265,6 +297,11 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       viewWrites: () => countViewWrites(lastMap().callLog),
       simulateUserView: (next) => simulateUserView(lastMap(), fake, next),
       subscribedEvents: () => lastMap().getListenerTypes(),
+      subscribedEventsOf: (mapIndex) =>
+        createdMapAt(fake.createdMaps, mapIndex, "fake-v4 harness").getListenerTypes(),
+      dispatch: (name, payload) => lastMap().emit(name, payload ?? {}),
+      dispatchTo: (mapIndex, name, payload) =>
+        createdMapAt(fake.createdMaps, mapIndex, "fake-v4 harness").emit(name, payload ?? {}),
       listenActivity: () => {
         const snapshot = fake.diagnostics.snapshot();
         return { calls: snapshot.activity.listenCalls, pending: snapshot.leaks.listeners };

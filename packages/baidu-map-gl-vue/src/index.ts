@@ -109,7 +109,41 @@ export type {
   CapabilityExplanation,
 } from "./driver/capability";
 export type { UnsupportedBehavior } from "./driver/capability";
-export type { MapMouseEvent } from "./driver/types/events";
+export type {
+  MapLoadEvent,
+  MapMouseEvent,
+  MapResizeEvent,
+  MapTypeChangeEvent,
+} from "./driver/types/events";
+// 事件 Catalog（M4-EVENTS / #28）：事件名、SDK 拼写与载荷类型的单一事实源。
+// `<BMap>` 的 emits、`useMapEvent` 的订阅名解析与文档表格都从这里出发。
+export {
+  BMAP_COMPONENT_EVENT_ALIASES,
+  BMAP_COMPONENT_EVENT_CATALOG,
+  MAP_EVENT_CATALOG,
+  MAP_EVENT_EMIT_ALIASES,
+  MAP_EVENT_NAMES,
+  normalizeEventKey,
+  resolveMapEventName,
+  toSdkEventName,
+  toVueEventName,
+} from "./core/events/eventCatalog";
+export type {
+  BMapComponentEmitName,
+  BMapComponentEventName,
+  MapEventDefinition,
+  MapEventMap,
+  MapEventName,
+  MapEventPayload,
+  MapEventPayloadKind,
+  MapEventPayloadOf,
+  MapEventSdkName,
+  MapLoadPayload,
+  MapPointerEvent,
+  MapResizePayload,
+  MapTypeChangePayload,
+  ResolvedMapEvent,
+} from "./core/events/eventCatalog";
 // 服务归一化调用面的领域类型（#38 起 service composable 的公开签名用到它们）
 export type {
   BoundaryRings,

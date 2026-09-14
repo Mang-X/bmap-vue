@@ -26,6 +26,7 @@
 | [2026-09-14](./2026-09-14-service-lifecycle-and-local-search.md) | 服务生命周期、统一状态口径与 headless LocalSearch（回收 composable 的 raw 访问，取代 #23 ADR 的两条保留项） | Accepted |
 | [2026-09-14](./2026-09-14-map-controlled-state.md) | Map 视野的受控 / 非受控模型（多 `v-model`、状态归属与回环抑制） | Accepted |
 | [2026-09-14](./2026-09-14-plugin-catalog-scope-scheduling.md) | 插件 Catalog、global / map 作用域与依赖调度（unknown 明确失败 / 跨地图共享 / 按层并行） | Accepted |
+| [2026-09-14](./2026-09-14-map-events-and-status.md) | typed Map Events、`useMapEvent` 与 `useMapStatus`（事件 Catalog / 订阅与生命周期口径 / 合帧与状态语义） | Accepted |
 | [2026-09-14](./2026-09-14-route-services-headless.md) | 路线服务（Driving / Walking / Riding / Transit）的 headless 契约（端点模型 / 实例身份归属 / 绘制所有权 / 状态码口径） | Accepted |
 
 ## 约定

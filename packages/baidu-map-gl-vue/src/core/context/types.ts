@@ -47,6 +47,26 @@ export interface MapRuntimeShape {
   readonly scheduler: FrameScheduler;
 
   whenReady(signal?: AbortSignal): Promise<MapReadyContext>;
+  /**
+   * 注册「地图对象已创建」的回调（M4-EVENTS / #28）：时机是 `create()` 之后、首次
+   * `initializeView()` **之前**，因此官方 `load` 这类初始化期事件也订阅得上。
+   *
+   * 已经在有地图时立即同步回调；返回注销用的 disposer。由 `MapRuntime` 实现；
+   * 自定义 Context（如 client 适配器）可以不提供 —— 此时 `useMapEvent` 退化为「等到句柄可见再订阅」，
+   * 代价是可能错过 `load`。
+   */
+  whenMapCreated?(callback: (ready: MapReadyContext) => void): () => void;
+  /**
+   * 承载这张地图的组件是否**已经开始卸载**（M4-EVENTS / #28）。
+   *
+   * `<BMap>` 在 `onBeforeUnmount` 里置位 —— 那一刻早于子树卸载（Vue 的顺序：父 `beforeUnmount` →
+   * 父作用域 stop → 卸载子树 → 父 `unmounted`，地图销毁在最后一步）。
+   * `useMapEvent` 用它区分两种「订阅方消失」：
+   *
+   * - **整图 teardown**：地图马上要被销毁 ⇒ 生命周期结束事件（`destroy`）的订阅要活到那一刻；
+   * - **子组件自行卸载**（条件渲染 / Tab / 路由）：地图还在 ⇒ 订阅照常释放，不能残留。
+   */
+  isTearingDown?(): boolean;
   retry?(): Promise<MapReadyContext>;
   dispose(): void;
 }

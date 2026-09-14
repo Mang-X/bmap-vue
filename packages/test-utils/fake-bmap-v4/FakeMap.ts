@@ -82,6 +82,8 @@ export class FakeV4Map extends FakeV4EventTarget {
   lastViewOptions: Record<string, unknown> | null = null
   resizeCalls = 0
   destroyed = false
+  /** `load` 是否已经派发过（官方只在首次 `centerAndZoom` 后派发一次）。 */
+  loadEmitted = false
   readonly callLog: string[] = []
 
   /* ------------------------------------------------------------ 子资源容器（#21） */
@@ -120,6 +122,13 @@ export class FakeV4Map extends FakeV4EventTarget {
    */
   failNextAddControl: Error | null = null
   failNextAddLayer: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
+   *
+   * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
+   * `MapRuntime` 的 `whenMapCreated` 注册必须在失败之后仍然有效，第二张图的 `load` 才收得到。
+   */
+  failNextCenterAndZoom: Error | null = null
 
   /* ------------------------------------------------------------------ 覆盖物 */
 
@@ -294,9 +303,20 @@ export class FakeV4Map extends FakeV4EventTarget {
     options?: Record<string, unknown>,
   ): void {
     this.callLog.push('centerAndZoom')
+    if (this.failNextCenterAndZoom) {
+      const error = this.failNextCenterAndZoom
+      this.failNextCenterAndZoom = null
+      throw error
+    }
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
     if (typeof zoom === 'number') this.zoom = zoom
     this.lastViewOptions = options ?? null
+    // 官方语义：`load` 在**首次** centerAndZoom 之后派发一次（后续 centerAndZoom 不再派发）。
+    // 夹具照实建模，否则「订阅者能不能收到 load」这件事在单测里无法验证（#28 评审 P1）。
+    if (!this.loadEmitted) {
+      this.loadEmitted = true
+      this.emit('load', { point: this.center, zoom: this.zoom })
+    }
   }
 
   setCenter(point: FakeV4Point | string, options?: Record<string, unknown>): void {
