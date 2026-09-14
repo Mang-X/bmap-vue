@@ -183,6 +183,33 @@ describe("依据与结论不留空", () => {
     expect(checked).toBeGreaterThan(0);
   });
 
+  it("配置页的插件状态表与 inventory 不矛盾（评审 #85 第二轮 P2）", () => {
+    const doc = readFileSync(resolve(ROOT, "docs/zh-CN/guide/config.md"), "utf8");
+    const ids = new Set<string>(ENTRIES.map((entry) => entry.id));
+    const rows = new Map<string, string>();
+    for (const line of doc.split("\n")) {
+      const match = /^\|\s*\[([A-Za-z]+)\]\(/.exec(line);
+      if (match && ids.has(match[1]!)) rows.set(match[1]!, line);
+    }
+    // 空转守卫：四个插件在配置页都必须有行（删了行也不能绕过检查）
+    expect([...rows.keys()].sort()).toEqual([...ids].sort());
+
+    for (const entry of ENTRIES) {
+      const row = rows.get(entry.id)!;
+      if (entry.runtime?.status === "verified") {
+        expect(row, `${entry.id} 的配置页行还写着「运行时未验证」`).not.toContain("运行时未验证");
+        expect(row, `${entry.id} 的配置页行未写明最小运行时路径已验证`).toContain(
+          "最小运行时路径已验证",
+        );
+      }
+      if (entry.verdict === "incompatible") {
+        expect(row, `${entry.id} 判不兼容，配置页却没说`).toContain("不兼容");
+      } else {
+        expect(row, `${entry.id} 不是 incompatible，配置页却说「不兼容」`).not.toContain("不兼容");
+      }
+    }
+  });
+
   it("用户可见的 hook 文档跟着 inventory 的运行时状态走（评审 #85 P2-3）", () => {
     const trackAnimation = ENTRIES.find((entry) => entry.id === "TrackAnimation")!;
     expect(trackAnimation.runtime?.status).toBe("verified");

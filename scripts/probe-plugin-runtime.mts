@@ -54,26 +54,21 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.mts"
 import { freshModuleUrl } from "./fresh-module-url.mts"
+import {
+  decidePluginRuntimeExitCode,
+  expectedPluginIds,
+  formatPluginRuntimeSummary,
+  PLUGIN_SPECS,
+  type PluginRuntimeRun,
+} from "./plugin-runtime-report.mts"
 
 const repoRoot = resolve(import.meta.dirname, "..")
 const ak = process.env.BAIDU_MAP_AK ?? ""
-if (!ak) {
-  console.error("缺 BAIDU_MAP_AK")
-  process.exitCode = 2
-}
 
 const builtins = (await import(freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/builtins.ts")))) as {
   BUILTIN_PLUGIN_URLS: Record<string, string>
 }
 const urls = builtins.BUILTIN_PLUGIN_URLS
-
-/** 插件 → （`BUILTIN_PLUGIN_URLS` 的键, 应暴露的全局路径）。 */
-const PLUGIN_SPECS = [
-  { id: "TrackAnimation", key: "trackAnimation", global: "BMapGLLib.TrackAnimation" },
-  { id: "GeoUtils", key: "geoUtils", global: "BMapGLLib.GeoUtils" },
-  { id: "DrawingManager", key: "drawingManager", global: "BMapGLLib.DrawingManager" },
-  { id: "Mapvgl", key: "mapvgl", global: "mapvgl" },
-] as const
 
 /* ------------------------------------------------------------------ 页面 */
 
@@ -235,161 +230,150 @@ const pageHtml = `<!doctype html>
   .replace("__URLS__", JSON.stringify(urls))
   .replace("__AK__", JSON.stringify(ak))}</script></body></html>`
 
-/* ------------------------------------------------------------------ 服务与浏览器 */
+/* ------------------------------------------------------------------ 主流程 */
 
-const workDir = mkdtempSync(join(tmpdir(), "plugin-probe-"))
-const userDataDir = mkdtempSync(join(tmpdir(), "plugin-probe-chrome-"))
-writeFileSync(join(workDir, "index.html"), pageHtml)
+/**
+ * 全部步骤都收在一个函数里，**早退码必须真的停下来**（评审 #85 第二轮 P2）：
+ * 旧写法在缺 AK / 找不到浏览器时只设 `process.exitCode = 2` 就继续往下跑 —— 后面仍会起服务器、
+ * 起浏览器、用空 AK 去加载 SDK，等页面超时后又把退出码改成 `3`。于是「缺 AK」被报成 blocked，
+ * 还白等一次超时。现在缺什么立刻 `return 2`。
+ */
+async function main(): Promise<number> {
+  if (!ak) {
+    console.error("缺 BAIDU_MAP_AK：`BAIDU_MAP_AK=<ak> pnpm probe:plugin-runtime`")
+    return 2
+  }
 
-const server = createServer((req, res) => {
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
-  res.end(pageHtml)
-})
-await new Promise<void>((done) => server.listen(0, "localhost", () => done()))
-const address = server.address()
-if (address === null || typeof address === "string") {
-  console.error("服务未就绪")
-  process.exitCode = 2
-}
-const port = typeof address === "object" && address ? address.port : 0
-const baseUrl = `http://localhost:${port}/`
+  const browser =
+    process.env.SMOKE_BROWSER ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  if (!existsSync(browser)) {
+    console.error(`浏览器不存在：${browser}（可用 SMOKE_BROWSER 覆盖）`)
+    return 2
+  }
 
-const browser = process.env.SMOKE_BROWSER ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-if (!existsSync(browser)) {
-  console.error(`浏览器不存在：${browser}`)
-  process.exitCode = 2
-}
+  const workDir = mkdtempSync(join(tmpdir(), "plugin-probe-"))
+  const userDataDir = mkdtempSync(join(tmpdir(), "plugin-probe-chrome-"))
+  writeFileSync(join(workDir, "index.html"), pageHtml)
 
-interface RunReport {
-  only: string | null
-  env: Record<string, unknown>
-  result: { id: string; urlLoaded?: string; globalExposed?: boolean; probe?: unknown } | null
-  steps: Array<{ name: string; detail: unknown }>
-  done: boolean
-  fatal?: string
-}
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
+    res.end(pageHtml)
+  })
+  await new Promise<void>((done) => server.listen(0, "localhost", () => done()))
+  const address = server.address()
+  if (address === null || typeof address === "string") {
+    console.error("[plugin-runtime] 服务未就绪（脚手架失败）")
+    return 2
+  }
+  const port = typeof address === "object" && address ? address.port : 0
+  const baseUrl = `http://localhost:${port}/`
 
-let chrome: ChildProcess | null = null
-let session: Awaited<ReturnType<typeof connectCdpSession>> | null = null
-const runs: RunReport[] = []
-try {
-  chrome = spawn(browser, [
-    "--headless",
-    "--disable-gpu",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--enable-unsafe-swiftshader",
-    "--remote-debugging-port=0",
-    `--user-data-dir=${userDataDir}`,
-    baseUrl,
-  ], { stdio: "ignore" })
+  let chrome: ChildProcess | null = null
+  let session: Awaited<ReturnType<typeof connectCdpSession>> | null = null
+  const runs: PluginRuntimeRun[] = []
+  try {
+    // `SMOKE_CHROME_ARGS`：给「验证判定分支」用的仿真开关。**按换行分隔**（参数值里本来就有空格，
+    // 按空格拆会把 `--host-resolver-rules=MAP a.com 127.0.0.1` 拆坏 —— 实测 Chrome 直接起不来），例如：
+    //   SMOKE_CHROME_ARGS=$'--host-resolver-rules=MAP api.map.baidu.com 127.0.0.1'
+    // 它能把 SDK 入口指向死路，从而端到端验 `blocked = 3`（否则这条分支只能靠纯函数桩测试覆盖）。
+    // 与 `SMOKE_BROWSER` 同一族：只影响本机取证，不进 CI。
+    const extraArgs = (process.env.SMOKE_CHROME_ARGS ?? "")
+      .split("\n")
+      .map((arg) => arg.trim())
+      .filter(Boolean)
+    chrome = spawn(browser, [
+      "--headless",
+      ...extraArgs,
+      "--disable-gpu",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--enable-unsafe-swiftshader",
+      "--remote-debugging-port=0",
+      `--user-data-dir=${userDataDir}`,
+      baseUrl,
+    ], { stdio: "ignore" })
 
-  const portFile = join(userDataDir, "DevToolsActivePort")
-  const startedAt = Date.now()
-  let devtoolsPort = 0
-  for (;;) {
-    if (existsSync(portFile)) {
-      devtoolsPort = Number(readFileSync(portFile, "utf8").split("\n")[0])
-      if (devtoolsPort) break
+    const portFile = join(userDataDir, "DevToolsActivePort")
+    const startedAt = Date.now()
+    let devtoolsPort = 0
+    for (;;) {
+      if (existsSync(portFile)) {
+        devtoolsPort = Number(readFileSync(portFile, "utf8").split("\n")[0])
+        if (devtoolsPort) break
+      }
+      if (Date.now() - startedAt > 30_000) throw new Error("等待 DevToolsActivePort 超时")
+      await sleep(200)
     }
-    if (Date.now() - startedAt > 30_000) throw new Error("等待 DevToolsActivePort 超时")
-    await sleep(200)
+
+    let target: { webSocketDebuggerUrl?: string } | undefined
+    const t1 = Date.now()
+    for (;;) {
+      try {
+        const list = (await (await fetch(`http://127.0.0.1:${devtoolsPort}/json/list`)).json()) as Array<{ type: string; url: string; webSocketDebuggerUrl?: string }>
+        target = list.find((t) => t.type === "page" && t.url.startsWith(baseUrl))
+        if (target?.webSocketDebuggerUrl) break
+      } catch { /* CDP 还没起来 */ }
+      if (Date.now() - t1 > 30_000) throw new Error("等待 page target 超时")
+      await sleep(300)
+    }
+
+    const deadline = Date.now() + 240_000
+    session = await connectCdpSession(target!.webSocketDebuggerUrl!, { deadline, commandTimeoutMs: 30_000 })
+
+    // 每个插件一个**全新文档**（`?only=<id>`），并且只认「那个 id 写完了」为本轮结束 —— 这样既消除
+    // 插件之间的副作用串扰，也不会误读上一轮遗留的报告。
+    for (const spec of PLUGIN_SPECS) {
+      await session.send("Page.navigate", { url: `${baseUrl}?only=${spec.id}` })
+      const report = await readProbeReport<PluginRuntimeRun>(session, {
+        deadline,
+        pollIntervalMs: 1000,
+        expression:
+          "(window.__PLUGIN_PROBE__ && window.__PLUGIN_PROBE__.done && window.__PLUGIN_PROBE__.only === " +
+          JSON.stringify(spec.id) +
+          ") ? JSON.stringify(window.__PLUGIN_PROBE__) : null",
+      })
+      if (!report) throw new Error(`插件 ${spec.id} 没有写出报告`)
+      runs.push(report)
+    }
+  } finally {
+    try { session?.close() } catch { /* ignore */ }
+    try { chrome?.kill("SIGKILL") } catch { /* ignore */ }
+    server.close()
+    try { rmSync(workDir, { recursive: true, force: true }) } catch { /* ignore */ }
+    try { rmSync(userDataDir, { recursive: true, force: true }) } catch { /* ignore */ }
   }
 
-  let target: { webSocketDebuggerUrl?: string } | undefined
-  const t1 = Date.now()
-  for (;;) {
-    try {
-      const list = (await (await fetch(`http://127.0.0.1:${devtoolsPort}/json/list`)).json()) as Array<{ type: string; url: string; webSocketDebuggerUrl?: string }>
-      target = list.find((t) => t.type === "page" && t.url.startsWith(baseUrl))
-      if (target?.webSocketDebuggerUrl) break
-    } catch { /* CDP 还没起来 */ }
-    if (Date.now() - t1 > 30_000) throw new Error("等待 page target 超时")
-    await sleep(300)
+  const payload = JSON.stringify({ runs }, null, 2)
+  console.log(redact(payload))
+  const outPath = process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length)
+  if (outPath) {
+    writeFileSync(outPath, redact(payload) + "\n")
+    console.log(`\n[plugin-runtime] wrote ${outPath}`)
   }
 
-  const deadline = Date.now() + 240_000
-  session = await connectCdpSession(target!.webSocketDebuggerUrl!, { deadline, commandTimeoutMs: 30_000 })
-
-  // 每个插件一个**全新文档**（`?only=<id>`），并且只认「那个 id 写完了」为本轮结束 —— 这样既消除
-  // 插件之间的副作用串扰，也不会误读上一轮遗留的报告。
-  for (const spec of PLUGIN_SPECS) {
-    await session.send("Page.navigate", { url: `${baseUrl}?only=${spec.id}` })
-    const report = await readProbeReport<RunReport>(session, {
-      deadline,
-      pollIntervalMs: 1000,
-      expression:
-        "(window.__PLUGIN_PROBE__ && window.__PLUGIN_PROBE__.done && window.__PLUGIN_PROBE__.only === " +
-        JSON.stringify(spec.id) +
-        ") ? JSON.stringify(window.__PLUGIN_PROBE__) : null",
-    })
-    if (!report) throw new Error(`插件 ${spec.id} 没有写出报告`)
-    runs.push(report)
+  const decision = decidePluginRuntimeExitCode(runs, expectedPluginIds())
+  console.log(`\n${formatPluginRuntimeSummary(decision)}`)
+  for (const reason of decision.reasons) console.error(`[plugin-runtime] ${reason}`)
+  if (decision.exitCode === 3) {
+    console.error("[plugin-runtime] blocked 不是通过：本轮无法判定")
   }
-} finally {
-  try { session?.close() } catch { /* ignore */ }
-  try { chrome?.kill("SIGKILL") } catch { /* ignore */ }
-  server.close()
-  try { rmSync(workDir, { recursive: true, force: true }) } catch { /* ignore */ }
-  try { rmSync(userDataDir, { recursive: true, force: true }) } catch { /* ignore */ }
+  return decision.exitCode
 }
 
-/* ------------------------------------------------------------------ 报告 */
-
+/** 输出里的 `ak=` 与 `BAIDU_MAP_AK` 一律脱敏。 */
 function redact(text: string): string {
   return text
     .replace(/([?&]ak=)[^&"'\s]+/g, "$1<redacted>")
     .replaceAll(ak, "<redacted>")
 }
 
-const outPath = process.argv.find((a) => a.startsWith("--out="))?.slice("--out=".length)
-
-if (runs.length !== PLUGIN_SPECS.length) {
-  console.error("[plugin-runtime] 页面没有写全报告（脚手架失败）")
-  process.exitCode = 2
-} else {
-  const payload = JSON.stringify({ runs }, null, 2)
-  console.log(redact(payload))
-  if (outPath) {
-    writeFileSync(outPath, redact(payload) + "\n")
-    console.log(`\n[plugin-runtime] wrote ${outPath}`)
-  }
-
-  const env = runs[0]?.env ?? {}
-  const results = runs
-    .map((run) => run.result)
-    .filter((r): r is NonNullable<RunReport["result"]> => r !== null)
-  const notIndependent = runs
-    .filter((run) => run.env.globalExistedBeforeLoad === true)
-    .map((run) => run.only)
-  const notLoaded = results.filter((r) => r.urlLoaded !== "ok")
-  const notExposed = results.filter((r) => !r.globalExposed)
-  const threw = results.filter(
-    (r) => typeof r.probe === "string" && String(r.probe).startsWith("THREW"),
-  )
-
-  console.log(
-    `\n[plugin-runtime] sdk=${env.sdkLoaded === true ? "ok" : "failed"} plugins=${results.length} ` +
-      `notIndependent=${notIndependent.length} scriptFailed=${notLoaded.length} ` +
-      `globalMissing=${notExposed.length} threw=${threw.length}`,
-  )
-
-  if (env.sdkLoaded !== true) {
-    console.error("[plugin-runtime] SDK 没起来，本轮无法判定（blocked 不是通过）")
-    process.exitCode = 3
-  } else if (notIndependent.length > 0) {
-    // 独立性断言失败：全局在加载我们这支脚本之前就存在 ⇒ 本轮的读数不能归因给我们那个 URL
-    console.error(`[plugin-runtime] 证据不独立（全局先于脚本存在）：${notIndependent.join(", ")}`)
-    process.exitCode = 1
-  } else if (notLoaded.length > 0 || notExposed.length > 0) {
-    console.error(
-      `[plugin-runtime] blocked: ${[...notLoaded, ...notExposed].map((r) => r.id).join(", ")}`,
-    )
-    process.exitCode = 3
-  } else if (threw.length > 0) {
-    console.error(`[plugin-runtime] 运行时抛错：${threw.map((r) => r.id).join(", ")}`)
-    process.exitCode = 1
-  } else {
-    process.exitCode = 0
-  }
-}
+// 顶层只做一件事：把 main 的返回码变成 `process.exitCode`，并兜住脚手架异常（→ 2）。
+// 刻意不用 `process.exit()`：它会跳过 finally，把 Chromium / Vite 子进程留在后台。
+main()
+  .then((code) => {
+    process.exitCode = code
+  })
+  .catch((error: unknown) => {
+    console.error(`[plugin-runtime] 脚手架失败：${(error as Error).message}`)
+    process.exitCode = 2
+  })
