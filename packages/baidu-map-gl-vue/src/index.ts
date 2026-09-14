@@ -93,6 +93,15 @@ export type {
   LayerHandle,
   ServiceHandle,
 } from "./driver/types/handles";
+// Map 命令面与暂停原因（M4-HANDLE-UX / issue #29）
+//
+// `BMapExpose` 是 `<BMap ref>` 拿到的**组件级命令面**（常用 get/set/pan/fit/checkResize/supports
+// + 生命周期 + 暂停策略），`MapHandle` 是 Driver 层的 SDK 句柄 —— 两者分工见
+// `src/types/mapExpose.ts` 的命名对照表。raw SDK 对象只经 `./advanced` 的 `unwrapRaw()`。
+export type { BMapExpose } from "./types/mapExpose";
+export type { MapCommands } from "./core/runtime/mapCommands";
+export { MAP_SUSPEND_REASONS } from "./core/runtime/suspension";
+export type { MapSuspendReason } from "./core/runtime/suspension";
 export type {
   Point,
   PointInput,

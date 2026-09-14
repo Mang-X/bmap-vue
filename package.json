@@ -79,6 +79,7 @@
   "devDependencies": {
     "@baidumap/jsapi-loader": "1.0.0",
     "@baidumap/jsapi-ui-kit": "1.1.2",
+    "@vueuse/core": "14.4.0",
     "vitest": "^5.0.0",
     "happy-dom": "^20.14.0",
     "jsdom": "^30.0.1",

@@ -19,7 +19,12 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, onMounted, ref, type VNodeChild } from "vue";
-import { createFakeV4Harness, createManualFrames, type FakeV4Harness } from "../../packages/test-utils";
+import {
+  browserShims,
+  createFakeV4Harness,
+  createManualFrames,
+  type FakeV4Harness,
+} from "../../packages/test-utils";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
 import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
@@ -77,17 +82,24 @@ async function unmountAndSettle(wrapper: { unmount(): void }) {
  */
 async function mountControlledMap(
   getProps: () => Record<string, unknown>,
-  options: { children?: () => VNodeChild; onError?: (error: unknown) => void } = {},
+  options: {
+    children?: () => VNodeChild;
+    onError?: (error: unknown) => void;
+    /** 挂载宿主（默认 `harness.container()`）；容器门禁用例需要自己控制宿主。 */
+    attachTo?: HTMLElement;
+  } = {},
 ) {
   const Root = defineComponent({ setup: () => () => h(BMap, getProps(), options.children) });
   const wrapper = mount(Root, {
-    attachTo: harness.container(),
+    attachTo: options.attachTo ?? harness.container(),
     global: options.onError ? { config: { errorHandler: options.onError } } : undefined,
   });
   await flushPromises();
   await nextTick();
   return { wrapper, bmap: wrapper.findComponent(BMap) };
 }
+
+import type { BMapExpose } from "../../packages/baidu-map-gl-vue/src/types/mapExpose";
 
 /** 一套受控视野 props（父级从 setup 起就传值 ⇒ 受控）。 */
 function controlledViewProps(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1405,5 +1417,437 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     await unmountAndSettle(wrapper);
     expect(harness.listenActivity().pending).toBe(0);
     harness.assertIdle("useMapStatus");
+  });
+});
+
+/**
+ * MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / issue #29）
+ *
+ * 用例只写**领域语言**：`expose` 的命令、`harness.mapsCreated()`（建了几张图）、
+ * `harness.checkResizeCalls()`（下发了几次尺寸校正）、`harness.view()`（视野读数），
+ * 以及替身层的环境信号（`shims.*`）。字段名、观察器实现与合帧细节都不在这层。
+ *
+ * 三个替身口径先说清：
+ * - `shims.resize(el, size)`：布局把这元素算成这个尺寸**并**派发一次 resize 回调；
+ * - `shims.notifyResize(el)`：只派发回调（尺寸由替身的盒模型自己算，用来测「真实 DOM 读数」）；
+ * - `shims.setDocumentHidden()` / `setReducedMotion()` / `intersect()`：环境信号。
+ */
+describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", () => {
+  /**
+   * expose 的读法：直接按**真实契约** `BMapExpose` 断言（不再手写一份子集 —— 手写的那份
+   * 既会漂移，也挡不住「实现少了一个成员」；逐成员的类型契约由 `fixtures/v3-consumer` 锁）。
+   */
+  const shims = browserShims();
+  let frames: ReturnType<typeof createManualFrames> | null = null;
+
+  /** 装一个手动帧队列：`FrameScheduler` 在**创建时**读全局 RAF，因此必须在挂载之前装。 */
+  function useManualFrames() {
+    frames = createManualFrames();
+    frames.install();
+    return frames;
+  }
+
+  afterEach(() => {
+    frames?.restore();
+    frames = null;
+  });
+
+  const exposeOf = (bmap: { vm: unknown }): BMapExpose => bmap.vm as unknown as BMapExpose;
+  const statusOf = (bmap: { vm: unknown }): string => (bmap.vm as { status: string }).status;
+
+  it("expose 的常用命令真的读写 SDK（get / set / supports）", async () => {
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+
+    expect(api.isContainerReady(), "容器一开始就有尺寸 ⇒ 门禁已放行").toBe(true);
+    expect(api.getCenter()).toEqual(POSITION);
+    expect(api.getZoom()).toBe(12);
+    expect(api.getBounds(), "读命令在就绪后给得出值").toBeTruthy();
+    expect(api.getSize(), "读命令在就绪后给得出值").toBeTruthy();
+    expect(api.supports("map.zoom"), "能力查询走 Capability Registry").toBe(true);
+    expect(api.getMapInstance(), "raw 逃生口只拿到句柄，raw 对象要经 ./advanced").toBeTruthy();
+
+    api.setCenter({ lng: 121.5, lat: 31.2 });
+    api.setZoom(15);
+    expect(harness.view()).toMatchObject({ center: { lng: 121.5, lat: 31.2 }, zoom: 15 });
+    expect(harness.viewWrites(), "命令各自只下发一次").toMatchObject({ setCenter: 1, setZoom: 1 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("expose 常用命令");
+  });
+
+  it("未就绪时读命令给 null、写命令是空操作（不排队、不猜）", async () => {
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+    }));
+    expect(statusOf(bmap), "SDK 还在加载").not.toBe("ready");
+
+    const api = exposeOf(bmap);
+    expect(api.getCenter()).toBeNull();
+    expect(api.getZoom()).toBeNull();
+    expect(api.supports("map.zoom")).toBe(false);
+    api.setCenter({ lng: 1, lat: 1 });
+    api.setZoom(3);
+    expect(harness.mapsCreated(), "没有句柄时写命令不下发、也不建图").toBe(0);
+
+    harness.releaseProvider();
+    await settleProps();
+    expect(statusOf(bmap)).toBe("ready");
+    expect(api.getCenter(), "就绪后读到的仍是受控值，没有被未就绪时的写入污染").toEqual(POSITION);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("expose 未就绪");
+  });
+
+  it("expose 不再有 resetCenter，resetView 仍在", async () => {
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const vm = bmap.vm as unknown as Record<string, unknown>;
+    // 验收：`BMapExpose` 不包含错误的 `resetCenter()` 实现（名字说重置中心、实现重置整个视野）
+    expect(vm.resetCenter, "废弃别名必须被移除").toBeUndefined();
+    expect(typeof vm.resetView).toBe("function");
+
+    harness.simulateUserView({ center: { lng: 100, lat: 30 }, zoom: 8 });
+    expect(harness.view()).toMatchObject({ center: { lng: 100, lat: 30 }, zoom: 8 });
+    exposeOf(bmap).resetView();
+    expect(harness.view(), "resetView 回到首次快照").toMatchObject({ center: POSITION, zoom: 12 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("expose resetView");
+  });
+
+  it("容器零尺寸（width/height=0）不建图；拿到非零尺寸后只建一张，后续变化走 checkResize", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      ...controlledViewProps(),
+      width: "0px",
+      height: "0px",
+    }));
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+
+    expect(api.isContainerReady(), "零尺寸 ⇒ 门禁未放行").toBe(false);
+    expect(statusOf(bmap), "刻意停在 idle（没有进入加载流程）").toBe("idle");
+    expect(harness.mapsCreated(), "零尺寸下不得创建地图").toBe(0);
+
+    // Tab / Drawer 展开：容器拿到非零尺寸
+    shims.resize(root, { width: 320, height: 240 });
+    await settleProps();
+    expect(api.isContainerReady()).toBe(true);
+    expect(statusOf(bmap)).toBe("ready");
+    expect(harness.mapsCreated(), "放行后只建一张").toBe(1);
+
+    // 同一帧内连续三次尺寸变化：合帧 ⇒ 一次 checkResize
+    frames!.flush();
+    shims.resize(root, { width: 400, height: 240 });
+    shims.resize(root, { width: 420, height: 260 });
+    shims.resize(root, { width: 440, height: 300 });
+    expect(harness.checkResizeCalls(), "还没到帧边界时不下发").toBe(0);
+    frames!.flush();
+    expect(harness.checkResizeCalls(), "合帧：一帧最多一次").toBe(1);
+    expect(harness.mapsCreated(), "尺寸变化不重建地图").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("容器门禁");
+  });
+
+  it("祖先 display:none（未展开）不建图；展开后按真实读数放行", async () => {
+    const host = document.createElement("div");
+    host.style.display = "none";
+    document.body.appendChild(host);
+
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps, { attachTo: host });
+    expect(exposeOf(bmap).isContainerReady()).toBe(false);
+    expect(harness.mapsCreated()).toBe(0);
+
+    host.style.display = "block";
+    // 只派发回调：尺寸由读数自己算（不写任何显式尺寸覆盖），因此这条用例证明的是
+    // 「组件读的是标准 DOM 测量」而不是「夹具喂了一个数字」。
+    shims.notifyResize(bmap.element as HTMLElement);
+    await settleProps();
+    expect(exposeOf(bmap).isContainerReady()).toBe(true);
+    expect(harness.mapsCreated()).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("容器门禁（display:none）");
+  });
+
+  it("enableAutoResize=false 时不自动 checkResize，手动入口仍然有效", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      ...controlledViewProps(),
+      enableAutoResize: false,
+    }));
+    const root = bmap.element as HTMLElement;
+    frames!.flush();
+
+    shims.resize(root, { width: 400, height: 300 });
+    frames!.flush();
+    expect(harness.checkResizeCalls(), "关闭自动重设 ⇒ 容器变化不下发").toBe(0);
+
+    exposeOf(bmap).checkResize();
+    expect(harness.checkResizeCalls(), "手动入口与自动路径同口径").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("enableAutoResize");
+  });
+
+  it("页面前后台暂停：恢复可见只移除 document，不误恢复用户手动暂停", async () => {
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+
+    shims.setDocumentHidden(true);
+    expect(api.isSuspended()).toBe(true);
+    expect(api.suspendReasons()).toEqual(["document"]);
+
+    api.suspend();
+    expect(api.suspendReasons().sort()).toEqual(["document", "user"]);
+
+    shims.setDocumentHidden(false);
+    expect(api.isSuspended(), "用户的手动暂停必须活着").toBe(true);
+    expect(api.suspendReasons()).toEqual(["user"]);
+    expect(harness.checkResizeCalls(), "还在暂停中 ⇒ 不补偿 resize").toBe(0);
+
+    api.resume();
+    expect(api.isSuspended()).toBe(false);
+    expect(harness.checkResizeCalls(), "全部原因清空 ⇒ 补偿一次").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("页面前后台暂停");
+  });
+
+  it("暂停期间容器变化不下发 checkResize、也不排帧；恢复时补一次", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const root = bmap.element as HTMLElement;
+    frames!.flush();
+    const before = harness.checkResizeCalls();
+
+    shims.setDocumentHidden(true);
+    shims.resize(root, { width: 400, height: 300 });
+    frames!.flush();
+    expect(harness.checkResizeCalls(), "后台期间不下发 SDk 命令").toBe(before);
+    expect(frames!.pending(), "后台期间不占帧").toBe(0);
+
+    shims.setDocumentHidden(false);
+    expect(harness.checkResizeCalls(), "回到前台补一次").toBe(before + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("暂停期间的容器变化");
+  });
+
+  it("离开视口暂停、回到视口恢复，且不销毁地图", async () => {
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+
+    shims.intersect(root, false);
+    expect(api.suspendReasons()).toEqual(["offscreen"]);
+    expect(harness.mapsCreated(), "离开视口不销毁 WebGL 地图（issue 非目标）").toBe(1);
+
+    shims.intersect(root, true);
+    expect(api.isSuspended()).toBe(false);
+    expect(harness.checkResizeCalls(), "回到视口补一次").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("offscreen 暂停");
+  });
+
+  it("减少动画偏好变化不暂停地图、也不误停必要任务", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+
+    expect(api.prefersReducedMotion()).toBe(false);
+    shims.setReducedMotion(true);
+    expect(api.prefersReducedMotion(), "偏好如实透出（供可选动画读）").toBe(true);
+    expect(api.isSuspended(), "它不是暂停原因").toBe(false);
+    expect(api.suspendReasons()).toEqual([]);
+
+    frames!.flush();
+    shims.resize(bmap.element as HTMLElement, { width: 500, height: 320 });
+    frames!.flush();
+    expect(harness.checkResizeCalls(), "必要任务照常进行").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("reduced motion");
+  });
+
+  it("卸载后不再调 SDK：观察器被 disconnect，迟到的尺寸变化不产生任何调用", async () => {
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const root = bmap.element as HTMLElement;
+    const before = harness.checkResizeCalls();
+
+    await unmountAndSettle(wrapper);
+    const afterUnmount = shims.diagnostics();
+    expect(afterUnmount.resizeObservers, "观察器必须被释放").toBe(0);
+    expect(afterUnmount.intersectionObservers, "视口观察器必须被释放").toBe(0);
+    expect(afterUnmount.resizeDisconnects, "释放路径真的调用了 disconnect").toBeGreaterThan(0);
+
+    shims.resize(root, { width: 100, height: 100 });
+    expect(harness.checkResizeCalls(), "disposed 之后不再调 SDK").toBe(before);
+    harness.assertIdle("卸载后的容器变化");
+  });
+
+  it("两张地图不串状态：各自的容器变化只影响自己", async () => {
+    useManualFrames();
+    const hostA = harness.container();
+    const hostB = harness.container();
+    const wrapperA = mount(BMap, { attachTo: hostA, props: { provider: harness.provider() } });
+    const wrapperB = mount(BMap, { attachTo: hostB, props: { provider: harness.provider() } });
+    await settleProps();
+
+    expect(harness.mapsCreated()).toBe(2);
+    frames!.flush();
+
+    shims.resize(wrapperA.element as HTMLElement, { width: 500, height: 400 });
+    frames!.flush();
+    expect(harness.checkResizeCalls(-2), "A 自己的变化只下发给自己").toBe(1);
+    expect(harness.checkResizeCalls(-1), "B 不受影响").toBe(0);
+
+    await unmountAndSettle(wrapperA);
+    await unmountAndSettle(wrapperB);
+    harness.assertIdle("多地图容器策略");
+  });
+
+  it("状态插槽：error 插槽拿到结构化错误与重试入口，retry 成功且幂等（成功后 error 归 null）", async () => {
+    harness.failNextInitializeView();
+    const seen: Array<Record<string, unknown>> = [];
+    const defaultSeen: Array<Record<string, unknown>> = [];
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMap, { provider: harness.provider(), center: { ...POSITION }, zoom: 12 }, {
+          error: (props: Record<string, unknown>) => {
+            seen.push(props);
+            return h("button", { class: "retry-slot" }, "retry");
+          },
+          // 默认插槽也接一下载荷：它是「重试成功后 error 是否归 null」最直接的观察口
+          default: (props: Record<string, unknown>) => {
+            defaultSeen.push(props);
+            return h("span", "slot-probe");
+          },
+        }),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settleProps();
+    const bmap = wrapper.findComponent(BMap);
+
+    expect(statusOf(bmap)).toBe("error");
+    expect(bmap.emitted("error"), "结构化错误经 `error` 事件上报").toHaveLength(1);
+    const errorProps = seen.at(-1)!;
+    expect(errorProps.status).toBe("error");
+    expect(errorProps.error).toBeTruthy();
+    expect(typeof errorProps.retry, "插槽直接给重试入口，不需要业务监听 Runtime").toBe("function");
+    expect(wrapper.find(".retry-slot").exists()).toBe(true);
+
+    // retry 成功：第二张地图建起来
+    await (errorProps.retry as () => Promise<unknown>)();
+    await settleProps();
+    expect(statusOf(bmap)).toBe("ready");
+    expect(harness.mapsCreated()).toBe(2);
+    // 评审 blocking：重试成功之后 `error` 必须归 null。只断言「错误文案消失」锁不住它 ——
+    // 默认文案的 `v-if` 只看 `status`，旧的 error 会一直挂到下一次失败、从别的出口漏出去
+    // （默认插槽载荷 / `#loading` 与 `#error` 的 slotProps / `MapContext.error`）。
+    expect(
+      defaultSeen.at(-1)!.error,
+      "retry 成功之后旧的 error 必须被清掉（否则四个出口都还在显示已经过去的那次失败）",
+    ).toBeNull();
+
+    // 已经 ready 时再 retry：不重复建图、也不重复广播 ready
+    const readyCount = bmap.emitted("ready")?.length ?? 0;
+    await exposeOf(bmap).retry();
+    await settleProps();
+    expect(harness.mapsCreated(), "多次 retry 幂等").toBe(2);
+    expect(bmap.emitted("ready")?.length ?? 0).toBe(readyCount);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("状态插槽 retry");
+  });
+
+  it("状态插槽：容器零尺寸时 loading 插槽的 containerReady=false，且给的是同一份载荷", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMap, { provider: harness.provider(), width: "0px", height: "0px" }, {
+          loading: (props: Record<string, unknown>) => {
+            seen.push(props);
+            return h("span", { class: "loading-slot" }, "custom-loading");
+          },
+        }),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settleProps();
+
+    expect(wrapper.find(".loading-slot").exists()).toBe(true);
+    const loadingProps = seen.at(-1)!;
+    expect(loadingProps.containerReady, "业务据此区分「容器还没展开」与「SDK 在加载」").toBe(false);
+    expect(loadingProps.status).toBe("idle");
+    expect(typeof loadingProps.retry).toBe("function");
+    expect(harness.mapsCreated()).toBe(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("loading 插槽");
+  });
+
+  it("不给插槽时的默认状态文案与重试按钮（容器零尺寸 / 错误两条路径）", async () => {
+    // ① 容器零尺寸：默认文案必须是「等尺寸」而不是「加载中」，否则业务没法区分
+    const zero = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap as never, { provider: harness.provider(), width: "0px", height: "0px" }),
+      }),
+      { attachTo: harness.container() },
+    );
+    await settleProps();
+    expect(zero.text(), "零尺寸时给的是等尺寸的默认文案").toContain("waiting for container size");
+    await unmountAndSettle(zero);
+
+    // ② 错误态：默认文案 + 一个可点的重试按钮（覆盖 `#error` 插槽即可完全接管）
+    harness.failNextInitializeView();
+    const failed = mount(
+      defineComponent({
+        setup: () => () => h(BMap as never, { provider: harness.provider() }),
+      }),
+      { attachTo: harness.container() },
+    );
+    await settleProps();
+    expect(failed.text()).toContain("map error");
+    const button = failed.find("button");
+    expect(button.exists(), "默认错误文案自带重试入口").toBe(true);
+    // 点一下：默认按钮走的是 expose 的 retry（失败态下重新建图）
+    const before = harness.mapsCreated();
+    await button.trigger("click");
+    await settleProps();
+    expect(harness.mapsCreated(), "默认按钮真的重试了（不是装饰）").toBeGreaterThan(before);
+
+    await unmountAndSettle(failed);
+    harness.assertIdle("默认状态文案");
+  });
+
+  it("默认插槽的既有载荷不变（status / map / error / client）", async () => {
+    let slotProps: Record<string, unknown> | null = null;
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMap, { provider: harness.provider() }, {
+          default: (props: Record<string, unknown>) => {
+            slotProps = props;
+            return h("span", "child");
+          },
+        }),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settleProps();
+    await nextTick();
+
+    expect(Object.keys(slotProps!).sort()).toEqual(["client", "error", "map", "status"]);
+    expect(slotProps!.status).toBe("ready");
+    // 不只比键名：就绪时这三个字段得真的有值（否则「载荷不变」这条断言可能只是「键还在」）
+    expect(slotProps!.map, "就绪时载荷里必须真的有句柄").toBeTruthy();
+    expect(slotProps!.client, "就绪时载荷里必须真的有 client").toBeTruthy();
+    expect(slotProps!.error, "就绪时不该有错误").toBeNull();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("默认插槽载荷");
   });
 });

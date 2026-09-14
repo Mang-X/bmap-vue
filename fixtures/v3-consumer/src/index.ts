@@ -314,3 +314,96 @@ export const routeComposableSmoke = {
   driveByKeyword,
   routePolicies,
 }
+
+// `<BMap>` 的组件级命令面（M4-HANDLE-UX / #29）在**消费方**这一侧的编译 smoke。
+//
+// 这段代码只依赖 tarball 的公共类型，证据由 `scripts/verify-package.mts` 与 `v3` CI job 的
+// tarball `vue-tsc` 提供（本仓库的 `tests/**` 不在任何 typecheck 门禁里，所以「类型层被拒」
+// 这类承诺必须钉在消费方）。它钉住四件事：
+//
+// ① 组件实例类型与冻结的 `BMapExpose` **互相可赋值**（少一个成员就编译失败）；
+// ② `resetCenter` 已从 expose 移除（`@ts-expect-error` 是双向的：留着它就变成「多余指令」而报错）；
+// ③ 读命令的返回值不退化成 `any`（同样用 `@ts-expect-error` 反证）；
+// ④ 写命令的参数类型没有被放宽（传字符串地名必须编译失败）。
+import {
+  MAP_SUSPEND_REASONS,
+  type BMapExpose,
+  type MapCommands,
+  type MapReadyContext,
+  type MapSuspendReason,
+} from 'baidu-map-gl-vue'
+
+// ① 组件实例 → 契约：`defineExpose()` 推导出的实例类型必须覆盖 `BMapExpose` 的每一个成员。
+const bmapApi: BMapExpose = null as unknown as InstanceType<typeof BMap>
+// ① 反向：`BMapExpose` 的成员在实例上都能取到（漏一个时上面那行就会报错）
+const commandSurface: MapCommands = bmapApi
+export const mapExposeSmoke = { bmapApi, commandSurface }
+
+const centerOrNull: { lng: number; lat: number } | null = bmapApi.getCenter()
+const zoomOrNull: number | null = bmapApi.getZoom()
+const boundsOrNull: ReturnType<typeof bmapApi.getBounds> = bmapApi.getBounds()
+const sizeOrNull: ReturnType<typeof bmapApi.getSize> = bmapApi.getSize()
+const supported: boolean = bmapApi.supports('map.zoom')
+const containerReady: boolean = bmapApi.isContainerReady()
+const suspended: boolean = bmapApi.isSuspended()
+const reasons: readonly string[] = bmapApi.suspendReasons()
+const reducedMotion: boolean = bmapApi.prefersReducedMotion()
+bmapApi.setCenter({ lng: 116.404, lat: 39.915 })
+bmapApi.setZoom(14)
+bmapApi.setHeading(30)
+bmapApi.setTilt(20)
+bmapApi.panTo({ lng: 116.404, lat: 39.915 })
+bmapApi.panBy({ x: 0, y: -100 })
+bmapApi.fitBounds({ southwest: { lng: 116, lat: 39 }, northeast: { lng: 117, lat: 40 } })
+bmapApi.checkResize()
+bmapApi.resetView()
+bmapApi.setDragging(false)
+const offscreen: MapSuspendReason = MAP_SUSPEND_REASONS.offscreen
+bmapApi.suspend(offscreen)
+bmapApi.resume(MAP_SUSPEND_REASONS.offscreen)
+const readyOnce: Promise<MapReadyContext> = bmapApi.whenReady()
+const retriedOnce: Promise<MapReadyContext> = bmapApi.retry()
+const mapOrNull: ReturnType<typeof bmapApi.getMapInstance> = bmapApi.getMapInstance()
+
+// ③ 读命令不退化成 `any`：把结果当字符串用必须编译失败。
+// @ts-expect-error `getCenter()` 是 `Point | null`，不是 any
+const badCenter: string = bmapApi.getCenter()
+// ③ 能力查询也不是 any。
+// @ts-expect-error `supports()` 返回 boolean
+const badCapability: string = bmapApi.supports('map.zoom')
+// ④ 写命令的参数类型没有被放宽：字符串地名不是 `Point`（字符串兼容只在 props 上）。
+// @ts-expect-error `setCenter` 只接受点对象
+bmapApi.setCenter('北京市')
+// ② 废弃别名已移除。若 `resetCenter` 重新出现，下面这条指令会变成「未使用的 @ts-expect-error」。
+// @ts-expect-error `resetCenter` 已从 BMapExpose 移除（改用 resetView）
+bmapApi.resetCenter()
+
+export const mapExposeApiSmoke = {
+  centerOrNull,
+  zoomOrNull,
+  boundsOrNull,
+  sizeOrNull,
+  supported,
+  containerReady,
+  suspended,
+  reasons,
+  reducedMotion,
+  offscreen,
+  readyOnce,
+  retriedOnce,
+  mapOrNull,
+  badCenter,
+  badCapability,
+}
+
+// raw 逃生口（`./advanced`）在**产物层**的消费方 smoke（#29 评审补充）。
+//
+// 此前的「raw 只在 `./advanced`」只在**源码级**被锁（`tests/behavior/v3-entry.test.ts` 的成对断言 +
+// `check:public-dts`），没有任何代码消费那个子路径 ⇒ 打包产物里「它还在不在、类型能不能用」没人验。
+// 这几行补上：`createHandle` / `unwrapRaw` / `HANDLE_BRAND` 三个名字在 tarball 层必须可用且可类型化。
+import { HANDLE_BRAND, createHandle, unwrapRaw } from 'baidu-map-gl-vue/advanced'
+
+const advancedProbe = createHandle('probe', { ok: true })
+const advancedProbeRaw: { ok: boolean } = unwrapRaw(advancedProbe)
+const advancedProbeBrand: string = advancedProbe[HANDLE_BRAND]
+export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }

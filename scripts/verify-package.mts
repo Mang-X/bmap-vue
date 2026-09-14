@@ -97,6 +97,29 @@ function main() {
   }
   console.log('\n[verify-package] runtime dependency OK: @baidumap/jsapi-loader@1.0.0 已精确锁定并被消费者解析')
 
+  // 6b) M4-HANDLE-UX（#29）：环境采集能力（ResizeObserver / IntersectionObserver / 页面前后台 /
+  //     减少动画偏好）委托 `@vueuse/core`。它同样是**精确锁定**的运行时依赖，理由与上面那条相同：
+  //     只断言「能 import」不够 —— 产物里内联时漏声明照样能跑，于是「消费者不需要手动装」这条
+  //     契约会静默失效。另外钉住产物形态：ESM 档必须把它保持 **external**（不能内联），
+  //     否则「依赖声明」与「产物内容」不一致（消费者会装一份用不到的包）。
+  const vueuseDeclared = installedPkg.dependencies?.['@vueuse/core']
+  if (vueuseDeclared !== '14.4.0') {
+    throw new Error(
+      `[verify-package] 发布包必须以 dependencies 精确锁定 @vueuse/core@14.4.0，实际为 ${String(vueuseDeclared)}`,
+    )
+  }
+  const vueusePkgPath = resolve(v3Consumer, 'node_modules/@vueuse/core/package.json')
+  if (!existsSync(vueusePkgPath)) {
+    throw new Error(
+      '[verify-package] 消费者的 node_modules 里没有 @vueuse/core：运行时依赖没有被解析',
+    )
+  }
+  const vueusePkg = JSON.parse(readFileSync(vueusePkgPath, 'utf8')) as { version?: string }
+  if (vueusePkg.version !== '14.4.0') {
+    throw new Error(`[verify-package] 装到的 @vueuse/core 版本不是 14.4.0：${String(vueusePkg.version)}`)
+  }
+  console.log('\n[verify-package] runtime dependency OK: @vueuse/core@14.4.0 已精确锁定并被消费者解析')
+
   // 7) 负向消费测试:消费者未安装官方类型包时,全局 `BMap.*` 必须不可用
   //    (公共声明不得泄漏官方命名空间;泄漏会让下面的类型检查意外通过)
   const negativeFile = resolve(v3Consumer, 'src/global-namespace-negative.ts')
@@ -147,6 +170,18 @@ function main() {
     throw new Error(
       '[verify-package] ESM 产物必须保留 `process.env.NODE_ENV` 这个可折叠标记：' +
         '在库构建阶段定死开发 / 生产会让消费方的 dev server 永远看不到 dev 告警',
+    )
+  }
+
+  // ①b M4-HANDLE-UX（#29）：`@vueuse/core` 是声明过的运行时依赖，必须在 ESM 产物里保持
+  //     **external**（见 `vite.config.build.ts`）。内联会让「依赖声明」与「产物内容」不一致：
+  //     消费者装了一份用不到的包，而产物里还塞着另一份实现。
+  const keepsVueuseExternal = esmFiles.some((file) =>
+    /from\s*["']@vueuse\/core["']/.test(readFileSync(file, "utf8")),
+  )
+  if (!keepsVueuseExternal) {
+    throw new Error(
+      '[verify-package] ESM 产物必须把 @vueuse/core 保持 external（vite.config.build.ts 的 external 列表）',
     )
   }
 

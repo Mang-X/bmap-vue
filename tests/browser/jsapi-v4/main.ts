@@ -1227,6 +1227,217 @@ const CHECKS: Record<string, CheckImpl> = {
       }
     },
   },
+
+  /**
+   * 容器门禁与精简命令面（M4-HANDLE-UX / #29）。
+   *
+   * 为什么必须在浏览器档里跑：单测里的「容器尺寸」来自替身的最小盒模型，而这条验收在真实环境里
+   * 依赖**真实布局** —— `display:none` 的元素真的没有盒子、`ResizeObserver` 真的会因 `display`
+   * 变化而派发。Fake 与替身都证不了这两点，而「零尺寸建图」在真实浏览器上会得到一个 0×0 的
+   * WebGL 画布（Tab / Drawer 展开前正是这个状态）。
+   *
+   * 这条检查**自己挂一棵树**（自带宿主），因此它不依赖 `ctx.mounted`，也就不受前面
+   * `unmount-release` 拆树的影响；排在最后执行。
+   */
+  "map-container-gate": {
+    async run() {
+      const mark = consoleRing.length;
+      const host = document.createElement("div");
+      host.style.cssText = "width:340px;height:260px;display:none";
+      document.getElementById("stage")!.appendChild(host);
+
+      const apiRef = ref<unknown>(null);
+      const statusRef = ref<string>("");
+      const treeErrors: unknown[] = [];
+      const mapProps: Record<string, unknown> = {
+        ref: apiRef,
+        center: { ...CENTER },
+        zoom: 12,
+        onError: (error: unknown) => treeErrors.push(error),
+      };
+      if (descriptor.provider) {
+        mapProps.provider = descriptor.provider;
+        mapProps.loadOptions = { ak: "fixture-no-network" };
+      } else {
+        // live：只给 ak，走**默认入口**（与 `mountTree` 同一口径）
+        mapProps.ak = AK;
+      }
+
+      const app = createApp(
+        defineComponent({
+          name: "SmokeContainerGate",
+          render: () =>
+            h(
+              BMap as never,
+              mapProps,
+              {
+                default: (slotProps: { status?: unknown }) => {
+                  statusRef.value = String(slotProps?.status ?? "");
+                  return h("span", { class: "gate-probe" });
+                },
+              } as never,
+            ),
+        }),
+      );
+      app.config.errorHandler = (error) => treeErrors.push(error);
+      app.mount(host);
+
+      interface GateApi {
+        isContainerReady(): boolean;
+        getMapInstance(): unknown;
+        getCenter(): { lng: number; lat: number } | null;
+        getZoom(): number | null;
+        setZoom(zoom: number): void;
+        supports(capability: string): boolean;
+        isSuspended(): boolean;
+        suspendReasons(): readonly string[];
+        suspend(reason?: string): void;
+        resume(reason?: string): void;
+        checkResize(): void;
+      }
+      const api = apiRef.value as GateApi | null;
+      assertSmoke(api, "MAP_EXPOSE_MISSING", "挂载后拿不到 <BMap> 的 expose（defineExpose 没有生效）");
+
+      try {
+        // ① 零尺寸阶段：给一个明确的观察窗口，再断言「真的没有建图」
+        await sleep(MODE === "live" ? 1200 : 300);
+        assertSmoke(
+          api!.isContainerReady() === false,
+          "MAP_GATE_OPEN_WITHOUT_SIZE",
+          "容器零尺寸时门禁已放行（应当停在未放行）",
+        );
+        assertSmoke(
+          api!.getMapInstance() === null,
+          "MAP_GATE_CREATED_WITHOUT_SIZE",
+          "容器零尺寸时创建了地图：真实浏览器上会得到一个 0×0 的 WebGL 画布",
+          { status: statusRef.value },
+        );
+        assertSmoke(
+          treeErrors.length === 0,
+          "MAP_GATE_ERROR_BEFORE_SIZE",
+          "容器零尺寸阶段出现了错误（加载流程不该被启动）",
+          { errors: treeErrors.slice(0, 2) },
+        );
+
+        // ② 展开：真实布局变化 → ResizeObserver 派发 → 门禁放行 → 建图
+        host.style.display = "block";
+        await until(
+          () => api!.isContainerReady() === true,
+          READY_MS,
+          "MAP_GATE_OPEN_TIMEOUT",
+          "容器由零尺寸变为非零后门禁放行",
+        );
+        await until(
+          () => api!.getMapInstance() !== null,
+          READY_MS,
+          "MAP_GATE_MAP_TIMEOUT",
+          "门禁放行后建图",
+        );
+
+        // ③ 命令面在真实 SDK 上可用：读命令读回真实读数、写命令真的改到 SDK
+        const center = api!.getCenter();
+        assertSmoke(
+          center !== null &&
+            Math.abs(center.lng - CENTER.lng) < 1e-4 &&
+            Math.abs(center.lat - CENTER.lat) < 1e-4,
+          "MAP_GATE_CENTER_MISMATCH",
+          "放行后的地图中心与传入的 center 不一致",
+          { center },
+        );
+        const zoomBefore = api!.getZoom();
+        api!.setZoom(15);
+        await sleep(MODE === "live" ? 400 : 60);
+        const zoomAfter = api!.getZoom();
+        assertSmoke(
+          Math.abs((zoomAfter ?? 0) - 15) < 1e-6,
+          "MAP_GATE_ZOOM_WRITE",
+          `setZoom(15) 之后读回 ${String(zoomAfter)}：写命令没有到达 SDK`,
+          { zoomBefore, zoomAfter },
+        );
+        // ⑤ 能力查询：`supports()` 是 #29 新增的公开命令面，必须走真的 Capability Registry。
+        //    **正证**：两个档都支持的能力必须报 true（`overlay.marker` 是本库既有的标准正例）。
+        assertSmoke(
+          api!.supports("overlay.marker") === true,
+          "MAP_GATE_SUPPORTS",
+          "能力查询在真实 SDK 上应报 true（overlay.marker）",
+          { overlayMarker: api!.supports("overlay.marker") },
+        );
+        //    **已知缺口的现状断言**（characterization，刻意断言而不是静默跳过）：能力探测只查
+        //    「命名空间顶层 + `Map.prototype`」，于是**夹具与真实引擎的读数方向相反**：
+        //
+        //    | 能力 | live | fixture | 原因 |
+        //    | --- | --- | --- | --- |
+        //    | `map.zoom` | `false` | `true` | 真实 4.0 的 `setZoom` 是**实例自有**成员（`Map.prototype` 上只有 `getZoom`）；Fake 把两者都放在原型上 |
+        //    | `map.bounds` | `true` | `false` | 真实原型上有 `setBounds`；Fake 没有建模它（Map Facet 不调用，因此不在 Fake 的覆盖面内） |
+        //
+        //    这正是 #74 那条「夹具比真实宽容 / 夹具与真实不一致」教训的另一面，本票只把它**钉成
+        //    可断言的现状**并登记为欠账（属能力探测策略，不在 #29 范围内）：哪一侧的形状变了都会红，
+        //    红的时候请同步更新本条、capability catalog 的说明与 ADR 的已知限制。
+        const divergence = {
+          mapZoomMatchesMode: api!.supports("map.zoom") === (MODE === "fixture"),
+          mapBoundsMatchesMode: api!.supports("map.bounds") === (MODE === "live"),
+        };
+        assertSmoke(
+          divergence.mapZoomMatchesMode && divergence.mapBoundsMatchesMode,
+          "MAP_CAPABILITY_PROBE_DIVERGENCE_CHANGED",
+          `能力读数与登记的两档差异不符（mode=${MODE}）：本条记录「实例自有成员 + 只查原型」造成的` +
+            "夹具 / 真实引擎分歧（map.zoom: live=false / fixture=true；map.bounds: live=true / fixture=false）。" +
+            "改变它意味着探测策略或夹具形状变了 —— 请同步更新本条与 ADR 的已知限制",
+          {
+            mode: MODE,
+            mapZoom: api!.supports("map.zoom"),
+            mapBounds: api!.supports("map.bounds"),
+            mapViewState: api!.supports("map.view-state"),
+          },
+        );
+
+        // ④ 暂停策略：按**原因**记账（不是「恢复一切」）。
+        //    这里刻意不断言 `isSuspended() === false` —— 真实页面里宿主可能就在视口之外，
+        //    此时 `offscreen` 原因本就该留着；要断言的是「user 被精确地摘掉」+「两者一致」。
+        const reasonsBefore = api!.suspendReasons();
+        api!.suspend("user");
+        assertSmoke(
+          api!.suspendReasons().includes("user"),
+          "MAP_GATE_SUSPEND",
+          "expose 的 suspend(\"user\") 没有反映到暂停原因上",
+          { reasonsBefore, reasonsAfter: api!.suspendReasons() },
+        );
+        api!.resume("user");
+        const reasonsAfter = api!.suspendReasons();
+        assertSmoke(
+          !reasonsAfter.includes("user"),
+          "MAP_GATE_RESUME",
+          "resume(\"user\") 之后 user 原因仍在（暂停原因没有按原因增减）",
+          { reasonsAfter },
+        );
+        assertSmoke(
+          api!.isSuspended() === reasonsAfter.length > 0,
+          "MAP_GATE_SUSPEND_CONSISTENT",
+          "isSuspended() 与 suspendReasons() 不一致",
+          { reasonsAfter, isSuspended: api!.isSuspended() },
+        );
+
+        assertSmoke(
+          consoleErrorsSince(mark).length === 0,
+          "MAP_GATE_CONSOLE_ERROR",
+          "容器门禁 / 命令面期间出现 console.error",
+          { errors: consoleErrorsSince(mark).slice(0, 3) },
+        );
+        return {
+          gate: "display:none → block",
+          center,
+          zoomBefore,
+          zoomAfter,
+          containerReady: api!.isContainerReady(),
+          suspendReasons: reasonsAfter,
+        };
+      } finally {
+        app.unmount();
+        await nextTick();
+        host.remove();
+      }
+    },
+  },
 };
 
 /* ------------------------------------------------------------------ 主流程 */

@@ -13,6 +13,7 @@ import {
   shallowRef,
   useId,
   watch,
+  type ShallowRef,
 } from "vue";
 import { mapContextKey, type MapContext, type MapReadyContext } from "../../core/context/types";
 import {
@@ -44,6 +45,10 @@ import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
 import { useControllableState } from "../../composables/useControllableState";
+import { useMapSuspension } from "../../composables/useMapSuspension";
+import { createMapCommands } from "../../core/runtime/mapCommands";
+import { MAP_SUSPEND_REASONS } from "../../core/runtime/suspension";
+import type { BMapExpose } from "../../types/mapExpose";
 import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
 import { resolvePluginDefinition } from "../../plugins/catalog";
 
@@ -63,6 +68,9 @@ const props = withDefaults(defineProps<BMapProps>(), {
   enableScrollWheelZoom: false,
   loadingBgColor: "#f1f1f1",
   keepAliveBehavior: "suspend",
+  // 容器尺寸变化时自动 `checkResize`（#29）：默认开启。`false` 时只更新读数，由调用方
+  // 自己在合适的时机调用暴露的 `checkResize()`（此前这个 prop 是「接收后忽略」的假支持）。
+  enableAutoResize: true,
   // 视野四字段（center/zoom/heading/tilt）**刻意不给默认值**（M4-STATE / #27）：
   // `undefined` 是「当前非受控」的判定依据，给了默认值就再也区分不出「父级传了」
   // 与「父级没传」。库默认视野移到 DEFAULT_VIEW，作为「缺省」档的兜底参与首次解析，
@@ -132,6 +140,12 @@ function emitReady(payload: MapReadyPayload): void {
 }
 
 const containerRef = ref<HTMLDivElement | null>(null);
+/**
+ * 组件**根容器**（作者声明的尺寸所在）。M4-HANDLE-UX / #29：容器门禁与可见性策略测量的是
+ * 它，而不是内层 `bmap-canvas-host`。内层壳是 `position: absolute; inset: 0` 的定位壳，
+ * 尺寸完全由根容器决定 —— 真实浏览器上两者同盒，但显式区分能让「测量谁」成为可评审的选择。
+ */
+const rootRef = ref<HTMLDivElement | null>(null);
 // SSR-safe DOM id(服务端只输出固定容器 shell,客户端 mounted 后加载)
 const containerId = useId();
 
@@ -588,11 +602,67 @@ const pluginPlan: { name: string; error?: BMapError }[] = [];
 runtimeRef.value = currentRuntime;
 const runtime = currentRuntime;
 
+/* --------------------------------------------- 容器门禁与可见性策略（M4-HANDLE-UX / #29）
+ *
+ * 两个决定合在 `useMapSuspension` 一处（同一个环境适配、同一条尺寸变化路径）：
+ *
+ * 1. **容器门禁**：容器拿到非零尺寸之前**不创建地图**。零尺寸建图在真实浏览器上会得到一个
+ *    0×0 的 WebGL 画布，而 Tab / Drawer / 折叠面板在展开之前正是 0×0 —— 这正是 issue 要求
+ *    「Tab/Drawer/Resize 场景」的原因。门禁只决定「何时建图」：地图建好之后容器又变成 0
+ *    （折叠、切走）**不销毁地图**，与 issue 的非目标一致；
+ * 2. **可见性策略**：页面前后台、容器是否在视口附近 → 暂停原因；减少动画偏好 → 只读信号。
+ *    容器尺寸变化经**既有 FrameScheduler** 合帧后调用 `checkResize()`，后台 / 视口外不排帧。
+ *
+ * 释放走 `onUnmounted` 的 `suspension.dispose()`（观察器与订阅都挂在这个控制器上），
+ * 不依赖 Vue 的组件作用域 —— 于是「谁释放」只有一个答案。SSR 下 `onMounted` 不执行，
+ * 观察器一个都不建（`useMapSuspension` 也不在任何模块顶层碰 `window`）。
+ */
+const suspension = useMapSuspension({
+  target: runtime,
+  // 观察**根容器**：它才是「作者声明的尺寸」所在（内层 host 是 `inset: 0` 的定位壳，
+  // SDK 在它内部建 canvas）。两者在真实浏览器上同盒，但「测量谁」必须是显式选择。
+  measure: () => rootRef.value,
+  onContainerReady: () => beginMount(),
+  autoResize: () => props.enableAutoResize,
+});
+
+/**
+ * 容器门禁是否已放行（状态插槽的读数）。
+ *
+ * 与 `status` 的关系：容器零尺寸期间 `status` 停在 `idle`（不会进入加载流程），因此「怎么还没
+ * 加载」与「容器还没展开」在这份读数上可以区分。
+ */
+const containerReady: Readonly<ShallowRef<boolean>> = suspension.containerReady;
+
+/** 建图是否**已经开始**（`retry()` 用它区分「门禁还没放行」与「失败后重试」）。 */
+let mountStarted = false;
+
+/**
+ * 放行建图（幂等）。
+ *
+ * 两个入口：`onMounted` 里的同步测量（容器一开始就有尺寸，最常见）与观察器的首次回调
+ * （容器在展开动画之后才有尺寸）。两者都会调它，所以必须幂等。
+ *
+ * `containerReady` 这一判是**前置条件**（防御性），不是第二处门禁：真正的门禁只有一处 ——
+ * `useMapSuspension` 的 `applySize()` 里「非零尺寸才调 `onContainerReady()`」，而本函数只有
+ * 那一个调用点。留着它是为了让「将来有人直接调 `beginMount()`」也不会在零尺寸上建图。
+ * （自审记录：删掉这一句时现有用例不会红，因为上游已经挡住了；删掉 `applySize` 里那句会红。）
+ */
+function beginMount(): void {
+  if (mountStarted) return;
+  const host = containerRef.value;
+  if (!host || !containerReady.value) return;
+  mountStarted = true;
+  runtime.container = host;
+  boot().catch(() => {});
+}
+
 // 容器 ref 挂载后回填,供 MapRuntime.mount 使用(SSR 服务端不执行)
 onMounted(() => {
   if (!containerRef.value) return;
   runtime.container = containerRef.value;
-  boot().catch(() => {});
+  // 同步测一次：观察器要等一个 post-flush 才建立，而「容器一开始就有尺寸」是最常见的路径
+  suspension.begin();
 });
 
 // KeepAlive:默认 suspend(不销毁 WebGL Map),激活后自动 checkResize
@@ -600,7 +670,7 @@ onDeactivated(() => {
   if (props.keepAliveBehavior === "dispose") {
     runtime.dispose();
   } else {
-    runtime.suspend("keep-alive");
+    runtime.suspend(MAP_SUSPEND_REASONS.keepAlive);
   }
 });
 
@@ -612,8 +682,17 @@ onActivated(() => {
     }
     return;
   }
-  runtime.resume("keep-alive");
+  runtime.resume(MAP_SUSPEND_REASONS.keepAlive);
   runtime.checkResize();
+});
+
+/**
+ * 组件卸载：**先释放观察器与订阅**，再交给 Runtime 收尾（注册顺序保证这一点 —— 本钩子注册在
+ * `onUnmounted(runtime.dispose)` 之前）。顺序反过来会让观察器在 Runtime 已经 disposed 之后
+ * 仍尝试请求 `checkResize`（虽然那时的调用会被短路，但「先断源再收尾」是能自证的一步）。
+ */
+onUnmounted(() => {
+  suspension.dispose();
 });
 
 /** 插件不阻塞 map ready；ready 后台加载插件并逐个 emit */
@@ -737,37 +816,59 @@ function syncMapEventSubscriptions(early?: { client: BMapClient; map: MapHandle 
   }
 }
 
-async function boot() {
-  if (runtime.status.value === "ready") {
-    const payload = {
-      client: runtime.client.value!,
-      map: runtime.map.value!,
-      container: containerRef.value!,
-    };
-    // 重入（已 ready）：订阅可能因为地图实例换新而需要重建（`retry()` 之后的路径）
-    syncMapEventSubscriptions();
-    emitReady(payload);
-    void loadPluginsInBackground();
-    return;
-  }
+/**
+ * 已经把「地图就绪之后的一次性装配」做完的地图句柄（M4-HANDLE-UX / #29）。
+ *
+ * `retry()` 成功后要重跑一次装配（样式 / 类型 / 交互开关 / 视野收敛 / 事件订阅），而
+ * 「重复 retry」不得把订阅叠两遍 —— 因此装配按**句柄身份**幂等：同一张地图只装配一次。
+ * `retry()` 之后 `MapRuntime` 会创建**第二张**地图（新的句柄），那时装配照常再跑一遍。
+ */
+let assembledMap: MapHandle | null = null;
+
+/** 地图就绪之后的装配（按句柄身份幂等；首次建图与 `retry()` 共用）。 */
+function assemble(ctx: MapReadyContext): void {
+  if (assembledMap === ctx.map) return;
+  assembledMap = ctx.map;
+  // initialView 已由 Runtime.initializeView 应用,此处仅应用样式/类型/开关
+  applyStyleProps(ctx);
+  applyMapType(ctx);
+  syncEnableProps(ctx);
+  // 加载期间父级可能已经改过受控视野（那时没有 map 可写），ready 之前按当前 props 收敛一次
+  syncControlledView();
+  // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
+  bindViewEvents(ctx);
+  // map 事件转发（M4-EVENTS / #28）：Catalog 里的事件全订（`load` 已由 onMapCreated 提前订上，
+  // 这里是幂等的补齐：同一个句柄不重复订阅）
+  syncMapEventSubscriptions();
+}
+
+/**
+ * 建图 → 装配 → 广播 `ready` → 后台加载插件：首次建图与 `retry()` 共用的**唯一**路径。
+ *
+ * 走 `MapRuntime.retry()` 而不是 `mount()`：两者的差别只有一处 —— 失败态下 `retry()` 会先
+ * **清掉 `runtime.error`**。用 `mount()` 会让「重试成功」之后 `error` 仍是那条旧错误，
+ * 于是四个出口（默认插槽的 `error`、`#loading` / `#error` 的 `slotProps.error`、
+ * `MapContext.error`）都继续显示已经过去的那次失败。非 error 态（idle / loading / disposed）
+ * 下 `retry()` 等价于 `mount()`，因此这一处没有副作用。
+ *
+ * 调用点只有两个（`beginMount()` 的首挂载与 `retry()` 的重试），两者都不会在 `ready` 时进来
+ * —— 「已经 ready 就直接返回当前上下文」由 `retry()` 统一短路，这里不再重复判一次。
+ */
+async function start(): Promise<MapReadyContext> {
+  const ctx: MapReadyContext = await runtime.retry();
+  assemble(ctx);
+  const payload = { client: ctx.client, map: ctx.map, container: containerRef.value! };
+  // Map ready 不等待 optional plugin
+  emitReady(payload);
+  // 插件后台加载，逐个回执
+  void loadPluginsInBackground();
+  return ctx;
+}
+
+/** 走完整路径，并把错误经 `error` 事件如实上报（调用方仍拿到拒绝的 Promise）。 */
+async function boot(): Promise<MapReadyContext> {
   try {
-    const ctx = await runtime.mount();
-    // initialView 已由 Runtime.initializeView 应用,此处仅应用样式/类型/开关
-    applyStyleProps(ctx);
-    applyMapType(ctx);
-    syncEnableProps(ctx);
-    // 加载期间父级可能已经改过受控视野（那时没有 map 可写），ready 之前按当前 props 收敛一次
-    syncControlledView();
-    // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
-    bindViewEvents(ctx);
-    // map 事件转发（M4-EVENTS / #28）：Catalog 里的事件全订（`load` 已由 onMapCreated 提前订上，
-    // 这里是幂等的补齐：同一个句柄不重复订阅）
-    syncMapEventSubscriptions();
-    const payload = { client: ctx.client, map: ctx.map, container: containerRef.value! };
-    // Map ready 不等待 optional plugin
-    emitReady(payload);
-    // 插件后台加载，逐个回执
-    void loadPluginsInBackground();
+    return await start();
   } catch (e) {
     emit(
       "error",
@@ -777,6 +878,25 @@ async function boot() {
     );
     throw e;
   }
+}
+
+/**
+ * 重试加载（`#error` / `#loading` 插槽与 expose 共用同一份实现）。
+ *
+ * 三种情形分开处理，三种都是「幂等」的一部分：
+ *
+ * 1. **门禁还没放行**（容器零尺寸）：不建图 —— 门禁放行后 `beginMount()` 会走同一条路径，
+ *    这里只等结果。零尺寸下强行建图正是本 issue 要消除的行为；
+ * 2. **已经 ready**：直接返回当前上下文，不重跑装配、也不重复广播 `ready`；
+ * 3. **失败态**：`MapRuntime.retry()` 清错重入 → 装配按句柄身份重跑 → 重新广播 `ready`
+ *    （「重试成功之后 `error` 必须归 null」有用例钉住，它同时锁住四个出口）。
+ *
+ * 并发调用天然收敛：`MapRuntime.mount()` 用 `mountPromise` 去重，「同一失败态上的两次 retry」
+ * 共享同一个在飞任务，因此不会创建两张地图。
+ */
+function retry(): Promise<MapReadyContext> {
+  if (!mountStarted || runtime.status.value === "ready") return runtime.whenReady();
+  return boot();
 }
 
 onBeforeUnmount(() => {
@@ -860,7 +980,9 @@ const context: MapContext = {
     runtime.whenMapCreated(callback),
   // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
   isTearingDown: () => tearingDown,
-  retry: () => runtime.retry(),
+  // 与 expose 的 `retry()` 同一实现（#29 评审）：子组件走 context 重试时，门禁未放行同样**不建图**，
+  // 不会绕开容器门禁去 mount
+  retry: () => retry(),
   dispose: () => runtime.dispose(),
 };
 provide(mapContextKey, context);
@@ -915,31 +1037,98 @@ function resetView() {
   tiltState.reset();
 }
 
-defineExpose({
-  getMapInstance: () => map.value,
-  getContainer: () => containerRef.value,
-  whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
-  // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
-  whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
-    runtime.whenMapCreated(callback),
-  // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
-  isTearingDown: () => tearingDown,
-  retry: () => runtime.retry(),
-  suspend: (reason?: unknown) => runtime.suspend(reason),
-  resume: (reason?: unknown) => runtime.resume(reason),
-  checkResize: () => runtime.checkResize(),
-  resetView,
-  /** @deprecated Use resetView() instead. */
-  resetCenter: () => {
-    resetView();
-  },
-  setDragging: (enabled: boolean) => {
-    const m = map.value;
-    const c = client.value;
-    if (!m || !c) return;
-    c.driver.map.setInteraction(m, "dragging", enabled);
-  },
-});
+/**
+ * 状态插槽的载荷（M4-HANDLE-UX / #29）。
+ *
+ * `#loading` 与 `#error` 收到**同一份**载荷：业务判断「为什么还没好」所需的信息（运行时状态、
+ * 结构化错误、容器门禁是否放行、重试入口）在这里一次给全，不需要自己去监听内部 Runtime。
+ */
+const slotProps = computed(() => ({
+  status: status.value,
+  error: error.value,
+  containerReady: containerReady.value,
+  retry,
+}));
+
+/** 默认状态文案的样式（沿用 #27 之前的居中灰字，两个插槽共用）。 */
+const statusMessageStyle = {
+  color: "#999",
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%,-50%)",
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+} as const;
+
+/** 默认错误文案里的重试按钮（覆盖 `#error` 插槽即可完全接管，包括去掉它）。 */
+const retryButtonStyle = {
+  padding: "2px 10px",
+  border: "1px solid currentColor",
+  borderRadius: "4px",
+  background: "transparent",
+  color: "inherit",
+  cursor: "pointer",
+} as const;
+
+/** 默认重试按钮的点击处理：失败仍由 `error` 事件与状态插槽表达，这里只吞掉拒绝。 */
+function onRetryClick(): void {
+  void retry().catch(() => {});
+}
+
+/**
+ * 组件对外的命令面（M4-HANDLE-UX / #29）。
+ *
+ * 返回类型**显式标注**为 `BMapExpose`：`defineExpose()` 会把它推导成组件实例类型，因此消费方
+ * （含 `fixtures/v3-consumer` 里针对真实 tarball 的 `vue-tsc`）拿到的就是这份冻结面 ——
+ * 少一个成员、多一个成员、改一个签名都会在类型检查里报出来。
+ *
+ * 与 #28 相比**只有一处删除**：`resetCenter`。它是「名字说重置中心、实现重置整个视野」的
+ * 废弃别名（issue #29 的验收明确要求 expose 里不再有它），`resetView()` 是唯一入口。
+ */
+function createExpose(): BMapExpose {
+  return {
+    // —— 常用命令（get / set / pan / fit / supports）：实现只有一份，在 core/runtime/mapCommands
+    ...createMapCommands({
+      client: () => client.value,
+      map: () => map.value,
+    }),
+
+    // —— 容器
+    getContainer: () => containerRef.value,
+    isContainerReady: () => containerReady.value,
+    checkResize: () => runtime.checkResize(),
+
+    // —— 生命周期
+    getMapInstance: () => map.value,
+    whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
+    whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
+      runtime.whenMapCreated(callback),
+    isTearingDown: () => tearingDown,
+    retry,
+
+    // —— 暂停策略：默认原因是 `user`（调用方的显式暂停），与 `document` / `offscreen` 分账
+    suspend: (reason) => runtime.suspend(reason ?? MAP_SUSPEND_REASONS.user),
+    resume: (reason) => runtime.resume(reason ?? MAP_SUSPEND_REASONS.user),
+    isSuspended: () => runtime.isSuspended,
+    suspendReasons: () => runtime.suspendReasons(),
+
+    // —— 视野 / 交互
+    resetView,
+    setDragging: (enabled: boolean) => {
+      const m = map.value;
+      const c = client.value;
+      if (!m || !c) return;
+      c.driver.map.setInteraction(m, "dragging", enabled);
+    },
+
+    // —— 环境偏好：只读信号，不参与暂停
+    prefersReducedMotion: () => suspension.reducedMotion.value,
+  };
+}
+
+defineExpose(createExpose());
 
 defineOptions({ name: "BMap" });
 </script>
@@ -947,32 +1136,21 @@ defineOptions({ name: "BMap" });
 <template>
   <div
     :id="containerId"
+    ref="rootRef"
     class="bmap-container"
     :style="{ width, height, background: loadingBgColor }"
     style="position: relative; overflow: hidden"
   >
     <div ref="containerRef" class="bmap-canvas-host" style="position: absolute; inset: 0" />
-    <slot name="loading" :status="status" :error="error">
-      <div
-        v-if="status !== 'ready'"
-        :style="{
-          color: '#999',
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%,-50%)',
-        }"
-      >
-        {{
-          status === "loading" ||
-          status === "waiting-client" ||
-          status === "creating" ||
-          status === "initializing"
-            ? "map loading..."
-            : status === "error"
-              ? "map error"
-              : ""
-        }}
+    <slot v-if="status === 'error'" name="error" v-bind="slotProps">
+      <div :style="statusMessageStyle">
+        <span>map error</span>
+        <button type="button" :style="retryButtonStyle" @click="onRetryClick">重试</button>
+      </div>
+    </slot>
+    <slot v-else-if="status !== 'ready'" name="loading" v-bind="slotProps">
+      <div :style="statusMessageStyle">
+        {{ containerReady ? "map loading..." : "waiting for container size..." }}
       </div>
     </slot>
     <slot :status="status" :map="map" :error="error" :client="client" />

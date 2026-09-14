@@ -50,7 +50,15 @@ map/theme2
 
 ## 自定义地图加载中
 
-默认情况下，地图加载中效果是 `map loading...` 文字居中。如果不能满足你的需求，你可以通过提供 `loading` 具名插槽来自定义地图加载中显示效果。
+在 `status !== 'ready'` 且 `status !== 'error'` 时，`<BMap>` 会渲染 `loading` 具名插槽
+（不提供时是居中灰字）：
+
+- **容器还没有拿到非零尺寸**（未展开的 Tab / Drawer / 折叠面板）：`waiting for container size...`
+  —— 此时地图**刻意还没有创建**，`status` 停在 `idle`；
+- 否则：`map loading...`。
+
+插槽载荷与 `error` 插槽**完全相同**（`status` / `error` / `containerReady` / `retry`），
+见下文「状态插槽」一节。如果自带的文案不能满足你的需求，用 `loading` 具名插槽自定义即可。
 
 :::details 显示代码
 
@@ -185,8 +193,69 @@ map/theme2
 | enableDoubleClickZoom  | 启用地图双击缩放，左键双击放大、右键双击缩小                                                                                                                                   | `boolean`                             | `false`           | -                                  |
 | enableKeyboard         | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean`                             | `true`            | -                                  |
 | enablePinchToZoom      | 启用双指缩放地图                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableAutoResize       | 保留字段，当前版本未生效（容器尺寸变化请调用暴露的 `checkResize()`）                                                                                                          | `boolean`                             | `true`            | -                                  |
+| enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^3.0.0" /> |
 | loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
+
+## 容器尺寸、自动重设与可见性策略
+
+### 容器门禁：零尺寸不建图
+
+容器拿到**非零尺寸**之前，`<BMap>` **不会创建地图**。零尺寸建图在真实浏览器上会得到一个 0×0 的
+WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠面板在展开之前正是 0×0 —— 于是
+用户会看到「地图加载完了但一片空白」。
+
+| 观察点 | 零尺寸期间 | 拿到非零尺寸之后 |
+| --- | --- | --- |
+| `status` | `idle`（不进入加载流程） | `loading` → `ready` |
+| `#loading` 插槽的 `containerReady` | `false` | `true` |
+| 组件方法 `isContainerReady()` | `false` | `true` |
+| 地图实例 | **不存在**（`getMapInstance()` 为 `null`） | 创建一次 |
+
+读数走标准 DOM 测量（`getBoundingClientRect()`，退化到 `offsetWidth` / `clientWidth`），
+被测量的是**组件根容器**（作者声明的尺寸所在）。
+
+地图**建好之后**容器再变成 0（折叠 / 切走 / 进后台）**不会销毁地图**，也不取消门禁：恢复尺寸后由
+`checkResize()` 纠正即可（本库刻意不在这种时机销毁 WebGL 地图）。
+
+### 尺寸变化的自动重设
+
+容器尺寸变化 → 经内部 `FrameScheduler` **合帧** → 一帧最多下发一次 `checkResize()`：
+
+- 默认开启（`enableAutoResize` 默认 `true`）；
+- 传 `enableAutoResize: false` 时只更新读数，由调用方自己调暴露的 `checkResize()`
+  （与旧版本的「保留字段」行为一致）。
+
+### 暂停策略：按**原因**记账
+
+`<BMap>` 与 `expose` 的 `suspend()` / `resume()` 不是「一个开关」，而是一组**暂停原因**。
+只有原因集合**变空**才真正恢复（并补偿一次 `checkResize()`）：
+
+| 原因 | 谁加 | 谁移除 | 说明 |
+| --- | --- | --- | --- |
+| `user` | `expose.suspend()`（默认原因） | 调用方 `resume()` | 业务主动暂停；与其他原因**互相独立**（别的原因怎么变都不会把它摘掉） |
+| `keep-alive` | `<KeepAlive>` 停用（`onDeactivated`） | 重新激活 | 默认不销毁地图 |
+| `document` | 页面 `visibilitychange → hidden` | 页面重新可见 | 后台标签页 |
+| `offscreen` | 容器离开视口（含 64px 安全边） | 回到视口附近 | **不销毁地图** |
+
+```ts
+const api = mapRef.value!
+api.suspend()                     // 等价于 suspend('user')
+api.suspend('my-own-reason')      // 也可以用自己的原因字符串
+api.suspendReasons()              // 当前生效的原因（诊断用）
+api.resume()                      // 只摘掉 'user'；页面恢复可见不会顺手解除它
+```
+
+两条冻结语义：
+
+1. **不误恢复**：页面恢复可见只移除 `document` —— 用户的手动暂停必须活着；
+2. **暂停的可见效果**：容器尺寸变化不触发 `checkResize`、合帧任务不提交（保留每个 key 的最后一次），
+   恢复时**补偿一次** `checkResize()`（后台 / 视口外发生的尺寸变化没有下发过命令）。
+
+### 减少动画偏好
+
+`expose.prefersReducedMotion()` 暴露 `(prefers-reduced-motion: reduce)` 的当前取值，供**可选动画**
+决定要不要跳过。它**不参与暂停**、也不阻断任何必要的数据更新；`<BMap>` 自身没有可选动画
+（首次视野一直是 `noAnimation`），所以它是暴露给调用方的只读信号。
 
 ## 受控 / 非受控视野
 
@@ -285,7 +354,7 @@ const tilt = ref(0)
 
 ### resetView()
 
-组件通过 `defineExpose` 暴露 `resetView()`（`resetCenter` 是它的废弃别名）：把地图视野移回
+组件通过 `defineExpose` 暴露 `resetView()`：把地图视野移回
 **首次快照**，并**同时把四个状态重置**到该快照。后者不是可有可无的——非受控档下内部状态就是
 事实源，只重置地图会让两者分叉：用户再拖回「重置前的那个值」时会被判成「没变化」而不 emit，
 那次真实操作就丢了。
@@ -419,20 +488,78 @@ const tilt = ref(0)
 
 ## 组件方法
 
-| 方法              | 说明                             | 类型                               |
-| ----------------- | -------------------------------- | ---------------------------------- |
-| getMapInstance    | 父组件获取 map 句柄（`MapHandle`，非 raw SDK 地图） | `() => MapHandle \| null` |
-| getContainer      | 获取地图容器 DOM                 | `() => HTMLElement \| null`        |
-| whenReady         | 地图 ready 后 resolve             | `(signal?: AbortSignal) => Promise<MapReadyContext>` |
-| retry             | 加载失败后重试                   | `() => Promise<MapReadyContext>`   |
-| suspend           | 暂停高频计算（KeepAlive 停用时自动调用，不销毁地图） | `(reason?: unknown) => void` |
-| resume            | 恢复并自动 `checkResize`（KeepAlive 激活时自动调用） | `(reason?: unknown) => void` |
-| checkResize       | 容器尺寸变化后手动重设地图尺寸   | `() => void`                       |
-| resetCenter       | 重置地图中心（deprecated）       | `() => void`                       |
-| resetView         | 恢复首次初始化时的 center、zoom、heading 和 tilt | `() => void` |
-| setDragging       | 设置地图是否可拖动               | `(enabled: boolean) => void` |
+`<BMap ref>` 拿到的是一份**冻结的命令面**（类型 `BMapExpose`）。它只包含常用能力，不是
+`BMap.Map` 方法表的镜像 —— 要别的能力先问 `supports()`，要 raw SDK 对象走 `./advanced`。
 
-`resetCenter` 已 deprecated，不再返回 map 实例；新代码请使用 `resetView`。需要 raw SDK 地图时，用 `./advanced` 的 `unwrapRaw(mapHandle)` 获取。
+### 常用命令
+
+| 方法 | 说明 | 类型 |
+| --- | --- | --- |
+| `getCenter()` | 读当前中心点（读不到给 `null`） | `() => { lng, lat } \| null` |
+| `setCenter(center)` | 设置中心点（不含 zoom，不会重置级别） | `(center: { lng, lat }) => void` |
+| `getZoom()` / `setZoom(zoom)` | 缩放级别读写 | `() => number \| null` / `(zoom: number) => void` |
+| `getHeading()` / `setHeading(heading)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number) => void` |
+| `getTilt()` / `setTilt(tilt)` | 倾斜角读写（0..90） | `() => number \| null` / `(tilt: number) => void` |
+| `getBounds()` | 读可视范围 | `() => Bounds \| null` |
+| `getSize()` | 读地图尺寸 | `() => Size \| null` |
+| `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移 | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |
+| `fitBounds(bounds)` | 按范围适配视野 | `(bounds: Bounds) => void` |
+| `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`） | `(capability: Capability) => boolean` |
+
+**未就绪时的契约**：读命令给 `null`、写命令是**空操作**（不排队、也不会在就绪后重放）。
+需要确定性时先 `await whenReady()`。SDK 调用失败会照常抛出（不降级成 `null`）。
+
+### 容器 / 生命周期 / 暂停
+
+| 方法 | 说明 | 类型 |
+| --- | --- | --- |
+| `getContainer` | 获取地图容器 DOM | `() => HTMLElement \| null` |
+| `isContainerReady` | 容器是否已拿到非零尺寸（门禁是否放行） | `() => boolean` |
+| `checkResize` | 手动重设地图尺寸（与自动路径同一口径：暂停期间不下发） | `() => void` |
+| `getMapInstance` | 获取 map 句柄（`MapHandle`，**非** raw SDK 地图） | `() => MapHandle \| null` |
+| `whenReady` | 地图 ready 后 resolve；可传 `AbortSignal` 只取消本次等待 | `(signal?: AbortSignal) => Promise<MapReadyContext>` |
+| `whenMapCreated` | 建图成功、初始化视野**之前**的挂载点（订阅 `load` 这类初始化期事件用） | `(cb) => () => void` |
+| `isTearingDown` | 承载地图的组件是否已开始卸载 | `() => boolean` |
+| `retry` | 加载失败后重试（已就绪时是幂等的空转） | `() => Promise<MapReadyContext>` |
+| `suspend` / `resume` | 加 / 摘一个暂停原因（默认 `'user'`） | `(reason?: MapSuspendReason) => void` |
+| `isSuspended` / `suspendReasons` | 当前是否暂停 / 生效的原因快照 | `() => boolean` / `() => readonly string[]` |
+| `resetView` | 恢复首次初始化时的 center、zoom、heading 和 tilt（并同步重置四个内部状态） | `() => void` |
+| `setDragging` | 设置地图是否可拖动 | `(enabled: boolean) => void` |
+| `prefersReducedMotion` | 当前的「减少动画」偏好（只读信号，不参与暂停） | `() => boolean` |
+
+`resetCenter` 在本版本**已移除**（它是「名字说重置中心、实现重置整个视野」的废弃别名），
+请使用 `resetView()`。需要 raw SDK 地图时，用 `./advanced` 的 `unwrapRaw(mapInstance)` 获取。
+
+## 状态插槽
+
+加载与错误状态都有具名插槽，**业务不需要监听内部 Runtime**：
+
+```vue
+<BMap ak="百度地图ak">
+  <template #loading="{ status, containerReady }">
+    <p>{{ containerReady ? '地图加载中…' : '容器还没展开' }}</p>
+  </template>
+  <template #error="{ error, retry }">
+    <p>加载失败：{{ error }}</p>
+    <button @click="retry()">重试</button>
+  </template>
+</BMap>
+```
+
+两个插槽收到**同一份**载荷（`error` 是 `unknown`：通常是 `BMapError`，要读 `code` / `message`
+请先自证形状，模板里直接插值最省事）：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `status` | `MapRuntimeStatus` | 运行时状态（`idle` / `loading` / `ready` / `error` …） |
+| `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
+| `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
+| `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图） |
+
+- `#loading` 在 `status !== 'ready'` **且** `status !== 'error'` 时渲染（自带文案见
+  「自定义地图加载中」一节）—— 与原来一样，error 态走 `#error`；
+- `#error` 在 `status === 'error'` 时渲染（自带文案带一个「重试」按钮）；
+- **默认插槽的载荷不变**：`{ status, map, error, client }`。
 
 ## 组件事件
 
