@@ -215,10 +215,14 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
         const geocoder = useBMapGeocoder();
         onMounted(async () => {
           try {
-            const point = await geocoder.get("北京", "北京市");
+            // #38 起动作恒 resolve 成 ServiceResult：不 reject，「有没有结果」看 status/data
+            const result = await geocoder.get("北京", "北京市");
             outcome.status = "resolved";
             outcome.finite =
-              point !== null && Number.isFinite(point.lng) && Number.isFinite(point.lat);
+              result.status === "success" &&
+              result.data !== null &&
+              Number.isFinite(result.data.lng) &&
+              Number.isFinite(result.data.lat);
           } catch {
             outcome.status = "failed";
           }

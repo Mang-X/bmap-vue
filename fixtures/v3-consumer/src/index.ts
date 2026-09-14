@@ -208,3 +208,40 @@ export const customProviderSmoke: BMapProviderLike = {
       namespace: (globalThis as { BMap?: unknown }).BMap,
     }),
 }
+
+
+// 服务类 composable 的**消费方编译 smoke**（#38）：这段代码只依赖 tarball 的公共类型，
+// 用来钉住「动作恒 resolve 成 `ServiceResult`」与「状态是只读 shallow ref」这两条公开契约。
+// 证据由本仓库 `v3` CI job 的 tarball `vue-tsc` 提供（`scripts/verify-package.mts`）。
+import { useBMapLocalSearch, useBMapGeocoder, type ServiceResult, type LocalSearchResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus } from 'baidu-map-gl-vue'
+
+declare const searchHook: ReturnType<typeof useBMapLocalSearch>
+declare const geocoderHook: ReturnType<typeof useBMapGeocoder>
+
+const searchOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.search('餐厅')
+const searchNearbyOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.searchNearby(
+  '银行',
+  { lng: 116.404, lat: 39.915 },
+  2000,
+)
+const searchInBoundsOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.searchInBounds('超市', {
+  southwest: { lng: 116.2, lat: 39.8 },
+  northeast: { lng: 116.6, lat: 40 },
+})
+const gotoPageOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.gotoPage(1)
+const clearOnce: void = searchHook.clear()
+const taskStatus: BMapServiceStatus = searchHook.status.value
+const taskSupported: boolean = searchHook.supported.value
+const geocodeOnce: ReturnType<typeof geocoderHook.get> = geocoderHook.get('北京市', '北京市')
+
+export const serviceComposableSmoke = {
+  searchOnce,
+  searchNearbyOnce,
+  searchInBoundsOnce,
+  gotoPageOnce,
+  clearOnce,
+  taskStatus,
+  taskSupported,
+  geocodeOnce,
+}
