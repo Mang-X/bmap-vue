@@ -56,7 +56,6 @@ import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.
 import { freshModuleUrl } from "./fresh-module-url.mts"
 import {
   decidePluginRuntimeExitCode,
-  expectedPluginIds,
   formatPluginRuntimeSummary,
   PLUGIN_SPECS,
   type PluginRuntimeRun,
@@ -143,22 +142,54 @@ const PAGE_JS = `
     r.urlLoaded = load.ok ? "ok" : (load.error || "error");
     r.globalExposed = !!getPath(spec.global);
 
+    // 每个 probe 自己判定「最小路径 invariant」，并返回**结构化小结**（评审 #85 第三轮）：
+    // 「脚本加载了、全局存在、没抛错」不等于「跑通了该插件的最小功能路径」。
+    function okCheck(name, condition, detail) {
+      return { name: name, ok: !!condition, detail: detail || null };
+    }
+    function verified(detail, checks) {
+      return { status: "verified", detail: detail, checks: checks };
+    }
+    function inconclusive(reason, detail, checks) {
+      return { status: "inconclusive", reason: reason, detail: detail || null, checks: checks || [] };
+    }
+    function allOk(checks) {
+      return checks.every(function (c) { return c.ok; });
+    }
+
     var probes = {
       TrackAnimation: async function () {
         var C = getPath("BMapGLLib.TrackAnimation");
-        if (typeof C !== "function") return "no-ctor";
+        if (typeof C !== "function") return inconclusive("构造器不是 function", { ctorType: typeof C });
         var before = polyline.getPath().length;
+        var zoomBefore = map.getZoom();
         var ta = new C(map, polyline, { duration: 1500, overallView: false });
         ta.start();
         await sleep(400);
-        var midPath = polyline.getPath().length;
-        var zoom = map.getZoom();
+        var after = polyline.getPath().length;
+        var zoomAfter = map.getZoom();
         ta.cancel();
-        return { statusAfter400ms: ta._status, pathBefore: before, pathAfterStart: midPath, zoomDuringAnim: zoom };
+        var checks = [
+          okCheck("path 增长（start 真的驱动了动画）", after > before, { before: before, after: after }),
+          okCheck("视角跟随（zoom 发生变化）", Math.abs(zoomAfter - zoomBefore) > 1e-6, {
+            zoomBefore: zoomBefore,
+            zoomAfter: zoomAfter,
+          }),
+        ];
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
+        return verified(
+          {
+            pathBefore: before,
+            pathAfterStart: after,
+            zoomDuringAnim: zoomAfter,
+            statusAfter400ms: ta._status,
+          },
+          checks,
+        );
       },
       DrawingManager: async function () {
         var C = getPath("BMapGLLib.DrawingManager");
-        if (typeof C !== "function") return "no-ctor";
+        if (typeof C !== "function") return inconclusive("构造器不是 function", { ctorType: typeof C });
         var dm = new C(map, { isOpen: false, enableCalculate: true, enableGpc: true });
         var mode = typeof dm.getDrawingMode === "function" ? dm.getDrawingMode() : null;
         if (typeof dm.enableCalculate === "function") dm.enableCalculate();
@@ -172,48 +203,90 @@ const PAGE_JS = `
         }
         if (typeof dm.close === "function") dm.close();
         if (typeof dm.dispose === "function") { try { dm.dispose(); } catch (e) {} }
-        return { drawingMode: mode, selfInjectedScripts: injected };
+        var joined = injected.join(",");
+        var checks = [
+          okCheck("getDrawingMode() 返回非空字符串", typeof mode === "string" && mode.length > 0, {
+            drawingMode: mode,
+          }),
+          okCheck("自行注入 GeoUtils 与 gpc 两个脚本", joined.indexOf("GeoUtils") >= 0 && joined.indexOf("gpc.js") >= 0, {
+            selfInjectedScripts: injected,
+          }),
+        ];
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
+        return verified({ drawingMode: mode, selfInjectedScripts: injected }, checks);
       },
       GeoUtils: function () {
         var G = getPath("BMapGLLib.GeoUtils");
-        if (!G) return "no-global";
+        if (!G) return inconclusive("全局不存在");
         var P = window.BMap.Point;
-        return {
-          members: Object.keys(G).length,
-          isPointInRect: typeof G.isPointInRect === "function"
-            ? G.isPointInRect(new P(1, 1), new P(0, 0), new P(2, 2))
-            : null,
-          getDistance: typeof G.getDistance === "function" ? G.getDistance(new P(0, 0), new P(0, 1)) : null,
-        };
+        var members = Object.keys(G).length;
+        var dist = typeof G.getDistance === "function" ? G.getDistance(new P(0, 0), new P(0, 1)) : null;
+        var rect = typeof G.isPointInRect === "function" ? G.isPointInRect(new P(1, 1), new P(0, 0), new P(2, 2)) : null;
+        var checks = [
+          okCheck("静态成员数大于 0", members > 0, { members: members }),
+          okCheck("getDistance 是有限数值且约为 1 度纬度（111194.87，容差 1%）",
+            typeof dist === "number" && isFinite(dist) && Math.abs(dist - 111194.87) / 111194.87 < 0.01,
+            { getDistance: dist }),
+          okCheck("isPointInRect 返回布尔", typeof rect === "boolean", { isPointInRect: rect }),
+        ];
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
+        return verified({ members: members, getDistance: dist, isPointInRect: rect }, checks);
       },
       Mapvgl: function () {
-        if (!window.mapvgl) return "no-global";
+        if (!window.mapvgl) return inconclusive("全局不存在");
         var View = window.mapvgl.View;
-        if (typeof View !== "function") return { viewType: typeof View, keys: Object.keys(window.mapvgl).length };
+        if (typeof View !== "function") {
+          return inconclusive("View 不是 function", {
+            viewType: typeof View,
+            keys: Object.keys(window.mapvgl).length,
+          });
+        }
         var layerNames = Object.keys(window.mapvgl).filter(function (k) { return /Layer$/.test(k); });
+        // 真实 4.0 上这一步会抛（View 挂载容器时读到 undefined）——抛出会被下面 catch 记成 threw
         var v = new View({ map: map, mapType: "bmap" });
-        var created = !!v;
         var LayerCtor = window.mapvgl.PointLayer || window.mapvgl.LineLayer || window.mapvgl.FillLayer;
-        var layerOk = null, layerErr = null;
+        var layerOk = null;
+        var layerErr = null;
         if (typeof LayerCtor === "function") {
           try {
-            var layer = new LayerCtor({ data: [{ geometry: { type: "Point", coordinates: [116.404, 39.915] } }], size: 6, color: "#f00" });
+            var layer = new LayerCtor({
+              data: [{ geometry: { type: "Point", coordinates: [116.404, 39.915] } }],
+              size: 6,
+              color: "#f00",
+            });
             v.addLayer(layer);
             layerOk = true;
             v.removeLayer(layer);
             if (typeof layer.destroy === "function") layer.destroy();
-          } catch (e) { layerErr = msg(e); }
+          } catch (e) {
+            layerErr = msg(e);
+          }
         }
         try { if (typeof v.destroy === "function") v.destroy(); } catch (e) {}
-        return { viewCreated: created, layerAdded: layerOk, layerError: layerErr, layerCtors: layerNames.slice(0, 8) };
+        var checks = [
+          okCheck("View 构造成功", !!v),
+          okCheck("图层能挂上", layerOk === true, { layerError: layerErr }),
+        ];
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", { layerError: layerErr }, checks);
+        return verified({ viewCreated: true, layerAdded: layerOk, layerCtors: layerNames.slice(0, 8) }, checks);
       },
     };
 
-    if (r.globalExposed) {
-      try { r.probe = await probes[spec.id](); } catch (e) { r.probe = "THREW: " + msg(e); }
+    if (!r.globalExposed) {
+      r.probe = inconclusive("脚本加载后全局不存在", { global: spec.global });
     } else {
-      r.probe = "skipped: global missing";
+      try {
+        r.probe = await probes[spec.id]();
+      } catch (e) {
+        // 抛出本身是**结论**（MapVGL 的 View 构造就落在这一档），记下错误文本与栈的前几行
+        r.probe = {
+          status: "threw",
+          error: msg(e),
+          detail: { stack: String((e && e.stack) || "").split("\\n").slice(0, 3) },
+        };
+      }
     }
+
     out.result = r;
     step("plugin", r);
     out.done = true;
@@ -224,11 +297,14 @@ const PAGE_JS = `
 })();
 `
 
+const pageScript = PAGE_JS
+  .replace("__SPECS__", JSON.stringify(PLUGIN_SPECS))
+  .replace("__URLS__", JSON.stringify(urls))
+  .replace("__AK__", JSON.stringify(ak))
+
 const pageHtml = `<!doctype html>
 <html><head><meta charset="utf-8"><title>plugin runtime probe</title></head>
-<body><script>${PAGE_JS.replace("__SPECS__", JSON.stringify(PLUGIN_SPECS))
-  .replace("__URLS__", JSON.stringify(urls))
-  .replace("__AK__", JSON.stringify(ak))}</script></body></html>`
+<body><script>${pageScript}</script></body></html>`
 
 /* ------------------------------------------------------------------ 主流程 */
 
@@ -248,6 +324,16 @@ async function main(): Promise<number> {
     process.env.SMOKE_BROWSER ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   if (!existsSync(browser)) {
     console.error(`浏览器不存在：${browser}（可用 SMOKE_BROWSER 覆盖）`)
+    return 2
+  }
+
+  // 预检：页面脚本是**拼出来的字符串**，一旦语法错，表现是「页面永远不写报告」——
+  // 要等到读报告的截止时间才暴露（实测白等 4 分钟）。编译一次（不执行）就能立刻退 2。
+  try {
+    // eslint-disable-next-line no-new-func
+    new Function(pageScript)
+  } catch (error) {
+    console.error(`页面脚本语法错误（脚手架失败）：${(error as Error).message}`)
     return 2
   }
 
@@ -351,7 +437,15 @@ async function main(): Promise<number> {
     console.log(`\n[plugin-runtime] wrote ${outPath}`)
   }
 
-  const decision = decidePluginRuntimeExitCode(runs, expectedPluginIds())
+  // 期望值来自 inventory 的 `runtime.status` —— 读数与记录不一致时会退 1 并提示更新 inventory
+  const inventory = (await import(
+    freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts"))
+  )) as { PLUGIN_COMPAT_BY_ID: Record<string, { runtime?: { status?: string } }> }
+  const expectations = PLUGIN_SPECS.map((spec) => ({
+    id: spec.id,
+    status: inventory.PLUGIN_COMPAT_BY_ID[spec.id]?.runtime?.status as never,
+  }))
+  const decision = decidePluginRuntimeExitCode(runs, expectations)
   console.log(`\n${formatPluginRuntimeSummary(decision)}`)
   for (const reason of decision.reasons) console.error(`[plugin-runtime] ${reason}`)
   if (decision.exitCode === 3) {

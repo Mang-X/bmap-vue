@@ -127,6 +127,36 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
 
 **`blocked` 不是通过**，只有 `0` 放行。它放在 nightly / 手工执行；PR 门禁只跑无网络的 `--check`。
 
+#### 运行时档的小结是**结构化状态**，不是「没抛错」
+
+评审第三轮指出：只要「`probe` 不以 `THREW` 开头」就算过，那句 `0` 实际只表达了「脚本加载了、全局存在、
+没抛错」，而不是 inventory 想说的「**已跑通该插件的最小功能路径**」——页面存在多种「没走到最小路径但
+不抛异常」的返回（构造器不是 function、`mapvgl.View` 不是 function……）。同一批输入的实测对比：
+这四种形态在旧规则下**全部退 `0`**，现在全部退 `3`。
+
+因此页面侧统一产出 `{ status: "verified" | "threw" | "inconclusive", detail, reason?, checks?, error? }`，
+**每条最小路径的 invariant 由插件自己判定**，判定只看 `status`：
+
+| 插件 | 判 `verified` 的必要 invariant |
+| --- | --- |
+| TrackAnimation | 构造器是 function；`start()` 后折线 path **真的增长**；`map.getZoom()` **真的变化**（视角跟随） |
+| GeoUtils | 静态成员数 > 0；`getDistance((0,0),(0,1))` 是有限数值且 ≈ 111194.87（容差 1%）；`isPointInRect` 返回布尔 |
+| DrawingManager | 构造器是 function；`getDrawingMode()` 返回非空字符串；**自行注入** `GeoUtils` 与 `gpc` 两个脚本 |
+| Mapvgl | `mapvgl.View` 是 function；`new View(...)` 构造成功；图层能挂上 —— 真实 4.0 上这条必然不成立，故落到 `threw` |
+
+运行时档的退出码表：
+
+| 结论 | 触发 | 退出码 |
+| --- | --- | --- |
+| 全成立 | 每个插件都有报告、SDK 都起来、脚本都加载、全局都暴露、独立性成立、**`status` 都是 `verified`**，且与 inventory 记录的 `runtime.status` 一致 | 0 |
+| `fail` | 有插件 `threw`；或独立性被打破；或读数与 inventory **不一致**（说明 inventory 已过期，必须更新） | 1 |
+| `blocked` | 任一页 `sdkLoaded !== true`；任一 run 没给出 `result`；`status` 缺失或不是三个取值之一；脚本加载/全局暴露不成立；**`inconclusive`（最小路径 invariant 不成立）** | 3 |
+| 脚手架失败 | 缺 AK / 找不到浏览器 / 页面脚本语法错或自身抛错 / 期望的插件没有报告 | 2 |
+
+优先级：**脚手架(2) > blocked(3) > fail(1) > 通过(0)**。一个插件没跑通最小路径时，不该拿另一个插件的
+观察当结论。判定与清单都收在纯函数模块 `scripts/plugin-runtime-report.mts`，桩测试见
+`tests/behavior/v3-plugin-runtime-decision.test.ts`。
+
 ### 8. 「插件页」仍归 #43，本轮不越界
 
 [ v4 required smoke ](./2026-09-13-v4-required-smoke.md) 决策 2 已经定下「可选插件的噪声靠单独页面
