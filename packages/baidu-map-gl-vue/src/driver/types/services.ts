@@ -72,6 +72,34 @@ export interface ServiceDriver {
     options?: LocalSearchOptions,
   ): ServiceHandle<"service:local-search">;
   /**
+   * 驾车路线规划实例（`BMap.DrivingRoute`，M7-ROUTES / #39）。
+   *
+   * 与 `createLocalSearch` 同形：`location` 是**检索区域**（城市名 / 领域 `Point` / 本库
+   * `MapHandle`），官方四个路线服务的构造签名都是 `(location, opts)`。
+   *
+   * `options.renderOptions.map` 给 `MapHandle` 时服务会把路线与标注画到该地图上（覆盖物所有权在
+   * 调用方一侧：`clearRouteResults` / `disposeRoute` 负责收）；不传则纯 headless。
+   */
+  createDrivingRoute(
+    location: string | Point | MapHandle,
+    options?: DrivingRouteOptions,
+  ): ServiceHandle<"service:driving-route">;
+  /** 步行路线规划实例（`BMap.WalkingRoute`）。 */
+  createWalkingRoute(
+    location: string | Point | MapHandle,
+    options?: WalkingRouteOptions,
+  ): ServiceHandle<"service:walking-route">;
+  /** 骑行路线规划实例（`BMap.RidingRoute`）。 */
+  createRidingRoute(
+    location: string | Point | MapHandle,
+    options?: RidingRouteOptions,
+  ): ServiceHandle<"service:riding-route">;
+  /** 公交路线规划实例（`BMap.TransitRoute`）。 */
+  createTransitRoute(
+    location: string | Point | MapHandle,
+    options?: TransitRouteOptions,
+  ): ServiceHandle<"service:transit-route">;
+  /**
    * 更新已创建 Autocomplete 实例的检索区域与数据类型（`Autocomplete#setLocation` / `#setTypes`）。
    *
    * **为什么放在 Driver 而不是组件里**（R25-C / #72）：组件侧的 `inst.raw.setLocation(...)` 把
@@ -401,6 +429,447 @@ export interface LocalSearchInBoundsRequest {
   bounds: LocalSearchBounds;
 }
 
+/* ------------------------------------------------------------------ 路线规划 */
+/* M7-ROUTES / issue #39：DrivingRoute / WalkingRoute / RidingRoute / TransitRoute */
+
+/**
+ * 路线端点里能表达的 **POI 引用**。
+ *
+ * 官方四个路线服务的 `search()` 都声明接受 `LocalResultPoi`（`Point | LocalResultPoi` /
+ * `string | Point | LocalResultPoi`）。本库**不接受** raw POI：公共 DTO 是投影、不携带 raw 对象，
+ * 把投影对象传回 SDK 只会得到非法值（与 `LocalSearchNearbyRequest.center` 同源取舍）。
+ *
+ * 因此改用调用方**本来就拿得到**的三个字段表达同一个东西：`uid` + `point` + 可选 `name`
+ * （`name` 进结果里的端点标题）。Driver 把它构造成 SDK 认得的对象。
+ *
+ * > **未经真实运行时证明的假设**（与 `Autocomplete` 的 `keyword`、`Promise` 型归属同级）：
+ * > 官方 4.0 文档与类型包只声明了 `LocalResultPoi` 的**形状**，没有说明 `search()` 会读它的哪几个
+ * > 成员。本库按「`uid` 定位、`point` 兜底、`title` 作标题」实现，并在 ADR
+ * > `2026-09-14-route-services-headless.md` 的「已知限制」里登记为待真实 AK 验证项。
+ * > 只传 `point`（不传 uid/name）时走纯坐标路径，那条路径**没有**这个假设。
+ */
+export interface RouteEndpointPoi {
+  /** POI 唯一标识（官方优先按 uid 定位） */
+  uid: string;
+  /** POI 坐标（uid 失效时的定位依据） */
+  point: Point;
+  /** POI 名称（作为结果里的端点标题；缺省时用 uid） */
+  name?: string;
+}
+
+/**
+ * 路线端点（一个端点 = 「点 / 地点名 / POI 引用」三者之一）。
+ *
+ * **只给步行 / 骑行 / 公交**用：官方 `WalkingRoute#search` / `RidingRoute#search` /
+ * `TransitRoute#search` 的签名是 `string | Point | LocalResultPoi`（支持关键字检索）。
+ * 驾车**没有关键字检索**，它的端点是 {@link DrivingRouteEndpoint}——「不能用最宽模型假定
+ * 全部模式相同」这条要求落在类型上，而不是留给运行时。
+ */
+export type RouteEndpoint = string | Point | RouteEndpointPoi;
+
+/**
+ * 驾车端点。
+ *
+ * 官方 `DrivingRoute#search(start: Point | LocalResultPoi, end: ..., options?)` 的签名里
+ * **没有** `string`：驾车路线不支持按关键字起终点（要按地址走，先用 `Geocoder` / `LocalSearch`
+ * 拿到坐标或 POI）。把它做成独立的窄类型，是为了让「给驾车传了地名」在编译期就被拒，
+ * 而不是留到 SDK 侧得到一个不可解释的失败。
+ */
+export type DrivingRouteEndpoint = Point | RouteEndpointPoi;
+
+/** 路线端点（结果里的起点 / 终点，官方 `LocalResultPoi` 的领域投影）。 */
+export interface RouteEndpointInfo {
+  /** 端点标题（官方 `LocalResultPoi.title`） */
+  title: string;
+  /** 端点坐标；回包给出非法坐标时为 `null` */
+  point: Point | null;
+  /** POI uid（没有时为空串） */
+  uid: string;
+}
+
+/** 路线中的一个关键点（官方 `Step` 的领域投影）。 */
+export interface RouteStep {
+  /** 关键点在本路线中的序号（官方 `Step#getIndex`） */
+  index: number;
+  /** 关键点坐标（官方 `Step#getPosition`） */
+  position: Point | null;
+  /** 描述文本，**不含 HTML**（官方 `Step#getDescription(false)`） */
+  description: string | null;
+  /** 到下一个关键点的距离（米，`getDistance(false)`） */
+  distance: number | null;
+  /** 到下一个关键点的距离文本（`getDistance(true)`） */
+  distanceText: string | null;
+  /** 所属路线序号（`Step#getRouteIndex`） */
+  routeIndex: number | null;
+  /** 所属方案序号（`Step#getPlanIndex`） */
+  planIndex: number | null;
+}
+
+/**
+ * 一条路线（官方 `Route` 的领域投影）——驾车 / 步行 / 骑行与公交换乘里的步行段共用它。
+ *
+ * **刻意不投影的官方成员**：`Route#getPolyline()`。它是 SDK 自己画在地图上的覆盖物，属于
+ * 「显式 `renderOptions.map` 时由服务持有、由 `clearResults()` 收回」的那一份资源；
+ * 把它交出去会让「谁负责移除」变成两说。需要它时经 `./advanced` 的 `unwrapRaw()` 取 raw。
+ */
+export interface RouteLeg {
+  /** 路线在方案中的序号（官方 `Route#getIndex`） */
+  index: number;
+  /** 所属方案序号（官方 `Route#getPlanIndex`） */
+  planIndex: number | null;
+  /** 路线类型（官方 `Route#getRouteType` → `BMAP_ROUTE_TYPE_*`）；拿不到时为 `null` */
+  routeType: number | null;
+  /** 路线距离（米，`getDistance(false)`） */
+  distance: number | null;
+  /** 路线距离文本（`getDistance(true)`） */
+  distanceText: string | null;
+  /** 路线坐标点串（官方 `Route#getPath`） */
+  path: readonly Point[];
+  /** 关键点（官方 `Route#getStep`；官方声明里驾车/步行适用，骑行结果可能为空数组） */
+  steps: readonly RouteStep[];
+}
+
+/** 出租车计费明细（官方 `TaxiFareDetail` 的领域投影）。 */
+export interface RouteTaxiFareDetail {
+  /** 起步价 */
+  initialFare: number | null;
+  /** 单价 */
+  unitFare: number | null;
+  /** 总价 */
+  totalFare: number | null;
+}
+
+/** 出租车费用信息（官方 `TaxiFare` 的领域投影；仅驾车方案的 `getTaxiFare()` 会给）。 */
+export interface RouteTaxiFare {
+  /** 白天计费（部分城市没有夜间费用，此时它是全天费用） */
+  day: RouteTaxiFareDetail | null;
+  /** 夜间计费 */
+  night: RouteTaxiFareDetail | null;
+  /** 出租车里程（米） */
+  distance: number | null;
+  /** 备注信息 */
+  remark: string | null;
+}
+
+/**
+ * 一条驾车 / 步行 / 骑行方案（官方 `RoutePlan` 的领域投影）。
+ *
+ * `toll` / `tollDistance` 取自官方那句**只在 `DrivingRoutePlan` 接口里声明**的
+ * `getToll()` / `getTollDistance()`：4.0.4 的 `DrivingRouteResult#getPlan()` 返回类型写的是
+ * `RoutePlan`（不含这两个成员），但 `DrivingRoutePlan` 接口确实在同一个类型包里声明了它们。
+ * 因此这里**可选读取**（成员缺失 ⇒ `null`），不 augmentation、不告警——如实表达「这次没拿到」。
+ */
+export interface RoutePlan {
+  /** 方案在结果里的序号（0 基；本库补的，官方没有「我排第几」的入口） */
+  index: number;
+  distance: number | null;
+  distanceText: string | null;
+  duration: number | null;
+  durationText: string | null;
+  /** 道路收费（元，`DrivingRoutePlan#getToll`） */
+  toll: number | null;
+  /** 收费路段里程（米，`DrivingRoutePlan#getTollDistance`） */
+  tollDistance: number | null;
+  /** 出租车费用（`RoutePlan#getTaxiFare`；没有该项时为 `null`） */
+  taxiFare: RouteTaxiFare | null;
+  /** 方案里的拖拽点（官方 `RoutePlan#getDragPois`） */
+  dragPois: readonly RouteEndpointInfo[];
+  /** 方案中的路线（官方 `RoutePlan#getRoute`） */
+  legs: readonly RouteLeg[];
+}
+
+/** 公交方案里的**乘车**段（官方 `Line` 的领域投影）。 */
+export interface TransitLineSegment {
+  kind: "line";
+  /** 线路全称（官方 `Line#getTitle` / `Line.title`） */
+  title: string;
+  /** 线路类型（官方 `Line#type` → `BMAP_LINE_TYPE_*`）；拿不到时为 `null` */
+  lineType: number | null;
+  /** 途经车站数（官方 `Line#getNumViaStops`；仅公交/地铁有效） */
+  viaStops: number | null;
+  /** 上车站（官方 `Line#getGetOnStop`） */
+  onStop: RouteEndpointInfo | null;
+  /** 下车站（官方 `Line#getGetOffStop`） */
+  offStop: RouteEndpointInfo | null;
+  distance: number | null;
+  distanceText: string | null;
+  /** 该段的地理坐标（官方 `Line#getPath`） */
+  path: readonly Point[];
+}
+
+/** 公交方案里的**步行**段（官方 `Route`；与驾车方案里的路线同一套投影）。 */
+export interface TransitWalkSegment {
+  kind: "walk";
+  leg: RouteLeg;
+}
+
+/**
+ * 公交方案的一段。
+ *
+ * 判别键是**官方自己的判别入口** `TransitRoutePlan#getTotalType(i)`（0 = `Route` / 1 = `Line`），
+ * 不是「有没有某个字段」这类形状特征——接口允许没有该字段的合法成员，特征识别会把它们误分类。
+ */
+export type TransitRouteSegment = TransitLineSegment | TransitWalkSegment;
+
+/**
+ * 一条公交方案（官方 `TransitRoutePlan` 的领域投影）。
+ *
+ * 与 {@link RoutePlan} 刻意**不同构**：公交方案是「乘车段 + 步行段」的序列，而不是「方案 → 路线
+ * → 关键点」的树；硬套同一个形状会逼着调用方从 `description` 文本里还原换乘信息。
+ */
+export interface TransitRoutePlan {
+  /** 方案在结果里的序号（0 基） */
+  index: number;
+  distance: number | null;
+  distanceText: string | null;
+  duration: number | null;
+  durationText: string | null;
+  /** 方案描述文本，**不含 HTML**（官方 `TransitRoutePlan#getDescription(false)`） */
+  description: string | null;
+  /** 各线路名称拼接文本（官方 `getLinesTitle`） */
+  linesTitle: string | null;
+  /** 总步行距离文本（官方 `getWalkDistance`） */
+  walkDistance: string | null;
+  /** 按官方 `getTotal` 顺序排列的路段序列 */
+  segments: readonly TransitRouteSegment[];
+}
+
+/**
+ * 路线检索结果（四类服务共用的信封，`TPlan` 是各自的方案类型）。
+ *
+ * 共用的只有信封（起终点 + 方案数组 + 策略），方案本身**不强求同构**——见
+ * {@link TransitRoutePlan} 的说明。
+ */
+export interface RouteResult<TPlan> {
+  start: RouteEndpointInfo | null;
+  end: RouteEndpointInfo | null;
+  plans: readonly TPlan[];
+  /** 本次检索使用的策略（官方 `DrivingRouteResult.policy` / `TransitRouteResult.policy`） */
+  policy: number | null;
+  /**
+   * 出行类型（官方 `TransitRouteResult#getTransitType` → `BMAP_TRANSIT_TYPE_*`）；
+   * 驾车 / 步行 / 骑行没有这个成员，恒为 `null`。
+   */
+  transitType: number | null;
+}
+
+export type DrivingRouteResult = RouteResult<RoutePlan>;
+export type WalkingRouteResult = RouteResult<RoutePlan>;
+export type RidingRouteResult = RouteResult<RoutePlan>;
+export type TransitRouteResult = RouteResult<TransitRoutePlan>;
+
+/* ---------------------------------------------------------- 策略常量（值 + 类型） */
+
+/**
+ * 驾车策略（官方 `BMAP_DRIVING_POLICY_*`）。
+ *
+ * **既是类型也是值**，与 TS 枚举同形：调用方不必写魔法数字，也不必去读全局常量。
+ * 与官方 4.0.4 声明的逐成员对齐由 `driver/jsapi-v4/routes.test.ts` 从上游 `.d.ts` 解析成员后
+ * 逐项断言（名字配错数字是类型层拦不住的，只有这条断言能拦）。
+ */
+export const DrivingPolicy = {
+  /** 默认（通常为时间最短） */
+  DEFAULT: 0,
+  /** 距离最短 */
+  LEAST_DISTANCE: 2,
+  /** 避开高速 */
+  AVOID_HIGHWAYS: 3,
+  /** 优先高速 */
+  FIRST_HIGHWAYS: 4,
+  /** 避开拥堵 */
+  AVOID_CONGESTION: 5,
+  /** 避开收费 */
+  AVOID_PAY: 6,
+  /** 高速优先且避开拥堵 */
+  HIGHWAYS_AVOID_CONGESTION: 7,
+  /** 避开高速和拥堵 */
+  AVOID_HIGHWAYS_CONGESTION: 8,
+  /** 避开拥堵和收费 */
+  AVOID_CONGESTION_PAY: 9,
+  /** 避开高速、拥堵和收费 */
+  AVOID_HIGHWAYS_CONGESTION_PAY: 10,
+  /** 避开高速和收费 */
+  AVOID_HIGHWAYS_PAY: 11,
+  /** 距离优先 */
+  DISTANCE_PRIORITY: 12,
+  /** 时间优先 */
+  TIME_PRIORITY: 13,
+} as const;
+
+export type DrivingPolicy = (typeof DrivingPolicy)[keyof typeof DrivingPolicy];
+
+/** 市内公交换乘策略（官方 `BMAP_TRANSIT_POLICY_*`）。 */
+export const TransitPolicy = {
+  /** 推荐方案 */
+  RECOMMEND: 0,
+  /** 最少换乘 */
+  LEAST_TRANSFER: 1,
+  /** 最少步行 */
+  LEAST_WALKING: 2,
+  /** 不乘地铁 */
+  AVOID_SUBWAYS: 3,
+  /** 最少时间 */
+  LEAST_TIME: 4,
+  /** 地铁优先 */
+  FIRST_SUBWAYS: 5,
+} as const;
+
+export type TransitPolicy = (typeof TransitPolicy)[keyof typeof TransitPolicy];
+
+/** 跨城公交换乘策略（官方 `BMAP_INTERCITY_POLICY_*`）。 */
+export const IntercityPolicy = {
+  /** 时间最短 */
+  LEAST_TIME: 0,
+  /** 出发时间最早 */
+  EARLY_START: 1,
+  /** 价格最低 */
+  CHEAP_PRICE: 2,
+} as const;
+
+export type IntercityPolicy = (typeof IntercityPolicy)[keyof typeof IntercityPolicy];
+
+/** 跨城交通方式策略（官方 `BMAP_TRANSIT_TYPE_POLICY_*`）。 */
+export const TransitVehiclePolicy = {
+  /** 火车 */
+  TRAIN: 0,
+  /** 飞机 */
+  AIRPLANE: 1,
+  /** 大巴 */
+  COACH: 2,
+} as const;
+
+export type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
+
+/* ------------------------------------------------------------- 路线构造期状态 */
+
+/**
+ * 四类路线服务共用的**呈现状态**：要不要画、画在哪里、画完要不要调视野。
+ *
+ * 「只有这些字段变化才重建 SDK 实例」是这一层的核心口径：路线服务实例既持有配置、又持有**结果与
+ * 绘制物**（服务自己画在地图上的折线与标注、写进 `panel` 的 DOM），所以配置变了就必须换实例，
+ * 而不是在旧实例上改——旧实例上的可见结果要由 `clearRouteResults()` 收回。
+ */
+export interface RouteRenderState {
+  /**
+   * 结果呈现设置。**不传 = 纯 headless**：只回数据、不在任何地图上绘制、不写任何 DOM。
+   *
+   * 传了 `map` 就是「让服务自己画」：画出来的折线 / 标注 / 结果面板由该服务实例持有，
+   * 由 `clearRouteResults()` / `disposeRoute()` 收回（所有权因此可验证）。
+   */
+  renderOptions?: RouteRenderOptions;
+}
+
+/**
+ * 驾车 / 公交的构造期状态（issue #39 的 `RouteState`）。
+ *
+ * 比 {@link RouteRenderState} 多一个 `enableTraffic`：官方只在 `DrivingRouteOptions` 与
+ * `TransitRouteOptions` 里声明了它，`WalkingRouteOptions` / `RidingRouteOptions` 没有。
+ */
+export interface RouteState extends RouteRenderState {
+  /**
+   * 是否显示实时路况（官方 `enableTraffic`，4.0 默认 `false`）。
+   *
+   * 注意官方声明的一条副作用：**开启后按路况分段着色的折线不受 `polylineStyle` 影响**。
+   */
+  enableTraffic?: boolean;
+}
+
+/** 驾车构造期选项（官方 `DrivingRouteOptions` 的领域投影）。 */
+export interface DrivingRouteOptions extends RouteState {
+  /** 驾车策略，默认 `0`（`DrivingPolicy.DEFAULT`） */
+  policy?: DrivingPolicy;
+}
+
+/**
+ * 步行 / 骑行构造期选项。
+ *
+ * 官方 `WalkingRouteOptions` / `RidingRouteOptions` **没有** `policy`、`pageCapacity`，也**没有**
+ * `enableTraffic`（声明里只有 `renderOptions` 与五个回调），因此它们的构造期状态只剩 `renderOptions`。
+ * 用窄类型把不存在的选项排除掉，而不是「收进来再丢掉」——后者是假支持。
+ */
+export type WalkingRouteOptions = RouteRenderState;
+export type RidingRouteOptions = RouteRenderState;
+
+/** 公交构造期选项（官方 `TransitRouteOptions` 的领域投影）。 */
+export interface TransitRouteOptions extends RouteState {
+  /** 市内公交换乘策略，默认 `0`（`TransitPolicy.RECOMMEND`） */
+  policy?: TransitPolicy;
+  /** 跨城公交换乘策略（仅跨城检索有效） */
+  intercityPolicy?: IntercityPolicy;
+  /** 跨城交通方式策略（仅跨城检索有效） */
+  transitTypePolicy?: TransitVehiclePolicy;
+  /** 每页返回的方案个数（官方范围 1 - 5，超出时 SDK 自行重置） */
+  pageCapacity?: number;
+}
+
+/**
+ * 路线结果的绘制选项（官方 `RouteRenderOptions` 的领域投影）。
+ *
+ * 只透传官方声明里**存在且有语义**的成员：
+ * - `selectFirstResult` 在官方 `RenderOptions` 里明说「此属性仅对 `LocalSearch` 有效」，
+ *   路线服务收下它也不会生效 —— 因此**不暴露**（接收后忽略属于假支持）；
+ * - `polylineStyle` 本轮**不暴露**：上游类型包声明的 `PolylineOptions`（平铺成员）与官方类文档
+ *   给的**具名分桶**（`highlight` / `transit` / `walking` / `decorate`）互相矛盾，无法在不猜的
+ *   前提下给出可信的公共形状。需要时经 `./advanced` 的 `unwrapRaw()` 或官方 UI Kit 配置。
+ */
+export interface RouteRenderOptions {
+  /**
+   * 绘制目标：本库的 `MapHandle`（Driver 归一化成 raw `Map`）。
+   *
+   * 不传 = 纯 headless。运行时仍按句柄品牌校验（JS 调用方拿不到编译期保护；跨 Client 混用必须被拒绝）。
+   */
+  map?: MapHandle;
+  /** 结果列表容器（元素或 id）；官方声明里驾车路线规划**不支持**面板，传了按 SDK 行为处理 */
+  panel?: string | HTMLElement;
+  /** 检索结束后是否自动调整地图视野 */
+  autoViewport?: boolean;
+  /** 自动调整视野时的计算选项（与 `LocalSearch` 同形，官方只声明这三个成员） */
+  viewportOptions?: {
+    noAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+  };
+}
+
+/* --------------------------------------------------------------- 路线请求 */
+
+/** 驾车检索请求（官方 `DrivingRoute#search(start, end, { waypoints })`）。 */
+export interface DrivingRouteRequest {
+  start: DrivingRouteEndpoint;
+  end: DrivingRouteEndpoint;
+  /**
+   * 途经点坐标数组（**只有驾车支持**）。
+   *
+   * 官方 `DrivingRoute#search` 的第三个参数里只有 `waypoints` 这一个成员；步行 / 骑行 / 公交的
+   * `search` 是两参数签名（`TransitRoute#search` 连 options 都没有），因此本库不把它们暴露成
+   * 「收了但忽略」。
+   */
+  waypoints?: readonly Point[];
+}
+
+/**
+ * 步行 / 骑行检索请求（官方两参数签名 `search(start, end)`）。
+ *
+ * 与 {@link DrivingRouteRequest} 分开，正是因为**没有途经点**：把 `waypoints` 放进公共请求类型
+ * 再在实现里静默丢掉（官方参考实现 `react-bmap` 的做法）会让「设了途经点但不生效」变成无声行为。
+ */
+export interface RouteRequest {
+  start: RouteEndpoint;
+  end: RouteEndpoint;
+}
+
+/** 公交检索请求（官方 `TransitRoute#search(start, end)`，同样没有途经点）。 */
+export type TransitRouteRequest = RouteRequest;
+
+/** 路线服务句柄种类（四类服务共用一套释放 / 清理入口）。 */
+export type RouteServiceKind =
+  | "service:driving-route"
+  | "service:walking-route"
+  | "service:riding-route"
+  | "service:transit-route";
+
+/** 四类路线服务句柄的联合（`clearRouteResults` / `disposeRoute` 的参数）。 */
+export type RouteServiceHandle = ServiceHandle<RouteServiceKind>;
 
 export interface GeolocationOptions {
   enableHighAccuracy?: boolean;
@@ -556,9 +1025,67 @@ export interface ServiceInvocationDriver {
     handle: ServiceHandle<"service:local-search">,
     page: number,
   ): ServiceCall<LocalSearchResult[]>;
+
+  /* -------------------------------------------------- 路线规划（M7-ROUTES / #39） */
+
+  /**
+   * 驾车路线检索（`DrivingRoute#search`）。
+   *
+   * **归属模型与 `search()` 完全一致**（同一个 Driver、同一份记账）：路线服务也只有一条
+   * `onSearchComplete`，回包里没有请求身份，官方也没有承诺多次请求之间的回调顺序。因此同样按
+   * 「**一个实例同一时刻只有一个未结算操作**」归属——并发被显式拒绝、取消/超时之后该实例不再接受
+   * 新检索（调用方侧 `useBMapServiceTask` 的 `supersede: "recreate"` 会在下一次检索时换新实例）。
+   *
+   * 端点形态上驾车是**最窄的那一个**：官方签名 `search(start: Point | LocalResultPoi, end: …,
+   * options?: { waypoints })` 里没有 `string`，因此传地名在类型层就被拒（`BMAP_INVALID_ARGUMENT`）。
+   */
+  searchDrivingRoute(
+    handle: ServiceHandle<"service:driving-route">,
+    request: DrivingRouteRequest,
+  ): ServiceCall<DrivingRouteResult>;
+  /** 步行路线检索（`WalkingRoute#search`），归属规则同 `searchDrivingRoute()`。 */
+  searchWalkingRoute(
+    handle: ServiceHandle<"service:walking-route">,
+    request: RouteRequest,
+  ): ServiceCall<WalkingRouteResult>;
+  /** 骑行路线检索（`RidingRoute#search`），归属规则同 `searchDrivingRoute()`。 */
+  searchRidingRoute(
+    handle: ServiceHandle<"service:riding-route">,
+    request: RouteRequest,
+  ): ServiceCall<RidingRouteResult>;
+  /** 公交路线检索（`TransitRoute#search`），归属规则同 `searchDrivingRoute()`。 */
+  searchTransitRoute(
+    handle: ServiceHandle<"service:transit-route">,
+    request: TransitRouteRequest,
+  ): ServiceCall<TransitRouteResult>;
+
+  /**
+   * 清除最近一次路线检索的结果（官方四个服务共有的 `clearResults()`）。
+   *
+   * 官方文档对它的描述是「清除最近一次检索的结果，**同时清除地图上的路线和标注**」——因此它正是
+   * 「显式 render 之后把本服务生成的 Marker / Polyline / Panel 收回来」的那个入口，不需要（也不
+   * 应该）由本库另外去枚举 SDK 画出来的覆盖物。
+   *
+   * **没有回包**，因此不是 `ServiceCall`：与「取消一个在飞请求」（`ServiceCall.cancel()`）是两件事。
+   * 实例仍可继续检索（下一次 `search*Route` 会重新画）。
+   */
+  clearRouteResults(handle: RouteServiceHandle): void;
+
+  /**
+   * 释放路线服务实例（幂等；四类服务共用）。
+   *
+   * 与 `disposeLocalSearch()` 同一套语义与实现（`disposeServiceInstance`）：① 停止接受业务调用并把
+   * 在飞调用显式失败；② 解绑 Driver 侧订阅；③ 走**公开的** `clearResults()` 收回已画出的路线与标注
+   * ——这一步**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
+   *
+   * 官方四个路线服务都**没有** `dispose()`（4.0.4 声明里是 `clearResults` / `setPolylineStyle` /
+   * `getStatus` …），所以「有没有释放入口」这件事与 `LocalSearch` 同档：实例本身随 GC，真正的资源
+   * 是它**交付出去的结果**（地图上的折线与标注、写进 `panel` 的 DOM），由 `clearResults()` 销账。
+   */
+  disposeRoute(handle: RouteServiceHandle): void;
 }
 
-/** JSAPI 4.0 的 Service Facet：创建面 + 归一化调用面 + **Autocomplete 专用**释放入口。 */
+/** JSAPI 4.0 的 Service Facet：创建面 + 归一化调用面 + **持有 Driver 侧资源的服务**的释放入口。 */
 export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
   /**
    * 释放 **Autocomplete** 服务实例（幂等）。

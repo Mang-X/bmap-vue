@@ -113,6 +113,10 @@ export type { MapMouseEvent } from "./driver/types/events";
 // 服务归一化调用面的领域类型（#38 起 service composable 的公开签名用到它们）
 export type {
   BoundaryRings,
+  DrivingRouteEndpoint,
+  DrivingRouteOptions,
+  DrivingRouteRequest,
+  DrivingRouteResult,
   GeocodedAddress,
   GeocodedAddressComponents,
   LocalSearchBounds,
@@ -125,9 +129,45 @@ export type {
   LocalSearchResult,
   LocalSearchSearchOption,
   PlaceSuggestion,
+  RidingRouteOptions,
+  RidingRouteResult,
+  RouteEndpoint,
+  RouteEndpointInfo,
+  RouteEndpointPoi,
+  RouteLeg,
+  RoutePlan,
+  RouteRenderOptions,
+  RouteRenderState,
+  RouteRequest,
+  RouteResult,
+  RouteServiceHandle,
+  RouteServiceKind,
+  RouteState,
+  RouteStep,
+  RouteTaxiFare,
+  RouteTaxiFareDetail,
   ServiceCallStatus,
   ServiceErrorInfo,
   ServiceInvocationDriver,
+  TransitLineSegment,
+  TransitRouteOptions,
+  TransitRoutePlan,
+  TransitRouteRequest,
+  TransitRouteResult,
+  TransitRouteSegment,
+  TransitWalkSegment,
+  WalkingRouteOptions,
+  WalkingRouteResult,
+} from "./driver/types/services";
+// 路线策略常量（值 + 类型同名）：调用方不必写魔法数字，也不必去读 SDK 全局常量。
+// 与官方 `BMAP_DRIVING_POLICY_*` / `BMAP_TRANSIT_POLICY_*` / `BMAP_INTERCITY_POLICY_*` /
+// `BMAP_TRANSIT_TYPE_POLICY_*` 的逐成员对齐由 `src/driver/jsapi-v4/routes.test.ts` 解析上游
+// `.d.ts` 的枚举成员后逐项断言（名字配错数字是类型层拦不住的，只有那条断言能拦）。
+export {
+  DrivingPolicy,
+  IntercityPolicy,
+  TransitPolicy,
+  TransitVehiclePolicy,
 } from "./driver/types/services";
 export type { BMapServiceStatus } from "./core/services";
 export type {

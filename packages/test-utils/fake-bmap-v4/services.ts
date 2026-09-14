@@ -715,3 +715,517 @@ export class FakeV4LocalSearch {
     this.queue.dispatch(() => onSearchComplete?.(outgoing))
   }
 }
+
+/* ------------------------------------------------------------------ 路线规划 */
+/* M7-ROUTES / issue #39：DrivingRoute / WalkingRoute / RidingRoute / TransitRoute */
+
+/** 结果里的端点（官方 `LocalResultPoi` 的最小子集：`title` / `point` / `uid`）。 */
+export class FakeV4RoutePoi {
+  title: string
+  point: FakeV4Point
+  uid: string
+
+  constructor(options: { title?: string; point?: FakeV4Point; uid?: string } = {}) {
+    this.title = options.title ?? '未命名地点'
+    this.point = options.point ?? new FakeV4Point(116.404, 39.915)
+    this.uid = options.uid ?? 'fake-route-poi-' + this.title
+  }
+}
+
+/**
+ * 官方 `Step`：**只实现投影真正读的成员**（`getIndex` / `getPosition` / `getDescription` /
+ * `getDistance` / `getRouteIndex` / `getPlanIndex`），不补 getter 家族。
+ *
+ * `getDistance(format)` 与官方一致地按 `format` 返回数值 / 文本——投影两个都读，因此 Fake 必须
+ * 两个都给，否则测出来的是「投影读不到」而不是「SDK 没给数据」。
+ */
+export class FakeV4RouteStep {
+  constructor(
+    private readonly index: number,
+    private readonly point: FakeV4Point,
+    private readonly distance: number,
+    private readonly routeIndex: number,
+    private readonly planIndex: number,
+  ) {}
+
+  getIndex(): number {
+    return this.index
+  }
+
+  getPosition(): FakeV4Point {
+    return this.point
+  }
+
+  getDescription(includeHtml: boolean): string {
+    return includeHtml ? `<b>第${this.index}段</b>` : `第${this.index}段`
+  }
+
+  getDistance(format = true): string | number {
+    return format ? `${this.distance}米` : this.distance
+  }
+
+  getRouteIndex(): number {
+    return this.routeIndex
+  }
+
+  getPlanIndex(): number {
+    return this.planIndex
+  }
+}
+
+/** 官方 `Route`：驾车 / 步行 / 骑行方案里的路线，以及公交换乘里的步行段。 */
+export class FakeV4Route {
+  constructor(
+    private readonly index: number,
+    private readonly planIndex: number,
+    private readonly distance: number,
+    private readonly path: FakeV4Point[],
+    private readonly stepCount: number,
+    /** 官方 `BMAP_ROUTE_TYPE_*`：2 步行 / 3 驾车 / 6 骑行 */
+    private readonly routeType: number,
+  ) {}
+
+  getIndex(): number {
+    return this.index
+  }
+
+  getPlanIndex(): number {
+    return this.planIndex
+  }
+
+  getRouteType(): number {
+    return this.routeType
+  }
+
+  getDistance(format = true): string | number {
+    return format ? `${(this.distance / 1000).toFixed(1)}公里` : this.distance
+  }
+
+  getPath(): FakeV4Point[] {
+    return this.path
+  }
+
+  getNumSteps(): number {
+    return this.stepCount
+  }
+
+  getStep(i: number): FakeV4RouteStep | undefined {
+    if (i < 0 || i >= this.stepCount) return undefined
+    return new FakeV4RouteStep(i, this.path[i] ?? this.path[0]!, 100 + i, this.index, this.planIndex)
+  }
+}
+
+/** 官方 `RoutePlan`：`getNumRoutes` / `getRoute` / `getDistance` / `getDuration` / `getDragPois` / `getTaxiFare`。 */
+export class FakeV4RoutePlan {
+  constructor(
+    private readonly routes: FakeV4Route[],
+    private readonly distance: number,
+    private readonly duration: number,
+    private readonly options: { toll?: number; tollDistance?: number; taxiFare?: Record<string, unknown> } = {},
+  ) {}
+
+  getNumRoutes(): number {
+    return this.routes.length
+  }
+
+  getRoute(i: number): FakeV4Route | undefined {
+    return this.routes[i]
+  }
+
+  getDistance(format = true): string | number {
+    return format ? `${(this.distance / 1000).toFixed(1)}公里` : this.distance
+  }
+
+  getDuration(format = true): string | number {
+    return format ? `${Math.round(this.duration / 60)}分钟` : this.duration
+  }
+
+  getDragPois(): FakeV4RoutePoi[] {
+    return []
+  }
+
+  getTaxiFare(): Record<string, unknown> | null {
+    return this.options.taxiFare ?? null
+  }
+
+  /** 官方 `DrivingRoutePlan` 接口里的成员（4.0.4 的 `RoutePlan` 声明里没有）——可选读取的验证点。 */
+  getToll(): number {
+    return this.options.toll ?? 0
+  }
+
+  getTollDistance(): number {
+    return this.options.tollDistance ?? 0
+  }
+}
+
+/** 官方 `Line`：公交 / 地铁 / 火车 / 飞机 / 大巴线路。 */
+export class FakeV4TransitLine {
+  title: string
+
+  constructor(
+    title: string,
+    private readonly lineType: number,
+    private readonly viaStops: number,
+    private readonly path: FakeV4Point[],
+    private readonly distance: number,
+  ) {
+    this.title = title
+  }
+
+  getTitle(): string {
+    return this.title
+  }
+
+  /** 官方把线路类型同时暴露成字段与 `getTitle()`；`type` 是字段（`Line#type`）。 */
+  get type(): number {
+    return this.lineType
+  }
+
+  getNumViaStops(): number {
+    return this.viaStops
+  }
+
+  getGetOnStop(): FakeV4RoutePoi {
+    return new FakeV4RoutePoi({ title: `${this.title}·上车站` })
+  }
+
+  getGetOffStop(): FakeV4RoutePoi {
+    return new FakeV4RoutePoi({ title: `${this.title}·下车站` })
+  }
+
+  getDistance(format = true): string | number {
+    return format ? `${(this.distance / 1000).toFixed(1)}公里` : this.distance
+  }
+
+  getPath(): FakeV4Point[] {
+    return this.path
+  }
+}
+
+/**
+ * 官方 `TransitRoutePlan`。
+ *
+ * `getTotalType(i)` / `getTotal(i)` 是**官方的判别入口**（0 = `Route` / 1 = `Line`），Fake 如实
+ * 建模两者的一致性：投影按 `getTotalType` 分流，`getTotal` 给出对应的那个对象。
+ */
+export class FakeV4TransitRoutePlan {
+  constructor(
+    private readonly segments: Array<{ type: 0 | 1; value: FakeV4Route | FakeV4TransitLine }>,
+    private readonly distance: number,
+    private readonly duration: number,
+  ) {}
+
+  getNumLines(): number {
+    return this.segments.filter((segment) => segment.type === 1).length
+  }
+
+  getLine(i: number): FakeV4TransitLine | undefined {
+    return this.segments.filter((segment) => segment.type === 1)[i]?.value as FakeV4TransitLine
+  }
+
+  getNumRoutes(): number {
+    return this.segments.filter((segment) => segment.type === 0).length
+  }
+
+  getRoute(i: number): FakeV4Route | undefined {
+    return this.segments.filter((segment) => segment.type === 0)[i]?.value as FakeV4Route
+  }
+
+  getDistance(format = true): string | number {
+    return format ? `${(this.distance / 1000).toFixed(1)}公里` : this.distance
+  }
+
+  getDuration(format = true): string | number {
+    return format ? `${Math.round(this.duration / 60)}分钟` : this.duration
+  }
+
+  getDescription(includeHtml: boolean): string {
+    return includeHtml ? '<b>换乘一次</b>' : '换乘一次'
+  }
+
+  getLinesTitle(): string {
+    const lines = this.segments.filter((segment) => segment.type === 1)
+    return lines.map((segment) => (segment.value as FakeV4TransitLine).title).join(' → ')
+  }
+
+  getWalkDistance(): string {
+    return '0.4公里'
+  }
+
+  getTotalType(i: number): 0 | 1 | undefined {
+    return this.segments[i]?.type
+  }
+
+  getTotal(i: number): FakeV4Route | FakeV4TransitLine | undefined {
+    return this.segments[i]?.value
+  }
+
+  getNumTotal(): number {
+    return this.segments.length
+  }
+}
+
+/** 官方路线结果（驾车 / 步行 / 骑行共用形状；`policy` 是**字段**）。 */
+export class FakeV4RouteResult<TPlan> {
+  policy: number
+
+  constructor(
+    private readonly start: FakeV4RoutePoi,
+    private readonly end: FakeV4RoutePoi,
+    private readonly plans: TPlan[],
+    policy: number,
+  ) {
+    this.policy = policy
+  }
+
+  getStart(): FakeV4RoutePoi {
+    return this.start
+  }
+
+  getEnd(): FakeV4RoutePoi {
+    return this.end
+  }
+
+  getNumPlans(): number {
+    return this.plans.length
+  }
+
+  getPlan(i: number): TPlan | undefined {
+    return this.plans[i]
+  }
+}
+
+/** 官方 `TransitRouteResult`：多一个 `getTransitType()`。 */
+export class FakeV4TransitRouteResult extends FakeV4RouteResult<FakeV4TransitRoutePlan> {
+  constructor(
+    start: FakeV4RoutePoi,
+    end: FakeV4RoutePoi,
+    plans: FakeV4TransitRoutePlan[],
+    policy: number,
+    private readonly transitType: number,
+  ) {
+    super(start, end, plans, policy)
+  }
+
+  getTransitType(): number {
+    return this.transitType
+  }
+}
+
+/** 四个路线服务共用的替身基类（官方声明里它们的方法面几乎一致）。 */
+export abstract class FakeV4RouteService {
+  readonly callLog: string[] = []
+  readonly queue: FakeV4CallbackQueue
+  /** 构造参数（`location` 与选项）：断言「构造字段变化才重建」时读它 */
+  readonly options: Record<string, unknown>
+  readonly location: unknown
+
+  /** 测试辅助：`search` 是否回包（false = SDK 静默失败，用来验证超时 / 取消） */
+  respond = true
+  /** 测试辅助：注入的 `getStatus()` 值（回包前即生效，与 LocalSearch 同口径） */
+  status = 0
+  /** 测试辅助：回包里的方案数（0 = 合法回包但没有路线 ⇒ Driver 应结算成 `empty`） */
+  planCount = 1
+  /** 测试辅助：强制下一次回包使用这个载荷（`null` = 服务不可用） */
+  overridePayload?: unknown
+  /** 测试辅助：下一次 `clearResults()` 抛出的错误（用后即清） */
+  failNextClearResults: Error | null = null
+  /** 测试辅助：`clearResults()` 期间同步执行的回调（注入「清理钩子里重入释放」） */
+  onClearResults: (() => void) | null = null
+
+  /** 测试辅助：`setPolylineStyle()` 的调用记录（Driver 目前不调用它；保留给形状探针） */
+  readonly polylineStyles: unknown[] = []
+
+  private hasResults = false
+  private readonly diagnostics: FakeV4Diagnostics | undefined
+  private readonly routeType: number
+
+  constructor(
+    location: unknown,
+    options: Record<string, unknown> = {},
+    diagnostics?: FakeV4Diagnostics,
+    routeType = 3,
+  ) {
+    this.queue = new FakeV4CallbackQueue(diagnostics)
+    this.diagnostics = diagnostics
+    this.location = location
+    this.options = options
+    this.routeType = routeType
+    this.callLog.push('construct:' + JSON.stringify(options))
+    // 官方四个路线服务都**没有** `dispose()`，实例本身不进泄漏门禁（随 GC 回收），只进活动口径；
+    // 真正的资源是它**交付出去的结果集**（地图上的折线 / 标注、写进 panel 的 DOM），
+    // 由公开的 `clearResults()` 释放 —— 见 `markResults()`。
+    diagnostics?.serviceInstanceCreated()
+  }
+
+  /** 官方 `search`：起终点 + （驾车才有的）选项。 */
+  search(start: unknown, end: unknown, options?: Record<string, unknown>): void {
+    this.callLog.push('search:' + JSON.stringify({ start, end, options: options ?? null }))
+    if (!this.respond) return
+    const payload = this.buildResult(start, end)
+    if (payload === null) return
+    const outgoing = this.overridePayload === undefined ? payload : this.overridePayload
+    if (outgoing !== null && outgoing !== undefined) this.markResults()
+    const onSearchComplete = this.options.onSearchComplete as
+      | ((value: unknown) => void)
+      | undefined
+    this.queue.dispatch(() => onSearchComplete?.(outgoing))
+  }
+
+  getResults(): unknown {
+    return null
+  }
+
+  getStatus(): number {
+    return this.status
+  }
+
+  setPolylineStyle(style: unknown): void {
+    this.callLog.push('setPolylineStyle')
+    this.polylineStyles.push(style)
+  }
+
+  enableAutoViewport(): void {
+    this.callLog.push('enableAutoViewport')
+  }
+
+  disableAutoViewport(): void {
+    this.callLog.push('disableAutoViewport')
+  }
+
+  /**
+   * 官方 `clearResults()`：清除最近一次检索的结果，**同时清除地图上的路线和标注**。
+   *
+   * 它是四个路线服务唯一的公开清理入口（官方声明里没有 `dispose()`），因此 Fake 把它建模成
+   * 「释放已交付的结果集」——泄漏门禁的销账点。
+   */
+  clearResults(): void {
+    this.callLog.push('clearResults')
+    const failure = this.failNextClearResults
+    if (failure) {
+      this.failNextClearResults = null
+      throw failure
+    }
+    this.releaseResults()
+    this.onClearResults?.()
+  }
+
+  /** 回包不可用时返回 `null`（本 Fake 只在构造「无方案」时用到）。 */
+  protected abstract buildResult(start: unknown, end: unknown): unknown | null
+
+  /** 起终点原样回显（点 / 我们的 POI 引用都照读），用来断言「端点真的被转发到了 SDK」。 */
+  protected echoEndpoint(value: unknown, fallbackTitle: string): FakeV4RoutePoi {
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>
+      const point = record.point instanceof FakeV4Point
+        ? record.point
+        : record instanceof FakeV4Point
+          ? record
+          : new FakeV4Point(
+              typeof record.lng === 'number' ? record.lng : 116.404,
+              typeof record.lat === 'number' ? record.lat : 39.915,
+            )
+      const title = typeof record.title === 'string' ? record.title : fallbackTitle
+      const uid = typeof record.uid === 'string' ? record.uid : undefined
+      return new FakeV4RoutePoi(uid === undefined ? { title, point } : { title, point, uid })
+    }
+    return new FakeV4RoutePoi({ title: typeof value === 'string' ? value : fallbackTitle })
+  }
+
+  protected routeFor(planIndex: number, routeIndex: number, stepCount = 2): FakeV4Route {
+    const path = Array.from({ length: stepCount }, (_, i) => new FakeV4Point(116.4 + i / 100, 39.9 + i / 100))
+    return new FakeV4Route(routeIndex, planIndex, (planIndex + 1) * 1000, path, stepCount, this.routeType)
+  }
+
+  private markResults(): void {
+    if (this.hasResults) return
+    this.hasResults = true
+    this.diagnostics?.resourceCreated('routeResults', this)
+  }
+
+  private releaseResults(): void {
+    if (!this.hasResults) return
+    this.hasResults = false
+    this.diagnostics?.resourceReleased('routeResults', this)
+  }
+}
+
+/** 官方 `DrivingRoute`（`search(start, end, { waypoints })`，**不接受字符串地址**）。 */
+export class FakeV4DrivingRoute extends FakeV4RouteService {
+  constructor(location: unknown, options: Record<string, unknown> = {}, diagnostics?: FakeV4Diagnostics) {
+    super(location, options, diagnostics, 3)
+  }
+
+  protected buildResult(start: unknown, end: unknown): FakeV4RouteResult<FakeV4RoutePlan> {
+    const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
+      new FakeV4RoutePlan([this.routeFor(i, 0), this.routeFor(i, 1)], 1000 + i * 100, 600 + i * 60, {
+        toll: i === 0 ? 10 : 0,
+        tollDistance: i === 0 ? 500 : 0,
+      }),
+    )
+    const policy = typeof this.options.policy === 'number' ? this.options.policy : 0
+    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, policy)
+  }
+}
+
+/** 官方 `WalkingRoute` / `RidingRoute`（`search(start, end)` 两参数签名）。 */
+export class FakeV4WalkingRoute extends FakeV4RouteService {
+  constructor(location: unknown, options: Record<string, unknown> = {}, diagnostics?: FakeV4Diagnostics) {
+    super(location, options, diagnostics, 2)
+  }
+
+  protected buildResult(start: unknown, end: unknown): FakeV4RouteResult<FakeV4RoutePlan> {
+    const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
+      new FakeV4RoutePlan([this.routeFor(i, 0)], 800 + i * 100, 400 + i * 30),
+    )
+    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, 0)
+  }
+}
+
+export class FakeV4RidingRoute extends FakeV4RouteService {
+  constructor(location: unknown, options: Record<string, unknown> = {}, diagnostics?: FakeV4Diagnostics) {
+    super(location, options, diagnostics, 6)
+  }
+
+  protected buildResult(start: unknown, end: unknown): FakeV4RouteResult<FakeV4RoutePlan> {
+    const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) =>
+      new FakeV4RoutePlan([this.routeFor(i, 0)], 1200 + i * 100, 500 + i * 30),
+    )
+    return new FakeV4RouteResult(this.echoEndpoint(start, '起点'), this.echoEndpoint(end, '终点'), plans, 0)
+  }
+}
+
+/** 官方 `TransitRoute`（`search(start, end)`；方案是「步行段 + 乘车段」序列）。 */
+export class FakeV4TransitRoute extends FakeV4RouteService {
+  /** 测试辅助：回包里跨城方案的交通方式策略 */
+  transitTypePolicy: number | undefined
+  /** 测试辅助：`getTransitType()` 的取值（0 市内 / 1 跨城） */
+  transitType = 0
+
+  constructor(location: unknown, options: Record<string, unknown> = {}, diagnostics?: FakeV4Diagnostics) {
+    super(location, options, diagnostics, 3)
+  }
+
+  protected buildResult(start: unknown, end: unknown): FakeV4TransitRouteResult {
+    const plans = Array.from({ length: Math.max(0, this.planCount) }, (_, i) => {
+      const walk = this.routeFor(i, 0, 2)
+      const line = new FakeV4TransitLine(`快速公交 ${i + 1} 号线`, 0, 5, [new FakeV4Point(116.41, 39.91)], 3000)
+      return new FakeV4TransitRoutePlan(
+        [
+          { type: 0, value: walk },
+          { type: 1, value: line },
+        ],
+        3000 + i * 500,
+        900 + i * 60,
+      )
+    })
+    const policy = typeof this.options.policy === 'number' ? this.options.policy : 0
+    return new FakeV4TransitRouteResult(
+      this.echoEndpoint(start, '起点'),
+      this.echoEndpoint(end, '终点'),
+      plans,
+      policy,
+      this.transitType,
+    )
+  }
+}

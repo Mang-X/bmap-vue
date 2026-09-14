@@ -49,7 +49,20 @@
  *   重复添加」列为误用，本仓库由 Driver 自己记账），因此按**次数**销账——「挂两次、摘一次
  *   还剩一个」这条不变式不能被实例去重改掉。
  */
-export type FakeV4LifecycleKind = "map" | "panorama" | "autocomplete" | "localSearchResults";
+export type FakeV4LifecycleKind =
+  | "map"
+  | "panorama"
+  | "autocomplete"
+  | "localSearchResults"
+  /**
+   * 路线服务（`DrivingRoute` / `WalkingRoute` / `RidingRoute` / `TransitRoute`，M7-ROUTES / #39）
+   * **交付出去的检索结果集**：地图上的折线与标注、写进 `panel` 的 DOM。
+   *
+   * 四类服务共用**同一个** kind：它们的结果集形状不同，但「未清理的结果集」是同一类资源，
+   * 销账入口也只有一个（公开的 `clearResults()`）。实例本身同样没有 `dispose()`，因此与
+   * `localSearchResults` 同档：只记结果集，不记实例。
+   */
+  | "routeResults";
 
 export type FakeV4AttachmentKind =
   | "overlay"
@@ -66,6 +79,7 @@ const LIFECYCLE_KINDS: ReadonlySet<FakeV4ResourceKind> = new Set<FakeV4Lifecycle
   "panorama",
   "autocomplete",
   "localSearchResults",
+  "routeResults",
 ]);
 
 /** 泄漏门禁口径：当前未释放的资源数（全 0 = 无泄漏）。 */
@@ -80,6 +94,8 @@ export interface FakeV4LeakCounters {
   autocompletes: number;
   /** 未被 `clearResults()` 清掉的检索结果集（含 SDK 画在地图上的标注 / 结果面板）。 */
   localSearchResults: number;
+  /** 未被 `clearResults()` 清掉的路线结果集（含 SDK 画在地图上的路线 / 标注 / 结果面板）。 */
+  routeResults: number;
   listeners: number;
 }
 
@@ -105,6 +121,10 @@ export interface FakeV4ActivityCounters {
   localSearchResultsDrawn: number;
   /** 被 `clearResults()` 清掉的次数。 */
   localSearchResultsCleared: number;
+  /** 交付过路线结果集的次数（每次路线 `search` 回包一次）。 */
+  routeResultsDrawn: number;
+  /** 被路线 `clearResults()` 清掉的次数。 */
+  routeResultsCleared: number;
   /** 无释放入口的基础服务实例（构造计数）。 */
   servicesCreated: number;
   listenCalls: number;
@@ -142,6 +162,7 @@ const LEAK_FIELD_BY_KIND: Record<FakeV4ResourceKind, keyof FakeV4LeakCounters> =
   panorama: "panoramas",
   autocomplete: "autocompletes",
   localSearchResults: "localSearchResults",
+  routeResults: "routeResults",
 };
 
 export class FakeV4Diagnostics {
@@ -162,6 +183,7 @@ export class FakeV4Diagnostics {
     panorama: 0,
     autocomplete: 0,
     localSearchResults: 0,
+    routeResults: 0,
   };
 
   private readonly created: Record<FakeV4ResourceKind, number> = {
@@ -174,6 +196,7 @@ export class FakeV4Diagnostics {
     panorama: 0,
     autocomplete: 0,
     localSearchResults: 0,
+    routeResults: 0,
   };
 
   private readonly released: Record<FakeV4ResourceKind, number> = {
@@ -186,6 +209,7 @@ export class FakeV4Diagnostics {
     panorama: 0,
     autocomplete: 0,
     localSearchResults: 0,
+    routeResults: 0,
   };
 
   /* ------------------------------------------------ 测试辅助：异步窗口（非官方语义） */
@@ -312,6 +336,8 @@ export class FakeV4Diagnostics {
       autocompletesDisposed: this.released.autocomplete,
       localSearchResultsDrawn: this.created.localSearchResults,
       localSearchResultsCleared: this.released.localSearchResults,
+      routeResultsDrawn: this.created.routeResults,
+      routeResultsCleared: this.released.routeResults,
       servicesCreated: this.servicesCreated,
       listenCalls: this.listenCalls,
       unlistenCalls: this.unlistenCalls,

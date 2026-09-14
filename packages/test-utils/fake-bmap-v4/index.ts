@@ -65,12 +65,17 @@ import {
   FakeV4Boundary,
   FakeV4CallbackQueue,
   FakeV4Convertor,
+  FakeV4DrivingRoute,
   FakeV4Geocoder,
   FakeV4Geolocation,
   FakeV4LocalCity,
   FakeV4LocalResult,
   FakeV4LocalResultPoi,
   FakeV4LocalSearch,
+  FakeV4RidingRoute,
+  FakeV4RouteService,
+  FakeV4TransitRoute,
+  FakeV4WalkingRoute,
 } from './services.ts'
 import {
   FakeV4ClusterLayer,
@@ -143,12 +148,25 @@ export {
   FakeV4Boundary,
   FakeV4CallbackQueue,
   FakeV4Convertor,
+  FakeV4DrivingRoute,
   FakeV4Geocoder,
   FakeV4Geolocation,
   FakeV4LocalCity,
   FakeV4LocalResult,
   FakeV4LocalResultPoi,
   FakeV4LocalSearch,
+  FakeV4RidingRoute,
+  FakeV4RoutePlan,
+  FakeV4RoutePoi,
+  FakeV4RouteResult,
+  FakeV4RouteService,
+  FakeV4RouteStep,
+  FakeV4Route as FakeV4RoutePath,
+  FakeV4TransitLine,
+  FakeV4TransitRoute,
+  FakeV4TransitRoutePlan,
+  FakeV4TransitRouteResult,
+  FakeV4WalkingRoute,
 } from './services.ts'
 export type {
   FakeV4LocalResultOptions,
@@ -244,6 +262,11 @@ export interface FakeBMapV4Namespace {
     location: unknown,
     options?: Record<string, unknown>,
   ) => FakeV4LocalSearch
+  /* ------------------------------------------- 路线规划（#39） */
+  DrivingRoute: new (location: unknown, options?: Record<string, unknown>) => FakeV4DrivingRoute
+  WalkingRoute: new (location: unknown, options?: Record<string, unknown>) => FakeV4WalkingRoute
+  RidingRoute: new (location: unknown, options?: Record<string, unknown>) => FakeV4RidingRoute
+  TransitRoute: new (location: unknown, options?: Record<string, unknown>) => FakeV4TransitRoute
   /* ---------------------------------------------- 原生数据图层（#23） */
   PointIconLayer: new (options?: Record<string, unknown>) => FakeV4PointIconLayer
   PointShapeLayer: new (options?: Record<string, unknown>) => FakeV4PointShapeLayer
@@ -291,6 +314,16 @@ export interface FakeBMapV4 {
   createdAutocompletes: FakeV4Autocomplete[]
   /** 测试辅助：记录已创建的本地检索实例（#38） */
   createdLocalSearches: FakeV4LocalSearch[]
+  /**
+   * 测试辅助：已创建的路线服务实例，按 SDK 构造器名分桶（M7-ROUTES / #39）。
+   *
+   * 分桶而不是四个平行数组：四类替身的方法面一致（`queue` / `planCount` / `status` / `respond`），
+   * 用例读作 `fake.rawRoutes.DrivingRoute[0]`，新增服务时也不需要再加一个数组。
+   */
+  rawRoutes: Record<
+    "DrivingRoute" | "WalkingRoute" | "RidingRoute" | "TransitRoute",
+    FakeV4RouteService[]
+  >
   /** 测试辅助：记录已创建的原生数据图层实例（#23） */
   createdNativeLayers: FakeV4Layer[]
   /** 测试辅助：记录已创建的全景查看器 / 检索实例（#23） */
@@ -318,6 +351,11 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdLocalCities: FakeV4LocalCity[] = []
   const createdAutocompletes: FakeV4Autocomplete[] = []
   const createdLocalSearches: FakeV4LocalSearch[] = []
+  /** 路线服务实例账本（#39）：按 SDK 构造器名分桶，读法见 `FakeBMapV4["rawRoutes"]` */
+  const rawRoutes: Record<
+    "DrivingRoute" | "WalkingRoute" | "RidingRoute" | "TransitRoute",
+    FakeV4RouteService[]
+  > = { DrivingRoute: [], WalkingRoute: [], RidingRoute: [], TransitRoute: [] }
   const createdNativeLayers: FakeV4Layer[] = []
   const createdPanoramas: FakeV4Panorama[] = []
   const createdPanoramaServices: FakeV4PanoramaService[] = []
@@ -541,6 +579,33 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     }
   }
 
+  /* ------------------------------------------- 路线规划（#39） */
+
+  class DrivingRouteClass extends FakeV4DrivingRoute {
+    constructor(location: unknown, options?: Record<string, unknown>) {
+      super(location, options ?? {}, stats)
+      rawRoutes.DrivingRoute.push(this)
+    }
+  }
+  class WalkingRouteClass extends FakeV4WalkingRoute {
+    constructor(location: unknown, options?: Record<string, unknown>) {
+      super(location, options ?? {}, stats)
+      rawRoutes.WalkingRoute.push(this)
+    }
+  }
+  class RidingRouteClass extends FakeV4RidingRoute {
+    constructor(location: unknown, options?: Record<string, unknown>) {
+      super(location, options ?? {}, stats)
+      rawRoutes.RidingRoute.push(this)
+    }
+  }
+  class TransitRouteClass extends FakeV4TransitRoute {
+    constructor(location: unknown, options?: Record<string, unknown>) {
+      super(location, options ?? {}, stats)
+      rawRoutes.TransitRoute.push(this)
+    }
+  }
+
   /* ---------------------------------------------- 原生数据图层（#23） */
 
   class PointIconLayerClass extends FakeV4PointIconLayer {
@@ -650,6 +715,10 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     LocalCity: LocalCityClass,
     Autocomplete: AutocompleteClass,
     LocalSearch: LocalSearchClass,
+    DrivingRoute: DrivingRouteClass,
+    WalkingRoute: WalkingRouteClass,
+    RidingRoute: RidingRouteClass,
+    TransitRoute: TransitRouteClass,
     PointIconLayer: PointIconLayerClass,
     PointShapeLayer: PointShapeLayerClass,
     LineLayer: LineLayerClass,
@@ -679,6 +748,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     createdLocalCities,
     createdAutocompletes,
     createdLocalSearches,
+    rawRoutes,
     createdNativeLayers,
     createdPanoramas,
     createdPanoramaServices,
