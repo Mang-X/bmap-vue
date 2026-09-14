@@ -100,10 +100,18 @@ watch 源是 `lng,lat` 两个标量（字符串形态取整串，并加 `s:` / `
 非有限值（`NaN` / `±Infinity`）**不参与容差比较**（只有严格相等才算等），否则
 `numbersEqual(NaN, NaN) === true` 会把「引擎读不出值」伪装成「值一致」。
 
+**读回失败怎么办（评审第一轮 P2 修正）**：只忽略**明确允许**的错误码——资源已销毁
+（`BMAP_RESOURCE_DISPOSED` / `BMAP_RUNTIME_DISPOSED`）或该能力在本引擎不可用
+（`BMAP_CAPABILITY_UNSUPPORTED`），此时**不写下一条命令**（写命令只会抛同样的错）。
+其余 `BMapError`（`BMAP_SDK_CALL_FAILED` / `BMAP_INVALID_ARGUMENT` / `BMAP_INVALID_POINT` /
+`BMAP_HANDLE_FOREIGN`）与非 `BMapError` 的编程错误**一律上抛**：把「读错」归零成「读不到」
+就是静默失效。原先的实现只写了注释（「读不到就不写」），代码却仍会往下调 setter——
+注释与实现不一致比没有注释更糟。
+
 ### 4. `default*` 只读一次；模式实时判定；切换只告警不拒绝
 
 1. `default*` **只在首次解析时读一次**，之后变化不覆盖内部状态（否则「用户拖到 A、父级重算
-   default 得到 B」会把用户操作静默吃掉），失效时 dev 告警一次；
+   default 得到 B」会把用户操作静默吃掉），失效时告警一次；
 2. 模式按「当前受控值是否存在」**实时**判定，**不冻结**在首次解析——`:center="loaded ? spot : undefined"`
    这种「异步数据到达后才开始受控」的用法必须能工作；
 3. 模式切换**只告警、不拒绝**，且只在「切换会造成事实源歧义」时告警：非受控 → 受控且外部值与
@@ -111,7 +119,20 @@ watch 源是 `lng,lat` 两个标量（字符串形态取整串，并加 `s:` / `
    父级把 `update:*` 的值原样写回（`v-model` 的正常闭环）**不告警**——判据是「值与内部状态是否冲突」，
    而不是「prop 是否存在过」。
 
-告警经 `logger.warn` 输出（带 `[baidu-map-gl-vue]` 前缀与 `field` context），每字段每方向至多一次。
+告警经 `core/logger` 的 `devWarn` 输出（带 `[baidu-map-gl-vue]` 前缀与 `field` context），每字段每
+方向至多一次。门禁是构建期常量 `__DEV__`（`vite.config.build.ts` / `vite.config.global.ts` 早就
+`define` 成 `'false'`，vitest 为 `'true'`；本次给 docs / playground / browser smoke 这几份
+**直接编 src** 的配置补上同一个 `define`），因此**生产产物里这段分支被静态消除**。
+
+**试过但放弃的方案：`import.meta.env.DEV`。** 它由 Vite 自动替换、零配置，看起来更省事，但它需要
+`vite/client` 的**环境类型** ⇒ 任何编译本包源码的 program 都被迫带上这份环境声明。仓库自己的门禁
+立刻抓到了这一点：`tests/behavior/v3-ui-kit-widget-contract.test.ts` 用 `types: []` 模拟
+「不带任何环境声明的消费方」，`import.meta.env` 在它那里报
+`TS2339: Property 'env' does not exist on type 'ImportMeta'`。`__DEV__` 只在本文件 `declare`，
+是纯模块内的构建期常量，不带环境类型依赖（代价：每份会编 src 的构建配置都要注入）。
+
+`logger.warn` 自身保持无门禁——它承载的是运行时故障（能力不支持、服务失败…），那是运维与使用者
+都该看到的。
 
 ### 5. 事件订阅面：只订阅结束事件，四个 `update:*`
 
@@ -157,7 +178,49 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 | `center` 判等 | `pointEquals(1e-7)` | `centerEquals`（点容差 + 字符串整串 + 跨形态不等） | 同源（容差一致），本库补了字符串形态的判别 |
 | `heading/tilt` 判等 | `Math.abs(a - b) > 0.01`（线性） | `anglesEqual`（heading 环绕）/ 线性（tilt） | **本库更严**：线性判等会为自身写入发出假的 `-90` |
 | 对外通知 | `onCenterChange` / `onZoomChange` / … props | `update:center` / … + `v-model` | 框架语义差异（Vue 用 emit），不照搬 |
+| 「加载期间（SDK 就绪前）到达的受控值」 | 建图 effect 在 `status === 'ready'` 时才运行，闭包里读到的是**当时**的 props ⇒ 天然不丢 | 初值在 setup 阶段被冻结成快照 ⇒ 会丢；由 ready 之前的 `syncControlledView()` 收敛（决策 8） | **本库补了这一步**（评审第一轮 P1） |
 | 「用户交互后是否回退到受控值」 | 否 | 否 | 同源；写进「已知限制」 |
+
+### 8. 加载窗口内的受控值：ready 之前按当前 props 收敛
+
+四个 watcher 在 `map` / `client` 未就绪时会跳过写入（那时没有 map 可写），而首次视野用的是
+**setup 阶段冻结**的快照。父级在「SDK 加载中」改 prop 是文档明确支持的用法
+（`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher 不会
+重跑 ⇒ 地图永远停在旧初值。因此 `boot()` 在 `runtime.mount()` 返回后、emit `ready` / `initd`
+**之前**执行一次 `syncControlledView()`（四个 `apply*FromProps`）。
+
+参考实现不存在这个问题：它在 `status === 'ready'` 时才建图，effect 闭包里读到的是**当时**的
+props（没有 setup 期冻结的快照）。本库的快照是必要的（`initializeView` 与 `resetView()` 共用
+同一份「首次视野」，见决策 2），所以用一次显式收敛把差距补回来——而不是把快照改成每次都读
+当前 props（那会让 `resetView()` 失去「回到初值」的语义）。
+
+三个约束：
+
+- 收敛走**字段级命令**（`setCenter` / `setZoom` / …），不是重跑 `centerAndZoom`——初始化仍然只
+  发生一次，「后续 center 变化不重置 zoom」这条不变量在加载窗口里同样成立；
+- 四个 `apply*FromProps` 都是幂等的（读回判等），所以「加载期间没变过」不会产生额外命令；
+- 它只覆盖**视野**。`mapType` / 样式 / 交互开关 / 插件在 `boot()` 里已经是「按当前 props 应用」
+  （`applyMapType` / `applyStyleProps` / `syncEnableProps`），不受这个窗口影响。
+
+**相邻缺口（本 ADR 显式不覆盖）**：`defineExpose().retry()` 直接透传 `runtime.retry()`，重挂之后
+既不会重跑 `applyMapType` / `syncEnableProps` / `bindViewEvents`，也不会做这次收敛。它属于
+「重试 = 重新装配」这个更大的问题（重试后事件订阅也要重建），留给后续 issue，不在 #27 的面。
+
+### 9. 可变值不共享引用：`copy` 是状态的一部分
+
+`center` / `defaultCenter` 是**可变对象**。父级拿到自己的对象后原地改一个字段
+（`spot.lng = 5`）不会触发 props 变化，却会顺着引用改到状态内部：初值、内部镜像、以及
+`resetView()` 用的「首次快照」都会被一起改掉——「resetView 回到首次值」与「default 只读一次」
+两条语义就此被绕过（更隐蔽的一种：内部状态被改成 X 之后，用户真的拖到 X 会被判成「没变化」，
+于是**不 emit**）。
+
+因此 `useControllableState` 增加 `copy` 选项（默认恒等），并在三处落库时使用：首次解析的初值、
+`syncExternal`、`commit`。`<BMap>` 对 `center` 传 `cloneCenter`（字符串不可变，原样返回）。
+另外，暴露的 `initial` 与内部 `internal` 也各自持有独立拷贝——前者会被组件当作长期快照持有，
+共享同一对象会让其中一方的原地修改影响另一方。
+
+「props 请换引用更新」是 Vue 的常规语义，组件不打算为原地 mutation 做补偿（那需要 deep watch，
+本 ADR 明令禁止）；这里要做的是**让 mutation 不会静默污染内部状态**。
 
 ## 后果
 
@@ -170,15 +233,18 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 | 新增公开 composable `useControllableState` | 纯新增（根入口） | 文档：`docs/zh-CN/hooks/useControllableState.md`；changeset 记为 `minor` |
 | 视野四字段不再走 `withDefaults` | **无行为变化**：缺省档用同一组库默认视野 | 由测试锁定「什么都不传 ⇒ 库默认视野」 |
 | prop 变化判定从严格相等改为容差 + 读回 | 极少写命令，可能少一次「看似必要」的写 | 属修正（`±1e-9` 抖动不再触发写） |
-| dev 期新增 3 类告警 | 只在开发期控制台 | 每字段每方向至多一次 |
+| SDK 加载期间到达的受控值现在会生效 | 之前会丢（地图停在旧初值），现在 ready 前收敛一次 | 属修正（评审第一轮 P1），无 API 变化 |
+| 用法告警只出现在开发构建 | 生产产物里没有这几条提示 | 属修正（评审第一轮 P2） |
+| `useControllableState` 新增 `copy` 选项 | 纯新增（可选） | 传可变对象时应当提供，见决策 9 |
 
 **无破坏性变更**：公共 props / 事件的既有语义与默认表现保持不变。
 
 ### 回滚
 
-回滚 = 撤销本 PR：`withDefaults` 恢复默认值、删除四个 watcher 与 `bindViewEvents` 调用、
-`composables/index.ts` 去掉导出。新增的 `default*` / `update:*` 与 `useControllableState` 若已发布，
-回滚需要按破坏性变更处理（这也是它需要 ADR 的原因）。
+回滚 = 撤销本 PR：`withDefaults` 恢复默认值、删除四个 watcher、`syncControlledView()` 与
+`bindViewEvents` 调用、`core/logger.ts` 去掉 `devWarn`、`composables/index.ts` 去掉导出。
+新增的 `default*` / `update:*`、`useControllableState`（含 `copy` 选项）若已发布，回滚需要按
+破坏性变更处理（这也是它需要 ADR 的原因）。
 
 ## 已知限制（显式接受，带归属）
 
@@ -194,24 +260,48 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
    （`resetCenter` 的 deprecated 别名也指向它）。
 6. **未覆盖 Map 事件全集**（`moving` / `zoomstart` / 右键…）：属 issue #27 的非目标，
    由后续 issue 处理。
+7. **`retry()` 之后不重跑装配**：`defineExpose().retry()` 只透传 `runtime.retry()`，重挂之后
+   `applyMapType` / `syncEnableProps` / `bindViewEvents` / 视野收敛都不会重新执行（见决策 8 末段）。
 
 ## 验证
 
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 11 条用例覆盖三态、初次视野只执行
-  一次、`centerAndZoom` 不复发、0/0 与边界 zoom、相同值不写 SDK、浮点抖动、用户交互回写与父级
-  回写闭环、heading 环绕、四个 `default*` 的失效、模式切换告警、受控值优先、不重绑与卸载归零。
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-STATE 一组 **16 条**用例覆盖三态、初次视野只
+  执行一次、`centerAndZoom` 不复发、0/0 与边界 zoom、相同值不写 SDK、浮点抖动、用户交互回写与
+  父级回写闭环、heading 环绕、四个 `default*` 的失效、模式切换告警、受控值优先、不重绑与卸载归零，
+  以及评审第一轮补的四条：**加载窗口内的受控更新**（延迟 Provider，含「加载期间才开始受控」形态）、
+  **受控 center 原地 mutation**、**`defaultCenter` 原地 mutation**、**读回错误白名单**。
   **放置理由**：issue 的「预计变更区域」把测试指向 `tests/behavior/v3-bmap.test.ts`，而
   `AGENTS.md` 明确要求「单一引擎的组件级场景写在 `v3-component-scenarios.test.ts`，用例只写领域
   语言、不碰字段名」。二者冲突时按 `AGENTS.md` 执行（预计区域是提示），为此
-  `packages/test-utils/fake-v4-harness.ts` 补了四个领域读数：`view()` / `viewWrites()` /
-  `simulateUserView()` / `subscribedEvents()` / `listenActivity()`。
+  `packages/test-utils/fake-v4-harness.ts` 补了六个领域读数：`view()` / `viewWrites()` /
+  `simulateUserView()` / `subscribedEvents()` / `listenActivity()` /
+  `deferredProvider()` + `releaseProvider()` + `mapsCreated()`。
 - `packages/baidu-map-gl-vue/src/core/utils/equality.test.ts`：容差、环绕、`centerKey` 的 23 条单测；
-- `packages/baidu-map-gl-vue/src/composables/useControllableState.test.ts`：三态与告警规则的 9 条单测；
+- `packages/baidu-map-gl-vue/src/composables/useControllableState.test.ts`：三态、告警规则与
+  `copy` 语义的 10 条单测；
 - `tests/behavior/v3-entry.test.ts`：根入口导出 `useControllableState`；
-- 单点反证（改坏一行即红）：把 heading 判等换回线性、去掉 `center` 的读回守卫，三条例
-  （相同值不写 SDK / v-model 闭环 / heading 环绕）立即失败并已还原；
+- **单点反证**（改坏一处即红，逐条实测并已还原）：
+  1. heading 判等换回线性 + 去掉 `center` 的读回守卫 → 3 条例（相同值不写 SDK / v-model 闭环 /
+     heading 环绕）失败；
+  2. 去掉 ready 之前的 `syncControlledView()` → 2 条加载窗口用例失败；
+  3. 去掉 `copy: cloneCenter` → 2 条原地 mutation 用例失败；
+  4. 把读回错误白名单放宽成「所有 `BMapError`」+ 读不到仍调 setter → 读回白名单用例失败；
 - 门禁：`typecheck:v3` → `build:v3` → `check:public-dts` → `check:no-bmapgl` → `check:raw-sdk:tree`
   → `test:unit` → `smoke:v4:fixture` → docs 三件套 → `playground:build` → `verify:package`。
+
+## 评审修正（2026-09-14 第一轮）
+
+维护者评审给出 2 条 blocking + 2 条 P2，全部按事实核对后处理（对照见 PR #87 的回复）：
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** SDK ready 前的受控更新会被丢掉 | **成立**：watcher 在未就绪时 return，初值是 setup 期冻结的快照，之后 prop 不再变化 ⇒ 永不重跑 | 决策 8：ready 前 `syncControlledView()` + 2 条延迟 Provider 用例 |
+| **[P1/P2]** `initialViewSnapshot` / `defaultCenter` 没冻结 point 值 | **成立**：`initial` / `internal` 直接持有父级对象引用，原地 mutation 可改到快照与内部状态 | 决策 9：新增 `copy` 选项 + `cloneCenter` + 2 条 mutation 用例 |
+| **[P2]** `readLiveView` 吞掉所有 `BMapError`，且读不到仍调 setter | **成立**：注释写「读不到就不写」，代码却会继续 setter | 决策 3 补充：白名单（disposed / capability）+ 显式 `return` + 1 条白名单用例 |
+| **[P2]** 文档/PR 声称 warning 是 dev-only，但实现不是 | **成立**：`logger` 无 production gate | 决策 4 补充：告警改走 `devWarn`（`import.meta.env.DEV`，生产产物静态消除）——**改实现而不是改文档**，因为这几条是面向库使用者的用法提示，不该出现在最终用户 console |
+
+评审未提、本轮一并记录的相邻缺口：`retry()` 之后不会重跑 `apply*` / `bindViewEvents` / 收敛
+（见决策 8 末段，留给后续 issue）。
 
 ## 非目标
 

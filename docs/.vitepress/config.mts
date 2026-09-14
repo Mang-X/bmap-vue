@@ -11,6 +11,16 @@ export default withPwa(
     lastUpdated: true,
     base: "/bmap-vue/",
     cleanUrls: true,
+    /**
+     * 组件库源码里的构建期常量（`src/core/logger.ts` 的 `devWarn`）。
+     *
+     * 文档站直接把组件库**源码**编进 bundle（见 `docs/vite.config.ts` 的 alias 与示例的
+     * 相对 import），因此这份配置必须注入同一个常量：漏了就会在运行时读到一个不存在的
+     * 全局标识符。取值按 Vite 的惯例——`build` 为 `false`（生产静态消除），`dev` 为 `true`。
+     */
+    vite: {
+      define: { __DEV__: JSON.stringify(process.env.NODE_ENV !== "production") },
+    },
     head,
     markdown: {
       config: (md) => mdPlugin(md),

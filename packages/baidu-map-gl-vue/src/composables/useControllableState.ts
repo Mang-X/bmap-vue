@@ -9,7 +9,7 @@
  * | 非受控 | 受控 getter 返回 `undefined`，`defaultValue` 有值 | 内部状态 | 不适用 | 更新内部状态 |
  * | 缺省 | 两者都没有 | 内部状态（初值 = `fallback`） | 不适用 | 更新内部状态 |
  *
- * 三条**无歧义规则**（受控语义一旦发布很难改，因此这里冻结，详见 ADR
+ * 四条**无歧义规则**（受控语义一旦发布很难改，因此这里冻结，详见 ADR
  * `2026-09-14-map-controlled-state`）：
  *
  * 1. **`defaultValue` 只在首次解析时读一次**。之后它的变化不会覆盖内部状态——否则
@@ -21,6 +21,8 @@
  *      `v-model` 的正常首帧回写（父级写回的值 == 刚交互得到的值）不告警，否则每个用户
  *      第一次拖动地图都会看到一条无意义的告警。
  *    - 受控 → 非受控：内部状态接管（保留最后一次外部值），告警一次。
+ * 4. **可变值必须经 `copy` 落库**：初值、外部同步、SDK 回写三处都不与调用方的对象共享引用，
+ *    否则调用方一次原地修改就绕过了整个状态机。
  *
  * 每个字段每种方向最多告警一次（`warned` 集合），避免高频 prop 变化刷屏。
  *
@@ -33,7 +35,7 @@
  * （内部会注册一个 `defaultValue` 变化的告警 watcher，需要随作用域一起释放）。
  */
 import { computed, shallowRef, watch, type ComputedRef, type ShallowRef } from "vue";
-import { logger } from "../core/logger";
+import { devWarn } from "../core/logger";
 
 /** 相等判定。**必须容忍浮点抖动**（见 `core/utils/equality`），否则受控写入与 SDK 回写会形成往返。 */
 export type EqualFn<T> = (a: T, b: T) => boolean;
@@ -52,7 +54,20 @@ export interface UseControllableStateOptions<T> {
   fallback: T;
   /** 相等判定。 */
   equals: EqualFn<T>;
-  /** 是否输出 dev 告警（默认 true；测试与需要绝对静默的调用方可关掉）。 */
+  /**
+   * 值的防御性拷贝（默认恒等）。
+   *
+   * 传**可变对象**（如坐标点）时应当提供：初值与每次外部同步都会经过它，否则内部状态会与
+   * 调用方的对象共享引用——调用方原地修改就绕过了状态机（不产生 `commit`，也会把「首次快照」
+   * 一起改掉）。不可变值（字符串 / 数字）不需要。
+   */
+  copy?: (value: T) => T;
+  /**
+   * 是否输出用法告警（默认 true）。
+   *
+   * 即使为 true，也只有**开发构建**才真正打印（见 `core/logger` 的 `devWarn`）；
+   * 生产产物里该分支被构建期静态消除。
+   */
   warn?: boolean;
 }
 
@@ -83,13 +98,22 @@ export interface ControllableState<T> {
 export function useControllableState<T>(
   options: UseControllableStateOptions<T>,
 ): ControllableState<T> {
-  const { name, value, defaultValue, fallback, equals, warn = true } = options;
+  const {
+    name,
+    value,
+    defaultValue,
+    fallback,
+    equals,
+    copy = (input: T) => input,
+    warn = true,
+  } = options;
 
   // 首次解析固化三个来源的优先级：受控值 > 非受控初值 > 库默认值。
-  const initial = value() ?? defaultValue?.() ?? fallback;
-  // shallowRef：内部状态由调用方整体替换（不做深转换）。深响应式会把调用方传入的普通对象
-  // 变成 reactive 代理，再交给 SDK 时形状与 `Object.is` 语义都会变。
-  const internal = shallowRef(initial) as ShallowRef<T>;
+  // 经 `copy` 落库：调用方后续原地修改自己的对象不会改到这里的初值。
+  const initial = copy(value() ?? defaultValue?.() ?? fallback);
+  // 内部状态**再拷一份**：`initial` 会被调用方长期持有（例如组件的「首次视野快照」），
+  // 两者共享同一对象会让其中一方的原地修改影响另一方。
+  const internal = shallowRef(copy(initial)) as ShallowRef<T>;
   const isControlled = computed(() => value() !== undefined);
   const model = computed<T>(() => value() ?? internal.value);
 
@@ -98,7 +122,7 @@ export function useControllableState<T>(
   const warnOnce = (key: string, message: string): void => {
     if (!warn || warned.has(key)) return;
     warned.add(key);
-    logger.warn(message, { field: name });
+    devWarn(message, { field: name });
   };
 
   function syncExternal(next: T | undefined): void {
@@ -118,13 +142,13 @@ export function useControllableState<T>(
         `${name} 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。`,
       );
     }
-    internal.value = next;
+    internal.value = copy(next);
     mode = "controlled";
   }
 
   function commit(next: T): boolean {
     if (equals(next, internal.value)) return false;
-    internal.value = next;
+    internal.value = copy(next);
     return true;
   }
 

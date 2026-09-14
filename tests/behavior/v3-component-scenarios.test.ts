@@ -27,6 +27,7 @@ import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BC
 import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
 import { useBMapGeocoder } from "../../packages/baidu-map-gl-vue/src/composables/useBMapGeocoder";
 import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
+import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
 
 const { harness, fake } = createFakeV4Harness();
 
@@ -69,10 +70,18 @@ async function unmountAndSettle(wrapper: { unmount(): void }) {
  * 挂一份由 `props` 驱动的 `<BMap>`（视野用例需要从外部改变 props，见 M4-STATE / #27）。
  *
  * `emit` 从 `<BMap>` 自己的 wrapper 上读：`wrapper.emitted()` 只记录父级 emit 的事件。
+ * `onError` 把「组件 mounted / watcher 回调里抛出的错误」收成可断言的结果
+ * （与 `mountMapTree` 同一口径：Vue 会交给 `config.errorHandler`，不接住就是 unhandled）。
  */
-async function mountControlledMap(getProps: () => Record<string, unknown>) {
-  const Root = defineComponent({ setup: () => () => h(BMap, getProps()) });
-  const wrapper = mount(Root, { attachTo: harness.container() });
+async function mountControlledMap(
+  getProps: () => Record<string, unknown>,
+  options: { children?: () => VNodeChild; onError?: (error: unknown) => void } = {},
+) {
+  const Root = defineComponent({ setup: () => () => h(BMap, getProps(), options.children) });
+  const wrapper = mount(Root, {
+    attachTo: harness.container(),
+    global: options.onError ? { config: { errorHandler: options.onError } } : undefined,
+  });
   await flushPromises();
   await nextTick();
   return { wrapper, bmap: wrapper.findComponent(BMap) };
@@ -597,5 +606,172 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
     await unmountAndSettle(wrapper);
     expect(harness.listenActivity().pending).toBe(0);
     harness.assertIdle("视野：不重绑与卸载归零");
+  });
+
+  /* ------------------------------------------------- 评审补测（2026-09-14 回合同步补） */
+
+  it("SDK 就绪前发生的受控值变化，会在 ready 时收敛（延迟加载 Provider）", async () => {
+    const props = ref<Record<string, unknown>>({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+      heading: 0,
+      tilt: 0,
+    });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    // 正证守卫：SDK 真的还没放行（否则下面的「收敛」可能只是因为压根没走延迟路径）
+    expect(harness.mapsCreated(), "SDK 尚未放行 ⇒ 还没有地图").toBe(0);
+
+    // 加载窗口内改四个受控值：那时没有 map 可写，watcher 只能跳过
+    const later = { lng: 121.5, lat: 31.2 };
+    props.value = { ...props.value, center: { ...later }, zoom: 16, heading: 45, tilt: 30 };
+    await settleProps();
+    expect(harness.mapsCreated(), "仅改 props 不会提前建图").toBe(0);
+
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    // 最终视野必须是**最新 props**（不修的话这里会停在 POSITION / 12 / 0 / 0）
+    expect(harness.view()).toEqual({ center: later, zoom: 16, heading: 45, tilt: 30 });
+    // 而且收敛是**字段级写入**，不是重跑初始化视野
+    expect(harness.viewWrites()).toMatchObject({
+      centerAndZoom: 1,
+      setCenter: 1,
+      setZoom: 1,
+      setHeading: 2,
+      setTilt: 2,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载窗口内的受控更新");
+  });
+
+  it("加载期间才出现的受控值（`loaded ? spot : undefined` 形态）在 ready 后生效", async () => {
+    const props = ref<Record<string, unknown>>({ provider: harness.deferredProvider() });
+    const { wrapper } = await mountControlledMap(() => props.value);
+    expect(harness.mapsCreated()).toBe(0);
+
+    // 文档明确支持的用法：起点是「缺省档」，异步数据到达后才开始受控
+    props.value = { provider: props.value.provider, center: { ...POSITION }, zoom: 9 };
+    await settleProps();
+    harness.releaseProvider();
+    await settleProps();
+    await settleProps();
+
+    expect(harness.view()).toEqual({ center: POSITION, zoom: 9, heading: 0, tilt: 0 });
+    expect(harness.viewWrites()).toMatchObject({ centerAndZoom: 1, setCenter: 1, setZoom: 1 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：加载期间开始受控");
+  });
+
+  it("受控 center 的原地 mutation 不改动状态与首次快照", async () => {
+    const spot = { lng: POSITION.lng, lat: POSITION.lat };
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      center: spot,
+      zoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view().center).toEqual(POSITION);
+
+    // 用户交互把地图挪走（父级按 v-model 收到了回写）
+    props.value["onUpdate:center"] = (next: unknown) => {
+      props.value = { ...props.value, center: next };
+    };
+    harness.simulateUserView({ center: { lng: 118, lat: 41 } });
+    await settleProps();
+    expect(harness.view().center).toEqual({ lng: 118, lat: 41 });
+
+    // 父级原地改「自己那个对象」：既没有新引用、也没有新的 props 变化
+    spot.lng = 125;
+    await settleProps();
+    expect(harness.view().center, "mutation 不是 prop 变化，地图不动").toEqual({
+      lng: 118,
+      lat: 41,
+    });
+
+    // 关键断言：resetView() 回到**首次解析**的值，而不是被 mutation 改过的 125
+    (bmap.vm as unknown as { resetView(): void }).resetView();
+    await settleProps();
+    expect(harness.view().center).toEqual(POSITION);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：受控 center 原地 mutation");
+  });
+
+  it("defaultCenter 的原地 mutation 不改内部初值，也不吃掉后续 update:center", async () => {
+    const initial = { lng: POSITION.lng, lat: POSITION.lat };
+    const props = ref<Record<string, unknown>>({
+      provider: harness.provider(),
+      defaultCenter: initial,
+      defaultZoom: 12,
+    });
+    const { wrapper, bmap } = await mountControlledMap(() => props.value);
+    expect(harness.view()).toMatchObject({ center: POSITION, zoom: 12 });
+
+    initial.lng = 125;
+    await settleProps();
+    expect(harness.view().center, "mutation 不得静默改到内部初值").toEqual(POSITION);
+    expect(harness.viewWrites().setCenter).toBe(0);
+
+    // 用户交互到「与 mutation 后的值相同」的位置：内部状态没被改写 ⇒ 必须照常上报
+    harness.simulateUserView({ center: { lng: 125, lat: 39.9 } });
+    await settleProps();
+    expect(bmap.emitted("update:center")).toEqual([[{ lng: 125, lat: 39.9 }]]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：defaultCenter 原地 mutation");
+  });
+
+  it("读回失败：白名单错误码跳过命令，其余错误码上抛", async () => {
+    const errors: unknown[] = [];
+    const seen: { driver: Record<string, unknown> | null } = { driver: null };
+    const DriverProbe = defineComponent({
+      setup() {
+        const mapContext = useRequiredMapContext();
+        return () => {
+          // 首帧渲染时 client 还没就绪（探针挂在 `<BMap>` 的默认插槽里，先于 mount 完成渲染），
+          // 因此这里要能容忍 undefined，等 client 就绪后的那次重渲染再捕获。
+          const driver = mapContext.client.value?.driver as unknown as
+            | { map: Record<string, unknown> }
+            | undefined;
+          if (driver) seen.driver = driver.map;
+          return h("span", "driver-probe");
+        };
+      },
+    });
+
+    const props = ref<Record<string, unknown>>(controlledViewProps());
+    const { wrapper } = await mountControlledMap(() => props.value, {
+      children: () => h(DriverProbe),
+      onError: (error) => errors.push(error),
+    });
+    const driverMap = seen.driver;
+    expect(driverMap, "探针必须拿到 driver.map").not.toBeNull();
+
+    // ① 已销毁（白名单）：读不到 ⇒ 不下发命令，也不上抛
+    driverMap!.getCenter = () => {
+      throw new BMapError("BMAP_RESOURCE_DISPOSED", "地图已销毁");
+    };
+    props.value = { ...props.value, center: { lng: 118, lat: 41 } };
+    await settleProps();
+    expect(harness.viewWrites().setCenter, "读不到就不写下一条命令").toBe(0);
+    expect(errors, "白名单错误码不上抛").toHaveLength(0);
+    expect(harness.view().center, "地图仍停在原处").toEqual(POSITION);
+
+    // ② 真实故障（不在白名单）：必须冒出来，而不是被静默跳过
+    driverMap!.getCenter = () => {
+      throw new BMapError("BMAP_SDK_CALL_FAILED", "读回失败");
+    };
+    props.value = { ...props.value, center: { lng: 119, lat: 42 } };
+    await settleProps();
+    expect(errors, "非白名单错误码必须上抛（Vue 交给 errorHandler）").toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(BMapError);
+    expect(harness.viewWrites().setCenter).toBe(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野：读回错误白名单");
   });
 });

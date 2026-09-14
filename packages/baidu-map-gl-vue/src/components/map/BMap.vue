@@ -22,7 +22,7 @@ import {
 } from "../../core/context/client";
 import { targetContextKey, type TargetContext } from "../../core/context/target";
 import { MapRuntime } from "../../core/runtime/MapRuntime";
-import { BMapError } from "../../core/errors/BMapError";
+import { BMapError, type BMapErrorCode } from "../../core/errors/BMapError";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
@@ -177,12 +177,25 @@ const DEFAULT_VIEW = {
   tilt: 0,
 } as const;
 
+/**
+ * `center` 的防御性拷贝（#27 评审 P1）。
+ *
+ * 点必须拷：`center` / `defaultCenter` 是**可变对象**，父级拿到自己的对象后原地改一个字段
+ * （`spot.lng = 5`）不会触发 props 变化，却会顺着引用改到状态内部的初值 / 镜像 / 首次视野快照上，
+ * 于是「resetView 回到首次值」「default 只读一次」两条语义都被绕过。字符串是不可变的，原样返回。
+ */
+function cloneCenter(value: MapCenter): MapCenter {
+  if (typeof value === "string") return value;
+  return { lng: value.lng, lat: value.lat };
+}
+
 const centerState = useControllableState<MapCenter>({
   name: "center",
   value: () => props.center,
   defaultValue: () => props.defaultCenter,
   fallback: DEFAULT_VIEW.center,
   equals: centerEquals,
+  copy: cloneCenter,
 });
 
 const zoomState = useControllableState<number>({
@@ -228,21 +241,30 @@ const initialViewSnapshot: MapView = {
 };
 
 /**
- * 读回地图当前值；读不到时返回 `null`。
+ * 读回视野时**允许**被忽略的错误码（#27 评审 P2：只吞明确允许的，其余重抛）。
  *
- * 「读不到」= SDK 已销毁（`BMAP_RESOURCE_DISPOSED`）或该能力在本引擎不可用——两者都由
- * 库自己的错误协议（`BMapError`）表达。读不到就**不**写下一条命令：写命令在同样条件下只会
- * 抛同样的错，而这里的调用来自 prop watcher 与 SDK 事件回调，让异常从这两处逃逸只会在
- * 销毁 / 降级路径上产生噪音。
+ * 只有这两种情形算「这次读本来就不成立」：资源已销毁（销毁后没有可读状态，写命令也只会抛
+ * 同样的错），或该能力在本引擎不可用（读不出、也没有可写的东西）。
  *
- * **不吞**非 `BMapError` 的异常：`TypeError` 一类是编程错误（或测试替身失真），
- * 归零成 `null` 会让「读不到」与「读错」混在一起，变成静默失效。
+ * 其余错误码一律上抛——`BMAP_SDK_CALL_FAILED` / `BMAP_INVALID_ARGUMENT` / `BMAP_INVALID_POINT` /
+ * `BMAP_HANDLE_FOREIGN` 都是真实故障（含测试替身失真），归零成 `null` 会变成静默失效。
+ */
+const IGNORABLE_VIEW_READ_ERRORS: ReadonlySet<BMapErrorCode> = new Set([
+  "BMAP_RESOURCE_DISPOSED",
+  "BMAP_RUNTIME_DISPOSED",
+  "BMAP_CAPABILITY_UNSUPPORTED",
+]);
+
+/**
+ * 读回地图当前值；不可读时返回 `null`——**调用方必须显式 `return`，不写下一条命令**。
+ *
+ * 非 `BMapError`（`TypeError` 一类编程错误）与不在白名单里的 `BMapError` 都继续抛。
  */
 function readLiveView<T>(read: () => T): T | null {
   try {
     return read();
   } catch (e) {
-    if (e instanceof BMapError) return null;
+    if (e instanceof BMapError && IGNORABLE_VIEW_READ_ERRORS.has(e.code)) return null;
     throw e;
   }
 }
@@ -253,7 +275,8 @@ function readLiveView<T>(read: () => T): T | null {
  * 1. 先同步内部镜像（受控值优先，并触发模式切换告警）；
  * 2. 非受控（`undefined`）直接返回，不写 SDK；
  * 3. **读回** SDK 现值做容差判等：一致就不下命令。这一步既抑制「父级回写同一值」的重复命令，
- *    也抑制真实 SDK 的浮点抖动；反过来，`centerAndZoom` 永远不会出现在这条路径上。
+ *    也抑制真实 SDK 的浮点抖动；反过来，`centerAndZoom` 永远不会出现在这条路径上；
+ * 4. 读不到（地图已销毁 / 该能力不可用）也直接返回：写命令在同样条件下只会抛同样的错。
  */
 function applyCenterFromProps(next: MapCenter | undefined): void {
   centerState.syncExternal(next);
@@ -262,7 +285,8 @@ function applyCenterFromProps(next: MapCenter | undefined): void {
   const c = client.value;
   if (!m || !c) return;
   const current = readLiveView(() => c.driver.map.getCenter(m));
-  if (current && centerEquals(current, next)) return;
+  if (current === null) return;
+  if (centerEquals(current, next)) return;
   c.driver.map.setCenter(m, next);
 }
 
@@ -274,7 +298,8 @@ function applyZoomFromProps(next: number | undefined): void {
   const c = client.value;
   if (!m || !c) return;
   const current = readLiveView(() => c.driver.map.getZoom(m));
-  if (current !== null && numbersEqual(current, next)) return;
+  if (current === null) return;
+  if (numbersEqual(current, next)) return;
   c.driver.map.setZoom(m, next);
 }
 
@@ -286,7 +311,8 @@ function applyHeadingFromProps(next: number | undefined): void {
   const c = client.value;
   if (!m || !c) return;
   const current = readLiveView(() => c.driver.map.getHeading(m));
-  if (current !== null && anglesEqual(current, next)) return;
+  if (current === null) return;
+  if (anglesEqual(current, next)) return;
   c.driver.map.setHeading(m, next);
 }
 
@@ -298,8 +324,26 @@ function applyTiltFromProps(next: number | undefined): void {
   const c = client.value;
   if (!m || !c) return;
   const current = readLiveView(() => c.driver.map.getTilt(m));
-  if (current !== null && numbersEqual(current, next, ANGLE_EPSILON)) return;
+  if (current === null) return;
+  if (numbersEqual(current, next, ANGLE_EPSILON)) return;
   c.driver.map.setTilt(m, next);
+}
+
+/**
+ * 把**当前** props 的受控视野收敛到刚就绪的地图上（#27 评审 P1）。
+ *
+ * 为什么必须有这一步：四个 watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野
+ * 用的是 setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
+ * （`:center="loaded ? spot : undefined"`）：那次写入会被丢掉，之后 prop 不再变化 ⇒ watcher
+ * 不会重跑 ⇒ 地图永远停在旧初值。这里在 ready 之前按当前 props 收敛一次。
+ *
+ * 四个 `apply*FromProps` 都是幂等的（读回判等），所以「加载期间没变过」的情形不会产生额外命令。
+ */
+function syncControlledView(): void {
+  applyCenterFromProps(props.center);
+  applyZoomFromProps(props.zoom);
+  applyHeadingFromProps(props.heading);
+  applyTiltFromProps(props.tilt);
 }
 
 /**
@@ -485,6 +529,8 @@ async function boot() {
     applyStyleProps(ctx);
     applyMapType(ctx);
     syncEnableProps(ctx);
+    // 加载期间父级可能已经改过受控视野（那时没有 map 可写），ready 之前按当前 props 收敛一次
+    syncControlledView();
     // 视野回写订阅（M4-STATE / #27）：用户交互 → model → emit update:*
     bindViewEvents(ctx);
     runtime.resources.add(

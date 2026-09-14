@@ -55,6 +55,14 @@ export interface FakeV4UserView {
 export interface FakeV4Harness {
   /** 组件路径的 Provider（结构化：自述 `engine: "jsapi-v4"`）。 */
   provider(): BMapProviderLike;
+  /**
+   * 加载**挂起**的 Provider：`load()` 一直不 resolve，直到 `releaseProvider()` 被调用。
+   *
+   * 用来在「SDK 尚未就绪」的窗口里改变 props / 观察中间状态（#27 评审 P1 的延迟加载场景）。
+   */
+  deferredProvider(): BMapProviderLike;
+  /** 放行所有由 `deferredProvider()` 发起的加载（幂等：放行后再次调用是 no-op）。 */
+  releaseProvider(): void;
   /** 每个用例一份的挂载容器（已 attach 到 document 并带内联尺寸）。 */
   container(): HTMLElement;
   /** 用例开头重置 Fake 的生命周期诊断基线与运行时注入成员。 */
@@ -67,6 +75,8 @@ export interface FakeV4Harness {
   overlayPositions(): Array<{ lng: number; lat: number } | null>;
   /** 最后一张地图上当前打开的气泡数。 */
   openInfoWindows(): number;
+  /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
+  mapsCreated(): number;
   /** 最后一张地图当前的视野（M4-STATE / #27 的领域读数）。 */
   view(): FakeV4View;
   /** 最后一张地图收到的视野命令次数（按字段分开计数）。 */
@@ -188,6 +198,8 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
   fake: FakeBMapV4;
 } {
   const lastMap = () => lastCreatedMap(fake.createdMaps, "fake-v4 harness");
+  /** 挂起中的 `deferredProvider().load()` 放行函数（放行一次即清空）。 */
+  const pendingLoads: Array<() => void> = [];
   return {
     fake,
     harness: {
@@ -207,6 +219,25 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
             loadedAt: 0,
           }),
       }),
+      deferredProvider: () => ({
+        id: "fake-bmap-v4-deferred",
+        load: async () => {
+          await new Promise<void>((resolve) => pendingLoads.push(resolve));
+          return createLoadedJsapiV4({
+            providerId: "existing-global-v4",
+            mode: "existing-global",
+            version: fake.namespace.VERSION,
+            versionSource: "global",
+            options: { ak: "fake-ak" },
+            fingerprint: "fake-v4-harness-deferred",
+            namespace: fake.namespace,
+            loadedAt: 0,
+          });
+        },
+      }),
+      releaseProvider: () => {
+        for (const resolve of pendingLoads.splice(0)) resolve();
+      },
       container: sizedContainer,
       reset: () => {
         fake.diagnostics.reset();
@@ -221,6 +252,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       },
       overlayPositions: () => toPositions(lastMap().overlays),
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
+      mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
       view: () => {
         const map = lastMap();
         return {

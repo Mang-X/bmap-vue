@@ -57,6 +57,18 @@ console.log(state.value.value) // 生效值（受控时读外部，非受控时�
 必须在 `setup()` 或 `effectScope()` 内调用（内部会注册一个 `defaultValue` 变化的告警 watcher，
 需要随作用域一起释放）。
 
+传**可变对象**（坐标点一类）时补一个 `copy`，否则内部状态会与调用方的对象共享引用：
+
+```ts
+const state = useControllableState<{ lng: number; lat: number }>({
+  name: 'center',
+  value: () => props.center,
+  fallback: { lng: 116.403901, lat: 39.915185 },
+  equals: (a, b) => Math.abs(a.lng - b.lng) <= 1e-7 && Math.abs(a.lat - b.lat) <= 1e-7,
+  copy: (p) => ({ lng: p.lng, lat: p.lat }), // 初值、外部同步、SDK 回写三处都会经它
+})
+```
+
 ## 返回值
 
 | 成员 | 说明 |
@@ -77,17 +89,22 @@ console.log(state.value.value) // 生效值（受控时读外部，非受控时�
 | `defaultValue()` | 非受控初值读取器；**只在首次解析时读一次** |
 | `fallback` | 既无受控值也无初值时的库默认值（只在首次解析时使用） |
 | `equals` | 相等判定；**必须容忍浮点抖动**，否则受控写入与 SDK 回写会形成往返 |
-| `warn` | 是否输出 dev 告警（默认 `true`） |
+| `copy` | 值的防御性拷贝（默认恒等）；传可变对象时应当提供 |
+| `warn` | 是否输出用法告警（默认 `true`）；即使为 `true`，也只有**开发构建**才真的打印 |
 
-## 三条规则
+## 四条规则
 
 1. **`defaultValue` 只在首次解析时读一次。** 之后它的变化不会覆盖内部状态（否则会把用户操作
-   静默吃掉）；发生这种情况时输出一次 dev 告警。
+   静默吃掉）；发生这种情况时输出一次告警。
 2. **模式按「当前受控值是否存在」实时判定，不冻结在首次解析**，因此「异步数据到达后才开始
    受控」是支持的。
 3. **模式切换只告警、不拒绝**，且只在「切换会造成事实源歧义」时告警：非受控 → 受控且外部值
    与当前内部状态冲突时告警一次；受控 → 非受控时内部状态接管（保留最后一次外部值）并告警一次。
    父级把交互结果原样写回（`v-model` 的正常闭环）不会告警。
+4. **可变值必须经 `copy` 落库**：初值、外部同步、SDK 回写三处都持有独立拷贝，调用方原地修改
+   自己的对象不会绕过状态机。
+
+告警走开发期通道（构建期常量 `__DEV__`）：**生产产物里不包含这段代码**。
 
 相等判定的现成实现见
 `packages/baidu-map-gl-vue/src/core/utils/equality.ts`（`pointEquals` / `numbersEqual` /

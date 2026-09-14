@@ -166,6 +166,49 @@ describe('useControllableState', () => {
     expect(warnLines(warn).filter((line) => line.includes('由受控切换为非受控')).length).toBe(1)
   })
 
+  it('copy：初值、外部同步与 SDK 回写都持有独立拷贝（原地 mutation 不改内部状态）', () => {
+    interface Spot {
+      lng: number
+      lat: number
+    }
+    const spotEquals = (a: Spot, b: Spot) => a.lng === b.lng && a.lat === b.lat
+    const cloneSpot = (value: Spot): Spot => ({ lng: value.lng, lat: value.lat })
+
+    const external: Spot = { lng: 1, lat: 2 }
+    const state = inScope(() =>
+      useControllableState<Spot>({
+        name: 'center',
+        value: () => external,
+        fallback: { lng: 0, lat: 0 },
+        equals: spotEquals,
+        copy: cloneSpot,
+      }),
+    )
+
+    // ① 暴露的初值与内部状态各自独立，且都不是调用方那个对象
+    expect(state.initial).not.toBe(external)
+    expect(state.initial).toEqual(external)
+    expect(state.internal.value).not.toBe(state.initial)
+    expect(state.internal.value).toEqual(external)
+
+    // ② 调用方原地改自己的对象：内部状态不受影响（1,2 仍然是当前值 ⇒ 不算「变化」）
+    external.lng = 99
+    expect(state.commit({ lng: 1, lat: 2 }), '内部状态未被 mutation 改写').toBe(false)
+
+    // ③ 外部同步存的是拷贝
+    const nextExternal: Spot = { lng: 5, lat: 6 }
+    state.syncExternal(nextExternal)
+    nextExternal.lng = 77
+    expect(state.internal.value).toEqual({ lng: 5, lat: 6 })
+
+    // ④ SDK 回写也存拷贝（事件载荷与内部状态解耦）
+    const fromSdk: Spot = { lng: 7, lat: 8 }
+    expect(state.commit(fromSdk)).toBe(true)
+    fromSdk.lng = 70
+    expect(state.internal.value).toEqual({ lng: 7, lat: 8 })
+    expect(state.commit({ lng: 7, lat: 8 })).toBe(false)
+  })
+
   it('warn: false 时模式切换与 default 失效都静默', async () => {
     const external = ref<number | undefined>(undefined)
     const fallbackDefault = ref<number | undefined>(1)
