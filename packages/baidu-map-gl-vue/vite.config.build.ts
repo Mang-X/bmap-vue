@@ -131,6 +131,11 @@ export default defineConfig({
   define: {
     __DEV__: 'false',
     __VERSION__: JSON.stringify('3.0.0-beta.0'),
+    // ⚠️ **不要**在这里 define `process.env.NODE_ENV`（global 档可以，见 vite.config.global.ts）。
+    // 这一档是发布给 npm 消费方的 ESM 产物：`core/logger.ts` 的 `devWarn` 靠这个标记让**消费方的**
+    // 打包器 / 运行时决定开发还是生产。在 publish build 阶段定死成 `production`，消费方即使在自己
+    // 的 dev server 里 import 也永远看不到告警（#27 评审第二轮 P2 就是这个坑）。
+    // `scripts/verify-package.mts` 有断言锁住这条不变量。
   },
   build: {
     lib: {

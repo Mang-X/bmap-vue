@@ -16,6 +16,11 @@ export default defineConfig({
   define: {
     __DEV__: 'false',
     __VERSION__: JSON.stringify('3.0.0-beta.0'),
+    // 这一档是 `<script>` 直引的生产产物，浏览器里没有 `process`：必须在这里把
+    // `core/logger.ts`（`devWarn`）的环境判定折叠掉，否则会留下裸 `process` 引用。
+    // **只在这一档折叠**：ESM 档（vite.config.build.ts）必须原样保留这个标记，
+    // 由消费方的打包器决定开发 / 生产（否则 npm 消费方永远看不到 dev 告警，见 #27 评审第二轮）。
+    'process.env.NODE_ENV': JSON.stringify('production'),
   },
   build: {
     lib: {

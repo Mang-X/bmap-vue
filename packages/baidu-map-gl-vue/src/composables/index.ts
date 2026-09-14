@@ -1,4 +1,5 @@
 export * from "./useBMap";
+export * from "./useControllableState";
 export * from "./useBMapGeolocation";
 export * from "./useBMapViewAnimation";
 export * from "./useBMapMarkerIcons";
