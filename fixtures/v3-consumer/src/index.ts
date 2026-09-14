@@ -245,3 +245,72 @@ export const serviceComposableSmoke = {
   taskSupported,
   geocodeOnce,
 }
+
+// 路线服务（M7-ROUTES / #39）的消费方编译 smoke：与上一段同样的目的——这段代码只依赖 tarball 的
+// 公共类型，证据由 `scripts/verify-package.mts` 里的 `vue-tsc --noEmit` 提供。这里额外钉住三件事：
+// ① 驾车端点**不接受字符串**（官方签名里没有 `string`）；② 结果**不退化成 `any`**；
+// ③ 公交的分段是判别联合（`kind` 收窄能真的收窄 `leg` / `title`）。
+import {
+  DrivingPolicy,
+  IntercityPolicy,
+  TransitPolicy,
+  TransitVehiclePolicy,
+  useBMapDrivingRoute,
+  useBMapRidingRoute,
+  useBMapTransitRoute,
+  useBMapWalkingRoute,
+  type DrivingRouteResult,
+  type RidingRouteResult,
+  type TransitRouteResult,
+  type WalkingRouteResult,
+} from 'baidu-map-gl-vue'
+
+declare const drivingRoute: ReturnType<typeof useBMapDrivingRoute>
+declare const walkingRoute: ReturnType<typeof useBMapWalkingRoute>
+declare const ridingRoute: ReturnType<typeof useBMapRidingRoute>
+declare const transitRoute: ReturnType<typeof useBMapTransitRoute>
+
+const driveOnce: Promise<ServiceResult<DrivingRouteResult>> = drivingRoute.search(
+  { lng: 116.391, lat: 39.91 },
+  // POI 引用端点：uid 定位、point 兜底、name 作标题
+  { uid: 'poi-1', point: { lng: 116.431, lat: 39.931 }, name: '终点' },
+  { waypoints: [{ lng: 116.41, lat: 39.92 }] },
+)
+const walkOnce: Promise<ServiceResult<WalkingRouteResult>> = walkingRoute.search('天安门', '王府井')
+const rideOnce: Promise<ServiceResult<RidingRouteResult>> = ridingRoute.search('北京大学', '清华大学')
+const transitOnce: Promise<ServiceResult<TransitRouteResult>> = transitRoute.search('天安门', '北京西站')
+
+// ② 结果不是 `any`：`description` 是 `string | null`，当 number 用必须编译失败。
+// @ts-expect-error 路线结果不退化为 any
+const notAny: number = drivingRoute.data.value?.plans[0]?.legs[0]?.steps[0]?.description
+
+// ③ 公交分段是判别联合：`kind === 'line'` 之后才有 `title`，`'walk'` 之后才有 `leg`。
+const firstSegment = transitRoute.data.value?.plans[0]?.segments[0]
+const segmentKind: 'line' | 'walk' | undefined = firstSegment?.kind
+const lineTitle: string | undefined = firstSegment?.kind === 'line' ? firstSegment.title : undefined
+const walkLegPath: number | undefined =
+  firstSegment?.kind === 'walk' ? firstSegment.leg.path.length : undefined
+
+// ① 驾车端点不接受字符串地名（官方 `DrivingRoute#search` 的签名里没有 `string`）。
+// @ts-expect-error 驾车端点只接受 Point 或 POI 引用
+const driveByKeyword: ReturnType<typeof drivingRoute.search> = drivingRoute.search('天安门', '王府井')
+
+const routePolicies: number[] = [
+  DrivingPolicy.AVOID_CONGESTION,
+  TransitPolicy.LEAST_TIME,
+  IntercityPolicy.CHEAP_PRICE,
+  TransitVehiclePolicy.TRAIN,
+]
+
+export const routeComposableSmoke = {
+  driveOnce,
+  walkOnce,
+  rideOnce,
+  transitOnce,
+  notAny,
+  segmentKind,
+  lineTitle,
+  walkLegPath,
+  driveByKeyword,
+  routePolicies,
+}

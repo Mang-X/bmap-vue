@@ -31,6 +31,9 @@ function zeroLeaks(): FakeV4LeakCounters {
     panoramas: 0,
     autocompletes: 0,
     localSearchResults: 0,
+    // 路线服务的结果集（M7-ROUTES / #39）：与 localSearchResults 同档——实例没有 dispose()，
+    // 真正的资源是它交付出去的结果，销账点是公开的 `clearResults()`。
+    routeResults: 0,
     listeners: 0,
   };
 }
