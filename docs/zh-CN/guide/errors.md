@@ -97,6 +97,9 @@ interface BMapErrorLike {
 **解决**:改正名字。组件层不会因此阻断地图：该名字发 `plugin-error`，同一列表里的其它插件照常加载。
 它与 `BMAP_PLUGIN_LOAD_FAILED` 的区别是**重试没有意义**（配置错误 vs CDN 抖动），
 因此 `retryable === false`。
+还要注意：未知名字**不会**在注册表里留下记录，所以 `getStatus(name)` / `inspect(name)` 是
+`undefined` 而**不是** `'error'` —— 「名字不认识」与「名字认得但加载失败」（有记录、状态 `error`）
+是两个不同的可观察结果。
 
 ### `BMAP_SERVICE_FAILED`
 

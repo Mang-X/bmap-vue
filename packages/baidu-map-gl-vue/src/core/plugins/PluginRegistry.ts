@@ -156,13 +156,19 @@ function unknownPluginError(name: string): BMapError {
 }
 
 /**
- * 注册表的内部记录：比公开的 `PluginRecord` 多一个**在飞 promise**。
+ * 注册表的内部记录：比公开的 `PluginRecord` 多一个**在飞 promise** 与**加载令牌**。
  *
- * 放在内部类型而不是公开类型上，是因为「同一次加载的 promise 是谁」属于实现细节；
+ * 放在内部类型而不是公开类型上，是因为「同一次加载的 promise / 第几次尝试」属于实现细节；
  * 对外要暴露的是 `inspect()` 那组读数。
  */
 interface InternalPluginRecord extends PluginRecord {
   promise: Promise<unknown> | null;
+  /**
+   * 当前这次加载的令牌，每次进入 `load()` 自增。
+   *
+   * 结算时比对：过期的结算（注册表已销毁、或又起了一次新加载）一律丢弃（评审 #88 P1-1）。
+   */
+  generation: number;
 }
 
 export function createPluginRegistry(
@@ -286,6 +292,36 @@ export function createPluginRegistry(
     }
   }
 
+  /**
+   * 这次结算是否已经**过期**：注册表已销毁，或又起了一次新的加载。
+   *
+   * 为什么必须在写状态之前校验（评审 #88 P1-1）：`dispose()` 只把记录标成 `disposed`，
+   * 而这里 `.then/.catch` 是**在 dispose 之前**就挂在底层 promise 上的 —— 地图卸载后插件脚本
+   * 才下载完/失败时，它们会把这个注册表从 `disposed` 拉回 `ready` / `error`：
+   * 状态说谎、事件广播到已销毁的地图上，而且 `map` 作用域那条晚到的实例没人再会释放。
+   */
+  function isStaleSettle(record: InternalPluginRecord, generation: number): boolean {
+    return disposed || record.status === "disposed" || generation !== record.generation;
+  }
+
+  /**
+   * 丢弃一次过期结算，并把它带来的 `map` 作用域资源**就地释放**。
+   *
+   * 为什么必须释放：`dispose()` 的释放快照只看 `status === "ready"` 的条目，这次成功来得比它晚
+   * ⇒ 实例不在任何人的名下；`scope` 也只会跑 `setup` 登记过的 disposer（那是 `setup` 的返回值，
+   * 不是实例本身）。不释放就是孤儿资源。
+   *
+   * 不在这里动 `global` 作用域：它的所有者是宿主（ADR 决策 4），注册表释放它是越权。
+   */
+  function discardStaleSettle(record: InternalPluginRecord, instance: unknown): void {
+    if (record.scope !== "map" || instance == null) return;
+    try {
+      record.definition.dispose?.(instance, getContext());
+    } catch {
+      // 释放失败不得影响结算路径
+    }
+  }
+
   function loadPlugin(record: InternalPluginRecord): Promise<unknown> {
     if (record.status === "ready") return Promise.resolve(record.instance);
     if (record.status === "loading" && record.promise) return record.promise;
@@ -299,8 +335,14 @@ export function createPluginRegistry(
 
     record.status = "loading";
     record.attempts += 1;
+    const generation = ++record.generation;
     const promise = startLoad(record)
       .then((instance) => {
+        // 过期结算：不写状态、不发事件、不登记 setup；把资源就地交还
+        if (isStaleSettle(record, generation)) {
+          discardStaleSettle(record, instance);
+          return instance;
+        }
         record.instance = instance;
         record.status = "ready";
         // 成功必须把上一次的错误清掉：留着它，`getStatus() === "ready"` 与
@@ -312,6 +354,8 @@ export function createPluginRegistry(
         return instance;
       })
       .catch((error: unknown) => {
+        // 过期失败同样只把错误交还给等待者，不写状态、不广播
+        if (isStaleSettle(record, generation)) throw error;
         record.status = "error";
         record.error = error;
         record.promise = null;
@@ -343,6 +387,7 @@ export function createPluginRegistry(
         attempts: 0,
         consumers: 0,
         promise: null,
+        generation: 0,
       });
     },
 

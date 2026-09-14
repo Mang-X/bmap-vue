@@ -53,6 +53,19 @@ function registry(
   return { plugins, events, scope };
 }
 
+/**
+ * 结算在飞 promise 链后的一拍。
+ *
+ * 「晚到的 settle」这条路径**没有消费者在等**（消费者早被 dispose 结算掉了），所以不能靠
+ * `await` 某个 promise 来推进，只能等一个 macrotask。
+ */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** 事件总线里某类事件的次数。 */
+function emitted(events: ReturnType<typeof makeEvents>, type: string): number {
+  return events.emit.mock.calls.filter(([t]) => t === type).length;
+}
+
 describe("PluginRegistry：注册与状态", () => {
   it("registers and loads a plugin", async () => {
     const { plugins, events } = registry();
@@ -76,6 +89,12 @@ describe("PluginRegistry：注册与状态", () => {
     expect(rejection).toBeInstanceOf(BMapError);
     expect((rejection as BMapError).code).toBe("BMAP_PLUGIN_UNKNOWN");
     expect((rejection as BMapError).plugin).toBe("Nope");
+    // 未注册的名字**不会**留下记录：`getStatus` / `inspect` 都是 `undefined`（不是 `'error'`）。
+    // 这一点必须如实写在文档里 —— 「名字不认识」与「名字认得但加载失败」是两个不同的可观察结果
+    // （评审 #88 文档项）。
+    expect(plugins.getStatus("Nope"), "没有记录就没有状态，不是 error").toBeUndefined();
+    expect(plugins.inspect("Nope")).toBeUndefined();
+    expect(plugins.getError("Nope")).toBeUndefined();
   });
 
   it("非法的 scope 值在注册期就报错（JS 调用方的唯一防线）", () => {
@@ -542,5 +561,95 @@ describe("PluginRegistry：setup 的 disposer 与 map dispose 的顺序", () => 
       "definition-dispose",
       "setup-disposer",
     ]);
+  });
+});
+
+/**
+ * dispose 之后**晚到的结算**不得复活记录（评审 #88 P1-1）。
+ *
+ * `dispose()` 只把 record 标成 `disposed`，但 `loadPlugin()` 里早先挂上的 `.then/.catch`
+ * 仍会无条件回写 `status` / `instance` / `error` 并广播事件。于是「地图卸载了，插件脚本这才
+ * 下载完/失败」会把这个注册表从 disposed 拉回 ready / error：状态说谎、事件发到已销毁的地图上，
+ * 而且 `map` 作用域那条晚到的实例此刻**没有任何所有者**（dispose 的快照里它是 null），
+ * 再也不会有谁去调 `definition.dispose`。
+ */
+describe("PluginRegistry：dispose 之后晚到的结算不得复活记录", () => {
+  it("dispose 后底层才 reject：状态仍是 disposed，不再发 plugin:error、不记 late error", async () => {
+    const boom = new Error("late failure");
+    const { plugins, events } = registry();
+    const deferred = deferredLoad("M");
+    plugins.register({ ...deferred.definition, scope: "map", required: false });
+
+    const pending = plugins.whenPlugin("M");
+    expect(plugins.getStatus("M")).toBe("loading");
+
+    plugins.dispose();
+    // 消费者在 dispose 时就被结算（这是既有行为，保持不变）
+    await expect(pending).rejects.toBeInstanceOf(BMapError);
+
+    deferred.settle().reject(boom);
+    await flush();
+
+    expect(plugins.getStatus("M"), "晚到的失败不得把 disposed 改回 error").toBe("disposed");
+    expect(emitted(events, "plugin:error"), "disposed 后不得再广播").toBe(0);
+    expect(plugins.getError("M"), "也不该把 late error 写进记录").toBeUndefined();
+  });
+
+  it("dispose 后底层才 resolve：状态仍是 disposed、不 emit ready，且 map 资源被就地释放", async () => {
+    const { plugins, events } = registry();
+    const dispose = vi.fn();
+    const deferred = deferredLoad("M");
+    plugins.register({ ...deferred.definition, scope: "map", dispose });
+
+    const pending = plugins.whenPlugin("M");
+    plugins.dispose();
+    await expect(pending).rejects.toBeInstanceOf(BMapError);
+
+    const instance = { late: true };
+    deferred.settle().resolve(instance);
+    await flush();
+
+    expect(plugins.getStatus("M"), "晚到的成功不得把 disposed 改回 ready").toBe("disposed");
+    expect(events.readyCount(), "disposed 后不得再广播").toBe(0);
+    expect(
+      dispose,
+      "晚到的 map 资源此刻没有别的所有者，必须就地释放（否则既没进 dispose 快照，也不会被 scope 回收）",
+    ).toHaveBeenCalledWith(instance, expect.anything());
+  });
+
+  it("global 作用域的迟到成功不由注册表释放（释放权在宿主的 dispose）", async () => {
+    const host = createPluginHost();
+    const { plugins } = registry({ host });
+    const dispose = vi.fn();
+    const deferred = deferredLoad("G");
+    plugins.register({ ...deferred.definition, scope: "global", dispose });
+
+    const pending = plugins.whenPlugin("G");
+    plugins.dispose();
+    await expect(pending).rejects.toBeInstanceOf(BMapError);
+
+    deferred.settle().resolve({ shared: true });
+    await flush();
+
+    expect(plugins.getStatus("G")).toBe("disposed");
+    expect(dispose, "global 资源归宿主管，注册表无权释放").not.toHaveBeenCalled();
+    host.dispose();
+    expect(dispose, "宿主才是它的所有者").toHaveBeenCalledTimes(1);
+  });
+
+  it("反证：没有 dispose 时，同样的晚到结算照常记账（别把守卫写成恒不记账）", async () => {
+    const { plugins, events } = registry();
+    const dispose = vi.fn();
+    const deferred = deferredLoad("M");
+    plugins.register({ ...deferred.definition, scope: "map", dispose });
+
+    const pending = plugins.whenPlugin("M");
+    const instance = { ok: true };
+    deferred.settle().resolve(instance);
+    await expect(pending).resolves.toBe(instance);
+
+    expect(plugins.getStatus("M")).toBe("ready");
+    expect(emitted(events, "plugin:ready")).toBe(1);
+    expect(dispose, "正常路径不由加载流程释放").not.toHaveBeenCalled();
   });
 });

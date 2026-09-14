@@ -30,9 +30,13 @@
  * 上游（四个 `BMapGLLib` / MapVGL 脚本）**没有卸载入口**，能做的只有「删 `<script>` + 抹全局」，
  * 而那会波及页面里其它已经拿到这个全局的代码 —— AGENTS.md 明令不得删除 / 改写上游注入的 script。
  *
- * `dispose()` 因此是**纪元重置**：释放当前持有的全部 global 资源并回到干净起点（测试 / 热更新），
- * 之后仍可继续 `acquire`。释放顺序：先跑 `setup` 登记的 disposer（连同在飞加载的 abort），
- * 再调 `definition.dispose`（插件自己的释放），最后清空缓存。
+ * `dispose()` 因此是**纪元重置**：换一个纪元 scope（在飞加载随之 abort、`setup` 的 disposer 随之执行）、
+ * 让每个已就绪实例过一遍 `definition.dispose`、清空缓存与计数，之后仍可继续 `acquire`。
+ *
+ * ⚠️ **它不恢复「没加载过」的状态**（评审 #88 文档项）：`dispose()` 不会移除第三方脚本，也不会抹掉
+ * `window.BMapGLLib.*`。于是内置脚本插件下一次 `acquire` 会直接命中 `loadScriptWithExport` 的
+ * 「导出已存在 ⇒ 直接 resolve」短路：**复用同一个全局对象，既不重新拉脚本、也不重新初始化**。
+ * 想要真正的干净起点只能刷新文档（或由宿主页面自己负责卸载那个全局）。
  *
  * ## 与 PluginRegistry 的分工
  *
@@ -76,7 +80,12 @@ export interface PluginHost {
     signal?: AbortSignal,
   ): Promise<unknown>;
   inspect(name: string): PluginHostEntryInspection | undefined;
-  /** 释放当前持有的全部 global 资源并回到干净起点（纪元重置，之后仍可 acquire）。 */
+  /**
+   * 释放当前持有的全部 global 资源并回到**干净纪元**（之后仍可 acquire）。
+   *
+   * 注意它不恢复「没加载过」的状态：第三方脚本与 `window.BMapGLLib.*` 都留在原地，
+   * 内置脚本插件下一次 acquire 会复用已存在的全局（见文件头「释放权」）。
+   */
   dispose(): void;
 }
 
@@ -100,34 +109,57 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
    * 会随着旧条目一起消失，于是「重试真的发生了」不可观察。这张表活到宿主 dispose（纪元重置）。
    */
   const attempts = new Map<string, number>();
+  /**
+   * 纪元号：每次 `dispose()` 自增。
+   *
+   * 在飞任务在 `start()` 时记下自己属于哪个纪元，结算时比对。不对就说明这是**上一个纪元**的迟到
+   * 结果 —— 它不得写进当前纪元的条目、不得按名字操作这张表，但也不该被静默丢掉（评审 #88 P1-2）。
+   */
+  let epochNumber = 0;
   // 纪元 scope：持有 setup 登记的 disposer，并给在飞加载提供 abort 信号。
   // dispose 时整体替换成一个新的（而不是「一次性用掉」），这样宿主可以继续被使用。
   let scope = new ResourceScope({ label });
 
-  function start(entry: HostEntry, epoch: ResourceScope): Promise<unknown> {
+  function start(entry: HostEntry, epochScope: ResourceScope, myEpoch: number): Promise<unknown> {
     const attempt = (attempts.get(entry.name) ?? 0) + 1;
     attempts.set(entry.name, attempt);
     entry.attempts = attempt;
     let task: Promise<unknown>;
     try {
-      task = Promise.resolve(entry.definition.load(entry.context, epoch.signal));
+      task = Promise.resolve(entry.definition.load(entry.context, epochScope.signal));
     } catch (error) {
       task = Promise.reject(error);
     }
     const settled = task
       .then((instance) => {
+        if (myEpoch !== epochNumber) {
+          // 上一个纪元的迟到成功：它已经从 entries 摘除，也不在 dispose 时的 ready 快照里
+          // ⇒ 不就地释放就是一个没有任何所有者的孤儿资源。
+          //
+          // 释放是 **identity 作用域**的：只有当这个实例**不是**当前纪元正在用的那个时才释放。
+          // 自定义 definition 完全可能 `load` 出同一个单例，那时释放它等于拆掉新纪元正在用的东西。
+          if (entries.get(entry.name)?.instance !== instance) {
+            try {
+              entry.definition.dispose?.(instance, entry.context);
+            } catch {
+              // 释放失败不得影响结算路径
+            }
+          }
+          return instance;
+        }
         entry.instance = instance;
         entry.status = "ready";
         if (entry.definition.setup) {
           const disposer = entry.definition.setup(instance, entry.context);
-          if (disposer) epoch.add(disposer);
+          if (disposer) epochScope.add(disposer);
         }
         return instance;
       })
       .catch((error: unknown) => {
         entry.task = null;
-        // 失败条目**不留在缓存里**：否则「重试」永远拿到同一次失败。
-        entries.delete(entry.name);
+        // 只删**自己**那一条：dispose 之后同名的新条目可能已经建好，按名字删会把它一起删掉 ——
+        // 于是新纪元在飞/已成功的条目查不到，第三次 acquire 又会重复加载（global 去重失效）。
+        if (entries.get(entry.name) === entry) entries.delete(entry.name);
         throw error;
       });
     entry.task = settled;
@@ -146,7 +178,7 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
     // 已 abort 的消费者不启动加载：不该产生一个没有任何人等待的请求。
     if (signal?.aborted) throw pluginAbortError(name, signal.reason);
 
-    const epoch = scope;
+    const epochScope = scope;
     let entry = entries.get(name);
     if (!entry) {
       entry = {
@@ -160,7 +192,7 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
         context,
       };
       entries.set(name, entry);
-      start(entry, epoch);
+      start(entry, epochScope, epochNumber);
     }
     entry.consumers += 1;
     try {
@@ -168,7 +200,7 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
         entry.status === "ready"
           ? Promise.resolve(entry.instance)
           : (entry.task as Promise<unknown>);
-      return await abortRace(task, [signal, epoch.signal], name);
+      return await abortRace(task, [signal, epochScope.signal], name);
     } finally {
       entry.consumers -= 1;
     }
@@ -193,10 +225,12 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
       const ready = held.filter((entry) => entry.status === "ready");
       entries.clear();
       attempts.clear();
-      // 2) 停掉在飞加载（在飞的消费者随之结算），并跑 `setup` 登记的 disposer
-      const epoch = scope;
+      // 2) 换纪元 + 停掉在飞加载（在飞的消费者随之结算），并跑 `setup` 登记的 disposer。
+      //    纪元号必须在这里自增：仍在飞的旧任务结算时要靠它认出自己已经过期。
+      epochNumber += 1;
+      const epochScope = scope;
       scope = new ResourceScope({ label });
-      epoch.dispose("plugin-host-disposed");
+      epochScope.dispose("plugin-host-disposed");
       // 3) 最后把已就绪的实例交给插件自己的 dispose —— 宿主是这个资源的合法所有者
       for (const entry of ready) {
         try {
@@ -226,7 +260,9 @@ export function getDefaultPluginHost(): PluginHost {
 /**
  * 释放并复位默认宿主（测试 / 热更新用）。
  *
- * 与 `createPluginHost().dispose()` 一样是纪元重置：调用之后默认宿主仍可继续使用。
+ * 纪元重置：清掉宿主缓存的 global 资源并让在飞加载结算，之后默认宿主仍可继续使用。
+ * **不会**卸载第三方脚本或抹掉它挂的全局（上游没有卸载入口），所以它不是「让内置插件回到
+ * 没加载过」的手段 —— 详见文件头「释放权」。
  */
 export function disposeDefaultPluginHost(): void {
   defaultHost?.dispose();

@@ -62,7 +62,7 @@
 `<BMap :plugins="['Typo']">` 不该让整张地图不渲染：那既把运行时问题变成渲染期崩溃，也违反既有隔离口径。因此分层：
 
 - **Catalog 层**：`resolvePluginDefinition` / `stringToPluginDefinitions` **抛**（不静默降级，这是本票要消灭的行为）；
-- **组件层**（`BMap.vue`）：**逐个名字**解析并捕获，未知名字进 `pluginPlan`（带错误），稍后按 `plugin-error` 回执。地图照常 `ready`，同一列表里的其它插件照常加载。
+- **组件层**（`BMap.vue`）：**逐个名字**解析并捕获，未知名字进 `pluginPlan`（带错误），稍后按 `plugin-error` 回执。地图照常 `ready`，同一列表里的其它插件照常加载。未知名字**不进注册表**——它本来就不是这个注册表里的插件，所以 `getStatus` / `inspect` 是 `undefined`（读数的这层区分是要的：「名字不认识」与「认得但加载失败」不该长得一样）。
 
 `.vue` 里的循环也因此不再用 `stringToPluginDefinitions`（它的整体失败语义在这里不合适），而是逐个 `resolvePluginDefinition` + `try/catch`。附带修掉一个小缺陷：`plugins` 里重复写同一个名字不再触发注册表的 `already registered` 抛错，而是按一次处理、只回执一次。
 
@@ -87,7 +87,11 @@
 - AGENTS.md 明令不得删除 / 改写上游注入的 script、不得在组件卸载中 reset SDK；
 - 删掉全局会波及页面里**其它已经拿到它**的代码（业务自己的代码、其它库）。
 
-所以 `global` 资源活到宿主 `dispose()`；`dispose()` 是**纪元重置**（释放当前全部 global 资源并回到干净起点，之后仍可继续 `acquire`），只由测试 / 热更新显式调用。释放顺序固定为三步：**先摘出并清空当前条目**（dispose 期间到来的 `acquire` 必须落到新纪元，而不是复用一份正在被释放的实例）→ **abort 在飞加载并跑 `setup` 登记的 disposer** → **最后把已就绪的实例交给 `definition.dispose`**。
+所以 `global` 资源活到宿主 `dispose()`；`dispose()` 是**纪元重置**（换一个纪元 scope、让每个已就绪实例过一遍 `definition.dispose`、清空缓存与计数，之后仍可继续 `acquire`），只由测试 / 热更新显式调用。释放顺序固定为三步：**先摘出并清空当前条目**（dispose 期间到来的 `acquire` 必须落到新纪元，而不是复用一份正在被释放的实例）→ **abort 在飞加载并跑 `setup` 登记的 disposer** → **最后把已就绪的实例交给 `definition.dispose`**。
+
+⚠️ **它不是「让内置插件回到没加载过」的手段**：`dispose()` 不移除第三方脚本、也不抹 `window.BMapGLLib.*`，因此下一次 `acquire` 会命中 `urlPluginDefinition` 的「导出已存在 ⇒ 直接 resolve」短路 —— 复用同一个全局对象，**既不重新拉脚本、也不重新初始化**（`builtins.test.ts` 有一条用例把这句话钉成可执行事实）。要真正的干净起点只能刷新文档，或由宿主页面自己卸载那个全局。
+
+**纪元校验是必须的，不是防御性编程**（评审 #88 P1-2）：`dispose()` 清空条目之后同名插件可以立刻重新 `acquire`，而**上一个纪元**那条在飞任务之后才结算时，它的处理器仍会碰这张表 —— 失败时按名字 `delete` 会把新纪元的同名条目一起删掉（去重失效、重复加载），成功时旧实例既不在 entries 也不在 dispose 快照里（孤儿资源）。所以每次加载都记下自己的纪元号，结算时比对：过期的结算不写状态、不动这张表，只把资源按 **identity 作用域**释放（只有当它不是当前纪元正在用的那个实例时才释放）。
 
 `disposeDefaultPluginHost()` 从 `baidu-map-gl-vue/plugins` 子路径导出（根入口保持最小面）；调用方要自己负责「此刻没有地图还在用这些插件」。
 
@@ -157,7 +161,11 @@
 ## 后果
 
 - 同页面多张地图的插件脚本从「每张一份」变成「一份文档一份」，且一张地图卸载不再牵连另一张。
-- 插件名字拼错会**明确失败**（组件层 `plugin-error` + `getStatus() === 'error'`），不再有「看起来成功」的空实现。
+- 插件名字拼错会**明确失败**，不再有「看起来成功」的空实现。准确的语义分两层：**Catalog 层抛**
+  `BMAP_PLUGIN_UNKNOWN`；**组件层**该名字发一次 `plugin-error`（载荷 `error.code` 同上）。要留意
+  **它不会在注册表里留下记录**，所以 `getStatus(name)` / `inspect(name)` 是 `undefined` 而**不是**
+  `'error'` —— 「名字不认识」与「名字认得但加载失败」（有记录、状态 `error`）是两个不同的可观察结果
+  （评审 #88 文档项，`PluginRegistry.test.ts` 有一条用例钉住）。
 - 依赖加载从串行变成按层并行；同层插件的就绪时间不再相加。
 - `inspect()` 让「试过几次 / 还有几个消费者在等」可轮询，不再依赖瞬时事件。
 
@@ -166,7 +174,8 @@
 ## 已知限制
 
 - **插件加载仍然没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`，脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证「失败被隔离」与「消费者取消不被牵连」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策（与 [inventory](./2026-09-13-plugin-compat-inventory.md) 的同名限制一致，本轮未推进）。
-- **全局脚本无法卸载**：`PluginHost.dispose()` 只释放本库登记的 `setup` disposer 与调用 `definition.dispose`，**不**删 `<script>`、**不**抹 `window.BMapGLLib`（上游没有卸载入口，见决策 4）。因此「宿主 dispose 后重新加载」会再插一份脚本 —— 这是刻意的，别把它当泄漏门禁去断言归零。
+- **全局脚本无法卸载**：`PluginHost.dispose()` 只释放本库登记的 `setup` disposer 与调用 `definition.dispose`，**不**删 `<script>`、**不**抹 `window.BMapGLLib`（上游没有卸载入口，见决策 4）。后果是双向的：① 「宿主 dispose 后重新加载」**不会**重新拉脚本（`loadScriptWithExport` 先读 `exportGetter()`，导出还在就直接 resolve），所以别把它当「干净起点」—— 这条由 `builtins.test.ts` 的用例钉住；② 用**自定义** `load`（没有这个短路）的宿主单测才会看到「重新加载」，别把那条例外用例读成「真实脚本会重拉」。
+- **过期结算的资源释放是 identity 作用域的，且有一处窄角**：宿主的旧纪元迟到成功只在「实例不是当前纪元正在用的那个」时才就地释放（否则就是拆掉新纪元在用的东西）。若自定义 definition 的 `load` 返回同一个单例**且**带真实 `dispose`，在「旧任务与新任务同时返回同一实例、且新任务尚未就绪」这个窄角里仍有过度释放的可能 —— 上游四个脚本插件没有 `dispose`，本库自带的插件定义不受影响。
 - **宿主只记录第一个消费者的 context**：共享任务用发起那次加载的 `PluginContext`。内置脚本插件忽略 context，因此无影响；自定义 global 插件若依赖 context 要知道这件事。
 - **`map` 作用域插件的底层 `load` 仍由地图 scope 收口**：注册表 `dispose()` 会立刻结算消费者，但底层在飞 promise 要等 `scope.signal` abort（`MapRuntime.dispose()` 里紧随其后）。中间窗口内 `load()` 仍可能结算，其结果不会被任何人使用。
 - **`PluginHost` 的 `attempts` 是名字级累计**：失败条目会被移除，所以「重试过几次」只能记在名字级计数器上；宿主的 `dispose()`（纪元重置）会清零。

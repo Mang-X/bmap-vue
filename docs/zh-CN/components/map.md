@@ -145,13 +145,15 @@ map/theme2
   `customScriptV4Provider(scriptSrc)`（经 `provider` / `definition` 传入），宿主已加载好 SDK 则用
   `existingGlobalV4Provider()`；
 - `plugins` 里的名字必须是**内置**的四个之一。**名字不认识时该插件明确失败**：发 `plugin-error`
-  （`code: 'BMAP_PLUGIN_UNKNOWN'`），地图与同一列表里其它插件不受影响。此前未知名字会被静默降级成
-  一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`（见
+  （`code: 'BMAP_PLUGIN_UNKNOWN'`），地图与同一列表里其它插件不受影响。注意它**不会**在注册表里留下
+  记录，所以 `getStatus(name)` / `inspect(name)` 是 `undefined`，而不是 `'error'`。此前未知名字会被
+  静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`（见
   [ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）；
 - 内置插件都是**文档级（`global`）资源**：同页面多张地图**共享同一次加载**（只插一份脚本），
-  并且**地图卸载不会释放它**（上游没有卸载入口）。要一个干净起点（测试 / 热更新）时用
-  `baidu-map-gl-vue/plugins` 的 `disposeDefaultPluginHost()` —— 它等价于「释放当前持有的全部
-  文档级插件资源」，调用方自己负责确保此刻没有地图还在用它们；
+  并且**地图卸载不会释放它**（上游没有卸载入口）。`baidu-map-gl-vue/plugins` 的
+  `disposeDefaultPluginHost()` 只能清掉**宿主缓存的资源与在飞的等待**，它**不卸载**第三方脚本、
+  也不抹掉 `window.BMapGLLib.*` —— 所以那次调用之后重新渲染地图会**复用已存在的全局**（不会重新
+  拉脚本）。要真正的干净起点只能刷新文档。调用方还要自己负责「此刻没有地图还在用这些插件」；
 - 每个内置插件在 JSAPI 4.0 上的状态（含「不兼容」与「运行时未验证」）见
   [插件兼容 inventory](../contributing/plugin-compat-inventory)。
 :::

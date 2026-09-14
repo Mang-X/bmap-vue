@@ -220,13 +220,27 @@ M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
   scope 就变成全局共享。内置四个插件都是 `'global'`。
   注意 `urlPluginDefinition(...)` 这个**脚本插件工厂**的缺省是 `'global'`（它加载的就是文档级脚本），
   需要按地图隔离时显式传 `{ scope: 'map' }`；两个缺省不一样是有意的，别当成一个。
-  要清掉全局共享状态（测试 / 热更新）用 `baidu-map-gl-vue/plugins` 的 `disposeDefaultPluginHost()`。
+  要清掉宿主缓存的全局状态（测试 / 热更新）用 `baidu-map-gl-vue/plugins` 的
+  `disposeDefaultPluginHost()`。**它不是「回到没加载过」**：第三方脚本与 `window.BMapGLLib.*` 都留在
+  原地，内置脚本插件下一次会命中「导出已存在」的短路、复用同一个全局对象（不重新拉脚本）。
 - **未知名字明确失败**：`resolvePluginDefinition` / `stringToPluginDefinitions` 抛
   `BMAP_PLUGIN_UNKNOWN`（不再降级成永远成功的空实现）。`<BMap :plugins="[...]">` 在组件层逐个名字捕获，
-  未知名字回执 `plugin-error`，**不阻断地图**。
+  未知名字回执 `plugin-error`，**不阻断地图**；它不会在注册表留下记录，所以 `getStatus(name)` 是
+  `undefined` 而不是 `'error'`。
 - **取消只影响自己**：`whenPlugin(name, signal)` 的 signal abort 只会让本次等待以
   `BMAP_PROVIDER_ABORTED` 结束，共享的加载继续跑、结果留给后来的消费者。
 - **状态可读**：`PluginRegistry.inspect(name)` 返回 `{ scope, required, status, attempts, consumers, error }`，
   比瞬时事件更适合做诊断（「试过几次」「还有几个消费者在等」）。
 - **失败可重试**：失败会被登记成 `error` 并清掉缓存条目，再请求一次就真的重新加载；
   成功后 `getError()` 会被清空。
+
+### dispose 之后晚到的结算不会复活记录
+
+`PluginRegistry.dispose()` 会把记录收口成 `disposed`，并**丢弃此后才到达的加载结果**：晚到的成功不会
+把状态改回 `ready`、也不再广播 `plugin:ready` / `plugin:error`（一次地图卸载之后才下载完的插件不该让
+记录「复活」）。对 `map` 作用域的插件，那条晚到的实例此刻已经没有别的所有者，注册表会**就地调用
+`definition.dispose`** 释放它；`global` 作用域的实例归宿主管，注册表不动它。
+
+宿主侧同理：`PluginHost` 用**纪元号**区分「上一轮 dispose 之前的在飞任务」，旧纪元的结算不会写进新纪元
+的条目、也不会按名字误删同名的新条目；旧纪元那条迟到的成功会被就地释放（只有当它**不是**当前纪元正在
+用的那个实例时才释放）。

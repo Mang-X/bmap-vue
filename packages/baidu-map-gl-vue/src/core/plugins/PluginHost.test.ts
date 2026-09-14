@@ -255,3 +255,99 @@ describe("PluginHost：释放权在宿主手里", () => {
     host.dispose();
   });
 });
+
+/**
+ * 旧纪元任务的结算不得污染新纪元（评审 #88 P1-2）。
+ *
+ * `dispose()` 会清空 entries 并允许同名插件重新 `acquire`，但**旧纪元那条在飞任务**之后才结算时，
+ * 它的处理器仍按**名字**操作这张表：失败时 `entries.delete(name)` 会把新纪元的同名条目一起删掉
+ * （于是新纪元在飞/已成功的条目查不到，第三次 acquire 又会重复加载 —— global 去重失效）；
+ * 成功时旧实例已经不在 entries 里、也不在 dispose 时的 ready 快照里 ⇒
+ * `definition.dispose` 永远不会执行，形成孤儿资源。
+ */
+describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
+  it("旧纪元任务失败时按名字删会误删新纪元的同名条目（去重随之失效）", async () => {
+    const host = createPluginHost();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire("G", old.definition, makeContext());
+
+    host.dispose();
+    // 旧纪元的消费者在 dispose 时就被结算了
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    const fresh = vi.fn(async () => "fresh");
+    const freshDefinition = { name: "G", scope: "global" as const, load: fresh };
+    await expect(host.acquire("G", freshDefinition, makeContext())).resolves.toBe("fresh");
+
+    // 旧纪元那条现在才失败
+    old.settle().reject(new Error("old epoch fails"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(host.inspect("G"), "新纪元的条目必须还在").toBeDefined();
+    // 去重没被破坏：再来一次应当复用新纪元已就绪的实例，而不是重新加载
+    await expect(host.acquire("G", freshDefinition, makeContext())).resolves.toBe("fresh");
+    expect(fresh, "第三次 acquire 不得重复加载").toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
+
+  it("旧纪元的迟到成功：不进新纪元状态，且旧资源被就地释放（不留孤儿）", async () => {
+    const host = createPluginHost();
+    const oldDispose = vi.fn();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire(
+      "G",
+      { ...old.definition, dispose: oldDispose },
+      makeContext(),
+    );
+
+    host.dispose();
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    // 新纪元这条用**手动可控**的加载：否则它会在同一个 tick 里就绪，下面那句
+    // 「结算不得写进新纪元」的观测窗口就没了
+    const fresh = deferredPlugin("G");
+    const freshAcquire = host.acquire("G", fresh.definition, makeContext());
+    expect(host.inspect("G")?.status, "新纪元正在飞").toBe("loading");
+
+    // 旧纪元那条现在才成功
+    old.settle().resolve("old-instance");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(host.inspect("G")?.status, "旧纪元任务的结算不得写进新纪元").toBe("loading");
+    expect(
+      oldDispose,
+      "旧资源已经没有任何所有者（不在 entries、也不在 dispose 的 ready 快照里），必须就地释放",
+    ).toHaveBeenCalledWith("old-instance", expect.anything());
+
+    fresh.settle().resolve("fresh-instance");
+    await expect(freshAcquire, "就地释放不得牵连新纪元的加载").resolves.toBe("fresh-instance");
+    host.dispose();
+  });
+
+  it("旧纪元与新纪元拿到的是**同一个**实例时不释放它（避免过度释放）", async () => {
+    const host = createPluginHost();
+    const shared = { shared: true };
+    const dispose = vi.fn();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire("G", { ...old.definition, dispose }, makeContext());
+    host.dispose();
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    // 新纪元的加载先完成，且返回**同一个对象**（自定义 definition 复用一个单例完全可能）
+    const freshAcquire = host.acquire(
+      "G",
+      { name: "G", scope: "global", load: async () => shared, dispose },
+      makeContext(),
+    );
+    await expect(freshAcquire).resolves.toBe(shared);
+
+    old.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(dispose, "新纪元仍在用这个实例，释放它就是过度释放").not.toHaveBeenCalled();
+    expect(host.inspect("G")?.status).toBe("ready");
+
+    host.dispose();
+    expect(dispose, "宿主 dispose 才是它的释放点").toHaveBeenCalledTimes(1);
+  });
+});
