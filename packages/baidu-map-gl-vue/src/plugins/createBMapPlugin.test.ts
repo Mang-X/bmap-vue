@@ -1,10 +1,11 @@
 /**
- * createBMapPlugin（M3A1-CLIENT / #18）
+ * createBMapPlugin（M3A1-CLIENT / #18；M3A3-REMOVE-LEGACY / #26）
  *
  * - 组件注册由 Manifest 生成的 `components/index.ts` 驱动（单一事实源），不再维护手写数组；
  * - 默认版本取 `DEFAULT_VERSION`（JSAPI 4.0 基线）；
- * - 默认 Client definition 走迁移归一（按加载结果 engine 分派）；R25-B（#71）起默认 Provider 是
- *   `baiduJsapiV4Provider()`（内部委托官方 Loader），显式传入的 legacy Provider 仍可用；
+ * - 默认 Provider 是 `baiduJsapiV4Provider()`（内部委托官方 Loader，R25-B / #71）；
+ * - `#26`：默认 definition **不再经任何归一**（`withMigrationDriver` 已删除），原样交给
+ *   `createBMapClient`；旧引擎的加载结果会被对方的收口拒绝。
  * - 旧 globalProperties 只保留迁移期兼容，并给出明确的 beta 警告。
  */
 import { createApp, inject } from "vue";
@@ -23,10 +24,22 @@ import { createLoadedJsapiV4 } from "../core/loader/providers";
 import type { CreateBMapClientOptions } from "../client/types";
 import { logger } from "../core/logger";
 
-const fakeNamespace = { Map: class {}, Point: class {}, Marker: class {}, VERSION: "1.0" };
-
 function createTestApp() {
   return createApp({ template: "<div />", render: () => null });
+}
+
+/** 读插件注入的默认 definition（不 mount 也能拿到：`inject` 只在 setup 里可用）。 */
+function captureDefaultDefinition(plugin: ReturnType<typeof createBMapPlugin>) {
+  const captured: { definition?: CreateBMapClientOptions } = {};
+  const app = createApp({
+    setup() {
+      captured.definition = inject(defaultClientDefinitionKey, undefined);
+      return () => null;
+    },
+  });
+  app.use(plugin);
+  app.mount(document.createElement("div"));
+  return captured;
 }
 
 beforeEach(() => {
@@ -45,40 +58,49 @@ describe("createBMapPlugin", () => {
     }
   });
 
-  it("接受 v4 Provider 并按 engine 分派（不被默认 legacy 破坏）", async () => {
-    const captured: { definition?: CreateBMapClientOptions } = {};
-    const app = createApp({
-      setup() {
-        captured.definition = inject(defaultClientDefinitionKey, undefined);
-        return () => null;
-      },
-    });
-    app.use(
-      createBMapPlugin({
-        provider: {
-          id: "v4-test",
-          load: async () =>
-            createLoadedJsapiV4({
-              providerId: "baidu-jsapi-v4",
-              mode: "jsonp",
-              version: "4.0",
-              versionSource: "url",
-              options: { ak: "test" },
-              fingerprint: "fp-v4",
-              namespace: createFakeBMapV4().namespace,
-              loadedAt: 0,
-            }),
-        },
-      }),
-    );
-    app.mount(document.createElement("div"));
+  it("接受 v4 Provider：默认 definition 装出可用的 v4 Client", async () => {
+    const provider = {
+      id: "v4-test",
+      load: async () =>
+        createLoadedJsapiV4({
+          providerId: "baidu-jsapi-v4",
+          mode: "jsonp",
+          version: "4.0",
+          versionSource: "url",
+          options: { ak: "test" },
+          fingerprint: "fp-v4",
+          namespace: createFakeBMapV4().namespace,
+          loadedAt: 0,
+        }),
+    };
+    const captured = captureDefaultDefinition(createBMapPlugin({ provider }));
 
-    // 分派必须落在 v4 路径，而不是被当成 legacy（那会是 BMAP_SDK_ENGINE_MISMATCH）。
-    // #23 装配了 `createJsapiV4Driver`，因此这里从「v4 路径明确失败」改成**正向**断言：
-    // 同一条 definition 现在能装出 v4 Client。
+    // 默认 definition 现在**原样**就是「这个 provider + defaults」——不再被包装、
+    // 也不再注入任何迁移期 Driver 工厂。
+    expect(captured.definition?.provider).toBe(provider);
+    expect(captured.definition?.driver).toBeUndefined();
+
     const client = await createBMapClient(captured.definition!);
     expect(client.engine).toBe("jsapi-v4");
     expect(client.driver.capabilities.supports("overlay.marker")).toBe(true);
+  });
+
+  it("旧引擎（webgl-v1）加载结果在默认路径上被拒绝（不回退旧引擎）", async () => {
+    const captured = captureDefaultDefinition(
+      createBMapPlugin({
+        provider: {
+          id: "test-legacy",
+          getCacheKey: () => "fp",
+          // 旧引擎已删除：这类 Provider 只可能来自「有人把旧代码加回来」
+          load: async () => ({ engine: "webgl-v1", namespace: {} }) as never,
+        },
+      }),
+    );
+
+    expect(captured.definition).toBeTruthy();
+    await expect(createBMapClient(captured.definition!)).rejects.toMatchObject({
+      code: "BMAP_SDK_ENGINE_MISMATCH",
+    });
   });
 
   it("按需导入与全局注册指向同一组件实现（Manifest 单一事实源）", async () => {
@@ -100,33 +122,6 @@ describe("createBMapPlugin", () => {
 
     const custom = createBMapPlugin({ version: "4.0.x" });
     expect(custom.config.defaults.version).toBe("4.0.x");
-  });
-
-  it("默认 Client definition 走迁移归一（legacy Provider 可用）", async () => {
-    const captured: { definition?: CreateBMapClientOptions } = {};
-    const app = createApp({
-      setup() {
-        captured.definition = inject(defaultClientDefinitionKey, undefined);
-        return () => null;
-      },
-    });
-    app.use(
-      createBMapPlugin({
-        provider: {
-          id: "test-legacy",
-          getCacheKey: () => "fp",
-          load: async () => ({ engine: "webgl-v1" as const, namespace: fakeNamespace }),
-        },
-      }),
-    );
-    app.mount(document.createElement("div"));
-
-    expect(captured.definition).toBeTruthy();
-    expect(captured.definition?.driver).toBeTruthy();
-
-    const client = await createBMapClient(captured.definition!);
-    expect(client.engine).toBe("webgl-v1");
-    expect(client.sdkVersion).toBe("1.0");
   });
 
   it("globalProperties 兼容映射给出明确的 beta 迁移警告，且进程内只提示一次", () => {
@@ -153,3 +148,4 @@ describe("createBMapPlugin", () => {
     warn.mockRestore();
   });
 });
+

@@ -11,7 +11,7 @@
 | 维度 | 说明 |
 | --- | --- |
 | 组件库版本 | `packages/baidu-map-gl-vue/package.json` |
-| SDK engine（内部） | `webgl-v1` / `jsapi-v3` / `jsapi-v4`（`src/driver`） |
+| SDK engine（内部） | `jsapi-v4`（唯一；旧引擎 `webgl-v1` / `jsapi-v3` 已在 #26 删除） |
 | SDK version | `4.0`（`v=4.0`） |
 
 讨论「升级」时需说明是哪一种版本。
@@ -39,16 +39,21 @@ ADR `2026-09-13-ui-kit-subpath-and-type-boundary`：根入口不重导出 UI、�
 ## SDK 边界与门禁
 
 边界配置的单一事实源：`scripts/raw-sdk-boundary.mts`（白名单 + 命名空间/全局对象清单）；
-检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）。
+检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）；文件收集与 SFC 解析层：
+`scripts/source-scan.mts`（`check:raw-sdk` 与 `check:no-bmapgl` 共用）。
 
 raw SDK 白名单（相对 `packages/baidu-map-gl-vue/src`）：`driver/**`、`client/**`、`core/loader/**`、`plugins/**`；
 `packages/test-utils` 作为 Fake 边界在扫描范围之外。其余目录（`components`、`composables`、`core/runtime` 等）为禁区。
+
+`BMapGL`（旧引擎命名空间）自 #26 起**整棵运行时源码都不允许出现**——它不在任何白名单里，
+由 `check:no-bmapgl` 单独守（官方插件命名空间 `BMapGLLib` 与官方 runtime 自己挂的别名不受影响）。
 
 | 命令 | 作用 |
 | --- | --- |
 | `pnpm check:raw-sdk` | 禁区目录静态扫描（`BMapGL`、`window.BMap`、`new BMap.*`、`BMap.*` 类型、`namespace BMap`、官方类型包导入） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src` |
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:v3`） |
+| `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:v3`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 
 类型边界 augmentation 位于 `src/driver/jsapi-v4/augmentations/`，治理规则与元数据模板见该目录 `README.md`；
@@ -90,4 +95,4 @@ Capability Catalog 是能力清单的单一事实源（`src/driver/capability/ca
 Fake SDK 在 raw SDK 扫描范围之外，是「组件/Facet 与 SDK 之间」的替身边界。两条约定：
 
 - **诊断分两个口径**：`fake.diagnostics.snapshot()` 返回 `leaks`（当前**未释放**的资源，门槛值恒为 0，`assertNoLeaks()` 逐项点名）与 `activity`（累计发生过什么，不要求归零）。定时器与回调是「在飞」而非「未释放」，**只进 `activity` 与 `pendingAsync()`**——需要断言「没有在飞窗口」时要显式写出来。新增资源种类必须同时登记进 `LeakCounters` 与 `LEAK_FIELD_BY_KIND`（后者穷尽，漏登记会编译失败），并选对销账方式：`map` / `panorama` / `autocomplete` 是**生命周期类**（按实例销账，重复销毁同一个实例不能抵消别的实例的泄漏），其余是**挂载类**（按次数销账，因为 SDK 不去重、挂两次就要摘两次）。
-- **跨引擎行为用 driver matrix**：`packages/test-utils/driver-matrix.ts` 的 `runDriverMatrix` / `expectSameDomainResult` 让同一份场景在多个引擎上跑并比较**领域结果**（不比较 raw SDK 调用序列）；引擎差异（Provider 形状、假账本位置、气泡活状态怎么读）一律收在引擎描述里。旧引擎把多种资源混在一个容器时，读数必须按构造器身份分类，不能把 raw 容器当领域结果用。迁移期双跑只用于验证，不形成长期兼容承诺（见 ADR `2026-09-12-fake-v4-diagnostics-and-dual-driver-matrix`）。
+- **单一引擎的组件级场景用 Fake v4 harness**：`packages/test-utils/fake-v4-harness.ts` 提供 `createFakeV4Harness()`（结构化 Provider / 带尺寸容器 / 基线重置 / 泄漏门禁 / 逐族读数）与 `createFakeV4Client()`（走**默认路径**装 Client：Provider 归一 → `assertLoadedSdk` → 默认 Driver 工厂 → 组装）。组件级场景写在 `tests/behavior/v3-component-scenarios.test.ts`，用例只写领域语言（`harness.attached('overlay')` / `harness.assertIdle()`），不碰字段名。

@@ -4,6 +4,12 @@
 - 日期：2026-09-11
 - 计划键：`M3A1-CLIENT`（issue #18，追踪 #12）
 - 取代：无
+- **后续（2026-09-14，issue #26）**：本文决策 1 / 2 / 3 里「`LoadedSdk` 是判别联合 + 三条迁移期
+  归一入口（`normalizeMigrationProvider` / `legacyDriverFactory` / `withMigrationDriver`）」的部分
+  **已被 [ADR 2026-09-14 删除旧引擎](./2026-09-14-remove-legacy-engine.md) 取代**：旧引擎删除后
+  `LoadedSdk` 就是 `LoadedJsapiV4` 的别名，`assertLoadedSdk` 是唯一收口点，宽松 Provider 形状
+  不再存在。本文其余决策（Client 不接收裸 `unknown`、`driver` 注入点、metadata 三维度分离、
+  插件注册由 Manifest 驱动）仍然有效。
 - 相关：`packages/baidu-map-gl-vue/src/core/loader/loaded.ts`、`packages/baidu-map-gl-vue/src/client/**`、`packages/baidu-map-gl-vue/src/plugins/createBMapPlugin.ts`
 
 ## 背景

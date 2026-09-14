@@ -1,16 +1,18 @@
 /**
- * Driver 工厂与 engine 收口（M3A1-CLIENT / #18；M3A.2 装配收口 / #23）
+ * Driver 工厂与 engine 收口（M3A1-CLIENT / #18；M3A.2 装配收口 / #23；M3A3-REMOVE-LEGACY / #26）
  *
- * `detectEngine` 是运行时猜测，已从默认 Client 路径移除；这里只保留其自身行为与
- * `createDriver` / `createJsapiV4Driver` 的显式分派与**装配**契约。
+ * M3A1-CLIENT 把「运行时 engine 猜测」从默认 Client 路径移除；`#26` 删掉旧引擎后，
+ * `detectEngine`（猜测）与 `createDriver`（多 engine 分派）**一并删除**——构造 Driver 的
+ * 唯一入口是 `createJsapiV4Driver`，它要求调用方显式给出 SDK 运行时版本，不再猜。
  *
- * #23 之前 v4 分支是「明确失败」，因此那些断言写的是「抛 BMAP_CAPABILITY_UNSUPPORTED」；
- * 本 issue 完成装配后它们改为断言「真的装出全部 Facet」，并把装配后的行为锚定住
- * （否则 #25 的默认切换会缺少一条可回归的基线）。
+ * 因此本文件断言两件事：
+ * 1. 装配契约本身（#23 交付的那一组）；
+ * 2. **那两个入口不再存在**——「删除」如果只靠 diff 检查，下一个人复制粘贴一段旧代码就能加回来。
  */
 import { describe, it, expect } from "vitest";
 import { createFakeBMapV4 } from "../../../test-utils";
-import { createDriver, createJsapiV4Driver, detectEngine } from "./index";
+import * as driverIndex from "./index";
+import { createJsapiV4Driver } from "./index";
 
 const fakeSdk = { Map: class {}, Point: class {}, Marker: class {}, VERSION: "1.0" };
 
@@ -19,34 +21,24 @@ function v4Namespace() {
   return createFakeBMapV4().namespace;
 }
 
-describe("detectEngine（advanced 逃生口，默认 Client 不再使用）", () => {
-  it("按构造器区分 webgl-v1 / jsapi-v3", () => {
-    expect(detectEngine(fakeSdk)).toBe("webgl-v1");
-    expect(detectEngine({ MapGL: class {} })).toBe("jsapi-v3");
-    expect(detectEngine(undefined)).toBe("jsapi-v4");
-  });
-});
-
-describe("createDriver", () => {
-  it("webgl-v1 走真实 Driver", () => {
-    const driver = createDriver({ engine: "webgl-v1", rawSdk: fakeSdk });
-    expect(driver.engine).toBe("webgl-v1");
-    expect(driver.version).toBe("1.0");
-    expect(driver.capabilities.supports("overlay.marker")).toBe(true);
+describe("engine 猜测与分派入口已删除（#26）", () => {
+  it("`detectEngine` / `createDriver` 不再从 Driver 入口导出", () => {
+    expect("detectEngine" in driverIndex).toBe(false);
+    expect("createDriver" in driverIndex).toBe(false);
   });
 
-  it("jsapi-v4 委派 createJsapiV4Driver：命名空间不完整时按 SDK 边界失败", () => {
+  it("旧引擎的版本探测（`detectVersion`）也不再导出", () => {
+    // `detectVersion` 原来住在 `driver/webgl-v1/createDriver.ts`；它随该目录一起删除。
+    // v4 的 SDK 版本一律来自结构化加载结果（Provider 声明），Driver 不再探测。
+    expect("detectVersion" in driverIndex).toBe(false);
+  });
+
+  it("命名空间不完整时按 SDK 边界失败（不是「能力不支持」）", () => {
     // fakeSdk 缺 Pixel/Size/Bounds（v4 命名空间的必需成员）——错误码是「调用失败」而不是
     // 「能力不支持」：这是「加载成功但命名空间不可用」，重试没有意义。
-    expect(() => createDriver({ engine: "jsapi-v4", rawSdk: fakeSdk })).toThrowError(
-      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
-    );
-  });
-
-  it("jsapi-v3 明确不支持", () => {
-    expect(() => createDriver({ engine: "jsapi-v3", rawSdk: fakeSdk })).toThrow(
-      /not implemented yet/,
-    );
+    expect(() =>
+      createJsapiV4Driver({ rawSdk: fakeSdk, version: "1.0", unsupported: "warn" }),
+    ).toThrowError(expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }));
   });
 });
 

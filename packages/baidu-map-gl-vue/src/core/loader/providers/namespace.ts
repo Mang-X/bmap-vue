@@ -5,8 +5,9 @@
  * 结构化封装；组件、业务 composable 与 runtime 一律经 Facade Driver 访问，禁止直接
  * 触碰全局（见 `scripts/raw-sdk-boundary.mts`）。
  *
- * 迁移期 legacy Provider 读的是 `BMap ?? BMapGL`（见 `core/loader/Provider.ts`），
- * 这里只认 v4 目标的 `BMap`：读到 `BMapGL` 不是 v4 就绪，必须走 legacy 路径。
+ * 这里只认 JSAPI 4.0 的 `BMap`：读到 `BMapGL` **不算**就绪。旧引擎（`webgl-v1`，读
+ * `BMap ?? BMapGL` 的 legacy Provider）已在 `#26` 删除，因此不再有「读到 BMapGL 就走
+ * legacy 路径」这条分支——它现在只是一个应当走 `existingGlobalV4Provider()` 的信号。
  */
 import { BMapError } from "../../errors/BMapError";
 import { DEFAULT_VERSION, type BMapLoadOptions } from "../url";

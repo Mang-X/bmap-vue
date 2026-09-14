@@ -1,29 +1,21 @@
 /**
  * BDistrictLayer 迁移验证
+ *
+ * 从 BMapGL Fake 迁到 Fake v4：图层在 BMapGL 上混在 `map.overlays` 里计数
+ * （`stats.overlaysCreated/Removed`），v4 上所有图层走**统一**的 `map.layers`
+ * 与 `map.addLayer/removeLayer`，因此读数改为 `harness.attached('layer')` 与
+ * `activity.layersAttached/layersDetached`。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BDistrictLayer from '../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness, fake } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
 
 function mountLayer(visible = ref(true)) {
   const el = host()
@@ -38,29 +30,34 @@ function mountLayer(visible = ref(true)) {
 }
 
 describe('BDistrictLayer v3', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
 
   it('adds a district layer to the map', async () => {
-    fake.stats.reset()
     const { wrapper } = mountLayer()
     await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
+    expect(harness.attached('layer')).toBe(1)
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.overlaysRemoved).toBe(1)
+    expect(harness.attached('layer')).toBe(0)
   })
 
   it('toggles visible add/remove idempotently', async () => {
-    fake.stats.reset()
     const { wrapper, visible } = mountLayer()
     await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
+    expect(harness.attached('layer')).toBe(1)
     visible.value = false
     await nextTick()
-    expect(fake.stats.overlaysRemoved).toBe(1)
+    expect(harness.attached('layer')).toBe(0)
     visible.value = true
     await nextTick()
-    expect(fake.stats.overlaysCreated).toBe(2)
+    expect(harness.attached('layer')).toBe(1)
+    // 累计口径：原有 stats.overlaysCreated/Removed 的对应读数（挂载 2 次、摘除 1 次）
+    const { activity } = fake.diagnostics.snapshot()
+    expect(activity.layersAttached).toBe(2)
+    expect(activity.layersDetached).toBe(1)
     wrapper.unmount()
     await nextTick()
   })

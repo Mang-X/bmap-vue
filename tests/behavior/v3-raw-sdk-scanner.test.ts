@@ -278,7 +278,7 @@ describe("check-raw-sdk: JSAPI 4.0 `BMap` 边界（issue #15）", () => {
   it("--src 模式按目录白名单放行 driver/client/core-loader/plugins", () => {
     const dir = makeFixture({
       "driver/jsapi-v4/map.ts": 'export const create = () => new BMap.Map("c");\n',
-      "core/loader/Provider.ts": "export const get = () => (window as any).BMapGL;\n",
+      "core/loader/providers/official.ts": "export const get = () => (window as any).BMapGL;\n",
       "components/Leak.vue": [
         '<script setup lang="ts">',
         "const sdk = window.BMap;",
@@ -291,7 +291,7 @@ describe("check-raw-sdk: JSAPI 4.0 `BMap` 边界（issue #15）", () => {
     expect(r.output).toMatch(/components\/Leak\.vue:2/);
     // 白名单目录不产生行号级违规（提示文案里的路径不算）
     expect(r.output).not.toMatch(/driver\/jsapi-v4\/map\.ts:\d/);
-    expect(r.output).not.toMatch(/core\/loader\/Provider\.ts:\d/);
+    expect(r.output).not.toMatch(/core\/loader\/providers\/official\.ts:\d/);
     rmSync(dir, { recursive: true, force: true });
   });
 

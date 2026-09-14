@@ -1,5 +1,8 @@
 /**
  * BZoom/BScale 迁移验证
+ *
+ * #26 之后组件默认路径直接走 v4 Driver。Fake v4 的 `map.controls` 是**数组**（BMapGL fake 里是
+ * `Set`），因此 `.size` → `.length`；其余观察点（挂了几个、visible=false 摘掉）完全一致。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -11,23 +14,15 @@ import BCityList from '../../packages/baidu-map-gl-vue/src/components/controls/B
 import BLocation from '../../packages/baidu-map-gl-vue/src/components/controls/BLocation.vue'
 import BNavigation3d from '../../packages/baidu-map-gl-vue/src/components/controls/BNavigation3d.vue'
 import BCopyright from '../../packages/baidu-map-gl-vue/src/components/controls/BCopyright.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
+const { harness, fake } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
+
+/** 当前（最后一张）地图 —— 控件数一律以它为准。 */
+function currentMap() {
+  return fake.createdMaps.at(-1)!
 }
 
 function mountControl(comp: any, props: Record<string, unknown> = {}) {
@@ -43,22 +38,20 @@ function mountControl(comp: any, props: Record<string, unknown> = {}) {
 }
 
 describe('Control v3', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
 
   it('BZoom adds a zoom control to the map', async () => {
-    fake.stats.reset()
     const { wrapper } = mountControl(BZoom)
     await flushPromises()
-    // fake Map.addControl 已实现(记录在 maps 的 controls 集合)
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
+    // fake Map.addControl 已实现（记录在 maps 的 controls 数组里）
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
     wrapper.unmount()
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
   })
 
   it('BScale adds control and toggles visible', async () => {
-    fake.stats.reset()
     const visible = ref(true)
     const el = host()
     const wrapper = mount(
@@ -69,50 +62,46 @@ describe('Control v3', () => {
       { attachTo: el },
     )
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
     visible.value = false
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
     wrapper.unmount()
     await nextTick()
   })
 
   it('BCityList adds a city-list control', async () => {
-    fake.stats.reset()
     const { wrapper } = mountControl(BCityList, { expand: true })
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
     wrapper.unmount()
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
   })
 
   it('BLocation adds a location control', async () => {
-    fake.stats.reset()
     const { wrapper } = mountControl(BLocation)
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
     wrapper.unmount()
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
   })
 
   it('BNavigation3d adds a navigation control', async () => {
-    fake.stats.reset()
     const { wrapper } = mountControl(BNavigation3d)
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
     wrapper.unmount()
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
   })
 
   it('BCopyright adds a copyright control with slot content', async () => {
-    fake.stats.reset()
     const el = host()
     const wrapper = mount(
       defineComponent({
@@ -123,17 +112,18 @@ describe('Control v3', () => {
       { attachTo: el },
     )
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    expect(map.controls.size).toBe(1)
-    const control = [...map.controls][0] as { copyrights?: { content: string }[] }
+    const map = currentMap()
+    expect(map.controls).toHaveLength(1)
+    const control = map.controls[0] as { copyrights?: { content: string }[] }
+    expect(control.copyrights).toHaveLength(1)
+    expect(control.copyrights?.[0]?.content).toContain('custom copyright')
     expect(wrapper.text()).toContain('custom copyright')
     wrapper.unmount()
     await nextTick()
-    expect(map.controls.size).toBe(0)
+    expect(map.controls).toHaveLength(0)
   })
 
   it('BCopyright toggles visibility without re-adding the control', async () => {
-    fake.stats.reset()
     const visible = ref(true)
     const el = host()
     const wrapper = mount(
@@ -145,16 +135,16 @@ describe('Control v3', () => {
       { attachTo: el },
     )
     await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const control = [...map.controls][0] as { copyrights?: unknown[] }
+    const map = currentMap()
+    const control = map.controls[0] as { copyrights?: unknown[] }
     expect(control.copyrights).toHaveLength(1)
     visible.value = false
     await nextTick()
-    expect(map.controls.size).toBe(1)
+    expect(map.controls).toHaveLength(1)
     expect(control.copyrights).toHaveLength(0)
     visible.value = true
     await nextTick()
-    expect(map.controls.size).toBe(1)
+    expect(map.controls).toHaveLength(1)
     expect(control.copyrights).toHaveLength(1)
     wrapper.unmount()
     await nextTick()

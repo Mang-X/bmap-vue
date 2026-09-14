@@ -30,7 +30,6 @@ interface Descriptor {
   description: string
   rawMembers?: readonly string[]
   engines: readonly string[]
-  fallback?: { via?: string }
   status: string
   runtimeOnly: boolean
 }
@@ -46,7 +45,8 @@ const catalog = (await import(freshModuleUrl(catalogPath))) as {
 
 const { CAPABILITY_CATALOG, CAPABILITY_IDS, CAPABILITY_FAMILIES, CAPABILITY_STATUSES } = catalog
 
-const ENGINES = ['webgl-v1', 'jsapi-v3', 'jsapi-v4'] as const
+// 单引擎基线（M3A3-REMOVE-LEGACY / #26）：旧引擎删除后只剩 jsapi-v4，引擎列因此只有一列。
+const ENGINES = ['jsapi-v4'] as const
 
 const STATUS_MEANING: Record<string, string> = {
   native: 'SDK 原生能力，直接映射官方 API',
@@ -99,7 +99,7 @@ function renderMarkdown(): string {
   )
   lines.push('')
 
-  const headerCells = ['家族', '能力', '状态', '运行时探测', ...ENGINES, 'raw members', '回退', '说明']
+  const headerCells = ['家族', '能力', '状态', '运行时探测', ...ENGINES, 'raw members', '说明']
   lines.push(`| ${headerCells.join(' | ')} |`)
   lines.push(`| ${headerCells.map(() => '---').join(' | ')} |`)
 
@@ -109,7 +109,6 @@ function renderMarkdown(): string {
       if (d.family !== family) continue
       const engineCells = ENGINES.map((engine) => mark(d.engines.includes(engine)))
       const members = (d.rawMembers ?? []).join(', ') || '—'
-      const fallback = d.fallback?.via ? `\`${d.fallback.via}\`` : '—'
       const cells = [
         family,
         `\`${id}\``,
@@ -117,7 +116,6 @@ function renderMarkdown(): string {
         mark(d.runtimeOnly),
         ...engineCells,
         members,
-        fallback,
         d.description,
       ]
       lines.push(`| ${cells.join(' | ')} |`)
@@ -144,7 +142,6 @@ function renderJson(): string {
         runtimeOnly: d.runtimeOnly,
         engines: d.engines,
         rawMembers: d.rawMembers ?? [],
-        ...(d.fallback ? { fallback: d.fallback } : {}),
         description: d.description,
       }
     }),

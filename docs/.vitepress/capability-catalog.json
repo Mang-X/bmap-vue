@@ -16,8 +16,6 @@
     "unsupported"
   ],
   "engines": [
-    "webgl-v1",
-    "jsapi-v3",
     "jsapi-v4"
   ],
   "capabilities": [
@@ -27,8 +25,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -43,8 +39,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -59,7 +53,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -73,8 +66,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -103,7 +94,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -117,7 +107,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -131,17 +120,12 @@
       "status": "extended",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
         "panTo"
       ],
-      "fallback": {
-        "via": "panTo"
-      },
-      "description": "平滑飞行定位；v4 原生 flyTo，迁移期经 panTo 回退"
+      "description": "平滑飞行定位（v4 原生 flyTo；探测成员 panTo）"
     },
     {
       "id": "map.animate",
@@ -163,7 +147,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -177,8 +160,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -192,7 +173,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -207,7 +187,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -234,8 +213,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -249,8 +226,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -264,8 +239,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -279,8 +252,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -294,8 +265,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -309,8 +278,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -324,7 +291,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -338,7 +304,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -352,7 +317,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -366,7 +330,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -380,7 +343,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -395,7 +357,6 @@
       "status": "experimental",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -409,7 +370,6 @@
       "status": "experimental",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -436,8 +396,6 @@
       "status": "unsupported",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
@@ -449,8 +407,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -464,8 +420,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -479,7 +433,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -493,7 +446,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -507,7 +459,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -521,7 +472,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -535,7 +485,6 @@
       "status": "native",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -601,8 +550,6 @@
       "status": "extended",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
@@ -653,8 +600,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -668,8 +613,6 @@
       "status": "experimental",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -683,8 +626,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -698,8 +639,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -713,8 +652,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -728,8 +665,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -743,7 +678,6 @@
       "status": "experimental",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -757,8 +691,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -772,8 +704,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -787,8 +717,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -802,8 +730,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -817,8 +743,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -832,8 +756,6 @@
       "status": "unsupported",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
@@ -845,7 +767,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -859,7 +780,6 @@
       "status": "native",
       "runtimeOnly": false,
       "engines": [
-        "webgl-v1",
         "jsapi-v4"
       ],
       "rawMembers": [
@@ -886,8 +806,6 @@
       "status": "extended",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
@@ -899,8 +817,6 @@
       "status": "extended",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
@@ -912,12 +828,10 @@
       "status": "experimental",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],
-      "description": "Fake SDK 测试替身（M3A.3 双 Driver 行为验证）"
+      "description": "Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证）"
     },
     {
       "id": "runtime.async-task",
@@ -925,8 +839,6 @@
       "status": "experimental",
       "runtimeOnly": true,
       "engines": [
-        "webgl-v1",
-        "jsapi-v3",
         "jsapi-v4"
       ],
       "rawMembers": [],

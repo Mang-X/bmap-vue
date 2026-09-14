@@ -141,14 +141,17 @@ describe("图层创建与构造选项映射", () => {
   });
 
   it("能力守卫先于构造：catalog 说该能力不可用时不产生孤儿实例", () => {
-    // `layer.district` 只声明给 v4 / webgl-v1，jsapi-v3 属于「引擎不支持」
+    // M3A3-REMOVE-LEGACY（#26）：engine 只剩 jsapi-v4，无法再用「引擎不在白名单」制造
+    // 「不可用」。这里改用显式 override 把 `layer.district` 标成不可用——它走的是同一条
+    // 能力守卫路径（先查能力、再构造），因此本用例要守的仍然是「守卫先于构造」。
     const registry = createJsapiV4HandleRegistry();
     const fake = createFakeBMapV4();
     const capabilities = createCapabilityRegistry({
-      engine: "jsapi-v3",
-      version: "3.0",
+      engine: "jsapi-v4",
+      version: "4.0",
       rawSdk: fake.namespace,
       unsupported: "throw",
+      overrides: { "layer.district": false },
     });
     const layers = createJsapiV4LayerDriver({
       rawSdk: fake.namespace,

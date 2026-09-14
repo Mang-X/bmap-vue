@@ -10,7 +10,6 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "types",
     "volar.d.ts"
   ],
   "exports": {

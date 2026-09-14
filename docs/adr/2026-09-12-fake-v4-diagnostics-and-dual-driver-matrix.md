@@ -1,9 +1,16 @@
 # ADR 2026-09-12：Fake v4 诊断口径与迁移期双 Driver 矩阵（诊断门禁 / 领域结果比对）
 
-- 状态：已接受（Accepted）
+- 状态：已接受（Accepted，**部分退役**）
 - 日期：2026-09-12
 - 计划键：`M3A3-FAKE-DUAL`（issue #24，追踪 #12）
 - 取代：无
+- **后续（2026-09-14，issue #26）**：本文的**诊断口径**（`leaks` 恒为 0 / `activity` 不归零 /
+  定时器与回调不进泄漏门禁）继续有效并被 `packages/test-utils/fake-bmap-v4/diagnostics.ts` 沿用；
+  **双 Driver 矩阵部分已退役**——旧引擎删除后「跨引擎比较」不再存在，`driver-matrix.ts` 的
+  `runDriverMatrix` / `expectSameDomainResult` / `createLegacyMatrixEngine` /
+  `createMigrationMatrixEngines` 一并删除，只留下组件级装配与领域读数（`fake-v4-harness.ts`）。
+  组件级场景（含 100 轮挂载/卸载与逐族活动计数）保留在
+  `tests/behavior/v3-component-scenarios.test.ts`。见 [ADR 2026-09-14](./2026-09-14-remove-legacy-engine.md)。
 - 相关：[`2026-09-10-bmap-raw-sdk-boundary`](./2026-09-10-bmap-raw-sdk-boundary.md)、[`2026-09-11-loaded-sdk-client-boundary`](./2026-09-11-loaded-sdk-client-boundary.md)、[`2026-09-11-jsapi-v4-overlay-facet`](./2026-09-11-jsapi-v4-overlay-facet.md)、[`2026-09-11-jsapi-v4-control-layer-facets`](./2026-09-11-jsapi-v4-control-layer-facets.md)、[`2026-09-12-jsapi-v4-service-panorama-native-layers`](./2026-09-12-jsapi-v4-service-panorama-native-layers.md)
 
 ## 背景

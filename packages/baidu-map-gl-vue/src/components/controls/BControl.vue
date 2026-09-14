@@ -7,7 +7,7 @@ import type { ControlHandle } from "../../driver/types/handles";
 /**
  * BControl —— 自定义控件(slot DOM)
  *
- * 创建 BMapGL.Control,把 slot 容器 append 到地图容器,
+ * 创建 BMap.Control,把 slot 容器 append 到地图容器,
  * anchor/offset/visible 与其他 Control 一致(useControlResource)。
  */
 

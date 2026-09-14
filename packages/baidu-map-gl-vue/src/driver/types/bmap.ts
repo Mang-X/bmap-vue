@@ -1,12 +1,18 @@
 /**
  * BMapDriver —— 全部 Facet 的聚合接口
  *
- * 组件与业务 composable 只依赖该稳定领域接口，不依赖 BMapGL 全局命名空间。
+ * 组件与业务 composable 只依赖该稳定领域接口，不依赖 SDK 全局命名空间。
  *
- * M3A.2 收口（issue #23）：v4 **独有的** Facet 不塞进共享契约——共享契约要同时被
- * webgl-v1 满足，而 v1 没有原生数据图层、也没有归一化服务调用面。它们放在
- * `JsapiV4Driver`（v4 Driver 的返回类型）上，因此默认 cutover（#25）之后组件只要拿到
- * v4 Client 的类型，就能在不碰 raw SDK 的前提下使用这些能力。
+ * M3A3-REMOVE-LEGACY（issue #26）：旧引擎（`webgl-v1`，全局 `BMapGL`）随
+ * `src/driver/webgl-v1` 一并删除，因此 `BMapEngine` 只剩 `jsapi-v4` 一个取值。
+ * 保留成类型（而不是到处写字符串字面量）是为了让「engine 身份」在 Capability Catalog /
+ * 诊断 / Ability Explanation 里有统一落点；它仍是**内部实现细节**，面向使用者的公共 API
+ * 不得泄漏 engine 枚举语义以外的 SDK 细节。
+ *
+ * v4 **独有的** Facet 仍只挂在 `JsapiV4Driver` 上：共享契约 `BMapDriver` 保持最小，
+ * 这样面向组件的最小依赖面（map / overlays / controls / layers / services / panorama /
+ * events / capabilities）与 v4 专有面（调用面 services / viewer panorama / nativeLayers）
+ * 在类型上继续分得开。
  */
 import type { CapabilityRegistry } from "../capability/registry";
 import type { ControlDriver } from "./controls";
@@ -19,7 +25,7 @@ import type { OverlayDriver } from "./overlays";
 import type { PanoramaDriver, PanoramaViewerDriver } from "./panorama";
 import type { JsapiV4ServiceDriver, ServiceDriver } from "./services";
 
-export type BMapEngine = "webgl-v1" | "jsapi-v3" | "jsapi-v4";
+export type BMapEngine = "jsapi-v4";
 
 export interface BMapDriver {
   readonly engine: BMapEngine;
@@ -45,7 +51,7 @@ export interface BMapDriver {
  * - `nativeLayers`：原生批量数据图层（8 种 kind）。
  *
  * 三者都是 `BMapDriver` 对应成员的**子类型**，因此 `JsapiV4Driver` 可以直接用在任何
- * 期望 `BMapDriver` 的位置（`createBMapClient` 的注入点、`createDriver` 的分派）。
+ * 期望 `BMapDriver` 的位置（`createBMapClient` 的注入点）。
  */
 export interface JsapiV4Driver extends BMapDriver {
   readonly services: JsapiV4ServiceDriver;

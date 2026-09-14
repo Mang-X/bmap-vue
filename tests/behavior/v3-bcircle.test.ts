@@ -1,45 +1,57 @@
 /**
- * BCircle 迁移验证
+ * BCircle 迁移验证（Fake v4 后端）
  *
  * 验证:
  * - center 字段级更新(不 deep watch),SDK setCenter 被调用
  * - radius/样式 字段级更新
  * - visible 幂等切换
  * - 卸载后 resource 销毁 + 监听释放
+ *
+ * #26 之后旧引擎 Fake BMapGL 已删除：读数走 Fake v4 的覆盖物字段（`circle.center` / `radius`）
+ * 与诊断口径（`leaks.listeners` / `activity.overlaysAttached`）。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BCircle from '../../packages/baidu-map-gl-vue/src/components/overlays/BCircle.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import {
+  createFakeV4Harness,
+  type FakeBMapV4,
+  type FakeV4Circle,
+  type FakeV4Harness,
+} from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
+let harness: FakeV4Harness
+let fake: FakeBMapV4
+
+beforeEach(() => {
+  ;({ harness, fake } = createFakeV4Harness())
+})
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
+
+async function settle() {
+  await flushPromises()
+  await nextTick()
 }
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
+
+/** 最后一张地图上挂着的圆（这些用例里就是那个唯一的 Circle）。 */
+function firstCircle(): FakeV4Circle {
+  return fake.createdMaps.at(-1)!.overlays[0] as FakeV4Circle
 }
 
 function mountCircle(centerRef = ref({ lng: 116.4, lat: 39.9 })) {
-  const el = host()
+  const el = harness.container()
   const wrapper = mount(
     defineComponent({
       components: { BMap, BCircle },
       setup() {
         const center = centerRef
         return () =>
-          h(BMap, { provider: provider() }, () => [
+          h(BMap, { provider: harness.provider() }, () => [
             h(BCircle, { center: center.value, radius: 100, strokeColor: '#ff0000' }),
           ])
       },
@@ -50,30 +62,29 @@ function mountCircle(centerRef = ref({ lng: 116.4, lat: 39.9 })) {
 }
 
 describe('BCircle v3', () => {
-  beforeEach(() => resetLifecycleState())
-
   it('creates circle with valid center (incl 0,0) and radius', async () => {
-    fake.stats.reset()
     const { wrapper } = mountCircle(ref({ lng: 0, lat: 0 }))
-    await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(1)
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
-    const circle = [...(map.overlays as Set<any>)][0]
+    await settle()
+    // 旧口径 `fake.stats.overlaysCreated === 1`；v4 同一事实是活动口径里的挂载次数
+    expect(fake.diagnostics.snapshot().activity.overlaysAttached).toBe(1)
+    const circle = firstCircle()
     expect(circle.radius).toBe(100)
+    // 0 坐标必须被当成合法值传下去（旧 BMapGL fake 上只断言了 radius；v4 的构造期 center 是
+    // `circle.center` 字段，可以直接读出 0,0）
+    expect(circle.center.lng).toBe(0)
+    expect(circle.center.lat).toBe(0)
     wrapper.unmount()
     await nextTick()
   })
 
   it('updates center via field-level watch (0 coordinate valid)', async () => {
-    fake.stats.reset()
     const center = ref({ lng: 116.4, lat: 39.9 })
     const { wrapper } = mountCircle(center)
-    await flushPromises()
-    const map = fake.createdMaps[fake.createdMaps.length - 1]
+    await settle()
 
     center.value = { lng: 0, lat: 0 }
     await nextTick()
-    const circle = [...(map.overlays as Set<any>)][0]
+    const circle = firstCircle()
     expect(circle.center.lng).toBe(0)
     expect(circle.center.lat).toBe(0)
     wrapper.unmount()
@@ -81,12 +92,13 @@ describe('BCircle v3', () => {
   })
 
   it('releases listeners and disposes circle on unmount', async () => {
-    fake.stats.reset()
     const { wrapper } = mountCircle()
-    await flushPromises()
-    expect(fake.stats.listeners).toBeGreaterThan(0)
+    await settle()
+    // 旧读数 `fake.stats.listeners`;Fake v4 的同一事实是诊断的存活监听器数
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.listeners).toBe(0)
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0)
+    harness.assertIdle('BCircle 卸载')
   })
 })

@@ -2,6 +2,9 @@
 
 > 面向从 `baidu-map-gl-vue@2.x` 升级到 `3.0.0` 的使用者。
 > 目标版本 `3.0.0-beta`(next) → `3.0.0`(stable)。
+>
+> SDK 世代的差异（v2 的 `BMapGL` → 3.0 的 `BMap`）单独成页：
+> [WebGL v1 → JSAPI 4.0 迁移指南](./migration-v1-to-v4)。本页讲**组件 API**层面的迁移。
 
 v3 的核心变化是**运行时架构**,不是组件 API 的推倒重来。绝大多数 v2 组件用法保持不变;
 变化集中在「如何加载 SDK」「如何表达父子依赖」「如何承载大数据」。
@@ -42,7 +45,7 @@ app.use(createBMapPlugin({
 | 按需导入组件(`BMap` 等) | 保留组件名与根 named exports | 无需改动 |
 | `@initd` | 保留并 **deprecate**,新增 `@ready` | 建议改为 `@ready` |
 | `getMapInstance()` | 保留,返回 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `./advanced` 的 `unwrapRaw` 获取）,新增 `whenReady()` | 涉及 raw 地图访问时迁移 |
-| `apiUrl`(离线) | 默认路径已不接受（会报 `BMAP_INVALID_ARGUMENT`）；保留为 legacy Provider 的参数 | 改用 `customScriptV4Provider(scriptSrc)` / `existingGlobalV4Provider()` |
+| `apiUrl`(离线) | 默认路径已不接受（会报 `BMAP_INVALID_ARGUMENT`）；legacy 参数已随旧引擎删除 | 改用 `customScriptV4Provider(scriptSrc)` / `existingGlobalV4Provider()` |
 | `plugins: string[]` | 保留适配；`ready` 不等待插件，使用 `plugin-ready` / `plugin-error` 监听插件状态 | 检查插件依赖时序 |
 | `@pluginReady(map)`（旧驼峰事件，载荷为地图实例） | 已移除，统一为 `@plugin-ready`（载荷为插件名）；地图实例改用 `ready` 载荷、`whenReady()` 或组件 `ref.getMapInstance()` 获取 | 涉及插件回调取地图时迁移 |
 | `v-model:show`(InfoWindow) | 保留 | 无需改动 |

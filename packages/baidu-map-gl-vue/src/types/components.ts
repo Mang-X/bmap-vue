@@ -25,13 +25,17 @@ export type DistrictTypeValue = (typeof DistrictType)[keyof typeof DistrictType]
 export interface BMapProps {
   ak?: string;
   apiUrl?: string;
-  provider?: { load(opts?: unknown, signal?: AbortSignal): Promise<unknown> };
+  /**
+   * 显式 Provider（结构化：`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。
+   *
+   * M3A3-REMOVE-LEGACY（#26）：不再接受裸全局对象形状，也不再有任何「已有全局自动回退」。
+   * 宿主自己加载了 SDK 时显式传 `existingGlobalV4Provider()`。
+   */
+  provider?: import("../client/types").BMapProviderLike;
   /** 显式 Client(最高优先级,查找顺序首位) */
   client?: import("../client/types").BMapClient;
   /** 显式 Client Definition(覆盖 Provider/默认) */
   definition?: import("../client/types").CreateBMapClientOptions;
-  /** 显式 opt-in 才允许读取 window.BMapGL(默认不静默读取) */
-  allowExistingGlobal?: boolean;
   /** KeepAlive 行为:suspend(默认,不销毁 WebGL Map) | dispose */
   keepAliveBehavior?: "suspend" | "dispose";
   center?: { lng: number; lat: number } | string;

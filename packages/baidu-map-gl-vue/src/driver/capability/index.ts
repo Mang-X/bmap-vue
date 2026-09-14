@@ -1,7 +1,6 @@
 export type {
   Capability,
   CapabilityDescriptor,
-  CapabilityFallback,
   CapabilityFamily,
   CapabilityStatus,
 } from "./catalog";

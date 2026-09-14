@@ -1,29 +1,20 @@
 /**
  * BMarkerCluster 聚合组件验证
+ *
+ * 从 BMapGL Fake 迁到 Fake v4：簇 marker 仍是普通 Marker（挂在 `map.overlays`），
+ * 计数口径从 `stats.overlaysCreated` 换成 `harness.attached('overlay')`，
+ * 「监听归零」换成泄漏门禁 `harness.assertIdle()`。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BMarkerCluster from '../../packages/baidu-map-gl-vue/src/components/data/BMarkerCluster.vue'
-import { getFakeBMapGl, resetLifecycleState } from '../../packages/test-utils'
+import { createFakeV4Harness } from '../../packages/test-utils'
 
-const fake = getFakeBMapGl()
-function provider() {
-  return {
-    load: async () => {
-      ;(window as any).BMapGL = fake
-      return fake
-    },
-  }
-}
-function host() {
-  const el = document.createElement('div')
-  el.style.width = '200px'
-  el.style.height = '200px'
-  document.body.appendChild(el)
-  return el
-}
+const { harness, fake } = createFakeV4Harness()
+const provider = () => harness.provider()
+const host = () => harness.container()
 
 interface Pt { id: string; lng: number; lat: number }
 
@@ -60,28 +51,31 @@ const pts: readonly Pt[] = [
 ] as readonly Pt[]
 
 describe('BMarkerCluster v3', () => {
-  beforeEach(() => resetLifecycleState())
+  beforeEach(() => harness.reset())
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
 
   it('clusters nearby points and keeps far point separate', async () => {
-    fake.stats.reset()
     const data = ref<readonly Pt[]>(pts)
     const { wrapper } = mountCluster(data)
     await flushPromises()
     // 北京 3 点聚为 1 个簇 marker + 上海 1 点单独 = 2 个视觉 marker
-    expect(fake.stats.overlaysCreated).toBe(2)
+    expect(harness.attached('overlay')).toBe(2)
     wrapper.unmount()
     await nextTick()
   })
 
   it('releases all markers and listeners on unmount', async () => {
-    fake.stats.reset()
     const data = ref<readonly Pt[]>(pts)
     const { wrapper } = mountCluster(data)
     await flushPromises()
-    expect(fake.stats.overlaysCreated).toBe(2)
-    expect(fake.stats.listeners).toBeGreaterThan(0)
+    expect(harness.attached('overlay')).toBe(2)
+    // 原口径是 fake.stats.listeners > 0；v4 的对应实时读数是 leaks.listeners
+    expect(fake.diagnostics.snapshot().leaks.listeners).toBeGreaterThan(0)
     wrapper.unmount()
     await nextTick()
-    expect(fake.stats.listeners).toBe(0)
+    // 原口径是 fake.stats.listeners === 0；v4 用泄漏门禁一次覆盖「监听 + 资源」
+    harness.assertIdle('BMarkerCluster 卸载')
   })
 })

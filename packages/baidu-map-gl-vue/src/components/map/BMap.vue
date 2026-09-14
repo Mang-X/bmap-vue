@@ -23,16 +23,10 @@ import {
 import { targetContextKey, type TargetContext } from "../../core/context/target";
 import { MapRuntime } from "../../core/runtime/MapRuntime";
 import { BMapError } from "../../core/errors/BMapError";
-import { logger } from "../../core/logger";
 import type { BMapLoadOptions } from "../../core/loader/url";
 import { DEFAULT_VERSION } from "../../core/loader/url";
-import {
-  existingGlobalProvider,
-  hasExistingGlobalSdk,
-} from "../../core/loader/Provider";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
-import type { AnyBMapProviderLike, BMapClient, CreateBMapClientOptions } from "../../client/types";
-import { withMigrationDriver } from "../../client/migration";
+import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../../client/types";
 import { normalizeMapMouseEvent } from "../../driver/normalize";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
 import type { BMapProps } from "../../types/components";
@@ -90,7 +84,11 @@ const height = computed(() =>
 );
 
 // Client 查找顺序:显式 client prop > 显式 definition > 显式 provider/ak >
-// 最近 BMapProvider > app.use 默认 definition > 旧 bmapConfig > opt-in existingGlobal > 报错
+// 最近 BMapProvider > app.use 默认 definition > 旧 bmapConfig > 报错
+//
+// M3A3-REMOVE-LEGACY（#26）：删掉了 webgl-v1 时代的两条兜底——`allowExistingGlobal` 与
+// 「页面已有全局就自动回退」。它们走的是 legacy `existingGlobalProvider()`（读 `BMap ?? BMapGL`），
+// 需要复用宿主已加载的 SDK 时请显式传 `existingGlobalV4Provider()`（v4 语义）。
 const parentClientContext = inject(bmapClientContextKey, undefined) as
   | BMapClientContext
   | undefined;
@@ -110,45 +108,27 @@ if (props.client) {
 } else if (props.provider || props.ak || props.apiUrl) {
   // R25-B（issue #71）：无显式 Provider 时默认落到 v4 家族（内部委托官方 `@baidumap/jsapi-loader`）。
   // `props.apiUrl` 是「自定义入口」，默认路径无法表达，会在加载前显式报错并指向 customScriptV4Provider()。
-  const provider = (props.provider as BMapClientContext extends never ? never : AnyBMapProviderLike) ?? appConfig?.provider ?? baiduJsapiV4Provider();
+  const provider: BMapProviderLike = props.provider ?? appConfig?.provider ?? baiduJsapiV4Provider();
   const loadOptions: BMapLoadOptions = {
     ak: props.ak ?? appConfig?.defaults?.ak,
     apiUrl: props.apiUrl ?? appConfig?.defaults?.apiUrl,
     version: appConfig?.defaults?.version ?? DEFAULT_VERSION,
   };
-  // M3A1-CLIENT(#18): 组件默认路径走迁移归一（按加载 engine 分派 Driver，默认 cutover
-  // 属 #25）；createBMapClient 自身的默认已收口到 jsapi-v4。
+  // 定义直接进 Client：`createBMapClient` 的默认 Driver 工厂已是 jsapi-v4，
+  // 迁移期的 `withMigrationDriver` 归一随 webgl-v1 删除（#26）。
   clientContext = createClientContext({
-    definition: withMigrationDriver({
-      provider: provider as AnyBMapProviderLike,
-      loadOptions,
-    }),
+    definition: { provider, loadOptions },
   });
   ownClientContext = true;
 } else if (parentClientContext) {
   clientContext = parentClientContext;
 } else if (defaultDefinition) {
-  // 迁移期归一在 Client Context 收口（见 core/context/client.ts），此处直接透传
+  // 定义直接透传（收口在 core/context/client.ts 与 createBMapClient）
   clientContext = createClientContext({ definition: defaultDefinition });
   ownClientContext = true;
 } else if (appConfig?.provider) {
   clientContext = createClientContext({
-    definition: withMigrationDriver({
-      provider: appConfig.provider,
-      loadOptions: appConfig.defaults,
-    }),
-  });
-  ownClientContext = true;
-} else if (props.allowExistingGlobal) {
-  clientContext = createClientContext({
-    definition: { provider: existingGlobalProvider(), loadOptions: {} },
-  });
-  ownClientContext = true;
-} else if (hasExistingGlobalSdk()) {
-  // 向后兼容:默认不静默读取全局 SDK,仅在已存在时经 Loader 边界回退并 warn
-  logger.warn("BMap resolved existing global SDK fallback; prefer <BMapProvider> or app.use(createBMapPlugin(...))");
-  clientContext = createClientContext({
-    definition: { provider: existingGlobalProvider(), loadOptions: {} },
+    definition: { provider: appConfig.provider, loadOptions: appConfig.defaults },
   });
   ownClientContext = true;
 } else {

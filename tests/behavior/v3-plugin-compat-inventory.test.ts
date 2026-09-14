@@ -475,7 +475,7 @@ describe("文档承诺的命令真的存在（防空口承诺）", () => {
     }
   });
 
-  it("清单源码里指向的 ADR 与 legacy 声明文件都在仓库里", () => {
+  it("清单源码里指向的 ADR 都在仓库里，且不再指向已删除的 legacy 声明面", () => {
     const sourceFile = resolve(
       ROOT,
       "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts",
@@ -484,7 +484,6 @@ describe("文档承诺的命令真的存在（防空口承诺）", () => {
     const mentioned = [
       "docs/adr/2026-09-13-plugin-compat-inventory.md",
       "docs/adr/2026-09-13-private-sdk-surface-removal.md",
-      "packages/baidu-map-gl-vue/types/BMapGL/lib.d.ts",
     ];
     for (const path of mentioned) {
       // 先证明这条断言真的在检查东西：文件名主干确实在源码里被提到。
@@ -493,5 +492,10 @@ describe("文档承诺的命令真的存在（防空口承诺）", () => {
       expect(source, `清单源码没有指向 ${marker}`).toContain(marker);
       expect(existsSync(resolve(ROOT, path)), `${path} 不存在`).toBe(true);
     }
+
+    // M3A3-REMOVE-LEGACY（#26）：`types/BMapGL` 已删除，清单不能再把它当成现存文件引用。
+    // 正证守卫：那句话本身还在（只是改成历史表述），否则下面这条负向断言可能恒真。
+    expect(source, "GeoUtils 的声明面差异应当继续被记录").toContain("BMapGLLib.GeoUtils");
+    expect(source).not.toContain("types/BMapGL/");
   });
 });

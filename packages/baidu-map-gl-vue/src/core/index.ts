@@ -17,15 +17,6 @@ export type { BMapSdkEventTarget, NormalizedMapEvent } from "./events/EventBridg
 export { createMapEventBus } from "./events/MapEventBus";
 export type { MapEventBus, InternalMapEvents } from "./events/MapEventBus";
 export {
-  BaiduCdnProvider,
-  CustomScriptProvider,
-  ExistingGlobalProvider,
-  baiduCdnProvider,
-  customScriptProvider,
-  existingGlobalProvider,
-} from "./loader/Provider";
-export type { BMapProvider } from "./loader/Provider";
-export {
   BaiduJsapiV4Provider,
   CustomScriptV4Provider,
   ExistingGlobalV4Provider,
@@ -55,15 +46,8 @@ export type {
   ReuseExistingJsapiV4Input,
 } from "./loader/providers/index";
 export { ScriptLoader, getScriptKey, scriptOptions } from "./loader/ScriptLoader";
-export {
-  assertLoadedJsapiV4,
-  assertLoadedSdk,
-  isLoadedJsapiV4,
-  isLoadedLegacySdk,
-  isLoadedSdk,
-  toLoadedLegacySdk,
-} from "./loader/loaded";
-export type { LoadedLegacySdk, LoadedSdk } from "./loader/loaded";
+export { assertLoadedSdk, isLoadedSdk } from "./loader/loaded";
+export type { LoadedSdk } from "./loader/loaded";
 export type {
   ScriptJsonpModeOptions,
   ScriptLoadModeOptions,

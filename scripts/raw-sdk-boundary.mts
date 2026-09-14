@@ -7,19 +7,23 @@
  * - `tests/behavior/v3-raw-sdk-scanner.test.ts`
  * - `tests/behavior/v3-public-dts-gate.test.ts`
  *
- * 边界原则：`BMap.*`（v4 目标）与 `BMapGL`（迁移期）只能出现在 v4 Driver /
+ * 边界原则：`BMap.*`（JSAPI 4.0 的唯一命名空间）只能出现在 v4 Driver /
  * Client / Loader / 插件适配层与最小 augmentation；组件、业务 composable 与
  * runtime 一律视为禁区。
+ *
+ * `BMapGL` 自 M3A3-REMOVE-LEGACY（issue #26）起**在任何位置都是违规**——旧引擎已删除，
+ * 它只剩两种合法出现：官方 4.0 runtime 自己挂的别名（不在本库源码里）与测试替身按真实形状
+ * 做的镜像（`packages/test-utils` 在扫描范围之外）。跨整棵树的这条不变量由
+ * `scripts/check-no-bmapgl.mts`（`pnpm check:no-bmapgl`）守。
  */
 
-/** SDK 全局命名空间：Stable 目标 `BMap`（v4）与迁移期 `BMapGL`。 */
+/** SDK 全局命名空间：`BMap`（JSAPI 4.0）。`BMapGL` 保留在清单里作为**违规标记**。 */
 export const RAW_SDK_NAMESPACES = ["BMap", "BMapGL"] as const;
 export type RawSdkNamespace = (typeof RAW_SDK_NAMESPACES)[number];
 
 /**
  * 浏览器/运行时全局对象名：`<global>.BMap` / `<global>["BMap"]` 属于越界访问，
- * 合法探测入口只有 Loader/Provider 边界：迁移期 `core/loader/Provider.ts` 的
- * `hasExistingGlobalSdk()`，v4 目标 `core/loader/providers/namespace.ts` 的
+ * 合法探测入口只有 Loader/Provider 边界：`core/loader/providers/namespace.ts` 的
  * `readJsapiV4Global()`。
  */
 export const GLOBAL_OBJECT_NAMES = ["window", "globalThis", "self", "global"] as const;

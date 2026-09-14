@@ -17,6 +17,11 @@
       "@baidumap/jsapi-ui-kit": ["./types/ui-kit/upstream.d.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "types/shared/**/*.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.d.ts",
+    "types/**/*.d.ts"
+  ],
   "exclude": ["src/**/*.test.ts", "src/**/__tests__/**", "node_modules"]
 }

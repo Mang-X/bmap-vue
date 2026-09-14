@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../packages/test-utils";
+import { createLoadedJsapiV4 } from "../../packages/baidu-map-gl-vue/src/core/loader/providers";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
 import BAutoComplete from "../../packages/baidu-map-gl-vue/src/components/autocomplete/BAutoComplete.vue";
@@ -27,14 +28,26 @@ const POSITION = { lng: 116.404, lat: 39.915 };
 
 let fake: FakeBMapV4;
 
-/** 与 `driver-matrix.ts` 的 v4 引擎同形：Provider 必须自述 engine。 */
+/**
+ * 与 `fake-v4-harness.ts` 的 Provider 同形：结构化 `LoadedJsapiV4`（engine 自述 + load metadata）。
+ *
+ * 刻意用 `createLoadedJsapiV4` 而不是手写 `{ engine, version, namespace }`：后者在类型层少
+ * `load` metadata 字段（`BMapProviderLike.load` 的返回类型要求结构完整），手写会在类型检查里
+ * 被拒——而 `tests/**` 不在任何 typecheck 门禁的覆盖范围内，这个错误只会在一次性审计里暴露。
+ */
 function provider() {
   return {
-    load: async () => ({
-      engine: "jsapi-v4" as const,
-      version: fake.namespace.VERSION,
-      namespace: fake.namespace,
-    }),
+    load: async () =>
+      createLoadedJsapiV4({
+        providerId: "custom-script-v4",
+        mode: "load",
+        version: fake.namespace.VERSION,
+        versionSource: "global",
+        options: { ak: "fake-ak" },
+        fingerprint: "v4-components-lifecycle",
+        namespace: fake.namespace,
+        loadedAt: 0,
+      }),
   };
 }
 

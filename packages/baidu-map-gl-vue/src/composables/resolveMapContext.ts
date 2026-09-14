@@ -7,7 +7,8 @@
  * 3. app.use(createBMapPlugin(...)) 的默认定义或旧 bmapConfig:就地创建真实
  *    ClientContext 适配器(真实 ResourceScope/EventBus/Scheduler/Registries)。
  * 4. 以上皆无:抛出明确 BMAP_PARENT_CONTEXT_MISSING,不再静默构造假 Context,
- *    也不再默认静默读取 window.BMapGL。
+ *    也不再有任何全局兜底——旧引擎(读 `BMap ?? BMapGL` 的 legacy Provider)已在 3.0 删除;
+ *    宿主自己加载了 SDK 时请显式传 `existingGlobalV4Provider()`。
  */
 import { shallowRef, toRaw } from "vue";
 import { useOptionalMapContext } from "../core/context/inject";
@@ -18,7 +19,6 @@ import {
   type BMapClientContext,
 } from "../core/context/client";
 import { bmapConfigKey } from "../core/context/pluginConfig";
-import { withMigrationDriver } from "../client/migration";
 import { inject } from "vue";
 import type { MapContext, MapReadyContext } from "../core/context/types";
 import { ResourceScope } from "../core/lifecycle/ResourceScope";
@@ -75,12 +75,11 @@ function resolveDefaultClientContext(): BMapClientContext | undefined {
     const cached = defaultContextCache.get(key);
     if (cached) return cached;
     const created = createClientContext({
-      // 迁移期组件默认路径:按加载结果的 engine 分派 Driver(见 client/migration.ts),
-      // 默认 cutover 属 #25。
-      definition: withMigrationDriver({
+      // 旧 bmapConfig 兼容路径：definition 直接组装，不再经迁移期归一（#26 删除）。
+      definition: {
         provider: appConfig.provider,
         loadOptions: appConfig.defaults,
-      }),
+      },
     });
     defaultContextCache.set(key, created);
     return created;

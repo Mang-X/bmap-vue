@@ -249,7 +249,10 @@ export function findViolations(
   return violations;
 }
 
-export function sortViolations(violations: Violation[]): Violation[] {
+/** 稳定排序：文件 → 行 → 列。泛型以便其它门禁（如 no-bmapgl）复用自己的违规类型。 */
+export function sortViolations<T extends { file: string; line: number; column: number }>(
+  violations: T[],
+): T[] {
   return [...violations].sort(
     (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column,
   );

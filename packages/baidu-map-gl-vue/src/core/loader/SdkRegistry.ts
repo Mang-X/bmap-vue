@@ -1,8 +1,8 @@
 /**
  * 进程级 SDK Registry —— 同一 realm 内的全局 SDK 冲突域
  *
- * `BMap` / `BMapGL` 都是**进程级**全局资源，同一 realm 只能存在一份配置。registry 因此
- * 以「冲突域（domain）」为单位共享，而不是让每个 Provider 各持一份缓存：
+ * `BMap`（JSAPI 4.0 的全局命名空间）是**进程级**全局资源，同一 realm 只能存在一份配置。
+ * registry 因此以「冲突域（domain）」为单位共享，而不是让每个 Provider 各持一份缓存：
  *
  * - 域内**已就绪**或**正在加载**的配置构成占用：不兼容的请求在启动 loader **之前**
  *   就被拒绝，避免首次并发请求不同 AK / 版本时各自插入一个 script；
@@ -18,8 +18,8 @@
  * - **失败**后条目与占用一并释放，允许下一次重试，不残留半成品状态；**取消**则按请求声明的
  *   `cancellable` 分流（可取消 → 同步释放；不可取消 → 保留条目 / 占用 / 任务），见上一条。
  *
- * 域划分：所有 JSAPI 4.0 Provider 共用 `BMap` 域（见 `providers/namespace.ts`）；
- * 迁移期 legacy Provider 使用独立的 `BMapGL` 域，由 M3A.3 的默认切换一并删除。
+ * 域划分：所有 JSAPI 4.0 Provider 共用 `BMap` 域（见 `providers/namespace.ts`）。
+ * 旧引擎时代那个独立的 `BMapGL` 域已随 `#26` 删除（同一个 realm 里不再有两份配置需要分开记账）。
  */
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
