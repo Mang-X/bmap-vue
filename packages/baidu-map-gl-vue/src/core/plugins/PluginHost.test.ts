@@ -500,3 +500,122 @@ describe("PluginHost：候选孤儿按实例去重", () => {
     host.dispose();
   });
 });
+
+/**
+ * 组合边界：**parked 候选**与「当前纪元的 `setup` 失败」指向同一个实例（评审第五轮 P1）。
+ *
+ * 当前纪元的 `setup()` 抛错时，失败路径会立刻释放刚产出的实例；但同名下 identity 相同的 parked
+ * 候选还留在 `orphanCandidates` 里，下一次 `host.dispose()` 会把它再释放一次 —— 而
+ * `BMapPluginDefinition.dispose` 没有幂等契约，这就是双重释放。
+ *
+ * 修法：失败路径释放之前，先把同名下 identity 相同的候选**摘掉**（不重复释放）。
+ */
+describe("PluginHost：parked 候选与 setup 失败撞在同一个实例上", () => {
+  it("旧纪元 parked(shared) + 当前纪元 setup(shared) 抛错：shared 只被释放一次", async () => {
+    const host = createPluginHost();
+    const boom = new Error("setup failed");
+    const shared = { shared: true };
+    const dispose = vi.fn();
+
+    // epoch 0 在飞
+    const epoch0 = deferredPlugin("G");
+    const acquired0 = host.acquire("G", { ...epoch0.definition, dispose }, makeContext());
+    host.dispose();
+    await expect(acquired0).rejects.toBeInstanceOf(BMapError);
+
+    // epoch 1 在飞，且它的 setup 会抛错
+    const epoch1 = deferredPlugin("G");
+    const acquired1 = host.acquire(
+      "G",
+      {
+        ...epoch1.definition,
+        dispose,
+        setup: () => {
+          throw boom;
+        },
+      },
+      makeContext(),
+    );
+    expect(host.inspect("G")?.status).toBe("loading");
+
+    // epoch 0 先 resolve shared ⇒ 挂起成候选
+    epoch0.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(dispose, "还在判定点之前").not.toHaveBeenCalled();
+
+    // epoch 1 也 resolve shared ⇒ setup 抛错 ⇒ 当前失败路径释放一次
+    epoch1.settle().resolve(shared);
+    await expect(acquired1).rejects.toBe(boom);
+    expect(
+      dispose.mock.calls.filter(([instance]) => instance === shared),
+      "失败路径释放一次",
+    ).toHaveLength(1);
+
+    host.dispose();
+    expect(
+      dispose.mock.calls.filter(([instance]) => instance === shared),
+      "dispose 不得再释放同一个实例（候选已被摘掉）",
+    ).toHaveLength(1);
+  });
+});
+
+/**
+ * `setup()` 是调用方代码，可以**同步重入** owner（评审第五轮 P2）。
+ *
+ * 只在校验通过后才执行 `setup` 还不够：`setup` 内部调用 `host.dispose()` 时，epoch 在 setup 执行期间
+ * 就变了，而成功分支随后仍会把实例写进一个**已经被摘掉的条目** —— 没有任何记录指向它，
+ * 之后 `host.dispose()` 也找不到它。
+ */
+describe("PluginHost：setup 内同步重入 dispose", () => {
+  it("setup 内调用 host.dispose()：不得把实例写进已摘掉的条目，最终仍被释放一次", async () => {
+    const host = createPluginHost();
+    const instance = { ok: true };
+    const dispose = vi.fn();
+    const definition: BMapPluginDefinition<unknown> = {
+      name: "G",
+      scope: "global",
+      load: async () => instance,
+      setup: () => {
+        // 重入：此刻 epoch 会变，当前条目被清掉
+        host.dispose();
+      },
+      dispose,
+    };
+
+    // 消费者被 epoch scope 的 abort 结算
+    await expect(host.acquire("G", definition, makeContext())).rejects.toBeInstanceOf(BMapError);
+
+    expect(dispose, "重入的那一刻没有结论（可能被新纪元认领）").not.toHaveBeenCalled();
+    // 但实例必须有归属：下一次 dispose 必须能释放它
+    host.dispose();
+    expect(dispose, "重入导致的孤儿实例最终要被释放，且只释放一次").toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 旧纪元的迟到成功**不执行** `setup`（这一条是被反证逼出来的覆盖缺口）。
+ *
+ * 宿主的 `setup` 只属于**被当前纪元接管**的那个实例。把入口处那次纪元校验去掉、只留 `setup` 之后
+ * 那次复核的话，「迟到成功」会先跑一遍 `setup`（在已经被摘掉的条目上产生副作用），然后才被复核
+ * 拦下来 —— 状态最终是对的，但副作用已经发生了。
+ */
+describe("PluginHost：迟到成功不得执行 setup", () => {
+  it("旧纪元迟到成功且当前没有同名条目：挂起，且不执行 setup", async () => {
+    const host = createPluginHost();
+    const setup = vi.fn(() => () => {});
+    const dispose = vi.fn();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire("G", { ...old.definition, setup, dispose }, makeContext());
+    host.dispose();
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    // 没人再 acquire 这个名字 ⇒ 判定要推迟到宿主 dispose
+    old.settle().resolve({ late: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(setup, "迟到成功的实例没人接管，不得为它执行 setup").not.toHaveBeenCalled();
+
+    host.dispose();
+    expect(dispose, "挂起的候选最终由 dispose 释放").toHaveBeenCalledTimes(1);
+  });
+});

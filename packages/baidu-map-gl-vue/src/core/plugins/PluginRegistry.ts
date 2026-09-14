@@ -358,6 +358,13 @@ export function createPluginRegistry(
           if (disposer) scope.add(disposer);
         }
         setupCompleted = true;
+        // `setup` 是**调用方代码**，可以同步重入注册表（例如内部调 `plugins.dispose()`）：发布 ready
+        // 之前必须再确认一次记录仍然有效，否则会把它从 `disposed` 写回 `ready`、并往已销毁的注册表
+        // 广播 `plugin:ready`；刚产出的 `map` 资源也没人释放（评审第五轮 P2）。
+        if (isStaleSettle(record, generation)) {
+          releaseUnclaimedResource(record, instance);
+          return instance;
+        }
         record.instance = instance;
         record.status = "ready";
         // 成功必须把上一次的错误清掉：留着它，`getStatus() === "ready"` 与

@@ -172,6 +172,35 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
     }
   }
 
+  /** 从候选里**摘掉**某个实例（**不**释放它）：它已经由别的路径释放过了。 */
+  function dropOrphan(name: string, instance: unknown): void {
+    const list = orphanCandidates.get(name);
+    if (!list) return;
+    const remaining = list.filter((candidate) => candidate.instance !== instance);
+    if (remaining.length > 0) orphanCandidates.set(name, remaining);
+    else orphanCandidates.delete(name);
+  }
+
+  /**
+   * 一个实例**没有（或不再有）归属**时的统一处理。
+   *
+   * 当前同名条目已有结论（`ready`）就立刻按 identity 判定：同一个实例说明新纪元正在用它，丢弃；
+   * 不同实例说明确实没人认领，释放。否则（还在 loading、或这个名字暂无条目）**挂起** ——
+   * 此刻判断不了新纪元会不会 claim 它。
+   *
+   * 三个入口共用它：旧纪元的迟到成功、以及 `setup()` 之后的重入校验。
+   */
+  function abandonInstance(entry: HostEntry, instance: unknown): void {
+    const current = entries.get(entry.name);
+    if (current?.status === "ready") {
+      if (current.instance !== instance) {
+        releaseCandidate({ instance, definition: entry.definition, context: entry.context });
+      }
+      return;
+    }
+    parkOrphan(entry, instance);
+  }
+
   function start(entry: HostEntry, epochScope: ResourceScope, myEpoch: number): Promise<unknown> {
     const attempt = (attempts.get(entry.name) ?? 0) + 1;
     attempts.set(entry.name, attempt);
@@ -191,21 +220,8 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
       .then((instance) => {
         if (myEpoch !== epochNumber) {
           // 上一个纪元的迟到成功：它已经从 entries 摘除，也不在 dispose 时的 ready 快照里
-          // ⇒ 不释放就是孤儿。但**此刻不一定判断得了**：当前同名条目若还在 loading，
-          // 它最终可能拿到同一个实例（见 orphanCandidates 的注释）。
-          const current = entries.get(entry.name);
-          if (current?.status === "ready") {
-            // 已经有结论：直接按 identity 判定
-            if (current.instance !== instance) {
-              releaseCandidate({
-                instance,
-                definition: entry.definition,
-                context: entry.context,
-              });
-            }
-          } else {
-            parkOrphan(entry, instance);
-          }
+          // ⇒ 不释放就是孤儿。但**此刻不一定判断得了**（见 abandonInstance / orphanCandidates）。
+          abandonInstance(entry, instance);
           return instance;
         }
         // `setup` 只在校验通过后执行，而且失败时**不能**把它带来的实例留在没人管的状态
@@ -217,6 +233,13 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
           if (disposer) epochScope.add(disposer);
         }
         setupCompleted = true;
+        // `setup` 是**调用方代码**，可以同步重入宿主（例如内部调 `host.dispose()`）。发布 ready 之前
+        // 必须再确认一次这次加载仍然算数：否则实例会被写进一个已经被摘掉的条目 —— 没有任何记录
+        // 指向它，之后 `dispose()` 也释放不到（评审第五轮 P2）。
+        if (myEpoch !== epochNumber) {
+          abandonInstance(entry, instance);
+          return instance;
+        }
         entry.instance = instance;
         entry.status = "ready";
         // 这个名字有结论了：把先前推迟判定的候选按 identity 结算掉
@@ -226,6 +249,10 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
       .catch((error: unknown) => {
         // `setup` 抛错：实例已经创建但没能就绪 ⇒ 由宿主就地释放（它是 global 资源的所有者）
         if (instanceProduced && !setupCompleted) {
+          // 这个实例可能**同时**躺在候选里（某个旧纪元先 resolve 了同一个实例）。先把它摘掉，
+          // 否则这次释放与之后 `dispose()` 的释放会让同一个实例被 dispose 两次
+          // —— `definition.dispose` 没有幂等契约（评审第五轮 P1）。
+          dropOrphan(entry.name, producedInstance);
           releaseCandidate({
             instance: producedInstance,
             definition: entry.definition,

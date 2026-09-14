@@ -769,3 +769,38 @@ describe("PluginRegistry：setup 只由资源所有者执行一次", () => {
     expect(setup).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * `setup()` 内同步重入注册表的 `dispose()`（评审第五轮 P2）。
+ *
+ * 只把 `setup` 排在校验之后还不够：`setup` 是调用方代码，它可以在内部调 `plugins.dispose()`。
+ * 那时 record 已经变成 `disposed`，而成功分支随后仍会把 `status` 写回 `ready`、并往已销毁的注册表
+ * 广播 `plugin:ready`；刚产出的 map 资源也没人释放。
+ */
+describe("PluginRegistry：setup 内同步重入 dispose", () => {
+  it("map 插件的 setup 内调用 plugins.dispose()：保持 disposed、释放实例、不发 ready", async () => {
+    const { plugins, events } = registry();
+    const instance = { ok: true };
+    const dispose = vi.fn(() => {});
+    plugins.register({
+      name: "M",
+      scope: "map",
+      required: false,
+      load: async () => instance,
+      setup: () => {
+        plugins.dispose();
+      },
+      dispose,
+    });
+
+    // 消费者被注册表的内部 abort 结算
+    await expect(plugins.whenPlugin("M")).rejects.toBeInstanceOf(BMapError);
+
+    expect(plugins.getStatus("M"), "不得被写回 ready").toBe("disposed");
+    expect(emitted(events, "plugin:ready"), "已销毁的注册表不得再广播").toBe(0);
+    expect(dispose, "刚产出的 map 资源要就地释放").toHaveBeenCalledWith(
+      instance,
+      expect.anything(),
+    );
+  });
+});
