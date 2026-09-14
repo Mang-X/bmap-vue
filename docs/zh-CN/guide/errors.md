@@ -98,10 +98,16 @@ interface BMapErrorLike {
 
 **关于「配额用尽 / Referer 白名单拦截」**：百度 JSAPI 在这类失败时只回**空结果**，官方没有公开的错误码入口（错误码在它的私有回调表里，本库**不**去嗅探——见 [ADR 2026-09-13](../../adr/2026-09-13-private-sdk-surface-removal.md)）。因此：
 
-- `useBMapGeocoder` / `useBMapGeocodeDetail` 等服务在服务端失败时**不会报错**，而是解析出 `null`（`isEmpty` 为 `true`）——它与「真的查无结果」在公开面上**不可区分**；
+- `useBMapGeocoder` / `useBMapGeocodeDetail` 等服务在服务端失败时**不会报错**，而是以 `status === 'empty'` 结算（`data` 为 `null`、`error` 也是 `null`）——它与「真的查无结果」在公开面上**不可区分**；
+- 「动作恒 resolve」：所有服务动作返回 `Promise<ServiceResult<T>>`、不 reject，失败/超时/取消都在返回值里（`status` 是 `failed` / `timeout` / `canceled`）；
 - 需要区分时只能按业务口径处理（重试、提示、或换 AK / 查 Referer 白名单），并在自己的埋点里记录调用上下文。
 
-**解决**：按 `message` 与你的业务上下文处理；`isEmpty` 为 true 时按「没有结果」展示，同时留意配额与白名单这两个最常见的环境原因。
+**解决**：按 `error.message` 与你的业务上下文处理；`status` 为 `empty` 时按「没有结果」展示，同时留意配额与白名单这两个最常见的环境原因。
+
+:::tip `unsupported` 与 `failed` 不是一回事
+
+`status === 'unsupported'` 表示**当前引擎没有这个能力**：一次请求都没有发出（同时 `supported` 为
+`false`）。把它按 `failed` 处理会误导用户去「重试」。
 
 ### `BMAP_INVALID_ARGUMENT`
 

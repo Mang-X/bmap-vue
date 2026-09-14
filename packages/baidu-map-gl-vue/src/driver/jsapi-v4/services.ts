@@ -1,9 +1,9 @@
 /**
- * v4 ServiceDriver（M3A2-SERVICES-NATIVE / issue #23）
+ * v4 ServiceDriver（M3A2-SERVICES-NATIVE / issue #23；LocalSearch 属 M7-SERVICE-CORE / #38）
  *
  * 两件事写在同一处，因为它们必须一起成立：
  *
- * 1. **创建面**（`ServiceDriver`）：6 项基础服务 + `ViewAnimation` 经 `namespaceCtor` 创建，
+ * 1. **创建面**（`ServiceDriver`）：7 项服务 + `ViewAnimation` 经 `namespaceCtor` 创建，
  *    实例一律 `registry.adopt` 成句柄（跨 Client 混用抛 `BMAP_HANDLE_FOREIGN`）；
  * 2. **归一化调用面**（`ServiceInvocationDriver`）：SDK 的 callback 风格收敛成
  *    `ServiceCall<ServiceResult<T>>`（`../normalize/serviceCall`），业务不再需要自己写
@@ -12,7 +12,8 @@
  * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
  * - `Geocoder#getPoint/getLocation`、`Convertor#translate`、`Boundary#get`、`LocalCity#get`、
  *   `Geolocation#getCurrentPosition` + `getStatus`、`Autocomplete#search` /
- *   `AutocompleteOptions.onSearchComplete` 是各自唯一的调用入口；
+ *   `AutocompleteOptions.onSearchComplete`、`LocalSearch#search/searchNearby/searchInBounds/
+ *   gotoPage/getResults/clearResults/getStatus` 是各自唯一的调用入口；
  * - `Autocomplete#setLocation` / `#setTypes` 是官方声明里的实例更新入口（`serviceDriver.
  *   setAutocompleteOptions` 的落点），组件因此不需要碰 `.raw`；
  * - **只看公开回调参数与实例状态**（R25-C / #72）：`Geocoder#getPoint/getLocation`、
@@ -21,14 +22,17 @@
  *   有结果 → `success`；回 `null` 或空容器 → `empty`（「没有结果或服务当前不可用」）。
  *   本库**不**去嗅探 `_rd` 之类的私有面，也不制造精确错误码——见 ADR
  *   `2026-09-13-private-sdk-surface-removal.md`。只有 SDK 公开给出状态码的服务
- *   （`Geolocation#getStatus()` → `BMAP_STATUS_*`、`Convertor#translate` 回包的 `status`）
- *   才走 `failed` 并带上那个码；
- * - `Geolocation` 是唯一自带状态码的服务（`getStatus()` → `BMAP_STATUS_*`），因此它的
- *   `sdkStatus` 恒有值；
+ *   （`Geolocation#getStatus()` / `LocalSearch#getStatus()` → `BMAP_STATUS_*`、
+ *   `Convertor#translate` 回包的 `status`）才走 `failed` 并带上那个码；
+ * - `Geolocation` 与 `LocalSearch` 是公开带状态码的服务，因此 `sdkStatus` 恒有值
+ *   （拿不到时如实为 `null`，不伪装成 0）；
  * - `Autocomplete` 是**事件式**服务：`search()` 只负责发起请求，结果经构造选项的
  *   `onSearchComplete` 回来。归一化调用因此由 Driver 在创建时挂一个**内部分发器**：
  *   既结算 pending 的 `suggest()`，也把同一个回调转给调用方传入的 `onSearchComplete`
  *   （不吞掉业务本来就有的监听）；
+ * - `LocalSearch` 同样是**事件式**服务，但**不绑输入框**、且 `LocalResult.keyword` 是官方
+ *   **必填**字段——因此它是「逐请求归属」真正落地的地方（#72 的 ADR 把它记在 #38 名下）：
+ *   FIFO + 关键字校验 + 墓碑 + 同关键词互斥，见 `search()` 的契约；
  * - `TrackAnimation` 属 `BMapGLLib` 插件、不在 4.0 的运行时入口里（Catalog
  *   `service.track-animation` 为 `unsupported`，迁移结论属 M8 #43），因此**显式失败**
  *   而不是静默给一个不能用的实例——4.0 的对应能力是原生图层 `TrackLine`。
@@ -44,14 +48,25 @@ import type {
   AutocompleteOptions,
   AutocompleteUpdateOptions,
   BoundaryRequest,
+  BoundaryRings,
   ConvertorRequest,
   GeocodeRequest,
   GeocodedAddress,
+  GeocodedAddressComponents,
   GeolocationAddressInfo,
   GeolocationFix,
   GeolocationOptions,
   JsapiV4ServiceDriver,
   LocalCityFix,
+  LocalSearchBounds,
+  LocalSearchInBoundsRequest,
+  LocalSearchKeyword,
+  LocalSearchNearbyRequest,
+  LocalSearchOptions,
+  LocalSearchPoi,
+  LocalSearchRenderOptions,
+  LocalSearchResult,
+  LocalSearchSearchOption,
   PlaceSuggestion,
   ReverseGeocodeRequest,
   ServiceCall,
@@ -61,6 +76,7 @@ import {
   assertJsapiV4Namespace,
   callRequired,
   createWarnOnce,
+  isObjectLike,
   namespaceCtor,
   readNamespaceMember,
   sdkCall,
@@ -116,6 +132,35 @@ interface RawAutocompleteResult {
   getPoi?: (index: number) => RawAutocompletePoi | undefined;
 }
 
+/** `LocalSearch#onSearchComplete` 回包的单个结果点（官方 `LocalResultPoi`）。 */
+interface RawLocalSearchPoi {
+  title?: unknown;
+  uid?: unknown;
+  point?: unknown;
+  address?: unknown;
+  city?: unknown;
+  province?: unknown;
+  phoneNumber?: unknown;
+  postcode?: unknown;
+  adcode?: unknown;
+  tags?: unknown;
+  isAccurate?: unknown;
+  url?: unknown;
+  detailUrl?: unknown;
+}
+
+/** `LocalSearch#onSearchComplete` 回包（官方 `LocalResult`；多关键字时是它的数组）。 */
+interface RawLocalResult {
+  keyword?: unknown;
+  center?: unknown;
+  radius?: unknown;
+  bounds?: unknown;
+  city?: unknown;
+  province?: unknown;
+  moreResultsUrl?: unknown;
+  suggestions?: unknown;
+}
+
 /* -------------------------------------------------------------------------- */
 /* 常量与纯函数                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -142,7 +187,35 @@ const SERVICE_CAPABILITIES = {
   createLocalCity: "service.local-city",
   createBoundary: "service.boundary",
   createAutocomplete: "service.autocomplete",
+  createLocalSearch: "service.local-search",
 } as const satisfies Record<string, Capability>;
+
+/**
+ * `LocalSearch#getStatus()` 的失败状态码 → 可读原因（0 = 成功、1 = 城市列表不是失败）。
+ *
+ * 与 `GEOLOCATION_FAILURE_REASONS` 同样的口径：`LocalSearch` 是**公开给出状态码**的服务，
+ * 因此失败走 `failed` 并带上官方那个码；码表里没有的码原样透传成 `状态码 N`，不编造。
+ */
+const LOCAL_SEARCH_FAILURE_REASONS = {
+  2: "位置未知",
+  4: "非法密钥",
+  5: "非法请求（关键词或页码无效）",
+  6: "没有权限",
+  7: "服务不可用",
+  8: "超时",
+} as const;
+
+/** `null` / `0`（成功）/ `1`（城市列表）之外的状态码都是失败。 */
+function isLocalSearchFailureStatus(status: number | null): status is number {
+  return status !== null && status !== 0 && status !== 1;
+}
+
+function describeLocalSearchStatus(status: number): string {
+  return (
+    LOCAL_SEARCH_FAILURE_REASONS[status as keyof typeof LOCAL_SEARCH_FAILURE_REASONS] ??
+    `检索失败（状态码 ${status}）`
+  );
+}
 
 export interface CreateJsapiV4ServiceDriverInput {
   /** v4 全局命名空间（`globalThis.BMap`）；raw SDK 只允许在 Driver/Client 边界读取。 */
@@ -203,10 +276,16 @@ export function readSuggestions(
   return suggestions;
 }
 
-/** 读 `Geolocation#getStatus()`；成员缺失或调用失败时返回 `null`（不把缺成员伪装成状态 0）。 */
-function readGeolocationStatus(
+/**
+ * 读服务实例的 `getStatus()`（`Geolocation` 与 `LocalSearch` 是本文档里公开状态码的两个服务）。
+ *
+ * 成员缺失或调用失败时返回 `null`（不把缺成员伪装成状态 0）：状态码只用于**补充**公开原因，
+ * 拿不到就如实说「拿不到」，而不是编一个 0。
+ */
+function readServiceStatus(
   raw: Record<string, unknown>,
   warn: (key: string, message: string) => void,
+  label: string,
 ): number | null {
   const fn = readNamespaceMember(raw, "getStatus");
   if (typeof fn !== "function") return null;
@@ -215,13 +294,217 @@ function readGeolocationStatus(
     return typeof status === "number" ? status : null;
   } catch (error) {
     warn(
-      "geolocation:getStatus",
-      `ServiceDriver.locate: Geolocation.getStatus() 调用失败，状态码按未知处理：${
+      `${label}:getStatus`,
+      `${label}: getStatus() 调用失败，状态码按未知处理：${
         (error as Error)?.message ?? String(error)
       }`,
     );
     return null;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* LocalSearch 结果投影（#38）                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 可选成员的统一读法：**成员缺失、调用抛错、或返回值形状不对**时一律返回 `undefined`。
+ *
+ * 这里用 try/catch 而不是「前置校验 + 直接调用」是刻意的：这些读取器只用来**补全**一份已经
+ * 拿到手的载荷（`getCityList` / `getBounds` / `getPageIndex` …），任何一个可选成员在某个
+ * 运行时上抛错，都不应该把整次检索变成失败——那会把「某个 getter 不可用」升级成「检索不可用」。
+ * 必需成员（`getPoi` / `getCurrentNumPois`）走另一条路：缺失时整份载荷被判为「不是 LocalResult」。
+ */
+function readOptionalMember(
+  target: unknown,
+  method: string,
+  ...args: unknown[]
+): unknown {
+  const fn = readNamespaceMember(target, method);
+  if (typeof fn !== "function") return undefined;
+  try {
+    return (fn as (...a: unknown[]) => unknown).apply(target, args);
+  } catch {
+    return undefined;
+  }
+}
+
+function readOptionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readOptionalFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readOptionalBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+/** `{ lng, lat }` 形状 + 有限数校验；不满足返回 `null`（不把非法坐标写成 0/0）。 */
+function readPointLike(value: unknown): Point | null {
+  if (!isObjectLike(value)) return null;
+  const record = value as Record<string, unknown>;
+  const lng = readOptionalFiniteNumber(record.lng);
+  const lat = readOptionalFiniteNumber(record.lat);
+  return lng === null || lat === null ? null : { lng, lat };
+}
+
+/** raw `Bounds`（`getSouthWest` / `getNorthEast`）→ 领域矩形；空 Bounds 返回 `null`。 */
+function readBoundsLike(value: unknown): LocalSearchBounds | null {
+  if (!isObjectLike(value)) return null;
+  const southwest = readPointLike(readOptionalMember(value, "getSouthWest"));
+  const northeast = readPointLike(readOptionalMember(value, "getNorthEast"));
+  if (!southwest || !northeast) return null;
+  return { southwest, northeast };
+}
+
+/** `LocalResultPoi` → 领域条目。非对象返回 `null`（编造的条目比丢一条更糟）。 */
+export function readLocalSearchPoi(value: unknown): LocalSearchPoi | null {
+  if (!isObjectLike(value)) return null;
+  const poi = value as RawLocalSearchPoi;
+  return {
+    title: readOptionalString(poi.title) ?? "",
+    uid: readOptionalString(poi.uid) ?? "",
+    point: readPointLike(poi.point),
+    address: readOptionalString(poi.address),
+    city: readOptionalString(poi.city),
+    province: readOptionalString(poi.province),
+    phoneNumber: readOptionalString(poi.phoneNumber),
+    postcode: readOptionalString(poi.postcode),
+    adcode: readOptionalString(poi.adcode),
+    tags: readStringList(poi.tags),
+    isAccurate: readOptionalBoolean(poi.isAccurate),
+    url: readOptionalString(poi.url),
+    detailUrl: readOptionalString(poi.detailUrl),
+  };
+}
+
+/** 单个 `LocalResult` → 领域结果；**不是** `LocalResult`（缺 `getPoi`）时返回 `null`。 */
+export function readLocalSearchResult(value: unknown): LocalSearchResult | null {
+  if (!isObjectLike(value)) return null;
+  const result = value as RawLocalResult;
+  if (typeof readNamespaceMember(result, "getPoi") !== "function") return null;
+
+  // `getCurrentNumPois()` 是**本页**条数（`getNumPois()` 是总条数）；读不到时按 0 处理，
+  // 而不是拿总条数冒充本页条数——那会让 `pois` 之外的两个读数互相矛盾。
+  const pageSize = readOptionalFiniteNumber(readOptionalMember(result, "getCurrentNumPois")) ?? 0;
+  const pois: LocalSearchPoi[] = [];
+  for (let index = 0; index < pageSize; index += 1) {
+    const projected = readLocalSearchPoi(readOptionalMember(result, "getPoi", index));
+    if (projected) pois.push(projected);
+  }
+
+  const cities: Array<{ name: string; count: number }> = [];
+  const rawCities = readOptionalMember(result, "getCityList");
+  if (Array.isArray(rawCities)) {
+    for (const entry of rawCities) {
+      if (!isObjectLike(entry)) continue;
+      const name = readOptionalString((entry as Record<string, unknown>).city);
+      if (name === null) continue;
+      cities.push({
+        name,
+        count: readOptionalFiniteNumber((entry as Record<string, unknown>).numResults) ?? 0,
+      });
+    }
+  }
+
+  return {
+    keyword: readOptionalString(result.keyword) ?? "",
+    city: readOptionalString(result.city) ?? "",
+    province: readOptionalString(result.province) ?? "",
+    center:
+      readPointLike(readOptionalMember(result, "getCenter")) ?? readPointLike(result.center),
+    radius: readOptionalFiniteNumber(result.radius),
+    // `getBounds()` 是官方读法；字段 `bounds` 只在部分实现上填充，作为退路（两者都读不到
+    // 就是没有范围信息，返回 `null` 而不是编一个空矩形）
+    bounds:
+      readBoundsLike(readOptionalMember(result, "getBounds")) ?? readBoundsLike(result.bounds),
+    pois,
+    pageSize,
+    total: readOptionalFiniteNumber(readOptionalMember(result, "getNumPois")) ?? pageSize,
+    pageCount: readOptionalFiniteNumber(readOptionalMember(result, "getNumPages")) ?? 0,
+    pageIndex: readOptionalFiniteNumber(readOptionalMember(result, "getPageIndex")) ?? 0,
+    cities,
+    moreResultsUrl: readOptionalString(result.moreResultsUrl),
+    suggestions: readStringList(result.suggestions),
+  };
+}
+
+/**
+ * `onSearchComplete` 的回包 → 领域结果数组。
+ *
+ * 官方单关键字回单个 `LocalResult`、多关键字回 `LocalResult[]`（顺序与关键字数组一致）。
+ * 本库统一归一成数组；载荷不是 `LocalResult`（`null` / 空数组 / 别的对象）时返回 `[]`，
+ * 由调用方按「回包不可用」结算。
+ */
+export function readLocalSearchResults(payload: unknown): LocalSearchResult[] {
+  const list = Array.isArray(payload) ? payload : [payload];
+  const results: LocalSearchResult[] = [];
+  for (const item of list) {
+    const projected = readLocalSearchResult(item);
+    if (projected) results.push(projected);
+  }
+  return results;
+}
+
+/** 回包里各结果的关键字（单关键字 1 项、多关键字 N 项）；读不到返回 `[]`。 */
+export function readLocalSearchResultKeywords(payload: unknown): string[] {
+  const list = Array.isArray(payload) ? payload : [payload];
+  const keywords: string[] = [];
+  for (const item of list) {
+    if (!isObjectLike(item)) continue;
+    const keyword = readOptionalString((item as RawLocalResult).keyword);
+    if (keyword !== null) keywords.push(keyword);
+  }
+  return keywords;
+}
+
+/**
+ * 同关键词互斥的判据键。
+ *
+ * 单关键字用 `s:<keyword>`、多关键字用 `a:<k1>\u0000<k2>`：多关键字检索的结果是数组，
+ * 逐项在同一个回包里返回，两次**完全相同**的多关键字检索同样无法区分谁是谁，因此也要互斥。
+ */
+export function canonicalLocalSearchKeyword(keyword: LocalSearchKeyword): string {
+  return Array.isArray(keyword)
+    ? `a:${[...keyword].join("\u0000")}`
+    : `s:${String(keyword)}`;
+}
+
+/**
+ * 期望的回包关键字：只有单关键字检索才有单一期望值（多关键字回包的 `keyword` 逐项不同，
+ * 用一个值去校验必然误判），因此数组形态返回 `null` = 不做关键字校验、纯 FIFO。
+ */
+export function expectedLocalSearchKeyword(keyword: LocalSearchKeyword): string | null {
+  return typeof keyword === "string" ? keyword : null;
+}
+
+/** `AddressComponent` → 领域投影（缺项一律 `null`，不补空串——空串会被读成「真的有这个值」）。 */
+export function readAddressComponents(value: unknown): GeocodedAddressComponents {
+  const record = isObjectLike(value) ? (value as Record<string, unknown>) : {};
+  return {
+    province: readOptionalString(record.province),
+    city: readOptionalString(record.city),
+    district: readOptionalString(record.district),
+    street: readOptionalString(record.street),
+    streetNumber: readOptionalString(record.streetNumber),
+  };
+}
+
+/** 等待回包的检索操作槽位。 */
+interface PendingLocalSearch {
+  /** 期望的回包关键字；`null` = 不做关键字校验 */
+  keyword: string | null;
+  /** 同关键词互斥的判据键；`null` = 不参与互斥（`gotoPage` 不带自己的关键字） */
+  canonical: string | null;
+  /** `null` = 墓碑（已取消 / 已超时的操作，保留槽位吸收自己的迟到回包） */
+  settle: ServiceCallSettle<LocalSearchResult[]> | null;
 }
 
 export function createJsapiV4ServiceDriver(
@@ -355,18 +638,24 @@ export function createJsapiV4ServiceDriver(
    */
   const boundInput = new WeakMap<object, unknown>();
   const lostExclusivity = new WeakSet<object>();
-  /** 已被 `disposeAutocomplete()` 释放的实例：此后一律拒绝（释放时会把在飞调用显式失败）。 */
-  const disposed = new WeakSet<object>();
-  /** 清理**正在执行**（重入保护）：SDK 的销毁回调里再次调用 `disposeAutocomplete()` 必须短路，
+  /**
+   * 已进入**终态**的服务实例（`disposeAutocomplete()` / `disposeLocalSearch()`）：此后一律拒绝
+   * 业务调用（释放时会把在飞调用显式失败）。
+   *
+   * 两类服务共用同一份记账：WeakSet 的键是 raw 实例，而一个 raw 对象只可能是其中一类，
+   * 因此不存在互相污染；分开存只会让「服务实例终态」这件事有两个真相。
+   */
+  const disposedInstances = new WeakSet<object>();
+  /** 清理**正在执行**（重入保护）：SDK 的销毁回调里再次调用 dispose 入口必须短路，
    *  否则同一个底层对象会被销毁两次（与 Map / Panorama Facet 同源）。 */
-  const disposing = new WeakSet<object>();
+  const disposingInstances = new WeakSet<object>();
   /**
    * SDK 侧 `dispose()` **已成功执行**的实例。
    *
-   * 与 `disposed` 分开记账（八轮复审 P2-2）：SDK 销毁抛错时句柄必须保持「不再接受业务调用」，
-   * 但**不能**因此跳过后续重试——只有成功才记账，失败留给下一次 `disposeAutocomplete()` 重试。
+   * 与 `disposedInstances` 分开记账（八轮复审 P2-2）：SDK 销毁抛错时句柄必须保持「不再接受业务
+   * 调用」，但**不能**因此跳过后续重试——只有成功才记账，失败留给下一次 dispose 入口重试。
    */
-  const sdkDisposed = new WeakSet<object>();
+  const sdkDisposedInstances = new WeakSet<object>();
   /**
    * 绑定输入框上的「用户输入活动」监听（`input` 事件）——**释放路径见 `releaseInputWatcher`**。
    *
@@ -449,7 +738,7 @@ export function createJsapiV4ServiceDriver(
 
   /** 每次调用 / 每次回包都要跑的独占校验；返回失败原因（null 表示仍然独占）。 */
   const exclusivityFailure = (raw: Record<string, unknown>): string | null => {
-    if (disposed.has(raw)) {
+    if (disposedInstances.has(raw)) {
       return "该服务实例已被 disposeAutocomplete() 释放：请重建实例后再做程序化检索";
     }
     if (lostExclusivity.has(raw)) {
@@ -499,6 +788,63 @@ export function createJsapiV4ServiceDriver(
     );
 
   /**
+   * 释放一个**在 Driver 侧持有资源**的服务实例（`Autocomplete` / `LocalSearch` 共用）。
+   *
+   * 三件事的顺序与 Map / Panorama Facet 一致：
+   * 1. 先置**终态**（不再接受业务调用）——这一步是「一旦释放就不再恢复」的状态；
+   * 2. 执行 `cleanup()`（该种类专属的 Driver 侧清理：解绑监听、把在飞调用显式失败）与
+   *    `events.release(handle)`——**解绑失败不阻断后续步骤，但汇总抛出**（订阅也是 Driver 侧资源，
+   *    EventDriver 的 `groups` 是强引用 Map，SDK 清空自己的监听器不会删除这份记录）；
+   * 3. 调用 SDK 自身的 `dispose()`：**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
+   *
+   * 幂等 + 重入短路（SDK 销毁钩子里再次 dispose）都在这里统一处理。两个种类的差异只有
+   * `label`（错误信息里点名是谁）与 `cleanup`；写成两份只会让「成功才记账」这类细节各自漂移。
+   */
+  const disposeServiceInstance = (
+    raw: Record<string, unknown>,
+    handle: ServiceHandle<string>,
+    options: { label: string; cleanup: () => void },
+  ): void => {
+    disposedInstances.add(raw); // 先停止接受业务调用
+    if (disposingInstances.has(raw)) return; // 清理期间的重入直接短路
+    disposingInstances.add(raw);
+
+    const failures: unknown[] = [];
+    try {
+      try {
+        options.cleanup();
+        events.release(handle);
+      } catch (error) {
+        failures.push(error);
+      }
+
+      if (!sdkDisposedInstances.has(raw)) {
+        const disposeMember = readNamespaceMember(raw, "dispose");
+        if (typeof disposeMember !== "function") {
+          sdkDisposedInstances.add(raw); // 没有该成员 ⇒ 视为已完成（不是错误）
+        } else {
+          sdkCall(`${options.label}.dispose`, () => callRequired(raw, "dispose"));
+          sdkDisposedInstances.add(raw);
+        }
+      }
+    } finally {
+      disposingInstances.delete(raw);
+    }
+
+    if (failures.length > 0) {
+      const details = failures
+        .map((failure) => (failure as Error)?.message ?? String(failure))
+        .join("; ");
+      throw new BMapError(
+        "BMAP_SDK_CALL_FAILED",
+        `${options.label} 有 ${failures.length} 项 Driver 侧清理未完成（其余步骤已尽力执行；` +
+          `再次调用只会重试未完成的那一步）: ${details}`,
+        { cause: failures[0], engine: "jsapi-v4" },
+      );
+    }
+  };
+
+  /**
    * 运行期句柄种类校验（类型是编译期契约，JS 调用方仍需在边界拦住）。
    *
    * 与 layers / controls / native-layers 同源，按 Handle 品牌判断，避免把别的服务句柄悄悄
@@ -514,7 +860,7 @@ export function createJsapiV4ServiceDriver(
     throw new BMapError(
       "BMAP_INVALID_ARGUMENT",
       `${operation} 只接受 createAutocomplete 的句柄，收到 "${brand}"；` +
-        "其他服务当前没有 Driver 侧资源需要管理（统一的服务生命周期属 M7 #38）",
+        "需要释放的另一个服务实例是 LocalSearch（disposeLocalSearch）",
       { engine: "jsapi-v4" },
     );
   };
@@ -561,9 +907,343 @@ export function createJsapiV4ServiceDriver(
     return value;
   };
 
-  return {
-    /* ------------------------------------------------------------ 创建面 */
+  /* ------------------------------------------------- LocalSearch 请求归属（#38） */
 
+  /**
+   * 同一 `LocalSearch` 实例的待回包**队列**（`search` / `searchNearby` / `searchInBounds` /
+   * `gotoPage` 共用）。
+   *
+   * 归属规则与 `pendingSuggest` 同源（`Autocomplete` 的那一套），但**依据更强**：
+   * `LocalResult.keyword` 在官方声明里是**必填**字段（`AutocompleteResult.keyword` 只是可选），
+   * 且 LocalSearch **不绑输入框**——回调通道不会被用户输入污染，因此：
+   *
+   * 1. **FIFO**：官方口径是每个操作恰好触发一次 `onSearchComplete`、按发出顺序到达；
+   * 2. **关键字校验**：回包带回的 `keyword` 与队首期望值不一致 ⇒ **不消费槽位**（它不属于在册
+   *    请求）。`gotoPage` 沿用上一次 `search*` 设定的关键字；多关键字检索没有单一期望值，
+   *    退化回纯 FIFO；
+   * 3. **墓碑**：SDK 没有取消入口，`cancel()` 只结算调用方看到的 `ServiceCall`，槽位保留到它
+   *    自己的回包到达——删掉它会让迟到回包去结算**下一个**操作（旧结果污染新请求）；
+   * 4. **同关键词互斥**：两个关键字相同的**未结算**操作无法区分（互斥判据见
+   *    `canonicalLocalSearchKeyword`），命中时显式拒绝。墓碑不参与互斥——FIFO 保证它先被消费，
+   *    因此「取消同关键词的前一次、再发一次」是允许的（composable 的「最新者胜」正是这样）。
+   */
+  const pendingSearches = new WeakMap<object, PendingLocalSearch[]>();
+
+  /** 上一次带关键字的检索设定的关键字：`gotoPage` 用它做回包校验。 */
+  const lastSearchKeyword = new WeakMap<object, string>();
+
+  /**
+   * 待回包队列的上限。与 `MAX_PENDING_SUGGESTS` 同一取舍：**达到上限时拒绝新调用，而不是淘汰
+   * 旧记录**——淘汰不会取消 SDK 请求，被淘汰的请求的回包仍会到达，一旦它落到队首就会把回包
+   * 结算给**另一个**操作。
+   */
+  const MAX_PENDING_SEARCHES = 16;
+
+  const pendingSearchQueue = (raw: Record<string, unknown>): PendingLocalSearch[] => {
+    const existing = pendingSearches.get(raw);
+    if (existing) return existing;
+    const created: PendingLocalSearch[] = [];
+    pendingSearches.set(raw, created);
+    return created;
+  };
+
+  const enqueueSearch = (
+    raw: Record<string, unknown>,
+    entry: PendingLocalSearch,
+  ): void => {
+    pendingSearchQueue(raw).push(entry);
+  };
+
+  /** 同步抛错时回滚刚入队的槽位（没有请求就没有回包，留着会永久错位）。 */
+  const dequeueSearch = (
+    raw: Record<string, unknown>,
+    settle: ServiceCallSettle<LocalSearchResult[]>,
+  ): void => {
+    const queue = pendingSearches.get(raw);
+    if (!queue) return;
+    const index = queue.findIndex((entry) => entry.settle === settle);
+    if (index >= 0) queue.splice(index, 1);
+  };
+
+  /**
+   * 把一次**已从调用方视角结束**的检索（取消 / 超时）降级为**墓碑**：槽位保留在原处吸收它
+   * 自己的迟到回包，但不再参与「同关键词互斥」——回包归属由 FIFO 保证墓碑先被消费。
+   *
+   * 为什么必须有这一步：SDK 没有取消入口，`cancel()` / `timeout` 只是「调用方不再关心结果」。
+   * 若槽位既不移除也不降级，取消之后立刻重查**同一个关键词**（「最新者胜」的最常见形态）会
+   * 被互斥规则挡住，而那是完全正当的用法——参考实现（`huiyan-fe/react-bmap`）也是「最新者胜」。
+   * 反过来，若直接**移除**槽位，迟到回包就会去结算**下一个**调用（旧结果污染新请求）。
+   * 降级成墓碑同时避开这两件事。
+   */
+  const retireSearch = (
+    raw: Record<string, unknown>,
+    settle: ServiceCallSettle<LocalSearchResult[]>,
+  ): void => {
+    const entry = pendingSearches.get(raw)?.find((item) => item.settle === settle);
+    if (entry) entry.settle = null;
+  };
+
+  /** 发起一次检索操作：入队 → 调用 → （失败回滚）→ 调用结束即把槽位降级为墓碑。 */
+  const invokeLocalSearch = (
+    label: string,
+    raw: Record<string, unknown>,
+    entry: { keyword: string | null; canonical: string | null; lastKeyword?: string },
+    invoke: () => void,
+  ): ServiceCall<LocalSearchResult[]> => {
+    let settleRef: ServiceCallSettle<LocalSearchResult[]> | null = null;
+    const call = createServiceCall<LocalSearchResult[]>(
+      (settle) => {
+        settleRef = settle;
+        enqueueSearch(raw, { keyword: entry.keyword, canonical: entry.canonical, settle });
+        try {
+          invoke();
+        } catch (error) {
+          dequeueSearch(raw, settle);
+          throw error;
+        }
+        // 请求真的发出去了才记「上一次的关键字」——`gotoPage` 用它校验回包归属；
+        // 放在 catch 之后是为了「发出失败」不留下过期的期望值。
+        if (entry.lastKeyword !== undefined) lastSearchKeyword.set(raw, entry.lastKeyword);
+      },
+      {
+        label,
+        // 取消之后槽位降级为墓碑：见 `retireSearch`
+        onCancel: () => {
+          if (settleRef) retireSearch(raw, settleRef);
+        },
+      },
+    );
+    // 超时同样意味着这次调用已经结束。`result` **恒 resolve**（适配器不 reject），
+    // 因此这里不会产生未处理的 rejection。
+    void call.result.then((result) => {
+      if (result.status === "timeout" && settleRef) retireSearch(raw, settleRef);
+    });
+    return call;
+  };
+
+  /**
+   * 调用前的准入判定（返回失败原因，`null` 表示放行）。
+   *
+   * 三条拒绝理由都必须是**显式失败**而不是静默排队：排队会让调用方以为请求已经发出去了。
+   */
+  const searchAdmissionFailure = (
+    raw: Record<string, unknown>,
+    canonical: string | null,
+  ): string | null => {
+    if (disposedInstances.has(raw)) {
+      return "该服务实例已被 disposeLocalSearch() 释放：请重建实例后再检索";
+    }
+    const queue = pendingSearches.get(raw) ?? [];
+    if (
+      canonical !== null &&
+      queue.some((entry) => entry.settle !== null && entry.canonical === canonical)
+    ) {
+      return (
+        "同一 LocalSearch 实例上已有**相同关键字**的未结算检索：回包不带请求标识，" +
+        "两次同名检索的回包无法区分（旧结果可能被当成新结果）。" +
+        "请等它结算；要「重新检索同一个词」就先 cancel() 前一次" +
+        "（取消会留下墓碑，它的回包不会被误判给本次）"
+      );
+    }
+    if (queue.length >= MAX_PENDING_SEARCHES) {
+      return (
+        `同一 LocalSearch 实例上等待回包的检索已达上限 ${MAX_PENDING_SEARCHES}：` +
+        "旧请求的记录必须保留到它的回包到达为止（淘汰它们会让迟到回包被错误归属）；" +
+        "请等结算，或 disposeLocalSearch() 后重建实例"
+      );
+    }
+    return null;
+  };
+
+  /**
+   * 回包归属 + 结算（唯一入口：`onSearchComplete` 的内部分发器调用它）。
+   *
+   * 队列为空 ⇒ 与自己无关（例如实例内部触发的检索），直接返回、不消费任何槽位。
+   */
+  const settlePendingSearch = (raw: Record<string, unknown>, payload: unknown): void => {
+    const queue = pendingSearches.get(raw);
+    if (!queue || queue.length === 0) return;
+
+    const head = queue[0];
+    if (!head) return;
+    const keywords = readLocalSearchResultKeywords(payload);
+    if (
+      head.keyword !== null &&
+      keywords.length > 0 &&
+      !keywords.includes(head.keyword)
+    ) {
+      // 回包不属于队首的在册请求（运行时违反了「每次操作恰好一次回包」的假设）：
+      // **不消费槽位**——消费掉会让真正的回包到达时错位到下一个操作。
+      return;
+    }
+    queue.shift();
+
+    // 墓碑：已取消 / 已超时的请求的回包，丢弃（调用方早已拿到 canceled / timeout）
+    if (head.settle === null) return;
+
+    const settle = head.settle;
+    const status = readServiceStatus(raw, warnOnce, "ServiceDriver.search");
+    // **状态码优先**：`LocalSearch` 是公开带状态码的服务，失败时官方仍会触发
+    // `onSearchComplete`（`gotoPage` 页码无效时甚至带上一轮的载荷一起回调）——先看载荷
+    // 会把「官方说这次失败了」误判成成功。
+    if (isLocalSearchFailureStatus(status)) {
+      settle.failed({ code: status, message: describeLocalSearchStatus(status) }, status);
+      return;
+    }
+    if (payload === null || payload === undefined) {
+      // 回包不可用（状态码是 0/1）：没有公开原因就不假装是失败
+      settle.empty(status);
+      return;
+    }
+    const results = readLocalSearchResults(payload);
+    if (results.length === 0) {
+      // 载荷不是 LocalResult（缺 getPoi 等）：按「没有可用结果」上报，不编造
+      settle.empty(status);
+      return;
+    }
+    settle.success(results, status);
+  };
+
+  /** 参数不合法的 LocalSearch 调用（走结果通道，不抛错）。 */
+  const invalidSearchCall = (label: string, message: string): ServiceCall<LocalSearchResult[]> =>
+    invalidCall<LocalSearchResult[]>(label, message);
+
+  /** 准入失败的 LocalSearch 调用（不是参数问题，也不是 SDK 调用失败）。 */
+  const rejectedSearchCall = (label: string, message: string): ServiceCall<LocalSearchResult[]> =>
+    serviceFailedCall<LocalSearchResult[]>(label, message);
+
+  /**
+   * 本地检索的检索区域归一化。
+   *
+   * 官方接受 `Map | Point | string`；本库对应 `MapHandle | 领域 Point | 城市名`。其余形态
+   * **显式失败**而不是透传给 SDK（透传会得到 SDK 侧的原生异常，调用方无法按 code 分类处理）。
+   */
+  const normalizeSearchLocation = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      if (value.length === 0) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "createLocalSearch: 检索区域不能是空字符串",
+          { engine: "jsapi-v4" },
+        );
+      }
+      return value;
+    }
+    if (isObjectLike(value)) {
+      const brand = (value as Record<PropertyKey, unknown>)[HANDLE_BRAND];
+      if (typeof brand === "string") {
+        if (brand !== "map") {
+          throw new BMapError(
+            "BMAP_INVALID_ARGUMENT",
+            `createLocalSearch: 检索区域只接受 MapHandle（收到 "${brand}"）`,
+            { engine: "jsapi-v4" },
+          );
+        }
+        return registry.resolve<unknown>(value as SdkHandle<string>);
+      }
+      if ("lng" in (value as Record<string, unknown>)) {
+        return geometry.toRawPoint(value as Point);
+      }
+    }
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      "createLocalSearch: 检索区域必须是城市名字符串、领域 Point（{ lng, lat }）或 MapHandle",
+      { engine: "jsapi-v4" },
+    );
+  };
+
+  /**
+   * 绘制选项归一化。
+   *
+   * 只透传官方声明里**存在**的成员（`map` / `panel` / `selectFirstResult` / `autoViewport` /
+   * `viewportOptions`）——接收后忽略属于假支持。`map` 必须是本库的 `MapHandle`：绘制出来的
+   * 覆盖物所有权必须可验证，否则 `clearLocalSearch` / `disposeLocalSearch` 收不回它们。
+   */
+  const normalizeRenderOptions = (
+    value: LocalSearchRenderOptions | undefined,
+  ): Record<string, unknown> | null => {
+    if (!value || typeof value !== "object") return null;
+    const out: Record<string, unknown> = {};
+    if (value.map !== undefined) {
+      const brand = isObjectLike(value.map)
+        ? (value.map as Record<PropertyKey, unknown>)[HANDLE_BRAND]
+        : undefined;
+      if (brand !== "map") {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "createLocalSearch: renderOptions.map 必须是本库的 MapHandle" +
+            "（绘制目标的所有权必须可验证，否则清理路径收不回覆盖物）",
+          { engine: "jsapi-v4" },
+        );
+      }
+      out.map = registry.resolve<unknown>(value.map as SdkHandle<string>);
+    }
+    if (typeof value.panel === "string" || isObjectLike(value.panel)) out.panel = value.panel;
+    if (typeof value.selectFirstResult === "boolean") {
+      out.selectFirstResult = value.selectFirstResult;
+    }
+    if (typeof value.autoViewport === "boolean") out.autoViewport = value.autoViewport;
+    if (value.viewportOptions) {
+      const viewport: Record<string, unknown> = {};
+      if (typeof value.viewportOptions.noAnimation === "boolean") {
+        viewport.noAnimation = value.viewportOptions.noAnimation;
+      }
+      if (Array.isArray(value.viewportOptions.margins)) {
+        viewport.margins = [...value.viewportOptions.margins];
+      }
+      if (typeof value.viewportOptions.zoomFactor === "number") {
+        viewport.zoomFactor = value.viewportOptions.zoomFactor;
+      }
+      if (Object.keys(viewport).length > 0) out.viewportOptions = viewport;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  };
+
+  /** 关键字归一化：非空字符串、或非空的**全字符串**数组（官方最多 10 个）。 */
+  const normalizeSearchKeyword = (
+    value: LocalSearchKeyword,
+  ): { value: LocalSearchKeyword; canonical: string; expected: string | null } | null => {
+    if (typeof value === "string") {
+      if (value.length === 0) return null;
+      return {
+        value,
+        canonical: canonicalLocalSearchKeyword(value),
+        expected: expectedLocalSearchKeyword(value),
+      };
+    }
+    if (!Array.isArray(value) || value.length === 0) return null;
+    if (value.some((item) => typeof item !== "string" || item.length === 0)) return null;
+    return {
+      value: [...value],
+      canonical: canonicalLocalSearchKeyword(value),
+      expected: expectedLocalSearchKeyword(value),
+    };
+  };
+
+  const assertLocalSearchHandle = (
+    handle: ServiceHandle<"service:local-search">,
+    operation: string,
+  ): void => {
+    const brand = String(handle[HANDLE_BRAND]);
+    if (brand === "service:local-search") return;
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      `${operation} 只接受 createLocalSearch 的句柄，收到 "${brand}"`,
+      { engine: "jsapi-v4" },
+    );
+  };
+
+  const localSearchOf = (
+    handle: ServiceHandle<"service:local-search">,
+    operation: string,
+  ): Record<string, unknown> => {
+    assertLocalSearchHandle(handle, operation);
+    return resolve<Record<string, unknown>>(handle, operation);
+  };
+
+  /* ------------------------------------------------------------ 创建面 */
+
+  return {
     createGeocoder() {
       capabilities.require(SERVICE_CAPABILITIES.createGeocoder);
       const Geocoder = namespaceCtor(namespace, "Geocoder");
@@ -615,10 +1295,10 @@ export function createJsapiV4ServiceDriver(
           onSearchComplete: (results: RawAutocompleteResult) => {
             // **已释放的实例一律不再回写**（R25-C 复审 P1）：SDK 的回包可能在
             // `disposeAutocomplete()` 之后才到达（取消 / 卸载都收不回请求），也可能在 dispose()
-            // 内部**同步**触发（真实销毁流程会走回调）。`disposed` 在 dispose 的第一步就置位，
+            // 内部**同步**触发（真实销毁流程会走回调）。`disposedInstances` 在 dispose 的第一步就置位，
             // 因此两条路径都在这里被挡住。「卸载后不再回写」是 Driver 的契约，不能依赖调用方
             // （Vue 组件）自己再判一次——更不能依赖「Vue 卸载后 emit 恰好是 no-op」这种内部实现。
-            if (raw && disposed.has(raw)) return;
+            if (raw && disposedInstances.has(raw)) return;
             let settle: ServiceCallSettle<PlaceSuggestion[]> | null = null;
             if (raw) {
               // 独占在**每次回包**时重新校验：等待期间输入框变回可输入 ⇒ 这个回包可能来自用户输入，
@@ -643,6 +1323,44 @@ export function createJsapiV4ServiceDriver(
     },
 
     /**
+     * 创建本地检索实例（`BMap.LocalSearch`）。
+     *
+     * 与 `createAutocomplete` 的关键差别：**不绑输入框**，因此回调通道不被用户输入污染，回包
+     * 归属可以建立在「请求顺序 + 回包 `keyword`」上（见 `search()` 的契约）。代价是必须自己管
+     * 在飞请求的记账与释放入口（`disposeLocalSearch`）。
+     *
+     * 内部分发器只挂一次（构造期）：所有操作共用它，因为它必须与实例同寿命——`setSearchCompleteCallback`
+     * 虽然也在官方 `LocalSearch` 的声明里，但「换回调能否按请求归属」在 #72 的真实 AK 探测里
+     * **没有得出可发布结论**（那批检索全部无回包，对照组同样无回包），因此不建立在它上面。
+     */
+    createLocalSearch(location, options: LocalSearchOptions = {}) {
+      capabilities.require(SERVICE_CAPABILITIES.createLocalSearch);
+      const LocalSearch = namespaceCtor(namespace, "LocalSearch");
+      const resolvedLocation = normalizeSearchLocation(location);
+      const renderOptions = normalizeRenderOptions(options.renderOptions);
+
+      const settings: Record<string, unknown> = {};
+      if (renderOptions) settings.renderOptions = renderOptions;
+      if (typeof options.pageCapacity === "number") settings.pageCapacity = options.pageCapacity;
+      if (typeof options.pageNum === "number") settings.pageNum = options.pageNum;
+
+      let raw: Record<string, unknown> | null = null;
+      const instance = sdkCall("LocalSearch", () =>
+        new LocalSearch(resolvedLocation, {
+          ...settings,
+          onSearchComplete: (payload: unknown) => {
+            // 终态实例一律不再回写（与 Autocomplete 同源）：SDK 的回包可能在 release 之后才
+            // 到达（取消 / 卸载都收不回请求），也可能在 `dispose()` 内部同步触发。
+            if (raw && disposedInstances.has(raw)) return;
+            if (raw) settlePendingSearch(raw, payload);
+          },
+        }),
+      );
+      raw = instance as unknown as Record<string, unknown>;
+      return registry.adopt("service:local-search", instance);
+    },
+
+    /**
      * 更新已创建实例的检索区域 / 数据类型（官方 4.0.4 声明的 `Autocomplete#setLocation` /
      * `#setTypes`）。
      *
@@ -662,7 +1380,7 @@ export function createJsapiV4ServiceDriver(
       // `BMAP_HANDLE_FOREIGN`，品牌判据永远不可达，两条入口的「共用一份判据」就名不副实。
       assertAutocompleteHandle(handle, "setAutocompleteOptions");
       const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.setAutocompleteOptions");
-      if (disposed.has(raw)) {
+      if (disposedInstances.has(raw)) {
         throw new BMapError(
           "BMAP_INVALID_ARGUMENT",
           "setAutocompleteOptions: 该 Autocomplete 实例已被 disposeAutocomplete() 释放，" +
@@ -725,10 +1443,11 @@ export function createJsapiV4ServiceDriver(
      * 释放 **Autocomplete** 服务实例（Driver 侧释放入口，七/八轮复审）。
      *
      * 为什么是专用入口而不是通用 `dispose(ServiceHandle<string>)`（八轮复审 P2-1）：契约必须与实现
-     * 一致。当前只有 Autocomplete 在 Driver 侧持有资源（输入活动监听 + 待回包队列），其余服务
+     * 一致。当前只有 Autocomplete 在 Driver 侧持有资源（输入活动监听 + 待回包队列）与 LocalSearch
+     * （待回包队列），其余服务
      * （Geocoder / Boundary / Convertor …）的调用**没有登记在飞请求、也没有释放标记**——一个通用的
      * `dispose()` 会承诺「在飞调用会失败、释放后拒绝新调用」，而实现做不到。统一的服务生命周期
-     * （在飞请求登记 + 取消）属 M7（#38 的 ServiceSpec / AsyncTaskController）。
+     * 统一状态口径由 composable 侧的 `useBMapServiceTask` 承担（ADR `2026-09-14-service-lifecycle-and-local-search.md`）。
      *
      * 语义：① 幂等；② **Driver 侧清理**（解绑输入活动监听 + 把在飞建议调用显式失败）每次都执行
      * （幂等）；③ **SDK 自身的 `dispose()` 只有成功才记账**：抛错时调用方会收到错误，而句柄保持
@@ -739,58 +1458,22 @@ export function createJsapiV4ServiceDriver(
       assertAutocompleteHandle(handle, "disposeAutocomplete");
       const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeAutocomplete");
 
-      disposed.add(raw); // 先停止接受业务调用（这一个是「一旦释放就不再恢复」的状态）
-      // 正在清理期间的重入直接短路（SDK 销毁钩子里再次 dispose 的场景，见 `disposing`）
-      if (disposing.has(raw)) return;
-      disposing.add(raw);
-
-      const failures: unknown[] = [];
-      try {
-        // 顺序与 Map / Panorama Facet 一致：**先让业务事件与监听器下线，再销毁 SDK 对象**。
-        // 解绑失败不阻断后续步骤，但汇总抛出（九轮复审 P2：订阅也是 Driver 侧资源，
-        // EventDriver 的 `groups` 是强引用 Map，SDK 清空自己的监听器不会删除这份记录）。
-        try {
+      disposeServiceInstance(raw, handle, {
+        label: "disposeAutocomplete",
+        cleanup: () => {
+          // 输入框上的输入活动监听必须在实例进入终态时解绑（输入框通常比实例活得久）
           releaseInputWatcher(raw);
-          events.release(handle);
-        } catch (error) {
-          failures.push(error);
-        }
-
-        // 在飞建议调用显式失败（幂等，重试时重复执行没有代价）
-        const queue = pendingSuggest.get(raw) ?? [];
-        pendingSuggest.delete(raw);
-        for (const entry of queue) {
-          entry.settle.failed({
-            code: "BMAP_SERVICE_FAILED",
-            message: "该服务实例在请求进行中被 disposeAutocomplete() 释放",
-          });
-        }
-
-        // SDK 自身的释放（官方 Autocomplete#dispose）：**成功才记账**，失败留给下一次重试
-        if (!sdkDisposed.has(raw)) {
-          const disposeMember = readNamespaceMember(raw, "dispose");
-          if (typeof disposeMember !== "function") {
-            sdkDisposed.add(raw); // 没有该成员 ⇒ 视为已完成（不是错误）
-          } else {
-            sdkCall("Autocomplete.dispose", () => callRequired(raw, "dispose"));
-            sdkDisposed.add(raw);
+          // 在飞建议调用显式失败（幂等，重试时重复执行没有代价）
+          const queue = pendingSuggest.get(raw) ?? [];
+          pendingSuggest.delete(raw);
+          for (const entry of queue) {
+            entry.settle.failed({
+              code: "BMAP_SERVICE_FAILED",
+              message: "该服务实例在请求进行中被 disposeAutocomplete() 释放",
+            });
           }
-        }
-      } finally {
-        disposing.delete(raw);
-      }
-
-      if (failures.length > 0) {
-        const details = failures
-          .map((failure) => (failure as Error)?.message ?? String(failure))
-          .join("; ");
-        throw new BMapError(
-          "BMAP_SDK_CALL_FAILED",
-          `disposeAutocomplete 有 ${failures.length} 项 Driver 侧清理未完成（其余步骤已尽力执行；` +
-            `再次调用只会重试未完成的那一步）: ${details}`,
-          { cause: failures[0], engine: "jsapi-v4" },
-        );
-      }
+        },
+      });
     },
 
     /* -------------------------------------------------------- 归一化调用面 */
@@ -842,6 +1525,7 @@ export function createJsapiV4ServiceDriver(
                 address?: string;
                 point?: RawPoint;
                 business?: string;
+                addressComponents?: unknown;
                 surroundingPois?: unknown[];
               } | null,
             ) => {
@@ -849,13 +1533,18 @@ export function createJsapiV4ServiceDriver(
                 settleUnavailable(settle);
                 return;
               }
+              const surrounding = Array.isArray(result.surroundingPois)
+                ? result.surroundingPois
+                    .map(readLocalSearchPoi)
+                    .filter((poi): poi is LocalSearchPoi => poi !== null)
+                : [];
               settle.success({
                 address: typeof result.address === "string" ? result.address : "",
                 point: result.point ? toPlainPoint(result.point) : null,
                 business: typeof result.business === "string" ? result.business : null,
-                poiCount: Array.isArray(result.surroundingPois)
-                  ? result.surroundingPois.length
-                  : 0,
+                addressComponents: readAddressComponents(result.addressComponents),
+                surroundingPois: surrounding,
+                poiCount: surrounding.length,
               });
             },
             options,
@@ -928,21 +1617,24 @@ export function createJsapiV4ServiceDriver(
     queryBoundary(handle, request: BoundaryRequest) {
       const name = request?.name;
       if (typeof name !== "string" || name.length === 0) {
-        return invalidCall<Point[][]>("Boundary.get", "name 必须是非空字符串");
+        return invalidCall<BoundaryRings>("Boundary.get", "name 必须是非空字符串");
       }
       const raw = boundaryOf(handle);
-      return createServiceCall<Point[][]>(
+      return createServiceCall<BoundaryRings>(
         (settle) => {
           callRequired(raw, "get", name, (result: RawBoundaryPayload | null) => {
             if (!result || !Array.isArray(result.boundaries)) {
               settleUnavailable(settle);
               return;
             }
-            const rings = (result.boundaries as unknown[])
-              .map(parseBoundaryRing)
-              .filter((ring) => ring.length > 0);
+            // 两个视图一起给：官方回包本身就是点串，`B*` 覆盖物的 `isBoundary` 直接吃它；
+            // 解析出的坐标环给几何运算用。只留一份都会静默丢掉调用方需要的东西。
+            const strings = (result.boundaries as unknown[]).filter(
+              (ring): ring is string => typeof ring === "string" && ring.length > 0,
+            );
+            const rings = strings.map(parseBoundaryRing).filter((ring) => ring.length > 0);
             if (rings.length === 0) settle.empty();
-            else settle.success(rings);
+            else settle.success({ raw: strings, rings });
           });
         },
         { label: "Boundary.get" },
@@ -957,8 +1649,8 @@ export function createJsapiV4ServiceDriver(
             raw,
             "getCurrentPosition",
             (result: RawGeolocationPayload | null) => {
-              // `Geolocation` 是唯一自带状态码的服务（`BMAP_STATUS_*`）。
-              const status = readGeolocationStatus(raw, warnOnce);
+              // `Geolocation` 是公开带状态码的服务之一（`BMAP_STATUS_*`；另一个是 `LocalSearch`）。
+              const status = readServiceStatus(raw, warnOnce, "ServiceDriver.locate");
               if (!result || (status !== null && status !== 0)) {
                 settle.failed(
                   {
@@ -1066,6 +1758,187 @@ export function createJsapiV4ServiceDriver(
         },
         { label: "Autocomplete.search" },
       );
+    },
+
+    /* ---------------------------------------------------- LocalSearch（#38） */
+
+    search(handle, keyword, option?: LocalSearchSearchOption) {
+      const normalized = normalizeSearchKeyword(keyword);
+      if (!normalized) {
+        return invalidSearchCall(
+          "LocalSearch.search",
+          "keyword 必须是非空字符串，或非空的字符串数组",
+        );
+      }
+      const raw = localSearchOf(handle, "ServiceDriver.search");
+      const rejection = searchAdmissionFailure(raw, normalized.canonical);
+      if (rejection !== null) return rejectedSearchCall("LocalSearch.search", rejection);
+
+      return invokeLocalSearch(
+        "LocalSearch.search",
+        raw,
+        {
+          keyword: normalized.expected,
+          canonical: normalized.canonical,
+          lastKeyword: normalized.expected ?? undefined,
+        },
+        () => {
+          if (option?.forceLocal === undefined) {
+            callRequired(raw, "search", normalized.value);
+          } else {
+            callRequired(raw, "search", normalized.value, { forceLocal: option.forceLocal });
+          }
+        },
+      );
+    },
+
+    searchNearby(handle, request: LocalSearchNearbyRequest) {
+      const normalized = normalizeSearchKeyword(request?.keyword);
+      if (!normalized) {
+        return invalidSearchCall(
+          "LocalSearch.searchNearby",
+          "keyword 必须是非空字符串，或非空的字符串数组",
+        );
+      }
+      const center = request?.center;
+      const raw = localSearchOf(handle, "ServiceDriver.searchNearby");
+      const rejection = searchAdmissionFailure(raw, normalized.canonical);
+      if (rejection !== null) return rejectedSearchCall("LocalSearch.searchNearby", rejection);
+
+      // 参数校验前移到进入调用之前：几何/半径非法必须走结果通道（`failed`），
+      // 而不是从 `createServiceCall` 之外同步抛出（与 `convert` 同一取舍）。
+      let resolvedCenter: unknown;
+      if (typeof center === "string") {
+        if (center.length === 0) {
+          return invalidSearchCall("LocalSearch.searchNearby", "center 不能是空字符串");
+        }
+        resolvedCenter = center;
+      } else {
+        const point = readPointLike(center);
+        if (!point) {
+          return invalidSearchCall(
+            "LocalSearch.searchNearby",
+            "center 必须是城市名字符串或领域 Point（{ lng, lat }）；" +
+              "本库不接受官方签名里的 LocalResultPoi——DTO 是投影、不携带 raw POI",
+          );
+        }
+        resolvedCenter = geometry.toRawPoint(point);
+      }
+      const radius = request?.radius;
+      if (typeof radius !== "number" || !Number.isFinite(radius) || radius < 0) {
+        return invalidSearchCall("LocalSearch.searchNearby", "radius 必须是非负有限数（米）");
+      }
+
+      return invokeLocalSearch(
+        "LocalSearch.searchNearby",
+        raw,
+        {
+          keyword: normalized.expected,
+          canonical: normalized.canonical,
+          lastKeyword: normalized.expected ?? undefined,
+        },
+        () => {
+          callRequired(raw, "searchNearby", normalized.value, resolvedCenter, radius);
+        },
+      );
+    },
+
+    searchInBounds(handle, request: LocalSearchInBoundsRequest) {
+      const normalized = normalizeSearchKeyword(request?.keyword);
+      if (!normalized) {
+        return invalidSearchCall(
+          "LocalSearch.searchInBounds",
+          "keyword 必须是非空字符串，或非空的字符串数组",
+        );
+      }
+      const bounds = request?.bounds;
+      const raw = localSearchOf(handle, "ServiceDriver.searchInBounds");
+      const rejection = searchAdmissionFailure(raw, normalized.canonical);
+      if (rejection !== null) return rejectedSearchCall("LocalSearch.searchInBounds", rejection);
+
+      let rawBounds: unknown;
+      try {
+        // 容器形状由 GeometryDriver 校验（它在进入调用之前抛结构化错误，见 `convert` 同源取舍）
+        rawBounds = geometry.toRawBounds(bounds);
+      } catch (error) {
+        return invalidSearchCall(
+          "LocalSearch.searchInBounds",
+          `bounds 必须是 { southwest, northeast } 且角点为有限坐标（${
+            (error as Error)?.message ?? String(error)
+          }）`,
+        );
+      }
+
+      return invokeLocalSearch(
+        "LocalSearch.searchInBounds",
+        raw,
+        {
+          keyword: normalized.expected,
+          canonical: normalized.canonical,
+          lastKeyword: normalized.expected ?? undefined,
+        },
+        () => {
+          callRequired(raw, "searchInBounds", normalized.value, rawBounds);
+        },
+      );
+    },
+
+    gotoPage(handle, page: number) {
+      if (typeof page !== "number" || !Number.isInteger(page) || page < 0) {
+        return invalidSearchCall("LocalSearch.gotoPage", "page 必须是从 0 开始的整数");
+      }
+      const raw = localSearchOf(handle, "ServiceDriver.gotoPage");
+      // `gotoPage` 没有自己的关键字：它沿用上一次检索的关键字做回包校验；不参与同关键词互斥
+      // （`canonical: null`）——FIFO 已经能区分两次翻页，强行互斥只会挡住正常翻页。
+      const rejection = searchAdmissionFailure(raw, null);
+      if (rejection !== null) return rejectedSearchCall("LocalSearch.gotoPage", rejection);
+
+      return invokeLocalSearch(
+        "LocalSearch.gotoPage",
+        raw,
+        { keyword: lastSearchKeyword.get(raw) ?? null, canonical: null },
+        () => {
+          callRequired(raw, "gotoPage", page);
+        },
+      );
+    },
+
+    /**
+     * 清除最近一次检索的结果（`LocalSearch#clearResults`）：地图上的标注、结果面板与实例内部的
+     * 结果状态一起清掉。**没有回包**，因此不是 `ServiceCall`——它是「丢弃已可见的结果」，
+     * 与「取消一个在飞请求」（`ServiceCall.cancel()`）是两件事，两者互不代替。
+     */
+    clearLocalSearch(handle) {
+      const raw = localSearchOf(handle, "ServiceDriver.clearLocalSearch");
+      if (disposedInstances.has(raw)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "clearLocalSearch: 该 LocalSearch 实例已被 disposeLocalSearch() 释放，拒绝在已销毁的" +
+            "实例上写入；请重建实例",
+          { engine: "jsapi-v4" },
+        );
+      }
+      callRequired(raw, "clearResults");
+    },
+
+    /** 释放本地检索实例：语义与 `disposeAutocomplete` 同构（幂等、Driver 侧清理 + SDK 释放）。 */
+    disposeLocalSearch(handle) {
+      const raw = localSearchOf(handle, "ServiceDriver.disposeLocalSearch");
+
+      disposeServiceInstance(raw, handle, {
+        label: "disposeLocalSearch",
+        cleanup: () => {
+          // 在飞检索显式失败（幂等）；墓碑也一并清掉——实例都要销毁了，没有回包会再来认领它们
+          const queue = pendingSearches.get(raw) ?? [];
+          pendingSearches.delete(raw);
+          for (const entry of queue) {
+            entry.settle?.failed({
+              code: "BMAP_SERVICE_FAILED",
+              message: "该服务实例在请求进行中被 disposeLocalSearch() 释放",
+            });
+          }
+        },
+      });
     },
   };
 }

@@ -11,7 +11,7 @@
  *   `docs/adr/2026-09-12-jsapi-v4-service-panorama-native-layers.md`）。
  */
 import type { MapHandle, ServiceHandle } from "./handles";
-import type { Point } from "./geometry";
+import type { Bounds, Point } from "./geometry";
 
 export interface AutocompleteOptions {
   /**
@@ -53,6 +53,21 @@ export interface ServiceDriver {
   createLocalCity(): ServiceHandle<"service:local-city">;
   createBoundary(): ServiceHandle<"service:boundary">;
   createAutocomplete(options: AutocompleteOptions): ServiceHandle<"service:autocomplete">;
+  /**
+   * 本地检索（`BMap.LocalSearch`）实例。
+   *
+   * `location` 是**检索区域**：城市名字符串、领域 `Point`，或本库的 `MapHandle`。与
+   * Autocomplete 不同，LocalSearch **不绑定输入框**：它没有「用户输入与程序化检索共用一条
+   * 回调」的问题，因此逐请求归属可以落在 Driver（见 `LocalSearchRequest`）。
+   *
+   * `options.renderOptions.map` 传 `MapHandle` 时才会把结果绘制到地图上（覆盖物所有权在
+   * 调用方一侧：`clearLocalSearch` / `disposeLocalSearch` 负责收）；**不传则纯 headless**——
+   * 服务只需要 `ClientContext`，不需要地图实例。
+   */
+  createLocalSearch(
+    location: unknown,
+    options?: LocalSearchOptions,
+  ): ServiceHandle<"service:local-search">;
   /**
    * 更新已创建 Autocomplete 实例的检索区域与数据类型（`Autocomplete#setLocation` / `#setTypes`）。
    *
@@ -163,12 +178,30 @@ export interface ReverseGeocodeRequest {
   numPois?: number;
 }
 
+/** 结构化地址（官方 `AddressComponent` 的领域投影）。 */
+export interface GeocodedAddressComponents {
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  street: string | null;
+  streetNumber: string | null;
+}
+
 export interface GeocodedAddress {
   address: string;
   point: Point | null;
   /** 所属商圈 */
   business: string | null;
-  /** 附近 POI 数量（官方 `surroundingPois` 的长度；只暴露计数，POI 结构属 M7 #38） */
+  /** 结构化的地址描述（官方 `GeocoderResult.addressComponents`） */
+  addressComponents: GeocodedAddressComponents;
+  /**
+   * 附近的 POI（官方 `GeocoderResult.surroundingPois` 的领域投影）。
+   *
+   * 与 `LocalSearchResult.pois` 用**同一个** `LocalSearchPoi`：两者都是官方
+   * `LocalResultPoi`，分开定义只会让「投影漏字段」在两处各犯一次（#38 收口）。
+   */
+  surroundingPois: readonly LocalSearchPoi[];
+  /** 附近 POI 数量（= `surroundingPois.length`；保留旧字段名以免破坏既有调用方） */
   poiCount: number;
 }
 
@@ -187,6 +220,175 @@ export interface BoundaryRequest {
   /** 省 / 直辖市 / 地级市 / 县的名称 */
   name: string;
 }
+
+/**
+ * 行政区边界结果（`Boundary#get` 回包的**两个公开视图**）。
+ *
+ * 官方回包是 `{ boundaries: string[] }`——每项是一条 `"lng,lat;lng,lat;…"` 的点串。这个字符串
+ * 形态本身就是公开契约的一部分：`B*` 覆盖物的 `isBoundary` 直接吃它。因此 DTO 同时给出
+ *
+ * - `raw`：官方原样的点串（喂 `isBoundary` / 自行解析都用它）；
+ * - `rings`：解析后的坐标环（几何运算、命中判定用）。
+ *
+ * 只留其中一份都会**静默丢掉**调用方需要的东西：只留 `rings` 会把「点串是官方表示」这件事
+ * 藏起来，只留 `raw` 则逼每个调用方自己写一遍解析。
+ */
+export interface BoundaryRings {
+  /** 官方回包的原始边界点串（每串一个闭合环），原样透传、不做归一 */
+  readonly raw: readonly string[];
+  /** `raw` 解析后的坐标环（非法片段已在解析时丢弃） */
+  readonly rings: readonly (readonly Point[])[];
+}
+
+/* ------------------------------------------------------------------ LocalSearch */
+
+/** 本地检索的关键字（官方 `search` 家族接受单关键字或多关键字，最多 10 个）。 */
+export type LocalSearchKeyword = string | readonly string[];
+
+/**
+ * 矩形检索范围（`LocalSearch#searchInBounds`）。
+ *
+ * 与 `BMap.Bounds` 同形（`southwest` / `northeast`），由 Driver 归一化成 raw `Bounds`；
+ * 领域层因此不需要 import 官方类型。
+ */
+export type LocalSearchBounds = Bounds;
+
+/** 结果绘制选项（官方 `RenderOptions`）。 */
+export interface LocalSearchRenderOptions {
+  /**
+   * 绘制目标：本库的 `MapHandle`（Driver 归一化成 raw `Map`）。
+   *
+   * 不传 = 纯 headless：只回数据、不在任何地图上绘制覆盖物。
+   */
+  map?: unknown;
+  /** 结果列表容器（元素或 id） */
+  panel?: string | HTMLElement;
+  /** 是否自动选中第一个结果 */
+  selectFirstResult?: boolean;
+  /** 检索结束后是否自动调整地图视野 */
+  autoViewport?: boolean;
+  /**
+   * `autoViewport` 的视野计算选项。
+   *
+   * 官方只声明了 `margins` / `zoomFactor` / `noAnimation` 三个成员；本库**不接收**声明之外的
+   * 成员（接收后忽略 = 假支持）。
+   */
+  viewportOptions?: {
+    noAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+  };
+}
+
+/** 本地检索**构造期**选项（只有这些字段变化才需要重建实例，见 `#38`）。 */
+export interface LocalSearchOptions {
+  renderOptions?: LocalSearchRenderOptions;
+  /** 每页容量（1-100，官方超出范围时重置为 10） */
+  pageCapacity?: number;
+  /** 起始页码（从 0 开始） */
+  pageNum?: number;
+}
+
+/** `search()` 的附加选项（官方 `LocalSearchSearchOption`）。 */
+export interface LocalSearchSearchOption {
+  /** 强制在当前城市内检索，不跳转到其它城市的结果 */
+  forceLocal?: boolean;
+}
+
+/** 单个检索结果点（官方 `LocalResultPoi` 的领域投影）。 */
+export interface LocalSearchPoi {
+  /** 结果名称标题 */
+  title: string;
+  /** POI 唯一标识；官方回包没有时为空串 */
+  uid: string;
+  /** 结果坐标；回包给出非法坐标时为 `null` */
+  point: Point | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  phoneNumber: string | null;
+  postcode: string | null;
+  /** 行政区编码 */
+  adcode: string | null;
+  /** POI 标签 */
+  tags: readonly string[];
+  /** 是否精确匹配（仅 `search()` 的结果中有效；无从判断时为 `null`） */
+  isAccurate: boolean | null;
+  /** 在百度地图中展示该结果点的链接 */
+  url: string | null;
+  /** 详情页链接 */
+  detailUrl: string | null;
+}
+
+/**
+ * 一次检索的结果（官方 `LocalResult` 的领域投影，**每个关键字一项**）。
+ *
+ * 多关键字检索时官方回包是 `LocalResult[]`、顺序与关键字数组一致；单关键字时是单个
+ * `LocalResult`。本库统一归一成数组（单关键字 ⇒ 长度 1），因为「是否为数组」是实现细节，
+ * 而「第 i 个关键字的结果是哪一份」才是调用方要的语义。
+ *
+ * **刻意不投影的官方成员**：`LocalResultPoi.marker`（SDK 的覆蓋物对象）与 `type`
+ * （官方 `POIType` 数字枚举——本库不自持它的值域，投影成裸数字只会让调用方写魔法数字）。
+ * 需要它们时经 `./advanced` 的 `unwrapRaw()` 取 raw。
+ */
+export interface LocalSearchResult {
+  /** 本次检索的关键字 */
+  keyword: string;
+  /** 本次检索所在的城市 / 省份 */
+  city: string;
+  province: string;
+  /** 周边检索的中心点（仅周边检索时有值） */
+  center: Point | null;
+  /** 周边检索的半径（仅周边检索时有值） */
+  radius: number | null;
+  /** 范围检索的矩形区域（仅范围检索时有值） */
+  bounds: LocalSearchBounds | null;
+  /** 本页结果 */
+  pois: readonly LocalSearchPoi[];
+  /** 本页结果数（官方 `getCurrentNumPois`） */
+  pageSize: number;
+  /** 结果总数（官方 `getNumPois`） */
+  total: number;
+  /** 总页数（官方 `getNumPages`） */
+  pageCount: number;
+  /** 当前页码，从 0 开始（官方 `getPageIndex`） */
+  pageIndex: number;
+  /** 检索词在多个城市有结果时的城市列表（官方 `getCityList`） */
+  cities: readonly { readonly name: string; readonly count: number }[];
+  /** 更多结果的链接（到百度地图搜索） */
+  moreResultsUrl: string | null;
+  /** 搜索建议（关键词为拼音或拼写错误时给出） */
+  suggestions: readonly string[];
+}
+
+/**
+ * 本地检索的请求描述。
+ *
+ * 四个操作**共用**一条 `onSearchComplete`（实例单例回调），而除 `gotoPage` 外的操作各自带
+ * 关键字。归属因此按「请求顺序 + 关键字」判定：回包带回的 `keyword` 与队首期望的关键字
+ * 不一致时，这次回包**不属于**在册请求（不消费队列槽位），见 `JsapiV4ServiceDriver.search`
+ * 的契约说明。
+ */
+export interface LocalSearchNearbyRequest {
+  keyword: LocalSearchKeyword;
+  /**
+   * 周边检索的中心点。
+   *
+   * 官方签名还接受 `LocalResultPoi`（把上一次的结果点直接传回来）。本库**不接受**它：DTO 是
+   * 投影、**不携带 raw POI**，把投影对象传回去只会得到 SDK 侧的非法值。需要以某个结果点为
+   * 中心时用它的 `point`。
+   */
+  center: string | Point;
+  /** 检索半径（米，默认 2000，最大 100000；`center` 为字符串时官方忽略它） */
+  radius: number;
+}
+
+/** 范围检索请求（`LocalSearch#searchInBounds`）。 */
+export interface LocalSearchInBoundsRequest {
+  keyword: LocalSearchKeyword;
+  bounds: LocalSearchBounds;
+}
+
 
 export interface GeolocationOptions {
   enableHighAccuracy?: boolean;
@@ -254,11 +456,11 @@ export interface ServiceInvocationDriver {
     handle: ServiceHandle<"service:convertor">,
     request: ConvertorRequest,
   ): ServiceCall<Point[]>;
-  /** 行政区边界（`Boundary#get`）→ 坐标点串数组（每串一个闭合环） */
+  /** 行政区边界（`Boundary#get`）→ 原始点串 + 解析后的坐标环 */
   queryBoundary(
     handle: ServiceHandle<"service:boundary">,
     request: BoundaryRequest,
-  ): ServiceCall<Point[][]>;
+  ): ServiceCall<BoundaryRings>;
   /** 浏览器定位（`Geolocation#getCurrentPosition`） */
   locate(
     handle: ServiceHandle<"service:geolocation">,
@@ -286,6 +488,59 @@ export interface ServiceInvocationDriver {
     handle: ServiceHandle<"service:autocomplete">,
     keyword: string,
   ): ServiceCall<PlaceSuggestion[]>;
+
+  /**
+   * 关键字检索（`LocalSearch#search`）。
+   *
+   * 与 `suggest()` 的差别不是「换了个类」：**LocalSearch 不绑输入框**（没有用户输入与程序化
+   * 检索共用回调的问题），并且官方把 `LocalResult.keyword` 声明为**必填**，`getStatus()` 也是
+   * 公开的状态码入口——因此这里是「逐请求归属」可以真正落地的地方（`#72` 的 ADR 把这件事
+   * 记在了 `#38` 名下）。
+   *
+   * 归属与并发（`search` / `searchNearby` / `searchInBounds` / `gotoPage` 共用同一套规则）：
+   *
+   * 1. **按请求顺序归属**：官方口径是每个操作恰好触发一次 `onSearchComplete`，且按发出顺序
+   *    到达；因此未结算的操作串行排队，回包按 FIFO 结算队首；
+   * 2. **关键字校验**：回包带回的 `keyword`（`LocalResult.keyword`，官方必填）与队首期望的
+   *    关键字不一致时，**不消费任何槽位**——它不属于在册请求；
+   * 3. **取消 = 墓碑**：SDK 没有取消入口（JSONP 发出去收不回），因此 `cancel()` 只把本次
+   *    `ServiceCall` 结算成 `canceled`，槽位保留为墓碑直到它自己的回包到达（删掉它会让迟到
+   *    回包去结算**下一个**操作）。墓碑不阻止新的同关键词操作——FIFO 保证它先被消费；
+   * 4. **同关键词互斥**：同一实例上不能有两个**未结算**且关键字相同的操作（回包无法区分），
+   *    命中时以 `failed(BMAP_SERVICE_FAILED)` 显式拒绝，而不是猜；
+   * 5. **队列上界**：等待回包的操作达到上界时拒绝新调用（不淘汰旧记录——淘汰会让回包错位）。
+   *
+   * 参数非法（空关键字 / 非法坐标 / 非法半径）走 `failed(BMAP_INVALID_ARGUMENT)`；
+   * 句柄不属于本 Driver 时同步抛 `BMAP_HANDLE_FOREIGN`（与其余调用面同源）。
+   */
+  search(
+    handle: ServiceHandle<"service:local-search">,
+    keyword: LocalSearchKeyword,
+    option?: LocalSearchSearchOption,
+  ): ServiceCall<LocalSearchResult[]>;
+
+  /** 周边检索（`LocalSearch#searchNearby`），归属规则同 `search()`。 */
+  searchNearby(
+    handle: ServiceHandle<"service:local-search">,
+    request: LocalSearchNearbyRequest,
+  ): ServiceCall<LocalSearchResult[]>;
+
+  /** 范围检索（`LocalSearch#searchInBounds`），归属规则同 `search()`。 */
+  searchInBounds(
+    handle: ServiceHandle<"service:local-search">,
+    request: LocalSearchInBoundsRequest,
+  ): ServiceCall<LocalSearchResult[]>;
+
+  /**
+   * 翻页（`LocalSearch#gotoPage`），归属规则同 `search()`。
+   *
+   * 页码无效时官方**仍会**触发 `onSearchComplete` 并把状态设为 `INVALID_REQUEST`（5），
+   * 因此这次调用会以 `failed({ code: 5 })` 结算——不虚构原因，就是官方给的那个码。
+   */
+  gotoPage(
+    handle: ServiceHandle<"service:local-search">,
+    page: number,
+  ): ServiceCall<LocalSearchResult[]>;
 }
 
 /** JSAPI 4.0 的 Service Facet：创建面 + 归一化调用面 + **Autocomplete 专用**释放入口。 */
@@ -297,14 +552,40 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
    * 显式失败；③ 调用 SDK 自身的 `dispose()`——**只有成功才记账**，抛错时调用方收到错误，句柄仍保持
    * 不可用，再次调用会**重试**未完成的 SDK 清理。
    *
-   * **为什么是专用入口、而不是通用 `dispose(ServiceHandle<string>)`**：契约必须与实现一致。目前只有
-   * Autocomplete 在 Driver 侧持有资源（输入活动监听 + 待回包队列），其余服务（Geocoder / Boundary /
-   * Convertor / LocalCity / Geolocation）的调用没有登记在飞请求、也没有释放标记——通用入口会承诺
-   * 「在飞调用会失败、释放后拒绝新调用」而实现做不到。统一的服务生命周期（在飞请求登记 + 取消）
-   * 属 M7（#38 的 ServiceSpec / AsyncTaskController）。
+   * **为什么是专用入口、而不是通用 `dispose(ServiceHandle<string>)`**：契约必须与实现一致。**只有**
+   * `Autocomplete`（输入活动监听 + 待回包队列）与 `LocalSearch`（待回包队列）在 Driver 侧持有资源；
+   * 其余服务（Geocoder / Boundary / Convertor / LocalCity / Geolocation）的调用既没有登记在飞请求、
+   * 也没有释放标记——通用入口会承诺「在飞调用会失败、释放后拒绝新调用」而实现做不到。
+   * 这条取舍（以及「统一状态口径由 composable 侧的 `useBMapServiceTask` 承担」）冻结在 ADR
+   * `2026-09-14-service-lifecycle-and-local-search.md`。
    *
    * 只用输入框联想 UI（不调用 `suggest()`）的实例也**应该**在结束使用时调用它：输入框通常比实例
    * 活得久，Driver 挂在它上面的监听器不会随 SDK 实例被回收而消失。
    */
   disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
+
+  /**
+   * 清除最近一次检索的结果（`LocalSearch#clearResults`）：同时清掉地图上的标注与结果面板。
+   *
+   * **没有回包**（官方无回调），因此不发生成 `ServiceCall`——语义是「丢弃 SDK 侧的可见结果」，
+   * 与「取消一个在飞请求」（`ServiceCall.cancel()`）是两件事。纯 headless（未传
+   * `renderOptions.map`）时它仍然有意义：结果的内部状态与 `getResults()` 会被清掉。
+   *
+   * 调用方**不需要**在 `disposeLocalSearch` 之前调用它。
+   */
+  clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+
+  /**
+   * 释放本地检索实例（幂等）。
+   *
+   * 语义与 `disposeAutocomplete` 同构：① 停止接受该实例的业务调用并**把在飞调用显式失败**；
+   * ② 解绑 Driver 侧资源（EventDriver 订阅）；③ 调用 SDK 自身的 `dispose()`——**只有成功才
+   * 记账**，抛错时调用方收到错误，句柄仍保持不可用，再次调用会**重试**未完成的 SDK 清理。
+   *
+   * 为什么 LocalSearch 需要专用释放入口、而 Geocoder 等不需要：它是**唯一**由 Driver 登记了
+   * 「在飞请求 + 待回包队列」的非 Autocomplete 服务（`#23` 的欠账在 `#38` 补齐）。其余服务
+   * （Geocoder / Boundary / Convertor / LocalCity / Geolocation）的调用不持有 Driver 侧资源，
+   * 因此仍然没有通用 `dispose(ServiceHandle<string>)`。
+   */
+  disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 }

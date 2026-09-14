@@ -164,12 +164,20 @@ v3 的 SdkRegistry 会在失败后移除缓存,允许下次重试。
 **Q: `BPointLayer` 是真正的批量 SDK 点层吗?**
 不是。当前 `BPointLayer` 是 deprecated alias，实际每个 item 仍创建一个 SDK Marker；新代码使用 `BMarkerList`。真正的单资源批量层 `BPointCollection` 尚未实现。
 
-**Q: `useBMapAsyncTask` 的 runner 为什么多了一个参数?**
-v3 的 runner 第一个参数是 `{ signal, requestId }`，用于真实取消和防止旧请求回写：
+**Q: `useBMapAsyncTask` 去哪了?**
+它已在 v3 的服务重构里**删除**（同一件事有两套实现：一套是 Driver 的归一化调用面，一套是
+composable 自己拼的 Promise + 定时器）。现在服务状态统一由各 service hooks 直接给出：
 
 ```ts
-runner: async ({ signal }, query) => {
-  const response = await fetch(`/api?q=${query}`, { signal })
-  return response.json()
-}
+// v3-beta 早期（已删除）
+const task = useBMapAsyncTask({ immediate: false, runner: async ({ signal }, q) => { … } })
+
+// 现在：服务 hooks 自带统一状态与「最新者胜」
+const { data, status, error, isLoading, supported, cancel } = useBMapGeocoder()
+const result = await get('北京市', '北京市') // 恒 resolve 成 ServiceResult
 ```
+
+- 超时 / 空结果 / 迟到回调 / 先到者胜全部由 Driver 的归一化调用面负责（`SERVICE_CALL_TIMEOUT_MS`），
+  细节见 [`useBMapGeocoder`](../hooks/useBMapGeocoder) 等 hooks 与
+  [ADR 2026-09-14](../../adr/2026-09-14-service-lifecycle-and-local-search.md)；
+- 需要自己发请求（非百度服务）时用 `fetch` + `AbortController` 即可——本库不再提供通用异步任务框架。

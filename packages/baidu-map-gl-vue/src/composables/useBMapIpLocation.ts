@@ -1,51 +1,68 @@
 /**
- * useBMapIpLocation —— IP 定位
+ * useBMapIpLocation —— IP 定位（拿到当前城市）
  *
- * 通过 SDK BMapGL.LocalCity 获取 IP 所在城市。
- * 统一异步状态(useBMapAsyncTask),不再由用户担保全局 BMapGL。
+ * 走 Driver 的归一化调用面（`driver.services.locateCity`）。`LocalCity` 失败时只回 `null`、
+ * **没有公开错误码入口**，因此「查不到城市」与「服务当前不可用」都是 `empty`（`status` 为
+ * `empty`、`isEmpty` 为 `true`）——本库不嗅探私有面去「还原」精确错误码。
+ *
+ * 需要 BMap 上下文；本服务只需要 Client（`<BMapProvider>` 子树亦可）。
  */
-import { computed } from "vue";
+import type { ServiceHandle } from "../driver/types/handles";
+import type { LocalCityFix } from "../driver/types/services";
 import { resolveMapContext } from "./resolveMapContext";
-import { useBMapAsyncTask } from "./useBMapAsyncTask";
+import { useBMapServiceTask } from "./useBMapServiceTask";
+import { jsapiV4ServicesOf } from "../core/services";
 
 export interface BMapIpLocationResult {
-  code: number;
+  /** 城市名（官方 `LocalCityResult.name`） */
   name: string;
-  /** 定位点(与 v2 习惯一致:point) */
-  point: { lng: number; lat: number };
+  /**
+   * 城市中心点。
+   *
+   * 官方声明为可选；`renderOptions.map` 缺失时运行时也不保证给（SDK 未给出时为 `null`，
+   * 不伪造 `{0,0}`）。
+   */
+  point: { lng: number; lat: number } | null;
+  /** 城市层级（官方 `LocalCityResult.level`；未传 `renderOptions.map` 时官方默认给 5） */
+  level: number | null;
 }
 
 export function useBMapIpLocation(map?: unknown) {
   const ctx = resolveMapContext(map);
-  const task = useBMapAsyncTask<BMapIpLocationResult | null, []>({
-    immediate: false,
-    runner: async (_taskContext) => {
-      const ready = await ctx.whenReady();
-      const localCity = ready.client.driver.services.createLocalCity();
-      const raw = localCity.raw as { get: (cb: (r: unknown) => void) => void };
-      return new Promise<BMapIpLocationResult | null>((resolve) => {
-        raw.get((res) => {
-          const r = res as { code?: number; name?: string; center?: { lng: number; lat: number } };
-          resolve(
-            r.center && r.name
-              ? { code: r.code ?? 0, name: r.name, point: r.center }
-              : null,
-          );
-        });
-      });
+
+  const task = useBMapServiceTask<
+    LocalCityFix,
+    ServiceHandle<"service:local-city">,
+    [],
+    BMapIpLocationResult
+  >(ctx, {
+      capability: "service.local-city" as const,
+      create: (context) => jsapiV4ServicesOf(context.client).createLocalCity(),
+      invoke: (context, handle: ServiceHandle<"service:local-city">) =>
+        jsapiV4ServicesOf(context.client).locateCity(handle),
+      project: (fix: LocalCityFix): BMapIpLocationResult => ({
+        name: fix.name,
+        point: fix.center,
+        level: fix.level,
+      }),
     },
-  });
+  );
+
+  const get = () => task.execute();
 
   return {
     location: task.data,
-    isLoading: task.isLoading,
-    error: task.error,
     data: task.data,
     result: task.data,
-    isError: computed(() => task.status.value === "error"),
-    isEmpty: computed(() => task.data.value === null),
+    error: task.error,
+    isError: task.isError,
+    isEmpty: task.isEmpty,
     status: task.status,
-    get: task.execute,
+    /** `LocalCity` 没有公开状态码，恒为 `null` */
+    sdkStatus: task.sdkStatus,
+    isLoading: task.isLoading,
+    supported: task.supported,
+    get,
     cancel: task.cancel,
     reset: task.reset,
   };

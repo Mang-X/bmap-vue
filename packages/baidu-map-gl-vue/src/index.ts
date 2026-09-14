@@ -102,6 +102,26 @@ export type {
 } from "./driver/capability";
 export type { UnsupportedBehavior } from "./driver/capability";
 export type { MapMouseEvent } from "./driver/types/events";
+// 服务归一化调用面的领域类型（#38 起 service composable 的公开签名用到它们）
+export type {
+  BoundaryRings,
+  GeocodedAddress,
+  GeocodedAddressComponents,
+  LocalSearchBounds,
+  LocalSearchInBoundsRequest,
+  LocalSearchKeyword,
+  LocalSearchNearbyRequest,
+  LocalSearchOptions,
+  LocalSearchPoi,
+  LocalSearchRenderOptions,
+  LocalSearchResult,
+  LocalSearchSearchOption,
+  PlaceSuggestion,
+  ServiceCallStatus,
+  ServiceErrorInfo,
+  ServiceInvocationDriver,
+} from "./driver/types/services";
+export type { BMapServiceStatus } from "./core/services";
 export type {
   MapType,
   MapInteraction,

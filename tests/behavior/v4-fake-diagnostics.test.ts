@@ -30,6 +30,7 @@ function zeroLeaks(): FakeV4LeakCounters {
     layers: 0,
     panoramas: 0,
     autocompletes: 0,
+    localSearches: 0,
     listeners: 0,
   };
 }
@@ -174,7 +175,7 @@ describe("Fake v4 diagnostics：服务与全景的资源口径", () => {
     expect(leaks).toEqual(zeroLeaks());
   });
 
-  it("Autocomplete 与 Panorama 有释放入口，成功释放才销账", () => {
+  it("Autocomplete / LocalSearch / Panorama 有释放入口，成功释放才销账", () => {
     const d = fake.diagnostics;
     d.reset();
     document.body.innerHTML = "";
@@ -183,21 +184,33 @@ describe("Fake v4 diagnostics：服务与全景的资源口径", () => {
 
     const autocomplete = new fake.namespace.Autocomplete({ input });
     const panorama = new fake.namespace.Panorama(container());
-    expect(d.snapshot().leaks).toMatchObject({ autocompletes: 1, panoramas: 1 });
+    const localSearch = new fake.namespace.LocalSearch("北京市");
+    expect(d.snapshot().leaks).toMatchObject({
+      autocompletes: 1,
+      panoramas: 1,
+      localSearches: 1,
+    });
 
     // 销毁失败必须保留记账户头，否则「失败不记账、可以重试」那条契约无法被诊断观测
     panorama.failNextDestroy = new TypeError("destroy failed");
     expect(() => panorama.destroy()).toThrow();
     expect(d.snapshot().leaks.panoramas).toBe(1);
 
+    localSearch.failNextDispose = new Error("dispose failed");
+    expect(() => localSearch.dispose()).toThrow();
+    expect(d.snapshot().leaks.localSearches).toBe(1);
+
     panorama.destroy();
     autocomplete.dispose();
+    localSearch.dispose();
     expect(d.assertNoLeaks()).toEqual(zeroLeaks());
     expect(d.snapshot().activity).toMatchObject({
       panoramasCreated: 1,
       panoramasDestroyed: 1,
       autocompletesCreated: 1,
       autocompletesDisposed: 1,
+      localSearchesCreated: 1,
+      localSearchesDisposed: 1,
     });
   });
 });

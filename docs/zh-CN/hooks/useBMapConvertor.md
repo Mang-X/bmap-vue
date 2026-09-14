@@ -19,7 +19,8 @@ const { result, convert, isLoading, isError, status } = useBMapConvertor(map)
 ```
 
 :::tip
-该 hooks 需要地图 ready 后才能执行转换；在 `<BMap>` 子树内调用时可省略 `map` 参数
+该 hooks 只需要 **Client 上下文**（`<BMap>` 或 `<BMapProvider>` 子树内），**不需要地图实例**；
+在 `<BMap>` 子树内调用时可省略 `map` 参数
 :::
 
 ### 参数
@@ -28,21 +29,34 @@ const { result, convert, isLoading, isError, status } = useBMapConvertor(map)
 | ---- | -------------------------------------------- | --------- | ------ |
 | map  | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | -      |
 
+:::tip 状态与动作约定（#38 起）
+
+- `status` 的取值与含义对六个 service hooks **完全一致**：
+  `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
+  `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
+  表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
+- **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
+  与 `status` / `error` 同步。
+
+:::
+
 ### 返回值
 
-| 返回值    | 描述                                                     | 类型                                                                                                                                                |
-| --------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| data      | 目标坐标点数组（`result` 为其别名）                      | `Ref<{ lng: number; lat: number }[] \| null>`                                                                                                       |
-| result    | 目标坐标点数组                                           | `Ref<{ lng: number; lat: number }[] \| null>`                                                                                                       |
-| error     | 错误信息                                                 | `Ref<unknown>`                                                                                                                                      |
-| isError   | 是否出错                                                 | `boolean`                                                                                                                                           |
-| isEmpty   | 结果是否为空                                             | `boolean`                                                                                                                                           |
-| isLoading | 是否加载中                                               | `boolean`                                                                                                                                           |
-| status    | 当前状态                                                 | `Ref<'idle' \| 'loading' \| 'success' \| 'error'>`                                                                                                  |
-| convert   | 点坐标转换方法，需要在`Map`组件`ready`后才可调用         | `(points: Point[], `[`from: CoordinatesFromType`](#coordinatesfromtype)`, `[`to: CoordinatesToType`](#coordinatestotype)`) => Promise<Point[]>`      |
-| get       | `convert` 别名                                           | 同上                                                                                                                                                |
-| cancel    | 取消 pending 请求                                        | `() => void`                                                                                                                                        |
-| reset     | 清空 data/error                                          | `() => void`                                                                                                                                        |
+| 返回值    | 描述                                                                       | 类型                                                                                                    |
+| --------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| data      | 目标坐标点数组（`result` 为其别名）                                        | `Readonly<ShallowRef<Point[] \| null>>`                                                                  |
+| result    | 目标坐标点数组                                                             | `Readonly<ShallowRef<Point[] \| null>>`                                                                  |
+| error     | 有公开原因时的错误信息（`{ code, message }`）                              | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                                                         |
+| sdkStatus | `Convertor#translate` 回包的公开状态码（`0` = 成功）                        | `Readonly<ShallowRef<number \| null>>`                                                                   |
+| isError   | 是否出错（`status === 'failed'`）                                          | `boolean`                                                                                                 |
+| isEmpty   | 结果是否为空（`data === null`）                                            | `boolean`                                                                                                 |
+| isLoading | 是否加载中                                                                 | `boolean`                                                                                                 |
+| supported | 当前引擎是否支持坐标转换（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                                                                 |
+| status    | 任务状态（见上）                                                           | `Readonly<ShallowRef<BMapServiceStatus>>`                                                                  |
+| convert   | 坐标互转；`points` 为空 / 坐标非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(points: readonly Point[], from: CoordinatesFromType, to: CoordinatesToType) => Promise<ServiceResult<Point[]>>` |
+| get       | `convert` 别名                                                             | 同上                                                                                                      |
+| cancel    | 逻辑取消在飞请求                                                           | `() => void`                                                                                              |
+| reset     | 取消 + 清空 data/error/status                                              | `() => void`                                                                                              |
 
 ### CoordinatesFromType
 
@@ -148,7 +162,8 @@ export enum CoordinatesToType {
 ## TS 类型定义参考
 
 ```ts
-import { Ref } from 'vue'
+import type { ComputedRef, ShallowRef } from 'vue'
+import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
 /**
  * 地图经纬度点
  */
@@ -160,24 +175,26 @@ export declare type GeoPoint = {
  * 坐标转换
  */
 export declare function useBMapConvertor(map?: unknown): {
-  data: Ref<GeoPoint[] | null>
-  result: Ref<GeoPoint[] | null>
-  error: Ref<unknown>
-  isError: Ref<boolean>
-  isEmpty: Ref<boolean>
-  status: Ref<'idle' | 'loading' | 'success' | 'error'>
-  isLoading: Ref<boolean>
+  data: Readonly<ShallowRef<GeoPoint[] | null>>
+  result: Readonly<ShallowRef<GeoPoint[] | null>>
+  error: Readonly<ShallowRef<ServiceErrorInfo | null>>
+  sdkStatus: Readonly<ShallowRef<number | null>>
+  isError: ComputedRef<boolean>
+  isEmpty: ComputedRef<boolean>
+  status: Readonly<ShallowRef<BMapServiceStatus>>
+  isLoading: Readonly<ShallowRef<boolean>>
+  supported: Readonly<ShallowRef<boolean>>
   convert: (
-    points: GeoPoint[],
+    points: readonly GeoPoint[],
     from: CoordinatesFromType,
     to: CoordinatesToType
-  ) => Promise<GeoPoint[] | null>
+  ) => Promise<ServiceResult<GeoPoint[]>>
   get: (
-    points: GeoPoint[],
+    points: readonly GeoPoint[],
     from: CoordinatesFromType,
     to: CoordinatesToType
-  ) => Promise<GeoPoint[] | null>
-  cancel: (reason?: unknown) => void
+  ) => Promise<ServiceResult<GeoPoint[]>>
+  cancel: () => void
   reset: () => void
 }
 ```

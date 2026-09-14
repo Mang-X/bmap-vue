@@ -25,7 +25,12 @@ import type {
   ServiceResult,
 } from "../types/services";
 
-/** 服务调用默认超时：SDK 失败时可能永不回调。与 composable 层的 `SERVICE_TIMEOUT_MS` 同值。 */
+/**
+ * 服务调用默认超时：SDK 失败时可能永不回调。
+ *
+ * **单一事实源**：composable 层不再自带超时实现（`useBMapAsyncTask` / `withServiceTimeout` 已随
+ * #38 删除），超时只在这里发生——曾经的「两份同值常量」因此不再存在。
+ */
 export const SERVICE_CALL_TIMEOUT_MS = 15000;
 
 function freeze<T>(result: ServiceResult<T>): ServiceResult<T> {

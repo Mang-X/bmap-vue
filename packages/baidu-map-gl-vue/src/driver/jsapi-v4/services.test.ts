@@ -12,7 +12,12 @@
  * `status`）才会走 `failed` 并带上那个码——下面各段严格按这条口径断言。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../../../test-utils";
+import {
+  createFakeBMapV4,
+  FakeV4AutocompleteResult,
+  FakeV4LocalResult,
+  type FakeBMapV4,
+} from "../../../../test-utils";
 import { CAPABILITY_CATALOG } from "../capability/catalog";
 import { createCapabilityRegistry } from "../capability/registry";
 import type { CapabilityRegistry } from "../capability/registry";
@@ -23,7 +28,12 @@ import { createJsapiV4GeometryDriver } from "./geometry";
 import { createJsapiV4HandleRegistry } from "./registry";
 import type { JsapiV4HandleRegistry } from "./registry";
 import { createJsapiV4ServiceDriver } from "./services";
-import type { JsapiV4ServiceDriver } from "../types/services";
+import type {
+  BoundaryRings,
+  GeocodedAddress,
+  JsapiV4ServiceDriver,
+  LocalSearchResult,
+} from "../types/services";
 
 let fake: FakeBMapV4;
 let registry: JsapiV4HandleRegistry;
@@ -233,7 +243,7 @@ describe("v4 Service Facet：Geocoder（正/逆地址解析）", () => {
     expect((await call.result).status).toBe("timeout");
   });
 
-  it("逆地址解析：地址、商圈与附近 POI 计数", async () => {
+  it("逆地址解析：地址、商圈、结构化地址与附近 POI（含结构，不只是计数）", async () => {
     const handle = services.createGeocoder();
     const result = await services.reverseGeocode(handle, {
       point: { lng: 116.404, lat: 39.915 },
@@ -241,12 +251,49 @@ describe("v4 Service Facet：Geocoder（正/逆地址解析）", () => {
     }).result;
 
     expect(result.status).toBe("success");
-    expect(result.data).toEqual({
+    const address = result.data as GeocodedAddress;
+    expect(address).toMatchObject({
       address: "北京市东城区天安门",
       point: { lng: 116.404, lat: 39.915 },
       business: "天安门",
       poiCount: 2,
     });
+    // `addressComponents` 与 `surroundingPois` 是官方 `GeocoderResult` 声明的字段：
+    // #38 之前它们被静默丢弃（只留一个 poiCount），这里逐项钉住。
+    expect(address.addressComponents).toEqual({
+      province: null,
+      city: null,
+      district: null,
+      street: null,
+      streetNumber: null,
+    });
+    expect(address.surroundingPois.map((poi) => poi.title)).toEqual(["a", "b"]);
+    // `marker` 是 SDK 的覆盖物对象：DTO 刻意不带 raw
+    expect(address.surroundingPois[0]).not.toHaveProperty("marker");
+
+    // 结构化地址真的按字段读进来了（不是恒 null）
+    fake.createdGeocoders[0]!.locationResult = {
+      address: "北京市东城区天安门",
+      point: { lng: 116.404, lat: 39.915 },
+      addressComponents: {
+        province: "北京市",
+        city: "北京市",
+        district: "东城区",
+        street: "东长安街",
+        streetNumber: "1号",
+      },
+    };
+    const detailed = await services.reverseGeocode(handle, {
+      point: { lng: 116.404, lat: 39.915 },
+    }).result;
+    expect((detailed.data as GeocodedAddress).addressComponents).toEqual({
+      province: "北京市",
+      city: "北京市",
+      district: "东城区",
+      street: "东长安街",
+      streetNumber: "1号",
+    });
+
     expect(fake.createdGeocoders[0].callLog[0]).toBe('getLocation:{"numPois":5}');
   });
 });
@@ -321,12 +368,16 @@ describe("v4 Service Facet：Convertor / Boundary", () => {
     expect(fake.createdConvertors[0].callLog).toHaveLength(0);
   });
 
-  it("行政区边界：点串解析成坐标环", async () => {
+  it("行政区边界：点串原样透传 + 解析成坐标环（两个公开视图都给）", async () => {
     const handle = services.createBoundary();
     const result = await services.queryBoundary(handle, { name: "北京市" }).result;
 
     expect(result.status).toBe("success");
-    expect(result.data).toEqual([
+    const data = result.data as BoundaryRings;
+    // `raw` 是官方回包原文（`isBoundary` 形态的覆盖物直接吃它）
+    expect(data.raw).toEqual(["116.30,39.90;116.31,39.91;116.30,39.90"]);
+    // `rings` 是解析后的坐标环
+    expect(data.rings).toEqual([
       [
         { lng: 116.3, lat: 39.9 },
         { lng: 116.31, lat: 39.91 },
@@ -1140,5 +1191,425 @@ describe("v4 Service Facet：Autocomplete 的回包归属（PR #63 复审 P2-1�
     // 16 个已登记的请求各自拿到自己的回包（没有淘汰、也没有错位）
     expect((await calls[0]!.result).data?.[0]?.title).toBe("N0");
     expect((await calls[15]!.result).data?.[0]?.title).toBe("N15");
+  });
+});
+
+
+describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
+  /** 纯 headless 实例：不传 renderOptions，因此不会在任何地图上绘制覆盖物。 */
+  function localSearchWith(location: unknown = "北京市", options?: Record<string, unknown>) {
+    return services.createLocalSearch(location, options);
+  }
+
+  /** 落到 SDK 的**检索调用**（不含构造期记录）。 */
+  function searchCalls(): string[] {
+    return fake.createdLocalSearches[0]!.callLog.filter((entry) => !entry.startsWith("construct:"));
+  }
+
+  it("search：回包归一成领域结果（关键字 / pois / 分页读数 / 建议 / 更多链接）", async () => {
+    const handle = localSearchWith();
+
+    const result = await services.search(handle, "天安门").result;
+
+    expect(result.status).toBe("success");
+    const [page] = result.data as LocalSearchResult[];
+    expect(page.keyword).toBe("天安门");
+    expect(page.city).toBe("北京市");
+    expect(page.pois.map((poi) => poi.title)).toEqual(["天安门", "故宫博物院"]);
+    expect(page.pois[0]?.address).toBe("北京市东城区东长安街");
+    // 分页读数是 getCurrentNumPois / getNumPois / getNumPages / getPageIndex 的投影
+    expect(page.pageSize).toBe(2);
+    expect(page.total).toBe(2);
+    expect(page.pageCount).toBe(1);
+    expect(page.pageIndex).toBe(0);
+    expect(page.suggestions).toEqual(["天安门 的结果建议"]);
+    expect(page.moreResultsUrl).toBe("https://map.baidu.com/search/天安门");
+    // 状态码来自公开的 getStatus()（0 = BMAP_STATUS_SUCCESS）
+    expect(result.sdkStatus).toBe(0);
+  });
+
+  it("search：多关键字回包归一成数组，顺序与关键字一致", async () => {
+    const handle = localSearchWith();
+
+    const result = await services.search(handle, ["咖啡", "甜品"]).result;
+
+    expect(result.status).toBe("success");
+    expect((result.data as LocalSearchResult[]).map((item) => item.keyword)).toEqual([
+      "咖啡",
+      "甜品",
+    ]);
+  });
+
+  it("searchInBounds：领域矩形经 GeometryDriver 转成 raw Bounds，范围字段进结果", async () => {
+    const handle = localSearchWith();
+    const bounds = { southwest: { lng: 116.2, lat: 39.8 }, northeast: { lng: 116.6, lat: 40.0 } };
+
+    const result = await services.searchInBounds(handle, { keyword: "超市", bounds }).result;
+
+    expect(result.status).toBe("success");
+    expect((result.data as LocalSearchResult[])[0]?.bounds).toEqual(bounds);
+    // 传给 SDK 的是 raw Bounds（有 getSouthWest / getNorthEast），不是裸对象
+    const raw = fake.createdLocalSearches[0]!;
+    expect(raw.callLog.some((entry) => entry.startsWith("searchInBounds:超市:"))).toBe(true);
+  });
+
+  it("searchInBounds：非法 bounds 走结果通道（failed），不从调用之外抛错", async () => {
+    const handle = localSearchWith();
+
+    const result = await services.searchInBounds(handle, {
+      keyword: "超市",
+      bounds: { southwest: { lng: Number.NaN, lat: 39.8 }, northeast: { lng: 116.6, lat: 40 } },
+    }).result;
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("BMAP_INVALID_ARGUMENT");
+  });
+
+  it("searchNearby：领域 Point 转 raw Point，半径透传；城市名亦可", async () => {
+    const handle = localSearchWith();
+
+    const nearby = await services.searchNearby(handle, {
+      keyword: "银行",
+      center: { lng: 116.404, lat: 39.915 },
+      radius: 2000,
+    }).result;
+    expect(nearby.status).toBe("success");
+    expect(fake.createdLocalSearches[0]!.callLog).toContain("searchNearby:银行:[object Object]:2000");
+
+    const byCity = await services.searchNearby(handle, {
+      keyword: "医院",
+      center: "上海市",
+      radius: 1000,
+    }).result;
+    expect(byCity.status).toBe("success");
+    expect(fake.createdLocalSearches[0]!.callLog).toContain("searchNearby:医院:上海市:1000");
+  });
+
+  it("searchNearby：缺分量 / 非有限坐标 / 缺半径都以 failed 结算，且不落到 SDK", async () => {
+    const handle = localSearchWith();
+
+    const badPoint = await services.searchNearby(handle, {
+      keyword: "银行",
+      center: { lng: Number.NaN, lat: 39.915 },
+      radius: 2000,
+    }).result;
+    expect(badPoint.status).toBe("failed");
+    expect(badPoint.error?.code).toBe("BMAP_INVALID_ARGUMENT");
+
+    const badRadius = await services.searchNearby(handle, {
+      keyword: "银行",
+      center: { lng: 116.404, lat: 39.915 },
+      radius: -1,
+    }).result;
+    expect(badRadius.status).toBe("failed");
+
+    // 一次检索都没有落到 SDK（construct 是构造期记的，不属于调用）
+    expect(searchCalls()).toHaveLength(0);
+  });
+
+  it("gotoPage：合法页码翻页（页码进结果），非法页码给出官方状态码 5", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    // 12 条结果 + 每页 10 条 ⇒ 共 2 页
+    raw.pois = Array.from({ length: 12 }, (_, index) => ({ title: `POI-${index}` }));
+    raw.options.pageCapacity = 10;
+
+    const first = await services.search(handle, "餐厅").result;
+    expect((first.data as LocalSearchResult[])[0]?.pageCount).toBe(2);
+    expect((first.data as LocalSearchResult[])[0]?.pageSize).toBe(10);
+
+    const second = await services.gotoPage(handle, 1).result;
+    expect(second.status).toBe("success");
+    const page = (second.data as LocalSearchResult[])[0];
+    expect(page.pageIndex).toBe(1);
+    // 第 2 页只有剩下的 2 条
+    expect(page.pageSize).toBe(2);
+    expect(page.pois.map((poi) => poi.title)).toEqual(["POI-10", "POI-11"]);
+
+    const invalid = await services.gotoPage(handle, 9).result;
+    expect(invalid.status).toBe("failed");
+    // 官方公开状态码：INVALID_REQUEST = 5（不编造、不改写）
+    expect(invalid.error?.code).toBe(5);
+    expect(invalid.sdkStatus).toBe(5);
+  });
+
+  it("gotoPage：页码不是非负整数时以 BMAP_INVALID_ARGUMENT 拒绝，不落到 SDK", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+
+    for (const page of [-1, 1.5, Number.NaN]) {
+      const result = await services.gotoPage(handle, page).result;
+      expect(result.status).toBe("failed");
+      expect(result.error?.code).toBe("BMAP_INVALID_ARGUMENT");
+    }
+    expect(raw.callLog.filter((entry) => entry.startsWith("gotoPage:"))).toHaveLength(0);
+  });
+
+  it("查无结果：回包是合法 LocalResult 但 0 条 ⇒ success + 空 pois（与 empty 区分）", async () => {
+    const handle = localSearchWith();
+    fake.createdLocalSearches[0]!.pois = [];
+
+    const result = await services.search(handle, "不存在的店").result;
+
+    expect(result.status).toBe("success");
+    const [page] = result.data as LocalSearchResult[];
+    expect(page.pois).toEqual([]);
+    expect(page.total).toBe(0);
+    expect(page.pageCount).toBe(0);
+  });
+
+  it("服务不可用（回包为 null）且状态码非 0：按公开状态码 failed，不编造原因", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.overridePayload = null;
+    raw.status = 7; // BMAP_STATUS_SERVICE_UNAVAILABLE
+
+    const result = await services.search(handle, "餐厅").result;
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe(7);
+    expect(result.error?.message).toContain("服务不可用");
+    expect(result.sdkStatus).toBe(7);
+  });
+
+  it("回包为 null 但状态码是 0/1：归成 empty（没有公开原因就不假装是失败）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.overridePayload = null;
+    raw.status = 0;
+
+    const result = await services.search(handle, "餐厅").result;
+
+    expect(result.status).toBe("empty");
+    expect(result.error).toBeNull();
+  });
+
+  it("超时：给出 timeout；迟到回包由墓碑吸收，同关键词重查仍然可用", async () => {
+    vi.useFakeTimers();
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    // 手动时序：**回包真的排进了队列**（`respond = false` 那种「压根没回包」的写法
+    // 会让下面的断言恒真——门禁空转）
+    raw.queue.auto = false;
+
+    const call = services.search(handle, "餐厅");
+    vi.advanceTimersByTime(15000);
+    expect((await call.result).status).toBe("timeout");
+    // 正证守卫：确实有一个迟到回包在飞
+    expect(raw.queue.pending, "迟到回包必须真的在队列里").toBe(1);
+
+    // 关键时序：**在迟到回包到达之前**重查同一个关键词。超时把槽位降级成了墓碑，
+    // 因此互斥规则不再挡它（若没降级，这里会以 failed(BMAP_SERVICE_FAILED) 被拒绝）。
+    const retried = services.search(handle, "餐厅");
+    expect(
+      raw.callLog.filter((entry) => entry.startsWith("search:餐厅")),
+      "重查必须真的落到 SDK（正证）",
+    ).toHaveLength(2);
+    // 两个槽位：墓碑 + 新请求
+    expect(raw.queue.pending).toBe(2);
+
+    // 迟到回包先到：被墓碑吸收（不复活已超时的调用），新请求的回包随后结算自己
+    expect(raw.queue.flush()).toBe(2);
+    expect((await call.result).status, "迟到回包不得复活已超时的调用").toBe("timeout");
+    const settled = await retried.result;
+    expect(settled.status).toBe("success");
+    expect((settled.data as LocalSearchResult[])[0]?.keyword).toBe("餐厅");
+
+    services.disposeLocalSearch(handle);
+    vi.useRealTimers();
+  });
+
+  it("空关键字 / 非法关键字数组：BMAP_INVALID_ARGUMENT，一次都不落到 SDK", async () => {
+    const handle = localSearchWith();
+
+    for (const keyword of ["", [], ["ok", ""]]) {
+      const result = await services.search(handle, keyword as never).result;
+      expect(result.status).toBe("failed");
+      expect(result.error?.code).toBe("BMAP_INVALID_ARGUMENT");
+    }
+    expect(searchCalls()).toHaveLength(0);
+  });
+
+  it("句柄守卫：非 LocalSearch 句柄同步抛 BMAP_INVALID_ARGUMENT，外来句柄抛 BMAP_HANDLE_FOREIGN", async () => {
+    const autocomplete = services.createAutocomplete({ input: input() });
+    expect(() => services.search(autocomplete as never, "餐厅")).toThrowError(/只接受 createLocalSearch/);
+
+    const foreign = createJsapiV4HandleRegistry();
+    const foreignHandle = foreign.adopt("service:local-search", {});
+    expect(() => services.search(foreignHandle as never, "餐厅")).toThrowError(/不属于当前 Client/);
+  });
+
+  it("clearLocalSearch：调用 SDK 的 clearResults；已释放实例上拒绝写入", () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+
+    services.clearLocalSearch(handle);
+    expect(raw.callLog).toContain("clearResults");
+
+    services.disposeLocalSearch(handle);
+    expect(() => services.clearLocalSearch(handle)).toThrowError(/已被 disposeLocalSearch\(\) 释放/);
+  });
+
+  it("取消 A 之后立刻重查 A：允许（墓碑不参与互斥），且 A 的迟到回包不得交给新请求", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    raw.pois = [{ title: "OLD" }];
+    const first = services.search(handle, "A");
+    first.cancel();
+
+    raw.pois = [{ title: "NEW" }];
+    const second = services.search(handle, "A");
+    // 两个槽位：墓碑（已取消的第一次）+ 新的这一次
+    expect(raw.queue.pending).toBe(2);
+
+    expect(raw.queue.flush()).toBe(2);
+    expect((await first.result).status).toBe("canceled");
+    const retried = await second.result;
+    expect(retried.status).toBe("success");
+    expect((retried.data as LocalSearchResult[])[0]?.pois[0]?.title).toBe("NEW");
+  });
+
+  it("取消 A 之后发起 B：A 的迟到回包被墓碑吸收，不会结算给 B", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    raw.pois = [{ title: "A-OLD" }];
+    const a = services.search(handle, "A");
+    a.cancel();
+
+    raw.pois = [{ title: "B-NEW" }];
+    const b = services.search(handle, "B");
+
+    // 先只让 A 的回包到达
+    expect(raw.queue.flushOne(0)).toBe(true);
+    expect((await Promise.resolve(), (await a.result).status)).toBe("canceled");
+
+    expect(raw.queue.flush()).toBe(1);
+    const settled = await b.result;
+    expect(settled.status).toBe("success");
+    expect((settled.data as LocalSearchResult[])[0]?.keyword).toBe("B");
+    expect((settled.data as LocalSearchResult[])[0]?.pois[0]?.title).toBe("B-NEW");
+  });
+
+  it("同关键字的两个未结算检索：第二次显式失败（回包无法区分）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const first = services.search(handle, "K");
+    const second = services.search(handle, "K");
+
+    expect((await second.result).status).toBe("failed");
+    expect((await second.result).error?.code).toBe("BMAP_SERVICE_FAILED");
+    // 只有第一次真的发出去了
+    expect(raw.callLog.filter((entry) => entry.startsWith("search:K"))).toHaveLength(1);
+
+    raw.queue.flush();
+    expect((await first.result).status).toBe("success");
+  });
+
+  it("回包带 keyword 但与队首期望不符时：不消费槽位（真正的回包仍能对上）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const call = services.search(handle, "A");
+    // 伪造一个不属于本次请求的回包（keyword 不同），直接经构造选项回调投递
+    const foreign = new FakeV4LocalResult({ keyword: "Z", pois: [] });
+    (raw.options.onSearchComplete as (value: unknown) => void)(foreign);
+
+    // 槽位仍在：真正的回包到达时才结算
+    expect(raw.queue.pending).toBe(1);
+    raw.queue.flush();
+    const result = await call.result;
+    expect(result.status).toBe("success");
+    expect((result.data as LocalSearchResult[])[0]?.keyword).toBe("A");
+  });
+
+  it("待回包队列达到上限时拒绝新调用（不淘汰旧记录）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const calls = Array.from({ length: 16 }, (_, index) => services.search(handle, `K${index}`));
+    const overflow = services.search(handle, "K-overflow");
+
+    expect((await overflow.result).status).toBe("failed");
+    expect((await overflow.result).error?.message).toContain("已达上限 16");
+
+    raw.queue.flush();
+    for (const call of calls) {
+      expect((await call.result).status).toBe("success");
+    }
+  });
+
+  it("disposeLocalSearch：在飞调用显式失败、释放后拒绝新调用、重复调用幂等", async () => {
+    vi.useFakeTimers();
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const inflight = services.search(handle, "餐厅");
+    services.disposeLocalSearch(handle);
+    expect((await inflight.result).status).toBe("failed");
+
+    expect((await services.search(handle, "餐厅").result).status).toBe("failed");
+    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
+
+    services.disposeLocalSearch(handle);
+    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
+  });
+
+  it("disposeLocalSearch：SDK dispose 抛错时不记账，下一次重试；泄漏账头保留", () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.failNextDispose = new Error("destroy boom");
+
+    expect(() => services.disposeLocalSearch(handle)).toThrowError(/LocalSearch.dispose/);
+    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(1);
+
+    services.disposeLocalSearch(handle);
+    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(0);
+  });
+
+  it("disposeLocalSearch：销毁钩子里重入 dispose 不会重复销毁 SDK 实例", () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.onDispose = () => services.disposeLocalSearch(handle);
+
+    services.disposeLocalSearch(handle);
+
+    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
+    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(0);
+  });
+
+  it("创建面：renderOptions.map 必须是本库的 MapHandle（绘制所有权可验证）", () => {
+    expect(() => services.createLocalSearch("北京市", { renderOptions: { map: {} } })).toThrowError(
+      /renderOptions\.map 必须是本库的 MapHandle/,
+    );
+    // 只有官方声明的绘制字段会被透传（构造选项里另有 Driver 自己挂的内部分发器）
+    const handle = services.createLocalSearch("北京市", {
+      renderOptions: { autoViewport: true, selectFirstResult: false },
+      pageCapacity: 5,
+      pageNum: 1,
+    });
+    const options = fake.createdLocalSearches[0]!.options;
+    expect(options.renderOptions).toEqual({ autoViewport: true, selectFirstResult: false });
+    expect(options.pageCapacity).toBe(5);
+    expect(options.pageNum).toBe(1);
+    expect(options.onSearchComplete).toBeTypeOf("function");
+    services.disposeLocalSearch(handle);
+  });
+
+  it("创建面：检索区域必须是城市名 / 领域 Point / MapHandle", () => {
+    expect(() => services.createLocalSearch(42)).toThrowError(/检索区域必须是城市名字符串/);
+    expect(() => services.createLocalSearch("")).toThrowError(/不能是空字符串/);
+
+    const point = services.createLocalSearch({ lng: 116.404, lat: 39.915 });
+    expect(fake.createdLocalSearches[0]!.location).toMatchObject({ lng: 116.404, lat: 39.915 });
+    services.disposeLocalSearch(point);
   });
 });
