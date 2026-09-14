@@ -88,7 +88,7 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 | `import { baiduCdnProvider, customScriptProvider, existingGlobalProvider } from 'baidu-map-gl-vue'` | 根入口**不再导出任何 Provider**；改用 `baidu-map-gl-vue/core` 的 `baiduJsapiV4Provider()` / `customScriptV4Provider()` / `existingGlobalV4Provider()` |
 | `withMigrationDriver({ provider, loadOptions })` | 删掉这层包装，直接把 `{ provider, loadOptions }` 交给 `createBMapClient()` / `<BMapProvider :definition>`；`createBMapClient` 的默认 Driver 工厂已是 v4 |
 | `createLegacyBMapClient({ provider })` | 已删除。旧引擎不在 3.0 里，请用默认 `createBMapClient()` |
-| Provider 返回**裸全局对象**（`load: async () => window.BMap`） | 必须返回结构化结果：`load: async () => ({ engine: 'jsapi-v4', version: '4.0', namespace: globalThis.BMap })`（4.0 的 provider 家族已经这样做） |
+| Provider 返回**裸全局对象**（`load: async () => window.BMap`） | 必须返回结构化结果（`LoadedJsapiV4`）。**优先用内置家族**（它们内部就返回结构化结果）；自研加载器用公开的 `createLoadedJsapiV4()` 构造，**不要**手写 `{ engine, version, namespace }` 字面量（`load` metadata 必填，手写会少字段） | 见[配置 → Provider 的返回值](./config)，那里有一段可直接抄的代码 |
 | 根入口的 `BMapProvider` 类型 | 改用 `BMapProviderLike`（结构化 Provider 的形状） |
 | `<BMap allowExistingGlobal>` / `createBMapPlugin({ allowExistingGlobal })` | prop 已删除；传 `provider: existingGlobalV4Provider()`（并且不再有「页面恰好有全局就用它」的隐式回退） |
 | `./advanced` 的 `detectEngine()` / `createDriver({ engine })` | 只用 `createJsapiV4Driver({ rawSdk, version, unsupported })`（engine 猜测已删除） |

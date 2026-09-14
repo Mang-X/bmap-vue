@@ -9,8 +9,10 @@
  * 2. **判定对象错位（误伤）** → 把注释、长文本里的提及、以及**官方 4.0 时代仍在用的插件
  *    命名空间 `BMapGLLib`** 判成「回退旧引擎」。这类误伤会逼出「为了过门禁而改注释」的
  *    本末倒置，所以也要逐条钉住。
- * 3. **夹具/范围写错导致空转** → 一个文件都没扫到时也会「通过」。因此每个「放行」用例都用
- *    `expectCleanAndScanned()` 顺带断言**真的扫到了文件**（成功输出里带扫描数）。
+ * 3. **夹具/范围写错导致空转** → 一个文件都没扫到时也会「通过」。这一条有**两层**防线：
+ *    脚本自身对每个相位做 fail-closed（`扫描范围为空` 直接判失败，见下面的负向用例），
+ *    用例侧再用 `expectCleanAndScanned()` 断言每个相位**真的扫到了文件**——后者保证的是
+ *    「这条用例测的相位确实被测到了」，不能替代前者。
  *
  * 最后两节把门禁接回仓库：运行时源码树真的干净，以及它真的被某个 workflow 的 `run:` 跑起来、
  * 没有被 `if:` / `continue-on-error:` 架空。
@@ -25,6 +27,8 @@ import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 const ROOT = resolve(import.meta.dirname, "../..");
 const SCRIPT = resolve(ROOT, "scripts/check-no-bmapgl.mts");
 const RUNTIME_SRC = resolve(ROOT, "packages/baidu-map-gl-vue/src");
+const RUNTIME_LABEL = "运行时源码";
+const DECLARATIONS_LABEL = "公共声明";
 
 interface ScanResult {
   code: number;
@@ -66,20 +70,28 @@ const scanSource = (dir: string): ScanResult => runGate(["--dir", dir]);
 const scanDeclarations = (dir: string): ScanResult => runGate(["--declarations", dir]);
 
 /**
- * 扫描范围里的文件数（成功输出里必须写出来，否则「干净」与「没扫到」无法区分）。
+ * 解析输出里的**逐相位**扫描数（`<label>=<dir>:<N> 个文件`）。
  *
- * 每个「期望放行」的用例都要顺带断言它 > 0——否则夹具写错路径时，门禁会因为**一个文件都没扫**
- * 而通过，这类空转比失败更难发现。
+ * 逐相位是刻意的：合并成一个总数后，「某一相位扫到 0 个」会被另一相位的读数掩盖。
  */
-function scannedCount(output: string): number {
-  const match = /共扫 (\d+) 个文件/.exec(output);
-  return match ? Number(match[1]) : -1;
+function phaseScans(output: string): Record<string, number> {
+  const found: Record<string, number> = {};
+  for (const match of output.matchAll(/([^\s,，（）=]+)=([^\s,:（）]+):(\d+) 个文件/g)) {
+    found[match[1]!] = Number(match[3]!);
+  }
+  return found;
 }
 
-/** 断言「放行」且确实扫到了内容。 */
-function expectCleanAndScanned(result: ScanResult, atLeast = 1, label = ""): void {
-  expect(result.code, `${label}\n${result.output}`).toBe(0);
-  expect(scannedCount(result.output), `${label} 没有扫到文件（门禁空转）`).toBeGreaterThanOrEqual(
+/**
+ * 断言「该相位放行」**且确实扫到了内容**。
+ *
+ * 这不是为了替代脚本自身的 fail-closed（它已经会失败），而是保证这条用例真的测到了它声称要测的
+ * 相位——夹具写错路径时，用例会因为 `phaseScans` 里没有这个 label 而立刻红，而不是静默通过。
+ */
+function expectCleanAndScanned(result: ScanResult, label: string, atLeast = 1): void {
+  expect(result.code, result.output).toBe(0);
+  const scanned = phaseScans(result.output)[label];
+  expect(scanned, `${label} 没有扫到文件（夹具写错路径？）\n${result.output}`).toBeGreaterThanOrEqual(
     atLeast,
   );
 }
@@ -170,6 +182,42 @@ describe("no-bmapgl gate：旧引擎痕迹必须被抓到", () => {
   });
 });
 
+describe("no-bmapgl gate：扫描范围为空必须失败（fail-closed）", () => {
+  it("`--dir` 指向空目录时判失败，而不是输出 OK", () => {
+    const r = scanSource(fixture({}));
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain("扫描范围为空");
+    expect(r.output).not.toContain("gate OK");
+  });
+
+  it("`--dir` 下只有测试文件（被整体跳过）时同样判失败", () => {
+    // 真实场景：目录配成了「只剩 co-located 单测」的那种树，门禁会一个文件都扫不到
+    const r = scanSource(fixture({ "only.test.ts": "const sdk = window.BMapGL;\n" }));
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain("扫描范围为空");
+  });
+
+  it("公共声明相位一个 `.d.ts` 都没有时判失败（不是「干净」）", () => {
+    const r = scanDeclarations(
+      fixture({ "index.mjs": 'export const engine = "webgl-v1";\n' }),
+    );
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain("扫描范围为空");
+    expect(r.output).toContain(DECLARATIONS_LABEL);
+  });
+
+  it("同目录补上一个 `.d.ts` 后放行，且报告里逐相位给出扫描数（对照）", () => {
+    const r = scanDeclarations(
+      fixture({
+        "index.mjs": 'export const engine = "webgl-v1";\n',
+        "index.d.ts": "export declare const version: string;\n",
+      }),
+    );
+    expectCleanAndScanned(r, DECLARATIONS_LABEL, 1);
+    expect(phaseScans(r.output)[DECLARATIONS_LABEL], "只应扫到 index.d.ts 一个文件").toBe(1);
+  });
+});
+
 describe("no-bmapgl gate：不得误伤官方 4.0 的别名与文档提及", () => {
   it("官方插件命名空间 `BMapGLLib` 与它的 CDN URL 不误报", () => {
     const r = scanSource(
@@ -184,7 +232,7 @@ describe("no-bmapgl gate：不得误伤官方 4.0 的别名与文档提及", () 
         ].join("\n"),
       }),
     );
-    expectCleanAndScanned(r, 1, "BMapGLLib 官方插件命名空间");
+    expectCleanAndScanned(r, RUNTIME_LABEL, 1);
   });
 
   it("注释与长文本里的 BMapGL 提及不误报（迁移说明必须能写出旧名字）", () => {
@@ -199,7 +247,7 @@ describe("no-bmapgl gate：不得误伤官方 4.0 的别名与文档提及", () 
         ].join("\n"),
       }),
     );
-    expectCleanAndScanned(r, 1, "注释与长文本里的提及");
+    expectCleanAndScanned(r, RUNTIME_LABEL, 1);
   });
 
   it("官方 4.0 的 `BMap` 用法不受本门禁限制（那是 raw SDK 门禁的职责）", () => {
@@ -211,7 +259,7 @@ describe("no-bmapgl gate：不得误伤官方 4.0 的别名与文档提及", () 
         ].join("\n"),
       }),
     );
-    expectCleanAndScanned(r, 1, "官方 BMap 用法");
+    expectCleanAndScanned(r, RUNTIME_LABEL, 1);
   });
 
   it("公共声明相位只认 .d.ts：同目录里含违规的 .mjs 不参与判定", () => {
@@ -223,15 +271,15 @@ describe("no-bmapgl gate：不得误伤官方 4.0 的别名与文档提及", () 
         "index.d.ts": "export declare const version: string;\n",
       }),
     );
-    expectCleanAndScanned(r, 1, "公共声明相位只收 .d.ts");
-    expect(scannedCount(r.output), "只应扫到 index.d.ts 一个文件").toBe(1);
+    expectCleanAndScanned(r, DECLARATIONS_LABEL, 1);
+    expect(phaseScans(r.output)[DECLARATIONS_LABEL], "只应扫到 index.d.ts 一个文件").toBe(1);
   });
 });
 
 describe("no-bmapgl gate：真实仓库上的不变量", () => {
-  it("本库运行时源码树无旧引擎痕迹（且真的扫到了文件）", () => {
+  it("本库运行时源码树无旧引擎痕迹（且逐相位都有扫描读数）", () => {
     const r = scanSource(RUNTIME_SRC);
-    expectCleanAndScanned(r, 100, "运行时源码树");
+    expectCleanAndScanned(r, RUNTIME_LABEL, 100);
   });
 
   it("旧引擎的三处产物都不在仓库里：webgl-v1 / types/BMapGL / fake-bmapgl", () => {

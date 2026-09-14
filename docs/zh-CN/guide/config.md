@@ -50,11 +50,35 @@ lang: zh-CN
 :::
 
 `./advanced` 的 `createBMapClient()` 与组件默认路径同一条收口：**只接受 `jsapi-v4` 的加载结果**，
-`provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedSdk`：
+`provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedSdk`，也就是
+`LoadedJsapiV4`（`engine` + `version` + `namespace` + **必填的 `load` metadata**）。
+
+**绝大多数场景不需要自己写 Provider**：`baiduJsapiV4Provider()`（默认）/ `customScriptV4Provider(scriptSrc)`
+（自托管入口）/ `existingGlobalV4Provider()`（宿主已加载 SDK）已经覆盖，它们内部就是下面这段。
+只有自研加载器才需要手工构造结构化结果——用公开的 `createLoadedJsapiV4()`，**不要手写
+`{ engine, version, namespace }` 字面量**（`load` metadata 是必填的，手写会少字段，也会丢掉
+AK / userinfo 脱敏）：
 
 ```ts
-// JSAPI 4.0（唯一基线）
-{ engine: "jsapi-v4", version: "4.0", namespace: globalThis.BMap, load: { /* metadata */ } }
+import type { BMapProviderLike } from 'baidu-map-gl-vue'
+import { createLoadedJsapiV4 } from 'baidu-map-gl-vue/core'
+
+const provider: BMapProviderLike = {
+  id: 'my-loader',
+  getCacheKey: () => 'my-loader',
+  load: async () =>
+    createLoadedJsapiV4({
+      providerId: 'custom-script-v4',
+      mode: 'load',
+      version: '4.0',
+      versionSource: 'declared',
+      options: { ak: 'YOUR_AK' },
+      fingerprint: 'my-loader',
+      // 你的加载器把命名空间放在哪就读哪；这里用「字符串键」写法，
+      // 因此**不依赖**官方类型包对全局 `BMap` 的声明
+      namespace: (globalThis as { BMap?: unknown }).BMap,
+    }),
+}
 ```
 
 `LoadedSdk` 现在就是 `LoadedJsapiV4` 的别名（旧引擎的 `LoadedLegacySdk` 已删除），

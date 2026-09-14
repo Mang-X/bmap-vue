@@ -31,6 +31,13 @@
  * 2. `removed-engine-id`：`"webgl-v1"` / `"jsapi-v3"` 这两个已删除的 engine 取值。
  *    「本库默认执行链只用 v4 与官方 Loader」这句验收标准必须有可执行的落点。
  *
+ * ## 失败即拒绝（fail-closed）
+ *
+ * **每个相位至少扫到一个文件**才可能放行。空目录 / 配置错 / 该相位文件被整体跳过（例如
+ * 公共声明相位一个 `.d.ts` 都没有）都判失败——「扫到 0 个文件」与「真的干净」在日志与退出码上
+ * 必须可区分，否则一个配错的扫描范围会伪装成绿色。逐相位统计（而不是合并成一个总数）是必需的：
+ * 合并之后某一相位的 0 会被另一相位的读数掩盖。
+ *
  * 用法：
  *   node --experimental-strip-types scripts/check-no-bmapgl.mts
  *   node --experimental-strip-types scripts/check-no-bmapgl.mts --dir <srcTree>
@@ -121,23 +128,33 @@ interface Phase {
   readonly skip?: (file: string) => boolean;
 }
 
+/** 每个相位实际扫到的文件数——空转守卫靠它，不是靠调用方自觉。 */
+interface PhaseScan {
+  readonly phase: Phase;
+  readonly scanned: number;
+}
+
+function describe(phase: Phase): string {
+  return `${phase.label}=${relative(ROOT, phase.dir) || phase.dir}`;
+}
+
 function runPhases(phases: readonly Phase[]): number {
   const violations: NoLegacyViolation[] = [];
   const failures: string[] = [];
 
-  const result = scanSourceDirs(
-    phases.map((phase) => ({ dir: phase.dir, skip: phase.skip })),
-    violations,
-    failures,
-    { root: ROOT, visitor: collectNoLegacy },
-  );
+  // 逐相位扫描：`scanned` 是**每个相位自己的**读数，不能把两个相位合并成一个总数——
+  // 合并之后「某一相位扫不到文件」会被另一相位的读数掩盖。
+  const scans: PhaseScan[] = phases.map((phase) => ({
+    phase,
+    scanned: scanSourceDirs([{ dir: phase.dir, skip: phase.skip }], violations, failures, {
+      root: ROOT,
+      visitor: collectNoLegacy,
+    }).scanned,
+  }));
+  const scanLabel = scans.map(({ phase, scanned }) => `${describe(phase)}:${scanned} 个文件`).join(", ");
 
   if (violations.length > 0) {
-    console.error(
-      `no-bmapgl gate FAILED: 本库仍有 ${violations.length} 处旧引擎痕迹（${phases
-        .map((phase) => phase.label)
-        .join(" + ")}，共扫 ${result.scanned} 个文件）。`,
-    );
+    console.error(`no-bmapgl gate FAILED: 本库仍有 ${violations.length} 处旧引擎痕迹（${scanLabel}）。`);
     for (const v of sortViolations(violations)) {
       console.error(`  ${v.file}:${v.line}:${v.column} -> ${v.text}  [${v.rule}]`);
     }
@@ -156,11 +173,19 @@ function runPhases(phases: readonly Phase[]): number {
     return 1;
   }
 
-  console.log(
-    `no-bmapgl gate OK: ${phases
-      .map((phase) => `${phase.label}=${relative(ROOT, phase.dir) || phase.dir}`)
-      .join(", ")} 无旧引擎痕迹（共扫 ${result.scanned} 个文件）。`,
-  );
+  // 空转守卫（fail-closed）：某个相位一个文件都没扫到时，它**什么都没检查**。
+  // 目录配错、被整体跳过（例如某个相位只剩 `*.test.ts`）都属于这一类；
+  // 「扫到 0 个文件」与「真的干净」在日志上必须长得不一样，这里直接判失败而不是只打印提示。
+  const empty = scans.filter((scan) => scan.scanned === 0);
+  if (empty.length > 0) {
+    console.error(
+      `no-bmapgl gate FAILED: 扫描范围为空（${empty.map(({ phase }) => describe(phase)).join(", ")}）` +
+        `——${scanLabel}。一个文件都没扫到说明目录配错或被整体跳过，此时放行等于门禁空转。`,
+    );
+    return 1;
+  }
+
+  console.log(`no-bmapgl gate OK: ${phases.map(describe).join(", ")} 无旧引擎痕迹（${scanLabel}）。`);
   return 0;
 }
 

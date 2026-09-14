@@ -16,6 +16,7 @@ import {
 // 任何 Provider factory（原先那三个是 legacy 的 `baiduCdnProvider` 家族），这里改成 v4 家族。
 import {
   baiduJsapiV4Provider,
+  createLoadedJsapiV4,
   existingGlobalV4Provider,
   customScriptV4Provider,
 } from 'baidu-map-gl-vue/core'
@@ -186,3 +187,24 @@ export const legacyBridgeUsage = useUiKitWidget({
 declare const uiKitModule: UiKitModule
 declare const upstreamExportName: string
 export const escapeHatch: unknown = uiKitModule[upstreamExportName]
+
+// 文档里那段「自研加载器怎么写 Provider」（`docs/zh-CN/guide/config.md`）的**可执行对照**：
+// 消费方只有 tarball + vue，也必须能原样编译。文档给一段抄不起来的片断，就等于写了一条
+// 跑不起来的命令——所以这里逐字对齐那段示例（含 `createLoadedJsapiV4` 与全局命名空间的字符串键写法）。
+// 证据由 `scripts/verify-package.mts` 与本仓库 `v3` CI job 的 tarball `vue-tsc` 提供。
+export const customProviderSmoke: BMapProviderLike = {
+  id: 'my-loader',
+  getCacheKey: () => 'my-loader',
+  load: async () =>
+    createLoadedJsapiV4({
+      providerId: 'custom-script-v4',
+      mode: 'load',
+      version: '4.0',
+      versionSource: 'declared',
+      options: { ak: 'YOUR_AK' },
+      fingerprint: 'my-loader',
+      // 你的加载器把命名空间放在哪就读哪；这里用「字符串键」写法，
+      // 因此**不依赖**官方类型包对全局 `BMap` 的声明
+      namespace: (globalThis as { BMap?: unknown }).BMap,
+    }),
+}
