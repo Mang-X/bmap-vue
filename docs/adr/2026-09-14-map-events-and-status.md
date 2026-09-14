@@ -232,7 +232,7 @@ Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用�
 | 事件 | 为什么收不到 | 处置 |
 | --- | --- | --- |
 | `load` | 官方在**首次 `centerAndZoom()` 之后**派发，而该调用发生在 `initializeView()` 里、句柄对外可见之前；`useMapEvent` 要等 `map` ref 变化才订阅 | 提供上下文级挂载点 `whenMapCreated`（`MapRuntime` → `MapContext`），`useMapEvent` 在**那之前**就把订阅建好（订阅仍归调用方作用域：那时组件还在） |
-| `destroy` | 子作用域在**地图销毁之前**就 stop 了，挂在调用方作用域上的订阅必然先被摘掉 | `MAP_CONTEXT_OWNED_EVENTS`（当前只有 `destroy`）：Map Context 路径下把订阅登记在**上下文的 `ResourceScope`** 上，随地图一起释放；组件卸载不摘（要提前停止用返回的 disposer） |
+| `destroy` | 子作用域在**地图销毁之前**就 stop 了，挂在调用方作用域上的订阅必然先被摘掉 | `MAP_CONTEXT_OWNED_EVENTS`（当前只有 `destroy`）：Map Context 路径下把订阅登记在**上下文的 `ResourceScope`** 上 —— 但**只在整图 teardown 时延长**（见决策 12 的修正） |
 
 **显式 `MapEventSource` 保持 SDK 订阅语义**（不提供这两个上下文能力）：`load` 在「订阅时地图已初始化」
 时可能收不到、`destroy` 只在订阅仍然存活时收得到。这条写进 `useMapEvent` 文档与 JSDoc，并有反向用例
@@ -240,6 +240,24 @@ Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用�
 
 **副效应**：`<BMap>` 自己的 map 事件订阅同样改用 `runtime.whenMapCreated(...)`（原来的构造选项
 `MapRuntimeOptions.onMapCreated` 被这个可订阅入口取代，一个机制服务两处）。
+
+### 12. `destroy` 的订阅寿命按「谁在消失」分档（评审第三轮修正）
+
+决策 11 第一版把 `destroy` 的订阅**无条件**交给上下文 scope：这修好了整图 teardown 的时序，但引入
+新缺陷（评审 P1）—— **子组件自己卸载而地图继续存活**（条件渲染 / Tab / 路由）时，订阅留在上下文的
+scope 里不释放，反复挂载卸载会累积旧 handler，地图最终销毁时把**已经卸载的组件**的回调也唤醒。
+
+修正：区分两种「订阅方消失」，判据是 `<BMap>` 在 `onBeforeUnmount` 置位的标记
+（`MapContext.isTearingDown()`；那一刻早于子树卸载，因此子组件在 `onScopeDispose` 里问得到）：
+
+| 场景 | `isTearingDown()` | 处置 |
+| --- | --- | --- |
+| **整张地图正在卸载**（`<BMap>` 卸载 / 路由离开整页） | `true` | `destroy` 订阅**留给上下文**（活到地图销毁那一刻，那里才回调 + 释放） |
+| **子组件自己卸载**（条件渲染 / Tab / 路由切页签） | `false` | 与普通事件一样**立即释放**（上下文 scope 也会摘掉记账） |
+
+门禁（评审点名要的那条）：`<BMap>` 保持存活、`destroy` 订阅子组件反复挂载 / 卸载 3 轮 ——
+每轮卸载后 `ctx.resources.size` 回到基线；最后再挂一个并卸载整棵树时，**只有当前还活着**的那个
+handler 被调用，前三个已卸载组件的 spy 均未被调用。
 
 ## 后果
 
@@ -288,9 +306,9 @@ Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用�
    `syncEnableProps` / 视野收敛——那属于「重试 = 重新装配」这个更大的问题（见 ADR
    `2026-09-14-map-controlled-state` 已知限制 7）。当前 `MapRuntime` 在 ready 之后不会重建地图实例，
    因此「按身份重建」这条分支目前是**防御性**的。
-9. **`useMapEvent('destroy')` 的订阅归地图所有**（决策 11）：Map Context 路径下它不随调用方组件卸载释放、
-   而是活到地图销毁那一刻（那时才回调 + 释放）。因此「组件提前卸载」不会提前停掉它 —— 需要提前停请用
-   返回的 disposer。显式 source 不受此规则影响（订阅归调用方）。
+9. **`useMapEvent('destroy')` 的订阅寿命分两档**（决策 11 / 12）：**整图 teardown** 时它延伸到地图销毁那一刻
+   （由上下文 scope 收尾），**子组件自己卸载**时立即释放。显式 source 不受此规则影响（订阅归调用方，且
+   `load` 的提前订阅能力也不可用）。
 10. **宽松拼写只有规范名保证精确类型**（评审 P2，选择「文档说明」而非「给兼容拼写建类型映射」）：
     运行时任意拼写都归一，但只有 `MapEventName` 的载荷推导是精确的。
 11. **`mousewheel.trend` / `zoomexceeded.targetZoom` 是 optional**：raw-only 字段（地图答不出「试图到达的
@@ -322,8 +340,9 @@ Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用�
   就绪即给值、未就绪=未知、引用不变（含 `watch` 不被唤醒 + **真实变化会唤醒**的正证）、容差、
   八个字段都是 ref、四个字段各自更新、标志起止与「同帧不倒置」、`moving` 只在真变化时唤醒、
   订阅 12 份落在 10 个事件类型（精确集合）、释放后不更新、未初始化视野如实上报。
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-EVENTS 一组 **15 条**组件级场景（含「Map Context 下的
-  `useMapEvent` 也能收到 `load` / `destroy`」与「显式 source 的订阅随组件卸载释放」两条生命周期门禁）；
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-EVENTS 一组 **17 条**组件级场景（含「Map Context 下的
+  `useMapEvent` 也能收到 `load` / `destroy`」「`destroy` 订阅只在整图 teardown 时延长寿命」
+  「首次 `initializeView` 失败后 retry 仍能收到 `load`」「显式 source 的订阅随组件卸载释放」四条生命周期门禁）；
   无条件订阅与
   handler 变更不丢事件、订阅覆盖全 Catalog、非函数 handler 不产生调用、事件转发与别名、`@click.once`、
   `@load`、`@destroy`、内联 handler 不重绑、高频合帧、**两张地图不串线**（`@` 与 `useMapEvent` 两条路径）、
@@ -362,6 +381,17 @@ Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用�
 | **[P2]** 合成 `destroy` 时 `DriverEvent.raw` 是「即将销毁的 Map 实例」而字段注释写的是「SDK 原始事件对象」 | **成立** | `raw` 的 JSDoc 补上这个唯一例外（避免 raw 逃生口在合成事件上出现意外形状） |
 
 **本轮新增单点反证 3 组**：`whenMapCreated` 接线、`whenMapCreated` 在 `MapContext` 上的暴露、上下文归属清单。
+
+## 评审修正（2026-09-14 第三轮）
+
+评审给出一轮复审：上一轮 `load/destroy` 主路径已通，但 `destroy` 的订阅寿命引入新缺陷 + 1 条 P2。
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** `destroy` 订阅无条件交给上下文 scope ⇒ 子组件单独卸载（条件渲染 / Tab / 路由）时旧订阅残留，反复挂载累积旧 handler，地图销毁时唤醒已卸载组件的回调 | **成立**。按评审建议先写门禁（图存活 + `destroy` 订阅子组件反复挂 3 次），红灯读数 `expected 49 to be 48`（每轮泄漏 1 条记账） | 决策 12：用 `<BMap>` 在 `onBeforeUnmount` 置位的 `isTearingDown()` 区分「整图 teardown」与「子组件自行卸载」；只有前者延长寿命。门禁同时断言「最终销毁时只有仍活着的那个 handler 被调用」 |
+| **[P2]** `MapRuntime.flushMapCreated()` 建图后清空注册 ⇒ 首次 `initializeView()` 失败后 `retry()` 创建第二张 map 时 `whenMapCreated` 不再触发，`load` 再次错过 | **成立** | 注册**存活到各自的 disposer / `runtime.dispose()`**（不再在建图后清空）；补 `fake.failNextInitializeView()` 故障注入（`FakeV4Map.failNextCenterAndZoom`，与既有 `failNextAddControl` 同形）与「失败 → retry → `load` 仍到达」用例 |
+
+**本轮新增单点反证 3 组**：不区分整图 teardown、`<BMap>` 不在 `beforeUnmount` 置位、`flushMapCreated` 又清空注册。
 
 ## 非目标
 

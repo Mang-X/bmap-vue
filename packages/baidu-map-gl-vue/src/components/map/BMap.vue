@@ -3,6 +3,7 @@ import {
   computed,
   inject,
   onActivated,
+  onBeforeUnmount,
   onDeactivated,
   onMounted,
   onUnmounted,
@@ -71,6 +72,15 @@ const props = withDefaults(defineProps<BMapProps>(), {
 export interface MapReadyPayload extends MapReadyContext {
   container: HTMLElement;
 }
+
+/**
+ * 承载本图的地图组件是否已开始卸载（M4-EVENTS / #28）。
+ *
+ * `onBeforeUnmount` 置位 —— 早于子树卸载（Vue 的顺序：父 `beforeUnmount` → 父作用域 stop →
+ * 卸载子树 → 父 `unmounted`，地图销毁在最后一步）。`useMapEvent` 靠它区分「整图 teardown」
+ * （`destroy` 订阅要活到地图销毁）与「子组件自行卸载」（订阅照常释放）。
+ */
+let tearingDown = false;
 
 /**
  * map 事件的 emits 声明（M4-EVENTS / #28）：名字与载荷来自 `core/events/eventCatalog` 的
@@ -769,6 +779,11 @@ async function boot() {
   }
 }
 
+onBeforeUnmount(() => {
+  // 必须在子树卸载**之前**置位：子组件的作用域在子树卸载时停止，那时它们要能问出「整图在 teardown」
+  tearingDown = true;
+});
+
 onUnmounted(() => {
   runtime.dispose();
   runtimeRef.value = null;
@@ -843,6 +858,8 @@ const context: MapContext = {
   // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
   whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
     runtime.whenMapCreated(callback),
+  // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
+  isTearingDown: () => tearingDown,
   retry: () => runtime.retry(),
   dispose: () => runtime.dispose(),
 };
@@ -905,6 +922,8 @@ defineExpose({
   // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
   whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
     runtime.whenMapCreated(callback),
+  // 整图卸载标记：子组件的 useMapEvent 据此决定 `destroy` 订阅是否延长到地图销毁那一刻
+  isTearingDown: () => tearingDown,
   retry: () => runtime.retry(),
   suspend: (reason?: unknown) => runtime.suspend(reason),
   resume: (reason?: unknown) => runtime.resume(reason),

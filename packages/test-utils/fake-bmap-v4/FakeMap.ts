@@ -122,6 +122,13 @@ export class FakeV4Map extends FakeV4EventTarget {
    */
   failNextAddControl: Error | null = null
   failNextAddLayer: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
+   *
+   * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
+   * `MapRuntime` 的 `whenMapCreated` 注册必须在失败之后仍然有效，第二张图的 `load` 才收得到。
+   */
+  failNextCenterAndZoom: Error | null = null
 
   /* ------------------------------------------------------------------ 覆盖物 */
 
@@ -296,6 +303,11 @@ export class FakeV4Map extends FakeV4EventTarget {
     options?: Record<string, unknown>,
   ): void {
     this.callLog.push('centerAndZoom')
+    if (this.failNextCenterAndZoom) {
+      const error = this.failNextCenterAndZoom
+      this.failNextCenterAndZoom = null
+      throw error
+    }
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
     if (typeof zoom === 'number') this.zoom = zoom
     this.lastViewOptions = options ?? null

@@ -148,11 +148,17 @@ export class MapRuntime {
     }
   }
 
+  /**
+   * 放行 `whenMapCreated` 的注册。
+   *
+   * **刻意不清空**：注册活到各自的 disposer 或 `dispose()`。理由是「建图成功但 `initializeView()`
+   * 失败」这条路径 —— 那时回调已经跑过一次，而 `retry()` 会创建**第二张** map，`load` 只能靠同一个
+   * 注册再放行一次（评审第二轮 P2）。清空会让第二张图的 `load` 永远收不到。
+   */
   private flushMapCreated(ready: MapReadyContext): void {
     for (const callback of [...this.mapCreatedCallbacks]) {
       this.invokeMapCreated(callback, ready);
     }
-    this.mapCreatedCallbacks.clear();
   }
 
   async mount(): Promise<MapReadyContext> {

@@ -188,9 +188,13 @@ export function useMapEvent<K extends string>(
 
   if (getCurrentScope()) {
     onScopeDispose(() => {
-      // 上下文归属的订阅（生命周期结束事件）**不**在这里释放：它要活到地图销毁那一刻，
-      // 由上下文的 ResourceScope 收尾（见文件头「生命周期事件」一节）。
-      if (!active?.contextOwned) releaseActive();
+      // 上下文归属的订阅（生命周期结束事件）**只在整图 teardown 时**延长寿命：
+      // 那时地图马上要被销毁，订阅要活到那一刻；而「子组件自己卸载」（条件渲染 / Tab / 路由）
+      // 必须照常释放 —— 否则反复挂载卸载会累积旧 handler，地图最终销毁时把已卸载组件的回调
+      // 也一起唤起来（评审 P1）。
+      const keepForTeardown =
+        active?.contextOwned === true && source.isTearingDown?.() === true;
+      if (!keepForTeardown) releaseActive();
       stopWatch();
       stopEarly?.();
     });

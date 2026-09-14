@@ -56,6 +56,17 @@ export interface MapRuntimeShape {
    * 代价是可能错过 `load`。
    */
   whenMapCreated?(callback: (ready: MapReadyContext) => void): () => void;
+  /**
+   * 承载这张地图的组件是否**已经开始卸载**（M4-EVENTS / #28）。
+   *
+   * `<BMap>` 在 `onBeforeUnmount` 里置位 —— 那一刻早于子树卸载（Vue 的顺序：父 `beforeUnmount` →
+   * 父作用域 stop → 卸载子树 → 父 `unmounted`，地图销毁在最后一步）。
+   * `useMapEvent` 用它区分两种「订阅方消失」：
+   *
+   * - **整图 teardown**：地图马上要被销毁 ⇒ 生命周期结束事件（`destroy`）的订阅要活到那一刻；
+   * - **子组件自行卸载**（条件渲染 / Tab / 路由）：地图还在 ⇒ 订阅照常释放，不能残留。
+   */
+  isTearingDown?(): boolean;
   retry?(): Promise<MapReadyContext>;
   dispose(): void;
 }

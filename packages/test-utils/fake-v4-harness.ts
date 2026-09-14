@@ -77,6 +77,12 @@ export interface FakeV4Harness {
   openInfoWindows(): number;
   /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
   mapsCreated(): number;
+  /**
+   * 让**下一张**地图的首次 `initializeView()` 失败（建图成功、初始化视野抛错）。
+   *
+   * 用来驱动「失败 → `retry()` 重建」这条路径（`whenMapCreated` 的注册必须在失败后仍然有效）。
+   */
+  failNextInitializeView(error?: Error): void;
   /** 最后一张地图当前的视野（M4-STATE / #27 的领域读数）。 */
   view(): FakeV4View;
   /** 最后一张地图收到的视野命令次数（按字段分开计数）。 */
@@ -278,6 +284,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       overlayPositions: () => toPositions(lastMap().overlays),
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
+      failNextInitializeView: (error) => fake.failNextInitializeView(error),
       view: () => {
         const map = lastMap();
         return {

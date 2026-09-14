@@ -290,6 +290,12 @@ export interface FakeBMapV4Namespace {
 export interface FakeBMapV4 {
   namespace: FakeBMapV4Namespace
   /**
+   * 测试故障注入：让**下一张**地图的首次 `centerAndZoom()` 抛错（`initializeView()` 因此失败）。
+   *
+   * 用来驱动「建图成功 → 初始化视野失败 → `retry()` 重建」这条路径；不传则用默认错误。
+   */
+  failNextInitializeView(error?: Error): void
+  /**
    * 诊断计数（泄漏门禁 + 活动口径）。
    *
    * `stats` 是同一对象的别名（#24 之前的名字只统计监听器）；新代码请用 `diagnostics`，
@@ -361,9 +367,20 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdPanoramas: FakeV4Panorama[] = []
   const createdPanoramaServices: FakeV4PanoramaService[] = []
 
+  /**
+   * 命名空间级一次性故障注入：**下一张**地图的首次 `centerAndZoom()` 抛错。
+   *
+   * 由 `fake.failNextInitializeView()` 置位、`MapClass` 构造时拷进实例（地图实例由 Driver 在
+   * `mount()` 里创建，测试无法在创建前拿到句柄）。
+   */
+  let nextCenterAndZoomError: Error | null = null
   class MapClass extends FakeV4Map {
     constructor(container: string | HTMLElement, options?: Record<string, unknown>) {
       super(container, options ?? {}, stats)
+      if (nextCenterAndZoomError) {
+        this.failNextCenterAndZoom = nextCenterAndZoomError
+        nextCenterAndZoomError = null
+      }
       createdMaps.push(this)
     }
   }
@@ -735,6 +752,9 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
 
   return {
     namespace,
+    failNextInitializeView: (error?: Error) => {
+      nextCenterAndZoomError = error ?? new Error('initializeView failed')
+    },
     diagnostics: stats,
     stats,
     runtimeExtensions: new FakeV4RuntimeExtensions(namespace),

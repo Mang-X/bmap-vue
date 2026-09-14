@@ -15,9 +15,9 @@
   重渲染时**不比较 emit listener**（`hasPropsChanged` 显式跳过），因此「监听器从 `undefined` 变成
   函数」不会让 `<BMap>` 重渲染 —— 按需订阅的实现会静默丢事件。未绑定 handler 的事件由 Vue 丢弃。
 - **`.once` 可用**：`@click.once` / `@styleLoaded.once` 按 Vue 语义只触发一次。
-- **生命周期两端可用**：`<BMap @load>` / `@destroy` 与 `useMapEvent('load' | 'destroy')` 都收得到
-  （`load` 用上下文的「地图已创建」挂载点提前订阅；`destroy` 的订阅由地图上下文持有，因为组件卸载
-  先于地图销毁）。显式 `MapEventSource` 仍是 SDK 订阅语义。
+- **生命周期两端可用**：`<BMap @load>` / `@destroy` 与 `useMapEvent('load' | 'destroy')` 都收得到。
+  `load` 用上下文的「地图已创建」挂载点提前订阅；`destroy` 的订阅在**整张地图正在卸载**时延伸寿命到
+  销毁那一刻，而子组件单独卸载（条件渲染 / Tab / 路由）时照常释放。显式 `MapEventSource` 仍是 SDK 订阅语义。
 - 高频事件（`mousemove` / `touchmove` / `dragging` / `moving` / `zooming`）**一帧最多提交一次**，
   取该帧最后一次的载荷；`mousewheel` 刻意不合帧（每次都有独立的 `trend`）。
 - 载荷新增 `trend`（`mousewheel`）、`mapType` / `exMapType`（`maptypechange`）三个归一化字段；

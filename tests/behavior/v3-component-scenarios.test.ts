@@ -1261,6 +1261,54 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     harness.assertIdle("useMapEvent：生命周期事件");
   });
 
+  it("destroy 订阅只在整图 teardown 时延长寿命：子组件自行卸载后回到基线、也不残留回调", async () => {
+    const spies: Array<ReturnType<typeof vi.fn>> = [];
+    let scopeSize = (): number => -1;
+    const ScopeProbe = defineComponent({
+      setup() {
+        const ctx = useRequiredMapContext();
+        scopeSize = () => ctx.resources.size;
+        return () => h("span", "scope-probe");
+      },
+    });
+    const DestroyProbe = defineComponent({
+      setup() {
+        const spy = vi.fn();
+        spies.push(spy);
+        useMapEvent("destroy", spy);
+        return () => h("span", "destroy-probe");
+      },
+    });
+
+    const props = ref<Record<string, unknown>>({ provider: harness.provider(), show: false });
+    const { wrapper } = await mountControlledMap(() => props.value, {
+      children: () => [h(ScopeProbe), props.value.show ? h(DestroyProbe) : null],
+    });
+    const baseline = scopeSize();
+
+    // 条件渲染 / Tab 场景：图还活着，子组件反复挂载卸载
+    for (let round = 0; round < 3; round += 1) {
+      props.value = { ...props.value, show: true };
+      await settleProps();
+      props.value = { ...props.value, show: false };
+      await settleProps();
+      expect(scopeSize(), `第 ${round + 1} 轮卸载后资源计数回到基线`).toBe(baseline);
+    }
+    expect(spies).toHaveLength(3);
+
+    // 最后再挂一个，然后卸载整棵树：只有**当前还活着**的那个收到 destroy
+    props.value = { ...props.value, show: true };
+    await settleProps();
+    const liveSpy = spies[3]!;
+    await unmountAndSettle(wrapper);
+
+    expect(liveSpy, "整图 teardown 时仍活着的订阅必须收到 destroy").toHaveBeenCalledTimes(1);
+    for (const [index, spy] of spies.slice(0, 3).entries()) {
+      expect(spy, `第 ${index + 1} 个已卸载组件的 handler 不得被回调`).not.toHaveBeenCalled();
+    }
+    harness.assertIdle("useMapEvent：destroy 订阅寿命");
+  });
+
   it("显式 source 的 useMapEvent 在组件提前卸载后不再收到 destroy（订阅归调用方）", async () => {
     const destroySpy = vi.fn();
     let stop: (() => void) | null = null;
@@ -1294,6 +1342,37 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     await unmountAndSettle(wrapper);
     expect(destroySpy).not.toHaveBeenCalled();
     harness.assertIdle("useMapEvent：显式 source 的 destroy");
+  });
+
+  it("首次 initializeView 失败后 retry：第二张地图的 load 仍能收到", async () => {
+    const loadSpy = vi.fn();
+    const LoadProbe = defineComponent({
+      setup() {
+        useMapEvent("load", loadSpy);
+        return () => h("span", "load-probe");
+      },
+    });
+
+    // 故障注入：第一次初始化视野失败（句柄已创建 ⇒ whenMapCreated 已经放过一次）
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(() => controlledViewProps({ heading: 30 }), {
+      children: () => [h(LoadProbe)],
+    });
+    // 建图成功但初始化失败：状态是 error、组件如实 emit error（`boot()` 的 rejection 被 onMounted 吞掉，
+    // 因此这里断言的是状态与回执，而不是 errorHandler）
+    expect((bmap.vm as unknown as { status: string }).status, "第一次初始化失败 ⇒ error").toBe("error");
+    expect(bmap.emitted("error"), "失败要如实回执").toHaveLength(1);
+    expect(loadSpy, "失败的那次没有 load").not.toHaveBeenCalled();
+    expect(harness.mapsCreated(), "第一张地图确实创建过").toBeGreaterThan(0);
+
+    // retry：第二张地图走同一条 create → initializeView 路径
+    await (bmap.vm as unknown as { retry(): Promise<unknown> }).retry();
+    await flushPromises();
+    await nextTick();
+
+    expect(loadSpy, "retry 之后 load 仍必须到达（whenMapCreated 不能在建图后就注销）").toHaveBeenCalledTimes(1);
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("useMapEvent：retry 后的 load");
   });
 
   it("useMapStatus：Map Context 下的只读 refs 跟随用户交互，卸载后监听器归零", async () => {

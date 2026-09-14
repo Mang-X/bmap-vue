@@ -40,6 +40,14 @@ export interface MapEventSource {
    */
   whenMapCreated?: (callback: (ready: MapReadyContext) => void) => () => void;
   /**
+   * 承载这张地图的组件是否已开始卸载（`MapContext` 自带）。
+   *
+   * 生命周期结束事件（`destroy`）的订阅**只在整图 teardown 时**才延长寿命：`true` ⇒ 订阅留给
+   * 上下文收尾（活到地图销毁），`false`/缺失 ⇒ 调用方作用域停止时就释放（条件渲染 / Tab / 路由
+   * 这类「子组件自己卸载」不能残留旧 handler）。
+   */
+  isTearingDown?: () => boolean;
+  /**
    * 上下文级订阅归属（`MapContext` 自带 `resources`）：**生命周期结束事件**（`destroy`）的订阅
    * 登记在这里而不是调用方组件的作用域 —— 组件卸载先于地图销毁，挂在自己作用域上必然收不到
    * （见 ADR `2026-09-14-map-events-and-status` 决策 11）。
