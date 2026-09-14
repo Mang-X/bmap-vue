@@ -195,6 +195,8 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 | 对外通知 | `onCenterChange` / `onZoomChange` / … props | `update:center` / … + `v-model` | 框架语义差异（Vue 用 emit），不照搬 |
 | 「加载期间（SDK 就绪前）到达的受控值」 | 建图 effect 在 `status === 'ready'` 时才运行，闭包里读到的是**当时**的 props ⇒ 天然不丢 | 初值在 setup 阶段被冻结成快照 ⇒ 会丢；由 ready 之前的 `syncControlledView()` 收敛（决策 8） | **本库补了这一步**（评审第一轮 P1） |
 | 「用户交互后是否回退到受控值」 | 否 | 否 | 同源；写进「已知限制」 |
+| 发布产物形态 | ESM + CJS（`formats: ['es', 'cjs']`，无 IIFE / `unpkg` / `jsdelivr`） | ESM + IIFE（M7-08 历史产物） | 本库多一个未文档化的 IIFE 档；它的 dev 判定在该档被折叠成生产（已知限制 8） |
+| `devWarn` 的 dev 判定 | `globalThis.process?.env?.NODE_ENV`（浏览器取不到 `process` ⇒ 按 **dev** 处理，会告警；但 webpack 的生产构建**折不了**这个链） | `process.env.NODE_ENV` + 模块内 `declare const process`（Vite / webpack 都能折叠；IIFE 档在构建期折成生产） | **本库更严**：打包器消费者不会在生产里漏出告警；代价是裸 `<script>` 档静默 |
 
 ### 8. 加载窗口内的受控值：ready 之前按当前 props 收敛
 
@@ -312,8 +314,17 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
 7. **`retry()` 之后不重跑装配**：`defineExpose().retry()` 只透传 `runtime.retry()`，重挂之后
    `applyMapType` / `syncEnableProps` / `bindViewEvents` / 视野收敛都不会重新执行（见决策 8 末段）。
 8. **IIFE 档（`<script>` 直引）固定按生产处理**：那一档在构建时就把 `process.env.NODE_ENV` 折叠成
-   `"production"`（浏览器里没有 `process`），因此它的使用者看不到用法告警。要按环境区分就得多发一个
-   dev 文件（Vue 的 `vue.global.js` / `vue.global.prod.js` 做法），本库暂不引入。
+   `"production"`（浏览器里没有 `process`），因此它的使用者看不到用法告警。**刻意不为它再发一份 dev
+   文件**，依据两条事实（2026-09-14 与维护者确认）：
+   - **官方参考实现根本没有这条路径**：`huiyan-fe/react-bmap@2.0.1` 的 `build.lib.formats` 只有
+     `['es', 'cjs']`，`package.json` 里也没有 `unpkg` / `jsdelivr` / `browser` 字段 ⇒ 它不发布
+     IIFE/global 产物，自然不存在「拆两份」。本库这一档是 M7-08 的历史产物，`docs` / `README`
+     至今零引用。
+   - 要按环境区分就得像 Vue 那样发 `*.global.js`（dev，未压缩 446KB）+ `*.global.prod.js`
+     （生产，184KB），而且「默认文件名」的语义一旦发布不可逆：按 Vue 约定会让现有引用突然变重
+     2.4 倍并开始出告警。
+   把「让 `<script>` 用户也看到告警」的成本花在一条没有消费者、也没有文档的路径上不划算。真需要
+   诊断的人走 ESM/npm 路径即可（消费方打包器会折叠，见决策 4）。
 
 ## 验证
 
