@@ -16,6 +16,7 @@
  */
 import { computed, onScopeDispose, shallowRef, watch, type ComputedRef, type ShallowRef } from "vue";
 import type { BMapClient } from "../client/types";
+import { logger } from "../core/logger";
 import type { MapContext } from "../core/context/types";
 import type { Capability } from "../driver/capability/catalog";
 import type { MapHandle } from "../driver/types/handles";
@@ -26,6 +27,18 @@ import {
   toServiceErrorInfo,
   type BMapServiceStatus,
 } from "../core/services";
+
+/**
+ * 新调用取代在飞调用时的三种处置。
+ *
+ * `"refuse"` 给「不能取代的那一类调用」用（LocalSearch 的 `gotoPage`：它是对上一条结果的延续，
+ * 在上一次检索还没结算时没有意义）。
+ */
+export type SupersedeMode = "cancel" | "recreate" | "refuse";
+
+export type SupersedePolicy<TArgs extends unknown[]> =
+  | Exclude<SupersedeMode, "refuse">
+  | ((...args: TArgs) => SupersedeMode);
 
 /** 传给 `create` / `invoke` 的上下文（Client 已就绪、能力已通过）。 */
 export interface BMapServiceInvokeContext {
@@ -69,11 +82,27 @@ export interface UseBMapServiceTaskOptions<
    */
   project?: (data: TDriver, ...args: TArgs) => TResult;
   /**
-   * 释放服务实例（可选）。只有**有释放入口**的服务需要给：当前是 LocalSearch
+   * 释放服务实例（可选）。只有**有清理入口**的服务需要给：当前是 LocalSearch
    * （`disposeLocalSearch`）；其余服务（Geocoder / Convertor / Boundary / Geolocation /
    * LocalCity）官方没有销毁入口，随 Client 被 GC 回收。
+   *
+   * 释放失败**不吞掉**：失败的实例留在待释放队列里，下一次释放（下一次取代 / `invalidateService()`
+   * / scope 卸载）会重试，并告警一次——否则「释放失败」会变成静默泄漏。
    */
   release?: (context: BMapServiceInvokeContext, handle: THandle) => void;
+  /**
+   * 新调用取代**在飞调用**时的策略（默认 `"cancel"`）。
+   *
+   * - `"cancel"`：只逻辑取消上一次调用，实例**复用**（适用于回包归属不依赖实例身份的 SDK）。
+   * - `"recreate"`：取消 + **释放旧实例**，并为新调用建一个新实例。该策略下，上一次调用以
+   *   `canceled` / `timeout` 收场后，下一次调用同样会重建实例（那两种情况下 SDK 侧可能仍有回包
+   *   在路上，旧实例不再可用）——适用于**归属依赖实例身份**的 SDK（LocalSearch）。
+   * - 函数形式：**按调用参数逐次决定**，可返回 `"refuse"`：本次调用不能取代在飞调用（或实例已
+   *   过期），直接以 `failed` 结算（说明取 `refuseMessage`），**不**发起请求。
+   */
+  supersede?: SupersedePolicy<TArgs>;
+  /** `supersede` 判定为 `"refuse"` 时的说明（进 `error.message`） */
+  refuseMessage?: string;
 }
 
 export interface BMapServiceTask<TResult, TArgs extends unknown[], THandle = unknown> {
@@ -95,15 +124,11 @@ export interface BMapServiceTask<TResult, TArgs extends unknown[], THandle = unk
   cancel: () => void;
   /** 取消 + 清空 data/error/status。 */
   reset: () => void;
-  /** 丢弃缓存的服务实例（下一次调用重建）；会先取消在飞调用并释放旧实例。 */
-  invalidateService: () => void;
   /**
-   * 当前缓存的服务实例；**不会创建**实例（Client 未就绪或还没调用过时为 `null`）。
-   *
-   * 给「不需要发请求、但要操作已有实例」的动作留的口子（当前只有 LocalSearch 的
-   * `clearLocalSearch` —— 它清的是 SDK 侧已产生的可见结果，不是一次调用）。
+   * 丢弃缓存的服务实例（下一次调用重建）：先取消在飞调用，再释放旧实例，并把实例标记为过期
+   * ——因此 `supersede` 判定为 `"refuse"` 的那些调用（如 LocalSearch 的 `gotoPage`）随后会被拒绝。
    */
-  peekService: () => THandle | null;
+  invalidateService: () => void;
 }
 
 export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TResult = TDriver>(
@@ -125,9 +150,32 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
   let disposed = false;
   let activeCall: ServiceCall<TDriver> | null = null;
   let activeController: AbortController | null = null;
-  let cached:
-    | { client: BMapClient; handle: THandle; context: BMapServiceInvokeContext }
-    | null = null;
+  interface CachedService {
+    client: BMapClient;
+    handle: THandle;
+    context: BMapServiceInvokeContext;
+  }
+
+  let cached: CachedService | null = null;
+  /**
+   * 释放失败、等待重试的实例。
+   *
+   * 为什么不是「释放失败就丢掉引用」：`release()` 的失败通常意味着 SDK 侧的清理没走完（例如
+   * `clearResults()` 抛错），把引用丢掉就既无法重试、也没有任何可观察信号 —— 静默泄漏。
+   * 失败时保留引用 + 告警，下一次释放（下一次取代 / `invalidateService()` / scope 卸载）重试。
+   */
+  const pendingReleases: CachedService[] = [];
+  /**
+   * 缓存实例是否**不再是可用的请求通道**。
+   *
+   * 两种来源：① 上一次调用以 `canceled` / `timeout` 收场（SDK 侧的回包可能仍在路上）；
+   * ② `invalidateService()`。只对声明了 `supersede` 策略的服务生效（默认策略下恒为 `false`，
+   * 其余服务的行为完全不变）。
+   */
+  let instanceStale = false;
+  /** 声明了取代策略（`"recreate"` 或函数形式）的服务才需要「过期即重建」。 */
+  const supersedePolicy = options.supersede;
+  const marksStale = supersedePolicy !== undefined && supersedePolicy !== "cancel";
 
   const invokeContext = (
     client: BMapClient,
@@ -149,15 +197,30 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
     { immediate: true },
   );
 
+  /** 释放一个实例；失败时告警并保留以便重试（返回是否成功）。 */
+  const tryRelease = (entry: CachedService): boolean => {
+    if (!options.release) return true;
+    try {
+      options.release(entry.context, entry.handle);
+      return true;
+    } catch (error) {
+      logger.warn(
+        `useBMapServiceTask: 释放 ${options.capability} 的实例失败，已保留引用待下一次释放重试（` +
+          `${(error as Error)?.message ?? String(error)}）`,
+      );
+      return false;
+    }
+  };
+
   const releaseCached = (): void => {
     const entry = cached;
     cached = null;
-    if (!entry || !options.release) return;
-    try {
-      options.release(entry.context, entry.handle);
-    } catch {
-      // 释放失败不改变本地状态：实例缓存已经丢弃，下一次调用会重建；
-      // 把失败吞掉是刻意的——否则「释放一个已经出问题的实例」会连累取消路径。
+    if (entry && !tryRelease(entry)) pendingReleases.push(entry);
+    // 顺带重试历史失败项（释放是幂等的：`disposeLocalSearch` / `clearResults` 都可重复调用）；
+    // 仍失败就继续留着，等下一次或 scope 卸载
+    for (let index = pendingReleases.length - 1; index >= 0; index -= 1) {
+      const pending = pendingReleases[index];
+      if (pending && tryRelease(pending)) pendingReleases.splice(index, 1);
     }
   };
 
@@ -173,6 +236,12 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
     const handle = options.create(context);
     cached = { client, handle, context };
     return handle;
+  };
+
+  /** 解析本次调用的取代策略（未声明时是默认的 `"cancel"`）。 */
+  const resolveSupersede = (args: TArgs): SupersedeMode => {
+    if (typeof supersedePolicy === "function") return supersedePolicy(...args);
+    return supersedePolicy ?? "cancel";
   };
 
   /**
@@ -233,12 +302,36 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
   };
 
   async function execute(...args: TArgs): Promise<ServiceResult<TResult>> {
+    // **取代判定必须在 `guard.next()` 之前**：拒绝本次调用时不能作废在飞调用 —— 它还在跑，
+    // 它的结果仍然属于它自己。
+    const mode = resolveSupersede(args);
+    const busy = activeCall !== null || instanceStale;
+    if (busy && mode === "refuse") {
+      const info = {
+        code: "BMAP_SERVICE_FAILED",
+        // 拒绝是「已结算的失败」，**不写状态**：`status` / `error` 属于在飞的那一次调用
+        message:
+          options.refuseMessage ??
+          "上一次调用尚未结算，本次调用被拒绝（它不能取代在飞调用，也没有独立的结果可归属）",
+      };
+      return settledServiceResult<TResult>("failed", info);
+    }
+
     const id = guard.next();
-    // 上一轮仍在飞 ⇒ 逻辑取消（最新者胜）。SDK 侧请求收不回，但它的回包会被序列号挡掉，
-    // 且不会有人把它当成「本次的结果」。
-    activeCall?.cancel();
-    activeCall = null;
-    activeController?.abort("superseded");
+    if (activeCall) {
+      // 上一轮仍在飞 ⇒ 逻辑取消（最新者胜）。SDK 侧请求收不回，但它的回包会被序列号挡掉，
+      // 且不会有人把它当成「本次的结果」。
+      activeCall.cancel();
+      activeCall = null;
+      activeController?.abort("superseded");
+      activeController = null;
+    }
+    if (busy && mode === "recreate") {
+      // 该 SDK 的回包归属依赖**实例身份**：旧实例（含它交付出去、可能仍画在地图上的结果）
+      // 交还给 Driver 清理，本次调用用新实例。
+      releaseCached();
+      instanceStale = false;
+    }
     const controller = new AbortController();
     activeController = controller;
 
@@ -266,6 +359,12 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
         return settledServiceResult<TResult>("canceled");
       }
       const result = toPublicResult(driverResult, args);
+      if (marksStale) {
+        // `canceled` / `timeout` 都意味着 SDK 侧的回包**可能仍在路上**（那时槽位仍被占用），
+        // 因此这个实例不再是可靠的请求通道；正常结算（含服务端报失败）则表示回调已到达、
+        // 槽位已释放，实例可以继续用（`gotoPage` 依赖这一点）。
+        instanceStale = driverResult.status === "canceled" || driverResult.status === "timeout";
+      }
       applyResult(result);
       return result;
     } catch (caught) {
@@ -292,10 +391,14 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
 
   function cancel(): void {
     guard.invalidate();
+    const hadInflight = activeCall !== null;
     activeCall?.cancel();
     activeCall = null;
     activeController?.abort("canceled");
     activeController = null;
+    // 取消的是**还在跑**的调用 ⇒ SDK 侧的回包可能仍在路上，实例不再可靠（下一次调用重建）。
+    // 没有在飞调用时 cancel() 是 no-op，不能因此把实例标记为过期。
+    if (hadInflight && marksStale) instanceStale = true;
     if (disposed) return;
     // 取消不是失败：状态回到 `idle`，data 保留（「上一次的结果」仍在，调用方自己决定要不要清）
     status.value = "idle";
@@ -314,6 +417,9 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
   function invalidateService(): void {
     cancel();
     releaseCached();
+    // 明确要求「丢弃实例」⇒ 下一次调用重建（`"refuse"` 类调用也会因此被拒绝：
+    // 例如 `gotoPage` 在结果被清掉 / 实例被丢弃之后没有意义）
+    instanceStale = true;
   }
 
   onScopeDispose(() => {
@@ -339,6 +445,5 @@ export function useBMapServiceTask<TDriver, THandle, TArgs extends unknown[], TR
     cancel,
     reset,
     invalidateService,
-    peekService: () => cached?.handle ?? null,
   };
 }

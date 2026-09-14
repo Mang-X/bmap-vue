@@ -12,6 +12,15 @@
  *
  * 服务默认只依赖 Client（`<BMapProvider>` 子树即可用）；**要绘制结果就必须显式传 MapHandle**：
  * `renderOptions.map`（绘制出来的覆盖物所有权因此可验证，`clear()` / 卸载时由 Driver 收回）。
+ *
+ * **并发语义（PR #89 评审后定稿）**：官方只承诺**单次多关键字检索内部**的顺序，**没有**承诺多次
+ * 请求之间的回调顺序，`keyword` 也不是请求身份——因此回包归属只能靠**实例身份**：
+ *
+ * - 新 `search*` 取代在飞检索时，本 composable **废弃旧实例**（释放它 → 公开的 `clearResults()`
+ *   顺带清掉它画出的标注），并为新检索建一个新实例。旧的迟到回包只会落到旧实例上，不会污染新结果；
+ * - `cancel()` / 超时之后，实例**不再复用**（那时 SDK 侧可能仍有回包在路上）：下一次 `search*` 建新实例；
+ * - `gotoPage` 是对**上一条结果**的延续，因此在「上一次还没结算」或「实例已过期」时**被拒绝**
+ *   （`failed` + 说明），而不是让 SDK 空转等超时。
  */
 import { toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { MapHandle } from "../driver/types/handles";
@@ -215,6 +224,13 @@ export function useBMapLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOpti
       release: (context: BMapServiceInvokeContext, handle: ServiceHandle<"service:local-search">) => {
         jsapiV4ServicesOf(context.client).disposeLocalSearch(handle);
       },
+      // 归属依赖实例身份（见文件头）：检索类调用取代在飞调用时换新实例；翻页必须落在同一条
+      // 结果集上，因此在「未结算 / 实例已过期」时拒绝，而不是让它空转。
+      supersede: (operation: BMapLocalSearchOperation) =>
+        operation.kind === "page" ? "refuse" : "recreate",
+      refuseMessage:
+        "上一次检索还没结算（或它的结果已被清空）：翻页是对同一条结果集的延续，此时没有意义；" +
+        "请等它结算，或重新 search()",
     },
   );
 
@@ -245,15 +261,17 @@ export function useBMapLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOpti
   const gotoPage = (page: number) => task.execute({ kind: "page", page });
 
   /**
-   * 清空检索结果：同时清掉 SDK 侧已产生的可见结果（地图标注 / 结果面板）与本地状态。
+   * 清空检索结果：清掉 SDK 侧已画出的标注 / 结果面板与本地状态。
    *
-   * 与 `cancel()` 的区别：`cancel()` 只放弃**在飞请求**的结果，已经画出来的结果不动；
-   * `clear()` 是「把结果丢掉」。SDK 的 `clearResults` 没有回调，因此本方法同步完成。
+   * 实现上是**释放当前实例**（`disposeLocalSearch` → 公开的 `clearResults()`）：LocalSearch 的
+   * 结果集与绘制物都挂在实例上，丢弃实例是唯一能同时清干净两者、又不留下「实例还活着但结果已被
+   * 清掉」这种中间态的入口（那种中间态下的 `gotoPage` 只会空转到超时）。下一次 `search()` 会
+   * 建一个新实例。SDK 侧没有回调，因此本方法同步完成。
+   *
+   * 与 `cancel()` 的区别：`cancel()` 只放弃**在飞请求**的结果，已经画出来的结果不动。
    */
   const clear = (): void => {
-    const client = ctx.client.value;
-    const handle = task.peekService();
-    if (client && handle) jsapiV4ServicesOf(client).clearLocalSearch(handle);
+    task.invalidateService();
     task.reset();
   };
 

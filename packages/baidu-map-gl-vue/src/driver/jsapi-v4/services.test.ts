@@ -32,8 +32,10 @@ import type {
   BoundaryRings,
   GeocodedAddress,
   JsapiV4ServiceDriver,
+  LocalSearchOptions,
   LocalSearchResult,
 } from "../types/services";
+import type { Point } from "../types/geometry";
 
 let fake: FakeBMapV4;
 let registry: JsapiV4HandleRegistry;
@@ -1197,7 +1199,7 @@ describe("v4 Service Facet：Autocomplete 的回包归属（PR #63 复审 P2-1�
 
 describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
   /** 纯 headless 实例：不传 renderOptions，因此不会在任何地图上绘制覆盖物。 */
-  function localSearchWith(location: unknown = "北京市", options?: Record<string, unknown>) {
+  function localSearchWith(location: string | Point = "北京市", options?: LocalSearchOptions) {
     return services.createLocalSearch(location, options);
   }
 
@@ -1384,41 +1386,6 @@ describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
     expect(result.error).toBeNull();
   });
 
-  it("超时：给出 timeout；迟到回包由墓碑吸收，同关键词重查仍然可用", async () => {
-    vi.useFakeTimers();
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    // 手动时序：**回包真的排进了队列**（`respond = false` 那种「压根没回包」的写法
-    // 会让下面的断言恒真——门禁空转）
-    raw.queue.auto = false;
-
-    const call = services.search(handle, "餐厅");
-    vi.advanceTimersByTime(15000);
-    expect((await call.result).status).toBe("timeout");
-    // 正证守卫：确实有一个迟到回包在飞
-    expect(raw.queue.pending, "迟到回包必须真的在队列里").toBe(1);
-
-    // 关键时序：**在迟到回包到达之前**重查同一个关键词。超时把槽位降级成了墓碑，
-    // 因此互斥规则不再挡它（若没降级，这里会以 failed(BMAP_SERVICE_FAILED) 被拒绝）。
-    const retried = services.search(handle, "餐厅");
-    expect(
-      raw.callLog.filter((entry) => entry.startsWith("search:餐厅")),
-      "重查必须真的落到 SDK（正证）",
-    ).toHaveLength(2);
-    // 两个槽位：墓碑 + 新请求
-    expect(raw.queue.pending).toBe(2);
-
-    // 迟到回包先到：被墓碑吸收（不复活已超时的调用），新请求的回包随后结算自己
-    expect(raw.queue.flush()).toBe(2);
-    expect((await call.result).status, "迟到回包不得复活已超时的调用").toBe("timeout");
-    const settled = await retried.result;
-    expect(settled.status).toBe("success");
-    expect((settled.data as LocalSearchResult[])[0]?.keyword).toBe("餐厅");
-
-    services.disposeLocalSearch(handle);
-    vi.useRealTimers();
-  });
-
   it("空关键字 / 非法关键字数组：BMAP_INVALID_ARGUMENT，一次都不落到 SDK", async () => {
     const handle = localSearchWith();
 
@@ -1450,104 +1417,7 @@ describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
     expect(() => services.clearLocalSearch(handle)).toThrowError(/已被 disposeLocalSearch\(\) 释放/);
   });
 
-  it("取消 A 之后立刻重查 A：允许（墓碑不参与互斥），且 A 的迟到回包不得交给新请求", async () => {
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    raw.queue.auto = false;
-
-    raw.pois = [{ title: "OLD" }];
-    const first = services.search(handle, "A");
-    first.cancel();
-
-    raw.pois = [{ title: "NEW" }];
-    const second = services.search(handle, "A");
-    // 两个槽位：墓碑（已取消的第一次）+ 新的这一次
-    expect(raw.queue.pending).toBe(2);
-
-    expect(raw.queue.flush()).toBe(2);
-    expect((await first.result).status).toBe("canceled");
-    const retried = await second.result;
-    expect(retried.status).toBe("success");
-    expect((retried.data as LocalSearchResult[])[0]?.pois[0]?.title).toBe("NEW");
-  });
-
-  it("取消 A 之后发起 B：A 的迟到回包被墓碑吸收，不会结算给 B", async () => {
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    raw.queue.auto = false;
-
-    raw.pois = [{ title: "A-OLD" }];
-    const a = services.search(handle, "A");
-    a.cancel();
-
-    raw.pois = [{ title: "B-NEW" }];
-    const b = services.search(handle, "B");
-
-    // 先只让 A 的回包到达
-    expect(raw.queue.flushOne(0)).toBe(true);
-    expect((await Promise.resolve(), (await a.result).status)).toBe("canceled");
-
-    expect(raw.queue.flush()).toBe(1);
-    const settled = await b.result;
-    expect(settled.status).toBe("success");
-    expect((settled.data as LocalSearchResult[])[0]?.keyword).toBe("B");
-    expect((settled.data as LocalSearchResult[])[0]?.pois[0]?.title).toBe("B-NEW");
-  });
-
-  it("同关键字的两个未结算检索：第二次显式失败（回包无法区分）", async () => {
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    raw.queue.auto = false;
-
-    const first = services.search(handle, "K");
-    const second = services.search(handle, "K");
-
-    expect((await second.result).status).toBe("failed");
-    expect((await second.result).error?.code).toBe("BMAP_SERVICE_FAILED");
-    // 只有第一次真的发出去了
-    expect(raw.callLog.filter((entry) => entry.startsWith("search:K"))).toHaveLength(1);
-
-    raw.queue.flush();
-    expect((await first.result).status).toBe("success");
-  });
-
-  it("回包带 keyword 但与队首期望不符时：不消费槽位（真正的回包仍能对上）", async () => {
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    raw.queue.auto = false;
-
-    const call = services.search(handle, "A");
-    // 伪造一个不属于本次请求的回包（keyword 不同），直接经构造选项回调投递
-    const foreign = new FakeV4LocalResult({ keyword: "Z", pois: [] });
-    (raw.options.onSearchComplete as (value: unknown) => void)(foreign);
-
-    // 槽位仍在：真正的回包到达时才结算
-    expect(raw.queue.pending).toBe(1);
-    raw.queue.flush();
-    const result = await call.result;
-    expect(result.status).toBe("success");
-    expect((result.data as LocalSearchResult[])[0]?.keyword).toBe("A");
-  });
-
-  it("待回包队列达到上限时拒绝新调用（不淘汰旧记录）", async () => {
-    const handle = localSearchWith();
-    const raw = fake.createdLocalSearches[0]!;
-    raw.queue.auto = false;
-
-    const calls = Array.from({ length: 16 }, (_, index) => services.search(handle, `K${index}`));
-    const overflow = services.search(handle, "K-overflow");
-
-    expect((await overflow.result).status).toBe("failed");
-    expect((await overflow.result).error?.message).toContain("已达上限 16");
-
-    raw.queue.flush();
-    for (const call of calls) {
-      expect((await call.result).status).toBe("success");
-    }
-  });
-
   it("disposeLocalSearch：在飞调用显式失败、释放后拒绝新调用、重复调用幂等", async () => {
-    vi.useFakeTimers();
     const handle = localSearchWith();
     const raw = fake.createdLocalSearches[0]!;
     raw.queue.auto = false;
@@ -1555,41 +1425,45 @@ describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
     const inflight = services.search(handle, "餐厅");
     services.disposeLocalSearch(handle);
     expect((await inflight.result).status).toBe("failed");
+    expect(raw.callLog.filter((entry) => entry === "clearResults")).toHaveLength(1);
 
     expect((await services.search(handle, "餐厅").result).status).toBe("failed");
-    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
 
     services.disposeLocalSearch(handle);
-    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
+    expect(raw.callLog.filter((entry) => entry === "clearResults"), "幂等：不再重复清理").toHaveLength(1);
   });
 
-  it("disposeLocalSearch：SDK dispose 抛错时不记账，下一次重试；泄漏账头保留", () => {
+  it("disposeLocalSearch：clearResults 抛错时不记账，下一次重试；泄漏账头保留", async () => {
     const handle = localSearchWith();
     const raw = fake.createdLocalSearches[0]!;
-    raw.failNextDispose = new Error("destroy boom");
+    await services.search(handle, "餐厅").result;
+    // 检索交付了一份结果集 ⇒ 未清理前它算一份未释放资源
+    expect(fake.diagnostics.snapshot().leaks.localSearchResults).toBe(1);
 
-    expect(() => services.disposeLocalSearch(handle)).toThrowError(/LocalSearch.dispose/);
-    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(1);
+    raw.failNextClearResults = new Error("clear boom");
+    expect(() => services.disposeLocalSearch(handle)).toThrowError(/LocalSearch.clearResults/);
+    expect(fake.diagnostics.snapshot().leaks.localSearchResults, "失败不记账").toBe(1);
 
     services.disposeLocalSearch(handle);
-    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(0);
+    expect(fake.diagnostics.snapshot().leaks.localSearchResults).toBe(0);
   });
 
-  it("disposeLocalSearch：销毁钩子里重入 dispose 不会重复销毁 SDK 实例", () => {
+  it("disposeLocalSearch：清理钩子里重入 dispose 不会重复清结果", async () => {
     const handle = localSearchWith();
     const raw = fake.createdLocalSearches[0]!;
-    raw.onDispose = () => services.disposeLocalSearch(handle);
+    await services.search(handle, "餐厅").result;
+    raw.onClearResults = () => services.disposeLocalSearch(handle);
 
     services.disposeLocalSearch(handle);
 
-    expect(raw.callLog.filter((entry) => entry === "dispose")).toHaveLength(1);
-    expect(fake.diagnostics.snapshot().leaks.localSearches).toBe(0);
+    expect(raw.callLog.filter((entry) => entry === "clearResults")).toHaveLength(1);
+    expect(fake.diagnostics.snapshot().leaks.localSearchResults).toBe(0);
   });
 
   it("创建面：renderOptions.map 必须是本库的 MapHandle（绘制所有权可验证）", () => {
-    expect(() => services.createLocalSearch("北京市", { renderOptions: { map: {} } })).toThrowError(
-      /renderOptions\.map 必须是本库的 MapHandle/,
-    );
+    expect(() =>
+      services.createLocalSearch("北京市", { renderOptions: { map: {} as never } }),
+    ).toThrowError(/renderOptions\.map 必须是本库的 MapHandle/);
     // 只有官方声明的绘制字段会被透传（构造选项里另有 Driver 自己挂的内部分发器）
     const handle = services.createLocalSearch("北京市", {
       renderOptions: { autoViewport: true, selectFirstResult: false },
@@ -1605,11 +1479,173 @@ describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
   });
 
   it("创建面：检索区域必须是城市名 / 领域 Point / MapHandle", () => {
-    expect(() => services.createLocalSearch(42)).toThrowError(/检索区域必须是城市名字符串/);
+    expect(() => services.createLocalSearch(42 as never)).toThrowError(/检索区域必须是城市名字符串/);
     expect(() => services.createLocalSearch("")).toThrowError(/不能是空字符串/);
 
     const point = services.createLocalSearch({ lng: 116.404, lat: 39.915 });
     expect(fake.createdLocalSearches[0]!.location).toMatchObject({ lng: 116.404, lat: 39.915 });
     services.disposeLocalSearch(point);
+  });
+});
+
+
+/**
+ * 外部评审（PR #89）复现：LocalSearch 的归属与释放
+ *
+ * 四条都是评审给出的**确定性反例**，先在此复现（红），再改实现；用例留在仓库里当回归。
+ * 共同点：归属不能建立在「跨请求按发出顺序回包」这个官方**没有承诺**的前提上。
+ */
+describe("v4 Service Facet：LocalSearch 归属与释放（PR #89 评审复现）", () => {
+  function localSearchWith(location: string | Point = "北京市", options?: LocalSearchOptions) {
+    return services.createLocalSearch(location, options);
+  }
+
+  /** 落到 SDK 的检索调用（不含构造期记录）。 */
+  function searchCalls(): string[] {
+    return fake.createdLocalSearches[0]!.callLog.filter((entry) => !entry.startsWith("construct:"));
+  }
+
+  it("cancel A 之后，同一实例上的新检索被显式拒绝（不再按到达顺序猜归属）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const a = services.search(handle, "A");
+    a.cancel();
+    const b = services.search(handle, "B");
+
+    // 关键：B **没有**落到 SDK（旧实现在这里会接受 B，然后把它的乱序回包丢掉 → timeout）
+    expect(searchCalls()).toEqual(["search:A:"]);
+    const bResult = await b.result;
+    expect(bResult.status).toBe("failed");
+    expect(bResult.error?.code).toBe("BMAP_SERVICE_FAILED");
+    expect(bResult.error?.message).toContain("重建");
+
+    // A 的迟到回包到达：实例已是终态，没有在册操作可被错配
+    expect(raw.queue.flush()).toBe(1);
+    expect((await a.result).status).toBe("canceled");
+
+    services.disposeLocalSearch(handle);
+  });
+
+  it("cancel K 之后重查同一个 K：同样被拒绝，且不会把旧结果交给新请求", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    raw.pois = [{ title: "OLD" }];
+    const first = services.search(handle, "K");
+    first.cancel();
+    raw.pois = [{ title: "NEW" }];
+    const second = services.search(handle, "K");
+
+    expect(searchCalls()).toEqual(["search:K:"]);
+    const settled = await second.result;
+    expect(settled.status, "同关键词重查无法归属时必须显式拒绝").toBe("failed");
+    expect(settled.data, "更不得把旧请求的结果交给新请求").toBeNull();
+
+    raw.queue.flush();
+    expect((await first.result).status).toBe("canceled");
+    services.disposeLocalSearch(handle);
+  });
+
+  it("实例身份隔离：换新实例重查同一个关键词，迟到回包不污染新请求（两种到达顺序都对）", async () => {
+    const first = localSearchWith();
+    const rawFirst = fake.createdLocalSearches[0]!;
+    rawFirst.queue.auto = false;
+
+    rawFirst.pois = [{ title: "OLD" }];
+    const oldCall = services.search(first, "K");
+    oldCall.cancel();
+    services.disposeLocalSearch(first);
+
+    // 新实例（评审建议的 supersede 形态）
+    const second = localSearchWith();
+    const rawSecond = fake.createdLocalSearches[1]!;
+    rawSecond.queue.auto = false;
+    rawSecond.pois = [{ title: "NEW" }];
+    const newCall = services.search(second, "K");
+
+    // 旧实例的迟到回包**先**到（它只能落到旧实例上）
+    expect(rawFirst.queue.flush()).toBe(1);
+    expect(rawSecond.queue.flush()).toBe(1);
+
+    const settled = await newCall.result;
+    expect(settled.status).toBe("success");
+    expect((settled.data as LocalSearchResult[])[0]?.pois[0]?.title).toBe("NEW");
+    expect((await oldCall.result).status).toBe("canceled");
+
+    services.disposeLocalSearch(second);
+  });
+
+  it("超时：给出 timeout；该实例此后拒绝新检索（已在路上的回包不会消失）", async () => {
+    vi.useFakeTimers();
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const call = services.search(handle, "餐厅");
+    vi.advanceTimersByTime(15000);
+    expect((await call.result).status).toBe("timeout");
+    // 正证：回包真的还在路上
+    expect(raw.queue.pending).toBe(1);
+
+    vi.useRealTimers();
+    const retry = services.search(handle, "餐厅");
+    expect(searchCalls(), "超时之后的同实例重查不得落到 SDK").toEqual(["search:餐厅:"]);
+    expect((await retry.result).status).toBe("failed");
+    expect((await retry.result).error?.message).toContain("重建");
+
+    expect(raw.queue.flush()).toBe(1);
+    services.disposeLocalSearch(handle);
+  });
+
+  it("释放必须调用公开的 clearResults（LocalSearch 没有官方 dispose）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    await services.search(handle, "餐厅").result;
+
+    services.disposeLocalSearch(handle);
+
+    // 官方 LocalSearch 没有 dispose()：清掉它画出的结果必须走 clearResults()
+    expect(raw.callLog, "释放路径必须落到公开的 clearResults").toContain("clearResults");
+    expect(
+      (raw as unknown as { dispose?: unknown }).dispose,
+      "Fake 不得为 LocalSearch 虚构 dispose（它不在官方声明里）",
+    ).toBeUndefined();
+  });
+
+  it("多关键字检索之后 gotoPage 仍能结算（不再有上一次关键字的残留判据）", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.pois = [{ title: "P0" }, { title: "P1" }];
+    raw.options.pageCapacity = 1;
+
+    await services.search(handle, "A").result;
+    const multi = await services.search(handle, ["B", "C"]).result;
+    expect(multi.status).toBe("success");
+
+    // 不结算就会挂到用例超时（回包经微任务到达，这里直接 await）
+    const paged = await services.gotoPage(handle, 0).result;
+    expect(paged.status, "多关键字之后翻页不该被判成「不属于本次」").toBe("success");
+
+    services.disposeLocalSearch(handle);
+  });
+
+  it("单实例串行：上一个检索未结算时，新调用被显式拒绝且一次都不落到 SDK", async () => {
+    const handle = localSearchWith();
+    const raw = fake.createdLocalSearches[0]!;
+    raw.queue.auto = false;
+
+    const a = services.search(handle, "A");
+    const b = services.search(handle, "B");
+    const bResult = await b.result;
+    expect(bResult.status).toBe("failed");
+    expect(bResult.error?.message).toContain("未结算");
+    expect(searchCalls()).toEqual(["search:A:"]);
+
+    raw.queue.flush();
+    expect((await a.result).status).toBe("success");
+    services.disposeLocalSearch(handle);
   });
 });

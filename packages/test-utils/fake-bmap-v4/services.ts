@@ -529,11 +529,11 @@ export class FakeV4LocalSearch {
    * `undefined` = 用检索结果（默认）；`null` = 「服务不可用」——官方仍会回调，只是参数为 null。
    */
   overridePayload?: FakeV4LocalResult | FakeV4LocalResult[] | null
-  /** 测试辅助：下一次 `dispose()` 抛出的错误（注入 SDK 销毁失败，用后即清） */
-  failNextDispose: Error | null = null
-  /** 测试辅助：`dispose()` 期间同步执行的回调（注入「销毁钩子里重入 dispose」） */
-  onDispose: (() => void) | null = null
 
+  /** 测试辅助/内部：当前是否持有一份未清理的结果集（0→1 去重，见 `markResults`） */
+  private hasResults = false
+  /** 测试辅助：`clearResults()` 期间同步执行的回调（用后即清） */
+  private reentered: (() => void) | null = null
   private readonly diagnostics: FakeV4Diagnostics | undefined
   /** 最近一次检索的载荷（`getResults()` 的返回值） */
   private lastPayload: FakeV4LocalResult | FakeV4LocalResult[] | null = null
@@ -551,8 +551,10 @@ export class FakeV4LocalSearch {
     this.location = location
     this.options = options
     this.callLog.push('construct:' + JSON.stringify(options))
-    // LocalSearch 有官方销毁入口（`dispose()`）⇒ 进泄漏门禁，按实例销账
-    diagnostics?.resourceCreated('localSearch', this)
+    // 官方 `LocalSearch` **没有** `dispose()`，因此实例本身不进泄漏门禁（随 GC 回收），只进活动
+    // 口径（与 Geocoder / Boundary 等「无释放入口的服务」同档）；真正的资源是它**交付出去的结果集**
+    // （含画在地图上的标注 / 结果面板），由 `clearResults()` 释放 —— 见 `markResults()`。
+    diagnostics?.serviceInstanceCreated()
   }
 
   search(keyword: string | string[], option?: { forceLocal?: boolean }): void {
@@ -599,10 +601,32 @@ export class FakeV4LocalSearch {
     return this.lastPayload
   }
 
+  /**
+   * 官方 `LocalSearch#clearResults()`：清除最近一次检索的结果，**同时清除地图上的标注和结果面板**。
+   *
+   * 这是 LocalSearch 唯一的公开清理入口（官方声明里没有 `dispose()`），因此 Fake 把它建模成
+   * 「释放已交付的结果集」——泄漏门禁的销账点。
+   *
+   * 测试辅助：`failNextClearResults` 注入一次失败（验证「失败不记账、可重试」）；
+   * `onClearResults` 用来注入「清理期间重入释放」的重入场景。
+   */
   clearResults(): void {
     this.callLog.push('clearResults')
+    const failure = this.failNextClearResults
+    if (failure) {
+      this.failNextClearResults = null
+      throw failure
+    }
     this.lastPayload = null
+    this.reentered = this.onClearResults
+    this.reentered?.()
+    this.releaseResults()
   }
+
+  /** 测试辅助：下一次 `clearResults()` 抛出的错误（用后即清） */
+  failNextClearResults: Error | null = null
+  /** 测试辅助：`clearResults()` 期间同步执行的回调（注入「清理钩子里重入释放」） */
+  onClearResults: (() => void) | null = null
 
   getStatus(): number {
     return this.status
@@ -623,21 +647,6 @@ export class FakeV4LocalSearch {
 
   getPageNum(): number {
     return 0
-  }
-
-  /** 官方 `LocalSearch#dispose()`：Driver 的释放入口会调用它 */
-  dispose(): void {
-    this.callLog.push('dispose')
-    const reenter = this.onDispose
-    const failure = this.failNextDispose
-    if (failure) {
-      this.failNextDispose = null
-      throw failure
-    }
-    // 真实 SDK 的销毁流程可能触发业务回调（与 Autocomplete / Panorama 同口径）
-    reenter?.()
-    // 只有真的走完 dispose 才销账；传实例：重复 dispose 不能抵消别的实例的泄漏
-    this.diagnostics?.resourceReleased('localSearch', this)
   }
 
   private currentResults(): FakeV4LocalResult[] {
@@ -670,9 +679,29 @@ export class FakeV4LocalSearch {
     })
   }
 
+  /**
+   * 交付一份结果集 ⇒ 记一笔「未清理的检索结果」。
+   *
+   * 同一实例任意时刻只可能有**一份**当前结果集（新检索会重画），因此用 `hasResults` 做 0→1 去重：
+   * 诊断的 `resourceCreated` 是按次数累计的，重复登记会把同一份结果算成两份。
+   */
+  private markResults(): void {
+    if (this.hasResults) return
+    this.hasResults = true
+    this.diagnostics?.resourceCreated('localSearchResults', this)
+  }
+
+  /** 结果集被清掉（`clearResults()`）：销账一次。 */
+  private releaseResults(): void {
+    if (!this.hasResults) return
+    this.hasResults = false
+    this.diagnostics?.resourceReleased('localSearchResults', this)
+  }
+
   private dispatchPayload(payload: FakeV4LocalResult | FakeV4LocalResult[] | null): void {
     if (!this.respond) return
     const outgoing = this.overridePayload === undefined ? payload : this.overridePayload
+    if (outgoing !== null && outgoing !== undefined) this.markResults()
     const onSearchComplete = this.options.onSearchComplete as
       | ((value: FakeV4LocalResult | FakeV4LocalResult[] | null) => void)
       | undefined

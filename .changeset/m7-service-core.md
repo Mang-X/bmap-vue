@@ -31,7 +31,10 @@
 
 - 「查无结果」与「服务当前不可用」仍是 `empty`（官方对 Geocoder / Boundary / LocalCity 只给了「回调参数是不是 `null`」这一条公开信息），
   但**拿到了合法回包而结果为空**（`LocalSearch` 的 `pois: []`）是 `success`——用 `pois.length` / `total` 判断，比压成 `empty` 更有信息量。
-- `LocalSearch` 同一实例上**相同关键字**的两个未结算请求无法区分，第二个会被显式拒绝（`failed` + `BMAP_SERVICE_FAILED`）；
-  要重查同一个词先 `cancel()` 前一次（取消会留下墓碑，迟到回包不会被误判给新请求）。
-- `cancel()` 是**逻辑取消**：SDK 没有取消入口（JSONP 发出去收不回），只承诺「放弃结果」。
+- `LocalSearch` 的归属**不靠回包顺序**（官方只承诺单次多关键字检索内部的顺序）：同一实例同一时刻只处理
+  一个检索，并发会被显式拒绝；`useBMapLocalSearch` 用「取代即换新实例」实现「最新者胜」，
+  `cancel()` / 超时之后的下一次检索同样会新建实例。`gotoPage` 在上一次还没结算时会被**拒绝**
+  （它是对上一条结果的延续），而不是空转到超时。
+- `cancel()` 是**逻辑取消**：SDK 没有取消入口（JSONP 发出去收不回），只承诺「放弃结果」；
+  取消/超时之后的实例不再复用（那时 SDK 侧可能仍有回包在路上）。
 - 与官方 UI Kit 的分流不变：headless composable 不会因为 UI 交互而发请求，两者互相独立。

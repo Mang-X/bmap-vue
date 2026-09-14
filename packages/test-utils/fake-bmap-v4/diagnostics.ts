@@ -19,16 +19,18 @@
  * | `layers` | `map.addLayer` / `removeLayer`（含原生数据图层） | `map.removeLayer()` |
  * | `panoramas` | `Panorama` 构造 / 成功 `destroy()` | `panorama.destroy()` |
  * | `autocompletes` | `Autocomplete` 构造 / 成功 `dispose()` | `autocomplete.dispose()` |
- * | `localSearches` | `LocalSearch` 构造 / 成功 `dispose()` | `localsearch.dispose()` |
+ * | `localSearchResults` | `LocalSearch` 交付结果集 / `clearResults()` | `localsearch.clearResults()` |
  * | `listeners` | `addEventListener` − `removeEventListener`（外加 `map.destroy()` 时清掉的残留监听器） | `removeEventListener` / `map.destroy()` 的清理 |
  *
  * 记账方式同样分两类（见 `FakeV4LifecycleKind` / `FakeV4AttachmentKind`）：`maps` / `panoramas` /
- * `autocompletes` / `localSearches` 按**实例**销账（同一实例重复销毁只销一次），`overlays` / `infoWindows` /
+ * `autocompletes` / `localSearchResults` 按**实例**销账（同一实例重复销毁只销一次），`overlays` / `infoWindows` /
  * `contextMenus` / `controls` / `layers` 按**次数**销账（SDK 不去重，挂两次就要摘两次）。
  *
  * 两类刻意**不**进泄漏门禁，理由写在对应字段上：
- * - 无销毁入口的服务实例（`Geocoder` / `Convertor` / `Boundary` / `Geolocation` / `LocalCity`）——
- *   官方 4.0 就没有 destroy/dispose，它们随 Client 被 GC 回收；
+ * - 无销毁入口的服务实例（`Geocoder` / `Convertor` / `Boundary` / `Geolocation` / `LocalCity`，
+ *   以及 `LocalSearch` **实例本身**：官方 `LocalSearch` 没有 `dispose()`）——官方 4.0 就没有
+ *   destroy/dispose，它们随 Client 被 GC 回收。但 `LocalSearch` **交付出去的结果集**（含它画在
+ *   地图上的标注 / 结果面板）不随实例被回收，必须由公开的 `clearResults()` 清掉，因此单独记账；
  * - 定时器与回调队列——「在飞」不等于「未释放」：取消之后 SDK 的迟到回包仍会到达（这是真实
  *   语义，`FakeV4CallbackQueue` 的注释里有一段专门说它），把它们算成泄漏会逼出「为了骗过门禁
  *   而 flush」的假绿。它们的实时值仍可从 `pendingAsync()` / `activity` 读到，由需要的用例显式断言。
@@ -47,7 +49,7 @@
  *   重复添加」列为误用，本仓库由 Driver 自己记账），因此按**次数**销账——「挂两次、摘一次
  *   还剩一个」这条不变式不能被实例去重改掉。
  */
-export type FakeV4LifecycleKind = "map" | "panorama" | "autocomplete" | "localSearch";
+export type FakeV4LifecycleKind = "map" | "panorama" | "autocomplete" | "localSearchResults";
 
 export type FakeV4AttachmentKind =
   | "overlay"
@@ -63,7 +65,7 @@ const LIFECYCLE_KINDS: ReadonlySet<FakeV4ResourceKind> = new Set<FakeV4Lifecycle
   "map",
   "panorama",
   "autocomplete",
-  "localSearch",
+  "localSearchResults",
 ]);
 
 /** 泄漏门禁口径：当前未释放的资源数（全 0 = 无泄漏）。 */
@@ -76,7 +78,8 @@ export interface FakeV4LeakCounters {
   layers: number;
   panoramas: number;
   autocompletes: number;
-  localSearches: number;
+  /** 未被 `clearResults()` 清掉的检索结果集（含 SDK 画在地图上的标注 / 结果面板）。 */
+  localSearchResults: number;
   listeners: number;
 }
 
@@ -98,8 +101,10 @@ export interface FakeV4ActivityCounters {
   panoramasDestroyed: number;
   autocompletesCreated: number;
   autocompletesDisposed: number;
-  localSearchesCreated: number;
-  localSearchesDisposed: number;
+  /** 交付过检索结果集的次数（每次 `search*` / `gotoPage` 回包一次）。 */
+  localSearchResultsDrawn: number;
+  /** 被 `clearResults()` 清掉的次数。 */
+  localSearchResultsCleared: number;
   /** 无释放入口的基础服务实例（构造计数）。 */
   servicesCreated: number;
   listenCalls: number;
@@ -136,7 +141,7 @@ const LEAK_FIELD_BY_KIND: Record<FakeV4ResourceKind, keyof FakeV4LeakCounters> =
   layer: "layers",
   panorama: "panoramas",
   autocomplete: "autocompletes",
-  localSearch: "localSearches",
+  localSearchResults: "localSearchResults",
 };
 
 export class FakeV4Diagnostics {
@@ -156,7 +161,7 @@ export class FakeV4Diagnostics {
     layer: 0,
     panorama: 0,
     autocomplete: 0,
-    localSearch: 0,
+    localSearchResults: 0,
   };
 
   private readonly created: Record<FakeV4ResourceKind, number> = {
@@ -168,7 +173,7 @@ export class FakeV4Diagnostics {
     layer: 0,
     panorama: 0,
     autocomplete: 0,
-    localSearch: 0,
+    localSearchResults: 0,
   };
 
   private readonly released: Record<FakeV4ResourceKind, number> = {
@@ -180,7 +185,7 @@ export class FakeV4Diagnostics {
     layer: 0,
     panorama: 0,
     autocomplete: 0,
-    localSearch: 0,
+    localSearchResults: 0,
   };
 
   /* ------------------------------------------------ 测试辅助：异步窗口（非官方语义） */
@@ -305,8 +310,8 @@ export class FakeV4Diagnostics {
       panoramasDestroyed: this.released.panorama,
       autocompletesCreated: this.created.autocomplete,
       autocompletesDisposed: this.released.autocomplete,
-      localSearchesCreated: this.created.localSearch,
-      localSearchesDisposed: this.released.localSearch,
+      localSearchResultsDrawn: this.created.localSearchResults,
+      localSearchResultsCleared: this.released.localSearchResults,
       servicesCreated: this.servicesCreated,
       listenCalls: this.listenCalls,
       unlistenCalls: this.unlistenCalls,

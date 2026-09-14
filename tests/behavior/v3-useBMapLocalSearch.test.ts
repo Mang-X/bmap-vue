@@ -282,21 +282,30 @@ describe("useBMapLocalSearch：headless 检索", () => {
     await flushPromises();
   });
 
-  it("旧请求不得覆盖新结果：先发的慢回包被丢弃", async () => {
+  it("旧请求不得覆盖新结果：取代会换新实例，旧实例的迟到回包不污染新结果", async () => {
     let hook: Hook | null = null;
     const wrapper = mountInMap((h) => {
       hook = h;
     });
     await flushPromises();
-    const { raw } = await warmUp(hook!);
+    const { raw: firstRaw } = await warmUp(hook!);
 
     const first = hook!.search("第一个");
     await flushPromises();
+    // 正证：第一次检索**仍在飞**（回包还没到）——只有这时才谈得上「取代」
+    expect(firstRaw.queue.pending).toBe(1);
     const second = hook!.search("第二个");
     await flushPromises();
 
-    // 两次回包（第一次已被取代，它的回包先到）
-    expect(raw.queue.flush()).toBe(2);
+    // 取代 = 换新实例（官方只承诺单次多关键字内部顺序，跨请求顺序无承诺）
+    expect(fake.createdLocalSearches, "取代时必须新建实例").toHaveLength(2);
+    // 旧实例的结果集被释放（含它画出的标注）——公开的 clearResults()
+    expect(firstRaw.callLog, "旧实例必须走公开 clearResults 清理").toContain("clearResults");
+
+    // 旧实例的迟到回包到达：它只能落到**已释放**的旧实例上，与新结果无关
+    expect(firstRaw.queue.flush()).toBe(1);
+    await flushPromises();
+
     expect((await first).status).toBe("canceled");
     const settled = await second;
     expect(settled.status).toBe("success");
@@ -451,8 +460,8 @@ describe("useBMapLocalSearch：构造字段变化才重建", () => {
     expect(fake.createdLocalSearches, "构造字段变化后重建").toHaveLength(2);
     const rebuilt = fake.createdLocalSearches[1]!;
     expect(rebuilt.options.pageCapacity).toBe(1);
-    // 旧实例被释放（泄漏门禁只在卸载时统一断言，这里先确认 dispose 真的被调用）
-    expect(fake.createdLocalSearches[0]!.callLog).toContain("dispose");
+    // 旧实例被释放（泄漏门禁只在卸载时统一断言，这里先确认公开清理真的被调用）
+    expect(fake.createdLocalSearches[0]!.callLog).toContain("clearResults");
 
     // 变化之后再重复调用仍然不重建
     await hook!.search("医院");
@@ -461,6 +470,64 @@ describe("useBMapLocalSearch：构造字段变化才重建", () => {
     wrapper.unmount();
     await flushPromises();
     harness.assertIdle("重建之后");
+  });
+
+  it("取消之后的下一次检索换新实例（旧实例不再复用）", async () => {
+    let hook: Hook | null = null;
+    const wrapper = mountInMap((h) => {
+      hook = h;
+    });
+    await flushPromises();
+    const { raw: firstRaw } = await warmUp(hook!);
+    expect(fake.createdLocalSearches).toHaveLength(1);
+
+    // 取消一次在飞检索：实例从此不是可靠的请求通道（SDK 侧回包可能仍在路上）
+    const pending = hook!.search("第一个");
+    await flushPromises();
+    hook!.cancel();
+    expect((await pending).status).toBe("canceled");
+    // 取消**不**立刻清掉已经画出的结果（`data` 仍保留给调用方看），旧实例在下一次调用时才交还清理
+    expect(firstRaw.callLog).not.toContain("clearResults");
+
+    const retried = await hook!.search("第二个");
+    expect(retried.status, "换新实例后检索照常可用").toBe("success");
+    expect(fake.createdLocalSearches, "下一次 search 必须换新实例").toHaveLength(2);
+    expect(firstRaw.callLog, "旧实例在下一次调用时才被释放（公开 clearResults）").toContain(
+      "clearResults",
+    );
+
+    // 旧实例的迟到回包不影响新结果
+    firstRaw.queue.flush();
+    await flushPromises();
+    expect(hook!.data.value?.[0]?.keyword).toBe("第二个");
+
+    wrapper.unmount();
+    await flushPromises();
+  });
+
+  it("gotoPage 在检索进行中被显式拒绝（不空转到超时）", async () => {
+    let hook: Hook | null = null;
+    const wrapper = mountInMap((h) => {
+      hook = h;
+    });
+    await flushPromises();
+    const { raw } = await warmUp(hook!);
+
+    const pending = hook!.search("第一个");
+    await flushPromises();
+    expect(raw.queue.pending, "正证：检索确实在飞").toBe(1);
+
+    const refused = await hook!.gotoPage(1);
+    expect(refused.status).toBe("failed");
+    expect(refused.error?.code).toBe("BMAP_SERVICE_FAILED");
+    expect(refused.error?.message).toContain("翻页");
+    expect(raw.callLog.filter((entry) => entry.startsWith("gotoPage")), "不得落到 SDK").toHaveLength(0);
+
+    raw.queue.flush();
+    expect((await pending).status).toBe("success");
+
+    wrapper.unmount();
+    await flushPromises();
   });
 
   it("clear() 调 SDK 的 clearResults 并清空本地状态", async () => {
@@ -479,6 +546,11 @@ describe("useBMapLocalSearch：构造字段变化才重建", () => {
     expect(fake.createdLocalSearches[0]!.callLog).toContain("clearResults");
     expect(hook!.data.value).toBeNull();
     expect(hook!.status.value).toBe("idle");
+
+    // 结果集与绘制物都挂在实例上：清空 = 释放实例，下一次检索换新实例
+    const again = await hook!.search("超市");
+    expect(again.status).toBe("success");
+    expect(fake.createdLocalSearches).toHaveLength(2);
 
     wrapper.unmount();
     await flushPromises();

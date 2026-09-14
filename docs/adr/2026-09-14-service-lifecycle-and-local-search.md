@@ -101,31 +101,50 @@ idle | loading | success | empty | failed | timeout | canceled | unsupported
 `error` 载荷与 `catch`、以及「本次调用的结论」不再需要回读状态（`getBatch` 这类批量动作因此可以
 **逐项**带自己的 `status` / `error`——「部分成功」有了载体）。
 
-### 4. LocalSearch 的请求归属：FIFO + 关键字校验 + 墓碑 + 同关键词互斥
+### 4. LocalSearch 的请求归属：**一个实例一个未结算操作**（实例身份隔离）
+
+> **本节在 PR #89 的评审（P1-1）后改写。** 初版用的是「FIFO + `keyword` 校验 + 墓碑」——评审给出两个
+> 确定性反例证明它在乱序回包下会错，因此整段作废，改为下面这条**不变式**。改写的依据与反例见
+> 「外部评审记录」一节。
 
 `LocalSearch` 的四个操作**共用实例上的一条 `onSearchComplete`**（构造期权一次），而 SDK 没有取消
-入口。归属模型因此是：
+入口。归属模型因此只有一条规则：
 
-1. **FIFO**：官方口径是每个操作恰好触发一次 `onSearchComplete`、按发出顺序到达；未结算的请求排队，
-   回包结算队首；
-2. **关键字校验**：回包带回的 `keyword`（官方**必填**字段）与队首期望值不一致时**不消费任何槽位**
-   （它不属于在册请求）；
-3. **墓碑**：`cancel()` / 超时不从队列里删掉槽位，而是把它**降级为墓碑**（`settle = null`），
-   由它自己的迟到回包消费掉——删掉槽位就会让迟到回包去结算**下一个**操作；
-4. **同关键词互斥**：两个**未结算**且关键字相同的操作无法区分（多关键字用
-   `a:<k1>\u0000<k2>` 的规范键），命中时以 `failed(BMAP_SERVICE_FAILED)` 显式拒绝，而不是猜；
-5. **队列上界** `MAX_PENDING_SEARCHES = 16`：达到上限时**拒绝新调用**而不是淘汰旧记录
-   （淘汰不会取消 SDK 请求，被淘汰那条的回包迟早会把队列错位）。
+> **一个实例，同一时刻最多一个未结算操作。**
 
-**与 `Autocomplete` 的关键差异**：LocalSearch 不绑输入框，回调通道不会被用户输入污染，因此不需要
-「通道独占」那套前置校验；`keyword` 是必填而不是可选，因此关键字校验是**契约级**而不是**假设级**。
+回调到达时，在册的那一个就是它——归属与到达顺序、与 `keyword` 都无关。由此派生三条对调用方可见的
+契约：
 
-**墓碑为什么要参与「解除互斥」**：`Autocomplete` 的契约是「取消同关键词后立刻重查 ⇒ 显式失败」，
-代价是「最新者胜」这个最常见的用法（用户重新点了同一个词的搜索）被挡住。LocalSearch 用
-`onCancel: () => retireSearch(...)` 把已结束的槽位降级为墓碑，于是**同一关键词可以重查**——FIFO 保证
-墓碑先被消费。这与参考实现的「最新者胜」在可观察行为上一致。**代价（显式接受）**：如果某次请求的
-回包**永远不到**（网络断开这类），它的墓碑会吃掉随后那次**同关键词**请求的回包，后者于是走到
-`timeout`。放弃这个 trade-off 的唯一办法是退回「一律拒绝」，而那会挡住正当用法。
+1. **并发被显式拒绝**：实例上已有未结算操作时，新调用以 `failed(BMAP_SERVICE_FAILED)` 结算并说明
+   「请 `disposeLocalSearch()` 后重建实例」，而**不是**排队等后来猜；
+2. **取消/超时 = 该实例不再可用**：`cancel()` 只把本次 `ServiceCall` 结算成 `canceled`；SDK 侧请求
+   收不回，迟到回包无法与后续请求区分，因此该实例此后拒绝新检索（要重建）。超时同理——超时不代表
+   SDK 侧请求消失；
+3. **`gotoPage` 必须落在同一条结果集上**：它是对上一条结果的延续，因此在「上一次还没结算」或
+   「实例已过期」时**被拒绝**，而不是让 SDK 空转等超时（composable 侧用 `supersede: "refuse"` 表达）。
+
+**为什么不用「FIFO + keyword 校验」**（初版的做法，已被评审推翻）：
+
+- 官方只承诺**单次多关键字检索内部**结果数组与关键字数组顺序一致，**没有**承诺多次请求之间的回调
+  顺序——初版把「每个操作恰好触发一次回调、按发出顺序到达」当成了官方口径，这是**未经验证**的推断；
+- `LocalResult.keyword` 也不是请求身份：同关键词重查时新旧两次完全等价，无法据此区分；
+- 两个反例（评审给出，已在 `services.test.ts` 里固化为回归用例）：
+  - `cancel A → search B`（不同关键词）：B 的回包先到时，队首是 A 的墓碑 ⇒ B 被判成「不属于在册请求」
+    而**丢弃**，随后 A 的回包消费墓碑 ⇒ B 只能等 `timeout`；
+  - `cancel K → search K`（同关键词）：新 K 的回包被旧 K 的墓碑吃掉，旧 K 的迟到回包反而结算给新请求
+    ⇒ **stale data**。
+
+两种情况下「哪一次请求产生了这个回包」这个事实都不存在，所以本库不再猜：把歧义**变成不可能**，
+代价是取消/超时之后要重建实例。
+
+**调用方（composable）如何实现「最新者胜」**：`useBMapServiceTask` 的 `supersede` 策略。
+LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate"`：
+新检索取代在飞检索时，先取消旧的、再**释放旧实例**（→ 公开的 `clearResults()`，顺带清掉它画出的标注），
+并为新检索建一个新实例；`cancel()` / 超时之后的实例被标记为过期，下一次检索同样重建。
+**取消不立刻释放实例**——已经画出的结果保留可见（`data` 也保留），旧实例在下一次调用时才交还清理。
+
+**代价（显式接受）**：取代会多建一个 SDK 实例（`LocalSearch` 构造的代价，换来归属可判定）；
+`supersede: "recreate"` 只对声明了该策略的服务生效，其余六个服务的行为完全不变。
 
 ### 5. 释放路径：`clearLocalSearch` + `disposeLocalSearch`，仍然不引入通用 `dispose`
 
@@ -194,7 +213,8 @@ idle | loading | success | empty | failed | timeout | canceled | unsupported
 - 不做路线服务（Driving / Walking / Riding / Transit，属 `#39`），不实现任何标准 UI
   （建议列表 / 搜索面板 / 详情，属 `#73` / `#75` 的官方 UI Kit），不读取 SDK 私有面。
 - 不改 `Autocomplete` 的归属契约（通道独占 + 同关键词互斥）。它的依据（`keyword` 可选）与本票不同，
-  一起改会把两套判据混起来；「Autocomplete 也能用墓碑解除互斥」属于后续可评估项。
+  一起改会把两套判据混起来（它没有 `dispose()` 的归属问题、也不允许「一个实例一个在飞操作」——
+  输入提示本来就是「边打边发」）。它是否也改用实例隔离属后续可评估项。
 - 不给其余服务补释放入口（官方没有 `destroy` / `dispose`）。
 - 不做 `LocalSearch` 的 `enableAutoViewport` / `enableFirstResultSelection` /
   `setPageCapacity` / `setPageNum` 的运行时开关（它们**只影响绘制与分页**，而首页容量已在构造选项里；
@@ -202,11 +222,13 @@ idle | loading | success | empty | failed | timeout | canceled | unsupported
 
 ## 已知限制
 
-1. **墓碑吃回包的窗口**（决策 4）：某次请求的回包永不到达时，其墓碑会吃掉随后同关键词请求的回包，
-   后者以 `timeout` 结算。判定与规避写在 `search()` 的契约注释里。
-2. **墓碑占用队列槽位**：`MAX_PENDING_SEARCHES = 16` 统计的是**全部**槽位（含墓碑）。一个长期
-   不回包的 SDK 上反复取消 + 重查，最终会让新调用以 `failed(BMAP_SERVICE_FAILED)` 被拒
-   ——这是刻意的 fail-explicit（淘汰墓碑会导致回包错位），而不是可以靠调大常量解决的问题。
+1. **取代要付一次构造代价**（决策 4）：LocalSearch 的归属依赖实例身份，因此「取代 / 取消 / 超时」
+   之后的重查会新建一个 SDK 实例。官方 `LocalSearch` 的构造没有公开代价数字，本库也没有实测；
+   在「用户反复改关键词」的交互里这是**每次一次构造**，如果实测发现开销不可接受，优化方向是
+   「同一实例串行 + 只在上一次未结算时才重建」，而不是回到按到达顺序猜归属。
+2. **取消/超时后的实例必须由调用方重建**：Driver 会拒绝继续使用（这是刻意的 fail-explicit），
+   直接调 Driver 的调用方若不重建就会一直拿到 `failed`。composable 已经替调用方做了这件事
+   （`supersede: "recreate"`），这条限制只在直接用 Driver 时可见。
 3. **`sdkStatus` 只在公开带状态码的服务上恒有值**：`Geolocation` / `LocalSearch`
    （`BMAP_STATUS_*`）与 `Convertor`（回包 `status`）；其余服务没有公开错误码入口，`sdkStatus`
    恒为 `null`——不伪装成 0。
@@ -228,7 +250,30 @@ idle | loading | success | empty | failed | timeout | canceled | unsupported
   `LocalCityResult` / `StatusCodes`（`BMAP_STATUS_*`）。
 - 参考实现 `huiyan-fe/react-bmap`（`src/hooks/services/*`、`src/types/results.ts`）：状态面与动作集
   对齐；归属模型**不采纳**它的 `requestId` 守卫（那是「最新者胜」，对下拉列表够用，对数据契约不够），
-  改用 FIFO + `keyword` 校验 + 墓碑。
+  改用「一个实例一个未结算操作」这条不变式（初版试过 FIFO + `keyword` 校验 + 墓碑，被 PR #89 的
+  评审用两个乱序反例推翻，见决策 4）。
 - 本仓库：`2026-09-12-jsapi-v4-service-panorama-native-layers.md`（两层结构）、
   `2026-09-13-private-sdk-surface-removal.md`（`empty` 是合并结论、不嗅探私有面）、
   ADR `2026-09-14-remove-legacy-engine.md`（删除旧引擎后统一服务生命周期的前提已成立）。
+
+## 外部评审记录（PR #89，基线 `51d51bb`）
+
+维护者评审给出 3 条 P1 + 2 条 P2 + 1 处正文笔误，全部**先在仓库里复现成红用例**再改（复现命令与读数
+写在 PR 回复里）。逐条处置：
+
+| 发现 | 复现结果（红） | 处置 |
+| --- | --- | --- |
+| **P1-1** 归属依赖「跨请求按发出顺序回包」这个官方**没有承诺**的前提 | `cancel A → search B` 且 B 的回包先到 ⇒ B `timeout`；`cancel K → search K` 且新的先到 ⇒ 新调用拿到结果（stale） | 整段作废，改为「一个实例一个未结算操作」不变式 + composable 侧 `supersede` 策略（决策 4）；两个反例固化为回归用例（`expected 'timeout' to be 'failed'` / `expected 'success' to be 'failed'`） |
+| **P1-2** 把不存在的官方 `LocalSearch#dispose()` 当成官方 API；`disposeLocalSearch` 没有调用公开的 `clearResults()` | `disposeLocalSearch` 后 `callLog` 里**没有** `clearResults` | 释放路径走公开 `clearResults()`（`disposeServiceInstance` 的 SDK 步可注入）；Fake 删掉虚构的 `dispose()`，泄漏口径改为「未清理的**结果集**」（`localSearchResults`） |
+| **P1-3** 多关键字检索后 `gotoPage` 继承陈旧的 `lastSearchKeyword` | `search("A")` → `search(["B","C"])` → `gotoPage(0)` ⇒ `timeout` | 新模型里**没有**关键字判据（槽位唯一），该字段与相关工具一并删除 |
+| **P2-1** `releaseCached()` 先丢引用再释放、并吞掉异常 ⇒ 「可重试」名存实亡、静默泄漏；`cleanup()` 与 `events.release()` 写在同一个 try 里 | 注入一次释放失败后，没有任何重试与可观察信号 | 失败的实例进**待释放队列**并在下一次释放重试 + 告警；`disposeServiceInstance` 两步分别 try/catch |
+| **P2-2** `createLocalSearch(location: unknown, …)` 与 `renderOptions.map?: unknown` 与领域类型不一致 | — | 收紧为 `string \| Point \| MapHandle` / `map?: MapHandle`（运行时品牌校验保留，覆盖 JS 调用方与跨 Client） |
+| 正文笔误：PR 描述写 `46 files`，实际 54 | — | 正文按实际读数更新 |
+
+**评审同时确认了的判断**（保留）：`Autocomplete` 的 `dispose()` **是**官方声明里的成员（`service/Autocomplete.d.ts`），
+因此它的释放路径不变；只有 `LocalSearch` 没有。
+
+**刻意不采纳的建议**：评审提到「除非能找到百度对跨请求 FIFO 的明确官方保证」——查过 4.0.4 的
+`LocalSearch.d.ts` 与 `LocalResult.d.ts`，**没有**任何关于多次请求之间回调顺序的承诺（只承诺单次多关键
+字内部顺序），因此没有理由保留 FIFO。另外「让旧实例自己吸收迟到回包」被采纳为「旧实例在取消/处置后
+忽略一切回包」（比保留槽位更简单，且同样不会错配）。

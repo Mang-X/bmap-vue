@@ -44,6 +44,11 @@
   只在 `core/services/serviceStatus.ts` 定义：`empty` = 没有结果**或**服务当前不可用（官方没有公开原因），
   `unsupported` = 当前引擎没有该能力且**没有发起任何请求**；「请求发了但结果不好」是 `failed`。
   两者的区分是调用方能不能「重试」的依据，不要合并。
+- **回调归属不许按到达顺序猜**：官方对 JSONP 风格的服务只承诺「单次调用内部的顺序」，**没有**承诺
+  多次请求之间的回调顺序（`LocalSearch` 的 4.0.4 声明里也没有）。因此归属只能靠**可验证的身份**：
+  `Autocomplete` 用「通道独占 + 同关键词互斥」（`suggest()`），`LocalSearch` 用「**一个实例一个未结算
+  操作**」+ 调用方侧「取代即换新实例」（`useBMapServiceTask` 的 `supersede` 策略）。没有身份可依据时
+  **显式拒绝**，不要排队等后来猜——见 ADR `2026-09-14-service-lifecycle-and-local-search` 决策 4。
 
 `integrations/**` 与 `components` / `composables` 同属禁区（不在 raw SDK 白名单内）：它只能经
 `MapHandle`（`unwrapRaw()`）与 Facet Driver 与引擎交互。`./ui-kit` 另有两条硬约束，见

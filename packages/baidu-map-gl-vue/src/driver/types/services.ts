@@ -63,9 +63,12 @@ export interface ServiceDriver {
    * `options.renderOptions.map` 传 `MapHandle` 时才会把结果绘制到地图上（覆盖物所有权在
    * 调用方一侧：`clearLocalSearch` / `disposeLocalSearch` 负责收）；**不传则纯 headless**——
    * 服务只需要 `ClientContext`，不需要地图实例。
+   *
+   * **检索区域**只接受官方 `LocalSearch(location, …)` 的三种形态：城市名字符串、领域 `Point`、
+   * 或本库的 `MapHandle`（运行时仍会校验句柄品牌，覆盖 JS 调用方与跨 Client 混用）。
    */
   createLocalSearch(
-    location: unknown,
+    location: string | Point | MapHandle,
     options?: LocalSearchOptions,
   ): ServiceHandle<"service:local-search">;
   /**
@@ -259,8 +262,9 @@ export interface LocalSearchRenderOptions {
    * 绘制目标：本库的 `MapHandle`（Driver 归一化成 raw `Map`）。
    *
    * 不传 = 纯 headless：只回数据、不在任何地图上绘制覆盖物。
+   * 运行时仍按句柄品牌校验（JS 调用方拿不到编译期保护；跨 Client 混用必须被拒绝）。
    */
-  map?: unknown;
+  map?: MapHandle;
   /** 结果列表容器（元素或 id） */
   panel?: string | HTMLElement;
   /** 是否自动选中第一个结果 */
@@ -493,22 +497,25 @@ export interface ServiceInvocationDriver {
    * 关键字检索（`LocalSearch#search`）。
    *
    * 与 `suggest()` 的差别不是「换了个类」：**LocalSearch 不绑输入框**（没有用户输入与程序化
-   * 检索共用回调的问题），并且官方把 `LocalResult.keyword` 声明为**必填**，`getStatus()` 也是
-   * 公开的状态码入口——因此这里是「逐请求归属」可以真正落地的地方（`#72` 的 ADR 把这件事
-   * 记在了 `#38` 名下）。
+   * 检索共用回调的问题）。但它的**回包归属**反而更受约束——见下。
    *
-   * 归属与并发（`search` / `searchNearby` / `searchInBounds` / `gotoPage` 共用同一套规则）：
+   * **归属模型：一个实例同一时刻只有一个未结算操作**（`search` / `searchNearby` /
+   * `searchInBounds` / `gotoPage` 共用同一套规则）。
    *
-   * 1. **按请求顺序归属**：官方口径是每个操作恰好触发一次 `onSearchComplete`，且按发出顺序
-   *    到达；因此未结算的操作串行排队，回包按 FIFO 结算队首；
-   * 2. **关键字校验**：回包带回的 `keyword`（`LocalResult.keyword`，官方必填）与队首期望的
-   *    关键字不一致时，**不消费任何槽位**——它不属于在册请求；
-   * 3. **取消 = 墓碑**：SDK 没有取消入口（JSONP 发出去收不回），因此 `cancel()` 只把本次
-   *    `ServiceCall` 结算成 `canceled`，槽位保留为墓碑直到它自己的回包到达（删掉它会让迟到
-   *    回包去结算**下一个**操作）。墓碑不阻止新的同关键词操作——FIFO 保证它先被消费；
-   * 4. **同关键词互斥**：同一实例上不能有两个**未结算**且关键字相同的操作（回包无法区分），
-   *    命中时以 `failed(BMAP_SERVICE_FAILED)` 显式拒绝，而不是猜；
-   * 5. **队列上界**：等待回包的操作达到上界时拒绝新调用（不淘汰旧记录——淘汰会让回包错位）。
+   * 为什么不是「FIFO + keyword 校验」：官方只承诺**单次多关键字检索内部**结果数组与关键字
+   * 数组顺序一致，**没有**承诺多次请求之间的回调顺序；`LocalResult.keyword` 也不是请求身份
+   * （同关键词重查时完全等价）。按到达顺序归属在乱序回包下会确定性出错——「cancel A → search
+   * B」时 B 的回包先到会被判成不属于在册请求而丢弃，旧 A 的回包反而可能结算新请求（stale data）。
+   * 因此本库不再猜：**同一实例同一时刻只允许一个未结算操作**，归属与到达顺序无关。
+   *
+   * 由此派生三条对调用方可见的契约：
+   *
+   * 1. **并发被显式拒绝**：实例上已有未结算操作（含已取消/已超时、但其回包可能仍在路上的那次）
+   *    时，新调用以 `failed(BMAP_SERVICE_FAILED)` 结算，并提示重建实例；
+   * 2. **取消 = 该实例不再可用**：SDK 没有取消入口（JSONP 发出去收不回），`cancel()` 只把本次
+   *    `ServiceCall` 结算成 `canceled`；这个实例的迟到回包无法与后续请求区分，因此它从此拒绝
+   *    新的检索。要继续请 `disposeLocalSearch()` 后**重建实例**（返回的说明里也这么写）；
+   * 3. **超时同理**：超时不代表 SDK 侧请求消失，因此该实例同样需要重建。
    *
    * 参数非法（空关键字 / 非法坐标 / 非法半径）走 `failed(BMAP_INVALID_ARGUMENT)`；
    * 句柄不属于本 Driver 时同步抛 `BMAP_HANDLE_FOREIGN`（与其余调用面同源）。
@@ -578,14 +585,18 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
   /**
    * 释放本地检索实例（幂等）。
    *
-   * 语义与 `disposeAutocomplete` 同构：① 停止接受该实例的业务调用并**把在飞调用显式失败**；
-   * ② 解绑 Driver 侧资源（EventDriver 订阅）；③ 调用 SDK 自身的 `dispose()`——**只有成功才
-   * 记账**，抛错时调用方收到错误，句柄仍保持不可用，再次调用会**重试**未完成的 SDK 清理。
+   * ① 停止接受该实例的业务调用并**把在飞调用显式失败**；② 解绑 Driver 侧资源（EventDriver 订阅）；
+   * ③ **清掉 SDK 侧已画出的结果**——官方 `LocalSearch` **没有** `dispose()`（`4.0.4` 的声明里只有
+   * `clearResults` / `clearSelected` / `setSearchCompleteCallback` / `getStatus` …），因此这一步走
+   * 公开的 `clearResults()`：它同时清掉地图上的标注与结果面板。这一步**只有成功才记账**，抛错时
+   * 调用方收到错误，句柄仍保持不可用，再次调用会**重试**未完成的清理。
    *
-   * 为什么 LocalSearch 需要专用释放入口、而 Geocoder 等不需要：它是**唯一**由 Driver 登记了
-   * 「在飞请求 + 待回包队列」的非 Autocomplete 服务（`#23` 的欠账在 `#38` 补齐）。其余服务
-   * （Geocoder / Boundary / Convertor / LocalCity / Geolocation）的调用不持有 Driver 侧资源，
-   * 因此仍然没有通用 `dispose(ServiceHandle<string>)`。
+   * 与 `clearLocalSearch()` 的区别：后者只清结果、实例仍可继续检索；本入口把实例置为**终态**。
+   *
+   * 为什么 LocalSearch 需要专用释放入口、而 Geocoder 等不需要：它在 Driver 侧持有在飞请求记账，
+   * 并且是**唯一**会把覆盖物画到地图上的服务（`renderOptions.map`）——那些覆盖物不会随实例被 GC
+   * 回收，必须由这里收回。其余服务（Geocoder / Boundary / Convertor / LocalCity / Geolocation）
+   * 的调用不持有 Driver 侧资源，因此仍然没有通用 `dispose(ServiceHandle<string>)`。
    */
   disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 }

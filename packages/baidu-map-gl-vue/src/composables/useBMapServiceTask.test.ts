@@ -22,7 +22,13 @@ interface StubHandle {
 }
 
 interface StubService {
-  readonly stats: { created: number; released: number; invokes: number };
+  readonly stats: {
+    created: number;
+    released: number;
+    invokes: number;
+    /** `release` 被调用的次数（含失败的尝试） */
+    releaseAttempts: number;
+  };
   readonly client: unknown;
   readonly ctx: MapContext;
 }
@@ -35,10 +41,14 @@ interface StubServiceOptions {
   createHandle?: () => StubHandle;
   /** `whenReady` 是否失败 */
   loadFails?: boolean;
+  /** 前 N 次 `release` 抛错（验证「释放失败保留引用并重试」） */
+  releaseFails?: number;
+  /** 取代策略（透传给 `useBMapServiceTask`） */
+  supersede?: "cancel" | "recreate" | (() => "cancel" | "recreate" | "refuse");
 }
 
 function makeService(options: StubServiceOptions = {}): StubService {
-  const stats = { created: 0, released: 0, invokes: 0 };
+  const stats = { created: 0, released: 0, invokes: 0, releaseAttempts: 0 };
   const client = {
     engine: "jsapi-v4",
     rawSdk: {},
@@ -86,8 +96,13 @@ function taskOptions(service: StubService, options: StubServiceOptions = {}) {
       }, { label: "stub" });
     },
     release: () => {
+      stats.releaseAttempts += 1;
+      if (stats.releaseAttempts <= (options.releaseFails ?? 0)) {
+        throw new Error(`release failed (attempt ${stats.releaseAttempts})`);
+      }
       stats.released += 1;
     },
+    ...(options.supersede ? { supersede: options.supersede } : {}),
   };
 }
 
@@ -258,5 +273,131 @@ describe("useBMapServiceTask", () => {
     expect(task.status.value).toBe("loading");
     expect((await running).status).toBe("canceled");
     expect(service.stats.released, "卸载时释放实例").toBe(1);
+  });
+});
+
+describe("useBMapServiceTask：释放失败与取代策略（PR #89 评审 P2）", () => {
+  it("释放失败不丢引用：同一次释放内重试，成功后销账（不静默泄漏）", async () => {
+    const service = makeService();
+    const { wrapper, task } = mountTask(service, { releaseFails: 1 });
+    await flushPromises();
+
+    await task.execute();
+    task.invalidateService();
+
+    expect(service.stats.releaseAttempts, "失败后立刻重试一次").toBe(2);
+    expect(service.stats.released, "重试成功即销账").toBe(1);
+    wrapper.unmount();
+  });
+
+  it("释放持续失败：引用保留到下一次释放（scope 卸载时再试），不抛错", async () => {
+    const service = makeService();
+    const { wrapper, task } = mountTask(service, { releaseFails: 2 });
+    await flushPromises();
+
+    await task.execute();
+    task.invalidateService(); // 两次尝试都失败 ⇒ 留在待释放队列里
+    expect(service.stats.released).toBe(0);
+
+    await task.execute(); // 新建实例（失败项继续留在队列）
+    expect(service.stats.created).toBe(2);
+
+    wrapper.unmount(); // scope 卸载时再试：这次成功
+    await flushPromises();
+    expect(service.stats.released, "最终释放成功，且没有把错误抛到卸载路径").toBe(2);
+  });
+
+  it('supersede="recreate"：取代在飞调用时释放旧实例并新建（旧结果不会污染新结果）', async () => {
+    const pending: Array<(value: number) => void> = [];
+    const settleHook = (settle: ServiceCallSettle<number>, index: number): void => {
+      pending.push((value) => settle.success(value, index));
+    };
+    const service = makeService();
+    const { wrapper, task } = mountTask(service, { settle: settleHook, supersede: "recreate" });
+    await flushPromises();
+
+    const first = task.execute();
+    await flushPromises();
+    expect(service.stats.created).toBe(1);
+
+    const second = task.execute();
+    await flushPromises();
+    expect(service.stats.created, "取代 ⇒ 新建实例").toBe(2);
+    expect(service.stats.released, "旧实例被释放").toBe(1);
+
+    pending[0]?.(1);
+    pending[1]?.(2);
+    expect((await first).status).toBe("canceled");
+    const settled = await second;
+    expect(settled.status).toBe("success");
+    expect(settled.data, "新调用拿到的是自己的结果（不是被取代那次的数据）").toBe(2);
+    expect(service.stats.created, "同一次取代只新建一个实例").toBe(2);
+
+    wrapper.unmount();
+  });
+
+  it('supersede="recreate"：cancel 之后实例被标记过期，下一次调用重建', async () => {
+    const pending: Array<(value: number) => void> = [];
+    const service = makeService({
+      settle: (settle) => {
+        pending.push((value) => settle.success(value, 0));
+      },
+    });
+    const { wrapper, task } = mountTask(service, {
+      settle: (settle) => {
+        pending.push((value) => settle.success(value, 0));
+      },
+      supersede: "recreate",
+    });
+    await flushPromises();
+
+    const inflight = task.execute();
+    await flushPromises();
+    task.cancel();
+    expect((await inflight).status).toBe("canceled");
+    expect(service.stats.created).toBe(1);
+
+    const retried = task.execute();
+    await flushPromises();
+    expect(service.stats.created, "cancel 之后的下一次调用重建实例").toBe(2);
+    expect(service.stats.released).toBe(1);
+
+    // 旧实例的迟到回包 / 新实例自己的回包各归其位
+    pending[0]?.(1);
+    pending[1]?.(2);
+    expect((await retried).status).toBe("success");
+    expect(task.data.value).toBe(2);
+
+    wrapper.unmount();
+  });
+
+  it('supersede 返回 "refuse"：本次调用直接 failed，不发起请求、也不作废在飞调用', async () => {
+    const pending: Array<(value: number) => void> = [];
+    const service = makeService({
+      settle: (settle) => {
+        pending.push((value) => settle.success(value, 0));
+      },
+    });
+    const { wrapper, task } = mountTask(service, {
+      settle: (settle) => {
+        pending.push((value) => settle.success(value, 0));
+      },
+      supersede: () => "refuse",
+    });
+    await flushPromises();
+
+    const inflight = task.execute();
+    await flushPromises();
+    // 空闲时也照常拒绝（策略说「这次调用不能被接受」）——但**不得**影响在飞调用
+    const refused = await task.execute();
+    expect(refused.status).toBe("failed");
+    expect(refused.error?.code).toBe("BMAP_SERVICE_FAILED");
+
+    pending[0]?.(7);
+    const settled = await inflight;
+    expect(settled.status, "在飞调用不受拒绝影响").toBe("success");
+    expect(settled.data).toBe(7);
+
+    wrapper.unmount();
   });
 });

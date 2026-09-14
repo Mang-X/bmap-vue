@@ -78,8 +78,8 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | searchNearby  | 周边检索（中心点 + 半径，单位米）                                           | `(keyword, center, radius) => Promise<…>`             |
 | searchInBounds | 范围检索（矩形 `{ southwest, northeast }`）                                | `(keyword, bounds) => Promise<…>`                     |
 | gotoPage      | 翻页（页码从 0 开始）                                                       | `(page: number) => Promise<…>`                        |
-| clear         | 清空结果：同时清掉地图上的标注 / 结果面板与本地状态（同步，没有回包）        | `() => void`                                          |
-| cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）                 | `() => void`                                          |
+| clear         | 清空结果：清掉地图上的标注 / 结果面板与本地状态（实现上是释放当前实例，下一次 `search()` 用新实例） | `() => void`                                          |
+| cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）；取消后该实例不再复用 | `() => void`                                          |
 | reset         | 取消 + 清空 `data` / `error` / `status`                                     | `() => void`                                          |
 
 #### 统一状态口径
@@ -97,15 +97,22 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | `canceled`    | 逻辑取消                                                             |
 | `unsupported` | 当前引擎没有这个能力：**一次请求都没有发出**（此时 `supported` 为 `false`） |
 
-### 请求归属与并发
+### 请求归属与并发（**同一实例同一时刻只处理一个检索**）
 
-`LocalSearch` 的四个动作共用实例上的一条回调，而 SDK **没有取消入口**。因此：
+官方只承诺**单次多关键字检索内部**结果数组与关键字数组顺序一致，**没有**承诺多次请求之间的回调顺序；
+`keyword` 也不是请求身份。因此本 hooks 不按到达顺序猜归属，而是靠**实例身份**：
 
-- 同一实例上未结算的请求按**发出顺序**结算（每个动作恰好触发一次回调）；
-- 同一实例上**相同关键字**的两个未结算请求无法区分，第二个会被显式拒绝
-  （`failed` + `BMAP_SERVICE_FAILED`）。要「重新检索同一个词」先 `cancel()` 前一次——
-  取消会留下墓碑（它的迟到回包被丢弃，不会结算给新请求），因此**同关键词可以重查**；
-- 上一个请求被新的请求取代时，它**以 `canceled` 结算**，且结果既不写状态也不交回调用方。
+| 场景 | 行为 |
+| --- | --- |
+| 新 `search*` 落在**已经有未结算检索**的实例上 | 取消旧检索、**释放旧实例**（公开的 `clearResults()`，顺带清掉它画出的标注），并为新检索建新实例 → 旧的迟到回包只会落到旧实例上 |
+| `cancel()` 之后 | 实例被标记过期；**已经画出的结果保留可见**（`data` 也保留），下一次 `search*` 建新实例 |
+| 超时（`status === 'timeout'`）之后 | 同上：超时不代表 SDK 侧请求消失，实例不再复用 |
+| 在「上一次还没结算 / 实例已过期」时 `gotoPage()` | **直接以 `failed` 拒绝**（说明见 `error.message`），不落到 SDK、也不空转到超时 |
+| `clear()` | 释放当前实例（→ 公开的 `clearResults()`）+ 清空本地状态；下一次 `search()` 用新实例 |
+| 直接调 Driver（不经本 hooks）时并发 | Driver 以 `failed(BMAP_SERVICE_FAILED)` 拒绝，并提示 `disposeLocalSearch()` 后重建实例 |
+
+代价：取代 / 取消 / 超时之后的重查会**多建一个 SDK 实例**（换来归属可判定）。这一点与「每次请求一个
+独立实例」的取舍写在 ADR [2026-09-14](../../adr/2026-09-14-service-lifecycle-and-local-search.md) 决策 4。
 
 ### 与官方 UI Kit 的分流
 
