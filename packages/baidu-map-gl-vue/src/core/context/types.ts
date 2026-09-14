@@ -47,6 +47,15 @@ export interface MapRuntimeShape {
   readonly scheduler: FrameScheduler;
 
   whenReady(signal?: AbortSignal): Promise<MapReadyContext>;
+  /**
+   * 注册「地图对象已创建」的回调（M4-EVENTS / #28）：时机是 `create()` 之后、首次
+   * `initializeView()` **之前**，因此官方 `load` 这类初始化期事件也订阅得上。
+   *
+   * 已经在有地图时立即同步回调；返回注销用的 disposer。由 `MapRuntime` 实现；
+   * 自定义 Context（如 client 适配器）可以不提供 —— 此时 `useMapEvent` 退化为「等到句柄可见再订阅」，
+   * 代价是可能错过 `load`。
+   */
+  whenMapCreated?(callback: (ready: MapReadyContext) => void): () => void;
   retry?(): Promise<MapReadyContext>;
   dispose(): void;
 }

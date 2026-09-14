@@ -38,6 +38,12 @@ useMapEvent(name, handler, options?): () => void
   `MapEventPayload`（表内事件有逐事件的精确类型，官方清单见
   [组件事件](../guide/com-events) 页的「BMap：map 事件」一节）。
 
+> **宽松拼写 vs 精确类型**：运行时接受任意拼写（`styleLoaded`、`MAPTYPECHANGE`、`mouse_move`…都归一
+> 到同一条目），但**只有规范名 `MapEventName` 保证精确的载荷推导**。例如
+> `useMapEvent('mousemove', (e) => e.point.lng)` 里 `point` 必填，而写成 `useMapEvent('mouseMove', ...)`
+> 时载荷退回公共底座（`e.point` 变成可选、`e.zoomLevel` 变成 `number | undefined`）。
+> 要精确类型就用规范名（列表见上面那一页）。
+
 ```ts
 import type { MapEventPayloadOf } from 'baidu-map-gl-vue'
 
@@ -48,6 +54,26 @@ useMapEvent('some-future-event', (e) => {
   e.raw // 表外事件：用公共底座 + raw 逃生口
 })
 ```
+
+## 生命周期事件（`load` / `destroy`）
+
+`useMapEvent` 与 `<BMap>` 的 `@` 在生命周期两端给出**同一个可观察集合**：
+
+```ts
+useMapEvent('load', () => console.log('地图初始化完成'))   // 首次视野确定后一次
+useMapEvent('destroy', () => console.log('地图实例销毁'))  // 随地图销毁一次
+```
+
+两条规则与普通事件不同（原因：**组件卸载先于地图销毁** —— Vue 的卸载顺序是「父 `beforeUnmount` →
+父作用域 stop → 子树卸载 → 父 `unmounted`」，而地图销毁发生在 `<BMap>` 的 `onUnmounted` 里）：
+
+- `load` 通过上下文的「地图已创建」挂载点（`initializeView()` **之前**）提前订阅，否则等句柄可见时
+  它已经派发完了；
+- `destroy` 的订阅**由地图上下文持有**（登记在 Map Context 的 scope 上），因此组件卸载不会摘掉它 ——
+  它要活到地图销毁那一刻，之后随地图一起释放。要提前停止请用返回的 disposer。
+
+> 显式 `MapEventSource`（`{ map, client }`）**没有**这两个上下文能力，保持 SDK 订阅语义：
+> `load` 在「订阅时地图已初始化」时收不到、`destroy` 只在订阅仍然存活时收得到（订阅归调用方）。
 
 ## 显式订阅源（多地图）
 
@@ -109,3 +135,6 @@ stop() // 手动释放（幂等）
 
 // 或者交给作用域：组件卸载 / effectScope.stop() 时自动释放
 ```
+
+`destroy` 是唯一例外：它的订阅由地图上下文持有（组件卸载不摘，要活到地图销毁那一刻），
+提前停止同样用上面的 `stop()`。

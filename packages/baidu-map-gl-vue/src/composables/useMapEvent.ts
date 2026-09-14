@@ -21,6 +21,20 @@
  *    取最后一次载荷（可用 `options.coalesce` 覆盖）；
  * 4. **释放路径明确**：返回的 disposer 幂等；在组件 / effect scope 里调用时随作用域自动释放。
  *
+ * ## 生命周期事件（`load` / `destroy`）在 Map Context 路径下也能收到
+ *
+ * 两条与「普通事件」不同的规则，都来自同一件事实：**组件卸载先于地图销毁**（Vue 的卸载顺序是
+ * 父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，而地图销毁在
+ * `<BMap>` 的 `onUnmounted` 里）：
+ *
+ * - `load`：用上下文提供的 `whenMapCreated`（`create()` 之后、`initializeView()` **之前**）提前订阅，
+ *   否则等句柄可见时官方 `load` 已经派发完；
+ * - `destroy`：订阅登记在**上下文的 `ResourceScope`** 上（`MAP_CONTEXT_OWNED_EVENTS`），因此组件卸载
+ *   不会摘掉它 —— 它要活到地图销毁那一刻。要提前停止请用返回的 disposer。
+ *
+ * **显式 `MapEventSource` 保持 SDK 订阅语义**：没有这两个上下文能力，`load` 在「订阅时地图已初始化」
+ * 时收不到、`destroy` 只在订阅仍然存活时收得到（订阅归调用方）。
+ *
  * 名字任一种拼写都认（`'style-loaded'` / `'style_loaded'` / `'styleLoaded'`）。**Catalog 之外
  * 的名字原样订阅**——这是 raw 逃生口：上游以后新增的事件不需要等本库发版（代价是载荷类型只能是
  * 公共底座 `MapEventPayload`；表内事件有逐事件的精确类型）。
@@ -37,12 +51,15 @@ import {
   type ShallowRef,
 } from "vue";
 import {
+  MAP_CONTEXT_OWNED_EVENTS,
   resolveMapEventName,
   type MapEventName,
   type MapEventPayload,
   type MapEventPayloadOf,
 } from "../core/events/eventCatalog";
 import { subscribeMapEvent } from "../core/events/subscribeMapEvent";
+import type { BMapClient } from "../client/types";
+import type { MapHandle } from "../driver/types/handles";
 import { readEventSource, resolveMapEventSource, type MapEventSourceInput } from "./mapEventSource";
 
 /**
@@ -92,20 +109,43 @@ export function useMapEvent<K extends string>(
     : shallowRef(handler);
 
   const source = resolveMapEventSource(options.source);
-  let unsubscribe: (() => void) | null = null;
+  /** 当前生效的订阅（含它的归属与释放入口）。 */
+  let active: {
+    map: MapHandle;
+    sdkEventName: string;
+    coalesce: boolean;
+    release: () => void;
+    /** `true` = 订阅挂在地图上下文的 scope 上（生命周期结束事件），不随组件卸载释放。 */
+    contextOwned: boolean;
+  } | null = null;
 
-  const sync = (): void => {
-    unsubscribe?.();
-    unsubscribe = null;
-    const { map, client } = readEventSource(source);
-    if (!map || !client) return;
+  const releaseActive = (): void => {
+    const current = active;
+    active = null;
+    current?.release();
+  };
+
+  /** 建立/替换订阅：同一个「句柄 + SDK 名 + 合帧口径」上是幂等的。 */
+  const ensure = (map: MapHandle | null, client: BMapClient | null): void => {
     const rawName = String(toValue(name) ?? "");
     const entry = resolveMapEventName(rawName);
     // 表外名字原样订阅（raw 逃生口）；表内名字用 Catalog 的 SDK 拼写
     const sdkEventName = entry?.sdk ?? rawName;
-    if (!sdkEventName) return;
+    if (!map || !client || !sdkEventName) {
+      releaseActive();
+      return;
+    }
     const coalesce = options.coalesce ?? entry?.coalesce ?? false;
-    unsubscribe = subscribeMapEvent(
+    if (
+      active &&
+      active.map === map &&
+      active.sdkEventName === sdkEventName &&
+      active.coalesce === coalesce
+    ) {
+      return;
+    }
+    releaseActive();
+    const off = subscribeMapEvent(
       client,
       map,
       sdkEventName,
@@ -115,6 +155,18 @@ export function useMapEvent<K extends string>(
       },
       { coalesce, scheduler: source.scheduler },
     );
+    // 生命周期结束事件在 Map Context 路径下由**上下文**持有订阅（组件卸载先于地图销毁，见文件头）
+    const contextOwned =
+      entry !== undefined &&
+      source.resources !== undefined &&
+      MAP_CONTEXT_OWNED_EVENTS.includes(entry.vue);
+    const release = contextOwned ? source.resources!.add(off) : off;
+    active = { map, sdkEventName, coalesce, release, contextOwned };
+  };
+
+  const sync = (): void => {
+    const { map, client } = readEventSource(source);
+    ensure(map, client);
   };
 
   // 只把「订阅真的会变的东西」放进 watch 源：handler 不在其中，所以内联函数不会触发重订阅
@@ -124,13 +176,25 @@ export function useMapEvent<K extends string>(
     { immediate: true, flush: "post" },
   );
 
+  // 早期挂载点：`load` 这类初始化期事件在地图创建时（`initializeView()` **之前**）就派发
+  const stopEarly = source.whenMapCreated?.((ready) => ensure(ready.map, ready.client));
+
+  /** 调用方显式释放：全部释放（含上下文归属的那一类）。 */
   const dispose = (): void => {
-    unsubscribe?.();
-    unsubscribe = null;
+    releaseActive();
     stopWatch();
+    stopEarly?.();
   };
 
-  if (getCurrentScope()) onScopeDispose(dispose);
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      // 上下文归属的订阅（生命周期结束事件）**不**在这里释放：它要活到地图销毁那一刻，
+      // 由上下文的 ResourceScope 收尾（见文件头「生命周期事件」一节）。
+      if (!active?.contextOwned) releaseActive();
+      stopWatch();
+      stopEarly?.();
+    });
+  }
 
   return dispose;
 }

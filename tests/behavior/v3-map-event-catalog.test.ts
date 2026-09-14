@@ -25,6 +25,7 @@ import {
   BMAP_COMPONENT_EVENT_CATALOG,
   MAP_EVENT_CATALOG,
   MAP_EVENT_EMIT_ALIASES,
+  MAP_CONTEXT_OWNED_EVENTS,
   MAP_EVENT_NAMES,
   normalizeEventKey,
   resolveMapEventName,
@@ -394,6 +395,16 @@ describe("#28 组件级事件表", () => {
     // 正证：同一个字面量出现在代码里必须命中
     expect(stripComments('const y = \'emit("initd"\';\n')).toContain('"initd"');
     expect(stripComments('emitDynamic("initd", payload);\n')).toContain('"initd"');
+  });
+
+  it("上下文归属的生命周期事件清单是精确的（目前只有 destroy）", () => {
+    // 精确列表：这张表决定 `useMapEvent` 把订阅登记在谁的 scope 上，改动必须是显式的
+    expect([...MAP_CONTEXT_OWNED_EVENTS]).toEqual(["destroy"]);
+    for (const name of MAP_CONTEXT_OWNED_EVENTS) {
+      expect(MAP_EVENT_NAMES, `${name} 必须在 Catalog 里`).toContain(name);
+    }
+    // 反例：`load` 不在这里 —— 它在起点派发，订阅按调用方作用域释放即可
+    expect(MAP_CONTEXT_OWNED_EVENTS).not.toContain("load");
   });
 
   it("每条都有说明（文档表格由它生成）", () => {

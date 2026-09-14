@@ -47,16 +47,6 @@ export interface MapRuntimeOptions {
   container: HTMLElement;
   initialView?: MapView;
   mapOptions?: InitialMapOptions;
-  /**
-   * 地图对象**创建成功之后、首次 `initializeView()` 之前**调用一次（M4-EVENTS / #28 评审 P1）。
-   *
-   * 存在的理由：官方 `load` 事件在**首次 `centerAndZoom()` 之后**派发，而 `initializeView()`
-   * 内部就会调它、并且发生在 `map` 句柄对外可见之前——订阅者若等 `mount()` resolve 才订阅，
-   * 就永远收不到 `load`。这一个挂载点把「可以订阅了」提前到初始化边界之前。
-   *
-   * 该回调抛错**不**阻断建图（只告警）：它只用来挂订阅，不是初始化的一部分。
-   */
-  onMapCreated?: (ready: MapReadyContext) => void;
 }
 
 export type KeepAliveBehavior = "suspend" | "dispose";
@@ -79,6 +69,8 @@ export class MapRuntime {
   readonly plugins: PluginRegistry;
 
   private waiters = new Set<Waiter>();
+  /** `whenMapCreated()` 注册的回调，建图时清空（M4-EVENTS / #28）。 */
+  private mapCreatedCallbacks = new Set<(ready: MapReadyContext) => void>();
   private options: MapRuntimeOptions;
   private mountPromise: Promise<MapReadyContext> | null = null;
   private suspended = false;
@@ -115,6 +107,52 @@ export class MapRuntime {
       },
       this.resources,
     );
+  }
+
+  /**
+   * 注册「地图对象已创建」的回调（M4-EVENTS / #28 评审）。
+   *
+   * 时机是 `driver.map.create()` 之后、**首次 `initializeView()` 之前**：官方 `load` 就在
+   * `initializeView()` 内部那次 `centerAndZoom` 之后派发，而句柄要等 `mount()` resolve 才对外可见 ——
+   * 没有这个挂载点，`load` 这类「初始化期事件」在 `useMapEvent` 路径上永远收不到。
+   *
+   * 已经有地图时**立即同步调用**；返回取消注册的 disposer。回调抛错只告警，不阻断建图。
+   * 订阅者（如 `useMapEvent`）负责在自己的作用域里调用返回的 disposer。
+   */
+  whenMapCreated(callback: (ready: MapReadyContext) => void): () => void {
+    const currentMap = this.map.value;
+    const currentClient = this.client.value;
+    if (currentMap && currentClient) {
+      this.invokeMapCreated(callback, { client: currentClient, map: currentMap });
+      return () => {};
+    }
+    this.mapCreatedCallbacks.add(callback);
+    return () => {
+      this.mapCreatedCallbacks.delete(callback);
+    };
+  }
+
+  /** 单个回调的调用点：抛错只告警（它只用来挂订阅，不是初始化的一部分）。 */
+  private invokeMapCreated(
+    callback: (ready: MapReadyContext) => void,
+    ready: MapReadyContext,
+  ): void {
+    try {
+      callback(ready);
+    } catch (error) {
+      logger.warn(
+        `MapRuntime: whenMapCreated 回调抛错（不阻断建图）: ${
+          (error as Error)?.message ?? String(error)
+        }`,
+      );
+    }
+  }
+
+  private flushMapCreated(ready: MapReadyContext): void {
+    for (const callback of [...this.mapCreatedCallbacks]) {
+      this.invokeMapCreated(callback, ready);
+    }
+    this.mapCreatedCallbacks.clear();
   }
 
   async mount(): Promise<MapReadyContext> {
@@ -169,17 +207,7 @@ export class MapRuntime {
       }
       this.status.value = "initializing";
       // 初始化视野之前先放行订阅（`load` 就在 initializeView 的首次 centerAndZoom 之后派发）
-      if (this.options.onMapCreated) {
-        try {
-          this.options.onMapCreated({ client, map });
-        } catch (error) {
-          logger.warn(
-            `MapRuntime: onMapCreated 回调抛错（不阻断建图）: ${
-              (error as Error)?.message ?? String(error)
-            }`,
-          );
-        }
-      }
+      this.flushMapCreated({ client, map });
       if (this.options.initialView) {
         try {
           client.driver.map.initializeView(map, this.options.initialView);
@@ -373,6 +401,7 @@ export class MapRuntime {
     this.scheduler.dispose();
     this.events.clear();
     // 7. dispose root scope
+    this.mapCreatedCallbacks.clear();
     this.resources.dispose();
     // 8. status = disposed
     this.suspended = false;

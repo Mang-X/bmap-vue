@@ -413,6 +413,18 @@ export const MAP_EVENT_CATALOG = {
  */
 export type MapEventName = keyof typeof MAP_EVENT_CATALOG;
 
+/**
+ * **由地图上下文持有订阅**的生命周期事件（M4-EVENTS / #28 评审第二轮）。
+ *
+ * 目前只有 `destroy`：它是「地图的终点」，而组件的卸载**先于**地图销毁
+ * （Vue 的卸载顺序：父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，
+ * 而地图销毁发生在 `<BMap>` 的 `onUnmounted` 里）。因此挂在调用方作用域上的订阅必然先被摘掉。
+ * 规则：Map Context 路径下这些事件的订阅登记在上下文的 `ResourceScope` 上，随地图一起释放。
+ *
+ * `load` 不在此列：它在**起点**派发（订阅用 `whenMapCreated` 提前建立即可），组件那时还在。
+ */
+export const MAP_CONTEXT_OWNED_EVENTS: readonly MapEventName[] = Object.freeze(["destroy"]);
+
 /** 全部 SDK 订阅名。 */
 export type MapEventSdkName = (typeof MAP_EVENT_CATALOG)[MapEventName]["sdk"];
 

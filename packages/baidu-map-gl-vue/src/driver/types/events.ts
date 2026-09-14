@@ -43,7 +43,13 @@ export interface DriverEvent {
   zoomLevel?: number;
   /** 原始 DOM 事件；部分合成事件没有对应 DOM 事件。 */
   domEvent?: Event;
-  /** raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。 */
+  /**
+   * raw escape hatch：SDK 原始事件对象，只在需要访问未归一化字段时使用。
+   *
+   * **一个例外**：`destroy` 是库在销毁边界**合成派发**的生命周期事件（官方在我们摘掉订阅之后才
+   * 派发它），此时 `raw` 是**即将被销毁的 SDK Map 实例**，而不是 event object —— 形状与其它事件不同，
+   * 需要访问时请先按事件名区分。
+   */
   raw: unknown;
   preventDefault(): void;
   stopPropagation(): void;

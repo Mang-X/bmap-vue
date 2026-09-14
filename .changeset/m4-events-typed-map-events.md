@@ -15,6 +15,9 @@
   重渲染时**不比较 emit listener**（`hasPropsChanged` 显式跳过），因此「监听器从 `undefined` 变成
   函数」不会让 `<BMap>` 重渲染 —— 按需订阅的实现会静默丢事件。未绑定 handler 的事件由 Vue 丢弃。
 - **`.once` 可用**：`@click.once` / `@styleLoaded.once` 按 Vue 语义只触发一次。
+- **生命周期两端可用**：`<BMap @load>` / `@destroy` 与 `useMapEvent('load' | 'destroy')` 都收得到
+  （`load` 用上下文的「地图已创建」挂载点提前订阅；`destroy` 的订阅由地图上下文持有，因为组件卸载
+  先于地图销毁）。显式 `MapEventSource` 仍是 SDK 订阅语义。
 - 高频事件（`mousemove` / `touchmove` / `dragging` / `moving` / `zooming`）**一帧最多提交一次**，
   取该帧最后一次的载荷；`mousewheel` 刻意不合帧（每次都有独立的 `trend`）。
 - 载荷新增 `trend`（`mousewheel`）、`mapType` / `exMapType`（`maptypechange`）三个归一化字段；
@@ -30,7 +33,8 @@ useMapEvent('click', handler, { source: { map, client } }) // 订阅别处的地
 
 - **handler 更新不重绑**：传函数只捕获一次（Vue 的闭包读的就是最新值）；
   也可以传 `ref(handler)` 表示「每次派发读 `.value`」——两种都不新增 SDK 订阅。
-- 事件名任一种拼写都认（`style-loaded` / `style_loaded` / `styleLoaded`）；
+- 事件名运行时任一种拼写都认（`style-loaded` / `style_loaded` / `styleLoaded`），但**只有规范名
+  `MapEventName` 保证精确的载荷推导**（宽松拼写退回公共底座）；
   **清单之外的名字原样订阅**（上游新增事件不必等本库发版），载荷类型退化为公共底座、不用 `any`。
 - 返回幂等的 disposer；在组件 / `effectScope` 内调用时随作用域自动释放。
 

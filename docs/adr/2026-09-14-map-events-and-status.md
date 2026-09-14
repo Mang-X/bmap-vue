@@ -221,6 +221,26 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 `mousewheel.trend` 与 `zoomexceeded.targetZoom` **保持 optional**：地图答不出它们（`getZoom()` 给的是当前级别，
 不是「试图到达的级别」；滚轮方向只在 raw 里），本库不做猜测。
 
+### 11. 生命周期两端的可观察集合：`load` 早订、`destroy` 归上下文（评审第二轮）
+
+`<BMap @load>` / `@destroy` 已经可用，但**子组件里的 `useMapEvent('load' | 'destroy')` 收不到**
+（评审 P1）—— 两个方向的根因不同，都源自同一件事实：**组件卸载先于地图销毁**。
+
+Vue 的卸载顺序（`unmountComponent`）：父 `beforeUnmount` → 父作用域 stop → 卸载子树（**子作用域 stop**）
+→ 父 `unmounted`（`<BMap>` 在这里 `runtime.dispose()` → `driver.map.destroy()` → 合成 `destroy`）。
+
+| 事件 | 为什么收不到 | 处置 |
+| --- | --- | --- |
+| `load` | 官方在**首次 `centerAndZoom()` 之后**派发，而该调用发生在 `initializeView()` 里、句柄对外可见之前；`useMapEvent` 要等 `map` ref 变化才订阅 | 提供上下文级挂载点 `whenMapCreated`（`MapRuntime` → `MapContext`），`useMapEvent` 在**那之前**就把订阅建好（订阅仍归调用方作用域：那时组件还在） |
+| `destroy` | 子作用域在**地图销毁之前**就 stop 了，挂在调用方作用域上的订阅必然先被摘掉 | `MAP_CONTEXT_OWNED_EVENTS`（当前只有 `destroy`）：Map Context 路径下把订阅登记在**上下文的 `ResourceScope`** 上，随地图一起释放；组件卸载不摘（要提前停止用返回的 disposer） |
+
+**显式 `MapEventSource` 保持 SDK 订阅语义**（不提供这两个上下文能力）：`load` 在「订阅时地图已初始化」
+时可能收不到、`destroy` 只在订阅仍然存活时收得到。这条写进 `useMapEvent` 文档与 JSDoc，并有反向用例
+（显式 source 的订阅随组件卸载释放 ⇒ 不再收到 `destroy`）。
+
+**副效应**：`<BMap>` 自己的 map 事件订阅同样改用 `runtime.whenMapCreated(...)`（原来的构造选项
+`MapRuntimeOptions.onMapCreated` 被这个可订阅入口取代，一个机制服务两处）。
+
 ## 后果
 
 ### 迁移影响（对调用方可见）
@@ -268,10 +288,15 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
    `syncEnableProps` / 视野收敛——那属于「重试 = 重新装配」这个更大的问题（见 ADR
    `2026-09-14-map-controlled-state` 已知限制 7）。当前 `MapRuntime` 在 ready 之后不会重建地图实例，
    因此「按身份重建」这条分支目前是**防御性**的。
-9. **`mousewheel.trend` / `zoomexceeded.targetZoom` 是 optional**：raw-only 字段（地图答不出「试图到达的
+9. **`useMapEvent('destroy')` 的订阅归地图所有**（决策 11）：Map Context 路径下它不随调用方组件卸载释放、
+   而是活到地图销毁那一刻（那时才回调 + 释放）。因此「组件提前卸载」不会提前停掉它 —— 需要提前停请用
+   返回的 disposer。显式 source 不受此规则影响（订阅归调用方）。
+10. **宽松拼写只有规范名保证精确类型**（评审 P2，选择「文档说明」而非「给兼容拼写建类型映射」）：
+    运行时任意拼写都归一，但只有 `MapEventName` 的载荷推导是精确的。
+11. **`mousewheel.trend` / `zoomexceeded.targetZoom` 是 optional**：raw-only 字段（地图答不出「试图到达的
    缩放级别」，滚轮方向也只在 raw 里），本库不猜。其余事件级必填字段（`load.point/zoom`、`resize.size`、
    `maptypechange.zoomLevel`）由 Driver 读回补齐，因此**在类型上是必填**（见决策 10）。
-10. **`destroy` 是 Driver 合成派发**（不是直接转发的 SDK 事件）：官方在我们摘掉订阅之后才派发它，
+12. **`destroy` 是 Driver 合成派发**（不是直接转发的 SDK 事件）：官方在我们摘掉订阅之后才派发它，
     转发的路子拿不到（见决策 10）。载荷形状与其它事件一致，`raw` 是被销毁的实例。
 9. **组件事件的别名目前只有 `ready` → `initd` 一处**，它由 `emitReady()` 从 Catalog 的
    `BMAP_COMPONENT_EVENT_EMIT_ALIASES` 读；表里新增别名时需要同样接一个「唯一出口」。
@@ -285,7 +310,7 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 
 ## 验证
 
-- `tests/behavior/v3-map-event-catalog.test.ts`（24 条）：上游 `MapEventMap` 双向取差集、
+- `tests/behavior/v3-map-event-catalog.test.ts`（28 条）：上游 `MapEventMap` 双向取差集、
   名字推导与反例（不拆 `maptypechange`）、归一化无撞车、`resolveMapEventName` 四种拼写、
   合帧集合、`pointer` 标记 ↔ Driver 兜底清单、**两个归一化入口的坐标优先级一致**、
   `trend`/`mapType` 归一化、组件事件别名「只有一处」（含注释不误报的反证）、
@@ -297,7 +322,9 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
   就绪即给值、未就绪=未知、引用不变（含 `watch` 不被唤醒 + **真实变化会唤醒**的正证）、容差、
   八个字段都是 ref、四个字段各自更新、标志起止与「同帧不倒置」、`moving` 只在真变化时唤醒、
   订阅 12 份落在 10 个事件类型（精确集合）、释放后不更新、未初始化视野如实上报。
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-EVENTS 一组 **13 条**组件级场景（无条件订阅与
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-EVENTS 一组 **15 条**组件级场景（含「Map Context 下的
+  `useMapEvent` 也能收到 `load` / `destroy`」与「显式 source 的订阅随组件卸载释放」两条生命周期门禁）；
+  无条件订阅与
   handler 变更不丢事件、订阅覆盖全 Catalog、非函数 handler 不产生调用、事件转发与别名、`@click.once`、
   `@load`、`@destroy`、内联 handler 不重绑、高频合帧、**两张地图不串线**（`@` 与 `useMapEvent` 两条路径）、
   `useMapStatus` 跟随用户交互、卸载后 scope 账本归零）；既有的「不重绑与卸载归零」用例的 fixture 补了
@@ -323,6 +350,18 @@ symbol，因此共享同一个调度器的多份订阅互不覆盖）。
 
 **本轮新增单点反证 8 组**（改坏即红，全部还原）：`Once` 变体、值检查、`onMapCreated` 接线、
 `destroy` 合成派发、scope remover、`bind()` 事务回滚、`bind()` 状态复位、合帧异常外抛。
+
+## 评审修正（2026-09-14 第二轮）
+
+评审给出 1 条主要 blocking + 2 条 P2（上一轮 8 项已逐条复核通过）。三条均成立：
+
+| 评审意见 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1]** `useMapEvent('load' \| 'destroy')` 在真实 `<BMap>` 子树里收不到：`load` 因订阅晚于初始化边界；`destroy` 因组件作用域先于地图销毁 stop ⇒ 与「`<BMap>` 与 `useMapEvent` 同一可观察集合」的表述不符 | **成立**。按评审建议先写门禁用例（子树里同时订 `load` / `destroy`，mount→unmount 各一次），实测 `load` 0 次；`destroy` 的时序由 Vue 的卸载顺序决定（子作用域 stop 在 `unmounted` 之前） | 决策 11：上下文级挂载点 `whenMapCreated`（`MapRuntime` → `MapContext`）+ `MAP_CONTEXT_OWNED_EVENTS`（`destroy` 的订阅归上下文 scope）。**没有**采用「只保证 `<BMap @...>`」的替代方案 —— 两条都做成真的可用，且显式 source 的语义用反向用例钉住 |
+| **[P2]** 运行时接受宽松拼写，但只有 canonical `MapEventName` 有精确 payload 推导 | **成立** | 采纳评审倾向的第二种：在 `useMapEvent` 文档写明「运行时宽松、类型只在规范名上精确」，并在 JSDoc 里点明 |
+| **[P2]** 合成 `destroy` 时 `DriverEvent.raw` 是「即将销毁的 Map 实例」而字段注释写的是「SDK 原始事件对象」 | **成立** | `raw` 的 JSDoc 补上这个唯一例外（避免 raw 逃生口在合成事件上出现意外形状） |
+
+**本轮新增单点反证 3 组**：`whenMapCreated` 接线、`whenMapCreated` 在 `MapContext` 上的暴露、上下文归属清单。
 
 ## 非目标
 

@@ -526,11 +526,6 @@ const currentRuntime = new MapRuntime({
   clientContext,
   container: null as unknown as HTMLElement,
   initialView: initialViewSnapshot,
-  // 订阅挂载点（M4-EVENTS / #28 评审 P1）：官方 `load` 在首次 `centerAndZoom()` 之后派发，
-  // 而那次调用发生在 `mount()` resolve 之前、`map` 句柄对外可见之前 —— 等 ready 再订阅
-  // 就**永远收不到** `load`。这里在初始化视野之前先把订阅挂上（同一次订阅记账，身份一致时幂等）。
-  onMapCreated: ({ client: createdClient, map: createdMap }) =>
-    syncMapEventSubscriptions({ client: createdClient, map: createdMap }),
   mapOptions: {
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
@@ -539,6 +534,13 @@ const currentRuntime = new MapRuntime({
     backgroundColor: props.backgroundColor,
   },
 });
+/**
+ * 订阅挂载点（M4-EVENTS / #28）：官方 `load` 在首次 `centerAndZoom()` 之后派发，而那次调用发生在
+ * `mount()` resolve 之前、`map` 句柄对外可见之前 —— 等 ready 再订阅就**永远收不到** `load`。
+ * 在初始化视野之前把订阅挂上（同一次订阅记账，句柄身份一致时幂等）。
+ */
+currentRuntime.whenMapCreated((ready) => syncMapEventSubscriptions(ready));
+
 /**
  * `plugins` prop 的解析结果，按**用户写的顺序**排列。
  *
@@ -838,6 +840,9 @@ const context: MapContext = {
   controls: runtime.controls,
   plugins: runtime.plugins,
   whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
+  // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
+  whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
+    runtime.whenMapCreated(callback),
   retry: () => runtime.retry(),
   dispose: () => runtime.dispose(),
 };
@@ -897,6 +902,9 @@ defineExpose({
   getMapInstance: () => map.value,
   getContainer: () => containerRef.value,
   whenReady: (signal?: AbortSignal) => runtime.whenReady(signal),
+  // 早期订阅挂载点（M4-EVENTS / #28）：子组件的 useMapEvent 靠它在 initializeView 之前订上 `load`
+  whenMapCreated: (callback: (ready: MapReadyContext) => void) =>
+    runtime.whenMapCreated(callback),
   retry: () => runtime.retry(),
   suspend: (reason?: unknown) => runtime.suspend(reason),
   resume: (reason?: unknown) => runtime.resume(reason),

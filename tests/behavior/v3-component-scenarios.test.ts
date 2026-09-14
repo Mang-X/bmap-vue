@@ -1232,6 +1232,70 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     harness.assertIdle("map 事件：scope 记账");
   });
 
+  it("Map Context 下的 useMapEvent 也能收到 load / destroy（与 <BMap @...> 同一可观察集合）", async () => {
+    const loadSpy = vi.fn();
+    const destroySpy = vi.fn();
+    const LifecycleProbe = defineComponent({
+      setup() {
+        useMapEvent("load", loadSpy);
+        useMapEvent("destroy", destroySpy);
+        return () => h("span", "lifecycle-probe");
+      },
+    });
+
+    const { wrapper } = await mountControlledMap(() => controlledViewProps(), {
+      children: () => [h(LifecycleProbe)],
+    });
+
+    expect(loadSpy, "load 在 initializeView 之后派发 —— 订阅必须在那之前建立").toHaveBeenCalledTimes(1);
+    expect(loadSpy.mock.calls[0]![0]).toMatchObject({ type: "load" });
+    expect(destroySpy).not.toHaveBeenCalled();
+
+    await unmountAndSettle(wrapper);
+
+    expect(
+      destroySpy,
+      "destroy 在 runtime.dispose() 里合成派发，而子组件的作用域先于它停止 —— 订阅必须活到那一刻",
+    ).toHaveBeenCalledTimes(1);
+    expect(destroySpy.mock.calls[0]![0]).toMatchObject({ type: "destroy" });
+    harness.assertIdle("useMapEvent：生命周期事件");
+  });
+
+  it("显式 source 的 useMapEvent 在组件提前卸载后不再收到 destroy（订阅归调用方）", async () => {
+    const destroySpy = vi.fn();
+    let stop: (() => void) | null = null;
+    let childScopeStopped = false;
+    const ExplicitProbe = defineComponent({
+      setup() {
+        const mapContext = useRequiredMapContext();
+        stop = useMapEvent("destroy", destroySpy, {
+          source: { map: mapContext.map, client: mapContext.client },
+        });
+        return () => h("span", "explicit-probe");
+      },
+    });
+    // 父级在子组件卸载后单独把地图销毁（模拟「订阅归调用方」的语义）
+    const props = ref<Record<string, unknown>>({ provider: harness.provider(), show: true });
+    const Tree = defineComponent({
+      setup: () => () =>
+        h(BMap, props.value as never, {
+          default: () => (props.value.show ? [h(ExplicitProbe)] : []),
+        }),
+    });
+    const wrapper = mount(Tree, { attachTo: harness.container() });
+    await flushPromises();
+    await nextTick();
+
+    props.value = { ...props.value, show: false };
+    await settleProps();
+    childScopeStopped = stop !== null;
+    expect(childScopeStopped).toBe(true);
+    // 子组件已卸载：显式 source 的订阅随作用域释放 ⇒ 不再收到 destroy
+    await unmountAndSettle(wrapper);
+    expect(destroySpy).not.toHaveBeenCalled();
+    harness.assertIdle("useMapEvent：显式 source 的 destroy");
+  });
+
   it("useMapStatus：Map Context 下的只读 refs 跟随用户交互，卸载后监听器归零", async () => {
     let seen: ReturnType<typeof useMapStatus> | null = null;
     const StatusProbe = defineComponent({

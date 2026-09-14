@@ -13,8 +13,9 @@
 import { getCurrentInstance, toValue, type MaybeRefOrGetter } from "vue";
 import type { BMapClient } from "../client/types";
 import { useOptionalMapContext } from "../core/context/inject";
-import type { MapContext } from "../core/context/types";
+import type { MapContext, MapReadyContext } from "../core/context/types";
 import { BMapError } from "../core/errors/BMapError";
+import type { ResourceScope } from "../core/lifecycle/ResourceScope";
 import type { FrameScheduler } from "../core/scheduler/FrameScheduler";
 import type { MapHandle } from "../driver/types/handles";
 
@@ -31,6 +32,19 @@ export interface MapEventSource {
   client: MaybeRefOrGetter<BMapClient | null>;
   /** 可选的合帧器：给了就复用它（缺省时高频订阅自建一个并随订阅释放）。 */
   scheduler?: FrameScheduler;
+  /**
+   * 早期订阅挂载点：`create()` 之后、`initializeView()` **之前**回调（`MapContext` 自带）。
+   *
+   * 没有它的显式 source 只能在句柄可见时订阅 —— 对「初始化期事件」（`load`）意味着**可能收不到**，
+   * 这是显式 source 的既有语义（见 `useMapEvent` 文档）。
+   */
+  whenMapCreated?: (callback: (ready: MapReadyContext) => void) => () => void;
+  /**
+   * 上下文级订阅归属（`MapContext` 自带 `resources`）：**生命周期结束事件**（`destroy`）的订阅
+   * 登记在这里而不是调用方组件的作用域 —— 组件卸载先于地图销毁，挂在自己作用域上必然收不到
+   * （见 ADR `2026-09-14-map-events-and-status` 决策 11）。
+   */
+  resources?: ResourceScope;
 }
 
 export type MapEventSourceInput = MapContext | MapEventSource;
