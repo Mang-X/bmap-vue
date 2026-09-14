@@ -50,12 +50,17 @@ import type {
   BoundaryRequest,
   BoundaryRings,
   ConvertorRequest,
+  DrivingPolicy,
+  DrivingRouteOptions,
+  DrivingRouteRequest,
+  DrivingRouteResult,
   GeocodeRequest,
   GeocodedAddress,
   GeocodedAddressComponents,
   GeolocationAddressInfo,
   GeolocationFix,
   GeolocationOptions,
+  IntercityPolicy,
   JsapiV4ServiceDriver,
   LocalCityFix,
   LocalSearchBounds,
@@ -69,8 +74,32 @@ import type {
   LocalSearchSearchOption,
   PlaceSuggestion,
   ReverseGeocodeRequest,
+  RidingRouteOptions,
+  RidingRouteResult,
+  RouteEndpoint,
+  RouteEndpointInfo,
+  RouteLeg,
+  RoutePlan,
+  RouteRenderOptions,
+  RouteRequest,
+  RouteResult,
+  RouteServiceHandle,
+  RouteServiceKind,
+  RouteStep,
+  RouteTaxiFare,
+  RouteTaxiFareDetail,
   ServiceCall,
   ServiceCallSettle,
+  TransitLineSegment,
+  TransitPolicy,
+  TransitRouteOptions,
+  TransitRoutePlan,
+  TransitRouteRequest,
+  TransitRouteResult,
+  TransitRouteSegment,
+  TransitVehiclePolicy,
+  WalkingRouteOptions,
+  WalkingRouteResult,
 } from "../types/services";
 import {
   assertJsapiV4Namespace,
@@ -179,7 +208,7 @@ const GEOLOCATION_FAILURE_REASONS = {
   8: "定位超时",
 } as const;
 
-/** 六个基础服务 ↔ Catalog 能力（能力清单是单一事实源：`driver/capability/catalog.ts`）。 */
+/** 服务 ↔ Catalog 能力（能力清单是单一事实源：`driver/capability/catalog.ts`）。 */
 const SERVICE_CAPABILITIES = {
   createGeocoder: "service.geocoder",
   createConvertor: "service.convertor",
@@ -188,6 +217,11 @@ const SERVICE_CAPABILITIES = {
   createBoundary: "service.boundary",
   createAutocomplete: "service.autocomplete",
   createLocalSearch: "service.local-search",
+  // 四类路线服务（M7-ROUTES / #39）在 Catalog 里都是 `native`（服务模块存在、签名已核对）
+  createDrivingRoute: "service.driving-route",
+  createWalkingRoute: "service.walking-route",
+  createRidingRoute: "service.riding-route",
+  createTransitRoute: "service.transit-route",
 } as const satisfies Record<string, Capability>;
 
 /**
@@ -214,6 +248,48 @@ function describeLocalSearchStatus(status: number): string {
   return (
     LOCAL_SEARCH_FAILURE_REASONS[status as keyof typeof LOCAL_SEARCH_FAILURE_REASONS] ??
     `检索失败（状态码 ${status}）`
+  );
+}
+
+/**
+ * 路线服务的失败状态码 → 可读原因（M7-ROUTES / #39）。
+ *
+ * 口径**以四个路线类 `getStatus()` 的声明为准**：它声明的是 `ServiceStatus`（`BMAP_STATUS_*`），
+ * 里面唯一表示成功的是 `0`，`2..8` 依次是位置未知 / 导航未知 / 非法密钥 / 非法请求 / 没有权限 /
+ * 服务不可用 / 超时——都是失败。
+ *
+ * 类型包里另有一套 `RouteStatus`（`0` 正常 / `1` 结果为空 / `2` 仅返回地址信息），与 `ServiceStatus`
+ * 在 0..2 上重叠、语义不同；但**没有任何路线类的 `getStatus()` 声明成 `RouteStatus`**，因此不能拿
+ * 「另一张码表存在」去覆盖明确的方法签名（PR #91 评审 P1）。处置：
+ *
+ * - `≥ 2` ⇒ `failed` 并带上官方那个码（`2` = `BMAP_STATUS_UNKNOWN_LOCATION`）；
+ * - `0`（声明里唯一的成功值）与 `1`（在 `ServiceStatus` 是「城市列表」、在 `RouteStatus` 是「结果为空」，
+ *   两种读法都表示「没有可用路线」）⇒ 由载荷决定 `success` / `empty`；
+ * - 读不到状态码（`null`）⇒ 同样由载荷决定。
+ *
+ * 若真实运行时能证明它回的是 `RouteStatus`（需要真实 AK smoke 读数：正常路线 / 无法规划 / 无法识别
+ * 起终点三种），再按新 ADR 调整口径——在那之前**不按猜测放宽**。这条欠账记在
+ * ADR `2026-09-14-route-services-headless.md` 的「已知限制」里。
+ */
+const ROUTE_FAILURE_REASONS = {
+  2: "位置未知",
+  3: "导航未知（无法规划出路线）",
+  4: "非法密钥",
+  5: "非法请求",
+  6: "没有权限",
+  7: "服务不可用",
+  8: "超时",
+} as const;
+
+/** 路线状态码：按声明（`ServiceStatus`）判定失败，`≥ 2` 即失败（见 `ROUTE_FAILURE_REASONS`）。 */
+function isRouteFailureStatus(status: number | null): status is number {
+  return status !== null && status >= 2;
+}
+
+function describeRouteStatus(status: number): string {
+  return (
+    ROUTE_FAILURE_REASONS[status as keyof typeof ROUTE_FAILURE_REASONS] ??
+    `路线规划失败（状态码 ${status}）`
   );
 }
 
@@ -451,6 +527,268 @@ export function readLocalSearchResults(payload: unknown): LocalSearchResult[] {
     if (projected) results.push(projected);
   }
   return results;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 路线结果投影（M7-ROUTES / #39）                                               */
+/* -------------------------------------------------------------------------- */
+
+/** 坐标数组读取：不是坐标的项直接丢弃（伪造一个 0/0 比丢一个点更糟）。 */
+function readPointList(value: unknown): Point[] {
+  if (!Array.isArray(value)) return [];
+  const points: Point[] = [];
+  for (const item of value) {
+    const point = readPointLike(item);
+    if (point) points.push(point);
+  }
+  return points;
+}
+
+/** 成员是否可调用（与 `readOptionalMember` 的分工：这里只判存在，不调用）。 */
+function hasMember(target: unknown, method: string): boolean {
+  return typeof readNamespaceMember(target, method) === "function";
+}
+
+/** 官方 `getDistance(format?)` 一类的「数值 / 文本」双读法。 */
+interface FormattedNumber {
+  value: number | null;
+  text: string | null;
+}
+
+function readFormatted(target: unknown, method: string): FormattedNumber {
+  return {
+    value: readOptionalFiniteNumber(readOptionalMember(target, method, false)),
+    text: readOptionalString(readOptionalMember(target, method, true)),
+  };
+}
+
+/** 结果里的端点（官方 `LocalResultPoi` 的领域投影；缺坐标时为 `null` 而不是 0/0）。 */
+export function readRouteEndpointInfo(value: unknown): RouteEndpointInfo | null {
+  if (!isObjectLike(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    title: readOptionalString(record.title) ?? "",
+    point: readPointLike(record.point),
+    uid: readOptionalString(record.uid) ?? "",
+  };
+}
+
+/**
+ * `Step` → 领域关键点。
+ *
+ * 判别键是 `getIndex()`（官方 `Step` 的唯一序号入口）：缺它说明这不是一个关键点，返回 `null`
+ * ——把「形状不认识」降级成「这个关键点没有描述」会让调用方分不清两种「没有」。
+ */
+export function readRouteStep(value: unknown): RouteStep | null {
+  if (!isObjectLike(value)) return null;
+  const index = readOptionalFiniteNumber(readOptionalMember(value, "getIndex"));
+  if (index === null) return null;
+  const distance = readFormatted(value, "getDistance");
+  return {
+    index,
+    position: readPointLike(readOptionalMember(value, "getPosition")),
+    // `getDescription(includeHtml)`：官方默认带 HTML，这里只取**纯文本**（`false`）；
+    // 要 HTML 的调用方本来就不该从数据层拿（那属于 UI 的事）。
+    description: readOptionalString(readOptionalMember(value, "getDescription", false)),
+    distance: distance.value,
+    distanceText: distance.text,
+    routeIndex: readOptionalFiniteNumber(readOptionalMember(value, "getRouteIndex")),
+    planIndex: readOptionalFiniteNumber(readOptionalMember(value, "getPlanIndex")),
+  };
+}
+
+/** `Route` → 领域路线；缺 `getPath()` 说明这不是一条路线，返回 `null`。 */
+export function readRouteLeg(value: unknown): RouteLeg | null {
+  if (!isObjectLike(value) || !hasMember(value, "getPath")) return null;
+  const distance = readFormatted(value, "getDistance");
+  const stepCount = readOptionalFiniteNumber(readOptionalMember(value, "getNumSteps")) ?? 0;
+  const steps: RouteStep[] = [];
+  for (let index = 0; index < stepCount; index += 1) {
+    const step = readRouteStep(readOptionalMember(value, "getStep", index));
+    if (step) steps.push(step);
+  }
+  return {
+    index: readOptionalFiniteNumber(readOptionalMember(value, "getIndex")) ?? 0,
+    planIndex: readOptionalFiniteNumber(readOptionalMember(value, "getPlanIndex")),
+    routeType: readOptionalFiniteNumber(readOptionalMember(value, "getRouteType")),
+    distance: distance.value,
+    distanceText: distance.text,
+    path: readPointList(readOptionalMember(value, "getPath")),
+    steps,
+  };
+}
+
+function readTaxiFareDetail(value: unknown): RouteTaxiFareDetail | null {
+  if (!isObjectLike(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    initialFare: readOptionalFiniteNumber(record.initialFare),
+    unitFare: readOptionalFiniteNumber(record.unitFare),
+    totalFare: readOptionalFiniteNumber(record.totalFare),
+  };
+}
+
+function readTaxiFare(value: unknown): RouteTaxiFare | null {
+  if (!isObjectLike(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    day: readTaxiFareDetail(record.day),
+    night: readTaxiFareDetail(record.night),
+    distance: readOptionalFiniteNumber(record.distance),
+    remark: readOptionalString(record.remark),
+  };
+}
+
+/** `RoutePlan` → 领域方案；缺 `getNumRoutes()` 说明这不是一条方案，返回 `null`。 */
+export function readRoutePlan(value: unknown, index: number): RoutePlan | null {
+  if (!isObjectLike(value)) return null;
+  const routeCount = readOptionalFiniteNumber(readOptionalMember(value, "getNumRoutes"));
+  if (routeCount === null) return null;
+
+  const distance = readFormatted(value, "getDistance");
+  const duration = readFormatted(value, "getDuration");
+  const legs: RouteLeg[] = [];
+  for (let i = 0; i < routeCount; i += 1) {
+    const leg = readRouteLeg(readOptionalMember(value, "getRoute", i));
+    if (leg) legs.push(leg);
+  }
+  const dragPois: RouteEndpointInfo[] = [];
+  const rawDragPois = readOptionalMember(value, "getDragPois");
+  if (Array.isArray(rawDragPois)) {
+    for (const item of rawDragPois) {
+      const poi = readRouteEndpointInfo(item);
+      if (poi) dragPois.push(poi);
+    }
+  }
+
+  return {
+    index,
+    distance: distance.value,
+    distanceText: distance.text,
+    duration: duration.value,
+    durationText: duration.text,
+    // `getToll()` / `getTollDistance()` 只在官方 `DrivingRoutePlan` 接口里声明（4.0.4 的
+    // `DrivingRouteResult#getPlan` 返回类型写的是 `RoutePlan`）⇒ **可选读取**：拿不到就是 `null`，
+    // 不 augmentation、不告警——「这次没拿到」本身就是如实的表达。
+    toll: readOptionalFiniteNumber(readOptionalMember(value, "getToll")),
+    tollDistance: readOptionalFiniteNumber(readOptionalMember(value, "getTollDistance")),
+    taxiFare: readTaxiFare(readOptionalMember(value, "getTaxiFare")),
+    dragPois,
+    legs,
+  };
+}
+
+/** `Line` → 领域乘车段；缺 `getTitle()` 说明这不是一条线路，返回 `null`。 */
+export function readTransitLineSegment(value: unknown): TransitLineSegment | null {
+  if (!isObjectLike(value) || !hasMember(value, "getTitle")) return null;
+  const record = value as Record<string, unknown>;
+  const distance = readFormatted(value, "getDistance");
+  return {
+    kind: "line",
+    title: readOptionalString(readOptionalMember(value, "getTitle")) ?? readOptionalString(record.title) ?? "",
+    // 官方 `Line#type` 是**字段**（`LineType` 数值枚举），不是 getter
+    lineType: readOptionalFiniteNumber(record.type),
+    viaStops: readOptionalFiniteNumber(readOptionalMember(value, "getNumViaStops")),
+    onStop: readRouteEndpointInfo(readOptionalMember(value, "getGetOnStop")),
+    offStop: readRouteEndpointInfo(readOptionalMember(value, "getGetOffStop")),
+    distance: distance.value,
+    distanceText: distance.text,
+    path: readPointList(readOptionalMember(value, "getPath")),
+  };
+}
+
+/**
+ * `TransitRoutePlan` → 领域公交方案；缺 `getNumTotal()` 说明这不是一条公交方案，返回 `null`。
+ *
+ * 分段按**官方自己的判别入口** `getTotalType(i)`（0 = 步行 `Route` / 1 = 乘车 `Line`）分流，
+ * `getTotal(i)` 取对象——不用「有没有某个字段」这类形状特征（接口允许没有该字段的合法成员，
+ * 特征识别会把它们误分类）。
+ */
+export function readTransitRoutePlan(value: unknown, index: number): TransitRoutePlan | null {
+  if (!isObjectLike(value)) return null;
+  const totalCount = readOptionalFiniteNumber(readOptionalMember(value, "getNumTotal"));
+  if (totalCount === null) return null;
+
+  const segments: TransitRouteSegment[] = [];
+  for (let i = 0; i < totalCount; i += 1) {
+    const type = readOptionalFiniteNumber(readOptionalMember(value, "getTotalType", i));
+    const item = readOptionalMember(value, "getTotal", i);
+    if (type === 0) {
+      const leg = readRouteLeg(item);
+      if (leg) segments.push({ kind: "walk", leg });
+    } else if (type === 1) {
+      const line = readTransitLineSegment(item);
+      if (line) segments.push(line);
+    }
+    // 判别键不是 0/1 ⇒ 既不按步行也不按乘车读，丢弃该段（不猜）
+  }
+
+  const distance = readFormatted(value, "getDistance");
+  const duration = readFormatted(value, "getDuration");
+  return {
+    index,
+    distance: distance.value,
+    distanceText: distance.text,
+    duration: duration.value,
+    durationText: duration.text,
+    description: readOptionalString(readOptionalMember(value, "getDescription", false)),
+    linesTitle: readOptionalString(readOptionalMember(value, "getLinesTitle")),
+    walkDistance: readOptionalString(readOptionalMember(value, "getWalkDistance")),
+    segments,
+  };
+}
+
+/**
+ * 路线结果的**信封**读取（四类服务共用）：`getNumPlans()` + `getPlan()` 是判别键。
+ *
+ * 两者缺一即认为「这不是我们认识的路线结果」⇒ 返回 `null`，由调用方结算成 `empty`；不伪造一个
+ * 「0 条方案」的成功结果（那会把「契约变了」伪装成「这次没有路线」）。
+ */
+function readRouteEnvelope(
+  value: unknown,
+): { envelope: Omit<RouteResult<never>, "plans">; planCount: number } | null {
+  if (!isObjectLike(value)) return null;
+  const planCount = readOptionalFiniteNumber(readOptionalMember(value, "getNumPlans"));
+  if (planCount === null || !hasMember(value, "getPlan")) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    envelope: {
+      start: readRouteEndpointInfo(readOptionalMember(value, "getStart")),
+      end: readRouteEndpointInfo(readOptionalMember(value, "getEnd")),
+      policy: readOptionalFiniteNumber(record.policy),
+      // 驾车 / 步行 / 骑行没有 `getTransitType()`，恒为 `null`（`readTransitRouteResult` 补它）
+      transitType: null,
+    },
+    planCount,
+  };
+}
+
+/** 路线结果 → 领域 DTO（驾车 / 步行 / 骑行）。 */
+export function readRouteResult(value: unknown): RouteResult<RoutePlan> | null {
+  const head = readRouteEnvelope(value);
+  if (!head) return null;
+  const plans: RoutePlan[] = [];
+  for (let i = 0; i < head.planCount; i += 1) {
+    const plan = readRoutePlan(readOptionalMember(value, "getPlan", i), i);
+    if (plan) plans.push(plan);
+  }
+  return { ...head.envelope, plans };
+}
+
+/** 公交路线结果 → 领域 DTO（多一个 `getTransitType()`）。 */
+export function readTransitRouteResult(value: unknown): RouteResult<TransitRoutePlan> | null {
+  const head = readRouteEnvelope(value);
+  if (!head) return null;
+  const plans: TransitRoutePlan[] = [];
+  for (let i = 0; i < head.planCount; i += 1) {
+    const plan = readTransitRoutePlan(readOptionalMember(value, "getPlan", i), i);
+    if (plan) plans.push(plan);
+  }
+  return {
+    ...head.envelope,
+    transitType: readOptionalFiniteNumber(readOptionalMember(value, "getTransitType")),
+    plans,
+  };
 }
 
 /** `AddressComponent` → 领域投影（缺项一律 `null`，不补空串——空串会被读成「真的有这个值」）。 */
@@ -828,6 +1166,44 @@ export function createJsapiV4ServiceDriver(
   };
 
   /**
+   * 释放一个「以**公开 `clearResults()`** 为唯一清理入口」的服务实例
+   * （`LocalSearch` 与四类路线服务共用，#39 把它从 `disposeLocalSearch` 里提出来）。
+   *
+   * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.4 声明里只有
+   * `clearResults` / `getResults` / `getStatus` …），但它**交付出去的结果集**不随实例被 GC
+   * ——地图上的折线与标注、写进 `panel` 的 DOM 都由调用方交给 SDK 的地图持有。因此：
+   *
+   * 1. 先把在册的未结算操作**显式失败**并置为**终态**（它的迟到回包从此没有归属可言）；
+   * 2. 再走公开的 `clearResults()` 把已经可见的结果收回来。
+   *
+   * 差异只剩 `label`（错误信息里点名是谁）；写成两份只会让「成功才记账」这类细节各自漂移。
+   */
+  const disposeResultHolderInstance = (
+    raw: Record<string, unknown>,
+    handle: ServiceHandle<string>,
+    label: string,
+  ): void => {
+    disposeServiceInstance(raw, handle, {
+      label,
+      cleanup: () => {
+        // 在飞调用显式失败（幂等）；并置为**终态** —— 迟到回包不再有归属
+        const settle = readActiveOperation<unknown>(raw);
+        activeOperations.delete(raw);
+        supersededOperations.add(raw);
+        settle?.failed({
+          code: "BMAP_SERVICE_FAILED",
+          message: `该服务实例在请求进行中被 ${label}() 释放`,
+        });
+      },
+      // 官方公开的清理入口：清掉它画在地图上的路线 / 标注与结果面板。
+      // **不能**只把实例丢给 GC：那些覆盖物由调用方交给 SDK 的地图持有。
+      releaseSdk: () => {
+        sdkCall(`${label}.clearResults`, () => callRequired(raw, "clearResults"));
+      },
+    });
+  };
+
+  /**
    * 运行期句柄种类校验（类型是编译期契约，JS 调用方仍需在边界拦住）。
    *
    * 与 layers / controls / native-layers 同源，按 Handle 品牌判断，避免把别的服务句柄悄悄
@@ -913,52 +1289,69 @@ export function createJsapiV4ServiceDriver(
    * 调用方侧（composable）用「supersede ⇒ 新建实例」实现「最新者胜」，见
    * `docs/adr/2026-09-14-service-lifecycle-and-local-search.md` 决策 4。
    */
-  const activeSearches = new WeakMap<object, ServiceCallSettle<LocalSearchResult[]>>();
+  const activeOperations = new WeakMap<object, ServiceCallSettle<unknown>>();
 
   /**
-   * 已被**取消**取代的实例：`cancel()` 之后它不再接受新的检索。
+   * 已被**取消 / 超时**取代的实例：此后它不再接受新的检索。
    *
-   * 判据是「这个实例上出现过一次无法归属的迟到回包」，因此与「是否已 dispose」是两件事：
-   * 前者可以由调用方重新 `createLocalSearch()` 继续用，后者只能重建。
+   * 判据是「这个实例上出现过一次无法归属的迟到回包」，因此与「是否已释放」是两件事：
+   * 前者可以由调用方重新建实例继续用，后者只能重建。
+   *
+   * 键是 raw 实例，而一个 raw 对象只可能是 `LocalSearch` 或四类路线服务之一，因此**一份记账够用**
+   * （与 `disposedInstances` 同一取舍）：分开存只会让「这个实例上还有没有未结算操作」有两个真相。
    */
-  const supersededSearches = new WeakSet<object>();
+  const supersededOperations = new WeakSet<object>();
 
-  /** 取消 = 该实例不再可用（它的迟到回包无法与后续请求区分）。 */
-  const supersedeLocalSearch = (raw: Record<string, unknown>): void => {
-    supersededSearches.add(raw);
-    activeSearches.delete(raw);
+  /** 取消 / 超时 = 该实例不再可用（它的迟到回包无法与后续请求区分）。 */
+  const supersedeOperation = (raw: Record<string, unknown>): void => {
+    supersededOperations.add(raw);
+    activeOperations.delete(raw);
   };
+
+  /**
+   * 读取该实例上**唯一**那个未结算操作的结算入口。
+   *
+   * 存进去的是 `ServiceCallSettle<unknown>`（一份记账服务多个调用面），取出来时按调用面自己的
+   * 载荷类型收窄——一个 raw 实例只可能属于一个调用面（`LocalSearch` **或** 四类路线服务之一），
+   * 因此这个收窄在事实层面是安全的，而不是「赌」。
+   */
+  const readActiveOperation = <T>(raw: Record<string, unknown>): ServiceCallSettle<T> | null =>
+    (activeOperations.get(raw) as ServiceCallSettle<T> | undefined) ?? null;
 
   /**
    * 发起一次检索操作：占用唯一槽位 → 调用 SDK → （同步抛错则回滚槽位）。
    *
-   * `cancel()` 走 `onCancel` 把实例标记为「已被取代」——**不保留槽位**：实例从此不再接受
-   * 新检索，迟到回包到达时没有任何在册操作可被结算（也就不会再错配给别人）。
+   * **`LocalSearch` 与四类路线服务共用它**（#39 明确要求「复用请求生命周期、避免建立第二套框架」）：
+   * 这五类服务的回包语义完全一样——一条 `onSearchComplete`、回包里没有请求身份、官方也没有承诺
+   * 跨请求顺序，所以归属只能靠**实例身份**（一个实例同一时刻一个未结算操作）。
+   *
+   * `cancel()` 走 `onCancel` 把实例标记为「已被取代」——**不保留槽位**：实例从此不再接受新检索，
+   * 迟到回包到达时没有任何在册操作可被结算（也就不会再错配给别人）。
    */
-  const invokeLocalSearch = (
+  const invokeSlotOperation = <T>(
     label: string,
     raw: Record<string, unknown>,
     invoke: () => void,
-  ): ServiceCall<LocalSearchResult[]> =>
-    createServiceCall<LocalSearchResult[]>(
+  ): ServiceCall<T> =>
+    createServiceCall<T>(
       (settle) => {
-        activeSearches.set(raw, settle);
+        activeOperations.set(raw, settle as ServiceCallSettle<unknown>);
         try {
           invoke();
         } catch (error) {
           // 请求没发出去就不会有回包：把槽位交还，否则这个实例会永远「忙」
-          activeSearches.delete(raw);
+          activeOperations.delete(raw);
           throw error;
         }
       },
       {
         label,
-        // 取消只影响调用方看到的结果；实例本身从此不再可用（见 `supersededSearches`）
-        onCancel: () => supersedeLocalSearch(raw),
+        // 取消只影响调用方看到的结果；实例本身从此不再可用（见 `supersededOperations`）
+        onCancel: () => supersedeOperation(raw),
         // **超时同理**：超时不代表 SDK 侧请求消失，迟到回包仍可能到达。若这里不收尾，
         // 「迟到回包到达后实例又变回可用」就会让同一 handle 的行为取决于回包早晚
         // （PR #89 复审 P1）——契约要求：取消/超时之后必须重建实例。
-        onTimeout: () => supersedeLocalSearch(raw),
+        onTimeout: () => supersedeOperation(raw),
       },
     );
 
@@ -966,29 +1359,30 @@ export function createJsapiV4ServiceDriver(
    * 调用前的准入判定（返回失败原因，`null` 表示放行）。
    *
    * 三条拒绝理由都必须**显式失败**而不是静默排队：排队会让调用方以为请求已经发出去了。
-   * 三条都指向同一个处置——`disposeLocalSearch()` 后重建实例。
+   * 三条都指向同一个处置——`disposeEntry()` 后重建实例。
    */
-  const searchAdmissionFailure = (
+  const operationAdmissionFailure = (
     raw: Record<string, unknown>,
     operation: string,
+    disposeEntry: string,
   ): string | null => {
     if (disposedInstances.has(raw)) {
-      return "该服务实例已被 disposeLocalSearch() 释放：请重建实例后再检索";
+      return `${operation}: 该服务实例已被 ${disposeEntry}() 释放：请重建实例后再检索`;
     }
-    if (supersededSearches.has(raw)) {
+    if (supersededOperations.has(raw)) {
       // 这个集合有两个来源：`cancel()`（`onCancel`）与**超时**（`onTimeout`）——两者都意味着
       // 「这一次调用已经结束，但 SDK 侧的请求可能仍在路上」，因此文案不点名 cancel。
       return (
-        `LocalSearch.${operation}: 该实例已因**取消或超时**失效 —— 它上一次检索的迟到回包无法与` +
+        `${operation}: 该实例已因**取消或超时**失效 —— 它上一次检索的迟到回包无法与` +
         "后续请求区分（官方没有承诺多次请求之间的回包顺序），因此不再接受新的检索；" +
-        "请 disposeLocalSearch() 后重建实例（composable 的「最新者胜」正是这样做的）"
+        `请 ${disposeEntry}() 后重建实例（composable 的「最新者胜」正是这样做的）`
       );
     }
-    if (activeSearches.has(raw)) {
+    if (activeOperations.has(raw)) {
       return (
-        `LocalSearch.${operation}: 该实例上已有**未结算**的检索 —— 同一实例同一时刻只允许一个` +
+        `${operation}: 该实例上已有**未结算**的检索 —— 同一实例同一时刻只允许一个` +
         "未结算操作，否则回包无法归属（官方只承诺单次多关键字内部顺序，不承诺跨请求顺序）。" +
-        "请等它结算，或 disposeLocalSearch() 后重建实例（已在路上的回包不会因为取消而消失）"
+        `请等它结算，或 ${disposeEntry}() 后重建实例（已在路上的回包不会因为取消而消失）`
       );
     }
     return null;
@@ -1001,10 +1395,10 @@ export function createJsapiV4ServiceDriver(
    * 迟到回包，或运行时自行触发的检索）。
    */
   const settleActiveSearch = (raw: Record<string, unknown>, payload: unknown): void => {
-    if (disposedInstances.has(raw) || supersededSearches.has(raw)) return;
-    const settle = activeSearches.get(raw);
+    if (disposedInstances.has(raw) || supersededOperations.has(raw)) return;
+    const settle = readActiveOperation<LocalSearchResult[]>(raw);
     if (!settle) return;
-    activeSearches.delete(raw);
+    activeOperations.delete(raw);
 
     const status = readServiceStatus(raw, warnOnce, "ServiceDriver.search");
     // **状态码优先**：`LocalSearch` 是公开带状态码的服务，失败时官方仍会触发
@@ -1028,6 +1422,51 @@ export function createJsapiV4ServiceDriver(
     settle.success(results, status);
   };
 
+  /**
+   * 路线回包归属 + 结算（四类路线服务共用；由 `onSearchComplete` 的内部分发器调用）。
+   *
+   * 与 `settleActiveSearch` 同源——槽位唯一，因此不需要关键字校验、也不依赖到达顺序；差别只有两处：
+   *
+   * 1. 载荷投影换成路线的那两个（`readRouteResult` / `readTransitRouteResult`）；
+   * 2. **状态码口径**换成路线的（见 `isRouteFailureStatus`：0..2 区间有两套码表重叠，一律按
+   *    `empty` 报，`≥3` 才是失败的公开原因）。
+   *
+   * `label` 同时用于 `getStatus()` 读取失败时的告警与超时文案，因此按调用面分别传
+   * （`ServiceDriver.searchDrivingRoute` 等）——同一个实例只可能属于一个调用面。
+   */
+  const settleActiveRoute = <TPlan>(
+    raw: Record<string, unknown>,
+    payload: unknown,
+    project: (value: unknown) => RouteResult<TPlan> | null,
+    label: string,
+  ): void => {
+    if (disposedInstances.has(raw) || supersededOperations.has(raw)) return;
+    // 载荷类型按调用面收窄：raw 实例只可能由一个 `create*Route` 建出来（见 `readActiveOperation`）
+    const settle = readActiveOperation<RouteResult<TPlan>>(raw);
+    if (!settle) return;
+    activeOperations.delete(raw);
+
+    const status = readServiceStatus(raw, warnOnce, label);
+    // **状态码优先**：官方失败时仍会触发 `onSearchComplete`（可能还带着上一轮或空的载荷），
+    // 先看载荷会把「官方说这次失败了」误判成成功。
+    if (isRouteFailureStatus(status)) {
+      settle.failed({ code: status, message: describeRouteStatus(status) }, status);
+      return;
+    }
+    const result = project(payload);
+    if (!result) {
+      // 回包不可用（`null` / 不是路线结果）：没有公开原因就不假装是失败
+      settle.empty(status);
+      return;
+    }
+    if (result.plans.length === 0) {
+      // 合法回包但一条方案都没有 ⇒ 查无路线（`empty`，不是 `failed`）
+      settle.empty(status);
+      return;
+    }
+    settle.success(result, status);
+  };
+
   /** 参数不合法的 LocalSearch 调用（走结果通道，不抛错）。 */
   const invalidSearchCall = (label: string, message: string): ServiceCall<LocalSearchResult[]> =>
     invalidCall<LocalSearchResult[]>(label, message);
@@ -1037,17 +1476,20 @@ export function createJsapiV4ServiceDriver(
     serviceFailedCall<LocalSearchResult[]>(label, message);
 
   /**
-   * 本地检索的检索区域归一化。
+   * 服务实例的**检索区域**归一化（`LocalSearch` 与四类路线服务共用）。
    *
    * 官方接受 `Map | Point | string`；本库对应 `MapHandle | 领域 Point | 城市名`。其余形态
    * **显式失败**而不是透传给 SDK（透传会得到 SDK 侧的原生异常，调用方无法按 code 分类处理）。
+   *
+   * `label` 是**创建入口名**（`createLocalSearch` / `createDrivingRoute` …）：这条函数被多类服务
+   * 共用，把入口名写死会让路线的参数错误报成「createLocalSearch: …」（指错服务），因此逐调用点传。
    */
-  const normalizeSearchLocation = (value: unknown): unknown => {
+  const normalizeSearchLocation = (value: unknown, label: string): unknown => {
     if (typeof value === "string") {
       if (value.length === 0) {
         throw new BMapError(
           "BMAP_INVALID_ARGUMENT",
-          "createLocalSearch: 检索区域不能是空字符串",
+          `${label}: 检索区域不能是空字符串`,
           { engine: "jsapi-v4" },
         );
       }
@@ -1059,7 +1501,7 @@ export function createJsapiV4ServiceDriver(
         if (brand !== "map") {
           throw new BMapError(
             "BMAP_INVALID_ARGUMENT",
-            `createLocalSearch: 检索区域只接受 MapHandle（收到 "${brand}"）`,
+            `${label}: 检索区域只接受 MapHandle（收到 "${brand}"）`,
             { engine: "jsapi-v4" },
           );
         }
@@ -1071,20 +1513,28 @@ export function createJsapiV4ServiceDriver(
     }
     throw new BMapError(
       "BMAP_INVALID_ARGUMENT",
-      "createLocalSearch: 检索区域必须是城市名字符串、领域 Point（{ lng, lat }）或 MapHandle",
+      `${label}: 检索区域必须是城市名字符串、领域 Point（{ lng, lat }）或 MapHandle`,
       { engine: "jsapi-v4" },
     );
   };
 
   /**
-   * 绘制选项归一化。
+   * 绘制选项归一化（`LocalSearch` 与四类路线服务共用）。
    *
-   * 只透传官方声明里**存在**的成员（`map` / `panel` / `selectFirstResult` / `autoViewport` /
-   * `viewportOptions`）——接收后忽略属于假支持。`map` 必须是本库的 `MapHandle`：绘制出来的
-   * 覆盖物所有权必须可验证，否则 `clearLocalSearch` / `disposeLocalSearch` 收不回它们。
+   * 只透传官方声明里**存在且有语义**的成员——接收后忽略属于假支持。两处按调用方区分：
+   *
+   * - `selectFirstResult` 只有 `LocalSearch` 收（官方 `RenderOptions` 明说它「仅对 LocalSearch
+   *   有效」），由 `options.allowSelectFirstResult` 决定要不要读：路线服务传 `false`，因此 JS 调用方
+   *   硬塞进来的 `selectFirstResult` 也**不会**被转发；
+   * - `label` 是创建入口名，用于错误信息（共用一份实现不能把入口名写死，否则路线会报成
+   *   「createLocalSearch: …」）。
+   *
+   * `map` 必须是本库的 `MapHandle`：绘制出来的覆盖物所有权必须可验证，否则清理路径
+   * （`clearLocalSearch` / `clearRouteResults` / `disposeLocalSearch` / `disposeRoute`）收不回它们。
    */
   const normalizeRenderOptions = (
-    value: LocalSearchRenderOptions | undefined,
+    value: LocalSearchRenderOptions | RouteRenderOptions | undefined,
+    options: { label: string; allowSelectFirstResult: boolean },
   ): Record<string, unknown> | null => {
     if (!value || typeof value !== "object") return null;
     const out: Record<string, unknown> = {};
@@ -1094,7 +1544,7 @@ export function createJsapiV4ServiceDriver(
       if (brand !== "map") {
         throw new BMapError(
           "BMAP_INVALID_ARGUMENT",
-          "createLocalSearch: renderOptions.map 必须是本库的 MapHandle" +
+          `${options.label}: renderOptions.map 必须是本库的 MapHandle` +
             "（绘制目标的所有权必须可验证，否则清理路径收不回覆盖物）",
           { engine: "jsapi-v4" },
         );
@@ -1102,8 +1552,11 @@ export function createJsapiV4ServiceDriver(
       out.map = registry.resolve<unknown>(value.map as SdkHandle<string>);
     }
     if (typeof value.panel === "string" || isObjectLike(value.panel)) out.panel = value.panel;
-    if (typeof value.selectFirstResult === "boolean") {
-      out.selectFirstResult = value.selectFirstResult;
+    // `selectFirstResult` 只存在于 `LocalSearchRenderOptions`（`RouteRenderOptions` 刻意不含它：
+    // 官方声明说它「仅对 LocalSearch 有效」），因此按结构化读法「存在才读」，而不是把两个类型强行合并。
+    const selectFirstResult = (value as { selectFirstResult?: unknown }).selectFirstResult;
+    if (options.allowSelectFirstResult && typeof selectFirstResult === "boolean") {
+      out.selectFirstResult = selectFirstResult;
     }
     if (typeof value.autoViewport === "boolean") out.autoViewport = value.autoViewport;
     if (value.viewportOptions) {
@@ -1156,6 +1609,225 @@ export function createJsapiV4ServiceDriver(
   ): Record<string, unknown> => {
     assertLocalSearchHandle(handle, operation);
     return resolve<Record<string, unknown>>(handle, operation);
+  };
+
+  /* ------------------------------------------------------- 路线规划（#39） */
+
+  /** 路线服务句柄种类（`clearRouteResults` / `disposeRoute` 的准入判据）。 */
+  const ROUTE_HANDLE_KINDS: readonly string[] = [
+    "service:driving-route",
+    "service:walking-route",
+    "service:riding-route",
+    "service:transit-route",
+  ];
+
+  const assertRouteHandle = (handle: RouteServiceHandle, operation: string): void => {
+    const brand = String(handle[HANDLE_BRAND]);
+    if (ROUTE_HANDLE_KINDS.includes(brand)) return;
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      `${operation} 只接受 createDrivingRoute / createWalkingRoute / createRidingRoute / ` +
+        `createTransitRoute 的句柄，收到 "${brand}"`,
+      { engine: "jsapi-v4" },
+    );
+  };
+
+  /** 把「有值才写」的构造选项收成一个对象（`undefined` = 不写这一项，而不是写一个 undefined）。 */
+  const definedSettings = (entries: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(entries)) {
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  };
+
+  /**
+   * 路线端点归一化。
+   *
+   * 官方四个服务的 `search()` 接受 `Point`（四者都有）、`string`（步行 / 骑行 / 公交有，
+   * **驾车没有**）、与 `LocalResultPoi`（四者都有）。本库对应：
+   *
+   * - 领域 `Point`（`{ lng, lat }`）→ `geometry.toRawPoint()`；
+   * - 非空字符串（仅 `allowKeyword` 时）→ 原样透传；
+   * - `RouteEndpointPoi`（`uid` + `point` + 可选 `name`）→ 构造成 SDK 认得的对象，见
+   *   `RouteEndpointPoi` 的说明（**未经真实运行时证明的假设**，已登记在 ADR 的已知限制里）；
+   * - 其余形态**显式失败**：不把非法值透传给 SDK（透传得到的是 SDK 侧原生异常，调用方无法按码分类）。
+   */
+  const normalizeRouteEndpoint = (
+    value: unknown,
+    options: { allowKeyword: boolean },
+  ): unknown => {
+    if (typeof value === "string") {
+      if (!options.allowKeyword) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "驾车路线不支持关键字（字符串）起终点：官方 DrivingRoute#search 只接受 Point 或 POI。" +
+            "要按地址出发，请先用 Geocoder / LocalSearch 取得坐标或 POI",
+          { engine: "jsapi-v4" },
+        );
+      }
+      if (value.length === 0) {
+        throw new BMapError("BMAP_INVALID_ARGUMENT", "路线端点不能是空字符串", {
+          engine: "jsapi-v4",
+        });
+      }
+      return value;
+    }
+    if (isObjectLike(value)) {
+      const record = value as Record<string, unknown>;
+      if ("lng" in record || "lat" in record) {
+        const point = readPointLike(record);
+        if (!point) {
+          throw new BMapError(
+            "BMAP_INVALID_ARGUMENT",
+            `路线端点必须是有限坐标 { lng, lat }：${JSON.stringify(value) ?? String(value)}`,
+            { engine: "jsapi-v4" },
+          );
+        }
+        return geometry.toRawPoint(point);
+      }
+      if (typeof record.uid === "string" && record.uid.length > 0) {
+        const point = readPointLike(record.point);
+        if (!point) {
+          throw new BMapError(
+            "BMAP_INVALID_ARGUMENT",
+            "路线端点的 POI 引用必须带合法坐标 point（{ lng, lat }）——uid 失效时它就是定位依据",
+            { engine: "jsapi-v4" },
+          );
+        }
+        // 官方 `LocalResultPoi` 的标题字段叫 `title`；本库的 `name` 映射到它
+        return {
+          uid: record.uid,
+          title: typeof record.name === "string" ? record.name : record.uid,
+          point: geometry.toRawPoint(point),
+        };
+      }
+    }
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      "路线端点必须是领域 Point（{ lng, lat }）、POI 引用（{ uid, point }）" +
+        (options.allowKeyword ? "或非空地名字符串" : ""),
+      { engine: "jsapi-v4" },
+    );
+  };
+
+  /** 途经点归一化（**只有驾车**调用它）：必须是坐标数组，非法项显式失败。 */
+  const normalizeRouteWaypoints = (value: unknown): unknown[] | null => {
+    if (value === undefined) return null;
+    if (!Array.isArray(value)) {
+      throw new BMapError("BMAP_INVALID_ARGUMENT", "waypoints 必须是坐标数组", {
+        engine: "jsapi-v4",
+      });
+    }
+    const points: Point[] = [];
+    for (const item of value) {
+      const point = readPointLike(item);
+      if (!point) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `waypoints 里存在非法坐标（缺分量或非有限数）: ${JSON.stringify(item) ?? String(item)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      points.push(point);
+    }
+    return geometry.toRawPoints(points);
+  };
+
+  /**
+   * 创建路线服务实例（四类服务共用）。
+   *
+   * 与 `createLocalSearch` 的三点一致：① 能力门先过；② 回包经 `settleActiveRoute` 落到本实例的
+   * **唯一**槽位；③ **终态实例一律不再回写**（SDK 的回包可能在释放之后才到，也可能在清理过程中
+   * 同步触发）。差别只有构造器名、能力 id、句柄种类与载荷投影。
+   */
+  const createRouteService = <TPlan, TKind extends RouteServiceKind>(input: {
+    /** SDK 构造器名（同时作为 `sdkCall` 的标签），如 `"DrivingRoute"` */
+    ctor: string;
+    capability: Capability;
+    kind: TKind;
+    /** 调用面标签（进告警与超时文案），如 `"ServiceDriver.searchDrivingRoute"` */
+    operation: string;
+    projection: (value: unknown) => RouteResult<TPlan> | null;
+    location: string | Point | MapHandle;
+    /** 该服务自己的构造选项（策略 / 页容量 / 路况开关），已按官方声明过滤 */
+    settings?: Record<string, unknown>;
+    renderOptions?: RouteRenderOptions;
+  }): ServiceHandle<TKind> => {
+    capabilities.require(input.capability);
+    const Ctor = namespaceCtor(namespace, input.ctor);
+    // 创建入口名（`createDrivingRoute` 这类）：共用的归一化函数靠它把错误指向**正确的服务**
+    const label = `create${input.ctor}`;
+    const location = normalizeSearchLocation(input.location, label);
+    const settings: Record<string, unknown> = { ...(input.settings ?? {}) };
+    // 绘制选项复用 `createLocalSearch` 的那份归一化（`RouteRenderOptions` 是 `LocalSearchRenderOptions`
+    // 的结构子集：`map` 的句柄品牌校验、「只透传声明里存在且有语义的成员」的口径两处完全相同）。
+    // 路线传 `allowSelectFirstResult: false` ⇒ JS 调用方硬塞的 `selectFirstResult` 也不会被转发。
+    const renderOptions = normalizeRenderOptions(input.renderOptions, {
+      label,
+      allowSelectFirstResult: false,
+    });
+    if (renderOptions) settings.renderOptions = renderOptions;
+
+    let raw: Record<string, unknown> | null = null;
+    const instance = sdkCall(input.ctor, () =>
+      new Ctor(location, {
+        ...settings,
+        onSearchComplete: (payload: unknown) => {
+          if (raw && disposedInstances.has(raw)) return;
+          if (raw) settleActiveRoute(raw, payload, input.projection, input.operation);
+        },
+      }),
+    );
+    raw = instance as unknown as Record<string, unknown>;
+    return registry.adopt(input.kind, instance);
+  };
+
+  /**
+   * 路线检索的公共前半段：句柄判定 → 参数归一化 → 准入判定 → 槽位记账。
+   *
+   * 三点取舍与其余调用面一致：
+   * - **句柄错误同步抛**（`BMAP_HANDLE_FOREIGN` / `BMAP_INVALID_ARGUMENT`）：跨 Client 混用必须在
+   *   边界立刻失败，而不是伪装成一个「服务失败」的结果；
+   * - **参数错误走结果通道**（`invalidCall`）：它是**调用内容**的问题，调用方要能按 code 分类；
+   * - **该服务没有的选项显式失败**（例如给步行传 `waypoints`），而不是静默丢掉——官方
+   *   `WalkingRoute#search` 是两参数签名，收下再忽略就是假支持。
+   */
+  const invokeRouteSearch = <TPlan>(
+    label: string,
+    handle: RouteServiceHandle,
+    request: { start?: unknown; end?: unknown; waypoints?: unknown },
+    options: { allowKeyword: boolean; allowWaypoints: boolean },
+  ): ServiceCall<RouteResult<TPlan>> => {
+    assertRouteHandle(handle, label);
+    const raw = resolve<Record<string, unknown>>(handle, label);
+
+    if (!options.allowWaypoints && request?.waypoints !== undefined) {
+      return invalidCall<RouteResult<TPlan>>(
+        label,
+        "该服务不支持途经点：官方 WalkingRoute / RidingRoute / TransitRoute 的 search 是两参数签名，" +
+          "只有 DrivingRoute 接受 { waypoints }",
+      );
+    }
+
+    let start: unknown;
+    let end: unknown;
+    let waypoints: unknown[] | null = null;
+    try {
+      start = normalizeRouteEndpoint(request?.start, options);
+      end = normalizeRouteEndpoint(request?.end, options);
+      waypoints = options.allowWaypoints ? normalizeRouteWaypoints(request?.waypoints) : null;
+    } catch (error) {
+      return invalidCall<RouteResult<TPlan>>(label, (error as Error)?.message ?? String(error));
+    }
+
+    const rejection = operationAdmissionFailure(raw, label, "disposeRoute");
+    if (rejection !== null) return serviceFailedCall<RouteResult<TPlan>>(label, rejection);
+
+    return invokeSlotOperation<RouteResult<TPlan>>(label, raw, () => {
+      if (waypoints) callRequired(raw, "search", start, end, { waypoints });
+      else callRequired(raw, "search", start, end);
+    });
   };
 
   /* ------------------------------------------------------------ 创建面 */
@@ -1254,8 +1926,12 @@ export function createJsapiV4ServiceDriver(
     createLocalSearch(location, options: LocalSearchOptions = {}) {
       capabilities.require(SERVICE_CAPABILITIES.createLocalSearch);
       const LocalSearch = namespaceCtor(namespace, "LocalSearch");
-      const resolvedLocation = normalizeSearchLocation(location);
-      const renderOptions = normalizeRenderOptions(options.renderOptions);
+      const resolvedLocation = normalizeSearchLocation(location, "createLocalSearch");
+      const renderOptions = normalizeRenderOptions(options.renderOptions, {
+        label: "createLocalSearch",
+        // 官方 `RenderOptions.selectFirstResult` 明说「仅对 LocalSearch 有效」
+        allowSelectFirstResult: true,
+      });
 
       const settings: Record<string, unknown> = {};
       if (renderOptions) settings.renderOptions = renderOptions;
@@ -1326,6 +2002,74 @@ export function createJsapiV4ServiceDriver(
       if (options.types !== undefined) {
         apply("setTypes", options.types);
       }
+    },
+
+    /* ---------------------------------------------------- 路线规划（#39） */
+
+    createDrivingRoute(location, options: DrivingRouteOptions = {}) {
+      // `renderOptions.panel` 在 4.0.4 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
+      // 而 `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
+      // **真实 AK 实测驾车有效**（容器 DOM 0 → 2417 字符、`clearResults()` 后回 0）⇒ 那句注释是过时的。
+      // 处置：原样转发、不告警，也不替 SDK 承诺有效或无效（上游自述仍矛盾）——见 ADR 决策 7。
+      return createRouteService<RoutePlan, "service:driving-route">({
+        ctor: "DrivingRoute",
+        capability: SERVICE_CAPABILITIES.createDrivingRoute,
+        kind: "service:driving-route",
+        operation: "ServiceDriver.searchDrivingRoute",
+        projection: readRouteResult,
+        location,
+        settings: definedSettings({
+          policy: options.policy,
+          enableTraffic: options.enableTraffic,
+        }),
+        renderOptions: options.renderOptions,
+      });
+    },
+
+    createWalkingRoute(location, options: WalkingRouteOptions = {}) {
+      return createRouteService<RoutePlan, "service:walking-route">({
+        ctor: "WalkingRoute",
+        capability: SERVICE_CAPABILITIES.createWalkingRoute,
+        kind: "service:walking-route",
+        operation: "ServiceDriver.searchWalkingRoute",
+        projection: readRouteResult,
+        location,
+        renderOptions: options.renderOptions,
+      });
+    },
+
+    createRidingRoute(location, options: RidingRouteOptions = {}) {
+      return createRouteService<RoutePlan, "service:riding-route">({
+        ctor: "RidingRoute",
+        capability: SERVICE_CAPABILITIES.createRidingRoute,
+        kind: "service:riding-route",
+        operation: "ServiceDriver.searchRidingRoute",
+        projection: readRouteResult,
+        location,
+        renderOptions: options.renderOptions,
+      });
+    },
+
+    createTransitRoute(location, options: TransitRouteOptions = {}) {
+      return createRouteService<TransitRoutePlan, "service:transit-route">({
+        ctor: "TransitRoute",
+        capability: SERVICE_CAPABILITIES.createTransitRoute,
+        kind: "service:transit-route",
+        operation: "ServiceDriver.searchTransitRoute",
+        projection: readTransitRouteResult,
+        location,
+        // 公交的构造选项比其余三个多（市内策略 / 跨城策略 / 跨城交通方式 / 页容量）——逐个按官方
+        // `TransitRouteOptions` 的声明透传，`undefined` 不写（写了等于把「没设」变成「显式设成
+        // undefined」，SDK 侧无法区分）
+        settings: definedSettings({
+          policy: options.policy,
+          intercityPolicy: options.intercityPolicy,
+          transitTypePolicy: options.transitTypePolicy,
+          pageCapacity: options.pageCapacity,
+          enableTraffic: options.enableTraffic,
+        }),
+        renderOptions: options.renderOptions,
+      });
     },
 
     createViewAnimation(keyFrames, options = {}) {
@@ -1689,10 +2433,10 @@ export function createJsapiV4ServiceDriver(
         );
       }
       const raw = localSearchOf(handle, "ServiceDriver.search");
-      const rejection = searchAdmissionFailure(raw, "search");
+      const rejection = operationAdmissionFailure(raw, "LocalSearch.search", "disposeLocalSearch");
       if (rejection !== null) return rejectedSearchCall("LocalSearch.search", rejection);
 
-      return invokeLocalSearch("LocalSearch.search", raw, () => {
+      return invokeSlotOperation<LocalSearchResult[]>("LocalSearch.search", raw, () => {
         if (option?.forceLocal === undefined) {
           callRequired(raw, "search", normalized.value);
         } else {
@@ -1711,7 +2455,11 @@ export function createJsapiV4ServiceDriver(
       }
       const center = request?.center;
       const raw = localSearchOf(handle, "ServiceDriver.searchNearby");
-      const rejection = searchAdmissionFailure(raw, "searchNearby");
+      const rejection = operationAdmissionFailure(
+        raw,
+        "LocalSearch.searchNearby",
+        "disposeLocalSearch",
+      );
       if (rejection !== null) return rejectedSearchCall("LocalSearch.searchNearby", rejection);
 
       // 参数校验前移到进入调用之前：几何/半径非法必须走结果通道（`failed`），
@@ -1738,7 +2486,7 @@ export function createJsapiV4ServiceDriver(
         return invalidSearchCall("LocalSearch.searchNearby", "radius 必须是非负有限数（米）");
       }
 
-      return invokeLocalSearch("LocalSearch.searchNearby", raw, () => {
+      return invokeSlotOperation<LocalSearchResult[]>("LocalSearch.searchNearby", raw, () => {
         callRequired(raw, "searchNearby", normalized.value, resolvedCenter, radius);
       });
     },
@@ -1753,7 +2501,11 @@ export function createJsapiV4ServiceDriver(
       }
       const bounds = request?.bounds;
       const raw = localSearchOf(handle, "ServiceDriver.searchInBounds");
-      const rejection = searchAdmissionFailure(raw, "searchInBounds");
+      const rejection = operationAdmissionFailure(
+        raw,
+        "LocalSearch.searchInBounds",
+        "disposeLocalSearch",
+      );
       if (rejection !== null) return rejectedSearchCall("LocalSearch.searchInBounds", rejection);
 
       let rawBounds: unknown;
@@ -1769,7 +2521,7 @@ export function createJsapiV4ServiceDriver(
         );
       }
 
-      return invokeLocalSearch("LocalSearch.searchInBounds", raw, () => {
+      return invokeSlotOperation<LocalSearchResult[]>("LocalSearch.searchInBounds", raw, () => {
         callRequired(raw, "searchInBounds", normalized.value, rawBounds);
       });
     },
@@ -1781,12 +2533,64 @@ export function createJsapiV4ServiceDriver(
       const raw = localSearchOf(handle, "ServiceDriver.gotoPage");
       // `gotoPage` 是对「上一条结果」的延续：槽位唯一就够（它必须在同一条结果集上翻页，
       // 因此也不需要自己的关键字——上一次检索的载荷本来就在同一个实例里）。
-      const rejection = searchAdmissionFailure(raw, "gotoPage");
+      const rejection = operationAdmissionFailure(raw, "LocalSearch.gotoPage", "disposeLocalSearch");
       if (rejection !== null) return rejectedSearchCall("LocalSearch.gotoPage", rejection);
 
-      return invokeLocalSearch("LocalSearch.gotoPage", raw, () => {
+      return invokeSlotOperation<LocalSearchResult[]>("LocalSearch.gotoPage", raw, () => {
         callRequired(raw, "gotoPage", page);
       });
+    },
+
+    /* ------------------------------------------------ 路线归一化调用面（#39） */
+
+    searchDrivingRoute(handle, request: DrivingRouteRequest) {
+      return invokeRouteSearch<RoutePlan>("DrivingRoute.search", handle, request, {
+        // 驾车**没有**关键字检索（官方签名是 `Point | LocalResultPoi`）
+        allowKeyword: false,
+        allowWaypoints: true,
+      });
+    },
+
+    searchWalkingRoute(handle, request: RouteRequest) {
+      return invokeRouteSearch<RoutePlan>("WalkingRoute.search", handle, request, {
+        allowKeyword: true,
+        allowWaypoints: false,
+      });
+    },
+
+    searchRidingRoute(handle, request: RouteRequest) {
+      return invokeRouteSearch<RoutePlan>("RidingRoute.search", handle, request, {
+        allowKeyword: true,
+        allowWaypoints: false,
+      });
+    },
+
+    searchTransitRoute(handle, request: TransitRouteRequest) {
+      return invokeRouteSearch<TransitRoutePlan>("TransitRoute.search", handle, request, {
+        allowKeyword: true,
+        allowWaypoints: false,
+      });
+    },
+
+    clearRouteResults(handle) {
+      assertRouteHandle(handle, "ServiceDriver.clearRouteResults");
+      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.clearRouteResults");
+      if (disposedInstances.has(raw)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "clearRouteResults: 该路线服务实例已被 disposeRoute() 释放，拒绝在已销毁的实例上写入；" +
+            "请重建实例",
+          { engine: "jsapi-v4" },
+        );
+      }
+      callRequired(raw, "clearResults");
+    },
+
+    disposeRoute(handle) {
+      assertRouteHandle(handle, "ServiceDriver.disposeRoute");
+      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeRoute");
+      // 与 `disposeLocalSearch` 同一套语义与实现：置终态 → 解绑订阅 → 公开的 `clearResults()`
+      disposeResultHolderInstance(raw, handle, "disposeRoute");
     },
 
     /**
@@ -1813,25 +2617,7 @@ export function createJsapiV4ServiceDriver(
      */
     disposeLocalSearch(handle) {
       const raw = localSearchOf(handle, "ServiceDriver.disposeLocalSearch");
-
-      disposeServiceInstance(raw, handle, {
-        label: "disposeLocalSearch",
-        cleanup: () => {
-          // 在飞检索显式失败（幂等）；并置为**终态** —— 它的迟到回包从此没有归属可言
-          const settle = activeSearches.get(raw);
-          activeSearches.delete(raw);
-          supersededSearches.add(raw);
-          settle?.failed({
-            code: "BMAP_SERVICE_FAILED",
-            message: "该服务实例在请求进行中被 disposeLocalSearch() 释放",
-          });
-        },
-        // 官方 LocalSearch 的公开清理入口：清掉它画在地图上的标注与结果面板。
-        // **不能**只把实例丢给 GC：那些覆盖物由调用方交给 SDK 的地图持有。
-        releaseSdk: () => {
-          sdkCall("LocalSearch.clearResults", () => callRequired(raw, "clearResults"));
-        },
-      });
+      disposeResultHolderInstance(raw, handle, "disposeLocalSearch");
     },
   };
 }
@@ -1864,5 +2650,10 @@ type ServiceCtorName =
   | "LocalCity"
   | "Boundary"
   | "Autocomplete"
+  | "LocalSearch"
+  | "DrivingRoute"
+  | "WalkingRoute"
+  | "RidingRoute"
+  | "TransitRoute"
   | "ViewAnimation";
 type _AssertServiceCtors = ExpectTrue<ServiceCtorName extends keyof typeof BMap ? true : false>;

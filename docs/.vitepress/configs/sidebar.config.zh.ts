@@ -234,6 +234,22 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "useBMapLocalSearch",
         },
         {
+          text: "useBMapDrivingRoute 驾车路线",
+          link: "useBMapDrivingRoute",
+        },
+        {
+          text: "useBMapWalkingRoute 步行路线",
+          link: "useBMapWalkingRoute",
+        },
+        {
+          text: "useBMapRidingRoute 骑行路线",
+          link: "useBMapRidingRoute",
+        },
+        {
+          text: "useBMapTransitRoute 公交路线",
+          link: "useBMapTransitRoute",
+        },
+        {
           text: "useBMapViewAnimation 3d视角动画",
           link: "useBMapViewAnimation",
         },
