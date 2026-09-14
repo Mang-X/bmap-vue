@@ -653,3 +653,90 @@ describe("PluginRegistry：dispose 之后晚到的结算不得复活记录", () 
     expect(dispose, "正常路径不由加载流程释放").not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `setup()` 的执行时机（评审第三轮 P1-2）。
+ *
+ * `setup()` 原本跑在 `loadOwnedResource()` 里 —— 也就是**早于** generation / disposed 校验。
+ * 两个后果：
+ *
+ * 1. 「地图已经销毁、插件脚本这才下载完」时，仍然会在销毁后执行一次 `setup()`（可能重新产生副作用）；
+ * 2. 更糟的是 `setup()` 抛错时，实例**到不了**过期结算那条释放路径：异常把 promise 推进 catch，
+ *    而 catch 只把错误重新抛出 ⇒ 刚创建出来的 `map` 资源没人释放。
+ *
+ * 正确顺序：产出实例 → 校验这次加载还算不算数 → 算数才 `setup` → ready；
+ * 不算数就地释放；`setup` 抛错则把实例释放掉再按失败结算。
+ */
+describe("PluginRegistry：setup 的执行时机", () => {
+  it("dispose 后 load 才 resolve：**不执行** setup，但仍就地释放实例", async () => {
+    const { plugins } = registry();
+    const setup = vi.fn(() => () => {});
+    const dispose = vi.fn();
+    const deferred = deferredLoad("M");
+    plugins.register({
+      ...deferred.definition,
+      scope: "map",
+      required: false,
+      setup,
+      dispose,
+    });
+
+    const pending = plugins.whenPlugin("M");
+    plugins.dispose();
+    await expect(pending).rejects.toBeInstanceOf(BMapError);
+
+    const instance = { late: true };
+    deferred.settle().resolve(instance);
+    await flush();
+
+    expect(setup, "地图销毁后不得再产生 setup 副作用").not.toHaveBeenCalled();
+    expect(dispose, "资源仍要释放").toHaveBeenCalledWith(instance, expect.anything());
+  });
+
+  it("setup 抛错：已创建的实例仍被释放，插件按失败结算（不是泄漏 + 假成功）", async () => {
+    const boom = new Error("setup failed");
+    const { plugins, events } = registry();
+    const instance = { ok: true };
+    const dispose = vi.fn();
+    plugins.register({
+      name: "M",
+      scope: "map",
+      required: false,
+      load: async () => instance,
+      setup: () => {
+        throw boom;
+      },
+      dispose,
+    });
+
+    await expect(plugins.whenPlugin("M")).resolves.toBeNull();
+    expect(plugins.getStatus("M")).toBe("error");
+    expect(plugins.getError("M")).toBe(boom);
+    expect(emitted(events, "plugin:ready"), "没就绪就不该回执 ready").toBe(0);
+    expect(emitted(events, "plugin:error")).toBe(1);
+    expect(dispose, "创建出来却没就绪的实例必须释放").toHaveBeenCalledWith(
+      instance,
+      expect.anything(),
+    );
+  });
+
+  it("反证：正常路径会执行 setup，且**不**在加载流程里释放实例", async () => {
+    const { plugins, events } = registry();
+    const instance = { ok: true };
+    const dispose = vi.fn();
+    const setup = vi.fn(() => () => {});
+    plugins.register({
+      name: "M",
+      scope: "map",
+      load: async () => instance,
+      setup,
+      dispose,
+    });
+
+    await expect(plugins.whenPlugin("M")).resolves.toBe(instance);
+    expect(setup, "正常路径必须执行 setup").toHaveBeenCalledWith(instance, expect.anything());
+    expect(plugins.getStatus("M")).toBe("ready");
+    expect(emitted(events, "plugin:ready")).toBe(1);
+    expect(dispose, "正常路径不由加载流程释放").not.toHaveBeenCalled();
+  });
+});

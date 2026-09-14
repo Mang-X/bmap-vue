@@ -100,6 +100,12 @@ interface HostEntry {
   readonly context: PluginContext;
 }
 
+interface OrphanCandidate {
+  readonly instance: unknown;
+  readonly definition: BMapPluginDefinition<unknown>;
+  readonly context: PluginContext;
+}
+
 export function createPluginHost(label = "plugin-host"): PluginHost {
   const entries = new Map<string, HostEntry>();
   /**
@@ -116,9 +122,51 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
    * 结果 —— 它不得写进当前纪元的条目、不得按名字操作这张表，但也不该被静默丢掉（评审 #88 P1-2）。
    */
   let epochNumber = 0;
+  /**
+   * 「旧纪元迟到成功」留下的**候选孤儿**：名字 → 待判定实例。
+   *
+   * 为什么不能当场释放（评审第三轮 P1-1）：新纪元的同名条目可能**还在 loading**，它最终完全可能
+   * `load` 出**同一个实例**（自定义 definition 返回单例是允许的，代码自己也是这么承认的）。
+   * 那时按 identity 比到的 `null` 只说明「还没结算」，当场释放就等于把新纪元将要拿到的资源提前拆掉。
+   *
+   * 判定推迟到「这个名字下一次有确定结论」：
+   * - 当前条目 ready(X) ⇒ 释放所有 `!== X` 的候选，`=== X` 的丢弃（新纪元正在用）；
+   * - 宿主 `dispose()` ⇒ 剩下的全部释放（纪元结束，不会再有人认领）。
+   *
+   * 代价是「这个名字再也没人 acquire」时候选会多留一会儿 —— 有界的保留，好过把在用的资源拆掉。
+   */
+  const orphanCandidates = new Map<string, OrphanCandidate[]>();
   // 纪元 scope：持有 setup 登记的 disposer，并给在飞加载提供 abort 信号。
   // dispose 时整体替换成一个新的（而不是「一次性用掉」），这样宿主可以继续被使用。
   let scope = new ResourceScope({ label });
+
+  function releaseCandidate(candidate: OrphanCandidate): void {
+    try {
+      candidate.definition.dispose?.(candidate.instance, candidate.context);
+    } catch {
+      // 释放失败不得影响结算路径
+    }
+  }
+
+  /** 把「暂时判定不了」的旧纪元实例挂起，等这个名字有结论时再结算。 */
+  function parkOrphan(entry: HostEntry, instance: unknown): void {
+    // 实例是 null / undefined 时没有可释放的东西（void 插件）
+    if (instance == null) return;
+    const list = orphanCandidates.get(entry.name) ?? [];
+    list.push({ instance, definition: entry.definition, context: entry.context });
+    orphanCandidates.set(entry.name, list);
+  }
+
+  /** 这个名字有结论了：`claimed` 是被当前纪元接管的实例，其余候选就地释放。 */
+  function settleOrphans(name: string, claimed: unknown): void {
+    const list = orphanCandidates.get(name);
+    if (!list) return;
+    orphanCandidates.delete(name);
+    for (const candidate of list) {
+      if (candidate.instance === claimed) continue; // 新纪元正在用它
+      releaseCandidate(candidate);
+    }
+  }
 
   function start(entry: HostEntry, epochScope: ResourceScope, myEpoch: number): Promise<unknown> {
     const attempt = (attempts.get(entry.name) ?? 0) + 1;
@@ -134,16 +182,20 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
       .then((instance) => {
         if (myEpoch !== epochNumber) {
           // 上一个纪元的迟到成功：它已经从 entries 摘除，也不在 dispose 时的 ready 快照里
-          // ⇒ 不就地释放就是一个没有任何所有者的孤儿资源。
-          //
-          // 释放是 **identity 作用域**的：只有当这个实例**不是**当前纪元正在用的那个时才释放。
-          // 自定义 definition 完全可能 `load` 出同一个单例，那时释放它等于拆掉新纪元正在用的东西。
-          if (entries.get(entry.name)?.instance !== instance) {
-            try {
-              entry.definition.dispose?.(instance, entry.context);
-            } catch {
-              // 释放失败不得影响结算路径
+          // ⇒ 不释放就是孤儿。但**此刻不一定判断得了**：当前同名条目若还在 loading，
+          // 它最终可能拿到同一个实例（见 orphanCandidates 的注释）。
+          const current = entries.get(entry.name);
+          if (current?.status === "ready") {
+            // 已经有结论：直接按 identity 判定
+            if (current.instance !== instance) {
+              releaseCandidate({
+                instance,
+                definition: entry.definition,
+                context: entry.context,
+              });
             }
+          } else {
+            parkOrphan(entry, instance);
           }
           return instance;
         }
@@ -153,6 +205,8 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
           const disposer = entry.definition.setup(instance, entry.context);
           if (disposer) epochScope.add(disposer);
         }
+        // 这个名字有结论了：把先前推迟判定的候选按 identity 结算掉
+        settleOrphans(entry.name, instance);
         return instance;
       })
       .catch((error: unknown) => {
@@ -239,6 +293,12 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
           // 单个插件的 dispose 失败不得影响其余释放
         }
       }
+      // 4) 还在等待判定的候选孤儿：纪元结束，不会再有人认领，全部释放。
+      //    它们不属于这一轮的 ready 快照（那个快照只含当前条目的已就绪实例），不会重复释放。
+      for (const list of orphanCandidates.values()) {
+        for (const candidate of list) releaseCandidate(candidate);
+      }
+      orphanCandidates.clear();
     },
   };
 }

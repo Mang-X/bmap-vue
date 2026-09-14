@@ -261,18 +261,18 @@ export function createPluginRegistry(
     return layers.filter((layer): layer is string[] => Array.isArray(layer));
   }
 
-  /** `global` 作用域走共享宿主；其余由本注册表按地图生命周期持有。 */
+  /**
+   * 取到资源实例本身。**刻意不在这里跑 `setup`。**
+   *
+   * `setup` 会产生副作用（可能碰地图、注册监听），因此必须等「这次加载还算不算数」校验通过之后再执行：
+   * 跑在校验之前的话，① 地图销毁后还会冒出一个 `setup`；② `setup` 抛错会把 promise 推进 catch，
+   * 绕过过期结算那条资源释放路径 —— 刚创建出来的实例就没人释放了（评审第三轮 P1-2）。
+   */
   function loadOwnedResource(record: InternalPluginRecord): Promise<unknown> {
     if (record.scope === "global") {
       return host.acquire(record.name, record.definition, getContext());
     }
-    return Promise.resolve(record.definition.load(getContext(), scope.signal)).then((instance) => {
-      if (record.definition.setup) {
-        const disposer = record.definition.setup(instance, getContext());
-        if (disposer) scope.add(disposer);
-      }
-      return instance;
-    });
+    return Promise.resolve(record.definition.load(getContext(), scope.signal));
   }
 
   /**
@@ -305,15 +305,15 @@ export function createPluginRegistry(
   }
 
   /**
-   * 丢弃一次过期结算，并把它带来的 `map` 作用域资源**就地释放**。
+   * 释放一个**没人认领**的 `map` 作用域实例。
    *
-   * 为什么必须释放：`dispose()` 的释放快照只看 `status === "ready"` 的条目，这次成功来得比它晚
-   * ⇒ 实例不在任何人的名下；`scope` 也只会跑 `setup` 登记过的 disposer（那是 `setup` 的返回值，
-   * 不是实例本身）。不释放就是孤儿资源。
+   * 两个调用点，都是「实例已经创建出来、但没有任何人的名下」：
+   * - **过期结算**（`dispose()` 之后才 resolve）：不在 dispose 的释放快照里；
+   * - **`setup` 抛错**：这一轮产出了实例却没就绪，`record.instance` 不会被赋值。
    *
    * 不在这里动 `global` 作用域：它的所有者是宿主（ADR 决策 4），注册表释放它是越权。
    */
-  function discardStaleSettle(record: InternalPluginRecord, instance: unknown): void {
+  function releaseUnclaimedResource(record: InternalPluginRecord, instance: unknown): void {
     if (record.scope !== "map" || instance == null) return;
     try {
       record.definition.dispose?.(instance, getContext());
@@ -336,13 +336,25 @@ export function createPluginRegistry(
     record.status = "loading";
     record.attempts += 1;
     const generation = ++record.generation;
+    // 这一轮产出的实例：`setup` 抛错时要靠它们把资源释放掉，不能只看 `record.instance`
+    // （那时它还没被赋值）
+    let producedInstance: unknown = null;
+    let instanceProduced = false;
+    let setupCompleted = false;
     const promise = startLoad(record)
       .then((instance) => {
-        // 过期结算：不写状态、不发事件、不登记 setup；把资源就地交还
+        // 过期结算：不写状态、不发事件、不执行 setup；把资源就地交还
         if (isStaleSettle(record, generation)) {
-          discardStaleSettle(record, instance);
+          releaseUnclaimedResource(record, instance);
           return instance;
         }
+        producedInstance = instance;
+        instanceProduced = true;
+        if (record.definition.setup) {
+          const disposer = record.definition.setup(instance, getContext());
+          if (disposer) scope.add(disposer);
+        }
+        setupCompleted = true;
         record.instance = instance;
         record.status = "ready";
         // 成功必须把上一次的错误清掉：留着它，`getStatus() === "ready"` 与
@@ -354,6 +366,10 @@ export function createPluginRegistry(
         return instance;
       })
       .catch((error: unknown) => {
+        // 已经产出实例但没走完 setup ⇒ 它不会进入 ready，必须就地释放（评审第三轮 P1-2）
+        if (instanceProduced && !setupCompleted) {
+          releaseUnclaimedResource(record, producedInstance);
+        }
         // 过期失败同样只把错误交还给等待者，不写状态、不广播
         if (isStaleSettle(record, generation)) throw error;
         record.status = "error";

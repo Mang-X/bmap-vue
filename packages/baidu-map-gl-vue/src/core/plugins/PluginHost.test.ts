@@ -290,7 +290,7 @@ describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
     host.dispose();
   });
 
-  it("旧纪元的迟到成功：不进新纪元状态，且旧资源被就地释放（不留孤儿）", async () => {
+  it("旧纪元的迟到成功：不写进新纪元状态，也不在判定点之前释放旧资源", async () => {
     const host = createPluginHost();
     const oldDispose = vi.fn();
     const old = deferredPlugin("G");
@@ -314,10 +314,9 @@ describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(host.inspect("G")?.status, "旧纪元任务的结算不得写进新纪元").toBe("loading");
-    expect(
-      oldDispose,
-      "旧资源已经没有任何所有者（不在 entries、也不在 dispose 的 ready 快照里），必须就地释放",
-    ).toHaveBeenCalledWith("old-instance", expect.anything());
+    // 判定推迟：新纪元还在飞，谁也不知道它会不会 claim 同一个实例
+    // （「确实没人认领 ⇒ 释放」那半条由下面「延迟判定不会漏掉」的用例断言）
+    expect(oldDispose, "新纪元尚未结算，此刻不能释放").not.toHaveBeenCalled();
 
     fresh.settle().resolve("fresh-instance");
     await expect(freshAcquire, "就地释放不得牵连新纪元的加载").resolves.toBe("fresh-instance");
@@ -349,5 +348,68 @@ describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
 
     host.dispose();
     expect(dispose, "宿主 dispose 才是它的释放点").toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 上面那条只覆盖了**一个顺序**（新纪元先就绪、旧纪元后结算）。反过来才是危险的：
+   * 新纪元还在飞时 `instance` 是 `null`，旧纪元先 resolve ⇒ 看上去「没人用」，于是释放掉 ——
+   * 而新纪元随后拿到**同一个单例**，消费者手里就是一个已经被释放的资源（评审第三轮 P1-1）。
+   */
+  it("反向顺序：新纪元仍在飞时旧纪元先 resolve 同一个实例 ⇒ 不得释放", async () => {
+    const host = createPluginHost();
+    const shared = { shared: true };
+    const dispose = vi.fn();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire("G", { ...old.definition, dispose }, makeContext());
+    host.dispose();
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    // 新纪元开始加载，但**还没结算**（此刻新条目的 instance 仍是 null）
+    const fresh = deferredPlugin("G");
+    const freshAcquire = host.acquire("G", { ...fresh.definition, dispose }, makeContext());
+    expect(host.inspect("G")?.status).toBe("loading");
+
+    // 旧纪元先 resolve 同一个实例：此刻**还判断不了**新纪元会不会 claim 它
+    old.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(dispose, "新纪元还在飞，判定必须推迟，不能当场释放").not.toHaveBeenCalled();
+
+    // 新纪元随后 resolve 同一个实例
+    fresh.settle().resolve(shared);
+    await expect(freshAcquire).resolves.toBe(shared);
+    expect(host.inspect("G")?.status).toBe("ready");
+    expect(dispose, "新纪元正在用这个实例").not.toHaveBeenCalled();
+
+    host.dispose();
+    expect(dispose, "宿主 dispose 才是释放点").toHaveBeenCalledTimes(1);
+  });
+
+  it("延迟判定不会把**确实没人认领**的旧实例漏掉（新纪元拿到另一个实例时旧的要释放）", async () => {
+    const host = createPluginHost();
+    const orphan = { orphan: true };
+    const freshInstance = { fresh: true };
+    const dispose = vi.fn();
+    const old = deferredPlugin("G");
+    const oldAcquire = host.acquire("G", { ...old.definition, dispose }, makeContext());
+    host.dispose();
+    await expect(oldAcquire).rejects.toBeInstanceOf(BMapError);
+
+    const fresh = deferredPlugin("G");
+    const freshAcquire = host.acquire("G", { ...fresh.definition, dispose }, makeContext());
+
+    old.settle().resolve(orphan);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(dispose, "还没到判定点").not.toHaveBeenCalled();
+
+    fresh.settle().resolve(freshInstance);
+    await expect(freshAcquire).resolves.toBe(freshInstance);
+
+    expect(dispose, "新纪元用的是另一个实例 ⇒ 旧实例确实没人认领，必须释放").toHaveBeenCalledWith(
+      orphan,
+      expect.anything(),
+    );
+    expect(dispose, "新纪元在用的那个不当场释放").toHaveBeenCalledTimes(1);
+    host.dispose();
+    expect(dispose, "宿主的 ready 快照再释放一次新实例").toHaveBeenCalledTimes(2);
   });
 });
