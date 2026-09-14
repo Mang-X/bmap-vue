@@ -2009,8 +2009,8 @@ export function createJsapiV4ServiceDriver(
     createDrivingRoute(location, options: DrivingRouteOptions = {}) {
       // `renderOptions.panel` 在 4.0.4 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
       // 而 `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
-      // 因此按「上游契约冲突」处理（与 `polylineStyle` 同档）：**原样转发、不替 SDK 下结论**——
-      // 既不发确定性告警，也不在文档里承诺有效或无效；等真实运行时读数再定（PR #91 评审 P2）。
+      // **真实 AK 实测驾车有效**（容器 DOM 0 → 2417 字符、`clearResults()` 后回 0）⇒ 那句注释是过时的。
+      // 处置：原样转发、不告警，也不替 SDK 承诺有效或无效（上游自述仍矛盾）——见 ADR 决策 7。
       return createRouteService<RoutePlan, "service:driving-route">({
         ctor: "DrivingRoute",
         capability: SERVICE_CAPABILITIES.createDrivingRoute,

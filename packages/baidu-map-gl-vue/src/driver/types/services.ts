@@ -824,8 +824,9 @@ export interface RouteRenderOptions {
    *
    * 4.0.4 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
    * `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
-   * 本库按「上游契约冲突」处理（与 `polylineStyle` 同档）：**原样转发、不替 SDK 下结论** ——
-   * 不告警，也不在文档里承诺有效或无效；等真实运行时读数再定（PR #91 评审 P2）。
+   * **真实 AK 实测驾车有效**（容器 DOM `0 → 2417` 字符，`clearResults()` 后回 `0`）⇒ 那句
+   * 「驾车无效」是过时描述。本库因此**原样转发**：不告警，也不替 SDK 承诺有效或无效
+   * （上游自述仍矛盾，等官方修正或更多读数再收紧措辞）。见 ADR 决策 7。
    */
   panel?: string | HTMLElement;
   /** 检索结束后是否自动调整地图视野 */

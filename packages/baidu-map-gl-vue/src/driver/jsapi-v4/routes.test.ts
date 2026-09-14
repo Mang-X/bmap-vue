@@ -415,7 +415,7 @@ describe("v4 路线服务：状态与失败口径", () => {
     expect(withPlans.data).toBeNull();
   });
 
-  it("状态码 0 / 1 / 读不到时由载荷决定（0 是声明里唯一的成功值；1 两套读法都表示「没有可用路线」）", async () => {
+  it("状态码 0 / 1 由载荷决定（无方案 ⇒ empty；有方案 ⇒ success），且不产生 error", async () => {
     const handle = services.createDrivingRoute(point());
     const raw = fake.rawRoutes.DrivingRoute[0]!;
     raw.planCount = 0;
@@ -430,16 +430,20 @@ describe("v4 路线服务：状态与失败口径", () => {
       expect(empty.error).toBeNull();
     }
 
-    // 有方案就是成功（`1` 在 `ServiceStatus` 里是「城市列表」，在 `RouteStatus` 里是「结果为空」——
-    // 两种读法都不否认「回包里带回了路线」这一事实）。注意本用例必须用**新实例**：这一个已被
-    // 上一次 `empty` 结算过，未结算槽位只保证「同一时刻一个」，结算后可以继续用。
-    raw.status = 0;
-    raw.planCount = 1;
-    const success = await services.searchDrivingRoute(handle, {
-      start: point(),
-      end: point(116.5, 39.9),
-    }).result;
-    expect(success.status).toBe("success");
+    // 有方案就是成功：`0` 与 `1` **都必须如此**（状态码不否认「回包里带回了路线」这一事实；
+    // `1 + 有方案 ⇒ success` 这条边缘契约由 PR #91 复审点名补上）。注意这个实例已被上面的
+    // `empty` 结算过——未结算槽位只保证「同一时刻一个」，结算之后可以继续用。
+    for (const status of [0, 1]) {
+      raw.status = status;
+      raw.planCount = 1;
+      const success = await services.searchDrivingRoute(handle, {
+        start: point(),
+        end: point(116.5, 39.9),
+      }).result;
+      expect(success.status).toBe("success");
+      expect(success.error).toBeNull();
+      expect(success.sdkStatus).toBe(status);
+    }
   });
 
   it("SDK 不回包 ⇒ timeout；超时后该实例不再接受新检索（迟到回包无法归属）", async () => {
