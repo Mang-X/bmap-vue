@@ -419,7 +419,11 @@ export type MapEventName = keyof typeof MAP_EVENT_CATALOG;
  * 目前只有 `destroy`：它是「地图的终点」，而组件的卸载**先于**地图销毁
  * （Vue 的卸载顺序：父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，
  * 而地图销毁发生在 `<BMap>` 的 `onUnmounted` 里）。因此挂在调用方作用域上的订阅必然先被摘掉。
- * 规则：Map Context 路径下这些事件的订阅登记在上下文的 `ResourceScope` 上，随地图一起释放。
+ *
+ * **登记 ≠ 一律不摘**（评审第三轮修正，见 ADR 决策 12）：列在这里的事件只在**整图 teardown** 时才
+ * 把订阅留给上下文 scope（登记在 `ResourceScope` 上，随地图一起释放）；**子组件自己卸载**而地图继续
+ * 存活（条件渲染 / Tab / 路由）时照常释放 —— 否则反复挂载会累积旧 handler。判据是
+ * `MapContext.isTearingDown()`。
  *
  * `load` 不在此列：它在**起点**派发（订阅用 `whenMapCreated` 提前建立即可），组件那时还在。
  */

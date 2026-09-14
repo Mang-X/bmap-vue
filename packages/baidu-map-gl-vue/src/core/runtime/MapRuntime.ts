@@ -69,7 +69,13 @@ export class MapRuntime {
   readonly plugins: PluginRegistry;
 
   private waiters = new Set<Waiter>();
-  /** `whenMapCreated()` 注册的回调，建图时清空（M4-EVENTS / #28）。 */
+  /**
+   * `whenMapCreated()` 注册的回调。
+   *
+   * **不在建图后清空**（M4-EVENTS / #28 评审第三轮 P2）：每个注册存活到它自己的 disposer 或
+   * `dispose()`。理由是「建图成功但 `initializeView()` 失败 → `retry()` 重建第二张 map」这条路径——
+   * 那时只能靠同一个注册再放行一次 `load`。
+   */
   private mapCreatedCallbacks = new Set<(ready: MapReadyContext) => void>();
   private options: MapRuntimeOptions;
   private mountPromise: Promise<MapReadyContext> | null = null;

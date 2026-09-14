@@ -29,8 +29,14 @@
  *
  * - `load`：用上下文提供的 `whenMapCreated`（`create()` 之后、`initializeView()` **之前**）提前订阅，
  *   否则等句柄可见时官方 `load` 已经派发完；
- * - `destroy`：订阅登记在**上下文的 `ResourceScope`** 上（`MAP_CONTEXT_OWNED_EVENTS`），因此组件卸载
- *   不会摘掉它 —— 它要活到地图销毁那一刻。要提前停止请用返回的 disposer。
+ * - `destroy`：订阅寿命**按「谁在消失」分档**（判据 `MapContext.isTearingDown()`）：
+ *   - **整图 teardown**（`<BMap>` 卸载 / 路由离开整页）：订阅登记在**上下文的 `ResourceScope`** 上
+ *     （`MAP_CONTEXT_OWNED_EVENTS`）—— 这时它**不能**被子作用域摘掉，要活到地图销毁那一刻；
+ *   - **子组件自己卸载**（条件渲染 / Tab / 路由切页签，地图还活着）：与普通事件一样随作用域
+ *     **立即释放**，否则反复挂载会累积旧 handler，地图销毁时把已卸载组件的回调也一起唤醒。
+ *
+ *   `isTearingDown()` 由 `<BMap>` 在 `onBeforeUnmount` 置位 —— 那一刻早于子树卸载，所以子组件在
+ *   `onScopeDispose` 里问得出。要提前停止始终可用返回的 disposer。
  *
  * **显式 `MapEventSource` 保持 SDK 订阅语义**：没有这两个上下文能力，`load` 在「订阅时地图已初始化」
  * 时收不到、`destroy` 只在订阅仍然存活时收得到（订阅归调用方）。
@@ -115,7 +121,12 @@ export function useMapEvent<K extends string>(
     sdkEventName: string;
     coalesce: boolean;
     release: () => void;
-    /** `true` = 订阅挂在地图上下文的 scope 上（生命周期结束事件），不随组件卸载释放。 */
+    /**
+     * `true` = 订阅登记在地图上下文的 `ResourceScope` 上（生命周期结束事件）。
+     *
+     * **不是**「无论如何都不随组件卸载释放」：只有整图 teardown（`isTearingDown()`）时才留给上下文
+     * 收尾，子组件自己卸载时照样由 `onScopeDispose` 释放（见文件头「生命周期事件」）。
+     */
     contextOwned: boolean;
   } | null = null;
 
