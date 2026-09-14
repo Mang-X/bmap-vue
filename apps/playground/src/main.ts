@@ -1,12 +1,16 @@
 /**
  * Playground:多场景演示(方案 §15.2 / M7-05)
  *
- * 覆盖 v3 组件全家族,基于 mock provider(无外网/AK),
- * 本地/CI 可直接 `vite build`。
+ * 覆盖 v3 组件全家族。三档模式（见 `./providers`，M3A3-04 / issue #25）：
+ * 配了 `VITE_BMAP_AK` 走默认官方 Loader 的真实 v4；否则默认走 **Fake v4**
+ * （`existingGlobalV4Provider()` 复用注入的 Fake v4 全局，组件仍然在 v4 Driver 上）；
+ * `VITE_BMAP_MODE=legacy-fake` 时退回旧的 Fake BMapGL legacy 对照。
+ *
+ * 三档都不给 `<BMap>` 传 `provider` —— 解析始终落在 `app.use` 的默认 definition 上，
+ * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到。
  */
 import { createApp, h, ref, shallowRef, defineComponent, computed } from 'vue'
 import {
-  createBMapPlugin,
   BMap,
   BMarker,
   BMarker3d,
@@ -34,23 +38,12 @@ import {
   BPanoramaCoverageLayer,
   BAutoComplete,
 } from 'baidu-map-gl-vue'
-import { mockProvider } from './mock-provider'
+import { bootPlayground, type PlaygroundEnvLike } from '@test-utils'
 
-/**
- * 两种模式，与官方 react-bmapgl 的「`<Map>` 不收 ak + `MapApiLoaderHOC({ ak })` 负责异步加载」
- * 同一个分工：地图组件自己不携带密钥，加载方式由应用级装配决定。
- *
- * - 配了 `VITE_BMAP_AK`：**走默认路径**——`createBMapPlugin({ ak })` 的默认 Provider 就是
- *   `baiduJsapiV4Provider()`，内部委托官方 `@baidumap/jsapi-loader` 注入 SDK script；
- * - 没配 AK（本地 / CI）：显式注入 fake provider，让无外网环境也能跑通全部场景。
- *
- * 两种模式都**不给 `<BMap>` 传 `provider`**：解析始终落在 `app.use` 的默认 definition 上，
- * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到。
- */
-const viteEnv = (import.meta as unknown as { env?: { VITE_BMAP_AK?: string } }).env ?? {}
-const ak = viteEnv.VITE_BMAP_AK?.trim()
-const mode = ak ? '真实 v4（默认路径 / 官方 Loader）' : 'Fake BMapGL'
-const plugin = ak ? createBMapPlugin({ ak }) : createBMapPlugin({ provider: mockProvider() as any })
+const viteEnv = ((import.meta as unknown as { env?: PlaygroundEnvLike }).env ?? {}) as PlaygroundEnvLike
+const boot = bootPlayground(viteEnv)
+const mode = boot.label
+const plugin = boot.plugin
 const center = { lng: 116.404, lat: 39.915 }
 const centerRef = ref(center)
 

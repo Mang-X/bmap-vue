@@ -66,3 +66,39 @@ jobs:
           path: ${{ runner.temp }}/v4-smoke.log
           if-no-files-found: warn
           retention-days: 14
+
+  # 插件兼容 inventory 的真实产物核对（M3A3-07 / #25）。
+  #
+  # 它**不需要 AK**，只需要网络：从 `BUILTIN_PLUGIN_URLS` 锁定的 URL 拉真实脚本，重新抽取
+  # 「引用的 SDK 成员 / 私有面 / 副作用标记」，与仓库里的 inventory 比对。
+  # 放在 nightly 是为了让「锁定 URL 失效 / 上游脚本改了引用面」这类漂移**当天就被发现**，
+  # 而不是等到有人手工跑去翻 minified 源码。
+  # 判定口径：`0` 一致；`1` 不一致（要更新 inventory）；`3` 网络/CDN 不可用（blocked，不是通过）。
+  plugin-compat:
+    if: github.repository == 'Mang-X/bmap-vue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Probe plugin compatibility against real artifacts
+        run: pnpm probe:plugin-compat -- --json="$RUNNER_TEMP/plugin-compat.json"
+
+      - name: Upload plugin compat report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-compat-report
+          path: ${{ runner.temp }}/plugin-compat.json
+          if-no-files-found: warn
+          retention-days: 14

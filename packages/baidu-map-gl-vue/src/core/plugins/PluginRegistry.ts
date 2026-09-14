@@ -46,6 +46,15 @@ export interface PluginRegistry {
   register<Resource>(definition: BMapPluginDefinition<Resource>): void;
   whenPlugin<Resource = unknown>(name: string, signal?: AbortSignal): Promise<Resource>;
   getStatus(name: string): PluginStatus | undefined;
+  /**
+   * 该插件记录到的失败原因（没有失败过则 `undefined`）。
+   *
+   * 为什么需要它：**optional 插件失败时 `whenPlugin` 以 `undefined` resolve**（见
+   * `loadPlugin` 的失败策略），调用方无法从返回值区分「成功拿到资源」与「失败被吞掉」。
+   * 组件侧要如实回执 `plugin-error`，就得能从注册表取回原始错误 —— 否则只能自己造一个
+   * 没有 `cause` 的替代错误，把诊断信息丢掉。
+   */
+  getError(name: string): unknown;
   dispose(): void;
 }
 
@@ -176,7 +185,14 @@ export function createPluginRegistry(
     async whenPlugin(name, signal) {
       if (!records.has(name))
         throw new BMapError("BMAP_PLUGIN_LOAD_FAILED", `Plugin "${name}" is not registered`);
+      // `collectDeps(name)` 会把**目标自己**也放进集合，而 `loadPluginsInOrder()` 会真的加载它一次。
+      // 于是下面那句 `loadPlugin(target)` 对成功路径是多余的（状态已是 ready，会短路），
+      // 但对 **optional 失败**路径不是：那时状态是 `error`，`loadPlugin` 的短路条件
+      // （ready / loading）都不成立，**目标会被真的加载第二次** —— 一次 CDN 失败产生两次请求与
+      // 两次 script 注入机会，并重复发 `plugin:error`（评审 #85 P1-1）。
+      // 因此这里只按拓扑序加载**依赖**，目标留到最后单独加载一次。
       const deps = collectDeps(name);
+      deps.delete(name);
       await loadPluginsInOrder([...deps]);
       return loadPlugin(records.get(name) as PluginRecord<any>);
     },
@@ -184,6 +200,10 @@ export function createPluginRegistry(
     getStatus(name) {
       if (disposedNames.has(name)) return "disposed";
       return records.get(name)?.status;
+    },
+
+    getError(name) {
+      return records.get(name)?.error;
     },
 
     dispose() {

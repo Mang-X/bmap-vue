@@ -276,6 +276,18 @@ async function loadPluginsInBackground() {
   for (const name of props.plugins ?? []) {
     try {
       await runtime.plugins.whenPlugin(name, runtime.resources.signal);
+      // **只以注册表状态判定成败**。两点都要注意（评审 #85 P1-2）：
+      // - optional 插件失败时注册表以 `undefined` resolve ⇒ 不能把「拿到了返回值」当成成功；
+      // - 但反过来也不行：`undefined` **不等于**失败 —— 只注入副作用、不产出资源的「void 插件」
+      //   本来就是这种合法形态，用 `loaded === undefined` 判失败会把它们一起否掉。
+      // 失败（required 抛错、optional 被吞）统一由状态识别，并带回注册表记录到的原始错误。
+      if (runtime.plugins.getStatus(name) !== "ready") {
+        throw new BMapError(
+          "BMAP_RESOURCE_CREATE_FAILED",
+          `plugin "${name}" 未加载成功（status: ${runtime.plugins.getStatus(name) ?? "unknown"}）`,
+          { cause: runtime.plugins.getError(name) },
+        );
+      }
       // 只发 kebab 规范事件：Vue 会把 `plugin-ready` 回退匹配到 `@pluginReady`
       // 监听器，双事件会导致同一监听器被调两次（一次 name、一次 map）
       emit("plugin-ready", name);

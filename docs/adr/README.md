@@ -21,6 +21,7 @@
 | [2026-09-13](./2026-09-13-default-online-loader-cutover.md) | 默认在线路径委托官方 Loader（v4 默认切换、默认路径配置面） | Accepted |
 | [2026-09-13](./2026-09-13-v4-required-smoke.md) | v4 required smoke 的交付形态与判定口径（五态判定 / required 只接受 pass / 取消跨域豁免） | Accepted |
 | [2026-09-13](./2026-09-13-ui-kit-detail-route-wrappers.md) | `./ui-kit` 的详情 / 路线 Vue 封装与「上游声明了但没实现」的处置（取代 `./ui-kit` ADR 决策 7） | Accepted |
+| [2026-09-13](./2026-09-13-plugin-compat-inventory.md) | 插件兼容 inventory 与「必需功能不依赖插件脚本」的隔离口径 | Accepted |
 
 ## 约定
 

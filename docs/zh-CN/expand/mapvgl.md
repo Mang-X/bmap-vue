@@ -2,6 +2,15 @@
 
 MapVGL，是一款基于 WebGL 的地理信息可视化库，可以用来展示大量基于 3D 的地理信息点线面数据。设计初衷主要是为了解决大数据量的三维地理数据展示问题及一些炫酷的三维效果。
 
+::: danger 在 JSAPI 4.0 默认路径上不可用
+`Mapvgl` 插件在 JSAPI 4.0 上**不兼容**：它的 JSONP 传输层把 `BMapGL._rd` 当回调表
+（`BMapGL._rd["_cbk"+n] = fn` 并把它拼进 `callback=` 参数），而 `_rd` 是 SDK 私有面，本库明令不得访问。
+依据与复现命令见[插件兼容 inventory](../contributing/plugin-compat-inventory)。
+
+本章节示例来自 v2 时代，**在当前默认路径下不能直接使用**；请在 legacy 路径下参考，或改用 4.0 的原生图层
+（`BPointLayer` / `BMarkerCluster` 等）。
+:::
+
 本章节演示通过插件形式加载 MapVGL 资源，并展示几个官方图层示例。
 
 ## 结合方式：

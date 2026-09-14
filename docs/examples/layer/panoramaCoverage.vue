@@ -1,5 +1,6 @@
 <template>
-  <BMap v-bind="$attrs" enableScrollWheelZoom ak="oW2UEhdth2tRbEE4FUpF9E5YVDCIPYih">
+  <!-- ak 由文档站的应用级装配提供（createBMapPlugin({ ak })），示例不携带密钥 -->
+  <BMap v-bind="$attrs" enableScrollWheelZoom>
     <BPanoramaControl />
     <BPanoramaCoverageLayer />
   </BMap>

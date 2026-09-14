@@ -7,7 +7,7 @@ export default withPwa(
     lang: "zh-CN",
     title: "Vue3 Baidu Map Gl",
     description:
-      "基于百度地图 JavaScript GL 版（使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图） API 封装设计的 Vue3 组件/hooks 库。",
+      "基于百度地图 JSAPI 4.0（使用 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图）封装设计的 Vue3 组件/hooks 库，默认通过官方 @baidumap/jsapi-loader 加载 SDK。",
     lastUpdated: true,
     base: "/bmap-vue/",
     cleanUrls: true,

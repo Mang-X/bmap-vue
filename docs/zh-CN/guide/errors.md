@@ -7,7 +7,7 @@
 
 | code | 分类 | 可重试 | 触发场景 |
 |---|---|---|---|
-| `BMAP_SDK_LOAD_FAILED` | SDK 加载 | ✅ | 在线 Provider 脚本注入失败(网络/拦截/CSP) |
+| `BMAP_SDK_LOAD_FAILED` | SDK 加载 | ✅ | 官方 Loader 注入入口脚本失败(网络/拦截/CSP),或脚本就绪但全局命名空间缺失/不完整 |
 | `BMAP_SDK_LOAD_TIMEOUT` | SDK 加载 | ✅ | 脚本注入超过 `timeout` 未回调 |
 | `BMAP_SDK_CONFIG_CONFLICT` | SDK 配置 | ❌ | 进程级 SdkRegistry 检测到冲突配置 |
 | `BMAP_PROVIDER_ABORTED` | Provider | ✅ | 加载被 AbortSignal 中止 |
@@ -42,11 +42,14 @@ interface BMapErrorLike {
 
 ### `BMAP_SDK_LOAD_FAILED`
 
-**原因**:在线 CDN 脚本无法注入。
+**原因**:官方 Loader 无法注入入口脚本(默认路径从 `api.map.baidu.com/api?v=4.0` 取),或脚本已执行但
+`BMap` 命名空间缺失 / 不完整(至少需要 `Map` / `Point` / `Marker`)。
 **排查**:
 - 检查网络能否访问 `api.map.baidu.com/api`。
 - 检查 CSP `script-src` 是否放行。
-- 检查 AK 是否有效。
+- 检查 AK 是否有效。实测（真实 AK 档，见 [ADR 2026-09-13 v4 required smoke](/adr/2026-09-13-v4-required-smoke)
+  的「已知限制」）：**无效 AK 仍会注入脚本并挂上命名空间**，但地图对象是半初始化的，这类失败表现为 Driver
+  在读 SDK 时抛 `TypeError`，**不是**本错误码 —— 也就是说它无法与实现回归区分，当前按保守的 `fail` 处理。
 **解决**:使用自定义 Provider(自托管脚本),见[配置指南](./config.md#client-查找顺序)。
 
 ### `BMAP_SDK_LOAD_TIMEOUT`

@@ -19,16 +19,18 @@ app.use(Vue3BaiduMapGl, { ak: 'YOUR_AK' })
 ### v3
 ```ts
 import { createBMapPlugin } from 'baidu-map-gl-vue'
-// ak 给 createBMapPlugin（或 definition.loadOptions）；baiduCdnProvider() 本身不收 ak 参数
+// ak 给 createBMapPlugin（或 definition.loadOptions）
 app.use(createBMapPlugin({
   ak: import.meta.env.VITE_BAIDU_MAP_AK,
-  version: '1.0',
 }))
 ```
 
 > 不兼容：v2 的默认导出 `app.use(Vue3BaiduMapGl, { ak })` 在 v3 已移除，
-> 请改用具名 `createBMapPlugin`。`baiduCdnProvider()` 工厂不接受 ak/version 参数，
-> 它们属于 Client 定义的 `loadOptions`。
+> 请改用具名 `createBMapPlugin`。
+>
+> `version` 现在**只接受 `'4.0'`**（默认就是它）：默认路径由官方 `@baidumap/jsapi-loader` 加载
+> JSAPI 4.0，传别的版本会在加载前抛 `BMAP_INVALID_ARGUMENT`。v2/v3-beta 里写的 `version: '1.0'`
+> 必须删掉。见 [Breaking Changes](./breaking-changes)。
 
 ---
 
@@ -40,13 +42,13 @@ app.use(createBMapPlugin({
 | 按需导入组件(`BMap` 等) | 保留组件名与根 named exports | 无需改动 |
 | `@initd` | 保留并 **deprecate**,新增 `@ready` | 建议改为 `@ready` |
 | `getMapInstance()` | 保留,返回 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `./advanced` 的 `unwrapRaw` 获取）,新增 `whenReady()` | 涉及 raw 地图访问时迁移 |
-| `apiUrl`(离线) | 保留为 CustomScriptProvider 兼容参数 | 推荐 Provider |
+| `apiUrl`(离线) | 默认路径已不接受（会报 `BMAP_INVALID_ARGUMENT`）；保留为 legacy Provider 的参数 | 改用 `customScriptV4Provider(scriptSrc)` / `existingGlobalV4Provider()` |
 | `plugins: string[]` | 保留适配；`ready` 不等待插件，使用 `plugin-ready` / `plugin-error` 监听插件状态 | 检查插件依赖时序 |
 | `@pluginReady(map)`（旧驼峰事件，载荷为地图实例） | 已移除，统一为 `@plugin-ready`（载荷为插件名）；地图实例改用 `ready` 载荷、`whenReady()` 或组件 `ref.getMapInstance()` 获取 | 涉及插件回调取地图时迁移 |
 | `v-model:show`(InfoWindow) | 保留 | 无需改动 |
 | `modelValue`(InfoWindow) | beta 期保留 + warning | 改为 `open`/`v-model:open` |
 | `usePubSub` | 已移除 | 改用 context/whenReady（`useBMap()` + `whenReady()`） |
-| `getScriptAsync` | 已移除，改走 Provider/loader | 改用 `baiduCdnProvider` / `customScriptProvider` |
+| `getScriptAsync` | 已移除，改走 Provider/loader | 默认路径不用管（官方 Loader 自动加载）；显式场景用 `./core` 的 `baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider` |
 | 任意 `package/*` 深路径 | 不再保证;提供明确 exports | 改用子路径 |
 
 ---
@@ -143,6 +145,8 @@ v3 引入三档渲染模型:
 4. 检查 BMarker:大列表迁移到 `BMarkerCluster` / `BMarkerList`。
 5. 检查 BInfoWindow:用 `v-model:open` 替代 `modelValue`。
 6. 移除对 `package/*` 深路径的依赖,改用子路径(`/components`、`/composables`、`/plugins`)。
+7. 删除 `version: '1.0'` 之类的旧版本号（只接受 `'4.0'`），并确认没有在用 `apiUrl` 换入口
+   （两项都会在加载前显式报错,见 [Breaking Changes](./breaking-changes)）。
 
 ---
 

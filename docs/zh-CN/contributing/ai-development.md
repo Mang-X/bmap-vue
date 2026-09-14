@@ -149,6 +149,9 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:raw-sdk` | 扫描禁区目录（`components` / `composables` / `core/runtime`） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src`，白名单外的任何 raw SDK 引用都会失败 |
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
+| `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
+| `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
+| `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
 
 `pnpm check:public-dts` 需在 `pnpm build:v3` 之后运行；CI 的两个 job 都会在构建后执行。
 
@@ -161,6 +164,19 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
   CI 用 `pnpm generate:capability-matrix:check` 校验无漂移。
 - `status: "unsupported"` 的条目 `supports()` 恒为 `false`（用户 override 除外），保留槽位使错误信息、文档与能力矩阵保持一致。
 - `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 声明为基准核对（`core/Map.d.ts` 与各子目录的 `declare namespace BMap`）。
+
+## 插件兼容 inventory
+
+`plugins: [...]` 能识别的四个内置插件（TrackAnimation / DrawingManager / GeoUtils / Mapvgl）在 JSAPI 4.0 上的
+状态由 `packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts` 单一维护，它的生成物是两个：
+
+- [插件兼容 inventory](./plugin-compat-inventory)：人读，含依据档位、逐条结论与残余风险；
+- `docs/.vitepress/plugin-inventory.json`：机读，形如 `{ plugins: [{ id, url, verdict, basis, capability?, … }] }`，
+  供站点或工具链**按 `id` 取结论**（例如「某个插件在本仓库到底算不算支持」）；
+  取用口径由 `tests/behavior/v3-plugin-compat-inventory.test.ts` 钉住，改形状会红。
+
+三条约定：结论必须标依据档位（`artifact` / `declaration` / `runtime`，没跑过的不写）、
+内置插件一律 optional（必需功能不依赖插件脚本）、Catalog 里标 `unsupported` 的插件类能力必须在清单里有条目。
 
 ## AI Agent 边界
 

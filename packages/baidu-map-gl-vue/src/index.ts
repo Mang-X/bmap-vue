@@ -15,6 +15,7 @@ export {
   trackAnimationPlugin,
   mapVglPlugin,
   drawingManagerPlugin,
+  geoUtilsPlugin,
   stringToPluginDefinitions,
   urlPluginDefinition,
   BUILTIN_PLUGIN_URLS,

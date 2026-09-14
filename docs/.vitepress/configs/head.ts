@@ -18,7 +18,7 @@ export const head: HeadConfig[] = [
     {
       name: "description",
       content:
-        "Vue 3 百度地图 GL 是一个基于 Vue 3 和百度地图 GL 的地图组件库，方便开发者快速构建地图应用。",
+        "Vue 3 百度地图组件库：基于 Vue 3 与百度地图 JSAPI 4.0，默认通过官方 jsapi-loader 加载 SDK，方便开发者快速构建地图应用。",
     },
   ],
   [
@@ -26,7 +26,7 @@ export const head: HeadConfig[] = [
     {
       name: "keywords",
       content:
-        "vue3,vue component,baidu map,baidu map gl,baidu-map-gl-vue,vue3-bmap-gl,百度地图,组件库,vue3组件库,vue百度地图",
+        "vue3,vue component,baidu map,baidu map gl,baidu jsapi 4.0,baidu-map-gl-vue,vue3-bmap-gl,百度地图,组件库,vue3组件库,vue百度地图",
     },
   ],
 ];

@@ -9,7 +9,7 @@
 <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
 </div>
 
-基于百度地图 JavaScript GL 版 (使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图) API 封装设计的 Vue3 组件库，开发体验良好，以优雅的方式完成百度地图的接入。
+基于百度地图 JSAPI 4.0（使用 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图）封装设计的 Vue3 组件库，开发体验良好，以优雅的方式完成百度地图的接入。默认通过官方 `@baidumap/jsapi-loader` 加载 SDK。
 
 ## 特性
 
@@ -19,7 +19,7 @@
 - ⚡ Composition Api，更好的性能
 - 🔨 完整的 TypeScript 支持，更好的体验
 - 🧩 tree shaking 支持，模块分包，只打包你想要的的
-- 🌏 基于百度地图 Gl 版 SDK，通过 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图
+- 🌏 基于百度地图 JSAPI 4.0，通过 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图
 - 🚀 支持 volar，组件提供完善的代码提示
 
 ## 环境支持
@@ -33,9 +33,11 @@ Vue3 BaiduMap GL 可以在支持 [ES2018](https://caniuse.com/?feats=mdn-javascr
 | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | Edge ≥ 79 | Firefox ≥ 78 | Chrome ≥ 64 | Safari ≥ 12 |
 
-### Baidu Map GL Api 兼容性
+### 浏览器兼容性
 
-JavaScript API GL v1.0 基于 WebGL 开发，对于用户的浏览器环境有兼容性要求。需要完整支持 WebGL 的现代浏览器来支持渲染。对于 WebGL 支持欠佳的浏览器会降级为 Canvas 绘制，若仍然存在兼容性问题，则会降级到瓦片图渲染，确保不同浏览器环境的用户都可以完成地图的基本渲染。
+百度地图 JSAPI 4.0 基于 WebGL 开发，对浏览器环境有兼容性要求：需要完整支持 WebGL 的现代浏览器。
+对于 WebGL 支持欠佳的浏览器，SDK 会自行降级（先 Canvas 绘制、再瓦片图渲染），确保不同环境的用户都能完成
+地图的基本渲染。本库自身的类型与运行时要求见[安装](./installation)。
 
 <script lang="ts" setup>
 import { ref } from 'vue'
@@ -43,19 +45,30 @@ import { VPTeamMembers } from 'vitepress/theme'
 
 const members = ref<any[]>([])
 const isLoading = ref(true)
-fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1').then(res => res.json()).then(res => {
-  isLoading.value = false
-  members.value = res.map(({ avatar_url, login, html_url }, index) => {
-    return {
-      avatar: avatar_url,
-      name: login,
-      title: index === 0 ? 'Creator' : 'Contributor',
-      links: [
-        { icon: 'github', link: html_url },
-      ]
-    }
+// 未认证的 GitHub API 限流是 **60 次/小时/IP**，而 CI runner 的出口 IP 是共享的。限流时这个接口
+// 返回的是 `{ message: ... }` 而不是数组，直接 `.map` 会让 `vitepress build` **整站构建失败**
+// （实测：PR #85 的 docs job 因此红过一次，报 `TypeError: res.map is not a function`）。
+// 拿不到成员列表就不渲染成员 —— 外部抖动不该挡住构建，也不该让「docs 是硬门禁」变成随机红。
+fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1')
+  .then(res => res.json())
+  .then(res => {
+    isLoading.value = false
+    if (!Array.isArray(res)) return
+    members.value = res.map(({ avatar_url, login, html_url }, index) => {
+      return {
+        avatar: avatar_url,
+        name: login,
+        title: index === 0 ? 'Creator' : 'Contributor',
+        links: [
+          { icon: 'github', link: html_url },
+        ]
+      }
+    })
   })
-})
+  .catch(() => {
+    // 网络不可达时也要收掉 loading 态（SSR 期间未处理的 rejection 同样会让构建失败）
+    isLoading.value = false
+  })
 </script>
 
 ## 贡献者

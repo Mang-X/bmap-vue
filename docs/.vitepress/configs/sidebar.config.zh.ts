@@ -194,7 +194,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/hooks/",
       items: [
         {
-          text: "usePoint 地图实例点",
+          text: "usePoint 地图实例点（v2 已移除，仅留迁移说明）",
           link: "usePoint",
         },
         {
@@ -270,6 +270,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "Capability Catalog 能力矩阵",
           link: "capability-matrix",
+        },
+        {
+          text: "插件兼容 inventory",
+          link: "plugin-compat-inventory",
         },
         {
           text: "官方包发布契约（Loader / UI Kit）",
