@@ -18,6 +18,10 @@
 | `timeout` | 语义模糊 | 官方支持：`0` = **不超时** | 需要截止时间就显式配一个毫秒数 |
 | 显式自定义加载器 | `baiduCdnProvider()` 等 legacy 工厂 | 默认已是 v4；legacy 工厂与旧引擎**已删除** | 新代码用 `./core` 的 v4 Provider 家族（`baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider`） |
 | 插件失败 | `TrackAnimation` 标成必需，失败即抛 | 内置插件一律 optional，失败只发 `plugin-error` | 依赖「抛错发现插件没加载」的代码改为监听 `plugin-error` |
+| 未知插件名（M8-PLUGIN-CORE / #42） | 静默降级成一个「永远成功」的空实现（`plugin-ready`、状态 `ready`） | Catalog 层抛 `BMAP_PLUGIN_UNKNOWN`；组件层该名字发 `plugin-error`，地图与其它插件不受影响 | 改正名字；不要把 `<BMap :plugins>` 的拼写错误当成「插件已就绪」 |
+| 插件的作用域（同上） | `scope` 字段存在但不生效：每张地图各插一份脚本，地图卸载可能取消别的地图的加载 | `'global'` 走进程级宿主，**一份文档一份**、地图卸载不释放；未标 `scope` 按 `'map'` 处理 | 需要跨地图共享的插件显式标 `scope: 'global'` |
+| `whenPlugin` 的失败值（同上） | optional 失败 resolve `undefined` | resolve `null`（`undefined` 保留给「void 插件」这一合法成功） | 用 `=== null` 判失败，别再判 `undefined` |
+| 插件的取消（同上） | `whenPlugin(name, signal)` 的 signal **被忽略** | signal 会让**本次等待**以 `BMAP_PROVIDER_ABORTED` 结束，共享加载继续 | 依赖「取消就一起取消加载」的代码要知道：取消是消费者自己的事 |
 
 同一批变更的完整依据见 [官方包契约](../contributing/official-packages) 与
 [插件兼容 inventory](../contributing/plugin-compat-inventory)。

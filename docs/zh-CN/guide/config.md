@@ -211,3 +211,22 @@ app.use(createBMapPlugin({
 你还可以通过插件定义扩展。插件定义 shape 见 `BMapPluginDefinition`（`name/scope/dependencies/required/load/setup/dispose`），
 用 `urlPluginDefinition` 或 `stringToPluginDefinitions` 构造，并在需要地图的组件内经 PluginRegistry 注册。
 插件加载结果通过 `plugin-ready` / `plugin-error` 事件回执。
+
+M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
+[ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）之后：
+
+- **`scope` 决定资源归谁**：`'global'`（文档级脚本，跨地图共享、由进程级宿主持有，地图卸载**不**释放）
+  或 `'map'`（随地图释放）。**手写 definition 不写 `scope` 就是 `'map'`** —— 自定义插件不会因为没写
+  scope 就变成全局共享。内置四个插件都是 `'global'`。
+  注意 `urlPluginDefinition(...)` 这个**脚本插件工厂**的缺省是 `'global'`（它加载的就是文档级脚本），
+  需要按地图隔离时显式传 `{ scope: 'map' }`；两个缺省不一样是有意的，别当成一个。
+  要清掉全局共享状态（测试 / 热更新）用 `baidu-map-gl-vue/plugins` 的 `disposeDefaultPluginHost()`。
+- **未知名字明确失败**：`resolvePluginDefinition` / `stringToPluginDefinitions` 抛
+  `BMAP_PLUGIN_UNKNOWN`（不再降级成永远成功的空实现）。`<BMap :plugins="[...]">` 在组件层逐个名字捕获，
+  未知名字回执 `plugin-error`，**不阻断地图**。
+- **取消只影响自己**：`whenPlugin(name, signal)` 的 signal abort 只会让本次等待以
+  `BMAP_PROVIDER_ABORTED` 结束，共享的加载继续跑、结果留给后来的消费者。
+- **状态可读**：`PluginRegistry.inspect(name)` 返回 `{ scope, required, status, attempts, consumers, error }`，
+  比瞬时事件更适合做诊断（「试过几次」「还有几个消费者在等」）。
+- **失败可重试**：失败会被登记成 `error` 并清掉缓存条目，再请求一次就真的重新加载；
+  成功后 `getError()` 会被清空。

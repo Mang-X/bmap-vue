@@ -297,19 +297,15 @@ describe("与 Capability Catalog 双向互锁", () => {
     }
   });
 
-  it("清单里的每个 id 都由**真工厂**构造，而不是未知插件的空实现", () => {
-    // 关键：`stringToPluginDefinitions` 对未知名字返回 `{ name, required: false, load: noop }`，
-    // 它与真工厂**同名、同 required**。只断言 name/required 的话，把 `GeoUtils` 从名字表里删掉
-    // （即回退 M3A3-07 的修复）测试照样全绿。真工厂经 `urlPluginDefinition` 构造，`scope` 是
-    // `'global'`；空实现没有这个字段 —— 拿它当判据，回退才会红。
+  it("清单里的每个 id 都解析得出 definition（且作用域是脚本插件的 `global`）", () => {
+    // M8-PLUGIN-CORE（#42）之后，**函数同一性**这条更强的判据搬到了
+    // `src/plugins/catalog.test.ts`（`BUILTIN_PLUGIN_CATALOG[name].create === trackAnimationPlugin`）。
+    // 这里保留与 inventory 的那半条：清单里的 id 必须都能被解析，且内置插件都是 global 脚本插件 ——
+    // 只断言 name/required 是不够的（真工厂与「同名同 required 的别的实现」在这两项上一样）。
     const defs = stringToPluginDefinitions(ENTRIES.map((entry) => entry.id));
     for (const def of defs) {
-      expect(def.scope, `${def.name} 不是由内置工厂构造的（疑似退化成未知插件的空实现）`).toBe(
-        "global",
-      );
+      expect(def.scope, `${def.name} 是脚本插件，作用域必须是 global`).toBe("global");
     }
-    // 每个真工厂还必须有 `load`（空实现的 load 是 async () => undefined，但真工厂也一样有；
-    // 因此这里只作为存在性检查，真正的判据是上面的 scope）
     for (const def of defs) expect(typeof def.load).toBe("function");
 
     // GeoUtils 此前只有 URL、没有工厂，也没有名字表条目 —— 这条防止再退回去
@@ -359,11 +355,12 @@ describe("可选插件故障与必需功能隔离", () => {
       },
     });
 
-    await expect(optionalRegistry.whenPlugin("OptionalFail")).resolves.toBeUndefined();
+    // M8-PLUGIN-CORE（#42）：optional 失败以 **`null`** resolve。
+    // 用 `undefined` 表达失败会与「void 插件（合法地 load 出 undefined）」撞车（评审 #85 P1-2）。
+    await expect(optionalRegistry.whenPlugin("OptionalFail")).resolves.toBeNull();
     expect(optionalRegistry.getStatus("OptionalFail")).toBe("error");
-    // 只锁「发的是 plugin:error」与「带的是同一个错误对象」，不锁次数：
-    // `whenPlugin` 会先按依赖序结算、再结算目标本身，一次失败因此可能发两次事件。
-    // 把次数写死会让这条用例在无关的注册表实现调整时假红。
+    // 这里只锁「发的是 plugin:error」与「带的是同一个错误对象」，次数留给
+    // `PluginRegistry.test.ts`（那里断言恰好一次）。两处都锁会让无关的实现调整制造双重红。
     expect(new Set(events.map((e) => e.type))).toEqual(new Set(["plugin:error"]));
     expect(events.length).toBeGreaterThan(0);
     expect((events[0]!.payload as { error: unknown }).error).toBe(boom);
@@ -389,7 +386,7 @@ describe("可选插件故障与必需功能隔离", () => {
       });
     }
     for (const def of definitions) {
-      await expect(registry.whenPlugin(def.name)).resolves.toBeUndefined();
+      await expect(registry.whenPlugin(def.name)).resolves.toBeNull();
       expect(registry.getStatus(def.name)).toBe("error");
     }
   });

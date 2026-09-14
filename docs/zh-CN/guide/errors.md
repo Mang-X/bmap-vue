@@ -10,11 +10,12 @@
 | `BMAP_SDK_LOAD_FAILED` | SDK 加载 | ✅ | 官方 Loader 注入入口脚本失败(网络/拦截/CSP),或脚本就绪但全局命名空间缺失/不完整 |
 | `BMAP_SDK_LOAD_TIMEOUT` | SDK 加载 | ✅ | 脚本注入超过 `timeout` 未回调 |
 | `BMAP_SDK_CONFIG_CONFLICT` | SDK 配置 | ❌ | 进程级 SdkRegistry 检测到冲突配置 |
-| `BMAP_PROVIDER_ABORTED` | Provider | ✅ | 加载被 AbortSignal 中止 |
+| `BMAP_PROVIDER_ABORTED` | 取消 | ✅ | 加载或等待被 `AbortSignal` 中止（Provider 加载、以及插件的 `whenPlugin(name, signal)`） |
 | `BMAP_RUNTIME_DISPOSED` | 运行时 | ❌ | 在 MapRuntime 销毁后访问 |
 | `BMAP_PARENT_CONTEXT_MISSING` | 上下文 | ❌ | 子组件未挂在 `BMap` 内(缺少 map context) |
 | `BMAP_RESOURCE_CREATE_FAILED` | 资源 | ❌ | Overlay/Control/Layer 创建失败 |
 | `BMAP_PLUGIN_LOAD_FAILED` | 插件 | ✅ | 插件脚本加载或初始化失败 |
+| `BMAP_PLUGIN_UNKNOWN` | 插件 | ❌ | `plugins: [...]` 里的名字不在 Catalog（拼写错误等）；不重试，先改正名字 |
 | `BMAP_SERVICE_FAILED` | 服务 | ✅ | 服务调用失败：SDK 公开状态码非 0、或服务端在 `timeout` 内未回包 |
 | `BMAP_INVALID_ARGUMENT` | 参数 | ❌ | 参数与官方 API 契约不符（例如 `<BInfoWindow open>` 没给 `position`） |
 | `BMAP_INVALID_POINT` | 参数 | ❌ | 传入非法坐标(缺 lng/lat) |
@@ -87,6 +88,15 @@ interface BMapErrorLike {
 
 **原因**:插件脚本加载或 `load()` 失败。
 **解决**:插件插件版本是否与 SDK 兼容;检查 `plugin` 字段;使用 `urlPluginDefinition` 固定版本。
+
+### `BMAP_PLUGIN_UNKNOWN`
+
+**原因**:`<BMap :plugins="[...]">`（或 `resolvePluginDefinition` / `stringToPluginDefinitions`）里的名字
+不在 Catalog 里 —— 认得的只有 `TrackAnimation` / `DrawingManager` / `GeoUtils` / `Mapvgl`。
+错误消息与会话里的 `plugin` 字段都带上了那个名字，消息里还列出全部认得的名字。
+**解决**:改正名字。组件层不会因此阻断地图：该名字发 `plugin-error`，同一列表里的其它插件照常加载。
+它与 `BMAP_PLUGIN_LOAD_FAILED` 的区别是**重试没有意义**（配置错误 vs CDN 抖动），
+因此 `retryable === false`。
 
 ### `BMAP_SERVICE_FAILED`
 

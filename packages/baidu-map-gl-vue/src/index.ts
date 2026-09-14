@@ -16,10 +16,18 @@ export {
   mapVglPlugin,
   drawingManagerPlugin,
   geoUtilsPlugin,
-  stringToPluginDefinitions,
   urlPluginDefinition,
   BUILTIN_PLUGIN_URLS,
 } from "./plugins/builtins";
+// 插件 Catalog（M8-PLUGIN-CORE / #42）：名字 → definition 的单一事实源。
+// `resolvePluginDefinition` 对未知名字抛 `BMAP_PLUGIN_UNKNOWN`（不再静默降级成空实现）。
+export {
+  BUILTIN_PLUGIN_CATALOG,
+  BUILTIN_PLUGIN_NAMES,
+  resolvePluginDefinition,
+  stringToPluginDefinitions,
+} from "./plugins/catalog";
+export type { PluginCatalogEntry } from "./plugins/catalog";
 // Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
 // 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
