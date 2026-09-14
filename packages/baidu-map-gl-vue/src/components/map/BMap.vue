@@ -32,9 +32,9 @@ import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginC
 import type { BMapProps } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
-import { stringToPluginDefinitions } from "../../plugins/builtins";
 import { useControllableState } from "../../composables/useControllableState";
 import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
+import { resolvePluginDefinition } from "../../plugins/catalog";
 
 export type { BMapProps };
 
@@ -520,8 +520,39 @@ const currentRuntime = new MapRuntime({
     backgroundColor: props.backgroundColor,
   },
 });
-for (const definition of stringToPluginDefinitions(props.plugins ?? [])) {
-  currentRuntime.plugins.register(definition);
+/**
+ * `plugins` prop 的解析结果，按**用户写的顺序**排列。
+ *
+ * 为什么不在 setup 里直接抛未知名字（M8-PLUGIN-CORE / #42）：Catalog 的解析**确实**会抛
+ * `BMAP_PLUGIN_UNKNOWN`（不静默降级成空实现），但一个拼写错误不该让整张地图不渲染 ——
+ * 那既把运行时问题变成渲染期崩溃，也违反「插件故障不得阻断地图」的既有隔离口径。
+ * 所以这里逐个名字捕获，未知名字记进 plan，稍后在后台按 `plugin-error` 回执：
+ * **明确失败**（绝不假装成功）与**阻断地图**是两件事。
+ */
+const pluginPlan: { name: string; error?: BMapError }[] = [];
+{
+  const seen = new Set<string>();
+  for (const name of props.plugins ?? []) {
+    // 同一个名字写两遍：注册表会 `already registered` 抛错，但调用方的本意显然不是「报错」。
+    // 按一次处理，并且只回执一次。
+    if (seen.has(name)) continue;
+    seen.add(name);
+    try {
+      currentRuntime.plugins.register(resolvePluginDefinition(name));
+      pluginPlan.push({ name });
+    } catch (error) {
+      pluginPlan.push({
+        name,
+        error:
+          error instanceof BMapError
+            ? error
+            : new BMapError("BMAP_PLUGIN_UNKNOWN", `plugin "${name}" 解析失败`, {
+                plugin: name,
+                cause: error,
+              }),
+      });
+    }
+  }
 }
 runtimeRef.value = currentRuntime;
 const runtime = currentRuntime;
@@ -556,30 +587,39 @@ onActivated(() => {
 
 /** 插件不阻塞 map ready；ready 后台加载插件并逐个 emit */
 async function loadPluginsInBackground() {
-  for (const name of props.plugins ?? []) {
+  for (const entry of pluginPlan) {
+    // 未知名字：Catalog 已经明确失败（`BMAP_PLUGIN_UNKNOWN`），这里如实回执，不阻断地图、
+    // 也不影响同一列表里其它插件。
+    if (entry.error) {
+      emit("plugin-error", { name: entry.name, error: entry.error });
+      continue;
+    }
     try {
-      await runtime.plugins.whenPlugin(name, runtime.resources.signal);
+      await runtime.plugins.whenPlugin(entry.name, runtime.resources.signal);
       // **只以注册表状态判定成败**。两点都要注意（评审 #85 P1-2）：
-      // - optional 插件失败时注册表以 `undefined` resolve ⇒ 不能把「拿到了返回值」当成成功；
-      // - 但反过来也不行：`undefined` **不等于**失败 —— 只注入副作用、不产出资源的「void 插件」
-      //   本来就是这种合法形态，用 `loaded === undefined` 判失败会把它们一起否掉。
-      // 失败（required 抛错、optional 被吞）统一由状态识别，并带回注册表记录到的原始错误。
-      if (runtime.plugins.getStatus(name) !== "ready") {
+      // - optional 插件失败时注册表以 `null` resolve ⇒ 不能把「拿到了返回值」当成成功；
+      // - 但反过来也不行：`null` 之外的值**不等于**失败 —— 只注入副作用、不产出资源的
+      //   「void 插件」返回 `undefined` 本来就是合法形态，用 `loaded == null` 判失败会把它们
+      //   一起否掉。失败（required 抛错、optional 被吞）统一由状态识别。
+      if (runtime.plugins.getStatus(entry.name) !== "ready") {
         throw new BMapError(
           "BMAP_RESOURCE_CREATE_FAILED",
-          `plugin "${name}" 未加载成功（status: ${runtime.plugins.getStatus(name) ?? "unknown"}）`,
-          { cause: runtime.plugins.getError(name) },
+          `plugin "${entry.name}" 未加载成功（status: ${runtime.plugins.getStatus(entry.name) ?? "unknown"}）`,
+          { plugin: entry.name, cause: runtime.plugins.getError(entry.name) },
         );
       }
       // 只发 kebab 规范事件：Vue 会把 `plugin-ready` 回退匹配到 `@pluginReady`
       // 监听器，双事件会导致同一监听器被调两次（一次 name、一次 map）
-      emit("plugin-ready", name);
+      emit("plugin-ready", entry.name);
     } catch (e) {
       const err =
         e instanceof BMapError
           ? e
-          : new BMapError("BMAP_RESOURCE_CREATE_FAILED", `plugin ${name} failed`, { cause: e });
-      emit("plugin-error", { name, error: err });
+          : new BMapError("BMAP_RESOURCE_CREATE_FAILED", `plugin ${entry.name} failed`, {
+              plugin: entry.name,
+              cause: e,
+            });
+      emit("plugin-error", { name: entry.name, error: err });
     }
   }
 }

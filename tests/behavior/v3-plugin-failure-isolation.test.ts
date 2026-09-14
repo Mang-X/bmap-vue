@@ -4,11 +4,11 @@
  * `PluginRegistry` 那一层已经有用例证明「optional 插件失败只发事件、不抛」。组件层还要钉三件事：
  *
  * 1. **失败不得阻断地图** —— `BMap.vue` 的承诺是「ready 不等插件」（`loadPluginsInBackground`）；
- * 2. **失败不得被回执成成功** —— 对 optional 插件，注册表在失败时是以 `undefined` **resolve** 的
+ * 2. **失败不得被回执成成功** —— 对 optional 插件，注册表在失败时是以 `null` **resolve** 的
  *    （`PluginRegistry.loadPlugin`），所以 `await` 拿到返回值**不等于**成功；
- * 3. **但 `undefined` 也不等于失败**（评审 #85 P1-2 抓到的反向错误）—— 只注入副作用、不产出资源的
- *    「void 插件」本来就是这种合法形态。曾用 `loaded === undefined` 判失败，会把它们一起否掉；
- *    正确判据是**注册表状态**（`getStatus(name) === "ready"`）。
+ * 3. **但 `null` 之外的值也不等于失败**（评审 #85 P1-2 抓到的反向错误）—— 只注入副作用、不产出
+ *    资源的「void 插件」`load` 出 `undefined` 本来就是合法形态。曾用 `loaded == null` 判失败，
+ *    会把它们一起否掉；正确判据是**注册表状态**（`getStatus(name) === "ready"`）。
  *
  * ## 为什么不用 `vi.mock` 造失败样本
  *
@@ -22,15 +22,24 @@
  *   并在测试里把 `document.createElement` 对非百度脚本的
  *   `<script>` 打成「派发 `error`」——`loadScriptWithExport` 的 `onerror` 分支因此真的 reject，
  *   这是**确定性、不碰网络**的真实失败；
- * - **成功（void）**：用一个未知插件名（名字表给 noop，resolve `undefined`，状态是 `ready`）。
+ * - **成功**：预置 `window.BMapGLLib.GeoUtils`。这是 `loadScriptWithExport` 的
+ *   「导出已存在就直接 resolve」分支，等价于「宿主已经加载过这个脚本」的真实场景。
  *
- * 两个样本互为对照：把判据写回 `loaded === undefined`，第二个样本立刻变红。
+ *   注（M8-PLUGIN-CORE / #42）：这一半原先用的是**未知插件名**（名字表当时给它一个 noop 空实现，
+ *   resolve `undefined`，状态 `ready`），用来钉「`undefined` 不等于失败」。
+ *   那条行为已经作为「假支持」被删除 —— 未知名字现在抛 `BMAP_PLUGIN_UNKNOWN`
+ *   （组件层回执 `plugin-error`，见 `v3-plugin-catalog-scope.test.ts`）。
+ *   「void 插件是成功」这条语义因此搬到它真正能被表达的层级：
+ *   `PluginRegistry.test.ts` 里直接注册一个 `load: async () => undefined` 的 definition。
+ *
+ * 两个样本互为对照：把判据写回 `loaded == null`，两条用例都会红。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
+import { disposeDefaultPluginHost } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost";
 
 // #26 后 Provider 必须是结构化 v4 形状：harness.provider() 自述 engine + namespace。
 const { harness } = createFakeV4Harness();
@@ -97,10 +106,15 @@ function mountMap(plugins: string[]) {
 describe("插件失败不阻断地图，且失败不被回执成成功", () => {
   beforeEach(() => {
     harness.reset();
+    // 默认宿主是模块级单例：不清掉的话，前一个用例加载成功的插件会被后一个用例复用，
+    // 「这次失败了吗」就变成了「取决于用例顺序」（M8-PLUGIN-CORE / #42）。
+    disposeDefaultPluginHost();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete (window as any).BMapGLLib;
+    disposeDefaultPluginHost();
   });
 
   it("真实失败（脚本注入 error）：ready 照发，回执 plugin-error 而不是 plugin-ready", async () => {
@@ -121,15 +135,16 @@ describe("插件失败不阻断地图，且失败不被回执成成功", () => {
     mounted.wrapper.unmount();
   });
 
-  it("void 插件（load resolve undefined）是**成功**：回执 plugin-ready，绝不报错", async () => {
-    // 名字表对未知插件的定义是 `{ required: false, load: async () => undefined }` ——
-    // 「只注册副作用、不产出资源」的合法形态。用 `loaded === undefined` 判失败会把这条语义否掉。
-    const mounted = mountMap(["NoSuchPlugin"]);
+  it("真实成功（脚本已加载过）：回执 plugin-ready，绝不报错", async () => {
+    // 「导出已存在就直接 resolve」是 `loadScriptWithExport` 的不碰网络分支，
+    // 等价于宿主页面上这个脚本早就加载好了。
+    (window as any).BMapGLLib = { GeoUtils: { fake: true } };
+    const mounted = mountMap(["GeoUtils"]);
     await flushPromises();
 
     expect(mounted.readyEvents().length).toBeGreaterThan(0);
-    expect(mounted.readyNames(), "void 插件必须回执 plugin-ready").toEqual(["NoSuchPlugin"]);
-    expect(mounted.errorEvents(), "void 插件不是失败").toEqual([]);
+    expect(mounted.readyNames(), "成功的插件必须回执 plugin-ready").toEqual(["GeoUtils"]);
+    expect(mounted.errorEvents(), "成功不是失败").toEqual([]);
     mounted.wrapper.unmount();
   });
 
@@ -138,15 +153,16 @@ describe("插件失败不阻断地图，且失败不被回执成成功", () => {
     const failing = mountMap(["TrackAnimation"]);
     await flushPromises();
     await flushPromises();
-    const voidPlugin = mountMap(["NoSuchPlugin"]);
+    (window as any).BMapGLLib = { GeoUtils: { fake: true } };
+    const succeeding = mountMap(["GeoUtils"]);
     await flushPromises();
 
     expect(failing.readyNames()).toEqual([]);
     expect(failing.errorEvents().length).toBeGreaterThan(0);
-    expect(voidPlugin.readyNames()).toEqual(["NoSuchPlugin"]);
-    expect(voidPlugin.errorEvents()).toEqual([]);
+    expect(succeeding.readyNames()).toEqual(["GeoUtils"]);
+    expect(succeeding.errorEvents()).toEqual([]);
 
     failing.wrapper.unmount();
-    voidPlugin.wrapper.unmount();
+    succeeding.wrapper.unmount();
   });
 });

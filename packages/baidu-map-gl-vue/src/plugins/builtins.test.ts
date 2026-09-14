@@ -4,30 +4,27 @@ import {
   drawingManagerPlugin,
   geoUtilsPlugin,
   mapVglPlugin,
-  stringToPluginDefinitions,
   trackAnimationPlugin,
   urlPluginDefinition,
 } from "./builtins";
+// `stringToPluginDefinitions` 随 M8-PLUGIN-CORE（#42）搬到 catalog：未知名字不再降级成空实现，
+// 因此它属于「名字 → definition」那个模块。完整语义（含未知名字抛错）在 `catalog.test.ts`。
+import { stringToPluginDefinitions } from "./catalog";
+import { createPluginHost } from "../core/plugins/PluginHost";
 import { PLUGIN_COMPAT_BY_ID } from "./compat-inventory";
 
 describe("plugin definitions", () => {
   it("converts legacy string[] config to plugin definitions", () => {
-    const defs = stringToPluginDefinitions([
-      "TrackAnimation",
-      "Mapvgl",
-      "DrawingManager",
-      "GeoUtils",
-      "UnknownPlugin",
-    ]);
+    const defs = stringToPluginDefinitions(["TrackAnimation", "Mapvgl", "DrawingManager", "GeoUtils"]);
     expect(defs.map((d) => d.name)).toEqual([
       "TrackAnimation",
       "Mapvgl",
       "DrawingManager",
       "GeoUtils",
-      "UnknownPlugin",
     ]);
-    // 未知插件 optional,不阻断
-    expect(defs[4].required).toBe(false);
+    // 内置插件一律 optional（隔离口径），旧断言 `defs[4].required === false` 依赖的
+    // 「未知插件被降级成一个 optional 空实现」这条行为已在 #42 删除 —— 现在未知名字抛错。
+    for (const def of defs) expect(def.required, `${def.name} 应为 optional`).toBe(false);
   });
 
   /**
@@ -71,8 +68,20 @@ describe("plugin definitions", () => {
     }
   });
 
-  it("urlPluginDefinition resolves existing global export without loading script", async () => {
-    // 预置全局导出,避免真正请求网络
+  it("urlPluginDefinition 的 scope 缺省是 global（脚本插件），且可显式覆盖成 map", () => {
+    // 两个缺省各有各的道理，别把它们当成一个：`urlPluginDefinition` 产出的是「注入 `<script>`
+    // + 读文档级全局」，本来就该是 global；手写 definition 的缺省是 map（见 PluginRegistry.ts）。
+    const scriptPlugin = urlPluginDefinition("X", "https://example.com/x.js", () => undefined);
+    const mapScoped = urlPluginDefinition("Y", "https://example.com/y.js", () => undefined, {
+      scope: "map",
+    });
+    expect(scriptPlugin.scope, "脚本插件缺省是文档级资源").toBe("global");
+    expect(mapScoped.scope, "需要按地图隔离时必须能显式覆盖").toBe("map");
+    // 反证：这条判据不能对任何输入都返回同一个值
+    expect(scriptPlugin.scope).not.toBe(mapScoped.scope);
+  });
+
+  it("urlPluginDefinition resolves existing global export without loading script", async () => {    // 预置全局导出,避免真正请求网络
     (window as any).__fakePlugin = { v: 1 };
     const def = urlPluginDefinition(
       "Fake",
@@ -90,5 +99,31 @@ describe("plugin definitions", () => {
     await expect(
       def.load({ api: {}, map: {}, client: null } as any, new AbortController().signal),
     ).rejects.toThrow();
+  });
+
+  /**
+   * 评审 #88 文档项：`disposeDefaultPluginHost()` **不是**内置脚本插件的「干净起点」。
+   *
+   * 它只清宿主的缓存与纪元。`loadScriptWithExport` 的第一件事就是读 `exportGetter()` ——
+   * 真实脚本一旦跑过，`window.BMapGLLib.GeoUtils` 就一直在那儿（上游没有卸载入口，
+   * 本库也不许删它，见 ADR 决策 4），于是**下一次 acquire 直接命中短路分支**：
+   * 复用同一个全局对象，既不重新拉脚本，也不会「重新初始化」。文档必须这么写。
+   */
+  it("宿主 dispose 之后重新取用内置插件：命中「导出已存在」的短路，不再拉脚本", async () => {
+    const host = createPluginHost();
+    (window as any).BMapGLLib = { GeoUtils: { fake: true } };
+    const pluginsBefore = document.querySelectorAll("script").length;
+    const context = { api: {}, map: {}, client: null } as never;
+
+    const first = await host.acquire("GeoUtils", geoUtilsPlugin(), context);
+    host.dispose();
+    const second = await host.acquire("GeoUtils", geoUtilsPlugin(), context);
+
+    expect(second, "已存在的全局被复用，而不是重新加载").toBe(first);
+    expect(document.querySelectorAll("script").length, "dispose 不卸载脚本，重新取用也不新插脚本")
+      .toBe(pluginsBefore);
+
+    delete (window as any).BMapGLLib;
+    host.dispose();
   });
 });

@@ -17,6 +17,13 @@ export type BMapErrorCode =
   | "BMAP_RESOURCE_CREATE_FAILED"
   | "BMAP_RESOURCE_UPDATE_FAILED"
   | "BMAP_PLUGIN_LOAD_FAILED"
+  /**
+   * 插件**名字**不在 Catalog 里（`plugins: ['Typo']`）。
+   *
+   * 与 `BMAP_PLUGIN_LOAD_FAILED`（名字认得、脚本/依赖加载失败）分开：前者是调用方的配置错误、
+   * 重试没有意义；后者才可能因为 CDN 抖动而值得重试。合在一起会让 `retryable` 说谎。
+   */
+  | "BMAP_PLUGIN_UNKNOWN"
   | "BMAP_CAPABILITY_UNSUPPORTED"
   | "BMAP_SDK_CALL_FAILED"
   | "BMAP_SERVICE_FAILED"
@@ -87,6 +94,7 @@ export class BMapError extends Error {
     RESOURCE_CREATE_FAILED: "BMAP_RESOURCE_CREATE_FAILED" as const,
     RESOURCE_UPDATE_FAILED: "BMAP_RESOURCE_UPDATE_FAILED" as const,
     PLUGIN_LOAD_FAILED: "BMAP_PLUGIN_LOAD_FAILED" as const,
+    PLUGIN_UNKNOWN: "BMAP_PLUGIN_UNKNOWN" as const,
     CAPABILITY_UNSUPPORTED: "BMAP_CAPABILITY_UNSUPPORTED" as const,
     SDK_CALL_FAILED: "BMAP_SDK_CALL_FAILED" as const,
     SERVICE_FAILED: "BMAP_SERVICE_FAILED" as const,

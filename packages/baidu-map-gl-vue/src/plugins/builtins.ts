@@ -18,6 +18,14 @@
  * 2. 补齐 `GeoUtils` 工厂：URL 一直在 `BUILTIN_PLUGIN_URLS` 里，但既没有工厂、也不在
  *    `stringToPluginDefinitions` 的名字表里，于是 `plugins: ['GeoUtils']` 会被当成未知插件
  *    静默变成空实现。
+ *
+ * M8-PLUGIN-CORE（issue #42）的两条调整：
+ *
+ * 1. **名字 → definition 的映射搬到了 `catalog.ts`**（`BUILTIN_PLUGIN_CATALOG` /
+ *    `resolvePluginDefinition` / `stringToPluginDefinitions`）。本文件只留工厂与 URL，
+ *    不再持有名字表——一份清单放两处正是上面第 2 条那种漂移的来源。
+ * 2. **未知名字不再降级成空实现**，改为抛 `BMAP_PLUGIN_UNKNOWN`。旧行为是「假支持」：
+ *    拼错一个字母也会 `getStatus() === 'ready'`。
  */
 import type { BMapPluginDefinition } from "../core/plugins/PluginRegistry";
 
@@ -25,7 +33,14 @@ export interface PluginLoader {
   (src: string, exportName: string): Promise<unknown>;
 }
 
-/** 从 URL 加载脚本并返回全局导出 */
+/**
+ * 从 URL 加载脚本并返回全局导出。
+ *
+ * `scope` 的缺省是 **`"global"`**，与 `BMapPluginDefinition.scope` 的缺省（`"map"`）**不同**，
+ * 这是刻意的：本工厂产出的都是「注入 `<script>` + 读一个文档级全局」的插件，资源本来就是
+ * 文档级的；手写 definition 则保守按 `map` 处理（不改变既有自定义插件的行为）。
+ * 两个缺省各有各的道理，别把它们当成一个。
+ */
 export function urlPluginDefinition<T>(
   name: string,
   url: string,
@@ -125,28 +140,35 @@ export const BUILTIN_PLUGIN_URLS = {
  * **optional**（M3A3-07）：它对应 `service.track-animation`，而后者在 Capability Catalog 里是
  * `unsupported`（4.0 的替代能力是原生图层 `layer.track-line`）。把它标成必需会让「地图能不能起」
  * 取决于一个本库明确不支持的第三方脚本能否下载成功。
+ *
+ * **scope `global`**（#42）：注入的是文档级脚本、暴露的是文档级全局，所以它由共享宿主持有、
+ * 跨地图只加载一次，且地图卸载不释放。四个内置插件都**显式**写出来，不靠工厂缺省 ——
+ * 「它是 global 的」这件事值得在每一处都看得见（工厂缺省恰好也是 global，但那是巧合，不是依据）。
  */
 export function trackAnimationPlugin(): BMapPluginDefinition<unknown> {
   return urlPluginDefinition(
     "TrackAnimation",
     BUILTIN_PLUGIN_URLS.trackAnimation,
     () => (window as any).BMapGLLib?.TrackAnimation,
+    { scope: "global" },
   );
 }
 
-/** Mapvgl 插件:暴露 window.mapvgl */
+/** Mapvgl 插件:暴露 window.mapvgl（文档级脚本，`scope: "global"`） */
 export function mapVglPlugin(): BMapPluginDefinition<unknown> {
   return urlPluginDefinition("Mapvgl", BUILTIN_PLUGIN_URLS.mapvgl, () => (window as any).mapvgl, {
     required: false,
+    scope: "global",
   });
 }
 
-/** DrawingManager 插件:暴露 window.BMapGLLib.DrawingManager */
+/** DrawingManager 插件:暴露 window.BMapGLLib.DrawingManager（文档级脚本，`scope: "global"`） */
 export function drawingManagerPlugin(): BMapPluginDefinition<unknown> {
   return urlPluginDefinition(
     "DrawingManager",
     BUILTIN_PLUGIN_URLS.drawingManager,
     () => (window as any).BMapGLLib?.DrawingManager,
+    { scope: "global" },
   );
 }
 
@@ -156,23 +178,6 @@ export function geoUtilsPlugin(): BMapPluginDefinition<unknown> {
     "GeoUtils",
     BUILTIN_PLUGIN_URLS.geoUtils,
     () => (window as any).BMapGLLib?.GeoUtils,
+    { scope: "global" },
   );
-}
-
-/** 内置插件的字符串名 → 工厂。未知名字走 optional 空实现（不阻断地图）。 */
-const BUILTIN_PLUGIN_FACTORIES: Record<string, () => BMapPluginDefinition<unknown>> = {
-  TrackAnimation: trackAnimationPlugin,
-  Mapvgl: mapVglPlugin,
-  DrawingManager: drawingManagerPlugin,
-  GeoUtils: geoUtilsPlugin,
-};
-
-/** 兼容旧 plugins: string[] 配置 → plugin definitions */
-export function stringToPluginDefinitions(names: string[]): BMapPluginDefinition<unknown>[] {
-  return names.map((name) => {
-    const factory = BUILTIN_PLUGIN_FACTORIES[name];
-    if (factory) return factory();
-    // 未知插件:optional,避免阻断
-    return { name, required: false, load: async () => undefined } as BMapPluginDefinition<unknown>;
-  });
 }

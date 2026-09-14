@@ -211,3 +211,39 @@ app.use(createBMapPlugin({
 你还可以通过插件定义扩展。插件定义 shape 见 `BMapPluginDefinition`（`name/scope/dependencies/required/load/setup/dispose`），
 用 `urlPluginDefinition` 或 `stringToPluginDefinitions` 构造，并在需要地图的组件内经 PluginRegistry 注册。
 插件加载结果通过 `plugin-ready` / `plugin-error` 事件回执。
+
+M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
+[ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）之后：
+
+- **`scope` 决定资源归谁**：`'global'`（文档级脚本，跨地图共享、由进程级宿主持有，地图卸载**不**释放）
+  或 `'map'`（随地图释放）。**手写 definition 不写 `scope` 就是 `'map'`** —— 自定义插件不会因为没写
+  scope 就变成全局共享。内置四个插件都是 `'global'`。
+  注意 `urlPluginDefinition(...)` 这个**脚本插件工厂**的缺省是 `'global'`（它加载的就是文档级脚本），
+  需要按地图隔离时显式传 `{ scope: 'map' }`；两个缺省不一样是有意的，别当成一个。
+  要清掉宿主缓存的全局状态（测试 / 热更新）用 `baidu-map-gl-vue/plugins` 的
+  `disposeDefaultPluginHost()`。**它不是「回到没加载过」**：第三方脚本与 `window.BMapGLLib.*` 都留在
+  原地，内置脚本插件下一次会命中「导出已存在」的短路、复用同一个全局对象（不重新拉脚本）。
+- **未知名字明确失败**：`resolvePluginDefinition` / `stringToPluginDefinitions` 抛
+  `BMAP_PLUGIN_UNKNOWN`（不再降级成永远成功的空实现）。`<BMap :plugins="[...]">` 在组件层逐个名字捕获，
+  未知名字回执 `plugin-error`，**不阻断地图**；它不会在注册表留下记录，所以 `getStatus(name)` 是
+  `undefined` 而不是 `'error'`。
+- **取消只影响自己**：`whenPlugin(name, signal)` 的 signal abort 只会让本次等待以
+  `BMAP_PROVIDER_ABORTED` 结束，共享的加载继续跑、结果留给后来的消费者。
+- **状态可读**：`PluginRegistry.inspect(name)` 返回 `{ scope, required, status, attempts, consumers, error }`，
+  比瞬时事件更适合做诊断（「试过几次」「还有几个消费者在等」）。
+- **失败可重试**：失败会被登记成 `error` 并清掉缓存条目，再请求一次就真的重新加载；
+  成功后 `getError()` 会被清空。
+
+### dispose 之后晚到的结算不会复活记录
+
+`PluginRegistry.dispose()` 会把记录收口成 `disposed`，并**丢弃此后才到达的加载结果**：晚到的成功不会
+把状态改回 `ready`、也不再广播 `plugin:ready` / `plugin:error`（一次地图卸载之后才下载完的插件不该让
+记录「复活」）。对 `map` 作用域的插件，那条晚到的实例此刻已经没有别的所有者，注册表会**就地调用
+`definition.dispose`** 释放它；`global` 作用域的实例归宿主管，注册表不动它。
+
+`setup` 也遵循同一条时间线：它只在「这次加载还算不算数」校验**通过之后**才执行，而且 `setup` 返回后还会**再校验一次**（`setup` 是调用方代码，内部可能同步调用 `dispose()`）—— 校验不过就不发布 `ready`、并释放刚产出的实例。所以地图销毁后再下载完的插件**不会**再产生一次 `setup` 副作用；反过来，`setup` 抛错时已经创建出来的实例会被释放掉（不会出现「实例创建了、却因为 `setup` 失败而没人释放」），同一个实例也不会被释放两次。`setup` 只由资源的**所有者**执行一次：`'map'` 插件的归注册表（disposer 进地图 scope），`'global'` 插件的归宿主（disposer 进宿主的纪元 scope）。
+
+宿主侧同理：`PluginHost` 用**纪元号**区分「上一轮 dispose 之前的在飞任务」，旧纪元的结算不会写进新纪元
+的条目、也不会按名字误删同名的新条目。旧纪元那条迟到的成功会先**挂起**，等这个名字下一次有确定结论
+（新纪元条目 ready / 宿主 dispose）再按 identity 判定是否释放 —— 因为新纪元可能还在飞、并且可能拿到
+**同一个**实例（自定义 definition 复用单例是允许的），当场按 `null` 比较会把它提前拆掉。
