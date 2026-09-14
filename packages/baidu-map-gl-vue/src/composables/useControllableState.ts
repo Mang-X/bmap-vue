@@ -9,7 +9,7 @@
  * | 非受控 | 受控 getter 返回 `undefined`，`defaultValue` 有值 | 内部状态 | 不适用 | 更新内部状态 |
  * | 缺省 | 两者都没有 | 内部状态（初值 = `fallback`） | 不适用 | 更新内部状态 |
  *
- * 四条**无歧义规则**（受控语义一旦发布很难改，因此这里冻结，详见 ADR
+ * 五条**无歧义规则**（受控语义一旦发布很难改，因此这里冻结，详见 ADR
  * `2026-09-14-map-controlled-state`）：
  *
  * 1. **`defaultValue` 只在首次解析时读一次**。之后它的变化不会覆盖内部状态——否则
@@ -67,8 +67,9 @@ export interface UseControllableStateOptions<T> {
   /**
    * 是否输出用法告警（默认 true）。
    *
-   * 即使为 true，也只有**开发构建**才真正打印（见 `core/logger` 的 `devWarn`）；
-   * 生产产物里该分支被构建期静态消除。
+   * 即使为 true，也只有**非生产环境**才真正打印：`devWarn` 读 `process.env.NODE_ENV`，
+   * 判定留给**消费方**——ESM 产物保留该标记由消费方打包器 / 运行时折叠（Vite、webpack 都能折），
+   * IIFE 档在构建期就折成 `production`（见 ADR 决策 4 与已知限制 8）。
    */
   warn?: boolean;
 }

@@ -285,7 +285,7 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
 | 视野四字段不再走 `withDefaults` | **无行为变化**：缺省档用同一组库默认视野 | 由测试锁定「什么都不传 ⇒ 库默认视野」 |
 | prop 变化判定从严格相等改为容差 + 读回 | 极少写命令，可能少一次「看似必要」的写 | 属修正（`±1e-9` 抖动不再触发写） |
 | SDK 加载期间到达的受控值现在会生效 | 之前会丢（地图停在旧初值），现在 ready 前收敛一次 | 属修正（评审第一轮 P1），无 API 变化 |
-| 用法告警只出现在开发构建 | 生产产物里没有这几条提示 | 属修正（评审第一轮 P2） |
+| 用法告警只在非生产环境出现 | 判定读 `process.env.NODE_ENV`，ESM 档留给消费方打包器折叠；IIFE 档固定按生产（已知限制 8） | 属修正（评审第一、二轮 P2） |
 | `useControllableState` 新增 `copy` 选项 | 纯新增（可选） | 传可变对象时应当提供，见决策 9 |
 
 **无破坏性变更**：公共 props / 事件的既有语义与默认表现保持不变。
@@ -373,12 +373,12 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
 | **[P1]** SDK ready 前的受控更新会被丢掉 | **成立**：watcher 在未就绪时 return，初值是 setup 期冻结的快照，之后 prop 不再变化 ⇒ 永不重跑 | 决策 8：ready 前 `syncControlledView()` + 2 条延迟 Provider 用例 |
 | **[P1/P2]** `initialViewSnapshot` / `defaultCenter` 没冻结 point 值 | **成立**：`initial` / `internal` 直接持有父级对象引用，原地 mutation 可改到快照与内部状态 | 决策 9：新增 `copy` 选项 + `cloneCenter` + 2 条 mutation 用例 |
 | **[P2]** `readLiveView` 吞掉所有 `BMapError`，且读不到仍调 setter | **成立**：注释写「读不到就不写」，代码却会继续 setter | 决策 3 补充：白名单（disposed / capability）+ 显式 `return` + 1 条白名单用例 |
-| **[P2]** 文档/PR 声称 warning 是 dev-only，但实现不是 | **成立**：`logger` 无 production gate | 决策 4 补充：告警改走 `devWarn`（`import.meta.env.DEV`，生产产物静态消除）——**改实现而不是改文档**，因为这几条是面向库使用者的用法提示，不该出现在最终用户 console |
+| **[P2]** 文档/PR 声称 warning 是 dev-only，但实现不是 | **成立**：`logger` 无 production gate | 决策 4 补充：告警改走 `devWarn`（当时用构建期常量 `__DEV__`）；第二轮改为 `process.env.NODE_ENV`——**改实现而不是改文档**，因为这几条是面向库使用者的用法提示，不该出现在最终用户 console |
 
 评审未提、本轮一并记录的相邻缺口：`retry()` 之后不会重跑 `apply*` / `bindViewEvents` / 收敛
 （见决策 8 末段，留给后续 issue）。
 
-### 评审修正（第二轮，`<本次提交>`）
+### 评审修正（第二轮，`3bbe1a2`）
 
 第二轮给出 1 条 blocking + 1 条 blocking-from-consumer-view，都成立：
 
@@ -389,7 +389,7 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
 
 第二轮同时确认：上一轮的 defensive copy / 读回白名单 / ready 前受控档收敛 / dev-only 方向都已修正。
 
-### 评审修正（第三轮，`<本次提交>`）
+### 评审修正（第三轮，`317f20a`）
 
 第三轮给出 1 条 blocking + 2 条 P2，都成立：
 
