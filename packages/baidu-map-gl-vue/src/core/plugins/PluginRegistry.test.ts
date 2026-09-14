@@ -740,3 +740,32 @@ describe("PluginRegistry：setup 的执行时机", () => {
     expect(dispose, "正常路径不由加载流程释放").not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `setup` 只由**资源的所有者**执行一次（自查发现，同一轮改动带出来的）。
+ *
+ * `global` 作用域的资源归宿主管：宿主在它的纪元 scope 上跑一次 `setup`。注册表如果也跑一次，
+ * 同一个副作用会被登记两遍，而且它返回的 disposer 会被挂到**地图** scope 上 —— 于是地图一卸载
+ * 就拆掉了宿主持有的那份状态。所以注册表只对 `map` 作用域执行 `setup`。
+ */
+describe("PluginRegistry：setup 只由资源所有者执行一次", () => {
+  it("global 插件：setup 恰好一次（宿主执行），注册表不重复执行", async () => {
+    const host = createPluginHost();
+    const { plugins } = registry({ host });
+    const setup = vi.fn(() => () => {});
+    plugins.register({ name: "G", scope: "global", load: async () => ({ lib: true }), setup });
+
+    await plugins.whenPlugin("G");
+    expect(setup, "global 资源的 setup 归宿主管，只跑一次").toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
+
+  it("map 插件：setup 仍由注册表执行（它才是这张地图资源的所有者）", async () => {
+    const { plugins } = registry();
+    const setup = vi.fn(() => () => {});
+    plugins.register({ name: "M", scope: "map", load: async () => ({ local: true }), setup });
+
+    await plugins.whenPlugin("M");
+    expect(setup).toHaveBeenCalledTimes(1);
+  });
+});

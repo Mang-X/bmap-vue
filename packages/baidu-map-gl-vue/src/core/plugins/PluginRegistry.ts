@@ -350,7 +350,10 @@ export function createPluginRegistry(
         }
         producedInstance = instance;
         instanceProduced = true;
-        if (record.definition.setup) {
+        // `setup` 只由资源的**所有者**执行：`map` 作用域归这张地图的注册表；`global` 作用域归宿主
+        // （它在自己的纪元 scope 上跑过一次）。两边都跑会让同一个副作用被登记两遍，而且注册表这次
+        // 返回的 disposer 会挂到**地图** scope 上 —— 地图一卸载就拆掉了宿主持有的那份状态。
+        if (record.scope === "map" && record.definition.setup) {
           const disposer = record.definition.setup(instance, getContext());
           if (disposer) scope.add(disposer);
         }

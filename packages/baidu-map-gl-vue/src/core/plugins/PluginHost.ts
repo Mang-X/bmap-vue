@@ -153,6 +153,10 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
     // 实例是 null / undefined 时没有可释放的东西（void 插件）
     if (instance == null) return;
     const list = orphanCandidates.get(entry.name) ?? [];
+    // 同一个实例只挂一次：`definition.dispose` 没有幂等契约，而两个旧纪元完全可能 `load` 出
+    // **同一个单例**（忽略 abort 是合法写法）⇒ 挂两次就会在结算时 dispose 两次（评审第四轮 P2）。
+    // 比的是实例 identity，不是条目 identity —— 要挡的正是「不同条目、同一个实例」。
+    if (list.some((candidate) => candidate.instance === instance)) return;
     list.push({ instance, definition: entry.definition, context: entry.context });
     orphanCandidates.set(entry.name, list);
   }
@@ -178,6 +182,11 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
     } catch (error) {
       task = Promise.reject(error);
     }
+    // 这一轮产出了什么：`setup` 抛错时要靠它们把资源释放掉，不能只看 `entry.instance`
+    // （那时它还没被赋值）
+    let producedInstance: unknown = null;
+    let instanceProduced = false;
+    let setupCompleted = false;
     const settled = task
       .then((instance) => {
         if (myEpoch !== epochNumber) {
@@ -199,17 +208,30 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
           }
           return instance;
         }
-        entry.instance = instance;
-        entry.status = "ready";
+        // `setup` 只在校验通过后执行，而且失败时**不能**把它带来的实例留在没人管的状态
+        // （评审第四轮 P1）：宿主是这个实例唯一的所有者，条目一旦被清掉就再也没有人会释放它。
+        producedInstance = instance;
+        instanceProduced = true;
         if (entry.definition.setup) {
           const disposer = entry.definition.setup(instance, entry.context);
           if (disposer) epochScope.add(disposer);
         }
+        setupCompleted = true;
+        entry.instance = instance;
+        entry.status = "ready";
         // 这个名字有结论了：把先前推迟判定的候选按 identity 结算掉
         settleOrphans(entry.name, instance);
         return instance;
       })
       .catch((error: unknown) => {
+        // `setup` 抛错：实例已经创建但没能就绪 ⇒ 由宿主就地释放（它是 global 资源的所有者）
+        if (instanceProduced && !setupCompleted) {
+          releaseCandidate({
+            instance: producedInstance,
+            definition: entry.definition,
+            context: entry.context,
+          });
+        }
         entry.task = null;
         // 只删**自己**那一条：dispose 之后同名的新条目可能已经建好，按名字删会把它一起删掉 ——
         // 于是新纪元在飞/已成功的条目查不到，第三次 acquire 又会重复加载（global 去重失效）。

@@ -384,8 +384,7 @@ describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
     expect(dispose, "宿主 dispose 才是释放点").toHaveBeenCalledTimes(1);
   });
 
-  it("延迟判定不会把**确实没人认领**的旧实例漏掉（新纪元拿到另一个实例时旧的要释放）", async () => {
-    const host = createPluginHost();
+  it("延迟判定不会把**确实没人认领**的旧实例漏掉（新纪元拿到另一个实例时旧的要释放）", async () => {    const host = createPluginHost();
     const orphan = { orphan: true };
     const freshInstance = { fresh: true };
     const dispose = vi.fn();
@@ -411,5 +410,93 @@ describe("PluginHost：旧纪元的结算不得污染新纪元", () => {
     expect(dispose, "新纪元在用的那个不当场释放").toHaveBeenCalledTimes(1);
     host.dispose();
     expect(dispose, "宿主的 ready 快照再释放一次新实例").toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * 宿主的 `setup()` 抛错同样不能泄漏（评审第四轮 P1）。
+ *
+ * Registry 在上一轮已经把「守卫必须排在副作用之前」修掉了，宿主这边还是老样子：
+ * 先写 `entry.instance` / `status = "ready"`、再调 `setup()`；`setup()` 抛错时 catch 只把条目
+ * 从 `entries` 删掉并重新抛 —— 实例已经创建、却没有任何缓存记录指向它，之后 `host.dispose()`
+ * 也找不到它。**global 资源的所有者本来就是宿主**，所以这一份必须由宿主自己回收。
+ */
+describe("PluginHost：setup 抛错时的资源归属", () => {
+  it("setup 抛错：实例由宿主释放一次，条目被清掉（可重试），acquire 抛原始错误", async () => {
+    const host = createPluginHost();
+    const boom = new Error("setup failed");
+    const instance = { ok: true };
+    const dispose = vi.fn();
+    const definition: BMapPluginDefinition<unknown> = {
+      name: "G",
+      scope: "global",
+      load: async () => instance,
+      setup: () => {
+        throw boom;
+      },
+      dispose,
+    };
+
+    await expect(host.acquire("G", definition, makeContext())).rejects.toBe(boom);
+    expect(dispose, "创建出来却没就绪的实例必须由宿主释放").toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledWith(instance, expect.anything());
+    expect(host.inspect("G"), "失败条目不留缓存 ⇒ 可重试").toBeUndefined();
+
+    // 反证：修好之后重试仍能成功（失败没有被记成「已加载」）
+    const retryInstance = { retry: true };
+    const retry: BMapPluginDefinition<unknown> = {
+      name: "G",
+      scope: "global",
+      load: async () => retryInstance,
+      dispose,
+    };
+    await expect(host.acquire("G", retry, makeContext())).resolves.toBe(retryInstance);
+    host.dispose();
+  });
+});
+
+/**
+ * 候选孤儿要按**实例 identity** 去重（评审第四轮 P2）。
+ *
+ * `BMapPluginDefinition.dispose` 没有幂等契约，而候选是按名字存进数组的 —— 两个旧纪元各自
+ * `resolve` 出**同一个单例**（`load` 忽略 abort 是完全合法的写法）时会被挂两次，结算时同一个实例
+ * 就被 `dispose` 两次。
+ */
+describe("PluginHost：候选孤儿按实例去重", () => {
+  it("两个旧纪元 resolve 同一个单例：只挂一次、只释放一次（三纪元场景）", async () => {
+    const host = createPluginHost();
+    const shared = { shared: true };
+    const freshInstance = { fresh: true };
+    const dispose = vi.fn();
+
+    const epoch0 = deferredPlugin("G");
+    const acquired0 = host.acquire("G", { ...epoch0.definition, dispose }, makeContext());
+    host.dispose();
+    const epoch1 = deferredPlugin("G");
+    const acquired1 = host.acquire("G", { ...epoch1.definition, dispose }, makeContext());
+    host.dispose();
+    await expect(acquired0).rejects.toBeInstanceOf(BMapError);
+    await expect(acquired1).rejects.toBeInstanceOf(BMapError);
+
+    // 第三个纪元正在加载
+    const epoch2 = deferredPlugin("G");
+    const acquired2 = host.acquire("G", { ...epoch2.definition, dispose }, makeContext());
+
+    // 两个旧纪元都 resolve **同一个** 实例
+    epoch0.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    epoch1.settle().resolve(shared);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(dispose, "还没到判定点").not.toHaveBeenCalled();
+
+    // 第三个纪元拿到另一个实例 ⇒ 旧实例该释放，但**只能一次**
+    epoch2.settle().resolve(freshInstance);
+    await expect(acquired2).resolves.toBe(freshInstance);
+    expect(
+      dispose.mock.calls.filter(([instance]) => instance === shared),
+      "同一个实例不得被 dispose 两次",
+    ).toHaveLength(1);
+
+    host.dispose();
   });
 });
