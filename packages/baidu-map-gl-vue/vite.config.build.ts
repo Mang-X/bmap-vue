@@ -164,9 +164,13 @@ export default defineConfig({
       // `@baidumap/jsapi-loader` 是本包的**运行时依赖**（精确锁定 1.0.0），同样保持 external：
       // 它是模块级单例（script 单例 + 状态机），内联会让「同一页面出现两份加载状态机」
       // ——这正是 ADR 2026-09-13 要消除的情况。
+      // `@vueuse/core` 同理是**运行时依赖**（精确锁定 14.4.0，见 #29）：它采集环境信息
+      // （ResizeObserver / IntersectionObserver / document 可见性 / 减少动画偏好）。
+      // 它没有单例语义，但作为声明过的依赖仍应 external —— 内联会让同一份实现出现在
+      // 消费方与产物里两处，并让「依赖声明」与「产物内容」不一致。
       // CDN/IIFE 产物无法 external（两个官方包都没有 IIFE/global 产物），那份构建仍内联，见
       // `vite.config.global.ts`。
-      external: ['vue', '@baidumap/jsapi-ui-kit', '@baidumap/jsapi-loader'],
+      external: ['vue', '@baidumap/jsapi-ui-kit', '@baidumap/jsapi-loader', '@vueuse/core'],
       output: {
         entryFileNames: '[name].mjs',
         chunkFileNames: 'chunks/[name]-[hash].mjs',

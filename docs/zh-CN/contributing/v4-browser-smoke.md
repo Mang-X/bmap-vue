@@ -82,6 +82,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `second-provider-reuses-sdk` | ✅ | — | 第二个入口不重复注入 SDK script（fixture 档从不注入 script，这条在该档恒真，故不登记） |
 | `unmount-release` | ✅ | ✅ | 容器里 SDK DOM 已撤、句柄作废（`BMAP_RESOURCE_DISPOSED`）、**官方全局不得被改写** |
 | `remount-after-unmount` | ✅ | ✅ | 重挂载后仍可用（没有复用脏状态） |
+| `map-container-gate` | ✅ | ✅ | 宿主 `display:none`（真实零尺寸）时**不建图**（`getMapInstance()` 为 `null`、状态未 ready、无错误），`display:block` 后门禁放行并建图一次；随后 `getCenter`/`setZoom`/`supports`/`suspend`·`resume` 在真实 SDK 上逐条生效，且期间无 `console.error`。其中 `supports()` 三条读数（`overlay.marker` / `map.zoom` / `map.bounds`）**两档都必须是 `true`** —— live 档那一条正是「能力探测要认实例自有成员」的回归门禁（真实 4.0 的 `setZoom` 不在 `Map.prototype` 上，见 ADR 已知限制第 12 条） |
 
 未处理异常单独汇总：**能归属到本库的一律 `fail`**；未归因的按上面第 3 条处理。
 

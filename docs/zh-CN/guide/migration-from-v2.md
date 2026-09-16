@@ -75,7 +75,16 @@ app.use(createBMapPlugin({
 - `ready` 事件带 `{ client, map, container }`：`map` 为 `MapHandle`，`client` 提供 `driver` 领域接口；raw SDK 只经 `baidu-map-gl-vue/advanced` 的 `unwrapRaw()` 获取。
 - `initd` 仍发出,内容与 `ready` 相同,标记 deprecated。
 - 地图 `ready` 不表示 optional plugin 已完成；依赖插件的代码应监听 `plugin-ready`。
-- `resetCenter()` 不再返回 map 实例，改用 `resetView()` 恢复初始视角。
+- `resetCenter()` **已移除**（它是「名字说重置中心、实现重置整个视野」的废弃别名），改用
+  `resetView()` 恢复初始视角。
+- `<BMap ref>` 拿到的是定型后的命令面 `BMapExpose`：常用 get / set / pan / fit、
+  `checkResize()`、`supports(capability)` 与方法表里的容器 / 生命周期 / 暂停入口。
+  未就绪时读命令给 `null`、写命令是空操作（不排队）。
+- **容器拿到非零尺寸之前不建图**：Tab / Drawer / 折叠面板展开前 `status` 停在 `idle`，
+  用 expose 的 `isContainerReady()` 或 `#loading` 插槽的 `containerReady` 与「SDK 在加载」区分。
+  容器尺寸变化默认会自动重设（`enableAutoResize`，默认 `true`），传 `false` 回到手动调 `checkResize()`。
+- `suspend()` / `resume()` 按**原因**记账：`resume(reason)` 只摘掉一个原因，页面恢复可见
+  （`document`）不会顺手解除用户的手动暂停（`user`）；全部原因清空才恢复并补偿一次 `checkResize()`。
 
 ### 3.2 BMarker
 

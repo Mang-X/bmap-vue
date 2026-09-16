@@ -38,6 +38,50 @@ describe("CapabilityRegistry", () => {
     expect(registry.supports("service.truck-route")).toBe(false);
   });
 
+  /**
+   * #29 评审 P1：真实 JSAPI 4.0 有一部分 Map 方法挂在**实例**上（`setZoom` / `setCenter` …），
+   * 只查「命名空间 + `Map.prototype`」会让 `supports()` 假阴性 —— 而它是公开命令面的一部分。
+   */
+  it("实例自有成员也算：登记之前 false、登记之后 supported（真实 4.0 的 setZoom 不在原型上）", () => {
+    const mapProto = class MapProtoOnly {}
+    ;(mapProto.prototype as Record<string, unknown>).getZoom = () => 12
+    const namespace = { Map: mapProto, VERSION: "4.0" }
+    const registry = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: namespace,
+      unsupported: "silent",
+    })
+    // 只有 getZoom 在原型上：`map.zoom` 需要 getZoom **和** setZoom ⇒ 还不能判定支持
+    expect(registry.supports("map.zoom"), "半个成员不算支持").toBe(false)
+
+    // 建图成功之后 Map Facet 会登记实例成员（driver/jsapi-v4/map.ts 的 create()）
+    class RealishMap {
+      getZoom = (): number => 12
+      setZoom = (_zoom: number): void => {}
+    }
+    registry.observeInstanceMembers(new RealishMap())
+    expect(registry.supports("map.zoom"), "登记实例成员之后必须转为 supported").toBe(true)
+  })
+
+  it("observeInstanceMembers：只收函数、幂等、null 是 no-op", () => {
+    const registry = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: { Map: class {} },
+      unsupported: "silent",
+    })
+    registry.observeInstanceMembers(null)
+    registry.observeInstanceMembers(undefined)
+    // `map.check-resize` 只要求一个成员：`checkResize`
+    registry.observeInstanceMembers({ checkResize: 12 })
+    expect(registry.supports("map.check-resize"), "数据字段不算成员").toBe(false)
+
+    registry.observeInstanceMembers({ checkResize: () => {} })
+    registry.observeInstanceMembers({ checkResize: () => {} })
+    expect(registry.supports("map.check-resize")).toBe(true)
+  })
+
   it("catalog 的每条能力都声明当前引擎（单引擎基线，M3A3-REMOVE-LEGACY）", () => {
     for (const id of CAPABILITY_IDS) {
       expect(CAPABILITY_CATALOG[id].engines, `${id} 未声明 jsapi-v4`).toContain("jsapi-v4");

@@ -113,6 +113,13 @@ export interface FakeV4Harness {
   dispatchTo(mapIndex: number, name: string, payload?: Record<string, unknown>): void;
   /** 监听相关的两个口径：`calls` = 累计订阅次数（活动），`pending` = 当前未释放（门禁）。 */
   listenActivity(): { calls: number; pending: number };
+  /**
+   * 最后一张地图收到的 `checkResize` 次数（M4-HANDLE-UX / #29 的容器门禁读数）。
+   *
+   * 用它断言「合帧：同一帧内多次尺寸变化只下发一次」与「暂停期间一次都不下发」——
+   * 领域读数是次数，不是「有没有调用过」。
+   */
+  checkResizeCalls(mapIndex?: number): number;
 }
 
 function sizedContainer(): HTMLElement {
@@ -306,6 +313,8 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         const snapshot = fake.diagnostics.snapshot();
         return { calls: snapshot.activity.listenCalls, pending: snapshot.leaks.listeners };
       },
+      checkResizeCalls: (mapIndex = -1) =>
+        createdMapAt(fake.createdMaps, mapIndex, "fake-v4 harness").resizeCalls,
     },
   };
 }
