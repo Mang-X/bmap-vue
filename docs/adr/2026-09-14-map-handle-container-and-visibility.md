@@ -93,6 +93,7 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 | 读数 | `getBoundingClientRect()` → `offsetWidth/Height` → `clientWidth/Height` | rect 是唯一能反映 transform 与小数的读数；**只要 rect 可读就用它（哪怕是 0）**，否则「真的被折叠」会被降级读数掩盖 |
 | 放行 | **每次**「不可用 → 可用」都放行一次（不只首次），且这一次**不**额外请求 `checkResize` | 建图自己会应用首次视野，补一次 resize 是多余命令；而折叠后重新展开必须能接续「收起期间发出的 `retry()`」（#29 评审 P2） |
 | 谁守门 | **所有建图路径共用一个判据**（容器当前是否有非零尺寸）：首挂载、尺寸变化回调、`retry()` | 只在首次 mount 上守门会让「失败后收起容器再 retry」在 0×0 容器上建出第二张图（#29 评审 P2） |
+| 恢复尺寸要校正 | 「不可用 → 可用」除了放行建图，**还要请求一次 `checkResize()`**（`enableAutoResize` 为 `true` 时） | 已就绪的图在 `0×0 → 非零` 时既不会重建、也没有别的路径下发尺寸命令 ⇒ 会停在旧尺寸（#29 复审 P1）。首次挂载那一次由 `MapRuntime.requestResize()` 的状态门短路，不会多发命令 |
 | `containerReady` | 只增的 latch（「曾经放行过」），供状态插槽与 `isContainerReady()` 读数 | 「建好之后又变成 0」不算取消门禁；需要「当前能不能建图」时读实时读数（`size` + `isUsableSize`） |
 | 建图之后容器又变成 0 | **不**销毁地图、也不取消门禁 | issue 非目标：不在离开视口 / 折叠时销毁 WebGL Map |
 | 自动重设 | 容器尺寸变化经**既有 `FrameScheduler`** 合帧后调 `checkResize()`（一帧最多一次） | issue 评论的「复用内部适配入口，不在组件中散落独立 Observer/RAF」 |
@@ -202,9 +203,14 @@ interface MapSlotProps {
   （`waiting for container size...` / `map loading...`）；
 - `#error` 在 `status === "error"` 时渲染，默认文案带一个「重试」按钮（覆盖插槽即完全接管）；
 - **默认插槽的载荷不变**（`status` / `map` / `error` / `client`），有门禁用例钉住这一点；
-- `retry()` 三种情形幂等：门禁没放行 ⇒ 只等（不建图）；已 ready ⇒ 直接返回当前上下文（不重跑
-  装配、不重复广播 `ready`）；失败态 ⇒ 走完整路径（清错重入 + 重新装配 + 广播）。
+- `retry()` 的 Promise **只有一条语义**：它就是「这一次重试的结果」（#29 复审 P1 收掉了此前
+  自相矛盾的两句）。三种入口 —— 已 ready ⇒ 立刻 resolve 当前上下文（不重跑装配、不重复广播）；
+  **已有一次启动在飞 ⇒ 返回同一个 Promise**（复审 P2：`boot()` 必须单飞，否则 `ready` / `initd` /
+  插件加载会各跑两遍）；容器不可用 ⇒ 返回 **pending** 的 Promise（不建图，等容器恢复后启动）。
   装配按**句柄身份**幂等，所以「重复 retry」不会把订阅叠两遍。
+- **组件级 boot 状态机**（`BMap.vue`）：`bootTask`（单飞，首挂载 / 普通 retry / 延迟 retry 共用）+
+  `deferredWaiters`（容器不可用时的悬挂请求）。`mountMap()` 只回答「现在能不能启动」——
+  首挂载、尺寸回调、延迟重试都走它，`retry()` 不再自己决定。
 
 `resetCenter` 在本票删除（验收明写「`BMapExpose` 不包含错误的 `resetCenter()` 实现」）。
 
@@ -310,6 +316,10 @@ interface MapSlotProps {
   评审轮补的 4 条：`<KeepAlive>` + `keepAliveBehavior="dispose"` 停用即释放观察器、
   默认 `suspend` 停用**不**释放（两档分工在读数上分得开）、激活时补偿**恰好一次** `checkResize`、
   容器收起期间 `retry()` 不建图且重新展开后由门禁接续）。
+
+  复审轮（2×P1 + 1×P2）又补 4 条：ready 地图 `0×0 → 非零` 恢复必须 `checkResize` 恰好一次、
+  `enableAutoResize=false` 时恢复也**不**下发、容器收起时 `retry()` 的 Promise 保持 pending 且
+  容器恢复后同一个 Promise resolve、并发 `retry()` 只广播一次 `ready`/`initd`。
 - `packages/baidu-map-gl-vue/src/driver/capability/registry.test.ts`（16 条）：
   机制上补了「实例自有成员也算」与「`observeInstanceMembers` 只收函数 / 幂等 / `null` no-op」
   两条（评审 P1 的单元级门禁）。

@@ -6,7 +6,8 @@
  * 端到端行为在 `tests/behavior/v3-component-scenarios.test.ts`（那里的 target 是真的 MapRuntime）。
  *
  * 覆盖四类容易只测 happy path 的点：
- * 1. **门禁只放行一次**，且放行之前**不**请求尺寸校正（零尺寸建图与多余命令都不该发生）；
+ * 1. **每次「不可用 → 可用」都放行**（不只首次），且每次都请求一次尺寸校正 —— 策略层不做
+ *    状态判断，由 target 按自身是否就绪短路（零尺寸建图与多余命令都不该发生）；
  * 2. **恢复只减自己那一个原因**（`resume("document")` 不得等于「恢复一切」）；
  * 3. **未知不当作不可见**（视口初值乐观），否则不支持 IntersectionObserver 的环境一上来就暂停；
  * 4. **dispose 之后**迟到的回调不再触碰 target，且观察器真的被断开。
@@ -87,7 +88,7 @@ describe("useMapSuspension：容器门禁", () => {
     expect(onContainerReady, "门禁只放行一次").toHaveBeenCalledTimes(1);
   });
 
-  it("零尺寸不放行；拿到非零尺寸后放行一次，且放行前不请求尺寸校正", () => {
+  it("零尺寸不放行；拿到非零尺寸后放行一次，并请求一次尺寸校正（由目标自行短路）", () => {
     const { container, target, onContainerReady, controller } = setup({
       size: { width: 0, height: 0 },
     });
@@ -103,14 +104,14 @@ describe("useMapSuspension：容器门禁", () => {
     shims.resize(container, { width: 320, height: 240 });
     expect(controller.containerReady.value).toBe(true);
     expect(onContainerReady).toHaveBeenCalledTimes(1);
-    expect(
-      target.requestResize,
-      "放行那一次不额外请求（建图自己会应用首次视野）",
-    ).not.toHaveBeenCalled();
+    // 「可用转换」同时意味着「尺寸回来了，去校正一次」：**策略层不做状态判断**，
+    // 由目标按自身是否就绪短路（`MapRuntime.requestResize` 要求 status 为 ready），
+    // 因此建图前那一次是 no-op、不会多发命令（#29 复审 P1 修掉了「只放行不校正」的漏洞）。
+    expect(target.requestResize, "每次可用转换都请求一次校正").toHaveBeenCalledTimes(1);
   });
 
   it("可用 → 不可用 → 可用：每次重新可用都会再放行一次（评审 P2：收紧期间 retry 靠它接续）", () => {
-    const { container, onContainerReady, controller } = setup();
+    const { container, target, onContainerReady, controller } = setup();
     controller.begin();
     expect(onContainerReady, "首次可用 ⇒ 放行").toHaveBeenCalledTimes(1);
 
@@ -119,11 +120,17 @@ describe("useMapSuspension：容器门禁", () => {
 
     shims.resize(container, { width: 320, height: 240 });
     expect(onContainerReady, "重新可用必须再放行一次").toHaveBeenCalledTimes(2);
+    expect(
+      target.requestResize,
+      "两次「不可用 → 可用」各请求一次校正（已就绪的地图靠它纠正尺寸）",
+    ).toHaveBeenCalledTimes(2);
   });
 
   it("放行之后的尺寸变化请求一次合帧校正；相同尺寸不请求", () => {
     const { container, target, controller } = setup();
     controller.begin();
+    expect(target.requestResize, "放行那一次已经请求过一次校正").toHaveBeenCalledTimes(1);
+    target.requestResize.mockClear();
 
     shims.resize(container, { width: 320, height: 240 });
     expect(target.requestResize, "尺寸没变 ⇒ 不请求").not.toHaveBeenCalled();
@@ -132,11 +139,16 @@ describe("useMapSuspension：容器门禁", () => {
     expect(target.requestResize).toHaveBeenCalledTimes(1);
   });
 
-  it("autoResize 返回 false 时只更新读数、不请求校正", () => {
+  it("autoResize 返回 false 时只更新读数、不请求校正（含「不可用 → 可用」恢复）", () => {
     const { container, target, controller } = setup({ autoResize: () => false });
     controller.begin();
     shims.resize(container, { width: 400, height: 300 });
     expect(controller.size.value).toEqual({ width: 400, height: 300 });
+    expect(target.requestResize).not.toHaveBeenCalled();
+
+    // 收起再展开：`enableAutoResize=false` 时恢复尺寸也不下发（手动档的契约）
+    shims.resize(container, { width: 0, height: 0 });
+    shims.resize(container, { width: 320, height: 240 });
     expect(target.requestResize).not.toHaveBeenCalled();
   });
 });
@@ -215,6 +227,7 @@ describe("useMapSuspension：释放", () => {
     current.value = second;
     await nextTick();
 
+    target.requestResize.mockClear(); // 换容器过程中的放行/校正请求与「旧元素」这条断言无关
     shims.resize(first, { width: 500, height: 500 });
     expect(target.requestResize, "旧元素的尺寸变化不该再触发任何请求").not.toHaveBeenCalled();
 
@@ -236,6 +249,7 @@ describe("useMapSuspension：释放", () => {
     expect(after.resizeObservers, "尺寸观察器被释放").toBeLessThanOrEqual(before.resizeObservers);
     expect(after.resizeDisconnects, "释放路径调用了 disconnect").toBeGreaterThan(0);
 
+    target.requestResize.mockClear(); // 同上：只关心里放之后是否还会发起新请求
     const callsAfterDispose = target.suspendCalls.length;
     shims.setDocumentHidden(true);
     shims.intersect(container, false);

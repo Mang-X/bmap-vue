@@ -1938,32 +1938,113 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("KeepAlive 激活");
   });
 
-  it("容器收起期间的 retry 不建图；重新展开后由门禁接着放行（评审 P2）", async () => {
+  // 注：「容器收起期间的 retry」原本是一条独立用例，但它用 `await retry().catch(() => {})`
+  // 掩盖了「这个 Promise 其实立刻以旧 error 拒绝了」这件事（#29 复审 P1）。现在由下面那条
+  // 「Promise 保持 pending → 容器恢复后同一 Promise resolve」覆盖同一个场景，且断言更强。
+
+  it("ready 的地图在容器 0×0 → 非零恢复后必须重设尺寸（复审 P1）", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const root = bmap.element as HTMLElement;
+    frames!.flush();
+    const before = harness.checkResizeCalls();
+
+    // Tab / Drawer 收起再展开：地图不销毁（ADR 决策 4），但恢复尺寸后必须补一次 checkResize
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+
+    expect(
+      harness.checkResizeCalls(),
+      "0×0 → 非零恢复：已就绪的地图必须收到一次 checkResize（文档承诺的「恢复尺寸后纠正」）",
+    ).toBe(before + 1);
+    expect(harness.mapsCreated(), "恢复尺寸不重建地图").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("ready 恢复尺寸");
+  });
+
+  it("enableAutoResize=false 时容器 0×0 → 非零恢复不下发 checkResize（复审 P1）", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      ...controlledViewProps(),
+      enableAutoResize: false,
+    }));
+    const root = bmap.element as HTMLElement;
+    frames!.flush();
+    const before = harness.checkResizeCalls();
+
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+
+    expect(harness.checkResizeCalls(), "关闭自动重设 ⇒ 恢复尺寸也不下发").toBe(before);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("enableAutoResize=false 恢复尺寸");
+  });
+
+  it("容器收起时 retry 的 Promise 保持 pending，容器恢复并真正就绪后才 resolve（复审 P1）", async () => {
     useManualFrames();
     harness.failNextInitializeView();
     const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
     const api = exposeOf(bmap);
     const root = bmap.element as HTMLElement;
-    expect(statusOf(bmap), "首次初始化失败").toBe("error");
+    expect(statusOf(bmap)).toBe("error");
     const created = harness.mapsCreated();
 
-    // Tab / Drawer 收起 → 容器 0×0
+    // 收起 → retry：这次请求不能立刻以「旧的 error」拒绝（那会表达成「重试已经失败了」）
     shims.resize(root, { width: 0, height: 0 });
     frames!.flush();
-
-    // 此刻 retry：不能建图（会得到一张 0×0 的画布）；返回的 Promise 会以当前错误 reject
-    await api.retry().catch(() => {});
+    let settled: "pending" | "resolved" | "rejected" = "pending";
+    const pending = api.retry();
+    void pending.then(
+      () => {
+        settled = "resolved";
+      },
+      () => {
+        settled = "rejected";
+      },
+    );
     await settleProps();
-    expect(harness.mapsCreated(), "容器 0×0 时 retry 不得建图").toBe(created);
+    await nextTick();
+    expect(
+      settled,
+      "容器收起时 retry 应返回 pending 的 Promise（等这次延迟重试的结果），而不是立刻 reject",
+    ).toBe("pending");
+    expect(harness.mapsCreated(), "pending 期间不建图").toBe(created);
 
-    // 重新展开 → 门禁接着把挂起的那次重试做完
+    // 展开 → 延迟的那次重试真正执行 → 同一个 Promise resolve
     shims.resize(root, { width: 320, height: 240 });
     frames!.flush();
-    await settleProps();
-    expect(harness.mapsCreated(), "重新展开后由门禁放行").toBe(created + 1);
+    await expect(pending, "同一个 Promise 必须随延迟重试成功而 resolve").resolves.toBeTruthy();
     expect(statusOf(bmap)).toBe("ready");
+    expect(harness.mapsCreated(), "延迟重试只建一张图").toBe(created + 1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("收起期间的 retry");
+    harness.assertIdle("延迟 retry 的 Promise");
+  });
+
+  it("并发 retry 共享同一次 boot：ready / initd 只广播一次（复审 P2）", async () => {
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    expect(statusOf(bmap)).toBe("error");
+    const created = harness.mapsCreated();
+    const readyBefore = bmap.emitted("ready")?.length ?? 0;
+    const initdBefore = bmap.emitted("initd")?.length ?? 0;
+
+    await Promise.all([api.retry(), api.retry()]);
+    await settleProps();
+    await nextTick();
+
+    expect(harness.mapsCreated(), "并发 retry 只建一张图").toBe(created + 1);
+    expect(bmap.emitted("ready")?.length ?? 0, "并发 retry 只广播一次 ready").toBe(readyBefore + 1);
+    expect(bmap.emitted("initd")?.length ?? 0, "并发 retry 只广播一次 initd").toBe(initdBefore + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("并发 retry");
   });
 });

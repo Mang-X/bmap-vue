@@ -56,7 +56,14 @@ export interface BMapExpose extends MapCommands {
   whenMapCreated(callback: (ready: MapReadyContext) => void): () => void;
   /** 承载地图的组件是否已开始卸载（早于子树卸载）。 */
   isTearingDown(): boolean;
-  /** 加载失败后重试（失败态下重新走一遍加载与建图）。 */
+  /**
+   * 重试加载：**返回的 Promise 就是「这一次重试的结果」**。
+   *
+   * - 已就绪：立刻 resolve 当前上下文（幂等：不重跑装配、不重复广播 `ready`）；
+   * - 已有一次启动在飞：返回**同一个** Promise（并发 `retry()` 不会重复广播 / 重复加载插件）；
+   * - 容器当前不可用（Tab / Drawer 收起）：**不建图**，Promise 保持 **pending**，直到容器恢复、
+   *   这次重试真正执行完才 settle。
+   */
   retry(): Promise<MapReadyContext>;
 
   /* ------------------------------------------------------------------ 暂停策略 */

@@ -217,10 +217,15 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 地图**建好之后**容器再变成 0（折叠 / 切走 / 进后台）**不会销毁地图**，也不取消门禁：恢复尺寸后由
 `checkResize()` 纠正即可（本库刻意不在这种时机销毁 WebGL 地图）。
 
-门禁不止覆盖首次挂载：**`retry()` 与首次建图共用同一个判据**（容器**当前**是否有非零尺寸）。
-因此「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图：那次重试会挂起，等容器
-重新展开时由门禁接着放行。收起期间调用 `retry()` 返回的 Promise 会在真正就绪后 resolve；
-在此之前若仍是失败态，它会以**当前错误** reject（「此刻不能重试」的如实回执）。
+门禁不止覆盖首次挂载：**`retry()` 与首次建图共用同一个判据**（容器**当前**是否有非零尺寸），
+且**一次完整启动是单飞的**（并发 `retry()` 共享同一次启动，`ready` / `initd` / 插件加载都不会重复）。
+
+- 「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图：那次重试会**挂起**，
+  等容器重新展开时由门禁接着放行；
+- 容器收起期间 `retry()` 返回的 Promise 保持 **pending**，直到这次重试真正执行完才 settle
+  （成功 resolve 上下文 / 失败 reject **那一次**的错误）—— 它**不会**拿旧的错误立刻拒绝；
+- 已就绪的地图遇到「0×0 → 恢复非零尺寸」会**补一次 `checkResize()`**（`enableAutoResize` 为
+  `true` 时；关掉则完全手动）。
 
 ### 尺寸变化的自动重设
 
@@ -531,7 +536,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `whenReady` | 地图 ready 后 resolve；可传 `AbortSignal` 只取消本次等待 | `(signal?: AbortSignal) => Promise<MapReadyContext>` |
 | `whenMapCreated` | 建图成功、初始化视野**之前**的挂载点（订阅 `load` 这类初始化期事件用） | `(cb) => () => void` |
 | `isTearingDown` | 承载地图的组件是否已开始卸载 | `() => boolean` |
-| `retry` | 加载失败后重试（已就绪时是幂等的空转） | `() => Promise<MapReadyContext>` |
+| `retry` | 重试加载：返回「这一次重试」的 Promise（并发共享同一次启动；容器不可用时保持 pending；已就绪时立刻 resolve 当前上下文） | `() => Promise<MapReadyContext>` |
 | `suspend` / `resume` | 加 / 摘一个暂停原因（默认 `'user'`） | `(reason?: MapSuspendReason) => void` |
 | `isSuspended` / `suspendReasons` | 当前是否暂停 / 生效的原因快照 | `() => boolean` / `() => readonly string[]` |
 | `resetView` | 恢复首次初始化时的 center、zoom、heading 和 tilt（并同步重置四个内部状态） | `() => void` |
@@ -565,7 +570,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `status` | `MapRuntimeStatus` | 运行时状态（`idle` / `loading` / `ready` / `error` …） |
 | `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
 | `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
-| `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图） |
+| `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图；容器收起时保持 pending，容器恢复后由门禁接着执行） |
 
 - `#loading` 在 `status !== 'ready'` **且** `status !== 'error'` 时渲染（自带文案见
   「自定义地图加载中」一节）—— 与原来一样，error 态走 `#error`；

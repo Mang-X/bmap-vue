@@ -3,7 +3,9 @@
  *
  * 这一个 composable 同时承担两件事，**刻意不拆成两个**：
  *
- * 1. **容器门禁**：容器拿到非零尺寸之前不建图（首次放行只发生一次）；
+ * 1. **容器门禁**：容器拿到非零尺寸之前不建图；「不可用 → 可用」**每次**都会放行回调一次
+ *    （不只首次 —— 折叠后重新展开要能接续挂起的 retry，且已就绪的地图要靠这次转换补一次
+ *    `checkResize`，#29 复审 P1）；
  * 2. **可见性策略**：把「页面前后台 / 元素是否在视口附近 / 减少动画偏好」翻译成暂停原因。
  *
  * 拆开的代价是同一容器上会出现两套尺寸观察器（issue #29 的评论明确禁止：「只需要宽高状态时
@@ -168,15 +170,19 @@ export function useMapSuspension(options: UseMapSuspensionOptions): MapSuspensio
     if (usable && !wasUsable) {
       // 「不可用 → 可用」：放行建图。**每次**这种转换都回调（不只是第一次）—— 评审 P2 指出
       // 「收起期间调用 retry()」不能被一次性 latch 挡住：容器重新展开时必须能接着放行。
-      // 调用方负责幂等（`<BMap>` 用「当前尺寸 + `mountStarted`」判断，重复调用是 no-op），
-      // 且这一步**不**请求 checkResize（建图自己会应用首次视野，补一次是多余命令）。
+      // 调用方负责幂等（`<BMap>` 用「当前尺寸 + 是否有人要求重试」判断，重复调用是 no-op）。
+      //
+      // 这里**不 return**：同一次转换对「已经就绪的地图」还意味着「容器尺寸回来了，去校正尺寸」
+      // （#29 复审 P1：`ready(320) → 0×0 → 320` 若只放行不请求 resize，就违背了
+      // 「恢复尺寸后由 checkResize() 纠正」这条承诺）。首次挂载那一次会走到下面的
+      // `requestResize()`，而目标自己按「是否就绪」短路（`MapRuntime.requestResize` 要求 status
+      // 为 `ready`），因此建图前是 no-op、不会多发命令。
       containerReady.value = true;
       options.onContainerReady();
-      return;
     }
     if (!usable) {
       // 「可用 → 不可用」：什么都不做 —— 地图已存在时不销毁、也不请求 resize（ADR 决策 4），
-      // 等重新可用时由上面那条分支接着处理。
+      // 恢复到非零尺寸时由上面那条分支 + 下面的 `requestResize()` 补一次校正。
       return;
     }
     if (options.autoResize?.() === false) return;

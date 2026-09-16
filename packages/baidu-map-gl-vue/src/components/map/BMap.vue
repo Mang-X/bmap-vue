@@ -646,15 +646,41 @@ runtime.resources.add(() => suspension.dispose());
  */
 const containerReady: Readonly<ShallowRef<boolean>> = suspension.containerReady;
 
-/** 建图是否**已经开始**（`mountMap()` 用它区分「首挂载」与「失败后重试」）。 */
-let mountStarted = false;
-
 /**
- * 有没有一次「因为容器当时不可用而没能执行」的建图 / 重试请求（#29 评审 P2）。
+ * 组件级 boot 状态机（#29 复审 P1 / P2）。三条语义都要求「一次**完整**启动」是单飞的 ——
+ * 而不是只让 Runtime 的建图单飞：
  *
- * 容器重新可用时由放行回调（`mountMap()`）接着完成；容器一直不可用就一直挂着 —— 绝不建图。
+ * 1. **并发 retry 共享同一次 boot**：否则两次 `start()` 都会 `await` 同一个 `mountPromise`，
+ *    地图只建一张，但 `emitReady` / `initd` / 插件加载会各跑两遍；
+ * 2. **容器不可用时的 retry 要「挂起」而不是「立刻失败」**：`MapRuntime.whenReady()` 在 error
+ *    态是立即 reject，用它表达「还没开始」会把「等容器展开」误报成「重试失败了」；
+ * 3. **首挂载、普通 retry、延迟 retry 走同一条路径**（`mountMap()` 只判断「现在能不能启动」）。
+ *
+ * 于是：正在跑的那次 boot 记为 `bootTask`（并发调用共享它，结束后复位以便下一次重试）；
+ * 容器不可用时的请求排进 `deferredWaiters`，容器重新可用 → `mountMap()` 启动 → 同一个 Promise
+ * 随那次 boot 的结果 settle。
  */
-let pendingRetry = false;
+let mountStarted = false;
+let bootTask: Promise<MapReadyContext> | null = null;
+let deferredWaiters: Array<{
+  resolve: (ctx: MapReadyContext) => void;
+  reject: (error: unknown) => void;
+}> = [];
+
+/** 启动一次 boot；并发调用共享同一个 Promise（结束后复位，让下一次 retry 能重新启动）。 */
+function startBoot(): Promise<MapReadyContext> {
+  bootTask ??= boot().finally(() => {
+    bootTask = null;
+  });
+  return bootTask;
+}
+
+/** 把挂起的等待者接到这次 boot 上：成功一起 resolve、失败一起 reject。 */
+function attachWaiters(task: Promise<MapReadyContext>): void {
+  const waiting = deferredWaiters;
+  deferredWaiters = [];
+  for (const waiter of waiting) task.then(waiter.resolve, waiter.reject);
+}
 
 /**
  * 建图 / 重试的**统一入口**（幂等）。
@@ -662,26 +688,30 @@ let pendingRetry = false;
  * 判据是**当前**尺寸（`suspension.size`），不是一次性 latch —— 评审 P2 指出：只在首次 mount
  * 上守门，会让「容器收起后调用 `retry()`」在 0×0 容器上建出第二张图。于是：
  *
- * - 容器当前不可用 ⇒ 什么都不做，把请求留在 `pendingRetry` 上；等「不可用 → 可用」的放行回调
- *   再走一遍（尺寸观察器**每次**这种转换都会回调，因此折起来再展开也接得上）；
- * - 已经 `ready` ⇒ 什么都不做（幂等：不重跑装配、也不重复广播 `ready`）；
- * - 其它情况：首挂载，或「已经建过图 + 有人要求重试」⇒ 走 `boot()`。
+ * - 容器当前不可用 ⇒ 什么都不做（请求留在 `deferredWaiters` 上）；等「不可用 → 可用」的放行
+ *   回调再走一遍（尺寸观察器**每次**这种转换都会回调，因此折起来再展开也接得上）；
+ * - 已经 `ready` ⇒ 把挂起的等待者接到「已就绪」的结果上（幂等：不重跑装配、也不重复广播）；
+ * - 已经在启动中（`bootTask`）⇒ 什么都不做，等它（复审 P2：不能并发起两次 boot）；
+ * - 其它情况：首挂载，或「已经建过图 + 有人要求重试」⇒ 启动一次 boot。
  *
- * 调用点：`onMounted` 的同步测量、尺寸观察器的放行回调、`retry()`。
+ * 调用点：`onMounted` 的同步测量、尺寸观察器的放行回调。
  */
 function mountMap(): void {
   const host = containerRef.value;
   if (!host || !isUsableSize(suspension.size.value)) return;
   if (runtime.status.value === "ready") {
-    pendingRetry = false;
+    attachWaiters(runtime.whenReady());
     return;
   }
-  const firstMount = !mountStarted;
-  if (!firstMount && !pendingRetry) return;
-  pendingRetry = false;
+  if (bootTask) return;
+  if (mountStarted && deferredWaiters.length === 0) return;
   mountStarted = true;
   runtime.container = host;
-  boot().catch(() => {});
+  const task = startBoot();
+  // 门禁自动启动的那一次没有人 await：错误已经由 `error` 事件如实上报，这里只吞掉 rejection
+  // （有等待者时它们各自带 reject handler，不需要这一句）。
+  if (deferredWaiters.length === 0) task.catch(() => {});
+  attachWaiters(task);
 }
 
 // 容器 ref 挂载后回填,供 MapRuntime.mount 使用(SSR 服务端不执行)
@@ -721,6 +751,12 @@ onActivated(() => {
  */
 onUnmounted(() => {
   suspension.dispose();
+  // 挂起的 retry 等待者不能永远 pending：卸载即终态（与 `MapRuntime.whenReady()` 同一口径与错误码）
+  for (const waiter of deferredWaiters.splice(0)) {
+    waiter.reject(
+      new BMapError("BMAP_RUNTIME_DISPOSED", "BMap unmounted before the container became usable"),
+    );
+  }
 });
 
 /** 插件不阻塞 map ready；ready 后台加载插件并逐个 emit */
@@ -911,26 +947,42 @@ async function boot(): Promise<MapReadyContext> {
 /**
  * 重试加载（`#error` / `#loading` 插槽与 expose 共用同一份实现）。
  *
- * 语义就是「请求一次（重新）建图」，具体能不能立刻做交给 `mountMap()` 判断（**同一个门禁**）：
+ * 返回的 Promise 语义**只有一条**（#29 复审 P1 收口了此前自相矛盾的两句）：
+ * **它就是「这一次重试的结果」** —— 成功时 resolve 出那次启动的上下文，失败时 reject 那次启动
+ * 的错误；容器当前不可用时它保持 **pending**，直到容器恢复、这次重试真正执行完。
  *
- * 1. **容器当前不可用**（Tab / Drawer 收起、宿主隐藏）：不建图，请求挂在 `pendingRetry` 上，
- *    等容器重新可用时由放行回调接着完成 —— 评审 P2：门禁必须覆盖 retry / recreate，而不只是
- *    首次 mount，否则第二张图会建在 0×0 容器上；
- * 2. **已经 ready**：立刻 resolve，不重跑装配、也不重复广播 `ready`（幂等）；
- * 3. **失败态且容器可用**：`MapRuntime.retry()` 清错重入 → 装配按句柄身份重跑 → 重新广播
- *    `ready`（「重试成功之后 `error` 必须归 null」有用例钉住，它同时锁住四个出口）。
+ * 三种入口状态：
  *
- * 返回的是「等就绪」的 Promise：门禁放行并真正就绪时 resolve；在那之前若仍处于 `error` 态，
- * 会以**当前错误** reject —— 那是「此刻不能重试」的如实回执（与 `status` / 插槽里的 `error`
- * 是同一个事实）。
+ * 1. **已经 ready**：立刻 resolve 当前上下文（幂等：不重跑装配、不重复广播 `ready`）；
+ * 2. **已经在启动中**（首挂载或上一次 retry 还在飞）：返回**同一个** Promise —— 复审 P2：
+ *    `boot()` 必须单飞，否则 `ready` / `initd` / 插件加载会跟着重复；
+ * 3. **容器当前不可用**（Tab / Drawer 收起、宿主隐藏）：**不建图**（复审 P2：门禁要覆盖
+ *    retry / recreate），这次请求挂到 `deferredWaiters` 上并返回一个 **pending** 的 Promise，
+ *    容器重新可用时由放行回调启动，同一个 Promise 随结果 settle。
  *
- * 并发调用天然收敛：`MapRuntime.mount()` 用 `mountPromise` 去重，「同一失败态上的两次 retry」
- * 共享同一个在飞任务，因此不会创建两张地图。
+ * 因此「失败态」下调用它的两种结果都是**如实**的：容器可用 ⇒ 重新走一遍完整启动（`MapRuntime.retry()`
+ * 清错重入 → 装配按句柄身份重跑 → 重新广播 `ready`，失败则 reject **这次**的错误）；容器不可用 ⇒
+ * 一直 pending，等容器展开。不再出现「拿旧的错误立刻 reject 一个其实还没开始的延迟重试」。
  */
 function retry(): Promise<MapReadyContext> {
-  pendingRetry = true;
-  mountMap();
-  return runtime.whenReady();
+  if (runtime.status.value === "ready") {
+    const settled = runtime.whenReady();
+    attachWaiters(settled);
+    return settled;
+  }
+  if (bootTask) return bootTask;
+  const host = containerRef.value;
+  if (!host || !isUsableSize(suspension.size.value)) {
+    // 容器当前不可用：挂起（不建图、也不以旧错误立刻拒绝），等放行回调启动这次重试
+    return new Promise<MapReadyContext>((resolve, reject) => {
+      deferredWaiters.push({ resolve, reject });
+    });
+  }
+  mountStarted = true;
+  runtime.container = host;
+  const task = startBoot();
+  attachWaiters(task);
+  return task;
 }
 
 onBeforeUnmount(() => {
