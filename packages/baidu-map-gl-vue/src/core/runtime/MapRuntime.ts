@@ -57,6 +57,16 @@ function createAbortError(reason?: unknown): BMapError {
 }
 
 export interface MapRuntimeOptions {
+  /**
+   * 建图前的**最后一个等待点**（可选）：在 `driver.map.create()` 之前 `await` 它。
+   *
+   * `<BMap>` 用它把「容器当前是否有可用尺寸」这条**异步门禁**放到这里 —— 只「在启动之前判一次」
+   * 会有 TOCTOU 窗口：`doMount()` 中途要 `await` SDK 加载，慢网络下加载完成时容器可能已经被
+   * 收起成 0×0，于是仍会在零尺寸容器上建出一张 0×0 的画布（#29 三轮复审 P1）。
+   *
+   * 约定：实现应当「等到可以建图」再 resolve（例如等到容器重新可用）；抛错则按建图失败处理。
+   */
+  beforeCreateMap?: () => Promise<void> | void;
   /** 新规范:经 ClientContext 加载(推荐) */
   clientContext?: BMapClientContext;
   /** 向后兼容:直接工厂(测试/旧调用) */
@@ -236,6 +246,15 @@ export class MapRuntime {
       }
       this.client.value = client;
       this.status.value = "creating";
+      // 最后一个异步边界：把「等容器可用」这类门禁放在 create() **之前**（#29 三轮复审 P1）。
+      // 它必须在**这个位置**，而不是启动之前 —— 见 `beforeCreateMap` 的文档。
+      await this.options.beforeCreateMap?.();
+      if (this.resources.isDisposed) {
+        throw new BMapError(
+          "BMAP_RUNTIME_DISPOSED",
+          "MapRuntime disposed while waiting for the map container",
+        );
+      }
       const map = client.driver.map.create(this.container, this.options.mapOptions);
       if (this.resources.isDisposed) {
         try {

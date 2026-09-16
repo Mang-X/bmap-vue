@@ -74,3 +74,9 @@ api.supports('map.bounds'); api.whenReady(); api.retry()
 - **容器门禁覆盖 `retry()`**：建图与重试收敛到同一个判据（容器**当前**是否有非零尺寸）。
   「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图；那次重试会挂起，
   等容器重新展开时由门禁接着放行。
+- **判据也落在异步边界之后**：`await` SDK 加载期间容器被收起时同样不建图（加载完成后先等容器
+  恢复可用，再 `create()`）；挂起的 retry 会随**任何** Runtime 销毁（KeepAlive 停用 /
+  `MapContext.dispose()` / 组件卸载）终止，`disposed` 之后再 `retry()` 立即以
+  `BMAP_RUNTIME_DISPOSED` 拒绝。
+- **失败期间同步 retry 会真的排下一次**：在 `@error` 回调里调用 `retry()`（自动重试）不再复用
+  那条即将失败的任务。

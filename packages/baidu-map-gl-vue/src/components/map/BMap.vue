@@ -558,6 +558,9 @@ const currentRuntime = new MapRuntime({
     displayOptions: props.displayOptions,
     backgroundColor: props.backgroundColor,
   },
+  // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
+  // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。
+  beforeCreateMap: () => waitForUsableContainer(),
 });
 /**
  * 订阅挂载点（M4-EVENTS / #28）：官方 `load` 在首次 `centerAndZoom()` 之后派发，而那次调用发生在
@@ -633,6 +636,10 @@ const suspension = useMapSuspension({
 // `resources` 之后 `runtime.dispose()` 会一并释放它们（`onUnmounted` 里的显式 `dispose()`
 // 保留，幂等，用来保证「先断源再收尾」的顺序）。
 runtime.resources.add(() => suspension.dispose());
+// 悬挂的 retry 请求同样归属地图实例的资源作用域（#29 三轮复审 P1）：任何 `runtime.dispose()`
+// （KeepAlive 停用、`MapContext.dispose()`、组件卸载）都必须终止它们 —— 观察器这时已经一起释放，
+// 容器再也不可能变可用，留着就是永久 pending。
+runtime.resources.add(() => rejectPendingWaiters(disposedError()));
 
 /**
  * 容器门禁是否**曾经**放行（状态插槽的读数；只增的 latch）。
@@ -666,6 +673,19 @@ let deferredWaiters: Array<{
   resolve: (ctx: MapReadyContext) => void;
   reject: (error: unknown) => void;
 }> = [];
+/**
+ * 「失败期间同步提出的 retry」排的下一轮（#29 三轮复审 P2）。
+ *
+ * `boot()` 是「先同步 `emit('error')`、再 throw」，而 `bootTask` 要到 `.finally()` 才复位 ——
+ * 于是 `@error="mapRef?.retry()"` 这种写法会命中「已有 bootTask」并复用那条**即将 reject** 的
+ * 任务，实际并没有排下一次重试。这类请求记在这里，等当前任务 settle 后真正启动下一轮。
+ */
+let nextBootWaiters: Array<{
+  resolve: (ctx: MapReadyContext) => void;
+  reject: (error: unknown) => void;
+}> = [];
+/** 在「建图等待点」里等容器变可用的唤醒函数（见 `waitForUsableContainer`）。 */
+let containerUsableWaiters: Array<() => void> = [];
 
 /** 启动一次 boot；并发调用共享同一个 Promise（结束后复位，让下一次 retry 能重新启动）。 */
 function startBoot(): Promise<MapReadyContext> {
@@ -683,6 +703,52 @@ function attachWaiters(task: Promise<MapReadyContext>): void {
 }
 
 /**
+ * 终止所有悬挂的等待者（#29 三轮复审 P1）。
+ *
+ * 三组等待者都必须能被「Runtime 被销毁」终止，而不只是「组件被卸载」：
+ * `keepAliveBehavior="dispose"` 的 `onDeactivated → runtime.dispose()` 不会触发 `onUnmounted`，
+ * 而 `MapContext.dispose()` 也是公开路径 —— 只挂 `onUnmounted` 会让那些 Promise 永久 pending
+ * （观察器已经随 Runtime 释放，容器再也不可能变可用 ⇒ 永远没有唤醒源）。
+ *
+ * - `deferredWaiters` / `nextBootWaiters`：以传入的错误 reject；
+ * - `containerUsableWaiters`：只**唤醒** —— 让建图等待点重新检查并退出，由 Runtime 自己的
+ *   disposed 守卫抛出 `BMAP_RUNTIME_DISPOSED`（比在这里造错更贴近真实原因）。
+ */
+function rejectPendingWaiters(error: unknown): void {
+  for (const waiter of deferredWaiters.splice(0)) waiter.reject(error);
+  for (const waiter of nextBootWaiters.splice(0)) waiter.reject(error);
+  for (const resolve of containerUsableWaiters.splice(0)) resolve();
+}
+
+/** Runtime 被销毁时终止悬挂请求用的错误（与 `whenReady()` 同码）。 */
+function disposedError(): BMapError {
+  return new BMapError(
+    "BMAP_RUNTIME_DISPOSED",
+    "BMap map runtime disposed while a retry was pending",
+  );
+}
+
+/**
+ * 「建图等待点」（`MapRuntimeOptions.beforeCreateMap`，#29 三轮复审 P1）：容器当前不可用就等到可用。
+ *
+ * 与 `mountMap()` 用**同一份**判据（`containerRef.value` + `isUsableSize(suspension.size)`），
+ * 区别只是位置 —— 这里是「最后一个异步边界之后、`create()` 之前」，因此慢网络下
+ * 「加载期间容器被收起」也穿不过去。用 `while` 而不是 `if`：被唤醒后尺寸若又变回不可用（或
+ * Runtime 正在销毁）就继续等 / 退出，让 Runtime 的 disposed 守卫收尾。
+ */
+async function waitForUsableContainer(): Promise<void> {
+  for (;;) {
+    const status = runtime.status.value as string;
+    if (status === "disposing" || status === "disposed") return;
+    const host = containerRef.value;
+    if (host && isUsableSize(suspension.size.value)) return;
+    await new Promise<void>((resolve) => {
+      containerUsableWaiters.push(resolve);
+    });
+  }
+}
+
+/**
  * 建图 / 重试的**统一入口**（幂等）。
  *
  * 判据是**当前**尺寸（`suspension.size`），不是一次性 latch —— 评审 P2 指出：只在首次 mount
@@ -697,8 +763,12 @@ function attachWaiters(task: Promise<MapReadyContext>): void {
  * 调用点：`onMounted` 的同步测量、尺寸观察器的放行回调。
  */
 function mountMap(): void {
+  const status = runtime.status.value as string;
+  if (status === "disposing" || status === "disposed") return;
   const host = containerRef.value;
   if (!host || !isUsableSize(suspension.size.value)) return;
+  // 先唤醒「建图等待点」里等容器可用的那一次挂载（它已经跑到 SDK 加载之后了）
+  for (const resolve of containerUsableWaiters.splice(0)) resolve();
   if (runtime.status.value === "ready") {
     attachWaiters(runtime.whenReady());
     return;
@@ -751,12 +821,10 @@ onActivated(() => {
  */
 onUnmounted(() => {
   suspension.dispose();
-  // 挂起的 retry 等待者不能永远 pending：卸载即终态（与 `MapRuntime.whenReady()` 同一口径与错误码）
-  for (const waiter of deferredWaiters.splice(0)) {
-    waiter.reject(
-      new BMapError("BMAP_RUNTIME_DISPOSED", "BMap unmounted before the container became usable"),
-    );
-  }
+  // 挂起的 retry 等待者不能永远 pending：卸载即终态（与 `MapRuntime.whenReady()` 同码）。
+  // 注：真正的「任何 Runtime dispose 都要终止」由上面登记进 `resources` 的那条保证，这里只是
+  // 让「先断源再收尾」的顺序在组件卸载路径上也成立（重复调用是 no-op）。
+  rejectPendingWaiters(disposedError());
 });
 
 /** 插件不阻塞 map ready；ready 后台加载插件并逐个 emit */
@@ -964,13 +1032,47 @@ async function boot(): Promise<MapReadyContext> {
  * 清错重入 → 装配按句柄身份重跑 → 重新广播 `ready`，失败则 reject **这次**的错误）；容器不可用 ⇒
  * 一直 pending，等容器展开。不再出现「拿旧的错误立刻 reject 一个其实还没开始的延迟重试」。
  */
+/**
+ * 把「失败期间同步提出的 retry」排到下一轮（#29 三轮复审 P2）。
+ *
+ * 当前 `bootTask` settle（`.finally()` 复位它）之后，用同一个 `retry()` 启动下一轮，并把排队的
+ * 等待者接到那一轮上 —— 于是调用方拿到的是**下一次重试**的结果，而不是眼前这条失败的任务。
+ */
+function requestNextBoot(): Promise<MapReadyContext> {
+  const previous = bootTask;
+  const queued = new Promise<MapReadyContext>((resolve, reject) => {
+    nextBootWaiters.push({ resolve, reject });
+  });
+  void previous
+    ?.catch(() => {})
+    .then(() => {
+      const waiters = nextBootWaiters.splice(0);
+      if (waiters.length === 0) return;
+      // `startBoot()` 的 `.finally()` 先于这里复位 `bootTask`；显式再确认一次，避免被旧任务挡住
+      if (bootTask === previous) bootTask = null;
+      const task = retry();
+      for (const waiter of waiters) task.then(waiter.resolve, waiter.reject);
+    });
+  return queued;
+}
+
 function retry(): Promise<MapReadyContext> {
+  const status = runtime.status.value as string;
+  if (status === "disposing" || status === "disposed") {
+    // 已经（正在）销毁：直接以终态错误拒绝，不要塞一个永远没有唤醒源的等待者
+    return Promise.reject(disposedError());
+  }
   if (runtime.status.value === "ready") {
     const settled = runtime.whenReady();
     attachWaiters(settled);
     return settled;
   }
-  if (bootTask) return bootTask;
+  if (bootTask) {
+    // 失败**已经发生**但任务还没 settle（`emit('error')` 里同步调 `retry()` 就落在这里）：
+    // 复用这条即将 reject 的任务等于没重试 —— 排到下一轮（#29 三轮复审 P2）
+    if (runtime.status.value === "error") return requestNextBoot();
+    return bootTask;
+  }
   const host = containerRef.value;
   if (!host || !isUsableSize(suspension.size.value)) {
     // 容器当前不可用：挂起（不建图、也不以旧错误立刻拒绝），等放行回调启动这次重试

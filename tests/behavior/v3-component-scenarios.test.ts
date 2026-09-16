@@ -1876,7 +1876,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     const wrapper = mount(Root, { attachTo: harness.container() });
     await settleProps();
     await nextTick();
-    return { wrapper, show };
+    return { wrapper, show, bmap: wrapper.findComponent(BMap) };
   }
 
   it("KeepAlive + keepAliveBehavior=dispose：停用即释放观察器（评审 P1）", async () => {
@@ -2046,5 +2046,120 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("并发 retry");
+  });
+
+  it("KeepAlive(dispose) 停用会终止挂起的 retry（复审 P1）", async () => {
+    harness.failNextInitializeView();
+    const { wrapper, show, bmap } = await mountKeepAliveTree("dispose");
+    await settleProps();
+    await nextTick();
+    const api = exposeOf(bmap);
+    expect(statusOf(bmap)).toBe("error");
+    const created = harness.mapsCreated();
+
+    // 容器收起 → retry 挂起（pending，不建图）
+    shims.resize(bmap.element as HTMLElement, { width: 0, height: 0 });
+    let settled: "pending" | "resolved" | "rejected" = "pending";
+    let reason: unknown = null;
+    const pending = api.retry();
+    void pending.then(
+      () => {
+        settled = "resolved";
+      },
+      (error) => {
+        settled = "rejected";
+        reason = error;
+      },
+    );
+    await settleProps();
+    expect(settled, "容器不可用 ⇒ 挂起").toBe("pending");
+
+    // KeepAlive 停用 + keepAliveBehavior="dispose" ⇒ runtime.dispose()（**不**触发 onUnmounted）
+    show.value = false;
+    await settleProps();
+    await nextTick();
+
+    expect(settled, "Runtime dispose 必须终止挂起的 retry（不能永久 pending）").toBe("rejected");
+    expect((reason as { code?: string } | null)?.code).toBe("BMAP_RUNTIME_DISPOSED");
+    expect(harness.mapsCreated(), "停用期间不建图").toBe(created);
+
+    // 已经 disposed：再 retry 必须**立刻**以终态错误拒绝，而不是塞一个永远不会被唤醒的等待者
+    await expect(api.retry()).rejects.toMatchObject({ code: "BMAP_RUNTIME_DISPOSED" });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("KeepAlive dispose 终止挂起 retry");
+  });
+
+  it("SDK 加载期间容器被收起：不在 0×0 上建图，容器可用后才建一张（复审 P1）", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+    }));
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap), "SDK 还在加载").toBe("waiting-client");
+    expect(harness.mapsCreated()).toBe(0);
+
+    // 加载期间把容器收起，然后放行 provider：此刻**不能**在 0×0 上 create
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+    harness.releaseProvider();
+    await settleProps();
+    await nextTick();
+    expect(
+      harness.mapsCreated(),
+      "SDK 加载完成时容器已收起 ⇒ 不得在 0×0 上建图（启动前判一次会有 TOCTOU）",
+    ).toBe(0);
+
+    // 容器恢复 → 才建图
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+    await settleProps();
+    expect(harness.mapsCreated(), "容器可用之后才建图").toBe(1);
+    expect(statusOf(bmap)).toBe("ready");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("加载期间收起容器");
+  });
+
+  it("error 事件回调里同步 retry：真的排下一次重试（复审 P2）", async () => {
+    harness.failNextInitializeView();
+    let api: BMapExpose | null = null;
+    const retries: Array<Promise<unknown>> = [];
+    const Root = defineComponent({
+      setup: () => () =>
+        h(
+          BMap as never,
+          {
+            ref: (value: unknown) => {
+              api = value as BMapExpose | null;
+            },
+            provider: harness.provider(),
+            center: { ...POSITION },
+            zoom: 12,
+            // 业务最常见的写法：失败即自动重试（**同步**发生在 error 事件里）
+            onError: () => {
+              if (api) retries.push(api.retry());
+            },
+          } as never,
+        ),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settleProps();
+    await nextTick();
+    await nextTick();
+    const bmap = wrapper.findComponent(BMap);
+
+    expect(retries, "error 事件里确实发起了 retry").toHaveLength(1);
+    expect(
+      harness.mapsCreated(),
+      "同步 retry 必须真的排下一次重试（复用那条即将 reject 的旧任务等于没重试）",
+    ).toBe(2);
+    expect(statusOf(bmap)).toBe("ready");
+    await expect(Promise.all(retries), "拿到的是下一次重试的结果").resolves.toHaveLength(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("error 事件里同步 retry");
   });
 });
