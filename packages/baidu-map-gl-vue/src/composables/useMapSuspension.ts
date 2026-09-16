@@ -99,7 +99,12 @@ export interface UseMapSuspensionOptions {
    * 留在旧元素上（用例 `容器引用替换：旧元素的信号不再进来，旧观察器被断开` 钉住这一点）。
    */
   measure: () => HTMLElement | null;
-  /** 容器**首次**获得非零尺寸时回调一次（放行建图）。 */
+  /**
+   * 容器**每次**从「不可用」变为「可用」时回调（放行建图）。
+   *
+   * 不是「只回调一次」：折叠（0×0）后重新展开也要回调，否则「收起期间调用 `retry()`」这类
+   * 请求会永远等不到门禁（#29 评审 P2）。调用方负责幂等。
+   */
   onContainerReady: () => void;
   /**
    * 容器尺寸变化时是否自动重设地图尺寸（对应 `enableAutoResize`，缺省视为 `true`）。
@@ -110,7 +115,13 @@ export interface UseMapSuspensionOptions {
 }
 
 export interface MapSuspensionController {
-  /** 容器是否已获得非零尺寸（门禁是否放行）。 */
+  /**
+   * 容器门禁是否**曾经**放行（只增的 latch）。
+   *
+   * 「地图建好之后容器又变成 0」不算门禁被取消（ADR 决策 4：那种情况不销毁地图），
+   * 因此它不会回退。需要「**当前**能不能建图」时读 `size` + `isUsableSize()` ——
+   * `<BMap>` 的 `beginMount()` / `retry()` 就是这么做（#29 评审 P2）。
+   */
   readonly containerReady: Readonly<ShallowRef<boolean>>;
   /** 最近一次测得的容器尺寸（`null` = 还没测量过 / 读不到）。 */
   readonly size: Readonly<ShallowRef<ElementSize | null>>;
@@ -150,14 +161,22 @@ export function useMapSuspension(options: UseMapSuspensionOptions): MapSuspensio
   function applySize(next: ElementSize | null): void {
     if (disposed) return;
     if (sizeEquals(size.value, next)) return;
-    const wasReady = containerReady.value;
+    const wasUsable = isUsableSize(size.value);
     size.value = next;
-    if (!wasReady) {
-      // 首次放行：从「不可用」到「可用」只发生一次，且这一步**不**请求 checkResize
-      // （建图自己会应用首次视野，再补一次 resize 是多余命令）。
-      if (!isUsableSize(next)) return;
+    const usable = isUsableSize(next);
+
+    if (usable && !wasUsable) {
+      // 「不可用 → 可用」：放行建图。**每次**这种转换都回调（不只是第一次）—— 评审 P2 指出
+      // 「收起期间调用 retry()」不能被一次性 latch 挡住：容器重新展开时必须能接着放行。
+      // 调用方负责幂等（`<BMap>` 用「当前尺寸 + `mountStarted`」判断，重复调用是 no-op），
+      // 且这一步**不**请求 checkResize（建图自己会应用首次视野，补一次是多余命令）。
       containerReady.value = true;
       options.onContainerReady();
+      return;
+    }
+    if (!usable) {
+      // 「可用 → 不可用」：什么都不做 —— 地图已存在时不销毁、也不请求 resize（ADR 决策 4），
+      // 等重新可用时由上面那条分支接着处理。
       return;
     }
     if (options.autoResize?.() === false) return;

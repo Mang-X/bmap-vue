@@ -109,6 +109,18 @@ describe("useMapSuspension：容器门禁", () => {
     ).not.toHaveBeenCalled();
   });
 
+  it("可用 → 不可用 → 可用：每次重新可用都会再放行一次（评审 P2：收紧期间 retry 靠它接续）", () => {
+    const { container, onContainerReady, controller } = setup();
+    controller.begin();
+    expect(onContainerReady, "首次可用 ⇒ 放行").toHaveBeenCalledTimes(1);
+
+    shims.resize(container, { width: 0, height: 0 });
+    expect(onContainerReady, "回到不可用不回调（也不取消门禁）").toHaveBeenCalledTimes(1);
+
+    shims.resize(container, { width: 320, height: 240 });
+    expect(onContainerReady, "重新可用必须再放行一次").toHaveBeenCalledTimes(2);
+  });
+
   it("放行之后的尺寸变化请求一次合帧校正；相同尺寸不请求", () => {
     const { container, target, controller } = setup();
     controller.begin();

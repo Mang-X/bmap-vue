@@ -64,6 +64,14 @@ export interface MapCommands {
    * 走的是 Client 的 Capability Registry（能力清单的单一事实源），因此 `unsupported` 的能力
    * 会如实返回 `false`，而不是「调用之后才知道」。**没有 Client 时返回 `false`**：
    * 「还不知道」与「不支持」在这里合并成同一个答案（`false`），因为调用方要的是「能不能用」。
+   *
+   * **两条边界要知道**（#29 评审 P1 之后写死在这里）：
+   *
+   * 1. 探测来源是「命名空间顶层 + `Map.prototype` + **运行时观察到的实例成员**」。第三项来自
+   *    Map Facet 建图成功后的登记 —— 真实 JSAPI 4.0 有一部分 Map 方法（`setZoom` / `setCenter`）
+   *    挂在实例上而不是原型上，少了它 `supports("map.zoom")` 会假阴性；
+   * 2. 因此**建图之前**，Map 作用域的能力（`map.zoom` 这类 `runtimeOnly` 的）可能仍是 `false`
+   *    —— 那时也确实没有可操作的对象。需要确定性时先 `await whenReady()` 再问。
    */
   supports(capability: Capability): boolean;
 }

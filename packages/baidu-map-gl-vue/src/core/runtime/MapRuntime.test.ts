@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { MapRuntime } from "./MapRuntime";
+import { MAP_SUSPEND_REASONS } from "./suspension";
 import { BMapError } from "../errors/BMapError";
 import type { BMapClient } from "../../client/types";
 import type { BMapDriver } from "../../driver/types/bmap";
@@ -240,6 +241,28 @@ describe("MapRuntime suspension reasons", () => {
     rt.suspend("user");
     expect(rt.isSuspended).toBe(true);
     expect(checkResize).not.toHaveBeenCalled();
+  });
+
+  it('suspend("disposed") 被拒绝：公开 API 不该能把正常运行的地图永久锁死', async () => {
+    const { rt } = await mountReady();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      rt.suspend(MAP_SUSPEND_REASONS.disposed);
+      expect(rt.isSuspended, "disposed 只能由 dispose() 添加").toBe(false);
+      expect(rt.suspendReasons()).toEqual([]);
+      expect(
+        warn.mock.calls.map((call) => String(call[0])).some((line) => line.includes("disposed")),
+        "拒绝要有可观察的告警（不静默）",
+      ).toBe(true);
+
+      // 一刀切拒绝不能把正常原因也砍掉
+      rt.suspend(MAP_SUSPEND_REASONS.user);
+      expect(rt.isSuspended).toBe(true);
+      rt.resume(MAP_SUSPEND_REASONS.user);
+      expect(rt.isSuspended).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("disposed 是终态原因：resume 不能把它摘掉", async () => {

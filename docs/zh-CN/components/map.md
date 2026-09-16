@@ -217,6 +217,11 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 地图**建好之后**容器再变成 0（折叠 / 切走 / 进后台）**不会销毁地图**，也不取消门禁：恢复尺寸后由
 `checkResize()` 纠正即可（本库刻意不在这种时机销毁 WebGL 地图）。
 
+门禁不止覆盖首次挂载：**`retry()` 与首次建图共用同一个判据**（容器**当前**是否有非零尺寸）。
+因此「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图：那次重试会挂起，等容器
+重新展开时由门禁接着放行。收起期间调用 `retry()` 返回的 Promise 会在真正就绪后 resolve；
+在此之前若仍是失败态，它会以**当前错误** reject（「此刻不能重试」的如实回执）。
+
 ### 尺寸变化的自动重设
 
 容器尺寸变化 → 经内部 `FrameScheduler` **合帧** → 一帧最多下发一次 `checkResize()`：
@@ -233,6 +238,7 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 | 原因 | 谁加 | 谁移除 | 说明 |
 | --- | --- | --- | --- |
 | `user` | `expose.suspend()`（默认原因） | 调用方 `resume()` | 业务主动暂停；与其他原因**互相独立**（别的原因怎么变都不会把它摘掉） |
+| `disposed` | **只有库内部的 `dispose()`** | 不解除（终态） | 公开的 `suspend('disposed')` 会被拒绝并告警：它会把正常运行的地图永久锁死 |
 | `keep-alive` | `<KeepAlive>` 停用（`onDeactivated`） | 重新激活 | 默认不销毁地图 |
 | `document` | 页面 `visibilitychange → hidden` | 页面重新可见 | 后台标签页 |
 | `offscreen` | 容器离开视口（含 64px 安全边） | 回到视口附近 | **不销毁地图** |
@@ -430,7 +436,12 @@ const tilt = ref(0)
 ### KeepAlive
 
 地图组件在 `deactivated` 时默认**不销毁** WebGL 地图（`keepAliveBehavior="suspend"`），仅暂停高频计算；
-`activated` 时自动恢复并 `checkResize()`。如需停用时销毁，设为 `"dispose"`。
+`activated` 时自动恢复并**补偿一次** `checkResize()`（只补偿一次：组件层不再重复下发，见
+[ADR](/adr/2026-09-14-map-handle-container-and-visibility) 决策 5）。
+
+设为 `"dispose"` 时，`deactivated` 会**销毁地图并一并释放容器观察器**（Resize /
+Intersection、页面前后台与减少动画偏好的监听都挂在地图实例的资源作用域上）—— 组件在
+`<KeepAlive>` 的 cache 里仍活着，但地图相关资源已经归零；`activated` 不会复活它（需要重新挂载）。
 
 ```vue
 <BMap ak="百度地图ak" keepAliveBehavior="suspend" />
@@ -504,7 +515,7 @@ const tilt = ref(0)
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
 | `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移 | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |
 | `fitBounds(bounds)` | 按范围适配视野 | `(bounds: Bounds) => void` |
-| `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`） | `(capability: Capability) => boolean` |
+| `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`；Map 作用域的能力要等地图建好之后才可靠 —— 需要确定性时先 `await whenReady()`） | `(capability: Capability) => boolean` |
 
 **未就绪时的契约**：读命令给 `null`、写命令是**空操作**（不排队、也不会在就绪后重放）。
 需要确定性时先 `await whenReady()`。SDK 调用失败会照常抛出（不降级成 `null`）。

@@ -48,6 +48,7 @@ import { useControllableState } from "../../composables/useControllableState";
 import { useMapSuspension } from "../../composables/useMapSuspension";
 import { createMapCommands } from "../../core/runtime/mapCommands";
 import { MAP_SUSPEND_REASONS } from "../../core/runtime/suspension";
+import { isUsableSize } from "../../core/runtime/elementSize";
 import type { BMapExpose } from "../../types/mapExpose";
 import { ANGLE_EPSILON, anglesEqual, centerEquals, centerKey, numbersEqual } from "../../core/utils/equality";
 import { resolvePluginDefinition } from "../../plugins/catalog";
@@ -622,36 +623,62 @@ const suspension = useMapSuspension({
   // 观察**根容器**：它才是「作者声明的尺寸」所在（内层 host 是 `inset: 0` 的定位壳，
   // SDK 在它内部建 canvas）。两者在真实浏览器上同盒，但「测量谁」必须是显式选择。
   measure: () => rootRef.value,
-  onContainerReady: () => beginMount(),
+  onContainerReady: () => mountMap(),
   autoResize: () => props.enableAutoResize,
 });
 
+// 观察器与订阅归属**地图实例的资源作用域**（#29 评审 P1）：`keepAliveBehavior="dispose"` 时
+// `onDeactivated` 会调 `runtime.dispose()`，而组件那一刻还在 KeepAlive 的 cache 里 —— 只靠
+// `onUnmounted` 释放会让 Resize / Intersection 观察器活到「下一次真正卸载」。登记进
+// `resources` 之后 `runtime.dispose()` 会一并释放它们（`onUnmounted` 里的显式 `dispose()`
+// 保留，幂等，用来保证「先断源再收尾」的顺序）。
+runtime.resources.add(() => suspension.dispose());
+
 /**
- * 容器门禁是否已放行（状态插槽的读数）。
+ * 容器门禁是否**曾经**放行（状态插槽的读数；只增的 latch）。
+ *
+ * 「地图建好之后容器又变成 0」（折叠 / 切走）不算门禁被取消（ADR 决策 4：不销毁地图），
+ * 因此它不回退。需要「**当前**能不能建图」时读 `suspension.size` + `isUsableSize()` ——
+ * `beginMount()` 与 `retry()` 就是这么做的（#29 评审 P2）。
  *
  * 与 `status` 的关系：容器零尺寸期间 `status` 停在 `idle`（不会进入加载流程），因此「怎么还没
  * 加载」与「容器还没展开」在这份读数上可以区分。
  */
 const containerReady: Readonly<ShallowRef<boolean>> = suspension.containerReady;
 
-/** 建图是否**已经开始**（`retry()` 用它区分「门禁还没放行」与「失败后重试」）。 */
+/** 建图是否**已经开始**（`mountMap()` 用它区分「首挂载」与「失败后重试」）。 */
 let mountStarted = false;
 
 /**
- * 放行建图（幂等）。
+ * 有没有一次「因为容器当时不可用而没能执行」的建图 / 重试请求（#29 评审 P2）。
  *
- * 两个入口：`onMounted` 里的同步测量（容器一开始就有尺寸，最常见）与观察器的首次回调
- * （容器在展开动画之后才有尺寸）。两者都会调它，所以必须幂等。
- *
- * `containerReady` 这一判是**前置条件**（防御性），不是第二处门禁：真正的门禁只有一处 ——
- * `useMapSuspension` 的 `applySize()` 里「非零尺寸才调 `onContainerReady()`」，而本函数只有
- * 那一个调用点。留着它是为了让「将来有人直接调 `beginMount()`」也不会在零尺寸上建图。
- * （自审记录：删掉这一句时现有用例不会红，因为上游已经挡住了；删掉 `applySize` 里那句会红。）
+ * 容器重新可用时由放行回调（`mountMap()`）接着完成；容器一直不可用就一直挂着 —— 绝不建图。
  */
-function beginMount(): void {
-  if (mountStarted) return;
+let pendingRetry = false;
+
+/**
+ * 建图 / 重试的**统一入口**（幂等）。
+ *
+ * 判据是**当前**尺寸（`suspension.size`），不是一次性 latch —— 评审 P2 指出：只在首次 mount
+ * 上守门，会让「容器收起后调用 `retry()`」在 0×0 容器上建出第二张图。于是：
+ *
+ * - 容器当前不可用 ⇒ 什么都不做，把请求留在 `pendingRetry` 上；等「不可用 → 可用」的放行回调
+ *   再走一遍（尺寸观察器**每次**这种转换都会回调，因此折起来再展开也接得上）；
+ * - 已经 `ready` ⇒ 什么都不做（幂等：不重跑装配、也不重复广播 `ready`）；
+ * - 其它情况：首挂载，或「已经建过图 + 有人要求重试」⇒ 走 `boot()`。
+ *
+ * 调用点：`onMounted` 的同步测量、尺寸观察器的放行回调、`retry()`。
+ */
+function mountMap(): void {
   const host = containerRef.value;
-  if (!host || !containerReady.value) return;
+  if (!host || !isUsableSize(suspension.size.value)) return;
+  if (runtime.status.value === "ready") {
+    pendingRetry = false;
+    return;
+  }
+  const firstMount = !mountStarted;
+  if (!firstMount && !pendingRetry) return;
+  pendingRetry = false;
   mountStarted = true;
   runtime.container = host;
   boot().catch(() => {});
@@ -682,8 +709,9 @@ onActivated(() => {
     }
     return;
   }
+  // 评审 P2：`resume()` 在**最后一个暂停原因被移除**时已经补偿过一次 `checkResize()`；
+  // 这里再调一次会让同一次激活下发两条 resize 命令。补偿语义只保留在 Runtime 一个事实源。
   runtime.resume(MAP_SUSPEND_REASONS.keepAlive);
-  runtime.checkResize();
 });
 
 /**
@@ -883,20 +911,26 @@ async function boot(): Promise<MapReadyContext> {
 /**
  * 重试加载（`#error` / `#loading` 插槽与 expose 共用同一份实现）。
  *
- * 三种情形分开处理，三种都是「幂等」的一部分：
+ * 语义就是「请求一次（重新）建图」，具体能不能立刻做交给 `mountMap()` 判断（**同一个门禁**）：
  *
- * 1. **门禁还没放行**（容器零尺寸）：不建图 —— 门禁放行后 `beginMount()` 会走同一条路径，
- *    这里只等结果。零尺寸下强行建图正是本 issue 要消除的行为；
- * 2. **已经 ready**：直接返回当前上下文，不重跑装配、也不重复广播 `ready`；
- * 3. **失败态**：`MapRuntime.retry()` 清错重入 → 装配按句柄身份重跑 → 重新广播 `ready`
- *    （「重试成功之后 `error` 必须归 null」有用例钉住，它同时锁住四个出口）。
+ * 1. **容器当前不可用**（Tab / Drawer 收起、宿主隐藏）：不建图，请求挂在 `pendingRetry` 上，
+ *    等容器重新可用时由放行回调接着完成 —— 评审 P2：门禁必须覆盖 retry / recreate，而不只是
+ *    首次 mount，否则第二张图会建在 0×0 容器上；
+ * 2. **已经 ready**：立刻 resolve，不重跑装配、也不重复广播 `ready`（幂等）；
+ * 3. **失败态且容器可用**：`MapRuntime.retry()` 清错重入 → 装配按句柄身份重跑 → 重新广播
+ *    `ready`（「重试成功之后 `error` 必须归 null」有用例钉住，它同时锁住四个出口）。
+ *
+ * 返回的是「等就绪」的 Promise：门禁放行并真正就绪时 resolve；在那之前若仍处于 `error` 态，
+ * 会以**当前错误** reject —— 那是「此刻不能重试」的如实回执（与 `status` / 插槽里的 `error`
+ * 是同一个事实）。
  *
  * 并发调用天然收敛：`MapRuntime.mount()` 用 `mountPromise` 去重，「同一失败态上的两次 retry」
  * 共享同一个在飞任务，因此不会创建两张地图。
  */
 function retry(): Promise<MapReadyContext> {
-  if (!mountStarted || runtime.status.value === "ready") return runtime.whenReady();
-  return boot();
+  pendingRetry = true;
+  mountMap();
+  return runtime.whenReady();
 }
 
 onBeforeUnmount(() => {

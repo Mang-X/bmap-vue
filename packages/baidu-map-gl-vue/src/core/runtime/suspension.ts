@@ -12,7 +12,7 @@
  * | `keep-alive` | `<BMap>` 的 `onDeactivated` | `onActivated` | KeepAlive 停用（不销毁 WebGL 地图） |
  * | `document` | 页面 `visibilitychange → hidden` | 页面重新可见 | 后台标签页 |
  * | `offscreen` | 容器离开视口（IntersectionObserver） | 容器回到视口附近 | **不销毁地图**，与 issue 的非目标一致 |
- * | `disposed` | `MapRuntime.dispose()` | **不解除** | 终态：集合永不为空 ⇒ 卸载之后不再调用 SDK |
+ * | `disposed` | `MapRuntime.dispose()` | **不解除** | 终态：集合永不为空 ⇒ 卸载之后不再调用 SDK。**只能由 `dispose()` 添加**：公开的 `suspend()` 会拒绝它（否则调用方能把一张正常运行的地图永久锁死，#29 评审 P2） |
  *
  * 允许调用方传自己的字符串：与 `useMapEvent` 的「表外事件名原样订阅」同一口径
  * —— 多一个原因只会让它自己那一份暂停生效，不影响既有语义。

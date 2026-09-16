@@ -1354,41 +1354,29 @@ const CHECKS: Record<string, CheckImpl> = {
           `setZoom(15) 之后读回 ${String(zoomAfter)}：写命令没有到达 SDK`,
           { zoomBefore, zoomAfter },
         );
-        // ⑤ 能力查询：`supports()` 是 #29 新增的公开命令面，必须走真的 Capability Registry。
-        //    **正证**：两个档都支持的能力必须报 true（`overlay.marker` 是本库既有的标准正例）。
-        assertSmoke(
-          api!.supports("overlay.marker") === true,
-          "MAP_GATE_SUPPORTS",
-          "能力查询在真实 SDK 上应报 true（overlay.marker）",
-          { overlayMarker: api!.supports("overlay.marker") },
-        );
-        //    **已知缺口的现状断言**（characterization，刻意断言而不是静默跳过）：能力探测只查
-        //    「命名空间顶层 + `Map.prototype`」，于是**夹具与真实引擎的读数方向相反**：
+        // ⑤ 能力查询：`supports()` 是 #29 公开命令面的一部分，必须走真的 Capability Registry，
+        //    而且在**真实引擎**上必须可信（评审 P1 的判据）。
         //
-        //    | 能力 | live | fixture | 原因 |
-        //    | --- | --- | --- | --- |
-        //    | `map.zoom` | `false` | `true` | 真实 4.0 的 `setZoom` 是**实例自有**成员（`Map.prototype` 上只有 `getZoom`）；Fake 把两者都放在原型上 |
-        //    | `map.bounds` | `true` | `false` | 真实原型上有 `setBounds`；Fake 没有建模它（Map Facet 不调用，因此不在 Fake 的覆盖面内） |
-        //
-        //    这正是 #74 那条「夹具比真实宽容 / 夹具与真实不一致」教训的另一面，本票只把它**钉成
-        //    可断言的现状**并登记为欠账（属能力探测策略，不在 #29 范围内）：哪一侧的形状变了都会红，
-        //    红的时候请同步更新本条、capability catalog 的说明与 ADR 的已知限制。
-        const divergence = {
-          mapZoomMatchesMode: api!.supports("map.zoom") === (MODE === "fixture"),
-          mapBoundsMatchesMode: api!.supports("map.bounds") === (MODE === "live"),
+        //    三条在两档都必须是 true：
+        //    - `overlay.marker`：命名空间顶层构造器；
+        //    - `map.zoom`：真实 4.0 的 `setZoom` 是**实例自有**成员、不在 `Map.prototype` 上 ——
+        //      只查「命名空间 + 原型」时它在 live 档是 false（假阴性，与 fixture 档相反）。
+        //      现在 Map Facet 在建图成功后登记实例成员（`observeInstanceMembers`），两档一致；
+        //    - `map.bounds`：真实引擎上 `getBounds` / `setBounds` 都在原型上；Fake 侧补了 `setBounds`
+        //      （它本来就在 Fake 的覆盖面规则里：能力探测会查的成员）。
+        //    这条检查在 live 档**恰好就是**P1 的回归门禁：哪天探测又退回只查原型，它会立刻红。
+        const capabilityReadings = {
+          overlayMarker: api!.supports("overlay.marker"),
+          mapZoom: api!.supports("map.zoom"),
+          mapBounds: api!.supports("map.bounds"),
         };
         assertSmoke(
-          divergence.mapZoomMatchesMode && divergence.mapBoundsMatchesMode,
-          "MAP_CAPABILITY_PROBE_DIVERGENCE_CHANGED",
-          `能力读数与登记的两档差异不符（mode=${MODE}）：本条记录「实例自有成员 + 只查原型」造成的` +
-            "夹具 / 真实引擎分歧（map.zoom: live=false / fixture=true；map.bounds: live=true / fixture=false）。" +
-            "改变它意味着探测策略或夹具形状变了 —— 请同步更新本条与 ADR 的已知限制",
-          {
-            mode: MODE,
-            mapZoom: api!.supports("map.zoom"),
-            mapBounds: api!.supports("map.bounds"),
-            mapViewState: api!.supports("map.view-state"),
-          },
+          capabilityReadings.overlayMarker &&
+            capabilityReadings.mapZoom &&
+            capabilityReadings.mapBounds,
+          "MAP_GATE_SUPPORTS",
+          `能力查询在真实 SDK 上应报 true（mode=${MODE}）`,
+          capabilityReadings,
         );
 
         // ④ 暂停策略：按**原因**记账（不是「恢复一切」）。
@@ -1430,6 +1418,9 @@ const CHECKS: Record<string, CheckImpl> = {
           zoomAfter,
           containerReady: api!.isContainerReady(),
           suspendReasons: reasonsAfter,
+          // 把能力读数放进**通过时也可见**的 detail：它是 P1 那条修复的 live 侧证据
+          // （修复前 live 档 `mapZoom` 是 false）
+          capabilities: capabilityReadings,
         };
       } finally {
         app.unmount();

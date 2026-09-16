@@ -91,7 +91,9 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 | 测谁 | 组件**根容器**（`.bmap-container`），不是内层 `bmap-canvas-host` | 根容器才是作者声明的尺寸所在；内层是 `inset: 0` 的定位壳，真实浏览器上两者同盒，但「测量谁」必须是显式选择（`BMap.vue` 有注释） |
 | 判据 | 宽与高**都** > 0（`isUsableSize`） | 展开动画的中间帧是「宽度已到位、高度还是 0」，拒绝它会让门禁永远等不到 |
 | 读数 | `getBoundingClientRect()` → `offsetWidth/Height` → `clientWidth/Height` | rect 是唯一能反映 transform 与小数的读数；**只要 rect 可读就用它（哪怕是 0）**，否则「真的被折叠」会被降级读数掩盖 |
-| 放行 | 只在「不可用 → 可用」那一次触发 `boot()`，且**不**额外请求 `checkResize` | 建图自己会应用首次视野，补一次 resize 是多余命令 |
+| 放行 | **每次**「不可用 → 可用」都放行一次（不只首次），且这一次**不**额外请求 `checkResize` | 建图自己会应用首次视野，补一次 resize 是多余命令；而折叠后重新展开必须能接续「收起期间发出的 `retry()`」（#29 评审 P2） |
+| 谁守门 | **所有建图路径共用一个判据**（容器当前是否有非零尺寸）：首挂载、尺寸变化回调、`retry()` | 只在首次 mount 上守门会让「失败后收起容器再 retry」在 0×0 容器上建出第二张图（#29 评审 P2） |
+| `containerReady` | 只增的 latch（「曾经放行过」），供状态插槽与 `isContainerReady()` 读数 | 「建好之后又变成 0」不算取消门禁；需要「当前能不能建图」时读实时读数（`size` + `isUsableSize`） |
 | 建图之后容器又变成 0 | **不**销毁地图、也不取消门禁 | issue 非目标：不在离开视口 / 折叠时销毁 WebGL Map |
 | 自动重设 | 容器尺寸变化经**既有 `FrameScheduler`** 合帧后调 `checkResize()`（一帧最多一次） | issue 评论的「复用内部适配入口，不在组件中散落独立 Observer/RAF」 |
 
@@ -109,7 +111,7 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 | `keep-alive` | `<BMap>` 的 `onDeactivated` | `onActivated` | KeepAlive 停用（不销毁地图） |
 | `document` | 页面 `visibilitychange → hidden` | 页面重新可见 | 后台标签页 |
 | `offscreen` | 容器离开视口（安全边 64px） | 回到视口附近 | **不销毁地图** |
-| `disposed` | `MapRuntime.dispose()` | **不解除** | 终态：集合永不为空 ⇒ 卸载之后不再调用 SDK |
+| `disposed` | `MapRuntime.dispose()`（**只有它**） | **不解除** | 终态：集合永不为空 ⇒ 卸载之后不再调用 SDK。公开的 `suspend('disposed')` 被拒绝并告警 —— 否则调用方能把一张正常运行的地图永久锁死（#29 评审 P2） |
 
 三条冻结语义：
 
@@ -119,7 +121,8 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 2. **暂停期间 `checkResize()` 是 no-op，且 `requestResize()` 连帧都不排**（`FrameScheduler`
    新增 `pause()` / `resume()`）。连帧都不排是可以被门禁证明的：`createManualFrames().pending()`
    归零。
-3. **`disposed` 让「卸载后不再调 SDK」成为集合的性质**，而不是 `status` 守卫的巧合。
+3. **`disposed` 让「卸载后不再调 SDK」成为集合的性质**，而不是 `status` 守卫的巧合；并且它
+   只能由 `dispose()` 添加（`suspend()` 显式拒绝），公开 API 无法把正常地图推进终态。
 
 ### 6. 环境采集委托 `@vueuse/core`，决策留在本库
 
@@ -139,21 +142,38 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 3. **`scripts/verify-package.mts` 增加断言**：发布包必须以 `dependencies` 锁定 14.4.0、消费者
    能解析到它、且 ESM 产物里确实是 `from "@vueuse/core"`。
 
+**「统一策略」的逐项落点**（票面把四件事写在一节里，这里显式映射，避免被读成「四件事都做成暂停原因」）：
+
+| 环境事实 | 落点 | 是不是暂停原因 |
+| --- | --- | --- |
+| 容器零尺寸 | `useMapSuspension` 的门禁（`isUsableSize`） | **不是** —— 它决定「何时建图」 |
+| 容器尺寸变化 | 合帧 → `checkResize()`（`enableAutoResize` 控制开关） | **不是** |
+| 页面 `document` 可见性 | 暂停原因 `document` | 是 |
+| 容器离开 / 回到视口 | 暂停原因 `offscreen` | 是 |
+| 减少动画偏好 | 只读信号 `prefersReducedMotion()`（可选动画自己读） | **不是**（issue 评论：不直接停止必要数据更新） |
+
 副作用一处，必须显式记录：`@vueuse/core` 的 `index.d.ts` 引用了 Web Bluetooth 的全局类型
 （来自它的依赖 `@types/web-bluetooth`），而本包的 `tsconfig.build.json` 用**显式白名单**
 `types` 且 `skipLibCheck: false`，于是 `typecheck:v3` 会报四个 `TS2304`。处置：把
 `@types/web-bluetooth@0.0.21` 加进包 `devDependencies` 并登记进 `types` 数组
 （不写本地 shim 复刻上游声明；不加宽 `skipLibCheck`）。
 
-### 7. 释放归**地图实例**，不靠 Vue 组件作用域
+### 7. 释放归**地图实例的资源作用域**，不靠 Vue 组件作用域
 
-四个观察器 / 订阅都跑在一个 `effectScope(true)`（detached scope）里，释放只由
-`useMapSuspension` 的 `dispose()` 触发，在 `<BMap>` 的 `onUnmounted` 里调用，
-且注册顺序保证「先断源（观察器）再交给 Runtime 收尾」。`dispose()` 之后迟到的回调一律被
-忽略（`disposed` 门闩），因此不会再触发 `checkResize` 或任何 SDK 调用。
+四个观察器 / 订阅与一个只读 computed 都跑在一个 `effectScope(true)`（detached scope）里，
+释放只由 `useMapSuspension` 的 `dispose()` 触发，且**登记进地图实例的 `ResourceScope`**
+（`runtime.resources.add(() => suspension.dispose())`，幂等）。于是有两条触发路径、同一个终点：
 
-不依赖组件作用域的原因不是洁癖：组件卸载**不等于**地图销毁（`retry()` 会创建第二张地图），
-而「地图实例换了、观察器还指向旧容器」正是「多 Map 串状态」的来源。
+| 触发 | 结果 |
+| --- | --- |
+| `<BMap>` 的 `onUnmounted`（显式 `dispose()`，注册顺序在 `runtime.dispose()` **之前**） | 先断源，再交给 Runtime 收尾 —— 最常见的一条 |
+| `keepAliveBehavior="dispose"` 的 `onDeactivated → runtime.dispose()` | `resources` 被 drain 时一并释放观察器。组件这时还在 `<KeepAlive>` 的 cache 里（**没有** `onUnmounted`），只靠组件卸载触发会让 Resize / Intersection 观察器活到「下一次真正卸载」（#29 评审 P1） |
+
+`dispose()` 之后迟到的回调一律被忽略（`disposed` 门闩），因此不会再触发 `checkResize` 或任何
+SDK 调用。
+
+不依赖组件作用域的原因不是洁癖：观察器归属的是**地图实例的资源**（`keepAliveBehavior` 两档
+语义的差异正体现在这里），而「地图实例换了、观察器还指向旧容器」正是「多 Map 串状态」的来源。
 
 ### 8. `FrameScheduler` 增加 `pause()` / `resume()`
 
@@ -251,17 +271,25 @@ interface MapSlotProps {
    raw 走 `./advanced` 的 `unwrapRaw()`。这条与 v2 迁移文档一致。
 9. **`prefers-reduced-motion` 的媒体查询字符串是 `(prefers-reduced-motion: reduce)`**（VueUse
    的默认实现），本库不解析自定义查询。
-10. **能力探测在「实例自有成员」上有假阴性（本票登记为欠账，刻意不修）**：
-   `CapabilityRegistry` 的 `rawMembers` 探测只查「命名空间顶层 + `Map.prototype`」，而真实
-   JSAPI 4.0 有一部分成员是**实例自有**的（实测：`raw.getZoom` / `raw.setZoom` 都是函数，但
-   `Map.prototype.setZoom` 是 `undefined`、`getZoom` 在原型上）。后果是 `supports("map.zoom")`
-   在真实引擎上**假阴性**；Fake 把两者都放在原型上，所以单测一路绿。本票第一次把它钉在浏览器档里
-   （`map-container-gate` 的**现状断言**，两档方向相反：`map.zoom` live=`false` / fixture=`true`，
-   `map.bounds` live=`true` / fixture=`false`），属于「夹具与真实引擎不一致」的另一面。
-   修它要换探测策略（原型链遍历，或基于**已建实例**探测），是一个独立决策，因此**不在本票范围**；
-   当前影响面只有新增的公开 `supports()` —— Driver 内部只为 `map.heading` / `map.tilt` /
-   `map.pixel-conversion` / `map.viewport` / `map.style` / `map.animate` 调 `require()`，它们都
-   没有这个形态，因此运行时行为不受影响。
+10. **状态插槽的 `error` 是 `unknown`，不声明成 `BMapError`**：组件在把错误交给插槽之前不假定
+   它的形状（`onError` 事件与 `MapRuntime.error` 的既有类型都是 `unknown`），文档写的是「通常是
+   `BMapError`」。收紧它是另一处公共契约改动（`ProviderErrorSlotProps.error` 才是 `BMapError`），
+   不在本票范围。
+11. **「根入口在无 DOM 环境可 import」由 `verify-package` 的 `node -e "import('baidu-map-gl-vue')"`
+   覆盖（纯 Node、无 DOM）**，而不是像 `./ui-kit` 那样另有一条带 `subprocess` 的强断言；本轮新增
+   `@vueuse/core` 后该断言仍绿，是本条最直接的证据。
+   `CapabilityRegistry` 的探测来源从「命名空间顶层 + `Map.prototype`」扩成**三个**，第三个是
+   运行时观察到的实例成员（`observeInstanceMembers()`，由 Map Facet 在 `create()` 成功后登记；
+   幂等、只增不减）。依据是实测：真实 JSAPI 4.0 的 `raw.setZoom` 是函数、而
+   `Map.prototype.setZoom` 是 `undefined`（`getZoom` 在原型上），只查前两个来源会让
+   `supports("map.zoom")` 假阴性 —— 而它是本票冻结的公开命令面的一部分，业务最自然的
+   `if (map.supports("map.zoom")) map.setZoom(16)` 会被错误跳过。
+   配套：Fake 补上 `setBounds`（`map.bounds` 的 `rawMembers` 之一，属 Fake 自己声明的
+   「能力探测会查」覆盖面），浏览器档的 `map-container-gate` 从「两档读数相反」改成「两档都为
+   true」—— **live 档那一条就是本次修复的回归门禁**。
+   仍存在的边界：`observeInstanceMembers` 只在建了 map 之后才有效，因此**建图之前** Map 作用域
+   的能力仍可能是 `false`（此时也确实没有可操作对象）；这条时序写进了 `MapCommands.supports()`
+   的文档，不是靠约定。
 
 ## 非目标
 
@@ -274,18 +302,25 @@ interface MapSlotProps {
 
 ## 验证
 
-- `tests/behavior/v3-component-scenarios.test.ts`：M4-HANDLE-UX 一组 **16 条**组件级场景
+- `tests/behavior/v3-component-scenarios.test.ts`：M4-HANDLE-UX 一组 **20 条**组件级场景
   （命令面读写 / 未就绪空操作 / `resetCenter` 已移除 / `width=0` 门禁 / 祖先 `display:none` 门禁 /
   `enableAutoResize=false` / 页面前后台不误恢复 / 暂停期间不排帧 / offscreen / reduced motion /
   卸载后不再调 SDK / 两张地图不串状态 / `#error` 重试幂等 / `#loading` 的 `containerReady` /
-  默认状态文案与重试按钮 / 默认插槽载荷不变）。
-- `packages/baidu-map-gl-vue/src/composables/useMapSuspension.test.ts`（12 条）：策略层与
+  默认状态文案与重试按钮 / 默认插槽载荷不变；
+  评审轮补的 4 条：`<KeepAlive>` + `keepAliveBehavior="dispose"` 停用即释放观察器、
+  默认 `suspend` 停用**不**释放（两档分工在读数上分得开）、激活时补偿**恰好一次** `checkResize`、
+  容器收起期间 `retry()` 不建图且重新展开后由门禁接续）。
+- `packages/baidu-map-gl-vue/src/driver/capability/registry.test.ts`（16 条）：
+  机制上补了「实例自有成员也算」与「`observeInstanceMembers` 只收函数 / 幂等 / `null` no-op」
+  两条（评审 P1 的单元级门禁）。
+- `packages/baidu-map-gl-vue/src/composables/useMapSuspension.test.ts`（13 条）：策略层与
   最小 target 的行为（放行一次、放行前不请求、合帧请求、`autoResize=false`、原因增减、
-  乐观初值、reduced motion 不参与、容器引用替换后旧观察器被断开、`dispose` 后忽略迟到信号、
-  幂等 dispose、不占 RAF）。
+  乐观初值、reduced motion 不参与、容器引用替换后旧观察器被断开、可用→不可用→可用会再次放行、
+  `dispose` 后忽略迟到信号、幂等 dispose、不占 RAF）。
 - `packages/baidu-map-gl-vue/src/core/runtime/{elementSize,mapCommands}.test.ts`（14 + 7 条）：
   读数优先级与「读不到 ≠ 零尺寸」；命令面的透传 / 空路径 / 错误口径。
-- `packages/baidu-map-gl-vue/src/core/runtime/MapRuntime.test.ts`（新增 7 条）：
+- `packages/baidu-map-gl-vue/src/core/runtime/MapRuntime.test.ts`（新增 8 条，含评审 P2 的
+  `suspend("disposed")` 被拒绝）：
   原因集合语义（幂等、不误恢复、暂停期 no-op、未就绪也记账、`disposed` 终态）。
 - `packages/baidu-map-gl-vue/src/core/scheduler/FrameScheduler.test.ts`（新增 6 条）：
   `pause` / `resume`。

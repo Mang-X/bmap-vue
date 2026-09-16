@@ -58,3 +58,19 @@ api.supports('map.bounds'); api.whenReady(); api.retry()
 环境采集（尺寸 / 视口 / 页面前后台 / 减少动画偏好）委托 `@vueuse/core`，作为**精确锁定的运行时
 依赖**（`14.4.0`）声明；ESM 产物保持 external，`verify-package` 有断言。决策留在本库（暂停原因集合），
 采集与决策的边界见 ADR `2026-09-14-map-handle-container-and-visibility`。
+
+## 评审轮补正（5 条，均已补回归用例 + 单点反证）
+
+- **`supports()` 在真实 JSAPI 4.0 上不再假阴性**：能力探测的来源从两项扩成三项，第三项是
+  Map Facet 建图成功后登记的**实例自有成员**（真实 4.0 的 `setZoom` / `setCenter` 不在
+  `Map.prototype` 上）。Fake 同步补上 `setBounds`（`map.bounds` 的 `rawMembers` 之一），
+  浏览器档的两档读数从「相反」变成「都为 `true`」。
+- **观察器随地图实例的资源作用域释放**：`keepAliveBehavior="dispose"` 的
+  `onDeactivated → runtime.dispose()` 现在会一并释放 Resize / Intersection 观察器与
+  可见性订阅（组件还在 `<KeepAlive>` cache 里时不残留）。
+- **KeepAlive 激活只补偿一次 `checkResize()`**：组件层不再额外调用（补偿语义只有 Runtime 一处）。
+- **公开的 `suspend('disposed')` 被拒绝并告警**：`disposed` 是终态原因，只能由 `dispose()` 添加，
+  否则调用方能把一张正常运行的地图永久锁死。
+- **容器门禁覆盖 `retry()`**：建图与重试收敛到同一个判据（容器**当前**是否有非零尺寸）。
+  「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图；那次重试会挂起，
+  等容器重新展开时由门禁接着放行。

@@ -320,8 +320,18 @@ export class MapRuntime {
    * 暂停高频计算 / 动画 / polling，不移除 Overlay 或销毁 Map。
    *
    * 幂等：同一个原因重复 `suspend()` 只记一次（因此重复调用不会让 `resume()` 需要调用两次）。
+   *
+   * `disposed` 是**终态原因**，只能由 `dispose()` 添加。`MAP_SUSPEND_REASONS` 是公开导出，
+   * 若 `suspend("disposed")` 也生效，调用方就能把一张**正常运行**的地图永久锁死
+   * （`resume("disposed")` 按设计是 no-op）—— 这里显式拒绝并告警（#29 评审 P2）。
    */
   suspend(reason: MapSuspendReason = MAP_SUSPEND_REASONS.keepAlive): void {
+    if (reason === MAP_SUSPEND_REASONS.disposed) {
+      logger.warn(
+        'MapRuntime.suspend("disposed") 被忽略：disposed 是终态原因，只能由 dispose() 添加',
+      );
+      return;
+    }
     if (this.suspension.value.includes(reason)) return;
     this.suspension.value = [...this.suspension.value, reason];
     // 暂停期间不排帧、也不执行已排的帧（`FrameScheduler.pause()` 保留各 key 的最后一次任务）

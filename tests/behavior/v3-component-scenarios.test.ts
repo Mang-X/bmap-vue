@@ -18,7 +18,7 @@
  */
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, onMounted, ref, type VNodeChild } from "vue";
+import { KeepAlive, defineComponent, h, nextTick, onMounted, ref, type VNodeChild } from "vue";
 import {
   browserShims,
   createFakeV4Harness,
@@ -1849,5 +1849,121 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("默认插槽载荷");
+  });
+
+  /**
+   * 挂一棵 `<KeepAlive>` + `<BMap>`，返回控制「是否挂载」的开关。
+   *
+   * KeepAlive 的语义正是评审 P1-2 那条路径：`show=false` 让 `<BMap>` **deactivate** 而组件
+   * 仍在 cache 里（不发生 `onUnmounted`），此时只有 `runtime.dispose()` 会跑
+   * （`keepAliveBehavior="dispose"` 下）。
+   */
+  async function mountKeepAliveTree(behavior: "suspend" | "dispose") {
+    const show = ref(true);
+    const Root = defineComponent({
+      setup: () => () =>
+        h(
+          KeepAlive,
+          null,
+          {
+            default: () =>
+              show.value
+                ? h(BMap, { provider: harness.provider(), keepAliveBehavior: behavior })
+                : null,
+          } as never,
+        ),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settleProps();
+    await nextTick();
+    return { wrapper, show };
+  }
+
+  it("KeepAlive + keepAliveBehavior=dispose：停用即释放观察器（评审 P1）", async () => {
+    const { wrapper, show } = await mountKeepAliveTree("dispose");
+    expect(shims.diagnostics().resizeObservers, "挂载后观察器确实在观察").toBeGreaterThan(0);
+
+    show.value = false; // onDeactivated → runtime.dispose()（组件仍在 KeepAlive cache 里）
+    await settleProps();
+    await nextTick();
+
+    expect(
+      shims.diagnostics().resizeObservers,
+      "runtime dispose 必须一并释放尺寸观察器（不能只等 onUnmounted）",
+    ).toBe(0);
+    expect(shims.diagnostics().intersectionObservers, "视口观察器同样释放").toBe(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("KeepAlive dispose");
+  });
+
+  it("KeepAlive + 默认 suspend：停用**不**释放观察器（地图没销毁，回来还要用）", async () => {
+    const { wrapper, show } = await mountKeepAliveTree("suspend");
+    const before = shims.diagnostics().resizeObservers;
+    expect(before).toBeGreaterThan(0);
+
+    show.value = false; // 只 suspend：不销毁地图 ⇒ 资源照旧
+    await settleProps();
+    await nextTick();
+
+    expect(
+      shims.diagnostics().resizeObservers,
+      "suspend 只暂停，不释放（与 dispose 的分工要在读数上分得开）",
+    ).toBe(before);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("KeepAlive suspend");
+  });
+
+  it("KeepAlive 激活：补偿**恰好一次** checkResize（评审 P2）", async () => {
+    useManualFrames();
+    const { wrapper, show } = await mountKeepAliveTree("suspend");
+    frames!.flush();
+    const before = harness.checkResizeCalls();
+
+    show.value = false;
+    await settleProps();
+    await nextTick();
+    show.value = true; // onActivated → resume（Runtime 内部补偿一次）
+    await settleProps();
+    await nextTick();
+    frames!.flush();
+
+    expect(
+      harness.checkResizeCalls(),
+      "一次激活 = 一条 resize 命令（组件层不再自己调 checkResize）",
+    ).toBe(before + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("KeepAlive 激活");
+  });
+
+  it("容器收起期间的 retry 不建图；重新展开后由门禁接着放行（评审 P2）", async () => {
+    useManualFrames();
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap), "首次初始化失败").toBe("error");
+    const created = harness.mapsCreated();
+
+    // Tab / Drawer 收起 → 容器 0×0
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+
+    // 此刻 retry：不能建图（会得到一张 0×0 的画布）；返回的 Promise 会以当前错误 reject
+    await api.retry().catch(() => {});
+    await settleProps();
+    expect(harness.mapsCreated(), "容器 0×0 时 retry 不得建图").toBe(created);
+
+    // 重新展开 → 门禁接着把挂起的那次重试做完
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+    await settleProps();
+    expect(harness.mapsCreated(), "重新展开后由门禁放行").toBe(created + 1);
+    expect(statusOf(bmap)).toBe("ready");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("收起期间的 retry");
   });
 });
