@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { nextTick, shallowRef, type ShallowRef } from "vue";
 import { browserShims, createManualFrames } from "../../../test-utils";
+import { isUsableSize } from "../core/runtime/elementSize";
 import type { MapSuspendReason } from "../core/runtime/suspension";
 import { useMapSuspension } from "./useMapSuspension";
 
@@ -124,6 +125,18 @@ describe("useMapSuspension：容器门禁", () => {
       target.requestResize,
       "两次「不可用 → 可用」各请求一次校正（已就绪的地图靠它纠正尺寸）",
     ).toHaveBeenCalledTimes(2);
+  });
+
+  it("measureNow() 是 fresh DOM 读数：观察器未交付时也不被缓存骗（复审 P1）", () => {
+    const { container, controller } = setup();
+    controller.begin();
+    expect(controller.size.value).toEqual({ width: 320, height: 240 });
+
+    // 只改「盒模型」、**不派发** resize 回调：模拟「DOM 已变、观察器尚未交付」的窗口
+    shims.setElementSize(container, { width: 0, height: 0 });
+    expect(controller.size.value, "缓存仍是上一次测得的尺寸").toEqual({ width: 320, height: 240 });
+    expect(controller.measureNow(), "fresh 读数必须反映当前 DOM").toEqual({ width: 0, height: 0 });
+    expect(isUsableSize(controller.measureNow())).toBe(false);
   });
 
   it("放行之后的尺寸变化请求一次合帧校正；相同尺寸不请求", () => {

@@ -84,18 +84,19 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 `await whenReady()`。读命令的容错口径复用 `core/utils/liveView.ts` 的 `readLiveView`：
 只有「资源已销毁」「当前引擎没有该能力」算读不到，其余 `BMapError` 与编程错误一律上抛。
 
-### 4. 容器门禁：测**根容器**的尺寸，零尺寸不建图，且只放行一次
+### 4. 容器门禁：测**根容器**的尺寸，零尺寸不建图（每次「不可用 → 可用」都放行 + 校正尺寸）
 
 | 维度 | 处置 | 依据 |
 | --- | --- | --- |
 | 测谁 | 组件**根容器**（`.bmap-container`），不是内层 `bmap-canvas-host` | 根容器才是作者声明的尺寸所在；内层是 `inset: 0` 的定位壳，真实浏览器上两者同盒，但「测量谁」必须是显式选择（`BMap.vue` 有注释） |
 | 判据 | 宽与高**都** > 0（`isUsableSize`） | 展开动画的中间帧是「宽度已到位、高度还是 0」，拒绝它会让门禁永远等不到 |
-| 读数 | `getBoundingClientRect()` → `offsetWidth/Height` → `clientWidth/Height` | rect 是唯一能反映 transform 与小数的读数；**只要 rect 可读就用它（哪怕是 0）**，否则「真的被折叠」会被降级读数掩盖 |
-| 放行 | **每次**「不可用 → 可用」都放行一次（不只首次），且这一次**不**额外请求 `checkResize` | 建图自己会应用首次视野，补一次 resize 是多余命令；而折叠后重新展开必须能接续「收起期间发出的 `retry()`」（#29 评审 P2） |
+| 读数 | `offsetWidth/Height`（布局盒）→ `clientWidth/Height` → `getBoundingClientRect()`（兜底） | **读数语义必须与触发源一致**：触发源是 `useResizeObserver(border-box)`，而**纯 transform 变化不触发 ResizeObserver**。若以 rect（含 transform）为准，`scale(0) → scale(1)` 会出现「rect 非零但观察器不通知」⇒ 门禁永不放行。因此 **transform 不属于门禁语义**（布局盒才是地图的真实尺寸）。「读得到就返回、哪怕是 0」不变：只有读不到才降级（#29 四轮复审 P2） |
+| 读数的时机 | 最终判定用 `suspension.measureNow()`（**fresh 同步 DOM 读数**），不是 `suspension.size`（最近一次的缓存） | 观察器**交付之前**缓存可能已过期（父级改 `display` / 折叠动画 → DOM 已变、回调未到），那一瞬间 `create()` 仍会落在 0×0 上（#29 四轮复审 P1）。`size` 仍是发布给状态插槽 / watcher 的读数，观察器只当唤醒源 |
+| 放行 | **每次**「不可用 → 可用」都放行一次（不只首次）：先回调 `onContainerReady()` 建图 / 接续挂起的重试，**再**按下面「恢复尺寸要校正」那行请求一次 `checkResize()` | 折叠后重新展开必须能接续「收起期间发出的 `retry()`」（#29 评审 P2）；而首次挂载那一次的 resize 请求会被 `MapRuntime.requestResize()` 的状态门短路，因此不多发命令 |
 | 谁守门 | **所有建图路径共用一个判据**（容器当前是否有非零尺寸）：首挂载、尺寸变化回调、`retry()` | 只在首次 mount 上守门会让「失败后收起容器再 retry」在 0×0 容器上建出第二张图（#29 评审 P2） |
 | 恢复尺寸要校正 | 「不可用 → 可用」除了放行建图，**还要请求一次 `checkResize()`**（`enableAutoResize` 为 `true` 时） | 已就绪的图在 `0×0 → 非零` 时既不会重建、也没有别的路径下发尺寸命令 ⇒ 会停在旧尺寸（#29 复审 P1）。首次挂载那一次由 `MapRuntime.requestResize()` 的状态门短路，不会多发命令 |
 | 判据的位置 | 判据也要出现在**最后一个异步边界之后、`driver.map.create()` 之前**（`MapRuntimeOptions.beforeCreateMap`） | 尺寸是异步得到的：`doMount()` 中途要 `await` SDK 加载，慢网络下「启动前判一次」会留下 TOCTOU 窗口 —— 加载完成时容器可能已被收起，于是仍会建出一张 0×0 的画布（#29 三轮复审 P1）。`<BMap>` 传 `waitForUsableContainer()`：容器不可用就等到可用（`while` 而非 `if`，唤醒后再判一次） |
-| `containerReady` | 只增的 latch（「曾经放行过」），供状态插槽与 `isContainerReady()` 读数 | 「建好之后又变成 0」不算取消门禁；需要「当前能不能建图」时读实时读数（`size` + `isUsableSize`） |
+| `containerReady` | 只增的 latch（「曾经放行过」），供状态插槽与 `isContainerReady()` 读数 | 「建好之后又变成 0」不算取消门禁；需要「当前能不能建图」时读 **fresh 读数**（`measureNow()` + `isUsableSize`） |
 | 建图之后容器又变成 0 | **不**销毁地图、也不取消门禁 | issue 非目标：不在离开视口 / 折叠时销毁 WebGL Map |
 | 自动重设 | 容器尺寸变化经**既有 `FrameScheduler`** 合帧后调 `checkResize()`（一帧最多一次） | issue 评论的「复用内部适配入口，不在组件中散落独立 Observer/RAF」 |
 
@@ -277,25 +278,31 @@ interface MapSlotProps {
    这是 issue 非目标的直接结果。
 4. **零尺寸 + 无 `ResizeObserver` 的环境不会自动建图**：门禁的放行依赖尺寸观察；这类环境需要
    调用方在挂载时给出非零尺寸（真实浏览器都已支持 `ResizeObserver`，因此没有做轮询兜底）。
-5. **视口判定有 64px 安全边、且初值乐观**：不支持 `IntersectionObserver` 的环境退化为
+5. **门禁读数是布局盒（`offsetWidth`/`offsetHeight`，浏览器上取整）**：与 `ResizeObserver(border-box)`
+   的语义一致，代价是「小于 1px 的容器」在取整后可能被判成 0 —— 那种尺寸下地图本来也不可用，
+   因此显式接受；需要小数读数时用 `getBoundingClientRect()`（本库只在兜底层用它）。
+   同时**纯 transform 变化不被门禁感知**（不触发 ResizeObserver）：那是刻意的 —— 一个被
+   `scale(0)` 的容器布局盒仍然有效，地图按布局盒创建是正确的（#29 四轮复审 P2）。
+6. **视口判定有 64px 安全边、且初值乐观**：不支持 `IntersectionObserver` 的环境退化为
    「从不因离屏暂停」；这正是「未知不当作不可见」的选择，避免一上来就暂停。
-6. **`offscreen` 在本机 headless smoke 里会真的生效**（`display:none → block` 的宿主在视口之外），
+7. **`offscreen` 在本机 headless smoke 里会真的生效**（`display:none → block` 的宿主在视口之外），
    因此真实档的 `suspendReasons` 会出现 `["offscreen"]` —— 这是**正确行为**，检查体也只断言
    「`user` 被精确摘掉」，不断言「集合为空」。
-7. **暂停不阻断 `FrameScheduler.flush()`**（显式 flush 优先于暂停）：`DataLayerManager.flush()`
+8. **暂停不阻断 `FrameScheduler.flush()`**（显式 flush 优先于暂停）：`DataLayerManager.flush()`
    这类调用点不受暂停影响，因此「暂停期间一个任务都不提交」这句话的准确范围是
    **经 `schedule()` 排入的帧任务**。
-8. **`getMapInstance()` 仍返回 driver 句柄**（不是 raw SDK 对象）：名字里没有 `raw` 就是没有，
+9. **`getMapInstance()` 仍返回 driver 句柄**（不是 raw SDK 对象）：名字里没有 `raw` 就是没有，
    raw 走 `./advanced` 的 `unwrapRaw()`。这条与 v2 迁移文档一致。
-9. **`prefers-reduced-motion` 的媒体查询字符串是 `(prefers-reduced-motion: reduce)`**（VueUse
+10. **`prefers-reduced-motion` 的媒体查询字符串是 `(prefers-reduced-motion: reduce)`**（VueUse
    的默认实现），本库不解析自定义查询。
-10. **状态插槽的 `error` 是 `unknown`，不声明成 `BMapError`**：组件在把错误交给插槽之前不假定
+11. **状态插槽的 `error` 是 `unknown`，不声明成 `BMapError`**：组件在把错误交给插槽之前不假定
    它的形状（`onError` 事件与 `MapRuntime.error` 的既有类型都是 `unknown`），文档写的是「通常是
    `BMapError`」。收紧它是另一处公共契约改动（`ProviderErrorSlotProps.error` 才是 `BMapError`），
    不在本票范围。
-11. **「根入口在无 DOM 环境可 import」由 `verify-package` 的 `node -e "import('baidu-map-gl-vue')"`
+12. **「根入口在无 DOM 环境可 import」由 `verify-package` 的 `node -e "import('baidu-map-gl-vue')"`
    覆盖（纯 Node、无 DOM）**，而不是像 `./ui-kit` 那样另有一条带 `subprocess` 的强断言；本轮新增
    `@vueuse/core` 后该断言仍绿，是本条最直接的证据。
+13. **能力探测的「实例自有成员」已在本票修掉（评审 P1 的落点）**：
    `CapabilityRegistry` 的探测来源从「命名空间顶层 + `Map.prototype`」扩成**三个**，第三个是
    运行时观察到的实例成员（`observeInstanceMembers()`，由 Map Facet 在 `create()` 成功后登记；
    幂等、只增不减）。依据是实测：真实 JSAPI 4.0 的 `raw.setZoom` 是函数、而
@@ -337,6 +344,11 @@ interface MapSlotProps {
   （同一个 Promise reject `BMAP_RUNTIME_DISPOSED`，且 disposed 后再 retry 立即拒绝）、
   **SDK 加载期间容器被收起**不会在 0×0 上建图（`deferredProvider` 复现 TOCTOU）、
   `@error` 回调里**同步** `retry()` 真的排下一次重试（`mapsCreated` 到 2 且 Promise resolve）。
+
+  四轮复审再补 2 条：**「DOM 已变、Observer 尚未交付」时最终门禁仍不建图**
+  （`setElementSize` 只改盒模型不派发回调 ⇒ 只有 fresh 读数能看见 0×0）、
+  `measureNow()` 与缓存的 `size` 的分工（策略层直接断言两者在「未交付」窗口里不同）。
+  `elementSize.test.ts` 同时补了「纯 transform 不改变读数」与「布局盒读得到 0 就用 0」两条正反守卫。
 - `packages/baidu-map-gl-vue/src/driver/capability/registry.test.ts`（16 条）：
   机制上补了「实例自有成员也算」与「`observeInstanceMembers` 只收函数 / 幂等 / `null` no-op」
   两条（评审 P1 的单元级门禁）。

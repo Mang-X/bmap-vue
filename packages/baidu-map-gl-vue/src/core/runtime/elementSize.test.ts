@@ -2,7 +2,8 @@
  * 容器尺寸读数（M4-HANDLE-UX / issue #29）
  *
  * 覆盖三类失败方式：
- * 1. **取值优先级写错**：rect 与 offsetWidth 都有值时用了后者（会掩盖「真的被折叠成 0」）；
+ * 1. **取值优先级写错**：布局盒（offset/client）与 rect 都有值时用了后者 —— 会把 transform 带进门禁，
+ *    与 `ResizeObserver(border-box)` 的触发语义不一致（#29 四轮复审 P2）；
  * 2. **读不到与零尺寸被合并**：`null`（没元素）与 `0×0`（确定零尺寸）语义不同，不能混；
  * 3. **门禁判据写歪**：只判一个方向（宽 > 0）就会放过 `0×N` 的半折叠容器。
  */
@@ -15,7 +16,14 @@ import {
   type ElementSize,
 } from "./elementSize";
 
-/** 造一个「可读 rect」的元素；`rect` 之外的读数（offset/client）按需补。 */
+/**
+ * 造一个「可读 rect」的元素；`rect` 之外的读数（offset/client）按需补。
+ *
+ * ⚠️ **默认把布局盒（`offsetWidth` / `offsetHeight`）钉成 0**：测试环境里的替身
+ * （`packages/test-utils/browser-shims.ts`）会给真实 DOM 元素提供最小盒模型读数，未登记尺寸时
+ * 回落到**视口尺寸** —— 不钉住的话，同一份断言会在「装没装替身」两种环境下得到不同结果
+ * （读过一次全量才发现）。需要测某一级读数时显式传 `offsetWidth` / `offsetHeight`。
+ */
 function elementWith(
   rect: (() => { width: number; height: number }) | undefined,
   extra: Record<string, unknown> = {},
@@ -29,7 +37,8 @@ function elementWith(
       configurable: true,
     });
   }
-  for (const [key, value] of Object.entries(extra)) {
+  const readings: Record<string, unknown> = { offsetWidth: 0, offsetHeight: 0, ...extra };
+  for (const [key, value] of Object.entries(readings)) {
     Object.defineProperty(element, key, { value, configurable: true });
   }
   return element;
@@ -41,49 +50,77 @@ describe("readElementSize", () => {
     expect(readElementSize(undefined)).toBeNull();
   });
 
-  it("优先用 getBoundingClientRect，并保留小数", () => {
-    const element = elementWith(() => ({ width: 320.5, height: 240.25 }), {
-      offsetWidth: 999,
-      offsetHeight: 999,
+  it("优先用布局盒（offsetWidth/Height），与 ResizeObserver 的触发语义一致", () => {
+    const element = elementWith(() => ({ width: 999, height: 999 }), {
+      offsetWidth: 320,
+      offsetHeight: 240,
     });
-    expect(readElementSize(element)).toEqual({ width: 320.5, height: 240.25 });
+    expect(readElementSize(element)).toEqual({ width: 320, height: 240 });
   });
 
-  it("rect 读得到 0 时就用 0，不降级到 offsetWidth（否则「折叠成 0」会被掩盖）", () => {
+  it("纯 transform 不改变读数（`scale(0)` 的容器布局盒仍是它声明的尺寸）", () => {
+    // rect 反映 transform（这里模拟 scale(0)：rect 为 0），但布局盒没变 ⇒ 读数必须是布局盒。
+    // 反过来说：若以 rect 为准，`scale(0) → scale(1)` 这种转换**不会触发 ResizeObserver**
+    // （纯 transform 不触发），门禁就永远等不到放行 —— 这正是 #29 四轮复审 P2 要收掉的口子。
     const element = elementWith(() => ({ width: 0, height: 0 }), {
       offsetWidth: 320,
       offsetHeight: 240,
     });
+    expect(readElementSize(element)).toEqual({ width: 320, height: 240 });
+    expect(isUsableSize(readElementSize(element)), "布局盒可用 ⇒ 门禁放行").toBe(true);
+  });
+
+  it("布局盒读得到 0 时就用 0，不降级到 client / rect（否则「折叠成 0」会被掩盖）", () => {
+    const element = elementWith(() => ({ width: 320, height: 240 }), {
+      offsetWidth: 0,
+      offsetHeight: 0,
+      clientWidth: 320,
+      clientHeight: 240,
+    });
     expect(readElementSize(element)).toEqual(ZERO_SIZE);
-    // 正证守卫：这条用例真的能区分两种读数 —— 拿掉 rect 之后必须读到 320×240
-    const legacyOnly = elementWith(undefined, { offsetWidth: 320, offsetHeight: 240 });
-    expect(readElementSize(legacyOnly)).toEqual({ width: 320, height: 240 });
+    // 正证守卫：这条用例真的能区分两种读数 —— 拿掉 offset 之后必须读到 320×240。
+    // （真实 DOM 元素上 `offsetWidth` 恒存在（最差是 0），所以这一级只能用形状对象覆盖。）
+    const noOffset = {
+      clientWidth: 320,
+      clientHeight: 240,
+      getBoundingClientRect: () => ({ width: 320, height: 240 }),
+    } as unknown as Element;
+    expect(readElementSize(noOffset)).toEqual({ width: 320, height: 240 });
   });
 
-  it("环境不提供 rect 时降级到 offsetWidth / offsetHeight", () => {
-    const element = elementWith(undefined, { offsetWidth: 100, offsetHeight: 50 });
-    expect(readElementSize(element)).toEqual({ width: 100, height: 50 });
+  it("布局盒不可读（非 HTMLElement，如 SVG）时兜底到 getBoundingClientRect", () => {
+    const element = elementWith(() => ({ width: 100, height: 50 }), {});
+    // 真实 DOM 元素上 `offsetWidth` 恒存在（最差是 0）⇒ 用形状对象覆盖这条兜底路径
+    const svgLike = {
+      getBoundingClientRect: () => ({ width: 100, height: 50 }),
+    } as unknown as Element;
+    expect(readElementSize(svgLike)).toEqual({ width: 100, height: 50 });
+    expect(
+      readElementSize(element),
+      "普通元素（夹具把布局盒钉成 0）⇒ 以布局盒为准，不落到 rect",
+    ).toEqual(ZERO_SIZE);
   });
 
-  it("rect 抛错时降级到 offsetWidth，而不是把异常抛给调用方", () => {
-    const element = elementWith(() => {
-      throw new Error("detached");
-    }, { offsetWidth: 12, offsetHeight: 34 });
-    expect(readElementSize(element)).toEqual({ width: 12, height: 34 });
-  });
-
-  it("offset 也不可读时降级到 clientWidth / clientHeight", () => {
-    // 真实 DOM 元素上 `offsetWidth` 一定存在（最差也是 0），因此这条降级路径只能用
-    // 形状对象覆盖：读数函数只碰 `getBoundingClientRect` / `offset*` / `client*` 三类成员。
+  it("rect 抛错时不把异常抛给调用方（前两级不可读时返回 null）", () => {
     const element = {
-      getBoundingClientRect: undefined,
+      getBoundingClientRect: () => {
+        throw new Error("detached");
+      },
+    } as unknown as Element;
+    expect(readElementSize(element)).toBeNull();
+  });
+
+  it("offset 不可读时降级到 clientWidth / clientHeight", () => {
+    // 真实 DOM 元素上 `offsetWidth` 一定存在（最差也是 0），因此这条降级路径只能用
+    // 形状对象覆盖：读数函数只碰 `offset*` / `client*` / `getBoundingClientRect` 三类成员。
+    const element = {
       clientWidth: 7,
       clientHeight: 9,
     } as unknown as Element;
     expect(readElementSize(element)).toEqual({ width: 7, height: 9 });
   });
 
-  it("真实 DOM 元素上 rect 不可读也不返回 null（offset 恒存在，0 就是「确定的零尺寸」）", () => {
+  it("真实 DOM 元素上 rect 不可读也不返回 null（布局盒恒存在，0 就是「确定的零尺寸」）", () => {
     expect(readElementSize(elementWith(undefined))).toEqual(ZERO_SIZE);
   });
 
@@ -92,8 +129,15 @@ describe("readElementSize", () => {
   });
 
   it("NaN / Infinity 归一为 0（不把脏读数带进门禁判定）", () => {
-    const element = elementWith(() => ({ width: Number.NaN, height: Number.POSITIVE_INFINITY }));
-    expect(readElementSize(element)).toEqual(ZERO_SIZE);
+    const dirtyBox = elementWith(undefined, {
+      offsetWidth: Number.NaN,
+      offsetHeight: Number.POSITIVE_INFINITY,
+    });
+    expect(readElementSize(dirtyBox)).toEqual(ZERO_SIZE);
+    const dirtyRect = {
+      getBoundingClientRect: () => ({ width: Number.NaN, height: Number.POSITIVE_INFINITY }),
+    } as unknown as Element;
+    expect(readElementSize(dirtyRect)).toEqual(ZERO_SIZE);
   });
 });
 

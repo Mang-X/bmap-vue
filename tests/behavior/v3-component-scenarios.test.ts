@@ -2123,6 +2123,40 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("加载期间收起容器");
   });
 
+  it("最终门禁读 fresh DOM：DOM 已变、Observer 尚未交付时也不在 0×0 上建图（复审 P1）", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+    }));
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap), "SDK 还在加载").toBe("waiting-client");
+
+    // 「DOM 已变、观察器尚未交付」：`setElementSize` 只改替身的盒模型，**不派发** resize 回调，
+    // 因此 `suspension.size` 仍是 320×240 —— 只有 fresh 读数能看见 0×0。
+    shims.setElementSize(root, { width: 0, height: 0 });
+    harness.releaseProvider();
+    await settleProps();
+    await nextTick();
+    expect(
+      harness.mapsCreated(),
+      "最终门禁必须读 fresh DOM，而不是观察器缓存（缓存里还是 320×240）",
+    ).toBe(0);
+
+    // 观察器随后补上这个变化（真实浏览器里布局变化一定会交付），再恢复容器 → 才放行建图
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+    await settleProps();
+    expect(harness.mapsCreated(), "容器真的可用之后才建图").toBe(1);
+    expect(statusOf(bmap)).toBe("ready");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("fresh DOM 建图门禁");
+  });
+
   it("error 事件回调里同步 retry：真的排下一次重试（复审 P2）", async () => {
     harness.failNextInitializeView();
     let api: BMapExpose | null = null;

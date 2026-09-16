@@ -731,17 +731,19 @@ function disposedError(): BMapError {
 /**
  * 「建图等待点」（`MapRuntimeOptions.beforeCreateMap`，#29 三轮复审 P1）：容器当前不可用就等到可用。
  *
- * 与 `mountMap()` 用**同一份**判据（`containerRef.value` + `isUsableSize(suspension.size)`），
- * 区别只是位置 —— 这里是「最后一个异步边界之后、`create()` 之前」，因此慢网络下
- * 「加载期间容器被收起」也穿不过去。用 `while` 而不是 `if`：被唤醒后尺寸若又变回不可用（或
- * Runtime 正在销毁）就继续等 / 退出，让 Runtime 的 disposed 守卫收尾。
+ * 与 `mountMap()` 用**同一份**判据、同一个读数（`suspension.measureNow()` —— **fresh DOM 读数**），
+ * 区别只是位置 —— 这里是「最后一个异步边界之后、`create()` 之前」。
+ *
+ * 为什么必须是 fresh 读数而不是 `suspension.size`（#29 四轮复审 P1）：`size` 是「最近一次测得」
+ * 的缓存，在「父级改 display / 折叠动画 → DOM 已变 → ResizeObserver 尚未交付」这个窗口里它是
+ * **过期**的，那时 `map.create()` 仍会落在 0×0 容器上。用 `while` 而不是 `if`：被唤醒后再判一次
+ * （尺寸可能又被改回去），Runtime 正在销毁时直接退出，由它的 disposed 守卫收尾。
  */
 async function waitForUsableContainer(): Promise<void> {
   for (;;) {
     const status = runtime.status.value as string;
     if (status === "disposing" || status === "disposed") return;
-    const host = containerRef.value;
-    if (host && isUsableSize(suspension.size.value)) return;
+    if (isUsableSize(suspension.measureNow())) return;
     await new Promise<void>((resolve) => {
       containerUsableWaiters.push(resolve);
     });
@@ -751,8 +753,8 @@ async function waitForUsableContainer(): Promise<void> {
 /**
  * 建图 / 重试的**统一入口**（幂等）。
  *
- * 判据是**当前**尺寸（`suspension.size`），不是一次性 latch —— 评审 P2 指出：只在首次 mount
- * 上守门，会让「容器收起后调用 `retry()`」在 0×0 容器上建出第二张图。于是：
+ * 判据是**当前**尺寸（`suspension.measureNow()`，fresh DOM 读数），不是一次性 latch ——
+ * 评审 P2 指出：只在首次 mount 上守门，会让「容器收起后调用 `retry()`」在 0×0 容器上建出第二张图。于是：
  *
  * - 容器当前不可用 ⇒ 什么都不做（请求留在 `deferredWaiters` 上）；等「不可用 → 可用」的放行
  *   回调再走一遍（尺寸观察器**每次**这种转换都会回调，因此折起来再展开也接得上）；
@@ -766,7 +768,8 @@ function mountMap(): void {
   const status = runtime.status.value as string;
   if (status === "disposing" || status === "disposed") return;
   const host = containerRef.value;
-  if (!host || !isUsableSize(suspension.size.value)) return;
+  // 判据与建图等待点共用同一个读数（fresh DOM，不是观察器缓存）
+  if (!host || !isUsableSize(suspension.measureNow())) return;
   // 先唤醒「建图等待点」里等容器可用的那一次挂载（它已经跑到 SDK 加载之后了）
   for (const resolve of containerUsableWaiters.splice(0)) resolve();
   if (runtime.status.value === "ready") {

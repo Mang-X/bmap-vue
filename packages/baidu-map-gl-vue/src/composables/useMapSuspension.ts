@@ -121,12 +121,27 @@ export interface MapSuspensionController {
    * 容器门禁是否**曾经**放行（只增的 latch）。
    *
    * 「地图建好之后容器又变成 0」不算门禁被取消（ADR 决策 4：那种情况不销毁地图），
-   * 因此它不会回退。需要「**当前**能不能建图」时读 `size` + `isUsableSize()` ——
-   * `<BMap>` 的 `beginMount()` / `retry()` 就是这么做（#29 评审 P2）。
+   * 因此它不会回退。需要「**当前**能不能建图」时读 `measureNow()` + `isUsableSize()` ——
+   * `<BMap>` 的 `mountMap()` / 建图等待点就是这么做（#29 评审 P2 / 四轮复审 P1）。
    */
   readonly containerReady: Readonly<ShallowRef<boolean>>;
-  /** 最近一次测得的容器尺寸（`null` = 还没测量过 / 读不到）。 */
+  /**
+   * **最近一次测得**的容器尺寸（`null` = 还没测量过 / 读不到）。
+   *
+   * ⚠️ 它是缓存的读数：观察器**交付之前**它可能已经过期（DOM 变了、回调还没到）。需要
+   * 「这一刻到底能不能建图」的调用方请用 `measureNow()`（`<BMap>` 的建图等待点就是这么做的）。
+   */
   readonly size: Readonly<ShallowRef<ElementSize | null>>;
+
+  /**
+   * **立即**读一次容器尺寸（同步 fresh DOM 读数，不走缓存）。
+   *
+   * 与 `size` 的分工是「读数的用途」：`size` 是发布给状态插槽 / watcher 的**最近一次**读数；
+   * `measureNow()` 是给「最后一刻判定」用的 —— 例如 `MapRuntimeOptions.beforeCreateMap`
+   * 里那次「现在能不能 create」的判断。**观察器仍然只是唤醒源**，不需要为了这个再建一套
+   * （#29 四轮复审 P1）。
+   */
+  measureNow(): ElementSize | null;
   /** 页面是否可见（`document.visibilityState !== "hidden"`）。 */
   readonly documentVisible: Readonly<ShallowRef<boolean>>;
   /**
@@ -251,6 +266,7 @@ export function useMapSuspension(options: UseMapSuspensionOptions): MapSuspensio
     intersectVisible,
     reducedMotion,
     suspendedReasons,
+    measureNow: () => measure(),
     begin: () => applySize(measure()),
     dispose: () => {
       if (disposed) return;

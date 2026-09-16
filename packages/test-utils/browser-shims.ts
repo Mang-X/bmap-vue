@@ -296,6 +296,23 @@ function createBrowserShims(): BrowserShims {
         },
       });
 
+      // 布局盒读数：`elementSize.ts` 的优先级链是 `offset*` → `client*` → `getBoundingClientRect()`
+      // （与 `ResizeObserver(border-box)` 的触发语义一致，见该模块文件头）。替身必须把前两级也
+      // 补上 —— 否则会落到 happy-dom 原生的 `0×0`，「容器拿到尺寸才建图」的门禁在测试里永不放行。
+      for (const [name, pick] of [
+        ["offsetWidth", (size: SizeRecord) => size.width],
+        ["offsetHeight", (size: SizeRecord) => size.height],
+        ["clientWidth", (size: SizeRecord) => size.width],
+        ["clientHeight", (size: SizeRecord) => size.height],
+      ] as const) {
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement): number {
+            return pick(boxOf(this));
+          },
+        });
+      }
+
       const globals = globalThis as unknown as Record<string, unknown>;
       originalResizeObserver = globals.ResizeObserver;
       originalIntersectionObserver = globals.IntersectionObserver;

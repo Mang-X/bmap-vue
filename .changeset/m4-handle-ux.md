@@ -80,3 +80,7 @@ api.supports('map.bounds'); api.whenReady(); api.retry()
   `BMAP_RUNTIME_DISPOSED` 拒绝。
 - **失败期间同步 retry 会真的排下一次**：在 `@error` 回调里调用 `retry()`（自动重试）不再复用
   那条即将失败的任务。
+- **最终建图判据读 fresh DOM**：`beforeCreateMap` 用同步 fresh 读数（不是尺寸观察器的缓存），
+  因此「DOM 已变、观察器尚未交付」的窗口也不会在 0×0 上建图。
+- **读数语义 = 布局盒**：与内部 `ResizeObserver(border-box)` 的触发语义一致；**纯 transform 变化
+  不属于尺寸门禁**（否则会出现「rect 非零但观察器不通知 ⇒ 永远不建图」）。

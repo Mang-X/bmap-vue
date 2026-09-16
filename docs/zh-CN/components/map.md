@@ -211,8 +211,15 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 | 组件方法 `isContainerReady()` | `false` | `true` |
 | 地图实例 | **不存在**（`getMapInstance()` 为 `null`） | 创建一次 |
 
-读数走标准 DOM 测量（`getBoundingClientRect()`，退化到 `offsetWidth` / `clientWidth`），
-被测量的是**组件根容器**（作者声明的尺寸所在）。
+读数走标准 DOM 测量，优先级是 **`offsetWidth/Height`（布局盒）→ `clientWidth/Height`
+→ `getBoundingClientRect()`（兜底）**，被测量的是**组件根容器**（作者声明的尺寸所在）。
+
+两点要知道：
+
+- 语义是**布局盒**，所以**纯 CSS transform 不算尺寸变化**（`scale(0)` 的容器布局盒仍然有效，
+  地图会按布局盒创建）—— 这与内部尺寸观察器（border-box）的触发语义保持一致；
+- 最终判定用的是一次**fresh 同步读数**，不是最近一次的缓存 —— 因此「父级刚改完
+  `display`、尺寸观察器还没回调」的那个窗口也不会在 0×0 上建图。
 
 地图**建好之后**容器再变成 0（折叠 / 切走 / 进后台）**不会销毁地图**，也不取消门禁：恢复尺寸后由
 `checkResize()` 纠正即可（本库刻意不在这种时机销毁 WebGL 地图）。
