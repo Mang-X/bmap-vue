@@ -2157,6 +2157,39 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("fresh DOM 建图门禁");
   });
 
+  it("fresh 门禁阻塞后：缓存层没有发生转换也必须被唤醒（复审 P1，活性兜底）", async () => {
+    useManualFrames();
+    const { wrapper, bmap } = await mountControlledMap(() => ({
+      provider: harness.deferredProvider(),
+      center: { ...POSITION },
+      zoom: 12,
+    }));
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap)).toBe("waiting-client");
+
+    // ① DOM 变 0×0（不 notify：缓存仍是 320×240）② 放行 SDK ⇒ fresh 门禁拦住并挂起等待
+    shims.setElementSize(root, { width: 0, height: 0 });
+    harness.releaseProvider();
+    await settleProps();
+    await nextTick();
+    expect(harness.mapsCreated(), "fresh 门禁必须拦住").toBe(0);
+
+    // ③ 在观察器交付之前把 DOM 恢复成**原尺寸**：缓存层不会出现「不可用 → 可用」转换
+    shims.setElementSize(root, { width: 320, height: 240 });
+    shims.notifyResize(root); // 观察器“交付”，但 applySize 被 `sizeEquals` 去重吞掉
+    frames!.flush(); // ⇒ 只能靠等待期间的每帧 fresh 复查唤醒
+
+    await settleProps();
+    expect(
+      harness.mapsCreated(),
+      "缓存没有转换时也必须被唤醒（否则 Runtime 永远停在 creating）",
+    ).toBe(1);
+    expect(statusOf(bmap)).toBe("ready");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("fresh 门禁的活性兜底");
+  });
+
   it("error 事件回调里同步 retry：真的排下一次重试（复审 P2）", async () => {
     harness.failNextInitializeView();
     let api: BMapExpose | null = null;

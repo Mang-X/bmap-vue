@@ -84,3 +84,5 @@ api.supports('map.bounds'); api.whenReady(); api.retry()
   因此「DOM 已变、观察器尚未交付」的窗口也不会在 0×0 上建图。
 - **读数语义 = 布局盒**：与内部 `ResizeObserver(border-box)` 的触发语义一致；**纯 transform 变化
   不属于尺寸门禁**（否则会出现「rect 非零但观察器不通知 ⇒ 永远不建图」）。
+- **建图等待点有活性兜底**：等待期间每帧 fresh 复查（观察器仍是主要唤醒源、也不加第二套观察器），
+  避免「fresh 判定挡住 create、而缓存层没有尺寸转换 ⇒ 观察器永不回调」把挂载搁浅在 `creating`。

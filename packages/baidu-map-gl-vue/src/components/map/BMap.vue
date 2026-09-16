@@ -715,6 +715,7 @@ function attachWaiters(task: Promise<MapReadyContext>): void {
  *   disposed 守卫抛出 `BMAP_RUNTIME_DISPOSED`（比在这里造错更贴近真实原因）。
  */
 function rejectPendingWaiters(error: unknown): void {
+  stopUsableRecheck();
   for (const waiter of deferredWaiters.splice(0)) waiter.reject(error);
   for (const waiter of nextBootWaiters.splice(0)) waiter.reject(error);
   for (const resolve of containerUsableWaiters.splice(0)) resolve();
@@ -726,6 +727,37 @@ function disposedError(): BMapError {
     "BMAP_RUNTIME_DISPOSED",
     "BMap map runtime disposed while a retry was pending",
   );
+}
+
+/**
+ * 建图等待点的**兜底唤醒**：只要还有等待者，就每帧做一次 fresh 复查（#29 五轮复审 P1）。
+ *
+ * 主唤醒源仍然是尺寸观察器，但它只在**缓存层**出现「不可用 → 可用」转换时回调。fresh 判据与
+ * 缓存可能不一致 —— DOM 在观察器交付之前变回原尺寸时，缓存里根本没有那次 0×0，
+ * `applySize()` 的 `sizeEquals` 去重会把这次交付吞掉，于是等待者被搁浅、Runtime 永远停在
+ * `creating`（fresh 门禁 + 缓存唤醒源之间的活性竞态）。
+ *
+ * 因此：**只有存在等待者时**才启动这个复查，全部唤醒 / 销毁后立刻停（`cancelAnimationFrame`
+ * 由 `rejectPendingWaiters()` 统一收尾）—— 常态路径（观察器唤醒）完全不受影响，
+ * 也不建第二套观察器。
+ */
+let usableRecheckFrame: number | null = null;
+
+function stopUsableRecheck(): void {
+  if (usableRecheckFrame === null) return;
+  cancelAnimationFrame(usableRecheckFrame);
+  usableRecheckFrame = null;
+}
+
+function ensureUsableRecheck(): void {
+  if (usableRecheckFrame !== null || containerUsableWaiters.length === 0) return;
+  usableRecheckFrame = requestAnimationFrame(() => {
+    usableRecheckFrame = null;
+    if (containerUsableWaiters.length === 0) return;
+    // `mountMap()` 用 fresh 读数判定；可用则唤醒等待者（它在 `bootTask` 早退之前就先唤醒）
+    mountMap();
+    ensureUsableRecheck();
+  });
 }
 
 /**
@@ -746,6 +778,8 @@ async function waitForUsableContainer(): Promise<void> {
     if (isUsableSize(suspension.measureNow())) return;
     await new Promise<void>((resolve) => {
       containerUsableWaiters.push(resolve);
+      // 单靠观察器可能永远唤不醒（见 `ensureUsableRecheck` 的说明）
+      ensureUsableRecheck();
     });
   }
 }

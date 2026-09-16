@@ -8,14 +8,15 @@
  *
  * | 能力 | happy-dom 现状 | 本项目真的用它的地方 | 本文件补什么 |
  * | --- | --- | --- | --- |
- * | `getBoundingClientRect()` | 恒为 0×0（无布局引擎） | `core/runtime/elementSize.ts` 的容器读数 | 最小盒模型（显式登记 / 内联样式） |
+ * | 尺寸读数（`offsetWidth/offsetHeight`、`clientWidth/clientHeight`、`getBoundingClientRect()`） | 恒为 0×0（无布局引擎） | `core/runtime/elementSize.ts` 的容器读数（**布局盒优先**） | 最小盒模型（显式登记 / 内联样式），四级读数同源 |
  * | `ResizeObserver` | 类存在，`observe` / `disconnect` 是空实现（源码注释 `TODO: Implement`） | `useMapSuspension` 的尺寸变化 | 记录观察者 + 可手动派发 + 计数 |
  * | `IntersectionObserver` | 同上 | `useMapSuspension` 的视口判定 | 同上 |
  * | `window.matchMedia` | 存在，`matches` 恒为 `false` | `usePreferredReducedMotion` | 可切换 + 派发 `change` |
  * | `document.visibilityState` | 恒为 `"visible"` | `useDocumentVisibility` | 可切换 + 派发 `visibilitychange` |
  *
  * 它**不是**给生产代码用的抽象：生产代码只用标准 DOM API（`elementSize.ts` 里那条
- * 「`getBoundingClientRect` → `offsetWidth` → `clientWidth`」的优先级链），
+ * 「`offsetWidth/offsetHeight`（布局盒）→ `clientWidth/clientHeight` → `getBoundingClientRect()`（兜底）」
+ * 的优先级链），
  * 由本文件在测试环境里把那条链喂饱 —— 于是「门禁读的是标准读数」在实现里是显式的。
  * 观察器替身还负责一件事：**`disconnect()` 计数**，它是「释放路径真的被走到」的可用证据
  * （happy-dom 的空实现让这件事在测试里原本不可观察）。
@@ -138,6 +139,11 @@ function createBrowserShims(): BrowserShims {
   const originalGetBoundingClientRect = Object.getOwnPropertyDescriptor(
     Element.prototype,
     "getBoundingClientRect",
+  );
+  /** 布局盒两侧四级的原始 descriptor（`install()` 会覆盖它们，`restore()` 必须逐一还原）。 */
+  const LAYOUT_READING_NAMES = ["offsetWidth", "offsetHeight", "clientWidth", "clientHeight"] as const;
+  const originalLayoutReadings = LAYOUT_READING_NAMES.map(
+    (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
   );
   let originalMatchMedia: unknown;
   let originalResizeObserver: unknown;
@@ -304,7 +310,7 @@ function createBrowserShims(): BrowserShims {
         ["offsetHeight", (size: SizeRecord) => size.height],
         ["clientWidth", (size: SizeRecord) => size.width],
         ["clientHeight", (size: SizeRecord) => size.height],
-      ] as const) {
+      ] as const satisfies ReadonlyArray<readonly [string, (size: SizeRecord) => number]>) {
         Object.defineProperty(HTMLElement.prototype, name, {
           configurable: true,
           get(this: HTMLElement): number {
@@ -358,6 +364,11 @@ function createBrowserShims(): BrowserShims {
           "getBoundingClientRect",
           originalGetBoundingClientRect,
         );
+      }
+      // 四级布局盒读数同样要还原（原先不存在则删掉）——「install 覆盖了什么，restore 就要收回什么」
+      for (const [name, descriptor] of originalLayoutReadings) {
+        if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
       }
       const globals = globalThis as unknown as Record<string, unknown>;
       globals.ResizeObserver = originalResizeObserver;
