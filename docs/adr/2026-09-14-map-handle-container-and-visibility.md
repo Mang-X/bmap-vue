@@ -95,7 +95,7 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
 | 放行 | **每次**「不可用 → 可用」都放行一次（不只首次）：先回调 `onContainerReady()` 建图 / 接续挂起的重试，**再**按下面「恢复尺寸要校正」那行请求一次 `checkResize()` | 折叠后重新展开必须能接续「收起期间发出的 `retry()`」（#29 评审 P2）；而首次挂载那一次的 resize 请求会被 `MapRuntime.requestResize()` 的状态门短路，因此不多发命令 |
 | 谁守门 | **所有建图路径共用一个判据**（容器**当前**是否有非零尺寸，读 `measureNow()` 而不是缓存）：首挂载、尺寸变化回调、`retry()`、建图等待点 | 只在首次 mount 上守门会让「失败后收起容器再 retry」在 0×0 容器上建出第二张图（#29 评审 P2）。⚠️ 四处判据里**只有建图等待点与 `retry()` 有独立用例**：`mountMap()` 那句是**防御性前置**（删掉它现有用例仍全绿 —— 独立复核实测），它的价值是「不启动一次注定被拦的 boot」，别以为它被覆盖了 |
 | 恢复尺寸要校正 | 「不可用 → 可用」除了放行建图，**还要请求一次 `checkResize()`**（`enableAutoResize` 为 `true` 时） | 已就绪的图在 `0×0 → 非零` 时既不会重建、也没有别的路径下发尺寸命令 ⇒ 会停在旧尺寸（#29 复审 P1）。首次挂载那一次由 `MapRuntime.requestResize()` 的状态门短路，不会多发命令 |
-| 活性兜底 | 建图等待点挂着时，**每帧做一次 fresh 复查**（`requestAnimationFrame`；只等待者非空才启动，`rejectPendingWaiters()` 统一 `cancelAnimationFrame`） | 主唤醒源（尺寸观察器）只在**缓存层**出现「不可用 → 可用」转换时回调；fresh 判据与缓存不一致时（DOM 在观察器交付之前变回原尺寸 ⇒ 缓存里没有那次 0×0 ⇒ `applySize()` 被 `sizeEquals` 去重吞掉）等待者会被搁浅、Runtime 永远停在 `creating`（#29 五轮复审 P1）。常态路径仍是观察器唤醒，也不建第二套观察器 |
+| 活性兜底 | 只要存在**任何**「在等容器可用」的请求（**建图等待点** `containerUsableWaiters` + **被挂起的 `retry()`** `deferredWaiters`），就**每帧做一次 fresh 复查**（`requestAnimationFrame`；`hasContainerWaiters()` 判据，`rejectPendingWaiters()` 统一 `cancelAnimationFrame`） | 主唤醒源（尺寸观察器）只在**缓存层**出现「不可用 → 可用」转换时回调；fresh 判据与缓存不一致时（DOM 在观察器交付之前变回原尺寸 ⇒ 缓存里没有那次 0×0 ⇒ `applySize()` 被 `sizeEquals` 去重吞掉）等待者会被搁浅（五轮 P1 修了「boot 已启动」那组、七轮 P1 修了「`retry()` 还没启动」那组 —— 形态完全对称）。常态路径仍是观察器唤醒，也不建第二套观察器 |
 | 判据的位置 | 判据也要出现在**最后一个异步边界之后、`driver.map.create()` 之前**（`MapRuntimeOptions.beforeCreateMap`） | 尺寸是异步得到的：`doMount()` 中途要 `await` SDK 加载，慢网络下「启动前判一次」会留下 TOCTOU 窗口 —— 加载完成时容器可能已被收起，于是仍会建出一张 0×0 的画布（#29 三轮复审 P1）。`<BMap>` 传 `waitForUsableContainer()`：容器不可用就等到可用（`while` 而非 `if`，唤醒后再判一次） |
 | `containerReady` | 只增的 latch（「曾经放行过」），供状态插槽与 `isContainerReady()` 读数 | 「建好之后又变成 0」不算取消门禁；需要「当前能不能建图」时读 **fresh 读数**（`measureNow()` + `isUsableSize`） |
 | 建图之后容器又变成 0 | **不**销毁地图、也不取消门禁 | issue 非目标：不在离开视口 / 折叠时销毁 WebGL Map |
@@ -352,6 +352,10 @@ interface MapSlotProps {
 
   五轮复审再补 1 条：**fresh 门禁阻塞后、缓存层没有发生转换时也必须被唤醒**
   （DOM 直接恢复原尺寸 + `notifyResize`，`applySize` 被去重吞掉 ⇒ 只能靠等待期间的每帧 fresh 复查）。
+
+  七轮复审再补 1 条：**被挂起的 `retry()` 同样必须被兜底唤醒**（`deferredWaiters` 那组；
+  Observer 从未见过 0×0、直接恢复原尺寸 ⇒ 缓存层无转换）。两条反证都要能红：
+  把判据收回只看 `containerUsableWaiters`、或去掉 `retry()` 挂起时的 `ensureUsableRecheck()`。
   `elementSize.test.ts` 同时补了「纯 transform 不改变读数」与「布局盒读得到 0 就用 0」两条正反守卫。
 - `packages/baidu-map-gl-vue/src/driver/capability/registry.test.ts`（16 条）：
   机制上补了「实例自有成员也算」与「`observeInstanceMembers` 只收函数 / 幂等 / `null` no-op」

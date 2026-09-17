@@ -743,6 +743,18 @@ function disposedError(): BMapError {
  */
 let usableRecheckFrame: number | null = null;
 
+/**
+ * 是否还有**任何**「在等容器可用」的请求。
+ *
+ * 两组都要算（#29 七轮复审 P1）：`containerUsableWaiters` 是「boot 已经启动、卡在
+ * `beforeCreateMap`」的等待者；`deferredWaiters` 是「`retry()` 发现容器不可用、还没启动 boot」的
+ * 等待者 —— 两者都只能靠「容器变可用」的信号醒来，而那个信号（尺寸观察器）会因为**缓存去重**
+ * 而漏发。上一轮只覆盖了前者，形态完全对称地被复制到了后者。
+ */
+function hasContainerWaiters(): boolean {
+  return containerUsableWaiters.length > 0 || deferredWaiters.length > 0;
+}
+
 function stopUsableRecheck(): void {
   if (usableRecheckFrame === null) return;
   cancelAnimationFrame(usableRecheckFrame);
@@ -750,11 +762,11 @@ function stopUsableRecheck(): void {
 }
 
 function ensureUsableRecheck(): void {
-  if (usableRecheckFrame !== null || containerUsableWaiters.length === 0) return;
+  if (usableRecheckFrame !== null || !hasContainerWaiters()) return;
   usableRecheckFrame = requestAnimationFrame(() => {
     usableRecheckFrame = null;
-    if (containerUsableWaiters.length === 0) return;
-    // `mountMap()` 用 fresh 读数判定；可用则唤醒等待者（它在 `bootTask` 早退之前就先唤醒）
+    if (!hasContainerWaiters()) return;
+    // `mountMap()` 用 fresh 读数判定；可用则唤醒等待者，并把 `deferredWaiters` 接到这次启动上
     mountMap();
     ensureUsableRecheck();
   });
@@ -1125,6 +1137,8 @@ function retry(): Promise<MapReadyContext> {
     // 容器当前不可用：挂起（不建图、也不以旧错误立刻拒绝），等放行回调启动这次重试
     return new Promise<MapReadyContext>((resolve, reject) => {
       deferredWaiters.push({ resolve, reject });
+      // 单靠观察器可能永远唤不醒（见 `ensureUsableRecheck`）——它的判据已经包含这一组等待者
+      ensureUsableRecheck();
     });
   }
   mountStarted = true;

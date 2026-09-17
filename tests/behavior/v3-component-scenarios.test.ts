@@ -2202,6 +2202,35 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("缓存过期时的 retry 门禁");
   });
 
+  it("被挂起的 retry：Observer 从未见过 0×0 也必须被唤醒（复审 P1，活性兜底覆盖 deferredWaiters）", async () => {
+    useManualFrames();
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap)).toBe("error");
+
+    // DOM 变 0×0 但**不交付**（缓存仍 320×240）→ retry 走 fresh 判据 ⇒ 正确挂起、不启动 boot
+    shims.setElementSize(root, { width: 0, height: 0 });
+    const pending = api.retry();
+    await settleProps();
+    expect(statusOf(bmap), "fresh 判据下不得启动 boot").toBe("error");
+
+    // 「观察器从未见过那次 0×0」：直接恢复原尺寸 + 一次交付 ⇒ 缓存层没有可用转换
+    shims.setElementSize(root, { width: 320, height: 240 });
+    shims.notifyResize(root);
+    frames!.flush();
+
+    await expect(
+      pending,
+      "挂起的 retry 必须被唤醒（每帧 fresh 复查要覆盖 deferredWaiters）",
+    ).resolves.toBeTruthy();
+    expect(statusOf(bmap)).toBe("ready");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("deferredWaiters 的活性兜底");
+  });
+
   it("fresh 门禁阻塞后：缓存层没有发生转换也必须被唤醒（复审 P1，活性兜底）", async () => {
     useManualFrames();
     const { wrapper, bmap } = await mountControlledMap(() => ({
