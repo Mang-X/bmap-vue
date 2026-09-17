@@ -40,6 +40,11 @@ import BWMSLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BWM
 import BWMTSLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BWMTSLayer.vue";
 import BXYZLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BXYZLayer.vue";
 import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
+import { createCapabilityRegistry } from "../../packages/baidu-map-gl-vue/src/driver/capability/registry";
+import { createJsapiV4EventDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
+import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
+import { createJsapiV4LayerDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/layers";
+import { createJsapiV4HandleRegistry } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/registry";
 import type { LayerKind } from "../../packages/baidu-map-gl-vue/src/driver/types/layers";
 import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability/catalog";
 
@@ -127,6 +132,31 @@ function mountTreeWithErrorProbe(errors: unknown[], children: () => VNodeChild) 
     },
   });
   return mountLayerTree(() => [h(Probe), children()]);
+}
+
+/**
+ * §10 用：绕过组件，直接在 Fake 命名空间上建一个图层。
+ *
+ * 第三轮的两条契约发现（替身成员与官方声明是否一致、EventDriver 对缺成员的拒绝）都在
+ * **Driver / 替身**这一层，用组件路径反而看不到。
+ */
+function createFakeDriverPair() {
+  // layer driver 与 events driver **必须共用同一个 registry**：句柄的所有权绑定在创建它的
+  // registry 上，跨 registry 会得到 `BMAP_HANDLE_FOREIGN`（这正是「跨 Client 混用被拒绝」）。
+  const registry = createJsapiV4HandleRegistry();
+  const capabilities = createCapabilityRegistry({
+    engine: "jsapi-v4",
+    version: fake.namespace.VERSION,
+    rawSdk: fake.namespace,
+    unsupported: "throw",
+  });
+  return {
+    layers: createJsapiV4LayerDriver({ rawSdk: fake.namespace, capabilities, registry }),
+    events: createJsapiV4EventDriver({
+      registry,
+      geometry: createJsapiV4GeometryDriver(fake.namespace),
+    }),
+  };
 }
 
 /** 挂一个图层组件，返回可写的 props 与 wrapper。 */
@@ -855,6 +885,166 @@ describe("[#40] §9 评审修正：函数型 style 重建、槽位移除与整�
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("整袋失败重试");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 10. 评审修正（PR #96 第三轮）：DOM 事件契约、数据覆盖物清理与重建优先级        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 第三轮的三条代码发现。第一条是**契约层**（公开了真实订阅不到的事件），
+ * 后两条是**清理与优先级**（该清的没清、该重建的会被异常挡住）。
+ */
+describe("[#40] §10 评审修正：DOM 事件契约、覆盖物清理与重建优先级", () => {
+  it("[三轮 1 附属] createDom 变化不重建，但下一次数据解析用新实现（参考实现的 useLatest 语义）", async () => {
+    // 这条钉住一处**有意保留**的差异：GeoJSON 的 style 换引用会重建（见 §9），而 DOMLayer 的
+    // `createDom` 走转发（官方参考实现 huiyan-fe/react-bmap 就是 useLatest 包装）。
+    // 两种语义都必须有正证，否则「为什么一个重建一个不重建」只能靠注释解释。
+    const callA = vi.fn(() => document.createElement("div"));
+    const callB = vi.fn(() => document.createElement("span"));
+    const { wrapper, setProp } = await mountOneLayer(5, { createDom: callA });
+
+    await setProp({ createDom: callB });
+    expect(createdSince(), "createDom 换实现不重建图层").toBe(1);
+
+    // `createDOM` 是**构造首参**（不在选项袋里），因此从替身实例上读那一份
+    const stored = (
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement;
+      }
+    ).createDOM;
+    expect(stored({}, { lng: 1, lat: 2 }).tagName, "SDK 手上的工厂已转发到新实现").toBe("SPAN");
+
+    // 再重新赋值 data（数据驱动的一次解析）时，用的也是新工厂
+    await setProp({ data: { type: "FeatureCollection", features: [] } });
+    expect(createdSince()).toBe(1);
+    expect(callB).toHaveBeenCalled();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("createDom 转发语义");
+  });
+
+  it("[三轮 1] 替身与官方声明一致：DOMLayer 有 addEventListener、没有 removeEventListener", () => {
+    const { layers } = createFakeDriverPair();
+    const dom = layers.create("dom", { createDOM }).raw as Record<string, unknown>;
+    expect(typeof (dom as Record<string, unknown>).addEventListener).toBe("function");
+    expect(
+      typeof (dom as Record<string, unknown>).removeEventListener,
+      "官方 4.0.4 的 DOMLayer 没有声明 removeEventListener；替身从基类继承来的那一半会让「订阅不到」被掩盖",
+    ).toBe("undefined");
+  });
+
+  it("[三轮 1] 官方契约下 DOMLayer 的事件订阅会被 EventDriver 拒绝（warn + no-op）", () => {
+    // 这条是「为什么 BDOMLayer 不公开事件」的机制正证：不是我们不想绑，是契约上**绑了就解不掉**。
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { layers, events } = createFakeDriverPair();
+    const dom = layers.create("dom", { createDOM });
+    const handler = vi.fn();
+    const off = events.on(dom, "click", handler);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("addEventListener/removeEventListener"),
+      expect.anything(),
+    );
+    (dom.raw as { emit?: (type: string, payload?: unknown) => void }).emit?.("click", {});
+    expect(handler, "拒绝的订阅不该收到任何事件").not.toHaveBeenCalled();
+    expect(() => off()).not.toThrow();
+    warn.mockRestore();
+  });
+
+  it("[三轮 2] DOM 的已渲染覆盖物在卸载与重建时必须清掉；hide/show 不清", async () => {
+    const { wrapper, setProp } = await mountOneLayer(5);
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as { customOverlays: unknown[] };
+
+    expect(layerOf().customOverlays.length, "挂载时数据已渲染出覆盖物").toBeGreaterThan(0);
+
+    await setProp({ visible: false });
+    expect(layerOf().customOverlays.length, "摘挂（hide）不清覆盖物：切回可见还要用").toBeGreaterThan(0);
+    await setProp({ visible: true });
+    expect(layerOf().customOverlays.length).toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    expect(
+      layerOf().customOverlays.length,
+      "永久销毁必须先 removeAllOverlays() 再 removeLayer()（仓库 data-layers.md 的清理口径）",
+    ).toBe(0);
+    harness.assertIdle("DOM 覆盖物清理");
+  });
+
+  it("[三轮 2] Map 被销毁（KeepAlive dispose）时，DOM 的覆盖物同样先被清掉", async () => {
+    // 组件卸载那条路（上一条用例）走的是组件自己的 dispose；这条走**账本**驱动的 disposeAll，
+    // 是「Registry 与 Map dispose 一致」在数据覆盖物上的对照。
+    const show = ref(true);
+    const Root = defineComponent({
+      setup: () => () =>
+        h(KeepAlive, null, {
+          default: () =>
+            show.value
+              ? h(BMap, { provider: harness.provider(), keepAliveBehavior: "dispose" }, () => [
+                  h(BDOMLayer, { createDom: createDOM, data: FEATURE_COLLECTION } as never),
+                ])
+              : null,
+        }),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settle();
+
+    const layer = fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+      customOverlays: unknown[];
+    };
+    expect(layer.customOverlays.length).toBeGreaterThan(0);
+
+    show.value = false;
+    await settle();
+
+    expect(harness.attached("layer")).toBe(0);
+    expect(layer.customOverlays.length, "Map 销毁时也要先清掉数据覆盖物").toBe(0);
+    harness.assertIdle("KeepAlive dispose 清理覆盖物");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("KeepAlive dispose 之后卸载");
+  });
+
+  it("[三轮 3] 已判定「必须重建」时，不能被同一次更新里另一步的异常挡住（槽位移除方向）", async () => {
+    // DOM 的 minZoom 走整袋 setter：摘掉它必须重建；同一次更新里 offsetX 变化要就地写。
+    const { wrapper, setProp } = await mountOneLayer(5, { minZoom: 3, offsetX: 2 });
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    const layer = fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+      failNextSetStyleOptions: Error | null;
+    };
+    layer.failNextSetStyleOptions = new Error("setStyleOptions failed");
+
+    await setProp({ minZoom: undefined, offsetX: 9 });
+
+    expect(
+      createdSince(),
+      "zIndex/minZoom 这类槽位没有 unset 入口 ⇒ 必须重建；不能被 setStyleOptions 的异常挡掉",
+    ).toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.layerAttached(-2)).toBe(false);
+    void map;
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("槽位移除优先于就地写入");
+  });
+
+  it("[三轮 3] 反方向：mutable option 已判定「键消失必须重建」时，也不能被槽位写入异常挡住", async () => {
+    const { wrapper, setProp } = await mountOneLayer(3, { zIndex: 5, edge: true });
+    const layer = fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+      failNextSetZIndex: Error | null;
+    };
+    layer.failNextSetZIndex = new Error("setZIndex failed");
+
+    await setProp({ zIndex: 6, edge: undefined });
+
+    expect(createdSince(), "edge 由 true 变回未表态 ⇒ 必须重建").toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.layerAttached(-2)).toBe(false);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("option 移除优先于就地写入");
   });
 });
 

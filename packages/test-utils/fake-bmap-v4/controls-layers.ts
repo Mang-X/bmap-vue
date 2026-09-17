@@ -258,6 +258,13 @@ export class FakeV4TileLayer extends FakeV4Layer {
   boundary: string | string[] | null = null
   clearedCache = 0
   zIndexTopCalls = 0
+  /**
+   * 测试故障注入：让**下一次** `setZIndex` 抛错（用后即清）。
+   *
+   * 用途是「同一次更新里，已经判定必须重建的状态不能被另一步的就地写入异常挡住」——
+   * 需要一个「就地写入会失败」的注入点（与 `FakeV4DOMLayer.failNextSetStyleOptions` 同一手法）。
+   */
+  failNextSetZIndex: Error | null = null
 
   constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
     super(options, stats)
@@ -265,6 +272,11 @@ export class FakeV4TileLayer extends FakeV4Layer {
 
   setZIndex(zIndex: number): void {
     this.callLog.push('setZIndex')
+    if (this.failNextSetZIndex) {
+      const error = this.failNextSetZIndex
+      this.failNextSetZIndex = null
+      throw error
+    }
     this.zIndex = zIndex
   }
 
@@ -472,6 +484,16 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
 export class FakeV4DOMLayer extends FakeV4Layer {
   readonly isCustomHtmlLayer = true
   /**
+   * 官方 4.0.4 的 `DOMLayer` **只有** `addEventListener`、没有 `removeEventListener`
+   * （逐成员核对 `layer/DOMLayer.d.ts`）。替身必须同样缺这一半，否则会掩盖一类真实缺陷：
+   * `EventDriver.on()` 要求两个入口同时存在，缺一个就 warn + no-op，而 Fake 从基类继承来的
+   * `removeEventListener` 会让「组件公开了事件、真实契约下订阅不到」这种问题**测试全绿**。
+   *
+   * 用 `Object.defineProperty` 把继承来的原型方法在本实例上遮蔽为 `undefined`
+   * （写成类字段会与基类方法签名冲突，类型层不通过）。
+   */
+  private static readonly HIDE_REMOVE_EVENT_LISTENER = true
+  /**
    * 测试故障注入：让**下一次** `setStyleOptions` 抛错（用后即清）。
    *
    * 用来锁住「applied 记账必须在 SDK 调用**成功返回之后**才提交」这条不变式——
@@ -491,6 +513,9 @@ export class FakeV4DOMLayer extends FakeV4Layer {
     stats: FakeV4Diagnostics,
   ) {
     super(options, stats)
+    if (FakeV4DOMLayer.HIDE_REMOVE_EVENT_LISTENER) {
+      Object.defineProperty(this, 'removeEventListener', { value: undefined, configurable: true })
+    }
     if (typeof createDOM !== 'function') {
       throw new TypeError('DOMLayer: 第一个参数必须是 createDOM 函数（官方签名是 (createDOM, options)）')
     }
@@ -505,6 +530,17 @@ export class FakeV4DOMLayer extends FakeV4Layer {
       throw new TypeError('DOMLayer.setData: 只接受 GeoJSON FeatureCollection（或 null）')
     }
     this.data = data
+    // 官方口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：`setData(null)` 只清空
+    // 数据引用，**不会**移除已经渲染出来的 overlays；清空必须显式 `removeAllOverlays()`。
+    // 替身按这条建模：每次喂数据都重建这批覆盖物，`data = null` 时保留现状。
+    if (data !== null) {
+      const features = (data as { features?: unknown[] }).features ?? []
+      this.customOverlays.splice(
+        0,
+        this.customOverlays.length,
+        ...features.map((feature, index) => ({ id: index, feature })),
+      )
+    }
   }
 
   show(): void {

@@ -148,8 +148,12 @@ function optionValueFingerprint(kind: LayerKind, key: string, value: unknown): s
  * 为什么需要它：`stableLayerValue` 刻意把函数折叠成 `fn`（否则父级每次渲染产生的内联箭头
  * 都会让图层重建），代价是**函数 A → 函数 B 的变化在指纹里看不出来**。折叠行为要保留，
  * 于是换一种方式让语义正确：SDK 手上那个函数身份恒定，但它每次被调用时都去读**最新的 prop**。
- * 这样 `tileLoadFunction` / `url` / 模板回调 / 函数型 style 换成新实现后立即生效，
+ * 这样 `tileLoadFunction` / `url` / 模板回调 / `createDom` 换成新实现后立即生效，
  * 而内联箭头仍然不会触发重建。
+ *
+ * ⚠️ 它**只适用于「每个工作单元都会再调用」的回调**。只在解析数据时求一次的回调
+ * （GeoJSON 的 style，见 `IDENTITY_SENSITIVE_OPTION_KEYS`）**不能**只靠转发：光让包装读到新实现
+ * 不会让已经在图上的要素换样式，必须重建。
  *
  * 语义细节（刻意选择，已写进 ADR 已知限制）：
  * - 创建时该 option 不是函数 ⇒ 原样返回（「不表态」就该缺席，包一层空函数等于假支持）；

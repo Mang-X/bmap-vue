@@ -37,13 +37,17 @@ layer/domLayer
 | coordinate | 坐标系类型 | `string` | `BD09` |
 | enableDraggingMap | 是否允许拖动地图 | `boolean` | `false` |
 
-## 组件事件
+## 关于交互事件（本组件刻意不提供）
 
-| 事件名 | 说明 | 类型 |
-| --- | --- | --- |
-| click | 点击 DOM 覆盖物时触发 | `(e: unknown) => void` |
-| mouseover | 鼠标移入 DOM 覆盖物时触发 | `(e: unknown) => void` |
-| mouseout | 鼠标移出 DOM 覆盖物时触发 | `(e: unknown) => void` |
+官方 4.0.4 的 `DOMLayer` 只声明了 `addEventListener`、**没有** `removeEventListener`，而本库的
+事件订阅要求两者同时存在才生效（缺一个就告警 + no-op）—— 也就是说这类订阅**绑上就解不掉**。
+官方技能文档把「在短生命周期组件注册 DOMLayer 事件」列为常见错误。因此 `BDOMLayer` **没有**
+`@click` / `@mouseover` / `@mouseout`：与其公开一个真实契约下收不到的事件，不如不提供。
+
+需要交互时：
+
+- 在 **`createDom` 里给元素自己挂监听**（推荐）：元素随数据 / 图层一起销毁，不需要额外解绑；
+- 或者把图层放在与 Map 同生命周期的壳层里，经 `advanced` 逃生口自行注册（解绑自担）。
 
 ## 稳定性
 
@@ -51,7 +55,10 @@ layer/domLayer
 
 ## 注意
 
-- `createDom` 写成内联箭头函数**不会**导致重建（内核的指纹把函数折叠成 `fn`）。
+- `createDom` 变化**不重建**，但交给 SDK 的是「转发到最新 prop」的包装函数：**下一次数据解析**
+  （`setData`，包括重新赋值 `data` 触发的那次）就会用到新实现，已经在图上的 DOM 元素保持旧实现
+  ——与官方参考实现 `huiyan-fe/react-bmap` 的 `useLatest` 语义一致。要让既有元素换实现，重新赋值
+  `data` 即可（数据驱动的一次重建解析）。
 - 模板里写 `:create-dom="..."`（prop 名用 `createDom` 而不是 `createDOM`：后者在 kebab-case 下不可达）。
 - 层级一类构造项经官方的整袋 `setStyleOptions()` 更新，因此 `zIndex` / `minZoom` 变化不重建。
 

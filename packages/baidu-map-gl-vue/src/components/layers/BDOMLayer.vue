@@ -14,8 +14,12 @@
  * - 官方用整袋 `setStyleOptions(partial)` 更新构造项（`minZoom` / `maxZoom` / `zIndex` /
  *   `offsetX` / `offsetY` / `anchors` / `coordinate` / `enableDraggingMap`），因此这些 prop
  *   变化时**就地更新**，不重建；
- * - 事件按官方声明绑定（`click` / `mouseover` / `mouseout`，由图层内部的 DOM 覆盖物派发）；
- *   回调参数是**归一化事件**，官方事件的原始对象在 `e.raw`；
+ * - **不提供交互事件**（本组件刻意没有 `@click` 一类 emit）：官方 4.0.4 的 `DOMLayer` 只声明了
+ *   `addEventListener`、**没有** `removeEventListener`（逐成员核对 `layer/DOMLayer.d.ts`），
+ *   而本库的 `EventDriver.on()` 要求两者同时存在才订阅（缺一个就告警 + no-op）。也就是说这类
+ *   订阅**绑上就解不掉**，仓库的官方技能文档 `references/data-layers.md` 把它列为常见错误：
+ *   「在短生命周期组件注册 DOMLayer 事件」。需要交互时请在 `createDom` 里给元素自己挂监听
+ *   （元素随数据/图层一起销毁），或把图层放在与 Map 同生命周期的壳层里用 `advanced` 逃生口；
  * - 清空走官方 `clearData` 归一化入口（`DOMLayer` 的实现是 `removeAllOverlays()`）：
  *   把 `data` 置为 `null` 即可。
  */
@@ -64,12 +68,6 @@ const props = withDefaults(defineProps<BDOMLayerProps>(), {
   enableDraggingMap: undefined,
 });
 
-const emit = defineEmits<{
-  click: [e: unknown];
-  mouseover: [e: unknown];
-  mouseout: [e: unknown];
-}>();
-
 useLayerResource<BDOMLayerProps>(props, {
   component: "BDOMLayer",
   toSpec: (p) => ({
@@ -93,12 +91,9 @@ useLayerResource<BDOMLayerProps>(props, {
       ]),
     },
   }),
-  bind: ({ handle, context, scope }) => {
-    const events = context.client.driver.events;
-    scope.add(events.on(handle, "click", (e) => emit("click", e)));
-    scope.add(events.on(handle, "mouseover", (e) => emit("mouseover", e)));
-    scope.add(events.on(handle, "mouseout", (e) => emit("mouseout", e)));
-  },
+  // 刻意**没有** `bind`：`DOMLayer` 只有 `addEventListener`、没有可解绑入口（见文件头），
+  // 而 `EventDriver.on()` 要求两者同时存在 ⇒ 订阅必然被拒绝。与其公开一个真实契约下 no-op 的
+  // `@click`，不如不提供（需要交互时在 `createDom` 里给元素自己挂监听）。
 });
 
 defineOptions({ name: "BDOMLayer" });

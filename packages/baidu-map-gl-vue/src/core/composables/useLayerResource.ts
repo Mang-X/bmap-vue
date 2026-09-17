@@ -35,7 +35,7 @@ import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { BMapError } from "../errors/BMapError";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
-import { devWarn } from "../logger";
+import { devWarn, logger } from "../logger";
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
 import {
   LAYER_CTOR_SLOTS,
@@ -97,6 +97,8 @@ interface InstanceState {
    * 与 `mounted` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
    */
   mountAttempted: boolean;
+  /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性，避免重复清理同一实例。 */
+  torndown: boolean;
   /** 创建该实例时用的重建指纹：props 变化时与它比较，决定「重建」还是「就地更新」。 */
   rebuildKey: string;
   /**
@@ -174,14 +176,49 @@ export function useLayerResource<Props>(
   let instance: InstanceState | null = null;
 
   /**
+   * 数据驱动图层的**永久销毁**前的清理：先清数据覆盖物，再由 Map 摘除图层。
+   *
+   * 依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
+   * - `DOMLayer`：先 `removeAllOverlays()` 再 `removeLayer()`（`setData(null)` **不会**移除已经渲染
+   *   出来的 overlays —— 该文档把它列为「常见错误」）；
+   * - `GeoJSONLayer`：`clearData()` 在 `removeLayer` **之前**（之后再 `destroy()` 不起作用，
+   *   因为 `removeLayer` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用）。
+   *
+   * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
+   * 因此这里不需要按 kind 分支。**只在永久销毁时做**：普通 `visible=false` 的摘挂不能清
+   * （切回可见时还得重新 `setData`）；清理失败不阻断摘除，但要可观测。
+   */
+  const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
+    const layers = context.client.driver.layers;
+    if (!layers.supports(state.spec.kind, "clearData")) return;
+    try {
+      layers.clearData(state.handle);
+    } catch (error) {
+      logger.warn(
+        `layer:${state.spec.kind} 销毁前的 clearData 失败（图层仍会被摘除，SDK 侧可能残留数据覆盖物）`,
+        { error: (error as Error)?.message ?? String(error) },
+      );
+    }
+  };
+
+  /**
    * 摘除的唯一入口。
    *
    * 以 `mountAttempted`（**调用过** `addLayer`）而不是 `mounted`（**成功返回过**）为门禁：
    * 真实 SDK 的 `addLayer` 可能「已经产生副作用、然后抛错」，用成功返回的记账当门禁会让那次
    * 补偿摘除被跳过，实例就永久留在图上（Driver 侧的 `remove` 明确不读记账，正是为了支持这种
    * best-effort 摘除；这一层不能用更严格的记账把它挡掉）。
+   *
+   * `permanent` 区分两条语义：**临时摘挂**（`visible=false`，保留数据与实例）与
+   * **永久销毁**（组件卸载 / 重建 / Map 销毁，先清数据覆盖物再摘除）。
    */
-  const unmount = (state: InstanceState, context: MapReadyContext): void => {
+  const unmount = (state: InstanceState, context: MapReadyContext, permanent = false): void => {
+    // 清理与「挂没挂上」无关：只要这个实例要被永久丢弃，就先清掉它渲染出的数据覆盖物
+    // （失败补偿路径下 `mountAttempted` 可能已被复位，但那时也没有数据可清，是 no-op）。
+    if (permanent && !state.torndown) {
+      state.torndown = true;
+      tearDownData(state, context);
+    }
     if (!state.mountAttempted) return;
     state.mounted = false;
     state.mountAttempted = false;
@@ -215,28 +252,14 @@ export function useLayerResource<Props>(
    * **不在 `map.addLayer` 之前执行这类操作**（issue #40 的非目标）：官方明确层级调整会访问
    * 已关联的 Map 与图层管理器，未挂载时调用是未定义行为。因此这里以 `state.mounted` 为前置。
    */
-  const syncPostMountSlots = (state: InstanceState, context: MapReadyContext): boolean => {
+  const syncPostMountSlots = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
     const probe = probeOf(context);
     const kind = state.spec.kind;
 
-    // 「已经写入过的槽位变回未表态」与是否挂载**无关**：SDK 没有 unset 入口、本库也不猜默认值，
-    // 只能靠重建回到 SDK 自己的默认状态（与可变 option 同一口径）。`data` 例外：它有
-    // `null = 清空` 的显式语义，`undefined` 就是「不表态（保持现状）」。
-    const removedSlots = [...state.appliedSlots.keys()].filter(
-      (slot) => layerSlotValue(state.spec, slot) === undefined,
-    );
-    if (removedSlots.length > 0) {
-      devWarn(
-        `[layer:${kind}] 可就地更新的槽位 ${removedSlots.join(" / ")} 由有值变为 undefined：` +
-          "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
-      );
-      return true;
-    }
-
     // 未挂载时**不写、也不记账**：官方明确「层级调整一类操作会访问已关联的 Map 与图层管理器」，
     // 未挂载时调用是未定义行为（issue #40 的非目标）。等挂载发生时这里会被再调一次。
-    if (!state.mounted) return false;
+    if (!state.mounted) return;
     /** 走 option 通道的槽位攒成**一次** `setOptions`（Driver 再按整袋 / 字段 setter 分类）。 */
     const optionBag: Record<string, unknown> = {};
     /** 整袋调用成功**之后**才提交的记账（失败不能记成已写入，否则永不重试）。 */
@@ -285,7 +308,6 @@ export function useLayerResource<Props>(
       layers.setOptions(state.handle, optionBag);
       for (const [slot, fingerprint] of pendingBagSlots) state.appliedSlots.set(slot, fingerprint);
     }
-    return false;
   };
 
   /**
@@ -295,29 +317,35 @@ export function useLayerResource<Props>(
    * 图层没有 unset 入口，本库也不猜默认值 ⇒ 唯一能回到「SDK 自己的默认状态」的办法是换一个
    * 新实例（构造期不传它）。不重建的话，声明（不表态）与 SDK 实际状态会永久不一致。
    */
-  const syncMutableOptions = (state: InstanceState, context: MapReadyContext): boolean => {
+  const syncMutableOptions = (state: InstanceState, context: MapReadyContext): void => {
     const mutable = layerMutableOptions(state.spec, probeOf(context));
     const nextKeys = Object.keys(mutable);
 
-    const removed = [...state.appliedMutableKeys].filter((key) => !nextKeys.includes(key));
-    if (removed.length > 0) {
-      devWarn(
-        `[layer:${state.spec.kind}] 可就地更新的 option ${removed.join(" / ")} 由有值变为 undefined：` +
-          "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
-      );
-      return true;
-    }
-
-    if (nextKeys.length === 0) return false;
+    if (nextKeys.length === 0) return;
     const fingerprint = stableLayerValue(mutable);
-    if (fingerprint === state.appliedMutableKey) return false;
+    if (fingerprint === state.appliedMutableKey) return;
     // 未挂载时**不写、也不记账**：切回可见时这里会被再调一次（记成「已应用」会让那次写入永久丢失）
-    if (!state.mounted) return false;
+    if (!state.mounted) return;
 
     context.client.driver.layers.setOptions(state.handle, mutable);
     state.appliedMutableKey = fingerprint;
     state.appliedMutableKeys = new Set(nextKeys);
-    return false;
+  };
+
+  /**
+   * **纯判定**：有没有「已经写入过、现在变回未表态」的状态（槽位 / 可变 option）。
+   *
+   * 这是「必须重建」的判据，刻意与执行分开：一旦判定必须重建，就**不该**再执行就地写入
+   * （否则一步 SDK 异常会把已经确定的收敛挡掉——第三轮评审发现 3）。`data` 例外：它有
+   * `null = 清空` 的显式语义，`undefined` 表示「不表态（保持现状）」。
+   */
+  const detectRemovedState = (state: InstanceState, context: MapReadyContext): string[] => {
+    const mutable = layerMutableOptions(state.spec, probeOf(context));
+    const removedSlots = [...state.appliedSlots.keys()].filter(
+      (slot) => layerSlotValue(state.spec, slot) === undefined,
+    );
+    const removedOptions = [...state.appliedMutableKeys].filter((key) => !(key in mutable));
+    return [...removedSlots, ...removedOptions];
   };
 
   /** 组件侧失败的唯一上报出口（mount 路径与 watch 路径共用，避免两条路各写一份）。 */
@@ -327,6 +355,15 @@ export function useLayerResource<Props>(
         ? error
         : new BMapError("BMAP_RESOURCE_CREATE_FAILED", String(error), { cause: error });
     mapContext.events.emit("resource:error", { error: wrapped, component: hooks.component });
+  };
+
+  /** 逐步隔离执行：一步失败只上报，不阻断同一次更新里的其它步骤。 */
+  const runIsolated = (step: () => void): void => {
+    try {
+      step();
+    } catch (error) {
+      reportResourceError(error);
+    }
   };
 
   const resource = useSdkResource<Readonly<Props>, LayerHandle, MapReadyContext>({
@@ -360,6 +397,7 @@ export function useLayerResource<Props>(
           spec,
           mounted: false,
           mountAttempted: false,
+          torndown: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
           appliedData: UNAPPLIED,
@@ -377,9 +415,10 @@ export function useLayerResource<Props>(
           scope,
           remove: () => {
             // 摘除只在这里发生（`unmount` 以「调用过 add」为门禁），因此重复 dispose
-            // （组件卸载 / 重建 / Map 卸载）不会多摘一次。
+            // （组件卸载 / 重建 / Map 卸载）不会多摘一次。这条路径是**永久销毁**：
+            // 先清数据覆盖物，再由 Map 摘除图层。
             if (instance === state) instance = null;
-            unmount(state, context);
+            unmount(state, context, true);
           },
         });
         // 先登记账本、再做副作用：`syncMounted` / 槽位写入里任何一步抛错时，错误路径上
@@ -422,8 +461,8 @@ export function useLayerResource<Props>(
               const state = instance;
               // 还没就绪或没有实例：`create()` 会读到最新的规格，这里不需要动作。
               if (!ready || !handle || !state) return;
-              // 这一步里 `syncMounted` 会调用 SDK（可能抛错），抛出来就是 unhandled rejection
-              // ——必须收成 `resource:error`（与 mount 路径同一条诊断通道）。
+              // 这一步里的 SDK 调用都可能抛错，抛出来就是 unhandled rejection —— 必须收成
+              // `resource:error`（与 mount 路径同一条诊断通道）。
               try {
                 const next = hooks.toSpec(current);
                 if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
@@ -431,13 +470,25 @@ export function useLayerResource<Props>(
                   return;
                 }
                 state.spec = next;
-                syncMounted(state, ready);
-                const slotsNeedRebuild = syncPostMountSlots(state, ready);
-                const optionsNeedRebuild = syncMutableOptions(state, ready);
-                if (slotsNeedRebuild || optionsNeedRebuild) {
-                  // 有槽位 / option 从「已写入」变回未表态：只能靠新实例回到 SDK 自己的默认状态
+
+                // **先判定、后执行**：一旦确定「必须重建」，就不再执行就地写入——否则同一次更新里
+                // 一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次
+                // （第三轮评审发现 3）。
+                const removed = detectRemovedState(state, ready);
+                if (removed.length > 0) {
+                  devWarn(
+                    `[layer:${state.spec.kind}] ${removed.join(" / ")} 由有值变为未表态：` +
+                      "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
+                  );
                   void replace();
+                  return;
                 }
+
+                // 各步互相隔离：一次写入失败不该连带吞掉同一次更新里其它步骤（各自上报为
+                // `resource:error`；失败的记账不会提交，下一次变化或重挂载会重试）。
+                runIsolated(() => syncMounted(state, ready));
+                runIsolated(() => syncPostMountSlots(state, ready));
+                runIsolated(() => syncMutableOptions(state, ready));
               } catch (error) {
                 reportResourceError(error);
               }

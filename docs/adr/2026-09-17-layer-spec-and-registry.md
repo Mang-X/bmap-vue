@@ -131,6 +131,7 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 | --- | --- | --- |
 | **每个工作单元都会再调用** | `url`、`tileLoadFunction`、`xTemplate` / `yTemplate` / `zTemplate` / `bTemplate` | 交给 SDK 的是 **`forwardCallback` 包装**：函数身份稳定、每次调用读**最新 prop**。**不重建**（下一个瓦片就会用到新实现） |
 | **只在解析数据时求一次** | GeoJSON 的 `markerStyle` / `polylineStyle` / `polygonStyle`（`IDENTITY_SENSITIVE_OPTION_KEYS`） | 指纹按**引用**比较（`layerDataIdentity`）⇒ 换函数即**重建**。光转发不够：已经在图上的要素不会知道实现换了（第二轮评审发现 1） |
+| 只在解析数据时求一次，但**有官方参考实现先例** | `BDOMLayer` 的 `createDom` | 仍走**转发**（不重建）：参考实现 `huiyan-fe/react-bmap` 用 `useLatest` 包装，让新工厂只作用于**后续**创建的元素。用户要换既有元素时重新赋值 `data`（触发一次 `setData`），届时包装函数会把最新 prop 交出去。两者的差别是**有意保留**的，各自有正证用例 |
 
 `forwardCallback` 的两条语义细节刻意如此：创建时不是函数就原样返回（「不表态」就该缺席，
 包一层空函数等于假支持）；调用时刻 prop 已变成非函数时继续用**最后一个确定的实现**，而不是抛错
@@ -157,11 +158,20 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 `surface().operations` 是唯一声明；替身（Fake）按官方声明实现成员，因此
 「声明了但替身里没有」与「替身里有但没声明」都会被测试抓到。
 
-### 10. 事件面按官方声明给
+### 10. 事件面按官方声明给（且**必须**有可解绑入口）
 
-只给 `GeoJSONLayer`（`click` / `mousemove` / `mouseout`）与 `DOMLayer`（`click` / `mouseover` /
-`mouseout`）绑定事件；其余 kind **不声明**事件 props——非目标「不假定所有 Layer 都有相同事件
-接口」。`BDistrictLayer` 的 `click` / `mouseover` / `mouseout` **保留**，理由见「已知限制」。
+本库的事件订阅走 `EventDriver.on()`，它要求目标**同时**具备 `addEventListener` 与
+`removeEventListener`：缺一个就告警 + no-op，因为「绑上解不掉」的监听器违反本库「所有监听器
+都必须有释放路径」的硬约束。逐成员核对 4.0.4 声明后的结论：
+
+| kind | `addEventListener` | `removeEventListener` | 组件是否提供事件 |
+| --- | --- | --- | --- |
+| `GeoJSONLayer` | ✅ | ✅ | ✅ `click` / `mousemove` / `mouseout` |
+| `DistrictLayer` | ✅ | ✅ | ✅ `click` / `mouseover` / `mouseout`（`BDistrictLayer` 的既有 API，依据充分） |
+| `DOMLayer` | ✅ | ❌ | ❌ 不提供（见决策 13） |
+| `TileLayer` 家族 / `XYZLayer` / `WMSLayer` / `WMTSLayer` / `RasterTileLayer` | ❌ | ❌ | ❌ 无事件面 |
+
+其余 kind **不声明**事件 props——非目标「不假定所有 Layer 都有相同事件接口」。
 
 ### 11. 每一条新 kind 都要过一遍同一批断言
 
@@ -169,6 +179,37 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 （「creates / mounts / updates / removes」在每种 kind 上各跑一遍），
 `tests/behavior/v3-layer-suite.test.ts` 按 issue 的「测试要求」分节覆盖
 （统一内核 / URL 重建 / 参数生成 / 响应式数据 / Registry 与 Map dispose / 事件归属 / 能力标记）。
+
+### 12. 永久销毁前先清数据覆盖物（`clearData` → `removeLayer`），临时摘挂不清
+
+依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
+
+- `DOMLayer`：**先 `removeAllOverlays()` 再 `removeLayer()`**；该文档明确「`setData(null)` 只清空
+  数据引用，不会移除已经渲染出来的 overlays」，并把「对 DOMLayer 只调用 `setData(null)`」
+  列为常见错误；
+- `GeoJSONLayer`：`clearData()` 在 `removeLayer` **之前**（该文档同时写明：`removeLayer` 已经摘掉
+  覆盖物、解绑监听并清空图层持有的 Map 引用，**之后再 `destroy()` 不起作用**——所以本库**不**调用
+  `destroy()`：它既无必要，也不会产生可观测效果）。
+
+因此 `LayerRecord.dispose()`（组件卸载 / 重建 / Map 销毁三条路径的公共出口）在摘除图层之前，
+对**支持 `clearData` 的 kind** 调一次统一清空入口（Driver 按 kind 映射到 `clearData` /
+`removeAllOverlays`）。两条边界刻意如此：**`visible=false` 的临时摘挂不清**（切回可见时数据照旧，
+不用补 `setData`）；清理失败不阻断摘除，但经 `logger.warn` 可观测。
+（第三轮评审发现 2。）
+
+### 13. `BDOMLayer` 不提供交互事件（官方声明缺 `removeEventListener`）
+
+官方 4.0.4 的 `DOMLayer` **只有** `addEventListener`，没有可解绑入口；而本库的
+`EventDriver.on()` 要求目标**同时**具备 `addEventListener` 与 `removeEventListener`，缺一个就
+告警 + 返回 no-op（连 `addEventListener` 都不会调用——这正是「绑上就解不掉」的显式拒绝）。
+仓库的官方技能文档把「在短生命周期组件注册 DOMLayer 事件」列为常见错误。
+
+因此 `BDOMLayer` **不绑定、也不公开** `click` / `mouseover` / `mouseout`：公开一个真实契约下
+no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元素自己挂监听（元素随数据 / 图层
+一起销毁），或把图层放到与 Map 同生命周期的壳层里经 `advanced` 逃生口自行注册。
+配套把 Fake 从基类继承来的 `removeEventListener` **遮蔽掉**（替身必须与声明一致，否则
+「组件能订阅、真实契约下收不到」这类缺陷会被测试全绿掩盖），并补一条「EventDriver 拒绝订阅」
+的机制正证。（第三轮评审发现 1。）
 
 ## 与官方参考实现 `huiyan-fe/react-bmap` 的对照
 
@@ -215,9 +256,13 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 1. **要素集合只在 `raw` 上**：`BGeoJSONLayer` / `BDOMLayer` 的事件回调收到的是归一化
    `DriverEvent`，`features` 不是它的第一类字段，需要 `e.raw.features`。给 `DriverEvent`
    加 `features` 属于事件 facet 的改动（不在本 issue 范围），登记为欠账。
-2. **`BDistrictLayer` 的三个事件保留，但官方 4.0.4 的 `DistrictLayer` 声明里没有
-   `addEventListener`**：既有实现、文档与官方 demo 都依赖它们，删除属于与本 issue 无关的
-   破坏性变更。若上游某天明确移除该能力，应按「显式失败」处理而不是静默降级。
+2. ~~`BDistrictLayer` 的三个事件在官方声明里没有 `addEventListener`~~ —— **本条已作废（第三轮
+   评审核对）**：4.0.4 的 `layer/DistrictLayer.d.ts` **同时**声明了
+   `addEventListener<K extends keyof DistrictLayerEventMap>` 与 `removeEventListener<…>`
+   （两者都是泛型签名，早先按「方法名 + 左括号」扫成员时漏掉了它们）。因此
+   `BDistrictLayer` 的三个事件是**完全有依据**的常规能力，`EventDriver.on()` 也满足订阅前提
+   （两个入口齐备），不是欠账。保留这条是为了说明「成员核对要按类型包的**签名**读，
+   而不是按命名规律或正则扫名字」。
 3. **`GeoJSONLayer` 的层级语义不映射到 `zIndex`**：官方的 `level`（默认 -99）与其它图层的
    `zIndex` 不是同一个量，方向也未在文档里写死，因此本库**不猜**：`BGeoJSONLayer` /
    `BDistrictLayer` **不提供** `zIndex` / `opacity` 这两个 props（组件层拿不到入口）；
