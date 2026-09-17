@@ -114,6 +114,35 @@ export function stableLayerValue(value: unknown): string {
 }
 
 /**
+ * **身份敏感**的回调型 option：它的变化必须换实例，光「转发到最新实现」不够。
+ *
+ * 判据是「SDK 什么时候调用这个回调」：
+ * - **每次工作单元都会再调用**的回调（瓦片地址 / 载入函数 / 模板换算）——SDK 下一个瓦片就会
+ *   再问一次，因此只要交给它的函数能读到最新 prop 就够了（`forwardCallback`），**不需要重建**；
+ * - **只在解析数据时求一次**的回调（GeoJSON 的样式）——换实现之后，**已经在图上的要素**不会
+ *   知道，必须重新解析数据；本库的表达方式就是重建实例（用最新回调重建覆盖物）。
+ *
+ * 因此这三类 style 走身份比较（`layerDataIdentity`）而不是「按值折叠」，引用一变就重建。
+ * 代价写在文档里：**内联箭头函数会导致每次渲染都重建**，请传稳定引用。
+ */
+const IDENTITY_SENSITIVE_OPTION_KEYS: Readonly<Partial<Record<LayerKind, readonly string[]>>> = {
+  geojson: ["markerStyle", "polylineStyle", "polygonStyle"],
+};
+
+/**
+ * 单个 option 值的指纹。
+ *
+ * 身份敏感的键里**只有函数**按引用比较：函数没有「内容」可以比，折叠成 `fn` 会让换实现彻底
+ * 不可见；而**普通对象仍按值**比较——同内容的新对象不该触发重建（对象的内容变化本来就能被
+ * `stableLayerValue` 看出来，没有静默风险）。
+ */
+function optionValueFingerprint(kind: LayerKind, key: string, value: unknown): string {
+  const identitySensitive = IDENTITY_SENSITIVE_OPTION_KEYS[kind]?.includes(key) ?? false;
+  if (identitySensitive && typeof value === "function") return layerDataIdentity(value);
+  return stableLayerValue(value);
+}
+
+/**
  * 回调型 option 的统一包装：交给 SDK 的是一个**转发到「当前取值」**的函数。
  *
  * 为什么需要它：`stableLayerValue` 刻意把函数折叠成 `fn`（否则父级每次渲染产生的内联箭头
@@ -230,7 +259,10 @@ export function layerRebuildKey(spec: LayerSpec, probe: LayerProbe): string {
   const slots = LAYER_CTOR_SLOTS.filter(
     (slot) => surface.ctorSlots.includes(slot) && !isUpdatableSlot(spec, probe, slot),
   ).map((slot) => `${slot}=${stableLayerValue(layerSlotValue(spec, slot))}`);
-  return [spec.kind, stableLayerValue(ctorOnly), slots.join("|")].join("::");
+  const options = Object.entries(ctorOnly)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}:${optionValueFingerprint(spec.kind, key, value)}`);
+  return [spec.kind, options.join(","), slots.join("|")].join("::");
 }
 
 /** 该规格里**可就地更新**的 option 键与值（供 `setOptions` 使用）。 */
@@ -270,23 +302,28 @@ export function pickLayerOptions<Props extends object>(
 export const LAYER_UNIFIED_FIELDS: readonly string[] = [...LAYER_CTOR_SLOTS, "visible"];
 
 /**
- * `data` 的**引用身份**（`WeakMap` 计数，`O(1)`）。
+ * **引用身份**（`WeakMap` 计数，`O(1)`）：对象与函数各拿一个稳定编号。
  *
- * 用途见 `layerWatchKey`：`data` 往往是整份 `FeatureCollection`，用 `stableLayerValue()`
- * 深度序列化会让「每次 props 变化」都付一次遍历成本。这里只比引用，代价恒定。
+ * 两个用途：
+ * - `data`（`layerWatchKey`）：整份 `FeatureCollection` 用 `stableLayerValue()` 深度序列化会让
+ *   「每次 props 变化」都付一次遍历成本，这里只比引用；
+ * - **身份敏感的回调型 option**（`optionValueFingerprint`）：函数必须按**引用**比较——
+ *   凡是需要「换实现就有可观测效果」的回调，折叠成 `fn` 会让变化彻底不可见。
+ *
+ * 非对象 / 非函数的原始值按取值比较（`p:<value>`，含 `NaN` / `Infinity` 的字符串化差异）。
  */
-const dataIdentities = new WeakMap<object, number>();
-let nextDataIdentity = 0;
+const identityIds = new WeakMap<object, number>();
+let nextIdentityId = 0;
 
 export function layerDataIdentity(value: unknown): string {
   if (value === undefined) return "u";
   if (value === null) return "n";
-  if (typeof value !== "object") return `p:${String(value)}`;
+  if (typeof value !== "object" && typeof value !== "function") return `p:${String(value)}`;
   const key = value as object;
-  let id = dataIdentities.get(key);
+  let id = identityIds.get(key);
   if (id === undefined) {
-    id = ++nextDataIdentity;
-    dataIdentities.set(key, id);
+    id = ++nextIdentityId;
+    identityIds.set(key, id);
   }
   return `o:${id}`;
 }
@@ -302,6 +339,10 @@ export function layerDataIdentity(value: unknown): string {
  * 代价：**原地修改同一份 `data` 不会被感知**（Vue 的响应式约定也是「换引用才更新」）。
  */
 export function layerWatchKey(spec: LayerSpec): string {
+  const options = Object.entries(spec.options ?? {})
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}:${optionValueFingerprint(spec.kind, key, value)}`);
   return [
     spec.kind,
     spec.visible === false ? "0" : "1",
@@ -310,6 +351,6 @@ export function layerWatchKey(spec: LayerSpec): string {
     spec.maxZoom,
     spec.zIndex,
     layerDataIdentity(spec.data),
-    stableLayerValue(spec.options ?? {}),
+    options.join(","),
   ].join("::");
 }

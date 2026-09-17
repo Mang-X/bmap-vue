@@ -50,20 +50,31 @@ import {
 
 ## 回调型 option
 
-`url`（`BRasterLayer`）、`tileLoadFunction`、XYZ/WMTS 的模板回调、GeoJSON 的函数型 style、
-`createDom` 这类**回调**可以随时换成新实现，**立即生效且不会重建图层**：本库交给 SDK 的是一个
-身份稳定的包装函数，它每次被调用时去读最新的 prop。两条语义值得记住：
+回调分两类，判据是「SDK 什么时候调用它」：
 
-- **换成 `undefined`**（或不传）会改变构造指纹 ⇒ 重建图层（`url` 从回调换回字符串模板同理）；
-- **对象内部**的函数（例如 `markerStyle: { icon: () => … }`）不在覆盖范围内——换实现请换外层对象的
-  引用（那会改变指纹 ⇒ 重建）。
+| 类别 | 例子 | 换实现时的行为 |
+| --- | --- | --- |
+| **每个瓦片 / 每次请求都会再调用** | `url`（`BRasterLayer`）、`tileLoadFunction`、XYZ/WMTS 的 `xTemplate` / `yTemplate` / `zTemplate` / `bTemplate` | **立即生效，不重建**（本库交给 SDK 的是身份稳定、每次调用读最新 prop 的包装函数） |
+| **只在解析数据时求一次** | GeoJSON 的 `markerStyle` / `polylineStyle` / `polygonStyle`、`BDOMPLayer` 的 `createDom` | **重建图层**（既有要素 / DOM 只能靠重新解析数据换实现） |
+
+由此有两条要注意的：
+
+- **函数型 style 请传稳定引用**（`computed` / 模块常量）：它按**引用**比较，内联箭头函数会因引用
+  每次变化而触发重建。**对象** style 仍按值比较，同内容的新对象不会重建。
+- **对象内部**的函数（例如 `markerStyle: { icon: () => … }`）不在覆盖范围内：`{ icon: fnA }` 与
+  `{ icon: fnB }` 指纹相同，**换外层对象也没用**。可行的替代是把 style 写成**函数**
+  （`markerStyle: (props) => ({ … })`），或在 Vue 层用 `:key` 强制重挂载。
+- 任何回调 prop 换成 `undefined`（或不传）都会改变构造指纹 ⇒ 重建图层（`url` 从回调换回字符串模板同理）。
 
 ## 显隐与就地更新的时序
 
 - `visible=false` 期间对可变 option（`colors` / `edge` / `offsetX`…）的设置**不会丢失**：切回可见时
   会补写一次（未挂载时既不写也不记账）。
-- 已经写入过的可变 option 由有值变回 `undefined` 时，图层会**重建**——SDK 没有 unset 入口，
-  重建是回到「SDK 自己的默认值」的唯一办法（本库不猜默认值）。
+- 已经写入过的**可变 option 与统一槽位**（`zIndex` / `minZoom` 一类）由有值变回 `undefined` 时，
+  图层会**重建**——SDK 没有 unset 入口，重建是回到「SDK 自己的默认值」的唯一办法（本库不猜默认值）。
+  例外是 `data`：`null` 表示清空，`undefined` 表示「不表态（保持现状）」。
+- 就地更新失败（例如整袋 `setStyleOptions` 抛错）**不会**被记成已写入：下一次任何变化都会把这个
+  值一起重试；失败本身经 `resource:error` 交出。
 - `addLayer` 抛错时（哪怕副作用已经产生）图层会被 best-effort 摘掉，错误经 `resource:error`
   交出；失败之后仍可重试挂载。
 

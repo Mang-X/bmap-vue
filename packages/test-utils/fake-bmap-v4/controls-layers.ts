@@ -471,6 +471,13 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
  */
 export class FakeV4DOMLayer extends FakeV4Layer {
   readonly isCustomHtmlLayer = true
+  /**
+   * 测试故障注入：让**下一次** `setStyleOptions` 抛错（用后即清）。
+   *
+   * 用来锁住「applied 记账必须在 SDK 调用**成功返回之后**才提交」这条不变式——
+   * 少了它，一次失败的整袋更新会被记成已完成，后续同值更新被指纹跳过、永不重试。
+   */
+  failNextSetStyleOptions: Error | null = null
   readonly createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement
   /** 每次 `setStyleOptions` 收到的袋子（顺序即调用顺序）。 */
   readonly appliedStyleBags: Record<string, unknown>[] = []
@@ -512,6 +519,11 @@ export class FakeV4DOMLayer extends FakeV4Layer {
 
   setStyleOptions(options: Partial<Record<string, unknown>>): void {
     this.callLog.push('setStyleOptions')
+    if (this.failNextSetStyleOptions) {
+      const error = this.failNextSetStyleOptions
+      this.failNextSetStyleOptions = null
+      throw error
+    }
     this.appliedStyleBags.push({ ...options })
     this.options = { ...this.options, ...options }
   }

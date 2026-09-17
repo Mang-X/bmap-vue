@@ -215,15 +215,32 @@ export function useLayerResource<Props>(
    * **不在 `map.addLayer` 之前执行这类操作**（issue #40 的非目标）：官方明确层级调整会访问
    * 已关联的 Map 与图层管理器，未挂载时调用是未定义行为。因此这里以 `state.mounted` 为前置。
    */
-  const syncPostMountSlots = (state: InstanceState, context: MapReadyContext): void => {
-    // 未挂载时**不写、也不记账**：官方明确「层级调整一类操作会访问已关联的 Map 与图层管理器」，
-    // 未挂载时调用是未定义行为（issue #40 的非目标）。等挂载发生时这里会被再调一次。
-    if (!state.mounted) return;
+  const syncPostMountSlots = (state: InstanceState, context: MapReadyContext): boolean => {
     const layers = context.client.driver.layers;
     const probe = probeOf(context);
     const kind = state.spec.kind;
+
+    // 「已经写入过的槽位变回未表态」与是否挂载**无关**：SDK 没有 unset 入口、本库也不猜默认值，
+    // 只能靠重建回到 SDK 自己的默认状态（与可变 option 同一口径）。`data` 例外：它有
+    // `null = 清空` 的显式语义，`undefined` 就是「不表态（保持现状）」。
+    const removedSlots = [...state.appliedSlots.keys()].filter(
+      (slot) => layerSlotValue(state.spec, slot) === undefined,
+    );
+    if (removedSlots.length > 0) {
+      devWarn(
+        `[layer:${kind}] 可就地更新的槽位 ${removedSlots.join(" / ")} 由有值变为 undefined：` +
+          "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
+      );
+      return true;
+    }
+
+    // 未挂载时**不写、也不记账**：官方明确「层级调整一类操作会访问已关联的 Map 与图层管理器」，
+    // 未挂载时调用是未定义行为（issue #40 的非目标）。等挂载发生时这里会被再调一次。
+    if (!state.mounted) return false;
     /** 走 option 通道的槽位攒成**一次** `setOptions`（Driver 再按整袋 / 字段 setter 分类）。 */
     const optionBag: Record<string, unknown> = {};
+    /** 整袋调用成功**之后**才提交的记账（失败不能记成已写入，否则永不重试）。 */
+    const pendingBagSlots: Array<[LayerCtorSlot, string]> = [];
 
     for (const slot of LAYER_CTOR_SLOTS) {
       if (!isUpdatableSlot(state.spec, probe, slot)) continue;
@@ -259,12 +276,16 @@ export function useLayerResource<Props>(
       // 其余可就地更新的槽位（`DOMLayer` 的 `zIndex` / `minZoom` / `maxZoom` 一类）走整袋 /
       // 字段 setter 通道，由 Driver 的 `mutable` / `bagSetters` 分类决定具体入口。
       optionBag[slot] = value;
-      state.appliedSlots.set(slot, fingerprint);
+      pendingBagSlots.push([slot, fingerprint]);
     }
 
     if (Object.keys(optionBag).length > 0) {
+      // 顺序要紧：**先调用、成功之后再提交记账**。反过来的话，一次失败的整袋更新会被记成已完成，
+      // 之后同值更新被指纹跳过、永久不再重试（声明与 SDK 状态静默分叉）。
       layers.setOptions(state.handle, optionBag);
+      for (const [slot, fingerprint] of pendingBagSlots) state.appliedSlots.set(slot, fingerprint);
     }
+    return false;
   };
 
   /**
@@ -366,6 +387,7 @@ export function useLayerResource<Props>(
         // 但那时它还没有 registration；先登记能让 `remove` 兜住已经挂到图上的实例）。
         try {
           syncMounted(state, context);
+          // 新实例的 `appliedSlots` 是空的 ⇒ 不可能有「变回未表态」的槽位，返回值在这里恒为 false
           syncPostMountSlots(state, context);
           syncMutableOptions(state, context);
         } catch (error) {
@@ -410,9 +432,10 @@ export function useLayerResource<Props>(
                 }
                 state.spec = next;
                 syncMounted(state, ready);
-                syncPostMountSlots(state, ready);
-                if (syncMutableOptions(state, ready)) {
-                  // 有键从「已写入」变回未表态：只能靠新实例回到 SDK 自己的默认状态
+                const slotsNeedRebuild = syncPostMountSlots(state, ready);
+                const optionsNeedRebuild = syncMutableOptions(state, ready);
+                if (slotsNeedRebuild || optionsNeedRebuild) {
+                  // 有槽位 / option 从「已写入」变回未表态：只能靠新实例回到 SDK 自己的默认状态
                   void replace();
                 }
               } catch (error) {

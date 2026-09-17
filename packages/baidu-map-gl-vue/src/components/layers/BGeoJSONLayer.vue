@@ -15,7 +15,7 @@
  *   本组件因此不声明这两个 props——而不是声明了再静默忽略。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
+import { pickLayerOptions } from "../../core/layers/LayerSpec";
 
 export interface BGeoJSONLayerProps {
   /** 是否挂在地图上（`false` = 摘掉）。 */
@@ -63,11 +63,13 @@ useLayerResource<BGeoJSONLayerProps>(props, {
       // 官方构造首参就叫 `layerName`（不是选项）；与 `createDOM` 同样走具名键，
       // 由 Driver 的 `buildCtorArgs` 取出并从选项袋里剔除。
       layerName: p.layerName,
-      // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
-      // 因此「换一个回调」立即生效，而内联箭头函数也不会触发重建（见 `LayerSpec` 的说明）。
-      markerStyle: forwardCallback(() => p.markerStyle),
-      polylineStyle: forwardCallback(() => p.polylineStyle),
-      polygonStyle: forwardCallback(() => p.polygonStyle),
+      // 这三类是**身份敏感**的回调（只在解析数据时求一次样式）：换实现必须重建实例，
+      // 否则已经在图上的要素不会换样式。因此它们**不**走 `forwardCallback`（那是「每次工作
+      // 单元都会再调用」的回调用的），由内核按**引用**比较指纹 ⇒ 引用变化即重建。
+      // 代价：请传稳定引用（`computed` / 模块常量），内联箭头会因引用每次变化而重建。
+      markerStyle: p.markerStyle,
+      polylineStyle: p.polylineStyle,
+      polygonStyle: p.polygonStyle,
       ...pickLayerOptions(p, ["reference", "level"]),
     },
   }),

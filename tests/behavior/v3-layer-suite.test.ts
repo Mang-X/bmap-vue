@@ -759,6 +759,106 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
 });
 
 /* -------------------------------------------------------------------------- */
+/* 9. 评审修正（PR #96 第二轮）：函数型 style、槽位移除与整袋记账                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 第二轮的三条代码发现。共同点是**「声明变了但 SDK 侧什么都不会发生」**——
+ * 与第一轮的家族相邻，但落在不同的机制上：指纹、slot 记账、整袋调用时序。
+ */
+describe("[#40] §9 评审修正：函数型 style 重建、槽位移除与整袋记账时序", () => {
+  it("[二轮 1] 函数型 style 换成另一个函数 ⇒ 重建（既有要素才会用新实现重解析）", async () => {
+    // GeoJSON 的 style 是「解析数据时求一次」的回调：光让 wrapper 读到新 prop 不会让
+    // **已经在图上的要素**换样式，必须重新解析数据（= 重建本库的语义）。
+    const { wrapper, setProp } = await mountOneLayer(4, { markerStyle: () => ({ title: "A" }) });
+    expect(createdSince()).toBe(1);
+    expect(harness.layerCalls(-1)).toEqual(["setData"]);
+
+    await setProp({ markerStyle: () => ({ title: "B" }) });
+
+    expect(createdSince(), "函数型 style 换实现必须重建").toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.layerAttached(-2), "旧实例已摘除").toBe(false);
+    expect(harness.layerCalls(-1), "新实例重新应用数据 ⇒ 既有要素用新样式").toEqual(["setData"]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("函数型 style 替换");
+  });
+
+  it("[二轮 1] 非函数（对象）style 变化同样重建；同内容对象不重建", async () => {
+    const { wrapper, setProp } = await mountOneLayer(4, { markerStyle: { title: "A" } });
+    await setProp({ markerStyle: { title: "B" } });
+    expect(createdSince(), "对象 style 内容变化 ⇒ 重建").toBe(2);
+
+    await setProp({ markerStyle: { title: "B" } });
+    expect(createdSince(), "同内容的新对象不重建（按值比较）").toBe(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("对象 style 替换");
+  });
+
+  it("[二轮 2] 字段 setter 的槽位（tile.zIndex）由有值变回 undefined ⇒ 重建", async () => {
+    const tile = await mountOneLayer(2, { zIndex: 5 });
+    expect(harness.layerCalls(-1)).toEqual(["setZIndex"]);
+
+    await tile.setProp({ zIndex: undefined });
+    expect(createdSince(), "zIndex 由 5 变回未表态 ⇒ 重建以回到 SDK 默认").toBe(2);
+    expect(harness.layerCalls(-1), "新实例不再写 zIndex").toEqual([]);
+    await unmountAndSettle(tile.wrapper);
+    harness.assertIdle("zIndex 移除");
+  });
+
+  it("[二轮 2] 整袋 setter 的槽位（DOM.minZoom）由有值变回 undefined ⇒ 重建", async () => {
+    const dom = await mountOneLayer(5, { minZoom: 3 });
+    expect(harness.layerCalls(-1)).toEqual(["setData", "setStyleOptions"]);
+
+    await dom.setProp({ minZoom: undefined });
+    expect(createdSince(), "DOM 的 minZoom 走整袋 setter，同样要能回到默认").toBe(2);
+    expect(harness.layerCalls(-1), "新实例只重新应用数据，不再写 minZoom").toEqual(["setData"]);
+    await unmountAndSettle(dom.wrapper);
+    harness.assertIdle("dom minZoom 移除");
+  });
+
+  it("[二轮 2] data 例外：null 是显式清空，不触发重建", async () => {
+    const { wrapper, setProp } = await mountOneLayer(5);
+    await setProp({ data: null });
+    expect(createdSince(), "data: null 是 clear 语义，不是「未表态」").toBe(1);
+    expect(harness.layerCalls(-1)).toEqual(["setData", "removeAllOverlays"]);
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("data 清空");
+  });
+
+  it("[二轮 3] 整袋 setOptions 失败时不能被记成已应用（下一次更新要重试）", async () => {
+    const { wrapper, setProp } = await mountOneLayer(5, { minZoom: 3, zIndex: 4 });
+    expect(harness.layerCalls(-1)).toEqual(["setData", "setStyleOptions"]);
+
+    const layer = fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+      failNextSetStyleOptions: Error | null;
+      appliedStyleBags: Record<string, unknown>[];
+    };
+    layer.failNextSetStyleOptions = new Error("setStyleOptions failed");
+    await setProp({ minZoom: 6 });
+    expect(harness.layerCalls(-1), "失败的那次调用确实发生了").toEqual([
+      "setData",
+      "setStyleOptions",
+      "setStyleOptions",
+    ]);
+    expect(layer.appliedStyleBags, "失败的那一袋不该被记成已应用").toHaveLength(1);
+
+    // 失败 ⇒ 记账不该提交 ⇒ 下一次任何变化都要把 minZoom 一起重试
+    await setProp({ zIndex: 9 });
+    const bags = layer.appliedStyleBags;
+    expect(bags[bags.length - 1], "失败的 minZoom 必须与新值一起重试").toMatchObject({
+      minZoom: 6,
+      zIndex: 9,
+    });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("整袋失败重试");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* 7. 能力清单：实验性图层的稳定性标记                                            */
 /* -------------------------------------------------------------------------- */
 
