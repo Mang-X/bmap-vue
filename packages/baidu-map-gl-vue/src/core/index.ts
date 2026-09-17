@@ -129,12 +129,46 @@ export { diffData, getItemKey, shouldFullReplace } from "./data/diffData";
 export type { DataDiff, ItemKeyFn } from "./data/diffData";
 export { gridCluster } from "./data/gridCluster";
 export type { Cluster, ClusterOptions } from "./data/gridCluster";
-export { normalizeIconDescriptor, iconCacheKey, createLruIconCache } from "./icons/iconCache";
+export {
+  normalizeIconDescriptor,
+  iconCacheKey,
+  createLruIconCache,
+  DEFAULT_ICON_CACHE_SIZE,
+} from "./icons/iconCache";
 export type { IconCache, IconDescriptor } from "./icons/iconCache";
+// 内置 Marker 图标：descriptor + 单一事实源（M5-SPEC-MARKER / #30）
+export {
+  BUILTIN_MARKER_ICON_NAMES,
+  MARKER_ICON_HD_SCALE,
+  MARKER_ICON_SPRITE_SIZE,
+  MARKER_ICON_SPRITE_URL,
+  builtinMarkerIconDescriptor,
+  isBuiltinMarkerIconName,
+  resolveMarkerIconDescriptor,
+} from "./icons/markerIcon";
+export type { BuiltinMarkerIconName, MarkerIconInputLike } from "./icons/markerIcon";
 export { DataLayerManager } from "./data/DataLayerManager";
 export type { DataLayerHost, DataLayerOptions } from "./data/DataLayerManager";
 export { createOverlayRegistry } from "./overlays/OverlayRegistry";
-export type { OverlayRecord, OverlayRegistry } from "./overlays/OverlayRegistry";
+export type {
+  OverlayRecord,
+  OverlayRegistry,
+  ResourceRegistration,
+  ResourceRegistrationInput,
+} from "./overlays/OverlayRegistry";
+// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）
+export type {
+  OverlayEventSpec,
+  OverlayFieldMap,
+  OverlayFieldUpdate,
+  OverlaySpec,
+} from "./overlays/OverlaySpec";
+export { useOverlaySpec } from "./composables/useOverlaySpec";
+export type {
+  OverlayPositionModel,
+  UseOverlaySpecOptions,
+  UseOverlaySpecResult,
+} from "./composables/useOverlaySpec";
 export { createPluginRegistry } from "./plugins/PluginRegistry";
 export type {
   BMapPluginDefinition,

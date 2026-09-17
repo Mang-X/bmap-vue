@@ -5,6 +5,10 @@
  * `show/hide/isOpen` 一类的状态入口，**不补 getter 家族**（Facet 不读它们），避免 Fake 先于
  * 实现膨胀（同 `FakeMap` 的口径）。
  *
+ * 例外是**构造选项**：官方语义里 `new Marker(pt, { rotation })` 会立刻生效，因此构造器把
+ * 官方 `*Options` 里被建模的那几项落进实例字段（否则「初始 rotation / draggable / zIndex」
+ * 这类只能经构造期设置的属性在夹具上读不到，组件少传一项也测不出来——夹具比真实宽容会掩盖缺陷）。
+ *
  * 也不复刻 SDK 的隐式行为：覆盖物只记录「传进去了什么」与「哪个 setter 被调用」，不实现真实绘制、
  * 坐标系回转与默认主题色。真实数值行为由 M3A.3（#25）的浏览器 smoke 验证。
  *
@@ -255,6 +259,19 @@ export class FakeV4Marker extends FakeV4Overlay {
   constructor(point: FakeV4Point, options: Record<string, unknown>, stats: FakeV4Diagnostics) {
     super(options, stats)
     this.position = point
+    // 构造选项要**落进实例状态**（M5-SPEC-MARKER / #30）。
+    //
+    // 真实 SDK 就是这么做的：`new BMap.Marker(pt, { rotation: 45 })` 之后 `getRotation()` 返回 45。
+    // 此前 Fake 只把 options 原样存进 `this.options`，于是「初始 rotation / zIndex / draggable」
+    // 这类**只能经构造期设置**的属性在夹具上根本读不到——组件少传一项也测不出来（夹具比真实宽容
+    // 就会掩盖缺陷）。这里按官方 `MarkerOptions` 的语义逐项落库，读法仍是实例字段。
+    if (options.offset) this.offset = options.offset as FakeV4Size
+    if (options.icon !== undefined) this.icon = options.icon
+    if (typeof options.title === 'string') this.title = options.title
+    if (typeof options.zIndex === 'number') this.zIndex = options.zIndex
+    if (typeof options.rotation === 'number') this.rotation = options.rotation
+    if (options.enableDragging === true) this.dragging = true
+    if (options.enableMassClear === false) this.massClear = false
   }
 
   setPosition(point: FakeV4Point): void {

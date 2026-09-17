@@ -64,6 +64,19 @@ export type { TargetContext, TargetKind } from "./core/context/target";
 // 统一资源生命周期
 export { useSdkResource } from "./core/composables/useSdkResource";
 export type { SdkResourceSpec, SdkResourceStatus } from "./core/composables/useSdkResource";
+// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）：组件只声明 OverlaySpec，其余由这里驱动
+export { useOverlaySpec } from "./core/composables/useOverlaySpec";
+export type {
+  OverlayPositionModel,
+  UseOverlaySpecOptions,
+  UseOverlaySpecResult,
+} from "./core/composables/useOverlaySpec";
+export type {
+  OverlayEventSpec,
+  OverlayFieldMap,
+  OverlayFieldUpdate,
+  OverlaySpec,
+} from "./core/overlays/OverlaySpec";
 export { useResourceScope } from "./core/lifecycle/useResourceScope";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
 export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";

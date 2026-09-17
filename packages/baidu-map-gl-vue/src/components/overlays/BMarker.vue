@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { computed, provide, readonly, shallowRef, watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
+/**
+ * BMarker —— 图像标注（M5-SPEC-MARKER / issue #30 的样板组件）
+ *
+ * 这个组件现在只做两件事：**声明 spec** + **渲染 slot**。创建 / 挂载 / 就地更新 / 重建 /
+ * 卸载、实例 child scope、Registry 记账、Target provide、SDK 事件绑定全部由
+ * `useOverlaySpec` 按声明驱动——组件里不再有生命周期代码，也不再手写 9 个 watcher。
+ * 每个公开属性的更新策略（以及它与 Driver 属性描述符的对应）见 `./markerSpec.ts` 的表，
+ * 声明与描述符的一致性由 `tests/behavior/v3-overlay-spec.test.ts` 交叉锁定。
+ *
+ * 事件与 `v-model:position` 的行为依据见 ADR `2026-09-17-overlay-spec-and-marker`。
+ */
+import { provide } from "vue";
+import { useOverlaySpec, type OverlayPositionModel } from "../../core/composables/useOverlaySpec";
 import { overlayContextKey } from "../../core/context/types";
-import { targetContextKey, type TargetContext } from "../../core/context/target";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { MarkerHandle } from "../../driver/types/handles";
+import { createMarkerSpec } from "./markerSpec";
 import type { BMarkerProps } from "../../types/components";
 
 export type { BMarkerProps };
@@ -34,198 +42,30 @@ const emit = defineEmits<{
   "update:position": [position: { lng: number; lat: number }];
 }>();
 
-// 创建时应用全部构造属性（offset/title/icon/enableClicking/rotation/draggable）
-const make = (ctx: MapReadyContext, position: { lng: number; lat: number }, p: BMarkerProps) =>
-  ctx.client.driver.overlays.createMarker(position, {
-    offset: p.offset,
-    title: p.title,
-    enableClicking: p.enableClicking,
-    enableDragging: p.enableDragging,
-    rotation: p.rotation,
-    zIndex: p.zIndex,
-    icon: p.icon,
-  });
+/** 事件转发入口：`spec.events` 里只写事件名，动态名在这里集中收窄一次（不让 `as` 扩散）。 */
+const emitDynamic = emit as unknown as (name: string, payload: unknown) => void;
 
-function setVisible(
-  ctx: MapReadyContext,
-  res: MarkerHandle,
-  visible: boolean | undefined,
-) {
-  const driver = ctx.client.driver.overlays;
-  if (visible === false) {
-    // 优先 show/hide（不破坏 overlay 归属），否则 add/remove
-    if (!driver.hide(res)) driver.remove({ kind: "map", handle: ctx.map }, res);
-  } else {
-    if (!driver.show(res)) driver.add({ kind: "map", handle: ctx.map }, res);
-  }
-}
+/**
+ * 位置模型句柄：spec 的回调在**运行时**读取它（`dragend` 处理器在 setup 之后才被调用），
+ * 因此可以在 spec 里先声明、拿到结果后再回填。
+ */
+let positionModel: OverlayPositionModel | null = null;
 
-const { resource, rebuild, applyOptions } = useOverlayResource<BMarkerProps, MarkerHandle>(
-  props,
-  {
-    create: (ready, p) => make(ready, p.position, p),
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      // visible 初始行为——visible=false 时不 add，避免先 add 再等 watcher
-      if (p.visible !== false) {
-        ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      }
-      // Registry 统一由 useOverlayResource 上下文管理，此处只做地图添加。
-      // SDK 事件绑定(ready 后,res 可用),注册到 scope,卸载时释放
-      bindMarkerEvents(ctx, res, scope);
-    },
-    // 响应式 prop watcher:setup 阶段同步注册(保证响应式)
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          [() => p.position?.lng, () => p.position?.lat],
-          ([lng, lat], [oldLng, oldLat]) => {
-            if (lng === undefined || lat === undefined) return;
-            if (lng === oldLng && lat === oldLat) return;
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            ctx.client.driver.overlays.setPosition(res, { lng, lat });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          [() => (p.offset ?? { x: 0, y: 0 }).x, () => (p.offset ?? { x: 0, y: 0 }).y],
-          ([x, y], [ox, oy]) => {
-            if (x === ox && y === oy) return;
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            ctx.client.driver.overlays.setOptions(res, { offset: { x, y } });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.zIndex,
-          (z) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (z != null && r && ctx) ctx.client.driver.overlays.setOptions(r, { zIndex: z });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.rotation,
-          (r) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (r != null && res && ctx) ctx.client.driver.overlays.setOptions(res, { rotation: r });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.title,
-          (t) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (t != null && r && ctx) ctx.client.driver.overlays.setOptions(r, { title: t });
-          },
-        ),
-      );
-      // icon: 更新策略由 Driver 的属性描述符给出（mutable → 就地 setIcon），
-      // 组件不再探测 raw SDK 有没有 setIcon（M3A2-OVERLAYS / #21）
-      addDisposer(
-        watch(
-          () => p.icon,
-          (icon) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            void applyOptions({ icon });
-          },
-          { deep: true },
-        ),
-      );
-      // visible 幂等切换
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            setVisible(ctx, res, visible);
-          },
-        ),
-      );
-      // draggable: enable/disable 切换
-      addDisposer(
-        watch(
-          () => p.enableDragging,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableDragging: en });
-          },
-        ),
-      );
-      // enableClicking 构造期属性：策略为 recreate → applyOptions 只重建一次
-      addDisposer(
-        watch(
-          () => p.enableClicking,
-          (v, old) => {
-            if (v === old) return;
-            void applyOptions({ enableClicking: v });
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "marker",
-);
+const markerSpec = createMarkerSpec({
+  emit: emitDynamic,
+  position: () => positionModel,
+});
 
-type DragEndEvent = { position?: { lng: number; lat: number }; point?: { lng: number; lat: number } };
+const { resource, position } = useOverlaySpec(props, markerSpec, { emit: emitDynamic });
+positionModel = position;
 
-// SDK 事件绑定:ready 后(res 可用)调用,全部注册到 scope
-function bindMarkerEvents(ctx: MapReadyContext, res: MarkerHandle, scope: ResourceScope) {
-  const on = (name: string, h: (e: unknown) => void) => {
-    scope.add(ctx.client.driver.events.on(res, name, h));
-  };
-  on("click", (e) => emit("click", e));
-  on("dblclick", (e) => emit("dblclick", e));
-  on("rightclick", (e) => emit("rightclick", e));
-  on("mousedown", (e) => emit("mousedown", e));
-  on("mouseup", (e) => emit("mouseup", e));
-  on("mouseover", (e) => emit("mouseover", e));
-  on("mouseout", (e) => emit("mouseout", e));
-  on("dragstart", (e) => emit("dragstart", e));
-  on("dragging", (e) => emit("dragging", e));
-  on("dragend", (e) => {
-    emit("dragend", e);
-    emit("drag-end", e);
-    // 拖拽结束回写位置
-    const evt = e as DragEndEvent;
-    const position = evt.position ?? evt.point;
-    if (position && typeof position.lng === "number" && typeof position.lat === "number") {
-      emit("update:position", { lng: position.lng, lat: position.lat });
-    }
-  });
-  on("remove", (e) => emit("remove", e));
-}
-
-// provide 必须在 setup 中调用
-// 旧 key 保持兼容(函数式读取);新 TargetContext 为响应式 shallowRef,支持父晚就绪
+/**
+ * 旧的整体句柄 key 保持兼容（函数式读取）。
+ *
+ * 新代码请用 `targetContextKey` 的 `TargetContext`：它由 `useOverlaySpec` **自动 provide**，
+ * 且带 `kind` 与响应式 `target`（`BContextMenu` 走的是新的那条）。
+ */
 provide(overlayContextKey, () => resource.value);
-{
-  const kindRef = shallowRef<"marker">("marker");
-  const targetRef = computed(() => (resource.value as unknown as import("../../driver/types/handles").SdkHandle<string> | null) ?? null);
-  const markerTarget: TargetContext = {
-    kind: readonly(kindRef),
-    target: targetRef,
-    add: () => {},
-    remove: () => {},
-  };
-  provide(targetContextKey, markerTarget);
-}
 </script>
 
 <template>

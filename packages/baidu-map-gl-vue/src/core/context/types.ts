@@ -10,6 +10,7 @@
 import type { InjectionKey, ShallowRef } from "vue";
 import type { BMapClient } from "../../client/types";
 import type { MapHandle } from "../../driver/types/handles";
+import type { OverlayRegistry } from "../overlays/OverlayRegistry";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
 import type { MapEventBus } from "../events/MapEventBus";
 import type { LayerRegistry } from "../layers/LayerRegistry";
@@ -74,7 +75,14 @@ export interface MapRuntimeShape {
 
 /** 供注入使用的 context 接口 */
 export interface MapContext extends MapRuntimeShape {
-  readonly overlays: unknown;
+  /**
+   * 这张地图的覆盖物注册表（M5-SPEC-MARKER / #30）。
+   *
+   * 类型此前是 `unknown`：注册表虽然由 `MapRuntime` 创建并挂在这里，但**没有任何组件往里登记**
+   * （`register` 只有测试消费者），因此没人需要它的类型。现在 `useOverlaySpec` 把每个覆盖物实例
+   * 登记进来（registration 与实例 child scope 绑定），调用方可以据此按类型清点当前存活的覆盖物。
+   */
+  readonly overlays: OverlayRegistry;
   /**
    * 图层账本（M7-LAYERS / issue #40）。
    *
