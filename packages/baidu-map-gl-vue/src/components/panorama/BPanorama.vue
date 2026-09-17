@@ -81,14 +81,20 @@ interface ActiveViewer {
 }
 let active: ActiveViewer | null = null;
 /**
- * **传给构造期**的那一份 `options`。
+ * **构造期实际生效的那一份 `options` 的变化键**（不是选项对象本身）。
  *
  * 用来在就绪收敛时判断「构造之后 options 变过没有」：`context.mount()` 可能还在等 Client，
  * 这段窗口里 watcher 会触发，但那时 `active === null`（查看器还不存在），改动会被跳过；
- * 若不在 ready 后补一次，它就永久停在构造期那份了（#95 评审 P2）。存快照而不是无条件重发，
+ * 若不在 ready 后补一次，它就永久停在构造期那份了（#95 评审 P2）。比对键而不是无条件重发，
  * 是为了不破坏「同一个值重设不产生多余下发」。
+ *
+ * 存**键**而不是对象引用，与控件侧的 `optionSnapshot` 是同一手法：基线一旦持有父级传进来的对象，
+ * 父级原地改字段就会把基线一起改掉，「构造期到底生效了什么」这个事实随之丢失。此处这个变体在
+ * 当前生命周线下不可观测（`context.mount()` 直到构造完成才 resolve，而构造读的是活对象，晚一点的
+ * 改动本来就会被构造期看到），因此没有对应的回归用例——写死成键是为了不把正确性寄托在「那个窗口
+ * 恰好是同一条同步续体」上。
  */
-let createdOptions: PanoramaOptions | undefined;
+let createdOptionsKey: string | undefined;
 
 /** `options` 的变化键（watcher 与就绪收敛共用一份判据）。 */
 const optionsKeyOf = (options: PanoramaOptions | undefined): string =>
@@ -100,9 +106,17 @@ const optionsKeyOf = (options: PanoramaOptions | undefined): string =>
     options?.albumsControlOptions,
   ]);
 
-/** 在本轮创建出来的查看器上执行一次（未就绪时静默跳过）。 */
-function onViewer(run: (target: ActiveViewer) => void): void {
-  if (active) run(active);
+/**
+ * 在本轮创建出来的查看器上执行一次；返回**是否真的执行了**。
+ *
+ * 调用方靠这个返回值决定要不要推进「构造期基线」——只推进**真的下发过**的那些变化。
+ * （未就绪时静默跳过是对的：那一份由 ready 收敛负责补发；但如果这里也把基线推了，
+ * 收敛就会以为「已经生效」，改动反而永久丢失。）
+ */
+function onViewer(run: (target: ActiveViewer) => void): boolean {
+  if (!active) return false;
+  run(active);
+  return true;
 }
 
 /** 构造期之后把全部受控 props 落到新实例上（创建与「重建」共用同一份判据）。 */
@@ -118,10 +132,10 @@ function applyControlled(target: ActiveViewer): void {
     else driver.disableScrollWheelZoom(viewer);
   }
   if (props.poiType !== undefined) driver.setPanoramaPoiType(viewer, props.poiType);
-  // 收敛等待期间变过的 options（构造期拿到的是 `createdOptions`）
-  if (optionsKeyOf(props.options) !== optionsKeyOf(createdOptions) && props.options) {
+  // 收敛等待期间变过的 options（构造期生效的是 `createdOptionsKey` 那一份）
+  if (optionsKeyOf(props.options) !== createdOptionsKey && props.options) {
     driver.setOptions(viewer, props.options);
-    createdOptions = props.options;
+    createdOptionsKey = optionsKeyOf(props.options);
   }
 }
 
@@ -145,9 +159,9 @@ function subscribe(target: ActiveViewer): void {
 onMounted(async () => {
   const container = containerRef.value;
   if (!container) return;
-  // 与传给 `mount()` 的**同一份值**：这段窗口里父级可能改 options，收敛时要用它做基线
+  // 与传给 `mount()` 的**同一个值**：这段窗口里父级可能改 options，收敛时要用它做基线
   const initialOptions = props.options;
-  createdOptions = initialOptions;
+  createdOptionsKey = optionsKeyOf(initialOptions);
   try {
     const ready = await context.mount(container, initialOptions);
     active = { driver: jsapiV4PanoramaOf(ready.client), viewer: ready.viewer };
@@ -229,7 +243,10 @@ watch(
   () => optionsKeyOf(props.options),
   () => {
     const options = props.options;
-    if (options) onViewer((target) => target.driver.setOptions(target.viewer, options));
+    if (!options) return;
+    // 只有真的下发成功才推进基线；未就绪时留给 ready 收敛（见 `onViewer` 的注释）
+    const applied = onViewer((target) => target.driver.setOptions(target.viewer, options));
+    if (applied) createdOptionsKey = optionsKeyOf(options);
   },
 );
 

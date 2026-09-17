@@ -57,7 +57,10 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   ) {
     super(stats)
     this.container = container
-    this.options = options
+    // **拷一份**：真实 4.0 在构造期把选项读进内部状态，父级之后改自己那份对象不会影响查看器。
+    // 直接持有调用方的引用会让 Fake 比真实「宽容」——「组件有没有把新值重新下发」这件事就永远
+    // 观察不到（#95 评审第 2 轮的原地修改变体正是在这里被藏住的）。
+    this.options = { ...options }
     this.stats.resourceCreated('panorama', this)
   }
 

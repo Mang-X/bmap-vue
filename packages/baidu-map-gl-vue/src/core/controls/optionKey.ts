@@ -99,15 +99,48 @@ export function optionKey(options: Record<string, unknown>): string {
   return serialize(options, new Set())
 }
 
-/** 两份选项之间**真的变了**的键（浅比较，逐键用 `optionKey` 的取值口径）。 */
+/**
+ * **逐键的值快照**：`键 → 该键取值的变化键`。
+ *
+ * 为什么 diff 基线必须是快照，而不是 `options()` 返回的那个对象：`offset` / `size` / `mapTypes`
+ * 这些键的值是**父级传入的同一个引用**。父级原地改字段（`offset.x = 21`）时，watch 源能感知
+ * （`optionKey` 会递归跟踪到 `x` / `y`），但拿「持有同一引用的基线」去做比较，两边序列化出来
+ * 完全一样 ⇒ 判定成「没变化」⇒ 更新被**静默吃掉**（#95 评审第 2 轮 P1）。
+ *
+ * 把值序列化在**基线建立的那一刻**固定下来，就与后续的原地修改彻底解耦；同时它与 watch 源
+ * 共用同一套取值口径（都是 `optionKey`），因此不会出现「watcher 说变了、diff 说没变」的分歧。
+ *
+ * 不深拷贝的另一个理由（评审也提到了）：选项值域含 DOM、函数与可能的循环引用，深拷贝很难保持
+ * 同一份契约；序列化字符串没有这个问题。
+ */
+export type OptionSnapshot = Readonly<Record<string, string>>
+
+/** 建立一份值快照（与 `optionKey` 同一套取值口径）。 */
+export function optionSnapshot(options: Record<string, unknown>): OptionSnapshot {
+  const snapshot: Record<string, string> = {}
+  for (const [key, value] of Object.entries(options)) {
+    snapshot[key] = optionKey({ value })
+  }
+  return snapshot
+}
+
+/** 「键缺席」等价于「键存在但值为 `undefined`」——两者在 Driver 侧都被跳过，不该算变化。 */
+const ABSENT_KEY = optionKey({ value: undefined })
+
+/**
+ * 快照与**当前**选项之间真的变了的键。
+ *
+ * 入参类型刻意是 `OptionSnapshot` 而不是 `Record<string, unknown>`：后者可以被误传成
+ * 「上一次的选项对象」，那正是上一版的 bug（基线持有父级的引用）。类型上收窄能挡住这种写法。
+ */
 export function changedOptionKeys(
-  previous: Record<string, unknown>,
+  previous: OptionSnapshot,
   next: Record<string, unknown>,
 ): string[] {
   const keys = new Set([...Object.keys(previous), ...Object.keys(next)])
   const changed: string[] = []
   for (const key of keys) {
-    if (optionKey({ value: previous[key] }) !== optionKey({ value: next[key] })) changed.push(key)
+    if ((previous[key] ?? ABSENT_KEY) !== optionKey({ value: next[key] })) changed.push(key)
   }
   return changed
 }

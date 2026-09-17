@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, ref, type Component } from "vue";
+import { defineComponent, h, nextTick, reactive, ref, type Component } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BZoom from "../../packages/baidu-map-gl-vue/src/components/controls/BZoom.vue";
 import BScale from "../../packages/baidu-map-gl-vue/src/components/controls/BScale.vue";
@@ -30,6 +30,7 @@ import BOverview from "../../packages/baidu-map-gl-vue/src/components/controls/B
 import BPanoramaControl from "../../packages/baidu-map-gl-vue/src/components/controls/BPanoramaControl.vue";
 import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BControl.vue";
 import BCopyright from "../../packages/baidu-map-gl-vue/src/components/controls/BCopyright.vue";
+import { useControlResource } from "../../packages/baidu-map-gl-vue/src/core/controls";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
 const { harness, fake } = createFakeV4Harness();
@@ -515,6 +516,140 @@ describe("评审复现：option 从有值变回 undefined", () => {
     // 期望：重建一次，让构造期重新采用默认值
     expect(fake.createdControls.length).toBe(created + 1);
     expect(lastCreatedControl().options.type).toBeUndefined();
+
+    wrapper.unmount();
+    await nextTick();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 评审第 2 轮（commit 67b5a31）复现：嵌套 option 的**原地修改**                */
+/* -------------------------------------------------------------------------- */
+
+describe("评审复现：父级对嵌套 option 做原地修改（同一对象改字段 / push）", () => {
+  beforeEach(() => harness.reset());
+
+  function mountWithProps(node: (props: Record<string, unknown>) => unknown) {
+    const shared = reactive<Record<string, unknown>>({});
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(BMap, { provider: provider() }, () => [node(shared) as never]),
+      }),
+      { attachTo: host() },
+    );
+    return { wrapper, shared };
+  }
+
+  it("BZoom：同一 offset 对象原地改 x/y 必须下发 setOffset", async () => {
+    const shared = reactive({ offset: { x: 7, y: 9 } });
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [h(BZoom, { offset: shared.offset })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const control = controlsOnMap()[0]!;
+    expect(offsetOf(control)).toEqual({ width: 7, height: 9 });
+
+    // 原地修改**同一个**对象（不是换引用）：watch 源能感知，diff 也必须能
+    shared.offset.x = 21;
+    shared.offset.y = 22;
+    await nextTick();
+    await nextTick();
+    expect(control.getOffset()).toEqual({ width: 21, height: 22 });
+
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("BOverview：同一 size 对象原地修改必须下发 setSize，且不重建", async () => {
+    const shared = reactive({ size: { x: 150, y: 150 } });
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [h(BOverview, { size: shared.size })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+    const control = fake.createdControls.at(-1) as unknown as {
+      callLog: string[];
+      size: { width: number; height: number } | null;
+    };
+    expect(control.size).toEqual({ width: 150, height: 150 });
+
+    shared.size.x = 200;
+    shared.size.y = 210;
+    await nextTick();
+    await nextTick();
+    expect(control.callLog).toContain("setSize");
+    expect(control.size).toEqual({ width: 200, height: 210 });
+    expect(fake.createdControls.length).toBe(created);
+
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("BMapType：同一 mapTypes 数组原地 push 必须重建（构造期项）", async () => {
+    const shared = reactive({ mapTypes: [1, 2] });
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [h(BMapType, { mapTypes: shared.mapTypes })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+
+    shared.mapTypes.push(3);
+    await nextTick();
+    await flushPromises();
+    expect(fake.createdControls.length).toBe(created + 1);
+    expect(lastCreatedControl().options.mapTypes).toEqual([1, 2, 3]);
+
+    wrapper.unmount();
+    await nextTick();
+  });
+});
+
+describe("统一 adapter：不存在「变化被静默丢掉」的路径", () => {
+  beforeEach(() => harness.reset());
+
+  it("Driver 说 `unsupported` 的键也走重建（构造期是唯一可能的入口）", async () => {
+    // 自定义 spec：`nope` 不在任何分类表里、实例上也没有 `setNope` ⇒ planOptions 报 unsupported。
+    // 这条路径内置组件走不到（反向门禁要求组件选项都有落地方式），但适配器是公共抽象，
+    // 外部消费者完全可能传一个官方构造选项而本库还没分类——那就必须重建，而不是「既不写、
+    // 又推进基线」。
+    const Probe = defineComponent({
+      props: { nope: { type: Number, required: true } },
+      setup(p) {
+        useControlResource(p as never, {
+          kind: "zoom",
+          options: (x: { nope: number }) => ({ offset: { x: 7, y: 9 }, nope: x.nope }),
+        });
+        return () => null;
+      },
+    });
+    const value = ref(1);
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+
+    value.value = 2;
+    await nextTick();
+    await flushPromises();
+
+    expect(fake.createdControls.length).toBe(created + 1);
+    expect(lastCreatedControl().options.nope).toBe(2);
 
     wrapper.unmount();
     await nextTick();

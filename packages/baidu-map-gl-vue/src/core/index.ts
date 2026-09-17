@@ -97,7 +97,8 @@ export type {
 // 帮手，无任何消费者）随这次替换删除。
 export { useControlResource } from "./controls/useControlResource";
 export type { UseControlResourceResult } from "./controls/useControlResource";
-export { changedOptionKeys, optionKey } from "./controls/optionKey";
+export { changedOptionKeys, optionKey, optionSnapshot } from "./controls/optionKey";
+export type { OptionSnapshot } from "./controls/optionKey";
 export type {
   ControlBaseProps,
   ControlCreateInput,

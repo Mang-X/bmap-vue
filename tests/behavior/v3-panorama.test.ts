@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, onMounted, ref, type Component } from "vue";
+import { defineComponent, h, nextTick, onMounted, reactive, ref, type Component } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
 import BPanorama from "../../packages/baidu-map-gl-vue/src/components/panorama/BPanorama.vue";
@@ -479,5 +479,25 @@ describe("评审复现：options 在 viewer 异步 ready 前变化", () => {
 
     wrapper.unmount();
     await nextTick();
+  });
+});
+
+describe("Fake 保真：查看器的构造选项在**构造期**读入（#95 评审第 2 轮）", () => {
+  beforeEach(() => harness.reset());
+
+  /**
+   * 真实 4.0 在构造期把 `PanoramaOptions` 读进查看器内部状态；之后父级改自己那份对象不会影响查看器。
+   *
+   * Fake 若直接持有调用方的引用，就会比真实**宽容**：任何「组件到底有没有把新值重新下发」的断言
+   * 都可以被父级对同一对象的原地修改『蒙对』——第 2 轮审查的原地修改变体正是在这里被藏住的。
+   * 因此这条用例钉住 Fake 的保真度（去掉 `{ ...options }` 拷贝它会立刻变红）。
+   */
+  it("构造之后原地修改调用方那份 options，不会改变查看器", () => {
+    const options: Record<string, unknown> = { navigationControl: true };
+    const viewer = new fake.namespace.Panorama(document.createElement("div"), options);
+
+    options.albumsControl = true;
+    expect(viewer.options).not.toHaveProperty("albumsControl");
+    expect(viewer.options).toMatchObject({ navigationControl: true });
   });
 });

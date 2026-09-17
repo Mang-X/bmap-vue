@@ -10,7 +10,8 @@
  */
 export { useControlResource } from "./useControlResource";
 export type { UseControlResourceResult } from "./useControlResource";
-export { changedOptionKeys, optionKey } from "./optionKey";
+export { changedOptionKeys, optionKey, optionSnapshot } from "./optionKey";
+export type { OptionSnapshot } from "./optionKey";
 export type {
   ControlBaseProps,
   ControlCreateInput,

@@ -33,7 +33,7 @@ import {
   type SdkResourceSpec,
   type SdkResourceStatus,
 } from "../composables/useSdkResource";
-import { changedOptionKeys, optionKey } from "./optionKey";
+import { changedOptionKeys, optionKey, optionSnapshot, type OptionSnapshot } from "./optionKey";
 import type { ControlBaseProps, ControlSpec } from "./spec";
 
 export interface UseControlResourceResult {
@@ -82,14 +82,18 @@ export function useControlResource<Props extends ControlBaseProps>(
 ): UseControlResourceResult {
   const ctx = useRequiredMapContext();
   /**
-   * 上一次写进 SDK 的选项（diff 基线）。
+   * 上一次写进 SDK 的选项的**逐键值快照**（diff 基线）。
    *
-   * 记「期望值」而不是「回读值」：SDK 对未声明的键既不回读也不报错，回读会把
-   * 「值写下去了但 SDK 没用」判成「没写过」而反复下发。
+   * 两个要点：
+   * - 记「期望值」而不是「回读值」：SDK 对未声明的键既不回读也不报错，回读会把
+   *   「值写下去了但 SDK 没用」判成「没写过」而反复下发；
+   * - 记**快照**而不是 `options()` 返回的对象：后者里的 `offset` / `size` / `mapTypes` 与父级
+   *   是同一个引用，父级原地改字段时基线会跟着一起变，diff 于是判成「没变化」而把更新吃掉
+   *   （#95 评审第 2 轮 P1）。序列化字符串在建立基线的那一刻就与引用解耦。
    */
-  let applied: ControlOptions | null = null;
-  /** `create` 实际交给 SDK 的那份选项；`mount` 用它当基线，再对当前 props 收敛一次。 */
-  let createdWith: ControlOptions | null = null;
+  let applied: OptionSnapshot | null = null;
+  /** `create` 实际交给 SDK 的那份选项的快照；`mount` 用它当基线，再对当前 props 收敛一次。 */
+  let createdWith: OptionSnapshot | null = null;
   /** `useSdkResource` 的 `replace`；声明在 spec 之前，供 `mount` 的收敛路径使用。 */
   let replaceRef: (() => Promise<void>) | null = null;
 
@@ -100,14 +104,14 @@ export function useControlResource<Props extends ControlBaseProps>(
       const handle =
         controlSpec.create?.({ context, props: current, scope }) ??
         createDefault(controlSpec, context, current);
-      createdWith = controlSpec.options(current);
+      createdWith = optionSnapshot(controlSpec.options(current));
       return handle;
     },
 
     mount({ context, resource, props: current, scope }) {
       // 基线取**构造期实际下发的那份**，随后对当前 props 收敛一次——中间那个微任务里
       // 用户改过的 props 必须在这里被补写，否则它永远不会再被 diff 检测到。
-      applied = createdWith ?? controlSpec.options(current);
+      applied = createdWith ?? optionSnapshot(controlSpec.options(current));
       createdWith = null;
 
       if (controlSpec.mount) controlSpec.mount({ context, resource, props: current, scope });
@@ -234,20 +238,27 @@ export function useControlResource<Props extends ControlBaseProps>(
     const next = controlSpec.options(current);
     const changed = changedOptionKeys(applied ?? {}, next);
     if (changed.length === 0) return;
-    applied = next;
+    // 基线在**决定处置之前**前移：`replace()` 的重新创建会再写一次基线，
+    // 而「本次变化已经处理过」这个事实不能依赖后续异步路径成功与否。
+    applied = optionSnapshot(next);
 
     const plan = context.client.driver.controls.planOptions(resource, changed);
     /**
-     * 两种变化必须**重建**而不是就地写：
+     * **只有「Driver 说 `live` 且值有定义」才就地写；其余一律重建。**
+     *
+     * 把判据写成这个总括形式（而不是逐条列举「什么情况下重建」）是为了让它**没有缺口**——
+     * 每一种「就地写做不到」的情形都落到重建上，不存在「既没写、又推进了基线」的静默丢更新：
      *
      * 1. `recreate`：Driver 说这个键只有构造期生效（就地写会被告警忽略）；
      * 2. **值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK 默认」，而默认值只存在于构造期
-     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过，于是这次更新既不生效、也
-     *    因为 `applied` 已经前移而**永远不会重试**（#95 评审 P1：`BNavigation.type` 一旦设过
-     *    `SMALL`，`undefined` 就再也回不到默认）。重建让构造期按「没有这个键」重新采用默认值，
-     *    因此不需要维护第二份 SDK 默认值表。
+     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过（#95 评审 P1：
+     *    `BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到默认）；
+     * 3. `unsupported`：Driver 没有该键的就地入口（`set<Key>` 不存在、也不在分类表里）。
+     *    构造期是**唯一**可能生效的入口（构造选项是原样透传的），所以重建是唯一有意义的动作；
+     *    只告警不重建就会把值丢掉——而 Driver 那句「本次更新被忽略」是可见的，静默才是问题。
      */
-    if (changed.some((key) => plan[key] === "recreate" || next[key] === undefined)) {
+    const appliesInPlace = (key: string): boolean => plan[key] === "live" && next[key] !== undefined;
+    if (changed.some((key) => !appliesInPlace(key))) {
       void replace();
       return;
     }

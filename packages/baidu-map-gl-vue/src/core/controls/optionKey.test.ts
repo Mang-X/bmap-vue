@@ -6,7 +6,8 @@
  * **反证**（换一个值必须换一个键），而不是只断言「同一个值得到同一个键」。
  */
 import { describe, it, expect } from "vitest";
-import { changedOptionKeys, optionKey } from "./optionKey";
+import { reactive, watch, nextTick } from "vue";
+import { changedOptionKeys, optionKey, optionSnapshot } from "./optionKey";
 
 describe("optionKey：同一个值得到同一个键", () => {
   it("标量按值比较（与对象身份无关）", () => {
@@ -29,7 +30,7 @@ describe("optionKey：同一个值得到同一个键", () => {
     // 把 `null` 交给结构逃生口），合并会让「显式传 null」被当成没变化而吃掉。
     // 官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 同样分开标记。
     expect(optionKey({ type: undefined })).not.toBe(optionKey({ type: null }));
-    expect(changedOptionKeys({ type: null }, { type: undefined })).toEqual(["type"]);
+    expect(changedOptionKeys(optionSnapshot({ type: null }), { type: undefined })).toEqual(["type"]);
   });
 
   it("DOM 节点按**对象身份**区分：同一个节点同一个键，换一个节点就是另一个键", () => {
@@ -50,27 +51,32 @@ describe("changedOptionKeys：只回答「哪些键可能要变」", () => {
   it("逐键比较，未变的键不进结果", () => {
     expect(
       changedOptionKeys(
-        { anchor: "A", offset: { x: 1, y: 1 }, expand: false },
+        optionSnapshot({ anchor: "A", offset: { x: 1, y: 1 }, expand: false }),
         { anchor: "A", offset: { x: 1, y: 1 }, expand: true },
       ),
     ).toEqual(["expand"]);
   });
 
   it("新增 / 删除的键都算变化（组件 props 有默认值，但 `recreate` 类选项可能是首次给出）", () => {
-    expect(changedOptionKeys({}, { type: "BMAP_NAVIGATION_CONTROL_SMALL" })).toEqual(["type"]);
-    expect(changedOptionKeys({ type: "old" }, {})).toEqual(["type"]);
+    expect(changedOptionKeys(optionSnapshot({}), { type: "BMAP_NAVIGATION_CONTROL_SMALL" })).toEqual([
+      "type",
+    ]);
+    expect(changedOptionKeys(optionSnapshot({ type: "old" }), {})).toEqual(["type"]);
   });
 
   it("两份完全相同的选项得到空数组（这是「不产生多余下发」的判据）", () => {
-    expect(changedOptionKeys({ anchor: "A", offset: { x: 1, y: 1 } }, { anchor: "A", offset: { x: 1, y: 1 } })).toEqual(
-      [],
-    );
+    expect(
+      changedOptionKeys(optionSnapshot({ anchor: "A", offset: { x: 1, y: 1 } }), {
+        anchor: "A",
+        offset: { x: 1, y: 1 },
+      }),
+    ).toEqual([]);
   });
 
   it("反证：值真的变了必须报出来（否则下发会被吃掉）", () => {
-    expect(changedOptionKeys({ showStreetLayer: true }, { showStreetLayer: false })).toEqual([
-      "showStreetLayer",
-    ]);
+    expect(
+      changedOptionKeys(optionSnapshot({ showStreetLayer: true }), { showStreetLayer: false }),
+    ).toEqual(["showStreetLayer"]);
   });
 });
 
@@ -94,10 +100,67 @@ describe("optionKey：函数值按存在性比较（与官方参考实现同口�
    */
   it("换一个回调不算「选项变了」", () => {
     expect(optionKey({ onChange: () => 1 })).toBe(optionKey({ onChange: () => 2 }));
-    expect(changedOptionKeys({ onChange: () => 1 }, { onChange: () => 2 })).toEqual([]);
+    expect(
+      changedOptionKeys(optionSnapshot({ onChange: () => 1 }), { onChange: () => 2 }),
+    ).toEqual([]);
   });
 
   it("但「有回调」与「没有回调」是变化（存在性仍然被跟踪）", () => {
-    expect(changedOptionKeys({ onChange: () => 1 }, {})).toEqual(["onChange"]);
+    expect(changedOptionKeys(optionSnapshot({ onChange: () => 1 }), {})).toEqual(["onChange"]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 快照基线的不可变性（#95 评审第 2 轮 P1）                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("optionSnapshot：基线必须是**值快照**，不能被后续原地修改污染", () => {
+  /**
+   * 这一节是本 PR 那次 P1 的**根因**所在，值得单独钉住：
+   *
+   * 适配器早期把 `controlSpec.options()` 返回的**对象**当 diff 基线，而 `offset` / `size` 这些
+   * 键的值是父级传入的同一个引用。父级原地改字段时：watch 源（`optionKey`）**能**感知到
+   * （下面的用例证明它确实递归跟踪到了 `x` / `y`），但随后的 diff 两边指向同一个已被改过的
+   * 对象、序列化完全相同 ⇒ `changed` 为空 ⇒ 更新被静默吃掉。
+   */
+  it("watch 源确实跟踪嵌套字段（所以问题在 diff，不在 watcher）", async () => {
+    const offset = reactive({ x: 7, y: 9 });
+    let fired = 0;
+    const stop = watch(
+      () => optionKey({ offset }),
+      () => {
+        fired += 1;
+      },
+    );
+    offset.x = 21;
+    await nextTick();
+    stop();
+    expect(fired).toBe(1);
+  });
+
+  it("快照之后原地修改原对象，diff 仍然必须报出该键", () => {
+    const offset = { x: 7, y: 9 };
+    const snapshot = optionSnapshot({ anchor: "A", offset });
+    // 基线建立后，父级原地改同一个对象
+    offset.x = 21;
+    expect(changedOptionKeys(snapshot, { anchor: "A", offset })).toEqual(["offset"]);
+  });
+
+  it("数组原地 push 同理", () => {
+    const mapTypes = [1, 2];
+    const snapshot = optionSnapshot({ mapTypes });
+    mapTypes.push(3);
+    expect(changedOptionKeys(snapshot, { mapTypes })).toEqual(["mapTypes"]);
+  });
+
+  it("值没变时报空数组（快照不能变成「每次都算变化」）", () => {
+    const offset = { x: 7, y: 9 };
+    const snapshot = optionSnapshot({ anchor: "A", offset });
+    expect(changedOptionKeys(snapshot, { anchor: "A", offset: { x: 7, y: 9 } })).toEqual([]);
+  });
+
+  it("「键缺席」与「键存在但值为 undefined」等价（不产生假变化）", () => {
+    const snapshot = optionSnapshot({ anchor: "A" });
+    expect(changedOptionKeys(snapshot, { anchor: "A", type: undefined })).toEqual([]);
   });
 });
