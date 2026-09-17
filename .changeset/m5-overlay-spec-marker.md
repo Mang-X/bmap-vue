@@ -23,12 +23,17 @@
   内置图标表收敛为单一事实源，`MarkerIconName` 直接派生自它。
 - 新增**有界图标缓存**（同一个 Client / `<BMapProvider>` 一份，上限 200 条）：相同图标配置只构造一次 `BMap.Icon`，
   组件反复重建也不会重复构造；更新图标时始终重新 `setIcon`（官方指南：直接改 Icon 属性
-  Marker 不会同步刷新）。
+  Marker 不会同步刷新）。缓存**只服务库内部**的 Marker 路径：公共的
+  `driver.overlays.buildIcon()`（`useBMapMarkerIcons()` 用的就是它）**每次调用仍新建实例**，
+  语义与本版本之前完全一致——公共 API 不会交出缓存持有的共享可变对象。
 - 覆盖物实例现在会登记进该地图的覆盖物注册表（`MapContext.overlays`，类型由 `unknown` 收紧为
   `OverlayRegistry`），registration 与实例作用域绑定，重建 / 卸载时自动摘除。
 - **破坏性变更（公开 API 收窄）**：`OverlayRegistry.register` / `unregister` 删除
   （此前无生产消费者；`registerResource` 是一等入口，返回自带 `dispose` 的 registration）。
 - 行为细节：父级重复渲染传「内容相同的内联对象」（`icon` / `offset` 等）不再产生多余的 SDK 命令。
+- 行为细节：`create` 为异步时，就绪窗口内到达的更新（含位置）会在实例可见后主动收敛一次；
+  窗口内没有更新时不产生任何多余命令。
+- `MarkerIconName` 继续从 `./composables` 子入口导出（定义改为从内置图标表派生，名字与取值域不变）。
 
 其余覆盖物组件本次不迁移（`useOverlayResource` 保持不变），决策与取舍见
 `docs/adr/2026-09-17-overlay-spec-and-marker.md`。

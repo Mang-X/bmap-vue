@@ -102,6 +102,8 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 - `icon` 走「descriptor → 有界 LRU 缓存 → `setIcon`」：**相同图标配置只构造一次 `BMap.Icon`**
   （缓存上限 200 条；作用域是同一个 Client / `<BMapProvider>`，因此它下面的多张地图共用），
   更新时始终重新 `setIcon` ——官方指南明确「直接改 Icon 的属性之后 Marker 不会同步刷新」。
+  这份缓存**只服务组件内部**：`useBMapMarkerIcons()` 拿到的始终是每次新建的独立实例，
+  你可以安全地持有或修改它，不会影响别处。
 - 组件的每次重建都会释放旧实例的 child scope（SDK 监听、Registry 记录一并归零），因此反复重建
   不会累积资源。
 - 组件挂到地图上时会登记进该地图的覆盖物注册表（`MapContext.overlays`），可按类型清点当前存活的

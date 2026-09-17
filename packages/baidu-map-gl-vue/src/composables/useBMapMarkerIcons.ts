@@ -17,7 +17,19 @@ import { useOptionalClientContext } from "../core/context/client";
 import {
   BUILTIN_MARKER_ICON_NAMES,
   builtinMarkerIconDescriptor,
+  type BuiltinMarkerIconName,
 } from "../core/icons/markerIcon";
+
+/**
+ * 内置图标名的取值域。
+ *
+ * 这个名字属于 `./composables` 子入口的**既有公共 API**（此前由本文件自己声明、经
+ * `composables/index.ts` 的 `export *` 暴露出去），因此这里必须继续导出；值本身改为从
+ * 内置图标表派生（`types/components` 的 `MarkerIconName` 是同一个类型），不再手写第二份名单
+ * ——外部评审 P1：删掉它会让 `import type { MarkerIconName } from 'baidu-map-gl-vue/composables'`
+ * 编译失败，而 consumer smoke 只覆盖了根入口。
+ */
+export type MarkerIconName = BuiltinMarkerIconName;
 
 /**
  * 构建内置图标集合。

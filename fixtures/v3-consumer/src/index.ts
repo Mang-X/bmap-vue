@@ -397,6 +397,26 @@ export const mapExposeApiSmoke = {
   badCapability,
 }
 
+// `./composables` 子入口的消费方 smoke（外部评审 P1）。
+//
+// `MarkerIconName` **原先定义在 `composables/useBMapMarkerIcons.ts` 里**，而 `composables/index.ts`
+// 是 `export *` ⇒ 它一直是这个子入口的既有公共 API。把定义收进 `types/components` 之后如果忘了
+// 在这里 re-export，`import type { MarkerIconName } from 'baidu-map-gl-vue/composables'` 会直接
+// 编译失败——而当时的 smoke 只 import 根入口，刚好覆盖不到这个回归。这条补上：
+// 既验证名字在（类型 + 值导出），也验证「未知名字编译失败」。
+import { useBMapMarkerIcons, useControllableState } from 'baidu-map-gl-vue/composables'
+import type { MarkerIconName as ComposableMarkerIconName } from 'baidu-map-gl-vue/composables'
+
+const composablesMarkerIconName: ComposableMarkerIconName = 'simple_blue'
+// @ts-expect-error 不在内置名清单里的字符串必须编译失败
+const unknownComposablesMarkerIconName: ComposableMarkerIconName = 'ghost_icon'
+export const composablesSubpathSmoke = {
+  useBMapMarkerIcons,
+  useControllableState,
+  composablesMarkerIconName,
+  unknownComposablesMarkerIconName,
+}
+
 // BMarker 的图标名是**封闭**联合，且派生自内置图标表（M5-SPEC-MARKER / #30）：
 // 「类型里有、实际渲染不出来」在结构上不可能。下面两条是这条承诺的**门禁** ——
 // 本文件由 `scripts/verify-package.mts` 的 `vue-tsc` 编译（CI 会跑），

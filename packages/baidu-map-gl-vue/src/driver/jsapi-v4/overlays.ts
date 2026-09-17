@@ -106,6 +106,9 @@ export function createJsapiV4OverlayDriver(
    *   之后 Marker 不会同步刷新，必须重新 `setIcon(icon)`」。共享实例因此安全（官方示例也共享）；
    *   一旦我们原地改它，所有共享它的 Marker 都会跟着变；跨地图共享同理（Icon 是纯值对象，
    *   不属于任何一张地图）。**换图标 = 换 descriptor = 换缓存条目。**
+   * - **只有库内部的 Marker 路径（`iconFor`）走缓存**：公共的 `buildIcon` 每次新建实例，
+   *   因为 `useBMapMarkerIcons()` 会把结果直接交给调用方，而 `BMap.Icon` 有可变面
+   *   （外部评审 P2：公共 API 不得交出缓存持有的共享可变对象）。
    */
   const iconCache: IconCache<unknown> = createLruIconCache<unknown>(DEFAULT_ICON_CACHE_SIZE);
 
@@ -152,12 +155,13 @@ export function createJsapiV4OverlayDriver(
   const rawSize = (pixel: Pixel): unknown =>
     geometry.toRawSize({ width: pixel.x, height: pixel.y });
 
-  const buildIcon = (icon: MarkerIconInput): unknown => {
+  /** 未知内置名的告警（两条图标路径共用）。 */
+  const warnUnknownIconName = (icon: MarkerIconInput): void => {
     if (typeof icon === "string" && !isBuiltinMarkerIconName(icon)) {
       // 未知名字此前会**静默**落进兜底图标（旧实现里 20 个内置名都如此），至少要说出来。
       warnOnce(
         `icon:unknown-name:${icon}`,
-        `OverlayDriver.buildIcon: "${icon}" 不是内置图标名，已按兜底图标（simple_red）渲染；` +
+        `OverlayDriver: "${icon}" 不是内置图标名，已按兜底图标（simple_red）渲染；` +
           "内置名清单见 core/icons/markerIcon 的 BUILTIN_MARKER_ICON_NAMES",
       );
     }
@@ -165,34 +169,61 @@ export function createJsapiV4OverlayDriver(
       // 4.0.4 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver.buildIcon: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
       );
     }
+  };
+
+  /** descriptor → **新建**的 raw `Icon`（不做缓存）。 */
+  const constructIcon = (descriptor: ReturnType<typeof resolveMarkerIconDescriptor>): unknown => {
+    const Icon = namespaceCtor(namespace, "Icon");
+    const opts: Record<string, unknown> = {};
+    if (descriptor.imageSizeWidth != null && descriptor.imageSizeHeight != null) {
+      opts.imageSize = geometry.toRawSize({
+        width: descriptor.imageSizeWidth,
+        height: descriptor.imageSizeHeight,
+      });
+    }
+    if (descriptor.anchorX != null && descriptor.anchorY != null) {
+      opts.anchor = geometry.toRawSize({ width: descriptor.anchorX, height: descriptor.anchorY });
+    }
+    if (descriptor.imageOffsetX != null && descriptor.imageOffsetY != null) {
+      opts.imageOffset = geometry.toRawSize({
+        width: descriptor.imageOffsetX,
+        height: descriptor.imageOffsetY,
+      });
+    }
+    return new Icon(
+      descriptor.imageUrl,
+      geometry.toRawSize({ width: descriptor.width, height: descriptor.height }),
+      opts,
+    );
+  };
+
+  /**
+   * **公共** `buildIcon`：每次调用都返回一个**新的** `BMap.Icon`。
+   *
+   * `BMap.Icon` 有 `setImageUrl` / `setSize` / `setAnchor` 等可变面，而
+   * `useBMapMarkerIcons()`（公开 hook）把这里的结果直接交给调用方。公共 API **不得**交出
+   * 缓存持有的共享可变对象——否则一个消费者改了自己那份，会污染同一 Client 下所有地图后续拿到的
+   * 图标（外部评审 P2）。因此缓存只服务**库内部**的 Marker 路径（{@link iconFor}）。
+   */
+  const buildIcon = (icon: MarkerIconInput): unknown => {
+    warnUnknownIconName(icon);
+    return constructIcon(resolveMarkerIconDescriptor(icon));
+  };
+
+  /**
+   * **内部**图标解析（Marker 的构造与 `setIcon` 路径）：同 descriptor 命中**有界 LRU 缓存**，
+   * 返回同一个 raw `Icon`。
+   *
+   * 缓存持有的实例只被读、从不就地修改（官方指南：改了 icon 自己也必须重新 `setIcon`），
+   * 因此共享是安全的；且它**不经过**任何公开 API，调用方拿不到这份实例。
+   */
+  const iconFor = (icon: MarkerIconInput): unknown => {
+    warnUnknownIconName(icon);
     const descriptor = resolveMarkerIconDescriptor(icon);
-    return iconCache.get(descriptor, () => {
-      const Icon = namespaceCtor(namespace, "Icon");
-      const opts: Record<string, unknown> = {};
-      if (descriptor.imageSizeWidth != null && descriptor.imageSizeHeight != null) {
-        opts.imageSize = geometry.toRawSize({
-          width: descriptor.imageSizeWidth,
-          height: descriptor.imageSizeHeight,
-        });
-      }
-      if (descriptor.anchorX != null && descriptor.anchorY != null) {
-        opts.anchor = geometry.toRawSize({ width: descriptor.anchorX, height: descriptor.anchorY });
-      }
-      if (descriptor.imageOffsetX != null && descriptor.imageOffsetY != null) {
-        opts.imageOffset = geometry.toRawSize({
-          width: descriptor.imageOffsetX,
-          height: descriptor.imageOffsetY,
-        });
-      }
-      return new Icon(
-        descriptor.imageUrl,
-        geometry.toRawSize({ width: descriptor.width, height: descriptor.height }),
-        opts,
-      );
-    });
+    return iconCache.get(descriptor, () => constructIcon(descriptor));
   };
 
   /** 领域值 → v4 构造参数 / setter 入参。 */
@@ -215,7 +246,7 @@ export function createJsapiV4OverlayDriver(
         // 项目侧偏移是 Pixel（`{x, y}`），v4 的 offset / anchor 是 Size（`{width, height}`）
         return rawSize(value as Pixel);
       case "icon":
-        return buildIcon(value as MarkerIconInput);
+        return iconFor(value as MarkerIconInput);
       default:
         return value;
     }

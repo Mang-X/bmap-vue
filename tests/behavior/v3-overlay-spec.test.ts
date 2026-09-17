@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, nextTick, ref, watchEffect } from "vue";
+import { defineComponent, h, nextTick, reactive, ref, watchEffect } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
 import {
@@ -28,10 +28,11 @@ import {
 import { assertOverlayFieldDeclarations } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
 import type { OverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
 import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
+import { useOverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/composables/useOverlaySpec";
 import { useParentOverlayHandle } from "../../packages/baidu-map-gl-vue/src/core/context/target";
 import type { MapContext } from "../../packages/baidu-map-gl-vue/src/core/context/types";
 import { OVERLAY_DESCRIPTORS, overlayPropertySpec } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
-import type { SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
+import type { MarkerHandle, SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
 import type { BMarkerProps } from "../../packages/baidu-map-gl-vue/src/types/components";
 import { createFakeV4Harness, type FakeBMapV4, type FakeV4Harness, type FakeV4Marker } from "../../packages/test-utils";
 
@@ -675,3 +676,102 @@ describe("100 次重建后资源稳定", () => {
 });
 
 /* ------------------------------------------------------------------------------ */
+
+/**
+ * 异步 `OverlaySpec.create()` 的就绪窗口（外部评审 P1）。
+ *
+ * `OverlaySpec.create()` 允许返回 Promise，而实例在 `create` 完成**之前**是"没有落点"的：
+ * 这段时间到达的更新既不能下发（`resource` 还是 null），也不会被 `create` 看到（它在入口处
+ * 就把 props 读完了）。因此就绪之后必须做一次**主动收敛**，否则这些更新会永久停在待办里
+ * （或更糟：位置模型认为 SDK 已经是新位置，后续相同值全被回环抑制吃掉）。
+ *
+ * 这一组用例用一个"入口处快照 props、再 await 一个闸门"的 create 复现该窗口。
+ */
+describe("异步 create 的就绪窗口", () => {
+  type AsyncProbeProps = { position: { lng: number; lat: number }; zIndex: number };
+
+  function asyncProbeHost() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const state = reactive<AsyncProbeProps>({
+      position: { lng: 116.4, lat: 39.9 },
+      zIndex: 1,
+    });
+    const spec: OverlaySpec<AsyncProbeProps, MarkerHandle> = {
+      type: "async-probe",
+      targetKind: "marker",
+      fields: { position: "position", zIndex: "options" },
+      descriptorKeys: { position: "position" },
+      create: async (context, p) => {
+        // 异步工厂的自然写法：入口处读数，然后做异步工作（此后 props 再变也看不到）
+        const snapshot = { position: { ...p.position }, zIndex: p.zIndex };
+        await gate;
+        return context.client.driver.overlays.createMarker(snapshot.position, {
+          zIndex: snapshot.zIndex,
+        });
+      },
+    };
+    const Probe = defineComponent({
+      setup() {
+        useOverlaySpec(state, spec, { emit: () => {} });
+        return () => null;
+      },
+    });
+    const Host = defineComponent({
+      components: { BMap, Probe },
+      setup() {
+        return () => h(BMap, { provider: harness.provider() }, () => [h(Probe)]);
+      },
+    });
+    return { Host, state, release: () => release() };
+  }
+
+  it("create 挂起期间改的 position / mutable prop，在实例就绪后必须补上", async () => {
+    const { Host, state, release } = asyncProbeHost();
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    // 闸门未开：实例还没建出来
+    expect(fake.createdOverlays.length).toBe(0);
+
+    // 窗口内的更新：一个位置策略、一个就地策略
+    state.position = { lng: 117.5, lat: 40.5 };
+    state.zIndex = 9;
+    await settle();
+
+    release();
+    await settle();
+    await settle();
+
+    const marker = fake.createdOverlays[0] as unknown as FakeV4Marker;
+    expect(marker).toBeDefined();
+    // 实例是用「调用 create 那一刻」的位置建的，因此必须再补一次 setPosition
+    expect(marker.position.lng).toBe(117.5);
+    expect(marker.callLog).toContain("setPosition");
+    // 就地更新也不能丢：待办要在实例可见之后排空
+    expect(marker.zIndex).toBe(9);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("异步 create 的就绪窗口");
+  });
+
+  it("窗口内没有更新时不产生多余命令（收敛是幂等的）", async () => {
+    const { Host, release } = asyncProbeHost();
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    release();
+    await settle();
+    await settle();
+
+    const marker = fake.createdOverlays[0] as unknown as FakeV4Marker;
+    expect(marker.position.lng).toBe(116.4);
+    expect(marker.zIndex).toBe(1);
+    expect(marker.callLog).toEqual([]);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("异步 create 无更新");
+  });
+});

@@ -154,6 +154,16 @@ export function useOverlaySpec<Props extends object, Resource>(
   /** 最后一次已知与 SDK 一致的位置（两条方向都更新它）。 */
   let syncedPosition: Point | null = null;
 
+  /**
+   * **调用 `spec.create()` 那一刻**的位置。
+   *
+   * 必须在 create 之前取：`create` 可能异步，而异步工厂的自然写法是「入口处读一次 props，
+   * 然后做异步工作」——`await` 之后它已经看不到后来的变化了。若改在 `mount` 里读当时的 props，
+   * 就会出现「实例是按旧位置建的，但同步模型记为新位置」，随后**相同值全被回环抑制吃掉**
+   * （外部评审 P1，`v3-overlay-spec.test.ts` 的「异步 create 的就绪窗口」用例锁定了它）。
+   */
+  let createdPosition: Point | null = null;
+
   const positionModel: OverlayPositionModel | null = positionField
     ? {
         current: () => readPosition(),
@@ -286,7 +296,11 @@ export function useOverlaySpec<Props extends object, Resource>(
     },
     spec: {
       type: spec.type,
-      create: ({ context, props: current }) => spec.create(context, current),
+      create: ({ context, props: current }) => {
+        // 「实例是按哪个位置建的」必须在**调用 create 之前**取，理由见 `createdPosition`。
+        createdPosition = positionField ? (readPosition() ?? null) : null;
+        return spec.create(context, current);
+      },
       mount: ({ context, resource, props: current, scope }) => {
         // 初始可见性：`visible: false` 的实例**不挂到地图**（不是「先挂再等 watcher」）。
         // 只有「尚未有任何实例挂上」时才补挂：竞态分支里两个实例可能先后走到这里，
@@ -297,9 +311,10 @@ export function useOverlaySpec<Props extends object, Resource>(
         ) {
           addToMap(context, resource);
         }
+        // 同步模型记的是**实例真实所在的位置**（create 那一刻的值），不是当前的 props——
+        // 两者在异步 create 窗口里会分叉，收敛交给 `bind` 的 reconciliation。
         if (positionField) {
-          const initial = (current as Record<string, unknown>)[positionField] as Point | undefined;
-          syncedPosition = initial ? clonePoint(initial) : null;
+          syncedPosition = createdPosition ? clonePoint(createdPosition) : null;
         }
         // registration 与**实例 scope** 绑定：scope 释放（重建 / 卸载）时记录自动摘除，
         // Registry 只保留当前存活实例，不保留历史 disposer 闭包。
@@ -322,6 +337,15 @@ export function useOverlaySpec<Props extends object, Resource>(
           );
           scope.add(off);
         }
+        // **就绪窗口的 reconciliation**：实例在 `create` 完成之前没有落点，这段时间到达的更新
+        // 既下发不了（`resource` 还是 null）、也进不了实例（`create` 在入口处就把 props 读完了）。
+        // 此刻 `resource` 已经可见（`useSdkResource` 在 `bind` 之前赋值），因此在这里补一次：
+        // - 位置：与「建实例时用的值」不等时补一条 `setPosition`；相等时 `applyFromProps`
+        //   自己会短路，因此**不会**产生多余命令（幂等，有专门用例）；
+        // - 待办队列：排空（就地更新落到这个实例上）。
+        // 不做这一步的后果是外部评审 P1 复现的那条：更新永久停摆、位置在模型与 SDK 之间分叉。
+        if (positionModel) positionModel.applyFromProps(readPosition());
+        void drainAppliedUpdates();
       },
       watch: ({ scope }) => {
         if (visibilityField) {

@@ -134,6 +134,26 @@ Rectangle 与事件）重叠——**留给 #31**，本 ADR 记为已知限制。
 声明的契约（本库 `driver/normalize/events.ts` 就是按这份契约归一化的）。数值守卫留给 JS / `any`
 调用方：拿不到合法点就不回写模型，不猜位置。
 
+### 4b. 就绪窗口必须**主动收敛**（`create` 可能异步）
+
+`OverlaySpec.create()` 允许返回 Promise，而实例在它完成之前**没有落点**：这段时间到达的更新既下发
+不了（`resource` 仍是 null），也进不了实例（异步工厂的自然写法是入口处读一次 props，`await` 之后
+再看已经晚了）。因此就绪之后必须补一次收敛，否则会出现两种真实故障：
+
+- 队列里的就地更新永久停摆（后续没有同类 prop 再变化就没人唤醒它）；
+- **位置在模型与 SDK 之间分叉**：若 `mount` 用「当时的 props」当同步基准，而实例是按 create 那一刻
+  的旧位置建的，模型就会认为新位置已生效，此后**相同值全被回环抑制吃掉**。
+
+规格（外部评审 P1 之后定型，`tests/behavior/v3-overlay-spec.test.ts` 的「异步 create 的就绪窗口」
+一组用例锁定）：
+
+1. `syncedPosition` 的基准是**调用 `create()` 那一刻**的位置（在调用前快照，而不是 mount 时读 props）；
+2. `useSdkResource` 的 `bind` 阶段（此刻 `resource` 已经可见）做 reconciliation：
+   补一次 `applyFromProps(当前 props 位置)`（相等时它自己短路，因此**幂等**、不产生多余命令）
+   + `drainAppliedUpdates()` 排空待办。
+
+"窗口内没有更新" 的用例专门证明收敛是幂等的：不加任何 prop 时 `callLog` 必须为空。
+
 ### 5. 图标：descriptor 单一事实源 + 有界 LRU 缓存；`BMap.Icons` 不使用
 
 - **内置图标表移到 `core/icons/markerIcon.ts`**（单一事实源）。此前 Driver 一份（7 个名字 +
@@ -151,6 +171,19 @@ Rectangle 与事件）重叠——**留给 #31**，本 ADR 记为已知限制。
   icon 之后 Marker 并不会同步刷新，必须重新 `setIcon(icon)`」。共享一个 Icon 实例因此是安全的
   （官方示例也共享）；一旦我们原地改它，所有共享它的 Marker 都会跟着变。
   **换图标 = 换 descriptor = 换缓存条目**，更新路径永远是 `setIcon(新的/缓存里的 Icon)`。
+- **两条路径，边界明确**（外部评审 P2 之后定型）：
+
+  | 路径 | 使用者 | 是否共享实例 |
+  | --- | --- | --- |
+  | `driver.overlays.buildIcon()`（**公共**） | `useBMapMarkerIcons()` 等业务代码 | **不共享**：每次调用新建 |
+  | Marker 的构造 / `setIcon`（`iconFor`，**库内部**） | `<BMarker icon=...>` | **共享**：命中同一个有界 LRU 缓存 |
+
+  公共路径必须新建，因为 `BMap.Icon` 有 `setImageUrl` / `setSize` / `setAnchor` 等可变面，而
+  `useBMapMarkerIcons()` 把结果直接交给调用方——公共 API 交出缓存持有的共享可变对象，会让一个
+  消费者改自己那份时污染同一 Client 下所有地图后续拿到的图标。「缓存只读」因此不再只是内部约定，
+  而是**API 边界上的隔离**（`v3-marker-icon-cache.test.ts` 的「隔离契约」用例锁定：公共路径两次
+  调用必须拿到不同实例，且改一份不影响下一次）。这也让 `buildIcon` 的语义与 #30 之前**完全一致**
+  （当时没有缓存，每次都是新实例）。
 - **`BMap.Icons` 不使用（本 issue 的「`BMap.Icons` adapter」按此口径交付）**。
   issue 原文写的是「图标 descriptor、LRU cache 和 `BMap.Icons` adapter」。事实核对如下：
 
@@ -190,7 +223,9 @@ Rectangle 与事件）重叠——**留给 #31**，本 ADR 记为已知限制。
 | `MapContext.overlays` 类型 `unknown` → `OverlayRegistry` | 类型更严（此前调用方拿不到任何成员） | 无运行时影响 |
 | `BMarker` 的 `visible: false` 初值行为 | 此前实例先是「未挂载」，切到 `true` 时调 `show()`（作用在未挂载实例上 ⇒ 永远不显示）；现在 `true` 时才真正 `add` | 修 bug，用例锁定 |
 | `red1`~`red10` / `blue1`~`blue10` 的渲染位置 | 此前静默回落 `simple_red` 的格子，现在落在自己的格子上 | 修 bug，用例锁定 |
-| 相同图标配置的 Marker 共享同一个 `BMap.Icon` 实例 | 只读共享（我们从不改它），命令次数下降 | 用例锁定 |
+| 相同图标配置的 Marker 共享同一个 `BMap.Icon` 实例 | **仅库内部**共享（我们从不改它），构造次数下降 | 用例锁定 |
+| 公共 `driver.overlays.buildIcon()` | **语义与 #30 之前完全一致**：每次调用新建实例（缓存只服务库内部路径，见决策 5） | 用例锁定（隔离契约） |
+| `MarkerIconName` 从 `./composables` 子入口继续可用 | 无变化（只是定义改为从图标表派生） | consumer fixture 的 `/composables` smoke 锁定 |
 | `useOverlaySpec` / `OverlaySpec` 新增公开导出 | 自定义覆盖物有了受支持的入口 | changeset（minor） |
 | 重复渲染传「内容相同的内联对象」不再触发 SDK 命令 | 命令次数下降，行为不变 | 用例锁定（`stableKeyOf`） |
 
@@ -213,6 +248,8 @@ Driver 侧的图标改动（表格收敛 + 缓存）与 `OverlayRegistry` 的记
 1. **覆盖物位置没有读回入口**（决策 4 的取舍）。回环抑制因此基于「最后一次同步值」而不是
    「读回现值」：若 SDK 在某次 `setPosition` 之后**自行**改变了位置且没有派发事件，快照会与实际
    分叉，直到底层派发一次事件或外部再次赋值。补 `OverlayDriver` 的位置读回 API 属 **#31**。
+   **注意区分**：因 `create` 异步窗口造成的那种分叉**不属于**这条限制——它由决策 4b 的快照 + 收敛
+   消除了（外部评审 P1）。
 2. **其余 10 个覆盖物仍是命令式 watcher**（`useOverlayResource`），`OverlaySpec` 目前只有
    Marker 一个消费者。批量迁移按 issue #30 的「风险与回滚」留给 **#31 / #33**；
    在迁移完成前 **`useOverlayResource` 与 `useOverlaySpec` 会并存**——这是有意的过渡态，
@@ -249,6 +286,9 @@ Driver 侧的图标改动（表格收敛 + 缓存）与 `OverlayRegistry` 的记
 | 内置名清单（27 个）+ `red5` 落在自己格子上 | `packages/baidu-map-gl-vue/src/core/icons/markerIcon.test.ts` |
 | 公开类型 `MarkerIconName` 的取值域（类型层门禁；**测试文件不在任何编译门禁里**，因此落在 fixture） | `fixtures/v3-consumer/src/index.ts` 的 `@ts-expect-error`，由 `verify:package` 的 vue-tsc 跑 |
 | 加载窗口内改 props 不丢、等值内联对象不产生多余命令 | `tests/behavior/v3-overlay-spec.test.ts`（`SDK 就绪之前改的 props 不丢` / `重复渲染传内容相同的内联对象`） |
+| **异步 `create` 的就绪窗口**：窗口内的 position / 就地更新在 ready 后必须补上；无更新时零命令 | `tests/behavior/v3-overlay-spec.test.ts`（`异步 create 的就绪窗口` 2 条） |
+| 公共 `buildIcon` 的隔离契约（每次新建、改一份不影响下一次） | `tests/behavior/v3-marker-icon-cache.test.ts`（`公共 buildIcon：不交出共享对象`） |
+| `/composables` 子入口的既有导出（`MarkerIconName`、hook 值导出） | `fixtures/v3-consumer/src/index.ts`（由 `verify:package` 的 vue-tsc 跑） |
 | 注册表的显式释放 / scope 释放 / 不堆积 | `packages/baidu-map-gl-vue/src/core/overlays/OverlayRegistry.test.ts` |
 | `stableKeyOf` 的稳定性与循环引用 | `packages/baidu-map-gl-vue/src/core/utils/stableKey.test.ts` |
 | 既有覆盖物行为不回归 | `v3-bmarker-update` / `v3-overlay-update-policy` / `v3-bcontextmenu` / `v4-components-lifecycle` |
