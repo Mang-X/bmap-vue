@@ -72,6 +72,8 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `overlay-marker` | ✅ | ✅ | 覆盖物计数增长（live 用 `getOverlays()`，fixture 用账本） |
 | `overlay-polyline` | ✅ | ✅ | 同上 |
 | `control-zoom` | ✅ | ✅ | **拦截真实 `Map.addControl` 的调用**（live）/ 账本计数增长（fixture），另附容器 DOM 增量作为 detail |
+| `controls-stable-set` | ✅ | ✅ | #41 新增的三个 Stable 控件（`<BNavigation>` / `<BMapType>` / `<BOverview>`）各发生一次 `Map.addControl`；随后把三者的 `anchor` 一起改成一个新值，**从拦截到的实例上回读 `getAnchor()`** 必须全部变成 `BOTTOM_LEFT`（这是「anchor 真的动态下发」在真实 SDK 上的证据）；挂载期间无 `console.error` |
+| `panorama-viewer` | — | ✅ | `<BPanorama>` 挂载后查看器计数增长（fixture 的实例账本）。**live 档不登记**：真实查看器需要真实全景场景与网络，`descriptor.panoramas()` 在 live 档恒为 `-1`，登记进来只会得到一条假失败（真实图块加载属 nightly 的观察项） |
 | `layer-district` | ✅ | ✅ | **拦截真实 `Map.addLayer` 的调用**（live）/ 账本计数增长（fixture），另附能力表声明与无 `console.error` 作为辅助 |
 | `layer-tile` | ✅ | ✅ | 同 `layer-district`（拦截真实 `Map.addLayer`），瓦片模板指向**百度自己的瓦片主机**（与 SDK 内部同源）以便 live 档不产生无关的网络错误；**瓦片是否画出来不由本库保证** |
 | `layer-traffic` | ✅ | ✅ | 同 `layer-district`；`BTrafficLayer` 走官方路况服务，无需外部瓦片源 |

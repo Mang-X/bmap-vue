@@ -328,7 +328,7 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 | `Heatmap` / `TrackLine` / `PointLayer` / `ClusterLayer` 的未声明继承成员（`setVisible` / `setOpacity` / `setZIndex`） | 真实 4.0 可调用，但本 Facet 按官方文档回答「不支持」 | 见「已知限制」；放开只需改 `operations` 一处 |
 | Catalog 新增 `layer.point` / `layer.heatmap` / `layer.track-line` | `supports()` 在 v4 下由「无此能力」变为 true | 能力矩阵与 docs JSON 已重生成（64 条） |
 | `service.track-animation` 在 v4 的失败码 | `BMAP_CAPABILITY_UNSUPPORTED`（消息指向 `TrackLine`） | 迁移到原生图层或等 M8 #43 |
-| `Panorama#destroy()` 在未加载场景的实例上抛错 | 归一为 `BMAP_SDK_CALL_FAILED`；重复销毁会**真的重试** | 组件路径（M7 #41）先 `setId` / `setPosition` 再销毁 |
+| `Panorama#destroy()` 在未加载场景的实例上抛错 | 归一为 `BMAP_SDK_CALL_FAILED`；重复销毁会**真的重试** | 组件路径（M7 #41）先 `setId` / `setPosition` 再销毁。✅ 已由 [2026-09-17](./2026-09-17-control-spec-and-panorama.md) 落地：`<BPanorama>` 在 `onUnmounted` 里销毁（子组件先摘标注），真没场景时**只告警不抛错** |
 | `panorama.supported` | 从常量变为**每次读取重新探测**的 getter | 行为更正确；读取有极小开销 |
 
 ## 非目标
@@ -400,7 +400,9 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
   FIFO 的顺序假设）需要「每次请求一个独立实例 + 回调闭包」，登记为 M7（#38）的接口设计项。
 - **`locate` 需要浏览器定位授权**：headless 下必然失败（`BMAP_STATUS_PERMISSION_DENIED`）。
   这里验证的是「状态码 → 归一化 `failed` + 可读原因」，不是「能拿到坐标」。
-- **`Panorama` 的真实场景渲染未覆盖**：smoke 只做构造 / 视角 / 显隐 / 销毁 / 检索；真实全景图块
+- **`Panorama` 的真实场景渲染未覆盖**（⚠️ 组件路径已由 [2026-09-17 / #41](./2026-09-17-control-spec-and-panorama.md)
+  承接：`<BPanorama>` / `<BPanoramaLabel>` / `usePanoramaService` 已交付，销毁顺序按本文档的建议写成
+  「先给 `point` / `id`、再销毁」；真实图块加载仍属 live smoke 的观察项）：smoke 只做构造 / 视角 / 显隐 / 销毁 / 检索；真实全景图块
   加载与交互留给 M7 #41。**未加载场景时 `destroy()` 会抛错**（见上），组件路径必须先 `setId` /
   `setPosition`。
 - **扩展 API 的继承成员保守回答**：`setVisible` / `setOpacity` / `setZIndex` 在真实运行时可用，

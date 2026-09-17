@@ -80,6 +80,18 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "navigation3d",
         },
         {
+          text: "BNavigation 平移缩放",
+          link: "navigation",
+        },
+        {
+          text: "BMapType 地图类型",
+          link: "map-type",
+        },
+        {
+          text: "BOverview 鹰眼",
+          link: "overview",
+        },
+        {
           text: "BCopyright 版权",
           link: "copyright",
         },
@@ -218,6 +230,21 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       ],
     },
     {
+      text: "全景组件",
+      collapsed: false,
+      base: "/zh-CN/components/panorama/",
+      items: [
+        {
+          text: "BPanorama 全景查看器",
+          link: "index",
+        },
+        {
+          text: "BPanoramaLabel 全景标注",
+          link: "label",
+        },
+      ],
+    },
+    {
       text: "检索组件",
       collapsed: false,
       base: "/zh-CN/components/autoComplete/",
@@ -264,6 +291,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "useBMapAreaBoundary 区域边界",
           link: "useBMapAreaBoundary",
+        },
+        {
+          text: "usePanoramaService 全景检索",
+          link: "usePanoramaService",
         },
         {
           text: "useBMapLocalSearch 本地检索",

@@ -21,9 +21,20 @@
  *   参数写成结构等价的 `Copyright`，两处不冲突）。
  * - `create("custom")` 显式失败并指向 `createCustomControl()`：自定义控件要的是 DOM 工厂，
  *   走通用构造器只会拿到一个没有 `initialize` 的空控件。
+ *
+ * M7-CONTROL-PANORAMA（issue #41）在本文新增 `planOptions()`：把「构造之后改某个 option 会
+ * 怎样」逐键报给调用方，供组件层的统一 Control adapter 在**就地更新**与**重建控件**之间选择。
+ * 它与 `setOptions` 共用同一处分类（`classifyOption`）——分类表、options 袋与 `set<Key>`
+ * 逃生口只有一份，不存在第二张会漂移的表。
  */
 import { BMapError } from "../../core/errors/BMapError";
-import type { ControlDriver, ControlKind, ControlOptions, CopyrightEntry } from "../types/controls";
+import type {
+  ControlDriver,
+  ControlKind,
+  ControlOptionStatus,
+  ControlOptions,
+  CopyrightEntry,
+} from "../types/controls";
 import type { Pixel } from "../types/geometry";
 import { HANDLE_BRAND, type ControlHandle } from "../types/handles";
 import {
@@ -117,6 +128,12 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   navigation: {
     type: { policy: "mutable", setter: "setType" },
+    // 官方 4.0.4 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
+    showZoomInfo: { policy: "recreate", reason: "4.0 的 NavigationControl 没有级别提示的 setter" },
+    enableGeolocation: {
+      policy: "recreate",
+      reason: "4.0 的 NavigationControl 没有定位集成的 setter",
+    },
   },
   "navigation-3d": {},
   "city-list": {
@@ -125,6 +142,7 @@ const CONTROL_OPTION_SPECS: Readonly<
       policy: "recreate",
       reason: "4.0 的 CityListControl 只在构造期读取自定义触发元素（没有 setTrigger）",
     },
+    canCheckSize: { policy: "recreate", reason: "容器尺寸检查只在构造期读取" },
     onChangeBefore: { policy: "recreate", reason: "回调只在构造期注册" },
     onChangeAfter: { policy: "recreate", reason: "回调只在构造期注册" },
     onChangeSuccess: { policy: "recreate", reason: "回调只在构造期注册" },
@@ -133,6 +151,10 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   location: {},
   "map-type": {
+    // `showStreetLayer(isShow)` 是官方 4.0.4 上 `MapTypeControl` **唯一**的字段级 setter
+    // （路网层显隐），成员名不是 `set<Key>` 形状——所以它必须进分类表，否则会落到下面
+    // 的「未知键 + `set<Key>` 结构逃生口」里被判成 unsupported（值被静默丢弃）。
+    showStreetLayer: { policy: "mutable", setter: "showStreetLayer" },
     type: {
       policy: "recreate",
       reason: "4.0 的 MapTypeControl 只公开 showStreetLayer(isShow)，控件样式没有 setter",
@@ -141,6 +163,8 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   overview: {
     size: { policy: "mutable", setter: "setSize", value: "size" },
+    zoomInterval: { policy: "recreate", reason: "4.0 的 OverviewMapControl 没有缩放级别差的 setter" },
+    padding: { policy: "recreate", reason: "4.0 的 OverviewMapControl 没有空隙宽度的 setter" },
     isOpen: {
       policy: "recreate",
       reason:
@@ -314,6 +338,98 @@ export function createJsapiV4ControlDriver(
     return namespaceCtor(namespace, name);
   };
 
+  /**
+   * 单个 option 键**在运行期**的落地方式——`setOptions` 与 `planOptions` 的**唯一**分类点。
+   *
+   * 两个入口共用它而不是各写一套：分类表（`CONTROL_OPTION_SPECS`）、options 袋
+   * （`CONTROL_OPTIONS_BAG`）与 `set<Key>` 逃生口共同决定一个键的归属，任何一处漂移都会
+   * 变成「组件以为能就地改、Driver 却告警忽略」这种最难查的分歧。
+   *
+   * - `apply` 存在：就地落地（`setOptions` 调它；`planOptions` 只看 `status`）。
+   * - `apply` 缺席但 `status === "mutable"`：**options 袋**的键——袋装入口是「整袋一次写回」，
+   *   逐键调用会漏掉袋内其它键的语义，所以聚合交给调用方（`setOptions` 的 `bag`）。
+   */
+  type OptionAction =
+    | { readonly status: "mutable"; readonly apply?: (value: unknown) => void }
+    | { readonly status: "recreate"; readonly reason: string }
+    | { readonly status: "unsupported" };
+
+  const classifyOption = (
+    raw: Record<string, unknown>,
+    kind: ControlKind | undefined,
+    key: string,
+  ): OptionAction => {
+    // anchor / offset 是全部控件的公共可更新项（基类 setAnchor / setOffset），不重复进分类表……
+    // ……**但版权控件例外**：它的实例按停靠位置**共享**（同一 anchor 的多个组件共用一个
+    // `CopyrightControl`，各自往里加一条版权项）。对共享实例就地 `setAnchor()` 会让「实例」与
+    // 「它服务的 anchor」脱钩，于是后续同 anchor 的组件找不到它、另建一个，同一个位置上出现两个
+    // 控件（#95 评审 P1 的复现）。因此这里把 `copyright.anchor` 判成构造期项：变化时重建，
+    // 由 `BCopyright` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移。
+    if (key === "anchor" && kind === "copyright") {
+      return {
+        status: "recreate",
+        reason:
+          "版权控件的实例按停靠位置共享（同 anchor 共用一个 CopyrightControl），" +
+          "就地 setAnchor 会让实例与它服务的 anchor 脱钩、同一位置出现两个控件",
+      };
+    }
+    if (key === "anchor") {
+      return {
+        status: "mutable",
+        apply: (value) => {
+          const anchor = resolveAnchor(value);
+          if (anchor !== undefined) callControl(raw, "setAnchor", [anchor]);
+        },
+      };
+    }
+    if (key === "offset") {
+      return { status: "mutable", apply: (value) => callControl(raw, "setOffset", [toRawSize(value)]) };
+    }
+    const spec = kind ? CONTROL_OPTION_SPECS[kind]?.[key] : undefined;
+    if (spec) {
+      if (spec.policy === "recreate") return { status: "recreate", reason: spec.reason };
+      if ("choice" in spec) {
+        return {
+          status: "mutable",
+          apply: (value) => callControl(raw, value ? spec.choice[0] : spec.choice[1]),
+        };
+      }
+      return {
+        status: "mutable",
+        apply: (value) => callControl(raw, spec.setter, [normalizeValue(spec, value)]),
+      };
+    }
+    // 「options 袋」控件：整袋写回，按键结构调用会漏掉袋装选项
+    if (kind && CONTROL_OPTIONS_BAG[kind]) return { status: "mutable" };
+    // 逃生口：未知键按 `set<Key>` 结构性调用（与 OverlayDriver.setOptions 同形）
+    const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+    if (typeof readNamespaceMember(raw, setter) === "function") {
+      return { status: "mutable", apply: (value) => callControl(raw, setter, [value]) };
+    }
+    /**
+     * 到这里：既不在分类表里、没有 options 袋、实例上也没有 `set<Key>`。
+     *
+     * **这不等于「本引擎没有这个 option」**——4.0 的构造选项是**原样透传**的
+     * （`projectOptions` 只归一化 anchor / offset / `value: "size"`，其余键照发），所以未命中
+     * 分类表的键依然可能在**构造期**生效。按三态的定义，这属于 `recreate`（「只有构造期生效」），
+     * 不是 `unsupported`（「连构造期也没有入口」）。把两者混为一谈会让调用方二选一地犯错：
+     * 要么把能生效的键当成没入口而**丢掉更新**，要么对真正没入口的键做**无效重建**（#95 评审第 3 轮）。
+     *
+     * 两个例外——「构造期也到不了」的才叫 `unsupported`：
+     * - `custom`：`createCustomControl({ anchor, offset, render })` 只接收这三样，别的键连构造期
+     *   都进不去；
+     * - 裸 `"control"` 句柄（`kindOfControl` 认不出种类的、手工登记的句柄）：**授权重建需要知道
+     *   种类**，认不出就不猜。
+     */
+    if (kind === undefined || kind === "custom") return { status: "unsupported" };
+    return {
+      status: "recreate",
+      reason:
+        "未命中控件 option 分类表、实例上也没有对应的 set<Key>——只有构造期可能生效" +
+        "（4.0 的构造选项原样透传）",
+    };
+  };
+
   return {
     create(kind: ControlKind, options: ControlOptions = {}): ControlHandle {
       if (kind === "custom") {
@@ -402,58 +518,45 @@ export function createJsapiV4ControlDriver(
       // 失败经 `sdkCall` 归一成 `BMAP_SDK_CALL_FAILED` 而不是静默吞掉。
       const raw = registry.resolve<Record<string, unknown>>(control);
       const kind = kindOfControl(control);
-      const specs = kind ? CONTROL_OPTION_SPECS[kind] : undefined;
       const bagMethod = kind ? CONTROL_OPTIONS_BAG[kind] : undefined;
       const bag: Record<string, unknown> = {};
 
       for (const [key, value] of Object.entries(options)) {
         if (value === undefined) continue;
-        if (key === "anchor") {
-          const anchor = resolveAnchor(value);
-          if (anchor !== undefined) callControl(raw, "setAnchor", [anchor]);
-          continue;
-        }
-        if (key === "offset") {
-          callControl(raw, "setOffset", [toRawSize(value)]);
-          continue;
-        }
-        const spec = specs?.[key];
-        if (!spec) {
-          // 「options 袋」控件：整袋写回，按键结构调用会漏掉袋装选项
-          if (bagMethod) {
-            bag[key] = value;
-            continue;
-          }
-          // 逃生口：未知键按 `set<Key>` 结构性调用（与 OverlayDriver.setOptions 同形）。
-          // 先探测成员是否存在，只发一条精确的告警（调用路径的通用告警留给「声明了但没有」）。
-          const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-          if (typeof readNamespaceMember(raw, setter) !== "function") {
-            warnOnce(
-              `unknown:${kind}:${key}`,
-              `ControlDriver.setOptions: ${kind ?? "control"} 没有 "${key}" 的字段级 setter` +
-                "（也不在控件 option 分类里），本次更新被忽略",
-            );
-            continue;
-          }
-          callControl(raw, setter, [value]);
-          continue;
-        }
-        if (spec.policy === "recreate") {
+        const action = classifyOption(raw, kind, key);
+        if (action.status === "recreate") {
           warnOnce(
             `recreate:${kind}:${key}`,
-            `ControlDriver.setOptions: ${kind}.${key} 只有构造期生效（${spec.reason}）；本次更新被忽略，` +
+            `ControlDriver.setOptions: ${kind}.${key} 只有构造期生效（${action.reason}）；本次更新被忽略，` +
               "需要生效请重建控件",
           );
           continue;
         }
-        if ("choice" in spec) {
-          callControl(raw, value ? spec.choice[0] : spec.choice[1]);
+        if (action.status === "unsupported") {
+          warnOnce(
+            `unknown:${kind}:${key}`,
+            `ControlDriver.setOptions: ${kind ?? "control"} 没有 "${key}" 的字段级 setter` +
+              "（也不在控件 option 分类里），本次更新被忽略",
+          );
           continue;
         }
-        callControl(raw, spec.setter, [normalizeValue(spec, value)]);
+        // 袋装键（`apply` 缺席）：聚到一次 `setOptions(options)` 写回，不逐键结构调用
+        if (!action.apply) {
+          bag[key] = value;
+          continue;
+        }
+        action.apply(value);
       }
 
       if (bagMethod && Object.keys(bag).length > 0) callControl(raw, bagMethod, [bag]);
+    },
+
+    planOptions(control, keys) {
+      const raw = registry.resolve<Record<string, unknown>>(control);
+      const kind = kindOfControl(control);
+      const plan: Record<string, ControlOptionStatus> = {};
+      for (const key of keys) plan[key] = classifyOption(raw, kind, key).status;
+      return plan;
     },
 
     addCopyright(control, copyright: CopyrightEntry) {

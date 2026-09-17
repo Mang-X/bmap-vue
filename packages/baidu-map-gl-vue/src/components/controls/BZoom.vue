@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useControlResource } from "../../core/composables/useControlResource";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { ControlHandle } from "../../driver/types/handles";
+import { useControlResource, type ControlSpec } from "../../core/controls";
 
 export interface BZoomProps {
   anchor?: string;
@@ -10,41 +7,26 @@ export interface BZoomProps {
   visible?: boolean;
 }
 
+/**
+ * BZoom —— 缩放控件
+ *
+ * 创建 / 挂载 / 卸载 / anchor / offset / visible / options / 事件八件事全部由统一
+ * `ControlSpec` + `useControlResource` 承担（M7-CONTROL-PANORAMA / issue #41），本文件只声明
+ * 「这个控件是什么」。`anchor` / `offset` 与 `visible` 随 props 变化**即时下发**
+ * （此前只在构造期生效）。
+ */
 const props = withDefaults(defineProps<BZoomProps>(), {
   anchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
   offset: () => ({ x: 83, y: 18 }),
   visible: true,
 });
 
-const { resource } = useControlResource<BZoomProps, ControlHandle>(props, {
-  create: (ctx, p) =>
-    ctx.client.driver.controls.create("zoom", {
-      anchor: p.anchor,
-      offset: p.offset,
-    }),
-  addToMap: (res, ctx, p, scope: ResourceScope) => {
-    if (props.visible) ctx.client.driver.controls.add({ kind: "map", handle: ctx.map }, res);
-  },
-  createWatchers(getCtx, getResource, p, addDisposer) {
-    addDisposer(
-      watch(
-        () => p.visible,
-        (v) => {
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          const controls = ctx.client.driver.controls;
-          const target = { kind: "map" as const, handle: ctx.map };
-          if (v) controls.add(target, res);
-          else controls.remove(target, res);
-        },
-      ),
-    );
-  },
-  remove: (res, ctx) => {
-    ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, res);
-  },
-});
+const spec: ControlSpec<BZoomProps> = {
+  kind: "zoom",
+  options: (p) => ({ anchor: p.anchor, offset: p.offset }),
+};
+
+useControlResource(props, spec);
 
 defineOptions({ name: "BZoom" });
 </script>

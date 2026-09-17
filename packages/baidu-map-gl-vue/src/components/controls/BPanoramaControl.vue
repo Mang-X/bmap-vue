@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useControlResource } from "../../core/composables/useControlResource";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { ControlHandle } from "../../driver/types/handles";
+import { useControlResource, type ControlSpec } from "../../core/controls";
 
 export interface BPanoramaControlProps {
   anchor?: string;
@@ -10,41 +7,27 @@ export interface BPanoramaControlProps {
   visible?: boolean;
 }
 
+/**
+ * BPanoramaControl —— 切换至全景地图的控件
+ *
+ * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。
+ *
+ * 显隐走 SDK 基类的 `show()` / `hide()`；官方 4.0.4 里 `PanoramaControl extends Control`，
+ * 因此这两个成员存在。Driver 仍按**结构性调用**处理（缺成员时告警一次而不是假装成功）——
+ * 官方文档对 PanoramaControl 的描述是「由全景模块提供」，个别运行时版本未必带齐基类成员。
+ */
 const props = withDefaults(defineProps<BPanoramaControlProps>(), {
   anchor: "BMAP_ANCHOR_TOP_RIGHT",
   offset: () => ({ x: 10, y: 10 }),
   visible: true,
 });
 
-const { resource } = useControlResource<BPanoramaControlProps, ControlHandle>(props, {
-  create: (ctx, p) =>
-    ctx.client.driver.controls.create("panorama", {
-      anchor: p.anchor,
-      offset: p.offset,
-    }),
-  addToMap: (res, ctx, p, scope: ResourceScope) => {
-    if (props.visible) ctx.client.driver.controls.add({ kind: "map", handle: ctx.map }, res);
-  },
-  createWatchers(getCtx, getResource, p, addDisposer) {
-    addDisposer(
-      watch(
-        () => p.visible,
-        (v) => {
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          const controls = ctx.client.driver.controls;
-          const target = { kind: "map" as const, handle: ctx.map };
-          if (v) controls.add(target, res);
-          else controls.remove(target, res);
-        },
-      ),
-    );
-  },
-  remove: (res, ctx) => {
-    ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, res);
-  },
-});
+const spec: ControlSpec<BPanoramaControlProps> = {
+  kind: "panorama",
+  options: (p) => ({ anchor: p.anchor, offset: p.offset }),
+};
+
+useControlResource(props, spec);
 
 defineOptions({ name: "BPanoramaControl" });
 </script>

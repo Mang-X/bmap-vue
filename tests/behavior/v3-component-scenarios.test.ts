@@ -212,16 +212,20 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
       h(BControl, { visible: visible.value }, () => h("button", "自定义控件")),
     ]);
     expect(harness.attached("control")).toBe(1);
+    expect(harness.visibleControls()).toBe(1);
 
+    // `visible` 在 M7-CONTROL-PANORAMA / #41 定型为 SDK 基类的 hide()：控件**仍然挂载**，
+    // 只是不可见。用挂载计数读显隐会把「藏起来了」与「摘掉了」混成一件事。
     visible.value = false;
     await nextTick();
     await flushPromises();
-    expect(harness.attached("control")).toBe(0);
+    expect(harness.visibleControls()).toBe(0);
+    expect(harness.attached("control")).toBe(1);
 
-    // 重新挂载：remove 之后可以再 add（Driver 自己记账）
     visible.value = true;
     await nextTick();
     await flushPromises();
+    expect(harness.visibleControls()).toBe(1);
     expect(harness.attached("control")).toBe(1);
 
     await unmountAndSettle(wrapper);

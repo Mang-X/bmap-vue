@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import { watch, ref } from "vue";
-import { useControlResource } from "../../core/composables/useControlResource";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { ControlHandle } from "../../driver/types/handles";
-
-/**
- * BControl —— 自定义控件(slot DOM)
- *
- * 创建 BMap.Control,把 slot 容器 append 到地图容器,
- * anchor/offset/visible 与其他 Control 一致(useControlResource)。
- */
+import { ref } from "vue";
+import { useControlResource, type ControlSpec } from "../../core/controls";
 
 export interface BControlProps {
   anchor?: string;
@@ -17,6 +8,13 @@ export interface BControlProps {
   visible?: boolean;
 }
 
+/**
+ * BControl —— 自定义控件（slot DOM）
+ *
+ * 走 `ControlSpec(kind: "custom")`：DOM 由 `render(props)` 产出的工厂负责，创建 / 挂载 /
+ * 卸载 / anchor / offset / visible 与其它控件完全一致（M7-CONTROL-PANORAMA / issue #41）。
+ * `createCustomControl` 的 `render` 只接收地图 DOM 容器，SDK 细节留在 Driver 内。
+ */
 const props = withDefaults(defineProps<BControlProps>(), {
   anchor: "BMAP_ANCHOR_TOP_LEFT",
   offset: () => ({ x: 83, y: 18 }),
@@ -25,40 +23,17 @@ const props = withDefaults(defineProps<BControlProps>(), {
 
 const containerRef = ref<HTMLElement | null>(null);
 
-const { resource } = useControlResource<BControlProps, ControlHandle>(props, {
-  create: (ctx, p) =>
-    ctx.client.driver.controls.createCustomControl({
-      anchor: p.anchor,
-      offset: p.offset,
-      render: (mapContainer) => {
-        const containerEl = containerRef.value;
-        if (!containerEl) return mapContainer;
-        return mapContainer.appendChild(containerEl as Node) as HTMLElement;
-      },
-    }),
-  addToMap: (res, ctx, p, scope: ResourceScope) => {
-    if (props.visible) ctx.client.driver.controls.add({ kind: "map", handle: ctx.map }, res);
+const spec: ControlSpec<BControlProps> = {
+  kind: "custom",
+  options: (p) => ({ anchor: p.anchor, offset: p.offset }),
+  render: () => (mapContainer: HTMLElement) => {
+    const containerEl = containerRef.value;
+    if (!containerEl) return mapContainer;
+    return mapContainer.appendChild(containerEl as Node) as HTMLElement;
   },
-  createWatchers(getCtx, getResource, p, addDisposer) {
-    addDisposer(
-      watch(
-        () => p.visible,
-        (v) => {
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          const controls = ctx.client.driver.controls;
-          const target = { kind: "map" as const, handle: ctx.map };
-          if (v) controls.add(target, res);
-          else controls.remove(target, res);
-        },
-      ),
-    );
-  },
-  remove: (res, ctx) => {
-    ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, res);
-  },
-});
+};
+
+useControlResource(props, spec);
 
 defineOptions({ name: "BControl", inheritAttrs: false });
 </script>

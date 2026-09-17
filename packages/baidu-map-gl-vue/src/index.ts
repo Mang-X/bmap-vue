@@ -236,6 +236,8 @@ export type {
   GeometryDriver,
   OverlayDriver,
   ControlDriver,
+  ControlKind,
+  ControlOptionStatus,
   LayerDriver,
   NativeLayerDriver,
   NativeLayerKind,
@@ -246,6 +248,18 @@ export type {
   JsapiV4Driver,
   EventDriver,
   PanoramaDriver,
+} from "./driver";
+// 全景的领域类型（M7-CONTROL-PANORAMA / #41）：`<BPanorama>` 的 props 与
+// `usePanoramaService` 的返回值用到它们，因此必须从根入口可取。
+export type {
+  PanoramaDataInfo,
+  PanoramaLabelHandle,
+  PanoramaLabelOptions,
+  PanoramaOptions,
+  PanoramaPoiType,
+  PanoramaPov,
+  PanoramaSceneType,
+  PanoramaViewerDriver,
 } from "./driver";
 
 // 组件公开类型(与 SFC 内 export 对齐,供类型使用)
