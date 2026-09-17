@@ -1,24 +1,33 @@
 /**
- * OverlayRegistry
+ * OverlayRegistry —— 每张地图的覆盖物注册表
  *
- * 每地图实例的覆盖物注册表:
- * - 注册/注销 Overlay
- * - 按 type 查询
- * - runtime dispose 时逆序清理
- * - 支持 InfoWindow 单实例策略
- * - 处理 clearOverlays 后 registry 同步
+ * 记账模型（M5-SPEC-MARKER / issue #30 定型）：
  *
- * registration 自带 dispose，不再维护无界 disposer 历史数组。
+ * - **所有者是实例 scope，不是注册表**。`registerResource()` 返回一个自带 `dispose()` 的一等
+ *   registration，并把「从表里摘除」这条 detach 交给**实例 scope**；scope 释放（重建 / 卸载）
+ *   时记录自动消失，调用方不必记得再调一次 `unregister`。
+ * - **注册表不持有释放历史**。此前还有一条 `register(type, instance, owner?)` 的旧 API：它把
+ *   owner scope 的所有权反过来交给注册表（`dispose()` 会去释放别人的 scope），并且把 detach
+ *   闭包挂在记录的私有字段 `__detach` 上供 `unregister` 取用——那正好是「历史 disposer 闭包」
+ *   的形态，而且没有任何生产消费者。旧 API 与那个私有字段一起删除。
+ * - 因此 `dispose()` 只**清空记录**：owner scope 由拥有它的组件释放，注册表不越权。
  */
-import { ResourceScope } from "../lifecycle/ResourceScope";
+import type { ResourceScope } from "../lifecycle/ResourceScope";
 
 export interface OverlayRecord<Resource = unknown> {
   readonly id: symbol;
   readonly type: string;
   readonly instance: Resource;
+  /** 拥有这条记录的实例 scope（诊断用；它才是释放的责任方）。 */
   readonly owner: ResourceScope;
 }
 
+/**
+ * 一等注册凭据：**自带走**。
+ *
+ * `dispose()` 幂等，并且同时做两件事：把记录从表里摘掉、把 detach 从 owner scope 摘掉
+ * （后者防止「注册 → 释放 → 再注册」反复堆积 scope 里的失效闭包）。
+ */
 export interface ResourceRegistration<Resource = unknown> {
   readonly id: symbol;
   readonly type: string;
@@ -27,20 +36,25 @@ export interface ResourceRegistration<Resource = unknown> {
   dispose(): void;
 }
 
+export interface ResourceRegistrationInput<Resource = unknown> {
+  type: string;
+  resource: Resource;
+  /** 拥有这条记录的实例 scope。 */
+  scope: ResourceScope;
+  /** 从地图上移除实例（由调用方给出；注册表只管记账，不碰 Driver）。 */
+  remove: (resource: Resource) => void;
+}
+
 export interface OverlayRegistry {
-  register<Resource>(type: string, instance: Resource, owner?: ResourceScope): symbol;
-  /** 新 API：返回自带 dispose 的 registration，避免历史闭包堆积 */
-  registerResource<Resource>(input: {
-    type: string;
-    resource: Resource;
-    scope: ResourceScope;
-    remove: (resource: Resource) => void;
-  }): ResourceRegistration<Resource>;
-  unregister(id: symbol): void;
+  /**
+   * 登记一个覆盖物实例，返回自带 `dispose` 的 registration；记录的生命周期与 `scope` 绑定。
+   */
+  registerResource<Resource>(input: ResourceRegistrationInput<Resource>): ResourceRegistration<Resource>;
   get(id: symbol): OverlayRecord | undefined;
   getByType<Resource = unknown>(type: string): OverlayRecord<Resource>[];
-  /** 同步 registry 以反映 map.clearOverlays 清除的全部 overlay */
+  /** 同步 registry 以反映 `map.clearOverlays()` 清除的全部 overlay（只清记录，不调 SDK）。 */
   clearAll(): void;
+  /** 清空记录。**不**释放 owner scope —— 释放责任在拥有实例的组件，见模块注释。 */
   dispose(): void;
   get size(): number;
 }
@@ -48,29 +62,11 @@ export interface OverlayRegistry {
 export function createOverlayRegistry(): OverlayRegistry {
   const records = new Map<symbol, OverlayRecord>();
 
-  const registry: OverlayRegistry = {
-    register(type, instance, owner) {
-      const id = Symbol("overlay");
-      const scope = owner ?? new ResourceScope();
-      const rec: OverlayRecord = { id, type, instance, owner: scope };
-      records.set(id, rec);
-      // owner 释放时自动摘除记录；detach 经 scope.remove 在 unregister 时摘除，
-      // 不维护无界历史数组。
-      const detach = () => {
-        records.delete(id);
-      };
-      scope.add(detach);
-      // 将 detach 句柄挂到记录上，供 unregister 时摘除
-      (rec as { __detach?: () => void }).__detach = detach;
-      return id;
-    },
-    registerResource<Resource>(input: {
-      type: string;
-      resource: Resource;
-      scope: ResourceScope;
-      remove: (resource: Resource) => void;
-    }): ResourceRegistration<Resource> {
-      const id = Symbol("overlay");
+  return {
+    registerResource<Resource>(
+      input: ResourceRegistrationInput<Resource>,
+    ): ResourceRegistration<Resource> {
+      const id = Symbol(input.type);
       const rec: OverlayRecord<Resource> = {
         id,
         type: input.type,
@@ -78,13 +74,16 @@ export function createOverlayRegistry(): OverlayRegistry {
         owner: input.scope,
       };
       records.set(id, rec);
+
       let disposed = false;
-      // scope 释放时自动摘除（不调用 SDK remove，SDK remove 由调用方 dispose 显式执行）
+      // scope 释放时自动摘除记录（SDK 侧的 remove 由调用方显式 dispose 时执行）
       const detach = () => {
         records.delete(id);
       };
-      input.scope.add(detach);
-      const registration: ResourceRegistration<Resource> = {
+      // `add()` 在 scope 已释放时会立即执行 detach —— 那是正确语义：记录不会活在注册表里
+      const removeDetach = input.scope.add(detach);
+
+      return {
         id,
         type: input.type,
         resource: input.resource,
@@ -98,47 +97,31 @@ export function createOverlayRegistry(): OverlayRegistry {
             input.remove(input.resource);
           } finally {
             records.delete(id);
-            input.scope.remove(detach);
+            removeDetach();
           }
         },
       };
-      return registration;
     },
-    unregister(id) {
-      const rec = records.get(id);
-      if (rec) {
-        records.delete(id);
-        // 从 owner 摘除 detach，避免 owner disposers 堆积
-        const detach = (rec as { __detach?: () => void }).__detach;
-        if (detach) rec.owner.remove(detach);
-      }
-    },
+
     get(id) {
       return records.get(id);
     },
+
     getByType(type) {
-      return [...records.values()].filter((r) => r.type === type) as OverlayRecord<any>[];
+      return [...records.values()].filter((record) => record.type === type) as OverlayRecord<any>[];
     },
+
     clearAll() {
-      // 模拟 map.clearOverlays:移除全部
-      for (const rec of [...records.values()]) {
-        records.delete(rec.id);
-      }
-    },
-    dispose() {
-      for (const rec of [...records.values()].reverse()) {
-        records.delete(rec.id);
-        try {
-          rec.owner.dispose();
-        } catch {
-          // 忽略单个 owner 释放错误，继续释放其余
-        }
-      }
+      // 模拟 map.clearOverlays：移除全部记录（不逐个调 SDK remove —— SDK 已经清过了）
       records.clear();
     },
+
+    dispose() {
+      records.clear();
+    },
+
     get size() {
       return records.size;
     },
   };
-  return registry;
 }
