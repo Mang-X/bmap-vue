@@ -67,6 +67,13 @@ planOptions(control: ControlHandle, keys: readonly string[]): Record<string, Con
 三态而不是二态：「本引擎没有入口」与「有入口但只能构造期生效」对调用方是两件不同的事——
 前者重建也没用（值会被静默丢弃），后者重建就能生效。合并它们会让 adapter 对着一堆无用重建反复创建控件。
 
+**三态的判据在评审第 3 轮收紧过一次**（这一点容易写错，写在这里）：`unsupported` 的唯一依据是
+**「连构造期也到不了」**，而不是「没有就地 setter」。4.0 的构造选项是**原样透传**的（`projectOptions`
+只归一化 anchor / offset / `value: "size"`），所以「未命中分类表 + 实例上没有 `set<Key>`」的键依然
+可能在构造期生效 ⇒ 属于 `recreate`。v4 上真正 `unsupported` 的只有两类：`custom`（`createCustomControl`
+只接收 `anchor` / `offset` / `render`）与裸 `"control"` 句柄（认不出种类就不授权重建）。把两者混为一谈
+会让调用方二选一地犯错：丢掉本可生效的键，或对没有入口的键做无效重建。
+
 **`planOptions` 与 `setOptions` 共用同一处分类**（`classifyOption()` 返回的动作同时决定两者：`apply` 存在即就地写、
 `apply` 缺席但 `live` 即 options 袋、`recreate` / `unsupported` 只告警）。分类表、options 袋与 `set<Key>`
 逃生口因此只有一份，不存在会漂移的第二张表。
@@ -291,6 +298,27 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 | Fake 的 `FakeV4Panorama` 直接持有调用方传入的 options 引用（真实 4.0 是构造期读入） | 改为构造期拷一份。这让「组件到底有没有把新值重新下发」可观察——第 2 轮那个原地修改变体正是被这条「夹具比真实宽容」藏住的。补 1 条 Fake 保真用例（去掉拷贝即红） |
 
 同轮的反证（改坏 → 必须红，**用退出码判定**）：把两个源文件退回 `67b5a31` → 3 条红（原地修改的三条）；重建判据退回旧形式 → 1 条红（`unsupported`）；去掉 Fake 的构造期拷贝 → 1 条红（Fake 保真）。
+
+## 外部评审轮次记录（PR #95 第 3 轮，基线 `494eceb`）
+
+上一轮的 P1 **复核通过**（`OptionSnapshot` / 原地 mutation / Panorama 基线与 Fake 保真都认可）；
+本轮提 1 个**合并前收口**的 P2：`ControlOptionStatus.unsupported` 的公开语义与统一 adapter 的实现相反。
+
+| 发现 | 复现/核对 | 处置 |
+| --- | --- | --- |
+| P2 公共契约自相矛盾：`driver/types/controls.ts` 定义 `unsupported` = 「本引擎没有该 option 的入口，**重建同样不会生效**」，而 adapter 上一轮的判据 `!appliesInPlace(key) ⇒ replace()` 让 `unsupported` **必然重建**；同一文件上方还留着「`unsupported` ⇒ 不写也不重建」的注释。第三方 Driver 若按公开契约返回 `unsupported`，会被迫在每次该 option 变化时销毁重建控件 | **两处都确认**：`useControlResource.ts:227` 与 `:256` 确实相反；另核对 `projectOptions()` 对未知构造选项**原样透传**，因此「实例没有 `setNope` 但构造器会收到」在语义上就是 `recreate`，不是 `unsupported` | 采纳评审的**方案 1**（改 Driver 的分类，而不是重定义 `unsupported`）：v4 的分类器只在**构造期也到不了**时报 `unsupported`（`custom` / 裸 `control` 句柄），其余未命中分类表的键报 `recreate` 并给出理由串；adapter 判据回到「`recreate` 或值变回 `undefined` 才重建」，并为 `unsupported` 的键**告警一次**（每个键一次），消掉「静默 no-op」。`driver/types/controls.ts` 与 `useControlResource.ts` 的注释同步改写，并写明「把『没有就地 setter』一律报成 `unsupported` 是错的」 |
+
+同轮的测试调整（旧用例编码的是错契约，**改而不是删**）：
+
+- `setOptions` 那条「未知键 ⇒ 告警 `没有 "x" 的字段级 setter`」改为断言新的 `recreate` 文案，
+  并补一条 `planOptions` 断言；
+- 新增驱动层用例：`custom` 控件上未知键 ⇒ `unsupported`；同时反向断言全部 kind 的 `anchor` / `offset`
+  仍是 `live`；
+- 行为层把「`unsupported` ⇒ 重建」改成「未命中分类表但构造期会收到 ⇒ `recreate` ⇒ 重建」，
+  并**新增**「Driver 报 `unsupported` ⇒ 不重建 + 告警一次」（用自定义 spec 驱动这条公共抽象路径）。
+
+反证（改坏 → 必须红，退出码判定）：分类器退回「未命中即 `unsupported`」→ **3 条红**；
+adapter 判据退回「非 live 即重建」→ **1 条红**（`custom` 那条）。
 
 ## 参考
 

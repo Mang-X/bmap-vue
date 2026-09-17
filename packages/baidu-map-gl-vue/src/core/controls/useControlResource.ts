@@ -94,6 +94,8 @@ export function useControlResource<Props extends ControlBaseProps>(
   let applied: OptionSnapshot | null = null;
   /** `create` 实际交给 SDK 的那份选项的快照；`mount` 用它当基线，再对当前 props 收敛一次。 */
   let createdWith: OptionSnapshot | null = null;
+  /** 已就 `unsupported` 告警过的键（每个键一次，避免每次 props 变化都刷屏）。 */
+  const warnedUnsupported = new Set<string>();
   /** `useSdkResource` 的 `replace`；声明在 spec 之前，供 `mount` 的收敛路径使用。 */
   let replaceRef: (() => Promise<void>) | null = null;
 
@@ -222,9 +224,11 @@ export function useControlResource<Props extends ControlBaseProps>(
    * 选项变化 → 就地更新 / 重建。
    *
    * 判据来自 Driver（`planOptions`），组件侧不维护第二张表：
-   * - 任一变化键是 `recreate` ⇒ **整只重建**（把新选项交给构造期）；
+   * - 任一变化键是 `recreate`，或**值变回 `undefined`** ⇒ **整只重建**（把新选项交给构造期）；
    * - 其余（`live`）⇒ 只把变了的键写下去；
-   * - `unsupported` ⇒ 不写也不重建（写了会被静默丢弃、重建同样无效）。
+   * - `unsupported` ⇒ 不写也不重建（三态设计的本意：这种键**连构造期也没有入口**，重建同样无效）。
+   *   它不是静默丢弃——适配器会为它告警一次（每个键一次），否则调用方只知道「没生效」而不知道
+   *   为什么。
    *
    * `anchor` 与 `offset` 必须**成对写**：真实 4.0 上 `setAnchor()` 会把控件偏移重置回
    * 控件默认值，只写 anchor 会把用户给的 offset 悄悄吃掉。
@@ -244,23 +248,32 @@ export function useControlResource<Props extends ControlBaseProps>(
 
     const plan = context.client.driver.controls.planOptions(resource, changed);
     /**
-     * **只有「Driver 说 `live` 且值有定义」才就地写；其余一律重建。**
+     * **重建**（就地写做不到）的两种情形：
      *
-     * 把判据写成这个总括形式（而不是逐条列举「什么情况下重建」）是为了让它**没有缺口**——
-     * 每一种「就地写做不到」的情形都落到重建上，不存在「既没写、又推进了基线」的静默丢更新：
-     *
-     * 1. `recreate`：Driver 说这个键只有构造期生效（就地写会被告警忽略）；
+     * 1. `recreate`：Driver 说这个键**只有构造期生效**——既包括分类表里显式声明的构造期项
+     *    （`map-type.type` / `overview.isOpen` / 版权控件的 `anchor`），也包括「未命中分类表、
+     *    但 4.0 会把构造选项**原样透传**」的键（后者依然可能在构造期生效，所以归 `recreate`）；
      * 2. **值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK 默认」，而默认值只存在于构造期
-     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过（#95 评审 P1：
-     *    `BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到默认）；
-     * 3. `unsupported`：Driver 没有该键的就地入口（`set<Key>` 不存在、也不在分类表里）。
-     *    构造期是**唯一**可能生效的入口（构造选项是原样透传的），所以重建是唯一有意义的动作；
-     *    只告警不重建就会把值丢掉——而 Driver 那句「本次更新被忽略」是可见的，静默才是问题。
+     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过（#95 评审第 1 轮 P1：
+     *    `BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到默认）。
+     *
+     * `unsupported` **刻意不重建**：按三态的定义，它意味着「连构造期也没有入口」（例如自定义
+     * 控件上未知的键），重建同样不会生效——这正是三态要避免的无效重建与内部状态丢失
+     * （#95 评审第 3 轮）。为了不让它变成「静默丢弃」，下面会为这类键告警一次。
      */
-    const appliesInPlace = (key: string): boolean => plan[key] === "live" && next[key] !== undefined;
-    if (changed.some((key) => !appliesInPlace(key))) {
+    if (changed.some((key) => plan[key] === "recreate" || next[key] === undefined)) {
       void replace();
       return;
+    }
+
+    // `unsupported` 的键：写也不会生效、重建也不会生效，但**必须说出来**（每个键一次）
+    for (const key of changed) {
+      if (plan[key] !== "unsupported" || warnedUnsupported.has(key)) continue;
+      warnedUnsupported.add(key);
+      logger.warn(
+        `ControlSpec(${controlSpec.kind}): option "${key}" 在本引擎没有入口（连构造期也没有，` +
+          "例如自定义控件上未知的键），本次变化被忽略——重建同样不会生效",
+      );
     }
 
     const patch: ControlOptions = {};

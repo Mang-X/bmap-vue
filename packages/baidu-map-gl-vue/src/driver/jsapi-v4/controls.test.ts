@@ -289,11 +289,17 @@ describe("setOptions 的动态 / 构造期分类", () => {
     expect(raw.options).toMatchObject({ showAddressBar: false, watchPosition: true });
   });
 
-  it("未知键走 set<Key> 逃生口，实例上没有该方法时告警一次", () => {
+  it("未知键走 set<Key> 逃生口；实例上没有该方法时按 `recreate` 告警一次（构造选项原样透传）", () => {
     const control = ctx.controls.create("zoom");
     ctx.controls.setOptions(control, { noSuchOption: 1 });
     expect(ctx.rawOf(control).callLog).toEqual([]);
-    expect(String(warn.mock.calls[0][0])).toContain("没有 \"noSuchOption\" 的字段级 setter");
+    // 「没有就地入口」≠「没有入口」：Built-in 控件的构造选项是原样透传的，所以这条属于
+    // 「只有构造期生效」⇒ `recreate`（#95 评审第 3 轮）。真正「连构造期也没有入口」的是
+    // 自定义控件上的未知键，见下一条用例。
+    expect(String(warn.mock.calls[0][0])).toContain("只有构造期生效");
+    expect(ctx.controls.planOptions(control, ["noSuchOption"])).toEqual({
+      noSuchOption: "recreate",
+    });
   });
 });
 
@@ -613,12 +619,32 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
     expect(raw.callLog.length).toBe(before);
     expect(warn).toHaveBeenCalledTimes(1);
 
-    // unsupported：同样不动实例（重建也没用，值本来就没有入口）
-    expect(ctx.controls.planOptions(handle, ["nope"]).nope).toBe("unsupported");
+    // 未命中分类表的键 ⇒ `recreate`（构造选项原样透传，构造期仍可能生效），不是 unsupported
+    expect(ctx.controls.planOptions(handle, ["nope"]).nope).toBe("recreate");
     warn.mockClear();
     ctx.controls.setOptions(handle, { nope: 1 });
     expect(raw.callLog.length).toBe(before);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("`unsupported` 只留给「连构造期也到不了」的键（自定义控件上未知的键）", () => {
+    const handle = ctx.controls.createCustomControl({
+      render: () => document.createElement("div"),
+    });
+    ctx.controls.add(ctx.mapTarget(), handle);
+    const raw = ctx.rawOf(handle) as unknown as { callLog: string[] };
+
+    expect(ctx.controls.planOptions(handle, ["nope"])).toEqual({ nope: "unsupported" });
+    warn.mockClear();
+    ctx.controls.setOptions(handle, { nope: 1 });
+    expect(raw.callLog).not.toContain("setNope");
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // 反向：全部 kind 的 anchor / offset 仍然是 live（自定义控件走 setAnchor / setOffset）
+    expect(ctx.controls.planOptions(handle, ["anchor", "offset"])).toEqual({
+      anchor: "live",
+      offset: "live",
+    });
   });
 
   it("anchor 在除版权控件外的 kind 上都是 live，且 anchor 变化会把 offset 一并写下去", () => {

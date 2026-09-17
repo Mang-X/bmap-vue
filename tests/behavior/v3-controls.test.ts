@@ -15,7 +15,7 @@
  * 显隐语义（issue 的「统一 visible」）在 #41 定型为 SDK 基类的 `show()` / `hide()`：控件始终
  * 挂载，只切换可见性。`BCopyright` 是唯一例外（共享实例 + 版权项级显隐），单独一节覆盖。
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive, ref, type Component } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
@@ -616,14 +616,14 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
   });
 });
 
-describe("统一 adapter：不存在「变化被静默丢掉」的路径", () => {
+describe("统一 adapter：就地写做不到时的两种反应（重建 / 有据可查的忽略）", () => {
   beforeEach(() => harness.reset());
 
-  it("Driver 说 `unsupported` 的键也走重建（构造期是唯一可能的入口）", async () => {
-    // 自定义 spec：`nope` 不在任何分类表里、实例上也没有 `setNope` ⇒ planOptions 报 unsupported。
-    // 这条路径内置组件走不到（反向门禁要求组件选项都有落地方式），但适配器是公共抽象，
-    // 外部消费者完全可能传一个官方构造选项而本库还没分类——那就必须重建，而不是「既不写、
-    // 又推进基线」。
+  it("未命中分类表、但构造期会收到该键 ⇒ `recreate` ⇒ 重建", async () => {
+    // 自定义 spec：`nope` 不在任何分类表里、实例上也没有 `setNope`。Driver 现在把它判成
+    // `recreate`（4.0 的构造选项**原样透传**，构造期仍可能生效），因此适配器必须重建——
+    // 而不是当成 `unsupported` 既不写也不重建地丢掉。
+    // 这条路径内置组件走不到（反向门禁要求组件选项都有落地方式），但适配器是公共抽象。
     const Probe = defineComponent({
       props: { nope: { type: Number, required: true } },
       setup(p) {
@@ -651,6 +651,48 @@ describe("统一 adapter：不存在「变化被静默丢掉」的路径", () =>
     expect(fake.createdControls.length).toBe(created + 1);
     expect(lastCreatedControl().options.nope).toBe(2);
 
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("Driver 报 `unsupported`（连构造期也没入口）⇒ **不**重建，但会告警一次（不是静默丢弃）", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const Probe = defineComponent({
+      props: { nope: { type: Number, required: true } },
+      setup(p) {
+        useControlResource(p as never, {
+          // `custom` 是唯一「构造期也到不了」的种类：createCustomControl 只接收 anchor/offset/render
+          kind: "custom",
+          options: (x: { nope: number }) => ({ offset: { x: 7, y: 9 }, nope: x.nope }),
+          render: () => () => document.createElement("div"),
+        });
+        return () => null;
+      },
+    });
+    const value = ref(1);
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+    warn.mockClear();
+
+    value.value = 2;
+    await nextTick();
+    await flushPromises();
+
+    // 三态契约：`unsupported` = 重建同样不会生效 ⇒ 不做无效重建（否则每次变化都销毁重建控件）
+    expect(fake.createdControls.length).toBe(created);
+    // 但它必须可见：适配器为这类键告警一次
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("没有入口")),
+      "unsupported 的键应当告警一次",
+    ).toBe(true);
+
+    warn.mockRestore();
     wrapper.unmount();
     await nextTick();
   });

@@ -45,9 +45,15 @@ export interface ControlOptions {
  * 反复创建控件（M7-CONTROL-PANORAMA / issue #41）。
  *
  * - `live`：有就地入口，`setOptions` 会真的写下去；
- * - `recreate`：只有构造期生效，`setOptions` 告警一次且**不动实例**，需要新值请重建控件；
- * - `unsupported`：本引擎没有该 option 的入口（未命中分类表、没有 options 袋，实例上也没有
- *   对应的 `set<Key>`）——`setOptions` 告警一次且忽略，**重建同样不会生效**。
+ * - `recreate`：**只有构造期生效**，`setOptions` 告警一次且**不动实例**，需要新值请重建控件。
+ *   既包括分类表里显式声明的构造期项（`map-type.type`、`overview.isOpen`、版权控件的 `anchor`），
+ *   也包括「未命中分类表、但构造选项**原样透传**」的键——后者依然可能在构造期生效，因此归这里
+ *   而不是 `unsupported`；
+ * - `unsupported`：**连构造期也没有入口**（例如自定义控件上未知的键：`createCustomControl`
+ *   只接收 `anchor` / `offset` / `render`）——`setOptions` 告警一次且忽略，**重建同样不会生效**。
+ *
+ * 实现者注意：把「没有就地 setter」一律报成 `unsupported` 是**错的**（那会让调用方丢掉本可
+ * 在构造期生效的键）；判定 `unsupported` 的唯一依据是「构造期也到不了」。#95 评审第 3 轮。
  */
 export type ControlOptionStatus = "live" | "recreate" | "unsupported";
 

@@ -403,8 +403,31 @@ export function createJsapiV4ControlDriver(
     if (kind && CONTROL_OPTIONS_BAG[kind]) return { status: "live" };
     // 逃生口：未知键按 `set<Key>` 结构性调用（与 OverlayDriver.setOptions 同形）
     const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-    if (typeof readNamespaceMember(raw, setter) !== "function") return { status: "unsupported" };
-    return { status: "live", apply: (value) => callControl(raw, setter, [value]) };
+    if (typeof readNamespaceMember(raw, setter) === "function") {
+      return { status: "live", apply: (value) => callControl(raw, setter, [value]) };
+    }
+    /**
+     * 到这里：既不在分类表里、没有 options 袋、实例上也没有 `set<Key>`。
+     *
+     * **这不等于「本引擎没有这个 option」**——4.0 的构造选项是**原样透传**的
+     * （`projectOptions` 只归一化 anchor / offset / `value: "size"`，其余键照发），所以未命中
+     * 分类表的键依然可能在**构造期**生效。按三态的定义，这属于 `recreate`（「只有构造期生效」），
+     * 不是 `unsupported`（「连构造期也没有入口」）。把两者混为一谈会让调用方二选一地犯错：
+     * 要么把能生效的键当成没入口而**丢掉更新**，要么对真正没入口的键做**无效重建**（#95 评审第 3 轮）。
+     *
+     * 两个例外——「构造期也到不了」的才叫 `unsupported`：
+     * - `custom`：`createCustomControl({ anchor, offset, render })` 只接收这三样，别的键连构造期
+     *   都进不去；
+     * - 裸 `"control"` 句柄（`kindOfControl` 认不出种类的、手工登记的句柄）：**授权重建需要知道
+     *   种类**，认不出就不猜。
+     */
+    if (kind === undefined || kind === "custom") return { status: "unsupported" };
+    return {
+      status: "recreate",
+      reason:
+        "未命中控件 option 分类表、实例上也没有对应的 set<Key>——只有构造期可能生效" +
+        "（4.0 的构造选项原样透传）",
+    };
   };
 
   return {
