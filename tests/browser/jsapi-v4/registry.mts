@@ -40,6 +40,14 @@ const SPECS: Record<string, SmokeCheckSpec> = {
   "overlay-marker": { id: "overlay-marker", name: "<BMarker> 挂载后覆盖物计数真的增长" },
   "overlay-polyline": { id: "overlay-polyline", name: "<BPolyline> 挂载后覆盖物计数真的增长" },
   "control-zoom": { id: "control-zoom", name: "基础控件 <BZoom> 真的挂上（账本计数或容器 DOM 增量）" },
+  "controls-stable-set": {
+    id: "controls-stable-set",
+    name: "#41 新增的 Stable 控件（<BNavigation> / <BMapType> / <BOverview>）真的挂上，且改 anchor 后即时下发",
+  },
+  "panorama-viewer": {
+    id: "panorama-viewer",
+    name: "<BPanorama> 建出查看器并接受受控写入（只登记在 fixture 档：live 需要真实全景场景）",
+  },
   "layer-district": {
     id: "layer-district",
     name: "基础图层 <BDistrictLayer> 真的挂上（账本计数或容器 DOM 增量）",
@@ -87,6 +95,8 @@ const fixtureChecks: string[] = [
   "overlay-marker",
   "overlay-polyline",
   "control-zoom",
+  "controls-stable-set",
+  "panorama-viewer",
   "layer-district",
   "infowindow-visible",
   "unmount-release",
@@ -101,6 +111,7 @@ const liveChecks: string[] = [
   "overlay-marker",
   "overlay-polyline",
   "control-zoom",
+  "controls-stable-set",
   "layer-district",
   "infowindow-visible",
   "service-geocode",

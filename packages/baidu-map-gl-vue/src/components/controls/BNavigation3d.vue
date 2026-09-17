@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useControlResource } from "../../core/composables/useControlResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { ControlHandle } from "../../driver/types/handles";
+import { useControlResource, type ControlSpec } from "../../core/controls";
 
 export interface BNavigation3dProps {
   anchor?: string;
@@ -11,41 +7,23 @@ export interface BNavigation3dProps {
   visible?: boolean;
 }
 
+/**
+ * BNavigation3d —— 3D 视角导航控件（官方 `NavigationControl3D`）
+ *
+ * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。
+ */
 const props = withDefaults(defineProps<BNavigation3dProps>(), {
   anchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
   offset: () => ({ x: 83, y: 18 }),
   visible: true,
 });
 
-const { resource } = useControlResource<BNavigation3dProps, ControlHandle>(props, {
-  create: (ctx, p) =>
-    ctx.client.driver.controls.create("navigation-3d", {
-      anchor: p.anchor,
-      offset: p.offset,
-    }),
-  addToMap: (res, ctx, p, scope: ResourceScope) => {
-    if (props.visible) ctx.client.driver.controls.add({ kind: "map", handle: ctx.map }, res);
-  },
-  createWatchers(getCtx, getResource, p, addDisposer) {
-    addDisposer(
-      watch(
-        () => p.visible,
-        (v) => {
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          const controls = ctx.client.driver.controls;
-          const target = { kind: "map" as const, handle: ctx.map };
-          if (v) controls.add(target, res);
-          else controls.remove(target, res);
-        },
-      ),
-    );
-  },
-  remove: (res, ctx) => {
-    ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, res);
-  },
-});
+const spec: ControlSpec<BNavigation3dProps> = {
+  kind: "navigation-3d",
+  options: (p) => ({ anchor: p.anchor, offset: p.offset }),
+};
+
+useControlResource(props, spec);
 
 defineOptions({ name: "BNavigation3d" });
 </script>

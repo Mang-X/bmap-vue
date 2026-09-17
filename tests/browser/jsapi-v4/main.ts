@@ -23,7 +23,11 @@ import {
   BDistrictLayer,
   BInfoWindow,
   BMap,
+  BMapType,
   BMarker,
+  BNavigation,
+  BOverview,
+  BPanorama,
   BPolyline,
   BZoom,
   useBMapGeocoder,
@@ -173,6 +177,11 @@ interface ModeDescriptor {
   /** 控件/图层读数：Fake 有账本；真实 4.0 的 Map 没有读数接口，返回 `-1` 表示改用 DOM 增量。 */
   controls(raw: Record<string, unknown>): number;
   layers(raw: Record<string, unknown>): number;
+  /**
+   * 全景查看器读数（M7-CONTROL-PANORAMA / #41）：Fake 有实例账本；live 档没有公开读数面，
+   * 返回 `-1`（`panorama-viewer` 因此**只登记在 fixture 档**）。
+   */
+  panoramas(): number;
   /** 卸载后的泄漏门禁：真实 SDK 只能核对可观察量，Fake 有精确诊断。 */
   assertNoLeaks(snapshot: UnmountSnapshot): void;
   /** 「地图真的初始化了」的可观察证据：真实 SDK 有容器 DOM，Fake 有可读账本。 */
@@ -240,6 +249,7 @@ function createDescriptor(): ModeDescriptor {
       overlays: (raw) => ledger(raw).overlays.length,
       controls: (raw) => ledger(raw).controls.length,
       layers: (raw) => ledger(raw).layers.length,
+      panoramas: () => fake!.createdPanoramas.length,
       assertNoLeaks: () => fake!.diagnostics.assertNoLeaks("jsapi-v4 browser smoke (fixture)"),
       assertMapInitialized: (raw) => {
         assertSmoke(
@@ -290,6 +300,7 @@ function createDescriptor(): ModeDescriptor {
     // 因此控件/图层改用容器 DOM 增量核对。
     controls: () => -1,
     layers: () => -1,
+    panoramas: () => -1,
     assertNoLeaks: (snapshot) => {
       const canvasHost =
         (snapshot.container.querySelector(".bmap-canvas-host") as HTMLElement | null) ??
@@ -378,6 +389,11 @@ interface Mounted {
   searchRef: { value: unknown };
   detailRef: { value: unknown };
   routeRef: { value: unknown };
+  /**
+   * 新增 Stable 控件的可改 props（`controls-stable-set` 要证明 anchor 真的会动态下发）。
+   * 初始值刻意两两不同，改动后统一落到 `BMAP_ANCHOR_BOTTOM_LEFT`，这样「三个都变了」是可断言的。
+   */
+  controlProps: { navigationAnchor: string; mapTypeAnchor: string; overviewAnchor: string };
   /** 四个 wrapper 的状态输入（`BPlaceDetail` 的 `uid` 由真实检索结果喂进来，不硬编码）。 */
   uiKit: { placeUid: string };
   /** wrapper 事件落点：检查体靠它断言「事件真的到达」，而不是只看返回值。 */
@@ -402,6 +418,10 @@ function mountTree(): Mounted {
     info: false,
     zoom: false,
     district: false,
+    navigation: false,
+    maptype: false,
+    overview: false,
+    panorama: false,
     autocomplete: false,
     placesearch: false,
     placedetail: false,
@@ -414,6 +434,11 @@ function mountTree(): Mounted {
   const searchRef = ref<unknown>(null);
   const detailRef = ref<unknown>(null);
   const routeRef = ref<unknown>(null);
+  const controlProps = reactive({
+    navigationAnchor: "BMAP_ANCHOR_TOP_LEFT",
+    mapTypeAnchor: "BMAP_ANCHOR_TOP_RIGHT",
+    overviewAnchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
+  });
   const uiKit = reactive({ placeUid: "" });
   const uiKitEvents: Mounted["uiKitEvents"] = {
     searchLoad: [],
@@ -453,6 +478,20 @@ function mountTree(): Mounted {
       );
     if (flags.zoom) nodes.push(h(BZoom, {}));
     if (flags.district) nodes.push(h(BDistrictLayer, { name: "北京市" }));
+    // #41 新增的三个 Stable 控件：锚点绑到 `controlProps`，用来断言「改 props 真的下发」
+    if (flags.navigation) nodes.push(h(BNavigation, { anchor: controlProps.navigationAnchor }));
+    if (flags.maptype) nodes.push(h(BMapType, { anchor: controlProps.mapTypeAnchor }));
+    if (flags.overview) nodes.push(h(BOverview, { anchor: controlProps.overviewAnchor }));
+    if (flags.panorama) {
+      nodes.push(
+        h(BPanorama, {
+          point: POINT,
+          pov: { heading: 90, pitch: -10 },
+          zoom: 1,
+          style: "width: 200px; height: 140px",
+        }),
+      );
+    }
     if (flags.autocomplete) nodes.push(h(BPlaceAutocomplete as never, { ref: autoRef, location: CITY }));
     if (flags.placesearch) {
       nodes.push(
@@ -553,6 +592,7 @@ function mountTree(): Mounted {
     ready,
     treeErrors,
     flags,
+    controlProps,
     infoRef,
     autoRef,
     searchRef,
@@ -793,6 +833,98 @@ const CHECKS: Record<string, CheckImpl> = {
       } finally {
         recorder.restore();
       }
+    },
+  },
+
+  "controls-stable-set": {
+    async run(ctx) {
+      // M7-CONTROL-PANORAMA / #41：新增的三个 Stable 控件在**真实 SDK** 上真的挂上，
+      // 而且 `anchor` 改 props 之后真的下发（`getAnchor()` 从拦截到的实例上读回）。
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addControl");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const countBefore = descriptor.controls(ctx.mounted.raw());
+        const mark = consoleRing.length;
+        ctx.mounted.flags.navigation = true;
+        ctx.mounted.flags.maptype = true;
+        ctx.mounted.flags.overview = true;
+        await nextTick();
+        await sleep(400);
+
+        assertSmoke(
+          recorder.calls.length >= 3,
+          "BMAP_CONTROL_STABLE_SET_PARTIAL",
+          `三个 Stable 控件只发生了 ${recorder.calls.length} 次 Map.addControl（应为 3）`,
+          { rawCalls: recorder.calls.length },
+        );
+
+        // 三个 anchor 一起改成一个谁都没有过的值（初始是 TOP_LEFT / TOP_RIGHT / BOTTOM_RIGHT）
+        ctx.mounted.controlProps.navigationAnchor = "BMAP_ANCHOR_BOTTOM_LEFT";
+        ctx.mounted.controlProps.mapTypeAnchor = "BMAP_ANCHOR_BOTTOM_LEFT";
+        ctx.mounted.controlProps.overviewAnchor = "BMAP_ANCHOR_BOTTOM_LEFT";
+        await nextTick();
+        await sleep(200);
+
+        const recent = recorder.calls.slice(-3).map((args) => args[0] as Record<string, unknown>);
+        const anchors = recent.map((control) => {
+          const read = control?.getAnchor;
+          assertSmoke(
+            typeof read === "function",
+            "BMAP_CONTROL_NO_ANCHOR_READER",
+            "拦截到的控件实例没有 getAnchor()，anchor 动态更新无法核对",
+          );
+          return (read as () => unknown).call(control);
+        });
+        // `BMAP_ANCHOR_BOTTOM_LEFT` 在官方常量表里是 2
+        assertSmoke(
+          anchors.every((value) => value === 2),
+          "BMAP_CONTROL_ANCHOR_NOT_UPDATED",
+          `改 anchor 后三个控件的 getAnchor() 应全为 2（BOTTOM_LEFT），实际 ${JSON.stringify(anchors)}`,
+          { anchors },
+        );
+
+        return descriptor.assertAttached({
+          kind: "control",
+          code: "BMAP_CONTROL_NOT_ATTACHED",
+          label: "<BNavigation> / <BMapType> / <BOverview>",
+          rawMethod: "addControl",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.controls(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: null,
+          capabilitySupported: null,
+        });
+      } finally {
+        recorder.restore();
+      }
+    },
+  },
+
+  "panorama-viewer": {
+    async run(ctx) {
+      // 只在 fixture 档登记：live 档的查看器需要真实全景场景与网络，属 nightly 的观察项
+      // （`descriptor.panoramas()` 在 live 档恒为 -1，登记进来只会得到一条假失败）。
+      const countBefore = descriptor.panoramas();
+      const mark = consoleRing.length;
+      ctx.mounted.flags.panorama = true;
+      await nextTick();
+      await sleep(600);
+      const countAfter = descriptor.panoramas();
+      assertSmoke(
+        countAfter > countBefore,
+        "BMAP_PANORAMA_NOT_CREATED",
+        `挂载 <BPanorama> 后查看器计数没有增长：${countBefore} → ${countAfter}`,
+        { countBefore, countAfter },
+      );
+      assertSmoke(
+        consoleErrorsSince(mark).length === 0,
+        "BMAP_PANORAMA_CONSOLE_ERROR",
+        "<BPanorama> 挂载期间出现 console.error",
+        { errors: consoleErrorsSince(mark).slice(0, 3) },
+      );
+      return { readApi: "fake-ledger (createdPanoramas)", countBefore, countAfter };
     },
   },
 

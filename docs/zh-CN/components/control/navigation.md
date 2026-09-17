@@ -1,0 +1,65 @@
+# BNavigation 平移缩放控件
+
+地图的平移缩放控件（官方 `NavigationControl`），默认位于地图左上角。
+
+```ts
+import { BNavigation } from 'baidu-map-gl-vue'
+```
+
+## 组件示例
+
+:::demo
+control/navigation
+:::
+
+## 静态组件 Props
+
+| 属性              | 说明                                            | 类型                      | 可选值                          | 默认值                    |
+| ----------------- | ----------------------------------------------- | ------------------------- | ------------------------------- | ------------------------- |
+| anchor            | 控件的停靠位置                                  | `string`                  | [anchor](#anchor)               | `BMAP_ANCHOR_TOP_LEFT`    |
+| offset            | 控件的偏移值                                    | `{x: number, y: number }` | -                               | `{ x: 30, y: 10 }`        |
+| type              | 控件类型（可就地更新，走官方 `setType()`）      | `string`                  | [type](#type)                   | 官方默认 `LARGE`          |
+| showZoomInfo      | 是否显示级别提示信息（只有构造期生效）          | `boolean`                 | -                               | `true`                    |
+| enableGeolocation | 是否集成定位功能（只有构造期生效）              | `boolean`                 | -                               | `false`                   |
+
+## 动态组件 Props
+
+| 属性    | 说明     | 类型      | 可选值 | 默认值 | 版本                               |
+| ------- | -------- | --------- | ------ | ------ | ---------------------------------- |
+| visible | 是否显示 | `boolean` | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+
+`anchor` / `offset` 同样可以动态更新（控制组件会即时下发 `setAnchor()` / `setOffset()`）。
+
+## anchor
+
+| 值                       | 说明 |
+| ------------------------ | ---- |
+| BMAP_ANCHOR_TOP_LEFT     | 左上 |
+| BMAP_ANCHOR_TOP_RIGHT    | 右上 |
+| BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
+| BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+
+## type
+
+| 值                          | 说明                       |
+| --------------------------- | -------------------------- |
+| BMAP_NAVIGATION_CONTROL_LARGE | 平移按钮 + 缩放按钮 + 滑块 |
+| BMAP_NAVIGATION_CONTROL_SMALL | 平移按钮 + 缩放按钮        |
+| BMAP_NAVIGATION_CONTROL_PAN   | 仅平移按钮                 |
+| BMAP_NAVIGATION_CONTROL_ZOOM  | 仅缩放按钮                 |
+
+## 选项的更新方式
+
+`type` 走官方 `setType()` **就地更新**（控件不会重建、交互状态不丢）；`showZoomInfo` / `enableGeolocation` 在官方
+4.0 的 `NavigationControl` 上没有 setter，改变时会**重建控件**并把新值交给构造期。
+
+::: tip 提示
+真实 4.0 上 `setType()` 要求控件已经挂载（内部滑块 DOM 在 `addControl` 时才创建）。本组件保证写入顺序是
+`create → add → setOptions`，使用方不需要关心。
+:::
+
+## 组件事件
+
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+
+该组件没有对外事件。

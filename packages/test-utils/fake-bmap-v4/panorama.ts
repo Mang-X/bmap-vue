@@ -1,20 +1,28 @@
 /**
- * Fake BMap v4 全景替身（M3A2-SERVICES-NATIVE / issue #23）
+ * Fake BMap v4 全景替身（M3A2-SERVICES-NATIVE / issue #23；#41 补齐组件路径的成员）
  *
  * 覆盖面只到「Panorama Facet 会调用 + 契约会断言」的成员：查看器的生命周期与视角、
  * 数据检索的重载（`getPanoramaById` / `getPanoramaByLocation(point)` /
- * `getPanoramaByLocation(point, radius)`）。
+ * `getPanoramaByLocation(point, radius)`），以及 #41 新增的读取面、场景切换、配置写回、
+ * 滚轮缩放与标注（`PanoramaLabel`）。
  *
- * 两条刻意建模的边界：
+ * 三条刻意建模的边界：
  * - **重载必须可区分**：`getPanoramaByLocation` 有「带半径」与「不带半径」两种调用，
  *   Fake 把实参个数记进 `callLog`，否则「省略半径」与「传 undefined」这两种写法在测试里
  *   长得一样——而真实 SDK 上它们是不同的重载。
  * - **`destroy()` 重复调用不保证安全**：Fake 记录调用次数但不做幂等，让「Driver 自己记账」
  *   这条设计可断言（重复 `destroy(viewer)` 时 SDK 侧计数必须仍是 1）。
+ * - **场景未加载时可以区分**：`id` / `position` 初始为空。真实 4.0 在**未加载场景**的实例上
+ *   `destroy()` 会抛错（见 ADR 的 smoke 记录），这条由 `failNextDestroy` 注入而不是默认行为——
+ *   默认抛错会让「组件正常销毁」的用例全都需要额外说明。
  */
 import type { FakeV4Diagnostics } from './diagnostics.ts'
 import { FakeV4EventTarget } from './event-target.ts'
 import { FakeV4CallbackQueue } from './services.ts'
+import { FakeV4Point } from './geometry.ts'
+
+/** 官方 `PanoramaPOIType` 的取值集合：`setPanoramaPOIType` 用它做入参校验（真实 SDK 同样只认这几个）。 */
+const POI_TYPES = ['hotel', 'catering', 'movie', 'transit', 'indoor_scene', 'none'] as const
 
 export class FakeV4Panorama extends FakeV4EventTarget {
   readonly callLog: string[] = []
@@ -24,6 +32,11 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   zoom = 1
   pov: Record<string, unknown> = { heading: 0, pitch: 0 }
   position: { lng: number; lat: number } | null = null
+  /** 当前场景 id；空表示**尚未加载任何场景**（真实 4.0 上这种实例 destroy 会抛错）。 */
+  id: string | null = null
+  sceneType: 'street' | 'inter' = 'street'
+  poiType: string | null = null
+  scrollWheelZoom = false
   destroyCalls = 0
   overlays: unknown[] = []
   /**
@@ -48,6 +61,40 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.stats.resourceCreated('panorama', this)
   }
 
+  // -------------------------------------------------------------- 读取面
+  getPosition(): { lng: number; lat: number } | null {
+    return this.position
+  }
+
+  getPov(): Record<string, unknown> {
+    return this.pov
+  }
+
+  getZoom(): number {
+    return this.zoom
+  }
+
+  getId(): string | null {
+    return this.id
+  }
+
+  getSceneType(): 'street' | 'inter' {
+    return this.sceneType
+  }
+
+  getVisible(): boolean {
+    return this.visible
+  }
+
+  // -------------------------------------------------------------- 写入面
+  setId(id: string, options?: unknown): void {
+    this.callLog.push(`setId:${id}`)
+    this.id = id
+    void options
+    // 官方在切换 id 后会派发 `id_changed`（载荷是新的 id）
+    this.emit('id_changed', id)
+  }
+
   setPosition(position: { lng: number; lat: number }): void {
     this.callLog.push('setPosition')
     this.position = position
@@ -63,16 +110,22 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.zoom = zoom
   }
 
-  getZoom(): number {
-    return this.zoom
+  setPanoramaPOIType(poiType: string): void {
+    this.callLog.push(`setPanoramaPOIType:${poiType}`)
+    if (!POI_TYPES.includes(poiType as (typeof POI_TYPES)[number])) {
+      throw new TypeError(`不认识的 POI 类型: ${poiType}`)
+    }
+    this.poiType = poiType
   }
 
-  getPosition(): { lng: number; lat: number } | null {
-    return this.position
+  enableScrollWheelZoom(): void {
+    this.callLog.push('enableScrollWheelZoom')
+    this.scrollWheelZoom = true
   }
 
-  getPov(): Record<string, unknown> {
-    return this.pov
+  disableScrollWheelZoom(): void {
+    this.callLog.push('disableScrollWheelZoom')
+    this.scrollWheelZoom = false
   }
 
   show(): void {
@@ -85,28 +138,34 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.visible = false
   }
 
-  getVisible(): boolean {
-    return this.visible
-  }
-
   setOptions(options: Record<string, unknown>): void {
     this.callLog.push('setOptions')
     this.options = { ...this.options, ...options }
   }
 
+  // ---------------------------------------------------------- 标注覆盖物
   addOverlay(overlay: unknown): void {
     this.callLog.push('addOverlay')
+    // **不做去重**：诊断把 `panoramaLabel` 归为「挂载类」（按次数销账），前提正是
+    // 「SDK 不会替调用方去重、挂两次就要摘两次」。在这里去重会让计数与释放路径脱钩
+    // （销账入口是 `removeOverlay`，见 diagnostics 的记账方式表）。
     this.overlays.push(overlay)
+    this.stats.resourceCreated('panoramaLabel')
   }
 
   removeOverlay(overlay: unknown): void {
     this.callLog.push('removeOverlay')
     const index = this.overlays.indexOf(overlay)
-    if (index >= 0) this.overlays.splice(index, 1)
+    if (index < 0) return
+    this.overlays.splice(index, 1)
+    this.stats.resourceReleased('panoramaLabel')
   }
 
   clearOverlays(): void {
     this.callLog.push('clearOverlays')
+    for (let index = this.overlays.length - 1; index >= 0; index -= 1) {
+      this.stats.resourceReleased('panoramaLabel')
+    }
     this.overlays = []
   }
 
@@ -123,6 +182,75 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     // 传实例：本 Fake 刻意保留「重复 destroy 每次都真的打到 SDK」的语义（`destroyCalls` 记数），
     // 诊断必须按实例去重，否则重复销毁一个实例会抵消另一个实例的泄漏（PR #66 复审 P2-1）。
     this.stats.resourceReleased('panorama', this)
+  }
+}
+
+/**
+ * 全景标注（官方 `BMap.PanoramaLabel`）。
+ *
+ * 覆盖面 = 官方 4.0.4 声明里的成员：构造参数（`content` + `PanoramaLabelOptions`）、
+ * `setPosition` / `setContent` / `setAltitude`（这三个有 setter 与 getter）、`getPov`、
+ * `show` / `hide`，以及 `click` 事件（`FakeV4EventTarget` 提供）。
+ *
+ * **刻意没有 `setDisplayDistance`**：官方声明里没有这个成员——建出来会让「构造期项」这条分类
+ * 变成一句空话（M7-CONTROL-PANORAMA / #41）。
+ */
+export class FakeV4PanoramaLabel extends FakeV4EventTarget {
+  readonly callLog: string[] = []
+  content: string
+  options: Record<string, unknown>
+  position: { lng: number; lat: number } | null = null
+  altitude: number
+  visible = true
+
+  constructor(content: string, options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(stats)
+    this.content = content
+    this.options = options
+    const position = options.position as FakeV4Point | { lng: number; lat: number } | undefined
+    this.position = position ? { lng: position.lng, lat: position.lat } : null
+    this.altitude = typeof options.altitude === 'number' ? options.altitude : 2
+  }
+
+  setPosition(position: { lng: number; lat: number }): void {
+    this.callLog.push('setPosition')
+    this.position = position
+  }
+
+  getPosition(): { lng: number; lat: number } | null {
+    return this.position
+  }
+
+  getPov(): Record<string, unknown> {
+    return { heading: 0, pitch: 0 }
+  }
+
+  setContent(content: string): void {
+    this.callLog.push('setContent')
+    this.content = content
+  }
+
+  getContent(): string {
+    return this.content
+  }
+
+  setAltitude(altitude: number): void {
+    this.callLog.push('setAltitude')
+    this.altitude = altitude
+  }
+
+  getAltitude(): number {
+    return this.altitude
+  }
+
+  show(): void {
+    this.callLog.push('show')
+    this.visible = true
+  }
+
+  hide(): void {
+    this.callLog.push('hide')
+    this.visible = false
   }
 }
 

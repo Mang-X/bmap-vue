@@ -37,6 +37,7 @@ import {
   FakeV4DistrictLayer,
   FakeV4GeolocationControl,
   FakeV4Layer,
+  FakeV4MapTypeControl,
   FakeV4NavigationControl,
   FakeV4OverviewMapControl,
   FakeV4PanoramaCoverageLayer,
@@ -87,7 +88,7 @@ import {
   FakeV4PointShapeLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
-import { FakeV4Panorama, FakeV4PanoramaService } from './panorama.ts'
+import { FakeV4Panorama, FakeV4PanoramaLabel, FakeV4PanoramaService } from './panorama.ts'
 
 export { FakeV4Diagnostics } from './diagnostics.ts'
 export { FakeV4EventTarget } from './event-target.ts'
@@ -119,6 +120,7 @@ export {
   FakeV4DistrictLayer,
   FakeV4GeolocationControl,
   FakeV4Layer,
+  FakeV4MapTypeControl,
   FakeV4NavigationControl,
   FakeV4OverviewMapControl,
   FakeV4PanoramaCoverageLayer,
@@ -186,7 +188,7 @@ export {
   FakeV4RuntimeLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
-export { FakeV4Panorama, FakeV4PanoramaService } from './panorama.ts'
+export { FakeV4Panorama, FakeV4PanoramaLabel, FakeV4PanoramaService } from './panorama.ts'
 
 export interface FakeBMapV4Namespace {
   Map: new (container: string | HTMLElement, options?: Record<string, unknown>) => FakeV4Map
@@ -243,7 +245,7 @@ export interface FakeBMapV4Namespace {
   CityListControl: new (options?: Record<string, unknown>) => FakeV4CityListControl
   /** 官方 `location` 语义在 4.0 上统一写 `GeolocationControl`（领域名仍是 `location`）。 */
   GeolocationControl: new (options?: Record<string, unknown>) => FakeV4GeolocationControl
-  MapTypeControl: new (options?: Record<string, unknown>) => FakeV4Control
+  MapTypeControl: new (options?: Record<string, unknown>) => FakeV4MapTypeControl
   OverviewMapControl: new (options?: Record<string, unknown>) => FakeV4OverviewMapControl
   PanoramaControl: new (options?: Record<string, unknown>) => FakeV4Control
   CopyrightControl: new (options?: Record<string, unknown>) => FakeV4CopyrightControl
@@ -284,6 +286,10 @@ export interface FakeBMapV4Namespace {
     options?: Record<string, unknown>,
   ) => FakeV4Panorama
   PanoramaService: new () => FakeV4PanoramaService
+  PanoramaLabel: new (
+    content: string,
+    options?: Record<string, unknown>,
+  ) => FakeV4PanoramaLabel
   VERSION: string
 }
 
@@ -336,6 +342,8 @@ export interface FakeBMapV4 {
   /** 测试辅助：记录已创建的全景查看器 / 检索实例（#23） */
   createdPanoramas: FakeV4Panorama[]
   createdPanoramaServices: FakeV4PanoramaService[]
+  /** 测试辅助：记录已创建的全景标注（#41） */
+  createdPanoramaLabels: FakeV4PanoramaLabel[]
   /**
    * 测试辅助：运行时注入成员的可控开关（卸下 / 装回扩展 API 的类）。
    *
@@ -366,6 +374,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdNativeLayers: FakeV4Layer[] = []
   const createdPanoramas: FakeV4Panorama[] = []
   const createdPanoramaServices: FakeV4PanoramaService[] = []
+  const createdPanoramaLabels: FakeV4PanoramaLabel[] = []
 
   /**
    * 命名空间级一次性故障注入：**下一张**地图的首次 `centerAndZoom()` 抛错。
@@ -506,7 +515,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdControls.push(this)
     }
   }
-  class MapTypeControlClass extends FakeV4Control {
+  class MapTypeControlClass extends FakeV4MapTypeControl {
     constructor(options?: Record<string, unknown>) {
       super(options ?? {}, stats)
       createdControls.push(this)
@@ -689,6 +698,12 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdPanoramaServices.push(this)
     }
   }
+  class PanoramaLabelClass extends FakeV4PanoramaLabel {
+    constructor(content: string, options?: Record<string, unknown>) {
+      super(content, options ?? {}, stats)
+      createdPanoramaLabels.push(this)
+    }
+  }
 
   const namespace: FakeBMapV4Namespace = {
     Map: MapClass,
@@ -747,6 +762,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     TrackLine: TrackLineClass,
     Panorama: PanoramaClass,
     PanoramaService: PanoramaServiceClass,
+    PanoramaLabel: PanoramaLabelClass,
     VERSION: version,
   }
 
@@ -773,5 +789,6 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     createdNativeLayers,
     createdPanoramas,
     createdPanoramaServices,
+    createdPanoramaLabels,
   }
 }

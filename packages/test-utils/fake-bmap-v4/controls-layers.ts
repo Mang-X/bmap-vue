@@ -55,6 +55,18 @@ export class FakeV4Control extends FakeV4EventTarget {
   setAnchor(anchor: unknown): void {
     this.callLog.push('setAnchor')
     this.anchor = anchor
+    /**
+     * **`setAnchor()` 会把偏移重置回控件**自身**的默认值**。
+     *
+     * 这条不是猜的：官方参考实现 `huiyan-fe/react-bmap` 的控件工厂在首次同步选项时特意
+     * **跳过** `setAnchor`，注释写的就是「构造函数已经设置了所有选项，首次 `setControlOptions`
+     * 会调用 `setAnchor` 重置 SDK 默认 offset」。
+     *
+     * 本 Fake 不建模「默认值具体是多少」（那是 SDK 内部常量），只用 `null` 表达「已经不再是
+     * 构造期那个值」。有了它，「成对写 anchor + offset」才是一个**可证伪**的不变量
+     * （M7-CONTROL-PANORAMA / #41）：去掉成对写，10 个 Stable 控件的用例必须一起变红。
+     */
+    this.offset = null
   }
 
   getAnchor(): unknown {
@@ -118,6 +130,23 @@ export class FakeV4ScaleControl extends FakeV4Control {
   }
 }
 
+/**
+ * 地图类型切换控件（官方 `MapTypeControl`）。
+ *
+ * 唯一建模的成员是 `showStreetLayer(isShow)`：它是官方 4.0.4 上该控件**唯一**的字段级 setter，
+ * 而且成员名不是 `set<Key>` 形状（`setOptions` 的结构逃生口抓不到）——Fake 把它做出来，
+ * 这样「统一 adapter 真的把路网开关就地写下去了」才是可断言的
+ * （M7-CONTROL-PANORAMA / issue #41）。
+ */
+export class FakeV4MapTypeControl extends FakeV4Control {
+  streetLayer: boolean | null = null
+
+  showStreetLayer(isShow: boolean): void {
+    this.callLog.push(`showStreetLayer:${isShow === true ? 'on' : 'off'}`)
+    this.streetLayer = isShow === true
+  }
+}
+
 export class FakeV4CityListControl extends FakeV4Control {
   expanded = false
   cityName = ''
@@ -145,6 +174,18 @@ export class FakeV4CityListControl extends FakeV4Control {
 export class FakeV4OverviewMapControl extends FakeV4Control {
   open = false
   size: FakeV4Size | null = null
+
+  /**
+   * 构造期选项**必须**被建模：`size` / `isOpen` 在真实 4.0 上只在构造期读取（没有幂等
+   * setter，`isOpen` 甚至只有 `changeView()` 的切换语义）。Fake 不读它们的话，
+   * 「统一 adapter 用重建来让构造期选项生效」这条路径就无法断言——重建出来的新实例读到的
+   * 仍会是 `null`/`false`（M7-CONTROL-PANORAMA / issue #41 实测踩到）。
+   */
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    this.open = options.isOpen === true
+    this.size = (options.size as FakeV4Size | undefined) ?? null
+  }
 
   isOpen(): boolean {
     return this.open

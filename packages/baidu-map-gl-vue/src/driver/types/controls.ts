@@ -37,6 +37,20 @@ export interface ControlOptions {
   [key: string]: unknown;
 }
 
+/**
+ * 单个 option 键**在构造之后**改动的落地方式（`ControlDriver.planOptions()` 的返回值）。
+ *
+ * 三态而不是二态：「本引擎没有入口」与「有入口但只能构造期生效」对调用方是两件不同的事——
+ * 前者重建也没用（值会被静默丢弃），后者重建就能生效。合并它们会让组件对着一堆无用重建
+ * 反复创建控件（M7-CONTROL-PANORAMA / issue #41）。
+ *
+ * - `live`：有就地入口，`setOptions` 会真的写下去；
+ * - `recreate`：只有构造期生效，`setOptions` 告警一次且**不动实例**，需要新值请重建控件；
+ * - `unsupported`：本引擎没有该 option 的入口（未命中分类表、没有 options 袋，实例上也没有
+ *   对应的 `set<Key>`）——`setOptions` 告警一次且忽略，**重建同样不会生效**。
+ */
+export type ControlOptionStatus = "live" | "recreate" | "unsupported";
+
 export interface CopyrightEntry {
   id: number;
   content: string;
@@ -56,6 +70,21 @@ export interface ControlDriver {
   show(control: ControlHandle): void;
   hide(control: ControlHandle): void;
   setOptions(control: ControlHandle, options: Record<string, unknown>): void;
+  /**
+   * 逐键报告「构造之后改这个 option 会怎样」（M7-CONTROL-PANORAMA / issue #41）。
+   *
+   * 组件层的统一 Control adapter 靠它在两条动作里选一条：**就地更新**（`live`）还是
+   * **重建控件**（`recreate`）。没有这个查询面时，组件只能各自抄一份「哪些键要重建」的表，
+   * 与 Driver 的分类各自漂移——所以本方法与 `setOptions` **共用同一处分类**（同一函数返回
+   * 的动作同时决定两者），而不是并列两张表。
+   *
+   * `unsupported` 只在能读到实例时才能判定（逃生口按 `set<Key>` 是否存在分流），因此入参是
+   * 句柄而不是 kind。
+   */
+  planOptions(
+    control: ControlHandle,
+    keys: readonly string[],
+  ): Record<string, ControlOptionStatus>;
 
   addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
   removeCopyright(control: ControlHandle, id: number): void;

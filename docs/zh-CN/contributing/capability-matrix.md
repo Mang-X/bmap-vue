@@ -11,9 +11,9 @@
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 43 |
+| `native` | SDK 原生能力，直接映射官方 API | 44 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 4 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 15 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 14 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -92,7 +92,7 @@
 | service | `service.track-animation` | unsupported | ✓ | ✓ | — | 轨迹动画（BMapGLLib 插件）；脚本引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随跑通），**完整功能链路仍未验证**；本阶段不装配（4.0 的对应能力是原生图层 `layer.track-line`）；依据与复现见 plugin-compat-inventory（M3A3-07 / #25） |
 | panorama | `panorama.viewer` | native | — | ✓ | Panorama | 全景查看器（Panorama） |
 | panorama | `panorama.service` | native | — | ✓ | PanoramaService | 全景服务（PanoramaService） |
-| panorama | `panorama.label` | experimental | — | ✓ | PanoramaLabel | 全景标注（PanoramaLabel） |
+| panorama | `panorama.label` | native | — | ✓ | PanoramaLabel | 全景标注（PanoramaLabel）。#41 起由 `<BPanoramaLabel>` 消费，因此状态由 experimental 提升为 native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表） |
 | runtime | `runtime.resource-scope` | extended | ✓ | ✓ | — | 项目资源生命周期作用域（监听器/覆盖物/图层的统一释放路径） |
 | runtime | `runtime.capability-override` | extended | ✓ | ✓ | — | 运行时能力 override（显式修正能力探测结果） |
 | runtime | `runtime.fake-sdk` | experimental | ✓ | ✓ | — | Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证） |

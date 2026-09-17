@@ -129,6 +129,24 @@ export const componentManifest = [
     source: "./components/controls/BZoom.vue",
   },
   {
+    name: "BNavigation",
+    exportName: "BNavigation",
+    category: "control",
+    source: "./components/controls/BNavigation.vue",
+  },
+  {
+    name: "BMapType",
+    exportName: "BMapType",
+    category: "control",
+    source: "./components/controls/BMapType.vue",
+  },
+  {
+    name: "BOverview",
+    exportName: "BOverview",
+    category: "control",
+    source: "./components/controls/BOverview.vue",
+  },
+  {
     name: "BScale",
     exportName: "BScale",
     category: "control",
@@ -169,5 +187,17 @@ export const componentManifest = [
     exportName: "BPanoramaCoverageLayer",
     category: "layer",
     source: "./components/layers/BPanoramaCoverageLayer.vue",
+  },
+  {
+    name: "BPanorama",
+    exportName: "BPanorama",
+    category: "panorama",
+    source: "./components/panorama/BPanorama.vue",
+  },
+  {
+    name: "BPanoramaLabel",
+    exportName: "BPanoramaLabel",
+    category: "panorama",
+    source: "./components/panorama/BPanoramaLabel.vue",
   },
 ] as const;

@@ -43,3 +43,19 @@ M3A.3 把旧引擎整份删除（决策见 [ADR 2026-09-14 删除旧引擎](/adr
 | `LoadedSdk` | `LoadedJsapiV4 \| LoadedLegacySdk` 判别联合 | `LoadedJsapiV4` 的别名（`assertLoadedSdk` 唯一收口） | 删掉 legacy 分支处理 |
 | Playground | `VITE_BMAP_MODE=legacy-fake` 对照档 | 该档与开关删除 | 无需配置 |
 | 包文件清单 | `files: ["dist", "types", "volar.d.ts"]` | `files: ["dist", "volar.d.ts"]` | 无（`types/` 只剩构建期占位文件 `shared/` 与 `ui-kit/upstream.d.ts`，不再发布；`volar.d.ts` 是 Volar 提示产物，必须保留——`tsconfig` 里的 `"types": ["baidu-map-gl-vue/volar"]` 靠它） |
+
+## 3.0.0-beta → 3.0（控件统一 spec 与全景基线）
+
+M7 把控件收进统一的 `ControlSpec`，并补上全景基线（决策见
+[ADR 2026-09-17 控件统一 spec 与全景基线](/adr/2026-09-17-control-spec-and-panorama)）。
+对调用方可见的变化：
+
+| 变更 | 之前 | 现在 | 处置 |
+| --- | --- | --- | --- |
+| 控件的 `visible` | `false` 会把控件从地图上**摘掉**（`removeControl`），`true` 再挂回来 | SDK 基类的 `show()` / `hide()`：控件始终挂载，只切换可见性 | 行为通常更符合预期（内部状态不再重置、`BLocation` 不再顺带停掉定位跟踪）。若确实需要「不挂载」，请用 `v-if` 卸载组件 |
+| 控件的 `anchor` / `offset` | 只在构造期生效，运行期改 props 不产生任何效果 | 变化即下发 `setAnchor()` / `setOffset()`（两者成对写，避免 SDK 重置偏移） | 无需改动；依赖「改了不生效」的代码要显式避免改这两个 prop |
+| `BCopyright` 的 `visible` | 只摘掉本组件那一条版权项 | **不变**（共享控件按 anchor 复用，隐藏整个控件会连带隐藏兄弟组件的内容） | 无需改动 |
+| 新增控件组件 | `<BNavigation>` / `<BMapType>` / `<BOverview>` 不存在（只有 Driver 侧的 kind） | 三个 Stable 组件可用，选项按官方能力分「就地更新 / 重建」两档 | 见各组件文档的「选项的更新方式」 |
+| 控件组件的卸载 | 各自手写 `onMounted` / `onUnmounted` | 全部经 `useSdkResource` 派生的统一 adapter | 无需改动；`scope` 的释放顺序（先解绑业务事件、再 `removeControl`）不变 |
+| `useControlResource`（`./core` 子入口） | `(props, adapter)`，adapter 是 `{ create, addToMap, remove, createWatchers }` | `(props, spec)`，spec 是声明式的 `ControlSpec` | 自建控件的调用方按 `ControlSpec` 重写；`buildControlOptions` / `bindControlEvents` 两个无消费者的帮手已删除 |
+| 全景 | 只有 Driver 侧的 `PanoramaViewerDriver`（skeleton） | `<BPanorama>` / `<BPanoramaLabel>` / `usePanoramaService`（**post-stable**，见[发布范围](/zh-CN/components/panorama/)） | 需要全景点位/标注/检索时使用；Stable 上不依赖它 |

@@ -69,7 +69,15 @@ export type FakeV4AttachmentKind =
   | "infoWindow"
   | "contextMenu"
   | "control"
-  | "layer";
+  | "layer"
+  /**
+   * 全景标注（`PanoramaLabel`，M7-CONTROL-PANORAMA / #41）。
+   *
+   * 用**挂载类**而不是生命周期类：它的释放入口是 `Panorama#removeOverlay()`——与覆盖物的
+   * `map.removeOverlay()` 同形（挂到某个宿主上、由宿主摘除），而不是「实例自己的 destroy」。
+   * 宿主是查看器而不是地图，但「谁挂的谁摘」这条不变式完全一致。
+   */
+  | "panoramaLabel";
 
 export type FakeV4ResourceKind = FakeV4LifecycleKind | FakeV4AttachmentKind;
 
@@ -96,6 +104,8 @@ export interface FakeV4LeakCounters {
   localSearchResults: number;
   /** 未被 `clearResults()` 清掉的路线结果集（含 SDK 画在地图上的路线 / 标注 / 结果面板）。 */
   routeResults: number;
+  /** 仍挂在某个全景查看器上的标注（未走 `removeOverlay()`）。 */
+  panoramaLabels: number;
   listeners: number;
 }
 
@@ -125,6 +135,9 @@ export interface FakeV4ActivityCounters {
   routeResultsDrawn: number;
   /** 被路线 `clearResults()` 清掉的次数。 */
   routeResultsCleared: number;
+  /** 挂到全景查看器上的标注次数 / 被 `removeOverlay()` 摘掉的次数。 */
+  panoramaLabelsAttached: number;
+  panoramaLabelsDetached: number;
   /** 无释放入口的基础服务实例（构造计数）。 */
   servicesCreated: number;
   listenCalls: number;
@@ -163,6 +176,7 @@ const LEAK_FIELD_BY_KIND: Record<FakeV4ResourceKind, keyof FakeV4LeakCounters> =
   autocomplete: "autocompletes",
   localSearchResults: "localSearchResults",
   routeResults: "routeResults",
+  panoramaLabel: "panoramaLabels",
 };
 
 export class FakeV4Diagnostics {
@@ -184,6 +198,7 @@ export class FakeV4Diagnostics {
     autocomplete: 0,
     localSearchResults: 0,
     routeResults: 0,
+    panoramaLabel: 0,
   };
 
   private readonly created: Record<FakeV4ResourceKind, number> = {
@@ -197,6 +212,7 @@ export class FakeV4Diagnostics {
     autocomplete: 0,
     localSearchResults: 0,
     routeResults: 0,
+    panoramaLabel: 0,
   };
 
   private readonly released: Record<FakeV4ResourceKind, number> = {
@@ -210,6 +226,7 @@ export class FakeV4Diagnostics {
     autocomplete: 0,
     localSearchResults: 0,
     routeResults: 0,
+    panoramaLabel: 0,
   };
 
   /* ------------------------------------------------ 测试辅助：异步窗口（非官方语义） */
@@ -338,6 +355,8 @@ export class FakeV4Diagnostics {
       localSearchResultsCleared: this.released.localSearchResults,
       routeResultsDrawn: this.created.routeResults,
       routeResultsCleared: this.released.routeResults,
+      panoramaLabelsAttached: this.created.panoramaLabel,
+      panoramaLabelsDetached: this.released.panoramaLabel,
       servicesCreated: this.servicesCreated,
       listenCalls: this.listenCalls,
       unlistenCalls: this.unlistenCalls,
