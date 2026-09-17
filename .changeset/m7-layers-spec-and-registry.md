@@ -50,14 +50,12 @@
 - **可变 option 与统一槽位由有值变回 `undefined` 都会重建图层**，以便回到 SDK 自己的默认值。
   例外是 `data`：`null` = 清空，`undefined` = 保持现状。
 - **永久销毁（卸载 / 重建 / Map 销毁）会 best-effort 清理并摘除**：正常返回后不残留；**最后一次 SDK
-  摘除失败时只保证可观测**（`logger.warn`），不保证无残留。清理本身按「清空操作的作用域」分述：
-  `GeoJSONLayer` 的 `clearData()` 是 **`"map-bound"`**（官方明说「要真正清空 `getData()` 集合得在
-  `removeLayer` **之前**调」），因此只在图层仍在图上时调用；已 detached 时跳过它（对已摘下的实例
-  调用没有效果），可见资源由 `removeLayer` 自己摘掉。`DOMLayer.removeAllOverlays()` 的作用域官方
-  **没有说明**，能力面如实记为 **`"unknown"`**（**未知不等于不需要**），内核据此选择**策略**：
-  best-effort 尝试（跳过会真的残留真实 DOM 节点，失败经 `logger.warn` 可观测）。取证见 issue #98。
-  `getData()` 集合在 detached 路径上不会被清——它是随实例一起丢弃的内存状态，
-  不是需要释放的 SDK 资源。
+  摘除失败时只保证可观测**（`logger.warn`），不保证无残留。清理走 Driver 归一化后的统一「清空」入口
+  （`GeoJSONLayer.clearData()` / `DOMLayer.removeAllOverlays()`），并**不再按挂载状态决定要不要执行**
+  ——原先把「`clearData` 必须在 `removeLayer` 之前调」当成硬约束，issue #98 的 live 取证实测推翻它：
+  摘掉之后 `getData()` 仍在（2 条），此时再 `clearData()` 仍能清空（→ 0 条）且不抛错；而 `DOMLayer`
+  的节点本来就由 `removeLayer` 自己摘掉（`isConnected` 2 → 0），摘掉后再清是安全 no-op。
+  临时摘挂（`visible=false`）**不清**，切回可见时数据照旧。
 - **如果 `visible=false` 已经先成功摘过一次**，永久销毁只做 **detached cleanup**，**不会**再调一次
   `removeLayer`——官方没有承诺「对已经摘掉的图层重复 `removeLayer` 是安全的」，本库不猜。
   临时摘挂（`visible=false`）**不清**，切回可见时数据照旧。

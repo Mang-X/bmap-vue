@@ -65,6 +65,21 @@ export const FAKE_V4_INTERACTIONS = [
 
 export type FakeV4Interaction = (typeof FAKE_V4_INTERACTIONS)[number]
 
+/**
+ * 调用图层替身上的**可选挂载生命周期钩子**（`onAttached` / `onDetached`）。
+ *
+ * 存在的理由：真实 SDK 的 `addLayer` / `removeLayer` 不只改账本，还会动**渲染**——DOMLayer 的
+ * 节点就在 `removeLayer` 时从文档里被摘掉（issue #98 的 live 探针实测 `isConnected` 2 → 0）。
+ * 替身若不建模这一条，「隐藏之后覆盖物仍在」这类断言会在**与真实相反**的方向上成立。
+ *
+ * 钩子是**可选**的（不是每个替身都有渲染生命周期），所以用一次结构检查调用，而不是把它加进
+ * `FakeV4Layer` 基类——基类加了就等于声称「所有图层都有这两步」。
+ */
+function callLayerHook(layer: FakeV4Layer, hook: "onAttached" | "onDetached"): void {
+  const candidate = (layer as unknown as Record<string, unknown>)[hook]
+  if (typeof candidate === "function") (candidate as () => void).call(layer)
+}
+
 export class FakeV4Map extends FakeV4EventTarget {
   container: HTMLElement
   options: Record<string, unknown>
@@ -292,6 +307,7 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.layers.push(layer)
     layer.attachedMap = this
     this.stats.resourceCreated('layer')
+    callLayerHook(layer, "onAttached")
     if (this.failNextAddLayerAfterAttach) {
       const error = this.failNextAddLayerAfterAttach
       this.failNextAddLayerAfterAttach = null
@@ -315,6 +331,10 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (index >= 0) {
       this.layers.splice(index, 1)
       this.stats.resourceReleased('layer')
+      // 摘挂的渲染生命周期（实测建模）：真实 4.0 的 removeLayer 会把图层渲染出来的东西摘掉
+      // —— DOMLayer 的节点会从文档移除（#98 live 探针：isConnected 2 → 0）。
+      // 只在**真的在图上**时调用；对已经摘下的实例重复 removeLayer 不产生副作用（与实测一致）。
+      callLayerHook(layer, "onDetached")
     }
     if (layer.attachedMap === this) layer.attachedMap = null
     if (this.failNextRemoveLayerAfterDetach) {

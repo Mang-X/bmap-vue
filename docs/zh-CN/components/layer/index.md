@@ -119,12 +119,10 @@ import {
 - **数据**：`BGeoJSONLayer` / `BDOMLayer` 的 `data` 变化只调 `setData()`，**不重建**
   （重建会让所有覆盖物重做，DOM 图层会肉眼可见地闪）。
 - **释放**：组件卸载、地图销毁（含 `keepAliveBehavior="dispose"` 的停用）都会摘掉图层并释放
-  监听；诊断计数归零有测试锁住。数据驱动图层的清理按**清空操作的作用域**分述：
-  - `GeoJSONLayer` 的 `clearData()` 是 **map-bound**（官方要求「先清、再 `removeLayer`」，因为摘掉
-    之后图层不再持有 Map 引用）⇒ 只在图层**仍在图上**时调用。若 `visible=false` 已经先摘过一次，
-    永久销毁只做 **detached cleanup**：跳过 `clearData()`（对已摘下的实例调用没有效果），
-    可见资源由那一次 `removeLayer` 自己摘掉——**不会再调一次 `removeLayer`**（官方没有承诺
-    「对已经摘掉的图层重复摘除是安全的」，本库不猜）。
-  - `DOMLayer.removeAllOverlays()` 的作用域官方**没有说明**（不是「不需要挂图」，是「不知道」）
-    ⇒ 能力面记为 `unknown`，内核据此选择**策略**：best-effort 尝试（跳过会真的残留真实 DOM 节点，
-    失败经 `logger.warn` 可观测）。取证见 issue #98。
+  监听；诊断计数归零有测试锁住。数据驱动图层在永久销毁时走一次统一的「清空」入口
+  （`GeoJSONLayer.clearData()` / `DOMLayer.removeAllOverlays()`），**与图层当时挂没挂上无关**
+  ——依据是 4.0 上的实测（issue #98）：`clearData()` 在 `removeLayer` **之后**调用仍然有效；
+  而 `DOMLayer` 的节点本来就由 `removeLayer` 自己摘掉，摘掉后再清是安全的 no-op。
+  若 `visible=false` 已经先摘过一次，永久销毁**只清空、不会**再调一次 `removeLayer`
+  （官方没有承诺「对已经摘掉的图层重复摘除是安全的」——实测三个 kind 家族都不抛错，但本库
+  只按「一次摘除」写，重复摘除只出现在挂载状态未知时的收敛动作里）。

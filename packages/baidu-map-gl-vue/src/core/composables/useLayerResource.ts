@@ -212,34 +212,29 @@ export function useLayerResource<Props>(
   let instance: InstanceState | null = null;
 
   /**
-   * 数据驱动图层的**永久销毁**前的清理：在图层仍在图上时先清数据覆盖物，再由 Map 摘除图层。
-   *
-   * 依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
-   * - `DOMLayer`：先 `removeAllOverlays()` 再 `removeLayer()`（`setData(null)` **不会**移除已经渲染
-   *   出来的 overlays —— 该文档把它列为「常见错误」）；
-   * - `GeoJSONLayer`：`clearData()` 在 `removeLayer` **之前**（之后再 `destroy()` 不起作用，
-   *   因为 `removeLayer` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用）。
+   * 数据驱动图层的**永久销毁**前的清理：走上统一的「清空」入口。
    *
    * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
-   * 因此这里不需要按 kind 分支；**但要不要执行**由该清空操作的**作用域**决定（`clearScope` 三态）：
-   * `"map-bound"` 要求仍在图上、`"unknown"` 走 best-effort 策略、`"none"` 没有入口。详见函数内注释。
-   * **只在永久销毁时做**：普通 `visible=false` 的摘挂不能清（切回可见时还得重新 `setData`）；
-   * 清理失败不阻断摘除，但要可观测。
+   * 因此这里不需要按 kind 分支，也**不需要判挂载状态**——后者曾经存在过（`clearScope` 三态），
+   * 它建立在「`GeoJSONLayer.clearData()` 要在 `removeLayer` 之前调、之后无效」这句 reference 上，
+   * 而 issue #98 的 live 探针实测**推翻**了它（见下）。**只在永久销毁时做**：普通 `visible=false`
+   * 的摘挂不能清（切回可见时还得重新 `setData`）；清理失败不阻断摘除，但要可观测。
+   *
+   * 依据与实测（`scripts/probe-layer-detached.mts`，JSAPI 4.0 / `BMap.version === "gl"`）：
+   *
+   * - `GeoJSONLayer`：`removeLayer` 之后 `getData()` 集合**仍保留**（实测 2 条），此时再调
+   *   `clearData()` **仍然生效**（实测 2 → 0，未抛错）⇒ reference 那句「要真正清空得在
+   *   `removeLayer` 之前调」与运行时不符。可见资源也不靠它：`removeLayer` 本身已经摘掉覆盖物。
+   * - `DOMLayer`：`removeLayer` **自己就把节点从文档摘掉了**（实测 `isConnected` 2 → 0，
+   *   `getCustomOverlays()` 2 → 0），因此 `removeAllOverlays()` 在 detached 之后是**安全 no-op**
+   *   （未抛错）。「只调 `setData(null)` 会残留」那句警告说的是 `setData(null)`，与 `removeLayer` 无关。
+   *
+   * 两条合起来的结论是：**清空入口与挂载状态无关**，所以「先清再摘」（attached 路径）与
+   * 「已摘下后再清」（detached 路径）都安全；这里统一执行，失败只告警。
    */
   const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
-    const scope = layers.clearScope(state.spec.kind);
-    // `"none"` = 该 kind 没有清空入口（与 `supports(kind, "clearData")` 同解，有双向一致性断言）。
-    if (scope === "none") return;
-    // `"map-bound"` = **官方明确要求**图层仍在图上。对 `GeoJSONLayer.clearData()` 就是这条：
-    // 「先从 Map 移除这些覆盖物」，而 `removeLayer` 会清空图层持有的 Map 引用 ⇒ 官方明说
-    // 「要真正清空 `getData()` 集合得在 `removeLayer` **之前**调」。因此 detached / unknown 时
-    // 跳过它——那次调用没有效果，留着只会把「已经清空了」变成一句看起来有保证的假话。
-    // 可见资源并没有因此残留：同一段说明写明 `removeLayer` **本身已经摘掉覆盖物**。
-    if (scope === "map-bound" && state.mountState !== "attached") return;
-    // `"unknown"` = 官方**没有**说明它是否要求 attachment（`DOMLayer.removeAllOverlays()`）。
-    // 这里刻意**不**声称哪一侧成立，只选一个策略并把它写出来：**best-effort 尝试**——因为跳过会
-    // 真的残留真实 DOM 节点，而失败是经 `logger.warn` 可观测的。取证见已知限制 13。
+    if (!layers.supports(state.spec.kind, "clearData")) return;
     try {
       layers.clearData(state.handle);
     } catch (error) {

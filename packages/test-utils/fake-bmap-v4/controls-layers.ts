@@ -598,6 +598,8 @@ export class FakeV4DOMLayer extends FakeV4Layer {
   data: object | null = null
   visible: boolean
   readonly customOverlays: object[] = []
+  /** `onDetached()` 被调用过几次（摘挂把节点摘掉的次数；实测建模，见 `onDetached`）。 */
+  detachedRenderCount = 0
   /**
    * 最近一次 `removeAllOverlays()` 时，图层是否仍在图上（没清过则为 `null`）。
    *
@@ -632,14 +634,35 @@ export class FakeV4DOMLayer extends FakeV4Layer {
     // 官方口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：`setData(null)` 只清空
     // 数据引用，**不会**移除已经渲染出来的 overlays；清空必须显式 `removeAllOverlays()`。
     // 替身按这条建模：每次喂数据都重建这批覆盖物，`data = null` 时保留现状。
-    if (data !== null) {
-      const features = (data as { features?: unknown[] }).features ?? []
-      this.customOverlays.splice(
-        0,
-        this.customOverlays.length,
-        ...features.map((feature, index) => ({ id: index, feature })),
-      )
-    }
+    if (data !== null) this.render()
+  }
+
+  /**
+   * 摘挂时的渲染生命周期（**实测建模**，issue #98 的 live 探针）：
+   *
+   * - `onDetached()`：真实 4.0 的 `map.removeLayer(domLayer)` **会把图层渲染出来的节点从文档摘掉**
+   *   （实测 `isConnected` 2 → 0，同时 `getCustomOverlays()` 2 → 0）。替身原先没有建模这一条，
+   *   于是「隐藏之后覆盖物仍在」这类断言在**与真实相反**的方向上成立；
+   * - `onAttached()`：重新 `addLayer` 时若图层仍持有数据，SDK 会**重新渲染**出来（摘挂不改数据）。
+   *
+   * 两者由 `FakeV4Map` 在真正挂上 / 摘除之后调用（可选钩子，见 `FakeMap` 里的 `callLayerHook`）。
+   */
+  onDetached(): void {
+    this.detachedRenderCount += 1
+    this.customOverlays.length = 0
+  }
+
+  onAttached(): void {
+    if (this.data !== null && this.customOverlays.length === 0) this.render()
+  }
+
+  private render(): void {
+    const features = (this.data as { features?: unknown[] } | null)?.features ?? []
+    this.customOverlays.splice(
+      0,
+      this.customOverlays.length,
+      ...features.map((feature, index) => ({ id: index, feature })),
+    )
   }
 
   show(): void {
