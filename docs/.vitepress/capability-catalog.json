@@ -545,6 +545,58 @@
       "description": "DOM 图层（DOMLayer）"
     },
     {
+      "id": "layer.xyz",
+      "family": "layer",
+      "status": "experimental",
+      "runtimeOnly": false,
+      "engines": [
+        "jsapi-v4"
+      ],
+      "rawMembers": [
+        "XYZLayer"
+      ],
+      "description": "第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务"
+    },
+    {
+      "id": "layer.wms",
+      "family": "layer",
+      "status": "experimental",
+      "runtimeOnly": false,
+      "engines": [
+        "jsapi-v4"
+      ],
+      "rawMembers": [
+        "WMSLayer"
+      ],
+      "description": "WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求"
+    },
+    {
+      "id": "layer.wmts",
+      "family": "layer",
+      "status": "experimental",
+      "runtimeOnly": false,
+      "engines": [
+        "jsapi-v4"
+      ],
+      "rawMembers": [
+        "WMTSLayer"
+      ],
+      "description": "WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求"
+    },
+    {
+      "id": "layer.raster",
+      "family": "layer",
+      "status": "experimental",
+      "runtimeOnly": false,
+      "engines": [
+        "jsapi-v4"
+      ],
+      "rawMembers": [
+        "RasterTileLayer"
+      ],
+      "description": "栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪"
+    },
+    {
       "id": "layer.cluster",
       "family": "layer",
       "status": "extended",

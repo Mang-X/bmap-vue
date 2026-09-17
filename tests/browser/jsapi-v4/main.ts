@@ -21,10 +21,13 @@
 import { createApp, defineComponent, h, nextTick, reactive, ref, type App, type VNode } from "vue";
 import {
   BDistrictLayer,
+  BGeoJSONLayer,
   BInfoWindow,
   BMap,
   BMarker,
   BPolyline,
+  BTileLayer,
+  BTrafficLayer,
   BZoom,
   useBMapGeocoder,
 } from "../../../packages/baidu-map-gl-vue/src/index.ts";
@@ -73,6 +76,14 @@ const SERVICE_MS = Number(params.get("serviceMs") ?? (MODE === "live" ? 20_000 :
 const UI_MS = Number(params.get("uiMs") ?? (MODE === "live" ? 20_000 : 5_000));
 
 const CENTER = { lng: 116.404, lat: 39.915 };
+/**
+ * `BTileLayer` 检查用的瓦片源：百度自己的瓦片主机（与 JSAPI 内部请求同源）。
+ *
+ * 刻意**不**用「随便一个第三方域名」当占位：那会让 live 档刷出一堆与库无关的网络错误，
+ * 把「检查失败」和「瓦片源不可达」混成一件事。本检查断言的是「组件 → Driver → 真实
+ * `Map.addLayer` 的调用发生了、且没有 `console.error`」，**瓦片是否真的画出来不由本库保证**。
+ */
+const SMOKE_TILE_ORIGIN = "https://maponline0.bdimg.com/tile";
 const POINT = { lng: 116.44, lat: 39.93 };
 const CITY = "北京";
 const KEYWORD = "中关村";
@@ -402,6 +413,9 @@ function mountTree(): Mounted {
     info: false,
     zoom: false,
     district: false,
+    tile: false,
+    traffic: false,
+    geojson: false,
     autocomplete: false,
     placesearch: false,
     placedetail: false,
@@ -453,6 +467,33 @@ function mountTree(): Mounted {
       );
     if (flags.zoom) nodes.push(h(BZoom, {}));
     if (flags.district) nodes.push(h(BDistrictLayer, { name: "北京市" }));
+    // M7-LAYERS（#40）的三条图层检查：瓦片模板指向百度自己的瓦片服务（与 SDK 内部同源），
+    // 因此 live 档的瓦片请求不会因为「指向一个不存在的域名」而刷出网络错误。
+    if (flags.tile)
+      nodes.push(
+        h(BTileLayer, {
+          tileUrlTemplate: `${SMOKE_TILE_ORIGIN}/?qt=tile&x={X}&y={Y}&z={Z}&styles=pl&scaler=1`,
+          opacity: 0.9,
+          zIndex: 3,
+        }),
+      );
+    if (flags.traffic) nodes.push(h(BTrafficLayer, {}));
+    if (flags.geojson)
+      nodes.push(
+        h(BGeoJSONLayer, {
+          layerName: "smoke-geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "LineString", coordinates: [CENTER, POINT] },
+                properties: { name: "smoke-line" },
+              },
+            ],
+          },
+        }),
+      );
     if (flags.autocomplete) nodes.push(h(BPlaceAutocomplete as never, { ref: autoRef, location: CITY }));
     if (flags.placesearch) {
       nodes.push(
@@ -818,6 +859,93 @@ const CHECKS: Record<string, CheckImpl> = {
           consoleErrors: consoleErrorsSince(mark),
           capabilityId: "layer.district",
           capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.district"),
+        });
+      } finally {
+        recorder.restore();
+      }
+    },
+  },
+
+  "layer-tile": {
+    async run(ctx) {
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addLayer");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const mark = consoleRing.length;
+        const countBefore = descriptor.layers(ctx.mounted.raw());
+        ctx.mounted.flags.tile = true;
+        await nextTick();
+        await sleep(600);
+        return descriptor.assertAttached({
+          kind: "layer",
+          code: "BMAP_LAYER_NOT_ATTACHED",
+          label: "<BTileLayer>",
+          rawMethod: "addLayer",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.layers(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: "layer.tile",
+          capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.tile"),
+        });
+      } finally {
+        recorder.restore();
+      }
+    },
+  },
+
+  "layer-traffic": {
+    async run(ctx) {
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addLayer");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const mark = consoleRing.length;
+        const countBefore = descriptor.layers(ctx.mounted.raw());
+        ctx.mounted.flags.traffic = true;
+        await nextTick();
+        await sleep(600);
+        return descriptor.assertAttached({
+          kind: "layer",
+          code: "BMAP_LAYER_NOT_ATTACHED",
+          label: "<BTrafficLayer>",
+          rawMethod: "addLayer",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.layers(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: "layer.traffic",
+          capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.traffic"),
+        });
+      } finally {
+        recorder.restore();
+      }
+    },
+  },
+
+  "layer-geojson": {
+    async run(ctx) {
+      const recorder = recordRawCalls(ctx.mounted.raw(), "addLayer");
+      try {
+        const signatureBefore = uiSignature(ctx.mounted.container());
+        const mark = consoleRing.length;
+        const countBefore = descriptor.layers(ctx.mounted.raw());
+        ctx.mounted.flags.geojson = true;
+        await nextTick();
+        await sleep(600);
+        return descriptor.assertAttached({
+          kind: "layer",
+          code: "BMAP_LAYER_NOT_ATTACHED",
+          label: "<BGeoJSONLayer>",
+          rawMethod: "addLayer",
+          rawCalls: recorder.calls.length,
+          countBefore,
+          countAfter: descriptor.layers(ctx.mounted.raw()),
+          domChanged: uiSignature(ctx.mounted.container()) !== signatureBefore,
+          consoleErrors: consoleErrorsSince(mark),
+          capabilityId: "layer.geojson",
+          capabilitySupported: capabilitySupported(ctx.mounted.client(), "layer.geojson"),
         });
       } finally {
         recorder.restore();

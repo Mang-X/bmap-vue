@@ -1,0 +1,34 @@
+---
+"baidu-map-gl-vue": minor
+---
+
+新增图层套件（`M7-LAYERS` / #40）：十个图层组件共用同一个生命周期内核，并补齐瓦片 / 数据 /
+路况 / 行政区 / 全景五类常用图层。
+
+**新增组件**（八种）：`BTileLayer`、`BTrafficLayer`、`BGeoJSONLayer`、`BDOMLayer`、
+`BXYZLayer`、`BWMSLayer`、`BWMTSLayer`、`BRasterLayer`。
+
+**统一槽位与三条更新路径**：`visible` / `opacity` / `minZoom` / `maxZoom` / `zIndex` / `data`
+由同一个内核处理——`visible` 表达为「挂上 / 摘掉」，可就地更新的槽位（有 setter 的 `zIndex`、
+数据图层的 `data`、`colors` / `edge` 一类可变选项）在挂载后原地写入，其余槽位变化时**重建图层**
+（旧实例先摘掉、旧监听随它那一代释放）。因此**改 URL 会换实例**，而改 `data` 不会。
+
+**新增内核与账本**：`core/layers` 的 `LayerSpec` / `LayerRegistry`（`useLayerResource` 改为
+规格驱动）。`MapRuntime.layers` 的类型从 `OverlayRegistry` 变为 `LayerRegistry`：地图销毁
+（含 `keepAliveBehavior="dispose"` 的停用）时先摘掉仍挂着的图层、再销毁地图。
+
+**能力清单**：新增 `layer.xyz` / `layer.wms` / `layer.wmts` / `layer.raster`
+（四个都标 `experimental`——4.0 新增的独立构造器，只有类声明没有官方专页）。
+
+**迁移注意**：
+
+- `BDistrictLayer` 的构造项（`fillColor` / `kind` / `viewport`…）此前变化**静默不生效**，
+  现在会**重建图层**（4.0 的 `DistrictLayer` 没有任何字段级 setter）；新增 `adcode` prop。
+- `BPanoramaCoverageLayer` 新增 `visible` prop（默认 `true`）；原文档里那份 `anchor` / `offset`
+  表格是复制残留，已删除。
+- `BGeoJSONLayer` / `BDOMLayer` 的事件回调收到的是**归一化事件**：要素集合在 `e.raw.features`。
+- `BGeoJSONLayer` 不提供 `opacity` / `zIndex`（官方该图层没有这两个语义），`BDistrictLayer`
+  同样不提供 `opacity` / `zIndex`。
+- 显隐统一走 `visible` prop（挂上 / 摘掉）；直接调 `driver.layers.create(kind, { visible })`
+  时该键会被忽略并告警一次（组件层没有把 `visible` 放进 `options` 的入口）。
+- `BTrafficLayer` **不承诺多实例隔离**（官方 `TrafficLayer` 是页面级单实例）。

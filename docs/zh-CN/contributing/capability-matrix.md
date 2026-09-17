@@ -5,7 +5,7 @@
 > 由 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**64**
+能力总数：**68**
 
 ## 状态说明
 
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `native` | SDK 原生能力，直接映射官方 API | 43 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 4 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 15 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 19 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -22,7 +22,7 @@
 | --- | --- |
 | `map` | 14 |
 | `overlay` | 15 |
-| `layer` | 15 |
+| `layer` | 19 |
 | `service` | 13 |
 | `panorama` | 3 |
 | `runtime` | 4 |
@@ -73,6 +73,10 @@
 | layer | `layer.fill` | experimental | — | ✓ | FillLayer | 面图层（FillLayer） |
 | layer | `layer.mvt` | experimental | — | ✓ | MVTLayer | MVT 矢量瓦片图层（MVTLayer） |
 | layer | `layer.dom` | experimental | — | ✓ | DOMLayer | DOM 图层（DOMLayer） |
+| layer | `layer.xyz` | experimental | — | ✓ | XYZLayer | 第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务 |
+| layer | `layer.wms` | experimental | — | ✓ | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |
+| layer | `layer.wmts` | experimental | — | ✓ | WMTSLayer | WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求 |
+| layer | `layer.raster` | experimental | — | ✓ | RasterTileLayer | 栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪 |
 | layer | `layer.cluster` | extended | ✓ | ✓ | — | 聚合图层；优先使用 SDK 原生能力，缺失时由项目提供 fallback 聚类 |
 | layer | `layer.point` | experimental | ✓ | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API |
 | layer | `layer.heatmap` | experimental | ✓ | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |

@@ -1,6 +1,6 @@
 {
   "version": "3.0.0-beta.0",
-  "generatedAt": "2026-09-09T07:10:49.232Z",
+  "generatedAt": "2026-09-17T05:57:53.024Z",
   "components": [
     "BMapProvider",
     "BMap",
@@ -29,6 +29,14 @@
     "BNavigation3d",
     "BCopyright",
     "BDistrictLayer",
-    "BPanoramaCoverageLayer"
+    "BPanoramaCoverageLayer",
+    "BTileLayer",
+    "BTrafficLayer",
+    "BGeoJSONLayer",
+    "BDOMLayer",
+    "BXYZLayer",
+    "BWMSLayer",
+    "BWMTSLayer",
+    "BRasterLayer"
   ]
 }

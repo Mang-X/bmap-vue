@@ -65,6 +65,11 @@ export type Capability =
   | "layer.fill"
   | "layer.mvt"
   | "layer.dom"
+  // M7-LAYERS（#40）：第三方标准瓦片服务基线（XYZ / WMS / WMTS / 栅格）
+  | "layer.xyz"
+  | "layer.wms"
+  | "layer.wmts"
+  | "layer.raster"
   | "layer.cluster"
   | "layer.point"
   | "layer.heatmap"
@@ -493,6 +498,45 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "DOM 图层（DOMLayer）",
     rawMembers: ["DOMLayer"],
+    engines: JSAPI_V4,
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  // M7-LAYERS（#40）的四种「第三方标准瓦片服务」基线。它们都是 4.0 **新增**的独立构造器
+  // （只有类声明，没有官方专页/Skill 背书），且第三方服务的可用性、坐标系与使用条款不受本库
+  // 控制，因此标 `experimental`：接口面可能变，接入不等于保证可用。
+  "layer.xyz": {
+    id: "layer.xyz",
+    family: "layer",
+    description: "第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务",
+    rawMembers: ["XYZLayer"],
+    engines: JSAPI_V4,
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  "layer.wms": {
+    id: "layer.wms",
+    family: "layer",
+    description: "WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求",
+    rawMembers: ["WMSLayer"],
+    engines: JSAPI_V4,
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  "layer.wmts": {
+    id: "layer.wmts",
+    family: "layer",
+    description: "WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求",
+    rawMembers: ["WMTSLayer"],
+    engines: JSAPI_V4,
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  "layer.raster": {
+    id: "layer.raster",
+    family: "layer",
+    description: "栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪",
+    rawMembers: ["RasterTileLayer"],
     engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,

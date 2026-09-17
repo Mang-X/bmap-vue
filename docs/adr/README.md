@@ -29,6 +29,7 @@
 | [2026-09-14](./2026-09-14-map-events-and-status.md) | typed Map Events、`useMapEvent` 与 `useMapStatus`（事件 Catalog / 订阅与生命周期口径 / 合帧与状态语义） | Accepted |
 | [2026-09-14](./2026-09-14-route-services-headless.md) | 路线服务（Driving / Walking / Riding / Transit）的 headless 契约（端点模型 / 实例身份归属 / 绘制所有权 / 状态码口径） | Accepted |
 | [2026-09-14](./2026-09-14-map-handle-container-and-visibility.md) | `BMapExpose` 冻结面、容器门禁与可见性暂停策略（命令面边界 / 暂停按原因记账 / VueUse 环境采集 / 状态插槽） | Accepted |
+| [2026-09-17](./2026-09-17-layer-spec-and-registry.md) | LayerSpec / LayerRegistry 与统一槽位口径（十条图层共用同一个生命周期内核；修改 #22 ADR 的注册表释放与显隐两处口径） | Accepted |
 
 ## 约定
 

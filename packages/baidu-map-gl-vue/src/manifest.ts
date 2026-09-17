@@ -170,4 +170,52 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/BPanoramaCoverageLayer.vue",
   },
+  {
+    name: "BTileLayer",
+    exportName: "BTileLayer",
+    category: "layer",
+    source: "./components/layers/BTileLayer.vue",
+  },
+  {
+    name: "BTrafficLayer",
+    exportName: "BTrafficLayer",
+    category: "layer",
+    source: "./components/layers/BTrafficLayer.vue",
+  },
+  {
+    name: "BGeoJSONLayer",
+    exportName: "BGeoJSONLayer",
+    category: "layer",
+    source: "./components/layers/BGeoJSONLayer.vue",
+  },
+  {
+    name: "BDOMLayer",
+    exportName: "BDOMLayer",
+    category: "layer",
+    source: "./components/layers/BDOMLayer.vue",
+  },
+  {
+    name: "BXYZLayer",
+    exportName: "BXYZLayer",
+    category: "layer",
+    source: "./components/layers/BXYZLayer.vue",
+  },
+  {
+    name: "BWMSLayer",
+    exportName: "BWMSLayer",
+    category: "layer",
+    source: "./components/layers/BWMSLayer.vue",
+  },
+  {
+    name: "BWMTSLayer",
+    exportName: "BWMTSLayer",
+    category: "layer",
+    source: "./components/layers/BWMTSLayer.vue",
+  },
+  {
+    name: "BRasterLayer",
+    exportName: "BRasterLayer",
+    category: "layer",
+    source: "./components/layers/BRasterLayer.vue",
+  },
 ] as const;

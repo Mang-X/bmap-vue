@@ -154,6 +154,14 @@ function toPath(exportName: string): string {
     BCopyright: 'controls/BCopyright.vue',
     BDistrictLayer: 'layers/BDistrictLayer.vue',
     BPanoramaCoverageLayer: 'layers/BPanoramaCoverageLayer.vue',
+    BTileLayer: 'layers/BTileLayer.vue',
+    BTrafficLayer: 'layers/BTrafficLayer.vue',
+    BGeoJSONLayer: 'layers/BGeoJSONLayer.vue',
+    BDOMLayer: 'layers/BDOMLayer.vue',
+    BXYZLayer: 'layers/BXYZLayer.vue',
+    BWMSLayer: 'layers/BWMSLayer.vue',
+    BWMTSLayer: 'layers/BWMTSLayer.vue',
+    BRasterLayer: 'layers/BRasterLayer.vue',
   }
   return map[exportName] ?? exportName
 }

@@ -73,6 +73,9 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `overlay-polyline` | ✅ | ✅ | 同上 |
 | `control-zoom` | ✅ | ✅ | **拦截真实 `Map.addControl` 的调用**（live）/ 账本计数增长（fixture），另附容器 DOM 增量作为 detail |
 | `layer-district` | ✅ | ✅ | **拦截真实 `Map.addLayer` 的调用**（live）/ 账本计数增长（fixture），另附能力表声明与无 `console.error` 作为辅助 |
+| `layer-tile` | ✅ | ✅ | 同 `layer-district`（拦截真实 `Map.addLayer`），瓦片模板指向**百度自己的瓦片主机**（与 SDK 内部同源）以便 live 档不产生无关的网络错误；**瓦片是否画出来不由本库保证** |
+| `layer-traffic` | ✅ | ✅ | 同 `layer-district`；`BTrafficLayer` 走官方路况服务，无需外部瓦片源 |
+| `layer-geojson` | ✅ | ✅ | 同 `layer-district`，另加「`setData` 写入的 `FeatureCollection` 被 SDK 接受」（线要素） |
 | `infowindow-visible` | ✅ | ✅ | 地图**活状态**非空（轮询）+ 内容节点 `display`/`visibility` 可见 + 文本非空 |
 | `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空或超时都记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
 | `ui-kit-autocomplete-search` | ✅ | — | widget `ready`、检索写入输入框、宿主里出现官方 UI Kit 渲染的输入框、**卸载后宿主子树从文档撤走**（回收路径，见下） |

@@ -150,6 +150,11 @@ SDK **不保证** `addControl` / `addLayer` 去重（官方「常见错误」把
   ——按记录拒绝会让记账一旦漂移就永久挂不上；
 - 重复 `remove` 因此天然幂等（共享契约对两个引擎都断言「重复 remove 不抛错、计数归零」）。
 
+> **后续修正（指针）**：本节的图层一侧已被 ADR `2026-09-17-layer-spec-and-registry` 取代：图层的
+> 注册表释放不再只依赖组件卸载，而是由 `LayerRegistry.disposeAll()` 在 `map.destroy()` 之前
+> 先摘除 SDK 资源；「可见性就是挂上 / 摘掉」也从「当前现状」升格为**所有 kind 的唯一口径**。
+> 控件一侧不受影响。正文保留原样（本文件冻结）。
+
 **释放顺序（issue 实施步骤 4）**：`useControlResource` / `useLayerResource` 的 `onUnmounted`
 改成**先解绑业务事件、再由 Map 移除 SDK 资源**：
 
@@ -249,6 +254,12 @@ issue 的验收标准里有「Capability Catalog 与实际 Driver 支持一致�
   这条是刻意的不改动，不是遗漏。
 
 能力矩阵由脚本重生成（`pnpm generate:capability-matrix`，61 条能力），`--check` 无漂移。
+
+> **后续修正（指针）**：本节第 2 条的**范围结论**已被 ADR `2026-09-17-layer-spec-and-registry`
+> 取代——M7-LAYERS（#40）的验收清单点名要求 `TrafficLayer`，因此现在有 `traffic` kind 与
+> `BTrafficLayer`。但本节记下的**技术事实仍然成立**：`TrafficLayer` 是页面级单实例，
+> 本库不承诺多实例隔离（见该 ADR 的「已知限制」第 9 条）。`MapDriver.setTraffic` 的告警与
+> no-op 行为不变（路况仍然只能经 Layer Facet 接入）。
 
 ### 12. 路况（`TrafficLayer`）刻意不承接，登记欠账
 

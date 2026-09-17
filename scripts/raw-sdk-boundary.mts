@@ -33,6 +33,10 @@ export const FORBIDDEN_SRC_DIRS = [
   "components",
   "composables",
   "core/runtime",
+  // M7-LAYERS（#40）新增的图层内核（LayerSpec / LayerRegistry）：与组件同档的禁区，
+  // 只能经 Facet Driver 与引擎交互。新增顶层目录时**顺手加进来**，否则「单一事实源」
+  // 会与实际扫描范围漂移（只跑默认门禁命令就会漏扫整个新目录）。
+  "core/layers",
   // 对接官方包的薄封装（`integrations/ui-kit`，issue #73）与组件同属禁区：
   // 它只能经 MapHandle（`unwrapRaw()`）与 Facet Driver 与引擎交互。
   "integrations",

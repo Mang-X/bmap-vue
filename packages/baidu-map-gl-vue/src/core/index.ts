@@ -98,7 +98,14 @@ export type {
   UseControlResourceResult,
 } from "./composables/useControlResource";
 export { useLayerResource } from "./composables/useLayerResource";
-export type { LayerResourceAdapter, UseLayerResourceResult } from "./composables/useLayerResource";
+export type {
+  LayerResourceBindInput,
+  LayerResourceHooks,
+  UseLayerResourceResult,
+} from "./composables/useLayerResource";
+export { createLayerRegistry } from "./layers/LayerRegistry";
+export type { LayerRecord, LayerRegistry } from "./layers/LayerRegistry";
+export type { LayerProbe, LayerSpec } from "./layers/LayerSpec";
 export type {
   MapContext,
   MapReadyContext,

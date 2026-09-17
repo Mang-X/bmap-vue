@@ -12,6 +12,7 @@ import type { BMapClient } from "../../client/types";
 import type { MapHandle } from "../../driver/types/handles";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
 import type { MapEventBus } from "../events/MapEventBus";
+import type { LayerRegistry } from "../layers/LayerRegistry";
 import type { FrameScheduler } from "../scheduler/FrameScheduler";
 
 export type MapStatus =
@@ -74,7 +75,17 @@ export interface MapRuntimeShape {
 /** 供注入使用的 context 接口 */
 export interface MapContext extends MapRuntimeShape {
   readonly overlays: unknown;
-  readonly layers?: unknown;
+  /**
+   * 图层账本（M7-LAYERS / issue #40）。
+   *
+   * 由 `MapRuntime` 持有、随地图一起释放：`MapRuntime.dispose()` 在 `map.destroy()` **之前**
+   * 调 `layers.disposeAll()`，把每个图层的 SDK 资源摘掉并释放它的 child scope。因此
+   * 「Registry 的读数」与「地图上还剩几个图层」是同一件事。
+   *
+   * 可选：自定义 Context（只实现 `MapRuntimeShape` 的适配器）可以不提供，图层组件会退化为
+   * 组件自持的账本（见 `useLayerResource`）。
+   */
+  readonly layers?: LayerRegistry;
   readonly controls?: unknown;
   readonly plugins: unknown;
 }

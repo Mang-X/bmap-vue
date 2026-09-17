@@ -172,12 +172,48 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/components/layer/",
       items: [
         {
+          text: "图层总览与排障",
+          link: "index",
+        },
+        {
           text: "BPanoramaCoverageLayer 全景图层",
           link: "panorama-coverage",
         },
         {
           text: "BDistrictLayer 行政区图层",
           link: "district-layer",
+        },
+        {
+          text: "BTileLayer 瓦片图层",
+          link: "tile-layer",
+        },
+        {
+          text: "BTrafficLayer 路况图层",
+          link: "traffic-layer",
+        },
+        {
+          text: "BGeoJSONLayer GeoJSON 图层",
+          link: "geojson-layer",
+        },
+        {
+          text: "BDOMLayer DOM 图层",
+          link: "dom-layer",
+        },
+        {
+          text: "BXYZLayer 标准瓦片图层",
+          link: "xyz-layer",
+        },
+        {
+          text: "BWMSLayer WMS 图层",
+          link: "wms-layer",
+        },
+        {
+          text: "BWMTSLayer WMTS 图层",
+          link: "wmts-layer",
+        },
+        {
+          text: "BRasterLayer 栅格瓦片图层",
+          link: "raster-layer",
         },
       ],
     },

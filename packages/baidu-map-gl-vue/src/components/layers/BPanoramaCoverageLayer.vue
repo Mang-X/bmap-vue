@@ -1,28 +1,29 @@
 <script setup lang="ts">
-import { useLayerResource } from "../../core/composables/useLayerResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { LayerHandle } from "../../driver/types/handles";
-
 /**
- * BPanoramaCoverageLayer 迁移
+ * BPanoramaCoverageLayer —— 全景覆盖图层（官方 `BMap.PanoramaCoverageLayer`，4.0）
  *
- * 全景覆盖图层,经 map.addTileLayer/removeTileLayer 管理。
+ * 4.0.4 的类型包**没有** `PanoramaCoverageLayer` 的类声明（官方 Skill 明确它是 4.0 公开
+ * 图层），因此 Driver 按结构探测构造器：运行时没有它时报 `BMAP_CAPABILITY_UNSUPPORTED`
+ * 并告警一次，而不是静默降级成一个空图层。
+ *
+ * 行为依据：
+ * - 该图层没有可核对的 `Options` 声明，因此本组件**不声明**构造选项 props（否则就是
+ *   「传了被忽略」的假支持）；统一槽位里只有 `visible` 有确定语义（挂上 / 摘掉）；
+ * - 单独使用它是看不到全景的，要用 `<BPanoramaControl>` 打开全景入口。
  */
-const props = defineProps({});
+import { useLayerResource } from "../../core/composables/useLayerResource";
 
-const { resource } = useLayerResource<Record<string, never>, LayerHandle>(
-  props as Record<string, never>,
-  {
-    create: (ctx) => ctx.client.driver.layers.create("panorama-coverage"),
-    addToMap: (res, ctx) => {
-      ctx.client.driver.layers.add({ kind: "map", handle: ctx.map }, res);
-    },
-    remove: (res, ctx) => {
-      ctx.client.driver.layers.remove({ kind: "map", handle: ctx.map }, res);
-    },
-  },
-);
+export interface BPanoramaCoverageLayerProps {
+  /** 是否挂在地图上（`false` = 摘掉）。 */
+  visible?: boolean;
+}
+
+const props = withDefaults(defineProps<BPanoramaCoverageLayerProps>(), { visible: true });
+
+useLayerResource<BPanoramaCoverageLayerProps>(props, {
+  component: "BPanoramaCoverageLayer",
+  toSpec: (p) => ({ kind: "panorama-coverage", visible: p.visible }),
+});
 
 defineOptions({ name: "BPanoramaCoverageLayer" });
 </script>

@@ -31,6 +31,7 @@ import { ResourceScope } from "../lifecycle/ResourceScope";
 import { createMapEventBus, type MapEventBus, type InternalMapEvents } from "../events/MapEventBus";
 import { createFrameScheduler, type FrameScheduler } from "../scheduler/FrameScheduler";
 import { createOverlayRegistry, type OverlayRegistry } from "../overlays/OverlayRegistry";
+import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
 import { createPluginRegistry, type PluginRegistry } from "../plugins/PluginRegistry";
 import type { BMapClientContext } from "../context/client";
 import type { MapReadyContext, MapRuntimeStatus } from "../context/types";
@@ -92,7 +93,14 @@ export class MapRuntime {
   readonly events: MapEventBus = createMapEventBus();
   readonly scheduler: FrameScheduler = createFrameScheduler();
   readonly overlays: OverlayRegistry = createOverlayRegistry();
-  readonly layers: OverlayRegistry = createOverlayRegistry();
+  /**
+   * 图层账本（M7-LAYERS / #40）：`dispose()` 在 `map.destroy()` 之前把每个图层摘掉。
+   *
+   * 与 `overlays` / `controls` 的 `OverlayRegistry` 不同（它们只释放 owner scope，摘除由
+   * 组件自己负责）——图层的「先摘子资源、再销毁 Map」是一条跨 Facet 不变式（见
+   * `core/layers/LayerRegistry.ts` 的文件头）。
+   */
+  readonly layers: LayerRegistry = createLayerRegistry();
   readonly controls: OverlayRegistry = createOverlayRegistry();
   readonly plugins: PluginRegistry;
 
@@ -487,7 +495,7 @@ export class MapRuntime {
       /* ignore */
     }
     try {
-      this.layers.dispose();
+      this.layers.disposeAll();
     } catch {
       /* ignore */
     }

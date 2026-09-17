@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
 import { createCapabilityRegistry } from "../capability/registry";
 import { HANDLE_BRAND, type LayerHandle } from "../types/handles";
+import type { LayerKind, LayerOperation } from "../types/layers";
 import { createJsapiV4LayerDriver } from "./layers";
 import { createJsapiV4HandleRegistry } from "./registry";
 
@@ -388,5 +389,282 @@ describe("[P2] viewport → autoViewport 的别名优先级要按「有效取值
       autoViewport: true,
     });
     expect(ctx.rawOf(explicitTrue).options.autoViewport).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* M7-LAYERS（issue #40）：十种图层、统一槽位与归一化操作面                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * issue #40 的完整 kind 清单。
+ *
+ * ⚠️ 它是**手写**的：漏一个 kind 时本文件的 `it.each` 会静默少跑一条。完备性由
+ * `packages/test-utils/driver-contract.ts` 的类型断言（`_AssertLayerFacetKindsComplete`）
+ * 兜住——那里是「必须覆盖全部 kind」的所在。
+ */
+const ALL_LAYER_KINDS = [
+  "district",
+  "panorama-coverage",
+  "tile",
+  "traffic",
+  "geojson",
+  "dom",
+  "xyz",
+  "wms",
+  "wmts",
+  "raster",
+] as const;
+
+/**
+ * 归一化操作 → 该 kind 上真正的官方入口名（`clearData` 在 `DOMLayer` 上是
+ * `removeAllOverlays()`，见 `LAYER_DESCRIPTORS.clearEntry`）。
+ */
+const OPERATION_ENTRY: Record<LayerOperation, string> = {
+  setZIndex: "setZIndex",
+  setData: "setData",
+  clearData: "clearData",
+};
+
+/** `geojson` / `dom` 的官方构造签名是两参：这里给出「必需首参」。 */
+const FIRST_ARGUMENT: Partial<Record<LayerKind, Record<string, unknown>>> = {
+  geojson: { layerName: "test-layer" },
+  dom: { createDOM: () => document.createElement("div") },
+};
+
+function createOfKind(kind: LayerKind, extra: Record<string, unknown> = {}) {
+  return ctx.layers.create(kind, { ...(FIRST_ARGUMENT[kind] ?? {}), ...extra });
+}
+
+describe("[#40] 十种图层的创建与官方构造签名", () => {
+  it.each(ALL_LAYER_KINDS)("%s：句柄品牌与 raw 实例都成立", (kind) => {
+    const handle = createOfKind(kind);
+    expect(handle[HANDLE_BRAND]).toBe(`layer:${kind}`);
+    expect(handle.raw).toBeTruthy();
+    expect(typeof (handle.raw as { options?: unknown }).options).toBe("object");
+  });
+
+  it("geojson：首参是 layerName（不是选项袋），选项是第二个实参", () => {
+    const handle = ctx.layers.create("geojson", {
+      layerName: "roads",
+      markerStyle: { title: "标记点" },
+      // `data`（统一槽位）在构造期映射到官方的 `dataSource`
+      data: { type: "FeatureCollection", features: [] },
+    });
+    const raw = handle.raw as { layerName: string; options: Record<string, unknown> };
+
+    expect(raw.layerName).toBe("roads");
+    expect(raw.options).toEqual({
+      markerStyle: { title: "标记点" },
+      dataSource: { type: "FeatureCollection", features: [] },
+    });
+    // `layerName` 不能留在选项袋里（官方第二个实参没有这个键）
+    expect(raw.options.layerName).toBeUndefined();
+  });
+
+  it("dom：首参是 createDOM（不是选项袋）", () => {
+    const createDOM = () => document.createElement("div");
+    const handle = ctx.layers.create("dom", { createDOM, minZoom: 5, zIndex: 3 });
+    const raw = handle.raw as {
+      createDOM: unknown;
+      options: Record<string, unknown>;
+    };
+
+    expect(raw.createDOM).toBe(createDOM);
+    expect(raw.options).toEqual({ minZoom: 5, zIndex: 3 });
+    expect(raw.options.createDOM).toBeUndefined();
+  });
+
+  it.each([
+    ["geojson", "layerName"],
+    ["dom", "createDOM"],
+  ] as const)("%s：缺必需首参时 BMAP_INVALID_ARGUMENT（而不是造出一个画不出东西的图层）", (kind, key) => {
+    expect(() => ctx.layers.create(kind)).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT", message: expect.stringContaining(key) }),
+    );
+    expect(ctx.fake.createdLayers).toHaveLength(0);
+  });
+
+  it("[#40] 统一槽位里的 visible 不进构造选项（显隐统一表达为挂载状态）", () => {
+    const handle = ctx.layers.create("tile", { visible: false, tileUrlTemplate: "x" } as never);
+    const raw = ctx.rawOf(handle);
+    expect(raw.options.visible).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("visible"),
+      expect.anything(),
+    );
+  });
+
+  it("[#40] 该 kind 没有的统一槽位被丢弃并告警（不静默转发给 SDK）", () => {
+    // `district` 没有 opacity / zIndex 槽位（官方只有 fillOpacity / strokeOpacity）
+    const handle = ctx.layers.create("district", {
+      name: "(北京市)",
+      opacity: 0.5,
+      zIndex: 9,
+    } as never);
+    expect(ctx.rawOf(handle).options.opacity).toBeUndefined();
+    expect(ctx.rawOf(handle).options.zIndex).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("opacity"), expect.anything());
+  });
+});
+
+describe("[#40] surface() / supports() / isMutableOption() 的能力面", () => {
+  it("每条归一化操作声明都能在替身实例上找到对应入口（含 clearEntry 的改名）", () => {
+    for (const kind of ALL_LAYER_KINDS) {
+      const surface = ctx.layers.surface(kind);
+      const handle = createOfKind(kind);
+      const raw = handle.raw as Record<string, unknown>;
+      for (const operation of surface.operations) {
+        const entry =
+          operation === "clearData"
+            ? ((handle.raw as { isCustomHtmlLayer?: boolean }).isCustomHtmlLayer
+                ? "removeAllOverlays"
+                : "clearData")
+            : OPERATION_ENTRY[operation];
+        expect(typeof raw[entry], `${kind}.${operation} → ${entry}()`).toBe("function");
+      }
+    }
+  });
+
+  it("没声明的操作在替身实例上也**不存在**（能力面与替身双向一致，不是单方面声明）", () => {
+    const allOperations: LayerOperation[] = ["setZIndex", "setData", "clearData"];
+    for (const kind of ALL_LAYER_KINDS) {
+      const surface = ctx.layers.surface(kind);
+      const handle = createOfKind(kind);
+      const raw = handle.raw as Record<string, unknown>;
+      for (const operation of allOperations) {
+        if (surface.operations.includes(operation)) continue;
+        expect(
+          raw[OPERATION_ENTRY[operation]],
+          `${kind} 未声明 ${operation}，替身里也不该有 ${OPERATION_ENTRY[operation]}()`,
+        ).toBeUndefined();
+      }
+    }
+  });
+
+  it("surface() 返回同一对象（调用方可以按引用比较）且不可变", () => {
+    const first = ctx.layers.surface("tile");
+    expect(ctx.layers.surface("tile")).toBe(first);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  it("未知 kind 的 surface() 显式失败", () => {
+    expect(() => ctx.layers.surface("nope" as LayerKind)).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+    );
+  });
+
+  it("isMutableOption：字段级 setter / 整袋 setter / 构造期三类分别回答", () => {
+    // 字段级 setter
+    expect(ctx.layers.isMutableOption("tile", "zIndex")).toBe(true);
+    expect(ctx.layers.isMutableOption("traffic", "colors")).toBe(true);
+    // 整袋 setter（DOMLayer.setStyleOptions）
+    expect(ctx.layers.isMutableOption("dom", "zIndex")).toBe(true);
+    expect(ctx.layers.isMutableOption("dom", "anchors")).toBe(true);
+    // 构造期生效
+    expect(ctx.layers.isMutableOption("tile", "tileUrlTemplate")).toBe(false);
+    expect(ctx.layers.isMutableOption("district", "fillColor")).toBe(false);
+    // 归一化操作承载的 data
+    expect(ctx.layers.isMutableOption("geojson", "data")).toBe(true);
+    expect(ctx.layers.isMutableOption("tile", "data")).toBe(false);
+    // 未知 kind 不抛错（能力探测语义）
+    expect(ctx.layers.isMutableOption("nope" as LayerKind, "zIndex")).toBe(false);
+  });
+});
+
+describe("[#40] 归一化操作：就地更新与显式拒绝", () => {
+  it("dom 的 zIndex 走整袋 setStyleOptions（官方没有 setZIndex）", () => {
+    const handle = ctx.layers.create("dom", { createDOM: () => document.createElement("div") });
+    ctx.layers.setOptions(handle, { zIndex: 7 });
+    const raw = handle.raw as { appliedStyleBags: Record<string, unknown>[]; callLog: string[] };
+
+    expect(raw.appliedStyleBags).toEqual([{ zIndex: 7 }]);
+    expect(raw.callLog).toContain("setStyleOptions");
+    expect(ctx.layers.supports("dom", "setZIndex")).toBe(false);
+  });
+
+  it("traffic 的 colors / edge 走字段级 setter", () => {
+    const handle = ctx.layers.create("traffic");
+    ctx.layers.setOptions(handle, { colors: ["#0f0", "#ff0"], edge: false });
+    const raw = handle.raw as { colors: string[]; edge: boolean };
+
+    expect(raw.colors).toEqual(["#0f0", "#ff0"]);
+    expect(raw.edge).toBe(false);
+  });
+
+  it("geojson 的 setData / clearData 直接打到官方入口", () => {
+    const handle = ctx.layers.create("geojson", { layerName: "pois" });
+    const collection = { type: "FeatureCollection", features: [] };
+    ctx.layers.setData(handle, collection);
+    expect((handle.raw as { data: object }).data).toBe(collection);
+    ctx.layers.clearData(handle);
+    expect((handle.raw as { data: object | null }).data).toBeNull();
+  });
+
+  it("dom 的 clearData 走 removeAllOverlays（官方没有 clearData）", () => {
+    const handle = ctx.layers.create("dom", { createDOM: () => document.createElement("div") });
+    ctx.layers.clearData(handle);
+    expect((handle.raw as { callLog: string[] }).callLog).toContain("removeAllOverlays");
+  });
+
+  it.each([
+    ["district", "setData"],
+    ["tile", "setData"],
+    ["tile", "clearData"],
+    ["geojson", "setZIndex"],
+    ["dom", "setZIndex"],
+  ] as const)("%s 没有 %s 入口：显式失败（BMAP_CAPABILITY_UNSUPPORTED）且告警", (kind, operation) => {
+    const handle = createOfKind(kind);
+    expect(() => {
+      if (operation === "setData") ctx.layers.setData(handle, {});
+      else if (operation === "clearData") ctx.layers.clearData(handle);
+      else ctx.layers.setZIndex(handle, 1);
+    }).toThrowError(expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(operation),
+      expect.anything(),
+    );
+  });
+
+  it("zIndex 就地更新：tile / xyz / wms / wmts / raster / traffic 都可用", () => {
+    for (const kind of ["tile", "xyz", "wms", "wmts", "raster", "traffic"] as const) {
+      const handle = createOfKind(kind);
+      ctx.layers.setZIndex(handle, 4);
+      expect((handle.raw as { zIndex: number }).zIndex).toBe(4);
+      expect(
+        (handle.raw as { callLog: string[] }).callLog,
+        `${kind} 应经 setZIndex()`,
+      ).toContain("setZIndex");
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 官方类型一致性：声明的构造器名必须真的在官方命名空间里                          */
+/* -------------------------------------------------------------------------- */
+
+describe("[#40] 与官方类型包的构造器清单一致", () => {
+  it("十种 kind 的构造器名与 4.0.4 声明逐条对应（新增 kind 漏配会在类型层失败，这里锁运行时读数）", () => {
+    const expected: Record<LayerKind, string> = {
+      district: "DistrictLayer",
+      "panorama-coverage": "PanoramaCoverageLayer",
+      tile: "TileLayer",
+      traffic: "TrafficLayer",
+      geojson: "GeoJSONLayer",
+      dom: "DOMLayer",
+      xyz: "XYZLayer",
+      wms: "WMSLayer",
+      wmts: "WMTSLayer",
+      raster: "RasterTileLayer",
+    };
+    const namespace = ctx.fake.namespace as unknown as Record<string, unknown>;
+    for (const [kind, ctor] of Object.entries(expected)) {
+      const handle = createOfKind(kind as LayerKind);
+      expect(
+        typeof namespace[ctor],
+        `${kind} → BMap.${ctor} 必须存在于命名空间`,
+      ).toBe("function");
+      expect(handle.raw).toBeInstanceOf(namespace[ctor] as new () => unknown);
+    }
   });
 });

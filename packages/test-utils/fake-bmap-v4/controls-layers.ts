@@ -3,8 +3,10 @@
  *
  * 覆盖面刻意只到「Control / Layer Facet 会调用 + 共享契约会断言」的成员：控件基类的
  * 停靠/偏移/显隐、各 kind 的字段级 setter、`CopyrightControl` 的版权家族，以及图层的
- * 家族标志位与 `TileLayer#setZIndex`。**不补 getter 家族**（Facet 不读它们），避免
- * Fake 先于实现膨胀（同 `objects.ts` / `FakeMap.ts` 的口径）。
+ * 家族标志位与各自的字段级 / 整袋 setter。**唯一硬规则是「只实现官方 `.d.ts` 里声明过的
+ * 成员」**（因为「能力面与替身一致」本身是一条要断言的契约：Fake 比真实宽容 = 掩盖缺陷）；
+ * 在这个前提下，成对的 getter（`getLevel` / `getVisible`…）跟着 setter 一起给，
+ * 便于用例读回写入结果。M7-LAYERS（#40）之后图层一侧覆盖十种 kind。
  *
  * 与覆盖物替身分开成文件，是因为 issue #22 的 ADR 把「控件」与「图层」写成两节；
  * 覆盖物替身（`objects.ts`）已经很长，混在一起会让两节无法对照阅读。
@@ -15,9 +17,11 @@
  *   唯一可观察点；
  * - 图层经**统一** `map.addLayer/removeLayer` 管理（4.0 的 `addDistrictLayer` /
  *   `addTileLayer` 已标记 deprecated），家族由原型标志位（`isDistrictLayer` /
- *   `isTileLayer`）表达；
+ *   `isTileLayer` / `isGeoJSONLayer` / `isCustomHtmlLayer`）表达；
  * - `PanoramaCoverageLayer` 在 4.0.4 类型包里**没有类声明**，属运行时能力——Fake 提供它，
- *   以便覆盖「真实运行时存在」的创建路径；「运行时缺失」的分支由测试自己裁掉该构造器。
+ *   以便覆盖「真实运行时存在」的创建路径；「运行时缺失」的分支由测试自己裁掉该构造器；
+ * - `GeoJSONLayer` / `DOMLayer` 的官方构造签名是**两参**（首参分别是 `layerName` 与
+ *   `createDOM`），Fake 如实校验首参类型：拼错实参顺序会在夹具层直接暴露。
  */
 import { FakeV4EventTarget } from './event-target.ts'
 import type { FakeV4Diagnostics } from './diagnostics.ts'
@@ -240,10 +244,20 @@ export class FakeV4DistrictLayer extends FakeV4Layer {
   readonly isDistrictLayer = true
 }
 
-/** 瓦片图层（官方 `TileLayer`）：`setZIndex` 是唯一的字段级 setter。 */
+/**
+ * 瓦片图层（官方 `TileLayer`）。
+ *
+ * 声明成员逐条对应（`@baidumap/jsapi-v4-types@4.0.4`）：`setZIndex` / `addBoundary` /
+ * `clearBoundary` / `clearCache` / `setZIndexTop` / `isTransparentPng` / `getTilesUrl`。
+ * **不含** `show/hide`——官方 `TileLayer` 没有它们（`TrafficLayer` 继承自它，同样没有），
+ * 因此「按声明造替身」的这条约束正好锁住「表层显隐只能靠挂载」这个结论。
+ */
 export class FakeV4TileLayer extends FakeV4Layer {
   readonly isTileLayer = true
   zIndex: number | null = null
+  boundary: string | string[] | null = null
+  clearedCache = 0
+  zIndexTopCalls = 0
 
   constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
     super(options, stats)
@@ -254,12 +268,267 @@ export class FakeV4TileLayer extends FakeV4Layer {
     this.zIndex = zIndex
   }
 
+  setZIndexTop(): void {
+    this.callLog.push('setZIndexTop')
+    this.zIndexTopCalls += 1
+  }
+
+  addBoundary(boundary: string | string[]): void {
+    this.callLog.push('addBoundary')
+    this.boundary = boundary
+  }
+
+  clearBoundary(): void {
+    this.callLog.push('clearBoundary')
+    this.boundary = null
+  }
+
+  clearCache(): void {
+    this.callLog.push('clearCache')
+    this.clearedCache += 1
+  }
+
   isTransparentPng(): boolean {
     return this.options.transparentPng === true
   }
 
   getTilesUrl(): string {
     return ''
+  }
+}
+
+/**
+ * 路况图层（官方 `TrafficLayer extends TileLayer`）。
+ *
+ * 官方声明在继承之上多了 `setColors` / `setEdge`；两个都是**就地更新**（`setOptions` 的
+ * `mutable` 分类），因此 Fake 把写入值留成可读字段，便于断言「真的调到了这个 setter」。
+ */
+export class FakeV4TrafficLayer extends FakeV4TileLayer {
+  colors: string[] | null = null
+  edge: boolean | null = null
+
+  setColors(colors: string[]): void {
+    this.callLog.push('setColors')
+    this.colors = [...colors]
+  }
+
+  setEdge(value: boolean): void {
+    this.callLog.push('setEdge')
+    this.edge = value
+  }
+}
+
+/**
+ * 4.0 新增的「第三方标准瓦片服务」家族（`XYZLayer` / `RasterTileLayer` / `WMSLayer` /
+ * `WMTSLayer`）共享的声明面：`setZIndex` + 掩膜 + 清缓存，**没有** `isTransparentPng` /
+ * `getTilesUrl` / `setZIndexTop`（那是 `TileLayer` 自己的声明）。
+ */
+export class FakeV4StandardTileLayer extends FakeV4Layer {
+  readonly isTileLayer = true
+  zIndex: number | null = null
+  boundary: string | string[] | null = null
+  clearedCache = 0
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+  }
+
+  setZIndex(zIndex: number): void {
+    this.callLog.push('setZIndex')
+    this.zIndex = zIndex
+  }
+
+  addBoundary(boundary: string | string[]): void {
+    this.callLog.push('addBoundary')
+    this.boundary = boundary
+  }
+
+  clearBoundary(): void {
+    this.callLog.push('clearBoundary')
+    this.boundary = null
+  }
+
+  clearCache(): void {
+    this.callLog.push('clearCache')
+    this.clearedCache += 1
+  }
+}
+
+/** XYZ 图层（官方 `XYZLayer`）：在标准瓦片家族之上多 `show` / `hide` / `isVisible`。 */
+export class FakeV4XYZLayer extends FakeV4StandardTileLayer {
+  visible = true
+
+  show(): void {
+    this.callLog.push('show')
+    this.visible = true
+  }
+
+  hide(): void {
+    this.callLog.push('hide')
+    this.visible = false
+  }
+
+  isVisible(): boolean {
+    return this.visible
+  }
+}
+
+/** 栅格瓦片图层（官方 `RasterTileLayer`）：只有标准瓦片家族那一份声明面。 */
+export class FakeV4RasterTileLayer extends FakeV4StandardTileLayer {}
+
+/** WMS 图层（官方 `WMSLayer`）：只有标准瓦片家族那一份声明面。 */
+export class FakeV4WMSLayer extends FakeV4StandardTileLayer {}
+
+/** WMTS 图层（官方 `WMTSLayer`）：只有标准瓦片家族那一份声明面。 */
+export class FakeV4WMTSLayer extends FakeV4StandardTileLayer {}
+
+/**
+ * GeoJSON 覆盖物组合图层（官方 `GeoJSONLayer`）。
+ *
+ * 官方构造签名是 `(layerName, options)`——**首参是图层名而不是选项**。Fake 如实建模（首参
+ * 不是非空字符串就抛错），这样「Driver 把两个实参拼错顺序」会在夹具层立刻暴露，而不是变成
+ * 一个永远画不出东西的图层。
+ */
+export class FakeV4GeoJSONLayer extends FakeV4Layer {
+  readonly isGeoJSONLayer = true
+  readonly layerName: string
+  /** 最近一次 `setData` 的数据（`null` = 已清空）。 */
+  data: object | null = null
+  level: number
+  visible: boolean
+  resetStyleCalls = 0
+  destroyCalls = 0
+
+  constructor(layerName: string, options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    if (typeof layerName !== 'string' || layerName.length === 0) {
+      throw new TypeError('GeoJSONLayer: 第一个参数必须是图层名（官方签名是 (layerName, options)）')
+    }
+    this.layerName = layerName
+    this.level = typeof options.level === 'number' ? options.level : -99
+    this.visible = options.visible !== false
+    if (options.dataSource !== undefined) this.data = options.dataSource as object
+  }
+
+  setData(geojson: object): void {
+    this.callLog.push('setData')
+    if (!geojson || (geojson as { type?: unknown }).type !== 'FeatureCollection') {
+      throw new TypeError('GeoJSONLayer.setData: 只接受 GeoJSON FeatureCollection')
+    }
+    this.data = geojson
+  }
+
+  getData(): unknown[] {
+    return []
+  }
+
+  clearData(): void {
+    this.callLog.push('clearData')
+    this.data = null
+  }
+
+  resetStyle(): void {
+    this.callLog.push('resetStyle')
+    this.resetStyleCalls += 1
+  }
+
+  pickOverlays(): unknown[] | null {
+    return null
+  }
+
+  setLevel(z: number): void {
+    this.callLog.push('setLevel')
+    this.level = z
+  }
+
+  getLevel(): number {
+    return this.level
+  }
+
+  setVisible(v: boolean): void {
+    this.callLog.push('setVisible')
+    this.visible = v
+  }
+
+  getVisible(): boolean {
+    return this.visible
+  }
+
+  /** 官方 `destroy()`：清空覆盖物数据并解除与 Map 的关联。 */
+  destroy(): void {
+    this.callLog.push('destroy')
+    this.destroyCalls += 1
+    this.data = null
+  }
+}
+
+/**
+ * 自定义 DOM 覆盖物图层（官方 `DOMLayer`）。
+ *
+ * 官方构造签名是 `(createDOM, options)`；`setStyleOptions(partial)` 是**整袋**
+ * 更新构造项（没有逐字段 setter），Fake 把每次收到的袋子都记下来，让
+ * 「`bagSetters` 走的是整袋入口」这件事可断言。
+ */
+export class FakeV4DOMLayer extends FakeV4Layer {
+  readonly isCustomHtmlLayer = true
+  readonly createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement
+  /** 每次 `setStyleOptions` 收到的袋子（顺序即调用顺序）。 */
+  readonly appliedStyleBags: Record<string, unknown>[] = []
+  data: object | null = null
+  visible: boolean
+  readonly customOverlays: object[] = []
+
+  constructor(
+    createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement,
+    options: Record<string, unknown> = {},
+    stats: FakeV4Diagnostics,
+  ) {
+    super(options, stats)
+    if (typeof createDOM !== 'function') {
+      throw new TypeError('DOMLayer: 第一个参数必须是 createDOM 函数（官方签名是 (createDOM, options)）')
+    }
+    this.createDOM = createDOM
+    this.visible = options.visible !== false
+    if (options.data !== undefined) this.data = options.data as object
+  }
+
+  setData(data: object | null): void {
+    this.callLog.push('setData')
+    if (data !== null && (data as { type?: unknown }).type !== 'FeatureCollection') {
+      throw new TypeError('DOMLayer.setData: 只接受 GeoJSON FeatureCollection（或 null）')
+    }
+    this.data = data
+  }
+
+  show(): void {
+    this.callLog.push('show')
+    this.visible = true
+  }
+
+  hide(): void {
+    this.callLog.push('hide')
+    this.visible = false
+  }
+
+  setStyleOptions(options: Partial<Record<string, unknown>>): void {
+    this.callLog.push('setStyleOptions')
+    this.appliedStyleBags.push({ ...options })
+    this.options = { ...this.options, ...options }
+  }
+
+  removeAllOverlays(): void {
+    this.callLog.push('removeAllOverlays')
+    this.customOverlays.length = 0
+  }
+
+  removeOverlay(cusItem: object | string): void {
+    this.callLog.push('removeOverlay')
+    const index = this.customOverlays.indexOf(cusItem as object)
+    if (index >= 0) this.customOverlays.splice(index, 1)
+  }
+
+  getCustomOverlays(): object[] {
+    return this.customOverlays
   }
 }
 
