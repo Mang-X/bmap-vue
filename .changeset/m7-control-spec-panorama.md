@@ -16,6 +16,8 @@
   （`mutable` / `recreate` / `unsupported`，与 `OverlayPropertyPolicy` 同一套词汇），与 `setOptions`
   **共用同一处分类**——组件侧不再维护第二张「哪些键要重建」的表。
   `unsupported` 的判据收窄为**「连构造期也到不了」**（`custom` 上未知的键、认不出种类的裸句柄）。
+  处置按固定顺序分三段：`unsupported` 的键**不重建但告警一次**（不是静默 no-op），只有在 `recreate`
+  或「`mutable` 的选项从有值变回 `undefined`」时才重建控件——`unsupported` 不落进这条重建分支。
 - **`anchor` / `offset` 从「只在构造期生效」变为运行期即时下发**（按 `anchor → offset` 的顺序成对写：
   真实 4.0 的 `setAnchor()` 会把偏移重置回控件默认值）。选项从有值改回 `undefined` 时**重建**控件，
   让构造期重新采用 SDK 默认值。

@@ -696,4 +696,104 @@ describe("统一 adapter：就地写做不到时的两种反应（重建 / 有�
     wrapper.unmount();
     await nextTick();
   });
+
+  it("`unsupported` 的键变回 `undefined` ⇒ 同样**不**重建，且仍然告警一次", async () => {
+    // 「有值 → 没有值」的通则（语义是「回到 SDK 默认」，只能靠构造期）**不能覆盖到 `unsupported` 上**：
+    // 按三态定义它连构造期也没有入口，重建同样不生效。把通则套上去会同时违反两条契约——
+    // 一次无效重建，且因为提前 `return` 连告警都被跳过（#95 评审第 4 轮 P2）。
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const Probe = defineComponent({
+      props: { nope: { type: Number, default: undefined } },
+      setup(p) {
+        useControlResource(p as never, {
+          kind: "custom",
+          options: (x: { nope?: number }) => ({ offset: { x: 7, y: 9 }, nope: x.nope }),
+          render: () => () => document.createElement("div"),
+        });
+        return () => null;
+      },
+    });
+    const value = ref<number | undefined>(1);
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+    warn.mockClear();
+
+    value.value = undefined;
+    await nextTick();
+    await flushPromises();
+
+    expect(
+      fake.createdControls.length,
+      "`unsupported` 变 undefined 不得触发无效重建",
+    ).toBe(created);
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("没有入口")),
+      "`unsupported` 变 undefined 仍必须告警一次（不能因为走了重建分支就被静默跳过）",
+    ).toBe(true);
+
+    warn.mockRestore();
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("`unsupported` 与「需要重建的键」同 tick 变化 ⇒ 允许重建，但 `unsupported` 仍必须告警", async () => {
+    // 同批里有一个正当的重建理由（这里用 `offset` 有值 → undefined）时，`unsupported` 的键
+    // 不能被这次重建「顺带吞掉」——它的变化同样被忽略了，调用方同样有权知道。
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const Probe = defineComponent({
+      props: {
+        nope: { type: Number, default: 1 },
+        shift: { type: Boolean, default: false },
+      },
+      setup(p) {
+        useControlResource(p as never, {
+          kind: "custom",
+          options: (x: { nope: number; shift: boolean }) => ({
+            offset: x.shift ? undefined : { x: 7, y: 9 },
+            nope: x.nope,
+          }),
+          render: () => () => document.createElement("div"),
+        });
+        return () => null;
+      },
+    });
+    const state = reactive({ shift: false, nope: 1 });
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [
+            h(Probe, { nope: state.nope, shift: state.shift }),
+          ]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    const created = fake.createdControls.length;
+    warn.mockClear();
+
+    // 同一 tick：`offset` 变 undefined（重建理由）+ `nope` 变化（`unsupported`）
+    state.shift = true;
+    state.nope = 2;
+    await nextTick();
+    await flushPromises();
+
+    expect(
+      fake.createdControls.length,
+      "`offset` 变 undefined 是正当的重建理由，应当重建",
+    ).toBe(created + 1);
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("没有入口")),
+      "同批的重建不能把 `unsupported` 的告警吞掉",
+    ).toBe(true);
+
+    warn.mockRestore();
+    wrapper.unmount();
+    await nextTick();
+  });
 });

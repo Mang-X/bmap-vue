@@ -221,14 +221,18 @@ export function useControlResource<Props extends ControlBaseProps>(
   }
 
   /**
-   * 选项变化 → 就地更新 / 重建。
+   * 选项变化 → 告警 / 重建 / 就地更新。
    *
-   * 判据来自 Driver（`planOptions`），组件侧不维护第二张表：
-   * - 任一变化键是 `recreate`，或**值变回 `undefined`** ⇒ **整只重建**（把新选项交给构造期）；
-   * - 其余（`mutable`）⇒ 只把变了的键写下去；
-   * - `unsupported` ⇒ 不写也不重建（三态设计的本意：这种键**连构造期也没有入口**，重建同样无效）。
-   *   它不是静默丢弃——适配器会为它告警一次（每个键一次），否则调用方只知道「没生效」而不知道
-   *   为什么。
+   * **三段的顺序本身就是契约**（#95 评审第 4 轮 P2），不能合并成一个判据：
+   *
+   * 1. `unsupported` 先 warn-once —— 无论这一批里是否还有别的键要重建。它是「本次变化被忽略」
+   *    的告知，与「这次重建有没有别的正当理由」无关，被重建吞掉就等于回到了静默丢弃；
+   * 2. 重建判据只看 `recreate`，以及 `mutable && 值变回 undefined`。**`unsupported` 不能被
+   *    「有值 → 没有值」这条通则覆盖**：它连构造期也没有入口，重建同样不生效（三态设计要避免的
+   *    正是这种无效重建 + 内部状态丢失）；
+   * 3. 剩下的 `mutable + defined` 才进 `setOptions`。
+   *
+   * 判据来自 Driver（`planOptions`），组件侧不维护第二张表。`unsupported` 不是静默丢弃——见第 1 段。
    *
    * `anchor` 与 `offset` 必须**成对写**：真实 4.0 上 `setAnchor()` 会把控件偏移重置回
    * 控件默认值，只写 anchor 会把用户给的 offset 悄悄吃掉。
@@ -247,26 +251,14 @@ export function useControlResource<Props extends ControlBaseProps>(
     applied = optionSnapshot(next);
 
     const plan = context.client.driver.controls.planOptions(resource, changed);
-    /**
-     * **重建**（就地写做不到）的两种情形：
-     *
-     * 1. `recreate`：Driver 说这个键**只有构造期生效**——既包括分类表里显式声明的构造期项
-     *    （`map-type.type` / `overview.isOpen` / 版权控件的 `anchor`），也包括「未命中分类表、
-     *    但 4.0 会把构造选项**原样透传**」的键（后者依然可能在构造期生效，所以归 `recreate`）；
-     * 2. **值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK 默认」，而默认值只存在于构造期
-     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过（#95 评审第 1 轮 P1：
-     *    `BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到默认）。
-     *
-     * `unsupported` **刻意不重建**：按三态的定义，它意味着「连构造期也没有入口」（例如自定义
-     * 控件上未知的键），重建同样不会生效——这正是三态要避免的无效重建与内部状态丢失
-     * （#95 评审第 3 轮）。为了不让它变成「静默丢弃」，下面会为这类键告警一次。
-     */
-    if (changed.some((key) => plan[key] === "recreate" || next[key] === undefined)) {
-      void replace();
-      return;
-    }
 
-    // `unsupported` 的键：写也不会生效、重建也不会生效，但**必须说出来**（每个键一次）
+    /**
+     * **第 1 段：`unsupported` 的键先告警**（每个键一次）。
+     *
+     * 这类键「写也不会生效、重建也不会生效」，所以处置上什么都不做；但**必须说出来**，否则调用方
+     * 只知道「没生效」而不知道「为什么」。放在重建判据**之前**是有意的：同批里若有别的键要重建，
+     * 那个键依然是被忽略的，告警不该消失（曾经因为重建分支提前 `return` 而被整体跳过）。
+     */
     for (const key of changed) {
       if (plan[key] !== "unsupported" || warnedUnsupported.has(key)) continue;
       warnedUnsupported.add(key);
@@ -274,6 +266,29 @@ export function useControlResource<Props extends ControlBaseProps>(
         `ControlSpec(${controlSpec.kind}): option "${key}" 在本引擎没有入口（连构造期也没有，` +
           "例如自定义控件上未知的键），本次变化被忽略——重建同样不会生效",
       );
+    }
+
+    /**
+     * **第 2 段：重建**（就地写做不到）的两种情形：
+     *
+     * 1. `recreate`：Driver 说这个键**只有构造期生效**——既包括分类表里显式声明的构造期项
+     *    （`map-type.type` / `overview.isOpen` / 版权控件的 `anchor`），也包括「未命中分类表、
+     *    但 4.0 会把构造选项**原样透传**」的键（后者依然可能在构造期生效，所以归 `recreate`）；
+     * 2. `plan[key] === "mutable"` 且**值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK
+     *    默认」，而默认值只存在于构造期——就地写的话 `setOptions` 会按 `value === undefined`
+     *    跳过（#95 评审第 1 轮 P1：`BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到
+     *    默认）。
+     *
+     * 这里**必须带 `mutable` 这个限定**（第 4 轮 P2）：`anchor` / `offset` 与分类表里的就地项都是
+     * `mutable`，所以带不带限定不影响它们的「有值 → undefined」路径；而 `unsupported` 一旦落进
+     * 这条分支就是双重违约——既做了一次注定无效的重建，又因为提前 `return` 跳掉了第 1 段的告警。
+     */
+    const needsRebuild = changed.some(
+      (key) => plan[key] === "recreate" || (plan[key] === "mutable" && next[key] === undefined),
+    );
+    if (needsRebuild) {
+      void replace();
+      return;
     }
 
     const patch: ControlOptions = {};

@@ -89,8 +89,9 @@ planOptions(control: ControlHandle, keys: readonly string[]): Record<string, Con
 `apply` 缺席但 `mutable` 即 options 袋、`recreate` / `unsupported` 只告警）。分类表、options 袋与 `set<Key>`
 逃生口因此只有一份，不存在会漂移的第二张表。
 
-adapter 的判据因此是一句话：**任一变化键是 `recreate` ⇒ 整只重建**（把新选项交给构造期）；
-其余（`mutable`）⇒ 只把变了的键写下去；`unsupported` ⇒ 不写也不重建。
+adapter 的判据**分三段、按顺序**（顺序本身是契约，见评审第 4 轮）：**先**为 `unsupported` 的键告警一次；
+**再**看重建——`recreate`，或 `mutable` 且值变回 `undefined`；**最后**剩下的 `mutable` 才写下去。
+`unsupported` 不写、不重建，但一定说出来（见 §2 末与评审第 4 轮）。
 
 ### 3. `anchor` / `offset` 与 kind 专属选项走**同一条 diff**，并且按 `anchor → offset` 的顺序下发
 
@@ -110,8 +111,10 @@ adapter 的判据因此是一句话：**任一变化键是 `recreate` ⇒ 整只
   - `copyright.anchor` 是**构造期项**——版权控件的实例按停靠位置**共享**，就地 `setAnchor()` 会让实例与
     它服务的 anchor 脱钩（后续同 anchor 的组件找不到它、另建一个，同一位置出现两个控件）。变化时重建，
     由 `BCopyright` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移；
-  - **任何选项从有值变回 `undefined`** 也走重建（语义是「回到 SDK 默认值」，而默认值只存在于构造期）——
-    就地写的话 `setOptions` 会按「没有值」跳过，既不生效、又因为 `applied` 已前移而**永不重试**。
+  - **`mutable` 的选项从有值变回 `undefined`** 也走重建（语义是「回到 SDK 默认值」，而默认值只存在于
+    构造期）——就地写的话 `setOptions` 会按「没有值」跳过，既不生效、又因为 `applied` 已前移而**永不重试**。
+    这条通则**必须带 `mutable` 限定**：`unsupported` 连构造期也没有入口，套上去只会做一次注定无效的重建，
+    而且会把该有的告警一起吞掉（评审第 4 轮 P2，见文末「外部评审轮次记录（第 4 轮）」）。
 
 ### 4. `visible` 定型为 SDK 的 `show()` / `hide()`；`BCopyright` 是唯一的例外
 
@@ -338,6 +341,23 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 
 反证（改坏 → 必须红，退出码判定）：分类器退回「未命中即 `unsupported`」→ **3 条红**；
 adapter 判据退回「非 live 即重建」→ **1 条红**（`custom` 那条）。
+
+## 外部评审轮次记录（PR #95 第 4 轮，基线 `bbb8e28`）
+
+第 3 轮的主问题**复核通过**；本轮提 1 个 P2：`unsupported` 的**边界分支**仍不符合刚定下的三态契约。
+
+| 发现 | 复现结果 | 处置 |
+| --- | --- | --- |
+| P2 重建判据 `plan[key] === "recreate" \|\| next[key] === undefined` 里的第二项**没有限定状态**：`unsupported` 的键从有值变为 `undefined` 时会命中 `replace()` 并提前 `return`，于是同时违反两条已写进公开契约的保证——「`unsupported` 不做无效重建」与「`unsupported` 会告警一次（不是静默忽略）」。**同源分支**：同一批 changed 里若同时有需要重建的键与 `unsupported` 的键，也会提前 `return`，把 `unsupported` 的告警一起吞掉 | **确认**（2 条，先写成会红）：<br>① `custom` 的 `unsupported` 键 `1 → undefined` ⇒ 实测发生了无效重建（`createdControls` 74 vs 73）且无告警；<br>② `unsupported` 与 `offset → undefined`（正当重建理由）同 tick ⇒ 重建如期发生，但 `unsupported` 的告警**一次都没有**（该用例只在告警断言上红，证明两条子结论各自独立） | 采纳评审建议，把处置**拆成三段且固定顺序**：①先对 `unsupported` 做 warn-once（无论同批是否还有重建键）；②重建判据收窄为 `recreate`，或 `mutable && next[key] === undefined`；③剩余 `mutable + defined` 才进 `setOptions`。`anchor` / `offset` 与分类表里的就地项都是 `mutable`，因此「有值 → undefined」的既有路径不受影响（反过来，这个限定恰好把「重建同样无效」的那一类挡在外面） |
+
+同轮的反证（改坏 → 必须红，退出码判定）：两条新用例在修复前 `vitest exit=1`（2 failed / 60 passed），
+失败原因分别落在「重建计数」与「告警缺失」上；修复后 4 个相关文件 `166 passed`。
+
+一处**自查出来的自伤**（记下来，因为它是本轮唯一的返工）：改写 `applyOptions` 时把
+`context.client.driver.controls.planOptions(...)` 误写成 `context.client.driver.planOptions(...)`，
+于是 26 条用例一起报 `TypeError: ... planOptions is not a function`。判据很有辨识度：**错误数量远超改动
+面**（改的是判据，却红了 26 条跨越 anchor/offset、重建、共享缓存各族的用例），且报错是「方法不存在」
+而不是断言不符——这类信号应当先怀疑「改写时丢了调用面」，而不是逐个去看断言。
 
 ## 参考
 
