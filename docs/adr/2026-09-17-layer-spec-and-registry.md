@@ -232,11 +232,14 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 **`visible=false` 的临时摘挂一律不清**（切回可见时数据照旧，不用补 `setData`）。
 清理失败不阻断摘除，但经 `logger.warn` 可观测。
 
-**承诺的是结果、且按作用域分述**——不再笼统写「保证最终清空」：
+**承诺的边界要说准**——不再笼统写「保证最终清空」，也不再写「一定不在图上」：
 
-- 覆盖物（GeoJSON 的图形 / DOM 的真实节点）在永久销毁后**一定不在图上**：attached 路径由
-  `clearData()` 清、detached 路径由 `removeLayer` 自己摘（GeoJSON）；DOM 的节点由
-  `removeAllOverlays()` 清（其 detached 有效性待取证，见已知限制 13）；
+- **正常路径**（清理与摘除都成功返回）：清理动作按作用域执行——attached 时 `clearData()` 清，
+  detached 时（GeoJSON）由那一次 `removeLayer` 自己摘；DOM 的节点由 `removeAllOverlays()` 清
+  （其 detached 有效性待取证，见已知限制 13）。**正常返回后不残留。**
+- **失败路径**：清理 / 摘除**失败时只保证可观测**（`logger.warn` / `resource:error`），
+  **不保证无残留**——已知限制 12 就是它的反例（最后一次 `removeLayer` 失败时收口交给 SDK 自己的
+  `map.destroy()`）。把它写成「一定不在图上」会与同一条已知限制互斥。
 - `getData()` 集合在 detached 路径上**不会被清**（官方明说那要在 `removeLayer` 之前做）。
   该集合是随实例一起丢弃的内存状态，**不是**需要释放的 SDK 资源——所以这条不构成残留。
 

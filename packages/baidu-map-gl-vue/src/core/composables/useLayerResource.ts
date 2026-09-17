@@ -105,7 +105,9 @@ interface InstanceState {
   /**
    * 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。
    *
-   * 三态的理由见 `MountState`：失败之后留 `unknown`，由下一次同步动作收敛。
+   * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会**尝试**把它推回确定状态
+   * （`remove -> add`）——**仅在前提 P（对已摘掉的图层重复 `removeLayer` 是安全的）成立时才保证
+   * 收敛**；前提不成立时保持 `unknown` 并报错（可观测、且不会重复挂载）。见已知限制 14。
    */
   mountState: MountState;
   /**

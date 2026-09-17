@@ -1080,7 +1080,11 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     harness.assertIdle("removeLayer 失败后重试摘除");
   });
 
-  it("[四轮 1 / 五轮 2] 摘除失败之后切回可见：状态必须收敛到**恰好挂一份**（不重复挂、也不丢）", async () => {
+  it("[四轮 1 / 五轮 2] 摘除失败之后切回可见：下一次同步会**尝试**收敛（本组默认替身 = 前提 P 成立的乐观分支）", async () => {
+    // ⚠️ 这条跑的是**乐观契约分支**：默认替身对「不在图上的 layer」是 no-op，也就是**前提 P
+    // （对已经摘掉的图层重复 `removeLayer` 是安全的）成立**。只有在这一分支下才保证收敛到
+    // 「恰好挂一份」；前提不成立时的退化由 §13 的悲观契约用例成对钉住（收敛不保证发生、
+    // 但可观测且不重复挂载）。见已知限制 14。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
     const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
@@ -1095,9 +1099,10 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     props.value = { ...props.value, visible: true };
     await settle();
 
-    // 收敛动作是「先 best-effort 摘一次、再挂」，不是猜。猜「还挂着」会让**真实已 detached** 的
-    // 实例永远挂不回来（`failNextRemoveLayerAfterDetach` 那条形状，见 §12）；猜「已经下去了」会让
-    // 仍在图上的实例被挂第二份（`addLayer` 不去重）。两条都错，所以只能做确定性的同步。
+    // 动作是「先 best-effort 摘一次、再挂」，不是猜。猜「还挂着」会让**真实已 detached** 的实例
+    // 永远挂不回来（`failNextRemoveLayerAfterDetach` 那条形状，见 §12）；猜「已经下去了」会让仍在
+    // 图上的实例被挂第二份（`addLayer` 不去重）。两条都错 ⇒ 只能做一次同步动作，而这次同步的成败
+    // 取决于前提 P。
     expect(harness.attached("layer")).toBe(1);
     expect(
       map.callLog.filter((call) => call === "removeLayer" || call === "addLayer"),
