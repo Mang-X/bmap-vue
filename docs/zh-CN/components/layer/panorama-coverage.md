@@ -18,25 +18,15 @@ import { BPanoramaCoverageLayer } from 'baidu-map-gl-vue'
 layer/panoramaCoverage
 :::
 
-## 静态组件 Props
+## 组件 Props
 
-| 属性   | 说明           | 类型                      | 可选值            | 默认值                  |
-| ------ | -------------- | ------------------------- | ----------------- | ----------------------- |
-| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_TOP_RIGHT` |
-| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 10, y: 10 }`      |
+| 属性    | 说明         | 类型      | 默认值 | 版本                               |
+| ------- | ------------ | --------- | ------ | ---------------------------------- |
+| visible | 是否挂在地图上 | `boolean` | `true` | <Badge type="tip" text="^3.0.0" /> |
 
-## anchor
+`visible` 的语义是「挂上 / 摘掉」（`addLayer` / `removeLayer`）。
 
-| 值                       | 说明 |
-| ------------------------ | ---- |
-| BMAP_ANCHOR_TOP_LEFT     | 左上 |
-| BMAP_ANCHOR_TOP_RIGHT    | 右上 |
-| BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
-| BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+## 稳定性
 
-## 组件事件
-
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
-
-该组件没有对外事件。
-
+4.0.4 的类型包**没有** `PanoramaCoverageLayer` 的类声明（官方 Skill 明确它是 4.0 公开图层），
+因此本库按结构探测构造器：当前运行时没有它时会**显式失败**并告警一次，而不是静默降级。

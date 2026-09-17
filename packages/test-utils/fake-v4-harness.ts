@@ -17,7 +17,12 @@
 import type { BMapClient, BMapProviderLike } from "../baidu-map-gl-vue/src/client/types";
 import { createBMapClient } from "../baidu-map-gl-vue/src/client/createBMapClient";
 import { createLoadedJsapiV4 } from "../baidu-map-gl-vue/src/core/loader/providers";
-import { createFakeBMapV4, type FakeBMapV4, type FakeV4Map } from "./fake-bmap-v4/index.ts";
+import {
+  createFakeBMapV4,
+  type FakeBMapV4,
+  type FakeV4Layer,
+  type FakeV4Map,
+} from "./fake-bmap-v4/index.ts";
 
 /**
  * 组件挂在 Map 上的子资源种类（**领域读数**用的三种挂载面）。
@@ -128,6 +133,31 @@ export interface FakeV4Harness {
    * 领域读数是次数，不是「有没有调用过」。
    */
   checkResizeCalls(mapIndex?: number): number;
+  /* ------------------------------------------- 图层读数（M7-LAYERS / #40） */
+
+  /**
+   * 本用例内**累计创建**过的图层实例数。
+   *
+   * 「重建」的领域读数就是它：URL / 构造选项变化 ⇒ +1；`visible` / `data` / `zIndex` 变化 ⇒ 不变。
+   * 与 `attached('layer')`（当前挂在图上的数量）是两个口径，用例通常两个都要断言。
+   */
+  layersCreated(): number;
+  /**
+   * 第 `index` 个创建过的图层收到的 **SDK 调用日记**（官方方法名，按调用顺序）。
+   *
+   * 这就是「这一代图层被要求做了什么」的全部可观察事实：`zIndex` 就走 `setZIndex`、
+   * `data` 走 `setData` / `clearData`、`DOMLayer` 的构造项走 `setStyleOptions`。
+   */
+  layerCalls(index?: number): string[];
+  /**
+   * 第 `index` 个创建过的图层收到的**构造选项**（SDK 侧真正拿到的参数）。
+   *
+   * 用途是断言「参数生成」（XYZ / WMS / WMTS 的 URL 与参数、别名改名）——那是这些图层的
+   * 公开契约本身，而不是实现细节。
+   */
+  layerOptions(index?: number): Record<string, unknown>;
+  /** 第 `index` 个创建过的图层当前是否还挂在地图上（重建后旧实例必须为 `false`）。 */
+  layerAttached(index?: number): boolean;
 }
 
 function sizedContainer(): HTMLElement {
@@ -162,6 +192,7 @@ function toPositions(overlays: Iterable<unknown>): Array<{ lng: number; lat: num
     return position ? { lng: position.lng, lat: position.lat } : null;
   });
 }
+
 
 /** 视野命令计数：`centerAndZoom` 一次性与四个字段级 `setXxx` 分开数。 */
 function countViewWrites(callLog: readonly string[]): FakeV4ViewWrites {
@@ -244,6 +275,21 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
   fake: FakeBMapV4;
 } {
   const lastMap = () => lastCreatedMap(fake.createdMaps, "fake-v4 harness");
+  /**
+   * 取第 `index` 个**创建过**的图层（`-1` = 最后创建的那个）。
+   *
+   * 索引落在实例账本（`fake.createdLayers`）上，而 `reset()` 只重置诊断计数、不清账本——
+   * 因此**跨用例安全**的写法是负索引：`-1` = 最后一个、`-2` = 倒数第二个。
+   */
+  const layerAt = (index: number) => {
+    const layers = fake.createdLayers;
+    const resolved = index < 0 ? layers.length + index : index;
+    const layer = layers[resolved];
+    if (!layer) {
+      throw new Error(`fake-v4 harness：没有第 ${index} 个图层（已创建 ${layers.length} 个）`);
+    }
+    return layer;
+  };
   /** 挂起中的 `deferredProvider().load()` 放行函数（放行一次即清空）。 */
   const pendingLoads: Array<() => void> = [];
   return {
@@ -324,6 +370,10 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       },
       checkResizeCalls: (mapIndex = -1) =>
         createdMapAt(fake.createdMaps, mapIndex, "fake-v4 harness").resizeCalls,
+      layersCreated: () => fake.createdLayers.length,
+      layerCalls: (index = -1) => [...layerAt(index).callLog],
+      layerOptions: (index = -1) => ({ ...layerAt(index).options }),
+      layerAttached: (index = -1) => layerAt(index).attachedMap !== null,
     },
   };
 }

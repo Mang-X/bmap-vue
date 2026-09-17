@@ -135,6 +135,10 @@ function jsonMatches(current: string, expected: Record<string, unknown>): boolea
  * 组件只改 manifest 时，生成出来的 import 会退化成 `./BNavigation` 这种不存在的路径
  * （M7-CONTROL-PANORAMA / #41 实测），而且失败发生在**测试运行时**而不是生成时。
  * 现在路径只有一个事实源（manifest 的 `source`），本函数只做前缀剥离。
+ *
+ * 合并说明（M7-LAYERS / #40 × #41）：本 PR 早先是在那张手写表上补了 8 个图层，
+ * 这里取 #41 的派生版——**图层那 8 个入口不需要在表里再登记一次**，
+ * 只要 manifest 的 `source` 正确就自动生成。
  */
 function toPath(source: string): string {
   const relative = source.startsWith('./components/') ? source.slice('./components/'.length) : source

@@ -35,14 +35,22 @@ import {
   FakeV4Control,
   FakeV4CopyrightControl,
   FakeV4DistrictLayer,
+  FakeV4DOMLayer,
+  FakeV4GeoJSONLayer,
   FakeV4GeolocationControl,
   FakeV4Layer,
   FakeV4MapTypeControl,
   FakeV4NavigationControl,
   FakeV4OverviewMapControl,
   FakeV4PanoramaCoverageLayer,
+  FakeV4RasterTileLayer,
   FakeV4ScaleControl,
+  FakeV4StandardTileLayer,
   FakeV4TileLayer,
+  FakeV4TrafficLayer,
+  FakeV4WMSLayer,
+  FakeV4WMTSLayer,
+  FakeV4XYZLayer,
 } from './controls-layers.ts'
 import {
   FakeV4BezierCurve,
@@ -118,14 +126,22 @@ export {
   FakeV4Control,
   FakeV4CopyrightControl,
   FakeV4DistrictLayer,
+  FakeV4DOMLayer,
+  FakeV4GeoJSONLayer,
   FakeV4GeolocationControl,
   FakeV4Layer,
   FakeV4MapTypeControl,
   FakeV4NavigationControl,
   FakeV4OverviewMapControl,
   FakeV4PanoramaCoverageLayer,
+  FakeV4RasterTileLayer,
   FakeV4ScaleControl,
+  FakeV4StandardTileLayer,
   FakeV4TileLayer,
+  FakeV4TrafficLayer,
+  FakeV4WMSLayer,
+  FakeV4WMTSLayer,
+  FakeV4XYZLayer,
 } from './controls-layers.ts'
 export {
   FakeV4BezierCurve,
@@ -249,11 +265,27 @@ export interface FakeBMapV4Namespace {
   OverviewMapControl: new (options?: Record<string, unknown>) => FakeV4OverviewMapControl
   PanoramaControl: new (options?: Record<string, unknown>) => FakeV4Control
   CopyrightControl: new (options?: Record<string, unknown>) => FakeV4CopyrightControl
-  /* ---------------------------------------------------- 图层（#22） */
+  /* ---------------------------------------------------- 图层（#22 / #40） */
   DistrictLayer: new (options?: Record<string, unknown>) => FakeV4DistrictLayer
   TileLayer: new (options?: Record<string, unknown>) => FakeV4TileLayer
+  TrafficLayer: new (options?: Record<string, unknown>) => FakeV4TrafficLayer
   /** 官方 4.0 运行时公开、但 4.0.4 类型包未声明类声明的成员。 */
   PanoramaCoverageLayer: new () => FakeV4PanoramaCoverageLayer
+  /** M7-LAYERS（#40）：第三方标准瓦片服务基线（首参形态各不相同，逐条写明）。 */
+  XYZLayer: new (options?: Record<string, unknown>) => FakeV4XYZLayer
+  RasterTileLayer: new (options?: Record<string, unknown>) => FakeV4RasterTileLayer
+  WMSLayer: new (options?: Record<string, unknown>) => FakeV4WMSLayer
+  WMTSLayer: new (options?: Record<string, unknown>) => FakeV4WMTSLayer
+  /** 官方签名是 `(layerName, options)`——首参是图层名。 */
+  GeoJSONLayer: new (
+    layerName: string,
+    options?: Record<string, unknown>,
+  ) => FakeV4GeoJSONLayer
+  /** 官方签名是 `(createDOM, options)`——首参是 DOM 工厂。 */
+  DOMLayer: new (
+    createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement,
+    options?: Record<string, unknown>,
+  ) => FakeV4DOMLayer
   /* -------------------------------------------------- 服务（#23） */
   Geocoder: new (opts?: Record<string, unknown>) => FakeV4Geocoder
   Convertor: new () => FakeV4Convertor
@@ -554,9 +586,54 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdLayers.push(this)
     }
   }
+  class TrafficLayerClass extends FakeV4TrafficLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
   class PanoramaCoverageLayerClass extends FakeV4PanoramaCoverageLayer {
     constructor() {
       super(stats)
+      createdLayers.push(this)
+    }
+  }
+  class XYZLayerClass extends FakeV4XYZLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
+  class RasterTileLayerClass extends FakeV4RasterTileLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
+  class WMSLayerClass extends FakeV4WMSLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
+  class WMTSLayerClass extends FakeV4WMTSLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
+  class GeoJSONLayerClass extends FakeV4GeoJSONLayer {
+    constructor(layerName: string, options?: Record<string, unknown>) {
+      super(layerName, options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
+  class DOMLayerClass extends FakeV4DOMLayer {
+    constructor(
+      createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement,
+      options?: Record<string, unknown>,
+    ) {
+      super(createDOM, options ?? {}, stats)
       createdLayers.push(this)
     }
   }
@@ -740,7 +817,14 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     CopyrightControl: CopyrightControlClass,
     DistrictLayer: DistrictLayerClass,
     TileLayer: TileLayerClass,
+    TrafficLayer: TrafficLayerClass,
     PanoramaCoverageLayer: PanoramaCoverageLayerClass,
+    XYZLayer: XYZLayerClass,
+    RasterTileLayer: RasterTileLayerClass,
+    WMSLayer: WMSLayerClass,
+    WMTSLayer: WMTSLayerClass,
+    GeoJSONLayer: GeoJSONLayerClass,
+    DOMLayer: DOMLayerClass,
     Geocoder: GeocoderClass,
     Convertor: ConvertorClass,
     Boundary: BoundaryClass,

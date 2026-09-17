@@ -25,6 +25,7 @@ import { ResourceScope } from "../core/lifecycle/ResourceScope";
 import { createMapEventBus } from "../core/events/MapEventBus";
 import { createFrameScheduler } from "../core/scheduler/FrameScheduler";
 import { createOverlayRegistry } from "../core/overlays/OverlayRegistry";
+import { createLayerRegistry } from "../core/layers/LayerRegistry";
 import { createPluginRegistry } from "../core/plugins/PluginRegistry";
 import { BMapError } from "../core/errors/BMapError";
 
@@ -93,7 +94,7 @@ function createClientAdapter(clientContext: BMapClientContext, map?: unknown): M
   const events = createMapEventBus();
   const scheduler = createFrameScheduler();
   const overlays = createOverlayRegistry();
-  const layers = createOverlayRegistry();
+  const layers = createLayerRegistry();
   const controls = createOverlayRegistry();
   const plugins = createPluginRegistry(
     () => ({ client: clientRef.value, map: mapRef.value, api: clientRef.value?.rawSdk ?? null }),

@@ -107,7 +107,14 @@ export type {
   ControlVisibleInput,
 } from "./controls/spec";
 export { useLayerResource } from "./composables/useLayerResource";
-export type { LayerResourceAdapter, UseLayerResourceResult } from "./composables/useLayerResource";
+export type {
+  LayerResourceBindInput,
+  LayerResourceHooks,
+  UseLayerResourceResult,
+} from "./composables/useLayerResource";
+export { createLayerRegistry } from "./layers/LayerRegistry";
+export type { LayerRecord, LayerRegistry } from "./layers/LayerRegistry";
+export type { LayerProbe, LayerSpec } from "./layers/LayerSpec";
 // 全景底座（M7-CONTROL-PANORAMA / #41）：独立的 PanoramaContext（**不并入 MapContext**，
 // 见文件头注释）+ v4 全景面的可检查收窄点。
 export {

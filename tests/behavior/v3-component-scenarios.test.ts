@@ -30,6 +30,8 @@ import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMa
 import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
 import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BControl.vue";
 import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
+import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BGeoJSONLayer.vue";
+import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
 import { useBMapGeocoder } from "../../packages/baidu-map-gl-vue/src/composables/useBMapGeocoder";
 import { useMapEvent } from "../../packages/baidu-map-gl-vue/src/composables/useMapEvent";
 import { useMapStatus } from "../../packages/baidu-map-gl-vue/src/composables/useMapStatus";
@@ -2306,5 +2308,40 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("error 事件里同步 retry");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* M7-LAYERS（#40）：同一张图上的多个图层共用同一个生命周期内核                    */
+/* -------------------------------------------------------------------------- */
+
+describe("图层套件在同图共存时的领域行为（M7-LAYERS / #40）", () => {
+  /**
+   * 这个场景只写**领域语言**：三种「常用图层」挂在同一张图上，各自的显隐对外表现为
+   * 「挂载数」，卸载后过一遍泄漏门禁。详细的分 kind 断言在 `v3-layer-suite.test.ts`
+   * （那份文件按 issue 的验收条目组织），这里保证仓库的「组件级场景」约定仍然覆盖新组件。
+   */
+  it("行政区 + 瓦片 + GeoJSON 同图共存；显隐各自独立，卸载后无残留", async () => {
+    const visible = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BDistrictLayer, { name: "北京市" }),
+      h(BTileLayer, { tileUrlTemplate: "https://example.com/{X}/{Y}/{Z}.png" }),
+      h(BGeoJSONLayer, { data: { type: "FeatureCollection", features: [] }, visible: visible.value }),
+    ]);
+    expect(harness.attached("layer")).toBe(3);
+
+    visible.value = false;
+    await nextTick();
+    await nextTick();
+    expect(harness.attached("layer"), "GeoJSON 图层被摘掉，其它两个不受影响").toBe(2);
+
+    visible.value = true;
+    await nextTick();
+    await nextTick();
+    expect(harness.attached("layer")).toBe(3);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("图层套件同图共存");
   });
 });

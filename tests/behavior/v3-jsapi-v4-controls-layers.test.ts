@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 import {
+  layerFacetOptions,
   runControlFacetContract,
   runLayerFacetContract,
   type ControlFacetHarness,
@@ -25,6 +26,7 @@ import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/c
 import { createCapabilityRegistry } from "../../packages/baidu-map-gl-vue/src/driver/capability/registry";
 import type { Capability } from "../../packages/baidu-map-gl-vue/src/driver/capability/catalog";
 import type { ControlHandle, LayerHandle, SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
+import type { LayerKind } from "../../packages/baidu-map-gl-vue/src/driver/types/layers";
 import { createJsapiV4ControlDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/controls";
 import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
 import { createJsapiV4LayerDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/layers";
@@ -116,11 +118,22 @@ describe("v4 Control / Layer facet 释放顺序（跨 Facet 不变式）", () =>
 });
 
 describe("v4 Control / Layer facet 与 Capability Catalog 一致", () => {
-  /** issue #22 的「验收标准」：Catalog 声明的能力必须与 Driver 实际支持的 kind 一致。 */
-  const KIND_CAPABILITIES: readonly [string, Capability][] = [
+  /**
+   * issue #22 的「验收标准」：Catalog 声明的能力必须与 Driver 实际支持的 kind 一致。
+   *
+   * M7-LAYERS（#40）把它扩到**全部十种** kind（原本只有 #22 的三种）。
+   */
+  const KIND_CAPABILITIES: readonly [LayerKind, Capability][] = [
     ["district", "layer.district"],
     ["panorama-coverage", "layer.panorama-coverage"],
     ["tile", "layer.tile"],
+    ["traffic", "layer.traffic"],
+    ["geojson", "layer.geojson"],
+    ["dom", "layer.dom"],
+    ["xyz", "layer.xyz"],
+    ["wms", "layer.wms"],
+    ["wmts", "layer.wmts"],
+    ["raster", "layer.raster"],
   ];
 
   it.each(KIND_CAPABILITIES)("%s ↔ %s：能力可用且 rawMembers 真的存在", (kind, capability) => {
@@ -136,7 +149,7 @@ describe("v4 Control / Layer facet 与 Capability Catalog 一致", () => {
     }
 
     // 能力可用 → 该 kind 真的能创建并挂载
-    const layer = layers.create(kind as "district");
+    const layer = layers.create(kind, layerFacetOptions(kind));
     layers.add({ kind: "map", handle: adoptMap() }, layer);
     expect(rawMaps[rawMaps.length - 1].layers).toHaveLength(1);
   });

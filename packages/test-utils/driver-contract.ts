@@ -22,7 +22,7 @@ import { describe, it, expect } from "vitest";
 import type { BMapClient } from "../baidu-map-gl-vue/src/client/types";
 import type { BMapDriver } from "../baidu-map-gl-vue/src/driver/types/bmap";
 import type { ControlKind } from "../baidu-map-gl-vue/src/driver/types/controls";
-import type { MapHandle } from "../baidu-map-gl-vue/src/driver/types/handles";
+import type { LayerHandle, MapHandle } from "../baidu-map-gl-vue/src/driver/types/handles";
 import type { LayerKind } from "../baidu-map-gl-vue/src/driver/types/layers";
 import type { MapInteraction } from "../baidu-map-gl-vue/src/driver/types/map";
 import type {
@@ -406,12 +406,46 @@ export const CONTROL_FACET_KINDS: readonly ControlKind[] = [
   "copyright",
 ];
 
-/** issue #22 要求的图层种类（`LayerKind` 全覆盖）。 */
+/**
+ * 图层种类（`LayerKind` 全覆盖）。
+ *
+ * #22 只要求前三种；M7-LAYERS（#40）补齐到十种——契约的写法是「同一批断言在每个 kind 上
+ * 各跑一遍」，所以新增 kind 时**必须**加进这里，否则「十种图层共用同一个生命周期内核」
+ * 这句话在证据层就不成立。
+ */
 export const LAYER_FACET_KINDS: readonly LayerKind[] = [
   "district",
   "panorama-coverage",
   "tile",
+  "traffic",
+  "geojson",
+  "dom",
+  "xyz",
+  "wms",
+  "wmts",
+  "raster",
 ];
+
+/**
+ * `LAYER_FACET_KINDS` 必须**覆盖全部** `LayerKind`。
+ *
+ * 上面那段话（「新增 kind 时必须加进这里」）如果只靠人肉维持，就是一个空转守卫：漏一个 kind
+ * 时契约静默漏测、测试全绿。这条类型断言把意图变成编译期约束（与 `facet-probes.ts` 的
+ * 「探针清单必须完备」同一手法）。
+ */
+type AssertKindsComplete = LayerKind extends (typeof LAYER_FACET_KINDS)[number] ? true : never;
+export type _AssertLayerFacetKindsComplete = AssertKindsComplete;
+
+/**
+ * 每个 kind 的**必需构造首参**（`GeoJSONLayer` / `DOMLayer` 的官方签名是两参）。
+ *
+ * 其余 kind 的构造选项都是空对象即可——契约只验证生命周期，不验证选项语义。
+ */
+export function layerFacetOptions(kind: LayerKind): Record<string, unknown> {
+  if (kind === "geojson") return { layerName: "layer-facet-contract" };
+  if (kind === "dom") return { createDOM: () => document.createElement("div") };
+  return {};
+}
 
 /** Control / Layer facet 契约只需要该 facet + 一个 Map 句柄 + 挂载计数。 */
 export type ControlFacetDriver = Pick<BMapDriver, "controls">;
@@ -509,13 +543,46 @@ export function runControlFacetContract(createHarness: () => ControlFacetHarness
  * 可见性在 v4 就是「挂上 / 摘掉」（图层没有 `show/hide`），因此这块用挂载计数断言；
  * 与 webgl-v1 的 `addDistrictLayer` / `addTileLayer` 分流差异一起由 harness 吸收。
  */
+/**
+ * 走一次该 kind 真正支持的「就地更新」（契约的 updates 腿）。
+ *
+ * 选第一个可用操作，不假设所有 kind 有同一套方法面；一个操作都没有的 kind（`district` /
+ * `panorama-coverage`）没有可验证的更新路径，由 `setOptions({})` 兜底（那一条只验证「不抛错」，
+ * 因此必须写清它**不是**更新语义的证据）。
+ */
+function exerciseInPlaceUpdate(
+  layers: LayerFacetDriver["layers"],
+  kind: LayerKind,
+  layer: LayerHandle,
+): boolean {
+  const surface = layers.surface(kind);
+  for (const operation of surface.operations) {
+    if (operation === "setZIndex") {
+      layers.setZIndex(layer, 3);
+      return true;
+    }
+    if (operation === "setData") {
+      layers.setData(layer, { type: "FeatureCollection", features: [] });
+      return true;
+    }
+    if (operation === "clearData") {
+      layers.clearData(layer);
+      return true;
+    }
+  }
+  return false;
+}
+
 export function runLayerFacetContract(createHarness: () => LayerFacetHarness) {
   describe("Layer facet contract", () => {
     for (const kind of LAYER_FACET_KINDS) {
       it(`creates, mounts, updates and removes a ${kind} layer`, () => {
         const harness = createHarness();
         const layers = harness.driver().layers;
-        const options = kind === "district" ? { name: "北京市", viewport: true } : {};
+        const options =
+          kind === "district"
+            ? { name: "北京市", viewport: true }
+            : layerFacetOptions(kind);
         const layer = layers.create(kind, options);
         expect(layer.raw).toBeTruthy();
 
@@ -529,7 +596,14 @@ export function runLayerFacetContract(createHarness: () => LayerFacetHarness) {
         expect(harness.attachedCount()).toBe(1);
 
         // 「hidden」在图层上就是「已摘掉」：显隐不抛错
-        expect(() => layers.setOptions(layer, {})).not.toThrow();
+        //
+        // M7-LAYERS（#40）：这里**真的调用一次**该 kind 声明可就地更新的操作，
+        // 而不是只调 `setOptions({})`——后者对任何实现都恒真（空袋没有任何断言的着力点），
+        // 会让契约里「updates」这条腿空转。没有任何操作的 kind 才退化为空袋。
+        // 有操作可跑的 kind 跑真的更新；一个操作都没有的 kind 才退化为「空袋不抛错」
+        // （那一条对任何实现都恒真，因此**不是**更新语义的证据，见 `exerciseInPlaceUpdate`）。
+        const exercised = exerciseInPlaceUpdate(layers, kind, layer);
+        if (!exercised) expect(() => layers.setOptions(layer, {})).not.toThrow();
 
         layers.remove(target, layer);
         expect(harness.attachedCount()).toBe(0);

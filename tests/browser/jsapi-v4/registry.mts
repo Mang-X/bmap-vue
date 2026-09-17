@@ -52,6 +52,18 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     id: "layer-district",
     name: "基础图层 <BDistrictLayer> 真的挂上（账本计数或容器 DOM 增量）",
   },
+  "layer-tile": {
+    id: "layer-tile",
+    name: "瓦片图层 <BTileLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
+  },
+  "layer-traffic": {
+    id: "layer-traffic",
+    name: "路况图层 <BTrafficLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
+  },
+  "layer-geojson": {
+    id: "layer-geojson",
+    name: "GeoJSON 图层 <BGeoJSONLayer> 真的挂上、`setData` 被 SDK 接受（拦截真实 Map.addLayer，且无 console.error）",
+  },
   "infowindow-visible": {
     id: "infowindow-visible",
     name: "<BInfoWindow> 打开后地图活状态非空、内容节点可见且有内容（#72 的可见性回归）",
@@ -98,6 +110,9 @@ const fixtureChecks: string[] = [
   "controls-stable-set",
   "panorama-viewer",
   "layer-district",
+  "layer-tile",
+  "layer-traffic",
+  "layer-geojson",
   "infowindow-visible",
   "unmount-release",
   "remount-after-unmount",
@@ -113,6 +128,9 @@ const liveChecks: string[] = [
   "control-zoom",
   "controls-stable-set",
   "layer-district",
+  "layer-tile",
+  "layer-traffic",
+  "layer-geojson",
   "infowindow-visible",
   "service-geocode",
   "ui-kit-autocomplete-search",

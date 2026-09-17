@@ -124,6 +124,48 @@ export class FakeV4Map extends FakeV4EventTarget {
   failNextAddControl: Error | null = null
   failNextAddLayer: Error | null = null
   /**
+   * 测试故障注入：让**下一次** `addLayer` **先真的挂上、再抛错**（用后即清）。
+   *
+   * 与 `failNextAddLayer`（抛在挂载之前）是两条不同的路径，必须分开建模：
+   * 前者是「什么都没发生」，后者是「**副作用已经产生**但调用方收到异常」——真实 SDK 里
+   * `addLayer` 会在内部访问地图与图层管理器，抛错可能发生在资源已经登记之后。
+   * 把这条形状建出来的用途是：调用方的错误补偿必须**best-effort 摘除**，不能只看
+   * 「调用成功返回」的记账（见 `useLayerResource` 的 mount 补偿）。
+   */
+  failNextAddLayerAfterAttach: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `removeLayer` **在摘掉之前**抛错（用后即清）。
+   *
+   * 形状与 `failNextAddLayerAfterAttach` 对偶，但方向更危险：`addLayer` 抛错时资源是「多了」，
+   * 而 `removeLayer` 抛错时资源是「**摘不掉**」——真实 SDK 里 `removeLayer` 会访问地图与图层
+   * 管理器，抛错可能发生在真正摘除之前，于是**图层仍在图上**。调用方如果按「调用过就复位记账」
+   * 处理，之后再也没有第二次机会，SDK 上就留下孤儿。
+   */
+  failNextRemoveLayer: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `removeLayer` **先真的摘掉、再抛错**（用后即清）。
+   *
+   * 与 `failNextRemoveLayer`（摘之前抛）是**两条不同的状态机路径**，必须分开建模。
+   *
+   * 早先这里只建模了前者，理由是「已经摘掉再抛错时，重试 `removeLayer` 是无害 no-op」。那只看了
+   * `removeLayer` 自己，没有看完整状态机：调用方**唯一能观测的**「挂没挂上」证据就是调用有没有
+   * 成功返回。这条路径下 SDK 已经 detached，而调用方收到的却是异常 ⇒ 如果它把「还挂着」当成
+   * 结论记下来，就再也挂不回来了（`visible: true → false → true` 之后图上什么都没有）。
+   */
+  failNextRemoveLayerAfterDetach: Error | null = null
+  /**
+   * **悲观契约模式**：让 `removeLayer` 在目标**不在图上**时抛错（**粘性**，不随调用清除）。
+   *
+   * 为什么需要一条粘性策略，而不只是一次性注入：官方对「`map.removeLayer()` 传入一个**已经摘掉**
+   * 的图层」**没有任何说明**，而替身对「不在数组里的 layer」天然是 no-op——于是任何依赖「重复摘除
+   * 是安全的」的算法都会被替身的宽容悄悄放行。
+   *
+   * 打开这个模式等于把契约换成**最悲观的那一侧**（重复摘除会抛错），让那条依赖显式暴露出来：
+   * 三态收敛（`unknown` ⇒ 先 best-effort 摘一次、再挂）正是依赖它的一处。用例据此钉住
+   * 「在悲观契约下退化到什么程度」，而不是让依赖只活在注释里。
+   */
+  failRemoveLayerWhenDetached: Error | null = null
+  /**
    * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
    *
    * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
@@ -250,16 +292,37 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.layers.push(layer)
     layer.attachedMap = this
     this.stats.resourceCreated('layer')
+    if (this.failNextAddLayerAfterAttach) {
+      const error = this.failNextAddLayerAfterAttach
+      this.failNextAddLayerAfterAttach = null
+      throw error
+    }
   }
 
   removeLayer(layer: FakeV4Layer): void {
     this.callLog.push('removeLayer')
+    if (this.failNextRemoveLayer) {
+      const error = this.failNextRemoveLayer
+      this.failNextRemoveLayer = null
+      // 刻意**在摘除之前**抛出：图层仍然留在 `this.layers` 上（见该字段的说明）。
+      throw error
+    }
     const index = this.layers.indexOf(layer)
+    if (index < 0 && this.failRemoveLayerWhenDetached) {
+      // 悲观契约：目标不在图上 ⇒ 抛错（粘性，见该字段说明）。
+      throw this.failRemoveLayerWhenDetached
+    }
     if (index >= 0) {
       this.layers.splice(index, 1)
       this.stats.resourceReleased('layer')
     }
     if (layer.attachedMap === this) layer.attachedMap = null
+    if (this.failNextRemoveLayerAfterDetach) {
+      const error = this.failNextRemoveLayerAfterDetach
+      this.failNextRemoveLayerAfterDetach = null
+      // 摘除**已经生效**，调用方却收到异常（见该字段的说明）。
+      throw error
+    }
   }
 
   constructor(
