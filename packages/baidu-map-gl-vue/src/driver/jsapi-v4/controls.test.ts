@@ -607,7 +607,7 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
     const raw = ctx.rawOf(handle) as unknown as { callLog: string[] };
 
     // live：真的写到实例上
-    expect(ctx.controls.planOptions(handle, ["showStreetLayer"]).showStreetLayer).toBe("live");
+    expect(ctx.controls.planOptions(handle, ["showStreetLayer"]).showStreetLayer).toBe("mutable");
     ctx.controls.setOptions(handle, { showStreetLayer: false });
     expect(raw.callLog).toContain("showStreetLayer:off");
 
@@ -642,8 +642,8 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
 
     // 反向：全部 kind 的 anchor / offset 仍然是 live（自定义控件走 setAnchor / setOffset）
     expect(ctx.controls.planOptions(handle, ["anchor", "offset"])).toEqual({
-      anchor: "live",
-      offset: "live",
+      anchor: "mutable",
+      offset: "mutable",
     });
   });
 
@@ -656,8 +656,8 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
     };
 
     expect(ctx.controls.planOptions(handle, ["anchor", "offset"])).toEqual({
-      anchor: "live",
-      offset: "live",
+      anchor: "mutable",
+      offset: "mutable",
     });
 
     ctx.controls.setOptions(handle, { anchor: "BMAP_ANCHOR_TOP_LEFT", offset: { x: 700, y: 800 } });
@@ -672,7 +672,7 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
 
     expect(ctx.controls.planOptions(handle, ["anchor", "offset"])).toEqual({
       anchor: "recreate",
-      offset: "live",
+      offset: "mutable",
     });
 
     // `recreate` 的口径：告警一次且**不动实例**（把重建的决定交给调用方）

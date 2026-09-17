@@ -44,7 +44,7 @@ export interface ControlOptions {
  * 前者重建也没用（值会被静默丢弃），后者重建就能生效。合并它们会让组件对着一堆无用重建
  * 反复创建控件（M7-CONTROL-PANORAMA / issue #41）。
  *
- * - `live`：有就地入口，`setOptions` 会真的写下去；
+ * - `mutable`：有就地入口，`setOptions` 会真的写下去；
  * - `recreate`：**只有构造期生效**，`setOptions` 告警一次且**不动实例**，需要新值请重建控件。
  *   既包括分类表里显式声明的构造期项（`map-type.type`、`overview.isOpen`、版权控件的 `anchor`），
  *   也包括「未命中分类表、但构造选项**原样透传**」的键——后者依然可能在构造期生效，因此归这里
@@ -54,8 +54,13 @@ export interface ControlOptions {
  *
  * 实现者注意：把「没有就地 setter」一律报成 `unsupported` 是**错的**（那会让调用方丢掉本可
  * 在构造期生效的键）；判定 `unsupported` 的唯一依据是「构造期也到不了」。#95 评审第 3 轮。
+ *
+ * **词汇与 `OverlayPropertyPolicy` 对齐**：同一个「构造之后改这个键会怎样」的三态概念，Overlay 侧
+ * 公开的是 `mutable` / `recreate` / `unsupported`，本 Facet 用同一组名字。此前控件侧叫 `live`，
+ * 而控件 Driver 自己的**内部**分类表（`CONTROL_OPTION_SPECS`）用的又是 `policy: "mutable"`——
+ * 一个概念三种写法最容易让消费方对不上号。#95 评审第 3 轮合并 #94 时统一。
  */
-export type ControlOptionStatus = "live" | "recreate" | "unsupported";
+export type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
 
 export interface CopyrightEntry {
   id: number;
@@ -79,7 +84,7 @@ export interface ControlDriver {
   /**
    * 逐键报告「构造之后改这个 option 会怎样」（M7-CONTROL-PANORAMA / issue #41）。
    *
-   * 组件层的统一 Control adapter 靠它在两条动作里选一条：**就地更新**（`live`）还是
+   * 组件层的统一 Control adapter 靠它在两条动作里选一条：**就地更新**（`mutable`）还是
    * **重建控件**（`recreate`）。没有这个查询面时，组件只能各自抄一份「哪些键要重建」的表，
    * 与 Driver 的分类各自漂移——所以本方法与 `setOptions` **共用同一处分类**（同一函数返回
    * 的动作同时决定两者），而不是并列两张表。

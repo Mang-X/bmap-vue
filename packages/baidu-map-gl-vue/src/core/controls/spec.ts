@@ -12,7 +12,7 @@
  * 1. **选项只有一份**：`options(props)` 同时服务构造与运行期更新。组件不再手写
  *    「构造时传什么、更新时传什么」两套（那两套迟早分叉）。
  * 2. **哪些选项能就地改由 Driver 说了算**：`ControlDriver.planOptions()` 逐键给出
- *    `live` / `recreate` / `unsupported`；adapter 据此在「`setOptions`」与「重建控件」
+ *    `mutable` / `recreate` / `unsupported`；adapter 据此在「`setOptions`」与「重建控件」
  *    之间选择，组件侧**不维护第二张表**（ADR 2026-09-11 §5 的分类是单一事实源）。
  * 3. **钩子都是「覆盖默认」，不是「必须实现」**：`create` / `mount` / `unmount` /
  *    `setVisible` 都有可用默认；只有语义真的不同的控件才覆盖（见各钩子注释里的实例）。

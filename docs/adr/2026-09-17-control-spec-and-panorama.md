@@ -48,6 +48,12 @@ M3A.2（#22）把十个内置控件收进了 Driver 的能力面并冻结了「o
 `useSdkResource` 仍然负责实例的创建 / 竞态 / 释放；控件特有的四件事（visible、anchor/offset、options、事件）
 留在 adapter。八条 `addToMap` / `createWatchers` / `remove` 的重复随之删除。
 
+**取值口径复用共享的 `stableKeyOf`**：`#94`（M5 OverlaySpec）引入了 `core/utils/stableKey.ts` 的
+`stableKeyOf`（与官方参考实现同源的稳定序列化，Overlay 侧的 watch 源用的就是它）。本 Facet 原先自带一份
+等价实现，合并后**删掉自带的、改为委托**——同一件事有两份实现，迟早会在「函数怎么折叠」
+「`undefined` 与 `null` 要不要分」这类细节上分叉，而分叉的表现是**变更检测静默失效**。
+控件侧只保留三件真正特有的东西：逐键值快照、缺席≡`undefined`、快照与当前值的比较口径。
+
 **diff 基线是「逐键值快照」而不是选项对象**（`optionSnapshot()`，见 `optionKey.ts`）：`offset` / `size` /
 `mapTypes` 这些键的值是父级传入的**同一个引用**，把选项对象当基线会让父级的原地修改
 （`offset.x = 21`）把基线一起改掉——watch 源**能**感知（`optionKey` 递归跟踪到 `x` / `y`），但 diff
@@ -61,11 +67,16 @@ M3A.2（#22）把十个内置控件收进了 Driver 的能力面并冻结了「o
 
 ```ts
 planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
-// ControlOptionStatus = "live" | "recreate" | "unsupported"
+// ControlOptionStatus = "mutable" | "recreate" | "unsupported"
 ```
 
 三态而不是二态：「本引擎没有入口」与「有入口但只能构造期生效」对调用方是两件不同的事——
 前者重建也没用（值会被静默丢弃），后者重建就能生效。合并它们会让 adapter 对着一堆无用重建反复创建控件。
+
+**三态的词汇在评审第 3 轮与 `OverlayPropertyPolicy` 对齐**：同一个概念（构造之后改这个键会怎样）
+在 Overlay 侧公开为 `mutable` / `recreate` / `unsupported`，本 Facet 现在用同一组名字——此前控件侧叫
+`live`，而控件 Driver 自己的内部分类表用的又是 `policy: "mutable"`，一个概念三种写法会让消费方对不上号
+（#94 合入 `OverlaySpec` 时暴露）。
 
 **三态的判据在评审第 3 轮收紧过一次**（这一点容易写错，写在这里）：`unsupported` 的唯一依据是
 **「连构造期也到不了」**，而不是「没有就地 setter」。4.0 的构造选项是**原样透传**的（`projectOptions`
@@ -75,11 +86,11 @@ planOptions(control: ControlHandle, keys: readonly string[]): Record<string, Con
 会让调用方二选一地犯错：丢掉本可生效的键，或对没有入口的键做无效重建。
 
 **`planOptions` 与 `setOptions` 共用同一处分类**（`classifyOption()` 返回的动作同时决定两者：`apply` 存在即就地写、
-`apply` 缺席但 `live` 即 options 袋、`recreate` / `unsupported` 只告警）。分类表、options 袋与 `set<Key>`
+`apply` 缺席但 `mutable` 即 options 袋、`recreate` / `unsupported` 只告警）。分类表、options 袋与 `set<Key>`
 逃生口因此只有一份，不存在会漂移的第二张表。
 
 adapter 的判据因此是一句话：**任一变化键是 `recreate` ⇒ 整只重建**（把新选项交给构造期）；
-其余（`live`）⇒ 只把变了的键写下去；`unsupported` ⇒ 不写也不重建。
+其余（`mutable`）⇒ 只把变了的键写下去；`unsupported` ⇒ 不写也不重建。
 
 ### 3. `anchor` / `offset` 与 kind 专属选项走**同一条 diff**，并且按 `anchor → offset` 的顺序下发
 
@@ -191,6 +202,8 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
   ——自建控件的调用方需要按 `ControlSpec` 重写（beta 内允许直接变更）；Fake v4 新增 `MapTypeControl` 的
   `showStreetLayer` 观测点、全景读取面 / 标注替身与 `panoramaLabels` 泄漏计数；`scripts/generate-manifest-artifacts.mts`
   的 `toPath` 从手写表改为从 manifest 的 `source` 派生（见「已知限制」）。
+- 与 `#94`（M5 OverlaySpec）的对齐：三态词汇统一为 `mutable` / `recreate` / `unsupported`；
+  稳定序列化复用共享的 `stableKeyOf`（删掉控件侧自带的那份）；`docs/adr/README.md` 同日两条 ADR 并存。
 - 回滚：删除 `src/core/controls/**`、`src/core/panorama/**`、`src/components/panorama/**`、
   `usePanoramaService.ts` 与三个新控件组件即可；`ControlDriver.planOptions` 与
   `CONTROL_OPTION_SPECS.map-type.showStreetLayer` 是纯增量，`dist` 不含 `driver/**` 与 `core/**` 之外的
@@ -242,7 +255,13 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
    ——那属于同一类的进程级共享状态问题，与 #42 对插件作用域的处理同源。
 2. **`Panorama#destroy()` 在未加载场景时失败**：组件只告警不抛错，本库资源照常释放。
    官方没有「无场景也能安全销毁」的入口，不为此发明一套补偿。
-3. **`optionKey` 对函数值按「存在性」比较**（换一个回调不算变化）：与官方参考实现
+3. **DOM 节点不做身份区分**（`stableKeyOf` 的既有口径）：DOM 没有自有可枚举属性 ⇒ 序列化成 `{}`，
+   「换成另一个节点」与「没换」得到同一个键。当前**不是活缺陷**——没有组件把 DOM 放进 `options()`
+   （`city-list.trigger` 没被暴露，且反向门禁要求组件的每个选项 prop 都有落地方式）。
+   修的位置在**共享的** `stableKeyOf`（一处修、两个 Facet 受益），不在控件侧自建分支；
+   `optionKey.test.ts` 用一条「已知限制」用例钉住它（修好即红，提醒同步文档）。
+
+4. **`optionKey` 对函数值按「存在性」比较**（换一个回调不算变化）：与官方参考实现
    `huiyan-fe/react-bmap` 的 `stableStringify` 同口径（同样 `typeof value === 'function' → 'fn'`），
    理由是不这么做的话「父级在模板里传内联箭头函数」会让 `recreate` 类回调选项**每次渲染都重建控件**。
    代价是**回调选项更新不会被下发**，因此 `ControlSpec.options()` 不应承载需要在运行期更新的回调
@@ -251,13 +270,13 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
    将来真要让某个组件暴露回调选项，需要先补一层稳定代理（或对该键改用身份比较）。
    （顺带自查修掉：`undefined` 与 `null` 原先合并成同一个键——参考实现明确区分两者，而本 Driver 对
    「没传这个键」与「显式传 null」也确实走不同路径，合并会把后者当成没变化而吃掉。）
-4. **全景的 `options` 是整体写回**：`setOptions()` 是官方唯一的整体入口，键的变化粒度只到「有没有变」
+5. **全景的 `options` 是整体写回**：`setOptions()` 是官方唯一的整体入口，键的变化粒度只到「有没有变」
    （`albumsControlOptions` 用 JSON 比较），不做深 diff。
-5. **`BCopyright` 文档里的默认 anchor 与实际不一致**：文档写 `BMAP_ANCHOR_BOTTOM_LEFT`，代码里
+6. **`BCopyright` 文档里的默认 anchor 与实际不一致**：文档写 `BMAP_ANCHOR_BOTTOM_LEFT`，代码里
    `withDefaults` 给的是 `BMAP_ANCHOR_BOTTOM_RIGHT`。这是**改动前就存在**的文档缺陷，本 issue 顺手把代码里的
    死分支（`p.anchor ?? "BMAP_ANCHOR_BOTTOM_LEFT"`，永远走不到）收敛到与 `withDefaults` 一致，
    但**不动文档**——修正默认值文档属于独立的、面向使用者的变更。
-6. **控件真实运行时的一条限制未在真机复验**：`show()` / `hide()` 在真实 4.0 的各控件上都存在（#22 的 smoke 只
+7. **控件真实运行时的一条限制未在真机复验**：`show()` / `hide()` 在真实 4.0 的各控件上都存在（#22 的 smoke 只
    核对了 `zoom` / `scale`），`PanoramaControl` 继承自 `Control`（类型包声明如此，Driver 仍按结构性调用处理）。
    本 issue 的浏览器 smoke 只覆盖 Fake 档的同名语义。
 
@@ -279,7 +298,7 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 | `optionKey` 把 `undefined` 与 `null` 合并成同一个键，而参考实现明确区分两者、本 Driver 也确实对「没传这个键」与「显式传 null」走不同路径（`projectOptions` / `setOptions` 跳过 `undefined`、把 `null` 交给结构逃生口） | 分开标记，并改掉原来那条断言「两者得到同一个键」的用例（它编码的是错的契约） |
 | `BPanorama` 的 `options` 变化键是内联在 watcher 里的一份字面量数组，收敛判断需要复用它 | 抽成 `optionsKeyOf()`，watcher 与就绪收敛共用一份判据 |
 
-同轮的反证（改坏 → 必须红）：把 `copyright.anchor` 的分类改回 `live` → 2 条共享组用例红；把「值变回 `undefined` ⇒ 重建」从判据里去掉 → `undefined` 回归用例红；在 `BPanorama` 里去掉落 ready 收敛 → 延迟 Provider 那条红。
+同轮的反证（改坏 → 必须红）：把 `copyright.anchor` 的分类改回 `mutable` → 2 条共享组用例红；把「值变回 `undefined` ⇒ 重建」从判据里去掉 → `undefined` 回归用例红；在 `BPanorama` 里去掉落 ready 收敛 → 延迟 Provider 那条红。
 
 ## 外部评审轮次记录（PR #95 第 2 轮，基线 `67b5a31`）
 
@@ -287,7 +306,7 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 
 | 发现 | 复现结果 | 处置 |
 | --- | --- | --- |
-| P1 `applied` 不是值快照，嵌套 option 的**原地修改**会被 watcher 检测到、又被 diff 静默吃掉 | **确认**（3 条）：`offset.x = 21` / `size.x = 200` / `mapTypes.push(3)` 三种原地修改都不下发。另用一条单测证明 watch 源**确实**跟踪嵌套字段（`optionKey` 递归读到 `x`/`y`），因此问题在 diff 而不在 watcher | 按评审建议把基线换成**逐键值快照**（`OptionSnapshot`：`键 → 该键取值的变化键`），与 watch 源共用同一套口径；`changedOptionKeys` 的首个入参类型收窄为快照（挡住「误传选项对象」这种写法）。顺带把重建判据写成**无缺口**的总括形式「只有 Driver 说 `live` 且值有定义才就地写，其余一律重建」——原判据漏了 `unsupported` 一类（既没写、又推进了基线 = 第三种静默丢更新），补了 1 条用例 |
+| P1 `applied` 不是值快照，嵌套 option 的**原地修改**会被 watcher 检测到、又被 diff 静默吃掉 | **确认**（3 条）：`offset.x = 21` / `size.x = 200` / `mapTypes.push(3)` 三种原地修改都不下发。另用一条单测证明 watch 源**确实**跟踪嵌套字段（`optionKey` 递归读到 `x`/`y`），因此问题在 diff 而不在 watcher | 按评审建议把基线换成**逐键值快照**（`OptionSnapshot`：`键 → 该键取值的变化键`），与 watch 源共用同一套口径；`changedOptionKeys` 的首个入参类型收窄为快照（挡住「误传选项对象」这种写法）。顺带把重建判据写成**无缺口**的总括形式「只有 Driver 说 `mutable` 且值有定义才就地写，其余一律重建」——原判据漏了 `unsupported` 一类（既没写、又推进了基线 = 第三种静默丢更新），补了 1 条用例 |
 
 同轮的连带修正（都是「同一族的键语义一起扫」扫出来的）：
 
@@ -313,7 +332,7 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 - `setOptions` 那条「未知键 ⇒ 告警 `没有 "x" 的字段级 setter`」改为断言新的 `recreate` 文案，
   并补一条 `planOptions` 断言；
 - 新增驱动层用例：`custom` 控件上未知键 ⇒ `unsupported`；同时反向断言全部 kind 的 `anchor` / `offset`
-  仍是 `live`；
+  仍是 `mutable`；
 - 行为层把「`unsupported` ⇒ 重建」改成「未命中分类表但构造期会收到 ⇒ `recreate` ⇒ 重建」，
   并**新增**「Driver 报 `unsupported` ⇒ 不重建 + 告警一次」（用自定义 spec 驱动这条公共抽象路径）。
 

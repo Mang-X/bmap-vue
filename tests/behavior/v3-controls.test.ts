@@ -9,7 +9,7 @@
  * 2. 「位置、offset、visible 动态更新」——`anchor` / `offset` 此前只在构造期生效，本文件把
  *    「改 props → SDK 侧真的变了」变成断言（`getAnchor()` / `getOffset()`）；
  * 3. 「控件创建 / 更新 / 重建 / 移除」——`recreate` 类选项（`BMapType.type`、`BOverview.isOpen`）
- *    变化时**重建控件**；`live` 类选项（`BNavigation.type`、`BMapType.showStreetLayer`、
+ *    变化时**重建控件**；`mutable` 类选项（`BNavigation.type`、`BMapType.showStreetLayer`、
  *    `BOverview.size`、`BCityList.expand`）**就地更新、不重建**。
  *
  * 显隐语义（issue 的「统一 visible」）在 #41 定型为 SDK 基类的 `show()` / `hide()`：控件始终

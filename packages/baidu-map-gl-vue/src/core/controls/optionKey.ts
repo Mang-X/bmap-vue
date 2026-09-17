@@ -1,93 +1,34 @@
+import { stableKeyOf } from "../utils/stableKey";
+
 /**
- * 控件选项的**变化键**（M7-CONTROL-PANORAMA / issue #41）
+ * 控件选项的**变化键**与**逐键值快照**（M7-CONTROL-PANORAMA / issue #41）
  *
- * 统一 Control adapter 用它当 `watch` 的源。直接 watch 选项对象会让「父级传内联字面量」
- * （引用每次都新）每次都触发一次无用的比较；而比较本身又不能用 `===`——选项的取值域是
- * **官方构造选项的值域**，里面既有标量，也有数组（`mapTypes`）、回调
- * （`CityListControlOptions.onChangeSuccess` 之类）与 DOM 节点（`CityListControlOptions.trigger`）。
+ * ## 取值口径：**复用共享的 `stableKeyOf`**
  *
- * 三类值分开处理（与 `equality.ts` 的 `centerKey` 同一口径：**键只回答「可能要变」**，
- * 真正的相等判定留给调用方）：
+ * 「一个值 → 一个稳定字符串」这件事由 `core/utils/stableKey.ts` 的 `stableKeyOf` 提供
+ * （与官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 同源；Overlay 侧的 watch 源用的
+ * 就是它）。本文件**不再自带一份序列化**——同一件事有两份实现，迟早会在
+ * 「函数怎么折叠」「`undefined` 与 `null` 要不要分」这类细节上分叉，而分叉的表现是
+ * **变更检测静默失效**，最难查。
  *
- * - **函数** → 固定字面量 `fn`（**按存在性比较，不按身份**，见下面的「函数值的契约」）；
- * - **DOM 节点** → 按对象身份分配稳定序号（`trigger` 这类选项传的是真 DOM；同一个节点、
- *   同一份配置不应触发重建，换一个节点才应该）；
- * - **其余** → 稳定 JSON（对象键排序），因此 `{type: "a"}` 与 `{type: "a"}` 得到同一个键，
- *   而 `mapTypes: [1, 2]` 与 `[2, 1]` 不同。
+ * ## 本文件只加控件侧需要的三件事
  *
- * `undefined` 与 `null` **必须分开**（`undefined` / `null`）：前者是「没传这个键」，后者是
- * 「显式传了 null」，两者在本 Driver 里走不同路径（`projectOptions` / `setOptions` 会跳过
- * `undefined`、把 `null` 原样交给 SDK 的结构逃生口）。合并成一个键会把「显式传 null」当成
- * 「没变化」而吃掉——这与「有值 → undefined」是同一类漏检。官方参考实现
- * `huiyan-fe/react-bmap` 的 `stableStringify` 也是这么分的（注释写明「两者互换时 effect
- * 不重跑」）。
+ * 1. **逐键值快照**（`optionSnapshot`）：diff 基线必须是**值**而不是 `options()` 返回的对象。
+ *    `offset` / `size` / `mapTypes` 的值是父级传入的**同一个引用**，把对象当基线会让父级的原地
+ *    修改（`offset.x = 21`）把基线一起改掉——watch 源能感知，diff 两边序列化却相同 ⇒ 判成
+ *    「没变化」⇒ 更新被静默吃掉（#95 评审第 2 轮 P1）。快照在建立的那一刻把值固定下来。
+ * 2. **「键缺席」等价于「键存在但值为 `undefined`」**：两者在 Driver 侧都被跳过，不该算变化。
+ * 3. **快照 vs 当前值**的比较口径与 watch 源一致（同一套 `stableKeyOf`），因此不会出现
+ *    「watcher 说变了、diff 说没变」的分歧。
  *
- * ## 函数值的契约（**按存在性比较**）
+ * ## 已知限制（登记在案，不在本文件修）
  *
- * 函数折叠成 `fn` 意味着：**换一个回调不算「选项变了」**。这是刻意的，与官方参考实现同口径
- * （它的 `stableStringify` 同样 `typeof value === 'function' → 'fn'`）：父级在模板里传内联
- * 箭头函数是常规写法，若按身份比较，`recreate` 类回调选项会**每次渲染都重建控件**。
- *
- * 代价写在明处：**回调选项更新不会被下发**。因此 `ControlSpec.options()` 不应承载需要在运行期
- * 更新的回调——需要新闭包时应当经 `spec.events`（每次（重）创建后绑定）或由组件自己维护稳定
- * 代理。当前没有任何控件把函数值放进 `options()`（`BControl` 的 DOM 工厂走 `spec.render`，
- * 不进选项），这条约束是给后续消费者看的。用例：`optionKey.test.ts` 的同名 describe。
- *
- * 函数与 DOM 两个分支在当前组件集里没有直接消费者，但它们不是「预留」：没有它们，函数会被
- * 序列化成 `{}`、DOM 会被序列化成属性快照——两种都是**静默的漏检**（两个不同的值得到同一个
- * 键 ⇒ 变更检测失效、下发被吃掉）。
- *
- * 值里出现循环引用时**不抛错**（选项来自用户 props，抛错会把一次渲染变成崩溃）：
- * 退化为 `cycle` 标记。这只会让「本该等」的判成「不等」，代价是一次多余的下发。
+ * `stableKeyOf` **不做 DOM 身份**：DOM 节点没有自有可枚举属性，会被序列化成 `{}`，因此
+ * 「换成另一个节点」与「没换」得到同一个键。当前**没有任何组件把 DOM 放进 `options()`**
+ * （`city-list.trigger` 没被暴露，且反向门禁要求组件的每个选项 prop 都有落地方式）；
+ * 将来要暴露这类选项时，应在**共享的** `stableKeyOf` 里补 DOM 身份分支——一处修，两个 Facet 受益。
+ * 用例见 `optionKey.test.ts` 的同名 describe。
  */
-
-/** DOM 节点 → 稳定序号。同一个节点在两次调用中得到同一个序号。 */
-const domIds = new WeakMap<object, number>()
-let nextDomId = 0
-
-function isDomNode(value: object): boolean {
-  // 只认节点身份，不读节点上的任何属性：`nodeType` 在 happy-dom / 真实浏览器上一致，
-  // 而 `tagName` 之类在「同一节点的自定义包装」上会给出误导性的相等。
-  return typeof (value as { nodeType?: unknown }).nodeType === "number"
-}
-
-function serialize(value: unknown, seen: Set<object>): string {
-  if (value === null) return "null"
-  // 与 `null` **不同**标记：`undefined` = 「没传这个键」，`null` = 「显式传了 null」，
-  // Driver 侧对两者走不同路径（见文件头）。合并会让「显式传 null」被当成没变化而吃掉。
-  if (value === undefined) return "undefined"
-  const type = typeof value
-  if (type === "function") return "fn"
-  if (type === "number" || type === "boolean") return String(value)
-  if (type === "string") return JSON.stringify(value)
-  if (type === "bigint") return `${String(value)}n`
-  if (type === "symbol") return String(value)
-
-  const object = value as object
-  if (isDomNode(object)) {
-    let id = domIds.get(object)
-    if (id === undefined) {
-      nextDomId += 1
-      id = nextDomId
-      domIds.set(object, id)
-    }
-    return `dom#${id}`
-  }
-  if (seen.has(object)) return "cycle"
-  seen.add(object)
-  try {
-    if (Array.isArray(object)) {
-      return `[${object.map((item) => serialize(item, seen)).join(",")}]`
-    }
-    const entries = Object.entries(object as Record<string, unknown>)
-      // 键排序：`{a, b}` 与 `{b, a}` 是同一个选项
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([key, item]) => `${JSON.stringify(key)}:${serialize(item, seen)}`)
-    return `{${entries.join(",")}}`
-  } finally {
-    seen.delete(object)
-  }
-}
 
 /**
  * 一份控件选项 → 变化键。
@@ -96,7 +37,7 @@ function serialize(value: unknown, seen: Set<object>): string {
  * 否则 anchor 变化会被漏掉（这正是 issue #41 要修的「位置不动态更新」）。
  */
 export function optionKey(options: Record<string, unknown>): string {
-  return serialize(options, new Set())
+  return stableKeyOf(options)
 }
 
 /**
@@ -119,13 +60,13 @@ export type OptionSnapshot = Readonly<Record<string, string>>
 export function optionSnapshot(options: Record<string, unknown>): OptionSnapshot {
   const snapshot: Record<string, string> = {}
   for (const [key, value] of Object.entries(options)) {
-    snapshot[key] = optionKey({ value })
+    snapshot[key] = stableKeyOf(value)
   }
   return snapshot
 }
 
 /** 「键缺席」等价于「键存在但值为 `undefined`」——两者在 Driver 侧都被跳过，不该算变化。 */
-const ABSENT_KEY = optionKey({ value: undefined })
+const ABSENT_KEY = stableKeyOf(undefined)
 
 /**
  * 快照与**当前**选项之间真的变了的键。
@@ -140,7 +81,7 @@ export function changedOptionKeys(
   const keys = new Set([...Object.keys(previous), ...Object.keys(next)])
   const changed: string[] = []
   for (const key of keys) {
-    if ((previous[key] ?? ABSENT_KEY) !== optionKey({ value: next[key] })) changed.push(key)
+    if ((previous[key] ?? ABSENT_KEY) !== stableKeyOf(next[key])) changed.push(key)
   }
   return changed
 }

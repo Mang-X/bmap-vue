@@ -7,7 +7,7 @@
  * | --- | --- |
  * | `visible` | 默认 SDK `show()` / `hide()`（可被 `spec.setVisible` 覆盖），变更即时生效 |
  * | `anchor` / `offset` | 与其它 option 走**同一条 diff**（此前只在构造期生效——issue 明确要求动态更新） |
- * | 普通 option | 变化时先问 `ControlDriver.planOptions()`：`live` 就地 `setOptions`，`recreate` 重建控件 |
+ * | 普通 option | 变化时先问 `ControlDriver.planOptions()`：`mutable` 就地 `setOptions`，`recreate` 重建控件 |
  * | SDK 事件 | `spec.events()` 的绑定进入**实例 scope**，随实例释放 |
  *
  * 释放顺序是硬约束（ADR 2026-09-11 §6，issue #22 实施步骤 4）：卸载时**先解绑业务事件**，
@@ -225,7 +225,7 @@ export function useControlResource<Props extends ControlBaseProps>(
    *
    * 判据来自 Driver（`planOptions`），组件侧不维护第二张表：
    * - 任一变化键是 `recreate`，或**值变回 `undefined`** ⇒ **整只重建**（把新选项交给构造期）；
-   * - 其余（`live`）⇒ 只把变了的键写下去；
+   * - 其余（`mutable`）⇒ 只把变了的键写下去；
    * - `unsupported` ⇒ 不写也不重建（三态设计的本意：这种键**连构造期也没有入口**，重建同样无效）。
    *   它不是静默丢弃——适配器会为它告警一次（每个键一次），否则调用方只知道「没生效」而不知道
    *   为什么。
@@ -296,7 +296,7 @@ export function useControlResource<Props extends ControlBaseProps>(
     }
     for (const key of changed) {
       if (key === "anchor" || key === "offset") continue;
-      if (plan[key] === "live") patch[key] = next[key];
+      if (plan[key] === "mutable") patch[key] = next[key];
     }
     if (Object.keys(patch).length > 0) context.client.driver.controls.setOptions(resource, patch);
   }

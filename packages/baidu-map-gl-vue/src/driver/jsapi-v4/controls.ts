@@ -346,11 +346,11 @@ export function createJsapiV4ControlDriver(
    * 变成「组件以为能就地改、Driver 却告警忽略」这种最难查的分歧。
    *
    * - `apply` 存在：就地落地（`setOptions` 调它；`planOptions` 只看 `status`）。
-   * - `apply` 缺席但 `status === "live"`：**options 袋**的键——袋装入口是「整袋一次写回」，
+   * - `apply` 缺席但 `status === "mutable"`：**options 袋**的键——袋装入口是「整袋一次写回」，
    *   逐键调用会漏掉袋内其它键的语义，所以聚合交给调用方（`setOptions` 的 `bag`）。
    */
   type OptionAction =
-    | { readonly status: "live"; readonly apply?: (value: unknown) => void }
+    | { readonly status: "mutable"; readonly apply?: (value: unknown) => void }
     | { readonly status: "recreate"; readonly reason: string }
     | { readonly status: "unsupported" };
 
@@ -375,7 +375,7 @@ export function createJsapiV4ControlDriver(
     }
     if (key === "anchor") {
       return {
-        status: "live",
+        status: "mutable",
         apply: (value) => {
           const anchor = resolveAnchor(value);
           if (anchor !== undefined) callControl(raw, "setAnchor", [anchor]);
@@ -383,28 +383,28 @@ export function createJsapiV4ControlDriver(
       };
     }
     if (key === "offset") {
-      return { status: "live", apply: (value) => callControl(raw, "setOffset", [toRawSize(value)]) };
+      return { status: "mutable", apply: (value) => callControl(raw, "setOffset", [toRawSize(value)]) };
     }
     const spec = kind ? CONTROL_OPTION_SPECS[kind]?.[key] : undefined;
     if (spec) {
       if (spec.policy === "recreate") return { status: "recreate", reason: spec.reason };
       if ("choice" in spec) {
         return {
-          status: "live",
+          status: "mutable",
           apply: (value) => callControl(raw, value ? spec.choice[0] : spec.choice[1]),
         };
       }
       return {
-        status: "live",
+        status: "mutable",
         apply: (value) => callControl(raw, spec.setter, [normalizeValue(spec, value)]),
       };
     }
     // 「options 袋」控件：整袋写回，按键结构调用会漏掉袋装选项
-    if (kind && CONTROL_OPTIONS_BAG[kind]) return { status: "live" };
+    if (kind && CONTROL_OPTIONS_BAG[kind]) return { status: "mutable" };
     // 逃生口：未知键按 `set<Key>` 结构性调用（与 OverlayDriver.setOptions 同形）
     const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
     if (typeof readNamespaceMember(raw, setter) === "function") {
-      return { status: "live", apply: (value) => callControl(raw, setter, [value]) };
+      return { status: "mutable", apply: (value) => callControl(raw, setter, [value]) };
     }
     /**
      * 到这里：既不在分类表里、没有 options 袋、实例上也没有 `set<Key>`。
