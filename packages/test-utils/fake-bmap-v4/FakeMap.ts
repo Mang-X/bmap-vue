@@ -9,7 +9,8 @@
  * - 投影：`pointToPixel` / `pixelToPoint`（不传 options 时按当前地图状态换算）；
  * - 资源释放：`destroy()` —— 清空 Map 自身监听器，但管不到子对象。
  *
- * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` 属后者：
+ * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` / `setBounds`
+ * 属后者：
  * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位）。其余官方成员等真正有
  * Facet 或组件需要时再补，避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
  * 的形状整体给出（不是按类型声明，见其定义处的说明）。
@@ -348,6 +349,26 @@ export class FakeV4Map extends FakeV4EventTarget {
       new FakeV4Point(this.center.lng - halfLng, this.center.lat - halfLat),
       new FakeV4Point(this.center.lng + halfLng, this.center.lat + halfLat),
     )
+  }
+
+  /**
+   * 官方 `Map#setBounds(bounds)`：把视野设到给定范围。
+   *
+   * 这个成员**不是任何 Facet 调用的**，补它是因为 Capability Catalog 的 `map.bounds`
+   * 把 `setBounds` 列进了 `rawMembers`（「会探测」那一类）。缺它会让
+   * `supports("map.bounds")` 在 fixture 档报 false、与真实引擎的读数不一致
+   * ——「夹具与真实不一致」正是 #74 那条教训要消掉的东西（#29 评审 P1）。
+   *
+   * 换算与 `getBounds()` 近似互逆（一半经度跨度 = `180 / 2 ** zoom`）；Fake 不复刻 SDK 的
+   * 数值归一化，只保证「调用发生后视野确实变了」。
+   */
+  setBounds(bounds: FakeV4Bounds): void {
+    this.callLog.push("setBounds")
+    const center = bounds.getCenter()
+    if (!center) return
+    this.center = center
+    const span = bounds.toSpan().lng
+    if (span > 0) this.zoom = Math.log2(360 / span)
   }
 
   setViewport(view: FakeV4Point[] | FakeV4Point | { center?: FakeV4Point; zoom?: number }, options?: unknown): void {

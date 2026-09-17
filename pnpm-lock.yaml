@@ -134,6 +134,9 @@ importers:
       '@vue/test-utils':
         specifier: ^2.5.0
         version: 2.5.0(@vue/compiler-dom@3.5.42)(@vue/server-renderer@3.5.42)(vue@3.5.42(typescript@5.9.3))
+      '@vueuse/core':
+        specifier: 14.4.0
+        version: 14.4.0(vue@3.5.42(typescript@5.9.3))
       happy-dom:
         specifier: ^20.14.0
         version: 20.14.0
@@ -244,12 +247,15 @@ importers:
 
   packages/baidu-map-gl-vue:
     dependencies:
-      '@baidumap/jsapi-ui-kit':
-        specifier: 1.1.2
-        version: 1.1.2
       '@baidumap/jsapi-loader':
         specifier: 1.0.0
         version: 1.0.0
+      '@baidumap/jsapi-ui-kit':
+        specifier: 1.1.2
+        version: 1.1.2
+      '@vueuse/core':
+        specifier: 14.4.0
+        version: 14.4.0(vue@3.5.42(typescript@5.9.3))
       vue:
         specifier: ^3.5.0
         version: 3.5.42(typescript@5.9.3)
@@ -260,6 +266,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.0
         version: 7.59.0(@types/node@26.4.1)
+      '@types/web-bluetooth':
+        specifier: 0.0.21
+        version: 0.0.21
       '@vitejs/plugin-vue':
         specifier: ^6.0.8
         version: 6.0.8(vite@8.2.2(@types/node@26.4.1)(less@4.9.1(supports-color@8.1.1))(terser@5.51.2)(yaml@2.9.0))(vue@3.5.42(typescript@5.9.3))

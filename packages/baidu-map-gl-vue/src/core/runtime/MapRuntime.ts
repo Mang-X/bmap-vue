@@ -6,8 +6,20 @@
  *   ("loading" 保留为 waiting-client 别名,向后兼容)
  * - Runtime 只管理 Map,不再加载 Plugin(PluginRegistry 的 map-scope 实例属于 Runtime)
  * - mount 去重经 mountPromise;retry 清错重入;suspend/resume 供 KeepAlive
+ * - **暂停按原因集合记账**（M4-HANDLE-UX / #29，见下）
  * - dispose 顺序:disposing → reject waiters → child registries/scopes → destroy map
  *   → clear handle → scheduler/events → root scope → disposed
+ *
+ * ## 暂停原因集合（issue #29）
+ *
+ * 旧实现是**一个布尔位**：任何一处 `suspend()` 都会让整个地图暂停，任何一处 `resume()`
+ * 都会无条件恢复。这在「页面前后台」和「用户手动暂停」重叠时必然出错 —— 用户手动暂停后切走
+ * 再切回页面，`document.visibilitychange` 那次 `resume()` 会把用户的手动暂停一起抹掉。
+ *
+ * 因此暂停状态是**原因集合**：`suspend(reason)` 加一个原因、`resume(reason)` 只减一个，
+ * 只有集合变空才真正恢复（并补偿一次 `checkResize()`）。`disposed` 是**终态原因**：它
+ * **不可被 `resume()` 摘除**（`resume` 里显式短路），于是「卸载后不再调用 SDK」不再依赖
+ * `status` 守卫这一处巧合，也不依赖「调用方记得别 resume」。
  */
 import { shallowRef, type ShallowRef } from "vue";
 import type { BMapClient } from "../../client/types";
@@ -22,6 +34,12 @@ import { createOverlayRegistry, type OverlayRegistry } from "../overlays/Overlay
 import { createPluginRegistry, type PluginRegistry } from "../plugins/PluginRegistry";
 import type { BMapClientContext } from "../context/client";
 import type { MapReadyContext, MapRuntimeStatus } from "../context/types";
+import { MAP_SUSPEND_REASONS, type MapSuspendReason } from "./suspension";
+
+export type { MapSuspendReason };
+
+/** 合帧调度用的 key（同一帧内多次容器尺寸变化只下发一次 `checkResize`）。 */
+const RESIZE_TASK_KEY: unique symbol = Symbol("map-runtime.resize");
 
 interface Waiter {
   resolve: (ctx: MapReadyContext) => void;
@@ -39,6 +57,16 @@ function createAbortError(reason?: unknown): BMapError {
 }
 
 export interface MapRuntimeOptions {
+  /**
+   * 建图前的**最后一个等待点**（可选）：在 `driver.map.create()` 之前 `await` 它。
+   *
+   * `<BMap>` 用它把「容器当前是否有可用尺寸」这条**异步门禁**放到这里 —— 只「在启动之前判一次」
+   * 会有 TOCTOU 窗口：`doMount()` 中途要 `await` SDK 加载，慢网络下加载完成时容器可能已经被
+   * 收起成 0×0，于是仍会在零尺寸容器上建出一张 0×0 的画布（#29 三轮复审 P1）。
+   *
+   * 约定：实现应当「等到可以建图」再 resolve（例如等到容器重新可用）；抛错则按建图失败处理。
+   */
+  beforeCreateMap?: () => Promise<void> | void;
   /** 新规范:经 ClientContext 加载(推荐) */
   clientContext?: BMapClientContext;
   /** 向后兼容:直接工厂(测试/旧调用) */
@@ -79,8 +107,18 @@ export class MapRuntime {
   private mapCreatedCallbacks = new Set<(ready: MapReadyContext) => void>();
   private options: MapRuntimeOptions;
   private mountPromise: Promise<MapReadyContext> | null = null;
-  private suspended = false;
-  private suspendReason: unknown = null;
+  /**
+   * 当前生效的暂停原因（M4-HANDLE-UX / #29）。
+   *
+   * 用 shallow ref 存**数组快照**而不是可变 Set：`<BMap>` 的状态插槽要按它渲染，
+   * 而 `suspend` / `resume` 本来就该逐次替换（同 `status` / `error` 的写法）。
+   * 刻意**不**按运行时状态短路：地图还没 ready 时「页面前后台」这类环境事实已经成立，
+   * 丢掉它会让首次恢复的补偿动作（`checkResize`）与后续优先级判断都失去依据；
+   * 真正的效果（下发 SDK 命令 / 提交合帧任务）由 `checkResize()` 与调度器的暂停承担。
+   */
+  readonly suspension: ShallowRef<readonly MapSuspendReason[]> = shallowRef<
+    readonly MapSuspendReason[]
+  >([]);
 
   /** 可供外部在 setup 后回填的容器引用 */
   container: HTMLElement;
@@ -208,6 +246,15 @@ export class MapRuntime {
       }
       this.client.value = client;
       this.status.value = "creating";
+      // 最后一个异步边界：把「等容器可用」这类门禁放在 create() **之前**（#29 三轮复审 P1）。
+      // 它必须在**这个位置**，而不是启动之前 —— 见 `beforeCreateMap` 的文档。
+      await this.options.beforeCreateMap?.();
+      if (this.resources.isDisposed) {
+        throw new BMapError(
+          "BMAP_RUNTIME_DISPOSED",
+          "MapRuntime disposed while waiting for the map container",
+        );
+      }
       const map = client.driver.map.create(this.container, this.options.mapOptions);
       if (this.resources.isDisposed) {
         try {
@@ -288,26 +335,69 @@ export class MapRuntime {
     return this.mount();
   }
 
-  /** KeepAlive:暂停高频计算/动画/polling,不移除 Overlay 或销毁 Map */
-  suspend(reason: unknown = "keep-alive"): void {
-    if (this.status.value !== "ready") return;
-    this.suspended = true;
-    this.suspendReason = reason;
+  /**
+   * 暂停高频计算 / 动画 / polling，不移除 Overlay 或销毁 Map。
+   *
+   * 幂等：同一个原因重复 `suspend()` 只记一次（因此重复调用不会让 `resume()` 需要调用两次）。
+   *
+   * `disposed` 是**终态原因**，只能由 `dispose()` 添加。`MAP_SUSPEND_REASONS` 是公开导出，
+   * 若 `suspend("disposed")` 也生效，调用方就能把一张**正常运行**的地图永久锁死
+   * （`resume("disposed")` 按设计是 no-op）—— 这里显式拒绝并告警（#29 评审 P2）。
+   */
+  suspend(reason: MapSuspendReason = MAP_SUSPEND_REASONS.keepAlive): void {
+    if (reason === MAP_SUSPEND_REASONS.disposed) {
+      logger.warn(
+        'MapRuntime.suspend("disposed") 被忽略：disposed 是终态原因，只能由 dispose() 添加',
+      );
+      return;
+    }
+    if (this.suspension.value.includes(reason)) return;
+    this.suspension.value = [...this.suspension.value, reason];
+    // 暂停期间不排帧、也不执行已排的帧（`FrameScheduler.pause()` 保留各 key 的最后一次任务）
+    this.scheduler.pause();
   }
 
-  resume(reason: unknown = "keep-alive"): void {
-    void reason;
-    if (!this.suspended) return;
-    this.suspended = false;
-    this.suspendReason = null;
+  /**
+   * 解除**一个**暂停原因。
+   *
+   * 只有集合变空才真正恢复：那时才提交暂停期间合并下来的帧任务，并**恰好补偿一次**
+   * `checkResize()` —— 后台 / 视口外发生的容器尺寸变化没有下发过 SDK 命令，回到前台必须补上。
+   * 这也正是「页面恢复可见只能移除 `document` 原因」的落点（issue 评论的硬要求）。
+   *
+   * 两个细节都是门禁要求的：
+   * - 恢复前先**撤掉队列里那份尺寸任务**（`RESIZE_TASK_KEY`）：它是暂停之前排进来、还没提交的，
+   *   不撤就会出现「残留任务 + 补偿」两条命令（本轮评审实测）；
+   * - `disposed` 是**终态**，不能被 `resume()` 摘掉 —— 否则「卸载后不再调 SDK」这条不变量
+   *   会退化成「只要有人记得别 resume」。
+   */
+  resume(reason: MapSuspendReason = MAP_SUSPEND_REASONS.keepAlive): void {
+    if (reason === MAP_SUSPEND_REASONS.disposed) return;
+    if (!this.suspension.value.includes(reason)) return;
+    const next = this.suspension.value.filter((current) => current !== reason);
+    this.suspension.value = next;
+    if (next.length > 0) return;
+    this.scheduler.cancel(RESIZE_TASK_KEY);
+    this.scheduler.resume();
     this.checkResize();
   }
 
+  /** 当前是否处于暂停（任一原因存在即为真）。 */
   get isSuspended(): boolean {
-    return this.suspended;
+    return this.suspension.value.length > 0;
   }
 
+  /** 当前生效的暂停原因（诊断 / 状态插槽读数；返回的就是那份只读快照）。 */
+  suspendReasons(): readonly MapSuspendReason[] {
+    return this.suspension.value;
+  }
+
+  /**
+   * 暂停期间 `checkResize()` 是 no-op：容器在后台 / 视口外变化时下发 SDK 命令既是浪费、
+   * 也可能在 WebGL 上下文被浏览器回收后抛错。补偿路径是「最后一个原因被移除时的一次
+   * `checkResize()`」（见 `resume`），因此不会丢掉最终的尺寸。
+   */
   checkResize(): void {
+    if (this.isSuspended) return;
     const map = this.map.value;
     const client = this.client.value;
     if (!map || !client || this.status.value !== "ready") return;
@@ -316,6 +406,18 @@ export class MapRuntime {
     } catch {
       /* 忽略 resize 错误 */
     }
+  }
+
+  /**
+   * 合帧地请求一次尺寸校正（容器尺寸变化 → 一帧最多下发一次 `checkResize`）。
+   *
+   * 暂停期间**不排帧**：`FrameScheduler.pause()` 本身会拦掉提交，但连帧都不排才能满足
+   * 「暂停时不占 RAF」这条门禁（`manual-frames` 的 `pending()` 归零）。
+   */
+  requestResize(): void {
+    if (this.isSuspended) return;
+    if (this.status.value !== "ready" || this.map.value === null) return;
+    this.scheduler.schedule(RESIZE_TASK_KEY, () => this.checkResize());
   }
 
   whenReady(signal?: AbortSignal): Promise<MapReadyContext> {
@@ -416,7 +518,9 @@ export class MapRuntime {
     this.mapCreatedCallbacks.clear();
     this.resources.dispose();
     // 8. status = disposed
-    this.suspended = false;
+    //    `disposed` 是**终态原因**（#29）：此后任何 `resume(reason)` 都不会让集合变空，
+    //    于是「卸载之后不再调用 SDK」由暂停集合本身保证，而不是靠 `status` 守卫的巧合。
+    this.suspension.value = [...this.suspension.value, MAP_SUSPEND_REASONS.disposed];
     this.status.value = "disposed";
   }
 }

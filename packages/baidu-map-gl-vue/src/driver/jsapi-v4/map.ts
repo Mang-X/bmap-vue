@@ -593,6 +593,9 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     create(container, options) {
       const mapOptions = toV4MapOptions(options);
       const raw = sdkCall("Map", () => new MapCtor(container, mapOptions));
+      // 让能力探测看到**实例自有**成员（真实 4.0 的 `setZoom` / `setCenter` 等不在 `Map.prototype`
+      // 上）—— 否则 `supports("map.zoom")` 在真实引擎上假阴性（#29 评审 P1）。
+      capabilities.observeInstanceMembers(raw);
       return registry.adopt("map", raw);
     },
 

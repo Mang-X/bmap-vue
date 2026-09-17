@@ -239,6 +239,11 @@ props（没有 setup 期冻结的快照）。本库的快照是必要的（`init
 既不会重跑 `applyMapType` / `syncEnableProps` / `bindViewEvents`，也不会做这次收敛。它属于
 「重试 = 重新装配」这个更大的问题（重试后事件订阅也要重建），留给后续 issue，不在 #27 的面。
 
+> **2026-09-14 更新（#29 已收口）**：本段描述的缺口已经不成立 —— `expose.retry()` 现在与首次挂载
+> 共用同一条路径，会按**句柄身份**幂等地重跑装配（样式 / 类型 / 交互开关 / 视野收敛 / 事件订阅），
+> 并清掉旧的 `error`。正文见
+> [ADR 2026-09-14 BMapExpose、容器门禁与可见性暂停策略](./2026-09-14-map-handle-container-and-visibility.md) 决策 9。
+
 ### 9. 可变值不共享引用：`copy` 是状态的一部分
 
 `center` / `defaultCenter` 是**可变对象**。父级拿到自己的对象后原地改一个字段
@@ -313,6 +318,7 @@ resetView()                    ⇒ 地图 = A、内部状态仍是 B
    由后续 issue 处理。
 7. **`retry()` 之后不重跑装配**：`defineExpose().retry()` 只透传 `runtime.retry()`，重挂之后
    `applyMapType` / `syncEnableProps` / `bindViewEvents` / 视野收敛都不会重新执行（见决策 8 末段）。
+   ⚠️ **本条已由 #29 收口**（`retry()` 现在会重新装配 + 清错），指针见决策 8 末段的更新注。
 8. **IIFE 档（`<script>` 直引）固定按生产处理**：那一档在构建时就把 `process.env.NODE_ENV` 折叠成
    `"production"`（浏览器里没有 `process`），因此它的使用者看不到用法告警。**刻意不为它再发一份 dev
    文件**，依据两条事实（2026-09-14 与维护者确认）：

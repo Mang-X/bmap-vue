@@ -74,6 +74,10 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     name: "卸载后本库资源与监听全部释放、句柄作废，且不改写官方全局",
   },
   "remount-after-unmount": { id: "remount-after-unmount", name: "卸载后重挂载仍然可用" },
+  "map-container-gate": {
+    id: "map-container-gate",
+    name: "容器门禁与精简命令面（#29）：零尺寸（display:none）不建图 → 展开后建图一次，且 get/set/supports/suspend 在真实 SDK 上生效",
+  },
 };
 
 const fixtureChecks: string[] = [
@@ -87,6 +91,7 @@ const fixtureChecks: string[] = [
   "infowindow-visible",
   "unmount-release",
   "remount-after-unmount",
+  "map-container-gate",
 ];
 
 const liveChecks: string[] = [
@@ -106,6 +111,7 @@ const liveChecks: string[] = [
   "second-provider-reuses-sdk",
   "unmount-release",
   "remount-after-unmount",
+  "map-container-gate",
 ];
 
 /**
