@@ -22,6 +22,15 @@
  */
 import { BMapError } from "../../core/errors/BMapError";
 import { logger } from "../../core/logger";
+import {
+  createLruIconCache,
+  DEFAULT_ICON_CACHE_SIZE,
+  type IconCache,
+} from "../../core/icons/iconCache";
+import {
+  isBuiltinMarkerIconName,
+  resolveMarkerIconDescriptor,
+} from "../../core/icons/markerIcon";
 import type { CapabilityRegistry } from "../capability/registry";
 import type { Bounds, GeometryDriver, Pixel, Point } from "../types/geometry";
 import type {
@@ -66,33 +75,6 @@ import {
 } from "./internal";
 import type { JsapiV4HandleRegistry } from "./registry";
 
-/**
- * 内置图标名的雪碧图映射（与 `webgl-v1/overlays.ts` 刻意保持两份）。
- *
- * 4.0 的正式图标入口是 `BMap.Icon` / `BMap.Symbol` / `BMap.Icons`，但 `Icons` 不在 4.0.4
- * 类型包里、也没有官方参考章节可核对，因此这里沿用**库已有的内置图标语义**（同名同图同偏移），
- * 保证 `<BMarker icon="simple_red">` 换引擎后观感一致。跨引擎重复会在 #26 删除 `webgl-v1` 时
- * 自然收敛（同 ADR 2026-09-11-jsapi-v4-map-facet 的交互映射表）。
- */
-const DEFAULT_ICON_URL =
-  "https://mapopen.bj.bcebos.com/cms/react-bmap/markers_new2x_fbb9e99.png";
-
-const ICON_OFFSETS: Record<string, [number, number, number, number]> = {
-  simple_red: [454, 378, 42, 66],
-  simple_blue: [454, 450, 42, 66],
-  loc_red: [400, 378, 46, 70],
-  loc_blue: [400, 450, 46, 70],
-  start: [298, 450, 46, 70],
-  end: [298, 378, 46, 70],
-  location: [400, 378, 46, 70],
-};
-
-const SPECIAL_ICON_URLS: Record<string, string> = {
-  start:
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='32'%3E%3Cpath fill='%231677ff' stroke='white' stroke-width='2' d='M12 1C6 1 2 5 2 11c0 8 10 19 10 19s10-11 10-19C22 5 18 1 12 1z'/%3E%3Ccircle fill='white' cx='12' cy='11' r='4'/%3E%3C/svg%3E",
-  end: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='32'%3E%3Cpath fill='%23f04444' stroke='white' stroke-width='2' d='M12 1C6 1 2 5 2 11c0 8 10 19 10 19s10-11 10-19C22 5 18 1 12 1z'/%3E%3Ccircle fill='white' cx='12' cy='11' r='4'/%3E%3C/svg%3E",
-};
-
 export interface CreateJsapiV4OverlayDriverInput {
   /** v4 全局命名空间（`globalThis.BMap`）；raw SDK 只允许在 Driver/Client 边界读取。 */
   rawSdk: unknown;
@@ -106,6 +88,29 @@ export function createJsapiV4OverlayDriver(
 ): OverlayDriver {
   const { rawSdk, geometry, capabilities, registry } = input;
   const namespace: JsapiV4Namespace = assertJsapiV4Namespace(rawSdk);
+
+  /**
+   * `Marker.icon` 的**有界缓存**（M5-SPEC-MARKER / issue #30）。
+   *
+   * 作用域是 **Driver（= Client / SDK 域）**，不是单个实例：`createJsapiV4Driver` 每次装
+   * Client 时创建一份，因此**同一个 Client 下的多张地图共用同一个缓存**（`<BMapProvider>` 下
+   * 渲染两个 `<BMap>` 就是这种情况），换一个 Client（换 AK / 换 Provider）就是另一份。
+   *
+   * - **descriptor 归一化**由 `core/icons/markerIcon` 负责（内置名 / 自定义描述的单一事实源），
+   *   这里只做「descriptor → `BMap.Icon` 构造参数」——raw SDK 构造必须留在边界内；
+   * - 键是 descriptor 的全字段，因此「同配置 ⇒ 同一个 Icon 实例」：一屏 500 个同款 Marker、
+   *   或组件因构造期属性变化反复重建，都只创建一次 `BMap.Icon`；
+   * - **上限**是必须的（{@link DEFAULT_ICON_CACHE_SIZE}）：只要用户在渲染里拼 `imageUrl`
+   *   （带时间戳 / 宽度参数的 CDN 地址），键空间就是无界的；
+   * - 缓存里的 Icon **只读、从不就地修改**：官方文档明确「直接调 `setImageUrl` / `setSize` 改 icon
+   *   之后 Marker 不会同步刷新，必须重新 `setIcon(icon)`」。共享实例因此安全（官方示例也共享）；
+   *   一旦我们原地改它，所有共享它的 Marker 都会跟着变；跨地图共享同理（Icon 是纯值对象，
+   *   不属于任何一张地图）。**换图标 = 换 descriptor = 换缓存条目。**
+   * - **只有库内部的 Marker 路径（`iconFor`）走缓存**：公共的 `buildIcon` 每次新建实例，
+   *   因为 `useBMapMarkerIcons()` 会把结果直接交给调用方，而 `BMap.Icon` 有可变面
+   *   （外部评审 P2：公共 API 不得交出缓存持有的共享可变对象）。
+   */
+  const iconCache: IconCache<unknown> = createLruIconCache<unknown>(DEFAULT_ICON_CACHE_SIZE);
 
   /** 已告警过的「分类 / 键 / 种类」组合：每个 Driver 一份，避免重复刷屏。 */
   const warned = new Set<string>();
@@ -150,33 +155,75 @@ export function createJsapiV4OverlayDriver(
   const rawSize = (pixel: Pixel): unknown =>
     geometry.toRawSize({ width: pixel.x, height: pixel.y });
 
-  const buildIcon = (icon: MarkerIconInput): unknown => {
-    const Icon = namespaceCtor(namespace, "Icon");
-    if (typeof icon === "string") {
-      const special = SPECIAL_ICON_URLS[icon];
-      if (special) {
-        return new Icon(special, geometry.toRawSize({ width: 24, height: 32 }), {
-          anchor: geometry.toRawSize({ width: 12, height: 16 }),
-        });
-      }
-      const [ox, oy, w, h] = ICON_OFFSETS[icon] ?? [454, 378, 42, 66];
-      return new Icon(DEFAULT_ICON_URL, geometry.toRawSize({ width: w / 2, height: h / 2 }), {
-        imageOffset: geometry.toRawSize({ width: ox / 2, height: oy / 2 }),
-        imageSize: geometry.toRawSize({ width: 300, height: 300 }),
-      });
+  /** 未知内置名的告警（两条图标路径共用）。 */
+  const warnUnknownIconName = (icon: MarkerIconInput): void => {
+    if (typeof icon === "string" && !isBuiltinMarkerIconName(icon)) {
+      // 未知名字此前会**静默**落进兜底图标（旧实现里 20 个内置名都如此），至少要说出来。
+      warnOnce(
+        `icon:unknown-name:${icon}`,
+        `OverlayDriver: "${icon}" 不是内置图标名，已按兜底图标（simple_red）渲染；` +
+          "内置名清单见 core/icons/markerIcon 的 BUILTIN_MARKER_ICON_NAMES",
+      );
     }
-    const opts: Record<string, unknown> = {};
-    if (icon.imageSize) opts.imageSize = geometry.toRawSize(icon.imageSize);
-    if (icon.anchor) opts.anchor = rawSize(icon.anchor);
-    if (icon.imageOffset) opts.imageOffset = rawSize(icon.imageOffset);
-    if (icon.printImageUrl) {
+    if (typeof icon !== "string" && icon?.printImageUrl) {
       // 4.0.4 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver.buildIcon: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
       );
     }
-    return new Icon(icon.imageUrl, geometry.toRawSize(icon.size), opts);
+  };
+
+  /** descriptor → **新建**的 raw `Icon`（不做缓存）。 */
+  const constructIcon = (descriptor: ReturnType<typeof resolveMarkerIconDescriptor>): unknown => {
+    const Icon = namespaceCtor(namespace, "Icon");
+    const opts: Record<string, unknown> = {};
+    if (descriptor.imageSizeWidth != null && descriptor.imageSizeHeight != null) {
+      opts.imageSize = geometry.toRawSize({
+        width: descriptor.imageSizeWidth,
+        height: descriptor.imageSizeHeight,
+      });
+    }
+    if (descriptor.anchorX != null && descriptor.anchorY != null) {
+      opts.anchor = geometry.toRawSize({ width: descriptor.anchorX, height: descriptor.anchorY });
+    }
+    if (descriptor.imageOffsetX != null && descriptor.imageOffsetY != null) {
+      opts.imageOffset = geometry.toRawSize({
+        width: descriptor.imageOffsetX,
+        height: descriptor.imageOffsetY,
+      });
+    }
+    return new Icon(
+      descriptor.imageUrl,
+      geometry.toRawSize({ width: descriptor.width, height: descriptor.height }),
+      opts,
+    );
+  };
+
+  /**
+   * **公共** `buildIcon`：每次调用都返回一个**新的** `BMap.Icon`。
+   *
+   * `BMap.Icon` 有 `setImageUrl` / `setSize` / `setAnchor` 等可变面，而
+   * `useBMapMarkerIcons()`（公开 hook）把这里的结果直接交给调用方。公共 API **不得**交出
+   * 缓存持有的共享可变对象——否则一个消费者改了自己那份，会污染同一 Client 下所有地图后续拿到的
+   * 图标（外部评审 P2）。因此缓存只服务**库内部**的 Marker 路径（{@link iconFor}）。
+   */
+  const buildIcon = (icon: MarkerIconInput): unknown => {
+    warnUnknownIconName(icon);
+    return constructIcon(resolveMarkerIconDescriptor(icon));
+  };
+
+  /**
+   * **内部**图标解析（Marker 的构造与 `setIcon` 路径）：同 descriptor 命中**有界 LRU 缓存**，
+   * 返回同一个 raw `Icon`。
+   *
+   * 缓存持有的实例只被读、从不就地修改（官方指南：改了 icon 自己也必须重新 `setIcon`），
+   * 因此共享是安全的；且它**不经过**任何公开 API，调用方拿不到这份实例。
+   */
+  const iconFor = (icon: MarkerIconInput): unknown => {
+    warnUnknownIconName(icon);
+    const descriptor = resolveMarkerIconDescriptor(icon);
+    return iconCache.get(descriptor, () => constructIcon(descriptor));
   };
 
   /** 领域值 → v4 构造参数 / setter 入参。 */
@@ -199,7 +246,7 @@ export function createJsapiV4OverlayDriver(
         // 项目侧偏移是 Pixel（`{x, y}`），v4 的 offset / anchor 是 Size（`{width, height}`）
         return rawSize(value as Pixel);
       case "icon":
-        return buildIcon(value as MarkerIconInput);
+        return iconFor(value as MarkerIconInput);
       default:
         return value;
     }

@@ -102,14 +102,14 @@ export interface BMapProps {
   plugins?: string[];
 }
 
-/** BMarker 图标:内置名称或自定义图标描述 */
-export type MarkerIconName =
-  | "simple_red" | "simple_blue" | "loc_red" | "loc_blue"
-  | "start" | "end" | "location"
-  | "red1" | "red2" | "red3" | "red4" | "red5"
-  | "red6" | "red7" | "red8" | "red9" | "red10"
-  | "blue1" | "blue2" | "blue3" | "blue4" | "blue5"
-  | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
+/**
+ * BMarker 图标:内置名称或自定义图标描述
+ *
+ * `MarkerIconName` **派生自内置图标表**（`core/icons/markerIcon` 的 `BUILTIN_MARKER_ICON_NAMES`），
+ * 而不是手写第二份名单：手写的那份曾与 Driver 的解析表漂移，导致 20 个名字静默渲染成
+ * `simple_red`（M5-SPEC-MARKER / #30）。派生之后「类型里有、实际渲染不出来」在结构上不可能。
+ */
+export type MarkerIconName = import("../core/icons/markerIcon").BuiltinMarkerIconName;
 
 export interface MarkerCustomIcon {
   imageUrl: string;

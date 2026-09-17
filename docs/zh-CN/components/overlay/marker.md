@@ -46,6 +46,9 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 蓝色图标：blue1，blue2，blue3，blue4，blue5，blue6，blue7，blue8，blue9，blue10
 
+以上 27 个名字都解析到雪碧图上各自的格子（`start` / `end` 使用内联 SVG，与
+`useBMapMarkerIcons()` 返回的雪碧图版本刻意不同）。未知名字按 `simple_red` 渲染并告警一次。
+
 其余图标可根据下图自行定位裁切：
 
 ![https://mapopen.bj.bcebos.com/cms/react-bmap/markers_new2x_fbb9e99.png](https://mapopen.bj.bcebos.com/cms/react-bmap/markers_new2x_fbb9e99.png)
@@ -83,21 +86,41 @@ v3 子组件没有 `initd/unload` 事件；以下为 `BMarker` 实际发出的 t
 
 ## v3 生命周期与更新行为
 
-- `visible=false` 时，Marker 创建后不会先添加到地图再等待 watcher，而是从创建开始保持隐藏。
-- `position`、`offset`、`title`、`rotation`、`zIndex`、`enableDragging` 和 `visible` 支持运行时更新。
-- `icon` 在 SDK 支持 `setIcon` 时原地更新；不支持时会移除旧 Marker 并重建。
-- `enableClicking` 是构造期属性，变化时会重建 Marker。
-- 组件卸载时会移除 Marker 和事件监听。
+`BMarker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
+issue #30），组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
+并由用例与 Driver 的属性描述符逐条交叉核对：
 
-拖拽结束时，组件除了触发 `dragend`，还会触发 `drag-end`，并在 SDK 事件包含位置时触发 `update:position`：
+| 属性 | 更新策略 | 落地 |
+| --- | --- | --- |
+| `position` | 位置字段 | `setPosition`，并支持 `v-model:position` |
+| `offset` / `title` / `icon` / `zIndex` / `rotation` / `enableDragging` | 就地更新 | `setOptions` → 对应 setter（`enableDragging` 是成对开关） |
+| `enableClicking` | 构造期属性 | 变化时重建 Marker |
+| `visible` | 显隐 | `show()` / `hide()`；SDK 没有这两个成员时退回 `addOverlay` / `removeOverlay` |
+
+- `visible=false` 时，Marker 创建后**不会**先添加到地图再等待 watcher，而是从创建开始就不挂载；
+  之后切到 `true` 时才真正 `addOverlay`（此前实现会在未挂载的实例上调用 `show()`，等于永远不显示）。
+- `icon` 走「descriptor → 有界 LRU 缓存 → `setIcon`」：**相同图标配置只构造一次 `BMap.Icon`**
+  （缓存上限 200 条；作用域是同一个 Client / `<BMapProvider>`，因此它下面的多张地图共用），
+  更新时始终重新 `setIcon` ——官方指南明确「直接改 Icon 的属性之后 Marker 不会同步刷新」。
+  这份缓存**只服务组件内部**：`useBMapMarkerIcons()` 拿到的始终是每次新建的独立实例，
+  你可以安全地持有或修改它，不会影响别处。
+- 组件的每次重建都会释放旧实例的 child scope（SDK 监听、Registry 记录一并归零），因此反复重建
+  不会累积资源。
+- 组件挂到地图上时会登记进该地图的覆盖物注册表（`MapContext.overlays`），可按类型清点当前存活的
+  覆盖物。
+
+### `v-model:position`
+
+拖拽结束时，组件除了触发 `dragend`（与别名 `drag-end`），还会在位置**真的变化**时触发
+`update:position`：
 
 ```vue
-<BMarker
-  :position="position"
-  :enable-dragging="true"
-  @drag-end="onDragEnd"
-  @update:position="position = $event"
-/>
+<BMarker v-model:position="position" :enable-dragging="true" />
 ```
+
+两条方向都有回环抑制：父级把刚上报的位置写回时不会重复下发 `setPosition`，SDK 重复派发同一位置
+也不会产生第二条 `update:position`。取舍（为什么这里用「最后一次同步值」而不是像 `<BMap>` 那样
+读回 SDK 现值）见 ADR [2026-09-17 声明式 OverlaySpec、Marker 状态模型与图标缓存](/adr/2026-09-17-overlay-spec-and-marker)
+的决策 4 与已知限制 1。
 
 v3 支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend`、`drag-end` 和 `remove`。
