@@ -2157,6 +2157,51 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("fresh DOM 建图门禁");
   });
 
+  it("缓存过期时 retry 不得启动 boot：状态保持 error，等容器真可用才继续（独立复核发现）", async () => {
+    useManualFrames();
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap)).toBe("error");
+    const created = harness.mapsCreated();
+
+    // 「DOM 已变、观察器尚未交付」：缓存仍是 320×240（不 notify），fresh 已是 0×0
+    shims.setElementSize(root, { width: 0, height: 0 });
+    let settled: "pending" | "resolved" | "rejected" = "pending";
+    const pending = api.retry().then(
+      () => {
+        settled = "resolved";
+      },
+      () => {
+        settled = "rejected";
+      },
+    );
+    await settleProps();
+    await nextTick();
+
+    expect(
+      statusOf(bmap),
+      "缓存过期时 retry 必须走 fresh 判据：不得启动 boot（状态应留在 error，而不是 creating）",
+    ).toBe("error");
+    expect(settled, "这次重试应当挂起等待容器").toBe("pending");
+    expect(harness.mapsCreated(), "挂起期间不建图").toBe(created);
+
+    // 观察器补上 0×0，再恢复容器 → 挂起的这次重试应当继续并成功
+    shims.resize(root, { width: 0, height: 0 });
+    frames!.flush();
+    shims.resize(root, { width: 320, height: 240 });
+    frames!.flush();
+    await settleProps();
+    await pending;
+    await expect(pending).resolves.toBeUndefined();
+    expect(statusOf(bmap)).toBe("ready");
+    expect(harness.mapsCreated(), "延迟重试只建一张图").toBe(created + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("缓存过期时的 retry 门禁");
+  });
+
   it("fresh 门禁阻塞后：缓存层没有发生转换也必须被唤醒（复审 P1，活性兜底）", async () => {
     useManualFrames();
     const { wrapper, bmap } = await mountControlledMap(() => ({

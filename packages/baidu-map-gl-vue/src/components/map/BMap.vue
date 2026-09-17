@@ -802,7 +802,13 @@ function mountMap(): void {
   const status = runtime.status.value as string;
   if (status === "disposing" || status === "disposed") return;
   const host = containerRef.value;
-  // 判据与建图等待点共用同一个读数（fresh DOM，不是观察器缓存）
+  // 判据与建图等待点共用同一个读数（fresh DOM，不是观察器缓存）。
+  //
+  // ⚠️ 这一句是**防御性前置**，不是唯一的拦截点：真正会让「0×0 建图」不发生的可观察结果是
+  // `waitForUsableContainer()`（`beforeCreateMap` 里的最后一次 fresh 判定）；本句的价值是
+  // 「别启动一次注定被拦的 boot」（省一次无用装配、也不把状态推进 `creating`）。
+  // 独立复核记录：把本句整条删掉，现有 1799 条用例仍全绿 ⇒ 它**没有独立用例**，
+  // 别以为它被覆盖了（真正被用例钉住的是 `retry()` 的 fresh 判据与建图等待点）。
   if (!host || !isUsableSize(suspension.measureNow())) return;
   // 先唤醒「建图等待点」里等容器可用的那一次挂载（它已经跑到 SDK 加载之后了）
   for (const resolve of containerUsableWaiters.splice(0)) resolve();
@@ -1111,7 +1117,11 @@ function retry(): Promise<MapReadyContext> {
     return bootTask;
   }
   const host = containerRef.value;
-  if (!host || !isUsableSize(suspension.size.value)) {
+  // 与 `mountMap()` / 建图等待点用**同一个 fresh 读数**：`suspension.size` 是最近一次的缓存，
+  // 在「DOM 已变、观察器尚未交付」的窗口里它是过期的 —— 用它会让本次 retry 启动一次注定被
+  // `beforeCreateMap` 拦住的 boot（状态进 `creating`、`#loading` 文案也跟着不对），
+  // 与「需要当前能不能建图时读 fresh 读数」的口径矛盾（独立复核发现，属 #29 第一轮评审 P2 的收口）。
+  if (!host || !isUsableSize(suspension.measureNow())) {
     // 容器当前不可用：挂起（不建图、也不以旧错误立刻拒绝），等放行回调启动这次重试
     return new Promise<MapReadyContext>((resolve, reject) => {
       deferredWaiters.push({ resolve, reject });
