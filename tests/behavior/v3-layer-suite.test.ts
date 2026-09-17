@@ -1076,7 +1076,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     harness.assertIdle("removeLayer 失败后重试摘除");
   });
 
-  it("[四轮 1] 反方向：摘除失败之后切回可见不得重复 addLayer（实例可能仍在图上）", async () => {
+  it("[四轮 1 / 五轮 2] 摘除失败之后切回可见：状态必须收敛到**恰好挂一份**（不重复挂、也不丢）", async () => {
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
     const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
@@ -1086,13 +1086,19 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     map.failNextRemoveLayer = new Error("removeLayer failed");
     props.value = { ...props.value, visible: false };
     await settle();
-    expect(harness.attached("layer")).toBe(1);
+    expect(harness.attached("layer"), "「还没摘掉就抛错」⇒ 图层仍在图上").toBe(1);
 
-    // 摘除失败 ⇒ 我们**不能**认为它已经下去了。切回可见时若再 add 一次，同一个实例会在图上
-    // 出现两份（真实 SDK 不去重）。
     props.value = { ...props.value, visible: true };
     await settle();
-    expect(harness.attached("layer"), "不得因为摘除失败就重复 addLayer").toBe(1);
+
+    // 收敛动作是「先 best-effort 摘一次、再挂」，不是猜。猜「还挂着」会让**真实已 detached** 的
+    // 实例永远挂不回来（`failNextRemoveLayerAfterDetach` 那条形状，见 §12）；猜「已经下去了」会让
+    // 仍在图上的实例被挂第二份（`addLayer` 不去重）。两条都错，所以只能做确定性的同步。
+    expect(harness.attached("layer")).toBe(1);
+    expect(
+      map.callLog.filter((call) => call === "removeLayer" || call === "addLayer"),
+      "摘除抛错 ⇒ mount 状态是 unknown ⇒ 收敛时先摘再挂",
+    ).toEqual(["addLayer", "removeLayer", "removeLayer", "addLayer"]);
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
@@ -1230,31 +1236,164 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     harness.assertIdle("整袋「已生效再抛错」后的重建");
   });
 
-  it("[四轮补测] DOM：先 visible=false 再卸载——清空发生在**第二次**摘除之前，覆盖物仍归零", async () => {
-    // 评审的补测建议：`visible=false` 已经先 `removeLayer()` 过一次，之后永久销毁才 `clearData()`。
-    // 因此「永久销毁总是 clearData → removeLayer」这个**顺序承诺**在这条路径上只在**后一次**摘除
-    // 上成立（清空确实仍在最终摘除之前，但前面还夹着一次摘除）。
+  it("[四轮补测 / 五轮 3] DOM：先 visible=false 再卸载——永久销毁走的是 **detached cleanup**（只清空）", async () => {
+    // 第五轮评审指出的措辞问题：`visible=false` 那一次摘除**成功**之后 `mountAttempted` 已复位，
+    // 卸载时 `unmount(permanent=true)` 先 `tearDownData()`、随后在 `if (!mountAttempted) return`
+    // 处结束 —— **没有第二次 `removeLayer()`**。所以这条描述的是「对已经 detached 的实例做清空」，
+    // 不是「清空之后再摘一次」；原来的标题/注释说的是后者，等于在证明一个实现里不存在的动作。
     //
-    // 这条能钉住的是**顺序**；它**不能**证明真实 SDK 对 detached 的图层调 `removeAllOverlays()`
-    // 一定安全（替身没有这个前置条件）。真出问题时 `tearDownData` 的 try/catch 会把它降级成
-    // `logger.warn` + 继续摘除，不会中断释放——取证属于 live smoke 的范畴（已知限制 13）。
+    // 为什么不让永久销毁无条件再摘一次：官方**没有**承诺「对已经摘掉的图层重复 `removeLayer`
+    // 是安全的」，本库不猜（与「不做假支持」同一口径）。这条用例把真实调用次数钉住。
+    //
+    // 它**不能**证明真实 SDK 对 detached 图层调 `removeAllOverlays()` 一定安全（替身没有这个前置
+    // 条件）。真出问题时 `tearDownData` 的 try/catch 会把它降级成 `logger.warn` + 继续，不会中断
+    // 释放——取证属于 live smoke 的范畴（已知限制 13）。
     const { wrapper, setProp } = await mountOneLayer(5);
     const layerOf = () =>
       fake.createdLayers[fake.createdLayers.length - 1] as unknown as { customOverlays: unknown[] };
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    const removeCalls = () => map.callLog.filter((call) => call === "removeLayer").length;
 
     expect(layerOf().customOverlays.length).toBeGreaterThan(0);
 
     await setProp({ visible: false });
-    expect(harness.attached("layer"), "隐藏本身已经摘过一次").toBe(0);
+    expect(harness.attached("layer"), "隐藏本身就摘了一次").toBe(0);
+    expect(removeCalls(), "隐藏那一次摘除成功").toBe(1);
     expect(layerOf().customOverlays.length, "隐藏（临时摘挂）不清覆盖物").toBeGreaterThan(0);
 
     await unmountAndSettle(wrapper);
+    expect(layerOf().customOverlays.length, "永久销毁在 detached 实例上清空").toBe(0);
     expect(
-      layerOf().customOverlays.length,
-      "永久销毁仍然先清空，再摘（这一次 removeLayer 是第二次调用）",
-    ).toBe(0);
+      removeCalls(),
+      "已经摘掉的实例不再重复 removeLayer（官方没有承诺那是安全的）",
+    ).toBe(1);
     expect(harness.attached("layer")).toBe(0);
     harness.assertIdle("隐藏之后再卸载");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 12. 第五轮评审修正：成功态指纹的失效与 mount 状态收敛                          */
+/* -------------------------------------------------------------------------- */
+
+describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收敛", () => {
+  it("[五轮 1] Traffic 部分成功之后改回上一次成功值，必须真的重写 SDK", async () => {
+    // `possiblyApplied*` 解决的是「之后把键删掉要不要重建」；这条钉的是**另一半**：
+    // 一次「可能已经产生副作用」的失败之后，成功态去重指纹不再代表 SDK 的当前值。
+    const { wrapper, setProp } = await mountOneLayer(3, { colors: ["#ff0000"], edge: false });
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        colors: string[] | null;
+        failNextSetEdge: Error | null;
+      };
+    expect(layerOf().colors, "挂载时写进了 SDK").toEqual(["#ff0000"]);
+
+    layerOf().failNextSetEdge = new Error("setEdge failed");
+    await setProp({ colors: ["#00ff00"], edge: true });
+    expect(layerOf().colors, "同批第一个键**真的**生效了，而整袋调用失败了").toEqual(["#00ff00"]);
+
+    // 改回**上一次成功值**：指纹与 `appliedMutableKey` 相同，但 SDK 已经被改成 00ff00。
+    await setProp({ colors: ["#ff0000"], edge: false });
+    expect(
+      layerOf().colors,
+      "DP 回到 A ⇒ SDK 必须也被写回 A（去重指纹在失败之后必须先失效）",
+    ).toEqual(["#ff0000"]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("部分成功之后回滚到旧值");
+  });
+
+  it("[五轮 1] DOM 整袋「已生效再抛错」之后改回上一次成功值，必须重写（槽位同样不能陈旧）", async () => {
+    const { wrapper, setProp } = await mountOneLayer(5, { minZoom: 3 });
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        options: Record<string, unknown>;
+        appliedStyleBags: Record<string, unknown>[];
+        failNextSetStyleOptionsAfterApply: Error | null;
+      };
+    expect(layerOf().options.minZoom, "挂载时写进了 SDK").toBe(3);
+    const bagsAfterMount = layerOf().appliedStyleBags.length;
+
+    layerOf().failNextSetStyleOptionsAfterApply = new Error("setStyleOptions failed");
+    await setProp({ minZoom: 6 });
+    expect(layerOf().options.minZoom, "整袋**已经生效**之后才抛错").toBe(6);
+    expect(createdSince(), "抛错本身不重建").toBe(1);
+
+    await setProp({ minZoom: 3 });
+    expect(layerOf().options.minZoom, "改回上一次成功值也必须真的重写").toBe(3);
+    expect(
+      layerOf().appliedStyleBags.length,
+      "必须有新的一次 setStyleOptions 调用（不能被槽位指纹去重跳过）",
+    ).toBe(bagsAfterMount + 2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("整袋部分成功之后回滚到旧值");
+  });
+
+  it("[五轮 1] data「换了再抛错」之后换回上一次成功那份引用，必须真的重写", async () => {
+    // `data` 的去重是**按引用**的，因此它有和指纹完全一样的缺陷形状：失败那一次已经把 SDK 的
+    // 数据换掉了，而账本还停在旧引用上；用户换回旧引用时会被误判成「已经写过了」。
+    const dataA = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [116.404, 39.915] }, properties: { id: "A" } },
+      ],
+    };
+    const dataB = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [121.47, 31.23] }, properties: { id: "B" } },
+      ],
+    };
+    const { wrapper, setProp } = await mountOneLayer(4, { data: dataA });
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        data: object | null;
+        failNextSetDataAfterApply: Error | null;
+      };
+    const idOf = (value: object | null) =>
+      (value as { features: Array<{ properties: { id: string } }> } | null)?.features[0]?.properties.id;
+    // 注意：props 里的对象会被 Vue 包成 reactive 代理，因此**不能**直接与 `dataA` 比引用。
+    // 这里记下「挂载那一刻 SDK 拿到的那个引用」，后面用它做「换回上一次成功值」的对照。
+    const mountedData = layerOf().data;
+    expect(idOf(mountedData), "挂载时写进去的是 A").toBe("A");
+
+    layerOf().failNextSetDataAfterApply = new Error("setData failed");
+    await setProp({ data: dataB });
+    expect(idOf(layerOf().data), "SDK 已经换成 B，而调用方收到的是异常").toBe("B");
+
+    await setProp({ data: dataA });
+    expect(
+      layerOf().data,
+      "换回 A 必须真的重写（按引用的去重指纹同样要先失效），而不是被误判成「已经写过了」",
+    ).toBe(mountedData);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("data 换了再抛错之后回滚");
+  });
+
+  it("[五轮 2] removeLayer「先摘掉、再抛错」：状态必须收敛，切回可见要能重新挂上", async () => {
+    // 与 §11 的「摘之前抛」是两条不同的状态机路径。这条的关键是：**调用方唯一能观测的
+    // 「挂没挂上」证据就是调用有没有成功返回**，所以失败之后不能把「还挂着」当结论。
+    const { wrapper, setProp } = await mountOneLayer(2);
+    expect(harness.attached("layer")).toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayerAfterDetach = new Error("removeLayer failed after detach");
+
+    await setProp({ visible: false });
+    expect(harness.attached("layer"), "SDK 先摘掉再抛错 ⇒ 图上确实已经没有它").toBe(0);
+
+    await setProp({ visible: true });
+    expect(
+      harness.attached("layer"),
+      "不能因为「两层记账都说还挂着」就永远挂不回来",
+    ).toBe(1);
+    expect(createdSince(), "收敛不该重建实例").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("detach 之后抛错的收敛");
   });
 });
 

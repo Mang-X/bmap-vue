@@ -466,6 +466,15 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
   visible: boolean
   resetStyleCalls = 0
   destroyCalls = 0
+  /**
+   * 测试故障注入：让**下一次** `setData` **先真的换掉数据、再抛错**（用后即清）。
+   *
+   * 与 `FakeV4DOMLayer.failNextSetStyleOptionsAfterApply` 同一个用途：建模「SDK 已经改了、
+   * 调用方却收到异常」。`data` 的去重指纹（按引用）在失败之后同样会变成陈旧值——用户把 `data`
+   * 换回**上一次成功那份引用**时，指纹相同会被误跳过，而 SDK 里其实还是失败那次换上去的数据
+   * （第五轮评审发现 1 的 `data` 版本）。
+   */
+  failNextSetDataAfterApply: Error | null = null
 
   constructor(layerName: string, options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
     super(options, stats)
@@ -484,6 +493,12 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
       throw new TypeError('GeoJSONLayer.setData: 只接受 GeoJSON FeatureCollection')
     }
     this.data = geojson
+    if (this.failNextSetDataAfterApply) {
+      const error = this.failNextSetDataAfterApply
+      this.failNextSetDataAfterApply = null
+      // 数据**已经换掉**，调用方却收到异常（形状同 `FakeV4Map.failNextRemoveLayerAfterDetach`）。
+      throw error
+    }
   }
 
   getData(): unknown[] {

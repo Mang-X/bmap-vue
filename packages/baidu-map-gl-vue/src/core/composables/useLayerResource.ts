@@ -85,16 +85,32 @@ export interface UseLayerResourceResult {
   readonly error: Readonly<ShallowRef<BMapError | null>>;
 }
 
+/**
+ * 「我们相信实例当前挂没挂在地图上」的三态。
+ *
+ * 刻意不是布尔：SDK 允许**先产生副作用、再抛错**，而调用方唯一能观测的证据就是「调用有没有
+ * 成功返回」。因此 `removeLayer` / `addLayer` 抛错之后，**挂载状态是未知的**——既不能按「还挂着」
+ * 记（真实可能已经 detached，那就再也挂不回来），也不能按「已经下去了」记（真实可能还在图上，
+ * 再 `add` 一次会让同一个实例在图上出现两份，而 `addLayer` 不去重）。
+ *
+ * 未知状态的收敛方式是**做一次确定性的同步**，而不是猜：见 `syncMounted`。
+ */
+type MountState = "attached" | "detached" | "unknown";
+
 /** 当前实例的读数与记账（重建 = 整体替换）。 */
 interface InstanceState {
   handle: LayerHandle;
   spec: LayerSpec;
-  /** 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。 */
-  mounted: boolean;
+  /**
+   * 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。
+   *
+   * 三态的理由见 `MountState`：失败之后留 `unknown`，由下一次同步动作收敛。
+   */
+  mountState: MountState;
   /**
    * 是否**调用过** `addLayer`（无论成功与否）。
    *
-   * 与 `mounted` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
+   * 与 `mountState` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
    */
   mountAttempted: boolean;
   /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性，避免重复清理同一实例。 */
@@ -105,6 +121,11 @@ interface InstanceState {
    * 已写入 SDK 的槽位指纹（**按槽位**记账，`data` 除外）。
    *
    * 作用：没变的槽位不重复写（`zIndex` 一类重复写是无谓的 SDK 调用）。
+   *
+   * ⚠️ 它代表的是「**SDK 当前值是什么**」，因此**必须在一次可能产生副作用的调用之前失效**
+   * （`delete` 掉对应槽位），成功返回后再提交新指纹。只在成功后推进是不够的：一次
+   * 「已经写进去了、然后抛错」的调用会让它停留在**陈旧值**上——用户改回上一次成功的取值时，
+   * 指纹正好相同、于是被跳过，而 SDK 其实还停在失败那次写进去的值（第五轮评审发现 1）。
    */
   appliedSlots: Map<LayerCtorSlot, string>;
   /**
@@ -113,9 +134,11 @@ interface InstanceState {
    * `data` 往往是整份 `FeatureCollection`，序列化它来做去重会把「每次 props 变化」变成一次
    * 深遍历。这里按引用记：换引用才写、同一份数据重复渲染不重复写（正是旧实现里
    * 「DOM 已抹掉、定时器还在」想避免的那次多余写入）。
+   *
+   * 与 `appliedSlots` 同一条规则：调用之前先复位成 `UNAPPLIED`，成功后再提交。
    */
   appliedData: unknown;
-  /** 已就地写入的可选 option 指纹（取值不变时不重复写 SDK）。 */
+  /** 已就地写入的可选 option 指纹（取值不变时不重复写 SDK）。失效规则同 `appliedSlots`。 */
   appliedMutableKey: string;
   /**
    * 「**可能**已写入」的统一槽位：**尝试过**写入，不论成功。
@@ -214,10 +237,13 @@ export function useLayerResource<Props>(
   /**
    * 摘除的唯一入口。
    *
-   * 以 `mountAttempted`（**调用过** `addLayer`）而不是 `mounted`（**成功返回过**）为门禁：
-   * 真实 SDK 的 `addLayer` 可能「已经产生副作用、然后抛错」，用成功返回的记账当门禁会让那次
-   * 补偿摘除被跳过，实例就永久留在图上（Driver 侧的 `remove` 明确不读记账，正是为了支持这种
+   * 以 `mountAttempted`（**调用过** `addLayer`）而不是 `mountState === "attached"`（**成功返回过**）
+   * 为门禁：真实 SDK 的 `addLayer` 可能「已经产生副作用、然后抛错」，用成功返回的记账当门禁会让
+   * 那次补偿摘除被跳过，实例就永久留在图上（Driver 侧的 `remove` 明确不读记账，正是为了支持这种
    * best-effort 摘除；这一层不能用更严格的记账把它挡掉）。
+   *
+   * 失败之后 `mountAttempted` **保留**（还有没人认领的实例要摘），`mountState` 置为 `unknown`
+   * （既不能按「还挂着」也不能按「已经下去了」记，见 `MountState`）。
    *
    * `permanent` 区分两条语义：**临时摘挂**（`visible=false`，保留数据与实例）与
    * **永久销毁**（组件卸载 / 重建 / Map 销毁，先清数据覆盖物再摘除）。
@@ -231,48 +257,68 @@ export function useLayerResource<Props>(
     }
     if (!state.mountAttempted) return;
     // 记账在**摘除成功返回之后**才复位。`removeLayer` 与 `addLayer` 一样允许「副作用还没完成就
-    // 抛错」（那时图层仍在图上），先复位的话 `mountAttempted` 就变成「从未挂过」，后续的永久销毁
-    // （组件卸载 / 重建 / Map 销毁）会在门口 return 而**不再重试** —— SDK 上留下一个再也没人认领
-    // 的图层。保留记账 = 保留「仍需 best-effort 摘除」的所有权。
-    context.client.driver.layers.remove(target(context), state.handle);
-    state.mounted = false;
+    // 抛错」，先复位的话 `mountAttempted` 就变成「从未挂过」，后续的永久销毁（组件卸载 / 重建 /
+    // Map 销毁）会在门口 return 而**不再重试** —— SDK 上留下一个再也没人认领的图层。
+    // 保留记账 = 保留「仍需 best-effort 摘除」的所有权。
+    try {
+      context.client.driver.layers.remove(target(context), state.handle);
+    } catch (error) {
+      // 「可能摘掉了、也可能没摘掉」——两种都真实存在（SDK 允许先产生副作用再抛错）。
+      state.mountState = "unknown";
+      throw error;
+    }
+    state.mountState = "detached";
     state.mountAttempted = false;
   };
 
-  /** 挂上 / 摘掉：图层的显隐口径。 */
+  /**
+   * 挂上 / 摘掉：图层的显隐口径。
+   *
+   * `unknown` 的收敛方式是**再做一次确定性的同步**，而不是猜：
+   *
+   * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`。这样两种失败形状都
+   *   收敛到「**恰好挂一份**」：上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已经摘掉 ⇒ 这是一次
+   *   no-op，随后照常挂上。
+   * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次去做成确定）。
+   *
+   * 收敛动作**不是免费的**（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
+   */
   const syncMounted = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
     const shouldMount = state.spec.visible !== false;
-    if (shouldMount) {
-      // `mounted` 为真有两种含义，这里都该 early return：真的还挂着；或者上一次摘除失败了、
-      // 我们还**不能**认为它下去了（重复 add 会让同一个实例在图上出现两份）。
-      if (state.mounted) return;
-      state.mountAttempted = true;
-      try {
-        layers.add(target(context), state.handle);
-      } catch (error) {
-        // 「副作用可能已经产生」⇒ best-effort 摘一次，再把**原错误**抛出去：`addLayer` 为什么没
-        // 挂上，比「补偿摘除也失败了」更值得让调用方看见。补偿自身失败不静默——`mountAttempted`
-        // 会保留为 true，因此 `create()` 的 catch 里那次 `record.dispose()` 会经永久销毁路径再试
-        // 一次，失败时由 `LayerRegistry` 留下 `logger.warn`。
-        try {
-          unmount(state, context);
-        } catch {
-          /* 有意吞掉：原错误在下一行抛出，补偿失败的兜底见上 */
-        }
-        throw error;
-      }
-      state.mounted = true;
+    if (!shouldMount) {
+      unmount(state, context);
       return;
     }
-    unmount(state, context);
+    if (state.mountState === "attached") return;
+    if (state.mountState === "unknown") {
+      // 先摘一次把未知变确定。它自己失败就再抛（状态仍是 unknown，等下一次机会）。
+      unmount(state, context);
+    }
+    state.mountAttempted = true;
+    try {
+      layers.add(target(context), state.handle);
+    } catch (error) {
+      // 「副作用可能已经产生」⇒ best-effort 摘一次，再把**原错误**抛出去：`addLayer` 为什么没
+      // 挂上，比「补偿摘除也失败了」更值得让调用方看见。补偿自身失败不静默——`mountAttempted`
+      // 会保留为 true，因此 `create()` 的 catch 里那次 `record.dispose()` 会经永久销毁路径再试
+      // 一次，失败时由 `LayerRegistry` 留下 `logger.warn`。
+      try {
+        unmount(state, context);
+      } catch {
+        /* 有意吞掉：原错误在下一行抛出，补偿失败的兜底见上 */
+      }
+      throw error;
+    }
+    state.mountState = "attached";
   };
 
   /**
    * 就地写入「依赖已挂载」的槽位。
    *
    * **不在 `map.addLayer` 之前执行这类操作**（issue #40 的非目标）：官方明确层级调整会访问
-   * 已关联的 Map 与图层管理器，未挂载时调用是未定义行为。因此这里以 `state.mounted` 为前置。
+   * 已关联的 Map 与图层管理器，未挂载时调用是未定义行为。因此这里以「我们相信它确实挂着」
+   * （`mountState === "attached"`）为前置——`unknown` 同样不写（那时连它在地图上的状态都不确定）。
    */
   const syncPostMountSlots = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
@@ -281,10 +327,10 @@ export function useLayerResource<Props>(
 
     // 未挂载时**不写、也不记账**：官方明确「层级调整一类操作会访问已关联的 Map 与图层管理器」，
     // 未挂载时调用是未定义行为（issue #40 的非目标）。等挂载发生时这里会被再调一次。
-    if (!state.mounted) return;
+    if (state.mountState !== "attached") return;
     /** 走 option 通道的槽位攒成**一次** `setOptions`（Driver 再按整袋 / 字段 setter 分类）。 */
     const optionBag: Record<string, unknown> = {};
-    /** 整袋调用成功**之后**才提交的记账（失败不能记成已写入，否则永不重试）。 */
+    /** 整袋调用成功**之后**才提交的去重指纹。 */
     const pendingBagSlots: Array<[LayerCtorSlot, string]> = [];
 
     for (const slot of LAYER_CTOR_SLOTS) {
@@ -303,6 +349,9 @@ export function useLayerResource<Props>(
           );
           continue;
         }
+        // 去重指纹在调用**之前**失效：这一次调用可能已经改了 SDK 然后抛错，那之后旧指纹就不再
+        // 代表 SDK 的当前值（见 `appliedSlots` 的说明）。成功返回后才重新提交。
+        state.appliedData = UNAPPLIED;
         if (value === null) layers.clearData(state.handle);
         else layers.setData(state.handle, value);
         state.appliedData = value;
@@ -315,6 +364,8 @@ export function useLayerResource<Props>(
       if (slot === "zIndex" && layers.supports(kind, "setZIndex")) {
         // 「尝试过」先记：这一笔的意义是「SDK 可能已经改了」——它抛错也可能发生在改变之后。
         state.possiblyAppliedSlots.add(slot);
+        // 同上：去重指纹先失效，成功后再提交。
+        state.appliedSlots.delete(slot);
         layers.setZIndex(state.handle, value as number);
         state.appliedSlots.set(slot, fingerprint);
         continue;
@@ -327,12 +378,17 @@ export function useLayerResource<Props>(
     }
 
     if (Object.keys(optionBag).length > 0) {
-      // 顺序要紧：**先记「尝试过」、再调用、成功之后再提交去重指纹**。
+      // 顺序要紧：**先让旧指纹失效、再记「尝试过」、再调用、成功之后才提交新指纹**。
+      // - 旧指纹先失效：这一次调用可能已经改了 SDK 然后抛错，那之后它就不再代表 SDK 的当前值
+      //   （第五轮评审发现 1）；
       // - 「尝试过」先记：整袋 setter 内部同样可能逐键生效（Driver 按 `bagSetters` / `mutable`
       //   分类后可能拆成多次调用），第一个键写成功、第二个键抛错时，前一个键已经真的改了 SDK；
-      // - 去重指纹最后记：反过来的话，一次失败的整袋更新会被记成已完成，之后同值更新被指纹跳过、
+      // - 新指纹最后记：反过来的话，一次失败的整袋更新会被记成已完成，之后同值更新被指纹跳过、
       //   永久不再重试（声明与 SDK 状态静默分叉）。
-      for (const [slot] of pendingBagSlots) state.possiblyAppliedSlots.add(slot);
+      for (const [slot] of pendingBagSlots) {
+        state.possiblyAppliedSlots.add(slot);
+        state.appliedSlots.delete(slot);
+      }
       layers.setOptions(state.handle, optionBag);
       for (const [slot, fingerprint] of pendingBagSlots) state.appliedSlots.set(slot, fingerprint);
     }
@@ -353,11 +409,14 @@ export function useLayerResource<Props>(
     const fingerprint = stableLayerValue(mutable);
     if (fingerprint === state.appliedMutableKey) return;
     // 未挂载时**不写、也不记账**：切回可见时这里会被再调一次（记成「已应用」会让那次写入永久丢失）
-    if (!state.mounted) return;
+    if (state.mountState !== "attached") return;
 
-    // 同 `syncPostMountSlots`：`setOptions` 在 Traffic 上是**逐 setter** 调用（`setColors` →
-    // `setEdge`），不是事务。因此「尝试过」必须在调用之前整批记下——否则第一个键成功、第二个键
-    // 抛错时，整批一个键都不记，之后第一个键变回未表态就不会重建（第四轮评审发现 2）。
+    // 同 `syncPostMountSlots`，三条顺序都不能换：
+    // ① 旧指纹失效（一次可能已生效的失败会让它陈旧 ⇒ 用户改回上一次成功值会被误跳过）；
+    // ② 「尝试过」整批先记（`setOptions` 在 Traffic 上是**逐 setter** 调用：`setColors` 成功、
+    //    `setEdge` 抛错时，前一个键已经真的改了 SDK，整批不记就会在移除时漏掉重建）；
+    // ③ 新指纹最后记（失败被记成完成 ⇒ 同值更新永不重试）。
+    state.appliedMutableKey = NO_MUTABLE_KEY;
     for (const key of nextKeys) state.possiblyAppliedOptions.add(key);
     context.client.driver.layers.setOptions(state.handle, mutable);
     state.appliedMutableKey = fingerprint;
@@ -429,7 +488,7 @@ export function useLayerResource<Props>(
         const state: InstanceState = {
           handle,
           spec,
-          mounted: false,
+          mountState: "detached",
           mountAttempted: false,
           torndown: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
