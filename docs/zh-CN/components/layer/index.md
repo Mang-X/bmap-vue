@@ -119,10 +119,11 @@ import {
   （重建会让所有覆盖物重做，DOM 图层会肉眼可见地闪）。
 - **释放**：组件卸载、地图销毁（含 `keepAliveBehavior="dispose"` 的停用）都会摘掉图层并释放
   监听；诊断计数归零有测试锁住。数据驱动图层的清理按**清空操作的作用域**分述：
-  - `GeoJSONLayer` 的 `clearData()` 是 **Map 作用域**（官方要求「先清、再 `removeLayer`」，因为摘掉
+  - `GeoJSONLayer` 的 `clearData()` 是 **map-bound**（官方要求「先清、再 `removeLayer`」，因为摘掉
     之后图层不再持有 Map 引用）⇒ 只在图层**仍在图上**时调用。若 `visible=false` 已经先摘过一次，
     永久销毁只做 **detached cleanup**：跳过 `clearData()`（对已摘下的实例调用没有效果），
     可见资源由那一次 `removeLayer` 自己摘掉——**不会再调一次 `removeLayer`**（官方没有承诺
     「对已经摘掉的图层重复摘除是安全的」，本库不猜）。
-  - `DOMLayer.removeAllOverlays()` 是**图层作用域**（移除的是图层自己创建的真实 DOM 节点）
-    ⇒ 与是否挂图无关，照常执行。
+  - `DOMLayer.removeAllOverlays()` 的作用域官方**没有说明**（不是「不需要挂图」，是「不知道」）
+    ⇒ 能力面记为 `unknown`，内核据此选择**策略**：best-effort 尝试（跳过会真的残留真实 DOM 节点，
+    失败经 `logger.warn` 可观测）。取证见 issue #98。

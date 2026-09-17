@@ -1406,22 +1406,29 @@ describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收�
 /* -------------------------------------------------------------------------- */
 
 describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除」前提", () => {
-  it("[六轮 1] 清空的作用域是能力面：geojson 是 Map 作用域，dom 是图层作用域", () => {
+  it("[六轮 1 / 七轮 1] 清空的作用域是三态能力面：官方要求 / 官方未说明 / 没有入口", () => {
     const { layers } = createFakeDriverPair();
-    expect(layers.supports("geojson", "clearData")).toBe(true);
     expect(
-      layers.clearRequiresAttach("geojson"),
-      "GeoJSONLayer.clearData 是「先从 Map 移除这些覆盖物」⇒ 要求图层仍在图上",
-    ).toBe(true);
-    expect(layers.supports("dom", "clearData")).toBe(true);
+      layers.clearScope("geojson"),
+      "GeoJSONLayer.clearData 是「先从 Map 移除这些覆盖物」⇒ 官方明确要求仍在图上",
+    ).toBe("map-bound");
     expect(
-      layers.clearRequiresAttach("dom"),
-      "DOMLayer.removeAllOverlays 移除的是图层自己创建的 DOM 节点 ⇒ 与是否挂图无关",
-    ).toBe(false);
+      layers.clearScope("dom"),
+      "DOMLayer.removeAllOverlays 官方**没有**说明它是否要求仍在图上 —— 未知不等于不需要",
+    ).toBe("unknown");
     expect(
-      layers.clearRequiresAttach("tile"),
-      "没有清空入口的 kind 恒 false（两条判据分开：调用方先问 supports）",
-    ).toBe(false);
+      layers.clearScope("tile"),
+      "没有清空入口 ⇒ none（未知 kind 同解）",
+    ).toBe("none");
+
+    // 两条判据必须同解：`clearScope !== "none"` ⟺ `supports(kind, "clearData")`。
+    // 分开是为了让「没有这个能力」与「这个能力的前置条件未知」不被混成一个答案；但**不能**漂移。
+    for (const kind of LAYER_CASES.map((entry) => entry.kind)) {
+      expect(
+        layers.clearScope(kind) !== "none",
+        `${kind}：clearScope 与 supports(clearData) 必须同解`,
+      ).toBe(layers.supports(kind, "clearData"));
+    }
   });
 
   it("[六轮 1] GeoJSON：挂载中卸载 ⇒ 清空发生在图层**仍在图上**时（官方要求的顺序）", async () => {
@@ -1440,7 +1447,7 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
     harness.assertIdle("attached 卸载");
   });
 
-  it("[六轮 1] GeoJSON：先 visible=false 再卸载 ⇒ **不再**对 detached 实例调 clearData", async () => {
+  it("[六轮 1 / 七轮 1] GeoJSON：先 visible=false 再卸载 ⇒ **不再**对 detached 实例调 clearData", async () => {
     // 官方明说「要真正清空 getData() 集合，得在 removeLayer **之前**调用 clearData()」——
     // 摘掉之后图层不再持有 Map 引用，此时再调它是**无效动作**。可见资源不会因此残留：
     // 同一段说明写明 `removeLayer` 本身已经摘掉覆盖物。
@@ -1463,11 +1470,14 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
     harness.assertIdle("detached 卸载（geojson）");
   });
 
-  it("[六轮 1] DOM：先 visible=false 再卸载 ⇒ 图层作用域的清空**照常执行**（未取证前提，见已知限制 13）", async () => {
-    // 这条刻意把「依赖了一条没有上游依据的前提」钉住：官方只给了 `removeAllOverlays() →
-    // removeLayer()` 的顺序，**没有**说该入口是否要求图层仍在图上。跳过它会真的残留 DOM 节点，
-    // 所以这里照常执行；`attachedAtClear === false` 就是那条前提的显式读数——取证结论若推翻它，
-    // 这条断言会红，而不是让依赖继续藏在替身的宽容里。
+  it("[六轮 1 / 七轮 1] DOM：先 visible=false 再卸载 ⇒ 清空照常执行（**unknown 下的 best-effort 策略**，非已证事实）", async () => {
+    // 这条刻意把两件事分开钉住：
+    // ① **能力面**：`clearScope("dom") === "unknown"`（上面那条用例）——官方没有说明它是否要求仍在
+    //    图上，所以**不能**声称「与挂图无关（layer scope）」；
+    // ② **策略**：内核在 `unknown` 下选择 **best-effort 尝试**（跳过会真的残留真实 DOM 节点，
+    //    而失败是经 `logger.warn` 可观测的）。`attachedAtClear === false` 就是「这次尝试发生在
+    //    detached 状态下」的显式读数——取证结论若推翻它，这条断言会红，而不是让依赖藏在替身的
+    //    宽容里（已知限制 13）。
     const { wrapper, setProp } = await mountOneLayer(5);
     const layerOf = () =>
       fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
@@ -1482,7 +1492,7 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
 
     expect(
       layerOf().attachedAtClear,
-      "detached 时仍会调用 removeAllOverlays（无上游依据，登记为已知限制 13）",
+      "detached 时仍会调用 removeAllOverlays（unknown 下的 best-effort 策略，无上游依据）",
     ).toBe(false);
     expect(layerOf().customOverlays.length, "节点被清掉").toBe(0);
     harness.assertIdle("detached 卸载（dom）");

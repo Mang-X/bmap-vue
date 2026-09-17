@@ -93,7 +93,8 @@ export interface UseLayerResourceResult {
  * 记（真实可能已经 detached，那就再也挂不回来），也不能按「已经下去了」记（真实可能还在图上，
  * 再 `add` 一次会让同一个实例在图上出现两份，而 `addLayer` 不去重）。
  *
- * 未知状态的收敛方式是**做一次确定性的同步**，而不是猜：见 `syncMounted`。
+ * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。注意这只在「对已经摘掉的
+ * 图层重复 `removeLayer` 是安全的」这条**未取证前提**成立时才保证收敛——见已知限制 14。
  */
 type MountState = "attached" | "detached" | "unknown";
 
@@ -218,27 +219,25 @@ export function useLayerResource<Props>(
    *   因为 `removeLayer` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用）。
    *
    * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
-   * 因此这里不需要按 kind 分支；**但要不要执行**由该清空操作的**作用域**决定
-   * （`clearRequiresAttach`）：Map 作用域的要求图层仍在图上（见下面的说明），图层作用域的照常执行。
+   * 因此这里不需要按 kind 分支；**但要不要执行**由该清空操作的**作用域**决定（`clearScope` 三态）：
+   * `"map-bound"` 要求仍在图上、`"unknown"` 走 best-effort 策略、`"none"` 没有入口。详见函数内注释。
    * **只在永久销毁时做**：普通 `visible=false` 的摘挂不能清（切回可见时还得重新 `setData`）；
    * 清理失败不阻断摘除，但要可观测。
    */
   const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
-    if (!layers.supports(state.spec.kind, "clearData")) return;
-    // **Map 作用域**的清空要求图层仍在图上。官方对 `GeoJSONLayer.clearData` 的说明是「**先从 Map
-    // 移除**这些覆盖物并清空集合」，而 `map.removeLayer()` 会「清空图层持有的 Map 引用」，官方因此
-    // 明确：**要真正清空 `getData()` 集合，得在 `removeLayer` 之前调用 `clearData()`**。
-    // 也就是说，对已经摘下的实例再调它是**无效动作**——留着它只会把「已经清空了」变成一句看起来
-    // 有保证的假话（本库禁止假支持）。可见资源并没有因此残留：同一段说明写明 `removeLayer`
-    // **本身已经摘掉覆盖物**。
-    //
-    // `unknown` 同样跳过：那一刻我们连它是否在图上都不确定，调用同样无法保证有效果。
-    //
-    // **图层作用域**的清空（`DOMLayer.removeAllOverlays`）与挂没挂上无关，照常执行——它移除的是
-    // 图层自己创建的真实 DOM 节点，跳过会真的残留（官方「资源清理」把它列为必要步骤，且没有把它
-    // 与 Map 绑定）。
-    if (layers.clearRequiresAttach(state.spec.kind) && state.mountState !== "attached") return;
+    const scope = layers.clearScope(state.spec.kind);
+    // `"none"` = 该 kind 没有清空入口（与 `supports(kind, "clearData")` 同解，有双向一致性断言）。
+    if (scope === "none") return;
+    // `"map-bound"` = **官方明确要求**图层仍在图上。对 `GeoJSONLayer.clearData()` 就是这条：
+    // 「先从 Map 移除这些覆盖物」，而 `removeLayer` 会清空图层持有的 Map 引用 ⇒ 官方明说
+    // 「要真正清空 `getData()` 集合得在 `removeLayer` **之前**调」。因此 detached / unknown 时
+    // 跳过它——那次调用没有效果，留着只会把「已经清空了」变成一句看起来有保证的假话。
+    // 可见资源并没有因此残留：同一段说明写明 `removeLayer` **本身已经摘掉覆盖物**。
+    if (scope === "map-bound" && state.mountState !== "attached") return;
+    // `"unknown"` = 官方**没有**说明它是否要求 attachment（`DOMLayer.removeAllOverlays()`）。
+    // 这里刻意**不**声称哪一侧成立，只选一个策略并把它写出来：**best-effort 尝试**——因为跳过会
+    // 真的残留真实 DOM 节点，而失败是经 `logger.warn` 可观测的。取证见已知限制 13。
     try {
       layers.clearData(state.handle);
     } catch (error) {
@@ -296,14 +295,18 @@ export function useLayerResource<Props>(
   /**
    * 挂上 / 摘掉：图层的显隐口径。
    *
-   * `unknown` 的收敛方式是**再做一次确定性的同步**，而不是猜：
+   * `unknown` 时**尝试**通过「先摘一次、再挂」收敛，而不是猜：
    *
-   * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`。这样两种失败形状都
-   *   收敛到「**恰好挂一份**」：上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已经摘掉 ⇒ 这是一次
-   *   no-op，随后照常挂上。
-   * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次去做成确定）。
+   * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`；
+   * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次）。
    *
-   * 收敛动作**不是免费的**（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
+   * ⚠️ **这是「尝试」，不是「确定性收敛」**：它依赖一条**未经上游证明**的前提 P——「对已经摘掉的
+   * 图层重复 `removeLayer` 是安全的」。前提 P 成立时两种失败形状都落到「恰好挂一份」（上一步真的
+   * 没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）；**P 不成立时收敛不会发生**（第二次摘除
+   * 继续抛，状态仍是 `unknown`、图层仍不可见），但失败经 `resource:error` 交出，且**绝不会**因为
+   * 「猜已经下去了」去 `add` 而出现两份。登记见已知限制 14，悲观契约下的退化有回归用例（§13）。
+   *
+   * 这次尝试**不是免费的**（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
    */
   const syncMounted = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
