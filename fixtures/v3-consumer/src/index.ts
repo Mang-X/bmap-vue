@@ -11,6 +11,7 @@ import {
   Vue3BaiduMapGlResolver,
   type BMapProviderLike,
   type BMapProps,
+  type MarkerIconName,
 } from 'baidu-map-gl-vue'
 // v4 Provider 家族从 `./core` 暴露（#17）。M3A3-REMOVE-LEGACY（#26）之后根入口**不再**导出
 // 任何 Provider factory（原先那三个是 legacy 的 `baiduCdnProvider` 家族），这里改成 v4 家族。
@@ -395,6 +396,16 @@ export const mapExposeApiSmoke = {
   badCenter,
   badCapability,
 }
+
+// BMarker 的图标名是**封闭**联合，且派生自内置图标表（M5-SPEC-MARKER / #30）：
+// 「类型里有、实际渲染不出来」在结构上不可能。下面两条是这条承诺的**门禁** ——
+// 本文件由 `scripts/verify-package.mts` 的 `vue-tsc` 编译（CI 会跑），
+// 而 `src/**/*.test.ts` 里的类型断言**不在任何门禁的编译范围**里
+// （`packages/baidu-map-gl-vue/tsconfig.build.json` 排除了它们），因此类型层承诺必须落在这里。
+const markerIconName: MarkerIconName = 'red5'
+// @ts-expect-error 不在内置名清单里的字符串必须编译失败
+const unknownMarkerIconName: MarkerIconName = 'ghost_icon'
+export const markerIconNameSmoke = { markerIconName, unknownMarkerIconName }
 
 // raw 逃生口（`./advanced`）在**产物层**的消费方 smoke（#29 评审补充）。
 //

@@ -19,8 +19,9 @@
 - **修复**：`visible=false` 的初始 `BMarker` 此前切到 `true` 时会在**未挂载**的实例上调用 `show()`
   （等于永远不显示）；现在切到 `true` 时才真正 `addOverlay`。
 - **修复**：内置图标名 `red1`~`red10` / `blue1`~`blue10` 此前会静默渲染成 `simple_red` 的雪碧图位置，
-  现在全部 27 个内置名都解析到各自的格子（内置图标表收敛为单一事实源）。
-- 新增**有界图标缓存**（每个地图一份，上限 200 条）：相同图标配置只构造一次 `BMap.Icon`，
+  现在全部 27 个内置名都解析到各自的格子（`location` 与 `loc_red` 是历史别名、`start` / `end` 走内联 SVG），
+  内置图标表收敛为单一事实源，`MarkerIconName` 直接派生自它。
+- 新增**有界图标缓存**（同一个 Client / `<BMapProvider>` 一份，上限 200 条）：相同图标配置只构造一次 `BMap.Icon`，
   组件反复重建也不会重复构造；更新图标时始终重新 `setIcon`（官方指南：直接改 Icon 属性
   Marker 不会同步刷新）。
 - 覆盖物实例现在会登记进该地图的覆盖物注册表（`MapContext.overlays`，类型由 `unknown` 收紧为

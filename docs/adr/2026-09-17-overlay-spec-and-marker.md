@@ -30,9 +30,12 @@
 策略」。动手前先盘了现状，实际缺口有三层：
 
 1. **更新层被复制了 10 份**。`useOverlayResource` 已经把 create / mount / unmount / rebuild / child scope
-   收在一处，但**字段 watcher** 仍在每个组件里手写：11 个覆盖物组件里共 74 个 `watch`
-   （BMarker 9 个、BCircle 11 个、BPolygon 10 个…），而且「哪个属性是构造期属性」这个判断也散在
-   组件里——BMarker 迁移前甚至会去探测 raw SDK 有没有 `setIcon`（G4 的边界规则不允许）。
+   收在一处，但**字段 watcher** 仍在每个组件里手写：`src/components/overlays` 下 12 个 SFC 共
+   **83 处 `watch(`**（BMarker 9、BCircle 11、BPolygon 10、BPolyline 8、BPrism 8、BBezierCurve 8、
+   BMarker3d 7、BLabel 6、BGroundOverlay 5、BInfoWindow 5、BContextMenu 3、BMapMask 3），
+   而且「哪个属性是构造期属性」这个判断也散在组件里——#21 之前 BMarker 甚至会去探测 raw SDK
+   有没有 `setIcon`（raw SDK 边界规则不允许；#21 改为向 Driver 的 `updatePolicy()` 要分类，
+   但分类仍然在每个组件的 watcher 里各自消费）。
 2. **`useSdkResource` 是死代码**。它是 #21 留下的「统一资源生命周期」，有完整测试、有公共导出，
    但**没有任何生产消费者**；同时 `useOverlayResource` 又把它该做的事做了一遍。
 3. **两处基座是摆设**：
@@ -52,7 +55,12 @@
 扩展点按需添加（需要自定义挂载方式的组件见已知限制 5）。
 `useOverlaySpec`（`core/composables/useOverlaySpec.ts`）把它翻译成一个 `SdkResourceSpec`
 交给 **`useSdkResource`** 执行——创建、挂载、实例 child scope、`replace()`（重建）、卸载与
-幂等 dispose 都由后者提供（`useSdkResource` 因此获得了第一个生产消费者，缺口 2 消解）。
+幂等 dispose 都由后者提供（`useSdkResource` 因此获得了第一个生产消费者，缺口 2 消解；
+`useSdkResource` 自身**不需要改**：它的契约本来就覆盖 create/mount/unmount，缺的是消费者）。
+
+`useOverlaySpec` 的返回值只有**观察面**（`resource` / `status` / `error` / `position`）：
+声明式的消费者不需要 `replace()` / `applyOptions()` / `whenReady()` 这类命令与等待入口——
+重建由 `recreate` 分类触发、字段下发由声明出的 watcher 入队、就绪与否读 `status` 即可。
 
 字段的策略取值与它们对描述符的要求：
 
@@ -71,7 +79,7 @@
 **分类的事实源仍然是描述符**：声明是**意图**，真正决定「就地更新还是重建」的是
 `driver.overlays.updatePolicy()`（即 `OVERLAY_DESCRIPTORS`）。组件**不得**探测 raw SDK 成员形状。
 
-### 2. 更新走「按键合并的待办队列」，语义与 `useOverlayResource` 完全一致
+### 2. 更新走「按键合并的待办队列」，语义与 `useOverlayResource` 对齐（差异见已知限制 2）
 
 `useOverlayResource` 的队列语义（PR #61 三轮评审的收敛点）原样搬到本层：
 
@@ -131,7 +139,9 @@ Rectangle 与事件）重叠——**留给 #31**，本 ADR 记为已知限制。
 - **内置图标表移到 `core/icons/markerIcon.ts`**（单一事实源）。此前 Driver 一份（7 个名字 +
   `start`/`end` 的 data URL 覆盖）、`useBMapMarkerIcons` 一份（27 个名字），而 `BMarkerProps.icon`
   的类型认的是 **27 个**名字 ⇒ 另外 20 个名字（`red1`~`red10` / `blue1`~`blue10`）会静默渲染成
-  `simple_red` 的格子。现在两侧读同一份数据，并补了一条「每个内置名都落在自己的格子上」的检查。
+  `simple_red` 的格子。现在两侧读同一份数据，并补了检查：27 个名字**全部**解析到雪碧图上的位置，
+  其中 `red5` 之类的名字必须落在自己的格子上（不再等于 `simple_red`）。两处**刻意**的例外写在检查
+  旁边：`location` 与 `loc_red` 本来就是同一格（历史别名），`start` / `end` 走内联 SVG（见下）。
   `start` / `end` 的 data URL 覆盖**保留**（`<BMarker icon="start">` 的观感依赖它），与
   `useBMapMarkerIcons` 的雪碧图版本刻意不同——该差异早于本次改动，本 ADR 只收敛数据来源。
 - **LRU 缓存接到 `buildIcon` 上**（每个 Driver 一份，即每张地图一份）：键是 descriptor 的全字段，
@@ -141,12 +151,21 @@ Rectangle 与事件）重叠——**留给 #31**，本 ADR 记为已知限制。
   icon 之后 Marker 并不会同步刷新，必须重新 `setIcon(icon)`」。共享一个 Icon 实例因此是安全的
   （官方示例也共享）；一旦我们原地改它，所有共享它的 Marker 都会跟着变。
   **换图标 = 换 descriptor = 换缓存条目**，更新路径永远是 `setIcon(新的/缓存里的 Icon)`。
-- **`BMap.Icons` 不使用**。issue 原文写的是「`BMap.Icons` adapter」，但该成员在本引擎没有声明的
-  运行时入口：`@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/` 里只有 `Icon.d.ts` / `IconOptions.d.ts`
-  与 `IconSequence.d.ts`，`index.d.ts` 的三斜线引用里也没有 `Icons`；官方 JSAPI 4.0 API 参考里
-  `BMap.Icon` 有独立页面、没有 `Icons`。按 official-first 规则（上游没有的能力不得靠就地
-  augmentation 或结构性探测「补齐」），这里实现的是**官方声明的等价面** `BMap.Icon`，
-  adapter 的职责收窄成「领域 descriptor → `BMap.Icon` 构造参数」。
+- **`BMap.Icons` 不使用（本 issue 的「`BMap.Icons` adapter」按此口径交付）**。
+  issue 原文写的是「图标 descriptor、LRU cache 和 `BMap.Icons` adapter」。事实核对如下：
+
+  | 来源 | 结论 |
+  | --- | --- |
+  | `@baidumap/jsapi-v4-types@4.0.4` | `overlay/` 里只有 `Icon.d.ts` / `IconOptions.d.ts` / `IconSequence.d.ts`，`index.d.ts` 的三斜线引用里**没有** `Icons` ⇒ 无声明 |
+  | 官方 JSAPI 4.0 API 参考 | `BMap.Icon` 有独立页面，**没有** `Icons` 章节 ⇒ 无官方参考 |
+  | 本库的真实 AK smoke | [ADR 2026-09-11](./2026-09-11-jsapi-v4-overlay-facet.md)「smoke 顺带确认的运行时事实」记录了 `BMap.Icons`（26 个语义图标 + `createIcon`）在 4.0 运行时**存在**，并把「内置图标表切到官方 `Icons`」列为**后续议题** |
+
+  ⇒ 它是「运行时存在、但两处都没有声明」的成员。`AGENTS.md` 的 official-first 一节对这类成员给的
+  处置是「要么不用它（改用两处都声明的等价 API），要么显式告警」——因此本 PR **不**碰 `Icons`，
+  adapter 落在两处都声明的 `BMap.Icon` 上（职责收窄成「领域 descriptor → `BMap.Icon` 构造参数」），
+  并**沿用 2026-09-11 的排期**：把内置图标从 canvas 雪碧图切到官方语义图标是后续票的事，
+  届时按 `Marker3D` / `MapMask` 的先例走结构性探测（`requireRuntimeCtor`）+ 缺失即显式失败。
+  本条在 PR 的验收对照表里标为「⚠️ 部分满足（改用等价 API）」，不写成已实现。
 
 ### 6. 与官方参考实现 `huiyan-fe/react-bmap@2.0.2` 的对照
 
@@ -197,10 +216,19 @@ Driver 侧的图标改动（表格收敛 + 缓存）与 `OverlayRegistry` 的记
 2. **其余 10 个覆盖物仍是命令式 watcher**（`useOverlayResource`），`OverlaySpec` 目前只有
    Marker 一个消费者。批量迁移按 issue #30 的「风险与回滚」留给 **#31 / #33**；
    在迁移完成前 **`useOverlayResource` 与 `useOverlaySpec` 会并存**——这是有意的过渡态，
-   不是遗漏（两层的队列语义一致，迁移是机械替换）。
-3. **图标缓存按 Driver 实例**（每张地图一份）。同一个页面上的两张地图不会共享 Icon 实例：
-   `BMap.Icon` 是纯值对象、跨地图共享本来是安全的，但那样会把缓存变成模块级可变状态
-   （本库一贯避免），收益也有限（同款图标的 Marker 通常在同一张地图上）。
+   不是遗漏。**「更新层只剩一份实现」因此是本条限制的收口条件，而不是本 PR 的既成事实**
+   （PR 的验收对照表里对应那条标「部分满足」）。
+
+   两层的队列语义逐条对齐（合并成批、先重建再就地、排空期间新值并入、后到者胜），
+   只有**一处刻意差异**：`useOverlayResource.applyOptions()` 在 `readyCtx` 还没就绪时**直接丢弃**
+   这次更新（依赖 `create` 读当前 props 兜住），而本层会把它留在待办里。本层这样选是因为
+   「留队列 + create 读当前 props」在两种情况下都安全，而且**不会再出现第三种路径**：
+   队列里的值永远是该键的最新值（同键后写覆盖先写），`create` 也永远读当前 props。
+3. **图标缓存按 Driver（= Client / SDK 域）一份**，不是按地图：一个 `<BMapProvider>` 下渲染两张
+   `<BMap>` 时，两张图**共用同一个缓存与同一批 Icon 实例**（跨地图共享 `BMap.Icon` 是安全的——
+   它是纯值对象、不属于任何一张地图，而且我们从不就地修改缓存里的实例）。刻意**没有**做成
+   模块级（进程级）缓存：那会让「换 AK / 换 Provider」的新 Client 复用上一份域的 Icon，并引入
+   本库一贯避免的模块级可变状态与跨测试污染。
 4. **`dragend` 缺坐标时按归一化契约补 `{lng:0,lat:0}`**（`normalize/events.ts` 的既有口径，
    `POINTER_EVENT_NAMES` 包含 `dragend`）。组件侧读的是归一化后的 `point`，因此**不会**跳过，
    而是把 Marker 放到 (0,0)。上游声明 `point` 必填，该分支在真实 SDK 上不可达；真出现时应当
@@ -218,7 +246,9 @@ Driver 侧的图标改动（表格收敛 + 缓存）与 `OverlayRegistry` 的记
 | 声明面覆盖与描述符一致 | `tests/behavior/v3-overlay-spec.test.ts`（3 条） |
 | 初始状态 / mutable / recreate / drag-end / Target+Registry / 100 次重建 | 同上（12 条） |
 | 图标缓存命中与上限、内置名解析 | `tests/behavior/v3-marker-icon-cache.test.ts`（5 条） |
-| 内置名清单与 `MarkerIconName` 双向一致 | `packages/baidu-map-gl-vue/src/core/icons/markerIcon.test.ts` |
+| 内置名清单（27 个）+ `red5` 落在自己格子上 | `packages/baidu-map-gl-vue/src/core/icons/markerIcon.test.ts` |
+| 公开类型 `MarkerIconName` 的取值域（类型层门禁；**测试文件不在任何编译门禁里**，因此落在 fixture） | `fixtures/v3-consumer/src/index.ts` 的 `@ts-expect-error`，由 `verify:package` 的 vue-tsc 跑 |
+| 加载窗口内改 props 不丢、等值内联对象不产生多余命令 | `tests/behavior/v3-overlay-spec.test.ts`（`SDK 就绪之前改的 props 不丢` / `重复渲染传内容相同的内联对象`） |
 | 注册表的显式释放 / scope 释放 / 不堆积 | `packages/baidu-map-gl-vue/src/core/overlays/OverlayRegistry.test.ts` |
 | `stableKeyOf` 的稳定性与循环引用 | `packages/baidu-map-gl-vue/src/core/utils/stableKey.test.ts` |
 | 既有覆盖物行为不回归 | `v3-bmarker-update` / `v3-overlay-update-policy` / `v3-bcontextmenu` / `v4-components-lifecycle` |
@@ -235,7 +265,7 @@ Driver 侧的图标改动（表格收敛 + 缓存）与 `OverlayRegistry` 的记
 ## 参考
 
 - issue #30（`M5-SPEC-MARKER`）、追踪 issue #12「M5 / Overlay」泳道
-- [ADR 2026-09-11 v4 Overlay Facet](./2026-09-11-jsapi-v4-overlay-facet.md)（`OVERLAY_DESCRIPTORS` 与属性分类）
+- [ADR 2026-09-11 v4 Overlay Facet](./2026-09-11-jsapi-v4-overlay-facet.md)（`OVERLAY_DESCRIPTORS` 与属性分类；以及「`BMap.Icons` 在运行时存在、属后续议题」的真实 AK smoke 记录）
 - [ADR 2026-09-14 视野受控模型](./2026-09-14-map-controlled-state.md)（回环抑制的口径）
 - [ADR 2026-09-14 服务生命周期](./2026-09-14-service-lifecycle-and-local-search.md)（状态口径与资源释放）
 - 官方：JSAPI 4.0 API 参考 `BMap.Icon` / `BMap.Marker`；官方指南「设置点标记样式」；

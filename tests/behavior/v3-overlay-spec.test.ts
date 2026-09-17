@@ -168,6 +168,11 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
     // 正证守卫：描述符里确实有这两个分类，否则上面的断言可能只是「什么都没检查」
     expect(overlayPropertySpec("marker", "icon")?.policy).toBe("mutable");
     expect(overlayPropertySpec("marker", "enableClicking")?.policy).toBe("recreate");
+    // 归一化方式也是契约的一部分（`position` 必须按点投影、`icon` 必须走 buildIcon，
+    // 否则组件传下去的值会以错误的形状进 SDK）
+    expect(overlayPropertySpec("marker", "position")?.value).toBe("point");
+    expect(overlayPropertySpec("marker", "icon")?.value).toBe("icon");
+    expect(overlayPropertySpec("marker", "offset")?.value).toBe("size");
   });
 
   it("声明自相矛盾时构造期自检抛错（自检不是空转）", () => {
@@ -231,6 +236,9 @@ describe("初始状态（构造期属性一次到位）", () => {
     expect(marker.title).toBe("天安门");
     expect(marker.offset).not.toBeNull();
     expect(marker.icon).not.toBeNull();
+    // `enableClicking` 只有构造期入口（描述符里的 `recreate`），实例上读不到对应状态 ——
+    // 读夹具的构造选项账本，确认它确实在**创建时**就交给了 SDK，而不是等 watcher 补
+    expect(marker.options).toMatchObject({ enableClicking: false });
 
     // 转为可见：这次才挂到地图（此前 show() 会作用在一个没挂载的实例上，等于永远不显示）
     visible.value = true;
@@ -258,6 +266,86 @@ describe("初始状态（构造期属性一次到位）", () => {
     expect(currentMarker().rotation).toBeNull();
     wrapper.unmount();
     await settle();
+  });
+
+  it("SDK 就绪之前改的 props 不丢（await 之后按当前 props 建实例）", async () => {
+    const icon = ref<BMarkerProps["icon"]>({ imageUrl: "https://example.com/a.png", size: { width: 10, height: 10 } });
+    const title = ref("before-ready");
+    const wrapper = mount(
+      defineComponent({
+        components: { BMap, BMarker },
+        setup() {
+          return () =>
+            h(BMap, { provider: harness.deferredProvider() }, () => [
+              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value, title: title.value }),
+            ]);
+        },
+      }),
+      { attachTo: harness.container() },
+    );
+    await settle();
+    // 供应商还没放行：实例尚未创建
+    expect(fake.createdOverlays.length).toBe(0);
+
+    icon.value = { imageUrl: "https://example.com/late.png", size: { width: 12, height: 12 } };
+    title.value = "after-ready";
+    await settle();
+
+    harness.releaseProvider();
+    await settle();
+    await settle();
+
+    // 加载窗口里到达的值必须在**创建时**就生效（队列与 create 共用同一份 props）
+    const marker = currentMarker();
+    expect(marker.title).toBe("after-ready");
+    expect((marker.icon as { imageUrl?: string } | null)?.imageUrl).toBe(
+      "https://example.com/late.png",
+    );
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("加载期间改 props");
+  });
+
+  it("重复渲染传内容相同的内联对象：不产生多余的 SDK 命令", async () => {
+    const tick = ref(0);
+    const wrapper = mount(
+      defineComponent({
+        components: { BMap, BMarker },
+        setup() {
+          return () =>
+            h(BMap, { provider: harness.provider() }, () => [
+              h(BMarker, {
+                // 每次渲染都是**新的对象字面量**，内容相同
+                position: { lng: 116.4, lat: 39.9 },
+                offset: { x: 1, y: 2 },
+                icon: { imageUrl: "https://example.com/a.png", size: { width: 10, height: 10 } },
+                key: undefined,
+                "data-tick": tick.value,
+              } as unknown as BMarkerProps),
+            ]);
+        },
+      }),
+      { attachTo: harness.container() },
+    );
+    await settle();
+
+    const marker = currentMarker();
+    const constructed = fake.createdOverlays.length;
+    marker.callLog.length = 0;
+
+    // 触发 3 次父级重渲染（只是把 data-tick 改掉）
+    for (let i = 1; i <= 3; i++) {
+      tick.value = i;
+      await settle();
+    }
+
+    expect(fake.createdOverlays.length).toBe(constructed);
+    expect(marker.callLog).toEqual([]);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("等值内联对象");
   });
 });
 

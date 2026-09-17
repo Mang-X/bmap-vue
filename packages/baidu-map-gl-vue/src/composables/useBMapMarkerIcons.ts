@@ -17,10 +17,7 @@ import { useOptionalClientContext } from "../core/context/client";
 import {
   BUILTIN_MARKER_ICON_NAMES,
   builtinMarkerIconDescriptor,
-  type BuiltinMarkerIconName,
 } from "../core/icons/markerIcon";
-
-export type MarkerIconName = BuiltinMarkerIconName;
 
 /**
  * 构建内置图标集合。

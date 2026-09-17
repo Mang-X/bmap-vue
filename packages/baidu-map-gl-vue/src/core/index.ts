@@ -140,7 +140,6 @@ export {
   resolveMarkerIconDescriptor,
 } from "./icons/markerIcon";
 export type { BuiltinMarkerIconName, MarkerIconInputLike } from "./icons/markerIcon";
-export { stableKeyOf } from "./utils/stableKey";
 export { DataLayerManager } from "./data/DataLayerManager";
 export type { DataLayerHost, DataLayerOptions } from "./data/DataLayerManager";
 export { createOverlayRegistry } from "./overlays/OverlayRegistry";

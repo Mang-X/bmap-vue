@@ -100,8 +100,8 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 - `visible=false` 时，Marker 创建后**不会**先添加到地图再等待 watcher，而是从创建开始就不挂载；
   之后切到 `true` 时才真正 `addOverlay`（此前实现会在未挂载的实例上调用 `show()`，等于永远不显示）。
 - `icon` 走「descriptor → 有界 LRU 缓存 → `setIcon`」：**相同图标配置只构造一次 `BMap.Icon`**
-  （缓存上限 200 条，每个地图一份），更新时始终重新 `setIcon` ——官方指南明确「直接改 Icon 的属性
-  之后 Marker 不会同步刷新」。
+  （缓存上限 200 条；作用域是同一个 Client / `<BMapProvider>`，因此它下面的多张地图共用），
+  更新时始终重新 `setIcon` ——官方指南明确「直接改 Icon 的属性之后 Marker 不会同步刷新」。
 - 组件的每次重建都会释放旧实例的 child scope（SDK 监听、Registry 记录一并归零），因此反复重建
   不会累积资源。
 - 组件挂到地图上时会登记进该地图的覆盖物注册表（`MapContext.overlays`），可按类型清点当前存活的

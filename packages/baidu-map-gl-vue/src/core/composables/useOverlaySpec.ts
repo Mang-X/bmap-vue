@@ -69,17 +69,20 @@ export interface UseOverlaySpecOptions {
   emit?: (name: string, payload: unknown) => void;
 }
 
+/**
+ * 读到的**只有观察面**：实例句柄、状态、错误与位置模型。
+ *
+ * 刻意**不**暴露 `replace()` / `applyOptions()` / `whenReady()` 这类命令与等待入口：声明式的消费者
+ * （组件只声明 `fields`）全部不需要它们——重建由 `recreate` 分类触发、字段下发由 watcher 入队、
+ * 就绪与否读 `status` 即可。等真有命令式消费者时再加（与 `OverlaySpec` 不加 `add`/`remove` 同一口径，
+ * 见 ADR 已知限制 5）。
+ */
 export interface UseOverlaySpecResult<Resource> {
   readonly resource: Readonly<ShallowRef<Resource | null>>;
   readonly status: Readonly<ShallowRef<SdkResourceStatus>>;
   readonly error: Readonly<ShallowRef<BMapError | null>>;
   /** 位置模型（仅当 `spec.fields` 里声明了 `"position"` 策略字段时存在）。 */
   readonly position: OverlayPositionModel | null;
-  /** 用当前 props 重建实例（构造期属性变化由队列自动触发；显式入口留给命令方）。 */
-  replace: () => Promise<void>;
-  /** 按属性分类应用一组更新（与组件 watcher 共用同一条排队路径）。 */
-  applyOptions: (options: Record<string, unknown>) => Promise<void>;
-  whenReady: () => Promise<Resource>;
 }
 
 /** 领域点 → 防御性拷贝（两条方向都不与调用方共享引用）。 */
@@ -386,8 +389,5 @@ export function useOverlaySpec<Props extends object, Resource>(
     status: sdk.status,
     error: sdk.error,
     position: positionModel,
-    replace: sdk.replace,
-    applyOptions: enqueue,
-    whenReady: sdk.whenReady,
   };
 }

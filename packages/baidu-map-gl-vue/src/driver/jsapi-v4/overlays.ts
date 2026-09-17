@@ -90,8 +90,11 @@ export function createJsapiV4OverlayDriver(
   const namespace: JsapiV4Namespace = assertJsapiV4Namespace(rawSdk);
 
   /**
-   * `Marker.icon` 的**有界缓存**（M5-SPEC-MARKER / issue #30），每个 Driver 一份
-   * （即每张地图一份，不跨地图共享）。
+   * `Marker.icon` 的**有界缓存**（M5-SPEC-MARKER / issue #30）。
+   *
+   * 作用域是 **Driver（= Client / SDK 域）**，不是单个实例：`createJsapiV4Driver` 每次装
+   * Client 时创建一份，因此**同一个 Client 下的多张地图共用同一个缓存**（`<BMapProvider>` 下
+   * 渲染两个 `<BMap>` 就是这种情况），换一个 Client（换 AK / 换 Provider）就是另一份。
    *
    * - **descriptor 归一化**由 `core/icons/markerIcon` 负责（内置名 / 自定义描述的单一事实源），
    *   这里只做「descriptor → `BMap.Icon` 构造参数」——raw SDK 构造必须留在边界内；
@@ -101,7 +104,8 @@ export function createJsapiV4OverlayDriver(
    *   （带时间戳 / 宽度参数的 CDN 地址），键空间就是无界的；
    * - 缓存里的 Icon **只读、从不就地修改**：官方文档明确「直接调 `setImageUrl` / `setSize` 改 icon
    *   之后 Marker 不会同步刷新，必须重新 `setIcon(icon)`」。共享实例因此安全（官方示例也共享）；
-   *   一旦我们原地改它，所有共享它的 Marker 都会跟着变。**换图标 = 换 descriptor = 换缓存条目。**
+   *   一旦我们原地改它，所有共享它的 Marker 都会跟着变；跨地图共享同理（Icon 是纯值对象，
+   *   不属于任何一张地图）。**换图标 = 换 descriptor = 换缓存条目。**
    */
   const iconCache: IconCache<unknown> = createLruIconCache<unknown>(DEFAULT_ICON_CACHE_SIZE);
 

@@ -8,19 +8,17 @@ import {
   resolveMarkerIconDescriptor,
 } from "./markerIcon";
 import { iconCacheKey } from "./iconCache";
-import type { MarkerIconName } from "../../types/components";
 
 describe("内置图标名清单", () => {
-  it("与公开类型 MarkerIconName 完全一致（双向，不是单向可赋值）", () => {
-    // 类型层：把差集显式取出来并要求它是 never —— 上游/本库任一侧改了名字都会编译失败
-    type BuiltinOnly = Exclude<MarkerIconName, (typeof BUILTIN_MARKER_ICON_NAMES)[number]>;
-    type DeclaredOnly = Exclude<(typeof BUILTIN_MARKER_ICON_NAMES)[number], MarkerIconName>;
-    const noBuiltinOnly: BuiltinOnly[] = [];
-    const noDeclaredOnly: DeclaredOnly[] = [];
-    expect(noBuiltinOnly).toEqual([]);
-    expect(noDeclaredOnly).toEqual([]);
-
-    // 运行期：逐项点名（类型层断言不参与运行时，改名后仍要有一条会红的检查）
+  it("清单就是公开类型 MarkerIconName 的取值域（逐项点名）", () => {
+    // 「清单 == 公开类型」的**类型层**门禁不在这里：`src/**/*.test.ts` 被
+    // `tsconfig.build.json` 排除，任何写在测试文件里的类型断言都**不在门禁的编译范围**里
+    // （写了也是空转）。真正的门禁有两条，都在会被编译的地方：
+    //   - `types/components.ts` 的 `MarkerIconName` **派生自** `BuiltinMarkerIconName`
+    //     （结构上不可能再出现第二份名单）；
+    //   - `fixtures/v3-consumer/src/index.ts` 用 `@ts-expect-error` 锁「未知名字编译失败」
+    //     （由 `verify-package` 的 vue-tsc 跑，CI 有）。
+    // 这里只做运行期能做的事：把 27 个名字逐个点名，避免「表里悄悄改名 / 增删」没有读数。
     expect([...BUILTIN_MARKER_ICON_NAMES].sort()).toEqual(
       [
         "simple_red", "simple_blue", "loc_red", "loc_blue", "start", "end", "location",
