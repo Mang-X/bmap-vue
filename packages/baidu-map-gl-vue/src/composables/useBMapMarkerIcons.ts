@@ -11,6 +11,10 @@
  * 这里刻意用**雪碧图**版本的 descriptor（`builtinMarkerIconDescriptor`）：这套图标的语义是
  * 「同一张雪碧图上的位置集合」，因此 `start` / `end` 与 `<BMarker icon="start">`（走内联 SVG）
  * 可以不同——该差异在迁移前就存在，本次只收敛数据来源，不改变观感。
+ *
+ * **返回的每个 Icon 都是独立新建的**：本 hook 走的是**公共** `buildIcon`，而公共路径不共享
+ * 有界 LRU 缓存持有的实例（该缓存只服务 Marker 的构造 / `setIcon`）——调用方可以安全地持有或
+ * 修改拿到的对象，不会影响别处或后续调用（外部评审 P2 的隔离契约）。
  */
 import { useOptionalMapContext } from "../core/context/inject";
 import { useOptionalClientContext } from "../core/context/client";
@@ -34,7 +38,8 @@ export type MarkerIconName = BuiltinMarkerIconName;
 /**
  * 构建内置图标集合。
  * @param client BMapClient(经 map context ready 获取)
- * @returns 名称 → Icon 实例（同一 descriptor 会命中 Driver 的图标缓存，重复调用不重复构造）
+ * @returns 名称 → Icon 实例；**每个实例都是独立新建的**（公共 `buildIcon` 不共享缓存对象），
+ *          调用方可以安全地持有 / 修改，重复调用返回的是新实例
  */
 export function useBMapMarkerIcons(
   client?: import("../client/types").BMapClient,
