@@ -318,6 +318,15 @@ export class FakeV4TileLayer extends FakeV4Layer {
 export class FakeV4TrafficLayer extends FakeV4TileLayer {
   colors: string[] | null = null
   edge: boolean | null = null
+  /**
+   * 测试故障注入：让**下一次** `setEdge` 抛错（用后即清）。
+   *
+   * 建模的是「Driver 的 `setOptions` **不是事务**」这条形状：官方对 `TrafficLayer` 只给了
+   * 两个字段级 setter，调用方传一个袋子时 Driver 只能**逐 setter** 调用，于是「`setColors`
+   * 已经写进 SDK、`setEdge` 抛错」是真实可达的**部分成功**。调用方若把这批键当成原子的
+   * 「要么全成功、要么全没发生」，第一个键就会在账本上凭空消失（第四轮评审发现 2）。
+   */
+  failNextSetEdge: Error | null = null
 
   setColors(colors: string[]): void {
     this.callLog.push('setColors')
@@ -326,6 +335,12 @@ export class FakeV4TrafficLayer extends FakeV4TileLayer {
 
   setEdge(value: boolean): void {
     this.callLog.push('setEdge')
+    if (this.failNextSetEdge) {
+      const error = this.failNextSetEdge
+      this.failNextSetEdge = null
+      // 刻意**在写入之前**抛出：这一次 `setEdge` 没生效，但同批的 `setColors` 已经生效了。
+      throw error
+    }
     this.edge = value
   }
 }
@@ -500,6 +515,16 @@ export class FakeV4DOMLayer extends FakeV4Layer {
    * 少了它，一次失败的整袋更新会被记成已完成，后续同值更新被指纹跳过、永不重试。
    */
   failNextSetStyleOptions: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `setStyleOptions` **先真的写进去、再抛错**（用后即清）。
+   *
+   * 与 `failNextSetStyleOptions`（写之前抛）对偶，形状同 `FakeV4Map.failNextAddLayerAfterAttach`。
+   * 它建模的是内核**无法区分**的那一类：调用方收到异常，但 SDK 侧的状态**已经变了**。这正是
+   * 「移除检测必须用『尝试过写入』的账本、不能用『成功写入过』的账本」这条不变式的用武之地——
+   * 按成功记账的话，这个已经生效的 `minZoom` 在账本上不存在，之后把它置回未表态就不会重建，
+   * SDK 永久保留旧值（第四轮评审发现 2）。
+   */
+  failNextSetStyleOptionsAfterApply: Error | null = null
   readonly createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement
   /** 每次 `setStyleOptions` 收到的袋子（顺序即调用顺序）。 */
   readonly appliedStyleBags: Record<string, unknown>[] = []
@@ -562,6 +587,11 @@ export class FakeV4DOMLayer extends FakeV4Layer {
     }
     this.appliedStyleBags.push({ ...options })
     this.options = { ...this.options, ...options }
+    if (this.failNextSetStyleOptionsAfterApply) {
+      const error = this.failNextSetStyleOptionsAfterApply
+      this.failNextSetStyleOptionsAfterApply = null
+      throw error
+    }
   }
 
   removeAllOverlays(): void {

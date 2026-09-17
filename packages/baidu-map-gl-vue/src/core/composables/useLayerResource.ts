@@ -118,12 +118,22 @@ interface InstanceState {
   /** 已就地写入的可选 option 指纹（取值不变时不重复写 SDK）。 */
   appliedMutableKey: string;
   /**
-   * **已经写入过 SDK** 的可选 option 键。
+   * 「**可能**已写入」的统一槽位：**尝试过**写入，不论成功。
    *
-   * 只在写成功后更新：未挂载时不写也不记账（否则「挂载期间设的值」会被记成已应用，
-   * 切回可见时那次写入就永久丢失）。它的另一个用途是判断「键从有值变回未表态」。
+   * 只有一个用途：判断「之前有值 → 现在变回未表态」时是否必须重建。它刻意与
+   * `appliedSlots`（去重指纹，只在成功后推进）分开——两者的判据**必须**不同：
+   *
+   * - 去重：只认「成功写入过」的指纹，否则一次失败会被记成已完成、同值更新永久不再重试；
+   * - 移除检测：认「尝试写入过」。SDK 允许在抛错**之前**已经产生副作用（与 `mountAttempted`
+   *   同一条理由），按「成功过」判断会让一次**部分成功**的写入变成永久分叉：`setOptions`
+   *   逐 setter 调用时第一个键已经写进 SDK，第二个键抛错，于是这个键在账本上「从没写过」，
+   *   之后它变回未表态就不会重建，SDK 永久保留旧值（第四轮评审发现 2）。
+   *
+   * 单调集合：只增不减（「曾经尝试过」这个事实不会过期）。
    */
-  appliedMutableKeys: Set<string>;
+  possiblyAppliedSlots: Set<LayerCtorSlot>;
+  /** 同上，用于可选 option 的键。 */
+  possiblyAppliedOptions: Set<string>;
 }
 
 /** 槽位值的指纹：`undefined` 不写也不记账，`null` 单独记（它是「清空」而不是「没表态」）。 */
@@ -220,9 +230,13 @@ export function useLayerResource<Props>(
       tearDownData(state, context);
     }
     if (!state.mountAttempted) return;
+    // 记账在**摘除成功返回之后**才复位。`removeLayer` 与 `addLayer` 一样允许「副作用还没完成就
+    // 抛错」（那时图层仍在图上），先复位的话 `mountAttempted` 就变成「从未挂过」，后续的永久销毁
+    // （组件卸载 / 重建 / Map 销毁）会在门口 return 而**不再重试** —— SDK 上留下一个再也没人认领
+    // 的图层。保留记账 = 保留「仍需 best-effort 摘除」的所有权。
+    context.client.driver.layers.remove(target(context), state.handle);
     state.mounted = false;
     state.mountAttempted = false;
-    context.client.driver.layers.remove(target(context), state.handle);
   };
 
   /** 挂上 / 摘掉：图层的显隐口径。 */
@@ -230,14 +244,22 @@ export function useLayerResource<Props>(
     const layers = context.client.driver.layers;
     const shouldMount = state.spec.visible !== false;
     if (shouldMount) {
+      // `mounted` 为真有两种含义，这里都该 early return：真的还挂着；或者上一次摘除失败了、
+      // 我们还**不能**认为它下去了（重复 add 会让同一个实例在图上出现两份）。
       if (state.mounted) return;
       state.mountAttempted = true;
       try {
         layers.add(target(context), state.handle);
       } catch (error) {
-        // 「副作用可能已经产生」⇒ best-effort 摘一次，再把原错误抛出去（`unmount` 同时复位
-        // 记账，因此失败之后仍然可以重试挂载）
-        unmount(state, context);
+        // 「副作用可能已经产生」⇒ best-effort 摘一次，再把**原错误**抛出去：`addLayer` 为什么没
+        // 挂上，比「补偿摘除也失败了」更值得让调用方看见。补偿自身失败不静默——`mountAttempted`
+        // 会保留为 true，因此 `create()` 的 catch 里那次 `record.dispose()` 会经永久销毁路径再试
+        // 一次，失败时由 `LayerRegistry` 留下 `logger.warn`。
+        try {
+          unmount(state, context);
+        } catch {
+          /* 有意吞掉：原错误在下一行抛出，补偿失败的兜底见上 */
+        }
         throw error;
       }
       state.mounted = true;
@@ -291,6 +313,8 @@ export function useLayerResource<Props>(
       if (state.appliedSlots.get(slot) === fingerprint) continue;
 
       if (slot === "zIndex" && layers.supports(kind, "setZIndex")) {
+        // 「尝试过」先记：这一笔的意义是「SDK 可能已经改了」——它抛错也可能发生在改变之后。
+        state.possiblyAppliedSlots.add(slot);
         layers.setZIndex(state.handle, value as number);
         state.appliedSlots.set(slot, fingerprint);
         continue;
@@ -303,8 +327,12 @@ export function useLayerResource<Props>(
     }
 
     if (Object.keys(optionBag).length > 0) {
-      // 顺序要紧：**先调用、成功之后再提交记账**。反过来的话，一次失败的整袋更新会被记成已完成，
-      // 之后同值更新被指纹跳过、永久不再重试（声明与 SDK 状态静默分叉）。
+      // 顺序要紧：**先记「尝试过」、再调用、成功之后再提交去重指纹**。
+      // - 「尝试过」先记：整袋 setter 内部同样可能逐键生效（Driver 按 `bagSetters` / `mutable`
+      //   分类后可能拆成多次调用），第一个键写成功、第二个键抛错时，前一个键已经真的改了 SDK；
+      // - 去重指纹最后记：反过来的话，一次失败的整袋更新会被记成已完成，之后同值更新被指纹跳过、
+      //   永久不再重试（声明与 SDK 状态静默分叉）。
+      for (const [slot] of pendingBagSlots) state.possiblyAppliedSlots.add(slot);
       layers.setOptions(state.handle, optionBag);
       for (const [slot, fingerprint] of pendingBagSlots) state.appliedSlots.set(slot, fingerprint);
     }
@@ -313,9 +341,9 @@ export function useLayerResource<Props>(
   /**
    * 就地写入「可选 option」（`colors` / `edge` 这类有 setter 的构造项）。
    *
-   * 返回 `true` 表示**调用方必须重建**：某个**已经写入过**的键从有值变回未表态时，SDK 这批
-   * 图层没有 unset 入口，本库也不猜默认值 ⇒ 唯一能回到「SDK 自己的默认状态」的办法是换一个
-   * 新实例（构造期不传它）。不重建的话，声明（不表态）与 SDK 实际状态会永久不一致。
+   * 只是写入，**不负责判断「要不要重建」**：那个判定已经前置到 `detectRemovedState()`（见该函数
+   * 与 watch 路径的顺序说明）。这里唯一的记账是「去重指纹」与「可能已写入」两组，含义见
+   * `InstanceState`。
    */
   const syncMutableOptions = (state: InstanceState, context: MapReadyContext): void => {
     const mutable = layerMutableOptions(state.spec, probeOf(context));
@@ -327,24 +355,30 @@ export function useLayerResource<Props>(
     // 未挂载时**不写、也不记账**：切回可见时这里会被再调一次（记成「已应用」会让那次写入永久丢失）
     if (!state.mounted) return;
 
+    // 同 `syncPostMountSlots`：`setOptions` 在 Traffic 上是**逐 setter** 调用（`setColors` →
+    // `setEdge`），不是事务。因此「尝试过」必须在调用之前整批记下——否则第一个键成功、第二个键
+    // 抛错时，整批一个键都不记，之后第一个键变回未表态就不会重建（第四轮评审发现 2）。
+    for (const key of nextKeys) state.possiblyAppliedOptions.add(key);
     context.client.driver.layers.setOptions(state.handle, mutable);
     state.appliedMutableKey = fingerprint;
-    state.appliedMutableKeys = new Set(nextKeys);
   };
 
   /**
-   * **纯判定**：有没有「已经写入过、现在变回未表态」的状态（槽位 / 可变 option）。
+   * **纯判定**：有没有「已经写过 / 可能写过、现在变回未表态」的状态（槽位 / 可变 option）。
    *
    * 这是「必须重建」的判据，刻意与执行分开：一旦判定必须重建，就**不该**再执行就地写入
    * （否则一步 SDK 异常会把已经确定的收敛挡掉——第三轮评审发现 3）。`data` 例外：它有
    * `null = 清空` 的显式语义，`undefined` 表示「不表态（保持现状）」。
+   *
+   * 判据用的是「**可能**已写入」而不是「成功写入过」：详见 `possiblyAppliedSlots` 的说明——
+   * 按成功判断会让一次部分成功的写入变成永久分叉。
    */
   const detectRemovedState = (state: InstanceState, context: MapReadyContext): string[] => {
     const mutable = layerMutableOptions(state.spec, probeOf(context));
-    const removedSlots = [...state.appliedSlots.keys()].filter(
+    const removedSlots = [...state.possiblyAppliedSlots].filter(
       (slot) => layerSlotValue(state.spec, slot) === undefined,
     );
-    const removedOptions = [...state.appliedMutableKeys].filter((key) => !(key in mutable));
+    const removedOptions = [...state.possiblyAppliedOptions].filter((key) => !(key in mutable));
     return [...removedSlots, ...removedOptions];
   };
 
@@ -401,12 +435,12 @@ export function useLayerResource<Props>(
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
           appliedData: UNAPPLIED,
-          // 刻意留空（而不是当前键集）：「已写入」只该由**成功写入**来建立，
-          // 预置成当前键集会同时带来两个错——挂载期不写却记成已应用，以及把「键消失」误判成重建。
-          appliedMutableKeys: new Set(),
-          // 同理：用「未写」哨兵而不是当前值的指纹。可就地更新的 option **不进构造选项**，
+          // 用「未写」哨兵而不是当前值的指纹：可就地更新的 option **不进构造选项**，
           // 因此挂载后的这一次写入是它们的唯一生效路径（否则初始值会被静默丢弃）。
           appliedMutableKey: NO_MUTABLE_KEY,
+          // 同为空集：这两个是「尝试过写入」的单调账本，由就地写入那几步自己填。
+          possiblyAppliedSlots: new Set(),
+          possiblyAppliedOptions: new Set(),
         };
         instance = state;
         const record = registryOf().register({
@@ -426,7 +460,8 @@ export function useLayerResource<Props>(
         // 但那时它还没有 registration；先登记能让 `remove` 兜住已经挂到图上的实例）。
         try {
           syncMounted(state, context);
-          // 新实例的 `appliedSlots` 是空的 ⇒ 不可能有「变回未表态」的槽位，返回值在这里恒为 false
+          // 挂载路径**不需要**跑 `detectRemovedState()`：它是全新实例，两个「可能已写入」的账本
+          // 都是空的，不可能存在「变回未表态」的状态（那正是 `replace()` 才要判的事）。
           syncPostMountSlots(state, context);
           syncMutableOptions(state, context);
         } catch (error) {

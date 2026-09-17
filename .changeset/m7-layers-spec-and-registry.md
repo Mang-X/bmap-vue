@@ -49,8 +49,16 @@
 - **`visible=false` 期间设置的可变 option 不会丢**：切回可见时补写一次。
 - **可变 option 与统一槽位由有值变回 `undefined` 都会重建图层**，以便回到 SDK 自己的默认值。
   例外是 `data`：`null` = 清空，`undefined` = 保持现状。
-- **永久销毁（卸载 / 重建 / Map 销毁）会先清掉数据覆盖物**再摘除图层（`clearData` →
-  `removeLayer`，即 `DOMLayer` 的 `removeAllOverlays()`）；临时摘挂（`visible=false`）**不清**，
-  切回可见时数据照旧。
+- **永久销毁（卸载 / 重建 / Map 销毁）保证最终清空 + 摘除**数据驱动图层（`clearData` →
+  `removeLayer`，即 `DOMLayer` 的 `removeAllOverlays()`）；**不承诺**所有路径都是这一个固定顺序
+  （例如 `visible=false` 先摘过一次、之后才卸载时，清空发生在第二次摘除之前）。临时摘挂
+  （`visible=false`）**不清**，切回可见时数据照旧。
+- **就地更新的记账分两本**：「去重」只认成功写入过的值；「变回未表态 ⇒ 重建」的判据认
+  **尝试过**写入的键/槽位。这样一次**部分成功**的写入（`TrafficLayer` 的 `setOptions` 是逐
+  setter 调用、不是事务）不会让已经生效的键在账本上凭空消失，从而在它被移除时漏掉重建。
+- **`removeLayer` 失败不会把「挂过」的记账一起复位**：后续的永久销毁会再试一次摘除，不会因为
+  一次摘除失败就把实例永远留在图上。`addLayer` / `removeLayer` 的补偿都保留**原错误**优先。
+- **`LayerRegistry.size` 的语义收窄**：它是「这张地图**拥有**的存活图层实例数」（含暂时隐藏 /
+  摘下的），**不是**「地图上此刻挂着几个」——`visible=false` 时 `size` 仍为 1 而 attached 为 0。
 - 就地更新失败（整袋 `setStyleOptions` 抛错等）不会被记成已写入，后续更新会自动重试；
   同一次更新里「已判定必须重建」的状态不会被另一步的就地写入异常挡住。

@@ -55,7 +55,15 @@ export interface LayerRegistry {
    * 幂等；`MapRuntime.dispose()` 在 `map.destroy()` 之前调用它。
    */
   disposeAll(): void;
-  /** 当前登记的图层数（也是「地图上应当有几个图层」的读数）。 */
+  /**
+   * 当前由这张地图**拥有**的存活图层实例数（含暂时隐藏 / 摘下的实例）。
+   *
+   * 刻意**不是**「地图上此刻挂着几个图层」（attached count）：显隐在本库统一表达为挂载状态
+   * （`visible=false` ⇒ `removeLayer`），而注册表只在**创建 / 销毁**时增删——因此
+   * `size === 1` 与「地图上一个图层都没挂」完全可能同时成立。
+   *
+   * 需要 attached count 请读 SDK 侧（或替身的 `harness.attached('layer')`）；两个口径不要混用。
+   */
   readonly size: number;
   /** 当前登记的种类（按登记顺序）：诊断与断言用。 */
   kinds(): LayerKind[];

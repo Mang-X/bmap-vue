@@ -134,6 +134,18 @@ export class FakeV4Map extends FakeV4EventTarget {
    */
   failNextAddLayerAfterAttach: Error | null = null
   /**
+   * 测试故障注入：让**下一次** `removeLayer` **在摘掉之前**抛错（用后即清）。
+   *
+   * 形状与 `failNextAddLayerAfterAttach` 对偶，但方向更危险：`addLayer` 抛错时资源是「多了」，
+   * 而 `removeLayer` 抛错时资源是「**摘不掉**」——真实 SDK 里 `removeLayer` 会访问地图与图层
+   * 管理器，抛错可能发生在真正摘除之前，于是**图层仍在图上**。调用方如果按「调用过就复位记账」
+   * 处理，之后再也没有第二次机会，SDK 上就留下孤儿。
+   *
+   * 反方向的形状（已经摘掉再抛错）刻意不建模：那样重试一次 `removeLayer` 是无害的 no-op，
+   * 不会产生可观测的差异。
+   */
+  failNextRemoveLayer: Error | null = null
+  /**
    * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
    *
    * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
@@ -269,6 +281,12 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   removeLayer(layer: FakeV4Layer): void {
     this.callLog.push('removeLayer')
+    if (this.failNextRemoveLayer) {
+      const error = this.failNextRemoveLayer
+      this.failNextRemoveLayer = null
+      // 刻意**在摘除之前**抛出：图层仍然留在 `this.layers` 上（见该字段的说明）。
+      throw error
+    }
     const index = this.layers.indexOf(layer)
     if (index >= 0) {
       this.layers.splice(index, 1)

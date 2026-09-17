@@ -1049,6 +1049,216 @@ describe("[#40] §10 评审修正：DOM 事件契约、覆盖物清理与重建�
 });
 
 /* -------------------------------------------------------------------------- */
+/* 11. 第四轮评审修正：摘除失败后的重试、就地写入的「部分成功」与注释口径            */
+/* -------------------------------------------------------------------------- */
+
+describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记账与注释口径", () => {
+  it("[四轮 1] visible=false 时 removeLayer 抛错：永久销毁必须**再试一次**摘除（不留孤儿）", async () => {
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+    expect(harness.attached("layer")).toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed");
+
+    props.value = { ...props.value, visible: false };
+    await settle();
+    expect(harness.attached("layer"), "「尚未完成移除就抛错」⇒ 图层仍在图上").toBe(1);
+    expect(errors.length, "摘除失败必须经 resource:error 交出").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    expect(
+      harness.attached("layer"),
+      "摘除失败不能把「调用过 addLayer」的记账一起复位：否则永久销毁不会再试，SDK 上留下孤儿",
+    ).toBe(0);
+    harness.assertIdle("removeLayer 失败后重试摘除");
+  });
+
+  it("[四轮 1] 反方向：摘除失败之后切回可见不得重复 addLayer（实例可能仍在图上）", async () => {
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed");
+    props.value = { ...props.value, visible: false };
+    await settle();
+    expect(harness.attached("layer")).toBe(1);
+
+    // 摘除失败 ⇒ 我们**不能**认为它已经下去了。切回可见时若再 add 一次，同一个实例会在图上
+    // 出现两份（真实 SDK 不去重）。
+    props.value = { ...props.value, visible: true };
+    await settle();
+    expect(harness.attached("layer"), "不得因为摘除失败就重复 addLayer").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("摘除失败后切回可见");
+  });
+
+  it("[四轮 1] 窄角：**永久销毁那一次**摘除也失败时，只剩可观测性（登记为已知限制，不假装无残留）", async () => {
+    // 这条钉住上一次修复的边界：重试的机会来自「还有后续的 dispose 路径」。如果**最后一次**
+    // 摘除本身失败，组件已经卸载、账本记录也已一次性作废，没有任何一侧还能再试 —— 真实 SDK 里
+    // 收口的是 `map.destroy()` 自己。此时唯一正确的承诺是「可观测」，不是「无残留」。
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mountLayerTree(() =>
+      h(BTileLayer as never, { ...LAYER_CASES[2]!.props } as never),
+    );
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed");
+    await unmountAndSettle(wrapper);
+
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("SDK 资源可能仍在图上")),
+      "最后一次摘除失败必须留下日志（否则它是静默失败）",
+    ).toBe(true);
+    // 刻意**不**断言 attached 归零，也刻意不调 `assertIdle()`：这条路径下确实留着孤儿，
+    // 假装它消失比留一个可观测的告警更糟。
+    warn.mockRestore();
+  });
+
+  it("[四轮 2] 逐 setter 的部分成功：colors 已写进 SDK、edge 抛错 ⇒ colors 变回未表态必须重建", async () => {
+    // 这条钉住「就地写入不是事务」：官方对 `TrafficLayer` 只给了两个字段级 setter，传一个袋子时
+    // Driver 只能**逐 setter** 调用，于是「第一个键生效、第二个键抛错」是真实可达的部分成功。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({});
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTrafficLayer as never, props.value));
+    await settle();
+
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        colors: string[] | null;
+        failNextSetEdge: Error | null;
+      };
+    layerOf().failNextSetEdge = new Error("setEdge failed");
+
+    // 这一次更新把两个键一起交出去：`setColors` 生效、`setEdge` 抛错
+    props.value = { colors: ["#00ff00"], edge: true };
+    await settle();
+
+    expect(layerOf().colors, "同批第一个键**真的**写进了 SDK").toEqual(["#00ff00"]);
+    expect(errors.length, "同批第二个键的失败经 resource:error 交出").toBeGreaterThan(0);
+    expect(createdSince(), "只是就地写入失败，这一步不该重建").toBe(1);
+
+    // 关键一步：colors 从「有值」变回「未表态」。它**可能**已经写进过 SDK（这里的事实是确实写了），
+    // 所以只有重建能让它回到 SDK 自己的默认 colors —— 只看「成功写入过」的账本会漏掉它。
+    props.value = { edge: true };
+    await settle();
+
+    expect(createdSince(), "「可能已写入」的键消失 ⇒ 必须重建").toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+    expect(
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as { colors: string[] | null },
+    ).toMatchObject({ colors: null });
+    expect(harness.layerAttached(-2), "旧实例已经摘掉（原子替换）").toBe(false);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("部分成功后的重建");
+  });
+
+  it("[四轮 2] 统一槽位的写入失败同样记「尝试过」：槽位消失时保守重建", async () => {
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        zIndex: number | null;
+        failNextSetZIndex: Error | null;
+      };
+    layerOf().failNextSetZIndex = new Error("setZIndex failed");
+
+    props.value = { ...props.value, zIndex: 5 };
+    await settle();
+    expect(errors.length).toBeGreaterThan(0);
+    expect(createdSince(), "就地写入失败（而不是「必须重建」）不换实例").toBe(1);
+
+    props.value = { ...props.value, zIndex: undefined };
+    await settle();
+
+    // 替身是「改之前」抛错，SDK 其实没变——但内核**无法区分**「抛在改之前」与「抛在改之后」
+    // （与 `mountAttempted` 同一条理由）。这里刻意选保守侧：多重建一次（代价是一次重挂），
+    // 而不是让声明与 SDK 的状态永久分叉。这一条是在钉「判据用的是尝试账本，不是成功账本」。
+    expect(createdSince(), "「可能已写入」的槽位消失 ⇒ 保守重建").toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("槽位写入失败后的保守重建");
+  });
+
+  it("[四轮 2] 整袋 setter「已生效再抛错」：槽位消失时必须重建，否则 SDK 永久保留旧值", async () => {
+    // 上一条用的是「改之前抛」，所以那个重建是**保守侧**。这一条把真正危险的那一半建出来：
+    // `setStyleOptions` 先写进 SDK 再抛错，于是 `minZoom` 在 SDK 上**确实**是 3，而账本上
+    // 没有任何成功记录。此时若不重建，声明（未表态）与 SDK（3）就永久分叉。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[5]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BDOMLayer as never, props.value));
+    await settle();
+
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        failNextSetStyleOptionsAfterApply: Error | null;
+      };
+    layerOf().failNextSetStyleOptionsAfterApply = new Error("setStyleOptions failed");
+
+    props.value = { ...props.value, minZoom: 3 };
+    await settle();
+    expect(errors.length).toBeGreaterThan(0);
+    expect(
+      (layerOf() as unknown as { options: Record<string, unknown> }).options.minZoom,
+      "故障注入在写入之后 ⇒ SDK 侧**已经**生效，而账本上没有任何成功记录",
+    ).toBe(3);
+    expect(createdSince(), "抛错的这一步本身不重建").toBe(1);
+
+    props.value = { ...props.value, minZoom: undefined };
+    await settle();
+
+    expect(createdSince(), "已经生效过的槽位消失 ⇒ 必须重建").toBe(2);
+    expect(
+      harness.layerOptions(-1).minZoom,
+      "新实例的构造选项里不该出现它（回到 SDK 默认）",
+    ).toBeUndefined();
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("整袋「已生效再抛错」后的重建");
+  });
+
+  it("[四轮补测] DOM：先 visible=false 再卸载——清空发生在**第二次**摘除之前，覆盖物仍归零", async () => {
+    // 评审的补测建议：`visible=false` 已经先 `removeLayer()` 过一次，之后永久销毁才 `clearData()`。
+    // 因此「永久销毁总是 clearData → removeLayer」这个**顺序承诺**在这条路径上只在**后一次**摘除
+    // 上成立（清空确实仍在最终摘除之前，但前面还夹着一次摘除）。
+    //
+    // 这条能钉住的是**顺序**；它**不能**证明真实 SDK 对 detached 的图层调 `removeAllOverlays()`
+    // 一定安全（替身没有这个前置条件）。真出问题时 `tearDownData` 的 try/catch 会把它降级成
+    // `logger.warn` + 继续摘除，不会中断释放——取证属于 live smoke 的范畴（已知限制 13）。
+    const { wrapper, setProp } = await mountOneLayer(5);
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as { customOverlays: unknown[] };
+
+    expect(layerOf().customOverlays.length).toBeGreaterThan(0);
+
+    await setProp({ visible: false });
+    expect(harness.attached("layer"), "隐藏本身已经摘过一次").toBe(0);
+    expect(layerOf().customOverlays.length, "隐藏（临时摘挂）不清覆盖物").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    expect(
+      layerOf().customOverlays.length,
+      "永久销毁仍然先清空，再摘（这一次 removeLayer 是第二次调用）",
+    ).toBe(0);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("隐藏之后再卸载");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* 7. 能力清单：实验性图层的稳定性标记                                            */
 /* -------------------------------------------------------------------------- */
 

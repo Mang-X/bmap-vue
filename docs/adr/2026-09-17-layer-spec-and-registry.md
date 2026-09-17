@@ -103,20 +103,34 @@ Vue 对 `boolean` prop 有「缺省即 `false`」的转换（`resolvePropValue` 
 生效路径（`appliedMutableKey` 用「未写」哨兵初始化，保证这次一定发生）。漏掉它的症状是
 「初始 `colors` / `offsetX` 静默失效、改一次才生效」——`v3-layer-suite.test.ts` 有回归。
 
-**记账（`appliedMutableKey` / `appliedMutableKeys`）只在成功写入 SDK 之后更新**：未挂载时不写、
-也**不记**。这一点是 PR #96 第一轮评审的发现 1——先记账再判断 `mounted` 会把「挂载期间设的值」
-记成已应用，切回可见时指纹相同直接跳过，值就永久丢了（`<BTrafficLayer :visible="false" :edge="false" />`
-是最小复现）。
+**记账分两本，判据刻意不同**（第二轮发现 1/3 + 第四轮发现 2 收口到这里）：
 
-顺着同一条规则，**已经写入过的键 / 槽位从有值变回未表态 ⇒ 重建图层**（见已知限制 5）：SDK 没有
+| 账本 | 何时推进 | 用来回答 |
+| --- | --- | --- |
+| 去重指纹（`appliedSlots` / `appliedMutableKey` / `appliedData`） | **只在 SDK 调用成功返回之后** | 「这个值是不是已经写过了」⇒ 决定要不要再调一次 |
+| 「可能已写入」集合（`possiblyAppliedSlots` / `possiblyAppliedOptions`） | **在调用之前**（单调只增） | 「这个键/槽位有没有可能已经改过 SDK」⇒ 决定「变回未表态」时是否必须重建 |
+
+两本必须分开，因为 SDK 允许**在抛错之前已经产生副作用**（与 `mountAttempted` 同一条理由）：
+
+- 去重若按「尝试过」记账 ⇒ 一次失败的更新被记成完成，后续同值更新被指纹跳过、**永不重试**；
+- 移除检测若按「成功过」记账 ⇒ 一次**部分成功**（`TrafficLayer` 的 `setOptions` 是逐 setter 调用、
+  不是事务：`setColors` 已写进 SDK、`setEdge` 抛错）会让那个已经生效的键在账本上「从没写过」，
+  之后它变回未表态就不重建，SDK **永久保留旧值**。
+
+未挂载时不写、也**不记**（两本都不动）。这一点是 PR #96 第一轮评审的发现 1——先记账再判断
+`mounted` 会把「挂载期间设的值」记成已应用，切回可见时指纹相同直接跳过，值就永久丢了
+（`<BTrafficLayer :visible="false" :edge="false" />` 是最小复现）。
+
+顺着同一条规则，**写过的键 / 槽位从有值变回未表态 ⇒ 重建图层**（见已知限制 5）：SDK 没有
 unset 入口，本库也不猜默认值，换一个新实例（构造期不传它）才是回到「SDK 自己的默认状态」的唯一
 办法。这条对**统一槽位**同样成立（`zIndex: 5 → undefined`、DOM 的 `minZoom: 3 → undefined`…），
 唯一例外是 `data`：它有 `null = 清空` 的显式语义，`undefined` 表示「不表态（保持现状）」。
 （第二轮评审发现 2。）
 
-同样地，**applied 记账只在 SDK 调用成功返回之后才提交**：这不只适用于可变 option，也适用于走整袋
-`setOptions` 的槽位——整袋调用抛错时不能把这一袋记成已写入，否则后续同值更新会被指纹跳过、
-**永不重试**，声明与 SDK 状态静默分叉。（第二轮评审发现 3。）
+这条保守侧有代价，明写出来：**替身 / 真实 SDK 里「改之前抛错」与「改之后抛错」无法区分**，
+因此一次失败的写入之后再移除该键，会多付一次重建（`v3-layer-suite.test.ts` §11 两条分别钉住
+「改之后抛错必须重建」与「改之前抛错也保守重建」）。选保守侧的理由是：多一次重建的代价是确定的
+一次重挂，而漏掉重建的代价是声明与 SDK 永久分叉、且没有任何后续事件会把它纠正回来。
 
 ### 7. 回调型 option 分两类：**转发**（每次调用）与**重建**（只求一次）
 
@@ -197,6 +211,14 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 不用补 `setData`）；清理失败不阻断摘除，但经 `logger.warn` 可观测。
 （第三轮评审发现 2。）
 
+**承诺的是结果，不是固定顺序**（第四轮补测建议）：`visible=false` 时图层已经被摘过一次，永久销毁
+那一次才是 `clearData()` → 第二次 `remove()`。因此「永久销毁保证**最终清空 + 摘除**」，而不是
+「所有路径都恰好是 `clearData → removeLayer` 一次」。这条已同步到 `layer/index.md` 与 changeset。
+`v3-layer-suite.test.ts` §11 有一条「先隐藏再卸载」的用例钉住顺序；它**不能**证明真实 SDK 对
+detached 的图层调 `removeAllOverlays()` 一定安全（替身没有该前置条件）——真出问题时 `tearDownData`
+的 try/catch 会降级成 `logger.warn` + 继续摘除，不会中断释放。取证属 live smoke 范畴，登记为
+已知限制 13。
+
 ### 13. `BDOMLayer` 不提供交互事件（官方声明缺 `removeEventListener`）
 
 官方 4.0.4 的 `DOMLayer` **只有** `addEventListener`，没有可解绑入口；而本库的
@@ -210,6 +232,30 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
 配套把 Fake 从基类继承来的 `removeEventListener` **遮蔽掉**（替身必须与声明一致，否则
 「组件能订阅、真实契约下收不到」这类缺陷会被测试全绿掩盖），并补一条「EventDriver 拒绝订阅」
 的机制正证。（第三轮评审发现 1。）
+
+### 14. 摘除（`removeLayer`）失败的记账：**成功返回之后**才复位，且失败是「可观测」而非「可掩盖」
+
+`removeLayer` 与 `addLayer` 一样允许「副作用还没完成就抛错」（那时图层**仍在图上**）。因此
+`unmount()` 里的 `mounted` / `mountAttempted` 复位必须放在 `driver.layers.remove()` **成功返回之后**。
+
+先复位的后果不是「少摘一次」，而是**永远不再摘**：`mountAttempted` 变成「从未挂过」，之后组件卸载 /
+重建 / Map 销毁三条永久销毁路径都会在 `if (!state.mountAttempted) return;` 处直接返回，SDK 上留下
+一个再也没人认领的孤儿。保留记账 = 保留「仍需 best-effort 摘除」的所有权。
+
+摘除失败时**不回退** `mounted`：那一刻我们**不能**认为它已经下去了，而 `addLayer` 不去重
+（见 `FakeV4Map.addLayer` 的说明）。这条路径下的重复挂载由 Driver 的 claim 记账兜住——它同样
+「成功返回之后才 release」，所以组件记账分叉时它仍然认为图层在图上。（第四轮评审发现 1。）
+
+边界（登记为已知限制 12）：重试的机会来自**还有后续的 dispose 路径**。如果**最后一次**摘除本身
+失败（组件卸载那一刻），账本记录已经一次性作废、组件也已经消失——没有任何一侧还能再试，真实 SDK
+里收口的是 `map.destroy()` 自己。此时唯一的承诺是「经 `logger.warn` 可观测」，不是「无残留」。
+
+### 15. 「Registry 读数」与「地图上挂着几个」是两个口径
+
+`LayerRegistry.size` = 这张地图**拥有**几个存活图层实例（含暂时隐藏 / 摘下的）；attached count
+要读 SDK 侧。显隐统一表达为挂载状态（决策 8），所以 `size === 1` 与「一个图层都没挂」可以同时
+成立——把两者写成同一个读数会让「测试全绿但地图上什么都没有」这类问题无从判定。
+（第四轮评审发现 3。）
 
 ## 与官方参考实现 `huiyan-fe/react-bmap` 的对照
 
@@ -275,10 +321,11 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
    默认状态。代价是「清一个开关」带来一次重建——这是刻意的：另一种做法（停在旧值）会让声明与
    SDK 实际状态永久不一致。（PR #96 第一轮评审的发现 3；`v3-layer-suite.test.ts` 有回归。）
 6. **网络图层的 loading / error 回调不在本 issue 内（已拆票）**：issue 实施步骤 4 要求「定义网络
-   Layer 的 loading/error 回调」，但官方这批图层里 `addEventListener` **只**声明在
-   `GeoJSONLayer` / `DOMLayer` 上（`TileLayer` 家族、`XYZLayer` / `WMSLayer` / `WMTSLayer` /
-   `RasterTileLayer` 的类声明里都没有事件成员），按本库「不把未声明成员当契约」的口径，
-   **不发明** `tileload` / `tileerror` 事件。当前唯一的可观测入口是官方的 `tileLoadFunction`
+   Layer 的 loading/error 回调」，但**四个网络图层**（`TileLayer` 家族、`XYZLayer` / `WMSLayer` /
+   `WMTSLayer` / `RasterTileLayer`）的类声明里**根本没有事件成员**，按本库「不把未声明成员当契约」
+   的口径，**不发明** `tileload` / `tileerror` 事件。（声明了 `addEventListener` 的是
+   `GeoJSONLayer` / `DistrictLayer` / `DOMLayer`，但只有前两者的**事件名**与网络加载无关；
+   声明面的完整表格见决策 10。）当前唯一的可观测入口是官方的 `tileLoadFunction`
    （已在四个网络图层上透传：`BTileLayer` / `BWMSLayer` / `BWMTSLayer` / `BRasterLayer`）。
    承接方见 issue #97（需要先取证「真实 4.0 是否另派发未声明事件」，再决定是否补事件）。
 7. **`data` 按引用去重**：同一份数据原地修改不会被感知（内核按引用比较 `data`，避免每次 props
@@ -299,6 +346,20 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
 10. **瓦片是否真的画出来不由本库保证**：live smoke 的 `layer-tile` / `layer-traffic` /
     `layer-geojson` 断言的是「组件 → Driver → 真实 `Map.addLayer` 的调用发生了、且没有
     `console.error`」，与既有 `layer-district` 同一口径。
+11. **摘除失败之后，实例可能仍留在图上直到下一次摘除机会**：`removeLayer` 抛错时内核**保留**
+    「仍需摘除」的记账（决策 14），因此这条路径下切回可见**不会**重新 `addLayer`（`addLayer` 不去重，
+    重挂会让同一个实例在图上出现两份）。代价是「失败后的一段时间里，声明为可见而实例确实在图上、
+    声明为不可见而实例也还在图上」——真正的收口在下一个永久销毁时机（组件卸载 / 重建 / Map 销毁）。
+    这条路径**有回归用例**（§11 反方向），不是设想。
+12. **最后一次摘除失败时只剩可观测性**：见决策 14 末尾。组件已经卸载、账本记录已一次性作废，
+    没有任何一侧还能重试——真实 SDK 里收口的是 `map.destroy()` 自己。此时承诺的是
+    「`logger.warn` 可见」，**不是**「无残留」；`v3-layer-suite.test.ts` §11 的窄角用例刻意**不**
+    断言地图已空（详见决策 14）。
+13. **「先隐藏、后卸载」这条路径上，`removeAllOverlays()` 是对 detached 图层调用的**：顺序有
+    回归用例钉住，但真实 SDK 是否要求「图层仍在图上」才允许清理**没有取证**（替身没有该前置条件）。
+    若上游确实有前置条件，症状是日志里多一条 `DOM 销毁前的 clearData 失败` 且覆盖物残留——不会
+    阻断摘除。真出现时按「显式失败」处理（在 `tearDownData` 里先补挂再清），不要静默降级。
+    与已知限制 12 不同：这条**可能**有解，只是缺证据。
 
 ## 参考
 

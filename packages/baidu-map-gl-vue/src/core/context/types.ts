@@ -87,8 +87,11 @@ export interface MapContext extends MapRuntimeShape {
    * 图层账本（M7-LAYERS / issue #40）。
    *
    * 由 `MapRuntime` 持有、随地图一起释放：`MapRuntime.dispose()` 在 `map.destroy()` **之前**
-   * 调 `layers.disposeAll()`，把每个图层的 SDK 资源摘掉并释放它的 child scope。因此
-   * 「Registry 的读数」与「地图上还剩几个图层」是同一件事。
+   * 调 `layers.disposeAll()`，把每个图层的 SDK 资源摘掉并释放它的 child scope。
+   *
+   * 它的读数是「这张地图**拥有**几个存活的图层实例」——**不是**「地图上此刻挂着几个」：
+   * `visible=false` 的实例仍在账本里，只是被 `removeLayer` 临时摘下来了。要 attached count
+   * 请读 SDK 侧（见 `LayerRegistry.size`）。
    *
    * 可选：自定义 Context（只实现 `MapRuntimeShape` 的适配器）可以不提供，图层组件会退化为
    * 组件自持的账本（见 `useLayerResource`）。
