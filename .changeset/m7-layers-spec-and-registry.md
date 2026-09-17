@@ -46,6 +46,11 @@
     也没用 ⇒ 把 style 写成函数，或在 Vue 层用 `:key` 强制重挂载。
   - `BDOMLayer` 的 `createDom` 按官方参考实现的 `useLatest` 语义处理：**不重建**，但下一次数据
     解析（`setData`，含重新赋值 `data`）会用新实现。
+- **网络图层新增加载观察面 `tileLoadObserver`**（`BTileLayer` / `BWMSLayer` / `BWMTSLayer` /
+  `BRasterLayer`）：给 `{ onRequest, onLoaded, onError }` 即可知道「SDK 什么时候要求加载哪张瓦片、
+  它成功还是失败」，**不需要自己接管加载**（本库在内部完成）。依据是 live 取证：这些图层的类声明与
+  运行时都**不派发**常见瓦片事件（所以本库仍不发明事件），而官方 `tileLoadFunction` 是**接管式**的
+  （设了它 SDK 就不再自己加载）。不给观察者时该 option 保持缺席，行为与之前完全一致。
 - **`visible=false` 期间设置的可变 option 不会丢**：切回可见时补写一次。
 - **可变 option 与统一槽位由有值变回 `undefined` 都会重建图层**，以便回到 SDK 自己的默认值。
   例外是 `data`：`null` = 清空，`undefined` = 保持现状。

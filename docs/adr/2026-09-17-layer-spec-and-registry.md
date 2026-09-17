@@ -323,6 +323,40 @@ SDK 上留下一个再也没人认领的孤儿。保留记账 = 保留「仍需 
 失败（组件卸载那一刻），账本记录已经一次性作废、组件也已经消失——没有任何一侧还能再试，真实 SDK
 里收口的是 `map.destroy()` 自己。此时唯一的承诺是「经 `logger.warn` 可观测」，不是「无残留」。
 
+### 16. 网络图层的加载诊断走**观察面**，不发明事件（issue #97）
+
+issue #40 的实施步骤 4 要「定义网络 Layer 的 loading/error 回调」。PR #96 当时按**声明面**推迟了它
+（那些类的 `.d.ts` 里没有任何事件成员，本库的口径是「不把未声明成员当契约」）。**issue #97 的 live
+探针把运行时面补齐了**（`scripts/probe-layer-events.mts`，真实 4.0 / `BMap.version === "gl"`）：
+
+| 读数 | 值 |
+| --- | --- |
+| 六个家族都暴露 `addEventListener` / `removeEventListener` | 是（声明里没有，运行时原型上有） |
+| 十个候选事件名（`tileload` / `tileerror` / `tilesloaded` / `load` / `error` …）在**请求确实发生过**时是否触发 | **一个都没有**（tile 12 次、raster / wms / wmts 各 20 次请求） |
+| 底图基线（同页从百度主机取到的资源数） | 24（证明页面真的在渲染，读数有意义） |
+| 设了 `tileLoadFunction` 但函数里什么都不做 ⇒ 那块瓦片最终 | `complete=true, naturalWidth=0`（**SDK 不再自己加载**） |
+| 设了它、函数里自己赋 `tile.src = url` ⇒ 那块瓦片最终 | `naturalWidth=256`（加载真的发生了） |
+
+**覆盖面要说准**：`TrafficLayer` 本轮窗口内没有发出瓦片请求（它需要授权的路况服务），因此**未参与**
+「无事件」结论；探针会把这一点打印在「适用范围」一行，不靠读者去数。
+
+因此本库的处置是：
+
+- **不发明事件**：既然运行时也不派发，补一套 `@tile-load` / `@tile-error` 就是假支持；
+- 提供**加载观察面** `tileLoadObserver`（`onRequest` / `onLoaded` / `onError`），实现在
+  `components/layers/tileLoadObserver.ts`：SDK 手上是一个包装函数，它先回调观察者，再完成加载
+  （**必须在内部完成**——`tileLoadFunction` 是接管式的，不补这一步用户会静默失去瓦片）。
+  与官方 `tileLoadFunction` **正交**：两者同时给时，加载交给调用方，本库只在旁边观察；
+- **不给观察者时这个 option 保持缺席**（`undefined`）：没有观察需求就不得改变任何行为。
+
+口径（写进组件 props 的 JSDoc，别让调用方猜）：`onRequest` 是「SDK 要求加载这张瓦片」而不是「成功」；
+`onLoaded` / `onError` **以图片元素为单位**，回调里的 `url` 是元素**当前**的 `src`（官方没有暴露单次
+请求的身份，本库不做归属推断）；`onError` **不带失败原因**（DOM 的 `error` 事件不提供原因）——可诊断的
+是「哪个 URL 失败了、几次」，不是「为什么失败」。观察者回调抛错不影响加载（捕获 + `devWarn`）。
+
+**非目标**（延续 #97 票面）：不实现重试 / 缓存策略（官方构造选项已透传）；不把「瓦片真的画出来」变成
+库的保证（CORS / 坐标系 / 服务条款由使用方负责，排障见文档站图层总览）。
+
 ### 15. 「Registry 读数」与「地图上挂着几个」是两个口径
 
 `LayerRegistry.size` = 这张地图**拥有**几个存活图层实例（含暂时隐藏 / 摘下的）；attached count
