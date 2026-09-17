@@ -621,7 +621,7 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("anchor / offset 在任意 kind 上都是 live，且 anchor 变化会把 offset 一并写下去", () => {
+  it("anchor 在除版权控件外的 kind 上都是 live，且 anchor 变化会把 offset 一并写下去", () => {
     const handle = ctx.controls.create("overview", { offset: { x: 700, y: 800 } });
     ctx.controls.add(ctx.mapTarget(), handle);
     const raw = ctx.rawOf(handle) as unknown as {
@@ -637,6 +637,23 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
     ctx.controls.setOptions(handle, { anchor: "BMAP_ANCHOR_TOP_LEFT", offset: { x: 700, y: 800 } });
     expect(raw.callLog).toContain("setAnchor");
     expect(raw.getOffset()).toEqual({ width: 700, height: 800 });
+  });
+
+  it("版权控件的 anchor 是构造期项（实例按停靠位置共享，就地 setAnchor 会让它脱钩）", () => {
+    const handle = ctx.controls.create("copyright", { anchor: "BMAP_ANCHOR_TOP_LEFT" });
+    ctx.controls.add(ctx.mapTarget(), handle);
+    const raw = ctx.rawOf(handle) as unknown as { callLog: string[] };
+
+    expect(ctx.controls.planOptions(handle, ["anchor", "offset"])).toEqual({
+      anchor: "recreate",
+      offset: "live",
+    });
+
+    // `recreate` 的口径：告警一次且**不动实例**（把重建的决定交给调用方）
+    warn.mockClear();
+    ctx.controls.setOptions(handle, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" });
+    expect(raw.callLog).not.toContain("setAnchor");
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 

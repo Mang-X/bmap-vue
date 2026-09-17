@@ -359,7 +359,20 @@ export function createJsapiV4ControlDriver(
     kind: ControlKind | undefined,
     key: string,
   ): OptionAction => {
-    // anchor / offset 是全部控件的公共可更新项（基类 setAnchor / setOffset），不重复进分类表
+    // anchor / offset 是全部控件的公共可更新项（基类 setAnchor / setOffset），不重复进分类表……
+    // ……**但版权控件例外**：它的实例按停靠位置**共享**（同一 anchor 的多个组件共用一个
+    // `CopyrightControl`，各自往里加一条版权项）。对共享实例就地 `setAnchor()` 会让「实例」与
+    // 「它服务的 anchor」脱钩，于是后续同 anchor 的组件找不到它、另建一个，同一个位置上出现两个
+    // 控件（#95 评审 P1 的复现）。因此这里把 `copyright.anchor` 判成构造期项：变化时重建，
+    // 由 `BCopyright` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移。
+    if (key === "anchor" && kind === "copyright") {
+      return {
+        status: "recreate",
+        reason:
+          "版权控件的实例按停靠位置共享（同 anchor 共用一个 CopyrightControl），" +
+          "就地 setAnchor 会让实例与它服务的 anchor 脱钩、同一位置出现两个控件",
+      };
+    }
     if (key === "anchor") {
       return {
         status: "live",

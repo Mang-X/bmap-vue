@@ -24,12 +24,12 @@ describe("optionKey：同一个值得到同一个键", () => {
     expect(optionKey({ mapTypes: [1, 2] })).not.toBe(optionKey({ mapTypes: [2, 1] }));
   });
 
-  it("`undefined` 与显式 `null` 得到同一个键（都是「没有值」）", () => {
-    expect(optionKey({ type: undefined })).toBe(optionKey({ type: null }));
-  });
-
-  it("函数折叠成固定字面量（父级每次渲染传新箭头函数不得触发下发）", () => {
-    expect(optionKey({ onChange: () => 1 })).toBe(optionKey({ onChange: () => 2 }));
+  it("`undefined` 与显式 `null` **必须**得到不同的键", () => {
+    // 依据：Driver 对两者走不同路径（`projectOptions` / `setOptions` 跳过 `undefined`、
+    // 把 `null` 交给结构逃生口），合并会让「显式传 null」被当成没变化而吃掉。
+    // 官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 同样分开标记。
+    expect(optionKey({ type: undefined })).not.toBe(optionKey({ type: null }));
+    expect(changedOptionKeys({ type: null }, { type: undefined })).toEqual(["type"]);
   });
 
   it("DOM 节点按**对象身份**区分：同一个节点同一个键，换一个节点就是另一个键", () => {
@@ -71,5 +71,33 @@ describe("changedOptionKeys：只回答「哪些键可能要变」", () => {
     expect(changedOptionKeys({ showStreetLayer: true }, { showStreetLayer: false })).toEqual([
       "showStreetLayer",
     ]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 函数值的契约：按**存在性**比较，不按身份（#95 评审 P2-3 的口径）              */
+/* -------------------------------------------------------------------------- */
+
+describe("optionKey：函数值按存在性比较（与官方参考实现同口径）", () => {
+  /**
+   * 这一节锁的是**刻意的取舍**，不是「还没修」：
+   *
+   * - 若按身份比较，父级在模板里写 `:on-change="(e) => ..."`（内联箭头每次渲染都是新函数）
+   *   会让 `recreate` 类回调选项**每次渲染都重建控件**——内联回调是常规写法，这个代价不可接受；
+   * - 官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 也是
+   *   `typeof value === 'function' → 'fn'`（同一份文件里它却**分开**标记 `undefined` / `null`，
+   *   本库两者都对齐）。
+   *
+   * 代价写在 `optionKey` 的文件头：**回调选项更新不会被下发**，因此 `ControlSpec.options()`
+   * 不应承载需要在运行期更新的回调（要新闭包就经 `spec.events` 或自建稳定代理）。
+   * 当前没有任何控件把函数值放进 `options()`。
+   */
+  it("换一个回调不算「选项变了」", () => {
+    expect(optionKey({ onChange: () => 1 })).toBe(optionKey({ onChange: () => 2 }));
+    expect(changedOptionKeys({ onChange: () => 1 }, { onChange: () => 2 })).toEqual([]);
+  });
+
+  it("但「有回调」与「没有回调」是变化（存在性仍然被跟踪）", () => {
+    expect(changedOptionKeys({ onChange: () => 1 }, {})).toEqual(["onChange"]);
   });
 });

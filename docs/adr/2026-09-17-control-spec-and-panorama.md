@@ -81,6 +81,12 @@ adapter 的判据因此是一句话：**任一变化键是 `recreate` ⇒ 整只
   把约束建进 Fake 之后，去掉成对写会让 10 个 Stable 控件一起变红；这个过程顺带**抓出了实现里的一个真
   bug**：offset 单独变化时 `setOffset` 与 `setAnchor` 的键顺序反了，`offset` 会被重置掉。
 - **缺省不补第二份默认表**：`withDefaults` 已经给出 anchor / offset（#22 ADR §4 的口径），Driver 侧仍不补。
+- **两个例外**（都是「就地改」表达不了的东西）：
+  - `copyright.anchor` 是**构造期项**——版权控件的实例按停靠位置**共享**，就地 `setAnchor()` 会让实例与
+    它服务的 anchor 脱钩（后续同 anchor 的组件找不到它、另建一个，同一位置出现两个控件）。变化时重建，
+    由 `BCopyright` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移；
+  - **任何选项从有值变回 `undefined`** 也走重建（语义是「回到 SDK 默认值」，而默认值只存在于构造期）——
+    就地写的话 `setOptions` 会按「没有值」跳过，既不生效、又因为 `applied` 已前移而**永不重试**。
 
 ### 4. `visible` 定型为 SDK 的 `show()` / `hide()`；`BCopyright` 是唯一的例外
 
@@ -205,27 +211,61 @@ PR 正文里按此如实标注，不把已存在的交付项算成本轮成果�
 
 ## 已知限制（显式接受）
 
-1. **`BCopyright` 的共享缓存在 `anchor` 移动后不会重新入桶**：`anchor` 变化时会经 `setAnchor()` 把共享
-   实例挪位，而桶的键是**创建时**的 anchor。触发条件是「同一 anchor 的组件改 anchor，而之后又有新组件
-   挂到旧 anchor」——与新组件的内容会显示在被挪走的那个控件上。改动前这条路径**完全没有效果**
-   （anchor 不动态更新），因此本 issue 是净改善；彻底修好需要重做共享模型（非目标）。
+1. **（已在评审第 1 轮修掉，留档）** `BCopyright` 的共享缓存曾有两个身份缺陷，现在是「按
+   **Client + 创建时 anchor** 分桶 + anchor 变化走重建迁移」：
 
-   顺带修掉的另一处（不在已知限制里）：缓存原先的键**只有 anchor**，于是同一页面上的两个 `<BMap>`
-   （两个 Client）会复用同一个句柄——而句柄所有权绑定创建它的 Client，跨 Client 使用会被注册表判成
-   `BMAP_HANDLE_FOREIGN`，第二个 Client 下的 `<BCopyright>` 直接建不出控件。**这是新增的
-   「`BCopyright` 并入统一 spec 门禁」用例抓出来的**：门禁把它列进 `STABLE_CONTROLS` 之后，
-   用例之间换 Client 就复现了。现在缓存改成按 Client 分桶的 `WeakMap`。
+   - 键最早**只有 anchor**（不含 Client）：同一页面两个 `<BMap>` 会复用同一个句柄，而句柄所有权绑定创建
+     它的 Client，跨 Client 使用被注册表判成 `BMAP_HANDLE_FOREIGN` ⇒ 第二个 Client 下的 `<BCopyright>`
+     直接建不出控件。**这是「把 `BCopyright` 并入统一 spec 门禁」这条改动抓出来的**（用例之间换 Client
+     即复现），修法是 `WeakMap<客户端, Map<anchor, handle>>`。
+   - 接着**允许 `anchor` 就地 `setAnchor()`** 又制造了第二个缺陷：实例被挪位后仍挂在旧桶上，卸载时按
+     「当前 anchor」删桶会删掉**目标** anchor 上别人的条目，于是同一位置出现两个控件（#95 评审 P1）。
+     修法是三条一起：Driver 把 `copyright.anchor` 判成构造期项（变化即重建，重建路径天然完成共享组
+     迁移）、组件卸载按**创建时**的 anchor 退出共享组、缓存删除加「桶里的确实是本实例」的身份校验。
+
+   残余（不在本 issue 范围）：共享缓存是**模块级**的，因此它按 Client 分桶但仍然跨组件实例共享；
+   这不影响正确性（同一 Client 内共享是本意），只是提示「两个独立打包的库副本」不会共享缓存
+   ——那属于同一类的进程级共享状态问题，与 #42 对插件作用域的处理同源。
 2. **`Panorama#destroy()` 在未加载场景时失败**：组件只告警不抛错，本库资源照常释放。
    官方没有「无场景也能安全销毁」的入口，不为此发明一套补偿。
-3. **全景的 `options` 是整体写回**：`setOptions()` 是官方唯一的整体入口，键的变化粒度只到「有没有变」
+3. **`optionKey` 对函数值按「存在性」比较**（换一个回调不算变化）：与官方参考实现
+   `huiyan-fe/react-bmap` 的 `stableStringify` 同口径（同样 `typeof value === 'function' → 'fn'`），
+   理由是不这么做的话「父级在模板里传内联箭头函数」会让 `recreate` 类回调选项**每次渲染都重建控件**。
+   代价是**回调选项更新不会被下发**，因此 `ControlSpec.options()` 不应承载需要在运行期更新的回调
+   （要新闭包请走 `spec.events`，或由组件自己维护稳定代理）。当前没有任何控件把函数值放进 `options()`
+   （`BControl` 的 DOM 工厂走 `spec.render`），契约写进 `optionKey` 的文件头并用用例钉住；
+   将来真要让某个组件暴露回调选项，需要先补一层稳定代理（或对该键改用身份比较）。
+   （顺带自查修掉：`undefined` 与 `null` 原先合并成同一个键——参考实现明确区分两者，而本 Driver 对
+   「没传这个键」与「显式传 null」也确实走不同路径，合并会把后者当成没变化而吃掉。）
+4. **全景的 `options` 是整体写回**：`setOptions()` 是官方唯一的整体入口，键的变化粒度只到「有没有变」
    （`albumsControlOptions` 用 JSON 比较），不做深 diff。
-4. **`BCopyright` 文档里的默认 anchor 与实际不一致**：文档写 `BMAP_ANCHOR_BOTTOM_LEFT`，代码里
+5. **`BCopyright` 文档里的默认 anchor 与实际不一致**：文档写 `BMAP_ANCHOR_BOTTOM_LEFT`，代码里
    `withDefaults` 给的是 `BMAP_ANCHOR_BOTTOM_RIGHT`。这是**改动前就存在**的文档缺陷，本 issue 顺手把代码里的
    死分支（`p.anchor ?? "BMAP_ANCHOR_BOTTOM_LEFT"`，永远走不到）收敛到与 `withDefaults` 一致，
    但**不动文档**——修正默认值文档属于独立的、面向使用者的变更。
-5. **控件真实运行时的一条限制未在真机复验**：`show()` / `hide()` 在真实 4.0 的各控件上都存在（#22 的 smoke 只
+6. **控件真实运行时的一条限制未在真机复验**：`show()` / `hide()` 在真实 4.0 的各控件上都存在（#22 的 smoke 只
    核对了 `zoom` / `scale`），`PanoramaControl` 继承自 `Control`（类型包声明如此，Driver 仍按结构性调用处理）。
    本 issue 的浏览器 smoke 只覆盖 Fake 档的同名语义。
+
+## 外部评审轮次记录（PR #95，基线 `e54d6fe`）
+
+评审给的是 **2 个 P1 + 2 个 P2**。四条都先在仓库里写成**会红**的用例（同一次运行 4 条红）再修：
+
+| 发现 | 复现结果 | 处置 |
+| --- | --- | --- |
+| P1-1 动态改 `anchor` 污染版权控件的共享缓存 | **确认**：A 从 `TOP_LEFT` 移到 `BOTTOM_RIGHT` 后与 B **不共享**（同一位置两个控件）；此时卸载 A 还会按「当前 anchor」删掉 B 的桶 → 第三个实例再建一个 | §3 的两个例外之一：Driver 把 `copyright.anchor` 判成构造期项（变化即重建，重建路径天然完成共享组迁移）；`BCopyright` 卸载改用**创建时**的 anchor 退出共享组；缓存删除加身份校验（`bucket.get(anchor) === control`）。补 2 条回归用例（移动后共享 + 移动后第三实例仍复用） |
+| P1-2 live option 从有值变回 `undefined` 时 SDK 状态不恢复 | **确认**：`BNavigation.type` 设过 `SMALL` 后再传 `undefined`，既没有下发、也没有重建（`applied` 已前移 ⇒ 永不重试） | `applyOptions` 的重建判据从「任一键是 `recreate`」扩成「任一键是 `recreate` **或值变回 `undefined`**」——后者即「回到 SDK 默认值」，用重建交给构造期，不需要维护第二份默认值表。补回归用例 |
+| P2-3 `optionKey` 折叠函数会吃掉 callback 更新 | **确认语义属实，但不改判据**：函数按存在性比较是**刻意的**，与官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 同口径——若按身份比较，模板里的内联箭头会让 `recreate` 类回调选项每次渲染都重建控件 | 保留折叠，把契约写进 `optionKey` 文件头与 `ControlSpec.options()`、用一条 pin 用例钉住、登记进「已知限制」第 3 条（并写明「将来暴露回调选项前必须先补稳定代理」）。**没有**改成身份比较，理由与代价都在正文 |
+| P2-4 `BPanorama.options` 在 viewer 异步 ready 前变化会永久丢失 | **确认**：延迟 Provider 下在等待窗口里改 `options`，ready 后 `viewer.options` 仍是 `{}`（构造期那份） | `BPanorama` 记住**传给构造期的那份** `options`，在 ready 收敛时按同一份变化键比对、变了就补一次 `setOptions`。补回归用例（延迟 Provider 覆盖该窗口） |
+
+同轮**自查新增**（不在评审清单里，读参考实现时发现）：
+
+| 发现 | 处置 |
+| --- | --- |
+| `optionKey` 把 `undefined` 与 `null` 合并成同一个键，而参考实现明确区分两者、本 Driver 也确实对「没传这个键」与「显式传 null」走不同路径（`projectOptions` / `setOptions` 跳过 `undefined`、把 `null` 交给结构逃生口） | 分开标记，并改掉原来那条断言「两者得到同一个键」的用例（它编码的是错的契约） |
+| `BPanorama` 的 `options` 变化键是内联在 watcher 里的一份字面量数组，收敛判断需要复用它 | 抽成 `optionsKeyOf()`，watcher 与就绪收敛共用一份判据 |
+
+同轮的反证（改坏 → 必须红）：把 `copyright.anchor` 的分类改回 `live` → 2 条共享组用例红；把「值变回 `undefined` ⇒ 重建」从判据里去掉 → `undefined` 回归用例红；在 `BPanorama` 里去掉落 ready 收敛 → 延迟 Provider 那条红。
 
 ## 参考
 

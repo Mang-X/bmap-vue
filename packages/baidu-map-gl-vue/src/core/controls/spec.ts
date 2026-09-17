@@ -68,6 +68,12 @@ export interface ControlSpec<Props extends ControlBaseProps> {
    * 必须满足两条：
    * - 纯函数式：同 props 得到同结果（`optionKey` 会拿它做 diff，带随机值会导致无限重建）；
    * - 值域是「4.0 构造选项」的超集：项目 option 接口的索引签名就是官方构造选项的逃生口。
+   *
+   * ⚠️ **不要把需要在运行期更新的回调放进这里**：变化键对函数值按**存在性**比较
+   * （与官方参考实现 `huiyan-fe/react-bmap` 的 `stableStringify` 同口径），换一个函数引用
+   * **不算变化**——这是为了不让模板里的内联箭头把 `recreate` 类选项变成「每次渲染都重建」。
+   * 需要跟随最新闭包的回调请走 `events`（每次（重）创建后绑定），或由组件自己维护稳定代理。
+   * 依据与代价写在 `optionKey.ts` 的文件头。
    */
   options(props: Readonly<Props>): ControlOptions;
 

@@ -237,7 +237,17 @@ export function useControlResource<Props extends ControlBaseProps>(
     applied = next;
 
     const plan = context.client.driver.controls.planOptions(resource, changed);
-    if (changed.some((key) => plan[key] === "recreate")) {
+    /**
+     * 两种变化必须**重建**而不是就地写：
+     *
+     * 1. `recreate`：Driver 说这个键只有构造期生效（就地写会被告警忽略）；
+     * 2. **值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK 默认」，而默认值只存在于构造期
+     *    ——就地写的话 `setOptions` 会按 `value === undefined` 跳过，于是这次更新既不生效、也
+     *    因为 `applied` 已经前移而**永远不会重试**（#95 评审 P1：`BNavigation.type` 一旦设过
+     *    `SMALL`，`undefined` 就再也回不到默认）。重建让构造期按「没有这个键」重新采用默认值，
+     *    因此不需要维护第二份 SDK 默认值表。
+     */
+    if (changed.some((key) => plan[key] === "recreate" || next[key] === undefined)) {
       void replace();
       return;
     }

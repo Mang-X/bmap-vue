@@ -53,7 +53,9 @@ M7 把控件收进统一的 `ControlSpec`，并补上全景基线（决策见
 | 变更 | 之前 | 现在 | 处置 |
 | --- | --- | --- | --- |
 | 控件的 `visible` | `false` 会把控件从地图上**摘掉**（`removeControl`），`true` 再挂回来 | SDK 基类的 `show()` / `hide()`：控件始终挂载，只切换可见性 | 行为通常更符合预期（内部状态不再重置、`BLocation` 不再顺带停掉定位跟踪）。若确实需要「不挂载」，请用 `v-if` 卸载组件 |
-| 控件的 `anchor` / `offset` | 只在构造期生效，运行期改 props 不产生任何效果 | 变化即下发 `setAnchor()` / `setOffset()`（两者成对写，避免 SDK 重置偏移） | 无需改动；依赖「改了不生效」的代码要显式避免改这两个 prop |
+| 控件的 `anchor` / `offset` | 只在构造期生效，运行期改 props 不产生任何效果 | 变化即下发 `setAnchor()` / `setOffset()`（按 `anchor → offset` 的顺序成对写，避免 SDK 重置偏移） | 无需改动；依赖「改了不生效」的代码要显式避免改这两个 prop |
+| `BCopyright` 的 `anchor` | 同上（改了不生效） | **构造期项**：实例按停靠位置共享，就地 `setAnchor()` 会让实例与它服务的 anchor 脱钩（同一位置出现两个控件），因此改变它走**重建 + 共享组迁移** | 无需改动；注意这会重建控件（内部状态重置） |
+| 选项从有值改回 `undefined` | 「没变化」以外什么都不做（旧值留在控件上） | 等价于「回到 SDK 默认值」⇒ **重建控件**，由构造期重新采用默认值 | 无需改动；若不想重建，请显式传入目标值而不是 `undefined` |
 | `BCopyright` 的 `visible` | 只摘掉本组件那一条版权项 | **不变**（共享控件按 anchor 复用，隐藏整个控件会连带隐藏兄弟组件的内容） | 无需改动 |
 | 新增控件组件 | `<BNavigation>` / `<BMapType>` / `<BOverview>` 不存在（只有 Driver 侧的 kind） | 三个 Stable 组件可用，选项按官方能力分「就地更新 / 重建」两档 | 见各组件文档的「选项的更新方式」 |
 | 控件组件的卸载 | 各自手写 `onMounted` / `onUnmounted` | 全部经 `useSdkResource` 派生的统一 adapter | 无需改动；`scope` 的释放顺序（先解绑业务事件、再 `removeControl`）不变 |

@@ -38,6 +38,15 @@ const id = getCurrentInstance()?.uid ?? Math.random();
 let control: ControlHandle | null = null;
 let readyContext: MapReadyContext | null = null;
 let registered = false;
+/**
+ * **创建这个实例时**用的停靠位置。
+ *
+ * 卸载时必须按它（而不是当前 `props.anchor`）去退出共享组：`anchor` 是构造期项（变化即重建，
+ * 见 Driver 里 `copyright.anchor` 的分类），因此卸载那一刻 `props.anchor` 已经是**新**值——
+ * 拿它去删桶会删掉目标 anchor 上**别人的**缓存项，同一个位置上随后就会出现两个控件
+ * （#95 评审 P1 的复现）。
+ */
+let createdAnchor: string | null = null;
 
 /** 与 `withDefaults` 的默认值同一份口径（`anchor` 在组件里恒有值）。 */
 const anchorOf = (p: Readonly<BCopyrightProps>): string =>
@@ -49,6 +58,7 @@ const spec: ControlSpec<BCopyrightProps> = {
 
   create({ context, props: current }) {
     const anchor = anchorOf(current);
+    createdAnchor = anchor;
     // 共享缓存按 **Client + anchor** 分桶：句柄的所有权绑定在创建它的 Client 上，
     // 跨 Client 复用会被 Driver 的注册表判成 `BMAP_HANDLE_FOREIGN`（见缓存模块的注释）。
     const cached = getCopyrightControl(context.client, anchor);
@@ -76,7 +86,10 @@ const spec: ControlSpec<BCopyrightProps> = {
   unmount({ context, resource }) {
     context.client.driver.controls.removeCopyright(resource, id);
     registered = false;
-    removeCopyrightControlIfEmpty(anchorOf(props), resource, context);
+    // 用**创建时**的 anchor 退出共享组（`props.anchor` 可能已经是新值，见 `createdAnchor`）
+    const anchor = createdAnchor ?? anchorOf(props);
+    createdAnchor = null;
+    removeCopyrightControlIfEmpty(anchor, resource, context);
     if (control === resource) control = null;
     readyContext = null;
   },

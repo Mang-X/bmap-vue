@@ -73,6 +73,8 @@ function lastCreatedControl(): { options: Record<string, unknown> } & Record<str
  *
  * - `ctor`：它在 Fake 命名空间里的构造器名。`location` 的领域名对应 Fake 里的
  *   `GeolocationControl`（4.0 的写法）。
+ * - `anchorMode`：**anchor 的落地方式**。10 个控件就地 `setAnchor()`；`BCopyright` 是
+ *   构造期项（实例按停靠位置共享 ⇒ anchor 是它的 identity），变化时重建并完成共享组迁移。
  * - `visibleMode`：**显隐的落地方式**。10 个控件走 SDK 基类的 `show()` / `hide()`；
  *   `BCopyright` 是唯一例外——它的实例按 anchor **共享**（文档承诺「多个相同位置版权控件会自动
  *   排列」），隐藏整个控件会连带隐藏兄弟组件的内容，因此它的「可见」落在**版权项**的登记 /
@@ -84,6 +86,7 @@ const STABLE_CONTROLS: ReadonlyArray<{
   component: Component;
   ctor: string;
   visibleMode: "control" | "entries";
+  anchorMode?: "setAnchor" | "recreate";
   props?: Record<string, unknown>;
   slots?: Record<string, () => unknown>;
 }> = [
@@ -102,6 +105,7 @@ const STABLE_CONTROLS: ReadonlyArray<{
     component: BCopyright,
     ctor: "CopyrightControl",
     visibleMode: "entries",
+    anchorMode: "recreate",
     // 用 TOP_LEFT 与别处的 BOTTOM_RIGHT 用例错开：版权控件的实例按 anchor **模块级共享**
     // （`copyrightControlPosCache`），撞同一个 anchor 会读到上一个用例留下的实例。
     props: { anchor: "BMAP_ANCHOR_TOP_LEFT" },
@@ -135,7 +139,9 @@ function mountControl(
 describe("控件统一 spec：每个 Stable 控件同一批断言", () => {
   beforeEach(() => harness.reset());
 
-  describe.each(STABLE_CONTROLS)("$name", ({ component, ctor, props, slots, visibleMode }) => {
+  describe.each(STABLE_CONTROLS)(
+    "$name",
+    ({ component, ctor, props, slots, visibleMode, anchorMode = "setAnchor" }) => {
     it("挂载后在地图上出现且构造器种类正确，卸载后归零", async () => {
       const { wrapper } = mountControl(component, props, slots);
       await flushPromises();
@@ -151,17 +157,31 @@ describe("控件统一 spec：每个 Stable 控件同一批断言", () => {
     });
 
     it("anchor / offset 随 props 即时下发，且 anchor 变化不吞掉 offset", async () => {
-      const { wrapper, setProps } = mountControl(component, { ...props, offset: { x: 7, y: 9 } });
+      const { wrapper, setProps } = mountControl(
+        component,
+        { ...props, offset: { x: 7, y: 9 } },
+        slots,
+      );
       await flushPromises();
-      const control = controlsOnMap()[0]!;
+      let control = controlsOnMap()[0]!;
       expect(offsetOf(control)).toEqual({ width: 7, height: 9 });
 
+      const created = fake.createdControls.length;
       await setProps({ anchor: "BMAP_ANCHOR_TOP_RIGHT" });
+      await flushPromises();
       // `BMAP_ANCHOR_TOP_RIGHT` 在 Driver 的常量表里是 1
-      expect(control.getAnchor()).toBe(1);
-      // 真实 4.0 的 `setAnchor()` 会把偏移重置回控件默认值 —— 统一 adapter 因此成对写；
-      // 这一条正是那条不变量的断言。
-      expect(control.getOffset()).toEqual({ width: 7, height: 9 });
+      if (anchorMode === "setAnchor") {
+        expect(control.getAnchor()).toBe(1);
+        // 真实 4.0 的 `setAnchor()` 会把偏移重置回控件默认值 —— 统一 adapter 因此按
+        // `anchor → offset` 的顺序成对写；这一条正是那条不变量的断言。
+        expect(control.getOffset()).toEqual({ width: 7, height: 9 });
+        expect(fake.createdControls.length).toBe(created);
+      } else {
+        // 共享实例的 anchor 是 identity 的一部分：变化即重建（旧实例退出共享组）
+        expect(fake.createdControls.length).toBe(created + 1);
+        control = controlsOnMap()[0]!;
+        expect(control.getAnchor()).toBe(1);
+      }
 
       await setProps({ offset: { x: 21, y: 22 } });
       expect(control.getOffset()).toEqual({ width: 21, height: 22 });
@@ -399,6 +419,103 @@ describe("BCopyright：共享实例 + 版权项级显隐", () => {
     await nextTick();
     await nextTick();
     expect(control.copyrights).toHaveLength(2);
+    wrapper.unmount();
+    await nextTick();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 评审第 1 轮（commit e54d6fe）复现：#95 review 的四条                          */
+/* -------------------------------------------------------------------------- */
+
+describe("评审复现：动态改 anchor 不得污染版权控件的共享缓存", () => {
+  beforeEach(() => harness.reset());
+
+  it("A 从 TOP_LEFT 移到 BOTTOM_RIGHT 后应与 B 共用同一个控件，且卸载不得删掉 B 的缓存项", async () => {
+    const anchorA = ref("BMAP_ANCHOR_TOP_LEFT");
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [
+            h(BCopyright, { anchor: anchorA.value }, { default: () => "A" }),
+            h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" }),
+          ]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+
+    // 起点：两个 anchor 各一个控件
+    expect(controlsOnMap()).toHaveLength(2);
+    const shared = controlsOnMap()[1] as unknown as { copyrights: { content: string }[] };
+    expect(shared.copyrights).toHaveLength(1);
+
+    // A 移到 BOTTOM_RIGHT：正确语义是「离开旧共享组、加入目标共享组」
+    anchorA.value = "BMAP_ANCHOR_BOTTOM_RIGHT";
+    await nextTick();
+    await flushPromises();
+    expect(controlsOnMap()).toHaveLength(1);
+    expect(shared.copyrights).toHaveLength(2);
+
+    // A 卸载：共享控件仍被 B 使用 ⇒ 必须留在图上，且它的缓存项不得被删掉
+    anchorA.value = "BMAP_ANCHOR_BOTTOM_RIGHT";
+    wrapper.unmount();
+    await nextTick();
+    await flushPromises();
+    expect(controlsOnMap()).toHaveLength(0);
+    harness.assertIdle("版权控件共享缓存");
+  });
+
+  it("移动后同 anchor 再挂第三个实例仍应复用同一个控件（缓存项没被误删）", async () => {
+    const anchorA = ref("BMAP_ANCHOR_TOP_LEFT");
+    const showOthers = ref(false);
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: provider() }, () => [
+            h(BCopyright, { anchor: anchorA.value }, { default: () => "A" }),
+            showOthers.value
+              ? h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" })
+              : null,
+          ]),
+      }),
+      { attachTo: host() },
+    );
+    await flushPromises();
+    anchorA.value = "BMAP_ANCHOR_BOTTOM_RIGHT";
+    showOthers.value = true;
+    await nextTick();
+    await flushPromises();
+
+    const shared = controlsOnMap().at(-1) as unknown as { copyrights: unknown[] };
+    expect(controlsOnMap()).toHaveLength(1);
+    expect(shared.copyrights).toHaveLength(2);
+
+    wrapper.unmount();
+    await nextTick();
+    await flushPromises();
+    expect(controlsOnMap()).toHaveLength(0);
+  });
+});
+
+describe("评审复现：option 从有值变回 undefined", () => {
+  beforeEach(() => harness.reset());
+
+  it("live option 变回 undefined 时必须回到构造期默认（不能永久停在旧值）", async () => {
+    const { wrapper, setProps } = mountControl(BNavigation);
+    await flushPromises();
+    await setProps({ type: "BMAP_NAVIGATION_CONTROL_SMALL" });
+    expect((lastCreatedControl() as unknown as { type: unknown }).type).toBe(
+      "BMAP_NAVIGATION_CONTROL_SMALL",
+    );
+
+    const created = fake.createdControls.length;
+    await setProps({ type: undefined });
+    await flushPromises();
+    // 期望：重建一次，让构造期重新采用默认值
+    expect(fake.createdControls.length).toBe(created + 1);
+    expect(lastCreatedControl().options.type).toBeUndefined();
+
     wrapper.unmount();
     await nextTick();
   });

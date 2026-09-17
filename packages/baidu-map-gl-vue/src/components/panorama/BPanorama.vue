@@ -80,6 +80,25 @@ interface ActiveViewer {
   readonly viewer: PanoramaHandle;
 }
 let active: ActiveViewer | null = null;
+/**
+ * **传给构造期**的那一份 `options`。
+ *
+ * 用来在就绪收敛时判断「构造之后 options 变过没有」：`context.mount()` 可能还在等 Client，
+ * 这段窗口里 watcher 会触发，但那时 `active === null`（查看器还不存在），改动会被跳过；
+ * 若不在 ready 后补一次，它就永久停在构造期那份了（#95 评审 P2）。存快照而不是无条件重发，
+ * 是为了不破坏「同一个值重设不产生多余下发」。
+ */
+let createdOptions: PanoramaOptions | undefined;
+
+/** `options` 的变化键（watcher 与就绪收敛共用一份判据）。 */
+const optionsKeyOf = (options: PanoramaOptions | undefined): string =>
+  JSON.stringify([
+    options?.navigationControl,
+    options?.linksControl,
+    options?.indoorSceneSwitchControl,
+    options?.albumsControl,
+    options?.albumsControlOptions,
+  ]);
 
 /** 在本轮创建出来的查看器上执行一次（未就绪时静默跳过）。 */
 function onViewer(run: (target: ActiveViewer) => void): void {
@@ -99,6 +118,11 @@ function applyControlled(target: ActiveViewer): void {
     else driver.disableScrollWheelZoom(viewer);
   }
   if (props.poiType !== undefined) driver.setPanoramaPoiType(viewer, props.poiType);
+  // 收敛等待期间变过的 options（构造期拿到的是 `createdOptions`）
+  if (optionsKeyOf(props.options) !== optionsKeyOf(createdOptions) && props.options) {
+    driver.setOptions(viewer, props.options);
+    createdOptions = props.options;
+  }
 }
 
 /**
@@ -121,8 +145,11 @@ function subscribe(target: ActiveViewer): void {
 onMounted(async () => {
   const container = containerRef.value;
   if (!container) return;
+  // 与传给 `mount()` 的**同一份值**：这段窗口里父级可能改 options，收敛时要用它做基线
+  const initialOptions = props.options;
+  createdOptions = initialOptions;
   try {
-    const ready = await context.mount(container, props.options);
+    const ready = await context.mount(container, initialOptions);
     active = { driver: jsapiV4PanoramaOf(ready.client), viewer: ready.viewer };
     applyControlled(active);
     subscribe(active);
@@ -198,14 +225,8 @@ watch(
 );
 
 watch(
-  () =>
-    JSON.stringify([
-      props.options?.navigationControl,
-      props.options?.linksControl,
-      props.options?.indoorSceneSwitchControl,
-      props.options?.albumsControl,
-      props.options?.albumsControlOptions,
-    ]),
+  // 键按字段展开：父级传内联字面量不应触发一次多余的整体写回
+  () => optionsKeyOf(props.options),
   () => {
     const options = props.options;
     if (options) onViewer((target) => target.driver.setOptions(target.viewer, options));

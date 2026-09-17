@@ -61,5 +61,10 @@ export function removeCopyrightControlIfEmpty(
   const entries = ctx.client.driver.controls.listCopyrights(control);
   if (entries.length > 0) return;
   ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, control);
-  bucket(ctx.client, false)?.delete(anchor);
+  // **按身份出桶**：只有这个桶确实指向本实例时才删。调用方可能带着过期的 anchor 到来
+  // （例如实例已被移动到别处、而调用方手里还是旧键），无条件 `delete` 会把**别人**刚登记
+  // 的同名条目一起删掉——那个控件还在图上，后续同 anchor 的组件却会另建一个（#95 评审 P1 的
+  // 第二种症状）。`BCopyright` 已按创建时的 anchor 调用，这里是第二道保险。
+  const bucketOfClient = bucket(ctx.client, false);
+  if (bucketOfClient?.get(anchor) === control) bucketOfClient.delete(anchor);
 }

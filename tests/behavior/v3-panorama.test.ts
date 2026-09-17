@@ -449,3 +449,35 @@ describe("usePanoramaService：检索状态层", () => {
     await nextTick();
   });
 });
+
+describe("评审复现：options 在 viewer 异步 ready 前变化", () => {
+  beforeEach(() => harness.reset());
+
+  it("ready 之前改 options 必须在 ready 后收敛（不能永久停在构造期那份）", async () => {
+    const before = baseline();
+    const deferred = harness.deferredProvider();
+    const props = ref<Record<string, unknown>>({ point: POINT });
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(BMap, { provider: deferred }, () => [h(BPanorama, props.value)]),
+      }),
+      { attachTo: host() },
+    );
+    // Client 还没就绪：viewer 尚未创建，此刻改 options 走的是「active 为 null」的分支
+    await nextTick();
+    props.value = { point: POINT, options: { albumsControl: true } };
+    await nextTick();
+    expect(fake.createdPanoramas.length).toBe(before.panoramas);
+
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+
+    // 期望：ready 后用**当前** props.options 收敛
+    expect(lastViewer().options).toMatchObject({ albumsControl: true });
+
+    wrapper.unmount();
+    await nextTick();
+  });
+});
