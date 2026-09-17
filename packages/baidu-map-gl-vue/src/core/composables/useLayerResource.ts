@@ -209,7 +209,7 @@ export function useLayerResource<Props>(
   let instance: InstanceState | null = null;
 
   /**
-   * 数据驱动图层的**永久销毁**前的清理：先清数据覆盖物，再由 Map 摘除图层。
+   * 数据驱动图层的**永久销毁**前的清理：在图层仍在图上时先清数据覆盖物，再由 Map 摘除图层。
    *
    * 依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
    * - `DOMLayer`：先 `removeAllOverlays()` 再 `removeLayer()`（`setData(null)` **不会**移除已经渲染
@@ -218,12 +218,27 @@ export function useLayerResource<Props>(
    *   因为 `removeLayer` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用）。
    *
    * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
-   * 因此这里不需要按 kind 分支。**只在永久销毁时做**：普通 `visible=false` 的摘挂不能清
-   * （切回可见时还得重新 `setData`）；清理失败不阻断摘除，但要可观测。
+   * 因此这里不需要按 kind 分支；**但要不要执行**由该清空操作的**作用域**决定
+   * （`clearRequiresAttach`）：Map 作用域的要求图层仍在图上（见下面的说明），图层作用域的照常执行。
+   * **只在永久销毁时做**：普通 `visible=false` 的摘挂不能清（切回可见时还得重新 `setData`）；
+   * 清理失败不阻断摘除，但要可观测。
    */
   const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
     if (!layers.supports(state.spec.kind, "clearData")) return;
+    // **Map 作用域**的清空要求图层仍在图上。官方对 `GeoJSONLayer.clearData` 的说明是「**先从 Map
+    // 移除**这些覆盖物并清空集合」，而 `map.removeLayer()` 会「清空图层持有的 Map 引用」，官方因此
+    // 明确：**要真正清空 `getData()` 集合，得在 `removeLayer` 之前调用 `clearData()`**。
+    // 也就是说，对已经摘下的实例再调它是**无效动作**——留着它只会把「已经清空了」变成一句看起来
+    // 有保证的假话（本库禁止假支持）。可见资源并没有因此残留：同一段说明写明 `removeLayer`
+    // **本身已经摘掉覆盖物**。
+    //
+    // `unknown` 同样跳过：那一刻我们连它是否在图上都不确定，调用同样无法保证有效果。
+    //
+    // **图层作用域**的清空（`DOMLayer.removeAllOverlays`）与挂没挂上无关，照常执行——它移除的是
+    // 图层自己创建的真实 DOM 节点，跳过会真的残留（官方「资源清理」把它列为必要步骤，且没有把它
+    // 与 Map 绑定）。
+    if (layers.clearRequiresAttach(state.spec.kind) && state.mountState !== "attached") return;
     try {
       layers.clearData(state.handle);
     } catch (error) {
@@ -245,12 +260,19 @@ export function useLayerResource<Props>(
    * 失败之后 `mountAttempted` **保留**（还有没人认领的实例要摘），`mountState` 置为 `unknown`
    * （既不能按「还挂着」也不能按「已经下去了」记，见 `MountState`）。
    *
-   * `permanent` 区分两条语义：**临时摘挂**（`visible=false`，保留数据与实例）与
-   * **永久销毁**（组件卸载 / 重建 / Map 销毁，先清数据覆盖物再摘除）。
+   * `permanent` 区分两条语义：**临时摘挂**（`visible=false`，保留数据与实例、**不清**数据覆盖物）与
+   * **永久销毁**（组件卸载 / 重建 / Map 销毁）。永久销毁这一侧有两种落法，取决于调用时的挂载状态：
+   *
+   * - `attached`（含 add 失败补偿）：**先清数据覆盖物、再摘除**，即官方推荐的
+   *   `clearData()` / `removeAllOverlays()` → `removeLayer()` 顺序；
+   * - 已经 `detached`（此前 `visible=false` 已成功摘过一次）：只做 **detached cleanup**——
+   *   可执行的清空照常做（见 `tearDownData`），但**不会再摘一次**（`mountAttempted` 已复位，
+   *   下面那道门禁会直接 return）。官方没有承诺「对已经摘掉的图层重复 `removeLayer` 是安全的」，
+   *   本库不猜。
    */
   const unmount = (state: InstanceState, context: MapReadyContext, permanent = false): void => {
-    // 清理与「挂没挂上」无关：只要这个实例要被永久丢弃，就先清掉它渲染出的数据覆盖物
-    // （失败补偿路径下 `mountAttempted` 可能已被复位，但那时也没有数据可清，是 no-op）。
+    // 清理只与「这个实例要被永久丢弃」有关，与「它还挂不挂着」无关（要不要执行由清空操作的
+    // 作用域决定，见 `tearDownData`）。放在门禁之前，是为了让「已经摘下」这条路径也走到它。
     if (permanent && !state.torndown) {
       state.torndown = true;
       tearDownData(state, context);

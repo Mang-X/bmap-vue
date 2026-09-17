@@ -684,7 +684,10 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
     harness.assertIdle("raster url 回调替换");
   });
 
-  it("[评审 2] 同类回调（tileLoadFunction / 模板回调 / GeoJSON style）同样转发到最新实现", async () => {
+  it("[评审 2] 转发型回调（tileLoadFunction / XYZ 模板回调）转发到最新实现；GeoJSON style 走「重建」那条路", async () => {
+    // ⚠️ 标题曾写成「同类回调（… / GeoJSON style）同样转发」，但自第二轮起**函数型 GeoJSON style
+    // 已改为身份敏感 ⇒ 重建**（见 §9）。这条用例的 GeoJSON 段测的是**对象型** style 的内容变化
+    // ⇒ 重建，不是转发；两者是同一条判据（「SDK 什么时候调用它」）下的两个分支，不要混读。
     const loadA = vi.fn();
     const loadB = vi.fn();
     const tile = await mountOneLayer(2, { tileLoadFunction: loadA });
@@ -701,7 +704,8 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
     await unmountAndSettle(tile.wrapper);
     harness.assertIdle("tileLoadFunction 替换");
 
-    // XYZ 的模板回调与 GeoJSON 的函数型 style 走同一条路径（同一个 helper，逐个组件覆盖）
+    // XYZ 的模板回调与 TileLayer 的 `tileLoadFunction` 走同一条路径（同一个 helper，逐个组件覆盖）；
+    // 下面 GeoJSON 那一段刻意**不是**转发：它验证的是「会转发的那一类」与「要重建的那一类」的边界。
     const xyz = await mountOneLayer(6, { xTemplate: (x: number) => x });
     const firstX = harness.layerOptions(-1).xTemplate as (x: number, y: number, z: number) => number;
     expect(firstX(7, 1, 1)).toBe(7);
@@ -1394,6 +1398,131 @@ describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收�
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
     harness.assertIdle("detach 之后抛错的收敛");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 13. 第六轮评审修正：清空操作的作用域与「重复摘除」前提                        */
+/* -------------------------------------------------------------------------- */
+
+describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除」前提", () => {
+  it("[六轮 1] 清空的作用域是能力面：geojson 是 Map 作用域，dom 是图层作用域", () => {
+    const { layers } = createFakeDriverPair();
+    expect(layers.supports("geojson", "clearData")).toBe(true);
+    expect(
+      layers.clearRequiresAttach("geojson"),
+      "GeoJSONLayer.clearData 是「先从 Map 移除这些覆盖物」⇒ 要求图层仍在图上",
+    ).toBe(true);
+    expect(layers.supports("dom", "clearData")).toBe(true);
+    expect(
+      layers.clearRequiresAttach("dom"),
+      "DOMLayer.removeAllOverlays 移除的是图层自己创建的 DOM 节点 ⇒ 与是否挂图无关",
+    ).toBe(false);
+    expect(
+      layers.clearRequiresAttach("tile"),
+      "没有清空入口的 kind 恒 false（两条判据分开：调用方先问 supports）",
+    ).toBe(false);
+  });
+
+  it("[六轮 1] GeoJSON：挂载中卸载 ⇒ 清空发生在图层**仍在图上**时（官方要求的顺序）", async () => {
+    const { wrapper } = await mountOneLayer(4);
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        attachedAtClear: boolean | null;
+        data: unknown;
+      };
+    expect(layerOf().attachedAtClear, "挂载期间还没清过").toBeNull();
+
+    await unmountAndSettle(wrapper);
+
+    expect(layerOf().attachedAtClear, "clearData 之前图层仍在图上").toBe(true);
+    expect(layerOf().data, "集合被真正清空").toBeNull();
+    harness.assertIdle("attached 卸载");
+  });
+
+  it("[六轮 1] GeoJSON：先 visible=false 再卸载 ⇒ **不再**对 detached 实例调 clearData", async () => {
+    // 官方明说「要真正清空 getData() 集合，得在 removeLayer **之前**调用 clearData()」——
+    // 摘掉之后图层不再持有 Map 引用，此时再调它是**无效动作**。可见资源不会因此残留：
+    // 同一段说明写明 `removeLayer` 本身已经摘掉覆盖物。
+    const { wrapper, setProp } = await mountOneLayer(4);
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        attachedAtClear: boolean | null;
+        data: unknown;
+      };
+
+    await setProp({ visible: false });
+    expect(harness.attached("layer"), "隐藏已经摘过一次").toBe(0);
+
+    await unmountAndSettle(wrapper);
+
+    expect(
+      layerOf().attachedAtClear,
+      "Map 作用域的清空被跳过（对 detached 实例调用它没有效果）",
+    ).toBeNull();
+    harness.assertIdle("detached 卸载（geojson）");
+  });
+
+  it("[六轮 1] DOM：先 visible=false 再卸载 ⇒ 图层作用域的清空**照常执行**（未取证前提，见已知限制 13）", async () => {
+    // 这条刻意把「依赖了一条没有上游依据的前提」钉住：官方只给了 `removeAllOverlays() →
+    // removeLayer()` 的顺序，**没有**说该入口是否要求图层仍在图上。跳过它会真的残留 DOM 节点，
+    // 所以这里照常执行；`attachedAtClear === false` 就是那条前提的显式读数——取证结论若推翻它，
+    // 这条断言会红，而不是让依赖继续藏在替身的宽容里。
+    const { wrapper, setProp } = await mountOneLayer(5);
+    const layerOf = () =>
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        attachedAtClear: boolean | null;
+        customOverlays: unknown[];
+      };
+
+    await setProp({ visible: false });
+    expect(layerOf().customOverlays.length, "隐藏不清覆盖物").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+
+    expect(
+      layerOf().attachedAtClear,
+      "detached 时仍会调用 removeAllOverlays（无上游依据，登记为已知限制 13）",
+    ).toBe(false);
+    expect(layerOf().customOverlays.length, "节点被清掉").toBe(0);
+    harness.assertIdle("detached 卸载（dom）");
+  });
+
+  it("[六轮 2] 悲观契约下（detached 时 removeLayer 抛错）：收敛**不保证发生**，但退化可观测且绝不重复挂载", async () => {
+    // `unknown` 的收敛依赖「对已经摘掉的图层再调一次 removeLayer 是安全的」——而官方**没有**这条
+    // 承诺（这正是本库在 detached-cleanup 上「不猜」的同一条理由）。Fake 的默认行为对「不在图上的
+    // layer」天然是 no-op，所以那条依赖一直被掩盖着；打开悲观契约把它暴露出来。
+    //
+    // 结论（也是这条用例要钉的）：前提不成立时**收敛不会发生**（图层仍然保持 unknown、不在地图上），
+    // 但它是**可观测**的（`resource:error`），而且**不会**因为「猜已经下去了」去 `add` 而出现两份。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayerAfterDetach = new Error("removeLayer failed after detach");
+    map.failRemoveLayerWhenDetached = new Error("removeLayer on detached layer");
+
+    props.value = { ...props.value, visible: false };
+    await settle();
+    expect(harness.attached("layer"), "第一次摘除已经把图层拿下去了").toBe(0);
+    const errorsAfterHide = errors.length;
+    expect(errorsAfterHide, "第一次失败可观测").toBeGreaterThan(0);
+
+    props.value = { ...props.value, visible: true };
+    await settle();
+
+    expect(
+      harness.attached("layer"),
+      "收敛失败 ⇒ 图层不会回来（诚实退化），但**绝不会**出现两份",
+    ).toBe(0);
+    expect(errors.length, "退化必须可观测（第二次失败也经 resource:error 交出）").toBeGreaterThan(
+      errorsAfterHide,
+    );
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
   });
 });
 

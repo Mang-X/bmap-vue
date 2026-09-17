@@ -75,6 +75,8 @@ function fakeLayerDriver(): LayerDriver {
     surface: () => ({ ctorSlots: [], operations: [] }),
     supports: () => false,
     isMutableOption: () => false,
+    // 本用例只数「谁先谁后」：没有清空能力 ⇒ 恒 false（调用方应先判 supports）。
+    clearRequiresAttach: () => false,
     setZIndex: () => {},
     setData: () => {},
     clearData: () => {},

@@ -467,6 +467,13 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
   resetStyleCalls = 0
   destroyCalls = 0
   /**
+   * 最近一次 `clearData()` 时，图层是否仍在图上（没清过则为 `null`）。
+   *
+   * 官方要求「先清、再 `removeLayer`」：`removeLayer` 之后图层不再持有 Map 引用，此后再 `clearData`
+   * 不会真正清空集合。把这个**前提**记下来，用例就能直接断言它成立，而不是靠注释。
+   */
+  attachedAtClear: boolean | null = null
+  /**
    * 测试故障注入：让**下一次** `setData` **先真的换掉数据、再抛错**（用后即清）。
    *
    * 与 `FakeV4DOMLayer.failNextSetStyleOptionsAfterApply` 同一个用途：建模「SDK 已经改了、
@@ -507,6 +514,10 @@ export class FakeV4GeoJSONLayer extends FakeV4Layer {
 
   clearData(): void {
     this.callLog.push('clearData')
+    // 「清空发生时图层是否仍在图上」——官方对 `GeoJSONLayer.clearData` 的要求就是「先在图上清、
+    // 再 removeLayer」（`removeLayer` 之后图层不再持有 Map 引用，clearData 不再起作用）。
+    // 把它记成可断言的事实，好让「顺序 / 前提」在测试里可见，而不是只写在注释里。
+    this.attachedAtClear = this.attachedMap !== null
     this.data = null
   }
 
@@ -587,6 +598,13 @@ export class FakeV4DOMLayer extends FakeV4Layer {
   data: object | null = null
   visible: boolean
   readonly customOverlays: object[] = []
+  /**
+   * 最近一次 `removeAllOverlays()` 时，图层是否仍在图上（没清过则为 `null`）。
+   *
+   * 官方没说明该入口是否需要图层在图上，所以这个值在 detached 路径上会是 `false`——用例据此把
+   * 「我们依赖了这条未取证的前提」显式钉住（已知限制 13）。
+   */
+  attachedAtClear: boolean | null = null
 
   constructor(
     createDOM: (properties: object, point: { lng: number; lat: number }) => HTMLElement,
@@ -652,6 +670,11 @@ export class FakeV4DOMLayer extends FakeV4Layer {
 
   removeAllOverlays(): void {
     this.callLog.push('removeAllOverlays')
+    // 与 `FakeV4GeoJSONLayer.attachedAtClear` 同一个用途：把这个**图层作用域**的清空「在什么挂载
+    // 状态下被执行」记成可断言的事实。官方对 `DOMLayer` 只给了「先 removeAllOverlays() 再
+    // removeLayer()」的顺序，**没有**说明该入口是否要求图层仍在图上——所以 detached 时仍然会走到
+    // 这里（已知限制 13 的前提），用例把这个依赖显式钉住，而不是让它藏在替身的宽容里。
+    this.attachedAtClear = this.attachedMap !== null
     this.customOverlays.length = 0
   }
 

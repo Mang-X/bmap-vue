@@ -93,6 +93,13 @@ interface LayerDescriptor {
    * 按 kind 分支。
    */
   clearEntry: string;
+  /**
+   * 清空入口的作用域（依据见 `LayerDriver.clearRequiresAttach` 的文档）。
+   *
+   * 只在 `operations` 含 `"clearData"` 时被读取；其余 kind 保持 `"map"`（与 `clearData` 的
+   * 语义一致），不参与判定。写成**必填**是为了让「新加的 kind 到底属于哪一种」必须被显式回答。
+   */
+  clearScope: "map" | "layer";
   operations: readonly LayerOperation[];
 }
 
@@ -118,6 +125,7 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: [],
   },
   "panorama-coverage": {
@@ -130,6 +138,7 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: [],
   },
   tile: {
@@ -144,6 +153,7 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
   traffic: {
@@ -156,6 +166,7 @@ const LAYER_DESCRIPTORS = {
     mutable: { ...TILE_MUTABLE, colors: "setColors", edge: "setEdge" },
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
   geojson: {
@@ -170,6 +181,7 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: ["setData", "clearData"],
   },
   dom: {
@@ -195,6 +207,7 @@ const LAYER_DESCRIPTORS = {
     },
     // DOMLayer 有 setData；清空走 removeAllOverlays()（`clearEntry` 表达这个差异）。
     clearEntry: "removeAllOverlays",
+    clearScope: "layer",
     operations: ["setData", "clearData"],
   },
   xyz: {
@@ -207,6 +220,7 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
   wms: {
@@ -219,6 +233,7 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
   wmts: {
@@ -231,6 +246,7 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
   raster: {
@@ -243,6 +259,7 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
+    clearScope: "map",
     operations: TILE_OPERATIONS,
   },
 } as const satisfies Record<LayerKind, LayerDescriptor>;
@@ -498,6 +515,15 @@ export function createJsapiV4LayerDriver(input: CreateJsapiV4LayerDriverInput): 
       if (descriptor.mutable[key] || descriptor.bagSetters[key]) return true;
       // `data` 由归一化操作承载（`setData`），不走 option 更新路径
       return key === "data" && descriptor.operations.includes("setData");
+    },
+
+    clearRequiresAttach(kind) {
+      const descriptor = LAYER_DESCRIPTORS[kind] as LayerDescriptor | undefined;
+      if (!descriptor) return false;
+      // 没有清空入口的 kind 恒 false：调用方应先问 `supports(kind, "clearData")`
+      // （两条判据分开，是为了不让「没有这个能力」与「这个能力有前置条件」混成一个答案）。
+      if (!descriptor.operations.includes("clearData")) return false;
+      return descriptor.clearScope === "map";
     },
 
     setOptions(layer, options) {

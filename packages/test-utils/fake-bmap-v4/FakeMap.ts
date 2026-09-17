@@ -154,6 +154,18 @@ export class FakeV4Map extends FakeV4EventTarget {
    */
   failNextRemoveLayerAfterDetach: Error | null = null
   /**
+   * **悲观契约模式**：让 `removeLayer` 在目标**不在图上**时抛错（**粘性**，不随调用清除）。
+   *
+   * 为什么需要一条粘性策略，而不只是一次性注入：官方对「`map.removeLayer()` 传入一个**已经摘掉**
+   * 的图层」**没有任何说明**，而替身对「不在数组里的 layer」天然是 no-op——于是任何依赖「重复摘除
+   * 是安全的」的算法都会被替身的宽容悄悄放行。
+   *
+   * 打开这个模式等于把契约换成**最悲观的那一侧**（重复摘除会抛错），让那条依赖显式暴露出来：
+   * 三态收敛（`unknown` ⇒ 先 best-effort 摘一次、再挂）正是依赖它的一处。用例据此钉住
+   * 「在悲观契约下退化到什么程度」，而不是让依赖只活在注释里。
+   */
+  failRemoveLayerWhenDetached: Error | null = null
+  /**
    * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
    *
    * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
@@ -296,6 +308,10 @@ export class FakeV4Map extends FakeV4EventTarget {
       throw error
     }
     const index = this.layers.indexOf(layer)
+    if (index < 0 && this.failRemoveLayerWhenDetached) {
+      // 悲观契约：目标不在图上 ⇒ 抛错（粘性，见该字段说明）。
+      throw this.failRemoveLayerWhenDetached
+    }
     if (index >= 0) {
       this.layers.splice(index, 1)
       this.stats.resourceReleased('layer')

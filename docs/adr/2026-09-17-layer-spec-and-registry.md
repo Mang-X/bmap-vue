@@ -204,34 +204,61 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 `tests/behavior/v3-layer-suite.test.ts` 按 issue 的「测试要求」分节覆盖
 （统一内核 / URL 重建 / 参数生成 / 响应式数据 / Registry 与 Map dispose / 事件归属 / 能力标记）。
 
-### 12. 永久销毁前先清数据覆盖物（`clearData` → `removeLayer`），临时摘挂不清
+### 12. 永久销毁的清理：按**清空操作的作用域**决定，临时摘挂不清
 
-依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
+依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`），
+而它对两种「清空」的**前置条件**说法不同——这条差异是决策的起点：
 
-- `DOMLayer`：**先 `removeAllOverlays()` 再 `removeLayer()`**；该文档明确「`setData(null)` 只清空
-  数据引用，不会移除已经渲染出来的 overlays」，并把「对 DOMLayer 只调用 `setData(null)`」
-  列为常见错误；
-- `GeoJSONLayer`：`clearData()` 在 `removeLayer` **之前**（该文档同时写明：`removeLayer` 已经摘掉
-  覆盖物、解绑监听并清空图层持有的 Map 引用，**之后再 `destroy()` 不起作用**——所以本库**不**调用
-  `destroy()`：它既无必要，也不会产生可观测效果）。
+| 清空入口 | 文档原文 | 作用域 |
+| --- | --- | --- |
+| `GeoJSONLayer.clearData()` | 「**先从 Map 移除**这些覆盖物并清空集合」；且 `map.removeLayer()` 会「清空图层持有的 Map 引用」，官方因此明确「**要真正清空 `getData()` 集合，得在 `removeLayer` 之前调用 `clearData()`**」 | **Map**：要求图层仍在图上 |
+| `DOMLayer.removeAllOverlays()` | 「`setData(null)` 只清空数据引用，不会移除已经渲染出来的 overlays；清空时必须显式调用 `removeAllOverlays()`」，且「资源清理」把它列为**必要步骤** | **图层**：移除的是图层自己创建的真实 DOM 节点，与是否挂图无关 |
 
-因此 `LayerRecord.dispose()`（组件卸载 / 重建 / Map 销毁三条路径的公共出口）在摘除图层之前，
-对**支持 `clearData` 的 kind** 调一次统一清空入口（Driver 按 kind 映射到 `clearData` /
-`removeAllOverlays`）。两条边界刻意如此：**`visible=false` 的临时摘挂不清**（切回可见时数据照旧，
-不用补 `setData`）；清理失败不阻断摘除，但经 `logger.warn` 可观测。
-（第三轮评审发现 2。）
+因此该差异被建模成**能力面**（`LayerDriver.clearRequiresAttach(kind)`，事实源在 Driver 的
+`clearScope` 描述符字段），内核据此决定「这次清空要不要执行」：
 
-**承诺的是结果，不是固定顺序**：`visible=false` 的摘除**成功**之后 `mountAttempted` 已复位，
-永久销毁只做 **detached cleanup**——`clearData()` 之后在 `if (!mountAttempted) return` 处结束，
-**没有第二次 `removeLayer()`**。因此承诺是「永久销毁保证**最终清空**（数据覆盖物一定被清掉）」，
-而不是「所有路径都恰好走一遍 `clearData → removeLayer`」。
+- 图层**在图上**（含 `addLayer` 失败补偿那条路径）：`clearData()` / `removeAllOverlays()` →
+  `removeLayer()`，正是文档推荐的顺序；
+- 已经 **detached**（此前 `visible=false` 已成功摘过一次）：本库只做 **detached cleanup**——
+  **Map 作用域的清空跳过**（对已摘下的实例调用它没有效果，留着只会把「已经清空了」变成一句
+  看起来有保证的假话；可见资源并不残留，同一段说明写明 `removeLayer` **本身已经摘掉覆盖物**），
+  **图层作用域的清空照常执行**（跳过会真的残留 DOM 节点）。**不会再摘一次**：官方没有承诺
+  「对已经摘掉的图层重复 `removeLayer` 是安全的」，本库不猜；
+- `unknown`：同样跳过 Map 作用域的清空（那一刻连它是否在图上都不确定）。
 
-为什么不无条件再摘一次：官方**没有**承诺「对已经摘掉的图层重复 `removeLayer` 是安全的」，
-本库不猜（与「不做假支持」同一口径）。`v3-layer-suite.test.ts` §11 的「先隐藏再卸载」用例把
-**真实调用次数**钉住（`map.callLog` 里 `removeLayer` 恰好一次）。
+**`visible=false` 的临时摘挂一律不清**（切回可见时数据照旧，不用补 `setData`）。
+清理失败不阻断摘除，但经 `logger.warn` 可观测。
 
-（第四轮补测建议 + 第五轮评审发现 3：早先这条与用例写的是「清空发生在第二次摘除之前」，
-那是在描述一个实现里**并不存在**的动作。）
+**承诺的是结果、且按作用域分述**——不再笼统写「保证最终清空」：
+
+- 覆盖物（GeoJSON 的图形 / DOM 的真实节点）在永久销毁后**一定不在图上**：attached 路径由
+  `clearData()` 清、detached 路径由 `removeLayer` 自己摘（GeoJSON）；DOM 的节点由
+  `removeAllOverlays()` 清；
+- `getData()` 集合在 detached 路径上**不会被清**（官方明说那要在 `removeLayer` 之前做）。
+  该集合是随实例一起丢弃的内存状态，**不是**需要释放的 SDK 资源——所以这条不构成残留。
+
+`v3-layer-suite.test.ts` §11 / §13 用**真实调用次数**与「清空发生时图层在不在图上」
+（替身的 `attachedAtClear`）把这个前提钉住，而不是只写在注释里。
+（第三轮评审发现 2；第四轮补测建议 + 第五轮发现 3 修正了「第二次摘除」的错误表述；
+第六轮发现 1 把作用域差异建出来。）
+
+### 12b. 前提：`map.removeLayer()` 对**已经摘掉**的图层是安全的（**未取证**）
+
+三态收敛（决策 14）在 `unknown` ⇒ 期望可见时要「先 best-effort 摘一次、再挂」，这一步会对一个
+**可能已经不在图上**的图层再调一次 `removeLayer`。上游**没有**任何关于「重复摘除是否安全」的说明。
+
+这条前提无法回避：任何「保证它不在图上」的动作都只能是 `removeLayer`；区别只在于什么时候调。
+因此本库不假装它已被证明，而是：
+
+- 把它**显式登记**为本条前提（已知限制 14）；
+- 在替身里建出**悲观契约**（`FakeV4Map.failRemoveLayerWhenDetached`：目标不在图上时 `removeLayer`
+  抛错），并用一条用例钉住退化行为——**收敛不保证发生**（图层停在 `unknown`、仍不在地图上），
+  但**可观测**（`resource:error`）且**绝不会**因为「猜已经下去了」去 `add` 而出现两份；
+- 把取证写成可执行的形状：**开一张 live 取证票**，在真实 4.0 页面上记录
+  「`removeLayer(已摘下的 layer)` 是否抛错」与
+  「`DOMLayer.removeAllOverlays()` 在 detached 实例上是否生效」两个读数，拿到结论后再决定是否
+  把三态收敛改成别的恢复机制（或把该前提升级为已证事实）。
+
 
 ### 13. `BDOMLayer` 不提供交互事件（官方声明缺 `removeEventListener`）
 
@@ -257,7 +284,7 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
 - 记「已经下去了」⇒ 真实可能还在图上，再 `add` 一次会让**同一个实例在图上出现两份**
   （`addLayer` 不去重）。
 
-两条路都错，所以失败之后留 `unknown`，由一个**确定的动作**收敛（`syncMounted`）：
+两条路都错，所以失败之后留 `unknown`，由一个**同步动作**收敛（`syncMounted`）：
 
 | 当前状态 | 期望可见 | 动作 |
 | --- | --- | --- |
@@ -266,9 +293,18 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
 | `unknown` | 可见 | **先 best-effort `remove` 一次（把未知变确定），再 `add`** ⇒ `attached` |
 | 任意 | 不可见 | `unmount`（成功 ⇒ `detached`；失败 ⇒ `unknown`） |
 
-收敛动作不是免费的（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生，而且能让**两种失败
-形状**都落到「恰好挂一份」：上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这是一次 no-op，随后
-照常挂上。（第五轮评审发现 2。）
+收敛动作不是免费的（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
+
+**这里有一条前提，而且它未被上游证明**：`unknown` 行里的那次 `remove` 是对一个**可能已经不在图上**
+的图层调用的，而官方对「重复摘除是否安全」**没有**任何说明。因此本库**不**声称这是「确定性收敛」，
+只声称「在前提 P（重复 `removeLayer` 安全）下收敛，并且前提不成立时的退化是有界且可观测的」：
+
+- 前提 P 成立（替身的默认行为、也是最可能的真实行为）⇒ 收敛到「恰好挂一份」；
+- 前提 P 不成立 ⇒ **收敛不会发生**（状态停在 `unknown`、图层仍不在地图上），但失败经
+  `resource:error` 交出，且**绝不会**因为「猜已经下去了」去 `add` 而出现两份。
+
+前提 P 的登记与取证方式见决策 12b、已知限制 14；悲观契约下的退化行为有用例钉住（§13）。
+（第五轮评审发现 2；第六轮评审发现 2 指出原先「确定性收敛」的表述过强。）
 
 记账的复位时点：`mountState = "detached"` 与 `mountAttempted = false` 都放在 `driver.layers.remove()`
 **成功返回之后**。先复位的后果不是「少摘一次」，而是**永远不再摘**——`mountAttempted` 变成「从未挂过」，
@@ -386,12 +422,20 @@ SDK 上留下一个再也没人认领的孤儿。保留记账 = 保留「仍需 
     没有任何一侧还能重试——真实 SDK 里收口的是 `map.destroy()` 自己。此时承诺的是
     「`logger.warn` 可见」，**不是**「无残留」；`v3-layer-suite.test.ts` §11 的窄角用例刻意**不**
     断言地图已空（详见决策 14）。
-13. **「先隐藏、后卸载」这条路径上，永久销毁做的是 detached cleanup、`removeAllOverlays()` 是对
-    detached 图层调用的**：调用次数有回归用例钉住（`removeLayer` 恰好一次），但真实 SDK 是否要求
-    「图层仍在图上」才允许清理**没有取证**（替身没有该前置条件）。若上游确实有前置条件，症状是
-    日志里多一条 `DOM 销毁前的 clearData 失败` 且覆盖物残留——不会阻断释放。真出现时按「显式失败」
-    处理（在 `tearDownData` 里先补挂再清），不要静默降级。与已知限制 12 不同：这条**可能**有解，
-    只是缺证据。
+13. **`DOMLayer.removeAllOverlays()` 在 detached 实例上是否生效，没有上游依据**：官方只给了
+    「先 `removeAllOverlays()` 再 `removeLayer()`」的顺序与「只调 `setData(null)` 会残留」的警告，
+    **没有**说该入口是否要求图层仍在图上。本库仍然照常调用它（它是移除真实 DOM 节点的唯一依据，
+    跳过会真的残留），因此「先隐藏、后卸载」这条路径确实依赖一个未取证的前提。
+    这条依赖**已被显式钉住**：替身记录 `attachedAtClear`（清空发生时图层在不在图上），§13 的用例
+    断言 detached 路径上它是 `false`——取证结论若推翻它，那条断言会红，而不是让依赖继续藏在
+    替身的宽容里。若上游确实要求「图层仍在图上」，症状是日志里多一条 `DOM 销毁前的 clearData 失败`
+    且覆盖物残留（不阻断释放）；届时按「显式失败」处理（先补挂再清），不要静默降级。
+14. **`map.removeLayer()` 对已经摘掉的图层是否安全，没有上游依据**（决策 12b 的前提 P）：
+    三态收敛在 `unknown` 时会再调一次 `removeLayer`，这一步依赖重复摘除安全。上游对此**无任何说明**，
+    且这条前提**无法回避**——任何「保证它不在图上」的动作都只能是 `removeLayer`。
+    本库不假装它已被证明：悲观契约（`FakeV4Map.failRemoveLayerWhenDetached`）下的退化行为有用例
+    钉住（§13：收敛不保证发生、可观测、绝不重复挂载），取证形状写在决策 12b。
+    **拿到取证结论之前，不要在任何文档/注释里把它写成「已确定」或「幂等」。**
 
 ## 参考
 

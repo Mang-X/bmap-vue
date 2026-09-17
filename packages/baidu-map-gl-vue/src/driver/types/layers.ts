@@ -154,6 +154,22 @@ export interface LayerDriver {
    */
   isMutableOption(kind: LayerKind, key: string): boolean;
 
+  /**
+   * 归一化的「清空」（`clearData`）在该 kind 上是否**要求图层仍在图上**。
+   *
+   * 为什么这是一条**能力面**而不是调用方的约定：官方对两种清空语义的描述不同——
+   *
+   * - `GeoJSONLayer.clearData()`：「**先从 Map 移除**这些覆盖物并清空集合」，而
+   *   `map.removeLayer()` 会「清空图层持有的 Map 引用」，官方因此明确要求
+   *   「要真正清空 `getData()` 集合，得在 `removeLayer` **之前**调用 `clearData()`」
+   *   ⇒ **Map 作用域**，摘掉之后再调无效；
+   * - `DOMLayer.removeAllOverlays()`：移除**图层自己**渲染出来的 DOM 覆盖物
+   *   ⇒ **图层作用域**，与是否挂在图上无关（且它是「只调 `setData(null)` 会残留」的唯一解）。
+   *
+   * 没有清空入口的 kind 恒返回 `false`（调用方应先问 `supports(kind, "clearData")`）。
+   */
+  clearRequiresAttach(kind: LayerKind): boolean;
+
   setZIndex(layer: LayerHandle, zIndex: number): void;
   setData(layer: LayerHandle, data: LayerData): void;
   clearData(layer: LayerHandle): void;
