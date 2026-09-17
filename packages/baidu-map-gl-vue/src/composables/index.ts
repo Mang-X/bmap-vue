@@ -14,6 +14,7 @@ export * from "./useBMapWalkingRoute";
 export * from "./useBMapRidingRoute";
 export * from "./useBMapTransitRoute";
 export * from "./useBMapServiceTask";
+export * from "./usePanoramaService";
 export * from "./useBMapTrackAnimation";
 export { useMapEvent } from "./useMapEvent";
 export type { MapEventHandler, MapEventPayloadForName, UseMapEventOptions } from "./useMapEvent";

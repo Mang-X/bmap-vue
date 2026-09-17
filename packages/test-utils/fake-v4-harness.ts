@@ -71,6 +71,14 @@ export interface FakeV4Harness {
   assertIdle(label?: string): void;
   /** 当前挂在**最后一张创建的 Map** 上的子资源数。 */
   attached(kind: FakeV4MountKind): number;
+  /**
+   * 最后一张地图上当前**可见**的控件数（M7-CONTROL-PANORAMA / #41）。
+   *
+   * 控件的 `visible` 在 #41 定型为 SDK 基类的 `show()` / `hide()`：控件始终挂载，
+   * 只是可见性变化。因此「显隐」需要一个与 `attached("control")` **不同**的读数——
+   * 用挂载计数读显隐会把「藏起来了」与「摘掉了」混成一件事。
+   */
+  visibleControls(): number;
   /** 最后一张地图上挂载的覆盖物位置（不含图层），按挂载顺序；无位置记为 `null`。 */
   overlayPositions(): Array<{ lng: number; lat: number } | null>;
   /** 最后一张地图上当前打开的气泡数。 */
@@ -289,6 +297,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         return map.layers.length;
       },
       overlayPositions: () => toPositions(lastMap().overlays),
+      visibleControls: () => lastMap().controls.filter((control) => control.isVisible()).length,
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
       failNextInitializeView: (error) => fake.failNextInitializeView(error),

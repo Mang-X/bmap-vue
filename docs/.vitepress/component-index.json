@@ -1,6 +1,6 @@
 {
   "version": "3.0.0-beta.0",
-  "generatedAt": "2026-09-09T07:10:49.232Z",
+  "generatedAt": "2026-09-17T06:06:20.379Z",
   "components": [
     "BMapProvider",
     "BMap",
@@ -23,12 +23,17 @@
     "BMarkerList",
     "BMarkerCluster",
     "BZoom",
+    "BNavigation",
+    "BMapType",
+    "BOverview",
     "BScale",
     "BCityList",
     "BLocation",
     "BNavigation3d",
     "BCopyright",
     "BDistrictLayer",
-    "BPanoramaCoverageLayer"
+    "BPanoramaCoverageLayer",
+    "BPanorama",
+    "BPanoramaLabel"
   ]
 }

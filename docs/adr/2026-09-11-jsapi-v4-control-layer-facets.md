@@ -78,6 +78,10 @@ issue #22「目标与范围」逐条列出的控件集合：
   （issue 的非目标之一）。webgl-v1 侧同步补齐（`CONTROL_CTORS` 是 `Record<…>` 类型，
   漏一个 kind 会直接编译失败）。
 
+  > ✅ **已由 2026-09-17 / #41 承接**：三个组件与 `ControlSpec` 都已交付，且既有 8 个控件的
+  > **props 表一个都没变**（只换了底层的生命周期实现）。见
+  > [2026-09-17 控件统一 spec 与全景基线](./2026-09-17-control-spec-and-panorama.md) §1 / §5。
+
 ### 3. 控件句柄品牌补成 `control:<kind>`
 
 `ControlHandle` 从 `SdkHandle<"control">` 放宽为**品牌带种类**的形式（`SdkHandle<"control" |
@@ -132,6 +136,11 @@ const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | OfficialCent
   （同 Overlay Facet §3）。
 - **`recreate` 只告警、不动实例**，把「重建」的决定交给调用方（组件目前不调
   `controls.setOptions`，所以没有 `updatePolicy()` 之类的查询入口——不引入没有被消费的 API）。
+
+  > ⚠️ **已被取代（2026-09-17 / #41）**：组件路径现在**会**调 `controls.setOptions`（统一
+  > Control adapter 的 `live` 档），并且需要一个「哪些键只能构造期生效」的查询入口来决定是否重建。
+  > 查询入口已按本文档留的线索补上（`ControlDriver.planOptions()`，与 `setOptions` **共用同一处分类**）。
+  > 决定与全部依据见 [2026-09-17 控件统一 spec 与全景基线](./2026-09-17-control-spec-and-panorama.md) §2。
 - **kind 专属 setter 要求控件已挂载**：真实 smoke 实测 `NavigationControl#setType()` 在
   `addControl()` 之前抛 `TypeError`。调用顺序因此是 `create → add → setOptions`（与覆盖物
   「先挂载再 `enableEditing`」同源）；Driver 不替调用方猜挂载状态，失败经 `sdkCall` 归一成
@@ -368,6 +377,11 @@ smoke 顺带确认（并已回写到决策里）的运行时事实：
 - **控件不在 Capability Catalog 内**：因此能力矩阵不会体现「控件支持情况」，这是 `#15` 冻结的
   family 划分的结果，不是本 issue 的遗漏；如需控件级能力探测，应在 M7（#41）与 ControlSpec
   一起设计。
+
+  > ⚠️ **部分取代（2026-09-17 / #41）**：「控件不进 Catalog」这条**保持不变**（`planOptions` 是
+  > **option 级**的更新口径查询，与 family 划分无关）；M7 交付的是一套声明式 `ControlSpec` +
+  > 统一 adapter，**没有**引入控件级的能力探测。见
+  > [2026-09-17 控件统一 spec 与全景基线](./2026-09-17-control-spec-and-panorama.md) §2 与「非目标」。
 - **非四角 `anchor` 只能告警后交给 SDK 回落**：4.0 没有「顶部居中」这类落点的等价表达，
   所以本库无法把它「显式化」——issue 风险条目里的「显式传递默认值」在**四角**与 `offset` 上是
   满足的（组件 `withDefaults` 显式给出，Driver 缺省不补第二份默认表）。

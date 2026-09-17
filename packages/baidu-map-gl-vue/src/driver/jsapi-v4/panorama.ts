@@ -25,8 +25,14 @@ import type { GeometryDriver, Point } from "../types/geometry";
 import type {
   PanoramaDataInfo,
   PanoramaHandle,
+  PanoramaLabelHandle,
+  PanoramaLabelOptions,
+  PanoramaOptions,
+  PanoramaPoiType,
   PanoramaPov,
+  PanoramaSceneType,
   PanoramaServiceHandle,
+  PanoramaSwitchOptions,
   PanoramaViewerDriver,
 } from "../types/panorama";
 import {
@@ -72,6 +78,28 @@ function toDataInfo(raw: unknown): PanoramaDataInfo | null {
   };
 }
 
+/** 全景场景类型（官方是 `'street' | 'inter'` 两个字符串字面量）。 */
+function toSceneType(raw: unknown): PanoramaSceneType | null {
+  return raw === "street" || raw === "inter" ? raw : null;
+}
+
+/** 读取面的公共部分：非空对象投影，否则 `null`。 */
+function readPoint(raw: unknown): Point | null {
+  if (!raw || typeof raw !== "object") return null;
+  const point = raw as { lng?: unknown; lat?: unknown };
+  if (typeof point.lng !== "number" || typeof point.lat !== "number") return null;
+  return toPlainPoint({ lng: point.lng, lat: point.lat });
+}
+
+function readPov(raw: unknown): PanoramaPov | null {
+  if (!raw || typeof raw !== "object") return null;
+  const pov = raw as { heading?: unknown; pitch?: unknown };
+  if (typeof pov.heading !== "number") return null;
+  return typeof pov.pitch === "number"
+    ? { heading: pov.heading, pitch: pov.pitch }
+    : { heading: pov.heading };
+}
+
 export function createJsapiV4PanoramaDriver(
   input: CreateJsapiV4PanoramaDriverInput,
 ): PanoramaViewerDriver {
@@ -98,8 +126,67 @@ export function createJsapiV4PanoramaDriver(
   const viewerOf = (viewer: PanoramaHandle): Record<string, unknown> =>
     registry.resolve<Record<string, unknown>>(viewer);
 
+  /**
+   * 查看器 / 标注上的 SDK 事件订阅（**原样投递**，见 `PanoramaViewerDriver.on` 的注释）。
+   *
+   * 记账用 `WeakMap`：不因为「某个查看器订阅过」而长期持有已销毁的 raw 对象。`destroy` 会
+   * 显式释放该 target 上剩下的订阅（业务侧的 disposer 通常已经释放过，这里是兜底）。
+   */
+  const subscriptions = new WeakMap<object, Array<{ type: string; listener: (e: unknown) => void }>>();
+
   const serviceOf = (service: PanoramaServiceHandle): Record<string, unknown> =>
     registry.resolve<Record<string, unknown>>(service);
+
+  const labelOf = (label: PanoramaLabelHandle): Record<string, unknown> =>
+    registry.resolve<Record<string, unknown>>(label);
+
+  /**
+   * 事件订阅的公共部分（查看器与标注共用）：官方两个类的 `addEventListener` 形状一致。
+   *
+   * 成员缺失时**显式失败**（`callRequired` 的语义），不做静默忽略：`PanoramaLabel` 的
+   * `click` 与查看器的事件面都是官方声明的成员，缺了就说明运行时与本库的假设不符。
+   */
+  const subscribe = (
+    raw: Record<string, unknown>,
+    type: string,
+    listener: (event: unknown) => void,
+  ): (() => void) => {
+    callRequired(raw, "addEventListener", type, listener);
+    let entries = subscriptions.get(raw);
+    if (!entries) {
+      entries = [];
+      subscriptions.set(raw, entries);
+    }
+    const entry = { type, listener };
+    entries.push(entry);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const list = subscriptions.get(raw);
+      if (list) {
+        const index = list.indexOf(entry);
+        if (index >= 0) list.splice(index, 1);
+      }
+      callRequired(raw, "removeEventListener", type, listener);
+    };
+  };
+
+  /** 释放该 target 上剩下的订阅（`destroy` 的兜底；业务侧 disposer 通常已经释放过）。 */
+  const releaseSubscriptions = (raw: Record<string, unknown>): void => {
+    const entries = subscriptions.get(raw);
+    subscriptions.delete(raw);
+    if (!entries) return;
+    const remove = readNamespaceMember(raw, "removeEventListener");
+    if (typeof remove !== "function") return;
+    for (const entry of entries) {
+      try {
+        (remove as (...a: unknown[]) => unknown).call(raw, entry.type, entry.listener);
+      } catch {
+        /* 兜底释放失败不阻断销毁：SDK 对象随后就被销毁了 */
+      }
+    }
+  };
 
   /**
    * 全景数据检索的公共部分：`getPanoramaById` / `getPanoramaByLocation` 都是
@@ -139,7 +226,6 @@ export function createJsapiV4PanoramaDriver(
       const Panorama = namespaceCtor(namespace, "Panorama");
       return registry.adopt("panorama", sdkCall("Panorama", () => new Panorama(container, options)));
     },
-
     destroy(viewer) {
       const raw = viewerOf(viewer);
       // 已完成 / 正在清理：直接短路（重入保护，避免同一个底层对象被销毁两次）
@@ -159,6 +245,8 @@ export function createJsapiV4PanoramaDriver(
       } catch (error) {
         failures.push(error);
       }
+      // 本 Facet 自己的订阅（`on()`）与 EventDriver 的是两套记账，必须分别释放
+      releaseSubscriptions(raw);
       try {
         sdkCall("Panorama.destroy", () => callRequired(raw, "destroy"));
         destroyed.add(raw);
@@ -181,6 +269,48 @@ export function createJsapiV4PanoramaDriver(
       }
     },
 
+    // ------------------------------------------------------------- 事件订阅
+    on(target, type: string, listener: (event: unknown) => void) {
+      return subscribe(registry.resolve<Record<string, unknown>>(target), type, listener);
+    },
+
+    // ------------------------------------------------------------- 读取面
+    //
+    // 事件载荷来源：官方 `position_changed` / `pov_changed` / `zoom_changed` /
+    // `scene_type_changed` 的载荷只有 `{type, target, currentTarget}`，业务要的是**值**，
+    // 因此组件在事件回调里回读这几个 getter。这也解释了为什么读取面必须存在而不是「留给
+    // 调用方自己 unwrap raw」。
+    getPosition(viewer) {
+      return readPoint(callRequired(viewerOf(viewer), "getPosition"));
+    },
+
+    getPov(viewer) {
+      return readPov(callRequired(viewerOf(viewer), "getPov"));
+    },
+
+    getZoom(viewer) {
+      const zoom = callRequired(viewerOf(viewer), "getZoom");
+      return typeof zoom === "number" ? zoom : null;
+    },
+
+    getId(viewer) {
+      const id = callRequired(viewerOf(viewer), "getId");
+      return typeof id === "string" && id.length > 0 ? id : null;
+    },
+
+    getSceneType(viewer) {
+      return toSceneType(callRequired(viewerOf(viewer), "getSceneType"));
+    },
+
+    // ------------------------------------------------------------- 写入面
+    setId(viewer, id: string, options?: PanoramaSwitchOptions) {
+      // 官方有两个重载（`setId(id, options?)` 与 `setId(id, sceneType, options?)`）。
+      // 本库只暴露 id 形态：场景类型由 SDK 从数据里判定，让调用方显式指定需要一份
+      // 「id 与类型的对应关系」——那是 SDK 的领域知识，转述只会成为第二份真相。
+      if (options) callRequired(viewerOf(viewer), "setId", id, options);
+      else callRequired(viewerOf(viewer), "setId", id);
+    },
+
     setPosition(viewer, position: Point) {
       callRequired(viewerOf(viewer), "setPosition", geometry.toRawPoint(position));
     },
@@ -200,6 +330,22 @@ export function createJsapiV4PanoramaDriver(
       else callRequired(viewerOf(viewer), "setZoom", zoom);
     },
 
+    setOptions(viewer, options: PanoramaOptions) {
+      callRequired(viewerOf(viewer), "setOptions", options);
+    },
+
+    setPanoramaPoiType(viewer, poiType: PanoramaPoiType) {
+      callRequired(viewerOf(viewer), "setPanoramaPOIType", poiType);
+    },
+
+    enableScrollWheelZoom(viewer) {
+      callRequired(viewerOf(viewer), "enableScrollWheelZoom");
+    },
+
+    disableScrollWheelZoom(viewer) {
+      callRequired(viewerOf(viewer), "disableScrollWheelZoom");
+    },
+
     show(viewer) {
       callRequired(viewerOf(viewer), "show");
     },
@@ -210,6 +356,39 @@ export function createJsapiV4PanoramaDriver(
 
     getVisible(viewer) {
       return Boolean(callRequired(viewerOf(viewer), "getVisible"));
+    },
+
+    // ----------------------------------------------------------- 标注覆盖物
+    //
+    // 标注**不是** Control / Overlay 家族的成员：它只存在于某个查看器内部
+    // （`Panorama#addOverlay` / `removeOverlay`），因此这里不引入 add/remove 之外的
+    // 生命周期记账——所有权由「谁创建谁摘除」表达（`BPanoramaLabel` 在实例 scope 里摘除）。
+    createLabel(content: string, options?: PanoramaLabelOptions) {
+      const Label = namespaceCtor(namespace, "PanoramaLabel");
+      return registry.adopt(
+        "panorama:label",
+        sdkCall("PanoramaLabel", () => new Label(content, options ?? {})),
+      );
+    },
+
+    addLabel(viewer, label) {
+      callRequired(viewerOf(viewer), "addOverlay", labelOf(label));
+    },
+
+    removeLabel(viewer, label) {
+      callRequired(viewerOf(viewer), "removeOverlay", labelOf(label));
+    },
+
+    setLabelPosition(label, position: Point) {
+      callRequired(labelOf(label), "setPosition", geometry.toRawPoint(position));
+    },
+
+    setLabelContent(label, content: string) {
+      callRequired(labelOf(label), "setContent", content);
+    },
+
+    setLabelAltitude(label, altitude: number) {
+      callRequired(labelOf(label), "setAltitude", altitude);
     },
 
     createService() {

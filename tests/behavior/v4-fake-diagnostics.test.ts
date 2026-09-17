@@ -34,6 +34,9 @@ function zeroLeaks(): FakeV4LeakCounters {
     // 路线服务的结果集（M7-ROUTES / #39）：与 localSearchResults 同档——实例没有 dispose()，
     // 真正的资源是它交付出去的结果，销账点是公开的 `clearResults()`。
     routeResults: 0,
+    // 全景标注（M7-CONTROL-PANORAMA / #41）：与 overlays 同档——挂到宿主上、由宿主摘除，
+    // 销账点是 `Panorama#removeOverlay()`。
+    panoramaLabels: 0,
     listeners: 0,
   };
 }

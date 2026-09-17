@@ -26,6 +26,9 @@ control/scale
 | unit    | 比例尺单位制 | `string`  | [unit](#unit) | `BMAP_UNIT_METRIC` |                                    |
 | visible | 是否显示     | `boolean` | -             | `true`             | <Badge type="tip" text="^2.2.0" /> |
 
+`anchor` / `offset` 同样可以**动态更新**：属性变化时会即时下发 `setAnchor()` / `setOffset()`，
+不需要重建控件（M7-CONTROL-PANORAMA / #41 之前它们只在构造期生效）。
+
 ## anchor
 
 | 值                       | 说明 |

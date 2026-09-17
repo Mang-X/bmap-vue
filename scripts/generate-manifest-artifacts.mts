@@ -29,9 +29,13 @@ const check = process.argv.includes('--check')
 // 避免正则对 oxfmt 格式化后的多行/双引号格式敏感)。
 // 必须走 file: URL,直接拼 `path + '?t='` 在 Windows 上会被 ESM 加载器拒绝。
 const { componentManifest } = (await import(freshModuleUrl(manifestSrc))) as {
-  componentManifest: { name: string; exportName: string }[]
+  componentManifest: { name: string; exportName: string; source: string }[]
 }
-const names = componentManifest.map((c) => ({ name: c.name, exportName: c.exportName }))
+const names = componentManifest.map((c) => ({
+  name: c.name,
+  exportName: c.exportName,
+  source: c.source,
+}))
 
 const componentsIndexPath = resolve(root, 'packages/baidu-map-gl-vue/src/components/index.ts')
 const volarDtsPath = resolve(root, 'packages/baidu-map-gl-vue/volar.d.ts')
@@ -40,7 +44,7 @@ const componentIndexJsonPath = resolve(root, 'docs/.vitepress/component-index.js
 // 1) components/index.ts
 const componentsIndex = [
   '// Generated file. Do not edit directly.',
-  ...names.map((c) => `export { default as ${c.exportName} } from './${toPath(c.exportName)}'`),
+  ...names.map((c) => `export { default as ${c.exportName} } from './${toPath(c.source)}'`),
   '',
 ].join('\n')
 
@@ -124,36 +128,15 @@ function jsonMatches(current: string, expected: Record<string, unknown>): boolea
   }
 }
 
-function toPath(exportName: string): string {
-  const map: Record<string, string> = {
-    BMapProvider: 'provider/BMapProvider.vue',
-    BMap: 'map/BMap.vue',
-    BMarker: 'overlays/BMarker.vue',
-    BInfoWindow: 'overlays/BInfoWindow.vue',
-    BCircle: 'overlays/BCircle.vue',
-    BPolyline: 'overlays/BPolyline.vue',
-    BPolygon: 'overlays/BPolygon.vue',
-    BLabel: 'overlays/BLabel.vue',
-    BContextMenu: 'overlays/BContextMenu.vue',
-    BPrism: 'overlays/BPrism.vue',
-    BGroundOverlay: 'overlays/BGroundOverlay.vue',
-    BBezierCurve: 'overlays/BBezierCurve.vue',
-    BMapMask: 'overlays/BMapMask.vue',
-    BMarker3d: 'overlays/BMarker3d.vue',
-    BAutoComplete: 'autocomplete/BAutoComplete.vue',
-    BPanoramaControl: 'controls/BPanoramaControl.vue',
-    BControl: 'controls/BControl.vue',
-    BPointLayer: 'data/BPointLayer.vue',
-    BMarkerList: 'data/BMarkerList.vue',
-    BMarkerCluster: 'data/BMarkerCluster.vue',
-    BZoom: 'controls/BZoom.vue',
-    BScale: 'controls/BScale.vue',
-    BCityList: 'controls/BCityList.vue',
-    BLocation: 'controls/BLocation.vue',
-    BNavigation3d: 'controls/BNavigation3d.vue',
-    BCopyright: 'controls/BCopyright.vue',
-    BDistrictLayer: 'layers/BDistrictLayer.vue',
-    BPanoramaCoverageLayer: 'layers/BPanoramaCoverageLayer.vue',
-  }
-  return map[exportName] ?? exportName
+/**
+ * manifest 的 `source`（`./components/<相对路径>`）→ `components/index.ts` 里的相对说明符。
+ *
+ * 曾经这里是一张**手写的 exportName → 路径**表，与 manifest 的 `source` 各自漂移：新增一个
+ * 组件只改 manifest 时，生成出来的 import 会退化成 `./BNavigation` 这种不存在的路径
+ * （M7-CONTROL-PANORAMA / #41 实测），而且失败发生在**测试运行时**而不是生成时。
+ * 现在路径只有一个事实源（manifest 的 `source`），本函数只做前缀剥离。
+ */
+function toPath(source: string): string {
+  const relative = source.startsWith('./components/') ? source.slice('./components/'.length) : source
+  return relative.replace(/^\.\//, '')
 }

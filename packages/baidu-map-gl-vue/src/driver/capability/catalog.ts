@@ -687,10 +687,13 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "panorama.label": {
     id: "panorama.label",
     family: "panorama",
-    description: "全景标注（PanoramaLabel）",
+    description:
+      "全景标注（PanoramaLabel）。#41 起由 `<BPanoramaLabel>` 消费，因此状态由 experimental 提升为 " +
+      "native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**" +
+      "（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表）",
     rawMembers: ["PanoramaLabel"],
     engines: JSAPI_V4,
-    status: "experimental",
+    status: "native",
     runtimeOnly: false,
   },
 

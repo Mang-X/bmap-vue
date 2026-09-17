@@ -92,13 +92,32 @@ export type {
   UseSdkResourceOptions,
   UseSdkResourceResult as UseUnifiedSdkResourceResult,
 } from "./composables/useSdkResource";
-export { useControlResource, buildControlOptions } from "./composables/useControlResource";
+// 控件层底座（M7-CONTROL-PANORAMA / #41）：`ControlSpec` + 统一 adapter。
+// 库内 11 个控件组件的唯一入口；`buildControlOptions` / `bindControlEvents`（#22 的临时
+// 帮手，无任何消费者）随这次替换删除。
+export { useControlResource } from "./controls/useControlResource";
+export type { UseControlResourceResult } from "./controls/useControlResource";
+export { changedOptionKeys, optionKey, optionSnapshot } from "./controls/optionKey";
+export type { OptionSnapshot } from "./controls/optionKey";
 export type {
-  ControlResourceAdapter,
-  UseControlResourceResult,
-} from "./composables/useControlResource";
+  ControlBaseProps,
+  ControlCreateInput,
+  ControlMountInput,
+  ControlSpec,
+  ControlVisibleInput,
+} from "./controls/spec";
 export { useLayerResource } from "./composables/useLayerResource";
 export type { LayerResourceAdapter, UseLayerResourceResult } from "./composables/useLayerResource";
+// 全景底座（M7-CONTROL-PANORAMA / #41）：独立的 PanoramaContext（**不并入 MapContext**，
+// 见文件头注释）+ v4 全景面的可检查收窄点。
+export {
+  createPanoramaContext,
+  jsapiV4PanoramaOf,
+  panoramaContextKey,
+  useOptionalPanoramaContext,
+  useRequiredPanoramaContext,
+} from "./panorama";
+export type { PanoramaContext, PanoramaReadyContext, PanoramaStatus } from "./panorama";
 export type {
   MapContext,
   MapReadyContext,

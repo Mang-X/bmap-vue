@@ -26,7 +26,7 @@ export type {
   OverlayDriver,
   OverlayPropertyPolicy,
 } from "./types/overlays";
-export type { ControlKind, ControlOptions, CopyrightEntry, ControlDriver } from "./types/controls";
+export type { ControlKind, ControlOptionStatus, ControlOptions, CopyrightEntry, ControlDriver } from "./types/controls";
 export type { LayerKind, LayerDriver } from "./types/layers";
 export type {
   NativeLayerData,
@@ -67,8 +67,14 @@ export type {
   PanoramaDataInfo,
   PanoramaDriver,
   PanoramaHandle,
+  PanoramaLabelHandle,
+  PanoramaLabelOptions,
+  PanoramaOptions,
+  PanoramaPoiType,
   PanoramaPov,
+  PanoramaSceneType,
   PanoramaServiceHandle,
+  PanoramaSwitchOptions,
   PanoramaViewerDriver,
 } from "./types/panorama";
 export type { MapMouseEvent, EventDriver } from "./types/events";

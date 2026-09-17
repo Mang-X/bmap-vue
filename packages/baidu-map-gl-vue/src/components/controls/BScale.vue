@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useControlResource } from "../../core/composables/useControlResource";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { ControlHandle } from "../../driver/types/handles";
+import { useControlResource, type ControlSpec } from "../../core/controls";
 
 export interface BScaleProps {
   anchor?: string;
@@ -10,41 +7,24 @@ export interface BScaleProps {
   visible?: boolean;
 }
 
+/**
+ * BScale —— 比例尺控件
+ *
+ * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）：anchor / offset / visible 都随
+ * props 即时下发。
+ */
 const props = withDefaults(defineProps<BScaleProps>(), {
   anchor: "BMAP_ANCHOR_BOTTOM_LEFT",
   offset: () => ({ x: 10, y: 10 }),
   visible: true,
 });
 
-const { resource } = useControlResource<BScaleProps, ControlHandle>(props, {
-  create: (ctx, p) =>
-    ctx.client.driver.controls.create("scale", {
-      anchor: p.anchor,
-      offset: p.offset,
-    }),
-  addToMap: (res, ctx) => {
-    if (props.visible) ctx.client.driver.controls.add({ kind: "map", handle: ctx.map }, res);
-  },
-  createWatchers(getCtx, getResource, p, addDisposer) {
-    addDisposer(
-      watch(
-        () => p.visible,
-        (v) => {
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          const controls = ctx.client.driver.controls;
-          const target = { kind: "map" as const, handle: ctx.map };
-          if (v) controls.add(target, res);
-          else controls.remove(target, res);
-        },
-      ),
-    );
-  },
-  remove: (res, ctx) => {
-    ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, res);
-  },
-});
+const spec: ControlSpec<BScaleProps> = {
+  kind: "scale",
+  options: (p) => ({ anchor: p.anchor, offset: p.offset }),
+};
+
+useControlResource(props, spec);
 
 defineOptions({ name: "BScale" });
 </script>
