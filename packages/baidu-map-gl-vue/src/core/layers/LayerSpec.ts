@@ -113,6 +113,33 @@ export function stableLayerValue(value: unknown): string {
   return "?";
 }
 
+/**
+ * 回调型 option 的统一包装：交给 SDK 的是一个**转发到「当前取值」**的函数。
+ *
+ * 为什么需要它：`stableLayerValue` 刻意把函数折叠成 `fn`（否则父级每次渲染产生的内联箭头
+ * 都会让图层重建），代价是**函数 A → 函数 B 的变化在指纹里看不出来**。折叠行为要保留，
+ * 于是换一种方式让语义正确：SDK 手上那个函数身份恒定，但它每次被调用时都去读**最新的 prop**。
+ * 这样 `tileLoadFunction` / `url` / 模板回调 / 函数型 style 换成新实现后立即生效，
+ * 而内联箭头仍然不会触发重建。
+ *
+ * 语义细节（刻意选择，已写进 ADR 已知限制）：
+ * - 创建时该 option 不是函数 ⇒ 原样返回（「不表态」就该缺席，包一层空函数等于假支持）；
+ * - 调用时刻 prop 已变成非函数（例如回调被清空）：继续用**最后一个确定的实现**，而不是抛错或
+ *   返回 `undefined`——这类变化同时会改变重建指纹、旧实例很快被替换，在替换完成前抛错只会把
+ *   「我要换了」变成 SDK 侧的一次异常。
+ */
+export function forwardCallback<T>(get: () => T): T {
+  const initial = get();
+  if (typeof initial !== "function") return initial;
+  let last = initial as (...args: never[]) => unknown;
+  const wrapper = (...args: never[]): unknown => {
+    const latest = get();
+    if (typeof latest === "function") last = latest as (...args: never[]) => unknown;
+    return last(...args);
+  };
+  return wrapper as T;
+}
+
 /** 规格里 `options` 的「可就地更新」键（其余键变化 ⇒ 重建）。 */
 function splitOptions(
   spec: LayerSpec,

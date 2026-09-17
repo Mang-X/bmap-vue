@@ -15,7 +15,7 @@
  * （排障见文档站「图层总览」的 CORS 一节）。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
 
 export interface BTileLayerProps {
   /** 是否挂在地图上（`false` = 摘掉，不是 `hide()`）。 */
@@ -57,16 +57,20 @@ useLayerResource<BTileLayerProps>(props, {
     visible: p.visible,
     opacity: p.opacity,
     zIndex: p.zIndex,
-    options: pickLayerOptions(p, [
-      "tileUrlTemplate",
-      "transparentPng",
-      "boundary",
-      "showRegion",
-      "retry",
-      "retryTime",
-      "cacheSize",
-      "tileLoadFunction",
-    ]),
+    options: {
+      // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
+      // 因此「换一个回调」立即生效，而内联箭头函数也不会触发重建（见 `LayerSpec` 的说明）。
+      tileLoadFunction: forwardCallback(() => p.tileLoadFunction),
+      ...pickLayerOptions(p, [
+        "tileUrlTemplate",
+        "transparentPng",
+        "boundary",
+        "showRegion",
+        "retry",
+        "retryTime",
+        "cacheSize",
+      ]),
+    },
   }),
 });
 

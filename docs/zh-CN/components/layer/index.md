@@ -48,6 +48,25 @@ import {
 - **`visible` 之外的可写项**：有 setter 的（`zIndex`、数据图层的 `data`、`colors` / `edge` /
   `offsetX`… 这类可变 option）就地更新，其余变化**重建**。
 
+## 回调型 option
+
+`url`（`BRasterLayer`）、`tileLoadFunction`、XYZ/WMTS 的模板回调、GeoJSON 的函数型 style、
+`createDom` 这类**回调**可以随时换成新实现，**立即生效且不会重建图层**：本库交给 SDK 的是一个
+身份稳定的包装函数，它每次被调用时去读最新的 prop。两条语义值得记住：
+
+- **换成 `undefined`**（或不传）会改变构造指纹 ⇒ 重建图层（`url` 从回调换回字符串模板同理）；
+- **对象内部**的函数（例如 `markerStyle: { icon: () => … }`）不在覆盖范围内——换实现请换外层对象的
+  引用（那会改变指纹 ⇒ 重建）。
+
+## 显隐与就地更新的时序
+
+- `visible=false` 期间对可变 option（`colors` / `edge` / `offsetX`…）的设置**不会丢失**：切回可见时
+  会补写一次（未挂载时既不写也不记账）。
+- 已经写入过的可变 option 由有值变回 `undefined` 时，图层会**重建**——SDK 没有 unset 入口，
+  重建是回到「SDK 自己的默认值」的唯一办法（本库不猜默认值）。
+- `addLayer` 抛错时（哪怕副作用已经产生）图层会被 best-effort 摘掉，错误经 `resource:error`
+  交出；失败之后仍可重试挂载。
+
 ## 排障：图层挂上了但看不到东西
 
 按下面的顺序查，能覆盖绝大多数「瓦片不显示」的问题：

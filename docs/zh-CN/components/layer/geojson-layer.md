@@ -50,6 +50,12 @@ layer/geojsonLayer
 - 本组件**不提供** `opacity` / `zIndex`：官方 `GeoJSONLayer` 没有这两个语义（层级是语义不同的
   `level`），声明了再静默忽略属于假支持。
 
+## 关于函数型样式
+
+`markerStyle` / `polylineStyle` / `polygonStyle` 也可以是「按要素属性计算样式」的**函数**：
+换成另一个函数会立即生效（不重建图层）。注意**对象内部**的函数不在覆盖范围内——需要换实现时
+请换外层对象的引用。
+
 ## 参考
 
 - 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.4` 的类声明。

@@ -124,6 +124,16 @@ export class FakeV4Map extends FakeV4EventTarget {
   failNextAddControl: Error | null = null
   failNextAddLayer: Error | null = null
   /**
+   * 测试故障注入：让**下一次** `addLayer` **先真的挂上、再抛错**（用后即清）。
+   *
+   * 与 `failNextAddLayer`（抛在挂载之前）是两条不同的路径，必须分开建模：
+   * 前者是「什么都没发生」，后者是「**副作用已经产生**但调用方收到异常」——真实 SDK 里
+   * `addLayer` 会在内部访问地图与图层管理器，抛错可能发生在资源已经登记之后。
+   * 把这条形状建出来的用途是：调用方的错误补偿必须**best-effort 摘除**，不能只看
+   * 「调用成功返回」的记账（见 `useLayerResource` 的 mount 补偿）。
+   */
+  failNextAddLayerAfterAttach: Error | null = null
+  /**
    * 测试故障注入：让**下一次** `centerAndZoom()` 抛错（用后即清）。
    *
    * 用来驱动「建图成功、但 `initializeView()` 失败 → `retry()` 重建」这条路径（M4-EVENTS / #28）：
@@ -250,6 +260,11 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.layers.push(layer)
     layer.attachedMap = this
     this.stats.resourceCreated('layer')
+    if (this.failNextAddLayerAfterAttach) {
+      const error = this.failNextAddLayerAfterAttach
+      this.failNextAddLayerAfterAttach = null
+      throw error
+    }
   }
 
   removeLayer(layer: FakeV4Layer): void {

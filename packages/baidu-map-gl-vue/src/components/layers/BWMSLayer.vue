@@ -17,7 +17,7 @@
  * 第三方服务的可用性受 **CORS、坐标系与服务条款**约束：本库只负责接入，不保证源服务可用。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
 
 export interface BWMSLayerProps {
   visible?: boolean;
@@ -87,28 +87,32 @@ useLayerResource<BWMSLayerProps>(props, {
     minZoom: p.minZoom,
     maxZoom: p.maxZoom,
     zIndex: p.zIndex,
-    options: pickLayerOptions(p, [
-      "url",
-      "params",
-      "projection",
-      "tileSize",
-      "extent",
-      "extentCRSIsWGS84",
-      "useThumbData",
-      "spanLevel",
-      "reproject",
-      "reprojectSourceCRS",
-      "png8",
-      "height",
-      "retry",
-      "retryTime",
-      "dataType",
-      "cacheSize",
-      "boundary",
-      "thumbParentDepth",
-      "thumbChildDepth",
-      "tileLoadFunction",
-    ]),
+    options: {
+      // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
+      // 因此「换一个回调」立即生效，而内联箭头函数也不会触发重建（见 `LayerSpec` 的说明）。
+      tileLoadFunction: forwardCallback(() => p.tileLoadFunction),
+      ...pickLayerOptions(p, [
+        "url",
+        "params",
+        "projection",
+        "tileSize",
+        "extent",
+        "extentCRSIsWGS84",
+        "useThumbData",
+        "spanLevel",
+        "reproject",
+        "reprojectSourceCRS",
+        "png8",
+        "height",
+        "retry",
+        "retryTime",
+        "dataType",
+        "cacheSize",
+        "boundary",
+        "thumbParentDepth",
+        "thumbChildDepth",
+      ]),
+    },
   }),
 });
 

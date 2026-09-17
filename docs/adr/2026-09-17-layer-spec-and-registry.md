@@ -67,6 +67,12 @@ issue #40 要求「统一 LayerSpec、LayerRegistry 和实例 child scope」，�
 记录本身是幂等的（同 `ResourceRegistration` 形状），因此「组件卸载 / 重建 / Map 销毁」三条
 路径交叉触发时只生效一次。
 
+**摘除的门禁是「调用过 `addLayer`」而不是「成功返回过」**（`mountAttempted` ≠ `mounted`）：
+真实 SDK 的 `addLayer` 可能「已经产生副作用、然后抛错」，用成功返回的记账当门禁会让那次补偿
+摘除被跳过、实例永久留在图上。Driver 的 `remove` 明确不读自己的挂载记账，正是为了支持这种
+best-effort 摘除；组件层不能用更严格的记账把它挡掉。失败补偿与 watch 路径的异常都收成
+`resource:error`（两条路径共用同一个上报出口），且失败后记账复位、可以重试挂载。
+
 ### 3. 能力面的单一事实源在 Driver，内核只做投影
 
 `LayerDriver` 新增三个查询：`surface(kind)`（构造期槽位 + 可用操作）、`supports(kind, op)`、
@@ -90,14 +96,37 @@ Vue 对 `boolean` prop 有「缺省即 `false`」的转换（`resolvePropValue` 
 「没传」就是**不表态**，构造选项与 setter 调用里都不会出现这个键。
 `v3-layer-suite.test.ts` 有对应回归（不传 ⇒ `layerCalls` 为空；显式 `false` ⇒ 真的调到 `setEdge`）。
 
-### 6. 可就地更新的 option **必须在挂载时写一次**
+### 6. 可就地更新的 option：挂载时必须写一次，且**只在写成功后记账**
 
 见决策 4：它们不进构造选项。因此 `mount()` 的顺序是
 `syncMounted → syncPostMountSlots → syncMutableOptions`，其中最后一步是这些 option 唯一的
-生效路径（`mutableKey` 用「未写」哨兵初始化，保证这次一定发生）。漏掉它的症状是
+生效路径（`appliedMutableKey` 用「未写」哨兵初始化，保证这次一定发生）。漏掉它的症状是
 「初始 `colors` / `offsetX` 静默失效、改一次才生效」——`v3-layer-suite.test.ts` 有回归。
 
-### 7. `visible` 统一表达为「挂上 / 摘掉」
+**记账（`appliedMutableKey` / `appliedMutableKeys`）只在成功写入 SDK 之后更新**：未挂载时不写、
+也**不记**。这一点是 PR #96 第一轮评审的发现 1——先记账再判断 `mounted` 会把「挂载期间设的值」
+记成已应用，切回可见时指纹相同直接跳过，值就永久丢了（`<BTrafficLayer :visible="false" :edge="false" />`
+是最小复现）。
+
+顺着同一条规则，**已经写入过的键从有值变回未表态 ⇒ 重建图层**（见已知限制 5）：SDK 没有 unset
+入口，本库也不猜默认值，换一个新实例（构造期不传它）才是回到「SDK 自己的默认状态」的唯一办法。
+
+### 7. 回调型 option 经 `forwardCallback` 转发到当前取值
+
+`stableLayerValue` 刻意把函数折叠成 `fn`（否则父级每次渲染产生的内联箭头都会让图层重建），
+**代价是「函数 A → 函数 B」的变化在指纹里看不出来**——PR #96 第一轮评审的发现 2 指的就是它：
+`BRasterLayer.url` 从回调换成另一个回调、`tileLoadFunction` 换实现、XYZ/WMTS 的模板回调、
+GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现。
+
+折叠行为要保留，于是换一条路让语义正确：所有回调型 option 交给 SDK 的都是一个
+**`forwardCallback` 包装**（函数身份稳定、每次调用去读**最新 prop**）。
+两条语义细节刻意如此：创建时不是函数就原样返回（「不表态」就该缺席，包一层空函数等于假支持）；
+调用时刻 prop 已变成非函数时继续用**最后一个确定的实现**，而不是抛错——这类变化同时会改变
+重建指纹、旧实例很快被替换，在替换完成前抛错只会把「我要换了」变成 SDK 侧的一次异常。
+
+残余限制：**嵌套在对象里的函数**（例如 `markerStyle: { icon: fn }`）不在覆盖范围内（见已知限制 8）。
+
+### 8. `visible` 统一表达为「挂上 / 摘掉」
 
 **这是对 #22 ADR 的第二处修改**：它把「可见性在 v4 就是挂上 / 摘掉」写成 layer facet 的现状，
 本 ADR 把它升格为**所有 kind 的唯一口径**，即使某个 kind 官方提供了 `show` / `hide`
@@ -105,20 +134,20 @@ Vue 对 `boolean` prop 有「缺省即 `false`」的转换（`resolvePropValue` 
 「两种显隐机制」，且「`visible: false` 的实例仍被挂在图上」这种两套事实源的状态。
 `LayerSpec` 的 `options` 里出现 `visible` 时 Driver 会告警一次并忽略。
 
-### 8. 跨 kind 的归一化操作：`setZIndex` / `setData` / `clearData`
+### 9. 跨 kind 的归一化操作：`setZIndex` / `setData` / `clearData`
 
 三个操作都由 Driver 按 kind 映射到官方入口（`DOMLayer.clearData → removeAllOverlays()`），
 该 kind 没有入口时**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`）并告警一次，不静默 no-op。
 `surface().operations` 是唯一声明；替身（Fake）按官方声明实现成员，因此
 「声明了但替身里没有」与「替身里有但没声明」都会被测试抓到。
 
-### 9. 事件面按官方声明给
+### 10. 事件面按官方声明给
 
 只给 `GeoJSONLayer`（`click` / `mousemove` / `mouseout`）与 `DOMLayer`（`click` / `mouseover` /
 `mouseout`）绑定事件；其余 kind **不声明**事件 props——非目标「不假定所有 Layer 都有相同事件
 接口」。`BDistrictLayer` 的 `click` / `mouseover` / `mouseout` **保留**，理由见「已知限制」。
 
-### 10. 每一条新 kind 都要过一遍同一批断言
+### 11. 每一条新 kind 都要过一遍同一批断言
 
 `packages/test-utils/driver-contract.ts` 的 `LAYER_FACET_KINDS` 从 3 种扩到 10 种
 （「creates / mounts / updates / removes」在每种 kind 上各跑一遍），
@@ -180,26 +209,31 @@ Vue 对 `boolean` prop 有「缺省即 `false`」的转换（`resolvePropValue` 
    分支并告警一次——两层都不是静默接受。
 4. **`PanoramaCoverageLayer` 没有可核对的选项声明**：`BPanoramaCoverageLayer` 因此只声明
    `visible`（有确定语义的那个槽位）；上游补齐声明后按 augmentation 治理流程再放开。
-5. **可变 option 由有值变为 `undefined` 时不还原默认值**：官方没有默认值回读入口，本库只
-   `devWarn` 一次，而不是猜一个默认值写回去。
-6. **网络图层的 loading / error 回调未实现（欠账）**：issue 实施步骤 4 要求「定义网络 Layer 的
-   loading/error 回调」，但官方这批图层里 `addEventListener` **只**声明在 `GeoJSONLayer` /
-   `DOMLayer` 上（`TileLayer` 家族、`XYZLayer` / `WMSLayer` / `WMTSLayer` / `RasterTileLayer`
-   的类声明里都没有事件成员），按本库「不把未声明成员当契约」的口径，**不发明** `tileload` /
-   `tileerror` 事件。当前唯一的可观测入口是官方的 `tileLoadFunction`（已在四个网络图层上透传：
-   `BTileLayer` / `BWMSLayer` / `BWMTSLayer` / `BRasterLayer`）。真实 4.0 运行时是否另派发了
-   未声明的事件需要 live 取证（探针可用 `driver.events.dispatch` 的同一路径核对），取得证据后
-   再决定是否补事件——在拿到证据之前补一套事件就是「假支持」。
+5. **可变 option 从有值变回未表态 ⇒ 重建图层**：SDK 这批图层没有 unset 入口，本库也不猜默认值，
+   因此 `edge: false → undefined` 这类变化会换一个新实例（构造期不传它），让它回到 SDK 自己的
+   默认状态。代价是「清一个开关」带来一次重建——这是刻意的：另一种做法（停在旧值）会让声明与
+   SDK 实际状态永久不一致。（PR #96 第一轮评审的发现 3；`v3-layer-suite.test.ts` 有回归。）
+6. **网络图层的 loading / error 回调不在本 issue 内（已拆票）**：issue 实施步骤 4 要求「定义网络
+   Layer 的 loading/error 回调」，但官方这批图层里 `addEventListener` **只**声明在
+   `GeoJSONLayer` / `DOMLayer` 上（`TileLayer` 家族、`XYZLayer` / `WMSLayer` / `WMTSLayer` /
+   `RasterTileLayer` 的类声明里都没有事件成员），按本库「不把未声明成员当契约」的口径，
+   **不发明** `tileload` / `tileerror` 事件。当前唯一的可观测入口是官方的 `tileLoadFunction`
+   （已在四个网络图层上透传：`BTileLayer` / `BWMSLayer` / `BWMTSLayer` / `BRasterLayer`）。
+   承接方见 issue #97（需要先取证「真实 4.0 是否另派发未声明事件」，再决定是否补事件）。
 7. **`data` 按引用去重**：同一份数据原地修改不会被感知（内核按引用比较 `data`，避免每次 props
    变化都深度序列化整份 `FeatureCollection`）。这是 Vue 的响应式约定本身，但值得写下来。
+8. **嵌套在对象里的函数不被指纹感知**：`forwardCallback` 只覆盖「option 本身就是回调」的形态
+   （`url` / `tileLoadFunction` / 模板回调 / 函数型 style / `createDom`）。
+   `markerStyle: { icon: () => … }` 这类**对象内部**的函数换了实现不会触发重建也不会转发——
+   指纹把嵌套函数同样折叠成 `fn`。需要换实现时请换外层对象的引用（那会改变指纹 ⇒ 重建）。
 9. **`TrafficLayer` 不保证多实例隔离（延续 #22 §12 的技术结论）**：官方 `TrafficLayer` 是
    **页面级单实例**（原型本身就是已构造实例，`map` / 瓦片缓存 / 刷新 timer 在 `new TrafficLayer()`
    之间共享）。本库仍然提供 `BTrafficLayer`（issue #40 的验收清单点名要求），但**不承诺**
    「挂两个路况图层互不影响」——`autoRefresh` / `refreshInterval` 这类共享状态以最后一次写入为准。
    需要严格隔离时用一层 `<BMap>` 一个实例。
 10. **瓦片是否真的画出来不由本库保证**：live smoke 的 `layer-tile` / `layer-traffic` /
-   `layer-geojson` 断言的是「组件 → Driver → 真实 `Map.addLayer` 的调用发生了、且没有
-   `console.error`」，与既有 `layer-district` 同一口径。
+    `layer-geojson` 断言的是「组件 → Driver → 真实 `Map.addLayer` 的调用发生了、且没有
+    `console.error`」，与既有 `layer-district` 同一口径。
 
 ## 参考
 

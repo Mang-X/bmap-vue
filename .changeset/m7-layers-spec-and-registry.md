@@ -32,3 +32,8 @@
 - 显隐统一走 `visible` prop（挂上 / 摘掉）；直接调 `driver.layers.create(kind, { visible })`
   时该键会被忽略并告警一次（组件层没有把 `visible` 放进 `options` 的入口）。
 - `BTrafficLayer` **不承诺多实例隔离**（官方 `TrafficLayer` 是页面级单实例）。
+- **回调型 option 换实现立即生效**（`url` / `tileLoadFunction` / 模板回调 / 函数型 style /
+  `createDom`）：本库交给 SDK 的是转发到当前 prop 的稳定包装，因此换回调不会重建图层。
+  对象内部的函数不在覆盖范围内（换外层对象的引用即可）。
+- **`visible=false` 期间设置的可变 option 不会丢**：切回可见时补写一次。
+- **可变 option 由有值变回 `undefined` 会重建图层**，以便回到 SDK 自己的默认值（不再只告警）。

@@ -20,7 +20,7 @@
  *   把 `data` 置为 `null` 即可。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
 
 export interface BDOMLayerProps {
   /** 是否挂在地图上（`false` = 摘掉）。 */
@@ -81,10 +81,9 @@ useLayerResource<BDOMLayerProps>(props, {
     data: p.data,
     options: {
       // 官方构造首参就叫 `createDOM`；prop 名与其不同（见 props 的说明），这里做映射。
-      // 包一层**引用稳定**的转发函数：内联箭头函数不会触发重建（指纹折叠为 `fn`），
-      // 而后续 `setData` 触发的新一轮 DOM 创建仍能用到最新的 `createDom`。
-      createDOM: (properties: object, point: { lng: number; lat: number }) =>
-        props.createDom(properties, point),
+      // 与其余回调型 option 走同一个 `forwardCallback`：SDK 手上的函数**转发到当前 prop**，
+      // 因此后续 `setData` 触发的新一轮 DOM 创建用的是最新实现，且内联箭头不会触发重建。
+      createDOM: forwardCallback(() => p.createDom),
       ...pickLayerOptions(p, [
         "offsetX",
         "offsetY",

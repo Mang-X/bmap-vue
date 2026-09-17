@@ -39,6 +39,7 @@ import BTrafficLayer from "../../packages/baidu-map-gl-vue/src/components/layers
 import BWMSLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BWMSLayer.vue";
 import BWMTSLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BWMTSLayer.vue";
 import BXYZLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BXYZLayer.vue";
+import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
 import type { LayerKind } from "../../packages/baidu-map-gl-vue/src/driver/types/layers";
 import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability/catalog";
 
@@ -108,6 +109,24 @@ async function settle() {
 async function unmountAndSettle(wrapper: { unmount(): void }) {
   wrapper.unmount();
   await settle();
+}
+
+/**
+ * 挂一棵带 `resource:error` 探针的 `<BMap>`：把组件的创建 / 挂载失败收成可断言的结果。
+ *
+ * 与 `v3-component-scenarios.test.ts` 里的同名探针同源（那条路走 `useRequiredMapContext`
+ * 读上下文的事件总线）。
+ */
+function mountTreeWithErrorProbe(errors: unknown[], children: () => VNodeChild) {
+  const Probe = defineComponent({
+    name: "SmokeErrorProbe",
+    setup() {
+      const ctx = useRequiredMapContext();
+      ctx.events.on("resource:error", (payload) => errors.push(payload));
+      return () => null;
+    },
+  });
+  return mountLayerTree(() => [h(Probe), children()]);
 }
 
 /** 挂一个图层组件，返回可写的 props 与 wrapper。 */
@@ -580,6 +599,162 @@ describe("[#40] §6 事件与重建后的监听归属", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("geoJSON 载荷");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 8. 评审修正（PR #96 第一轮）：状态转换与错误补偿                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 这一节对应 PR #96 第一轮评审的四条代码发现（1、2、3、4）。每条都是「某条状态转换没人守」，
+ * 而不是「某处写错」——因此每条都先写成会红的用例，再修实现。
+ */
+describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与挂载失败补偿", () => {
+  it("[评审 1] visible=false 期间设置的可变 option，切回可见时必须真的写入 SDK", async () => {
+    const { wrapper, setProp } = await mountOneLayer(3, {
+      visible: false,
+      edge: false,
+      colors: ["#0f0", "#ff0"],
+    });
+
+    // 未挂载 ⇒ 一次都不该写（公开语义：不在地图上就不写），但也**不能**记成「已应用」
+    expect(harness.attached("layer")).toBe(0);
+    expect(harness.layerCalls(-1)).toEqual([]);
+
+    await setProp({ visible: true });
+
+    expect(harness.attached("layer")).toBe(1);
+    expect(
+      harness.layerCalls(-1),
+      "切回可见时补写挂载期间设为「不表态前」的那些值（修复前这里是 []：状态被记成已应用）",
+    ).toEqual(["setColors", "setEdge"]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("visible=false 期间的可变 option");
+  });
+
+  it("[评审 2] 回调型构造 option 换成另一个函数后，SDK 手上的回调必须转发到最新的那个", async () => {
+    // `BRasterLayer.url` 是 `string | ((x,y,z) => string)`：函数 → 函数 的切换在指纹里被折叠成 `fn`，
+    // 因此不会重建（这是刻意的，否则内联箭头会让父级每次渲染都重建图层）——
+    // 但 SDK 手上的那份必须**转发到当前 prop**，否则就是「换了回调但永远用旧的」。
+    const urlA = (x: number) => `A:${x}`;
+    const urlB = (x: number) => `B:${x}`;
+    const { wrapper, setProp } = await mountOneLayer(9, { url: urlA });
+
+    const firstUrl = harness.layerOptions(-1).url as (x: number, y: number, z: number) => string;
+    expect(firstUrl(1, 2, 3)).toBe("A:1");
+
+    await setProp({ url: urlB });
+    expect(createdSince(), "回调身份变化不重建（指纹折叠函数）").toBe(1);
+    const secondUrl = harness.layerOptions(-1).url as (x: number, y: number, z: number) => string;
+    expect(secondUrl(1, 2, 3), "SDK 手上的回调必须已经是新的").toBe("B:1");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("raster url 回调替换");
+  });
+
+  it("[评审 2] 同类回调（tileLoadFunction / 模板回调 / GeoJSON style）同样转发到最新实现", async () => {
+    const loadA = vi.fn();
+    const loadB = vi.fn();
+    const tile = await mountOneLayer(2, { tileLoadFunction: loadA });
+    const firstLoad = harness.layerOptions(-1).tileLoadFunction as (t: unknown, u: string) => void;
+    firstLoad({}, "https://x/1.png");
+    expect(loadA).toHaveBeenCalledTimes(1);
+
+    await tile.setProp({ tileLoadFunction: loadB });
+    const secondLoad = harness.layerOptions(-1).tileLoadFunction as (t: unknown, u: string) => void;
+    expect(secondLoad, "SDK 手上的函数身份稳定（同一个包装），换的是它转发到的目标").toBe(firstLoad);
+    secondLoad({}, "https://x/2.png");
+    expect(loadB, "SDK 侧调用必须落到新的实现").toHaveBeenCalledTimes(1);
+    expect(loadA, "旧实现不该再被调用").toHaveBeenCalledTimes(1);
+    await unmountAndSettle(tile.wrapper);
+    harness.assertIdle("tileLoadFunction 替换");
+
+    // XYZ 的模板回调与 GeoJSON 的函数型 style 走同一条路径（同一个 helper，逐个组件覆盖）
+    const xyz = await mountOneLayer(6, { xTemplate: (x: number) => x });
+    const firstX = harness.layerOptions(-1).xTemplate as (x: number, y: number, z: number) => number;
+    expect(firstX(7, 1, 1)).toBe(7);
+    await xyz.setProp({ xTemplate: (x: number) => x * 2 });
+    const secondX = harness.layerOptions(-1).xTemplate as (x: number, y: number, z: number) => number;
+    expect(secondX(7, 1, 1)).toBe(14);
+    await unmountAndSettle(xyz.wrapper);
+    harness.assertIdle("xyz xTemplate 替换");
+
+    const styleA = { title: "A" };
+    const styleB = { title: "B" };
+    const geo = await mountOneLayer(4, { markerStyle: styleA });
+    const firstStyle = harness.layerOptions(-1).markerStyle as { title: string };
+    expect(firstStyle.title).toBe("A");
+    await geo.setProp({ markerStyle: styleB });
+    expect((harness.layerOptions(-1).markerStyle as { title: string }).title, "对象型 style 变化会重建").toBe(
+      "B",
+    );
+    await unmountAndSettle(geo.wrapper);
+    harness.assertIdle("geojson markerStyle 替换");
+  });
+
+  it("[评审 3] 可变 option 从有值变回 undefined：重建图层，让 SDK 回到自身默认状态", async () => {
+    const { wrapper, setProp } = await mountOneLayer(3, { edge: false });
+    expect(harness.layerCalls(-1)).toEqual(["setEdge"]);
+    expect(createdSince()).toBe(1);
+
+    await setProp({ edge: undefined });
+
+    expect(createdSince(), "SDK 没有 unset 入口 ⇒ 只能重建以回到默认").toBe(2);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.layerCalls(-1), "新实例不再写 edge（用 SDK 自己的默认）").toEqual([]);
+    expect(harness.layerAttached(-2), "旧实例已摘除").toBe(false);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("可变 option 移除");
+  });
+
+  it("[评审 4] addLayer 已经挂上之后再抛错：mount 的错误补偿必须把它摘掉", async () => {
+    const show = ref(false);
+    const wrapper = mountLayerTree(() => (show.value ? h(BTrafficLayer, {}) : null));
+    await settle();
+    expect(createdSince()).toBe(0);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextAddLayerAfterAttach = new Error("addLayer failed after attach");
+    show.value = true;
+    await settle();
+
+    expect(
+      map.layers.length,
+      "「副作用已产生但调用抛错」时，错误补偿必须 best-effort 摘除（修复前这里会留 1 个）",
+    ).toBe(0);
+    expect(harness.layerAttached(-1)).toBe(false);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("挂载失败补偿");
+  });
+
+  it("[评审 4] 挂载之后切可见时的失败同样不留下孤儿，且经 resource:error 可诊断", async () => {
+    const errors: unknown[] = [];
+    const visible = ref(false);
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTrafficLayer, { visible: visible.value }));
+    await settle();
+    expect(createdSince()).toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextAddLayerAfterAttach = new Error("addLayer failed after attach");
+    visible.value = true;
+    await settle();
+
+    expect(map.layers.length, "失败后不能留下孤儿").toBe(0);
+    expect(errors, "失败必须经 resource:error 可诊断").toHaveLength(1);
+
+    // 失败之后仍然可以重试（记账没有被永久污染）
+    visible.value = false;
+    await settle();
+    visible.value = true;
+    await settle();
+    expect(map.layers.length, "重试必须能成功挂上").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("切可见失败补偿");
   });
 });
 

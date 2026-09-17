@@ -33,7 +33,7 @@
 import { onScopeDispose, watch, type ShallowRef } from "vue";
 import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
-import type { BMapError } from "../errors/BMapError";
+import { BMapError } from "../errors/BMapError";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
 import { devWarn } from "../logger";
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
@@ -89,7 +89,14 @@ export interface UseLayerResourceResult {
 interface InstanceState {
   handle: LayerHandle;
   spec: LayerSpec;
+  /** 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。 */
   mounted: boolean;
+  /**
+   * 是否**调用过** `addLayer`（无论成功与否）。
+   *
+   * 与 `mounted` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
+   */
+  mountAttempted: boolean;
   /** 创建该实例时用的重建指纹：props 变化时与它比较，决定「重建」还是「就地更新」。 */
   rebuildKey: string;
   /**
@@ -107,9 +114,14 @@ interface InstanceState {
    */
   appliedData: unknown;
   /** 已就地写入的可选 option 指纹（取值不变时不重复写 SDK）。 */
-  mutableKey: string;
-  /** 已就地写入的可选 option 键（由有值变为 undefined 的键要提示一次）。 */
-  mutableKeys: Set<string>;
+  appliedMutableKey: string;
+  /**
+   * **已经写入过 SDK** 的可选 option 键。
+   *
+   * 只在写成功后更新：未挂载时不写也不记账（否则「挂载期间设的值」会被记成已应用，
+   * 切回可见时那次写入就永久丢失）。它的另一个用途是判断「键从有值变回未表态」。
+   */
+  appliedMutableKeys: Set<string>;
 }
 
 /** 槽位值的指纹：`undefined` 不写也不记账，`null` 单独记（它是「清空」而不是「没表态」）。 */
@@ -161,14 +173,40 @@ export function useLayerResource<Props>(
   /** 当前生成（generation）的状态；`replace()` 会先把它置空。 */
   let instance: InstanceState | null = null;
 
+  /**
+   * 摘除的唯一入口。
+   *
+   * 以 `mountAttempted`（**调用过** `addLayer`）而不是 `mounted`（**成功返回过**）为门禁：
+   * 真实 SDK 的 `addLayer` 可能「已经产生副作用、然后抛错」，用成功返回的记账当门禁会让那次
+   * 补偿摘除被跳过，实例就永久留在图上（Driver 侧的 `remove` 明确不读记账，正是为了支持这种
+   * best-effort 摘除；这一层不能用更严格的记账把它挡掉）。
+   */
+  const unmount = (state: InstanceState, context: MapReadyContext): void => {
+    if (!state.mountAttempted) return;
+    state.mounted = false;
+    state.mountAttempted = false;
+    context.client.driver.layers.remove(target(context), state.handle);
+  };
+
   /** 挂上 / 摘掉：图层的显隐口径。 */
   const syncMounted = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
     const shouldMount = state.spec.visible !== false;
-    if (shouldMount === state.mounted) return;
-    if (shouldMount) layers.add(target(context), state.handle);
-    else layers.remove(target(context), state.handle);
-    state.mounted = shouldMount;
+    if (shouldMount) {
+      if (state.mounted) return;
+      state.mountAttempted = true;
+      try {
+        layers.add(target(context), state.handle);
+      } catch (error) {
+        // 「副作用可能已经产生」⇒ best-effort 摘一次，再把原错误抛出去（`unmount` 同时复位
+        // 记账，因此失败之后仍然可以重试挂载）
+        unmount(state, context);
+        throw error;
+      }
+      state.mounted = true;
+      return;
+    }
+    unmount(state, context);
   };
 
   /**
@@ -232,26 +270,42 @@ export function useLayerResource<Props>(
   /**
    * 就地写入「可选 option」（`colors` / `edge` 这类有 setter 的构造项）。
    *
-   * 只有**键集合或取值**变化时才写 SDK；键消失（由有值变为 `undefined`）时**不猜默认值**
-   * ——官方没有默认值回读入口，本库只提示一次，而不是静默保留旧值（那会让调用方以为还原了）。
+   * 返回 `true` 表示**调用方必须重建**：某个**已经写入过**的键从有值变回未表态时，SDK 这批
+   * 图层没有 unset 入口，本库也不猜默认值 ⇒ 唯一能回到「SDK 自己的默认状态」的办法是换一个
+   * 新实例（构造期不传它）。不重建的话，声明（不表态）与 SDK 实际状态会永久不一致。
    */
-  const syncMutableOptions = (state: InstanceState, context: MapReadyContext): void => {
+  const syncMutableOptions = (state: InstanceState, context: MapReadyContext): boolean => {
     const mutable = layerMutableOptions(state.spec, probeOf(context));
     const nextKeys = Object.keys(mutable);
-    const removed = [...state.mutableKeys].filter((key) => !nextKeys.includes(key));
-    state.mutableKeys = new Set(nextKeys);
+
+    const removed = [...state.appliedMutableKeys].filter((key) => !nextKeys.includes(key));
     if (removed.length > 0) {
       devWarn(
-        `[layer:${state.spec.kind}] 可就地更新的 option ${removed.join(" / ")} 变为 undefined：` +
-          "本库不还原 SDK 默认值（4.0 没有默认值回读入口），图层上仍是上一次设置的值",
+        `[layer:${state.spec.kind}] 可就地更新的 option ${removed.join(" / ")} 由有值变为 undefined：` +
+          "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
       );
-      state.mutableKeys = new Set(nextKeys);
+      return true;
     }
-    if (nextKeys.length === 0) return;
-    if (stableLayerValue(mutable) === state.mutableKey) return;
-    state.mutableKey = stableLayerValue(mutable);
-    if (!state.mounted) return;
+
+    if (nextKeys.length === 0) return false;
+    const fingerprint = stableLayerValue(mutable);
+    if (fingerprint === state.appliedMutableKey) return false;
+    // 未挂载时**不写、也不记账**：切回可见时这里会被再调一次（记成「已应用」会让那次写入永久丢失）
+    if (!state.mounted) return false;
+
     context.client.driver.layers.setOptions(state.handle, mutable);
+    state.appliedMutableKey = fingerprint;
+    state.appliedMutableKeys = new Set(nextKeys);
+    return false;
+  };
+
+  /** 组件侧失败的唯一上报出口（mount 路径与 watch 路径共用，避免两条路各写一份）。 */
+  const reportResourceError = (error: unknown): void => {
+    const wrapped =
+      error instanceof BMapError
+        ? error
+        : new BMapError("BMAP_RESOURCE_CREATE_FAILED", String(error), { cause: error });
+    mapContext.events.emit("resource:error", { error: wrapped, component: hooks.component });
   };
 
   const resource = useSdkResource<Readonly<Props>, LayerHandle, MapReadyContext>({
@@ -261,9 +315,7 @@ export function useLayerResource<Props>(
      * 失败经 `resource:error` 交出（与 `useOverlayResource` / `useControlResource` 同一条
      * 诊断通道）：图层组件的错误不该只留在内部 ref 里。
      */
-    onError: (error) => {
-      mapContext.events.emit("resource:error", { error, component: hooks.component });
-    },
+    onError: reportResourceError,
     resolveContext: async (signal) => {
       const context = await mapContext.whenReady(signal);
       if (!context.map) {
@@ -286,13 +338,16 @@ export function useLayerResource<Props>(
           handle,
           spec,
           mounted: false,
+          mountAttempted: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
           appliedData: UNAPPLIED,
-          mutableKeys: new Set(Object.keys(layerMutableOptions(spec, probeOf(context)))),
-          // 刻意用「未写」哨兵而不是当前值的指纹：可就地更新的 option **不进构造选项**，
+          // 刻意留空（而不是当前键集）：「已写入」只该由**成功写入**来建立，
+          // 预置成当前键集会同时带来两个错——挂载期不写却记成已应用，以及把「键消失」误判成重建。
+          appliedMutableKeys: new Set(),
+          // 同理：用「未写」哨兵而不是当前值的指纹。可就地更新的 option **不进构造选项**，
           // 因此挂载后的这一次写入是它们的唯一生效路径（否则初始值会被静默丢弃）。
-          mutableKey: NO_MUTABLE_KEY,
+          appliedMutableKey: NO_MUTABLE_KEY,
         };
         instance = state;
         const record = registryOf().register({
@@ -300,12 +355,10 @@ export function useLayerResource<Props>(
           handle,
           scope,
           remove: () => {
-            // 摘除只在这里发生：`state.mounted` 是本库对「挂没挂上」的唯一记账，
-            // 因此重复 dispose（组件卸载 / 重建 / Map 卸载）不会多摘一次。
+            // 摘除只在这里发生（`unmount` 以「调用过 add」为门禁），因此重复 dispose
+            // （组件卸载 / 重建 / Map 卸载）不会多摘一次。
             if (instance === state) instance = null;
-            if (!state.mounted) return;
-            state.mounted = false;
-            context.client.driver.layers.remove(target(context), handle);
+            unmount(state, context);
           },
         });
         // 先登记账本、再做副作用：`syncMounted` / 槽位写入里任何一步抛错时，错误路径上
@@ -347,15 +400,24 @@ export function useLayerResource<Props>(
               const state = instance;
               // 还没就绪或没有实例：`create()` 会读到最新的规格，这里不需要动作。
               if (!ready || !handle || !state) return;
-              const next = hooks.toSpec(current);
-              if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
-                void replace();
-                return;
+              // 这一步里 `syncMounted` 会调用 SDK（可能抛错），抛出来就是 unhandled rejection
+              // ——必须收成 `resource:error`（与 mount 路径同一条诊断通道）。
+              try {
+                const next = hooks.toSpec(current);
+                if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
+                  void replace();
+                  return;
+                }
+                state.spec = next;
+                syncMounted(state, ready);
+                syncPostMountSlots(state, ready);
+                if (syncMutableOptions(state, ready)) {
+                  // 有键从「已写入」变回未表态：只能靠新实例回到 SDK 自己的默认状态
+                  void replace();
+                }
+              } catch (error) {
+                reportResourceError(error);
               }
-              state.spec = next;
-              syncMounted(state, ready);
-              syncPostMountSlots(state, ready);
-              syncMutableOptions(state, ready);
             },
           );
         });
