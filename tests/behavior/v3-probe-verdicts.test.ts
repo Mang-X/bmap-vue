@@ -12,6 +12,8 @@
  *   也能让上面两条通过。
  */
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { controlFailures, verdicts, type Reading } from "../../scripts/probe-layer-detached-verdicts.mts";
 
 /** 只关心 readings，其余字段给最小合法值。 */
@@ -439,5 +441,64 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
       ),
       "字符串 `\"2\"` 不得靠强转通过控件",
     ).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 正证基线 ↔ live 报告：漂移必须在 CI 里被发现，而不是等到评审            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `COMPLETE` 是「读数齐备」的**合成**报告，用来做正证（结论都必须落定）。
+ *
+ * 它的字段值必须**逐条等于**最近一次成功的 live 报告——否则「正证」保护的是一条 live 从不发生的
+ * 分支。这件事已经发生过两次（第七轮：GeoJSON 的 `afterClearData`；第八轮：GeoJSON 内核顺序整组），
+ * 靠注释与 checklist 都拦不住，所以这里把它变成机器检查。
+ *
+ * fixture 的刷新方式（只在**探针退出码为 0** 时才抄）：
+ *
+ * ```bash
+ * BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-layer-detached.mts --out=/tmp/live.json
+ * # 然后把 phase / sdk / readings 抄进 tests/behavior/fixtures/probe-layer-detached.live.json
+ * ```
+ */
+describe("[#98] 正证基线（COMPLETE）与 live 报告一致", () => {
+  const fixturePath = join(
+    process.cwd(),
+    "tests/behavior/fixtures/probe-layer-detached.live.json",
+  );
+  const live = JSON.parse(readFileSync(fixturePath, "utf8")) as {
+    capturedAt: string;
+    phase: string;
+    readings: Reading[];
+  };
+
+  it("fixture 不是空壳（正证守卫：文件被清空 / 搬走时不得静默空转）", () => {
+    expect(live.phase, `${fixturePath} 的 phase 不是 done`).toBe("done");
+    expect(live.readings.length, `${fixturePath} 里的读数太少`).toBeGreaterThan(20);
+  });
+
+  it("`COMPLETE` 的每条读数都与 live 报告逐字段一致", () => {
+    const byId = new Map(live.readings.map((reading) => [reading.id, reading]));
+    const fields = ["threw", "connected", "overlayCount", "created"] as const;
+    const drifted = COMPLETE.flatMap((expected) => {
+      const actual = byId.get(expected.id);
+      if (actual === undefined) return [`${expected.id}：live 报告里没有这条读数`];
+      // ⚠️ **只比 COMPLETE 声明过的字段**：判定层对每条读数只读它需要的字段（快照读 `connected`、
+      // 集合读 `overlayCount`、attempt 读 `threw`），所以 COMPLETE 不必把 live 的每个字段都写全。
+      // 一开始按「全字段比对」写，立刻报出 `kernel.mounted.threw：COMPLETE=undefined live=false`
+      // 这类噪音——那不是漂移，是「没声明」。多报一次就会让人开始忽略这条用例。
+      return fields
+        .filter((field) => expected[field] !== undefined && expected[field] !== actual[field])
+        .map(
+          (field) =>
+            `${expected.id}.${field}：COMPLETE=${String(expected[field])} live=${String(actual[field])}`,
+        );
+    });
+    expect(
+      drifted,
+      `COMPLETE 与 live 报告（${live.capturedAt}）漂移了：要么改回 live 的值，要么在重跑探针` +
+        `（退出码 0）之后刷新 fixture——正证保护的必须是真实基线`,
+    ).toEqual([]);
   });
 });
