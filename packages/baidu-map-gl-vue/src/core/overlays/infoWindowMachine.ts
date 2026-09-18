@@ -161,7 +161,35 @@ export interface InfoWindowSnapshot {
   readonly positionKey: string | null;
   /** 「想开但缺位置」是否已经报过一次（进入该状态时报一次，离开即复位）。 */
   readonly invalidNotified: boolean;
+  /**
+   * 「用户主动关闭」那一对事件的**配对标记**（外部评审第九轮 P1）。
+   *
+   * 真实 4.0 实测（真实 AK · headless Chromium，5 轮）：点一次气泡的关闭按钮会派发
+   * **`close` 与 `clickclose` 各一次**，两者间隔约 0.1ms（**同一个 task**，微任务里已经两条都到齐），
+   * 但**顺序不固定** —— 5 轮里 4 次 `close` 在前、1 次 `clickclose` 在前。
+   *
+   * 这一对属于**一次**用户关闭，两半都**不得**消费我们下发的关闭命令的账（那一对不带我们命令的身份）。
+   * 麻烦在于：一条 `close` 到达时无法预知后面会不会跟着 `clickclose`，所以只能**回溯性对账**：
+   *
+   * - `none`：不在这一对里；
+   * - `close-consumed`：上一条 `sdk-close` 消费了一份 `closeOutstanding` ⇒ 若随后那条
+   *   `clickclose` 是它的配对，要把这份账**还回去**；
+   * - `close-noop`：上一条 `sdk-close` 什么都没消费（没有在飞账，或相位已 `closed` 的幂等）⇒ 无需还；
+   * - `clickclose-just-seen`：上一条动作是 `sdk-clickclose` ⇒ 随后那条 `close` 是它的伴随事件，
+   *   来了也**不得**消费。
+   *
+   * 任何**别的**动作都会把它清回 `none`（见 `reduceInfoWindow`）：标记只在「紧邻的下一条关闭类事件」
+   * 上有意义，否则一条很久以前的 `close` 会被后来的点击认领（或反过来）。
+   */
+  readonly explicitClosePair: ExplicitClosePair;
 }
+
+/** 见 `InfoWindowSnapshot.explicitClosePair`。 */
+export type ExplicitClosePair =
+  | "none"
+  | "close-consumed"
+  | "close-noop"
+  | "clickclose-just-seen";
 
 export type InfoWindowAction =
   /**
@@ -236,6 +264,7 @@ export function initialInfoWindowSnapshot(generation = 0): InfoWindowSnapshot {
     openOutstanding: 0,
     positionKey: null,
     invalidNotified: false,
+    explicitClosePair: "none",
   };
 }
 
@@ -283,6 +312,24 @@ export function reduceInfoWindow(
   state: InfoWindowSnapshot,
   action: InfoWindowAction,
 ): InfoWindowTransition {
+  const step = reduceAction(state, action);
+  // `explicitClosePair` 只在「紧邻的下一条关闭类事件」上有意义：任何**别的**动作都把它清掉，
+  // 否则一条很久以前的 `close` 会被后来的点击认领（或反过来，一条点击的标记留到下一次关闭）。
+  // 这一对实测间隔约 0.1ms（同一 task），正常路径上不会有别的动作插进来。
+  if (
+    action.type !== "sdk-close" &&
+    action.type !== "sdk-clickclose" &&
+    step.snapshot.explicitClosePair !== "none"
+  ) {
+    return { ...step, snapshot: { ...step.snapshot, explicitClosePair: "none" } };
+  }
+  return step;
+}
+
+function reduceAction(
+  state: InfoWindowSnapshot,
+  action: InfoWindowAction,
+): InfoWindowTransition {
   // 终态：一切输入都被丢弃，且不产生任何效果
   if (state.phase === "disposed") return settle(state);
 
@@ -320,6 +367,7 @@ export function reduceInfoWindow(
         openOutstanding: 0,
         positionKey: null,
         invalidNotified: false,
+        explicitClosePair: "none",
       });
     case "dispose":
       return settle(enterPhase({ ...state, closeOutstanding: 0, openOutstanding: 0 }, "disposed"));
@@ -487,13 +535,26 @@ function reduceCommandFailed(
 function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
 
+  // 「用户主动关闭」那一对里的**后半**（前半是 `sdk-clickclose`；真实 4.0 实测两条在同一个 task 里，
+  // 但顺序不固定）：它只是那次点击的伴随事件，**不消费任何账**，模型与相位也不动
+  // （点击那半已经收敛过了）。见 `InfoWindowSnapshot.explicitClosePair`。
+  if (state.explicitClosePair === "clickclose-just-seen") {
+    return settle(enterPhase({ ...state, explicitClosePair: "none" }, "closed"));
+  }
+
   // ⚠️ 顺序是硬要求（外部评审 P1）：**先消费在飞计数，再判「已经关着」的幂等**。
   // 计数允许 > 1（相位是 `closing` 时观测到迟到的 `sdk-open` 会补发一条 close，见 `reduceSdkOpen`），
   // 而「相位已经回到 `closed`」不代表「计数已经还清」—— 第二条回包正是在那一刻到达的。
   // 反过来先按 `closed` 早退，残留计数就永远还不清，下一次重开后一条**真实**的关闭会被
   // 当成过期回包吞掉（模型停在「开」），也就是本模块反复强调的「漏关」那一侧。
   if (state.closeOutstanding > 0) {
-    const settled = { ...state, closeOutstanding: state.closeOutstanding - 1 };
+    // 记下「这一条消费了一份账」：万一它其实是用户点击的伴随事件（紧随一条 `clickclose`），
+    // 那一份要由 `reduceSdkClickClose` 还回去。
+    const settled: InfoWindowSnapshot = {
+      ...state,
+      closeOutstanding: state.closeOutstanding - 1,
+      explicitClosePair: "close-consumed",
+    };
     if (state.open) {
       // 过期回包：模型是「开」只可能来自「重开之后」，而重开之前的关闭命令的回包都是过期的。
       // 只消耗一次计数，相位与模型都不动。
@@ -505,11 +566,17 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   }
 
   // 计数为 0 的 `close` 事件：相位已经关了 ⇒ 幂等（不产生任何回写）
-  if (state.phase === "closed") return settle(state);
+  if (state.phase === "closed") {
+    return settle({ ...state, explicitClosePair: "close-noop" });
+  }
 
   // 未经请求的关闭（点地图 / 被顶掉）。注意「点关闭按钮」不在这里 —— 那是带来源的
   // `sdk-clickclose`，见 `reduceSdkClickClose`。
-  const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
+  const closed = changeOpen(
+    { ...state, closeOutstanding: 0, explicitClosePair: "close-noop" },
+    false,
+    "sdk",
+  );
   return {
     snapshot: enterPhase(closed.snapshot, "closed"),
     changes: closed.changes ?? NONE_CHANGES,
@@ -525,10 +592,34 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
  *
  * 刻意**保留** `closeOutstanding`：我们下发的关闭命令仍然欠一条回包，它迟到时必须继续被认成
  * 「结算」而不是「未经请求的关闭」—— 那条回包不该由用户的一次点击来冲销。
+ *
+ * 它还要负责**给这一对事件结账**（外部评审第九轮 P1）：真实 4.0 实测一次点击会派发
+ * `close` + `clickclose` 各一次、**顺序不固定**（见 `explicitClosePair`）。那一对不带我们命令的
+ * 身份，因此两半都不该消费 `closeOutstanding`：
+ *
+ * - 伴随的 `close` **已经先到**并消费了一份 ⇒ 这里**还回去**（`closeOutstanding + 1`）；
+ * - 前一条动作不是关闭类事件 ⇒ 打上 `clickclose-just-seen`，让**随后**那条伴随 `close` 不消费。
  */
 function reduceSdkClickClose(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
-  const closed = changeOpen(state, false, "sdk");
+
+  const isPairTail = state.explicitClosePair === "close-consumed";
+  const restored = isPairTail ? state.closeOutstanding + 1 : state.closeOutstanding;
+  // 前一条就是 `sdk-close`（无论它消没消费）⇒ 这一对已经闭合，不再给别人留标记；
+  // 只有「前一条不是关闭类事件」时才标记「接下来那条伴随 close 不许消费」。
+  //
+  // ⚠️ 还要**这次点击确实关掉了东西**（`state.open === true`）才留标记：实测一对可能是
+  // `clickclose > close > clickclose`（同一个气泡被打开/重绘多次后 SDK 会重复派发），
+  // 末尾那条 `clickclose` 落在「模型已经是关」时若还留标记，就会一直挂到下一次关闭、
+  // 让一条**真实的**命令回包被跳过结算 —— 那正是「计数还不清 ⇒ 后续真实关闭被吞」的老毛病。
+  const pair: ExplicitClosePair =
+    state.explicitClosePair === "none" && state.open ? "clickclose-just-seen" : "none";
+
+  const closed = changeOpen(
+    { ...state, closeOutstanding: restored, explicitClosePair: pair },
+    false,
+    "sdk",
+  );
   return {
     snapshot: enterPhase(closed.snapshot, "closed"),
     changes: closed.changes ?? NONE_CHANGES,

@@ -358,6 +358,46 @@ open → sdk-open → intent(false)（closeOutstanding = 1，回包还没到）
 而这个暗示本身就是错的。给夹具命名时要写清延迟的是**哪一半**（副作用 / 事件 / 回调），
 并且**每条用到它的用例都要断言那一半**，否则夹具建错了也看不出来。
 
+### 4f. 「用户点关闭按钮」是一**组**事件，不是一个（外部评审第九轮 P1 · **真实 AK 实测**）
+
+前几轮把 `clickclose` 当成「一条事件」来讨论。第九轮评审提出：百度历史实现是
+「先 `dispatchEvent("onclickclose")`、随后关闭并 `dispatchEvent("onclose")`」，
+所以一次点击可能**同时**产生 `clickclose` 与 `close`；若那条伴随的 `close` 去消费我们下发的
+关闭命令的账，真正迟到的回包就会在下次重开后被误判成「未经请求的关闭」。
+评审要求**先用真实 v4 记录事件序列**，再决定处置。实测结论如下（真实 AK · headless Chromium）：
+
+| 读数 | 结果 |
+| --- | --- |
+| 一次点击的**组成** | `close` **恰好 1 条** + `clickclose` **1 条或多条** |
+| 两者间隔 | 约 0.1ms，**同一个 task**（点击后立刻排的微任务里两条都已经到齐） |
+| **顺序** | **不固定**：全新实例 5 轮里 4 次 `close` 在前、1 次 `clickclose` 在前 |
+| `clickclose` 的**条数** | 随「同一个实例被打开过几次」累积：打开 1/2/3 次 ⇒ 1/2/3 条（`close` 始终 1 条） |
+| 点击之后 | `map.getInfoWindow()` 变成 `null`（气泡确实关了） |
+| 对照组：`map.closeInfoWindow()` | 只有 `close` 1 条（没有 `clickclose`） |
+
+「`clickclose` 随打开次数累积」说明 SDK **每次打开/重绘都会重新绑定关闭按钮的处理器**
+（实测规律就是「条数 = 打开次数」）—— 这是一条**上游性质**，不是本库造成的。
+
+**处置：这一组事件不带我们命令的身份 ⇒ 两半都不得消费 `closeOutstanding`。**
+难点在于一条 `close` 到达时无法预知后面会不会跟着 `clickclose`，所以只能**回溯性对账**，
+`InfoWindowSnapshot.explicitClosePair` 就是这个标记（四种取值见其注释）：
+
+| 收到的顺序 | 前半做了什么 | 后半怎么补 |
+| --- | --- | --- |
+| `close` → `clickclose` | `close` 可能已消费一份账（记为 `close-consumed`） | `clickclose` **还回去**（`closeOutstanding + 1`） |
+| `clickclose` → `close` | `clickclose` 打上 `clickclose-just-seen` | 那条 `close` **不消费**，标记清掉 |
+| `close` … `close` | 正常逐条消费（标记被下一次覆盖） | —— |
+| 末尾多余的第 N 条 `clickclose` | 模型已经是「关」⇒ 什么都没关掉 | **不留标记**（否则它会挂到下一次关闭，让一条真实回包被跳过结算） |
+
+最后一行是实测逼出来的：`clickclose` 会有**多条**，末尾那几条落在「模型已经关」的时刻；
+只有「这次点击确实关掉了东西」才留标记，标记就不会滞留。
+
+**没做的一件事（留给维护者定）**：我们目前把 SDK 的 `clickclose` **1:1 转发**给调用方，
+所以同一个实例被打开多次之后，一次点击会让调用方收到**多条** `clickclose`。
+这与文档里「用户点了气泡上的关闭按钮」的措辞有落差，但**去重会改变公开的 emit 契约**
+（是「一次点击一次事件」还是「原样转发上游」），属于产品决策而不是缺陷修复 ——
+因此本轮只把它登记为已知限制 13 并保持原样转发。
+
 ### 5. 尺寸：观察**实际内容 host**、合帧重绘、不自激
 
 1. **触发源**：`useResizeObserver(host)`（VueUse）。观察的就是 SDK 实际展示内容的那块 host，
@@ -532,6 +572,13 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
     键集由编译期映射类型强制覆盖）。改默认值时三处要一起改；做成门禁（解析文档表格 + 读运行期
     props 定义）属于发布面校验，留给后续票。
 
+13. **`clickclose` 会随「同一个实例被打开过几次」重复派发**（真实 AK 实测：打开 1/2/3 次 ⇒
+    `clickclose` 1/2/3 条，`close` 始终 1 条；SDK 每次打开/重绘都重新绑定关闭按钮的处理器）。
+    本库**原样转发**，因此调用方在一次点击里可能收到多条 `clickclose` 事件。
+    状态机对这一组事件是幂等的（第 2 条起不改变任何状态，也不会消费命令账，见 4f）。
+    是否在转发层去重属于公开 emit 契约的取舍，**留给维护者决定**：去重会让「一次点击 = 一次事件」
+    成立，代价是与上游事件流不再 1:1。
+
 ## 验证
 
 | 检查 | 命令 / 落点 |
@@ -544,6 +591,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **反序回包**：关 → 立刻重开 →「重开的 `open` 先到、旧 `close` 后到」不得关掉已重开的模型；随后一次真实关闭仍须收敛（评审 P1-1 的复现） | `infoWindowMachine.test.ts`（`重开确认先到、旧 close 后到`） |
 | **被放弃的那一代必须被它自己的释放路径收干净**（重建窗口内卸载 → `useSdkResource` 的 stale 分支） | `v3-binfowindow.test.ts`（`重建窗口内卸载`） |
 | **单飞的尾随重建不得丢值**：连续构造期变化后，最终存活那一代必须按**最后一次**的 prop 构建（反证：去掉尾随重建 ⇒ `expected 9 to be 10`） | 同上（`重建是单飞的`） |
+| **点关闭按钮是一组事件，不得吞掉命令账**：`close`（恰 1 条）+ `clickclose`（1..N 条，顺序不定）落在「有一笔关闭命令在飞 + 已重开」之上时，账必须仍然保留到真正迟到的回包（反证：不还原伴随 close 消费的账 / 让伴随 close 照常消费 / 标记不清理 / **无条件**还原 ⇒ 各红） | `infoWindowMachine.test.ts`（`clickclose 伴随的那条普通 close 不得吞掉命令账`，4 种形状）+ `v3-binfowindow.test.ts`（同名端到端，3 种形状）+ live smoke `infowindow-close-button-pair`（把实测形状本身变成门禁） |
 | **过期回包不得清空账本**：重开确认先到、旧 `close` 后到时状态机仍 `open` ⇒ `current()` 必须保持该实例，**且地图上仍然开着重开后的气泡**（反证：退回「无条件 `deactivate`」⇒ 红；**永不退场** ⇒ 正常关闭路径的用例红；**夹具退回「延迟副作用」** ⇒ 地图断言红） | `v3-binfowindow.test.ts`（`重开确认先到、旧 close 后到`） |
 | **`clickclose` 带来源，不参与无身份的归属表**：有在飞关闭账时用户点关闭按钮仍必须真的关上（模型回写一次 `false`、账本退场），但那笔账**不得**被这次点击冲销（反证：状态机退回 `reduceSdkClose` / 组件退回 `sdk-close` / 顺手把账清零 ⇒ 各红） | `infoWindowMachine.test.ts`（`clickclose 带明确来源`）+ `v3-binfowindow.test.ts`（`用户点关闭按钮（clickclose）不得被在飞的旧关闭账吞掉`） |
 | **账本跟随 SDK 事实**：被迟到接管真正顶掉的 B 必须收到 `superseded`（模型不能停在图上已不存在的气泡上）；外部 SDK 开 / 关后 `infoWindows.current()` 必须同步（反证：删掉 `open` 的 `activate` / 删掉 `close` 的 `deactivate` / 删掉 `clickclose` 的 `deactivate` / **把两行顺序调反** ⇒ 各红） | `v3-binfowindow.test.ts`（`双窗口乱序`、`外部 SDK 的 open / close 都要同步账本`、`点地图关闭`、`clickclose`） |
@@ -723,6 +771,30 @@ B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 
 **这一轮的自我批评值得记下来**：P1-2 说明「**新增断言之前先问这条用例到底在验证哪个模型**」。
 我上一轮把「旧命令晚执行」当成了「旧事件晚到」——两者的差别恰好落在**地图状态**上，
 而我恰恰没断言它。夹具的名字（`deferInfoWindowClose`）当时还逐字给了我错误的暗示。
+
+### 第九轮（`b0f2f77` → 本轮）
+
+评审指出 `clickclose` 与随后的普通 `close` 可能同属一次用户点击，那条伴随 `close` 会去消费
+在飞命令账，导致真正迟到的回包被误判。评审明确要求**先用真实 v4 把事件序列录出来**再决定处置 ——
+于是这轮先做实测（真实 AK · headless Chromium，`.smoke/` 临时 harness，跑完移出仓库）：
+
+- **全新实例、打开 1 次**：`close` ×1 + `clickclose` ×1，**顺序不固定**（5 轮：4 次 `close` 在前）。
+- **同一实例打开 N 次**：`close` 始终 ×1，`clickclose` ×N（实测三轮 1+1 / 2+1 / 3+1）⇒
+  SDK 每次打开/重绘都重新绑定关闭按钮的处理器。
+- 两者间隔约 0.1ms（同一 task）；点击后 `getInfoWindow()` 为 `null`；对照组 `closeInfoWindow()` 只有 `close`。
+
+⇒ 评审的担心**成立**（伴随的 `close` 确实存在、且会消费账），但**形状比预期复杂**：
+不是「一对」，而是「1 条 `close` + 1..N 条 `clickclose`」。
+
+- **修正**：`explicitClosePair` 标记 + 双向回溯对账（见 4f 的表）；末尾多余的 `clickclose`
+  只在「确实关掉了东西」时才留标记。
+- **反证四条变异全红**：① 不还原伴随 `close` 消费的账；② 伴随 `close` 照常消费（只处理另一种顺序）；
+  ③ 标记不清理；④ **反方向**无条件还原。
+- **把实测变成门禁**：live smoke 新增 `infowindow-close-button-pair` —— 断言
+  「`close` 恰 1 条 + `clickclose` ≥ 1 条」**并**断言本库模型收敛为关；`clickclose` 的条数
+  作为**读数**带回报告（它与打开次数相关，不适合当判据）。
+- 第一次接这条检查时它红了，读数 `counts={"close":1,"clickclose":2}` 与 `.smoke` 里的 1+1 不一致 ——
+  顺着这个差异才量出「随打开次数累积」这条规律。**两个环境的读数不一致本身就是线索**。
 
 ### 本轮修正引入的自我检查
 

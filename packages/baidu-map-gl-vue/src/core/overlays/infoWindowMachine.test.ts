@@ -276,6 +276,84 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
     expect(d.changes, "陈旧回包不得再产生模型变化").toHaveLength(changesBefore);
   });
 
+  it("clickclose 伴随的那条普通 close 不得吞掉命令账（真实 4.0 的三种形状都要对）", () => {
+    // 真实 4.0 实测（真实 AK · headless Chromium）：
+    //   - 全新实例只打开过一次 ⇒ `close` + `clickclose` 各一次，顺序不固定；
+    //   - 同一个实例被打开过 N 次 ⇒ `close` **仍恰好一次**，但 `clickclose` 有 N 条
+    //     （1/2/3 次打开 ⇒ 1/2/3 条），因为 SDK 每次打开/重绘都会重新绑定关闭按钮的处理器。
+    // 不变量（与形状无关）：这一对**不带我们命令的身份** ⇒ 不得消费 `closeOutstanding`。
+    const shapes: Array<{ tag: string; events: string[] }> = [
+      { tag: "1 次打开 · close 在前", events: ["close", "clickclose"] },
+      { tag: "1 次打开 · clickclose 在前", events: ["clickclose", "close"] },
+      { tag: "2 次打开", events: ["clickclose", "close", "clickclose"] },
+      { tag: "3 次打开", events: ["clickclose", "close", "clickclose", "clickclose"] },
+    ];
+
+    for (const { tag, events } of shapes) {
+      const d = drive();
+      d.intent(true, A);
+      d.sdkOpen();
+      // 关：下发 close 命令（closeOutstanding = 1），它的回包还没到
+      d.intent(false, A);
+      // 立刻重开，并且重开的确认先到
+      d.intent(true, A);
+      d.sdkOpen();
+      expect(d.open).toBe(true);
+      expect(d.snapshot.closeOutstanding, `${tag}：对照组，那笔账挂着`).toBe(1);
+
+      // ★ 用户点了关闭按钮 —— 按实测形状派发
+      for (const name of events) {
+        if (name === "close") d.sdkClose();
+        else d.sdkClickClose();
+      }
+
+      expect(d.open, `${tag}：用户主动关闭必须生效`).toBe(false);
+      expect(d.phase).toBe("closed");
+      expect(
+        d.snapshot.closeOutstanding,
+        `${tag}：这一对不带命令身份 ⇒ 不得消费我们那条在飞命令的账`,
+      ).toBe(1);
+
+      // 父级再次重开并确认：那笔账仍然挂着（它要留给真正迟到的那条回包）
+      d.intent(true, A);
+      d.sdkOpen();
+      expect(d.open).toBe(true);
+      expect(d.snapshot.closeOutstanding, `${tag}：账仍在`).toBe(1);
+
+      // 对照组：我们那条关闭命令的回包这时才到 —— 必须仍被认成「结算」，
+      // 而不是「未经请求的关闭」（后者会把刚重开的模型关掉）
+      const changesBefore = d.changes.length;
+      d.sdkClose();
+      expect(d.open, `${tag}：陈旧回包不得把刚重开的模型关掉`).toBe(true);
+      expect(d.snapshot.closeOutstanding, `${tag}：结算后账归零`).toBe(0);
+      expect(d.changes, `${tag}：陈旧回包不得再产生模型变化`).toHaveLength(changesBefore);
+    }
+  });
+
+  it("clickclose 的配对标记不得留到下一次关闭（它只在紧邻的下一条关闭类事件上有意义）", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    d.intent(false, A); // 关闭命令下发 ⇒ closeOutstanding = 1，回包还没到
+
+    // 用户点关闭按钮：此时前一条动作**不是**关闭类事件 ⇒ 会打上
+    // 「随后那条伴随 close 不许消费」的标记（因为那一对还有一半可能没到）
+    d.sdkClickClose();
+    expect(d.open).toBe(false);
+    expect(d.snapshot.closeOutstanding, "对照组：命令账还挂着").toBe(1);
+
+    // 中间插入了别的动作（父级重开 + SDK 确认）⇒ 那条标记必须已经失效
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.open).toBe(true);
+
+    // 对照组：真正迟到的命令回包这时才到 —— 必须照常被认成「结算」并消费掉那笔账；
+    // 若那条陈旧标记留着，这次消费会被跳过 ⇒ 计数永远还不清（后续真实关闭会被吞）
+    d.sdkClose();
+    expect(d.snapshot.closeOutstanding, "陈旧标记不得让这次结算被跳过").toBe(0);
+    expect(d.open, "陈旧回包不得把刚重开的模型关掉").toBe(true);
+  });
+
   it("多条关闭命令在飞：每一条回包都必须清账，否则重开后的真实关闭会被吞掉", () => {
     const d = drive();
     d.intent(true, A);

@@ -438,45 +438,65 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     harness.assertIdle('反序回包后账本仍指向该实例')
   })
 
-  it('用户点关闭按钮（clickclose）不得被在飞的旧关闭账吞掉', async () => {
-    const el = harness.container()
-    const open = ref(true)
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    const map = lastMap()
-    const raw = currentInfoWindow()!
+  it('用户点关闭按钮（clickclose）那一组事件：实测的三种形状都不得吞掉在飞命令账', async () => {
+    // 真实 4.0 实测：`close` **恰好一次**；`clickclose` 一条或多条（条数随同一实例被打开过几次累积），
+    // 顺序不固定。三种形状都要满足同一条不变量：这一组不带我们命令的身份 ⇒ **不得消费**命令账。
+    const shapes = [
+      { tag: '1 次打开 · close 在前', options: {} },
+      { tag: '1 次打开 · clickclose 在前', options: { clickcloseFirst: true } },
+      { tag: '2 次打开（clickclose 累积）', options: { clickcloseRepeats: 2 } },
+    ];
 
-    // 先造出「有一笔关闭账在飞」：关闭已生效（副作用），但它的 `close` 事件还没派发
-    map.deferInfoWindowCloseEvent = true
-    open.value = false
-    await settle()
-    // 立刻重开 ⇒ 状态机刻意保留那笔在飞的关闭账
-    open.value = true
-    await settle()
-    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
+    for (const { tag, options } of shapes) {
+      const el = harness.container()
+      const open = ref(true)
+      const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+      await settle()
+      const child = wrapper.findComponent(BInfoWindow)
+      const map = lastMap()
+      const raw = currentInfoWindow()!
 
-    // ★ 用户点了关闭按钮。`clickclose` 的来源是**明确的**（官方事件契约：点击关闭按钮时触发），
-    //   它不能被当成「我们自己那条关闭命令的过期回包」而只减账、不动模型。
-    raw.emit('clickclose', { type: 'clickclose' })
-    await settle()
+      // 造出一笔在飞的关闭账：关闭已生效（副作用），但它的 `close` 事件被推迟 ⇒ 还没有回包
+      map.deferInfoWindowCloseEvent = true
+      open.value = false
+      await settle()
+      // 立刻重开 ⇒ 状态机刻意保留那笔在飞的关闭账
+      open.value = true
+      await settle()
+      expect(map.infoWindow, `${tag}：对照组，重开已经生效`).toBe(raw)
 
-    expect(emittedOf(child, 'clickclose'), '照常把「是谁关的」告诉调用方').toHaveLength(1)
-    expect(emittedOf(child, 'update:open'), '用户主动关闭必须生效（回写一次 false）').toEqual([[false]])
-    expect(
-      probeContext.value?.infoWindows?.current(),
-      '用户已经把它关掉了 ⇒ 账本不得再把它当当前气泡',
-    ).toBeNull()
+      // ★ 用户点了关闭按钮
+      expect(
+        map.clickInfoWindowCloseButton(options),
+        `${tag}：对照组，确实点到了`,
+      ).toBe(true)
+      await settle()
 
-    // 收尾：那条旧命令的回包这时才到 —— 它仍然要能被认成「结算」，
-    // 也就是 `clickclose` **不得**把那笔账一并吞掉（否则以后真正迟到的回包会被误判成外部关闭）
-    expect(map.flushInfoWindowCloseEvent(), '对照组：旧回包确实被放行了').toBe(true)
-    await settle()
-    expect(emittedOf(child, 'update:open'), '旧回包不得再改动模型').toEqual([[false]])
+      expect(emittedOf(child, 'clickclose').length, `${tag}：照常转发 clickclose`).toBeGreaterThan(0)
+      expect(emittedOf(child, 'update:open'), `${tag}：用户主动关闭必须生效`).toEqual([[false]])
+      expect(
+        probeContext.value?.infoWindows?.current(),
+        `${tag}：用户已经关掉了 ⇒ 账本退场`,
+      ).toBeNull()
 
-    map.deferInfoWindowCloseEvent = false
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('clickclose 不被旧账吞掉')
+      // ★ 关键：这一组**不得**吞掉在飞命令账。父级先回声这次关闭（受控语义：此时 `open` 仍是
+      //   `true`，直接再赋 `true` 不会触发 watch），然后再重开；此时真正迟到的回包必须仍被认成
+      //   「结算」，而不是「未经请求的关闭」—— 后者会把刚重开的模型关掉、把气泡也关掉。
+      open.value = false
+      await settle()
+      open.value = true
+      await settle()
+      expect(map.infoWindow, `${tag}：重开已经生效`).toBe(raw)
+      expect(map.flushInfoWindowCloseEvent(), `${tag}：旧回包被放行`).toBe(true)
+      await settle()
+
+      expect(emittedOf(child, 'update:open'), `${tag}：陈旧回包不得再改模型`).toEqual([[false]])
+      expect(map.infoWindow, `${tag}：地图上仍开着重开后的气泡`).toBe(raw)
+
+      map.deferInfoWindowCloseEvent = false
+      await unmountAndSettle(wrapper)
+      harness.assertIdle(`${tag}：点关闭按钮的一组事件`)
+    }
   })
 
   it('SDK 自己打开（未经请求）⇒ 回写 update:open true', async () => {

@@ -117,6 +117,23 @@ async function until<T>(
   }
 }
 
+/**
+ * 等一条事件流**停下来**：直到 `quietMs` 内没有新事件，或到 `maxMs` 上限。
+ *
+ * 「读一个事件序列」的检查都需要它：只等某个状态成立（例如「地图上没有当前气泡」）之后，
+ * SDK 可能还在继续派发；此时去点数会把**半截序列**当成最终形状
+ * （`infowindow-close-button-pair` 第一次接上时就栽在这里）。
+ */
+async function settleEvents<T>(marks: T[], quietMs: number, maxMs: number): Promise<T[]> {
+  const started = performance.now();
+  let seen = marks.length;
+  for (;;) {
+    await sleep(quietMs);
+    if (marks.length === seen || performance.now() - started > maxMs) return marks;
+    seen = marks.length;
+  }
+}
+
 /* ------------------------------------------------------------------ 未处理异常 */
 
 const unhandled: SmokeUnhandledEntry[] = [];
@@ -415,6 +432,13 @@ interface Mounted {
    * 「关了以后还留在地图上」这类缺陷（正是 #32 的 detached host 要防的）永远测不出来。
    */
   infoOpen: { value: boolean };
+  /**
+   * `<BInfoWindow>` 回写的 `update:open` 序列。
+   *
+   * `infowindow-close-button-pair` 用它证明「用户点了关闭按钮」这件事**真的到达了本库模型**
+   * （而不只是 SDK 那边把气泡关了）。
+   */
+  infoEvents: { updates: boolean[] };
   autoRef: { value: unknown };
   searchRef: { value: unknown };
   detailRef: { value: unknown };
@@ -474,6 +498,7 @@ function mountTree(): Mounted {
     overviewAnchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
   });
   const uiKit = reactive({ placeUid: "" });
+  const infoEvents: Mounted["infoEvents"] = { updates: [] };
   const uiKitEvents: Mounted["uiKitEvents"] = {
     searchLoad: [],
     searchSelect: [],
@@ -516,7 +541,12 @@ function mountTree(): Mounted {
       nodes.push(
         h(
           BInfoWindow,
-          { open: infoOpen.value, position: POINT, title: "smoke" },
+          {
+            open: infoOpen.value,
+            position: POINT,
+            title: "smoke",
+            "onUpdate:open": (value: boolean) => infoEvents.updates.push(value),
+          },
           { default: () => "smoke-infowindow-content" },
         ),
       );
@@ -665,6 +695,7 @@ function mountTree(): Mounted {
     flags,
     controlProps,
     infoOpen,
+    infoEvents,
     autoRef,
     searchRef,
     detailRef,
@@ -1264,6 +1295,99 @@ const CHECKS: Record<string, CheckImpl> = {
         { connected: host!.isConnected, display: getComputedStyle(host!).display },
       );
       return { text: host!.textContent, closed: true };
+    },
+  },
+
+  /**
+   * 直接把「点关闭按钮」这对事件的**形状**变成门禁（M5-INFOWINDOW / #32 第九轮评审）。
+   *
+   * 为什么需要它：状态机对 `clickclose` 的处置依赖「一次点击 = `close` + `clickclose` 各一次」
+   * 这个事实（在飞命令账不能被这一对消费）。这个事实**只能实测**，夹具怎么建都不算证据。
+   * 本地实测（真实 AK · headless Chromium，5 轮）：两事件各一次、间隔约 0.1ms（同一 task），
+   * 但**顺序不固定**（4 次 `close` 在前、1 次 `clickclose` 在前）⇒ 这里只断言**数量**与
+   * 「本库模型收敛」这两件与顺序无关的事，顺序作为**读数**带回报告。
+   */
+  "infowindow-close-button-pair": {
+    async run(ctx) {
+      ctx.mounted.flags.info = true;
+      ctx.mounted.infoOpen.value = true;
+      ctx.mounted.infoEvents.updates.length = 0;
+      await nextTick();
+      const raw = ctx.mounted.raw();
+      const readCurrent = (): unknown => {
+        const getInfoWindow = raw.getInfoWindow as undefined | (() => unknown);
+        if (typeof getInfoWindow === "function") return getInfoWindow.call(raw) ?? null;
+        return null;
+      };
+      const opened = await until(readCurrent, 5_000, "BMAP_INFOWINDOW_NOT_OPEN", "地图的当前气泡");
+
+      // 在**原始实例**上记录这一对事件：顺序与数量就是被测读数
+      const marks: Array<{ name: string; at: number }> = [];
+      const target = opened as { addEventListener?: (name: string, fn: () => void) => void };
+      assertSmoke(
+        typeof target.addEventListener === "function",
+        "BMAP_INFOWINDOW_NO_LISTENER",
+        "`map.getInfoWindow()` 返回的实例没有 addEventListener —— 无法观测这对事件",
+        { keys: Object.keys(opened as object).slice(0, 24) },
+      );
+      for (const name of ["close", "clickclose"]) {
+        target.addEventListener!(name, () => marks.push({ name, at: performance.now() }));
+      }
+
+      // 关闭按钮是气泡右上角那个 `×`：`.BMap_bubble_buttons` 的最后一个子节点
+      // （前一个是最小化/最大化的 `+`，`enableMaximize` 时才显示）。
+      const button = ctx
+        .mounted
+        .container()
+        .querySelector<HTMLElement>(".BMap_bubble_buttons > div:last-child");
+      assertSmoke(
+        button,
+        "BMAP_INFOWINDOW_NO_CLOSE_BUTTON",
+        "找不到气泡的关闭按钮（`.BMap_bubble_buttons` 的最后一个子节点）—— SDK 的 DOM 结构可能变了",
+        { html: ctx.mounted.container().querySelector(".BMap_bubble_pop")?.outerHTML.slice(0, 400) },
+      );
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+      await until(
+        () => (readCurrent() ? null : true),
+        5_000,
+        "BMAP_INFOWINDOW_NOT_CLOSED",
+        "点关闭按钮之后地图上没有当前气泡",
+      );
+
+      // 等事件流**停下来**：`until` 只等到「地图上没有当前气泡」，那之后 SDK 可能还在派发。
+      // 不稳住就点数会把「还在陆续到达」的序列当成最终形状（第一次接这条检查时正是这么错的）。
+      await settleEvents(marks, 600, 4_000);
+
+      const counts = { close: 0, clickclose: 0 };
+      for (const mark of marks) counts[mark.name as "close" | "clickclose"] += 1;
+      const first = marks[0]?.at ?? performance.now();
+      const order = marks.map((m) => `${m.name}+${(m.at - first).toFixed(1)}ms`).join(" > ");
+      // 只断言**稳定**的那两件事（实测口径，见下），数量作为读数带回报告：
+      //   - `close` 恰好一次：一次用户点击只会有一次关闭，状态机给它的配对回滚建立在这上面；
+      //   - `clickclose` 至少一次：用户点击确实以这个**带来源**的事件报出来 ——
+      //     `sdk-clickclose` 这个独立动作就是为它存在的。
+      // **不断言 `clickclose` 的具体条数**：实测它随「同一个实例被打开过几次」累积
+      // （打开 1/2/3 次 ⇒ clickclose 1/2/3 条，`close` 始终 1 条）—— SDK 每次打开/重绘都会
+      // 重新绑定关闭按钮的处理器。状态机因此必须容忍 N 条（见 `explicitClosePair` 的说明）。
+      assertSmoke(
+        counts.close === 1 && counts.clickclose >= 1,
+        "BMAP_INFOWINDOW_CLOSE_PAIR_SHAPE",
+        `点关闭按钮的事件形状变了：${JSON.stringify({ counts, order })}` +
+          "（期望 `close` 恰好一次、`clickclose` 至少一次；状态机的归属规则建立在这两点上）",
+        { order, counts },
+      );
+      assertSmoke(
+        ctx.mounted.infoEvents.updates.includes(false),
+        "BMAP_INFOWINDOW_CLOSE_NOT_ECHOED",
+        "用户点了关闭按钮，但本库没有回写 `update:open false` —— 模型没跟着收敛",
+        { updates: ctx.mounted.infoEvents.updates },
+      );
+
+      // 收尾：父级回声这次关闭，别给后面的检查留一个「父级要开、模型是关」的分叉状态
+      ctx.mounted.infoOpen.value = false;
+      await nextTick();
+      return { order, counts, updates: ctx.mounted.infoEvents.updates.length };
     },
   },
 
