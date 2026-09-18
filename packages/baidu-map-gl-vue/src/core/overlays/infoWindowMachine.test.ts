@@ -260,6 +260,39 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
     expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
   });
 
+  it("迟到的**内部** open（关闭已完成之后才到）：不得把模型重新拉开", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    // 位置变化 ⇒ 再下发一条 open（移动）：这条请求的回包会晚到
+    d.intent(true, B);
+    // 关：气泡确实开着 ⇒ 关闭命令计数 1
+    d.intent(false, B);
+    d.sdkClose();
+    expect(d.phase, "关闭已经结算").toBe("closed");
+    expect(d.open).toBe(false);
+
+    // ★ 移动那条 open 的回包这时才到 —— 它是**本组件自己下发**的，不是外部打开
+    d.sdkOpen();
+    expect(d.open, "父级刚明确关闭，模型不得被旧请求的回包拉开").toBe(false);
+    expect(d.phase, "应当重新收敛到关闭").toBe("closing");
+    expect(d.commands, "要再补一条 close").toEqual(["open@1", "open@1", "close@1", "close@1"]);
+
+    d.sdkClose();
+    expect(d.phase).toBe("closed");
+    expect(d.open).toBe(false);
+  });
+
+  it("外部未经请求的 open（没有本组件的请求在飞）：仍须回写 update:open true", () => {
+    const d = drive();
+    d.intent(false, A); // 期望关闭，且没有任何打开请求在飞
+    d.sdkOpen();
+    expect(d.open, "外部打开仍然要如实回写").toBe(true);
+    expect(d.phase).toBe("open");
+    expect(d.changes.at(-1)).toEqual({ open: true, source: "sdk" });
+    expect(d.commands, "外部打开不得触发关闭命令").toEqual([]);
+  });
+
   it("被顶掉（superseded）：不下发任何命令，只收敛自己的模型", () => {
     const d = drive();
     d.intent(true, A);

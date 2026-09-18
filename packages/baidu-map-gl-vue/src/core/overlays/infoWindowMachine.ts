@@ -52,6 +52,23 @@
  * 而「相位已经回到 `closed`」不等于「计数已经还清」—— 第 2 条回包恰恰在那时到达。
  * 顺序反了就会留下永久残留计数，之后一次**真实**的关闭被当成过期回包吞掉（模型停在「开」）。
  *
+ * ## `open` 事件同样需要归属（外部评审第三轮 P1）—— 与上面**完全对称**的一张表
+ *
+ * `sdk-open` 也不是孤立的：本组件在 `open` 相位下改变位置会**再下发一条 open**（移动），
+ * 那条请求的回包可以晚到 —— 甚至晚到「关闭已经完成」之后。若不加区分地把它当成「外部打开」，
+ * 模型会被一条旧请求的回包重新拉成开（父级刚明确关闭）。
+ *
+ * 因此 `open` 侧也记账（`openOutstanding` = 已下发、尚未被 `sdk-open` 确认的打开请求）：
+ *
+ * | 观测到 `sdk-open` | 期望状态 | 处置 |
+ * | --- | --- | --- |
+ * | 任意 | `open === true` | 确认：相位进 `open`（模型本来就是开 ⇒ 无回写） |
+ * | `openOutstanding > 0` | `open === false` | **自己的迟到回包** ⇒ 重新收敛：补一条 close（计数 +1），相位进 `closing` |
+ * | `openOutstanding === 0` | `open === false` | **外部未经请求的打开** ⇒ 如实回写 `update:open true`（既有契约） |
+ *
+ * 两张账（`openOutstanding` / `closeOutstanding`）互为镜像：**谁下发的请求，谁负责收敛**；
+ * 没有在飞请求时，才把事件当作外部意图照实回写。
+ *
  * 计数只在三种时机增长（都保证会有一条 `close` 回调）：`open` 相位下收到关闭意图、
  * `closing` 相位里观测到 `sdk-open`（命令被吞掉 ⇒ 补一条）、以及它们各自的重复下发。
  * 重建 / 被顶掉 / 销毁一律清零（那一代的回包已经没有意义）。
@@ -118,6 +135,13 @@ export interface InfoWindowSnapshot {
    * 「旧命令的回包」与「未经请求的关闭」。
    */
   readonly closeOutstanding: number;
+  /**
+   * 已下发、尚未被 `sdk-open` 确认的**打开请求**条数（open 侧的对称账）。
+   *
+   * 用来区分「本组件自己的迟到打开回包」（要重新收敛到关闭）与「外部未经请求的打开」
+   * （要如实回写 `update:open true`）—— 两者在事件载荷上不可区分。
+   */
+  readonly openOutstanding: number;
   /** 当前生效的位置指纹（`null` = 无位置）。用来判断已开着的气泡是否需要移动。 */
   readonly positionKey: string | null;
   /** 「想开但缺位置」是否已经报过一次（进入该状态时报一次，离开即复位）。 */
@@ -172,6 +196,7 @@ export function initialInfoWindowSnapshot(generation = 0): InfoWindowSnapshot {
     open: false,
     generation,
     closeOutstanding: 0,
+    openOutstanding: 0,
     positionKey: null,
     invalidNotified: false,
   };
@@ -235,6 +260,8 @@ export function reduceInfoWindow(
       if (action.generation !== state.generation) return settle(state);
       if (state.phase === "closed") return settle(state);
       // 不下发任何命令：地图上已经是新的那一个，任何 map 级关闭都会打到它头上
+      // 刻意**保留** `openOutstanding`：在飞的打开请求仍然会回包，而它回来时模型是「关」——
+      // 必须继续被认作「自己的迟到回包」（清零会让它变成「外部打开」而把模型拉开）。
       const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
       return transition({
         snapshot: enterPhase(closed.snapshot, "closed"),
@@ -249,11 +276,12 @@ export function reduceInfoWindow(
         open: state.open,
         generation: action.generation,
         closeOutstanding: 0,
+        openOutstanding: 0,
         positionKey: null,
         invalidNotified: false,
       });
     case "dispose":
-      return settle(enterPhase({ ...state, closeOutstanding: 0 }, "disposed"));
+      return settle(enterPhase({ ...state, closeOutstanding: 0, openOutstanding: 0 }, "disposed"));
     default:
       return settle(state);
   }
@@ -293,10 +321,13 @@ function reduceIntent(
   }
 
   if (base.phase === "open" || base.phase === "opening") {
-    // 已经在打开一侧：只有位置**真的变了**才补一条 open（它同时负责「移动」）
+    // 已经在打开一侧：只有位置**真的变了**才补一条 open（它同时负责「移动」）。
+    // 那条请求同样要记账（`openOutstanding`）：它的回包可能晚到关闭完成之后（第三轮 P1）。
     const moved = base.positionKey !== state.positionKey;
     return {
-      snapshot: base,
+      snapshot: moved
+        ? { ...base, openOutstanding: base.openOutstanding + 1 }
+        : base,
       effects: moved ? [{ type: "open", generation: state.generation }] : NONE_EFFECTS,
       changes: NONE_CHANGES,
       notices,
@@ -307,7 +338,11 @@ function reduceIntent(
   // `closeOutstanding` **保持原值**：从 `closing` 重开时，那条关闭命令仍然在飞，它的迟到回包
   // 必须继续被认作「过期」——**直到那条回包真的到达**为止（清掉计数会让它变成「未经请求的关闭」，
   // 见模块注释的归属表）。因此这里的清账只发生在 `sdk-close` 上，不发生在 `sdk-open` 上。
-  const reopened = changeOpen({ ...base, closeOutstanding: state.closeOutstanding }, true, "prop");
+  const reopened = changeOpen(
+    { ...base, closeOutstanding: state.closeOutstanding, openOutstanding: base.openOutstanding + 1 },
+    true,
+    "prop",
+  );
   return {
     snapshot: enterPhase(reopened.snapshot, "opening"),
     effects: [{ type: "open", generation: state.generation }],
@@ -318,21 +353,41 @@ function reduceIntent(
 
 function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
-  if (state.phase === "closing") {
-    // 关闭命令被吞掉了（同 tick 的 open → close）。再下发一次收敛到关闭；
-    // 这一次 SDK 已经确认开着 ⇒ 它一定会产生一条 `close` 回调，所以计数要 +1。
+
+  // 先还 `open` 侧的账（与 `sdk-close` 先还 close 侧的账对称）：这条回包是不是我们自己要的？
+  const ours = state.openOutstanding > 0;
+  const base: InfoWindowSnapshot = {
+    ...state,
+    openOutstanding: ours ? state.openOutstanding - 1 : 0,
+  };
+
+  if (state.open) {
+    // 期望是开：这就是那次打开（或重开）的确认。
+    // 刻意**不**碰 `closeOutstanding`（第一轮 P1）：仍在飞的关闭命令还没回包，
+    // 清掉它会让反序到达的旧 `close` 被当成「未经请求的关闭」而误关已经重开的气泡。
+    if (base.phase === "open") return settle(base);
+    return { snapshot: enterPhase(base, "open") };
+  }
+
+  if (ours) {
+    // 期望是**关**、而这条 `open` 是我们自己下发的（还有在飞的打开请求）⇒ 我们并不想它开着。
+    // 两种情况都落到这里：① 关闭命令被 SDK 吞掉（同 tick 的 open → close，第一轮）；
+    // ② 移动请求的回包在关闭完成之后才到（第三轮 P1）。处置都是**重新收敛到关闭** ——
+    // 此刻 SDK 确认它是开着的，所以这一条 close 一定会产生回调，计数 +1。
     return {
-      snapshot: { ...state, closeOutstanding: state.closeOutstanding + 1 },
+      snapshot: enterPhase(
+        { ...base, closeOutstanding: state.closeOutstanding + 1 },
+        "closing",
+      ),
       effects: [{ type: "close", generation: state.generation }],
     };
   }
-  if (state.phase === "open") return settle(state);
-  // 刻意**不**清计数：这里的 `open` 只是新一次打开的确认，那份仍在飞的关闭命令还没回包。
-  // 清掉它，反序到达的旧 `close` 就会被当成「未经请求的关闭」而误关已经重开的气泡（评审 P1）。
-  const confirmed = changeOpen({ ...state }, true, "sdk");
+
+  // 期望是关、且本组件没有任何打开请求在飞 ⇒ **外部未经请求的打开**：如实回写（既有契约）
+  const opened = changeOpen(base, true, "sdk");
   return {
-    snapshot: enterPhase(confirmed.snapshot, "open"),
-    changes: confirmed.changes ?? NONE_CHANGES,
+    snapshot: enterPhase(opened.snapshot, "open"),
+    changes: opened.changes ?? NONE_CHANGES,
   };
 }
 
