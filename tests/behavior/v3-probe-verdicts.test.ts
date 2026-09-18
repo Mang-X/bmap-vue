@@ -78,7 +78,8 @@ const COMPLETE: Reading[] = [
   { id: "kernel.mounted", connected: 2, overlayCount: 2 },
   { id: "kernel.hidden", connected: 0, overlayCount: 0 },
   { id: "kernel.shown", connected: 0, overlayCount: 0 },
-  { id: "kernel.repaired", connected: 2, overlayCount: 2 },
+  // 与 live 实测一致：补 `setData` 抛错、节点仍是 0（这就是「必须换新实例」那条结论的来源）。
+  { id: "kernel.repaired", connected: 0, overlayCount: 0 },
   { id: "kernel.repair.setData", threw: true, message: "reading 'coordinate'" },
   { id: "geojson.kernel.mounted", overlayCount: 2 },
   { id: "geojson.kernel.hidden", overlayCount: 0 },
@@ -146,14 +147,14 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(lineOf(lines, "[前提 P]")).toContain("安全（前提 P 成立）");
     expect(lineOf(lines, "[DOM 生命周期")).toContain("内容没回来");
     expect(lineOf(lines, "[再显示后补 setData]")).toContain("抛错");
-    expect(lineOf(lines, "[再显示后补 setData]")).toContain("能把内容找回来");
+    expect(lineOf(lines, "[再显示后补 setData]"), "live 那一组：抛错且没恢复").toContain("找不回来");
     expect(lineOf(lines, "[GeoJSON 生命周期")).toContain("集合被清空了");
     expect(lineOf(lines, "[对照：换新实例重建]")).toContain("重建路径正常");
     expect(lineOf(lines, "[DOM detached 清空]"), "实测那一组 ⇒ 无需清空").toContain("无需清空");
     expect(
-      lineOf(lines, "[对照：GeoJSON 换新实例重建]"),
-      "同一份 data 在新实例上有数据 ⇒ 差异来自实例本身",
-    ).toContain("重建路径正常");
+      lineOf(lines, "[对照：GeoJSON 换新实例重建"),
+      "同一份 data 在新实例上有数据 ⇒ 差异来自实例本身（只到「集合层面」）",
+    ).toContain("可写入");
     expect(lineOf(lines, "[GeoJSON detached clearData]")).toContain("完整清空");
   });
 
@@ -256,6 +257,53 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     );
     expect(pLine).toContain("无法判定");
     expect(pLine, "另两条没抛错也不能把它抬成「安全」").not.toContain("安全（前提 P 成立）");
+  });
+
+  it("[再显示后补 setData] 的 2×2：调用抛错要**堵死「修法可行」**，但不得吞掉「找不回来」", () => {
+    // 第七轮评审发现 1：这一条原先只读 `repairThrew` 做展示，结论仍只看节点数——于是
+    // 「抛错但节点数变多了」会被写成「能把内容找回来（修法可行）」，与刚给 GeoJSON clearData
+    // 建立的口径（抛错是一等事实）自相矛盾。反过来也不能一刀切成「不可依赖」：
+    // 「抛错 + 节点仍为 0」比「没抛错 + 节点仍为 0」更强地支持「必须换新实例」。
+    const lineFor = (threw: boolean | null, repaired: number | null) =>
+      lineOf(
+        verdicts(
+          report([
+            ...COMPLETE.filter((r) => !r.id.startsWith("kernel.repair")),
+            ...(threw === null
+              ? []
+              : [{ id: "kernel.repair.setData", threw, message: "reading 'coordinate'" }]),
+            ...(repaired === null
+              ? []
+              : [{ id: "kernel.repaired", connected: repaired, overlayCount: repaired }]),
+          ]),
+        ),
+        "[再显示后补 setData]",
+      );
+
+    expect(lineFor(false, 2), "没抛错 + 内容回来了").toContain("**能把内容找回来**");
+    expect(lineFor(false, 0), "没抛错 + 内容没回来").toContain("**找不回来**");
+
+    const unreliable = lineFor(true, 2);
+    expect(unreliable, "抛错 + 节点数变多 ⇒ 只能报不可依赖").toContain("**不可依赖**");
+    expect(
+      unreliable,
+      "绝不能因为副作用看起来成功就说「修法可行」",
+    ).not.toContain("**能把内容找回来**");
+
+    const bothBad = lineFor(true, 0);
+    expect(bothBad, "抛错 + 没恢复 ⇒ 两条事实都要说出来").toContain("**找不回来，且这次调用本身抛错**");
+    expect(lineFor(null, 2), "调用读数缺失").toContain("无法判定");
+  });
+
+  it("GeoJSON 生命周期的正证控件：`mounted === 0` ⇒ 对照不成立，不得判「集合被清空了」", () => {
+    // 第七轮评审发现 2：与 DOM 那条的 `mounted <= 0` 保持同一口径——data 从一开始就没进集合时，
+    // 「再显示后为 0」什么都证明不了。
+    const readings = COMPLETE.map((r) =>
+      r.id === "geojson.kernel.mounted" ? { ...r, overlayCount: 0 } : r,
+    );
+    const line = lineOf(verdicts(report(readings)), "[GeoJSON 生命周期");
+    expect(line).toContain("对照不成立");
+    expect(line, "从一开始就没有数据 ⇒ 证明不了任何清理").not.toContain("集合被清空了");
   });
 
   it("前置 attempt 抛错 ⇒ 该结论第三态，**不得**把实验步骤失败读成 SDK 语义", () => {

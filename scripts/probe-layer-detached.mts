@@ -254,8 +254,12 @@ const PAGE_JS = `
     await wait(900);
     geoSnapshot("geojson.kernel.repaired");
     const geo4 = new window.BMap.GeoJSONLayer("probe-kernel-rebuild", {});
-    push("geojson.kernel.rebuild.setData", attempt(() => geo4.setData(data)));
+    // 按真实内核顺序（addLayer -> setData，与上面 DOM 的对照一致）：反过来写只能证明
+    // 「新实例的集合可写入」，证不了内核重建走的那条路径（第七轮评审发现 3）。
+    // ⚠️ 本段位于 PAGE_JS 模板串内部：注释里**不能出现反引号**（会截断外层模板串，
+    // 报 ERR_INVALID_TYPESCRIPT_SYNTAX，而报错位置在被截断的下一行）。
     push("geojson.kernel.rebuild.addLayer", attempt(() => map.addLayer(geo4)));
+    push("geojson.kernel.rebuild.setData", attempt(() => geo4.setData(data)));
     await wait(900);
     push("geojson.kernel.rebuilt", { threw: false, overlayCount: len(geo4, "getData") });
 

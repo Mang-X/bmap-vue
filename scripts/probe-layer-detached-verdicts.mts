@@ -215,9 +215,17 @@ export function verdicts(report: ProbeReport): string[] {
         : // 结论归因给「这一次调用」，所以这次调用本身必须先**取到**（抛错是观测，缺失不是）。
           repairThrew === null || repaired === null
           ? UNKNOWN
-          : repaired > 0
-            ? "**能把内容找回来**（修法可行：重新挂载成功后让 data 槽位重写一次）"
-            : "**找不回来**（补 setData 不足以恢复 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"),
+          : // **2×2 状态机**（第七轮评审发现 1）：抛错是**一等事实**，它必须出现在结论里，
+            // 并且**堵死正结论**——「抛错但节点数变多了」只能说「抛错前有副作用」，不能据此说
+            // 「修法可行」（那次调用本身不可依赖）。与此同时不能因为抛错就把负结论也吞掉：
+            // 「抛错 + 节点仍为 0」比「没抛错 + 节点仍为 0」更强地支持「必须换新实例」。
+            repairThrew
+            ? repaired > 0
+              ? "**不可依赖**（这一次调用抛错；节点数变多只是抛错前的副作用，不能据此说「重新挂载后补 data」可行）"
+              : "**找不回来，且这次调用本身抛错**（抛错前也没恢复任何内容 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"
+            : repaired > 0
+              ? "**能把内容找回来**（调用未抛错、内容也回来了 ⇒ 「重新挂载后补一次 data 写入」这条修法可行）"
+              : "**找不回来**（调用未抛错但内容没回来 ⇒ 补 setData 不足以恢复，必须换新实例）"),
   )
   const geoOrderIds = [
     "geojson.kernel.mounted",
@@ -226,34 +234,41 @@ export function verdicts(report: ProbeReport): string[] {
     "geojson.kernel.repaired",
   ]
   const geoNums = geoOrderIds.map((id) => overlaysOf(id))
+  const geoMounted = geoNums[0] ?? null
   const geoShown = geoNums[2] ?? null
   lines.push(
     "[GeoJSON 生命周期（同一套内核顺序）] 挂载后 " +
-      `${numText(geoNums[0] ?? null)} 条 → 隐藏后 ${numText(geoNums[1] ?? null)} 条 → ` +
+      `${numText(geoMounted)} 条 → 隐藏后 ${numText(geoNums[1] ?? null)} 条 → ` +
       `再显示后 ${numText(geoShown)} 条 → 补 setData 后 ${numText(geoNums[3] ?? null)} 条 ⇒ ` +
       (geoKernelPrereq.length > 0
         ? prereqText(geoKernelPrereq)
-        : geoNums.some((value) => value === null) || geoShown === null
+        : geoNums.some((value) => value === null) || geoMounted === null || geoShown === null
           ? UNKNOWN
-          : geoShown > 0
-            ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
-            : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
+          : // 正证控件：`mounted === 0` 说明 data 从一开始就没进集合，那么「再显示后为 0」什么都
+            // 证明不了（与 DOM 那条的 `mounted <= 0 ⇒ 对照不成立` 是同一口径，第七轮评审发现 2）。
+            geoMounted <= 0
+            ? "**无法判定**（对照不成立：挂载 + setData 之后集合里就没有数据）"
+            : geoShown > 0
+              ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
+              : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
   )
   // GeoJSON 的**对照**：换一个新实例（内核的重建路径）之后集合条数。与上面那条配对使用——
   // 两边用的是同一份 `data`，所以差异只能来自**实例**，不是数据。
   const geoRebuilt = overlaysOf("geojson.kernel.rebuilt")
   const geoRebuildPrereq = unmetPrerequisites([
-    "geojson.kernel.rebuild.setData",
     "geojson.kernel.rebuild.addLayer",
+    "geojson.kernel.rebuild.setData",
   ])
   lines.push(
-    `[对照：GeoJSON 换新实例重建] 集合 ${numText(geoRebuilt)} 条 ⇒ ` +
+    `[对照：GeoJSON 换新实例重建（addLayer → setData）] 集合 ${numText(geoRebuilt)} 条 ⇒ ` +
       (geoRebuildPrereq.length > 0
         ? prereqText(geoRebuildPrereq)
         : geoRebuilt === null
           ? UNKNOWN
           : geoRebuilt > 0
-            ? "重建路径正常（同一份 data 在新实例上有数据 ⇒ 上面那条的差异来自**实例**本身）"
+            ? "新实例的集合**可写入**（同一份 data ⇒ 上面那条的差异来自**实例**本身）；" +
+              "⚠️ 覆盖物是否渲染到图上**没有公开手段可观测**，所以这条只支持「集合层面」的对照，" +
+              "不等于「重建之后覆盖物一定回来了」"
             : "**重建之后集合仍为空**（说明本轮实验本身不成立，先查前面的读数）"),
   )
   const rebuilt = nodesOf("kernel.rebuilt")
