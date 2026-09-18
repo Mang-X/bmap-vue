@@ -111,6 +111,12 @@ export class FakeV4Map extends FakeV4EventTarget {
   readonly overlays: FakeV4Overlay[] = []
   /** 当前打开的 InfoWindow（官方同一张地图同时只有一个）。 */
   infoWindow: FakeV4InfoWindow | null = null
+  /**
+   * 气泡内容节点的宿主（`data-fake-bubble-host`），首次打开时懒建。
+   *
+   * 建模真实 4.0 的「SDK 把内容节点搬进自己的容器」——见 `attachBubbleContent`。
+   */
+  bubbleHost: HTMLElement | null = null
   /** 已挂载的右键菜单（官方入口是 `map.addContextMenu`）。 */
   readonly contextMenus: FakeV4ContextMenu[] = []
   /**
@@ -211,15 +217,88 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (overlay.attachedMap === this) overlay.attachedMap = null
   }
 
+  /**
+   * 把气泡内容节点搬进本张地图的「气泡容器」。
+   *
+   * 真实 4.0 在打开时会把传入的内容节点挂进自己的容器（这也是「Vue 不该把 SDK 会搬走的节点
+   * 当成自己的 shell」这条设计约束的**唯一后果**）。替身若不建模它，
+   * 「卸载后 host 无残留」「内容可见」这两条在与真实相反的方向上也会成立 —— 那正是
+   * `AGENTS.md` 说的「夹具比真实宽容会掩盖缺陷」。
+   */
+  private attachBubbleContent(content: string | HTMLElement): void {
+    if (!(content instanceof HTMLElement)) return;
+    if (!this.bubbleHost) {
+      this.bubbleHost = document.createElement("div");
+      // 气泡容器属于**地图**，不属于任何组件：组件卸载时它仍在地图上（没有气泡内容而已）
+      this.bubbleHost.setAttribute("data-fake-bubble-host", "");
+      this.container.appendChild(this.bubbleHost);
+    }
+    this.bubbleHost.appendChild(content);
+  }
+
+  /**
+   * 关闭气泡：SDK 拆掉的是**自己的容器**，而**不**负责回收我们交给它的内容节点。
+   *
+   * 这条刻意的悲观建模让「宿主由谁释放」变成可区分的读数（`content.parentElement === null`
+   * 只可能由**我们**的释放路径产生）：真实 4.0 是否会在关闭时把传入的节点摘掉没有公开承诺，
+   * 夹具按「不会」建模 —— 组件因此必须自己 `remove()`，否则节点会留在（已脱离文档的）容器里。
+   */
+  private teardownBubbleHost(): void {
+    this.bubbleHost?.remove();
+    this.bubbleHost = null;
+  }
+
+  /**
+   * 让 `openInfoWindow` 变成**异步生效**（真机语义）。
+   *
+   * ADR 2026-09-11 的真实 AK 实测：`map.openInfoWindow()` 之后**同一 tick**
+   * `map.getInfoWindow()` 仍是 `null`（约 100ms 后才变成该实例），因此同一 tick 里的
+   * `map.closeInfoWindow()` 是 **no-op**。默认关闭这条行为（同步接管），需要复现那个时序的
+   * 用例打开它，再调 `flushInfoWindowOpen()` 放行。
+   */
+  deferInfoWindowOpen = false
+  /** 已经请求打开、但还没被 SDK 接管的气泡（`deferInfoWindowOpen` 打开时才有值）。 */
+  private pendingInfoWindow: { infoWnd: FakeV4InfoWindow; point: FakeV4Point } | null = null
+
   openInfoWindow(infoWnd: FakeV4InfoWindow, point: FakeV4Point): void {
     this.callLog.push('openInfoWindow')
+    if (this.deferInfoWindowOpen) {
+      // 异步生效：这一刻只记下请求，地图的「当前气泡」与事件都还没变
+      this.pendingInfoWindow = { infoWnd, point }
+      return
+    }
+    this.adoptInfoWindow(infoWnd, point)
+  }
+
+  /** 放行一次挂起的打开（模拟 SDK 迟一步接管）。没有挂起请求时是 no-op。 */
+  flushInfoWindowOpen(): boolean {
+    const pending = this.pendingInfoWindow
+    this.pendingInfoWindow = null
+    if (!pending) return false
+    this.adoptInfoWindow(pending.infoWnd, pending.point)
+    return true
+  }
+
+  /** 当前有没有「已请求打开、尚未接管」的气泡。 */
+  hasPendingInfoWindow(): boolean {
+    return this.pendingInfoWindow !== null
+  }
+
+  /** SDK 真正接管气泡：改「当前气泡」、挂内容节点、派发 `open`。 */
+  private adoptInfoWindow(infoWnd: FakeV4InfoWindow, point: FakeV4Point): void {
+    const previous = this.infoWindow
     // 官方同一张地图只有一个气泡处于打开状态：换一个实例就先把上一个销账，
     // 否则诊断会把「被顶掉的那个」永久记成泄漏（见 diagnostics 的 leaks.infoWindows 口径）
-    if (this.infoWindow && this.infoWindow !== infoWnd) this.stats.resourceReleased('infoWindow')
-    const isNew = this.infoWindow !== infoWnd
+    if (previous && previous !== infoWnd) {
+      this.stats.resourceReleased('infoWindow')
+      // 被顶掉的气泡容器也要拆掉：同一时刻地图上只显示一个气泡
+      this.teardownBubbleHost()
+    }
+    const isNew = previous !== infoWnd
     this.infoWindow = infoWnd
     infoWnd.openedAt = point
     infoWnd.open = true
+    this.attachBubbleContent(infoWnd.content)
     if (isNew) this.stats.resourceCreated('infoWindow')
     infoWnd.emit('open')
   }
@@ -231,6 +310,7 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.infoWindow = null
     if (!current) return
     this.stats.resourceReleased('infoWindow')
+    this.teardownBubbleHost()
     current.open = false
     current.emit('close')
   }

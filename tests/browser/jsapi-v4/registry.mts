@@ -66,7 +66,7 @@ const SPECS: Record<string, SmokeCheckSpec> = {
   },
   "infowindow-visible": {
     id: "infowindow-visible",
-    name: "<BInfoWindow> 打开后地图活状态非空、内容节点可见且有内容（#72 的可见性回归）",
+    name: "<BInfoWindow>：detached host 被 SDK 搬进自己的容器、内容可见；关闭后地图无当前气泡且宿主不残留（#32 / #72 可见性回归）",
   },
   "service-geocode": { id: "service-geocode", name: "headless 地理编码拿到真实回包" },
   "ui-kit-autocomplete-search": {

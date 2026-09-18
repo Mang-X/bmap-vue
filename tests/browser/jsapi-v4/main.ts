@@ -395,7 +395,13 @@ interface Mounted {
   ready: Promise<unknown>;
   treeErrors: unknown[];
   flags: Record<string, boolean>;
-  infoRef: { value: unknown };
+  /**
+   * 气泡的受控打开状态（`v-model:open`）。
+   *
+   * `infowindow-visible` 检查要用它证明**关闭**这一半：只测「打开可见」的话，
+   * 「关了以后还留在地图上」这类缺陷（正是 #32 的 detached host 要防的）永远测不出来。
+   */
+  infoOpen: { value: boolean };
   autoRef: { value: unknown };
   searchRef: { value: unknown };
   detailRef: { value: unknown };
@@ -443,7 +449,7 @@ function mountTree(): Mounted {
   });
   const treeErrors: unknown[] = [];
   const mapRef = ref<unknown>(null);
-  const infoRef = ref<unknown>(null);
+  const infoOpen = ref(true);
   const autoRef = ref<unknown>(null);
   const searchRef = ref<unknown>(null);
   const detailRef = ref<unknown>(null);
@@ -486,7 +492,7 @@ function mountTree(): Mounted {
       nodes.push(
         h(
           BInfoWindow,
-          { ref: infoRef, open: true, position: POINT, title: "smoke" },
+          { open: infoOpen.value, position: POINT, title: "smoke" },
           { default: () => "smoke-infowindow-content" },
         ),
       );
@@ -634,7 +640,7 @@ function mountTree(): Mounted {
     treeErrors,
     flags,
     controlProps,
-    infoRef,
+    infoOpen,
     autoRef,
     searchRef,
     detailRef,
@@ -655,6 +661,19 @@ function uiSignature(container: HTMLElement): string {
     .map((el) => `${el.tagName}.${el.className}`)
     .sort()
     .join("|");
+}
+
+/**
+ * 气泡内容宿主的**直接读数**（M5-INFOWINDOW / #32）。
+ *
+ * `<BInfoWindow>` 的组件根是 `<Teleport>`，因此 `$el` 不再指向内容节点 —— 宿主页/探针要从
+ * 开放出来的 DOM 契约 `[data-bmap-infowindow-content]` 定位。这条读数直接回答两个问题：
+ * 「内容在不在文档里」（可见性）与「关闭/卸载后有没有残留」（`null`）。
+ */
+function contentHost(): HTMLElement | null {
+  const nodes = document.querySelectorAll<HTMLElement>("[data-bmap-infowindow-content]");
+  for (const node of nodes) if (node.isConnected) return node;
+  return null;
 }
 
 interface RawCallRecorder {
@@ -1101,9 +1120,13 @@ const CHECKS: Record<string, CheckImpl> = {
         "BMAP_INFOWINDOW_NOT_OPEN",
         "地图的当前气泡",
       );
-      const shell = (ctx.mounted.infoRef.value as { $el?: HTMLElement } | null)?.$el;
-      assertSmoke(shell, "HARNESS_NO_INFOWINDOW_SHELL", "拿不到 <BInfoWindow> 的内容节点");
-      const style = getComputedStyle(shell!);
+      const host = contentHost();
+      assertSmoke(
+        host,
+        "BMAP_INFOWINDOW_NO_CONTENT_HOST",
+        "打开后定位不到内容宿主（`[data-bmap-infowindow-content]`）——detached host 没有被 SDK 挂进文档",
+      );
+      const style = getComputedStyle(host!);
       assertSmoke(
         style.display !== "none" && style.visibility !== "hidden",
         "BMAP_INFOWINDOW_HIDDEN",
@@ -1111,12 +1134,45 @@ const CHECKS: Record<string, CheckImpl> = {
         { display: style.display, visibility: style.visibility },
       );
       assertSmoke(
-        (shell!.textContent ?? "").includes("smoke-infowindow-content"),
+        (host!.textContent ?? "").includes("smoke-infowindow-content"),
         "BMAP_INFOWINDOW_EMPTY",
         "气泡内容节点里没有渲染出内容",
-        { text: shell!.textContent },
+        { text: host!.textContent },
       );
-      return { text: shell!.textContent };
+      // 宿主必须由 **SDK** 接管（内容节点由 SDK 持有、渲染子树由 Vue Teleport 拥有）：
+      // 它不该还停在地图容器的顶层（那是本库创建它时的位置）
+      assertSmoke(
+        host!.parentElement !== ctx.mounted.container(),
+        "BMAP_INFOWINDOW_HOST_NOT_MOVED",
+        "内容宿主仍停在地图容器顶层：SDK 没有接管它（detached host 未生效）",
+        { parentClass: host!.parentElement?.className ?? null },
+      );
+      const parentWhenOpen = host!.parentElement;
+
+      // **关闭**这一半：只测「打开可见」的话，「关了以后还留在地图上」永远测不出来。
+      // 这里读的是**本库的承诺**：关闭命令下发给地图级 API 之后，地图上不再有当前气泡。
+      ctx.mounted.infoOpen.value = false;
+      await nextTick();
+      await until(
+        () => {
+          const raw = ctx.mounted.raw();
+          const getInfoWindow = raw.getInfoWindow as undefined | (() => unknown);
+          const current = typeof getInfoWindow === "function" ? getInfoWindow.call(raw) : null;
+          return current ? null : true;
+        },
+        5_000,
+        "BMAP_INFOWINDOW_NOT_CLOSED",
+        "气泡关闭",
+      );
+      assertSmoke(
+        getComputedStyle(host!).display === "none" ||
+          !host!.isConnected ||
+          host!.parentElement !== parentWhenOpen,
+        "BMAP_INFOWINDOW_RESIDUE",
+        "关闭后内容宿主仍然可见（既没有随 SDK 的容器撤下，也没有被隐藏）",
+        { connected: host!.isConnected, display: getComputedStyle(host!).display },
+      );
+      return { text: host!.textContent, closed: true };
     },
   },
 

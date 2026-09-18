@@ -13,7 +13,7 @@
       enableClicking
     />
     <BInfoWindow
-      v-model:show="show"
+      v-model:open="show"
       :position="position"
       :title="title"
       enableAutoPan

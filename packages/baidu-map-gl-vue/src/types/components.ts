@@ -6,6 +6,7 @@
  * - 根入口从此文件导出,避免从 `*.vue` 导出类型(TS 无法在纯 tsc 下解析 .vue 具名命名导出)。
  * - 精确的组件实例类型仍由 Volar 从 SFC 解析。
  */
+import type { InfoWindowProps } from "../core/overlays/InfoWindowSpec";
 
 /** BMapMask 掩膜显示区域 */
 export type MapMaskShowRegion = "inside" | "outside";
@@ -135,18 +136,14 @@ export interface BMarkerProps {
   icon?: MarkerIcon;
 }
 
-export interface BInfoWindowProps {
-  position?: { lng: number; lat: number };
-  title?: string;
-  width?: number;
-  height?: number;
-  offset?: { x: number; y: number };
-  open?: boolean;
-  show?: boolean;
-  enableMaximize?: boolean;
-  enableAutoPan?: boolean;
-  enableCloseOnClick?: boolean;
-}
+/**
+ * BInfoWindow 的公开属性。
+ *
+ * 字段与逐字段语义的**单一声明点**在 `core/overlays/InfoWindowSpec.ts`（那里还带着
+ * 「每个属性怎么落地」的策略表，由用例与 Driver 描述符交叉锁定）。这里只把公开类型名
+ * 暴露给调用方，避免出现第二份字段清单。
+ */
+export interface BInfoWindowProps extends InfoWindowProps {}
 
 export interface BCircleProps {
   center: { lng: number; lat: number };

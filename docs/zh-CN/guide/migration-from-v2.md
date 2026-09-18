@@ -48,8 +48,8 @@ app.use(createBMapPlugin({
 | `apiUrl`(离线) | 默认路径已不接受（会报 `BMAP_INVALID_ARGUMENT`）；legacy 参数已随旧引擎删除 | 改用 `customScriptV4Provider(scriptSrc)` / `existingGlobalV4Provider()` |
 | `plugins: string[]` | 保留适配；`ready` 不等待插件，使用 `plugin-ready` / `plugin-error` 监听插件状态 | 检查插件依赖时序 |
 | `@pluginReady(map)`（旧驼峰事件，载荷为地图实例） | 已移除，统一为 `@plugin-ready`（载荷为插件名）；地图实例改用 `ready` 载荷、`whenReady()` 或组件 `ref.getMapInstance()` 获取 | 涉及插件回调取地图时迁移 |
-| `v-model:show`(InfoWindow) | 保留 | 无需改动 |
-| `modelValue`(InfoWindow) | beta 期保留 + warning | 改为 `open`/`v-model:open` |
+| `v-model:show`(InfoWindow) | 保留为兼容别名（只被读取）；开发期会提示一次，主状态是 `open`/`v-model:open` | 建议改为 `v-model:open` |
+| `modelValue`(InfoWindow) | **不接受**（`v-model` 请改用 `v-model:open`；不再有 beta 兼容或告警） | 改为 `open`/`v-model:open` |
 | `usePubSub` | 已移除 | 改用 context/whenReady（`useBMap()` + `whenReady()`） |
 | `getScriptAsync` | 已移除，改走 Provider/loader | 默认路径不用管（官方 Loader 自动加载）；显式场景用 `./core` 的 `baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider` |
 | 任意 `package/*` 深路径 | 不再保证;提供明确 exports | 改用子路径 |
@@ -112,7 +112,7 @@ v3 修复:
 
 v3 修复:
 - 开放状态用明确状态机,prop 与 SDK 事件不再相互拉扯。
-- `modelValue` 保留一个 beta 周期并给出 warning。
+- `modelValue` 已不再接受，请用 `v-model:open`；`v-model:show` 仍是兼容别名（开发期提示一次）。
 - slot 内容变化会触发受控 redraw，观察器会在组件卸载时断开。
 
 ---

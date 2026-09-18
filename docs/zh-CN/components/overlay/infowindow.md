@@ -7,7 +7,9 @@ import { BInfoWindow } from 'baidu-map-gl-vue'
 ```
 
 ::: tip 提示
-地图上只能同时显示一个 `infoWindow`，所以当地图上有多个 `infoWindow` 组件同时绑定 `v-model="true"`，只有最后一个 `infoWindow` 组件会在地图上显示。
+地图上只能同时显示一个 `infoWindow`：同一张地图上多个 `<BInfoWindow>` 同时 `v-model:open` 为
+`true` 时，**最后一个打开**的会显示出来，被顶掉的那个会收到 `update:open=false`（不需要手动处理
+两个气泡的竞争）。
 :::
 
 ## 组件示例
@@ -34,38 +36,47 @@ overlay/dynmicInfoWindow
 </style>
 <br>
 
-## 静态组件 Props
+## 组件 Props
 
-| 属性   | 说明                                                                                                                                                                                               | 类型                      | 默认值          |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | --------------- |
-| offset | 信息窗位置偏移值。默认情况下在地图上打开的信息窗底端的尖角将指向其地理坐标，在标注上打开的信息窗底端尖角的位置取决于标注所用图标的 infoWindowOffset 属性值，您可以为信息窗添加偏移量来改变默认位置 | `{x: number, y: number }` | `{x: 0, y: 0 }` |
+| 属性                 | 说明                                                                     | 类型                      | 默认值          |
+| -------------------- | ------------------------------------------------------------------------ | ------------------------- | --------------- |
+| `open`               | **唯一主状态**：是否打开，支持 `v-model:open`                            | `boolean`                 | `false`         |
+| `show`               | `open` 的兼容别名（v2 沿用）。使用时会打印一次开发期告警，请迁移到 `open` | `boolean`                 | -               |
+| `position`           | 信息窗体所在坐标。**打开与移动都由它驱动**                               | `{ lng, lat }`            | -               |
+| `title`              | 信息窗标题文字（官方支持 HTML）                                          | `string`                  | `''`            |
+| `width`              | 信息窗宽度，单位像素。取值范围：0, 220 - 730。0 表示按内容自适应          | `number`                  | `0`             |
+| `height`             | 信息窗高度，单位像素。取值范围：0, 60 - 650。0 表示按内容自适应           | `number`                  | `0`             |
+| `offset`             | 底端尖角相对地理坐标的像素偏移。**构造期属性**（官方没有 `setOffset`）    | `{ x, y }`                | `{ x: 0, y: 0 }` |
+| `enableMaximize`     | 是否开启最大化功能（需配合 `setMaxContent`，官方默认关闭）                | `boolean`                 | `false`         |
+| `enableAutoPan`      | 是否开启打开时地图自动平移                                               | `boolean`                 | `true`          |
+| `enableCloseOnClick` | 是否开启点击地图关闭                                                     | `boolean`                 | `false`         |
 
-## 动态组件 Props
-
-| 属性               | 说明                                                                                                   | 类型                            | 可选值    | 默认值     | 版本                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------- | --------- | ---------- | ---------------------------------- |
-| show               | 是否开启信息窗体, 支持 `v-model:show`                                                                  | `boolean `                      | -         | `false`    | <Badge type="tip" text="^2.2.2" /> |
-| position           | 信息窗体所在坐标                                                                                       | `{ lng: number, lat: number}` | -         | -          | -                                  |
-| title              | 信息窗标题文字                                                                                         | `string`                        | -         | -          | -                                  |
-| width              | 信息窗宽度，单位像素。取值范围：0, 220 - 730。如果您指定宽度为 0，则信息窗口的宽度将按照其内容自动调整 | `number`                        | `220-730` | `0`        | -                                  |
-| height             | 信息窗高度，单位像素。取值范围：0, 60 - 650。如果您指定高度为 0，则信息窗口的高度将按照其内容自动调整  | `number`                        | `60-650`  | `0`        | -                                  |
-| enableAutoPan      | 是否开启信息窗口打开时地图自动移动                                                                     | `boolean`                       | -         | ` true`    | -                                  |
-| enableCloseOnClick | 是否开启点击地图关闭信息窗口                                                                           | `boolean`                       | -         | ` false`   | -                                  |
+::: warning `offset` 是构造期属性
+官方 4.0 的 `InfoWindow` 只有 `getOffset()`，**没有** `setOffset`，因此 `offset` 变化会**重建实例**
+（`update:position` 那类「就地移动」对它不适用）。重建对外是原子的：只发 `rebuild` / `destroy`
+事件，不会产生多余的 `close` / `open`。
+:::
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件；以下为 `BInfoWindow` 实际发出的 typed emits：
+| 事件名         | 说明                                                       | 载荷                     |
+| -------------- | ---------------------------------------------------------- | ------------------------ |
+| `open`         | 气泡被打开（**任何**来源：prop 驱动或 SDK 侧）             | -                        |
+| `close`        | 气泡被关闭                                                 | -                        |
+| `clickclose`   | 用户点了气泡上的关闭按钮（官方 `clickclose`）              | 事件对象                 |
+| `maximize`     | 气泡被最大化（需 `enableMaximize`）                        | 事件对象                 |
+| `restore`      | 气泡从最大化还原                                           | 事件对象                 |
+| `update:open`  | 受控状态回写：**只有 SDK 侧的关闭 / 打开**才会回写         | `boolean`                |
+| `update:show`  | 兼容状态回写（与 `update:open` 同源）                      | `boolean`                |
+| `rebuild`      | 实例被重建（构造期属性变化）。**首次创建不发**，载荷是新的实例代次 | `number`                 |
+| `destroy`      | 实例被释放，载荷是旧的实例代次                             | `number`                 |
 
-| 事件名       | 说明                       | 属性 |
-| ------------ | -------------------------- | ---- |
-| open         | 信息窗口被打开时触发此事件 | -    |
-| close        | 信息窗口被关闭时触发此事件 | -    |
-| update:open  | 受控状态回写               | `boolean` |
-| update:show  | 兼容状态回写               | `boolean` |
+`update:open` **不回声**父级驱动的变化：给 `open` 赋值 `false` 时组件不会回写一次 `false`
+（受控组件的常规语义）。想知道「气泡真的开了 / 关了」，用 `open` / `close` 事件。
 
-## v3 状态同步与清理
+## 状态同步与清理
 
-`open` 是 v3 推荐的受控状态，支持 `v-model:open`。旧的 `show` / `v-model:show` 仍作为 deprecated alias 保留。
+`open` 是唯一的主状态，支持 `v-model:open`：
 
 ```vue
 <BInfoWindow
@@ -80,31 +91,44 @@ v3 子组件没有 `initd/unload` 事件；以下为 `BInfoWindow` 实际发出�
 
 ::: warning 打开气泡必须给出 `position`
 官方 4.0 的打开入口是 `Map#openInfoWindow(infoWnd, point)`，`point` **没有默认值**，`InfoWindow`
-实例也没有公开的 `openInfoWindow()` —— 所以「没有位置就打开」没有可解释的语义。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
+实例也没有公开的 `openInfoWindow()` —— 所以「没有位置就打开」没有可解释的语义。气泡挂到 Marker 上的
+「目标级打开」属后续里程碑。
 :::
 
 **状态同步是一条声明式规则**（没有隐藏状态）：
 
-| `open` | `position` | 结果 |
-| --- | --- | --- |
-| `true` | 有效坐标 | 打开；已打开时按新坐标移动 |
-| `true` | 缺失 | 不打开（已经开着就关掉），并把 `BMAP_INVALID_ARGUMENT` 交给内部诊断总线 |
-| `false` | 任意 | 关闭 |
+| `open` | `position` | 结果                                                                              |
+| ------ | ---------- | --------------------------------------------------------------------------------- |
+| `true` | 有效坐标   | 打开；已打开时按新坐标移动                                                        |
+| `true` | 缺失       | 不打开（已经开着就关掉），并把一次 `BMAP_INVALID_ARGUMENT` 交给内部诊断总线        |
+| `false`| 任意       | 关闭                                                                              |
 
 两个推论值得注意：
 
-- **`position` 晚到会自动补开**：`open=true` 先到、`position` 由异步数据后到是常见形态，组件按「期望
-  状态」判断，不需要手动把 `open` 切成 `false → true` 来恢复；
-- **`position` 变回 `undefined` 会关闭气泡并报错**（而不是悄悄停在旧位置）——`open=true` 但缺位置就是
-  「想开却打不开」；
-- `position` **不是**实例 option：它由 `openInfoWindow(map, infoWindow, position)` 提供，因此动态移动
-  走的是重新打开，不会出现「position 在当前引擎不支持」这类告警。
+- **`position` 晚到会自动补开**：`open=true` 先到、`position` 由异步数据后到是常见形态，组件按
+  「期望状态」判断，不需要手动把 `open` 切成 `false → true` 来恢复；
+- **`position` 变回 `undefined` 会关闭气泡并报错**（而不是悄悄停在旧位置）；
+- `position` **不是**实例 option：动态移动走的是重新 `openInfoWindow`，不会出现「position 在当前
+  引擎不支持」这类告警。
 
-- `title`、`width`、`height` 和 `position` 更新后会同步到已经创建的 InfoWindow；`offset` 作为创建参数应用。
-- SDK 自己打开或关闭窗口时，组件会回写 `update:open` 和 `update:show`，不会重复发出相同状态。
-- 组件卸载时会**关闭** InfoWindow 并释放自己的事件订阅与观察器。
-- 气泡走**地图级**专用入口（`openInfoWindow` / `closeInfoWindow`），不是 `addOverlay` / `removeOverlay`——这一点在 JSAPI 4.0 上是硬要求（气泡不是普通覆盖物）。slot 内容容器由打开状态驱动可见性，打开时不会被内联样式隐藏。
-- slot 内容变化会触发 redraw；内部观察器会在卸载时断开。
+## 内容宿主（detached host）
 
-<!-- maximize	event{type, target}	信息窗口最大化后触发此事件
-restore	event{type, target}	信息窗口还原时触发此事件 -->
+气泡的内容节点由 **SDK 持有**，Vue 只负责渲染它的子树：
+
+- 组件创建一块独立的内容宿主节点交给 `new BMap.InfoWindow(host)`，SDK 会在打开时把它搬进自己的容器；
+- **Vue 的渲染子树由 `<Teleport>` 挂到这块宿主上**，因此 SDK 搬动宿主时不会动到 Vue 管理的节点树；
+- 宿主带 `data-bmap-infowindow-content` 属性（唯一的 DOM 契约），需要从外部定位气泡内容时用它；
+- `class` / `style` / 其它 `$attrs` 落在宿主内部的包装节点上；
+- **卸载与实例重建时由本库摘掉宿主**（`remove()`，不留下游离节点）。**关闭**气泡时宿主本身不摘
+  —— 实例要留着复用，是否连带撤掉容器由 SDK 决定（官方没有对「关闭后内容节点归谁」作出承诺）；
+- 打开之前宿主根本不在文档里（因此不需要旧实现那种 `display:none` 的兜底），**组件根是
+  `<Teleport>`**，所以实例的 `$el` 不指向内容节点。
+
+slot 内容尺寸变化（文本更新、图片异步加载、字体变化…）经 `ResizeObserver`（`border-box`，与尺寸
+读数同语义）观察**这块宿主**，并用合帧的方式每帧最多重绘一次；由重绘自身引起的尺寸变化会被吞掉，
+不会形成反馈循环。
+
+## SSR
+
+气泡内容依赖客户端的宿主节点，因此**服务端渲染的 HTML 里不含气泡内容**（`<BInfoWindow>` 在
+SSR 期不渲染 slot、不创建宿主）。这与地图本身只在客户端可用是一致的。
