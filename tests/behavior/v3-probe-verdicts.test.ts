@@ -243,5 +243,16 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
       controlFailures(report([{ id: "geojson.attached", overlayCount: 2 }, { id: "dom.attached" }])),
       "`created` 字段缺失同样算不成立（控件方向保守：缺失一律不成立）",
     ).toHaveLength(1);
+    expect(
+      controlFailures(
+        report([
+          { id: "geojson.attached", overlayCount: 2 },
+          // 页面回传字符串：`(value ?? 0) <= 0` 会被 JS 数值强转后**通过**，所以必须显式查类型
+          // （`created` / `connected` 都查）。
+          { id: "dom.attached", created: "2" as unknown as number, connected: "2" as unknown as number },
+        ]),
+      ),
+      "字符串 `\"2\"` 不得靠强转通过控件",
+    ).toHaveLength(1);
   });
 });

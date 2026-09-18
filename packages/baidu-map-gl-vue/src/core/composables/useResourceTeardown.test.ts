@@ -37,6 +37,14 @@ import { useLayerResource, type LayerResourceHooks } from "./useLayerResource";
 /** 卸载过程中记录到的动作顺序。 */
 let order: string[] = [];
 
+/**
+ * 「SDK 在 `remove` **期间同步派发一次事件**」的注入点（由用例设置，默认无）。
+ *
+ * 行内评审要的不是「顺序对了」，而是**顺序带来的后果**：事件到达时业务监听必须已经解绑。
+ * 所以这条钩子在 `remove` 里被调用——如果解绑晚了，旧一代的 handler 就是**活着**收到事件的。
+ */
+let onSdkRemove: (() => void) | null = null;
+
 /** 控件侧的最小 Driver：只记 add / remove 的顺序，其余成员不会在本用例里被调用。 */
 function recordingControls(): ControlDriver {
   const unused = (): never => {
@@ -70,7 +78,11 @@ function fakeLayerDriver(): LayerDriver {
     },
     add: () => order.push("add-to-map"),
     // 与真实 Driver 同形：`remove` 成功返回之后才销账。这里只记顺序，本用例不注入失败。
-    remove: () => order.push("sdk-remove"),
+    remove: () => {
+      order.push("sdk-remove");
+      // 真实 SDK 可能在 `removeLayer` 期间同步派发事件 ⇒ 解绑必须**先**发生。
+      onSdkRemove?.();
+    },
     setOptions: () => {},
     surface: () => ({ ctorSlots: [], operations: [] }),
     supports: () => false,
@@ -102,6 +114,7 @@ function fakeMapContext(): never {
 
 beforeEach(() => {
   order = [];
+  onSdkRemove = null;
 });
 
 /** 业务事件/副作用：与组件里 `scope.add(events.on(res, ...))` 同形。 */
@@ -203,6 +216,55 @@ describe("图层重建路径的卸载顺序", () => {
     await flushPromises();
     // 卸载时换成了新一代那一份 scope 的解绑 + 它的摘除，顺序同样是 unbind 在前。
     expect(order.slice(-2)).toEqual(["unbind", "sdk-remove"]);
+  });
+
+  it("重建时 SDK 在 `remove` **期间**同步派发事件：旧一代的 handler 必须已经解绑", async () => {
+    // 上面那条断言的是**顺序**；这条断言的是顺序**带来的后果**（行内评审要的那条形状）：
+    // 真实 SDK 可能在 `removeLayer` 期间同步派发事件，那时旧实例的业务回调如果还活着，
+    // 就会收到一个「已经开始拆解」的事件。用 `listening` 直接建模「业务监听还在不在」。
+    let listening = false;
+    const hitLiveHandler: string[] = [];
+    onSdkRemove = () => {
+      if (listening) hitLiveHandler.push("removeLayer 期间的事件打到了仍活着的旧 handler");
+    };
+
+    const props = reactive({ tileUrlTemplate: "https://a.example/1.png" });
+    const Child = defineComponent({
+      name: "ProbeLayer",
+      setup() {
+        useLayerResource(props, {
+          toSpec: (p) => ({ kind: "tile", options: { tileUrlTemplate: p.tileUrlTemplate } }),
+          component: "ProbeLayer",
+          bind: ({ scope }) => {
+            listening = true;
+            scope.add(() => {
+              listening = false;
+            });
+          },
+        });
+        return () => null;
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          provide(mapContextInjectionKey, fakeMapContext());
+          return () => h(Child);
+        },
+      }),
+    );
+    await flushPromises();
+    expect(listening, "挂载后业务监听是活的").toBe(true);
+
+    props.tileUrlTemplate = "https://a.example/2.png";
+    await nextTick();
+    await flushPromises();
+
+    expect(hitLiveHandler, "解绑必须早于 removeLayer，否则事件会打到正在拆解的旧回调上").toEqual([]);
+
+    wrapper.unmount();
+    await flushPromises();
+    expect(hitLiveHandler, "卸载路径同理").toEqual([]);
   });
 });
 
