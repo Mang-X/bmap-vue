@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { PolygonHandle } from "../../driver/types/handles";
+/**
+ * BPolygon —— 多边形（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ *
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。`path`（根引用 + `pathVersion`）、填充/描边、
+ * `isBoundary`（构造期 → 变化即重建）、`enableEditing`（成对开关）全部由 `polygonSpec` 声明。
+ *
+ * 事件面（17 个）与 Polyline 相同（上游同为 `GraphEventMap`）；`defineEmits` 与矩阵的一致性由
+ * `v3-overlay-suite.test.ts` 的门禁锁定。
+ */
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
+import type {
+  OverlayEventPayload,
+  OverlayPartialPointerEvent,
+  OverlayPointerEvent,
+} from "../../driver/types/events";
+import type { BPolygonProps } from "../../types/components";
+import { createPolygonSpec } from "./polygonSpec";
 
-export interface BPolygonProps {
-  path: { lng: number; lat: number }[] | string[];
-  pathVersion?: string | number;
-  strokeColor?: string;
-  strokeWeight?: number;
-  strokeOpacity?: number;
-  strokeStyle?: "solid" | "dashed" | "dotted";
-  fillColor?: string;
-  fillOpacity?: number;
-  isBoundary?: boolean;
-  enableMassClear?: boolean;
-  enableEditing?: boolean;
-  visible?: boolean;
-}
+export type { BPolygonProps };
 
 const props = withDefaults(defineProps<BPolygonProps>(), {
   strokeColor: "#000000",
@@ -34,164 +34,30 @@ const props = withDefaults(defineProps<BPolygonProps>(), {
 });
 
 const emit = defineEmits<{
-  click: [e: unknown];
-  dblclick: [e: unknown];
+  click: [event: OverlayPointerEvent];
+  dblclick: [event: OverlayPointerEvent];
+  mousedown: [event: OverlayPointerEvent];
+  mouseup: [event: OverlayPointerEvent];
+  mouseover: [event: OverlayPointerEvent];
+  mouseout: [event: OverlayPartialPointerEvent];
+  mousemove: [event: OverlayPointerEvent];
+  rightclick: [event: OverlayPointerEvent];
+  rightdblclick: [event: OverlayPointerEvent];
+  remove: [event: OverlayEventPayload];
+  lineupdate: [event: OverlayEventPayload];
+  editstart: [event: OverlayEventPayload];
+  editend: [event: OverlayEventPayload];
+  linevertexdragstart: [event: OverlayEventPayload];
+  linevertexdragging: [event: OverlayEventPayload];
+  linevertexdragend: [event: OverlayEventPayload];
+  linevertexdel: [event: OverlayEventPayload];
 }>();
 
-const { resource } = useOverlayResource<BPolygonProps, PolygonHandle>(
-  props,
-  {
-    create: (ctx, p) =>
-      ctx.client.driver.overlays.createPolygon(p.path, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        fillColor: p.fillColor,
-        fillOpacity: p.fillOpacity,
-        isBoundary: p.isBoundary,
-        enableMassClear: p.enableMassClear,
-        enableEditing: p.enableEditing,
-      }),
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      if (props.visible) ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      scope.add(ctx.client.driver.events.on(res, "click", (e) => emit("click", e)));
-      scope.add(ctx.client.driver.events.on(res, "dblclick", (e) => emit("dblclick", e)));
-    },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          [() => p.path, () => p.pathVersion],
-          ([path]) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            if (path && path.length > 0) {
-              ctx.client.driver.overlays.setPath(res, path);
-            }
-          },
-          { flush: "sync" },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeWeight,
-          (w) => {
-            const _v = w;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeWeight: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeStyle,
-          (s) => {
-            const _v = s;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeStyle: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.fillColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.fillOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableEditing,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableEditing: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "polygon",
-);
+const emitDynamic = dynamicEmit(emit);
 
 defineOptions({ name: "BPolygon" });
+
+useOverlaySpec(props, createPolygonSpec(), { emit: emitDynamic });
 </script>
 
 <template>

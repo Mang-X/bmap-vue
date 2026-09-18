@@ -25,7 +25,9 @@
  */
 import { BMapError } from "../../core/errors/BMapError";
 import { logger } from "../../core/logger";
+import { overlayPointerFallback } from "../../core/overlays/overlayEventCatalog";
 import { normalizeDriverEvent } from "../normalize";
+import { overlayKindOf } from "../types/overlays";
 import type { DriverEvent, EventDriver } from "../types/events";
 import type { GeometryDriver } from "../types/geometry";
 import type { SdkHandle } from "../types/handles";
@@ -197,14 +199,18 @@ export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): 
     removeEventListener.call(target, type, group.raw);
   };
 
-  const createGroup = (type: string, rawTarget: object): SubscriptionGroup => {
+  const createGroup = (
+    type: string,
+    rawTarget: object,
+    pointerFallback: "default" | "never",
+  ): SubscriptionGroup => {
     const group: SubscriptionGroup = {
       claims: new Map<TypedListener, number>(),
       raw: (event: unknown) => {
         const payload = enrichDriverEvent(
           rawTarget,
           type,
-          normalizeDriverEvent(type, event, geometry),
+          normalizeDriverEvent(type, event, geometry, { pointerFallback }),
           geometry,
         );
         // 复制一份再遍历：监听器内部 dispose 不影响本轮派发
@@ -240,7 +246,13 @@ export function createJsapiV4EventDriver(input: CreateJsapiV4EventDriverInput): 
         // handler 更新/追加：复用同一个 raw listener，不重新绑定
         group = existing;
       } else {
-        group = createGroup(type, rawTarget);
+        // 指针兜底策略在**订阅时**定一次（判据是事件矩阵，见 overlayPointerFallback）：
+        // 覆盖物里上游声明「坐标可缺」的事件不补 `(0,0)`，map / layer 维持既有口径。
+        group = createGroup(
+          type,
+          rawTarget,
+          overlayPointerFallback(overlayKindOf(target), type),
+        );
         // 先绑定、后登记：addEventListener 抛错时不在 groups 里留下空分组
         (addEventListener as RawMethod).call(rawTarget, type, group.raw);
         if (byType) {

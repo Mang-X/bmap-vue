@@ -18,6 +18,7 @@ import {
   BCircle,
   BPolyline,
   BPolygon,
+  BRectangle,
   BLabel,
   BInfoWindow,
   BPrism,
@@ -78,6 +79,8 @@ function basicScene(): () => unknown {
     h(BCircle, { center: centerRef.value, radius: 800, strokeColor: '#ff0000' }),
     h(BPolyline, { path: [{ lng: 116.35, lat: 39.87 }, { lng: 116.5, lat: 39.96 }], strokeColor: '#00ff00' }),
     h(BPolygon, { path: [{ lng: 116.36, lat: 39.88 }, { lng: 116.45, lat: 39.88 }, { lng: 116.42, lat: 39.95 }], fillColor: 'rgba(0,0,255,0.2)' }),
+    // M5-VECTORS / #31：v4 新增的矩形（对角两点）
+    h(BRectangle, { bounds: { southwest: { lng: 116.3, lat: 39.85 }, northeast: { lng: 116.34, lat: 39.88 } }, strokeColor: '#1677ff' }),
     h(BInfoWindow, { position: centerRef.value, open: open.value, title: '北京' }),
     h(BZoom),
   ])

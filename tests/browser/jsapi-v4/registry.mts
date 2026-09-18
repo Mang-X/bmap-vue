@@ -39,6 +39,10 @@ const SPECS: Record<string, SmokeCheckSpec> = {
   },
   "overlay-marker": { id: "overlay-marker", name: "<BMarker> 挂载后覆盖物计数真的增长" },
   "overlay-polyline": { id: "overlay-polyline", name: "<BPolyline> 挂载后覆盖物计数真的增长" },
+  "overlay-rectangle": {
+    id: "overlay-rectangle",
+    name: "<BRectangle>（v4 新增）挂载后覆盖物计数增长，且 getBounds() 读回的就是传入的对角两点",
+  },
   "control-zoom": { id: "control-zoom", name: "基础控件 <BZoom> 真的挂上（账本计数或容器 DOM 增量）" },
   "controls-stable-set": {
     id: "controls-stable-set",
@@ -106,6 +110,7 @@ const fixtureChecks: string[] = [
   "map-view-round-trip",
   "overlay-marker",
   "overlay-polyline",
+  "overlay-rectangle",
   "control-zoom",
   "controls-stable-set",
   "panorama-viewer",
@@ -125,6 +130,7 @@ const liveChecks: string[] = [
   "map-view-round-trip",
   "overlay-marker",
   "overlay-polyline",
+  "overlay-rectangle",
   "control-zoom",
   "controls-stable-set",
   "layer-district",

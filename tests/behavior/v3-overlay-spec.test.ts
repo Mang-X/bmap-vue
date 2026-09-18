@@ -195,7 +195,7 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
       fields: { icon: "options", visible: "visibility" },
       descriptorKeys: {},
     } as unknown as OverlaySpec<BMarkerProps, unknown>;
-    expect(() => assertOverlayFieldDeclarations(wrongVisibility)).toThrow(/不进属性描述符/);
+    expect(() => assertOverlayFieldDeclarations(wrongVisibility)).toThrow(/组件侧语义/);
 
     // 第三个用例：多个 position 字段——第二个会被静默忽略，宁可起不来
     const twoPositions = {

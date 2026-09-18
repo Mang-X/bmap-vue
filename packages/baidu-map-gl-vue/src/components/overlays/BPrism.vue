@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { OverlayHandle } from "../../driver/types/handles";
+/**
+ * BPrism —— 3D 棱柱（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ *
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。`path` 用内容指纹（建筑底面轮廓是小数组，
+ * 且组件没有 `pathVersion`），`altitude` / 顶面与侧面填充走各自的 setter，
+ * `isBoundary` / `autoCenter` 是构造期透传（变化即重建）。
+ *
+ * 事件面（11 个）由 `GraphEventMap` 去掉编辑六件套得到：官方参考明确 Prism 不实现编辑能力，
+ * 因此本组件不暴露 `enableEditing`。
+ */
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
+import type {
+  OverlayEventPayload,
+  OverlayPartialPointerEvent,
+  OverlayPointerEvent,
+} from "../../driver/types/events";
+import type { BPrismProps } from "../../types/components";
+import { createPrismSpec } from "./prismSpec";
 
-export interface BPrismProps {
-  path: { lng: number; lat: number }[] | string[];
-  altitude: number;
-  topFillColor?: string;
-  topFillOpacity?: number;
-  sideFillColor?: string;
-  sideFillOpacity?: number;
-  isBoundary?: boolean;
-  autoCenter?: boolean;
-  enableMassClear?: boolean;
-  visible?: boolean;
-}
+export type { BPrismProps };
 
 const props = withDefaults(defineProps<BPrismProps>(), {
   topFillColor: "#fff",
@@ -30,147 +33,24 @@ const props = withDefaults(defineProps<BPrismProps>(), {
 });
 
 const emit = defineEmits<{
-  click: [e: unknown];
-  dblclick: [e: unknown];
-  mouseover: [e: unknown];
-  mouseout: [e: unknown];
+  click: [event: OverlayPointerEvent];
+  dblclick: [event: OverlayPointerEvent];
+  mousedown: [event: OverlayPointerEvent];
+  mouseup: [event: OverlayPointerEvent];
+  mouseover: [event: OverlayPointerEvent];
+  mouseout: [event: OverlayPartialPointerEvent];
+  mousemove: [event: OverlayPointerEvent];
+  rightclick: [event: OverlayPointerEvent];
+  rightdblclick: [event: OverlayPointerEvent];
+  remove: [event: OverlayEventPayload];
+  lineupdate: [event: OverlayEventPayload];
 }>();
 
-const { resource, rebuild } = useOverlayResource<BPrismProps, OverlayHandle>(
-  props,
-  {
-    create: (ctx, p) => {
-      if (!p.path?.length) throw new Error("BPrism path is required");
-      return ctx.client.driver.overlays.createPrism(p.path, p.altitude, {
-        topFillColor: p.topFillColor,
-        topFillOpacity: p.topFillOpacity,
-        sideFillColor: p.sideFillColor,
-        sideFillOpacity: p.sideFillOpacity,
-        isBoundary: p.isBoundary,
-        autoCenter: p.autoCenter,
-        enableMassClear: p.enableMassClear,
-      });
-    },
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      if (props.visible) ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      const on = (name: string, h: (e: unknown) => void) => {
-        scope.add(ctx.client.driver.events.on(res, name, h));
-      };
-      on("click", (e) => emit("click", e));
-      on("dblclick", (e) => emit("dblclick", e));
-      on("mouseover", (e) => emit("mouseover", e));
-      on("mouseout", (e) => emit("mouseout", e));
-    },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          [() => p.path, () => p.altitude],
-          () => {
-            const ctx = getCtx();
-            if (!p.path?.length || !ctx) return;
-            const res = getResource();
-            if (res) ctx.client.driver.overlays.setPath(res, p.path);
-            else void rebuild();
-          },
-          { flush: "sync" },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.altitude,
-          (a) => {
-            const _v = a;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { altitude: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.topFillColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { topFillColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.topFillOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { topFillOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.sideFillColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { sideFillColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.sideFillOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { sideFillOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "prism",
-);
+const emitDynamic = dynamicEmit(emit);
 
 defineOptions({ name: "BPrism" });
+
+useOverlaySpec(props, createPrismSpec(), { emit: emitDynamic });
 </script>
 
 <template>

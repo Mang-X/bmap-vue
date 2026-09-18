@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { LabelHandle } from "../../driver/types/handles";
+/**
+ * BLabel —— 文本标注（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ *
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。创建 / 挂载 / 就地更新 / 重建 / 卸载、
+ * 实例 child scope、Registry 记账、Target provide、SDK 事件绑定全部由 `useOverlaySpec`
+ * 按 `labelSpec` 驱动——组件里不再有生命周期代码，也不再手写 6 个 watcher。
+ *
+ * 事件面（8 个）由 `label` 的事件矩阵（`LabelEventMap`）派生；`defineEmits` 与矩阵的一致性由
+ * `v3-overlay-suite.test.ts` 的门禁锁定（SFC 编译器解析不了 `keyof typeof <大对象>`，
+ * 因此这一侧必须显式写名字，用门禁而不是 mapped type 来防漂移）。
+ */
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
+import type {
+  OverlayEventPayload,
+  OverlayPointerEvent,
+} from "../../driver/types/events";
+import type { BLabelProps, LabelStyle } from "../../types/components";
+import { createLabelSpec } from "./labelSpec";
 
-export type LabelStyle = Record<string, any>;
-export interface BLabelProps {
-  content: string;
-  position: { lng: number; lat: number };
-  offset?: { x: number; y: number };
-  zIndex?: number;
-  style?: LabelStyle;
-  enableMassClear?: boolean;
-  visible?: boolean;
-}
+export type { BLabelProps, LabelStyle };
 
 const props = withDefaults(defineProps<BLabelProps>(), {
   offset: () => ({ x: 0, y: 0 }),
@@ -23,97 +28,21 @@ const props = withDefaults(defineProps<BLabelProps>(), {
 });
 
 const emit = defineEmits<{
-  click: [e: unknown];
-  dblclick: [e: unknown];
+  click: [event: OverlayPointerEvent];
+  dblclick: [event: OverlayPointerEvent];
+  rightclick: [event: OverlayPointerEvent];
+  mousedown: [event: OverlayPointerEvent];
+  mouseup: [event: OverlayPointerEvent];
+  mouseover: [event: OverlayPointerEvent];
+  mouseout: [event: OverlayPointerEvent];
+  remove: [event: OverlayEventPayload];
 }>();
 
-const { resource } = useOverlayResource<BLabelProps, LabelHandle>(
-  props,
-  {
-    create: (ctx, p) =>
-      ctx.client.driver.overlays.createLabel(p.content, {
-        position: p.position,
-        offset: p.offset,
-        enableMassClear: p.enableMassClear,
-        style: p.style,
-      }),
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      if (props.visible) ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      scope.add(ctx.client.driver.events.on(res, "click", (e) => emit("click", e)));
-      scope.add(ctx.client.driver.events.on(res, "dblclick", (e) => emit("dblclick", e)));
-    },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch([() => p.position?.lng, () => p.position?.lat], ([lng, lat], [ol, oa]) => {
-          if (lng === undefined || lat === undefined) return;
-          if (lng === ol && lat === oa) return;
-          const res = getResource();
-          const ctx = getCtx();
-          if (!res || !ctx) return;
-          ctx.client.driver.overlays.setPosition(res, { lng, lat });
-        }),
-      );
-      addDisposer(
-        watch(
-          () => p.content,
-          (c) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { content: c });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.zIndex,
-          (z) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (z != null && r && ctx) ctx.client.driver.overlays.setOptions(r, { zIndex: z });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.style,
-          (s) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (s && r && ctx) ctx.client.driver.overlays.setOptions(r, { style: s });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "label",
-);
+const emitDynamic = dynamicEmit(emit);
 
 defineOptions({ name: "BLabel" });
+
+useOverlaySpec(props, createLabelSpec(), { emit: emitDynamic });
 </script>
 
 <template>
