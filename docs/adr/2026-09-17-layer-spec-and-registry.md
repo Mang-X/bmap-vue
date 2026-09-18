@@ -283,6 +283,25 @@ Map 引用，那个实例**再也渲染不了**。严格按内核的 `addLayer �
 - 悲观契约与那条用例**保留**，但身份从「我们依赖的假设」变成**防御性不变量**：万一将来某个 kind
   或某个 SDK 版本不成立，退化必须仍然有界（不重复挂载）且可观测（`resource:error`）。
 
+**读数只有在「产生它的那一步真的成功了」时才能当依据**（第六轮行内发现 1，判定层已落实）：
+探针的结论是从**后续 snapshot** 推出来的，而 snapshot 只说明「那一刻的状态」——若
+`kernel.show.addLayer` 自己抛错，`kernel.shown.connected === 0` 就不能读成「重挂之后内容不会回来」，
+那是**实验步骤失败**，不是 SDK 语义。因此判定层给每个实验声明**前置 attempt**
+（`unmetPrerequisites()`，要求 `threwOf(id) === false`）：
+
+| 实验 | 前置 attempt |
+| --- | --- |
+| 前提 P（重复摘除） | `{geojson,dom,tile}.removeLayer#1`（否则 `#2` 测的不是「已摘下」的实例） |
+| DOM / GeoJSON 生命周期（内核顺序） | `*.mount.addLayer` + `*.mount.setData` + `*.hide.removeLayer` + `*.show.addLayer` |
+| 两个「换新实例」对照 | `*.rebuild.setData` + `*.rebuild.addLayer` |
+| DOM detached 清空 | `dom.removeLayer#1`（否则 `dom.detached` 根本不是 detached 状态） |
+| GeoJSON detached clearData | `geojson.removeLayer#1` |
+
+任一缺失 / 抛错 ⇒ 该结论落**第三态**并点名是哪一步。同理，`GeoJSONLayer` 那条的判定要求
+**消费 `geojson.clearData.已detached` 的 `threw`**（「抛错但已产生副作用」对内核策略是决定性的），
+且 **`after === 0` 才算「完整清空」**——`after !== before` 太弱，2 → 1 只是部分清理。
+（第六轮行内发现 2。）
+
 
 ### 13. `BDOMLayer` 不提供交互事件（官方声明缺 `removeEventListener`）
 

@@ -692,12 +692,15 @@ export function useLayerResource<Props>(
            * 收敛失败时**什么都不做**（不换实例、也不重新挂载）：失败经 `resource:error` 交出，
            * 留到下一次 props 变化或永久销毁再试。宁可暂时不回来，也不能出现两份。
            *
-           * 顺序上的一处有意变化（评审问过就答这里）：`replace()` 内部的 dispose 原本是
-           * 「先解绑 child scope → 再 `removeLayer`」，现在收敛那一步会**先把 `removeLayer` 做掉**，
-           * 因此 dispose 里那次摘除变成 no-op（`mountAttempted` 已复位），数据清空（`tearDownData`）
-           * 落在摘除之后——即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
+           * 顺序（**收敛那一步先解绑、再摘除**）：收敛不会走 `record.dispose()`，所以
+           * `LayerRecord.dispose()` 的「先释放 child scope、再 `removeLayer`」这条顺序要由
+           * `tryConvergeToDetached()` 自己补上（`releaseListeners()`，见它的说明）。因此
+           * `replace()` 内部 dispose 里那次摘除成为 no-op（`mountAttempted` 已复位）、
+           * `scope.dispose()` 也成了幂等的第二次调用；数据清空（`tearDownData`）随之落到摘除
+           * **之后**，即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
            * 在 `removeLayer` 之后仍有效、`DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
-           * 「摘除时 child scope 还活着」不是新形态：`visible=false` 这条常规路径本来就是这么做的。
+           * ⚠️ 早先这里写过「摘除时 child scope 还活着不是新形态（`visible=false` 也这样）」——
+           * 那个类比**不成立**：`visible=false` 是临时摘挂、不销毁资源，而这里是销毁旧一代。
            */
           const replaceAfterDetached = (state: InstanceState, context: MapReadyContext): void => {
             if (!tryConvergeToDetached(state, context)) return;

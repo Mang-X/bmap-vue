@@ -38,10 +38,40 @@ function conclusionOf(line: string): string {
 }
 
 /**
+ * 所有**必须成功返回**的前置 attempt。
+ *
+ * 第六轮行内发现 1 的要求：生命周期结论是从「后续 snapshot」推出来的，而 snapshot 只说明那一刻的
+ * 状态——产生它的那一步如果**自己抛错**，那个状态就不再代表「正常完成该步骤之后的 SDK 行为」。
+ * 所以每个实验都声明自己的前置，任一缺失 / 抛错 ⇒ 该结论落第三态。这里给的是**全部成功**的版本，
+ * 下面另有用例把其中一条改成抛错。
+ */
+const OK_ATTEMPTS: Reading[] = [
+  // 前提 P：第二次摘除测的必须是「已摘下」的实例 ⇒ 第一次摘除必须成功
+  { id: "geojson.removeLayer#1", threw: false },
+  { id: "dom.removeLayer#1", threw: false },
+  { id: "tile.removeLayer#1", threw: false },
+  // 内核顺序组（DOM + GeoJSON）
+  { id: "kernel.mount.addLayer", threw: false },
+  { id: "kernel.mount.setData", threw: false },
+  { id: "kernel.hide.removeLayer", threw: false },
+  { id: "kernel.show.addLayer", threw: false },
+  { id: "geojson.kernel.mount.addLayer", threw: false },
+  { id: "geojson.kernel.mount.setData", threw: false },
+  { id: "geojson.kernel.hide.removeLayer", threw: false },
+  { id: "geojson.kernel.show.addLayer", threw: false },
+  // 两个「换新实例」对照
+  { id: "kernel.rebuild.addLayer", threw: false },
+  { id: "kernel.rebuild.setData", threw: false },
+  { id: "geojson.kernel.rebuild.setData", threw: false },
+  { id: "geojson.kernel.rebuild.addLayer", threw: false },
+];
+
+/**
  * 一份**读数齐备**的报告：每次新加一条结论都要同步补这里的读数，否则下面的正证用例会红
  * ——这正是我们想要的「新结论必须被正证覆盖」。
  */
 const COMPLETE: Reading[] = [
+  ...OK_ATTEMPTS,
   { id: "geojson.removeLayer#2.已摘下", threw: false },
   { id: "dom.removeLayer#2.已摘下", threw: false },
   { id: "tile.removeLayer#2.已摘下", threw: false },
@@ -54,6 +84,7 @@ const COMPLETE: Reading[] = [
   { id: "geojson.kernel.hidden", overlayCount: 0 },
   { id: "geojson.kernel.shown", overlayCount: 0 },
   { id: "geojson.kernel.repaired", overlayCount: 0 },
+  { id: "geojson.kernel.rebuilt", overlayCount: 2 },
   { id: "kernel.rebuilt", connected: 2, overlayCount: 2 },
   // #98 的核心读数 2：detached 之后仍有几个节点 / 清空调用有没有抛 / 清完之后剩几个
   // （这里取实测那一组：`removeLayer` 自己就摘干净了 ⇒ 清空是安全 no-op）。
@@ -61,14 +92,16 @@ const COMPLETE: Reading[] = [
   { id: "dom.removeAllOverlays.已detached", threw: false, message: null },
   { id: "dom.afterRemoveAllOverlays", connected: 0, overlayCount: 0 },
   { id: "geojson.detached", overlayCount: 2 },
-  { id: "geojson.afterClearData", overlayCount: 2 },
+  { id: "geojson.clearData.已detached", threw: false, message: null },
+  // 与 live 实测一致：detached 之后调 `clearData()` 把集合清成 0（那条读数正是 #98 的结论来源）。
+  { id: "geojson.afterClearData", overlayCount: 0 },
 ];
 
 describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）", () => {
-  it("空报告 ⇒ 七条结论**全部**是「无法判定」（主守卫：新增结论也必须带第三态）", () => {
+  it("空报告 ⇒ 八条结论**全部**是「无法判定」（主守卫：新增结论也必须带第三态）", () => {
     const lines = verdicts(report([]));
     // ⚠️ 条数要跟着 `verdicts()` 的结论数走：**新增一条结论却忘了给它第三态**时，这条会先红。
-    expect(lines.length, "结论条数变了：新增/删除结论时要同步更新本用例与 COMPLETE").toBe(7);
+    expect(lines.length, "结论条数变了：新增/删除结论时要同步更新本用例与 COMPLETE").toBe(8);
     const determinate = lines
       .map((line) => ({ line, conclusion: conclusionOf(line) }))
       .filter((item) => !item.conclusion.includes("无法判定"))
@@ -107,7 +140,7 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(line, "缺读数不得落成「集合被清空了」").not.toContain("集合被清空了");
   });
 
-  it("读数齐备 ⇒ 七条结论都是**确定**结论（正证：否则「永远输出无法判定」也能过上面那条）", () => {
+  it("读数齐备 ⇒ 八条结论都是**确定**结论（正证：否则「永远输出无法判定」也能过上面那条）", () => {
     const lines = verdicts(report(COMPLETE));
     expect(lines.filter((line) => line.includes("无法判定"))).toEqual([]);
     expect(lineOf(lines, "[前提 P]")).toContain("安全（前提 P 成立）");
@@ -117,7 +150,11 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(lineOf(lines, "[GeoJSON 生命周期")).toContain("集合被清空了");
     expect(lineOf(lines, "[对照：换新实例重建]")).toContain("重建路径正常");
     expect(lineOf(lines, "[DOM detached 清空]"), "实测那一组 ⇒ 无需清空").toContain("无需清空");
-    expect(lineOf(lines, "[GeoJSON detached clearData]")).toContain("未清空");
+    expect(
+      lineOf(lines, "[对照：GeoJSON 换新实例重建]"),
+      "同一份 data 在新实例上有数据 ⇒ 差异来自实例本身",
+    ).toContain("重建路径正常");
+    expect(lineOf(lines, "[GeoJSON detached clearData]")).toContain("完整清空");
   });
 
   it("缺 `dom.afterRemoveAllOverlays` ⇒ DOM detached 清空那条是第三态（不是「无效」）", () => {
@@ -137,6 +174,8 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
       lineOf(
         verdicts(
           report([
+            // 前置：`dom.removeLayer#1` 必须成功，否则 `dom.detached` 根本不是 detached 状态。
+            { id: "dom.removeLayer#1", threw: false },
             { id: "dom.detached", connected: before, overlayCount: before },
             { id: "dom.afterRemoveAllOverlays", connected: after, overlayCount: after },
             {
@@ -217,6 +256,75 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     );
     expect(pLine).toContain("无法判定");
     expect(pLine, "另两条没抛错也不能把它抬成「安全」").not.toContain("安全（前提 P 成立）");
+  });
+
+  it("前置 attempt 抛错 ⇒ 该结论第三态，**不得**把实验步骤失败读成 SDK 语义", () => {
+    // 第六轮行内发现 1 的核心形状：`kernel.show.addLayer` 自己抛错时 `kernel.shown.connected === 0`，
+    // 若不管前置就会落成「重挂之后内容不会回来」——那是**实验步骤失败**，不是 SDK 语义。
+    const withPrereqBroken = (id: string, threw = true) =>
+      report(COMPLETE.map((r) => (r.id === id ? { ...r, threw } : r)));
+
+    const domLine = lineOf(
+      verdicts(withPrereqBroken("kernel.show.addLayer")),
+      "[DOM 生命周期",
+    );
+    expect(domLine).toContain("无法判定");
+    expect(domLine, "文案必须点名是哪一步不成立").toContain("kernel.show.addLayer");
+    expect(domLine, "不得读成「内容没回来」").not.toContain("内容没回来");
+
+    const clearLine = lineOf(
+      verdicts(withPrereqBroken("dom.removeLayer#1")),
+      "[DOM detached 清空]",
+    );
+    expect(clearLine).toContain("无法判定");
+    expect(clearLine).toContain("dom.removeLayer#1");
+    expect(clearLine, "不得读成安全侧的「无需清空」").not.toContain("**无需清空**");
+
+    const geoLine = lineOf(
+      verdicts(withPrereqBroken("geojson.removeLayer#1")),
+      "[GeoJSON detached clearData]",
+    );
+    expect(geoLine).toContain("无法判定");
+    expect(geoLine).toContain("geojson.removeLayer#1");
+
+    // 前置**读数缺失**同样算不成立（不是「没测到就跳过」）。
+    const missingPrereq = lineOf(
+      verdicts(report(COMPLETE.filter((r) => r.id !== "kernel.hide.removeLayer"))),
+      "[DOM 生命周期",
+    );
+    expect(missingPrereq).toContain("无法判定");
+    expect(missingPrereq).toContain("kernel.hide.removeLayer");
+  });
+
+  it("GeoJSON detached clear 的状态机：完整清空 / 部分 / 未清空 / 无需清空 / 不安全 / 第三态", () => {
+    // 第六轮行内发现 2：①必须消费 `geojson.clearData.已detached` 这个 attempt；
+    // ②`after !== before` 太弱——2 → 1 这种**部分清理**也会被说成「被清空了」。
+    const lineFor = (before: number | null, after: number | null, threw: boolean | null, detachThrew = false) =>
+      lineOf(
+        verdicts(
+          report([
+            { id: "geojson.removeLayer#1", threw: detachThrew, message: null },
+            ...(before === null ? [] : [{ id: "geojson.detached", overlayCount: before }]),
+            ...(threw === null ? [] : [{ id: "geojson.clearData.已detached", threw, message: null }]),
+            ...(after === null ? [] : [{ id: "geojson.afterClearData", overlayCount: after }]),
+          ]),
+        ),
+        "[GeoJSON detached clearData]",
+      );
+
+    expect(lineFor(2, 0, false), "2 → 0").toContain("**完整清空**");
+    expect(lineFor(2, 1, false), "2 → 1 只是部分清理，不能叫清空").toContain("**只清掉了部分**");
+    expect(lineFor(2, 1, false), "更不得说成完整清空").not.toContain("**完整清空**");
+    expect(lineFor(2, 2, false), "没变少").toContain("**未清空**");
+    expect(lineFor(0, 0, false), "摘除自己就清干净了").toContain("**无需清空**");
+    expect(
+      lineFor(2, 0, true),
+      "调用抛错是决定性的：即使条数看起来清空了，也必须先报不安全（可能只是抛错前的副作用）",
+    ).toContain("**不安全**");
+    expect(lineFor(2, 0, true), "不得落成正结论").not.toContain("**完整清空**");
+    expect(lineFor(null, 0, false), "读数缺失").toContain("无法判定");
+    expect(lineFor(2, null, null), "attempt 与读数都缺失").toContain("无法判定");
+    expect(lineFor(2, 0, false, true), "前置摘除失败 ⇒ 第三态").toContain("无法判定");
   });
 
   it("正证控件：读数缺失 / 字段类型不对都算不成立，齐备时为空", () => {

@@ -96,20 +96,51 @@ export function verdicts(report: ProbeReport): string[] {
     if (reading === undefined || threw === null) return "无法判定（读数缺失）"
     return threw ? `抛错（${reading.message}）` : "未抛错"
   }
+  // ── 前置条件 ──────────────────────────────────────────────────────────────
+  /**
+   * **前置调用**里哪些没有成功：返回失败说明（空数组 = 全部成功）。
+   *
+   * 为什么需要这一步：生命周期的结论都是从**后续 snapshot** 推出来的，而 snapshot 只说明「那一刻
+   * 的状态」。如果产生它的那一步 SDK 调用**自己抛错**了，这个状态就不再代表「正常完成该步骤之后的
+   * SDK 行为」——例如 `kernel.show.addLayer` 抛错时 `kernel.shown.connected === 0`，读成
+   * 「重挂之后内容不会回来」就是把**实验步骤失败**误写成了 **SDK 语义**。
+   *
+   * 所以每个实验都把自己依赖的 attempt 列成前置条件，**要求 `threwOf(id) === false`**；
+   * 任一缺失 / 抛错 ⇒ 该结论落第三态，并说明是哪一步不成立（ADR 决策 12b 的读数只在
+   * 「前置全部成功」时才作为依据）。
+   */
+  const unmetPrerequisites = (ids: readonly string[]): string[] =>
+    ids
+      .map((id) => ({ id, threw: threwOf(id) }))
+      .filter((item) => item.threw !== false)
+      .map((item) => `${item.id} ${item.threw === null ? "读数缺失" : "抛错"}`)
+  /** 前置不成立时的第三态文案（带上是哪一步）。 */
+  const prereqText = (unmet: readonly string[]): string =>
+    `**无法判定**（前置步骤不成立：${unmet.join("、")}）`
+
   // 每条读数**三态**：安全 / 不安全 / **无法判定**。缺失的读数**不得**当成 safe——
-  // `!undefined === true` 会把「没测到」读成「安全」，正是第六轮评审要求避免的形态。
+  // `!undefined === true` 会把「没测到」读成「安全」，正是本轮之前那几轮要求避免的形态。
   const pIds: Array<[string, string]> = [
     ["GeoJSON", "geojson.removeLayer#2.已摘下"],
     ["DOM", "dom.removeLayer#2.已摘下"],
     ["Tile", "tile.removeLayer#2.已摘下"],
   ]
+  // 前提 P 说的是「对**已经摘掉**的图层重复摘除」⇒ 第一次摘除必须真的成功了，
+  // 否则 `#2` 测的是「对一个还挂着的图层再摘一次」，与前提无关。
+  const pPrereq = unmetPrerequisites([
+    "geojson.removeLayer#1",
+    "dom.removeLayer#1",
+    "tile.removeLayer#1",
+  ])
   const pThrows = pIds.map(([, id]) => threwOf(id))
   const pVerdict =
-    pThrows.some((threw) => threw === null)
-      ? "**无法判定**（有读数缺失）"
-      : pThrows.some((threw) => threw === true)
-        ? "**不安全**（三态收敛的该分支需要换机制）"
-        : "安全（前提 P 成立）"
+    pPrereq.length > 0
+      ? prereqText(pPrereq)
+      : pThrows.some((threw) => threw === null)
+        ? "**无法判定**（有读数缺失）"
+        : pThrows.some((threw) => threw === true)
+          ? "**不安全**（三态收敛的该分支需要换机制）"
+          : "安全（前提 P 成立）"
   lines.push(
     `[前提 P] 对已摘下的图层重复 removeLayer —— ` +
       pIds.map(([name, id]) => `${name} ${describeReading(id)}`).join(" / ") +
@@ -122,12 +153,34 @@ export function verdicts(report: ProbeReport): string[] {
     const value = byId.get(id)?.connected
     return typeof value === "number" ? value : null
   }
+  /** 读一个「集合条数」字段（`getData()` 的长度）：缺失 / 类型不对 ⇒ `null`。 */
+  const overlaysOf = (id: string): number | null => {
+    const value = byId.get(id)?.overlayCount
+    return typeof value === "number" ? value : null
+  }
+  /** 读数原文用：缺失时印 `—`，不要印 `null` / `undefined` 让人误读成 0。 */
+  const numText = (value: number | null): string => (value === null ? "—" : String(value))
   const domSnap = (id: string) => {
     const reading = byId.get(id)
     const connected = nodesOf(id)
     if (reading === undefined || connected === null) return UNKNOWN
     return `${String(connected)} 个节点连在文档（overlays ${String(reading.overlayCount)}）`
   }
+
+  /** 内核顺序那一组（DOM + GeoJSON）依赖的四步；每一个实验都用得到。 */
+  const kernelPrereq = unmetPrerequisites([
+    "kernel.mount.addLayer",
+    "kernel.mount.setData",
+    "kernel.hide.removeLayer",
+    "kernel.show.addLayer",
+  ])
+  const geoKernelPrereq = unmetPrerequisites([
+    "geojson.kernel.mount.addLayer",
+    "geojson.kernel.mount.setData",
+    "geojson.kernel.hide.removeLayer",
+    "geojson.kernel.show.addLayer",
+  ])
+
   // ⚠️ 结论必须**先确认读数存在、字段类型对**，再进正 / 负分支：`?.connected ?? 0` 会把
   // 「没测到」悄悄读成「内容没回来 / 重建也没渲染」这类**确定结论**（第三组逐处标过）。
   const mounted = nodesOf("kernel.mounted")
@@ -136,13 +189,15 @@ export function verdicts(report: ProbeReport): string[] {
     "[DOM 生命周期（严格按内核顺序：addLayer → setData）] " +
       `挂载后 ${domSnap("kernel.mounted")} → 隐藏后 ${domSnap("kernel.hidden")} → ` +
       `**再显示后 ${domSnap("kernel.shown")}** ⇒ ` +
-      (mounted === null || shown === null
-        ? UNKNOWN
-        : mounted <= 0
-          ? "**无法判定**（对照不成立：挂载后就没有节点）"
-          : shown > 0
-            ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
-            : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
+      (kernelPrereq.length > 0
+        ? prereqText(kernelPrereq)
+        : mounted === null || shown === null
+          ? UNKNOWN
+          : mounted <= 0
+            ? "**无法判定**（对照不成立：挂载后就没有节点）"
+            : shown > 0
+              ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
+              : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
   )
   const repaired = nodesOf("kernel.repaired")
   const repairThrew = threwOf("kernel.repair.setData")
@@ -155,52 +210,87 @@ export function verdicts(report: ProbeReport): string[] {
             ? `抛错（${byId.get("kernel.repair.setData")?.message}）`
             : "未抛错"
       } ⇒ ` +
-      (repaired === null
-        ? UNKNOWN
-        : repaired > 0
-          ? "**能把内容找回来**（修法可行：重新挂载成功后让 data 槽位重写一次）"
-          : "**找不回来**（补 setData 不足以恢复 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"),
+      (kernelPrereq.length > 0
+        ? prereqText(kernelPrereq)
+        : // 结论归因给「这一次调用」，所以这次调用本身必须先**取到**（抛错是观测，缺失不是）。
+          repairThrew === null || repaired === null
+          ? UNKNOWN
+          : repaired > 0
+            ? "**能把内容找回来**（修法可行：重新挂载成功后让 data 槽位重写一次）"
+            : "**找不回来**（补 setData 不足以恢复 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"),
   )
-  const geoNums = ["geojson.kernel.mounted", "geojson.kernel.hidden", "geojson.kernel.shown", "geojson.kernel.repaired"]
-    .map((id) => byId.get(id)?.overlayCount)
+  const geoOrderIds = [
+    "geojson.kernel.mounted",
+    "geojson.kernel.hidden",
+    "geojson.kernel.shown",
+    "geojson.kernel.repaired",
+  ]
+  const geoNums = geoOrderIds.map((id) => overlaysOf(id))
+  const geoShown = geoNums[2] ?? null
   lines.push(
     "[GeoJSON 生命周期（同一套内核顺序）] 挂载后 " +
-      `${String(geoNums[0])} 条 → 隐藏后 ${String(geoNums[1])} 条 → 再显示后 ${String(geoNums[2])} 条 → ` +
-      `补 setData 后 ${String(geoNums[3])} 条 ⇒ ` +
-      (geoNums.some((value) => typeof value !== "number")
-        ? UNKNOWN
-        : Number(geoNums[2]) > 0
-          ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
-          : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
+      `${numText(geoNums[0] ?? null)} 条 → 隐藏后 ${numText(geoNums[1] ?? null)} 条 → ` +
+      `再显示后 ${numText(geoShown)} 条 → 补 setData 后 ${numText(geoNums[3] ?? null)} 条 ⇒ ` +
+      (geoKernelPrereq.length > 0
+        ? prereqText(geoKernelPrereq)
+        : geoNums.some((value) => value === null) || geoShown === null
+          ? UNKNOWN
+          : geoShown > 0
+            ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
+            : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
+  )
+  // GeoJSON 的**对照**：换一个新实例（内核的重建路径）之后集合条数。与上面那条配对使用——
+  // 两边用的是同一份 `data`，所以差异只能来自**实例**，不是数据。
+  const geoRebuilt = overlaysOf("geojson.kernel.rebuilt")
+  const geoRebuildPrereq = unmetPrerequisites([
+    "geojson.kernel.rebuild.setData",
+    "geojson.kernel.rebuild.addLayer",
+  ])
+  lines.push(
+    `[对照：GeoJSON 换新实例重建] 集合 ${numText(geoRebuilt)} 条 ⇒ ` +
+      (geoRebuildPrereq.length > 0
+        ? prereqText(geoRebuildPrereq)
+        : geoRebuilt === null
+          ? UNKNOWN
+          : geoRebuilt > 0
+            ? "重建路径正常（同一份 data 在新实例上有数据 ⇒ 上面那条的差异来自**实例**本身）"
+            : "**重建之后集合仍为空**（说明本轮实验本身不成立，先查前面的读数）"),
   )
   const rebuilt = nodesOf("kernel.rebuilt")
+  const rebuildPrereq = unmetPrerequisites(["kernel.rebuild.setData", "kernel.rebuild.addLayer"])
   lines.push(
     `[对照：换新实例重建] ${domSnap("kernel.rebuilt")} ⇒ ` +
-      (rebuilt === null
-        ? UNKNOWN
-        : rebuilt > 0
-          ? "重建路径正常（可选修法：data 图层在重新可见时重建实例）"
-          : "**重建也没渲染**（说明本轮实验本身不成立，先查前面的读数）"),
+      (rebuildPrereq.length > 0
+        ? prereqText(rebuildPrereq)
+        : rebuilt === null
+          ? UNKNOWN
+          : rebuilt > 0
+            ? "重建路径正常（可选修法：data 图层在重新可见时重建实例）"
+            : "**重建也没渲染**（说明本轮实验本身不成立，先查前面的读数）"),
   )
 
-  // ── 核心读数 2（#98）：`DOMLayer.removeAllOverlays()` 在 **detached 实例**上是否生效 ──
+  // ── 核心读数 2（#98）之一：`DOMLayer.removeAllOverlays()` 在 **detached 实例**上是否生效 ──
   // 这是内核「永久销毁时对已摘下的 DOM 图层**照常**调清空」这条策略的直接依据（ADR 决策 12 / 13），
   // 不能只有原始读数、没有三态结论。各分支**互斥且各自诚实**：`before === 0` 不是「清空无效」，
   // 而是「`removeLayer` 自己就把节点摘干净了」——本探针第一版把它归进「未清掉」，得出了与实际读数
   // 相反的结论（「判定文案必须跟着读数走」这个坑就是从这里来的）。
+  // 前置：`dom.removeLayer#1` 必须成功，否则 `dom.detached` 根本不是 detached 状态。
+  const domDetachPrereq = unmetPrerequisites(["dom.removeLayer#1"])
   const domBefore = nodesOf("dom.detached")
   const domAfter = nodesOf("dom.afterRemoveAllOverlays")
   const clearThrew = threwOf("dom.removeAllOverlays.已detached")
   const domClearVerdict =
-    domBefore === null || domAfter === null || clearThrew === null
-      ? UNKNOWN
-      : clearThrew
-        ? "**不安全**（detached 上调用抛错 ⇒ 内核不能照常调它，得先把图层挂回去再清）"
-        : domBefore === 0
-          ? "**无需清空**（`removeLayer` 已把节点从文档摘掉）；detached 调它是安全的 no-op"
-          : domAfter === 0
-            ? "**有效**（detached 清空确实移除了节点 ⇒ 可固化为「不要求 attached」）"
-            : "**无效**（detached 之后节点仍在文档上 ⇒ 永久销毁必须先补挂再清）"
+    domDetachPrereq.length > 0
+      ? prereqText(domDetachPrereq)
+      : domBefore === null || domAfter === null || clearThrew === null
+        ? UNKNOWN
+        : clearThrew
+          ? "**不安全**（detached 上调用抛错 ⇒ 内核不能照常调它，得先把图层挂回去再清）"
+          : domBefore === 0
+            ? "**无需清空**（`removeLayer` 已把节点从文档摘掉）；detached 调它是安全的 no-op"
+            : domAfter === 0
+              ? "**有效**（detached 清空确实移除了节点 ⇒ 可固化为「不要求 attached」）"
+              : "**无效**（detached 之后节点仍在文档上 ⇒ 永久销毁必须先补挂再清）"
   lines.push(
     `[DOM detached 清空] removeLayer 之后仍连在文档上的节点 ${domSnap("dom.detached")}；` +
       `再调 removeAllOverlays() ${
@@ -212,18 +302,41 @@ export function verdicts(report: ProbeReport): string[] {
       }；之后 ${domSnap("dom.afterRemoveAllOverlays")} ⇒ ${domClearVerdict}`,
   )
 
-  const geoDetached = byId.get("geojson.detached")
-  const geoAfter = byId.get("geojson.afterClearData")
-  const geoNumbersKnown =
-    typeof geoDetached?.overlayCount === "number" && typeof geoAfter?.overlayCount === "number"
-  lines.push(
-    `[GeoJSON detached clearData] 摘掉后 getData() ${String(geoDetached?.overlayCount)} 条；` +
-      `再调 clearData() 之后 ${String(geoAfter?.overlayCount)} 条 ⇒ ` +
-      (!geoNumbersKnown
+  // ── 核心读数 2 的另一半：`GeoJSONLayer.clearData()` 在 **detached 实例**上是否生效 ──
+  // 与上面那条同级的状态机，三件事都不能少：
+  //   ① 前置 `geojson.removeLayer#1` 成功（否则 `geojson.detached` 不是 detached 状态）；
+  //   ② **消费 `geojson.clearData.已detached` 这个 attempt**——「调用自己抛错但先产生了副作用」
+  //      对内核策略是决定性的（不能照常调），只看 before/after 会把它漏掉；
+  //   ③ **`after === 0` 才算「完整清空」**：`after !== before` 太弱，2 → 1 这种部分清理也会被
+  //      说成「被清空了」，而那并不满足 `clearData()` 的语义。
+  const geoDetachPrereq = unmetPrerequisites(["geojson.removeLayer#1"])
+  const geoBefore = overlaysOf("geojson.detached")
+  const geoAfterClear = overlaysOf("geojson.afterClearData")
+  const geoClearThrew = threwOf("geojson.clearData.已detached")
+  const geoClearVerdict =
+    geoDetachPrereq.length > 0
+      ? prereqText(geoDetachPrereq)
+      : geoBefore === null || geoAfterClear === null || geoClearThrew === null
         ? UNKNOWN
-        : geoAfter!.overlayCount === geoDetached!.overlayCount
-          ? "**未清空**（印证 reference「要真正清空得在 removeLayer 之前调」⇒ 内核跳过它是正确的）"
-          : "**被清空了**（reference 那句话与运行时不一致，需要据实修正）"),
+        : geoClearThrew
+          ? "**不安全**（detached 上调用抛错 ⇒ 内核不能照常调它；上面的条数只说明抛错前有没有副作用）"
+          : geoBefore === 0
+            ? "**无需清空**（`removeLayer` 已把集合清空）；detached 调它是安全的 no-op"
+            : geoAfterClear === 0
+              ? "**完整清空**（detached 调用有效 ⇒ 可固化为「不要求 attached」；reference 那句" +
+                "「要真正清空得在 `removeLayer` **之前**调」与运行时不一致）"
+              : geoAfterClear < geoBefore
+                ? "**只清掉了部分**（集合变少了但没清空 ⇒ 不满足 `clearData()` 的完整语义）"
+                : "**未清空**（集合没有变少）"
+  lines.push(
+    `[GeoJSON detached clearData] 摘掉后 getData() ${numText(geoBefore)} 条；` +
+      `再调 clearData() ${
+        geoClearThrew === null
+          ? UNKNOWN
+          : geoClearThrew
+            ? `抛错（${byId.get("geojson.clearData.已detached")?.message}）`
+            : "未抛错"
+      }；之后 ${numText(geoAfterClear)} 条 ⇒ ${geoClearVerdict}`,
   )
   return lines
 }
