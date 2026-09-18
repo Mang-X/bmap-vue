@@ -85,20 +85,6 @@ export const LAYER_CTOR_SLOTS = [
 export type LayerOperation = "setZIndex" | "setData" | "clearData";
 
 /**
- * 「清空」这一操作的作用域（`LayerDriver.clearScope` 的返回值）。
- *
- * 刻意是**三态**：把「官方明确要求」与「官方没有说明」分开，因为后者只能作为**策略**处理，
- * 不能被编码成一条公开的能力事实（否则「未知」会被下游读成「确定不需要」，见已知限制 13）。
- */
-export type LayerClearScope =
-  /** 官方明确要求图层仍在图上（`GeoJSONLayer.clearData`）。 */
-  | "map-bound"
-  /** 官方**没有**说明是否要求仍在图上（`DOMLayer.removeAllOverlays`）——未知，不是「不需要」。 */
-  | "unknown"
-  /** 该 kind 没有清空入口（与 `supports(kind, "clearData") === false` 必须一致）。 */
-  | "none";
-
-/**
  * 该 kind 的能力面（`surface()` 的返回值）。
  *
  * 两个字段都是**白名单**：不在 `ctorSlots` 里的统一槽位不会进构造选项，不在 `operations`
@@ -167,23 +153,6 @@ export interface LayerDriver {
    * 上层的重建判据据此计算「构造键」，而不是自己去猜哪些键需要重建。
    */
   isMutableOption(kind: LayerKind, key: string): boolean;
-
-  /**
-   * 归一化的「清空」（`clearData`）在该 kind 上的**作用域**。
-   *
-   * 为什么这是一条**能力面**而不是调用方的约定：官方对两种清空语义的描述不同，而本库禁止把
-   * 「我们不知道」写成「我们确定」——所以它是**三态**，不是布尔：
-   *
-   * - `"map-bound"`：官方明确要求图层**仍在图上**。`GeoJSONLayer.clearData()`：「先从 Map 移除
-   *   这些覆盖物并清空集合」，而 `map.removeLayer()` 会「清空图层持有的 Map 引用」，官方因此明说
-   *   「要真正清空 `getData()` 集合，得在 `removeLayer` **之前**调用 `clearData()`」；
-   * - `"unknown"`：官方**没有**说明它是否要求仍在图上。`DOMLayer.removeAllOverlays()` 就是这一档
-   *   ——它的文档只说「移除图层渲染出来的 overlays」，既没说需要 attachment、也没说不需要。
-   *   **未知不等于不需要**：调用方在这一档下只能选一个**策略**（本库选 best-effort 尝试，
-   *   失败可观测），而不能声称「已证明与挂图无关」；
-   * - `"none"`：该 kind 没有清空入口（与 `supports(kind, "clearData") === false` 必须一致）。
-   */
-  clearScope(kind: LayerKind): LayerClearScope;
 
   setZIndex(layer: LayerHandle, zIndex: number): void;
   setData(layer: LayerHandle, data: LayerData): void;

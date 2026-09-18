@@ -93,8 +93,9 @@ export interface UseLayerResourceResult {
  * 记（真实可能已经 detached，那就再也挂不回来），也不能按「已经下去了」记（真实可能还在图上，
  * 再 `add` 一次会让同一个实例在图上出现两份，而 `addLayer` 不去重）。
  *
- * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。注意这只在「对已经摘掉的
- * 图层重复 `removeLayer` 是安全的」这条**未取证前提**成立时才保证收敛——见已知限制 14。
+ * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。这一步依赖「对已经摘掉的
+ * 图层重复 `removeLayer` 是安全的」——该前提已由 issue #98 的 live 探针**实测成立**
+ * （GeoJSON / DOM / Tile 三个家族重复摘除均未抛错，见 ADR 决策 12b）。
  */
 type MountState = "attached" | "detached" | "unknown";
 
@@ -105,9 +106,10 @@ interface InstanceState {
   /**
    * 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。
    *
-   * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会**尝试**把它推回确定状态
-   * （`remove -> add`）——**仅在前提 P（对已摘掉的图层重复 `removeLayer` 是安全的）成立时才保证
-   * 收敛**；前提不成立时保持 `unknown` 并报错（可观测、且不会重复挂载）。见已知限制 14。
+   * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会把它推回确定状态
+   * （`remove -> add`）。这条路径依赖的前提 P（重复 `removeLayer` 安全）**已由 issue #98 的 live
+   * 探针实测成立**（三个家族均未抛错，见 ADR 决策 12b）；万一对某个 kind / SDK 版本不成立，
+   * 退化仍然有界且可观测（保持 `unknown` + `resource:error`，不会重复挂载）。
    */
   mountState: MountState;
   /**
@@ -116,8 +118,25 @@ interface InstanceState {
    * 与 `mountState` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
    */
   mountAttempted: boolean;
+  /**
+   * 是否**成功挂上去过**（一旦为真就不再复位）。
+   *
+   * 用途只有一个：区分「第一次挂载」（实例是全新的，直接 `addLayer` 就行）与「摘掉之后重新可见」
+   * （**必须换实例**，见 `needsRemountRebuild`）。
+   */
+  everAttached: boolean;
   /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性，避免重复清理同一实例。 */
   torndown: boolean;
+  /**
+   * **本代的 child scope**：`bind()` 把业务监听（驱动事件订阅等）挂在这里。
+   *
+   * 内核持有它的唯一用途是：在**收敛**（`tryConvergeToDetached` 会先自己摘一次）之前先把业务
+   * 监听解绑。常规两条销毁路径都走 `LayerRecord.dispose()`，「先 scope、再 `removeLayer`」的顺序
+   * 自然成立；收敛不能走 `dispose()`（那会连带把账本记录永久删掉），所以那条顺序得自己保证。
+   */
+  scope: ResourceScope;
+  /** 是否已经解绑过本代的业务监听（一次性；`replace()` 里的 `dispose()` 还会再解一次，幂等）。 */
+  listenersReleased: boolean;
   /** 创建该实例时用的重建指纹：props 变化时与它比较，决定「重建」还是「就地更新」。 */
   rebuildKey: string;
   /**
@@ -212,34 +231,29 @@ export function useLayerResource<Props>(
   let instance: InstanceState | null = null;
 
   /**
-   * 数据驱动图层的**永久销毁**前的清理：在图层仍在图上时先清数据覆盖物，再由 Map 摘除图层。
-   *
-   * 依据是仓库自己的 4.0 清理口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：
-   * - `DOMLayer`：先 `removeAllOverlays()` 再 `removeLayer()`（`setData(null)` **不会**移除已经渲染
-   *   出来的 overlays —— 该文档把它列为「常见错误」）；
-   * - `GeoJSONLayer`：`clearData()` 在 `removeLayer` **之前**（之后再 `destroy()` 不起作用，
-   *   因为 `removeLayer` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用）。
+   * 数据驱动图层的**永久销毁**前的清理：走上统一的「清空」入口。
    *
    * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
-   * 因此这里不需要按 kind 分支；**但要不要执行**由该清空操作的**作用域**决定（`clearScope` 三态）：
-   * `"map-bound"` 要求仍在图上、`"unknown"` 走 best-effort 策略、`"none"` 没有入口。详见函数内注释。
-   * **只在永久销毁时做**：普通 `visible=false` 的摘挂不能清（切回可见时还得重新 `setData`）；
-   * 清理失败不阻断摘除，但要可观测。
+   * 因此这里不需要按 kind 分支，也**不需要判挂载状态**——后者曾经存在过（`clearScope` 三态），
+   * 它建立在「`GeoJSONLayer.clearData()` 要在 `removeLayer` 之前调、之后无效」这句 reference 上，
+   * 而 issue #98 的 live 探针实测**推翻**了它（见下）。**只在永久销毁时做**：普通 `visible=false`
+   * 的摘挂不能清（切回可见时还得重新 `setData`）；清理失败不阻断摘除，但要可观测。
+   *
+   * 依据与实测（`scripts/probe-layer-detached.mts`，JSAPI 4.0 / `BMap.version === "gl"`）：
+   *
+   * - `GeoJSONLayer`：`removeLayer` 之后 `getData()` 集合**仍保留**（实测 2 条），此时再调
+   *   `clearData()` **仍然生效**（实测 2 → 0，未抛错）⇒ reference 那句「要真正清空得在
+   *   `removeLayer` 之前调」与运行时不符。可见资源也不靠它：`removeLayer` 本身已经摘掉覆盖物。
+   * - `DOMLayer`：`removeLayer` **自己就把节点从文档摘掉了**（实测 `isConnected` 2 → 0，
+   *   `getCustomOverlays()` 2 → 0），因此 `removeAllOverlays()` 在 detached 之后是**安全 no-op**
+   *   （未抛错）。「只调 `setData(null)` 会残留」那句警告说的是 `setData(null)`，与 `removeLayer` 无关。
+   *
+   * 两条合起来的结论是：**清空入口与挂载状态无关**，所以「先清再摘」（attached 路径）与
+   * 「已摘下后再清」（detached 路径）都安全；这里统一执行，失败只告警。
    */
   const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
     const layers = context.client.driver.layers;
-    const scope = layers.clearScope(state.spec.kind);
-    // `"none"` = 该 kind 没有清空入口（与 `supports(kind, "clearData")` 同解，有双向一致性断言）。
-    if (scope === "none") return;
-    // `"map-bound"` = **官方明确要求**图层仍在图上。对 `GeoJSONLayer.clearData()` 就是这条：
-    // 「先从 Map 移除这些覆盖物」，而 `removeLayer` 会清空图层持有的 Map 引用 ⇒ 官方明说
-    // 「要真正清空 `getData()` 集合得在 `removeLayer` **之前**调」。因此 detached / unknown 时
-    // 跳过它——那次调用没有效果，留着只会把「已经清空了」变成一句看起来有保证的假话。
-    // 可见资源并没有因此残留：同一段说明写明 `removeLayer` **本身已经摘掉覆盖物**。
-    if (scope === "map-bound" && state.mountState !== "attached") return;
-    // `"unknown"` = 官方**没有**说明它是否要求 attachment（`DOMLayer.removeAllOverlays()`）。
-    // 这里刻意**不**声称哪一侧成立，只选一个策略并把它写出来：**best-effort 尝试**——因为跳过会
-    // 真的残留真实 DOM 节点，而失败是经 `logger.warn` 可观测的。取证见已知限制 13。
+    if (!layers.supports(state.spec.kind, "clearData")) return;
     try {
       layers.clearData(state.handle);
     } catch (error) {
@@ -268,8 +282,9 @@ export function useLayerResource<Props>(
    *   `clearData()` / `removeAllOverlays()` → `removeLayer()` 顺序；
    * - 已经 `detached`（此前 `visible=false` 已成功摘过一次）：只做 **detached cleanup**——
    *   可执行的清空照常做（见 `tearDownData`），但**不会再摘一次**（`mountAttempted` 已复位，
-   *   下面那道门禁会直接 return）。官方没有承诺「对已经摘掉的图层重复 `removeLayer` 是安全的」，
-   *   本库不猜。
+   *   下面那道门禁会直接 return）。重复 `removeLayer` 的安全性已由 issue #98 实测（三个家族均未
+   *   抛错，见决策 12b），但**这条路径本身只做一次摘除**——重复摘除只出现在「挂载状态未知」时的
+   *   收敛动作里。
    */
   const unmount = (state: InstanceState, context: MapReadyContext, permanent = false): void => {
     // 清理只与「这个实例要被永久丢弃」有关，与「它还挂不挂着」无关（要不要执行由清空操作的
@@ -302,11 +317,13 @@ export function useLayerResource<Props>(
    * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`；
    * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次）。
    *
-   * ⚠️ **这是「尝试」，不是「确定性收敛」**：它依赖一条**未经上游证明**的前提 P——「对已经摘掉的
-   * 图层重复 `removeLayer` 是安全的」。前提 P 成立时两种失败形状都落到「恰好挂一份」（上一步真的
-   * 没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）；**P 不成立时收敛不会发生**（第二次摘除
-   * 继续抛，状态仍是 `unknown`、图层仍不可见），但失败经 `resource:error` 交出，且**绝不会**因为
-   * 「猜已经下去了」去 `add` 而出现两份。登记见已知限制 14，悲观契约下的退化有回归用例（§13）。
+   * 它依赖前提 P——「对已经摘掉的图层重复 `removeLayer` 是安全的」。**该前提已由 issue #98 的
+   * live 探针实测成立**（GeoJSON / DOM / Tile 重复摘除均未抛错，见 ADR 决策 12b），因此两种失败
+   * 形状都落到「恰好挂一份」（上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）。
+   *
+   * 覆盖范围按证据写准：三个家族实测 + 其余 kind 走**同一个** `map.removeLayer` 入口。若将来某个
+   * kind / SDK 版本不成立，退化仍然有界且可观测（状态停在 `unknown`、失败经 `resource:error` 交出，
+   * 且**绝不会**因为「猜已经下去了」去 `add` 而出现两份）——这条防御性不变量由悲观契约的用例钉住。
    *
    * 这次尝试**不是免费的**（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
    */
@@ -338,7 +355,31 @@ export function useLayerResource<Props>(
       throw error;
     }
     state.mountState = "attached";
+    state.everAttached = true;
   };
+
+  /**
+   * **纯判定**：「上一次挂上去过的实例，现在要重新可见」⇒ 必须重建，不能复用。
+   *
+   * 依据是 issue #98 的 live 读数（真实 4.0，严格按内核的 `addLayer → setData` 顺序）：
+   *
+   * | 步骤 | DOMLayer 的节点（连在文档） |
+   * | --- | --- |
+   * | 挂载 + `setData` | 2 |
+   * | `removeLayer`（内核的「隐藏」） | 0 |
+   * | **再 `addLayer`（内核的「再显示」）** | **0 —— 内容不会自己回来** |
+   * | 再补一次 `setData` | 0，且**调用本身抛错**（`Cannot read properties of null (reading 'coordinate')`）|
+   * | 对照：**换一个新实例** | **2 —— 正常渲染** |
+   *
+   * 也就是说 `removeLayer` 会清空图层持有的 Map 引用，该实例**再也渲染不了**，补 `setData` 也救不回来。
+   * `GeoJSONLayer` 的 `getData()` 集合在同样路径下**还在**（2 条），但「集合在」不等于「覆盖物回到图上」——
+   * 那一点没有公开手段可观测（`Map` 上没有列出覆盖物的方法），因此**不构成「复用可行」的证据**。
+   *
+   * 既然没有任何 kind 的「摘掉之后复用」被证实可行，就不去猜：**重新可见一律重建**。
+   * 代价是一次重建（与「构造期选项变化」同级，且只发生在 hide → show 这条不热的路径上）。
+   */
+  const needsRemountRebuild = (state: InstanceState): boolean =>
+    state.everAttached && state.mountState !== "attached" && state.spec.visible !== false;
 
   /**
    * 就地写入「依赖已挂载」的槽位。
@@ -468,6 +509,69 @@ export function useLayerResource<Props>(
     return [...removedSlots, ...removedOptions];
   };
 
+  /**
+   * **解绑本代实例的业务监听**（`bind()` 里 `scope.add(...)` 注册的驱动事件订阅等）。
+   *
+   * 为什么内核自己要有这一步：「**先解绑业务事件、再由 Map 摘除资源**」这条顺序由
+   * `LayerRegistry.dispose()` 与 `useResourceTeardown.test.ts` 维护，理由是 SDK 可能在
+   * `removeLayer` **期间同步派发事件**，那时业务回调已经开始拆解了。常规两条销毁路径都经过
+   * `LayerRecord.dispose()`，顺序自然成立；但**收敛**（见 `tryConvergeToDetached`）必须在
+   * `replace()` **之前**自己摘一次，而它不能走 `dispose()`——`LayerRegistry` 会在那里把记录
+   * **永久删除**，之后三条永久销毁路径都不会再重试摘除那个实例。于是顺序要在这里自己保证。
+   *
+   * 幂等：`replace()` 之后的 `dispose()` 还会对同一个 scope 再调一次，`ResourceScope.dispose()`
+   * 自身幂等，那一次是 no-op。
+   *
+   * ⚠️ **代价写在明面上**：收敛**失败**时监听已经解绑、而实例仍留在图上——它保持渲染但不再
+   * 响应业务事件（`@click` 一类），直到下一次 props 变化（届时重试收敛）或永久销毁。这是有意的
+   * 取舍：宁可让一个**待替换**的实例暂时失去监听，也不在「业务监听还活着」的时候去调
+   * `removeLayer`（那正是这条顺序要防的事）。失败经 `resource:error` 可观测，不会被静默吞掉。
+   */
+  const releaseListeners = (state: InstanceState): void => {
+    if (state.listenersReleased) return;
+    state.listenersReleased = true;
+    try {
+      state.scope.dispose("layer-replaced");
+    } catch (error) {
+      reportResourceError(error);
+    }
+  };
+
+  /**
+   * 尝试把挂载状态**收敛到确定的 `detached`**；成功返回 `true`。
+   *
+   * 为什么换实例（`replace()`）之前必须先过这一关：`replace()` 释放旧实例时，最终经过
+   * `LayerRegistry.dispose()`，而 Registry 对摘除失败的处理是「**吞掉异常 + 把记录永久删除**」
+   * （组件卸载 / Map 卸载都要继续走完，这个口径本身是对的）。于是当旧实例的上一次摘除失败过
+   * （`mountState === "unknown"`，它**可能仍在图上**）时，直接 `replace()` 会：
+   *
+   * 1. 让旧实例**失去账本所有权**（记录被删了，之后没有任何一侧还能重试摘除它）；
+   * 2. 照常把新实例 `addLayer` 上去 ⇒ 图上可能**同时有两份**。
+   *
+   * 所以这里先自己做一次**可失败**的 `unmount`：成功 ⇒ 状态确定为 `detached`，可以安全换实例；
+   * 失败 ⇒ 经 `resource:error` 交出并返回 `false`，调用方**不做**任何会再加一份的动作
+   * （留到下一次 props 变化 / 永久销毁再试）。这条就是「摘除失败时绝不重复挂载」在换实例路径上的落实。
+   *
+   * **顺序**：真正去摘之前先 `releaseListeners()` —— 常规销毁路径的「先解绑、再摘除」由
+   * `LayerRecord.dispose()` 保证，而收敛绕过了它，所以在这里补上（理由与代价见 `releaseListeners`）。
+   *
+   * ⚠️ **不要直接调用它**：唯一的调用点是 `replaceAfterDetached()`（同一份 watch 里）。
+   * 分头调用正是「补了一条重建路径、漏了另一条」的来源——这三条路径必须一起受保护。
+   */
+  const tryConvergeToDetached = (state: InstanceState, context: MapReadyContext): boolean => {
+    if (state.mountState === "detached") return true;
+    // 只在**真的要去摘**的时候才解绑：已经 `detached` 时上面那行就返回了，不会白解绑。
+    releaseListeners(state);
+    try {
+      unmount(state, context);
+      // `unmount` 会改写 `mountState`，但 TS 不知道——这里按完整三态重新读一次。
+      return (state.mountState as MountState) === "detached";
+    } catch (error) {
+      reportResourceError(error);
+      return false;
+    }
+  };
+
   /** 组件侧失败的唯一上报出口（mount 路径与 watch 路径共用，避免两条路各写一份）。 */
   const reportResourceError = (error: unknown): void => {
     const wrapped =
@@ -517,7 +621,10 @@ export function useLayerResource<Props>(
           spec,
           mountState: "detached",
           mountAttempted: false,
+          everAttached: false,
           torndown: false,
+          scope,
+          listenersReleased: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
           appliedData: UNAPPLIED,
@@ -572,6 +679,34 @@ export function useLayerResource<Props>(
       },
       watch: ({ props: current, context, resource: currentHandle, replace, scope }) => {
         scope.run(() => {
+          /**
+           * **唯一的换实例入口**：先确认旧实例真的下来了，再 `replace()`。
+           *
+           * 为什么要收口成一个入口：`replace()` 释放旧实例时最终经过 `LayerRegistry.dispose()`，
+           * 而它按「组件卸载 / Map 卸载都要继续走完」的口径**吞掉** `removeLayer` 的失败、并把记录
+           * 永久删除。于是只要那次摘除失败（旧实例可能仍在图上），紧接着 `addLayer` 的新实例就会让
+           * 图上出现**两份**，而旧实例连账本都没了。这条不变量对**所有**创建新实例的路径都成立，
+           * 不只对「重新可见」那条——所以三条重建路径（构造指纹变化 / 重新可见 / 已写入值变回未表态）
+           * 一律从这里出去，别再各自 `void replace()`：漏一条就是一个静默的两份同图。
+           *
+           * 收敛失败时**什么都不做**（不换实例、也不重新挂载）：失败经 `resource:error` 交出，
+           * 留到下一次 props 变化或永久销毁再试。宁可暂时不回来，也不能出现两份。
+           *
+           * 顺序（**收敛那一步先解绑、再摘除**）：收敛不会走 `record.dispose()`，所以
+           * `LayerRecord.dispose()` 的「先释放 child scope、再 `removeLayer`」这条顺序要由
+           * `tryConvergeToDetached()` 自己补上（`releaseListeners()`，见它的说明）。因此
+           * `replace()` 内部 dispose 里那次摘除成为 no-op（`mountAttempted` 已复位）、
+           * `scope.dispose()` 也成了幂等的第二次调用；数据清空（`tearDownData`）随之落到摘除
+           * **之后**，即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
+           * 在 `removeLayer` 之后仍有效、`DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
+           * ⚠️ 早先这里写过「摘除时 child scope 还活着不是新形态（`visible=false` 也这样）」——
+           * 那个类比**不成立**：`visible=false` 是临时摘挂、不销毁资源，而这里是销毁旧一代。
+           */
+          const replaceAfterDetached = (state: InstanceState, context: MapReadyContext): void => {
+            if (!tryConvergeToDetached(state, context)) return;
+            void replace();
+          };
+
           watch(
             // 廉价指纹：不含 Driver 信息、也不深遍历 data，SDK 未就绪也能算
             // （见 `layerWatchKey` 与文件头「就绪之前怎么处理」）。
@@ -587,10 +722,17 @@ export function useLayerResource<Props>(
               try {
                 const next = hooks.toSpec(current);
                 if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
-                  void replace();
+                  replaceAfterDetached(state, ready);
                   return;
                 }
                 state.spec = next;
+
+                // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
+                // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
+                if (needsRemountRebuild(state)) {
+                  replaceAfterDetached(state, ready);
+                  return;
+                }
 
                 // **先判定、后执行**：一旦确定「必须重建」，就不再执行就地写入——否则同一次更新里
                 // 一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次
@@ -601,7 +743,7 @@ export function useLayerResource<Props>(
                     `[layer:${state.spec.kind}] ${removed.join(" / ")} 由有值变为未表态：` +
                       "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
                   );
-                  void replace();
+                  replaceAfterDetached(state, ready);
                   return;
                 }
 

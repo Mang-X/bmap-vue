@@ -34,7 +34,6 @@ import { HANDLE_BRAND, type LayerHandle } from "../types/handles";
 import {
   LAYER_CTOR_SLOTS,
   type LayerCtorSlot,
-  type LayerClearScope,
   type LayerData,
   type LayerDriver,
   type LayerKind,
@@ -94,13 +93,6 @@ interface LayerDescriptor {
    * 按 kind 分支。
    */
   clearEntry: string;
-  /**
-   * 清空入口的作用域（依据见 `LayerDriver.clearScope` 的文档）。
-   *
-   * 写成**必填**是为了让「新加的 kind 到底属于哪一种」必须被显式回答；没有清空入口的 kind
-   * 一律 `"none"`（与 `operations` 不含 `"clearData"` 一致，用例里有双向一致性断言）。
-   */
-  clearScope: LayerClearScope;
   operations: readonly LayerOperation[];
 }
 
@@ -126,7 +118,6 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: [],
   },
   "panorama-coverage": {
@@ -139,7 +130,6 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: [],
   },
   tile: {
@@ -154,7 +144,6 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
   traffic: {
@@ -167,7 +156,6 @@ const LAYER_DESCRIPTORS = {
     mutable: { ...TILE_MUTABLE, colors: "setColors", edge: "setEdge" },
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
   geojson: {
@@ -182,9 +170,6 @@ const LAYER_DESCRIPTORS = {
     mutable: {},
     bagSetters: {},
     clearEntry: "clearData",
-    // 官方明说：`clearData()` 先从 Map 移除覆盖物，而 `removeLayer` 之后图层不再持有 Map 引用
-    // ⇒「要真正清空 `getData()` 集合得在 `removeLayer` 之前调」⇒ 要求仍在图上。
-    clearScope: "map-bound",
     operations: ["setData", "clearData"],
   },
   dom: {
@@ -210,12 +195,6 @@ const LAYER_DESCRIPTORS = {
     },
     // DOMLayer 有 setData；清空走 removeAllOverlays()（`clearEntry` 表达这个差异）。
     clearEntry: "removeAllOverlays",
-    // **未知**，不是「不需要」：官方只给了「先 removeAllOverlays() 再 removeLayer()」的顺序，
-    // 并警告「只调 setData(null) 会残留」，但**没有**说明该入口是否要求图层仍在图上。
-    // 把「不知道」写成 `"layer"` 就等于声称它已被证明与挂图无关（第六轮评审发现 1 的同一条教训
-    // 换个地方复发）；这里如实记 `"unknown"`，由内核选择策略（best-effort 尝试 + 失败可观测），
-    // 取证见已知限制 13。
-    clearScope: "unknown",
     operations: ["setData", "clearData"],
   },
   xyz: {
@@ -228,7 +207,6 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
   wms: {
@@ -241,7 +219,6 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
   wmts: {
@@ -254,7 +231,6 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
   raster: {
@@ -267,7 +243,6 @@ const LAYER_DESCRIPTORS = {
     mutable: TILE_MUTABLE,
     bagSetters: {},
     clearEntry: "clearData",
-    clearScope: "none",
     operations: TILE_OPERATIONS,
   },
 } as const satisfies Record<LayerKind, LayerDescriptor>;
@@ -525,12 +500,6 @@ export function createJsapiV4LayerDriver(input: CreateJsapiV4LayerDriverInput): 
       return key === "data" && descriptor.operations.includes("setData");
     },
 
-    clearScope(kind) {
-      const descriptor = LAYER_DESCRIPTORS[kind] as LayerDescriptor | undefined;
-      // 未知 kind 与「没有清空入口」同解：调用方应先问 `supports(kind, "clearData")`，
-      // 两条判据分开是为了不让「没有这个能力」与「这个能力有前置条件 / 前置条件未知」混成一个答案。
-      return descriptor ? descriptor.clearScope : "none";
-    },
 
     setOptions(layer, options) {
       const raw = registry.resolve<Record<string, unknown>>(layer);

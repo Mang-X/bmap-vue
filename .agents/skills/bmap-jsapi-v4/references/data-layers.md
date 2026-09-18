@@ -99,6 +99,19 @@ function dispose() {
 
 `map.removeLayer(geoJSONLayer)` 已经摘掉覆盖物、解绑监听并清空图层持有的 Map 引用，之后再调用 `destroy()` 不起作用。要真正清空 `getData()` 集合，得在 `removeLayer` 之前调用 `clearData()`，或者先 `destroy()` 再 `removeLayer()`。
 
+> **⚠️ 运行时实测更正（4.0 / `BMap.version === "gl"`，2026-09-17 取证，issue #98）**
+>
+> 上面那半句「**得在 `removeLayer` 之前**调用 `clearData()`」与运行时不符。实测（`scripts/probe-layer-detached.mts`）：
+>
+> | 时刻 | `getData()` 长度 |
+> | --- | --- |
+> | `addLayer` + `setData` 之后 | 2 |
+> | `map.removeLayer(layer)` 之后 | **2**（集合**没有**被清） |
+> | 此时再调 `layer.clearData()` 之后 | **0**（**清空了**，且未抛错） |
+>
+> 结论：`clearData()` 在 `removeLayer` **之后**调用**仍然有效**，因此它**不是** `removeLayer` 之前
+> 才能用的入口。仍然成立的那半句是：`removeLayer` 自己已经把覆盖物摘掉、并清空了图层的 Map 引用。
+
 GeoJSONLayer 的 click 事件对象赋值 `latLng`、`pixel` 和 `features`，没有 `point`。业务代码读取 `event.latLng`。
 
 ### GeoJSONParse
@@ -224,6 +237,30 @@ function removeDOMLayerWithMap() {
 3. Map labels：持有 add 返回的 uid，用 `removeMapLabels(uidList)`。
 4. DOMLayer：先 `removeAllOverlays()` 再 `removeLayer()`；由于事件无法解绑，让它与最终销毁的 Map 同生命周期。
 5. 只有组件拥有 Map 时才调用 `map.destroy()`。
+
+### 实测补充（4.0 / 2026-09-17，issue #98）
+
+- **两个清空入口都不要求图层仍在图上**：`GeoJSONLayer.clearData()` 与 `DOMLayer.removeAllOverlays()`
+  在 `map.removeLayer()` **之后**调用都不抛错；前者仍能把 `getData()` 集合清空。
+  因此上面的顺序是**推荐顺序**（先在图上清、再摘），不是「摘掉之后就来不及」的硬约束。
+- **`DOMLayer` 渲染出来的 DOM 节点由 `removeLayer` 自己摘掉**：实测 `map.removeLayer(domLayer)`
+  之后 `isConnected` 由 2 变 0、`getCustomOverlays()` 也归零。所以「只调 `setData(null)` 会残留」
+  说的是 `setData(null)`；`removeLayer` 不会残留节点。
+- **被 `removeLayer` 摘掉的实例不可复用（实测，2026-09-17 / issue #98）**：严格按内核的
+  `addLayer → setData` 顺序把**同一个** `DOMLayer` 再挂一次，节点仍是 **0** —— 内容不会自己回来；
+  再补一次 `setData` 不但无效，**调用本身还会抛错**
+  （`Cannot read properties of null (reading 'coordinate')`）。对照「换一个**新**实例」= 2 个节点、
+  正常渲染。也就是说 `removeLayer` 清空了图层持有的 Map 引用，该实例再也渲染不了。
+  ⇒ **「隐藏之后重新显示」必须换新实例**，不能把旧实例挂回去（本库内核据此改成重建，
+  见 ADR `2026-09-17-layer-spec-and-registry` 决策 8）。
+  ⚠️ 本条曾在本文件里写成「重新 `addLayer` 会按保留的数据重新渲染」——那是**未取证的推断**，
+  已被上面的读数推翻（保留记录是为了不再让后续读者依赖它）。
+- **`GeoJSONLayer` 的 `getData()` 集合在同样路径下还在（2 条），但「集合在」≠「覆盖物回到图上」**：
+  覆盖物是否真的渲染回图上**没有公开手段可观测**（`Map` 上没有列出覆盖物的方法），因此那
+  **不构成**「GeoJSON 可以复用实例」的证据。
+- **对已经摘掉的图层再调一次 `map.removeLayer()` 是安全的**：GeoJSONLayer / DOMLayer / TileLayer
+  三个家族实测均未抛错（这是本库三态挂载收敛的前提，见 ADR `2026-09-17-layer-spec-and-registry`
+  决策 12b）。
 
 ## 常见错误
 

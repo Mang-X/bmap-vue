@@ -178,7 +178,7 @@ async function mountOneLayer(index: number, overrides: Record<string, unknown> =
 
 describe("[#40] §1 统一生命周期内核：十种 kind 各跑同一批断言", () => {
   it.each(LAYER_CASES.map((entry, index) => [entry.name, index] as const))(
-    "%s：挂上 → 摘掉 → 再挂上 → 卸载，且不重建、无残留",
+    "%s：挂上 → 摘掉 → 再挂上（**重建**）→ 卸载，无残留",
     async (_name, index) => {
       const { wrapper, setProp } = await mountOneLayer(index);
 
@@ -186,14 +186,18 @@ describe("[#40] §1 统一生命周期内核：十种 kind 各跑同一批断言
       expect(harness.attached("layer")).toBe(1);
       expect(harness.layerAttached(-1)).toBe(true);
 
-      // visible=false 是「摘掉」，不是 hide()：不重建
+      // visible=false 是「摘掉」，不是 hide()；这一步本身不重建
       await setProp({ visible: false });
       expect(harness.attached("layer")).toBe(0);
-      expect(createdSince(), "显隐切换不该重建图层").toBe(1);
+      expect(createdSince(), "「摘掉」这一步不该换实例").toBe(1);
 
+      // ⚠️ 「再挂上」**会重建**：真实 4.0 的 removeLayer 会清空图层持有的 Map 引用，那个实例再也
+      // 渲染不了（DOMLayer 实测：重挂载后节点仍为 0，补 setData 还抛 `reading 'coordinate'`），
+      // 所以重新可见只能换实例（`needsRemountRebuild`，见 #98 的 live 读数）。
       await setProp({ visible: true });
       expect(harness.attached("layer")).toBe(1);
-      expect(createdSince()).toBe(1);
+      expect(createdSince(), "重新可见要换新实例（摘掉过的实例不可复用）").toBe(2);
+      expect(harness.layerAttached(-1), "新实例挂在图上").toBe(true);
 
       await unmountAndSettle(wrapper);
       expect(harness.attached("layer")).toBe(0);
@@ -957,23 +961,38 @@ describe("[#40] §10 评审修正：DOM 事件契约、覆盖物清理与重建�
     warn.mockRestore();
   });
 
-  it("[三轮 2] DOM 的已渲染覆盖物在卸载与重建时必须清掉；hide/show 不清", async () => {
+  it("[三轮 2 / 八轮 1] DOM 的节点在**摘挂时就被 SDK 摘掉**；重新可见靠**换新实例**把内容带回来", async () => {
+    // ⚠️ 这条的期望在 issue #98 的 live 探针之后**反了过来**：实测真实 4.0 的
+    // `map.removeLayer(domLayer)` 会把节点从文档摘掉（`isConnected` 2 → 0，`getCustomOverlays()`
+    // 2 → 0）。替身原先没有建模这一条，于是「隐藏之后覆盖物仍在」在与真实相反的方向上成立。
+    // 现在断言的是实测行为，分两半：①**摘挂改的是渲染、不是数据**（`data` 保持不变）；
+    // ②「重新可见」**不是把旧实例挂回去**——真实 4.0 的实例被 removeLayer 之后再也渲染不了，
+    // 内核因此换新实例（`needsRemountRebuild`），新实例按保留的数据重新渲染出来。
     const { wrapper, setProp } = await mountOneLayer(5);
     const layerOf = () =>
-      fake.createdLayers[fake.createdLayers.length - 1] as unknown as { customOverlays: unknown[] };
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        customOverlays: unknown[];
+        detachedRenderCount: number;
+        data: unknown;
+      };
 
     expect(layerOf().customOverlays.length, "挂载时数据已渲染出覆盖物").toBeGreaterThan(0);
+    const dataBeforeHide = layerOf().data;
 
     await setProp({ visible: false });
-    expect(layerOf().customOverlays.length, "摘挂（hide）不清覆盖物：切回可见还要用").toBeGreaterThan(0);
-    await setProp({ visible: true });
-    expect(layerOf().customOverlays.length).toBeGreaterThan(0);
+    expect(layerOf().customOverlays.length, "摘挂由 SDK 摘掉节点（实测）").toBe(0);
+    expect(layerOf().detachedRenderCount, "摘挂走了一次渲染生命周期").toBe(1);
+    expect(layerOf().data, "但**数据**保持不变：切回可见要按它重渲染").toBe(dataBeforeHide);
 
-    await unmountAndSettle(wrapper);
+    await setProp({ visible: true });
+    expect(createdSince(), "重新可见换了新实例").toBe(2);
     expect(
       layerOf().customOverlays.length,
-      "永久销毁必须先 removeAllOverlays() 再 removeLayer()（仓库 data-layers.md 的清理口径）",
-    ).toBe(0);
+      "新实例按保留的数据重新渲染出来（内容回来了）",
+    ).toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    expect(layerOf().customOverlays.length, "永久销毁后不残留").toBe(0);
     harness.assertIdle("DOM 覆盖物清理");
   });
 
@@ -1080,7 +1099,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     harness.assertIdle("removeLayer 失败后重试摘除");
   });
 
-  it("[四轮 1 / 五轮 2] 摘除失败之后切回可见：下一次同步会**尝试**收敛（本组默认替身 = 前提 P 成立的乐观分支）", async () => {
+  it("[四轮 1 / 五轮 2 / #98] 摘除失败之后切回可见：**换新实例**恢复（不再依赖「重复摘除」）", async () => {
     // ⚠️ 这条跑的是**乐观契约分支**：默认替身对「不在图上的 layer」是 no-op，也就是**前提 P
     // （对已经摘掉的图层重复 `removeLayer` 是安全的）成立**。只有在这一分支下才保证收敛到
     // 「恰好挂一份」；前提不成立时的退化由 §13 的悲观契约用例成对钉住（收敛不保证发生、
@@ -1104,9 +1123,10 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // 图上的实例被挂第二份（`addLayer` 不去重）。两条都错 ⇒ 只能做一次同步动作，而这次同步的成败
     // 取决于前提 P。
     expect(harness.attached("layer")).toBe(1);
+    expect(createdSince(), "切回可见换新实例（摘掉过的实例不可复用）").toBe(2);
     expect(
       map.callLog.filter((call) => call === "removeLayer" || call === "addLayer"),
-      "摘除抛错 ⇒ mount 状态是 unknown ⇒ 收敛时先摘再挂",
+      "旧实例先被 best-effort 摘掉（重试那一次），再挂上新实例",
     ).toEqual(["addLayer", "removeLayer", "removeLayer", "addLayer"]);
 
     await unmountAndSettle(wrapper);
@@ -1245,7 +1265,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     harness.assertIdle("整袋「已生效再抛错」后的重建");
   });
 
-  it("[四轮补测 / 五轮 3] DOM：先 visible=false 再卸载——永久销毁走的是 **detached cleanup**（只清空）", async () => {
+  it("[四轮补测 / 五轮 3 / 八轮 1] DOM：先 visible=false 再卸载——只清空、不再摘除；清空对 detached 实例是安全 no-op", async () => {
     // 第五轮评审指出的措辞问题：`visible=false` 那一次摘除**成功**之后 `mountAttempted` 已复位，
     // 卸载时 `unmount(permanent=true)` 先 `tearDownData()`、随后在 `if (!mountAttempted) return`
     // 处结束 —— **没有第二次 `removeLayer()`**。所以这条描述的是「对已经 detached 的实例做清空」，
@@ -1254,12 +1274,16 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // 为什么不让永久销毁无条件再摘一次：官方**没有**承诺「对已经摘掉的图层重复 `removeLayer`
     // 是安全的」，本库不猜（与「不做假支持」同一口径）。这条用例把真实调用次数钉住。
     //
-    // 它**不能**证明真实 SDK 对 detached 图层调 `removeAllOverlays()` 一定安全（替身没有这个前置
-    // 条件）。真出问题时 `tearDownData` 的 try/catch 会把它降级成 `logger.warn` + 继续，不会中断
-    // 释放——取证属于 live smoke 的范畴（已知限制 13）。
+    // 第八轮之后这条又多了两个**由 #98 的 live 探针给出**的读数：
+    // ① `removeLayer` 本身已经把节点摘掉（所以 detached 时 `customOverlays` 本来就是 0）；
+    // ② 对 detached 实例再调 `removeAllOverlays()` 是安全的 no-op（实测未抛错）⇒ 我们照常调它，
+    //    并把「这次调用发生在未挂载状态下」记成 `attachedAtClear === false`。
     const { wrapper, setProp } = await mountOneLayer(5);
     const layerOf = () =>
-      fake.createdLayers[fake.createdLayers.length - 1] as unknown as { customOverlays: unknown[] };
+      fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
+        customOverlays: unknown[];
+        attachedAtClear: boolean | null;
+      };
     const map = fake.createdMaps[fake.createdMaps.length - 1]!;
     const removeCalls = () => map.callLog.filter((call) => call === "removeLayer").length;
 
@@ -1268,10 +1292,14 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     await setProp({ visible: false });
     expect(harness.attached("layer"), "隐藏本身就摘了一次").toBe(0);
     expect(removeCalls(), "隐藏那一次摘除成功").toBe(1);
-    expect(layerOf().customOverlays.length, "隐藏（临时摘挂）不清覆盖物").toBeGreaterThan(0);
+    expect(layerOf().customOverlays.length, "摘挂时 SDK 就把节点摘掉了（实测）").toBe(0);
 
     await unmountAndSettle(wrapper);
-    expect(layerOf().customOverlays.length, "永久销毁在 detached 实例上清空").toBe(0);
+    expect(
+      layerOf().attachedAtClear,
+      "永久销毁仍然走清空入口（对 detached 实例是安全 no-op，实测未抛错）",
+    ).toBe(false);
+    expect(layerOf().customOverlays.length, "不残留").toBe(0);
     expect(
       removeCalls(),
       "已经摘掉的实例不再重复 removeLayer（官方没有承诺那是安全的）",
@@ -1381,7 +1409,7 @@ describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收�
     harness.assertIdle("data 换了再抛错之后回滚");
   });
 
-  it("[五轮 2] removeLayer「先摘掉、再抛错」：状态必须收敛，切回可见要能重新挂上", async () => {
+  it("[五轮 2 / #98] removeLayer「先摘掉、再抛错」：切回可见要能重新挂上（走重建）", async () => {
     // 与 §11 的「摘之前抛」是两条不同的状态机路径。这条的关键是：**调用方唯一能观测的
     // 「挂没挂上」证据就是调用有没有成功返回**，所以失败之后不能把「还挂着」当结论。
     const { wrapper, setProp } = await mountOneLayer(2);
@@ -1398,7 +1426,9 @@ describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收�
       harness.attached("layer"),
       "不能因为「两层记账都说还挂着」就永远挂不回来",
     ).toBe(1);
-    expect(createdSince(), "收敛不该重建实例").toBe(1);
+    // #98 之后这里改走**重建**：真实 4.0 的实例一旦被 removeLayer 就再也渲染不了，
+    // 所以「重新可见」不是把旧实例挂回去，而是换一个新实例（`needsRemountRebuild`）。
+    expect(createdSince(), "重新可见换新实例").toBe(2);
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
@@ -1407,33 +1437,37 @@ describe("[#40] §12 评审修正：成功态指纹的失效与 mount 状态收�
 });
 
 /* -------------------------------------------------------------------------- */
-/* 13. 第六轮评审修正：清空操作的作用域与「重复摘除」前提                        */
+/* 13. 清空入口的调用时机与「重复摘除」前提（第六轮发现 + #98 live 取证）        */
 /* -------------------------------------------------------------------------- */
 
-describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除」前提", () => {
-  it("[六轮 1 / 七轮 1] 清空的作用域是三态能力面：官方要求 / 官方未说明 / 没有入口", () => {
+describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘除」前提（#98 取证后）", () => {
+  it("[#98] 替身与实测一致：removeLayer 之后重新 addLayer **不会**重新渲染", async () => {
+    // 这条钉的是**替身本身**的建模，不是内核行为。理由：真实 4.0 的实例被 removeLayer 之后
+    // 再也渲染不了（live 读数：重挂载后节点仍为 0，补 setData 还抛 reading coordinate），
+    // 内核因此改成「重新可见一律重建」。如果替身哪天被改回「重挂载会按保留数据重渲染」，
+    // 那条内核缺陷就会被**测试全绿**地掩盖过去（这正是 #96 期间发生过的形态）。
+    // 探针：`scripts/probe-layer-detached.mts` 的第三组读数。
+    const wrapper = mountLayerTree(() => null);
+    await settle();
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
     const { layers } = createFakeDriverPair();
-    expect(
-      layers.clearScope("geojson"),
-      "GeoJSONLayer.clearData 是「先从 Map 移除这些覆盖物」⇒ 官方明确要求仍在图上",
-    ).toBe("map-bound");
-    expect(
-      layers.clearScope("dom"),
-      "DOMLayer.removeAllOverlays 官方**没有**说明它是否要求仍在图上 —— 未知不等于不需要",
-    ).toBe("unknown");
-    expect(
-      layers.clearScope("tile"),
-      "没有清空入口 ⇒ none（未知 kind 同解）",
-    ).toBe("none");
+    const handle = layers.create("dom", { createDOM });
+    const raw = handle.raw as unknown as { customOverlays: object[]; setData(value: object): void };
 
-    // 两条判据必须同解：`clearScope !== "none"` ⟺ `supports(kind, "clearData")`。
-    // 分开是为了让「没有这个能力」与「这个能力的前置条件未知」不被混成一个答案；但**不能**漂移。
-    for (const kind of LAYER_CASES.map((entry) => entry.kind)) {
-      expect(
-        layers.clearScope(kind) !== "none",
-        `${kind}：clearScope 与 supports(clearData) 必须同解`,
-      ).toBe(layers.supports(kind, "clearData"));
-    }
+    map.addLayer(handle.raw as never);
+    raw.setData(FEATURE_COLLECTION);
+    expect(raw.customOverlays.length, "首次挂载渲染出节点").toBe(1);
+
+    map.removeLayer(handle.raw as never);
+    expect(raw.customOverlays.length, "摘除时节点被摘掉（实测）").toBe(0);
+
+    map.addLayer(handle.raw as never);
+    expect(
+      raw.customOverlays.length,
+      "重新挂载**不会**重新渲染 —— 替身必须与实测一致，否则会掩盖内核缺陷",
+    ).toBe(0);
+
+    await unmountAndSettle(wrapper);
   });
 
   it("[六轮 1] GeoJSON：挂载中卸载 ⇒ 清空发生在图层**仍在图上**时（官方要求的顺序）", async () => {
@@ -1452,10 +1486,12 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
     harness.assertIdle("attached 卸载");
   });
 
-  it("[六轮 1 / 七轮 1] GeoJSON：先 visible=false 再卸载 ⇒ **不再**对 detached 实例调 clearData", async () => {
-    // 官方明说「要真正清空 getData() 集合，得在 removeLayer **之前**调用 clearData()」——
-    // 摘掉之后图层不再持有 Map 引用，此时再调它是**无效动作**。可见资源不会因此残留：
-    // 同一段说明写明 `removeLayer` 本身已经摘掉覆盖物。
+  it("[六轮 1 / 七轮 1 / 八轮 1] GeoJSON：先 visible=false 再卸载 ⇒ 清空**照常发生**（实测 detached 之后仍有效）", async () => {
+    // ⚠️ 这条的期望在 #98 取证后**反了过来**。此前依据是 reference 那句「要真正清空 getData()
+    // 集合，得在 removeLayer **之前**调用 clearData()（之后图层不再持有 Map 引用）」，于是内核在
+    // detached 时跳过它。live 探针实测：`removeLayer` 之后 `getData()` 仍是 2 条，此时再调
+    // `clearData()` **把它清成了 0 且未抛错** ⇒ 那句话与运行时不符，跳过没有依据。
+    // 现在统一执行；`attachedAtClear === false` 记录「这次调用发生在未挂载状态下」。
     const { wrapper, setProp } = await mountOneLayer(4);
     const layerOf = () =>
       fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
@@ -1470,19 +1506,15 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
 
     expect(
       layerOf().attachedAtClear,
-      "Map 作用域的清空被跳过（对 detached 实例调用它没有效果）",
-    ).toBeNull();
+      "清空在 detached 状态下执行（实测有效且未抛错）",
+    ).toBe(false);
+    expect(layerOf().data, "集合被清空").toBeNull();
     harness.assertIdle("detached 卸载（geojson）");
   });
 
-  it("[六轮 1 / 七轮 1] DOM：先 visible=false 再卸载 ⇒ 清空照常执行（**unknown 下的 best-effort 策略**，非已证事实）", async () => {
-    // 这条刻意把两件事分开钉住：
-    // ① **能力面**：`clearScope("dom") === "unknown"`（上面那条用例）——官方没有说明它是否要求仍在
-    //    图上，所以**不能**声称「与挂图无关（layer scope）」；
-    // ② **策略**：内核在 `unknown` 下选择 **best-effort 尝试**（跳过会真的残留真实 DOM 节点，
-    //    而失败是经 `logger.warn` 可观测的）。`attachedAtClear === false` 就是「这次尝试发生在
-    //    detached 状态下」的显式读数——取证结论若推翻它，这条断言会红，而不是让依赖藏在替身的
-    //    宽容里（已知限制 13）。
+  it("[六轮 1 / 七轮 1 / 八轮 1] DOM：先 visible=false 再卸载 ⇒ 清空照常执行（实测对 detached 实例是安全 no-op）", async () => {
+    // #98 的 live 探针给了两个读数：① `removeLayer` 自己就把节点从文档摘掉（`isConnected` 2 → 0）；
+    // ② 之后再调 `removeAllOverlays()` 未抛错、也没东西可清。因此「照常调用」既有依据、也没有代价。
     const { wrapper, setProp } = await mountOneLayer(5);
     const layerOf = () =>
       fake.createdLayers[fake.createdLayers.length - 1] as unknown as {
@@ -1491,25 +1523,139 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
       };
 
     await setProp({ visible: false });
-    expect(layerOf().customOverlays.length, "隐藏不清覆盖物").toBeGreaterThan(0);
+    expect(layerOf().customOverlays.length, "摘挂时 SDK 已把节点摘掉（实测）").toBe(0);
 
     await unmountAndSettle(wrapper);
 
     expect(
       layerOf().attachedAtClear,
-      "detached 时仍会调用 removeAllOverlays（unknown 下的 best-effort 策略，无上游依据）",
+      "detached 时仍会调用 removeAllOverlays（实测：安全 no-op，未抛错）",
     ).toBe(false);
-    expect(layerOf().customOverlays.length, "节点被清掉").toBe(0);
+    expect(layerOf().customOverlays.length, "不残留").toBe(0);
     harness.assertIdle("detached 卸载（dom）");
   });
 
-  it("[六轮 2] 悲观契约下（detached 时 removeLayer 抛错）：收敛**不保证发生**，但退化可观测且绝不重复挂载", async () => {
-    // `unknown` 的收敛依赖「对已经摘掉的图层再调一次 removeLayer 是安全的」——而官方**没有**这条
-    // 承诺（这正是本库在 detached-cleanup 上「不猜」的同一条理由）。Fake 的默认行为对「不在图上的
-    // layer」天然是 no-op，所以那条依赖一直被掩盖着；打开悲观契约把它暴露出来。
-    //
-    // 结论（也是这条用例要钉的）：前提不成立时**收敛不会发生**（图层仍然保持 unknown、不在地图上），
-    // 但它是**可观测**的（`resource:error`），而且**不会**因为「猜已经下去了」去 `add` 而出现两份。
+  it("[#98] 连续两次「摘除前」失败：旧实例仍在图上时，**绝不能**换实例挂出第二份", async () => {
+    // 评审指出的分支：第一次 `visible=false` 的 removeLayer 在**摘除前**抛错 ⇒ 旧实例仍在图上、
+    // `mountState === "unknown"`；随后 `visible=true` 时如果直接 `replace()`，`LayerRegistry.dispose()`
+    // 会吞掉第二次失败并**永久删除记录**（旧实例此后没有任何一侧能重试清理），而新实例照常挂上
+    // ⇒ 图上两份。这条钉住「换实例之前必须先确认旧实例真的下来了」。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach #1");
+    props.value = { ...props.value, visible: false };
+    await settle();
+    expect(harness.attached("layer"), "第一次失败：图层仍在图上").toBe(1);
+
+    // 第二次也让它失败（收敛那一次）：这才是「摘除前**持续**失败」的形状。
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach #2");
+    props.value = { ...props.value, visible: true };
+    await settle();
+
+    expect(
+      harness.attached("layer"),
+      "收敛失败 ⇒ 不换实例：宁可暂时不回来，也绝不能出现两份",
+    ).toBe(1);
+    expect(createdSince(), "没有创建第二个实例").toBe(1);
+    expect(errors.length, "两次失败都要可观测").toBeGreaterThanOrEqual(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("连续两次摘除失败之后");
+  });
+
+  it("[#98 四轮] **attached** 时构造期 option 变化 + 摘除前失败 ⇒ 不换实例（同一入口覆盖三条重建路径）", async () => {
+    // 评审指出：上一轮的保护只接在 `needsRemountRebuild` 上，同一个 watch 里另外两条 `replace()`
+    // （构造指纹变化 / 已写入值变回未表态）仍然绕过。这条**不需要先进入 `unknown`**：旧实例正常
+    // `attached`，一次构造期 option 变化触发重建，同时让这次 `removeLayer` 在**摘除前**失败——
+    // 若直接 `replace()`，`LayerRegistry.dispose()` 会吞掉失败并永久删除记录，随后新实例继续
+    // `addLayer` ⇒ 图上两份（旧实例连账本都没了）。这条钉住「入口只有一个」。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+    expect(harness.attached("layer"), "前置：旧实例正常挂着（不是 unknown）").toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, tileUrlTemplate: "https://a2.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+
+    expect(
+      harness.attached("layer"),
+      "收敛失败 ⇒ 不换实例：宁可暂时用着旧实例，也绝不能出现两份",
+    ).toBe(1);
+    expect(createdSince(), "没有创建第二个实例").toBe(1);
+    expect(harness.layerOptions(-1).tileUrlTemplate, "旧实例仍是旧 URL").toBe(
+      "https://a.example.com/{X}/{Y}/{Z}.png",
+    );
+    expect(errors.length, "第一次失败必须可观测").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("构造期变化 + 摘除失败之后");
+  });
+
+  it("[#98 四轮] 「已写入的槽位变回未表态」那条重建路径同样受保护", async () => {
+    // 第三条重建路径走的是**另一个判定**（`detectRemovedState` 的 `removed.length > 0`），
+    // 但换实例这一步必须是同一个入口，否则同样能挂出两份。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props, zIndex: 5 });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+    expect(harness.attached("layer")).toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, zIndex: undefined };
+    await settle();
+
+    expect(harness.attached("layer"), "不换实例：不出现两份").toBe(1);
+    expect(createdSince(), "没有创建第二个实例").toBe(1);
+    expect(errors.length, "失败必须可观测").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("槽位移除 + 摘除失败之后");
+  });
+
+  it("[#98 五轮] 收敛失败之后，**下一次 props 变化**仍能重试成功（「暂时不回来」不是永久降级）", async () => {
+    // 「宁可暂时用着旧实例」这条承诺必须配一条「以后还能回来」，否则它就退化成永久降级。
+    // 这条也顺带覆盖了收敛失败后的那个中间状态（该代业务监听已解绑、实例仍在图上）：
+    // 重试成功之后新一代带着自己的 `bind` 监听，`attach` / 卸载都能正常收尾。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, tileUrlTemplate: "https://a2.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+    expect(harness.attached("layer"), "第一次失败：不换实例").toBe(1);
+    expect(createdSince()).toBe(1);
+
+    // 故障注入是一次性的 ⇒ 这一次收敛会成功。
+    props.value = { ...props.value, tileUrlTemplate: "https://a3.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+
+    expect(harness.attached("layer")).toBe(1);
+    expect(createdSince(), "重试成功 ⇒ 换了实例").toBe(2);
+    expect(harness.layerOptions(-1).tileUrlTemplate).toBe("https://a3.example.com/{X}/{Y}/{Z}.png");
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("收敛失败后重试");
+  });
+
+  it("[六轮 2 / #98] 悲观契约下（detached 时 removeLayer 抛错）：无法确认旧实例已下来 ⇒ **不换实例**（绝不出现两份）", async () => {
+    // 前提 P（「对已经摘掉的图层再调一次 removeLayer 是安全的」）在真实 4.0 上**已实测成立**
+    // （issue #98 的 live 探针：GeoJSON / DOM / Tile 三个家族都未抛错），所以本库现在可以正当地
+    // 依赖它。这条用例改用**悲观契约**（`failRemoveLayerWhenDetached`：目标不在图上时抛错）钉住
+    // 一条**防御性不变量**：万一将来某个 kind 或某个 SDK 版本不成立，退化必须是**有界且可观测**的
+    // —— 收敛不发生（图层保持 unknown、不在地图上），失败经 `resource:error` 交出，且**绝不会**
+    // 因为「猜已经下去了」去 `add` 而出现两份。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
     const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
@@ -1528,13 +1674,16 @@ describe("[#40] §13 评审修正：清空操作的作用域与「重复摘除�
     props.value = { ...props.value, visible: true };
     await settle();
 
+    // 悲观契约下「对已摘下的实例再摘一次会抛错」，于是**无法确认旧实例是否真的下来了**。
+    // 这一版如实退化：**不做任何会再加一份的动作**（不换实例、也不重新挂载），失败经
+    // `resource:error` 交出，留到下一次机会（永久销毁时还会再试）。
+    // 这条正是「摘除失败时绝不重复挂载」这个不变量的悲观侧。
     expect(
       harness.attached("layer"),
-      "收敛失败 ⇒ 图层不会回来（诚实退化），但**绝不会**出现两份",
+      "状态无法确认 ⇒ 绝不重复挂载（宁可暂时不回来，也不能出现两份）",
     ).toBe(0);
-    expect(errors.length, "退化必须可观测（第二次失败也经 resource:error 交出）").toBeGreaterThan(
-      errorsAfterHide,
-    );
+    expect(createdSince(), "没有换实例").toBe(1);
+    expect(errors.length, "退化必须可观测").toBeGreaterThan(errorsAfterHide);
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);

@@ -1,0 +1,218 @@
+{
+  "note": "probe-layer-detached.mts 的一次成功 live 报告（只保留判定层消费的读数）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-layer-detached.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/v3-probe-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
+  "capturedAt": "2026-09-18",
+  "sdk": {
+    "version": "gl",
+    "geojsonLayer": "function",
+    "domLayer": "function"
+  },
+  "phase": "done",
+  "readings": [
+    {
+      "id": "geojson.attached",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.removeLayer#1",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.removeLayer#2.已摘下",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.detached",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.clearData.已detached",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.afterClearData",
+      "threw": false,
+      "overlayCount": 0
+    },
+    {
+      "id": "dom.attached",
+      "threw": false,
+      "created": 2,
+      "connected": 2,
+      "overlayCount": 2
+    },
+    {
+      "id": "dom.removeLayer#1",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "dom.removeLayer#2.已摘下",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "dom.detached",
+      "threw": false,
+      "created": 2,
+      "connected": 0,
+      "overlayCount": 0
+    },
+    {
+      "id": "dom.removeAllOverlays.已detached",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "dom.afterRemoveAllOverlays",
+      "threw": false,
+      "created": 2,
+      "connected": 0,
+      "overlayCount": 0
+    },
+    {
+      "id": "kernel.mount.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.mount.setData",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.mounted",
+      "threw": false,
+      "created": 2,
+      "connected": 2,
+      "overlayCount": 2
+    },
+    {
+      "id": "kernel.hide.removeLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.hidden",
+      "threw": false,
+      "created": 2,
+      "connected": 0,
+      "overlayCount": 0
+    },
+    {
+      "id": "kernel.show.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.shown",
+      "threw": false,
+      "created": 2,
+      "connected": 0,
+      "overlayCount": 0
+    },
+    {
+      "id": "kernel.repair.setData",
+      "threw": true,
+      "message": "Cannot read properties of null (reading 'coordinate')"
+    },
+    {
+      "id": "kernel.repaired",
+      "threw": false,
+      "created": 2,
+      "connected": 0,
+      "overlayCount": 0
+    },
+    {
+      "id": "geojson.kernel.mount.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.mount.setData",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.mounted",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.kernel.hide.removeLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.hidden",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.kernel.show.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.shown",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.kernel.repair.setData",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.repaired",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "geojson.kernel.rebuild.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.rebuild.setData",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "geojson.kernel.rebuilt",
+      "threw": false,
+      "overlayCount": 2
+    },
+    {
+      "id": "kernel.rebuild.addLayer",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.rebuild.setData",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "kernel.rebuilt",
+      "threw": false,
+      "created": 2,
+      "connected": 2,
+      "overlayCount": 2
+    },
+    {
+      "id": "tile.removeLayer#1",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "tile.removeLayer#2.已摘下",
+      "threw": false,
+      "message": null
+    }
+  ]
+}

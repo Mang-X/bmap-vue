@@ -598,6 +598,8 @@ export class FakeV4DOMLayer extends FakeV4Layer {
   data: object | null = null
   visible: boolean
   readonly customOverlays: object[] = []
+  /** `onDetached()` 被调用过几次（摘挂把节点摘掉的次数；实测建模，见 `onDetached`）。 */
+  detachedRenderCount = 0
   /**
    * 最近一次 `removeAllOverlays()` 时，图层是否仍在图上（没清过则为 `null`）。
    *
@@ -632,14 +634,37 @@ export class FakeV4DOMLayer extends FakeV4Layer {
     // 官方口径（`.agents/skills/bmap-jsapi-v4/references/data-layers.md`）：`setData(null)` 只清空
     // 数据引用，**不会**移除已经渲染出来的 overlays；清空必须显式 `removeAllOverlays()`。
     // 替身按这条建模：每次喂数据都重建这批覆盖物，`data = null` 时保留现状。
-    if (data !== null) {
-      const features = (data as { features?: unknown[] }).features ?? []
-      this.customOverlays.splice(
-        0,
-        this.customOverlays.length,
-        ...features.map((feature, index) => ({ id: index, feature })),
-      )
-    }
+    if (data !== null) this.render()
+  }
+
+  /**
+   * 摘除时的渲染生命周期（**实测建模**，issue #98 的 live 探针，严格按内核的
+   * `addLayer -> setData` 顺序）：
+   *
+   * | 步骤 | 真实 4.0 的节点（连在文档） |
+   * | --- | --- |
+   * | 挂载 + `setData` | 2 |
+   * | `removeLayer` | 0 |
+   * | **再 `addLayer`** | **0 —— 内容不会自己回来** |
+   * | 再补一次 `setData` | 0，且调用**抛错** |
+   * | 对照：换一个新实例 | 2 |
+   *
+   * 因此替身**不**建模「重新挂载会按保留数据重渲染」——真实 SDK 不会，而且补 `setData` 也救不回来
+   * （`removeLayer` 清空了图层持有的 Map 引用）。内核据此改成「重新可见一律重建」
+   * （`useLayerResource` 的 `needsRemountRebuild`），替身不建模那半边正是为了让这条回归可测。
+   */
+  onDetached(): void {
+    this.detachedRenderCount += 1
+    this.customOverlays.length = 0
+  }
+
+  private render(): void {
+    const features = (this.data as { features?: unknown[] } | null)?.features ?? []
+    this.customOverlays.splice(
+      0,
+      this.customOverlays.length,
+      ...features.map((feature, index) => ({ id: index, feature })),
+    )
   }
 
   show(): void {

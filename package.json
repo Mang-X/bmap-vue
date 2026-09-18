@@ -25,6 +25,7 @@
     "probe:plugin-compat": "node --experimental-strip-types scripts/probe-plugin-compat.mts",
     "probe:plugin-runtime": "node --experimental-strip-types scripts/probe-plugin-runtime.mts",
     "probe:layer-events": "node --experimental-strip-types scripts/probe-layer-events.mts",
+    "probe:layer-detached": "node --experimental-strip-types scripts/probe-layer-detached.mts",
     "build:v3": "node --experimental-strip-types scripts/build-v3.mts",
     "typecheck:v3": "pnpm exec vue-tsc -p packages/baidu-map-gl-vue/tsconfig.build.json",
     "pack:v3": "pnpm --filter baidu-map-gl-vue pack --pack-destination .artifacts",
