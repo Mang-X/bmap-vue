@@ -119,11 +119,16 @@ export function createJsapiV4OverlayDriver(
   /**
    * 每张地图**最近一次被请求打开**的气泡。
    *
-   * `map.closeInfoWindow()` 无参数、关的是「这张地图当前的气泡」，而真实 4.0 的打开是异步的：
-   * 同一 tick 里刚 `openInfoWindow(B)` 时 `map.getInfoWindow()` 仍可能指向 A（或为空）。
-   * 只有「这个气泡确实是本 Driver 最后请求打开的那个」才允许触碰地图，否则关一个旧气泡就可能
-   * 干扰正在进行的打开请求（PR #61 评审的跨气泡风险；真实 SDK 上未能复现，但这是本 Driver
-   * 唯一能自行保证的不变量，不依赖 SDK 内部时序）。
+   * 它的用途**只有一个**：`map.getInfoWindow()` 为空时那个**歧义窗口**的兜底判据。
+   * 真实 4.0 的打开是异步的 —— 同一 tick 里刚 `openInfoWindow(B)` 时 `map.getInfoWindow()`
+   * 仍是 `null`（实测 0ms 为 null、~100ms 变成该实例），这一刻没有任何事实能回答「当前是谁」。
+   * 该窗口里只有「本 Driver 最后请求打开的气泡」才允许触碰地图，否则关一个旧气泡可能干扰
+   * 正在进行的打开请求（PR #61 评审的跨气泡风险；真实 SDK 上未能复现，但这是本 Driver 唯一
+   * 能自行保证的不变量，不依赖 SDK 内部时序）。
+   *
+   * ⚠️ **不要**把它提到 `map.getInfoWindow()` 之前当总闸（PR #101 第五轮评审 P1）：迟到的打开
+   * 接管地图之后，「当前气泡」已经是本实例、而它早已不是「最后请求者」；按它挡掉关闭会把一个
+   * 明确关闭静默丢弃 —— 气泡留在图上，状态机里已经记下的在飞账也永远等不到回包。
    */
   const lastRequestedByMap = new WeakMap<object, object>();
   /** `createContextMenu({ width })` → `MenuItem` 的默认宽度。 */
@@ -658,15 +663,24 @@ export function createJsapiV4OverlayDriver(
       const raw = registry.resolve<object>(overlay);
       const owner = infoWindowOwners.get(raw);
       if (owner) {
-        // 只关「本 Driver 最后请求打开的那个气泡」。关一个更早请求的气泡时完全不碰地图：
-        // 真实 4.0 的打开是异步的，此时 map 上可能正有一次更新的打开请求在飞（PR #61 评审）。
-        if (lastRequestedByMap.get(owner) !== raw) return;
-        // 即便如此，仍用公开的 map.getInfoWindow() 确认**没有别的**气泡正开着，避免关掉
-        // 别的组件的气泡。注意 `current` 为空**不能**当成「没打开」：`openInfoWindow()` 之后
-        // 同一 tick 里它仍是 `null`（实测 0ms 为 null、~100ms 变成该实例），所以照常调用
-        // map.closeInfoWindow()（没有气泡时它是 no-op，实测重复 close 不抛错）。
+        // 判据的顺序是**契约的一部分**（PR #101 第五轮评审 P1 修正）：
+        //
+        // 1. 先读公开的 `map.getInfoWindow()` —— 「地图上当前开着的到底是谁」是唯一能回答
+        //    「这次关闭会不会碰到别人的气泡」的事实。**若它就是我们，就必须照关不误**，即使
+        //    `lastRequestedByMap` 指向别人（典型情形：本实例的打开晚到、迟到接管了地图）。
+        //    旧写法把 `lastRequestedByMap` 放在前面**直接 return**，会把这个明确关闭静默丢掉：
+        //    气泡留在图上，而状态机那边已经记下的在飞账永远等不到回包（幽灵账）。
+        // 2. `current` 指向**别人** ⇒ 不碰地图（那确实是别人的气泡）。
+        // 3. `current` 为空是**有歧义的**：真实 4.0 的打开是异步的，`openInfoWindow()` 之后同一
+        //    tick 里它仍是 `null`（实测 0ms 为 null、~100ms 变成该实例）。这个窗口里没有事实可依，
+        //    只能退回「这张地图最后被请求打开的是谁」这个本 Driver 唯一能自行保证的不变量，
+        //    避免旧气泡的 close 取消掉一次新生效的打开（PR #61 评审的跨气泡风险）。
         const current = callOptional(owner, "getInfoWindow");
-        if (current && current !== raw) return;
+        if (current) {
+          if (current !== raw) return;
+        } else if (lastRequestedByMap.get(owner) !== raw) {
+          return;
+        }
         sdkCall("map.closeInfoWindow", () => callRequired(owner, "closeInfoWindow"));
         return;
       }

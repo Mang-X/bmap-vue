@@ -706,6 +706,45 @@ describe("PR #61 评审反例", () => {
     ctx.overlays.closeInfoWindow(only);
     expect(ctx.rawMap.callLog).toContain("closeInfoWindow");
   });
+
+  it("[迟到接管] 当前气泡确实是我 ⇒ 即使最后请求者不是我，关闭也必须真的发给地图", () => {
+    const a = ctx.overlays.createInfoWindow(document.createElement("div"));
+    const b = ctx.overlays.createInfoWindow(document.createElement("div"));
+
+    ctx.overlays.openInfoWindow(ctx.map, a, { lng: 1, lat: 1 });
+    ctx.rawMap.infoWindow = null; // A 的打开仍在飞
+    ctx.overlays.openInfoWindow(ctx.map, b, { lng: 2, lat: 2 }); // 最后请求者变成 B
+    // ★ A 的迟到请求这时才真正接管：地图上「当前气泡」实际就是 A。
+    // 这与「两个请求都没完成」是两种不同的局面 —— 前者地图上确实显示着 A，
+    // 此刻关 A 既是在执行调用方的明确意图，也不会动到任何别的气泡。
+    ctx.rawMap.infoWindow = ctx.rawOf(a);
+
+    const closesBefore = ctx.rawMap.callLog.filter((c) => c === "closeInfoWindow").length;
+    ctx.overlays.closeInfoWindow(a);
+
+    expect(
+      ctx.rawMap.callLog.filter((c) => c === "closeInfoWindow").length,
+      "地图上开着的就是 A ⇒ 这条 close 必须真的发出去（否则气泡留在图上、账也没人还）",
+    ).toBe(closesBefore + 1);
+    expect(ctx.rawMap.infoWindow).toBeNull();
+  });
+
+  it("[迟到接管] 当前气泡是别人时仍然不碰地图（反向：别把收紧改松）", () => {
+    const a = ctx.overlays.createInfoWindow(document.createElement("div"));
+    const b = ctx.overlays.createInfoWindow(document.createElement("div"));
+
+    ctx.overlays.openInfoWindow(ctx.map, a, { lng: 1, lat: 1 });
+    ctx.overlays.openInfoWindow(ctx.map, b, { lng: 2, lat: 2 });
+
+    const closesBefore = ctx.rawMap.callLog.filter((c) => c === "closeInfoWindow").length;
+    ctx.overlays.closeInfoWindow(a);
+
+    expect(
+      ctx.rawMap.callLog.filter((c) => c === "closeInfoWindow").length,
+      "当前气泡是 B ⇒ 关 A 不得调用地图级 close（会关掉 B）",
+    ).toBe(closesBefore);
+    expect(ctx.rawMap.infoWindow).toBe(ctx.rawOf(b));
+  });
 });
 
 /* -------------------------------------------------------------------------- */

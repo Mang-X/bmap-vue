@@ -501,6 +501,53 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
     harness.assertIdle('两窗口互斥')
   })
 
+  it('被顶掉的 A 的迟到 open 接管地图后必须被真正关掉（双窗口乱序 · 端到端）', async () => {
+    const el = harness.container()
+    const openA = ref(false)
+    const openB = ref(false)
+    const wrapper = mountTree(
+      () => [
+        h(BInfoWindow, { position: POSITION, open: openA.value, title: 'A' }),
+        h(BInfoWindow, { position: POSITION_B, open: openB.value, title: 'B' }),
+      ],
+      el,
+    )
+    await settle()
+    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const map = lastMap()
+
+    // 1) A 的打开异步生效（真机：同一 tick 里 getInfoWindow() 仍是 null）⇒ 请求被挂起。
+    //    注意 Manager 此刻已经把 A 记成「当前项」—— 它相信这次请求（这是它唯一的判据）。
+    map.deferInfoWindowOpen = true
+    openA.value = true
+    await settle()
+    expect(map.hasPendingInfoWindow(), '对照组：A 的打开请求已被挂起').toBe(true)
+    expect(currentInfoWindow(), '对照组：地图上还没有气泡（A 尚未接管）').toBeNull()
+
+    // 2) B 同步打开并接管 ⇒ Manager 通知 A 被顶掉：A 收敛为**关**，但刻意保留在飞的打开账
+    map.deferInfoWindowOpen = false
+    openB.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：B 是当前气泡').toBe('B')
+    expect(emittedOf(a!, 'update:open'), '对照组：A 收到「被顶掉」的通知').toEqual([[false]])
+
+    // 3) ★ A 的旧请求这时才真正接管地图。它属于**本组件自己** ⇒ 状态机应当主动纠偏（下发 close）
+    expect(map.flushInfoWindowOpen(), '对照组：确实有一次被放行的接管').toBe(true)
+    await settle()
+
+    expect(
+      currentInfoWindow(),
+      '迟到的旧气泡必须被真正关掉：Driver 不得因为「最后请求者是 B」把这条纠偏 close 吞掉',
+    ).toBeNull()
+    expect(
+      emittedOf(a!, 'update:open').filter((payload) => payload[0] === true),
+      'A 早已被顶掉、从未被请求打开，不得被回写成打开',
+    ).toHaveLength(0)
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('双窗口乱序：被顶掉的 A 的迟到 open')
+  })
+
   it('被顶掉的 A 卸载时不得关掉 B 的气泡', async () => {
     const el = harness.container()
     const showA = ref(true)

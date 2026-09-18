@@ -201,6 +201,44 @@ open(A) → sdk-open → position(B)（再下发一条 open）→ intent(false)�
 而不是依赖调用点各自记得。
 
 
+### 3d.「命令交给了 Driver」≠「命令发给了地图」：守卫的**判据顺序**也是账本守恒的一部分（外部评审第五轮 P1）
+
+3c 处理的是「命令在调用点就失败了」。这一条是同一主题的另一面：命令**顺利交给了 Driver**，
+却被 Driver 的守卫**静默丢弃**。状态机那边已经 `accounted: true` 地记了一份在飞账，而这条命令
+从未到达 SDK ⇒ 不会有回包 ⇒ 账永远还不掉，气泡也留在图上。
+
+**缺陷形态**（`driver/jsapi-v4/overlays.ts` 的 `closeInfoWindow`）。旧顺序是：
+
+```
+if (lastRequestedByMap.get(owner) !== raw) return;   // ← 先挡，而且直接 return
+const current = callOptional(owner, "getInfoWindow");
+if (current && current !== raw) return;
+```
+
+被 B 顶掉的 A 会**刻意保留** `openOutstanding`（见 `superseded` 分支），于是当 A 那条迟到的
+打开请求真的接管了地图时，`sdk-open` 会被正确识别为「自己的迟到回包」，状态机也正确地下发一条
+纠偏 close —— 但它的 `lastRequestedByMap` 早已指向 B，第一行就 `return` 了。**它甚至不会去读
+`getInfoWindow()`**，因此「此刻地图上开着的其实正是 A」这个事实根本没被看到。
+
+**这条 P1 的性质与前四轮不同**：前四轮都在状态机内部（账记没记、冲销没冲销）。这一条是
+**跨层契约** —— 状态机的注释里写着「此刻 SDK 确认它是开着的 ⇒ 这条 close 一定会有回包」，
+这句话在 SDK 层面成立，但**在我们自己这一层不成立**：Driver 也是我们写的，它有权把命令丢掉。
+所以「账本守恒」的前提必须包括「Driver 不会静默吞掉一条已经记了账的命令」。
+
+**修正：判据顺序**（读**事实**优先，兜底判据最后）：
+
+| 顺序 | 判据 | 处置 | 理由 |
+| --- | --- | --- | --- |
+| 1 | `map.getInfoWindow() === raw` | **允许关闭** | 「当前开着的就是我」是唯一能回答「这次关闭会不会碰到别人的气泡」的事实。此时即使 `lastRequested` 指向别人（迟到接管的典型形态）也必须照关 |
+| 2 | `map.getInfoWindow()` 是**别人** | 不碰地图 | 那确实是别人的气泡 |
+| 3 | `map.getInfoWindow()` 为空 | 用 `lastRequestedByMap` 兜底 | 这是**有歧义的**异步窗口：`openInfoWindow()` 之后同一 tick 里它仍是 `null`（实测 0ms 为 null、~100ms 变成该实例）。这一刻没有任何事实可依，只能退回本 Driver 唯一能自行保证的不变量，避免旧气泡的 close 取消掉一次新生效的打开（PR #61 评审的跨气泡风险） |
+
+`lastRequestedByMap` 的定位因此**降级**了：它不再是「允许触碰地图的总闸」，而是**空窗口里的兜底**。
+代码里的声明注释与 `closeInfoWindow` 的注释都写明了这个顺序是契约的一部分、以及「不要把它提回去」。
+
+**必须防住的过度放宽**（反证的另一个方向）：判据 2 不能丢。丢掉它就会去关别人的气泡 ——
+既有用例里有四条会立刻变红（含官方 UI Kit 的 widget 与「被顶掉的 A 卸载时不得关掉 B」）。
+
 ### 4. 每张地图一份 `InfoWindowManager`：先换当前项，再通知被顶掉的那个
 
 `MapRuntime` 持有（`MapContext.infoWindows`，可选，与 `layers` 同口径），账本只有两项：
@@ -210,7 +248,8 @@ open(A) → sdk-open → position(B)（再下发一条 open）→ intent(false)�
 - **先写「当前是谁」，再通知被顶掉的那个**：被顶掉者在通知里会收敛自己的状态并交还归属，
   顺序反了那次调用会把新主人误清掉（`InfoWindowManager.test.ts` 有一条用例专门锁它）；
 - 被顶掉的组件**不得**调 `closeInfoWindow()`（契约写在 `register({ onSuperseded })` 上，
-  由 `superseded` 动作不产生 effect 保证，Driver 侧另有「只关本 Driver 最后请求打开的那个」守卫兜底）；
+  由 `superseded` 动作不产生 effect 保证；Driver 侧另有守卫兜底，其判据顺序见 3d ——
+  **以 `map.getInfoWindow()` 为准，只有那个「空窗口」才退回「最后请求者」**）；
 - 未登记的实例不能抢走归属（创建失败被释放的实例不该顶掉别人）。
 
 ### 5. 尺寸：观察**实际内容 host**、合帧重绘、不自激
@@ -341,7 +380,8 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 5. **SDK 事件与命令之间没有身份**：本库用「在飞的关闭命令计数」消歧（决策 3），覆盖了已知的
    真实时序（同 tick 吞命令、关后重开、反序回包、多条在飞）。两个被显式接受的前提：
    - 两条归属账（`closeOutstanding` / `openOutstanding`）都以「**每条在飞命令恰好产生一条回调**」
-     为前提（**命令同步失败不属于这个前提的反例**：那条路径由 `command-failed` 精确冲销，见 3c）。若某个 SDK 版本在气泡确实开着时**吞掉**一条关闭命令（少发一条 `close`），残留计数会
+     为前提（**本库自己这一侧不留这个缺口**：命令同步失败由 `command-failed` 精确冲销，见 3c；
+     命令被 Driver 守卫丢弃由判据顺序消掉，见 3d。剩下的风险只在**上游 SDK** 一侧）。若某个 SDK 版本在气泡确实开着时**吞掉**一条关闭命令（少发一条 `close`），残留计数会
      吸收掉随后**一次**真实关闭（模型停在该次关闭前的值）；同理**吞掉**一条打开请求会让随后
      一次**外部**打开被当成自己的迟到回包（`update:open true` 少发一次，我们反而去关它）。
      两者都只影响**一次**、之后自愈 —— 这条只能靠 live smoke 观察，不要为它预先加猜测性兜底；
@@ -398,6 +438,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **反序回包**：关 → 立刻重开 →「重开的 `open` 先到、旧 `close` 后到」不得关掉已重开的模型；随后一次真实关闭仍须收敛（评审 P1-1 的复现） | `infoWindowMachine.test.ts`（`重开确认先到、旧 close 后到`） |
 | **被放弃的那一代必须被它自己的释放路径收干净**（重建窗口内卸载 → `useSdkResource` 的 stale 分支） | `v3-binfowindow.test.ts`（`重建窗口内卸载`） |
 | **单飞的尾随重建不得丢值**：连续构造期变化后，最终存活那一代必须按**最后一次**的 prop 构建（反证：去掉尾随重建 ⇒ `expected 9 to be 10`） | 同上（`重建是单飞的`） |
+| **被顶掉的 A 的迟到 open 接管地图后必须被真正关掉**（双窗口乱序）：地图上不得留下 A，也不得把 A 回写成打开（反证：把 Driver 的判据顺序退回「先看最后请求者」⇒ Driver 与端到端用例都红；松开「当前是别人就不碰」或去掉空窗口兜底 ⇒ 既有收紧用例红） | `overlays.test.ts`（`[迟到接管] 当前气泡确实是我…` + 反向 `当前气泡是别人时仍然不碰地图`）+ `v3-binfowindow.test.ts`（`双窗口乱序`，端到端，用 `deferInfoWindowOpen` + `flushInfoWindowOpen()`） |
 | **命令同步失败必须冲销在飞账**：open 失败后「外部打开仍回写 / 父级重试仍成功」，close 失败后「真实关闭仍收敛」；移动失败**不得**把还开着的气泡收敛成关（反证四条：组件仍伪造 `sdk-close` / open 失败不冲销 / close 失败不冲销 / 移动失败也收敛 ⇒ 都红，逐条读数见文末第四轮小节） | `infoWindowMachine.test.ts`（三条）+ `v3-binfowindow.test.ts`（`open 命令同步失败`，端到端，用夹具的 `failNextOpenInfoWindow`） |
 | **迟到的内部 `open` 必须重新收敛**（移动请求的回包在关闭完成后才到）：模型不得被拉开；反证：去掉 open 侧在飞账或移动不记账 ⇒ 红 | `infoWindowMachine.test.ts`（`迟到的**内部** open`）+ `v3-binfowindow.test.ts`（`移动请求的迟到 open`，端到端） |
 | **外部未经请求的 `open` 仍须回写**（与上一条互为反向）：反证：把它也当成要收敛 ⇒ 红 | `infoWindowMachine.test.ts`（`外部未经请求的 open`） |
@@ -480,6 +521,26 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 - 这条 P1 的价值在于把「账本守恒」从**正常路径**推到了**异常路径** —— 前三轮都在修正常路径的归属，
   而「命令根本没成功发出去」是同一份守恒规则的另一半：**每一笔记账都必须有人冲销，冲销者要么是回包，
   要么是失败本身**。
+
+### 第五轮（`731121e` → 本轮）
+
+评审确认上轮失败路径的 P1 已修，但指出它引出了一个新的**跨层**冲突：状态机给「被顶掉的 A 的迟到
+`open`」下发的纠偏 close 会被 Driver 的 `lastRequestedByMap` 守卫**静默吞掉**（那条守卫排在
+`getInfoWindow()` 之前就直接 `return`），于是地图停在 A、`closeOutstanding` 永久残留。
+
+- **复现属实**：Driver 层红 —— `地图上开着的就是 A ⇒ 这条 close 必须真的发出去: expected +0 to be 1`；
+  端到端红（按评审给的 5 步：A 挂起 → B 同步打开顶掉 A → `flushInfoWindowOpen()`）——
+  `迟到的旧气泡必须被真正关掉: expected InfoWindowClass{…} to be null`。
+- **修正**：Driver 的判据改成「**先读事实、兜底判据最后**」（见 3d 的表）；
+  `lastRequestedByMap` 从「总闸」降级为「`getInfoWindow()` 为空时的兜底」，
+  声明注释与调用点注释都写明这个顺序是契约的一部分。
+- **反证三条变异**（各打新顺序的一个分支，全部变红）：
+  ① 退回旧顺序 ⇒ 新增的两条用例红；
+  ② 松开「当前气泡是别人就不碰」⇒ **四条既有收紧用例**红（含官方 UI Kit widget 那条）；
+  ③ 去掉空窗口兜底 ⇒ PR #61 的回归用例红。
+  ② 这一条是刻意的：它证明这次改的是**判据顺序**，不是「一律放行」。
+- 这条 P1 的价值在于指出**账本守恒的前提不止在状态机内部**：「命令交给了我们自己的 Driver」
+  不等于「命令发给了 SDK」，而只有后者才会产生回包。
 
 ### 本轮修正引入的自我检查
 

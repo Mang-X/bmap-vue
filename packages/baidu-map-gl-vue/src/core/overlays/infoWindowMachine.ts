@@ -412,7 +412,11 @@ function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
         { ...base, closeOutstanding: state.closeOutstanding + 1 },
         "closing",
       ),
-      // 此刻 SDK 确认它是开着的 ⇒ 这条 close 一定会有回包 ⇒ 记一份账
+      // 「此刻 SDK 确认它是开着的 ⇒ 这条 close 一定会有回包 ⇒ 记一份账」这个前提**不是自足的**：
+      // 它依赖 Driver 把这条 close 真的发出去。被顶掉的实例走到这里时，「最后请求打开的气泡」
+      // 往往已经不是它，所以 Driver 的守卫必须**先看 `map.getInfoWindow()` 是不是它**、
+      // 而不是先按「最后请求者」挡掉 —— 否则命令被静默丢弃，这份账就永远等不到回包
+      // （PR #101 第五轮评审 P1；Driver 侧的判据顺序见 `driver/jsapi-v4/overlays.ts`）。
       effects: [{ type: "close", generation: state.generation, accounted: true }],
     };
   }
