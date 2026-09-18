@@ -248,9 +248,15 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /**
    * 执行状态机下发的命令。
    *
-   * 失败时**收敛回关闭**：过渡相位不允许在效果失败后停留 —— 否则模型会一直说「开着」而地图上
-   * 没有任何气泡，且再也没有事件来唤醒它。收敛走 `sdk-close`，于是「打不开」与「被关掉」在本库
-   * 是同一个可观察形态（`update:open false`），调用方只需要处理一种。
+   * **命令没下发成的每一条路径，都必须把账冲销掉**（外部评审第四轮 P1 的推广形态）。机器在
+   * 下发 `open` / `close` 时已经记了一份在飞账（`effect.accounted`），只有真的把命令交给 SDK
+   * 才可能有一条回包来还账；同步抛错、以及下面那个「没有可用的位置」的提前返回，都不会有回包。
+   * 遗留计数不会自己消失，它会把**后续一次真实事件**归错类（外部打开被当成自己的迟到回包 ⇒ 主动关掉，
+   * 或真实的关闭被当成旧命令结算 ⇒ 吞掉）。
+   *
+   * 命令失败时**收敛回关闭**：过渡相位不允许在效果失败后停留 —— 否则模型会一直说「开着」而地图上
+   * 没有任何气泡，且再也没有事件来唤醒它。于是「打不开」与「被关掉」在本库是同一个可观察形态
+   * （`update:open false`），调用方只需要处理一种。
    */
   function runEffect(effect: InfoWindowEffect): void {
     const instance = activeInstance;
@@ -258,31 +264,46 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (!instance || !instance.alive || !context) return;
     if (effect.generation !== machine.generation) return;
     const driver = context.client.driver.overlays;
+    const generation = instance.generation;
+    /** 命令作废（没交给 SDK / 交给 SDK 但抛错）：按 `accounted` 精确冲销在飞账并收敛相位。 */
+    const failCommand = (command: "open" | "close"): void => {
+      dispatch({ type: "command-failed", command, accounted: effect.accounted, generation });
+    };
     if (effect.type === "open") {
       // 读 `props.position` 而不是机器记下的位置指纹：效果是**同步**执行的（`dispatch` 内联调用），
       // 与产生它的那次 `intent` 是同一个 tick，因此 `props.position` 就是那次判定的位置
       // （两者分叉只可能发生在 `await` 之后，而这里没有 await）。
       const position = props.position;
-      if (!position || positionKeyOf(position) === null) return; // 机器只在 canOpen 时下发 open
+      if (!position || positionKeyOf(position) === null) {
+        // 防御性分支：机器用**同一个** `positionKeyOf` 算 `canOpen`，它只在 `canOpen` 时下发 `open`，
+        // 因此这里按构造不可达。仍然走冲销而不是裸 `return` —— 账已经记下了，静默返回就是幽灵账。
+        failCommand("open");
+        return;
+      }
       try {
         driver.openInfoWindow(context.map, instance.handle, position);
         // **打开成功之后**才声明归属：过早声明会在打开失败时白白顶掉别人
         manager.activate(instance.handle);
       } catch (error) {
         options.reportError(toBMapError(error));
-        dispatch({ type: "sdk-close", generation: instance.generation });
+        // 失败是**独立动作**：命令作废 ⇒ 不会有回包 ⇒ 冲销它在飞账并收敛相位。
+        // 刻意**不**再伪造一条 `sdk-close`（那既冲不掉 open 侧的账，也会把还开着的气泡在
+        // 模型里关掉 —— 移动请求失败时就是这种情形，外部评审第四轮 P1）。
+        failCommand("open");
       }
       return;
     }
     try {
       driver.closeInfoWindow(instance.handle);
     } catch (error) {
-      // 关闭失败不致命（气泡可能已被别的实例顶掉），但不得静默：留一条可观测的痕迹
+      // 关闭失败不致命（气泡可能已被别的实例顶掉），但不得静默：留一条可观测的痕迹，
+      // 并且同样按「命令作废」冲销那笔计数（否则残账会吸收后续一次真实的关闭）
       logger.warn(
         `useInfoWindow(${component}).close: 关闭气泡失败: ${
           (error as Error)?.message ?? String(error)
         }`,
       );
+      failCommand("close");
     } finally {
       manager.deactivate(instance.handle);
     }

@@ -73,6 +73,10 @@ function drive(generation = 1) {
     superseded(gen = generation): void {
       send({ type: "superseded", generation: gen });
     },
+    /** 命令同步失败（`openInfoWindow` / `closeInfoWindow` 抛错时组件回喂的动作）。 */
+    commandFailed(command: "open" | "close", accounted = true): void {
+      send({ type: "command-failed", command, accounted, generation });
+    },
     rebuild(next: number): void {
       send({ type: "rebuild", generation: next });
     },
@@ -379,14 +383,64 @@ describe("缺少位置：只报一次错", () => {
 });
 
 describe("失败收敛与终态", () => {
-  it("open 命令失败（组件回喂一条 sdk-close）⇒ 相位收敛回 closed，不停留在过渡态", () => {
+  it("open 命令同步失败 ⇒ 冲销那笔在飞请求，且后续（外部）打开仍走正常路径", () => {
+    const d = drive();
+    d.intent(true, A); // openOutstanding = 1
+    expect(d.phase).toBe("opening");
+    expect(d.snapshot.openOutstanding).toBe(1);
+    // 组件在 `openInfoWindow` 抛错后回喂失败（**不是**伪造 sdk-close）
+    d.commandFailed("open");
+    expect(d.phase, "不停留在过渡态").toBe("closed");
+    expect(d.open).toBe(false);
+    expect(d.snapshot.openOutstanding, "幽灵请求必须被冲销").toBe(0);
+    expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
+
+    // ★ 账冲干净之后，一次**外部**打开必须走既有契约（回写），而不是被当成自己的迟到回包
+    d.sdkOpen();
+    expect(d.open).toBe(true);
+    expect(d.phase).toBe("open");
+    expect(d.changes.at(-1)).toEqual({ open: true, source: "sdk" });
+    expect(d.commands, "外部打开不得触发关闭命令").toEqual(["open@1"]);
+
+    // 而父级自己重试也必须照常工作（不残留任何旧账）
+    d.intent(false, A);
+    d.sdkClose();
+    d.intent(true, A);
+    expect(d.commands).toEqual(["open@1", "close@1", "open@1"]);
+    d.sdkOpen();
+    expect(d.phase).toBe("open");
+    expect(d.open).toBe(true);
+  });
+
+  it("移动的 open 同步失败 ⇒ 不得把还开着的气泡在模型里关掉", () => {
     const d = drive();
     d.intent(true, A);
-    expect(d.phase).toBe("opening");
-    // 组件在 `openInfoWindow` 抛错后回喂 sdk-close
-    d.sdkClose();
+    d.sdkOpen(); // 气泡确实开着
+    d.intent(true, B); // 位置变化 ⇒ 再下发一条 open（移动）
+    expect(d.snapshot.openOutstanding).toBe(1);
+    d.commandFailed("open");
+    expect(d.open, "移动失败不代表关闭意图").toBe(true);
+    expect(d.phase).toBe("open");
+    expect(d.snapshot.openOutstanding).toBe(0);
+  });
+
+  it("close 命令同步失败 ⇒ 冲销那笔计数，后续真实关闭不被残账吞掉", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    d.intent(false, A); // 气泡开着 ⇒ closeOutstanding = 1
+    expect(d.snapshot.closeOutstanding).toBe(1);
+    d.commandFailed("close");
     expect(d.phase).toBe("closed");
     expect(d.open).toBe(false);
+    expect(d.snapshot.closeOutstanding, "失败的关闭命令必须被冲销").toBe(0);
+
+    // 重开之后一次**真实**的关闭必须被收敛（不是被残账当成结算）
+    d.intent(true, A);
+    d.sdkOpen();
+    d.sdkClose();
+    expect(d.open).toBe(false);
+    expect(d.phase).toBe("closed");
     expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
   });
 

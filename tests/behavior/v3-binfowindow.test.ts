@@ -961,6 +961,55 @@ describe('唯一主模型与兼容别名', () => {
     await unmountAndSettle(wrapper)
   })
 
+  it('open 命令同步失败：冲销在飞账，随后的外部打开与父级重试都走正常路径', async () => {
+    const el = harness.container()
+    const open = ref(false)
+    const errors: Array<{ code?: string }> = []
+    const Probe = defineComponent({
+      setup() {
+        const ctx = useRequiredMapContext()
+        ctx.events.on('resource:error', (payload) => {
+          errors.push((payload as { error?: { code?: string } })?.error ?? {})
+        })
+        return () => null
+      },
+    })
+    const wrapper = mountTree(
+      () => [h(BInfoWindow, { position: POSITION, open: open.value }), h(Probe)],
+      el,
+    )
+    await settle()
+    const map = lastMap()
+    const child = wrapper.findComponent(BInfoWindow)
+    const iw = createdInfoWindows().at(-1)!
+
+    // 让下一次 openInfoWindow 同步抛错（真实 SDK 同样可能：参数 / 权限 / 内部状态）
+    map.failNextOpenInfoWindow = new Error('boom')
+    open.value = true
+    await settle()
+
+    expect(errors.length, '失败必须经 resource:error 报出来').toBe(1)
+    expect(emittedOf(child, 'update:open'), '失败要收敛回关（不回留在过渡态）').toEqual([[false]])
+    expect(currentInfoWindow(), '气泡没打开').toBeNull()
+
+    // ★ 关键：账冲干净之后，一次**外部**打开仍必须走既有契约（回写 true），
+    //   而不是被当成「本组件的迟到回包」而主动关掉
+    map.openInfoWindow(iw, POSITION)
+    await settle()
+    expect(emittedOf(child, 'update:open')).toEqual([[false], [true]])
+    expect(currentInfoWindow(), '外部打开的气泡不得被关掉').toBe(iw)
+
+    // 父级重试也必须照常工作（不残留任何旧账）
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+    expect(map.infoWindow, '重试必须真的打开').toBeTruthy()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('open 命令失败')
+  })
+
   it('只传正典 `open` 时不产生弃用告警', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const el = harness.container()

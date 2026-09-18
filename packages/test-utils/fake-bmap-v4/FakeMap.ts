@@ -196,6 +196,15 @@ export class FakeV4Map extends FakeV4EventTarget {
    * `MapRuntime` 的 `whenMapCreated` 注册必须在失败之后仍然有效，第二张图的 `load` 才收得到。
    */
   failNextCenterAndZoom: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `openInfoWindow` 抛错（用后即清）。
+   *
+   * 用来驱动「命令同步失败」这条路径（`useInfoWindow` 的 `command-failed`）：真实 SDK 的
+   * `map.openInfoWindow()` 会在内部访问地图与气泡管理器，抛错可能发生在资源已经登记之后，
+   * 也可能是参数/权限问题直接失败。这条路径**不会有** `open` 回调来还账，因此调用方必须
+   * 自己冲销它在飞账（否则残留计数会把后续一次**外部**打开归错类）。
+   */
+  failNextOpenInfoWindow: Error | null = null
 
   /* ------------------------------------------------------------------ 覆盖物 */
 
@@ -262,6 +271,12 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   openInfoWindow(infoWnd: FakeV4InfoWindow, point: FakeV4Point): void {
     this.callLog.push('openInfoWindow')
+    if (this.failNextOpenInfoWindow) {
+      const error = this.failNextOpenInfoWindow
+      this.failNextOpenInfoWindow = null
+      // 刻意**在接管之前**抛出：气泡没有被打开，也不会有 `open` 回调（见该字段的说明）。
+      throw error
+    }
     if (this.deferInfoWindowOpen) {
       // 异步生效：这一刻只记下请求，地图的「当前气泡」与事件都还没变
       this.pendingInfoWindow = { infoWnd, point }

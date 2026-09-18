@@ -69,6 +69,14 @@
  * 两张账（`openOutstanding` / `closeOutstanding`）互为镜像：**谁下发的请求，谁负责收敛**；
  * 没有在飞请求时，才把事件当作外部意图照实回写。
  *
+ * ## 异常路径上的守恒：命令同步失败要**冲销**，不能借事件收敛（外部评审第四轮 P1）
+ *
+ * `openInfoWindow()` / `closeInfoWindow()` 抛错时**不会有回包**来还账。若照旧「伪造一条 `sdk-close`
+ * 表示失败」，会留下两处不一致：① open 侧那笔账永远还不掉 ⇒ 后续一次**外部**打开被当成自己的迟到回包
+ * 而主动关掉；② 移动请求失败时（气泡其实还开着）模型被错误地收敛成关。
+ * 因此失败是**独立动作** `command-failed`：按 effect 上的 `accounted` 精确冲销那一本账，
+ * 再按「失败的是哪种命令」收敛相位（打开失败 ⇒ 关；移动失败 ⇒ 什么都不改；关闭失败 ⇒ 关）。
+ *
  * 计数只在三种时机增长（都保证会有一条 `close` 回调）：`open` 相位下收到关闭意图、
  * `closing` 相位里观测到 `sdk-open`（命令被吞掉 ⇒ 补一条）、以及它们各自的重复下发。
  * 重建 / 被顶掉 / 销毁一律清零（那一代的回包已经没有意义）。
@@ -99,10 +107,17 @@ import type { Point } from "../../driver/types/geometry";
 /** 气泡相位。`closed` / `open` 稳定，`opening` / `closing` 是命令在飞，`disposed` 终态。 */
 export type InfoWindowPhase = "closed" | "opening" | "open" | "closing" | "disposed";
 
-/** 机器能产生的副作用。一次转换最多一条 —— 「无重复开关回环」的可断言形态。 */
+/**
+ * 机器能产生的副作用。一次转换最多一条 —— 「无重复开关回环」的可断言形态。
+ *
+ * `accounted` 说明**这次命令是否记了一份在飞账**（`openOutstanding` / `closeOutstanding`）。
+ * 它存在的唯一理由是**同步失败**：命令抛错时不会有对应的 SDK 回包来还账，
+ * 调用方必须带着这个事实回喂 `command-failed`，让机器**精确**冲销它（外部评审第四轮 P1）。
+ * 「抛错后伪造一条 `sdk-close`」是错的 —— 那既不冲销 open 侧的账，也会把还开着的气泡在模型里关掉。
+ */
 export type InfoWindowEffect =
-  | { readonly type: "open"; readonly generation: number }
-  | { readonly type: "close"; readonly generation: number };
+  | { readonly type: "open"; readonly generation: number; readonly accounted: boolean }
+  | { readonly type: "close"; readonly generation: number; readonly accounted: boolean };
 
 /** 模型变化（`open` 的取值变了）。`source` 决定要不要回写 `update:*`。 */
 export interface InfoWindowChange {
@@ -165,6 +180,18 @@ export type InfoWindowAction =
   | { readonly type: "sdk-open"; readonly generation: number }
   /** SDK 报告「关闭了」。 */
   | { readonly type: "sdk-close"; readonly generation: number }
+  /**
+   * **命令同步失败**（`openInfoWindow()` / `closeInfoWindow()` 抛错）—— 与 SDK 观测事件分开的动作。
+   *
+   * 语义是「这条命令已经作废」：不会有回包了，因此要
+   * ① 按 `accounted` **精确冲销**它在飞账；② 把过渡相位收敛掉（不停留）。
+   */
+  | {
+      readonly type: "command-failed";
+      readonly command: "open" | "close";
+      readonly accounted: boolean;
+      readonly generation: number;
+    }
   /** 同一张地图上另一个气泡接管了（本实例被顶掉）。 */
   | { readonly type: "superseded"; readonly generation: number }
   /** 实例被重建：旧实例作废，新代次从 `closed` 起步。 */
@@ -256,6 +283,8 @@ export function reduceInfoWindow(
       return transition(reduceSdkOpen(state, action.generation));
     case "sdk-close":
       return transition(reduceSdkClose(state, action.generation));
+    case "command-failed":
+      return transition(reduceCommandFailed(state, action));
     case "superseded": {
       if (action.generation !== state.generation) return settle(state);
       if (state.phase === "closed") return settle(state);
@@ -310,11 +339,15 @@ function reduceIntent(
     }
     // 计数只在**气泡确实开着**时增长：`closing` / `opening` 时下发的关闭命令可能被 SDK 吞掉
     // （尚未接管），那种命令不会产生 `close` 回调，计进去会让后续一次真实的关闭被误判成结算。
-    const outstanding = base.closeOutstanding + (base.phase === "open" ? 1 : 0);
-    const closed = changeOpen({ ...base, closeOutstanding: outstanding }, false, "prop");
+    const accounted = base.phase === "open";
+    const closed = changeOpen(
+      { ...base, closeOutstanding: base.closeOutstanding + (accounted ? 1 : 0) },
+      false,
+      "prop",
+    );
     return {
       snapshot: enterPhase(closed.snapshot, "closing"),
-      effects: [{ type: "close", generation: state.generation }],
+      effects: [{ type: "close", generation: state.generation, accounted }],
       changes: closed.changes ?? NONE_CHANGES,
       notices,
     };
@@ -328,7 +361,7 @@ function reduceIntent(
       snapshot: moved
         ? { ...base, openOutstanding: base.openOutstanding + 1 }
         : base,
-      effects: moved ? [{ type: "open", generation: state.generation }] : NONE_EFFECTS,
+      effects: moved ? [{ type: "open", generation: state.generation, accounted: true }] : NONE_EFFECTS,
       changes: NONE_CHANGES,
       notices,
     };
@@ -345,7 +378,7 @@ function reduceIntent(
   );
   return {
     snapshot: enterPhase(reopened.snapshot, "opening"),
-    effects: [{ type: "open", generation: state.generation }],
+    effects: [{ type: "open", generation: state.generation, accounted: true }],
     changes: reopened.changes ?? NONE_CHANGES,
     notices,
   };
@@ -379,7 +412,8 @@ function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
         { ...base, closeOutstanding: state.closeOutstanding + 1 },
         "closing",
       ),
-      effects: [{ type: "close", generation: state.generation }],
+      // 此刻 SDK 确认它是开着的 ⇒ 这条 close 一定会有回包 ⇒ 记一份账
+      effects: [{ type: "close", generation: state.generation, accounted: true }],
     };
   }
 
@@ -388,6 +422,49 @@ function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
   return {
     snapshot: enterPhase(opened.snapshot, "open"),
     changes: opened.changes ?? NONE_CHANGES,
+  };
+}
+
+/**
+ * 命令**同步失败**的收敛（外部评审第四轮 P1）。
+ *
+ * 与 `reduceSdkClose` 分开是刻意的：`sdk-close` 表示「SDK 观测到关闭」，会消费 close 侧的在飞账；
+ * 而失败表示「这条命令作废、不会有回包」—— 它必须按 `accounted` **冲销对应的那本账**，
+ * 否则残留计数会把后续一次真实的关闭 / 外部打开归错类。借用 `sdk-close` 表达失败，
+ * 既冲不掉 open 侧的账，也会把**还开着**的气泡在模型里关掉（移动请求失败时就是这种情形）。
+ */
+function reduceCommandFailed(
+  state: InfoWindowSnapshot,
+  action: Extract<InfoWindowAction, { type: "command-failed" }>,
+): Step {
+  if (action.generation !== state.generation) return settle(state);
+  if (state.phase === "disposed") return settle(state);
+
+  const rollback = action.accounted ? 1 : 0;
+  if (action.command === "open") {
+    const base: InfoWindowSnapshot = {
+      ...state,
+      openOutstanding: Math.max(0, state.openOutstanding - rollback),
+    };
+    // 移动失败（气泡已经开着）不得把模型收敛成关：那是另一次「打开」失败，不是关闭意图
+    if (base.phase === "open") return settle(base);
+    // 打开失败 ⇒ 收敛到「关」（与状态机的期望状态一致），并回写一次（调用方只给过一次意图）
+    const closed = changeOpen(base, false, "sdk");
+    return {
+      snapshot: enterPhase(closed.snapshot, "closed"),
+      changes: closed.changes ?? NONE_CHANGES,
+    };
+  }
+
+  // 关闭失败：冲销那笔计数 + 收敛掉过渡相位（不留在 `closing` 里等一条永远不会来的回包）
+  const closed = changeOpen(
+    { ...state, closeOutstanding: Math.max(0, state.closeOutstanding - rollback) },
+    false,
+    "sdk",
+  );
+  return {
+    snapshot: enterPhase(closed.snapshot, "closed"),
+    changes: closed.changes ?? NONE_CHANGES,
   };
 }
 
