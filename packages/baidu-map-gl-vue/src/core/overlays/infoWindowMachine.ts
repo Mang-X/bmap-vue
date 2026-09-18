@@ -178,8 +178,18 @@ export type InfoWindowAction =
     }
   /** SDK 报告「打开了」。 */
   | { readonly type: "sdk-open"; readonly generation: number }
-  /** SDK 报告「关闭了」。 */
+  /** SDK 报告「关闭了」。**无身份**：要按在飞账判定它是结算还是过期回包（见模块注释的归属表）。 */
   | { readonly type: "sdk-close"; readonly generation: number }
+  /**
+   * 用户点了气泡上的**关闭按钮**（官方 `clickclose`，见 `overlayEventCatalog`：
+   * 「点击信息窗口的关闭按钮时触发」）—— 与 `sdk-close` **分开**的动作（外部评审第八轮 P1）。
+   *
+   * 它带**明确来源**：用户刚刚主动关掉了这个气泡。因此它不能被当成「我们自己那条关闭命令的
+   * 过期回包」而只减账 —— 那种处置会让一次真实的用户关闭被在飞账静默吞掉（模型停在「开」）。
+   * 语义 = **一次真实的关闭**：模型收敛为关、相位落到 `closed`，
+   * 但**保留** `closeOutstanding`（我们下发的关闭命令仍然欠一条回包，迟到时还要被认成结算）。
+   */
+  | { readonly type: "sdk-clickclose"; readonly generation: number }
   /**
    * **命令同步失败**（`openInfoWindow()` / `closeInfoWindow()` 抛错）—— 与 SDK 观测事件分开的动作。
    *
@@ -283,6 +293,8 @@ export function reduceInfoWindow(
       return transition(reduceSdkOpen(state, action.generation));
     case "sdk-close":
       return transition(reduceSdkClose(state, action.generation));
+    case "sdk-clickclose":
+      return transition(reduceSdkClickClose(state, action.generation));
     case "command-failed":
       return transition(reduceCommandFailed(state, action));
     case "superseded": {
@@ -495,8 +507,28 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   // 计数为 0 的 `close` 事件：相位已经关了 ⇒ 幂等（不产生任何回写）
   if (state.phase === "closed") return settle(state);
 
-  // 未经请求的关闭（点地图 / 点关闭按钮 / 被顶掉）
+  // 未经请求的关闭（点地图 / 被顶掉）。注意「点关闭按钮」不在这里 —— 那是带来源的
+  // `sdk-clickclose`，见 `reduceSdkClickClose`。
   const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
+  return {
+    snapshot: enterPhase(closed.snapshot, "closed"),
+    changes: closed.changes ?? NONE_CHANGES,
+  };
+}
+
+/**
+ * 用户点了关闭按钮（官方 `clickclose`）—— **带明确来源的真实关闭**（外部评审第八轮 P1）。
+ *
+ * 与 `reduceSdkClose` 分开是刻意的：`sdk-close` **没有身份**，只能靠在飞账判断它是不是自己的
+ * 过期回包；而 `clickclose` 的来源就是「用户主动关掉了当前气泡」，无论账上还挂着多少条未结算的
+ * 关闭命令，这一次关闭都是真的。把它塞进归属表，就会出现「用户点了关闭按钮、模型却仍是开」。
+ *
+ * 刻意**保留** `closeOutstanding`：我们下发的关闭命令仍然欠一条回包，它迟到时必须继续被认成
+ * 「结算」而不是「未经请求的关闭」—— 那条回包不该由用户的一次点击来冲销。
+ */
+function reduceSdkClickClose(state: InfoWindowSnapshot, generation: number): Step {
+  if (generation !== state.generation) return settle(state);
+  const closed = changeOpen(state, false, "sdk");
   return {
     snapshot: enterPhase(closed.snapshot, "closed"),
     changes: closed.changes ?? NONE_CHANGES,

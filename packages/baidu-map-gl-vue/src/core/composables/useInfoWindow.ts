@@ -664,9 +664,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             dispatch({ type: "sdk-open", generation: instance.generation });
             break;
           case "clickclose":
-            // 点关闭按钮：与 `close` 走同一套归属判定（含「过期回包不改账本」），
-            // 另外把「是谁关的」告诉调用方。
-            dispatch({ type: "sdk-close", generation: instance.generation });
+            // 用户点了关闭按钮：这条事件**带明确来源**（官方契约：「点击信息窗口的关闭按钮时触发」），
+            // 因此走独立的动作 —— 不能被在飞的关闭账当成「自己的过期回包」吞掉（第八轮评审 P1）。
+            // 它与 `close` 的差别只在归属：账本退场同样按状态机的结论。
+            dispatch({ type: "sdk-clickclose", generation: instance.generation });
             syncLedgerAfterClose(instance);
             emit("clickclose", event);
             break;

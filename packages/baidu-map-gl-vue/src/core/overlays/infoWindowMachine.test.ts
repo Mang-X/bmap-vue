@@ -70,6 +70,10 @@ function drive(generation = 1) {
     sdkClose(gen = generation): void {
       send({ type: "sdk-close", generation: gen });
     },
+    /** 用户点了气泡上的关闭按钮（官方 `clickclose`，带明确来源）。 */
+    sdkClickClose(gen = generation): void {
+      send({ type: "sdk-clickclose", generation: gen });
+    },
     superseded(gen = generation): void {
       send({ type: "superseded", generation: gen });
     },
@@ -234,6 +238,42 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
     expect(d.open, "真实的关闭不能被误判成过期回包").toBe(false);
     expect(d.phase).toBe("closed");
     expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
+  });
+
+  it("clickclose（用户点关闭按钮）带明确来源：有在飞关闭账时也必须真的关上", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    // 关：下发 close 命令（closeOutstanding = 1），它的回包还没到
+    d.intent(false, A);
+    // 立刻重开，并且重开的确认先到
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.open).toBe(true);
+    expect(d.snapshot.closeOutstanding, "对照组：那笔关闭账还挂着").toBe(1);
+
+    // ★ 用户点了关闭按钮。它和「无身份的 close 回包」不是一回事：
+    //   来源是用户主动关闭 ⇒ 不能被那笔在飞账吞掉。
+    d.sdkClickClose();
+
+    expect(d.open, "用户主动关闭必须生效").toBe(false);
+    expect(d.phase).toBe("closed");
+    expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
+    expect(d.snapshot.closeOutstanding, "那笔账**不得**被用户的一次点击冲销").toBe(1);
+
+    // 父级随后再次重开（并确认）：那笔账仍然挂着 —— 这正是它不能被冲销的原因
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.open).toBe(true);
+    expect(d.snapshot.closeOutstanding).toBe(1);
+
+    // 对照组：那条旧命令的回包终于到了 —— 它必须仍被认成「结算」，
+    // 而不是「未经请求的关闭」（否则会把刚重开的模型关掉）
+    const changesBefore = d.changes.length;
+    d.sdkClose();
+    expect(d.open, "陈旧回包不得把刚重开的模型关掉").toBe(true);
+    expect(d.snapshot.closeOutstanding).toBe(0);
+    expect(d.changes, "陈旧回包不得再产生模型变化").toHaveLength(changesBefore);
   });
 
   it("多条关闭命令在飞：每一条回包都必须清账，否则重开后的真实关闭会被吞掉", () => {
