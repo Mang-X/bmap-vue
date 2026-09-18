@@ -18,11 +18,24 @@ overlay/groundOverlay
 | ---------- | ---------------------------------------------------- | ---------------------------------------- | ---------- | ---------------------------------- |
 | type       | 地面叠加物类型                                       | `video \| canvas \| image`               | `required` | -                                  |
 | url        | 叠加物 image url、video url 或者自定义的 canvas 对象 | [`GroundOverlayUrl` ](#GroundOverlayUrl) | `required` | -                                  |
-| startPoint | 显示区域开始点，见[图示](#bounds-图示)               | `{ lng: number, lat: number}`            | `required` | -                                  |
-| endPoint   | 显示区域结束点，见[图示](#bounds-图示)               | `{ lng: number, lat: number}`            | `required` | -                                  |
+| bounds     | 显示区域（西南 / 东北两个角点），见[图示](#bounds-图示) | `{ southwest: Point, northeast: Point }` | `required` | <Badge type="tip" text="^3.0.0" /> |
 | autoCenter | 是否自动根据地面叠加物显示区域居中地图               | `boolean `                               | `true`     | -                                  |
 | opacity    | 透明度，范围 0-1                                     | `number`                                 |            | -                                  |
 | visible    | 是否显示                                             | `boolean`                                | `true`     | <Badge type="tip" text="^2.2.0" /> |
+
+### 从 `startPoint` + `endPoint` 迁移
+
+v2 / v3-beta 的 `startPoint`（西南角）与 `endPoint`（东北角）**仍然可用**，但它们已经弃用：
+内部只有一份几何模型 `bounds`，旧名由集中弃用层在**读取层**解析，并在控制台给出一次提示
+（同实例只提示一次）。新代码请直接用 `bounds`；两者同时出现时 **`bounds` 优先**，旧名完全不参与。
+
+```vue
+<!-- 旧写法（仍可用，会提示一次） -->
+<BGroundOverlay type="image" url="a.png" :start-point="sw" :end-point="ne" />
+
+<!-- 新写法 -->
+<BGroundOverlay type="image" url="a.png" :bounds="{ southwest: sw, northeast: ne }" />
+```
 
 ### bounds 图示
 
@@ -50,12 +63,7 @@ export type GroundOverlayUrl =
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件；以下为实际发出的 typed emits（载荷为 SDK 原生事件）：
+本组件的事件面由**覆盖物事件矩阵**给出：`ground-overlay` 共 11 个事件，事件名（Vue 名 / SDK 名）、
+载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
 
-| 事件名 | 说明 | 类型 |
-| --- | --- | --- |
-| click | 鼠标左键单击事件的回调函数 | `(e: unknown) => void` |
-| dblclick | 鼠标左键双击事件的回调函数 | `(e: unknown) => void` |
-| mouseover | 鼠标指针移入该覆盖物事件的回调函数 | `(e: unknown) => void` |
-| mouseout | 鼠标指针移出该覆盖物事件的回调函数 | `(e: unknown) => void` |
-
+详见 [覆盖物事件矩阵](./events)。

@@ -192,14 +192,44 @@ export type {
   ResourceRegistration,
   ResourceRegistrationInput,
 } from "./overlays/OverlayRegistry";
-// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）
+// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30，M5-VECTORS / #31 扩展）
 export type {
   OverlayEventSpec,
   OverlayFieldMap,
   OverlayFieldUpdate,
+  OverlayFieldWatch,
   OverlaySpec,
 } from "./overlays/OverlaySpec";
+export {
+  OVERLAY_EVENT_MATRIX,
+  OVERLAY_KINDS_WITHOUT_EVENT_MATRIX,
+  overlayEventOf,
+  overlayEventsOf,
+  overlayPointerFallback,
+} from "./overlays/overlayEventCatalog";
+export type {
+  OverlayEventDefinition,
+  OverlayEventMatrixEntry,
+  OverlayEventPayloadKind,
+} from "./overlays/overlayEventCatalog";
+export {
+  DEPRECATED_EVENT_ALIAS_CODE,
+  DEPRECATED_PROP_ALIAS_CODE,
+  OVERLAY_EVENT_ALIASES,
+  OVERLAY_PROP_ALIASES,
+  createDeprecationWarner,
+  describeDeprecation,
+  eventAliasesOf,
+  propAliasesOf,
+} from "./deprecations";
+export type {
+  DeprecationNotice,
+  DeprecationWarner,
+  OverlayEventAlias,
+  OverlayPropAlias,
+} from "./deprecations";
 export { useOverlaySpec } from "./composables/useOverlaySpec";
+export { dynamicEmit } from "./composables/dynamicEmit";
 export type {
   OverlayPositionModel,
   UseOverlaySpecOptions,

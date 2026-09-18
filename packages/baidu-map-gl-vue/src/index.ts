@@ -39,6 +39,15 @@ export type {
   BInfoWindowProps,
   BCircleProps,
   BPolylineProps,
+  BLabelProps,
+  LabelStyle,
+  BPolygonProps,
+  BRectangleProps,
+  BBezierCurveProps,
+  BPrismProps,
+  BGroundOverlayProps,
+  GroundOverlayType,
+  GroundOverlayUrl,
   BMapDataProps,
   BMarkerListProps,
   BMarkerClusterProps,
@@ -71,6 +80,7 @@ export { useSdkResource } from "./core/composables/useSdkResource";
 export type { SdkResourceSpec, SdkResourceStatus } from "./core/composables/useSdkResource";
 // 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）：组件只声明 OverlaySpec，其余由这里驱动
 export { useOverlaySpec } from "./core/composables/useOverlaySpec";
+export { dynamicEmit } from "./core/composables/dynamicEmit";
 export type {
   OverlayPositionModel,
   UseOverlaySpecOptions,
@@ -80,8 +90,49 @@ export type {
   OverlayEventSpec,
   OverlayFieldMap,
   OverlayFieldUpdate,
+  OverlayFieldWatch,
   OverlaySpec,
 } from "./core/overlays/OverlaySpec";
+// 覆盖物事件矩阵（M5-VECTORS / #31）：按 kind 的事件面、载荷档与「需要编辑能力」的单一事实源。
+// 与 map 事件 Catalog 同一分工——组件的 emits、内核的订阅、文档表格都从这里出发。
+export {
+  OVERLAY_EVENT_MATRIX,
+  OVERLAY_KINDS_WITHOUT_EVENT_MATRIX,
+  overlayEventOf,
+  overlayEventsOf,
+  overlayPointerFallback,
+} from "./core/overlays/overlayEventCatalog";
+export type {
+  OverlayEventDefinition,
+  OverlayEventMatrixEntry,
+  OverlayEventMatrixKey,
+  OverlayEventPayloadKind,
+} from "./core/overlays/overlayEventCatalog";
+// 覆盖物事件的公共载荷（三档：必填坐标 / 坐标可缺 / 只有底座）
+export type {
+  OverlayEventPayload,
+  OverlayPartialPointerEvent,
+  OverlayPointerEvent,
+} from "./driver/types/events";
+// 集中弃用层（#31）：旧 prop / 事件别名的身份与「同实例只警告一次」的告警器。
+// 组件**不写**自己的兼容代码（#28 明令禁止「组件各自兼容」）。
+export {
+  DEPRECATED_EVENT_ALIAS_CODE,
+  DEPRECATED_PROP_ALIAS_CODE,
+  OVERLAY_EVENT_ALIASES,
+  OVERLAY_PROP_ALIASES,
+  createDeprecationWarner,
+  describeDeprecation,
+  eventAliasesOf,
+  propAliasesOf,
+} from "./core/deprecations";
+export type {
+  DeprecationNotice,
+  DeprecationWarner,
+  OverlayEventAlias,
+  OverlayPropAlias,
+} from "./core/deprecations";
+export type { OverlayKind } from "./driver/types/overlays";
 export { useResourceScope } from "./core/lifecycle/useResourceScope";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
 export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";

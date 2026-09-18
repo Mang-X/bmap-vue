@@ -40,6 +40,14 @@ export interface SdkResourceSpec<Props, Resource, Context> {
     resource: Resource;
     props: Readonly<Props>;
     scope: ResourceScope;
+    /**
+     * 本次挂载属于**过期一代的清理路径**（`create()` 结算时发现已被卸载 / 取代）。
+     *
+     * 这条路径上的 `mount` 只用于拿到 registration 再立刻 `dispose()`（让 SDK 侧把刚建出来的
+     * 实例摘掉），因此 spec 在里面**不得执行组件侧副作用**——那是对一个马上消失的实例做业务动作，
+     * 而且回滚不了（PR #103 评审 1：`BGroundOverlay.afterMount` 的 `setViewport` 会改地图视野）。
+     */
+    stale?: boolean;
   }): ResourceRegistration<Resource> | void;
   bind?(input: {
     context: Context;
@@ -146,7 +154,7 @@ export function useSdkResource<Props, Resource, Context>(
       if (scope.isDisposed || componentScope.isDisposed || disposed || token !== createToken) {
         // 竞态:已卸载或被新一代取代,立即清理新建实例
         try {
-          const tmpReg = spec.mount({ context, resource: created, props, scope });
+          const tmpReg = spec.mount({ context, resource: created, props, scope, stale: true });
           tmpReg instanceof Object && (tmpReg as ResourceRegistration<Resource>)?.dispose?.();
         } catch {
           /* ignore */

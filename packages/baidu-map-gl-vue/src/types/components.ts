@@ -148,30 +148,145 @@ export interface BInfoWindowProps {
   enableCloseOnClick?: boolean;
 }
 
-export interface BCircleProps {
-  center: { lng: number; lat: number };
-  radius: number;
+/**
+ * 描边样式：Polyline / Polygon / Rectangle / Circle 共享（M5-VECTORS / #31）。
+ *
+ * 与 Driver 描述符的 `PATH_STYLE` 逐键对应，由 `v3-overlay-suite.test.ts` 交叉锁定。
+ */
+export interface PathStrokeProps {
   strokeColor?: string;
   strokeWeight?: number;
   strokeOpacity?: number;
   strokeStyle?: "solid" | "dashed" | "dotted";
+}
+
+/** 填充样式：Polygon / Rectangle / Circle 共享（**Polyline 没有填充**，上游只有描边 setter）。 */
+export interface PathFillProps {
   fillColor?: string;
   fillOpacity?: number;
+}
+
+/** 图形类覆盖物共有的开关与显隐（**不含** `enableEditing`：Prism / BezierCurve 上游没有编辑能力）。 */
+export interface PathShapeProps {
   enableMassClear?: boolean;
-  enableEditing?: boolean;
-  enableClicking?: boolean;
   visible?: boolean;
 }
 
-export interface BPolylineProps {
+/**
+ * 可编辑的图形类覆盖物（Polyline / Polygon / Rectangle / Circle 四个）。
+ *
+ * 单独一层接口而不是并进 `PathShapeProps`：上游把 `enableEditing` 只给了这四个
+ * （`GraphEventMap` 的编辑六件套也只在这四个 kind 的事件表里），因此
+ * 「谁能开编辑」这件事在**类型层**就说清了，而不是靠组件记得不暴露它。
+ */
+export interface PathEditableProps {
+  enableEditing?: boolean;
+}
+
+/**
+ * 折线。
+ *
+ * `path` 与 `pathVersion` 是一对：`path` 按**根引用**比较（大数组不做内容指纹，见
+ * `OverlaySpec` 的 `watchSources`），原地修改数组时靠 `pathVersion` 递增触发更新。
+ */
+export interface BPolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
   path: { lng: number; lat: number }[];
   pathVersion?: string | number;
-  strokeColor?: string;
-  strokeWeight?: number;
-  strokeOpacity?: number;
-  strokeStyle?: "solid" | "dashed" | "dotted";
+}
+
+/** 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。 */
+export interface BPolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+  path: ({ lng: number; lat: number } | string)[];
+  pathVersion?: string | number;
+  /** 构造期属性：路径按 SDK 原生边界名解析（如 `"北京市"`）。变化即重建。 */
+  isBoundary?: boolean;
+}
+
+/** 矩形（v4 起提供；由对角两点构成的 `bounds` 定义）。 */
+export interface BRectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+  bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
+  enableClicking?: boolean;
+}
+
+export interface BCircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+  center: { lng: number; lat: number };
+  radius: number;
+  enableClicking?: boolean;
+}
+
+/** 贝塞尔曲线：`path` 与 `controlPoints` 各有一个版本令牌。 */
+export interface BBezierCurveProps extends PathStrokeProps, PathShapeProps {
+  path: { lng: number; lat: number }[];
+  controlPoints: { lng: number; lat: number }[][];
+  pathVersion?: string | number;
+  controlPointsVersion?: string | number;
+}
+
+/** 文本标注的样式对象（驼峰 CSS 属性）。 */
+export type LabelStyle = Record<string, unknown>;
+
+export interface BLabelProps {
+  content: string;
+  position: { lng: number; lat: number };
+  offset?: { x: number; y: number };
+  zIndex?: number;
+  style?: LabelStyle;
   enableMassClear?: boolean;
-  enableEditing?: boolean;
+  visible?: boolean;
+}
+
+/**
+ * 3D 棱柱。
+ *
+ * `isBoundary` / `autoCenter` 是**构造期透传**：`@baidumap/jsapi-v4-types@4.0.4` 的
+ * `PrismOptions` 里没有这两个键（4.0 运行时是否读取未取证），因此它们既不被当作字段级更新，
+ * 也不被宣称支持——只在创建时原样交给 SDK（分类与理由见 `OVERLAY_DESCRIPTORS.prism`）。
+ */
+export interface BPrismProps {
+  path: ({ lng: number; lat: number } | string)[];
+  altitude: number;
+  topFillColor?: string;
+  topFillOpacity?: number;
+  sideFillColor?: string;
+  sideFillOpacity?: number;
+  isBoundary?: boolean;
+  autoCenter?: boolean;
+  enableMassClear?: boolean;
+  visible?: boolean;
+}
+
+/** 地面叠加层的内容类型（对应上游 `GroundOverlayOptions.type`）。 */
+export type GroundOverlayType = "image" | "video" | "canvas";
+
+/**
+ * 地面叠加层的内容来源。
+ *
+ * 允许**惰性工厂**：`type: "canvas"` 时通常需要现场创建 canvas，工厂只在创建 / 显式替换时调用一次
+ * （求值发生在本库的 props 视图里，绝不把函数交给 SDK）。
+ */
+export type GroundOverlayUrl =
+  | string
+  | HTMLCanvasElement
+  | (() => string | HTMLCanvasElement);
+
+/**
+ * 地面叠加层。
+ *
+ * `bounds` 是正典 prop；`startPoint` / `endPoint` 是 v2/v3-beta 的旧名，由集中弃用层
+ * （`core/deprecations`）在读取层解析——**新 API 优先**：`bounds` 一旦有值，旧名完全不参与。
+ */
+export interface BGroundOverlayProps {
+  /** 显示区域（西南 / 东北角点）。与旧的 `startPoint` + `endPoint` 二选一。 */
+  bounds?: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
+  /** @deprecated 旧名（西南角）；改用 `bounds.southwest`。 */
+  startPoint?: { lng: number; lat: number };
+  /** @deprecated 旧名（东北角）；改用 `bounds.northeast`。 */
+  endPoint?: { lng: number; lat: number };
+  type: GroundOverlayType;
+  url: GroundOverlayUrl;
+  opacity?: number;
+  /** 创建后按显示区域居中地图（组件侧行为，不是 SDK 选项）。 */
+  autoCenter?: boolean;
   visible?: boolean;
 }
 

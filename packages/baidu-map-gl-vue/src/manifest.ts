@@ -45,6 +45,12 @@ export const componentManifest = [
     source: "./components/overlays/BPolygon.vue",
   },
   {
+    name: "BRectangle",
+    exportName: "BRectangle",
+    category: "overlay",
+    source: "./components/overlays/BRectangle.vue",
+  },
+  {
     name: "BLabel",
     exportName: "BLabel",
     category: "overlay",

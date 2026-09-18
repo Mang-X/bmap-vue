@@ -143,6 +143,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "polygon",
         },
         {
+          text: "BRectangle 矩形",
+          link: "rectangle",
+        },
+        {
           text: "BPolyline 折线",
           link: "polyline",
         },
@@ -165,6 +169,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "BMapMask 掩膜",
           link: "mapMask",
+        },
+        {
+          text: "覆盖物事件矩阵",
+          link: "events",
         },
       ],
     },

@@ -35,12 +35,7 @@ overlay/prism
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件；以下为实际发出的 typed emits（载荷为 SDK 原生事件）：
+本组件的事件面由**覆盖物事件矩阵**给出：`prism` 共 11 个事件，事件名（Vue 名 / SDK 名）、
+载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
 
-| 事件名 | 说明 | 类型 |
-| --- | --- | --- |
-| click | 鼠标左键单击事件的回调函数 | `(e: unknown) => void` |
-| dblclick | 鼠标左键双击事件的回调函数 | `(e: unknown) => void` |
-| mouseover | 鼠标指针移入该覆盖物事件的回调函数 | `(e: unknown) => void` |
-| mouseout | 鼠标指针移出该覆盖物事件的回调函数 | `(e: unknown) => void` |
-
+详见 [覆盖物事件矩阵](./events)。
