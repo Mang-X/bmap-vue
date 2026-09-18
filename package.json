@@ -41,7 +41,8 @@
     "migrate": "node --experimental-strip-types scripts/migrate-v2-to-v3.mts",
     "changeset": "changeset",
     "skills:install": "npx -y skills experimental_install -y",
-    "skills:list": "npx -y skills list"
+    "skills:list": "npx -y skills list",
+    "probe:point-pick": "node --experimental-strip-types scripts/probe-point-pick.mts"
   },
   "dependencies": {
     "mitt": "^3.0.0",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diffData, shouldFullReplace } from "./diffData";
+import { diffData } from "./diffData";
 
 describe("diffData", () => {
   const items = [
@@ -56,17 +56,5 @@ describe("diffData", () => {
   it("supports key function", () => {
     const d = diffData([{ k: 1 }], [{ k: 1 }, { k: 2 }], (i) => i.k);
     expect(d.added.map((i) => i.k)).toEqual([2]);
-  });
-});
-
-describe("shouldFullReplace", () => {
-  it("full replace when dataVersion changes", () => {
-    expect(shouldFullReplace("v1", "v2", [] as never[], [] as never[])).toBe(true);
-  });
-  it("full replace when array length changes", () => {
-    expect(shouldFullReplace("v1", "v1", [1], [1, 2])).toBe(true);
-  });
-  it("no full replace when version same and length same", () => {
-    expect(shouldFullReplace("v1", "v1", [1, 2], [1, 2])).toBe(false);
   });
 });

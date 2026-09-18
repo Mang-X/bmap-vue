@@ -420,6 +420,8 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
   本 issue 只提供 SDK 原生入口。
 - **`BMapClient.driver` 仍是 `BMapDriver`**：组件要直接用 `nativeLayers` / 归一化服务调用需要
   v4 的类型收窄，那是 `#25` 的默认切换的一部分（本 issue 不做，避免在迁移期改动公共客户端类型）。
+  > 指针（2026-09-18 / #34）：**运行时的收窄入口已落地** —— `core/layers/nativeLayerAccess.ts`
+  > 的 `nativeLayersOf(client)`（与 `jsapiV4ServicesOf` 同一条口径）。共享契约 `BMapDriver` **不动**。
 
 ## 提交前的双轴自审（Standards / Spec，各一个子代理）
 
@@ -430,7 +432,7 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
 | `_AssertRuntimeCtorsUndeclared` 是**非分配式**断言：四个构造器名取联合后整体判断，上游只补齐其中 1~3 个声明时联合仍不整体可赋值 → 断言静默通过（门禁空转） | 改为**逐成员分配式**：先对单个 kind 求条件类型、再取联合，并要求结果是 `never`；`_AssertDeclaredCtors` 同步改成同一形状（`MissingDeclaredCtors extends never`） |
 | `Panorama.destroy` 先调 SDK 再记账：可重试但丢了重入保护（与 `#22` 明确保留的「先记账挡重入」口径相反） | 改为 **claim → 调 SDK → 失败 `release`**：重入被挡、失败可重试；Fake 加 `onDestroy` 重入注入 + 一条重入单测 |
 | `setStyle` 的 `doOnceDraw` 缺成员时**静默跳过**：样式已写入但画面不会变，调用方无任何提示 | 改为 `warnOnce` 明确告警「样式已更新但不会重绘」 |
-| `NativeLayerPointTuple` / `toGeoJsonPosition` 零消费者，且把运行时函数放进 `types/` | 删除（M6 的数据适配层需要时再加） |
+| `NativeLayerPointTuple` / `toGeoJsonPosition` 零消费者，且把运行时函数放进 `types/` | 删除（M6 的数据适配层需要时再加）——**已由 #34 落地**（`core/data/geojsonAdapter.ts`；那两个被删的符号**没有**恢复） |
 | 单测的 `KINDS` / `OPERATIONS` 与探针里的常量是同一事实的两份真相，且新增操作时契约会**静默漏测** | 单测改为 import 探针常量；探头两张表加 `as const satisfies` + 「必须覆盖全部 kind / 操作」的完备性断言（漏加即编译失败） |
 | 同包内两个**同名不同形状**的 `ServiceErrorInfo`（`code` 是否可为 `null`） | JSONP 侧改名 `JsonpServiceErrorInfo`，并删掉 `webgl-v1/services.ts` 里已无消费方的再导出 |
 | `ServiceInvocationDriver` 的文档说「不抛错」，但句柄所有权校验会同步抛 `BMAP_HANDLE_FOREIGN` | 修正文档：句柄所有权属**调用方错误**（同步抛，不伪装成「服务失败」）；参数非法则走结果通道 |
