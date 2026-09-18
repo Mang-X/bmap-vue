@@ -232,6 +232,34 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
     expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
   });
 
+  it("多条关闭命令在飞：每一条回包都必须清账，否则重开后的真实关闭会被吞掉", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    // 位置变化 ⇒ 再下发一条 open（移动），SDK 稍后会为它补一条 `open`
+    d.intent(true, B);
+    // 关：此时气泡确实开着 ⇒ 这条命令会产生回调（closeOutstanding = 1）
+    d.intent(false, B);
+    // ★ 移动那次打开的回包迟到到达：相位是 closing ⇒ 补发一条 close，计数到 2
+    //    （两条 close 命令都打在一个确实开着的气泡上，因此**都会**有回调）
+    d.sdkOpen();
+    expect(d.commands).toEqual(["open@1", "open@1", "close@1", "close@1"]);
+
+    d.sdkClose();
+    expect(d.phase, "第一条回包：结算 ⇒ 相位关闭").toBe("closed");
+    // ★ 第二条回包必须在**相位已经 closed** 时也能被消费掉（否则残留计数）
+    d.sdkClose();
+
+    // 重开，然后来一次**真实的**未经请求关闭：它必须被收敛，而不是被残留计数当成过期回包
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.phase).toBe("open");
+    d.sdkClose();
+    expect(d.open, "残留计数不得把真实关闭吞掉").toBe(false);
+    expect(d.phase).toBe("closed");
+    expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
+  });
+
   it("被顶掉（superseded）：不下发任何命令，只收敛自己的模型", () => {
     const d = drive();
     d.intent(true, A);

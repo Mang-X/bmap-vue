@@ -48,6 +48,10 @@
  * 而重开之前的那些关闭命令的回包都是过期的。于是「关 → 立刻重开 → 迟到的 close 到达」
  * 在**两种到达顺序**下都不会把已经重开的气泡关掉，而「点地图关闭」仍然是一次真实的模型收敛。
  *
+ * **消费计数先于「已经关着」的幂等判断**（外部评审第二轮 P1）：计数可以大于 1，
+ * 而「相位已经回到 `closed`」不等于「计数已经还清」—— 第 2 条回包恰恰在那时到达。
+ * 顺序反了就会留下永久残留计数，之后一次**真实**的关闭被当成过期回包吞掉（模型停在「开」）。
+ *
  * 计数只在三种时机增长（都保证会有一条 `close` 回调）：`open` 相位下收到关闭意图、
  * `closing` 相位里观测到 `sdk-open`（命令被吞掉 ⇒ 补一条）、以及它们各自的重复下发。
  * 重建 / 被顶掉 / 销毁一律清零（那一代的回包已经没有意义）。
@@ -334,8 +338,12 @@ function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
 
 function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
-  if (state.phase === "closed") return settle(state);
 
+  // ⚠️ 顺序是硬要求（外部评审 P1）：**先消费在飞计数，再判「已经关着」的幂等**。
+  // 计数允许 > 1（相位是 `closing` 时观测到迟到的 `sdk-open` 会补发一条 close，见 `reduceSdkOpen`），
+  // 而「相位已经回到 `closed`」不代表「计数已经还清」—— 第二条回包正是在那一刻到达的。
+  // 反过来先按 `closed` 早退，残留计数就永远还不清，下一次重开后一条**真实**的关闭会被
+  // 当成过期回包吞掉（模型停在「开」），也就是本模块反复强调的「漏关」那一侧。
   if (state.closeOutstanding > 0) {
     const settled = { ...state, closeOutstanding: state.closeOutstanding - 1 };
     if (state.open) {
@@ -343,9 +351,13 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
       // 只消耗一次计数，相位与模型都不动。
       return settle(settled);
     }
-    // 结算我们已下发的关闭命令：期望状态本来就是关，不改模型
+    // 结算我们已下发的关闭命令：期望状态本来就是关，不改模型。
+    // 相位已经是 `closed` 时这一步是幂等 no-op（`enterPhase` 会直接返回原快照）。
     return settle(enterPhase(settled, "closed"));
   }
+
+  // 计数为 0 的 `close` 事件：相位已经关了 ⇒ 幂等（不产生任何回写）
+  if (state.phase === "closed") return settle(state);
 
   // 未经请求的关闭（点地图 / 点关闭按钮 / 被顶掉）
   const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
