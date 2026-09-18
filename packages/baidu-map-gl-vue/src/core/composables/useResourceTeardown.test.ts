@@ -22,7 +22,7 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, provide } from "vue";
+import { defineComponent, h, nextTick, provide, reactive } from "vue";
 import type { MapContext, MapReadyContext } from "../context/types";
 import { mapContextInjectionKey } from "../context/inject";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
@@ -151,6 +151,60 @@ function mountWith(use: "control" | "layer") {
     }),
   );
 }
+
+/**
+ * **重建**路径（构造期 option 变化）的卸载顺序（#98 第四轮行内发现 1）。
+ *
+ * 为什么单独一条：常规销毁都经过 `LayerRecord.dispose()`，「先 scope、再 `removeLayer`」由它保证；
+ * 而**换实例**时内核会先做一次「收敛」——自己摘一次、确认摘掉了才换（否则 `LayerRegistry` 会吞掉
+ * 摘除失败并永久删除记录，新实例照挂 ⇒ 图上两份）。收敛不能走 `dispose()`，于是那条顺序要由内核
+ * 自己补上。这条用例把它变成可断言的事实：**收敛那一次 `removeLayer` 也必须在 `unbind` 之后**。
+ */
+describe("图层重建路径的卸载顺序", () => {
+  it("构造期 option 变化换实例：旧一代先解绑业务事件、再由 Map 摘除，新一代最后才建", async () => {
+    // 用**真实的响应式 props**（不是上面那套固定 `{}`）：重建必须由 props 变化驱动，
+    // 而 `tileUrlTemplate` 是构造期选项 ⇒ 落在重建指纹里 ⇒ 走 `replaceAfterDetached()`。
+    const props = reactive({ tileUrlTemplate: "https://a.example/1.png" });
+    const Child = defineComponent({
+      name: "ProbeLayer",
+      setup() {
+        useLayerResource(props, {
+          toSpec: (p) => ({ kind: "tile", options: { tileUrlTemplate: p.tileUrlTemplate } }),
+          component: "ProbeLayer",
+          bind: ({ scope }) => {
+            scope.add(() => order.push("unbind"));
+          },
+        });
+        return () => null;
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          provide(mapContextInjectionKey, fakeMapContext());
+          return () => h(Child);
+        },
+      }),
+    );
+    await flushPromises();
+    expect(order).toEqual(["create:tile", "add-to-map"]);
+    order = [];
+
+    props.tileUrlTemplate = "https://a.example/2.png";
+    await nextTick();
+    await flushPromises();
+
+    expect(
+      order,
+      "旧一代「解绑 → 摘除」、新一代「创建 → 挂上」；两段顺序都不能反（SDK 可能在 removeLayer 期间同步派发事件）",
+    ).toEqual(["unbind", "sdk-remove", "create:tile", "add-to-map"]);
+
+    wrapper.unmount();
+    await flushPromises();
+    // 卸载时换成了新一代那一份 scope 的解绑 + 它的摘除，顺序同样是 unbind 在前。
+    expect(order.slice(-2)).toEqual(["unbind", "sdk-remove"]);
+  });
+});
 
 describe.each([
   // 图层多一步 `create:<kind>`：内核的创建是显式的一次 SDK 调用（控件侧走 `controls.create`，

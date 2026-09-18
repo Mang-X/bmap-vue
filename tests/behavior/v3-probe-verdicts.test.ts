@@ -164,6 +164,61 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(line).not.toContain("内容没回来");
   });
 
+  it("读数对象**在**、`threw` 字段**不在** ⇒ 第三态（不得读成「未抛错 / 安全」）", () => {
+    // 第四轮行内发现 2：`Reading.threw` 是可选的，而页面回传的形状不完全由我们决定。
+    // 只判「读数对象在不在」的话，`{ id: "x" }` 这种读数会被读成「未抛错」= **安全**——
+    // 正是这条口径要禁止的方向（「没测到」不等于「测到了，是好的那一侧」）。
+    const blank = (id: string) => ({ id });
+
+    const pLine = lineOf(
+      verdicts(
+        report([
+          blank("geojson.removeLayer#2.已摘下"),
+          blank("dom.removeLayer#2.已摘下"),
+          blank("tile.removeLayer#2.已摘下"),
+        ]),
+      ),
+      "[前提 P]",
+    );
+    expect(pLine).toContain("无法判定");
+    expect(pLine, "不得读成「安全（前提 P 成立）」").not.toContain("安全（前提 P 成立）");
+
+    const repairLine = lineOf(
+      verdicts(report([blank("kernel.repair.setData")])),
+      "[再显示后补 setData]",
+    );
+    expect(repairLine).toContain("**无法判定**");
+    expect(repairLine, "不得读成「未抛错」").not.toContain("调用本身 未抛错");
+
+    const clearLine = lineOf(
+      verdicts(
+        report([
+          { id: "dom.detached", connected: 0, overlayCount: 0 },
+          { id: "dom.afterRemoveAllOverlays", connected: 0, overlayCount: 0 },
+          blank("dom.removeAllOverlays.已detached"),
+        ]),
+      ),
+      "[DOM detached 清空]",
+    );
+    expect(clearLine).toContain("无法判定");
+    expect(clearLine, "不得读成安全侧的「无需清空」").not.toContain("**无需清空**");
+  });
+
+  it("`threw` 字段类型不对（页面回传字符串）同样算没测到 ⇒ 第三态", () => {
+    const pLine = lineOf(
+      verdicts(
+        report([
+          { id: "geojson.removeLayer#2.已摘下", threw: "false" as unknown as boolean },
+          { id: "dom.removeLayer#2.已摘下", threw: false },
+          { id: "tile.removeLayer#2.已摘下", threw: false },
+        ]),
+      ),
+      "[前提 P]",
+    );
+    expect(pLine).toContain("无法判定");
+    expect(pLine, "另两条没抛错也不能把它抬成「安全」").not.toContain("安全（前提 P 成立）");
+  });
+
   it("正证控件：读数缺失 / 字段类型不对都算不成立，齐备时为空", () => {
     expect(controlFailures(report([])).length, "没有读数时控件必须不成立").toBeGreaterThan(0);
     expect(
@@ -184,5 +239,9 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
       ),
       "齐备时控件成立",
     ).toEqual([]);
+    expect(
+      controlFailures(report([{ id: "geojson.attached", overlayCount: 2 }, { id: "dom.attached" }])),
+      "`created` 字段缺失同样算不成立（控件方向保守：缺失一律不成立）",
+    ).toHaveLength(1);
   });
 });

@@ -49,9 +49,15 @@ export function controlFailures(report: ProbeReport): string[] {
     failures.push(`geojson.attached 的 overlayCount 不是正数（得到 ${String(geo?.overlayCount)}）`)
   }
   const dom = byId.get("dom.attached")
-  if (!dom || (dom.created ?? 0) <= 0) failures.push("dom.attached 没有创建出任何元素")
+  // 两个字段都**显式查类型**（不用 `?? 0` 兜底）：读数对象存在但字段缺失时，兜底会把
+  // 「没测到」写成「没创建出元素」——那是另一回事，诊断信息会把人带偏。
+  if (!dom || typeof dom.created !== "number" || dom.created <= 0) {
+    failures.push(`dom.attached 没有创建出任何元素（created=${String(dom?.created)}）`)
+  }
   // 「节点真的进了文档」是「残留」这个读数的前提：不成立就无法区分「没残留」与「本来就没进去」
-  else if ((dom.connected ?? 0) <= 0) failures.push("dom.attached 的节点一个都没连到文档上")
+  else if (typeof dom.connected !== "number" || dom.connected <= 0) {
+    failures.push(`dom.attached 的节点一个都没连到文档上（connected=${String(dom.connected)}）`)
+  }
   return failures
 }
 
@@ -61,8 +67,10 @@ const UNKNOWN = "**无法判定**（读数缺失）"
 /**
  * 把读数映射成结论——这是本探针真正的产物。
  *
- * 口径（三条，改这个函数前先读）：
+ * 口径（四条，改这个函数前先读）：
  * 1. **每个结论都先查 presence / 类型，再进正负分支**；缺失一律 `UNKNOWN`。
+ *    这条对**读数对象里的字段**同样成立——`Reading` 的字段（含 `threw`）都是可选的，
+ *    「读数对象在、`threw` 不在」也是「没测到」，不得当成「未抛错」（第四轮行内发现 2）。
  * 2. 「对照不成立」也是 `UNKNOWN`，不是负结论——控件不成立时后面的读数无意义。
  * 3. 结论行里可以带读数原文（`domSnap`），但**结论本身**不得由读数原文推导（同一处读两次
  *    容易只在一处加 presence 检查）。
@@ -71,30 +79,40 @@ export function verdicts(report: ProbeReport): string[] {
   const byId = new Map(report.readings.map((r) => [r.id, r]))
   const lines: string[] = []
 
+  /**
+   * 读一个「有没有抛错」的字段：读数缺失、或 `threw` 字段**缺失 / 类型不对** ⇒ `null`（第三态）。
+   *
+   * ⚠️ 不能只判「读数对象在不在」：`Reading.threw` 是可选的，页面回传的形状不完全由我们决定。
+   * 只判对象存在，`{ id: "x" }` 这种读数会被读成「未抛错」= **安全**——正是这条口径要禁止的方向。
+   */
+  const threwOf = (id: string): boolean | null => {
+    const value = byId.get(id)?.threw
+    return typeof value === "boolean" ? value : null
+  }
+  /** 读数原文（含抛错信息）；缺失或字段类型不对时给第三态文案。 */
+  const describeReading = (id: string): string => {
+    const reading = byId.get(id)
+    const threw = threwOf(id)
+    if (reading === undefined || threw === null) return "无法判定（读数缺失）"
+    return threw ? `抛错（${reading.message}）` : "未抛错"
+  }
   // 每条读数**三态**：安全 / 不安全 / **无法判定**。缺失的读数**不得**当成 safe——
   // `!undefined === true` 会把「没测到」读成「安全」，正是第六轮评审要求避免的形态。
-  const describeReading = (reading: Reading | undefined) =>
-    reading === undefined
-      ? "无法判定（读数缺失）"
-      : reading.threw
-        ? `抛错（${reading.message}）`
-        : "未抛错"
-  const pReadings: Array<[string, Reading | undefined]> = [
-    ["GeoJSON", byId.get("geojson.removeLayer#2.已摘下")],
-    ["DOM", byId.get("dom.removeLayer#2.已摘下")],
-    ["Tile", byId.get("tile.removeLayer#2.已摘下")],
+  const pIds: Array<[string, string]> = [
+    ["GeoJSON", "geojson.removeLayer#2.已摘下"],
+    ["DOM", "dom.removeLayer#2.已摘下"],
+    ["Tile", "tile.removeLayer#2.已摘下"],
   ]
-  const known = pReadings.filter(([, reading]) => reading !== undefined)
-  const anyThrew = known.some(([, reading]) => reading!.threw)
+  const pThrows = pIds.map(([, id]) => threwOf(id))
   const pVerdict =
-    known.length < pReadings.length
+    pThrows.some((threw) => threw === null)
       ? "**无法判定**（有读数缺失）"
-      : anyThrew
+      : pThrows.some((threw) => threw === true)
         ? "**不安全**（三态收敛的该分支需要换机制）"
         : "安全（前提 P 成立）"
   lines.push(
     `[前提 P] 对已摘下的图层重复 removeLayer —— ` +
-      pReadings.map(([name, reading]) => `${name} ${describeReading(reading)}`).join(" / ") +
+      pIds.map(([name, id]) => `${name} ${describeReading(id)}`).join(" / ") +
       ` ⇒ ${pVerdict}`,
   )
 
@@ -127,14 +145,14 @@ export function verdicts(report: ProbeReport): string[] {
             : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
   )
   const repaired = nodesOf("kernel.repaired")
-  const repairCall = byId.get("kernel.repair.setData")
+  const repairThrew = threwOf("kernel.repair.setData")
   lines.push(
     `[再显示后补 setData] ${domSnap("kernel.repaired")}；` +
       `调用本身 ${
-        repairCall === undefined
+        repairThrew === null
           ? UNKNOWN
-          : repairCall.threw
-            ? `抛错（${repairCall.message}）`
+          : repairThrew
+            ? `抛错（${byId.get("kernel.repair.setData")?.message}）`
             : "未抛错"
       } ⇒ ` +
       (repaired === null
@@ -172,11 +190,11 @@ export function verdicts(report: ProbeReport): string[] {
   // 相反的结论（「判定文案必须跟着读数走」这个坑就是从这里来的）。
   const domBefore = nodesOf("dom.detached")
   const domAfter = nodesOf("dom.afterRemoveAllOverlays")
-  const clearCall = byId.get("dom.removeAllOverlays.已detached")
+  const clearThrew = threwOf("dom.removeAllOverlays.已detached")
   const domClearVerdict =
-    domBefore === null || domAfter === null || clearCall === undefined
+    domBefore === null || domAfter === null || clearThrew === null
       ? UNKNOWN
-      : clearCall.threw
+      : clearThrew
         ? "**不安全**（detached 上调用抛错 ⇒ 内核不能照常调它，得先把图层挂回去再清）"
         : domBefore === 0
           ? "**无需清空**（`removeLayer` 已把节点从文档摘掉）；detached 调它是安全的 no-op"
@@ -186,10 +204,10 @@ export function verdicts(report: ProbeReport): string[] {
   lines.push(
     `[DOM detached 清空] removeLayer 之后仍连在文档上的节点 ${domSnap("dom.detached")}；` +
       `再调 removeAllOverlays() ${
-        clearCall === undefined
+        clearThrew === null
           ? UNKNOWN
-          : clearCall.threw
-            ? `抛错（${clearCall.message}）`
+          : clearThrew
+            ? `抛错（${byId.get("dom.removeAllOverlays.已detached")?.message}）`
             : "未抛错"
       }；之后 ${domSnap("dom.afterRemoveAllOverlays")} ⇒ ${domClearVerdict}`,
   )

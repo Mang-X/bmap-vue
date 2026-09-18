@@ -127,6 +127,16 @@ interface InstanceState {
   everAttached: boolean;
   /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性，避免重复清理同一实例。 */
   torndown: boolean;
+  /**
+   * **本代的 child scope**：`bind()` 把业务监听（驱动事件订阅等）挂在这里。
+   *
+   * 内核持有它的唯一用途是：在**收敛**（`tryConvergeToDetached` 会先自己摘一次）之前先把业务
+   * 监听解绑。常规两条销毁路径都走 `LayerRecord.dispose()`，「先 scope、再 `removeLayer`」的顺序
+   * 自然成立；收敛不能走 `dispose()`（那会连带把账本记录永久删掉），所以那条顺序得自己保证。
+   */
+  scope: ResourceScope;
+  /** 是否已经解绑过本代的业务监听（一次性；`replace()` 里的 `dispose()` 还会再解一次，幂等）。 */
+  listenersReleased: boolean;
   /** 创建该实例时用的重建指纹：props 变化时与它比较，决定「重建」还是「就地更新」。 */
   rebuildKey: string;
   /**
@@ -500,6 +510,34 @@ export function useLayerResource<Props>(
   };
 
   /**
+   * **解绑本代实例的业务监听**（`bind()` 里 `scope.add(...)` 注册的驱动事件订阅等）。
+   *
+   * 为什么内核自己要有这一步：「**先解绑业务事件、再由 Map 摘除资源**」这条顺序由
+   * `LayerRegistry.dispose()` 与 `useResourceTeardown.test.ts` 维护，理由是 SDK 可能在
+   * `removeLayer` **期间同步派发事件**，那时业务回调已经开始拆解了。常规两条销毁路径都经过
+   * `LayerRecord.dispose()`，顺序自然成立；但**收敛**（见 `tryConvergeToDetached`）必须在
+   * `replace()` **之前**自己摘一次，而它不能走 `dispose()`——`LayerRegistry` 会在那里把记录
+   * **永久删除**，之后三条永久销毁路径都不会再重试摘除那个实例。于是顺序要在这里自己保证。
+   *
+   * 幂等：`replace()` 之后的 `dispose()` 还会对同一个 scope 再调一次，`ResourceScope.dispose()`
+   * 自身幂等，那一次是 no-op。
+   *
+   * ⚠️ **代价写在明面上**：收敛**失败**时监听已经解绑、而实例仍留在图上——它保持渲染但不再
+   * 响应业务事件（`@click` 一类），直到下一次 props 变化（届时重试收敛）或永久销毁。这是有意的
+   * 取舍：宁可让一个**待替换**的实例暂时失去监听，也不在「业务监听还活着」的时候去调
+   * `removeLayer`（那正是这条顺序要防的事）。失败经 `resource:error` 可观测，不会被静默吞掉。
+   */
+  const releaseListeners = (state: InstanceState): void => {
+    if (state.listenersReleased) return;
+    state.listenersReleased = true;
+    try {
+      state.scope.dispose("layer-replaced");
+    } catch (error) {
+      reportResourceError(error);
+    }
+  };
+
+  /**
    * 尝试把挂载状态**收敛到确定的 `detached`**；成功返回 `true`。
    *
    * 为什么换实例（`replace()`）之前必须先过这一关：`replace()` 释放旧实例时，最终经过
@@ -514,11 +552,16 @@ export function useLayerResource<Props>(
    * 失败 ⇒ 经 `resource:error` 交出并返回 `false`，调用方**不做**任何会再加一份的动作
    * （留到下一次 props 变化 / 永久销毁再试）。这条就是「摘除失败时绝不重复挂载」在换实例路径上的落实。
    *
+   * **顺序**：真正去摘之前先 `releaseListeners()` —— 常规销毁路径的「先解绑、再摘除」由
+   * `LayerRecord.dispose()` 保证，而收敛绕过了它，所以在这里补上（理由与代价见 `releaseListeners`）。
+   *
    * ⚠️ **不要直接调用它**：唯一的调用点是 `replaceAfterDetached()`（同一份 watch 里）。
    * 分头调用正是「补了一条重建路径、漏了另一条」的来源——这三条路径必须一起受保护。
    */
   const tryConvergeToDetached = (state: InstanceState, context: MapReadyContext): boolean => {
     if (state.mountState === "detached") return true;
+    // 只在**真的要去摘**的时候才解绑：已经 `detached` 时上面那行就返回了，不会白解绑。
+    releaseListeners(state);
     try {
       unmount(state, context);
       // `unmount` 会改写 `mountState`，但 TS 不知道——这里按完整三态重新读一次。
@@ -580,6 +623,8 @@ export function useLayerResource<Props>(
           mountAttempted: false,
           everAttached: false,
           torndown: false,
+          scope,
+          listenersReleased: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
           appliedData: UNAPPLIED,

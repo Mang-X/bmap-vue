@@ -337,9 +337,23 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
 
 ```text
 replaceAfterDetached(state, ready)
-  ├─ tryConvergeToDetached(state, context)  ← 可失败的 unmount；失败 ⇒ 中止（不创建新实例）
-  └─ replace()
+  ├─ tryConvergeToDetached(state, context)
+  │    ├─ 已 detached ⇒ 直接放行（不需要动 SDK，也就不需要先解绑）
+  │    ├─ releaseListeners(state)        ← 先解绑本代业务监听（unbind -> sdk-remove）
+  │    └─ unmount(state, context)        ← 可失败的 removeLayer；失败 ⇒ 中止
+  └─ replace()                           ← 此处 dispose 内的摘除已是 no-op、scope 解绑已幂等
 ```
+
+**顺序**（第四轮行内发现 1）：收敛那一次 `removeLayer` **必须先解绑业务监听**。常规两条销毁路径由
+`LayerRecord.dispose()` 保证这条顺序（见 `useResourceTeardown.test.ts`），理由是 **SDK 可能在
+`removeLayer` 期间同步派发事件**，那时业务回调已经开始拆解了。收敛**不能**走 `dispose()`——
+`LayerRegistry` 会在那里把记录**永久删除**，之后组件卸载 / 重建 / Map 销毁三条永久销毁路径都不会
+再重试摘除那个实例（正是上面要避免的「失去账本所有权」）。所以顺序由内核自己补上
+（`releaseListeners()`，幂等）。
+
+**代价（有意取舍，写在这里）**：收敛**失败**时监听已经解绑、而实例仍留在图上——它保持渲染但不再
+响应业务事件（`@click` 一类），直到下一次 props 变化（届时重试收敛）或永久销毁。宁可让一个**待替换**
+的实例暂时失去监听，也不在「业务监听还活着」时去调 `removeLayer`。失败经 `resource:error` 可观测。
 
 为什么必须**先收敛**：`replace()` 释放旧实例最终经 `LayerRegistry.dispose()`，而 Registry 对摘除
 失败的口径是「**吞掉异常 + 把记录永久删除**」（组件卸载 / Map 卸载必须继续走完，这个口径本身是对的）。
@@ -355,18 +369,23 @@ replaceAfterDetached(state, ready)
 
 - **不是只有 `unknown` 才危险**。`attached` 时这一次 `removeLayer` 本身就可能**在摘除前**失败
   （SDK 允许先产生副作用再抛错），所以三条路径**一律**先收敛，不能按「当前状态是 attached 就跳过」。
-- **顺序有意变了一处**：收敛那一步会先把 `removeLayer` 做掉，于是 `replace()` 内部 dispose 里那次
-  摘除成为 no-op（`mountAttempted` 已复位），数据清空（`tearDownData`）落到摘除**之后**，即走
+- **数据清空（`tearDownData`）落到摘除之后**：收敛那一步先把 `removeLayer` 做掉，于是 `replace()`
+  内部 dispose 里那次摘除成为 no-op（`mountAttempted` 已复位），清空随之落到摘除**之后**，即走
   决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()` 在 `removeLayer` 之后仍有效、
-  `DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。「摘除时 child scope 还活着」也不是新形态
-  ——`visible=false` 这条常规路径本来就是这么做的。
+  `DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
+  ⚠️ 这一条**只针对数据清空**：业务监听的解绑必须**先于**摘除，见上面的「顺序」段落。
+  （第五轮修正：这一点上一轮写成「`visible=false` 这条常规路径也是摘除时 scope 还活着」——
+  那个类比不成立：`visible=false` 只是临时摘挂、**不销毁资源**，而重建是销毁旧一代。）
 
 §13 有三条回归用例钉住它：`unknown` 时连续两次 pre-detach 失败、**`attached` 时构造期 option 变化 +
 摘除前失败**、以及「已写入槽位变回未表态 + 摘除前失败」——三条都断言 `attached` 绝不变成 2。
+顺序那一条由 `useResourceTeardown.test.ts` 的「图层重建路径的卸载顺序」用例钉住
+（构造期 option 变化 ⇒ `["unbind", "sdk-remove", "create:tile", "add-to-map"]`）。
 
 （第五轮评审发现 2；第六轮评审发现 2 指出原先「确定性收敛」的表述过强；#98 取证之后前提成立；
 第三轮评审发现 1 补上换实例路径的收敛前置；**第四轮评审发现 1** 指出当时只接在一条路径上，
-遂收口成唯一入口。）
+遂收口成唯一入口；**第四轮行内发现 1** 指出收敛那次 `removeLayer` 把 `unbind -> sdk-remove`
+的顺序反了，遂补 `releaseListeners()`。）
 
 记账的复位时点：`mountState = "detached"` 与 `mountAttempted = false` 都放在 `driver.layers.remove()`
 **成功返回之后**。先复位的后果不是「少摘一次」，而是**永远不再摘**——`mountAttempted` 变成「从未挂过」，

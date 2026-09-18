@@ -1620,6 +1620,35 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     harness.assertIdle("槽位移除 + 摘除失败之后");
   });
 
+  it("[#98 五轮] 收敛失败之后，**下一次 props 变化**仍能重试成功（「暂时不回来」不是永久降级）", async () => {
+    // 「宁可暂时用着旧实例」这条承诺必须配一条「以后还能回来」，否则它就退化成永久降级。
+    // 这条也顺带覆盖了收敛失败后的那个中间状态（该代业务监听已解绑、实例仍在图上）：
+    // 重试成功之后新一代带着自己的 `bind` 监听，`attach` / 卸载都能正常收尾。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, tileUrlTemplate: "https://a2.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+    expect(harness.attached("layer"), "第一次失败：不换实例").toBe(1);
+    expect(createdSince()).toBe(1);
+
+    // 故障注入是一次性的 ⇒ 这一次收敛会成功。
+    props.value = { ...props.value, tileUrlTemplate: "https://a3.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+
+    expect(harness.attached("layer")).toBe(1);
+    expect(createdSince(), "重试成功 ⇒ 换了实例").toBe(2);
+    expect(harness.layerOptions(-1).tileUrlTemplate).toBe("https://a3.example.com/{X}/{Y}/{Z}.png");
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("收敛失败后重试");
+  });
+
   it("[六轮 2 / #98] 悲观契约下（detached 时 removeLayer 抛错）：无法确认旧实例已下来 ⇒ **不换实例**（绝不出现两份）", async () => {
     // 前提 P（「对已经摘掉的图层再调一次 removeLayer 是安全的」）在真实 4.0 上**已实测成立**
     // （issue #98 的 live 探针：GeoJSON / DOM / Tile 三个家族都未抛错），所以本库现在可以正当地
