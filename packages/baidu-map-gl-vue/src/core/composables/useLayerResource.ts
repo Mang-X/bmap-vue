@@ -499,6 +499,33 @@ export function useLayerResource<Props>(
     return [...removedSlots, ...removedOptions];
   };
 
+  /**
+   * 尝试把挂载状态**收敛到确定的 `detached`**；成功返回 `true`。
+   *
+   * 为什么换实例（`replace()`）之前必须先过这一关：`replace()` 释放旧实例时，最终经过
+   * `LayerRegistry.dispose()`，而 Registry 对摘除失败的处理是「**吞掉异常 + 把记录永久删除**」
+   * （组件卸载 / Map 卸载都要继续走完，这个口径本身是对的）。于是当旧实例的上一次摘除失败过
+   * （`mountState === "unknown"`，它**可能仍在图上**）时，直接 `replace()` 会：
+   *
+   * 1. 让旧实例**失去账本所有权**（记录被删了，之后没有任何一侧还能重试摘除它）；
+   * 2. 照常把新实例 `addLayer` 上去 ⇒ 图上可能**同时有两份**。
+   *
+   * 所以这里先自己做一次**可失败**的 `unmount`：成功 ⇒ 状态确定为 `detached`，可以安全换实例；
+   * 失败 ⇒ 经 `resource:error` 交出并返回 `false`，调用方**不做**任何会再加一份的动作
+   * （留到下一次 props 变化 / 永久销毁再试）。这条就是「摘除失败时绝不重复挂载」在换实例路径上的落实。
+   */
+  const tryConvergeToDetached = (state: InstanceState, context: MapReadyContext): boolean => {
+    if (state.mountState === "detached") return true;
+    try {
+      unmount(state, context);
+      // `unmount` 会改写 `mountState`，但 TS 不知道——这里按完整三态重新读一次。
+      return (state.mountState as MountState) === "detached";
+    } catch (error) {
+      reportResourceError(error);
+      return false;
+    }
+  };
+
   /** 组件侧失败的唯一上报出口（mount 路径与 watch 路径共用，避免两条路各写一份）。 */
   const reportResourceError = (error: unknown): void => {
     const wrapped =
@@ -626,7 +653,11 @@ export function useLayerResource<Props>(
 
                 // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
                 // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
+                //
+                // 先收敛再换：上一次摘除失败过（`unknown`）时旧实例可能**还在图上**，直接换会变成
+                // 「旧实例仍在 + 新实例又挂一份」，而旧实例连账本都没了（见 `tryConvergeToDetached`）。
                 if (needsRemountRebuild(state)) {
+                  if (!tryConvergeToDetached(state, ready)) return;
                   void replace();
                   return;
                 }

@@ -62,6 +62,9 @@ import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.mts"
+// 判定层（读数 → 结论）单独成模块：它是纯函数，由 `tests/behavior/v3-probe-verdicts.test.ts`
+// 用合成报告直接驱动，所以「缺失读数 ⇒ 无法判定」这条口径是可回归验证的，不靠下次跑探针时肉眼看。
+import { controlFailures, verdicts, type ProbeReport } from "./probe-layer-detached-verdicts.mts"
 
 const ak = argValue("ak") ?? process.env.BAIDU_MAP_AK ?? ""
 const outPath = argValue("out") ?? ""
@@ -293,133 +296,6 @@ const PAGE_JS = `
   window.__LAYER_DETACHED_PROBE__ = report;
 })();
 `;
-
-/* ------------------------------------------------------------------ 判定 */
-
-interface Reading {
-  id: string
-  threw?: boolean
-  message?: string | null
-  overlayCount?: number | string
-  created?: number
-  connected?: number
-}
-interface ProbeReport {
-  phase: string
-  sdk: Record<string, string> | null
-  readings: Reading[]
-  console: Array<{ level: string; text: string }>
-  error: string | null
-  loadError?: string
-}
-
-const CONTROL_READINGS = ["geojson.attached", "dom.attached"]
-
-/** 正证控件：这些读数不成立 ⇒ 本轮实验无法判定（fail），而不是「SDK 行为不好」。 */
-function controlFailures(report: ProbeReport): string[] {
-  const failures: string[] = []
-  const byId = new Map(report.readings.map((r) => [r.id, r]))
-  const geo = byId.get("geojson.attached")
-  if (!geo || typeof geo.overlayCount !== "number" || geo.overlayCount <= 0) {
-    failures.push(`geojson.attached 的 overlayCount 不是正数（得到 ${String(geo?.overlayCount)}）`)
-  }
-  const dom = byId.get("dom.attached")
-  if (!dom || (dom.created ?? 0) <= 0) failures.push("dom.attached 没有创建出任何元素")
-  // 「节点真的进了文档」是「残留」这个读数的前提：不成立就无法区分「没残留」与「本来就没进去」
-  else if ((dom.connected ?? 0) <= 0) failures.push("dom.attached 的节点一个都没连到文档上")
-  return failures
-}
-
-/** 把读数映射成两个前提的结论——这是本探针真正的产物。 */
-function verdicts(report: ProbeReport): string[] {
-  const byId = new Map(report.readings.map((r) => [r.id, r]))
-  const lines: string[] = []
-
-  // 每条读数**三态**：安全 / 不安全 / **无法判定**。缺失的读数**不得**当成 safe——
-  // `!undefined === true` 会把「没测到」读成「安全」，正是第六轮评审要求避免的形态。
-  const describeReading = (reading: Reading | undefined) =>
-    reading === undefined
-      ? "无法判定（读数缺失）"
-      : reading.threw
-        ? `抛错（${reading.message}）`
-        : "未抛错";
-  const pReadings: Array<[string, Reading | undefined]> = [
-    ["GeoJSON", byId.get("geojson.removeLayer#2.已摘下")],
-    ["DOM", byId.get("dom.removeLayer#2.已摘下")],
-    ["Tile", byId.get("tile.removeLayer#2.已摘下")],
-  ];
-  const known = pReadings.filter(([, reading]) => reading !== undefined)
-  const anyThrew = known.some(([, reading]) => reading!.threw)
-  const pVerdict =
-    known.length < pReadings.length
-      ? "**无法判定**（有读数缺失）"
-      : anyThrew
-        ? "**不安全**（三态收敛的该分支需要换机制）"
-        : "安全（前提 P 成立）"
-  lines.push(
-    `[前提 P] 对已摘下的图层重复 removeLayer —— ` +
-      pReadings.map(([name, reading]) => `${name} ${describeReading(reading)}`).join(" / ") +
-      ` ⇒ ${pVerdict}`,
-  )
-
-  // 重挂载是否按保留数据重渲染：**内核的 hide -> show 依赖它**（只重新挂载、不再 setData）。
-  const domSnap = (id: string) => {
-    const reading = byId.get(id)
-    if (reading === undefined) return "**无法判定**（读数缺失）"
-    const connected = typeof reading.connected === "number" ? reading.connected : -1
-    return `${String(connected)} 个节点连在文档（overlays ${String(reading.overlayCount)}）`
-  }
-  lines.push(
-    "[DOM 生命周期（严格按内核顺序：addLayer → setData）] " +
-      `挂载后 ${domSnap("kernel.mounted")} → 隐藏后 ${domSnap("kernel.hidden")} → ` +
-      `**再显示后 ${domSnap("kernel.shown")}** ⇒ ` +
-      ((byId.get("kernel.mounted")?.connected ?? 0) <= 0
-        ? "**无法判定**（对照不成立：挂载后就没有节点）"
-        : (byId.get("kernel.shown")?.connected ?? 0) > 0
-          ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
-          : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
-  )
-  lines.push(
-    `[再显示后补 setData] ${domSnap("kernel.repaired")}；` +
-      `调用本身 ${byId.get("kernel.repair.setData")?.threw ? `抛错（${byId.get("kernel.repair.setData")?.message}）` : "未抛错"} ⇒ ` +
-      ((byId.get("kernel.repaired")?.connected ?? 0) > 0
-        ? "**能把内容找回来**（修法可行：重新挂载成功后让 data 槽位重写一次）"
-        : "**找不回来**（补 setData 不足以恢复 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"),
-  )
-  const geoNums = ["geojson.kernel.mounted", "geojson.kernel.hidden", "geojson.kernel.shown", "geojson.kernel.repaired"]
-    .map((id) => byId.get(id)?.overlayCount)
-  lines.push(
-    "[GeoJSON 生命周期（同一套内核顺序）] 挂载后 " +
-      `${String(geoNums[0])} 条 → 隐藏后 ${String(geoNums[1])} 条 → 再显示后 ${String(geoNums[2])} 条 → ` +
-      `补 setData 后 ${String(geoNums[3])} 条 ⇒ ` +
-      (geoNums.some((value) => typeof value !== "number")
-        ? "**无法判定**（读数缺失）"
-        : Number(geoNums[2]) > 0
-          ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
-          : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
-  )
-  lines.push(
-    `[对照：换新实例重建] ${domSnap("kernel.rebuilt")} ⇒ ` +
-      ((byId.get("kernel.rebuilt")?.connected ?? 0) > 0
-        ? "重建路径正常（可选修法：data 图层在重新可见时重建实例）"
-        : "**重建也没渲染**（说明本轮实验本身不成立，先查前面的读数）"),
-  )
-
-  const geoDetached = byId.get("geojson.detached")
-  const geoAfter = byId.get("geojson.afterClearData")
-  const geoNumbersKnown =
-    typeof geoDetached?.overlayCount === "number" && typeof geoAfter?.overlayCount === "number"
-  lines.push(
-    `[GeoJSON detached clearData] 摘掉后 getData() ${String(geoDetached?.overlayCount)} 条；` +
-      `再调 clearData() 之后 ${String(geoAfter?.overlayCount)} 条 ⇒ ` +
-      (!geoNumbersKnown
-        ? "**无法判定**（读数缺失）"
-        : geoAfter!.overlayCount === geoDetached!.overlayCount
-          ? "**未清空**（印证 reference「要真正清空得在 removeLayer 之前调」⇒ 内核跳过它是正确的）"
-          : "**被清空了**（reference 那句话与运行时不一致，需要据实修正）"),
-  )
-  return lines
-}
 
 function redact(text: string): string {
   const trimmed = ak.trim()
