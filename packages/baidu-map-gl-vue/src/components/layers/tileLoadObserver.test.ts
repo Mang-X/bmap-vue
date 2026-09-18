@@ -13,6 +13,7 @@ import {
   createTileLoadFunction,
   defaultTileLoad,
   type TileLoadObserver,
+  type TileLoadObserverInput,
 } from "./tileLoadObserver";
 
 /** 造一块「假瓦片」：只看 `src` 有没有被赋，以及事件能不能派发。 */
@@ -144,6 +145,68 @@ describe("[#97] 瓦片加载观察面", () => {
     }
     tile.dispatchEvent(new Event("load"));
     expect(calls, "五次加载只挂一份监听 ⇒ 只回调一次（最后那个拥有者）").toEqual([4]);
+  });
+
+  it("[复审] 后来的包装器**没有观察者**（只有接管函数）⇒ 归属被清空，结果不再落到前一个拥有者", () => {
+    // 回归（#97 复审）：只做「元素登记过没有 ⇒ 整段跳过」的写法在这里是错的——它把**归属**
+    // 与**监听挂过没有**混成了一本账。后来的包装器明确没有观察者时，语义是「没有归属」，
+    // 不是「沿用上一个拥有者」；否则这块元素上迟到的事件仍会回调前一个 wrapper 的观察者
+    // （很可能是别的图层，或已经卸载的组件）。
+    const first = vi.fn();
+    const takeover = vi.fn();
+    const loadA = createTileLoadFunction(() => ({ observer: { onLoaded: first } }))!;
+    const loadB = createTileLoadFunction(() => ({ takeover }))!;
+    const tile = makeTile();
+
+    loadA(tile, "https://tiles.example/from-a.png");
+    loadB(tile, "https://tiles.example/from-b.png");
+    tile.dispatchEvent(new Event("load"));
+
+    expect(takeover, "接管照常（加载由调用方负责）").toHaveBeenCalledWith(
+      tile,
+      "https://tiles.example/from-b.png",
+    );
+    expect(first, "B 没有观察者 ⇒ 这块元素没有归属，A 不该再收到结果").not.toHaveBeenCalled();
+  });
+
+  it("[复审] 包装器创建时还有观察者、加载时已被移除 ⇒ 归属清空，不得回落到**上一个**包装器", () => {
+    // 形状是「同一处 prop 变化」：`tileLoadObserver` 置空、`tileLoadFunction` 还在 ⇒ 包装器还在。
+    // ⚠️ 这条**必须**让元素先被**另一个**包装器拥有过：若只有 B 一个包装器，去掉观察者之后
+    // `reportOutcome` 会因为 `get()` 读到最新输入而自然不回调——那样即使归属没清也是绿的，
+    // 用例就没有判别力了（第一版就是这么写的）。
+    const first = vi.fn();
+    const loadA = createTileLoadFunction(() => ({ observer: { onLoaded: first } }))!;
+    let current: TileLoadObserverInput = { observer: { onLoaded: vi.fn() } };
+    const loadB = createTileLoadFunction(() => current)!;
+    const tile = makeTile();
+
+    loadA(tile, "https://tiles.example/a.png");
+    // B 在**加载之前**才把观察者去掉。
+    current = { takeover: vi.fn() };
+    loadB(tile, "https://tiles.example/b.png");
+    tile.dispatchEvent(new Event("load"));
+
+    expect(first, "B 这次加载没有观察者 ⇒ 没有归属；不得回落到 A（上一个包装器）").not.toHaveBeenCalled();
+  });
+
+  it("[复审] 归属被清空**不是**把监听摘掉：后来的观察者仍能重新取得归属", () => {
+    // 保住上一条的退化边界：清空归属只删归属表，不能顺手把元素标成「不可观察」——
+    // 否则「先给接管函数、再给观察者」这条路径会永久静默。
+    const first = vi.fn();
+    const third = vi.fn();
+    const loadA = createTileLoadFunction(() => ({ observer: { onLoaded: first } }))!;
+    const loadB = createTileLoadFunction(() => ({ takeover: vi.fn() }))!;
+    const loadC = createTileLoadFunction(() => ({ observer: { onLoaded: third } }))!;
+    const tile = makeTile();
+
+    loadA(tile, "https://tiles.example/a.png");
+    loadB(tile, "https://tiles.example/b.png");
+    loadC(tile, "https://tiles.example/c.png");
+    tile.dispatchEvent(new Event("load"));
+
+    expect(third, "清空之后仍能重新取得归属").toHaveBeenCalledTimes(1);
+    expect(third.mock.calls[0]![0].url).toBe("https://tiles.example/c.png");
+    expect(first, "而且仍然只回调当前拥有者一次").not.toHaveBeenCalled();
   });
 
   it("defaultTileLoad 就是把 URL 交给图片元素（实测能恢复与不设钩子时相同的加载结果）", () => {

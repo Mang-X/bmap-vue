@@ -42,7 +42,9 @@
  *   可诊断的是「哪个 URL 失败了、失败了几次」，不是「为什么失败」。
  * - **元素归属**：结果监听按**元素**只挂一次（不随加载次数堆积），但每块元素**当前归谁观察**
  *   以**最近一次**向它发起加载的包装器为准。所以图层重建 / 多个网络图层复用同一块元素时，
- *   事件回调的是**当前**那个观察者，而不是第一个注册者。
+ *   事件回调的是**当前**那个观察者，而不是第一个注册者。若最近一次加载的包装器**没有观察者**
+ *   （只给了官方 `tileLoadFunction`），归属会被**清空**——此时没有任何观察者收到结果，
+ *   而不是继续回调上一个拥有者。
  * - **观察者回调抛错不会影响加载**：本库捕获并 `devWarn`，加载照常继续。
  *
  * ## 与 `tileLoadFunction` 的关系
@@ -61,7 +63,14 @@ export interface TileLoadInfo {
   readonly tile: HTMLImageElement;
 }
 
-/** 瓦片加载的观察者。三个回调都可选；只给需要的那个即可。 */
+/**
+ * 瓦片加载的观察者。三个回调都可选；只给需要的那个即可。
+ *
+ * **结果归谁**：`onLoaded` / `onError` 以图片元素为单位，回调**最近一次**向该元素发起加载的那个
+ * 观察者（SDK 会复用元素，图层重建 / 换观察者时归属随之转移）。若那次加载**没有观察者**
+ * （只给了 `tileLoadFunction`，或观察者被置空），该元素就**没有归属**——事件不会回调任何观察者，
+ * 也不会回落到上一个拥有者。想逐请求归因请用 `onRequest` 的顺序配合自己的计数。
+ */
 export interface TileLoadObserver {
   /** 每次 SDK 要求加载一张瓦片时调用（**请求**，不代表成功）。 */
   onRequest?(info: TileLoadInfo): void;
@@ -93,9 +102,23 @@ export function defaultTileLoad(tile: HTMLImageElement, url: string): void {
  * ——后来的拥有者收不到结果，而已卸载的组件反而还在被回调。
  *
  * 现在的语义：**监听器按元素只挂一次**（不随加载次数堆积），但每次加载都把归属更新到**当前**
- * 包装器；事件发生时按归属取观察者。
+ * 包装器；事件发生时按归属取观察者。当前包装器**没有观察者**时归属被**清空**（见下面的两本账）。
  */
 const tileOwners = new WeakMap<HTMLImageElement, () => TileLoadObserver | undefined>();
+
+/**
+ * 「结果监听已经挂过」的元素（**与归属分开的一本账**）。
+ *
+ * 第 3 轮评审指出了一处边界：后来的包装器**只有官方 `tileLoadFunction`、没有观察者**时，
+ * 若沿用「元素登记过就整段跳过」的写法，归属不会转移 ⇒ 这块元素上迟到的事件仍会落到**上一个**
+ * 拥有者（很可能是别的图层或已卸载的组件）。所以「挂过没有」与「归谁」必须分开：
+ *
+ * | 账本 | 何时推进 | 用来回答 |
+ * | --- | --- | --- |
+ * | `observedTiles` | 首次给该元素挂监听时（只增） | 监听器挂过没有（避免重复挂、事件翻倍回调） |
+ * | `tileOwners` | 每次加载按当前包装器更新 / **没有观察者时删除** | 这块元素的结果该回调谁 |
+ */
+const observedTiles = new WeakSet<HTMLImageElement>();
 
 function reportOutcome(tile: HTMLImageElement, hook: "onLoaded" | "onError"): void {
   const observer = tileOwners.get(tile)?.();
@@ -113,12 +136,24 @@ function reportOutcome(tile: HTMLImageElement, hook: "onLoaded" | "onError"): vo
 }
 
 function observeOutcome(tile: HTMLImageElement, owner: () => TileLoadObserver | undefined): void {
-  if (!tileOwners.has(tile)) {
+  if (!observedTiles.has(tile)) {
+    observedTiles.add(tile);
     tile.addEventListener("load", () => reportOutcome(tile, "onLoaded"));
     tile.addEventListener("error", () => reportOutcome(tile, "onError"));
   }
   // **后来的包装器接管归属**：它才是这块元素当前的拥有者。
   tileOwners.set(tile, owner);
+}
+
+/**
+ * **清掉归属**（监听器留着，但之后的事件不再回调任何人）。
+ *
+ * 用途：当前包装器**没有观察者**时（只给官方 `tileLoadFunction`，或观察者被移除）——
+ * 语义是「谁最后写，谁收结果；**没有观察者就没有归属**」，而不是「保留上一个拥有者」。
+ * 监听器不摘是因为 `observedTiles` 记着「挂过」，再挂一次会让同一个事件回调两次。
+ */
+function releaseOutcome(tile: HTMLImageElement): void {
+  tileOwners.delete(tile);
 }
 
 /**
@@ -149,6 +184,11 @@ export function createTileLoadFunction(
         );
       }
       observeOutcome(tile, () => get().observer);
+    } else {
+      // 这次加载**没有观察者**（只给了官方 `tileLoadFunction`，或观察者已被移除）：
+      // 必须把归属清掉——否则这块元素上迟到的事件会落到**上一个**拥有者（很可能是别的图层，
+      // 或已经卸载的组件）。见 `releaseOutcome` 的说明。
+      releaseOutcome(tile);
     }
     if (typeof current.takeover === "function") current.takeover(tile, url);
     else defaultTileLoad(tile, url);
