@@ -1,5 +1,6 @@
 /**
- * useOverlaySpec —— 由 `OverlaySpec` 声明驱动的覆盖物生命周期（M5-SPEC-MARKER / issue #30）
+ * useOverlaySpec —— 由 `OverlaySpec` 声明驱动的覆盖物生命周期（M5-SPEC-MARKER / issue #30，
+ * M5-VECTORS / issue #31 扩展）
  *
  * 这一层把「所有覆盖物都要做的事」收在一处，组件侧只声明 `OverlaySpec`：
  *
@@ -8,7 +9,7 @@
  * | 解析 Map 上下文 | `useSdkResource`（`resolveContext`） | 本文件只做包装（顺手留下 ctx 供更新路径用） |
  * | 创建（create） | `useSdkResource` → `spec.create` | 每次创建一个**新的实例 child scope** |
  * | 挂载（mount） | 本文件：`driver.overlays.add({ kind: "map" })` + Registry registration | registration 与实例 scope 绑定 |
- * | 绑定（bind） | 本文件：`spec.events` → SDK 事件 | 全部进实例 scope，重建即释放 |
+ * | 绑定（bind） | 本文件：**kind 的事件矩阵 + `spec.events` 覆盖项** → SDK 事件 | 全部进实例 scope，重建即释放 |
  * | 就地更新 / 重建 | 本文件：**按键合并的待办队列** → `driver.overlays.setOptions` / `replace()` | 分类来自 Driver 描述符 |
  * | 卸载（unmount） | `useSdkResource`：先摘 registration，再释放实例 scope，最后释放组件 scope | 幂等 |
  *
@@ -22,8 +23,19 @@
  * 2. 批里只要有 `recreate` 键就**先重建**，再把 mutable 落到**最终存活**的实例；
  * 3. 排空过程中新到的更新并入同一轮，因此**后到的值总是最后生效**。
  *
- * 这套语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 Marker 使用；
- * 其余覆盖物仍在 `useOverlayResource` 上，迁移按 issue #30 的「风险与回滚」留给后续票。
+ * 这套语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 #31 迁移过来的
+ * 八个覆盖物共用；`BMapMask` / `BMarker3d` / `BInfoWindow` / `BContextMenu` 仍走旧层，
+ * 理由见 ADR `2026-09-18-overlay-event-matrix` 的已知限制。
+ *
+ * ## issue #31 在本层加的三件事
+ *
+ * 1. **事件面由矩阵派生**（`overlayEventsOf(spec.kind)`）：组件不再逐个手写 `emit("click", e)`，
+ *    于是「同一类覆盖物的事件面不一致」在结构上不可能。`spec.events` 只剩**覆盖项**。
+ * 2. **读 props 走「别名感知视图」**：集中弃用表登记的旧 prop 名（`startPoint` / `endPoint`）在
+ *    **正典 prop 缺失**时才生效，并告警一次；`create` / watch / 更新队列读到的都是同一份值，
+ *    因此不存在「初始用旧名、更新用新名」这类分叉。
+ * 3. **卸载路径上的事件不再回放**：实例被摘除后，SDK 在解绑窗口里派发的 `remove` 之类事件
+ *    不再冒泡给调用方（`removeOverlay` 恰好发生在监听解绑之前）。
  */
 import { computed, onScopeDispose, provide, readonly, shallowRef, watch } from "vue";
 import type { ShallowRef } from "vue";
@@ -33,12 +45,21 @@ import { targetContextKey, type TargetContext, type TargetKind } from "../contex
 import type { MapReadyContext } from "../context/types";
 import type { Point } from "../../driver/types/geometry";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
+import type { OverlayKind } from "../../driver/types/overlays";
 import type { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
 import { pointEquals } from "../utils/equality";
 import { stableKeyOf } from "../utils/stableKey";
 import { assertOverlayFieldDeclarations } from "../overlays/OverlaySpec";
 import type { OverlayFieldUpdate, OverlaySpec } from "../overlays/OverlaySpec";
+import { overlayEventsOf } from "../overlays/overlayEventCatalog";
+import {
+  createDeprecationWarner,
+  describeDeprecation,
+  eventAliasesOf,
+  propAliasesOf,
+  type OverlayPropAlias,
+} from "../deprecations";
 
 /**
  * 位置字段的**双向同步模型**（`"position"` 策略）。
@@ -52,8 +73,7 @@ import type { OverlayFieldUpdate, OverlaySpec } from "../overlays/OverlaySpec";
  * **为什么不是「读回 SDK 现值判等」**（`<BMap>` 视野用的那条路）：覆盖物的位置在
  * `OverlayDriver` 上**没有读回入口**（`getPosition` 只在具体覆盖物原型上，不在本库的归一化调用面里；
  * 补一个位置读回 API 属于其它覆盖物的范围）。这里的判据仍是**值**而不是「来源标记」：两条方向都会
- * 更新它，因此不依赖「事件与命令谁先到」的隐式假设。取舍与备选方案见 ADR
- * `2026-09-17-overlay-spec-and-marker`。
+ * 更新它，因此不依赖「事件与命令谁先到」的隐式假设。
  */
 export interface OverlayPositionModel {
   /** 当前生效位置（props 上的值）。 */
@@ -74,8 +94,7 @@ export interface UseOverlaySpecOptions {
  *
  * 刻意**不**暴露 `replace()` / `applyOptions()` / `whenReady()` 这类命令与等待入口：声明式的消费者
  * （组件只声明 `fields`）全部不需要它们——重建由 `recreate` 分类触发、字段下发由 watcher 入队、
- * 就绪与否读 `status` 即可。等真有命令式消费者时再加（与 `OverlaySpec` 不加 `add`/`remove` 同一口径，
- * 见 ADR 已知限制 5）。
+ * 就绪与否读 `status` 即可。等真有命令式消费者时再加（与 `OverlaySpec` 不加 `add`/`remove` 同一口径）。
  */
 export interface UseOverlaySpecResult<Resource> {
   readonly resource: Readonly<ShallowRef<Resource | null>>;
@@ -83,11 +102,68 @@ export interface UseOverlaySpecResult<Resource> {
   readonly error: Readonly<ShallowRef<BMapError | null>>;
   /** 位置模型（仅当 `spec.fields` 里声明了 `"position"` 策略字段时存在）。 */
   readonly position: OverlayPositionModel | null;
+  /**
+   * 该实例实际绑定的事件（矩阵派生 + 覆盖项），按矩阵声明顺序 —— **领域读数**。
+   *
+   * 组件用例据此断言「事件面来自矩阵」而不必逐个 `emit` 试；也写进 ADR 的对照表。
+   */
+  readonly events: readonly string[];
 }
 
 /** 领域点 → 防御性拷贝（两条方向都不与调用方共享引用）。 */
 function clonePoint(point: Point): Point {
   return { lng: point.lng, lat: point.lat };
+}
+
+/** 解析后的一条事件绑定：SDK 名 + 组件 emit 名 + 可选的组件侧处置。 */
+interface ResolvedOverlayEvent {
+  /** SDK 订阅名。 */
+  readonly sdk: string;
+  /** 规范 Vue 名（别名查找的键）。 */
+  readonly vue: string;
+  /** 纯转发的 emit 名。 */
+  readonly emit?: string;
+  /** 组件自定义处置（与 `emit` 互斥）。 */
+  readonly handle?: (event: unknown) => void;
+}
+
+/**
+ * 事件面 = kind 的事件矩阵 ∪ `spec.events` 覆盖项（覆盖项按 SDK 名匹配，必须落在矩阵内）。
+ *
+ * 没有 `kind` 的 spec（第三方自建覆盖物：#30 的形态）**没有矩阵**：此时只有 `spec.events` 生效，
+ * 行为与 #30 完全一致。**没有「按名字猜 kind」的回落**——猜想会让「声明了 emit 却永不触发」
+ * 变成静默失败（见 `OverlaySpec.kind` 的说明）。
+ */
+function resolveOverlayEvents<Props extends object, Resource>(
+  spec: OverlaySpec<Props, Resource>,
+): ResolvedOverlayEvent[] {
+  const declared = spec.events ?? [];
+  const kind = spec.kind;
+  if (!kind) {
+    return declared.map((entry) =>
+      "handle" in entry
+        ? { sdk: entry.sdk, vue: entry.sdk, handle: entry.handle }
+        : { sdk: entry.sdk, vue: entry.sdk, emit: entry.emit },
+    );
+  }
+
+  const overrides = new Map(declared.map((entry) => [entry.sdk, entry]));
+  const fromMatrix = overlayEventsOf(kind);
+  const known = new Set(fromMatrix.map((event) => event.sdk));
+  const strays = [...overrides.keys()].filter((sdk) => !known.has(sdk));
+  if (strays.length > 0) {
+    throw new Error(
+      `OverlaySpec(${spec.type}): events 里的 ${strays.join(", ")} 不在 ${kind} 的事件矩阵里；` +
+        "覆盖项只能改处置方式，事件面本身由 core/overlays/overlayEventCatalog.ts 决定",
+    );
+  }
+  return fromMatrix.map((definition) => {
+    const override = overrides.get(definition.sdk);
+    if (!override) return { sdk: definition.sdk, vue: definition.vue, emit: definition.vue };
+    return "handle" in override
+      ? { sdk: definition.sdk, vue: definition.vue, handle: override.handle }
+      : { sdk: definition.sdk, vue: definition.vue, emit: override.emit };
+  });
 }
 
 export function useOverlaySpec<Props extends object, Resource>(
@@ -98,6 +174,11 @@ export function useOverlaySpec<Props extends object, Resource>(
   const mapContext = useRequiredMapContext();
   const overlayRegistry = mapContext.overlays;
   const emit = options.emit;
+  const kind: OverlayKind | undefined = spec.kind;
+
+  /** 集中弃用层：prop 别名（读取层）与事件别名（派发层）共用这一份「同实例一次」的去重。 */
+  const deprecation = createDeprecationWarner(spec.type);
+  const propAliases: readonly OverlayPropAlias[] = propAliasesOf(kind);
 
   /** ready 上下文：`useSdkResource` 内部缓存它，这里留一份给自己（更新路径要用 driver / map）。 */
   let readyCtx: MapReadyContext | null = null;
@@ -105,7 +186,51 @@ export function useOverlaySpec<Props extends object, Resource>(
   const fields = Object.entries(spec.fields) as Array<[string, OverlayFieldUpdate]>;
   const positionField = fields.find(([, update]) => update === "position")?.[0] ?? null;
   const visibilityField = fields.find(([, update]) => update === "visibility")?.[0] ?? null;
-  const readProp = (name: string): unknown => (props as Record<string, unknown>)[name];
+  const rawProps = props as Record<string, unknown>;
+
+  /**
+   * **统一 props 视图**：别名解析（旧 prop 名）+ 值投影（惰性值）。
+   *
+   * 正典 prop（`bounds`）缺失、而旧名组（`startPoint` + `endPoint`）齐备时，读 `bounds`
+   * 得到的是旧名派生出来的值——`create` / watch / 更新队列因此看到同一份值，不存在
+   * 「初始用旧名、更新用新名」这类分叉。正典一旦有值，旧名**完全不参与**（连告警都不发）：
+   * 这是「新 API 优先」，不是「两边合并」。
+   *
+   * 值投影在别名之后：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
+   */
+  function resolveAliasValue(alias: OverlayPropAlias, target: Record<string, unknown>): unknown {
+    const canonical = target[alias.canonical];
+    if (canonical !== undefined) return canonical;
+    if (alias.deprecated.some((key) => target[key] === undefined)) return undefined;
+    const derived = alias.derive(target);
+    if (derived === undefined) return undefined;
+    deprecation.warn(describeDeprecation(alias));
+    return derived;
+  }
+
+  const fieldValues: Partial<Record<keyof Props & string, (value: unknown) => unknown>> =
+    spec.fieldValues ?? {};
+  const needsView = propAliases.length > 0 || Object.keys(fieldValues).length > 0;
+
+  const propsView: Record<string, unknown> = !needsView
+    ? rawProps
+    : new Proxy(rawProps, {
+        get(target, key, receiver) {
+          if (typeof key !== "string") return Reflect.get(target, key, receiver);
+          const alias = propAliases.find((entry) => entry.canonical === key);
+          const value = alias
+            ? resolveAliasValue(alias, target)
+            : Reflect.get(target, key, receiver);
+          const project = fieldValues[key as keyof Props & string];
+          return project ? project(value) : value;
+        },
+      });
+
+  /** 经视图读取（别名 + 投影）：`create` / watch / 更新队列都用它。 */
+  const readProp = (name: string): unknown => propsView[name];
+
+  /** **原始** prop（不经别名与投影）：只给按引用比较的 watch 源用。 */
+  const readRawProp = (name: string): unknown => rawProps[name];
 
   /** prop → 描述符键：缺省同名，显式 `null` 表示该字段不经描述符。 */
   function descriptorKeyOf(prop: string): string | null {
@@ -114,7 +239,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   }
 
   // 构造期自检：声明自相矛盾时立刻失败（判据与用例共用 `assertOverlayFieldDeclarations`）。
-  assertOverlayFieldDeclarations(spec);
+  assertOverlayFieldDeclarations(spec, { propAliases });
 
   /* ------------------------------------------------------------------ 实例挂载与 Registry */
 
@@ -127,6 +252,20 @@ export function useOverlaySpec<Props extends object, Resource>(
    * 按身份记账时，过期实例的移除只看自己那一份，不会动别人的记录。
    */
   let attachedResource: Resource | null = null;
+
+  /**
+   * 已经进入摘除流程的实例。
+   *
+   * `useSdkResource.disposeInstance()` 的顺序是「先摘 registration（⇒ `removeOverlay`）→
+   * 再释放实例 scope（⇒ 解绑监听）」，因此 SDK 会**在监听仍然活着的窗口里**派发 `remove`。
+   * 若不设这道闸，调用方会在组件卸载 / 重建的过程中收到「对象正在消失」的事件——那是实现
+   * 细节的副产品，不是业务事实。
+   *
+   * 用 `WeakSet<实例>` 而不是一个布尔标记：竞态分支里**过期的那一代**也会走一遍 mount → dispose，
+   * 布尔标记会把「已经由新一代接管的组件」的事件面在整个会话里关掉（同一 bug class：
+   * 「按全局状态判断某一代是否还在工作」）。
+   */
+  const detachedResources = new WeakSet<object>();
 
   function addToMap(context: MapReadyContext, resource: Resource): void {
     if (attachedResource === resource) return;
@@ -159,8 +298,7 @@ export function useOverlaySpec<Props extends object, Resource>(
    *
    * 必须在 create 之前取：`create` 可能异步，而异步工厂的自然写法是「入口处读一次 props，
    * 然后做异步工作」——`await` 之后它已经看不到后来的变化了。若改在 `mount` 里读当时的 props，
-   * 就会出现「实例是按旧位置建的，但同步模型记为新位置」，随后**相同值全被回环抑制吃掉**
-   * （外部评审 P1，`v3-overlay-spec.test.ts` 的「异步 create 的就绪窗口」用例锁定了它）。
+   * 就会出现「实例是按旧位置建的，但同步模型记为新位置」，随后**相同值全被回环抑制吃掉**。
    */
   let createdPosition: Point | null = null;
 
@@ -284,10 +422,29 @@ export function useOverlaySpec<Props extends object, Resource>(
     if (!driver.hide(handle)) removeFromMap(context, resource);
   }
 
+  /* ---------------------------------------------------------------------------- 事件面 */
+
+  const resolvedEvents = resolveOverlayEvents(spec);
+
+  /**
+   * 派发一条事件：正典名 + **弃用别名**（各一次）。
+   *
+   * 别名在**首次派发**时告警一次，而不是在绑定时：只有真的有人触发它，旧名字才算被用到——
+   * 组件里绑了 `@click` 却从不点击，不该收到「你在用旧事件名」的提示。
+   */
+  function dispatchEvent(event: ResolvedOverlayEvent, payload: unknown): void {
+    if (event.handle) event.handle(payload);
+    else if (event.emit) emit?.(event.emit, payload);
+    for (const alias of eventAliasesOf(kind, event.vue)) {
+      deprecation.warn(describeDeprecation(alias));
+      emit?.(alias.alias, payload);
+    }
+  }
+
   /* ------------------------------------------------------------------------------ 主体 */
 
   const sdk = useSdkResource<Props, Resource, MapReadyContext>({
-    props,
+    props: propsView as Props,
     label: `overlay:${spec.type}`,
     resolveContext: async (signal) => {
       const ready = await mapContext.whenReady(signal);
@@ -305,12 +462,12 @@ export function useOverlaySpec<Props extends object, Resource>(
         // 初始可见性：`visible: false` 的实例**不挂到地图**（不是「先挂再等 watcher」）。
         // 只有「尚未有任何实例挂上」时才补挂：竞态分支里两个实例可能先后走到这里，
         // 后一个不该把前一个的挂载记录顶掉。
-        if (
-          !attachedResource &&
-          (!visibilityField || readProp(visibilityField) !== false)
-        ) {
+        if (!attachedResource && (!visibilityField || readProp(visibilityField) !== false)) {
           addToMap(context, resource);
         }
+        // 组件侧副作用（`afterMount`）：与迁移前 `addToMap` 里那段 `if (p.autoCenter) …` 同位。
+        // 刻意**不**看可见性：`autoCenter` 描述的是地图视野，不是覆盖物是否显示。
+        spec.afterMount?.(context, resource, current);
         // 同步模型记的是**实例真实所在的位置**（create 那一刻的值），不是当前的 props——
         // 两者在异步 create 窗口里会分叉，收敛交给 `bind` 的 reconciliation。
         if (positionField) {
@@ -318,21 +475,39 @@ export function useOverlaySpec<Props extends object, Resource>(
         }
         // registration 与**实例 scope** 绑定：scope 释放（重建 / 卸载）时记录自动摘除，
         // Registry 只保留当前存活实例，不保留历史 disposer 闭包。
-        return overlayRegistry.registerResource({
+        const registration = overlayRegistry.registerResource({
           type: spec.type,
           resource,
           scope,
           remove: (target) => removeFromMap(context, target),
         });
+        return {
+          id: registration.id,
+          type: registration.type,
+          resource: registration.resource,
+          get disposed() {
+            return registration.disposed;
+          },
+          /**
+           * 摘下实例 = 「这一代结束」。先立标记再交给注册表：`dispose()` 内部会
+           * `removeOverlay`，而那一刻监听还没解绑（实例 scope 由 `useSdkResource` 稍后释放）。
+           */
+          dispose: () => {
+            // 只立标记，**不**碰 `attachedResource`：真正的 SDK 侧摘除由 `registration.dispose()`
+            // 经 `removeFromMap` 完成，提前清账会让它以为「已经摘过了」而跳过 `removeOverlay`。
+            detachedResources.add(resource as unknown as object);
+            registration.dispose();
+          },
+        };
       },
       bind: ({ context, resource, scope }) => {
-        for (const entry of spec.events ?? []) {
+        for (const event of resolvedEvents) {
           const off = context.client.driver.events.on(
             resource as unknown as OverlayHandle,
-            entry.sdk,
-            (event) => {
-              if ("handle" in entry) entry.handle(event);
-              else emit?.(entry.emit, event);
+            event.sdk,
+            (payload) => {
+              if (detachedResources.has(resource as unknown as object)) return;
+              dispatchEvent(event, payload);
             },
           );
           scope.add(off);
@@ -364,16 +539,30 @@ export function useOverlaySpec<Props extends object, Resource>(
           );
         }
         for (const [prop, update] of fields) {
+          // 组件侧语义字段：`version` 只作为配对字段的 watch 源之一，`alias` 只经正典名被读取
           if (update === "visibility" || update === "position") continue;
+          if (update === "version" || update === "alias") continue;
           const key = descriptorKeyOf(prop);
           if (key === null) continue;
+          const source = spec.watchSources?.[prop as keyof Props & string] ?? "fingerprint";
+          const apply = () => void enqueue({ [key]: readProp(prop) });
+          if (source === "fingerprint") {
+            // watch 源用**稳定序列化**：对象字段（icon / offset / style / bounds）必须按内容判等，
+            // 否则父级每次渲染传内联字面量都会重新下发一次命令。
+            scope.add(watch(() => stableKeyOf(readProp(prop)), apply));
+            continue;
+          }
+          if (source === "reference") {
+            // 内容不可序列化的字段（url 的惰性工厂）：只比根引用，读**原始** prop
+            scope.add(watch(() => readRawProp(prop), apply));
+            continue;
+          }
+          // 大数组（path / controlPoints）：根引用 + 版本 prop，不做 O(n) 的内容指纹。
+          // `flush: "sync"` 沿用 v3 既有语义：路径更新要与父级渲染同一次提交内落地。
           scope.add(
-            watch(
-              // watch 源用**稳定序列化**：对象字段（icon / offset）必须按内容判等，
-              // 否则父级每次渲染传内联字面量都会重新下发一次命令。
-              () => stableKeyOf(readProp(prop)),
-              () => void enqueue({ [key]: readProp(prop) }),
-            ),
+            watch([() => readRawProp(prop), () => readProp(source.versionProp)], apply, {
+              flush: "sync",
+            }),
           );
         }
       },
@@ -413,5 +602,6 @@ export function useOverlaySpec<Props extends object, Resource>(
     status: sdk.status,
     error: sdk.error,
     position: positionModel,
+    events: resolvedEvents.map((event) => event.sdk),
   };
 }

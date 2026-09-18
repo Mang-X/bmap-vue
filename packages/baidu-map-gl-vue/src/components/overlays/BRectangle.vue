@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * BPolygon —— 多边形（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ * BRectangle —— 矩形（M5-VECTORS / issue #31 新增：v4 的 `Rectangle` 覆盖物）
  *
- * 组件只做两件事：**声明 spec** + **渲染 slot**。`path`（根引用 + `pathVersion`）、填充/描边、
- * `isBoundary`（构造期 → 变化即重建）、`enableEditing`（成对开关）全部由 `polygonSpec` 声明。
+ * 矩形由**对角两点**定义的 `bounds` 描述（上游 `new Rectangle(bounds, options)`）。
+ * 组件只做两件事：**声明 spec** + **渲染 slot**；`bounds` 走内容指纹判等（父级传内联字面量不会
+ * 产生多余命令），样式与编辑开关由 `rectangleSpec` 声明。
  *
- * 事件面（17 个）与 Polyline 相同（上游同为 `GraphEventMap`）；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * 事件面（17 个，含编辑六件套）与 Circle / Polygon 相同（上游同为 `GraphEventMap`）；
+ * `defineEmits` 与矩阵的一致性由 `v3-overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
@@ -15,21 +16,22 @@ import type {
   OverlayPartialPointerEvent,
   OverlayPointerEvent,
 } from "../../driver/types/events";
-import type { BPolygonProps } from "../../types/components";
-import { createPolygonSpec } from "./polygonSpec";
+import type { BRectangleProps } from "../../types/components";
+import { createRectangleSpec } from "./rectangleSpec";
 
-export type { BPolygonProps };
+export type { BRectangleProps };
 
-const props = withDefaults(defineProps<BPolygonProps>(), {
+const props = withDefaults(defineProps<BRectangleProps>(), {
   strokeColor: "#000000",
   strokeWeight: 2,
   strokeOpacity: 0.9,
   strokeStyle: "solid",
   fillColor: "#000000",
   fillOpacity: 0.5,
-  isBoundary: false,
   enableMassClear: true,
   enableEditing: false,
+  // 上游 `enableClicking` 默认 `true`：不显式给默认值会被 Vue 的布尔转换写成 `false`
+  enableClicking: true,
   visible: true,
 });
 
@@ -55,9 +57,9 @@ const emit = defineEmits<{
 
 const emitDynamic = dynamicEmit(emit);
 
-defineOptions({ name: "BPolygon" });
+defineOptions({ name: "BRectangle" });
 
-useOverlaySpec(props, createPolygonSpec(), { emit: emitDynamic });
+useOverlaySpec(props, createRectangleSpec(), { emit: emitDynamic });
 </script>
 
 <template>

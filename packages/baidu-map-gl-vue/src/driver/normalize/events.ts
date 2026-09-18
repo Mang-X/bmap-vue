@@ -131,18 +131,26 @@ const POINTER_EVENT_NAME_SET: ReadonlySet<string> = new Set(POINTER_EVENT_NAMES)
  *
  * `point` 走 `readEventPoint` 的统一顺序；指针 / 拖拽类事件在 raw 完全没有坐标时补
  * `{lng:0,lat:0}`（与 `normalizeMapMouseEvent` 同口径，见 `POINTER_EVENT_NAMES`）。
+ *
+ * `options.pointerFallback = "never"` 关掉这次兜底：**覆盖物**里上游把坐标声明为可缺的事件
+ * （图形族 `mouseout` 的 `GraphMouseOutEvent`、GroundOverlay 家族）用它——那类事件「没有坐标」
+ * 是上游允许的事实，补成 `(0,0)` 会把它伪装成一个真实坐标（M5-VECTORS / #31）。
+ * 判据来自事件矩阵（`core/overlays/overlayEventCatalog.ts`），不是调用点的临时判断。
  */
 export function normalizeDriverEvent(
   type: string,
   raw: unknown,
   geometry: GeometryDriver,
+  options?: { readonly pointerFallback?: "default" | "never" },
 ): DriverEvent {
   const shape = (raw ?? {}) as Record<string, unknown>;
   const rawType = typeof shape.type === "string" && shape.type ? shape.type : undefined;
+  const fallback =
+    options?.pointerFallback === "never" ? undefined : fallbackPoint(type, geometry);
   return {
     ...eventBase(raw),
     type: type || rawType,
-    point: readEventPoint(shape, geometry) ?? fallbackPoint(type, geometry),
+    point: readEventPoint(shape, geometry) ?? fallback,
     pixel: convertPixel(shape.pixel, geometry),
     size: convertSize(shape.size, geometry),
     zoom: isFiniteNumber(shape.zoom) ? shape.zoom : undefined,

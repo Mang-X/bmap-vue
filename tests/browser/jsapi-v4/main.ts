@@ -30,6 +30,7 @@ import {
   BOverview,
   BPanorama,
   BPolyline,
+  BRectangle,
   BTileLayer,
   BTrafficLayer,
   BZoom,
@@ -89,6 +90,9 @@ const CENTER = { lng: 116.404, lat: 39.915 };
  */
 const SMOKE_TILE_ORIGIN = "https://maponline0.bdimg.com/tile";
 const POINT = { lng: 116.44, lat: 39.93 };
+/** `overlay-rectangle` 的对角两点（#31）：与 CENTER / POINT 都不同，回读才有区分力。 */
+const RECTANGLE_SW = { lng: 116.37, lat: 39.885 };
+const RECTANGLE_NE = { lng: 116.4, lat: 39.905 };
 const CITY = "北京";
 const KEYWORD = "中关村";
 /** 驾车路线起终点（中关村 → 望京）：距离足够产生真实方案，且不依赖某个 POI 的 uid。 */
@@ -183,7 +187,14 @@ interface ModeDescriptor {
   live: boolean;
   /** 传给 `<BMap>` 的 provider；`live` 档刻意**不传**，以走默认入口。 */
   provider: unknown;
-  /** 覆盖物读数：真实 SDK 走 `getOverlays()`，Fake 走自己的账本。 */
+  /**
+   * 覆盖物**列表**读数：真实 SDK 走 `getOverlays()`，Fake 走自己的账本。
+   *
+   * 比计数更强：`overlay-rectangle`（M5-VECTORS / #31）要断言「矩形真的按传进去的对角两点
+   * 画出来」，只能从实例上读回几何。两个档各自知道「怎么列出覆盖物」，检查体不必知道。
+   */
+  overlayInstances(raw: Record<string, unknown>): Array<Record<string, unknown>>;
+  /** 覆盖物计数读数（= `overlayInstances().length`）。 */
   overlays(raw: Record<string, unknown>): number;
   /** 控件/图层读数：Fake 有账本；真实 4.0 的 Map 没有读数接口，返回 `-1` 表示改用 DOM 增量。 */
   controls(raw: Record<string, unknown>): number;
@@ -257,6 +268,7 @@ function createDescriptor(): ModeDescriptor {
     return {
       live: false,
       provider: existingGlobalV4Provider(),
+      overlayInstances: (raw) => ledger(raw).overlays,
       overlays: (raw) => ledger(raw).overlays.length,
       controls: (raw) => ledger(raw).controls.length,
       layers: (raw) => ledger(raw).layers.length,
@@ -292,7 +304,7 @@ function createDescriptor(): ModeDescriptor {
     };
   }
 
-  const readArray = (target: Record<string, unknown>, member: string): number => {
+  const readList = (target: Record<string, unknown>, member: string): unknown[] => {
     const fn = target[member];
     if (typeof fn !== "function") {
       // 成员**不存在**与「返回形状不对」必须分开：合成一个结果会让「SDK 补了读数接口但读错
@@ -301,12 +313,13 @@ function createDescriptor(): ModeDescriptor {
     }
     const value = (fn as () => unknown).call(target);
     assertSmoke(Array.isArray(value), "SDK_READ_SHAPE", `map.${member}() 返回值不是数组`);
-    return (value as unknown[]).length;
+    return value as unknown[];
   };
   return {
     live: true,
     provider: undefined,
-    overlays: (target) => readArray(target, "getOverlays"),
+    overlayInstances: (target) => readList(target, "getOverlays") as Array<Record<string, unknown>>,
+    overlays: (target) => readList(target, "getOverlays").length,
     // 4.0.4 的 `Map` **没有** `getControls()` / `getLayers()`（官方类型包里逐个成员核对过），
     // 因此控件/图层改用容器 DOM 增量核对。
     controls: () => -1,
@@ -426,6 +439,7 @@ function mountTree(): Mounted {
   const flags = reactive<Record<string, boolean>>({
     marker: false,
     polyline: false,
+    rectangle: false,
     info: false,
     zoom: false,
     district: false,
@@ -482,6 +496,16 @@ function mountTree(): Mounted {
     if (flags.marker) nodes.push(h(BMarker, { position: POINT, title: "smoke-marker" }));
     if (flags.polyline)
       nodes.push(h(BPolyline, { path: [CENTER, POINT], strokeColor: "#ff0000", strokeWeight: 3 }));
+    // M5-VECTORS / #31：v4 新增的矩形（对角两点定义）。几何回读要读它的实例，因此范围刻意取
+    // 一个与 marker/polyline 都不同的坐标。
+    if (flags.rectangle)
+      nodes.push(
+        h(BRectangle, {
+          bounds: { southwest: RECTANGLE_SW, northeast: RECTANGLE_NE },
+          strokeColor: "#1677ff",
+          fillOpacity: 0.25,
+        }),
+      );
     if (flags.info)
       nodes.push(
         h(
@@ -845,6 +869,73 @@ const CHECKS: Record<string, CheckImpl> = {
           "覆盖物计数增量",
         ),
       };
+    },
+  },
+
+  "overlay-rectangle": {
+    async run(ctx) {
+      // M5-VECTORS / #31：v4 新增的 `Rectangle` 在**真实 SDK** 上必须可用，而且必须真的
+      // 按传进去的对角两点画出来——只数「覆盖物又多了几个」证明不了几何（那只能证明挂了东西）。
+      // **按实例身份**找出这个矩形：先记下设置 flag 之前图上有哪些覆盖物（marker + polyline），
+      // 之后新出现的那个就是它。
+      //
+      // 这里刻意**不**用 `typeof overlay.getBounds === "function"` 之类的特征识别——live 档
+      // 第一次跑就是这样失败的（`BMAP_RECTANGLE_AMBIGUOUS`：真实 SDK 上不止一个覆盖物有
+      // `getBounds`，而夹具里只有 Rectangle 建模了它）。「夹具比真实更窄」同样会掩盖缺陷，
+      // 只是方向相反：夹具里通过、真实里测错对象。
+      const before = new Set(descriptor.overlayInstances(ctx.mounted.raw()));
+      ctx.mounted.flags.rectangle = true;
+      await nextTick();
+      await sleep(120);
+      const overlays = await until(
+        () => {
+          const instances = descriptor.overlayInstances(ctx.mounted.raw());
+          return instances.length > ctx.baseline.overlays + 2 ? instances : null;
+        },
+        3_000,
+        "BMAP_RECTANGLE_NOT_ATTACHED",
+        "覆盖物计数增量",
+      );
+
+      const added = overlays.filter((overlay) => !before.has(overlay));
+      assertSmoke(
+        added.length === 1,
+        "BMAP_RECTANGLE_AMBIGUOUS",
+        `本次新增的覆盖物应有 1 个（矩形），实际 ${added.length} 个`,
+        { before: before.size, after: overlays.length },
+      );
+      const rectangle = added[0]!;
+      assertSmoke(
+        typeof rectangle.getBounds === "function",
+        "BMAP_RECTANGLE_NO_READ_API",
+        "矩形的实例上没有 getBounds()（4.0.4 的 Rectangle 声明了它），几何无法核对",
+        { members: Object.keys(rectangle).slice(0, 24) },
+      );
+      const readCorner = (member: string): { lng?: number; lat?: number } | null => {
+        const bounds = (rectangle.getBounds as () => Record<string, unknown>).call(rectangle);
+        const corner = bounds?.[member];
+        if (typeof corner !== "function") return null;
+        const value = (corner as () => { lng?: number; lat?: number }).call(bounds);
+        return typeof value?.lng === "number" && typeof value?.lat === "number" ? value : null;
+      };
+      const sw = readCorner("getSouthWest");
+      const ne = readCorner("getNorthEast");
+      assertSmoke(
+        sw !== null && ne !== null,
+        "BMAP_RECTANGLE_NO_GEOMETRY",
+        "矩形的 getBounds() 读不回对角两点（getSouthWest / getNorthEast）",
+      );
+      const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+      assertSmoke(
+        near(sw!.lng, RECTANGLE_SW.lng) &&
+          near(sw!.lat, RECTANGLE_SW.lat) &&
+          near(ne!.lng, RECTANGLE_NE.lng) &&
+          near(ne!.lat, RECTANGLE_NE.lat),
+        "BMAP_RECTANGLE_BOUNDS_MISMATCH",
+        `矩形几何与传入的 bounds 不一致：读到 sw=${JSON.stringify(sw)} ne=${JSON.stringify(ne)}`,
+        { expected: { southwest: RECTANGLE_SW, northeast: RECTANGLE_NE }, actual: { sw, ne } },
+      );
+      return { overlays: overlays.length, southwest: sw, northeast: ne };
     },
   },
 

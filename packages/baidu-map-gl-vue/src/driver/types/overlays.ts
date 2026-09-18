@@ -432,6 +432,18 @@ export const OVERLAY_DESCRIPTORS = {
         "4.0 的 GroundOverlay 只有构造选项 enableClicking，实例上没有对应的成对开关",
         { ctorKey: "enableClicking" },
       ),
+      // M5-VECTORS / #31：组件的两个组件侧行为/构造期选项显式分类（此前落在「未知键」分支）
+      type: recreate(
+        "`GroundOverlayOptions.type`（image / video / canvas）只在构造期读取：实例上没有 setType，换类型必须重建（不同 type 的 url 语义也不同）",
+        { ctorKey: "type" },
+      ),
+      autoCenter: recreate(
+        "组件侧行为（创建后按显示区域居中地图，走 `Map#setViewport`，**不是** SDK 选项）：它描述的是「创建完成时做什么」，因此只在创建时生效，变化即重建以复现一次",
+        { ctorKey: null },
+      ),
+      // 旧 prop 名 `startPoint` / `endPoint` **刻意不在这张表里**：它们由集中弃用层
+      // （`core/deprecations`）在组件侧的读取层解析成正典的 `bounds`，从不作为独立字段下发。
+      // 给它们写分类会让「这个键能不能经 setOptions 下发」看起来有两种答案。
     }),
   },
 
@@ -451,6 +463,18 @@ export const OVERLAY_DESCRIPTORS = {
       enableClicking: recreate(
         "4.0 的 Prism 只有构造选项 enableClicking；官方参考同时说明 Prism 不实现编辑能力",
         { ctorKey: "enableClicking" },
+      ),
+      // M5-VECTORS / #31：这两个键**不在** `@baidumap/jsapi-v4-types@4.0.4` 的 `PrismOptions` 里。
+      // 组件的 v2 兼容 prop 仍然原样交给构造期（迁移前的行为），但分类必须是 `recreate` 而不是
+      // `mutable`：既没有字段级 setter，也没有证据表明运行时读取它——因此这里如实记下「未取证」，
+      // 而不是把它写成「支持」（不静默伪造能力）。
+      isBoundary: recreate(
+        "**未取证**：PrismOptions（4.0.4）里没有 isBoundary，4.0 运行时是否读取它没有证据；组件保留 v2 的构造期透传，但不声明字段级更新",
+        { ctorKey: "isBoundary" },
+      ),
+      autoCenter: recreate(
+        "**未取证**：PrismOptions（4.0.4）里没有 autoCenter；理由同 isBoundary（构造期透传）",
+        { ctorKey: "autoCenter" },
       ),
     }),
   },
