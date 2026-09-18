@@ -150,6 +150,17 @@ export class FakeV4Rectangle extends FakeV4Shape {
     this.callLog.push('setBounds')
     this.bounds = bounds
   }
+
+  /**
+   * 官方 `Rectangle#getBounds()`（4.0.4 的 `overlay/Rectangle.d.ts` 声明了它）。
+   *
+   * 建模它是因为**检查要读几何**：`overlay-rectangle`（M5-VECTORS / #31）断言「矩形真的按传进去的
+   * 对角两点画出来」——只数覆盖物个数证明不了这一点。夹具缺这个读数时，那条检查只能在真实档跑，
+   * 于是它在一个本地跑不到的档里，等于没有门禁（夹具要与契约同形，而不是「只建模驱动会调的东西」）。
+   */
+  getBounds(): FakeV4Bounds {
+    return this.bounds
+  }
 }
 
 export class FakeV4Circle extends FakeV4Shape {

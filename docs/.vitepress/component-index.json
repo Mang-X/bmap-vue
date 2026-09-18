@@ -9,6 +9,7 @@
     "BCircle",
     "BPolyline",
     "BPolygon",
+    "BRectangle",
     "BLabel",
     "BContextMenu",
     "BPrism",

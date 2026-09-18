@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { PolylineHandle } from "../../driver/types/handles";
-import type { BPolylineProps } from "../../types/components";
-
 /**
- * BPolyline 迁移(adapter 模式)
+ * BPolyline —— 折线（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
- * path 视为不可变值,更新后替换根引用触发;支持 pathVersion 强制刷新。
- * 大 path 默认不 deep watch。
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。字段级更新（`path` 走根引用 + `pathVersion`、
+ * 样式走各自的 setter、`enableEditing` 走成对开关）全部由 `polylineSpec` 声明、由
+ * `useOverlaySpec` 落地——组件里不再有 8 个手写 watcher。
+ *
+ * 事件面（17 个，含编辑六件套）由 `GraphEventMap` 派生；`defineEmits` 与矩阵的一致性由
+ * `v3-overlay-suite.test.ts` 的门禁锁定。
  */
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
+import type {
+  OverlayEventPayload,
+  OverlayPartialPointerEvent,
+  OverlayPointerEvent,
+} from "../../driver/types/events";
+import type { BPolylineProps } from "../../types/components";
+import { createPolylineSpec } from "./polylineSpec";
+
 export type { BPolylineProps };
 
 const props = withDefaults(defineProps<BPolylineProps>(), {
@@ -25,131 +32,30 @@ const props = withDefaults(defineProps<BPolylineProps>(), {
 });
 
 const emit = defineEmits<{
-  click: [e: unknown];
-  dblclick: [e: unknown];
+  click: [event: OverlayPointerEvent];
+  dblclick: [event: OverlayPointerEvent];
+  mousedown: [event: OverlayPointerEvent];
+  mouseup: [event: OverlayPointerEvent];
+  mouseover: [event: OverlayPointerEvent];
+  mouseout: [event: OverlayPartialPointerEvent];
+  mousemove: [event: OverlayPointerEvent];
+  rightclick: [event: OverlayPointerEvent];
+  rightdblclick: [event: OverlayPointerEvent];
+  remove: [event: OverlayEventPayload];
+  lineupdate: [event: OverlayEventPayload];
+  editstart: [event: OverlayEventPayload];
+  editend: [event: OverlayEventPayload];
+  linevertexdragstart: [event: OverlayEventPayload];
+  linevertexdragging: [event: OverlayEventPayload];
+  linevertexdragend: [event: OverlayEventPayload];
+  linevertexdel: [event: OverlayEventPayload];
 }>();
 
-const { resource } = useOverlayResource<BPolylineProps, PolylineHandle>(
-  props,
-  {
-    create: (ctx, p) =>
-      ctx.client.driver.overlays.createPolyline(p.path, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        enableMassClear: p.enableMassClear,
-        enableEditing: p.enableEditing,
-      }),
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      if (props.visible) ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      scope.add(ctx.client.driver.events.on(res, "click", (e) => emit("click", e)));
-      scope.add(ctx.client.driver.events.on(res, "dblclick", (e) => emit("dblclick", e)));
-    },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          [() => p.path, () => p.pathVersion],
-          ([path]) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            if (path && path.length > 0) ctx.client.driver.overlays.setPath(res, path);
-          },
-          { flush: "sync" },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeWeight,
-          (w) => {
-            const _v = w;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeWeight: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeStyle,
-          (s) => {
-            const _v = s;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeStyle: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableEditing,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableEditing: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "polyline",
-);
+const emitDynamic = dynamicEmit(emit);
+
+defineOptions({ name: "BPolyline" });
+
+useOverlaySpec(props, createPolylineSpec(), { emit: emitDynamic });
 </script>
 
 <template>

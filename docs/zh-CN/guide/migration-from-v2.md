@@ -141,6 +141,17 @@ v3 引入三档渲染模型:
 ## 5. 弃用(deprecation)
 
 每条弃用都有稳定 code,文档列出替代 API,同实例只警告一次,production 默认不输出。
+映射表本身是单一事实源(`packages/baidu-map-gl-vue/src/core/deprecations/aliases.ts`),
+下面的表格从它派生。
+
+| code | 旧名 | 替代 | 组件 | 说明 |
+| --- | --- | --- | --- | --- |
+| `BMAP_DEPRECATED_PROP_ALIAS` | `startPoint` + `endPoint` | `bounds` | `BGroundOverlay` | 一个 `bounds`(`{ southwest, northeast }`)取代两个角点。正典有值时旧名**完全不参与**(连提示都不发) |
+| `BMAP_DEPRECATED_EVENT_ALIAS` | `@drag-end` | `@dragend` | `BMarker` | 两个名字都会发(同载荷),提示同实例一次 |
+
+> 别名只在**真的被用到**时提示:prop 别名在读到旧值时提示,事件别名在第一次派发时提示——
+> 组件里绑了却从不触发的旧名字不会打扰使用者。
+
 
 示例(控制台):
 ```

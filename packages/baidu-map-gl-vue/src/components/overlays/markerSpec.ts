@@ -91,6 +91,9 @@ function readDragEndPoint(event: unknown): { lng: number; lat: number } | null {
 export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<BMarkerProps, MarkerHandle> {
   return {
     type: "marker",
+    // 事件面由事件矩阵给出（`MarkerEventMap` 的 11 个事件）；这里只覆盖 `dragend` 的处置方式。
+    // 清单与载荷档见 core/overlays/overlayEventCatalog.ts 与 docs/zh-CN/components/overlay/events.md
+    kind: "marker",
     targetKind: "marker",
     fields: MARKER_FIELDS,
     descriptorKeys: MARKER_DESCRIPTOR_KEYS,
@@ -105,28 +108,18 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<BMarkerProps
         icon: p.icon,
       }),
     events: [
-      { sdk: "click", emit: "click" },
-      { sdk: "dblclick", emit: "dblclick" },
-      { sdk: "rightclick", emit: "rightclick" },
-      { sdk: "mousedown", emit: "mousedown" },
-      { sdk: "mouseup", emit: "mouseup" },
-      { sdk: "mouseover", emit: "mouseover" },
-      { sdk: "mouseout", emit: "mouseout" },
-      { sdk: "dragstart", emit: "dragstart" },
-      { sdk: "dragging", emit: "dragging" },
       {
         sdk: "dragend",
         handle: (event) => {
           deps.emit("dragend", event);
-          // `drag-end` 是历史别名（kebab 拼写），与 `dragend` 一起发；两者都不是 `update:position`
-          deps.emit("drag-end", event);
+          // `drag-end` 是历史别名，由集中弃用层在派发后补发（一次告警）；
+          // 两者都不是 `update:position` 的替代。
           const point = readDragEndPoint(event);
           if (!point) return;
           // 只有**真的变了**才 emit：SDK 重复派发同一位置不应产生新的 update（回环抑制的模型侧）
           if (deps.position()?.observeFromSdk(point)) deps.emit("update:position", point);
         },
       },
-      { sdk: "remove", emit: "remove" },
     ],
   };
 }

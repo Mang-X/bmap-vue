@@ -1,28 +1,25 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useOverlayResource, removeOverlay } from "../../core/composables/useOverlayResource";
-import type { MapReadyContext } from "../../core/context/types";
-import type { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import type { OverlayHandle } from "../../driver/types/handles";
-
 /**
- * BBezierCurve 迁移(adapter 模式)
+ * BBezierCurve —— 贝塞尔曲线（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
- * path/controlPoints 视为不可变值,更新后替换根引用触发;支持 pathVersion 强制刷新。
- * 大 path 默认不 deep watch。
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。`path` 与 `controlPoints` 是**两个大数组**，
+ * 各有自己的版本令牌（`pathVersion` / `controlPointsVersion`）：根引用变化或对应版本递增都会
+ * 下发一次，不做内容指纹（上万点数组的 O(n) 序列化不可接受）。
+ *
+ * 事件面（11 个）由 `GraphEventMap` **去掉编辑六件套**得到（上游 Omit，SDK 没有 `enableEditing`）——
+ * 因此本组件既不暴露 `enableEditing`，也不声明编辑事件。
  */
-export interface BBezierCurveProps {
-  path: { lng: number; lat: number }[];
-  controlPoints: { lng: number; lat: number }[][];
-  pathVersion?: string | number;
-  controlPointsVersion?: string | number;
-  strokeColor?: string;
-  strokeWeight?: number;
-  strokeOpacity?: number;
-  strokeStyle?: "solid" | "dashed" | "dotted";
-  enableMassClear?: boolean;
-  visible?: boolean;
-}
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
+import type {
+  OverlayEventPayload,
+  OverlayPartialPointerEvent,
+  OverlayPointerEvent,
+} from "../../driver/types/events";
+import type { BBezierCurveProps } from "../../types/components";
+import { createBezierCurveSpec } from "./bezierCurveSpec";
+
+export type { BBezierCurveProps };
 
 const props = withDefaults(defineProps<BBezierCurveProps>(), {
   strokeColor: "#000000",
@@ -34,149 +31,24 @@ const props = withDefaults(defineProps<BBezierCurveProps>(), {
 });
 
 const emit = defineEmits<{
-  click: [e: unknown];
-  dblclick: [e: unknown];
-  mousedown: [e: unknown];
-  mouseup: [e: unknown];
-  mouseout: [e: unknown];
-  mouseover: [e: unknown];
-  remove: [e: unknown];
-  lineupdate: [e: unknown];
+  click: [event: OverlayPointerEvent];
+  dblclick: [event: OverlayPointerEvent];
+  mousedown: [event: OverlayPointerEvent];
+  mouseup: [event: OverlayPointerEvent];
+  mouseover: [event: OverlayPointerEvent];
+  mouseout: [event: OverlayPartialPointerEvent];
+  mousemove: [event: OverlayPointerEvent];
+  rightclick: [event: OverlayPointerEvent];
+  rightdblclick: [event: OverlayPointerEvent];
+  remove: [event: OverlayEventPayload];
+  lineupdate: [event: OverlayEventPayload];
 }>();
 
-const { resource } = useOverlayResource<BBezierCurveProps, OverlayHandle>(
-  props,
-  {
-    create: (ctx, p) =>
-      ctx.client.driver.overlays.createBezierCurve(p.path, p.controlPoints, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        enableMassClear: p.enableMassClear,
-      }),
-    addToMap: (res, ctx, p, scope: ResourceScope) => {
-      if (props.visible) ctx.client.driver.overlays.add({ kind: "map", handle: ctx.map }, res);
-      const on = (name: string, h: (e: unknown) => void) => {
-        scope.add(ctx.client.driver.events.on(res, name, h));
-      };
-      on("click", (e) => emit("click", e));
-      on("dblclick", (e) => emit("dblclick", e));
-      on("mousedown", (e) => emit("mousedown", e));
-      on("mouseup", (e) => emit("mouseup", e));
-      on("mouseout", (e) => emit("mouseout", e));
-      on("mouseover", (e) => emit("mouseover", e));
-      on("remove", (e) => emit("remove", e));
-      on("lineupdate", (e) => emit("lineupdate", e));
-    },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          [() => p.path, () => p.pathVersion],
-          ([path]) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            if (path && path.length > 0) ctx.client.driver.overlays.setPath(res, path);
-          },
-          { flush: "sync" },
-        ),
-      );
-      addDisposer(
-        watch(
-          [() => p.controlPoints, () => p.controlPointsVersion],
-          ([cps]) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            if (cps && cps.length > 0) ctx.client.driver.overlays.setOptions(res, { controlPoints: cps });
-          },
-          { flush: "sync" },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeColor: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeWeight,
-          (w) => {
-            const _v = w;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeWeight: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeOpacity: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.strokeStyle,
-          (s) => {
-            const _v = s;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { strokeStyle: _v });
-            }
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
-      );
-    },
-    remove: (res, ctx) => removeOverlay(res, ctx),
-  },
-  "bezier",
-);
+const emitDynamic = dynamicEmit(emit);
 
 defineOptions({ name: "BBezierCurve" });
+
+useOverlaySpec(props, createBezierCurveSpec(), { emit: emitDynamic });
 </script>
 
 <template>

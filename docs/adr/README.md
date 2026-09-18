@@ -33,6 +33,7 @@
 | [2026-09-17](./2026-09-17-overlay-spec-and-marker.md) | 声明式 `OverlaySpec`、Marker 状态模型与图标缓存（字段策略声明 / 一等 registration / 值快照式回环抑制 / 有界 Icon 缓存） | Accepted |
 | [2026-09-17](./2026-09-17-control-spec-and-panorama.md) | 控件统一 spec 与全景基线（`ControlSpec` / `planOptions` 分类查询 / visible 定型 / PanoramaContext 隔离 / post-stable 范围） | Accepted |
 | [2026-09-18](./2026-09-18-infowindow-host-and-ownership.md) | BInfoWindow 的 detached host、五相位状态机与每地图归属（Teleport 渲染子树 / `close` 事件的归属表 / `InfoWindowManager` / 尺寸合帧重绘） | Accepted |
+| [2026-09-18](./2026-09-18-overlay-event-matrix.md) | 覆盖物事件矩阵、字段 watch 源与集中弃用层（按 kind 派生事件面 / 三档载荷 / 大数组按根引用+版本 / 别名读取层 / 八个覆盖物共用内核） | Accepted |
 
 ## 约定
 
