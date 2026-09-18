@@ -40,6 +40,9 @@
  *   （那需要未声明的面）——需要逐请求归因的话，请用 `onRequest` 的顺序 + 自己的请求计数。
  * - **`onError` 不带失败原因**：DOM 的 `error` 事件不提供原因（CORS / 404 / 超时在浏览器侧同形）。
  *   可诊断的是「哪个 URL 失败了、失败了几次」，不是「为什么失败」。
+ * - **元素归属**：结果监听按**元素**只挂一次（不随加载次数堆积），但每块元素**当前归谁观察**
+ *   以**最近一次**向它发起加载的包装器为准。所以图层重建 / 多个网络图层复用同一块元素时，
+ *   事件回调的是**当前**那个观察者，而不是第一个注册者。
  * - **观察者回调抛错不会影响加载**：本库捕获并 `devWarn`，加载照常继续。
  *
  * ## 与 `tileLoadFunction` 的关系
@@ -82,28 +85,40 @@ export function defaultTileLoad(tile: HTMLImageElement, url: string): void {
   tile.src = url;
 }
 
-/** 已经挂过结果监听的元素（按元素去重，避免 SDK 复用元素时监听器越挂越多）。 */
-const observedTiles = new WeakSet<HTMLImageElement>();
+/**
+ * 每块元素**当前归谁观察**。
+ *
+ * 为什么是「归属」而不是「登记过没有」：SDK 可能复用同一块元素（图层重建、或多个网络图层共用）。
+ * 若只在第一次注册时把观察者 getter 捕获进闭包，事件就会**永远**回调**第一个**包装器的观察者
+ * ——后来的拥有者收不到结果，而已卸载的组件反而还在被回调。
+ *
+ * 现在的语义：**监听器按元素只挂一次**（不随加载次数堆积），但每次加载都把归属更新到**当前**
+ * 包装器；事件发生时按归属取观察者。
+ */
+const tileOwners = new WeakMap<HTMLImageElement, () => TileLoadObserver | undefined>();
 
-function observeOutcome(tile: HTMLImageElement, observerOf: () => TileLoadObserver | undefined): void {
-  if (observedTiles.has(tile)) return;
-  observedTiles.add(tile);
-  const report = (call: (observer: TileLoadObserver, info: TileLoadInfo) => void): void => {
-    const observer = observerOf();
-    if (!observer) return;
-    try {
-      call(observer, { url: tile.src, tile });
-    } catch (error) {
-      // 观察者抛错不得影响加载：这是「在旁边看」，不是链路的一部分。
-      devWarn(
-        `[layer] tileLoadObserver 的回调抛错，已忽略（瓦片加载不受影响）：${
-          (error as Error)?.message ?? String(error)
-        }`,
-      );
-    }
-  };
-  tile.addEventListener("load", () => report((observer, info) => observer.onLoaded?.(info)));
-  tile.addEventListener("error", () => report((observer, info) => observer.onError?.(info)));
+function reportOutcome(tile: HTMLImageElement, hook: "onLoaded" | "onError"): void {
+  const observer = tileOwners.get(tile)?.();
+  if (!observer) return;
+  try {
+    observer[hook]?.({ url: tile.src, tile });
+  } catch (error) {
+    // 观察者抛错不得影响加载：这是「在旁边看」，不是链路的一部分。
+    devWarn(
+      `[layer] tileLoadObserver.${hook} 抛错，已忽略（瓦片加载不受影响）：${
+        (error as Error)?.message ?? String(error)
+      }`,
+    );
+  }
+}
+
+function observeOutcome(tile: HTMLImageElement, owner: () => TileLoadObserver | undefined): void {
+  if (!tileOwners.has(tile)) {
+    tile.addEventListener("load", () => reportOutcome(tile, "onLoaded"));
+    tile.addEventListener("error", () => reportOutcome(tile, "onError"));
+  }
+  // **后来的包装器接管归属**：它才是这块元素当前的拥有者。
+  tileOwners.set(tile, owner);
 }
 
 /**

@@ -116,6 +116,36 @@ describe("[#97] 瓦片加载观察面", () => {
     expect(next.onRequest, "SDK 手上那个函数身份不变，但它转发到最新观察者").toHaveBeenCalledTimes(1);
   });
 
+  it("两个包装器依次用同一块元素 ⇒ 事件只回调**当前**的观察者（归属会转移）", () => {
+    // 回归：去重状态若只是「这块元素登记过没有」并把第一个观察者 getter 捕获进闭包，
+    // 后来的拥有者就永远收不到结果（图层重建 / 多个网络图层复用同一块元素时），
+    // 而已卸载的那一方反而还在被回调。现在的语义是「监听器只挂一次，归属每次更新」。
+    const first = vi.fn();
+    const second = vi.fn();
+    const loadA = createTileLoadFunction(() => ({ observer: { onLoaded: first } }))!;
+    const loadB = createTileLoadFunction(() => ({ observer: { onLoaded: second } }))!;
+    const tile = makeTile();
+
+    loadA(tile, "https://tiles.example/from-a.png");
+    loadB(tile, "https://tiles.example/from-b.png");
+    tile.dispatchEvent(new Event("load"));
+
+    expect(second, "当前拥有者收到结果").toHaveBeenCalledTimes(1);
+    expect(second.mock.calls[0]![0].url).toBe("https://tiles.example/from-b.png");
+    expect(first, "前一个包装器不再是拥有者，不该再被回调").not.toHaveBeenCalled();
+  });
+
+  it("归属转移之后仍然「每个元素只挂一次监听」（不会随包装器数量增长）", () => {
+    const calls: number[] = [];
+    const tile = makeTile();
+    for (let index = 0; index < 5; index += 1) {
+      const load = createTileLoadFunction(() => ({ observer: { onLoaded: () => calls.push(index) } }))!;
+      load(tile, `https://tiles.example/${index}.png`);
+    }
+    tile.dispatchEvent(new Event("load"));
+    expect(calls, "五次加载只挂一份监听 ⇒ 只回调一次（最后那个拥有者）").toEqual([4]);
+  });
+
   it("defaultTileLoad 就是把 URL 交给图片元素（实测能恢复与不设钩子时相同的加载结果）", () => {
     const tile = makeTile();
     defaultTileLoad(tile, "https://tiles.example/z.png");
