@@ -446,7 +446,6 @@ export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }
  * 而组件库源码里的测试文件与仓库根 tests 目录都不在任何 typecheck 门禁的编译范围内
  * （`packages/baidu-map-gl-vue/tsconfig.build.json` 排除了前者，后者从来没被编译过）。
  */
-import { h } from 'vue'
 import {
   BRectangle,
   BPolygon,
@@ -621,10 +620,19 @@ export const dataComponentPropsSmoke = { listProps, badListProps, badItemKey, co
 //
 // 模板用法**不受影响**（见 `src/data-components.vue`）。如果哪天上游修好了推断，下面这条指令会变成
 // 「未使用的 @ts-expect-error」而报错 —— 那时请更新这条断言与 `docs/zh-CN/components/data.md`。
-// @ts-expect-error `h()` 里推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
-export const programmaticGenericLimit = h(BMarkerList, {
+//
+// ⚠️ 写法上踩过两次，都记在这里：
+// 1. 指令必须贴在**实际报错的那一行**。vue-tsc 把 overload 不匹配报在某个属性上（实测是最后一个
+//    与签名冲突的属性），所以把 props 先收成一个变量、让 `h(...)` 调用成为唯一的报错行，
+//    断言才不会随属性顺序漂移；
+// 2. 早期版本的 `BMarkerList` **忘了导入**，于是指令吞掉的是 `Cannot find name` 而不是「推不出
+//    `Item`」—— 断言看起来通过、实际是空的。现在导入齐了，去掉指令会得到这样的报错原文：
+//    `TS2769: No overload matches this call … Types of property 'itemKey' are incompatible`
+//    （展开里能看到它期望的 `itemKey: (item: unknown) => PropertyKey`）。
+const programmaticProps = {
   data: stations,
   itemKey: 'id',
-  // 参数显式标注：本条的**唯一**预期错误是 `itemKey` 那处（`Item` 没推出来）
   getPosition: (item: { lng: number; lat: number }) => ({ lng: item.lng, lat: item.lat }),
-})
+}
+// @ts-expect-error `h()` 推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
+export const programmaticGenericLimit = h(BMarkerList, programmaticProps)
