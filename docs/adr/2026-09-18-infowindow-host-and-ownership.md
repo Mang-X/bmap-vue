@@ -109,7 +109,10 @@
 - **`v-model:open` 是唯一主模型**。`show` / `v-model:show` 作为 v2 兼容别名保留：它只在
   `resolveInfoWindowOpenIntent()`（唯一收口）里被读取，且**只在显式给出时**覆盖 `open`
   （`undefined` = 不表态，靠 `withDefaults(..., { show: undefined })` 关掉 Vue 布尔 prop 的
-  「缺省即 false」转换）。使用时会经 `devWarn` 打一条**集中告警**（每组件一次）。
+  「缺省即 false」转换）。告警**收进仓库的集中弃用层**（`core/deprecations` 的别名表 +
+  `warner`）：稳定 code `BMAP_DEPRECATED_PROP_ALIAS`、统一文案、同实例一次、production 不输出 ——
+  组件不写自己的兼容代码（那是 #28 明令禁止、#31 收掉的形态），迁移文档的表格也从同一张表派生
+  （`v3-overlay-events-doc.test.ts` 是它的镜像门禁）。
 - **`update:*` 只在 SDK 侧变化时回写**（`change.source === "sdk"`）。父级驱动的变化不回声 ——
   否则「父级改 → 我们 emit → 父级确认」会多出一轮回环。
 
@@ -323,7 +326,15 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
     `create` 或公开的重建入口），不是对当下可复现缺陷的修复；② **「不重叠」这条性质本身在这个
     表面上没有读数**（去掉单飞后全部用例仍绿）—— 单飞那部分的可测部分是「尾随重建不得丢值」
     （去掉尾随重建会红），其余只能靠代码审阅。若评审知道别的触发路径，请给出前置，我补判别性用例。
-11. **`props` 的默认值有第三处**：组件（`withDefaults`）、`INFO_WINDOW_FIELDS` 的声明面、
+11. **`show` 的读取规则与集中弃用层的「正典优先」有一处刻意差异**（决策 2）：集中层的
+    `resolveAliasValue()` 是「正典有值 ⇒ 旧名完全不参与」，前提是正典（`bounds`）**必填** ⇒
+    「缺失」可观测。本组件的正典 `open` 带运行期默认值（`withDefaults` 里的 `false`，为的是
+    `<BInfoWindow open />` 这种裸布尔属性仍按 Vue 惯例生效），于是「没传 `open`」与
+    「传了 `open: false`」在 props 上**不可区分**；照搬正典优先会让默认值把 `show` 彻底压死
+    （`v-model:show` 静默失效）。因此本组件取**可观测**的规则：显式给出的 `show` 生效。
+    代价：两个都传时以 `show` 为准（写进了组件文档与迁移文档的弃用表）。
+    要严格对齐就得去掉 `open` 的默认值，代价是裸布尔属性失效 —— 一侧留作后续取舍。
+12. **`props` 的默认值有第三处**：组件（`withDefaults`）、`INFO_WINDOW_FIELDS` 的声明面、
     文档的 props 表格各写了一份，当前一致但没有会红的检查（与 `BInfoWindowProps` 的键集不同 ——
     键集由编译期映射类型强制覆盖）。改默认值时三处要一起改；做成门禁（解析文档表格 + 读运行期
     props 定义）属于发布面校验，留给后续票。
@@ -384,6 +395,31 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 它当时**通过了**那条「同 tick 的 open → close」用例 —— 直到单点反证把计数写回无条件才发现它只覆盖了
 前半段。补上「被吞掉的命令不得计数 ⇒ 之后再来的真实关闭仍须收敛」后才真正有判别力。
 这条与仓库的既有纪律一致：**门禁要按「改坏 ⇒ 该条红」逐条验，不能按「读起来覆盖了」放过。**
+
+### 合并 main（#31 落地）后的对齐
+
+本 PR 期间 `main` 合入了 #31（覆盖物事件矩阵 / 统一内核 / **集中弃用层**）。合并后做了两件事：
+
+1. **回归**：`types/components.ts` 被两侧同时修改（#31 把八个矢量覆盖物的 props 拆成
+   `Path*Props` 共享接口，本 PR 把 `BInfoWindowProps` 的字段搬到 `core/overlays/InfoWindowSpec.ts`）。
+   自动合并结果正确，但**本 PR 写成单行的 `interface BInfoWindowProps extends InfoWindowProps {}`
+   打穿了 #31 的声明面门禁**：`v3-overlay-suite.test.ts` 的 `readPropsKeys()` 用
+   `([\s\S]*?)\n\}` 切接口正文（为了不误切行内对象类型），单行 `{}` 会让这个非贪婪匹配继续往后吞，
+   把紧随其后的 `Path*Props` 并进同一次匹配 ⇒ 那几个接口从解析表里消失、5 条用例误报。
+   修法是把它写成**多行**接口体（并在注释里写明这个约束），`#31` 的 122 条用例随即全绿。
+   这类「各自绿、合起来红」只有**在合并后的树上跑全量门禁**才发现得到。
+2. **对齐**：把 `show` 的兼容处置从本组件手写的 `devWarn` 换成集中弃用层（决策 2）。这条对齐牵出三处
+   必须一起改的地方（都**由门禁**逼出来，不是顺手改的）：
+   - **别名表**：`OVERLAY_PROP_ALIASES` 新增 `info-window` 的 `show → open`；
+   - **迁移文档的弃用表**：`v3-overlay-events-doc.test.ts` 逐条比对「表里每条别名都在文档里」
+     （code / 正典名 / 旧名），少一行就红；
+   - **描述符**：`v3-overlay-suite.test.ts` 要求「别名表里的**正典**名必须能在描述符里查到」。
+     `open` 不是 SDK 属性，所以按 `position` 的既有先例把它登记为
+     `open: unsupported("气泡的打开状态由地图级 openInfoWindow / closeInfoWindow 表达…")` ——
+     「为什么不走实例属性」因此只有一处事实源，而不是靠「不写」来表达。
+   > 取舍说清楚：也可以**不**进别名表（保留组件自持的一条告警），代价是与 #31 的
+   > 「组件不写自己的兼容代码」直接冲突。选择进表；`open` 那行 `unsupported` 是这次对齐的
+   > 必要代价，而不是为了过门禁的旁路 —— 它与 `position` 逐字同构。
 
 ## 非目标
 

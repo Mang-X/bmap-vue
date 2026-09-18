@@ -58,10 +58,12 @@ import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { BMapError } from "../errors/BMapError";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
-import { devWarn, logger } from "../logger";
+import { logger } from "../logger";
+import { createDeprecationWarner, describeDeprecation, propAliasesOf } from "../deprecations";
 import {
   INFO_WINDOW_DESCRIPTOR_KEYS,
   INFO_WINDOW_FIELDS,
+  infoWindowOpenIntentUsesAlias,
   resolveInfoWindowOpenIntent,
   type InfoWindowFieldUpdate,
   type InfoWindowProps,
@@ -210,12 +212,17 @@ export function useInfoWindow<Props extends InfoWindowProps>(
 
   assertFieldDeclarations();
 
-  // `show` 是兼容别名，不是第二份主状态：一条集中告警，每个组件只提示一次。
-  if (props.show !== undefined) {
-    devWarn(
-      `<${component}>: \`show\` 是 \`open\` 的兼容别名（v2 沿用 \`v-model:show\`）。主状态只有 ` +
-        "`open`，请迁移到 `v-model:open`；本条提示每个组件只出现一次。",
-    );
+  /**
+   * 集中弃用层：`show`（v2 的 `v-model:show`）由 `core/deprecations` 统一处置 ——
+   * 稳定 code、统一文案、**同实例只警告一次**、production 默认不输出。
+   *
+   * 组件**不**写自己的兼容代码，也不自己拼告警文案（那是 #28 明令禁止、#31 收掉的形态）。
+   * 告警只在旧名**确实是数据来源**时发：正典 `open` 一旦有值，`show` 完全不参与（连告警都不发）。
+   */
+  const deprecation = createDeprecationWarner(component);
+  if (infoWindowOpenIntentUsesAlias(props)) {
+    const alias = propAliasesOf("info-window").find((entry) => entry.canonical === "open");
+    if (alias) deprecation.warn(describeDeprecation(alias));
   }
 
   /* ------------------------------------------------------------------ 状态机驱动 */

@@ -13,7 +13,9 @@
 - `class` / `style` / 其它 `$attrs` 落在宿主**内部**的包装节点 `div.b-info-window-content` 上。
 
 **状态模型**：`open`（`v-model:open`）是唯一主状态，由五相位状态机（`closed` / `opening` / `open` /
-`closing` / `disposed`）驱动。`show` / `v-model:show` 保留为兼容别名，使用时会打印一次开发期告警。
+`closing` / `disposed`）驱动。`show` / `v-model:show` 保留为兼容别名，并**收进仓库的集中弃用层**
+（`core/deprecations`）：稳定 code `BMAP_DEPRECATED_PROP_ALIAS`、同一实例只提示一次、production 不输出。
+两个都传时以 `show` 为准（`open` 有运行期默认值，「父级没传」不可观测）。
 `update:open` / `update:show` **只在 SDK 侧的变化时回写**（不再回声父级驱动的变化）；要感知
 「气泡真的开了 / 关了」，用 `open` / `close` 事件。
 

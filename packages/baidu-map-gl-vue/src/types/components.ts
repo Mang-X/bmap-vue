@@ -143,7 +143,14 @@ export interface BMarkerProps {
  * 「每个属性怎么落地」的策略表，由用例与 Driver 描述符交叉锁定）。这里只把公开类型名
  * 暴露给调用方，避免出现第二份字段清单。
  */
-export interface BInfoWindowProps extends InfoWindowProps {}
+export interface BInfoWindowProps extends InfoWindowProps {
+  // 字段全部来自 `InfoWindowProps`（单一事实源，见上面的注释）。
+  //
+  // ⚠️ 这里**必须**保持「多行花括号」的写法：`tests/behavior/v3-overlay-suite.test.ts` 的
+  // `readPropsKeys()` 用 `([\s\S]*?)\n\}` 切接口正文（为的是不把行内对象类型 `{ lng, lat }`
+  // 当成分隔符）。写成单行 `{}` 会让那个非贪婪匹配**继续往后吞**，把紧随其后的接口正文并进
+  // 这一次匹配里 —— 结果是那几个接口在解析表里消失、声明面门禁误报（PR #101 合并 #31 后实测）。
+}
 
 /**
  * 描边样式：Polyline / Polygon / Rectangle / Circle 共享（M5-VECTORS / #31）。

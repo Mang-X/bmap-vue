@@ -365,6 +365,13 @@ export const OVERLAY_DESCRIPTORS = {
       position: unsupported(
         "气泡的打开位置由 openInfoWindow(map, infoWindow, position) 提供；InfoWindow 构造期与实例上都没有 setPosition",
       ),
+      // `open` 与 `position` 是同一类：**不是 SDK 属性**，而是本库状态机持有的语义。
+      // 登记在这里（而不是「干脆不写」）有两个理由：① 「为什么不走实例属性」只有这一处事实源；
+      // ② 集中弃用层的别名表要求「正典 prop 必须能在描述符里查到」（`v3-overlay-suite` 的门禁），
+      //    而 `BInfoWindow` 的旧名 `show` 的正典就是 `open` —— 与 `position` 用同一套口径。
+      open: unsupported(
+        "气泡的打开状态由地图级 openInfoWindow(map, infoWindow, position) 与 closeInfoWindow() 表达；InfoWindow 实例上没有 open 属性或 setter",
+      ),
     }),
   },
 

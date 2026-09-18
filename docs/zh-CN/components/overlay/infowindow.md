@@ -41,7 +41,7 @@ overlay/dynmicInfoWindow
 | 属性                 | 说明                                                                     | 类型                      | 默认值          |
 | -------------------- | ------------------------------------------------------------------------ | ------------------------- | --------------- |
 | `open`               | **唯一主状态**：是否打开，支持 `v-model:open`                            | `boolean`                 | `false`         |
-| `show`               | `open` 的兼容别名（v2 沿用）。使用时会打印一次开发期告警，请迁移到 `open` | `boolean`                 | -               |
+| `show`               | `open` 的兼容别名（v2 沿用）。使用时会经集中弃用层提示一次（code `BMAP_DEPRECATED_PROP_ALIAS`），请迁移到 `open` | `boolean`                 | -               |
 | `position`           | 信息窗体所在坐标。**打开与移动都由它驱动**                               | `{ lng, lat }`            | -               |
 | `title`              | 信息窗标题文字（官方支持 HTML）                                          | `string`                  | `''`            |
 | `width`              | 信息窗宽度，单位像素。取值范围：0, 220 - 730。0 表示按内容自适应          | `number`                  | `0`             |
@@ -73,6 +73,18 @@ overlay/dynmicInfoWindow
 
 `update:open` **不回声**父级驱动的变化：给 `open` 赋值 `false` 时组件不会回写一次 `false`
 （受控组件的常规语义）。想知道「气泡真的开了 / 关了」，用 `open` / `close` 事件。
+
+### 兼容别名 `show`（v2）
+
+`show` / `v-model:show` 会经仓库的**集中弃用层**（`core/deprecations`）处理：稳定 code
+`BMAP_DEPRECATED_PROP_ALIAS`、统一文案、**同实例只提示一次**、production 默认不输出。
+
+::: warning 两个都传时以 `show` 为准
+这与其它覆盖物的「正典优先」不同：`open` 有运行期默认值（为了 `open` 这种裸布尔属性仍按 Vue
+惯例生效），因此「父级有没有传 `open`」在 props 上不可观测。与其让默认值把旧名彻底压死
+（`v-model:show` 会静默失效），这里取可观测的规则：**显式给出的旧名生效**，并在集中层提示你迁移。
+:::
+
 
 ## 状态同步与清理
 

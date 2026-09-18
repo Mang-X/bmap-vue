@@ -897,13 +897,40 @@ describe('唯一主模型与兼容别名', () => {
     expect(resolveInfoWindowOpenIntent({ open: true, show: false })).toBe(false)
   })
 
-  it('使用 `show` 时打印一次集中告警（每个组件一次）', async () => {
+  it('使用 `show` 时经集中弃用层打印一次告警（稳定 code + 同实例一次）', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const el = harness.container()
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, show: false })], el)
+    const show = ref(true)
+    const wrapper = mountTree(
+      () => [h(BInfoWindow, { position: POSITION, show: show.value })],
+      el,
+    )
     await settle()
-    const lines = warn.mock.calls.map((call) => String(call[0]))
-    expect(lines.filter((line) => line.includes('`show` 是 `open` 的兼容别名'))).toHaveLength(1)
+    const deprecations = () =>
+      warn.mock.calls.filter((call) => String(call[0]).includes('is deprecated'));
+    const first = deprecations()
+    expect(first, '旧名被使用时恰好告警一次').toHaveLength(1)
+    // 文案与 code 都来自 `core/deprecations`（组件不自己拼）；正典名出现在文案里
+    expect(String(first[0]![0])).toContain('`open`');
+    expect(first[0]![1]).toMatchObject({ code: 'BMAP_DEPRECATED_PROP_ALIAS' });
+
+    // 同实例一次：再改 prop、再渲染都不重复（去重在 warner 里）
+    show.value = false
+    await settle()
+    expect(deprecations(), '同实例只警告一次').toHaveLength(1)
+
+    await unmountAndSettle(wrapper)
+  })
+
+  it('只传正典 `open` 时不产生弃用告警', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const el = harness.container()
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: true })], el)
+    await settle()
+    expect(
+      warn.mock.calls.filter((call) => String(call[0]).includes('is deprecated')),
+      '没有用旧名就不该有弃用提示',
+    ).toHaveLength(0)
     await unmountAndSettle(wrapper)
   })
 
