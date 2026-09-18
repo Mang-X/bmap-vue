@@ -194,6 +194,42 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
     d.sdkClose();
     expect(d.phase).toBe("closed");
     expect(d.open).toBe(false);
+
+    // ★ 关键的后半段：被吞掉的那条关闭命令**不会**产生回调，因此它**不能**计入在飞条数 ——
+    // 否则计数永远还不清，下面这次真实的关闭会被误判成「结算」而静默丢掉。
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.phase).toBe("open");
+    d.sdkClose();
+    expect(d.open, "被吞掉的命令不得把计数留在账上（否则真实关闭会丢）").toBe(false);
+    expect(d.phase).toBe("closed");
+    expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
+  });
+
+  it("重开确认先到、旧 close 后到：不得把已经重开的模型关掉（反序回包）", () => {
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    // 关：下发 close 命令（它的回包晚到）
+    d.intent(false, A);
+    // 立刻重开
+    d.intent(true, A);
+    // ★ 反序：**重开的确认先到**
+    d.sdkOpen();
+    expect(d.phase).toBe("open");
+    // ★ 然后前一次 close 的迟到回包才到
+    d.sdkClose();
+
+    expect(d.open, "模型必须仍然是打开：这条 close 是重开之前那次关闭的回包").toBe(true);
+    expect(d.phase, "相位不得被旧回包拉回 closed").toBe("open");
+    expect(d.changes.at(-1)).toEqual({ open: true, source: "prop" });
+    expect(d.commands, "旧回包不得触发任何新命令").toEqual(["open@1", "close@1", "open@1"]);
+
+    // 对照组：随后一次**真实的**未经请求关闭（点地图）仍必须被收敛
+    d.sdkClose();
+    expect(d.open, "真实的关闭不能被误判成过期回包").toBe(false);
+    expect(d.phase).toBe("closed");
+    expect(d.changes.at(-1)).toEqual({ open: false, source: "sdk" });
   });
 
   it("被顶掉（superseded）：不下发任何命令，只收敛自己的模型", () => {

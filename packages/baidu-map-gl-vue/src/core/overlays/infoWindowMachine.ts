@@ -24,20 +24,33 @@
  *   里观测到 SDK 的 `open` 时要**再下发一次关闭**，否则「点了关闭，气泡却留在地图上」。
  * - `disposed` 是终态：之后一切事件与意图都被丢弃（卸载后不得再产生命令或回写）。
  *
- * ## `close` 事件没有身份信息 ⇒ 用「未结算的关闭命令」来归属
+ * ## `close` 事件没有身份信息 ⇒ 用「在飞的关闭命令**计数**」来归属
  *
  * SDK 的 `close` 事件不带任何身份：它既可能是「我们刚下发的关闭命令的结算」，也可能是
  * 「更早一次关闭命令的迟到回包」，两者在 SDK 侧完全不可区分。处理错的后果是
- * 「明明还开着，模型却说关了」。因此：
+ * 「明明还开着，模型却说关了」。
  *
- * | `closePending` | 模型（`open`） | 处置 |
+ * **一个布尔不够**（外部评审 P1）：`关 → 立刻重开` 之后，两次回包的到达顺序都可能发生 ——
+ * 重开的 `open` 先到、旧 `close` 后到（或反之）。若在一个布尔上「见到 `open` 就清掉待结算标记」，
+ * 反序到达时那条旧 `close` 会被当成**未经请求的关闭**，把已经重开的模型关掉。
+ *
+ * 因此这里记的是**计数**，并且只统计**在「气泡确实开着」时下发的**关闭命令 ——
+ * 只有那种命令才会产生回调（真机与夹具都证实：气泡尚未被接管时 `closeInfoWindow()` 是 no-op，
+ * 不会有 `close` 事件）。每条 `close` 事件消耗一次计数，处置由**模型当前值**决定：
+ *
+ * | `closeOutstanding` | 模型（`open`） | 处置 |
  * | --- | --- | --- |
- * | `false` | 任意 | **未经请求的关闭**（点地图 / 点关闭按钮 / 被顶掉）⇒ 相位回 `closed`、模型收敛为关、回写 `update:open` |
- * | `true` | `false` | 结算我们已下发的关闭命令 ⇒ 相位回 `closed`，**不改模型**（期望状态本来就是关） |
- * | `true` | `true` | **过期回包**（关之后又重开过）⇒ 只清标记，相位与模型都不动 |
+ * | `0` | 任意 | **未经请求的关闭**（点地图 / 点关闭按钮 / 被顶掉）⇒ 相位回 `closed`、模型收敛为关、回写 `update:open` |
+ * | `> 0` | `false` | 结算我们已下发的关闭命令 ⇒ 计数减一、相位回 `closed`，**不改模型**（期望状态本来就是关） |
+ * | `> 0` | `true` | **过期回包**（关之后又重开过）⇒ 计数减一，相位与模型都不动 |
  *
- * 于是「关 → 立刻重开 → 迟到的 close 到达」不会把已经重开的气泡在模型里关掉，
- * 而「点地图关闭」仍然是一次真实的模型收敛。
+ * `>0` 且模型是 `true` 就一定是过期回包：「模型是 `true`」只可能来自「重开之后」，
+ * 而重开之前的那些关闭命令的回包都是过期的。于是「关 → 立刻重开 → 迟到的 close 到达」
+ * 在**两种到达顺序**下都不会把已经重开的气泡关掉，而「点地图关闭」仍然是一次真实的模型收敛。
+ *
+ * 计数只在三种时机增长（都保证会有一条 `close` 回调）：`open` 相位下收到关闭意图、
+ * `closing` 相位里观测到 `sdk-open`（命令被吞掉 ⇒ 补一条）、以及它们各自的重复下发。
+ * 重建 / 被顶掉 / 销毁一律清零（那一代的回包已经没有意义）。
  *
  * ## 迟到回调只有一种处置：丢弃
  *
@@ -94,8 +107,13 @@ export interface InfoWindowSnapshot {
   readonly open: boolean;
   /** 实例代次：重建即 +1，回调据此丢弃过期事件。 */
   readonly generation: number;
-  /** 已下发但尚未观测到结算的关闭命令，见模块注释的归属表。 */
-  readonly closePending: boolean;
+  /**
+   * 在飞的关闭命令**条数**（只统计「气泡确实开着时下发」的那些），见模块注释的归属表。
+   *
+   * 刻意不是布尔：`关 → 立刻重开` 之后回包顺序无法预期，一个布尔无法区分
+   * 「旧命令的回包」与「未经请求的关闭」。
+   */
+  readonly closeOutstanding: number;
   /** 当前生效的位置指纹（`null` = 无位置）。用来判断已开着的气泡是否需要移动。 */
   readonly positionKey: string | null;
   /** 「想开但缺位置」是否已经报过一次（进入该状态时报一次，离开即复位）。 */
@@ -149,7 +167,7 @@ export function initialInfoWindowSnapshot(generation = 0): InfoWindowSnapshot {
     phase: "closed",
     open: false,
     generation,
-    closePending: false,
+    closeOutstanding: 0,
     positionKey: null,
     invalidNotified: false,
   };
@@ -213,7 +231,7 @@ export function reduceInfoWindow(
       if (action.generation !== state.generation) return settle(state);
       if (state.phase === "closed") return settle(state);
       // 不下发任何命令：地图上已经是新的那一个，任何 map 级关闭都会打到它头上
-      const closed = changeOpen({ ...state, closePending: false }, false, "sdk");
+      const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
       return transition({
         snapshot: enterPhase(closed.snapshot, "closed"),
         changes: closed.changes ?? NONE_CHANGES,
@@ -226,12 +244,12 @@ export function reduceInfoWindow(
         phase: "closed",
         open: state.open,
         generation: action.generation,
-        closePending: false,
+        closeOutstanding: 0,
         positionKey: null,
         invalidNotified: false,
       });
     case "dispose":
-      return settle(enterPhase({ ...state, closePending: false }, "disposed"));
+      return settle(enterPhase({ ...state, closeOutstanding: 0 }, "disposed"));
     default:
       return settle(state);
   }
@@ -258,7 +276,10 @@ function reduceIntent(
       // 已经收敛在关闭一侧：不重复下发关闭命令
       return { snapshot: base, effects: NONE_EFFECTS, changes: NONE_CHANGES, notices };
     }
-    const closed = changeOpen({ ...base, closePending: true }, false, "prop");
+    // 计数只在**气泡确实开着**时增长：`closing` / `opening` 时下发的关闭命令可能被 SDK 吞掉
+    // （尚未接管），那种命令不会产生 `close` 回调，计进去会让后续一次真实的关闭被误判成结算。
+    const outstanding = base.closeOutstanding + (base.phase === "open" ? 1 : 0);
+    const closed = changeOpen({ ...base, closeOutstanding: outstanding }, false, "prop");
     return {
       snapshot: enterPhase(closed.snapshot, "closing"),
       effects: [{ type: "close", generation: state.generation }],
@@ -279,9 +300,10 @@ function reduceIntent(
   }
 
   // closed / closing：都要（重新）发起打开。
-  // `closePending` **保持原值**：从 `closing` 重开时，那条关闭命令仍然在飞，它的迟到回包
-  // 必须继续被认作「过期」（否则重开之后会被一条旧回包关掉，见模块注释的归属表）。
-  const reopened = changeOpen({ ...base, closePending: state.closePending }, true, "prop");
+  // `closeOutstanding` **保持原值**：从 `closing` 重开时，那条关闭命令仍然在飞，它的迟到回包
+  // 必须继续被认作「过期」——**直到那条回包真的到达**为止（清掉计数会让它变成「未经请求的关闭」，
+  // 见模块注释的归属表）。因此这里的清账只发生在 `sdk-close` 上，不发生在 `sdk-open` 上。
+  const reopened = changeOpen({ ...base, closeOutstanding: state.closeOutstanding }, true, "prop");
   return {
     snapshot: enterPhase(reopened.snapshot, "opening"),
     effects: [{ type: "open", generation: state.generation }],
@@ -293,14 +315,17 @@ function reduceIntent(
 function reduceSdkOpen(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
   if (state.phase === "closing") {
-    // 关闭命令被吞掉了（同 tick 的 open → close）。再下发一次收敛到关闭。
+    // 关闭命令被吞掉了（同 tick 的 open → close）。再下发一次收敛到关闭；
+    // 这一次 SDK 已经确认开着 ⇒ 它一定会产生一条 `close` 回调，所以计数要 +1。
     return {
-      snapshot: { ...state, closePending: true },
+      snapshot: { ...state, closeOutstanding: state.closeOutstanding + 1 },
       effects: [{ type: "close", generation: state.generation }],
     };
   }
   if (state.phase === "open") return settle(state);
-  const confirmed = changeOpen({ ...state, closePending: false }, true, "sdk");
+  // 刻意**不**清计数：这里的 `open` 只是新一次打开的确认，那份仍在飞的关闭命令还没回包。
+  // 清掉它，反序到达的旧 `close` 就会被当成「未经请求的关闭」而误关已经重开的气泡（评审 P1）。
+  const confirmed = changeOpen({ ...state }, true, "sdk");
   return {
     snapshot: enterPhase(confirmed.snapshot, "open"),
     changes: confirmed.changes ?? NONE_CHANGES,
@@ -311,10 +336,11 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   if (generation !== state.generation) return settle(state);
   if (state.phase === "closed") return settle(state);
 
-  if (state.closePending) {
-    const settled = { ...state, closePending: false };
+  if (state.closeOutstanding > 0) {
+    const settled = { ...state, closeOutstanding: state.closeOutstanding - 1 };
     if (state.open) {
-      // 过期回包：关闭命令之后又重开过。只清标记，相位与模型都不动。
+      // 过期回包：模型是「开」只可能来自「重开之后」，而重开之前的关闭命令的回包都是过期的。
+      // 只消耗一次计数，相位与模型都不动。
       return settle(settled);
     }
     // 结算我们已下发的关闭命令：期望状态本来就是关，不改模型
@@ -322,7 +348,7 @@ function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {
   }
 
   // 未经请求的关闭（点地图 / 点关闭按钮 / 被顶掉）
-  const closed = changeOpen({ ...state, closePending: false }, false, "sdk");
+  const closed = changeOpen({ ...state, closeOutstanding: 0 }, false, "sdk");
   return {
     snapshot: enterPhase(closed.snapshot, "closed"),
     changes: closed.changes ?? NONE_CHANGES,

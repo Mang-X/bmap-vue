@@ -163,6 +163,16 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /** 状态机快照。所有相位变化都经 `dispatch()`，组件里不另存一份状态。 */
   let machine: InfoWindowSnapshot = initialInfoWindowSnapshot();
   let activeInstance: ActiveInstance | null = null;
+  /**
+   * **每一代实例按它自己的 handle 索引**（创建时登记、释放时摘除）。
+   *
+   * `useSdkResource` 的释放路径会在「已过期的那一代」上补调一次 `spec.mount({ resource })`
+   * 再立刻 `dispose()`（见它 `createOnce()` 的 stale 分支）。那一代**不一定是** `activeInstance`
+   * ——成功路径上 `activeInstance` 永远是最后创建的那一个，而 stale 分支拿到的可能是更早的
+   * `resource`。因此 `mount` / `bind` 必须**按传进来的 handle 取实例**：用全局的 `activeInstance`
+   * 去代表它，轻则配不上（旧实例没人释放），重则拿新实例去给旧 resource 记账（外部评审 P1）。
+   */
+  const instancesByHandle = new Map<InfoWindowHandle, ActiveInstance>();
   let readyCtx: MapReadyContext | null = null;
   let generationCounter = 0;
 
@@ -440,7 +450,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           enableCloseOnClick: props.enableCloseOnClick,
           offset: props.offset,
         });
-        activeInstance = {
+        const created: ActiveInstance = {
           generation,
           handle,
           host: element,
@@ -449,6 +459,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           alive: true,
           lastRedrawnSize: null,
         };
+        activeInstance = created;
+        instancesByHandle.set(handle, created);
         // host 先交给 Teleport；注册与事件绑定的失败路径都不影响它的释放（dispose 里有 remove）
         host.value = element;
         // **首次创建不发 `rebuild`**：那个名字的语义是「实例被重建」。父级在挂载组件时本来就知道
@@ -458,15 +470,18 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       },
 
       mount: ({ context, resource }) => {
-        const instance = activeInstance;
+        // **按 handle 取实例**（不是 `activeInstance`）：stale 分支会把更早那一代的 resource
+        // 传进来，它必须连同自己那一代一起被记账 / 释放。
+        const instance = instancesByHandle.get(resource);
         if (!instance) return;
         return createRegistration(context, instance, resource);
       },
 
       bind: ({ resource }) => {
-        const instance = activeInstance;
+        // 同上：按 handle 取实例（`instancesByHandle` 里找不到说明这一代已经被释放）
+        const instance = instancesByHandle.get(resource);
         const context = readyCtx;
-        if (!instance || !context || instance.handle !== resource) return;
+        if (!instance || !context) return;
         bindSdkEvents(context, instance);
         // 就绪窗口的收敛（与 `useOverlaySpec` 的 4b 同口径）：`create` 与 `bind` 之间到达的
         // prop 变化在实例上还没有落点，此刻补一次「意图 + 待办选项」。
@@ -513,16 +528,56 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   });
 
   /**
-   * 重建实例（构造期属性变化）。
+   * 重建实例（构造期属性变化）—— **单飞 + 合并成一次尾随重建**。
    *
    * `useSdkResource.replace()` 是**原子替换**：先释放旧实例（含关闭气泡、解绑事件、摘掉 host），
    * 再创建新的，中间不会同时存在两个。释放路径本身已经通过 `createRegistration().dispose()`
    * 把旧实例的一切收起，因此这里只需要把「期望状态」记在机器里 —— `bind` 的 reconciliation 会
    * 把它重新施加到新实例上。
+   *
+   * ## 为什么要串行化（外部评审 P1）
+   *
+   * 两条 `replace()` 重叠时，先发起的那条会以「token 已过期」的身份走完它的 stale 清理路径 ——
+   * 而那条路径里 `mount({ resource })` 拿到的是**它自己那一代**的 resource。重叠本身就让
+   * 「哪一代对应哪个实例」这件事必须靠身份而不是靠全局变量来回答（见 `instancesByHandle`）。
+   * 串行化把这件事**从结构上**变成不可能：任何时刻只有一次 `replace()` 在飞，过期清理只会
+   * 发生在「组件正在卸载」这一条路径上（已由 `createRegistration().dispose()` 的身份判定覆盖）。
+   *
+   * 语义：**已经在飞时，新请求合并成一次尾随重建**（而不是排队 N 次）——
+   * `create` 每次都读当前 props，因此尾随那次一定用最新值；连续的构造期变化只多付一次重建。
    */
-  async function rebuild(): Promise<void> {
+  let rebuildInFlight: Promise<void> | null = null;
+  let rebuildPending = false;
+
+  function rebuild(): Promise<void> {
+    if (rebuildInFlight) {
+      rebuildPending = true;
+      return rebuildInFlight;
+    }
     // 销毁之后 `useSdkResource.replace()` 自己会短路（`disposed || componentScope.isDisposed`）
-    await sdk.replace();
+    const run = (async () => {
+      try {
+        await sdk.replace();
+      } catch (error) {
+        // replace 内部已经把失败交到 `resource:error`（`useSdkResource.onError`）；这里只是兜底，
+        // 不让它变成未处理的 rejection
+        logger.warn(
+          `useInfoWindow(${component}).rebuild: 重建失败: ${
+            (error as Error)?.message ?? String(error)
+          }`,
+        );
+      }
+    })().finally(() => {
+      // 先清指针、**再**看一次待办：否则「最后一次 replace 之后、清指针之前」到达的请求会被丢掉，
+      // 实例就会停在不是最新 props 的那一代上。
+      rebuildInFlight = null;
+      if (rebuildPending) {
+        rebuildPending = false;
+        void rebuild();
+      }
+    });
+    rebuildInFlight = run;
+    return run;
   }
 
   /* ------------------------------------------------------------------------ 内部 */
@@ -624,6 +679,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           host.value = null;
         }
         instance.host.remove();
+        // 摘掉索引（按身份判等：被替换的那一代不该把新主人从表里删掉）
+        if (instancesByHandle.get(instance.handle) === instance) {
+          instancesByHandle.delete(instance.handle);
+        }
         emit("destroy", instance.generation);
       },
     };

@@ -18,7 +18,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, nextTick, ref, type VNode } from 'vue'
+import { defineComponent, h, nextTick, ref, watch, type VNode } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
 import BInfoWindow from '../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue'
@@ -769,6 +769,87 @@ describe('重复挂载与实例重建：账目与释放', () => {
     expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0)
     expect(probeContext.value?.infoWindows?.size).toBe(0)
     harness.assertIdle('卸载')
+  })
+
+  it('重建窗口内卸载：被放弃的那一代必须被它自己的释放路径收干净', async () => {
+    const el = harness.container()
+    const offset = ref({ x: 0, y: 0 })
+    const kill = ref(false)
+    // 测试自己的 post-flush watcher：在**同一个 flush 的 post 阶段**卸载组件。
+    // 这会把 `useSdkResource` 逼进它的 stale 分支（create 已完成、`bind` 之前组件就没了），
+    // 也就是「重建窗口内卸载」这条真实可达的时序。
+    const wrapper = mount(
+      defineComponent({
+        components: { BMap },
+        setup() {
+          watch(kill, () => wrapper.unmount(), { flush: 'post' })
+          return () =>
+            h(BMap, { provider: harness.provider() }, () => [
+              h(BInfoWindow, { position: POSITION, open: true, offset: offset.value }),
+              h(ContextProbe),
+            ])
+        },
+      }),
+      { attachTo: el },
+    )
+    await settle()
+    expect(createdInfoWindows(), '对照组：第一代已经建好').toHaveLength(1)
+    expect(fake.diagnostics.snapshot().leaks.infoWindows).toBe(1)
+
+    // 同一个 tick：pre 阶段触发重建（第二代 create 完成、尚未 bind），post 阶段卸载
+    offset.value = { x: 0, y: -4 }
+    kill.value = true
+    await settle()
+
+    expect(createdInfoWindows(), '对照组：窗口内确实建出了第二代').toHaveLength(2)
+    const abandoned = createdInfoWindows().at(-1)!
+    // 真正的读数：被放弃的那一代不能泄漏 —— host 摘掉、气泡关掉、监听解绑、账本清空
+    expect(
+      (abandoned.content as HTMLElement).isConnected,
+      '被放弃那代的 host 必须被摘掉（stale 释放路径要认它自己的 handle，而不是当它不存在）',
+    ).toBe(false)
+    expect((abandoned.content as HTMLElement).parentElement).toBeNull()
+    expect(abandoned.isOpen()).toBe(false)
+    expect(lastMap().infoWindow, '地图上不得留下气泡').toBeNull()
+    expect(probeContext.value?.infoWindows?.size).toBe(0)
+    harness.assertIdle('重建窗口内卸载')
+  })
+
+  it('重建是单飞的：连续变化合并成一次尾随重建，不会并发进入 replace()', async () => {
+    const el = harness.container()
+    const offset = ref({ x: 0, y: 0 })
+    const wrapper = mountTree(
+      () => [h(BInfoWindow, { position: POSITION, open: true, offset: offset.value })],
+      el,
+    )
+    await settle()
+    expect(createdInfoWindows(), '对照组：初始一代').toHaveLength(1)
+
+    // 10 次构造期变化，每次只让出一个微任务（不等待 flush 完成）——「连续变化」的最坏形态
+    for (let i = 1; i <= 10; i += 1) {
+      offset.value = { x: i, y: 0 }
+      await Promise.resolve()
+    }
+    await settle()
+
+    const created = createdInfoWindows()
+    expect(created.length, '对照组：连续变化确实换过实例').toBeGreaterThan(1)
+    expect(currentInfoWindow(), '当前气泡必须是最后建出来的那一代').toBe(created.at(-1))
+
+    // 决定性读数（不依赖重建次数）：**最终存活的那一代必须是用最后一次变化的值建的** ——
+    // 单飞的尾随重建一旦被丢掉，实例就会停在中间某一代上，这条会红。
+    const finalOffset = created.at(-1)!.options.offset as
+      | { width: number; height: number }
+      | undefined
+    expect(finalOffset?.width, '尾随重建不得被丢掉：最终实例必须按最后一次 offset 构建').toBe(10)
+
+    // 更早的每一代都要释放干净（原子替换：中间不留孤儿）
+    for (const older of created.slice(0, -1)) {
+      expect(older.isOpen(), '被替换的每一代都必须关掉').toBe(false)
+      expect((older.content as HTMLElement).isConnected, '被替换的每一代都必须摘掉宿主').toBe(false)
+    }
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('连续变化的合并重建')
   })
 
   it('反复挂载 / 卸载 20 轮：代次与账目都对得上', async () => {
