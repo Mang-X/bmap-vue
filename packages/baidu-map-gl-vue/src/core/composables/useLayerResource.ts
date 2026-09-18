@@ -93,8 +93,9 @@ export interface UseLayerResourceResult {
  * 记（真实可能已经 detached，那就再也挂不回来），也不能按「已经下去了」记（真实可能还在图上，
  * 再 `add` 一次会让同一个实例在图上出现两份，而 `addLayer` 不去重）。
  *
- * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。注意这只在「对已经摘掉的
- * 图层重复 `removeLayer` 是安全的」这条**未取证前提**成立时才保证收敛——见已知限制 14。
+ * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。这一步依赖「对已经摘掉的
+ * 图层重复 `removeLayer` 是安全的」——该前提已由 issue #98 的 live 探针**实测成立**
+ * （GeoJSON / DOM / Tile 三个家族重复摘除均未抛错，见 ADR 决策 12b）。
  */
 type MountState = "attached" | "detached" | "unknown";
 
@@ -105,9 +106,10 @@ interface InstanceState {
   /**
    * 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。
    *
-   * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会**尝试**把它推回确定状态
-   * （`remove -> add`）——**仅在前提 P（对已摘掉的图层重复 `removeLayer` 是安全的）成立时才保证
-   * 收敛**；前提不成立时保持 `unknown` 并报错（可观测、且不会重复挂载）。见已知限制 14。
+   * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会把它推回确定状态
+   * （`remove -> add`）。这条路径依赖的前提 P（重复 `removeLayer` 安全）**已由 issue #98 的 live
+   * 探针实测成立**（三个家族均未抛错，见 ADR 决策 12b）；万一对某个 kind / SDK 版本不成立，
+   * 退化仍然有界且可观测（保持 `unknown` + `resource:error`，不会重复挂载）。
    */
   mountState: MountState;
   /**
@@ -116,6 +118,13 @@ interface InstanceState {
    * 与 `mountState` 分开的原因见 `unmount`：错误补偿必须能在「副作用已产生但调用抛错」时摘除实例。
    */
   mountAttempted: boolean;
+  /**
+   * 是否**成功挂上去过**（一旦为真就不再复位）。
+   *
+   * 用途只有一个：区分「第一次挂载」（实例是全新的，直接 `addLayer` 就行）与「摘掉之后重新可见」
+   * （**必须换实例**，见 `needsRemountRebuild`）。
+   */
+  everAttached: boolean;
   /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性，避免重复清理同一实例。 */
   torndown: boolean;
   /** 创建该实例时用的重建指纹：props 变化时与它比较，决定「重建」还是「就地更新」。 */
@@ -263,8 +272,9 @@ export function useLayerResource<Props>(
    *   `clearData()` / `removeAllOverlays()` → `removeLayer()` 顺序；
    * - 已经 `detached`（此前 `visible=false` 已成功摘过一次）：只做 **detached cleanup**——
    *   可执行的清空照常做（见 `tearDownData`），但**不会再摘一次**（`mountAttempted` 已复位，
-   *   下面那道门禁会直接 return）。官方没有承诺「对已经摘掉的图层重复 `removeLayer` 是安全的」，
-   *   本库不猜。
+   *   下面那道门禁会直接 return）。重复 `removeLayer` 的安全性已由 issue #98 实测（三个家族均未
+   *   抛错，见决策 12b），但**这条路径本身只做一次摘除**——重复摘除只出现在「挂载状态未知」时的
+   *   收敛动作里。
    */
   const unmount = (state: InstanceState, context: MapReadyContext, permanent = false): void => {
     // 清理只与「这个实例要被永久丢弃」有关，与「它还挂不挂着」无关（要不要执行由清空操作的
@@ -297,11 +307,13 @@ export function useLayerResource<Props>(
    * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`；
    * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次）。
    *
-   * ⚠️ **这是「尝试」，不是「确定性收敛」**：它依赖一条**未经上游证明**的前提 P——「对已经摘掉的
-   * 图层重复 `removeLayer` 是安全的」。前提 P 成立时两种失败形状都落到「恰好挂一份」（上一步真的
-   * 没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）；**P 不成立时收敛不会发生**（第二次摘除
-   * 继续抛，状态仍是 `unknown`、图层仍不可见），但失败经 `resource:error` 交出，且**绝不会**因为
-   * 「猜已经下去了」去 `add` 而出现两份。登记见已知限制 14，悲观契约下的退化有回归用例（§13）。
+   * 它依赖前提 P——「对已经摘掉的图层重复 `removeLayer` 是安全的」。**该前提已由 issue #98 的
+   * live 探针实测成立**（GeoJSON / DOM / Tile 重复摘除均未抛错，见 ADR 决策 12b），因此两种失败
+   * 形状都落到「恰好挂一份」（上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）。
+   *
+   * 覆盖范围按证据写准：三个家族实测 + 其余 kind 走**同一个** `map.removeLayer` 入口。若将来某个
+   * kind / SDK 版本不成立，退化仍然有界且可观测（状态停在 `unknown`、失败经 `resource:error` 交出，
+   * 且**绝不会**因为「猜已经下去了」去 `add` 而出现两份）——这条防御性不变量由悲观契约的用例钉住。
    *
    * 这次尝试**不是免费的**（多一次 SDK 调用），但它只在「上一次调用抛过错」之后才发生。
    */
@@ -333,7 +345,31 @@ export function useLayerResource<Props>(
       throw error;
     }
     state.mountState = "attached";
+    state.everAttached = true;
   };
+
+  /**
+   * **纯判定**：「上一次挂上去过的实例，现在要重新可见」⇒ 必须重建，不能复用。
+   *
+   * 依据是 issue #98 的 live 读数（真实 4.0，严格按内核的 `addLayer → setData` 顺序）：
+   *
+   * | 步骤 | DOMLayer 的节点（连在文档） |
+   * | --- | --- |
+   * | 挂载 + `setData` | 2 |
+   * | `removeLayer`（内核的「隐藏」） | 0 |
+   * | **再 `addLayer`（内核的「再显示」）** | **0 —— 内容不会自己回来** |
+   * | 再补一次 `setData` | 0，且**调用本身抛错**（`Cannot read properties of null (reading 'coordinate')`）|
+   * | 对照：**换一个新实例** | **2 —— 正常渲染** |
+   *
+   * 也就是说 `removeLayer` 会清空图层持有的 Map 引用，该实例**再也渲染不了**，补 `setData` 也救不回来。
+   * `GeoJSONLayer` 的 `getData()` 集合在同样路径下**还在**（2 条），但「集合在」不等于「覆盖物回到图上」——
+   * 那一点没有公开手段可观测（`Map` 上没有列出覆盖物的方法），因此**不构成「复用可行」的证据**。
+   *
+   * 既然没有任何 kind 的「摘掉之后复用」被证实可行，就不去猜：**重新可见一律重建**。
+   * 代价是一次重建（与「构造期选项变化」同级，且只发生在 hide → show 这条不热的路径上）。
+   */
+  const needsRemountRebuild = (state: InstanceState): boolean =>
+    state.everAttached && state.mountState !== "attached" && state.spec.visible !== false;
 
   /**
    * 就地写入「依赖已挂载」的槽位。
@@ -512,6 +548,7 @@ export function useLayerResource<Props>(
           spec,
           mountState: "detached",
           mountAttempted: false,
+          everAttached: false,
           torndown: false,
           rebuildKey: layerRebuildKey(spec, probeOf(context)),
           appliedSlots: new Map(),
@@ -586,6 +623,13 @@ export function useLayerResource<Props>(
                   return;
                 }
                 state.spec = next;
+
+                // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
+                // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
+                if (needsRemountRebuild(state)) {
+                  void replace();
+                  return;
+                }
 
                 // **先判定、后执行**：一旦确定「必须重建」，就不再执行就地写入——否则同一次更新里
                 // 一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次

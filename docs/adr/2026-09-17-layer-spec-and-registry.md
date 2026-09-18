@@ -175,6 +175,27 @@ GeoJSON 的函数型 style，全都会被折叠吞掉，SDK 永远用旧实现�
 「两种显隐机制」，且「`visible: false` 的实例仍被挂在图上」这种两套事实源的状态。
 `LayerSpec` 的 `options` 里出现 `visible` 时 Driver 会告警一次并忽略。
 
+**⚠️ 「再显示」要换新实例（issue #98 的 live 读数，后补的决策）**：`visible=false` 仍然是
+「摘掉」（不重建），但**重新可见不能把旧实例挂回去**——真实 4.0 的 `removeLayer` 会清空图层持有的
+Map 引用，那个实例**再也渲染不了**。严格按内核的 `addLayer → setData` 顺序实测（`DOMLayer`）：
+
+| 步骤 | 节点连在文档 |
+| --- | --- |
+| 挂载 + `setData` | 2 |
+| `removeLayer` | 0 |
+| **再 `addLayer`** | **0 —— 内容不会自己回来** |
+| 再补一次 `setData` | 0，且调用**抛错**（`Cannot read properties of null (reading 'coordinate')`）|
+| 对照：**换新实例** | **2** |
+
+`GeoJSONLayer` 的 `getData()` 集合在同样路径下**还在**（2 条），但「集合在」不等于「覆盖物回到图上」
+——那一点没有公开手段可观测（`Map` 上没有列出覆盖物的方法），因此**不构成「复用可行」的证据**。
+既然没有任何 kind 的「摘掉之后复用」被证实可行，就不去猜：**重新可见一律重建**
+（`needsRemountRebuild`，纯判定，放在任何就地写入之前）。
+
+代价与边界：一次重建（与「构造期选项变化」同级，只发生在 hide → show 这条不热的路径上）；
+好处是这条路不再依赖任何未取证前提——原来它依赖「重复摘除安全」+「重挂载会重渲染」两条，
+现在两条都不需要了。若将来某个 kind 的复用被证实可行，可以按证据把这条放宽为按 kind 判定。
+
 ### 9. 跨 kind 的归一化操作：`setZIndex` / `setData` / `clearData`
 
 三个操作都由 Driver 按 kind 映射到官方入口（`DOMLayer.clearData → removeAllOverlays()`），

@@ -66,16 +66,19 @@ export const FAKE_V4_INTERACTIONS = [
 export type FakeV4Interaction = (typeof FAKE_V4_INTERACTIONS)[number]
 
 /**
- * 调用图层替身上的**可选挂载生命周期钩子**（`onAttached` / `onDetached`）。
+ * 调用图层替身上的**可选摘除生命周期钩子**（`onDetached`）。
  *
  * 存在的理由：真实 SDK 的 `addLayer` / `removeLayer` 不只改账本，还会动**渲染**——DOMLayer 的
  * 节点就在 `removeLayer` 时从文档里被摘掉（issue #98 的 live 探针实测 `isConnected` 2 → 0）。
  * 替身若不建模这一条，「隐藏之后覆盖物仍在」这类断言会在**与真实相反**的方向上成立。
  *
+ * ⚠️ **反向没有钩子**：重新 `addLayer` 真实 SDK **不会**重新渲染（同一个实例已经废了），
+ * 所以这里也不提供「重挂载重渲染」——那正是内核「重新可见一律重建」要解决的。
+ *
  * 钩子是**可选**的（不是每个替身都有渲染生命周期），所以用一次结构检查调用，而不是把它加进
- * `FakeV4Layer` 基类——基类加了就等于声称「所有图层都有这两步」。
+ * `FakeV4Layer` 基类——基类加了就等于声称「所有图层都有这一步」。
  */
-function callLayerHook(layer: FakeV4Layer, hook: "onAttached" | "onDetached"): void {
+function callLayerHook(layer: FakeV4Layer, hook: "onDetached"): void {
   const candidate = (layer as unknown as Record<string, unknown>)[hook]
   if (typeof candidate === "function") (candidate as () => void).call(layer)
 }
@@ -307,7 +310,9 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.layers.push(layer)
     layer.attachedMap = this
     this.stats.resourceCreated('layer')
-    callLayerHook(layer, "onAttached")
+    // 刻意**不**调用任何「重挂载重渲染」钩子：真实 4.0 的 removeLayer 会清空图层持有的 Map 引用，
+    // 之后再 addLayer 不会重新渲染（issue #98 的 live 读数），补 setData 还会内部抛错。
+    // 也就是说「摘掉之后再挂上」只能靠**换新实例**——内核因此改成重建，替身这里不补钩子。
     if (this.failNextAddLayerAfterAttach) {
       const error = this.failNextAddLayerAfterAttach
       this.failNextAddLayerAfterAttach = null

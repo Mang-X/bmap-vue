@@ -46,6 +46,10 @@
     也没用 ⇒ 把 style 写成函数，或在 Vue 层用 `:key` 强制重挂载。
   - `BDOMLayer` 的 `createDom` 按官方参考实现的 `useLatest` 语义处理：**不重建**，但下一次数据
     解析（`setData`，含重新赋值 `data`）会用新实现。
+- **`visible` 的语义**：`false` 是「摘掉」（`removeLayer`，不重建）；**但再次 `visible=true` 会
+  **重建实例**——真实 4.0 的 `removeLayer` 会清空图层持有的 Map 引用，那个实例再也渲染不了
+  （DOMLayer 实测：重挂载后节点仍为 0，补 `setData` 还内部抛错）。也就是说「隐藏再显示」现在等价于
+  「摘掉 + 换一个新实例」，代价是一次重建，换来的是内容一定回来（旧实现在真实环境里会**内容消失**）。
 - **`visible=false` 期间设置的可变 option 不会丢**：切回可见时补写一次。
 - **可变 option 与统一槽位由有值变回 `undefined` 都会重建图层**，以便回到 SDK 自己的默认值。
   例外是 `data`：`null` = 清空，`undefined` = 保持现状。

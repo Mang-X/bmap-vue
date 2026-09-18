@@ -15,6 +15,13 @@
  * 图层不再持有 Map 引用，所以要真正清空 `getData()` 集合得在 `removeLayer` **之前**调」——
  * 它是内核「detached 时跳过该清空」这条决策的直接依据（ADR 决策 12）。
  *
+ * ## 第三组读数：「再显示」能不能复用实例（内核的 hide -> show 路径）
+ *
+ * 严格按内核的 `addLayer -> setData` 顺序跑一遍 `DOMLayer`：挂载 + `setData`（2 个节点连在文档）
+ * → `removeLayer`（0 个）→ **再 `addLayer`（仍是 0——内容不会自己回来）** → 补 `setData`
+ * （**抛错**：`Cannot read properties of null (reading 'coordinate')`）→ 对照「换新实例」（2 个）。
+ * 结论是 `removeLayer` 清空了图层持有的 Map 引用、实例不可复用，所以内核的「重新可见」改成了重建。
+ *
  * ## 为什么读数是**差分**的
  *
  * 「摘下之后清空还有效吗」这个问题，只有拿**同一个实例**在「刚 detach」与「调用清空之后」两个
@@ -187,6 +194,86 @@ const PAGE_JS = `
     push("dom.removeAllOverlays.已detached", attempt(() => dom.removeAllOverlays()));
     push("dom.afterRemoveAllOverlays", { threw: false, created: nodes.length, connected: connected(), overlayCount: len(dom, "getCustomOverlays") });
 
+    // ---- 聚焦实验：**严格按内核顺序**跑一遍数据图层的「挂载 → 隐藏 → 再显示」 ----
+    //
+    // 内核顺序（useLayerResource 的 mount 路径）是：create → syncMounted（addLayer）→
+    // 槽位同步（data 槽 → setData）。也就是说 **setData 发生在挂载之后**。
+    // 本探针第一版把 setData 放在 addLayer 之前（非内核顺序），于是「再显示」那一段的读数
+    // 可能归因于顺序而不是 SDK 行为 —— 所以这里另起一个实例，严格按内核顺序重跑。
+    //
+    // 要回答的问题：真实 SDK 上「隐藏（removeLayer）→ 再显示（addLayer）」之后
+    // ① 内容会不会自己回来？② 如果不回来，补一次 setData 能不能救？
+    const nodes3 = [];
+    const dom3 = new window.BMap.DOMLayer(function (properties) {
+      const element = document.createElement("div");
+      element.textContent = String(properties.id);
+      element.style.cssText = "width:16px;height:16px;background:#00f";
+      nodes3.push(element);
+      return element;
+    }, {});
+    const connected3 = () => nodes3.filter((element) => element.isConnected).length;
+    const snapshot = (id, extra) =>
+      push(id, Object.assign({ threw: false, created: nodes3.length, connected: connected3(), overlayCount: len(dom3, "getCustomOverlays") }, extra || {}));
+
+    push("kernel.mount.addLayer", attempt(() => map.addLayer(dom3)));
+    push("kernel.mount.setData", attempt(() => dom3.setData(data)));
+    await wait(900);
+    snapshot("kernel.mounted");
+
+    push("kernel.hide.removeLayer", attempt(() => map.removeLayer(dom3)));
+    await wait(400);
+    snapshot("kernel.hidden");
+
+    push("kernel.show.addLayer", attempt(() => map.addLayer(dom3)));
+    await wait(900);
+    snapshot("kernel.shown");
+
+    push("kernel.repair.setData", attempt(() => dom3.setData(data)));
+    await wait(900);
+    snapshot("kernel.repaired");
+
+    // GeoJSON 也按同一套内核顺序跑一遍：它是否与 DOM 一样「摘掉之后实例就废了」？
+    // 这决定修法是「所有数据图层统一重建」还是「按 kind 分级」。
+    const geo3 = new window.BMap.GeoJSONLayer("probe-kernel-order", {});
+    const geoSnapshot = (id, extra) =>
+      push(id, Object.assign({ threw: false, overlayCount: len(geo3, "getData") }, extra || {}));
+    push("geojson.kernel.mount.addLayer", attempt(() => map.addLayer(geo3)));
+    push("geojson.kernel.mount.setData", attempt(() => geo3.setData(data)));
+    await wait(900);
+    geoSnapshot("geojson.kernel.mounted");
+    push("geojson.kernel.hide.removeLayer", attempt(() => map.removeLayer(geo3)));
+    await wait(400);
+    geoSnapshot("geojson.kernel.hidden");
+    push("geojson.kernel.show.addLayer", attempt(() => map.addLayer(geo3)));
+    await wait(900);
+    geoSnapshot("geojson.kernel.shown");
+    push("geojson.kernel.repair.setData", attempt(() => geo3.setData(data)));
+    await wait(900);
+    geoSnapshot("geojson.kernel.repaired");
+    const geo4 = new window.BMap.GeoJSONLayer("probe-kernel-rebuild", {});
+    push("geojson.kernel.rebuild.setData", attempt(() => geo4.setData(data)));
+    push("geojson.kernel.rebuild.addLayer", attempt(() => map.addLayer(geo4)));
+    await wait(900);
+    push("geojson.kernel.rebuilt", { threw: false, overlayCount: len(geo4, "getData") });
+
+    // 对照：**换一个新实例**（内核的重建路径）能不能正常渲染 —— 决定「修法」是补 setData 还是换实例。
+    const nodes4 = [];
+    const dom4 = new window.BMap.DOMLayer(function (properties) {
+      const element = document.createElement("div");
+      element.textContent = String(properties.id);
+      nodes4.push(element);
+      return element;
+    }, {});
+    push("kernel.rebuild.addLayer", attempt(() => map.addLayer(dom4)));
+    push("kernel.rebuild.setData", attempt(() => dom4.setData(data)));
+    await wait(900);
+    push("kernel.rebuilt", {
+      threw: false,
+      created: nodes4.length,
+      connected: nodes4.filter((element) => element.isConnected).length,
+      overlayCount: len(dom4, "getCustomOverlays"),
+    });
+
     /* ------------------------------------------------------------ 瓦片家族 */
     // 三态挂载收敛是 kind 无关的，而 removeLayer 最常落在瓦片家族上，所以前提 P 的结论必须覆盖它。
     // 瓦片源指向百度自己的瓦片主机（与 smoke 同源），避免探针自己去撞一个不存在的域名。
@@ -248,47 +335,88 @@ function verdicts(report: ProbeReport): string[] {
   const byId = new Map(report.readings.map((r) => [r.id, r]))
   const lines: string[] = []
 
-  const geoSafe = byId.get("geojson.removeLayer#2.已摘下")
-  const domSafe = byId.get("dom.removeLayer#2.已摘下")
-  const tileSafe = byId.get("tile.removeLayer#2.已摘下")
-  const safeVerdict = !geoSafe?.threw && !domSafe?.threw && !tileSafe?.threw
+  // 每条读数**三态**：安全 / 不安全 / **无法判定**。缺失的读数**不得**当成 safe——
+  // `!undefined === true` 会把「没测到」读成「安全」，正是第六轮评审要求避免的形态。
+  const describeReading = (reading: Reading | undefined) =>
+    reading === undefined
+      ? "无法判定（读数缺失）"
+      : reading.threw
+        ? `抛错（${reading.message}）`
+        : "未抛错";
+  const pReadings: Array<[string, Reading | undefined]> = [
+    ["GeoJSON", byId.get("geojson.removeLayer#2.已摘下")],
+    ["DOM", byId.get("dom.removeLayer#2.已摘下")],
+    ["Tile", byId.get("tile.removeLayer#2.已摘下")],
+  ];
+  const known = pReadings.filter(([, reading]) => reading !== undefined)
+  const anyThrew = known.some(([, reading]) => reading!.threw)
+  const pVerdict =
+    known.length < pReadings.length
+      ? "**无法判定**（有读数缺失）"
+      : anyThrew
+        ? "**不安全**（三态收敛的该分支需要换机制）"
+        : "安全（前提 P 成立）"
   lines.push(
     `[前提 P] 对已摘下的图层重复 removeLayer —— ` +
-      `GeoJSON ${geoSafe?.threw ? `抛错（${geoSafe.message}）` : "未抛错"} / ` +
-      `DOM ${domSafe?.threw ? `抛错（${domSafe.message}）` : "未抛错"} / ` +
-      `Tile ${tileSafe?.threw ? `抛错（${tileSafe.message}）` : "未抛错"} ` +
-      `⇒ ${safeVerdict ? "安全（可把前提 P 升级为已证事实）" : "**不安全**（三态收敛的该分支需要换机制）"}`,
+      pReadings.map(([name, reading]) => `${name} ${describeReading(reading)}`).join(" / ") +
+      ` ⇒ ${pVerdict}`,
   )
 
-  const domBefore = byId.get("dom.detached")
-  const domAfter = byId.get("dom.afterRemoveAllOverlays")
-  const clearAttempt = byId.get("dom.removeAllOverlays.已detached")
-  const before = typeof domBefore?.connected === "number" ? domBefore.connected : -1
-  const after = typeof domAfter?.connected === "number" ? domAfter.connected : -1
-  // 三分支必须**互斥且各自诚实**：`before === 0` 不是「清空无效」，而是「removeLayer 自己就摘干净了」——
-  // 本探针第一版把它归进「未清掉」，得出一条与实际读数相反的结论（这正是「判定文案必须跟着读数走」）。
-  const domVerdict =
-    before < 0
-      ? "读数缺失，无法判定"
-      : before === 0
-        ? "**无需清空**（`removeLayer` 已把节点从文档摘掉）；detached 调 `removeAllOverlays()` 是安全的 no-op"
-        : after === 0
-          ? "**有效**（detached 清空确实移除了节点 ⇒ 可固化为「不要求 attached」）"
-          : "**无效**（detached 之后节点仍在文档上 ⇒ 永久销毁必须先补挂再清）"
+  // 重挂载是否按保留数据重渲染：**内核的 hide -> show 依赖它**（只重新挂载、不再 setData）。
+  const domSnap = (id: string) => {
+    const reading = byId.get(id)
+    if (reading === undefined) return "**无法判定**（读数缺失）"
+    const connected = typeof reading.connected === "number" ? reading.connected : -1
+    return `${String(connected)} 个节点连在文档（overlays ${String(reading.overlayCount)}）`
+  }
   lines.push(
-    `[DOM 摘除与清空] removeLayer 之后仍连在文档上的节点 ${String(domBefore?.connected)} 个；` +
-      `再调 removeAllOverlays() ${clearAttempt?.threw ? `抛错（${clearAttempt.message}）` : "未抛错"}；` +
-      `之后剩 ${String(domAfter?.connected)} 个 ⇒ ${domVerdict}`,
+    "[DOM 生命周期（严格按内核顺序：addLayer → setData）] " +
+      `挂载后 ${domSnap("kernel.mounted")} → 隐藏后 ${domSnap("kernel.hidden")} → ` +
+      `**再显示后 ${domSnap("kernel.shown")}** ⇒ ` +
+      ((byId.get("kernel.mounted")?.connected ?? 0) <= 0
+        ? "**无法判定**（对照不成立：挂载后就没有节点）"
+        : (byId.get("kernel.shown")?.connected ?? 0) > 0
+          ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
+          : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
+  )
+  lines.push(
+    `[再显示后补 setData] ${domSnap("kernel.repaired")}；` +
+      `调用本身 ${byId.get("kernel.repair.setData")?.threw ? `抛错（${byId.get("kernel.repair.setData")?.message}）` : "未抛错"} ⇒ ` +
+      ((byId.get("kernel.repaired")?.connected ?? 0) > 0
+        ? "**能把内容找回来**（修法可行：重新挂载成功后让 data 槽位重写一次）"
+        : "**找不回来**（补 setData 不足以恢复 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"),
+  )
+  const geoNums = ["geojson.kernel.mounted", "geojson.kernel.hidden", "geojson.kernel.shown", "geojson.kernel.repaired"]
+    .map((id) => byId.get(id)?.overlayCount)
+  lines.push(
+    "[GeoJSON 生命周期（同一套内核顺序）] 挂载后 " +
+      `${String(geoNums[0])} 条 → 隐藏后 ${String(geoNums[1])} 条 → 再显示后 ${String(geoNums[2])} 条 → ` +
+      `补 setData 后 ${String(geoNums[3])} 条 ⇒ ` +
+      (geoNums.some((value) => typeof value !== "number")
+        ? "**无法判定**（读数缺失）"
+        : Number(geoNums[2]) > 0
+          ? "**集合还在**（但注意：集合在 ≠ 覆盖物在图上，这条读数只说明实例没被清空）"
+          : "**集合被清空了** ⇒ GeoJSON 与 DOM 一样：`removeLayer` 之后实例不能靠重挂载恢复"),
+  )
+  lines.push(
+    `[对照：换新实例重建] ${domSnap("kernel.rebuilt")} ⇒ ` +
+      ((byId.get("kernel.rebuilt")?.connected ?? 0) > 0
+        ? "重建路径正常（可选修法：data 图层在重新可见时重建实例）"
+        : "**重建也没渲染**（说明本轮实验本身不成立，先查前面的读数）"),
   )
 
   const geoDetached = byId.get("geojson.detached")
   const geoAfter = byId.get("geojson.afterClearData")
+  const geoNumbersKnown =
+    typeof geoDetached?.overlayCount === "number" && typeof geoAfter?.overlayCount === "number"
   lines.push(
     `[GeoJSON detached clearData] 摘掉后 getData() ${String(geoDetached?.overlayCount)} 条；` +
       `再调 clearData() 之后 ${String(geoAfter?.overlayCount)} 条 ⇒ ` +
-      (geoAfter?.overlayCount === geoDetached?.overlayCount
-        ? "**未清空**（印证 reference「要真正清空得在 removeLayer 之前调」⇒ 内核跳过它是正确的）"
-        : "**被清空了**（reference 那句话与运行时不一致，需要据实修正）"),
+      (!geoNumbersKnown
+        ? "**无法判定**（读数缺失）"
+        : geoAfter!.overlayCount === geoDetached!.overlayCount
+          ? "**未清空**（印证 reference「要真正清空得在 removeLayer 之前调」⇒ 内核跳过它是正确的）"
+          : "**被清空了**（reference 那句话与运行时不一致，需要据实修正）"),
   )
   return lines
 }
@@ -412,17 +540,21 @@ async function main(): Promise<number> {
         console.log(`  [${entry.level}] ${redact(entry.text)}`)
       }
     }
-    console.log("-- 结论 --")
-    const lines = verdicts(report)
-    for (const line of lines) console.log(`  ${line}`)
-
+    // **顺序要紧**：正证控件先判，成立之后才打印结论。反过来（先印「安全 / 可升级为已证事实」、
+    // 再印「控件不成立、本轮无法判定」）会让日志前半段看起来像拿到了结论 —— 第六轮评审的同一类
+    // 问题（措辞比证据强）在探针里也不能犯。
     const failures = controlFailures(report)
     if (failures.length > 0) {
-      console.error("-- 正证控件不成立（本轮无法判定）--")
+      console.error("-- 正证控件不成立 ⇒ 本轮不出结论 --")
       for (const failure of failures) console.error(`  ${failure}`)
+      console.error("（上面这些读数按「无法判定」对待：控件不成立时它们无意义）")
       return 1
     }
     if (report.phase !== "done") return 3
+
+    console.log("-- 结论 --")
+    const lines = verdicts(report)
+    for (const line of lines) console.log(`  ${line}`)
 
     if (outPath) {
       writeFileSync(outPath, redact(JSON.stringify(report, null, 2)))

@@ -638,22 +638,24 @@ export class FakeV4DOMLayer extends FakeV4Layer {
   }
 
   /**
-   * 摘挂时的渲染生命周期（**实测建模**，issue #98 的 live 探针）：
+   * 摘除时的渲染生命周期（**实测建模**，issue #98 的 live 探针，严格按内核的
+   * `addLayer -> setData` 顺序）：
    *
-   * - `onDetached()`：真实 4.0 的 `map.removeLayer(domLayer)` **会把图层渲染出来的节点从文档摘掉**
-   *   （实测 `isConnected` 2 → 0，同时 `getCustomOverlays()` 2 → 0）。替身原先没有建模这一条，
-   *   于是「隐藏之后覆盖物仍在」这类断言在**与真实相反**的方向上成立；
-   * - `onAttached()`：重新 `addLayer` 时若图层仍持有数据，SDK 会**重新渲染**出来（摘挂不改数据）。
+   * | 步骤 | 真实 4.0 的节点（连在文档） |
+   * | --- | --- |
+   * | 挂载 + `setData` | 2 |
+   * | `removeLayer` | 0 |
+   * | **再 `addLayer`** | **0 —— 内容不会自己回来** |
+   * | 再补一次 `setData` | 0，且调用**抛错** |
+   * | 对照：换一个新实例 | 2 |
    *
-   * 两者由 `FakeV4Map` 在真正挂上 / 摘除之后调用（可选钩子，见 `FakeMap` 里的 `callLayerHook`）。
+   * 因此替身**不**建模「重新挂载会按保留数据重渲染」——真实 SDK 不会，而且补 `setData` 也救不回来
+   * （`removeLayer` 清空了图层持有的 Map 引用）。内核据此改成「重新可见一律重建」
+   * （`useLayerResource` 的 `needsRemountRebuild`），替身不建模那半边正是为了让这条回归可测。
    */
   onDetached(): void {
     this.detachedRenderCount += 1
     this.customOverlays.length = 0
-  }
-
-  onAttached(): void {
-    if (this.data !== null && this.customOverlays.length === 0) this.render()
   }
 
   private render(): void {
