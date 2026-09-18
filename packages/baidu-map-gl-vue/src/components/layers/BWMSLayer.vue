@@ -17,7 +17,11 @@
  * 第三方服务的可用性受 **CORS、坐标系与服务条款**约束：本库只负责接入，不保证源服务可用。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
+import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import {
+  createTileLoadFunction,
+  type TileLoadObserver,
+} from "./tileLoadObserver";
 
 export interface BWMSLayerProps {
   visible?: boolean;
@@ -63,8 +67,23 @@ export interface BWMSLayerProps {
   thumbParentDepth?: number;
   /** 子级缩略图深度。 */
   thumbChildDepth?: number;
-  /** 自定义瓦片加载函数。 */
+  /**
+   * 自定义瓦片加载函数（官方 `tileLoadFunction`）。
+   *
+   * ⚠️ 它是**接管式**的（真实 4.0 实测：设了它，SDK 就不再自己加载）——所以函数必须自己完成加载
+   * （通常是 `tile.src = url`），否则**瓦片不会出现**。只想在旁边观察请用 `tileLoadObserver`。
+   */
   tileLoadFunction?: (tile: HTMLImageElement, url: string) => void;
+  /**
+   * 瓦片加载**观察面**（issue #97）：给它就能知道「SDK 什么时候要求加载哪张瓦片」以及
+   * 「它加载成功还是失败」，而**不需要自己接管加载**（本库在内部完成默认加载）。
+   *
+   * 依据：官方这批网络图层的类声明里没有任何事件成员，live 探针在真实 4.0 上确认十个候选事件名
+   * 一个都不触发（在请求确实发生过的前提下），因此唯一可用的观察点就是 `tileLoadFunction`。
+   *
+   * 与 `tileLoadFunction` 同时给时：本库只在旁边观察，加载完全由你的函数负责。
+   */
+  tileLoadObserver?: TileLoadObserver;
 }
 
 const props = withDefaults(defineProps<BWMSLayerProps>(), {
@@ -88,9 +107,13 @@ useLayerResource<BWMSLayerProps>(props, {
     maxZoom: p.maxZoom,
     zIndex: p.zIndex,
     options: {
-      // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
-      // 因此「换一个回调」立即生效，而内联箭头函数也不会触发重建（见 `LayerSpec` 的说明）。
-      tileLoadFunction: forwardCallback(() => p.tileLoadFunction),
+      // 瓦片加载：官方 `tileLoadFunction` 是接管式的（实测），因此本库把「观察」与「加载」合成
+      // 一个包装——给了观察者就由本库完成默认加载，给了 `tileLoadFunction` 就交给它接管。
+      // 两者都没给时这个 option 是 `undefined`（本库不表态，SDK 走自己的默认路径）。
+      tileLoadFunction: createTileLoadFunction(() => ({
+        observer: p.tileLoadObserver,
+        takeover: p.tileLoadFunction,
+      })),
       ...pickLayerOptions(p, [
         "url",
         "params",
