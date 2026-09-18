@@ -343,6 +343,10 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     expect(emittedOf(child, 'update:open'), '这是一次未经请求的关闭 ⇒ 回写').toEqual([[false]])
     expect(emittedOf(child, 'close')).toHaveLength(1)
     expect(map.callLog.filter((entry) => entry === 'openInfoWindow').length, '不得因为回写而重开').toBe(1)
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      'SDK 自己关掉之后地图已经空了 ⇒ 账本不得再指向这个旧实例',
+    ).toBeNull()
 
     await unmountAndSettle(wrapper)
     harness.assertIdle('点地图关闭')
@@ -392,11 +396,38 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)
     await settle()
     const child = wrapper.findComponent(BInfoWindow)
+    expect(probeContext.value?.infoWindows?.current(), '对照组：还没打开时账本没有 current').toBeNull()
     // 模拟「别处调了 map.openInfoWindow 打开的就是这个实例」
     lastMap().openInfoWindow(createdInfoWindows()[0]!, POSITION)
     await settle()
     expect(emittedOf(child, 'update:open')).toEqual([[true]])
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      'SDK 真的把它开出来了 ⇒ 账本也必须认它是当前气泡（否则后续互斥通知基于陈旧归属）',
+    ).not.toBeNull()
     await unmountAndSettle(wrapper)
+  })
+
+  it('外部 SDK 的 open / close 都要同步账本（Manager 跟随实际归属，而不只跟随我们下发的命令）', async () => {
+    const el = harness.container()
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)
+    await settle()
+    const manager = () => probeContext.value?.infoWindows
+    const raw = createdInfoWindows()[0]!
+    expect(manager()?.current(), '对照组：从未打开过 ⇒ 账本没有 current').toBeNull()
+
+    // 外部打开：不是我们下发的命令（例如别处调了 map.openInfoWindow）
+    lastMap().openInfoWindow(raw, POSITION)
+    await settle()
+    expect(manager()?.current(), 'SDK 真的把它开出来了 ⇒ 账本必须认这个 current').not.toBeNull()
+
+    // 外部关闭：SDK 自己把当前气泡关掉（点地图 / 别处调 closeInfoWindow）
+    lastMap().closeInfoWindow()
+    await settle()
+    expect(manager()?.current(), 'SDK 自己关掉了 ⇒ 账本必须跟着清掉，不能留下幽灵 current').toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('外部 open/close 同步账本')
   })
 
   it('clickclose（点关闭按钮）与 close 走同一套归属，且额外转发 clickclose 事件', async () => {
@@ -411,6 +442,11 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     expect(emittedOf(child, 'clickclose'), '额外把「是谁关的」告诉调用方').toHaveLength(1)
     expect(emittedOf(child, 'update:open')).toEqual([[false]])
     expect(emittedOf(child, 'close')).toHaveLength(1)
+    // 真实 4.0 在 `clickclose` 时气泡已经关掉了 ⇒ 账本也要退场（替身不代劳，所以这里读的是账本而非地图）
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '点关闭按钮 = 气泡已经关了 ⇒ 账本不得再把它当当前气泡',
+    ).toBeNull()
 
     await unmountAndSettle(wrapper)
     expect(fake.diagnostics.snapshot().leaks.infoWindows, '卸载必须把 SDK 侧的气泡一并收掉').toBe(0)
@@ -513,7 +549,7 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
       el,
     )
     await settle()
-    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const [a, b] = wrapper.findAllComponents(BInfoWindow)
     const map = lastMap()
 
     // 1) A 的打开异步生效（真机：同一 tick 里 getInfoWindow() 仍是 null）⇒ 请求被挂起。
@@ -543,6 +579,13 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
       emittedOf(a!, 'update:open').filter((payload) => payload[0] === true),
       'A 早已被顶掉、从未被请求打开，不得被回写成打开',
     ).toHaveLength(0)
+    // A 的迟到接管在 **SDK 侧**真的顶掉了 B ⇒ 账本必须跟着事实走，
+    // 否则 B 会停在一个「模型说开着、地图上其实已经没有了」的分叉状态（它的 prop 没变，不会再触发）。
+    expect(emittedOf(b!, 'update:open'), '真正被 A 顶掉的 B 必须收到 superseded 通知').toEqual([[false]])
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '纠偏关闭之后地图已经空了 ⇒ 账本不得仍指向 B',
+    ).toBeNull()
 
     await unmountAndSettle(wrapper)
     harness.assertIdle('双窗口乱序：被顶掉的 A 的迟到 open')

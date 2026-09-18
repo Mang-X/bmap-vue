@@ -633,10 +633,18 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         if (instance.generation !== machine.generation) return;
         switch (name as ForwardedSdkEvent) {
           case "open":
+            // **先**把账本对齐到实际归属，**再**喂状态机（外部评审第六轮 P1）。顺序不能反：
+            // `activate()` 会把真正被顶掉的那个通知为 `superseded`；而我们的状态机在
+            // 「这条 open 是自己下发的、模型却是关」时会立刻下发一条纠偏 close，那条 close 的
+            // 收尾会 `deactivate(自己)` —— 如果账本此刻还指着别人，那次 `deactivate` 是 no-op，
+            // 结果就是「地图已经空了、账本还指着别人」的幽灵 current。
+            manager.activate(instance.handle);
             dispatch({ type: "sdk-open", generation: instance.generation });
             break;
           case "clickclose":
-            // 点关闭按钮：与 `close` 走同一套归属判定，另外把「是谁关的」告诉调用方
+            // 点关闭按钮：与 `close` 走同一套归属判定，另外把「是谁关的」告诉调用方。
+            // 账本同样要跟着**事实**退场：地图上已经没有这个气泡了。
+            manager.deactivate(instance.handle);
             dispatch({ type: "sdk-close", generation: instance.generation });
             emit("clickclose", event);
             break;
@@ -647,6 +655,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             break;
           case "close":
           default:
+            manager.deactivate(instance.handle);
             dispatch({ type: "sdk-close", generation: instance.generation });
             break;
         }

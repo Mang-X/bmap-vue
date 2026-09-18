@@ -242,7 +242,7 @@ if (current && current !== raw) return;
 ### 4. 每张地图一份 `InfoWindowManager`：先换当前项，再通知被顶掉的那个
 
 `MapRuntime` 持有（`MapContext.infoWindows`，可选，与 `layers` 同口径），账本只有两项：
-**注册表**（这张地图上还活着几个气泡）+ **当前项**（哪一个被请求打开）。
+**注册表**（这张地图上还活着几个气泡）+ **当前项**（**实际**在地图上打开的那一个，来源见 4b）。
 
 - `activate(handle)` 在**打开成功之后**调用（过早声明会在打开失败时白白顶掉别人）；
 - **先写「当前是谁」，再通知被顶掉的那个**：被顶掉者在通知里会收敛自己的状态并交还归属，
@@ -251,6 +251,35 @@ if (current && current !== raw) return;
   由 `superseded` 动作不产生 effect 保证；Driver 侧另有守卫兜底，其判据顺序见 3d ——
   **以 `map.getInfoWindow()` 为准，只有那个「空窗口」才退回「最后请求者」**）；
 - 未登记的实例不能抢走归属（创建失败被释放的实例不该顶掉别人）。
+
+### 4b. 账本的 `current` 必须跟随 **SDK 的事实**，而不只跟随我们下发的命令（外部评审第六轮 P1）
+
+决策 4 的账本原先只被两处推进：**打开命令成功后** `activate()`、**关闭效果收尾时** `deactivate()`。
+两者都是「我们下发过什么」，不是「地图上实际是什么」。第六轮评审打穿了这个缺口，有两个可观察的后果：
+
+1. **被迟到请求真正顶掉的那个气泡收不到任何通知**：A 的请求挂起 → B 同步打开（账本 current=B，
+   A 收到 `superseded`）→ A 的旧请求才真正接管地图（SDK 侧把 B 顶掉了）。状态机正确地给 A 下发了
+   纠偏 close（3d），但**账本从没被告知这件事** ⇒ B 一直以为自己是 current、模型停在 `open=true`，
+   而地图上已经什么都没有了。B 的 prop 没变 ⇒ watch 不会再触发 ⇒ 它不会自愈。
+2. **外部 SDK 自己开 / 关时账本与地图分叉**：`map.openInfoWindow()`（别处调的）让气泡真的开了，
+   账本却仍是 `null`；点地图关闭（`enableCloseOnClick`）之后地图已经空了，账本仍指向那个旧实例。
+   后续任何互斥通知都会**基于陈旧的归属**做决定。
+
+**修正**：把真实的 `open` / `close` / `clickclose` 事件也当成账本的事实源 ——
+
+| SDK 事件 | 账本 | 状态机 |
+| --- | --- | --- |
+| `open` | `manager.activate(自己)` | 然后喂 `sdk-open` |
+| `close` | `manager.deactivate(自己)` | 然后喂 `sdk-close` |
+| `clickclose` | `manager.deactivate(自己)` | 然后喂 `sdk-close` + 转发事件 |
+
+**顺序是硬要求（先对齐账本、再喂状态机）**：迟到接管那条路径上，状态机收到 `sdk-open` 后会**立刻**
+下发一条纠偏 close，而那条 close 的收尾会 `deactivate(自己)`。如果账本那一刻还指着别人，
+这次 `deactivate` 是 no-op，于是 `activate` 之后再也没人清账 —— 恰恰就是**幽灵 current** 本身。
+反证 M4（把两行对调）单独红了这一条。
+
+**注意 `deactivate` 的方向性**：它只清「当前项**就是自己**」的情形（决策 4 的既有语义），
+所以被顶掉的一方收到迟到的 `close` 不会误清新主人的归属。
 
 ### 5. 尺寸：观察**实际内容 host**、合帧重绘、不自激
 
@@ -438,6 +467,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **反序回包**：关 → 立刻重开 →「重开的 `open` 先到、旧 `close` 后到」不得关掉已重开的模型；随后一次真实关闭仍须收敛（评审 P1-1 的复现） | `infoWindowMachine.test.ts`（`重开确认先到、旧 close 后到`） |
 | **被放弃的那一代必须被它自己的释放路径收干净**（重建窗口内卸载 → `useSdkResource` 的 stale 分支） | `v3-binfowindow.test.ts`（`重建窗口内卸载`） |
 | **单飞的尾随重建不得丢值**：连续构造期变化后，最终存活那一代必须按**最后一次**的 prop 构建（反证：去掉尾随重建 ⇒ `expected 9 to be 10`） | 同上（`重建是单飞的`） |
+| **账本跟随 SDK 事实**：被迟到接管真正顶掉的 B 必须收到 `superseded`（模型不能停在图上已不存在的气泡上）；外部 SDK 开 / 关后 `infoWindows.current()` 必须同步（反证：删掉 `open` 的 `activate` / 删掉 `close` 的 `deactivate` / 删掉 `clickclose` 的 `deactivate` / **把两行顺序调反** ⇒ 各红） | `v3-binfowindow.test.ts`（`双窗口乱序`、`外部 SDK 的 open / close 都要同步账本`、`点地图关闭`、`clickclose`） |
 | **被顶掉的 A 的迟到 open 接管地图后必须被真正关掉**（双窗口乱序）：地图上不得留下 A，也不得把 A 回写成打开（反证：把 Driver 的判据顺序退回「先看最后请求者」⇒ Driver 与端到端用例都红；松开「当前是别人就不碰」或去掉空窗口兜底 ⇒ 既有收紧用例红） | `overlays.test.ts`（`[迟到接管] 当前气泡确实是我…` + 反向 `当前气泡是别人时仍然不碰地图`）+ `v3-binfowindow.test.ts`（`双窗口乱序`，端到端，用 `deferInfoWindowOpen` + `flushInfoWindowOpen()`） |
 | **命令同步失败必须冲销在飞账**：open 失败后「外部打开仍回写 / 父级重试仍成功」，close 失败后「真实关闭仍收敛」；移动失败**不得**把还开着的气泡收敛成关（反证四条：组件仍伪造 `sdk-close` / open 失败不冲销 / close 失败不冲销 / 移动失败也收敛 ⇒ 都红，逐条读数见文末第四轮小节） | `infoWindowMachine.test.ts`（三条）+ `v3-binfowindow.test.ts`（`open 命令同步失败`，端到端，用夹具的 `failNextOpenInfoWindow`） |
 | **迟到的内部 `open` 必须重新收敛**（移动请求的回包在关闭完成后才到）：模型不得被拉开；反证：去掉 open 侧在飞账或移动不记账 ⇒ 红 | `infoWindowMachine.test.ts`（`迟到的**内部** open`）+ `v3-binfowindow.test.ts`（`移动请求的迟到 open`，端到端） |
@@ -541,6 +571,23 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
   ② 这一条是刻意的：它证明这次改的是**判据顺序**，不是「一律放行」。
 - 这条 P1 的价值在于指出**账本守恒的前提不止在状态机内部**：「命令交给了我们自己的 Driver」
   不等于「命令发给了 SDK」，而只有后者才会产生回包。
+
+### 第六轮（`5b95ed9` → 本轮）
+
+评审确认上轮 Driver 判据顺序的 P1 已修，但指出刚补的那条双窗口乱序用例**只验证了「迟到 A 被真正关掉」**，
+漏了下一层：A 的迟到 `sdk-open` 在 SDK 侧真的顶掉了 B，而 `bindSdkEvents` 的 `open` / `close` 分支
+只驱动状态机、**不更新 `InfoWindowManager`**。于是纠偏关掉 A 之后地图已经空了，账本仍认为 B 是 current、
+B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 自己开 / 关时账本同样与地图分叉。
+
+- **复现属实**（三条断言各自先红）：`点地图关闭` —— `账本不得再指向这个旧实例: expected { raw: InfoWindowClass{…} } to be null`；
+  `SDK 自己打开` —— `账本必须认这个 current: expected null not to be null`；
+  `双窗口乱序` —— `真正被 A 顶掉的 B 必须收到 superseded 通知: expected [] to deeply equal [ [ false ] ]`。
+- **修正**：`open` / `close` / `clickclose` 三个分支各自先 `activate` / `deactivate` 再喂状态机（见 4b 的表）。
+- **反证四条变异全红**：删掉 `open` 的 `activate` / 删掉 `close` 的 `deactivate` /
+  删掉 `clickclose` 的 `deactivate` / **把 `activate` 与 `dispatch` 两行顺序对调**。
+  最后一条是刻意的：它证明顺序**本身**是承重的，不是「有这行就行」。
+- 这条 P1 的形态与前几轮又不同：前五轮都在问「命令有没有到位」，这一轮问的是
+  「我们内部记的账，有没有跟着**外部事实**走」—— 账本的事实源不能只有「我们自己发过的命令」。
 
 ### 本轮修正引入的自我检查
 
