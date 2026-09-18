@@ -1691,6 +1691,89 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
 });
 
 /* -------------------------------------------------------------------------- */
+/* 14. 网络图层的加载观察面（#97 的 live 取证之后）                              */
+/* -------------------------------------------------------------------------- */
+
+describe("[#97] §14 网络图层的加载观察面", () => {
+  it("不给观察者 ⇒ 本库不表态：构造选项里根本没有 tileLoadFunction（默认加载路径不受影响）", async () => {
+    const { wrapper } = await mountOneLayer(2);
+    expect(
+      harness.layerOptions(-1).tileLoadFunction,
+      "没有观察需求时不得改变任何行为：这个 option 必须是缺席而不是「一个什么都不做的函数」",
+    ).toBeUndefined();
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("tile 无观察者");
+  });
+
+  it("给观察者 ⇒ 装上包装：SDK 手上的函数会回调观察者并**自己完成默认加载**", async () => {
+    // 依据（真实 4.0 实测）：`tileLoadFunction` 是接管式的——设了它，SDK 就不再自己加载
+    // （静默钩子下那块瓦片 `naturalWidth = 0`）；在钩子里自己赋 `tile.src = url` 才能恢复
+    // （`naturalWidth = 256`）。所以包装必须替用户完成加载，否则用户会**静默失去瓦片**。
+    const onRequest = vi.fn();
+    const { wrapper } = await mountOneLayer(2, { tileLoadObserver: { onRequest } });
+
+    const installed = harness.layerOptions(-1).tileLoadFunction as
+      | ((tile: HTMLImageElement, url: string) => void)
+      | undefined;
+    expect(typeof installed, "观察者是回调型 option：交给 SDK 的是一个函数").toBe("function");
+
+    const tile = document.createElement("img");
+    installed!(tile, "https://tiles.example/1/2/3.png");
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    expect(tile.getAttribute("src"), "包装内部完成默认加载").toBe("https://tiles.example/1/2/3.png");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("tile 观察者");
+  });
+
+  it("同时给了官方 tileLoadFunction ⇒ 加载交给它接管，本库只在旁边观察", async () => {
+    const onRequest = vi.fn();
+    const takeover = vi.fn();
+    const { wrapper } = await mountOneLayer(2, {
+      tileLoadObserver: { onRequest },
+      tileLoadFunction: takeover,
+    });
+
+    const installed = harness.layerOptions(-1).tileLoadFunction as (
+      tile: HTMLImageElement,
+      url: string,
+    ) => void;
+    const tile = document.createElement("img");
+    installed(tile, "https://tiles.example/9.png");
+
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    expect(takeover).toHaveBeenCalledWith(tile, "https://tiles.example/9.png");
+    expect(tile.getAttribute("src"), "接管时不得替调用方决定怎么加载").toBeNull();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("tile 观察者 + 接管");
+  });
+
+  it("WMS / WMTS / Raster 三个家族同样接上观察面（不是只改了 tile）", async () => {
+    for (const [index, name] of [
+      [7, "BWMSLayer"],
+      [8, "BWMTSLayer"],
+      [9, "BRasterLayer"],
+    ] as const) {
+      const onRequest = vi.fn();
+      const { wrapper } = await mountOneLayer(index, { tileLoadObserver: { onRequest } });
+      const installed = harness.layerOptions(-1).tileLoadFunction as
+        | ((tile: HTMLImageElement, url: string) => void)
+        | undefined;
+      expect(typeof installed, `${name} 应当装上观察面包装`).toBe("function");
+      const tile = document.createElement("img");
+      installed!(tile, "https://tiles.example/w.png");
+      expect(onRequest, `${name} 的观察者应当被回调`).toHaveBeenCalledTimes(1);
+      expect(tile.getAttribute("src"), `${name} 的包装应当完成默认加载`).toBe(
+        "https://tiles.example/w.png",
+      );
+      await unmountAndSettle(wrapper);
+    }
+    harness.assertIdle("三个其余家族");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* 7. 能力清单：实验性图层的稳定性标记                                            */
 /* -------------------------------------------------------------------------- */
 

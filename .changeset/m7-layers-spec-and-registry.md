@@ -46,6 +46,14 @@
     也没用 ⇒ 把 style 写成函数，或在 Vue 层用 `:key` 强制重挂载。
   - `BDOMLayer` 的 `createDom` 按官方参考实现的 `useLatest` 语义处理：**不重建**，但下一次数据
     解析（`setData`，含重新赋值 `data`）会用新实现。
+- **网络图层新增加载观察面 `tileLoadObserver`**（`BTileLayer` / `BWMSLayer` / `BWMTSLayer` /
+  `BRasterLayer`）：给 `{ onRequest, onLoaded, onError }` 即可知道「SDK 什么时候要求加载哪张瓦片、
+  它成功还是失败」，**不需要自己接管加载**（本库在内部完成）。依据是 live 取证：这些图层的类声明与
+  运行时都**不派发**常见瓦片事件（所以本库仍不发明事件），而官方 `tileLoadFunction` 是**接管式**的
+  （设了它 SDK 就不再自己加载）。不给观察者时该 option 保持缺席，行为与之前完全一致。
+  `onLoaded` / `onError` **以图片元素为单位**，结果回调**最近一次**向该元素发起加载的那个观察者；
+  若那次加载没有观察者，则该元素**没有归属**（不会回落到上一个拥有者）——不同图层 / 已卸载组件之间
+  不会互相串结果。
 - **`visible` 的语义**：`false` 是「摘掉」（`removeLayer`，不重建）；**但再次 `visible=true` 会
   **重建实例**——真实 4.0 的 `removeLayer` 会清空图层持有的 Map 引用，那个实例再也渲染不了
   （DOMLayer 实测：重挂载后节点仍为 0，补 `setData` 还内部抛错）。也就是说「隐藏再显示」现在等价于

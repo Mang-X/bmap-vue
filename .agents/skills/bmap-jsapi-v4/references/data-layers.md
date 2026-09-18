@@ -195,6 +195,36 @@ function removeDOMLayerWithMap() {
 
 `setData(null)` 只清空数据引用，不会移除已经渲染出来的 overlays；清空时必须显式调用 `removeAllOverlays()`。
 
+## 网络图层的事件面与 `tileLoadFunction`（4.0 实测，2026-09-17 / issue #97）
+
+`TileLayer` 家族（含 `TrafficLayer`）、`XYZLayer` / `WMSLayer` / `WMTSLayer` / `RasterTileLayer` 的
+**类声明里没有任何事件成员**。运行时实测（`scripts/probe-layer-events.mts`，真实 AK + headless Chrome）：
+
+| 读数 | 值 |
+| --- | --- |
+| 六个家族是否暴露 `addEventListener` / `removeEventListener` | **都暴露**（原型上有，声明里没有） |
+| 十个候选事件名（`tileload` / `tileerror` / `tilesloaded` / `load` / `error` / …）是否触发 | **一个都没有**（tile 12 次请求、raster / wms / wmts 各 20 次的窗口内） |
+| 底图基线（同页从百度主机取到的资源数） | 24 ⇒ 页面确实在渲染，读数有意义 |
+| `TrafficLayer` | 该窗口内没有发出瓦片请求（需要授权的路况服务）⇒ **未参与**上面的结论 |
+
+**结论：不要指望这些图层派发瓦片事件**（无论声明面还是运行时）。`TrafficLayer` 需要另外的窗口 /
+授权才可能测到，本轮没测到就不要写进结论。
+
+### `tileLoadFunction` 是**接管式**的（实测）
+
+| 配置 | 那块瓦片的最终结果 |
+| --- | --- |
+| 不设 `tileLoadFunction`（对照） | 正常加载（同页窗口内 12 次瓦片请求） |
+| 设了它，函数里**什么都不做** | `complete = true`、**`naturalWidth = 0`** ⇒ **SDK 不再自己加载** |
+| 设了它，函数里自己赋 `tile.src = url` | **`naturalWidth = 256`** ⇒ 加载真的发生了 |
+
+也就是说：设了它就必须自己完成加载（通常是 `tile.src = url`），否则**瓦片不会出现**。
+反过来，想「只在旁边观察」的实现要在包装里补上这一步。
+
+⚠️ 量「有没有发请求」时别只看 `performance` 的资源条目：同名 URL 命中 HTTP 缓存时不会产生新条目
+（实测把「已经加载成功（`naturalWidth=256`）」读成了「0 次请求」），而且资源时间线默认只保留 250 条，
+前面的实验会把缓冲填满、让后面的读数静默变 0。**以元素自身的 `complete` / `naturalWidth` 为准。**
+
 ## 事件或回调
 
 - GeoJSONLayer：`click`、`mousemove`、`mouseout`，使用具名 handler 成对解绑。
