@@ -165,6 +165,35 @@ export function verdicts(report: ProbeReport): string[] {
           : "**重建也没渲染**（说明本轮实验本身不成立，先查前面的读数）"),
   )
 
+  // ── 核心读数 2（#98）：`DOMLayer.removeAllOverlays()` 在 **detached 实例**上是否生效 ──
+  // 这是内核「永久销毁时对已摘下的 DOM 图层**照常**调清空」这条策略的直接依据（ADR 决策 12 / 13），
+  // 不能只有原始读数、没有三态结论。各分支**互斥且各自诚实**：`before === 0` 不是「清空无效」，
+  // 而是「`removeLayer` 自己就把节点摘干净了」——本探针第一版把它归进「未清掉」，得出了与实际读数
+  // 相反的结论（「判定文案必须跟着读数走」这个坑就是从这里来的）。
+  const domBefore = nodesOf("dom.detached")
+  const domAfter = nodesOf("dom.afterRemoveAllOverlays")
+  const clearCall = byId.get("dom.removeAllOverlays.已detached")
+  const domClearVerdict =
+    domBefore === null || domAfter === null || clearCall === undefined
+      ? UNKNOWN
+      : clearCall.threw
+        ? "**不安全**（detached 上调用抛错 ⇒ 内核不能照常调它，得先把图层挂回去再清）"
+        : domBefore === 0
+          ? "**无需清空**（`removeLayer` 已把节点从文档摘掉）；detached 调它是安全的 no-op"
+          : domAfter === 0
+            ? "**有效**（detached 清空确实移除了节点 ⇒ 可固化为「不要求 attached」）"
+            : "**无效**（detached 之后节点仍在文档上 ⇒ 永久销毁必须先补挂再清）"
+  lines.push(
+    `[DOM detached 清空] removeLayer 之后仍连在文档上的节点 ${domSnap("dom.detached")}；` +
+      `再调 removeAllOverlays() ${
+        clearCall === undefined
+          ? UNKNOWN
+          : clearCall.threw
+            ? `抛错（${clearCall.message}）`
+            : "未抛错"
+      }；之后 ${domSnap("dom.afterRemoveAllOverlays")} ⇒ ${domClearVerdict}`,
+  )
+
   const geoDetached = byId.get("geojson.detached")
   const geoAfter = byId.get("geojson.afterClearData")
   const geoNumbersKnown =

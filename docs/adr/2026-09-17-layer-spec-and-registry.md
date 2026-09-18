@@ -330,21 +330,43 @@ no-op 的 `@click` 比不提供更糟。需要交互时在 `createDom` 里给元
   「猜已经下去了」去 `add` 而出现两份。这条退化路径由悲观契约的用例继续钉住（§13）——
   它现在的身份是**防御性不变量**，不是一个我们在依赖的假设。
 
-同一条不变量也约束**换实例**路径（`replace()`：构造期选项变化，或 `detached` 之后重新可见）。
-`replace()` 释放旧实例最终经 `LayerRegistry.dispose()`，而 Registry 对摘除失败的口径是
-「**吞掉异常 + 把记录永久删除**」（组件卸载 / Map 卸载必须继续走完，这个口径本身是对的）。
-于是旧实例若停在 `unknown`（**可能仍在图上**）而直接换实例，会同时踩到两个坑：
+同一条不变量也约束**换实例**路径。会创建新实例的路径有**三条**：构造指纹变化（`layerRebuildKey`）、
+重新可见（`needsRemountRebuild`）、已写入的槽位 / option 变回未表态（`detectRemovedState`）。
+三条都必须过同一关，因此封装成**唯一入口** `replaceAfterDetached()`——分头调用正是「补了一条、
+漏了另一条」的来源：
+
+```text
+replaceAfterDetached(state, ready)
+  ├─ tryConvergeToDetached(state, context)  ← 可失败的 unmount；失败 ⇒ 中止（不创建新实例）
+  └─ replace()
+```
+
+为什么必须**先收敛**：`replace()` 释放旧实例最终经 `LayerRegistry.dispose()`，而 Registry 对摘除
+失败的口径是「**吞掉异常 + 把记录永久删除**」（组件卸载 / Map 卸载必须继续走完，这个口径本身是对的）。
+于是旧实例还在图上而直接换实例，会同时踩到两个坑：
 
 1. 旧实例**失去账本所有权**——记录被删了，此后没有任何一侧还能重试摘除它；
 2. 新实例照常 `addLayer` ⇒ 图上**同时两份**（`addLayer` 不去重）。
 
-因此换实例之前一律先过一次 `tryConvergeToDetached()`（对 `unknown` 做一次**可失败**的 `unmount`）：
-**只有确认收敛到 `detached` 才换**；收敛失败则不做任何会再加一份的动作，失败经 `resource:error`
-交出、留到下一次 props 变化或永久销毁再试。§13 有「连续两次 pre-detach `removeLayer` 都失败」的
-回归用例钉住 `attached` 绝不变成 2。
+`tryConvergeToDetached()` 做一次**可失败**的 `unmount`：**只有确认收敛到 `detached` 才换**；
+失败则不做任何会再加一份的动作，失败经 `resource:error` 交出、留到下一次 props 变化或永久销毁再试。
+
+两个容易漏的前提条件，写在这里省得再犯：
+
+- **不是只有 `unknown` 才危险**。`attached` 时这一次 `removeLayer` 本身就可能**在摘除前**失败
+  （SDK 允许先产生副作用再抛错），所以三条路径**一律**先收敛，不能按「当前状态是 attached 就跳过」。
+- **顺序有意变了一处**：收敛那一步会先把 `removeLayer` 做掉，于是 `replace()` 内部 dispose 里那次
+  摘除成为 no-op（`mountAttempted` 已复位），数据清空（`tearDownData`）落到摘除**之后**，即走
+  决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()` 在 `removeLayer` 之后仍有效、
+  `DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。「摘除时 child scope 还活着」也不是新形态
+  ——`visible=false` 这条常规路径本来就是这么做的。
+
+§13 有三条回归用例钉住它：`unknown` 时连续两次 pre-detach 失败、**`attached` 时构造期 option 变化 +
+摘除前失败**、以及「已写入槽位变回未表态 + 摘除前失败」——三条都断言 `attached` 绝不变成 2。
 
 （第五轮评审发现 2；第六轮评审发现 2 指出原先「确定性收敛」的表述过强；#98 取证之后前提成立；
-第三轮评审发现 1 补上换实例路径的收敛前置。）
+第三轮评审发现 1 补上换实例路径的收敛前置；**第四轮评审发现 1** 指出当时只接在一条路径上，
+遂收口成唯一入口。）
 
 记账的复位时点：`mountState = "detached"` 与 `mountAttempted = false` 都放在 `driver.layers.remove()`
 **成功返回之后**。先复位的后果不是「少摘一次」，而是**永远不再摘**——`mountAttempted` 变成「从未挂过」，

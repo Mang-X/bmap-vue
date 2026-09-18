@@ -5,10 +5,10 @@
  * **只在某一天真的跑真实浏览器时才暴露**——同一类缺陷已经被评审连抓两次（第一次是前提 P 那组，
  * 第二次是第三组）。所以判定层被拆成纯模块，这里用**合成报告**直接驱动它：
  *
- * - **空报告**（一条读数都没有）⇒ 六条结论**全部**必须是第三态。这条是主守卫：它不枚举具体
+ * - **空报告**（一条读数都没有）⇒ 七条结论**全部**必须是第三态。这条是主守卫：它不枚举具体
  *   分支，只要有人新加一条结论、或把某处的 presence 检查退回 `?.` + `??` 兜底，就会变红。
  * - **逐条点名**缺失 ⇒ 对应那条结论落成第三态（防止「整段早退」把某条结论漏掉）。
- * - **读数齐备**（正证控件）⇒ 六条结论都必须是**确定**结论。没有这条，「永远输出无法判定」
+ * - **读数齐备**（正证控件）⇒ 七条结论都必须是**确定**结论。没有这条，「永远输出无法判定」
  *   也能让上面两条通过。
  */
 import { describe, expect, it } from "vitest";
@@ -55,14 +55,20 @@ const COMPLETE: Reading[] = [
   { id: "geojson.kernel.shown", overlayCount: 0 },
   { id: "geojson.kernel.repaired", overlayCount: 0 },
   { id: "kernel.rebuilt", connected: 2, overlayCount: 2 },
+  // #98 的核心读数 2：detached 之后仍有几个节点 / 清空调用有没有抛 / 清完之后剩几个
+  // （这里取实测那一组：`removeLayer` 自己就摘干净了 ⇒ 清空是安全 no-op）。
+  { id: "dom.detached", connected: 0, overlayCount: 0 },
+  { id: "dom.removeAllOverlays.已detached", threw: false, message: null },
+  { id: "dom.afterRemoveAllOverlays", connected: 0, overlayCount: 0 },
   { id: "geojson.detached", overlayCount: 2 },
   { id: "geojson.afterClearData", overlayCount: 2 },
 ];
 
 describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）", () => {
-  it("空报告 ⇒ 六条结论**全部**是「无法判定」（主守卫：新增结论也必须带第三态）", () => {
+  it("空报告 ⇒ 七条结论**全部**是「无法判定」（主守卫：新增结论也必须带第三态）", () => {
     const lines = verdicts(report([]));
-    expect(lines.length, "结论条数变了：新增/删除结论时要同步更新本用例与 COMPLETE").toBe(6);
+    // ⚠️ 条数要跟着 `verdicts()` 的结论数走：**新增一条结论却忘了给它第三态**时，这条会先红。
+    expect(lines.length, "结论条数变了：新增/删除结论时要同步更新本用例与 COMPLETE").toBe(7);
     const determinate = lines
       .map((line) => ({ line, conclusion: conclusionOf(line) }))
       .filter((item) => !item.conclusion.includes("无法判定"))
@@ -101,7 +107,7 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(line, "缺读数不得落成「集合被清空了」").not.toContain("集合被清空了");
   });
 
-  it("读数齐备 ⇒ 六条结论都是**确定**结论（正证：否则「永远输出无法判定」也能过上面那条）", () => {
+  it("读数齐备 ⇒ 七条结论都是**确定**结论（正证：否则「永远输出无法判定」也能过上面那条）", () => {
     const lines = verdicts(report(COMPLETE));
     expect(lines.filter((line) => line.includes("无法判定"))).toEqual([]);
     expect(lineOf(lines, "[前提 P]")).toContain("安全（前提 P 成立）");
@@ -110,7 +116,43 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(lineOf(lines, "[再显示后补 setData]")).toContain("能把内容找回来");
     expect(lineOf(lines, "[GeoJSON 生命周期")).toContain("集合被清空了");
     expect(lineOf(lines, "[对照：换新实例重建]")).toContain("重建路径正常");
+    expect(lineOf(lines, "[DOM detached 清空]"), "实测那一组 ⇒ 无需清空").toContain("无需清空");
     expect(lineOf(lines, "[GeoJSON detached clearData]")).toContain("未清空");
+  });
+
+  it("缺 `dom.afterRemoveAllOverlays` ⇒ DOM detached 清空那条是第三态（不是「无效」）", () => {
+    const readings = COMPLETE.filter((r) => r.id !== "dom.afterRemoveAllOverlays");
+    const line = lineOf(verdicts(report(readings)), "[DOM detached 清空]");
+    expect(line).toContain("无法判定");
+    expect(line, "缺读数不得落成「无效」").not.toContain("**无效**");
+    expect(line, "也不得落成「有效」").not.toContain("**有效**");
+  });
+
+  it("DOM detached 清空的四个分支互斥：无需清空 / 有效 / 无效 / 不安全", () => {
+    // 这条是 #98 的核心读数 2（内核「对已摘下的 DOM 图层照常调清空」这条策略的依据）。
+    // `before === 0` 必须是「**无需清空**」而不是「无效」——本探针第一版正是在这里得出了与读数
+    // 相反的结论（`removeLayer` 自己就摘干净了）。四个分支各自用带 `**` 的完整标记断言，
+    // 避免「无效」被「有效」这类子串关系误判。
+    const lineFor = (before: number, after: number, failed = false) =>
+      lineOf(
+        verdicts(
+          report([
+            { id: "dom.detached", connected: before, overlayCount: before },
+            { id: "dom.afterRemoveAllOverlays", connected: after, overlayCount: after },
+            {
+              id: "dom.removeAllOverlays.已detached",
+              threw: failed,
+              message: failed ? "boom" : null,
+            },
+          ]),
+        ),
+        "[DOM detached 清空]",
+      );
+
+    expect(lineFor(0, 0), "`removeLayer` 自己摘干净了").toContain("**无需清空**");
+    expect(lineFor(2, 0), "还有节点、清完为 0").toContain("**有效**");
+    expect(lineFor(2, 2), "还有节点、清完还在").toContain("**无效**");
+    expect(lineFor(2, 2, true), "调用本身抛错 ⇒ 策略不安全").toContain("**不安全**");
   });
 
   it("对照不成立（挂载后就没有节点）⇒ 第三态，而不是「内容没回来」", () => {

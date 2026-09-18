@@ -1567,6 +1567,59 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     harness.assertIdle("连续两次摘除失败之后");
   });
 
+  it("[#98 四轮] **attached** 时构造期 option 变化 + 摘除前失败 ⇒ 不换实例（同一入口覆盖三条重建路径）", async () => {
+    // 评审指出：上一轮的保护只接在 `needsRemountRebuild` 上，同一个 watch 里另外两条 `replace()`
+    // （构造指纹变化 / 已写入值变回未表态）仍然绕过。这条**不需要先进入 `unknown`**：旧实例正常
+    // `attached`，一次构造期 option 变化触发重建，同时让这次 `removeLayer` 在**摘除前**失败——
+    // 若直接 `replace()`，`LayerRegistry.dispose()` 会吞掉失败并永久删除记录，随后新实例继续
+    // `addLayer` ⇒ 图上两份（旧实例连账本都没了）。这条钉住「入口只有一个」。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+    expect(harness.attached("layer"), "前置：旧实例正常挂着（不是 unknown）").toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, tileUrlTemplate: "https://a2.example.com/{X}/{Y}/{Z}.png" };
+    await settle();
+
+    expect(
+      harness.attached("layer"),
+      "收敛失败 ⇒ 不换实例：宁可暂时用着旧实例，也绝不能出现两份",
+    ).toBe(1);
+    expect(createdSince(), "没有创建第二个实例").toBe(1);
+    expect(harness.layerOptions(-1).tileUrlTemplate, "旧实例仍是旧 URL").toBe(
+      "https://a.example.com/{X}/{Y}/{Z}.png",
+    );
+    expect(errors.length, "第一次失败必须可观测").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("构造期变化 + 摘除失败之后");
+  });
+
+  it("[#98 四轮] 「已写入的槽位变回未表态」那条重建路径同样受保护", async () => {
+    // 第三条重建路径走的是**另一个判定**（`detectRemovedState` 的 `removed.length > 0`），
+    // 但换实例这一步必须是同一个入口，否则同样能挂出两份。
+    const errors: unknown[] = [];
+    const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props, zIndex: 5 });
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    await settle();
+    expect(harness.attached("layer")).toBe(1);
+
+    const map = fake.createdMaps[fake.createdMaps.length - 1]!;
+    map.failNextRemoveLayer = new Error("removeLayer failed before detach");
+    props.value = { ...props.value, zIndex: undefined };
+    await settle();
+
+    expect(harness.attached("layer"), "不换实例：不出现两份").toBe(1);
+    expect(createdSince(), "没有创建第二个实例").toBe(1);
+    expect(errors.length, "失败必须可观测").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("槽位移除 + 摘除失败之后");
+  });
+
   it("[六轮 2 / #98] 悲观契约下（detached 时 removeLayer 抛错）：无法确认旧实例已下来 ⇒ **不换实例**（绝不出现两份）", async () => {
     // 前提 P（「对已经摘掉的图层再调一次 removeLayer 是安全的」）在真实 4.0 上**已实测成立**
     // （issue #98 的 live 探针：GeoJSON / DOM / Tile 三个家族都未抛错），所以本库现在可以正当地

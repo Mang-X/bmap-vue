@@ -513,6 +513,9 @@ export function useLayerResource<Props>(
    * 所以这里先自己做一次**可失败**的 `unmount`：成功 ⇒ 状态确定为 `detached`，可以安全换实例；
    * 失败 ⇒ 经 `resource:error` 交出并返回 `false`，调用方**不做**任何会再加一份的动作
    * （留到下一次 props 变化 / 永久销毁再试）。这条就是「摘除失败时绝不重复挂载」在换实例路径上的落实。
+   *
+   * ⚠️ **不要直接调用它**：唯一的调用点是 `replaceAfterDetached()`（同一份 watch 里）。
+   * 分头调用正是「补了一条重建路径、漏了另一条」的来源——这三条路径必须一起受保护。
    */
   const tryConvergeToDetached = (state: InstanceState, context: MapReadyContext): boolean => {
     if (state.mountState === "detached") return true;
@@ -631,6 +634,31 @@ export function useLayerResource<Props>(
       },
       watch: ({ props: current, context, resource: currentHandle, replace, scope }) => {
         scope.run(() => {
+          /**
+           * **唯一的换实例入口**：先确认旧实例真的下来了，再 `replace()`。
+           *
+           * 为什么要收口成一个入口：`replace()` 释放旧实例时最终经过 `LayerRegistry.dispose()`，
+           * 而它按「组件卸载 / Map 卸载都要继续走完」的口径**吞掉** `removeLayer` 的失败、并把记录
+           * 永久删除。于是只要那次摘除失败（旧实例可能仍在图上），紧接着 `addLayer` 的新实例就会让
+           * 图上出现**两份**，而旧实例连账本都没了。这条不变量对**所有**创建新实例的路径都成立，
+           * 不只对「重新可见」那条——所以三条重建路径（构造指纹变化 / 重新可见 / 已写入值变回未表态）
+           * 一律从这里出去，别再各自 `void replace()`：漏一条就是一个静默的两份同图。
+           *
+           * 收敛失败时**什么都不做**（不换实例、也不重新挂载）：失败经 `resource:error` 交出，
+           * 留到下一次 props 变化或永久销毁再试。宁可暂时不回来，也不能出现两份。
+           *
+           * 顺序上的一处有意变化（评审问过就答这里）：`replace()` 内部的 dispose 原本是
+           * 「先解绑 child scope → 再 `removeLayer`」，现在收敛那一步会**先把 `removeLayer` 做掉**，
+           * 因此 dispose 里那次摘除变成 no-op（`mountAttempted` 已复位），数据清空（`tearDownData`）
+           * 落在摘除之后——即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
+           * 在 `removeLayer` 之后仍有效、`DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
+           * 「摘除时 child scope 还活着」不是新形态：`visible=false` 这条常规路径本来就是这么做的。
+           */
+          const replaceAfterDetached = (state: InstanceState, context: MapReadyContext): void => {
+            if (!tryConvergeToDetached(state, context)) return;
+            void replace();
+          };
+
           watch(
             // 廉价指纹：不含 Driver 信息、也不深遍历 data，SDK 未就绪也能算
             // （见 `layerWatchKey` 与文件头「就绪之前怎么处理」）。
@@ -646,19 +674,15 @@ export function useLayerResource<Props>(
               try {
                 const next = hooks.toSpec(current);
                 if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
-                  void replace();
+                  replaceAfterDetached(state, ready);
                   return;
                 }
                 state.spec = next;
 
                 // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
                 // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
-                //
-                // 先收敛再换：上一次摘除失败过（`unknown`）时旧实例可能**还在图上**，直接换会变成
-                // 「旧实例仍在 + 新实例又挂一份」，而旧实例连账本都没了（见 `tryConvergeToDetached`）。
                 if (needsRemountRebuild(state)) {
-                  if (!tryConvergeToDetached(state, ready)) return;
-                  void replace();
+                  replaceAfterDetached(state, ready);
                   return;
                 }
 
@@ -671,7 +695,7 @@ export function useLayerResource<Props>(
                     `[layer:${state.spec.kind}] ${removed.join(" / ")} 由有值变为未表态：` +
                       "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
                   );
-                  void replace();
+                  replaceAfterDetached(state, ready);
                   return;
                 }
 

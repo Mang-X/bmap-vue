@@ -215,7 +215,19 @@ function removeDOMLayerWithMap() {
   因此上面的顺序是**推荐顺序**（先在图上清、再摘），不是「摘掉之后就来不及」的硬约束。
 - **`DOMLayer` 渲染出来的 DOM 节点由 `removeLayer` 自己摘掉**：实测 `map.removeLayer(domLayer)`
   之后 `isConnected` 由 2 变 0、`getCustomOverlays()` 也归零。所以「只调 `setData(null)` 会残留」
-  说的是 `setData(null)`；`removeLayer` 不会残留节点。重新 `addLayer` 会按保留的数据重新渲染。
+  说的是 `setData(null)`；`removeLayer` 不会残留节点。
+- **被 `removeLayer` 摘掉的实例不可复用（实测，2026-09-17 / issue #98）**：严格按内核的
+  `addLayer → setData` 顺序把**同一个** `DOMLayer` 再挂一次，节点仍是 **0** —— 内容不会自己回来；
+  再补一次 `setData` 不但无效，**调用本身还会抛错**
+  （`Cannot read properties of null (reading 'coordinate')`）。对照「换一个**新**实例」= 2 个节点、
+  正常渲染。也就是说 `removeLayer` 清空了图层持有的 Map 引用，该实例再也渲染不了。
+  ⇒ **「隐藏之后重新显示」必须换新实例**，不能把旧实例挂回去（本库内核据此改成重建，
+  见 ADR `2026-09-17-layer-spec-and-registry` 决策 8）。
+  ⚠️ 本条曾在本文件里写成「重新 `addLayer` 会按保留的数据重新渲染」——那是**未取证的推断**，
+  已被上面的读数推翻（保留记录是为了不再让后续读者依赖它）。
+- **`GeoJSONLayer` 的 `getData()` 集合在同样路径下还在（2 条），但「集合在」≠「覆盖物回到图上」**：
+  覆盖物是否真的渲染回图上**没有公开手段可观测**（`Map` 上没有列出覆盖物的方法），因此那
+  **不构成**「GeoJSON 可以复用实例」的证据。
 - **对已经摘掉的图层再调一次 `map.removeLayer()` 是安全的**：GeoJSONLayer / DOMLayer / TileLayer
   三个家族实测均未抛错（这是本库三态挂载收敛的前提，见 ADR `2026-09-17-layer-spec-and-registry`
   决策 12b）。
