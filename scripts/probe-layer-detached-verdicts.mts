@@ -186,6 +186,39 @@ export function verdicts(report: ProbeReport): string[] {
   const mounted = nodesOf("kernel.mounted")
   const hidden = nodesOf("kernel.hidden")
   const shown = nodesOf("kernel.shown")
+  /**
+   * **两条共用的一条正证**：「隐藏」这一步必须**真的发生过**（`removeLayer` 没抛错 ≠ 摘掉了节点）。
+   * 若节点还在，「再显示后」的读数只能说明「内容从来没消失过」，两条实验的结论都无从谈起。
+   * （第八轮评审发现 1；第九轮指出下面那条修法实验**没有复用**它。）
+   */
+  const HIDE_NOT_HAPPENED =
+    "**无法判定**（对照不成立：`removeLayer` 之后节点仍在文档上 ⇒「隐藏」没有真的发生）"
+  /**
+   * 两条实验**共用**的因果前提（第九轮评审要求「抽一个 helper 让两条复用」）：
+   *
+   * 1. `mounted > 0`：挂载 + `setData` 之后**确实有内容**——否则后面每一步读数都无意义
+   *    （`repaired === 0` 会变成「没救回来」，而真相是「从来没有过」）；
+   * 2. `hidden === 0`：「隐藏」这一步**真的发生了**（`removeLayer` 没抛错 ≠ 摘掉了节点）。
+   *
+   * 返回 `null` = 前提成立；否则返回第三态文案。**读数缺失（`null`）不在这里判定**——那是各条
+   * 自己的存在性检查的事，这里只在值存在时下结论。
+   */
+  const lifecycleBaseFailure = (): string | null =>
+    mounted !== null && mounted <= 0
+      ? "**无法判定**（对照不成立：挂载后就没有节点）"
+      : hidden !== null && hidden !== 0
+        ? HIDE_NOT_HAPPENED
+        : null
+  /**
+   * `setData` 修法那条**额外**要的因果前提：修之前内容**确实还没回来**。
+   *
+   * 若 `shown > 0`（重挂已经自己把内容带回来了），这次 `setData` 就**不是必需的**——
+   * 「修法可行 / 不可行」都失去意义。⚠️ 这条前提**只属于修法那条**：DOM 生命周期那条把同一个
+   * 读数当**结论**用（`shown > 0` ⇒「内容自己回来了」），两条对同一读数的用法不同是有意的。
+   * （第九轮评审发现。）
+   */
+  const ALREADY_RECOVERED =
+    "**无法判定**（对照不成立：重新挂载之后内容已经回来了 ⇒ 这次 `setData` 不是必需的，无法据此判断修法是否可行）"
   lines.push(
     "[DOM 生命周期（严格按内核顺序：addLayer → setData）] " +
       `挂载后 ${domSnap("kernel.mounted")} → 隐藏后 ${domSnap("kernel.hidden")} → ` +
@@ -194,16 +227,13 @@ export function verdicts(report: ProbeReport): string[] {
         ? prereqText(kernelPrereq)
         : mounted === null || hidden === null || shown === null
           ? UNKNOWN
-          : mounted <= 0
-            ? "**无法判定**（对照不成立：挂载后就没有节点）"
-            : // **中间正证**（第八轮评审发现 1）：前置只证明 `hide.removeLayer` **没抛错**，
-              // 不证明它的**副作用真的发生了**。若节点还在，`shown > 0` 只能说明「内容从来没消失过」，
-              // 与「重挂能不能把内容带回来」是两件事——那就必须落第三态而不是正结论。
-              hidden !== 0
-              ? "**无法判定**（对照不成立：`removeLayer` 之后节点仍在文档上 ⇒「隐藏」没有真的发生）"
-              : shown > 0
+          : // **中间正证**（第八轮评审发现 1）：前置只证明 `hide.removeLayer` **没抛错**，
+            // 不证明它的**副作用真的发生了**。若节点还在，`shown > 0` 只能说明「内容从来没消失过」，
+            // 与「重挂能不能把内容带回来」是两件事——那就必须落第三态而不是正结论。
+            (lifecycleBaseFailure() ??
+              (shown > 0
                 ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
-                : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
+                : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"))),
   )
   const repaired = nodesOf("kernel.repaired")
   const repairThrew = threwOf("kernel.repair.setData")
@@ -218,10 +248,18 @@ export function verdicts(report: ProbeReport): string[] {
       } ⇒ ` +
       (kernelPrereq.length > 0
         ? prereqText(kernelPrereq)
-        : // 结论归因给「这一次调用」，所以这次调用本身必须先**取到**（抛错是观测，缺失不是）。
-          repairThrew === null || repaired === null
+        : // 结论归因给「这一次调用」，所以这次调用本身必须先**取到**（抛错是观测，缺失不是）；
+          // 这一组还依赖上面 `lifecycleBaseFailure()` 的两条 + 「修之前内容确实还没回来」。
+          repairThrew === null ||
+            repaired === null ||
+            mounted === null ||
+            hidden === null ||
+            shown === null
           ? UNKNOWN
-          : // **2×2 状态机**（第七轮评审发现 1）：抛错是**一等事实**，它必须出现在结论里，
+          : (lifecycleBaseFailure() ??
+              (shown > 0
+                ? ALREADY_RECOVERED
+                : // **2×2 状态机**（第七轮评审发现 1）：抛错是**一等事实**，它必须出现在结论里，
             // 并且**堵死正结论**——「抛错但节点数变多了」只能说「抛错前有副作用」，不能据此说
             // 「修法可行」（那次调用本身不可依赖）。与此同时不能因为抛错就把负结论也吞掉：
             // 「抛错 + 节点仍为 0」比「没抛错 + 节点仍为 0」更强地支持「必须换新实例」。
@@ -231,7 +269,7 @@ export function verdicts(report: ProbeReport): string[] {
               : "**找不回来，且这次调用本身抛错**（抛错前也没恢复任何内容 ⇒ 数据图层不能靠 hide/show 复用实例，必须换新实例）"
             : repaired > 0
               ? "**能把内容找回来**（调用未抛错、内容也回来了 ⇒ 「重新挂载后补一次 data 写入」这条修法可行）"
-              : "**找不回来**（调用未抛错但内容没回来 ⇒ 补 setData 不足以恢复，必须换新实例）"),
+              : "**找不回来**（调用未抛错但内容没回来 ⇒ 补 setData 不足以恢复，必须换新实例）"))),
   )
   const geoOrderIds = [
     "geojson.kernel.mounted",

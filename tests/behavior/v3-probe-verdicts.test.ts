@@ -314,6 +314,44 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(line, "隐藏没有真的发生 ⇒ 不能说是重挂把内容带回来的").not.toContain("内容自己回来了");
   });
 
+  it("`[再显示后补 setData]` 复用「隐藏真的发生过」这条正证（与 DOM 生命周期同一条）", () => {
+    // 第九轮评审发现：修法那条没有复用 `hidden === 0`，"隐藏其实没发生"时它仍会给出关于
+    // `setData` 修法的确定结论。两条共用同一个前提，就应当**同时**落第三态。
+    const readings = COMPLETE.map((r) => (r.id === "kernel.hidden" ? { ...r, connected: 2 } : r));
+    for (const prefix of ["[DOM 生命周期", "[再显示后补 setData]"]) {
+      const line = lineOf(verdicts(report(readings)), prefix);
+      expect(line, `${prefix} 也要落第三态`).toContain("对照不成立");
+      expect(line, `${prefix} 要说明是「隐藏」没有真的发生`).toContain("「隐藏」没有真的发生");
+    }
+  });
+
+  it("`[再显示后补 setData]` 的因果前提：修之前内容**确实还没回来**", () => {
+    // 同一个 `shown` 读数在两条里用法**不同、而且是有意的**：
+    // - DOM 生命周期：`shown > 0` 是**结论**（「内容自己回来了」）；
+    // - 修法那条：`shown > 0` 让「补一次 setData 能不能救回来」这个问题**失去意义**。
+    const readings = COMPLETE.map((r) => (r.id === "kernel.shown" ? { ...r, connected: 2 } : r));
+
+    expect(lineOf(verdicts(report(readings)), "[DOM 生命周期")).toContain("内容自己回来了");
+
+    const repair = lineOf(verdicts(report(readings)), "[再显示后补 setData]");
+    expect(repair).toContain("这次 `setData` 不是必需的");
+    expect(repair, "既不能据此说修法可行").not.toContain("**能把内容找回来**");
+    expect(repair, "也不能据此说找不回来").not.toContain("**找不回来");
+  });
+
+  it("两条都要求 `mounted > 0`：挂载后就没有内容时，谈不上「救回来」", () => {
+    // 第九轮行内评论点名的第三条前提。`repaired === 0` 在 `mounted === 0` 时会被读成
+    // 「没救回来」，而真相是「从来没有过」——所以它属于**共用**前提（`lifecycleBaseFailure()`）。
+    const readings = COMPLETE.map((r) => (r.id === "kernel.mounted" ? { ...r, connected: 0 } : r));
+    for (const prefix of ["[DOM 生命周期", "[再显示后补 setData]"]) {
+      expect(lineOf(verdicts(report(readings)), prefix)).toContain("挂载后就没有节点");
+    }
+    expect(
+      lineOf(verdicts(report(readings)), "[再显示后补 setData]"),
+      "不得据此说「找不回来」",
+    ).not.toContain("**找不回来");
+  });
+
   it("GeoJSON 生命周期：`shown === 0` 那一支单独覆盖（live 基线是「集合还在」）", () => {
     // live 基线 2 → 2 → 2 → 2 ⇒ 判「集合还在」；「集合被清空了」是另一条**互斥**分支，
     // 用合成场景单独钉住即可——不要再把 COMPLETE 改成这条分支（那正是第八轮被点的漂移）。
