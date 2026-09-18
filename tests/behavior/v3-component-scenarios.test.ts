@@ -2831,3 +2831,53 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     harness.assertIdle("Map 销毁后组件卸载");
   });
 });
+
+/* ------------------------------------------------------------------ 评审（PR #102）的组件级复现 */
+
+describe("数据组件：评审 #102 的语义修正（组件级）", () => {
+  it("BMarkerList：换新数组 + 复用同一 item 对象（原地改坐标）⇒ Marker 必须挪到新位置 [#102 F1]", async () => {
+    const station: Station = { id: "a", lng: 116.4, lat: 39.9 };
+    const data = ref<readonly Station[]>([station]);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    expect(harness.overlayPositions(), "初始位置").toEqual([{ lng: 116.4, lat: 39.9 }]);
+
+    // 评审的最小场景：原地改坐标 + 换根引用（**不**递增 dataVersion）
+    station.lng = 116.5;
+    data.value = [station];
+    await settleProps();
+    expect(harness.overlayPositions(), "根引用变化就该重新读取并应用位置").toEqual([
+      { lng: 116.5, lat: 39.9 },
+    ]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerList 根引用变化");
+  });
+
+  it("BPointCollection：falsy 业务项（0）也必须能被拾取 [#102 F4]", async () => {
+    const data = ref<readonly number[]>([0, 1]);
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: data.value,
+        // 泛型没有被约束成 object ⇒ 0 / false / "" 都是合法业务项
+        itemKey: (item: number) => item,
+        getPosition: (item: number) => ({ lng: 116.4 + item * 0.01, lat: 39.9 }),
+      }),
+    ]);
+    const layer = wrapper.findComponent(BPointCollection);
+
+    harness.simulateNativePick({ dataIndex: 0 });
+    const picks = layer.emitted("click")!;
+    expect((picks.at(-1)![0] as { item: number | null }).item, "falsy 业务项不能变成 null").toBe(0);
+    const itemClicks = layer.emitted("item-click");
+    expect(itemClicks?.[0]?.[0], "falsy 业务项也要派发 item-click").toBe(0);
+
+    // 对照：truthy 的那一项仍然正常
+    harness.simulateNativePick({ dataIndex: 1 });
+    expect(layer.emitted("item-click")!.at(-1)![0]).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection falsy 业务项");
+  });
+});

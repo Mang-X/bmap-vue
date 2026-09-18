@@ -205,7 +205,9 @@ export interface BMapDataProps<Item> {
   /**
    * 数据版本：**根引用不变、内容却变了**时递增它（例如 `list[0].lng = 1`）。
    *
-   * 相同引用 + 相同版本 ⇒ 不产生任何 SDK 调用；版本变化 ⇒ 逐项重新读取并下发。
+   * 相同引用 + 相同版本 ⇒ 不产生任何 SDK 调用；版本变化 ⇒ 逐项重新读取并**重发一遍**。
+   * 根引用变化本身也会触发重新读取（只下发坐标真的变了的项），因此这个 prop 只在
+   * 「引用没换、内容变了」时需要；它也是「宿主侧自行改过位置、需要对回来」时的显式逃生口。
    */
   dataVersion?: PropertyKey;
   /** 是否显示；`false` = 隐藏（`BMarkerList` 用 `show/hide`，`BPointCollection` 用原生 `setVisible`）。 */

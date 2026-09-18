@@ -68,11 +68,32 @@ export interface DataLayerManagerOptions {
 
 const SYNC_KEY = "data-layer:sync";
 
+/**
+ * 位置指纹（「SDK 侧当前坐标是什么」的判定依据）。
+ *
+ * 用它而不是 `item` 引用：引用比较会漏掉「换根引用 + 复用同一个 item 对象 + 原地改坐标」，
+ * 也会在「换根引用但坐标没变」时产生多余的下发（评审 #102 F1 的两个方向）。
+ */
+function positionFingerprint(point: PointLike): string {
+  return `${point.lng},${point.lat}`;
+}
+
 export class DataLayerManager<Item, Resource> {
   private readonly scheduler: FrameScheduler = createFrameScheduler();
   private readonly resources = new Map<PropertyKey, Resource>();
   /** 资源 → key（事件委托要由实例反查业务项；`WeakMap` 不延长资源寿命）。 */
   private readonly keyOfResource = new WeakMap<object, PropertyKey>();
+  /**
+   * 「**SDK 侧当前是什么坐标**」的按 key 记账（评审 #102 F1/F2）。
+   *
+   * 位置下发由**值**决定，不由 `item` 引用决定：引用比较是一个未公开的短路条件——`data` 换了
+   * 根引用、但复用了同一个 item 对象（`item.lng = 2; data.value = [item]`）时，公开契约说
+   * 「根引用变化就该重新读取」，而引用比较会把这次变化吞掉（Marker 停在旧坐标）。
+   *
+   * 与其它记账同一条规则：**只在 SDK 调用成功返回之后**才提交；失败时保持旧值，下一次同步
+   * （或下一次 `version` 变化）会重试。
+   */
+  private readonly appliedPositions = new Map<PropertyKey, string>();
   private readonly index: ItemIndex<Item> = createItemIndex<Item>();
   private readonly label: string;
   private visible = true;
@@ -146,11 +167,15 @@ export class DataLayerManager<Item, Resource> {
         this.host.removeMarker(resource);
       } catch (error) {
         this.options.warn?.(
-          `${this.label}: 摘除资源失败（key=${String(key)}），SDK 侧可能仍有残留：` +
+          `${this.label}: 摘除资源失败（key=${String(key)}），它可能仍在图上：` +
             `${(error as Error)?.message ?? String(error)}`,
         );
+        // **保留所有权**（与 diff 删除路径同一条原则，评审 #102 F3）：SDK 可能是「还没产生副作用
+        // 就抛错」，此时旧资源仍在图上；删掉记账会让之后为同一个 key 再建一份，图上出现两份/泄漏。
+        continue;
       }
       this.resources.delete(key);
+      this.appliedPositions.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -177,8 +202,16 @@ export class DataLayerManager<Item, Resource> {
     if (this.everSynced && items === this.lastItems && version === this.lastVersion) return;
 
     const scanned = scanValidItems(items, { getKey, getPosition, onProblem: this.options.onProblem });
+    /**
+     * `version` 变化的语义是「内容变了，请重新下发」——**逐项写一遍**。
+     *
+     * 它是公开的逃生口（公开类型注释：根引用不变、内容却变了时递增它），也用于「宿主侧自行改过
+     * 位置、需要重新对齐」这种场景：那时位置指纹相同、只有版本变化能触发写入。
+     */
     const versionChanged = this.everSynced && version !== this.lastVersion;
     const nextKeys = new Set(scanned.map((entry) => entry.key));
+    /** 本次有没有 SDK 调用失败（有 ⇒ 不推进短路基线，同一批输入能重试，评审 #102 F2）。 */
+    let failed = false;
 
     // 1. 删除：账本里存在、本次数据里没有的 key
     for (const [key, resource] of [...this.resources]) {
@@ -189,6 +222,7 @@ export class DataLayerManager<Item, Resource> {
       try {
         this.host.removeMarker(resource);
       } catch (error) {
+        failed = true;
         this.options.warn?.(
           `${this.label}: 摘除资源失败（key=${String(key)}），它可能仍在图上：` +
             `${(error as Error)?.message ?? String(error)}`,
@@ -196,6 +230,7 @@ export class DataLayerManager<Item, Resource> {
         continue;
       }
       this.resources.delete(key);
+      this.appliedPositions.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -210,6 +245,7 @@ export class DataLayerManager<Item, Resource> {
           resource = this.host.createMarker(entry.item, entry.point);
         } catch (error) {
           // 记账**不写**：这一项下次同步会重试（写进去就再也不会补建了）。
+          failed = true;
           this.options.warn?.(
             `${this.label}: 创建资源失败（key=${String(entry.key)}），本项会等下次同步重试：` +
               `${(error as Error)?.message ?? String(error)}`,
@@ -217,6 +253,8 @@ export class DataLayerManager<Item, Resource> {
           continue;
         }
         this.resources.set(entry.key, resource);
+        // 资源是**按这个坐标建出来**的 ⇒ 直接提交位置记账（不需要再 setPosition 一次）
+        this.appliedPositions.set(entry.key, positionFingerprint(entry.point));
         if (typeof resource === "object" && resource !== null) {
           this.keyOfResource.set(resource as object, entry.key);
         }
@@ -225,24 +263,31 @@ export class DataLayerManager<Item, Resource> {
         if (!this.visible) this.applyVisibility(resource, entry.key);
         continue;
       }
-      // 版本变化 ⇒ 视为「内容变了」（这正是 dataVersion 的语义：引用不变、内容不同），
-      // 不依赖 item 引用比较；否则只在业务对象换了引用时下发位置。
-      const previous = this.index.latest(entry.key);
-      if (versionChanged || previous !== entry.item) {
-        try {
-          this.host.updatePosition(existing, entry.point, entry.item);
-        } catch (error) {
-          // 位置没更新成功 ⇒ 下一次同步会再试（`previous !== entry.item` 仍成立）。
-          this.options.warn?.(
-            `${this.label}: 更新位置失败（key=${String(entry.key)}）：${(error as Error)?.message ?? String(error)}`,
-          );
-        }
+      // 位置下发由**值**决定（不再用 item 引用做第二层短路）：根引用变化 ⇒ 重新读取；
+      // 坐标真的变了才写。`version` 变化时逐项写一遍（见上）。
+      const fingerprint = positionFingerprint(entry.point);
+      if (!versionChanged && this.appliedPositions.get(entry.key) === fingerprint) continue;
+      try {
+        this.host.updatePosition(existing, entry.point, entry.item);
+      } catch (error) {
+        // 位置没更新成功 ⇒ **不提交**位置记账，下一次同步会再试（评审 #102 F2）。
+        failed = true;
+        this.options.warn?.(
+          `${this.label}: 更新位置失败（key=${String(entry.key)}）：${(error as Error)?.message ?? String(error)}`,
+        );
+        continue;
       }
+      this.appliedPositions.set(entry.key, fingerprint);
     }
 
     this.index.replace(scanned.map((entry) => ({ key: entry.key, item: entry.item })));
-    this.lastItems = items;
-    this.lastVersion = version;
+    // 有失败 ⇒ **不推进**短路基线：同一批输入再 `sync()` 时会重跑一遍（各项按自己的记账重试），
+    // 而不是被顶部短路吞掉。`index`/`resources` 的记账照常推进（它们回答的是「当前业务对象是哪个」，
+    // 与「SDK 写成功没有」无关）。
+    if (!failed) {
+      this.lastItems = items;
+      this.lastVersion = version;
+    }
     this.everSynced = true;
   }
 

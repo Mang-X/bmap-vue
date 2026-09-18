@@ -394,7 +394,8 @@ function handlePick(event: unknown): void {
     pixel: payload.pixel,
   };
   emit("click", pick);
-  if (item) emit("item-click", item);
+  // 同 `resolveItem`：falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
+  if (item !== undefined) emit("item-click", item);
 }
 
 interface ReadPick {
@@ -448,19 +449,25 @@ function readPick(event: unknown): ReadPick {
   };
 }
 
-/** 逗号前后分别是「命中的是哪个业务项」与「找不到时的兜底」。 */
+/**
+ * 逗号前后分别是「命中的是哪个业务项」与「找不到时的兜底」。
+ *
+ * ⚠️ 判「找没找到」**必须用 `!== undefined`**：公开泛型没有把 `Item` 约束成 object，因此
+ * `0` / `false` / `""` 都是合法业务项（配函数式 `itemKey` / `getPosition` 即可）。用真值判断会把
+ * 它们当成「没找到」，于是 `click.item` 变成 null 且不派发 `item-click`（评审 #102 F4）。
+ */
 function resolveItem(payload: ReadPick): Item | undefined {
   if (!payload.hit) return undefined;
   if (payload.key !== undefined) {
     const latest = items.latest(payload.key);
-    if (latest) return latest;
+    if (latest !== undefined) return latest;
   }
   // 兜底：`value` 的形状在类型层只是 `object`，读不到身份时用 dataIndex 对回我们自己送出去的那份数据。
   const feature = lastAdapted?.data.features[payload.dataIndex];
   const fallbackKey = feature?.properties[lastAdapted?.idKey ?? ""];
   if (typeof fallbackKey === "string" || typeof fallbackKey === "number" || typeof fallbackKey === "symbol") {
     const latest = items.latest(fallbackKey);
-    if (latest) return latest;
+    if (latest !== undefined) return latest;
   }
   warnOnce(
     "pick-unresolved",

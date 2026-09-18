@@ -64,14 +64,17 @@ describe("DataLayerManager", () => {
 
     m.sync(
       syncOf([
-        { id: "a", lng: 1, lat: 1 }, // 新对象但同坐标 ⇒ 视为更新（引用变了）
+        // 新对象、**坐标也变了** ⇒ 真正的「更新」
+        { id: "a", lng: 9, lat: 9 },
         { id: "d", lng: 4, lat: 4 }, // 新增
       ]),
     );
     m.flush();
     expect(createMarker).toHaveBeenCalledTimes(1);
     expect(removeMarker).toHaveBeenCalledTimes(2); // b / c
-    expect(updatePosition).toHaveBeenCalledTimes(1); // a 换了引用
+    expect(updatePosition.mock.calls.map((call) => call[1]), "只有 a 的坐标变了").toEqual([
+      { lng: 9, lat: 9 },
+    ]);
     expect(m.size).toBe(2);
     m.dispose();
   });
@@ -348,11 +351,129 @@ describe("DataLayerManager 的失败隔离（SDK 调用抛错时不许把整轮 
     m.flush();
     vi.clearAllMocks();
 
-    // 换引用（同一份内容的新对象）⇒ 每一项都要重新下发位置
-    m.sync(syncOf(items.map((item) => ({ ...item }))));
+    // 每一项的坐标都真的变了 ⇒ 每一项都要下发位置（位置由**值**决定，不再由 item 引用决定）
+    m.sync(syncOf(items.map((item) => ({ ...item, lng: item.lng + 10 }))));
     m.flush();
     expect(updatePosition, "每一项都试过了（不是第一项失败就中断）").toHaveBeenCalledTimes(3);
     expect(warn).toHaveBeenCalledTimes(3);
+    m.dispose();
+  });
+});
+
+/* ------------------------------------------------------------------ 评审（PR #102）的四条语义修正
+ *
+ * 每条都先写成**会红**的复现（评审给的最小场景原样搬到用例里），再改实现。
+ * 命名带上 `[#102 Fn]` 便于回看「这条用例是为哪条评审意见存在的」。
+ */
+
+describe("DataLayerManager：根引用变化必须重新读取位置 [#102 F1]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("换新数组 + 复用同一个 item 对象（原地改坐标）⇒ 必须重新下发位置", () => {
+    const { host, updatePosition } = makeHost();
+    const m = new DataLayerManager(host);
+    const item: Item = { id: "a", lng: 1, lat: 1 };
+    m.sync(syncOf([item]));
+    m.flush();
+    vi.clearAllMocks();
+
+    // 评审的最小场景：`item.lng = 2; data.value = [item]`
+    item.lng = 2;
+    m.sync(syncOf([item]));
+    m.flush();
+    expect(
+      updatePosition.mock.calls.map((call) => call[1]),
+      "根引用变了就该重新读取（公开契约只说「根引用不变」时需要 dataVersion）",
+    ).toEqual([{ lng: 2, lat: 1 }]);
+    m.dispose();
+  });
+
+  it("换新数组但坐标确实没变 ⇒ 不产生多余的位置下发", () => {
+    const { host, updatePosition } = makeHost();
+    const m = new DataLayerManager(host);
+    const item: Item = { id: "a", lng: 1, lat: 1 };
+    m.sync(syncOf([item]));
+    m.flush();
+    vi.clearAllMocks();
+
+    m.sync(syncOf([{ ...item }]));
+    m.flush();
+    expect(updatePosition, "值没变就不写（按位置指纹，不按 item 引用）").not.toHaveBeenCalled();
+    m.dispose();
+  });
+});
+
+describe("DataLayerManager：失败的更新必须能重试 [#102 F2]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("updatePosition 抛错之后，用**同一批输入**再 sync 必须重试（不被短路吞掉）", () => {
+    const warn = vi.fn();
+    const { host, updatePosition } = makeHost();
+    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const item: Item = { id: "a", lng: 1, lat: 1 };
+    m.sync(syncOf([item]));
+    m.flush();
+
+    // 第一次：原地改坐标 ⇒ 位置下发失败
+    updatePosition.mockImplementationOnce(() => {
+      throw new Error("setPosition failed");
+    });
+    item.lng = 2;
+    m.sync(syncOf([item]));
+    m.flush();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("更新位置失败"));
+
+    // 第二次：**完全相同的输入**（同一数组引用、同一 version）也必须重试
+    vi.clearAllMocks();
+    m.sync(syncOf([item]));
+    m.flush();
+    expect(updatePosition.mock.calls.map((call) => call[1]), "失败的那一项必须重试").toEqual([
+      { lng: 2, lat: 1 },
+    ]);
+    m.dispose();
+  });
+
+  it("创建失败之后，同一批输入再 sync 必须重试创建", () => {
+    const { host, createMarker } = makeHost();
+    const m = new DataLayerManager(host);
+    createMarker.mockImplementationOnce(() => {
+      throw new Error("create failed");
+    });
+    const items2: Item[] = [{ id: "a", lng: 1, lat: 1 }];
+    m.sync(syncOf(items2));
+    m.flush();
+    expect(m.size).toBe(0);
+
+    m.sync(syncOf(items2));
+    m.flush();
+    expect(m.size, "同一批输入也要能补建").toBe(1);
+    m.dispose();
+  });
+});
+
+describe("DataLayerManager：clear() 失败不得丢失所有权 [#102 F3]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("某一条 removeMarker 失败 ⇒ 保留所有权；之后 sync 不得为同一 key 重复创建", () => {
+    const warn = vi.fn();
+    const { host, removeMarker, createMarker } = makeHost();
+    removeMarker.mockImplementation((resource: { id: string }) => {
+      if (resource.id === "b") throw new Error("remove failed");
+    });
+    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    m.sync(syncOf(items));
+    m.flush();
+
+    m.clear();
+    expect(m.size, "失败的那一条仍被持有（与 diff 删除路径同一条原则）").toBe(1);
+
+    // 再同步同一批数据：b 仍在账本里 ⇒ 不得为它再建一个资源（否则图上会出现两份/泄漏）
+    createMarker.mockClear();
+    removeMarker.mockImplementation(() => {});
+    m.sync(syncOf(items));
+    m.flush();
+    expect(createMarker.mock.calls.map((call) => (call[0] as Item).id), "只补建 a / c").toEqual(["a", "c"]);
+    expect(m.size).toBe(3);
     m.dispose();
   });
 });
