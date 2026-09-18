@@ -184,6 +184,7 @@ export function verdicts(report: ProbeReport): string[] {
   // ⚠️ 结论必须**先确认读数存在、字段类型对**，再进正 / 负分支：`?.connected ?? 0` 会把
   // 「没测到」悄悄读成「内容没回来 / 重建也没渲染」这类**确定结论**（第三组逐处标过）。
   const mounted = nodesOf("kernel.mounted")
+  const hidden = nodesOf("kernel.hidden")
   const shown = nodesOf("kernel.shown")
   lines.push(
     "[DOM 生命周期（严格按内核顺序：addLayer → setData）] " +
@@ -191,13 +192,18 @@ export function verdicts(report: ProbeReport): string[] {
       `**再显示后 ${domSnap("kernel.shown")}** ⇒ ` +
       (kernelPrereq.length > 0
         ? prereqText(kernelPrereq)
-        : mounted === null || shown === null
+        : mounted === null || hidden === null || shown === null
           ? UNKNOWN
           : mounted <= 0
             ? "**无法判定**（对照不成立：挂载后就没有节点）"
-            : shown > 0
-              ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
-              : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
+            : // **中间正证**（第八轮评审发现 1）：前置只证明 `hide.removeLayer` **没抛错**，
+              // 不证明它的**副作用真的发生了**。若节点还在，`shown > 0` 只能说明「内容从来没消失过」，
+              // 与「重挂能不能把内容带回来」是两件事——那就必须落第三态而不是正结论。
+              hidden !== 0
+              ? "**无法判定**（对照不成立：`removeLayer` 之后节点仍在文档上 ⇒「隐藏」没有真的发生）"
+              : shown > 0
+                ? "**内容自己回来了**（内核 hide -> show 只重新挂载是对的）"
+                : "**内容没回来** ⇒ 内核必须在重新挂载后补一次 data 写入，否则真实环境里隐藏再显示会内容消失"),
   )
   const repaired = nodesOf("kernel.repaired")
   const repairThrew = threwOf("kernel.repair.setData")
@@ -236,6 +242,11 @@ export function verdicts(report: ProbeReport): string[] {
   const geoNums = geoOrderIds.map((id) => overlaysOf(id))
   const geoMounted = geoNums[0] ?? null
   const geoShown = geoNums[2] ?? null
+  // ⚠️ 这里**没有**与 DOM 那条对应的「隐藏真的发生了没有」控件（`geoNums[1] === 0`？），
+  // 而且不是遗漏：GeoJSON 的读数是 **`getData()` 集合条数**，它本来就不受 `removeLayer` 影响
+  // （live 是 2 → **2** → 2 → 2）。「覆盖物有没有从图上消失」没有公开手段可观测，因此这里
+  // 能用的正证控件只有「`mounted > 0`」（data 确实进了集合）——下面那一支就是它。
+  // 把它写成「hidden 必须为 0」会直接与 live 冲突（那正是第八轮被点的那类漂移）。
   lines.push(
     "[GeoJSON 生命周期（同一套内核顺序）] 挂载后 " +
       `${numText(geoMounted)} 条 → 隐藏后 ${numText(geoNums[1] ?? null)} 条 → ` +

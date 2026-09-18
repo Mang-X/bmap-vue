@@ -297,7 +297,12 @@ Map 引用，那个实例**再也渲染不了**。严格按内核的 `addLayer �
 | DOM detached 清空 | `dom.removeLayer#1`（否则 `dom.detached` 根本不是 detached 状态） |
 | GeoJSON detached clearData | `geojson.removeLayer#1` |
 
-任一缺失 / 抛错 ⇒ 该结论落**第三态**并点名是哪一步。同理，`GeoJSONLayer` 那条的判定要求
+任一缺失 / 抛错 ⇒ 该结论落**第三态**并点名是哪一步。此外，**「没抛错」不等于「副作用发生了」**：DOM 生命周期那组还要一个**中间正证**
+`kernel.hidden.connected === 0`——`removeLayer` 返回成功但节点没摘掉时，`shown > 0` 只能说明
+「内容从来没消失过」，与「重挂能不能把内容带回来」无关，必须落第三态。（第八轮评审发现 1。）
+GeoJSON 一侧**没有**对应控件，而且不是遗漏：它的读数是 `getData()` 集合条数，本来就不受
+`removeLayer` 影响（live 是 2 → **2** → 2 → 2），「覆盖物有没有从图上消失」没有公开手段可观测——
+那一侧能用的正证控件只有 `mounted > 0`。同理，`GeoJSONLayer` 那条的判定要求
 **消费 `geojson.clearData.已detached` 的 `threw`**（「抛错但已产生副作用」对内核策略是决定性的），
 且 **`after === 0` 才算「完整清空」**——`after !== before` 太弱，2 → 1 只是部分清理。
 （第六轮行内发现 2。）

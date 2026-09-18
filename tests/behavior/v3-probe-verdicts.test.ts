@@ -81,10 +81,18 @@ const COMPLETE: Reading[] = [
   // 与 live 实测一致：补 `setData` 抛错、节点仍是 0（这就是「必须换新实例」那条结论的来源）。
   { id: "kernel.repaired", connected: 0, overlayCount: 0 },
   { id: "kernel.repair.setData", threw: true, message: "reading 'coordinate'" },
+  // ⚠️ 下面这一组**必须与最近一次 live 报告逐字一致**（第八轮评审发现 2：我此前写成
+  // `2 → 0 → 0 → 0`，于是「正证」一直在保护一条 live 从不发生的分支）。
+  // 抄录自 2026-09-18 的 live 报告（`probe-layer-detached.mts` 的原始读数行）：
+  //   geojson.kernel.mounted  {"overlayCount":2}
+  //   geojson.kernel.hidden   {"overlayCount":2}   ← removeLayer **不影响**集合条数
+  //   geojson.kernel.shown    {"overlayCount":2}
+  //   geojson.kernel.repaired {"overlayCount":2}
+  // 改这里之前先重跑一次探针、把上面四行抄成最新的（ADR 决策 12b 的读数表是同一份事实）。
   { id: "geojson.kernel.mounted", overlayCount: 2 },
-  { id: "geojson.kernel.hidden", overlayCount: 0 },
-  { id: "geojson.kernel.shown", overlayCount: 0 },
-  { id: "geojson.kernel.repaired", overlayCount: 0 },
+  { id: "geojson.kernel.hidden", overlayCount: 2 },
+  { id: "geojson.kernel.shown", overlayCount: 2 },
+  { id: "geojson.kernel.repaired", overlayCount: 2 },
   { id: "geojson.kernel.rebuilt", overlayCount: 2 },
   { id: "kernel.rebuilt", connected: 2, overlayCount: 2 },
   // #98 的核心读数 2：detached 之后仍有几个节点 / 清空调用有没有抛 / 清完之后剩几个
@@ -148,7 +156,7 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     expect(lineOf(lines, "[DOM 生命周期")).toContain("内容没回来");
     expect(lineOf(lines, "[再显示后补 setData]")).toContain("抛错");
     expect(lineOf(lines, "[再显示后补 setData]"), "live 那一组：抛错且没恢复").toContain("找不回来");
-    expect(lineOf(lines, "[GeoJSON 生命周期")).toContain("集合被清空了");
+    expect(lineOf(lines, "[GeoJSON 生命周期"), "live 那一组：集合一直在").toContain("集合还在");
     expect(lineOf(lines, "[对照：换新实例重建]")).toContain("重建路径正常");
     expect(lineOf(lines, "[DOM detached 清空]"), "实测那一组 ⇒ 无需清空").toContain("无需清空");
     expect(
@@ -293,6 +301,27 @@ describe("[#98] 探针判定层的三态（安全 / 不安全 / 无法判定）"
     const bothBad = lineFor(true, 0);
     expect(bothBad, "抛错 + 没恢复 ⇒ 两条事实都要说出来").toContain("**找不回来，且这次调用本身抛错**");
     expect(lineFor(null, 2), "调用读数缺失").toContain("无法判定");
+  });
+
+  it("DOM 生命周期的**中间正证**：`removeLayer` 没抛错但节点没摘掉 ⇒ 第三态", () => {
+    // 第八轮评审发现 1：前置只证明 `hide.removeLayer` **没抛错**，不证明它的**副作用发生了**。
+    // `hidden > 0` 时内容从未消失，`shown > 0` 与「重挂能不能把内容带回来」无关。
+    const readings = COMPLETE.map((r) => (r.id === "kernel.hidden" ? { ...r, connected: 2 } : r));
+    const line = lineOf(verdicts(report(readings)), "[DOM 生命周期");
+    expect(line).toContain("对照不成立");
+    expect(line, "隐藏没有真的发生 ⇒ 不能说是重挂把内容带回来的").not.toContain("内容自己回来了");
+  });
+
+  it("GeoJSON 生命周期：`shown === 0` 那一支单独覆盖（live 基线是「集合还在」）", () => {
+    // live 基线 2 → 2 → 2 → 2 ⇒ 判「集合还在」；「集合被清空了」是另一条**互斥**分支，
+    // 用合成场景单独钉住即可——不要再把 COMPLETE 改成这条分支（那正是第八轮被点的漂移）。
+    const readings = COMPLETE.map((r) =>
+      r.id === "geojson.kernel.shown" || r.id === "geojson.kernel.repaired"
+        ? { ...r, overlayCount: 0 }
+        : r,
+    );
+    const line = lineOf(verdicts(report(readings)), "[GeoJSON 生命周期");
+    expect(line).toContain("**集合被清空了**");
   });
 
   it("GeoJSON 生命周期的正证控件：`mounted === 0` ⇒ 对照不成立，不得判「集合被清空了」", () => {
