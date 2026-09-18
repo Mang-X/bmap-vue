@@ -391,6 +391,76 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     harness.assertIdle('迟到的内部 open')
   })
 
+  it('重开确认先到、旧 close 后到：过期回包不得把账本清空（组件级反序回归）', async () => {
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const child = wrapper.findComponent(BInfoWindow)
+    const map = lastMap()
+    const raw = currentInfoWindow()!
+    expect(raw.isOpen(), '对照组：气泡已经打开').toBe(true)
+
+    // 让接下来的关闭**异步生效**：请求已受理，但地图状态与 `close` 事件都还没发生
+    map.deferInfoWindowClose = true
+    open.value = false
+    await settle()
+    expect(map.hasPendingInfoWindowClose(), '对照组：关闭请求已被挂起（还没有回包）').toBe(true)
+    expect(map.infoWindow, '对照组：替身还没真正关掉它').toBe(raw)
+
+    // 立刻重开：状态机从 `closing` 重开并**刻意保留**那笔在飞的关闭账
+    open.value = true
+    await settle()
+    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
+
+    // ★ 反序：前一次关闭的迟到回包这时才到。它是**过期回包**（`closeOutstanding > 0` 且模型是开）
+    //   ⇒ 状态机只减账，`open` / 相位都不动。
+    expect(map.flushInfoWindowClose(), '对照组：确实有一次被放行的关闭').toBe(true)
+    await settle()
+
+    expect(
+      emittedOf(child, 'update:open'),
+      '过期回包不得改动模型（父级的意图仍然是「开」，重开也已确认）',
+    ).toHaveLength(0)
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '状态机仍认为它开着 ⇒ 账本不得被过期回包清空（否则后续互斥通知又基于陈旧归属）',
+    ).not.toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('反序回包后账本仍指向该实例')
+  })
+
+  it('过期回包走 clickclose 通道时：账本同样只跟随状态机的结论', async () => {
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const map = lastMap()
+    const raw = currentInfoWindow()!
+
+    // 同样先造出「有一笔关闭账在飞」
+    map.deferInfoWindowClose = true
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
+
+    // ★ `clickclose` 与 `close` 走同一套归属判定 ⇒ 过期回包同样只减账，账本不动
+    raw.emit('clickclose', { type: 'clickclose' })
+    await settle()
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '过期回包（无论走哪条通道）⇒ 状态机仍认为开着 ⇒ 账本不得被清空',
+    ).not.toBeNull()
+
+    // 收尾：让替身回到同步模式，卸载时把这条真实关闭走完
+    map.deferInfoWindowClose = false
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('clickclose 反序回包')
+  })
+
   it('SDK 自己打开（未经请求）⇒ 回写 update:open true', async () => {
     const el = harness.container()
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)

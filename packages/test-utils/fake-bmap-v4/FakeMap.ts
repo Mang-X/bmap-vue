@@ -269,6 +269,22 @@ export class FakeV4Map extends FakeV4EventTarget {
   /** 已经请求打开、但还没被 SDK 接管的气泡（`deferInfoWindowOpen` 打开时才有值）。 */
   private pendingInfoWindow: { infoWnd: FakeV4InfoWindow; point: FakeV4Point } | null = null
 
+  /**
+   * 让 `closeInfoWindow()` **异步生效**：请求已经受理，但地图状态与 `close` 事件都要等
+   * `flushInfoWindowClose()` 才发生。
+   *
+   * 用途是构造**乱序回包**：本库的状态机明确声明支持「重开确认先到、旧 `close` 回包后到」
+   * （第一轮评审 P1 的核心，纯 reducer 侧有对应用例）。要把它搬到组件层，就需要一个
+   * 「关闭请求已发出、但它的事件还没到」的窗口 —— 这与 `deferInfoWindowOpen` 是同一族**时序注入**，
+   * 而不是对真实 SDK 某次测量的复刻（真实 4.0 的关闭时序未单独测量过）。
+   *
+   * 只在这个字段为真、且**确实有**当前气泡时才挂起：没有当前气泡时它照旧是 no-op，
+   * 否则会留下一条「将来某个新气泡被它关掉」的悬空请求。
+   */
+  deferInfoWindowClose = false
+  /** 已经请求关闭、但还没被 SDK 执行的气泡（`deferInfoWindowClose` 打开时才有值）。 */
+  private pendingInfoWindowClose = false
+
   openInfoWindow(infoWnd: FakeV4InfoWindow, point: FakeV4Point): void {
     this.callLog.push('openInfoWindow')
     if (this.failNextOpenInfoWindow) {
@@ -299,6 +315,19 @@ export class FakeV4Map extends FakeV4EventTarget {
     return this.pendingInfoWindow !== null
   }
 
+  /** 放行一次挂起的关闭（模拟 SDK 迟一步执行 + 迟一步派发 `close`）。没有挂起请求时是 no-op。 */
+  flushInfoWindowClose(): boolean {
+    if (!this.pendingInfoWindowClose) return false
+    this.pendingInfoWindowClose = false
+    this.applyInfoWindowClose()
+    return true
+  }
+
+  /** 当前有没有「已请求关闭、尚未执行」的气泡。 */
+  hasPendingInfoWindowClose(): boolean {
+    return this.pendingInfoWindowClose
+  }
+
   /** SDK 真正接管气泡：改「当前气泡」、挂内容节点、派发 `open`。 */
   private adoptInfoWindow(infoWnd: FakeV4InfoWindow, point: FakeV4Point): void {
     const previous = this.infoWindow
@@ -321,6 +350,17 @@ export class FakeV4Map extends FakeV4EventTarget {
   /** 官方语义：关闭本张地图**当前**打开的气泡（不接收实例参数）。 */
   closeInfoWindow(): void {
     this.callLog.push('closeInfoWindow')
+    // 没有当前气泡时照旧是 no-op（真机同一 tick 里 `openInfoWindow()` 之后就是这种状态）。
+    // 也正因为如此，异步模式只在**确实有**当前气泡时才挂起 —— 不给将来某个新气泡留悬空请求。
+    if (this.deferInfoWindowClose && this.infoWindow) {
+      this.pendingInfoWindowClose = true
+      return
+    }
+    this.applyInfoWindowClose()
+  }
+
+  /** 真正执行一次关闭：改「当前气泡」、拆容器、派发 `close`。 */
+  private applyInfoWindowClose(): void {
     const current = this.infoWindow
     this.infoWindow = null
     if (!current) return

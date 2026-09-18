@@ -611,6 +611,28 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /* ------------------------------------------------------------------------ 内部 */
 
   /**
+   * 关闭类事件之后，账本要不要退场 —— **判据是状态机的结论，不是「收到了一条 close」**
+   * （外部评审第七轮 P1）。
+   *
+   * `sdk-close` 里有一类是**过期回包**：`closeOutstanding > 0` 且模型仍是「开」（重开确认先到、
+   * 旧 close 后到，第一轮 P1 修复的核心）。那种情况下状态机只减账、保持 `open` —— 地图上开着的
+   * 仍然是它，账本不能退场，否则又回到「地图开着、账本没有 current」的分叉，
+   * 后续互斥通知会基于陈旧归属。
+   *
+   * 因此两个方向的**顺序要求恰好相反**：
+   * - `open`：先 `manager.activate()` 再喂状态机 —— 状态机可能同步下发纠偏 close，
+   *   而那条 close 的收尾会 `deactivate(自己)`，必须打在已经换成自己的账本上；
+   * - `close` / `clickclose`：先喂状态机，**再按转换后的机器状态**决定是否 `deactivate`。
+   *
+   * 注意这里读的是 `machine` 而不是单次 transition：`dispatch` 期间可能发生（同步 SDK 回调触发的）
+   * 重入，`machine` 是全部收敛完成后的状态，正是我们要的口径。
+   */
+  function syncLedgerAfterClose(instance: ActiveInstance): void {
+    if (machine.open) return; // 过期回包：状态机仍认为开着 ⇒ 账本不动
+    manager.deactivate(instance.handle);
+  }
+
+  /**
    * 绑定 SDK 事件。
    *
    * 每条回调带**两道守卫**：实例身份（`activeInstance !== instance` / `!instance.alive`）与
@@ -642,10 +664,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             dispatch({ type: "sdk-open", generation: instance.generation });
             break;
           case "clickclose":
-            // 点关闭按钮：与 `close` 走同一套归属判定，另外把「是谁关的」告诉调用方。
-            // 账本同样要跟着**事实**退场：地图上已经没有这个气泡了。
-            manager.deactivate(instance.handle);
+            // 点关闭按钮：与 `close` 走同一套归属判定（含「过期回包不改账本」），
+            // 另外把「是谁关的」告诉调用方。
             dispatch({ type: "sdk-close", generation: instance.generation });
+            syncLedgerAfterClose(instance);
             emit("clickclose", event);
             break;
           case "maximize":
@@ -655,8 +677,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             break;
           case "close":
           default:
-            manager.deactivate(instance.handle);
+            // ⚠️ 顺序与 `open` 相反：**先让状态机判定这条 close 是否真的改变了「打开」这一维**，
+            // 再决定账本要不要退场（过期回包只减账、不改状态 ⇒ 账本保持不动，见 `syncLedgerAfterClose`）。
             dispatch({ type: "sdk-close", generation: instance.generation });
+            syncLedgerAfterClose(instance);
             break;
         }
       });

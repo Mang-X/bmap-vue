@@ -267,19 +267,46 @@ if (current && current !== raw) return;
 
 **修正**：把真实的 `open` / `close` / `clickclose` 事件也当成账本的事实源 ——
 
-| SDK 事件 | 账本 | 状态机 |
+| SDK 事件 | 顺序 | 账本 |
 | --- | --- | --- |
-| `open` | `manager.activate(自己)` | 然后喂 `sdk-open` |
-| `close` | `manager.deactivate(自己)` | 然后喂 `sdk-close` |
-| `clickclose` | `manager.deactivate(自己)` | 然后喂 `sdk-close` + 转发事件 |
+| `open` | **先**账本、后状态机 | `manager.activate(自己)` ⇒ 然后喂 `sdk-open` |
+| `close` | **先**状态机、后账本 | 喂 `sdk-close` ⇒ **按状态机的结论**决定是否 `deactivate` |
+| `clickclose` | 同 `close` | 同上 + 转发事件 |
 
-**顺序是硬要求（先对齐账本、再喂状态机）**：迟到接管那条路径上，状态机收到 `sdk-open` 后会**立刻**
-下发一条纠偏 close，而那条 close 的收尾会 `deactivate(自己)`。如果账本那一刻还指着别人，
-这次 `deactivate` 是 no-op，于是 `activate` 之后再也没人清账 —— 恰恰就是**幽灵 current** 本身。
-反证 M4（把两行对调）单独红了这一条。
+**`open` 的顺序是硬要求**：迟到接管那条路径上，状态机收到 `sdk-open` 后会**立刻**下发一条纠偏 close，
+而那条 close 的收尾会 `deactivate(自己)`。如果账本那一刻还指着别人，这次 `deactivate` 是 no-op，
+于是 `activate` 之后再也没人清账 —— 恰恰就是**幽灵 current** 本身。反证 M4（把两行对调）单独红了这一条。
+
+**`close` 的顺序恰好相反**，理由见 4c。
 
 **注意 `deactivate` 的方向性**：它只清「当前项**就是自己**」的情形（决策 4 的既有语义），
 所以被顶掉的一方收到迟到的 `close` 不会误清新主人的归属。
+
+### 4c. 关闭类事件的账本退场，要等**状态机的结论**（外部评审第七轮 P1）
+
+4b 把「SDK 事件」接进了账本，但第一版把 `close` / `clickclose` 也做成「**先** `deactivate`、**再**喂状态机」——
+与 `open` 同一个方向。这就与本 ADR 决策 3 早就确立的语义撞车了：`sdk-close` 里有一类是**过期回包**
+（`closeOutstanding > 0` 且模型仍是「开」，即「重开确认先到、旧 close 后到」，第一轮 P1 修复的核心），
+状态机对它的处置是**只减账、`open` 与相位都不动**。
+
+于是组件层会出现三处分叉：状态机仍 `open=true`、地图上可能仍开着这个气泡，而 `manager.current()`
+已经被清成 `null`。后续另一个气泡打开时，就不会通知这个**实际还开着**的实例 `superseded` —— 又回到
+决策 4b 要解决的那个「账本与地图分叉」，只是这次是从反面引入的。
+
+**修正**：`close` / `clickclose` 改成「**先喂状态机、再按转换后的机器状态**决定账本退场」：
+
+| 这条 `sdk-close` 是什么 | 状态机 | 账本 |
+| --- | --- | --- |
+| 我们下发的关闭的结算 / 未经请求的真实关闭 | 落到关闭侧（`open === false`） | `deactivate(自己)` |
+| **过期回包**（`closeOutstanding > 0` 且模型是开） | 仍 `open === true` | **不动** |
+| 相位已经 `closed` 的幂等重复 | `open === false` | `deactivate`（本已是 no-op） |
+
+判据读的是 `machine`（`dispatch` 全部收敛之后的状态）而不是单次 transition：`dispatch` 期间可能发生
+同步 SDK 回调触发的重入，`machine` 才是真正要的口径。
+
+**一句话总结这条轴**：账本镜像的是**状态机对「当前是否开着」的判断**，而不是「收到过哪些事件」。
+把事件直接当事实源是 4b 的进步，但**事件的语义要经过状态机的归属判定**才算数 ——
+否则「乱序回包」这条被状态机妥善处理掉的东西，会在账本这一层重新变成分叉。
 
 ### 5. 尺寸：观察**实际内容 host**、合帧重绘、不自激
 
@@ -467,6 +494,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **反序回包**：关 → 立刻重开 →「重开的 `open` 先到、旧 `close` 后到」不得关掉已重开的模型；随后一次真实关闭仍须收敛（评审 P1-1 的复现） | `infoWindowMachine.test.ts`（`重开确认先到、旧 close 后到`） |
 | **被放弃的那一代必须被它自己的释放路径收干净**（重建窗口内卸载 → `useSdkResource` 的 stale 分支） | `v3-binfowindow.test.ts`（`重建窗口内卸载`） |
 | **单飞的尾随重建不得丢值**：连续构造期变化后，最终存活那一代必须按**最后一次**的 prop 构建（反证：去掉尾随重建 ⇒ `expected 9 to be 10`） | 同上（`重建是单飞的`） |
+| **过期回包不得清空账本**：重开确认先到、旧 `close` 后到时状态机仍 `open` ⇒ `current()` 必须保持该实例（反证：退回「无条件 `deactivate`」⇒ 两条通道的用例都红；**永不退场** ⇒ 正常关闭路径的用例红；**单独**把 `clickclose` 退回旧顺序 ⇒ 只有该通道的用例红） | `v3-binfowindow.test.ts`（`重开确认先到、旧 close 后到`、`过期回包走 clickclose 通道时`） |
 | **账本跟随 SDK 事实**：被迟到接管真正顶掉的 B 必须收到 `superseded`（模型不能停在图上已不存在的气泡上）；外部 SDK 开 / 关后 `infoWindows.current()` 必须同步（反证：删掉 `open` 的 `activate` / 删掉 `close` 的 `deactivate` / 删掉 `clickclose` 的 `deactivate` / **把两行顺序调反** ⇒ 各红） | `v3-binfowindow.test.ts`（`双窗口乱序`、`外部 SDK 的 open / close 都要同步账本`、`点地图关闭`、`clickclose`） |
 | **被顶掉的 A 的迟到 open 接管地图后必须被真正关掉**（双窗口乱序）：地图上不得留下 A，也不得把 A 回写成打开（反证：把 Driver 的判据顺序退回「先看最后请求者」⇒ Driver 与端到端用例都红；松开「当前是别人就不碰」或去掉空窗口兜底 ⇒ 既有收紧用例红） | `overlays.test.ts`（`[迟到接管] 当前气泡确实是我…` + 反向 `当前气泡是别人时仍然不碰地图`）+ `v3-binfowindow.test.ts`（`双窗口乱序`，端到端，用 `deferInfoWindowOpen` + `flushInfoWindowOpen()`） |
 | **命令同步失败必须冲销在飞账**：open 失败后「外部打开仍回写 / 父级重试仍成功」，close 失败后「真实关闭仍收敛」；移动失败**不得**把还开着的气泡收敛成关（反证四条：组件仍伪造 `sdk-close` / open 失败不冲销 / close 失败不冲销 / 移动失败也收敛 ⇒ 都红，逐条读数见文末第四轮小节） | `infoWindowMachine.test.ts`（三条）+ `v3-binfowindow.test.ts`（`open 命令同步失败`，端到端，用夹具的 `failNextOpenInfoWindow`） |
@@ -588,6 +616,26 @@ B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 
   最后一条是刻意的：它证明顺序**本身**是承重的，不是「有这行就行」。
 - 这条 P1 的形态与前几轮又不同：前五轮都在问「命令有没有到位」，这一轮问的是
   「我们内部记的账，有没有跟着**外部事实**走」—— 账本的事实源不能只有「我们自己发过的命令」。
+
+### 第七轮（`97b675b` → 本轮）
+
+评审确认上轮幽灵 current 的**主路径**已修，但指出 4b 给 `close` / `clickclose` 选的顺序**与决策 3
+早就确立的语义撞车**：`sdk-close` 里有一类是过期回包（`closeOutstanding > 0` 且模型仍是开），
+状态机对它只减账、保持 `open`；而组件层会先把 `manager.deactivate()` 执行掉 ⇒
+「状态机说开着、地图上可能还开着、账本却已清空」。
+
+- **复现属实**：组件级反序用例 —— `状态机仍认为它开着 ⇒ 账本不得被过期回包清空: expected null not to be null`。
+- **修正**：`close` / `clickclose` 改成「先喂状态机、再按 `machine.open` 决定退场」（见 4c 的表）。
+  `open` 的方向**保持不变**（它必须抢先，理由见 4b）。
+- **反证三条变异全红**：① 退回「无条件 `deactivate`」⇒ 两条通道的用例红；
+  ② **反向**「永不退场」⇒ 正常关闭路径的三处账本读数是红（证明改的是判据，不是干脆不退场）；
+  ③ **只**把 `clickclose` 退回旧顺序 ⇒ 只有该通道的用例红（证明它为这条分支提供了独立判别力）。
+- **夹具**：新增 `deferInfoWindowClose` / `flushInfoWindowClose()`，与 `deferInfoWindowOpen` 同族 ——
+  用来构造「关闭请求已受理、但它的事件还没到」这个窗口。**如实标注**：它是对「乱序回包」这条
+  **本库声明支持**的时序的注入，不是对真实 4.0 关闭时序的测量复刻（真实关闭时序未单独测过）。
+  有了它，整条反序路径可以**全程走真实命令**构造，不必手工 `emit` 事件、也不必改替身内部字段。
+- 这条 P1 的形态是**前后两轮互为镜像**：第六轮把「事件」引进来是对的，第七轮补的是
+  「事件要先经过归属判定才算数」——**同一处代码的相邻两轮，一轮加、一轮校准**。
 
 ### 本轮修正引入的自我检查
 
