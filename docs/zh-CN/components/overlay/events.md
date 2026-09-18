@@ -26,6 +26,19 @@
 第三档里上游声明过但本库**没有归一化**的字段（`lineupdate.action`、编辑事件的 `overlay` / `from`）统一经
 `raw` 读取——与 map 事件对 `mousewheel.trend` 这类字段的口径一致，不做猜测式补齐。
 
+## `remove` 的到达时机（v3 起的两条口径）
+
+`remove` 由 SDK 在**覆盖物被摘除**时派发。v3 把「组件的显隐」统一成 `show()` / `hide()`（实例留在图上），
+因此这条事件只在**外部**摘除（`map.removeOverlay()` / `map.clearOverlays()`）时到达组件：
+
+| 动作 | `remove` 是否到达组件 |
+| --- | --- |
+| `map.removeOverlay(overlay)` / `map.clearOverlays()` | ✅ 到达 |
+| 组件自身的 `visible` 切到 `false` | ❌ 不到达（`hide()` 不派发它；「隐藏」不等于「被移除」） |
+| 组件自身的卸载 / 重建 | ❌ 不到达（摘除发生在监听解绑之后，且内核刻意不回放这条路径上的事件） |
+
+需要「自己被卸载了」的信号请用组件生命周期（`onUnmounted` / 父级的 `v-if`），不要依赖 `remove`。
+
 ## 编辑事件按能力注册
 
 `editstart` / `editend` / `linevertexdrag*` / `linevertexdel` 只在开启编辑（`enableEditing`）后才会派发。

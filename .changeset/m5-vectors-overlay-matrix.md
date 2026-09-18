@@ -37,7 +37,14 @@ SDK 事件绑定全部由 `useOverlaySpec` 按 `*Spec.ts` 驱动；这次删除�
   `BInfoWindow` / `BContextMenu` / `BMapMask` / `BMarker3d` 本次**不迁移**，
   各自的归属见 ADR `2026-09-18-overlay-event-matrix.md` 的已知限制。
 
-**无运行时破坏性变更**：八个组件的 props 名与默认值未变（只新增 `bounds`），emits 只增不减。
+**props 与 emits 层面无破坏性变更**：八个组件的 props 名与默认值未变（只新增 `bounds`），emits 只增不减。
+
+两处**行为语义**变化（都在 breaking-changes 的表里有对应行）：
+
+- `visible=false` 从 `removeOverlay` 改为 `hide()`：实例留在图上、只是不可见（与 `BMarker`、控件
+  从 #30 / #41 起的统一口径一致）。需要真正摘除请用 `v-if`；
+- `remove` 事件只在**外部**摘除（`map.removeOverlay()` / `clearOverlays()`）时到达组件：组件自身的
+  卸载 / 重建 / 隐藏不再回放它（此前 `<BBezierCurve>` / `<BMarker>` 在这些路径上会发）。
 
 两处类型 / 元数据层的附带变化：`LabelStyle` 由 `Record<string, any>` 收紧为
 `Record<string, unknown>`（`<BLabel style>` 的取值需自行收窄）；九个覆盖物组件统一补上

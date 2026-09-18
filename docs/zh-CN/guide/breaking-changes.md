@@ -61,8 +61,11 @@ M5-VECTORS 把 Label / Polyline / Polygon / Circle / BezierCurve / Prism / Groun
 | `<BMarker @drag-end>` | 组件内硬编码补发 | 由集中弃用层补发（同载荷、同实例提示一次） | 迁移到 `dragend` |
 | `BRectangle` | 不存在 | 新增覆盖物组件 | 见 [BRectangle 文档](/zh-CN/components/overlay/rectangle) |
 | `BInfoWindow` / `BContextMenu` / `BMapMask` / `BMarker3d` | 命令式 watcher | **本次不变**（仍走 `useOverlayResource`） | 归属见 ADR 已知限制（分别是 #32 / #33 / 待运行时取证） |
+| `visible=false` 的实现 | `removeOverlay`：实例离开地图（`map.getOverlays()` 少一个，SDK 会派发 `remove`） | `show()` / `hide()`：实例**留在图上**、只是不可见（与 #30 对 Marker、#41 对控件的统一口径一致） | 需要真正摘除请用 `v-if`；`visible` 只表达「显示与否」 |
+| `remove` 事件的到达时机 | `<BBezierCurve>` 与 `<BMarker>` 在**组件自身**的摘除路径上也会收到 `remove`：切隐藏（那时走 `removeOverlay`）、卸载 / 重建（那时监听还没解绑） | `remove` 只在**外部**摘除（`map.removeOverlay()` / `map.clearOverlays()`）时到达组件；组件自身的卸载 / 重建 / 隐藏不再回放它。其余六个组件此前根本不订阅 `remove`，现在按事件矩阵统一订阅（纯新增） | 用 `remove` 做「外部把我摘掉了」这类清理的代码要注意卸载时不会再有这条通知；感知显隐用 `visible`，感知卸载用组件生命周期 |
 
-**无运行时破坏性变更**：八个组件的 props 名与默认值未变（只新增 `bounds`），emits 只增不减。
+**props 与 emits 层面无破坏性变更**（八个组件的 props 名与默认值未变，只新增 `bounds`；emits 只增不减），
+但上表最后两行是**行为语义**的变化：`visible` 的实现方式、以及 `remove` 的到达时机。
 
 两处**类型 / 元数据层**的附带变化：
 

@@ -78,13 +78,18 @@ export function createGroundOverlaySpec(): OverlaySpec<BGroundOverlayProps, Over
           "BGroundOverlay 需要 bounds（{ southwest, northeast }），或旧的 startPoint + endPoint 组合",
         );
       }
-      if (!p.url) {
+      // **只读一次 `url`**（PR #103 评审 2）：`fieldValues` 的投影是「每次读取求值一次」，
+      // 而惰性工厂每求值一次就新建一份 canvas ⇒ 读两次会让「校验的对象」与「交给 SDK 的对象」
+      // 变成两个不同实例（旧实现是先 `resolveUrl()` 再复用）。需要单次求值的字段都由调用点
+      // 自己取一次，这是 `fieldValues` 的显式契约（见 `OverlaySpec.fieldValues` 的 JSDoc）。
+      const url = p.url;
+      if (!url) {
         throw new Error("BGroundOverlay url is required");
       }
       return context.client.driver.overlays.createGroundOverlay(p.bounds, {
         opacity: p.opacity,
         type: p.type,
-        url: p.url,
+        url,
       });
     },
     afterMount: (context, _resource, p) => {

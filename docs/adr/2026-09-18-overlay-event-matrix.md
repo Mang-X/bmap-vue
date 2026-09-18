@@ -169,6 +169,8 @@ scope（⇒ 解绑监听）」，因此 SDK 会在**监听仍然活着**的窗�
 | `BGroundOverlay` 的 `bounds` | 新增正典 prop（`{ southwest, northeast }`） | 推荐改用；`startPoint` + `endPoint` 仍可用（一次告警） |
 | `BGroundOverlay.type` 变化 | 组件自己在 watcher 里 `rebuild()` | 由描述符的 `recreate` 分类触发重建（**行为不变**） |
 | `BBezierCurve` / `BPrism` 不暴露 `enableEditing` | 上游没有该能力（事件表也被 `Omit`） | 无需改动；不要期望编辑事件 |
+| `visible=false` 的实现 | `removeOverlay`（实例离开地图，SDK 会派发 `remove`） | `hide()`：实例留在图上、只是不可见（与 #30 对 Marker、#41 对控件的统一口径一致） | 需要真正摘除请用 `v-if`（PR #103 评审 4 补记） |
+| `remove` 事件的**到达时机** | `<BBezierCurve>` / `<BMarker>` 在组件**自身**的摘除路径上也会收到（切隐藏走 `removeOverlay`、卸载/重建时监听还没解绑） | 只在**外部**摘除（`map.removeOverlay()` / `clearOverlays()`）时到达；组件自身的卸载 / 重建 / 隐藏不再回放（决策 7 的闸门）。其余六个组件此前根本不订阅 `remove`，现在按矩阵统一订阅 = 纯新增 | 用 `remove` 做「外部把我摘掉了」的清理代码要注意卸载时不再有这条通知（PR #103 评审 4 补记） |
 | `BLabel` / `BPrism` / `BBezierCurve` 的 props 类型来源 | 从 SFC 内的本地接口移到 `types/components.ts` | 名字不变；`LabelStyle` 仍从组件与根入口导出 |
 | `BMarker` 的 `drag-end` | 仍在（同载荷），但现在由内核按弃用表补发 | 迁移到 `dragend`；告警同实例一次 |
 | `Rectangle` | 新组件（v4 覆盖物） | 新增，见 [文档](/zh-CN/components/overlay/rectangle) |

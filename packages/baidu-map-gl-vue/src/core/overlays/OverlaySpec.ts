@@ -178,6 +178,11 @@ export interface OverlaySpec<Props extends object, Resource> {
    * 求值，否则会把一个函数交给 SDK（本库不允许「收下但没人读」的假支持）。
    *
    * 投影发生在**统一的 props 视图**里，因此 `create`、watch 与更新队列看到的是同一份值。
+   *
+   * **投影可能被多次求值**（每次读取求一次，没有缓存）：`fieldValues` 只保证「哪些字段要投影」，
+   * 不保证「一轮里只投影一次」。因此对**有副作用 / 每次都产生新实例**的投影（工厂函数），
+   * 调用点必须**自己先取一次**再复用（`BGroundOverlay.create` 就是 `const url = p.url` 那一行），
+   * 否则校验用的对象与交给 SDK 的对象会是两个不同实例（PR #103 评审 2）。
    */
   readonly fieldValues?: Partial<Record<keyof Props & string, (value: unknown) => unknown>>;
 

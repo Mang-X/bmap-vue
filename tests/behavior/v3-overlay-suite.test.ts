@@ -953,13 +953,20 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
     await settle();
   });
 
-  it("事件别名：drag-end 与 dragend 各发一次，且只警告一次", async () => {
+  it("事件别名：父级绑了旧名字时才双发 + 告警一次（同实例一次）", async () => {
+    // 前置条件在 PR #103 评审 3 之后成为契约的一部分：**只有父级真的绑了旧名字**才会收到
+    // 迁移提示（「SDK 派发过某事件」≠「调用方用了弃用名」）。因此本用例显式绑上 `@drag-end`。
+    const legacy: unknown[] = [];
     const Host = defineComponent({
       components: { BMap, BMarker },
       setup() {
         return () =>
           h(BMap, { provider: harness.provider() }, () => [
-            h(BMarker, { position: POINT, enableDragging: true }),
+            h(BMarker, {
+              position: POINT,
+              enableDragging: true,
+              "onDrag-end": (event: unknown) => legacy.push(event),
+            }),
           ]);
       },
     });
@@ -977,6 +984,7 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
 
     expect(child.emitted("dragend")).toHaveLength(2);
     expect(child.emitted("drag-end")).toHaveLength(2);
+    expect(legacy, "旧名字的监听器收到同载荷").toHaveLength(2);
     // 两次派发、两条别名，但**只警告一次**（同实例一次）
     expect(warningsWithCode(DEPRECATED_EVENT_ALIAS_CODE)).toHaveLength(1);
 
@@ -1094,6 +1102,240 @@ describe("#31 弃用告警器：同 code 只输出一次", () => {
     // 正证守卫：告警内容确实带着 code 与组件名（脱敏/文案之外的可检索性）
     expect(JSON.stringify(warn.mock.calls[0]![1])).toContain(DEPRECATED_PROP_ALIAS_CODE);
     expect(JSON.stringify(warn.mock.calls[0]![1])).toContain("probe");
+  });
+});
+
+/* ------------------------------------------------- 评审 PR #103 的回归用例（先红后绿） */
+
+describe("[评审 1] afterMount 的时序与回滚", () => {
+  /** 门闸：让 `create()` 停在窗口里，便于制造「过期一代」。 */
+  function gatedProbeHost(options: { afterMountThrows?: boolean } = {}) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const afterMountCalls: number[] = [];
+    const spec: OverlaySpec<Record<string, unknown>, unknown> = {
+      type: "probe-after-mount",
+      kind: "polygon",
+      fields: { path: "options", visible: "visibility" },
+      descriptorKeys: { path: "path", visible: null },
+      create: async (context, p) => {
+        await gate;
+        return context.client.driver.overlays.createPolygon(p.path as { lng: number; lat: number }[], {});
+      },
+      afterMount: () => {
+        afterMountCalls.push(afterMountCalls.length);
+        if (options.afterMountThrows) throw new Error("afterMount-boom");
+      },
+    };
+    const state = ref<Record<string, unknown>>({
+      path: [
+        { lng: 116.4, lat: 39.9 },
+        { lng: 116.5, lat: 40 },
+      ],
+    });
+    const Probe = defineComponent({
+      setup() {
+        useOverlaySpec(state.value as never, spec as never, { emit: () => {} });
+        return () => null;
+      },
+    });
+    const Host = defineComponent({
+      components: { BMap, Probe },
+      setup() {
+        return () => h(BMap, { provider: harness.provider() }, () => [h(Probe)]);
+      },
+    });
+    return { Host, release, afterMountCalls };
+  }
+
+  it("create 的 continuation 之前立刻卸载：过期一代不得执行 afterMount", async () => {
+    const { Host, release, afterMountCalls } = gatedProbeHost();
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    expect(afterMountCalls).toEqual([]);
+
+    // 卸载发生在 create 的窗口里 ⇒ 这一代是「过期一代」
+    wrapper.unmount();
+    await settle();
+    release();
+    await settle();
+    await settle();
+
+    expect(afterMountCalls, "过期一代不得有组件侧副作用").toEqual([]);
+    harness.assertIdle("[评审 1] 过期一代");
+  });
+
+  it("正常路径仍然执行一次（对照：守卫没有把功能关掉）", async () => {
+    const { Host, release, afterMountCalls } = gatedProbeHost();
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    release();
+    await settle();
+    await settle();
+    expect(afterMountCalls).toHaveLength(1);
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("[评审 1] 正常路径");
+  });
+
+  it("afterMount 抛错：已经 add 的覆盖物必须被撤掉（不留在图上、不进注册表）", async () => {
+    const { Host, release } = gatedProbeHost({ afterMountThrows: true });
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    release();
+    await settle();
+    await settle();
+
+    expect(harness.attached("overlay"), "抛错后不得留在地图上").toBe(0);
+    expect(fake.createdMaps[fake.createdMaps.length - 1]!.overlays).toHaveLength(0);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("[评审 1] afterMount 抛错");
+  });
+});
+
+describe("[评审 2] BGroundOverlay 的 url 惰性工厂只求值一次", () => {
+  it("一次 create 只调用一次工厂（校验用的对象就是交给 SDK 的那个）", async () => {
+    let calls = 0;
+    const factory = () => {
+      calls += 1;
+      return `canvas-${calls}.png`;
+    };
+    const Host = defineComponent({
+      components: { BMap, BGroundOverlay },
+      setup() {
+        return () =>
+          h(BMap, { provider: harness.provider() }, () => [
+            h(BGroundOverlay, {
+              type: "image",
+              url: factory,
+              bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
+            } as never),
+          ]);
+      },
+    });
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    await settle();
+
+    expect(calls, "工厂在一次创建里只应求值一次").toBe(1);
+    const raw = currentOverlay();
+    expect(raw.options.url).toBe("canvas-1.png");
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("[评审 2] url 工厂");
+  });
+});
+
+describe("[评审 3] 弃用事件告警只在实例上真的绑了旧名字时发", () => {
+  function markerHost(listeners: Record<string, unknown>) {
+    return defineComponent({
+      components: { BMap, BMarker },
+      setup() {
+        return () =>
+          h(BMap, { provider: harness.provider() }, () => [
+            h(BMarker, { position: POINT, enableDragging: true, ...listeners }),
+          ]);
+      },
+    });
+  }
+
+  it("只监听规范名 @dragend：不发弃用告警（也没有误报）", async () => {
+    const wrapper = mount(markerHost({ onDragend: () => {} }), { attachTo: harness.container() });
+    await settle();
+    await settle();
+    const marker = currentOverlay();
+    marker.emit("dragend", { point: { lng: 117, lat: 40 } });
+    await settle();
+    expect(warningsWithCode(DEPRECATED_EVENT_ALIAS_CODE), "只用了新名字时不得提示迁移").toEqual([]);
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("完全不监听 Marker 事件：拖拽也不发弃用告警", async () => {
+    const wrapper = mount(markerHost({}), { attachTo: harness.container() });
+    await settle();
+    await settle();
+    currentOverlay().emit("dragend", { point: { lng: 117, lat: 40 } });
+    await settle();
+    expect(warningsWithCode(DEPRECATED_EVENT_ALIAS_CODE)).toEqual([]);
+    wrapper.unmount();
+    await settle();
+  });
+
+  it.each(["onDrag-end", "onDragEnd"])("真的绑了旧名字（%s）：各发一次且只告警一次", async (key) => {
+    const legacy: unknown[] = [];
+    const wrapper = mount(markerHost({ [key]: (event: unknown) => legacy.push(event) }), {
+      attachTo: harness.container(),
+    });
+    await settle();
+    await settle();
+    const marker = currentOverlay();
+    const child = wrapper.findComponent(BMarker);
+
+    marker.emit("dragend", { point: { lng: 117, lat: 40 } });
+    await settle();
+    marker.emit("dragend", { point: { lng: 118, lat: 41 } });
+    await settle();
+
+    expect(legacy, "旧名字的监听器必须收到载荷").toHaveLength(2);
+    expect(child.emitted("dragend")).toHaveLength(2);
+    expect(warningsWithCode(DEPRECATED_EVENT_ALIAS_CODE)).toHaveLength(1);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("[评审 3] 旧名字监听器");
+  });
+});
+
+describe("[评审 4] remove 事件的可观察时机（文档与用例一起对齐）", () => {
+  it("外部摘除会到达组件；切隐藏不会（hide 不派发 remove）", async () => {
+    const removed: unknown[] = [];
+    const visible = ref(true);
+    const Host = defineComponent({
+      components: { BMap, BBezierCurve },
+      setup() {
+        return () =>
+          h(BMap, { provider: harness.provider() }, () => [
+            h(BBezierCurve, {
+              path: [
+                { lng: 116.4, lat: 39.9 },
+                { lng: 116.6, lat: 40.1 },
+              ],
+              controlPoints: [
+                [
+                  { lng: 116.45, lat: 40.05 },
+                  { lng: 116.55, lat: 39.95 },
+                ],
+              ],
+              visible: visible.value,
+              onRemove: (event: unknown) => removed.push(event),
+            } as never),
+          ]);
+      },
+    });
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    await settle();
+
+    // 1) 外部摘除（map.removeOverlay / clearOverlays）→ 组件收到
+    currentOverlay().emit("remove");
+    await settle();
+    expect(removed).toHaveLength(1);
+
+    // 2) 切隐藏：走 show/hide，SDK 不派发 remove ⇒ 组件也不会凭空收到
+    visible.value = false;
+    await settle();
+    expect(removed, "隐藏不等于被移除").toHaveLength(1);
+    expect(harness.attached("overlay"), "隐藏不摘挂载").toBe(1);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("[评审 4] remove 时机");
   });
 });
 

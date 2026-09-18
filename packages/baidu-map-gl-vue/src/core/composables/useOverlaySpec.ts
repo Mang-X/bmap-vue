@@ -37,8 +37,16 @@
  * 3. **卸载路径上的事件不再回放**：实例被摘除后，SDK 在解绑窗口里派发的 `remove` 之类事件
  *    不再冒泡给调用方（`removeOverlay` 恰好发生在监听解绑之前）。
  */
-import { computed, onScopeDispose, provide, readonly, shallowRef, watch } from "vue";
-import type { ShallowRef } from "vue";
+import {
+  computed,
+  getCurrentInstance,
+  onScopeDispose,
+  provide,
+  readonly,
+  shallowRef,
+  watch,
+} from "vue";
+import type { ComponentInternalInstance, ShallowRef } from "vue";
 import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
 import { useRequiredMapContext } from "../context/inject";
 import { targetContextKey, type TargetContext, type TargetKind } from "../context/target";
@@ -166,6 +174,29 @@ function resolveOverlayEvents<Props extends object, Resource>(
   });
 }
 
+/**
+ * 父级是否给这个事件名绑了监听器（照 Vue `emit` 的查找规则：`on<Name>` 与 camelCase 两种拼写）。
+ *
+ * 判据只能从**当前组件的 vnode props** 读：Vue 的 `emit()` 本身就是在
+ * `instance.vnode.props[toHandlerKey(name)]` 上找监听器（`@drag-end` 编译成 `onDrag-end`，
+ * 而手写 `h()` 常见的是 `onDragEnd` ⇒ 两种都要认）。刻意**每轮派发现读**而不是在 setup 里快照：
+ * 父级可以在运行期换掉监听器（动态 `v-if` / 换 handler 对象），快照会让告警判据过期。
+ *
+ * 读不到实例（比如在 setup 之外调用内核）时返回 `false`——宁可少提示，也不要误报。
+ */
+function hasListenerFor(instance: ComponentInternalInstance | null, name: string): boolean {
+  // 实例必须在 **setup 期**捕获：`getCurrentInstance()` 只在 setup / render 的同步栈里有值，
+  // 而这里是在 SDK 的事件回调里被调用的（那时它已经是 null，直接调用会永远返回 false）。
+  const props = instance?.vnode.props as Record<string, unknown> | null | undefined;
+  if (!props) return false;
+  const camel = name.replace(/-([a-zA-Z])/g, (_, char: string) => char.toUpperCase());
+  const handlerKeys = [
+    `on${name.charAt(0).toUpperCase()}${name.slice(1)}`,
+    `on${camel.charAt(0).toUpperCase()}${camel.slice(1)}`,
+  ];
+  return handlerKeys.some((key) => typeof props[key] === "function");
+}
+
 export function useOverlaySpec<Props extends object, Resource>(
   props: Props,
   spec: OverlaySpec<Props, Resource>,
@@ -175,6 +206,8 @@ export function useOverlaySpec<Props extends object, Resource>(
   const overlayRegistry = mapContext.overlays;
   const emit = options.emit;
   const kind: OverlayKind | undefined = spec.kind;
+  /** 本组件实例（父级监听器的读取依据，见 `hasListenerFor`）；非组件上下文里为 null。 */
+  const ownerInstance = getCurrentInstance();
 
   /** 集中弃用层：prop 别名（读取层）与事件别名（派发层）共用这一份「同实例一次」的去重。 */
   const deprecation = createDeprecationWarner(spec.type);
@@ -436,7 +469,10 @@ export function useOverlaySpec<Props extends object, Resource>(
     if (event.handle) event.handle(payload);
     else if (event.emit) emit?.(event.emit, payload);
     for (const alias of eventAliasesOf(kind, event.vue)) {
-      deprecation.warn(describeDeprecation(alias));
+      // 兼容派发照旧（没人监听的 `emit` 是 no-op），但**告警只在父级真的绑了旧名字时发**
+      // （PR #103 评审 3）：只监听规范名的应用升级后不该收到迁移提示——「SDK 派发过某个事件」
+      // 与「调用方用了弃用名」是两件事。
+      if (hasListenerFor(ownerInstance, alias.alias)) deprecation.warn(describeDeprecation(alias));
       emit?.(alias.alias, payload);
     }
   }
@@ -458,21 +494,12 @@ export function useOverlaySpec<Props extends object, Resource>(
         createdPosition = positionField ? (readPosition() ?? null) : null;
         return spec.create(context, current);
       },
-      mount: ({ context, resource, props: current, scope }) => {
-        // 初始可见性：`visible: false` 的实例**不挂到地图**（不是「先挂再等 watcher」）。
-        // 只有「尚未有任何实例挂上」时才补挂：竞态分支里两个实例可能先后走到这里，
-        // 后一个不该把前一个的挂载记录顶掉。
-        if (!attachedResource && (!visibilityField || readProp(visibilityField) !== false)) {
-          addToMap(context, resource);
-        }
-        // 组件侧副作用（`afterMount`）：与迁移前 `addToMap` 里那段 `if (p.autoCenter) …` 同位。
-        // 刻意**不**看可见性：`autoCenter` 描述的是地图视野，不是覆盖物是否显示。
-        spec.afterMount?.(context, resource, current);
-        // 同步模型记的是**实例真实所在的位置**（create 那一刻的值），不是当前的 props——
-        // 两者在异步 create 窗口里会分叉，收敛交给 `bind` 的 reconciliation。
-        if (positionField) {
-          syncedPosition = createdPosition ? clonePoint(createdPosition) : null;
-        }
+      mount: ({ context, resource, props: current, scope, stale }) => {
+        // **先登记，再做副作用**（PR #103 评审 1b）：`addToMap` 与 `afterMount` 都可能失败
+        // （SDK 抛错 / 组件侧副作用抛错），而唯一的回滚入口是 registration 的 `remove`。
+        // 登记在前 ⇒ 任一失败都能经 `registration.dispose()` 把已 add 的实例摘掉 + 摘记录；
+        // 登记在后 ⇒ 失败路径只剩「实例留在图上、注册表不知道」这一种结局（已用用例钉住）。
+        //
         // registration 与**实例 scope** 绑定：scope 释放（重建 / 卸载）时记录自动摘除，
         // Registry 只保留当前存活实例，不保留历史 disposer 闭包。
         const registration = overlayRegistry.registerResource({
@@ -481,6 +508,35 @@ export function useOverlaySpec<Props extends object, Resource>(
           scope,
           remove: (target) => removeFromMap(context, target),
         });
+
+        // 同步模型记的是**实例真实所在的位置**（create 那一刻的值），不是当前的 props——
+        // 两者在异步 create 窗口里会分叉，收敛交给 `bind` 的 reconciliation。
+        if (positionField) {
+          syncedPosition = createdPosition ? clonePoint(createdPosition) : null;
+        }
+
+        try {
+          // 初始可见性：`visible: false` 的实例**不挂到地图**（不是「先挂再等 watcher」）。
+          // 只有「尚未有任何实例挂上」时才补挂：竞态分支里两个实例可能先后走到这里，
+          // 后一个不该把前一个的挂载记录顶掉。
+          if (!attachedResource && (!visibilityField || readProp(visibilityField) !== false)) {
+            addToMap(context, resource);
+          }
+          // 组件侧副作用（`afterMount`）：与迁移前 `addToMap` 里那段 `if (p.autoCenter) …` 同位。
+          // 刻意**不**看可见性（`autoCenter` 描述的是地图视野）；但**过期一代不执行**——那条路径
+          // 上的 mount 只为了拿 registration 再 dispose，业务副作用既无意义也回滚不了（评审 1a）。
+          if (!stale) spec.afterMount?.(context, resource, current);
+        } catch (error) {
+          // 回滚：把已经 add 的实例摘掉、把记录摘掉（`dispose()` 幂等，registration 已摘除时是 no-op），
+          // 然后**原样抛出**——调用方（`useSdkResource`）据此把状态标成 error，原因不被吞掉。
+          try {
+            registration.dispose();
+          } catch {
+            /* 回滚失败不覆盖原错误：instance scope 的释放仍会走到（`useSdkResource` 的 catch） */
+          }
+          throw error;
+        }
+
         return {
           id: registration.id,
           type: registration.type,
