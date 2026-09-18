@@ -1,7 +1,7 @@
 /**
  * LayerRegistry —— 每张地图一份的图层账本（M7-LAYERS / issue #40）
  *
- * 记四件事：**所有权（哪个实例）**、**type（`LayerKind`）**、**handle**、**dispose**。
+ * 记四件事：**所有权（哪个实例）**、**type**、**handle**、**dispose**。
  * 与 `OverlayRegistry` 的分工在最后一条上，值得写清楚：
  *
  * `OverlayRegistry.dispose()` 只释放 owner scope（记录随 owner 消失），**不摘 SDK 资源**；
@@ -23,24 +23,44 @@
  * 记录本身是**幂等**的：`LayerRecord.dispose()` 可以被组件卸载、`replace()` 重建、Map 卸载
  * 三条路径中的任意一条触发，重复调用与交叉调用都只生效一次（与 `ResourceRegistration` 同形，
  * 便于直接交给 `useSdkResource` 的 `mount()` 返回值）。
+ *
+ * ## 为什么账本也能收留**原生数据图层**（M6-MARKER-POINTCOLLECTION / issue #34）
+ *
+ * `BPointCollection` 用的是另一个 Facet（`NativeLayerDriver`，句柄品牌 `native-layer:*`），
+ * 但它与底图图层有一条完全相同的约束：**必须在 `map.destroy()` 之前被摘掉**。而
+ * `MapRuntime` 的释放顺序是「child registries（含本 Registry）→ `map.destroy()` → 根
+ * `resources`」，根 scope 太晚、组件自持的 scope 只覆盖「组件卸载」这一条路径
+ * （KeepAlive 停用 / 上下文 dispose 都到不了）。因此把 `kind` 放宽成两个 Facet 的并集，
+ * 让原生数据图层走**同一条**「destroy 之前摘掉」的路，而不是新造一个只有一个月消费者的注册表。
+ *
+ * 两个 Facet 的 kind 名不重叠（底图：district / tile / traffic / geojson / dom / xyz / wms /
+ * wmts / raster / panorama-coverage；原生：point / cluster / point-icon / point-shape / line /
+ * fill / heatmap / track-line），`kind` 只作诊断标签，不参与所有权判定。
  */
 import { logger } from "../logger";
 import type { LayerHandle } from "../../driver/types/handles";
 import type { LayerKind } from "../../driver/types/layers";
+import type { NativeLayerHandle, NativeLayerKind } from "../../driver/types/native-layers";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
+
+/** 账本里可以登记的图层种类（两个 Facet 的并集，见文件头）。 */
+export type LayerLedgerKind = LayerKind | NativeLayerKind;
+
+/** 账本里可以登记的句柄（两个 Facet 的并集，见文件头）。 */
+export type LayerLedgerHandle = LayerHandle | NativeLayerHandle;
 
 export interface LayerRecord {
   readonly id: symbol;
   /** 领域种类（账本的 `type` 维度）。 */
-  readonly kind: LayerKind;
-  readonly handle: LayerHandle;
+  readonly kind: LayerLedgerKind;
+  readonly handle: LayerLedgerHandle;
   readonly disposed: boolean;
   dispose(): void;
 }
 
 export interface LayerRegistryInput {
-  readonly kind: LayerKind;
-  readonly handle: LayerHandle;
+  readonly kind: LayerLedgerKind;
+  readonly handle: LayerLedgerHandle;
   /** 实例 child scope：业务监听器 / watcher / timer 都挂在这里。 */
   readonly scope: ResourceScope;
   /** 摘除 SDK 侧资源（`map.removeLayer`）。由调用方闭包捕获 target；重复调用必须安全。 */
@@ -66,7 +86,7 @@ export interface LayerRegistry {
    */
   readonly size: number;
   /** 当前登记的种类（按登记顺序）：诊断与断言用。 */
-  kinds(): LayerKind[];
+  kinds(): LayerLedgerKind[];
 }
 
 export function createLayerRegistry(): LayerRegistry {

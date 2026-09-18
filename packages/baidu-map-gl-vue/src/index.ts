@@ -39,6 +39,11 @@ export type {
   BInfoWindowProps,
   BCircleProps,
   BPolylineProps,
+  BMapDataProps,
+  BMarkerListProps,
+  BMarkerClusterProps,
+  BPointCollectionProps,
+  BMapPointPick,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapRuntimeStatus, MapStatus } from "./core/context/types";

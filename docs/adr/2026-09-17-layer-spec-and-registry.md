@@ -53,6 +53,9 @@ issue #40 要求「统一 LayerSpec、LayerRegistry 和实例 child scope」，�
 注意：`opacity` / `minZoom` / `maxZoom` 是**必须重建**的那一类（官方这批图层没有对应 setter），
 不要误读成「可就地更新」。
 
+> 指针（2026-09-18 / #34）：账本后来也收留了**原生数据图层**（`kind` 放宽成两个 Facet 的并集，
+> 释放顺序与本决策**完全一致**）。理由见 ADR `2026-09-18-data-layer-manager-and-point-collection` 决策 7。
+
 ### 2. `LayerRegistry` 随 Map 释放，且 `disposeAll()` 先摘 SDK 资源
 
 新增 `core/layers/LayerRegistry.ts`，并把 `MapRuntime.layers` 从 `OverlayRegistry` 换成它。

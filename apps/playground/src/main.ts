@@ -25,7 +25,7 @@ import {
   BContextMenu,
   BBezierCurve,
   BMapMask,
-  BPointLayer,
+  BPointCollection,
   BZoom,
   BScale,
   BCityList,
@@ -99,7 +99,7 @@ function bulkScene(): () => unknown {
   const pts = shallowRef(demoPoints())
   return () =>
     h(BMap, baseMapProps(), () => [
-      h(BPointLayer, {
+      h(BPointCollection, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),

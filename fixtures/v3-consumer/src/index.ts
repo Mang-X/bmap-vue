@@ -1,5 +1,5 @@
 // v3 tarball 消费 smoke:按需导入 + app.use 全量安装 + 类型解析
-import { shallowRef } from 'vue'
+import { h, shallowRef } from 'vue'
 import {
   createBMapPlugin,
   BMap,
@@ -438,3 +438,70 @@ const advancedProbe = createHandle('probe', { ok: true })
 const advancedProbeRaw: { ok: boolean } = unwrapRaw(advancedProbe)
 const advancedProbeBrand: string = advancedProbe[HANDLE_BRAND]
 export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }
+
+
+// 数据组件（M6 / #34）的**消费方编译 smoke**。
+//
+// 分工说明（实测过一次，值得写下来）：泛型在**模板**里完整保留，但在 `h()` 编程式构造里
+// **推不出** `Item` —— vue-tsc 为泛型 SFC 生成的 props 是
+// `NonNullable<Awaited<typeof __VLS_setup>>["props"]`，TS 无法从这种形状反推类型参数
+// （带/不带 `withDefaults` 都一样，已实测）。所以：
+//
+// - **推断**（`Item` 不退化成 `unknown` / `any`）由 `src/data-components.vue` 的模板用法钉住；
+// - **公开 props 类型本身**在这里钉住（可具名使用 + 约束真的在起作用）。
+import type { BMarkerListProps, BPointCollectionProps } from 'baidu-map-gl-vue'
+
+interface Station {
+  id: string
+  lng: number
+  lat: number
+  name?: string
+}
+
+const stations: Station[] = [
+  { id: 'a', lng: 116.404, lat: 39.915, name: '百度大厦' },
+  { id: 'b', lng: 116.41, lat: 39.92 },
+]
+
+// 泛型 props 类型可直接具名使用，且 `Item` 参与约束（不是 `any`）。
+const listProps: BMarkerListProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+}
+const badListProps: BMarkerListProps<Station> = {
+  // @ts-expect-error `Item` 是 Station：缺 id / 坐标的项不能被接受
+  data: [{ name: '缺字段' }],
+  itemKey: 'id',
+  getPosition: () => null,
+}
+// @ts-expect-error `itemKey` 必须是 `Item` 的键（`'nope'` 不存在）
+const badItemKey: BMarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
+
+// `BPointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
+const collectionProps: BPointCollectionProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+  shape: 7,
+}
+// @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
+const badShape: BPointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
+export const dataComponentPropsSmoke = { listProps, badListProps, badItemKey, collectionProps, badShape }
+
+// `h()` 编程式构造**推不出** `Item` —— 这条限制用双向断言钉住，而不是写在文档里。
+//
+// 依据（2026-09-18 实测）：vue-tsc 为泛型 SFC 生成的 props 是
+// `NonNullable<Awaited<typeof __VLS_setup>>["props"]`，TS 无法从这种形状反推类型参数
+// （带 / 不带 `withDefaults` 都一样）。于是 `h()` 调用里 `itemKey` 会落成
+// `(item: unknown) => PropertyKey`，传字符串属性名直接编译失败。
+//
+// 模板用法**不受影响**（见 `src/data-components.vue`）。如果哪天上游修好了推断，下面这条指令会变成
+// 「未使用的 @ts-expect-error」而报错 —— 那时请更新这条断言与 `docs/zh-CN/components/data.md`。
+// @ts-expect-error `h()` 里推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
+export const programmaticGenericLimit = h(BMarkerList, {
+  data: stations,
+  itemKey: 'id',
+  // 参数显式标注：本条的**唯一**预期错误是 `itemKey` 那处（`Item` 没推出来）
+  getPosition: (item: { lng: number; lat: number }) => ({ lng: item.lng, lat: item.lat }),
+})

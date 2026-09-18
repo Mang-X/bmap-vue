@@ -86,6 +86,19 @@ export interface FakeV4Harness {
   visibleControls(): number;
   /** 最后一张地图上挂载的覆盖物位置（不含图层），按挂载顺序；无位置记为 `null`。 */
   overlayPositions(): Array<{ lng: number; lat: number } | null>;
+  /**
+   * 最后一张地图上当前**可见**的覆盖物数（`Overlay#show/hide` 的读数）。
+   *
+   * 与「挂载了几个」是两个口径：数据组件的 `visible=false` 用 `hide()` 表达
+   * （不摘掉资源、不丢数据），只数挂载数会让「藏起来了」与「还在图上」混成一件事。
+   */
+  visibleOverlays(): number;
+  /**
+   * 模拟 SDK 在某个覆盖物上派发 `click`（用户点了那个 Marker）。
+   *
+   * 索引落在**已创建**的覆盖物账本上（负索引语义同 `subscribedEventsOf`：`-1` = 最后一个）。
+   */
+  clickOverlay(index?: number): void;
   /** 最后一张地图上当前打开的气泡数。 */
   openInfoWindows(): number;
   /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
@@ -158,6 +171,44 @@ export interface FakeV4Harness {
   layerOptions(index?: number): Record<string, unknown>;
   /** 第 `index` 个创建过的图层当前是否还挂在地图上（重建后旧实例必须为 `false`）。 */
   layerAttached(index?: number): boolean;
+
+  /* ------------------------------- 原生批量图层读数（M6-MARKER-POINTCOLLECTION / #34） */
+
+  /**
+   * 本用例内**累计创建**过的原生批量图层数（官方 `PointShapeLayer` / `PointIconLayer` …）。
+   *
+   * 「批量点组件不是逐点 Marker」的领域读数就是它 + `attached('overlay')`：
+   * 一个 `BPointCollection` 无论多少数据都只创建 **1** 个图层、**0** 个覆盖物。
+   */
+  nativeLayersCreated(): number;
+  /** 第 `index` 个原生图层收到的 **SDK 调用日记**（官方方法名，按调用顺序）。 */
+  nativeLayerCalls(index?: number): string[];
+  /** 第 `index` 个原生图层的**构造选项**（`idKey` / `enablePicked` 等构造期项）。 */
+  nativeLayerOptions(index?: number): Record<string, unknown>;
+  /** 第 `index` 个原生图层最后一次 `setData()` 收到的数据（GeoJSON `FeatureCollection`）。 */
+  nativeLayerData(index?: number): unknown;
+  /** 第 `index` 个原生图层当前是否还挂在地图上。 */
+  nativeLayerAttached(index?: number): boolean;
+  /** 第 `index` 个原生图层当前的显隐读数（`setVisible` 是否真的落地）。 */
+  nativeLayerVisible(index?: number): boolean;
+  /**
+   * 模拟用户在原生批量图层上点了一下（SDK 侧派发 `click`）。
+   *
+   * 刻意**照着官方派发的形状**造载荷：`{ value: { dataIndex, dataItem: { properties } }, latLng, pixel }`。
+   * `properties` 缺省时从该图层自己收到的 `setData()` 数据里按 `dataIndex` 取出来
+   * ——这正是 SDK 的行为（回传命中要素的 properties），因此用例写「点第 2 个要素」就够，
+   * 不必自己拼 properties。`dataIndex = -1` 表示**未命中**（官方未命中也派发事件，
+   * `value` 是 `{ dataIndex: -1, dataItem: undefined }`）。
+   */
+  simulateNativePick(
+    payload: {
+      dataIndex: number;
+      properties?: Record<string, unknown>;
+      latLng?: { lng: number; lat: number };
+      pixel?: { x: number; y: number };
+    },
+    index?: number,
+  ): void;
 }
 
 function sizedContainer(): HTMLElement {
@@ -290,6 +341,22 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
     }
     return layer;
   };
+  /**
+   * 取第 `index` 个**创建过**的原生批量图层（`-1` = 最后一个）。
+   *
+   * 与 `layerAt` 同一个索引口径（负索引跨用例安全），但读的是**另一个**实例账本：
+   * 原生图层（`FakeV4PointShapeLayer` 一族）与底图图层（`FakeV4TileLayer` 一族）在 Fake 里
+   * 分属两个构造工厂，混用一个账本会让「BPointCollection 到底建了几个」读成两个组件的总数。
+   */
+  const nativeLayerAt = (index: number) => {
+    const layers = fake.createdNativeLayers;
+    const resolved = index < 0 ? layers.length + index : index;
+    const layer = layers[resolved];
+    if (!layer) {
+      throw new Error(`fake-v4 harness：没有第 ${index} 个原生图层（已创建 ${layers.length} 个）`);
+    }
+    return layer;
+  };
   /** 挂起中的 `deferredProvider().load()` 放行函数（放行一次即清空）。 */
   const pendingLoads: Array<() => void> = [];
   return {
@@ -343,6 +410,17 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         return map.layers.length;
       },
       overlayPositions: () => toPositions(lastMap().overlays),
+      visibleOverlays: () =>
+        lastMap().overlays.filter((overlay) => (overlay as { visible?: boolean }).visible !== false).length,
+      clickOverlay: (index = -1) => {
+        const overlays = fake.createdOverlays as Array<{ emit?: (type: string) => void }>;
+        const resolved = index < 0 ? overlays.length + index : index;
+        const overlay = overlays[resolved];
+        if (!overlay?.emit) {
+          throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
+        }
+        overlay.emit("click");
+      },
       visibleControls: () => lastMap().controls.filter((control) => control.isVisible()).length,
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
@@ -374,6 +452,32 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       layerCalls: (index = -1) => [...layerAt(index).callLog],
       layerOptions: (index = -1) => ({ ...layerAt(index).options }),
       layerAttached: (index = -1) => layerAt(index).attachedMap !== null,
+      nativeLayersCreated: () => fake.createdNativeLayers.length,
+      nativeLayerCalls: (index = -1) => [...nativeLayerAt(index).callLog],
+      nativeLayerOptions: (index = -1) => ({ ...nativeLayerAt(index).options }),
+      nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
+      nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
+      nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
+      simulateNativePick: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        const properties =
+          payload.properties ??
+          featurePropertiesAt((layer as { data?: unknown }).data, payload.dataIndex);
+        layer.emit("click", {
+          value: payload.dataIndex === -1 ? { dataIndex: -1, dataItem: undefined } : { dataIndex: payload.dataIndex, dataItem: { properties } },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
     },
   };
+}
+
+/** 从 `setData()` 收到的 GeoJSON 里取第 `index` 个要素的 properties（SDK 回传形状）。 */
+function featurePropertiesAt(data: unknown, index: number): Record<string, unknown> | undefined {
+  if (!data || typeof data !== "object" || index < 0) return undefined;
+  const features = (data as { features?: unknown }).features;
+  if (!Array.isArray(features)) return undefined;
+  const feature = features[index] as { properties?: Record<string, unknown> } | undefined;
+  return feature?.properties;
 }

@@ -144,8 +144,25 @@ export {
   useRequiredClientContext,
 } from "./context/client";
 export type { BMapClientContext, ClientStatus, CreateClientContextOptions } from "./context/client";
-export { diffData, getItemKey, shouldFullReplace } from "./data/diffData";
+export { diffData, getItemKey } from "./data/diffData";
 export type { DataDiff, ItemKeyFn } from "./data/diffData";
+export { scanValidItems, isUsableItemKey, itemKeyReader } from "./data/itemScan";
+export type { ItemProblem, ItemProblemKind, ItemScanOptions, ScannedItem } from "./data/itemScan";
+export { createProblemReporter } from "./data/problems";
+export type { DataProblem, DataProblemKind, ProblemReporter } from "./data/problems";
+export { readValidPoint } from "./data/points";
+export type { PointProblemReason, PointReadResult } from "./data/points";
+export { createItemIndex } from "./data/itemIndex";
+export type { IndexedItem, ItemIndex } from "./data/itemIndex";
+export { adaptPoints, resolveIdField, GENERATED_ID_FIELD } from "./data/geojsonAdapter";
+export type {
+  AdaptedPoints,
+  GeoJsonAdaptOptions,
+  GeoJsonFeatureCollection,
+  GeoJsonPointFeature,
+  GeoJsonProblem,
+  GeoJsonProblemKind,
+} from "./data/geojsonAdapter";
 export { gridCluster } from "./data/gridCluster";
 export type { Cluster, ClusterOptions } from "./data/gridCluster";
 export {
@@ -167,7 +184,7 @@ export {
 } from "./icons/markerIcon";
 export type { BuiltinMarkerIconName, MarkerIconInputLike } from "./icons/markerIcon";
 export { DataLayerManager } from "./data/DataLayerManager";
-export type { DataLayerHost, DataLayerOptions } from "./data/DataLayerManager";
+export type { DataLayerHost, DataLayerManagerOptions, DataLayerSync } from "./data/DataLayerManager";
 export { createOverlayRegistry } from "./overlays/OverlayRegistry";
 export type {
   OverlayRecord,
