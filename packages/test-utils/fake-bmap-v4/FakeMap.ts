@@ -270,16 +270,8 @@ export class FakeV4Map extends FakeV4EventTarget {
   private pendingInfoWindow: { infoWnd: FakeV4InfoWindow; point: FakeV4Point } | null = null
 
   /**
-   * 让 `closeInfoWindow()` 的 **`close` 事件**延迟派发 —— **关闭副作用（地图状态）立即发生**。
-   *
-   * 它模拟的是「关闭**已经生效**，只是那条 `close` 事件晚到」，也就是**乱序回包**
-   * （本库状态机明确声明支持「重开确认先到、旧 `close` 回包后到」，第一轮评审 P1 的核心）。
-   *
-   * ⚠️ **不是**「关闭命令晚执行」—— 这两种建模在组件层是**可观测地不同**的：
-   * 前者在重开之后地图上仍然开着重开的气泡，后者地图已经被关成空。
-   * 第一版写成了后者（`flush` 时才真正执行关闭），于是回归测试在
-   * 「地图已空、模型却仍是开、账本仍指着它」的三方分叉下**依然绿**（外部评审第八轮 P1）。
-   * 因此这里只暂存**事件**，并把「当时被关掉的那个实例」记下来。
+   * 让 `closeInfoWindow()` 的 `close` 事件延迟派发（关闭副作用立即发生）。
+   * 只暂存事件，并把当时被关掉的那个实例记下来供 `flushInfoWindowCloseEvent()` 放行。
    */
   deferInfoWindowCloseEvent = false
   /** 被暂存起来、等着晚一点派发 `close` 的那个实例（`deferInfoWindowCloseEvent` 打开时才有值）。 */
@@ -315,12 +307,7 @@ export class FakeV4Map extends FakeV4EventTarget {
     return this.pendingInfoWindow !== null
   }
 
-  /**
-   * 放行一条被推迟的 `close` 事件。
-   *
-   * **只派发事件，不再改地图状态** —— 它模拟的是「那条旧关闭的回包终于到了」，
-   * 而地图上在这之后可能已经重新打开了气泡。把地图状态也一起改掉就不是这个意思了。
-   */
+  /** 放行一条被推迟的 `close` 事件（只派发事件，不改地图状态）。 */
   flushInfoWindowCloseEvent(): boolean {
     const pending = this.pendingInfoWindowClose
     this.pendingInfoWindowClose = null
@@ -382,19 +369,8 @@ export class FakeV4Map extends FakeV4EventTarget {
   }
 
   /**
-   * 模拟**用户点击气泡的关闭按钮**（官方 `clickclose` 的真实来源）。
-   *
-   * 真实 4.0 实测（真实 AK · headless Chromium）的形状如下，`shape` 直接照着传即可：
-   *
-   * | 同一个实例被打开过几次 | 观测到的序列 |
-   * | --- | --- |
-   * | 1 次 | `close` + `clickclose`（顺序不固定：5 轮里 4 次 `close` 在前） |
-   * | 2 次 | `clickclose` → `close` → `clickclose` |
-   * | 3 次 | `clickclose` → `close` → `clickclose` → `clickclose` |
-   *
-   * 即：`close` **始终恰好一条**，`clickclose` 的条数**随打开次数累积**（SDK 每次打开/重绘都会
-   * 重新绑定关闭按钮的处理器）。整组事件在**同一个 task 内**派发完毕。
-   * 副作用（地图上的当前气泡被清掉）**立即**发生，与真实行为一致。
+   * 模拟用户点击气泡的关闭按钮：立即清掉当前气泡，并按 `shape` 派发事件序列。
+   * 真实 4.0 的形状是「`close` 恰好一条 + `clickclose` 随打开次数累积」，顺序不固定。
    */
   clickInfoWindowCloseButton(
     options: { shape?: Array<"close" | "clickclose"> } = {},

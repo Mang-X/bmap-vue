@@ -1,20 +1,8 @@
 /**
- * M5-INFOWINDOW（issue #32）：detached host、状态机、归属与残留
+ * M5-INFOWINDOW（issue #32）组件级用例：宿主 / 收敛 / 互斥 / 尺寸重绘 / 重建释放 / 兼容别名。
  *
- * 沿用 #72 的两条用例（地图级 open/close + SDK close 回写），并按 issue #32 的「测试与验收」
- * 逐条补齐。每个 `describe` 对应 issue 里的一条验收口径，读数尽量选**能直接改变结论**的那一个：
- *
- * | 验收口径 | 读数 |
- * | --- | --- |
- * | prop/SDK/map-click 的竞态无重复开关回环 | `update:open` 的**条数**（重复回写会多一条） |
- * | 多窗口互斥 / 多地图隔离 / 迟到 callback | 每张地图 `infoWindow` 的身份 + 各自 `update:open` |
- * | 内容可见且 Vue slot 更新正确 | 内容节点在 SDK 的容器里、且文本随 slot 变化 |
- * | 尺寸变化每帧最多一次 redraw | `FakeV4InfoWindow.redrawCalls`（配合手动帧队列） |
- * | 卸载后 host / Observer / listener 无残留 | `[data-bmap-infowindow-content]` 是否仍连接、`browserShims().diagnostics()`、`leaks.*` |
- * | 重复挂载与实例重建 | `rebuild` / `destroy` 事件的代次 + 实例账本条数 |
- *
- * 状态机自身的竞态在 `packages/baidu-map-gl-vue/src/core/overlays/infoWindowMachine.test.ts` 里
- * 用纯函数覆盖；这里只验证「组件把事件正确地喂给了它」。
+ * 每个 `describe` 对应 issue 的一条验收口径，读数选能直接改变结论的那一个（地图上的当前气泡身份、
+ * 公开事件的条数、`redrawCalls`、`leaks.*`）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -447,9 +435,8 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     harness.assertIdle('迟到的移动 open')
   })
 
-  it('用户点关闭按钮（clickclose）的四种实测形状：原样转发 + 回写一次 update:open(false)', async () => {
-    // 真实 4.0 实测（真实 AK）：`close` 恰好一条，`clickclose` 一条或多条（条数随同一实例被打开过几次
-    // 累积），顺序不固定。本库对它们**只做两件事**：原样转发、按用户意图回写一次。
+  it('用户点关闭按钮（clickclose）的四组事件形状：原样转发 + 回写一次 update:open(false)', async () => {
+    // 四组形状模拟真实 4.0 的不同打开次数：`close` 恰好一条、`clickclose` 随打开次数累积，顺序不固定
     const shapes: Array<{ tag: string; shape: Array<'close' | 'clickclose'> }> = [
       { tag: '1 次打开 · close 在前', shape: ['close', 'clickclose'] },
       { tag: '1 次打开 · clickclose 在前', shape: ['clickclose', 'close'] },

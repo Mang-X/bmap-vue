@@ -153,15 +153,7 @@ export function infoWindowOpenIntentUsesAlias(
   return props.show !== undefined;
 }
 
-/**
- * 位置指纹：**没有可用位置时返回 `null`**（而不是 `""` 之类的哨兵）。
- *
- * 用值而不是对象引用判等（父级常传内联字面量）；「没有位置」与「某个具体位置」必须可区分 ——
- * 与 `core/runtime/elementSize.ts` 的既有口径一致（那里也是「读不到返回 `null`，不等于 0」）。
- *
- * 它是组件收敛的**前置判据**：`open` 想开但没有可用位置时，本库不产生任何命令，
- * 只按边沿报一次 `BMAP_INVALID_ARGUMENT`（见 `useInfoWindow` 的 `reconcile()`）。
- */
+/** 位置指纹：没有可用位置时返回 `null`（按值判等，父级传内联字面量也认）。 */
 export function positionKeyOf(point: Point | undefined | null): string | null {
   if (!point || !Number.isFinite(point.lng) || !Number.isFinite(point.lat)) return null;
   return `${point.lng},${point.lat}`;

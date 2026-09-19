@@ -137,11 +137,8 @@ export interface BMarkerProps {
 }
 
 /**
- * BInfoWindow 的公开属性。
- *
- * 字段与逐字段语义的**单一声明点**在 `core/overlays/InfoWindowSpec.ts`（那里还带着
- * 「每个属性怎么落地」的策略表，由用例与 Driver 描述符交叉锁定）。这里只把公开类型名
- * 暴露给调用方，避免出现第二份字段清单。
+ * BInfoWindow 的公开属性。字段与逐字段语义的声明点在 `core/overlays/InfoWindowSpec.ts`
+ * （含「每个属性怎么落地」的策略表），这里只暴露公开类型名。
  */
 export interface BInfoWindowProps extends InfoWindowProps {
   // 字段全部来自 `InfoWindowProps`（单一事实源，见上面的注释）。

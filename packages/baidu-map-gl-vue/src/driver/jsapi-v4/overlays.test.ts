@@ -724,12 +724,12 @@ describe("PR #61 评审反例", () => {
 
     expect(
       ctx.rawMap.callLog.filter((c) => c === "closeInfoWindow").length,
-      "地图上开着的就是 A ⇒ 这条 close 必须真的发出去（否则气泡留在图上、账也没人还）",
+      "当前气泡就是 A ⇒ 这条 close 必须真的发给地图",
     ).toBe(closesBefore + 1);
     expect(ctx.rawMap.infoWindow).toBeNull();
   });
 
-  it("[迟到接管] 当前气泡是别人时仍然不碰地图（反向：别把收紧改松）", () => {
+  it("[迟到接管] 当前气泡是别人时不碰地图", () => {
     const a = ctx.overlays.createInfoWindow(document.createElement("div"));
     const b = ctx.overlays.createInfoWindow(document.createElement("div"));
 

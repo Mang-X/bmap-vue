@@ -693,17 +693,7 @@ export interface OverlayDriver {
   openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
   closeInfoWindow(overlay: InfoWindowHandle): void;
   redrawInfoWindow(overlay: InfoWindowHandle): void;
-  /**
-   * 读**当前**气泡的**身份**：地图上开着的是不是这一个。
-   *
-   * 官方 4.0 提供公开读回入口 `Map#getInfoWindow()`（返回那个实例或 `null`），本方法把它与本库的
-   * handle **做身份比对**后返回布尔值 —— 「是不是我」这个问题需要 handle 身份，而 handle 是本库的
-   * 私有包装（`handle.raw` 才是 SDK 实例），调用方不该自己去扒。
-   *
-   * 用途：ownership/reconcile 模型下组件要能回答「我期望的状态」与「地图上实际的状态」是否一致
-   * （见 ADR 的 ownership 契约）。注意官方这个读回是**异步生效**的：`openInfoWindow()` 之后同一 tick
-   * 里它仍是 `null`，所以它只适合当**收敛触发**，不适合当同步断言。
-   */
+  /** 读当前气泡是不是这一个（`Map#getInfoWindow()` + handle 身份比对）。 */
   isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
 
   /** 构建 Marker Icon（供 useBMapMarkerIcons 等业务复用） */

@@ -1305,13 +1305,8 @@ const CHECKS: Record<string, CheckImpl> = {
   },
 
   /**
-   * 直接把「点关闭按钮」这对事件的**形状**变成门禁（M5-INFOWINDOW / #32 第九轮评审）。
-   *
-   * 为什么需要它：状态机对 `clickclose` 的处置依赖「一次点击 = `close` + `clickclose` 各一次」
-   * 这个事实（在飞命令账不能被这一对消费）。这个事实**只能实测**，夹具怎么建都不算证据。
-   * 本地实测（真实 AK · headless Chromium，5 轮）：两事件各一次、间隔约 0.1ms（同一 task），
-   * 但**顺序不固定**（4 次 `close` 在前、1 次 `clickclose` 在前）⇒ 这里只断言**数量**与
-   * 「本库模型收敛」这两件与顺序无关的事，顺序作为**读数**带回报告。
+   * 点关闭按钮的事件形状与收敛（M5-INFOWINDOW / #32）：断言 `close` 恰好一条、
+   * `clickclose` 至少一条、且本库模型收敛为关；具体条数与顺序作为读数带回报告。
    */
   "infowindow-close-button-pair": {
     async run(ctx) {
@@ -1369,18 +1364,12 @@ const CHECKS: Record<string, CheckImpl> = {
       for (const mark of marks) counts[mark.name as "close" | "clickclose"] += 1;
       const first = marks[0]?.at ?? performance.now();
       const order = marks.map((m) => `${m.name}+${(m.at - first).toFixed(1)}ms`).join(" > ");
-      // 只断言**稳定**的那两件事（实测口径，见下），数量作为读数带回报告：
-      //   - `close` 恰好一次：一次用户点击只会有一次关闭，状态机给它的配对回滚建立在这上面；
-      //   - `clickclose` 至少一次：用户点击确实以这个**带来源**的事件报出来 ——
-      //     `sdk-clickclose` 这个独立动作就是为它存在的。
-      // **不断言 `clickclose` 的具体条数**：实测它随「同一个实例被打开过几次」累积
-      // （打开 1/2/3 次 ⇒ clickclose 1/2/3 条，`close` 始终 1 条）—— SDK 每次打开/重绘都会
-      // 重新绑定关闭按钮的处理器 ⇒ 本库原样转发这 N 条（不去重，见 ADR 已知限制 13）。
+      // 只断言稳定项：`close` 恰好一次、`clickclose` 至少一次（后者条数随打开次数累积，只作读数）
       assertSmoke(
         counts.close === 1 && counts.clickclose >= 1,
         "BMAP_INFOWINDOW_CLOSE_PAIR_SHAPE",
         `点关闭按钮的事件形状变了：${JSON.stringify({ counts, order })}` +
-          "（期望 `close` 恰好一次、`clickclose` 至少一次；状态机的归属规则建立在这两点上）",
+          "（期望 `close` 恰好一次、`clickclose` 至少一次）",
         { order, counts },
       );
       assertSmoke(

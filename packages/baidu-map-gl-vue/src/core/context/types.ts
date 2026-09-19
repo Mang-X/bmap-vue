@@ -99,20 +99,10 @@ export interface MapContext extends MapRuntimeShape {
    */
   readonly layers?: LayerRegistry;
   /**
-   * 这张地图的气泡归属账本（M5-INFOWINDOW / issue #32）。
+   * 这张地图的气泡账本（M5-INFOWINDOW / issue #32）：`current()` 是当前打开的那个，
+   * `isCurrent(h)` 是同一判定的便捷形式，`size` 是存活实例数（不是「此刻显示几个」）。
    *
-   * 官方 4.0 **一张地图同时只有一个气泡处于打开状态**，而「当前是谁」没有公开读回入口
-   * （`map.getInfoWindow()` 异步生效）。账本由 `MapRuntime` 持有、随地图一起释放，`BInfoWindow`
-   * 经它拿到「被别的组件顶掉」的通知并交还归属。
-   *
-   * 可选：自定义 Context（只实现 `MapRuntimeShape` 的适配器）可以不提供，气泡组件会退化为
-   * 组件自持的账本（此时同页多个 `<BInfoWindow>` 不再互相察觉）——与 `layers` 同口径。
-   *
-   * 读面（宿主页 / 诊断用，与 `LayerRegistry` 的 `size` 同口径）：
-   *
-   * - `current()` 是「这张地图**当前打开**的气泡」，没有则为 `null`（`isCurrent(h)` 是同一个判定的
-   *   便捷形式）；注意它与「实例是否存活」是两件事 —— 被顶掉的实例仍然登记在册、只是不再是当前项；
-   * - `size` 是「这张地图**拥有**的存活气泡实例数」（不是「此刻显示几个」）。
+   * 可选；不提供时气泡组件退化为组件自持的账本（同页多个 `<BInfoWindow>` 不再互相察觉）。
    */
   readonly infoWindows?: InfoWindowManager;
   readonly controls?: unknown;

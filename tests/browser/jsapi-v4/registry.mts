@@ -74,7 +74,7 @@ const SPECS: Record<string, SmokeCheckSpec> = {
   },
   "infowindow-close-button-pair": {
     id: "infowindow-close-button-pair",
-    name: "<BInfoWindow>：点关闭按钮的事件形状（实测：`close` 恰好一次、`clickclose` 至少一次且随后者累积）不变，且本库模型收敛为关（#32 第九轮；只登记在 live 档——它验的是真实 SDK 的事件与 DOM）",
+    name: "<BInfoWindow>：点关闭按钮时 `close` 恰好一次、`clickclose` 至少一次，且本库收敛为关（只登记在 live 档——它验的是真实 SDK 的事件与 DOM）",
   },
   "service-geocode": { id: "service-geocode", name: "headless 地理编码拿到真实回包" },
   "ui-kit-autocomplete-search": {

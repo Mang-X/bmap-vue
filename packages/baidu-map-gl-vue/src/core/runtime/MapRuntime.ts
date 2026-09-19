@@ -103,11 +103,7 @@ export class MapRuntime {
    */
   readonly layers: LayerRegistry = createLayerRegistry();
   readonly controls: OverlayRegistry = createOverlayRegistry();
-  /**
-   * 气泡归属账本（M5-INFOWINDOW / #32）：一张地图同一时刻只有一个气泡处于打开状态，
-   * 而「当前是谁」没有公开读回入口 —— 需要 `BInfoWindow` 之间共享一份记账才能给出
-   * 「被顶掉」这条通知。**每张地图一份**（不同地图之间必须互不影响）。
-   */
+  /** 气泡账本（M5-INFOWINDOW / #32）：每张地图一份，用于气泡之间「被顶掉」的通知。 */
   readonly infoWindows: InfoWindowManager = createInfoWindowManager();
   readonly plugins: PluginRegistry;
 

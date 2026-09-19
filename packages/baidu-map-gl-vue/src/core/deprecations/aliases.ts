@@ -76,14 +76,11 @@ export interface OverlayEventAlias {
 }
 
 /**
- * prop 别名表。两项：GroundOverlay 的角点组合在 v3 改成单一的 `bounds`
- * （与上游 `createGroundOverlay(bounds, options)` 同形）、`BInfoWindow` 的 `show` 在 v3
- * 让位给唯一的打开主状态 `open`。留着它们不是为了「以后可能有用」：
- * 它们承载的是**已经发布过的 prop 名**，删掉即等于让老代码静默失效。
+ * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）与 `BInfoWindow` 的 `show`
+ * （v3 起用唯一的打开主状态 `open`）。承载的是已发布过的 prop 名，删掉会让老代码静默失效。
  *
- * `show` 这条的消费者不是 `useOverlaySpec`（信息窗不走 `OverlaySpec`，见 ADR
- * `2026-09-18-infowindow-host-and-ownership`），而是 `useInfoWindow` ——
- * 两者共用本表与 `warner.ts`，因此「稳定 code / 统一文案 / 同实例一次」仍是一份实现。
+ * 消费者是 `useOverlaySpec` 与 `useInfoWindow`（信息窗不走 `OverlaySpec`），共用本表与
+ * `warner.ts`。
  */
 export const OVERLAY_PROP_ALIASES: readonly OverlayPropAlias[] = Object.freeze([
   {

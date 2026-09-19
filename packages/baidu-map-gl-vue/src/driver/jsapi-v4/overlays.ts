@@ -663,18 +663,8 @@ export function createJsapiV4OverlayDriver(
       const raw = registry.resolve<object>(overlay);
       const owner = infoWindowOwners.get(raw);
       if (owner) {
-        // 判据的顺序是**契约的一部分**（PR #101 第五轮评审 P1 修正）：
-        //
-        // 1. 先读公开的 `map.getInfoWindow()` —— 「地图上当前开着的到底是谁」是唯一能回答
-        //    「这次关闭会不会碰到别人的气泡」的事实。**若它就是我们，就必须照关不误**，即使
-        //    `lastRequestedByMap` 指向别人（典型情形：本实例的打开晚到、迟到接管了地图）。
-        //    旧写法把 `lastRequestedByMap` 放在前面**直接 return**，会把这个明确关闭静默丢掉：
-        //    气泡留在图上，而状态机那边已经记下的在飞账永远等不到回包（幽灵账）。
-        // 2. `current` 指向**别人** ⇒ 不碰地图（那确实是别人的气泡）。
-        // 3. `current` 为空是**有歧义的**：真实 4.0 的打开是异步的，`openInfoWindow()` 之后同一
-        //    tick 里它仍是 `null`（实测 0ms 为 null、~100ms 变成该实例）。这个窗口里没有事实可依，
-        //    只能退回「这张地图最后被请求打开的是谁」这个本 Driver 唯一能自行保证的不变量，
-        //    避免旧气泡的 close 取消掉一次新生效的打开（PR #61 评审的跨气泡风险）。
+        // 判据顺序：先读 `map.getInfoWindow()`（它就是我们 ⇒ 照关，即使最后请求者是别人），
+        // 它是别人 ⇒ 不碰；读不到（异步窗口）才退回 `lastRequestedByMap`。
         const current = callOptional(owner, "getInfoWindow");
         if (current) {
           if (current !== raw) return;
@@ -697,15 +687,7 @@ export function createJsapiV4OverlayDriver(
       sdkCall("InfoWindow.redraw", () => callOptional(raw, "redraw"));
     },
 
-    /**
-     * 读**当前**气泡是不是这一个 —— 只用官方公开的 `Map#getInfoWindow()`，再用 handle 身份比对。
-     *
-     * 为什么要放在 Driver 里而不是让调用方自己读：`getInfoWindow()` 返回的是 **raw SDK 实例**，
-     * 而调用方手里是 handle（`handle.raw` 才是实例）—— 身份比对需要知道这层包装，属于边界内部的事。
-     *
-     * 注意它**异步生效**：`openInfoWindow()` 之后同一 tick 里仍是 `null`（真实 AK 实测 0ms 为 null、
-     * ~100ms 变成该实例），所以只能当**收敛触发**用，不能当同步断言。
-     */
+    /** 读当前气泡是不是这一个（`Map#getInfoWindow()` + handle 身份比对；打开是异步生效的）。 */
     isCurrentInfoWindow(map, overlay) {
       const rawMap = registry.resolve<object>(map);
       const raw = registry.resolve<object>(overlay);
