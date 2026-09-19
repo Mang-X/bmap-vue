@@ -96,19 +96,26 @@
 命令面通过组件 `ref` 暴露（`featureState`），**只给有该能力的 kind**：`BHeatmapLayer` /
 `BTrackLineLayer` 不 expose（挂一个每次调用都会抛的方法只是假面）。
 
-### 5. 拾取的三个字段各自表达一件事
+### 5. 拾取的字段各自表达一件事
 
 `BMapPointPick` 增补 `id`（additive，不改既有字段语义），载荷语义写死：
 
 | 字段 | 语义 |
 | --- | --- |
 | `hit` | 官方是否命中（`dataIndex !== -1`；官方**未命中也派发事件**） |
-| `id` | 业务身份（`properties[idKey]`）；认不出**如实为 `null`**，不猜官方默认 `idKey` |
-| `item` | 命中的业务项（线 / 面图层就是 `properties`）；未命中为 `null` |
+| `id` | **可以公开 / 交给 Feature State 的业务身份**（`properties[idKey]`，取值域 `string \| number`）；认不出或不在该域时**如实为 `null`**，不猜官方默认 `idKey`，也不把 symbol 转成字符串冒充身份 |
+| `item` | 命中的业务项（线 / 面图层就是 `properties`）；未命中为 `null`。**与 `id` 解耦**：按完整业务键（`readFeatureKey` 的取值域 = `isUsableItemKey`）恢复，因此 `id` 为 `null` 时它仍可能有值 |
+| `latLng` / `pixel` | 事件回包里的坐标（未命中时也有） |
 
-`item` 与 `id` 解耦是有意的：`properties` 是官方回包直接给出的，不依赖 `idKey`；而逐项数据组件
-（`BPointCollection`）的业务对象靠身份索引，因此那一类在 `id` 为 `null` 时 `item` 也是 `null`
-（由 `resolveFeaturePick` 的 `itemOf` 钩子表达，且 `itemOf` 一旦提供就是权威，不做回退）。
+`item` 与 `id` 解耦是有意的（第三轮评审的收敛方向，见修正记录）：`id` 的取值域被官方
+`updateState(keys: string | number | …)` 的签名收窄，而**业务项的恢复不该跟着收窄**——
+逐项数据组件（`BPointCollection`）的业务对象靠业务键索引，symbol 型 `itemKey` 就是
+「`id` 为 `null`、`item` 有值」的情况（由 `resolveFeaturePick` 的 `itemOf` 钩子表达，
+且 `itemOf` 一旦提供就是权威，不做回退）。
+
+业务键的读取是**两阶段**的（第四轮评审）：先读事件回包 `value.dataItem.properties[idKey]`，
+读不到可用 key 就按 `dataIndex` 回到**我们自己成功送出的那份数据**再取一次。两条依据都是公开输入
+（不是猜 SDK 私有身份），且这条兜底与迁移前的 `BPointCollection` 行为等价。
 
 ### 6. Driver 增补两个状态操作；**删除**无依据的 `clearData`
 
@@ -249,7 +256,7 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 | `BGeoJSONLayer` 基线 | **不属于本票**：它由 #40 落地（`BGeoJSONLayer.vue`，走 `LayerDriver` 的 `geojson` kind，官方 `BMap.GeoJSONLayer`）。它是「覆盖物组合图层」而不是原生批量数据图层，没有要素状态 / 拾取面 | 无需动作（票面的这一项已在 #40 完成） |
 | 各种 geometry 的 GeoJSON 校验 | 本票的图层组件把它交给 SDK（官方 `setData(geojson: object)` 只声明了 `object`）；M6 的数据适配层（`core/data/*`）目前只覆盖 Point 几何 | 后续票（若需要线 / 面几何的前置校验） |
 | 大数据量用例 | 夹具与用例目前都是 1~2 个要素；「就地更新不重建、卸载不残留」已由 §1 / §4 覆盖，但**没有量级维度** | 后续票（`tests/performance` 已有基础设施） |
-| symbol 型字符串以外的业务身份 | 拾取与要素状态的身份口径是官方取值域 `string \| number`；数据组件的 `itemKey` 允许 symbol，那种 key 会走「身份认不出」这条路（`id: null`）而不是被猜出来 | 已写进 `readFeatureId` 的 JSDoc；若确有需求再评估 |
+| symbol 型业务键在**公开 `id` / Feature State** 上不可用 | 公开 `id` 的取值域是官方 `updateState(keys: string \| number \| …)` 的签名；symbol 不参与 Feature State 的键（也不转字符串冒充） | 已写进 `readFeatureId` / `readFeatureKey` 的 JSDoc 与组件文档；拾取侧 `item`/`item-click` **不受影响**（有回归用例） |
 | 样式字段与上游声明的**类型层锁** | 组件 props 目前只能靠「逐字段核对 + 用例」守（与 #34 的 `BPointCollectionProps` 同一条既有口径）；`src/types/**` 属 raw SDK 禁区，`BMap.LineStyle` 只能在 driver 侧或测试里引用 | 若评审要求，可放进消费方 fixture 或 driver 侧的断言文件 |
 | 探针的 live 档覆盖新操作 | fixture 档已进 PR 门禁（`smoke:v4:fixture`）；live 档在 nightly 跑同一份操作表 | nightly（无需额外动作） |
 

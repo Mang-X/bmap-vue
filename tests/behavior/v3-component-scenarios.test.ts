@@ -3013,6 +3013,33 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     harness.assertIdle("BPointCollection 空字段名");
   });
 
+  it("BPointCollection：回包只给部分 properties（缺业务键）时，item-click 仍要派发", async () => {
+    // #106 第四轮评审的组件级复现：SDK 回包里 `properties` 存在但没有 idKey 字段，
+    // 旧实现会按 dataIndex 回到本库自己送出的数据再取一次 key —— 这条兜底不能丢。
+    const items: Station[] = [
+      { id: "a", lng: 116.404, lat: 39.915 },
+      { id: "b", lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, { data: items, itemKey: "id", getPosition: stationPosition }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 0, properties: { name: "partial" } });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Station | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "业务键从快照兜底恢复").toBe("a");
+    expect(pick.item, "业务项按恢复出来的 key 索引").toBe(items[0]);
+    expect(layer.emitted("item-click"), "item-click 必须派发").toHaveLength(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 部分回包");
+  });
+
   it("BPointCollection：函数式 itemKey 返回 symbol 时，命中仍要回传最新业务项", async () => {
     // `itemKey` 的公开类型是 `keyof Item | ((item) => PropertyKey)`，PropertyKey 含 symbol；
     // 适配层会把 key 写进 `properties.__id`。symbol 不能作为公开 `id`（Feature State 的取值域是

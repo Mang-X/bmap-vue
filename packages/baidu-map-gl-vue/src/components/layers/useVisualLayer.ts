@@ -131,7 +131,7 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
   /** 构造期选项袋（官方构造参数里不能就地更新的那些）。 */
   const ctorOptions = (p: Readonly<Props>): Record<string, unknown> => {
     const bag: Record<string, unknown> = {};
-    // 只有「可用的字段名」才交给 SDK（`""` 不是字段名，见 `normalizeIdField`）
+    // 归一化只做类型归一（非字符串 → 未声明），**不**收窄取值：空字符串也是合法字段名
     const idKey = normalizeIdField(p.idKey);
     if (idKey !== undefined) bag.idKey = idKey;
     if (p.crs !== undefined) bag.crs = p.crs;

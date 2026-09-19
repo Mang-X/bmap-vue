@@ -207,26 +207,43 @@ export interface ResolveFeaturePickInput<Item> {
  * 2. 兜底：`dataIndex` 指向**我们自己送出去的那份数据**的对应要素——它仍然是我们自己的输入，
  *    不是从内部对象 / 事件顺序里恢复出来的猜测。
  *
- * 三个字段各自表达一件事，**不要把它们混起来看**：
+ * 两条依据是**独立的**，因此业务键的读取是**两阶段**：先读事件回包，读不到可用 key 就回到快照再取
+ * 一次（回包可能给出一个不含业务键的 `properties`）。`latLng` / `pixel` / `hit` 始终来自事件回包。
+ *
+ * 四个字段各自表达一件事，**不要把它们混起来看**：
  *
  * - `hit`：官方是否命中（`dataIndex !== -1`）；
- * - `item`：命中的那条要素的**业务项**（默认就是它的 `properties`）——它不依赖 `idKey`，因为
- *   「属性袋」是官方回包直接给出的；未命中时为 `null`；
- * - `id`：**业务身份**（`properties[idKey]`）。`idKey` 没表态、或那个字段不是有限数字 / 字符串时
- *   如实为 `null` —— 本库不猜官方的默认 `idKey`，也不会拿别的字段凑一个身份出来。
+ * - `id`：**可以公开 / 交给 Feature State 的业务身份**（`properties[idKey]`，取值域 `string | number`）。
+ *   `idKey` 没表态、或那里的值不在这个取值域（例如 symbol）时为 `null` —— 本库不猜官方的默认
+ *   `idKey`，也不会拿别的字段凑一个身份出来，更不会把 symbol 转成字符串冒充身份；
+ * - `item`：命中的那条要素的**业务项**（默认就是它的 `properties`，未命中为 `null`）。它与 `id`
+ *   **解耦**：取值域更窄的 `id` 不影响它，业务项按**完整业务键**（`readFeatureKey`）恢复——
+ *   symbol 型 `itemKey` 就是「`id` 为 `null`、`item` 有值」的情况；
+ * - `latLng` / `pixel`：事件回包里的坐标（未命中时也有）。
  *
  * `itemOf` 是给「业务对象与要素分离」的组件用的（`BPointCollection` 的 `Item[]`）：它一旦提供就是
- * **权威**的，返回 `undefined` 表示「按这个身份找不到业务项」，此时 `item` 为 `null`——而不是退回
+ * **权威**的，返回 `undefined` 表示「按这个业务键找不到业务项」，此时 `item` 为 `null`——而不是退回
  * 「拿 properties 当业务项」（那会把「找不到」变成「找到了一个形状不对的东西」）。
  */
 export function resolveFeaturePick<Item = Record<string, unknown>>(
   input: ResolveFeaturePickInput<Item>,
 ): NativeLayerFeaturePickPayload<Item> {
   const snapshot = readNativeLayerPick(input.event);
-  const properties =
-    readFeatureProperties(snapshot.dataItem) ??
-    readFeaturePropertiesAt(input.sentData?.() ?? null, snapshot.dataIndex);
-  const key = readFeatureKey(properties, input.idKey);
+  /**
+   * **两份属性分开读**（#106 第四轮评审）：事件回包与「我们自己送出去的那份数据」是两条独立的依据，
+   * `dataIndex` 指向的永远是后者。
+   *
+   * ⚠️ 不能写成 `readFeatureProperties(dataItem) ?? readFeaturePropertiesAt(sentData, …)`：那样只有
+   * **整个 `properties` 读不到**时才兜底，而 SDK 回包完全可能给出一个**不含业务键**的 `properties`
+   * （部分回包、symbol 属性没被保留……）。旧实现（迁移前的 `BPointCollection`）是两阶段的：key 读不到
+   * 就用 `dataIndex` 回到自己的数据再取一次——这条兜底不能丢。
+   */
+  const eventProperties = readFeatureProperties(snapshot.dataItem);
+  const snapshotProperties = readFeaturePropertiesAt(input.sentData?.() ?? null, snapshot.dataIndex);
+  const properties = eventProperties ?? snapshotProperties;
+  // 业务键：先读事件回包，读不到可用 key 时再用快照兜底（两阶段，与迁移前等价）
+  const key =
+    readFeatureKey(eventProperties, input.idKey) ?? readFeatureKey(snapshotProperties, input.idKey);
   const id = typeof key === "string" || typeof key === "number" ? key : null;
   // `itemOf` 一旦提供就是**权威**的：它返回 `undefined` 表示「认不出业务项」，这时不能退回
   // 「拿 properties 当业务项」——那会把「找不到」变成「找到了一个形状不对的东西」。

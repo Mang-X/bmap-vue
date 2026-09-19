@@ -151,6 +151,55 @@ describe("readFeatureKey / readFeatureId：业务键与公开 id 是两个取值
     expect(pick.id, "公开 id 为 null").toBeNull();
     expect(pick.item, "但业务项必须找得回").toBe("业务项");
   });
+
+  it("两阶段兜底：回包有 properties 但**缺业务键**时，用 dataIndex 回到自己的快照再取一次", () => {
+    // #106 第四轮评审：`dataItem.properties` 存在但没有 idKey 字段（部分回包）也要能兜底，
+    // 这条与迁移前的 BPointCollection 行为等价。
+    const collection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: { id: "a", name: "一路" } },
+        { type: "Feature", properties: { id: "b", name: "二路" } },
+      ],
+    };
+    const pick = resolveFeaturePick({
+      event: officialEvent({ dataIndex: 1, dataItem: { properties: { name: "partial" } } }),
+      idKey: "id",
+      sentData: () => collection,
+    });
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "业务键来自我们自己送出去的那份数据").toBe("b");
+    expect(pick.item, "线 / 面图层的 item 仍优先用回包的 properties").toEqual({ name: "partial" });
+  });
+
+  it("两阶段兜底同样适用于 symbol 业务键（回包丢了 symbol 也能找回业务项）", () => {
+    const collection = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { __id: symbolKey } }],
+    };
+    const pick = resolveFeaturePick({
+      event: officialEvent({ dataIndex: 0, dataItem: { properties: {} } }),
+      idKey: "__id",
+      sentData: () => collection,
+      itemOf: (key) => (key === symbolKey ? "业务项" : undefined),
+    });
+    expect(pick.item, "回包只给了空 properties，但快照里有 symbol 业务键").toBe("业务项");
+  });
+
+  it("两阶段兜底不越过 `dataIndex`：未命中（-1）时不读快照", () => {
+    const collection = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { id: "a" } }],
+    };
+    const pick = resolveFeaturePick({
+      event: officialEvent({ dataIndex: -1, dataItem: undefined }),
+      idKey: "id",
+      sentData: () => collection,
+    });
+    expect(pick.hit).toBe(false);
+    expect(pick.id).toBeNull();
+    expect(pick.item).toBeNull();
+  });
 });
 
 describe("readFeaturePropertiesAt", () => {

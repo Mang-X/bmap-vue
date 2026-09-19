@@ -8,7 +8,7 @@
  * | 统一 setData/style/base options/visible/opacity/zoom/zIndex | §1（四条写入路径 + `data` 三态）、§6（样式函数） | 完整 |
  * | 各种 geometry 的 GeoJSON 校验 | **未实现**：本票的图层组件**不做** GeoJSON 校验（官方 `setData(geojson: object)` 的结构由 SDK 负责），M6 的数据适配层（`core/data/*`，由 #34 落地）目前只覆盖 Point 几何 | 欠账（见 ADR） |
  * | Feature State 单选/多选/替换/清空 | §3（组件 expose 的命令面）+ `core/data/featureState.test.ts`（参数边界与读回口径） | 完整 |
- * | 未命中、命中和 data 更新后的 picked item | §2 | 完整 |
+ * | 未命中、命中和 data 更新后的 picked item | §2 | 完整（含「回包 properties 存在但缺业务键」的两阶段兜底） |
  * | TrackLine 状态/进度/隐藏页面 | **未实现**（2026-09-19 的范围纠正：播放控制与页面可见性联动必须先有真实运行时证据）。本文件只锁「不依赖 TrackAnimation 私有字段」与「不建内部播放状态机」 | 欠账（见 ADR） |
  * | 大数据 setData/style update 与资源清理 | §1（data / style 的就地更新）、§4（卸载 / 隐藏两条路径 + 每节的 `assertIdle()`） | 更新与清理完整；**「大数据量」维度无专门用例**（夹具都是 1~2 个要素），登记为欠账 |
  * | Layer API 有统一基础语义和各自强类型 style | §1（同一批断言跑在 line / fill 上）、§5（逐 kind 能力面：不支持的字段不声明） | line / fill 完整（强类型 style）；heatmap / track-line 只有官方声明得到的那部分面，**没有强类型 style**——官方没有可核对的声明 |
