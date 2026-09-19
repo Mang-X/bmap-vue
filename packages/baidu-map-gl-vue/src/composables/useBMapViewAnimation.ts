@@ -159,6 +159,25 @@ export function useBMapViewAnimation(
     run.cancelCommitted = true;
   }
 
+  /**
+   * 卸载期取消失败的诊断出口：与本库其它释放路径同一条通道（`resource:error`），
+   * 便于宿主在 `onUnmounted` 之外仍然看到「这段动画没被我们停掉」。
+   * 总线自己已经停用时不再追究——不能为了报错再抛一次错。
+   */
+  function reportTeardownFailure(error: unknown): void {
+    try {
+      ctx.events.emit("resource:error", {
+        error:
+          error instanceof BMapError
+            ? error
+            : new BMapError("BMAP_SDK_CALL_FAILED", String(error), { cause: error }),
+        component: "useBMapViewAnimation",
+      });
+    } catch {
+      /* 事件总线已停用时不再追究 */
+    }
+  }
+
   async function start(keyFrames: ViewAnimationKeyFrames[]): Promise<void> {
     if (disposed) return;
     const readyCtx = await getReady();
@@ -243,11 +262,13 @@ export function useBMapViewAnimation(
         stopRun(run);
       } catch (error) {
         // 取消失败：Driver 保留了动画记录，地图自己的销毁路径会重试。卸载钩子里没有调用方
-        // 能接住这个错误，按现有诊断口径上报，而不是让它打断整个卸载。
+        // 能接住这个错误，所以既要**不**打断卸载，又要让它**可观测**——`logger.warn` 在
+        // production 构建里会被折叠掉，只靠它等于把失败咽回去（#105 评审第五轮）。
         logger.warn(
           "useBMapViewAnimation: 卸载时取消视角动画失败，已交由地图销毁重试: " +
             ((error as Error)?.message ?? String(error)),
         );
+        reportTeardownFailure(error);
       }
       // 卸载之后不再观察任何事件：本段订阅无条件下线
       run.release();

@@ -33,7 +33,8 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   `EventBridge` 的 `extractSdkEventNames()`、`diffData` 的 `shouldFullReplace()`、
   `DataLayerManager` 的 `DataLayerOptions`（其唯一成员 `minClusterSize` 类根本不接受）；
 - Capability Catalog：`runtime` 整个 family（四条都是本库自身模块，不是 SDK 能力，没有任何地方按 id 问过，
-  连同 `CapabilityFamily` / `CAPABILITY_FAMILIES` 一起删）、`layer.mvt`、`service.truck-route`
+  删的是这四条目录项、联合成员 `"runtime"` 与 `CAPABILITY_FAMILIES` 里的那一项；`CapabilityFamily` 类型和
+  `CAPABILITY_FAMILIES` 常量本身保留，它们有真实消费者）、`layer.mvt`、`service.truck-route`
   （ADR 明确「不做」，槽位只被当作测试夹具）。矩阵重生成后为 62 条能力。
 - `<BAutoComplete>` 卸载路径上那句「按结构化成员探测 `disposeAutocomplete`，探测不到就静默跳过」的
   引擎分支：#26 之后 `BMapEngine` 只有 `jsapi-v4`，分支永不成立，而它跳过的是 Driver 侧的订阅记账。
@@ -67,7 +68,10 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   播完要听 `animationend`（`loop: "INFINITE"` 时不会来）或由 `status` 驱动。起播前 Driver 要先取消
   上一段，取消失败时它拒绝替换 ⇒ `start()` 随之 reject，上一段继续被观察、仍可 `cancel()` 重试；
   从未起播的那一段不留订阅。
-- 卸载时取消失败**不再打断卸载**（按 `logger.warn` 上报，地图销毁路径会重试取消），本段订阅无条件释放。
+- 卸载时取消失败**不再打断卸载**，并且**可观测**：本段订阅无条件下线，失败同时经
+  `resource:error` 诊断总线交出（`component: "useBMapViewAnimation"`）。只靠 `logger.warn` 不够——
+  它在 production 构建里会被折叠掉，而地图自己的销毁路径若也停不掉这段动画，失败就只剩一条
+  开发模式下的控制台痕迹。
 - 取消是**地图级**命令：`cancel()` 的守卫只看 hooks 自己有没有在飞段，因此不保证一定不牵连同图
   其它动画（文档与类型注释已改成这个口径，而不是反过来承诺归属）。
 - 一次 `stopViewAnimation()` **正常返回之后就不再重复发**（返回只代表这一次请求被 Driver 接手：

@@ -98,6 +98,9 @@ describe("CapabilityRegistry", () => {
     // 白名单检查在单引擎下的**唯一**可达路径：没有描述符
     expect(registry.supports("does.not-exist" as Capability)).toBe(false);
     expect(registry.explain("does.not-exist" as Capability).reason).toBe("engine-unsupported");
+    // 没有描述符就没有 family 可报：留空，而不是兜一个值（#104 R10 删掉 `runtime` 族之后，
+    // 原先兜的 `"runtime"` 是一个没人能解释的幽灵值）
+    expect(registry.explain("does.not-exist" as Capability).family).toBeUndefined();
   });
 
   it("list() returns only supported capabilities", () => {

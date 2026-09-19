@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
+import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
 import { useBMapViewAnimation } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
 import type { ViewAnimationKeyFrames } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
 import { createFakeV4Harness } from "../../packages/test-utils";
@@ -79,6 +80,32 @@ function lastAnimation(): FakeV4ViewAnimation {
   const animation = fake.createdViewAnimations.at(-1);
   if (!animation) throw new Error("没有创建 ViewAnimation 实例");
   return animation;
+}
+
+/**
+ * 与 `mountHook` 同形，额外挂一条 `resource:error` 探针：卸载钩子里没人能接住抛错，
+ * 那条失败必须由诊断总线交出来（`logger.warn` 在 production 会被折叠掉，不足以支撑可观测性）。
+ */
+function mountHookWithProbe(run: (hook: Hook) => void | Promise<void>) {
+  const errors: Array<{ error: unknown; component?: string }> = [];
+  const Child = defineComponent({
+    setup() {
+      useRequiredMapContext().events.on("resource:error", (payload) => {
+        errors.push(payload as { error: unknown; component?: string });
+      });
+      const hook = useBMapViewAnimation({ duration: 10_000, delay: 0, loop: "INFINITE" });
+      void Promise.resolve(run(hook));
+      return () => h("div", "animator");
+    },
+  });
+  const wrapper = mount(
+    defineComponent({
+      components: { BMap, Child },
+      setup: () => () => h(BMap, { provider: harness.provider() }, () => [h(Child)]),
+    }),
+    { attachTo: harness.container() },
+  );
+  return { wrapper, errors };
 }
 
 describe("useBMapViewAnimation：只用官方公开面", () => {
@@ -251,17 +278,26 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
     wrapper.unmount();
   });
 
-  it("卸载时取消失败：不打断卸载、本段订阅仍然归零", async () => {
-    const wrapper = await startAndSettle((hook) => void hook.start(KEY_FRAMES));
+  it("卸载时取消失败：不打断卸载、本段订阅归零，并把失败经 resource:error 交出来", async () => {
+    const { wrapper, errors } = mountHookWithProbe((hook) => void hook.start(KEY_FRAMES));
     await flushPromises();
+    await settleAsyncWindow();
     const animation = lastAnimation();
     expect(animation.getListenerCount()).toBeGreaterThan(0);
+    expect(errors, "起播阶段没有失败可报").toEqual([]);
 
     animation.failNextCancel = true;
     expect(() => wrapper.unmount()).not.toThrow();
     await settleAsyncWindow();
 
     expect(animation.getListenerCount(), "卸载路径不能等一条可能不来的事件才释放").toBe(0);
+    // `logger.warn` 在 production 会被折叠：只留它，「这段动画其实没被停掉」就不可观测
+    expect(errors, "卸载期取消失败必须上诊断总线").toHaveLength(1);
+    expect(errors[0]!.component).toBe("useBMapViewAnimation");
+    expect(errors[0]!.error).toMatchObject({
+      code: "BMAP_SDK_CALL_FAILED",
+      message: expect.stringContaining("取消视角动画时有 1 项失败"),
+    });
     fake.diagnostics.assertNoLeaks("useBMapViewAnimation 卸载时取消失败");
   });
 
