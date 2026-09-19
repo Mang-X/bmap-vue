@@ -1,5 +1,5 @@
 // v3 tarball 消费 smoke:按需导入 + app.use 全量安装 + 类型解析
-import { shallowRef } from 'vue'
+import { h, shallowRef } from 'vue'
 import {
   createBMapPlugin,
   BMap,
@@ -438,3 +438,201 @@ const advancedProbe = createHandle('probe', { ok: true })
 const advancedProbeRaw: { ok: boolean } = unwrapRaw(advancedProbe)
 const advancedProbeBrand: string = advancedProbe[HANDLE_BRAND]
 export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }
+
+/* ==================== 覆盖物统一 spec / 事件矩阵 / 集中弃用层（M5-VECTORS / #31） ====================
+ *
+ * 这一段的每条断言都对应 #31 的一条公开承诺，而且都必须落在**消费方**上下文里：
+ * 本文件由 `scripts/verify-package.mts` 的 `vue-tsc` 对着 tarball 编译（CI 跑），
+ * 而组件库源码里的测试文件与仓库根 tests 目录都不在任何 typecheck 门禁的编译范围内
+ * （`packages/baidu-map-gl-vue/tsconfig.build.json` 排除了前者，后者从来没被编译过）。
+ */
+import {
+  BRectangle,
+  BPolygon,
+  BGroundOverlay,
+  OVERLAY_EVENT_MATRIX,
+  OVERLAY_PROP_ALIASES,
+  DEPRECATED_PROP_ALIAS_CODE,
+  describeDeprecation,
+  overlayEventOf,
+  overlayEventsOf,
+  propAliasesOf,
+  type BGroundOverlayProps,
+  type BPolygonProps,
+  type BRectangleProps,
+  type OverlayEventPayload,
+  type OverlayFieldMap,
+  type OverlayFieldWatch,
+  type OverlayKind,
+  type OverlayPartialPointerEvent,
+  type OverlayPointerEvent,
+} from 'baidu-map-gl-vue'
+
+// 1) 新组件 BRectangle 的 props（对角两点定义）
+const rectangleProps: BRectangleProps = {
+  bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
+  strokeStyle: 'dashed',
+  enableEditing: true,
+}
+// @ts-expect-error strokeStyle 只接受 solid / dashed / dotted
+const invalidRectangleProps: BRectangleProps = { ...rectangleProps, strokeStyle: 'wavy' }
+
+// 2) 旧 prop 别名仍然可编译（弃用但未移除）：`startPoint` + `endPoint` 与正典 `bounds` 二选一
+const legacyGroundOverlayProps: BGroundOverlayProps = {
+  type: 'image',
+  url: 'a.png',
+  startPoint: { lng: 116.3, lat: 39.8 },
+  endPoint: { lng: 116.5, lat: 40 },
+}
+const canonicalGroundOverlayProps: BGroundOverlayProps = {
+  type: 'canvas',
+  url: () => document.createElement('canvas'),
+  bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
+}
+
+// 3) 事件载荷的三档在消费方侧可见：
+//    - `click`（pointer）：`point` 必填；
+//    - `mouseout`（图形族 partial-pointer）：`point` 可缺——上游 `GraphMouseOutEvent` 就是这么声明的，
+//      本库**不**用 `(0,0)` 兜底，因此调用方必须自己判空。
+const polygonClick = h(BPolygon, {
+  path: [{ lng: 116.4, lat: 39.9 }],
+  onClick: (event: OverlayPointerEvent) => {
+    const lng: number = event.point.lng
+    void lng
+  },
+})
+const polygonMouseout = h(BPolygon, {
+  path: [{ lng: 116.4, lat: 39.9 }],
+  onMouseout: (event: OverlayPartialPointerEvent) => {
+    const lng: number | undefined = event.point?.lng
+    void lng
+  },
+})
+const groundOverlayClick = h(BGroundOverlay, {
+  ...canonicalGroundOverlayProps,
+  onClick: (event: OverlayEventPayload) => void event.type,
+})
+
+// 4) 事件矩阵与弃用表是公开的读数面（自定义覆盖物与工具链要用）
+const polygonEventNames: string[] = overlayEventsOf('polygon').map((event) => event.sdk)
+const polygonMouseoutPayload: string | undefined = overlayEventOf('polygon', 'mouseout')?.payload
+const rectangleUpstream: string = OVERLAY_EVENT_MATRIX.rectangle.upstream
+const overlayKinds: OverlayKind[] = ['marker', 'label', 'polyline', 'polygon', 'rectangle', 'circle']
+const propAliases = propAliasesOf('ground-overlay')
+const propAliasNotice = describeDeprecation(OVERLAY_PROP_ALIASES[0]!)
+const propAliasNoticeText: string = propAliasNotice.message
+const propAliasNoticeCode: string = propAliasNotice.code
+const deprecatedCode: string = DEPRECATED_PROP_ALIAS_CODE
+
+// 5) 字段策略与 watch 源是公开类型（自定义覆盖物的声明面）
+const customPolygonFields: OverlayFieldMap<BPolygonProps> = {
+  path: 'options',
+  pathVersion: 'version',
+  isBoundary: 'recreate',
+  strokeColor: 'options',
+  strokeWeight: 'options',
+  strokeOpacity: 'options',
+  strokeStyle: 'options',
+  fillColor: 'options',
+  fillOpacity: 'options',
+  enableMassClear: 'options',
+  enableEditing: 'options',
+  visible: 'visibility',
+}
+const customWatchSource: OverlayFieldWatch = { source: 'versioned', versionProp: 'pathVersion' }
+
+export const overlaySpecSmoke = {
+  rectangleProps,
+  invalidRectangleProps,
+  legacyGroundOverlayProps,
+  canonicalGroundOverlayProps,
+  polygonClick,
+  polygonMouseout,
+  groundOverlayClick,
+  polygonEventNames,
+  polygonMouseoutPayload,
+  rectangleUpstream,
+  overlayKinds,
+  propAliases,
+  propAliasNoticeText,
+  propAliasNoticeCode,
+  deprecatedCode,
+  customPolygonFields,
+  customWatchSource,
+  rectangleComponent: BRectangle,
+}
+
+// 数据组件（M6 / #34）的**消费方编译 smoke**。
+//
+// 分工说明（实测过一次，值得写下来）：泛型在**模板**里完整保留，但在 `h()` 编程式构造里
+// **推不出** `Item` —— vue-tsc 为泛型 SFC 生成的 props 是
+// `NonNullable<Awaited<typeof __VLS_setup>>["props"]`，TS 无法从这种形状反推类型参数
+// （带/不带 `withDefaults` 都一样，已实测）。所以：
+//
+// - **推断**（`Item` 不退化成 `unknown` / `any`）由 `src/data-components.vue` 的模板用法钉住；
+// - **公开 props 类型本身**在这里钉住（可具名使用 + 约束真的在起作用）。
+import { BMarkerList, type BMarkerListProps, type BPointCollectionProps } from 'baidu-map-gl-vue'
+
+interface Station {
+  id: string
+  lng: number
+  lat: number
+  name?: string
+}
+
+const stations: Station[] = [
+  { id: 'a', lng: 116.404, lat: 39.915, name: '百度大厦' },
+  { id: 'b', lng: 116.41, lat: 39.92 },
+]
+
+// 泛型 props 类型可直接具名使用，且 `Item` 参与约束（不是 `any`）。
+const listProps: BMarkerListProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+}
+const badListProps: BMarkerListProps<Station> = {
+  // @ts-expect-error `Item` 是 Station：缺 id / 坐标的项不能被接受
+  data: [{ name: '缺字段' }],
+  itemKey: 'id',
+  getPosition: () => null,
+}
+// @ts-expect-error `itemKey` 必须是 `Item` 的键（`'nope'` 不存在）
+const badItemKey: BMarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
+
+// `BPointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
+const collectionProps: BPointCollectionProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+  shape: 7,
+}
+// @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
+const badShape: BPointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
+export const dataComponentPropsSmoke = { listProps, badListProps, badItemKey, collectionProps, badShape }
+
+// `h()` 编程式构造**推不出** `Item` —— 这条限制用双向断言钉住，而不是写在文档里。
+//
+// 依据（2026-09-18 实测）：vue-tsc 为泛型 SFC 生成的 props 是
+// `NonNullable<Awaited<typeof __VLS_setup>>["props"]`，TS 无法从这种形状反推类型参数
+// （带 / 不带 `withDefaults` 都一样）。于是 `h()` 调用里 `itemKey` 会落成
+// `(item: unknown) => PropertyKey`，传字符串属性名直接编译失败。
+//
+// 模板用法**不受影响**（见 `src/data-components.vue`）。如果哪天上游修好了推断，下面这条指令会变成
+// 「未使用的 @ts-expect-error」而报错 —— 那时请更新这条断言与 `docs/zh-CN/components/data.md`。
+//
+// ⚠️ 写法上踩过两次，都记在这里：
+// 1. 指令必须贴在**实际报错的那一行**。vue-tsc 把 overload 不匹配报在某个属性上（实测是最后一个
+//    与签名冲突的属性），所以把 props 先收成一个变量、让 `h(...)` 调用成为唯一的报错行，
+//    断言才不会随属性顺序漂移；
+// 2. 早期版本的 `BMarkerList` **忘了导入**，于是指令吞掉的是 `Cannot find name` 而不是「推不出
+//    `Item`」—— 断言看起来通过、实际是空的。现在导入齐了，去掉指令会得到这样的报错原文：
+//    `TS2769: No overload matches this call … Types of property 'itemKey' are incompatible`
+//    （展开里能看到它期望的 `itemKey: (item: unknown) => PropertyKey`）。
+const programmaticProps = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item: { lng: number; lat: number }) => ({ lng: item.lng, lat: item.lat }),
+}
+// @ts-expect-error `h()` 推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
+export const programmaticGenericLimit = h(BMarkerList, programmaticProps)

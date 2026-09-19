@@ -44,6 +44,36 @@ M3A.3 把旧引擎整份删除（决策见 [ADR 2026-09-14 删除旧引擎](/adr
 | Playground | `VITE_BMAP_MODE=legacy-fake` 对照档 | 该档与开关删除 | 无需配置 |
 | 包文件清单 | `files: ["dist", "types", "volar.d.ts"]` | `files: ["dist", "volar.d.ts"]` | 无（`types/` 只剩构建期占位文件 `shared/` 与 `ui-kit/upstream.d.ts`，不再发布；`volar.d.ts` 是 Volar 提示产物，必须保留——`tsconfig` 里的 `"types": ["baidu-map-gl-vue/volar"]` 靠它） |
 
+## 3.0.0-beta → 3.0（覆盖物统一内核、事件矩阵与 Rectangle）
+
+M5-VECTORS 把 Label / Polyline / Polygon / Circle / BezierCurve / Prism / GroundOverlay 迁到与
+`BMarker` 相同的声明式内核，新增 `BRectangle`，并把覆盖物事件面收进一张矩阵
+（决策见 [ADR 2026-09-18 覆盖物事件矩阵](/adr/2026-09-18-overlay-event-matrix)）。对调用方可见的变化：
+
+| 变更 | 之前 | 现在 | 处置 |
+| --- | --- | --- | --- |
+| 图形族的事件面 | `<BPolyline>` / `<BPolygon>` / `<BCircle>` 只发 `click` / `dblclick` 两个 | 17 个（含 `mousemove` / `rightdblclick` / `lineupdate` / 6 个编辑事件）；`<BLabel>` 8 个；`<BPrism>` / `<BBezierCurve>` / `<BGroundOverlay>` 11 个 | 新增，无破坏性；不监听的父级不受影响。完整清单见[覆盖物事件矩阵](/zh-CN/components/overlay/events) |
+| 图形族 `mouseout` 的载荷 | 直接订阅 Driver 时 raw 缺坐标会被补成 `(0,0)`（组件此前根本不发 `mouseout`） | **保持缺失**（上游 `GraphMouseOutEvent` 声明坐标可缺） | 判空即可（`e.point?.lng`）；`<BMarker @mouseout>` 不受影响（Marker 的 `point` 上游声明必填） |
+| `BGroundOverlay` 的显示区域 | `startPoint` + `endPoint` 两个 prop | `bounds`（`{ southwest, northeast }`），与上游 `createGroundOverlay(bounds, options)` 同形 | 旧名**仍可用**（控制台提示一次、`bounds` 优先）；新代码用 `bounds` |
+| `BGroundOverlay.type` 变化 | 组件自己 `watch` + `rebuild()` | 由描述符的 `recreate` 分类触发重建（**行为不变**） | 无需改动 |
+| `<BBezierCurve>` / `<BPrism>` 的 `enableEditing` | props 上不存在，但编辑事件也从不派发 | 明确「上游没有编辑能力」：不暴露 prop、事件矩阵里也没有编辑事件 | 需要编辑请改用 `<BPolyline>` / `<BPolygon>` / `<BRectangle>` / `<BCircle>` |
+| `path` / `controlPoints` 的更新判据 | 各组件手写（有的根引用、有的附带版本 prop） | 统一为「根引用 + 版本 prop」：原地改数组不会触发，换引用或递增 `pathVersion` / `controlPointsVersion` 才触发 | 原地修改数组的代码请在修改后递增版本 prop |
+| `<BMarker @drag-end>` | 组件内硬编码补发 | 由集中弃用层补发（同载荷、同实例提示一次） | 迁移到 `dragend` |
+| `BRectangle` | 不存在 | 新增覆盖物组件 | 见 [BRectangle 文档](/zh-CN/components/overlay/rectangle) |
+| `BInfoWindow` / `BContextMenu` / `BMapMask` / `BMarker3d` | 命令式 watcher | **本次不变**（仍走 `useOverlayResource`） | 归属见 ADR 已知限制（分别是 #32 / #33 / 待运行时取证） |
+| `visible=false` 的实现 | `removeOverlay`：实例离开地图（`map.getOverlays()` 少一个，SDK 会派发 `remove`） | `show()` / `hide()`：实例**留在图上**、只是不可见（与 #30 对 Marker、#41 对控件的统一口径一致） | 需要真正摘除请用 `v-if`；`visible` 只表达「显示与否」 |
+| `remove` 事件的到达时机 | `<BBezierCurve>` 与 `<BMarker>` 在**组件自身**的摘除路径上也会收到 `remove`：切隐藏（那时走 `removeOverlay`）、卸载 / 重建（那时监听还没解绑） | `remove` 只在**外部**摘除（`map.removeOverlay()` / `map.clearOverlays()`）时到达组件；组件自身的卸载 / 重建 / 隐藏不再回放它。其余六个组件此前根本不订阅 `remove`，现在按事件矩阵统一订阅（纯新增） | 用 `remove` 做「外部把我摘掉了」这类清理的代码要注意卸载时不会再有这条通知；感知显隐用 `visible`，感知卸载用组件生命周期 |
+
+**props 与 emits 层面无破坏性变更**（八个组件的 props 名与默认值未变，只新增 `bounds`；emits 只增不减），
+但上表最后两行是**行为语义**的变化：`visible` 的实现方式、以及 `remove` 的到达时机。
+
+两处**类型 / 元数据层**的附带变化：
+
+| 变更 | 之前 | 现在 | 处置 |
+| --- | --- | --- | --- |
+| `LabelStyle`（`<BLabel style>`） | `Record<string, any>` | `Record<string, unknown>` | 读样式值的代码可能要自己收窄（有意的收紧） |
+| 覆盖物组件的 devtools 名字 | 五个组件没有 `defineOptions({ name })` | 九个组件统一声明 | 无行为变化 |
+
 ## 3.0.0-beta → 3.0（控件统一 spec 与全景基线）
 
 M7 把控件收进统一的 `ControlSpec`，并补上全景基线（决策见

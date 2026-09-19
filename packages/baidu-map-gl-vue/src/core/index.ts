@@ -143,6 +143,23 @@ export {
 export type { BMapClientContext, ClientStatus, CreateClientContextOptions } from "./context/client";
 export { diffData, getItemKey } from "./data/diffData";
 export type { DataDiff, ItemKeyFn } from "./data/diffData";
+export { scanValidItems, isUsableItemKey, itemKeyReader } from "./data/itemScan";
+export type { ItemProblem, ItemProblemKind, ItemScanOptions, ScannedItem } from "./data/itemScan";
+export { createProblemReporter } from "./data/problems";
+export type { DataProblem, DataProblemKind, ProblemReporter } from "./data/problems";
+export { readValidPoint } from "./data/points";
+export type { PointProblemReason, PointReadResult } from "./data/points";
+export { createItemIndex } from "./data/itemIndex";
+export type { IndexedItem, ItemIndex } from "./data/itemIndex";
+export { adaptPoints, resolveIdField, GENERATED_ID_FIELD } from "./data/geojsonAdapter";
+export type {
+  AdaptedPoints,
+  GeoJsonAdaptOptions,
+  GeoJsonFeatureCollection,
+  GeoJsonPointFeature,
+  GeoJsonProblem,
+  GeoJsonProblemKind,
+} from "./data/geojsonAdapter";
 export { gridCluster } from "./data/gridCluster";
 export type { Cluster, ClusterOptions } from "./data/gridCluster";
 export {
@@ -164,7 +181,7 @@ export {
 } from "./icons/markerIcon";
 export type { BuiltinMarkerIconName, MarkerIconInputLike } from "./icons/markerIcon";
 export { DataLayerManager } from "./data/DataLayerManager";
-export type { DataLayerHost } from "./data/DataLayerManager";
+export type { DataLayerHost, DataLayerManagerOptions, DataLayerSync } from "./data/DataLayerManager";
 export { createOverlayRegistry } from "./overlays/OverlayRegistry";
 export type {
   OverlayRecord,
@@ -172,14 +189,44 @@ export type {
   ResourceRegistration,
   ResourceRegistrationInput,
 } from "./overlays/OverlayRegistry";
-// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）
+// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30，M5-VECTORS / #31 扩展）
 export type {
   OverlayEventSpec,
   OverlayFieldMap,
   OverlayFieldUpdate,
+  OverlayFieldWatch,
   OverlaySpec,
 } from "./overlays/OverlaySpec";
+export {
+  OVERLAY_EVENT_MATRIX,
+  OVERLAY_KINDS_WITHOUT_EVENT_MATRIX,
+  overlayEventOf,
+  overlayEventsOf,
+  overlayPointerFallback,
+} from "./overlays/overlayEventCatalog";
+export type {
+  OverlayEventDefinition,
+  OverlayEventMatrixEntry,
+  OverlayEventPayloadKind,
+} from "./overlays/overlayEventCatalog";
+export {
+  DEPRECATED_EVENT_ALIAS_CODE,
+  DEPRECATED_PROP_ALIAS_CODE,
+  OVERLAY_EVENT_ALIASES,
+  OVERLAY_PROP_ALIASES,
+  createDeprecationWarner,
+  describeDeprecation,
+  eventAliasesOf,
+  propAliasesOf,
+} from "./deprecations";
+export type {
+  DeprecationNotice,
+  DeprecationWarner,
+  OverlayEventAlias,
+  OverlayPropAlias,
+} from "./deprecations";
 export { useOverlaySpec } from "./composables/useOverlaySpec";
+export { dynamicEmit } from "./composables/dynamicEmit";
 export type {
   OverlayPositionModel,
   UseOverlaySpecOptions,

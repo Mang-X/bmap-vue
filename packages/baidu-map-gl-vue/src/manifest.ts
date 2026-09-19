@@ -45,6 +45,12 @@ export const componentManifest = [
     source: "./components/overlays/BPolygon.vue",
   },
   {
+    name: "BRectangle",
+    exportName: "BRectangle",
+    category: "overlay",
+    source: "./components/overlays/BRectangle.vue",
+  },
+  {
     name: "BLabel",
     exportName: "BLabel",
     category: "overlay",
@@ -105,16 +111,16 @@ export const componentManifest = [
     source: "./components/controls/BControl.vue",
   },
   {
-    name: "BPointLayer",
-    exportName: "BPointLayer",
-    category: "data",
-    source: "./components/data/BPointLayer.vue",
-  },
-  {
     name: "BMarkerList",
     exportName: "BMarkerList",
     category: "data",
     source: "./components/data/BMarkerList.vue",
+  },
+  {
+    name: "BPointCollection",
+    exportName: "BPointCollection",
+    category: "data",
+    source: "./components/data/BPointCollection.vue",
   },
   {
     name: "BMarkerCluster",

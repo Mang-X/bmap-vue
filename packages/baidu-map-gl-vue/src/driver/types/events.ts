@@ -85,6 +85,50 @@ export interface MapTypeChangeEvent extends DriverEvent {
   zoomLevel: number;
 }
 
+/* ------------------------------------------------------------------ 覆盖物事件载荷
+ *
+ * M5-VECTORS / issue #31：覆盖物事件的公共载荷按**上游声明的必填程度**分三档，而不是
+ * 「一律给一份形状相同的对象」。判据全部来自 `@baidumap/jsapi-v4-types@4.0.4` 的
+ * `overlay/OverlayEvent.d.ts`：
+ *
+ * | 上游声明 | 本库载荷 | 归一化 |
+ * | --- | --- | --- |
+ * | `OverlayMouseEvent.point` **必填**（Marker / Label / 图形族） | `OverlayPointerEvent`（`point` 必填） | raw 缺坐标时补 `{lng:0,lat:0}` |
+ * | `GraphMouseOutEvent` = base & **Partial**`<OverlayMouseEvent>`（图形族 `mouseout`） | `OverlayPartialPointerEvent`（`point` 可缺） | **不补**——「没有坐标」是上游允许的事实，补成 `(0,0)` 会把它伪装成一个真实坐标 |
+ * | `OverlayBaseEvent` 与其余图形事件（`remove` / `lineupdate` / 编辑类） | `OverlayEventPayload` | 不做坐标兜底 |
+ *
+ * 哪些事件属于哪一档由 `core/overlays/overlayEventCatalog.ts` 的矩阵声明（单一事实源），
+ * 由 `driver/jsapi-v4/events.ts` 在**订阅时**按目标句柄的种类翻译成归一化策略。
+ * 这份契约与 `<BMap>` 的 map 事件共用同一套 `DriverEvent` 底座：字段名不因目标而变。
+ */
+
+/** 覆盖物事件的公共底座：Driver 归一化后的领域事件 + **恒有的 `type`**（订阅名）。 */
+export interface OverlayEventPayload extends DriverEvent {
+  type: string;
+}
+
+/**
+ * 上游把 `point` 声明为必填的覆盖物指针事件（`OverlayMouseEvent`）。
+ *
+ * 「必填」是可兑现的：raw 里坐标残缺时由 Driver 补 `{lng:0,lat:0}`（与 map 事件的
+ * `POINTER_EVENT_NAMES` 同口径），因此调用方不需要判空。
+ */
+export interface OverlayPointerEvent extends OverlayEventPayload {
+  point: Point;
+}
+
+/**
+ * 上游把 `point` 声明为**可缺**的覆盖物指针事件（图形族 `mouseout`、GroundOverlay 家族）。
+ *
+ * Driver **不做兜底**：图形族 `mouseout` 可能由内部命中切换合成（上游 `GraphMouseOutEvent`），
+ * 此时坐标本来就不存在。把「不存在」补成 `(0,0)` 等于凭空造一个坐标——调用方无法区分
+ * 「真的在原点」与「这次没有坐标」。
+ */
+export interface OverlayPartialPointerEvent extends OverlayEventPayload {
+  /** 仅当 SDK 真的给了坐标时存在。 */
+  point?: Point;
+}
+
 export interface EventDriver {
   on<TEvent = unknown>(
     target: SdkHandle<string>,

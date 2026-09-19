@@ -66,23 +66,10 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件；以下为 `BMarker` 实际发出的 typed emits：
+本组件的事件面由**覆盖物事件矩阵**给出：`marker` 共 11 个事件，事件名（Vue 名 / SDK 名）、
+载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
 
-| 事件名           | 说明                                                                               | 类型                   |
-| ---------------- | ---------------------------------------------------------------------------------- | ---------------------- |
-| click            | 鼠标左键单击事件的回调函数。当双击时，产生的事件序列为：click -> click -> dblclick | `((e: unknown) => void)` |
-| dblclick         | 鼠标左键双击事件的回调函数                                                         | `((e: unknown) => void)` |
-| rightclick       | 鼠标右键单击事件的回调函数                                                         | `((e: unknown) => void)` |
-| mousedown        | 鼠标左键在该覆盖物上按下的回调函数                                                 | `((e: unknown) => void)` |
-| mouseup          | 鼠标左键在该覆盖物上抬起的回调函数                                                 | `((e: unknown) => void)` |
-| mouseout         | 鼠标指针移出该覆盖物事件的回调函数                                                 | `((e: unknown) => void)` |
-| mouseover        | 鼠标指针移入该覆盖物事件的回调函数                                                 | `((e: unknown) => void)` |
-| remove           | 该覆盖物被移除的回调函数                                                           | `((e: unknown) => void)` |
-| dragstart        | 拖拽覆盖物开始事件的回调函数                                                       | `((e: unknown) => void)` |
-| dragging         | 覆盖物拖拽中事件的回调函数                                                         | `((e: unknown) => void)` |
-| dragend          | 拖拽覆盖物结束事件的回调函数                                                       | `((e: unknown) => void)` |
-| drag-end         | `dragend` 的别名（同时触发）                                                       | `((e: unknown) => void)` |
-| update:position  | 拖拽结束回写位置                                                                   | `({ lng, lat })`       |
+详见 [覆盖物事件矩阵](./events)。
 
 ## v3 生命周期与更新行为
 

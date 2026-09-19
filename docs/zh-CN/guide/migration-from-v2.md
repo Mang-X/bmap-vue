@@ -99,7 +99,7 @@ v3 修复:
 - 0 坐标有效(不再用 truthy 判断)。
 - 初始 `visible`、`icon`、`rotation`、`zIndex` 和拖拽状态会在 Marker 创建时直接应用。
 
-> 大量点请勿堆叠独立 BMarker,改用 `BMarkerCluster` / `BMarkerList`。`BPointLayer` 仍可用，但只是 `BMarkerList` 的 deprecated alias。
+> 大量点请勿堆叠独立 BMarker,改用 `BMarkerCluster` / `BMarkerList` / `BPointCollection`。旧名 `BPointLayer` 已在 M6 移除（它本质是「每项一个 Marker」的组件，名字却暗示批量层，见[数据组件](../components/data)）。
 
 ### 3.3 BInfoWindow
 
@@ -126,7 +126,7 @@ v3 引入三档渲染模型:
 | 少量、逐点交互 | `BMarker` | 一 V 一组件 |
 | 中等规模、需聚合 | `BMarkerCluster` | 数据组件 + 内置网格聚合 |
 | 中小规模列表 | `BMarkerList` | 每个 item 一个 SDK Marker，由一个组件统一 diff 和清理 |
-| 千级以上 | `BPointCollection`（待实现） | 单个批量 SDK 资源；当前不要将 `BMarkerList` 误认为批量 SDK 层 |
+| 千级以上 | `BPointCollection` | 单个批量 SDK 资源（4.0 原生点图层），拾取回传业务项 |
 
 ```vue
 <BMarkerCluster :data="stations" item-key="id"
@@ -141,6 +141,17 @@ v3 引入三档渲染模型:
 ## 5. 弃用(deprecation)
 
 每条弃用都有稳定 code,文档列出替代 API,同实例只警告一次,production 默认不输出。
+映射表本身是单一事实源(`packages/baidu-map-gl-vue/src/core/deprecations/aliases.ts`),
+下面的表格从它派生。
+
+| code | 旧名 | 替代 | 组件 | 说明 |
+| --- | --- | --- | --- | --- |
+| `BMAP_DEPRECATED_PROP_ALIAS` | `startPoint` + `endPoint` | `bounds` | `BGroundOverlay` | 一个 `bounds`(`{ southwest, northeast }`)取代两个角点。正典有值时旧名**完全不参与**(连提示都不发) |
+| `BMAP_DEPRECATED_EVENT_ALIAS` | `@drag-end` | `@dragend` | `BMarker` | 两个名字都会发(同载荷),提示同实例一次 |
+
+> 别名只在**真的被用到**时提示:prop 别名在读到旧值时提示,事件别名在第一次派发时提示——
+> 组件里绑了却从不触发的旧名字不会打扰使用者。
+
 
 示例(控制台):
 ```
@@ -170,8 +181,10 @@ v3 的 SdkRegistry 会在失败后移除缓存,允许下次重试。
 **Q: 多个 BMap 会互相干扰吗?**
 不会。每个 BMap 创建独立 MapRuntime,含独立 event bus / overlay registry。
 
-**Q: `BPointLayer` 是真正的批量 SDK 点层吗?**
-不是。当前 `BPointLayer` 是 deprecated alias，实际每个 item 仍创建一个 SDK Marker；新代码使用 `BMarkerList`。真正的单资源批量层 `BPointCollection` 尚未实现。
+**Q: 批量点该用哪个组件?**
+看「落地成几个 SDK 资源」：逐项 Marker 用 `BMarkerList`（或聚合用 `BMarkerCluster`），
+单个批量资源用 `BPointCollection`。旧名 `BPointLayer` 已在 M6 移除：它的实现是「每项一个 Marker」，
+名字却暗示批量层，正是这次收口要消除的歧义。
 
 **Q: `useBMapAsyncTask` 去哪了?**
 它已在 v3 的服务重构里**删除**（同一件事有两套实现：一套是 Driver 的归一化调用面，一套是
