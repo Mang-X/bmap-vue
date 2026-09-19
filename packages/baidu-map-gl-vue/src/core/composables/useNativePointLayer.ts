@@ -87,6 +87,13 @@ interface InstanceState {
   appliedStyleKeys: string[];
   /** 账本记录（`Map` 卸载前摘掉它；换实例时走它的**严格** `detach()`）。登记成功前为 `null`。 */
   record: LayerRecord | null;
+  /**
+   * 摘除期间的业务回调门（由账本的严格 `detach()` 打开 / 关闭）。
+   *
+   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆；失败时门关掉，实例**完全恢复可用**
+   * —— 「保留旧实例」因此包含行为，不只是画面。
+   */
+  quiescing: boolean;
 }
 
 /**
@@ -214,6 +221,7 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       appliedStyleKeys: [],
       // 账本记录在下面**先登记再挂载**（任何一步抛错时，卸载路径上一定有一条能摘掉它的记录）
       record: null,
+      quiescing: false,
     };
 
     // 账本先登记：任何一步抛错时，卸载路径上一定有一个「能把它从图上摘掉」的记录。
@@ -221,6 +229,10 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       kind: profile.kind,
       handle,
       scope: listenerScope,
+      // 摘除期间挡业务回调（可恢复）：见 `InstanceState.quiescing`
+      quiesce: (active) => {
+        state.quiescing = active;
+      },
       remove: () => {
         // ⚠️ 顺序：**先摘、后销账**。反过来（先清 `instance`）时，一次抛错的 `removeLayer` 会把
         // 记账清成「已经没有实例了」，让之后的重试 / 卸载跳过摘除（资源留在图上没人认领）。
@@ -417,7 +429,14 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
    * （`NormalLayerEventMap`）——**没有** mouseover / mouseout，所以这里只订阅 `click`。
    */
   function bindEvents(state: InstanceState, c: MapReadyContext): void {
-    state.listenerScope.add(c.client.driver.events.on(state.handle, "click", (event) => handlePick(event)));
+    state.listenerScope.add(
+      c.client.driver.events.on(state.handle, "click", (event) => {
+        // 摘除期间（`detach()` 的 quiesce 阶段）不穿透：SDK 可能在 `removeLayer` 里同步派发事件，
+        // 而这一代实例正在被拆。
+        if (state.quiescing) return;
+        handlePick(event);
+      }),
+    );
   }
 
   /** 拾取载荷 → 业务项，并派发两个事件。 */

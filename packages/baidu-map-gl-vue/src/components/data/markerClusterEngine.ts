@@ -21,7 +21,7 @@
  * 2. **单点条目的 id 用业务 key**（`gridCluster` 的 `getKey`）：旧实现不传它，展开的单点拿到的是
  *    **桶内下标**（`"0"` / `"1"`…），两个不同桶的单点会撞成同一个 id ⇒ 只留下一个 marker（静默丢点）。
  */
-import { DataLayerManager, type DataLayerHost } from "../../core/data/DataLayerManager";
+import { DataLayerManager, type DataLayerHost, type DataLayerSync } from "../../core/data/DataLayerManager";
 import { gridCluster, type Cluster } from "../../core/data/gridCluster";
 import { itemKeyReader, scanValidItems } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
@@ -65,6 +65,13 @@ export function createMarkerClusterEngine<Item>(
   const clickDisposers = new WeakMap<object, () => void>();
   /** 读地图 zoom 失败只告警一次（兜底是显示优化，不该刷屏）。 */
   let warnedZoomRead = false;
+  /**
+   * 摘除期间的业务回调门（`detach()` 打开）。与 `LayerRegistryInput.quiesce` 同一语义：
+   * 摘除期间不穿透，失败后关掉门 ⇒ 旧引擎**完全恢复可用**。
+   */
+  let quiescing = false;
+  /** 上一次交给 `DataLayerManager` 的输入：部分摘除失败时用它把旧引擎**重放回完整状态**。 */
+  let lastSync: DataLayerSync<Cluster<ClusterPoint<Item>>> | null = null;
 
   function buildHost(c: MapReadyContext): DataLayerHost<Cluster<ClusterPoint<Item>>, MarkerHandle> {
     const driver = c.client.driver;
@@ -77,6 +84,8 @@ export function createMarkerClusterEngine<Item>(
         clickDisposers.set(
           marker as object,
           driver.events.on(marker, "click", () => {
+            // 摘除期间不穿透（SDK 可能在 `removeOverlay` 里同步派发事件）
+            if (quiescing) return;
             // 数据可能已经重算过聚合 ⇒ 读账本里的**最新**簇，而不是创建时闭包里的那个
             const latest = manager?.latestOf(marker) ?? cluster;
             if (latest.size >= minClusterSize()) {
@@ -96,9 +105,11 @@ export function createMarkerClusterEngine<Item>(
         return marker;
       },
       removeMarker: (marker) => {
+        // ⚠️ 顺序：**先摘、后删 disposer**。反过来时一次抛错的 `removeOverlay` 会把 Marker
+        // 留在图上却已经没人认领它的监听（与「记账晚于副作用」同源）。
+        driver.overlays.remove(target, marker);
         clickDisposers.get(marker as object)?.();
         clickDisposers.delete(marker as object);
-        driver.overlays.remove(target, marker);
       },
       updatePosition: (marker, point) => driver.overlays.setPosition(marker, point),
       setVisible: (marker, visible) => driver.overlays[visible ? "show" : "hide"](marker),
@@ -146,12 +157,15 @@ export function createMarkerClusterEngine<Item>(
         getKey: (entry: ClusterPoint<Item>) => readKey(entry.item),
       },
     );
-    manager.sync({
+    const syncInput: DataLayerSync<Cluster<ClusterPoint<Item>>> = {
       items: clustered,
       getKey: (cluster) => cluster.id,
       getPosition: (cluster) => cluster.position,
       version: props.dataVersion,
-    });
+    };
+    // 记住这一份输入：部分摘除失败时要靠它把旧引擎重放回**完整**状态（见 `detach()`）
+    lastSync = syncInput;
+    manager.sync(syncInput);
     manager.flush();
     reports.flush();
     // 与原生引擎同名同形的读数（原生转发 SDK 的 `change`，这里在重算之后给出同一份）
@@ -204,17 +218,38 @@ export function createMarkerClusterEngine<Item>(
     detach() {
       const active = manager;
       if (!active) return;
+      // 两阶段（quiesce → clear → commit）：
+      // `removeMarker` 会删掉 click disposer、`clear()` 还会清 item index，都是**不可逆**的，
+      // 所以先挡业务回调、只有确认摘净才让它们永久生效。
+      quiescing = true;
       active.clear();
-      // `clear()` 逐条隔离、不抛错：摘不掉的条目会**保留所有权** ⇒ 计数没归零就是「未确认摘净」。
-      // 此时抛错且**不清理本引擎状态**，调用方会放弃换引擎并保留旧引擎（下一次还能再试）。
       if (active.size > 0) {
+        // **部分成功**：已经摘掉的那些不会自己回来，`size > 0` 只证明「所有权没丢」，
+        // 不证明「旧引擎被保留」。因此用上一次输入重放一次同步，把旧引擎**恢复完整**
+        // （缺的补建、留下的仍在），再放弃这次换引擎 —— 交给用户的必须是完整可用的引擎。
+        const remaining = active.size;
+        try {
+          if (lastSync) {
+            active.sync(lastSync);
+            active.flush();
+          }
+        } catch (error) {
+          // 恢复失败也要把门关掉（否则旧引擎连点击都没了），并把这条信息交出去
+          devWarn(
+            `${input.label}: 换引擎时摘除未完成，且恢复旧引擎失败：` +
+              `${(error as Error)?.message ?? String(error)}`,
+          );
+        } finally {
+          quiescing = false;
+        }
         throw new BMapError(
           "BMAP_SDK_CALL_FAILED",
-          `${input.label}: 还有 ${active.size} 个 Marker 未能摘除，无法确认旧引擎已释放`,
+          `${input.label}: 还有 ${remaining} 个 Marker 未能摘除，已放弃换引擎并恢复旧引擎`,
         );
       }
       active.dispose();
       manager = null;
+      quiescing = false;
     },
   };
 }

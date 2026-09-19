@@ -27,6 +27,14 @@ export class FakeV4Overlay extends FakeV4EventTarget {
   visible = true
   /** 由 `FakeV4Map.addOverlay` 写入；`removeOverlay` 时按实例清除。 */
   attachedMap: FakeV4Map | null = null
+  /**
+   * 注入一次 `show()` / `hide()` 失败（**写之前**抛，状态不变）。
+   *
+   * 口径同 `FakeV4Map.failNextRemoveLayer`：显隐是「宿主**逐资源**写入」的循环，一次失败会留下
+   * 「部分已对齐、部分没对齐」的状态 —— 那种状态只有在夹具能注入失败时才可断言。
+   */
+  failNextShow: Error | null = null
+  failNextHide: Error | null = null
 
   constructor(options: Record<string, unknown>, stats: FakeV4Diagnostics) {
     super(stats)
@@ -36,12 +44,22 @@ export class FakeV4Overlay extends FakeV4EventTarget {
   /** 官方 `Overlay#show/hide`：所有内置覆盖物都继承，是 `OverlayDriver.show/hide` 的落点。 */
   show(): void {
     this.callLog.push('show')
+    if (this.failNextShow) {
+      const error = this.failNextShow
+      this.failNextShow = null
+      throw error
+    }
     this.visible = true
     this.emit('show')
   }
 
   hide(): void {
     this.callLog.push('hide')
+    if (this.failNextHide) {
+      const error = this.failNextHide
+      this.failNextHide = null
+      throw error
+    }
     this.visible = false
     this.emit('hide')
   }
