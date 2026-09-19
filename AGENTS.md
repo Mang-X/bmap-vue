@@ -46,9 +46,16 @@
   两者的区分是调用方能不能「重试」的依据，不要合并。
 - **回调归属不许按到达顺序猜**：官方对 JSONP 风格的服务只承诺「单次调用内部的顺序」，**没有**承诺
   多次请求之间的回调顺序（`LocalSearch` 的 4.0.4 声明里也没有）。因此归属只能靠**可验证的身份**：
-  `Autocomplete` 用「通道独占 + 同关键词互斥」（`suggest()`），`LocalSearch` 用「**一个实例一个未结算
-  操作**」+ 调用方侧「取代即换新实例」（`useBMapServiceTask` 的 `supersede` 策略）。没有身份可依据时
-  **显式拒绝**，不要排队等后来猜——见 ADR `2026-09-14-service-lifecycle-and-local-search` 决策 4。
+  `LocalSearch` 用「**一个实例一个未结算操作**」+ 调用方侧「取代即换新实例」（`useBMapServiceTask`
+  的 `supersede` 策略）。没有身份可依据时**不建推断层**：`Autocomplete` 因此**没有**归一化调用面
+  （#104 删掉了按 keyword/FIFO 猜回包的 `suggest()`），构造时传 `onSearchComplete` 原样转发，
+  「这条结果属于哪次输入」由持有输入框的一方判断。
+- **Ownership-first / Evidence-before-abstraction（#104）**：上游没有公开的 request identity 时，
+  顺序是「收窄并发或所有权 → 实例隔离 / supersede 重建 → 最终状态 reconcile」，**最后**才考虑
+  FIFO / 计数 / 时间 / 事件邻接，且不凭「通常按这个顺序到达」建立 Stable 契约。不镜像读不回的 SDK
+  内部状态（视角动画只观察公开事件，暂停/继续只有私有成员 ⇒ 不提供）。未知运行时行为先 probe 再建
+  抽象；判据退化成常量、没有消费者或官方已提供的抽象一律删除，不留「以后可能有用」的扩展面。
+  存量审计表见 `docs/zh-CN/contributing/architecture-ownership-audit.md`。
 
 `integrations/**` 与 `components` / `composables` 同属禁区（不在 raw SDK 白名单内）：它只能经
 `MapHandle`（`unwrapRaw()`）与 Facet Driver 与引擎交互。`./ui-kit` 另有两条硬约束，见
@@ -80,7 +87,7 @@ raw SDK 白名单（相对 `packages/baidu-map-gl-vue/src`）：`driver/**`、`c
 每个文件必须带 `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` 元数据，禁止 `any`。
 
 Capability Catalog 是能力清单的单一事实源（`src/driver/capability/catalog.ts`），
-覆盖 Map / Overlay / Layer / Service / Panorama / Runtime，用 `status`（`native` / `extended` / `experimental` / `unsupported`）与 `runtimeOnly` 表达能力语义；
+覆盖 Map / Overlay / Layer / Service / Panorama，用 `status`（`native` / `extended` / `experimental` / `unsupported`）与 `runtimeOnly` 表达能力语义；
 能力矩阵由 `pnpm generate:capability-matrix` 生成，禁止手工编辑。
 
 ## Official-first 约束

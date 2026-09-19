@@ -97,12 +97,19 @@ function walkStaticGraph(entries: readonly string[]): {
 const SELF_BUILT_TRANSPORT_MARKERS = [
   "ScriptLoader",
   "SharedLoadTask",
-  "createBaiduSdkUrl",
   "createCallbackName",
   "appendCallback",
   "loadJsapiV4Script",
   "createElement",
 ] as const;
+
+/**
+ * 默认入口（根 + `./core`）的**静态**模块图。
+ *
+ * 提到模块作用域是因为两批断言共用它：一条查「不得触达 UI Kit / CSS」，
+ * 一条查「legacy 入口 URL 构造器不在图里」。
+ */
+const DEFAULT_GRAPH = walkStaticGraph(["index.ts", "core/index.ts"]);
 
 /**
  * legacy 工厂的**调用**与**具名导入**。
@@ -120,20 +127,35 @@ describe("默认在线路径不得再自建 JSONP transport", () => {
   it("门禁自身不是空转：自建 transport 的痕迹会被抓到，注释里的提及不算", () => {
     // 正证：把「重新引入自建加载」的代码形状喂给判定式，必须命中。
     const reintroduced =
-      "const loader = new ScriptLoader();\nconst url = createBaiduSdkUrl(options, createCallbackName('cb'));";
+      "const loader = new ScriptLoader();\nconst url = appendCallback(apiUrl, createCallbackName('cb'));";
     expect(SELF_BUILT_TRANSPORT_MARKERS.filter((marker) => reintroduced.includes(marker))).toEqual([
       "ScriptLoader",
-      "createBaiduSdkUrl",
       "createCallbackName",
+      "appendCallback",
     ]);
     // 反向：注释里的说明不得触发（否则门禁逼着人改文案而不是改实现）。
-    const commented = stripComments("// 旧实现用 new ScriptLoader() 加载\n/* createBaiduSdkUrl(...) */");
+    const commented = stripComments("// 旧实现用 new ScriptLoader() 加载\n/* appendCallback(...) */");
     expect(SELF_BUILT_TRANSPORT_MARKERS.filter((marker) => commented.includes(marker))).toEqual([]);
   });
 
   it("不出现自建入口 URL / 回调名 / 自研 script 加载器的痕迹", () => {
     for (const forbidden of SELF_BUILT_TRANSPORT_MARKERS) {
       expect(source, `BaiduJsapiV4Provider 仍引用 ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it("legacy 的自拼入口 URL 构造器已整份删除（缺席即门禁）", () => {
+    // #104 R9：默认路径改走官方 `@baidumap/jsapi-loader` 之后，`createBaiduSdkUrl` 没有任何
+    // 生产调用方，连同 `./core` 的导出一起删除。这里断言的是**不存在**：它重新出现在默认模块图
+    // （含 `./core` 导出面）的任何一处，就等于把「自拼入口 URL」重新接回默认路径。
+    //
+    // 正证（门禁不是空转）：`core/loader/url.ts` 确实在这张图里，所以这条循环扫得到东西。
+    expect(DEFAULT_GRAPH.files.some((file) => file.endsWith("core/loader/url.ts"))).toBe(true);
+    for (const file of DEFAULT_GRAPH.files) {
+      expect(
+        stripComments(readFileSync(file, "utf8")),
+        `${file} 仍包含 legacy 入口 URL 构造器`,
+      ).not.toContain("createBaiduSdkUrl");
     }
   });
 
@@ -196,7 +218,7 @@ describe("默认入口解析到 v4 官方 Provider", () => {
 });
 
 describe("根入口静态模块图不得触达 UI Kit 或 CSS", () => {
-  const graph = walkStaticGraph(["index.ts", "core/index.ts"]);
+  const graph = DEFAULT_GRAPH;
 
   it("模块图覆盖了组件与 core 两侧（守卫本身不是空转）", () => {
     // 可达文件数量与「确实走到了 .vue 组件」是这条门禁的**正证**：如果解析器坏了，

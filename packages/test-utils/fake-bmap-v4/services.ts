@@ -246,18 +246,15 @@ export class FakeV4LocalCity {
 
 /* ---------------------------------------------------------------- Autocomplete */
 
-/** 官方 `AutocompleteResult`：只有 `getNumPois` / `getPoi` 两个读法（`keyword` 是可选的）。 */
+/**
+ * 官方 `AutocompleteResult`：只有 `getNumPois` / `getPoi` 两个读法。
+ *
+ * 早期版本还带一个可选的 `keyword`（以及关掉它的开关），那是为了验证已删除的
+ * `suggest()` 归属推断（#104）。官方对「回包里有请求关键字」没有任何承诺，因此这里
+ * 也不替它补——Fake 只长出**已被消费**的形状。
+ */
 export class FakeV4AutocompleteResult {
-  /** 检索关键字；`includeKeyword: false` 时不填充——用来验证「没有 keyword」的退化路径 */
-  keyword?: string
-
-  constructor(
-    private readonly pois: Array<Record<string, unknown>>,
-    keyword: string,
-    includeKeyword = true,
-  ) {
-    if (includeKeyword) this.keyword = keyword
-  }
+  constructor(private readonly pois: Array<Record<string, unknown>>) {}
 
   getNumPois(): number {
     return this.pois.length
@@ -280,10 +277,6 @@ export class FakeV4Autocomplete extends FakeV4EventTarget {
   pois: Array<Record<string, unknown>> = [
     { business: '天安门', province: '北京市', city: '北京市', district: '东城区' },
   ]
-  /** `search()` 是否会回包（false = SDK 静默失败，用来验证超时 / 取消） */
-  respond = true
-  /** 回包是否带 `AutocompleteResult.keyword`（官方声明为可选，运行时是否填充未承诺） */
-  includeKeyword = true
   /** 下一次 `dispose()` 抛出的错误（注入 SDK 销毁失败，用后即清） */
   failNextDispose: Error | null = null
   /** `dispose()` 期间同步执行的回调（用来注入「销毁钩子里重入 dispose」的场景） */
@@ -306,8 +299,7 @@ export class FakeV4Autocomplete extends FakeV4EventTarget {
 
   search(keyword: string): void {
     this.callLog.push(`search:${keyword}`)
-    if (!this.respond) return
-    const results = new FakeV4AutocompleteResult(this.pois, keyword, this.includeKeyword)
+    const results = new FakeV4AutocompleteResult(this.pois)
     const onSearchComplete = this.options.onSearchComplete as
       | ((value: FakeV4AutocompleteResult) => void)
       | undefined

@@ -91,4 +91,24 @@ export interface MapDriver {
 
   startViewAnimation(map: MapHandle, animation: unknown): void;
   stopViewAnimation(map: MapHandle): void;
+  /**
+   * 取消**这一个**视角动画实例（官方 `Map#cancelViewAnimation(viewAnimation)` 本来就是按实例的命令）。
+   *
+   * 与 `stopViewAnimation(map)` 的差别只在范围：本方法只处理该实例对应的那一条记录，同一张图上
+   * 别的动画一律不碰。因此调用方可以反复重试自己发起的那一次取消，而不会停掉别人的动画。
+   * SDK 取消失败时抛错并保留记录（下一次调用或 `destroy` 仍可重试），语义与 `stopViewAnimation` 一致。
+   *
+   * 返回值说的是**本库这一侧的交付状态**，不是 SDK 的终态（那条只能靠公开事件）：
+   * `"deferred"` 也允许调用方据此保留重试入口。
+   */
+  cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
 }
+
+/** `MapDriver.cancelViewAnimation` 的交付状态，全部来自本库自己的记录，不含任何 SDK 回包推断。 */
+export type ViewAnimationCancelOutcome =
+  /** 已起播 ⇒ 本次就调用了 SDK 的取消并且没抛错；记录已结算。 */
+  | "canceled"
+  /** 还没起播 ⇒ 只登记了取消请求，真正取消要等启动安全窗口（**这条不是「已停止」**）。 */
+  | "deferred"
+  /** 本 Driver 已没有该实例的记录：早已结算 / 从未由它起播 ⇒ 没有可取消的东西。 */
+  | "already-settled";

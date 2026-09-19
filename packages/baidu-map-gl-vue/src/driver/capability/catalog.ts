@@ -5,8 +5,9 @@
  * 用于在无真实 SDK 的测试/离线环境做能力探测。
  *
  * 命名与状态约定（M3A0-06 / issue #15）：
- * - 能力名按 `<family>.<capability>` 语义命名，family 覆盖
- *   Map / Overlay / Layer / Service / Panorama / Runtime。
+ * - 能力名按 `<family>.<capability>` 语义命名，family 覆盖 Map / Overlay / Layer / Service /
+ *   Panorama。目录只登记 **SDK 的能力**：本库自己的模块（生命周期、测试替身等）不进这张表，
+ *   「`supports()` 一个自家模块名」没有意义（#104 删掉了原来冒充能力的 `runtime` 族）。
  * - `status` 表达生命周期意图：
  *   - `native`：SDK 原生能力，直接映射官方 API；
  *   - `extended`：项目在 SDK 之上的扩展能力（需要额外实现或组合）；
@@ -14,7 +15,7 @@
  *   - `unsupported`：明确不支持；`supports()` 恒为 false（用户 override 除外），
  *     保留槽位使错误信息、文档与能力矩阵保持一致。
  * - `runtimeOnly`：只能通过实例/原型成员在运行时探测，官方类型包无对应静态声明
- *   （例如 `Map` 原型方法、`PointCollection`、`Marker3D` 或纯项目运行时能力）。
+ *   （例如 `Map` 原型方法、`PointCollection`、`Marker3D`，或只有文档没有类型声明的构造器）。
  *
  * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 为基准核对：
  * `core/Map.d.ts` 的 Map 原型方法与各子目录 `declare namespace BMap` 类声明。
@@ -63,7 +64,6 @@ export type Capability =
   | "layer.panorama-coverage"
   | "layer.line"
   | "layer.fill"
-  | "layer.mvt"
   | "layer.dom"
   // M7-LAYERS（#40）：第三方标准瓦片服务基线（XYZ / WMS / WMTS / 栅格）
   | "layer.xyz"
@@ -81,7 +81,6 @@ export type Capability =
   | "service.walking-route"
   | "service.riding-route"
   | "service.transit-route"
-  | "service.truck-route"
   | "service.geocoder"
   | "service.geolocation"
   | "service.local-city"
@@ -91,14 +90,9 @@ export type Capability =
   // Panorama
   | "panorama.viewer"
   | "panorama.service"
-  | "panorama.label"
-  // Runtime（项目运行时能力，无对应 SDK 成员）
-  | "runtime.resource-scope"
-  | "runtime.capability-override"
-  | "runtime.fake-sdk"
-  | "runtime.async-task";
+  | "panorama.label";
 
-export type CapabilityFamily = "map" | "overlay" | "layer" | "service" | "panorama" | "runtime";
+export type CapabilityFamily = "map" | "overlay" | "layer" | "service" | "panorama";
 
 export type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
 
@@ -484,15 +478,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "experimental",
     runtimeOnly: false,
   },
-  "layer.mvt": {
-    id: "layer.mvt",
-    family: "layer",
-    description: "MVT 矢量瓦片图层（MVTLayer）",
-    rawMembers: ["MVTLayer"],
-    engines: JSAPI_V4,
-    status: "experimental",
-    runtimeOnly: false,
-  },
   "layer.dom": {
     id: "layer.dom",
     family: "layer",
@@ -596,14 +581,14 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     id: "service.autocomplete",
     family: "service",
     description:
-      "输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**" +
-      "依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38）",
+      "输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。" +
+      "本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，" +
+      "已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit）",
     rawMembers: ["Autocomplete"],
     engines: JSAPI_V4,
-    // R25-C / #72：能力本身（构造 + 输入框联想）是 native，但 `suggest()` 的归属规则建立在一个
-    // 未证实的假设上（见 `jsapi-v4/services.ts` 的 pendingSuggest 注释），因此按 `experimental`
-    // 标注——它**不**影响 `supports()`（只有 `unsupported` 会），只是让能力矩阵如实反映风险。
-    status: "experimental",
+    // #104：原先标 `experimental` 的唯一理由是程序化 `suggest()` 的归属假设；该调用面已删除，
+    // 剩下的构造 / 绑定 / 转发都有官方声明支撑，因此回到 `native`。
+    status: "native",
     runtimeOnly: false,
   },
   "service.driving-route": {
@@ -640,15 +625,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     rawMembers: ["TransitRoute"],
     engines: JSAPI_V4,
     status: "native",
-    runtimeOnly: false,
-  },
-  "service.truck-route": {
-    id: "service.truck-route",
-    family: "service",
-    description: "货车路线规划；官方 4.0.4 未声明 TruckRoute 类，可用性待服务模块核查",
-    rawMembers: ["TruckRoute"],
-    engines: JSAPI_V4,
-    status: "experimental",
     runtimeOnly: false,
   },
   "service.geocoder": {
@@ -740,40 +716,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
-
-  // ------------------------------------------------------------ Runtime
-  "runtime.resource-scope": {
-    id: "runtime.resource-scope",
-    family: "runtime",
-    description: "项目资源生命周期作用域（监听器/覆盖物/图层的统一释放路径）",
-    engines: JSAPI_V4,
-    status: "extended",
-    runtimeOnly: true,
-  },
-  "runtime.capability-override": {
-    id: "runtime.capability-override",
-    family: "runtime",
-    description: "运行时能力 override（显式修正能力探测结果）",
-    engines: JSAPI_V4,
-    status: "extended",
-    runtimeOnly: true,
-  },
-  "runtime.fake-sdk": {
-    id: "runtime.fake-sdk",
-    family: "runtime",
-    description: "Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证）",
-    engines: JSAPI_V4,
-    status: "experimental",
-    runtimeOnly: true,
-  },
-  "runtime.async-task": {
-    id: "runtime.async-task",
-    family: "runtime",
-    description: "异步任务控制器（服务与动画的取消/状态统一）",
-    engines: JSAPI_V4,
-    status: "experimental",
-    runtimeOnly: true,
-  },
 };
 
 export const CAPABILITY_IDS = Object.keys(CAPABILITY_CATALOG) as readonly Capability[];
@@ -784,7 +726,6 @@ export const CAPABILITY_FAMILIES: readonly CapabilityFamily[] = [
   "layer",
   "service",
   "panorama",
-  "runtime",
 ];
 
 export const CAPABILITY_STATUSES: readonly CapabilityStatus[] = [

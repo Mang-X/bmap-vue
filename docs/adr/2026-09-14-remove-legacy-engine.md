@@ -147,6 +147,10 @@ ADR 2026-09-13 决策 10 明确把这两条挂到了本票。它们走的是 leg
    而 v4 侧明确抛 `BMAP_CAPABILITY_UNSUPPORTED`（Catalog 里 `service.track-animation` 是
    `unsupported`），指引改用原生图层 `track-line`。迁移结论（BMapGLLib 插件在 4.0 上的去向）
    属 **M8 / #43**，本票只保证错误信息可诊断、且组件/用例把它钉成现状。
+   **[已被 #104 / 2026-09-19 取代]** 该 hook 连同它的 `INITIAL/PLAYING/STOPPING/…` 状态机已**删除**
+   （连同文档、示例与行为用例）：在 v4 上它永远只会走「构造即抛」这一条分支，状态机因此退化成常量，
+   且没有任何消费者。轨迹的现状路径就是原生图层 `track-line`；插件侧结论仍在 **#43**。
+   同参考实现 `huiyan-fe/react-bmap`（236 个 TS 文件）也没有任何 TrackAnimation 抽象。
 3. **服务类 composable 仍直读 `geocoder.raw.*`**。[ADR 2026-09-13 私有面删除](./2026-09-13-private-sdk-surface-removal.md)
    的已知限制写明「要等 #26 删除 webgl-v1 之后，与 #38 的服务生命周期一起做」。本票完成了
    删除，但**没有**顺手做这层收口（它属 **#38**）——这是有意的欠账，不是遗漏。

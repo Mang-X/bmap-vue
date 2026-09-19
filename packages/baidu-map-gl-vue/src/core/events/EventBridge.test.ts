@@ -1,10 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  bindSdkEvent,
-  bindSdkEvents,
-  extractSdkEventNames,
-  normalizeMapEvent,
-} from "./EventBridge";
+import { bindSdkEvent, bindSdkEvents, normalizeMapEvent } from "./EventBridge";
 
 class FakeTarget {
   listeners = new Map<string, Set<(...args: any[]) => void>>();
@@ -45,11 +40,6 @@ describe("EventBridge", () => {
     dispose();
     expect(target.count("click")).toBe(0);
     expect(target.count("dblclick")).toBe(0);
-  });
-
-  it("extractSdkEventNames parses on-prefixed props", () => {
-    const names = extractSdkEventNames({ onClick: 1, onMoveend: 1, title: "x", onDragend: 1 });
-    expect(names).toEqual(["click", "moveend", "dragend"]);
   });
 
   it("normalizeMapEvent wraps without mutating raw", () => {

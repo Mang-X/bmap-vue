@@ -8,7 +8,8 @@
  *   进程级/模块级状态）；
  * - 「Autocomplete watcher/listener/dispose 完整；取消与卸载后不再回写」——观察点必须选在
  *   **能真的改变结论**的地方：更新是否经 Driver 的公开入口（而不是组件内的 raw setter）、
- *   卸载时输入框上的输入活动监听是否真的解绑、SDK 的 `dispose()` 是否被调用。
+ *   SDK 的 `dispose()` 是否被调用、Driver 是否**不**再往调用方的输入框上挂监听（#104 之后
+ *   回包归属不做推断，因此根本没有需要解绑的监听）。
  *   （注：组件卸载后 Vue 不再 patch 它的 props，所以「泄漏的 watcher 被 props 变化触发」
  *   在测试里复现不出来——把断言写在那儿只会得到一条恒真的用例。）
  *
@@ -162,7 +163,9 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     expect(raw.options.location).toBe("上海市");
   });
 
-  it("卸载时解绑输入活动监听、调用 Driver 的 dispose，实例账归零", async () => {
+  // #104：Driver 不再往输入框上挂监听（回包归属不做推断），所以释放面只剩 SDK `dispose()`。
+  // 这里同时守住反面：组件与 Driver 都不碰输入框的事件监听，也就没有「忘摘」的可能。
+  it("卸载只调用 Driver 的 dispose，不给输入框挂事件监听，实例账归零", async () => {
     const host = container();
     const wrapper = await mountTree(() => [h(BAutoComplete, { location: "北京市" })], host);
     await flushPromises();
@@ -170,16 +173,15 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     const raw = fake.createdAutocompletes[0]!;
     const input = document.querySelector(".b-auto-complete-input") as HTMLInputElement;
     expect(input, "组件必须渲染出输入框").toBeTruthy();
+    const addSpy = vi.spyOn(input, "addEventListener");
     const removeSpy = vi.spyOn(input, "removeEventListener");
     expect(fake.diagnostics.snapshot().leaks.autocompletes).toBe(1);
 
     await unmountAndSettle(wrapper);
 
     expect(raw.callLog, "卸载必须调用 SDK 的 dispose（Driver 的公开释放入口）").toContain("dispose");
-    expect(
-      removeSpy,
-      "Driver 挂在输入框上的输入活动监听必须随实例下线（输入框通常比实例活得久）",
-    ).toHaveBeenCalledWith("input", expect.any(Function));
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
     expect(fake.diagnostics.snapshot().leaks.autocompletes).toBe(0);
     fake.diagnostics.assertNoLeaks("BAutoComplete 卸载");
   });

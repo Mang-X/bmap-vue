@@ -210,15 +210,11 @@ describe("依据与结论不留空", () => {
     }
   });
 
-  it("用户可见的 hook 文档跟着 inventory 的运行时状态走（评审 #85 P2-3）", () => {
+  it("TrackAnimation 不向用户承诺 hook（#104：v4 上没有可运行的实现，状态机已删除）", () => {
     const trackAnimation = ENTRIES.find((entry) => entry.id === "TrackAnimation")!;
+    // inventory 的运行时读数仍然成立：插件本身最小路径验证过，只是本库不装配
     expect(trackAnimation.runtime?.status).toBe("verified");
-    const doc = readFileSync(
-      resolve(ROOT, "docs/zh-CN/hooks/useBMapTrackAnimation.md"),
-      "utf8",
-    );
-    expect(doc, "hook 文档还写着「运行时未验证」").not.toContain("运行时未验证");
-    expect(doc).toContain("最小运行时路径已验证");
+    expect(existsSync(resolve(ROOT, "docs/zh-CN/hooks/useBMapTrackAnimation.md"))).toBe(false);
   });
 
   it("runtime 读数与 `basis` 里的 runtime 档双向一致，且读数不是一句话", () => {

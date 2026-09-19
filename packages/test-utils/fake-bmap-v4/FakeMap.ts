@@ -881,6 +881,13 @@ export class FakeV4ViewAnimation extends FakeV4EventTarget {
   cancelCalls = 0
   /** 测试故障注入：让下一次 cancel 抛错（用于「取消失败后重试」） */
   failNextCancel = false
+  /**
+   * 测试辅助：让 `cancel()` **成功但不派发 `animationcancel`**。
+   *
+   * 真实 SDK 会不会在这种情况下不回调，仓库里没有取证（#104 审计表 F-1）——这个开关不是为了
+   * 声明官方行为，而是给「生产实现不能依赖该事件才交回所有权」留一条防御性用例。
+   */
+  suppressCancelEvent = false
 
   constructor(
     keyFrames: unknown[],
@@ -926,7 +933,7 @@ export class FakeV4ViewAnimation extends FakeV4EventTarget {
     if (this.internal.canceled) return
     this.internal.canceled = true
     this.settled = true
-    this.emit('animationcancel')
+    if (!this.suppressCancelEvent) this.emit('animationcancel')
   }
 
   /** 测试辅助：模拟动画正常结束（`animationend`）。 */

@@ -22,11 +22,39 @@ hooks/useBMapViewAnimation
 ## 用法
 
 ```ts
-const { viewAnimation, setKeyFrames, start, cancel, stop, proceed, status, ready } = useBMapViewAnimation(options, map)
+const { start, cancel, status, ready } = useBMapViewAnimation(options, map)
 ```
 
 :::tip
 该 hooks 需要地图 ready（`BMapClient` 就绪）后才能创建动画实例；在 `<BMap>` 子树内调用时可省略 `map` 参数
+:::
+
+:::warning 只有公开面，没有暂停 / 继续
+4.0 上视角动画实例的暂停与继续**只有私有成员**（`_pause` / `_continue`），本库不用私有面伪造能力，
+所以不提供 `stop()` / `proceed()`；需要中止就用 [`cancel()`](#返回值)（公开命令）。
+每一次 `start()` 都会新建一个动画实例，关键帧变了直接再调一次即可，不必重建 hooks。
+:::
+
+:::tip 接着播下一段该怎么写
+先说清楚一件事：**`start()` 的 Promise 不是「播完」的 Promise**。它等的是地图 ready + 起播命令被
+Driver 接受，命令发出去就 resolve；动画本身还要跑多久，只有公开事件知道。
+
+```ts
+// ① 立刻接管：上一段还在播也没关系，第二次 start() 会取代它
+await start(segmentA);
+await start(segmentB); // A 被接管（不是「等 A 播完」）
+
+// ② 播完再接续：由观察值驱动队列，而不是自己数时间
+watch(status, (value) => {
+  if (value === "idle" && queue.value.length > 0) void start(queue.value.shift()!);
+});
+```
+
+两点要知道：`loop: "INFINITE"` 时 SDK 不会派发 `animationend`，`status` 因此一直停在 `playing`，
+写回 `idle` 有两条路——该段自己的 `animationcancel`，或本库对那次取消的**交付确认**（取消已打到
+SDK）。而**接管可能失败**：起播前 Driver 要先按实例取消上一段，那次取消真的打到 SDK 却失败时
+`start()` 直接 reject、上一段继续播，所以 `await` / `.catch()` 要接住。上一段只是**还没进启动安全
+窗口**时不算失败（Driver 报 `deferred`）：取消被登记下来、新段照常起播，旧段仍由本 hooks 重试到终态。
 :::
 
 ### 参数
@@ -38,25 +66,20 @@ const { viewAnimation, setKeyFrames, start, cancel, stop, proceed, status, ready
 
 #### ViewAnimationOptions
 
-| 属性            | 描述                                                             | 类型                   | 默认值 |
-| --------------- | ---------------------------------------------------------------- | ---------------------- | ------ |
-| duration        | 动画持续时常，单位 ms                                            | `number`               | `1000` |
-| delay           | 动画开始延迟                                                     | `number`               | `0`    |
-| loop            | 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环 | `number \| 'INFINITE'` | `1`    |
-| disableDragging | 动画播放时禁止鼠标拖动                                           | `boolean`              | `true` |
+| 属性     | 描述                                                             | 类型                   | 默认值 |
+| -------- | ---------------------------------------------------------------- | ---------------------- | ------ |
+| duration | 动画持续时常，单位 ms                                            | `number`               | `1000` |
+| delay    | 动画开始延迟                                                     | `number`               | `0`    |
+| loop     | 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环 | `number \| 'INFINITE'` | `1`    |
 
 ### 返回值
 
-| 返回值        | 描述                                                                     | 类型                                                                        |
-| ------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| viewAnimation | 视角动画句柄（`Ref`，值为 `ServiceHandle`；raw 实例仅经 `./advanced` 获取） | `Ref<ServiceHandle<'service:view-animation'> \| null>`                      |
-| setKeyFrames  | 设置动画关键帧函数，需要在`Map`组件`ready`事件触发后才可调用             | [`(path: ViewAnimationKeyFrames[]) => void`](#viewanimationkeyframes)       |
-| start         | 开始动画函数，`setKeyFrames` 设置路径后且 `status` 为 `INITIAL` 才可调用 | `() => void`                                                                |
-| stop          | 暂停动画函数                                                             | `() => void`                                                                |
-| cancel        | 取消动画函数                                                             | `() => void`                                                                |
-| proceed       | 继续播放动画函数                                                         | `() => void`                                                                |
-| status        | 动画状态                                                                 | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                          |
-| ready         | 地图 ready 后 resolve 的 `MapReadyContext`                               | `Promise<MapReadyContext>`                                                  |
+| 返回值  | 描述                                                                             | 类型                                                                    |
+| ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| start   | 播放一段关键帧动画；每次调用新建实例，并**先按实例取消**仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：取消上一段的命令真的打到 SDK 却失败时（例如它的延迟取消刚刚失败过）本方法直接 reject，上一段仍是当前播放、稍后重试 `start()` 或 `cancel()` 即可。上一段只是还没进启动安全窗口（Driver 报 `deferred`）**不算失败**：取消被登记、新段照常起播，旧段留在本 hooks 的重试入口里直到交付终态 | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
+| cancel  | 取消本 hooks 当前那段播放，走官方**按实例**的 `Map#cancelViewAnimation(viewAnimation)`（经 Driver 的 `cancelViewAnimation(map, animation)`）。**只停本 hooks 自己起播的那一段**，同一张图上别人（或另一个 hooks）的动画不受影响。没有在飞动画时什么都不做。三种交付各走各的：登记阶段（还没进启动安全窗口）再调一次会**真重试**；已交付之后再调是**幂等收尾**，不重复打到 SDK；SDK 取消失败时错误抛给调用方，并保留该段的观察对象与重试入口。一次调用里**每一段只拿一次重试机会**（当前段与「取消未交付的旧段」重合时也不重复尝试），所以抛错就等于「这次确实没交付、还可以再试」。已被接管取代的旧段，其晚到的 `animationend` / `animationcancel` 不会改写当前段的状态（收尾按动画身份收敛） | `() => void`                                                            |
+| status  | 观察到的播放状态：由公开事件写，命令不乐观改写它。收敛回 `idle` 有两条路：该段自己的 `animationend` / `animationcancel`，或本库**自己确认过的取消交付**（取消已打到 SDK ⇒ 不再等那条事件）。让位给新段、取消仍未交付的旧段仍以它自己的事件为准 | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
+| ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 
 #### ViewAnimationKeyFrames
 
@@ -89,21 +112,16 @@ interface ViewAnimationKeyFrames {
 #### ViewAnimationStatus
 
 ```ts
-// PLAYING 播放中
-// STOPPING 暂停中
-// INITIAL 默认状态
-type ViewAnimationStatus = 'PLAYING' | 'STOPPING' | 'INITIAL'
+// playing 正在播放
+// idle 没有在播放（未开始 / 已播完 / 已取消）
+type ViewAnimationStatus = 'idle' | 'playing'
 ```
 
 ### 事件监听
 
-hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步到 `status`，无需手动绑定。如需自定义监听，可在 `ready` 后通过 `client.driver.events` 绑定动画句柄：
-
-```ts
-const { ready } = useBMapViewAnimation()
-const { client } = await ready
-client.driver.events.on(viewAnimation.value!, 'animationiterations', () => {})
-```
+hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步到 `status`，无需手动绑定。
+动画实例由 hooks 持有并在每次 `start()` 时替换，因此**不**对外暴露句柄；需要自己观察事件时，
+请在 `ready` 之后用 `client.driver.services.createViewAnimation()` 自行建实例并绑定：
 
 | 事件                | 参数 | 描述                                                                          |
 | ------------------- | ---- | ----------------------------------------------------------------------------- |
@@ -112,10 +130,15 @@ client.driver.events.on(viewAnimation.value!, 'animationiterations', () => {})
 | animationend        | -    | 动画结束时触发，如果动画中途被终止，则不会触发                                |
 | animationcancel     | -    | 动画中途被终止时触发                                                          |
 
+:::warning
+`animationiterations` 不在 hooks 的观察范围内：多轮循环的进度读数需要「按实例订阅 + 计数」，
+而本库目前没有消费它的运行时取证（#104 的 evidence-first）。需要循环进度时走上面那条自建路径。
+:::
+
 ## TS 类型定义参考
 
 ```ts
-import { Ref } from 'vue'
+import { ShallowRef } from 'vue'
 type Point = { lng: number; lat: number }
 export interface ViewAnimationKeyFrames {
   /**
@@ -139,36 +162,28 @@ export interface ViewAnimationKeyFrames {
    */
   percentage: number
 }
-export interface UseViewAnimationOptions {
+export interface UseBMapViewAnimationOptions {
   /**
    * 	动画开始延迟时间，单位ms，默认0
    */
-  delay: number
+  delay?: number
   /**
    * 	动画持续时间，单位ms，默认1000
    */
-  duration: number
+  duration?: number
   /**
    * 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环，默认为1
    */
-  loop: number | 'INFINITE'
-  /**
-   * 动画播放时禁止鼠标拖动
-   */
-  disableDragging: boolean
+  loop?: number | 'INFINITE'
 }
-export type ViewAnimationStatus = 'INITIAL' | 'PLAYING' | 'STOPPING'
+export type ViewAnimationStatus = 'idle' | 'playing'
 export declare function useBMapViewAnimation(
-  options?: UseViewAnimationOptions,
+  options?: UseBMapViewAnimationOptions,
   map?: unknown
 ): {
-  viewAnimation: Ref<unknown>
-  start: () => void
+  start: (keyFrames: ViewAnimationKeyFrames[]) => Promise<void>
   cancel: () => void
-  stop: () => void
-  proceed: () => void
-  status: Ref<ViewAnimationStatus>
-  setKeyFrames: (keyFrames: ViewAnimationKeyFrames[]) => void
+  status: Readonly<ShallowRef<ViewAnimationStatus>>
   ready: Promise<MapReadyContext>
 }
 ```

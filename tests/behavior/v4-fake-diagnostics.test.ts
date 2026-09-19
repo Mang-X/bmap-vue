@@ -259,7 +259,6 @@ describe("Fake v4 diagnostics：重复销毁不能抵消别的实例的泄漏（
     document.body.innerHTML = "";
     const input = () => {
       const el = document.createElement("input");
-      el.readOnly = true;
       document.body.appendChild(el);
       return el;
     };
