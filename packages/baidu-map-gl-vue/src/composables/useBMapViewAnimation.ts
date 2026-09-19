@@ -211,7 +211,8 @@ export function useBMapViewAnimation(
   function cancel(): void {
     if (disposed) return;
     const run = current;
-    // 没有在飞的动画就没有可取消的东西：`stopViewAnimation` 会连带取消**这张图上**别人的动画
+    // 守卫只看本 hooks 有没有在飞段。取消本身是**地图级**命令（`cancelViewAnimation`），
+    // 因此不保证一定不牵连同图其它动画；失败时 `stopRun` 保留归属，调用方可直接重试。
     if (run) stopRun(run);
   }
 
