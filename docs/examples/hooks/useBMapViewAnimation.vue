@@ -11,6 +11,7 @@
     />
     <div class="state">
       <span>播放状态: {{ status === "playing" ? "播放中" : "未播放" }}</span>
+      <span v-if="notice">{{ notice }}</span>
     </div>
     <button class="myButton no-m-b" type="button" @click="play">开始</button>
     <button class="myButton no-m-b" type="button" @click="cancel">取消</button>
@@ -29,9 +30,13 @@ const { start, cancel, status } = useBMapViewAnimation(
   },
   map,
 );
-// 每次播放都新建动画实例，所以关键帧直接随 `start()` 传，不需要先「设置」再「开始」
+const notice = ref("");
+// 每次播放都新建动画实例，所以关键帧直接随 `start()` 传，不需要先「设置」再「开始」。
+// 上一段还在播时再点一次就是「接管」：接管可能失败（起播前要先取消上一段），因此必须接住 rejection。
 function play() {
-  void start(buildKeyFrames());
+  start(buildKeyFrames()).catch((error: unknown) => {
+    notice.value = `本次播放未开始：${(error as Error)?.message ?? String(error)}（上一段仍在播，可再试或先取消）`;
+  });
 }
 function buildKeyFrames(): ViewAnimationKeyFrames[] {
   return [

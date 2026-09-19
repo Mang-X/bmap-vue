@@ -107,7 +107,7 @@
 | --- | --- | --- | --- | --- |
 | `FakeV4CallbackQueue` 的微任务 FIFO + `delay` + `flushOne(index)` | `fake-bmap-v4/async.ts` | 曾经是唯一「suggest 归属成立」的证据 | **KEEP 为测试工具**，禁止再用于认证任何跨请求顺序 | A1 之后其消费者只剩 LocalSearch 的实例身份路径；`flushOne` 的正当用途恰恰是**打乱**顺序 |
 | `FakeV4Autocomplete.respond` / `.includeKeyword` / `AutocompleteResult.keyword` | `fake-bmap-v4/services.ts` | 生产已不读 `keyword` | **REMOVE** | #104 A1 一并删（留着就会有人重新按 keyword 建归属） |
-| `FakeMap.destroy()` 幂等 | `fake-bmap-v4/FakeMap.ts:667` | 我们的 guard 保留 | `ASSUMED` ⇒ guard 可以留，**契约不能这么写** | 后续票：`driver-contract.ts` 里「重复 remove 不抛错」要标明是对本库的断言，不是对 SDK 的；另见 F-3 |
+| `FakeMap.destroy()` 幂等 | `fake-bmap-v4/FakeMap.ts:667` | 我们的 guard 保留 | `ASSUMED` ⇒ guard 可以留，**契约不能这么写** | 后续票：`driver-contract.ts:504`、`:610` 那两行注释里的「SDK 侧的移除对未挂载资源是 no-op」要删掉或标明是**对本库记账**的断言——这两条现在只能证伪我们自己的计数，证不伪 SDK 的幂等性（另见 F-3） |
 | 销毁期回调重入（`Autocomplete.onDispose` 等） | `fake-bmap-v4/services.ts:328-343` | Map / Panorama / service 三处 guard | `ASSUMED`（注释自己写的是「**可能**触发」） | **KEEP guard**，措辞保持「可能」，登记 **F-3** |
 | `addEventListener` 按函数身份去重（注释称「与官方一致」） | `fake-bmap-v4/event-target.ts:24-42` | 生产中立；只有某条用例的期望数字按它算 | `FAKE-ONLY` | 后续票：把该断言改成「夹具记账」口径，或 probe 一次（F-4） |
 | Fake 刻意比官方宽松（不剔除未声明 setter） | `fake-bmap-v4/objects.ts:53` 等 | 策略表仍按官方声明守 | **KEEP**（刻意的不对称，`FakeMap.ts:692` 已说明：宽松的夹具会藏 bug） | — |

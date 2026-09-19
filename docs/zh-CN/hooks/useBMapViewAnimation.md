@@ -35,6 +35,25 @@ const { start, cancel, status, ready } = useBMapViewAnimation(options, map)
 每一次 `start()` 都会新建一个动画实例，关键帧变了直接再调一次即可，不必重建 hooks。
 :::
 
+:::tip 接着播下一段该怎么写
+`start()` 每次都会**新建**一个动画实例并接管仍在播的那一段，所以两种写法都成立：
+
+```ts
+// ① 等这一段真的结束（观察值回到 idle）再起下一段
+await start(segmentA);
+await start(segmentB); // 上一段还在播时这一句会接管它
+
+// ② 想在播完时接续：看 status，而不是自己数时间
+watch(status, (value) => {
+  if (value === "idle" && queue.value.length > 0) void start(queue.value.shift()!);
+});
+```
+
+两点要知道：`loop: "INFINITE"` 时 SDK 不会派发 `animationend`，`status` 因此一直停在 `playing`，
+只有 `cancel()` 之后的 `animationcancel` 会把它写回 `idle`；而**接管可能失败**——起播前 Driver 要先
+取消上一段，取消失败时 `start()` 直接 reject、上一段继续播，所以 `await` / `.catch()` 要接住。
+:::
+
 ### 参数
 
 | 参数    | 描述                   | 类型                                            | 默认值 |
