@@ -39,6 +39,15 @@ async function letSdkStart(): Promise<void> {
   await flushPromises();
 }
 
+/**
+ * 在飞窗口屏障：Fake 的启动定时器 / 回调都记在 `diagnostics` 里。断言它们归零，用例的后续读数
+ * 才是「已经静下来」而不是「恰好赶在前一次推进上」（#105 评审 P2）。
+ */
+async function settleAsyncWindow(): Promise<void> {
+  await letSdkStart();
+  expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+}
+
 type Hook = ReturnType<typeof useBMapViewAnimation>;
 
 function mountHook(run: (hook: Hook) => void | Promise<void>) {
@@ -206,7 +215,7 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
 
     // 关键：第一次失败不能把 hooks 的归属清掉，否则第二次直接 no-op
     hook.cancel();
-    await letSdkStart();
+    await settleAsyncWindow();
 
     expect(animation.cancelCalls, "第二次必须真的把取消命令再打给 SDK").toBe(2);
     expect(animation.getListenerCount(), "重试成功后订阅归零").toBe(0);
@@ -235,7 +244,7 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
 
     // 旧段仍可由 hooks 重试取消（Driver 保留了它的记录）
     hook.cancel();
-    await letSdkStart();
+    await settleAsyncWindow();
 
     expect(first.getListenerCount()).toBe(0);
     expect(hook.status.value).toBe("idle");
@@ -250,7 +259,7 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
 
     animation.failNextCancel = true;
     expect(() => wrapper.unmount()).not.toThrow();
-    await letSdkStart();
+    await settleAsyncWindow();
 
     expect(animation.getListenerCount(), "卸载路径不能等一条可能不来的事件才释放").toBe(0);
     fake.diagnostics.assertNoLeaks("useBMapViewAnimation 卸载时取消失败");
