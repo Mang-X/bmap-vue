@@ -4,8 +4,12 @@
  * 用 key 对海量数据做过增删改 diff:
  * - 使用 Map<PropertyKey, Record> 建索引
  * - 默认以根数组引用 + item key 比较
- * - 支持 dataVersion 快速判定(整批替换)
  * - 不默认深比较完整 item
+ *
+ * ⚠️ 旧的 `shouldFullReplace()` 已删除（M6-MARKER-POINTCOLLECTION / #34）：它把「根引用相同、
+ * 长度变化」判成「整批替换」，而长度变化本来就由 diff 正确处理；真正的 `dataVersion` 语义
+ * （引用不变、内容变了 ⇒ 重新读一遍）在 `DataLayerManager` 里实现。该函数只有一个测试消费者，
+ * 没有任何生产调用点——留着只会让下一个人以为「整批替换」是既定语义。
  */
 export interface DataDiff<Item> {
   added: Item[];
@@ -67,19 +71,4 @@ export function diffData<Item>(
 
   const unchanged = next.length - added.length - updated.length;
   return { added, updated, removed, unchanged };
-}
-
-/**
- * 快速判定是否整批替换(dataVersion 变化 或 根引用相同但数组长度变化)。
- * 支持 dataVersion 快速判定。
- */
-export function shouldFullReplace<Item>(
-  prevVersion: PropertyKey | undefined,
-  nextVersion: PropertyKey | undefined,
-  previous: readonly Item[] | null,
-  next: readonly Item[],
-): boolean {
-  if (prevVersion !== nextVersion) return true;
-  if ((previous?.length ?? 0) !== next.length) return true;
-  return false;
 }

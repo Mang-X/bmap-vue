@@ -133,7 +133,7 @@ export function cluster<Item>(
 export function gridCluster<Item>(
   items: readonly Item[],
   getPosition: (item: Item) => PointLike,
-  options: ClusterOptions = {},
+  options: ClusterOptions<Item> = {},
 ): Cluster<Item>[] {
   const {
     gridSize = 128,

@@ -8,7 +8,7 @@ MapVGL，是一款基于 WebGL 的地理信息可视化库，可以用来展示�
 依据与复现命令见[插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
 本章节示例来自 v2 时代，**在当前默认路径下不能直接使用**；请在 legacy 路径下参考，或改用 4.0 的原生图层
-（`BPointLayer` / `BMarkerCluster` 等）。
+（`BPointCollection` / `BMarkerCluster` 等）。
 :::
 
 本章节演示通过插件形式加载 MapVGL 资源，并展示几个官方图层示例。
