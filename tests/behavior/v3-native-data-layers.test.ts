@@ -325,6 +325,31 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("data 不表态");
     });
 
+    it("不表态期间换实例（改构造期项）⇒ 数据必须被继承，不能凭空消失", async () => {
+      const { wrapper, setProp } = await mountOneVisual(0);
+      const created = createdSince();
+
+      await setProp({ data: undefined });
+      expect(harness.nativeLayerData(), "前置：旧实例仍有数据").toEqual(LINES);
+
+      // 与 data 无关的构造期项变化 —— 会换实例（#106 评审第二轮 P1 的触发路径）
+      await setProp({ enablePicked: false });
+      expect(createdSince(), "确认真的换了实例").toBe(created + 1);
+      expect(
+        harness.nativeLayerData(),
+        "新实例必须继承上一代成功送出的数据（不表态 ≠ 清空）",
+      ).toEqual(LINES);
+      expect(harness.attached("layer"), "同一时刻只有一个实例挂在图上").toBe(1);
+
+      // 账本与 SDK 一致：再给一份**新引用**的数据，仍然会下发（没有被错误地判成「已经写过」）
+      const next = { type: "FeatureCollection", features: [LINES.features[1]] };
+      await setProp({ data: next });
+      expect(harness.nativeLayerData()).toEqual(next);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("不表态 + 换实例");
+    });
+
     it("构造期项变化 ⇒ 换实例（先摘后建）", async () => {
       const { wrapper, setProp } = await mountOneVisual(0);
       const created = createdSince();
@@ -452,6 +477,32 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("Feature State 读回");
     });
 
+    it("idKey = \"\"（空字符串）也算**未声明**：不传给 SDK、命令拒绝、拾取给 id:null", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { wrapper } = await mountOneVisual(0, { idKey: "" });
+
+      // 写入侧：空字符串不是可用的字段名 ⇒ 不交给 SDK（避免 SDK 按 "" 去解析要素身份）
+      expect(harness.nativeLayerOptions(), "构造选项里不得出现空 idKey").not.toHaveProperty("idKey");
+
+      // 状态命令侧：拒绝执行（与「未声明」同一条路径）
+      const state = featureStateOf(wrapper, BLineLayer);
+      const calls = harness.nativeLayerCalls().length;
+      expect(() => state.update("a", { selected: true })).not.toThrow();
+      expect(state.get()).toEqual({});
+      expect(harness.nativeLayerCalls().length, "被拒绝的命令不得碰到 SDK").toBe(calls);
+
+      // 拾取侧：同样按「身份未知」处理 ⇒ 两侧口径一致（#106 评审第二轮 P2）
+      const layer = wrapper.findComponent(BLineLayer);
+      harness.simulateNativePick({ dataIndex: 0 });
+      const pick = layer.emitted("click")!.at(-1)![0] as { hit: boolean; id: unknown };
+      expect(pick.hit).toBe(true);
+      expect(pick.id, "拾取与状态命令不能各说一套").toBeNull();
+      expect(warnLines(warn).some((line) => line.includes("idKey")), "必须告警并点名 idKey").toBe(true);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("空 idKey");
+    });
+
     it("没有声明 idKey 时命令面**拒绝执行**（不让它悄悄落回 SDK 的默认身份）", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { wrapper } = await mountOneVisual(0, { idKey: undefined });
@@ -541,6 +592,28 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("BHeatmapLayer");
+    });
+
+    it("不表态期间「隐藏 → 显示」同样要继承数据（扩展 API 图层的强制重建路径）", async () => {
+      const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
+      const wrapper = mountLayerTree(() => h(BHeatmapLayer, props.value));
+      await settle();
+      const created = createdSince();
+
+      props.value = { ...props.value, data: undefined };
+      await settle();
+      expect(harness.nativeLayerData(), "前置：旧实例仍有数据").toEqual(POLYGONS);
+
+      // 没有 setVisible 的 kind：隐藏是摘掉、显示必须换实例 —— 这条路径不能把数据丢掉
+      props.value = { ...props.value, visible: false };
+      await settle();
+      props.value = { ...props.value, visible: true };
+      await settle();
+      expect(createdSince(), "重新可见换了实例").toBe(created + 1);
+      expect(harness.nativeLayerData(), "新实例继承数据").toEqual(POLYGONS);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("不表态 + 隐藏往返");
     });
 
     it("热力图的 visible 用挂上-摘掉表达；重新可见换实例（摘掉的实例渲染不了）", async () => {

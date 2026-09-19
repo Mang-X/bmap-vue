@@ -25,6 +25,8 @@
  * 本文件**框架无关**（不 import vue、不 import Driver 实现），可以在单测里直接喂事件对象。
  */
 
+import { normalizeIdField } from "../data/identity";
+
 export interface NativeLayerPickPoint {
   readonly lng: number;
   readonly lat: number;
@@ -95,8 +97,11 @@ export function readFeatureId(
   properties: Record<string, unknown> | null,
   idKey: string | undefined,
 ): string | number | null {
-  if (!properties || !idKey) return null;
-  const candidate = properties[idKey];
+  // 判定走 `normalizeIdField`（唯一判定点）：`""` / `undefined` 一律算「未声明身份」，
+  // 与要素状态命令面的前置条件用**同一个**判据（否则同一张图层上会出现两套身份语义）。
+  const field = normalizeIdField(idKey);
+  if (!properties || !field) return null;
+  const candidate = properties[field];
   if (typeof candidate === "string") return candidate;
   if (typeof candidate === "number") return Number.isFinite(candidate) ? candidate : null;
   return null;

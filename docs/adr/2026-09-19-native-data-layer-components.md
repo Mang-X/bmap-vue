@@ -77,9 +77,13 @@
 3. **未就绪不排队**：不抛、不攒着，告警一次并跳过（与 `<BMap>` expose 的命令面同一条口径）；
 4. **「不支持」不在这一层判**：某一类图层有没有该入口是 Driver 的事实，让
    `BMAP_CAPABILITY_UNSUPPORTED` 从那一处抛出来，两处各判一次必然分叉；
-5. **身份没声明就不执行**（#106 评审的建议项）：组件没给 `idKey` 时五个命令一律拒绝并告警一次。
-   放它们过去等价于悄悄依赖 SDK 的默认 `idKey`，于是同一张图层上会出现两套身份语义——拾取如实
-   给出 `id: null`，状态命令却装作知道身份。
+5. **身份没声明就不执行**（#106 评审的建议项）：组件没给可用的 `idKey` 时五个命令一律拒绝并告警
+   一次。放它们过去等价于悄悄依赖 SDK 的默认 `idKey`，于是同一张图层上会出现两套身份语义——拾取
+   如实给出 `id: null`，状态命令却装作知道身份。
+6. **「已声明身份」的判定只有一处**（`core/data/identity.ts` 的 `normalizeIdField`）：**非空字符串**
+   才算声明，`""` / `undefined` / 非字符串一律算未声明。三处用到它的地方（构造期选项要不要交给 SDK、
+   要素状态的前置条件、拾取读取）共用这一个判据——第二轮评审的 P2 正是 `idKey: ""` 在写入侧被当成
+   已声明、在读取侧被当成未声明。
 
 命令面通过组件 `ref` 暴露（`featureState`），**只给有该能力的 kind**：`BHeatmapLayer` /
 `BTrackLineLayer` 不 expose（挂一个每次调用都会抛的方法只是假面）。
@@ -125,7 +129,7 @@ setMaxZoom` …），任何一个映射不到就红。配套的 **Fake 侧不变
 | --- | --- | --- |
 | 对象 | 有数据 | `setData()`（**不重建**） |
 | `null` | 明确「没有数据」 | **换一个没有数据的实例**（这一族没有公开的清空入口） |
-| `undefined` | 不表态 | 不产生任何 SDK 调用，已画出来的数据保持不变 |
+| `undefined` | 不表态 | 不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时把上一代成功送出的数据补齐到新实例**（否则与 `data` 无关的构造期项变化会让数据凭空消失，且 `sentData()` 会与真实实例分叉） |
 
 「`null` ⇒ 重建」对**所有** kind 统一（包括扩展 API 里登记了 `clearData` 的 `Heatmap`）：同一个 prop
 在不同 kind 上换语义，是使用者最难预期的一类差异，而 `null` 是离散动作、重建代价可控。这条同时
@@ -192,12 +196,22 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 | **P1：`BTrackLineLayer` 的 `data → null/undefined` 不会清掉旧轨迹**，同一个 `null` 还会反复尝试同步 | **成立**：旧内核在 `value === null` 且 kind 不支持 `clearData` 时只 warn 就返回，不重建、不摘除、也不更新成功指纹 | 决策 9：`null` ⇒ 换一个没有数据的实例（所有 kind 统一）；`undefined` ⇒ 不表态。补 `object → null → object` 在四个组件（含 `BTrackLineLayer`）上的行为用例 |
 | **建议项：未声明 `idKey` 时仍 expose 完整的 `featureState`**，与拾取的「身份未知」口径形成两套身份语义 | **成立** | 决策 4 第 5 条：身份未声明时五个命令拒绝执行并告警一次；组件文档与用例同步 |
 
+### 第二轮（2026-09-19 晚，基线 `e7e0203`）
+
+| 评审项 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1] `data: undefined` 的「不表态」在**换实例**后会丢数据，`sentData()` 变成陈旧账本**（`A → undefined → 改 enablePicked/idKey` 或扩展图层的 `A → undefined → 隐藏 → 显示`） | **成立**：`applyData` 的 `absent` 分支直接 `return`；创建路径（`force`）同样如此，而 `sent` 是模块级的、不随重建重置 ⇒ 新实例没有数据、账本却还留着 A | 创建路径上把 `sent`（上一代**成功送出**的那份数据）补齐到新实例；补两条回归：`A → undefined → 改 enablePicked 触发重建`（断言新实例仍有 A、且再给新引用仍会下发）与热力图的 `A → undefined → 隐藏 → 显示` |
+| **[P2] `idKey = ""` 仍有两套身份口径**：写入侧用 `!== undefined`（把 `""` 当已声明并交给 SDK），读取侧用 falsy 判断（把 `""` 当未声明） | **成立** | 新增唯一判定点 `core/data/identity.ts#normalizeIdField`（非空字符串才算声明），构造期选项 / 要素状态前置 / 拾取读取三处共用；空字符串不再交给 SDK，命令拒绝，拾取给 `id: null`，并告警点名 |
+| 文档同步：PR 描述仍是旧契约（`解绑 → clearData → removeLayer`、卸载新增 `clearData()`） | **成立** | 同步 PR 描述的生命周期 / 迁移影响 / 验收对照 |
+
 反证（改坏 ⇒ 用例必须红，改回 ⇒ 绿）：
 
 | 改坏 | 结果 |
 | --- | --- |
 | 去掉 `sent !== null && dataIsEmpty()` 判据（退回「warn 后什么都不做」） | 3 条红：`「没有数据」由换实例表达: expected 1 to be 2`、`轨道清空: expected 1 to be 2`、`旧实例连同它的数据一起被丢弃: expected true to be false` |
 | 把 `clearData` 重新登记回四类专页图层 | 7 条红，含机器核对那条：`point-icon(PointIconLayer).clearData 落在 clearData() 上，而官方声明里没有它`，以及 facet 契约的 `SDK 实例缺少方法 clearData()`（Fake 不再宽容地接住） |
+| 去掉「不表态 + 换实例 ⇒ 继承上一代数据」 | 2 条红：`新实例必须继承上一代成功送出的数据: expected null to deeply equal …`、`新实例继承数据: expected null to deeply equal …` |
+| 让 `normalizeIdField` 接受空字符串 | 1 条红：`构造选项里不得出现空 idKey: expected { idKey: '', … } to not have property "idKey"` |
 
 ## 非目标与欠账
 

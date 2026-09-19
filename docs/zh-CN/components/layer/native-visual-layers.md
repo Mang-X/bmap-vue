@@ -29,7 +29,7 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'baidu-ma
 | --- | --- | --- |
 | `data`（有值） | `setData()` | 否 |
 | `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例**（这一族没有公开的清空入口） | **是** |
-| `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变 | 否 |
+| `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时会把上一代的数据补齐到新实例** | 否 |
 | `style` | `setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」） | 否 |
 | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
 | `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
@@ -128,9 +128,10 @@ function highlight(id: string) {
 
 - **身份只有业务 id**：不用要素下标（`dataIndex`）、不按调用顺序配对、不缓存「我们以为 SDK 现在是
   什么状态」——`get()` 每次都读回 SDK；
-- **没有声明 `idKey` 时命令会被拒绝**（告警一次，不做任何事）。「按 id 定位」在没有身份字段的图层上
-  没有意义，而放它过去就等于悄悄依赖 SDK 的默认 `idKey`——那会让**拾取**（如实给出 `id: null`）与
-  **状态命令**（装作知道身份）在同一张图层上形成两套身份语义；
+- **没有声明可用的 `idKey` 时命令会被拒绝**（告警一次，不做任何事）。「可用」= **非空字符串**：
+  `idKey=""` 与不写是同一件事（空字符串不是字段名，也不会交给 SDK）。「按 id 定位」在没有身份字段的
+  图层上没有意义，而放它过去就等于悄悄依赖 SDK 的默认 `idKey`——那会让**拾取**（如实给出 `id: null`）
+  与**状态命令**（装作知道身份）在同一张图层上形成两套身份语义；
 - **非法 id 在调用之前失败**（`BMAP_INVALID_ARGUMENT`），不会产生 SDK 调用；空数组 / 空映射是合法
   输入（什么都不做）；
 - **图层未就绪时命令不排队**：告警一次并跳过。需要确定性时等挂载完成后再调用；

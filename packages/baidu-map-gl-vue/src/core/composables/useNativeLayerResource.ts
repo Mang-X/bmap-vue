@@ -27,6 +27,8 @@
  *
  * `data: undefined` 是**不表态**（不产生任何 SDK 调用、也不重建），与 `LayerSpec` 的口径一致；
  * 「没有数据」必须显式写 `null`——两个取值承担两件事，别用 `undefined` 兼表它们。
+ * 不表态在**更新路径**上什么都不做，但在**换实例**时会把上一代成功送出的数据补齐到新实例，
+ * 否则「一个与 data 无关的构造期项变化」会让画面上的数据凭空消失（见 `applyData`）。
  *
  * ## `visible` 有两种落地，按 kind 的能力面选
  *
@@ -59,6 +61,7 @@ import { onMounted, onScopeDispose, onUnmounted, watch } from "vue";
 import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { createFeatureStateApi, type FeatureStateApi } from "../data/featureState";
+import { normalizeIdField } from "../data/identity";
 import { BMapError } from "../errors/BMapError";
 import { createDevWarnOnce } from "../logger";
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
@@ -446,15 +449,32 @@ export function useNativeLayerResource<Props>(
    *
    * `"empty"`（`null`）在这里**不产生 SDK 调用**，这是刻意的：这批图层没有公开的清空入口
    * （见 Driver 的操作表注释），「没有数据」的落地方式是**换一个没有数据的实例**——那件事由
-   * `sync()` 的重建判据负责（`needsDataClearRebuild`），本函数只在创建路径上把空输入记成
-   * 「这个实例没有数据」。`"absent"`（`undefined`）更是什么都不做：不表态 ≠ 清空。
+   * `sync()` 的重建判据负责（`dataIsEmpty`），本函数只在创建路径上把空输入记成「这个实例没有数据」。
+   *
+   * `"absent"`（`undefined`）在更新路径上什么都不做（不表态 ≠ 清空 ≠ 有值），但在**创建路径**上
+   * 必须把**上一代成功送出的那份数据补齐到新实例**（#106 评审第二轮 P1）：
+   *
+   * - 不补的话，一个与 `data` 无关的构造期项变化（或扩展 API 图层的「隐藏 → 显示」）会换实例，
+   *   而新实例什么数据都没有 ⇒ 画面上的数据凭空消失，违背「不表态 = 保持不变」的承诺；
+   * - 同时 `sentData()` 还留着上一代的数据，拾取兜底账本与真实实例分叉（SDK 空了、账本说有）。
+   *
+   * 「上一代成功送出」这个事实由 `sent` 承载：它在 `setData` 成功后更新、在「没有数据」与卸载时清空，
+   * 因此创建路径上 `sent !== null` 正好等价于「这一代之前确实有一份数据需要继承」。
    */
   const applyData = (state: InstanceState, context: MapReadyContext, force = false): void => {
     const data = hooks.data;
     if (!data) return;
     const mode = data.state(props);
-    if (mode === "absent") return;
     const key = data.key(props);
+    if (mode === "absent") {
+      if (force && sent !== null) {
+        nativeLayersOf(context.client).setData(
+          state.handle,
+          sent as unknown as Record<string, unknown>,
+        );
+      }
+      return;
+    }
     if (mode === "empty") {
       // 创建路径：新实例本来就没有数据 ⇒ 不需要任何调用；更新路径：`sync()` 已经先换过实例了。
       sent = null;
@@ -715,7 +735,8 @@ export function useNativeLayerResource<Props>(
    */
   const featureState = createFeatureStateApi({
     component: hooks.component,
-    identity: () => hooks.identity?.(props),
+    // 身份判定走唯一判定点（`""` / 非字符串都算未声明），与拾取读取用同一个判据
+    identity: () => normalizeIdField(hooks.identity?.(props)),
     session: () => {
       const state = instance;
       const context = readyCtx;

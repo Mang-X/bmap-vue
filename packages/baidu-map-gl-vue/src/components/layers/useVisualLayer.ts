@@ -27,6 +27,7 @@
  *
  * 本文件是 `.ts`（不是 SFC）：它是给四个 SFC 复用的**装配函数**，本身不产生组件。
  */
+import { normalizeIdField } from "../../core/data/identity";
 import { createDevWarnOnce } from "../../core/logger";
 import { layerDataIdentity, stableLayerValue } from "../../core/layers/LayerSpec";
 import { resolveFeaturePick } from "../../core/layers/nativeLayerPick";
@@ -130,7 +131,9 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
   /** 构造期选项袋（官方构造参数里不能就地更新的那些）。 */
   const ctorOptions = (p: Readonly<Props>): Record<string, unknown> => {
     const bag: Record<string, unknown> = {};
-    if (p.idKey !== undefined) bag.idKey = p.idKey;
+    // 只有「可用的字段名」才交给 SDK（`""` 不是字段名，见 `normalizeIdField`）
+    const idKey = normalizeIdField(p.idKey);
+    if (idKey !== undefined) bag.idKey = idKey;
     if (p.crs !== undefined) bag.crs = p.crs;
     if (p.enablePicked !== undefined) bag.enablePicked = p.enablePicked;
     if (p.pickWidth !== undefined) bag.pickWidth = p.pickWidth;
@@ -158,7 +161,7 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
       state: () => (props.data === null ? "empty" : props.data === undefined ? "absent" : "value"),
       value: () => props.data,
     },
-    identity: (p) => p.idKey,
+    identity: (p) => normalizeIdField(p.idKey),
     bind: ({ handle, context, scope }) => {
       const events = context.client.driver.events;
       for (const name of options.pickEvents ?? []) {
@@ -166,7 +169,7 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
           events.on(handle, name, (event) => {
             const pick = resolveFeaturePick({
               event,
-              idKey: props.idKey,
+              idKey: normalizeIdField(props.idKey),
               sentData: resource.sentData,
             });
             // 命中但认不出**身份**时必须说出来：`id` 是拾取与 Feature State 的唯一定位口径，
@@ -175,9 +178,10 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
               warnOnce(
                 `${component}:pick-identity`,
                 `[${component}] 命中了要素但认不出业务身份（载荷里的 \`id\` 为 null）：` +
-                  (props.idKey === undefined
-                    ? "本组件未设置 idKey ⇒ 无法知道哪个字段是业务 id（Feature State 与按 id 定位也会失败）"
-                    : `当前 idKey="${props.idKey}" 指向的字段不是有限数字 / 字符串`),
+                  (normalizeIdField(props.idKey) === undefined
+                    ? "本组件没有给出可用的 idKey（未声明或为空字符串）⇒ 无法知道哪个字段是业务 id" +
+                      "（Feature State 与按 id 定位也会失败）"
+                    : `当前 idKey="${normalizeIdField(props.idKey)}" 指向的字段不是有限数字 / 字符串`),
               );
             }
             options.emitPick?.(name, pick);

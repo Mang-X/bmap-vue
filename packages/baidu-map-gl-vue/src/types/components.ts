@@ -589,8 +589,8 @@ export interface BMapNativeLayerPickOptions {
   /**
    * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`。
    *
-   * 它是拾取与 Feature State 的**唯一身份口径**：不设置时拾取会如实返回
-   * `id: null / item: null`（本库不猜官方默认值）。
+   * 它是拾取与 Feature State 的**唯一身份口径**：不设置（或设为空字符串）时拾取会如实返回
+   * `id: null`、Feature State 的五个命令会被拒绝并告警一次（本库不猜官方默认值）。
    */
   idKey?: string;
   /** 来源坐标系：`BD09LL`（默认）/ `BD09MC` / `GCJ02`。 */
