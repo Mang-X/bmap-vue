@@ -604,7 +604,7 @@ describe("useBMapViewAnimation：未交付的旧段仍归本 hooks 所有", () =
     fake.diagnostics.assertNoLeaks("未交付旧段的接管与重试");
   });
 
-  it("重试成功但那次 animationcancel 被抑制：下一次 cancel() 就把 A 退出，不留悬空 owner", async () => {
+  it("未交付段重试成功且取消事件被抑制：同一次 cancel 就退出观察，之后不再被补发", async () => {
     let hook!: Hook;
     const wrapper = mountHook((created) => {
       hook = created;
@@ -615,26 +615,36 @@ describe("useBMapViewAnimation：未交付的旧段仍归本 hooks 所有", () =
     expect(a.hasPendingStart).toBe(true);
 
     a.failNextCancel = true;
-    hook.cancel(); // deferred：只登记
+    hook.cancel(); // deferred：只登记取消请求
     await settleAsyncWindow();
-    expect(a.cancelCalls, "安全窗口里的取消失败").toBe(1);
-    expect(a.getListenerCount(), "仍未交付 ⇒ 监听留着才有重试能力").toBeGreaterThan(0);
+    expect(a.cancelCalls, "安全窗口里的第一次真取消失败").toBe(1);
+    expect(a.getListenerCount(), "未交付 ⇒ 仍被观察，才有重试能力").toBeGreaterThan(0);
 
-    // 第二次重试成功，但 SDK 没有为该次取消派发 `animationcancel`
+    // 重试成功，但 SDK 没有为这一次取消派发 `animationcancel`
     a.suppressCancelEvent = true;
     hook.cancel();
     await settleAsyncWindow();
-    expect(a.cancelCalls).toBe(2);
     expect(a.settled).toBe(true);
-    expect(a.getListenerCount(), "交付确认即收尾：不留「已 settled 仍带监听」的中间态").toBe(0);
+    expect(a.cancelCalls).toBe(2);
+    expect(a.getListenerCount(), "交付确认即退出观察：不留「已 settled 仍带监听」的中间态").toBe(0);
+    expect(hook.status.value).toBe("idle");
 
-    // 再取消一次：A 不该再被打到（它已经退出），B / 当前段也不该被牵连
-    const before = a.cancelCalls;
-    expect(() => hook.cancel()).not.toThrow();
-    expect(a.cancelCalls, "A 已退出，不再被补发命令").toBe(before);
+    // A 退出之后重新起播 B：B 走自己的事件收敛，A 不再被牵连
+    await hook.start(KEY_FRAMES);
+    await settleAsyncWindow();
+    const b = fake.createdViewAnimations[1];
+    const aCallsAfterHandover = a.cancelCalls;
+    expect(hook.status.value).toBe("playing");
+
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(b.cancelCalls, "cancel() 停的是当前段 B").toBe(1);
+    expect(b.getListenerCount()).toBe(0);
+    expect(a.cancelCalls, "已退出的 A 不会重新获得 owner，也不会被补发").toBe(aCallsAfterHandover);
+    expect(hook.status.value).toBe("idle");
 
     wrapper.unmount();
-    fake.diagnostics.assertNoLeaks("重试成功后无悬空 owner");
+    fake.diagnostics.assertNoLeaks("未交付段重试成功后退出观察");
   });
 
   it("卸载时仍有一条未交付的旧段：两条都试一把，订阅全部下线", async () => {
