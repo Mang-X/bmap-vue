@@ -242,6 +242,31 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/BRasterLayer.vue",
   },
+  // M6 / issue #36：原生批量可视化图层（数据驱动，走 NativeLayerDriver 而不是 LayerDriver）。
+  {
+    name: "BLineLayer",
+    exportName: "BLineLayer",
+    category: "layer",
+    source: "./components/layers/BLineLayer.vue",
+  },
+  {
+    name: "BFillLayer",
+    exportName: "BFillLayer",
+    category: "layer",
+    source: "./components/layers/BFillLayer.vue",
+  },
+  {
+    name: "BHeatmapLayer",
+    exportName: "BHeatmapLayer",
+    category: "layer",
+    source: "./components/layers/BHeatmapLayer.vue",
+  },
+  {
+    name: "BTrackLineLayer",
+    exportName: "BTrackLineLayer",
+    category: "layer",
+    source: "./components/layers/BTrackLineLayer.vue",
+  },
   {
     name: "BPanorama",
     exportName: "BPanorama",

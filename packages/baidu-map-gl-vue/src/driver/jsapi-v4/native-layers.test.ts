@@ -244,6 +244,48 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
       expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
     );
   });
+
+  it("全量替换走 replaceAllState：未覆盖到的 id 必须消失（不是合并）", () => {
+    const layer = layers.create("fill");
+    const raw = layer.raw as unknown as { state: Record<string, unknown>; callLog: string[] };
+
+    layers.updateState(layer, ["a", "b"], { selected: true });
+    layers.replaceState(layer, { b: { hovered: true } });
+
+    expect(raw.state).toEqual({ b: { hovered: true } });
+    expect(raw.callLog).toContain("replaceAllState");
+  });
+
+  it("读回走 getAllState：返回业务 id → 状态的映射，且不是内部引用", () => {
+    const layer = layers.create("line");
+    layers.updateState(layer, [1, "b"], { selected: true });
+
+    const state = layers.getState(layer);
+    // 数字 id 在 SDK 侧就是字符串键（官方回包是普通对象）
+    expect(state).toEqual({ "1": { selected: true }, b: { selected: true } });
+
+    state["1"]!.selected = false;
+    expect(layers.getState(layer)["1"], "改回包不得污染 SDK 侧状态").toEqual({ selected: true });
+  });
+
+  it("读回的形状违规显式失败（回包不是对象时不当成空状态）", () => {
+    const layer = layers.create("line");
+    const raw = layer.raw as unknown as { getAllState: () => unknown };
+    raw.getAllState = () => 42;
+    expect(() => layers.getState(layer)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("状态读写在新操作上同样对扩展 API 显式失败", () => {
+    const layer = layers.create("heatmap");
+    expect(() => layers.replaceState(layer, {})).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+    expect(() => layers.getState(layer)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+  });
 });
 
 describe("v4 Native Layer Facet：拾取", () => {

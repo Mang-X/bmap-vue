@@ -28,48 +28,34 @@
  * 适配（idKey、坐标校验、重复 key、坏数据跳过）在 `core/data/geojsonAdapter.ts`，与逐项 Marker
  * 路径**共用同一份判定**（`core/data/itemScan.ts`）。
  *
- * ## 更新语义（四条路径，逐条对应官方入口）
+ * ## 生命周期
  *
- * | 变化 | 路径 | 依据（官方 4.0.4 声明） |
- * | --- | --- | --- |
- * | `data` / `dataVersion` / `properties` | `setData()`，**不重建** | `PointShapeLayer#setData` |
- * | `shape` / `size` / `color` / `strokeColor` / `strokeWeight` | `setStyleOptions + doOnceDraw`（Driver 的 `setStyle`），**不重建** | `setStyleOptions` 是 merge；官方明确「修改后需 `doOnceDraw()` 才可见」 |
- * | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter，**不重建** | `setVisible` / `setOpacity` / `setZIndex` / `setMinZoom` / `setMaxZoom` |
- * | `itemKey`（⇒ `idKey`）/ `enablePicked` / `pickWidth` / `pickHeight` | **重建实例** | 它们是构造选项；官方只有 `setBaseOptions`（整袋、且需 `doOnceDraw`）。「改了就换实例」比「写进去但画面不变」诚实 |
+ * 实例的创建 / 重建 / 字段写入 / 释放全部交给 `useNativeLayerResource`（#36 抽出的共享内核，
+ * 五个原生数据图层共用一份实现）。本组件只声明三件事：构造期选项、样式袋、数据载荷，以及事件。
  *
- * 与图层组件（#40）的两处**刻意不同**：
+ * 与底图图层组件（#40）的两处**刻意不同**（都由内核按 `supports()` 决定）：
  *
  * - **`visible` 走 `setVisible(false)`，不是「摘掉图层」**：官方在原生数据图层上**有**这个
  *   setter，而且 #98 的 live 实测显示 `removeLayer` 之后的实例**再也渲染不了**（只能换新实例）。
  *   用 setter 既准确（隐藏 ≠ 释放数据）又便宜。
- * - **重建必须「先摘成功、再建新的」**：`removeLayer` 失败时保留旧实例并交出 `resource:error`，
- *   否则新旧两份会同时挂在图上（同一实例 `addLayer` 不去重）。
- *
- * ## 生命周期
- *
- * 实例登记进该地图的图层账本（`MapContext.layers`），因此 `MapRuntime.dispose()` 会在
- * `map.destroy()` **之前**摘掉它（与底图图层同一条不变式）；业务监听挂在实例 child scope 上，
- * 释放顺序是「先解绑业务监听、再由 Map 摘除资源」。
+ * - **重建必须「先摘成功、再建新的」**：内核在摘除失败时保留旧实例并交出 `resource:error`，
+ *   否则新旧两份会同时挂在图上（同一个实例 `addLayer` 不去重）。
  */
-import { onMounted, onScopeDispose, onUnmounted, watch } from "vue";
-import { useRequiredMapContext } from "../../core/context/inject";
-import { createLayerRegistry, type LayerRegistry } from "../../core/layers/LayerRegistry";
-import { nativeLayersOf } from "../../core/layers/nativeLayerAccess";
+import { onUnmounted } from "vue";
+import { createDevWarnOnce, devWarn } from "../../core/logger";
+import { useNativeLayerResource } from "../../core/composables/useNativeLayerResource";
 import { layerDataIdentity, stableLayerValue } from "../../core/layers/LayerSpec";
-import { ResourceScope } from "../../core/lifecycle/ResourceScope";
+import { resolveFeaturePick } from "../../core/layers/nativeLayerPick";
+import { projectLayerStyle } from "../../core/layers/nativeLayerStyle";
 import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data/geojsonAdapter";
 import { itemKeyReader } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
 import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
-import { BMapError } from "../../core/errors/BMapError";
-import { devWarn } from "../../core/logger";
 import type { BMapPointPick, BPointCollectionProps } from "../../types/components";
-import type { MapReadyContext } from "../../core/context/types";
-import type { NativeLayerHandle } from "../../driver/types/native-layers";
-import type { PointLike } from "../../core/data/points";
+import type { NativeLayerKind } from "../../driver/types/native-layers";
 
 /** 本组件落地的原生图层种类（v4 的「几何点」批量图层）。 */
-const LAYER_KIND = "point-shape" as const;
+const LAYER_KIND: NativeLayerKind = "point-shape";
 
 const props = withDefaults(defineProps<BPointCollectionProps<Item>>(), {
   // 布尔 prop 必须给显式默认值：Vue 对 `Boolean` 有「缺省即 false」的转换。
@@ -86,58 +72,18 @@ const emit = defineEmits<{
   click: [pick: BMapPointPick<Item>];
 }>();
 
-const ctx = useRequiredMapContext();
-/** 组件作用域：等待就绪 / 卸载竞态的门禁。 */
-const scope = new ResourceScope({ label: "BPointCollection" });
+const warnOnce = createDevWarnOnce();
+/**
+ * 数据问题按**原因**聚合上报（`createProblemReporter` 自己就是去重的：同一原因只报一次，
+ * 之后只在计数增长时补一条）。这里**不能**再套一层按 key 去重——那会把两条不同原因压成一条。
+ */
 const reports = createProblemReporter("BPointCollection", (message) => devWarn(message));
 /** key → 最新业务项（拾取回传用；与 DataLayerManager 共用同一份实现）。 */
 const items: ItemIndex<Item> = createItemIndex<Item>();
-
-let readyCtx: MapReadyContext | null = null;
-/** 当前实例（未就绪 / 已释放时为 null）。 */
-let instance: InstanceState | null = null;
-/** 最近一次送给 SDK 的适配结果（`dataIndex` 兜底解析要用它与 SDK 侧保持同一份数据）。 */
+/** 最近一次适配结果（`idKey` 与「我们送出去的那份数据」都由它给出）。 */
 let lastAdapted: AdaptedPoints<Item> | null = null;
-/** 「这一次构建用的是哪份输入」的指纹（setData 去重用）。 */
-let appliedDataKey = "";
-
-interface InstanceState {
-  handle: NativeLayerHandle;
-  /** 本代的 child scope：业务监听挂这里（先解绑、再摘除）。 */
-  listenerScope: ResourceScope;
-  /** 构造期指纹：变化 ⇒ 换实例。 */
-  rebuildKey: string;
-  /** 已写入的「可就地更新」字段指纹（**按字段**记账，值没变就不重复写 SDK）。 */
-  applied: Map<string, string>;
-  /**
-   * 最近一次**成功写入** SDK 的样式字段名。
-   *
-   * 样式是**逐字段 merge**（官方 `setStyleOptions`），所以「整组 style 还在、但其中一个字段被撤回」
-   * 时 SDK 上仍留着旧值——只判「有没有 style 对象」会漏掉这种撤回（评审第一轮的反例：
-   * `color: "red" → undefined` 而 `size` 仍是 18）。有了这份字段名清单，撤回任何一个都能被发现。
-   */
-  appliedStyleKeys: string[];
-  /** 账本记录（`Map` 卸载前摘掉它）。 */
-  record: { dispose(): void };
-}
-
-/** 组件自持的账本（自定义 Context 不提供 `layers` 时用，随组件作用域释放）。 */
-const ownRegistry: LayerRegistry = createLayerRegistry();
-const registryOf = (): LayerRegistry => ctx.layers ?? ownRegistry;
-onScopeDispose(() => {
-  if (!ctx.layers) ownRegistry.disposeAll();
-});
-
-const target = (c: MapReadyContext) => ({ kind: "map" as const, handle: c.map });
 
 /* ------------------------------------------------------------------ 指纹 */
-
-/** 构造期指纹：决定「要不要换实例」。 */
-function rebuildKey(): string {
-  return [LAYER_KIND, resolveIdField(props.itemKey), props.enablePicked, props.pickWidth, props.pickHeight].join(
-    "|",
-  );
-}
 
 /**
  * 数据输入指纹：与「送给 SDK 的那一份」比对，值没变就不重复 `setData`。
@@ -150,7 +96,7 @@ function rebuildKey(): string {
  *   代价写在文档里：**换的是闭包里的值**（源码没变）时，请配合 `dataVersion` 表态；
  * - 其余按取值（`dataVersion` / 字符串 `itemKey`）。
  */
-function dataInputKey(): string {
+function dataKey(): string {
   return [props.data, props.dataVersion, props.itemKey, props.properties, props.getPosition]
     .map(inputFingerprint)
     .join("|");
@@ -170,424 +116,132 @@ function inputFingerprint(value: unknown): string {
 }
 
 /**
- * 字段指纹（**按值**比较，函数折叠成 `fn`）。
+ * 适配业务数据 → `FeatureCollection`（坏数据跳过并告警；同一份判定也服务逐项 Marker 路径）。
  *
- * 直接用 `core/layers/LayerSpec` 的 `stableLayerValue`：它是仓库里唯一一份「稳定值指纹」实现
- * （键排序、函数折叠、DOM/类实例折叠），再写一份必然与它分叉。**不能**按对象引用比较——
- * `styleValue()` 每次都返回新对象，按引用会让样式在每次 props 变化时都被重写。
+ * 只在**输入指纹变化**时被内核调用（见 `NativeLayerDataHooks.key` 的契约），因此这里是 O(n)
+ * 也不影响「父级重渲染」的开销。
  */
-function fieldFingerprint(value: unknown): string {
-  return stableLayerValue(value);
-}
-
-/* ------------------------------------------------------------------ 适配 */
-
-/** 业务数据 → FeatureCollection（坏数据跳过并告警；同一份判定也服务逐项 Marker 路径）。 */
 function adapt(): AdaptedPoints<Item> {
-  return adaptPoints(props.data, {
+  const adapted = adaptPoints(props.data, {
     itemKey: props.itemKey,
     getPosition: props.getPosition,
     properties: props.properties,
     onProblem: (problem) => reports.report(problem),
   });
-}
-
-/* ------------------------------------------------------------------ 生命周期 */
-
-function reportError(error: unknown): void {
-  const wrapped =
-    error instanceof BMapError ? error : new BMapError("BMAP_RESOURCE_CREATE_FAILED", String(error), { cause: error });
-  ctx.events.emit("resource:error", { error: wrapped, component: "BPointCollection" });
-}
-
-/** 创建 + 挂载 + 首次写入 + 绑事件（**只**在「确定要新建一个实例」时调用）。 */
-function createInstance(c: MapReadyContext): InstanceState {
-  const nativeLayers = nativeLayersOf(c.client);
-  const adapted = adapt();
   lastAdapted = adapted;
-  const handle = nativeLayers.create(LAYER_KIND, {
-    idKey: adapted.idKey,
-    // 官方默认 false；本组件的默认值在 props 那一层（见 withDefaults）。
-    enablePicked: props.enablePicked,
-    ...(props.pickWidth === undefined ? {} : { pickWidth: props.pickWidth }),
-    ...(props.pickHeight === undefined ? {} : { pickHeight: props.pickHeight }),
-  });
-  const listenerScope = new ResourceScope({ label: "point-collection:instance" });
-  const state: InstanceState = {
-    handle,
-    listenerScope,
-    rebuildKey: rebuildKey(),
-    applied: new Map(),
-    appliedStyleKeys: [],
-    record: { dispose: () => {} },
-  };
-
-  // 账本先登记：任何一步抛错时，卸载路径上一定有一个「能把它从图上摘掉」的记录。
-  state.record = registryOf().register({
-    kind: LAYER_KIND,
-    handle,
-    scope: listenerScope,
-    remove: () => {
-      if (instance === state) instance = null;
-      nativeLayers.remove(target(c), handle);
-    },
-  });
-  try {
-    nativeLayers.add(target(c), handle);
-    // 顺序：先样式 / 显隐 / 层级，**最后**才交付数据 —— 数据一到就渲染，先写到位的字段
-    // 才不会让第一帧出现「默认样式闪一下」。
-    applyFields(state, c, styleValue());
-    // 传 `adapted` 强制写入首份数据（不依赖指纹是否为空）
-    applyData(state, c, adapted);
-    bindEvents(state, c);
-  } catch (error) {
-    state.record.dispose();
-    throw error;
-  }
-  instance = state;
-  return state;
-}
-
-/** 释放实例（摘除 SDK 资源 + 解绑业务监听 + 账本销账）。 */
-function disposeInstance(): void {
-  const state = instance;
-  if (!state) return;
-  instance = null;
-  state.record.dispose();
-  if (!state.listenerScope.isDisposed) state.listenerScope.dispose("point-collection-released");
-}
-
-/**
- * 换实例：**先确认旧实例已经从图上摘掉**，再建新的。
- *
- * `removeLayer` 允许「先产生副作用、再抛错」，因此摘除失败时无法判断旧实例是否还在图上；
- * 此时**保留旧实例并交出错误**（宁可这一次不更新，也不能出现两份同图——那会更难收拾）。
- */
-function recreate(c: MapReadyContext): void {
-  const old = instance;
-  if (old) {
-    try {
-      nativeLayersOf(c.client).remove(target(c), old.handle);
-    } catch (error) {
-      reportError(error);
-      return;
-    }
-    // 摘除成功 ⇒ 旧实例连同它的监听与账本记录一起作废
-    old.record.dispose();
-    if (!old.listenerScope.isDisposed) old.listenerScope.dispose("point-collection-recreated");
-    instance = null;
-  }
-  createInstance(c);
-}
-
-/** 数据写入（`setData`；输入没变就不写）。 */
-function applyData(state: InstanceState, c: MapReadyContext, adapted?: AdaptedPoints<Item>): void {
-  // 指纹只算一次（它是「整份数据的引用 + 版本 + 三个取值函数」的拼接，没必要算两遍）
-  const key = dataInputKey();
-  // 挂载时传 `adapted`（首份数据必须写）；之后按输入指纹去重，值没变就不产生 SDK 调用。
-  if (adapted === undefined && key === appliedDataKey && lastAdapted) return;
-  const next = adapted ?? adapt();
-  lastAdapted = next;
   const readKey = itemKeyReader(props.itemKey);
-  items.replace(next.items.map((item) => ({ key: readKey(item), item })));
-  nativeLayersOf(c.client).setData(state.handle, next.data as unknown as Record<string, unknown>);
-  appliedDataKey = key;
+  items.replace(adapted.items.map((item) => ({ key: readKey(item), item })));
   reports.flush();
-}
-
-/**
- * 可就地更新的字段（样式 / 显隐 / 透明度 / 层级 / 缩放范围）：值没变就不写。
- *
- * `undefined` 一律**不写**：它是「不表态」（构造期的默认值由 SDK 自己决定），把 `undefined`
- * 传给 setter 只会让 SDK 收到一个非法值。
- */
-function applyFields(state: InstanceState, c: MapReadyContext, style: Record<string, unknown> | undefined): void {
-  const nativeLayers = nativeLayersOf(c.client);
-  const writes: Array<[string, unknown, () => void]> = [
-    ["visible", props.visible, () => nativeLayers.setVisible(state.handle, props.visible)],
-    ["opacity", props.opacity, () => nativeLayers.setOpacity(state.handle, props.opacity as number)],
-    // 层级必须**挂载之后**写（官方：层级调整会访问已关联的 Map 与图层管理器）
-    ["zIndex", props.zIndex, () => nativeLayers.setZIndex(state.handle, props.zIndex as number)],
-    [
-      "zoomRange",
-      props.minZoom === undefined && props.maxZoom === undefined ? undefined : `${props.minZoom}/${props.maxZoom}`,
-      () => nativeLayers.setZoomRange(state.handle, { min: props.minZoom, max: props.maxZoom }),
-    ],
-    ["style", style, () => nativeLayers.setStyle(state.handle, style as Record<string, unknown>)],
-  ];
-
-  for (const [field, value, write] of writes) {
-    if (value === undefined) continue;
-    const fingerprint = fieldFingerprint(value);
-    if (state.applied.get(field) === fingerprint) continue;
-    // 指纹**先失效**再调用：一次「已经写进去、然后抛错」的调用会让旧指纹不再代表 SDK 的当前值。
-    state.applied.delete(field);
-    write();
-    state.applied.set(field, fingerprint);
-    // 样式另记一份**字段名清单**：`setStyleOptions` 是 merge，撤回单个字段要在下一次同步时被发现
-    if (field === "style") state.appliedStyleKeys = Object.keys(style ?? {});
-  }
-}
-
-/**
- * 「曾经写过、现在变回未表态」的字段。
- *
- * 官方这批图层**没有 unset 入口**（官方只提供各字段的 setter），所以「用户把 `opacity` 撤回
- * `undefined`」在 SDK 侧无法表达。本库的口径与图层内核一致：**不猜默认值，重建实例**，让它回到
- * SDK 自己的默认状态（并告警一次——静默保留旧值会让声明与画面分叉）。
- *
- * **样式要逐字段判**：`setStyleOptions` 是 merge，只要还有任何一个样式字段在，整组就不算撤回——
- * 而被撤回的那个字段仍留在 SDK 上（评审第一轮的反例：`color` 撤回而 `size` 还在）。
- *
- * 判定与执行分开（判出来就不要再执行就地写入）：这一步要在 `applyFields` **之前**跑。
- */
-function detectRemovedFields(state: InstanceState, style: Record<string, unknown> | undefined): string[] {
-  // 只看「这一项还有没有表态」，不比取值：指纹是「值」的标识，这里问的是「在不在」。
-  const present: Record<string, boolean> = {
-    opacity: props.opacity !== undefined,
-    zIndex: props.zIndex !== undefined,
-    zoomRange: props.minZoom !== undefined || props.maxZoom !== undefined,
-    style: style !== undefined,
-    // `visible` 有默认值（`true`），永远不会变回未表态
-    visible: true,
-  };
-  const removed = [...state.applied.keys()].filter((field) => present[field] !== true);
-  // 样式**逐字段**判：整组还在、但某个字段被撤回时，SDK 上（merge 语义）仍留着旧值
-  const currentStyleKeys = new Set(Object.keys(style ?? {}));
-  for (const key of state.appliedStyleKeys) {
-    if (!currentStyleKeys.has(key)) removed.push(`style.${key}`);
-  }
-  return removed;
-}
-
-/** 样式对象（只包含**有表态**的字段：`undefined` 不进 SDK，避免把官方默认值盖成 undefined）。 */
-function styleValue(): Record<string, unknown> | undefined {
-  const style: Record<string, unknown> = {};
-  if (props.shape !== undefined) style.shapeType = props.shape;
-  if (props.size !== undefined) style.size = props.size;
-  if (props.color !== undefined) style.color = props.color;
-  if (props.strokeColor !== undefined) style.strokeColor = props.strokeColor;
-  if (props.strokeWeight !== undefined) style.strokeWeight = props.strokeWeight;
-  return Object.keys(style).length > 0 ? style : undefined;
-}
-
-/**
- * 绑定图层级事件。
- *
- * 官方这批图层只派发 `dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`
- * （`NormalLayerEventMap`）——**没有** mouseover / mouseout，所以本组件不声明它们。
- */
-function bindEvents(state: InstanceState, c: MapReadyContext): void {
-  const events = c.client.driver.events;
-  state.listenerScope.add(events.on(state.handle, "click", (event) => handlePick(event)));
-}
-
-/** 拾取载荷 → 业务项。形状依据见函数内注释。 */
-function handlePick(event: unknown): void {
-  const payload = readPick(event);
-  const item = resolveItem(payload);
-  const pick: BMapPointPick<Item> = {
-    hit: payload.hit,
-    dataIndex: payload.dataIndex,
-    item: item ?? null,
-    latLng: payload.latLng,
-    pixel: payload.pixel,
-  };
-  emit("click", pick);
-  // 同 `resolveItem`：falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
-  if (item !== undefined) emit("item-click", item);
-}
-
-interface ReadPick {
-  hit: boolean;
-  dataIndex: number;
-  /** 命中的要素身份（从 `value.dataItem.properties[idKey]` 取回，取不到时为 `undefined`）。 */
-  key: PropertyKey | undefined;
-  latLng: PointLike | null;
-  pixel: { x: number; y: number } | null;
-}
-
-/**
- * 读官方拾取事件。
- *
- * 形状依据 = 官方 4.0 的 `NormalLayerPickEvent`（`.d.ts`：`pixel` / `latLng` / `value: object`）
- * ＋ 官方 Skill 的批量图层专页（`event.value.dataItem.properties.id` 取业务键）：
- *
- * - **未命中也派发事件**，且 `event.value` 是 `{ dataIndex: -1, dataItem: undefined }`（真值）
- *   ⇒ 必须用 `dataIndex !== -1` 判命中，`if (event.value)` 是错的；
- * - `value` 在 `.d.ts` 里只声明成 `object`，字段是运行时约定 ⇒ 这里做结构化读取，
- *   读不到就按「未命中」处理并告警一次（不静默猜一个业务项出来）。
- *
- * ⚠️ 回调拿到的是 **Driver 归一化后的 `DriverEvent`**，不是 raw 事件：`value` 这类
- * facet 独有的字段不在归一化面里，因此这里从 `raw` 逃生口读 `value`，而坐标 / 像素用
- * 归一化后的 `point` / `pixel`（`events.ts` 公开契约：`raw` 就是「访问未归一化字段」的入口）。
- */
-function readPick(event: unknown): ReadPick {
-  const normalized = (event ?? {}) as {
-    raw?: unknown;
-    point?: unknown;
-    pixel?: unknown;
-  };
-  const raw = (normalized.raw ?? event) as { value?: unknown; latLng?: unknown; pixel?: unknown };
-  const value = raw?.value as { dataIndex?: unknown; dataItem?: unknown } | undefined;
-  const dataIndex = typeof value?.dataIndex === "number" ? value.dataIndex : -1;
-  const properties = (value?.dataItem as { properties?: Record<string, unknown> } | undefined)?.properties;
-  const adapted = lastAdapted;
-  let key: PropertyKey | undefined;
-  if (properties && adapted) {
-    const candidate = properties[adapted.idKey];
-    if (typeof candidate === "string" || typeof candidate === "number" || typeof candidate === "symbol") {
-      key = candidate;
-    }
-  }
-  return {
-    hit: dataIndex !== -1,
-    dataIndex,
-    key,
-    latLng: readPoint(normalized.point) ?? readPoint(raw?.latLng),
-    pixel: readPixel(normalized.pixel) ?? readPixel(raw?.pixel),
-  };
-}
-
-/**
- * 逗号前后分别是「命中的是哪个业务项」与「找不到时的兜底」。
- *
- * ⚠️ 判「找没找到」**必须用 `!== undefined`**：公开泛型没有把 `Item` 约束成 object，因此
- * `0` / `false` / `""` 都是合法业务项（配函数式 `itemKey` / `getPosition` 即可）。用真值判断会把
- * 它们当成「没找到」，于是 `click.item` 变成 null 且不派发 `item-click`（评审 #102 F4）。
- */
-function resolveItem(payload: ReadPick): Item | undefined {
-  if (!payload.hit) return undefined;
-  if (payload.key !== undefined) {
-    const latest = items.latest(payload.key);
-    if (latest !== undefined) return latest;
-  }
-  // 兜底：`value` 的形状在类型层只是 `object`，读不到身份时用 dataIndex 对回我们自己送出去的那份数据。
-  const feature = lastAdapted?.data.features[payload.dataIndex];
-  const fallbackKey = feature?.properties[lastAdapted?.idKey ?? ""];
-  if (typeof fallbackKey === "string" || typeof fallbackKey === "number" || typeof fallbackKey === "symbol") {
-    const latest = items.latest(fallbackKey);
-    if (latest !== undefined) return latest;
-  }
-  warnOnce(
-    "pick-unresolved",
-    `命中了要素（dataIndex=${payload.dataIndex}）但取不到业务项：` +
-      "要素身份来自 feature.properties[idKey]，若数据在本次点击之前刚被替换过，这一帧可能已经过期",
-  );
-  return undefined;
-}
-
-const warnings = new Set<string>();
-function warnOnce(key: string, message: string): void {
-  if (warnings.has(key)) return;
-  warnings.add(key);
-  devWarn(`[BPointCollection] ${message}`);
-}
-
-function readPoint(value: unknown): PointLike | null {
-  if (value === null || typeof value !== "object") return null;
-  const { lng, lat } = value as { lng?: unknown; lat?: unknown };
-  return typeof lng === "number" && typeof lat === "number" ? { lng, lat } : null;
-}
-
-function readPixel(value: unknown): { x: number; y: number } | null {
-  if (value === null || typeof value !== "object") return null;
-  const { x, y } = value as { x?: unknown; y?: unknown };
-  return typeof x === "number" && typeof y === "number" ? { x, y } : null;
+  return adapted;
 }
 
 /* ------------------------------------------------------------------ 装配 */
 
-/** 每次 props 变化后的收敛：不重建就就地写，构造期项变了就换实例。 */
-function sync(): void {
-  const c = readyCtx;
-  if (!c) return; // 还没就绪：创建时会读到最新的 props
-  const state = instance;
-  if (!state) {
-    try {
-      createInstance(c);
-    } catch (error) {
-      reportError(error);
-    }
-    return;
-  }
-  if (state.rebuildKey !== rebuildKey()) {
-    try {
-      recreate(c);
-    } catch (error) {
-      reportError(error);
-    }
-    return;
-  }
-  // **先判定、后执行**：一旦确定要重建（有字段变回未表态），就不再执行就地写入——
-  // 否则同一次更新里的一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次。
-  const style = styleValue();
-  const removed = detectRemovedFields(state, style);
-  if (removed.length > 0) {
-    devWarn(
-      `[BPointCollection] ${removed.join(" / ")} 由有值变为未表态：SDK 没有 unset 入口，` +
-        "本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
+/** 构造期选项袋（官方构造参数里不能就地更新的那些）。 */
+function ctorOptions(p: Readonly<BPointCollectionProps<Item>>): Record<string, unknown> {
+  return {
+    idKey: resolveIdField(p.itemKey),
+    enablePicked: p.enablePicked,
+    ...(p.pickWidth === undefined ? {} : { pickWidth: p.pickWidth }),
+    ...(p.pickHeight === undefined ? {} : { pickHeight: p.pickHeight }),
+  };
+}
+
+const resource = useNativeLayerResource<BPointCollectionProps<Item>>(props, {
+  component: "BPointCollection",
+  kind: LAYER_KIND,
+  ctorOptions,
+  // 重建指纹**派生自选项袋**（与 `useVisualLayer` 同一条口径）：新增构造期 prop 时不会漏进指纹
+  // ——漏掉的表现是「改了没反应」而不是报错。代价：选项袋里不能有函数（会被折叠成 `fn`）。
+  rebuildKey: (p) => `${LAYER_KIND}|${stableLayerValue(ctorOptions(p))}`,
+  style: styleValue,
+  data: {
+    key: dataKey,
+    value: () => adapt().data as unknown as object,
+  },
+  /**
+   * 官方这批图层只派发 `dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`
+   * （`NormalLayerEventMap`）——**没有** mouseover / mouseout，所以本组件不声明它们。
+   */
+  bind: ({ handle, context, scope }) => {
+    scope.add(context.client.driver.events.on(handle, "click", (event) => handlePick(event)));
+  },
+});
+
+/**
+ * 样式对象（只包含**有表态**的字段：`undefined` 不进 SDK，避免把官方默认值盖成 undefined）。
+ *
+ * 走共享的 `projectLayerStyle`：这里目前只有原始值（`PointShapeStyle` 的五个字段没有函数支），
+ * 但统一入口让「函数型样式的转发口径」只有一处实现——将来若暴露函数型样式字段，不需要在组件里
+ * 再补一遍 `forwardCallback`。
+ */
+function styleValue(): Record<string, unknown> | undefined {
+  return projectLayerStyle(() => {
+    const style: Record<string, unknown> = {};
+    if (props.shape !== undefined) style.shapeType = props.shape;
+    if (props.size !== undefined) style.size = props.size;
+    if (props.color !== undefined) style.color = props.color;
+    if (props.strokeColor !== undefined) style.strokeColor = props.strokeColor;
+    if (props.strokeWeight !== undefined) style.strokeWeight = props.strokeWeight;
+    return Object.keys(style).length > 0 ? style : undefined;
+  });
+}
+
+/* ------------------------------------------------------------------ 拾取 */
+
+/**
+ * 拾取载荷 → 业务项。
+ *
+ * 身份来源**只有两处，都是公开的**（都在 `resolveFeaturePick` 里）：
+ *
+ * 1. 官方回包 `value.dataItem.properties[idKey]`（官方示例的取法）；
+ * 2. 兜底：`dataIndex` 指向**我们自己送出去的那份数据**的对应要素——它仍然是我们自己的输入，
+ *    不是从内部对象 / 事件顺序里恢复出来的猜测。
+ *
+ * 两处都取不到身份时**如实返回未命中语义**（`item: null` 且不派发 `item-click`），并告警一次。
+ */
+function handlePick(event: unknown): void {
+  const pick = resolveFeaturePick<Item>({
+    event,
+    idKey: lastAdapted?.idKey,
+    sentData: resource.sentData,
+    // 业务对象与要素分离：身份 → 最新业务项由本组件的索引回答（找不到就是找不到，
+    // 不退回「拿 properties 当业务项」）
+    itemOf: (id) => (id === null ? undefined : items.latest(id)),
+  });
+
+  emit("click", pick);
+  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
+  if (pick.item !== null) emit("item-click", pick.item);
+  else if (pick.hit) {
+    warnOnce(
+      "pick-unresolved",
+      `[BPointCollection] 命中了要素（dataIndex=${pick.dataIndex}）但取不到业务项：` +
+        "要素身份来自 feature.properties[idKey]，若数据在本次点击之前刚被替换过，这一帧可能已经过期",
     );
-    try {
-      recreate(c);
-    } catch (error) {
-      reportError(error);
-    }
-    return;
-  }
-  // 逐步隔离：一步失败不该吞掉同一次更新里的其它步骤（各自上报）
-  try {
-    applyData(state, c);
-  } catch (error) {
-    reportError(error);
-  }
-  try {
-    applyFields(state, c, style);
-  } catch (error) {
-    reportError(error);
   }
 }
 
-onMounted(async () => {
-  const c = await ctx.whenReady(scope.signal);
-  if (scope.isDisposed) return;
-  readyCtx = c;
-  sync();
-});
-
+/**
+ * 卸载时清掉组件自持的账本。
+ *
+ * 实例生命周期（摘图层 / 清数据 / 解绑监听）由共享内核负责；这里清的是**组件自己的**两份状态：
+ * `items`（key → 业务项）与 `lastAdapted`。它们在组件被卸载后本来就不可达（闭包随实例被回收），
+ * 但显式复位能让「迟到的事件回调 / 计时器」即使引用到它们也拿不到已经失效的业务对象。
+ */
 onUnmounted(() => {
-  disposeInstance();
   items.clear();
   lastAdapted = null;
-  warnings.clear();
-  readyCtx = null;
-  scope.dispose();
 });
 
-watch(
-  () => [
-    props.data,
-    props.dataVersion,
-    props.properties,
-    props.getPosition,
-    props.itemKey,
-    props.visible,
-    props.opacity,
-    props.zIndex,
-    props.minZoom,
-    props.maxZoom,
-    props.shape,
-    props.size,
-    props.color,
-    props.strokeColor,
-    props.strokeWeight,
-    props.enablePicked,
-    props.pickWidth,
-    props.pickHeight,
-  ],
-  () => sync(),
-  { deep: false, flush: "sync" },
-);
+defineExpose({
+  /**
+   * 要素状态命令面（按业务 id = `itemKey` 指向的字段定位）。
+   *
+   * 未就绪时命令**不排队**（告警一次并跳过）；`get()` 走 SDK 的公开读回。
+   */
+  featureState: resource.featureState,
+});
 
 defineOptions({ name: "BPointCollection" });
 </script>

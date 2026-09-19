@@ -32,6 +32,8 @@ import { HANDLE_BRAND } from "../types/handles";
 import type {
   NativeLayerData,
   NativeLayerDriver,
+  NativeLayerFeatureState,
+  NativeLayerFeatureStateMap,
   NativeLayerHandle,
   NativeLayerKind,
   NativeLayerOperation,
@@ -65,17 +67,22 @@ const DECLARED_LAYER_OPERATIONS = [
   "updateState",
   "removeState",
   "clearState",
+  "replaceState",
+  "getState",
   "setEnablePicked",
 ] as const satisfies readonly NativeLayerOperation[];
 
 /**
  * 走 `invoke()` 通用分流的操作。
  *
- * `updateState`（参数固定为 keys/state/append）与 `hitTest`（有返回值）各自单独实现
- * ——把它们塞进同一个 `switch` 会让「payload 是数组还是对象」这种细节散在调用点，
- * 也会让 `never` 完备性检查失去意义。
+ * `updateState`（参数固定为 keys/state/append）、`getState`（**有返回值**）与 `hitTest`
+ * （有返回值）各自单独实现——把它们塞进同一个 `switch` 会让「payload 是数组还是对象」
+ * 这类细节散在调用点，也会让 `never` 完备性检查失去意义。
  */
-type DispatchedOperation = Exclude<NativeLayerOperation, "updateState" | "hitTest">;
+type DispatchedOperation = Exclude<
+  NativeLayerOperation,
+  "updateState" | "getState" | "hitTest"
+>;
 
 interface NativeLayerDescriptor {
   /** 4.0 构造器名（文件末尾的断言把 `declared: true` 的那些钉在官方 `BMap` 命名空间上）。 */
@@ -237,6 +244,9 @@ export function createJsapiV4NativeLayerDriver(
       case "clearState":
         callRequired(raw, "clearState");
         return;
+      case "replaceState":
+        callRequired(raw, "replaceAllState", payload);
+        return;
       case "setEnablePicked":
         if (descriptor.declared) {
           // 声明的成员里没有 setEnablePicked：官方把拾取开关放在基础配置项里
@@ -387,6 +397,33 @@ export function createJsapiV4NativeLayerDriver(
     clearState(layer) {
       const { raw, descriptor, kind } = open(layer, "clearState");
       invoke(raw, descriptor, kind, "clearState");
+    },
+
+    replaceState(layer, inputs) {
+      const { raw, descriptor, kind } = open(layer, "replaceState");
+      invoke(raw, descriptor, kind, "replaceState", inputs);
+    },
+
+    getState(layer) {
+      // 与 `hitTest` 同类：有返回值，因此不走 `invoke` 的 void 分流
+      const { raw } = open(layer, "getState");
+      const result = sdkCall("NativeLayer.getAllState", () => callRequired(raw, "getAllState"));
+      if (result === null || typeof result !== "object") {
+        throw new BMapError(
+          "BMAP_SDK_CALL_FAILED",
+          `NativeLayerDriver.getState: getAllState() 应当返回 id → 状态的对象，实际是 ${typeof result}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      // 只保留**状态对象**条目：声明里回包类型是 `object`，没有逐项类型；值不是对象的条目
+      // 无法当作要素状态使用（把它透传出去会让调用方拿到形状不一致的映射）。
+      const normalized: NativeLayerFeatureStateMap = {};
+      for (const [key, state] of Object.entries(result as Record<string, unknown>)) {
+        if (state !== null && typeof state === "object") {
+          normalized[key] = state as NativeLayerFeatureState;
+        }
+      }
+      return normalized;
     },
 
     setEnablePicked(layer, enabled) {

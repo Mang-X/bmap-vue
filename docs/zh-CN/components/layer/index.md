@@ -24,8 +24,14 @@ import {
 | WMTS 服务 | `BWMTSLayer` |
 | 实时路况 | `BTrafficLayer` |
 | GeoJSON 数据（点 / 线 / 面） | `BGeoJSONLayer` |
+| 批量线 / 面 / 热力 / 轨迹线（数据驱动 + 要素状态） | `BLineLayer` / `BFillLayer` / `BHeatmapLayer` / `BTrackLineLayer`（见[原生批量可视化图层](./native-visual-layers)） |
 | 自定义 DOM 覆盖物 | `BDOMLayer` |
 | 全景覆盖 | `BPanoramaCoverageLayer`（搭配 `BPanoramaControl`） |
+
+> 上面大半是**底图家族**（走 `LayerDriver`：行政区 / 瓦片 / 路况 / GeoJSON / DOM / 全景覆盖），
+> 它们的「显隐」统一表达为**挂上 / 摘掉**。四个原生批量可视化图层走的是另一条 Facet
+> （`NativeLayerDriver`）：数据、样式、要素状态与拾取是一等公民，`visible` 在有 `setVisible` 的
+> kind 上表达为 setter（隐藏 ≠ 释放数据）。两族的取舍见[原生批量可视化图层](./native-visual-layers)。
 
 ## 统一槽位与更新口径
 

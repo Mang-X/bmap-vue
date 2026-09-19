@@ -32,6 +32,10 @@ import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BC
 import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
 import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BGeoJSONLayer.vue";
 import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
+import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
 import BMarkerList from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerList.vue";
 import BMarkerCluster from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerCluster.vue";
 import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
@@ -2829,6 +2833,142 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("Map 销毁后组件卸载");
+  });
+});
+
+/* ------------------------------------------------------------------ 原生批量可视化图层（M6 / #36） */
+
+/**
+ * 四个原生批量可视化图层的**组件级场景**（详细的分 kind 断言在
+ * `v3-native-data-layers.test.ts`，那份文件按 issue 的验收条目组织）。
+ *
+ * 这里只写领域语言：资源数量、挂载读数、拾取载荷、命令面，以及每节末尾的泄漏门禁。
+ */
+const LINES = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: [[116.3, 39.9], [116.4, 39.95]] },
+      properties: { id: "a", name: "一路" },
+    },
+    {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: [[116.5, 39.9], [116.6, 39.95]] },
+      properties: { id: "b", name: "二路" },
+    },
+  ],
+};
+
+const POLYGON_AREAS = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[116.3, 39.9], [116.4, 39.9], [116.4, 39.95], [116.3, 39.9]]],
+      },
+      properties: { id: "area-1" },
+    },
+  ],
+};
+
+const TRACK_LINE = {
+  type: "Feature",
+  geometry: { type: "LineString", coordinates: [[116.3, 39.9], [116.4, 39.95]] },
+  properties: { id: "track" },
+};
+
+describe("原生批量可视化图层（M6 / #36）", () => {
+  it("四种图层同图共存：各 1 个 SDK 资源；卸载后不留残留", async () => {
+    // 实例账本**刻意**不随 `harness.reset()` 清空（跨用例安全靠负索引），因此这里比的是增量。
+    const layersBefore = harness.nativeLayersCreated();
+    const wrapper = await mountMapTree(() => [
+      h(BLineLayer, { data: LINES, idKey: "id" }),
+      h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" }),
+      h(BHeatmapLayer, { data: POLYGON_AREAS }),
+      h(BTrackLineLayer, { data: TRACK_LINE }),
+    ]);
+
+    expect(harness.nativeLayersCreated() - layersBefore, "四个组件 = 四个原生资源").toBe(4);
+    expect(harness.attached("layer")).toBe(4);
+    expect(harness.attached("overlay"), "没有逐项覆盖物").toBe(0);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("原生可视化图层同图共存");
+  });
+
+  it("线图层：数据更新只改数据；构造期项变化才换实例", async () => {
+    const data = ref<object>(LINES);
+    const picked = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BLineLayer, { data: data.value, idKey: "id", enablePicked: picked.value }),
+    ]);
+    const created = harness.nativeLayersCreated();
+
+    data.value = { type: "FeatureCollection", features: [LINES.features[0]] };
+    await settleProps();
+    expect(harness.nativeLayersCreated(), "数据变化不换实例").toBe(created);
+
+    picked.value = false;
+    await settleProps();
+    expect(harness.nativeLayersCreated(), "构造期项变化换实例").toBe(created + 1);
+    expect(harness.attached("layer"), "同一时刻只有一个实例挂在图上").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("线图层更新");
+  });
+
+  it("拾取：命中回传业务身份与属性；未命中只有 hit:false", async () => {
+    const wrapper = await mountMapTree(() => [h(BLineLayer, { data: LINES, idKey: "id" })]);
+    const layer = wrapper.findComponent(BLineLayer);
+
+    harness.simulateNativePick({ dataIndex: 1 });
+    const hit = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Record<string, unknown> | null;
+    };
+    expect(hit.hit).toBe(true);
+    expect(hit.id, "身份来自要素的 properties[idKey]").toBe("b");
+    expect(hit.item).toMatchObject({ id: "b", name: "二路" });
+
+    harness.simulateNativePick({ dataIndex: -1 });
+    const miss = layer.emitted("click")!.at(-1)![0] as { hit: boolean; item: unknown };
+    expect(miss.hit, "官方未命中也派发事件").toBe(false);
+    expect(miss.item).toBeNull();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("线图层拾取");
+  });
+
+  it("要素状态命令面：按业务 id 写状态，读回的是 SDK 的当前值", async () => {
+    const wrapper = await mountMapTree(() => [h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" })]);
+    const state = wrapper.findComponent(BFillLayer).vm.featureState;
+
+    state.update(["area-1"], { selected: true });
+    expect(state.get("area-1")).toEqual({ "area-1": { selected: true } });
+
+    state.clear();
+    expect(state.get(), "清空后读回为空").toEqual({});
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("要素状态命令面");
+  });
+
+  it("BPointCollection 也暴露同一份命令面（迁移到共享内核之后）", async () => {
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    const state = wrapper.findComponent(BPointCollection).vm.featureState;
+
+    state.update("a", { selected: true });
+    expect(state.get("a"), "状态键是业务 id（itemKey 指向的字段）").toEqual({ a: { selected: true } });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 命令面");
   });
 });
 

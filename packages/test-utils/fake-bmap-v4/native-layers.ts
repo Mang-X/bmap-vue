@@ -4,7 +4,8 @@
  * 三个族，按官方 4.0 的公开面如实分：
  *
  * - **专页批量图层**（`PointIconLayer` / `PointShapeLayer` / `LineLayer` / `FillLayer`）：
- *   共享数据、要素状态、字段级 setter 族与 `setBaseOptions`；官方把拾取开关放在基础配置项里
+ *   共享数据、要素状态（`updateState` / `removeState` / `clearState` / `replaceAllState` /
+ *   `getAllState`）、字段级 setter 族与 `setBaseOptions`；官方把拾取开关放在基础配置项里
  *   （`enablePicked`），因此这一族**没有** `setEnablePicked` / `hitTest`——Driver 的
  *   `supports()` 正是据此回答 `false`。
  * - **扩展 API 的点/聚合/热力**（`PointLayer` / `ClusterLayer` / `Heatmap`）：只有
@@ -71,6 +72,27 @@ export class FakeV4NativeLayerBase extends FakeV4Layer {
   clearState(): void {
     this.callLog.push('clearState')
     this.state = {}
+  }
+
+  /**
+   * 全量替换（官方 `replaceAllState(inputs)`）。
+   *
+   * 语义上等于 `clearState + 一次性写入`：**不是**合并——旧状态里没被覆盖到的 id 必须消失，
+   * 否则「先清空再写」与「直接替换」两种调用方式在夹具上无法区分。
+   */
+  replaceAllState(inputs: Record<string, Record<string, unknown>>): void {
+    this.callLog.push('replaceAllState')
+    const next: Record<string, Record<string, unknown>> = {}
+    for (const [key, state] of Object.entries(inputs)) next[key] = { ...state }
+    this.state = next
+  }
+
+  /** 公开读回（官方 `getAllState()`）：返回快照，不是内部引用。 */
+  getAllState(): Record<string, Record<string, unknown>> {
+    this.callLog.push('getAllState')
+    const snapshot: Record<string, Record<string, unknown>> = {}
+    for (const [key, state] of Object.entries(this.state)) snapshot[key] = { ...state }
+    return snapshot
   }
 
   setStyleOptions(options: Record<string, unknown>): void {
