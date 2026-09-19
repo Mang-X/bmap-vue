@@ -180,6 +180,13 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     }
   }
 
+  /** 当前意图：`wantOpen` 是 `open` 这条 prop；`desired` 还要求有位置（缺位置不满足打开条件）。 */
+  function readIntent(): { wantOpen: boolean; positionKey: string | null; desired: boolean } {
+    const wantOpen = resolveInfoWindowOpenIntent(props);
+    const positionKey = positionKeyOf(props.position);
+    return { wantOpen, positionKey, desired: wantOpen && positionKey !== null };
+  }
+
   /**
    * 唯一的收敛入口：把 desired 施加到地图上。
    *
@@ -196,12 +203,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (disposed || !instance || !instance.alive || !context) return;
     if (instance.suppressed) return;
 
-    const wantOpen = resolveInfoWindowOpenIntent(props);
+    const { wantOpen, positionKey, desired } = readIntent();
     const position = props.position;
-    const positionKey = positionKeyOf(position);
     // 缺位置不满足打开条件：期望为「关」，并按边沿报一次
-    const canOpen = positionKey !== null;
-    if (wantOpen && !canOpen) {
+    if (wantOpen && !desired) {
       if (!missingPositionNotified) {
         missingPositionNotified = true;
         reportMissingPosition();
@@ -209,7 +214,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     } else {
       missingPositionNotified = false;
     }
-    const desired = wantOpen && canOpen;
 
     const observed = observe(context, instance);
     if (desired) {
@@ -526,6 +530,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       resource: instance.handle,
       onSuperseded: () => {
         if (!instance.alive) return;
+        // 已经退出竞争（desired 为假）⇒ 这是陈旧账本造成的假通知
+        if (!readIntent().desired) return;
         // 被同图另一个气泡顶掉：回写一次并停止抢回来，绝不碰 SDK
         instance.suppressed = true;
         instance.opened = false;

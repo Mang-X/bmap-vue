@@ -718,6 +718,95 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
     harness.assertIdle('双窗口乱序：迟到的接管')
   })
 
+  it('迟到的 close 事件造成的陈旧账本：已经退出的 A 不该被顶替通知，也不该再也打不开', async () => {
+    const el = harness.container()
+    const openA = ref(true)
+    const openB = ref(false)
+    const wrapper = mountTree(
+      () => [
+        h(BInfoWindow, { position: POSITION, open: openA.value, title: 'A' }),
+        h(BInfoWindow, { position: POSITION_B, open: openB.value, title: 'B' }),
+      ],
+      el,
+    )
+    await settle()
+    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const map = lastMap()
+    expect(currentInfoWindow()?.options.title, '对照组：A 先打开').toBe('A')
+
+    // 1) A 的关闭**副作用立即发生**，但 `close` 事件还没派发 ⇒ 账本仍短暂记着 A
+    map.deferInfoWindowCloseEvent = true
+    openA.value = false
+    await settle()
+    expect(currentInfoWindow(), '对照组：地图上已经没有 A').toBeNull()
+    expect(map.hasPendingInfoWindowCloseEvent(), '对照组：A 的 close 事件还挂着').toBe(true)
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '对照组：陈旧账本仍认 A',
+    ).not.toBeNull()
+
+    // 2) B 打开 ⇒ 账本以为「A 被顶掉」。但 A 早已退出竞争（desired=false），
+    //    这次顶替是陈旧账本造成的假通知：不该 suppress，也不该再回写一条 update:open(false)
+    map.deferInfoWindowCloseEvent = false
+    openB.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：B 成为当前气泡').toBe('B')
+    expect(
+      emittedOf(a!, 'update:open'),
+      'A 已经关闭（desired=false）⇒ 不该再收到一次「被顶掉」的回写',
+    ).toHaveLength(0)
+
+    // 3) 父级把 A 重新置为打开：A 必须真的能开（旧的 suppress 不得永久生效）
+    openA.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, 'A 必须能重新打开').toBe('A')
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('陈旧账本造成的顶替通知')
+  })
+
+  it('因缺位置退出竞争的 A 同样不该被顶替通知（判据是 desired，不只是 open）', async () => {
+    const el = harness.container()
+    const position = ref<typeof POSITION | undefined>(POSITION)
+    const openB = ref(false)
+    const wrapper = mountTree(
+      () => [
+        h(BInfoWindow, { position: position.value, open: true, title: 'A' }),
+        h(BInfoWindow, { position: POSITION_B, open: openB.value, title: 'B' }),
+      ],
+      el,
+    )
+    await settle()
+    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const map = lastMap()
+    expect(currentInfoWindow()?.options.title, '对照组：A 先打开').toBe('A')
+
+    // 位置被摘掉 ⇒ 不再满足打开条件（desired=false）；收敛把它关掉，但 `close` 事件被推迟
+    map.deferInfoWindowCloseEvent = true
+    position.value = undefined
+    await settle()
+    expect(currentInfoWindow(), '对照组：地图上已经没有 A').toBeNull()
+    expect(map.hasPendingInfoWindowCloseEvent(), '对照组：A 的 close 事件还挂着').toBe(true)
+
+    // B 打开并接管：A 的 `open` 仍为 true，但缺位置 ⇒ 它本来就不在竞争里
+    map.deferInfoWindowCloseEvent = false
+    openB.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：B 成为当前气泡').toBe('B')
+    expect(
+      emittedOf(a!, 'update:open'),
+      'A 没有满足打开条件 ⇒ 不该被当成「被顶掉」回写',
+    ).toHaveLength(0)
+
+    // 位置回来 ⇒ A 必须真的能重新打开
+    position.value = POSITION
+    await settle()
+    expect(currentInfoWindow()?.options.title, '位置恢复后 A 必须能重新打开').toBe('A')
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('缺位置退出竞争后的顶替')
+  })
+
   it('被顶掉的 A 卸载时不得关掉 B 的气泡', async () => {
     const el = harness.container()
     const showA = ref(true)

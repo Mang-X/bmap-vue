@@ -72,7 +72,7 @@
 | **SDK 事件** | `open` / `close` / `clickclose` / `maximize` / `restore` **原样转发**；前三条同时是**收敛触发**，**不是**第二套业务意图 |
 | **收敛** | 只有三种命令：`desired ∧ ¬observed ⇒ openInfoWindow`；`desired ∧ observed ∧ 位置变了 ⇒ 再开一次`（官方没有 `setPosition`）；`¬desired ∧ observed ⇒ closeInfoWindow`。其余什么都不做 |
 | **缺位置** | 「想开但读不到位置」**不满足打开条件** ⇒ 期望状态是「关」，并按边沿报一次 `BMAP_INVALID_ARGUMENT` |
-| **被同图另一个气泡顶掉** | Manager 通知 ⇒ 回写一次 `update:open(false)` + 进入「不抢回来」，直到父级把 `open` 置回 `false` 再置 `true` |
+| **被同图另一个气泡顶掉** | 前提是它**此刻仍 desired**（已经退出竞争的一方收到的是陈旧账本造成的通知 ⇒ 不回写、也不进入「不抢回来」）；满足前提时：Manager 通知 ⇒ 回写一次 `update:open(false)` + 进入「不抢回来」，直到父级把 `open` 置回 `false` 再置 `true` |
 | **用户点关闭按钮（`clickclose`）** | 带明确来源的用户意图 ⇒ 回写一次 `update:open(false)`（回写幂等：同一状态只回写一次） |
 | **命令失败** | 经 `resource:error` 上报，不假装成功；下一次触发（父级再改一次意图）自然重试 —— 不需要「冲销在飞账」 |
 
@@ -728,6 +728,8 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **外部未经请求的 `open` 仍须回写**（与上一条互为反向）：反证：把它也当成要收敛 ⇒ 红 | `infoWindowMachine.test.ts`（`外部未经请求的 open`） |
 | **多条关闭命令在飞时必须全部清账**：`outstanding=2 → 两次 sdk-close`（其中一次在相位已 `closed` 时到达）⇒ 重开后一次真实关闭仍能收敛（评审第二轮 P1 的复现；反证：把 `closed` 早退挪回计数之前 ⇒ 红） | `infoWindowMachine.test.ts`（`多条关闭命令在飞`） |
 | **点地图关闭**（`enableCloseOnClick`）：SDK 自己关 ⇒ 模型收敛 + 回写，且不因为回写而重开 | 同上（`点地图关闭`） |
+| **命令只表达 intent，失败不改事实**：open 命令挂起期间不得提前认领归属（账本不认、也不通知它被顶掉）；close 命令抛错时地图与账本都保持「仍开着」并经 `resource:error` 上报，下一次触发仍会重试（反证两条 ⇒ 各红） | `v3-binfowindow.test.ts`（`打开命令挂起期间不得提前认领归属`、`关闭命令抛错：事实保持不变`） |
+| **陈旧账本造成的顶替通知**：`close` 事件延迟时 Manager 会短暂滞后，已经退出竞争的一方（`open` 已置假，或因缺位置不满足打开条件）不该被当成「被顶掉」——不回写 `update:open(false)`、也不进入「不抢回来」，之后意图恢复必须仍能重新打开（反证：去掉意图判据 ⇒ 两条都红；判据弱化成只看 `open` ⇒ 「缺位置」那条红） | `v3-binfowindow.test.ts`（`迟到的 close 事件造成的陈旧账本…`、`因缺位置退出竞争的 A 同样不该被顶替通知`） |
 | 多窗口互斥、被顶掉者卸载不影响新气泡、多地图隔离、迟到 callback | 同上（`互斥与隔离` 一组） |
 | 一帧一次重绘、不自激、未打开不重绘、选项变化补一次重绘 | 同上（`尺寸与合帧重绘` 一组） |
 | **排队中的重绘在卸载 / 重建时被丢弃**（旧实例不再重绘） | 同上（`排队中的 redraw 在卸载 / 重建时被丢弃`） |
@@ -968,6 +970,36 @@ B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 
 - 另外修掉一处替身缺陷：`FakeV4InfoWindow` 里有**两个** `close()`（类里后定义的那个生效），
   导致实例级关闭没有把地图的「当前气泡」摘掉 ⇒ 收敛自激到 OOM。这是夹具 bug，但正是它让
   「实例级 close 必须真的摘掉当前气泡」这条语义被写清楚。
+
+### 第十二轮（`3858ab1` → 本轮）：命令只表达 intent
+
+评审确认方向已纠正到位，只剩两条 P1，根因相同：**把「命令调用结果」提前当成「SDK 事实」**。
+
+- `openInfoWindow()` 返回后立刻 `manager.activate()` + `opened = true` —— 真实 v4 的 open **异步生效**
+  （返回时 `getInfoWindow()` 仍是 `null`），于是尚未打开的 pending 气泡会提前成为 current，并提前给
+  别的实例发 `superseded`。⇒ 删掉命令侧这两行，归属只由 SDK 的 `open` 事件更新。
+- 关闭命令抛错也走 `finally` ⇒ 当场制造「SDK 开 / 账本关」的分叉，而 `desired` 已是 `false`，
+  未必再有触发来重试。⇒ `finally` 整段删除；失败经 `resource:error` 上报、事实不动。
+
+**口径**：command 只表达 intent；`open` / `close` 事件或公开读回才改变 observed / Manager。
+`InfoWindowManager` 由此退回纯粹的 resource ownership 账本。替身为此补 `failNextCloseInfoWindow`
+（抛在关闭**之前** ⇒ 气泡仍开着，也没有 `close` 事件），否则「失败保持事实不变」写不出断言。
+
+### 第十三轮（`02ba755` → 本轮）：顶替通知要看**当前意图**
+
+评审指出 `onSuperseded` 无条件 `suppressed = true`：Manager 的 current 在 `close` 事件延迟时可以短暂
+滞后，于是一个**已经 desired=false、地图上也已经关掉**的 A（只因为它的 `close` 事件还没派发）会被 B 的
+`open` 当成「被顶掉」再次 suppress；父级之后把 A 置回 `true` 时 `suppressed` 不会被清（它只在 `open`
+的下降沿清），A **再也打不开**。用现有 `deferInfoWindowCloseEvent` 即可复现，不需要伪造 ACK。
+
+- **修法**：`onSuperseded` 先读一次当前意图，`desired` 为假就直接返回（不回写、不 suppress）；
+  判据收在 `readIntent()` 一处，与 `reconcile()` 共用，避免「desired」出现第二个定义。
+- **判据取 `desired` 而不是 `wantOpen`**：还有一条同型路径 —— A 因为**位置被摘掉**而退出竞争
+  （`open` 仍为 `true`），它同样已被收敛关掉。两条用例分别固定这两种「已退出竞争」的形态；
+  单点反证里把判据弱化成 `wantOpen`，「缺位置」那条会红，说明这个选择有判别力。
+- 回归覆盖**两个症状**：不该出现的那条 `update:open(false)`，以及「A 必须能重新打开」。
+  第四轮那类「陈旧账本」的教训在这里复用了同一条纪律：**任何『我替上游宣布事实』的写入点都要先问
+  『此刻的意图是什么』**。
 
 ### 本轮修正引入的自我检查
 
