@@ -325,11 +325,16 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
  * 取消成功、但 SDK 没有派发 `animationcancel`（#105 评审第三轮 P1）
  *
  * 这是审计表 F-1 那条未取证时序的**反面**用例：Fake 默认一定派发该事件，所以「等事件再交回
- * 所有权」在这里永远不会出错。把派发关掉之后，才能看出生产实现是不是把「还在观察事件」当成了
- * 「还有资格再发一次地图级 stop」。`stopViewAnimation` 是**地图级**命令，重复发就会停掉这张图上
- * 任何人正在播的动画——包括另一个 hooks 刚起的那一段。
+ * 所有权」在这里永远不会出错。把派发关掉之后，才能看出生产实现是不是把「收到 `animationcancel`」
+ * 当成了所有权交付的唯一凭据。
  *
- * 这条用例**不**主张官方一定不派发该事件；它只钉住：真不派发时本库也不越权。
+ * 这一节钉两条，两条在按实例的取消下同时成立：
+ * ① 取消已交付（`canceled` / `already-settled`）⇒ 本 hooks 收尾：监听释放、状态收敛，再 `cancel()`
+ *    不重复打到 SDK；
+ * ② 取消只属于自己那一段（`cancelViewAnimation(map, animation)`）⇒ 另一段动画的 `cancelCalls`
+ *    始终是 0，无论本 hooks 重试还是卸载。
+ *
+ * 这条用例**不**主张官方一定不派发该事件；它只钉住：真不派发时本库既不越权、也不卡死。
  */
 describe("useBMapViewAnimation：取消被接受之后不再越权", () => {
   /** 同一张地图上挂两个 hooks；`showFirst` 可以只卸载前一个（地图保持存活） */
@@ -384,7 +389,7 @@ describe("useBMapViewAnimation：取消被接受之后不再越权", () => {
     // 关键：H1 再取消一次不能越权去停 H2 那一段
     hooks[0].cancel();
     await settleAsyncWindow();
-    expect(second.cancelCalls, "H1 不得对这张图再发一次地图级 stop").toBe(0);
+    expect(second.cancelCalls, "H1 的取消只属于自己那一段，不得碰 H2 的动画").toBe(0);
     expect(hooks[1].status.value).toBe("playing");
     expect(second.getListenerCount(), "H2 的观察不受影响").toBeGreaterThan(0);
 
