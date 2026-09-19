@@ -70,8 +70,9 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 - 卸载时取消失败**不再打断卸载**（按 `logger.warn` 上报，地图销毁路径会重试取消），本段订阅无条件释放。
 - 取消是**地图级**命令：`cancel()` 的守卫只看 hooks 自己有没有在飞段，因此不保证一定不牵连同图
   其它动画（文档与类型注释已改成这个口径，而不是反过来承诺归属）。
-- stop 请求**一旦被 Driver 接受就不再重复发**（`stopViewAnimation` 正常返回；动画还没起播时 Driver
-  只是登记 `cancelRequested`，真正的 SDK 取消留给安全窗口）：同一 hooks 之后再调 `cancel()` 是 no-op。
+- 一次 `stopViewAnimation()` **正常返回之后就不再重复发**（返回只代表这一次请求被 Driver 接手：
+  动画还没起播时它只登记 `cancelRequested`，真正的 SDK 取消留给安全窗口，既不等于「SDK 已取消」
+  也不等于「动画已停」）：同一 hooks 之后再调 `cancel()` 是 no-op。
   此前它会在「取消已成功、但 SDK 没派发 `animationcancel`」时保留发 stop 的资格，下一次调用就会停掉
   这张图上**任何人**正在播的动画（包括另一个 `useBMapViewAnimation` 刚起的那一段）。
   「还在观察事件」与「还有资格再发一次地图级 stop」现在是两件事。
