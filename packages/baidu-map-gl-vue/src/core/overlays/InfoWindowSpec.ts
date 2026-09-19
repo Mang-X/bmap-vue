@@ -9,7 +9,7 @@
  *
  * | 策略 | 含义 | 预期与描述符的关系 |
  * | --- | --- | --- |
- * | `state` | 由 `infoWindowMachine` 驱动（打开 / 关闭 / 移动），**不进** `setOptions` | 描述符里该键**不存在**或为 `unsupported` |
+ * | `state` | 由组件的**收敛**驱动（打开 / 关闭 / 移动），**不进** `setOptions` | 描述符里该键**不存在**或为 `unsupported` |
  * | `options` | 就地更新：进更新队列 → `driver.overlays.setOptions` | 描述符里该键必须是 `mutable` |
  * | `recreate` | 构造期属性：变化即**重建实例**（旧实例连同 child scope 一起释放） | 描述符里该键必须是 `recreate` |
  *
@@ -151,4 +151,18 @@ export function infoWindowOpenIntentUsesAlias(
   props: Readonly<Pick<InfoWindowProps, "open" | "show">>,
 ): boolean {
   return props.show !== undefined;
+}
+
+/**
+ * 位置指纹：**没有可用位置时返回 `null`**（而不是 `""` 之类的哨兵）。
+ *
+ * 用值而不是对象引用判等（父级常传内联字面量）；「没有位置」与「某个具体位置」必须可区分 ——
+ * 与 `core/runtime/elementSize.ts` 的既有口径一致（那里也是「读不到返回 `null`，不等于 0」）。
+ *
+ * 它是组件收敛的**前置判据**：`open` 想开但没有可用位置时，本库不产生任何命令，
+ * 只按边沿报一次 `BMAP_INVALID_ARGUMENT`（见 `useInfoWindow` 的 `reconcile()`）。
+ */
+export function positionKeyOf(point: Point | undefined | null): string | null {
+  if (!point || !Number.isFinite(point.lng) || !Number.isFinite(point.lat)) return null;
+  return `${point.lng},${point.lat}`;
 }

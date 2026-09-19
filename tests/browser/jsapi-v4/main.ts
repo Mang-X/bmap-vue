@@ -545,7 +545,13 @@ function mountTree(): Mounted {
             open: infoOpen.value,
             position: POINT,
             title: "smoke",
-            "onUpdate:open": (value: boolean) => infoEvents.updates.push(value),
+            // 受控父级的常规用法：接到回写就把自己的状态跟上（`v-model:open` 的语义）。
+            // 少了这一步，「用户点了关闭按钮」之后本库会按**仍然是 true 的**意图把气泡重新打开
+            // —— 那样这条检查断言的「最终地图上没有气泡」永远不成立。
+            "onUpdate:open": (value: boolean) => {
+              infoEvents.updates.push(value);
+              infoOpen.value = value;
+            },
           },
           { default: () => "smoke-infowindow-content" },
         ),
@@ -1369,7 +1375,7 @@ const CHECKS: Record<string, CheckImpl> = {
       //     `sdk-clickclose` 这个独立动作就是为它存在的。
       // **不断言 `clickclose` 的具体条数**：实测它随「同一个实例被打开过几次」累积
       // （打开 1/2/3 次 ⇒ clickclose 1/2/3 条，`close` 始终 1 条）—— SDK 每次打开/重绘都会
-      // 重新绑定关闭按钮的处理器。状态机因此必须容忍 N 条（见 `explicitClosePair` 的说明）。
+      // 重新绑定关闭按钮的处理器 ⇒ 本库原样转发这 N 条（不去重，见 ADR 已知限制 13）。
       assertSmoke(
         counts.close === 1 && counts.clickclose >= 1,
         "BMAP_INFOWINDOW_CLOSE_PAIR_SHAPE",

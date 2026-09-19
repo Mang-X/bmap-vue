@@ -353,6 +353,14 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
   open = false
   /** 最近一次「地图侧打开」传入的位置（`map.openInfoWindow(iw, point)`）。 */
   openedAt: FakeV4Point | null = null
+  /**
+   * 当前承载它那张地图（被接管时记下、关闭时清掉）。
+   *
+   * 存在的理由是官方 4.0 的 `InfoWindow#close()`：它是**实例级**入口（真实运行时实测存在），
+   * 关闭的是「这个实例所在的那张地图上的当前气泡」。没有它就复现不出「别处打开了我们拥有的实例、
+   * 本库再把它收敛掉」这条路径（Driver 对「不由本 Driver 打开过」的实例只能走实例级 close）。
+   */
+  enclosingMap: FakeV4Map | null = null
   width: number | null = null
   height: number | null = null
   redrawCalls = 0
@@ -442,8 +450,20 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
     this.emit('open')
   }
 
+  /**
+   * 官方语义：关闭**这个实例**（真实 4.0 运行时提供 `InfoWindow#close()`）。
+   *
+   * 挂在某张地图上时就交给地图关（它会摘掉「当前气泡」并派发 `close`）—— 这条路径是
+   * 「别处打开了我们拥有的实例、本库再把它收敛掉」能成立的前提：Driver 对
+   * 「不由本 Driver 打开过」的实例只能走实例级 close，而个体级的关闭必须真的把地图上的
+   * 当前气泡摘掉，否则收敛会一直认为它还开着（外部评审第十一轮实测到的自激）。
+   */
   close(): void {
     this.callLog.push('close')
+    if (this.enclosingMap?.infoWindow === this) {
+      this.enclosingMap.closeInfoWindow()
+      return
+    }
     this.open = false
     this.emit('close')
   }

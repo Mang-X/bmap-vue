@@ -348,6 +348,8 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.infoWindow = infoWnd
     infoWnd.openedAt = point
     infoWnd.open = true
+    // 记下「它现在在哪张地图上」：官方 4.0 的实例级 `InfoWindow#close()` 需要这个信息
+    infoWnd.enclosingMap = this
     this.attachBubbleContent(infoWnd.content)
     if (isNew) this.stats.resourceCreated('infoWindow')
     infoWnd.emit('open')
@@ -375,6 +377,7 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.stats.resourceReleased('infoWindow')
     this.teardownBubbleHost()
     current.open = false
+    current.enclosingMap = null
     return current
   }
 

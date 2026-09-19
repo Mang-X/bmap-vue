@@ -6,27 +6,22 @@
  * 官方不给读回入口——`map.getInfoWindow()` 是**异步生效**的（同一 tick 里刚 open 完仍是
  * `null`），因此本库必须自己记账。
  *
- * 账本只有两项：**注册表**（这张地图上还活着几个气泡）+ **当前项**（实际在地图上打开的那一个）。
+ * 账本只有两项：**注册表**（这张地图上还活着几个气泡）+ **当前项**（观测到实际在地图上打开的那一个）。
  *
- * ## 当前项的两个来源：命令的「早声明」+ SDK 事件的「事实」（外部评审第六轮 P1）
+ * ## 它只做**资源所有权**，不做 request ownership
  *
- * `current()` 的语义是「**实际**打开的气泡」，所以它必须能被两路推进：
+ * 账本里没有任何「哪次命令的回包」的信息（2026-09-19 方向纠正后尤其如此）：它只知道
+ * **这张地图上还活着几个气泡**、**最近一次观测到哪个是当前项**。`close` 是不是我们某次命令的
+ * 结算、需不需要配对，都不在这里判断 —— 见 ADR 的 ownership 契约
+ * （`docs/adr/2026-09-18-infowindow-host-and-ownership.md` 的「决策 0」）。
  *
- * - **命令侧**：打开命令成功之后 `activate()` —— 真机上打开是异步的（`map.getInfoWindow()`
- *   同一 tick 里仍是 `null`），先声明是当时唯一能做的事；
- * - **SDK 事件侧**：真实到达的 `open` / `close` / `clickclose` 也要 `activate()` / `deactivate()`。
- *   少了这一路，被迟到请求真正顶掉的那个气泡收不到通知（模型停在地图上已经不存在的气泡上），
- *   而外部 SDK 自己开 / 关时账本会与地图分叉（留下「幽灵 current」）。
+ * 两个推进来源（都在「观测到实际归属」时）：
  *
- * 事实优先，但两个方向的**顺序要求恰好相反**（外部评审第七轮 P1）：
- *
- * - `open`：**先** `activate()` 再喂状态机 —— 状态机可能同步下发纠偏 close，
- *   而那条 close 的收尾会 `deactivate(自己)`，必须打在已经换成自己的账本上；
- * - `close` / `clickclose`：**先**喂状态机，**再按状态机的结论**决定是否 `deactivate` ——
- *   `sdk-close` 里有一类是**过期回包**（`closeOutstanding > 0` 且模型仍是开），状态机只减账、
- *   保持 `open`，那时地图上开着的仍然是它，账本不能退场。
- *
- * 一句话：账本镜像的是**状态机对「当前是否开着」的判断**，而不是「收到过哪些事件」。
+ * - `useInfoWindow` 在打开命令**成功之后** `activate()`（真机上打开是异步的，
+ *   `map.getInfoWindow()` 同一 tick 里仍是 `null`，先声明是当时唯一能做的事）；
+ * - SDK 的 `open` / `close` / `clickclose` 到达时同样 `activate()` / `deactivate()` ——
+ *   少了这一路，被真正顶掉的那个气泡收不到通知，而外部 SDK 自己开 / 关时账本会与地图分叉
+ *   （留下「幽灵 current」）。
  *
  * ## 为什么需要它：被顶掉的那个组件不会收到任何通知
  *
@@ -35,16 +30,17 @@
  * `infoWindowsReleased` 注释）。于是 A 的受控模型会与地图分叉。Manager 的 `activate()` 就是
  * 补上这条通知：**先改当前项、再通知被顶掉的那个**。
  *
- * 顺序是硬要求：被顶掉的组件在通知里会调 `deactivate()`/收敛自己的状态，如果当前项还没换过去，
+ * 顺序是硬要求：被顶掉的组件在通知里会收敛自己的状态（并进入「不再抢回来」），如果当前项还没换过去，
  * 那次调用会把新主人误清掉。先写「当前是谁」，再通知「你被顶掉了」，让 `deactivate` 天然成为
  * 一次 no-op。
  *
  * ## 被顶掉的组件**不得**调 `closeInfoWindow()`
  *
  * `map.closeInfoWindow()` 是地图级、无参数的入口，关的是**当前**那个气泡。被顶掉的组件调它
- * 会关掉新的那个。因此 `onSuperseded` 只允许改自己的状态，不允许碰 SDK —— 这条由
- * `infoWindowMachine` 的 `superseded` 动作保证（它不产生任何 effect），再加上 Driver 侧
- * 已有的「只关本 Driver 最后请求打开的那个」守卫（`driver/jsapi-v4/overlays.ts`）。
+ * 会关掉新的那个。因此 `onSuperseded` 只允许改自己的状态、不允许碰 SDK —— 这条由
+ * `useInfoWindow` 的 `onSuperseded` 实现保证（它只回写一次 `update:open(false)` 并置
+ * 「不抢回来」），再加上 Driver 侧已有的「先看 `getInfoWindow()` 是不是自己」的守卫
+ * （`driver/jsapi-v4/overlays.ts`）。
  */
 import { logger } from "../logger";
 import type { InfoWindowHandle } from "../../driver/types/handles";

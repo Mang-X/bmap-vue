@@ -137,7 +137,7 @@ function emittedOf(wrapper: { emitted: (name: string) => unknown }, name: string
 /* ------------------------------------------------------------------ 沿用 #72 */
 
 describe('BInfoWindow 的地图级打开 / 关闭（R25-C / #72 回归）', () => {
-  it('opens and closes via open prop, respecting state machine', async () => {
+  it('opens and closes via open prop（desired 驱动，收敛到地图上）', async () => {
     const el = harness.container()
     const open = ref(true)
     const wrapper = mountTree(
@@ -156,19 +156,6 @@ describe('BInfoWindow 的地图级打开 / 关闭（R25-C / #72 回归）', () =
     await unmountAndSettle(wrapper)
     expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0)
     harness.assertIdle('BInfoWindow 关闭后卸载')
-  })
-
-  it('SDK close event writes update:open false', async () => {
-    const el = harness.container()
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: true, title: 't' })], el)
-    await settle()
-    const iw = currentInfoWindow()
-    expect(iw, '对照组：气泡必须已经打开').toBeTruthy()
-    iw!.emit('close', { type: 'close' })
-    await nextTick()
-    const child = wrapper.findComponent(BInfoWindow)
-    expect(emittedOf(child, 'update:open')).toContainEqual([false])
-    await unmountAndSettle(wrapper)
   })
 })
 
@@ -245,93 +232,169 @@ describe('内容宿主：SDK 持有节点、Vue Teleport 拥有渲染子树', ()
 
 /* --------------------------------------------------------------- 竞态与回环 */
 
-describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
-  it('受控闭环：SDK 关闭 → 一条 update:open false；父级写回后不再产生第二条', async () => {
+describe('所有权与收敛：desired（open）→ 地图上的实际状态', () => {
+  it('open=true ⇒ 打开；open=false ⇒ 关闭（prop 是唯一控制意图）', async () => {
     const el = harness.container()
     const open = ref(true)
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
     await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    expect(emittedOf(child, 'update:open'), '对照组：打开过程不得回写').toHaveLength(0)
+    expect(currentInfoWindow(), 'desired=true ⇒ 地图上真的有气泡').toBeTruthy()
+    const opens = lastMap().callLog.filter((c) => c === 'openInfoWindow').length
 
-    // 用户点地图关闭（SDK 侧）→ 组件回写一次
-    currentInfoWindow()!.emit('close', { type: 'close' })
-    await settle()
-    expect(emittedOf(child, 'update:open')).toEqual([[false]])
-
-    // 受控父级消费这次回写（v-model 的正常闭环）
     open.value = false
     await settle()
-    expect(emittedOf(child, 'update:open'), '父级写回不得再产生一条回写（无回环）').toEqual([[false]])
-    expect(emittedOf(child, 'close')).toHaveLength(1)
+    expect(currentInfoWindow(), 'desired=false ⇒ 收敛为关').toBeNull()
+    expect(
+      lastMap().callLog.filter((c) => c === 'closeInfoWindow').length,
+      '关闭走地图级专用入口',
+    ).toBe(1)
+    expect(
+      lastMap().callLog.filter((c) => c === 'openInfoWindow').length,
+      '没有多余的重开',
+    ).toBe(opens)
+
     await unmountAndSettle(wrapper)
+    harness.assertIdle('open/close by prop')
   })
 
-  it('快速 open → false → true：关闭与重开各一次，且不产生多余的回写', async () => {
-    const el = harness.container()
-    const open = ref(true)
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    const map = lastMap()
-    const openCalls = () => map.callLog.filter((entry) => entry === 'openInfoWindow').length
-
-    expect(openCalls()).toBe(1)
-    open.value = false
-    await settle()
-    open.value = true
-    await settle()
-
-    expect(openCalls(), '重开恰好一次：重复的同值意图不得再下发命令').toBe(2)
-    expect(emittedOf(child, 'open')).toHaveLength(2)
-    expect(emittedOf(child, 'close')).toHaveLength(1)
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('快速 open/close')
-  })
-
-  it('同一 tick 的 open → close 被 SDK 吞掉：观测到 open 后必须再关一次（真机时序的端到端复现）', async () => {
+  it('同一 tick 的 open → false 被 SDK 吞掉：观测到它真开了之后仍要关掉（真机时序）', async () => {
     const el = harness.container()
     const open = ref(false)
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
     await settle()
     const map = lastMap()
-    const iw = createdInfoWindows().at(-1)!
-    // 让**这一次**打开异步生效：真机上 openInfoWindow() 之后同一 tick 里
-    // `map.getInfoWindow()` 仍是 null，因此同一 tick 的 closeInfoWindow() 是 no-op
-    map.deferInfoWindowOpen = true
-    const closeCalls = () => map.callLog.filter((entry) => entry === 'closeInfoWindow').length
 
+    // 真机：`openInfoWindow()` 之后同一 tick 里 `getInfoWindow()` 仍是 null（异步生效）
+    map.deferInfoWindowOpen = true
     open.value = true
     await settle()
-    expect(map.hasPendingInfoWindow(), '对照：打开请求已经发出、SDK 还没接管').toBe(true)
-    expect(currentInfoWindow(), '对照：地图上还没有气泡').toBeNull()
+    expect(map.hasPendingInfoWindow(), '对照组：打开请求已被挂起').toBe(true)
+    expect(currentInfoWindow(), '对照组：还没真正打开').toBeNull()
 
-    // 立刻关闭：这条命令会被 SDK 吞掉（真机上就是 no-op）
+    // 立刻改回 false：此刻「期望关 + 实际没开」⇒ 不该发命令（发下去也会被吞掉）
+    const closesBefore = map.callLog.filter((c) => c === 'closeInfoWindow').length
     open.value = false
     await settle()
-    expect(closeCalls(), '确实下发了关闭命令').toBe(1)
-    expect(currentInfoWindow()).toBeNull()
+    expect(
+      map.callLog.filter((c) => c === 'closeInfoWindow').length,
+      '此刻没有可关的东西，不发多余的关闭命令',
+    ).toBe(closesBefore)
 
-    // SDK 迟一步真的接管了 ⇒ 组件必须再下发一次关闭，否则「点了关闭，气泡却留在地图上」
-    expect(map.flushInfoWindowOpen(), '对照：确实有一次被放行的接管').toBe(true)
+    // ★ SDK 迟一步真的把它打开了 ⇒ 观测到「实际开着」后必须收敛回关
+    expect(map.flushInfoWindowOpen(), '对照组：确实有一次被放行的接管').toBe(true)
     await settle()
-    expect(closeCalls(), '接管之后必须再关一次').toBe(2)
-    expect(currentInfoWindow(), '最终地图上没有气泡').toBeNull()
-    expect(iw.isOpen()).toBe(false)
-    expect(fake.diagnostics.snapshot().leaks.infoWindows).toBe(0)
+    expect(currentInfoWindow(), '父级要的是「关」⇒ 迟到的接管也要被收敛掉').toBeNull()
 
     await unmountAndSettle(wrapper)
-    harness.assertIdle('同 tick 开关')
+    harness.assertIdle('同 tick 吞命令')
   })
 
-  it('点地图关闭（enableCloseOnClick）：SDK 自己关 ⇒ 模型收敛并回写 update:open false', async () => {
+  it('快速 open → false → true：每个意图各产生一次命令', async () => {
     const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const child = wrapper.findComponent(BInfoWindow)
+    const map = lastMap()
+    const before = map.callLog.filter((c) => c === 'openInfoWindow').length
+
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+
+    expect(currentInfoWindow(), '最终是开着的').toBeTruthy()
+    expect(
+      map.callLog.filter((c) => c === 'openInfoWindow').length,
+      '重开一次（不多不少）',
+    ).toBe(before + 1)
+    expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(1)
+    expect(
+      emittedOf(child, 'update:open'),
+      'prop 驱动的变化不回写（受控语义）',
+    ).toHaveLength(0)
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('快速开关')
+  })
+
+  it('外部（别处）打开本组件拥有的实例：desired=false ⇒ 收敛为关，且如实转发 open', async () => {
+    const el = harness.container()
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)
+    await settle()
+    const child = wrapper.findComponent(BInfoWindow)
+    const raw = createdInfoWindows()[0]!
+
+    // 别处调了 `map.openInfoWindow`，打开的就是这个实例 —— 它是**本组件的**实例
+    lastMap().openInfoWindow(raw, POSITION)
+    await settle()
+
+    expect(emittedOf(child, 'open'), 'SDK 的 open 如实转发').toHaveLength(1)
+    expect(
+      emittedOf(child, 'update:open'),
+      '外部控制不再被翻译成新的 v-model 意图（ownership 契约）',
+    ).toHaveLength(0)
+    expect(currentInfoWindow(), 'desired=false ⇒ 收敛回关：本库拥有该实例').toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('外部打开我们拥有的实例')
+  })
+
+  it('SDK 侧被关闭（desired 仍为开）⇒ 收敛把它重新打开；父级若处理 close 则可保持关闭', async () => {
+    // 变体 1：父级只给 `open`（把它当「一直开着」）⇒ 受控语义：观测到关就重新断言
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const child = wrapper.findComponent(BInfoWindow)
+    const map = lastMap()
+
+    map.closeInfoWindow() // SDK 自己关（点地图 / 别处调）
+    await settle()
+    expect(emittedOf(child, 'close'), 'SDK 的 close 如实转发').toHaveLength(1)
+    expect(emittedOf(child, 'update:open'), '不再回写 update:open（不是第二套业务意图）').toHaveLength(0)
+    expect(currentInfoWindow(), 'desired 仍是开 ⇒ 重新断言，气泡回到地图上').toBeTruthy()
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('desired 重新断言')
+
+    // 变体 2：父级处理 `close`（把 open 置 false，v-model 的常规用法）⇒ 不会再被拉开
+    const el2 = harness.container()
+    const open2 = ref(true)
+    const wrapper2 = mountTree(
+      () => [
+        h(BInfoWindow, {
+          position: POSITION,
+          open: open2.value,
+          onClose: () => (open2.value = false),
+        }),
+      ],
+      el2,
+    )
+    await settle()
+    const map2 = lastMap()
+    map2.closeInfoWindow()
+    await settle()
+    expect(open2.value, '父级跟着 SDK 的 close 收敛').toBe(false)
+    expect(currentInfoWindow(), '父级也说关 ⇒ 不得被重新拉开').toBeNull()
+    await unmountAndSettle(wrapper2)
+    harness.assertIdle('父级跟着 close')
+  })
+
+  it('点地图关闭（enableCloseOnClick）+ 父级处理 close：用户关掉后不会被重新拉开', async () => {
+    const el = harness.container()
+    const open = ref(true)
     const wrapper = mountTree(
-      () => [h(BInfoWindow, { position: POSITION, open: true, enableCloseOnClick: true })],
+      () => [
+        h(BInfoWindow, {
+          position: POSITION,
+          open: open.value,
+          enableCloseOnClick: true,
+          onClose: () => (open.value = false),
+        }),
+      ],
       el,
     )
     await settle()
-    const child = wrapper.findComponent(BInfoWindow)
     const map = lastMap()
     expect(map.infoWindow?.isOpen(), '对照组：气泡已经打开').toBe(true)
 
@@ -339,20 +402,18 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     map.closeInfoWindow()
     await settle()
 
+    expect(open.value, '这是一次真实的关闭 ⇒ 父级应当收敛').toBe(false)
     expect(map.infoWindow, '地图上没有当前气泡').toBeNull()
-    expect(emittedOf(child, 'update:open'), '这是一次未经请求的关闭 ⇒ 回写').toEqual([[false]])
-    expect(emittedOf(child, 'close')).toHaveLength(1)
-    expect(map.callLog.filter((entry) => entry === 'openInfoWindow').length, '不得因为回写而重开').toBe(1)
     expect(
-      probeContext.value?.infoWindows?.current(),
-      'SDK 自己关掉之后地图已经空了 ⇒ 账本不得再指向这个旧实例',
-    ).toBeNull()
+      map.callLog.filter((c) => c === 'openInfoWindow').length,
+      '不得因为收敛而重开',
+    ).toBe(1)
 
     await unmountAndSettle(wrapper)
     harness.assertIdle('点地图关闭')
   })
 
-  it('移动请求的迟到 open 不得把已经关闭的气泡重新拉开（真机时序 · 端到端）', async () => {
+  it('移动请求的迟到 open：父级已关闭 ⇒ 迟到接管也要被收敛为关（真机时序）', async () => {
     const el = harness.container()
     const open = ref(true)
     const position = ref(POSITION)
@@ -362,291 +423,93 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     )
     await settle()
     const map = lastMap()
-    const child = wrapper.findComponent(BInfoWindow)
-    expect(map.infoWindow?.isOpen(), '对照组：气泡已经打开').toBe(true)
+    const raw = currentInfoWindow()!
+    expect(raw.isOpen(), '对照组：气泡已经打开').toBe(true)
 
     // 让接下来的 open 异步生效（真机：同一 tick 里 getInfoWindow() 仍是 null）
     map.deferInfoWindowOpen = true
-    // 位置变化 ⇒ 状态机在 `open` 相位下再下发一条 open（移动），夹具把它挂起
+    // 位置变化 ⇒ 收下发一条 open（移动），夹具把它挂起
     position.value = POSITION_B
     await settle()
     expect(map.hasPendingInfoWindow(), '对照组：移动请求已被挂起').toBe(true)
 
-    // 关：气泡确实开着 ⇒ 真正关闭并同步派发 close，机器结算后进入 closed
+    // 关：气泡确实开着 ⇒ 真正关闭并同步派发 close
     open.value = false
     await settle()
     expect(map.infoWindow, '对照组：关闭已经生效').toBeNull()
 
-    // ★ 移动那条 open 的回包这时才到（它属于**本组件自己**的请求，不是外部打开）
+    // ★ 移动那条 open 这时才真正接管地图：父级要的是「关」⇒ 必须被收敛掉
     expect(map.flushInfoWindowOpen(), '对照组：确实有一次被放行的接管').toBe(true)
     await settle()
-
-    expect(
-      emittedOf(child, 'update:open').filter((payload) => payload[0] === true),
-      '父级刚明确关闭，不得被自己那条旧请求的回包回写成打开',
-    ).toHaveLength(0)
-    expect(currentInfoWindow(), '最终地图上不得留下气泡（要重新收敛到关闭）').toBeNull()
+    expect(currentInfoWindow(), '最终地图上不得留下气泡').toBeNull()
 
     await unmountAndSettle(wrapper)
-    harness.assertIdle('迟到的内部 open')
+    harness.assertIdle('迟到的移动 open')
   })
 
-  it('重开确认先到、旧 close 后到：过期回包不得把账本清空（组件级反序回归）', async () => {
-    const el = harness.container()
-    const open = ref(true)
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    const map = lastMap()
-    const raw = currentInfoWindow()!
-    expect(raw.isOpen(), '对照组：气泡已经打开').toBe(true)
-
-    // 只推迟**那条 `close` 事件**：关闭副作用照常立即发生（真机也是这一刻地图就空了）
-    map.deferInfoWindowCloseEvent = true
-    open.value = false
-    await settle()
-    expect(map.hasPendingInfoWindowCloseEvent(), '对照组：关闭已生效，但 `close` 事件还没派发').toBe(true)
-    expect(map.infoWindow, '对照组：副作用立即发生 ⇒ 地图上此刻已经没有气泡').toBeNull()
-
-    // 立刻重开：状态机从 `closing` 重开并**刻意保留**那笔在飞的关闭账
-    open.value = true
-    await settle()
-    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
-
-    // ★ 反序：前一次关闭的迟到回包这时才到。它是**过期回包**（`closeOutstanding > 0` 且模型是开）
-    //   ⇒ 状态机只减账，`open` / 相位都不动。
-    expect(map.flushInfoWindowCloseEvent(), '对照组：确实有一条被放行的旧 `close` 事件').toBe(true)
-    await settle()
-
-    // 这两条是「旧 **事件** 晚到」与「旧 **命令** 晚执行」的判别线：
-    // 前者要求地图上**仍然开着**重开后的气泡（副作用早已发生，只有事件迟到）。
-    expect(
-      map.infoWindow,
-      '旧回包晚到不得把地图上的气泡弄没：被推迟的应当是事件，而不是关闭副作用本身',
-    ).toBe(raw)
-    expect(raw.isOpen(), '重开的气泡仍然开着').toBe(true)
-    expect(
-      emittedOf(child, 'update:open'),
-      '过期回包不得改动模型（父级的意图仍然是「开」，重开也已确认）',
-    ).toHaveLength(0)
-    expect(
-      probeContext.value?.infoWindows?.current(),
-      '状态机仍认为它开着 ⇒ 账本不得被过期回包清空（否则后续互斥通知又基于陈旧归属）',
-    ).not.toBeNull()
-
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('反序回包后账本仍指向该实例')
-  })
-
-  it('跨 task 之后的一次用户点击，不得与更早那条旧回包配对（配对要有 task 边界）', async () => {
-    // 评审第十轮 P1 的六步复现：配对标记只在「下一条关闭类 action」时清理，**时间过去本身不会清**。
-    // 于是「一条真正迟到的旧回包」留下的 `close-consumed`，会在许多个 task 之后被一次用户点击
-    // 误认成**本次点击的伴随 close**，把账还回去 ⇒ 凭空多出一份幽灵 `closeOutstanding`，
-    // 之后一次真实关闭又会被它当成旧命令结算而吞掉。
-    const el = harness.container()
-    const open = ref(true)
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    const map = lastMap()
-    const raw = currentInfoWindow()!
-
-    // 1) 造出一笔在飞的关闭账，并立刻重开（模型 open、closeOutstanding = 1）
-    map.deferInfoWindowCloseEvent = true
-    open.value = false
-    await settle()
-    open.value = true
-    await settle()
-    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
-
-    // 2) **真正那条旧命令的回包**到了：它消费掉那笔账，模型仍是开
-    expect(map.flushInfoWindowCloseEvent(), '对照组：旧回包被放行').toBe(true)
-    // 之后不需要再推迟 `close` 事件了（否则第 5 步那次真实关闭会被替身挂起、根本到不了组件）
-    map.deferInfoWindowCloseEvent = false
-    await settle()
-    expect(emittedOf(child, 'update:open'), '对照组：旧回包不得改模型').toHaveLength(0)
-
-    // 3) ★ 跨过若干个 task（没有任何状态机 action）之后，用户才点关闭按钮；
-    //    实测形状（同实例已打开两次）是 `clickclose > close > clickclose`
-    expect(
-      map.clickInfoWindowCloseButton({ shape: ['clickclose', 'close', 'clickclose'] }),
-      '对照组：确实点到了',
-    ).toBe(true)
-    await settle()
-    expect(emittedOf(child, 'update:open'), '用户主动关闭必须生效').toEqual([[false]])
-
-    // 4) 父级回声并重开
-    open.value = false
-    await settle()
-    open.value = true
-    await settle()
-    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
-
-    // 5) 一次**真实的**（非本组件请求的）关闭：账上若凭空多出幽灵条目，它会被当成「我们自己那条
-    //    旧命令的回包」而只减账、不动模型 —— 模型与地图都会停在「开」
-    map.closeInfoWindow()
-    await settle()
-
-    expect(
-      emittedOf(child, 'update:open'),
-      '真实关闭必须收敛：幽灵账会把它当成旧回包吞掉（第二条 false 就是「真的关了」）',
-    ).toEqual([[false], [false]])
-    expect(map.infoWindow, '地图上不得留下气泡').toBeNull()
-
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('跨 task 的用户点击不与旧回包配对')
-  })
-
-  it('用户点关闭按钮（clickclose）那一组事件：实测的四种形状都不得吞掉在飞命令账', async () => {
-    // 真实 4.0 实测：`close` **恰好一次**；`clickclose` 一条或多条（条数随同一实例被打开过几次累积），
-    // 顺序不固定。四种形状都要满足同一条不变量：这一组不带我们命令的身份 ⇒ **不得消费**命令账。
-    const shapes: Array<{ tag: string; options: { shape?: Array<'close' | 'clickclose'> } }> = [
-      { tag: '1 次打开 · close 在前', options: {} },
-      { tag: '1 次打开 · clickclose 在前', options: { shape: ['clickclose', 'close'] } },
-      { tag: '2 次打开', options: { shape: ['clickclose', 'close', 'clickclose'] } },
-      { tag: '3 次打开', options: { shape: ['clickclose', 'close', 'clickclose', 'clickclose'] } },
+  it('用户点关闭按钮（clickclose）的四种实测形状：原样转发 + 回写一次 update:open(false)', async () => {
+    // 真实 4.0 实测（真实 AK）：`close` 恰好一条，`clickclose` 一条或多条（条数随同一实例被打开过几次
+    // 累积），顺序不固定。本库对它们**只做两件事**：原样转发、按用户意图回写一次。
+    const shapes: Array<{ tag: string; shape: Array<'close' | 'clickclose'> }> = [
+      { tag: '1 次打开 · close 在前', shape: ['close', 'clickclose'] },
+      { tag: '1 次打开 · clickclose 在前', shape: ['clickclose', 'close'] },
+      { tag: '2 次打开', shape: ['clickclose', 'close', 'clickclose'] },
+      { tag: '3 次打开', shape: ['clickclose', 'close', 'clickclose', 'clickclose'] },
     ];
 
-    for (const { tag, options } of shapes) {
+    for (const { tag, shape } of shapes) {
       const el = harness.container()
       const open = ref(true)
-      const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+      const wrapper = mountTree(
+        () => [
+          h(BInfoWindow, {
+            position: POSITION,
+            open: open.value,
+            "onUpdate:open": (value: boolean) => (open.value = value),
+          }),
+        ],
+        el,
+      )
       await settle()
       const child = wrapper.findComponent(BInfoWindow)
       const map = lastMap()
-      const raw = currentInfoWindow()!
 
-      // 造出一笔在飞的关闭账：关闭已生效（副作用），但它的 `close` 事件被推迟 ⇒ 还没有回包
-      map.deferInfoWindowCloseEvent = true
-      open.value = false
-      await settle()
-      // 立刻重开 ⇒ 状态机刻意保留那笔在飞的关闭账
-      open.value = true
-      await settle()
-      expect(map.infoWindow, `${tag}：对照组，重开已经生效`).toBe(raw)
-
-      // ★ 用户点了关闭按钮
-      expect(
-        map.clickInfoWindowCloseButton(options),
-        `${tag}：对照组，确实点到了`,
-      ).toBe(true)
+      expect(map.clickInfoWindowCloseButton({ shape }), `${tag}：对照组，确实点到了`).toBe(true)
       await settle()
 
-      expect(emittedOf(child, 'clickclose').length, `${tag}：照常转发 clickclose`).toBeGreaterThan(0)
-      expect(emittedOf(child, 'update:open'), `${tag}：用户主动关闭必须生效`).toEqual([[false]])
-      expect(
-        probeContext.value?.infoWindows?.current(),
-        `${tag}：用户已经关掉了 ⇒ 账本退场`,
-      ).toBeNull()
+      const clickcloses = shape.filter((n) => n === 'clickclose').length
+      expect(emittedOf(child, 'clickclose').length, `${tag}：原样转发 ${clickcloses} 条`).toBe(clickcloses)
+      expect(emittedOf(child, 'close').length, `${tag}：SDK 那条 close 也照转`).toBe(1)
+      expect(emittedOf(child, 'update:open'), `${tag}：按用户意图回写一次`).toEqual([[false]])
+      expect(open.value, `${tag}：受控父级跟着收敛`).toBe(false)
+      expect(currentInfoWindow(), `${tag}：最终地图上没有气泡`).toBeNull()
 
-      // ★ 关键：这一组**不得**吞掉在飞命令账。父级先回声这次关闭（受控语义：此时 `open` 仍是
-      //   `true`，直接再赋 `true` 不会触发 watch），然后再重开；此时真正迟到的回包必须仍被认成
-      //   「结算」，而不是「未经请求的关闭」—— 后者会把刚重开的模型关掉、把气泡也关掉。
-      open.value = false
-      await settle()
-      open.value = true
-      await settle()
-      expect(map.infoWindow, `${tag}：重开已经生效`).toBe(raw)
-      expect(map.flushInfoWindowCloseEvent(), `${tag}：旧回包被放行`).toBe(true)
-      await settle()
-
-      expect(emittedOf(child, 'update:open'), `${tag}：陈旧回包不得再改模型`).toEqual([[false]])
-      expect(map.infoWindow, `${tag}：地图上仍开着重开后的气泡`).toBe(raw)
-
-      map.deferInfoWindowCloseEvent = false
       await unmountAndSettle(wrapper)
-      harness.assertIdle(`${tag}：点关闭按钮的一组事件`)
+      harness.assertIdle(`${tag}：点关闭按钮`)
     }
   })
 
-  it('SDK 自己打开（未经请求）⇒ 回写 update:open true', async () => {
-    const el = harness.container()
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    expect(probeContext.value?.infoWindows?.current(), '对照组：还没打开时账本没有 current').toBeNull()
-    // 模拟「别处调了 map.openInfoWindow 打开的就是这个实例」
-    lastMap().openInfoWindow(createdInfoWindows()[0]!, POSITION)
-    await settle()
-    expect(emittedOf(child, 'update:open')).toEqual([[true]])
-    expect(
-      probeContext.value?.infoWindows?.current(),
-      'SDK 真的把它开出来了 ⇒ 账本也必须认它是当前气泡（否则后续互斥通知基于陈旧归属）',
-    ).not.toBeNull()
-    await unmountAndSettle(wrapper)
-  })
-
-  it('外部 SDK 的 open / close 都要同步账本（Manager 跟随实际归属，而不只跟随我们下发的命令）', async () => {
-    const el = harness.container()
-    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: false })], el)
-    await settle()
-    const manager = () => probeContext.value?.infoWindows
-    const raw = createdInfoWindows()[0]!
-    expect(manager()?.current(), '对照组：从未打开过 ⇒ 账本没有 current').toBeNull()
-
-    // 外部打开：不是我们下发的命令（例如别处调了 map.openInfoWindow）
-    lastMap().openInfoWindow(raw, POSITION)
-    await settle()
-    expect(manager()?.current(), 'SDK 真的把它开出来了 ⇒ 账本必须认这个 current').not.toBeNull()
-
-    // 外部关闭：SDK 自己把当前气泡关掉（点地图 / 别处调 closeInfoWindow）
-    lastMap().closeInfoWindow()
-    await settle()
-    expect(manager()?.current(), 'SDK 自己关掉了 ⇒ 账本必须跟着清掉，不能留下幽灵 current').toBeNull()
-
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('外部 open/close 同步账本')
-  })
-
-  it('clickclose（点关闭按钮）是带来源的真实关闭，并额外转发事件', async () => {
+  it('maximize / restore 只转发，不改变「打开」这一维', async () => {
     const el = harness.container()
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: true })], el)
     await settle()
     const child = wrapper.findComponent(BInfoWindow)
 
-    // 点关闭按钮：SDK 派发 `clickclose`（真实 4.0 会同时把气泡关掉，替身只派发事件）
-    currentInfoWindow()!.emit('clickclose', { type: 'clickclose' })
-    await settle()
-    expect(emittedOf(child, 'clickclose'), '额外把「是谁关的」告诉调用方').toHaveLength(1)
-    expect(emittedOf(child, 'update:open')).toEqual([[false]])
-    expect(emittedOf(child, 'close')).toHaveLength(1)
-    // 真实 4.0 在 `clickclose` 时气泡已经关掉了 ⇒ 账本也要退场（替身不代劳，所以这里读的是账本而非地图）
-    expect(
-      probeContext.value?.infoWindows?.current(),
-      '点关闭按钮 = 气泡已经关了 ⇒ 账本不得再把它当当前气泡',
-    ).toBeNull()
-
-    await unmountAndSettle(wrapper)
-    expect(fake.diagnostics.snapshot().leaks.infoWindows, '卸载必须把 SDK 侧的气泡一并收掉').toBe(0)
-    harness.assertIdle('clickclose 后卸载')
-  })
-
-  it('maximize / restore 只转发，不改变「打开」这一维', async () => {
-    const el = harness.container()
-    const wrapper = mountTree(
-      () => [h(BInfoWindow, { position: POSITION, open: true, enableMaximize: true })],
-      el,
-    )
-    await settle()
-    const child = wrapper.findComponent(BInfoWindow)
-    const iw = currentInfoWindow()!
-
-    iw.emit('maximize', { type: 'maximize' })
-    await settle()
-    iw.emit('restore', { type: 'restore' })
+    currentInfoWindow()!.emit('maximize', { type: 'maximize' })
+    currentInfoWindow()!.emit('restore', { type: 'restore' })
     await settle()
 
     expect(emittedOf(child, 'maximize')).toHaveLength(1)
     expect(emittedOf(child, 'restore')).toHaveLength(1)
-    expect(emittedOf(child, 'update:open'), '界面状态不是「打开」这一维').toHaveLength(0)
-    expect(emittedOf(child, 'close')).toHaveLength(0)
-    expect(currentInfoWindow()!.isOpen(), '气泡仍然打开着').toBe(true)
+    expect(emittedOf(child, 'close'), '不是关闭').toHaveLength(0)
+    expect(emittedOf(child, 'update:open')).toHaveLength(0)
+    expect(currentInfoWindow(), '气泡仍然开着').toBeTruthy()
 
     await unmountAndSettle(wrapper)
     harness.assertIdle('maximize / restore')
   })
 
-  it('没有 position 时 open=true ⇒ 报一次 BMAP_INVALID_ARGUMENT，且不上报打开', async () => {
+  it('命令抛错：上报 resource:error，且不假装打开（下一次触发仍会重试）', async () => {
     const el = harness.container()
     const errors: Array<{ code?: string }> = []
     const Probe = defineComponent({
@@ -658,13 +521,14 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
         return () => null
       },
     })
+    const open = ref(false)
     const wrapper = mount(
       defineComponent({
         components: { BMap },
         setup() {
           return () =>
             h(BMap, { provider: harness.provider() }, () => [
-              h(BInfoWindow, { open: true }),
+              h(BInfoWindow, { position: POSITION, open: open.value }),
               h(Probe),
             ])
         },
@@ -672,14 +536,43 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
       { attachTo: el },
     )
     await settle()
-    expect(errors.map((e) => e.code)).toEqual(['BMAP_INVALID_ARGUMENT'])
-    expect(fake.diagnostics.snapshot().leaks.infoWindows).toBe(0)
+    const map = lastMap()
+
+    map.failNextOpenInfoWindow = new Error('openInfoWindow failed')
+    open.value = true
+    await settle()
+
+    expect(errors.length, '失败必须可观测（不静默）').toBeGreaterThan(0)
+    expect(errors[0]?.code).toBe('BMAP_SDK_CALL_FAILED')
+    expect(currentInfoWindow(), '没有假装打开').toBeNull()
+
+    // 下一次触发（这里是父级再改一次意图）应当重新尝试，且这次成功
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+    expect(currentInfoWindow(), '重试成功：收敛到 desired=true').toBeTruthy()
+
     await unmountAndSettle(wrapper)
-    harness.assertIdle('缺 position')
+    harness.assertIdle('命令抛错')
+  })
+
+  it('资源账本跟随实际归属：本库打开后认它、收敛关闭后清掉', async () => {
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const manager = () => probeContext.value?.infoWindows
+    expect(manager()?.current(), '打开之后账本认它是当前项').not.toBeNull()
+
+    open.value = false
+    await settle()
+    expect(manager()?.current(), '收敛关闭之后账本必须跟着清掉').toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('资源账本跟随归属')
   })
 })
-
-/* ----------------------------------------------------------- 互斥与多地图隔离 */
 
 describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
   it('同一地图两个气泡：后打开的顶掉前者并通知它（前者回写关闭，但不关掉后者）', async () => {
@@ -705,7 +598,7 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
     harness.assertIdle('两窗口互斥')
   })
 
-  it('被顶掉的 A 的迟到 open 接管地图后必须被真正关掉（双窗口乱序 · 端到端）', async () => {
+  it('双窗口乱序：迟到的接管成为当前项，被顶掉的 B 收到通知，且不产生反复顶替', async () => {
     const el = harness.container()
     const openA = ref(false)
     const openB = ref(false)
@@ -720,43 +613,44 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
     const [a, b] = wrapper.findAllComponents(BInfoWindow)
     const map = lastMap()
 
-    // 1) A 的打开异步生效（真机：同一 tick 里 getInfoWindow() 仍是 null）⇒ 请求被挂起。
-    //    注意 Manager 此刻已经把 A 记成「当前项」—— 它相信这次请求（这是它唯一的判据）。
+    // 1) A 的打开异步生效（真机：同一 tick 里 getInfoWindow() 仍是 null）⇒ 请求被挂起
     map.deferInfoWindowOpen = true
     openA.value = true
     await settle()
     expect(map.hasPendingInfoWindow(), '对照组：A 的打开请求已被挂起').toBe(true)
     expect(currentInfoWindow(), '对照组：地图上还没有气泡（A 尚未接管）').toBeNull()
 
-    // 2) B 同步打开并接管 ⇒ Manager 通知 A 被顶掉：A 收敛为**关**，但刻意保留在飞的打开账
+    // 2) B 同步打开并接管 ⇒ A 被顶掉：收到通知并进入「不抢回来」
     map.deferInfoWindowOpen = false
     openB.value = true
     await settle()
     expect(currentInfoWindow()?.options.title, '对照组：B 是当前气泡').toBe('B')
     expect(emittedOf(a!, 'update:open'), '对照组：A 收到「被顶掉」的通知').toEqual([[false]])
 
-    // 3) ★ A 的旧请求这时才真正接管地图。它属于**本组件自己** ⇒ 状态机应当主动纠偏（下发 close）
+    // 3) ★ A 的旧请求这时才真正接管地图。按 ownership 契约，本库只回答「现在是谁」：
+    //    A 是当前项、且 A 的 desired 也是「开」⇒ 一致，不做任何命令；B 则被如实通知。
+    const opensBefore = map.callLog.filter((c) => c === 'openInfoWindow').length
+    const closesBefore = map.callLog.filter((c) => c === 'closeInfoWindow').length
     expect(map.flushInfoWindowOpen(), '对照组：确实有一次被放行的接管').toBe(true)
     await settle()
 
-    expect(
-      currentInfoWindow(),
-      '迟到的旧气泡必须被真正关掉：Driver 不得因为「最后请求者是 B」把这条纠偏 close 吞掉',
-    ).toBeNull()
-    expect(
-      emittedOf(a!, 'update:open').filter((payload) => payload[0] === true),
-      'A 早已被顶掉、从未被请求打开，不得被回写成打开',
-    ).toHaveLength(0)
-    // A 的迟到接管在 **SDK 侧**真的顶掉了 B ⇒ 账本必须跟着事实走，
-    // 否则 B 会停在一个「模型说开着、地图上其实已经没有了」的分叉状态（它的 prop 没变，不会再触发）。
-    expect(emittedOf(b!, 'update:open'), '真正被 A 顶掉的 B 必须收到 superseded 通知').toEqual([[false]])
+    expect(currentInfoWindow()?.options.title, '迟到的接管成为当前气泡（desired 与 observed 一致）').toBe('A')
+    expect(emittedOf(b!, 'update:open'), '真正被顶掉的 B 必须收到通知').toEqual([[false]])
     expect(
       probeContext.value?.infoWindows?.current(),
-      '纠偏关闭之后地图已经空了 ⇒ 账本不得仍指向 B',
-    ).toBeNull()
+      '账本跟着实际归属：当前是 A',
+    ).not.toBeNull()
+    expect(
+      map.callLog.filter((c) => c === 'openInfoWindow').length,
+      '不得为了「抢回来」再打开一次',
+    ).toBe(opensBefore)
+    expect(
+      map.callLog.filter((c) => c === 'closeInfoWindow').length,
+      '也不得凭空关闭',
+    ).toBe(closesBefore)
 
     await unmountAndSettle(wrapper)
-    harness.assertIdle('双窗口乱序：被顶掉的 A 的迟到 open')
+    harness.assertIdle('双窗口乱序：迟到的接管')
   })
 
   it('被顶掉的 A 卸载时不得关掉 B 的气泡', async () => {
@@ -996,7 +890,7 @@ describe('尺寸变化：每帧最多一次 redraw，且不自激', () => {
 /* ------------------------------------------------------------- 重建与残留 */
 
 describe('重复挂载与实例重建：账目与释放', () => {
-  it('重建发出 destroy(旧代次) / rebuild(新代次)，且对外原子（不产生 close/open）', async () => {
+  it('重建发出 destroy(旧代次) / rebuild(新代次)：资源与最终状态正确，事件如实转发', async () => {
     const el = harness.container()
     const offset = ref({ x: 0, y: 0 })
     const wrapper = mountTree(
@@ -1017,11 +911,13 @@ describe('重复挂载与实例重建：账目与释放', () => {
     await settle()
     expect(emittedOf(child, 'destroy'), '载荷是被释放的那一代').toEqual([[1]])
     expect(emittedOf(child, 'rebuild'), '载荷是新的一代').toEqual([[2]])
-    expect(emittedOf(child, 'close'), '重建不得对外表现为「关了一次」').toHaveLength(0)
     expect(
-      emittedOf(child, 'open').length,
-      '重建不得对外表现为「又开了一次」：期望状态没变，对外只有 destroy/rebuild',
-    ).toBe(openBefore)
+      emittedOf(child, 'close'),
+      '旧实例的关闭发生在解绑事件之后 ⇒ 不会对外表现为「关了一次」',
+    ).toHaveLength(0)
+    // 新实例确实被重新打开；那一次打开**如实转发**成 `open`（SDK 事件原样转发，不做归属推断）。
+    // 与旧实现的差异（旧实现把重建做成「对外完全原子、不发 open」）记在 ADR 行为变更一节。
+    expect(emittedOf(child, 'open').length, '新实例重新打开 ⇒ 如实转发一次 open').toBe(openBefore + 1)
     expect(openCalls(), '新实例必须真的被重新打开').toBe(2)
 
     // 实例账：新实例是当前打开的那个，旧实例的宿主已摘掉
@@ -1219,54 +1115,6 @@ describe('唯一主模型与兼容别名', () => {
     await unmountAndSettle(wrapper)
   })
 
-  it('open 命令同步失败：冲销在飞账，随后的外部打开与父级重试都走正常路径', async () => {
-    const el = harness.container()
-    const open = ref(false)
-    const errors: Array<{ code?: string }> = []
-    const Probe = defineComponent({
-      setup() {
-        const ctx = useRequiredMapContext()
-        ctx.events.on('resource:error', (payload) => {
-          errors.push((payload as { error?: { code?: string } })?.error ?? {})
-        })
-        return () => null
-      },
-    })
-    const wrapper = mountTree(
-      () => [h(BInfoWindow, { position: POSITION, open: open.value }), h(Probe)],
-      el,
-    )
-    await settle()
-    const map = lastMap()
-    const child = wrapper.findComponent(BInfoWindow)
-    const iw = createdInfoWindows().at(-1)!
-
-    // 让下一次 openInfoWindow 同步抛错（真实 SDK 同样可能：参数 / 权限 / 内部状态）
-    map.failNextOpenInfoWindow = new Error('boom')
-    open.value = true
-    await settle()
-
-    expect(errors.length, '失败必须经 resource:error 报出来').toBe(1)
-    expect(emittedOf(child, 'update:open'), '失败要收敛回关（不回留在过渡态）').toEqual([[false]])
-    expect(currentInfoWindow(), '气泡没打开').toBeNull()
-
-    // ★ 关键：账冲干净之后，一次**外部**打开仍必须走既有契约（回写 true），
-    //   而不是被当成「本组件的迟到回包」而主动关掉
-    map.openInfoWindow(iw, POSITION)
-    await settle()
-    expect(emittedOf(child, 'update:open')).toEqual([[false], [true]])
-    expect(currentInfoWindow(), '外部打开的气泡不得被关掉').toBe(iw)
-
-    // 父级重试也必须照常工作（不残留任何旧账）
-    open.value = false
-    await settle()
-    open.value = true
-    await settle()
-    expect(map.infoWindow, '重试必须真的打开').toBeTruthy()
-
-    await unmountAndSettle(wrapper)
-    harness.assertIdle('open 命令失败')
-  })
 
   it('只传正典 `open` 时不产生弃用告警', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -1324,7 +1172,7 @@ describe('属性面与 Driver 描述符一致', () => {
       const declared = INFO_WINDOW_DESCRIPTOR_KEYS[prop as keyof BInfoWindowProps]
       const descriptorKey = declared === undefined ? prop : declared
       if (update === 'state') {
-        expect(descriptorKey, `${prop} 由状态机驱动，不得写进描述符`).toBeNull()
+        expect(descriptorKey, `${prop} 由组件收敛驱动，不得写进描述符`).toBeNull()
         continue
       }
       expect(descriptorKey, `${prop} 必须写明描述符键`).not.toBeNull()

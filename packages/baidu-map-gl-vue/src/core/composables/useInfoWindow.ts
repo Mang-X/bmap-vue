@@ -1,8 +1,33 @@
 /**
  * useInfoWindow —— BInfoWindow 的生命周期内核（M5-INFOWINDOW / issue #32）
  *
- * 组件只剩下「声明 + 渲染 slot」两件事：状态机（`infoWindowMachine`）、每地图的归属账本
- * （`InfoWindowManager`）、实例的创建 / 重建 / 释放都收在这里。
+ * 组件只剩下「声明 + 渲染 slot」两件事：**拥有**它创建的 InfoWindow、按 desired/observed 收敛、
+ * 以及实例的创建 / 重建 / 释放。
+ *
+ * ## ownership 契约：本库**拥有**这个 InfoWindow（2026-09-19 方向纠正）
+ *
+ * | 概念 | 是什么 |
+ * | --- | --- |
+ * | **desired** | `open`（旧名 `show`）这条 prop 表达的**唯一控制意图** |
+ * | **observed** | 地图上**实际**开着的是不是这一个 —— 读官方公开的 `Map#getInfoWindow()` 再与 **handle 身份**比对（`driver.overlays.isCurrentInfoWindow`） |
+ * | **SDK 事件** | `open` / `close` / `clickclose` **原样转发**给调用方，并作为**收敛触发**；它们**不是**第二套业务意图 |
+ * | **收敛** | 只有四象限：`desired ∧ ¬observed ⇒ open`、`¬desired ∧ observed ⇒ close`，其余不动 |
+ *
+ * 之所以是这套模型：SDK 对 `open` / `close` 回调**不提供 request identity**（载荷无 id、无位置，
+ * 官方也不承诺多次请求之间的回调顺序）。任何「这条回包属于哪次命令」的推断都得靠计数 / FIFO /
+ * 时序去猜，组合会无穷增长（本仓库 #38 / #71 / #72 / #99 都是同一类教训）—— 那是**上层在恢复
+ * 上游没公开的协议**。这里改成：本库拥有实例 ⇒ 只回答「地图上现在是不是我」，不问「这条回调是谁的」。
+ *
+ * 因此下面这些**刻意不再存在**：业务相位（`closed` / `opening` / `open` / `closing`）、
+ * 在飞命令计数、命令失败冲销、回包配对窗口。留下的只有「按意图把地图收敛到期望状态」。
+ *
+ * **两个必须保留的例外**（它们不是「回包归属推断」，而是本库自己的所有权事实）：
+ *
+ * - **被同图另一个气泡顶掉**：由 per-map `InfoWindowManager` 通知。此时回写一次
+ *   `update:open(false)` 并进入「不再抢回来」状态，直到父级把意图置回 `false` 再置 `true`
+ *   —— 否则两个都写 `open: true` 的气泡会互相顶替、无限来回。
+ * - **用户点了关闭按钮（`clickclose`）**：这是带明确来源的**用户意图**，回写一次
+ *   `update:open(false)`（`clickclose` 事件本身也照常转发）。
  *
  * ## detached host 的所有权（本 issue 的核心）
  *
@@ -43,7 +68,7 @@
  * `registration.dispose()`（由 `useSdkResource` 在释放实例 scope **之前**调用）里严格按序：
  *
  * 1. **停业务异步**：`alive = false`（所有实例回调立刻失效）+ 取消排队中的重绘；
- * 2. **解绑 SDK 事件**（此后不再有任何 SDK → 模型的写入）；
+ * 2. **解绑 SDK 事件**（此后不再有任何 SDK → 组件的写入）；
  * 3. **关闭气泡**（走地图级 `closeInfoWindow()`，不回退通用 `removeOverlay()`）并交还归属；
  * 4. **释放 host**（`host.value = null` → Teleport 换目标 / 观察器解绑，再 `remove()` 摘掉节点），
  *    实例 scope 由 `useSdkResource` 收尾。
@@ -52,18 +77,18 @@
  * （`Overlay#dispose()` 只在基类声明里，`InfoWindow` 自己的声明里没有），猜一个成员名属于
  * `AGENTS.md` 禁止的私有面嗅探。
  */
-import { onScopeDispose, shallowRef, watch, type ShallowRef } from "vue";
+import { nextTick, onScopeDispose, shallowRef, watch, type ShallowRef } from "vue";
 import { useResizeObserver } from "@vueuse/core";
 import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { BMapError } from "../errors/BMapError";
-import type { ResourceScope } from "../lifecycle/ResourceScope";
 import { logger } from "../logger";
 import { createDeprecationWarner, describeDeprecation, propAliasesOf } from "../deprecations";
 import {
   INFO_WINDOW_DESCRIPTOR_KEYS,
   INFO_WINDOW_FIELDS,
   infoWindowOpenIntentUsesAlias,
+  positionKeyOf,
   resolveInfoWindowOpenIntent,
   type InfoWindowFieldUpdate,
   type InfoWindowProps,
@@ -72,28 +97,18 @@ import {
   createInfoWindowManager,
   type InfoWindowManager,
 } from "../overlays/InfoWindowManager";
-import {
-  initialInfoWindowSnapshot,
-  positionKeyOf,
-  reduceInfoWindow,
-  type InfoWindowAction,
-  type InfoWindowEffect,
-  type InfoWindowPhase,
-  type InfoWindowSnapshot,
-} from "../overlays/infoWindowMachine";
 import type { InfoWindowHandle } from "../../driver/types/handles";
 import type { ResourceRegistration } from "../overlays/OverlayRegistry";
 import { readElementSize } from "../runtime/elementSize";
 import { stableKeyOf } from "../utils/stableKey";
-import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
+import { useSdkResource } from "./useSdkResource";
 
 /**
  * SDK 侧事件 → 组件侧事件的转发表。
  *
  * 覆盖官方 `InfoWindowEventMap` 里除 `resize` 之外的全部成员（`resize` 不转发，理由见
- * ADR `2026-09-18-infowindow-host-and-ownership` 的「不转发项」）。其中三个会驱动状态机
- * （`open` / `close` / `clickclose`），`maximize` / `restore` 只是转发 —— 它们是**界面状态**，
- * 与「打开 / 关闭」不是同一维，混进状态机会让相位变成六个。
+ * ADR `2026-09-18-infowindow-host-and-ownership` 的「不转发项」）。它们**全部原样转发**，
+ * 其中 `open` / `close` / `clickclose` 同时作为**收敛触发**（不是业务状态）。
  */
 const FORWARDED_SDK_EVENTS = ["open", "close", "clickclose", "maximize", "restore"] as const;
 type ForwardedSdkEvent = (typeof FORWARDED_SDK_EVENTS)[number];
@@ -109,8 +124,7 @@ export interface UseInfoWindowOptions {
 
 /**
  * 观察面**只暴露有消费者的东西**（与 ADR 2026-09-17 决策 1 对 `useOverlaySpec` 的口径一致）：
- * 组件只需要 `host` 交给 Teleport。实例句柄、`status`、`phase` 都是本层内部/诊断用，
- * 等真有第二类消费者再加 —— 加一个没人读的导出会让「它是不是契约的一部分」变成糊涂账。
+ * 组件只需要 `host` 交给 Teleport。
  */
 export interface UseInfoWindowResult {
   /** detached host：`<Teleport :to="host">` 的目标（实例未就绪时为 `null`）。 */
@@ -126,6 +140,34 @@ interface ActiveInstance {
   /** SDK 事件解绑器（实例级，必须能**先于**关闭命令逐个调用）。 */
   readonly unbind: Array<() => void>;
   alive: boolean;
+  /**
+   * 「上一次**观测到**它是开着的」——**只用来决定要不要排重绘**，不参与任何收敛判断。
+   *
+   * 之所以敢缓存：重绘早一帧 / 晚一帧都不改变对外语义；而每次尺寸变化都去读一次 SDK
+   * （`getInfoWindow()`）既贵又没必要。真正的收敛判断永远读实时观测，不读这个字段。
+   */
+  opened: boolean;
+  /**
+   * 是否处于「被顶掉之后不抢回来」：同图另一个气泡接管过之后置位，
+   * 直到父级把意图置回 `false` 再置 `true` 才清除（见模块注释的 ownership 契约）。
+   */
+  suppressed: boolean;
+  /**
+   * 最后一次**我们下发打开命令**用的位置指纹。
+   *
+   * 官方 4.0 的 `InfoWindow` **没有 `setPosition`**（ADR 2026-09-13 的实测结论：位置只能由
+   * `map.openInfoWindow(iw, point)` 提供），所以「开着但位置变了」只能**再下发一次打开**。
+   * 没有它的话，「desired 与 observed 一致就什么都不做」会把**移动**整个丢掉。
+   */
+  lastOpenPositionKey: string | null;
+  /**
+   * 已经向父级回写过一次「关」？
+   *
+   * 回写表达的是**状态变化**，不是事件计数 —— 同一次用户点击可能来多条 `clickclose`
+   * （实测：条数随实例被打开过几次累积），而父级只需要被告知一次。
+   * 父级把意图置回「开」时复位（下一次关闭又是一次新的状态变化）。
+   */
+  echoedClosed: boolean;
   /** 最后一次**重绘之后**的 host 尺寸（读不到为 `null`），用来吞掉由重绘自身引起的尺寸变化。 */
   lastRedrawnSize: string | null;
 }
@@ -151,19 +193,16 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   const scheduler = mapContext.scheduler;
 
   /**
-   * 每张地图一份的归属账本。自定义 Context（只实现 `MapRuntimeShape` 的适配器）可以不提供，
-   * 此时退化为组件自持的账本，并在组件作用域结束时释放 —— 与 `useLayerResource` 的
-   * LayerRegistry 回落同口径。
+   * 每张地图一份的**资源归属**账本（谁的文件是当前项）。自定义 Context（只实现
+   * `MapRuntimeShape` 的适配器）可以不提供，此时退化为组件自持的账本，并在组件作用域结束时释放
+   * —— 与 `useLayerResource` 的 LayerRegistry 回落同口径。
    */
   const ownManager = createInfoWindowManager();
   const manager: InfoWindowManager = mapContext.infoWindows ?? ownManager;
 
   const host = shallowRef<HTMLElement | null>(null);
-  const phase = shallowRef<InfoWindowPhase>("closed");
   const emit = options.emit;
 
-  /** 状态机快照。所有相位变化都经 `dispatch()`，组件里不另存一份状态。 */
-  let machine: InfoWindowSnapshot = initialInfoWindowSnapshot();
   let activeInstance: ActiveInstance | null = null;
   /**
    * **每一代实例按它自己的 handle 索引**（创建时登记、释放时摘除）。
@@ -177,11 +216,13 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   const instancesByHandle = new Map<InfoWindowHandle, ActiveInstance>();
   let readyCtx: MapReadyContext | null = null;
   let generationCounter = 0;
+  /** 组件级终态：scope 释放后一切输入丢弃（**唯一**一处终态标记）。 */
+  let disposed = false;
+  /** 「想开但缺位置」只报一次：进入该状态时报，离开即复位（与旧口径一致）。 */
+  let missingPositionNotified = false;
 
   onScopeDispose(() => {
-    // 组件级收尾：把机器推进**终态**（此后任何输入都被 `reduceInfoWindow` 丢弃，见该模块的
-    // 「终态」一条），而不是在 `dispatch` 外面再挂一个并行的布尔门闩 —— 终态语义只有一处。
-    dispatch({ type: "dispose" });
+    disposed = true;
     if (!mapContext.infoWindows) ownManager.dispose();
   });
 
@@ -199,7 +240,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       const descriptorKey = declared === undefined ? prop : declared;
       if (update === "state" && descriptorKey !== null) {
         throw new Error(
-          `InfoWindowSpec: 字段 "${prop}" 由状态机驱动（state），必须同时把描述符键标成 null`,
+          `InfoWindowSpec: 字段 "${prop}" 由组件驱动（state），必须同时把描述符键标成 null`,
         );
       }
       if (update !== "state" && descriptorKey === null) {
@@ -225,7 +266,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (alias) deprecation.warn(describeDeprecation(alias));
   }
 
-  /* ------------------------------------------------------------------ 状态机驱动 */
+  /* ------------------------------------------------------------------ 收敛（reconcile） */
 
   function reportMissingPosition(): void {
     options.reportError(
@@ -246,110 +287,137 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   }
 
   /**
-   * 执行状态机下发的命令。
+   * 读**实时观测**：地图上现在开着的是不是这一个。
    *
-   * **命令没下发成的每一条路径，都必须把账冲销掉**（外部评审第四轮 P1 的推广形态）。机器在
-   * 下发 `open` / `close` 时已经记了一份在飞账（`effect.accounted`），只有真的把命令交给 SDK
-   * 才可能有一条回包来还账；同步抛错、以及下面那个「没有可用的位置」的提前返回，都不会有回包。
-   * 遗留计数不会自己消失，它会把**后续一次真实事件**归错类（外部打开被当成自己的迟到回包 ⇒ 主动关掉，
-   * 或真实的关闭被当成旧命令结算 ⇒ 吞掉）。
-   *
-   * 命令失败时**收敛回关闭**：过渡相位不允许在效果失败后停留 —— 否则模型会一直说「开着」而地图上
-   * 没有任何气泡，且再也没有事件来唤醒它。于是「打不开」与「被关掉」在本库是同一个可观察形态
-   * （`update:open false`），调用方只需要处理一种。
+   * 读失败时**不静默当成「不是我」**：那会让收敛朝错误方向走（明明开着却以为没开 ⇒ 再开一次）。
+   * 报错之后按「没观测到」返回 —— 收敛本身是幂等的，下一次触发会重新读。
    */
-  function runEffect(effect: InfoWindowEffect): void {
+  function observe(context: MapReadyContext, instance: ActiveInstance): boolean {
+    try {
+      return context.client.driver.overlays.isCurrentInfoWindow(context.map, instance.handle);
+    } catch (error) {
+      options.reportError(toBMapError(error));
+      return false;
+    }
+  }
+
+  /**
+   * **唯一的收敛入口**。desired 与 observed 决定要不要下发命令，再加上一条**移动**规则：
+   *
+   * | desired | observed | 处置 |
+   * | --- | --- | --- |
+   * | 开 | 关 | `openInfoWindow(map, handle, position)` |
+   * | 开 | 开，但位置指纹变了 | **再下发一次打开**（官方没有 `setPosition`，重开是唯一的移动手段） |
+   * | 关 | 开 | `closeInfoWindow(handle)` |
+   * | 其余 | | 什么都不做 |
+   *
+   * 「缺位置」是 desired 不成立的**前置**（不是失败）：只按边沿报一次，不产生命令。
+   */
+  function reconcile(): void {
     const instance = activeInstance;
     const context = readyCtx;
-    if (!instance || !instance.alive || !context) return;
-    if (effect.generation !== machine.generation) return;
-    const driver = context.client.driver.overlays;
-    const generation = instance.generation;
-    /** 命令作废（没交给 SDK / 交给 SDK 但抛错）：按 `accounted` 精确冲销在飞账并收敛相位。 */
-    const failCommand = (command: "open" | "close"): void => {
-      dispatch({ type: "command-failed", command, accounted: effect.accounted, generation });
-    };
-    if (effect.type === "open") {
-      // 读 `props.position` 而不是机器记下的位置指纹：效果是**同步**执行的（`dispatch` 内联调用），
-      // 与产生它的那次 `intent` 是同一个 tick，因此 `props.position` 就是那次判定的位置
-      // （两者分叉只可能发生在 `await` 之后，而这里没有 await）。
-      const position = props.position;
-      if (!position || positionKeyOf(position) === null) {
-        // 防御性分支：机器用**同一个** `positionKeyOf` 算 `canOpen`，它只在 `canOpen` 时下发 `open`，
-        // 因此这里按构造不可达。仍然走冲销而不是裸 `return` —— 账已经记下了，静默返回就是幽灵账。
-        failCommand("open");
-        return;
+    if (disposed || !instance || !instance.alive || !context) return;
+    if (instance.suppressed) return;
+
+    const wantOpen = resolveInfoWindowOpenIntent(props);
+    const position = props.position;
+    const positionKey = positionKeyOf(position);
+    // **「缺位置」不满足打开条件**：想开但没有可用位置时，期望状态是「关」（旧口径「气泡打开必须给出
+    // position」的延续）。因此它既不该下发打开命令，也不该让已经开着的气泡继续留着 ——
+    // 只按边沿报一次错。
+    const canOpen = positionKey !== null;
+    if (wantOpen && !canOpen) {
+      if (!missingPositionNotified) {
+        missingPositionNotified = true;
+        reportMissingPosition();
       }
+    } else {
+      missingPositionNotified = false;
+    }
+    const desired = wantOpen && canOpen;
+
+    const observed = observe(context, instance);
+    if (desired) {
+      if (observed && instance.lastOpenPositionKey === positionKey) return;
+      if (!position || positionKey === null) return; // 上面已经挡掉；这里只为收窄类型
       try {
-        driver.openInfoWindow(context.map, instance.handle, position);
-        // **打开成功之后**才声明归属：过早声明会在打开失败时白白顶掉别人
+        context.client.driver.overlays.openInfoWindow(context.map, instance.handle, position);
+        // **打开命令成功之后**才声明归属：过早声明会在打开失败时白白顶掉别人
         manager.activate(instance.handle);
+        instance.opened = true;
+        instance.lastOpenPositionKey = positionKey;
       } catch (error) {
         options.reportError(toBMapError(error));
-        // 失败是**独立动作**：命令作废 ⇒ 不会有回包 ⇒ 冲销它在飞账并收敛相位。
-        // 刻意**不**再伪造一条 `sdk-close`（那既冲不掉 open 侧的账，也会把还开着的气泡在
-        // 模型里关掉 —— 移动请求失败时就是这种情形，外部评审第四轮 P1）。
-        failCommand("open");
       }
       return;
     }
+    if (!observed) return;
     try {
-      driver.closeInfoWindow(instance.handle);
+      context.client.driver.overlays.closeInfoWindow(instance.handle);
     } catch (error) {
-      // 关闭失败不致命（气泡可能已被别的实例顶掉），但不得静默：留一条可观测的痕迹，
-      // 并且同样按「命令作废」冲销那笔计数（否则残账会吸收后续一次真实的关闭）
+      // 关闭失败不致命（气泡可能已被别的实例顶掉），但不得静默
       logger.warn(
         `useInfoWindow(${component}).close: 关闭气泡失败: ${
           (error as Error)?.message ?? String(error)
         }`,
       );
-      failCommand("close");
     } finally {
       manager.deactivate(instance.handle);
+      instance.opened = false;
+      instance.lastOpenPositionKey = null;
     }
   }
 
   /**
-   * 唯一的状态机入口。顺序是硬要求：
+   * **观测驱动**的收敛：合并到本 task 的末尾、且**在父级的受控更新落地之后**再执行一次。
    *
-   * 1. **先落状态**再执行效果 —— SDK 可能在我们调用期间**同步**回调（本仓库的 Fake 就是同步的，
-   *    真机在 `openInfoWindow()` 之后也会很快派发 `open`），那时机器必须已经是转换后的状态，
-   *    否则嵌套进来的那次 dispatch 会按旧相位决策；
-   * 2. 变化只在**真的变了**时回写（由 `changeOpen` 保证），且 `prop` 来源不回声（受控语义）。
+   * 两个原因，都是实测逼出来的：
+   *
+   * 1. 一次用户操作会被 SDK 派发成**一组**事件（实测：点关闭按钮产生 `close` + `clickclose`×N，
+   *    都在同一个 task 内），它们描述的是**同一个新局面**。逐条收敛会在了解全貌之前先动一次 ——
+   *    先因 `close` 重新打开、再因 `clickclose` 又关掉，一次可见的闪烁。
+   * 2. 更关键的是**顺序**：`update:open` 靠父级（`v-model`）把 `open` 改成新值，而那次赋值要等
+   *    Vue 的渲染 flush 才反映到 `props` 上。若收敛只排一个微任务，它会在 flush **之前**跑 ——
+   *    读到的是**旧的** `open`（仍是 `true`）⇒ 把刚被用户关掉的气泡又打开一次。
+   *    `nextTick()` 的语义正是「本轮的渲染 flush 之后」，因此用它。
+   *
+   * 这里不合并任何事件本身：每条事件照旧各自被转发、各自生效。prop 驱动的意图变化**不**走这里 ——
+   * 那是所有者的命令，必须同步落到地图上。
    */
-  function dispatch(action: InfoWindowAction): void {
-    const transition = reduceInfoWindow(machine, action);
-    machine = transition.snapshot;
-    if (phase.value !== machine.phase) phase.value = machine.phase;
-    for (const notice of transition.notices) {
-      if (notice === "missing-position") reportMissingPosition();
-    }
-    for (const change of transition.changes) {
-      if (change.source === "sdk") {
-        emit("update:open", change.open);
-        emit("update:show", change.open);
-      }
-      if (change.open) emit("open");
-      else emit("close");
-    }
-    for (const effect of transition.effects) runEffect(effect);
-  }
+  let convergeQueued = false;
 
-  /**
-   * 把当前的受控意图喂给状态机。
-   *
-   * 这是 `open` / `show` / `position` 三条 prop 的**唯一**同步路径（验收「prop / SDK / map-click
-   * 的竞态无重复开关回环」的可断言形态：一条路径 ⇒ 不存在两条规则各自下发命令的可能）。
-   */
-  function applyIntent(): void {
-    if (!activeInstance?.alive) return;
-    const positionKey = positionKeyOf(props.position);
-    dispatch({
-      type: "intent",
-      wantOpen: resolveInfoWindowOpenIntent(props),
-      canOpen: positionKey !== null,
-      positionKey,
+  function scheduleConverge(): void {
+    if (convergeQueued) return;
+    convergeQueued = true;
+    // **两跳** `nextTick`：第一跳把「本轮渲染 flush」排进微任务队列，第二跳落在它**之后** ——
+    // 于是读到的 `open` 是父级（`v-model`）已经落地的最新值，而不是陈旧的 prop。
+    // 只跳一次会在 flush 之前跑：那样「用户点关闭按钮」这一组事件里先到的 `close` 会看到
+    // 仍是 `true` 的旧 prop，把气泡重新打开一次（实测：多出一次 open + 一次 close 的闪烁）。
+    void nextTick(() => {
+      void nextTick(() => {
+        convergeQueued = false;
+        reconcile();
+      });
     });
+  }
+
+  /**
+   * 意图变化（`open` / `show` / `position` 合一的那条 watch）的落点。
+   *
+   * 「父级把意图置回 `false`」也是**解除「被顶掉后不抢回来」**的唯一依据：父级再次明确要求打开时
+   * 会经历一次 `false → true`，那时才允许抢回来（见模块注释）。
+   */
+  function onIntentChanged(): void {
+    const instance = activeInstance;
+    if (!instance?.alive) return;
+    const wantOpen = resolveInfoWindowOpenIntent(props);
+    if (wantOpen) {
+      // 父级又要求「开」⇒ 下一次关闭是一次**新的**状态变化，需要重新回写
+      instance.echoedClosed = false;
+    } else {
+      instance.suppressed = false;
+    }
+    reconcile();
   }
 
   /* ------------------------------------------------------------------ 尺寸与重绘 */
@@ -370,16 +438,14 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     instance.lastRedrawnSize = sizeKeyOf(instance.host);
   }
 
-  /** 排队一次重绘（同 key 每帧一次）。只有「真的开着」才重绘。 */
+  /** 排队一次重绘（同 key 每帧一次）。只有「上次观测到开着」才重绘。 */
   function scheduleRedraw(): void {
     const instance = activeInstance;
-    if (!instance?.alive) return;
-    if (machine.phase !== "open") return;
+    if (!instance?.alive || !instance.opened) return;
     if (sizeKeyOf(instance.host) === instance.lastRedrawnSize) return;
     scheduler.schedule(instance.redrawKey, () => {
       // 排到这一帧时实例可能已经被替换 / 卸下
-      if (activeInstance !== instance || !instance.alive) return;
-      if (machine.phase !== "open") return;
+      if (activeInstance !== instance || !instance.alive || !instance.opened) return;
       redrawNow(instance);
     });
   }
@@ -430,7 +496,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           context.client.driver.overlays.setOptions(instance.handle, batch);
           // 选项变化（尤其 width/height）不会改到我们观察的 host 尺寸，因此显式补一次重绘；
           // 它与观察器共用同一本「已重绘尺寸」账，不会与观察器互相激发。
-          if (machine.phase === "open") redrawNow(instance);
+          if (instance.opened) redrawNow(instance);
         } catch (error) {
           logger.warn(
             `useInfoWindow(${component}).setOptions: 字段级更新失败: ${
@@ -447,7 +513,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /* ------------------------------------------------------------------ 实例生命周期 */
 
   const sdk = useSdkResource<InfoWindowProps, InfoWindowHandle, MapReadyContext>({
-    // `useSdkResource` 的观察面（resource / status / error）在本层没有消费者：状态机持有相位、
+    // `useSdkResource` 的观察面（resource / status / error）在本层没有消费者：
     // 实例句柄走 `activeInstance`。保留 `sdk` 只是为了 `replace()`（重建）。
     props,
     label: "overlay:info-window",
@@ -462,9 +528,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
 
       create: ({ context }) => {
         const generation = ++generationCounter;
-        // 新代次：旧代的**任何**回调立即失效（generation 不匹配），相位从 closed 起步；
-        // 期望状态由 `bind` 的 reconciliation 重新施加。
-        dispatch({ type: "rebuild", generation });
         const element = document.createElement("div");
         // 开放的 DOM 契约：外部（宿主页 / 浏览器 smoke）据此定位到 SDK 实际展示内容的那块 host，
         // 用来检查「内容是否可见」「卸载后是否残留」。host 由本层创建与释放，SDK 只决定它挂在哪。
@@ -485,6 +548,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           redrawKey: Symbol(`info-window-redraw:${generation}`),
           unbind: [],
           alive: true,
+          opened: false,
+          suppressed: false,
+          lastOpenPositionKey: null,
+          echoedClosed: false,
           lastRedrawnSize: null,
         };
         activeInstance = created;
@@ -513,7 +580,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         bindSdkEvents(context, instance);
         // 就绪窗口的收敛（与 `useOverlaySpec` 的 4b 同口径）：`create` 与 `bind` 之间到达的
         // prop 变化在实例上还没有落点，此刻补一次「意图 + 待办选项」。
-        applyIntent();
+        // 这里是**同步**的：意图是所有者下达的命令，不该被推迟一个微任务。
+        reconcile();
         void enqueueOptions({});
       },
 
@@ -523,7 +591,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           watch(
             () =>
               `${resolveInfoWindowOpenIntent(props) ? 1 : 0}|${positionKeyOf(props.position)}`,
-            () => applyIntent(),
+            () => onIntentChanged(),
             { immediate: true },
           ),
         );
@@ -560,8 +628,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
    *
    * `useSdkResource.replace()` 是**原子替换**：先释放旧实例（含关闭气泡、解绑事件、摘掉 host），
    * 再创建新的，中间不会同时存在两个。释放路径本身已经通过 `createRegistration().dispose()`
-   * 把旧实例的一切收起，因此这里只需要把「期望状态」记在机器里 —— `bind` 的 reconciliation 会
-   * 把它重新施加到新实例上。
+   * 把旧实例的一切收起，因此这里只需要让新实例的 `bind` 收敛一次即可。
    *
    * ## 为什么要串行化（外部评审 P1）
    *
@@ -611,107 +678,61 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /* ------------------------------------------------------------------------ 内部 */
 
   /**
-   * 关闭类事件之后，账本要不要退场 —— **判据是状态机的结论，不是「收到了一条 close」**
-   * （外部评审第七轮 P1）。
+   * 回写一次「关」：`clickclose`（用户意图）与 `superseded`（被同图另一个气泡顶掉）共用。
    *
-   * `sdk-close` 里有一类是**过期回包**：`closeOutstanding > 0` 且模型仍是「开」（重开确认先到、
-   * 旧 close 后到，第一轮 P1 修复的核心）。那种情况下状态机只减账、保持 `open` —— 地图上开着的
-   * 仍然是它，账本不能退场，否则又回到「地图开着、账本没有 current」的分叉，
-   * 后续互斥通知会基于陈旧归属。
-   *
-   * 因此两个方向的**顺序要求恰好相反**：
-   * - `open`：先 `manager.activate()` 再喂状态机 —— 状态机可能同步下发纠偏 close，
-   *   而那条 close 的收尾会 `deactivate(自己)`，必须打在已经换成自己的账本上；
-   * - `close` / `clickclose`：先喂状态机，**再按转换后的机器状态**决定是否 `deactivate`。
-   *
-   * 注意这里读的是 `machine` 而不是单次 transition：`dispatch` 期间可能发生（同步 SDK 回调触发的）
-   * 重入，`machine` 是全部收敛完成后的状态，正是我们要的口径。
+   * **幂等**：回写的是状态变化而不是事件计数，所以同一状态只回写一次（见 `echoedClosed`）。
    */
-  function syncLedgerAfterClose(instance: ActiveInstance): void {
-    if (machine.open) return; // 过期回包：状态机仍认为开着 ⇒ 账本不动
-    manager.deactivate(instance.handle);
-  }
-
-  /** 本 task 是否已经排过「配对窗口关闭」的微任务（每个 task 只需要一个）。 */
-  let closePairExpiryQueued = false;
-
-  /**
-   * 「用户点击关闭按钮」那一组事件的配对窗口**只在当前 task 内**有效（外部评审第十轮 P1）。
-   *
-   * 真实 4.0 实测：一次点击产生的 `close` + `clickclose`（×N）在**同一个 task 内**全部到齐
-   * （点击后立刻排的微任务里已经完整）。所以收到本 task 第一条关闭类事件后排一个微任务，
-   * 把 `explicitClosePair` 清掉 —— 微任务必然在「本 task 的同步派发结束」之后、下一个 task 之前运行，
-   * 于是同 task 的伴随事件已经配对完成，而**跨 task** 的陈旧标记不会留下来被后来的点击认领
-   * （那种误配会凭空造出一份幽灵 `closeOutstanding`，随后一次真实关闭又会被它吞掉）。
-   *
-   * 读 `machine.open` / `explicitClosePair` 与 `syncLedgerAfterClose` 同源：都是读状态机的当前快照。
-   */
-  function scheduleClosePairExpiry(instance: ActiveInstance): void {
-    if (closePairExpiryQueued) return;
-    closePairExpiryQueued = true;
-    queueMicrotask(() => {
-      // 先复位排队标记：即使下面因为实例失效而提前返回，也不能让后续 task 再也排不上清理
-      closePairExpiryQueued = false;
-      if (!instance.alive || activeInstance !== instance) return;
-      if (instance.generation !== machine.generation) return;
-      if (machine.explicitClosePair === "none") return;
-      dispatch({ type: "explicit-close-pair-expired", generation: instance.generation });
-    });
+  function echoClosed(instance: ActiveInstance): void {
+    if (instance.echoedClosed) return;
+    instance.echoedClosed = true;
+    emit("update:open", false);
+    emit("update:show", false);
   }
 
   /**
    * 绑定 SDK 事件。
    *
+   * **顺序是契约的一部分：先转发、再收敛。** 受控父级（`v-model:open`）在收到事件的那一帧就会把
+   * `open` 改成新值；先转发让那次同步回写生效，随后的收敛因此看到的是**父级最新的意图**
+   * ——「用户点了 X」这类事件不会因为我们抢在父级之前收敛而把气泡重新拉开。
+   *
    * 每条回调带**两道守卫**：实例身份（`activeInstance !== instance` / `!instance.alive`）与
-   * **代次**（`instance.generation !== machine.generation`）。
-   *
-   * ⚠️ 这两道在当前实现里是**防御性**的，不是「唯一防线」：释放路径已经先解绑事件
-   * （见 `createRegistration().dispose()` 的第 2 步），因此真实到达这里的过期回调在今天的
-   * 代码里构造不出来（单点反证验证过：去掉任意一道，全部用例仍是绿的）。保留它们的理由是
-   * **让「回调归属」不依赖释放顺序** —— 万一将来有人把解绑挪到关闭之后（或某条路径直接
-   * `close()`），过期回调仍然不会写模型、更不会下发命令。
-   *
-   * 真正被用例锁住的那一层是**状态机**：`reduceInfoWindow` 对代次不匹配的
-   * `sdk-open` / `sdk-close` / `superseded` 一律丢弃（`infoWindowMachine.test.ts` 的
-   * 「迟到回调按代次丢弃」一组）。
+   * **代次**（`instance.generation !== activeInstance?.generation`）。它们让「过期实例的回调」
+   * 不写任何东西 —— **不再有命令在飞，所以也不存在半途的状态需要它去收尾**。
    */
   function bindSdkEvents(context: MapReadyContext, instance: ActiveInstance): void {
     for (const name of FORWARDED_SDK_EVENTS) {
       const off = context.client.driver.events.on(instance.handle, name, (event: unknown) => {
         if (!instance.alive || activeInstance !== instance) return;
-        if (instance.generation !== machine.generation) return;
         switch (name as ForwardedSdkEvent) {
           case "open":
-            // **先**把账本对齐到实际归属，**再**喂状态机（外部评审第六轮 P1）。顺序不能反：
-            // `activate()` 会把真正被顶掉的那个通知为 `superseded`；而我们的状态机在
-            // 「这条 open 是自己下发的、模型却是关」时会立刻下发一条纠偏 close，那条 close 的
-            // 收尾会 `deactivate(自己)` —— 如果账本此刻还指着别人，那次 `deactivate` 是 no-op，
-            // 结果就是「地图已经空了、账本还指着别人」的幽灵 current。
+            // 观测到「我开着」⇒ 资源账本跟上（它会通知被顶掉的那一个），再转发、再收敛
+            instance.opened = true;
             manager.activate(instance.handle);
-            dispatch({ type: "sdk-open", generation: instance.generation });
+            emit("open");
+            scheduleConverge();
+            break;
+          case "close":
+            instance.opened = false;
+            manager.deactivate(instance.handle);
+            emit("close");
+            scheduleConverge();
             break;
           case "clickclose":
-            // 用户点了关闭按钮：这条事件**带明确来源**（官方契约：「点击信息窗口的关闭按钮时触发」），
-            // 因此走独立的动作 —— 不能被在飞的关闭账当成「自己的过期回包」吞掉（第八轮评审 P1）。
-            // 它与 `close` 的差别只在归属：账本退场同样按状态机的结论。
-            scheduleClosePairExpiry(instance);
-            dispatch({ type: "sdk-clickclose", generation: instance.generation });
-            syncLedgerAfterClose(instance);
+            // 用户点了关闭按钮：这是**带明确来源的用户意图**（官方契约：「点击信息窗口的关闭按钮时触发」），
+            // 因此除了原样转发，还要回写一次 `update:open(false)` 让受控父级跟上。
+            instance.opened = false;
+            manager.deactivate(instance.handle);
             emit("clickclose", event);
+            echoClosed(instance);
+            scheduleConverge();
             break;
           case "maximize":
           case "restore":
             // 界面状态（最大化 / 还原），不改变「打开」这一维，只转发
             emit(name, event);
             break;
-          case "close":
           default:
-            // ⚠️ 顺序与 `open` 相反：**先让状态机判定这条 close 是否真的改变了「打开」这一维**，
-            // 再决定账本要不要退场（过期回包只减账、不改状态 ⇒ 账本保持不动，见 `syncLedgerAfterClose`）。
-            // 同时排一个微任务，让这一组事件的配对窗口在本 task 结束时关闭。
-            scheduleClosePairExpiry(instance);
-            dispatch({ type: "sdk-close", generation: instance.generation });
-            syncLedgerAfterClose(instance);
             break;
         }
       });
@@ -732,8 +753,12 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       resource: instance.handle,
       onSuperseded: () => {
         if (!instance.alive) return;
-        // 被同一张地图上另一个气泡顶掉：**只收敛自己的状态**，绝不碰 SDK（见 Manager 契约）
-        dispatch({ type: "superseded", generation: instance.generation });
+        // 被同一张地图上另一个气泡顶掉：**只收敛自己的状态**，绝不碰 SDK（见 Manager 契约）。
+        // 回写一次「关」让受控父级跟上，并在父级再次明确要求打开之前**不抢回来** ——
+        // 否则两个都写 `open: true` 的气泡会互相顶替、无限来回。
+        instance.suppressed = true;
+        instance.opened = false;
+        echoClosed(instance);
       },
     });
     return {
@@ -747,17 +772,13 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         // 1) 停业务异步：所有实例回调立刻失效，并丢弃排队中的重绘
         instance.alive = false;
         scheduler.cancel(instance.redrawKey);
-        // 2) 解绑 SDK 事件（此后不再有任何 SDK → 模型的写入）
+        // 2) 解绑 SDK 事件（此后不再有任何 SDK → 组件的写入）
         for (const off of instance.unbind.splice(0)) off();
         // 3) 关闭气泡（地图级专用入口，不回退通用 removeOverlay）并交还归属。
         //
         // 这里**无条件**调用：气泡是不是我们「以为」开着的并不重要 —— 地图级关闭本身就幂等
-        // （没有气泡时是 no-op），而被顶掉的一方由 Driver 的「只关本 Driver 最后请求打开的那个」
-        // 守卫挡住，不会误伤别人。反过来「按模型跳过」会留下真实泄漏：SDK 侧已经关掉但模型已经
-        // 收敛（例如 `close` 事件先到）时，卸载就再也没人去关它了。
-        //
-        // 也**不**回喂状态机：这条路径的服务对象是「实例」，不是「模型」。重建要在对外表现上原子
-        // （只有 `destroy`/`rebuild`），回喂一条 `sdk-close` 会让父级收到一次假的 `close` 事件。
+        // （没有气泡时是 no-op），而被顶掉的一方由 Driver 的守卫挡住，不会误伤别人。
+        // 反过来「按观测跳过」会留下真实泄漏：SDK 侧已经关掉但观测还是 true 时，卸载就再也没人去关它了。
         try {
           context.client.driver.overlays.closeInfoWindow(instance.handle);
         } catch {

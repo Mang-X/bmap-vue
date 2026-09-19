@@ -697,6 +697,24 @@ export function createJsapiV4OverlayDriver(
       sdkCall("InfoWindow.redraw", () => callOptional(raw, "redraw"));
     },
 
+    /**
+     * 读**当前**气泡是不是这一个 —— 只用官方公开的 `Map#getInfoWindow()`，再用 handle 身份比对。
+     *
+     * 为什么要放在 Driver 里而不是让调用方自己读：`getInfoWindow()` 返回的是 **raw SDK 实例**，
+     * 而调用方手里是 handle（`handle.raw` 才是实例）—— 身份比对需要知道这层包装，属于边界内部的事。
+     *
+     * 注意它**异步生效**：`openInfoWindow()` 之后同一 tick 里仍是 `null`（真实 AK 实测 0ms 为 null、
+     * ~100ms 变成该实例），所以只能当**收敛触发**用，不能当同步断言。
+     */
+    isCurrentInfoWindow(map, overlay) {
+      const rawMap = registry.resolve<object>(map);
+      const raw = registry.resolve<object>(overlay);
+      // `callRequired` + `sdkCall`：读回失败要**显式**报错（包成 BMapError），不静默吞成 false ——
+      // 否则「读不到」会被静默解释成「不是我」，收敛会朝错误方向走。
+      const current = sdkCall("map.getInfoWindow", () => callRequired(rawMap, "getInfoWindow"));
+      return (current as unknown) === (raw as unknown);
+    },
+
     buildIcon,
   };
 }
