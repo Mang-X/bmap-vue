@@ -55,7 +55,7 @@ const { start, cancel, status, ready } = useBMapViewAnimation(options, map)
 | 返回值  | 描述                                                                             | 类型                                                                    |
 | ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | start   | 播放一段关键帧动画；每次调用新建实例并接管仍在播的那一段。**接管可能失败**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换并保留记录以便重试，本方法随之 reject（上一段仍在播、仍可被 `cancel()` 重试） | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
-| cancel  | 取消本 hooks 当前那段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做。**取消是地图级命令**，守卫只看 hooks 自己记的「有没有在飞段」，因此**不保证一定不牵连同图其它动画**。取消失败时错误抛给调用方，这一段归属保留，可以直接重试；状态要等 SDK 的 `animationcancel` 到达才变回 `idle` | `() => void`                                                            |
+| cancel  | 取消本 hooks 当前那段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做；**取消命令一旦被接受就不再重复发**（同一 hooks 再调 `cancel()` 是 no-op，否则停掉的会是这张图上任何人正在播的动画）。**取消是地图级命令**，守卫只看 hooks 自己记的「有没有在飞段」，因此**不保证一定不牵连同图其它动画**。取消失败时错误抛给调用方，这一段归属保留，可以直接重试；状态要等 SDK 的 `animationcancel` 到达才变回 `idle` | `() => void`                                                            |
 | status  | 观察到的播放状态，只由公开事件写，命令不改动它                                   | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
 | ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 

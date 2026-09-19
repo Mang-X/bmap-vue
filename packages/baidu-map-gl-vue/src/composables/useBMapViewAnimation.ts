@@ -52,17 +52,23 @@ export interface UseBMapViewAnimationOptions {
 export type ViewAnimationStatus = "idle" | "playing";
 
 /**
- * 一段在飞动画的现场：取消命令 + **这一段自己的**监听释放。
+ * 一段在飞动画的现场：取消命令 + **这一段自己的**监听释放 + 「这条取消命令是否已经被接受」。
  *
  * 不按「当前那一段」共用一个释放槽位：`startViewAnimation` 会先同步取消上一段，
  * 上一段的 `animationcancel` 于是在新一段订阅完成之后才到达——共用槽位会被旧段摘掉新段的监听。
  * 同理，被取代那一段的订阅在 `start()` 里**当场**释放，而不是等那条 `animationcancel`：
  * 「Driver 起播前会同步取消上一段、SDK 会为此派发事件」目前只有 Fake 建模、没有真实运行时取证
  * （审计表 F-1），而这三条监听是本库自己的记账，不该由 SDK 是否回调来决定销账。
+ *
+ * `cancelCommitted` 把另外两件事分开：**「还在观察事件」**不等于**「还有资格再发一次地图级 stop」**。
+ * 取消命令一旦被 SDK 接受，Driver 那边这笔账就结清了（记录已 settled 并移除），后续重试与销毁归它
+ * 自己推进；本 hooks 若再发一次 `stopViewAnimation`，那是一张图上的**所有**动画都会停——包括别人的。
  */
 interface AnimationRun {
   readonly stop: () => void;
   readonly release: () => void;
+  /** `stop()` 是否正常返回过（= 取消命令已被接受，不再重复发地图级 stop）。 */
+  cancelCommitted: boolean;
 }
 
 /** 地图（或整个 Client）已经没了：此时「取消动画」这个动作不成立，而不是失败。 */
@@ -87,9 +93,10 @@ export interface UseBMapViewAnimationReturn {
   /**
    * 取消本 hooks 当前那一段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做。
    *
-   * 两点边界：① 取消是**地图级**命令，守卫只看 hooks 自己记的在飞段，因此不保证一定不牵连同图
-   * 其它动画；② 取消失败时错误原样抛给调用方，本 hooks 保留这一段的归属，可以直接重试。
-   * `status` 要等 SDK 的 `animationcancel` 到达才变回 `idle`。
+   * 三点边界：① 取消是**地图级**命令，守卫只看 hooks 自己记的在飞段，因此不保证一定不牵连同图
+   * 其它动画；② 取消命令**一旦被接受就不重复发**——同一 hooks 再调 `cancel()` 是 no-op，
+   * 否则会把这张图上别人正在播的动画停掉；③ 取消失败时错误原样抛给调用方，本 hooks 保留
+   * 这一段的归属，可以直接重试。`status` 要等 SDK 的 `animationcancel` 到达才变回 `idle`。
    */
   cancel: () => void;
   status: Readonly<ShallowRef<ViewAnimationStatus>>;
@@ -126,13 +133,17 @@ export function useBMapViewAnimation(
    *
    * 成功时**不**在这里收尾：正常路径 `stopViewAnimation` 会同步派发 `animationcancel`，监听与状态
    * 由这一段自己的 `settle` 处理——提前释放监听就等于把 `status` 永远留在 `playing`。
+   * 但会置 `cancelCommitted`：**「还在观察事件」与「还有资格再发一次地图级 stop」是两件事**；
+   * 命令已被接受之后重复发 stop，停掉的会是这张图上任何一段动画（包括别的 hooks 刚起的）。
    * 地图已经不在了时只放行「地图没了」这一个原因，就地收尾（否则真故障会被静默成「已取消」）。
    */
   function stopRun(run: AnimationRun): void {
+    if (run.cancelCommitted) return; // 这条取消已经打到 SDK 并被接受：不重复发地图级 stop
     try {
       run.stop();
     } catch (error) {
       if (isWithoutMapError(error)) {
+        run.cancelCommitted = true;
         if (current === run) current = null;
         run.release();
         status.value = "idle";
@@ -140,6 +151,7 @@ export function useBMapViewAnimation(
       }
       throw error;
     }
+    run.cancelCommitted = true;
   }
 
   async function start(keyFrames: ViewAnimationKeyFrames[]): Promise<void> {
@@ -167,6 +179,7 @@ export function useBMapViewAnimation(
       release: () => {
         for (const off of offs) off();
       },
+      cancelCommitted: false,
     };
     const settle = () => {
       run.release();

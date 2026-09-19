@@ -11,7 +11,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, nextTick, ref } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import { useBMapViewAnimation } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
 import type { ViewAnimationKeyFrames } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
@@ -283,5 +283,91 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
     expect(attempt, "实例已创建，但起播被拒").toBeDefined();
     expect(attempt.getListenerCount(), "从未起播的一段不能留着任何订阅").toBe(0);
     wrapper.unmount();
+  });
+});
+
+/**
+ * 取消成功、但 SDK 没有派发 `animationcancel`（#105 评审第三轮 P1）
+ *
+ * 这是审计表 F-1 那条未取证时序的**反面**用例：Fake 默认一定派发该事件，所以「等事件再交回
+ * 所有权」在这里永远不会出错。把派发关掉之后，才能看出生产实现是不是把「还在观察事件」当成了
+ * 「还有资格再发一次地图级 stop」。`stopViewAnimation` 是**地图级**命令，重复发就会停掉这张图上
+ * 任何人正在播的动画——包括另一个 hooks 刚起的那一段。
+ *
+ * 这条用例**不**主张官方一定不派发该事件；它只钉住：真不派发时本库也不越权。
+ */
+describe("useBMapViewAnimation：取消被接受之后不再越权", () => {
+  /** 同一张地图上挂两个 hooks；`showFirst` 可以只卸载前一个（地图保持存活） */
+  function mountTwoHooks() {
+    const hooks: Hook[] = [];
+    const showFirst = ref(true);
+    const makeChild = (index: number) =>
+      defineComponent({
+        setup() {
+          hooks[index] = useBMapViewAnimation({ duration: 10_000, delay: 0, loop: "INFINITE" });
+          return () => h("div", `animator-${index}`);
+        },
+      });
+    const First = makeChild(0);
+    const Second = makeChild(1);
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () =>
+          h(BMap, { provider: harness.provider() }, () => [
+            showFirst.value ? h(First) : null,
+            h(Second),
+          ]),
+      }),
+      { attachTo: harness.container() },
+    );
+    return { wrapper, hooks, showFirst };
+  }
+
+  it("第一段取消成功但无 animationcancel：H1 的第二次 cancel 不能停掉 H2 的动画", async () => {
+    const { wrapper, hooks, showFirst } = mountTwoHooks();
+    await flushPromises();
+    await letSdkStart();
+
+    await hooks[0].start(KEY_FRAMES);
+    await settleAsyncWindow();
+    const first = fake.createdViewAnimations[0];
+    expect(hooks[0].status.value).toBe("playing");
+
+    first.suppressCancelEvent = true;
+    expect(() => hooks[0].cancel()).not.toThrow();
+    await settleAsyncWindow();
+    expect(first.cancelCalls, "取消命令确实打到了 SDK").toBe(1);
+    expect(hooks[0].status.value, "没观察到 animationcancel 就仍是 playing（观察值口径）").toBe(
+      "playing",
+    );
+
+    // H1 名下的动画已经被 Driver 结算掉，H2 在同一张图上正常起播
+    await hooks[1].start(KEY_FRAMES);
+    await settleAsyncWindow();
+    const second = fake.createdViewAnimations[1];
+    expect(hooks[1].status.value).toBe("playing");
+
+    // 关键：H1 再取消一次不能越权去停 H2 那一段
+    hooks[0].cancel();
+    await settleAsyncWindow();
+    expect(second.cancelCalls, "H1 不得对这张图再发一次地图级 stop").toBe(0);
+    expect(hooks[1].status.value).toBe("playing");
+    expect(second.getListenerCount(), "H2 的观察不受影响").toBeGreaterThan(0);
+
+    // 卸载 H1 同样不能补发 stop；但它自己的订阅必须当场归零
+    showFirst.value = false;
+    await nextTick();
+    await settleAsyncWindow();
+    expect(first.getListenerCount(), "H1 的订阅在卸载时释放").toBe(0);
+    expect(second.cancelCalls, "卸载 H1 也不能停掉 H2 的动画").toBe(0);
+    expect(hooks[1].status.value).toBe("playing");
+
+    // H2 自己结算与卸载一切正常
+    second.finish();
+    await flushPromises();
+    expect(hooks[1].status.value).toBe("idle");
+    expect(second.getListenerCount()).toBe(0);
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("两个 hooks 共用一张地图");
   });
 });
