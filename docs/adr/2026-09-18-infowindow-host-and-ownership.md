@@ -388,6 +388,7 @@ open → sdk-open → intent(false)（closeOutstanding = 1，回包还没到）
 | `clickclose` → `close` | `clickclose` 打上 `clickclose-just-seen` | 那条 `close` **不消费**，标记清掉 |
 | `close` … `close` | 正常逐条消费（标记被下一次覆盖） | —— |
 | 末尾多余的第 N 条 `clickclose` | 模型已经是「关」⇒ 什么都没关掉 | **不留标记**（否则它会挂到下一次关闭，让一条真实回包被跳过结算） |
+| **task 结束**（本组事件已收全） | —— | 残留标记一律作废（见 4g：组件排微任务派发 `explicit-close-pair-expired`） |
 
 最后一行是实测逼出来的：`clickclose` 会有**多条**，末尾那几条落在「模型已经关」的时刻；
 只有「这次点击确实关掉了东西」才留标记，标记就不会滞留。
@@ -397,6 +398,40 @@ open → sdk-open → intent(false)（closeOutstanding = 1，回包还没到）
 这与文档里「用户点了气泡上的关闭按钮」的措辞有落差，但**去重会改变公开的 emit 契约**
 （是「一次点击一次事件」还是「原样转发上游」），属于产品决策而不是缺陷修复 ——
 因此本轮只把它登记为已知限制 13 并保持原样转发。
+
+### 4g. 配对窗口**以 task 为界**：组件排微任务，状态机仍然是纯函数（外部评审第十轮 P1）
+
+4f 的配对是「**action 邻接**」式的：标记只在出现下一条关闭类 action 时被覆盖/清理。这漏了一个维度 ——
+**时间过去本身不会产生 action**。于是一条真正迟到的旧回包留下的 `close-consumed` 可以挂很久：
+
+```
+open → sdk-open → intent(false) → intent(true) → sdk-open     （closeOutstanding = 1，模型开）
+→ 真正那条旧命令的回包 sdk-close                                （账 1→0，模型仍开，留下 close-consumed）
+→ ★ 之后没有任何 action，过了任意多个 task
+→ 用户点 X（实测形状 clickclose → close → clickclose）
+   ⇒ 第一条 clickclose 把这条**陈旧**标记当成「本次点击的伴随 close」，把账 0→1 还回去
+   ⇒ 中间的 close 又 1→0，末尾重复的 clickclose 再还一次 ⇒ 最终 closeOutstanding = 1
+→ 父级重开后，下一次真实关闭被这份**幽灵账**当成旧命令结算而吞掉
+```
+
+这正是「用 action 邻接猜分组」的固有缺陷：邻接是**结构性**的，而分组其实是**时间性**的。
+
+**修正：把实测到的边界编码进去。** 真实 4.0 实测「同一次点击产生的 `close` + `clickclose`×N
+在**同一个 task 内**全部到齐（点击后立刻排的微任务里已经完整）」⇒ 配对窗口就是**一个 task**：
+
+- 组件在本 task 收到第一条关闭类事件时 `queueMicrotask` 一次（每个 task 只排一个，带守卫）；
+- 微任务必然在「本 task 的同步派发全部结束」之后、下一个 task 之前运行 ⇒ 同 task 的伴随事件
+  已经配对完成，残留标记作废；
+- 派发的是**纯动作** `explicit-close-pair-expired`，因此状态机不认识时间、也不必认识时间 ——
+  「过期」由调用方喂进来，这条规则照样能在 reducer 上直接测（用例显式调 `expireClosePair()`）。
+
+**为什么两边都要排微任务**：实测里 `close` 在前与 `clickclose` 在前都出现过，所以两个分支都要触发
+「本 task 有分组」这个信号；只在 `clickclose` 分支排会让 «`close` 在前的形状» 失去边界
+（反证 M2 专打这一点）。
+
+**没选的那条路**：把同一 task 的一整组事件 buffer 起来、微任务里一次性喂给状态机。它更彻底，
+但会让关闭类事件的模型更新**延迟一个微任务**（现状是同步收敛，`dispatch` 之后立刻可见），
+属于行为变更而不是修缺口；本轮取「保留同步收敛 + 给标记加边界」。
 
 ### 5. 尺寸：观察**实际内容 host**、合帧重绘、不自激
 
@@ -591,6 +626,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **反序回包**：关 → 立刻重开 →「重开的 `open` 先到、旧 `close` 后到」不得关掉已重开的模型；随后一次真实关闭仍须收敛（评审 P1-1 的复现） | `infoWindowMachine.test.ts`（`重开确认先到、旧 close 后到`） |
 | **被放弃的那一代必须被它自己的释放路径收干净**（重建窗口内卸载 → `useSdkResource` 的 stale 分支） | `v3-binfowindow.test.ts`（`重建窗口内卸载`） |
 | **单飞的尾随重建不得丢值**：连续构造期变化后，最终存活那一代必须按**最后一次**的 prop 构建（反证：去掉尾随重建 ⇒ `expected 9 to be 10`） | 同上（`重建是单飞的`） |
+| **配对窗口以 task 为界**：一条更早的旧回包留下的 `close-consumed` 不得与**很多个 task 之后**的一次用户点击配对 —— 否则凭空多出幽灵 `closeOutstanding`，后一次真实关闭会被它吞掉（反证：过期动作变 no-op / 只在 `clickclose` 分支排微任务 / **反方向**每个 action 后都清标记 ⇒ 各红） | `infoWindowMachine.test.ts`（`配对窗口随 task 结束关闭`）+ `v3-binfowindow.test.ts`（`跨 task 之后的一次用户点击，不得与更早那条旧回包配对`，六步复现） |
 | **点关闭按钮是一组事件，不得吞掉命令账**：`close`（恰 1 条）+ `clickclose`（1..N 条，顺序不定）落在「有一笔关闭命令在飞 + 已重开」之上时，账必须仍然保留到真正迟到的回包（反证：不还原伴随 close 消费的账 / 让伴随 close 照常消费 / 标记不清理 / **无条件**还原 ⇒ 各红） | `infoWindowMachine.test.ts`（`clickclose 伴随的那条普通 close 不得吞掉命令账`，4 种形状）+ `v3-binfowindow.test.ts`（同名端到端，3 种形状）+ live smoke `infowindow-close-button-pair`（把实测形状本身变成门禁） |
 | **过期回包不得清空账本**：重开确认先到、旧 `close` 后到时状态机仍 `open` ⇒ `current()` 必须保持该实例，**且地图上仍然开着重开后的气泡**（反证：退回「无条件 `deactivate`」⇒ 红；**永不退场** ⇒ 正常关闭路径的用例红；**夹具退回「延迟副作用」** ⇒ 地图断言红） | `v3-binfowindow.test.ts`（`重开确认先到、旧 close 后到`） |
 | **`clickclose` 带来源，不参与无身份的归属表**：有在飞关闭账时用户点关闭按钮仍必须真的关上（模型回写一次 `false`、账本退场），但那笔账**不得**被这次点击冲销（反证：状态机退回 `reduceSdkClose` / 组件退回 `sdk-close` / 顺手把账清零 ⇒ 各红） | `infoWindowMachine.test.ts`（`clickclose 带明确来源`）+ `v3-binfowindow.test.ts`（`用户点关闭按钮（clickclose）不得被在飞的旧关闭账吞掉`） |
@@ -795,6 +831,22 @@ B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 
   作为**读数**带回报告（它与打开次数相关，不适合当判据）。
 - 第一次接这条检查时它红了，读数 `counts={"close":1,"clickclose":2}` 与 `.smoke` 里的 1+1 不一致 ——
   顺着这个差异才量出「随打开次数累积」这条规律。**两个环境的读数不一致本身就是线索**。
+
+### 第十轮（`4cbdaef` → 本轮）
+
+评审确认第九轮的实测与修复方向，并补了一个**结构性缺口**：4f 的配对是「action 邻接」式的，
+而**时间过去不会产生 action** ⇒ 一条真正迟到的旧回包留下的 `close-consumed` 会挂到很多个 task 之后，
+被那时的一次用户点击误认成它的伴随 close，把账还回去 ⇒ 凭空多出一份幽灵 `closeOutstanding`。
+
+- **复现属实**：组件级六步复现 —— 第 5 步那次**真实**关闭只回写了一次 `false`
+  （`expected [ [ false ] ] to deeply equal [ [ false ], [ false ] ]`），也就是被幽灵账当成旧回包吞掉了。
+- **修正**：把第九轮实测到的边界编码进去 ——「整组事件在同一 task 内到齐」⇒ 配对窗口 = 一个 task。
+  组件在本 task 第一条关闭类事件后排一个微任务派发**纯动作** `explicit-close-pair-expired`（见 4g）。
+- **反证三条变异全红**：① 过期动作变 no-op；② 只在 `clickclose` 分支排微任务（漏掉 `close` 分支）；
+  ③ **反方向**：每个关闭类 action 后都清标记（等于取消配对）⇒ 第九轮那些形状用例红。
+- **评审同时替我们核对了一件事**：`huiyan-fe/react-bmap` 对 `close` / `clickclose` **没有任何去重或归属**，
+  只是逐个注册 listener 原样透传，而且它不用 SDK 事件反向维护受控状态 ⇒ 它没有我们的
+  outstanding/乱序问题，**不能照搬它的处理方式**。这条也说明「参考实现只作对照、不作移植对象」。
 
 ### 本轮修正引入的自我检查
 

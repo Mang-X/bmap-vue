@@ -438,13 +438,73 @@ describe('prop / SDK / map-click 的竞态无重复开关回环', () => {
     harness.assertIdle('反序回包后账本仍指向该实例')
   })
 
-  it('用户点关闭按钮（clickclose）那一组事件：实测的三种形状都不得吞掉在飞命令账', async () => {
+  it('跨 task 之后的一次用户点击，不得与更早那条旧回包配对（配对要有 task 边界）', async () => {
+    // 评审第十轮 P1 的六步复现：配对标记只在「下一条关闭类 action」时清理，**时间过去本身不会清**。
+    // 于是「一条真正迟到的旧回包」留下的 `close-consumed`，会在许多个 task 之后被一次用户点击
+    // 误认成**本次点击的伴随 close**，把账还回去 ⇒ 凭空多出一份幽灵 `closeOutstanding`，
+    // 之后一次真实关闭又会被它当成旧命令结算而吞掉。
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: open.value })], el)
+    await settle()
+    const child = wrapper.findComponent(BInfoWindow)
+    const map = lastMap()
+    const raw = currentInfoWindow()!
+
+    // 1) 造出一笔在飞的关闭账，并立刻重开（模型 open、closeOutstanding = 1）
+    map.deferInfoWindowCloseEvent = true
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
+
+    // 2) **真正那条旧命令的回包**到了：它消费掉那笔账，模型仍是开
+    expect(map.flushInfoWindowCloseEvent(), '对照组：旧回包被放行').toBe(true)
+    // 之后不需要再推迟 `close` 事件了（否则第 5 步那次真实关闭会被替身挂起、根本到不了组件）
+    map.deferInfoWindowCloseEvent = false
+    await settle()
+    expect(emittedOf(child, 'update:open'), '对照组：旧回包不得改模型').toHaveLength(0)
+
+    // 3) ★ 跨过若干个 task（没有任何状态机 action）之后，用户才点关闭按钮；
+    //    实测形状（同实例已打开两次）是 `clickclose > close > clickclose`
+    expect(
+      map.clickInfoWindowCloseButton({ shape: ['clickclose', 'close', 'clickclose'] }),
+      '对照组：确实点到了',
+    ).toBe(true)
+    await settle()
+    expect(emittedOf(child, 'update:open'), '用户主动关闭必须生效').toEqual([[false]])
+
+    // 4) 父级回声并重开
+    open.value = false
+    await settle()
+    open.value = true
+    await settle()
+    expect(map.infoWindow, '对照组：重开已经生效').toBe(raw)
+
+    // 5) 一次**真实的**（非本组件请求的）关闭：账上若凭空多出幽灵条目，它会被当成「我们自己那条
+    //    旧命令的回包」而只减账、不动模型 —— 模型与地图都会停在「开」
+    map.closeInfoWindow()
+    await settle()
+
+    expect(
+      emittedOf(child, 'update:open'),
+      '真实关闭必须收敛：幽灵账会把它当成旧回包吞掉（第二条 false 就是「真的关了」）',
+    ).toEqual([[false], [false]])
+    expect(map.infoWindow, '地图上不得留下气泡').toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('跨 task 的用户点击不与旧回包配对')
+  })
+
+  it('用户点关闭按钮（clickclose）那一组事件：实测的四种形状都不得吞掉在飞命令账', async () => {
     // 真实 4.0 实测：`close` **恰好一次**；`clickclose` 一条或多条（条数随同一实例被打开过几次累积），
-    // 顺序不固定。三种形状都要满足同一条不变量：这一组不带我们命令的身份 ⇒ **不得消费**命令账。
-    const shapes = [
+    // 顺序不固定。四种形状都要满足同一条不变量：这一组不带我们命令的身份 ⇒ **不得消费**命令账。
+    const shapes: Array<{ tag: string; options: { shape?: Array<'close' | 'clickclose'> } }> = [
       { tag: '1 次打开 · close 在前', options: {} },
-      { tag: '1 次打开 · clickclose 在前', options: { clickcloseFirst: true } },
-      { tag: '2 次打开（clickclose 累积）', options: { clickcloseRepeats: 2 } },
+      { tag: '1 次打开 · clickclose 在前', options: { shape: ['clickclose', 'close'] } },
+      { tag: '2 次打开', options: { shape: ['clickclose', 'close', 'clickclose'] } },
+      { tag: '3 次打开', options: { shape: ['clickclose', 'close', 'clickclose', 'clickclose'] } },
     ];
 
     for (const { tag, options } of shapes) {

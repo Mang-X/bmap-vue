@@ -632,6 +632,33 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     manager.deactivate(instance.handle);
   }
 
+  /** 本 task 是否已经排过「配对窗口关闭」的微任务（每个 task 只需要一个）。 */
+  let closePairExpiryQueued = false;
+
+  /**
+   * 「用户点击关闭按钮」那一组事件的配对窗口**只在当前 task 内**有效（外部评审第十轮 P1）。
+   *
+   * 真实 4.0 实测：一次点击产生的 `close` + `clickclose`（×N）在**同一个 task 内**全部到齐
+   * （点击后立刻排的微任务里已经完整）。所以收到本 task 第一条关闭类事件后排一个微任务，
+   * 把 `explicitClosePair` 清掉 —— 微任务必然在「本 task 的同步派发结束」之后、下一个 task 之前运行，
+   * 于是同 task 的伴随事件已经配对完成，而**跨 task** 的陈旧标记不会留下来被后来的点击认领
+   * （那种误配会凭空造出一份幽灵 `closeOutstanding`，随后一次真实关闭又会被它吞掉）。
+   *
+   * 读 `machine.open` / `explicitClosePair` 与 `syncLedgerAfterClose` 同源：都是读状态机的当前快照。
+   */
+  function scheduleClosePairExpiry(instance: ActiveInstance): void {
+    if (closePairExpiryQueued) return;
+    closePairExpiryQueued = true;
+    queueMicrotask(() => {
+      // 先复位排队标记：即使下面因为实例失效而提前返回，也不能让后续 task 再也排不上清理
+      closePairExpiryQueued = false;
+      if (!instance.alive || activeInstance !== instance) return;
+      if (instance.generation !== machine.generation) return;
+      if (machine.explicitClosePair === "none") return;
+      dispatch({ type: "explicit-close-pair-expired", generation: instance.generation });
+    });
+  }
+
   /**
    * 绑定 SDK 事件。
    *
@@ -667,6 +694,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             // 用户点了关闭按钮：这条事件**带明确来源**（官方契约：「点击信息窗口的关闭按钮时触发」），
             // 因此走独立的动作 —— 不能被在飞的关闭账当成「自己的过期回包」吞掉（第八轮评审 P1）。
             // 它与 `close` 的差别只在归属：账本退场同样按状态机的结论。
+            scheduleClosePairExpiry(instance);
             dispatch({ type: "sdk-clickclose", generation: instance.generation });
             syncLedgerAfterClose(instance);
             emit("clickclose", event);
@@ -680,6 +708,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           default:
             // ⚠️ 顺序与 `open` 相反：**先让状态机判定这条 close 是否真的改变了「打开」这一维**，
             // 再决定账本要不要退场（过期回包只减账、不改状态 ⇒ 账本保持不动，见 `syncLedgerAfterClose`）。
+            // 同时排一个微任务，让这一组事件的配对窗口在本 task 结束时关闭。
+            scheduleClosePairExpiry(instance);
             dispatch({ type: "sdk-close", generation: instance.generation });
             syncLedgerAfterClose(instance);
             break;

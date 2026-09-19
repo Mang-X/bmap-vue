@@ -180,6 +180,12 @@ export interface InfoWindowSnapshot {
    *
    * 任何**别的**动作都会把它清回 `none`（见 `reduceInfoWindow`）：标记只在「紧邻的下一条关闭类事件」
    * 上有意义，否则一条很久以前的 `close` 会被后来的点击认领（或反过来）。
+   *
+   * ⚠️ **光靠「别的动作」清理不够**（外部评审第十轮 P1）：**时间过去本身不会产生 action**。
+   * 一条真正迟到的旧回包留下的 `close-consumed` 会一直挂着，直到很多个 task 之后的一次用户点击
+   * 把它误认成「本次点击的伴随 close」—— 于是凭空多出一份幽灵 `closeOutstanding`。
+   * 所以配对窗口**以 task 为界**：组件在本 task 第一条关闭类事件后排一个微任务派发
+   * `explicit-close-pair-expired`（实测整组事件都在同一 task 内到齐，微任务跑到时已经收全）。
    */
   readonly explicitClosePair: ExplicitClosePair;
 }
@@ -218,6 +224,19 @@ export type InfoWindowAction =
    * 但**保留** `closeOutstanding`（我们下发的关闭命令仍然欠一条回包，迟到时还要被认成结算）。
    */
   | { readonly type: "sdk-clickclose"; readonly generation: number }
+  /**
+   * 「用户点击关闭按钮」那一组事件的**配对窗口在本 task 结束时关闭**（外部评审第十轮 P1）。
+   *
+   * 由组件在收到本 task 第一条关闭类事件后 `queueMicrotask` 派发：真实 4.0 实测整组事件
+   * （`close` + `clickclose`×N）都在**同一个 task 内**派发完毕，所以微任务跑到时这一组已经收全。
+   * 之后残留的配对标记必须作废 —— 否则一条更早的旧回包留下的 `close-consumed` 会被**很多个 task
+   * 之后**的一次用户点击误认成「本次点击的伴随 close」，把账还回去、凭空造出一份幽灵
+   * `closeOutstanding`，随后一次真实关闭又会被它当成旧命令结算而吞掉。
+   *
+   * 纯 reducer 不认识时间，所以「过期」必须由调用方显式喂进来（组件层排微任务）；
+   * 这样状态机仍然是纯函数，这条规则也能在 reducer 上直接测。
+   */
+  | { readonly type: "explicit-close-pair-expired"; readonly generation: number }
   /**
    * **命令同步失败**（`openInfoWindow()` / `closeInfoWindow()` 抛错）—— 与 SDK 观测事件分开的动作。
    *
@@ -315,10 +334,15 @@ export function reduceInfoWindow(
   const step = reduceAction(state, action);
   // `explicitClosePair` 只在「紧邻的下一条关闭类事件」上有意义：任何**别的**动作都把它清掉，
   // 否则一条很久以前的 `close` 会被后来的点击认领（或反过来，一条点击的标记留到下一次关闭）。
-  // 这一对实测间隔约 0.1ms（同一 task），正常路径上不会有别的动作插进来。
+  // 这一组实测间隔约 0.1ms（同一 task），正常路径上不会有别的动作插进来。
+  //
+  // 注意：光靠「别的动作」清理**不够**（外部评审第十轮 P1）—— 时间过去本身不会产生 action。
+  // 所以「关闭类动作」里还有一个 `explicit-close-pair-expired`（组件在 task 末尾派发），
+  // 它同样在下面这个豁免列表里，由自己的 reducer 负责清理。
   if (
     action.type !== "sdk-close" &&
     action.type !== "sdk-clickclose" &&
+    action.type !== "explicit-close-pair-expired" &&
     step.snapshot.explicitClosePair !== "none"
   ) {
     return { ...step, snapshot: { ...step.snapshot, explicitClosePair: "none" } };
@@ -342,6 +366,8 @@ function reduceAction(
       return transition(reduceSdkClose(state, action.generation));
     case "sdk-clickclose":
       return transition(reduceSdkClickClose(state, action.generation));
+    case "explicit-close-pair-expired":
+      return transition(reduceExplicitClosePairExpired(state, action.generation));
     case "command-failed":
       return transition(reduceCommandFailed(state, action));
     case "superseded": {
@@ -530,6 +556,20 @@ function reduceCommandFailed(
     snapshot: enterPhase(closed.snapshot, "closed"),
     changes: closed.changes ?? NONE_CHANGES,
   };
+}
+
+/**
+ * 关闭「用户点击」那一组事件的配对窗口（外部评审第十轮 P1）。
+ *
+ * 组件在收到本 task 第一条关闭类事件后 `queueMicrotask` 派发它：微任务必然在「本 task 的同步派发
+ * 全部结束」之后、下一个 task 之前运行 —— 于是同 task 的伴随事件已经配对完成，而**跨 task** 的
+ * 陈旧标记会被清掉（不清的话，一条更早的旧回包留下的 `close-consumed` 会在很多个 task 之后
+ * 被一次用户点击误认成它的伴随 close，把账还回去、凭空造出幽灵 `closeOutstanding`）。
+ */
+function reduceExplicitClosePairExpired(state: InfoWindowSnapshot, generation: number): Step {
+  if (generation !== state.generation) return settle(state);
+  if (state.explicitClosePair === "none") return settle(state);
+  return settle({ ...state, explicitClosePair: "none" });
 }
 
 function reduceSdkClose(state: InfoWindowSnapshot, generation: number): Step {

@@ -74,6 +74,13 @@ function drive(generation = 1) {
     sdkClickClose(gen = generation): void {
       send({ type: "sdk-clickclose", generation: gen });
     },
+    /**
+     * 「用户点击」那一组事件的配对窗口在本 task 结束时关闭（组件层排微任务派发，见 reducer 注释）。
+     * 纯 reducer 不认识时间，所以用例显式驱动它来模拟「跨过若干个 task」。
+     */
+    expireClosePair(gen = generation): void {
+      send({ type: "explicit-close-pair-expired", generation: gen });
+    },
     superseded(gen = generation): void {
       send({ type: "superseded", generation: gen });
     },
@@ -328,6 +335,38 @@ describe("归属：close 事件有没有身份信息（`closePending` 表）", (
       expect(d.snapshot.closeOutstanding, `${tag}：结算后账归零`).toBe(0);
       expect(d.changes, `${tag}：陈旧回包不得再产生模型变化`).toHaveLength(changesBefore);
     }
+  });
+
+  it("配对窗口随 task 结束关闭：更早那条旧回包留的标记不得与后来的一次点击配对（第十轮 P1）", () => {
+    // 纯 reducer 不认识时间 ⇒ 用 `expireClosePair()` 显式表示「跨过了若干个 task」。
+    const d = drive();
+    d.intent(true, A);
+    d.sdkOpen();
+    d.intent(false, A); // closeOutstanding = 1
+    d.intent(true, A);
+    d.sdkOpen();
+    expect(d.open).toBe(true);
+    expect(d.snapshot.closeOutstanding).toBe(1);
+
+    // 1) **真正那条旧命令的回包**到了：消费掉那笔账，模型仍是开，并留下 close-consumed
+    d.sdkClose();
+    expect(d.snapshot.closeOutstanding, "对照组：旧回包结算掉了那笔账").toBe(0);
+    expect(d.snapshot.explicitClosePair, "对照组：留下了配对标记").toBe("close-consumed");
+
+    // 2) ★ 跨过若干个 task（没有任何别的 action）⇒ 配对窗口必须关闭
+    d.expireClosePair();
+    expect(d.snapshot.explicitClosePair, "task 结束 ⇒ 标记作废").toBe("none");
+
+    // 3) 用户这时才点关闭按钮（实测形状：clickclose → close → clickclose）
+    d.sdkClickClose();
+    d.sdkClose();
+    d.sdkClickClose();
+
+    expect(d.open, "用户主动关闭仍要生效").toBe(false);
+    expect(
+      d.snapshot.closeOutstanding,
+      "陈旧的 close-consumed 不得被这次点击认领 —— 否则会凭空多出一份幽灵账",
+    ).toBe(0);
   });
 
   it("clickclose 的配对标记不得留到下一次关闭（它只在紧邻的下一条关闭类事件上有意义）", () => {

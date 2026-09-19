@@ -381,33 +381,26 @@ export class FakeV4Map extends FakeV4EventTarget {
   /**
    * 模拟**用户点击气泡的关闭按钮**（官方 `clickclose` 的真实来源）。
    *
-   * 真实 4.0 实测（真实 AK · headless Chromium）：
+   * 真实 4.0 实测（真实 AK · headless Chromium）的形状如下，`shape` 直接照着传即可：
    *
-   * - **一次点击**派发 `close` **恰好一次**，以及一条或多条 `clickclose`；两者间隔约 0.1ms（同一 task），
-   *   且**顺序不固定**（5 轮里 4 次 `close` 在前、1 次 `clickclose` 在前）。
-   * - `clickclose` 的**条数随「同一个实例被打开过几次」累积**：打开 1/2/3 次分别得到 1/2/3 条
-   *   （`close` 始终 1 条）—— SDK 每次打开/重绘都会重新绑定关闭按钮的处理器。
+   * | 同一个实例被打开过几次 | 观测到的序列 |
+   * | --- | --- |
+   * | 1 次 | `close` + `clickclose`（顺序不固定：5 轮里 4 次 `close` 在前） |
+   * | 2 次 | `clickclose` → `close` → `clickclose` |
+   * | 3 次 | `clickclose` → `close` → `clickclose` → `clickclose` |
    *
-   * 因此状态机必须容忍 N 条 `clickclose`（见 `explicitClosePair` 的说明）。这里默认复现**单次打开**
-   * 的形状（`close` + `clickclose` 各一次）；`clickcloseRepeats` 复现累积形状，`clickcloseFirst`
-   * 复现另一种顺序。副作用（地图上的当前气泡被清掉）**立即**发生，与真实行为一致。
+   * 即：`close` **始终恰好一条**，`clickclose` 的条数**随打开次数累积**（SDK 每次打开/重绘都会
+   * 重新绑定关闭按钮的处理器）。整组事件在**同一个 task 内**派发完毕。
+   * 副作用（地图上的当前气泡被清掉）**立即**发生，与真实行为一致。
    */
   clickInfoWindowCloseButton(
-    options: { clickcloseFirst?: boolean; clickcloseRepeats?: number } = {},
+    options: { shape?: Array<"close" | "clickclose"> } = {},
   ): boolean {
     const current = this.infoWindow
     if (!current) return false
     this.applyInfoWindowClose()
-    const repeats = Math.max(1, options.clickcloseRepeats ?? 1)
-    const emitClickclose = (): void => {
-      for (let i = 0; i < repeats; i++) current.emit('clickclose')
-    }
-    if (options.clickcloseFirst) {
-      emitClickclose()
-      current.emit('close')
-    } else {
-      current.emit('close')
-      emitClickclose()
+    for (const name of options.shape ?? ["close", "clickclose"]) {
+      current.emit(name)
     }
     return true
   }
