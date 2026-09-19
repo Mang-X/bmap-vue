@@ -103,8 +103,8 @@ export function createNativeClusterEngine<Item>(
   /**
    * 摘除期间的业务回调门（由账本的严格 `detach()` 打开 / 关闭）。
    *
-   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆；失败时门关掉，实例**完全恢复可用**
-   * —— 「保留旧引擎」因此包含行为，不只是画面。
+   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆。失败时门关掉、监听恢复；但资源那一侧
+   * 只能是 `unknown`（可能已被摘除、也可能仍在图上），因此这里**不宣称「旧引擎完整恢复」**。
    */
   let quiescing = false;
 
@@ -350,6 +350,9 @@ export function createNativeClusterEngine<Item>(
 
   function applyData(): void {
     if (!handle) return;
+    // 挂载态 `unknown` ⇒ 一个字都不写（它可能已经不在图上）。收敛交给下一次替换路径：
+    // `recreate()` → `record.detach()`，账本会把 `unknown` 收敛成确定状态。
+    if (record?.attachment === "unknown") return;
     const key = dataInputKey();
     if (key === appliedDataKey && adapted) return;
     const next = adaptPoints(props.data, {
@@ -371,6 +374,8 @@ export function createNativeClusterEngine<Item>(
    */
   function applyVisible(): void {
     if (!handle) return;
+    // 同 `applyData`：挂载态未知时不写
+    if (record?.attachment === "unknown") return;
     const desired = props.visible !== false;
     if (appliedVisible === desired) return;
     nativeLayers().setVisible(handle, desired);

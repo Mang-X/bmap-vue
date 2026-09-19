@@ -67,7 +67,8 @@ export function createMarkerClusterEngine<Item>(
   let warnedZoomRead = false;
   /**
    * 摘除期间的业务回调门（`detach()` 打开）。与 `LayerRegistryInput.quiesce` 同一语义：
-   * 摘除期间不穿透，失败后关掉门 ⇒ 旧引擎**完全恢复可用**。
+   * 摘除期间不穿透，失败后关掉门 ⇒ 旧引擎的**交互**恢复；已摘除的覆盖物是否还在图上无法判断，
+   * 因此这里用 `unknown` 计数如实上报，而不是宣称「恢复完整」。
    */
   let quiescing = false;
   /** 上一次交给 `DataLayerManager` 的输入：部分摘除失败时用它把旧引擎**重放回完整状态**。 */
@@ -224,19 +225,27 @@ export function createMarkerClusterEngine<Item>(
       quiescing = true;
       active.clear();
       if (active.size > 0) {
-        // **部分成功**：已经摘掉的那些不会自己回来，`size > 0` 只证明「所有权没丢」，
-        // 不证明「旧引擎被保留」。因此用上一次输入重放一次同步，把旧引擎**恢复完整**
-        // （缺的补建、留下的仍在），再放弃这次换引擎 —— 交给用户的必须是完整可用的引擎。
-        const remaining = active.size;
+        // **有一部分摘不掉**。`removeOverlay` 允许「先产生副作用、再抛错」，因此这些资源的
+        // 挂载态是 **unknown**：可能仍在图上、也可能已经不在。这里能做的与**不能**做的都要写清楚：
+        //
+        // - 能：把**确认摘掉**的那些用上一次输入重放一次补回来（重放只会补建已经不在 `resources`
+        //   里的 key；未知的那些**保留所有权、不重建** —— 重建可能重复挂一份）；
+        // - 不能：宣称「旧引擎恢复完整」。未知的那些是否在图上无从判断，因此如实上报数量。
+        //
+        // 也不做「再摘一次」的收敛：覆盖物的重复 `removeOverlay` 安全性本库**没有 live 取证**
+        // （图层那边有 #98 的实测，见 ADR 决策 12b）。无证据就收敛 = 猜，所以这里停在上报 `unknown`。
+        const unknown = active.size;
+        let replayed = false;
         try {
           if (lastSync) {
             active.sync(lastSync);
             active.flush();
+            replayed = true;
           }
         } catch (error) {
-          // 恢复失败也要把门关掉（否则旧引擎连点击都没了），并把这条信息交出去
+          // 重放失败也要把门关掉（否则旧引擎连点击都没了），并把这条信息交出去
           devWarn(
-            `${input.label}: 换引擎时摘除未完成，且恢复旧引擎失败：` +
+            `${input.label}: 换引擎时摘除未完成，且重放上次数据失败：` +
               `${(error as Error)?.message ?? String(error)}`,
           );
         } finally {
@@ -244,7 +253,9 @@ export function createMarkerClusterEngine<Item>(
         }
         throw new BMapError(
           "BMAP_SDK_CALL_FAILED",
-          `${input.label}: 还有 ${remaining} 个 Marker 未能摘除，已放弃换引擎并恢复旧引擎`,
+          `${input.label}: ${unknown} 个 Marker 未能确认摘除（可能仍在图上）` +
+            `${replayed ? "；确认摘掉的那些已按上次数据补建" : ""}，已放弃换引擎` +
+            `。旧引擎的交互已恢复，但这 ${unknown} 个 Marker 的挂载态仍是 unknown`,
         );
       }
       active.dispose();

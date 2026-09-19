@@ -90,8 +90,9 @@ interface InstanceState {
   /**
    * 摘除期间的业务回调门（由账本的严格 `detach()` 打开 / 关闭）。
    *
-   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆；失败时门关掉，实例**完全恢复可用**
-   * —— 「保留旧实例」因此包含行为，不只是画面。
+   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆。失败时门关掉、监听恢复，但**资源那边
+   * 只能到 `unknown`（`removeLayer` 允许「先产生副作用再抛错」，此刻它可能已经不在图上）——
+   * 所以「保留旧实例」只承诺可恢复的那一侧，另一半由状态位如实表达。
    */
   quiescing: boolean;
 }
@@ -295,8 +296,13 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
    * 一条空 `FeatureCollection` 与「没有数据」在语义上不同 —— 前者要求 SDK 解析并进入一次
    * 无要素的渲染，后者是图层自己的空态。这是本库对 `clearData` 的唯一调用点：数据清空是
    * 唯一有明确语义的时机（卸载走 `removeLayer`，不需要先清数据）。
+   *
+   * ⚠️ **挂载态 `unknown` 时一个字都不写**（与 `useLayerResource` 同一条规则）：那时连它还在不在
+   * 图上都不确定，写数据/样式既可能白写、也可能在真实 SDK 上抛错。收敛留给下一次替换路径
+   * （`recreate()` → `record.detach()`，账本会把 `unknown` 收敛成确定状态）。
    */
   function applyData(state: InstanceState, c: MapReadyContext, adapted?: AdaptedPoints<Item>): void {
+    if (state.record?.attachment === "unknown") return;
     // 指纹只算一次（它是「整份数据的引用 + 版本 + 三个取值函数」的拼接，没必要算两遍）
     const key = dataInputKey();
     // 挂载时传 `adapted`（首份数据必须写）；之后按输入指纹去重，值没变就不产生 SDK 调用。
@@ -323,6 +329,8 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
     c: MapReadyContext,
     style: Record<string, unknown> | undefined,
   ): void {
+    // 挂载态 `unknown` ⇒ 不写（同 `applyData` 的理由）
+    if (state.record?.attachment === "unknown") return;
     const nativeLayers = nativeLayersOf(c.client);
     const fields = props as unknown as FieldProps;
     const writes: FieldWrite[] = [

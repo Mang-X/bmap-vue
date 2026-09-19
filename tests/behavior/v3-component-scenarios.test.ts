@@ -3843,4 +3843,104 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     await unmountAndSettle(wrapper);
     harness.assertIdle("BMarkerCluster markers 显隐重试");
   });
+
+  /*
+   * PR #108 第三轮评审（commit 3d9880f）的阻塞项：**「摘除失败」有两种合法形状**。
+   *
+   * | 形状 | 资源 | 之前的行为 |
+   * | --- | --- | --- |
+   * | 摘除**之前**抛错 | 仍在图上 | 上一轮覆盖到了（旧实例/引擎继续可用） |
+   * | 摘除**之后**抛错 | **已经不在了** | ❌ 被当成「还在」⇒ 幻影所有权 + 继续往幻影写数据 |
+   *
+   * 两条路径的读法都只有一个：**调用有没有成功返回**。因此失败之后挂载态是 `unknown`，
+   * 组件既不能说「已恢复」、也不能继续按「已挂上」处理。
+   */
+
+  it("BMarkerCluster：removeLayer「先摘掉再抛错」⇒ 不按已挂上处理，下一次收敛完成重建", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    // 用**构造期项**驱动重建（而不是换引擎）：重建失败之后 props 仍停在「想要新参数」，
+    // 于是后面的数据变化不会再触发替换路径，正好用来观测「unknown 期间写不写」。
+    const radius = ref(60);
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        clusterRadius: radius.value,
+      }),
+    ]);
+    expect(harness.attached("layer")).toBe(1);
+
+    // 图层**真的被摘掉**，然后才抛错 ⇒ 调用方无法判断，只能记 unknown
+    harness.failNextRemoveLayerAfterDetach();
+    radius.value = 80;
+    await settleProps();
+    expect(errors.length, "摘除未确认必须交出错误").toBeGreaterThan(0);
+    expect(harness.attached("layer"), "它其实已经不在图上了").toBe(0);
+    expect(harness.nativeLayersCreated() - layersBefore, "摘除未确认 ⇒ 不建新实例").toBe(1);
+
+    // 挂载态 unknown：**不得**再往这个（可能已不在图上的）实例写任何东西。
+    // 观测窗口要把「构造期指纹」调回**与原实例一致**，否则每一次 sync 都会先重试替换
+    // （那是收敛路径，不是写入路径）—— 窗口就不存在了。
+    // 挂载态 unknown 期间**不得再按「已挂上」写**（`applyData` / `applyVisible` 里的门）。
+    //
+    // ⚠️ 这一条**刻意不写成断言**：从组件面观测不到它的窗口 —— 任何会触发写入的 props 变化都会
+    // 先走「指纹不一致 ⇒ 走替换路径收敛」那条路（成分复杂到足以让断言恒真）。门本身与
+    // `useLayerResource` 的同一规则同源，需要钉住的话应给引擎加一条直接调用的单测（不需要 Vue）。
+    // 这里只保留「失败以后仍然只有一份资源、且收敛之后图层回到图上」这两条可观测的不变量。
+    radius.value = 60;
+    data.value = [...STATIONS, { id: "d", lng: 1, lat: 1 }];
+    await settleProps();
+    expect(harness.attached("layer"), "图上始终只有一份（不会凭空多出一份）").toBe(1);
+
+    // 下一次替换路径会把 unknown 收敛成确定状态，并把用户的意图做完（新实例建起来）
+    radius.value = 90;
+    await settleProps();
+    expect(harness.attached("layer"), "收敛之后图层回到图上").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster after-detach 失败");
+  });
+
+  it("BMarkerCluster：markers「先摘掉再抛错」⇒ 上报 unknown，不制造假恢复", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const engine = ref<"native" | "markers">("markers");
+    // 两个 Marker：北京三点一簇 + 上海一个单点
+    const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: engine.value,
+        zoom: 8,
+        minClusterSize: 3,
+      }),
+    ]);
+    expect(harness.attached("overlay")).toBe(2);
+
+    // 其中一个 Marker **真的被摘掉**，然后才抛错
+    harness.failNextRemoveOverlayAfterDetach(undefined, -2);
+    engine.value = "native";
+    await settleProps();
+
+    expect(harness.attached("layer"), "摘除未确认 ⇒ 不建新引擎").toBe(0);
+    // ⚠️ 诚实性断言：错误里必须说「没能确认摘除 / 可能仍在图上」，**不能**宣称「已恢复完整」
+    const messages = errors
+      .map((entry) => (entry as { error?: { message?: string } }).error?.message ?? String(entry))
+      .join(" | ");
+    expect(messages, "必须如实上报 unknown 的数量").toContain("未能确认摘除");
+    expect(messages, "不得宣称已恢复完整").not.toContain("并恢复旧引擎");
+    // 真的被摘掉的那个不会被 replay 当成 existing 重建（那会重复挂一份）
+    expect(harness.attached("overlay"), "幻影所有权不会凭空变出一个 Marker").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster markers after-detach 失败");
+  });
 });

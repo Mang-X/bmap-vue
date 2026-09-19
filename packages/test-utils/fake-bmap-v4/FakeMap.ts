@@ -232,6 +232,14 @@ export class FakeV4Map extends FakeV4EventTarget {
    * 的判别点。
    */
   failNextRemoveOverlay: Error | null = null
+  /**
+   * 与 `failNextRemoveOverlay` 对偶：**先摘掉、再抛错**（用后即清）。
+   *
+   * 用它区分「摘除失败」的两种合法形状 —— 摘之前抛（覆盖物仍在图上）与摘之后抛（已经不在了）。
+   * 调用方在这种异常之后**无法判断**覆盖物还在不在，因此不能按「还在」处理（会留下一份幻影
+   * 所有权），也不能按「不在」处理（会重复挂一份）。
+   */
+  failNextRemoveOverlayAfterDetach: Error | null = null
 
   removeOverlay(overlay: FakeV4Overlay): void {
     this.callLog.push('removeOverlay')
@@ -246,6 +254,7 @@ export class FakeV4Map extends FakeV4EventTarget {
       this.stats.resourceReleased('overlay')
     }
     if (overlay.attachedMap === this) overlay.attachedMap = null
+<<<<<<< HEAD
     this.detachCustomOverlayDom(overlay)
   }
 
@@ -280,6 +289,13 @@ export class FakeV4Map extends FakeV4EventTarget {
     overlay.domElement = null
     if (!element) return
     if (element.parentElement === this.overlayPane) this.overlayPane?.removeChild(element)
+=======
+    const afterDetach = (overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach
+    if (afterDetach) {
+      ;(overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach = null
+      throw afterDetach
+    }
+>>>>>>> fdee24e (fix(M6-POINT-CLUSTER): 区分摘除失败的两种形状，挂载态如实标 unknown（#35 三轮评审）)
   }
 
   /**
