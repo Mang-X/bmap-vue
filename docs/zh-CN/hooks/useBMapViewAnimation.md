@@ -36,21 +36,22 @@ const { start, cancel, status, ready } = useBMapViewAnimation(options, map)
 :::
 
 :::tip 接着播下一段该怎么写
-`start()` 每次都会**新建**一个动画实例并接管仍在播的那一段，所以两种写法都成立：
+先说清楚一件事：**`start()` 的 Promise 不是「播完」的 Promise**。它等的是地图 ready + 起播命令被
+Driver 接受，命令发出去就 resolve；动画本身还要跑多久，只有公开事件知道。
 
 ```ts
-// ① 等这一段真的结束（观察值回到 idle）再起下一段
+// ① 立刻接管：上一段还在播也没关系，第二次 start() 会取代它
 await start(segmentA);
-await start(segmentB); // 上一段还在播时这一句会接管它
+await start(segmentB); // A 被接管（不是「等 A 播完」）
 
-// ② 想在播完时接续：看 status，而不是自己数时间
+// ② 播完再接续：由观察值驱动队列，而不是自己数时间
 watch(status, (value) => {
   if (value === "idle" && queue.value.length > 0) void start(queue.value.shift()!);
 });
 ```
 
 两点要知道：`loop: "INFINITE"` 时 SDK 不会派发 `animationend`，`status` 因此一直停在 `playing`，
-只有 `cancel()` 之后的 `animationcancel` 会把它写回 `idle`；而**接管可能失败**——起播前 Driver 要先
+只有 `cancel()` 之后回来的 `animationcancel` 会把它写回 `idle`；而**接管可能失败**——起播前 Driver 要先
 取消上一段，取消失败时 `start()` 直接 reject、上一段继续播，所以 `await` / `.catch()` 要接住。
 :::
 
@@ -73,8 +74,8 @@ watch(status, (value) => {
 
 | 返回值  | 描述                                                                             | 类型                                                                    |
 | ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| start   | 播放一段关键帧动画；每次调用新建实例并接管仍在播的那一段。**接管可能失败**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换并保留记录以便重试，本方法随之 reject（上一段仍在播、仍可被 `cancel()` 重试） | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
-| cancel  | 取消本 hooks 当前那段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做；**取消命令一旦被接受就不再重复发**（同一 hooks 再调 `cancel()` 是 no-op，否则停掉的会是这张图上任何人正在播的动画）。**取消是地图级命令**，守卫只看 hooks 自己记的「有没有在飞段」，因此**不保证一定不牵连同图其它动画**。取消失败时错误抛给调用方，这一段归属保留，可以直接重试；状态要等 SDK 的 `animationcancel` 到达才变回 `idle` | `() => void`                                                            |
+| start   | 播放一段关键帧动画；每次调用新建实例并接管仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换并保留记录以便重试，本方法随之 reject（上一段仍在播、仍可被 `cancel()` 重试） | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
+| cancel  | 取消本 hooks 当前那段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做；**stop 请求一旦被 Driver 接受就不再重复发**（同一 hooks 再调 `cancel()` 是 no-op，否则停掉的会是这张图上任何人正在播的动画）。**取消是地图级命令**，守卫只看 hooks 自己记的「有没有在飞段」，因此**不保证一定不牵连同图其它动画**。取消失败时错误抛给调用方，这一段归属保留，可以直接重试；状态要等 SDK 的 `animationcancel` 到达才变回 `idle` | `() => void`                                                            |
 | status  | 观察到的播放状态，只由公开事件写，命令不改动它                                   | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
 | ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 

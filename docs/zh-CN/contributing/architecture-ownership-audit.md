@@ -42,8 +42,8 @@
 | `useBMapViewAnimation` 的 `stop()` / `proceed()` → `handle.raw._pause` / `_continue` / `_cancel` | `composables/useBMapViewAnimation.ts`（原 98/105/114 行） | 只有文档页与示例引用 | 官方 4.0.4 **没有**声明这三个成员 ⇒ 私有面 | **REMOVE** | #104 A2：收窄为 `start(keyFrames)` / `cancel()` / `status` / `ready`。静态门禁抓不到 `handle.raw.*`（`check:raw-sdk` 只匹配 `BMap`/`BMapGL` 标识符），所以这条靠审计而不是靠 gate |
 | 同 hooks 的 `viewAnimation` 句柄 ref + `setKeyFrames` 两段式 + `disableDragging` | 同上 | 只有文档 | 句柄每次 `start()` 都被换掉、`disableDragging` 从未生效 ⇒ 退化成常量 | **REMOVE** | #104 A2 一并删除；`status` 改成只由公开事件写的**观察值**（`idle` / `playing`） |
 | MapDriver 的视角动画 teardown：`AnimationRecord{started,settled,cancelRequested}` + `Teardown{disposed,disposing,tornDown,released,deferredFinish,fallbackTimer}` | `driver/jsapi-v4/map.ts:193-210` | `MapDriver.destroy` / `startViewAnimation` / `stopViewAnimation`，约 20 条行为用例 | 记账对象是**我们自己**发起的启动/取消/销毁次序 ⇒ `OWNED`，合法；但它的前提「`animationstart` 在内部 Animation 构造前同步派发、启动前 `cancelViewAnimation` 抛 `TypeError`」是 `FAKE-ONLY`（只有 `FakeV4ViewAnimation` 建模，仓库无 probe 脚本、无 live 读数） | **KEEP + 待取证** | #104 B1：保留（它不恢复 SDK 的因果身份），但把口径改成「防御模型」，不得对外承诺该时序；取证登记为下方 **F-1**。ADR 2026-09-11 已加复核注记 |
-| 同一处前提在 hooks 侧的**残留用法**：`useBMapViewAnimation` 里被取代那一段的三条监听，原先只由该段的 `animationcancel` 释放 | `composables/useBMapViewAnimation.ts`（`AnimationRun` / `start`） | 该 hook 自己（`EventDriver.groups` 是强引用 Map，未释放即泄漏） | 与上面同一条 `FAKE-ONLY` 时序：Fake 里「Driver 起播前取消上一段 ⇒ 上一段必然派发 `animationcancel`」成立，真实 SDK 未证 ⇒ 本库自有记账的销账被挂在一个**不由我们决定的事件**上 | **SIMPLIFY（本票已做）** | #104 A2 收尾 + #105 评审 P1：**归属与释放分开**。① 一段动画的**归属**（`current`）只在取消被 SDK 接受之后交回——`MapDriver` 的契约是「取消失败时记录保留，可再次 stop/destroy 重试」，提前清空就等于 hook 自己先丢掉重试入口（`cancel()` 第二次直接 no-op，SDK 那边却还在播）；② 一段动画的**订阅**是本库自有记账，不等 SDK 回调：起播被拒的那一段（两阶段提交，`start()` 随之 reject、旧段继续被观察）、半途绑定失败的那一段、以及卸载时的当前段，都当场释放。`status` 仍只由公开事件写。文档随之删掉「由 Driver 在起播前同步取消上一段」的时序承诺，并把「取消是地图级命令、不保证不牵连同图其它动画」写进 `cancel` 的口径。四条回归见 `v3-useBMapViewAnimation.test.ts` 的「取消失败时保留重试入口」 |
-| 同一段动画的第三种资格：**「还有资格再对这张图发一次地图级 `stopViewAnimation`」**——原先与「还在观察事件」混用同一个 `current` | `composables/useBMapViewAnimation.ts`（`AnimationRun.cancelCommitted` / `stopRun`） | 跨 hooks：同一张地图上另一个 `useBMapViewAnimation` 的在飞段 | `FAKE-ONLY` 依赖：Fake 里取消成功必然派发 `animationcancel` ⇒ `settle` 一定把 `current` 清掉，这条依赖在夹具里不会暴露 | **SIMPLIFY（本票已做）** | #105 评审第三轮 P1：取消命令一旦被 SDK 接受就置 `cancelCommitted`，本 hooks 此后不再重复发地图级 stop（监听继续留着，只用于把 `status` 写回 `idle`）。反证用例见第 7 节的 `suppressCancelEvent`：去掉这个 guard，H1 的第二次 `cancel()` 会停掉 H2 正在播的那一段（`expected 1 to be +0`） |
+| 同一处前提在 hooks 侧的**残留用法**：`useBMapViewAnimation` 里被取代那一段的三条监听，原先只由该段的 `animationcancel` 释放 | `composables/useBMapViewAnimation.ts`（`AnimationRun` / `start`） | 该 hook 自己（`EventDriver.groups` 是强引用 Map，未释放即泄漏） | 与上面同一条 `FAKE-ONLY` 时序：Fake 里「Driver 起播前取消上一段 ⇒ 上一段必然派发 `animationcancel`」成立，真实 SDK 未证 ⇒ 本库自有记账的销账被挂在一个**不由我们决定的事件**上 | **SIMPLIFY（本票已做）** | #104 A2 收尾 + #105 评审 P1：**归属与释放分开**。① 一段动画的**归属**（`current`）只在 stop 请求被 Driver 接受之后交回——`MapDriver` 的契约是「取消失败时记录保留，可再次 stop/destroy 重试」，提前清空就等于 hook 自己先丢掉重试入口（`cancel()` 第二次直接 no-op，SDK 那边却还在播）；② 一段动画的**订阅**是本库自有记账，不等 SDK 回调：起播被拒的那一段（两阶段提交，`start()` 随之 reject、旧段继续被观察）、半途绑定失败的那一段、以及卸载时的当前段，都当场释放。`status` 仍只由公开事件写。文档随之删掉「由 Driver 在起播前同步取消上一段」的时序承诺，并把「取消是地图级命令、不保证不牵连同图其它动画」写进 `cancel` 的口径。四条回归见 `v3-useBMapViewAnimation.test.ts` 的「取消失败时保留重试入口」 |
+| 同一段动画的第三种资格：**「还有资格再对这张图发一次地图级 `stopViewAnimation`」**——原先与「还在观察事件」混用同一个 `current` | `composables/useBMapViewAnimation.ts`（`AnimationRun.cancelCommitted` / `stopRun`） | 跨 hooks：同一张地图上另一个 `useBMapViewAnimation` 的在飞段 | `FAKE-ONLY` 依赖：Fake 里取消成功必然派发 `animationcancel` ⇒ `settle` 一定把 `current` 清掉，这条依赖在夹具里不会暴露 | **SIMPLIFY（本票已做）** | #105 评审第三轮 P1：`stop()` 正常返回（= **Driver 接受了这次 stop 请求**；动画未起播时 Driver 只是登记 `cancelRequested`，真正的 SDK cancel 留给安全窗口，所以口径不能写成「SDK 已取消」）就置 `cancelCommitted`，本 hooks 此后不再重复发地图级 stop（监听继续留着，只用于把 `status` 写回 `idle`）。反证用例见第 7 节的 `suppressCancelEvent`：去掉这个 guard，H1 的第二次 `cancel()` 会停掉 H2 正在播的那一段（`expected 1 to be +0`） |
 | `useBMapTrackAnimation` 的插件状态机（`INITIAL` / `PLAYING` / `STOPPING` / …） | 原 `composables/useBMapTrackAnimation.ts` | **生产 0**：v4 上 `createTrackAnimation()` 必抛 `BMAP_CAPABILITY_UNSUPPORTED` | 状态机的全部可达分支 = 一条失败分支 ⇒ 退化成常量 | **REMOVE** | #104 A3：hook、文档页、示例、行为用例全部删除；轨迹走原生图层 `track-line`，插件侧结论仍在 **#43**。参考实现 `huiyan-fe/react-bmap`（236 个 TS 文件）没有任何 TrackAnimation 抽象 |
 | suspension reason 集（`user` / `keepAlive` / `document` / `offscreen` / `disposed`）、boot 单飞 + `deferredWaiters` + 0ms 活性兜底、`tileLoadObserver` 的两本账 | `core/runtime/suspension.ts`、`components/map/BMap.vue:691`、`components/layers/tileLoadObserver.ts` | 生产，组件生命周期 | `OWNED`；`tileLoadObserver` 另有 `PROBED`（`scripts/probe-layer-events.mts` 三臂对照 `12 / 0 / 12`） | **KEEP** | 反面样板：`tileLoadObserver.ts:38-40` 明确**拒绝**做瓦片回包归属，只记所有权 |
 
@@ -138,13 +138,8 @@
 
 **没有**为了本次审计新建任何通用 Runtime / 状态框架（验收项 4）。上表标 SIMPLIFY 而本票未做的行，全部是「要连带改夹具或改公共出口」的一类，逐条落到 **#44** 之后的独立票，不混进本票以免评审分不清两件事。
 
-**GitHub 侧交接：已完成一部分，剩下的范围是明确的**。#104 验收要求把四条约束写进 #12 与所有未开工的
-roadmap issue。当前状态（按 issue 正文实际核对，不是按印象）：
-
-| 已写入 | 仍未写入 |
-| --- | --- |
-| #12（Roadmap 总览）、#32、#33、#43、#44 | #35、#36、#37、#45、#46 |
-
-约束同时已进 `AGENTS.md`（对所有会话生效），本表是事实源。**未写入的五张是 M6 / M9 / M10 的票**，
-按本轮「先不碰共享 issue 正文」的授权边界留着；动它们之前需要一次明确授权。
-读这几张票时请以本表第 5、6、7 节标 **SIMPLIFY / 后续票** 的行作为待办清单，不要假定对面已经知道。
+**GitHub 侧交接：已完成**。#104 验收要求把四条约束写进 #12 与所有未开工的 roadmap issue。
+按 issue 正文核对（不是按印象）：**#12 / #32 / #33 / #35 / #36 / #37 / #43 / #44 / #45 / #46 十张票
+都带 `<!-- ownership-first:2026-09-19 -->` 标记与对应约束**（fallback 不恢复内部身份、不建第二套
+Runtime、先做具体场景再提共性、测试以业务结果与资源释放为主）。约束同时已进 `AGENTS.md`，本表是事实源。
+后续开新票时沿用这个标记，`gh issue view <n> --json body` 就能扫出覆盖面。

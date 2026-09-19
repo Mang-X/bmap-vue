@@ -63,12 +63,15 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 - `cancel()` 在**取消失败**时把错误抛给调用方，并保留这一段的归属 ⇒ 可以直接再调一次重试
   （`MapDriver` 的既有契约是「取消失败时动画记录保留，下一次 `stopViewAnimation` / `destroy` 可重试」）。
   原先的实现会先把归属清掉，第二次 `cancel()` 变成 no-op，而 SDK 那边还在播。
-- `start()` 是**两阶段提交**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换 ⇒ `start()` 随之
-  reject，上一段继续被观察、仍可 `cancel()` 重试；从未起播的那一段不留订阅。
+- `start()` 是**两阶段提交**：它的 Promise 表示「地图 ready + 起播命令被接受」，**不是**动画播完；
+  播完要听 `animationend`（`loop: "INFINITE"` 时不会来）或由 `status` 驱动。起播前 Driver 要先取消
+  上一段，取消失败时它拒绝替换 ⇒ `start()` 随之 reject，上一段继续被观察、仍可 `cancel()` 重试；
+  从未起播的那一段不留订阅。
 - 卸载时取消失败**不再打断卸载**（按 `logger.warn` 上报，地图销毁路径会重试取消），本段订阅无条件释放。
 - 取消是**地图级**命令：`cancel()` 的守卫只看 hooks 自己有没有在飞段，因此不保证一定不牵连同图
   其它动画（文档与类型注释已改成这个口径，而不是反过来承诺归属）。
-- 取消命令**一旦被 SDK 接受就不再重复发**：同一 hooks 之后再调 `cancel()` 是 no-op。此前它会在
-  「取消已成功、但 SDK 没派发 `animationcancel`」时保留发 stop 的资格，下一次调用就会停掉这张图上
-  **任何人**正在播的动画（包括另一个 `useBMapViewAnimation` 刚起的那一段）。「还在观察事件」与
-  「还有资格再发一次地图级 stop」现在是两件事。
+- stop 请求**一旦被 Driver 接受就不再重复发**（`stopViewAnimation` 正常返回；动画还没起播时 Driver
+  只是登记 `cancelRequested`，真正的 SDK 取消留给安全窗口）：同一 hooks 之后再调 `cancel()` 是 no-op。
+  此前它会在「取消已成功、但 SDK 没派发 `animationcancel`」时保留发 stop 的资格，下一次调用就会停掉
+  这张图上**任何人**正在播的动画（包括另一个 `useBMapViewAnimation` 刚起的那一段）。
+  「还在观察事件」与「还有资格再发一次地图级 stop」现在是两件事。
