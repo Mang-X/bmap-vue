@@ -352,6 +352,11 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       return;
     }
     if (!observed) return;
+    // 用户刚关掉它（`clickclose`，我们已经把这个状态回报给父级）⇒ **不再补一条关闭命令**：
+    // 真实 SDK 的 `getInfoWindow()` 在关闭之后还会短暂返回旧值（异步拆除），照读回值再关一次
+    // 只会白叫一次 `closeInfoWindow()` 并多转发一条 `close` 事件（外部评审第十一轮实测到）。
+    // 父级再次要求「开」时 `echoedClosed` 会复位，所以这不影响后续任何一次真实的关闭。
+    if (instance.echoedClosed) return;
     try {
       context.client.driver.overlays.closeInfoWindow(instance.handle);
     } catch (error) {
