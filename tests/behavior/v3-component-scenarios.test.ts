@@ -3404,7 +3404,8 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const unhandled: unknown[] = [];
     const Probe = errorsProbe(errors);
     const visible = ref(true);
-    const data = ref<readonly Station[]>(STATIONS);
+    // 同上：两个 Marker 才能观测到「一个成功、一个失败」的部分对齐
+    const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
     const wrapper = await mountMapTree(
       () => [
         h(Probe),
@@ -3451,5 +3452,152 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("BMarkerCluster malformed 命中");
+  });
+
+  /*
+   * PR #108 第二轮评审（commit e12a93a）的两条阻塞项：**失败之后能不能真的恢复**。
+   *
+   * | 评审 | 症状 |
+   * | --- | --- |
+   * | P2-1 | 严格 `detach()` 在 `remove` 之前就永久解绑了业务监听 ⇒ 摘除失败时旧实例
+   *        「还在图上，但已经点不动」；markers 引擎还有「部分摘掉」的半拆态 |
+   * | P2-2 | `DataLayerManager.setVisible()` 先把内部 `visible` 改成目标值再逐资源写 ⇒
+   *        失败后重试被内层短路吞掉，失败的资源永远补不上 |
+   */
+
+  it("BMarkerCluster：换引擎摘除失败后，旧原生引擎仍然**可用**（不只是还在图上）", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const engine = ref<"native" | "markers">("native");
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+
+    harness.failNextRemoveLayer(); // 摘除在**副作用之前**抛错：旧图层确实还留在图上
+    engine.value = "markers";
+    await settleProps();
+    expect(errors.length).toBeGreaterThan(0);
+    expect(harness.attached("overlay"), "摘除未确认 ⇒ 不建新引擎").toBe(0);
+
+    // 「保留旧引擎」必须包含**行为**：监听还在（摘除期间只是被门挡住）
+    harness.simulateNativeClusterHit({ clusterId: 9, pointCount: 3, latLng: { lng: 116.4, lat: 39.9 } });
+    expect(cluster.emitted("cluster-click"), "旧引擎仍然可交互").toBeTruthy();
+    harness.simulateNativeClusterSingleHit({ key: "b" });
+    expect(cluster.emitted("item-click"), "旧引擎的单点命中仍然可用").toBeTruthy();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 摘除失败后的旧引擎");
+  });
+
+  it("BMarkerCluster：markers 部分摘除失败 ⇒ 旧引擎恢复完整并可继续交互", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const engine = ref<"native" | "markers">("markers");
+    // 北京三点聚一簇 + 上海一个独立单点 ⇒ 两个 Marker（「部分失败」需要多于一个资源）
+    const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: engine.value,
+        zoom: 8,
+        minClusterSize: 3,
+      }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+    const overlaysBefore = harness.attached("overlay");
+    expect(overlaysBefore, "需要多个 Marker 才能测「部分失败」").toBeGreaterThan(1);
+
+    // 逐资源摘除时**一个失败**：`clear()` 逐条隔离 ⇒ 一部分真摘掉了、剩下的还在
+    harness.failNextRemoveOverlay();
+    engine.value = "native";
+    await settleProps();
+
+    expect(errors.length, "摘除未确认必须交出错误").toBeGreaterThan(0);
+    expect(harness.attached("layer"), "没换引擎：不能挂上原生图层").toBe(0);
+    expect(
+      harness.attached("overlay"),
+      "被摘掉的那些必须补回来：否则用户拿到的是「半拆」的旧引擎",
+    ).toBe(overlaysBefore);
+
+    // 恢复之后仍然可交互，并且回传的是**最新**业务数据。
+    // ⚠️ 恢复会**补建**被摘掉的那些 ⇒ 账本末尾是新建的实例，但「谁是簇、谁是单点」的顺序
+    // 由聚合输出决定，写死索引会在恢复语义变化时误报。因此两个都点，断言**两类事件各来一次**。
+    const updated: readonly Station[] = [
+      STATIONS[0],
+      { id: "b", lng: 116.41, lat: 39.92, name: "新对象" },
+      STATIONS[2],
+      { id: "solo", lng: 121.5, lat: 31.2 },
+    ];
+    // 把 engine 改回 markers（等价于用户放弃这次切换）：否则下一次 props 变化会**正确地把切换重试
+    // 一遍**（那正是想要的收敛），旧引擎就被换掉了，验证「旧引擎可用」的窗口也随之关闭。
+    engine.value = "markers";
+    await settleProps();
+    data.value = updated;
+    await settleProps();
+    // 点**最后 3 个**创建过的覆盖物：恢复会补建被摘掉的那一个，因此这一段窗口里既有「补建的实例」
+    // 也有「原来没摘掉的那个」，还可能夹着一个已摘下的（它的监听已随摘除解绑，点了没有反应）。
+    // 断言两类事件各来一次，因此不依赖「谁是簇、谁排在最后」这种实现细节。
+    for (const index of [-1, -2, -3]) harness.clickOverlay(index);
+    const clusterPicks = cluster.emitted("cluster-click");
+    expect(clusterPicks?.length, "恢复后的簇仍可交互").toBe(1);
+    expect(cluster.emitted("item-click")?.length, "恢复后的单点仍可交互").toBe(1);
+    // ⚠️ 用内容断言而不是 ：vitest 的 `toContain` 对对象是**严格相等**
+    // （深比较要 `toContainEqual`），而这里要证明的是「回传的是最新业务数据」而不是同一个引用。
+    const restoredItems = (clusterPicks!.at(-1)![0] as { items: Station[] | null }).items;
+    expect(
+      restoredItems?.find((item) => item.id === "b")?.name,
+      "回传最新业务项（账本在恢复时被重放）",
+    ).toBe("新对象");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 部分摘除失败");
+  });
+
+  it("BMarkerCluster：markers 显隐失败后，下一次收敛把所有 Marker 对齐（P2-2）", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const visible = ref(true);
+    // 同上：两个 Marker 才能观测到「一个成功、一个失败」的部分对齐
+    const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: "markers",
+        zoom: 8,
+        minClusterSize: 3,
+        visible: visible.value,
+      }),
+    ]);
+    expect(harness.attached("overlay"), "两个 Marker").toBe(2);
+    expect(harness.overlayVisibility().every((value) => value)).toBe(true);
+
+    // 让其中**一个** Marker 的 hide 失败（其余成功 ⇒ 部分对齐）
+    harness.failNextOverlayHide(undefined, -2);
+    visible.value = false;
+    await settleProps();
+    expect(errors.length, "显隐失败必须交出错误").toBeGreaterThan(0);
+    expect(
+      harness.overlayVisibility().every((value) => value === false),
+      "失败时不得假装已全部生效",
+    ).toBe(false);
+
+    // 内层不能把「已经改成目标值」当成「已经写成功」：下一次收敛必须把**所有**资源重新对齐
+    data.value = [...STATIONS, { id: "extra", lng: 1, lat: 1 }];
+    await settleProps();
+    expect(
+      harness.overlayVisibility().every((value) => value === false),
+      "重试必须把没写成功的 Marker 补上（内层短路吞掉重试就是这里红）",
+    ).toBe(true);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster markers 显隐重试");
   });
 });

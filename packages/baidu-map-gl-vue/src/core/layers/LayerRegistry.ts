@@ -63,15 +63,19 @@ export interface LayerRecord {
    */
   dispose(): void;
   /**
-   * **替换路径**的严格摘除：解绑业务监听 → 摘除 SDK 资源（**失败会抛**）→ 销账。
+   * **替换路径**的严格摘除：**quiesce（挡业务回调，可恢复）→ 摘除 SDK 资源（失败会抛）→ commit（解绑监听 + 销账）**。
    *
-   * 三步都成功才算完成；任一步失败时**不销账**（记录留在账本里，下一次 `dispose()` /
-   * `detach()` 仍会再试一次），调用方据此**放弃这次替换**并保留旧实例
-   * （重建 / 换引擎时「宁可这次不更新，也不能出现两份同图」）。
+   * 三个阶段缺一不可：
+   *
+   * - **quiesce**：`remove()` 期间 SDK 可能同步派发事件，而资源此刻正在被拆（#22 的口径）；
+   * - **remove 失败 ⇒ 回滚可用性**：`scope.dispose()` 不可逆，先解绑会把失败变成「资源还在图上
+   *   但已经点不动」；挡住回调则失败后关掉门就完全恢复；
+   * - **commit 只在成功后**：失败时**不销账**（记录留在账本里，下一次 `dispose()` / `detach()`
+   *   仍会再试一次），调用方据此**放弃这次替换**并保留旧实例。
    *
    * 与 `dispose()` 的分工是一条硬约束：`removeLayer` 允许「先产生副作用、再抛错」，
-   * 因此**摘除失败时无法判断资源是否还在图上** —— 只有「成功返回」能当作「确认摘掉」。
-   * 替换路径不能复用吞错的 `dispose()`，否则调用方会把「未知」当成「已完成」。
+   * 因此**只有「成功返回」能当作「确认摘掉」**。替换路径不能复用吞错的 `dispose()`，
+   * 否则调用方会把「未知」当成「已完成」。
    */
   detach(): void;
 }
@@ -83,6 +87,15 @@ export interface LayerRegistryInput {
   readonly scope: ResourceScope;
   /** 摘除 SDK 侧资源（`map.removeLayer`）。由调用方闭包捕获 target；重复调用必须安全。 */
   readonly remove: () => void;
+  /**
+   * **摘除期间的业务回调门**（可选）：`detach()` 会在 `remove` 之前打开、之后关闭。
+   *
+   * 存在的理由：`remove()` 可能「副作用发生前抛错」，而 `scope.dispose()` 是**不可逆**的 ——
+   * 「先解绑监听、再摘资源」（#22 的既有顺序）在失败时会把旧实例留成「还在图上但已经点不动」。
+   * 有了这道门，摘除期间业务回调照样不穿透，而失败时旧实例**完全恢复可用**（门关掉即可），
+   * 调用方说的「保留旧实例」因此包含行为，而不只是画面。
+   */
+  readonly quiesce?: (active: boolean) => void;
 }
 
 export interface LayerRegistry {
@@ -157,10 +170,19 @@ export function createLayerRegistry(): LayerRegistry {
         },
         detach() {
           if (disposed) return;
-          // 顺序同上（先解绑、再摘除），但**摘除失败向上抛**，且此时**不销账**：
-          // 记录仍在 `records` 里，下一次 `dispose()` / `detach()` 还能再试着摘掉它。
+          // 两阶段（quiesce → remove → commit）：`scope.dispose()` 不可逆，所以**先不**解绑，
+          // 而是把业务回调挡在门外；只有 `remove()` 成功返回才永久解绑并销账。
+          input.quiesce?.(true);
+          try {
+            input.remove();
+          } catch (error) {
+            // 摘除未确认 ⇒ **回滚可用性**：资源仍在图上，监听也还在（摘除期间只是被门挡住）。
+            // 调用方会放弃这次替换并继续用旧实例 —— 「保留」必须包含行为，不能只保留画面。
+            input.quiesce?.(false);
+            throw error;
+          }
           unbind("layer-detached");
-          input.remove();
+          input.quiesce?.(false);
           disposed = true;
           records.delete(id);
         },

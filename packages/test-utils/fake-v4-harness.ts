@@ -99,6 +99,22 @@ export interface FakeV4Harness {
    * 索引落在**已创建**的覆盖物账本上（负索引语义同 `subscribedEventsOf`：`-1` = 最后一个）。
    */
   clickOverlay(index?: number): void;
+  /**
+   * 注入一次 `removeOverlay` 失败（**摘除之前**抛，覆盖物仍留在图上）。
+   *
+   * 用途是「逐资源摘除」的**部分失败**：`DataLayerManager.clear()` 逐条隔离，注入之后会得到
+   * 「一部分真的摘掉了、剩下的还在」的半拆状态。
+   */
+  failNextRemoveOverlay(error?: Error): void;
+  /**
+   * 注入一次第 `index` 个覆盖物的 `hide()` / `show()` 失败（**写之前**抛，`visible` 不变）。
+   *
+   * 索引口径同 `clickOverlay`（**已创建**的覆盖物账本，负索引从后数）。
+   */
+  failNextOverlayHide(error?: Error, index?: number): void;
+  failNextOverlayShow(error?: Error, index?: number): void;
+  /** 最后一张地图上当前**真的可见**的覆盖物索引（读数用：显隐是否逐资源对齐）。 */
+  overlayVisibility(): boolean[];
   /** 最后一张地图上当前打开的气泡数。 */
   openInfoWindows(): number;
   /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
@@ -426,6 +442,16 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
   fake: FakeBMapV4;
 } {
   const lastMap = () => lastCreatedMap(fake.createdMaps, "fake-v4 harness");
+  /** 取第 `index` 个**创建过**的覆盖物（`-1` = 最后创建的那个）；口径同 `clickOverlay`。 */
+  const overlayAt = (index: number) => {
+    const overlays = fake.createdOverlays;
+    const resolved = index < 0 ? overlays.length + index : index;
+    const overlay = overlays[resolved];
+    if (!overlay) {
+      throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
+    }
+    return overlay;
+  };
   /**
    * 取第 `index` 个**创建过**的图层（`-1` = 最后创建的那个）。
    *
@@ -521,6 +547,18 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         }
         overlay.emit("click");
       },
+      failNextRemoveOverlay: (error) => {
+        lastMap().failNextRemoveOverlay = error ?? new Error("harness: failNextRemoveOverlay");
+      },
+      failNextOverlayHide: (error, index = -1) => {
+        (overlayAt(index) as { failNextHide?: Error | null }).failNextHide =
+          error ?? new Error("harness: failNextOverlayHide");
+      },
+      failNextOverlayShow: (error, index = -1) => {
+        (overlayAt(index) as { failNextShow?: Error | null }).failNextShow =
+          error ?? new Error("harness: failNextOverlayShow");
+      },
+      overlayVisibility: () => lastMap().overlays.map((overlay) => overlay.visible !== false),
       visibleControls: () => lastMap().controls.filter((control) => control.isVisible()).length,
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,

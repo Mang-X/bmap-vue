@@ -100,6 +100,13 @@ export function createNativeClusterEngine<Item>(
   let instanceKey = "";
   let warnedUnresolved = false;
   let warnedIncompleteHit = false;
+  /**
+   * 摘除期间的业务回调门（由账本的严格 `detach()` 打开 / 关闭）。
+   *
+   * 摘除期间 SDK 可能同步派发事件，而这一代实例正在被拆；失败时门关掉，实例**完全恢复可用**
+   * —— 「保留旧引擎」因此包含行为，不只是画面。
+   */
+  let quiescing = false;
 
   const target = { kind: "map" as const, handle: ready.map };
   const nativeLayers = (): ReturnType<typeof nativeLayersOf> => nativeLayersOf(ready.client);
@@ -173,6 +180,10 @@ export function createNativeClusterEngine<Item>(
       kind: "cluster",
       handle: created,
       scope,
+      // 摘除期间挡业务回调（可恢复）
+      quiesce: (active) => {
+        quiescing = active;
+      },
       remove: () => {
         // ⚠️ 顺序：**先摘、后销账**。反过来（先 `handle = null`）时，一次抛错的 `removeLayer`
         // 会把这个引擎的记账清成「已经没有实例了」，于是重试路径（`detach()` 的 `if (!handle) return`）
@@ -231,10 +242,20 @@ export function createNativeClusterEngine<Item>(
 
   function bindEvents(layer: NativeLayerHandle, scope: ResourceScope): void {
     const events = ready.client.driver.events;
-    scope.add(events.on(layer, "click", (event) => handleClick(event)));
+    scope.add(
+      events.on(layer, "click", (event) => {
+        if (quiescing) return;
+        handleClick(event);
+      }),
+    );
     // `change` 是官方给出的聚合结果读数（`{ singles, clusters, zoom }`）：**原样转发**，
     // 不在组件里存一份「当前有几簇」的镜像状态（ownership-first）。
-    scope.add(events.on(layer, "change", (event) => handleChange(event)));
+    scope.add(
+      events.on(layer, "change", (event) => {
+        if (quiescing) return;
+        handleChange(event);
+      }),
+    );
   }
 
   function handleChange(event: unknown): void {

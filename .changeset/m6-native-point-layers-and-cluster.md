@@ -49,8 +49,10 @@
   （`components/data/{clusterEngine,markerClusterEngine,nativeClusterEngine}.ts`）。
   探针新增 `pnpm probe:native-point-cluster`。
 - **`./core` 出口的两处新增（附加、不破坏）**：`LayerRecord.detach()` —— 与 `dispose()` 分工的
-  **严格**释放路径（解绑监听 → 摘资源（失败抛）→ 销账；失败时不销账，调用方放弃这次替换、
-  保留旧实例）；`DataLayerManager.size` —— 「还有几个资源归我管」的读数（摘除失败会按所有权保留，
-  因此计数归零 ⟺ 确认摘净）。两者都是「替换资源前先确认旧资源真的摘掉了」的机器依据。
+  **三阶段严格**释放路径（quiesce 挡业务回调 → 摘资源（失败抛）→ 解绑监听 + 销账；失败时**不解绑
+  也不销账**，调用方放弃这次替换、旧实例完全恢复可用）；`LayerRegistrationInput.quiesce` ——
+  摘除期间的业务回调门（可选，由账本在严格路径上驱动）；`DataLayerManager.size` —— 「还有几个资源
+  归我管」的读数（摘除失败会按所有权保留，因此计数归零 ⟺ 确认摘净）。
+  这些是「替换资源前先确认旧资源真的摘掉了、且失败可恢复」的机器依据。
 - 决策、取证读数与已知限制见 `docs/adr/2026-09-19-native-point-layers-and-cluster.md`；
-  评审修正（PR #108 第一轮的三条阻塞项 + 逐条复现读数）见该 ADR 的末节。
+  两轮评审修正（各自的三条 / 两条阻塞项 + 逐条复现读数）见该 ADR 的末节。
