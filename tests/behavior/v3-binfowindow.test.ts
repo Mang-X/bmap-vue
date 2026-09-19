@@ -554,6 +554,28 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     }
   })
 
+  it('clickclose 只表达用户意图：地图上仍开着它时，归属不得由这条事件清掉', async () => {
+    const el = harness.container()
+    const wrapper = mountTree(
+      () => [h(BInfoWindow, { position: POSITION, open: true, title: 'A' })],
+      el,
+    )
+    await settle()
+    const a = wrapper.findComponent(BInfoWindow)
+    expect(currentInfoWindow()?.options.title, '对照组：A 打开').toBe('A')
+
+    // 真实 4.0 实测：点击那一组回调里，`clickclose` 会先于「读回已经不是它」到达
+    currentInfoWindow()!.emit('clickclose')
+    await settle()
+
+    expect(emittedOf(a, 'update:open'), '用户意图仍要回写一次').toEqual([[false]])
+    expect(currentInfoWindow()?.options.title, '地图上仍然是 A').toBe('A')
+    expect(probeContext.value?.infoWindows?.current(), '归属不得被这条事件清掉').not.toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('读回仍是自己时的 clickclose')
+  })
+
   it('maximize / restore 只转发，不改变「打开」这一维', async () => {
     const el = harness.container()
     const wrapper = mountTree(() => [h(BInfoWindow, { position: POSITION, open: true })], el)
@@ -805,6 +827,60 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
 
     await unmountAndSettle(wrapper)
     harness.assertIdle('缺位置退出竞争后的顶替')
+  })
+
+  it('迟到的旧 close 不得把「已经重新打开」的同一实例从归属里清掉', async () => {
+    const el = harness.container()
+    const openA = ref(true)
+    const openB = ref(false)
+    const wrapper = mountTree(
+      () => [
+        h(BInfoWindow, { position: POSITION, open: openA.value, title: 'A' }, { default: () => 'x' }),
+        h(BInfoWindow, { position: POSITION_B, open: openB.value, title: 'B' }),
+      ],
+      el,
+    )
+    await settle()
+    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const map = lastMap()
+    expect(currentInfoWindow()?.options.title, '对照组：A 先打开').toBe('A')
+
+    // 1) 关闭的副作用立即发生，但 `close` 事件被暂存
+    map.deferInfoWindowCloseEvent = true
+    openA.value = false
+    await settle()
+    expect(map.hasPendingInfoWindowCloseEvent(), '对照组：旧 close 事件还挂着').toBe(true)
+
+    // 2) 同一个实例重新打开
+    openA.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：A 重新打开').toBe('A')
+
+    // 3) 放出第 1 步那条旧 close：地图上现在仍然是 A ⇒ 归属与「开着」都不得被它改掉
+    expect(map.flushInfoWindowCloseEvent(), '对照组：确实放出一条被推迟的 close').toBe(true)
+    await settle()
+    expect(currentInfoWindow()?.options.title, '地图上仍然是重新打开后的 A').toBe('A')
+    expect(probeContext.value?.infoWindows?.current(), '归属必须仍然是 A').not.toBeNull()
+
+    // 4) 仍然开着的实例必须继续重绘（`opened` 被清掉的话这里连帧都不会排）
+    const content = attachedContent()!
+    const iw = currentInfoWindow()!
+    shims.setElementSize(content, { width: 200, height: 80 })
+    frames.flush()
+    const before = iw.redrawCalls
+    shims.resize(content, { width: 260, height: 96 })
+    expect(frames.pending(), '对照组：尺寸变化排了一帧').toBe(1)
+    frames.flush()
+    expect(iw.redrawCalls - before, '仍然开着的实例必须继续重绘').toBe(1)
+
+    // 5) B 打开：A 必须正常收到「被顶掉」（账本里没有 A 的话它收不到）
+    openB.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：B 成为当前气泡').toBe('B')
+    expect(emittedOf(a!, 'update:open'), 'A 必须收到 superseded 回写').toEqual([[false]])
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('迟到的旧 close 事件')
   })
 
   it('被顶掉的 A 卸载时不得关掉 B 的气泡', async () => {

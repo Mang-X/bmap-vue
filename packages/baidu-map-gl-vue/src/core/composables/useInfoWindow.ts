@@ -180,6 +180,17 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     }
   }
 
+  /**
+   * 事件侧同步归属：`opened` 与 Manager 只在**公开读回说「不是我」**时才清。
+   *
+   * 一条 `close` 可能在同一实例**重新打开之后**才迟到（那时地图上仍是它）。
+   */
+  function syncOwnership(context: MapReadyContext, instance: ActiveInstance): void {
+    if (observe(context, instance)) return;
+    instance.opened = false;
+    manager.deactivate(instance.handle);
+  }
+
   /** 当前意图：`wantOpen` 是 `open` 这条 prop；`desired` 还要求有位置（缺位置不满足打开条件）。 */
   function readIntent(): { wantOpen: boolean; positionKey: string | null; desired: boolean } {
     const wantOpen = resolveInfoWindowOpenIntent(props);
@@ -495,15 +506,13 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             scheduleConverge();
             break;
           case "close":
-            instance.opened = false;
-            manager.deactivate(instance.handle);
+            syncOwnership(context, instance);
             emit("close");
             scheduleConverge();
             break;
           case "clickclose":
             // 带来源的用户意图：转发 + 回写一次
-            instance.opened = false;
-            manager.deactivate(instance.handle);
+            syncOwnership(context, instance);
             emit("clickclose", event);
             echoClosed(instance);
             scheduleConverge();

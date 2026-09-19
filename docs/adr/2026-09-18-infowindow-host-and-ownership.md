@@ -70,6 +70,7 @@
 | **desired** | `open`（旧名 `show`）表达的唯一控制意图（`show` 是兼容别名，同一收口） |
 | **observed** | 地图上**实际**开着的是不是这一个 —— 读官方公开的 `Map#getInfoWindow()` 再与 **handle 身份**比对（`driver.overlays.isCurrentInfoWindow()`） |
 | **SDK 事件** | `open` / `close` / `clickclose` / `maximize` / `restore` **原样转发**；前三条同时是**收敛触发**，**不是**第二套业务意图 |
+| **事件侧改归属的前提** | `close` / `clickclose` **不凭事件本身宣告归属**：先读公开读回，读回说「仍是我」就不动 `opened` / Manager（同一实例可能已经重新打开，这条事件不再代表当前事实）。`open` 侧不需要这条判据：事件与 SDK 接管发生在同一处，读回此刻必然已经是它 |
 | **收敛** | 只有三种命令：`desired ∧ ¬observed ⇒ openInfoWindow`；`desired ∧ observed ∧ 位置变了 ⇒ 再开一次`（官方没有 `setPosition`）；`¬desired ∧ observed ⇒ closeInfoWindow`。其余什么都不做 |
 | **缺位置** | 「想开但读不到位置」**不满足打开条件** ⇒ 期望状态是「关」，并按边沿报一次 `BMAP_INVALID_ARGUMENT` |
 | **被同图另一个气泡顶掉** | 前提是它**此刻仍 desired**（已经退出竞争的一方收到的是陈旧账本造成的通知 ⇒ 不回写、也不进入「不抢回来」）；满足前提时：Manager 通知 ⇒ 回写一次 `update:open(false)` + 进入「不抢回来」，直到父级把 `open` 置回 `false` 再置 `true` |
@@ -730,6 +731,7 @@ Fake 的 `bubbleHost` 建模与 `[data-bmap-infowindow-content]` 契约可以单
 | **点地图关闭**（`enableCloseOnClick`）：SDK 自己关 ⇒ 模型收敛 + 回写，且不因为回写而重开 | 同上（`点地图关闭`） |
 | **命令只表达 intent，失败不改事实**：open 命令挂起期间不得提前认领归属（账本不认、也不通知它被顶掉）；close 命令抛错时地图与账本都保持「仍开着」并经 `resource:error` 上报，下一次触发仍会重试（反证两条 ⇒ 各红） | `v3-binfowindow.test.ts`（`打开命令挂起期间不得提前认领归属`、`关闭命令抛错：事实保持不变`） |
 | **陈旧账本造成的顶替通知**：`close` 事件延迟时 Manager 会短暂滞后，已经退出竞争的一方（`open` 已置假，或因缺位置不满足打开条件）不该被当成「被顶掉」——不回写 `update:open(false)`、也不进入「不抢回来」，之后意图恢复必须仍能重新打开（反证：去掉意图判据 ⇒ 两条都红；判据弱化成只看 `open` ⇒ 「缺位置」那条红） | `v3-binfowindow.test.ts`（`迟到的 close 事件造成的陈旧账本…`、`因缺位置退出竞争的 A 同样不该被顶替通知`） |
+| **事件侧不凭事件宣告归属**：迟到的旧 `close` 不得清掉「已经重新打开」的同一实例（否则地图开着 / Manager 空 / `opened=false`：重绘停摆、后续 `superseded` 失效）；`clickclose` 只表达用户意图，归属留给读回与紧随的 `close`（反证：两条分支都退回无条件清 ⇒ 两条都红；只退 `clickclose` ⇒ 只有它红） | `v3-binfowindow.test.ts`（`迟到的旧 close 不得把「已经重新打开」的同一实例从归属里清掉`、`clickclose 只表达用户意图`） |
 | 多窗口互斥、被顶掉者卸载不影响新气泡、多地图隔离、迟到 callback | 同上（`互斥与隔离` 一组） |
 | 一帧一次重绘、不自激、未打开不重绘、选项变化补一次重绘 | 同上（`尺寸与合帧重绘` 一组） |
 | **排队中的重绘在卸载 / 重建时被丢弃**（旧实例不再重绘） | 同上（`排队中的 redraw 在卸载 / 重建时被丢弃`） |
@@ -1000,6 +1002,41 @@ B 的模型也仍是 `open=true`（prop 没变 ⇒ 不会自愈）；外部 SDK 
 - 回归覆盖**两个症状**：不该出现的那条 `update:open(false)`，以及「A 必须能重新打开」。
   第四轮那类「陈旧账本」的教训在这里复用了同一条纪律：**任何『我替上游宣布事实』的写入点都要先问
   『此刻的意图是什么』**。
+
+### 第十四轮（`05c5685` → 本轮）：事件侧也不许凭事件宣告归属（**真实 AK 实测**）
+
+评审的 P1：同一实例「关闭后重新打开」时，若旧 `close` 事件这时才迟到，`close` 分支会无条件
+`opened = false` + `manager.deactivate()`，而地图此刻仍然开着它 ⇒ 最终 **map=A / Manager=null /
+opened=false**。后果不止账本不一致：B 打开时 Manager 没有 previous ⇒ A 收不到 `superseded`；
+`scheduleRedraw()` 也因为 `opened=false` 连帧都不排（重绘停摆）。
+
+**修法**：把「清归属」交给公开读回 —— 新增 `syncOwnership()`，`close` / `clickclose` 两条分支
+先读回，仍是自己就不动；事件照转、用户意图的回写照发。
+
+**为什么这条判据在真实 SDK 上成立**（本机实测 · 真实 AK · headless Chromium · 4.0）：
+
+| 问题 | 读数 |
+| --- | --- |
+| `closeInfoWindow()` 返回后**同一 tick** 的 `getInfoWindow()` | `null`（`sameAsIw=false`） |
+| `close` 回调里**同步**读到的 `getInfoWindow()` | `null`（回调距调用 0.1ms） |
+| 300ms 后 | 仍 `null` |
+| 「同一 tick 关掉再重开」的事件顺序 | `close+0.2` → `open+0.3`；`close` 回调里「读回 === 自己」的条数 = **0**（真实运行时构造不出「迟到的旧 close」） |
+| 点真实关闭按钮那一组回调 | 第 1 条 `clickclose` 里读回**仍是自己**（`isNull=false`）→ 0.1ms 后的 `close` 里已是 `null` → 随后 5 条 `clickclose` 都是 `null` |
+
+⇒ 关方向的读回**没有**开方向那种滞后（开方向实测是「同一 tick 仍为 `null`、~100ms 才变成该实例」）：
+真关闭在事件派发时读回已经是 `null`，所以「读回仍是自己」只可能出现在陈旧事件上，用读回当判据
+不会挡住正常路径。点击路径的第 1 条 `clickclose` 恰好是「读回仍是自己」——按契约它只表达用户意图
+（回写一次），归属留给紧随其后的 `close` 收口。
+
+**回归**：
+
+- `迟到的旧 close 不得把「已经重新打开」的同一实例从归属里清掉` —— 五步（关闭副作用立即发生 →
+  事件暂存 → 重新打开 → 放出旧 `close` → 断言地图 / 归属 / 重绘 / 后续 supersede 四件事）；
+- `clickclose 只表达用户意图：地图上仍开着它时，归属不得由这条事件清掉` —— 直接派发一条 `clickclose`，
+  读回仍是自己 ⇒ 回写照发、归属不动。
+
+**单点反证**：两条分支都退回无条件清 ⇒ 两条用例都红；只让 `clickclose` 退回无条件清 ⇒ 只有它那条红
+（两处判据各自都有判别力，不是顺手加的一行）。
 
 ### 本轮修正引入的自我检查
 
