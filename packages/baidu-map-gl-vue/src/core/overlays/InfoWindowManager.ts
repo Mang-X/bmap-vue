@@ -93,8 +93,8 @@ export function createInfoWindowManager(): InfoWindowManager {
         displaced.onSuperseded();
       } catch (error) {
         // 通知失败**不得**打断顶替流程：地图已经切到新的那一个了，回滚当前项只会让账本与地图相反。
-        // 但也不静默：这条回调里出错意味着某个气泡的状态机卡在过去（它自己会经 `resource:error`
-        // 报一次，这里留一条兜底痕迹，便于区分「没有通知」与「通知里抛了」）。
+        // 但也不静默：气泡自己会经 `resource:error` 报一次，这里留一条兜底痕迹，
+        // 便于区分「没有通知」与「通知里抛了」。
         logger.warn(
           `InfoWindowManager.activate: 通知被顶掉的气泡失败（顶替已经完成）: ${
             (error as Error)?.message ?? String(error)

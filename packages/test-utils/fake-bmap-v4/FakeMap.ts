@@ -197,14 +197,14 @@ export class FakeV4Map extends FakeV4EventTarget {
    */
   failNextCenterAndZoom: Error | null = null
   /**
-   * 测试故障注入：让**下一次** `openInfoWindow` 抛错（用后即清）。
-   *
-   * 用来驱动「命令同步失败」这条路径（`useInfoWindow` 的 `command-failed`）：真实 SDK 的
-   * `map.openInfoWindow()` 会在内部访问地图与气泡管理器，抛错可能发生在资源已经登记之后，
-   * 也可能是参数/权限问题直接失败。这条路径**不会有** `open` 回调来还账，因此调用方必须
-   * 自己冲销它在飞账（否则残留计数会把后续一次**外部**打开归错类）。
+   * 测试故障注入：让**下一次** `openInfoWindow` 抛错（用后即清）。抛在接管之前 ⇒ 没有 `open` 回调。
    */
   failNextOpenInfoWindow: Error | null = null
+  /**
+   * 测试故障注入：让**下一次** `closeInfoWindow` 抛错（用后即清）。抛在关闭之前 ⇒ 气泡仍开着，
+   * 也没有 `close` 回调。
+   */
+  failNextCloseInfoWindow: Error | null = null
 
   /* ------------------------------------------------------------------ 覆盖物 */
 
@@ -345,8 +345,12 @@ export class FakeV4Map extends FakeV4EventTarget {
   /** 官方语义：关闭本张地图**当前**打开的气泡（不接收实例参数）。 */
   closeInfoWindow(): void {
     this.callLog.push('closeInfoWindow')
-    // 副作用照常**立即**发生（真机同一 tick 里 `openInfoWindow()` 之后 `closeInfoWindow()` 是
-    // no-op，那也是「副作用立即发生」的一种：当时没有当前气泡可关）。
+    if (this.failNextCloseInfoWindow) {
+      const error = this.failNextCloseInfoWindow
+      this.failNextCloseInfoWindow = null
+      throw error
+    }
+    // 副作用立即发生（没有当前气泡时是 no-op）
     const closed = this.applyInfoWindowClose()
     if (this.deferInfoWindowCloseEvent && closed) {
       // **只有事件**被推迟：记下当时被关掉的那个实例，等用例放行时再派发它的 `close`

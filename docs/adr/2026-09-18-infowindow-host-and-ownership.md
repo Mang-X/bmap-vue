@@ -1,4 +1,4 @@
-# ADR 2026-09-18：BInfoWindow 的 detached host、五相位状态机与每地图归属
+# ADR 2026-09-18：BInfoWindow 的 detached host、ownership/reconcile 与每地图归属
 
 - 状态：已接受（Accepted）
 - 日期：2026-09-18
@@ -16,7 +16,6 @@
   第二类同样不走 `OverlaySpec` 的组件 —— **信息窗不是「加到地图上的覆盖物」**（打开 / 关闭是
   Map 级 API，`add` / `remove` 对它必须抛错）。两条限制指向同一个扩展点，按需在 #33 添加。
 - 相关：`packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue`、
-  `packages/baidu-map-gl-vue/src/core/overlays/infoWindowMachine.ts`、
   `packages/baidu-map-gl-vue/src/core/overlays/InfoWindowManager.ts`、
   `packages/baidu-map-gl-vue/src/core/overlays/InfoWindowSpec.ts`、
   `packages/baidu-map-gl-vue/src/core/composables/useInfoWindow.ts`、
@@ -587,7 +586,7 @@ open → sdk-open → intent(false) → intent(true) → sdk-open     （closeOu
 
 | 维度 | 参考实现（v4 `InfoWindow.tsx`） | 本库 | 结论 |
 | --- | --- | --- | --- |
-| 生命周期 | 一个 `useEffect`：按构造期 props 指纹重建、按 `open` 调 `map.openInfoWindow()`，`close` 只在卸载时调一次 | 五相位状态机 + 每实例一份 scope | **本库更严**：参考实现的 `open` 变 `false` **不会关闭**已经打开的气泡 |
+| 生命周期 | 一个 `useEffect`：按构造期 props 指纹重建、按 `open` 调 `map.openInfoWindow()`，`close` 只在卸载时调一次 | 每实例一份 scope：按构造期 props 指纹重建，每个触发点跑到一次 desired/observed 收敛（官方没有 `setPosition`，位置变了就重开） | **本库更严**：参考实现的 `open` 变 `false` **不会关闭**已经打开的气泡 |
 | 双向同步 | 没有任何 SDK → props 的回写 | `update:open` + `open` / `close` 事件 + 回环抑制 | **本库更严** |
 | 归属 / 多气泡 | 无（同页两个气泡互相不知道） | 每地图 `InfoWindowManager` + `superseded` 通知 | **本库更严** |
 | 内容宿主 | v4 用 `content: string \| HTMLElement`，**不**渲染 `children`；v1 用 `document.createElement` + `ReactDOM.render(children, host)` 且**从不 unmount** | detached host + Vue Teleport（拥有渲染子树、卸载即收起） | 同源（v1 的思路）+ 修掉 v1 的泄漏 |

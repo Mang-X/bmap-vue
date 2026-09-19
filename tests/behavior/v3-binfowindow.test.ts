@@ -435,6 +435,84 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     harness.assertIdle('迟到的移动 open')
   })
 
+  it('打开命令挂起期间不得提前认领归属（open 是异步生效的）', async () => {
+    const el = harness.container()
+    const openA = ref(false)
+    const openB = ref(false)
+    const wrapper = mountTree(
+      () => [
+        h(BInfoWindow, { position: POSITION, open: openA.value, title: 'A' }),
+        h(BInfoWindow, { position: POSITION_B, open: openB.value, title: 'B' }),
+      ],
+      el,
+    )
+    await settle()
+    const [a] = wrapper.findAllComponents(BInfoWindow)
+    const map = lastMap()
+
+    // A 的打开异步生效 ⇒ 命令已发出、但地图上还没有它
+    map.deferInfoWindowOpen = true
+    openA.value = true
+    await settle()
+    expect(map.hasPendingInfoWindow(), '对照组：A 的打开请求被挂起').toBe(true)
+    expect(
+      probeContext.value?.infoWindows?.current(),
+      '命令发出不等于已经是当前项 ⇒ 账本此时不应认 A',
+    ).toBeNull()
+
+    // B 打开：A 从未真正打开过 ⇒ 不该收到 superseded
+    map.deferInfoWindowOpen = false
+    openB.value = true
+    await settle()
+    expect(currentInfoWindow()?.options.title, '对照组：B 是当前气泡').toBe('B')
+    expect(emittedOf(a!, 'update:open'), 'A 从未实际打开过 ⇒ 不该被通知顶掉').toHaveLength(0)
+    expect(emittedOf(a!, 'close')).toHaveLength(0)
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('挂起的打开不提前认领归属')
+  })
+
+  it('关闭命令抛错：事实保持不变，且下一次触发仍会重试', async () => {
+    const el = harness.container()
+    const open = ref(true)
+    const position = ref(POSITION)
+    const errors: Array<{ code?: string }> = []
+    const Probe = defineComponent({
+      setup() {
+        const ctx = useRequiredMapContext()
+        ctx.events.on('resource:error', (payload) => {
+          errors.push((payload as { error?: { code?: string } })?.error ?? {})
+        })
+        return () => null
+      },
+    })
+    const wrapper = mountTree(
+      () => [h(BInfoWindow, { position: position.value, open: open.value }), h(Probe)],
+      el,
+    )
+    await settle()
+    const map = lastMap()
+    const manager = () => probeContext.value?.infoWindows
+    expect(manager()?.current(), '对照组：已经打开').not.toBeNull()
+
+    map.failNextCloseInfoWindow = new Error('close failed')
+    open.value = false
+    await settle()
+
+    expect(errors.length, '失败必须上报（不静默）').toBeGreaterThan(0)
+    expect(currentInfoWindow(), '失败保持事实不变：地图上仍开着').toBeTruthy()
+    expect(manager()?.current(), '失败保持事实不变：账本仍认它是当前项').not.toBeNull()
+
+    // 下一次触发（这里用位置变化）仍会重试关闭，并且这次成功
+    position.value = POSITION_B
+    await settle()
+    expect(currentInfoWindow(), '重试后真的关掉了').toBeNull()
+    expect(manager()?.current()).toBeNull()
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('关闭失败后重试')
+  })
+
   it('用户点关闭按钮（clickclose）的四组事件形状：原样转发 + 回写一次 update:open(false)', async () => {
     // 四组形状模拟真实 4.0 的不同打开次数：`close` 恰好一条、`clickclose` 随打开次数累积，顺序不固定
     const shapes: Array<{ tag: string; shape: Array<'close' | 'clickclose'> }> = [
@@ -607,15 +685,15 @@ describe('多窗口互斥 / 多地图隔离 / 迟到 callback', () => {
     expect(map.hasPendingInfoWindow(), '对照组：A 的打开请求已被挂起').toBe(true)
     expect(currentInfoWindow(), '对照组：地图上还没有气泡（A 尚未接管）').toBeNull()
 
-    // 2) B 同步打开并接管 ⇒ A 被顶掉：收到通知并进入「不抢回来」
+    // 2) B 同步打开并接管：A 的打开还挂起、从未成为当前项 ⇒ 不该通知 A 被顶掉
     map.deferInfoWindowOpen = false
     openB.value = true
     await settle()
     expect(currentInfoWindow()?.options.title, '对照组：B 是当前气泡').toBe('B')
-    expect(emittedOf(a!, 'update:open'), '对照组：A 收到「被顶掉」的通知').toEqual([[false]])
+    expect(emittedOf(a!, 'update:open'), 'A 从未实际打开过 ⇒ 不该被通知顶掉').toHaveLength(0)
 
-    // 3) ★ A 的旧请求这时才真正接管地图。按 ownership 契约，本库只回答「现在是谁」：
-    //    A 是当前项、且 A 的 desired 也是「开」⇒ 一致，不做任何命令；B 则被如实通知。
+    // 3) ★ A 的旧请求这时才真正接管地图：A 成为当前项并顶掉实际开着的 B。
+    //    按 ownership 契约这里只回答「现在是谁」—— A 的 desired 也是「开」⇒ 不再下发命令。
     const opensBefore = map.callLog.filter((c) => c === 'openInfoWindow').length
     const closesBefore = map.callLog.filter((c) => c === 'closeInfoWindow').length
     expect(map.flushInfoWindowOpen(), '对照组：确实有一次被放行的接管').toBe(true)
@@ -1054,7 +1132,7 @@ describe('重复挂载与实例重建：账目与释放', () => {
 /* ------------------------------------------------------------------- 兼容与 SSR */
 
 describe('唯一主模型与兼容别名', () => {
-  it('`open` 是主状态；`show` 是兼容别名，两者都驱动同一个状态机', async () => {
+  it('`open` 是主状态；`show` 是兼容别名，两者表达同一个打开意图', async () => {
     const el = harness.container()
     const show = ref(true)
     const wrapper = mountTree(

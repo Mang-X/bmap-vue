@@ -216,10 +216,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       if (observed && instance.lastOpenPositionKey === positionKey) return;
       if (!position || positionKey === null) return;
       try {
+        // 命令只表达 intent：`opened` 与 Manager 的归属都由 SDK 事件更新（打开是异步生效的）
         context.client.driver.overlays.openInfoWindow(context.map, instance.handle, position);
-        // 打开成功之后才声明归属
-        manager.activate(instance.handle);
-        instance.opened = true;
         instance.lastOpenPositionKey = positionKey;
       } catch (error) {
         options.reportError(toBMapError(error));
@@ -229,18 +227,13 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (!observed) return;
     // 刚回报过用户关闭就不再补关（读回值在关闭后仍会短暂为旧值）
     if (instance.echoedClosed) return;
+    // 发起关闭后「上次打开请求的位置」不再有意义
+    instance.lastOpenPositionKey = null;
     try {
       context.client.driver.overlays.closeInfoWindow(instance.handle);
     } catch (error) {
-      logger.warn(
-        `useInfoWindow(${component}).close: 关闭气泡失败: ${
-          (error as Error)?.message ?? String(error)
-        }`,
-      );
-    } finally {
-      manager.deactivate(instance.handle);
-      instance.opened = false;
-      instance.lastOpenPositionKey = null;
+      // 失败只上报：事实（Manager 归属 / observed）保持不变，下一次触发仍会重试
+      options.reportError(toBMapError(error));
     }
   }
 

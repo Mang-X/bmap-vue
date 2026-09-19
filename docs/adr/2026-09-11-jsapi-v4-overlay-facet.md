@@ -221,7 +221,7 @@ updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undef
 - 不实现 Control / Layer / Service / Panorama Facet（#22~#23）。
 - **不实现 Vue Teleport 与 InfoWindow 状态机**（issue 明确列为非目标）。
   > 已被 [ADR 2026-09-18](./2026-09-18-infowindow-host-and-ownership.md) 取代：detached host + Teleport、
-  > 五相位状态机与每地图归属由 issue #32 交付。本 ADR 关于 `InfoWindow` **Driver 侧**的决策
+  > ownership/reconcile 模型与每地图归属由 issue #32 交付。本 ADR 关于 `InfoWindow` **Driver 侧**的决策
   > （专用 API、`recreate` / `unsupported` 分类、归属账本）**仍然有效**，是被取代那条的边界。
 - **不靠 deep watch / `stableStringify` 更新属性**：更新一律走字段级 setter 或显式重建。
 - 不覆盖全部官方覆盖物：`GroundPoint` / `Symbol` / `PlaceDetail` / `PointCollection` 不在本 issue

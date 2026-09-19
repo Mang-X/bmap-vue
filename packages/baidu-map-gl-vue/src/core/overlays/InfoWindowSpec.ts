@@ -60,7 +60,7 @@ export interface InfoWindowProps {
 
 /**
  * 字段的落地方式。前两个与 Driver 描述符的分类一一对应，`state` 是气泡独有的
- * 「由状态机驱动、不进属性描述符」这一类。
+ * 「由打开意图驱动、不进属性描述符」这一类。
  */
 export type InfoWindowFieldUpdate = "state" | "options" | "recreate";
 
@@ -85,7 +85,7 @@ export type InfoWindowDescriptorKeys<Props> = Partial<
  * | prop | 策略 | 依据（`OVERLAY_DESCRIPTORS["info-window"]`） |
  * | --- | --- | --- |
  * | `position` | `state` | 描述符里是 `unsupported(...)`：位置由 `openInfoWindow(map, iw, position)` 提供 |
- * | `open` / `show` | `state` | 不是 SDK 属性，由状态机消费 |
+ * | `open` / `show` | `state` | 不是 SDK 属性，只在打开意图里消费 |
  * | `title` / `width` / `height` | `options` | `mutateBy("setTitle"/"setWidth"/"setHeight")` ⇒ `mutable` |
  * | `enableMaximize` / `enableAutoPan` / `enableCloseOnClick` | `options` | `toggleBy([...])` ⇒ `mutable` |
  * | `offset` | `recreate` | 官方只有 `getOffset()`，**没有** `setOffset` ⇒ 构造期属性 |
