@@ -6,6 +6,7 @@
  * - 根入口从此文件导出,避免从 `*.vue` 导出类型(TS 无法在纯 tsc 下解析 .vue 具名命名导出)。
  * - 精确的组件实例类型仍由 Volar 从 SFC 解析。
  */
+import type { InfoWindowProps } from "../core/overlays/InfoWindowSpec";
 
 /** BMapMask 掩膜显示区域 */
 export type MapMaskShowRegion = "inside" | "outside";
@@ -135,17 +136,17 @@ export interface BMarkerProps {
   icon?: MarkerIcon;
 }
 
-export interface BInfoWindowProps {
-  position?: { lng: number; lat: number };
-  title?: string;
-  width?: number;
-  height?: number;
-  offset?: { x: number; y: number };
-  open?: boolean;
-  show?: boolean;
-  enableMaximize?: boolean;
-  enableAutoPan?: boolean;
-  enableCloseOnClick?: boolean;
+/**
+ * BInfoWindow 的公开属性。字段与逐字段语义的声明点在 `core/overlays/InfoWindowSpec.ts`
+ * （含「每个属性怎么落地」的策略表），这里只暴露公开类型名。
+ */
+export interface BInfoWindowProps extends InfoWindowProps {
+  // 字段全部来自 `InfoWindowProps`（单一事实源，见上面的注释）。
+  //
+  // ⚠️ 这里**必须**保持「多行花括号」的写法：`tests/behavior/v3-overlay-suite.test.ts` 的
+  // `readPropsKeys()` 用 `([\s\S]*?)\n\}` 切接口正文（为的是不把行内对象类型 `{ lng, lat }`
+  // 当成分隔符）。写成单行 `{}` 会让那个非贪婪匹配**继续往后吞**，把紧随其后的接口正文并进
+  // 这一次匹配里 —— 结果是那几个接口在解析表里消失、声明面门禁误报（PR #101 合并 #31 后实测）。
 }
 
 /**

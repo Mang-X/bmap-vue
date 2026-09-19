@@ -31,6 +31,7 @@ import { ResourceScope } from "../lifecycle/ResourceScope";
 import { createMapEventBus, type MapEventBus, type InternalMapEvents } from "../events/MapEventBus";
 import { createFrameScheduler, type FrameScheduler } from "../scheduler/FrameScheduler";
 import { createOverlayRegistry, type OverlayRegistry } from "../overlays/OverlayRegistry";
+import { createInfoWindowManager, type InfoWindowManager } from "../overlays/InfoWindowManager";
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
 import { createPluginRegistry, type PluginRegistry } from "../plugins/PluginRegistry";
 import type { BMapClientContext } from "../context/client";
@@ -102,6 +103,8 @@ export class MapRuntime {
    */
   readonly layers: LayerRegistry = createLayerRegistry();
   readonly controls: OverlayRegistry = createOverlayRegistry();
+  /** 气泡账本（M5-INFOWINDOW / #32）：每张地图一份，用于气泡之间「被顶掉」的通知。 */
+  readonly infoWindows: InfoWindowManager = createInfoWindowManager();
   readonly plugins: PluginRegistry;
 
   private waiters = new Set<Waiter>();
@@ -500,6 +503,8 @@ export class MapRuntime {
       /* ignore */
     }
     this.overlays.dispose();
+    // 气泡账本先清记账：真正的关闭由每个 BInfoWindow 自己的释放路径完成（组件先于 Map 卸载）
+    this.infoWindows.dispose();
     // 4. destroy map
     const currentClient = this.client.value;
     const currentMap = this.map.value;

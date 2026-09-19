@@ -353,6 +353,8 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
   open = false
   /** 最近一次「地图侧打开」传入的位置（`map.openInfoWindow(iw, point)`）。 */
   openedAt: FakeV4Point | null = null
+  /** 当前承载它的地图（被接管时记下、关闭时清掉），供实例级 `close()` 使用。 */
+  enclosingMap: FakeV4Map | null = null
   width: number | null = null
   height: number | null = null
   redrawCalls = 0
@@ -442,8 +444,13 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
     this.emit('open')
   }
 
+  /** 实例级关闭：挂在地图上就交给地图关（摘掉「当前气泡」并派发 `close`）。 */
   close(): void {
     this.callLog.push('close')
+    if (this.enclosingMap?.infoWindow === this) {
+      this.enclosingMap.closeInfoWindow()
+      return
+    }
     this.open = false
     this.emit('close')
   }

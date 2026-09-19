@@ -11,6 +11,7 @@ import type { InjectionKey, ShallowRef } from "vue";
 import type { BMapClient } from "../../client/types";
 import type { MapHandle } from "../../driver/types/handles";
 import type { OverlayRegistry } from "../overlays/OverlayRegistry";
+import type { InfoWindowManager } from "../overlays/InfoWindowManager";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
 import type { MapEventBus } from "../events/MapEventBus";
 import type { LayerRegistry } from "../layers/LayerRegistry";
@@ -97,6 +98,13 @@ export interface MapContext extends MapRuntimeShape {
    * 组件自持的账本（见 `useLayerResource`）。
    */
   readonly layers?: LayerRegistry;
+  /**
+   * 这张地图的气泡账本（M5-INFOWINDOW / issue #32）：`current()` 是当前打开的那个，
+   * `isCurrent(h)` 是同一判定的便捷形式，`size` 是存活实例数（不是「此刻显示几个」）。
+   *
+   * 可选；不提供时气泡组件退化为组件自持的账本（同页多个 `<BInfoWindow>` 不再互相察觉）。
+   */
+  readonly infoWindows?: InfoWindowManager;
   readonly controls?: unknown;
   readonly plugins: unknown;
 }

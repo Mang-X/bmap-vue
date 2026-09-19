@@ -1220,6 +1220,7 @@ const context: MapContext = {
   events: runtime.events,
   scheduler: runtime.scheduler,
   overlays: runtime.overlays,
+  infoWindows: runtime.infoWindows,
   layers: runtime.layers,
   controls: runtime.controls,
   plugins: runtime.plugins,

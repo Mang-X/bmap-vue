@@ -2,7 +2,8 @@
  * 集中弃用别名表（M5-VECTORS / issue #31）
  *
  * 迁移前「兼容旧名字」是散在各组件里的一行行手写代码：`BMarker` 的
- * `deps.emit("drag-end", event)` 就是唯一存活的例子，`BInfoWindow` 的 `show` 也是同类。
+ * `deps.emit("drag-end", event)` 与 `BInfoWindow` 里手写的 `show` 告警都是同类
+ * （#31 收掉前者、#32 收掉后者，两边现在都只读本表）。
  * 那种写法有三个必然的后果：**没有稳定 code**（无法在文档/日志里指认）、
  * **没有统一文案**、**没有人负责去重**（同一次会话里同一个警告刷屏）。
  *
@@ -75,11 +76,22 @@ export interface OverlayEventAlias {
 }
 
 /**
- * prop 别名表。当前只有一项——GroundOverlay 的角点组合在 v3 改成单一的 `bounds`
- * （与上游 `createGroundOverlay(bounds, options)` 同形）。留着它不是为了「以后可能有用」：
- * 它承载的是**已经发布过的 prop 名**，删掉即等于让老代码静默失效。
+ * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）与 `BInfoWindow` 的 `show`
+ * （v3 起用唯一的打开主状态 `open`）。承载的是已发布过的 prop 名，删掉会让老代码静默失效。
+ *
+ * 消费者是 `useOverlaySpec` 与 `useInfoWindow`（信息窗不走 `OverlaySpec`），共用本表与
+ * `warner.ts`。
  */
 export const OVERLAY_PROP_ALIASES: readonly OverlayPropAlias[] = Object.freeze([
+  {
+    target: "prop",
+    code: DEPRECATED_PROP_ALIAS_CODE,
+    kind: "info-window",
+    canonical: "open",
+    deprecated: ["show"],
+    note: "主状态统一为 open（v2 沿用 v-model:show，本版仍会读取，但将在后续大版本移除）",
+    derive: (props) => props.show,
+  },
   {
     target: "prop",
     code: DEPRECATED_PROP_ALIAS_CODE,

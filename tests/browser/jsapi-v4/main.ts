@@ -117,6 +117,23 @@ async function until<T>(
   }
 }
 
+/**
+ * 等一条事件流**停下来**：直到 `quietMs` 内没有新事件，或到 `maxMs` 上限。
+ *
+ * 「读一个事件序列」的检查都需要它：只等某个状态成立（例如「地图上没有当前气泡」）之后，
+ * SDK 可能还在继续派发；此时去点数会把**半截序列**当成最终形状
+ * （`infowindow-close-button-pair` 第一次接上时就栽在这里）。
+ */
+async function settleEvents<T>(marks: T[], quietMs: number, maxMs: number): Promise<T[]> {
+  const started = performance.now();
+  let seen = marks.length;
+  for (;;) {
+    await sleep(quietMs);
+    if (marks.length === seen || performance.now() - started > maxMs) return marks;
+    seen = marks.length;
+  }
+}
+
 /* ------------------------------------------------------------------ 未处理异常 */
 
 const unhandled: SmokeUnhandledEntry[] = [];
@@ -408,7 +425,20 @@ interface Mounted {
   ready: Promise<unknown>;
   treeErrors: unknown[];
   flags: Record<string, boolean>;
-  infoRef: { value: unknown };
+  /**
+   * 气泡的受控打开状态（`v-model:open`）。
+   *
+   * `infowindow-visible` 检查要用它证明**关闭**这一半：只测「打开可见」的话，
+   * 「关了以后还留在地图上」这类缺陷（正是 #32 的 detached host 要防的）永远测不出来。
+   */
+  infoOpen: { value: boolean };
+  /**
+   * `<BInfoWindow>` 回写的 `update:open` 序列。
+   *
+   * `infowindow-close-button-pair` 用它证明「用户点了关闭按钮」这件事**真的到达了本库模型**
+   * （而不只是 SDK 那边把气泡关了）。
+   */
+  infoEvents: { updates: boolean[] };
   autoRef: { value: unknown };
   searchRef: { value: unknown };
   detailRef: { value: unknown };
@@ -457,7 +487,7 @@ function mountTree(): Mounted {
   });
   const treeErrors: unknown[] = [];
   const mapRef = ref<unknown>(null);
-  const infoRef = ref<unknown>(null);
+  const infoOpen = ref(true);
   const autoRef = ref<unknown>(null);
   const searchRef = ref<unknown>(null);
   const detailRef = ref<unknown>(null);
@@ -468,6 +498,7 @@ function mountTree(): Mounted {
     overviewAnchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
   });
   const uiKit = reactive({ placeUid: "" });
+  const infoEvents: Mounted["infoEvents"] = { updates: [] };
   const uiKitEvents: Mounted["uiKitEvents"] = {
     searchLoad: [],
     searchSelect: [],
@@ -510,7 +541,18 @@ function mountTree(): Mounted {
       nodes.push(
         h(
           BInfoWindow,
-          { ref: infoRef, open: true, position: POINT, title: "smoke" },
+          {
+            open: infoOpen.value,
+            position: POINT,
+            title: "smoke",
+            // 受控父级的常规用法：接到回写就把自己的状态跟上（`v-model:open` 的语义）。
+            // 少了这一步，「用户点了关闭按钮」之后本库会按**仍然是 true 的**意图把气泡重新打开
+            // —— 那样这条检查断言的「最终地图上没有气泡」永远不成立。
+            "onUpdate:open": (value: boolean) => {
+              infoEvents.updates.push(value);
+              infoOpen.value = value;
+            },
+          },
           { default: () => "smoke-infowindow-content" },
         ),
       );
@@ -658,7 +700,8 @@ function mountTree(): Mounted {
     treeErrors,
     flags,
     controlProps,
-    infoRef,
+    infoOpen,
+    infoEvents,
     autoRef,
     searchRef,
     detailRef,
@@ -679,6 +722,19 @@ function uiSignature(container: HTMLElement): string {
     .map((el) => `${el.tagName}.${el.className}`)
     .sort()
     .join("|");
+}
+
+/**
+ * 气泡内容宿主的**直接读数**（M5-INFOWINDOW / #32）。
+ *
+ * `<BInfoWindow>` 的组件根是 `<Teleport>`，因此 `$el` 不再指向内容节点 —— 宿主页/探针要从
+ * 开放出来的 DOM 契约 `[data-bmap-infowindow-content]` 定位。这条读数直接回答两个问题：
+ * 「内容在不在文档里」（可见性）与「关闭/卸载后有没有残留」（`null`）。
+ */
+function contentHost(): HTMLElement | null {
+  const nodes = document.querySelectorAll<HTMLElement>("[data-bmap-infowindow-content]");
+  for (const node of nodes) if (node.isConnected) return node;
+  return null;
 }
 
 interface RawCallRecorder {
@@ -1192,9 +1248,13 @@ const CHECKS: Record<string, CheckImpl> = {
         "BMAP_INFOWINDOW_NOT_OPEN",
         "地图的当前气泡",
       );
-      const shell = (ctx.mounted.infoRef.value as { $el?: HTMLElement } | null)?.$el;
-      assertSmoke(shell, "HARNESS_NO_INFOWINDOW_SHELL", "拿不到 <BInfoWindow> 的内容节点");
-      const style = getComputedStyle(shell!);
+      const host = contentHost();
+      assertSmoke(
+        host,
+        "BMAP_INFOWINDOW_NO_CONTENT_HOST",
+        "打开后定位不到内容宿主（`[data-bmap-infowindow-content]`）——detached host 没有被 SDK 挂进文档",
+      );
+      const style = getComputedStyle(host!);
       assertSmoke(
         style.display !== "none" && style.visibility !== "hidden",
         "BMAP_INFOWINDOW_HIDDEN",
@@ -1202,12 +1262,127 @@ const CHECKS: Record<string, CheckImpl> = {
         { display: style.display, visibility: style.visibility },
       );
       assertSmoke(
-        (shell!.textContent ?? "").includes("smoke-infowindow-content"),
+        (host!.textContent ?? "").includes("smoke-infowindow-content"),
         "BMAP_INFOWINDOW_EMPTY",
         "气泡内容节点里没有渲染出内容",
-        { text: shell!.textContent },
+        { text: host!.textContent },
       );
-      return { text: shell!.textContent };
+      // 宿主必须由 **SDK** 接管（内容节点由 SDK 持有、渲染子树由 Vue Teleport 拥有）：
+      // 它不该还停在地图容器的顶层（那是本库创建它时的位置）
+      assertSmoke(
+        host!.parentElement !== ctx.mounted.container(),
+        "BMAP_INFOWINDOW_HOST_NOT_MOVED",
+        "内容宿主仍停在地图容器顶层：SDK 没有接管它（detached host 未生效）",
+        { parentClass: host!.parentElement?.className ?? null },
+      );
+      const parentWhenOpen = host!.parentElement;
+
+      // **关闭**这一半：只测「打开可见」的话，「关了以后还留在地图上」永远测不出来。
+      // 这里读的是**本库的承诺**：关闭命令下发给地图级 API 之后，地图上不再有当前气泡。
+      ctx.mounted.infoOpen.value = false;
+      await nextTick();
+      await until(
+        () => {
+          const raw = ctx.mounted.raw();
+          const getInfoWindow = raw.getInfoWindow as undefined | (() => unknown);
+          const current = typeof getInfoWindow === "function" ? getInfoWindow.call(raw) : null;
+          return current ? null : true;
+        },
+        5_000,
+        "BMAP_INFOWINDOW_NOT_CLOSED",
+        "气泡关闭",
+      );
+      assertSmoke(
+        getComputedStyle(host!).display === "none" ||
+          !host!.isConnected ||
+          host!.parentElement !== parentWhenOpen,
+        "BMAP_INFOWINDOW_RESIDUE",
+        "关闭后内容宿主仍然可见（既没有随 SDK 的容器撤下，也没有被隐藏）",
+        { connected: host!.isConnected, display: getComputedStyle(host!).display },
+      );
+      return { text: host!.textContent, closed: true };
+    },
+  },
+
+  /**
+   * 点关闭按钮的事件形状与收敛（M5-INFOWINDOW / #32）：断言 `close` 恰好一条、
+   * `clickclose` 至少一条、且本库模型收敛为关；具体条数与顺序作为读数带回报告。
+   */
+  "infowindow-close-button-pair": {
+    async run(ctx) {
+      ctx.mounted.flags.info = true;
+      ctx.mounted.infoOpen.value = true;
+      ctx.mounted.infoEvents.updates.length = 0;
+      await nextTick();
+      const raw = ctx.mounted.raw();
+      const readCurrent = (): unknown => {
+        const getInfoWindow = raw.getInfoWindow as undefined | (() => unknown);
+        if (typeof getInfoWindow === "function") return getInfoWindow.call(raw) ?? null;
+        return null;
+      };
+      const opened = await until(readCurrent, 5_000, "BMAP_INFOWINDOW_NOT_OPEN", "地图的当前气泡");
+
+      // 在**原始实例**上记录这一对事件：顺序与数量就是被测读数
+      const marks: Array<{ name: string; at: number }> = [];
+      const target = opened as { addEventListener?: (name: string, fn: () => void) => void };
+      assertSmoke(
+        typeof target.addEventListener === "function",
+        "BMAP_INFOWINDOW_NO_LISTENER",
+        "`map.getInfoWindow()` 返回的实例没有 addEventListener —— 无法观测这对事件",
+        { keys: Object.keys(opened as object).slice(0, 24) },
+      );
+      for (const name of ["close", "clickclose"]) {
+        target.addEventListener!(name, () => marks.push({ name, at: performance.now() }));
+      }
+
+      // 关闭按钮是气泡右上角那个 `×`：`.BMap_bubble_buttons` 的最后一个子节点
+      // （前一个是最小化/最大化的 `+`，`enableMaximize` 时才显示）。
+      const button = ctx
+        .mounted
+        .container()
+        .querySelector<HTMLElement>(".BMap_bubble_buttons > div:last-child");
+      assertSmoke(
+        button,
+        "BMAP_INFOWINDOW_NO_CLOSE_BUTTON",
+        "找不到气泡的关闭按钮（`.BMap_bubble_buttons` 的最后一个子节点）—— SDK 的 DOM 结构可能变了",
+        { html: ctx.mounted.container().querySelector(".BMap_bubble_pop")?.outerHTML.slice(0, 400) },
+      );
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+      await until(
+        () => (readCurrent() ? null : true),
+        5_000,
+        "BMAP_INFOWINDOW_NOT_CLOSED",
+        "点关闭按钮之后地图上没有当前气泡",
+      );
+
+      // 等事件流**停下来**：`until` 只等到「地图上没有当前气泡」，那之后 SDK 可能还在派发。
+      // 不稳住就点数会把「还在陆续到达」的序列当成最终形状（第一次接这条检查时正是这么错的）。
+      await settleEvents(marks, 600, 4_000);
+
+      const counts = { close: 0, clickclose: 0 };
+      for (const mark of marks) counts[mark.name as "close" | "clickclose"] += 1;
+      const first = marks[0]?.at ?? performance.now();
+      const order = marks.map((m) => `${m.name}+${(m.at - first).toFixed(1)}ms`).join(" > ");
+      // 只断言稳定项：`close` 恰好一次、`clickclose` 至少一次（后者条数随打开次数累积，只作读数）
+      assertSmoke(
+        counts.close === 1 && counts.clickclose >= 1,
+        "BMAP_INFOWINDOW_CLOSE_PAIR_SHAPE",
+        `点关闭按钮的事件形状变了：${JSON.stringify({ counts, order })}` +
+          "（期望 `close` 恰好一次、`clickclose` 至少一次）",
+        { order, counts },
+      );
+      assertSmoke(
+        ctx.mounted.infoEvents.updates.includes(false),
+        "BMAP_INFOWINDOW_CLOSE_NOT_ECHOED",
+        "用户点了关闭按钮，但本库没有回写 `update:open false` —— 模型没跟着收敛",
+        { updates: ctx.mounted.infoEvents.updates },
+      );
+
+      // 收尾：父级回声这次关闭，别给后面的检查留一个「父级要开、模型是关」的分叉状态
+      ctx.mounted.infoOpen.value = false;
+      await nextTick();
+      return { order, counts, updates: ctx.mounted.infoEvents.updates.length };
     },
   },
 
