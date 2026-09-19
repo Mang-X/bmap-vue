@@ -4,7 +4,7 @@
  *
  * ## 为什么需要它：我们的用例是**循环论证**的
  *
- * `BPointCollection` 的 `item-click` 依赖一条**只在运行时成立**的约定：批量图层的拾取事件把命中要素
+ * `BPointShapeLayer` 的 `item-click` 依赖一条**只在运行时成立**的约定：批量图层的拾取事件把命中要素
  * 放在 `event.value.dataItem.properties` 里。这条约定有两处依据，但都不足以当契约：
  *
  * | 来源 | 说法 |

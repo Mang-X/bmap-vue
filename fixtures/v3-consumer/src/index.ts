@@ -571,7 +571,13 @@ export const overlaySpecSmoke = {
 //
 // - **推断**（`Item` 不退化成 `unknown` / `any`）由 `src/data-components.vue` 的模板用法钉住；
 // - **公开 props 类型本身**在这里钉住（可具名使用 + 约束真的在起作用）。
-import { BMarkerList, type BMarkerListProps, type BPointCollectionProps } from 'baidu-map-gl-vue'
+import {
+  BMarkerList,
+  type BMarkerListProps,
+  type BPointIconLayerProps,
+  type BPointLayerProps,
+  type BPointShapeLayerProps,
+} from 'baidu-map-gl-vue'
 
 interface Station {
   id: string
@@ -600,16 +606,52 @@ const badListProps: BMarkerListProps<Station> = {
 // @ts-expect-error `itemKey` 必须是 `Item` 的键（`'nope'` 不存在）
 const badItemKey: BMarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
 
-// `BPointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
-const collectionProps: BPointCollectionProps<Station> = {
+// `BPointShapeLayer` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
+const collectionProps: BPointShapeLayerProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
   shape: 7,
 }
 // @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
-const badShape: BPointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
-export const dataComponentPropsSmoke = { listProps, badListProps, badItemKey, collectionProps, badShape }
+const badShape: BPointShapeLayerProps<Station> = { ...collectionProps, shape: 'circle' }
+
+// 图标层：样式字段名与形状层**不同**（官方 `PointIconStyle`），`isFlat` / `isFixed` 是构造期项。
+const iconProps: BPointIconLayerProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+  icon: 'https://example.com/pin.png',
+  width: 32,
+  height: 32,
+  isFlat: true,
+}
+// @ts-expect-error 图标层的样式里没有 `shape`（那是形状层的字段）
+const badIcon: BPointIconLayerProps<Station> = { ...iconProps, shape: 0 }
+
+// 扩展 API 点层：选项是**扁平**的（`fillColor` 而不是 `color`）。
+const extensionPointProps: BPointLayerProps<Station> = {
+  data: stations,
+  itemKey: 'id',
+  getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
+  shape: 'circle',
+  size: 18,
+  fillColor: '#1677ff',
+}
+// @ts-expect-error 扁平选项里没有 `style` 袋（那是形状层 / 图标层的写法）
+const badFlat: BPointLayerProps<Station> = { ...extensionPointProps, style: { size: 18 } }
+
+export const dataComponentPropsSmoke = {
+  listProps,
+  badListProps,
+  badItemKey,
+  collectionProps,
+  badShape,
+  iconProps,
+  badIcon,
+  extensionPointProps,
+  badFlat,
+}
 
 // `h()` 编程式构造**推不出** `Item` —— 这条限制用双向断言钉住，而不是写在文档里。
 //

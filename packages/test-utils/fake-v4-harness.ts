@@ -187,13 +187,20 @@ export interface FakeV4Harness {
    * 本用例内**累计创建**过的原生批量图层数（官方 `PointShapeLayer` / `PointIconLayer` …）。
    *
    * 「批量点组件不是逐点 Marker」的领域读数就是它 + `attached('overlay')`：
-   * 一个 `BPointCollection` 无论多少数据都只创建 **1** 个图层、**0** 个覆盖物。
+   * 一个 `BPointShapeLayer` 无论多少数据都只创建 **1** 个图层、**0** 个覆盖物。
    */
   nativeLayersCreated(): number;
   /** 第 `index` 个原生图层收到的 **SDK 调用日记**（官方方法名，按调用顺序）。 */
   nativeLayerCalls(index?: number): string[];
   /** 第 `index` 个原生图层的**构造选项**（`idKey` / `enablePicked` 等构造期项）。 */
   nativeLayerOptions(index?: number): Record<string, unknown>;
+  /**
+   * 第 `index` 个原生图层最后一次 `setStyleOptions()` 收到的**样式袋**（声明面的批量图层）。
+   *
+   * 与 `nativeLayerOptions()` 分开读，是因为两条写入路径确实不同：声明面走 `setStyleOptions`
+   * （+ `doOnceDraw`），扩展 API 走整袋 `setOptions`（落在 `nativeLayerOptions()` 里）。
+   */
+  nativeLayerStyle(index?: number): Record<string, unknown>;
   /** 第 `index` 个原生图层最后一次 `setData()` 收到的数据（GeoJSON `FeatureCollection`）。 */
   nativeLayerData(index?: number): unknown;
   /** 第 `index` 个原生图层当前是否还挂在地图上。 */
@@ -235,6 +242,54 @@ export interface FakeV4Harness {
       latLng?: { lng: number; lat: number };
       pixel?: { x: number; y: number };
     },
+    index?: number,
+  ): void;
+  /**
+   * 模拟在原生**扩展 API**（`PointLayer`）上点了一下。
+   *
+   * 形状依据：探针实测（`scripts/probe-native-point-cluster.mts`，2026-09-19）——
+   * `PointLayer` 的命中载荷是 `{ lng, lat, size, scale, offset, id, index, properties, feature }`，
+   * **没有** `dataIndex` / `dataItem`。夹具照这个形状造，否则「扩展 API 的拾取面」在单测里
+   * 会以声明面的形状被验证通过（夹具比真实宽容 = 掩盖缺陷）。
+   */
+  simulateNativeExtensionPick(
+    payload: {
+      key: PropertyKey;
+      idKey?: string;
+      latLng?: { lng: number; lat: number };
+      pixel?: { x: number; y: number };
+    },
+    index?: number,
+  ): void;
+  /**
+   * 模拟点击原生聚合的**簇**（`ClusterLayer`）。
+   *
+   * 形状依据：同一次探针实测 —— 簇命中只有元数据
+   * `{ isCluster: true, clusterId, parentId, pointCount, latLng, bbox, properties }`，
+   * **没有任何业务身份**。夹具刻意不提供「簇里有哪几个要素」，因为真实 SDK 也不提供。
+   */
+  simulateNativeClusterHit(
+    payload: {
+      clusterId: number;
+      pointCount: number;
+      latLng?: { lng: number; lat: number };
+      pixel?: { x: number; y: number };
+    },
+    index?: number,
+  ): void;
+  /** 模拟点击原生聚合里**未聚合的单点**（实测形状：业务键在 `value.id` 上）。 */
+  simulateNativeClusterSingleHit(
+    payload: { key: PropertyKey; latLng?: { lng: number; lat: number }; pixel?: { x: number; y: number } },
+    index?: number,
+  ): void;
+  /**
+   * 模拟原生聚合派发 `change`（实测形状：`value = { singles, clusters, zoom }`，前两个是**数组**）。
+   *
+   * 用数量而不是「造 N 个假簇对象」：本库只读它们的长度（见 `nativeClusterEngine` 的
+   * `handleChange`），多造几个对象只会让夹具看起来更真、实际上没有额外的判别力。
+   */
+  simulateNativeClusterChange(
+    payload: { clusters: number; singles: number; zoom?: number },
     index?: number,
   ): void;
 }
@@ -374,7 +429,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
    *
    * 与 `layerAt` 同一个索引口径（负索引跨用例安全），但读的是**另一个**实例账本：
    * 原生图层（`FakeV4PointShapeLayer` 一族）与底图图层（`FakeV4TileLayer` 一族）在 Fake 里
-   * 分属两个构造工厂，混用一个账本会让「BPointCollection 到底建了几个」读成两个组件的总数。
+   * 分属两个构造工厂，混用一个账本会让「BPointShapeLayer 到底建了几个」读成两个组件的总数。
    */
   const nativeLayerAt = (index: number) => {
     const layers = fake.createdNativeLayers;
@@ -493,6 +548,9 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       nativeLayersCreated: () => fake.createdNativeLayers.length,
       nativeLayerCalls: (index = -1) => [...nativeLayerAt(index).callLog],
       nativeLayerOptions: (index = -1) => ({ ...nativeLayerAt(index).options }),
+      nativeLayerStyle: (index = -1) => ({
+        ...((nativeLayerAt(index) as { styleOptions?: Record<string, unknown> }).styleOptions ?? {}),
+      }),
       nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
       nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
       failNextRemoveLayer: (error) => {
@@ -517,6 +575,59 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
           value: payload.dataIndex === -1 ? { dataIndex: -1, dataItem: undefined } : { dataIndex: payload.dataIndex, dataItem: { properties } },
           latLng: payload.latLng ?? { lng: 0, lat: 0 },
           pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeExtensionPick: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        // 扩展 API 的命中载荷：业务键在 value.properties[idKey] / value.id 上，**没有** dataIndex。
+        layer.emit("click", {
+          value: {
+            lng: payload.latLng?.lng ?? 0,
+            lat: payload.latLng?.lat ?? 0,
+            index: 0,
+            id: payload.key,
+            properties: { [payload.idKey ?? "id"]: payload.key },
+          },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterHit: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("click", {
+          value: {
+            isCluster: true,
+            clusterId: payload.clusterId,
+            parentId: -1,
+            pointCount: payload.pointCount,
+            latLng: payload.latLng ?? { lng: 0, lat: 0 },
+            bbox: [0, 0, 0, 0],
+            properties: {
+              isCluster: true,
+              clusterId: payload.clusterId,
+              pointCount: payload.pointCount,
+            },
+          },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterSingleHit: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("click", {
+          value: { id: payload.key, isCluster: false, properties: { id: payload.key } },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterChange: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("change", {
+          value: {
+            clusters: Array.from({ length: payload.clusters }, (_, i) => ({ clusterId: i })),
+            singles: Array.from({ length: payload.singles }, (_, i) => ({ id: `single-${i}` })),
+            zoom: payload.zoom ?? 11,
+          },
         });
       },
     },

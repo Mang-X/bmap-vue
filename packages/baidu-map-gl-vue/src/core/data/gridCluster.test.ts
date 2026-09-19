@@ -28,6 +28,17 @@ describe("gridCluster", () => {
     expect(Math.max(...clusters.map((c) => c.size))).toBeLessThan(10);
   });
 
+  it("低于阈值的桶**展开为独立条目**，点数守恒（不丢点）", () => {
+    const items = pts.map((p, i) => ({ id: i, pos: p }));
+    const clusters = gridCluster(items, (i) => i.pos, { minClusterSize: 10 });
+    // 阈值远高于每桶点数 ⇒ 全部展开；每个条目恰好 1 个点，且**每个输入点都还在**
+    expect(clusters.every((entry) => entry.clustered !== true && entry.points.length === 1)).toBe(true);
+    expect(
+      clusters.flatMap((entry) => entry.points.map((item) => item.id)).sort((a, b) => a - b),
+      "输入 4 个点就必须输出 4 个点（旧实现曾用「桶内下标」当 id，两个桶的单点会撞成同一个）",
+    ).toEqual(items.map((item) => item.id));
+  });
+
   it("computes centroid position", () => {
     const items = pts.map((p, i) => ({ id: i, pos: p }));
     const clusters = gridCluster(items, (i) => i.pos, { minClusterSize: 3 });

@@ -591,7 +591,7 @@
         "jsapi-v4"
       ],
       "rawMembers": [],
-      "description": "聚合图层；优先使用 SDK 原生能力，缺失时由项目提供 fallback 聚类"
+      "description": "聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19"
     },
     {
       "id": "layer.point",
@@ -604,7 +604,7 @@
       "rawMembers": [
         "PointLayer"
       ],
-      "description": "原生点图层（PointLayer）；支持形状或图标，属扩展 API"
+      "description": "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 BPointLayer 落地"
     },
     {
       "id": "layer.heatmap",

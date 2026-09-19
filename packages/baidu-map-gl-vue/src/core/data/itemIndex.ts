@@ -9,7 +9,7 @@
  * - 只留 `key → Resource`，事件里再去 `data` 数组里 `find` ⇒ 每次点击 O(n) 且要拿到「当前」数组引用。
  *
  * 因此这里维护 `key → 最近一次同步进来的 item`，两处消费者共用同一份实现：
- * `DataLayerManager`（逐项 Marker 路径）与 `BPointCollection`（批量图层拾取路径）。
+ * `DataLayerManager`（逐项 Marker 路径）与 `BPointShapeLayer`（批量图层拾取路径）。
  *
  * 三条语义：
  *
