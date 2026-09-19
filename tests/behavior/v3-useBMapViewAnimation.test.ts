@@ -451,6 +451,38 @@ describe("useBMapViewAnimation：deferred 与已交付的取消走不同的收�
     wrapper.unmount();
   });
 
+  it("重试本身又失败时：一次公开 cancel() 对同一段只尝试一次", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+
+    a.failNextCancel = true;
+    hook.cancel(); // deferred：只登记
+    await settleAsyncWindow();
+    expect(a.cancelCalls, "安全窗口里的第一次真取消失败").toBe(1);
+
+    // 此刻 A 既是当前观察对象、又在「未交付」集合里：一次公开调用只能给它一次重试机会
+    a.failNextCancel = true;
+    expect(() => hook.cancel(), "重试仍然失败必须让调用方看见").toThrow();
+    expect(a.cancelCalls, "同一次 cancel() 不得对同一段重试两次").toBe(2);
+    expect(a.settled, "没交付就不能宣称已停，否则抛错与事实相反").toBe(false);
+    expect(a.getListenerCount(), "仍未交付 ⇒ 订阅与重试入口都保留").toBeGreaterThan(0);
+    expect(hook.status.value).toBe("playing");
+
+    hook.cancel(); // 第三次调用才是成功的那一次重试
+    await settleAsyncWindow();
+    expect(a.cancelCalls).toBe(3);
+    expect(a.settled).toBe(true);
+    expect(a.getListenerCount()).toBe(0);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("一次 cancel() 对同一段只试一次");
+  });
+
   it("取消已交付之后再 cancel 是幂等收尾，不重复打到 SDK", async () => {
     let hook!: Hook;
     const wrapper = await startAndSettle((created) => {

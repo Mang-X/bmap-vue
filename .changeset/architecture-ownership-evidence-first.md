@@ -63,7 +63,8 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   并把状态错误地写回 `idle`。现在每段动画自带现场，取消在卸载时同步发出。
   第三处同源：被取代那段的监听**只**由 SDK 的 `animationcancel` 释放，而「上一段一定会收到该事件」
   恰恰是审计表 F-1 那条未取证的时序（只有 Fake 建模）——本库自己的订阅记账不该等 SDK 回调，
-  现在接管时同步释放，事件只负责写状态。
+  现在改成接管时**同步按实例取消**：交付即释放，未交付（`deferred`）则把订阅留着并由本 hooks 继续
+  重试到终态。事件只负责写状态。
 - Fake SDK 同步瘦身：`Autocomplete` 的 `respond` / `includeKeyword` 与回包的 `keyword` 一并删除，
   避免有人再按关键字建归属。
 
@@ -75,7 +76,8 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 - `start()` 是**两阶段提交**：它的 Promise 表示「地图 ready + 起播命令被接受」，**不是**动画播完；
   播完要听 `animationend`（`loop: "INFINITE"` 时不会来）或由 `status` 驱动。起播前 Driver 要先取消
   上一段，取消失败时它拒绝替换 ⇒ `start()` 随之 reject，上一段继续被观察、仍可 `cancel()` 重试；
-  从未起播的那一段不留订阅。
+  从未起播的那一段不留订阅。上一段只是**还没进启动安全窗口**（Driver 报 `deferred`）不算失败：
+  取消被登记下来，新段照常起播，旧段留在本 hooks 的重试入口里直到交付终态。
 - 卸载时取消失败**不再打断卸载**，并且**可观测**：本段订阅无条件下线，失败同时经
   `resource:error` 诊断总线交出（`component: "useBMapViewAnimation"`）。只靠 `logger.warn` 不够——
   它在 production 构建里会被折叠掉，而地图自己的销毁路径若也停不掉这段动画，失败就只剩一条
@@ -87,3 +89,7 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 - 该方法返回**本库侧的交付状态** `"canceled" | "deferred" | "already-settled"`：还没进启动安全窗口时
   只是登记（`deferred`，hooks 保留重试入口，第二次 `cancel()` 会真重试）；已交付之后再调是幂等收尾，
   不补发 SDK 命令（补发要假设「SDK 对已取消实例幂等」，属 F-3 未证）。
+- 一次公开 `cancel()` 里**每一段只拿一次重试机会**：当前段被 deferred 时它同时属于「观察对象」与
+  「未交付」两个集合，快照按 `Set` 去重。少了这一步，同一次调用会出现「第一份重试抛错、第二份又
+  偷偷重试成功并收尾」——调用方收到「取消失败」，动画其实已经结算完，抛错也就不能作为重试依据
+  （#105 第十一轮）。

@@ -92,9 +92,11 @@ export interface UseBMapViewAnimationReturn {
    * 播放一段关键帧动画。每次调用都新建一个动画实例，并先按实例取消上一段，
    * 因此关键帧改了不必重建 composable。
    *
-   * 接管**可能失败**：上一段的取消被 SDK 拒绝时（例如还没进启动安全窗口、延迟取消刚刚失败），
+   * 接管**可能失败**：取消上一段的命令真的打到 SDK 却失败时（例如它的延迟取消刚刚失败过），
    * 本方法直接 reject —— 上一段仍是当前观察对象、继续被观察，稍后重试 {@link start} 或
    * {@link cancel} 即可；本次新建实例的订阅在失败路径里已经下线，不会留下第二次尝试的残留。
+   * 上一段只是**还没进启动安全窗口**（Driver 报 `deferred`）不算失败：那次取消会被登记下来，
+   * 新段照常起播，旧段仍留在本 hooks 的重试入口里直到交付终态。
    */
   start: (keyFrames: ViewAnimationKeyFrames[]) => Promise<void>;
   /**
@@ -102,7 +104,9 @@ export interface UseBMapViewAnimationReturn {
    *
    * 边界：① 命令按**实例**发，只停本 hooks 自己起播的那一段，同一张图上别人的动画不受影响；
    * ② 上一次取消还**没进安全窗口**（只登记了请求）时，再调一次会真的重试；已经交付过之后再调是
-   * 幂等收尾，不会重复打到 SDK；③ 取消失败时错误原样抛给调用方，本 hooks 保留观察对象与重试入口。
+   * 幂等收尾，不会重复打到 SDK；③ 取消失败时错误原样抛给调用方，本 hooks 保留观察对象与重试入口
+   * —— 一次调用里**每一段只拿一次重试机会**（当前段与未交付的旧段重合时也不重复尝试），
+   * 所以「抛错」就等于「这一次确实没交付、还可以再试」；
    * `status` 由公开事件写；取消交付被本库确认后（`canceled` / `already-settled`）也会收敛到 `idle`，
    * 不等那条可能不来的事件。
    */
@@ -185,6 +189,18 @@ export function useBMapViewAnimation(
     if (current !== run) return;
     current = null;
     status.value = "idle";
+  }
+
+  /**
+   * 本 hooks 名下的在飞段：当前观察对象 + 取消仍未交付的旧段。
+   *
+   * 必须去重：对**当前段**取消并得到 `"deferred"` 时，该段既是 `current` 又在 `undelivered` 里
+   * （`stopRun` 不改 `current`）。不去重的话一次公开 `cancel()` 会把同一段放进快照两次，
+   * 于是「第一次重试抛错、同一次调用里第二份又偷偷重试成功并收尾」——调用方收到「取消失败」，
+   * 而动画其实已经结算完毕。一次公开调用给每段**恰好一次**重试机会，才让抛错可被据此判断。
+   */
+  function ownedRuns(): AnimationRun[] {
+    return [...new Set(current ? [current, ...undelivered] : undelivered)];
   }
 
   /**
@@ -271,9 +287,9 @@ export function useBMapViewAnimation(
     if (disposed) return;
     // 只碰本 hooks 自己起播过的段：当前段 + 取消仍未交付的旧段，逐条**按实例**取消。
     // 每一条都拿到自己的重试机会（失败的先攒着），最后把第一个失败抛给调用方。
-    const runs = current ? [current, ...undelivered] : [...undelivered];
+    const runs = ownedRuns();
     // 当前段与未交付的旧段**一起**处理：调用方一次 `cancel()` 就是把本 hooks 名下的播放全停掉，
-    // 所以 B 会被取消，A 也只拿属于自己的那次重试机会。
+    // 于是 B 被取消的同时 A 也被推进一步，而两者互不牵连。
     const failures: unknown[] = [];
     for (const run of runs) {
       try {
@@ -299,7 +315,7 @@ export function useBMapViewAnimation(
     // 地图销毁前**同步**取消（`<BMap>` 在父组件的 `onUnmounted` 里销毁地图，晚一步就跨过销毁线）：
     // 当前段与「取消尚未交付」的旧段都要试一把；失败时不打断卸载，但必须可观测——
     // `logger.warn` 在 production 构建里会被折叠掉，只靠它等于把失败咽回去（#105 评审第五轮）。
-    const runs = current ? [current, ...undelivered] : [...undelivered];
+    const runs = ownedRuns();
     for (const run of runs) {
       try {
         stopRun(run);

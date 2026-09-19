@@ -51,8 +51,10 @@ watch(status, (value) => {
 ```
 
 两点要知道：`loop: "INFINITE"` 时 SDK 不会派发 `animationend`，`status` 因此一直停在 `playing`，
-只有 `cancel()` 之后回来的 `animationcancel` 会把它写回 `idle`；而**接管可能失败**——起播前 Driver 要先
-取消上一段，取消失败时 `start()` 直接 reject、上一段继续播，所以 `await` / `.catch()` 要接住。
+写回 `idle` 有两条路——该段自己的 `animationcancel`，或本库对那次取消的**交付确认**（取消已打到
+SDK）。而**接管可能失败**：起播前 Driver 要先按实例取消上一段，那次取消真的打到 SDK 却失败时
+`start()` 直接 reject、上一段继续播，所以 `await` / `.catch()` 要接住。上一段只是**还没进启动安全
+窗口**时不算失败（Driver 报 `deferred`）：取消被登记下来、新段照常起播，旧段仍由本 hooks 重试到终态。
 :::
 
 ### 参数
@@ -74,8 +76,8 @@ watch(status, (value) => {
 
 | 返回值  | 描述                                                                             | 类型                                                                    |
 | ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| start   | 播放一段关键帧动画；每次调用新建实例，并**先按实例取消**仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：上一段的取消被拒（例如它还没进启动安全窗口、延迟取消刚失败）时本方法直接 reject，上一段仍是当前播放、稍后重试 `start()` 或 `cancel()` 即可 | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
-| cancel  | 取消本 hooks 当前那段播放，走官方**按实例**的 `Map#cancelViewAnimation(viewAnimation)`（经 Driver 的 `cancelViewAnimation(map, animation)`）。**只停本 hooks 自己起播的那一段**，同一张图上别人（或另一个 hooks）的动画不受影响。没有在飞动画时什么都不做。三种交付各走各的：登记阶段（还没进启动安全窗口）再调一次会**真重试**；已交付之后再调是**幂等收尾**，不重复打到 SDK；SDK 取消失败时错误抛给调用方，并保留该段的观察对象与重试入口。已被接管取代的旧段，其晚到的 `animationend` / `animationcancel` 不会改写当前段的状态（收尾按动画身份收敛） | `() => void`                                                            |
+| start   | 播放一段关键帧动画；每次调用新建实例，并**先按实例取消**仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：取消上一段的命令真的打到 SDK 却失败时（例如它的延迟取消刚刚失败过）本方法直接 reject，上一段仍是当前播放、稍后重试 `start()` 或 `cancel()` 即可。上一段只是还没进启动安全窗口（Driver 报 `deferred`）**不算失败**：取消被登记、新段照常起播，旧段留在本 hooks 的重试入口里直到交付终态 | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
+| cancel  | 取消本 hooks 当前那段播放，走官方**按实例**的 `Map#cancelViewAnimation(viewAnimation)`（经 Driver 的 `cancelViewAnimation(map, animation)`）。**只停本 hooks 自己起播的那一段**，同一张图上别人（或另一个 hooks）的动画不受影响。没有在飞动画时什么都不做。三种交付各走各的：登记阶段（还没进启动安全窗口）再调一次会**真重试**；已交付之后再调是**幂等收尾**，不重复打到 SDK；SDK 取消失败时错误抛给调用方，并保留该段的观察对象与重试入口。一次调用里**每一段只拿一次重试机会**（当前段与「取消未交付的旧段」重合时也不重复尝试），所以抛错就等于「这次确实没交付、还可以再试」。已被接管取代的旧段，其晚到的 `animationend` / `animationcancel` 不会改写当前段的状态（收尾按动画身份收敛） | `() => void`                                                            |
 | status  | 观察到的播放状态：由公开事件写，命令不乐观改写它。收敛回 `idle` 有两条路：该段自己的 `animationend` / `animationcancel`，或本库**自己确认过的取消交付**（取消已打到 SDK ⇒ 不再等那条事件）。让位给新段、取消仍未交付的旧段仍以它自己的事件为准 | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
 | ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 
