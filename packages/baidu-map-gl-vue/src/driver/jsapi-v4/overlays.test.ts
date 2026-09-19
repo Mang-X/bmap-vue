@@ -45,8 +45,22 @@ function setup(options: { unsupported?: "throw" | "warn" | "silent" } = {}) {
   const rawOf = (handle: OverlayHandle) => handle.raw as Record<string, unknown>;
   const marker = () => overlays.createMarker({ lng: 116.4, lat: 39.9 });
   const mapTarget = () => ({ kind: "map" as const, handle: map });
+  const markerTarget = (handle: OverlayHandle) => ({ kind: "marker" as const, handle });
 
-  return { fake, registry, geometry, capabilities, overlays, container, rawMap, map, rawOf, marker, mapTarget };
+  return {
+    fake,
+    registry,
+    geometry,
+    capabilities,
+    overlays,
+    container,
+    rawMap,
+    map,
+    rawOf,
+    marker,
+    mapTarget,
+    markerTarget,
+  };
 }
 
 let ctx: ReturnType<typeof setup>;
@@ -490,6 +504,28 @@ describe("InfoWindow 专用 open / close / redraw", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("右键菜单", () => {
+  /**
+   * `MenuItemOptions` 只有 `width` 与 `id` 两个键，且都**只在构造期**生效（复审 PR #107 P3）：
+   * `id` 曾是组件侧公开 prop 却一路被静默丢弃（指纹里算它 ⇒ 改 id 会重建，重建后仍没有 id）。
+   */
+  it("addContextMenuItem 把 width 与 id 都交给 MenuItemOptions，不给时不下发无意义的键", () => {
+    const menu = ctx.overlays.createContextMenu({ width: 140 });
+    ctx.overlays.addContextMenuItem(menu, { text: "带 id", callback: () => {} }, { id: "item-1" });
+    ctx.overlays.addContextMenuItem(menu, { text: "无选项", callback: () => {} }, undefined);
+
+    const raw = ctx.rawOf(menu);
+    const items = raw.items as { options: Record<string, unknown> }[];
+    // 第一项：id 显式给出；width 走菜单级默认值
+    expect(items[0]!.options).toMatchObject({ id: "item-1", width: 140 });
+    // 第二项：没给 id，但菜单级宽度仍然兜底（`options?.width ?? menuWidths.get(raw)`）
+    expect(items[1]!.options).toEqual({ width: 140 });
+
+    // 菜单级宽度也没有时，选项对象为空——不塞 `width: undefined` / `id: undefined`
+    const bare = ctx.overlays.createContextMenu();
+    ctx.overlays.addContextMenuItem(bare, { text: "裸项", callback: () => {} });
+    expect((ctx.rawOf(bare).items as { options: Record<string, unknown> }[])[0]!.options).toEqual({});
+  });
+
   it("ContextMenu 挂在 Map 上，MenuItem 带 width，分隔线走 addSeparator", () => {
     const menu = ctx.overlays.createContextMenu({ width: 160 });
     const handler = vi.fn();
@@ -508,6 +544,67 @@ describe("右键菜单", () => {
     expect(ctx.rawMap.contextMenus).toContain(raw);
     ctx.overlays.detachContextMenu(ctx.mapTarget(), menu);
     expect(ctx.rawMap.contextMenus).not.toContain(raw);
+  });
+
+  /**
+   * Marker 目标（M5-CUSTOM-MENU / #33）。
+   *
+   * `Marker#addContextMenu` / `#removeContextMenu` 是**运行时扩展**：官方 4.0.4 的类型包只在
+   * `Map` 上声明它们，真实 4.0 的 `Marker` 上却有且可用（真实 AK 实测）。这几条把 Driver 侧
+   * 的两件事钉住：① 结构性调用真的落到目标实例上；② 目标成员缺失时**显式失败**而不是静默。
+   */
+  it("ContextMenu 可以挂到 Marker 上：结构性调用 addContextMenu / removeContextMenu", () => {
+    const marker = ctx.marker();
+    const rawMarker = ctx.rawOf(marker) as { contextMenus: unknown[]; callLog: string[] };
+    const menu = ctx.overlays.createContextMenu({ width: 120 });
+    const rawMenu = ctx.rawOf(menu);
+
+    ctx.overlays.attachContextMenu(ctx.markerTarget(marker), menu);
+    expect(rawMarker.contextMenus).toContain(rawMenu);
+    expect(rawMarker.callLog).toContain("addContextMenu");
+
+    ctx.overlays.detachContextMenu(ctx.markerTarget(marker), menu);
+    expect(rawMarker.contextMenus).not.toContain(rawMenu);
+    expect(rawMarker.callLog).toContain("removeContextMenu");
+  });
+
+  it("重复挂同一个菜单不会堆叠（SDK 按身份去重，与真实 4.0 实测一致）", () => {
+    const marker = ctx.marker();
+    const rawMarker = ctx.rawOf(marker) as { contextMenus: unknown[] };
+    const menu = ctx.overlays.createContextMenu();
+    const target = ctx.markerTarget(marker);
+
+    ctx.overlays.attachContextMenu(target, menu);
+    ctx.overlays.attachContextMenu(target, menu);
+    ctx.overlays.attachContextMenu(target, menu);
+    expect(rawMarker.contextMenus).toHaveLength(1);
+
+    // 摘一次即彻底失效（真实 4.0 实测：之后再右键不再派发 open）
+    ctx.overlays.detachContextMenu(target, menu);
+    expect(rawMarker.contextMenus).toHaveLength(0);
+  });
+
+  it("目标实例缺少 addContextMenu 时显式失败（不静默 no-op）", () => {
+    // 官方 4.0.4 的类型包里**没有**声明 Marker 上的这两个成员，因此这里模拟「运行时也没有」
+    // 的形态：目标实例被换成一个没有该成员的对象。
+    const bare = ctx.registry.adopt("marker", {}) as OverlayHandle;
+    const menu = ctx.overlays.createContextMenu();
+    expect(() => ctx.overlays.attachContextMenu(ctx.markerTarget(bare), menu)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+  });
+
+  it("overlay / clusterer 目标没有菜单入口：显式拒绝，不回退到 map", () => {
+    const marker = ctx.marker();
+    const menu = ctx.overlays.createContextMenu();
+    expect(() =>
+      ctx.overlays.attachContextMenu({ kind: "overlay", handle: marker }, menu),
+    ).toThrowError(expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }));
+    // 没有回退：Map 上不该出现这个菜单
+    expect(ctx.rawMap.contextMenus).toHaveLength(0);
+    expect(String(warn.mock.calls.map((call) => String(call[0])).join("\n"))).toContain(
+      "只支持 map 与 marker",
+    );
   });
 });
 

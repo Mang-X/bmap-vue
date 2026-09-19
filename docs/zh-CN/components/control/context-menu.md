@@ -1,52 +1,132 @@
 # BContextMenu 上下文菜单 <Badge type="tip" text="^0.0.29" />
 
-在地图上添加自定义内容的右键菜单
+在地图或标注上添加自定义内容的右键菜单。
 
 ```ts
-import { BContextMenu } from 'baidu-map-gl-vue'
+import { BContextMenu, BMenuItem, BMenuSeparator } from 'baidu-map-gl-vue'
 ```
 
 ## 组件示例
 
-:::demo 添加地图和 `Marker` 上下文菜单，鼠标右击地图或 `Marker` 试试
+:::demo 地图与 `Marker` 各一个右键菜单：右击地图或那个 `Marker` 试试
 context-menu/index
 :::
 
-## 静态组件 Props
+## 两种写法，一份菜单
 
-| 属性  | 说明              | 类型     | 默认值 |
-| ----- | ----------------- | -------- | ------ |
-| width | 菜单宽度(单位 px) | `number` | `100`  |
+菜单项既可以**用数据给**，也可以**用子组件声明**。两种写法最终归一化成同一份条目，
+因此顺序、`disabled`、`select` 载荷都不因写法而异；两者可以同时出现，
+最终顺序是「`items` 在前、声明式 children 在后」。
 
-## 动态组件 Props
+```vue
+<!-- 数据 API：`-` 表示一条分隔线 -->
+<BContextMenu :items="[{ text: '放大', callback: onZoom }, '-', { text: '删除', disabled: true }]" />
 
-| 属性      | 说明                  | 类型                                                | 可选值 | 默认值 | 版本                               |
-| --------- | --------------------- | --------------------------------------------------- | ------ | ------ | ---------------------------------- |
-| menuItems | 菜单项，`-`添加分割线 | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | -      | -                                  |
-| visible   | 是否显示              | `boolean`                                           | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+<!-- 声明式 API -->
+<BContextMenu>
+  <BMenuItem text="放大" @select="onZoom" />
+  <BMenuSeparator />
+  <BMenuItem text="删除" disabled />
+</BContextMenu>
+```
+
+## 组件 Props
+
+| 属性        | 说明                                                       | 类型                                                | 默认值 | 版本                               |
+| ----------- | ---------------------------------------------------------- | --------------------------------------------------- | ------ | ---------------------------------- |
+| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | <Badge type="tip" text="^3.0.0" /> |
+| menuItems   | ⚠️ 弃用的旧名（v3 起）：`items` 的兼容别名，见下节          | 同上                                                | -      | -                                  |
+| width       | 菜单宽度（单位 px）                                        | `number`                                            | `100`  | -                                  |
+| visible     | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节）  | `boolean`                                           | `true` | <Badge type="tip" text="^2.2.0" /> |
+
+### 从 `menuItems` 迁移
+
+v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目模型 `items`，旧名由集中弃用层在
+**读取层**解析，并在控制台给出一次提示（同实例只提示一次）。新代码请直接用 `items`；
+两者同时出现时 **`items` 优先**，旧名完全不参与。
+
+```vue
+<!-- 旧写法（仍可用，会提示一次） -->
+<BContextMenu :menu-items="list" />
+
+<!-- 新写法 -->
+<BContextMenu :items="list" />
+```
 
 ## ContextMenuItem
 
-| 属性     | 说明                     | 类型                                            | 可选值  | 默认值     |
-| -------- | ------------------------ | ----------------------------------------------- | ------- | ---------- |
-| text     | 菜单项文字               | `string`                                        | -       | `required` |
-| callback | 菜单项点击触发的回调函数 | `({point, pixel, map, target}) => void`（`map` 为 `MapHandle`） | -       | `required` |
-| disabled | 是否禁用该菜单项         | `boolean`                                       | `false` | -          |
+| 属性     | 说明                        | 类型                                                                 | 默认值     |
+| -------- | --------------------------- | -------------------------------------------------------------------- | ---------- |
+| text     | 菜单项文字                  | `string`                                                             | `required` |
+| callback | 点击该项时触发              | `(payload: ContextMenuSelectPayload) => void`                         | -          |
+| disabled | 是否禁用该菜单项            | `boolean`                                                            | `false`    |
+| width    | 该项自己的宽度（覆盖菜单级 `width`） | `number`                                                      | -          |
+| id       | 该项 DOM 的 id（官方 `MenuItemOptions.id`） | `string`                                              | -          |
+
+> `width` / `id` 都是**构造期选项**（官方 `MenuItemOptions` 只有这两个键，`MenuItem` 实例上没有对应
+> setter）：改动它们会**重建菜单**。`disabled` / `text` 同理（官方 `disable()` 之后无法再 `enable()`，
+> 也没有读回），因此「改一个字段就换一个菜单实例」是这条路径的固有代价；回调**不进指纹**，
+> 只换 `callback` 不会重建（新函数在下一次点击时生效）。
+
+## BMenuItem 组件 Props
+
+`<BMenuItem>` 不渲染 DOM，它只把「这里有一条菜单项」注册给父级 `<BContextMenu>`，
+位置由**模板里的书写顺序**决定（`v-if` 切换回来时也回到原来的位置）。
+
+| 属性     | 说明                        | 类型      | 默认值     |
+| -------- | --------------------------- | --------- | ---------- |
+| text     | 菜单项文字                  | `string`  | `required` |
+| disabled | 是否禁用该菜单项            | `boolean` | `false`    |
+| width    | 该项自己的宽度              | `number`  | -          |
+| id       | 该项 DOM 的 id              | `string`  | -          |
+
+`<BMenuSeparator>` 没有 props。两者都必须放在 `<BContextMenu>` 的子节点里；放错位置会在控制台得到一条明确提示。
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+| 事件名  | 来源        | 说明                                                            | 载荷                          |
+| ------- | ----------- | --------------------------------------------------------------- | ----------------------------- |
+| `open`  | SDK 事件    | 菜单真正展开时触发（用户右键；程序化 `show()` 也会触发）         | `OverlayPartialPointerEvent`  |
+| `close` | SDK 事件    | 菜单关闭时触发（选中某项、`hide()`、点击别处）                   | `OverlayPartialPointerEvent`  |
+| `select` | 本库事件   | 某一项被选中；同时也会调用该项自己的回调（数据 API 的 `callback` / `<BMenuItem @select>`） | [`ContextMenuSelectPayload`](#contextmenuselectpayload) |
 
-| 事件名 | 说明 | 类型 |
-| --- | --- | --- |
-| open | 右键菜单真正展开时触发（对应 SDK open 事件，不对应挂载/卸载） | `() => void` |
-| close | 右键菜单关闭时触发（对应 SDK close 事件） | `() => void` |
+`open` / `close` 的载荷来自上游 `ContextMenuEvent`，其中 `point` / `pixel` 是 `Point | null`，
+因此本库的载荷里它们是**可选**的（`null` 与「缺失」都归一化成 `undefined`）。
 
-## v3 target 切换
+### ContextMenuSelectPayload
 
-`BContextMenu` 会把菜单挂载到最近的父覆盖物；没有父覆盖物时挂载到地图。target 发生变化时，组件会先从旧 target 移除，再挂载到新 target，不会同时残留在两个对象上。
+| 字段    | 说明                                              | 类型                              |
+| ------- | ------------------------------------------------- | --------------------------------- |
+| item    | 被选中的那一项（归一化后的结构）                  | [`ContextMenuItem`](#contextmenuitem) |
+| index   | 该项在最终菜单里的序号（含分隔线）                | `number`                          |
+| point   | 菜单弹出位置的地理坐标；SDK 没给时为 `undefined`  | `Point \| undefined`              |
+| pixel   | 菜单弹出位置的画面像素坐标；没给时为 `undefined`  | `Pixel \| undefined`              |
+| map     | 当前地图句柄                                      | `MapHandle`                       |
+| target  | 菜单挂载的目标句柄（地图或标注）；未挂载时为 `null` | `SdkHandle<string> \| null`      |
 
-- `visible=false` 时菜单从当前 target 移除，恢复为 `true` 后重新挂载。
-- `menuItems` 变化时会重建菜单并重新挂载。
-- `open` / `close` 只表示 SDK 菜单真正打开或关闭，不表示菜单的挂载和移除。
-- 组件卸载时会从当前 target 移除菜单。
+## 菜单挂到哪儿（target）
+
+菜单挂在**最近的挂载目标**上：
+
+| 写法位置            | 目标     | SDK 入口                                             |
+| ------------------- | -------- | ---------------------------------------------------- |
+| 直接写在 `<BMap>` 下 | 地图     | `Map#addContextMenu(menu)`（官方 4.0 有声明）         |
+| 写在 `<BMarker>` 里  | 那个标注 | `Marker#addContextMenu(menu)`（**运行时扩展成员**）   |
+
+> `Marker#addContextMenu` / `#removeContextMenu` 在官方 4.0.4 的**类型包里没有声明**（只声明在 `Map` 上），
+> 但真实 4.0 运行时存在且可用：挂上之后右键该标注会派发菜单的 `open`，`removeContextMenu` 之后同样的
+> 右键不再 `open`。本库据此支持 marker 目标，读数与依据见
+> [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)。
+
+**其它目标会显式报错**（`BMAP_CAPABILITY_UNSUPPORTED`），而**不会**回退挂到地图上——
+在普通覆盖物或旧层覆盖物下写菜单没有可挂的目标，「挂错地方」比「明确失败」难排查得多。
+
+## 行为细则
+
+- `visible` 的语义是**资源所有权**（挂 / 不挂），**不是**弹层显隐：菜单的展开由用户右键驱动。
+  本库**不**把 SDK 的 `open` / `close` 升级成 `v-model:open`——官方没有可靠的打开状态读回，
+  也没有「在指定位置打开」的公开入口（`ContextMenu#show()` 只在上一次右键的位置弹出来）。
+- target 变化只做**资源所有权迁移**：先从旧目标摘除，再挂到新目标，不会同时残留在两处，
+  也不会重复下发同一条挂载命令。
+- `items` / `width` 变化时**原子重建**菜单（旧实例连同它的监听一起释放）。
+- 组件卸载时会从当前目标摘除菜单。

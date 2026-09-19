@@ -161,6 +161,8 @@ export type {
   ControlHandle,
   LayerHandle,
   ServiceHandle,
+  // 句柄基类：`ContextMenuSelectPayload.target` 用到它（目标可能是地图也可能是标注）
+  SdkHandle,
 } from "./driver/types/handles";
 // Map 命令面与暂停原因（M4-HANDLE-UX / issue #29）
 //
@@ -319,7 +321,18 @@ export type {
 } from "./driver";
 
 // 组件公开类型(与 SFC 内 export 对齐,供类型使用)
-export type { ContextMenuItem, ContextMenuSeparator } from "./components/overlays/BContextMenu.vue";
+//
+// M5-CUSTOM-MENU / #33：`ContextMenuItem` / `ContextMenuSeparator` 从此前「从 .vue 导出」改为
+// 从 `types/components.ts` 导出——`.vue` 的具名命名导出在纯 tsc 下解析不了（本文件头部的约定），
+// 而菜单这一族现在还有 `BMenuItemProps` / `ContextMenuSelectPayload` 要一起暴露。
+export type {
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSelectPayload,
+  BContextMenuProps,
+  BMenuItemProps,
+  BCustomOverlayProps,
+} from "./types/components";
 export type { MarkerIcon, MarkerIconName, MarkerCustomIcon } from "./types/components";
 
 // 运行时枚举(供模板/脚本使用)

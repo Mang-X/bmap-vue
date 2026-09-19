@@ -353,6 +353,63 @@ export function createJsapiV4OverlayDriver(
     return registry.resolve<object>(target.handle);
   };
 
+  /**
+   * 右键菜单的挂载目标（M5-CUSTOM-MENU / issue #33）。
+   *
+   * **只有 `map` 与 `marker` 两个目标**，依据分两档：
+   *
+   * | 目标 | SDK 入口 | 依据 |
+   * | --- | --- | --- |
+   * | `map` | `Map#addContextMenu(menu)` / `#removeContextMenu(menu)` | 官方 4.0.4 的 `core/Map.d.ts` 里有声明（**一个** 参数，没有目标参数） |
+   * | `marker` | `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)` | **运行时扩展**：`@baidumap/jsapi-v4-types@4.0.4` 只在 `Map` 上声明，但真实 4.0 的 `Marker.prototype` 上有这两个成员且可用（真实 AK 实测，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`） |
+   *
+   * 其余 kind（`overlay` / `clusterer`）**没有任何入口证据**，显式拒绝——本库不把「挂到地图」
+   * 当成回退（那是另一种语义，会让菜单在整张地图上冒出来），也不静默忽略。
+   *
+   * `marker` 这一档刻意**不做就地类型 augmentation**：它是运行时扩展成员，按仓库对
+   * `Marker3D` / `MapMask` 的既有口径（白名单 README 的「先确认能否用项目领域类型绕开」）
+   * 走**结构性查找 + 缺失即显式失败**。
+   */
+  const requireContextMenuTarget = (target: OverlayTarget, operation: string): object => {
+    if (target.kind !== "map" && target.kind !== "marker") {
+      warnOnce(
+        `menu-target:${target.kind}`,
+        `OverlayDriver.${operation}: 右键菜单只支持 map 与 marker 目标（4.0 的实测入口是 ` +
+          `Map#addContextMenu 与 Marker#addContextMenu）；目标 kind="${target.kind}" 没有运行时入口，本次调用被拒绝`,
+      );
+      throw new BMapError(
+        "BMAP_CAPABILITY_UNSUPPORTED",
+        `OverlayDriver.${operation}: target.kind="${target.kind}" 没有右键菜单入口`,
+        { engine: "jsapi-v4" },
+      );
+    }
+    return registry.resolve<object>(target.handle);
+  };
+
+  /**
+   * 在运行时扩展目标（`marker`）上调用菜单挂载/摘除成员。
+   *
+   * 成员缺失时**显式失败**而不是静默 no-op：真实 4.0 的 `Map` 与 `Marker` 都有它，缺失说明
+   * 「这个版本/这个 target 与实测形态不一致」，静默忽略会让使用者看到「菜单挂不上但不报错」。
+   */
+  const callContextMenuTargetMethod = (
+    rawTarget: object,
+    method: string,
+    menu: object,
+    operation: string,
+    targetKind: string,
+  ): void => {
+    const fn = readNamespaceMember(rawTarget, method);
+    if (typeof fn !== "function") {
+      throw new BMapError(
+        "BMAP_CAPABILITY_UNSUPPORTED",
+        `OverlayDriver.${operation}: kind="${targetKind}" 的目标上没有 ${method}（真实 4.0 的 Map 与 Marker 都有它）`,
+        { engine: "jsapi-v4" },
+      );
+    }
+    sdkCall(`${targetKind}.${method}`, () => (fn as (m: object) => unknown).call(rawTarget, menu));
+  };
+
   const assertNotInfoWindow = (kind: OverlayKind, operation: string): void => {
     if (kind !== "info-window") return;
     throw new BMapError(
@@ -514,9 +571,14 @@ export function createJsapiV4OverlayDriver(
       }
       const width = options?.width ?? menuWidths.get(raw);
       const MenuItem = namespaceCtor(namespace, "MenuItem");
+      // `MenuItemOptions` 只有这两个键（4.0.4 的 `context-menu/MenuItemOptions.d.ts`）：`width` 与 `id`。
+      // 两者都是**构造期**输入，实例上没有对应 setter ⇒ 调用方改了它们只能重建菜单（组件侧就是这么做的）。
+      const menuItemOptions: Record<string, unknown> = {};
+      if (width != null) menuItemOptions.width = width;
+      if (options?.id != null) menuItemOptions.id = options.id;
       const menuItem = sdkCall(
         "MenuItem",
-        () => new MenuItem(item.text, item.callback, width != null ? { width } : {}),
+        () => new MenuItem(item.text, item.callback, menuItemOptions),
       );
       if (item.disabled) callOptional(menuItem, "disable");
       sdkCall("ContextMenu.addItem", () => callRequired(raw, "addItem", menuItem));
@@ -555,15 +617,23 @@ export function createJsapiV4OverlayDriver(
     },
 
     attachContextMenu(target, menu) {
-      const rawMap = requireMapTarget(target, "attachContextMenu");
+      const rawTarget = requireContextMenuTarget(target, "attachContextMenu");
       const raw = registry.resolve<object>(menu);
-      sdkCall("map.addContextMenu", () => callRequired(rawMap, "addContextMenu", raw));
+      // `map` 与 `marker` 走**同一份**结构性调用面：Map 上的成员有官方声明，Marker 上的没有，
+      // 但两者的调用形状一致，分成两条实现只会让「哪一条才是真的」变得难读。
+      callContextMenuTargetMethod(rawTarget, "addContextMenu", raw, "attachContextMenu", target.kind);
     },
 
     detachContextMenu(target, menu) {
-      const rawMap = requireMapTarget(target, "detachContextMenu");
+      const rawTarget = requireContextMenuTarget(target, "detachContextMenu");
       const raw = registry.resolve<object>(menu);
-      sdkCall("map.removeContextMenu", () => callRequired(rawMap, "removeContextMenu", raw));
+      callContextMenuTargetMethod(
+        rawTarget,
+        "removeContextMenu",
+        raw,
+        "detachContextMenu",
+        target.kind,
+      );
     },
 
     setPosition(overlay, position) {

@@ -636,3 +636,70 @@ const programmaticProps = {
 }
 // @ts-expect-error `h()` 推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
 export const programmaticGenericLimit = h(BMarkerList, programmaticProps)
+
+// ---------------------------------------------------------------------------
+// M5-CUSTOM-MENU / #33：`<BCustomOverlay>` 与声明式菜单的**公共类型面**（消费方视角）
+//
+// 这一节是「新公开面能不能被消费者正确消费」的真门禁（`verify:package` 里的 vue-tsc 跑它）：
+// 测试文件里的类型断言不在任何 typecheck 门禁的编译范围里，放在这里才有落点。
+// ---------------------------------------------------------------------------
+import {
+  BCustomOverlay,
+  BContextMenu,
+  BMenuItem,
+  BMenuSeparator,
+  type BCustomOverlayProps,
+  type BContextMenuProps,
+  type BMenuItemProps,
+  type ContextMenuItem,
+  type ContextMenuSeparator,
+  type ContextMenuSelectPayload,
+  type MapHandle,
+} from 'baidu-map-gl-vue'
+
+const overlayProps: BCustomOverlayProps = {
+  position: { lng: 116.404, lat: 39.915 },
+  offset: { x: 0, y: -12 },
+  anchor: { x: 0.5, y: 1 },
+  rotation: 30,
+  zIndex: 3,
+  properties: { id: 'store-1' },
+  visible: true,
+  enableMassClear: true,
+}
+// @ts-expect-error `position` 是必填：DOM 覆盖物没有位置就没有可解释的语义
+const badOverlayProps: BCustomOverlayProps = { rotation: 30 }
+export const customOverlayPropsSmoke = { overlayProps, badOverlayProps }
+
+// 数据 API 的条目：`"-"` 是分隔线（`ContextMenuSeparator`），两者可以混在一个数组里
+const menuItems: (ContextMenuItem | ContextMenuSeparator)[] = [
+  {
+    text: '标记此处',
+    callback: ({ item, index, point, pixel, map, target }: ContextMenuSelectPayload) => {
+      // 载荷字段逐个消费一次：字段改名 / 变可选都会在这里报错
+      void item.text
+      void index
+      void point?.lng
+      void pixel?.x
+      const zoomable = map as MapHandle & { raw: { zoomIn(): void } }
+      void zoomable
+      void target
+    },
+    disabled: false,
+    width: 120,
+    id: 'mark-here',
+  },
+  '-',
+]
+const menuProps: BContextMenuProps = { items: menuItems, width: 160, visible: true }
+// @ts-expect-error 旧的 `menuItems` 名字**仍可编译**，但类型上必须同时给出 `items` 的形状约束
+const badMenuProps: BContextMenuProps = { items: [{ text: 'x', callback: 42 }] }
+export const contextMenuPropsSmoke = { menuProps, badMenuProps }
+
+const menuItemProps: BMenuItemProps = { text: '删除', disabled: true, width: 120, id: 'del' }
+// @ts-expect-error `text` 是必填
+const badMenuItemProps: BMenuItemProps = { disabled: true }
+export const menuItemPropsSmoke = { menuItemProps, badMenuItemProps }
+
+// 四个新组件都在根入口（`BCustomOverlay` / `BContextMenu` 已存在，`BMenuItem` / `BMenuSeparator` 是新增）
+export const menuComponentSmoke = [BCustomOverlay, BContextMenu, BMenuItem, BMenuSeparator].length

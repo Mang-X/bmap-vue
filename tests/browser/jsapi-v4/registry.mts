@@ -76,6 +76,18 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     id: "infowindow-close-button-pair",
     name: "<BInfoWindow>：点关闭按钮时 `close` 恰好一次、`clickclose` 至少一次，且本库收敛为关（只登记在 live 档——它验的是真实 SDK 的事件与 DOM）",
   },
+  "custom-overlay-visible": {
+    id: "custom-overlay-visible",
+    name: "<BCustomOverlay>：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置不重建 DOM、不产生第二个宿主；隐藏后实例仍在图上",
+  },
+  "context-menu-attached": {
+    id: "context-menu-attached",
+    name: "<BContextMenu>：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（fixture 档读 Fake 账本）",
+  },
+  "context-menu-marker-target": {
+    id: "context-menu-marker-target",
+    name: "<BContextMenu> 写在 <BMarker> 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员）——只登记在 live 档，它验的是真实 SDK 的成员与 DOM",
+  },
   "service-geocode": { id: "service-geocode", name: "headless 地理编码拿到真实回包" },
   "ui-kit-autocomplete-search": {
     id: "ui-kit-autocomplete-search",
@@ -123,6 +135,8 @@ const fixtureChecks: string[] = [
   "layer-traffic",
   "layer-geojson",
   "infowindow-visible",
+  "custom-overlay-visible",
+  "context-menu-attached",
   "unmount-release",
   "remount-after-unmount",
   "map-container-gate",
@@ -143,6 +157,8 @@ const liveChecks: string[] = [
   "layer-geojson",
   "infowindow-visible",
   "infowindow-close-button-pair",
+  "custom-overlay-visible",
+  "context-menu-marker-target",
   "service-geocode",
   "ui-kit-autocomplete-search",
   "ui-kit-placesearch-load",

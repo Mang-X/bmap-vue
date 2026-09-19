@@ -203,6 +203,10 @@ emits 只增不减；`startPoint` / `endPoint` / `drag-end` 继续可用。
    - `BInfoWindow`：#32；`BContextMenu` + `BCustomOverlay`：#33。
    因此「所有基础覆盖物使用同一生命周期内核」在本次是 **9/13**（13 个覆盖物组件里：Marker（#30）+ 本 PR
    的 7 个迁移 + 新增的 Rectangle）；四个剩余组件的归属写在上面，不是遗漏。
+   > **后续（2026-09-19，issue #33 已落地）**：`BCustomOverlay` 已迁到同一内核；`BContextMenu` **仍不**
+   > 走 `OverlaySpec`，但理由从「欠账」变成有依据的决策 —— 引擎对菜单的动词是「挂到目标上」而不是
+   > 「加进地图」，内核的 `mount` 语义与菜单的资源语义不同。见
+   > [ADR 2026-09-19](./2026-09-19-custom-overlay-and-context-menu.md) 决策 3。
 2. **v2 才有的 props 没有恢复**：`BPolyline` 在 v2 有 `geodesic` / `clip` / `linkRight`
    （`PolylineOptions` 里确实存在），v3 起静默消失。本 ADR 的语义是「旧名 → 新名」的别名，
    而这几个**没有新名字**，属于「prop 面缺口」而不是别名问题；集中弃用层已经能承载它们
@@ -226,6 +230,9 @@ emits 只增不减；`startPoint` / `endPoint` / `drag-end` 继续可用。
 9. **`BContextMenu` 仍有 `{ deep: true }` 的 watcher**。验收标准里的「不存在组件级 deep watcher」
    在本次只对**已迁移的九个组件**成立；`BContextMenu` / `BInfoWindow` / `BMapMask` / `BMarker3d` 的
    18 处 watcher 属于它们的归属票（#33 / #32 / 运行时取证），不在本 PR 的改动面内。
+   > **后续（2026-09-19，issue #33 已落地）**：`BContextMenu` 的 deep watcher 已删除，改成
+   > 「条目指纹 + 声明式 children 合帧解析」（见 [ADR 2026-09-19](./2026-09-19-custom-overlay-and-context-menu.md)
+   > 决策 6）。`BInfoWindow` / `BMapMask` / `BMarker3d` 这一半继续有效。
 10. **真实 AK smoke 的结论限于本机环境**：`overlay-rectangle` 在 live 档 pass（几何回读一致），
    同一轮 `ui-kit-placesearch-load` / `ui-kit-placedetail-load` 失败——那是 UI Kit 检索路径的
    外网波动，与本次改动无关（基线对照见 PR）。live 档**不以「全绿」为验收**。

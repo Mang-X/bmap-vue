@@ -60,7 +60,7 @@ M5-VECTORS 把 Label / Polyline / Polygon / Circle / BezierCurve / Prism / Groun
 | `path` / `controlPoints` 的更新判据 | 各组件手写（有的根引用、有的附带版本 prop） | 统一为「根引用 + 版本 prop」：原地改数组不会触发，换引用或递增 `pathVersion` / `controlPointsVersion` 才触发 | 原地修改数组的代码请在修改后递增版本 prop |
 | `<BMarker @drag-end>` | 组件内硬编码补发 | 由集中弃用层补发（同载荷、同实例提示一次） | 迁移到 `dragend` |
 | `BRectangle` | 不存在 | 新增覆盖物组件 | 见 [BRectangle 文档](/zh-CN/components/overlay/rectangle) |
-| `BInfoWindow` / `BContextMenu` / `BMapMask` / `BMarker3d` | 命令式 watcher | **本次不变**（仍走 `useOverlayResource`） | 归属见 ADR 已知限制（分别是 #32 / #33 / 待运行时取证） |
+| `BInfoWindow` / `BContextMenu` / `BMapMask` / `BMarker3d` | 命令式 watcher | **本次不变**（仍走 `useOverlayResource`） | 归属见 ADR 已知限制（分别是 #32 / #33 / 待运行时取证）；#33 已在**独立一票**里把 `BContextMenu` 迁到统一内核，见下面那节 |
 | `visible=false` 的实现 | `removeOverlay`：实例离开地图（`map.getOverlays()` 少一个，SDK 会派发 `remove`） | `show()` / `hide()`：实例**留在图上**、只是不可见（与 #30 对 Marker、#41 对控件的统一口径一致） | 需要真正摘除请用 `v-if`；`visible` 只表达「显示与否」 |
 | `remove` 事件的到达时机 | `<BBezierCurve>` 与 `<BMarker>` 在**组件自身**的摘除路径上也会收到 `remove`：切隐藏（那时走 `removeOverlay`）、卸载 / 重建（那时监听还没解绑） | `remove` 只在**外部**摘除（`map.removeOverlay()` / `map.clearOverlays()`）时到达组件；组件自身的卸载 / 重建 / 隐藏不再回放它。其余六个组件此前根本不订阅 `remove`，现在按事件矩阵统一订阅（纯新增） | 用 `remove` 做「外部把我摘掉了」这类清理的代码要注意卸载时不会再有这条通知；感知显隐用 `visible`，感知卸载用组件生命周期 |
 
@@ -91,3 +91,19 @@ M7 把控件收进统一的 `ControlSpec`，并补上全景基线（决策见
 | 控件组件的卸载 | 各自手写 `onMounted` / `onUnmounted` | 全部经 `useSdkResource` 派生的统一 adapter | 无需改动；`scope` 的释放顺序（先解绑业务事件、再 `removeControl`）不变 |
 | `useControlResource`（`./core` 子入口） | `(props, adapter)`，adapter 是 `{ create, addToMap, remove, createWatchers }` | `(props, spec)`，spec 是声明式的 `ControlSpec` | 自建控件的调用方按 `ControlSpec` 重写；`buildControlOptions` / `bindControlEvents` 两个无消费者的帮手已删除 |
 | 全景 | 只有 Driver 侧的 `PanoramaViewerDriver`（skeleton） | `<BPanorama>` / `<BPanoramaLabel>` / `usePanoramaService`（**post-stable**，见[发布范围](/zh-CN/components/panorama/)） | 需要全景点位/标注/检索时使用；Stable 上不依赖它 |
+
+## 3.0.0-beta → 3.0（自定义 DOM 覆盖物、声明式右键菜单）
+
+M5-CUSTOM-MENU / #33 新增 `<BCustomOverlay>`、给 `<BContextMenu>` 补上数据与声明式两套菜单项 API，
+并让「菜单挂到标注上」这条路径**真的可用**（决策与实测读数见
+[ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)）。对调用方可见的变化：
+
+| 变更 | 之前 | 现在 | 处置 |
+| --- | --- | --- | --- |
+| `<BCustomOverlay>` | 不存在 | 新增：detached 宿主 + `<Teleport>` 的 DOM 覆盖物，支持 `position` / `offset` / `anchor` / `rotation` / `zIndex` / `minZoom` / `maxZoom` / `properties` / `visible` 与三个事件 | 见 [BCustomOverlay 文档](/zh-CN/components/overlay/custom-overlay) |
+| `<BContextMenu :menuItems>` | 唯一的数据入口 | `items` 是正典；`menuItems` **仍可用**，但会在控制台提示一次（同实例一次），且 `items` 有值时旧名完全不参与 | 新代码用 `items`；旧写法无需立即改 |
+| 声明式菜单项 | 不存在（只能传数组） | 新增 `<BMenuItem>` / `<BMenuSeparator>`；与数据 API 归一化成同一份条目，可混用（`items` 在前、children 在后） | 见 [BContextMenu 文档](/zh-CN/components/control/context-menu) |
+| 菜单挂到 `<BMarker>` 里 | **不生效**（Driver 拒绝 `overlay` 目标，只是不会报错：组件吞掉了异常） | 挂到**该标注**上（`Marker#addContextMenu`，4.0 的运行时扩展成员）；写在 `<BMap>` 下则挂到地图 | 原先「以为挂上了其实没有」的用法现在真的生效；若你想让菜单作用于整张地图，请把它移出 `<BMarker>` |
+| 菜单挂在**其它**目标下（普通覆盖物 / 旧层组件） | 静默不生效 | 显式报错（`resource:error` 收到 `BMAP_CAPABILITY_UNSUPPORTED`），**不回退**到地图 | 检查菜单的层级位置；需要地图级菜单就移到 `<BMap>` 直接子节点 |
+| `<BContextMenu>` 的 `open` / `close` | 已转发 SDK 事件 | **不变**（仍然只是观测）；新增 `select` 事件（本库派发，载荷含被选中项与坐标） | 监听 `select` 走「菜单被选中」这条逻辑 |
+| `ContextMenuItem` 的 `callback` 参数 | `(...args: any[]) => void`（载荷形状没有类型） | `(payload: ContextMenuSelectPayload) => void`（`{ item, index, point, pixel, map, target }`） | 解构用法（`({ map }) => …`）不受影响；`ContextMenuItem` / `ContextMenuSeparator` 改从 `baidu-map-gl-vue` 的类型入口导出（此前从 `BContextMenu.vue`），具名导入路径不变 |

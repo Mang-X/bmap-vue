@@ -78,8 +78,13 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 
 > 已知限制（3.0 现状，见 [ADR 2026-09-14](/adr/2026-09-14-remove-legacy-engine) 的「已知限制」）：
 > `useBMapTrackAnimation` 在 v4 上会抛 `BMAP_CAPABILITY_UNSUPPORTED`（4.0 的对应能力是原生
-> 图层 `track-line`；插件迁移结论属 M8 / #43）；`BContextMenu` 目前只能挂在地图上，挂到
-> 覆盖物目标的路径在 v4 上不生效（属 M5 / #33）。
+> 图层 `track-line`；插件迁移结论属 M8 / #43）。
+>
+> `BContextMenu` 的挂载目标自 M5 / #33 起**已实测可用**：`map` 与 `marker` 两个目标都能挂
+> （`Marker#addContextMenu` 是 4.0 的**运行时扩展成员**——官方类型包只在 `Map` 上声明它，真实
+> 运行时存在且可用，读数见 [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)）。
+> 其余目标（`overlay` / `clusterer` / 旧层组件下的菜单）**没有入口证据**，会**显式报错**而不是
+> 悄悄挂到地图上。
 
 ## 3. `3.0.0-beta` 用户：被删除的迁移期入口逐条对照
 

@@ -148,6 +148,7 @@ v3 引入三档渲染模型:
 | --- | --- | --- | --- | --- |
 | `BMAP_DEPRECATED_PROP_ALIAS` | `startPoint` + `endPoint` | `bounds` | `BGroundOverlay` | 一个 `bounds`(`{ southwest, northeast }`)取代两个角点。正典有值时旧名**完全不参与**(连提示都不发) |
 | `BMAP_DEPRECATED_PROP_ALIAS` | `show` | `open` | `BInfoWindow` | 打开状态的主模型统一为 `open`(v2 的 `v-model:show` 仍会读取)。与上一行的差别:这里的正典 `open` 有运行期默认值,「父级没传」不可观测,因此**旧名被显式给出时仍然生效**(两个都传时以旧名为准) |
+| `BMAP_DEPRECATED_PROP_ALIAS` | `menuItems` | `items` | `BContextMenu` | 菜单项的数据入口统一为 `items`(v3 的 `menuItems` 仍会读取)。与 `bounds` 同一口径:正典 `items` 有值时旧名**完全不参与**(连提示都不发) |
 | `BMAP_DEPRECATED_EVENT_ALIAS` | `@drag-end` | `@dragend` | `BMarker` | 两个名字都会发(同载荷),提示同实例一次 |
 
 > 别名只在**真的被用到**时提示:prop 别名在读到旧值时提示,事件别名在第一次派发时提示——

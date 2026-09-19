@@ -1,214 +1,100 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from "vue";
-import { useRequiredMapContext } from "../../core/context/inject";
-import { ResourceScope } from "../../core/lifecycle/ResourceScope";
-import { useParentOverlayHandle } from "../../core/context/target";
-import type { MapReadyContext } from "../../core/context/types";
-import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
-import type { BMapClient } from "../../client/types";
-
 /**
- * BContextMenu —— 右键菜单
+ * BContextMenu —— 右键菜单（M5-CUSTOM-MENU / issue #33）
  *
- * 通过 typed overlay context 取得最近父 Overlay(或 map),
- * 不通过广播。父 Overlay 不存在时回退到 map。
+ * 两种写法，一份条目：
  *
- * target 原子切换——从旧 target 移除后再挂到新 target；
- * visible=false 时 detach；open/close 只对应 SDK 真正展开/关闭事件。
+ * ```vue
+ * <!-- 数据 API -->
+ * <BContextMenu :items="[{ text: '标记此处', callback: onMark }, '-', { text: '删除', disabled }]" />
+ *
+ * <!-- 声明式 API -->
+ * <BContextMenu>
+ *   <BMenuItem text="标记此处" @select="onMark" />
+ *   <BMenuSeparator />
+ *   <BMenuItem text="删除" disabled />
+ * </BContextMenu>
+ * ```
+ *
+ * 组件只做三件事：把 `props` 交给内核、provide 声明式子组件的注册表、把声明式 children 渲染到一个
+ * **detached 宿主**里（因此它们不占地图容器的 DOM）。生命周期、target 迁移、事件全部在
+ * `useContextMenu` 里。
+ *
+ * ## target（v4 实测结论）
+ *
+ * 菜单挂到**最近的 TargetContext**：
+ *
+ * | 位置 | 目标 | SDK 入口 |
+ * | --- | --- | --- |
+ * | 直接写在 `<BMap>` 下 | `map` | `Map#addContextMenu(menu)` |
+ * | 写在 `<BMarker>` 里 | `marker` | `Marker#addContextMenu(menu)`（**运行时扩展**，类型包未声明） |
+ *
+ * 「挂到 marker」这条曾经被当作 v4 不存在（#33 之前的行为是显式拒绝），真实 AK 实测推翻了它：
+ * `Marker#addContextMenu` / `#removeContextMenu` 在 4.0 运行时存在且可用（挂上后右键该标注会派发
+ * 菜单的 `open`，`removeContextMenu` 之后同样的右键不再 `open`）。依据与读数见 ADR
+ * `2026-09-19-custom-overlay-and-context-menu`。
+ *
+ * `overlay` / `clusterer` 等其它目标**没有入口证据**，会被显式拒绝（**不**回退到地图）。
+ *
+ * ## `open` / `close` 不是受控状态
+ *
+ * 它们只是 SDK 的观测事件（用户右键打开、选中或点击别处关闭）。本库**不**把它们升级成
+ * `v-model:open`：官方没有可靠的打开状态读回，也没有「在指定位置打开」的公开入口，做成受控状态
+ * 就必须去猜「这条回包属于哪次命令」。选中走 `select`（本库事件，源自 `MenuItem` 的回调）。
  */
-export interface ContextMenuItem {
-  text: string;
-  callback: (...args: any[]) => void;
-  disabled?: boolean;
-}
-export type ContextMenuSeparator = "-";
+import { dynamicEmit } from "../../core/composables/dynamicEmit";
+import { useContextMenu } from "../../core/composables/useContextMenu";
+import { useRequiredMapContext } from "../../core/context/inject";
+import type { BMapError } from "../../core/errors/BMapError";
+import type { OverlayPartialPointerEvent } from "../../driver/types/events";
+import type { BContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
 
-export interface BContextMenuProps {
-  width?: number;
-  visible?: boolean;
-  menuItems?: (ContextMenuItem | ContextMenuSeparator)[];
-}
+export type { BContextMenuProps };
 
 const props = withDefaults(defineProps<BContextMenuProps>(), {
+  // `width: 100` 是 v3 起的默认值（也是文档里的值）。M5 重写时漏掉了它 ⇒ Driver 拿到 `undefined`，
+  // 而 `width` 是**每项的构造期输入**（`MenuItemOptions.width`），行为与 v3 分叉（复审 P4）。
   width: 100,
+  // `items` 与旧名 `menuItems` 都**不给运行期默认值**：集中弃用层的「新 API 优先」判据是
+  // 「正典值是不是 `undefined`」，给一个 `() => []` 的默认值会让旧名永远读不到
+  // （与 `BInfoWindow` 的 `show` 落在同一类取舍上，见 InfoWindowSpec 的说明）。
   visible: true,
-  menuItems: () => [],
 });
 
 const emit = defineEmits<{
-  open: [];
-  close: [];
+  /** SDK 事件：菜单真正展开（`ContextMenuEventMap`）。 */
+  open: [event: OverlayPartialPointerEvent];
+  /** SDK 事件：菜单关闭（选中某项、`hide()`、点击别处）。 */
+  close: [event: OverlayPartialPointerEvent];
+  /** 本库事件（**不是** SDK 事件）：某一项被选中，载荷见 `ContextMenuSelectPayload`。 */
+  select: [payload: ContextMenuSelectPayload];
 }>();
 
+const emitDynamic = dynamicEmit(emit);
 const ctx = useRequiredMapContext();
-const scope = new ResourceScope({ label: "context-menu" });
-// 每个菜单实例独立 child scope:重建时释放旧菜单的 SDK 事件绑定,避免堆积
-let menuScope: ResourceScope | null = null;
-// 最近父 Overlay 实例(优先 TargetContext,其次兼容旧 overlayContextKey;不在 overlay 下则为 null)
-// shallowRef 响应父 Marker 晚于自身就绪,watch immediate 自动原子挂载
-const parentOverlay = useParentOverlayHandle();
 
-let contextMenu: OverlayHandle | null = null;
-let currentTarget: SdkHandle<string> | null = null;
-let readyCtx: MapReadyContext | null = null;
-
-function buildMenu(client: BMapClient) {
-  const menu = client.driver.overlays.createContextMenu({ width: props.width });
-  for (const item of props.menuItems ?? []) {
-    if (item === "-") {
-      client.driver.overlays.addContextMenuItem(menu, "-");
-      continue;
-    }
-    const i = item as ContextMenuItem;
-    client.driver.overlays.addContextMenuItem(
-      menu,
-      {
-        text: i.text,
-        callback: (point, pixel) => {
-          // point 解析失败（如 SDK 回调携带空点）不得阻断菜单动作本身
-          let normPoint: { lng: number; lat: number } | undefined;
-          try {
-            normPoint = client.driver.geometry.fromRawPoint(point);
-          } catch {
-            normPoint = undefined;
-          }
-          i.callback({
-            point: normPoint,
-            pixel: pixel ? client.driver.geometry.fromRawPixel(pixel) : undefined,
-            map: ctx.map.value,
-            target: currentTarget,
-          });
-        },
-      },
-      { width: props.width },
-    );
-  }
-  return menu;
-}
-
-/** 原子切换——先从旧 target 移除，再挂到新 target */
-function attachTo(next: SdkHandle<string> | null) {
-  const previous = currentTarget;
-  const client = readyCtx?.client ?? ctx.client.value;
-  if (previous && previous !== next && contextMenu && client) {
+const { itemsHost } = useContextMenu(props, {
+  emit: emitDynamic,
+  /** 失败统一走组件既有的 `resource:error` 诊断通道（与其它覆盖物一致）。 */
+  reportError: (error: BMapError) => {
     try {
-      client.driver.overlays.detachContextMenu(
-        { kind: "overlay", handle: previous },
-        contextMenu,
-      );
+      ctx.events.emit("resource:error", { error, component: "BContextMenu" });
     } catch {
-      /* 忽略旧 target 移除错误 */
+      /* 事件总线已停用时不再追究 */
     }
-  }
-  currentTarget = next;
-  if (currentTarget && contextMenu && props.visible !== false && client) {
-    try {
-      client.driver.overlays.attachContextMenu(
-        { kind: "overlay", handle: currentTarget },
-        contextMenu,
-      );
-    } catch {
-      /* 忽略挂载错误 */
-    }
-  }
-}
-
-function detach() {
-  const client = readyCtx?.client ?? ctx.client.value;
-  if (currentTarget && contextMenu && client) {
-    try {
-      client.driver.overlays.detachContextMenu(
-        { kind: "overlay", handle: currentTarget },
-        contextMenu,
-      );
-    } catch {
-      /* 忽略 */
-    }
-  }
-}
-
-/** menuItems 变化：SDK 无增量能力时原子重建菜单 */
-function rebuildMenu() {
-  if (!readyCtx) return;
-  detach();
-  // 释放旧菜单实例 child scope(含其 open/close 事件绑定),再 fork 新实例 scope
-  menuScope?.dispose();
-  menuScope = null;
-  contextMenu = buildMenu(readyCtx.client);
-  bindMenuOpenClose(contextMenu);
-  if (currentTarget && props.visible !== false) {
-    attachTo(currentTarget);
-  }
-}
-
-function bindMenuOpenClose(menu: OverlayHandle) {
-  // open/close 只对应 SDK 菜单真正展开/关闭事件，不对应 attach/detach
-  const instanceScope = menuScope ?? (menuScope = scope.fork("context-menu-instance"));
-  try {
-    instanceScope.add(readyCtx!.client.driver.events.on(menu, "open", () => emit("open")));
-    instanceScope.add(readyCtx!.client.driver.events.on(menu, "close", () => emit("close")));
-  } catch {
-    /* 无事件能力的 SDK 忽略 */
-  }
-}
-
-onMounted(async () => {
-  const ready = await ctx.whenReady(scope.signal);
-  if (scope.isDisposed) return;
-  readyCtx = ready;
-  // 等待父 overlay 实例就绪(可能晚于 map ready),用 watch 响应变化
-  contextMenu = buildMenu(ready.client);
-  bindMenuOpenClose(contextMenu);
-  let disposeWatch: (() => void) | null = null;
-  disposeWatch = watch(
-    () => parentOverlay.value,
-    (overlay) => {
-      if (scope.isDisposed) return;
-      const next = overlay ?? (ready.map as SdkHandle<string>);
-      attachTo(next);
-    },
-    { immediate: true, flush: "sync" },
-  );
-  scope.add(() => disposeWatch?.());
-
-  // visible=false 应从 target 移除或禁用
-  scope.add(
-    watch(
-      () => props.visible,
-      (visible) => {
-        if (!currentTarget || !contextMenu) return;
-        if (visible === false) {
-          detach();
-        } else {
-          attachTo(currentTarget);
-        }
-      },
-    ),
-  );
-
-  // menuItems 变化：原子重建
-  scope.add(
-    watch(
-      () => props.menuItems,
-      () => rebuildMenu(),
-      { deep: true },
-    ),
-  );
-});
-
-onUnmounted(() => {
-  detach();
-  contextMenu = null;
-  currentTarget = null;
-  readyCtx = null;
-  menuScope?.dispose();
-  menuScope = null;
-  scope.dispose();
+  },
 });
 
 defineOptions({ name: "BContextMenu" });
 </script>
 
 <template>
-  <slot />
+  <!--
+    声明式 children 渲染到 detached 宿主：`<BMenuItem>` / `<BMenuSeparator>` 因此能被挂载
+    （从而把自己登记给菜单）却不出现在地图容器的 DOM 里。SSR 下 `itemsHost` 为 `null`，
+    子组件不渲染——与 `<BCustomOverlay>` / `<BInfoWindow>` 同一口径。
+  -->
+  <Teleport v-if="itemsHost" :to="itemsHost">
+    <slot />
+  </Teleport>
 </template>

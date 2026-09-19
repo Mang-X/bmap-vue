@@ -545,11 +545,18 @@ export const OVERLAY_DESCRIPTORS = {
     ctor: "ContextMenu",
     capability: "overlay.context-menu",
     properties: properties({
+      // ⚠️ 组件侧的 `visible` **不是**这里这条 `show`/`hide`：组件的语义是「菜单是否挂到目标上」
+      // （走 `attachContextMenu` / `detachContextMenu`），而实例的 `show()` 只是「在上一次右键的
+      // 位置把弹层显示出来」。两者都叫 visible 但指的不是同一件事，偏离记在 ADR
+      // `2026-09-19-custom-overlay-and-context-menu` 的已知限制里。
       visible: toggleBy(["show", "hide"], { ctorKey: null }),
       width: unsupported(
-        "宽度是 MenuItem 的构造选项（MenuItemOptions.width），ContextMenu 实例上没有宽度 setter",
+        "宽度是 MenuItem 的构造选项（MenuItemOptions.width），ContextMenu 实例上没有宽度 setter；组件侧因此走「重建菜单」路径",
       ),
-      menuItems: unsupported("菜单项经 addItem/removeItem 管理，项目侧走重建菜单路径"),
+      items: unsupported(
+        "菜单项经 addItem/removeItem 管理（没有整袋替换入口），且 MenuItem 的 disable 之后无法再 enable、也没有读回；" +
+          "组件侧因此走「原子重建菜单」路径——数据 API 的 items 与声明式 <BMenuItem> 都归一化到同一份条目",
+      ),
     }),
   },
 
@@ -654,10 +661,17 @@ export interface OverlayDriver {
     options?: CustomOverlayOptions,
   ): OverlayHandle;
   createContextMenu(options?: { width?: number }): OverlayHandle;
+  /**
+   * 追加一条菜单项（`"-"` = 分隔线）。
+   *
+   * `options` 对应官方 `MenuItemOptions`（`@baidumap/jsapi-v4-types@4.0.4` 的
+   * `context-menu/MenuItemOptions.d.ts`）：只有 `width` 与 `id` 两个键，两者都**只在构造期**生效
+   * （`MenuItem` 实例上没有 `setWidth` / `setId`）。因此调用方要么在构造时给全，要么重建菜单。
+   */
   addContextMenuItem(
     menu: OverlayHandle,
     item: { text: string; callback: (point: unknown, pixel: unknown) => void; disabled?: boolean } | "-",
-    options?: { width?: number },
+    options?: { width?: number; id?: string },
   ): void;
 
   add(target: OverlayTarget, overlay: OverlayHandle): void;
@@ -667,7 +681,22 @@ export interface OverlayDriver {
   show(overlay: OverlayHandle): boolean;
   hide(overlay: OverlayHandle): boolean;
 
+  /**
+   * 把右键菜单挂到目标上。
+   *
+   * **目标只支持 `map` 与 `marker`**（M5-CUSTOM-MENU / issue #33）：
+   * - `map` ⇒ `map.addContextMenu(menu)`：官方 4.0.4 的 `core/Map.d.ts` 有声明（签名只有一个
+   *   参数，**没有**目标参数），右键地图时打开；
+   * - `marker` ⇒ `marker.addContextMenu(menu)`：**运行时扩展**（类型包只在 `Map` 上声明，
+   *   真实 4.0 的 `Marker` 上有且可用，实测读数见 ADR `2026-09-19-custom-overlay-and-context-menu`），
+   *   只有右键**该标注**时才打开。
+   *
+   * 其余 kind 显式抛 `BMAP_CAPABILITY_UNSUPPORTED`（**不**回退到 map：那会变成「菜单在整张地图上
+   * 冒出来」的另一种语义）。同一目标重复挂同一个菜单由 SDK 去重（真实 4.0 实测：挂三次、一次右键
+   * 仍只派发一条 `open`），因此「无重复菜单」的判据落在**组件侧不重复下发命令**上。
+   */
   attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+  /** 摘除右键菜单。目标约束与 `attachContextMenu` 相同；摘除后 SDK 不再派发该菜单的 `open`。 */
   detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
 
   setPosition(overlay: OverlayHandle, position: Point): void;
