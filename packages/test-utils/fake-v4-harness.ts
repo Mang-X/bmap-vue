@@ -107,6 +107,20 @@ export interface FakeV4Harness {
    */
   failNextRemoveOverlay(error?: Error): void;
   /**
+   * 与 `failNextRemoveOverlay` 对偶：**先摘掉、再抛错**（用后即清，挂在指定覆盖物上）。
+   *
+   * 「摘除失败」的两种合法形状必须分开测：摘之前抛 ⇒ 资源仍在图上；摘之后抛 ⇒ 资源已经不在了。
+   * 后者的关键读数是「调用方不能把它当成 `attached`」——那会留下幻影所有权。
+   */
+  failNextRemoveOverlayAfterDetach(error?: Error, index?: number): void;
+  /**
+   * 与 `failNextRemoveLayer` 对偶：**先摘掉、再抛错**（用后即清）。
+   *
+   * 同形的既有 knob 一直在 `FakeV4Map` 上（`failNextRemoveLayerAfterDetach`），此前只是没有
+   * 暴露到这里 —— 于是「替换路径的失败只覆盖了「副作用之前抛」这一种形状」这件事在测试里看不出来。
+   */
+  failNextRemoveLayerAfterDetach(error?: Error): void;
+  /**
    * 注入一次第 `index` 个覆盖物的 `hide()` / `show()` 失败（**写之前**抛，`visible` 不变）。
    *
    * 索引口径同 `clickOverlay`（**已创建**的覆盖物账本，负索引从后数）。
@@ -549,6 +563,14 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       },
       failNextRemoveOverlay: (error) => {
         lastMap().failNextRemoveOverlay = error ?? new Error("harness: failNextRemoveOverlay");
+      },
+      failNextRemoveOverlayAfterDetach: (error, index = -1) => {
+        (overlayAt(index) as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach =
+          error ?? new Error("harness: failNextRemoveOverlayAfterDetach");
+      },
+      failNextRemoveLayerAfterDetach: (error) => {
+        lastMap().failNextRemoveLayerAfterDetach =
+          error ?? new Error("harness: failNextRemoveLayerAfterDetach");
       },
       failNextOverlayHide: (error, index = -1) => {
         (overlayAt(index) as { failNextHide?: Error | null }).failNextHide =

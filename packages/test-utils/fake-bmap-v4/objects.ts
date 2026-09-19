@@ -35,6 +35,15 @@ export class FakeV4Overlay extends FakeV4EventTarget {
    */
   failNextShow: Error | null = null
   failNextHide: Error | null = null
+  /**
+   * 注入一次「**先从图上摘掉、再抛错**」的覆盖物移除（与 `FakeV4Map.failNextRemoveOverlay`
+   * 的「摘之前抛」是两条不同的状态机路径，必须分开建模 —— 理由同
+   * `FakeV4Map.failNextRemoveLayerAfterDetach`：调用方唯一能观测的「还在不在」证据就是调用
+   * 有没有成功返回，这条路径下覆盖物已经摘掉而调用方收到的是异常）。
+   *
+   * ⚠️ 由宿主（`FakeV4Map.removeOverlay`）驱动，而不是覆盖物自己的方法。
+   */
+  failNextRemoveAfterDetach: Error | null = null
 
   constructor(options: Record<string, unknown>, stats: FakeV4Diagnostics) {
     super(stats)
