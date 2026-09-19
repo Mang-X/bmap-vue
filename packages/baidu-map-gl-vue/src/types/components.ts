@@ -7,6 +7,8 @@
  * - 精确的组件实例类型仍由 Volar 从 SFC 解析。
  */
 import type { InfoWindowProps } from "../core/overlays/InfoWindowSpec";
+import type { Pixel, Point } from "../driver/types/geometry";
+import type { MapHandle, SdkHandle } from "../driver/types/handles";
 
 /** BMapMask 掩膜显示区域 */
 export type MapMaskShowRegion = "inside" | "outside";
@@ -147,6 +149,134 @@ export interface BInfoWindowProps extends InfoWindowProps {
   // `readPropsKeys()` 用 `([\s\S]*?)\n\}` 切接口正文（为的是不把行内对象类型 `{ lng, lat }`
   // 当成分隔符）。写成单行 `{}` 会让那个非贪婪匹配**继续往后吞**，把紧随其后的接口正文并进
   // 这一次匹配里 —— 结果是那几个接口在解析表里消失、声明面门禁误报（PR #101 合并 #31 后实测）。
+}
+
+/**
+ * BCustomOverlay 的公开属性（M5-CUSTOM-MENU / issue #33）。
+ *
+ * 字段与「每个属性怎么落地」的声明点在 `components/overlays/customOverlaySpec.ts`，这里只暴露
+ * 公开类型名（与 `BInfoWindowProps` 同一手法）。键集与 `OVERLAY_DESCRIPTORS["custom-overlay"]`
+ * 的条目**一一对应**：能在构造期设置的写 `recreate`，有字段级 setter 的写 `options`。
+ *
+ * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ */
+export interface BCustomOverlayProps {
+  /** 覆盖物的地理坐标点。 */
+  position: { lng: number; lat: number };
+  /** 相对锚点的像素偏移。**构造期属性**：官方没有 `setOffset`。 */
+  offset?: { x: number; y: number };
+  /** 锚点，左上角为 `(0, 0)`、右下角为 `(1, 1)`。**构造期属性**：官方没有 `setAnchor`。 */
+  anchor?: { x: number; y: number };
+  /** 旋转角度（度）。有字段级 `setRotation`。 */
+  rotation?: number;
+  /** 层叠顺序。**构造期属性**：官方没有 `setZIndex`。 */
+  zIndex?: number;
+  /** 显示的最小缩放级别。**构造期属性**：官方没有 `setMinZoom`。 */
+  minZoom?: number;
+  /** 显示的最大缩放级别。**构造期属性**：官方没有 `setMaxZoom`。 */
+  maxZoom?: number;
+  /** 自定义业务属性。有字段级 `setProperties`。 */
+  properties?: Record<string, unknown>;
+  /** 是否显示（`show` / `hide`）。 */
+  visible?: boolean;
+  /** 是否参与 `map.clearOverlays()`。**构造期属性**：官方说明该开关当前不生效，因此不做就地开关。 */
+  enableMassClear?: boolean;
+}
+
+/**
+ * `BContextMenu` 的一条菜单项（数据 API）。
+ *
+ * 与 `<BMenuItem>`（声明式 API）产出的条目**同形**：两种写法最终都归一化成这份结构，只是
+ * 「谁来解析」不同。`"-"`（`ContextMenuSeparator`）表示一条分隔线。
+ */
+export interface ContextMenuItem {
+  /** 菜单项文字。 */
+  text: string;
+  /** 点击菜单项时触发；载荷与 `@select` 事件相同（见 `ContextMenuSelectPayload`）。 */
+  callback?: (payload: ContextMenuSelectPayload) => void;
+  /** 是否禁用该菜单项（官方 `MenuItem#disable`）。 */
+  disabled?: boolean;
+  /** 该项的宽度（官方 `MenuItemOptions.width`）；不传时用菜单级 `width`。 */
+  width?: number;
+  /** 该项 DOM 的 id（官方 `MenuItemOptions.id`）。 */
+  id?: string;
+}
+
+/** 分隔线：数据 API 里写 `"-"`（v2 沿用的写法，保持兼容）。 */
+export type ContextMenuSeparator = "-";
+
+/**
+ * 菜单项被选中时的载荷。
+ *
+ * **不是 SDK 事件**：官方把「选中」经 `MenuItem` 的构造回调给出（回调参数是菜单弹出位置的地理
+ * 坐标点），因此本库在这条回调里派发 `select`。`point` / `pixel` 可能缺失（归一化把 SDK 的 `null`
+ * 也收成 `undefined`）。
+ */
+export interface ContextMenuSelectPayload {
+  /** 被选中的菜单项（归一化后的结构；数据 API 与声明式 API 同形）。 */
+  item: ContextMenuItem;
+  /** 该菜单项在最终菜单里的序号（含分隔线）。 */
+  index: number;
+  /** 菜单弹出位置的地理坐标；SDK 没给时为 `undefined`（上游给 `null` 也收成缺失）。 */
+  point?: Point;
+  /** 菜单弹出位置的画面像素坐标；SDK 没给时为 `undefined`。 */
+  pixel?: Pixel;
+  /** 当前地图句柄（`MapHandle`）。 */
+  map: MapHandle;
+  /**
+   * 菜单挂载的目标句柄（地图或标注）；调用时尚未挂上时为 `null`。
+   *
+   * 类型是句柄基类，因为目标可能是 `MapHandle` 也可能是 `MarkerHandle`——两者都是
+   * `SdkHandle<string>`，而本库的右键菜单恰好支持这两种目标（见
+   * `driver/types/overlays.ts` 的 `attachContextMenu`）。
+   */
+  target: SdkHandle<string> | null;
+}
+
+/**
+ * BContextMenu 的公开属性（M5-CUSTOM-MENU / issue #33）。
+ *
+ * 声明点在 `core/overlays/ContextMenuSpec.ts`（含「每个属性怎么落地」的表）。
+ *
+ * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ */
+export interface BContextMenuProps {
+  /** 菜单项（数据 API）。写法与声明式 `<BMenuItem>` / `<BMenuSeparator>` 等价。 */
+  items?: (ContextMenuItem | ContextMenuSeparator)[];
+  /**
+   * @deprecated `items` 的兼容别名（v3 起的名字）。
+   *
+   * 只在 `items` **缺失**时生效（与集中弃用层同一条「新 API 优先」规则），使用时会打印一次告警。
+   */
+  menuItems?: (ContextMenuItem | ContextMenuSeparator)[];
+  /** 菜单宽度（像素）。官方上是 `MenuItemOptions.width`，因此变化即重建菜单。 */
+  width?: number;
+  /**
+   * 菜单是否挂到当前目标上。
+   *
+   * 语义是**资源所有权**（挂 / 不挂），不是「弹层是否展开」：菜单的展开由用户右键驱动，
+   * 本库不把 SDK 的 `open` / `close` 升级成第二写入口（见 ADR 的 ownership-first 一节）。
+   */
+  visible?: boolean;
+}
+
+/**
+ * BMenuItem 的公开属性（声明式 API）。
+ *
+ * 组件本身**不渲染任何 DOM**：它只把「这里有一条菜单项」注册给父级 `<BContextMenu>`，
+ * 由父级按顺序交给 SDK 构建菜单。`select` 由本组件派发（载荷与数据 API 的 `callback` 相同）。
+ *
+ * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ */
+export interface BMenuItemProps {
+  /** 菜单项文字。 */
+  text: string;
+  /** 是否禁用该菜单项。 */
+  disabled?: boolean;
+  /** 该项的宽度（官方 `MenuItemOptions.width`）；不传时用菜单级 `width`。 */
+  width?: number;
+  /** 该项 DOM 的 id（官方 `MenuItemOptions.id`）。 */
+  id?: string;
 }
 
 /**

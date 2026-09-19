@@ -66,6 +66,7 @@ import {
   describeDeprecation,
   eventAliasesOf,
   propAliasesOf,
+  resolvePropAliasValue,
   type OverlayPropAlias,
 } from "../deprecations";
 
@@ -232,13 +233,11 @@ export function useOverlaySpec<Props extends object, Resource>(
    * 值投影在别名之后：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
    */
   function resolveAliasValue(alias: OverlayPropAlias, target: Record<string, unknown>): unknown {
-    const canonical = target[alias.canonical];
-    if (canonical !== undefined) return canonical;
-    if (alias.deprecated.some((key) => target[key] === undefined)) return undefined;
-    const derived = alias.derive(target);
-    if (derived === undefined) return undefined;
-    deprecation.warn(describeDeprecation(alias));
-    return derived;
+    // 读取规则（新 API 优先 / 旧名要齐备 / 不猜）收在 `core/deprecations/resolve.ts`：
+    // `ContextMenuSpec` 的 `menuItems` → `items` 用的是同一条规则，两处各写一遍必然分叉。
+    const resolved = resolvePropAliasValue(alias, target);
+    if (resolved.usedAlias) deprecation.warn(describeDeprecation(alias));
+    return resolved.value;
   }
 
   const fieldValues: Partial<Record<keyof Props & string, (value: unknown) => unknown>> =

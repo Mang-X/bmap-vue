@@ -93,9 +93,12 @@ export interface MapTypeChangeEvent extends DriverEvent {
  *
  * | 上游声明 | 本库载荷 | 归一化 |
  * | --- | --- | --- |
- * | `OverlayMouseEvent.point` **必填**（Marker / Label / 图形族） | `OverlayPointerEvent`（`point` 必填） | raw 缺坐标时补 `{lng:0,lat:0}` |
- * | `GraphMouseOutEvent` = base & **Partial**`<OverlayMouseEvent>`（图形族 `mouseout`） | `OverlayPartialPointerEvent`（`point` 可缺） | **不补**——「没有坐标」是上游允许的事实，补成 `(0,0)` 会把它伪装成一个真实坐标 |
+ * | `OverlayMouseEvent.point` **必填**（Marker / Label / 图形族 / **`CustomOverlayEventMap`**） | `OverlayPointerEvent`（`point` 必填） | raw 缺坐标时补 `{lng:0,lat:0}` |
+ * | `GraphMouseOutEvent` = base & **Partial**`<OverlayMouseEvent>`（图形族 `mouseout`）、`GroundOverlayMouseEvent` 各字段可缺、**`ContextMenuEvent.point` 是 `Point \| null`** | `OverlayPartialPointerEvent`（`point` 可缺） | **不补**——「没有坐标」是上游允许的事实，补成 `(0,0)` 会把它伪装成一个真实坐标 |
  * | `OverlayBaseEvent` 与其余图形事件（`remove` / `lineupdate` / 编辑类） | `OverlayEventPayload` | 不做坐标兜底 |
+ *
+ * 「可为 `null`」与「可缺」在本库收成同一条路径：归一化的 `isPairLike` 闸门对 `null` 返回
+ * `false`，字段因此是 `undefined`，调用方不必区分「SDK 给了 null」与「SDK 没给」。
  *
  * 哪些事件属于哪一档由 `core/overlays/overlayEventCatalog.ts` 的矩阵声明（单一事实源），
  * 由 `driver/jsapi-v4/events.ts` 在**订阅时**按目标句柄的种类翻译成归一化策略。
@@ -118,14 +121,17 @@ export interface OverlayPointerEvent extends OverlayEventPayload {
 }
 
 /**
- * 上游把 `point` 声明为**可缺**的覆盖物指针事件（图形族 `mouseout`、GroundOverlay 家族）。
+ * 上游把 `point` 声明为**可缺**或**可为 `null`** 的覆盖物指针事件。
+ *
+ * 三类来源：图形族 `mouseout`（`GraphMouseOutEvent`）、GroundOverlay 家族
+ * （`GroundOverlayMouseEvent` 各字段可缺）、以及 `ContextMenuEvent`（`point: Point | null`）。
  *
  * Driver **不做兜底**：图形族 `mouseout` 可能由内部命中切换合成（上游 `GraphMouseOutEvent`），
- * 此时坐标本来就不存在。把「不存在」补成 `(0,0)` 等于凭空造一个坐标——调用方无法区分
- * 「真的在原点」与「这次没有坐标」。
+ * 菜单事件则可能在「没有触发位置」的路径上派发——这些情形下坐标本来就不存在。把「不存在」
+ * 补成 `(0,0)` 等于凭空造一个坐标，调用方无法区分「真的在原点」与「这次没有坐标」。
  */
 export interface OverlayPartialPointerEvent extends OverlayEventPayload {
-  /** 仅当 SDK 真的给了坐标时存在。 */
+  /** 仅当 SDK 真的给了坐标时存在（上游给的 `null` 也收成 `undefined`）。 */
   point?: Point;
 }
 

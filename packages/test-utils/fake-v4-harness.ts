@@ -30,7 +30,7 @@ import {
  * 刻意不复用 Fake v4 的 `FakeV4ResourceKind`：那是诊断计数器的记账分类（含 Map / Panorama
  * 这类生命周期类资源），与「组件挂在哪儿」不是同一个维度。
  */
-export type FakeV4MountKind = "overlay" | "control" | "layer";
+export type FakeV4MountKind = "overlay" | "control" | "layer" | "context-menu";
 
 /** 视野读数（领域口径）：最后一张地图当前的视野。 */
 export interface FakeV4View {
@@ -76,6 +76,15 @@ export interface FakeV4Harness {
   assertIdle(label?: string): void;
   /** 当前挂在**最后一张创建的 Map** 上的子资源数。 */
   attached(kind: FakeV4MountKind): number;
+  /**
+   * 第 `index` 个创建过的**覆盖物**上挂着的右键菜单数（负索引：`-1` = 最后一个）。
+   *
+   * 读的是 Fake 建模的 `Marker#addContextMenu` 账本——真实 4.0 的**运行时扩展**成员
+   * （类型包只声明在 `Map` 上，见 ADR `2026-09-19-custom-overlay-and-context-menu`）。
+   * 「菜单挂到了父标注上」与「菜单挂到了地图上」是两个不同的目标，因此需要两个不同的读数；
+   * 覆盖物没有该成员时返回 `0`（Fake 只给 `Marker` 建模）。
+   */
+  menusOnOverlay(index?: number): number;
   /**
    * 最后一张地图上当前**可见**的控件数（M7-CONTROL-PANORAMA / #41）。
    *
@@ -407,7 +416,17 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         const map = lastMap();
         if (kind === "overlay") return map.overlays.length;
         if (kind === "control") return map.controls.length;
+        if (kind === "context-menu") return map.contextMenus.length;
         return map.layers.length;
+      },
+      menusOnOverlay: (index = -1) => {
+        const overlays = fake.createdOverlays as Array<{ contextMenus?: unknown[] }>;
+        const resolved = index < 0 ? overlays.length + index : index;
+        const overlay = overlays[resolved];
+        if (!overlay) {
+          throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
+        }
+        return overlay.contextMenus?.length ?? 0;
       },
       overlayPositions: () => toPositions(lastMap().overlays),
       visibleOverlays: () =>

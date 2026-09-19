@@ -346,6 +346,37 @@ export class FakeV4Marker extends FakeV4Overlay {
     this.callLog.push('setOptions')
     this.options = { ...this.options, ...options }
   }
+
+  /**
+   * 官方 `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)`（M5-CUSTOM-MENU / #33）。
+   *
+   * 建模**实测到的运行时形状**（真实 AK 探针，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`）：
+   *
+   * - 成员在 `Marker.prototype` 上存在，但**不在** `@baidumap/jsapi-v4-types@4.0.4` 的声明里；
+   * - 同一个菜单挂三次仍然只算「挂上一次」：一次右键只派发一条菜单 `open`；
+   * - 摘除一次即彻底失效：之后的右键不再派发 `open`（因此 `contextMenus` 可以作为「挂上了没有」
+   *   的读数，与 `FakeV4Map.contextMenus` 同形）。
+   *
+   * 销账按**实际新增**计（去重后），与 `FakeV4Map.addContextMenu` 一致——否则重复挂载会把
+   * `contextMenus` 泄漏计数打成负数。
+   */
+  readonly contextMenus: FakeV4ContextMenu[] = []
+
+  addContextMenu(menu: FakeV4ContextMenu): void {
+    this.callLog.push('addContextMenu')
+    if (this.contextMenus.includes(menu)) return
+    this.contextMenus.push(menu)
+    this.stats.resourceCreated('contextMenu')
+  }
+
+  removeContextMenu(menu: FakeV4ContextMenu): void {
+    this.callLog.push('removeContextMenu')
+    const index = this.contextMenus.indexOf(menu)
+    if (index >= 0) {
+      this.contextMenus.splice(index, 1)
+      this.stats.resourceReleased('contextMenu')
+    }
+  }
 }
 
 export class FakeV4InfoWindow extends FakeV4Overlay {
@@ -580,6 +611,14 @@ export class FakeV4CustomOverlay extends FakeV4Overlay {
   properties: unknown = null
   /** DOM 工厂被调用的次数 —— 「重建 DOM」的可观察计数。 */
   domCreateCalls = 0
+  /**
+   * 当前这份业务 DOM（由 `FakeV4Map.addOverlay` 经工厂取得并搬进地图容器，`removeOverlay` 时撤掉）。
+   *
+   * 与真实 4.0 一致（真实 AK 实测：业务 DOM 被搬进 `bmap-container` 内部、摘除时随之下线）：
+   * 替身若不建模「SDK 会搬走这块元素」，「卸载后不残留」这条在与真实相反的方向上也会成立 ——
+   * 那正是 `AGENTS.md` 说的「夹具比真实宽容会掩盖缺陷」。
+   */
+  domElement: HTMLElement | null = null
 
   constructor(
     domCreate: () => HTMLElement,
@@ -599,6 +638,8 @@ export class FakeV4CustomOverlay extends FakeV4Overlay {
     this.point = point
     if (!noReCreate && this.domCreate) {
       this.domCreateCalls++
+      // 真实 SDK 会拿工厂返回的新元素替换旧的。这里只建模「工厂被再次调用」这一可观察事实：
+      // 本库的工厂始终返回**同一个**宿主元素，因此元素替换在替身上退化为 no-op（注释即是边界）。
       this.domCreate()
     }
   }

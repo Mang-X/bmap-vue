@@ -161,7 +161,7 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
           return () =>
             h(BMap, { provider: provider() }, () => [
               h(BMarker, { position: { lng: 116.4, lat: 39.9 }, enableClicking: enableClicking.value }, () => [
-                h(BContextMenu, { width: 120, menuItems: MENU_ITEMS }),
+                h(BContextMenu, { width: 120, items: MENU_ITEMS }),
               ]),
             ]);
         },
@@ -174,8 +174,9 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
     const oldMarker = currentMarker();
     // 探针：经 BMap 的公开 `whenReady()` 拿 Client，再观察 Driver 的挂载入口调用序列。
     // BMapGL 时代这条标准观察的是 marker 的 `addContextMenu/removeContextMenu`（组件当时把菜单
-    // 挂到父 Marker）；v4 的 ContextMenu 只有 **Map 级**入口（overlay target 被显式拒绝），
-    // 因此改为观察 Driver 公开入口的调用序列——「先摘旧、再挂新」正是该条标准的原文。
+    // 挂到父 Marker）；v4 起**同一个 Driver 入口**也能挂到 marker（`Marker#addContextMenu` 是运行时
+    // 扩展成员，见 ADR 2026-09-19），因此这里继续观察 Driver 公开入口的调用序列——
+    // 「先摘旧、再挂新」正是该条标准的原文。
     const ready = await (wrapper.findComponent(BMap).vm as unknown as {
       whenReady(): Promise<{
         client: { driver: { overlays: Record<string, unknown> } };
@@ -207,19 +208,21 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
     const newMarker = currentMarker();
     expect(newMarker).not.toBe(oldMarker);
 
-    // 「先摘旧、再挂新」：每一次挂载都紧跟在一次摘除之后，没有「先挂后摘」的重叠窗口
-    expect(calls.map((call) => call.op)).toEqual(["detach", "attach", "detach", "attach"]);
-    // 摘的是**旧覆盖物句柄**、挂的是**新覆盖物句柄**（中间那对 map 目标调用是 BMarker 重建期
-    // target 短暂为 null 的时序产物，不是策略本身）
-    expect(calls[0]!.handle).not.toBe(ready.map);
-    expect(calls[3]!.handle).not.toBe(ready.map);
-    expect(calls[0]!.handle).not.toBe(calls[3]!.handle);
-    expect(calls.map((call) => call.handle === ready.map)).toEqual([false, true, true, false]);
-    // 同一个菜单实例被原子搬运：menuItems 未变 ⇒ 不重建菜单，也没有对同一目标重复 attach
+    // 「先摘旧、再挂新」：每一次挂载都紧跟在一次摘除之后，没有「先挂后摘」的重叠窗口。
+    //
+    // ⚠️ 这条期望在 M5-CUSTOM-MENU / #33 变过（**行为变更**，不是修测试）：此前 `BMarker` 重建期间
+    // `TargetContext.target` 会短暂为 `null`，那时的实现会**回退挂到地图**，于是序列里多出一对
+    // `attach(map) / detach(map)`（旧注释把它记成「时序产物」）。现在目标未就绪时**什么都不做**
+    // （`planTarget` 的 `pending` 分支），不再产生指向地图的中间调用 —— 否则「挂在标注上」的菜单
+    // 会在重建窗口里静默变成「挂在整张地图上」。
+    expect(calls.map((call) => call.op)).toEqual(["detach", "attach"]);
+    // 两次调用都落在**标注**目标上（全程没有碰过地图目标），且摘的与挂的不是同一个实例
+    expect(calls.map((call) => call.kind)).toEqual(["marker", "marker"]);
+    expect(calls[0]!.handle).not.toBe(calls[1]!.handle);
+    // 同一个菜单实例被原子搬运：items 未变 ⇒ 不重建菜单，也没有对同一目标重复 attach
     expect(new Set(calls.map((call) => call.menu)).size).toBe(1);
-    // 三次调用涉及三个**不同**的目标（旧 marker / map / 新 marker），没有任何目标被挂两次
-    expect(new Set(calls.map((call) => call.handle)).size).toBe(3);
-    // 不留下双挂载：v4 拒绝 overlay 目标，菜单最终没有挂在任何地方
+    // 最终状态：菜单挂在新标注上、地图上没有任何菜单
+    expect(newMarker.contextMenus).toHaveLength(1);
     expect(fake.createdMaps[fake.createdMaps.length - 1]!.contextMenus).toHaveLength(0);
 
     wrapper.unmount();

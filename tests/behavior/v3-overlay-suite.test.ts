@@ -34,6 +34,7 @@ import BCircle from "../../packages/baidu-map-gl-vue/src/components/overlays/BCi
 import BBezierCurve from "../../packages/baidu-map-gl-vue/src/components/overlays/BBezierCurve.vue";
 import BPrism from "../../packages/baidu-map-gl-vue/src/components/overlays/BPrism.vue";
 import BGroundOverlay from "../../packages/baidu-map-gl-vue/src/components/overlays/BGroundOverlay.vue";
+import BCustomOverlay from "../../packages/baidu-map-gl-vue/src/components/overlays/BCustomOverlay.vue";
 import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
 import {
   LABEL_FIELDS,
@@ -83,6 +84,11 @@ import {
   MARKER_FIELDS,
   createMarkerSpec,
 } from "../../packages/baidu-map-gl-vue/src/components/overlays/markerSpec";
+import {
+  CUSTOM_OVERLAY_DESCRIPTOR_KEYS,
+  CUSTOM_OVERLAY_FIELDS,
+  createCustomOverlaySpec,
+} from "../../packages/baidu-map-gl-vue/src/components/overlays/customOverlaySpec";
 import { assertOverlayFieldDeclarations } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
 import { useOverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/composables/useOverlaySpec";
 import type {
@@ -347,6 +353,28 @@ const CASES: readonly OverlayCase[] = [
     recreate: [{ prop: "type", next: "canvas" }],
     ctorExpect: { opacity: 0.5, url: "a.png", type: "image" },
   },
+  {
+    name: "BCustomOverlay",
+    kind: "custom-overlay",
+    component: BCustomOverlay,
+    fields: CUSTOM_OVERLAY_FIELDS,
+    props: {
+      position: POINT,
+      rotation: 30,
+      properties: { id: "store-1" },
+      zIndex: 3,
+    },
+    mutable: [
+      { prop: "rotation", next: 60, setter: "setRotation" },
+      { prop: "properties", next: { id: "store-2" }, setter: "setProperties" },
+      // 位置字段走 Driver 的专用入口，落到 `setPoint(point, true)`——第二参数是**语义的一部分**
+      // （省略会重新调用业务 DOM 工厂、把 slot 里已渲染的节点换掉），因此这里连参数一起断言
+      { prop: "position", next: { lng: 117, lat: 40 }, setter: "setPoint:noReCreate" },
+    ],
+    recreate: [{ prop: "offset", next: { x: 2, y: 3 } }],
+    ctorExpect: { rotationInit: 30, properties: { id: "store-1" }, zIndex: 3 },
+    stateExpect: { rotation: 30, properties: { id: "store-1" } },
+  },
 ];
 
 async function mountCase(testCase: OverlayCase) {
@@ -583,6 +611,16 @@ const DECLARATIONS: readonly DeclarationCase[] = [
     descriptorKeys: GROUND_OVERLAY_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createGroundOverlaySpec as never,
   },
+  {
+    name: "BCustomOverlay",
+    kind: "custom-overlay",
+    propsInterface: "BCustomOverlayProps",
+    fields: CUSTOM_OVERLAY_FIELDS as Record<string, OverlayFieldUpdate>,
+    descriptorKeys: CUSTOM_OVERLAY_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
+    // spec 工厂要一个 `ensureHost` 依赖，但本组用例只做**声明面**核对（不调 `create`），
+    // 因此用 `undefined` 也能构造（依赖只在 create 里被读）——与行为用例的分工见 `CASES`。
+    spec: createCustomOverlaySpec as never,
+  },
 ];
 
 function descriptorKeyOf(testCase: DeclarationCase, prop: string): string | null {
@@ -612,8 +650,16 @@ describe("#31 声明面：fields 覆盖 props，且分类与描述符逐项一�
         expect(spec!.policy, `${prop} 声明为构造期属性`).toBe("recreate");
       }
     }
-    // 正证守卫：这个 kind 的描述符里确实有 mutable 条目（否则上面的循环可能什么都没检查到）
-    expect(overlayPropertySpec(testCase.kind, "enableMassClear")?.policy).toBe("mutable");
+    // 正证守卫：这个 kind 的描述符**两个方向都非空**（否则上面的循环可能在空集合上跑，什么都没检查到）。
+    //
+    // 此前这里点名断言 `enableMassClear` 是 `mutable`，那是拿一个**具体键**当「描述符非空」的哨兵；
+    // `custom-overlay` 的 `enableMassClear` 恰好是 `recreate`（官方说明该开关当前不生效），
+    // 于是哨兵失效而描述符本身完全正常。判据改成「两类策略都真的存在」——它与守卫声称的目的
+    // 一一对应，也不再把某个键的语义绑进这条门禁。
+    const policies = OVERLAY_DESCRIPTORS[testCase.kind].properties.map((spec) => spec.policy);
+    expect(policies, `${testCase.name} 的描述符为空`).not.toHaveLength(0);
+    expect(policies, `${testCase.name} 的描述符里没有 mutable 条目`).toContain("mutable");
+    expect(policies, `${testCase.name} 的描述符里没有 recreate 条目`).toContain("recreate");
   });
 
   it.each(DECLARATIONS)("$name：构造期自检通过（含别名登记与版本令牌配对）", (testCase) => {
@@ -664,6 +710,7 @@ const EMITS_CASES: readonly EmitsCase[] = [
   { file: "BBezierCurve.vue", kind: "bezier-curve" },
   { file: "BPrism.vue", kind: "prism" },
   { file: "BGroundOverlay.vue", kind: "ground-overlay" },
+  { file: "BCustomOverlay.vue", kind: "custom-overlay" },
 ];
 
 /** 解析 SFC 的 `defineEmits<{ … }>()` 块：键 + 载荷注解。 */
@@ -679,7 +726,8 @@ function readEmits(file: string): Map<string, string> {
     const type = /:\s*([A-Za-z_$][\w$]*)/.exec(annotation)?.[1] ?? "";
     entries.set(name, type);
   }
-  expect(entries.size, `${file} 的 defineEmits 解析结果为空`).toBeGreaterThan(3);
+  // 解析守卫：下界取 3（当前最小的事件面是 `CustomOverlayEventMap` 的 3 个）；解析失效时会掉到 0
+  expect(entries.size, `${file} 的 defineEmits 解析结果为空`).toBeGreaterThanOrEqual(3);
   return entries;
 }
 

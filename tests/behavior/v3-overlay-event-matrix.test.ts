@@ -1,21 +1,25 @@
 /**
- * 覆盖物事件矩阵门禁（M5-VECTORS / issue #31）
+ * 覆盖物事件矩阵门禁（M5-VECTORS / issue #31，多文件解析由 M5-CUSTOM-MENU / issue #33 扩展）
  *
  * 事件名与载荷形状是**公共契约**：组件的 `defineEmits`、Driver 的归一化兜底、文档表格三者必须
- * 来自同一份数据。本文件把「同一份数据」变成可执行断言，五类：
+ * 来自同一份数据。本文件把「同一份数据」变成可执行断言，六类：
  *
- * 1. **上游权威清单**：直接解析 `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts`，
+ * 1. **上游权威清单**：解析 `@baidumap/jsapi-v4-types@4.0.4` 的三份 `.d.ts`
+ *    （`overlay/OverlayEvent.d.ts` + `overlay/CustomOverlay.d.ts` + `context-menu/ContextMenu.d.ts`；
+ *    #33 之前只读第一份，于是 CustomOverlay / ContextMenu 被误登记成「上游没有事件表」），
  *    把每个 `*EventMap`（含 `type X = GraphEventMap<T>` 与 `Omit<GraphEventMap<T>, …>` 两种形态）
  *    解析成事件名集合，与矩阵**双向取差集**（多一个 / 少一个都红）。上游类型包只在这里被当
  *    **文本**读——公共类型自持，`check:public-dts` 不允许发布声明引用它。
- * 2. **Vue 命名规范**：`vue === toVueEventName(sdk)`（与 map 事件共用同一条推导），且同一 kind 内
+ * 2. **每张上游表只出现一次**：同名 `*EventMap` 出现在两个文件里本身就说明读法要更新，
+ *    不能靠「合并成一张全局表」把它掩盖过去（那正是 #33 修掉的那个假结论的成因）。
+ * 3. **Vue 命名规范**：`vue === toVueEventName(sdk)`（与 map 事件共用同一条推导），且同一 kind 内
  *    归一化后不撞车。
- * 3. **载荷档 ↔ Driver 兜底**：矩阵的 `pointer` / `partial-pointer` 必须与
+ * 4. **载荷档 ↔ Driver 兜底**：矩阵的 `pointer` / `partial-pointer` 必须与
  *    `overlayPointerFallback()` 的判断逐条一致，并用**真实归一化函数**喂空 raw 做 fixture；
  *    同时证明这条覆盖物规则**没有**改变 map / layer 的既有口径。
- * 4. **端到端**：走默认路径装出的 v4 Client，在真实 `EventDriver` 上订阅并派发，观察
+ * 5. **端到端**：走默认路径装出的 v4 Client，在真实 `EventDriver` 上订阅并派发，观察
  *    `point` 到底有没有被兜底——判据落在「调用方实际收到什么」上，而不是函数返回值。
- * 5. **编辑能力边界**：矩阵里有 `requiresEditing` 事件的 kind，描述符必须真的能开编辑；
+ * 6. **编辑能力边界**：矩阵里有 `requiresEditing` 事件的 kind，描述符必须真的能开编辑；
  *    上游 Omit 掉编辑事件的 kind（Prism / BezierCurve）一个编辑事件都不许有。
  */
 import { readFileSync, existsSync, realpathSync } from "node:fs";
@@ -62,50 +66,88 @@ interface UpstreamEventMap {
   readonly names: string[];
   /** 该声明派生自哪张基础表（`Omit` 形态用）。 */
   readonly base?: string;
+  /** 该声明的**声明所在文件**（相对类型包根）：同名表出现在两处时能被抓到。 */
+  readonly file: string;
 }
 
 /**
- * 解析上游 `overlay/OverlayEvent.d.ts` 里的全部 `*EventMap`。
+ * 上游声明事件表的文件清单（#33）。
+ *
+ * 必须显式列出而不是 `readdir` 全包：上游把每一类的事件表放在**它自己那一类**的声明里，
+ * 「只读一个文件」正是 #33 之前把 `custom-overlay` / `context-menu` 误判成「没有事件表」的原因。
+ * 少列一个文件 ⇒ 对应的表解析不到 ⇒ `expectedUpstreamMapName` 的断言直接红（fail-closed）。
+ */
+const UPSTREAM_EVENT_FILES = [
+  "overlay/OverlayEvent.d.ts",
+  "overlay/CustomOverlay.d.ts",
+  "context-menu/ContextMenu.d.ts",
+] as const;
+
+/**
+ * 解析上游全部事件表（三份 `.d.ts` 合并成 `表名 → { names, file }`）。
  *
  * 三种形态都要认（上游就是这么写的）：
  * - `interface MarkerEventMap { … }`（成员即事件名）；
  * - `type PolylineEventMap = GraphEventMap<Polyline>;`（派生自基础表）；
  * - `type PrismEventMap = Omit<GraphEventMap<Prism>, 'editstart' | …>;`（基础表减去若干）。
+ *
+ * 同名表出现在多个文件时**保留首个并在 `duplicates` 里登记**，由用例判红——不做「后写覆盖」，
+ * 那会把「上游挪了声明位置」静默吃掉。
  */
-function parseUpstreamEventMaps(): Map<string, UpstreamEventMap> {
-  const file = join(resolveUpstreamPackageDir(), "overlay/OverlayEvent.d.ts");
-  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
-  const result = new Map<string, UpstreamEventMap>();
-  const typeAliases = new Map<string, ts.TypeNode>();
+function parseUpstreamEventMaps(): {
+  maps: Map<string, UpstreamEventMap>;
+  duplicates: string[];
+  scannedFiles: string[];
+} {
+  const root = resolveUpstreamPackageDir();
+  const maps = new Map<string, UpstreamEventMap>();
+  const duplicates: string[] = [];
+  const scannedFiles: string[] = [];
 
-  const visit = (node: ts.Node): void => {
-    if (ts.isInterfaceDeclaration(node) && node.name.text.endsWith("EventMap")) {
-      const names: string[] = [];
-      for (const member of node.members) {
-        const name = member.name;
-        if (name && (ts.isIdentifier(name) || ts.isStringLiteral(name))) names.push(name.text);
+  for (const relative of UPSTREAM_EVENT_FILES) {
+    const file = join(root, relative);
+    if (!existsSync(file)) {
+      throw new Error(`上游类型包里没有 ${relative}（事件表可能被挪走了）`);
+    }
+    scannedFiles.push(relative);
+    const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+    const here = new Map<string, UpstreamEventMap>();
+    const typeAliases = new Map<string, ts.TypeNode>();
+
+    const visit = (node: ts.Node): void => {
+      if (ts.isInterfaceDeclaration(node) && node.name.text.endsWith("EventMap")) {
+        const names: string[] = [];
+        for (const member of node.members) {
+          const name = member.name;
+          if (name && (ts.isIdentifier(name) || ts.isStringLiteral(name))) names.push(name.text);
+        }
+        here.set(node.name.text, { names, file: relative });
       }
-      result.set(node.name.text, { names });
-    }
-    if (ts.isTypeAliasDeclaration(node) && node.name.text.endsWith("EventMap")) {
-      typeAliases.set(node.name.text, node.type);
-    }
-    ts.forEachChild(node, visit);
-  };
-  ts.forEachChild(source, visit);
+      if (ts.isTypeAliasDeclaration(node) && node.name.text.endsWith("EventMap")) {
+        typeAliases.set(node.name.text, node.type);
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(source, visit);
 
-  for (const [name, type] of typeAliases) {
-    const described = describeAlias(type, result);
-    if (described) result.set(name, described);
+    for (const [name, type] of typeAliases) {
+      const described = describeAlias(type, here);
+      if (described) here.set(name, { ...described, file: relative });
+    }
+
+    for (const [name, entry] of here) {
+      if (maps.has(name)) duplicates.push(name);
+      else maps.set(name, entry);
+    }
   }
-  return result;
+  return { maps, duplicates, scannedFiles };
 }
 
 /** 把 `GraphEventMap<T>` / `Omit<GraphEventMap<T>, 'a' | 'b'>` 解析成事件名集合。 */
 function describeAlias(
   type: ts.TypeNode,
   interfaces: Map<string, UpstreamEventMap>,
-): UpstreamEventMap | undefined {
+): { names: string[]; base?: string } | undefined {
   // Omit<Base, 'a' | 'b'>
   if (ts.isTypeReferenceNode(type) && (type.typeName as ts.Identifier).text === "Omit") {
     const [baseRef, keysNode] = type.typeArguments ?? [];
@@ -130,7 +172,8 @@ function describeAlias(
   return undefined;
 }
 
-const upstream = parseUpstreamEventMaps();
+const parsed = parseUpstreamEventMaps();
+const upstream = parsed.maps;
 
 /** 每个 kind 对应的上游事件表名。 */
 const UPSTREAM_MAP_BY_KIND: Readonly<Partial<Record<OverlayKind, string>>> = {
@@ -144,6 +187,30 @@ const UPSTREAM_MAP_BY_KIND: Readonly<Partial<Record<OverlayKind, string>>> = {
   "bezier-curve": "BezierCurveEventMap",
   "ground-overlay": "GroundOverlayEventMap",
   "info-window": "InfoWindowEventMap",
+  "custom-overlay": "CustomOverlayEventMap",
+  "context-menu": "ContextMenuEventMap",
+};
+
+/**
+ * 每个 kind 的事件表**声明所在文件**（从 kind 推导不出来：上游把每一类的表放在它自己的声明里，
+ * 而不是统一的 `OverlayEvent.d.ts`）。
+ *
+ * 它是唯一一张手写映射，因此由用例**双向**守住：表里写的文件必须真的含有那张表
+ * （`上游事件表与实际声明文件一致` 一条），而 `UPSTREAM_EVENT_FILES` 少列一个文件会让解析直接失败。
+ */
+const UPSTREAM_FILE_BY_KIND: Readonly<Partial<Record<OverlayKind, string>>> = {
+  marker: "overlay/OverlayEvent.d.ts",
+  label: "overlay/OverlayEvent.d.ts",
+  polyline: "overlay/OverlayEvent.d.ts",
+  polygon: "overlay/OverlayEvent.d.ts",
+  rectangle: "overlay/OverlayEvent.d.ts",
+  circle: "overlay/OverlayEvent.d.ts",
+  prism: "overlay/OverlayEvent.d.ts",
+  "bezier-curve": "overlay/OverlayEvent.d.ts",
+  "ground-overlay": "overlay/OverlayEvent.d.ts",
+  "info-window": "overlay/OverlayEvent.d.ts",
+  "custom-overlay": "overlay/CustomOverlay.d.ts",
+  "context-menu": "context-menu/ContextMenu.d.ts",
 };
 
 const matrixKinds = Object.keys(OVERLAY_EVENT_MATRIX) as OverlayKind[];
@@ -157,6 +224,27 @@ describe("#31 上游 OverlayEvent.d.ts 解析守卫", () => {
     expect(upstream.get("PrismEventMap")?.base).toBe("Omit");
     expect(upstream.get("PrismEventMap")!.names).not.toContain("editstart");
     expect(upstream.get("PolylineEventMap")!.names).toContain("editstart");
+  });
+
+  it("三份上游声明文件都真的被读到（少列一个文件会让对应 kind 的表解析不到）", () => {
+    expect([...parsed.scannedFiles].sort()).toEqual([...UPSTREAM_EVENT_FILES].sort());
+    // 正证守卫：#33 新增的两张表**必须**来自它们各自的文件，而不是被合并进来的
+    expect(upstream.get("CustomOverlayEventMap")?.file).toBe("overlay/CustomOverlay.d.ts");
+    expect(upstream.get("ContextMenuEventMap")?.file).toBe("context-menu/ContextMenu.d.ts");
+  });
+
+  it("没有任何一张上游事件表同时出现在两个文件里", () => {
+    expect(parsed.duplicates).toEqual([]);
+  });
+
+  it("每个 kind 的事件表名与声明文件都对得上", () => {
+    for (const kind of matrixKinds) {
+      const mapName = UPSTREAM_MAP_BY_KIND[kind];
+      expect(mapName, `${kind} 没有登记上游事件表名`).toBeDefined();
+      const entry = upstream.get(mapName!);
+      expect(entry, `${kind} 的上游事件表 ${mapName} 解析失败`).toBeDefined();
+      expect(entry!.file, `${kind}（${mapName}）的实际声明文件`).toBe(UPSTREAM_FILE_BY_KIND[kind]);
+    }
   });
 });
 
@@ -214,6 +302,9 @@ describe("#31 事件矩阵 ↔ 上游 EventMap（双向取差集）", () => {
       "bezier-curve": 11,
       "ground-overlay": 11,
       "info-window": 6,
+      // #33 补上的两张表：CustomOverlayEventMap / ContextMenuEventMap
+      "custom-overlay": 3,
+      "context-menu": 2,
     });
   });
 

@@ -34,6 +34,11 @@ import {
   BTileLayer,
   BTrafficLayer,
   BZoom,
+  // M5-CUSTOM-MENU / #33
+  BCustomOverlay,
+  BContextMenu,
+  BMenuItem,
+  BMenuSeparator,
   useBMapGeocoder,
 } from "../../../packages/baidu-map-gl-vue/src/index.ts";
 import { existingGlobalV4Provider } from "../../../packages/baidu-map-gl-vue/src/core/index.ts";
@@ -458,6 +463,18 @@ interface Mounted {
     routeResult: unknown[];
     routeError: unknown[];
   };
+  /* --------------------------------------------- M5-CUSTOM-MENU / #33 的可改状态 */
+  /** `<BCustomOverlay>` 的可改 props（检查要证明「换位置不重建 DOM」「隐藏不摘资源」）。 */
+  customOverlay: { position: { lng: number; lat: number }; visible: boolean };
+  /** `<BCustomOverlay>` 的事件落点。 */
+  customOverlayEvents: { clicks: number };
+  /** `<BContextMenu>` 的输入与事件落点（`items` 为正典；`menuItems` 由别名用例单独构造）。 */
+  menu: {
+    items: Array<{ text: string; disabled?: boolean } | "-">;
+    events: { open: number; close: number; selects: unknown[] };
+  };
+  /** marker 级菜单的 `open` 落点（live 档右键标注时用它证明「真的打开了」）。 */
+  markerMenuOpen: { count: number };
   unmount(): Promise<void>;
 }
 
@@ -484,6 +501,10 @@ function mountTree(): Mounted {
     placesearch: false,
     placedetail: false,
     routeplan: false,
+    // M5-CUSTOM-MENU / #33
+    customOverlay: false,
+    menu: false,
+    markerMenu: false,
   });
   const treeErrors: unknown[] = [];
   const mapRef = ref<unknown>(null);
@@ -499,6 +520,17 @@ function mountTree(): Mounted {
   });
   const uiKit = reactive({ placeUid: "" });
   const infoEvents: Mounted["infoEvents"] = { updates: [] };
+  const customOverlay = reactive({ position: { ...POINT }, visible: true });
+  const customOverlayEvents: Mounted["customOverlayEvents"] = { clicks: 0 };
+  const menu = reactive<Mounted["menu"]>({
+    items: [
+      { text: "smoke-menu-a" },
+      "-",
+      { text: "smoke-menu-b", disabled: true },
+    ],
+    events: { open: 0, close: 0, selects: [] },
+  });
+  const markerMenuOpen: Mounted["markerMenuOpen"] = { count: 0 };
   const uiKitEvents: Mounted["uiKitEvents"] = {
     searchLoad: [],
     searchSelect: [],
@@ -629,6 +661,56 @@ function mountTree(): Mounted {
       );
     }
     nodes.push(h(GeoProbe));
+    // M5-CUSTOM-MENU / #33：DOM 覆盖物放在**最后**——`overlayInstances()` 的末位就是它
+    // （与单测里的 `currentOverlay()` 同一读法），这样检查体不必按特征识别实例。
+    if (flags.customOverlay) {
+      nodes.push(
+        h(
+          BCustomOverlay,
+          {
+            position: customOverlay.position,
+            visible: customOverlay.visible,
+            offset: { x: 0, y: -12 },
+            onClick: () => {
+              customOverlayEvents.clicks += 1;
+            },
+          },
+          { default: () => h("div", { class: "smoke-custom-overlay" }, "smoke-custom-overlay-content") },
+        ),
+      );
+    }
+    if (flags.menu) {
+      nodes.push(
+        h(BContextMenu as never, {
+          items: menu.items as never,
+          width: 140,
+          onOpen: () => {
+            menu.events.open += 1;
+          },
+          onClose: () => {
+            menu.events.close += 1;
+          },
+          onSelect: (payload: unknown) => menu.events.selects.push(payload),
+        }),
+      );
+    }
+    if (flags.markerMenu) {
+      // 挂在 <BMarker> 里的菜单（target = marker）
+      nodes.push(
+        h(BMarker as never, { position: CENTER }, () =>
+          h(
+            BContextMenu as never,
+            {
+              width: 160,
+              onOpen: () => {
+                markerMenuOpen.count += 1;
+              },
+            },
+            () => [h(BMenuItem as never, { text: "smoke-marker-menu" }), h(BMenuSeparator as never)],
+          ),
+        ),
+      );
+    }
     return nodes;
   };
 
@@ -708,6 +790,10 @@ function mountTree(): Mounted {
     routeRef,
     uiKit,
     uiKitEvents,
+    customOverlay,
+    customOverlayEvents,
+    menu,
+    markerMenuOpen,
     async unmount() {
       app.unmount();
       await nextTick();
@@ -768,6 +854,26 @@ function recordRawCalls(raw: Record<string, unknown>, method: string): RawCallRe
       raw[method] = original;
     },
   };
+}
+
+/**
+ * 读「这个覆盖物当前是不是隐藏的」。
+ *
+ * 真实 4.0 的 `CustomOverlay` 有 `isVisible()`（实例方法），而 Fake 把可见性落成 `visible` 字段
+ * （与真实 SDK 的字段同名）——两档各读各的那一份，检查体不必知道差异。读不到时返回 `null`，
+ * 由调用方如实记为失败而不是「大概没隐藏」。
+ */
+function readOverlayHidden(instance: Record<string, unknown>): boolean | null {
+  const isVisible = instance.isVisible;
+  if (typeof isVisible === "function") {
+    try {
+      return (isVisible as () => unknown).call(instance) === false;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof instance.visible === "boolean") return instance.visible === false;
+  return null;
 }
 
 /** 读能力表；读不到（没有 capabilities / 抛错）时返回 `null`，由检查如实记录而不是当通过。 */
@@ -1383,6 +1489,243 @@ const CHECKS: Record<string, CheckImpl> = {
       ctx.mounted.infoOpen.value = false;
       await nextTick();
       return { order, counts, updates: ctx.mounted.infoEvents.updates.length };
+    },
+  },
+
+  /**
+   * `<BCustomOverlay>`（M5-CUSTOM-MENU / #33）——两档共用。
+   *
+   * 断言的都是**与实现方式无关**的事实：宿主被 SDK 搬进自己的容器、slot 内容在宿主里、
+   * 换位置之后仍然只有一个宿主且它还在文档里、隐藏之后宿主仍连着（`hide` 不摘资源）。
+   */
+  "custom-overlay-visible": {
+    async run(ctx) {
+      ctx.mounted.flags.customOverlay = true;
+      await nextTick();
+      await sleep(120);
+
+      const container = ctx.mounted.container();
+      const hosts = (): HTMLElement[] =>
+        [...document.querySelectorAll<HTMLElement>("[data-bmap-custom-overlay]")];
+      const host = await until(
+        () => hosts()[0] ?? null,
+        5_000,
+        "BMAP_CUSTOM_OVERLAY_NO_HOST",
+        "自定义覆盖物的宿主元素",
+      );
+      assertSmoke(
+        (host.textContent ?? "").includes("smoke-custom-overlay-content"),
+        "BMAP_CUSTOM_OVERLAY_EMPTY",
+        "宿主里没有渲染出 slot 内容",
+        { text: host.textContent },
+      );
+      // 宿主由 **SDK** 接管：它不该还停在地图容器的顶层（那是本库创建它时的位置）
+      assertSmoke(
+        host.parentElement !== container,
+        "BMAP_CUSTOM_OVERLAY_HOST_NOT_MOVED",
+        "宿主仍停在地图容器顶层：SDK 没有接管它",
+        { parentClass: host.parentElement?.className ?? null },
+      );
+      assertSmoke(host.isConnected, "BMAP_CUSTOM_OVERLAY_HOST_DETACHED", "宿主不在文档里");
+
+      // 换位置：**不重建 DOM**（宿主还是同一个、仍然只有一个、仍在文档里）
+      ctx.mounted.customOverlay.position = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+      await nextTick();
+      await sleep(120);
+      const afterMove = hosts();
+      assertSmoke(
+        afterMove.length === 1 && afterMove[0] === host,
+        "BMAP_CUSTOM_OVERLAY_HOST_REPLACED",
+        `换位置后宿主被换掉了或出现了多个（数量 ${afterMove.length}）——setPoint 应当只位移`,
+        { count: afterMove.length, same: afterMove[0] === host },
+      );
+      assertSmoke(host.isConnected, "BMAP_CUSTOM_OVERLAY_HOST_DETACHED_AFTER_MOVE", "换位置后宿主离开了文档");
+
+      // 隐藏：实例仍挂在地图上（`hide()` 而不是摘除）
+      const overlaysBefore = descriptor.overlays(ctx.mounted.raw());
+      ctx.mounted.customOverlay.visible = false;
+      await nextTick();
+      await sleep(120);
+      assertSmoke(
+        descriptor.overlays(ctx.mounted.raw()) === overlaysBefore,
+        "BMAP_CUSTOM_OVERLAY_HIDDEN_UNMOUNTED",
+        "`visible=false` 把覆盖物摘掉了：应当用 show/hide（实例留在图上）",
+        { before: overlaysBefore, after: descriptor.overlays(ctx.mounted.raw()) },
+      );
+      const instance = descriptor.overlayInstances(ctx.mounted.raw()).at(-1) ?? {};
+      const hidden = readOverlayHidden(instance);
+      assertSmoke(
+        hidden === true,
+        "BMAP_CUSTOM_OVERLAY_NOT_HIDDEN",
+        "`visible=false` 之后读不到「已隐藏」",
+        { hidden, keys: Object.keys(instance).slice(0, 24) },
+      );
+      assertSmoke(host.isConnected, "BMAP_CUSTOM_OVERLAY_HOST_REMOVED_ON_HIDE", "隐藏后宿主被撤掉了");
+
+      // 还原，别给后面的检查留一个隐藏的覆盖物
+      ctx.mounted.customOverlay.visible = true;
+      await nextTick();
+      await sleep(120);
+      return { hosts: hosts().length, hiddenWas: hidden };
+    },
+  },
+
+  /**
+   * `<BContextMenu>` 的组件级行为（M5-CUSTOM-MENU / #33）——**只登记在 fixture 档**。
+   *
+   * 它读的是 Fake 的**挂载账本**（`map.contextMenus` / `Marker#contextMenu` 账本）：
+   * 真实 4.0 的 `Map` 没有「已挂载菜单列表」的读回接口，因此 live 档这条读不出来
+   * （live 档由 `context-menu-marker-target` 用真实 DOM 与事件来证）。
+   */
+  "context-menu-attached": {
+    async run(ctx) {
+      assertSmoke(!descriptor.live, "HARNESS_MODE", "本检查只登记在 fixture 档（它读 Fake 账本）");
+      const raw = ctx.mounted.raw() as unknown as { contextMenus: unknown[] };
+      ctx.mounted.flags.menu = true;
+      await nextTick();
+      await sleep(120);
+
+      assertSmoke(
+        raw.contextMenus.length === 1,
+        "BMAP_CONTEXT_MENU_NOT_ATTACHED",
+        `地图上挂着的右键菜单数应为 1，实际 ${raw.contextMenus.length}`,
+        { attached: raw.contextMenus.length },
+      );
+      const menu = raw.contextMenus[0] as {
+        items: Array<string | { text: string; disabled?: boolean }>;
+      };
+      const texts = menu.items.map((item) => (typeof item === "string" ? "-" : item.text));
+      assertSmoke(
+        JSON.stringify(texts) === JSON.stringify(["smoke-menu-a", "-", "smoke-menu-b"]),
+        "BMAP_CONTEXT_MENU_ITEMS",
+        `菜单项与 items 不一致：${JSON.stringify(texts)}`,
+        { texts },
+      );
+      assertSmoke(
+        (menu.items[2] as { disabled?: boolean }).disabled === true,
+        "BMAP_CONTEXT_MENU_DISABLED",
+        "`disabled: true` 的菜单项没有被禁用",
+      );
+
+      // target 切换：把菜单挂到 <BMarker> 上再挂回来，任何时刻都只有一个、且不会同时挂两处
+      const before = raw.contextMenus.length;
+      ctx.mounted.flags.markerMenu = true;
+      await nextTick();
+      await sleep(120);
+      // ⚠️ 不能 `.find(...)`：前面的检查已经在地图上留了别的标注（它们也带 `contextMenus` 字段，
+      // 只是长度为 0），`find` 会挑中**第一个**。这里按「全部标注上的菜单总数」断言。
+      const markerMenus = (): number =>
+        descriptor
+          .overlayInstances(ctx.mounted.raw())
+          .filter((instance) => Array.isArray((instance as { contextMenus?: unknown[] }).contextMenus))
+          .reduce((sum, instance) => sum + ((instance as { contextMenus: unknown[] }).contextMenus).length, 0);
+      await until(
+        () => (markerMenus() === 1 ? true : null),
+        3_000,
+        "BMAP_CONTEXT_MENU_MARKER_NOT_ATTACHED",
+        "菜单挂到标注上",
+      ).catch(() => null);
+      assertSmoke(
+        markerMenus() === 1,
+        "BMAP_CONTEXT_MENU_MARKER_DUPLICATE",
+        `标注上挂着的菜单总数应为 1，实际 ${markerMenus()}`,
+        { markerMenus: markerMenus() },
+      );
+      assertSmoke(
+        raw.contextMenus.length === before,
+        "BMAP_CONTEXT_MENU_MAP_DUPLICATE",
+        "marker 级菜单不该影响地图级菜单的挂载数",
+      );
+
+      // 菜单项被选中：SDK 的回调 → 组件的 `select`（数据 API 与声明式都应到达同一个出口）
+      const select = (menu.items[0] as { callback?: (p: unknown, x: unknown) => void }).callback;
+      assertSmoke(typeof select === "function", "BMAP_CONTEXT_MENU_NO_CALLBACK", "菜单项没有回调");
+      select!({ lng: CENTER.lng, lat: CENTER.lat }, { x: 1, y: 2 });
+      await nextTick();
+      assertSmoke(
+        ctx.mounted.menu.events.selects.length === 1,
+        "BMAP_CONTEXT_MENU_SELECT",
+        `组件没有收到 select 事件（收到 ${ctx.mounted.menu.events.selects.length} 条）`,
+      );
+      const payload = ctx.mounted.menu.events.selects[0] as { item?: { text?: string }; index?: number };
+      assertSmoke(
+        payload.item?.text === "smoke-menu-a" && payload.index === 0,
+        "BMAP_CONTEXT_MENU_SELECT_PAYLOAD",
+        "select 载荷里的菜单项/序号不对",
+        { payload },
+      );
+
+      // 卸载后不留残留（由 `unmount-release` 统一核对，这里先把挂载数撤回去）
+      ctx.mounted.flags.markerMenu = false;
+      await nextTick();
+      await sleep(120);
+      assertSmoke(
+        raw.contextMenus.length === 1,
+        "BMAP_CONTEXT_MENU_RESTORE",
+        "撤掉 marker 级菜单之后地图级菜单应当仍在",
+      );
+      return { mapMenus: raw.contextMenus.length, selects: ctx.mounted.menu.events.selects.length };
+    },
+  },
+
+  /**
+   * `<BContextMenu>` 挂在 `<BMarker>` 上**真的能打开**（M5-CUSTOM-MENU / #33）——**只登记在 live 档**。
+   *
+   * 验的是真实 SDK 的运行时成员（`Marker#addContextMenu`，官方类型包未声明）与真实 DOM：
+   * 右键标注的 DOM ⇒ 菜单派发 `open`、菜单 DOM 里能看到我们声明的项。
+   * 依据与探针读数见 ADR `2026-09-19-custom-overlay-and-context-menu`。
+   */
+  "context-menu-marker-target": {
+    async run(ctx) {
+      assertSmoke(descriptor.live, "HARNESS_MODE", "本检查只登记在 live 档");
+      ctx.mounted.flags.markerMenu = true;
+      await nextTick();
+      await sleep(120);
+
+      const mark = ctx.mounted.markerMenuOpen.count;
+      // ⚠️ 取**最后**一个标注：前面的检查已经往地图上加过标注了，`querySelector` 会拿到第一个
+      // （那个标注上没有菜单，右键它当然不会 `open`）。挂载顺序 = SDK 的 DOM 追加顺序，
+      // 因此本检查新加的这个标注是最后一个。
+      const markerDom = await until(
+        () => {
+          const all = [...ctx.mounted.container().querySelectorAll<HTMLElement>(".BMap_Marker")];
+          return all.length > 0 ? all[all.length - 1]! : null;
+        },
+        5_000,
+        "BMAP_MARKER_DOM_MISSING",
+        "标注的 DOM 元素",
+      );
+      const rect = markerDom.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      for (const type of ["mousedown", "mouseup", "contextmenu"]) {
+        markerDom.dispatchEvent(
+          new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: cx,
+            clientY: cy,
+            button: 2,
+            buttons: 2,
+          }),
+        );
+      }
+      await until(
+        () => (ctx.mounted.markerMenuOpen.count > mark ? true : null),
+        8_000,
+        "BMAP_CONTEXT_MENU_MARKER_NOT_OPEN",
+        "右键标注之后菜单的 open 事件",
+      );
+      const itemTexts = [...document.querySelectorAll(".BMap_cmItem")].map(
+        (el) => el.textContent ?? "",
+      );
+      assertSmoke(
+        itemTexts.some((text) => text.includes("smoke-marker-menu")),
+        "BMAP_CONTEXT_MENU_MARKER_ITEM_MISSING",
+        `菜单 DOM 里没有我们声明的项（找到 ${JSON.stringify(itemTexts)}）`,
+        { itemTexts },
+      );
+      return { opens: ctx.mounted.markerMenuOpen.count - mark, itemTexts };
     },
   },
 

@@ -19,8 +19,8 @@
 
 | 档位 | 判据（上游声明） | 本库的归一化 | 调用方要做什么 |
 | --- | --- | --- | --- |
-| `point` 必填 | `OverlayMouseEvent.point` 必填 | raw 缺坐标时补 `{lng:0,lat:0}`（与 map 事件同一兜底） | 直接读 `event.point` |
-| 坐标可缺 | 图形族 `mouseout` 的 `GraphMouseOutEvent`（base + Partial）、GroundOverlay 家族 | **不补**：没有坐标就保持缺失 | 自己判空（`event.point?.lng`） |
+| `point` 必填 | `OverlayMouseEvent.point` 必填（Marker / Label / 图形族 / `CustomOverlayEventMap`） | raw 缺坐标时补 `{lng:0,lat:0}`（与 map 事件同一兜底） | 直接读 `event.point` |
+| 坐标可缺 | 图形族 `mouseout` 的 `GraphMouseOutEvent`（base + Partial）、GroundOverlay 家族、`ContextMenuEvent.point`（`Point \| null`） | **不补**：没有坐标就保持缺失（上游给的 `null` 同样收成「缺失」） | 自己判空（`event.point?.lng`） |
 | 仅底座字段 | `OverlayBaseEvent` / `GraphLineUpdateEvent` / 编辑类事件 | 只给底座字段（`type` / `raw` / `preventDefault` …） | 需要未归一化字段时走 `raw` 逃生口 |
 
 第三档里上游声明过但本库**没有归一化**的字段（`lineupdate.action`、编辑事件的 `overlay` / `from`）统一经
@@ -223,10 +223,32 @@
 | `restore` | `restore` | 仅底座字段 | 信息窗口从最大化恢复时触发 |
 | `resize` | `resize` | 仅底座字段 | 信息窗口尺寸发生变化时触发 |
 
+### `custom-overlay`（上游 `CustomOverlayEventMap`，3 个）
+
+| Vue 名 | SDK 名 | 载荷 | 说明 |
+| --- | --- | --- | --- |
+| `click` | `click` | `point` 必填 | 点击自定义覆盖物时触发 |
+| `mouseover` | `mouseover` | `point` 必填 | 鼠标移入自定义覆盖物时触发 |
+| `mouseout` | `mouseout` | `point` 必填 | 鼠标移出自定义覆盖物时触发 |
+
+上游把这三个事件声明在 `overlay/CustomOverlay.d.ts`（不是 `OverlayEvent.d.ts`），载荷是
+`OverlayMouseEvent<CustomOverlay>`。事件由业务 DOM 冒泡到 SDK，本库原样转发——业务**不需要**
+自己在 slot 内容上再绑一遍 DOM 监听。
+
+### `context-menu`（上游 `ContextMenuEventMap`，2 个）
+
+| Vue 名 | SDK 名 | 载荷 | 说明 |
+| --- | --- | --- | --- |
+| `open` | `open` | 坐标可缺 | 菜单打开时触发（`sdk.show()` 与真实右键都会触发） |
+| `close` | `close` | 坐标可缺 | 菜单关闭时触发（选中菜单项、`sdk.hide()` 都会触发） |
+
+上游把这两条声明在 `context-menu/ContextMenu.d.ts`，载荷 `ContextMenuEvent` 的
+`point` / `pixel` 都是 `Point | null`——因此它们属于「坐标可缺」那一档，**不补** `(0,0)`。
+菜单项的**选中**不是 SDK 事件（由 `MenuItem` 的构造回调给出），因此不在这张表里：
+`<BContextMenu @select>` 与 `<BMenuItem @select>` 是本库在自己的回调里派发的。
+
 ## 上游没有事件表的种类
 
-- `custom-overlay`：DOM 覆盖物：事件由业务 DOM 自己处理（上游 CustomOverlay 只声明了 domCreate 与容器 API，没有事件表）；本库不替业务 DOM 绑定鼠标事件
-- `context-menu`：上下文菜单：上游没有 ContextMenuEventMap，菜单项的选中经 addItem 的回调给出（不是事件订阅）
 - `map-mask`：掩膜：4.0.4 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）
 - `marker3d`：3D 标注：构造器 Marker3D 不在 4.0.4 的类声明里，因此也没有事件表；事件面要等运行时取证（与 TrafficLayer / 图层事件同一路径）
 

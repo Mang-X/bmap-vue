@@ -167,6 +167,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "ground-overlay",
         },
         {
+          text: "BCustomOverlay 自定义 DOM 覆盖物",
+          link: "custom-overlay",
+        },
+        {
           text: "BMapMask 掩膜",
           link: "mapMask",
         },
