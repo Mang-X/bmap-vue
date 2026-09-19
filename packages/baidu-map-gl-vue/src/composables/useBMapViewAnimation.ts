@@ -2,28 +2,31 @@
  * useBMapViewAnimation —— 视角关键帧动画
  *
  * 只封装官方公开面：`services.createViewAnimation()` 建实例、`map.startViewAnimation()` 播放、
- * `map.stopViewAnimation()`（落到 SDK 公开的 `cancelViewAnimation`）取消。
+ * `map.cancelViewAnimation(map, animation)` 取消（官方 `Map#cancelViewAnimation` 就是按实例的命令）。
  *
  * 没有 `pause` / `resume`：4.0 上实例级的暂停/继续只有私有成员（旧实现调 `_pause` / `_continue`），
  * 本仓库对 Map 级 `pauseViewAnimation` / `continueViewAnimation` 也没有真实运行时取证。按 #104
  * 的 official-first 与 evidence-first 两条约束，**不**用私有面伪造一个 Stable 能力。
  *
- * `status` 是**观察值**：只由公开的 `animationstart` / `animationend` / `animationcancel` 写，
- * 命令本身不改动它。因此「发起了播放但 SDK 一次都没回调」会如实停在 `idle`，而不是被乐观地
- * 标成播放中。
+ * `status` 是**观察值**：由公开的 `animationstart` / `animationend` / `animationcancel` 写，
+ * 命令本身不乐观改写它 —— 「发起了播放但 SDK 一次都没回调」会如实停在 `idle`。
+ * 唯一的例外是本库**自己确认过的取消交付**：`cancelViewAnimation` 报告这一次已经打到 SDK
+ * （`canceled` / `already-settled`）时状态收敛到 `idle`，不再等那条可能不来的 `animationcancel`
+ * （#104 F-1 说的是那条事件的时序没有取证，不能拿它当所有权判据）。
  *
  * 取消**不等微任务**：`<BMap>` 在父组件的 `onUnmounted` 里销毁地图，而子树卸载发生在那之前——
  * 同步调用还能看到活的地图，跨一个微任务就已经跨过销毁线了（旧实现的 `void getReady().then(...)`
  * 因此每次卸载都抛一个没人接的 `BMAP_RESOURCE_DISPOSED`）。
  *
- * 三件事分开（#105 评审 P1 / 第三轮）：Driver 对取消失败的处理是「**保留动画记录、可再次
- * stop/destroy 重试**」，因此本 hooks 一侧——
- * ① 一段动画的**归属**（`current`）只在 stop 请求被 Driver 接受之后交回（失败时保留，调用方可直接重试）；
- * ② 一段动画的**订阅**是本库自己的记账，不等 SDK 回调：起播被拒的那一段、半途绑定失败的那一段、
- *    以及卸载时的当前段，都当场释放；
- * ③ **再发一次地图级 stop 的资格**独立于①：`stop()` 正常返回即视为这一次已被 Driver 接手，此后同一 hooks
- *    再 `cancel()` 是 no-op，否则会停掉这张图上别人的动画。
- * 归属问的是「谁还在播」，释放问的是「谁还该被观察」，③问的是「谁还有权对这张图发 stop」。
+ * 取消命令按**实例**发（`driver.map.cancelViewAnimation(map, animation)`，官方
+ * `Map#cancelViewAnimation(viewAnimation)` 本来就是这个形状）。这一点决定了三件事可以分开：
+ * ① **观察对象**（`current`）：哪一段还被本 hooks 看着，`status` 只由它的公开事件与本库自己
+ *    确认过的取消交付写；
+ * ② **订阅**：本库自己的记账，不等 SDK 回调 —— 起播被拒、半途绑定失败、卸载这三种情形当场释放；
+ * ③ **重试入口**：Driver 报告 `"deferred"`（还没进安全窗口，只登记了取消请求）时**保留**，
+ *    下一次 `cancel()` 会真的再打一次；已交付（`"canceled"` / `"already-settled"`）时收尾且不重复发。
+ * 之前用整张图的 `stopViewAnimation(map)` 时，② 与 ③ 会互相牺牲（重试必牵连别人的动画 / 不重试就
+ * 失去入口），#105 第三轮与第六轮各打中过一次；换成按实例之后两者同时成立。
  */
 import { onUnmounted, shallowRef, toRaw, type ShallowRef } from "vue";
 import { resolveMapContext } from "./resolveMapContext";
@@ -31,6 +34,7 @@ import { BMapError } from "../core/errors/BMapError";
 import { logger } from "../core/logger";
 import type { MapReadyContext } from "../core/context/types";
 import type { MapHandle, ServiceHandle } from "../driver/types/handles";
+import type { ViewAnimationCancelOutcome } from "../driver/types/map";
 
 /** 视角动画关键帧 */
 export interface ViewAnimationKeyFrames {
@@ -55,7 +59,7 @@ export interface UseBMapViewAnimationOptions {
 export type ViewAnimationStatus = "idle" | "playing";
 
 /**
- * 一段在飞动画的现场：取消命令 + **这一段自己的**监听释放 + 「这次 stop 请求 Driver 有没有接手」。
+ * 一段在飞动画的现场：按实例的取消命令 + 这一段自己的监听释放。
  *
  * 不按「当前那一段」共用一个释放槽位：`startViewAnimation` 会先同步取消上一段，
  * 上一段的 `animationcancel` 于是在新一段订阅完成之后才到达——共用槽位会被旧段摘掉新段的监听。
@@ -63,17 +67,13 @@ export type ViewAnimationStatus = "idle" | "playing";
  * 「Driver 起播前会同步取消上一段、SDK 会为此派发事件」目前只有 Fake 建模、没有真实运行时取证
  * （审计表 F-1），而这三条监听是本库自己的记账，不该由 SDK 是否回调来决定销账。
  *
- * `cancelCommitted` 把另外两件事分开：**「还在观察事件」**不等于**「还有资格再发一次地图级 stop」**。
- * 这里的「被接受」只表示**这一次 `stopViewAnimation()` 正常返回**，不表示 SDK 已完成取消：动画已在
- * 安全窗口内时 Driver 同步打到 `cancelViewAnimation`，还没起播时它只登记 `cancelRequested` 留给延迟
- * 清理。两种情况下这笔账都已由 Driver 接手，本 hooks 不该再补发。若再发一次 `stopViewAnimation`，停掉的是一张图上的**所有**
- * 动画，包括别的 hooks 刚起的那一段。
+ * 取消只碰**自己这个实例**，所以「重试自己那一次」天然不会停掉同一张图上别人的动画。
+ * 返回值是 Driver 侧的交付状态（`canceled` / `deferred` / `already-settled`），本库据此决定
+ * 是收尾还是保留重试入口 —— 不猜 SDK 有没有回调。
  */
 interface AnimationRun {
-  readonly stop: () => void;
+  readonly stop: () => ViewAnimationCancelOutcome;
   readonly release: () => void;
-  /** 是否已有一次 `stop()` 正常返回（= 这一次地图级 stop 请求已被 Driver 接手，不再重复发）。 */
-  cancelCommitted: boolean;
 }
 
 /** 地图（或整个 Client）已经没了：此时「取消动画」这个动作不成立，而不是失败。 */
@@ -98,10 +98,11 @@ export interface UseBMapViewAnimationReturn {
   /**
    * 取消本 hooks 当前那一段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做。
    *
-   * 三点边界：① 取消是**地图级**命令，守卫只看 hooks 自己记的在飞段，因此不保证一定不牵连同图
-   * 其它动画；② **`stopViewAnimation()` 一旦正常返回就不重复发**——同一 hooks 再调 `cancel()` 是 no-op，
-   * 否则会把这张图上别人正在播的动画停掉；③ 取消失败时错误原样抛给调用方，本 hooks 保留
-   * 这一段的归属，可以直接重试。`status` 要等 SDK 的 `animationcancel` 到达才变回 `idle`。
+   * 边界：① 命令按**实例**发，只停本 hooks 自己起播的那一段，同一张图上别人的动画不受影响；
+   * ② 上一次取消还**没进安全窗口**（只登记了请求）时，再调一次会真的重试；已经交付过之后再调是
+   * 幂等收尾，不会重复打到 SDK；③ 取消失败时错误原样抛给调用方，本 hooks 保留观察对象与重试入口。
+   * `status` 由公开事件写；取消交付被本库确认后（`canceled` / `already-settled`）也会收敛到 `idle`，
+   * 不等那条可能不来的事件。
    */
   cancel: () => void;
   status: Readonly<ShallowRef<ViewAnimationStatus>>;
@@ -130,33 +131,47 @@ export function useBMapViewAnimation(
   }
 
   /**
-   * 取消一段动画（公开的 `cancelViewAnimation`）。
+   * 取消一段动画（按实例的 `cancelViewAnimation`）。三种交付各走各的：
    *
-   * **归属只在 stop 请求被 Driver 接受之后才交回**：`MapDriver` 的契约是「取消失败时动画记录保留，
-   * 下一次 `stopViewAnimation` / `destroy` 可重试」，因此失败时 `current` 必须仍指向这一段——否则
-   * SDK 那边还在播，hook 却先丢掉了自己的重试入口（错误照原样抛给调用方，由他决定重试）。
+   * - 抛错（SDK 取消失败）：错误原样给调用方，观察对象与重试入口都留着 —— Driver 保留了记录，
+   *   下一次 `cancel()` 就是真重试；
+   * - `"deferred"`（还没进安全窗口，只登记了取消请求）：**不是「已停止」**，所以同样留着入口，
+   *   本方法不做任何收尾；
+   * - `"canceled"` / `"already-settled"`：本库这一侧已经把它交付完了 ⇒ 就地收尾（释放监听 + 清观察对象
+   *   + `idle`）。正常路径下 `animationcancel` 已经在这之前把这三件事做过一遍，这里是幂等重放；
+   *   而那条事件没来时（F-1 说这无法取证）也不再需要靠它才能交回所有权。
    *
-   * 成功时**不**在这里收尾：正常路径 `stopViewAnimation` 会同步派发 `animationcancel`，监听与状态
-   * 由这一段自己的 `settle` 处理——提前释放监听就等于把 `status` 永远留在 `playing`。
-   * 但会置 `cancelCommitted`：**「还在观察事件」与「还有资格再发一次地图级 stop」是两件事**；
-   * 正常返回之后重复发，停掉的会是这张图上任何一段动画（包括别的 hooks 刚起的）。
    * 地图已经不在了时只放行「地图没了」这一个原因，就地收尾（否则真故障会被静默成「已取消」）。
    */
   function stopRun(run: AnimationRun): void {
-    if (run.cancelCommitted) return; // 已有一次 stop 正常返回：不重复发地图级 stop
+    let outcome: ViewAnimationCancelOutcome;
     try {
-      run.stop();
+      outcome = run.stop();
     } catch (error) {
       if (isWithoutMapError(error)) {
-        run.cancelCommitted = true;
-        if (current === run) current = null;
-        run.release();
-        status.value = "idle";
+        finishRun(run);
         return;
       }
       throw error;
     }
-    run.cancelCommitted = true;
+    if (outcome === "deferred") return;
+    finishRun(run);
+  }
+
+  /**
+   * 一段动画在本库这一侧结束：先释放它**自己的**订阅；只有它仍是本 hooks 的观察对象时，才清
+   * `current` 并把状态收敛到 `idle`。
+   *
+   * 这个身份守卫是必须的：`status` 与 `current` 是**本 hooks 一份**的共享量，而被接管、已收尾的旧段
+   * 也可能走到这里（交付确认、地图已销毁这两条路径）。不加守卫，旧段的收尾就会把后一段刚观察到的
+   * `playing` 抹成 `idle` —— 与 `settle` 里那句「旧段的结算不能抹掉新段的播放中」是同一条不变量，
+   * 现在两处共用一个收口。幂等：重复调用不再改动已经推进过的状态。
+   */
+  function finishRun(run: AnimationRun): void {
+    run.release();
+    if (current !== run) return;
+    current = null;
+    status.value = "idle";
   }
 
   /**
@@ -199,18 +214,14 @@ export function useBMapViewAnimation(
     const offs: Array<() => void> = [];
     let startedObserved = false;
     const run: AnimationRun = {
-      stop: () => driver.map.stopViewAnimation(mapHandle),
+      // 按实例取消：只碰这一段自己的记录，同一张图上别人的动画不受影响
+      stop: () => driver.map.cancelViewAnimation(mapHandle, animation),
       release: () => {
         for (const off of offs) off();
       },
-      cancelCommitted: false,
     };
-    const settle = () => {
-      run.release();
-      if (current === run) current = null;
-      // 已被下一段取代时不动状态：旧段的结算不能抹掉新段的「播放中」
-      if (current === null) status.value = "idle";
-    };
+    // 事件到 = 这一段的播放在公开面上结束了：与「取消交付确认」共用同一个收口
+    const settle = () => finishRun(run);
     try {
       offs.push(
         driver.events.on(animation, "animationstart", () => {
@@ -248,8 +259,8 @@ export function useBMapViewAnimation(
   function cancel(): void {
     if (disposed) return;
     const run = current;
-    // 守卫只看本 hooks 有没有在飞段。取消本身是**地图级**命令（`cancelViewAnimation`），
-    // 因此不保证一定不牵连同图其它动画；失败时 `stopRun` 保留归属，调用方可直接重试。
+    // 取消按**实例**发：只碰本 hooks 自己起播的那一段，同一张图上别人的动画不受影响。
+    // `stopRun` 按 Driver 报回的交付状态决定收尾还是保留重试入口（失败时错误给调用方）。
     if (run) stopRun(run);
   }
 

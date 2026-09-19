@@ -21,6 +21,12 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 | `UseBMapViewAnimationOptions.disableDragging` | 声明了但从未生效 | 已删除（假支持比没有更糟） |
 | `service.autocomplete` 能力等级 | `experimental`（降级理由就是 `suggest()` 的 keyword 假设） | `native`（构造、输入框绑定、`onSearchComplete` 转发都是原生的）。能力矩阵已重生成 |
 
+**新增一处公共面（请 #44 一并冻结）**：`MapDriver.cancelViewAnimation(map, animation)` 与返回类型
+`ViewAnimationCancelOutcome`（`canceled / deferred / already-settled`）。它 1:1 对应官方已声明的
+`Map#cancelViewAnimation(viewAnimation)`——该成员本就登记在 Capability Catalog 的 `map.animate.rawMembers`
+里（见能力矩阵），所以这不是新能力，只是把「按实例取消」这个官方形状暴露到 Facet 上；
+消费者是 `useBMapViewAnimation` 与 `map.test.ts` 的 Facet 用例。
+
 **同时移除的零消费者出口 / 内部面**（全部经全仓引用核对，含 docs、apps、fixtures、scripts）：
 
 - `core/loader`：`createBaiduSdkUrl()`（旧 CDN 入口拼装，默认路径早在 #71 就走官方 loader）；
@@ -42,8 +48,10 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
 
 **行为不变但口径写清的**：
 
-- `useBMapViewAnimation` 的 `status` 是**观察值**，只由公开的 `animationstart` / `animationend` /
-  `animationcancel` 写；命令不再乐观改它，因此「发了播放但 SDK 一次都没回调」会如实停在 `idle`。
+- `useBMapViewAnimation` 的 `status` 是**观察值**：由公开的 `animationstart` / `animationend` /
+  `animationcancel` 写，命令不乐观改它，因此「发了播放但 SDK 一次都没回调」会如实停在 `idle`。
+  唯一的例外是本库对自己那次取消的**交付确认**（`cancelViewAnimation` 已打到 SDK ⇒ 收敛 `idle`），
+  因为「事件一定会来」这条时序没有取证（审计表 F-1），不能拿它当所有权判据。
 - `MapDriver` 的视角动画 teardown **保留**：它记的是本库自己发起的启动 / 取消 / 销毁次序，
   不是「这条回包属于哪次命令」。但它的前提（`animationstart` 在内部 Animation 构造前同步派发、
   启动前 `cancelViewAnimation` 抛 `TypeError`）目前只有 Fake 建模、没有真实运行时取证，
@@ -72,11 +80,10 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   `resource:error` 诊断总线交出（`component: "useBMapViewAnimation"`）。只靠 `logger.warn` 不够——
   它在 production 构建里会被折叠掉，而地图自己的销毁路径若也停不掉这段动画，失败就只剩一条
   开发模式下的控制台痕迹。
-- 取消是**地图级**命令：`cancel()` 的守卫只看 hooks 自己有没有在飞段，因此不保证一定不牵连同图
-  其它动画（文档与类型注释已改成这个口径，而不是反过来承诺归属）。
-- 一次 `stopViewAnimation()` **正常返回之后就不再重复发**（返回只代表这一次请求被 Driver 接手：
-  动画还没起播时它只登记 `cancelRequested`，真正的 SDK 取消留给安全窗口，既不等于「SDK 已取消」
-  也不等于「动画已停」）：同一 hooks 之后再调 `cancel()` 是 no-op。
-  此前它会在「取消已成功、但 SDK 没派发 `animationcancel`」时保留发 stop 的资格，下一次调用就会停掉
-  这张图上**任何人**正在播的动画（包括另一个 `useBMapViewAnimation` 刚起的那一段）。
-  「还在观察事件」与「还有资格再发一次地图级 stop」现在是两件事。
+- **`cancel()` 改成按实例取消**：新增 `MapDriver.cancelViewAnimation(map, animation)`（官方
+  `Map#cancelViewAnimation(viewAnimation)` 本来就是按实例的；Driver 内部逐条记录调的也是这个成员），
+  hooks 用它替代整张图的 `stopViewAnimation(map)`。于是「重试自己那一次取消」与「不牵连别人的动画」
+  同时成立 —— 用整张图的 stop 时这两条只能二选一（#105 第三轮与第六轮各打中过一次）。
+- 该方法返回**本库侧的交付状态** `"canceled" | "deferred" | "already-settled"`：还没进启动安全窗口时
+  只是登记（`deferred`，hooks 保留重试入口，第二次 `cancel()` 会真重试）；已交付之后再调是幂等收尾，
+  不补发 SDK 命令（补发要假设「SDK 对已取消实例幂等」，属 F-3 未证）。

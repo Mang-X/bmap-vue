@@ -295,8 +295,7 @@ describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
     expect(errors, "卸载期取消失败必须上诊断总线").toHaveLength(1);
     expect(errors[0]!.component).toBe("useBMapViewAnimation");
     expect(errors[0]!.error).toMatchObject({
-      code: "BMAP_SDK_CALL_FAILED",
-      message: expect.stringContaining("取消视角动画时有 1 项失败"),
+      message: expect.stringContaining("cancelViewAnimation"),
     });
     fake.diagnostics.assertNoLeaks("useBMapViewAnimation 卸载时取消失败");
   });
@@ -373,9 +372,8 @@ describe("useBMapViewAnimation：取消被接受之后不再越权", () => {
     expect(() => hooks[0].cancel()).not.toThrow();
     await settleAsyncWindow();
     expect(first.cancelCalls, "取消命令确实打到了 SDK").toBe(1);
-    expect(hooks[0].status.value, "没观察到 animationcancel 就仍是 playing（观察值口径）").toBe(
-      "playing",
-    );
+    // 取消已经打到 SDK 并被本库确认交付 ⇒ 不等那条事件也收敛（#105 第六轮 P2-1）
+    expect(hooks[0].status.value).toBe("idle");
 
     // H1 名下的动画已经被 Driver 结算掉，H2 在同一张图上正常起播
     await hooks[1].start(KEY_FRAMES);
@@ -405,5 +403,129 @@ describe("useBMapViewAnimation：取消被接受之后不再越权", () => {
     expect(second.getListenerCount()).toBe(0);
     wrapper.unmount();
     fake.diagnostics.assertNoLeaks("两个 hooks 共用一张地图");
+  });
+});
+
+/**
+ * 取消的交付状态决定所有权（#105 第六轮）
+ *
+ * `MapDriver.cancelViewAnimation(map, animation)` 把这一次取消的**本库侧交付状态**报回来：
+ * 还没进启动安全窗口时只是登记（`"deferred"`），已起播时才真正打到 SDK（`"canceled"`），
+ * 记录早已结算则什么都不是（`"already-settled"`）。hooks 据此区分三件事：
+ * 观察对象、本库自己的监听、以及**还有没有东西需要重试** —— 而不是拿「有没有收到
+ * `animationcancel`」当所有权判据（F-1 说那条时序没有取证）。
+ */
+describe("useBMapViewAnimation：deferred 与已交付的取消走不同的收尾", () => {
+  it("还没进安全窗口就 cancel、延迟取消失败：第二次 cancel 真的重试自己那一段", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+
+    await hook.start(KEY_FRAMES);
+    const animation = lastAnimation();
+    expect(animation.hasPendingStart, "SDK 的启动定时器还没落地").toBe(true);
+    expect(hook.status.value, "没观察到 animationstart 就不算在播").toBe("idle");
+
+    animation.failNextCancel = true;
+    expect(() => hook.cancel(), "登记取消请求不该抛错").not.toThrow();
+    expect(animation.cancelCalls, "登记阶段不会打到 SDK").toBe(0);
+
+    // 安全窗口到达：Driver 补做取消，第一次失败 ⇒ 只告警、记录保留
+    await letSdkStart();
+    expect(animation.cancelCalls).toBe(1);
+    expect(hook.status.value, "取消尚未交付：观察对象与重试入口都得留着").toBe("playing");
+
+    // 第二次 cancel = 真重试（按实例，不碰这张图上别人的动画）
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(animation.cancelCalls, "第二次必须真的再打一次 SDK 取消").toBe(2);
+    expect(animation.getListenerCount(), "重试成功后订阅归零").toBe(0);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+  });
+
+  it("取消已交付之后再 cancel 是幂等收尾，不重复打到 SDK", async () => {
+    let hook!: Hook;
+    const wrapper = await startAndSettle((created) => {
+      hook = created;
+      void created.start(KEY_FRAMES);
+    });
+    await flushPromises();
+    const animation = lastAnimation();
+    expect(hook.status.value).toBe("playing");
+
+    // SDK 被调用、事件被关掉：本库仍知道自己已经把这次取消交付出去了
+    animation.suppressCancelEvent = true;
+    hook.cancel();
+    expect(animation.cancelCalls).toBe(1);
+    expect(hook.status.value, "交付确认即可收敛，不必等那条事件").toBe("idle");
+    expect(animation.getListenerCount()).toBe(0);
+
+    expect(() => hook.cancel(), "再取消不该抛错").not.toThrow();
+    expect(animation.cancelCalls, "已交付过就不再补发命令").toBe(1);
+    expect(hook.status.value).toBe("idle");
+
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("取消交付后的幂等 cancel");
+  });
+});
+
+/**
+ * 旧段的收尾不得改写新段（#105 第六轮 P2）
+ *
+ * `status` 与 `current` 是**同一个 hooks 一份**共享量，而 `finishRun` 有两个调用方（事件结算、
+ * 取消交付确认）加一条异常路径（地图已销毁）。所以收尾必须按 `run` 身份收敛：被接管或已收尾的
+ * 旧段只销自己的订阅，不动新段刚观察到的 `playing`。
+ */
+describe("useBMapViewAnimation：收尾按动画身份收敛", () => {
+  it("旧段 deferred→已交付之后再起新段：新段状态不被旧段改写，且自己能重试到收敛", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+    a.failNextCancel = true;
+    hook.cancel();
+    expect(a.cancelCalls, "还没进安全窗口：只登记，不打到 SDK").toBe(0);
+    await letSdkStart();
+    expect(a.cancelCalls, "安全窗口里 Driver 补做取消（这次失败）").toBe(1);
+    expect(hook.status.value, "取消尚未交付：状态照旧由事件说话").toBe("playing");
+
+    a.suppressCancelEvent = true;
+    hook.cancel(); // 重试成功 ⇒ 交付确认 ⇒ 收敛，不等那条 animationcancel
+    expect(a.cancelCalls).toBe(2);
+    expect(hook.status.value).toBe("idle");
+    expect(a.getListenerCount(), "旧段的订阅已销").toBe(0);
+
+    await hook.start(KEY_FRAMES);
+    await settleAsyncWindow();
+    const b = fake.createdViewAnimations[1];
+    expect(hook.status.value).toBe("playing");
+
+    // 旧段的监听已由 `start()` 的接管逻辑释放；这里再派发一次，代表任何旧段的后续交付路径
+    // （晚到的事件、重复结算）。它们都不该把新段刚观察到的 playing 抹掉。
+    a.emit("animationend");
+    a.emit("animationcancel");
+    await flushPromises();
+    expect(hook.status.value, "旧段不能把新段写成 idle").toBe("playing");
+    expect(b.getListenerCount(), "新段的订阅不受旧段影响").toBeGreaterThan(0);
+
+    // 新段自己走同一套：第一次取消失败 ⇒ 抛错、保留重试入口与 playing；第二次收敛
+    b.failNextCancel = true;
+    expect(() => hook.cancel()).toThrow();
+    expect(b.cancelCalls).toBe(1);
+    expect(hook.status.value).toBe("playing");
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(b.cancelCalls, "第二次真的重试到了 SDK").toBe(2);
+    expect(hook.status.value).toBe("idle");
+    expect(a.cancelCalls, "旧段保持它自己那两次，不被新段牵连").toBe(2);
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("收尾按动画身份收敛");
   });
 });
