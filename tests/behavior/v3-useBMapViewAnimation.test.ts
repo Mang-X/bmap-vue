@@ -175,3 +175,104 @@ describe("useBMapViewAnimation：只用官方公开面", () => {
     fake.diagnostics.assertNoLeaks("useBMapViewAnimation 卸载");
   });
 });
+
+/**
+ * 取消失败路径（#105 评审 P1）
+ *
+ * `MapDriver` 的契约是「`cancelViewAnimation` 失败时动画记录**保留**，下一次
+ * `stopViewAnimation` / `destroy` 仍可重试」（`driver/jsapi-v4/map.ts` 的 `cancelAllAnimations`
+ * 汇总抛 `BMAP_SDK_CALL_FAILED`，且不置 `settled`）。这条契约在 hooks 侧有两个方向：
+ *
+ * - hooks **不能**在取消被接受之前丢掉自己那一段的归属——否则 SDK 那边还在播，hook 却已经没有
+ *   重试入口了；
+ * - 反过来，「本段的订阅」是本库自己的记账：一段从未起播（起播被拒）或已经卸载的动画，
+ *   不能因为等一条可能不来的事件就一直挂着。
+ */
+describe("useBMapViewAnimation：取消失败时保留重试入口", () => {
+  it("显式 cancel() 第一次失败后仍可重试，并在重试成功时结算", async () => {
+    let hook!: Hook;
+    const wrapper = await startAndSettle((created) => {
+      hook = created;
+      void created.start(KEY_FRAMES);
+    });
+    await flushPromises();
+    const animation = lastAnimation();
+    expect(hook.status.value).toBe("playing");
+
+    animation.failNextCancel = true;
+    expect(() => hook.cancel(), "取消失败必须让调用方看见").toThrow();
+    expect(animation.cancelCalls).toBe(1);
+    expect(hook.status.value, "没观察到 animationcancel 就不能说已停").toBe("playing");
+
+    // 关键：第一次失败不能把 hooks 的归属清掉，否则第二次直接 no-op
+    hook.cancel();
+    await letSdkStart();
+
+    expect(animation.cancelCalls, "第二次必须真的把取消命令再打给 SDK").toBe(2);
+    expect(animation.getListenerCount(), "重试成功后订阅归零").toBe(0);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+  });
+
+  it("第二次 start() 被旧段的取消失败挡住时：旧段仍在观察、新段不留订阅", async () => {
+    let hook!: Hook;
+    const wrapper = await startAndSettle((created) => {
+      hook = created;
+      void created.start(KEY_FRAMES);
+    });
+    await flushPromises();
+    const first = lastAnimation();
+    expect(hook.status.value).toBe("playing");
+
+    first.failNextCancel = true;
+    await expect(hook.start(KEY_FRAMES)).rejects.toThrow();
+
+    const second = fake.createdViewAnimations[1];
+    expect(second, "新实例已创建，但起播被拒").toBeDefined();
+    expect(second.getListenerCount(), "从未起播的一段不能留着订阅").toBe(0);
+    expect(first.getListenerCount(), "旧段仍在播，必须还被观察着").toBeGreaterThan(0);
+    expect(first.hasPendingStart, "旧段的 SDK 启动定时器早已落地").toBe(false);
+
+    // 旧段仍可由 hooks 重试取消（Driver 保留了它的记录）
+    hook.cancel();
+    await letSdkStart();
+
+    expect(first.getListenerCount()).toBe(0);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+  });
+
+  it("卸载时取消失败：不打断卸载、本段订阅仍然归零", async () => {
+    const wrapper = await startAndSettle((hook) => void hook.start(KEY_FRAMES));
+    await flushPromises();
+    const animation = lastAnimation();
+    expect(animation.getListenerCount()).toBeGreaterThan(0);
+
+    animation.failNextCancel = true;
+    expect(() => wrapper.unmount()).not.toThrow();
+    await letSdkStart();
+
+    expect(animation.getListenerCount(), "卸载路径不能等一条可能不来的事件才释放").toBe(0);
+    fake.diagnostics.assertNoLeaks("useBMapViewAnimation 卸载时取消失败");
+  });
+
+  it("起播前地图已被销毁：那一段的三条订阅全部下线", async () => {
+    let hook!: Hook;
+    const wrapper = await startAndSettle((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    const ready = await hook.ready;
+    const created = fake.createdViewAnimations.length;
+
+    // 订阅与起播之间没有任何调用方能插手的窗口，真实形态是「地图在别处被销毁」：
+    // `createViewAnimation` 与 `events.on` 都只涉及动画实例本身，起播才要求地图活着
+    ready.client.driver.map.destroy(ready.map);
+    await expect(hook.start(KEY_FRAMES)).rejects.toThrow();
+
+    const attempt = fake.createdViewAnimations[created];
+    expect(attempt, "实例已创建，但起播被拒").toBeDefined();
+    expect(attempt.getListenerCount(), "从未起播的一段不能留着任何订阅").toBe(0);
+    wrapper.unmount();
+  });
+});

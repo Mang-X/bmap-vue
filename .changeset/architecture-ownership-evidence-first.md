@@ -57,3 +57,14 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   现在接管时同步释放，事件只负责写状态。
 - Fake SDK 同步瘦身：`Autocomplete` 的 `respond` / `includeKeyword` 与回包的 `keyword` 一并删除，
   避免有人再按关键字建归属。
+
+**`useBMapViewAnimation` 的失败路径口径（#105 评审后明确）**：
+
+- `cancel()` 在**取消失败**时把错误抛给调用方，并保留这一段的归属 ⇒ 可以直接再调一次重试
+  （`MapDriver` 的既有契约是「取消失败时动画记录保留，下一次 `stopViewAnimation` / `destroy` 可重试」）。
+  原先的实现会先把归属清掉，第二次 `cancel()` 变成 no-op，而 SDK 那边还在播。
+- `start()` 是**两阶段提交**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换 ⇒ `start()` 随之
+  reject，上一段继续被观察、仍可 `cancel()` 重试；从未起播的那一段不留订阅。
+- 卸载时取消失败**不再打断卸载**（按 `logger.warn` 上报，地图销毁路径会重试取消），本段订阅无条件释放。
+- 取消是**地图级**命令：`cancel()` 的守卫只看 hooks 自己有没有在飞段，因此不保证一定不牵连同图
+  其它动画（文档与类型注释已改成这个口径，而不是反过来承诺归属）。
