@@ -45,11 +45,16 @@ export class FakeV4NativeLayerBase extends FakeV4Layer {
     return this.data
   }
 
-  clearData(): void {
-    this.callLog.push('clearData')
-    this.data = null
-  }
-
+  /**
+   * ⚠️ **这里刻意没有 `clearData`。**
+   *
+   * 四类专页图层（`PointIconLayer` / `PointShapeLayer` / `LineLayer` / `FillLayer`）在官方声明里
+   * **只有** `setData` / `getData`（仓库内官方参考 `visualization-layers.md` 的清理清单也是
+   * 「解绑事件 → `map.removeLayer`」）。替身**不得比真实契约宽容**：一旦这里补上 `clearData`，
+   * 驱动表里那条不存在的 capability 就会被 CI 测绿（#106 评审的 P1 正是这么发生的），
+   * 而真实运行时会报 `BMAP_SDK_CALL_FAILED`。扩展 API 那一族（`FakeV4RuntimeLayer`）保留
+   * `clearData`，因为官方扩展 API 参考明确列出了它。
+   */
   updateState(
     keys: string | number | Array<string | number>,
     params: Record<string, unknown>,

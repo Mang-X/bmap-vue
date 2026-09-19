@@ -33,8 +33,11 @@ function rawOf(): { state: Record<string, unknown>; callLog: string[] } {
 /** 会话取值器：与内核的接线同形（未就绪时整段为 null）。 */
 const session = () => (handle === null ? null : { driver, handle });
 
+/** 业务身份字段：默认有（多数用例关心的是命令本身），`undefined` 用来验证「身份未声明」的拒绝。 */
+let identityField: string | undefined = "id";
+
 function api(component = "BTestLayer") {
-  return createFeatureStateApi({ session, component });
+  return createFeatureStateApi({ session, identity: () => identityField, component });
 }
 
 beforeEach(() => {
@@ -50,6 +53,7 @@ beforeEach(() => {
     registry: createJsapiV4HandleRegistry(),
   });
   handle = driver.create("line");
+  identityField = "id";
 });
 
 describe("Feature State：写命令", () => {
@@ -178,6 +182,23 @@ describe("Feature State：读回与就绪", () => {
     expect((stale.raw as unknown as { state: unknown }).state, "旧实例的状态保持原样").toEqual({
       a: { selected: true },
     });
+  });
+
+  it("身份字段没声明时五个命令都**拒绝执行**（不猜 SDK 的默认 idKey）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const state = api("BLineLayer");
+    const callsBefore = rawOf().callLog.length;
+    identityField = undefined;
+
+    expect(() => state.update("a", { selected: true })).not.toThrow();
+    expect(() => state.remove("a")).not.toThrow();
+    expect(() => state.clear()).not.toThrow();
+    expect(() => state.replace({ a: { selected: true } })).not.toThrow();
+    expect(state.get(), "读回同样拒绝（返回空映射）").toEqual({});
+
+    expect(rawOf().callLog.length, "被拒绝的命令不得碰到 SDK").toBe(callsBefore);
+    expect(rawOf().state, "SDK 侧状态不得被改动").toEqual({});
+    expect(warn, "必须说出来（否则使用者以为写成功了）").toHaveBeenCalled();
   });
 
   it("当前图层种类没有这个入口时，Driver 显式失败（本模块不预先吞掉）", () => {

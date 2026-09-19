@@ -23,6 +23,10 @@
  * - 不缓存「我们认为 SDK 现在是什么状态」——`get` 一律**读回** SDK 的当前值（`getAllState()`），
  *   因为 `setData` 触发的数据重新解析、以及 SDK 自己的默认值都会让本地账本与 SDK 分叉。
  *
+ * 身份**没声明**（组件没给 `idKey`）时五个命令一律**拒绝执行**并告警一次（见 `identity` 的契约）：
+ * 让它们过去就等价于悄悄依赖 SDK 的默认 `idKey`，于是同一张图层上会出现两套身份语义——拾取如实
+ * 给 `id: null`，状态命令却装作知道身份。
+ *
  * ## 校验一律前置于调用
  *
  * 非法参数（空 id、`NaN`、非对象状态）在**任何 SDK 调用之前**抛 `BMAP_INVALID_ARGUMENT`。
@@ -86,6 +90,14 @@ export interface CreateFeatureStateApiInput {
    *   连 Driver 都还没解析出来。
    */
   session(): FeatureStateSession | null;
+  /**
+   * **业务身份字段名**（构造期 `idKey`）的取值器；没表态时返回 `undefined`。
+   *
+   * 身份未知时命令一律被拒绝（告警一次）——「按 id 定位」在没有身份字段的图层上没有意义，
+   * 而放它过去就等价于悄悄依赖 SDK 的默认 `idKey`：同一个组件会在拾取上说「认不出身份」，
+   * 在状态命令上却装作知道身份，那是两套身份语义（#106 评审的建议项）。
+   */
+  identity(): string | undefined;
   /** 调用方名字（组件名）：参数错误与「未就绪」的告警都点名它。 */
   component: string;
 }
@@ -204,55 +216,69 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
     );
   };
 
+  /**
+   * **身份未声明**时的统一出口：同样不做任何事，同样要说出来（与 `notReady` 分开写，
+   * 因为原因是两件事：一个是时序，一个是「这个图层根本没有身份字段」）。
+   */
+  const noIdentity = (command: FeatureStateCommand): void => {
+    warnOnce(
+      `${component}:${command}:no-identity`,
+      `[${component}] ${command}() 需要一个业务身份字段，而本组件没有声明 idKey：` +
+        "本次不做任何事——本库不猜 SDK 的默认 idKey（拾取在同样情况下也只会给出 id: null）。" +
+        "请设置 idKey 后重试",
+    );
+  };
+
+  /**
+   * 命令的统一前置：会话与身份都就绪才继续。返回 `null` = 本次不执行（原因已经告警过）。
+   */
+  const guard = (command: FeatureStateCommand): FeatureStateSession | null => {
+    const session = input.session();
+    if (!session) {
+      notReady(command);
+      return null;
+    }
+    if (input.identity() === undefined) {
+      noIdentity(command);
+      return null;
+    }
+    return session;
+  };
+
   return {
     update(keys, state, options) {
       const ids = normalizeKeys(component, keys);
       const params = normalizeState(component, state);
       if (ids.length === 0) return;
-      const session = input.session();
-      if (!session) {
-        notReady("update");
-        return;
-      }
+      const session = guard("update");
+      if (!session) return;
       session.driver.updateState(session.handle, ids, params, options?.append ?? false);
     },
 
     remove(keys) {
       const ids = normalizeKeys(component, keys);
       if (ids.length === 0) return;
-      const session = input.session();
-      if (!session) {
-        notReady("remove");
-        return;
-      }
+      const session = guard("remove");
+      if (!session) return;
       session.driver.removeState(session.handle, ids);
     },
 
     clear() {
-      const session = input.session();
-      if (!session) {
-        notReady("clear");
-        return;
-      }
+      const session = guard("clear");
+      if (!session) return;
       session.driver.clearState(session.handle);
     },
 
     replace(inputs) {
       const map = normalizeStateMap(component, inputs);
-      const session = input.session();
-      if (!session) {
-        notReady("replace");
-        return;
-      }
+      const session = guard("replace");
+      if (!session) return;
       session.driver.replaceState(session.handle, map);
     },
 
     get(keys) {
-      const session = input.session();
-      if (!session) {
-        notReady("get");
-        return {};
-      }
+      const session = guard("get");
+      if (!session) return {};
       const all = session.driver.getState(session.handle);
       if (keys === undefined) return all;
       // 过滤口径与写入一致：`String(id)`（SDK 的映射键就是 id 的字符串形式）

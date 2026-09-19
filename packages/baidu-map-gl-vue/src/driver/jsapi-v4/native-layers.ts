@@ -7,10 +7,13 @@
  * 行为依据（官方 4.0 专页 + `@baidumap/jsapi-v4-types@4.0.4`）：
  *
  * - **四类「专页」批量图层**（`PointIconLayer` / `PointShapeLayer` / `LineLayer` / `FillLayer`）
- *   在 4.0.4 有类声明，且共享同一套方法面：`setData/clearData`、`updateState/removeState/
- *   clearState/replaceAllState/getAllState`、`setStyleOptions`、`setVisible`、`setOpacity`、
- *   `setZIndex`（及 `setMinZoom`/`setMaxZoom`）、`setBaseOptions`（`enablePicked` 在这里合并）、
- *   `doOnceDraw`。它们的构造选项里 `enablePicked` 默认 false，因此**拾取是显式开关**。
+ *   在 4.0.4 有类声明，且共享同一套方法面：`setData`/`getData`、`updateState`/`removeState`/
+ *   `clearState`/`replaceAllState`/`getAllState`、`setStyleOptions`（改完要 `doOnceDraw()`）、
+ *   `setVisible`、`setOpacity`、`setZIndex`（及 `setMinZoom`/`setMaxZoom`）、`setBaseOptions`
+ *   （`enablePicked` 在这里合并）、`getPickedItem`。它们的构造选项里 `enablePicked` 默认 false，
+ *   因此**拾取是显式开关**。
+ *   ⚠️ **这一族没有 `clearData`**（#106 评审修正，依据见 `DECLARED_LAYER_OPERATIONS` 的注释）：
+ *   「清空数据」由实例生命周期表达，不靠一个不存在的入口。
  * - **四个扩展 API**（`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`）在 4.0 运行时
  *   公开但**没有类声明**，且官方明确「首次加载时可视化实现是异步注入的」。因此：
  *   构造器按结构探测，且**在 `create()` 调用时刻判断**——不在 Driver 构造期冻结结论，
@@ -55,10 +58,26 @@ import {
 } from "./internal";
 import type { JsapiV4HandleRegistry } from "./registry";
 
-/** 四类专页图层共享的操作面（官方 4.0.4 声明的成员逐条对应）。 */
+/**
+ * 四类专页图层共享的操作面。
+ *
+ * ⚠️ **没有 `clearData`**（#106 评审修正）。两条一手来源都指向「这一族没有公开的清空入口」：
+ *
+ * - 上游声明 `@baidumap/jsapi-v4-types@4.0.4` 的 `PointIconLayer` / `PointShapeLayer` /
+ *   `LineLayer` / `FillLayer` **只有** `setData(data)` 与 `getData()`（只有 `GeoJSONLayer` 有
+ *   `clearData()`、`DOMLayer` 有 `removeAllOverlays()`）；
+ * - 仓库内的官方参考 `.agents/skills/bmap-jsapi-v4/references/visualization-layers.md` 把这一族的
+ *   数据面写成 `setData/getData`，资源清理写的是「解绑事件 → `map.removeLayer(layer)`」。
+ *
+ * 它原先出现在这里是因为 `2026-09-12` 的 ADR 决策 3 把「共享同一套方法面」写宽了（该表已被同一份
+ * 证据更正）。「清空数据」在这一族里因此由**实例生命周期**表达（换一个没有数据的实例）——见 ADR
+ * `2026-09-19-native-data-layer-components.md` 决策 8。
+ *
+ * 这张表与官方声明的逐条对应由 `native-layers.test.ts` 的「操作面 ↔ 官方声明」用例**机器核对**，
+ * 不允许凭印象增减。
+ */
 const DECLARED_LAYER_OPERATIONS = [
   "setData",
-  "clearData",
   "setStyle",
   "setVisible",
   "setOpacity",

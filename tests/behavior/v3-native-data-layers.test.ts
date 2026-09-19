@@ -5,7 +5,7 @@
  *
  * | issue 条目 | 落点 | 覆盖程度 |
  * | --- | --- | --- |
- * | 统一 setData/style/base options/visible/opacity/zoom/zIndex | §1（四条写入路径）、§6（样式函数） | 完整 |
+ * | 统一 setData/style/base options/visible/opacity/zoom/zIndex | §1（四条写入路径 + `data` 三态）、§6（样式函数） | 完整 |
  * | 各种 geometry 的 GeoJSON 校验 | **未实现**：本票的图层组件**不做** GeoJSON 校验（官方 `setData(geojson: object)` 的结构由 SDK 负责），M6 的数据适配层（`core/data/*`，由 #34 落地）目前只覆盖 Point 几何 | 欠账（见 ADR） |
  * | Feature State 单选/多选/替换/清空 | §3（组件 expose 的命令面）+ `core/data/featureState.test.ts`（参数边界与读回口径） | 完整 |
  * | 未命中、命中和 data 更新后的 picked item | §2 | 完整 |
@@ -14,7 +14,7 @@
  * | Layer API 有统一基础语义和各自强类型 style | §1（同一批断言跑在 line / fill 上）、§5（逐 kind 能力面：不支持的字段不声明） | line / fill 完整（强类型 style）；heatmap / track-line 只有官方声明得到的那部分面，**没有强类型 style**——官方没有可核对的声明 |
  * | Feature State 与业务 ID 稳定对应 | §2 / §3（身份只来自 `properties[idKey]`，`id` 如实回传） | 完整 |
  * | TrackLine 不再依赖旧 TrackAnimation 私有字段 | §7（源码级反向门禁 + 正证守卫） | 完整 |
- * | 所有 Layer 均有明确 remove/clear 策略 | §4（永久销毁 = `clearData` → `removeLayer`；有 `setVisible` 的 kind 隐藏走 setter，没有的走摘挂） | 完整 |
+ * | 所有 Layer 均有明确 remove/clear 策略 | §4（永久销毁 = 解绑监听 → `removeLayer`，全程不调 `clearData`；「清空」由 `data: null` ⇒ 换一个没有数据的实例表达）；§1 的 `data` 三态用例 | 完整 |
  *
  * 用例默认只写**领域读数**（`harness.nativeLayersCreated()` / `nativeLayerCalls()` /
  * `nativeLayerAttached()` / `harness.attached('layer')` / `assertIdle()`）。少数几条需要「SDK 侧
@@ -287,6 +287,44 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("部分写入后撤回");
     });
 
+    it("data 置为 null ⇒ 换一个**没有数据**的实例；再给数据能重新画出来", async () => {
+      const { wrapper, setProp } = await mountOneVisual(0);
+      const created = createdSince();
+      const stale = lastRawLayer();
+
+      await setProp({ data: null });
+      expect(createdSince(), "「没有数据」由换实例表达（这一族没有公开的清空入口）").toBe(created + 1);
+      expect(harness.nativeLayerData(), "新实例没有被下发任何数据").toBeNull();
+      expect(harness.nativeLayerCalls(), "全程不得调用 clearData").not.toContain("clearData");
+      expect(harness.attached("layer"), "同一时刻只有一个实例挂在图上").toBe(1);
+      expect(
+        (stale as unknown as { attachedMap: unknown }).attachedMap,
+        "旧实例连同它的数据一起被丢弃",
+      ).toBeNull();
+
+      // 再给数据：当前（空）实例直接 setData，不需要再换实例
+      await setProp({ data: POLYGONS });
+      expect(harness.nativeLayerData()).toEqual(POLYGONS);
+      expect(createdSince(), "从空切回有值不需要再换实例").toBe(created + 1);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("data 置空往返");
+    });
+
+    it("data 置为 undefined 是**不表态**：不换实例、不产生 SDK 调用、旧数据留在图上", async () => {
+      const { wrapper, setProp } = await mountOneVisual(0);
+      const created = createdSince();
+      const calls = harness.nativeLayerCalls().length;
+
+      await setProp({ data: undefined });
+      expect(createdSince(), "不表态不换实例").toBe(created);
+      expect(harness.nativeLayerCalls().length, "不表态不产生 SDK 调用").toBe(calls);
+      expect(harness.nativeLayerData(), "已画出来的数据保持不变").toEqual(LINES);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("data 不表态");
+    });
+
     it("构造期项变化 ⇒ 换实例（先摘后建）", async () => {
       const { wrapper, setProp } = await mountOneVisual(0);
       const created = createdSince();
@@ -414,6 +452,21 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("Feature State 读回");
     });
 
+    it("没有声明 idKey 时命令面**拒绝执行**（不让它悄悄落回 SDK 的默认身份）", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { wrapper } = await mountOneVisual(0, { idKey: undefined });
+      const state = featureStateOf(wrapper, BLineLayer);
+      const before = harness.nativeLayerCalls().length;
+
+      expect(() => state.update("a", { selected: true })).not.toThrow();
+      expect(state.get(), "读回同样拒绝（返回空映射）").toEqual({});
+      expect(harness.nativeLayerCalls().length, "被拒绝的命令不得碰到 SDK").toBe(before);
+      expect(warnLines(warn).some((line) => line.includes("idKey")), "必须告警并点名 idKey").toBe(true);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("身份未声明");
+    });
+
     it("非法 id 在调用之前失败（不产生 SDK 调用）", async () => {
       const { wrapper } = await mountOneVisual(0);
       const state = featureStateOf(wrapper, BLineLayer);
@@ -430,23 +483,28 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   });
 
   describe("§4 清理策略", () => {
-    it("永久销毁 = 先清数据、再摘图层", async () => {
+    it("永久销毁 = 先解绑业务监听、再摘图层；全程**不**调用 clearData（这一族没有这个入口）", async () => {
       const { wrapper } = await mountOneVisual(0);
       const raw = lastRawLayer();
 
-      // 顺序只能从替身上读：`clearData` 那一刻实例还必须挂在图上（领域读数看不出先后）
-      let attachedWhenCleared: boolean | null = null;
-      const original = raw.clearData;
-      raw.clearData = () => {
-        attachedWhenCleared = raw.attachedMap !== null;
-        original?.call(raw);
+      // 顺序只能从替身上读：摘除那一刻业务监听必须已经解绑（领域读数看不出先后）。
+      // 这条不变量与 `LayerRegistry.dispose()` 的顺序一致（ADR `2026-09-17` 决策 14）。
+      const map = fake.createdMaps[fake.createdMaps.length - 1] as unknown as {
+        removeLayer(layer: unknown): void;
+      };
+      let listenersWhenRemoved: number | null = null;
+      const originalRemove = map.removeLayer.bind(map);
+      map.removeLayer = (layer) => {
+        listenersWhenRemoved = (
+          (layer as { getListenerTypes?: () => string[] }).getListenerTypes?.() ?? []
+        ).length;
+        originalRemove(layer);
       };
 
       await unmountAndSettle(wrapper);
-      expect(raw.callLog, "永久销毁前必须走统一的清空入口").toContain("clearData");
-      expect(attachedWhenCleared, "清空发生在摘除之前（官方推荐顺序）").toBe(true);
+      expect(listenersWhenRemoved, "摘除那一刻业务监听必须已经解绑").toBe(0);
+      expect(raw.callLog, "#106 评审 P1：这一族没有 clearData 入口").not.toContain("clearData");
       expect(harness.attached("layer"), "图层已摘").toBe(0);
-      expect(raw.data, "SDK 侧数据已被清空").toBeNull();
       harness.assertIdle("卸载清理");
     });
 
@@ -457,10 +515,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       await setProp({ visible: false });
       expect(harness.nativeLayerAttached(), "隐藏 ≠ 摘掉").toBe(true);
       expect(raw.data, "隐藏不释放数据").toEqual(LINES);
-      expect(harness.nativeLayerCalls(), "隐藏不产生 clearData").not.toContain("clearData");
+      expect(harness.nativeLayerCalls()).not.toContain("clearData");
 
       await setProp({ visible: true });
-      expect(harness.nativeLayerCalls().filter((call) => call === "clearData").length).toBe(0);
+      expect(harness.nativeLayerCalls()).not.toContain("clearData");
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("隐藏往返");
@@ -502,6 +560,35 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("BHeatmapLayer 显隐");
+    });
+
+    it("轨迹线：data → null 真的清掉旧轨迹（不再有「仍在画上一条轨迹」的状态）", async () => {
+      const props = ref<Record<string, unknown>>({ data: TRACK });
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      await settle();
+      expect(harness.nativeLayerData(), "初始轨迹已下发").toEqual(TRACK);
+      const created = createdSince();
+
+      // 这一族的登记面里没有清空入口（只有 setData）⇒「没有轨迹」只能由**实例生命周期**表达
+      props.value = { ...props.value, data: null };
+      await settle();
+      expect(createdSince(), "轨道清空 = 换一个没有数据的实例").toBe(created + 1);
+      expect(harness.nativeLayerData(), "新实例没有轨迹").toBeNull();
+      expect(harness.attached("layer"), "同一时刻只有一条轨道挂在图上").toBe(1);
+
+      // 再给一条轨道：当前实例直接 setData
+      const nextTrack = {
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: [[116.4, 39.9], [116.5, 39.95]] },
+        properties: { id: "track-2" },
+      };
+      props.value = { ...props.value, data: nextTrack };
+      await settle();
+      expect(harness.nativeLayerData(), "新轨迹覆盖上一条").toEqual(nextTrack);
+      expect(createdSince(), "从空切回有值不需要再换实例").toBe(created + 1);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("轨迹线 data 往返");
     });
 
     it("轨迹线基线：只下发数据，没有其它能力调用；显隐同样用挂上-摘掉", async () => {

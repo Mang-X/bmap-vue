@@ -157,8 +157,17 @@ const resource = useNativeLayerResource<BPointCollectionProps<Item>>(props, {
   style: styleValue,
   data: {
     key: dataKey,
+    /**
+     * `data` 在类型上是必填的 `readonly Item[]`，但 JS 调用方可以传 `null` / `undefined`：
+     * 分别按「没有数据」/「不表态」处理（与图层组件同一口径），而不是在适配层里对 `null` 取坐标
+     * 抛一个看不懂的 `TypeError`。
+     */
+    state: (p) => (p.data == null ? (p.data === null ? "empty" : "absent") : "value"),
     value: () => adapt().data as unknown as object,
   },
+  // 身份口径：`resolveIdField(itemKey)` 恒有值（函数式 key 落保留字段 `__id`），因此
+  // BPointCollection 的要素状态命令面**不会**遇到「身份未声明」那条拒绝路径。
+  identity: (p) => resolveIdField(p.itemKey),
   /**
    * 官方这批图层只派发 `dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`
    * （`NormalLayerEventMap`）——**没有** mouseover / mouseout，所以本组件不声明它们。

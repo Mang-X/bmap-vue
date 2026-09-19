@@ -612,13 +612,19 @@ export interface BMapNativeLayerPickOptions {
   selectedColor?: string;
 }
 
-/** `BLineLayer` 的 props。 */
+/**
+ * `BLineLayer` 的 props。
+ *
+ * `data` 的三个取值承担三件事（与 `LayerSpec` 的口径一致，别用一个值兼表两件事）：
+ *
+ * - **有对象** ⇒ `setData()`，**不重建**；
+ * - **`null`** ⇒ 明确「没有数据」。官方专页这四类**没有公开的清空入口**（上游声明里只有
+ *   `setData`/`getData`），因此本库换一个**没有数据的实例**来表达它（代价是一次重建，见 ADR 的
+ *   已知限制）；
+ * - **`undefined`** ⇒ 不表态：不产生任何 SDK 调用，已画出来的数据保持不变。
+ */
 export interface BLineLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
-  /**
-   * GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` 走 `clearData()`。
-   *
-   * 变化时调 `setData()`，**不重建图层**（重建会把所有要素覆盖物拆掉重做）。
-   */
+  /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
   data?: object | null;
   /** 线样式（见 `BLineLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
   style?: BLineLayerStyle;
@@ -626,7 +632,10 @@ export interface BLineLayerProps extends BMapNativeLayerCommonProps, BMapNativeL
 
 /** `BFillLayer` 的 props。 */
 export interface BFillLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
-  /** GeoJSON 数据；`null` 走 `clearData()`。变化时 `setData()`，不重建。 */
+  /**
+   * GeoJSON 数据；有值时走 `setData()`（不重建），`null` = 没有数据（换一个空实例）、
+   * `undefined` = 不表态。详见 `BLineLayerProps.data` 的三条口径。
+   */
   data?: object | null;
   /** 面样式（见 `BFillLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
   style?: BFillLayerStyle;
@@ -643,12 +652,17 @@ export interface BFillLayerProps extends BMapNativeLayerCommonProps, BMapNativeL
  * `BHeatmapLayer` 的 props。
  *
  * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` 没有类声明，可视化实现是
- * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `clearData` / `setStyle`），
- * 因此**没有** `opacity` / `zIndex` / `minZoom` / `maxZoom`——官方这些图层不公开对应 setter，
- * 声明了也只是静默忽略。
+ * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `setStyle`；驱动也登记了
+ * `clearData`，但本组件不调用它——见下），因此**没有** `opacity` / `zIndex` / `minZoom` /
+ * `maxZoom`：官方这些图层不公开对应 setter，声明了也只是静默忽略。
  */
 export interface BHeatmapLayerProps {
-  /** GeoJSON 点数据；`null` 走 `clearData()`。 */
+  /**
+   * GeoJSON 点数据；`null` = 没有数据，`undefined` = 不表态。
+   *
+   * `null` 在**所有** kind 上走同一条路（换一个没有数据的实例），而不是「有 `clearData` 入口就
+   * 用它」：同一个 prop 在不同 kind 上换语义，是使用者最难预期的一类差异。
+   */
   data?: object | null;
   /**
    * 样式（官方扩展 API 只公开整袋 `setOptions`，且没有可核对的声明）。
@@ -676,6 +690,10 @@ export interface BTrackLineLayerProps {
    *
    * 形状由调用方保证（本库不做 GeoJSON 校验：那属于数据适配层，而该 kind 没有任何可核对的声明
    * 来支撑「什么算合法」）。
+   *
+   * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。这是
+   * 「无数据」在这一族里的唯一可收敛表达：驱动登记面里 `track-line` 只有 `setData`，没有清空入口
+   * （#106 评审的 P1-2）。
    */
   data?: object | null;
   /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达。 */

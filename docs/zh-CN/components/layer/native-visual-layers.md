@@ -27,7 +27,9 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'baidu-ma
 
 | 变化 | 路径 | 是否重建 |
 | --- | --- | --- |
-| `data` | `setData()`（`null` = `clearData()`） | 否 |
+| `data`（有值） | `setData()` | 否 |
+| `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例**（这一族没有公开的清空入口） | **是** |
+| `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变 | 否 |
 | `style` | `setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」） | 否 |
 | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
 | `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
@@ -122,10 +124,13 @@ function highlight(id: string) {
 </template>
 ```
 
-四条值得知道的口径：
+五条值得知道的口径：
 
 - **身份只有业务 id**：不用要素下标（`dataIndex`）、不按调用顺序配对、不缓存「我们以为 SDK 现在是
   什么状态」——`get()` 每次都读回 SDK；
+- **没有声明 `idKey` 时命令会被拒绝**（告警一次，不做任何事）。「按 id 定位」在没有身份字段的图层上
+  没有意义，而放它过去就等于悄悄依赖 SDK 的默认 `idKey`——那会让**拾取**（如实给出 `id: null`）与
+  **状态命令**（装作知道身份）在同一张图层上形成两套身份语义；
 - **非法 id 在调用之前失败**（`BMAP_INVALID_ARGUMENT`），不会产生 SDK 调用；空数组 / 空映射是合法
   输入（什么都不做）；
 - **图层未就绪时命令不排队**：告警一次并跳过。需要确定性时等挂载完成后再调用；
@@ -137,19 +142,27 @@ function highlight(id: string) {
 
 ## 释放策略
 
-卸载（组件卸载 / 地图销毁 / 换实例）时的固定顺序是：**先解绑业务监听 → 清数据 → 摘图层**。
-先解绑是硬要求（SDK 可能在 `removeLayer` 期间同步派发事件），清数据是「先清后摘」这条官方推荐
-顺序的落实（实测两种顺序都安全）。
+卸载（组件卸载 / 地图销毁 / 换实例）时的固定顺序是：**先解绑业务监听 → 摘图层（`removeLayer`）**。
+先解绑是硬要求（SDK 可能在 `removeLayer` 期间同步派发事件），这也是官方参考给出的清理清单
+（「解绑事件 → `map.removeLayer(layer)`」）。
 
 | 场景 | 会发生什么 |
 | --- | --- |
-| 组件卸载 / 地图销毁 | 解绑监听 → `clearData()` → `removeLayer()` |
-| 组件卸载 / 地图销毁（`BTrackLineLayer`） | 解绑监听 → `removeLayer()`：该 kind **没有** `clearData` 入口（官方扩展 API 只公开 `setData`），实例随摘除被丢弃 |
+| 组件卸载 / 地图销毁 | 解绑监听 → `removeLayer()`；实例随摘除被丢弃（SDK 侧的数据也随之成为垃圾） |
 | `visible=false`（有四类专页声明的 kind） | 只调 `setVisible(false)`：数据与实例都留着 |
 | `visible=false`（扩展 API 的 kind） | 摘掉图层（重新可见时换新实例） |
 
+> **这一族没有 `clearData`，所以「清空」不走清空入口。** 官方专页四类
+> （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）的公开方法里只有
+> `setData` / `getData`（上游类型包与官方参考都如此），因此 `data = null` 由**换一个没有数据的
+> 实例**表达——这与「字段由有值变回未表态时重建」是同一条口径：SDK 侧无法 unset 的东西，
+> 本库不猜、也不假装调了一个不存在的入口。
+
 ## 已知限制
 
+- **`data = null` 的代价是一次重建**：官方专页这一族没有公开的清空入口（见「释放策略」的注），
+  因此「没有数据」只能用「换一个没有数据的实例」表达。它是离散动作、代价可控，但**不是零成本**；
+  需要「临时不显示」的用 `visible`（不要用 `data = null`）。
 - **`BHeatmapLayer` 的 `style` 是原样透传的键值袋**：官方扩展 API 只公开整袋 `setOptions`，没有可
   核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `BLineLayer` / `BFillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画

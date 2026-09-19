@@ -19,10 +19,14 @@
  *
  * | 变化 | 路径 | 依据 |
  * | --- | --- | --- |
- * | `data` | `setData` / `clearData`，**不重建** | 官方 `setData(geojson)` 是一等公民 |
+ * | `data`（有值） | `setData`，**不重建** | 官方 `setData(geojson)` 是一等公民 |
+ * | `data` 由有值变为 `null`（明确「没有数据」） | **换一个没有数据的实例** | 这批图层**没有公开的清空入口**（见 `driver/jsapi-v4/native-layers.ts` 的操作表注释），重建是唯一有依据、且能收敛的表达；代价写入 ADR 已知限制 |
  * | `style` | `setStyleOptions` + `doOnceDraw`（Driver 的 `setStyle`），**不重建** | 官方是 merge，且明确「改完要重绘」 |
  * | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | **有 setter 就写 setter**，**不重建** | 官方这批字段级 setter 逐条在 `native-layers.ts` 的 `operations` 里 |
  * | 构造期项（`idKey` / `enablePicked` / `pickWidth` …） | **换实例** | 只有 `setBaseOptions`（整袋且需重绘）；「改了就换实例」比「写进去但画面不变」诚实 |
+ *
+ * `data: undefined` 是**不表态**（不产生任何 SDK 调用、也不重建），与 `LayerSpec` 的口径一致；
+ * 「没有数据」必须显式写 `null`——两个取值承担两件事，别用 `undefined` 兼表它们。
  *
  * ## `visible` 有两种落地，按 kind 的能力面选
  *
@@ -40,7 +44,10 @@
  * - 业务监听挂在**本代** child scope 上：重建时旧监听随旧 scope 一起消失，不存在「监听留在旧实例」；
  * - **摘除失败时绝不重复挂载**：`remove` 允许「已经产生副作用、然后抛错」，因此失败后挂载状态是
  *   `unknown`，下一次同步动作会**先摘一次**把它推回确定状态（依赖前提 P：对已经摘掉的图层重复
- *   `removeLayer` 是安全的——该前提已由 #98 的 live 探针在三个家族上实测成立，见 ADR 决策 12b）。
+ *   `removeLayer` 是安全的——该前提已由 #98 的 live 探针在三个家族上实测成立，见 ADR 决策 12b）；
+ * - **永久销毁只有两步**：解绑业务监听（`LayerRegistry.dispose()` 先做）→ `removeLayer`。这与官方
+ *   reference 的资源清理清单一致（「解绑事件 → `map.removeLayer(layer)`」）；**不**额外清数据——
+ *   四类专页图层没有 `clearData` 入口（#106 评审 P1），而扩展 API 上清一次既无用又多一次可失败调用。
  *
  * ## 为什么不吃 `props` 全量、而要显式 `rebuildKey`
  *
@@ -53,7 +60,7 @@ import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { createFeatureStateApi, type FeatureStateApi } from "../data/featureState";
 import { BMapError } from "../errors/BMapError";
-import { createDevWarnOnce, logger } from "../logger";
+import { createDevWarnOnce } from "../logger";
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
 import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { stableLayerValue } from "../layers/LayerSpec";
@@ -82,12 +89,12 @@ export interface NativeLayerBindInput {
 }
 
 /**
- * 数据面的两个 hook。
+ * 数据面的三个 hook。
  *
- * 刻意分成「廉价指纹」与「真正载荷」两步：真正的载荷往往是一次**数据变换**（适配 `Item[]` →
- * `FeatureCollection`、校验、建索引），而指纹是在**每次 props 变化**时都要算的。合成一步会让
- * 「父级重渲染」变成一次 O(n) 变换——这正是 #34 把「输入指纹」与「适配结果」分开的理由，
- * 不能因为抽内核又合回去。
+ * 刻意把「廉价的表态 / 指纹」与「真正的载荷」分开：真正的载荷往往是一次**数据变换**
+ * （适配 `Item[]` → `FeatureCollection`、校验、建索引），而前两者是在**每次 props 变化**时都要算的。
+ * 合成一步会让「父级重渲染」变成一次 O(n) 变换——这正是 #34 把「输入指纹」与「适配结果」分开的
+ * 理由，不能因为抽内核又合回去。
  */
 export interface NativeLayerDataHooks<Props> {
   /**
@@ -96,8 +103,21 @@ export interface NativeLayerDataHooks<Props> {
    * 引用 + 版本 + 取值函数源码文本是这里的常见组合；相同指纹 ⇒ 不产生任何 SDK 调用。
    */
   key(props: Readonly<Props>): string;
-  /** 真正交给 `setData` 的载荷（只在指纹变化 / 首次挂载时求值）。`null` = 清空。 */
-  value(props: Readonly<Props>): object | null;
+  /**
+   * 这次输入的**表态**（同样是廉价的属性读取）：
+   *
+   * - `"value"`：有数据 ⇒ `setData`；
+   * - `"empty"`：`null`，明确要求「没有数据」⇒ 见 `sync()` 的重建判据；
+   * - `"absent"`：`undefined`，**不表态** ⇒ 不产生任何 SDK 调用（既有数据保持不变），
+   *   与 `LayerSpec` 的口径一致。
+   */
+  state(props: Readonly<Props>): "value" | "empty" | "absent";
+  /**
+   * 真正交给 `setData` 的载荷（只在 `state === "value"` 且指纹变化 / 首次挂载时求值）。
+   *
+   * 返回非对象时**不调用 SDK**（那是 hook 契约被违反，告警一次即可，不静默写一个非法值进 SDK）。
+   */
+  value(props: Readonly<Props>): object | null | undefined;
 }
 
 export interface NativeLayerResourceHooks<Props> {
@@ -117,6 +137,14 @@ export interface NativeLayerResourceHooks<Props> {
   style(props: Readonly<Props>): Record<string, unknown> | undefined;
   /** 数据面（见 `NativeLayerDataHooks`）。 */
   data?: NativeLayerDataHooks<Props>;
+  /**
+   * 业务身份字段名（构造期 `idKey`）；**没表态时返回 `undefined`**。
+   *
+   * 它是要素状态命令面的前置条件：身份未知时「按 id 定位」没有意义，命令面会显式拒绝并告警一次
+   * ——与拾取在同样情况下如实返回 `id: null` 是**同一条口径**（不允许出现两套身份语义：
+   * 拾取说「认不出」，状态命令却悄悄依赖 SDK 的默认身份）。
+   */
+  identity?(props: Readonly<Props>): string | undefined;
   /** 绑定官方事件（每个实例一次，重建时拿到的是新实例 + 新 scope）。 */
   bind?(input: NativeLayerBindInput): void;
 }
@@ -173,8 +201,6 @@ interface InstanceState {
   mountAttempted: boolean;
   /** 是否**成功挂上去过**（用于「重新可见必须换实例」的判定）。 */
   everAttached: boolean;
-  /** 是否已经做过**永久销毁**前的清理（`clearData`）：一次性。 */
-  torndown: boolean;
   /** 账本记录（`Map` 卸载前摘掉它）。 */
   record: { dispose(): void };
 }
@@ -263,33 +289,6 @@ export function useNativeLayerResource<Props>(
     }
     state.mountState = "attached";
     state.everAttached = true;
-  };
-
-  /**
-   * **永久销毁**前的数据清理（一次性）。
-   *
-   * 走统一的「清空」入口（`clearData`）。它是**belt-and-braces**：实例马上就会被丢弃、SDK 侧的数据
-   * 也随之成为垃圾，但官方推荐的顺序就是「先清数据、再摘图层」，而 #98 的 live 探针实测两种顺序都
-   * 安全（`clearData()` 在 `removeLayer` 之后仍然生效）。顺序上的收益是：万一某个 kind 的数据不是
-   * 随实例释放的（挂在共享资源上），这里已经把它处理掉了。
-   *
-   * **只在永久销毁时做**：`visible=false` 的临时摘挂不清数据（见 `syncMounted` 的两条路径）。
-   * 清理失败不阻断摘除，但要可观测。
-   */
-  const tearDownData = (state: InstanceState, context: MapReadyContext): void => {
-    if (state.torndown) return;
-    state.torndown = true;
-    const nativeLayers = nativeLayersOf(context.client);
-    if (!nativeLayers.supports(hooks.kind, "clearData")) return;
-    try {
-      nativeLayers.clearData(state.handle);
-      sent = null;
-    } catch (error) {
-      logger.warn(
-        `layer:${hooks.kind} 销毁前的 clearData 失败（图层仍会被摘除，SDK 侧可能残留数据覆盖物）`,
-        { error: (error as Error)?.message ?? String(error) },
-      );
-    }
   };
 
   /**
@@ -442,31 +441,44 @@ export function useNativeLayerResource<Props>(
 
   /* ------------------------------------------------------------ 数据 */
 
-  /** 数据写入（`setData` / `clearData`；输入指纹没变就不写）。 */
+  /**
+   * 数据写入（只有 `state === "value"` 才会真的调 `setData`；输入指纹没变就不写）。
+   *
+   * `"empty"`（`null`）在这里**不产生 SDK 调用**，这是刻意的：这批图层没有公开的清空入口
+   * （见 Driver 的操作表注释），「没有数据」的落地方式是**换一个没有数据的实例**——那件事由
+   * `sync()` 的重建判据负责（`needsDataClearRebuild`），本函数只在创建路径上把空输入记成
+   * 「这个实例没有数据」。`"absent"`（`undefined`）更是什么都不做：不表态 ≠ 清空。
+   */
   const applyData = (state: InstanceState, context: MapReadyContext, force = false): void => {
     const data = hooks.data;
     if (!data) return;
+    const mode = data.state(props);
+    if (mode === "absent") return;
     const key = data.key(props);
-    if (!force && key === appliedDataKey) return;
-    const nativeLayers = nativeLayersOf(context.client);
-    const value = data.value(props);
-    if (value === null) {
-      if (!nativeLayers.supports(hooks.kind, "clearData")) {
-        warn(
-          "clearData:unsupported",
-          `[${hooks.component}] ${hooks.kind} 没有 "clearData" 的运行时入口：data 置为 null` +
-            "（清空）本次被忽略",
-        );
-        return;
-      }
-      nativeLayers.clearData(state.handle);
+    if (mode === "empty") {
+      // 创建路径：新实例本来就没有数据 ⇒ 不需要任何调用；更新路径：`sync()` 已经先换过实例了。
       sent = null;
-    } else {
-      nativeLayers.setData(state.handle, value as unknown as Record<string, unknown>);
-      sent = value;
+      appliedDataKey = key;
+      return;
     }
+    if (!force && key === appliedDataKey) return;
+    const value = data.value(props);
+    if (value === null || typeof value !== "object") {
+      // hook 契约被违反（`state` 说有值、`value` 却给不出载荷）：不静默写一个非法值进 SDK
+      warn(
+        "data-value-invalid",
+        `[${hooks.component}] data 表态为「有值」但取不到对象载荷（实际是 ${value === null ? "null" : typeof value}）：` +
+          "本次不调用 setData",
+      );
+      return;
+    }
+    nativeLayersOf(context.client).setData(state.handle, value as unknown as Record<string, unknown>);
+    sent = value;
     appliedDataKey = key;
   };
+
+  /** **纯判定**：这次输入要不要数据（`null`）——只在重建判据与 `applyData` 里用。 */
+  const dataIsEmpty = (): boolean => hooks.data?.state(props) === "empty";
 
   /* ------------------------------------------------------------ 实例生命周期 */
 
@@ -513,7 +525,6 @@ export function useNativeLayerResource<Props>(
       mountState: "detached",
       mountAttempted: false,
       everAttached: false,
-      torndown: false,
       record: { dispose: () => {} },
     };
 
@@ -524,9 +535,9 @@ export function useNativeLayerResource<Props>(
       scope: listenerScope,
       remove: () => {
         if (instance === state) instance = null;
-        // 永久销毁的固定顺序：**先清数据、再摘图层**（`detach` 自身以「调用过 add」为门禁，
-        // 因此重复销毁不会多摘一次）
-        tearDownData(state, context);
+        // 永久销毁只有「摘图层」这一步（`detach` 以「调用过 add」为门禁，因此重复销毁不会多摘一次）。
+        // 清数据**不在这里**：四类专页图层没有 `clearData` 入口，而实例随摘除被丢弃、SDK 侧的数据
+        // 也随之成为垃圾（官方 reference 的清理清单同样只有「解绑事件 → removeLayer」）。
         detach(state, context);
       },
     });
@@ -567,7 +578,7 @@ export function useNativeLayerResource<Props>(
     const old = instance;
     if (old) {
       /**
-       * 顺序与 `LayerRegistry.dispose()` 一致：**先解绑业务监听**，再清数据、再摘图层。
+       * 顺序与 `LayerRegistry.dispose()` 一致：**先解绑业务监听**，再摘图层。
        *
        * 常规卸载路径由 `LayerRegistry` 保证这个顺序，但换实例绕过了它（不能走 `record.dispose()`：
        * 那会把账本记录**永久删除**，一旦摘除失败就再也没人认领那个实例）。反过来（先 `removeLayer`
@@ -575,7 +586,6 @@ export function useNativeLayerResource<Props>(
        * （ADR `2026-09-17-layer-spec-and-registry.md` 决策 14）。
        */
       releaseListeners(old);
-      tearDownData(old, context);
       try {
         detach(old, context);
       } catch (error) {
@@ -624,6 +634,18 @@ export function useNativeLayerResource<Props>(
           "removed-fields",
           `[${hooks.component}] ${removed.join(" / ")} 由有值变为未表态：SDK 没有 unset 入口，` +
             "本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
+        );
+        recreate(context);
+        return;
+      }
+      // 「没有数据」（`data: null`）与上面那条同形：这批图层没有公开的清空入口，SDK 侧也无法
+      // unset，所以换一个**没有数据的实例**来表达它——否则旧数据会继续画在图上（#106 评审 P1-2）。
+      // 判据只用两个廉价事实：这次输入要不要数据（`dataIsEmpty`）、当前实例有没有数据（`sent`）。
+      if (sent !== null && dataIsEmpty()) {
+        warn(
+          "data-cleared",
+          `[${hooks.component}] data 置为 null 表示「没有数据」，而 ${hooks.kind} 没有公开的清空入口：` +
+            "换一个没有数据的实例让它收敛（旧实例连同它的数据一起被丢弃）",
         );
         recreate(context);
         return;
@@ -683,11 +705,17 @@ export function useNativeLayerResource<Props>(
   /**
    * 要素状态命令面。
    *
-   * 会话（Driver + 句柄）在**每次命令**时求值：未就绪 / 已释放时返回 `null`，命令面会告警一次
-   * 并跳过（不排队）。这样父级 ref 在 `onMounted` 之前拿到实例也不会拿到一个假的成功。
+   * 会话（Driver + 句柄）与**业务身份**都在**每次命令**时求值：
+   *
+   * - 未就绪 / 已释放 ⇒ `session()` 返回 `null`，命令面告警一次并跳过（不排队）。这样父级 ref 在
+   *   `onMounted` 之前拿到实例也不会拿到一个假的成功；
+   * - 身份字段没表态（组件没给 `idKey`）⇒ `identity()` 返回 `undefined`，命令面**显式拒绝**。
+   *   这条与拾取如实返回 `id: null` 是同一条口径：不让「按 id 定位」悄悄落回 SDK 的默认身份，
+   *   否则同一个图层上会出现两套身份语义（#106 评审的建议项）。
    */
   const featureState = createFeatureStateApi({
     component: hooks.component,
+    identity: () => hooks.identity?.(props),
     session: () => {
       const state = instance;
       const context = readyCtx;

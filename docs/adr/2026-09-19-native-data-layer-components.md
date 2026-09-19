@@ -76,7 +76,10 @@
    不用 `try/catch` 把参数错误伪装成 SDK 失败；空 keys / 空映射是合法输入（不产生 SDK 调用）；
 3. **未就绪不排队**：不抛、不攒着，告警一次并跳过（与 `<BMap>` expose 的命令面同一条口径）；
 4. **「不支持」不在这一层判**：某一类图层有没有该入口是 Driver 的事实，让
-   `BMAP_CAPABILITY_UNSUPPORTED` 从那一处抛出来，两处各判一次必然分叉。
+   `BMAP_CAPABILITY_UNSUPPORTED` 从那一处抛出来，两处各判一次必然分叉；
+5. **身份没声明就不执行**（#106 评审的建议项）：组件没给 `idKey` 时五个命令一律拒绝并告警一次。
+   放它们过去等价于悄悄依赖 SDK 的默认 `idKey`，于是同一张图层上会出现两套身份语义——拾取如实
+   给出 `id: null`，状态命令却装作知道身份。
 
 命令面通过组件 `ref` 暴露（`featureState`），**只给有该能力的 kind**：`BHeatmapLayer` /
 `BTrackLineLayer` 不 expose（挂一个每次调用都会抛的方法只是假面）。
@@ -95,14 +98,41 @@
 （`BPointCollection`）的业务对象靠身份索引，因此那一类在 `id` 为 `null` 时 `item` 也是 `null`
 （由 `resolveFeaturePick` 的 `itemOf` 钩子表达，且 `itemOf` 一旦提供就是权威，不做回退）。
 
-### 6. Driver 增补两个状态操作
+### 6. Driver 增补两个状态操作；**删除**无依据的 `clearData`
 
 `NativeLayerOperation` 加 `replaceState` / `getState`，`DECLARED_LAYER_OPERATIONS` 相应加
 `replaceAllState` / `getAllState`（官方四类专页图层的声明成员）。扩展 API 四种 kind 仍然回答
 「不支持」并显式失败。`getState` 与 `hitTest` 同类（有返回值，单独实现），并对回包形状做校验
 （不是对象时抛 `BMAP_SDK_CALL_FAILED`，而不是当成空状态）。
 
-### 7. 逐 kind 的能力面：不声明不支持的 prop
+同时**从四类专页图层的操作表里删掉 `clearData`**：上游声明只有 `setData`/`getData`，仓库内官方
+参考也只把清理写成 `removeLayer`（见「修正记录」）。
+
+### 7. 「这种 capability 凭什么算数」由**机器核对**兜住
+
+`native-layers.test.ts` 新增「操作面与官方声明一致」用例：它解析
+`@baidumap/jsapi-v4-types` 的类体成员，把 `supports(kind, operation)` 为真的每个操作映射到官方成员
+（`setStyle → setStyleOptions` / `setEnablePicked → setBaseOptions` / `setZoomRange → setMinZoom +
+setMaxZoom` …），任何一个映射不到就红。配套的 **Fake 侧不变量**：`FakeV4NativeLayerBase` 删掉
+`clearData`——**替身不得比真实契约宽容**，否则「登记了一条不存在的 capability」会被 CI 测绿
+（这正是本轮 P1 的成因）。
+
+### 9. 「没有数据」由**实例生命周期**表达，不猜清空入口
+
+`data` 的三个取值承担三件事（与 `LayerSpec` 的口径一致）：
+
+| 取值 | 语义 | 落地 |
+| --- | --- | --- |
+| 对象 | 有数据 | `setData()`（**不重建**） |
+| `null` | 明确「没有数据」 | **换一个没有数据的实例**（这一族没有公开的清空入口） |
+| `undefined` | 不表态 | 不产生任何 SDK 调用，已画出来的数据保持不变 |
+
+「`null` ⇒ 重建」对**所有** kind 统一（包括扩展 API 里登记了 `clearData` 的 `Heatmap`）：同一个 prop
+在不同 kind 上换语义，是使用者最难预期的一类差异，而 `null` 是离散动作、重建代价可控。这条同时
+解决了 `BTrackLineLayer` 的「`data → null` 画面不变」（旧实现在不支持 `clearData` 时只 warn 就返回，
+既不收敛、又会反复尝试同步）。
+
+### 8. 逐 kind 的能力面：不声明不支持的 prop
 
 | 组件 | prop 面 |
 | --- | --- |
@@ -142,11 +172,32 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
    `setBaseOptions` 且不自动重绘。
 6. **「不回退默认值」是刻意的**：字段由有值变为未表态时**重建实例**（并告警一次），因为官方没有
    unset 入口，静默保留旧值会让声明与画面分叉。
+7. **`data = null` 的代价是一次重建**（见决策 9）：这一族没有公开的清空入口，「没有数据」只能用
+   换实例表达。要「临时不显示」请用 `visible`，不要用 `data = null`。
+8. **没有声明 `idKey` 时要素状态命令会被拒绝**（告警一次）：理由是拒绝「悄悄依赖 SDK 默认身份」，
+   而不是这个能力不存在。`BPointCollection` 不受影响（它的 `itemKey` 恒能推出身份字段）。
 
 回滚：本 ADR 的改动集中在新增文件与 `BPointCollection` 的迁移上。回滚方式是「保留 Driver 的两个
 状态操作、移除四个组件与内核」——`BPointCollection` 若要回到自持实现，需要恢复它自己的
 `InstanceState`（本 ADR 提交前的版本即参考）。Driver 层的 `replaceState` / `getState` **不建议回滚**：
 它们是官方声明成员的直译，且 `supports()` 表是单一事实源。
+
+## 修正记录（#106 评审，2026-09-19）
+
+评审对同一 commit（`1cfa245`）提出两个阻塞项与一个建议项，全部**成立**，处置如下：
+
+| 评审项 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **P1：四类专页图层的 `clearData` 没有依据**，而 Fake 让它测绿；`data: object → null` 会打进一个不存在的入口，卸载也稳定产生一次失败告警 | **成立**（两条一手来源）：上游 `layer/{PointIconLayer,PointShapeLayer,LineLayer,FillLayer}.d.ts` 只有 `setData`/`getData`；仓库内官方参考 `visualization-layers.md` 的数据面是 `setData/getData`、清理是 `removeLayer`。错误的来源是 #23 ADR 决策 3 把「共享同一套方法面」写宽了（该处已一并更正） | ① 从 `DECLARED_LAYER_OPERATIONS` 删除 `clearData`（扩展 API 的三种 kind **保留**——官方扩展参考明确列出了它）；② Fake 的基线类删掉 `clearData`（**替身不得比真实契约宽容**）；③ 卸载路径去掉「先清数据」（官方参考的清理清单只有「解绑事件 → `removeLayer`」）；④ 新增机器核对用例（决策 7）；⑤ 更正 #23 ADR 与本文档 |
+| **P1：`BTrackLineLayer` 的 `data → null/undefined` 不会清掉旧轨迹**，同一个 `null` 还会反复尝试同步 | **成立**：旧内核在 `value === null` 且 kind 不支持 `clearData` 时只 warn 就返回，不重建、不摘除、也不更新成功指纹 | 决策 9：`null` ⇒ 换一个没有数据的实例（所有 kind 统一）；`undefined` ⇒ 不表态。补 `object → null → object` 在四个组件（含 `BTrackLineLayer`）上的行为用例 |
+| **建议项：未声明 `idKey` 时仍 expose 完整的 `featureState`**，与拾取的「身份未知」口径形成两套身份语义 | **成立** | 决策 4 第 5 条：身份未声明时五个命令拒绝执行并告警一次；组件文档与用例同步 |
+
+反证（改坏 ⇒ 用例必须红，改回 ⇒ 绿）：
+
+| 改坏 | 结果 |
+| --- | --- |
+| 去掉 `sent !== null && dataIsEmpty()` 判据（退回「warn 后什么都不做」） | 3 条红：`「没有数据」由换实例表达: expected 1 to be 2`、`轨道清空: expected 1 to be 2`、`旧实例连同它的数据一起被丢弃: expected true to be false` |
+| 把 `clearData` 重新登记回四类专页图层 | 7 条红，含机器核对那条：`point-icon(PointIconLayer).clearData 落在 clearData() 上，而官方声明里没有它`，以及 facet 契约的 `SDK 实例缺少方法 clearData()`（Fake 不再宽容地接住） |
 
 ## 非目标与欠账
 

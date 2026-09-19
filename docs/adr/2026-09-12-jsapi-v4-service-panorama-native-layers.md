@@ -23,10 +23,18 @@ unsupported policy」这件事。
    `onSearchComplete` 回来——没有「一次调用一次回调」的配对关系（用户在输入框里打字也会触发）。
 3. **原生数据图层有八个 kind，但方法面并不一致**：官方专页的四类
    （`PointIconLayer` / `PointShapeLayer` / `LineLayer` / `FillLayer`）共享
-   `setData` / `clearData` / 要素状态 / `setVisible` / `setOpacity` / `setZIndex` /
+   `setData` / ~~`clearData`~~ / 要素状态 / `setVisible` / `setOpacity` / `setZIndex` /
    `setStyleOptions` / `doOnceDraw`；而扩展 API 的四个
    （`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`）只公开各自那几个方法。
    把它们硬套成一套接口，必然产生「调了但没反应」。
+   ⚠️ **更正（#106 / 2026-09-19）**：上面划掉的那一处写错了——四类专页图层的公开方法里**没有**
+   `clearData`，只有 `setData` / `getData`。依据（两条一手来源）：
+   `@baidumap/jsapi-v4-types@4.0.4` 的 `layer/{PointIconLayer,PointShapeLayer,LineLayer,FillLayer}.d.ts`
+   只声明 `setData(data)` / `getData()`（只有 `GeoJSONLayer` 有 `clearData()`、`DOMLayer` 有
+   `removeAllOverlays()`）；仓库内官方参考
+   `.agents/skills/bmap-jsapi-v4/references/visualization-layers.md` 也把这一族的数据面写成
+   `setData/getData`、把清理写成「解绑事件 → `map.removeLayer(layer)`」。详见决策 7 的表与
+   [原生批量可视化图层的 ADR](./2026-09-19-native-data-layer-components.md) 的修正记录。
 4. **扩展 API 的实现是异步注入的**（官方明确），且 `@baidumap/jsapi-v4-types@4.0.4`
    **没有这四个类的类声明**：能力探测不能在 Driver 构造期冻结结论。
 5. **样式不会自动重绘**：官方专页图层 `setStyleOptions()` 后需要显式 `doOnceDraw()`；
@@ -216,12 +224,17 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 
 | kind | ctor | declared | operations |
 | --- | --- | --- | --- |
-| `point-icon` / `point-shape` / `line` / `fill` | 同名类 | ✅ | setData, clearData, setStyle, setVisible, setOpacity, setZIndex, setZoomRange, updateState, removeState, clearState, setEnablePicked |
+| `point-icon` / `point-shape` / `line` / `fill` | 同名类 | ✅ | setData, setStyle, setVisible, setOpacity, setZIndex, setZoomRange, updateState, removeState, clearState, replaceState, getState, setEnablePicked |
 | `point` | `PointLayer` | ❌ | setData, clearData, setStyle, setEnablePicked, hitTest |
 | `cluster` | `ClusterLayer` | ❌ | setData, clearData, setStyle |
 | `heatmap` | `Heatmap` | ❌ | setData, clearData, setStyle |
 | `track-line` | `TrackLine` | ❌ | setData |
 
+- ⚠️ **更正（#106 / 2026-09-19）**：本表的 `replaceState` / `getState` 由 #36 补上（官方声明的
+  `replaceAllState` / `getAllState`），而四类专页图层的 `clearData` 被**删除**（官方没有这个成员，
+  见决策 3 的更正）。表与官方声明的逐条一致性现在由
+  `native-layers.test.ts` 的「操作面与官方声明一致」用例**机器核对**（解析上游 `.d.ts` 的类体成员），
+  不再依赖人工逐条核对——`clearData` 正是靠人工核对漏进去的。
 - **不支持的操作抛 `BMAP_CAPABILITY_UNSUPPORTED`**（先 `warnOnce` 一条），不静默 no-op。
   「调了但什么都没发生」是数据图层最难排查的一类问题。
 - `supports(kind, operation)` 是**调用前查一次**的唯一入口；它的答案与真实调用的一致性由共享
@@ -294,6 +307,8 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 - 新增三个 runtime-only 能力：`layer.point` / `layer.heatmap` / `layer.track-line`
   （`V4_ONLY`、`experimental`、`runtimeOnly: true`）。前两个是原生数据图层的缺口，
   `layer.track-line` 同时登记「播放控制与迁移结论属 M8 #43」。
+- 更正（#106 / 2026-09-19）：本 ADR 决策 3 与决策 7 的表原先为四类专页图层登记了 `clearData`，
+  那是无依据的（该族没有这个成员）。已按上游声明与仓库内官方参考更正，并加了机器核对用例。
 - 已有的 `layer.cluster`（extended）/ `layer.point-icon` / `layer.point-shape` / `layer.line` /
   `layer.fill` 维持原状；能力矩阵由脚本重生成（64 条）。
 - **控件不进 Catalog** 是 `#22` 冻结的 family 划分结果，本 issue 不改。

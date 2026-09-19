@@ -30,6 +30,15 @@
 **驱动层**：`NativeLayerDriver` 增加 `replaceState` / `getState` 两个归一化操作（官方四类专页图层
 的声明成员），扩展 API 的四种 kind 仍然显式失败（`BMAP_CAPABILITY_UNSUPPORTED`）。
 
+**`data` 的三个取值承担三件事**：有对象 ⇒ `setData()`（不重建）；**`null` ⇒ 没有数据**（这一族
+没有公开的清空入口，因此**换一个没有数据的实例**，`BHeatmapLayer` / `BTrackLineLayer` 同样）；
+**`undefined` ⇒ 不表态**（不产生任何 SDK 调用）。卸载只有「解绑监听 → `removeLayer`」两步，
+**不调用** `clearData`——官方专页四类的公开方法里没有它（上游声明与仓库内官方参考都是 `setData` /
+`getData`）。
+
+**要素状态要求声明 `idKey`**：没有声明时五个命令一律拒绝并告警一次（不让「按 id 定位」悄悄落回
+SDK 的默认身份，与拾取如实返回 `id: null` 是同一条口径）。
+
 **未包含（登记为欠账，见 ADR `2026-09-19-native-data-layer-components`）**：`BMVTLayer` 基线
 （缺口在「怎么把它挂上地图」的机制，不在声明）；TrackLine 播放控制与页面可见性联动（官方类型包没有
 该类声明，方法名必须先由真实运行时探针取证）。`BGeoJSONLayer` 基线已于 #40 落地，本 PR 不重复实现。

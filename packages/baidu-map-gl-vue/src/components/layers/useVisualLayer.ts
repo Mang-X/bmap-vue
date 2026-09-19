@@ -151,8 +151,14 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
       // 数据按**引用**比较：整份 GeoJSON 序列化一次就是 O(n)，而这个指纹**每次 props 变化**都要算。
       // 代价与 M7 图层内核一致：原地修改同一份 data 不会被感知（Vue 的响应式约定也是换引用才更新）。
       key: () => layerDataIdentity(props.data),
-      value: () => props.data ?? null,
+      /**
+       * `null` = 明确「没有数据」⇒ 换一个没有数据的实例（这批图层没有公开的清空入口）；
+       * `undefined` = **不表态** ⇒ 不产生任何 SDK 调用，与 `LayerSpec` 的口径一致。
+       */
+      state: () => (props.data === null ? "empty" : props.data === undefined ? "absent" : "value"),
+      value: () => props.data,
     },
+    identity: (p) => p.idKey,
     bind: ({ handle, context, scope }) => {
       const events = context.client.driver.events;
       for (const name of options.pickEvents ?? []) {
