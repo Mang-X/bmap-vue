@@ -206,7 +206,7 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 
 | 观察点 | 零尺寸期间 | 拿到非零尺寸之后 |
 | --- | --- | --- |
-| `status` | `idle`（不进入加载流程） | `loading` → `ready` |
+| `status` | `idle`（不进入加载流程） | `waiting-client` → `creating` / `initializing` → `ready` |
 | `#loading` 插槽的 `containerReady` | `false` | `true` |
 | 组件方法 `isContainerReady()` | `false` | `true` |
 | 地图实例 | **不存在**（`getMapInstance()` 为 `null`） | 创建一次 |
@@ -578,7 +578,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `status` | `MapRuntimeStatus` | 运行时状态（`idle` / `loading` / `ready` / `error` …） |
+| `status` | `MapRuntimeStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`。类型上还兼容旧值 `"loading"`，但自 #71 起**不会再被发出**（别按它写分支） |
 | `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
 | `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
 | `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图；容器收起时保持 pending，容器恢复后由门禁接着执行） |

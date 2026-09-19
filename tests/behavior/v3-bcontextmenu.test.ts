@@ -17,7 +17,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, nextTick, provide, ref } from "vue";
+import { defineComponent, h, nextTick, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
@@ -33,7 +33,6 @@ import {
 } from "../../packages/baidu-map-gl-vue/src/core/deprecations";
 import { overlayEventsOf } from "../../packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog";
 import { CONTEXT_MENU_FIELDS } from "../../packages/baidu-map-gl-vue/src/core/overlays/ContextMenuSpec";
-import { overlayContextKey } from "../../packages/baidu-map-gl-vue/src/core/context/types";
 import { overlayPropertySpec } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
 import type { ContextMenuSelectPayload } from "../../packages/baidu-map-gl-vue/src/types/components";
 import { createFakeV4Harness, FakeV4ContextMenu } from "../../packages/test-utils";
@@ -57,15 +56,14 @@ function readPropsKeys(interfaceName: string): string[] {
 }
 
 /**
- * 「旧层组件」的最小替身：**只** provide `overlayContextKey`（函数式句柄），不提供 `TargetContext`。
+ * 一个**不提供 `TargetContext`** 的宿主组件：模拟 `BMapMask` / `BMarker3d` 这类没有实现目标契约的
+ * 覆盖物（合并 #105 之后 `overlayContextKey` 已被 #104 审计整条删除，因此没有 key 可以模拟）。
  *
- * `BMapMask` / `BMarker3d` 就是这种形态（它们走 `useOverlayResource`）。菜单在这种父级下没有
- * 可挂的目标，必须**显式失败**——「挂错地方」比「明确失败」难排查得多。
+ * 用途：证明「没有可依据的目标时**不猜**」——菜单落到 `BMap` 自己的地图 target 上。
  */
-const LegacyOverlayHost = defineComponent({
-  name: "LegacyOverlayHost",
+const PlainHost = defineComponent({
+  name: "PlainHost",
   setup(_props, { slots }) {
-    provide(overlayContextKey, () => ({ raw: {} }));
     return () => slots.default?.() ?? null;
   },
 });
@@ -744,28 +742,22 @@ describe("BContextMenu", () => {
     expect(sfc.emits ? sfc.emits.sort() : null).toEqual(["close", "open", "select"]);
   });
 
-  it("旧层组件（只提供 overlayContextKey、没有 TargetContext）下的菜单也显式失败，不回退挂到地图上", async () => {
+  it("不提供 TargetContext 的组件下的菜单等价于「挂在地图级」（没有可依据的目标就不猜）", async () => {
     const el = harness.container();
     const wrapper = await mountTree(
-      () =>
-        h(
-          LegacyOverlayHost,
-          {},
-          () => h(BContextMenu, { items: [{ text: "x", callback: () => {} }] }),
-        ),
+      () => h(PlainHost, {}, () => h(BContextMenu, { items: [{ text: "x", callback: () => {} }] })),
       el,
     );
 
-    // 关键事实：**没有**悄悄挂到地图上
-    expect(harness.attached("context-menu")).toBe(0);
-    expect(resourceErrors.map((entry) => entry.code)).toContain("BMAP_CAPABILITY_UNSUPPORTED");
-    expect(
-      resourceErrors.some((entry) => entry.message?.includes("legacy-overlay")),
-      `错误文案应点名 legacy-overlay：${JSON.stringify(resourceErrors)}`,
-    ).toBe(true);
+    // `BMap` 自己 provide 了地图 target，因此这类组件不会成为目标：菜单落到地图上
+    // （与「直接写在 <BMap> 下」同义）。合并 #105 之前这里靠 `overlayContextKey` 判「旧层覆盖物」
+    // 并显式报错，而 #104 审计把那个 key 整条删了 —— 没有契约可依据时就不猜。
+    expect(harness.attached("context-menu")).toBe(1);
+    expect(resourceErrors).toEqual([]);
 
     wrapper.unmount();
     await nextTick();
+    harness.assertIdle("BContextMenu 无 TargetContext 宿主");
   });
 
   it("别名表：`menuItems` 已登记且只登记一次（防「收下但没人读」）", () => {

@@ -118,8 +118,11 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 > 右键不再 `open`。本库据此支持 marker 目标，读数与依据见
 > [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)。
 
-**其它目标会显式报错**（`BMAP_CAPABILITY_UNSUPPORTED`），而**不会**回退挂到地图上——
-在普通覆盖物或旧层覆盖物下写菜单没有可挂的目标，「挂错地方」比「明确失败」难排查得多。
+**没有入口证据的目标会显式报错**（`BMAP_CAPABILITY_UNSUPPORTED`），而**不会**回退挂到地图上——
+例如写在 `<BPolyline>` 这类覆盖物里时，最近的挂载目标 `kind` 是 `overlay`，菜单没有可挂的地方。
+
+不提供挂载目标契约的组件（`BMapMask` / `BMarker3d` 这类）**不会成为目标**：它们不 provide
+`TargetContext`，因此其下的菜单会落到 `<BMap>` 自己的**地图**目标上，与「直接写在 `<BMap>` 下」同义。
 
 ## 行为细则
 

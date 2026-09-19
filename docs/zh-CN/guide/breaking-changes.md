@@ -104,6 +104,6 @@ M5-CUSTOM-MENU / #33 新增 `<BCustomOverlay>`、给 `<BContextMenu>` 补上数�
 | `<BContextMenu :menuItems>` | 唯一的数据入口 | `items` 是正典；`menuItems` **仍可用**，但会在控制台提示一次（同实例一次），且 `items` 有值时旧名完全不参与 | 新代码用 `items`；旧写法无需立即改 |
 | 声明式菜单项 | 不存在（只能传数组） | 新增 `<BMenuItem>` / `<BMenuSeparator>`；与数据 API 归一化成同一份条目，可混用（`items` 在前、children 在后） | 见 [BContextMenu 文档](/zh-CN/components/control/context-menu) |
 | 菜单挂到 `<BMarker>` 里 | **不生效**（Driver 拒绝 `overlay` 目标，只是不会报错：组件吞掉了异常） | 挂到**该标注**上（`Marker#addContextMenu`，4.0 的运行时扩展成员）；写在 `<BMap>` 下则挂到地图 | 原先「以为挂上了其实没有」的用法现在真的生效；若你想让菜单作用于整张地图，请把它移出 `<BMarker>` |
-| 菜单挂在**其它**目标下（普通覆盖物 / 旧层组件） | 静默不生效 | 显式报错（`resource:error` 收到 `BMAP_CAPABILITY_UNSUPPORTED`），**不回退**到地图 | 检查菜单的层级位置；需要地图级菜单就移到 `<BMap>` 直接子节点 |
+| 菜单挂在**不支持的目标**下（普通覆盖物，如 `<BPolyline>` 里） | 静默不生效 | 显式报错（`resource:error` 收到 `BMAP_CAPABILITY_UNSUPPORTED`），**不回退**到地图 | 检查菜单的层级位置；需要地图级菜单就移到 `<BMap>` 直接子节点 |
 | `<BContextMenu>` 的 `open` / `close` | 已转发 SDK 事件 | **不变**（仍然只是观测）；新增 `select` 事件（本库派发，载荷含被选中项与坐标） | 监听 `select` 走「菜单被选中」这条逻辑 |
 | `ContextMenuItem` 的 `callback` 参数 | `(...args: any[]) => void`（载荷形状没有类型） | `(payload: ContextMenuSelectPayload) => void`（`{ item, index, point, pixel, map, target }`） | 解构用法（`({ map }) => …`）不受影响；`ContextMenuItem` / `ContextMenuSeparator` 改从 `baidu-map-gl-vue` 的类型入口导出（此前从 `BContextMenu.vue`），具名导入路径不变 |

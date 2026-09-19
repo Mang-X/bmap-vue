@@ -221,6 +221,9 @@ LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate
 - 不改 `Autocomplete` 的归属契约（通道独占 + 同关键词互斥）。它的依据与本票不同（回调通道会被用户
   输入污染，与本票的 LocalSearch 相反），也不允许「一个实例一个在飞操作」——输入提示本来就是
   「边打边发」。它是否也改用实例隔离属后续可评估项。
+  **[已兑现于 #104 / 2026-09-19]** 答案是「都不改，直接删」：既没有实例隔离可用（一个输入框一个
+  实例，通道却被原生输入共用），也没有可验证身份，于是程序化 `suggest()` 连同归属层整体删除，
+  `Autocomplete` 退回「事件式转发、不建归一化调用面」。本票的 LocalSearch 模型不受影响。
 - 不给其余服务补释放入口（官方没有 `destroy` / `dispose`）。
 - 不做 `LocalSearch` 的 `enableAutoViewport` / `enableFirstResultSelection` /
   `setPageCapacity` / `setPageNum` 的运行时开关（它们**只影响绘制与分页**，而首页容量已在构造选项里；

@@ -52,7 +52,6 @@ export type {
   GeolocationOptions,
   JsapiV4ServiceDriver,
   LocalCityFix,
-  PlaceSuggestion,
   ReverseGeocodeRequest,
   ServiceCall,
   ServiceCallOptions,

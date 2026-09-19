@@ -25,19 +25,26 @@
  *
  * ## target 解析
  *
- * 只认 `TargetContext`（#30 起的挂载目标契约）：`kind === "map" | "marker"` 直接用它，其余 kind
- * **显式失败**（`driver.overlays.attachContextMenu` 也拒绝，两层一致）。没有 `TargetContext` 时
- * 回退到地图（`<BContextMenu>` 直接写在 `<BMap>` 下的常规用法）。
+ * 只认 `TargetContext`（#30 起的挂载目标契约）：
  *
- * ⚠️ **旧层组件**（经 `overlayContextKey` 暴露句柄、不提供 `TargetContext` 的那些）下的菜单会被判成
- * unsupported 并**显式报错**，而不是悄悄挂到地图上——「挂错地方」比「明确失败」难排查得多。
- * 这条取舍记在 ADR 的已知限制里。
+ * | 最近的 `TargetContext` | 结果 |
+ * | --- | --- |
+ * | `kind: "map"`（`<BMap>` 自己 provide 的那个） | 挂到地图 |
+ * | `kind: "marker"`（写在 `<BMarker>` 里） | 挂到该标注 |
+ * | 其它 kind（`overlay` / `clusterer` / …） | **显式失败**（`driver.overlays.attachContextMenu` 也拒绝，两层一致） |
+ * | 一个都没有 | 回退到地图 |
+ *
+ * 「一个都没有」这一档只在 `<BMap>` 之外成立——`<BMap>` 子树里总有它自己的地图 target，因此
+ * **不提供 `TargetContext` 的组件**（`BMapMask` / `BMarker3d` 这类）不会被当成目标，其下的菜单
+ * 等价于挂在地图级。⚠️ 这条口径在合并 #105 时改过一次：此前判据依赖 `overlayContextKey`，
+ * 而 #104 审计把那个 key 整条删了（「不恢复上游没公开的身份」方向的同一件事），于是本层不再
+ * 试图区分「父链上有旧层覆盖物」——没有契约可依据时就不猜（改法与理由见 ADR 的评审修正一节）。
  */
 import { inject, nextTick, onScopeDispose, provide, shallowRef, watch, type ShallowRef } from "vue";
 import { useRequiredMapContext } from "../context/inject";
-import { useOptionalTargetContext } from "../context/target";
+import { targetContextKey } from "../context/target";
+import type { TargetContext } from "../context/target";
 import { contextMenuChildrenKey, createContextMenuChildrenRegistry } from "../context/menu";
-import { overlayContextKey } from "../context/types";
 import type { MapReadyContext } from "../context/types";
 import { useSdkResource } from "./useSdkResource";
 import { BMapError } from "../errors/BMapError";
@@ -124,17 +131,15 @@ export function useContextMenu(
     typeof document === "undefined" ? null : document.createElement("div"),
   );
 
-  const targetContext = useOptionalTargetContext();
   /**
-   * 旧层组件是否在父链上（`overlayContextKey` 同时由 `BMarker` 与旧层组件提供）。
+   * 最近的挂载目标契约。
    *
-   * ⚠️ **`<BMap>` 自己就 provide 了一个 `kind: "map"` 的 `TargetContext`**，所以「注入不到 TargetContext」
-   * 在 `<BMap>` 子树里根本不会发生 —— 单靠 `!targetContext` 写不出旧层判据。
-   * 精确判据是：**最近的 target 是地图、而父链上还有 `overlayContextKey`** ——
-   * `BMap` 只提供前者，`BMarker` 两者都提供（且 kind 是 `marker`），只有旧层组件（`BMapMask` /
-   * `BMarker3d`，经 `useOverlayResource`）是「有旧 key、没有自己的 TargetContext」。
+   * 直接用 **`targetContextKey`** 注入，而不是再包一个 `useXxx()` helper：`useOptionalTargetContext()`
+   * 已被 #104 的存量审计删除（「只有一个消费者的公共 helper」），因此不能为了本组件把它加回来
+   * ——#104 的结论是「无消费者的公共面不加」，而一个 helper 只为「包一层 `inject`」存在时，
+   * 它的消费者永远只有本文件。这里读同一个 key，不新增公共出口。
    */
-  const legacyOverlayContext = inject(overlayContextKey, null);
+  const targetContext = inject<TargetContext | undefined>(targetContextKey, undefined);
 
   let readyCtx: MapReadyContext | null = null;
   let attached: AttachedMenu | null = null;
@@ -244,10 +249,6 @@ export function useContextMenu(
       return map ? { kind: "map", handle: map } : { kind: "pending", targetKind: "map" };
     }
     const kind = targetContext.kind.value;
-    // 旧层覆盖物：最近的 target 是地图，但父链上还有 `overlayContextKey`（见 `legacyOverlayContext` 的说明）
-    if (kind === "map" && legacyOverlayContext) {
-      return { kind: "unsupported", targetKind: "legacy-overlay" };
-    }
     if (kind !== "map" && kind !== "marker") return { kind: "unsupported", targetKind: kind };
     const handle = (targetContext.target.value ?? null) as SdkHandle<string> | null;
     if (handle) return { kind, handle };

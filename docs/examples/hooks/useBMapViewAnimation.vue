@@ -8,26 +8,21 @@
       }"
       :zoom="16"
       ref="map"
-      @ready="handleInitd"
     />
     <div class="state">
-      <span>动画状态: {{ status !== "INITIAL" ? "已开始" : "未开始" }}</span>
-      <span
-        >播放状态: {{ status === "INITIAL" || status === "STOPPING" ? "未播放" : "播放中" }}</span
-      >
+      <span>播放状态: {{ status === "playing" ? "播放中" : "未播放" }}</span>
+      <span v-if="notice">{{ notice }}</span>
     </div>
-    <button class="myButton no-m-b" type="button" @click="start">开始</button>
-    <button class="myButton no-m-b" type="button" @click="stop">暂停</button>
-    <button class="myButton no-m-b" type="button" @click="proceed">继续</button>
+    <button class="myButton no-m-b" type="button" @click="play">开始</button>
     <button class="myButton no-m-b" type="button" @click="cancel">取消</button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useBMapViewAnimation, ViewAnimationKeyFrames } from "baidu-map-gl-vue";
+import { useBMapViewAnimation, type ViewAnimationKeyFrames } from "baidu-map-gl-vue";
 const map = ref(null);
-const { setKeyFrames, start, stop, proceed, cancel, status } = useBMapViewAnimation(
+const { start, cancel, status } = useBMapViewAnimation(
   {
     duration: 10000,
     delay: 0,
@@ -35,8 +30,16 @@ const { setKeyFrames, start, stop, proceed, cancel, status } = useBMapViewAnimat
   },
   map,
 );
-function handleInitd() {
-  const keyFrames: ViewAnimationKeyFrames[] = [
+const notice = ref("");
+// 每次播放都新建动画实例，所以关键帧直接随 `start()` 传，不需要先「设置」再「开始」。
+// 上一段还在播时再点一次就是「接管」：接管可能失败（起播前要先取消上一段），因此必须接住 rejection。
+function play() {
+  start(buildKeyFrames()).catch((error: unknown) => {
+    notice.value = `本次播放未开始：${(error as Error)?.message ?? String(error)}（上一段仍在播，可再试或先取消）`;
+  });
+}
+function buildKeyFrames(): ViewAnimationKeyFrames[] {
+  return [
     {
       center: { lng: 116.307092, lat: 40.054922 },
       zoom: 18,
@@ -108,7 +111,6 @@ function handleInitd() {
       percentage: 1,
     },
   ];
-  setKeyFrames(keyFrames);
 }
 </script>
 

@@ -110,4 +110,3 @@ export interface MapContext extends MapRuntimeShape {
 }
 
 export const mapContextKey: InjectionKey<MapContext> = Symbol("baidu-map-gl-vue:map-context");
-export const overlayContextKey: InjectionKey<unknown> = Symbol("baidu-map-gl-vue:overlay-context");

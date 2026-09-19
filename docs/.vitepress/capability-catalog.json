@@ -6,8 +6,7 @@
     "overlay",
     "layer",
     "service",
-    "panorama",
-    "runtime"
+    "panorama"
   ],
   "statuses": [
     "native",
@@ -519,19 +518,6 @@
       "description": "面图层（FillLayer）"
     },
     {
-      "id": "layer.mvt",
-      "family": "layer",
-      "status": "experimental",
-      "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [
-        "MVTLayer"
-      ],
-      "description": "MVT 矢量瓦片图层（MVTLayer）"
-    },
-    {
       "id": "layer.dom",
       "family": "layer",
       "status": "experimental",
@@ -662,7 +648,7 @@
     {
       "id": "service.autocomplete",
       "family": "service",
-      "status": "experimental",
+      "status": "native",
       "runtimeOnly": false,
       "engines": [
         "jsapi-v4"
@@ -670,7 +656,7 @@
       "rawMembers": [
         "Autocomplete"
       ],
-      "description": "输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38）"
+      "description": "输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit）"
     },
     {
       "id": "service.driving-route",
@@ -723,19 +709,6 @@
         "TransitRoute"
       ],
       "description": "公交路线规划（TransitRoute）"
-    },
-    {
-      "id": "service.truck-route",
-      "family": "service",
-      "status": "experimental",
-      "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [
-        "TruckRoute"
-      ],
-      "description": "货车路线规划；官方 4.0.4 未声明 TruckRoute 类，可用性待服务模块核查"
     },
     {
       "id": "service.geocoder",
@@ -851,50 +824,6 @@
         "PanoramaLabel"
       ],
       "description": "全景标注（PanoramaLabel）。#41 起由 `<BPanoramaLabel>` 消费，因此状态由 experimental 提升为 native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表）"
-    },
-    {
-      "id": "runtime.resource-scope",
-      "family": "runtime",
-      "status": "extended",
-      "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [],
-      "description": "项目资源生命周期作用域（监听器/覆盖物/图层的统一释放路径）"
-    },
-    {
-      "id": "runtime.capability-override",
-      "family": "runtime",
-      "status": "extended",
-      "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [],
-      "description": "运行时能力 override（显式修正能力探测结果）"
-    },
-    {
-      "id": "runtime.fake-sdk",
-      "family": "runtime",
-      "status": "experimental",
-      "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [],
-      "description": "Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证）"
-    },
-    {
-      "id": "runtime.async-task",
-      "family": "runtime",
-      "status": "experimental",
-      "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
-      "rawMembers": [],
-      "description": "异步任务控制器（服务与动画的取消/状态统一）"
     }
   ]
 }

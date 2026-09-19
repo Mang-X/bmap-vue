@@ -209,12 +209,13 @@ width / id，**不含回调**）决定要不要真的重建菜单 —— 于是�
 
 ## 已知限制（显式接受）
 
-1. **`<BContextMenu>` 的 target 解析只认 `TargetContext`**，且旧层覆盖物下的菜单会**报错**。
-   判据要写准：`<BMap>` **自己就 provide 了一个 `kind: "map"` 的 `TargetContext`**，所以「注入不到
-   `TargetContext`」在 `<BMap>` 子树里不会发生——真正的判据是「**最近的 target 是地图、而父链上还有
-   `overlayContextKey`**」（`BMap` 只提供前者；`BMarker` 两者都提供且 kind 是 `marker`；只有旧层组件
-   是「有旧 key、没有自己的 TargetContext」）。命中即 `BMAP_CAPABILITY_UNSUPPORTED`，**不**回退。
-   这是刻意的（「挂错地方」比「明确失败」难排查）；等那两个组件迁到新层时这条自然消失。
+1. **`<BContextMenu>` 的 target 解析只认 `TargetContext`**：`map` / `marker` 之外的 kind 一律
+   显式失败；**不提供 `TargetContext` 的组件**（`BMapMask` / `BMarker3d` 这类）不会成为目标，
+   其下的菜单落到 `<BMap>` 自己的地图 target 上（与「直接写在 `<BMap>` 下」同义）。
+   这条口径在合并 #105 时**改过一次**：初版判据依赖 `overlayContextKey`（「最近的 target 是地图、
+   而父链上还有旧 key」⇒ 报错），而 #104 的存量审计把那个 key 整条删除了（连 `BMarker` 的 provide
+   一起）。按 #104 的方向，本层**不**为「区分旧层覆盖物」把 key 加回来——没有公开契约可依据时就不猜。
+   （代价如实记下：一个挂在 `BMapMask` 里的菜单会变成地图级菜单，而不再报错。）
 2. **`visible` 与描述符的 `show`/`hide` 不是同一件事**。`OVERLAY_DESCRIPTORS["context-menu"].visible`
    登记的是 SDK 的实例方法（弹层显隐），而组件的 `visible` 是「挂 / 不挂」。两者的名字撞车，
    因此在描述符条目里写了警示注释；本 ADR 是这条偏离的正本。
@@ -270,3 +271,27 @@ width / id，**不含回调**）决定要不要真的重建菜单 —— 于是�
 反证记录（改坏机制 ⇒ 目标用例红，全部用退出码判定、跑完恢复并自查无残留）：
 `M1a 标记写回 detach()`、`M1b 去掉最终释放标记`、`M2 latestEntries 只在 create 同步`、
 `M3 丢掉 width 默认值`、`M4 不下发 id` —— 五条全部如预期变红（`OK=5 BAD=0 SKIP=0`）。
+
+## 合并 #105（#104 存量审计）时的集成处置
+
+本分支开工时 main 停在 `2af11b6`；合入前 main 前进到 `b127dad`，两侧有 5 个文件重叠，
+`git merge` 报出 **2 处真冲突**（其余 3 个自动合并）。逐条处置：
+
+| 文件 | 冲突性质 | 处置 |
+| --- | --- | --- |
+| `components/overlays/BContextMenu.vue` | #105 改了**旧实现**里的一行注释，而本分支把整个文件重写了 | 取本分支的重写（改动面统计：`2af11b6..b127dad` 对该文件只有 1 行注释，取其无信息损失） |
+| `docs/zh-CN/guide/migration-v1-to-v4.md` | #105 把「已知限制」那段按「`useBMapTrackAnimation` 已删除」重排并**保留**了「`BContextMenu` 只能挂在地图上」的旧结论 | 合并两侧事实：`useBMapTrackAnimation` 的删除说明（#105）+ `BContextMenu` 的实测结论（本 ADR），旧结论删除 |
+
+**三处自动合并但语义相关**（文本无冲突 ≠ 语义正确）：
+
+1. **`useOptionalTargetContext()` 被 #104 删除**（「只有一个消费者的公共 helper」），而本分支的
+   `useContextMenu` 正是它的消费者。处置：改为直接 `inject(targetContextKey)`——**不**把这个 helper
+   加回来（那会与 #104 的结论相反：一个只为包一层 `inject` 存在的 helper，消费者永远只有一个）。
+2. **`overlayContextKey` 被 #104 整条删除**（连 `BMarker` 的 provide 一起），本分支的「旧层覆盖物」
+   判据因此失去基座。处置：删掉那条分支，改为「没有 `TargetContext` ⇒ 落到 `BMap` 的地图目标」，
+   并把测试从「显式报错」改成「等价于地图级菜单」。理由同上：没有公开契约可依据时**不猜**。
+3. `index.ts` / `FakeMap.ts` 的自动合并结果正确（前者取 #105 削减后的导出面，后者两侧改的是不同类）。
+
+合并后在**合并结果**上重跑了全部门禁（不是在原分支上）：`typecheck:v3` / `build:v3` /
+四条 `check:*` / 两条 `generate:*:check` / `test:unit` / `smoke:v4:fixture` / docs 三件套。
+**这类交互是 CI 抓不到的**——CI 只跑在 PR 分支上，不跑 GitHub 算出来的合并结果。

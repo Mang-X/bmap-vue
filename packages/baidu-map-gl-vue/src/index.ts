@@ -31,7 +31,7 @@ export type { PluginCatalogEntry } from "./plugins/catalog";
 // Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
 // 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
-export { Vue3BaiduMapGlResolver, componentTypeNames } from "./resolver/index";
+export { Vue3BaiduMapGlResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
   BMapProps,
@@ -67,13 +67,7 @@ export {
 } from "./core/context/client";
 export type { BMapClientContext, ClientStatus } from "./core/context/client";
 // Target Context(嵌套挂载目标)
-export {
-  targetContextKey,
-  createStaticTarget,
-  useResolvedTarget,
-  useOptionalTargetContext,
-  useParentOverlayHandle,
-} from "./core/context/target";
+export { targetContextKey, useParentOverlayHandle } from "./core/context/target";
 export type { TargetContext, TargetKind } from "./core/context/target";
 // 统一资源生命周期
 export { useSdkResource } from "./core/composables/useSdkResource";
@@ -133,7 +127,6 @@ export type {
   OverlayPropAlias,
 } from "./core/deprecations";
 export type { OverlayKind } from "./driver/types/overlays";
-export { useResourceScope } from "./core/lifecycle/useResourceScope";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
 export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
 export type { BMapProviderProps } from "./components/provider/BMapProvider.vue";
@@ -242,7 +235,6 @@ export type {
   LocalSearchRenderOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
-  PlaceSuggestion,
   RidingRouteOptions,
   RidingRouteResult,
   RouteEndpoint,

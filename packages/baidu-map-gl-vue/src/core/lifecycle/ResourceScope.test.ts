@@ -88,4 +88,64 @@ describe("ResourceScope", () => {
     scope.dispose();
     expect(observer.disconnect).toHaveBeenCalledTimes(1);
   });
+
+  it("exposes label and size", () => {
+    const scope = new ResourceScope({ label: "map-runtime" });
+    expect(scope.label).toBe("map-runtime");
+    expect(scope.size).toBe(0);
+    scope.add(() => {});
+    scope.add(() => {});
+    expect(scope.size).toBe(2);
+    scope.dispose();
+    expect(scope.size).toBe(0);
+  });
+
+  it("reports dispose errors via onDisposeError without interrupting others", () => {
+    const seen: unknown[] = [];
+    const scope = new ResourceScope({
+      onDisposeError: (e) => seen.push(e),
+    });
+    const order: string[] = [];
+    scope.add(() => order.push("a"));
+    scope.add(() => {
+      throw new Error("boom");
+    });
+    scope.add(() => order.push("c"));
+    scope.dispose();
+    expect(order).toEqual(["c", "a"]);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("fork links parent dispose and detaches on child dispose", () => {
+    const parent = new ResourceScope({ label: "parent" });
+    const child = parent.fork("child");
+    expect(child.label).toBe("child");
+    expect(parent.size).toBe(1);
+    child.dispose();
+    expect(parent.size).toBe(0);
+    parent.dispose();
+  });
+
+  it("child disposed when parent disposes", () => {
+    const parent = new ResourceScope();
+    const child = parent.fork();
+    child.add(vi.fn());
+    parent.dispose();
+    expect(child.isDisposed).toBe(true);
+  });
+
+  it("aborts when parentSignal aborts", async () => {
+    const parent = new ResourceScope();
+    const child = new ResourceScope({ parentSignal: parent.signal });
+    expect(child.isDisposed).toBe(false);
+    parent.dispose("test");
+    await Promise.resolve();
+    expect(child.isDisposed).toBe(true);
+  });
+
+  it("dispose accepts a reason", () => {
+    const scope = new ResourceScope();
+    expect(() => scope.dispose("vue-scope-disposed")).not.toThrow();
+    expect(scope.isDisposed).toBe(true);
+  });
 });
