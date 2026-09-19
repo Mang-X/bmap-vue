@@ -29,7 +29,7 @@
  */
 import { onMounted, onScopeDispose, onUnmounted, watch } from "vue";
 import { useRequiredMapContext } from "../context/inject";
-import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
+import { createLayerRegistry, type LayerRecord, type LayerRegistry } from "../layers/LayerRegistry";
 import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { layerInputFingerprint, stableLayerValue } from "../layers/LayerSpec";
 import { ResourceScope } from "../lifecycle/ResourceScope";
@@ -85,8 +85,8 @@ interface InstanceState {
    * （#34 评审第一轮的反例：`color: "red" → undefined` 而 `size` 仍是 18）。
    */
   appliedStyleKeys: string[];
-  /** 账本记录（`Map` 卸载前摘掉它）。 */
-  record: { dispose(): void };
+  /** 账本记录（`Map` 卸载前摘掉它；换实例时走它的**严格** `detach()`）。登记成功前为 `null`。 */
+  record: LayerRecord | null;
 }
 
 /**
@@ -212,7 +212,8 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       rebuildKey: profile.rebuildKey(props, adapted.idKey),
       applied: new Map(),
       appliedStyleKeys: [],
-      record: { dispose: () => {} },
+      // 账本记录在下面**先登记再挂载**（任何一步抛错时，卸载路径上一定有一条能摘掉它的记录）
+      record: null,
     };
 
     // 账本先登记：任何一步抛错时，卸载路径上一定有一个「能把它从图上摘掉」的记录。
@@ -221,8 +222,10 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       handle,
       scope: listenerScope,
       remove: () => {
-        if (instance === state) instance = null;
+        // ⚠️ 顺序：**先摘、后销账**。反过来（先清 `instance`）时，一次抛错的 `removeLayer` 会把
+        // 记账清成「已经没有实例了」，让之后的重试 / 卸载跳过摘除（资源留在图上没人认领）。
         nativeLayers.remove(target(c), handle);
+        if (instance === state) instance = null;
       },
     });
     try {
@@ -234,7 +237,7 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       applyData(state, c, adapted);
       bindEvents(state, c);
     } catch (error) {
-      state.record.dispose();
+      state.record?.dispose();
       throw error;
     }
     instance = state;
@@ -245,28 +248,29 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
     const state = instance;
     if (!state) return;
     instance = null;
-    state.record.dispose();
+    state.record?.dispose();
     if (!state.listenerScope.isDisposed) state.listenerScope.dispose(`${profile.label}-released`);
   }
 
   /**
    * 换实例：**先确认旧实例已经从图上摘掉**，再建新的。
    *
-   * `removeLayer` 允许「先产生副作用、再抛错」，因此摘除失败时无法判断旧实例是否还在图上；
-   * 此时**保留旧实例并交出错误**（宁可这一次不更新，也不能出现两份同图——那会更难收拾）。
+   * 摘除走账本的**严格路径** `record.detach()`（先解绑业务监听 → 摘资源 → 销账），
+   * 因此这里既不重复摘除、也不在监听还活着的时候动资源。`removeLayer` 允许「先产生副作用、
+   * 再抛错」，所以**摘除失败时必须认为旧实例还在图上**：保留它、交出错误、这一次不更新
+   * （宁可这次不更新，也不能出现两份同图）。
    */
   function recreate(c: MapReadyContext): void {
     const old = instance;
     if (old) {
       try {
-        nativeLayersOf(c.client).remove(target(c), old.handle);
+        // 严格摘除：先解绑业务监听、再摘资源，失败会抛（此时保留旧实例、这次不更新）
+        old.record?.detach();
       } catch (error) {
         reportError(error);
         return;
       }
       // 摘除成功 ⇒ 旧实例连同它的监听与账本记录一起作废
-      old.record.dispose();
-      if (!old.listenerScope.isDisposed) old.listenerScope.dispose(`${profile.label}-recreated`);
       instance = null;
     }
     createInstance(c);

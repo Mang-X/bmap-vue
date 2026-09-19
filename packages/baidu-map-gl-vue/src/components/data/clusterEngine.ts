@@ -76,8 +76,21 @@ export interface ClusterEngine<Item> {
   sync(): void;
   /** 显示 / 隐藏（两个引擎都实现「隐藏 ≠ 摘掉」）。 */
   setVisible(visible: boolean): void;
-  /** 释放全部资源（幂等）。 */
+  /**
+   * **卸载路径**的释放：best-effort、幂等、不抛（组件卸载 / 组件销毁）。
+   *
+   * 那里没有「重试」的位置，也没人能承接异常 ⇒ 失败必须可观测（日志 / `resource:error`）
+   * 而不是抛出。
+   */
   dispose(): void;
+  /**
+   * **换引擎路径**的严格释放：旧资源**未确认摘除时抛错**。
+   *
+   * 调用方（SFC）必须据此**放弃这次换引擎并保留旧引擎**——否则旧的还在图上、新的又挂上去，
+   * 两套资源同图（而且旧的那份再也没人认领）。与 `dispose()` 的分工同 `LayerRecord`：
+   * `removeLayer` 允许「先产生副作用、再抛错」，所以只有「成功返回」能当作「确认摘掉」。
+   */
+  detach(): void;
 }
 
 /** 供两个引擎共用的「载荷组装」——两种引擎的 `cluster-click` 只有 `items` 一项不同。 */

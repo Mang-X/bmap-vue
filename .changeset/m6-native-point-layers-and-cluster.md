@@ -48,4 +48,9 @@
   `core/composables/useNativePointLayer.ts`），`BMarkerCluster` 的两个引擎各收在一个模块里
   （`components/data/{clusterEngine,markerClusterEngine,nativeClusterEngine}.ts`）。
   探针新增 `pnpm probe:native-point-cluster`。
-- 决策、取证读数与已知限制见 `docs/adr/2026-09-19-native-point-layers-and-cluster.md`。
+- **`./core` 出口的两处新增（附加、不破坏）**：`LayerRecord.detach()` —— 与 `dispose()` 分工的
+  **严格**释放路径（解绑监听 → 摘资源（失败抛）→ 销账；失败时不销账，调用方放弃这次替换、
+  保留旧实例）；`DataLayerManager.size` —— 「还有几个资源归我管」的读数（摘除失败会按所有权保留，
+  因此计数归零 ⟺ 确认摘净）。两者都是「替换资源前先确认旧资源真的摘掉了」的机器依据。
+- 决策、取证读数与已知限制见 `docs/adr/2026-09-19-native-point-layers-and-cluster.md`；
+  评审修正（PR #108 第一轮的三条阻塞项 + 逐条复现读数）见该 ADR 的末节。

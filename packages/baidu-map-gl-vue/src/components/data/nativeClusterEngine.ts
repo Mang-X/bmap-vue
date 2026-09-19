@@ -174,8 +174,11 @@ export function createNativeClusterEngine<Item>(
       handle: created,
       scope,
       remove: () => {
-        if (handle === created) handle = null;
+        // ⚠️ 顺序：**先摘、后销账**。反过来（先 `handle = null`）时，一次抛错的 `removeLayer`
+        // 会把这个引擎的记账清成「已经没有实例了」，于是重试路径（`detach()` 的 `if (!handle) return`）
+        // 直接跳过摘除 —— 旧图层留在图上、新引擎照样挂上去。
         nativeLayers().remove(target, created);
+        if (handle === created) handle = null;
       },
     });
     try {
@@ -216,15 +219,14 @@ export function createNativeClusterEngine<Item>(
   }
 
   function disposeInstance(): void {
-    const current = handle;
-    if (!current) return;
-    handle = null;
-    record?.dispose();
+    // 门禁用 `record`（**所有权token**）而不是 `handle`：一次抛错的 `removeLayer` 之后
+    // `handle` 可能已经被摘除回调清掉，但资源的所有权仍在账本记录上 —— 用 `handle` 当门禁会
+    // 让「摘除失败」变成「永远不再摘」。
+    if (!record) return;
+    record.dispose();
     record = null;
-    if (listenerScope && !listenerScope.isDisposed) {
-      listenerScope.dispose(`${label}-native-cluster-released`);
-    }
     listenerScope = null;
+    handle = null;
   }
 
   function bindEvents(layer: NativeLayerHandle, scope: ResourceScope): void {
@@ -265,22 +267,31 @@ export function createNativeClusterEngine<Item>(
     if (!value || typeof value !== "object") return;
 
     if (value.isCluster === true) {
+      // 必要元数据不完整 ⇒ **停止派发**。公开类型把 `id` / `size` / `position` 声明成必填的
+      // 合法值，塞进 `(0,0)` / `0` / `""` 会把「SDK 载荷不完整」伪装成一个真实业务簇，而调用方
+      // 无从分辨。告警一次并如实表态：这一次没有可信的簇读数。
       const position = readPayloadPointLike(value.latLng);
-      if (!position || typeof value.pointCount !== "number") {
-        // 簇的元数据缺字段：**不编造** `(0, 0)` / `size: 0`（那会让调用方以为簇在几内亚湾），
-        // 也不丢弃整次点击 —— 告警一次并如实给出能拿到的部分。
+      const size = typeof value.pointCount === "number" ? value.pointCount : null;
+      const id = value.clusterId;
+      if (!position || size === null || id === undefined || id === null) {
         if (!warnedIncompleteHit) {
           warnedIncompleteHit = true;
+          const missing = [
+            position ? null : "latLng",
+            size === null ? "pointCount" : null,
+            id === undefined || id === null ? "clusterId" : null,
+          ].filter((field): field is string => field !== null);
           devWarn(
-            `${label}：簇命中载荷缺少 ${position ? "pointCount" : "latLng"}（官方扩展 API 的载荷形状以实测为准），` +
-              "本次仍会派发 cluster-click，但缺失的字段会用 null / 0 表示",
+            `${label}：簇命中载荷缺少 ${missing.join(" / ")}（官方扩展 API 的载荷形状以实测为准），` +
+              "本次**不派发** cluster-click —— 用占位值伪造一个合法业务簇会让调用方无从分辨",
           );
         }
+        return;
       }
       onClusterClick({
-        id: String(value.clusterId ?? ""),
-        size: typeof value.pointCount === "number" ? value.pointCount : 0,
-        position: position ?? { lng: 0, lat: 0 },
+        id: String(id),
+        size,
+        position,
         // 官方没有公开「簇里有哪几个业务项」的读回入口 ⇒ 如实给 null（见组件文档与 ADR）
         items: null,
       });
@@ -331,16 +342,30 @@ export function createNativeClusterEngine<Item>(
     reports.flush();
   }
 
-  /** 换实例：先摘成功、再建新的（摘除失败时保留旧实例并把错误抛给 SFC）。 */
+  /**
+   * 显隐的**唯一**写入点（props watcher 与 `sync()` 都走它）。
+   *
+   * `appliedVisible` 只在成功后推进：失败的显隐不是「已完成」，下一次收敛会重试
+   * （否则一次 SDK 异常会把声明与画面永久分叉）。
+   */
+  function applyVisible(): void {
+    if (!handle) return;
+    const desired = props.visible !== false;
+    if (appliedVisible === desired) return;
+    nativeLayers().setVisible(handle, desired);
+    appliedVisible = desired;
+  }
+
+  /**
+   * 换实例：先摘成功、再建新的（**严格路径**：`record.detach()` 先解绑监听、再摘资源，
+   * 摘除失败会抛 ⇒ 调用方保留旧实例）。
+   */
   function recreate(): void {
     const old = handle;
     if (old) {
-      nativeLayers().remove(target, old);
-      record?.dispose();
+      // 失败时**不清理任何记账**：旧的还在图上，下一次 sync / 卸载还要能再摘一次
+      record?.detach();
       record = null;
-      if (listenerScope && !listenerScope.isDisposed) {
-        listenerScope.dispose(`${label}-native-cluster-recreated`);
-      }
       listenerScope = null;
       handle = null;
     }
@@ -360,14 +385,26 @@ export function createNativeClusterEngine<Item>(
         return;
       }
       applyData();
+      // 未生效的显隐在这里被补上（`appliedVisible` 只在成功后推进）
+      applyVisible();
     },
-    setVisible(visible) {
-      if (!handle || appliedVisible === visible) return;
-      nativeLayers().setVisible(handle, visible);
-      appliedVisible = visible;
+    setVisible() {
+      applyVisible();
     },
     dispose() {
       disposeInstance();
+      items.clear();
+      adapted = null;
+    },
+    detach() {
+      // 严格路径：失败时**不清理任何记账**，调用方会放弃换引擎并保留本引擎
+      // （旧的还在图上 ⇒ 下一次还能再试；清掉记账等于让它没人认领）。
+      // 门禁同样用 `record`（所有权）而不是 `handle`（可能已被回调清掉）。
+      if (!record) return;
+      record.detach();
+      record = null;
+      listenerScope = null;
+      handle = null;
       items.clear();
       adapted = null;
     },
