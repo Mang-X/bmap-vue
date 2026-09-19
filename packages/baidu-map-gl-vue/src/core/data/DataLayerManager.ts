@@ -12,11 +12,6 @@
 import { createFrameScheduler, type FrameScheduler } from "../scheduler/FrameScheduler";
 import { diffData, type DataDiff } from "../data/diffData";
 
-export interface DataLayerOptions<Item> {
-  minClusterSize?: number;
-  /** 事件委托所需的默认样式/位置解析 */
-}
-
 export interface DataLayerHost<Resource> {
   createMarker(item: unknown): Resource;
   removeMarker(resource: Resource): void;
@@ -32,7 +27,12 @@ export class DataLayerManager<Item, Resource> {
 
   constructor(private readonly host: DataLayerHost<Resource>) {}
 
-  /** 同步一批点:diff + 批量增删改(RAF 合并) */
+  /**
+   * 同步一批点:diff + 批量增删改(RAF 合并)
+   *
+   * `itemVersion` 当前**不参与判定**：内容变了要重算是靠调用方 `watch([data, dataVersion])` 再
+   * `sync()` 一次，diff 只看 key。形参留着只为 `./core` 的既有位置签名（#104 审计第 5 节，删它归 #44）。
+   */
   sync(
     items: readonly Item[],
     getKey: (item: Item) => PropertyKey,

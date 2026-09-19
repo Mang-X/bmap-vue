@@ -29,5 +29,3 @@ export function Vue3BaiduMapGlResolver(): ComponentResolverLike {
     },
   };
 }
-
-export const componentTypeNames = v3ComponentNames;

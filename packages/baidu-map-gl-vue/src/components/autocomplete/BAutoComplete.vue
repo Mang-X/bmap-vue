@@ -3,7 +3,9 @@ import { markRaw, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useRequiredMapContext } from "../../core/context/inject";
 import { ResourceScope } from "../../core/lifecycle/ResourceScope";
 import { BMapError } from "../../core/errors/BMapError";
+import { jsapiV4ServicesOf } from "../../core/services";
 import type { MapReadyContext } from "../../core/context/types";
+import type { BMapClient } from "../../client/types";
 import type { ServiceHandle } from "../../driver/types/handles";
 
 /**
@@ -17,8 +19,8 @@ import type { ServiceHandle } from "../../driver/types/handles";
  * 1. **watcher 纳入作用域**：`onMounted` 是 async 的，`await whenReady()` 之后的 `watch()`
  *    不在 Vue 的实例作用域里（`getCurrentInstance()` 为 null），不注册进 `ResourceScope`
  *    就会在卸载后继续存活，并回写已经销毁的实例；
- * 2. **调用 Driver 的公开释放入口**：卸载时 `disposeAutocomplete()`——Driver 挂在输入框上的
- *    输入活动监听必须随实例一起下线（输入框通常比实例活得久）；
+ * 2. **调用 Driver 的公开释放入口**：卸载时 `disposeAutocomplete()`——它在 Driver 侧持有需要
+ *    销账的订阅记账（`EventDriver` 的 `groups` 是强引用 Map），漏掉这一步就是泄漏；
  * 3. **raw setter 回到集成边界**：`location` / `types` 的同步走
  *    `driver.services.setAutocompleteOptions()`，组件不再直接访问 `instance.raw.setLocation`。
  */
@@ -63,18 +65,13 @@ function reportResourceError(
 }
 
 /**
- * Driver 侧的释放入口**只在 v4 Driver 上存在**（`JsapiV4ServiceDriver.disposeAutocomplete`）：
- * legacy 的 Autocomplete 没有 Driver 侧资源（输入活动监听、待回包队列都是 v4 Facet 的记账）。
- * 组件不按引擎分支，因此按**结构化能力**探测：有就用，没有就退化为「只解绑本组件持有的订阅」
- * （后者由 `ResourceScope` 负责）。#26 删除 webgl-v1 后这个探测可以收成直接调用。
+ * Driver 侧的释放入口挂在 v4 的 Service Facet 上（`JsapiV4ServiceDriver.disposeAutocomplete`），
+ * 因此经 `jsapiV4ServicesOf()` 收窄取得（可运行时检查），**不**在这里写条件探测：
+ * #26 之后只有一个 engine，探测为假时静默跳过就等于「以为释放了、其实记账还在」。
  */
-function disposeService(instance: ServiceHandle<"service:autocomplete">): void {
-  const services = readyCtx?.client?.driver?.services as
-    | { disposeAutocomplete?: (handle: ServiceHandle<"service:autocomplete">) => void }
-    | undefined;
-  if (typeof services?.disposeAutocomplete !== "function") return;
+function disposeService(client: BMapClient, instance: ServiceHandle<"service:autocomplete">): void {
   try {
-    services.disposeAutocomplete(instance);
+    jsapiV4ServicesOf(client).disposeAutocomplete(instance);
   } catch (error) {
     // SDK dispose 抛错时句柄已停用、清理可以重试（见 `disposeAutocomplete` 的契约）；
     // 卸载路径不能因此抛异常，但要把它交出去而不是静默吞掉。
@@ -118,7 +115,7 @@ onMounted(async () => {
     resource.value = markRaw(instance as object) as ServiceHandle<"service:autocomplete">;
     // 先登记**释放**：`ResourceScope.dispose()` 按注册逆序执行，于是业务订阅先下线、
     // 再由 Driver 释放实例（与「先解绑业务事件、再移除资源」的既有口径一致）。
-    scope.add(() => disposeService(instance));
+    scope.add(() => disposeService(ready.client, instance));
     // bind highlight / confirm
     scope.add(ready.client.driver.events.on(instance, "highlight", (e) => emit("highlight", e)));
     scope.add(ready.client.driver.events.on(instance, "confirm", (e) => emit("confirm", e)));

@@ -34,7 +34,6 @@ import type {
   JsapiV4ServiceDriver,
   LocalCityFix,
   LocalSearchResult,
-  PlaceSuggestion,
   ReverseGeocodeRequest,
   ServiceResult,
 } from "../baidu-map-gl-vue/src/driver/types/services";
@@ -58,18 +57,17 @@ export const DEFAULT_SERVICE_FACET_FIXTURE: ServiceFacetFixture = {
   boundaryName: "北京市",
   convert: { points: [{ lng: 116.404, lat: 39.915 }], from: 3, to: 5 },
   /**
-   * 默认输入框：**挂到文档 + 不可输入**（两个都是硬要求）。
+   * 默认输入框：**挂到文档**（真实 4.0 的硬要求）。
    *
-   * - 真实 4.0 里 `new BMap.Autocomplete({ input })` 对**脱离文档**的 input 会直接抛
-   *   `TypeError: Cannot read properties of null (reading 'top')`；挂到文档之后 `search()` 才真
-   *   能拿到回包（2026-09-12 smoke 三种形态：detached 抛错、attached-body / attached-box 都
-   *   `suggest=success`）；
-   * - `suggest()` 还要求回调通道**独占**：可输入的输入框上，用户输入触发的同关键词回包与程序化
-   *   回包无法区分，会被 Driver 拒绝（PR #63 四轮复审 P2-2），所以这里用 `readOnly`。
+   * 真实 4.0 里 `new BMap.Autocomplete({ input })` 对**脱离文档**的 input 会直接抛
+   * `TypeError: Cannot read properties of null (reading 'top')`（2026-09-12 smoke 三种形态：
+   * detached 抛错、attached-body / attached-box 都构造成功）。
+   *
+   * 探针不打字，因此也不依赖任何回包：这里只覆盖「构造 + 释放」这条本库真实承诺的路径
+   * （#104 删掉了原先的程序化 `suggest()` 归属层，探针不再猜回包）。
    */
   input: () => {
     const el = document.createElement("input");
-    el.readOnly = true;
     document.body.appendChild(el);
     return el;
   },
@@ -82,7 +80,6 @@ export interface ServiceFacetProbes {
   boundary: ServiceResult<BoundaryRings>;
   locate: ServiceResult<GeolocationFix>;
   locateCity: ServiceResult<LocalCityFix>;
-  suggest: ServiceResult<PlaceSuggestion[]>;
   /** 本地检索（`LocalSearch#search`，#38） */
   search: ServiceResult<LocalSearchResult[]>;
   /** 取消之后的结算：用来固定「迟到回调不复活已取消的调用」 */
@@ -90,9 +87,12 @@ export interface ServiceFacetProbes {
 }
 
 /**
- * 跑一遍 Service Facet 的八个归一化调用 + 一次取消，返回结构化结果。
+ * 跑一遍 Service Facet 的七个归一化调用 + 一次取消，返回结构化结果。
  *
- * 注意 `live` 环境（真实 AK）里 `geocode` / `suggest` / `search` 的结果取决于配额与网络，
+ * `Autocomplete` **不在这一面上**（#104）：它绑输入框、只有一条不带请求身份的
+ * `onSearchComplete`，所以这里只走「构造 + 释放」，不猜回包。
+ *
+ * 注意 `live` 环境（真实 AK）里 `geocode` / `search` 的结果取决于配额与网络，
  * 因此这里**只负责记录**，期望值由调用方给（vitest 侧分 fixture / live 两档）。
  */
 export async function probeServiceFacet(
@@ -104,7 +104,8 @@ export async function probeServiceFacet(
   const boundary = services.createBoundary();
   const geolocation = services.createGeolocation();
   const localCity = services.createLocalCity();
-  const autocompleteOptions: AutocompleteOptions = { input: fixture.input() };
+  const autocompleteInput = fixture.input();
+  const autocompleteOptions: AutocompleteOptions = { input: autocompleteInput };
   const autocomplete = services.createAutocomplete(autocompleteOptions);
   // 纯 headless：不传 `renderOptions.map`，因此不会在任何地图上绘制覆盖物
   const localSearch = services.createLocalSearch(fixture.city);
@@ -124,15 +125,16 @@ export async function probeServiceFacet(
     boundary: await services.queryBoundary(boundary, boundaryRequest).result,
     locate: await services.locate(geolocation).result,
     locateCity: await services.locateCity(localCity).result,
-    suggest: await services.suggest(autocomplete, fixture.address).result,
     search: await services.search(localSearch, fixture.address).result,
     canceled: canceledResult,
   };
 
-  // 探针创建的实例在**有释放入口**时必须放掉：`Autocomplete` 载着输入框上的监听、
-  // `LocalSearch` 载着待回包队列，留在页面/用例里就是真实泄漏（smoke 页面尤其明显）。
+  // 探针创建的实例在**有释放入口**时必须放掉：`Autocomplete` 与 `LocalSearch` 都载着 Driver 侧的
+  // 订阅记账，留在页面/用例里就是真实泄漏（smoke 页面尤其明显）。输入框由探针挂到文档上，
+  // 也要由探针摘掉——官方 `dispose()` 不回收调用方提供的 DOM。
   services.disposeAutocomplete(autocomplete);
   services.disposeLocalSearch(localSearch);
+  autocompleteInput.remove();
 
   return probes;
 }

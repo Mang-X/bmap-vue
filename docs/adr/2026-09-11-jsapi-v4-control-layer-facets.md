@@ -261,6 +261,11 @@ issue 的验收标准里有「Capability Catalog 与实际 Driver 支持一致�
   Runtime` 六个 family（`#15` 冻结），控件没有对应 family；因此 Control Facet **不注入
   capabilities**，控件侧的「一致」体现为：不为任何 Catalog 标记 unsupported 的能力提供入口。
   这条是刻意的不改动，不是遗漏。
+  **[成员数已变于 #104 / 2026-09-19]** `Runtime` family 连同四条成员被删除（`CAPABILITY_FAMILIES`
+  这个常量本身也删了）：那四条记的是**本库自己的模块**（loader / runtime 等），不是 SDK 能力，
+  而且全仓没有任何地方按 id 问过它们。因此现在是**五个** family，上面那句「六个」按历史读。
+  本节真正的结论不变，而且它**不依赖** family 个数：控件不在 Catalog 里，所以 Control Facet
+  不注入 capabilities。
 
 能力矩阵由脚本重生成（`pnpm generate:capability-matrix`，61 条能力），`--check` 无漂移。
 

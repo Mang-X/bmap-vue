@@ -4,7 +4,6 @@
  * 用 key 对海量数据做过增删改 diff:
  * - 使用 Map<PropertyKey, Record> 建索引
  * - 默认以根数组引用 + item key 比较
- * - 支持 dataVersion 快速判定(整批替换)
  * - 不默认深比较完整 item
  */
 export interface DataDiff<Item> {
@@ -67,19 +66,4 @@ export function diffData<Item>(
 
   const unchanged = next.length - added.length - updated.length;
   return { added, updated, removed, unchanged };
-}
-
-/**
- * 快速判定是否整批替换(dataVersion 变化 或 根引用相同但数组长度变化)。
- * 支持 dataVersion 快速判定。
- */
-export function shouldFullReplace<Item>(
-  prevVersion: PropertyKey | undefined,
-  nextVersion: PropertyKey | undefined,
-  previous: readonly Item[] | null,
-  next: readonly Item[],
-): boolean {
-  if (prevVersion !== nextVersion) return true;
-  if ((previous?.length ?? 0) !== next.length) return true;
-  return false;
 }

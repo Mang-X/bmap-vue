@@ -134,7 +134,6 @@ describe("v4 装配后的跨 facet 不变式（#23）", () => {
 
   it("装配后释放服务实例时，EventDriver 持有的订阅也必须释放（events 已注入 Service Facet）", () => {
     const el = document.createElement("input");
-    el.readOnly = true;
     document.body.appendChild(el);
     const handle = driver.services.createAutocomplete({ input: el });
     const raw = fake.createdAutocompletes[0]!;

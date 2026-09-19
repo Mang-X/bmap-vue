@@ -35,7 +35,7 @@ describe("CapabilityRegistry", () => {
     });
     expect(registry.supports("overlay.marker")).toBe(true);
     expect(registry.supports("map.heading")).toBe(true);
-    expect(registry.supports("service.truck-route")).toBe(false);
+    expect(registry.supports("overlay.mapvgl")).toBe(false);
   });
 
   /**
@@ -109,7 +109,7 @@ describe("CapabilityRegistry", () => {
     });
     const listed = registry.list();
     expect(listed).toContain("overlay.marker");
-    expect(listed).not.toContain("service.truck-route");
+    expect(listed).not.toContain("overlay.mapvgl");
     expect(listed.every((id) => CAPABILITY_IDS.includes(id))).toBe(true);
   });
 
@@ -120,7 +120,7 @@ describe("CapabilityRegistry", () => {
       rawSdk: fakeSdk,
       unsupported: "throw",
     });
-    expect(() => registry.require("service.truck-route")).toThrow(UnsupportedCapabilityError);
+    expect(() => registry.require("overlay.mapvgl")).toThrow(UnsupportedCapabilityError);
   });
 
   it("require() warn policy logs and does not throw", () => {
@@ -131,7 +131,7 @@ describe("CapabilityRegistry", () => {
       rawSdk: fakeSdk,
       unsupported: "warn",
     });
-    expect(() => registry.require("service.truck-route")).not.toThrow();
+    expect(() => registry.require("overlay.mapvgl")).not.toThrow();
     warn.mockRestore();
   });
 
@@ -141,10 +141,10 @@ describe("CapabilityRegistry", () => {
       version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
-      overrides: { "overlay.marker": false, "service.truck-route": true },
+      overrides: { "overlay.marker": false, "overlay.mapvgl": true },
     });
     expect(registry.supports("overlay.marker")).toBe(false);
-    expect(registry.supports("service.truck-route")).toBe(true);
+    expect(registry.supports("overlay.mapvgl")).toBe(true);
   });
 });
 
@@ -174,7 +174,6 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
     DistrictLayer: class {},
     LineLayer: class {},
     FillLayer: class {},
-    MVTLayer: class {},
     DOMLayer: class {},
     LocalSearch: class {},
     Autocomplete: class {},
@@ -182,7 +181,6 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
     WalkingRoute: class {},
     RidingRoute: class {},
     TransitRoute: class {},
-    TruckRoute: class {},
     Geocoder: class {},
     Geolocation: class {},
     LocalCity: class {},
@@ -200,7 +198,7 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
     VERSION: "4.0",
   };
 
-  it("catalog 覆盖 Map / Overlay / Layer / Service / Panorama / Runtime 六个 family", () => {
+  it("catalog 覆盖 Map / Overlay / Layer / Service / Panorama 五个 family", () => {
     for (const family of CAPABILITY_FAMILIES) {
       const entries = CAPABILITY_IDS.filter((id) => CAPABILITY_CATALOG[id].family === family);
       expect(entries.length, `family ${family} 应至少有一个能力`).toBeGreaterThan(0);
@@ -236,17 +234,17 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
       version: "4.0",
       rawSdk: fullSdk,
       unsupported: "silent",
-      overrides: { "service.truck-route": true },
+      overrides: { "overlay.mapvgl": true },
     });
-    expect(overridden.supports("service.truck-route")).toBe(true);
-    expect(overridden.explain("service.truck-route").reason).toBe("overridden");
+    expect(overridden.supports("overlay.mapvgl")).toBe(true);
+    expect(overridden.explain("overlay.mapvgl").reason).toBe("overridden");
   });
 
   it("runtime-only 能力被显式标注，可探测能力不被误标", () => {
     const runtimeOnly = CAPABILITY_IDS.filter((id) => CAPABILITY_CATALOG[id].runtimeOnly);
     expect(runtimeOnly).toContain("map.check-resize");
     expect(runtimeOnly).toContain("overlay.point-collection");
-    expect(runtimeOnly).toContain("runtime.capability-override");
+    expect(runtimeOnly).toContain("layer.panorama-coverage");
     expect(CAPABILITY_CATALOG["overlay.marker"].runtimeOnly).toBe(false);
     expect(CAPABILITY_CATALOG["service.geocoder"].runtimeOnly).toBe(false);
   });
@@ -300,12 +298,7 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
   it("语义命名：id 前缀与 family 一致", () => {
     for (const id of CAPABILITY_IDS) {
       const prefix = (id as Capability).split(".")[0];
-      const family = CAPABILITY_CATALOG[id].family;
-      if (family === "runtime") {
-        expect(prefix).toBe("runtime");
-      } else {
-        expect(prefix).toBe(family);
-      }
+      expect(prefix).toBe(CAPABILITY_CATALOG[id].family);
     }
   });
 });

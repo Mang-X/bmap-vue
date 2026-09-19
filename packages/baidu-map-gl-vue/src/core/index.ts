@@ -4,13 +4,11 @@ export { logger, redactAk, setAkForLogger } from "./logger";
 export type { Logger } from "./logger";
 export { ResourceScope } from "./lifecycle/ResourceScope";
 export type { Disposer, DisposeContext, ResourceScopeOptions } from "./lifecycle/ResourceScope";
-export { useResourceScope } from "./lifecycle/useResourceScope";
 export { createFrameScheduler } from "./scheduler/FrameScheduler";
 export type { FrameScheduler } from "./scheduler/FrameScheduler";
 export {
   bindSdkEvent,
   bindSdkEvents,
-  extractSdkEventNames,
   normalizeMapEvent,
 } from "./events/EventBridge";
 export type { BMapSdkEventTarget, NormalizedMapEvent } from "./events/EventBridge";
@@ -71,7 +69,6 @@ export {
   DEFAULT_CALLBACK_PARAM,
   DEFAULT_VERSION,
   appendCallback,
-  createBaiduSdkUrl,
   createCallbackName,
   fingerprintApiUrl,
   fingerprintConfig,
@@ -132,9 +129,9 @@ export type {
   MapRuntimeStatus,
   MapStatus,
 } from "./context/types";
-export { mapContextKey, overlayContextKey } from "./context/types";
+export { mapContextKey } from "./context/types";
 export { useOptionalMapContext, useRequiredMapContext } from "./context/inject";
-export { targetContextKey, createStaticTarget, useResolvedTarget, useOptionalTargetContext, useParentOverlayHandle } from "./context/target";
+export { targetContextKey, useParentOverlayHandle } from "./context/target";
 export type { TargetContext, TargetKind } from "./context/target";
 export {
   bmapClientContextKey,
@@ -144,7 +141,7 @@ export {
   useRequiredClientContext,
 } from "./context/client";
 export type { BMapClientContext, ClientStatus, CreateClientContextOptions } from "./context/client";
-export { diffData, getItemKey, shouldFullReplace } from "./data/diffData";
+export { diffData, getItemKey } from "./data/diffData";
 export type { DataDiff, ItemKeyFn } from "./data/diffData";
 export { gridCluster } from "./data/gridCluster";
 export type { Cluster, ClusterOptions } from "./data/gridCluster";
@@ -167,7 +164,7 @@ export {
 } from "./icons/markerIcon";
 export type { BuiltinMarkerIconName, MarkerIconInputLike } from "./icons/markerIcon";
 export { DataLayerManager } from "./data/DataLayerManager";
-export type { DataLayerHost, DataLayerOptions } from "./data/DataLayerManager";
+export type { DataLayerHost } from "./data/DataLayerManager";
 export { createOverlayRegistry } from "./overlays/OverlayRegistry";
 export type {
   OverlayRecord,

@@ -37,7 +37,6 @@ function container(): HTMLElement {
 
 function input(): HTMLInputElement {
   const el = document.createElement("input");
-  el.readOnly = true;
   document.body.appendChild(el);
   return el;
 }

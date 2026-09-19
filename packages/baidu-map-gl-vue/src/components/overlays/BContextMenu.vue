@@ -44,7 +44,7 @@ const ctx = useRequiredMapContext();
 const scope = new ResourceScope({ label: "context-menu" });
 // 每个菜单实例独立 child scope:重建时释放旧菜单的 SDK 事件绑定,避免堆积
 let menuScope: ResourceScope | null = null;
-// 最近父 Overlay 实例(优先 TargetContext,其次兼容旧 overlayContextKey;不在 overlay 下则为 null)
+// 最近父 Overlay 实例(读 TargetContext;不在 overlay 下则为 null)
 // shallowRef 响应父 Marker 晚于自身就绪,watch immediate 自动原子挂载
 const parentOverlay = useParentOverlayHandle();
 

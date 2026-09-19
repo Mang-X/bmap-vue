@@ -54,13 +54,3 @@ export function normalizeMapEvent<Raw>(raw: Raw): NormalizedMapEvent<Raw> {
     stopPropagation: () => domEvent?.stopPropagation?.(),
   };
 }
-
-/**
- * 按事件名分组 + 给组件使用的 helper:
- * 从 vnode props(以 on 开头)解析出用户绑定的 SDK 事件名。
- */
-export function extractSdkEventNames(props: Record<string, unknown>): string[] {
-  return Object.keys(props)
-    .filter((key) => /^on[A-Z]/.test(key))
-    .map((key) => key.replace(/^on/, "").toLowerCase());
-}

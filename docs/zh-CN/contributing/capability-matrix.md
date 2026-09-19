@@ -5,15 +5,15 @@
 > 由 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**68**
+能力总数：**62**
 
 ## 状态说明
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 44 |
-| `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 4 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 18 |
+| `native` | SDK 原生能力，直接映射官方 API | 45 |
+| `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 2 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 13 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -22,10 +22,9 @@
 | --- | --- |
 | `map` | 14 |
 | `overlay` | 15 |
-| `layer` | 19 |
-| `service` | 13 |
+| `layer` | 18 |
+| `service` | 12 |
 | `panorama` | 3 |
-| `runtime` | 4 |
 
 ## 引擎矩阵
 
@@ -71,7 +70,6 @@
 | layer | `layer.panorama-coverage` | native | ✓ | ✓ | PanoramaCoverageLayer | 全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型 |
 | layer | `layer.line` | experimental | — | ✓ | LineLayer | 线图层（LineLayer） |
 | layer | `layer.fill` | experimental | — | ✓ | FillLayer | 面图层（FillLayer） |
-| layer | `layer.mvt` | experimental | — | ✓ | MVTLayer | MVT 矢量瓦片图层（MVTLayer） |
 | layer | `layer.dom` | experimental | — | ✓ | DOMLayer | DOM 图层（DOMLayer） |
 | layer | `layer.xyz` | experimental | — | ✓ | XYZLayer | 第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务 |
 | layer | `layer.wms` | experimental | — | ✓ | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |
@@ -82,12 +80,11 @@
 | layer | `layer.heatmap` | experimental | ✓ | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |
 | layer | `layer.track-line` | experimental | ✓ | ✓ | TrackLine | 轨迹线（TrackLine）；数据的绘制/播放/跟随，属扩展 API；播放控制与迁移结论见 M8（#43） |
 | service | `service.local-search` | native | — | ✓ | LocalSearch | 本地检索（LocalSearch） |
-| service | `service.autocomplete` | experimental | — | ✓ | Autocomplete | 输入提示（Autocomplete）：构造与输入框绑定是原生的；程序化检索（suggest）的**请求归属**依赖未经真实运行时证明的 keyword / FIFO 假设（R25-C / #72 标注，收口属 M7 #38） |
+| service | `service.autocomplete` | native | — | ✓ | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
 | service | `service.driving-route` | native | — | ✓ | DrivingRoute | 驾车路线规划（DrivingRoute） |
 | service | `service.walking-route` | native | — | ✓ | WalkingRoute | 步行路线规划（WalkingRoute） |
 | service | `service.riding-route` | native | — | ✓ | RidingRoute | 骑行路线规划（RidingRoute） |
 | service | `service.transit-route` | native | — | ✓ | TransitRoute | 公交路线规划（TransitRoute） |
-| service | `service.truck-route` | experimental | — | ✓ | TruckRoute | 货车路线规划；官方 4.0.4 未声明 TruckRoute 类，可用性待服务模块核查 |
 | service | `service.geocoder` | native | — | ✓ | Geocoder | 地理编码 / 逆地理编码（Geocoder） |
 | service | `service.geolocation` | native | — | ✓ | Geolocation | 浏览器定位（Geolocation） |
 | service | `service.local-city` | native | — | ✓ | LocalCity | IP 定位城市（LocalCity） |
@@ -97,7 +94,3 @@
 | panorama | `panorama.viewer` | native | — | ✓ | Panorama | 全景查看器（Panorama） |
 | panorama | `panorama.service` | native | — | ✓ | PanoramaService | 全景服务（PanoramaService） |
 | panorama | `panorama.label` | native | — | ✓ | PanoramaLabel | 全景标注（PanoramaLabel）。#41 起由 `<BPanoramaLabel>` 消费，因此状态由 experimental 提升为 native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表） |
-| runtime | `runtime.resource-scope` | extended | ✓ | ✓ | — | 项目资源生命周期作用域（监听器/覆盖物/图层的统一释放路径） |
-| runtime | `runtime.capability-override` | extended | ✓ | ✓ | — | 运行时能力 override（显式修正能力探测结果） |
-| runtime | `runtime.fake-sdk` | experimental | ✓ | ✓ | — | Fake SDK 测试替身（单引擎 jsapi-v4 的组件级 / Facet 级验证） |
-| runtime | `runtime.async-task` | experimental | ✓ | ✓ | — | 异步任务控制器（服务与动画的取消/状态统一） |

@@ -10,9 +10,7 @@
  *
  * 事件与 `v-model:position` 的行为依据见 ADR `2026-09-17-overlay-spec-and-marker`。
  */
-import { provide } from "vue";
 import { useOverlaySpec, type OverlayPositionModel } from "../../core/composables/useOverlaySpec";
-import { overlayContextKey } from "../../core/context/types";
 import { createMarkerSpec } from "./markerSpec";
 import type { BMarkerProps } from "../../types/components";
 
@@ -56,16 +54,8 @@ const markerSpec = createMarkerSpec({
   position: () => positionModel,
 });
 
-const { resource, position } = useOverlaySpec(props, markerSpec, { emit: emitDynamic });
+const { position } = useOverlaySpec(props, markerSpec, { emit: emitDynamic });
 positionModel = position;
-
-/**
- * 旧的整体句柄 key 保持兼容（函数式读取）。
- *
- * 新代码请用 `targetContextKey` 的 `TargetContext`：它由 `useOverlaySpec` **自动 provide**，
- * 且带 `kind` 与响应式 `target`（`BContextMenu` 走的是新的那条）。
- */
-provide(overlayContextKey, () => resource.value);
 </script>
 
 <template>

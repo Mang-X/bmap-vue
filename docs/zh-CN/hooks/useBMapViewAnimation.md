@@ -22,11 +22,17 @@ hooks/useBMapViewAnimation
 ## 用法
 
 ```ts
-const { viewAnimation, setKeyFrames, start, cancel, stop, proceed, status, ready } = useBMapViewAnimation(options, map)
+const { start, cancel, status, ready } = useBMapViewAnimation(options, map)
 ```
 
 :::tip
 该 hooks 需要地图 ready（`BMapClient` 就绪）后才能创建动画实例；在 `<BMap>` 子树内调用时可省略 `map` 参数
+:::
+
+:::warning 只有公开面，没有暂停 / 继续
+4.0 上视角动画实例的暂停与继续**只有私有成员**（`_pause` / `_continue`），本库不用私有面伪造能力，
+所以不提供 `stop()` / `proceed()`；需要中止就用 [`cancel()`](#返回值)（公开命令）。
+每一次 `start()` 都会新建一个动画实例，关键帧变了直接再调一次即可，不必重建 hooks。
 :::
 
 ### 参数
@@ -38,25 +44,20 @@ const { viewAnimation, setKeyFrames, start, cancel, stop, proceed, status, ready
 
 #### ViewAnimationOptions
 
-| 属性            | 描述                                                             | 类型                   | 默认值 |
-| --------------- | ---------------------------------------------------------------- | ---------------------- | ------ |
-| duration        | 动画持续时常，单位 ms                                            | `number`               | `1000` |
-| delay           | 动画开始延迟                                                     | `number`               | `0`    |
-| loop            | 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环 | `number \| 'INFINITE'` | `1`    |
-| disableDragging | 动画播放时禁止鼠标拖动                                           | `boolean`              | `true` |
+| 属性     | 描述                                                             | 类型                   | 默认值 |
+| -------- | ---------------------------------------------------------------- | ---------------------- | ------ |
+| duration | 动画持续时常，单位 ms                                            | `number`               | `1000` |
+| delay    | 动画开始延迟                                                     | `number`               | `0`    |
+| loop     | 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环 | `number \| 'INFINITE'` | `1`    |
 
 ### 返回值
 
-| 返回值        | 描述                                                                     | 类型                                                                        |
-| ------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| viewAnimation | 视角动画句柄（`Ref`，值为 `ServiceHandle`；raw 实例仅经 `./advanced` 获取） | `Ref<ServiceHandle<'service:view-animation'> \| null>`                      |
-| setKeyFrames  | 设置动画关键帧函数，需要在`Map`组件`ready`事件触发后才可调用             | [`(path: ViewAnimationKeyFrames[]) => void`](#viewanimationkeyframes)       |
-| start         | 开始动画函数，`setKeyFrames` 设置路径后且 `status` 为 `INITIAL` 才可调用 | `() => void`                                                                |
-| stop          | 暂停动画函数                                                             | `() => void`                                                                |
-| cancel        | 取消动画函数                                                             | `() => void`                                                                |
-| proceed       | 继续播放动画函数                                                         | `() => void`                                                                |
-| status        | 动画状态                                                                 | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                          |
-| ready         | 地图 ready 后 resolve 的 `MapReadyContext`                               | `Promise<MapReadyContext>`                                                  |
+| 返回值  | 描述                                                                             | 类型                                                                    |
+| ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| start   | 播放一段关键帧动画；每次调用新建实例并接管播放——上一段的观察当场下线（hooks 不再收它的事件），地图级的取消命令由 Driver 在起播时发出 | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
+| cancel  | 取消本 hooks 当前那段播放（公开的 `cancelViewAnimation`）。没有在飞动画时什么都不做；这条守卫看的是 hooks 自己记的「有没有在飞段」，不是 SDK 那边动画的归属。状态要等 SDK 的 `animationcancel` 到达才变回 `idle` | `() => void`                                                            |
+| status  | 观察到的播放状态，只由公开事件写，命令不改动它                                   | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
+| ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 
 #### ViewAnimationKeyFrames
 
@@ -89,21 +90,16 @@ interface ViewAnimationKeyFrames {
 #### ViewAnimationStatus
 
 ```ts
-// PLAYING 播放中
-// STOPPING 暂停中
-// INITIAL 默认状态
-type ViewAnimationStatus = 'PLAYING' | 'STOPPING' | 'INITIAL'
+// playing 正在播放
+// idle 没有在播放（未开始 / 已播完 / 已取消）
+type ViewAnimationStatus = 'idle' | 'playing'
 ```
 
 ### 事件监听
 
-hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步到 `status`，无需手动绑定。如需自定义监听，可在 `ready` 后通过 `client.driver.events` 绑定动画句柄：
-
-```ts
-const { ready } = useBMapViewAnimation()
-const { client } = await ready
-client.driver.events.on(viewAnimation.value!, 'animationiterations', () => {})
-```
+hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步到 `status`，无需手动绑定。
+动画实例由 hooks 持有并在每次 `start()` 时替换，因此**不**对外暴露句柄；需要自己观察事件时，
+请在 `ready` 之后用 `client.driver.services.createViewAnimation()` 自行建实例并绑定：
 
 | 事件                | 参数 | 描述                                                                          |
 | ------------------- | ---- | ----------------------------------------------------------------------------- |
@@ -112,10 +108,15 @@ client.driver.events.on(viewAnimation.value!, 'animationiterations', () => {})
 | animationend        | -    | 动画结束时触发，如果动画中途被终止，则不会触发                                |
 | animationcancel     | -    | 动画中途被终止时触发                                                          |
 
+:::warning
+`animationiterations` 不在 hooks 的观察范围内：多轮循环的进度读数需要「按实例订阅 + 计数」，
+而本库目前没有消费它的运行时取证（#104 的 evidence-first）。需要循环进度时走上面那条自建路径。
+:::
+
 ## TS 类型定义参考
 
 ```ts
-import { Ref } from 'vue'
+import { ShallowRef } from 'vue'
 type Point = { lng: number; lat: number }
 export interface ViewAnimationKeyFrames {
   /**
@@ -139,36 +140,28 @@ export interface ViewAnimationKeyFrames {
    */
   percentage: number
 }
-export interface UseViewAnimationOptions {
+export interface UseBMapViewAnimationOptions {
   /**
    * 	动画开始延迟时间，单位ms，默认0
    */
-  delay: number
+  delay?: number
   /**
    * 	动画持续时间，单位ms，默认1000
    */
-  duration: number
+  duration?: number
   /**
    * 循环次数，参数类型为数字时循环固定次数，参数为'INFINITE'无限循环，默认为1
    */
-  loop: number | 'INFINITE'
-  /**
-   * 动画播放时禁止鼠标拖动
-   */
-  disableDragging: boolean
+  loop?: number | 'INFINITE'
 }
-export type ViewAnimationStatus = 'INITIAL' | 'PLAYING' | 'STOPPING'
+export type ViewAnimationStatus = 'idle' | 'playing'
 export declare function useBMapViewAnimation(
-  options?: UseViewAnimationOptions,
+  options?: UseBMapViewAnimationOptions,
   map?: unknown
 ): {
-  viewAnimation: Ref<unknown>
-  start: () => void
+  start: (keyFrames: ViewAnimationKeyFrames[]) => Promise<void>
   cancel: () => void
-  stop: () => void
-  proceed: () => void
-  status: Ref<ViewAnimationStatus>
-  setKeyFrames: (keyFrames: ViewAnimationKeyFrames[]) => void
+  status: Readonly<ShallowRef<ViewAnimationStatus>>
   ready: Promise<MapReadyContext>
 }
 ```
