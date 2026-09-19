@@ -389,16 +389,314 @@ export interface BPointCollectionProps<Item> extends BMapDataProps<Item> {
   pickHeight?: number;
 }
 
-/** 图层级拾取事件（`BPointCollection` 的 `click`）。 */
+/**
+ * 图层级拾取事件（原生批量数据图层的 `click` / `mousemove` / `dblclick` / `rightclick`）。
+ *
+ * 五个原生数据图层共用这一个载荷形状（`BPointCollection` 与 #36 的 `BLineLayer` / `BFillLayer`）：
+ * 「未命中」「身份确认不到」这两种情况必须能被**区分**出来，所以 `hit` / `id` / `item` 三个字段
+ * 各自表达一件事。
+ */
 export interface BMapPointPick<Item> {
   /** 是否命中要素（未命中时官方**也**派发事件，用 `dataIndex === -1` 区分）。 */
   hit: boolean;
   /** 命中的要素在本次 `setData` 里的下标；未命中为 `-1`。 */
   dataIndex: number;
-  /** 命中的业务项（**最新**的那个）；未命中或对不上业务数据时为 `null`。 */
+  /**
+   * **可以公开 / 交给 Feature State 的业务身份**（`feature.properties[idKey]`）；确认不到时为 `null`。
+   *
+   * 取值域是 `string | number`（官方 `updateState(keys: string | number | …)` 的签名）：`idKey` 没声明、
+   * 或者 `properties[idKey]` 不在这个域（`NaN` / symbol）时如实返回 `null`——本库不按事件顺序 / 下标猜
+   * 身份，也不猜官方的默认 `idKey`，更不会把 symbol 转成字符串冒充身份。
+   */
+  id: string | number | null;
+  /**
+   * 命中的业务项（**最新**的那个）；未命中时为 `null`。
+   *
+   * 与 `id` 是**两件事**（`id` 的取值域更窄，见上）：`item` 只要求「命中并且能按**业务键**找回」，
+   * 因此 `id` 为 `null` 时 `item` 往往仍然有值——没设置 `idKey` 时线 / 面图层仍会给出命中要素的
+   * `properties`；函数式 `itemKey` 返回 symbol 时逐项数据组件（`BPointCollection`）也照样回传最新业务项。
+   */
   item: Item | null;
   /** 地理坐标（未命中时也有）。 */
   latLng: { lng: number; lat: number } | null;
   /** 画面像素坐标。 */
   pixel: { x: number; y: number } | null;
+}
+
+/**
+ * 线 / 面图层的拾取载荷：**业务项就是要素的 `properties`**。
+ *
+ * 与 `BPointCollection` 的差别只在 `Item` 的形状：逐项数据组件的业务对象是调用方给的 `Item[]`，
+ * 而线 / 面图层的数据本身就是 GeoJSON，因此「命中的业务项」只能是那条要素的属性袋——身份
+ * （`properties[idKey]`）也就在里面。不再包一层 `{ properties }` 是为了让 `pick.item[字段名]`
+ * 直接可用（包一层之后每次取值都要多写一次 `.properties`）。
+ */
+export type BMapFeaturePick = BMapPointPick<Record<string, unknown>>;
+
+/**
+ * 官方 `StyleExpress`（数据驱动样式表达式）：`string | object | ((properties) => any)`。
+ *
+ * 本库**如实透传**而不是猜它的结构：`object` 那一支是 SDK 自己的表达式语法（`['match', …]` 一
+ * 类），复刻一份必然会与上游漂移。函数那一支的参数是要素的 `properties`。
+ */
+export type BMapStyleExpression =
+  | string
+  | Record<string, unknown>
+  | ((properties: Record<string, unknown>) => unknown);
+
+/* ------------------------------------------------------------------ 原生批量线 / 面图层（#36） */
+
+/**
+ * `BLineLayer` 的样式（官方 `LineStyle` 的**逐字段**投影）。
+ *
+ * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.4` 的 `LineStyle` 为准；这里只做类型搬运，
+ * 不重新解释语义（默认值写在文档里，实现不补默认值——`undefined` = 不表态，由 SDK 决定）。
+ *
+ * ⚠️ 样式是**逐字段 merge**（官方 `setStyleOptions`）：把某个字段改成 `undefined` 时，SDK 侧仍
+ * 留着上一次的值，因此本库会**重建图层**让它回到 SDK 自己的默认（并告警一次）。
+ */
+export interface BLineLayerStyle {
+  /** 是否采用间隔填充纹理。默认 `false`。 */
+  sequence?: boolean;
+  /** 间隔距离（像素）。默认 `16`。 */
+  marginLength?: number;
+  /** 是否描边覆盖填充。默认 `true`。 */
+  borderCovered?: boolean;
+  /** 是否受内部填充区域掩膜。默认 `true`。 */
+  borderMask?: boolean;
+  /** 描边宽度（像素）。默认 `0`。 */
+  borderWeight?: number | BMapStyleExpression;
+  /** 描边颜色。默认 `'rgba(27, 142, 236, 1)'`。 */
+  borderColor?: string | BMapStyleExpression;
+  /** 填充纹理图片地址（竖向表达，自动横向处理）。 */
+  strokeTextureUrl?: string | BMapStyleExpression;
+  /** 填充纹理图片宽度（2 的 n 次方）。 */
+  strokeTextureWidth?: number | BMapStyleExpression;
+  /** 填充纹理图片高度（2 的 n 次方）。 */
+  strokeTextureHeight?: number | BMapStyleExpression;
+  /** 线连接处类型：`'miter'` / `'round'` / `'bevel'`。默认 `'round'`。 */
+  strokeLineJoin?: string | BMapStyleExpression;
+  /** 线端头类型：`'round'` / `'butt'` / `'square'`。默认 `'square'`。 */
+  strokeLineCap?: string | BMapStyleExpression;
+  /** 线颜色。默认 `'rgba(25, 25, 250, 1)'`。 */
+  strokeColor?: string | BMapStyleExpression;
+  /** 线宽度（像素）。默认 `2`。 */
+  strokeWeight?: number | BMapStyleExpression;
+  /** 线透明度（0-1）。默认 `1`。 */
+  strokeOpacity?: number | BMapStyleExpression;
+  /** 线类型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
+  strokeStyle?: string | BMapStyleExpression;
+  /** 虚线设置（实线部分与间隙部分长度的数组）。默认 `[8, 4]`。 */
+  dashArray?: number[] | BMapStyleExpression;
+  /** `MultiLineString` 是否以多段线组成一条线（配合 `strokeColorControl` 逐段上色）。默认 `false`。 */
+  linksLine?: boolean;
+  /** 输入「第几条路线、第几段」，输出颜色字符串。 */
+  strokeColorControl?: (line: number, segment: number) => string;
+  /** 痕迹是否使用消失模式（`false` 表示由 `traceControl` 决定颜色）。默认 `false`。 */
+  traceDisappear?: boolean;
+  /** 痕迹是否从起点开始处理（否则从终点）。默认 `true`。 */
+  traceStart?: boolean;
+  /** 输入路线数组，输出「距起点的痕迹长度数组」（米）。 */
+  traceControl?: (line: number[]) => number[];
+  /** 痕迹颜色（RGB，0-255）。 */
+  traceColor?: [number, number, number];
+  /** 线图层高度。默认 `0`。 */
+  height?: number | BMapStyleExpression;
+}
+
+/**
+ * `BFillLayer` 的样式（官方 `FillLayerStyle` 的逐字段投影）。
+ *
+ * 含「纯色 / 描边 / 纹理（掩膜或贴图）」三套；纹理模式下 `patternMask` 决定 `fillColor` 是否生效
+ * （详见各字段文档，取自官方声明）。
+ */
+export interface BFillLayerStyle {
+  /** 填充颜色。`patternMask=true`（掩膜模式）下纹理不透明区域显示该颜色。默认 `'#142655'`。 */
+  fillColor?: string | BMapStyleExpression;
+  /** 填充透明度（直接参与最终 alpha）。默认 `1`。 */
+  fillOpacity?: number | BMapStyleExpression;
+  /** 是否采用纹理填充（需同时给 `patternUrl`）。默认 `false`。 */
+  pattern?: boolean;
+  /** 纹理渲染模式：`true` 掩膜（裁剪 `fillColor`）/ `false` 贴图（显示纹理颜色）。默认 `true`。 */
+  patternMask?: boolean;
+  /** 纹理雪碧图地址（需支持跨域）。默认 `''`。 */
+  patternUrl?: string;
+  /** 雪碧图中的纹理区域：`'x, y, width, height'`（像素）。默认 `'0, 0, 32, 32'`。 */
+  patternMapping?: string | BMapStyleExpression;
+  /** 纹理缩放比例（以 zoom=18 为基准）。默认 `1`。 */
+  patternScale?: number | BMapStyleExpression;
+  /** 纹理 UV 偏移量：`'u, v'`（0-1）。默认 `'0, 0'`。 */
+  patternOffset?: string | BMapStyleExpression;
+  /** 是否采用间隔填充纹理。默认 `false`。 */
+  sequence?: boolean;
+  /** 间隔距离（像素）。默认 `16`。 */
+  marginLength?: number;
+  /** 是否描边覆盖填充。默认 `true`。 */
+  borderCovered?: boolean;
+  /** 是否受内部填充区域掩膜。默认 `true`。 */
+  borderMask?: boolean;
+  /** 描边宽度（像素）。默认 `0`。 */
+  borderWeight?: number | BMapStyleExpression;
+  /** 描边颜色。默认 `'rgba(27, 142, 236, 1)'`。 */
+  borderColor?: string | BMapStyleExpression;
+  /** 填充纹理图片地址。 */
+  strokeTextureUrl?: string | BMapStyleExpression;
+  /** 填充纹理图片宽度（2 的 n 次方）。 */
+  strokeTextureWidth?: number | BMapStyleExpression;
+  /** 填充纹理图片高度（2 的 n 次方）。 */
+  strokeTextureHeight?: number | BMapStyleExpression;
+  /** 线连接处类型：`'miter'` / `'round'` / `'bevel'`。默认 `'round'`。 */
+  strokeLineJoin?: string | BMapStyleExpression;
+  /** 线端头类型：`'round'` / `'butt'` / `'square'`。默认 `'square'`。 */
+  strokeLineCap?: string | BMapStyleExpression;
+  /** 描边线颜色。默认 `'rgba(25, 25, 250, 1)'`。 */
+  strokeColor?: string | BMapStyleExpression;
+  /** 描边线宽度（像素）。默认 `2`。 */
+  strokeWeight?: number | BMapStyleExpression;
+  /** 描边线透明度（0-1）。默认 `1`。 */
+  strokeOpacity?: number | BMapStyleExpression;
+  /** 描边线类型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
+  strokeStyle?: string | BMapStyleExpression;
+  /** 虚线设置。默认 `[8, 4]`。 */
+  dashArray?: number[] | BMapStyleExpression;
+  /** 面图层高度。默认 `0`。 */
+  height?: number | BMapStyleExpression;
+}
+
+/**
+ * 原生批量可视化图层共用的**统一槽位**（issue #36 的「统一 setData/style/base options/
+ * visible/opacity/zoom/zIndex」）。
+ *
+ * 四个槽位各自有没有落地方式**取决于该 kind 的官方方法面**（由 Driver 的 `supports()` 回答）：
+ * 例如 `Heatmap` / `TrackLine` 没有 `setVisible` / `setOpacity` / 缩放范围 setter，因此对应组件
+ * **不声明**这些 prop（声明了却忽略 = 假支持）。`visible` 在那种 kind 上表达为「挂上 / 摘掉」。
+ */
+export interface BMapNativeLayerCommonProps {
+  /** 是否显示。默认 `true`。 */
+  visible?: boolean;
+  /** 图层透明度（0-1）。 */
+  opacity?: number;
+  /** 图层层级（挂载后写入；官方层级方法要求先挂到地图上）。 */
+  zIndex?: number;
+  /** 最小显示缩放等级。 */
+  minZoom?: number;
+  /** 最大显示缩放等级。 */
+  maxZoom?: number;
+}
+
+/** 四个可视化图层共用的**构造期**拾取 / 选中选项（变化 ⇒ 换实例，官方只有整袋 `setBaseOptions`）。 */
+export interface BMapNativeLayerPickOptions {
+  /**
+   * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`。
+   *
+   * 它是拾取与 Feature State 的**唯一身份口径**：不设置时拾取会如实返回 `id: null`、
+   * Feature State 的五个命令会被拒绝并告警一次（本库不猜官方默认值）。
+   * 空字符串是**合法字段名**（`PropertyKey` 口径），不会被视为「未声明」。
+   */
+  idKey?: string;
+  /** 来源坐标系：`BD09LL`（默认）/ `BD09MC` / `GCJ02`。 */
+  crs?: string;
+  /**
+   * 是否开启鼠标拾取，默认 **`true`**。
+   *
+   * 与官方默认值（`false`）**不同**，刻意如此：不给事件就别怪用户拿不到 `pick`。
+   * 关掉它可以省掉拾取开销。
+   */
+  enablePicked?: boolean;
+  /** 拾取矩形宽（像素，官方默认 30）。 */
+  pickWidth?: number;
+  /** 拾取矩形高（像素，官方默认 30）。 */
+  pickHeight?: number;
+  /** 是否允许鼠标悬浮事件（官方 `autoSelect`，默认 `false`）。 */
+  autoSelect?: boolean;
+  /** 选中数据颜色（官方 `selectedColor`，默认 `'rgba(20, 20, 200, 1.0)'`）。 */
+  selectedColor?: string;
+}
+
+/**
+ * `BLineLayer` 的 props。
+ *
+ * `data` 的三个取值承担三件事（与 `LayerSpec` 的口径一致，别用一个值兼表两件事）：
+ *
+ * - **有对象** ⇒ `setData()`，**不重建**；
+ * - **`null`** ⇒ 明确「没有数据」。官方专页这四类**没有公开的清空入口**（上游声明里只有
+ *   `setData`/`getData`），因此本库换一个**没有数据的实例**来表达它（代价是一次重建，见 ADR 的
+ *   已知限制）；
+ * - **`undefined`** ⇒ 不表态：不产生任何 SDK 调用，已画出来的数据保持不变。
+ */
+export interface BLineLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
+  /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
+  data?: object | null;
+  /** 线样式（见 `BLineLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
+  style?: BLineLayerStyle;
+}
+
+/** `BFillLayer` 的 props。 */
+export interface BFillLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
+  /**
+   * GeoJSON 数据；有值时走 `setData()`（不重建），`null` = 没有数据（换一个空实例）、
+   * `undefined` = 不表态。详见 `BLineLayerProps.data` 的三条口径。
+   */
+  data?: object | null;
+  /** 面样式（见 `BFillLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
+  style?: BFillLayerStyle;
+  /**
+   * 是否显示描边（官方构造选项 `border`，**官方默认 `true`**）。
+   *
+   * 刻意不给默认值（`withDefaults` 里显式写 `undefined`）：Vue 对 `Boolean` 有「缺省即 `false`」
+   * 的转换，不给默认值会让每个不传 `border` 的用户都隐式地关掉描边。
+   */
+  border?: boolean;
+}
+
+/**
+ * `BHeatmapLayer` 的 props。
+ *
+ * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` 没有类声明，可视化实现是
+ * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `setStyle`；驱动也登记了
+ * `clearData`，但本组件不调用它——见下），因此**没有** `opacity` / `zIndex` / `minZoom` /
+ * `maxZoom`：官方这些图层不公开对应 setter，声明了也只是静默忽略。
+ */
+export interface BHeatmapLayerProps {
+  /**
+   * GeoJSON 点数据；`null` = 没有数据，`undefined` = 不表态。
+   *
+   * `null` 在**所有** kind 上走同一条路（换一个没有数据的实例），而不是「有 `clearData` 入口就
+   * 用它」：同一个 prop 在不同 kind 上换语义，是使用者最难预期的一类差异。
+   */
+  data?: object | null;
+  /**
+   * 样式（官方扩展 API 只公开整袋 `setOptions`，且没有可核对的声明）。
+   *
+   * 因此这里是**原样透传**的键值袋而不是逐个字段的强类型：本库不复刻一份没有依据的字段表。
+   */
+  style?: Record<string, unknown>;
+  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达（重新可见时换实例）。 */
+  visible?: boolean;
+}
+
+/**
+ * `BTrackLineLayer` 的 props（**基线**）。
+ *
+ * 与热力图同属扩展 API；驱动的登记面里它只有 `setData`，因此本组件只声明 `data` 与 `visible`。
+ *
+ * **播放控制（`start` / `pause` / `resume` / `stop`）与页面可见性联动刻意未实现**：官方类型包
+ * 没有该类声明，方法名必须先经真实运行时探针取证（本机可跑的 live 探针），在没有证据之前
+ * 不猜方法名、也不建一套镜像 SDK 播放状态的内部状态机。见 ADR
+ * `2026-09-19-native-data-layer-components` 的欠账表。
+ */
+export interface BTrackLineLayerProps {
+  /**
+   * 轨迹数据：官方 `TrackLine` 只接收**单条 `LineString` Feature**。
+   *
+   * 形状由调用方保证（本库不做 GeoJSON 校验：那属于数据适配层，而该 kind 没有任何可核对的声明
+   * 来支撑「什么算合法」）。
+   *
+   * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。这是
+   * 「无数据」在这一族里的唯一可收敛表达：驱动登记面里 `track-line` 只有 `setData`，没有清空入口
+   * （#106 评审的 P1-2）。
+   */
+  data?: object | null;
+  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达。 */
+  visible?: boolean;
 }

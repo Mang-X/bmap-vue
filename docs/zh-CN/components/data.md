@@ -164,10 +164,27 @@ function onItemClick(station: Station) {
 | 事件 | 说明 | 参数 |
 | --- | --- | --- |
 | `item-click` | 命中某个要素 | 最新的业务 item |
-| `click` | 图层级拾取（**含未命中**） | `BMapPointPick<Item>`：`{ hit, dataIndex, item, latLng, pixel }` |
+| `click` | 图层级拾取（**含未命中**） | `BMapPointPick<Item>`：`{ hit, dataIndex, id, item, latLng, pixel }` |
 
-未命中时官方**同样派发事件**（`dataIndex === -1`），因此 `click` 的 `hit` 为 `false`、
-`item` 为 `null`，而 `item-click` 不会派发。
+未命中时官方**同样派发事件**（`dataIndex === -1`），因此 `click` 的 `hit` 为 `false`、`item` 为
+`null`，而 `item-click` 不会派发。`id` 是命中要素的**业务身份**（`properties[idKey]`）；认不出时为
+`null`（本库不按事件顺序 / 下标猜身份）。
+
+## 要素状态（Feature State）
+
+`BPointCollection` 通过组件 `ref` 暴露要素状态命令面，按业务 id（即 `itemKey` 指向的字段）定位：
+
+```ts
+const state = layer.value?.featureState
+state?.update(["a"], { selected: true }, { append: true })
+state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
+```
+
+五个命令 `update` / `remove` / `clear` / `replace` / `get` 与官方入口一一对应；身份口径、参数校验
+与「未就绪不排队」的口径见[原生批量可视化图层](./layer/native-visual-layers) 的「要素状态」一节。
+
+`itemKey` 恒能推出身份字段（函数式 key 落保留字段 `__id`），因此本组件不会遇到那条「未声明
+`idKey` ⇒ 命令被拒绝」的前置条件。
 
 更新路径与逐点组件不同，但都在这一个实例上完成：
 

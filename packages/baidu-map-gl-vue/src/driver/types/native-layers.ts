@@ -54,6 +54,8 @@ export type NativeLayerOperation =
   | "updateState"
   | "removeState"
   | "clearState"
+  | "replaceState"
+  | "getState"
   | "setEnablePicked"
   | "hitTest";
 
@@ -76,6 +78,14 @@ export type NativeLayerData = Record<string, unknown>;
 
 /** 要素状态：`updateState` 的 `params`（如 `{ selected: true }`）。 */
 export type NativeLayerFeatureState = Record<string, unknown>;
+
+/**
+ * 「业务 id → 要素状态」的映射（官方 `replaceAllState(inputs)` 的入参、`getAllState()` 的回包）。
+ *
+ * 键是业务 id（`idKey` 字段的值）的**字符串形式**：官方回包是普通对象，而 JS 的对象键只能是
+ * 字符串 / Symbol——数字 id `1` 与字符串 id `"1"` 在 SDK 侧本来就是同一个槽位。
+ */
+export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
 
 /** 要素标识：业务 `idKey` 对应的值（单个或一批）。 */
 export type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
@@ -133,6 +143,24 @@ export interface NativeLayerDriver {
   ): void;
   removeState(layer: NativeLayerHandle, keys: NativeLayerFeatureKeys): void;
   clearState(layer: NativeLayerHandle): void;
+
+  /**
+   * **全量替换**所有要素状态（官方 `replaceAllState(inputs)`）。
+   *
+   * 官方把「整批替换」单独开了一个入口，而不是让调用方先 `clearState()` 再逐批 `updateState()`：
+   * 后者中间会出现「没有任何状态」的一帧，样式表达式会按空状态重算一次。语义上它是
+   * `clearState + 一次性写入`，因此这里**不做**任何本地记账——状态的真值在 SDK 侧。
+   */
+  replaceState(layer: NativeLayerHandle, inputs: NativeLayerFeatureStateMap): void;
+
+  /**
+   * 读回**当前**要素状态（官方 `getAllState()`）。
+   *
+   * 刻意走 SDK 的公开读回而不是本库自己记账：状态会因为 `setData` 重新解析数据、
+   * `replaceState`、以及 SDK 内部的默认值而变化，本地账本一定会与 SDK 分叉。返回的是
+   * **键为业务 id 字符串**的普通对象（官方返回的就是 id → 状态的映射）。
+   */
+  getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
 
   /** 开关鼠标拾取；官方要求构造时 `enablePicked` 才有拾取事件 */
   setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;

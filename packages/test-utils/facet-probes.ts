@@ -170,6 +170,8 @@ export const NATIVE_LAYER_FACET_OPERATIONS = [
   "updateState",
   "removeState",
   "clearState",
+  "replaceState",
+  "getState",
   "setEnablePicked",
   "hitTest",
 ] as const satisfies readonly NativeLayerOperation[];
@@ -215,6 +217,13 @@ export function callNativeLayerOperation(
       return;
     case "clearState":
       driver.clearState(layer);
+      return;
+    case "replaceState":
+      driver.replaceState(layer, { "contract-key": { selected: true } });
+      return;
+    case "getState":
+      // 有返回值的操作：这里只要「不抛错」就算通过（值的形状由各 facet 自身的用例断言）
+      driver.getState(layer);
       return;
     case "setEnablePicked":
       driver.setEnablePicked(layer, true);

@@ -187,6 +187,17 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       ],
     },
     {
+      text: "原生批量可视化图层",
+      collapsed: false,
+      base: "/zh-CN/components/layer/",
+      items: [
+        {
+          text: "线 / 面 / 热力 / 轨迹线（+ 要素状态）",
+          link: "native-visual-layers",
+        },
+      ],
+    },
+    {
       text: "图层组件",
       collapsed: false,
       base: "/zh-CN/components/layer/",
