@@ -13,7 +13,7 @@
  * 组件曾经在 `onMounted` 里走 `overlays.add({ kind: "map" }, infoWindow)`，而 v4 的 OverlayDriver
  * 明确拒绝这条路（气泡是地图级 API，要用 `openInfoWindow` / `closeInfoWindow`）并抛
  * `BMAP_INVALID_ARGUMENT`。`#72` 把组件改成专用入口之后断言变回正向：打开 1 个、关闭后 0 个、
- * 卸载后无残留。完整状态机（Teleport / InfoWindowManager / 受控与不受控的边界）仍由 M5 **#32**
+ * 卸载后无残留。完整生命周期（Teleport / InfoWindowManager / 受控与不受控的边界）仍由 M5 **#32**
  * 收口——本文件只覆盖「最小成功路径」。
  */
 import { beforeEach, describe, it, expect, vi } from "vitest";

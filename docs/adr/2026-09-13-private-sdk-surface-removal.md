@@ -43,6 +43,9 @@
 - **内容容器的可见性**：模板上不再写静态 `style="display:none"`。那个内联样式会一直留在节点上，SDK 把它挂进自己的容器之后**内容仍然是隐藏的** —— 现在由「是否打开」驱动（未打开时隐藏以避免内容在地图角落闪现，打开时把可见性交还给 SDK）；
 - **异步就绪保护**：`openWindow()` / `closeWindow()` 前置校验句柄 + client + map（`onMounted` 里 `whenReady()` 之后才有值，而卸载路径之后挂在 scope 上的 watcher 仍可能被触发）；
 - 完整状态机（Teleport、InfoWindowManager、受控 / 不受控的边界、多气泡竞争的产品级语义）仍由 M5 **#32** 收口，本决策只覆盖**最小成功路径**。
+  > 已由 [ADR 2026-09-18](./2026-09-18-infowindow-host-and-ownership.md) 交付（issue #32）。
+  > 本决策里「气泡只走地图级专用入口」「内容容器的可见性由打开状态驱动」两条**仍然有效**，
+  > 是新的 detached host 设计的前置。
 
 ### 3. Autocomplete 的实例更新收进 Driver，卸载调用公开释放入口
 
@@ -78,6 +81,8 @@
 ## 非目标
 
 - 不做 #32 的产品级气泡状态机（Teleport、Manager、多气泡竞争、`maximize` / `restore` 事件）；
+  > 已由 [ADR 2026-09-18](./2026-09-18-infowindow-host-and-ownership.md) 交付（issue #32）——
+  > 含 `maximize` / `restore` 的事件转发。
 - 不重做 Autocomplete 的逐请求隔离，也不引入请求调度框架（#38）；
 - 不接入官方 UI Kit 的自动补全 / 地点检索（#73）；
 - 不改 `tests/browser/jsapi-v4/**` 的 smoke 判定实现（#74，理由见决策 5）；

@@ -119,11 +119,16 @@ export function createJsapiV4OverlayDriver(
   /**
    * 每张地图**最近一次被请求打开**的气泡。
    *
-   * `map.closeInfoWindow()` 无参数、关的是「这张地图当前的气泡」，而真实 4.0 的打开是异步的：
-   * 同一 tick 里刚 `openInfoWindow(B)` 时 `map.getInfoWindow()` 仍可能指向 A（或为空）。
-   * 只有「这个气泡确实是本 Driver 最后请求打开的那个」才允许触碰地图，否则关一个旧气泡就可能
-   * 干扰正在进行的打开请求（PR #61 评审的跨气泡风险；真实 SDK 上未能复现，但这是本 Driver
-   * 唯一能自行保证的不变量，不依赖 SDK 内部时序）。
+   * 它的用途**只有一个**：`map.getInfoWindow()` 为空时那个**歧义窗口**的兜底判据。
+   * 真实 4.0 的打开是异步的 —— 同一 tick 里刚 `openInfoWindow(B)` 时 `map.getInfoWindow()`
+   * 仍是 `null`（实测 0ms 为 null、~100ms 变成该实例），这一刻没有任何事实能回答「当前是谁」。
+   * 该窗口里只有「本 Driver 最后请求打开的气泡」才允许触碰地图，否则关一个旧气泡可能干扰
+   * 正在进行的打开请求（PR #61 评审的跨气泡风险；真实 SDK 上未能复现，但这是本 Driver 唯一
+   * 能自行保证的不变量，不依赖 SDK 内部时序）。
+   *
+   * ⚠️ **不要**把它提到 `map.getInfoWindow()` 之前当总闸（PR #101 第五轮评审 P1）：迟到的打开
+   * 接管地图之后，「当前气泡」已经是本实例、而它早已不是「最后请求者」；按它挡掉关闭会把一个
+   * 明确关闭静默丢弃 —— 气泡留在图上，状态机里已经记下的在飞账也永远等不到回包。
    */
   const lastRequestedByMap = new WeakMap<object, object>();
   /** `createContextMenu({ width })` → `MenuItem` 的默认宽度。 */
@@ -658,15 +663,14 @@ export function createJsapiV4OverlayDriver(
       const raw = registry.resolve<object>(overlay);
       const owner = infoWindowOwners.get(raw);
       if (owner) {
-        // 只关「本 Driver 最后请求打开的那个气泡」。关一个更早请求的气泡时完全不碰地图：
-        // 真实 4.0 的打开是异步的，此时 map 上可能正有一次更新的打开请求在飞（PR #61 评审）。
-        if (lastRequestedByMap.get(owner) !== raw) return;
-        // 即便如此，仍用公开的 map.getInfoWindow() 确认**没有别的**气泡正开着，避免关掉
-        // 别的组件的气泡。注意 `current` 为空**不能**当成「没打开」：`openInfoWindow()` 之后
-        // 同一 tick 里它仍是 `null`（实测 0ms 为 null、~100ms 变成该实例），所以照常调用
-        // map.closeInfoWindow()（没有气泡时它是 no-op，实测重复 close 不抛错）。
+        // 判据顺序：先读 `map.getInfoWindow()`（它就是我们 ⇒ 照关，即使最后请求者是别人），
+        // 它是别人 ⇒ 不碰；读不到（异步窗口）才退回 `lastRequestedByMap`。
         const current = callOptional(owner, "getInfoWindow");
-        if (current && current !== raw) return;
+        if (current) {
+          if (current !== raw) return;
+        } else if (lastRequestedByMap.get(owner) !== raw) {
+          return;
+        }
         sdkCall("map.closeInfoWindow", () => callRequired(owner, "closeInfoWindow"));
         return;
       }
@@ -681,6 +685,16 @@ export function createJsapiV4OverlayDriver(
     redrawInfoWindow(overlay) {
       const raw = registry.resolve<object>(overlay);
       sdkCall("InfoWindow.redraw", () => callOptional(raw, "redraw"));
+    },
+
+    /** 读当前气泡是不是这一个（`Map#getInfoWindow()` + handle 身份比对；打开是异步生效的）。 */
+    isCurrentInfoWindow(map, overlay) {
+      const rawMap = registry.resolve<object>(map);
+      const raw = registry.resolve<object>(overlay);
+      // `callRequired` + `sdkCall`：读回失败要**显式**报错（包成 BMapError），不静默吞成 false ——
+      // 否则「读不到」会被静默解释成「不是我」，收敛会朝错误方向走。
+      const current = sdkCall("map.getInfoWindow", () => callRequired(rawMap, "getInfoWindow"));
+      return (current as unknown) === (raw as unknown);
     },
 
     buildIcon,
