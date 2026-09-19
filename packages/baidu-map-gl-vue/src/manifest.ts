@@ -117,10 +117,22 @@ export const componentManifest = [
     source: "./components/data/BMarkerList.vue",
   },
   {
-    name: "BPointCollection",
-    exportName: "BPointCollection",
+    name: "BPointShapeLayer",
+    exportName: "BPointShapeLayer",
     category: "data",
-    source: "./components/data/BPointCollection.vue",
+    source: "./components/data/BPointShapeLayer.vue",
+  },
+  {
+    name: "BPointIconLayer",
+    exportName: "BPointIconLayer",
+    category: "data",
+    source: "./components/data/BPointIconLayer.vue",
+  },
+  {
+    name: "BPointLayer",
+    exportName: "BPointLayer",
+    category: "data",
+    source: "./components/data/BPointLayer.vue",
   },
   {
     name: "BMarkerCluster",

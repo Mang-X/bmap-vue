@@ -417,6 +417,11 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
   `setPosition`。
 - **扩展 API 的继承成员保守回答**：`setVisible` / `setOpacity` / `setZIndex` 在真实运行时可用，
   但不在官方文档的方法面里，本 Facet 不认它们；放开只需把对应操作加进 `operations`（一处）。
+  ⚠️ **2026-09-19 部分取代**（issue #35 → ADR `2026-09-19-native-point-layers-and-cluster` 决策 6）：
+  `point` / `cluster` 上的 **`setVisible` 已放开**（有 live 取证：`setVisible(false)` 后
+  `getVisible() === false` 且可恢复，`visible` 是所有数据组件共享的契约）；
+  `setOpacity` / `setZIndex` / `setMinZoom` / `setMaxZoom` 与状态 API **仍然关闭**
+  （没有消费者也没有取证）。本条其余内容继续有效。
 - **TrackLine 只支持 `setData`**：播放控制（运行时确实存在：`start/pause/resume/stop/setSpeed/
   setProcess`）不在本 issue 的接口面内，属 M8 #43。
 - **服务归一化面的消费者是契约与探针**：7 个既有 service composable 仍在用 `create*` +

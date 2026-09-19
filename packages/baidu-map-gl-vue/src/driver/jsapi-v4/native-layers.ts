@@ -106,22 +106,27 @@ const NATIVE_LAYER_DESCRIPTORS = {
   },
   line: { ctor: "LineLayer", declared: true, operations: DECLARED_LAYER_OPERATIONS },
   fill: { ctor: "FillLayer", declared: true, operations: DECLARED_LAYER_OPERATIONS },
-  // 扩展 API：官方只公开「数据 + 通用 options + 拾取」，没有状态 / 显隐 / 层级方法面。
+  // 扩展 API：官方只公开「数据 + 通用 options + 拾取」，没有状态 / 层级方法面。
   //
   // 真实 4.0 的实测（ADR 的 smoke 记录，`直接调用` 一栏）显示这四个类**从共享基类继承了**
-  // `setVisible` / `setOpacity` / `setZIndex`，调用不抛错。本表仍然回答「不支持」：
-  // 官方扩展 API 专页没有把它们列为这些类的方法面，而「不把未声明成员当契约」是本仓库
-  // 对 SDK 边界的一贯口径（同 #22 的 `viewport → autoViewport`）。要放开只需把对应操作
-  // 加进这里的 operations ——**一处改动**，`supports()` 与调用检查会同时生效。
+  // `setVisible` / `setOpacity` / `setZIndex`，调用不抛错。本表对 `setOpacity` / `setZIndex` /
+  // 状态 API 仍然回答「不支持」：官方扩展 API 专页没有把它们列为这些类的方法面，而「不把未声明
+  // 成员当契约」是本仓库对 SDK 边界的一贯口径（同 #22 的 `viewport → autoViewport`）。
+  //
+  // `setVisible` 是**唯一的例外**，理由是 #35 的**实测取证**（`scripts/probe-native-point-cluster.mts`，
+  // 2026-09-19）：`PointLayer` / `ClusterLayer` 上 `setVisible(false)` 之后 `getVisible() === false`、
+  // 再 `setVisible(true)` 能恢复 —— 而这三类数据组件共享 `BMapDataProps.visible`，
+  // 「隐藏」是它们共同的最小契约的一部分。取证与取代关系见 ADR
+  // `2026-09-19-native-point-layers-and-cluster`；其它继承成员仍然关闭（没有消费者，也没有取证）。
   point: {
     ctor: "PointLayer",
     declared: false,
-    operations: ["setData", "clearData", "setStyle", "setEnablePicked", "hitTest"],
+    operations: ["setData", "clearData", "setStyle", "setVisible", "setEnablePicked", "hitTest"],
   },
   cluster: {
     ctor: "ClusterLayer",
     declared: false,
-    operations: ["setData", "clearData", "setStyle"],
+    operations: ["setData", "clearData", "setStyle", "setVisible"],
   },
   heatmap: { ctor: "Heatmap", declared: false, operations: ["setData", "clearData", "setStyle"] },
   // TrackLine 只接收单条 LineString Feature；播放控制（start/pause/resume/stop/setSpeed/

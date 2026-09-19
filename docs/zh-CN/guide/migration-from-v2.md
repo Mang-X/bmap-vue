@@ -99,7 +99,11 @@ v3 修复:
 - 0 坐标有效(不再用 truthy 判断)。
 - 初始 `visible`、`icon`、`rotation`、`zIndex` 和拖拽状态会在 Marker 创建时直接应用。
 
-> 大量点请勿堆叠独立 BMarker,改用 `BMarkerCluster` / `BMarkerList` / `BPointCollection`。旧名 `BPointLayer` 已在 M6 移除（它本质是「每项一个 Marker」的组件，名字却暗示批量层，见[数据组件](../components/data)）。
+> 大量点请勿堆叠独立 BMarker,改用 `BMarkerCluster` / `BMarkerList` / `BPointShapeLayer`。
+>
+> 历史上那个 `BPointLayer`（「每项一个 Marker」却叫批量层）已在 M6 移除；3.0 里的 `BPointLayer` 是
+> **重新引入的同名组件**，落在 4.0 的原生扩展 API `BMap.PointLayer` 上（一个图层承载全部点），
+> 见[数据组件](../components/data)。
 
 ### 3.3 BInfoWindow
 
@@ -126,7 +130,7 @@ v3 引入三档渲染模型:
 | 少量、逐点交互 | `BMarker` | 一 V 一组件 |
 | 中等规模、需聚合 | `BMarkerCluster` | 数据组件 + 内置网格聚合 |
 | 中小规模列表 | `BMarkerList` | 每个 item 一个 SDK Marker，由一个组件统一 diff 和清理 |
-| 千级以上 | `BPointCollection` | 单个批量 SDK 资源（4.0 原生点图层），拾取回传业务项 |
+| 千级以上 | `BPointShapeLayer` | 单个批量 SDK 资源（4.0 原生点图层），拾取回传业务项 |
 
 ```vue
 <BMarkerCluster :data="stations" item-key="id"
@@ -183,9 +187,13 @@ v3 的 SdkRegistry 会在失败后移除缓存,允许下次重试。
 不会。每个 BMap 创建独立 MapRuntime,含独立 event bus / overlay registry。
 
 **Q: 批量点该用哪个组件?**
-看「落地成几个 SDK 资源」：逐项 Marker 用 `BMarkerList`（或聚合用 `BMarkerCluster`），
-单个批量资源用 `BPointCollection`。旧名 `BPointLayer` 已在 M6 移除：它的实现是「每项一个 Marker」，
-名字却暗示批量层，正是这次收口要消除的歧义。
+看「落地成几个 SDK 资源」：逐项 Marker 用 `BMarkerList`，聚合用 `BMarkerCluster`（默认是一个原生聚合
+图层），单个批量资源用 `BPointShapeLayer` / `BPointIconLayer` / `BPointLayer`（三者的差别只是「落在哪个
+原生类上」，见[数据组件](../components/data)）。
+
+**Q: `BPointLayer` 这个名字以前不是「每项一个 Marker」吗?**
+那是 2.x 的老实现，已在 M6 删除；3.0 的 `BPointLayer` 是重新引入的**原生扩展 API**组件
+（`BMap.PointLayer`，一个图层承载全部点），与旧实现没有任何关系。
 
 **Q: `useBMapAsyncTask` 去哪了?**
 它已在 v3 的服务重构里**删除**（同一件事有两套实现：一套是 Driver 的归一化调用面，一套是

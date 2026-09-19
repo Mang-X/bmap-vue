@@ -216,14 +216,41 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.stats.resourceCreated('overlay')
   }
 
+  /**
+   * 注入一次 `removeOverlay` 失败（**摘除之前**抛：覆盖物仍留在 `overlays` 上）。
+   *
+   * 与 `failNextRemoveLayer` 同形。用途是「逐资源摘除」的**部分失败**：`clear()` 是逐条隔离的，
+   * 注入之后会得到「一部分真的摘掉了、剩下的还在」的半拆状态 —— 这正是「旧引擎还能不能算被保留」
+   * 的判别点。
+   */
+  failNextRemoveOverlay: Error | null = null
+  /**
+   * 与 `failNextRemoveOverlay` 对偶：**先摘掉、再抛错**（用后即清）。
+   *
+   * 用它区分「摘除失败」的两种合法形状 —— 摘之前抛（覆盖物仍在图上）与摘之后抛（已经不在了）。
+   * 调用方在这种异常之后**无法判断**覆盖物还在不在，因此不能按「还在」处理（会留下一份幻影
+   * 所有权），也不能按「不在」处理（会重复挂一份）。
+   */
+  failNextRemoveOverlayAfterDetach: Error | null = null
+
   removeOverlay(overlay: FakeV4Overlay): void {
     this.callLog.push('removeOverlay')
+    if (this.failNextRemoveOverlay) {
+      const error = this.failNextRemoveOverlay
+      this.failNextRemoveOverlay = null
+      throw error
+    }
     const index = this.overlays.indexOf(overlay)
     if (index >= 0) {
       this.overlays.splice(index, 1)
       this.stats.resourceReleased('overlay')
     }
     if (overlay.attachedMap === this) overlay.attachedMap = null
+    const afterDetach = (overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach
+    if (afterDetach) {
+      ;(overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach = null
+      throw afterDetach
+    }
   }
 
   /**

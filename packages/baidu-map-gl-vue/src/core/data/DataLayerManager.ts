@@ -127,11 +127,28 @@ export class DataLayerManager<Item, Resource> {
     this.scheduler.flush();
   }
 
-  /** 全员显隐；之后新建的资源也按当前状态落。 */
+  /**
+   * 全员显隐；之后新建的资源也按当前状态落。
+   *
+   * **逐条隔离 + 全部成功才提交**：`applyVisibility` 会抛（SDK 的 `show/hide` 走 `sdkCall`），
+   * 因此这里先把目标值记在局部、逐个尽力对齐，任一条失败就不推进内部 `this.visible`
+   * 并把错误交给调用方。这样下一次显隐请求**不会**被顶部短路吞掉（`this.visible === visible`
+   * 直接 return），会把**所有**资源重新对齐一遍 —— 否则「一个 Marker hide 失败」会永久留下
+   * 「部分可见、部分不可见」而调用方以为已经生效。
+   */
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
+    let failure: unknown = null;
+    for (const [key, resource] of [...this.resources]) {
+      try {
+        this.applyVisibility(resource, visible, key);
+      } catch (error) {
+        // 逐条隔离：一条失败不该让后面的资源也不再对齐（与 `clear()` / diff 删除同口径）
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
     this.visible = visible;
-    for (const resource of this.resources.values()) this.applyVisibility(resource);
   }
   /** 该 key 当前对应的**最新**业务项（数据里已删除时为 `undefined`）。 */
   latest(key: PropertyKey): Item | undefined {
@@ -150,6 +167,13 @@ export class DataLayerManager<Item, Resource> {
     return key === undefined ? undefined : this.index.latest(key);
   }
 
+  /**
+   * 当前**仍归本管理器所有**的资源数（含「摘除失败、按所有权保留下来」的那些）。
+   *
+   * 它是「摘干净了没有」唯一的机器读数：`clear()` 是逐条隔离的、不抛错，所以需要**确认**摘净的
+   * 调用方（替换 / 换引擎路径）只能靠这个计数判断，而不是「`clear()` 没抛 ⇒ 一定摘干净了」。
+   * 配合 `clear()` 的「失败保留所有权」语义：计数归零 ⟺ 全部确认摘除。
+   */
   get size(): number {
     return this.resources.size;
   }
@@ -260,7 +284,7 @@ export class DataLayerManager<Item, Resource> {
         }
         // 新建的资源也要服从当前的显隐状态（否则 `visible=false` 期间新来的点会「亮」着出现在图上）。
         // 只在隐藏态时下发一次：新建的资源本来就是可见的，再 show 一次是无谓的 SDK 调用。
-        if (!this.visible) this.applyVisibility(resource, entry.key);
+        if (!this.visible) this.applyVisibility(resource, this.visible, entry.key);
         continue;
       }
       // 位置下发由**值**决定（不再用 item 引用做第二层短路）：根引用变化 ⇒ 重新读取；
@@ -291,14 +315,20 @@ export class DataLayerManager<Item, Resource> {
     this.everSynced = true;
   }
 
-  /** 把**当前**显隐状态下发给一个资源（调用方负责只在需要时调，见两处调用点）。 */
-  private applyVisibility(resource: Resource, key?: PropertyKey): void {
-    const applied = this.host.setVisible?.(resource, this.visible) ?? false;
+  /**
+   * 把一个资源的显隐**显式**对齐到 `desired`（调用方负责只在需要时调，见两处调用点）。
+   *
+   * `desired` 由调用方传入而不是读 `this.visible`：`setVisible` 只在全部成功后推进内部记账，
+   * 因此循环进行中 `this.visible` 仍是**旧值**（这正是「失败可重试」的前提）。
+   * 错误不在这里吞：SDK 的 `show/hide` 抛错必须让调用方知道这一次没写成功。
+   */
+  private applyVisibility(resource: Resource, desired: boolean, key?: PropertyKey): void {
+    const applied = this.host.setVisible?.(resource, desired) ?? false;
     if (applied || this.warnedVisibilityUnsupported) return;
     this.warnedVisibilityUnsupported = true;
     this.options.warn?.(
       `${this.label}: 资源不支持显隐（宿主没有实现 setVisible 或 SDK 无 show/hide）` +
-        `${key === undefined ? "" : `，key=${String(key)}`}：本次 visible=${String(this.visible)} 被忽略`,
+        `${key === undefined ? "" : `，key=${String(key)}`}：本次 visible=${String(desired)} 被忽略`,
     );
   }
 }
