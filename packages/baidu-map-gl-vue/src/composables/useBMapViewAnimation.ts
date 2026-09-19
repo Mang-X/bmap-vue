@@ -10,9 +10,10 @@
  *
  * `status` 是**观察值**：由公开的 `animationstart` / `animationend` / `animationcancel` 写，
  * 命令本身不乐观改写它 —— 「发起了播放但 SDK 一次都没回调」会如实停在 `idle`。
- * 唯一的例外是本库**自己确认过的取消交付**：`cancelViewAnimation` 报告这一次已经打到 SDK
- * （`canceled` / `already-settled`）时状态收敛到 `idle`，不再等那条可能不来的 `animationcancel`
- * （#104 F-1 说的是那条事件的时序没有取证，不能拿它当所有权判据）。
+ * 收敛到 `idle` 有两条途径：① 该段自己的 `animationend` / `animationcancel`；② 本库**自己确认过的
+ * 取消交付**（`cancelViewAnimation` 返回 `canceled` / `already-settled`）——不能拿那条没取证的
+ * 事件（#104 F-1）当唯一判据。**例外只在取消这一条路上**：让位给新段、取消仍未交付的旧段，
+ * 仍然只能靠它自己的事件收尾，`cancel()` 不会替它乐观地改状态。
  *
  * 取消**不等微任务**：`<BMap>` 在父组件的 `onUnmounted` 里销毁地图，而子树卸载发生在那之前——
  * 同步调用还能看到活的地图，跨一个微任务就已经跨过销毁线了（旧实现的 `void getReady().then(...)`
@@ -63,9 +64,9 @@ export type ViewAnimationStatus = "idle" | "playing";
  *
  * 不按「当前那一段」共用一个释放槽位：`startViewAnimation` 会先同步取消上一段，
  * 上一段的 `animationcancel` 于是在新一段订阅完成之后才到达——共用槽位会被旧段摘掉新段的监听。
- * 同理，被取代那一段的订阅在 `start()` 里**当场**释放，而不是等那条 `animationcancel`：
- * 「Driver 起播前会同步取消上一段、SDK 会为此派发事件」目前只有 Fake 建模、没有真实运行时取证
- * （审计表 F-1），而这三条监听是本库自己的记账，不该由 SDK 是否回调来决定销账。
+ * 接管时本库**自己先按实例取消上一段**，于是「交付没交付」是当场知道的事实：已交付就立刻释放它的
+ * 订阅（不等那条 `animationcancel` —— F-1 说这条时序没有取证），未交付（`deferred`）就把订阅留着，
+ * 由 `undelivered` 继续持有到终态。
  *
  * 取消只碰**自己这个实例**，所以「重试自己那一次」天然不会停掉同一张图上别人的动画。
  * 返回值是 Driver 侧的交付状态（`canceled` / `deferred` / `already-settled`），本库据此决定
@@ -88,11 +89,12 @@ function isWithoutMapError(error: unknown): boolean {
 
 export interface UseBMapViewAnimationReturn {
   /**
-   * 播放一段关键帧动画。每次调用都新建一个动画实例，并接管仍在播的那一段，
+   * 播放一段关键帧动画。每次调用都新建一个动画实例，并先按实例取消上一段，
    * 因此关键帧改了不必重建 composable。
    *
-   * 接管**可能失败**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换并保留记录以便重试，
-   * 本方法随之 reject（上一段仍在播、仍可被 {@link cancel} 重试）。
+   * 接管**可能失败**：上一段的取消被 SDK 拒绝时（例如还没进启动安全窗口、延迟取消刚刚失败），
+   * 本方法直接 reject —— 上一段仍是当前观察对象、继续被观察，稍后重试 {@link start} 或
+   * {@link cancel} 即可；本次新建实例的订阅在失败路径里已经下线，不会留下第二次尝试的残留。
    */
   start: (keyFrames: ViewAnimationKeyFrames[]) => Promise<void>;
   /**
@@ -120,6 +122,13 @@ export function useBMapViewAnimation(
 
   let disposed = false;
   let current: AnimationRun | null = null;
+  /**
+   * 已经让位给新段、但取消**尚未交付**的旧段（Driver 报 `"deferred"`：还没进启动安全窗口，
+   * 那次取消只是被登记）。它们仍然归本 hooks 所有：监听留着（到终态自己收），`cancel()` 与
+   * 卸载也继续负责把它们推到终态 —— 否则「旧段到底停没停」就成了没人管的事（#105 第八轮 P1）。
+   * 正常情形下这个集合要么空、要么一条，且下一刻就被 `animationcancel` 收掉。
+   */
+  const undelivered = new Set<AnimationRun>();
 
   /** 传入 <BMap> 组件实例 ref 时解包出真正的 MapHandle */
   function resolveMapHandle(readyCtx: MapReadyContext): MapHandle {
@@ -154,7 +163,10 @@ export function useBMapViewAnimation(
       }
       throw error;
     }
-    if (outcome === "deferred") return;
+    if (outcome === "deferred") {
+      undelivered.add(run); // 未交付：继续由本 hooks 持有并重试
+      return;
+    }
     finishRun(run);
   }
 
@@ -168,6 +180,7 @@ export function useBMapViewAnimation(
    * 现在两处共用一个收口。幂等：重复调用不再改动已经推进过的状态。
    */
   function finishRun(run: AnimationRun): void {
+    undelivered.delete(run);
     run.release();
     if (current !== run) return;
     current = null;
@@ -236,54 +249,71 @@ export function useBMapViewAnimation(
       throw error;
     }
 
-    // **两阶段提交**：`startViewAnimation` 的第一步就是取消上一段，而它的契约是「取消失败 ⇒
-    // 拒绝替换、旧记录保留可重试」。所以在新段真的被接受起播之前，既不能把 `current` 换成新段，
-    // 也不能让旧段停止被观察——否则会出现「旧段还在播却没人看、新段从未起播却占着归属」。
+    // **两阶段提交**：接管与起播都在同一个守卫里 —— 任一步失败，新段的订阅立刻下线、`current`
+    // 保持原样（旧段仍在播就继续被观察、仍可被 `cancel()` 重试）。
+    // 接管**先按实例**取消上一段：这样「交付没交付」是本库当场知道的事实，而不是等一条事件去猜；
+    // 未交付（`deferred`）的那一段留在 `undelivered` 里继续归本 hooks 管（#105 第八轮 P1）。
     const previous = current;
     try {
+      if (previous) stopRun(previous);
       driver.map.startViewAnimation(mapHandle, animation);
     } catch (error) {
-      // 新段从未起播：它的订阅立刻下线（本库自己的记账不等 SDK 回调）。`current` 保持原样——
-      // 旧段仍在播就继续被观察、仍可被 `cancel()` 重试；它若已在刚才那次取消里结算完，
-      // 是它自己的 `settle` 把 `current` 清成 null 的，不是这里。
       run.release();
       throw error;
     }
     current = run;
-    // 起播已被接受：旧段的订阅当场下线（见 `AnimationRun` 的注释），不必等它的事件。
-    previous?.release();
+    // 已交付的旧段在 `stopRun` 里就收尾完了；未交付的那一段仍留在 `undelivered` 里被观察着。
     // 起播事件早于本次提交到达时（SDK 若同步派发）补记一次观察，否则这段会被看成从没播过
     if (startedObserved) status.value = "playing";
   }
 
   function cancel(): void {
     if (disposed) return;
-    const run = current;
-    // 取消按**实例**发：只碰本 hooks 自己起播的那一段，同一张图上别人的动画不受影响。
-    // `stopRun` 按 Driver 报回的交付状态决定收尾还是保留重试入口（失败时错误给调用方）。
-    if (run) stopRun(run);
+    // 只碰本 hooks 自己起播过的段：当前段 + 取消仍未交付的旧段，逐条**按实例**取消。
+    // 每一条都拿到自己的重试机会（失败的先攒着），最后把第一个失败抛给调用方。
+    const runs = current ? [current, ...undelivered] : [...undelivered];
+    // 当前段与未交付的旧段**一起**处理：调用方一次 `cancel()` 就是把本 hooks 名下的播放全停掉，
+    // 所以 B 会被取消，A 也只拿属于自己的那次重试机会。
+    const failures: unknown[] = [];
+    for (const run of runs) {
+      try {
+        stopRun(run);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 0) return;
+    if (failures.length > 1) {
+      // 一次调用只能抛出一个错误，其余的不能悄悄丢掉：按同一条诊断通道报出来
+      logger.warn(
+        `useBMapViewAnimation: 一次 cancel() 里有 ${failures.length} 条取消失败，` +
+          "只抛出第一个，其余经 resource:error 交出",
+      );
+      for (const error of failures.slice(1)) reportTeardownFailure(error);
+    }
+    throw failures[0];
   }
 
   onUnmounted(() => {
     disposed = true;
-    const run = current;
-    if (run) {
+    // 地图销毁前**同步**取消（`<BMap>` 在父组件的 `onUnmounted` 里销毁地图，晚一步就跨过销毁线）：
+    // 当前段与「取消尚未交付」的旧段都要试一把；失败时不打断卸载，但必须可观测——
+    // `logger.warn` 在 production 构建里会被折叠掉，只靠它等于把失败咽回去（#105 评审第五轮）。
+    const runs = current ? [current, ...undelivered] : [...undelivered];
+    for (const run of runs) {
       try {
-        // 地图销毁前**同步**取消（`<BMap>` 在父组件的 `onUnmounted` 里销毁地图，晚一步就跨过销毁线）
         stopRun(run);
       } catch (error) {
-        // 取消失败：Driver 保留了动画记录，地图自己的销毁路径会重试。卸载钩子里没有调用方
-        // 能接住这个错误，所以既要**不**打断卸载，又要让它**可观测**——`logger.warn` 在
-        // production 构建里会被折叠掉，只靠它等于把失败咽回去（#105 评审第五轮）。
         logger.warn(
           "useBMapViewAnimation: 卸载时取消视角动画失败，已交由地图销毁重试: " +
             ((error as Error)?.message ?? String(error)),
         );
         reportTeardownFailure(error);
       }
-      // 卸载之后不再观察任何事件：本段订阅无条件下线
+      // 卸载之后不再观察任何事件：这一段的订阅无条件下线
       run.release();
     }
+    undelivered.clear();
     current = null;
     status.value = "idle";
   });

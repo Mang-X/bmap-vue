@@ -534,3 +534,96 @@ describe("useBMapViewAnimation：收尾按动画身份收敛", () => {
     fake.diagnostics.assertNoLeaks("收尾按动画身份收敛");
   });
 });
+
+/**
+ * 让位给新段的旧段，取消仍未交付时仍归本 hooks 所有（#105 评审第八轮 P1）
+ *
+ * `start(B)` 会让 Driver 顺手取消 A；但 A 还没进启动安全窗口时，那次取消只是被**登记**
+ * （`cancelRequested`），真正取消要等安全窗口。如果那一次失败，Driver 只留一条 warn 并保留记录，
+ * 而 hooks 已经 release 掉 A 的监听、也不再持有 A —— 于是「A 到底停没停」变成没人管的事。
+ * 这条用例断言的是可观察的那一半：登记失败之后，本 hooks 仍能把 A 取消到终态。
+ */
+describe("useBMapViewAnimation：未交付的旧段仍归本 hooks 所有", () => {
+  it("A 还没进安全窗口就被 cancel、延迟取消第一次失败：第二次 cancel 真重试到终态", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+    expect(a.hasPendingStart, "A 还在启动窗口里").toBe(true);
+
+    a.failNextCancel = true;
+    hook.cancel();
+    expect(a.cancelCalls, "登记阶段不打到 SDK").toBe(0);
+
+    await settleAsyncWindow();
+    expect(a.cancelCalls, "安全窗口里 Driver 补做取消，这一次失败").toBe(1);
+    expect(a.settled, "取消尚未交付 ⇒ A 还归本 hooks 持有").toBe(false);
+    expect(a.getListenerCount(), "未交付的段不能提前释放订阅").toBeGreaterThan(0);
+    expect(hook.status.value, "没观察到终态事件就不改状态").toBe("playing");
+
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(a.cancelCalls, "第二次 cancel 是对 A 的真重试").toBe(2);
+    expect(a.settled).toBe(true);
+    expect(a.getListenerCount()).toBe(0);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+  });
+
+  it("A 让位给 B 之后才终态：B 的 playing 不被 A 的收尾改写，B 也不被误取消", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+    a.failNextCancel = false;
+    await hook.start(KEY_FRAMES); // 接管：A 的取消被登记为 deferred
+    const b = fake.createdViewAnimations[1];
+    expect(a.getListenerCount(), "A 未交付 ⇒ 订阅留着").toBeGreaterThan(0);
+
+    await settleAsyncWindow();
+    // A 的取消在安全窗口里成功 ⇒ 它的收尾发生在 B 已经是观察对象之后
+    expect(a.settled).toBe(true);
+    expect(a.cancelCalls).toBe(1);
+    expect(a.getListenerCount(), "A 到终态后自己销账").toBe(0);
+    expect(b.cancelCalls, "A 的事一律不碰 B").toBe(0);
+    expect(hook.status.value, "身份守卫：A 的 settle 不能把 B 写成 idle").toBe("playing");
+
+    // 取消当前段 B；A 已终态 ⇒ 不会再被打到
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(b.cancelCalls, "cancel() 停的是当前段").toBe(1);
+    expect(a.cancelCalls, "已终态的 A 不再被补发命令").toBe(1);
+    expect(hook.status.value).toBe("idle");
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("未交付旧段的接管与重试");
+  });
+
+  it("卸载时仍有一条未交付的旧段：两条都试一把，订阅全部下线", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+    a.failNextCancel = true;
+    await hook.start(KEY_FRAMES);
+    const b = fake.createdViewAnimations[1];
+    await settleAsyncWindow();
+    expect(a.settled, "A 的延迟取消第一次失败，仍未交付").toBe(false);
+
+    expect(() => wrapper.unmount()).not.toThrow();
+    await settleAsyncWindow();
+    expect(a.cancelCalls, "卸载也要替 A 再试一次").toBe(2);
+    expect(a.settled).toBe(true);
+    expect(a.getListenerCount(), "A 的订阅随卸载下线").toBe(0);
+    expect(b.getListenerCount(), "B 的订阅随卸载下线").toBe(0);
+    fake.diagnostics.assertNoLeaks("卸载时仍有未交付的旧段");
+  });
+});

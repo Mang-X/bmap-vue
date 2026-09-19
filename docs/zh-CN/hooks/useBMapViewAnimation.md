@@ -74,9 +74,9 @@ watch(status, (value) => {
 
 | 返回值  | 描述                                                                             | 类型                                                                    |
 | ------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| start   | 播放一段关键帧动画；每次调用新建实例并接管仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：起播前 Driver 要先取消上一段，取消失败时它拒绝替换并保留记录以便重试，本方法随之 reject（上一段仍在播、仍可被 `cancel()` 重试） | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
-| cancel  | 取消本 hooks 当前那段播放，走官方**按实例**的 `Map#cancelViewAnimation(viewAnimation)`（经 Driver 的 `cancelViewAnimation(map, animation)`）。**只停本 hooks 自己起播的那一段**，同一张图上别人（或另一个 hooks）的动画不受影响。没有在飞动画时什么都不做。三种交付各走各的：登记阶段（还没进启动安全窗口）再调一次会**真重试**；已交付之后再调是**幂等收尾**，不重复打到 SDK；SDK 取消失败时错误抛给调用方并保留重试入口。已被接管取代的旧段，其晚到的 `animationend` / `animationcancel` 不会改写当前段的状态（收尾按动画身份收敛） | `() => void`                                                            |
-| status  | 观察到的播放状态：由公开事件写，命令不乐观改写它；唯一的例外是本库**自己确认过的取消交付**（取消已打到 SDK ⇒ 直接收敛 `idle`，不等那条 `animationcancel`） | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
+| start   | 播放一段关键帧动画；每次调用新建实例，并**先按实例取消**仍在播的那一段。Promise 表示**起播命令被接受**（等地图 ready + 命令发出），不代表动画播完。接管**可能失败**：上一段的取消被拒（例如它还没进启动安全窗口、延迟取消刚失败）时本方法直接 reject，上一段仍是当前播放、稍后重试 `start()` 或 `cancel()` 即可 | [`(keyFrames: ViewAnimationKeyFrames[]) => Promise<void>`](#viewanimationkeyframes) |
+| cancel  | 取消本 hooks 当前那段播放，走官方**按实例**的 `Map#cancelViewAnimation(viewAnimation)`（经 Driver 的 `cancelViewAnimation(map, animation)`）。**只停本 hooks 自己起播的那一段**，同一张图上别人（或另一个 hooks）的动画不受影响。没有在飞动画时什么都不做。三种交付各走各的：登记阶段（还没进启动安全窗口）再调一次会**真重试**；已交付之后再调是**幂等收尾**，不重复打到 SDK；SDK 取消失败时错误抛给调用方，并保留该段的观察对象与重试入口。已被接管取代的旧段，其晚到的 `animationend` / `animationcancel` 不会改写当前段的状态（收尾按动画身份收敛） | `() => void`                                                            |
+| status  | 观察到的播放状态：由公开事件写，命令不乐观改写它。收敛回 `idle` 有两条路：该段自己的 `animationend` / `animationcancel`，或本库**自己确认过的取消交付**（取消已打到 SDK ⇒ 不再等那条事件）。让位给新段、取消仍未交付的旧段仍以它自己的事件为准 | [`Ref<ViewAnimationStatus>`](#viewanimationstatus)                       |
 | ready   | 地图 ready 后 resolve 的 `MapReadyContext`                                       | `Promise<MapReadyContext>`                                              |
 
 #### ViewAnimationKeyFrames
