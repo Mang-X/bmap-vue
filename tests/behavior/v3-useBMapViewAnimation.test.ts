@@ -604,6 +604,39 @@ describe("useBMapViewAnimation：未交付的旧段仍归本 hooks 所有", () =
     fake.diagnostics.assertNoLeaks("未交付旧段的接管与重试");
   });
 
+  it("重试成功但那次 animationcancel 被抑制：下一次 cancel() 就把 A 退出，不留悬空 owner", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+    await hook.start(KEY_FRAMES);
+    const a = fake.createdViewAnimations[0];
+    expect(a.hasPendingStart).toBe(true);
+
+    a.failNextCancel = true;
+    hook.cancel(); // deferred：只登记
+    await settleAsyncWindow();
+    expect(a.cancelCalls, "安全窗口里的取消失败").toBe(1);
+    expect(a.getListenerCount(), "仍未交付 ⇒ 监听留着才有重试能力").toBeGreaterThan(0);
+
+    // 第二次重试成功，但 SDK 没有为该次取消派发 `animationcancel`
+    a.suppressCancelEvent = true;
+    hook.cancel();
+    await settleAsyncWindow();
+    expect(a.cancelCalls).toBe(2);
+    expect(a.settled).toBe(true);
+    expect(a.getListenerCount(), "交付确认即收尾：不留「已 settled 仍带监听」的中间态").toBe(0);
+
+    // 再取消一次：A 不该再被打到（它已经退出），B / 当前段也不该被牵连
+    const before = a.cancelCalls;
+    expect(() => hook.cancel()).not.toThrow();
+    expect(a.cancelCalls, "A 已退出，不再被补发命令").toBe(before);
+
+    wrapper.unmount();
+    fake.diagnostics.assertNoLeaks("重试成功后无悬空 owner");
+  });
+
   it("卸载时仍有一条未交付的旧段：两条都试一把，订阅全部下线", async () => {
     let hook!: Hook;
     const wrapper = mountHook((created) => {
