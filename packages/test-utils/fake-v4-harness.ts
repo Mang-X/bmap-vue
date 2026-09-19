@@ -196,8 +196,38 @@ export interface FakeV4Harness {
   nativeLayerData(index?: number): unknown;
   /** 第 `index` 个原生图层当前是否还挂在地图上。 */
   nativeLayerAttached(index?: number): boolean;
-  /** 第 `index` 个原生图层当前的显隐读数（`setVisible` 是否真的落地）。 */
+  /** 第 `index` 个原生图层的显隐读数（`setVisible` 是否真的落地）。 */
   nativeLayerVisible(index?: number): boolean;
+  /**
+   * 注入**一次**地图级 `removeLayer` 失败（**摘除之前**抛：图层仍留在图上）。
+   *
+   * 重建 / 换引擎路径的判别力全在这条上：`removeLayer` 抛错时，「旧实例到底摘掉了没有」在
+   * SDK 侧没有第二次机会告诉你，所以内核必须**放弃这次替换**并保留旧实例；若它把失败当成
+   * 成功继续建新实例，就会出现两套资源同图。
+   */
+  failNextRemoveLayer(error?: Error): void;
+  /**
+   * 粘性策略：对**已经不在图上**的图层再 `removeLayer` 会抛错（官方没有承诺重复摘除安全）。
+   *
+   * 与 `failNextRemoveLayer`（一次性注入）不同，它描述的是一种**契约分支**：开启之后整段用例
+   * 都处在「重复摘除会失败」的世界里，因此可以断言「每代实例恰好摘一次」——而这正是
+   * 「不依赖重复摘除安全」的机器证据。
+   */
+  failRemoveLayerWhenDetached(error?: Error): void;
+  /**
+   * 地图上的**图层挂 / 摘调用序列**（`addLayer` / `removeLayer`，按到达顺序）。
+   *
+   * 「只摘一次」这类顺序断言只能落在动作序列上：两次 remove 与一次 remove 在**最终数量**上
+   * 看不出差别（替身不去重，第二次摘一个不在图上的图层是无害 no-op），只有序列能区分。
+   */
+  layerOps(): string[];
+  /**
+   * 注入**一次**第 `index` 个原生图层的 `setVisible` 失败（**写之前**抛）。
+   *
+   * 显隐是一条独立于其它 props 的更新路径（组件侧由单独的 watcher 驱动），需要它自己的
+   * 「失败仍走统一 `resource:error` 出口」回归。
+   */
+  failNextNativeLayerSetVisible(error?: Error, index?: number): void;
   /**
    * 模拟用户在原生批量图层上点了一下（SDK 侧派发 `click`）。
    *
@@ -264,6 +294,21 @@ export interface FakeV4Harness {
     payload: { clusters: number; singles: number; zoom?: number },
     index?: number,
   ): void;
+  /**
+   * 派发一个**字段不完整**的簇命中载荷（`value` 原样透传）。
+   *
+   * 现实里它对应「SDK 的载荷不是我们取过证的那个形状」。这里刻意**不由夹具编造**缺哪些字段：
+   * 用例要验证的正是「缺字段时组件不伪造占位值」，所以缺什么由用例明确写出来。
+   */
+  simulateMalformedNativeClusterHit(value: Record<string, unknown>, index?: number): void;
+  /**
+   * 让第 `index` 个原生图层在**摘除期间**（`removeLayer` 内）同步派发一次事件。
+   *
+   * 建模真实 SDK 的行为：`removeLayer` 会同步派发事件（`tileload` 一类）。这让
+   * 「**先解绑业务监听、再摘资源**」这条顺序不变式有了可观察的后果 —— 监听还活着时，
+   * 那次事件会打到已经在拆解的业务回调上（组件会把它当成一次真实命中）。
+   */
+  dispatchNativeLayerEventOnDetach(index: number, type: string, value: unknown): void;
 }
 
 function sizedContainer(): HTMLElement {
@@ -516,6 +561,18 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
       nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
       nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
+      failNextRemoveLayer: (error) => {
+        lastMap().failNextRemoveLayer = error ?? new Error("harness: failNextRemoveLayer");
+      },
+      failRemoveLayerWhenDetached: (error) => {
+        lastMap().failRemoveLayerWhenDetached = error ?? new Error("harness: 重复摘除");
+      },
+      layerOps: () =>
+        lastMap().callLog.filter((entry) => entry === "addLayer" || entry === "removeLayer"),
+      failNextNativeLayerSetVisible: (error, index = -1) => {
+        const layer = nativeLayerAt(index) as { failNextSetVisible?: Error | null };
+        layer.failNextSetVisible = error ?? new Error("harness: failNextSetVisible");
+      },
       simulateNativePick: (payload, index = -1) => {
         const layer = nativeLayerAt(index);
         const properties =
@@ -579,6 +636,13 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
             zoom: payload.zoom ?? 11,
           },
         });
+      },
+      simulateMalformedNativeClusterHit: (value, index = -1) => {
+        nativeLayerAt(index).emit("click", { value, latLng: { lng: 0, lat: 0 }, pixel: { x: 0, y: 0 } });
+      },
+      dispatchNativeLayerEventOnDetach: (index, type, value) => {
+        const layer = nativeLayerAt(index) as { onDetached?: () => void };
+        layer.onDetached = () => layer.emit(type, { value });
       },
     },
   };

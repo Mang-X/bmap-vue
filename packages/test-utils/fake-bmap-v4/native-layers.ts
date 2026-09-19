@@ -99,8 +99,22 @@ export class FakeV4NativeLayerBase extends FakeV4Layer {
     this.drawCount += 1
   }
 
+  /**
+   * 注入一次 `setVisible` 失败（**写之前**抛，状态不变）。
+   *
+   * 真实 Driver 的 `setVisible` 走 `sdkCall`，失败会抛 —— 而显隐是**独立于其它 props 的一条**
+   * 更新路径（组件侧由单独的 watcher 驱动），因此它也需要一条「失败仍走统一错误出口」的回归。
+   * 两个基类都给：声明的四类与扩展 API 的 `setVisible` 是各自实现的。
+   */
+  failNextSetVisible: Error | null = null
+
   setVisible(visible: boolean): void {
     this.callLog.push('setVisible')
+    if (this.failNextSetVisible) {
+      const error = this.failNextSetVisible
+      this.failNextSetVisible = null
+      throw error
+    }
     this.visible = visible
   }
 
@@ -180,8 +194,16 @@ export class FakeV4RuntimeLayer extends FakeV4Layer {
     this.options = { ...this.options, ...options }
   }
 
+  /** 注入一次 `setVisible` 失败（**写之前**抛，状态不变）；口径同基类那一份。 */
+  failNextSetVisible: Error | null = null
+
   setVisible(visible: boolean): void {
     this.callLog.push('setVisible')
+    if (this.failNextSetVisible) {
+      const error = this.failNextSetVisible
+      this.failNextSetVisible = null
+      throw error
+    }
     this.visible = visible
   }
 

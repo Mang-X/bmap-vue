@@ -2652,6 +2652,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
   });
 
   it("BPointShapeLayer：构造期项（enablePicked）变化 ⇒ 换实例（先摘后建）", async () => {
+    // 实例账本不随 `harness.reset()` 清空 ⇒ 比增量（跨用例安全）
     const layersBefore = harness.nativeLayersCreated();
     const enabled = ref(true);
     const wrapper = await mountMapTree(() => [
@@ -3290,5 +3291,165 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("空数据 clearData");
+  });
+
+  /*
+   * 下面四条是 PR #108 评审（commit 376dd14）的三个阻塞项的复现。
+   *
+   * | 评审 | 症状 |
+   * | --- | --- |
+   * | P1-1 | 重建路径 `remove() + record.dispose()` 会**摘两次**，且第一次摘除时业务监听还活着 |
+   * | P1-1 | 换引擎前 `engine.dispose()` 会吞掉摘除失败 ⇒ 新旧两套资源同图 |
+   * | P1-2 | 簇命中缺必要元数据时仍派发伪造了 `(0,0)` / `0` / `""` 的载荷 |
+   * | P1-3 | `visible` 的独立 watcher 绕过了统一的 `resource:error` 出口 |
+   */
+
+  it("BPointShapeLayer：重建只摘一次，且摘除期间业务监听已经解绑（P1-1）", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const enabled = ref(true);
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(BPointShapeLayer, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        enablePicked: enabled.value,
+      }),
+    ]);
+    const layer = wrapper.findComponent(BPointShapeLayer);
+    // 真实 SDK 在 removeLayer 内会同步派发事件 ⇒ 监听若还活着，这次事件会被当成业务命中
+    harness.dispatchNativeLayerEventOnDetach(-1, "click", {
+      dataIndex: 0,
+      dataItem: { properties: { id: "a" } },
+    });
+
+    enabled.value = false; // 构造期项变化 ⇒ 重建
+    await settleProps();
+
+    expect(
+      harness.layerOps(),
+      "重建 = 摘旧 + 挂新：旧实例只能摘一次（`LayerRecord.dispose()` 自己还会再摘一次 ⇒ 旧实现是四步）",
+    ).toEqual(["addLayer", "removeLayer", "addLayer"]);
+    expect(
+      layer.emitted("item-click"),
+      "摘除顺序必须是「先解绑业务监听、再摘资源」：摘除期间的事件不该打到业务回调上",
+    ).toBeUndefined();
+    expect(harness.attached("layer"), "新实例在图上、旧的已摘掉").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointShapeLayer 重建顺序");
+  });
+
+  it("BPointShapeLayer：整套生命周期都不依赖「重复摘除安全」（悲观契约）", async () => {
+    // 官方没有承诺「对已经摘下的图层再 removeLayer 是安全的」。开启这条粘性契约之后，
+    // 只要有任何一处对**已经不在图上**的实例再摘一次，它就会抛错 ⇒ 动作序列里会多出一条；
+    // 因此这条用例钉的是「每代实例恰好摘一次」（挂 → 重建 → 卸载三次动作，两次摘除）。
+    harness.failRemoveLayerWhenDetached();
+    const enabled = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BPointShapeLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        enablePicked: enabled.value,
+      }),
+    ]);
+    enabled.value = false;
+    await settleProps();
+    await unmountAndSettle(wrapper);
+
+    expect(harness.layerOps()).toEqual(["addLayer", "removeLayer", "addLayer", "removeLayer"]);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("BPointShapeLayer 悲观摘除契约");
+  });
+
+  it("BMarkerCluster：换引擎时旧资源未确认摘除 ⇒ 放弃切换，不会两套同图（P1-1）", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const engine = ref<"native" | "markers">("native");
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+    ]);
+    expect(harness.attached("layer")).toBe(1);
+
+    // 摘除失败：SDK 侧的「旧资源仍在图上」这件事没有任何后续机会被纠正
+    harness.failNextRemoveLayer();
+    engine.value = "markers";
+    await settleProps();
+
+    expect(errors.length, "摘除失败必须经 resource:error 交出").toBeGreaterThan(0);
+    expect(harness.attached("layer"), "旧原生图层仍在图上").toBe(1);
+    expect(
+      harness.attached("overlay"),
+      "未确认摘除 ⇒ 不得建新引擎：否则旧图层 + 新 Marker 两套同图",
+    ).toBe(0);
+    expect(harness.nativeLayersCreated() - layersBefore, "新引擎没有产出额外资源").toBe(1);
+
+    // 注入是一次性的：再切一次（或任何一次收敛）必须能成功，不能永久卡住
+    engine.value = "native"; // 触发一次 sync（此时引擎仍是 native，等价于「重试收敛」）
+    await settleProps();
+    engine.value = "markers";
+    await settleProps();
+    expect(harness.attached("layer"), "重试成功后旧资源被摘掉").toBe(0);
+    expect(harness.attached("overlay"), "重试成功后新引擎的 Marker 建起来了").toBeGreaterThan(0);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 换引擎失败");
+  });
+
+  it("BMarkerCluster：显隐失败仍走统一 resource:error，且后续收敛会重试（P1-3）", async () => {
+    const errors: unknown[] = [];
+    const unhandled: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const visible = ref(true);
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(
+      () => [
+        h(Probe),
+        h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
+      ],
+      (error) => unhandled.push(error),
+    );
+
+    harness.failNextNativeLayerSetVisible();
+    visible.value = false;
+    await settleProps();
+
+    expect(errors.length, "`setVisible` 抛错必须经 resource:error 交出（不是未处理的 watcher 异常）").toBeGreaterThan(0);
+    expect(unhandled, "组件必须自己接住：不得冒成 Vue 层的未处理异常").toEqual([]);
+    expect(harness.nativeLayerVisible(), "失败时不得假装已生效").toBe(true);
+
+    // 未生效的显隐不是「记成已完成」：下一次收敛（任何 props 变化）要重试
+    data.value = [...STATIONS, { id: "d", lng: 1, lat: 1 }];
+    await settleProps();
+    expect(harness.nativeLayerVisible(), "后续收敛必须把没生效的显隐补上").toBe(false);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 显隐失败");
+  });
+
+  it("BMarkerCluster：原生簇命中缺必要元数据时不派发 cluster-click（P1-2）", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+
+    // 载荷里有 clusterId / pointCount，但**没有**位置：不得把它当成「簇在 (0,0)」
+    harness.simulateMalformedNativeClusterHit({ isCluster: true, clusterId: 7, pointCount: 3 });
+    expect(
+      cluster.emitted("cluster-click"),
+      "必要元数据不完整 ⇒ 不派发（公开类型把 position 声明成必填，就不能塞占位值）",
+    ).toBeUndefined();
+    expect(warnLines(warn).some((line) => line.includes("latLng")), "必须告警").toBe(true);
+
+    // 完整载荷仍然照常派发（正证控件：上面那条 0 不是「管道根本没跑」）
+    harness.simulateNativeClusterHit({ clusterId: 7, pointCount: 3, latLng: { lng: 116.4, lat: 39.9 } });
+    expect(cluster.emitted("cluster-click")!.at(-1)![0]).toMatchObject({ id: "7", size: 3 });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster malformed 命中");
   });
 });

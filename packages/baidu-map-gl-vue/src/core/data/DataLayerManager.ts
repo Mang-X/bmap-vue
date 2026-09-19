@@ -150,6 +150,13 @@ export class DataLayerManager<Item, Resource> {
     return key === undefined ? undefined : this.index.latest(key);
   }
 
+  /**
+   * 当前**仍归本管理器所有**的资源数（含「摘除失败、按所有权保留下来」的那些）。
+   *
+   * 它是「摘干净了没有」唯一的机器读数：`clear()` 是逐条隔离的、不抛错，所以需要**确认**摘净的
+   * 调用方（替换 / 换引擎路径）只能靠这个计数判断，而不是「`clear()` 没抛 ⇒ 一定摘干净了」。
+   * 配合 `clear()` 的「失败保留所有权」语义：计数归零 ⟺ 全部确认摘除。
+   */
   get size(): number {
     return this.resources.size;
   }

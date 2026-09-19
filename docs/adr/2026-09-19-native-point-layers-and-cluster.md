@@ -238,6 +238,40 @@ interface BMapClusterPick<Item> {
     没公开的身份（`items: null` 与 `dataIndex: -1` 都是「拿不到就说拿不到」），但 `gridCluster`
     那套像素网格聚合本身属于 #104 的审计范围 —— 它的去留由 #104 的 inventory 结论决定。
 
+## 评审修正（PR #108 第一轮，2026-09-19）
+
+评审给 3 条阻塞项，**三条全部先复现、后修**（每条都在改实现之前跑出红色，判定用退出码）。
+三条都落在**失败 / 替换路径**上——happy path 的用例覆盖不到的地方。
+
+| # | 评审意见 | 复现读数（修前） | 处置 |
+| --- | --- | --- | --- |
+| 1 | 重建路径「手动 `remove` + `record.dispose()`」会**摘两次**，且第一次摘除时业务监听还活着；换引擎时 `engine.dispose()` 吞掉摘除失败 ⇒ 两套资源同图 | ① 重建的动作序列 `["addLayer","removeLayer","removeLayer","addLayer"]`（应是 3 步）；② 换引擎在注入 `removeLayer` 失败后：`resource:error` = 0 且新引擎的 Marker 已经建起来（`overlay > 0`，旧图层仍在图上） | 决策 9（下）：账本新增**严格** `detach()`；点图层内核与原生聚合引擎的重建都改走它；`ClusterEngine` 拆成 `dispose()`（卸载、吞错）/ `detach()`（替换、抛错），换引擎失败时**保留旧引擎** |
+| 2 | 簇命中缺必要元数据时仍派发伪造了 `(0,0)` / `0` / `""` 的载荷（`BMapClusterPick` 又把这些字段声明成必填非空） | `simulateMalformedNativeClusterHit({ isCluster: true, clusterId: 7, pointCount: 3 })`（无 `latLng`）仍然派发了 `cluster-click` | 决策 5 补一条：**必要元数据不完整 ⇒ 告警一次且不派发**（公开类型因此可以说「这三个字段一定是真实值」） |
+| 3 | `visible` 的独立 watcher 直接调 `engine.setVisible()`，绕过组件自己定义的统一 `resource:error` 出口 | 注入 `setVisible` 失败后 `resource:error` = 0（异常冒成 Vue watcher 的未处理异常） | 该 watcher 收进同一个错误出口；两个引擎的显隐收敛到各自的 `applyVisible()`，`appliedVisible` **只在成功后推进**（失败不是「已完成」，下一次收敛会重试） |
+
+修 1 的过程中还发现**同一族的第二个缺陷**（评审没提到、自查新增）：`remove` 回调在调用 SDK **之前**
+就把 `handle` / `instance` 清空了，于是一次抛错的摘除会把记账清成「已经没有实例了」，
+重试路径（`detach()` 的门禁）直接跳过摘除。修法与「记账晚于副作用」同一条：**先摘、后销账**。
+
+### 决策 9：账本的释放拆成「卸载（吞错）」与「替换（严格）」两条
+
+`removeLayer` 允许「先产生副作用、再抛错」，因此**只有成功返回能当作「确认摘掉」**。
+把这两种语义写成两个方法，而不是让调用方各自拼事务：
+
+| 方法 | 语义 | 适用 | 失败时 |
+| --- | --- | --- | --- |
+| `LayerRecord.dispose()` | 幂等 + **吞错**（日志可观测） | 组件卸载、Map 卸载（`disposeAll()`） | 继续走完；没有重试的位置 |
+| `LayerRecord.detach()` | **严格**：解绑监听 → 摘资源（**失败抛**）→ 销账，三步都成功才算完成 | 重建 / 换引擎（**资源替换**） | **不销账**（记录留在账本里可再试），调用方**放弃替换**并保留旧实例 |
+
+`ClusterEngine` 用同一对语义（`dispose()` / `detach()`）。这条拆分的收益是**顺序不变式只有一处**：
+「先解绑业务监听、再摘资源」（#22 / `LayerRegistry` 的既有口径）现在由账本内部保证，
+调用点不再各写一遍、也再不会出现「手动 remove 一次 + dispose 又 remove 一次」。
+
+**自查新增的同类项（本轮未改）**：`core/composables/useLayerResource.ts:647` 的 `remove` 回调有同样的
+「先清 `instance`、再调 SDK」顺序。它属于十种底图图层共用的内核、且与该内核的挂载/摘除三态机
+（#96 七轮评审的产物）耦合，改它需要它自己的复现与回归，本 PR 不顺手动它 —— 登记在此，
+建议随 #104 的存量审计一起处理。
+
 ## 参考
 
 - issue #35（`M6-POINT-CLUSTER`）与总追踪 #12；票面 2026-09-19 的开工前范围纠正。

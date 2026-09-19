@@ -55,7 +55,25 @@ export interface LayerRecord {
   readonly kind: LayerLedgerKind;
   readonly handle: LayerLedgerHandle;
   readonly disposed: boolean;
+  /**
+   * **卸载路径**的释放：幂等、**吞错**（摘除失败只记日志），保证调用方一定走完。
+   *
+   * 适用：组件卸载、Map 卸载（`disposeAll()`）。那里没有「重试」的位置，也没人能承接异常，
+   * 所以失败必须可观测而不是抛出。
+   */
   dispose(): void;
+  /**
+   * **替换路径**的严格摘除：解绑业务监听 → 摘除 SDK 资源（**失败会抛**）→ 销账。
+   *
+   * 三步都成功才算完成；任一步失败时**不销账**（记录留在账本里，下一次 `dispose()` /
+   * `detach()` 仍会再试一次），调用方据此**放弃这次替换**并保留旧实例
+   * （重建 / 换引擎时「宁可这次不更新，也不能出现两份同图」）。
+   *
+   * 与 `dispose()` 的分工是一条硬约束：`removeLayer` 允许「先产生副作用、再抛错」，
+   * 因此**摘除失败时无法判断资源是否还在图上** —— 只有「成功返回」能当作「确认摘掉」。
+   * 替换路径不能复用吞错的 `dispose()`，否则调用方会把「未知」当成「已完成」。
+   */
+  detach(): void;
 }
 
 export interface LayerRegistryInput {
@@ -96,6 +114,22 @@ export function createLayerRegistry(): LayerRegistry {
     register(input) {
       const id = Symbol("layer");
       let disposed = false;
+      /**
+       * 解绑业务监听（不可逆，只做一次）。抽成函数是因为两条释放路径都要用它，
+       * 而它们的唯一区别在**摘除失败之后**怎么处理（吞错 vs 抛出 + 不销账）。
+       */
+      const unbind = (reason: string): void => {
+        if (input.scope.isDisposed) return;
+        try {
+          input.scope.dispose(reason);
+        } catch (error) {
+          // 单个 scope 的释放错误不得挡住 SDK 摘除，但不能静默（与 MapRuntime 对
+          // `map.destroy` 失败的口径一致：至少要让它可观测）。
+          logger.warn(`LayerRegistry: 释放图层 child scope 失败（kind=${input.kind}）`, {
+            error: (error as Error)?.message ?? String(error),
+          });
+        }
+      };
       const record: LayerRecord = {
         id,
         kind: input.kind,
@@ -110,15 +144,7 @@ export function createLayerRegistry(): LayerRegistry {
           // 顺序与 #22 的口径一致：**先解绑业务事件**（释放 child scope），再由 Map 摘除
           // SDK 资源。反过来会让 SDK 在 `removeLayer` 期间同步派发的事件打到已经在拆解的
           // 业务回调上（`tileload` 一类事件在真实 SDK 上就是这样）。
-          try {
-            input.scope.dispose("layer-disposed");
-          } catch (error) {
-            // 单个 scope 的释放错误不得挡住 SDK 摘除，但不能静默（与 MapRuntime 对
-            // `map.destroy` 失败的口径一致：至少要让它可观测）。
-            logger.warn(`LayerRegistry: 释放图层 child scope 失败（kind=${input.kind}）`, {
-              error: (error as Error)?.message ?? String(error),
-            });
-          }
+          unbind("layer-disposed");
           try {
             input.remove();
           } catch (error) {
@@ -128,6 +154,15 @@ export function createLayerRegistry(): LayerRegistry {
               error: (error as Error)?.message ?? String(error),
             });
           }
+        },
+        detach() {
+          if (disposed) return;
+          // 顺序同上（先解绑、再摘除），但**摘除失败向上抛**，且此时**不销账**：
+          // 记录仍在 `records` 里，下一次 `dispose()` / `detach()` 还能再试着摘掉它。
+          unbind("layer-detached");
+          input.remove();
+          disposed = true;
+          records.delete(id);
         },
       };
       records.set(id, record);

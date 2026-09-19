@@ -25,6 +25,7 @@ import { DataLayerManager, type DataLayerHost } from "../../core/data/DataLayerM
 import { gridCluster, type Cluster } from "../../core/data/gridCluster";
 import { itemKeyReader, scanValidItems } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
+import { BMapError } from "../../core/errors/BMapError";
 import { devWarn, logger } from "../../core/logger";
 import type { ClusterEngine, ClusterEngineInput } from "./clusterEngine";
 import type { BMapDataProps, BMarkerClusterEngine } from "../../types/components";
@@ -57,6 +58,8 @@ export function createMarkerClusterEngine<Item>(
   const readyCtx: MapReadyContext = ready;
   const reports = createProblemReporter(input.label, (message) => devWarn(message));
   let manager: DataLayerManager<Cluster<ClusterPoint<Item>>, MarkerHandle> | null = null;
+  /** 已确认生效的显隐（只在 `setVisible` 成功返回后推进；失败 ⇒ 下一次收敛重试）。 */
+  let appliedVisible: boolean | null = null;
 
   /** 点击回调的 disposer（Handle 被 freeze ⇒ WeakMap 记账）。 */
   const clickDisposers = new WeakMap<object, () => void>();
@@ -161,24 +164,56 @@ export function createMarkerClusterEngine<Item>(
 
   const kind: BMarkerClusterEngine = "markers";
 
+  /**
+   * 显隐的**唯一**写入点（props watcher 与 `sync()` 都走它）。
+   *
+   * `appliedVisible` 只在成功后推进：失败的显隐不是「已完成」，下一次收敛会重试
+   * （否则一次 SDK 异常会把声明与画面永久分叉）。
+   */
+  function applyVisible(): void {
+    if (!manager) return;
+    const desired = props.visible !== false;
+    if (appliedVisible === desired) return;
+    manager.setVisible(desired);
+    appliedVisible = desired;
+  }
+
   return {
     kind,
-    mount() {      manager = new DataLayerManager<Cluster<ClusterPoint<Item>>, MarkerHandle>(buildHost(readyCtx), {
+    mount() {
+      manager = new DataLayerManager<Cluster<ClusterPoint<Item>>, MarkerHandle>(buildHost(readyCtx), {
         label: input.label,
         onProblem: (problem) => reports.report(problem),
         warn: (message) => logger.warn(message),
       });
-      manager.setVisible(props.visible ?? true);
+      applyVisible();
       applyData();
     },
     sync() {
       applyData();
+      // 未生效的显隐在这里被补上（`appliedVisible` 只在成功后推进）
+      applyVisible();
     },
-    setVisible(visible) {
-      manager?.setVisible(visible);
+    setVisible() {
+      applyVisible();
     },
     dispose() {
       manager?.dispose();
+      manager = null;
+    },
+    detach() {
+      const active = manager;
+      if (!active) return;
+      active.clear();
+      // `clear()` 逐条隔离、不抛错：摘不掉的条目会**保留所有权** ⇒ 计数没归零就是「未确认摘净」。
+      // 此时抛错且**不清理本引擎状态**，调用方会放弃换引擎并保留旧引擎（下一次还能再试）。
+      if (active.size > 0) {
+        throw new BMapError(
+          "BMAP_SDK_CALL_FAILED",
+          `${input.label}: 还有 ${active.size} 个 Marker 未能摘除，无法确认旧引擎已释放`,
+        );
+      }
+      active.dispose();
       manager = null;
     },
   };

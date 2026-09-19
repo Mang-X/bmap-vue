@@ -164,7 +164,10 @@ function sync(): void {
   warnOptionMismatch();
   try {
     if (engine && engineKind !== props.engine) {
-      engine.dispose();
+      // ⚠️ 换引擎是**资源替换**：必须先确认旧引擎真的释放了。`engine.detach()` 在旧资源未确认
+      // 摘除时抛错 —— 此时保留旧引擎、放弃这次切换（旧的还在图上，新的再挂上去就是两套同图，
+      // 而且旧的那份再也没人认领）。下一次 props 变化会再试。
+      engine.detach();
       engine = null;
       engineKind = null;
     }
@@ -176,6 +179,7 @@ function sync(): void {
     }
     engine.sync();
   } catch (error) {
+    // `detach()` 失败时引擎与 `engineKind` 都保持原样 —— 上面那两行只在成功返回后执行
     reportError(error);
   }
 }
@@ -218,9 +222,16 @@ watch(
 
 watch(
   () => props.visible,
-  (visible) => {
-    // 未就绪时不用管：`mount()` 会读到最新的 props
-    engine?.setVisible(visible);
+  () => {
+    // 未就绪时不用管：`mount()` 会读到最新的 props。
+    // **显隐也走同一个错误出口**：它是独立于其它 props 的一条更新路径（`setVisible` 经
+    // `sdkCall` 会抛），不给它 try/catch 就会变成 Vue watcher 的未处理异常 —— 与「引擎失败
+    // 一律转 resource:error」的契约矛盾。
+    try {
+      engine?.setVisible(props.visible);
+    } catch (error) {
+      reportError(error);
+    }
   },
   { flush: "sync" },
 );
