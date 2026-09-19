@@ -336,6 +336,22 @@ export function layerDataIdentity(value: unknown): string {
 }
 
 /**
+ * **输入指纹**：与 `layerDataIdentity` 同源，但把**函数按源码文本**折叠。
+ *
+ * 数据组件的三个取值函数（`getPosition` / `properties` / 函数式 `itemKey`）都是「父级每次渲染
+ * 传一个新箭头、源码却相同」的形态，按引用比较会让每一帧都产生一次 SDK 写入；而按源码折叠的
+ * 代价是「换的是闭包里的值」时指纹不变 —— 那个逃生口是 `dataVersion`，写在文档里。
+ *
+ * 抽到这里的理由与 `layerDataIdentity` 相同：**只能有一份**。点图层内核（`useNativePointLayer`）
+ * 与原生聚合引擎（`nativeClusterEngine`）都要算「这一批输入变了没有」，
+ * 两份实现必然在「函数怎么折叠」上分叉，而分叉的表现是「有的组件每帧重写、有的不重写」。
+ */
+export function layerInputFingerprint(value: unknown): string {
+  if (typeof value === "function") return `fn:${String(value)}`;
+  return layerDataIdentity(value);
+}
+
+/**
  * **廉价的**变化指纹：只用来当 `watch` 的源（回答「要不要重算」），不回答「怎么更新」。
  *
  * 刻意与 `layerRebuildKey` / `layerSlotKey` 分工：

@@ -526,10 +526,17 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "experimental",
     runtimeOnly: false,
   },
+  // 聚合：默认路径就是原生。`status: "extended"` 表达的是「本库在原生能力之上还提供了一个
+  // 显式可选的 `markers` 引擎（网格聚合 + Marker）」，而**不是**「原生缺失时的 fallback」——
+  // issue #35 的实测（`scripts/probe-native-point-cluster.mts`）证明原生可用，因此自动降级不成立；
+  // `markers` 的增量是「簇内业务项」（官方没有公开的读回入口）。`runtimeOnly: true` 是因为
+  // `ClusterLayer` 没有类声明、可视化实现按需异步注入（存在性只能在调用时刻判断）。
   "layer.cluster": {
     id: "layer.cluster",
     family: "layer",
-    description: "聚合图层；优先使用 SDK 原生能力，缺失时由项目提供 fallback 聚类",
+    description:
+      "聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎" +
+      "（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19",
     engines: JSAPI_V4,
     status: "extended",
     runtimeOnly: true,
@@ -541,7 +548,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.point": {
     id: "layer.point",
     family: "layer",
-    description: "原生点图层（PointLayer）；支持形状或图标，属扩展 API",
+    description: "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 BPointLayer 落地",
     rawMembers: ["PointLayer"],
     engines: JSAPI_V4,
     status: "experimental",

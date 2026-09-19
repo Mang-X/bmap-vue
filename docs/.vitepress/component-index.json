@@ -1,6 +1,6 @@
 {
   "version": "3.0.0-beta.0",
-  "generatedAt": "2026-09-17T08:56:36.089Z",
+  "generatedAt": "2026-09-19T11:40:23.373Z",
   "components": [
     "BMapProvider",
     "BMap",
@@ -21,7 +21,9 @@
     "BPanoramaControl",
     "BControl",
     "BMarkerList",
-    "BPointCollection",
+    "BPointShapeLayer",
+    "BPointIconLayer",
+    "BPointLayer",
     "BMarkerCluster",
     "BZoom",
     "BNavigation",

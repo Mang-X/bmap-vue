@@ -34,7 +34,9 @@ import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers
 import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
 import BMarkerList from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerList.vue";
 import BMarkerCluster from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerCluster.vue";
-import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
+import BPointShapeLayer from "../../packages/baidu-map-gl-vue/src/components/data/BPointShapeLayer.vue";
+import BPointIconLayer from "../../packages/baidu-map-gl-vue/src/components/data/BPointIconLayer.vue";
+import BPointLayer from "../../packages/baidu-map-gl-vue/src/components/data/BPointLayer.vue";
 import { useBMapGeocoder } from "../../packages/baidu-map-gl-vue/src/composables/useBMapGeocoder";
 import { useMapEvent } from "../../packages/baidu-map-gl-vue/src/composables/useMapEvent";
 import { useMapStatus } from "../../packages/baidu-map-gl-vue/src/composables/useMapStatus";
@@ -2351,8 +2353,8 @@ describe("图层套件在同图共存时的领域行为（M7-LAYERS / #40）", (
 
 /* ------------------------------------------------------------------ 数据组件（M6 / #34）
 
- * 三个数据组件的边界就是这一节的标题：`BMarkerList` / `BMarkerCluster` 逐项（或逐簇）落地成
- * **SDK Marker**，`BPointCollection` 用**一个**原生批量图层承载全部点。
+ * 数据组件的边界就是这一节的标题：`BMarkerList` / `BMarkerCluster` 逐项（或逐簇）落地成
+ * **SDK Marker**，`BPointShapeLayer` 用**一个**原生批量图层承载全部点。
  * 验收「资源数量证明 PointCollection 不是逐点 Marker」在这里落成两条读数：
  * `harness.nativeLayersCreated()`（原生图层数）与 `harness.attached("overlay")`（覆盖物数）。
  */
@@ -2370,7 +2372,23 @@ const STATIONS: readonly Station[] = [
   { id: "c", lng: 116.42, lat: 39.93 },
 ] as readonly Station[];
 
-const stationPosition = (item: Station) => ({ lng: item.lng, lat: item.lat });
+  const stationPosition = (item: Station) => ({ lng: item.lng, lat: item.lat });
+
+  /**
+   * 诊断总线探针：从组件树**内部**订阅 `resource:error`。
+   *
+   * 组件的失败出口是每条 Runtime 独立的内部事件总线（`ctx.events`），挂在 `<BMap>` 的插槽里
+   * 才能拿到同一个实例 —— 这也是「能力未就绪」这类预期内失败在组件级唯一可观察的落点。
+   */
+  function errorsProbe(sink: unknown[]) {
+    return defineComponent({
+      setup() {
+        const mapContext = useRequiredMapContext();
+        mapContext.events.on("resource:error", (payload: unknown) => sink.push(payload));
+        return () => h("span", "errors-probe");
+      },
+    });
+  }
 
 describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
   it("BMarkerList：每项一个 Marker，点击回传**最新**业务 item", async () => {
@@ -2483,6 +2501,9 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
+        // 网格聚合是**显式选择**（默认已是原生 ClusterLayer，见 #35）：本用例断言的是
+        // 「每簇 / 每单点一个 Marker」这套语义，因此必须点名 markers 引擎。
+        engine: "markers",
         zoom: 8,
         minClusterSize: 3,
       }),
@@ -2505,6 +2526,8 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
+        // markers 引擎是**唯一**能给出簇内业务项的引擎（原生命中载荷只有元数据）。
+        engine: "markers",
         zoom: 8,
         minClusterSize: 3,
       }),
@@ -2517,9 +2540,11 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     harness.clickOverlay(-2);
     const clusterClicks = cluster.emitted("cluster-click");
     expect(clusterClicks, "簇必须派发 cluster-click").toBeTruthy();
-    const payload = clusterClicks![0]![0] as { size: number; points: Station[] };
+    // #35 起载荷是**两种引擎的公共最小契约**：`items` 里才是业务项（markers 引擎能提供）
+    const payload = clusterClicks![0]![0] as { engine: string; size: number; items: Station[] | null };
+    expect(payload.engine).toBe("markers");
     expect(payload.size).toBe(3);
-    expect(payload.points.map((item) => item.id).sort()).toEqual(["a", "b", "c"]);
+    expect(payload.items?.map((item) => item.id).sort()).toEqual(["a", "b", "c"]);
 
     // 数据换引用之后点单点 ⇒ item-click 拿到的必须是**新**对象
     const updated: readonly Station[] = [...data.value.slice(0, 3), { id: "solo", lng: 121.5, lat: 31.2, name: "新对象" }];
@@ -2535,11 +2560,11 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     harness.assertIdle("BMarkerCluster 点击投影");
   });
 
-  it("BPointCollection：单个批量资源（0 个覆盖物 + 1 个原生图层）", async () => {
+  it("BPointShapeLayer：单个批量资源（0 个覆盖物 + 1 个原生图层）", async () => {
     // 实例账本**刻意**不随 `harness.reset()` 清空（跨用例安全靠负索引），因此这里比的是增量。
     const layersBefore = harness.nativeLayersCreated();
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2556,15 +2581,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointCollection 卸载");
+    harness.assertIdle("BPointShapeLayer 卸载");
   });
 
-  it("BPointCollection：data 走 setData 不重建；样式走 setStyle 并显式重绘", async () => {
+  it("BPointShapeLayer：data 走 setData 不重建；样式走 setStyle 并显式重绘", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const data = ref<readonly Station[]>(STATIONS);
     const color = ref("#1677ff");
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2588,16 +2613,16 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.nativeLayerCalls().filter((call) => call === "doOnceDraw")).toHaveLength(2);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 更新");
+    harness.assertIdle("BPointShapeLayer 更新");
   });
 
-  it("BPointCollection：visible / opacity / zIndex / 缩放范围走字段级 setter，不重建", async () => {
+  it("BPointShapeLayer：visible / opacity / zIndex / 缩放范围走字段级 setter，不重建", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const visible = ref(true);
     const opacity = ref(1);
     const zIndex = ref(1);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2623,14 +2648,14 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.nativeLayerCalls()).toContain("setMaxZoom");
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 字段级 setter");
+    harness.assertIdle("BPointShapeLayer 字段级 setter");
   });
 
-  it("BPointCollection：构造期项（enablePicked）变化 ⇒ 换实例（先摘后建）", async () => {
+  it("BPointShapeLayer：构造期项（enablePicked）变化 ⇒ 换实例（先摘后建）", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const enabled = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2649,15 +2674,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointCollection 重建");
+    harness.assertIdle("BPointShapeLayer 重建");
   });
 
-  it("BPointCollection：字段由有值变回未表态 ⇒ 重建（SDK 没有 unset 入口，不猜默认值）", async () => {
+  it("BPointShapeLayer：字段由有值变回未表态 ⇒ 重建（SDK 没有 unset 入口，不猜默认值）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const layersBefore = harness.nativeLayersCreated();
     const opacity = ref<number | undefined>(0.4);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2675,15 +2700,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(warnLines(warn).some((line) => line.includes("由有值变为未表态"))).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 撤回字段");
+    harness.assertIdle("BPointShapeLayer 撤回字段");
   });
 
-  it("BPointCollection：点击返回**最新**业务 item；未命中只有 click(hit:false)", async () => {
+  it("BPointShapeLayer：点击返回**最新**业务 item；未命中只有 click(hit:false)", async () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(BPointShapeLayer, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(BPointShapeLayer);
 
     harness.simulateNativePick({ dataIndex: 1, latLng: { lng: 116.41, lat: 39.92 }, pixel: { x: 10, y: 20 } });
     let picks = layer.emitted("item-click");
@@ -2705,15 +2730,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(layer.emitted("item-click")!.length).toBe(beforeMiss);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 拾取");
+    harness.assertIdle("BPointShapeLayer 拾取");
   });
 
-  it("BPointCollection：父级每次渲染传新的内联回调 ⇒ 不产生多余的 SDK 命令", async () => {
+  it("BPointShapeLayer：父级每次渲染传新的内联回调 ⇒ 不产生多余的 SDK 命令", async () => {
     const tick = ref(0);
     const data = ref<readonly Station[]>(STATIONS);
     const color = ref("#1677ff");
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: data.value,
         itemKey: "id",
         // 内联箭头：每次渲染都是新函数对象（最常见、也最容易踩坑的写法）
@@ -2745,16 +2770,16 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     ).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 内联回调");
+    harness.assertIdle("BPointShapeLayer 内联回调");
   });
 
-  it("BPointCollection：样式**逐字段**撤回也要被发现（merge 语义下旧值会留在 SDK 上）", async () => {
+  it("BPointShapeLayer：样式**逐字段**撤回也要被发现（merge 语义下旧值会留在 SDK 上）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const layersBefore = harness.nativeLayersCreated();
     const color = ref<string | undefined>("#ff4d4f");
     const size = ref<number>(18);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2774,10 +2799,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(styleCalls.length, "新实例挂载时写入当前样式").toBeGreaterThanOrEqual(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 样式撤回");
+    harness.assertIdle("BPointShapeLayer 样式撤回");
   });
 
-  it("BPointCollection：properties 映射进要素；非法坐标与重复 key 被挡在适配层", async () => {
+  it("BPointShapeLayer：properties 映射进要素；非法坐标与重复 key 被挡在适配层", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const data = ref<readonly Station[]>([
       { id: "a", lng: 116.404, lat: 39.915 },
@@ -2786,7 +2811,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
       { id: "a", lng: 116.5, lat: 39.9, name: "百度大厦" },
     ]);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2800,10 +2825,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(warnLines(warn).some((line) => line.includes("itemKey 重复"))).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 适配");
+    harness.assertIdle("BPointShapeLayer 适配");
   });
 
-  it("BPointCollection：地图被销毁而组件还在时，图层由地图账本摘掉（不是靠组件卸载）", async () => {
+  it("BPointShapeLayer：地图被销毁而组件还在时，图层由地图账本摘掉（不是靠组件卸载）", async () => {
     let disposeMap: (() => void) | null = null;
     const Capture = defineComponent({
       setup() {
@@ -2814,7 +2839,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     });
     const wrapper = await mountMapTree(() => [
       h(Capture),
-      h(BPointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+      h(BPointShapeLayer, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
     ]);
     const map = fake.createdMaps.at(-1)!;
     expect(harness.attached("layer")).toBe(1);
@@ -2822,7 +2847,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     // 组件**不卸载**，只销毁地图：这条路径只有地图账本能覆盖（组件自持的 scope 到不了）
     disposeMap!();
     await flushPromises();
-    expect(wrapper.findComponent(BPointCollection).exists(), "组件还在").toBe(true);
+    expect(wrapper.findComponent(BPointShapeLayer).exists(), "组件还在").toBe(true);
     expect(harness.attached("layer"), "地图销毁前图层已被摘掉").toBe(0);
     expect(map.destroyedWithLayers, "销毁那一刻图上没有残留图层").toBe(0);
     harness.assertIdle("Map 销毁顺序");
@@ -2855,17 +2880,17 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     harness.assertIdle("BMarkerList 根引用变化");
   });
 
-  it("BPointCollection：falsy 业务项（0）也必须能被拾取 [#102 F4]", async () => {
+  it("BPointShapeLayer：falsy 业务项（0）也必须能被拾取 [#102 F4]", async () => {
     const data = ref<readonly number[]>([0, 1]);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(BPointShapeLayer, {
         data: data.value,
         // 泛型没有被约束成 object ⇒ 0 / false / "" 都是合法业务项
         itemKey: (item: number) => item,
         getPosition: (item: number) => ({ lng: 116.4 + item * 0.01, lat: 39.9 }),
       }),
     ]);
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(BPointShapeLayer);
 
     harness.simulateNativePick({ dataIndex: 0 });
     const picks = layer.emitted("click")!;
@@ -2878,6 +2903,392 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(layer.emitted("item-click")!.at(-1)![0]).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection falsy 业务项");
+    harness.assertIdle("BPointShapeLayer falsy 业务项");
+  });
+
+  it("BPointIconLayer：落到原生 point-icon；图标样式走 setStyleOptions + 显式重绘", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const wrapper = await mountMapTree(() => [
+      h(BPointIconLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        icon: "https://example.com/pin.png",
+        width: 32,
+        height: 32,
+      }),
+    ]);
+    expect(harness.nativeLayersCreated() - layersBefore, "整批只有一个原生资源").toBe(1);
+    expect(harness.attached("overlay"), "没有任何逐点 Marker").toBe(0);
+    expect(harness.nativeLayerOptions()).toMatchObject({ idKey: "id", enablePicked: true });
+    // 图标字段真的进了 SDK 的样式袋（字段名与官方 PointIconStyle 一致）
+    expect(harness.nativeLayerStyle()).toMatchObject({
+      icon: "https://example.com/pin.png",
+      width: 32,
+      height: 32,
+    });
+    // 官方口径：声明面的图层改样式后**不会**自动重绘，Driver 必须显式 doOnceDraw
+    expect(harness.nativeLayerCalls()).toEqual(["setVisible", "setStyleOptions", "doOnceDraw", "setData"]);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("BPointIconLayer 卸载");
+  });
+
+  it("BPointIconLayer：isFlat / isFixed 是构造期项 ⇒ 变化时换实例", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const flat = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BPointIconLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        icon: "https://example.com/pin.png",
+        isFlat: flat.value,
+      }),
+    ]);
+    expect(harness.nativeLayerOptions()).toMatchObject({ isFlat: true });
+
+    flat.value = false;
+    await settleProps();
+    expect(harness.nativeLayersCreated() - layersBefore, "构造期选项 ⇒ 重建").toBe(2);
+    expect(harness.nativeLayerOptions(-1)).toMatchObject({ isFlat: false });
+    expect(harness.nativeLayerAttached(-2), "旧实例已经摘掉").toBe(false);
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointIconLayer 重建");
+  });
+
+  it("BPointLayer：落到扩展 API 的 point；扁平选项走 setOptions；命中载荷没有 dataIndex", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(BPointLayer, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        shape: "circle",
+        size: 18,
+        fillColor: "#1677ff",
+      }),
+    ]);
+    expect(harness.nativeLayersCreated() - layersBefore).toBe(1);
+    expect(harness.attached("overlay")).toBe(0);
+    // 扩展 API 是**扁平**选项（没有 style 袋）：Driver 的 setStyle 走整袋 setOptions
+    expect(harness.nativeLayerCalls()).toContain("setOptions");
+    expect(harness.nativeLayerOptions()).toMatchObject({ shape: "circle", size: 18, fillColor: "#1677ff" });
+
+    const layer = wrapper.findComponent(BPointLayer);
+    harness.simulateNativeExtensionPick({ key: "b" });
+    const clicks = layer.emitted("click")!;
+    const payload = clicks.at(-1)![0] as { hit: boolean; dataIndex: number; item: Station | null };
+    expect(payload.hit, "能解析出业务身份就算命中").toBe(true);
+    expect(payload.dataIndex, "扩展 API 的载荷里没有要素下标 ⇒ 如实给 -1，不编一个").toBe(-1);
+    expect(layer.emitted("item-click")!.at(-1)![0], "回传**最新**业务项").toBe(data.value[1]);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("BPointLayer 卸载");
+  });
+
+  it("BPointLayer：扩展 API 没有入口的字段显式告警，不静默收下", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = await mountMapTree(() => [
+      h(BPointLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        // `opacity` 走 setOpacity，而 Driver 对 `point` 只放开了 setVisible（其余继承成员未取证）
+        ...({ opacity: 0.5 } as Record<string, unknown>),
+      }),
+    ]);
+    expect(warnLines(warn).some((line) => line.includes("opacity")), "收下一个用不了的字段必须告警").toBe(true);
+    expect(harness.nativeLayerCalls(), "不该假装写了一次 setOpacity").not.toContain("setOpacity");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointLayer 字段不支持");
+  });
+
+  it("BMarkerCluster：默认走原生 ClusterLayer（1 个原生图层 + 0 个覆盖物）", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    expect(harness.nativeLayersCreated() - layersBefore, "整批点只落一个原生资源").toBe(1);
+    expect(harness.attached("overlay"), "原生引擎不建任何 Marker").toBe(0);
+    expect(harness.attached("layer")).toBe(1);
+    // 聚合参数走构造期选项；**没表态的键一个都不写**（官方默认值由 SDK 决定，本库不猜）
+    expect(harness.nativeLayerOptions()).toEqual({ idKey: "id", enablePicked: true });
+    const delivered = harness.nativeLayerData() as { features: Array<{ properties: Record<string, unknown> }> };
+    expect(delivered.features.map((f) => f.properties.id)).toEqual(["a", "b", "c"]);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("BMarkerCluster 原生引擎卸载");
+  });
+
+  it("BMarkerCluster：原生命中——簇只有元数据（items=null），单点回传最新业务项", async () => {
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+
+    harness.simulateNativeClusterHit({ clusterId: 7, pointCount: 3, latLng: { lng: 116.4, lat: 39.9 } });
+    const picks = cluster.emitted("cluster-click")!;
+    const pick = picks.at(-1)![0] as { engine: string; id: string; size: number; items: Station[] | null };
+    expect(pick.engine).toBe("native");
+    expect(pick.id).toBe("7");
+    expect(pick.size).toBe(3);
+    expect(pick.items, "官方没有公开「簇里有哪几个业务项」⇒ 如实给 null，而不是空数组").toBe(null);
+
+    // 数据换引用之后点未聚合的单点：必须拿到**新**对象（业务键在 value.id 上）
+    const updated: readonly Station[] = [STATIONS[0], { id: "b", lng: 116.41, lat: 39.92, name: "新对象" }, STATIONS[2]];
+    data.value = updated;
+    await settleProps();
+    harness.simulateNativeClusterSingleHit({ key: "b" });
+    expect(cluster.emitted("item-click")!.at(-1)![0], "载荷是最新业务对象").toBe(data.value[1]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 原生命中");
+  });
+
+  it("BMarkerCluster：可见性走原生 setVisible（隐藏 ≠ 摘掉）", async () => {
+    const visible = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
+    ]);
+    expect(harness.nativeLayerVisible()).toBe(true);
+
+    visible.value = false;
+    await settleProps();
+    expect(harness.nativeLayerVisible()).toBe(false);
+    expect(harness.attached("layer"), "隐藏不等于摘掉图层").toBe(1);
+
+    visible.value = true;
+    await settleProps();
+    expect(harness.nativeLayerVisible()).toBe(true);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 显隐");
+  });
+
+  it("BMarkerCluster：聚合参数变化 ⇒ 换实例（先摘后建，不会两份同图）", async () => {
+    const layersBefore = harness.nativeLayersCreated();
+    const radius = ref(60);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        clusterRadius: radius.value,
+      }),
+    ]);
+    expect(harness.nativeLayerOptions()).toMatchObject({ clusterRadius: 60 });
+
+    radius.value = 80;
+    await settleProps();
+    expect(harness.nativeLayersCreated() - layersBefore, "聚合参数是构造期选项 ⇒ 重建").toBe(2);
+    expect(harness.nativeLayerOptions(-1)).toMatchObject({ clusterRadius: 80 });
+    expect(harness.nativeLayerAttached(-2), "旧实例已摘掉").toBe(false);
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 重建");
+  });
+
+  it("BMarkerCluster：与 engine 不匹配的选项要告警（收下不生效属于假支持）", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        // gridSize 只对 markers 引擎有意义
+        gridSize: 64,
+      }),
+    ]);
+    expect(warnLines(warn).some((line) => line.includes("gridSize")), "必须点名那个不生效的选项").toBe(true);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 选项不匹配");
+  });
+
+  it("BMarkerCluster：engine 切换会换掉整条引擎（原生图层摘掉、Marker 建起来）", async () => {
+    // 实例账本不随 `harness.reset()` 清空 ⇒ 比增量（跨用例安全）
+    const layersBefore = harness.nativeLayersCreated();
+    const engine = ref<"native" | "markers">("native");
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+    ]);
+    expect(harness.nativeLayersCreated() - layersBefore).toBe(1);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.attached("overlay")).toBe(0);
+
+    engine.value = "markers";
+    await settleProps();
+    expect(harness.attached("layer"), "原生图层被摘掉").toBe(0);
+    expect(harness.nativeLayerAttached(-1), "旧实例真的从图上摘了").toBe(false);
+    expect(harness.attached("overlay"), "markers 引擎为每个簇 / 单点建一个 Marker").toBeGreaterThan(0);
+
+    // 反向也要成立：切回原生时覆盖物必须归零，否则两套引擎会同时留在图上
+    engine.value = "native";
+    await settleProps();
+    expect(harness.attached("overlay"), "markers 引擎的 Marker 全部摘掉").toBe(0);
+    expect(harness.attached("layer")).toBe(1);
+    expect(harness.nativeLayersCreated() - layersBefore, "换回来时新建了一个原生图层").toBe(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 引擎切换");
+  });
+
+  it("BMarkerCluster：重建之后点击仍然有效（listenerScope 必须每代一份）", async () => {
+    const radius = ref(60);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        clusterRadius: radius.value,
+      }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+
+    radius.value = 80;
+    await settleProps();
+    // 回归：早期实现把 listenerScope 做成**引擎级**的一份，重建时先 dispose 它、
+    // 再给新实例 add() 监听 ⇒ ResourceScope 会在 add 的那一刻立刻执行 disposer，
+    // 于是「改一次聚合参数」之后所有点击永久失效（且完全静默）。
+    harness.simulateNativeClusterHit({ clusterId: 9, pointCount: 2 });
+    expect(cluster.emitted("cluster-click"), "重建后簇点击仍然到得了组件").toBeTruthy();
+    harness.simulateNativeClusterSingleHit({ key: "b" });
+    expect(cluster.emitted("item-click"), "重建后单点点击仍然到得了组件").toBeTruthy();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster 重建后的监听");
+  });
+
+  it("BMarkerCluster：两个引擎都给同一份 cluster-change 读数", async () => {
+    const engine = ref<"native" | "markers">("native");
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: engine.value,
+        // 显式 zoom：markers 引擎的桶由 zoom + gridSize 决定，读地图 zoom 会让用例依赖 Fake 的视野
+        zoom: 8,
+      }),
+    ]);
+    const cluster = wrapper.findComponent(BMarkerCluster);
+    harness.simulateNativeClusterChange({ clusters: 2, singles: 1, zoom: 9 });
+    const nativeChange = cluster.emitted("cluster-change")!.at(-1)![0] as {
+      engine: string;
+      clusters: number;
+      singles: number;
+      zoom: number | null;
+    };
+    expect(nativeChange).toEqual({ engine: "native", clusters: 2, singles: 1, zoom: 9 });
+
+    engine.value = "markers";
+    await settleProps();
+    const markersChange = cluster.emitted("cluster-change")!.at(-1)![0] as {
+      engine: string;
+      clusters: number;
+      singles: number;
+    };
+    expect(markersChange.engine).toBe("markers");
+    expect(markersChange.clusters, "STATIONS 三点在 zoom 8 下同桶 ⇒ 一簇").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster change 读数");
+  });
+
+  it("BMarkerCluster：能力未就绪经 resource:error 交出，注入完成后同一组件可成功", async () => {
+    // 原生聚合是**异步注入**的扩展 API：注入完成前 create() 会抛 BMAP_CAPABILITY_UNSUPPORTED。
+    const namespace = fake.namespace as unknown as Record<string, unknown>;
+    const original = namespace.ClusterLayer;
+    const errors: unknown[] = [];
+    const data = ref<readonly Station[]>(STATIONS);
+    delete namespace.ClusterLayer;
+    try {
+      // 探针的组件定义只创建一次：每次渲染都 new 一个 component type 会让 Vue 整棵重挂载
+      const Probe = errorsProbe(errors);
+      const wrapper = await mountMapTree(() => [
+        h(Probe),
+        h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      ]);
+      expect(errors.length, "必须经 resource:error 交出，而不是冒成 unhandled rejection").toBeGreaterThan(0);
+      expect(harness.attached("layer")).toBe(0);
+
+      // 官方口径：同一个 Driver / 同一个组件在注入完成后重试即可成功
+      namespace.ClusterLayer = original;
+      data.value = [...STATIONS];
+      await settleProps();
+      expect(harness.attached("layer"), "能力就绪后不必换组件").toBe(1);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("BMarkerCluster 能力就绪");
+    } finally {
+      namespace.ClusterLayer = original;
+    }
+  });
+
+  it("大数据量（50k）：仍只有一个原生资源，SDK 调用不随点数增长", async () => {
+    const many: Station[] = Array.from({ length: 50_000 }, (_, i) => ({
+      id: `p${i}`,
+      lng: 116 + (i % 400) * 0.001,
+      lat: 39 + Math.floor(i / 400) * 0.001,
+    }));
+
+    const shapeBefore = harness.nativeLayersCreated();
+    const shape = ref<readonly Station[]>(many);
+    const shapeWrapper = await mountMapTree(() => [
+      h(BPointShapeLayer, { data: shape.value, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    expect(harness.nativeLayersCreated() - shapeBefore, "5 万个点也只有一个原生图层").toBe(1);
+    expect(harness.attached("overlay"), "没有任何逐点资源（= 不产生逐点 Vue watcher 的等价读数）").toBe(0);
+    // 调用数**与点数无关**：没有样式表态时挂载只写显隐 + 数据，两项
+    expect(harness.nativeLayerCalls()).toEqual(["setVisible", "setData"]);
+
+    // 更新：仍是同一个实例、只多一次 setData
+    shape.value = [...many, { id: "extra", lng: 1, lat: 1 }];
+    await settleProps();
+    expect(harness.nativeLayersCreated() - shapeBefore, "数据更新不换实例").toBe(1);
+    expect(harness.nativeLayerCalls()).toEqual(["setVisible", "setData", "setData"]);
+
+    await unmountAndSettle(shapeWrapper);
+    harness.assertIdle("大数据量 点图层");
+
+    const clusterBefore = harness.nativeLayersCreated();
+    const clusterWrapper = await mountMapTree(() => [
+      h(BMarkerCluster, { data: many, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    expect(harness.nativeLayersCreated() - clusterBefore).toBe(1);
+    expect(harness.attached("overlay")).toBe(0);
+    expect(harness.nativeLayerCalls()).toEqual(["setData"]);
+
+    await unmountAndSettle(clusterWrapper);
+    harness.assertIdle("大数据量 原生聚合");
+  });
+
+  it("空数据走 clearData（不是一条空的 FeatureCollection）", async () => {
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(BPointShapeLayer, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    expect(harness.nativeLayerCalls()).not.toContain("clearData");
+
+    data.value = [];
+    await settleProps();
+    // 官方为这类图层提供了 clearData：一条空 FeatureCollection 与「没有数据」语义不同
+    expect(harness.nativeLayerCalls().at(-1)).toBe("clearData");
+    expect(harness.nativeLayerData(), "图层还在，数据被清空").toBeNull();
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("空数据 clearData");
   });
 });

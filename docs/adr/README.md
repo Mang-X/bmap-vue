@@ -35,6 +35,7 @@
 | [2026-09-18](./2026-09-18-infowindow-host-and-ownership.md) | BInfoWindow 的 detached host、ownership/reconcile 与每地图归属（Teleport 渲染子树 / desired-observed 收敛 / `InfoWindowManager` / 尺寸合帧重绘） | Accepted |
 | [2026-09-18](./2026-09-18-overlay-event-matrix.md) | 覆盖物事件矩阵、字段 watch 源与集中弃用层（按 kind 派生事件面 / 三档载荷 / 大数组按根引用+版本 / 别名读取层 / 八个覆盖物共用内核） | Accepted |
 | [2026-09-18](./2026-09-18-data-layer-manager-and-point-collection.md) | 数据层收口（MarkerList / DataLayerManager 语义重写、泛型 GeoJSON 适配与批量点图层；删除 `BPointLayer` 与 `shouldFullReplace`） | Accepted |
+| [2026-09-19](./2026-09-19-native-point-layers-and-cluster.md) | 原生点图层与原生聚合（三个点图层共用 `pointLayerSpec` 内核 / `BPointCollection` → `BPointShapeLayer` / `BMarkerCluster` 原生优先且 `markers` 为显式选择 / 为 `point`、`cluster` 放开 `setVisible`） | Accepted |
 
 ## 约定
 

@@ -3,7 +3,7 @@
  * BMarkerList —— 逐项 Marker 列表（M6-MARKER-POINTCOLLECTION / issue #34）
  *
  * **每一项一个 SDK Marker**，配 `DataLayerManager` 做 keyed diff + RAF 合帧 + 最新项账本。
- * 适合中小规模、需要逐点交互的数据；大规模散点请用 `BPointCollection`（单个批量 SDK 资源）。
+ * 适合中小规模、需要逐点交互的数据；大规模散点请用 `BPointShapeLayer`（单个批量 SDK 资源）。
  *
  * ## 三条语义
  *

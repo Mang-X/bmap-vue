@@ -18,6 +18,12 @@
   3. ADR `2026-09-17-layer-spec-and-registry` 决策 2 里「图层账本只收底图图层」这一层含义 →
      本 ADR 决策 7 把 `kind` 放宽成两个 Facet 的并集（**注册表的释放顺序与不变式不变**）。
   旧 ADR 正文保持原样（它们是冻结文件），只在上面加指针。
+- ⚠️ 后续取代（2026-09-19，issue #35）→ ADR `2026-09-19-native-point-layers-and-cluster`：
+  1. 决策 1 的**命名**已取代：`BPointCollection` 更名为 `BPointShapeLayer`（发布前更名、不留别名）；
+  2. 非目标里「不实现其余原生图层组件（`PointIcon` / `Cluster` / …）——那是 #35 / #36」已部分落地：
+     `PointIcon` / `Cluster` 由 #35 实现（`Line` / `Fill` / `Heatmap` / `TrackLine` 仍归 #36 / #43）；
+  3. 决策 1 里**删除 `BPointLayer`** 的那半**仍然有效**：被删的是「每项一个 Marker」的组件；
+     #35 重新引入的同名组件落在**原生 `PointLayer`** 上，是另一件事。
 
 ## 背景
 

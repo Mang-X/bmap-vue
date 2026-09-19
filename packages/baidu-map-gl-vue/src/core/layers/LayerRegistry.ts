@@ -26,7 +26,7 @@
  *
  * ## 为什么账本也能收留**原生数据图层**（M6-MARKER-POINTCOLLECTION / issue #34）
  *
- * `BPointCollection` 用的是另一个 Facet（`NativeLayerDriver`，句柄品牌 `native-layer:*`），
+ * `BPointShapeLayer` 用的是另一个 Facet（`NativeLayerDriver`，句柄品牌 `native-layer:*`），
  * 但它与底图图层有一条完全相同的约束：**必须在 `map.destroy()` 之前被摘掉**。而
  * `MapRuntime` 的释放顺序是「child registries（含本 Registry）→ `map.destroy()` → 根
  * `resources`」，根 scope 太晚、组件自持的 scope 只覆盖「组件卸载」这一条路径

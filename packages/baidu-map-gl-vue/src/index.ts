@@ -51,7 +51,12 @@ export type {
   BMapDataProps,
   BMarkerListProps,
   BMarkerClusterProps,
-  BPointCollectionProps,
+  BMarkerClusterEngine,
+  BMapClusterPick,
+  BMapClusterChange,
+  BPointShapeLayerProps,
+  BPointIconLayerProps,
+  BPointLayerProps,
   BMapPointPick,
 } from "./types/components";
 // core 领域类型(供业务使用)
