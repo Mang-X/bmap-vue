@@ -12,7 +12,7 @@
  * | TrackLine 状态/进度/隐藏页面 | **未实现**（2026-09-19 的范围纠正：播放控制与页面可见性联动必须先有真实运行时证据）。本文件只锁「不依赖 TrackAnimation 私有字段」与「不建内部播放状态机」 | 欠账（见 ADR） |
  * | 大数据 setData/style update 与资源清理 | §1（data / style 的就地更新）、§4（卸载 / 隐藏两条路径 + 每节的 `assertIdle()`） | 更新与清理完整；**「大数据量」维度无专门用例**（夹具都是 1~2 个要素），登记为欠账 |
  * | Layer API 有统一基础语义和各自强类型 style | §1（同一批断言跑在 line / fill 上）、§5（逐 kind 能力面：不支持的字段不声明） | line / fill 完整（强类型 style）；heatmap / track-line 只有官方声明得到的那部分面，**没有强类型 style**——官方没有可核对的声明 |
- * | Feature State 与业务 ID 稳定对应 | §2 / §3（身份只来自 `properties[idKey]`，`id` 如实回传） | 完整 |
+ * | Feature State 与业务 ID 稳定对应 | §2 / §3（身份只来自 `properties[idKey]`；`id` = 可公开/可用于状态的 `string \| number`，`item` 按完整业务键恢复，两者解耦） | 完整 |
  * | TrackLine 不再依赖旧 TrackAnimation 私有字段 | §7（源码级反向门禁 + 正证守卫） | 完整 |
  * | 所有 Layer 均有明确 remove/clear 策略 | §4（永久销毁 = 解绑监听 → `removeLayer`，全程不调 `clearData`；「清空」由 `data: null` ⇒ 换一个没有数据的实例表达）；§1 的 `data` 三态用例 | 完整 |
  *
@@ -477,30 +477,39 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("Feature State 读回");
     });
 
-    it("idKey = \"\"（空字符串）也算**未声明**：不传给 SDK、命令拒绝、拾取给 id:null", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const { wrapper } = await mountOneVisual(0, { idKey: "" });
+    it('idKey=""（空字符串字段名）按**已声明**处理：构造 / 命令 / 拾取三侧口径一致', async () => {
+      // 空字符串是合法的 `PropertyKey`（`isUsableItemKey` 照收），上游也没有要求 `idKey` 非空。
+      // 因此三处必须同样把它当「已声明」——构造选项照传、命令照执行、拾取按该字段读取。
+      const blankKeyData = {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: [[116.3, 39.9], [116.4, 39.95]] },
+            properties: { "": "line-1" },
+          },
+        ],
+      };
+      const props = ref<Record<string, unknown>>({ data: blankKeyData, idKey: "" });
+      const wrapper = mountLayerTree(() => h(BLineLayer, props.value));
+      await settle();
 
-      // 写入侧：空字符串不是可用的字段名 ⇒ 不交给 SDK（避免 SDK 按 "" 去解析要素身份）
-      expect(harness.nativeLayerOptions(), "构造选项里不得出现空 idKey").not.toHaveProperty("idKey");
+      expect(harness.nativeLayerOptions(), "空字符串字段名照交给 SDK").toMatchObject({ idKey: "" });
 
-      // 状态命令侧：拒绝执行（与「未声明」同一条路径）
       const state = featureStateOf(wrapper, BLineLayer);
-      const calls = harness.nativeLayerCalls().length;
-      expect(() => state.update("a", { selected: true })).not.toThrow();
-      expect(state.get()).toEqual({});
-      expect(harness.nativeLayerCalls().length, "被拒绝的命令不得碰到 SDK").toBe(calls);
+      const before = harness.nativeLayerCalls().length;
+      state.update("line-1", { selected: true });
+      expect(harness.nativeLayerCalls().length, "身份已声明 ⇒ 命令真的执行").toBeGreaterThan(before);
+      expect(state.get("line-1")).toEqual({ "line-1": { selected: true } });
 
-      // 拾取侧：同样按「身份未知」处理 ⇒ 两侧口径一致（#106 评审第二轮 P2）
       const layer = wrapper.findComponent(BLineLayer);
       harness.simulateNativePick({ dataIndex: 0 });
       const pick = layer.emitted("click")!.at(-1)![0] as { hit: boolean; id: unknown };
       expect(pick.hit).toBe(true);
-      expect(pick.id, "拾取与状态命令不能各说一套").toBeNull();
-      expect(warnLines(warn).some((line) => line.includes("idKey")), "必须告警并点名 idKey").toBe(true);
+      expect(pick.id, 'properties[""] 就是业务键').toBe("line-1");
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("空 idKey");
+      harness.assertIdle("空字段名");
     });
 
     it("没有声明 idKey 时命令面**拒绝执行**（不让它悄悄落回 SDK 的默认身份）", async () => {

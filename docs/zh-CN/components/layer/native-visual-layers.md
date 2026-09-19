@@ -86,8 +86,8 @@ function onClick(pick: BMapFeaturePick) {
 | 字段 | 语义 |
 | --- | --- |
 | `hit` | 是否命中（未命中时 `dataIndex === -1`，事件**照常派发**） |
-| `id` | 业务身份 = `feature.properties[idKey]`；**认不出时为 `null`**（不猜官方的默认 `idKey`） |
-| `item` | 命中的业务项；线 / 面图层就是该要素的 `properties`，未命中为 `null` |
+| `id` | **可以公开 / 交给 Feature State 的业务身份** = `feature.properties[idKey]`；取值域 `string \| number`，不在这个域（例如 symbol）或 `idKey` 没声明时为 `null` |
+| `item` | 命中的业务项；线 / 面图层就是该要素的 `properties`，未命中为 `null`。**不受 `id` 取值域影响**（业务项按完整业务键恢复） |
 
 `id` 与 `item` 解耦是有意的：`properties` 是官方回包直接给出的，即使你没设置 `idKey` 也能拿到；
 而**要素状态**必须知道身份，所以 `idKey` 仍然要设置（见下）。
@@ -128,8 +128,8 @@ function highlight(id: string) {
 
 - **身份只有业务 id**：不用要素下标（`dataIndex`）、不按调用顺序配对、不缓存「我们以为 SDK 现在是
   什么状态」——`get()` 每次都读回 SDK；
-- **没有声明可用的 `idKey` 时命令会被拒绝**（告警一次，不做任何事）。「可用」= **非空字符串**：
-  `idKey=""` 与不写是同一件事（空字符串不是字段名，也不会交给 SDK）。「按 id 定位」在没有身份字段的
+- **没有声明 `idKey` 时命令会被拒绝**（告警一次，不做任何事）。「已声明」= **只要给了字符串就算**
+  （空字符串也是合法的字段名，与 `itemKey` 的 `PropertyKey` 口径一致）。「按 id 定位」在没有身份字段的
   图层上没有意义，而放它过去就等于悄悄依赖 SDK 的默认 `idKey`——那会让**拾取**（如实给出 `id: null`）
   与**状态命令**（装作知道身份）在同一张图层上形成两套身份语义；
 - **非法 id 在调用之前失败**（`BMAP_INVALID_ARGUMENT`），不会产生 SDK 调用；空数组 / 空映射是合法

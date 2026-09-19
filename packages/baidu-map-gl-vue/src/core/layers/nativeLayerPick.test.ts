@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import {
   readFeatureId,
+  readFeatureKey,
   readFeaturePropertiesAt,
   readNativeLayerPick,
   resolveFeaturePick,
@@ -117,6 +118,38 @@ describe("resolveFeaturePick：身份与业务项", () => {
     // falsy 业务项必须原样回传（`0` / `false` / `""` 都是合法业务项，不能当成「没找到」）
     const falsy = resolveFeaturePick({ event, idKey: "id", itemOf: () => 0 });
     expect(falsy.item).toBe(0);
+  });
+});
+
+describe("readFeatureKey / readFeatureId：业务键与公开 id 是两个取值域", () => {
+  const symbolKey = Symbol("k");
+
+  it("业务键与 itemScan 的口径一致：有限数字 / 字符串（含空串字段名）/ symbol 都算数", () => {
+    expect(readFeatureKey({ id: "a" }, "id")).toBe("a");
+    expect(readFeatureKey({ id: 7 }, "id")).toBe(7);
+    expect(readFeatureKey({ [""]: "blank" }, ""), "空字符串字段名照收").toBe("blank");
+    expect(readFeatureKey({ __id: symbolKey }, "__id"), "symbol 业务键照收").toBe(symbolKey);
+    expect(readFeatureKey({ id: Number.NaN }, "id"), "NaN 不是身份").toBeNull();
+    expect(readFeatureKey({}, "id")).toBeNull();
+    expect(readFeatureKey({ id: "a" }, undefined), "没声明 idKey ⇒ 业务键未知").toBeNull();
+  });
+
+  it("公开 id 只收 string | number（Feature State 的取值域）；symbol 如实为 null", () => {
+    expect(readFeatureId({ id: "a" }, "id")).toBe("a");
+    expect(readFeatureId({ id: 7 }, "id")).toBe(7);
+    expect(readFeatureId({ __id: symbolKey }, "__id"), "symbol 不冒充公开 id").toBeNull();
+    expect(readFeatureId({ id: null }, "id")).toBeNull();
+  });
+
+  it("symbol 业务键：item 仍然能找回（业务项恢复与公开 id 解耦）", () => {
+    const event = officialEvent({ dataIndex: 0, dataItem: { properties: { __id: symbolKey } } });
+    const pick = resolveFeaturePick({
+      event,
+      idKey: "__id",
+      itemOf: (key) => (key === symbolKey ? "业务项" : undefined),
+    });
+    expect(pick.id, "公开 id 为 null").toBeNull();
+    expect(pick.item, "但业务项必须找得回").toBe("业务项");
   });
 });
 

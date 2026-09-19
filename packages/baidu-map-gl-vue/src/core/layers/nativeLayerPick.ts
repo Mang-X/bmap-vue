@@ -26,6 +26,7 @@
  */
 
 import { normalizeIdField } from "../data/identity";
+import { isUsableItemKey } from "../data/itemScan";
 
 export interface NativeLayerPickPoint {
   readonly lng: number;
@@ -83,12 +84,33 @@ export function readFeatureProperties(dataItem: unknown): Record<string, unknown
 }
 
 /**
- * 业务身份（`properties[idKey]` 的值）。
+ * **业务键**：`properties[idKey]` 的原始值。
  *
- * 判据与 `core/data/featureState.ts` 的 id 判定一致（有限数字 / 字符串）——写入与读取必须是
- * 同一个口径，否则「写进去的状态查不回来」会表现为 SDK 的问题。官方 `updateState(keys: string |
- * number | …)` 的取值域也只有这两种，因此 **symbol 型身份不支持**（数据组件的 `itemKey` 允许
- * symbol，但那种 key 走到这里会如实返回 `null` 而不是被猜出来；见 ADR 的已知限制）。
+ * 取值域与 `core/data/itemScan.ts#isUsableItemKey` **完全一致**（有限数字 / 字符串 / symbol）——
+ * 数据组件的 `itemKey` 是 `PropertyKey`，函数式 key 的取值会被适配到 `properties.__id`，
+ * 那里完全可能是一个 symbol。判据走 `normalizeIdField`（唯一判定点），因此空字符串字段名
+ * （`properties[""]`）同样算数。
+ *
+ * 它是「找回业务项」的依据，与下面那个**公开 id** 是两件事（#106 第三轮评审）：某个键不便作为
+ * 公开 id（例如 symbol），也不能因此让 `item-click` 丢掉。
+ */
+export function readFeatureKey(
+  properties: Record<string, unknown> | null,
+  idKey: string | undefined,
+): PropertyKey | null {
+  const field = normalizeIdField(idKey);
+  if (!properties || field === undefined) return null;
+  const candidate = properties[field];
+  return isUsableItemKey(candidate) ? candidate : null;
+}
+
+/**
+ * **公开 id**：可以交给调用方、也可以用于 Feature State 的那部分业务身份。
+ *
+ * 取值域刻意收窄到 `string | number`：官方 `updateState(keys: string | number | …, …)` 的签名就是
+ * 这两种，而 `BMapPointPick.id` 的用途之一正是「拿去调状态命令」。symbol 型业务键在这里返回 `null`
+ * （不猜、也不转成字符串冒充身份），但它**不影响命中判定，也不影响业务项的恢复**——后者由
+ * `readFeatureKey` 与 `resolveFeaturePick` 的 `itemOf` 负责。
  *
  * `idKey` 没表态时**返回 null**（= 身份未知），而不是猜一个 `"id"`：官方 `idKey` 是可选项，
  * 它的默认值没有公开说明，猜错会让拾取稳定地认到错误的要素上。
@@ -97,14 +119,8 @@ export function readFeatureId(
   properties: Record<string, unknown> | null,
   idKey: string | undefined,
 ): string | number | null {
-  // 判定走 `normalizeIdField`（唯一判定点）：`""` / `undefined` 一律算「未声明身份」，
-  // 与要素状态命令面的前置条件用**同一个**判据（否则同一张图层上会出现两套身份语义）。
-  const field = normalizeIdField(idKey);
-  if (!properties || !field) return null;
-  const candidate = properties[field];
-  if (typeof candidate === "string") return candidate;
-  if (typeof candidate === "number") return Number.isFinite(candidate) ? candidate : null;
-  return null;
+  const key = readFeatureKey(properties, idKey);
+  return typeof key === "string" || typeof key === "number" ? key : null;
 }
 
 /**
@@ -171,7 +187,15 @@ export interface ResolveFeaturePickInput<Item> {
    * 判「找没找到」的返回值用 `undefined` 表示；实现**不要**用真值判断——`0` / `false` / `""`
    * 都是合法业务项（`BPointCollection` 的评审 #102 F4 就是这条）。
    */
-  readonly itemOf?: (id: string | number | null, properties: Record<string, unknown>) => Item | undefined;
+  /**
+   * 业务键 → 业务项（第二条参数是命中要素的 `properties`，可作兜底）。
+   *
+   * 收到的是 `readFeatureKey` 的原始值（可能是 symbol / 空字符串业务键），因此**不要**按
+   * 「公开 id 的取值域」去判它——那样会让 `item-click` 在 symbol 型 `itemKey` 上丢掉
+   * （#106 第三轮评审的 P1 回退）。用 `undefined` 表示「找不到」，且**不要**用真值判断：
+   * `0` / `false` / `""` 都是合法业务项。
+   */
+  readonly itemOf?: (key: PropertyKey | null, properties: Record<string, unknown>) => Item | undefined;
 }
 
 /**
@@ -202,11 +226,15 @@ export function resolveFeaturePick<Item = Record<string, unknown>>(
   const properties =
     readFeatureProperties(snapshot.dataItem) ??
     readFeaturePropertiesAt(input.sentData?.() ?? null, snapshot.dataIndex);
-  const id = readFeatureId(properties, input.idKey);
+  const key = readFeatureKey(properties, input.idKey);
+  const id = typeof key === "string" || typeof key === "number" ? key : null;
+  // `itemOf` 一旦提供就是**权威**的：它返回 `undefined` 表示「认不出业务项」，这时不能退回
+  // 「拿 properties 当业务项」——那会把「找不到」变成「找到了一个形状不对的东西」。
+  // 注意传的是**业务键**（`key`）而不是公开 `id`：symbol 键也要能找回业务项。
   const item =
     snapshot.hit && properties
       ? input.itemOf
-        ? input.itemOf(id, properties)
+        ? input.itemOf(key, properties)
         : (properties as unknown as Item)
       : undefined;
   return {

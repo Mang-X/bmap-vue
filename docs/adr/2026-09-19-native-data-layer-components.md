@@ -80,10 +80,18 @@
 5. **身份没声明就不执行**（#106 评审的建议项）：组件没给可用的 `idKey` 时五个命令一律拒绝并告警
    一次。放它们过去等价于悄悄依赖 SDK 的默认 `idKey`，于是同一张图层上会出现两套身份语义——拾取
    如实给出 `id: null`，状态命令却装作知道身份。
-6. **「已声明身份」的判定只有一处**（`core/data/identity.ts` 的 `normalizeIdField`）：**非空字符串**
-   才算声明，`""` / `undefined` / 非字符串一律算未声明。三处用到它的地方（构造期选项要不要交给 SDK、
-   要素状态的前置条件、拾取读取）共用这一个判据——第二轮评审的 P2 正是 `idKey: ""` 在写入侧被当成
-   已声明、在读取侧被当成未声明。
+6. **「已声明身份」的判定只有一处**（`core/data/identity.ts` 的 `normalizeIdField`）：**只要是字符串
+   就算声明**（含 `""`——`PropertyKey` 的既有口径，见 `isUsableItemKey`），只有 `undefined` / 非字符串
+   算未声明。三处用到它的地方（构造期选项要不要交给 SDK、要素状态的前置条件、拾取读取）共用这一个
+   判据——两轮评审分别撞到过它的两种错法：写入侧当已声明、读取侧当未声明（`idKey: ""`），以及
+   为了「统一」而**自行发明非空限制**（第三轮，见修正记录）。
+7. **业务键与公开 id 是两个取值域**（第三轮评审的收敛方向）：
+   - **业务键**（`readFeatureKey`）= `properties[idKey]` 的原始值，取值域与 `itemScan.isUsableItemKey`
+     一致（有限数字 / 字符串 / symbol）。它是「找回业务项」的依据；
+   - **公开 `id`**（`readFeatureId`）= 其中可公开、也可交给 Feature State 的那部分，取值域
+     `string | number`（官方 `updateState(keys: string | number | …)` 的签名）。
+   `resolveFeaturePick` 的 `itemOf` 收到的是**业务键**，因此 symbol 型身份不会让 `item-click` 丢掉；
+   `id` 为 `null` 时 `item` 仍可能有值，这是刻意且写进文档的。
 
 命令面通过组件 `ref` 暴露（`featureState`），**只给有该能力的 kind**：`BHeatmapLayer` /
 `BTrackLineLayer` 不 expose（挂一个每次调用都会抛的方法只是假面）。
@@ -170,8 +178,10 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 3. **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是 `forwardCallback` 包装，
    已经画出来的要素不会回溯变化；要立刻换样式请换 `data` 的引用触发重新解析。
 4. **原地修改同一份 `data` 不会被感知**：数据按引用比较（与 M7 图层内核同一条口径）。
-   拾取的业务身份只认 `properties[idKey]`（`string | number`）：`idKey` 没表态、或那个字段是
-   `NaN` / symbol 时，`id` 与 Feature State 都不工作（`item` 仍然可用，因为属性袋来自官方回包）。
+   拾取的业务身份只认 `properties[idKey]`：`idKey` 没表态、或那里的值不是有限数字 / 字符串
+   （`NaN` / symbol）时，**公开 `id` 为 `null`、Feature State 也不能用它**——但**业务项与
+   `item-click` 不受影响**（`item` 走业务键恢复；`BPointCollection` 的 symbol 型 `itemKey`
+   就是这种情况，有回归用例）。
 5. **`BPointCollection` 的 `toBaseOptions` 一类构造期项仍要换实例**：官方只有整袋
    `setBaseOptions` 且不自动重绘。
 6. **「不回退默认值」是刻意的**：字段由有值变为未表态时**重建实例**（并告警一次），因为官方没有
@@ -204,6 +214,13 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 | **[P2] `idKey = ""` 仍有两套身份口径**：写入侧用 `!== undefined`（把 `""` 当已声明并交给 SDK），读取侧用 falsy 判断（把 `""` 当未声明） | **成立** | 新增唯一判定点 `core/data/identity.ts#normalizeIdField`（非空字符串才算声明），构造期选项 / 要素状态前置 / 拾取读取三处共用；空字符串不再交给 SDK，命令拒绝，拾取给 `id: null`，并告警点名 |
 | 文档同步：PR 描述仍是旧契约（`解绑 → clearData → removeLayer`、卸载新增 `clearData()`） | **成立** | 同步 PR 描述的生命周期 / 迁移影响 / 验收对照 |
 
+### 第三轮（2026-09-19 晚，基线 `7834d89`）
+
+| 评审项 | 事实核对 | 处置 |
+| --- | --- | --- |
+| **[P1] `normalizeIdField` 把「图层 `idKey` 字段名」与 `BPointCollection.itemKey` 的既有 `PropertyKey` 契约混成一套，导致第五个消费者行为回退**：① `itemKey=""` 时 `ctorOptions` 仍把 `idKey: ""` 交给 SDK，而命令前置/拾取把它判成「未声明」⇒ 同一个组件内部又是两套语义，且相对迁移前是回退（旧实现会用 `properties[""]` 找回业务项）；② 函数式 `itemKey` 返回 symbol 时，`itemOf` 依赖被收窄的 `id` ⇒ `item-click` 从可用变成失效 | **成立**：`isUsableItemKey` 对空字符串与 symbol 照收；迁移前的 `readPick` 明确接受 `string \| number \| symbol` 并用它查 `ItemIndex<PropertyKey>`；PR 声称「行为等价」而公共 `itemKey` 类型仍是 `PropertyKey` ⇒ 属「实现收窄了、公共契约没收窄」 | ① `normalizeIdField` 只做**类型归一化**（非字符串 → 未声明），不再收窄取值（`""` 是合法字段名）；② 拆出**业务键** `readFeatureKey`（域 = `isUsableItemKey`）与**公开 id** `readFeatureId`（域 = `string \| number`，Feature State 的域）；③ `resolveFeaturePick` 的 `itemOf` 改收**业务键**，业务项恢复不再依赖公开 id；④ 补两条回归：`itemKey=""`（构造 / 命令 / 拾取三侧一致）与函数式 `itemKey` 返回 symbol（`id` 为 null 但 `item` / `item-click` 必须还在） |
+| 非阻塞文档项：PR 描述门禁表里的 `test:unit` 例数过期 | 成立 | 随本轮一并同步 |
+
 反证（改坏 ⇒ 用例必须红，改回 ⇒ 绿）：
 
 | 改坏 | 结果 |
@@ -211,7 +228,8 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 | 去掉 `sent !== null && dataIsEmpty()` 判据（退回「warn 后什么都不做」） | 3 条红：`「没有数据」由换实例表达: expected 1 to be 2`、`轨道清空: expected 1 to be 2`、`旧实例连同它的数据一起被丢弃: expected true to be false` |
 | 把 `clearData` 重新登记回四类专页图层 | 7 条红，含机器核对那条：`point-icon(PointIconLayer).clearData 落在 clearData() 上，而官方声明里没有它`，以及 facet 契约的 `SDK 实例缺少方法 clearData()`（Fake 不再宽容地接住） |
 | 去掉「不表态 + 换实例 ⇒ 继承上一代数据」 | 2 条红：`新实例必须继承上一代成功送出的数据: expected null to deeply equal …`、`新实例继承数据: expected null to deeply equal …` |
-| 让 `normalizeIdField` 接受空字符串 | 1 条红：`构造选项里不得出现空 idKey: expected { idKey: '', … } to not have property "idKey"` |
+| 让 `normalizeIdField` 接受空字符串（第二轮的口径） | 2 条红：`空字符串字段名照收，值是业务键: expected null to be 'a'`、`空字符串字段名照交给 SDK: expected { enablePicked: true, … } to match object { idKey: '' }` |
+| 让 `itemOf` 收到收窄后的公开 `id`（而不是业务键） | 1 条红：`业务项必须仍然能找回: expected null to be { Object (id, lng, ...) }` |
 
 ## 非目标与欠账
 

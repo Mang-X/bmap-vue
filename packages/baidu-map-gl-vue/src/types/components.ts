@@ -402,19 +402,19 @@ export interface BMapPointPick<Item> {
   /** 命中的要素在本次 `setData` 里的下标；未命中为 `-1`。 */
   dataIndex: number;
   /**
-   * 业务身份（`feature.properties[idKey]` 的值）；**确认不到时为 `null`**。
+   * **可以公开 / 交给 Feature State 的业务身份**（`feature.properties[idKey]`）；确认不到时为 `null`。
    *
-   * 「确认不到」有两种：组件没有 `idKey` 可依据，或者 `properties[idKey]` 不是有限数字 / 字符串。
-   * 两种都如实返回 `null`——本库不按事件顺序 / 下标猜一个身份出来，也不猜官方的默认 `idKey`。
+   * 取值域是 `string | number`（官方 `updateState(keys: string | number | …)` 的签名）：`idKey` 没声明、
+   * 或者 `properties[idKey]` 不在这个域（`NaN` / symbol）时如实返回 `null`——本库不按事件顺序 / 下标猜
+   * 身份，也不猜官方的默认 `idKey`，更不会把 symbol 转成字符串冒充身份。
    */
   id: string | number | null;
   /**
    * 命中的业务项（**最新**的那个）；未命中时为 `null`。
    *
-   * 与 `id` 是**两件事**：`item` 只要求「命中并且读到了属性」，因此 `id` 为 `null` 时 `item`
-   * 往往仍然有值（例如没设置 `idKey` 时，线 / 面图层依然能给出命中要素的 `properties`）。
-   * 逐项数据组件（`BPointCollection`）的业务对象与要素分离，它的 `item` 需要靠身份去索引，
-   * 因此那一类组件在 `id` 为 `null` 时 `item` 也是 `null`。
+   * 与 `id` 是**两件事**（`id` 的取值域更窄，见上）：`item` 只要求「命中并且能按**业务键**找回」，
+   * 因此 `id` 为 `null` 时 `item` 往往仍然有值——没设置 `idKey` 时线 / 面图层仍会给出命中要素的
+   * `properties`；函数式 `itemKey` 返回 symbol 时逐项数据组件（`BPointCollection`）也照样回传最新业务项。
    */
   item: Item | null;
   /** 地理坐标（未命中时也有）。 */
@@ -589,8 +589,9 @@ export interface BMapNativeLayerPickOptions {
   /**
    * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`。
    *
-   * 它是拾取与 Feature State 的**唯一身份口径**：不设置（或设为空字符串）时拾取会如实返回
-   * `id: null`、Feature State 的五个命令会被拒绝并告警一次（本库不猜官方默认值）。
+   * 它是拾取与 Feature State 的**唯一身份口径**：不设置时拾取会如实返回 `id: null`、
+   * Feature State 的五个命令会被拒绝并告警一次（本库不猜官方默认值）。
+   * 空字符串是**合法字段名**（`PropertyKey` 口径），不会被视为「未声明」。
    */
   idKey?: string;
   /** 来源坐标系：`BD09LL`（默认）/ `BD09MC` / `GCJ02`。 */

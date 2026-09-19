@@ -2970,6 +2970,82 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     await unmountAndSettle(wrapper);
     harness.assertIdle("BPointCollection 命令面");
   });
+
+  it('BPointCollection：itemKey=""（空字符串字段名）时构造 / 拾取 / 命令三侧口径一致', async () => {
+    // 空字符串是合法的 `PropertyKey`（`isUsableItemKey` 照收），因此这里唯一正确的行为是「照收」：
+    // SDK 的 idKey、数据里的字段名、Feature State 的身份判定必须是同一个，不能出现
+    // 「SDK 认为有身份、组件自己认为没有」的分叉（#106 第三轮评审的 P1 回退）。
+    interface BlankKeyStation {
+      "": string;
+      lng: number;
+      lat: number;
+    }
+    const items: BlankKeyStation[] = [
+      { "": "a", lng: 116.404, lat: 39.915 },
+      { "": "b", lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: items,
+        itemKey: "",
+        getPosition: (item: BlankKeyStation) => ({ lng: item.lng, lat: item.lat }),
+      }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 0 });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: BlankKeyStation | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "空字符串字段名照收，值是业务键").toBe("a");
+    expect(pick.item, "能找回业务项").toBe(items[0]);
+    expect(layer.emitted("item-click"), "item-click 必须派发").toHaveLength(1);
+
+    // 命令面同样按「已声明」处理：不会出现「拾取说有身份、命令说没有」
+    const state = layer.vm.featureState;
+    state.update("a", { selected: true });
+    expect(state.get("a"), "空字符串字段名的身份可写可读").toEqual({ a: { selected: true } });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 空字段名");
+  });
+
+  it("BPointCollection：函数式 itemKey 返回 symbol 时，命中仍要回传最新业务项", async () => {
+    // `itemKey` 的公开类型是 `keyof Item | ((item) => PropertyKey)`，PropertyKey 含 symbol；
+    // 适配层会把 key 写进 `properties.__id`。symbol 不能作为公开 `id`（Feature State 的取值域是
+    // string | number），但**业务项恢复与 item-click 不受它影响**（#106 第三轮评审的 P1 回退）。
+    const keyA = Symbol("a");
+    const keyB = Symbol("b");
+    const items: Station[] = [
+      { id: keyA as unknown as string, lng: 116.404, lat: 39.915 },
+      { id: keyB as unknown as string, lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: items,
+        itemKey: (item: Station) => item.id as unknown as PropertyKey,
+        getPosition: stationPosition,
+      }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 1 });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Station | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "symbol 不冒充公开 id").toBeNull();
+    expect(pick.item, "业务项必须仍然能找回").toBe(items[1]);
+    expect(layer.emitted("item-click")?.[0]?.[0], "item-click 必须派发").toBe(items[1]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection symbol 业务键");
+  });
 });
 
 /* ------------------------------------------------------------------ 评审（PR #102）的组件级复现 */

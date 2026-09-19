@@ -215,8 +215,10 @@ function handlePick(event: unknown): void {
     idKey: lastAdapted?.idKey,
     sentData: resource.sentData,
     // 业务对象与要素分离：身份 → 最新业务项由本组件的索引回答（找不到就是找不到，
-    // 不退回「拿 properties 当业务项」）
-    itemOf: (id) => (id === null ? undefined : items.latest(id)),
+    // 不退回「拿 properties 当业务项」）。
+    // 参数是**业务键**的原始值（`PropertyKey`，含 symbol 与空字符串业务键），不是公开 `id`
+    // ——按公开 id 的 `string | number` 域去判会让 symbol 型 `itemKey` 丢掉 `item-click`。
+    itemOf: (key) => (key === null ? undefined : items.latest(key)),
   });
 
   emit("click", pick);

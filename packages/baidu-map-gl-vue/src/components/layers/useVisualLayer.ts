@@ -179,9 +179,9 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
                 `${component}:pick-identity`,
                 `[${component}] 命中了要素但认不出业务身份（载荷里的 \`id\` 为 null）：` +
                   (normalizeIdField(props.idKey) === undefined
-                    ? "本组件没有给出可用的 idKey（未声明或为空字符串）⇒ 无法知道哪个字段是业务 id" +
+                    ? "本组件没有声明 idKey ⇒ 无法知道哪个字段是业务 id" +
                       "（Feature State 与按 id 定位也会失败）"
-                    : `当前 idKey="${normalizeIdField(props.idKey)}" 指向的字段不是有限数字 / 字符串`),
+                    : `当前 idKey="${String(normalizeIdField(props.idKey))}" 指向的字段不是有限数字 / 字符串`),
               );
             }
             options.emitPick?.(name, pick);
