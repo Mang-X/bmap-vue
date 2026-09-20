@@ -1,6 +1,6 @@
 {
   "version": "3.0.0-beta.0",
-  "generatedAt": "2026-09-17T08:56:36.089Z",
+  "generatedAt": "2026-09-19T11:11:04.978Z",
   "components": [
     "BMapProvider",
     "BMap",
@@ -45,6 +45,10 @@
     "BWMSLayer",
     "BWMTSLayer",
     "BRasterLayer",
+    "BLineLayer",
+    "BFillLayer",
+    "BHeatmapLayer",
+    "BTrackLineLayer",
     "BPanorama",
     "BPanoramaLabel"
   ]

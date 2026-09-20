@@ -32,6 +32,10 @@ import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BC
 import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
 import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BGeoJSONLayer.vue";
 import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
+import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
 import BMarkerList from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerList.vue";
 import BMarkerCluster from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerCluster.vue";
 import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
@@ -2829,6 +2833,245 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("Map 销毁后组件卸载");
+  });
+});
+
+/* ------------------------------------------------------------------ 原生批量可视化图层（M6 / #36） */
+
+/**
+ * 四个原生批量可视化图层的**组件级场景**（详细的分 kind 断言在
+ * `v3-native-data-layers.test.ts`，那份文件按 issue 的验收条目组织）。
+ *
+ * 这里只写领域语言：资源数量、挂载读数、拾取载荷、命令面，以及每节末尾的泄漏门禁。
+ */
+const LINES = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: [[116.3, 39.9], [116.4, 39.95]] },
+      properties: { id: "a", name: "一路" },
+    },
+    {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: [[116.5, 39.9], [116.6, 39.95]] },
+      properties: { id: "b", name: "二路" },
+    },
+  ],
+};
+
+const POLYGON_AREAS = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[116.3, 39.9], [116.4, 39.9], [116.4, 39.95], [116.3, 39.9]]],
+      },
+      properties: { id: "area-1" },
+    },
+  ],
+};
+
+const TRACK_LINE = {
+  type: "Feature",
+  geometry: { type: "LineString", coordinates: [[116.3, 39.9], [116.4, 39.95]] },
+  properties: { id: "track" },
+};
+
+describe("原生批量可视化图层（M6 / #36）", () => {
+  it("四种图层同图共存：各 1 个 SDK 资源；卸载后不留残留", async () => {
+    // 实例账本**刻意**不随 `harness.reset()` 清空（跨用例安全靠负索引），因此这里比的是增量。
+    const layersBefore = harness.nativeLayersCreated();
+    const wrapper = await mountMapTree(() => [
+      h(BLineLayer, { data: LINES, idKey: "id" }),
+      h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" }),
+      h(BHeatmapLayer, { data: POLYGON_AREAS }),
+      h(BTrackLineLayer, { data: TRACK_LINE }),
+    ]);
+
+    expect(harness.nativeLayersCreated() - layersBefore, "四个组件 = 四个原生资源").toBe(4);
+    expect(harness.attached("layer")).toBe(4);
+    expect(harness.attached("overlay"), "没有逐项覆盖物").toBe(0);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("layer")).toBe(0);
+    harness.assertIdle("原生可视化图层同图共存");
+  });
+
+  it("线图层：数据更新只改数据；构造期项变化才换实例", async () => {
+    const data = ref<object>(LINES);
+    const picked = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BLineLayer, { data: data.value, idKey: "id", enablePicked: picked.value }),
+    ]);
+    const created = harness.nativeLayersCreated();
+
+    data.value = { type: "FeatureCollection", features: [LINES.features[0]] };
+    await settleProps();
+    expect(harness.nativeLayersCreated(), "数据变化不换实例").toBe(created);
+
+    picked.value = false;
+    await settleProps();
+    expect(harness.nativeLayersCreated(), "构造期项变化换实例").toBe(created + 1);
+    expect(harness.attached("layer"), "同一时刻只有一个实例挂在图上").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("线图层更新");
+  });
+
+  it("拾取：命中回传业务身份与属性；未命中只有 hit:false", async () => {
+    const wrapper = await mountMapTree(() => [h(BLineLayer, { data: LINES, idKey: "id" })]);
+    const layer = wrapper.findComponent(BLineLayer);
+
+    harness.simulateNativePick({ dataIndex: 1 });
+    const hit = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Record<string, unknown> | null;
+    };
+    expect(hit.hit).toBe(true);
+    expect(hit.id, "身份来自要素的 properties[idKey]").toBe("b");
+    expect(hit.item).toMatchObject({ id: "b", name: "二路" });
+
+    harness.simulateNativePick({ dataIndex: -1 });
+    const miss = layer.emitted("click")!.at(-1)![0] as { hit: boolean; item: unknown };
+    expect(miss.hit, "官方未命中也派发事件").toBe(false);
+    expect(miss.item).toBeNull();
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("线图层拾取");
+  });
+
+  it("要素状态命令面：按业务 id 写状态，读回的是 SDK 的当前值", async () => {
+    const wrapper = await mountMapTree(() => [h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" })]);
+    const state = wrapper.findComponent(BFillLayer).vm.featureState;
+
+    state.update(["area-1"], { selected: true });
+    expect(state.get("area-1")).toEqual({ "area-1": { selected: true } });
+
+    state.clear();
+    expect(state.get(), "清空后读回为空").toEqual({});
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("要素状态命令面");
+  });
+
+  it("BPointCollection 也暴露同一份命令面（迁移到共享内核之后）", async () => {
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+    ]);
+    const state = wrapper.findComponent(BPointCollection).vm.featureState;
+
+    state.update("a", { selected: true });
+    expect(state.get("a"), "状态键是业务 id（itemKey 指向的字段）").toEqual({ a: { selected: true } });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 命令面");
+  });
+
+  it('BPointCollection：itemKey=""（空字符串字段名）时构造 / 拾取 / 命令三侧口径一致', async () => {
+    // 空字符串是合法的 `PropertyKey`（`isUsableItemKey` 照收），因此这里唯一正确的行为是「照收」：
+    // SDK 的 idKey、数据里的字段名、Feature State 的身份判定必须是同一个，不能出现
+    // 「SDK 认为有身份、组件自己认为没有」的分叉（#106 第三轮评审的 P1 回退）。
+    interface BlankKeyStation {
+      "": string;
+      lng: number;
+      lat: number;
+    }
+    const items: BlankKeyStation[] = [
+      { "": "a", lng: 116.404, lat: 39.915 },
+      { "": "b", lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: items,
+        itemKey: "",
+        getPosition: (item: BlankKeyStation) => ({ lng: item.lng, lat: item.lat }),
+      }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 0 });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: BlankKeyStation | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "空字符串字段名照收，值是业务键").toBe("a");
+    expect(pick.item, "能找回业务项").toBe(items[0]);
+    expect(layer.emitted("item-click"), "item-click 必须派发").toHaveLength(1);
+
+    // 命令面同样按「已声明」处理：不会出现「拾取说有身份、命令说没有」
+    const state = layer.vm.featureState;
+    state.update("a", { selected: true });
+    expect(state.get("a"), "空字符串字段名的身份可写可读").toEqual({ a: { selected: true } });
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 空字段名");
+  });
+
+  it("BPointCollection：回包只给部分 properties（缺业务键）时，item-click 仍要派发", async () => {
+    // #106 第四轮评审的组件级复现：SDK 回包里 `properties` 存在但没有 idKey 字段，
+    // 旧实现会按 dataIndex 回到本库自己送出的数据再取一次 key —— 这条兜底不能丢。
+    const items: Station[] = [
+      { id: "a", lng: 116.404, lat: 39.915 },
+      { id: "b", lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, { data: items, itemKey: "id", getPosition: stationPosition }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 0, properties: { name: "partial" } });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Station | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "业务键从快照兜底恢复").toBe("a");
+    expect(pick.item, "业务项按恢复出来的 key 索引").toBe(items[0]);
+    expect(layer.emitted("item-click"), "item-click 必须派发").toHaveLength(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection 部分回包");
+  });
+
+  it("BPointCollection：函数式 itemKey 返回 symbol 时，命中仍要回传最新业务项", async () => {
+    // `itemKey` 的公开类型是 `keyof Item | ((item) => PropertyKey)`，PropertyKey 含 symbol；
+    // 适配层会把 key 写进 `properties.__id`。symbol 不能作为公开 `id`（Feature State 的取值域是
+    // string | number），但**业务项恢复与 item-click 不受它影响**（#106 第三轮评审的 P1 回退）。
+    const keyA = Symbol("a");
+    const keyB = Symbol("b");
+    const items: Station[] = [
+      { id: keyA as unknown as string, lng: 116.404, lat: 39.915 },
+      { id: keyB as unknown as string, lng: 116.5, lat: 39.9 },
+    ];
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: items,
+        itemKey: (item: Station) => item.id as unknown as PropertyKey,
+        getPosition: stationPosition,
+      }),
+    ]);
+
+    const layer = wrapper.findComponent(BPointCollection);
+    harness.simulateNativePick({ dataIndex: 1 });
+    const pick = layer.emitted("click")!.at(-1)![0] as {
+      hit: boolean;
+      id: string | number | null;
+      item: Station | null;
+    };
+    expect(pick.hit).toBe(true);
+    expect(pick.id, "symbol 不冒充公开 id").toBeNull();
+    expect(pick.item, "业务项必须仍然能找回").toBe(items[1]);
+    expect(layer.emitted("item-click")?.[0]?.[0], "item-click 必须派发").toBe(items[1]);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection symbol 业务键");
   });
 });
 

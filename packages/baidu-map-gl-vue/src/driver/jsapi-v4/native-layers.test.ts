@@ -5,6 +5,8 @@
  * 外加 `supports()` 与实现的一致性（「不支持的操作必须显式失败」这条不变式不能只写在注释里）。
  */
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
 import type { FakeV4LineLayer, FakeV4PointLayer } from "../../../../test-utils";
 import {
@@ -164,12 +166,29 @@ describe("v4 Native Layer Facet：挂载与释放", () => {
 describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", () => {
   const collection = { type: "FeatureCollection", features: [{ type: "Feature" }] };
 
-  it("setData / clearData 落到实例", () => {
+  it("setData 落到实例；clearData 在四类专页图层上**显式失败**（官方没有这个入口）", () => {
     const layer = layers.create("line");
+    layers.setData(layer, collection);
+
+    const raw = layer.raw as FakeV4LineLayer;
+    expect(raw.callLog).toEqual(["setData"]);
+    expect(raw.data).toBe(collection);
+
+    // #106 评审 P1：这一族只有 setData/getData（上游 .d.ts + 仓库内官方参考都这么说），
+    // 因此 `clearData` 必须**显式失败**，而不是靠替身宽容地接住。
+    expect(layers.supports("line", "clearData")).toBe(false);
+    expect(() => layers.clearData(layer)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+    expect(raw.callLog, "被拒绝的调用不得碰到 SDK").toEqual(["setData"]);
+  });
+
+  it("扩展 API 的 clearData 保留（官方扩展参考明确列出它）", () => {
+    const layer = layers.create("heatmap");
     layers.setData(layer, collection);
     layers.clearData(layer);
 
-    const raw = layer.raw as FakeV4LineLayer;
+    const raw = layer.raw as unknown as { callLog: string[]; data: unknown };
     expect(raw.callLog).toEqual(["setData", "clearData"]);
     expect(raw.data).toBeNull();
   });
@@ -244,6 +263,48 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
       expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
     );
   });
+
+  it("全量替换走 replaceAllState：未覆盖到的 id 必须消失（不是合并）", () => {
+    const layer = layers.create("fill");
+    const raw = layer.raw as unknown as { state: Record<string, unknown>; callLog: string[] };
+
+    layers.updateState(layer, ["a", "b"], { selected: true });
+    layers.replaceState(layer, { b: { hovered: true } });
+
+    expect(raw.state).toEqual({ b: { hovered: true } });
+    expect(raw.callLog).toContain("replaceAllState");
+  });
+
+  it("读回走 getAllState：返回业务 id → 状态的映射，且不是内部引用", () => {
+    const layer = layers.create("line");
+    layers.updateState(layer, [1, "b"], { selected: true });
+
+    const state = layers.getState(layer);
+    // 数字 id 在 SDK 侧就是字符串键（官方回包是普通对象）
+    expect(state).toEqual({ "1": { selected: true }, b: { selected: true } });
+
+    state["1"]!.selected = false;
+    expect(layers.getState(layer)["1"], "改回包不得污染 SDK 侧状态").toEqual({ selected: true });
+  });
+
+  it("读回的形状违规显式失败（回包不是对象时不当成空状态）", () => {
+    const layer = layers.create("line");
+    const raw = layer.raw as unknown as { getAllState: () => unknown };
+    raw.getAllState = () => 42;
+    expect(() => layers.getState(layer)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("状态读写在新操作上同样对扩展 API 显式失败", () => {
+    const layer = layers.create("heatmap");
+    expect(() => layers.replaceState(layer, {})).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+    expect(() => layers.getState(layer)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+  });
 });
 
 describe("v4 Native Layer Facet：拾取", () => {
@@ -298,4 +359,92 @@ describe("v4 Native Layer Facet：supports() 与实现一致", () => {
       );
     },
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* 操作面 ↔ 官方声明（#106 评审 P1 的回归门禁）                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 归一化操作 → 它在**官方声明**里对应的成员（逐条取自 `invoke()` 与各方法实现）。
+ *
+ * 这张表是「操作面不许凭印象增减」的机器证据：#106 评审的 P1 正是 `clearData` 被登记进了四类
+ * 专页图层的操作表，而官方声明里根本没有它——下面那条用例会把这种情况抓回来，而不是靠替身
+ * 「宽容地接住」（替身比真实契约宽容 = 把不存在的 capability 测绿）。
+ */
+const OPERATION_MEMBERS: Readonly<Record<NativeLayerOperation, readonly string[]>> = {
+  setData: ["setData"],
+  clearData: ["clearData"],
+  setStyle: ["setStyleOptions", "doOnceDraw"],
+  setVisible: ["setVisible"],
+  setOpacity: ["setOpacity"],
+  setZIndex: ["setZIndex"],
+  setZoomRange: ["setMinZoom", "setMaxZoom"],
+  updateState: ["updateState"],
+  removeState: ["removeState"],
+  clearState: ["clearState"],
+  replaceState: ["replaceAllState"],
+  getState: ["getAllState"],
+  setEnablePicked: ["setBaseOptions"],
+  hitTest: ["hitTest"],
+};
+
+/** 四类「有类声明」的 kind（扩展 API 没有声明，由官方扩展参考的表钉住，不在这条检查里）。 */
+const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
+  ["point-icon", "PointIconLayer"],
+  ["point-shape", "PointShapeLayer"],
+  ["line", "LineLayer"],
+  ["fill", "FillLayer"],
+];
+
+/**
+ * 读出某个官方类在 `.d.ts` 里**声明过的成员名**。
+ *
+ * 只扫 `class <name> { … }` 这一段（用 2 空格缩进的 `}` 收尾）：同文件里的 `XxxOptions` 接口
+ * 字段也在 4 空格缩进上，整文件扫会把选项名混进成员表。成员名后必须跟 `(` 或 `<`——**泛型签名**
+ * （`addEventListener<K extends …>(…)`）必须也能被解析出来，否则「扫不到」会被误判成「官方没有」
+ * （这是本仓库踩过的坑）。
+ */
+function declaredMembersOf(ctor: string): string[] {
+  const require = createRequire(import.meta.url);
+  const path = require.resolve(`@baidumap/jsapi-v4-types/layer/${ctor}.d.ts`);
+  const source = readFileSync(path, "utf8");
+  const start = source.indexOf(`class ${ctor} {`);
+  expect(start, `${ctor}.d.ts 里应当有 class ${ctor} 声明`).toBeGreaterThan(-1);
+  const body = source.slice(start);
+  const end = body.indexOf("\n  }");
+  const declaration = end === -1 ? body : body.slice(0, end);
+  return [...declaration.matchAll(/^ {4}(\w+)\s*[<(]/gm)].map((match) => match[1]!);
+}
+
+describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
+  it("四类专页图层支持的每个操作，都能映射到官方 .d.ts 里声明过的成员", () => {
+    for (const [kind, ctor] of DECLARED_CTORS) {
+      const declared = declaredMembersOf(ctor);
+      for (const operation of OPERATIONS) {
+        if (!layers.supports(kind, operation)) continue;
+        for (const member of OPERATION_MEMBERS[operation]) {
+          expect(
+            declared,
+            `${kind}(${ctor}).${operation} 落在 ${member}() 上，而官方声明里没有它`,
+          ).toContain(member);
+        }
+      }
+    }
+  });
+
+  it("解析器本身不能恒真：泛型成员要读得到、未声明的成员必须读不到", () => {
+    const declared = declaredMembersOf("LineLayer");
+    expect(declared.length, "读到的应当是一整个类体").toBeGreaterThan(20);
+    expect(declared, "普通方法").toContain("setData");
+    expect(declared, "泛型方法（只匹配「名字 + (」会漏）").toContain("addEventListener");
+    expect(declared, "未被声明的方法不得凭空出现").not.toContain("clearData");
+    expect(declared, "同文件里 XxxOptions 的字段不得混进来").not.toContain("idKey");
+  });
+
+  it("四类专页图层的操作表里没有 clearData（这一族的「清空」靠实例生命周期表达）", () => {
+    for (const [kind] of DECLARED_CTORS) {
+      expect(layers.supports(kind, "clearData"), `${kind} 不该声称有 clearData`).toBe(false);
+    }
+  });
 });

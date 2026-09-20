@@ -80,3 +80,26 @@ export function devWarn(message: string, context?: Record<string, unknown>): voi
   if (process.env?.NODE_ENV === "production") return;
   logger.warn(message, context);
 }
+
+/**
+ * 「同一个 key 只报一次」的开发期告警。
+ *
+ * 数据驱动组件里的告警常常出现在**每次 props 变化**的路径上（拾取认不出身份、某个 kind 没有
+ * 某个入口…），逐个刷日志会把真正的问题淹掉；而同一条告警只出现一次，又足以让人知道要改什么。
+ *
+ * 去重键由调用方给（通常是「组件:场景」），因此同一场景下不同原因各自报一条 —— 用一句消息当
+ * 键会让「改了文案就重新开始刷」变成静默行为。
+ *
+ * 与 Driver 侧的 `createWarnOnce`（`driver/jsapi-v4/internal.ts`）是**两份**实现，刻意不合并：
+ * core 不能反向依赖 Driver 内部模块，而且两者的输出通道不同——这里是 `devWarn`（生产静音，面向
+ * 库使用者的用法提示），Driver 那份是 `logger.warn`（运行时故障，任何环境都要可见）。
+ */
+export function createDevWarnOnce(): (key: string, message: string) => void {
+  const seen = new Set<string>();
+  return (key, message) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    devWarn(message);
+  };
+}
+
