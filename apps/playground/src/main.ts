@@ -26,7 +26,7 @@ import {
   BContextMenu,
   BBezierCurve,
   BMapMask,
-  BPointShapeLayer,
+  BPointCollection,
   BPointIconLayer,
   BPointLayer,
   BZoom,
@@ -104,7 +104,7 @@ function bulkScene(): () => unknown {
   const pts = shallowRef(demoPoints())
   return () =>
     h(BMap, baseMapProps(), () => [
-      h(BPointShapeLayer, {
+      h(BPointCollection, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),

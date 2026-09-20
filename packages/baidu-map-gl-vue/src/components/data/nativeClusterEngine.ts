@@ -43,7 +43,7 @@ import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data
 import { itemKeyReader } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
 import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
-import { readPickValue } from "../../core/data/pointLayerSpec";
+import { readPickValue } from "../../core/layers/nativeLayerPick";
 import { readPayloadPointLike } from "../../core/data/points";
 import { devWarn } from "../../core/logger";
 import type { ClusterEngine, ClusterEngineInput } from "./clusterEngine";
@@ -100,6 +100,13 @@ export function createNativeClusterEngine<Item>(
   let instanceKey = "";
   let warnedUnresolved = false;
   let warnedIncompleteHit = false;
+  /**
+   * 上一次严格摘除是否**未确认**（`removeLayer` 抛错 ⇒ 旧图层可能已不在图上）。
+   *
+   * ⚠️ 这个状态**由本引擎自持**：账本（`LayerRegistry`）不复制挂载态 —— 那是消费方的事实
+   * （#112 评审指出 record 会在资源实际 detached 时持续报告 attached，属「重复且说谎的状态源」）。
+   */
+  let detachUnknown = false;
   /**
    * 摘除期间的业务回调门（由账本的严格 `detach()` 打开 / 关闭）。
    *
@@ -352,7 +359,7 @@ export function createNativeClusterEngine<Item>(
     if (!handle) return;
     // 挂载态 `unknown` ⇒ 一个字都不写（它可能已经不在图上）。收敛交给下一次替换路径：
     // `recreate()` → `record.detach()`，账本会把 `unknown` 收敛成确定状态。
-    if (record?.attachment === "unknown") return;
+    if (detachUnknown) return;
     const key = dataInputKey();
     if (key === appliedDataKey && adapted) return;
     const next = adaptPoints(props.data, {
@@ -375,7 +382,7 @@ export function createNativeClusterEngine<Item>(
   function applyVisible(): void {
     if (!handle) return;
     // 同 `applyData`：挂载态未知时不写
-    if (record?.attachment === "unknown") return;
+    if (detachUnknown) return;
     const desired = props.visible !== false;
     if (appliedVisible === desired) return;
     nativeLayers().setVisible(handle, desired);
@@ -390,7 +397,14 @@ export function createNativeClusterEngine<Item>(
     const old = handle;
     if (old) {
       // 失败时**不清理任何记账**：旧的还在图上，下一次 sync / 卸载还要能再摘一次
-      record?.detach();
+      try {
+        record?.detach();
+      } catch (error) {
+        // 「可能摘了、也可能没摘」⇒ 记下来：之后禁止普通写入，且下一次 sync 优先收敛
+        detachUnknown = true;
+        throw error;
+      }
+      detachUnknown = false;
       record = null;
       listenerScope = null;
       handle = null;
@@ -415,7 +429,7 @@ export function createNativeClusterEngine<Item>(
        * 收敛本身走 `recreate()` → `record.detach()`（受控地再摘一次，成功即确定已摘除，
        * 依据是 #98 的 live 实测：对已经摘掉的图层重复 `removeLayer` 安全）。
        */
-      if (record?.attachment === "unknown") {
+      if (detachUnknown) {
         recreate();
         return;
       }

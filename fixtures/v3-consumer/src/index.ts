@@ -576,7 +576,7 @@ import {
   type BMarkerListProps,
   type BPointIconLayerProps,
   type BPointLayerProps,
-  type BPointShapeLayerProps,
+  type BPointCollectionProps,
 } from 'baidu-map-gl-vue'
 
 interface Station {
@@ -606,15 +606,15 @@ const badListProps: BMarkerListProps<Station> = {
 // @ts-expect-error `itemKey` 必须是 `Item` 的键（`'nope'` 不存在）
 const badItemKey: BMarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
 
-// `BPointShapeLayer` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
-const collectionProps: BPointShapeLayerProps<Station> = {
+// `BPointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
+const collectionProps: BPointCollectionProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
   shape: 7,
 }
 // @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
-const badShape: BPointShapeLayerProps<Station> = { ...collectionProps, shape: 'circle' }
+const badShape: BPointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
 
 // 图标层：样式字段名与形状层**不同**（官方 `PointIconStyle`），`isFlat` / `isFixed` 是构造期项。
 const iconProps: BPointIconLayerProps<Station> = {

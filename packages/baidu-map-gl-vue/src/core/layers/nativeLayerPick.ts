@@ -58,15 +58,43 @@ export interface NativeLayerPickSnapshot {
 export function readNativeLayerPick(event: unknown): NativeLayerPickSnapshot {
   const normalized = (event ?? {}) as { raw?: unknown; point?: unknown; pixel?: unknown };
   const raw = (normalized.raw ?? event) as { value?: unknown; latLng?: unknown; pixel?: unknown };
-  const value = raw?.value as { dataIndex?: unknown; dataItem?: unknown } | null | undefined;
+  const value = raw?.value as
+    | { dataIndex?: unknown; dataItem?: unknown; properties?: unknown; id?: unknown }
+    | null
+    | undefined;
   const dataIndex = typeof value?.dataIndex === "number" ? value.dataIndex : -1;
+  /**
+   * **扩展 API 的载荷形状**（`BMap.PointLayer` / `ClusterLayer` 一族：运行时存在、类型包无声明）。
+   *
+   * 与四类专页图层的差异由本库的 live 探针实测（#35 的 `probe-native-point-cluster`）：
+   * 没有 `dataIndex`；要素属性**直接挂在 `value.properties`**（专页是 `value.dataItem.properties`）；
+   * 业务 id 在 `value.id`。
+   *
+   * 处理方式：**归一成专页形状**（`dataItem = { properties }`）⇒ 下游
+   * （`readFeatureProperties` / `readFeatureKey` / `resolveFeaturePick`）只有一份实现，
+   * **不为它维护第二套解析器**（评审 #112 的要求）。命中判定用它自己的依据：载荷里带得出要素
+   * —— 没有 `dataIndex` 可用时，只能按「有没有可读的 `properties` / `id`」判。身份仍然照旧：
+   * 读不出就 `id = null` / `item = null`，由调用方按「命中但身份未知」处理（告警一次、不派发
+   * `item-click`），**不猜**。
+   */
+  const extension = dataIndex === -1 && isExtensionPickValue(value);
+  const dataItem = extension ? { properties: (value as { properties?: unknown }).properties } : (value?.dataItem ?? null);
   return {
-    hit: dataIndex !== -1,
+    hit: dataIndex !== -1 || extension,
     dataIndex,
-    dataItem: value?.dataItem ?? null,
+    dataItem,
     latLng: readPoint(normalized.point) ?? readPoint(raw?.latLng),
     pixel: readPixel(normalized.pixel) ?? readPixel(raw?.pixel),
   };
+}
+
+/** 扩展 API 的载荷是否带得出一条要素（见 `readNativeLayerPick` 里那段说明）。 */
+function isExtensionPickValue(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  const { properties, id } = value as { properties?: unknown; id?: unknown };
+  const hasProperties =
+    properties !== null && typeof properties === "object" && !Array.isArray(properties);
+  return hasProperties || isUsableItemKey(id);
 }
 
 /**
@@ -140,6 +168,19 @@ export function readFeaturePropertiesAt(
   const features = (data as { features?: unknown }).features;
   if (!Array.isArray(features)) return null;
   return readFeatureProperties(features[index]);
+}
+
+/**
+ * 事件 → 原始 `value`（**不做形状解释**）。
+ *
+ * 形状解释在上面的 `readNativeLayerPick` 里（专页形状 / 扩展形状都归一成同一份快照）；
+ * 这个函数只服务「需要读 `value` 上**引擎独有字段**」的调用方（例：原生聚合的
+ * `clusterId` / `pointCount`）。放在这里是为了让「事件载荷的读取」只有一处实现。
+ */
+export function readPickValue(event: unknown): unknown {
+  const normalized = (event ?? {}) as { raw?: unknown };
+  const raw = normalized.raw ?? event;
+  return (raw as { value?: unknown } | undefined)?.value;
 }
 
 function readPoint(value: unknown): NativeLayerPickPoint | null {

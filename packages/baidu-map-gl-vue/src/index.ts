@@ -54,7 +54,7 @@ export type {
   BMarkerClusterEngine,
   BMapClusterPick,
   BMapClusterChange,
-  BPointShapeLayerProps,
+  BPointCollectionProps,
   BPointIconLayerProps,
   BPointLayerProps,
   BMapPointPick,

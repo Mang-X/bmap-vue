@@ -254,8 +254,12 @@ export class FakeV4Map extends FakeV4EventTarget {
       this.stats.resourceReleased('overlay')
     }
     if (overlay.attachedMap === this) overlay.attachedMap = null
-<<<<<<< HEAD
     this.detachCustomOverlayDom(overlay)
+    const afterDetach = (overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach
+    if (afterDetach) {
+      ;(overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach = null
+      throw afterDetach
+    }
   }
 
   /**
@@ -289,13 +293,6 @@ export class FakeV4Map extends FakeV4EventTarget {
     overlay.domElement = null
     if (!element) return
     if (element.parentElement === this.overlayPane) this.overlayPane?.removeChild(element)
-=======
-    const afterDetach = (overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach
-    if (afterDetach) {
-      ;(overlay as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach = null
-      throw afterDetach
-    }
->>>>>>> fdee24e (fix(M6-POINT-CLUSTER): 区分摘除失败的两种形状，挂载态如实标 unknown（#35 三轮评审）)
   }
 
   /**

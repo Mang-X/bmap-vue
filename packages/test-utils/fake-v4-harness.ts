@@ -558,6 +558,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         const map = lastMap();
         if (kind === "overlay") return map.overlays.length;
         if (kind === "control") return map.controls.length;
+        if (kind === "context-menu") return map.contextMenus.length;
         return map.layers.length;
       },
       overlayPositions: () => toPositions(lastMap().overlays),

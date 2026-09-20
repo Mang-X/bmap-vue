@@ -17,7 +17,7 @@ import {
   BMarkerList,
   BPointIconLayer,
   BPointLayer,
-  BPointShapeLayer,
+  BPointCollection,
   type BMapClusterPick,
   type BMapPointPick,
 } from 'baidu-map-gl-vue'
@@ -61,14 +61,14 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
   <BMarkerList
     :data="stations"
     item-key="id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     @item-click="onItemClick"
   />
   <!-- 默认引擎已是原生聚合（#35）；显式 engine="markers" 时 items 才有业务项 -->
   <BMarkerCluster
     :data="stations"
     :item-key="(item) => item.id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     :cluster-radius="60"
     @item-click="onItemClick"
     @cluster-click="onClusterClick"
@@ -77,15 +77,15 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
     engine="markers"
     :data="stations"
     item-key="id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     :grid-size="64"
     @cluster-click="(cluster) => void (cluster.items?.[0] as Station | undefined)"
   />
-  <BPointShapeLayer
+  <BPointCollection
     :data="stations"
     item-key="id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
-    :properties="(item) => ({ name: item.name ?? '未命名' })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
+    :properties="(item: Station) => ({ name: item.name ?? '未命名' })"
     :shape="0"
     :size="18"
     color="#1677ff"
@@ -95,7 +95,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
   <BPointIconLayer
     :data="stations"
     item-key="id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     icon="https://example.com/pin.png"
     :width="32"
     :height="32"
@@ -105,7 +105,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
   <BPointLayer
     :data="stations"
     :item-key="(item) => item.id"
-    :get-position="(item) => ({ lng: item.lng, lat: item.lat })"
+    :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     shape="circle"
     :size="18"
     fill-color="#1677ff"
