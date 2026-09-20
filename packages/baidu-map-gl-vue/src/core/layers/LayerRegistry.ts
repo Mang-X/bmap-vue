@@ -56,16 +56,6 @@ export interface LayerRecord {
   readonly handle: LayerLedgerHandle;
   readonly disposed: boolean;
   /**
-   * 资源**确认**的挂载状态（与 `useLayerResource` 的 `MountState` 同源；`detached` 由
-   * 「已销账」表达，因此这里只有两态）。
-   *
-   * `remove` 抛错时**无法判断**副作用有没有发生 ⇒ `"unknown"`：资源可能已经不在地图上、
-   * 也可能还在。调用方**不能**把它当成 `attached`（那会留下一份幻影所有权，之后没人再摘它），
-   * 也不能当成已摘除（那会重复挂一份）。`unknown` 的收敛方式是**受控地再摘一次**：
-   * 成功 ⇒ 确定已摘除；再失败 ⇒ 仍是 `unknown`（状态有界、可观测）。
-   */
-  readonly attachment: "attached" | "unknown";
-  /**
    * **卸载路径**的释放：幂等、**吞错**（摘除失败只记日志），保证调用方一定走完。
    *
    * 适用：组件卸载、Map 卸载（`disposeAll()`）。那里没有「重试」的位置，也没人能承接异常，
@@ -78,10 +68,10 @@ export interface LayerRecord {
    * 三个阶段缺一不可：
    *
    * - **quiesce**：`remove()` 期间 SDK 可能同步派发事件，而资源此刻正在被拆（#22 的口径）；
-   * - **remove 失败 ⇒ 状态标成 `unknown`**：`removeLayer` 允许「先产生副作用、再抛错」，因此失败
-   *   之后**无法判断资源还在不在图上**。此时只能承诺「业务监听恢复」（`quiesce(false)`），
-   *   **不能**承诺「资源恢复」—— 调用方必须按 `record.attachment === "unknown"` 分支，而不是
-   *   把它当作「旧实例完整可用」；
+   * - **remove 失败 ⇒ 只回滚能回滚的那一半**：`removeLayer` 允许「先产生副作用、再抛错」，因此
+   *   失败之后**无法判断资源还在不在图上**。此时账本只承诺「业务监听恢复」（`quiesce(false)`）+
+   *   「所有权保留」（记录不销账，下次还能再试）；**资源那一侧是未知的**，由消费方用自己的挂载态
+   *   （`useNativeLayerResource.mountState` 等）如实表达 —— 账本不复制这份事实（两本账会分叉）；
    * - **commit 只在成功后**：失败时**不销账**（记录留在账本里，下一次 `dispose()` / `detach()`
    *   会**受控地再摘一次**把 `unknown` 收敛成确定状态），调用方据此**放弃这次替换**。
    *
@@ -103,8 +93,9 @@ export interface LayerRegistryInput {
    *
    * 存在的理由：`remove()` 可能「副作用发生前抛错」，而 `scope.dispose()` 是**不可逆**的 ——
    * 「先解绑监听、再摘资源」（#22 的既有顺序）在失败时会把旧实例留成「还在图上但已经点不动」。
-   * 有了这道门，摘除期间业务回调照样不穿透，而失败时旧实例**完全恢复可用**（门关掉即可），
-   * 调用方说的「保留旧实例」因此包含行为，而不只是画面。
+   * 有了这道门，摘除期间业务回调照样不穿透；失败时门关掉、监听恢复（`remove` 之前**没有**执行
+   * 不可逆的 `scope.dispose()`）—— 但**资源是否仍在图上只能由消费方判断**：
+   * 「保留旧实例」能保证的是「监听没被提前拆掉」，不是「资源一定还在」。
    */
   readonly quiesce?: (active: boolean) => void;
 }
@@ -138,8 +129,6 @@ export function createLayerRegistry(): LayerRegistry {
     register(input) {
       const id = Symbol("layer");
       let disposed = false;
-      /** 确认的挂载态；`remove` 抛错后置 `unknown`（见 `LayerRecord.attachment`）。 */
-      let attachment: "attached" | "unknown" = "attached";
       /**
        * 解绑业务监听（不可逆，只做一次）。抽成函数是因为两条释放路径都要用它，
        * 而它们的唯一区别在**摘除失败之后**怎么处理（吞错 vs 抛出 + 不销账）。
@@ -163,9 +152,6 @@ export function createLayerRegistry(): LayerRegistry {
         get disposed() {
           return disposed;
         },
-        get attachment() {
-          return attachment;
-        },
         dispose() {
           if (disposed) return;
           disposed = true;
@@ -178,9 +164,9 @@ export function createLayerRegistry(): LayerRegistry {
             input.remove();
           } catch (error) {
             // 摘除失败不抛出：调用方（组件卸载 / Map 卸载）都要继续走完。但它是**资源可能
-            // 仍在图上**的信号，必须可观测（SDK 侧不会再有第二次机会告诉你），同时把挂载态
-            // 如实标成 `unknown`（诊断读数与「这条记录到底确认摘掉了没有」共用同一个事实）。
-            attachment = "unknown";
+            // 仍在图上**的信号，必须可观测（SDK 侧不会再有第二次机会告诉你）。
+            // 账本**不**记录「挂载态」这种读数：真实挂载态是**消费方**的事实（`useNativeLayerResource`
+            // 的三态 `mountState`、各引擎自己的标志），账本只知道「销账了没有」——两本账不要合并。
             logger.warn(`LayerRegistry: 摘除图层失败（kind=${input.kind}），SDK 资源可能仍在图上`, {
               error: (error as Error)?.message ?? String(error),
             });
@@ -192,16 +178,16 @@ export function createLayerRegistry(): LayerRegistry {
           // 而是把业务回调挡在门外；只有 `remove()` 成功返回才永久解绑并销账。
           input.quiesce?.(true);
           try {
-            // `attachment === "unknown"` 时这一次调用同时承担**收敛**职责：成功 ⇒ 它确实已经不在
-            // 图上；失败 ⇒ 仍未确认（按下面的 `unknown` 处理）。用的是仓库既有的前提 P ——
+            // 上一次摘除抛过错的记录再被调到这里时，这一次调用同时承担**收敛**职责：成功 ⇒ 它确实
+            // 已经不在图上；失败 ⇒ 仍未确认（按下面处理）。用的是仓库既有的前提 P ——
             // 「对已经摘掉的图层重复 `removeLayer` 是安全的」，已由 issue #98 的 live 探针实测成立
             // （同 `useLayerResource.syncMounted` 的收敛，见 ADR 决策 12b）。即使前提在某个 kind /
             // 版本上不成立，退化也有界：再抛错就仍是 `unknown`，绝不会因为「猜它已经下去了」而多挂一份。
             input.remove();
           } catch (error) {
             // `removeLayer` 允许「先产生副作用、再抛错」⇒ 此刻**资源可能已不在图上**。
-            // 因此这里只能承诺「监听恢复」，不能承诺「资源恢复」：状态如实标成 `unknown`。
-            attachment = "unknown";
+            // 因此账本只能承诺「监听恢复 + 所有权保留」，**不能**承诺「资源恢复」：
+            // 资源到底还在不在，只有消费方（它才持有 `mountState` 这类事实）能判断。
             // 门关掉：失败后旧实例**可能仍在图上、也可能已不在**，但业务监听这一侧是可恢复的
             // （还在图上就还能点，已经不在就不可能有事件）—— 两种情况下恢复监听都是正确的一侧。
             input.quiesce?.(false);
