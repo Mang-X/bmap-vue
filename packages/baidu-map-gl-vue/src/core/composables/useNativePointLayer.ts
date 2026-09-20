@@ -523,6 +523,19 @@ export function useNativePointLayer<Item, Props extends NativePointLayerDataProp
       }
       return;
     }
+    /**
+     * ⚠️ **`unknown` 优先于构造指纹**（与 `nativeClusterEngine.sync` 同一条规则）：挂载态未知时
+     * 必须先收敛，否则「把构造项改回旧值」会让指纹重新相等 ⇒ 后续写入被未知门静默挡掉、
+     * 再也没有收敛动作（组件可能永久空白）。
+     */
+    if (state.record?.attachment === "unknown") {
+      try {
+        recreate(c);
+      } catch (error) {
+        reportError(error);
+      }
+      return;
+    }
     // **先判定、后执行**：一旦确定要重建（有字段变回未表态），就不再执行就地写入——
     // 否则同一次更新里的一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次。
     const style = profile.stylePayload(props as unknown as Props);

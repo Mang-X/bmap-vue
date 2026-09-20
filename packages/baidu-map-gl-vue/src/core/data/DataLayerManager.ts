@@ -81,6 +81,21 @@ function positionFingerprint(point: PointLike): string {
 export class DataLayerManager<Item, Resource> {
   private readonly scheduler: FrameScheduler = createFrameScheduler();
   private readonly resources = new Map<PropertyKey, Resource>();
+  /**
+   * 摘除失败、**无法判断是否仍在图上**的 key（`unknown`）。
+   *
+   * 与 `LayerRecord.attachment` 同一条口径（这一侧没有账本记录，状态只能由管理器持有）。
+   * 落在这一集合里的资源：
+   *
+   * - **不再进入普通写入路径**（位置更新 / 显隐都跳过）—— 它们可能已经不在图上，写进去要么白写、
+   *   要么在真实 SDK 上抛错（#98 的读数：对已摘下的实例补 `setData` 会内部抛错）；
+   * - 仍然**保留所有权**，只在「摘除」路径上出现（数据里删掉它、或整个管理器被清理时再摘一次）——
+   *   摘除是唯一能把它收敛回确定状态的动作：成功 ⇒ 确定已摘除并销账；失败 ⇒ 仍是 unknown。
+   *
+   * ⚠️ 这个状态**必须是持久的**：只在错误文案里叫一声「unknown」、抛完就丢掉，会让这些句柄在
+   * 下一次 `sync()` / `setVisible()` 里又变回「正常资源」。
+   */
+  private readonly unknownKeys = new Set<PropertyKey>();
   /** 资源 → key（事件委托要由实例反查业务项；`WeakMap` 不延长资源寿命）。 */
   private readonly keyOfResource = new WeakMap<object, PropertyKey>();
   /**
@@ -140,6 +155,9 @@ export class DataLayerManager<Item, Resource> {
     if (this.visible === visible) return;
     let failure: unknown = null;
     for (const [key, resource] of [...this.resources]) {
+      // 挂载态未知 ⇒ 不写：它可能已经不在图上。**不计入失败**（那会让调用方永远重试同一个
+      // 不可能成功的动作）；这个事实由 `unknownSize` 与摘除路径的错误文案如实表达。
+      if (this.unknownKeys.has(key)) continue;
       try {
         this.applyVisibility(resource, visible, key);
       } catch (error) {
@@ -178,6 +196,11 @@ export class DataLayerManager<Item, Resource> {
     return this.resources.size;
   }
 
+  /** 当前挂载态未知的资源数（诊断读数；`0` 表示全部资源都有确定的挂载态）。 */
+  get unknownSize(): number {
+    return this.unknownKeys.size;
+  }
+
   /**
    * 摘掉全部资源，并把短路基线一并复位（下一次 `sync` 会重建）。
    *
@@ -196,10 +219,13 @@ export class DataLayerManager<Item, Resource> {
         );
         // **保留所有权**（与 diff 删除路径同一条原则，评审 #102 F3）：SDK 可能是「还没产生副作用
         // 就抛错」，此时旧资源仍在图上；删掉记账会让之后为同一个 key 再建一份，图上出现两份/泄漏。
+        // 同时把挂载态标成 `unknown`（`remove` 之后抛错 ⇒ 它可能已经不在图上了）。
+        this.unknownKeys.add(key);
         continue;
       }
       this.resources.delete(key);
       this.appliedPositions.delete(key);
+      this.unknownKeys.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -247,6 +273,9 @@ export class DataLayerManager<Item, Resource> {
         this.host.removeMarker(resource);
       } catch (error) {
         failed = true;
+        // 摘除抛错 ⇒ 挂载态未知（可能已经不在图上、也可能仍在）——持久记下来，
+        // 后续普通写入不再碰它（见 `unknownKeys` 的说明）。
+        this.unknownKeys.add(key);
         this.options.warn?.(
           `${this.label}: 摘除资源失败（key=${String(key)}），它可能仍在图上：` +
             `${(error as Error)?.message ?? String(error)}`,
@@ -255,6 +284,7 @@ export class DataLayerManager<Item, Resource> {
       }
       this.resources.delete(key);
       this.appliedPositions.delete(key);
+      this.unknownKeys.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -287,6 +317,10 @@ export class DataLayerManager<Item, Resource> {
         if (!this.visible) this.applyVisibility(resource, this.visible, entry.key);
         continue;
       }
+      // 挂载态未知的资源不进入普通写入路径：它可能已经不在图上（写进去要么白写、要么在真实
+      // SDK 上抛错）。索引记账照旧推进 —— 那个回答的是「当前业务对象是哪个」，与「SDK 写成功没有」
+      // 无关；摘除（数据里删掉它 / 管理器被清理）是唯一会把状态收敛回确定状态的动作。
+      if (this.unknownKeys.has(entry.key)) continue;
       // 位置下发由**值**决定（不再用 item 引用做第二层短路）：根引用变化 ⇒ 重新读取；
       // 坐标真的变了才写。`version` 变化时逐项写一遍（见上）。
       const fingerprint = positionFingerprint(entry.point);

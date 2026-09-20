@@ -234,7 +234,9 @@ export function createMarkerClusterEngine<Item>(
         //
         // 也不做「再摘一次」的收敛：覆盖物的重复 `removeOverlay` 安全性本库**没有 live 取证**
         // （图层那边有 #98 的实测，见 ADR 决策 12b）。无证据就收敛 = 猜，所以这里停在上报 `unknown`。
-        const unknown = active.size;
+        // 从**持久状态**读，而不是临时把 `size` 叫成 unknown：`clear()` 失败的那些已经在
+        // `DataLayerManager.unknownKeys` 里留下记录，之后不会再被当成正常资源写。
+        const unknown = active.unknownSize;
         let replayed = false;
         try {
           if (lastSync) {

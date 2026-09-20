@@ -406,6 +406,19 @@ export function createNativeClusterEngine<Item>(
       createInstance();
     },
     sync() {
+      /**
+       * ⚠️ **`unknown` 优先于构造指纹**：挂载态未知是「必须先收敛」的状态，不能让指纹相同把它
+       * 永久冻住。否则有一个稳定复现：key 60 → 改 80 时 after-detach 抛错（实例可能已不在图上）⇒
+       * 用户把参数改回 60 ⇒ 指纹又等于 `instanceKey` ⇒ 后续数据/显隐更新只会被未知门静默挡掉，
+       * **再也没有任何收敛动作**（组件可能永久空白，且除第一次错误外没有任何信号）。
+       *
+       * 收敛本身走 `recreate()` → `record.detach()`（受控地再摘一次，成功即确定已摘除，
+       * 依据是 #98 的 live 实测：对已经摘掉的图层重复 `removeLayer` 安全）。
+       */
+      if (record?.attachment === "unknown") {
+        recreate();
+        return;
+      }
       if (instanceFingerprint() !== instanceKey) {
         recreate();
         return;

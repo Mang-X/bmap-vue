@@ -3943,4 +3943,110 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     await unmountAndSettle(wrapper);
     harness.assertIdle("BMarkerCluster markers after-detach 失败");
   });
+
+  /*
+   * PR #108 第四轮评审（commit fdee24e）的阻塞主题：**`unknown` 必须是贯穿后续生命周期的持久状态**。
+   *
+   * | 缺口 | 症状 |
+   * | --- | --- |
+   * | native：`sync()` 只按构造指纹决定要不要收敛 | after-detach 失败后把构造项**改回旧值** ⇒ 指纹重新相等 ⇒ 未知门静默 return，**再也没有收敛动作** |
+   * | markers：unknown 只活在错误文案里 | 取消切换（engine 改回 markers）后，未知句柄又被当成正常资源做位置 / 显隐写入 |
+   */
+
+  it("BMarkerCluster：unknown 优先于构造指纹 —— 参数改回旧值也会主动收敛（不静默冻结）", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const radius = ref(60);
+    const data = ref<readonly Station[]>(STATIONS);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        clusterRadius: radius.value,
+      }),
+    ]);
+    expect(harness.attached("layer")).toBe(1);
+
+    // after-detach 失败 ⇒ 实例可能已经不在图上，挂载态 unknown
+    harness.failNextRemoveLayerAfterDetach();
+    radius.value = 80;
+    await settleProps();
+    expect(harness.attached("layer"), "它其实已经不在图上了").toBe(0);
+
+    // 把构造项**改回旧值**：指纹重新等于 `instanceKey`，但未知状态必须先收敛
+    radius.value = 60;
+    await settleProps();
+    expect(
+      harness.attached("layer"),
+      "unknown 优先于指纹：改回旧值也必须走一次受控收敛，把图层带回已知状态",
+    ).toBe(1);
+
+    // 收敛之后普通写入恢复（数据变化能落到图上）
+    const callsBefore = harness.nativeLayerCalls().length;
+    data.value = [...STATIONS, { id: "d", lng: 1, lat: 1 }];
+    await settleProps();
+    expect(harness.nativeLayerCalls().length, "收敛之后恢复普通写入").toBeGreaterThan(callsBefore);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster unknown 优先级");
+  });
+
+  it("BMarkerCluster：markers 的 unknown 是持久状态 —— 取消切换后不再被当成正常资源写", async () => {
+    const errors: unknown[] = [];
+    const Probe = errorsProbe(errors);
+    const engine = ref<"native" | "markers">("markers");
+    const visible = ref(true);
+    // ⚠️ 用 `dataVersion` 触发「逐项重写」而**不换数据**：换数据可能产生新 key（补建新覆盖物），
+    // 那会让「倒数第 N 个创建过的覆盖物」指向别的实例 —— 索引一漂，断言就变成恒真了。
+    const version = ref(1);
+    const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
+    const wrapper = await mountMapTree(() => [
+      h(Probe),
+      h(BMarkerCluster, {
+        data: data.value,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: engine.value,
+        zoom: 8,
+        minClusterSize: 3,
+        visible: visible.value,
+        dataVersion: version.value,
+      }),
+    ]);
+    expect(harness.attached("overlay")).toBe(2);
+
+    // ⚠️ 注入**最后创建的那个**（单点）：恢复会**补建**被摘掉的那些并排在账本末尾，因此
+    // 「未知的那一个」必须落在不会被新实例挤走的位置 —— 倒数第一个创建 ⇒ 补建之后它仍是倒数第二个。
+    const target = -2;
+    const known = -1;
+    harness.failNextRemoveOverlayAfterDetach(undefined, -1);
+    engine.value = "native";
+    await settleProps();
+    expect(harness.attached("layer"), "摘除未确认 ⇒ 不建新引擎").toBe(0);
+    expect(harness.attached("overlay"), "那个 Marker 已经不在图上了").toBe(1);
+
+    // 取消切换（engine 改回 markers）+ 之后的版本 / 显隐更新
+    engine.value = "markers";
+    await settleProps();
+    const unknownCallsBefore = harness.overlayCalls(target).length;
+    const knownCallsBefore = harness.overlayCalls(known).length;
+    version.value += 1;
+    visible.value = false;
+    await settleProps();
+
+    // 正证控件：**已知**的那个确实被写了（证明这一轮写入真的发生过，上面那条 0 不是「什么都没跑」）
+    expect(harness.overlayCalls(known).length, "已知资源的显隐/位置仍然照常下发").toBeGreaterThan(
+      knownCallsBefore,
+    );
+    expect(
+      harness.overlayCalls(target).length,
+      "挂载态未知的资源不得重新进入普通写入路径（位置 / 显隐都不能碰它）",
+    ).toBe(unknownCallsBefore);
+    expect(harness.attached("overlay"), "未知的那个不会被当成现存资源补建（不会重复挂）").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BMarkerCluster markers unknown 持久化");
+  });
 });
