@@ -831,5 +831,26 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       // 取消失败 → 记录保留并抛出，下一次 stop/destroy 仍可重试
       cancelAllAnimations(raw);
     },
+
+    cancelViewAnimation(map, animation) {
+      const raw = resolveLive(map);
+      capabilities.require("map.animate");
+      const instance = resolveAnimation(animation);
+      // 只认这一个实例的记录。别的动画一律不碰 —— 这是「重试自己那一次取消」能与
+      // 「不牵连别人的动画」同时成立的前提（`stopViewAnimation` 是整张图，做不到）。
+      for (const record of recordsOf(raw)) {
+        if (record.instance !== instance) continue;
+        if (!record.started) {
+          // 还没进安全窗口：SDK 此时取消会抛 TypeError，只登记待办（与 cancelAnimation 同一形状），
+          // 真正的取消由 `settleAtSafePoint` 推进；调用方据 "deferred" 保留重试入口
+          record.cancelRequested = true;
+          return "deferred";
+        }
+        // 失败时抛错、记录保留 ⇒ 调用方下一次调用仍可重试（不在这里吞）
+        cancelAnimation(raw, record);
+        return "canceled";
+      }
+      return "already-settled";
+    },
   };
 }

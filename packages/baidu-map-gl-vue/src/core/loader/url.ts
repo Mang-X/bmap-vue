@@ -56,38 +56,6 @@ export function resolveBrowserUrl(input: string, base?: string): URL {
   return new URL(input, resolveBaseUrl(base));
 }
 
-export type CreateBaiduSdkUrlOptions = Pick<
-  BMapLoadOptions,
-  "ak" | "apiUrl" | "version" | "callbackParam"
->;
-
-/**
- * 构造 JSAPI 4.0 入口 URL。
- *
- * @param options `ak` / `apiUrl` / `version` / `callbackParam`
- * @param callbackName 本次 script 的就绪回调名（写入 `callbackParam`）
- * @param base 测试用 base 覆盖；缺省 `document.baseURI`
- */
-export function createBaiduSdkUrl(
-  options: CreateBaiduSdkUrlOptions,
-  callbackName: string,
-  base?: string,
-): URL {
-  const url = resolveBrowserUrl(options.apiUrl ?? DEFAULT_API_URL, base);
-  // 旧 webgl-v1 的 `type` 与 4.0 入口互斥：即便 apiUrl 自带也必须剔除。
-  if (url.searchParams.get("type") === "webgl") {
-    url.searchParams.delete("type");
-  }
-  // 版本是全局 SDK 语义的一部分，始终以 4.0 基线覆盖。
-  url.searchParams.set("v", options.version ?? DEFAULT_VERSION);
-  if (options.ak && !url.searchParams.has("ak")) {
-    url.searchParams.set("ak", options.ak);
-  }
-  // 已有 callback 视为冲突：覆盖为本次回调名，保证只有一个取值。
-  url.searchParams.set(options.callbackParam ?? DEFAULT_CALLBACK_PARAM, callbackName);
-  return url;
-}
-
 /** 离线 / 私有 apiUrl 兼容：仅追加 callback 参数（保留既有 query）。 */
 export function appendCallback(
   url: string,

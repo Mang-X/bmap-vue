@@ -3,7 +3,7 @@
  *
  * `packages/**\/*.test.ts` 不在 `pnpm test:unit` 的路径过滤内，因此在 behavior 层
  * 固定 CI 可见的契约：
- * - Catalog 覆盖 Map / Overlay / Layer / Service / Panorama / Runtime 六个 family；
+ * - Catalog 覆盖 Map / Overlay / Layer / Service / Panorama 五个 family；
  * - 能表达 native / extended / experimental / unsupported 四种状态；
  * - runtime-only 能力被标注；
  * - override / require / supports 与 unsupported 策略语义稳定；
@@ -52,7 +52,6 @@ const FULL_SDK = {
   DistrictLayer: class {},
   LineLayer: class {},
   FillLayer: class {},
-  MVTLayer: class {},
   DOMLayer: class {},
   LocalSearch: class {},
   Autocomplete: class {},
@@ -60,7 +59,6 @@ const FULL_SDK = {
   WalkingRoute: class {},
   RidingRoute: class {},
   TransitRoute: class {},
-  TruckRoute: class {},
   Geocoder: class {},
   Geolocation: class {},
   LocalCity: class {},
@@ -88,7 +86,7 @@ const baseRegistry = (overrides?: Partial<Record<Capability, boolean>>) =>
   });
 
 describe("Capability Catalog 结构与状态", () => {
-  it("覆盖 Map / Overlay / Layer / Service / Panorama / Runtime 六个 family", () => {
+  it("覆盖 Map / Overlay / Layer / Service / Panorama 五个 family", () => {
     for (const family of CAPABILITY_FAMILIES) {
       const entries = CAPABILITY_IDS.filter((id) => CAPABILITY_CATALOG[id].family === family);
       expect(entries.length, `family ${family} 应至少有一个能力`).toBeGreaterThan(0);
@@ -124,7 +122,7 @@ describe("Capability Catalog 结构与状态", () => {
   it("runtime-only 能力被标注，可静态探测的构造器不被误标", () => {
     expect(CAPABILITY_CATALOG["map.check-resize"].runtimeOnly).toBe(true);
     expect(CAPABILITY_CATALOG["overlay.point-collection"].runtimeOnly).toBe(true);
-    expect(CAPABILITY_CATALOG["runtime.capability-override"].runtimeOnly).toBe(true);
+    expect(CAPABILITY_CATALOG["layer.panorama-coverage"].runtimeOnly).toBe(true);
     expect(CAPABILITY_CATALOG["overlay.marker"].runtimeOnly).toBe(false);
     expect(CAPABILITY_CATALOG["service.geocoder"].runtimeOnly).toBe(false);
   });
@@ -181,9 +179,9 @@ describe("Capability override / supports / require / unsupported 策略", () => 
       expect(registry.explain(id).reason).toBe("status-unsupported");
     }
 
-    const overridden = baseRegistry({ "service.truck-route": true, "overlay.marker": false });
-    expect(overridden.supports("service.truck-route")).toBe(true);
-    expect(overridden.explain("service.truck-route").reason).toBe("overridden");
+    const overridden = baseRegistry({ "overlay.mapvgl": true, "overlay.marker": false });
+    expect(overridden.supports("overlay.mapvgl")).toBe(true);
+    expect(overridden.explain("overlay.mapvgl").reason).toBe("overridden");
     expect(overridden.supports("overlay.marker")).toBe(false);
   });
 

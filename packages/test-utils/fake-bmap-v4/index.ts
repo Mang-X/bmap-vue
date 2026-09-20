@@ -357,6 +357,8 @@ export interface FakeBMapV4 {
   createdGeolocations: FakeV4Geolocation[]
   createdLocalCities: FakeV4LocalCity[]
   createdAutocompletes: FakeV4Autocomplete[]
+  /** 测试辅助：已创建的视角动画实例（#104：hooks 侧的可观察性） */
+  createdViewAnimations: FakeV4ViewAnimation[]
   /** 测试辅助：记录已创建的本地检索实例（#38） */
   createdLocalSearches: FakeV4LocalSearch[]
   /**
@@ -397,6 +399,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   const createdGeolocations: FakeV4Geolocation[] = []
   const createdLocalCities: FakeV4LocalCity[] = []
   const createdAutocompletes: FakeV4Autocomplete[] = []
+  const createdViewAnimations: FakeV4ViewAnimation[] = []
   const createdLocalSearches: FakeV4LocalSearch[] = []
   /** 路线服务实例账本（#39）：按 SDK 构造器名分桶，读法见 `FakeBMapV4["rawRoutes"]` */
   const rawRoutes: Record<
@@ -500,6 +503,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   class ViewAnimationClass extends FakeV4ViewAnimation {
     constructor(keyFrames: unknown[], options?: FakeV4AnimationOptions) {
       super(keyFrames, options ?? {}, stats)
+      createdViewAnimations.push(this)
     }
   }
 
@@ -868,6 +872,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     createdGeolocations,
     createdLocalCities,
     createdAutocompletes,
+    createdViewAnimations,
     createdLocalSearches,
     rawRoutes,
     createdNativeLayers,

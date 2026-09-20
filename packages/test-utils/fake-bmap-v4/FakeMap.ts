@@ -27,6 +27,7 @@ import { FakeV4EventTarget } from './event-target.ts'
 import type { FakeV4Diagnostics } from './diagnostics.ts'
 import { FakeV4Bounds, FakeV4Pixel, FakeV4Point, FakeV4Size } from './geometry.ts'
 import type { FakeV4Control, FakeV4Layer } from './controls-layers.ts'
+import { FakeV4CustomOverlay } from './objects.ts'
 import type { FakeV4ContextMenu, FakeV4InfoWindow, FakeV4Overlay } from './objects.ts'
 
 /**
@@ -117,6 +118,12 @@ export class FakeV4Map extends FakeV4EventTarget {
    * 建模真实 4.0 的「SDK 把内容节点搬进自己的容器」——见 `attachBubbleContent`。
    */
   bubbleHost: HTMLElement | null = null
+  /**
+   * 自定义覆盖物业务 DOM 的容器（`data-fake-overlay-pane`），首次挂载自定义覆盖物时懒建。
+   *
+   * 属于**地图**：组件卸载后容器仍在地图上（只是里面空了），与 `bubbleHost` 同一条口径。
+   */
+  overlayPane: HTMLElement | null = null
   /** 已挂载的右键菜单（官方入口是 `map.addContextMenu`）。 */
   readonly contextMenus: FakeV4ContextMenu[] = []
   /**
@@ -213,6 +220,7 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (this.overlays.includes(overlay)) return
     this.overlays.push(overlay)
     overlay.attachedMap = this
+    this.attachCustomOverlayDom(overlay)
     this.stats.resourceCreated('overlay')
   }
 
@@ -224,6 +232,40 @@ export class FakeV4Map extends FakeV4EventTarget {
       this.stats.resourceReleased('overlay')
     }
     if (overlay.attachedMap === this) overlay.attachedMap = null
+    this.detachCustomOverlayDom(overlay)
+  }
+
+  /**
+   * 把自定义覆盖物的业务 DOM 搬进本张地图的「覆盖物容器」（M5-CUSTOM-MENU / #33）。
+   *
+   * 真实 4.0 实测：`map.addOverlay(customOverlay)` 之后业务 DOM 位于 `bmap-container` **内部**
+   * （不是顶层），`removeOverlay` 之后随之撤离。替身不建模这一步的话，「卸载后宿主不残留」
+   * 在与真实相反的方向上也会成立——夹具比真实宽容就会掩盖缺陷（`AGENTS.md` 的既有教训，
+   * 与 `attachBubbleContent` 同一条理由）。
+   *
+   * 只有 `CustomOverlay` 会带 `domCreate`（其它覆盖物的 DOM 由 SDK 自己造），因此这里按**构造器身份**
+   * 分流，而不是按「有没有某个字段」猜。
+   */
+  private attachCustomOverlayDom(overlay: FakeV4Overlay): void {
+    if (!(overlay instanceof FakeV4CustomOverlay)) return;
+    const element = overlay.domCreate()
+    if (!(element instanceof HTMLElement)) return
+    if (!this.overlayPane) {
+      this.overlayPane = document.createElement('div')
+      this.overlayPane.setAttribute('data-fake-overlay-pane', '')
+      this.container.appendChild(this.overlayPane)
+    }
+    this.overlayPane.appendChild(element)
+    overlay.domElement = element
+  }
+
+  /** 摘除自定义覆盖物的业务 DOM（`removeOverlay` 的收尾；不销毁元素本身——它由组件拥有）。 */
+  private detachCustomOverlayDom(overlay: FakeV4Overlay): void {
+    if (!(overlay instanceof FakeV4CustomOverlay)) return;
+    const element = overlay.domElement
+    overlay.domElement = null
+    if (!element) return
+    if (element.parentElement === this.overlayPane) this.overlayPane?.removeChild(element)
   }
 
   /**
@@ -881,6 +923,13 @@ export class FakeV4ViewAnimation extends FakeV4EventTarget {
   cancelCalls = 0
   /** 测试故障注入：让下一次 cancel 抛错（用于「取消失败后重试」） */
   failNextCancel = false
+  /**
+   * 测试辅助：让 `cancel()` **成功但不派发 `animationcancel`**。
+   *
+   * 真实 SDK 会不会在这种情况下不回调，仓库里没有取证（#104 审计表 F-1）——这个开关不是为了
+   * 声明官方行为，而是给「生产实现不能依赖该事件才交回所有权」留一条防御性用例。
+   */
+  suppressCancelEvent = false
 
   constructor(
     keyFrames: unknown[],
@@ -926,7 +975,7 @@ export class FakeV4ViewAnimation extends FakeV4EventTarget {
     if (this.internal.canceled) return
     this.internal.canceled = true
     this.settled = true
-    this.emit('animationcancel')
+    if (!this.suppressCancelEvent) this.emit('animationcancel')
   }
 
   /** 测试辅助：模拟动画正常结束（`animationend`）。 */

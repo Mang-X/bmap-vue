@@ -62,6 +62,27 @@ export const componentManifest = [
     category: "overlay",
     source: "./components/overlays/BContextMenu.vue",
   },
+  // 声明式菜单项（M5-CUSTOM-MENU / #33）：两者都不渲染 DOM，只把「这里有一条菜单项 / 分隔线」
+  // 注册给父级 <BContextMenu>。它们进 manifest 是为了让插件注册与 Volar 补全一致——
+  // 声明式写法下调用方通常不 import 子组件。
+  {
+    name: "BMenuItem",
+    exportName: "BMenuItem",
+    category: "overlay",
+    source: "./components/overlays/BMenuItem.vue",
+  },
+  {
+    name: "BMenuSeparator",
+    exportName: "BMenuSeparator",
+    category: "overlay",
+    source: "./components/overlays/BMenuSeparator.vue",
+  },
+  {
+    name: "BCustomOverlay",
+    exportName: "BCustomOverlay",
+    category: "overlay",
+    source: "./components/overlays/BCustomOverlay.vue",
+  },
   {
     name: "BPrism",
     exportName: "BPrism",

@@ -584,6 +584,26 @@ describe("视角动画", () => {
     expect(fake.createdMaps[0].canceledAnimation).toBe(animation);
   });
 
+  it("cancelViewAnimation 只碰传入的那个实例，已结算的实例不补发", () => {
+    const { map, container } = setup();
+    const handle = map.create(container);
+    const canceled: string[] = [];
+    const a = { frames: [], cancel: () => void canceled.push("a") };
+    const b = { frames: [], cancel: () => void canceled.push("b") };
+
+    map.startViewAnimation(handle, a);
+    map.startViewAnimation(handle, b); // 起播前会先取消上一段 ⇒ a 被取消并已结算
+    expect(canceled).toEqual(["a"]);
+
+    // 传入 b：只取消 b 这一条记录
+    expect(map.cancelViewAnimation(handle, b)).toBe("canceled");
+    expect(canceled).toEqual(["a", "b"]);
+
+    // a 早已结算 ⇒ 没有可取消的东西，也不补发一次 SDK 取消（那要假设 SDK 幂等，F-3 未证）
+    expect(map.cancelViewAnimation(handle, a)).toBe("already-settled");
+    expect(canceled).toEqual(["a", "b"]);
+  });
+
   it("stopViewAnimation 在没有活动动画时是 no-op，未销毁地图仍可用", () => {
     const { map, container } = setup();
     const handle = map.create(container);

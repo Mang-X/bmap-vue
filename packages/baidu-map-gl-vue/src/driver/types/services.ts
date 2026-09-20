@@ -15,14 +15,11 @@ import type { Bounds, Point } from "./geometry";
 
 export interface AutocompleteOptions {
   /**
-   * 绑定到 SDK 实例的输入框。
+   * 绑定到 SDK 实例的输入框（官方 `Autocomplete` 的构造选项，原生联想 UI 的宿主）。
    *
-   * **要使用 `suggest()`（程序化检索），这个输入框在调用时刻必须不可输入**
-   * （`readOnly` / `disabled` / `type="hidden"`）：`Autocomplete` 只有一条
-   * `onSearchComplete`，可输入的输入框上用户打字触发的检索与程序化检索共用它，关键词相同时
-   * 回包无法区分——Driver 会因此拒绝 `suggest()`（且在调用时与每次回包时都重新校验输入框的
-   * **当前**状态；一旦观察到可输入，该实例就永久失去独占资格，需要重建）。只用输入框的联想 UI
-   * 时不受此限制。
+   * 本库**不**提供程序化检索：`Autocomplete` 只有一条 `onSearchComplete`，用户输入与任何程序化
+   * `search()` 共用它，而回包不带请求身份，所以「这条结果属于哪一次」无法判定（#104）。结果一律
+   * 原样转发给 `onSearchComplete`，归属由持有输入框的一方判断。
    */
   input: HTMLInputElement;
   location?: unknown;
@@ -912,15 +909,6 @@ export interface LocalCityFix {
   level: number | null;
 }
 
-/** 输入提示条目（`Autocomplete` 的检索结果）。 */
-export interface PlaceSuggestion {
-  title: string;
-  /** 结构化地址（`province + city + district + street`） */
-  address: string;
-  /** 条目在列表中的索引；无高亮时为 -1 */
-  index: number;
-}
-
 /**
  * 归一化调用面（callback → Promise/Result）。
  *
@@ -957,32 +945,13 @@ export interface ServiceInvocationDriver {
   ): ServiceCall<GeolocationFix>;
   /** IP 定位城市（`LocalCity#get`） */
   locateCity(handle: ServiceHandle<"service:local-city">): ServiceCall<LocalCityFix>;
-  /**
-   * 输入提示（`Autocomplete#search` + `onSearchComplete`）。
-   *
-   * 以下条件不满足时**拒绝**（`status: "failed"` + `BMAP_SERVICE_FAILED`），因为那时回包归属
-   * 无法确定（`Autocomplete` 的回包不带请求身份，只有可选的 `keyword`）：
-   *
-   * 1. **回调通道独占**：实例绑定的输入框在**调用时刻**必须不可输入（`readOnly` / `disabled` /
-   *    `type="hidden"`）——HTML 控件的可编辑性随时可变，所以这是**每次调用都重新校验**的，
-   *    而不是创建实例时定死；一旦观察到可输入，该实例会被**永久**标记为失去独占（不因为随后
-   *    又变回只读而恢复，因为可编辑期间触发的原生请求可能仍在等回包），需要重建实例。
-   *    等待回包期间失去独占时，在飞的调用也会被**显式失败**，不会接受可能来自用户输入的结果；
-   * 2. **同关键词互斥**：该实例上不能已有同关键词的未完成请求，等它结算（或改用不同关键词）
-   *    之后再调用。
-   *
-   * 彻底去掉这些限制需要「每次请求一个独立实例 + 回调闭包」，属 M7（#38 / #41）。
-   */
-  suggest(
-    handle: ServiceHandle<"service:autocomplete">,
-    keyword: string,
-  ): ServiceCall<PlaceSuggestion[]>;
 
   /**
    * 关键字检索（`LocalSearch#search`）。
    *
-   * 与 `suggest()` 的差别不是「换了个类」：**LocalSearch 不绑输入框**（没有用户输入与程序化
-   * 检索共用回调的问题）。但它的**回包归属**反而更受约束——见下。
+   * `Autocomplete` **不在这一面上**：它绑输入框、只有一条 `onSearchComplete`，用户输入与程序化
+   * 检索共用同一通道而回包不带请求身份，本库无法判定「这条回包属于谁」，因此只提供
+   * `createAutocomplete()` 的回包转发，不提供归一化调用（#104）。
    *
    * **归属模型：一个实例同一时刻只有一个未结算操作**（`search` / `searchNearby` /
    * `searchInBounds` / `gotoPage` 共用同一套规则）。
@@ -1098,19 +1067,20 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
   /**
    * 释放 **Autocomplete** 服务实例（幂等）。
    *
-   * 语义：① 停止接受该实例的业务调用；② 解绑 Driver 侧资源（输入活动监听）并把在飞的 `suggest()`
-   * 显式失败；③ 调用 SDK 自身的 `dispose()`——**只有成功才记账**，抛错时调用方收到错误，句柄仍保持
-   * 不可用，再次调用会**重试**未完成的 SDK 清理。
+   * 语义：① 停止接受该实例的业务调用（释放之后到达的回包不再转发给 `onSearchComplete`）；
+   * ② 释放 Driver 侧的订阅记账；③ 调用 SDK 自身的 `dispose()`——**只有成功才记账**，抛错时调用方
+   * 收到错误，句柄仍保持不可用，再次调用会**重试**未完成的 SDK 清理。
    *
    * **为什么是专用入口、而不是通用 `dispose(ServiceHandle<string>)`**：契约必须与实现一致。**只有**
-   * `Autocomplete`（输入活动监听 + 待回包队列）与 `LocalSearch`（待回包队列）在 Driver 侧持有资源；
+   * `Autocomplete` 与 `LocalSearch` 在 Driver 侧持有需要清理的资源（订阅记账，后者还有
+   * 「一个实例一个未结算操作」的槽位）；
    * 其余服务（Geocoder / Boundary / Convertor / LocalCity / Geolocation）的调用既没有登记在飞请求、
    * 也没有释放标记——通用入口会承诺「在飞调用会失败、释放后拒绝新调用」而实现做不到。
    * 这条取舍（以及「统一状态口径由 composable 侧的 `useBMapServiceTask` 承担」）冻结在 ADR
    * `2026-09-14-service-lifecycle-and-local-search.md`。
    *
-   * 只用输入框联想 UI（不调用 `suggest()`）的实例也**应该**在结束使用时调用它：输入框通常比实例
-   * 活得久，Driver 挂在它上面的监听器不会随 SDK 实例被回收而消失。
+   * 绑输入框的实例在结束使用时**应该**调用它：SDK 实例的 `dispose()` 不会随输入框一起被回收，
+   * 而 Driver 的订阅记账也必须显式销账。
    */
   disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
 

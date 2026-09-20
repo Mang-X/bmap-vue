@@ -26,10 +26,10 @@
  *   `Convertor#translate` 回包的 `status`）才走 `failed` 并带上那个码；
  * - `Geolocation` 与 `LocalSearch` 是公开带状态码的服务，因此 `sdkStatus` 恒有值
  *   （拿不到时如实为 `null`，不伪装成 0）；
- * - `Autocomplete` 是**事件式**服务：`search()` 只负责发起请求，结果经构造选项的
- *   `onSearchComplete` 回来。归一化调用因此由 Driver 在创建时挂一个**内部分发器**：
- *   既结算 pending 的 `suggest()`，也把同一个回调转给调用方传入的 `onSearchComplete`
- *   （不吞掉业务本来就有的监听）；
+ * - `Autocomplete` 是**事件式**服务，**没有**归一化调用面：官方只有一条 `onSearchComplete`、回包里
+ *   没有请求身份，所以 Driver 只在创建时挂一个**转发器**——把回包原样交给调用方传入的
+ *   `onSearchComplete`，并在实例释放后不再回写。「这条结果属于哪次输入」由持有输入框的一方判断；
+ *   本库不按到达顺序猜（#104：原先为程序化 `suggest()` 建的队列/keyword/FIFO 归属层已删除）；
  * - `LocalSearch` 同样是**事件式**服务，但**不绑输入框**；它的归属**不**依赖回包顺序或 `keyword`
  *   （官方没有承诺跨请求顺序，`keyword` 也不是请求身份），而是靠「**一个实例一个未结算操作**」
  *   这条不变式：并发显式拒绝，取消/超时之后该实例要重建。见 `search()` 的契约与 ADR 决策 4；
@@ -72,7 +72,6 @@ import type {
   LocalSearchRenderOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
-  PlaceSuggestion,
   ReverseGeocodeRequest,
   RidingRouteOptions,
   RidingRouteResult,
@@ -143,22 +142,6 @@ interface RawLocalCityPayload {
   name?: string;
   center?: RawPoint;
   level?: number;
-}
-
-interface RawAutocompletePoi {
-  province?: string;
-  city?: string;
-  district?: string;
-  street?: string;
-  streetNumber?: string;
-  business?: string;
-}
-
-interface RawAutocompleteResult {
-  /** 检索关键字（官方 `AutocompleteResult.keyword`；运行时不保证填充） */
-  keyword?: string;
-  getNumPois?: () => number;
-  getPoi?: (index: number) => RawAutocompletePoi | undefined;
 }
 
 /** `LocalSearch#onSearchComplete` 回包的单个结果点（官方 `LocalResultPoi`）。 */
@@ -317,39 +300,6 @@ export function parseBoundaryRing(value: unknown): Point[] {
     if (Number.isFinite(lng) && Number.isFinite(lat)) ring.push({ lng, lat });
   }
   return ring;
-}
-
-/** `province + city + district + street` 的结构化地址（`business` 为空时的标题）。 */
-function composeAddress(poi: RawAutocompletePoi): string {
-  return [poi.province, poi.city, poi.district, poi.street]
-    .filter((part): part is string => typeof part === "string" && part.length > 0)
-    .join("");
-}
-
-/** `AutocompleteResult` → 领域条目（`getPoi` / `getNumPois` 是官方唯一读法）。 */
-export function readSuggestions(
-  results: RawAutocompleteResult | null | undefined,
-): PlaceSuggestion[] {
-  if (
-    !results ||
-    typeof results.getNumPois !== "function" ||
-    typeof results.getPoi !== "function"
-  ) {
-    return [];
-  }
-  const count = results.getNumPois();
-  if (!Number.isFinite(count) || count <= 0) return [];
-  const suggestions: PlaceSuggestion[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const poi = results.getPoi(index);
-    if (!poi) continue;
-    suggestions.push({
-      title: poi.business || composeAddress(poi),
-      address: composeAddress(poi),
-      index,
-    });
-  }
-  return suggestions;
 }
 
 /**
@@ -812,129 +762,6 @@ export function createJsapiV4ServiceDriver(
   const warnOnce = createWarnOnce();
 
   /**
-   * 同一 `Autocomplete` 实例的 pending 结算**队列**。
-   *
-   * > **这是未经真实运行时证明的假设（R25-C / #72 的显式标注）。** 下面的归属规则成立的前提是
-   * > `AutocompleteResult.keyword` 确实等于「本次检索所用的关键字」、且同关键字的回包与请求一一
-   * > 对应。这两条**都不在官方 4.0 文档的承诺范围内**（`keyword` 被声明为可选字段，运行时是否
-   * > 填充未说明），本仓库也**没有**在真实 AK 上验证过。因此：
-   * > - Capability Catalog 把 `service.autocomplete` 标为 `experimental`（不是 `native`）；
-   * > - 归属规则只按「够用且可解释」设计（见下 1/2/3），并在无法归因时**拒绝**而不是猜；
-   * > - 彻底的隔离（每次请求一个独立实例 + 回调闭包）属 M7（#38 / #41），本 issue 只做
-   * >   「串行化 + 上界 + 标注」，不新增隐式请求调度框架。
-   *
-   * `Autocomplete#search()` **不带请求身份**：回包除了可选的 `keyword` 之外没有任何可用于
-   * 归因的信息。因此归属规则必须与「同一关键词最多只有一个槽位」这条**不变式**配套使用
-   * （由 `suggest()` 的前置拒绝保证），否则无论取最早还是取最新的同名项都只是按到达时间猜：
-   *
-   * 1. 回包**带 `keyword` 且队列里有同名项** ⇒ 取**最早**的同名项（回包与 `search()` 一一对应
-   *    并按请求顺序到达；由于同关键词只有一个槽位，取最早即等于「就是它自己的那个」）；
-   * 2. 回包**带 `keyword` 但队列里没有同名项** ⇒ **不消费任何槽位**（不属于任何 `suggest()`，
-   *    或属于已被上界丢掉的旧请求）——落回 FIFO 会把用户输入触发的回包结算给下一个调用；
-   * 3. 回包**不带 `keyword`**（运行时是否填充未在文档中承诺）⇒ 退化为**先进先出**。
-   *
-   * 两个直接推论：
-   * - **被取消 / 已超时的那次 `search()` 的回包仍会到达**（SDK 没有取消入口），所以取消不能
-   *   从队列里删掉自己的槽位——否则它的迟到回包会去结算**下一个**调用（旧结果污染新请求）；
-   * - 取消 / 超时后的结算由适配器的「先到者胜」吸收（已结算的 `ServiceCall` 再收到 `success`
-   *   是 no-op），墓碑只需要保证数量对齐；墓碑在自己那个回包到达时被移除。
-   */
-  const pendingSuggest = new WeakMap<
-    object,
-    Array<{ keyword: string; settle: ServiceCallSettle<PlaceSuggestion[]> }>
-  >();
-
-  /**
-   * 待回包队列的上限。**达到上限时拒绝新调用，而不是淘汰旧记录**（PR #63 四轮复审 P2-1）：
-   * 淘汰并不会取消 SDK 请求，被淘汰的请求的回包仍会到达；一旦它的关键词又出现在队列里
-   * （例如取消旧 K 之后再查 K），那个回包就会被错误地结算给新调用。上限只作为「SDK 长期
-   * 不回包」时的资源护栏，失败是显式的。
-   */
-  const MAX_PENDING_SUGGESTS = 16;
-
-  const isQueueFull = (raw: Record<string, unknown>): boolean =>
-    (pendingSuggest.get(raw)?.length ?? 0) >= MAX_PENDING_SUGGESTS;
-
-  const enqueueSuggest = (
-    raw: Record<string, unknown>,
-    keyword: string,
-    settle: ServiceCallSettle<PlaceSuggestion[]>,
-  ): void => {
-    const queue = pendingSuggest.get(raw) ?? [];
-    queue.push({ keyword, settle });
-    pendingSuggest.set(raw, queue);
-  };
-
-  /** `search()` 同步抛错时回滚刚入队的槽位（没有请求就没有回包，留着会永久错位）。 */
-  const dequeueSuggest = (
-    raw: Record<string, unknown>,
-    settle: ServiceCallSettle<PlaceSuggestion[]>,
-  ): void => {
-    const queue = pendingSuggest.get(raw);
-    if (!queue) return;
-    const index = queue.findIndex((entry) => entry.settle === settle);
-    if (index >= 0) queue.splice(index, 1);
-  };
-
-  /**
-   * 取出本次回包对应的 pending 结算（判定规则见 `pendingSuggest` 的注释）。
-   *
-   * 队列为空、或**回包带了 keyword 但队列里没有同名项**时返回 `null`：那种回包既不属于任何
-   * `suggest()`（用户在输入框里打字会触发同一条 `onSearchComplete`），也可能是已被队列上界
-   * 丢掉的旧请求的迟到回包。落回 FIFO 会把它结算给队列里的**下一个**调用（旧结果污染新请求），
-   * 所以这里必须**不消费任何槽位**。
-   */
-  const shiftPending = (
-    raw: Record<string, unknown>,
-    results: RawAutocompleteResult | null | undefined,
-  ): ServiceCallSettle<PlaceSuggestion[]> | null => {
-    const queue = pendingSuggest.get(raw);
-    if (!queue || queue.length === 0) return null;
-
-    const keyword = typeof results?.keyword === "string" ? results.keyword : null;
-    if (keyword === null) {
-      // 回包不带 keyword（官方只承诺「可选」）⇒ 只能按顺序退化到队首
-      return queue.shift()?.settle ?? null;
-    }
-    // 带 keyword ⇒ 取**最早**的同名项：回包与 `search()` 一一对应、且按请求顺序到达，
-    // 因此最早那个就是本次回包的归属。取最新会把**旧回包塞给新请求**（三轮复审用「按请求
-    // 顺序正常返回」的反例证明了这一点）。
-    const index = queue.findIndex((entry) => entry.keyword === keyword);
-    if (index < 0) return null;
-    const [entry] = queue.splice(index, 1);
-    return entry?.settle ?? null;
-  };
-
-  /**
-   * 该关键词是否已有未完成的槽位（含已取消 / 已超时、但仍在等自己那个回包的墓碑）。
-   *
-   * `suggest()` 用它做**前置拒绝**：同关键词的重叠请求无法被归属（见 `suggest` 的注释），
-   * 拒绝之后同一关键词在任意时刻最多只有一个槽位，回包归属与到达顺序无关。
-   */
-  const hasPendingKeyword = (raw: Record<string, unknown>, keyword: string): boolean =>
-    (pendingSuggest.get(raw) ?? []).some((entry) => entry.keyword === keyword);
-
-  /**
-   * 回调通道**独占**的判定（五轮复审 P2 之后）。
-   *
-   * `Autocomplete` 只有一条 `onSearchComplete`，用户输入触发的检索与程序化 `search()` 共用它，
-   * 而回包里没有任何「这次是谁触发的」信息——因此**可输入的实例上，同关键词的原生回包与程序化
-   * 回包无法区分**。判定必须看输入框的**当前**状态（HTML 控件的可编辑性取决于当前的
-   * `disabled` / `readonly` / `type`，构造之后随时可能变回可输入），所以：
-   *
-   * - `boundInput`：保留输入框引用，在**每次 `suggest()` 与每次回包**时重新校验；
-   * - `lostExclusivity`：一旦观察到可输入就**永久失效**（不因为随后又变回只读而恢复资格——
-   *   可编辑期间触发的旧请求可能仍在等回包），此后的 `suggest()` 与回包都明确失败/忽略，
-   *   调用方需重建实例。
-   *
-   * 为什么不直接建一个「程序化专用实例」：真实 4.0 里不带 `input` 的实例**能构造但 `search()`
-   * 不回包**（smoke 实测：`no-input` / `input: undefined` 都是「构造 ok；3s 内回包数=0」），
-   * 而挂到文档的输入框才是 `search()` 能回包的前提——所以独占通道只能由调用方用「不可输入的
-   * 输入框」表达，Driver 不替它造 DOM（DOM 所有权与释放路径都留在调用方一侧）。
-   */
-  const boundInput = new WeakMap<object, unknown>();
-  const lostExclusivity = new WeakSet<object>();
-  /**
    * 已进入**终态**的服务实例（`disposeAutocomplete()` / `disposeLocalSearch()`）：此后一律拒绝
    * 业务调用（释放时会把在飞调用显式失败）。
    *
@@ -952,105 +779,6 @@ export function createJsapiV4ServiceDriver(
    * 调用」，但**不能**因此跳过后续重试——只有成功才记账，失败留给下一次 dispose 入口重试。
    */
   const sdkDisposedInstances = new WeakSet<object>();
-  /**
-   * 绑定输入框上的「用户输入活动」监听（`input` 事件）——**释放路径见 `releaseInputWatcher`**。
-   *
-   * 六轮曾用 `MutationObserver` 观察属性变化，但**「属性被写过」不等于「曾经可输入」**（七轮复审
-   * P2-2）：真实 Chromium 里 `input.readOnly = true` 重复赋同值同样会产生一条记录，于是「始终只读、
-   * 只是随 loading 切 `disabled`」这类完全安全的用法会被永久禁用。
-   *
-   * 改为监听**输入活动**：它才是官方文档里原生检索的触发源（「输入框中的字符输入会触发检索」），
-   * 既不误伤属性写入，又覆盖了 `解除只读 → 用户输入 → 恢复只读` 那个没有观察点的窗口。
-   */
-  const inputWatchers = new WeakMap<object, { target: EventTarget; listener: EventListener }>();
-
-  /** 输入框是否可被用户输入（决定回调通道是否独占）。缺输入框时按「不独占」处理。 */
-  const isTypableInput = (input: unknown): boolean => {
-    if (typeof input !== "object" || input === null) return false;
-    const el = input as { readOnly?: unknown; disabled?: unknown; type?: unknown };
-    if (el.readOnly === true || el.disabled === true) return false;
-    return el.type !== "hidden";
-  };
-
-  const EXCLUSIVITY_LOST_HINT = "请重建 Autocomplete 实例（用不可输入的输入框）后再做程序化检索";
-
-  /**
-   * 解绑输入框上的输入活动监听。**这是监听器的唯一释放路径**，必须在实例进入终态时调用
-   * （失去独占 / 被 `dispose()`）：输入框通常比实例活得久，不解绑就会让监听器长期持有旧的 raw
-   * 实例与闭包（七轮复审 P2-1）。
-   */
-  const releaseInputWatcher = (raw: Record<string, unknown>): void => {
-    const watcher = inputWatchers.get(raw);
-    if (!watcher) return;
-    inputWatchers.delete(raw);
-    try {
-      watcher.target.removeEventListener("input", watcher.listener);
-    } catch {
-      /* 解绑失败不阻断：输入框可能已被替换或宿主未完整实现 EventTarget */
-    }
-  };
-
-  /**
-   * 标记实例失去独占，并把在飞的程序化请求**显式失败**：那些回包可能来自用户输入，不能再被当成
-   * 程序化检索的结果（宁可失败也不猜）。永久生效，见 `lostExclusivity`。
-   */
-  const loseExclusivity = (raw: Record<string, unknown>, reason: string): void => {
-    if (lostExclusivity.has(raw)) return;
-    lostExclusivity.add(raw);
-    // 释放路径：监听器只在「实例可能被用于程序化检索」期间需要，终止态一定解绑，
-    // 不留下持有输入框与闭包的活监听器。
-    releaseInputWatcher(raw);
-    const queue = pendingSuggest.get(raw) ?? [];
-    pendingSuggest.delete(raw);
-    for (const entry of queue) {
-      entry.settle.failed({ code: "BMAP_SERVICE_FAILED", message: reason });
-    }
-  };
-
-  /**
-   * 开始监听输入框的**输入活动**（`input` 事件）。
-   *
-   * 绑定失败时静默退化为「每次检查当前状态」——监听能力缺失不应让实例不可用。
-   */
-  const watchInputActivity = (raw: Record<string, unknown>, input: unknown): void => {
-    if (typeof input !== "object" || input === null) return;
-    const target = input as Partial<EventTarget>;
-    if (typeof target.addEventListener !== "function") return;
-    const listener: EventListener = () => {
-      loseExclusivity(
-        raw,
-        "该 Autocomplete 实例绑定的输入框在实例使用期间收到过用户输入：用户输入会触发原生检索，" +
-          "其回包与程序化检索无法区分（可能把用户那次的结果当成程序化调用的结果）；" +
-          EXCLUSIVITY_LOST_HINT,
-      );
-    };
-    try {
-      target.addEventListener("input", listener);
-      inputWatchers.set(raw, { target: target as EventTarget, listener });
-    } catch {
-      /* 非 DOM 环境等：退化为每次检查当前状态 */
-    }
-  };
-
-  /** 每次调用 / 每次回包都要跑的独占校验；返回失败原因（null 表示仍然独占）。 */
-  const exclusivityFailure = (raw: Record<string, unknown>): string | null => {
-    if (disposedInstances.has(raw)) {
-      return "该服务实例已被 disposeAutocomplete() 释放：请重建实例后再做程序化检索";
-    }
-    if (lostExclusivity.has(raw)) {
-      return `该 Autocomplete 实例已失去回调通道独占（输入框曾可输入、或收到过用户输入）：${EXCLUSIVITY_LOST_HINT}`;
-    }
-    if (isTypableInput(boundInput.get(raw))) {
-      const message =
-        "该 Autocomplete 实例绑定的输入框当前可输入：用户输入触发的检索与程序化检索共用同一条 " +
-        "onSearchComplete，关键词相同时回包无法区分（可能把用户那次的结果当成程序化调用的结果）。" +
-        `请用不可输入的输入框（readOnly / disabled / type="hidden"）创建程序化检索实例，` +
-        `或改用该实例的 onSearchComplete 回调；${EXCLUSIVITY_LOST_HINT}`;
-      loseExclusivity(raw, message);
-      return message;
-    }
-    return null;
-  };
 
   /**
    * 空回包的统一结算：`null` / 空容器 → `empty`。
@@ -1104,7 +832,8 @@ export function createJsapiV4ServiceDriver(
     handle: ServiceHandle<string>,
     options: {
       label: string;
-      cleanup: () => void;
+      /** 该种类专属的 Driver 侧清理；没有专属清理时省略（`events.release` 一律执行）。 */
+      cleanup?: () => void;
       /**
        * SDK 侧的释放步骤（**公开 API**）。缺省 = 探测 `dispose`（`Autocomplete` 的官方声明里有
        * 该成员）；`LocalSearch` 没有官方 `dispose()`，因此传
@@ -1124,7 +853,7 @@ export function createJsapiV4ServiceDriver(
       // **两步分别 try/catch**：`cleanup()` 抛错不能连带跳过 `events.release()`——那句注释
       // 里承诺的是「解绑失败不阻断其余步骤」，两份清理写在一个 try 里就做不到（PR #89 评审 P2）。
       try {
-        options.cleanup();
+        options.cleanup?.();
       } catch (error) {
         failures.push(error);
       }
@@ -1874,48 +1603,35 @@ export function createJsapiV4ServiceDriver(
       const Autocomplete = namespaceCtor(namespace, "Autocomplete");
       const location = normalizeAutocompleteLocation(options.location);
 
-      // 内部分发器：先结算在册的那一个 pending，再把同一个回调转给调用方自己的监听。
+      // 官方只有一条 `onSearchComplete`，回包里没有任何请求身份，因此本库**不做归属推断**：
+      // 回包原样转发给调用方的监听，「这条结果属于哪次输入」由持有输入框的一方决定。
       let raw: Record<string, unknown> | null = null;
       const instance = sdkCall("Autocomplete", () =>
         new Autocomplete({
           location,
           input: options.input,
           types: options.types,
-          onSearchComplete: (results: RawAutocompleteResult) => {
+          onSearchComplete: (results: unknown) => {
             // **已释放的实例一律不再回写**（R25-C 复审 P1）：SDK 的回包可能在
             // `disposeAutocomplete()` 之后才到达（取消 / 卸载都收不回请求），也可能在 dispose()
             // 内部**同步**触发（真实销毁流程会走回调）。`disposedInstances` 在 dispose 的第一步就置位，
             // 因此两条路径都在这里被挡住。「卸载后不再回写」是 Driver 的契约，不能依赖调用方
             // （Vue 组件）自己再判一次——更不能依赖「Vue 卸载后 emit 恰好是 no-op」这种内部实现。
             if (raw && disposedInstances.has(raw)) return;
-            let settle: ServiceCallSettle<PlaceSuggestion[]> | null = null;
-            if (raw) {
-              // 独占在**每次回包**时重新校验：等待期间输入框变回可输入 ⇒ 这个回包可能来自用户输入，
-              // 一律不接受（把在飞的程序化请求显式失败，并让实例永久失效）
-              if (exclusivityFailure(raw) === null) settle = shiftPending(raw, results);
-            }
-            if (settle) {
-              const suggestions = readSuggestions(results);
-              if (suggestions.length > 0) settle.success(suggestions);
-              else settle.empty();
-            }
             options.onSearchComplete?.(results);
           },
         }),
       );
       raw = instance as unknown as Record<string, unknown>;
-      // 记下输入框**引用**：独占判定在每次 `suggest()` 与每次回包时重新校验（见 `boundInput`）；
-      // 另外监听它的**输入活动**——只看当前状态发现不了「检查间隔内发生过的输入」（见 `inputWatchers`）
-      boundInput.set(raw, options.input);
-      watchInputActivity(raw, options.input);
       return registry.adopt("service:autocomplete", instance);
     },
 
     /**
      * 创建本地检索实例（`BMap.LocalSearch`）。
      *
-     * 与 `createAutocomplete` 的关键差别：**不绑输入框**，因此回调通道不被用户输入污染，不需要
-     * 「通道独占」那套前置校验。但它的回包**同样没有请求身份**（`keyword` 不是标识、官方也没承诺
+     * 与 `createAutocomplete` 的关键差别：**不绑输入框**，因此回调通道不被用户输入污染，本库可以
+     * 拥有这条通道（Autocomplete 做不到，所以它根本没有归一化调用面）。但它的回包**同样没有请求
+     * 身份**（`keyword` 不是标识、官方也没承诺
      * 跨请求顺序），所以归属靠**实例身份**：一个实例同一时刻只允许一个未结算操作（见 `search()`
      * 的契约与 ADR 决策 4）。代价是必须自己管在飞请求的记账与释放入口（`disposeLocalSearch`）。
      *
@@ -1962,10 +1678,8 @@ export function createJsapiV4ServiceDriver(
      * `inst.raw.setLocation(...)` 把 raw 成员访问摊在组件里，既越过了 raw SDK 边界，又让
      * 「某个 setter 在某个引擎上不存在」变成组件作者的记忆负担。这里统一：
      *
-     * - **前置状态校验**：已被 `disposeAutocomplete()` 释放的实例一律拒绝——写入一个已销毁的
-     *   SDK 对象是没有意义的行为，静默成功会骗人；
-     * - **失去回调通道独占**（输入框曾可输入）**不**拒绝：这是纯配置写入，不发起请求、也不影响
-     *   回包归属，把它算成错误只会让「用户改过输入框」的实例连检索区域都改不了；
+     * - **已释放**（`disposeAutocomplete()`）的实例一律拒绝——写入一个已销毁的 SDK 对象是没有
+     *   意义的行为，静默成功会骗人；
      * - 成员缺失时**告警一次**而不是静默 no-op（与 `setOptions` 的 mutable 分支同口径）：
      *   官方声明了该成员，运行时没有说明声明与实现不一致，调用方有权知道这次更新没生效。
      */
@@ -2105,37 +1819,22 @@ export function createJsapiV4ServiceDriver(
      * 释放 **Autocomplete** 服务实例（Driver 侧释放入口，七/八轮复审）。
      *
      * 为什么是专用入口而不是通用 `dispose(ServiceHandle<string>)`（八轮复审 P2-1）：契约必须与实现
-     * 一致。当前只有 Autocomplete 在 Driver 侧持有资源（输入活动监听 + 待回包队列）与 LocalSearch
-     * （待回包队列），其余服务
+     * 一致。当前只有 Autocomplete 与 LocalSearch 在 Driver 侧持有需要清理的东西（订阅记账，
+     * 后者还有「一个实例一个未结算操作」的槽位），其余服务
      * （Geocoder / Boundary / Convertor …）的调用**没有登记在飞请求、也没有释放标记**——一个通用的
      * `dispose()` 会承诺「在飞调用会失败、释放后拒绝新调用」，而实现做不到。统一的服务生命周期
      * 统一状态口径由 composable 侧的 `useBMapServiceTask` 承担（ADR `2026-09-14-service-lifecycle-and-local-search.md`）。
      *
-     * 语义：① 幂等；② **Driver 侧清理**（解绑输入活动监听 + 把在飞建议调用显式失败）每次都执行
-     * （幂等）；③ **SDK 自身的 `dispose()` 只有成功才记账**：抛错时调用方会收到错误，而句柄保持
-     * 「不再接受业务调用」，再次 dispose 会**重试**未完成的 SDK 清理（八轮复审 P2-2）。
+     * 语义：① 幂等；② **Driver 侧清理**（订阅释放）每次都执行（幂等）；③ **SDK 自身的
+     * `dispose()` 只有成功才记账**：抛错时调用方会收到错误，而句柄保持「不再接受业务调用」，
+     * 再次 dispose 会**重试**未完成的 SDK 清理（八轮复审 P2-2）。
      */
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">) {
       // 先按句柄种类拦（纯元数据判断），再解析；与 setAutocompleteOptions 共用一份判据
       assertAutocompleteHandle(handle, "disposeAutocomplete");
       const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.disposeAutocomplete");
 
-      disposeServiceInstance(raw, handle, {
-        label: "disposeAutocomplete",
-        cleanup: () => {
-          // 输入框上的输入活动监听必须在实例进入终态时解绑（输入框通常比实例活得久）
-          releaseInputWatcher(raw);
-          // 在飞建议调用显式失败（幂等，重试时重复执行没有代价）
-          const queue = pendingSuggest.get(raw) ?? [];
-          pendingSuggest.delete(raw);
-          for (const entry of queue) {
-            entry.settle.failed({
-              code: "BMAP_SERVICE_FAILED",
-              message: "该服务实例在请求进行中被 disposeAutocomplete() 释放",
-            });
-          }
-        },
-      });
+      disposeServiceInstance(raw, handle, { label: "disposeAutocomplete" });
     },
 
     /* -------------------------------------------------------- 归一化调用面 */
@@ -2370,55 +2069,6 @@ export function createJsapiV4ServiceDriver(
           });
         },
         { label: "LocalCity.get" },
-      );
-    },
-
-    suggest(handle, keyword: string) {
-      if (typeof keyword !== "string" || keyword.length === 0) {
-        return invalidCall<PlaceSuggestion[]>("Autocomplete.search", "keyword 必须是非空字符串");
-      }
-      const raw = resolve<Record<string, unknown>>(handle, "ServiceDriver.suggest");
-
-      // 前置拒绝 1（通道独占）：在**调用时**校验输入框的当前状态，而不是只信构造时的标记——
-      // HTML 控件的可编辑性随时可变，构造后恢复可输入同样会让两类回包无法区分（五轮复审 P2）。
-      const exclusivity = exclusivityFailure(raw);
-      if (exclusivity !== null) {
-        return serviceFailedCall<PlaceSuggestion[]>("Autocomplete.search", exclusivity);
-      }
-
-      // 前置拒绝 2（同关键词互斥）：`Autocomplete` 的回包不带请求身份，两次同名请求的回包互相
-      // 不可区分——旧回包先到会把旧结果塞给新请求，新回包先到又会让旧请求失效（两种情况都在
-      // PR #63 的复审里被复现过）。拒绝之后同一关键词在任意时刻最多只有一个槽位，归属与到达
-      // 顺序无关。彻底的隔离（每次请求一个独立实例 + 回调闭包）属 M7（#38 / #41），见 ADR。
-      if (hasPendingKeyword(raw, keyword)) {
-        return serviceFailedCall<PlaceSuggestion[]>(
-          "Autocomplete.search",
-          `同一 Autocomplete 实例上已有关键词 "${keyword}" 的未完成请求：Autocomplete 的回包不带请求标识，` +
-            "本次与它的回包无法区分（旧结果可能被当成新结果）；请等它结算后再查，或改用不同关键词",
-        );
-      }
-      if (isQueueFull(raw)) {
-        return serviceFailedCall<PlaceSuggestion[]>(
-          "Autocomplete.search",
-          `同一 Autocomplete 实例上等待回包的程序化检索已达上限 ${MAX_PENDING_SUGGESTS}：` +
-            "旧请求的记录必须保留到它的回包到达为止（淘汰它们会让迟到回包被错误归属），请等待结算后再查",
-        );
-      }
-
-      // 刻意**不传 `onCancel`**：取消只影响本次 `ServiceCall` 的结果（由适配器结算成
-      // `canceled`），队列槽位必须留在原处吸收那次 search 的回包——理由见 `pendingSuggest`。
-      return createServiceCall<PlaceSuggestion[]>(
-        (settle) => {
-          enqueueSuggest(raw, keyword, settle);
-          try {
-            callRequired(raw, "search", keyword);
-          } catch (error) {
-            // 请求没发出去就不会有回包：回滚槽位，否则队列会永久错位一格
-            dequeueSuggest(raw, settle);
-            throw error;
-          }
-        },
-        { label: "Autocomplete.search" },
       );
     },
 

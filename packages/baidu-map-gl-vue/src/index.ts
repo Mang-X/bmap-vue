@@ -31,7 +31,7 @@ export type { PluginCatalogEntry } from "./plugins/catalog";
 // Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
 // 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
-export { Vue3BaiduMapGlResolver, componentTypeNames } from "./resolver/index";
+export { Vue3BaiduMapGlResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
   BMapProps,
@@ -77,13 +77,7 @@ export {
 } from "./core/context/client";
 export type { BMapClientContext, ClientStatus } from "./core/context/client";
 // Target Context(嵌套挂载目标)
-export {
-  targetContextKey,
-  createStaticTarget,
-  useResolvedTarget,
-  useOptionalTargetContext,
-  useParentOverlayHandle,
-} from "./core/context/target";
+export { targetContextKey, useParentOverlayHandle } from "./core/context/target";
 export type { TargetContext, TargetKind } from "./core/context/target";
 // 统一资源生命周期
 export { useSdkResource } from "./core/composables/useSdkResource";
@@ -146,7 +140,6 @@ export type {
   OverlayPropAlias,
 } from "./core/deprecations";
 export type { OverlayKind } from "./driver/types/overlays";
-export { useResourceScope } from "./core/lifecycle/useResourceScope";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
 export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
 export type { BMapProviderProps } from "./components/provider/BMapProvider.vue";
@@ -174,6 +167,8 @@ export type {
   ControlHandle,
   LayerHandle,
   ServiceHandle,
+  // 句柄基类：`ContextMenuSelectPayload.target` 用到它（目标可能是地图也可能是标注）
+  SdkHandle,
 } from "./driver/types/handles";
 // Map 命令面与暂停原因（M4-HANDLE-UX / issue #29）
 //
@@ -253,7 +248,6 @@ export type {
   LocalSearchRenderOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
-  PlaceSuggestion,
   RidingRouteOptions,
   RidingRouteResult,
   RouteEndpoint,
@@ -332,7 +326,18 @@ export type {
 } from "./driver";
 
 // 组件公开类型(与 SFC 内 export 对齐,供类型使用)
-export type { ContextMenuItem, ContextMenuSeparator } from "./components/overlays/BContextMenu.vue";
+//
+// M5-CUSTOM-MENU / #33：`ContextMenuItem` / `ContextMenuSeparator` 从此前「从 .vue 导出」改为
+// 从 `types/components.ts` 导出——`.vue` 的具名命名导出在纯 tsc 下解析不了（本文件头部的约定），
+// 而菜单这一族现在还有 `BMenuItemProps` / `ContextMenuSelectPayload` 要一起暴露。
+export type {
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSelectPayload,
+  BContextMenuProps,
+  BMenuItemProps,
+  BCustomOverlayProps,
+} from "./types/components";
 export type { MarkerIcon, MarkerIconName, MarkerCustomIcon } from "./types/components";
 
 // 运行时枚举(供模板/脚本使用)

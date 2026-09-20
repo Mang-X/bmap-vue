@@ -77,7 +77,13 @@ describe("#31 事件矩阵 ↔ 文档镜像", () => {
     expect(doc.sections.length, "文档里没有解析到任何事件表小节").toBeGreaterThanOrEqual(10);
     const totalRows = doc.sections.reduce((sum, section) => sum + section.rows.length, 0);
     expect(totalRows, "解析到的表格行太少").toBeGreaterThan(100);
-    expect(doc.noEventKinds.length, "没有解析到「无事件表」清单").toBeGreaterThanOrEqual(4);
+    // 下界跟着 `OVERLAY_KINDS_WITHOUT_EVENT_MATRIX` 走：它现在只剩两个 kind（#33 把
+    // custom-overlay / context-menu 收进矩阵后）。这里只用「非空且与登记表同量级」守解析失效，
+    // 逐项相等由下面那条用例负责。
+    expect(doc.noEventKinds.length, "没有解析到「无事件表」清单").toBeGreaterThanOrEqual(2);
+    expect(doc.noEventKinds.length).toBeLessThanOrEqual(
+      Object.keys(OVERLAY_KINDS_WITHOUT_EVENT_MATRIX).length + 1,
+    );
   });
 
   it("文档里的小节恰好是矩阵里的 kind", () => {

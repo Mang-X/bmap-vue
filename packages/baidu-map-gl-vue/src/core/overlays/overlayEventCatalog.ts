@@ -20,20 +20,25 @@
  *
  * ## 名字从哪来（上游权威清单）
  *
- * `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts` 逐类声明了事件映射表：
+ * `@baidumap/jsapi-v4-types@4.0.4` 把每个覆盖物的事件映射表声明在**它自己那一类**的 `.d.ts` 里
+ * （`overlay/OverlayEvent.d.ts` 只装其中一部分）：
  *
- * | kind | 上游声明 |
- * | --- | --- |
- * | `marker` | `MarkerEventMap`（11 个） |
- * | `label` | `LabelEventMap`（8 个） |
- * | `polyline` / `polygon` / `rectangle` / `circle` | `GraphEventMap`（17 个） |
- * | `prism` / `bezier-curve` | `GraphEventMap` **Omit 6 个编辑事件**（11 个） |
- * | `ground-overlay` | `GroundOverlayEventMap`（11 个） |
- * | `info-window` | `InfoWindowEventMap`（6 个） |
+ * | kind | 上游声明 | 声明所在文件 |
+ * | --- | --- | --- |
+ * | `marker` | `MarkerEventMap`（11 个） | `overlay/OverlayEvent.d.ts` |
+ * | `label` | `LabelEventMap`（8 个） | 同上 |
+ * | `polyline` / `polygon` / `rectangle` / `circle` | `GraphEventMap`（17 个） | 同上 |
+ * | `prism` / `bezier-curve` | `GraphEventMap` **Omit 6 个编辑事件**（11 个） | 同上 |
+ * | `ground-overlay` | `GroundOverlayEventMap`（11 个） | 同上 |
+ * | `info-window` | `InfoWindowEventMap`（6 个） | 同上 |
+ * | `custom-overlay` | `CustomOverlayEventMap`（3 个） | `overlay/CustomOverlay.d.ts` |
+ * | `context-menu` | `ContextMenuEventMap`（2 个） | `context-menu/ContextMenu.d.ts` |
  *
- * `tests/behavior/v3-overlay-event-matrix.test.ts` 直接解析那份 `.d.ts` 的文本做**双向**比对
- * （表里多一个、少一个都红），因此「事件命名和 payload 由统一 Catalog 管理」是一条会红的检查，
- * 而不是文档承诺。
+ * 最后两行是 issue #33 补上的：此前本表把它们登记成「上游没有事件表」，而那是**只读了一个文件**
+ * 得到的结论——两张表都在，只是不在 `OverlayEvent.d.ts` 里。事件名照旧由
+ * `tests/behavior/v3-overlay-event-matrix.test.ts` 对着这三个文件做**双向**比对
+ * （表里多一个、少一个、或某张表换了文件都红），因此「事件命名和 payload 由统一 Catalog 管理」
+ * 是一条会红的检查，而不是文档承诺。
  *
  * ## Vue 命名规范
  *
@@ -55,8 +60,9 @@
  * 三档全部来自上游声明，不是本库的偏好（细节见 `driver/types/events.ts`）：
  *
  * - `pointer`：上游 `OverlayMouseEvent.point` 必填 ⇒ Driver 补 `{lng:0,lat:0}`，载荷 `point` 必填；
- * - `partial-pointer`：上游声明可缺（图形族 `mouseout` = `GraphMouseOutEvent`；GroundOverlay 家族的
- *   `GroundOverlayMouseEvent` 各字段可缺）⇒ **不补**，载荷 `point` 可缺；
+ * - `partial-pointer`：上游声明可缺、或**可为 `null`**（图形族 `mouseout` = `GraphMouseOutEvent`；
+ *   GroundOverlay 家族的 `GroundOverlayMouseEvent` 各字段可缺；`ContextMenuEvent.point` 是
+ *   `Point | null`）⇒ **不补**，载荷 `point` 可缺（归一化把 `null` 与「缺失」都收成 `undefined`）；
  * - `base`：`OverlayBaseEvent` / `GraphLineUpdateEvent` / `GraphEditEvent` ⇒ 只有底座字段
  *   （未归一化的 `action` / `from` 等仍经 `raw` 逃生口读取，与本库对 map 事件的口径一致）。
  *
@@ -234,6 +240,33 @@ const INFO_WINDOW_EVENTS: Record<string, OverlayEventInput> = {
 };
 
 /**
+ * `CustomOverlayEventMap`（3 个）：三个事件的载荷都是 `OverlayMouseEvent<CustomOverlay>`，
+ * 上游把 `point` / `pixel` / `latLng` 都声明为**必填** ⇒ 与 Marker / Label 同档（`pointer`）。
+ *
+ * 事件由业务 DOM 自己冒泡到 SDK（SDK 在宿主的 DOM 上绑了原生监听）：真实 v4 实测「在业务 DOM 上
+ * 派发 `click` / `mouseover` / `mouseout` ⇒ 实例派发同名事件」，因此本库**可以**把它们转发给
+ * 调用方，而不必让业务自己再绑一遍 DOM。
+ */
+const CUSTOM_OVERLAY_EVENTS: Record<string, OverlayEventInput> = {
+  click: pointer("点击自定义覆盖物时触发"),
+  mouseover: pointer("鼠标移入自定义覆盖物时触发"),
+  mouseout: pointer("鼠标移出自定义覆盖物时触发"),
+};
+
+/**
+ * `ContextMenuEventMap`（2 个）：载荷是 `ContextMenuEvent`，其中 `point` / `pixel` / `pointMC`
+ * 在上游被声明为 **`Point | null`**（不是可缺，而是可能为 null）⇒ 与「上游声明可缺」同一条归一化
+ * 路径：**不补** `{lng:0,lat:0}`，调用方按 `point` 是否为 `undefined` 判「这次有没有坐标」。
+ *
+ * 打开 / 关闭由 SDK 在真实右键（map 目标）或目标覆盖物的右键（marker 目标）时驱动；程序化
+ * `menu.show()` / `hide()` 也会派发同一对事件（真实 v4 实测）。
+ */
+const CONTEXT_MENU_EVENTS: Record<string, OverlayEventInput> = {
+  open: partialPointer("菜单打开时触发（`sdk.show()` 与真实右键都会触发）"),
+  close: partialPointer("菜单关闭时触发（选中菜单项、`sdk.hide()` 都会触发）"),
+};
+
+/**
  * 事件矩阵。**键 = `OverlayKind`**，与 `OVERLAY_DESCRIPTORS` 同一套种类名。
  *
  * `as const satisfies`：保留字面量键（`OverlayEventMatrixKey` 从它派生），并在编写期校验形状。
@@ -258,6 +291,11 @@ export const OVERLAY_EVENT_MATRIX = {
     events: GROUND_OVERLAY_EVENTS,
   }),
   "info-window": matrix({ upstream: "InfoWindowEventMap", events: INFO_WINDOW_EVENTS }),
+  "custom-overlay": matrix({
+    upstream: "CustomOverlayEventMap",
+    events: CUSTOM_OVERLAY_EVENTS,
+  }),
+  "context-menu": matrix({ upstream: "ContextMenuEventMap", events: CONTEXT_MENU_EVENTS }),
 } as const satisfies Record<string, OverlayEventMatrixEntry>;
 
 /** 有事件矩阵的 kind。 */
@@ -270,11 +308,6 @@ export type OverlayEventMatrixKey = keyof typeof OVERLAY_EVENT_MATRIX;
  * 会**编译失败**（见文末的类型门禁），因此「新加了一类覆盖物却忘了事件面」不可能悄悄通过。
  */
 export const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX = {
-  "custom-overlay":
-    "DOM 覆盖物：事件由业务 DOM 自己处理（上游 CustomOverlay 只声明了 domCreate 与容器 API，没有事件表）；" +
-    "本库不替业务 DOM 绑定鼠标事件",
-  "context-menu":
-    "上下文菜单：上游没有 ContextMenuEventMap，菜单项的选中经 addItem 的回调给出（不是事件订阅）",
   "map-mask": "掩膜：4.0.4 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）",
   marker3d:
     "3D 标注：构造器 Marker3D 不在 4.0.4 的类声明里，因此也没有事件表；" +

@@ -45,7 +45,11 @@ export interface CapabilityExplanation {
   reason: CapabilityReason;
   engine: BMapEngine;
   version: string;
-  family: CapabilityFamily;
+  /**
+   * 所属能力族。目录**未收录**的 id 没有 family 可报，留空而不是编一个值
+   * （原先兜的是 `"runtime"`，那个 family 已随 #104 R10 删除）。
+   */
+  family?: CapabilityFamily;
   status: CapabilityStatus;
   runtimeOnly: boolean;
 }
@@ -157,12 +161,17 @@ export function createCapabilityRegistry(
     },
 
     explain(capability) {
-      const descriptor = CAPABILITY_CATALOG[capability];
+      // `Capability` 是目录 id 的联合，但调用方可以带着**未收录**的 id 进来（外部字符串、
+      // 或 `as Capability` 的探针），而「未收录」正是单引擎下 `engine-unsupported` 的唯一可达路径
+      // （见 registry.test.ts 与 v3-capability-catalog.test.ts 的 `does.not-exist`）。
+      // 所以这里按「可能没有描述符」写：`family` 留空（不编一个值——原先兜的是 `"runtime"`，
+      // 那个 family 已随 #104 R10 删除，报出来就是个没人能解释的幽灵值）。
+      const descriptor: CapabilityDescriptor | undefined = CAPABILITY_CATALOG[capability];
       const metadata = {
         id: capability,
         engine,
         version,
-        family: descriptor?.family ?? ("runtime" as CapabilityFamily),
+        family: descriptor?.family,
         status: descriptor?.status ?? ("unsupported" as CapabilityStatus),
         runtimeOnly: descriptor?.runtimeOnly ?? true,
       };

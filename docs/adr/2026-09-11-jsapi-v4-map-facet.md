@@ -168,6 +168,14 @@ destroy(map):
   - 安全窗口里第一次取消失败时，延迟清理会在同一次推进里再试一次；仍然失败则记录保留，
     `released` 不置位，`destroy` 是一个真正可用的重试入口（第三轮 P1 的用例断言这一点）。
   - 记录按身份从集合移除（不影响同地图的其它动画记录）。
+  - **[复核于 #104 / 2026-09-19：KEEP]** 这套 `started` / `settled` / `cancelRequested` + 三态销毁
+    **保留**：它记账的是**我们自己**发起的启动/取消/销毁次序（本库拥有的异步写入），不是「这条 SDK
+    回包属于哪次命令」的因果身份——因此不在 #104 的删除面里。同时把它的**证据口径**写清楚：
+    「`animationstart` 在内部 Animation 构造之前同步派发、启动前 `cancelViewAnimation` 抛
+    `TypeError`」这两条目前**只有 Fake 建模**（`FakeV4ViewAnimation`），仓库里没有对应的 probe 脚本
+    或 live 读数，所以它是**防御模型**而不是可对外承诺的时序契约（已登记为审计表 F-1 的待取证项）。
+    `useBMapViewAnimation` 也据此不再镜像暂停/继续（见 #104）；Map 级
+    `pauseViewAnimation` / `continueViewAnimation` 至今没有任何生产者调用，也没有 live 证据。
 - destroy 之后的命令抛 `BMAP_RESOURCE_DISPOSED`（不可重试，`retryable === false`）。
 - **配套的 runtime 加固**：`MapRuntime` 在 `initializeView` 抛错时销毁那个「已创建但还没写进
   `this.map.value`」的 Map。原先只有 `this.map.value` 有值的路径会被清理，而 `initializeView`

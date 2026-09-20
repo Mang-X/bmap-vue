@@ -108,6 +108,16 @@ Fake 也把这条时序建模出来（回包走微任务），否则「嗅探没
 
 ### 5. `Autocomplete`：**「同关键词最多一个槽位」不变式 + FIFO 归属**（不靠到达时间猜）
 
+> **[SUPERSEDED by #104 / 2026-09-19]** 本节描述的归属层（`pendingSuggest` 队列、keyword 关联、
+> FIFO 队首退化、通道独占前置条件）连同程序化调用面 `driver.services.suggest()` **已整体删除**：
+> 它恢复的是官方从未发布的 request identity，而唯一「证明它成立」的证据来自我们自己的 Fake
+> （`FakeV4CallbackQueue` 发明的 FIFO、`includeKeyword` 发明的关键字回填）——全仓零生产消费者。
+> 现在的契约是：`Autocomplete` **不进归一化调用面**，构造时传 `onSearchComplete` 原样转发，
+> 归属由持有输入框的一方判断。保留本节是为了记住「为什么这条路走不通」，不要照它重新实现。
+> 逐条依据见 [Ownership-first 存量审计表](../zh-CN/contributing/architecture-ownership-audit.md)。
+> 本节里的**真实运行时取证**仍然有效（输入框必须 attached 到文档、`readOnly` 与可输入两种形态的
+> 差异、`new Autocomplete` 的 `TypeError` 形态）；被推翻的只是「由这些外推出一条归属契约」这一步。
+
 `Autocomplete#search()` **不带请求身份**：回包除了可选的 `keyword` 之外没有任何可归因的信息。
 三轮复审各给出了一组反例，结论是**任何「按到达时间猜」的规则都会错**：
 

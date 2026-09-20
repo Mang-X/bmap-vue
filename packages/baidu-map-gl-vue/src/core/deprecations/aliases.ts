@@ -76,11 +76,12 @@ export interface OverlayEventAlias {
 }
 
 /**
- * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）与 `BInfoWindow` 的 `show`
- * （v3 起用唯一的打开主状态 `open`）。承载的是已发布过的 prop 名，删掉会让老代码静默失效。
+ * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）、`BInfoWindow` 的 `show`
+ * （v3 起用唯一的打开主状态 `open`），以及 `BContextMenu` 的 `menuItems`（#33 起用 `items`）。
+ * 承载的是已发布过的 prop 名，删掉会让老代码静默失效。
  *
- * 消费者是 `useOverlaySpec` 与 `useInfoWindow`（信息窗不走 `OverlaySpec`），共用本表与
- * `warner.ts`。
+ * 消费者是 `useOverlaySpec`、`useContextMenu` 与 `useInfoWindow`（信息窗不走 `OverlaySpec`），
+ * 共用本表、`resolve.ts` 的读取规则与 `warner.ts` 的去重。
  */
 export const OVERLAY_PROP_ALIASES: readonly OverlayPropAlias[] = Object.freeze([
   {
@@ -108,6 +109,17 @@ export const OVERLAY_PROP_ALIASES: readonly OverlayPropAlias[] = Object.freeze([
         northeast: { lng: end.lng, lat: end.lat },
       };
     },
+  },
+  {
+    target: "prop",
+    code: DEPRECATED_PROP_ALIAS_CODE,
+    kind: "context-menu",
+    canonical: "items",
+    deprecated: ["menuItems"],
+    // 单一旧名，因此「齐备」条件退化为「给出了」；`Array.isArray` 守卫拦的是
+    // 「传了非数组的 `menuItems`」——那属于调用方的类型错误，不该被当成一份有效菜单。
+    note: "菜单项的数据入口统一为 items（v3 的 menuItems 仍会读取，但将在后续大版本移除）",
+    derive: (props) => (Array.isArray(props.menuItems) ? props.menuItems : undefined),
   },
 ]);
 

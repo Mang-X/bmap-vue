@@ -167,6 +167,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "ground-overlay",
         },
         {
+          text: "BCustomOverlay 自定义 DOM 覆盖物",
+          link: "custom-overlay",
+        },
+        {
           text: "BMapMask 掩膜",
           link: "mapMask",
         },
@@ -340,10 +344,6 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "useBMapViewAnimation",
         },
         {
-          text: "useBMapTrackAnimation 轨迹动画",
-          link: "useBMapTrackAnimation",
-        },
-        {
           text: "useControllableState 受控/非受控状态",
           link: "useControllableState",
         },
@@ -388,6 +388,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "Capability Catalog 能力矩阵",
           link: "capability-matrix",
+        },
+        {
+          text: "Ownership-first 存量审计表",
+          link: "architecture-ownership-audit",
         },
         {
           text: "插件兼容 inventory",

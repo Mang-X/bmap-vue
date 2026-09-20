@@ -4,8 +4,6 @@
  * raw SDK 只从这里提供逃生口；普通组件与业务 composable 不应直接 import。
  * 稳定公开（root）只导出类型，不导出这些实现函数。
  */
-import type { Capability } from "./driver/capability";
-
 export { createJsapiV4Driver } from "./driver";
 export type { CreateJsapiV4DriverInput } from "./driver";
 export { assertLoadedSdk, isLoadedSdk } from "./core/loader/loaded";
@@ -88,10 +86,3 @@ export type { AutocompleteOptions, ServiceDriver } from "./driver/types/services
 export type { PanoramaDriver } from "./driver/types/panorama";
 export type { MapMouseEvent, DriverEvent, EventDriver } from "./driver/types/events";
 export { normalizeMapMouseEvent, toPoint, isPointLike, toPlainPoint, toPlainPoints } from "./driver/normalize";
-
-/** 运行时能力 override 工厂：仅接受目录内能力名 */
-export function defineCapabilityOverride(
-  overrides: Partial<Record<Capability, boolean>>,
-): Partial<Record<Capability, boolean>> {
-  return overrides;
-}

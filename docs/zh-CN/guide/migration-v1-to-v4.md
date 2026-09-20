@@ -77,14 +77,23 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 - 其余（DistanceTool / AreaRestriction / InfoBox / RichMarker / LuShu）：未内置，未评估。
 
 > 已知限制（3.0 现状，见 [ADR 2026-09-14](/adr/2026-09-14-remove-legacy-engine) 的「已知限制」）：
-> `useBMapTrackAnimation` 在 v4 上会抛 `BMAP_CAPABILITY_UNSUPPORTED`（4.0 的对应能力是原生
-> 图层 `track-line`；插件迁移结论属 M8 / #43）；`BContextMenu` 目前只能挂在地图上，挂到
-> 覆盖物目标的路径在 v4 上不生效（属 M5 / #33）。
+> `useBMapTrackAnimation` 已于 #104 删除（它在 v4 上只会从 Driver 拿到
+> `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达）；4.0 的对应能力是原生图层
+> `track-line`，插件迁移结论属 M8 / #43。
+>
+> `BContextMenu` 的挂载目标自 M5 / #33 起**已实测可用**：`map` 与 `marker` 两个目标都能挂
+> （`Marker#addContextMenu` 是 4.0 的**运行时扩展成员**——官方类型包只在 `Map` 上声明它，真实
+> 运行时存在且可用，读数见 [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)）。
+> 其余目标（`overlay` / `clusterer` / 旧层组件下的菜单）**没有入口证据**，会**显式报错**而不是
+> 悄悄挂到地图上。
 
 ## 3. `3.0.0-beta` 用户：被删除的迁移期入口逐条对照
 
 | 之前怎么写 | 现在怎么写 |
 | --- | --- |
+| `import { useBMapTrackAnimation } from 'baidu-map-gl-vue'` | 已删除（#104）。它在 v4 上只会从 Driver 拿到 `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达。轨迹播放请等 M8 / #43 在原生 `TrackLine` 上给出的薄命令面 |
+| `const { setKeyFrames, start, stop, proceed, status } = useBMapViewAnimation()` | 收窄为 `start(keyFrames)` / `cancel()` / `status`（#104）。`stop` / `proceed` 依赖 SDK 私有的 `_pause` / `_continue`，本库不再用私有面伪造暂停/继续；`status` 只剩 `idle` / `playing` 两个**观察值**，由公开事件写，命令不再乐观改它 |
+| `driver.services.suggest(autocomplete, keyword)` | 已删除（#104）。`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，程序化检索的归属只能靠 keyword/FIFO 猜；改用 `createAutocomplete({ input, onSearchComplete })` 监听原生回包，或换 `useBMapLocalSearch` / 官方 UI Kit |
 | `import { baiduCdnProvider, customScriptProvider, existingGlobalProvider } from 'baidu-map-gl-vue'` | 根入口**不再导出任何 Provider**；改用 `baidu-map-gl-vue/core` 的 `baiduJsapiV4Provider()` / `customScriptV4Provider()` / `existingGlobalV4Provider()` |
 | `withMigrationDriver({ provider, loadOptions })` | 删掉这层包装，直接把 `{ provider, loadOptions }` 交给 `createBMapClient()` / `<BMapProvider :definition>`；`createBMapClient` 的默认 Driver 工厂已是 v4 |
 | `createLegacyBMapClient({ provider })` | 已删除。旧引擎不在 3.0 里，请用默认 `createBMapClient()` |
