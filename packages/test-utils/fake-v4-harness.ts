@@ -198,6 +198,25 @@ export interface FakeV4Harness {
   nativeLayerData(index?: number): unknown;
   /** 第 `index` 个原生图层当前是否还挂在地图上。 */
   nativeLayerAttached(index?: number): boolean;
+  /**
+   * 注入**一次** `removeLayer` 失败。两种形状分开建模（理由见 `FakeV4Map` 上的同名字段）：
+   * - `failNextRemoveLayer`：**摘除之前**抛错 ⇒ 资源可能仍在图上；
+   * - `failNextRemoveLayerAfterDetach`：**先真的摘掉、再抛错** ⇒ 资源可能已经不在了。
+   *
+   * 调用方在两种情况下都**无法判断**，因此都必须按「挂载态未知」处理（不能假装还 attached，
+   * 也不能假装已摘除）。这是 #35 / PR #108 四轮评审的核心结论，迁移到共享内核后由内核负责。
+   */
+  failNextRemoveLayer(error?: Error): void;
+  failNextRemoveLayerAfterDetach(error?: Error): void;
+  /**
+   * 地图上的**图层挂 / 摘调用序列**（`addLayer` / `removeLayer`，按到达顺序）。
+   *
+   * 「只摘一次」这类顺序断言只能落在动作序列上：两次 remove 与一次 remove 在**最终数量**上
+   * 看不出差别（替身不去重），只有序列能区分。
+   */
+  layerOps(): string[];
+  /** 让第 `index` 个原生图层派发一次事件（拾取语义：载荷挂在 `value` 上）。 */
+  emitNativeLayerEvent(index: number, type: string, value: unknown): void;
   /** 第 `index` 个原生图层当前的显隐读数（`setVisible` 是否真的落地）。 */
   nativeLayerVisible(index?: number): boolean;
   /**
@@ -476,6 +495,18 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       nativeLayerOptions: (index = -1) => ({ ...nativeLayerAt(index).options }),
       nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
       nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
+      failNextRemoveLayer: (error) => {
+        lastMap().failNextRemoveLayer = error ?? new Error("harness: failNextRemoveLayer");
+      },
+      failNextRemoveLayerAfterDetach: (error) => {
+        lastMap().failNextRemoveLayerAfterDetach =
+          error ?? new Error("harness: failNextRemoveLayerAfterDetach");
+      },
+      layerOps: () =>
+        lastMap().callLog.filter((entry) => entry === "addLayer" || entry === "removeLayer"),
+      emitNativeLayerEvent: (index, type, value) => {
+        nativeLayerAt(index).emit(type, { value });
+      },
       nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
       simulateNativePick: (payload, index = -1) => {
         const layer = nativeLayerAt(index);

@@ -172,8 +172,14 @@ const resource = useNativeLayerResource<BPointCollectionProps<Item>>(props, {
    * 官方这批图层只派发 `dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`
    * （`NormalLayerEventMap`）——**没有** mouseover / mouseout，所以本组件不声明它们。
    */
-  bind: ({ handle, context, scope }) => {
-    scope.add(context.client.driver.events.on(handle, "click", (event) => handlePick(event)));
+  bind: ({ handle, context, scope, isQuiescing }) => {
+    scope.add(
+      context.client.driver.events.on(handle, "click", (event) => {
+        // 摘除期间（严格换实例的 quiesce 阶段）不穿透：SDK 可能在 removeLayer 里同步派发事件
+        if (isQuiescing()) return;
+        handlePick(event);
+      }),
+    );
   },
 });
 

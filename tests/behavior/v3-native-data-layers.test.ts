@@ -784,6 +784,74 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
  * 字符串字面量里的注释标记在这里不会被特殊处理——本文件只用于「源码里有没有某个标识符」这类
  * 判定，误报方向是保守的（可能漏判，不会误判）。
  */
+/* ------------------------------------------------------------------ §8 换实例的失败语义 */
+
+/**
+ * `#35 / PR #108` 四轮评审验证出来的失败语义，**迁入共享内核**（`useNativeLayerResource` +
+ * `LayerRegistry`）之后在此落回归。三条不变式：
+ *
+ * 1. **严格替换**：摘除失败时**不解绑监听、不销账**（`scope.dispose()` 不可逆，先解绑会把失败变成
+ *    「还在图上但点不动」）；调用方据此放弃这次替换并保留旧实例；
+ * 2. **`unknown` 是持久状态**：`removeLayer` 抛错后无法判断资源在不在图上，之后禁止普通写入；
+ * 3. **`unknown` 优先于构造指纹**：未知状态必须先收敛，不能让「指纹恰好相等」把它永久冻住
+ *    （否则用户把构造项改回旧值之后，组件可能永久空白且再无任何收敛动作）。
+ */
+describe("§8 换实例的失败语义（严格 detach / unknown）", () => {
+  beforeEach(() => {
+    harness.reset();
+  });
+
+  it("removeLayer「先摘掉再抛错」⇒ 不假装还在，下一次收敛完成换实例", async () => {
+    const { wrapper, setProp } = await mountOneVisual(0);
+    const created = fake.createdNativeLayers.length;
+    expect(harness.attached("layer")).toBe(1);
+
+    // 先真的摘掉、再抛错：调用方**无法判断**它在不在图上
+    harness.failNextRemoveLayerAfterDetach();
+    await setProp({ idKey: "code" }); // 构造期项变化 ⇒ 换实例
+
+    expect(fake.createdNativeLayers.length, "未确认摘除 ⇒ 不建新实例").toBe(created);
+    expect(harness.attached("layer"), "它其实已经不在图上了").toBe(0);
+    expect(harness.nativeLayerAttached(created - 1), "旧实例确实已摘除").toBe(false);
+    expect(
+      harness.layerOps(),
+      "每代实例恰好摘一次（不依赖「重复摘除安全」这个未取证的前提）",
+    ).toEqual(["addLayer", "removeLayer"]);
+
+    // 「保留旧实例」必须包含**行为**：摘除失败**没有**解绑业务监听 ⇒ 旧实例上的拾取仍然到得了组件。
+    // （修前是「先 releaseListeners 再 detach」：监听已经被不可逆地释放掉，这里就一个事件都收不到。）
+    const layer = wrapper.findComponent(BLineLayer);
+    harness.simulateNativePick({ dataIndex: 0 });
+    expect(layer.emitted("click"), "旧实例仍然可交互（监听没被提前释放）").toBeTruthy();
+
+    // 下一次收敛（任意 props 变化）把状态推回确定：换实例完成
+    await setProp({ idKey: "code", opacity: 0.9 });
+    expect(fake.createdNativeLayers.length, "收敛之后新实例建起来").toBe(created + 1);
+    expect(harness.attached("layer")).toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("after-detach 失败");
+  });
+
+  it("unknown 优先于构造指纹：把构造项改回旧值也会主动收敛（不静默冻结）", async () => {
+    const { wrapper, setProp } = await mountOneVisual(0);
+    const created = fake.createdNativeLayers.length;
+
+    harness.failNextRemoveLayerAfterDetach();
+    await setProp({ idKey: "code" });
+    expect(harness.attached("layer"), "旧实例已不在图上").toBe(0);
+    expect(fake.createdNativeLayers.length).toBe(created);
+
+    // 改回旧值 ⇒ 构造指纹重新等于 `instanceKey`；若只看指纹，这里之后就再也不会收敛
+    await setProp({ idKey: "id" });
+    expect(harness.attached("layer"), "unknown 优先：改回旧值也必须收敛回确定状态").toBe(1);
+    expect(fake.createdNativeLayers.length, "收敛 = 换一个确定挂上的新实例").toBe(created + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("unknown 优先");
+  });
+});
+
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
 }

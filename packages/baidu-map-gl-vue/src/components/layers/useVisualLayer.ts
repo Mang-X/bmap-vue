@@ -162,11 +162,13 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
       value: () => props.data,
     },
     identity: (p) => normalizeIdField(p.idKey),
-    bind: ({ handle, context, scope }) => {
+    bind: ({ handle, context, scope, isQuiescing }) => {
       const events = context.client.driver.events;
       for (const name of options.pickEvents ?? []) {
         scope.add(
           events.on(handle, name, (event) => {
+            // 摘除期间（严格换实例的 quiesce 阶段）不穿透：SDK 可能在 removeLayer 里同步派发事件
+            if (isQuiescing()) return;
             const pick = resolveFeaturePick({
               event,
               idKey: normalizeIdField(props.idKey),
