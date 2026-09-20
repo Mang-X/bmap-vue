@@ -75,8 +75,8 @@
 | layer | `layer.wms` | experimental | — | ✓ | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |
 | layer | `layer.wmts` | experimental | — | ✓ | WMTSLayer | WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求 |
 | layer | `layer.raster` | experimental | — | ✓ | RasterTileLayer | 栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪 |
-| layer | `layer.cluster` | extended | ✓ | ✓ | — | 聚合图层；优先使用 SDK 原生能力，缺失时由项目提供 fallback 聚类 |
-| layer | `layer.point` | experimental | ✓ | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API |
+| layer | `layer.cluster` | extended | ✓ | ✓ | — | 聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19 |
+| layer | `layer.point` | experimental | ✓ | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 BPointLayer 落地 |
 | layer | `layer.heatmap` | experimental | ✓ | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |
 | layer | `layer.track-line` | experimental | ✓ | ✓ | TrackLine | 轨迹线（TrackLine）；数据的绘制/播放/跟随，属扩展 API；播放控制与迁移结论见 M8（#43） |
 | service | `service.local-search` | native | — | ✓ | LocalSearch | 本地检索（LocalSearch） |

@@ -81,6 +81,21 @@ function positionFingerprint(point: PointLike): string {
 export class DataLayerManager<Item, Resource> {
   private readonly scheduler: FrameScheduler = createFrameScheduler();
   private readonly resources = new Map<PropertyKey, Resource>();
+  /**
+   * 摘除失败、**无法判断是否仍在图上**的 key（`unknown`）。
+   *
+   * 与 `LayerRecord.attachment` 同一条口径（这一侧没有账本记录，状态只能由管理器持有）。
+   * 落在这一集合里的资源：
+   *
+   * - **不再进入普通写入路径**（位置更新 / 显隐都跳过）—— 它们可能已经不在图上，写进去要么白写、
+   *   要么在真实 SDK 上抛错（#98 的读数：对已摘下的实例补 `setData` 会内部抛错）；
+   * - 仍然**保留所有权**，只在「摘除」路径上出现（数据里删掉它、或整个管理器被清理时再摘一次）——
+   *   摘除是唯一能把它收敛回确定状态的动作：成功 ⇒ 确定已摘除并销账；失败 ⇒ 仍是 unknown。
+   *
+   * ⚠️ 这个状态**必须是持久的**：只在错误文案里叫一声「unknown」、抛完就丢掉，会让这些句柄在
+   * 下一次 `sync()` / `setVisible()` 里又变回「正常资源」。
+   */
+  private readonly unknownKeys = new Set<PropertyKey>();
   /** 资源 → key（事件委托要由实例反查业务项；`WeakMap` 不延长资源寿命）。 */
   private readonly keyOfResource = new WeakMap<object, PropertyKey>();
   /**
@@ -127,11 +142,31 @@ export class DataLayerManager<Item, Resource> {
     this.scheduler.flush();
   }
 
-  /** 全员显隐；之后新建的资源也按当前状态落。 */
+  /**
+   * 全员显隐；之后新建的资源也按当前状态落。
+   *
+   * **逐条隔离 + 全部成功才提交**：`applyVisibility` 会抛（SDK 的 `show/hide` 走 `sdkCall`），
+   * 因此这里先把目标值记在局部、逐个尽力对齐，任一条失败就不推进内部 `this.visible`
+   * 并把错误交给调用方。这样下一次显隐请求**不会**被顶部短路吞掉（`this.visible === visible`
+   * 直接 return），会把**所有**资源重新对齐一遍 —— 否则「一个 Marker hide 失败」会永久留下
+   * 「部分可见、部分不可见」而调用方以为已经生效。
+   */
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
+    let failure: unknown = null;
+    for (const [key, resource] of [...this.resources]) {
+      // 挂载态未知 ⇒ 不写：它可能已经不在图上。**不计入失败**（那会让调用方永远重试同一个
+      // 不可能成功的动作）；这个事实由 `unknownSize` 与摘除路径的错误文案如实表达。
+      if (this.unknownKeys.has(key)) continue;
+      try {
+        this.applyVisibility(resource, visible, key);
+      } catch (error) {
+        // 逐条隔离：一条失败不该让后面的资源也不再对齐（与 `clear()` / diff 删除同口径）
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
     this.visible = visible;
-    for (const resource of this.resources.values()) this.applyVisibility(resource);
   }
   /** 该 key 当前对应的**最新**业务项（数据里已删除时为 `undefined`）。 */
   latest(key: PropertyKey): Item | undefined {
@@ -150,8 +185,20 @@ export class DataLayerManager<Item, Resource> {
     return key === undefined ? undefined : this.index.latest(key);
   }
 
+  /**
+   * 当前**仍归本管理器所有**的资源数（含「摘除失败、按所有权保留下来」的那些）。
+   *
+   * 它是「摘干净了没有」唯一的机器读数：`clear()` 是逐条隔离的、不抛错，所以需要**确认**摘净的
+   * 调用方（替换 / 换引擎路径）只能靠这个计数判断，而不是「`clear()` 没抛 ⇒ 一定摘干净了」。
+   * 配合 `clear()` 的「失败保留所有权」语义：计数归零 ⟺ 全部确认摘除。
+   */
   get size(): number {
     return this.resources.size;
+  }
+
+  /** 当前挂载态未知的资源数（诊断读数；`0` 表示全部资源都有确定的挂载态）。 */
+  get unknownSize(): number {
+    return this.unknownKeys.size;
   }
 
   /**
@@ -172,10 +219,13 @@ export class DataLayerManager<Item, Resource> {
         );
         // **保留所有权**（与 diff 删除路径同一条原则，评审 #102 F3）：SDK 可能是「还没产生副作用
         // 就抛错」，此时旧资源仍在图上；删掉记账会让之后为同一个 key 再建一份，图上出现两份/泄漏。
+        // 同时把挂载态标成 `unknown`（`remove` 之后抛错 ⇒ 它可能已经不在图上了）。
+        this.unknownKeys.add(key);
         continue;
       }
       this.resources.delete(key);
       this.appliedPositions.delete(key);
+      this.unknownKeys.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -223,6 +273,9 @@ export class DataLayerManager<Item, Resource> {
         this.host.removeMarker(resource);
       } catch (error) {
         failed = true;
+        // 摘除抛错 ⇒ 挂载态未知（可能已经不在图上、也可能仍在）——持久记下来，
+        // 后续普通写入不再碰它（见 `unknownKeys` 的说明）。
+        this.unknownKeys.add(key);
         this.options.warn?.(
           `${this.label}: 摘除资源失败（key=${String(key)}），它可能仍在图上：` +
             `${(error as Error)?.message ?? String(error)}`,
@@ -231,6 +284,7 @@ export class DataLayerManager<Item, Resource> {
       }
       this.resources.delete(key);
       this.appliedPositions.delete(key);
+      this.unknownKeys.delete(key);
       if (typeof resource === "object" && resource !== null) {
         this.keyOfResource.delete(resource as unknown as object);
       }
@@ -260,9 +314,13 @@ export class DataLayerManager<Item, Resource> {
         }
         // 新建的资源也要服从当前的显隐状态（否则 `visible=false` 期间新来的点会「亮」着出现在图上）。
         // 只在隐藏态时下发一次：新建的资源本来就是可见的，再 show 一次是无谓的 SDK 调用。
-        if (!this.visible) this.applyVisibility(resource, entry.key);
+        if (!this.visible) this.applyVisibility(resource, this.visible, entry.key);
         continue;
       }
+      // 挂载态未知的资源不进入普通写入路径：它可能已经不在图上（写进去要么白写、要么在真实
+      // SDK 上抛错）。索引记账照旧推进 —— 那个回答的是「当前业务对象是哪个」，与「SDK 写成功没有」
+      // 无关；摘除（数据里删掉它 / 管理器被清理）是唯一会把状态收敛回确定状态的动作。
+      if (this.unknownKeys.has(entry.key)) continue;
       // 位置下发由**值**决定（不再用 item 引用做第二层短路）：根引用变化 ⇒ 重新读取；
       // 坐标真的变了才写。`version` 变化时逐项写一遍（见上）。
       const fingerprint = positionFingerprint(entry.point);
@@ -291,14 +349,20 @@ export class DataLayerManager<Item, Resource> {
     this.everSynced = true;
   }
 
-  /** 把**当前**显隐状态下发给一个资源（调用方负责只在需要时调，见两处调用点）。 */
-  private applyVisibility(resource: Resource, key?: PropertyKey): void {
-    const applied = this.host.setVisible?.(resource, this.visible) ?? false;
+  /**
+   * 把一个资源的显隐**显式**对齐到 `desired`（调用方负责只在需要时调，见两处调用点）。
+   *
+   * `desired` 由调用方传入而不是读 `this.visible`：`setVisible` 只在全部成功后推进内部记账，
+   * 因此循环进行中 `this.visible` 仍是**旧值**（这正是「失败可重试」的前提）。
+   * 错误不在这里吞：SDK 的 `show/hide` 抛错必须让调用方知道这一次没写成功。
+   */
+  private applyVisibility(resource: Resource, desired: boolean, key?: PropertyKey): void {
+    const applied = this.host.setVisible?.(resource, desired) ?? false;
     if (applied || this.warnedVisibilityUnsupported) return;
     this.warnedVisibilityUnsupported = true;
     this.options.warn?.(
       `${this.label}: 资源不支持显隐（宿主没有实现 setVisible 或 SDK 无 show/hide）` +
-        `${key === undefined ? "" : `，key=${String(key)}`}：本次 visible=${String(this.visible)} 被忽略`,
+        `${key === undefined ? "" : `，key=${String(key)}`}：本次 visible=${String(desired)} 被忽略`,
     );
   }
 }

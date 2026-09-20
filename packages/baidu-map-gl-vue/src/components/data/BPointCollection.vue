@@ -142,6 +142,7 @@ function ctorOptions(p: Readonly<BPointCollectionProps<Item>>): Record<string, u
   return {
     idKey: resolveIdField(p.itemKey),
     enablePicked: p.enablePicked,
+    ...(p.isFlat === undefined ? {} : { isFlat: p.isFlat }),
     ...(p.pickWidth === undefined ? {} : { pickWidth: p.pickWidth }),
     ...(p.pickHeight === undefined ? {} : { pickHeight: p.pickHeight }),
   };

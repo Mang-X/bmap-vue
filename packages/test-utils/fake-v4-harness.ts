@@ -30,7 +30,7 @@ import {
  * 刻意不复用 Fake v4 的 `FakeV4ResourceKind`：那是诊断计数器的记账分类（含 Map / Panorama
  * 这类生命周期类资源），与「组件挂在哪儿」不是同一个维度。
  */
-export type FakeV4MountKind = "overlay" | "control" | "layer" | "context-menu";
+export type FakeV4MountKind = "overlay" | "control" | "layer";
 
 /** 视野读数（领域口径）：最后一张地图当前的视野。 */
 export interface FakeV4View {
@@ -77,15 +77,6 @@ export interface FakeV4Harness {
   /** 当前挂在**最后一张创建的 Map** 上的子资源数。 */
   attached(kind: FakeV4MountKind): number;
   /**
-   * 第 `index` 个创建过的**覆盖物**上挂着的右键菜单数（负索引：`-1` = 最后一个）。
-   *
-   * 读的是 Fake 建模的 `Marker#addContextMenu` 账本——真实 4.0 的**运行时扩展**成员
-   * （类型包只声明在 `Map` 上，见 ADR `2026-09-19-custom-overlay-and-context-menu`）。
-   * 「菜单挂到了父标注上」与「菜单挂到了地图上」是两个不同的目标，因此需要两个不同的读数；
-   * 覆盖物没有该成员时返回 `0`（Fake 只给 `Marker` 建模）。
-   */
-  menusOnOverlay(index?: number): number;
-  /**
    * 最后一张地图上当前**可见**的控件数（M7-CONTROL-PANORAMA / #41）。
    *
    * 控件的 `visible` 在 #41 定型为 SDK 基类的 `show()` / `hide()`：控件始终挂载，
@@ -108,6 +99,43 @@ export interface FakeV4Harness {
    * 索引落在**已创建**的覆盖物账本上（负索引语义同 `subscribedEventsOf`：`-1` = 最后一个）。
    */
   clickOverlay(index?: number): void;
+  /**
+   * 注入一次 `removeOverlay` 失败（**摘除之前**抛，覆盖物仍留在图上）。
+   *
+   * 用途是「逐资源摘除」的**部分失败**：`DataLayerManager.clear()` 逐条隔离，注入之后会得到
+   * 「一部分真的摘掉了、剩下的还在」的半拆状态。
+   */
+  failNextRemoveOverlay(error?: Error): void;
+  /**
+   * 与 `failNextRemoveOverlay` 对偶：**先摘掉、再抛错**（用后即清，挂在指定覆盖物上）。
+   *
+   * 「摘除失败」的两种合法形状必须分开测：摘之前抛 ⇒ 资源仍在图上；摘之后抛 ⇒ 资源已经不在了。
+   * 后者的关键读数是「调用方不能把它当成 `attached`」——那会留下幻影所有权。
+   */
+  failNextRemoveOverlayAfterDetach(error?: Error, index?: number): void;
+  /**
+   * 与 `failNextRemoveLayer` 对偶：**先摘掉、再抛错**（用后即清）。
+   *
+   * 同形的既有 knob 一直在 `FakeV4Map` 上（`failNextRemoveLayerAfterDetach`），此前只是没有
+   * 暴露到这里 —— 于是「替换路径的失败只覆盖了「副作用之前抛」这一种形状」这件事在测试里看不出来。
+   */
+  failNextRemoveLayerAfterDetach(error?: Error): void;
+  /**
+   * 注入一次第 `index` 个覆盖物的 `hide()` / `show()` 失败（**写之前**抛，`visible` 不变）。
+   *
+   * 索引口径同 `clickOverlay`（**已创建**的覆盖物账本，负索引从后数）。
+   */
+  failNextOverlayHide(error?: Error, index?: number): void;
+  failNextOverlayShow(error?: Error, index?: number): void;
+  /** 最后一张地图上当前**真的可见**的覆盖物索引（读数用：显隐是否逐资源对齐）。 */
+  overlayVisibility(): boolean[];
+  /**
+   * 第 `index` 个**创建过**的覆盖物自己的调用日记（`show` / `hide` / `setPosition` …）。
+   *
+   * 与 `nativeLayerCalls` 同口径。需要它是因为「某个资源有没有被写」只能盯**那个资源自己**：
+   * 换成「最后创建的那个」或全量计数，一旦中途出现新实例，比的就不是同一个对象了。
+   */
+  overlayCalls(index?: number): string[];
   /** 最后一张地图上当前打开的气泡数。 */
   openInfoWindows(): number;
   /** 本用例内累计创建的地图数（`0` 表示 SDK 还没就绪）。 */
@@ -187,38 +215,60 @@ export interface FakeV4Harness {
    * 本用例内**累计创建**过的原生批量图层数（官方 `PointShapeLayer` / `PointIconLayer` …）。
    *
    * 「批量点组件不是逐点 Marker」的领域读数就是它 + `attached('overlay')`：
-   * 一个 `BPointCollection` 无论多少数据都只创建 **1** 个图层、**0** 个覆盖物。
+   * 一个 `BPointShapeLayer` 无论多少数据都只创建 **1** 个图层、**0** 个覆盖物。
    */
   nativeLayersCreated(): number;
   /** 第 `index` 个原生图层收到的 **SDK 调用日记**（官方方法名，按调用顺序）。 */
   nativeLayerCalls(index?: number): string[];
   /** 第 `index` 个原生图层的**构造选项**（`idKey` / `enablePicked` 等构造期项）。 */
   nativeLayerOptions(index?: number): Record<string, unknown>;
+  /**
+   * 第 `index` 个原生图层最后一次 `setStyleOptions()` 收到的**样式袋**（声明面的批量图层）。
+   *
+   * 与 `nativeLayerOptions()` 分开读，是因为两条写入路径确实不同：声明面走 `setStyleOptions`
+   * （+ `doOnceDraw`），扩展 API 走整袋 `setOptions`（落在 `nativeLayerOptions()` 里）。
+   */
+  nativeLayerStyle(index?: number): Record<string, unknown>;
   /** 第 `index` 个原生图层最后一次 `setData()` 收到的数据（GeoJSON `FeatureCollection`）。 */
   nativeLayerData(index?: number): unknown;
   /** 第 `index` 个原生图层当前是否还挂在地图上。 */
   nativeLayerAttached(index?: number): boolean;
+  /** 第 `index` 个原生图层的显隐读数（`setVisible` 是否真的落地）。 */
+  nativeLayerVisible(index?: number): boolean;
   /**
-   * 注入**一次** `removeLayer` 失败。两种形状分开建模（理由见 `FakeV4Map` 上的同名字段）：
-   * - `failNextRemoveLayer`：**摘除之前**抛错 ⇒ 资源可能仍在图上；
-   * - `failNextRemoveLayerAfterDetach`：**先真的摘掉、再抛错** ⇒ 资源可能已经不在了。
+   * 注入**一次**地图级 `removeLayer` 失败（**摘除之前**抛：图层仍留在图上）。
    *
-   * 调用方在两种情况下都**无法判断**，因此都必须按「挂载态未知」处理（不能假装还 attached，
-   * 也不能假装已摘除）。这是 #35 / PR #108 四轮评审的核心结论，迁移到共享内核后由内核负责。
+   * 重建 / 换引擎路径的判别力全在这条上：`removeLayer` 抛错时，「旧实例到底摘掉了没有」在
+   * SDK 侧没有第二次机会告诉你，所以内核必须**放弃这次替换**并保留旧实例；若它把失败当成
+   * 成功继续建新实例，就会出现两套资源同图。
    */
   failNextRemoveLayer(error?: Error): void;
-  failNextRemoveLayerAfterDetach(error?: Error): void;
+  /**
+   * 粘性策略：对**已经不在图上**的图层再 `removeLayer` 会抛错（官方没有承诺重复摘除安全）。
+   *
+   * 与 `failNextRemoveLayer`（一次性注入）不同，它描述的是一种**契约分支**：开启之后整段用例
+   * 都处在「重复摘除会失败」的世界里，因此可以断言「每代实例恰好摘一次」——而这正是
+   * 「不依赖重复摘除安全」的机器证据。
+   */
+  failRemoveLayerWhenDetached(error?: Error): void;
   /**
    * 地图上的**图层挂 / 摘调用序列**（`addLayer` / `removeLayer`，按到达顺序）。
    *
    * 「只摘一次」这类顺序断言只能落在动作序列上：两次 remove 与一次 remove 在**最终数量**上
-   * 看不出差别（替身不去重），只有序列能区分。
+   * 看不出差别（替身不去重，第二次摘一个不在图上的图层是无害 no-op），只有序列能区分。
    */
   layerOps(): string[];
   /** 让第 `index` 个原生图层派发一次事件（拾取语义：载荷挂在 `value` 上）。 */
   emitNativeLayerEvent(index: number, type: string, value: unknown): void;
-  /** 第 `index` 个原生图层当前的显隐读数（`setVisible` 是否真的落地）。 */
-  nativeLayerVisible(index?: number): boolean;
+  /** 第 `index` 个标注上挂着的右键菜单数（读的是 Fake 建模的 `Marker#addContextMenu` 账本）。 */
+  menusOnOverlay(index?: number): number;
+  /**
+   * 注入**一次**第 `index` 个原生图层的 `setVisible` 失败（**写之前**抛）。
+   *
+   * 显隐是一条独立于其它 props 的更新路径（组件侧由单独的 watcher 驱动），需要它自己的
+   * 「失败仍走统一 `resource:error` 出口」回归。
+   */
+  failNextNativeLayerSetVisible(error?: Error, index?: number): void;
   /**
    * 模拟用户在原生批量图层上点了一下（SDK 侧派发 `click`）。
    *
@@ -237,6 +287,69 @@ export interface FakeV4Harness {
     },
     index?: number,
   ): void;
+  /**
+   * 模拟在原生**扩展 API**（`PointLayer`）上点了一下。
+   *
+   * 形状依据：探针实测（`scripts/probe-native-point-cluster.mts`，2026-09-19）——
+   * `PointLayer` 的命中载荷是 `{ lng, lat, size, scale, offset, id, index, properties, feature }`，
+   * **没有** `dataIndex` / `dataItem`。夹具照这个形状造，否则「扩展 API 的拾取面」在单测里
+   * 会以声明面的形状被验证通过（夹具比真实宽容 = 掩盖缺陷）。
+   */
+  simulateNativeExtensionPick(
+    payload: {
+      key: PropertyKey;
+      idKey?: string;
+      latLng?: { lng: number; lat: number };
+      pixel?: { x: number; y: number };
+    },
+    index?: number,
+  ): void;
+  /**
+   * 模拟点击原生聚合的**簇**（`ClusterLayer`）。
+   *
+   * 形状依据：同一次探针实测 —— 簇命中只有元数据
+   * `{ isCluster: true, clusterId, parentId, pointCount, latLng, bbox, properties }`，
+   * **没有任何业务身份**。夹具刻意不提供「簇里有哪几个要素」，因为真实 SDK 也不提供。
+   */
+  simulateNativeClusterHit(
+    payload: {
+      clusterId: number;
+      pointCount: number;
+      latLng?: { lng: number; lat: number };
+      pixel?: { x: number; y: number };
+    },
+    index?: number,
+  ): void;
+  /** 模拟点击原生聚合里**未聚合的单点**（实测形状：业务键在 `value.id` 上）。 */
+  simulateNativeClusterSingleHit(
+    payload: { key: PropertyKey; latLng?: { lng: number; lat: number }; pixel?: { x: number; y: number } },
+    index?: number,
+  ): void;
+  /**
+   * 模拟原生聚合派发 `change`（实测形状：`value = { singles, clusters, zoom }`，前两个是**数组**）。
+   *
+   * 用数量而不是「造 N 个假簇对象」：本库只读它们的长度（见 `nativeClusterEngine` 的
+   * `handleChange`），多造几个对象只会让夹具看起来更真、实际上没有额外的判别力。
+   */
+  simulateNativeClusterChange(
+    payload: { clusters: number; singles: number; zoom?: number },
+    index?: number,
+  ): void;
+  /**
+   * 派发一个**字段不完整**的簇命中载荷（`value` 原样透传）。
+   *
+   * 现实里它对应「SDK 的载荷不是我们取过证的那个形状」。这里刻意**不由夹具编造**缺哪些字段：
+   * 用例要验证的正是「缺字段时组件不伪造占位值」，所以缺什么由用例明确写出来。
+   */
+  simulateMalformedNativeClusterHit(value: Record<string, unknown>, index?: number): void;
+  /**
+   * 让第 `index` 个原生图层在**摘除期间**（`removeLayer` 内）同步派发一次事件。
+   *
+   * 建模真实 SDK 的行为：`removeLayer` 会同步派发事件（`tileload` 一类）。这让
+   * 「**先解绑业务监听、再摘资源**」这条顺序不变式有了可观察的后果 —— 监听还活着时，
+   * 那次事件会打到已经在拆解的业务回调上（组件会把它当成一次真实命中）。
+   */
+  dispatchNativeLayerEventOnDetach(index: number, type: string, value: unknown): void;
 }
 
 function sizedContainer(): HTMLElement {
@@ -354,6 +467,16 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
   fake: FakeBMapV4;
 } {
   const lastMap = () => lastCreatedMap(fake.createdMaps, "fake-v4 harness");
+  /** 取第 `index` 个**创建过**的覆盖物（`-1` = 最后创建的那个）；口径同 `clickOverlay`。 */
+  const overlayAt = (index: number) => {
+    const overlays = fake.createdOverlays;
+    const resolved = index < 0 ? overlays.length + index : index;
+    const overlay = overlays[resolved];
+    if (!overlay) {
+      throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
+    }
+    return overlay;
+  };
   /**
    * 取第 `index` 个**创建过**的图层（`-1` = 最后创建的那个）。
    *
@@ -374,7 +497,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
    *
    * 与 `layerAt` 同一个索引口径（负索引跨用例安全），但读的是**另一个**实例账本：
    * 原生图层（`FakeV4PointShapeLayer` 一族）与底图图层（`FakeV4TileLayer` 一族）在 Fake 里
-   * 分属两个构造工厂，混用一个账本会让「BPointCollection 到底建了几个」读成两个组件的总数。
+   * 分属两个构造工厂，混用一个账本会让「BPointShapeLayer 到底建了几个」读成两个组件的总数。
    */
   const nativeLayerAt = (index: number) => {
     const layers = fake.createdNativeLayers;
@@ -438,15 +561,6 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         if (kind === "context-menu") return map.contextMenus.length;
         return map.layers.length;
       },
-      menusOnOverlay: (index = -1) => {
-        const overlays = fake.createdOverlays as Array<{ contextMenus?: unknown[] }>;
-        const resolved = index < 0 ? overlays.length + index : index;
-        const overlay = overlays[resolved];
-        if (!overlay) {
-          throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
-        }
-        return overlay.contextMenus?.length ?? 0;
-      },
       overlayPositions: () => toPositions(lastMap().overlays),
       visibleOverlays: () =>
         lastMap().overlays.filter((overlay) => (overlay as { visible?: boolean }).visible !== false).length,
@@ -459,6 +573,27 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         }
         overlay.emit("click");
       },
+      failNextRemoveOverlay: (error) => {
+        lastMap().failNextRemoveOverlay = error ?? new Error("harness: failNextRemoveOverlay");
+      },
+      failNextRemoveOverlayAfterDetach: (error, index = -1) => {
+        (overlayAt(index) as { failNextRemoveAfterDetach?: Error | null }).failNextRemoveAfterDetach =
+          error ?? new Error("harness: failNextRemoveOverlayAfterDetach");
+      },
+      failNextRemoveLayerAfterDetach: (error) => {
+        lastMap().failNextRemoveLayerAfterDetach =
+          error ?? new Error("harness: failNextRemoveLayerAfterDetach");
+      },
+      failNextOverlayHide: (error, index = -1) => {
+        (overlayAt(index) as { failNextHide?: Error | null }).failNextHide =
+          error ?? new Error("harness: failNextOverlayHide");
+      },
+      failNextOverlayShow: (error, index = -1) => {
+        (overlayAt(index) as { failNextShow?: Error | null }).failNextShow =
+          error ?? new Error("harness: failNextOverlayShow");
+      },
+      overlayVisibility: () => lastMap().overlays.map((overlay) => overlay.visible !== false),
+      overlayCalls: (index = -1) => [...(overlayAt(index).callLog ?? [])],
       visibleControls: () => lastMap().controls.filter((control) => control.isVisible()).length,
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
@@ -493,21 +628,36 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       nativeLayersCreated: () => fake.createdNativeLayers.length,
       nativeLayerCalls: (index = -1) => [...nativeLayerAt(index).callLog],
       nativeLayerOptions: (index = -1) => ({ ...nativeLayerAt(index).options }),
+      nativeLayerStyle: (index = -1) => ({
+        ...((nativeLayerAt(index) as { styleOptions?: Record<string, unknown> }).styleOptions ?? {}),
+      }),
       nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
       nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
+      nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
       failNextRemoveLayer: (error) => {
         lastMap().failNextRemoveLayer = error ?? new Error("harness: failNextRemoveLayer");
       },
-      failNextRemoveLayerAfterDetach: (error) => {
-        lastMap().failNextRemoveLayerAfterDetach =
-          error ?? new Error("harness: failNextRemoveLayerAfterDetach");
+      failRemoveLayerWhenDetached: (error) => {
+        lastMap().failRemoveLayerWhenDetached = error ?? new Error("harness: 重复摘除");
       },
       layerOps: () =>
         lastMap().callLog.filter((entry) => entry === "addLayer" || entry === "removeLayer"),
       emitNativeLayerEvent: (index, type, value) => {
         nativeLayerAt(index).emit(type, { value });
       },
-      nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
+      menusOnOverlay: (index = -1) => {
+        const overlays = fake.createdOverlays as Array<{ contextMenus?: unknown[] }>;
+        const resolved = index < 0 ? overlays.length + index : index;
+        const overlay = overlays[resolved];
+        if (!overlay) {
+          throw new Error(`fake-v4 harness：没有第 ${index} 个覆盖物（已创建 ${overlays.length} 个）`);
+        }
+        return overlay.contextMenus?.length ?? 0;
+      },
+      failNextNativeLayerSetVisible: (error, index = -1) => {
+        const layer = nativeLayerAt(index) as { failNextSetVisible?: Error | null };
+        layer.failNextSetVisible = error ?? new Error("harness: failNextSetVisible");
+      },
       simulateNativePick: (payload, index = -1) => {
         const layer = nativeLayerAt(index);
         const properties =
@@ -518,6 +668,66 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
           latLng: payload.latLng ?? { lng: 0, lat: 0 },
           pixel: payload.pixel ?? { x: 0, y: 0 },
         });
+      },
+      simulateNativeExtensionPick: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        // 扩展 API 的命中载荷：业务键在 value.properties[idKey] / value.id 上，**没有** dataIndex。
+        layer.emit("click", {
+          value: {
+            lng: payload.latLng?.lng ?? 0,
+            lat: payload.latLng?.lat ?? 0,
+            index: 0,
+            id: payload.key,
+            properties: { [payload.idKey ?? "id"]: payload.key },
+          },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterHit: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("click", {
+          value: {
+            isCluster: true,
+            clusterId: payload.clusterId,
+            parentId: -1,
+            pointCount: payload.pointCount,
+            latLng: payload.latLng ?? { lng: 0, lat: 0 },
+            bbox: [0, 0, 0, 0],
+            properties: {
+              isCluster: true,
+              clusterId: payload.clusterId,
+              pointCount: payload.pointCount,
+            },
+          },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterSingleHit: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("click", {
+          value: { id: payload.key, isCluster: false, properties: { id: payload.key } },
+          latLng: payload.latLng ?? { lng: 0, lat: 0 },
+          pixel: payload.pixel ?? { x: 0, y: 0 },
+        });
+      },
+      simulateNativeClusterChange: (payload, index = -1) => {
+        const layer = nativeLayerAt(index);
+        layer.emit("change", {
+          value: {
+            clusters: Array.from({ length: payload.clusters }, (_, i) => ({ clusterId: i })),
+            singles: Array.from({ length: payload.singles }, (_, i) => ({ id: `single-${i}` })),
+            zoom: payload.zoom ?? 11,
+          },
+        });
+      },
+      simulateMalformedNativeClusterHit: (value, index = -1) => {
+        nativeLayerAt(index).emit("click", { value, latLng: { lng: 0, lat: 0 }, pixel: { x: 0, y: 0 } });
+      },
+      dispatchNativeLayerEventOnDetach: (index, type, value) => {
+        const layer = nativeLayerAt(index) as { onDetached?: () => void };
+        layer.onDetached = () => layer.emit(type, { value });
       },
     },
   };

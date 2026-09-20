@@ -144,6 +144,18 @@ export const componentManifest = [
     source: "./components/data/BPointCollection.vue",
   },
   {
+    name: "BPointIconLayer",
+    exportName: "BPointIconLayer",
+    category: "data",
+    source: "./components/data/BPointIconLayer.vue",
+  },
+  {
+    name: "BPointLayer",
+    exportName: "BPointLayer",
+    category: "data",
+    source: "./components/data/BPointLayer.vue",
+  },
+  {
     name: "BMarkerCluster",
     exportName: "BMarkerCluster",
     category: "data",

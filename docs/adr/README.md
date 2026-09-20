@@ -37,6 +37,7 @@
 | [2026-09-18](./2026-09-18-data-layer-manager-and-point-collection.md) | 数据层收口（MarkerList / DataLayerManager 语义重写、泛型 GeoJSON 适配与批量点图层；删除 `BPointLayer` 与 `shouldFullReplace`） | Accepted |
 | [2026-09-19](./2026-09-19-custom-overlay-and-context-menu.md) | 自定义 DOM 覆盖物、声明式右键菜单与「运行时扩展成员」的处置（多文件事件矩阵门禁 / detached 宿主与 slot 所有权 / `Marker#addContextMenu` 的实测依据 / 菜单不复用 OverlaySpec 内核 / 不做受控 open） | Accepted |
 | [2026-09-19](./2026-09-19-native-data-layer-components.md) | 原生批量可视化图层的组件面与要素状态命令面（共享内核 / `visible` 双路径 / 按业务 id 的状态命令面 / 拾取字段语义与业务键兜底；增补 #23 的操作表） | Accepted |
+| [2026-09-19](./2026-09-19-native-point-layers-and-cluster.md) | 原生点图层与原生聚合（三个点图层共用 `pointLayerSpec` 内核 / `BPointCollection` → `BPointShapeLayer` / `BMarkerCluster` 原生优先且 `markers` 为显式选择 / 为 `point`、`cluster` 放开 `setVisible`） | Accepted |
 
 ## 约定
 

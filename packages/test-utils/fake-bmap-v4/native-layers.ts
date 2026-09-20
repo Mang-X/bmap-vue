@@ -9,11 +9,21 @@
  *   （`enablePicked`），因此这一族**没有** `setEnablePicked` / `hitTest`——Driver 的
  *   `supports()` 正是据此回答 `false`。
  * - **扩展 API 的点/聚合/热力**（`PointLayer` / `ClusterLayer` / `Heatmap`）：只有
- *   `setData` / `clearData` / `setOptions`（`PointLayer` 另有 `setEnablePicked` / `hitTest`）。
+ *   `setData` / `clearData` / `setOptions`（`PointLayer` 另有 `setEnablePicked` / `hitTest`），
+ *   外加**从共享基类继承**的 `setVisible` / `getVisible`。
  * - **TrackLine**：只有 `setData` 与播放控制。
  *
- * 刻意不提供「扩展 API 其实没有的方法」（如 `setVisible` / `updateState`）：如果 Fake 慷慨地
- * 全给上，`supports()` 的断言就会变成空转——而「静默 no-op」正是本 Facet 要挡掉的东西。
+ * ⚠️ 关于 `setVisible` 的一次更正（issue #35，2026-09-19）：本文件此前写着「刻意不提供
+ * `setVisible`，因为扩展 API 其实没有这个方法」——**那句话是错的**。真实 4.0 的 `PointLayer` /
+ * `ClusterLayer` 从共享基类继承了 `setVisible` / `getVisible`，探针
+ * （`scripts/probe-native-point-cluster.mts`）实测 `setVisible(false)` 之后
+ * `getVisible() === false`、恢复也成立；旧结论的依据只是「官方扩展 API 专页没列它」。
+ * 夹具比真实更窄会**掩盖** Driver 的 `supports()` 说假话（这里恰好相反：是 `supports()`
+ * 太保守，而夹具让「放开」这条改动无法被验证）。因此这一对成员现在如实建模。
+ *
+ * 仍然刻意不提供的（`supports()` 也回答不支持）：`setOpacity` / `setZIndex` / `setMinZoom` /
+ * `setMaxZoom` / 状态 API —— 它们在真实运行时同样继承自基类，但本库按官方专页口径不把它们
+ * 当契约，且当前没有消费者。**要放开必须像 `setVisible` 一样先取证**，不能只因为运行时存在。
  *
  * 所有替身都继承 `FakeV4Layer`：`FakeV4Map.addLayer/removeLayer` 的容器只认它，
  * 这也让「先摘子资源再 destroy 地图」的不变式在原生图层上同样可断言。
@@ -116,8 +126,22 @@ export class FakeV4NativeLayerBase extends FakeV4Layer {
     this.drawCount += 1
   }
 
+  /**
+   * 注入一次 `setVisible` 失败（**写之前**抛，状态不变）。
+   *
+   * 真实 Driver 的 `setVisible` 走 `sdkCall`，失败会抛 —— 而显隐是**独立于其它 props 的一条**
+   * 更新路径（组件侧由单独的 watcher 驱动），因此它也需要一条「失败仍走统一错误出口」的回归。
+   * 两个基类都给：声明的四类与扩展 API 的 `setVisible` 是各自实现的。
+   */
+  failNextSetVisible: Error | null = null
+
   setVisible(visible: boolean): void {
     this.callLog.push('setVisible')
+    if (this.failNextSetVisible) {
+      const error = this.failNextSetVisible
+      this.failNextSetVisible = null
+      throw error
+    }
     this.visible = visible
   }
 
@@ -168,9 +192,11 @@ export class FakeV4FillLayer extends FakeV4NativeLayerBase {
 
 /* ------------------------------------------------- 扩展 API（未声明的运行时类） */
 
-/** 扩展 API 的公共部分：只有 `setOptions` 一族 + 数据。 */
+/** 扩展 API 的公共部分：只有 `setOptions` 一族 + 数据 + 继承来的 `setVisible`。 */
 export class FakeV4RuntimeLayer extends FakeV4Layer {
   data: unknown = null
+  /** 继承自共享基类（真实 4.0 实测可读写，见文件头）：Driver 对 `point` / `cluster` 已放开 `setVisible`。 */
+  visible = true
 
   constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
     super(options, stats)
@@ -193,6 +219,23 @@ export class FakeV4RuntimeLayer extends FakeV4Layer {
   setOptions(options: Record<string, unknown>): void {
     this.callLog.push('setOptions')
     this.options = { ...this.options, ...options }
+  }
+
+  /** 注入一次 `setVisible` 失败（**写之前**抛，状态不变）；口径同基类那一份。 */
+  failNextSetVisible: Error | null = null
+
+  setVisible(visible: boolean): void {
+    this.callLog.push('setVisible')
+    if (this.failNextSetVisible) {
+      const error = this.failNextSetVisible
+      this.failNextSetVisible = null
+      throw error
+    }
+    this.visible = visible
+  }
+
+  getVisible(): boolean {
+    return this.visible
   }
 }
 

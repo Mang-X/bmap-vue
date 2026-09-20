@@ -1,7 +1,7 @@
 /**
  * 点坐标的读取与校验（M6-MARKER-POINTCOLLECTION / issue #34）
  *
- * 数据组件（`BMarkerList` / `BMarkerCluster` / `BPointCollection`）都从业务数据里读坐标，
+ * 数据组件（`BMarkerList` / `BMarkerCluster` / `BPointShapeLayer`）都从业务数据里读坐标，
  * 三处必须用**同一份**判定，否则「什么样的坐标算坏数据」会有三个版本。因此校验收在这里，
  * 组件只负责「跳过 + 报告」。
  *
@@ -28,7 +28,6 @@ import type { PointLike } from "../utils/geometry";
 
 /** 点形状在本模块与消费方之间复用（唯一实现仍在 `core/utils/geometry`）。 */
 export type { PointLike };
-
 export type PointProblemReason = "missing" | "not-finite" | "out-of-range";
 
 export type PointReadResult =
@@ -86,4 +85,29 @@ function describe(value: unknown): string {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
   return typeof value;
+}
+
+/**
+ * 从**SDK 回传的载荷**里读一个坐标：拿到合法形状就给出 `{ lng, lat }`，否则 `null`。
+ *
+ * 与 `readValidPoint` 的区别是**用途而不是严格度**：那个函数校验**业务数据**（错了要跳过该项
+ * 并告警，见 `itemScan`），这个只是把 SDK 事件里的 `latLng` / `point` 读成领域形状——
+ * 读不到就如实给 `null`（调用方按「本次没有坐标」处理），不编造、也不告警（事件来自 SDK，
+ * 不是用户输入）。
+ *
+ * 放在这里是因为它被两条路径共用：点图层内核（`useNativePointLayer`）与原生聚合引擎
+ * （`nativeClusterEngine`）。共用的理由与 `layerDataIdentity` 一样：两份实现会在
+ * 「什么样的值算坐标」上分叉。
+ */
+export function readPayloadPointLike(value: unknown): PointLike | null {
+  if (value === null || typeof value !== "object") return null;
+  const { lng, lat } = value as { lng?: unknown; lat?: unknown };
+  return typeof lng === "number" && typeof lat === "number" ? { lng, lat } : null;
+}
+
+/** 从 SDK 回传的载荷里读一个像素坐标；形状不对时 `null`。 */
+export function readPayloadPixel(value: unknown): { x: number; y: number } | null {
+  if (value === null || typeof value !== "object") return null;
+  const { x, y } = value as { x?: unknown; y?: unknown };
+  return typeof x === "number" && typeof y === "number" ? { x, y } : null;
 }

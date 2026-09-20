@@ -27,6 +27,8 @@ import {
   BBezierCurve,
   BMapMask,
   BPointCollection,
+  BPointIconLayer,
+  BPointLayer,
   BZoom,
   BScale,
   BCityList,
@@ -107,6 +109,25 @@ function bulkScene(): () => unknown {
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
       }),
+      // 图标层与扩展 API 点层（#35）：三者都是「整批一个原生图层」，一起放是为了肉眼比对
+      // 三种点样式的差异；真实场景里按需选一个。
+      h(BPointIconLayer, {
+        data: pts.value,
+        itemKey: 'id',
+        getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
+        icon: 'https://jsapi-demo.bj.bcebos.com/images/markers/marker_demo_1.png',
+        width: 24,
+        height: 24,
+      }),
+      h(BPointLayer, {
+        data: pts.value,
+        itemKey: 'id',
+        getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
+        shape: 'circle',
+        size: 12,
+        fillColor: '#ff6600',
+      }),
+      // 默认引擎已是原生聚合（#35）；要 `cluster-click` 回传业务项时写 engine="markers"
       h(BMarkerCluster, {
         data: pts.value,
         itemKey: 'id',

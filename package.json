@@ -42,7 +42,8 @@
     "changeset": "changeset",
     "skills:install": "npx -y skills experimental_install -y",
     "skills:list": "npx -y skills list",
-    "probe:point-pick": "node --experimental-strip-types scripts/probe-point-pick.mts"
+    "probe:point-pick": "node --experimental-strip-types scripts/probe-point-pick.mts",
+    "probe:native-point-cluster": "node --experimental-strip-types scripts/probe-native-point-cluster.mts"
   },
   "dependencies": {
     "mitt": "^3.0.0",
