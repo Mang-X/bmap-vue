@@ -393,18 +393,35 @@ export function createNativeClusterEngine<Item>(
    * 换实例：先摘成功、再建新的（**严格路径**：`record.detach()` 先解绑监听、再摘资源，
    * 摘除失败会抛 ⇒ 调用方保留旧实例）。
    */
+  /**
+   * **严格摘除当前实例，并同步 `detachUnknown`** —— 两条入口（构造期重建 / 换引擎）**共用**。
+   *
+   * - 成功 ⇒ 确定已摘除：清掉 `detachUnknown`；
+   * - `record.detach()` 抛错 ⇒ 资源**可能已经不在图上** ⇒ 置 `detachUnknown = true` 后原样抛出，
+   *   调用方据此放弃这次重建 / 切换，并保留旧实例（记账不清理，下一次还能再试）。
+   *
+   * 为什么必须共用：`recreate()`（构造期项变化）与公开的 `detach()`（换引擎）是**两条入口**，
+   * 各写一份 catch 的结果就是「一条记了 unknown、另一条没记」—— 第四轮评审的同一条原则漏在了
+   * 另一条入口上（#108 本轮评审）。未知状态下 `applyData` / `applyVisible` 都不写，`sync()`
+   * 优先收敛，所以这个标志必须两条入口都维护。
+   */
+  function detachStrict(): void {
+    const current = record;
+    if (!current) return;
+    try {
+      current.detach();
+    } catch (error) {
+      detachUnknown = true;
+      throw error;
+    }
+    detachUnknown = false;
+  }
+
   function recreate(): void {
     const old = handle;
     if (old) {
       // 失败时**不清理任何记账**：旧的还在图上，下一次 sync / 卸载还要能再摘一次
-      try {
-        record?.detach();
-      } catch (error) {
-        // 「可能摘了、也可能没摘」⇒ 记下来：之后禁止普通写入，且下一次 sync 优先收敛
-        detachUnknown = true;
-        throw error;
-      }
-      detachUnknown = false;
+      detachStrict();
       record = null;
       listenerScope = null;
       handle = null;
@@ -454,7 +471,9 @@ export function createNativeClusterEngine<Item>(
       // （旧的还在图上 ⇒ 下一次还能再试；清掉记账等于让它没人认领）。
       // 门禁同样用 `record`（所有权）而不是 `handle`（可能已被回调清掉）。
       if (!record) return;
-      record.detach();
+      // 与 `recreate()` **共用**同一条严格摘除（含 `detachUnknown` 记账）：这条入口是「换引擎」，
+      // 失败后外层会保留本引擎 ⇒ 之后单改 `visible` / 取消切换时都必须按未知句柄处理。
+      detachStrict();
       record = null;
       listenerScope = null;
       handle = null;

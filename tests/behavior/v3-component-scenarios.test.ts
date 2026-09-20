@@ -3956,6 +3956,49 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     harness.assertIdle("BPointCollection isFlat");
   });
 
+  it("BMarkerCluster：换引擎的严格 detach 失败也标 unknown —— 取消切换前不写、之后收敛", async () => {
+    const engine = ref<"native" | "markers">("native");
+    const visible = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(BMarkerCluster, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        engine: engine.value,
+        visible: visible.value,
+      }),
+    ]);
+    // ⚠️ 挂载**之后**取计数 ⇒ 本用例那个实例的绝对索引是「计数 - 1」
+    const layersBefore = harness.nativeLayersCreated();
+    const phantom = layersBefore - 1;
+    expect(harness.attached("layer")).toBe(1);
+
+    // 换引擎：`removeLayer` **先真的摘掉、再抛错** ⇒ 旧 native 图层可能已不在图上
+    harness.failNextRemoveLayerAfterDetach();
+    engine.value = "markers";
+    await settleProps();
+    expect(harness.attached("overlay"), "切换失败 ⇒ 不建 markers").toBe(0);
+    expect(harness.attached("layer"), "它其实已经不在图上了").toBe(0);
+
+    // 收敛之前：改 visible **不得**向这个可能已 detached 的句柄下发 setVisible
+    const callsBefore = harness.nativeLayerCalls(phantom).length;
+    visible.value = false;
+    await settleProps();
+    expect(
+      harness.nativeLayerCalls(phantom).length,
+      "unknown 期间不得下发 setVisible（第四轮那条原则同样适用于「换引擎」入口）",
+    ).toBe(callsBefore);
+
+    // 把 engine 改回 native（取消切换）：必须主动收敛，重新得到 1 个 native layer
+    engine.value = "native";
+    await settleProps();
+    expect(harness.attached("layer"), "收敛之后图层回到图上").toBe(1);
+    expect(harness.nativeLayersCreated(), "收敛 = 换一个新实例").toBe(layersBefore + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("换引擎 detach 失败的 unknown");
+  });
+
   /*
    * PR #108 第四轮评审（commit fdee24e）的阻塞主题：**`unknown` 必须是贯穿后续生命周期的持久状态**。
    *
