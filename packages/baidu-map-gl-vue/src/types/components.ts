@@ -505,6 +505,15 @@ export interface BPointCollectionProps<Item> extends BMapDataProps<Item> {
   /** 最大显示缩放等级。 */
   maxZoom?: number;
   /**
+   * 是否**贴地渲染**（官方 `PointShapeLayerOptions.isFlat`，官方默认 `true`）。
+   *
+   * 本库**不覆盖**官方默认值：不表态就**不进**构造选项袋（`undefined` 一律不发），
+   * 要改成贴图外那种「始终面向屏幕」的渲染再显式传 `false`。
+   *
+   * 它是**构造期**选项（决定渲染通道）⇒ 变化时重建图层实例。
+   */
+  isFlat?: boolean;
+  /**
    * 是否开启鼠标拾取，默认 **`true`**。
    *
    * 与官方 `PointShapeLayerOptions.enablePicked` 的默认值（`false`）**不同**，这是刻意的：

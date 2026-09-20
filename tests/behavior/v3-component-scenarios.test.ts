@@ -3927,6 +3927,35 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     harness.assertIdle("BMarkerCluster markers after-detach 失败");
   });
 
+  it("BPointCollection：isFlat 是构造期选项 —— 不表态不进选项袋，表态后换实例（#35 收口）", async () => {
+    const isFlat = ref<boolean | undefined>(undefined);
+    const wrapper = await mountMapTree(() => [
+      h(BPointCollection, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        isFlat: isFlat.value,
+      }),
+    ]);
+
+    // 不表态：**不**把官方默认值（`true`）显式发下去 —— 与 BPointIconLayer 同一条口径
+    expect(
+      Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(), "isFlat"),
+      "不表态不进构造选项袋（让 SDK 自己的默认值生效）",
+    ).toBe(false);
+
+    const created = harness.nativeLayersCreated();
+    isFlat.value = false;
+    await settleProps();
+
+    expect(harness.nativeLayerOptions(), "表态后下发给构造器").toMatchObject({ isFlat: false });
+    expect(harness.nativeLayersCreated(), "构造期项 ⇒ 换实例").toBe(created + 1);
+    expect(harness.attached("layer"), "同一时刻只有一个实例").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("BPointCollection isFlat");
+  });
+
   /*
    * PR #108 第四轮评审（commit fdee24e）的阻塞主题：**`unknown` 必须是贯穿后续生命周期的持久状态**。
    *
