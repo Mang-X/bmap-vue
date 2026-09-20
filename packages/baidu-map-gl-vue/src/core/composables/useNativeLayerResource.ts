@@ -64,7 +64,7 @@ import { createFeatureStateApi, type FeatureStateApi } from "../data/featureStat
 import { normalizeIdField } from "../data/identity";
 import { BMapError } from "../errors/BMapError";
 import { createDevWarnOnce } from "../logger";
-import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
+import { createLayerRegistry, type LayerRecord, type LayerRegistry } from "../layers/LayerRegistry";
 import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { stableLayerValue } from "../layers/LayerSpec";
 import { ResourceScope } from "../lifecycle/ResourceScope";
@@ -89,6 +89,15 @@ export interface NativeLayerBindInput {
   readonly context: MapReadyContext;
   /** 本代的 child scope：监听器 / watcher 都挂这里（重建后旧监听随之消失）。 */
   readonly scope: ResourceScope;
+  /**
+   * **摘除期间的回调门**：严格换实例时内核对旧实例做 `quiesce → remove → commit`，在 `remove`
+   * 期间这个函数返回 `true`。`bind()` 里的事件回调必须据此**提前返回**。
+   *
+   * 为什么需要它：`removeLayer` 期间 SDK 可能同步派发事件（真实 SDK 的 `tileload` 一类），而那个
+   * 实例正在被拆。用「先把监听 dispose 掉」来挡是没有回头路的 —— `scope.dispose()` 不可逆，
+   * 一旦 `remove` 抛错，旧实例就变成「还在图上但点不动」，而我们要的是「失败后完全恢复可用」。
+   */
+  readonly isQuiescing: () => boolean;
 }
 
 /**
@@ -205,7 +214,9 @@ interface InstanceState {
   /** 是否**成功挂上去过**（用于「重新可见必须换实例」的判定）。 */
   everAttached: boolean;
   /** 账本记录（`Map` 卸载前摘掉它）。 */
-  record: { dispose(): void };
+  record: LayerRecord | null;
+  /** 摘除期间的业务回调门（由账本的严格 detach 驱动，见 `NativeLayerBindInput.isQuiescing`）。 */
+  quiescing: boolean;
 }
 
 export function useNativeLayerResource<Props>(
@@ -396,6 +407,8 @@ export function useNativeLayerResource<Props>(
    * setter 只会让 SDK 收到一个非法值。
    */
   const applyFields = (state: InstanceState, context: MapReadyContext): void => {
+    // 挂载态未知 ⇒ 一个字都不写（它可能已经不在图上；真实 SDK 对已摘下的实例补 setData 会内部抛错）
+    if (state.mountState === "unknown") return;
     for (const [field, value, write] of fieldWrites(state, context)) {
       const fingerprint = stableLayerValue(value);
       if (state.applied.get(field) === fingerprint) continue;
@@ -462,6 +475,8 @@ export function useNativeLayerResource<Props>(
    * 因此创建路径上 `sent !== null` 正好等价于「这一代之前确实有一份数据需要继承」。
    */
   const applyData = (state: InstanceState, context: MapReadyContext, force = false): void => {
+    // 同 `applyFields`：挂载态未知时不写
+    if (state.mountState === "unknown") return;
     const data = hooks.data;
     if (!data) return;
     const mode = data.state(props);
@@ -512,24 +527,6 @@ export function useNativeLayerResource<Props>(
     ctx.events.emit("resource:error", { error: wrapped, component: hooks.component });
   };
 
-  /**
-   * **解绑本代实例的业务监听**（`bind()` 里挂到 `listenerScope` 上的驱动事件订阅）。
-   *
-   * 内核对这一步有所有权的原因是**换实例**：`recreate()` 会先解绑、再清数据、再摘图层，而它不能走
-   * `record.dispose()`（`LayerRegistry` 在那里会把记录永久删除）。常规卸载路径的顺序由
-   * `LayerRegistry.dispose()` 保证，这里补上换实例那一条。
-   *
-   * 幂等：`LayerRegistry` 对同一个 scope 还会再调一次，`ResourceScope.dispose()` 自身幂等。
-   */
-  const releaseListeners = (state: InstanceState): void => {
-    if (state.listenerScope.isDisposed) return;
-    try {
-      state.listenerScope.dispose(`${hooks.component}-released`);
-    } catch (error) {
-      reportError(error);
-    }
-  };
-
   /** 创建 + 挂载 + 首次写入 + 绑事件（**只**在「确定要新建一个实例」时调用）。 */
   const createInstance = (context: MapReadyContext): InstanceState => {
     const nativeLayers = nativeLayersOf(context.client);
@@ -545,7 +542,8 @@ export function useNativeLayerResource<Props>(
       mountState: "detached",
       mountAttempted: false,
       everAttached: false,
-      record: { dispose: () => {} },
+      record: null,
+      quiescing: false,
     };
 
     // 账本先登记：任何一步抛错时，卸载路径上一定有一个「能把它从图上摘掉」的记录
@@ -553,12 +551,19 @@ export function useNativeLayerResource<Props>(
       kind: hooks.kind,
       handle,
       scope: listenerScope,
+      /** 摘除期间挡业务回调（可恢复）：见 `NativeLayerBindInput.isQuiescing`。 */
+      quiesce: (active) => {
+        state.quiescing = active;
+      },
       remove: () => {
-        if (instance === state) instance = null;
+        // ⚠️ 顺序：**先摘、后销账**。反过来（先清 `instance`）时，一次抛错的 `removeLayer` 会把记账
+        // 清成「已经没有实例了」，之后的重试 / 卸载都会跳过摘除 —— 资源留在图上没人认领。
+        // （这条是 #35 / PR #108 四轮评审的结论，迁移到共享内核时保留。）
         // 永久销毁只有「摘图层」这一步（`detach` 以「调用过 add」为门禁，因此重复销毁不会多摘一次）。
         // 清数据**不在这里**：四类专页图层没有 `clearData` 入口，而实例随摘除被丢弃、SDK 侧的数据
         // 也随之成为垃圾（官方 reference 的清理清单同样只有「解绑事件 → removeLayer」）。
         detach(state, context);
+        if (instance === state) instance = null;
       },
     });
     try {
@@ -568,9 +573,9 @@ export function useNativeLayerResource<Props>(
       applyFields(state, context);
       // 传 `force`：首份数据必须写（不依赖指纹是否为空）
       applyData(state, context, true);
-      hooks.bind?.({ handle, context, scope: listenerScope });
+      hooks.bind?.({ handle, context, scope: listenerScope, isQuiescing: () => state.quiescing });
     } catch (error) {
-      state.record.dispose();
+      state.record?.dispose();
       throw error;
     }
     instance = state;
@@ -582,7 +587,7 @@ export function useNativeLayerResource<Props>(
     const state = instance;
     if (!state) return;
     instance = null;
-    state.record.dispose();
+    state.record?.dispose();
     if (!state.listenerScope.isDisposed) {
       state.listenerScope.dispose(`${hooks.component}-released`);
     }
@@ -605,15 +610,20 @@ export function useNativeLayerResource<Props>(
        * 再解绑）会让 SDK 在 `removeLayer` 期间同步派发的事件打到已经开始拆解的业务回调上
        * （ADR `2026-09-17-layer-spec-and-registry.md` 决策 14）。
        */
-      releaseListeners(old);
+      /**
+       * 走账本的**严格**摘除（三阶段：quiesce 挡业务回调 → `removeLayer` → commit 解绑监听 + 销账）。
+       *
+       * 不用「先 `releaseListeners(old)` 再 `detach(old)`」：`scope.dispose()` **不可逆**，一旦
+       * `removeLayer` 抛错，旧实例就变成「还在图上但已经点不动」——而调用方以为「保留了旧实例」。
+       * 现在失败时**不解绑、不销账**：门关掉就完全恢复可用，所有权也还在账本里（下次 sync 再试）。
+       * 摘除期间业务回调照样不穿透（消费方按 `isQuiescing()` 提前返回），#22 的口径不变。
+       */
       try {
-        detach(old, context);
+        old.record?.detach();
       } catch (error) {
         reportError(error);
         return;
       }
-      // 摘除成功 ⇒ 旧实例连同它的账本记录一起作废（此时 `remove` 已是 no-op）
-      old.record.dispose();
       instance = null;
     }
     createInstance(context);
@@ -641,6 +651,15 @@ export function useNativeLayerResource<Props>(
     }
 
     try {
+      /**
+       * ⚠️ **`unknown` 优先于构造指纹**：挂载态未知是「必须先收敛」的状态。只看 `rebuildKey` 会让
+       * 一个稳定复现永久卡住：构造项 A → B 时摘除失败（实例可能已不在图上）⇒ 用户把参数改回 A ⇒
+       * 指纹重新相等 ⇒ 后面每次 sync 都只命中「不写」的门，**再没有任何收敛动作**。
+       */
+      if (state.mountState === "unknown") {
+        recreate(context);
+        return;
+      }
       if (
         state.rebuildKey !== hooks.rebuildKey(props) ||
         needsRemountRebuild(state, context)
