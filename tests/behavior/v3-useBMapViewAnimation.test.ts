@@ -183,7 +183,7 @@ describe("useBMapViewAnimation：只用官方公开面", () => {
     expect(hook.status.value).toBe("playing");
     expect(first.getListenerCount()).toBeGreaterThan(0);
 
-    // 第一段还在播，直接起第二段：Driver 会在起播前同步取消上一段
+    // 第一段**已启动**（`status` 已是 playing），直接起第二段：Driver 会在起播前先取消上一段（即时交付）
     await hook.start(KEY_FRAMES);
     await letSdkStart();
 
@@ -215,8 +215,8 @@ describe("useBMapViewAnimation：只用官方公开面", () => {
 /**
  * 取消失败路径（#105 评审 P1）
  *
- * `MapDriver` 的契约是「`cancelViewAnimation` 失败时动画记录**保留**，下一次
- * `stopViewAnimation` / `destroy` 仍可重试」（`driver/jsapi-v4/map.ts` 的 `cancelAllAnimations`
+ * `MapDriver` 的契约是「`cancelViewAnimation` 失败时动画记录**保留**，下一次同一实例的
+ * `cancelViewAnimation` / `destroy` 仍可重试」（`driver/jsapi-v4/map.ts` 的 `cancelAllAnimations`
  * 汇总抛 `BMAP_SDK_CALL_FAILED`，且不置 `settled`）。这条契约在 hooks 侧有两个方向：
  *
  * - hooks **不能**在取消被接受之前丢掉自己那一段的归属——否则 SDK 那边还在播，hook 却已经没有
@@ -700,5 +700,50 @@ describe("useBMapViewAnimation：未交付的旧段仍归本 hooks 所有", () =
     expect(a.getListenerCount(), "A 的订阅随卸载下线").toBe(0);
     expect(b.getListenerCount(), "B 的订阅随卸载下线").toBe(0);
     fake.diagnostics.assertNoLeaks("卸载时仍有未交付的旧段");
+  });
+});
+
+/**
+ * [#122 复审 P1] `status === "idle"` **不是**「旧段已确定停止」的 barrier。
+ *
+ * 评审指出的可达序列（本用例逐步复现）：① `start(A)` 已经把 A 提交给 SDK；② A 仍在启动窗口，
+ * `animationstart` 还没到；③ 此刻 `status` 本来就是 `idle`（`start()` 不乐观改写状态）；
+ * ④ `cancel()` 拿到 Driver 的 `deferred`，不走 `finishRun`，所以 `status` 仍是 `idle`。
+ * ⇒ 「等 `status` 收敛回 `idle` 再起播下一段」这条建议在**旧段还没被取消**时就已经满足了。
+ *
+ * 写法上刻意与「deferred 与已交付的取消走不同的收尾」那组一致：`await hook.start()`（hook 的 Promise
+ * 在**命令被接受**时就 resolve）之后**立刻**断言——中间只经过微任务，SDK 的 0ms 启动定时器来不及落地。
+ * `hasPendingStart` 是这一点的**自证**：少了它，用例会退化成「碰巧在窗口里」的时序依赖
+ * （第一版就是这样：`await flushPromises()` 是宏任务，负载下一跑就把窗口让过去了）。
+ *
+ * 本用例钉住这个语义，免得文档再写出一条不存在的确定性保证（hook 目前**不暴露**
+ * 「pending cancel 已交付」的可等待信号；要严格串行只能自己持有实例）。
+ */
+describe("useBMapViewAnimation：idle 不是串行 barrier（#122 复审 P1）", () => {
+  it("status 已是 idle 的同一刻，旧段的取消还没有交付", async () => {
+    let hook!: Hook;
+    const wrapper = mountHook((created) => {
+      hook = created;
+    });
+    await flushPromises();
+
+    await hook.start(KEY_FRAMES);
+    const first = lastAnimation();
+    // 自证：这一次读数确实落在「已提交、事件未到」的窗口里
+    expect(first.hasPendingStart, "SDK 的启动定时器还没落地").toBe(true);
+    // ① A 已交给 SDK；② `animationstart` 还没到 ⇒ ③ `start()` 不乐观改写状态，于是 `status` 就是 idle
+    expect(hook.status.value, "没观察到 animationstart 就不算在播").toBe("idle");
+
+    // ④ 此刻取消：Driver 只能报 `deferred`，不会走 `finishRun`，所以 `status` 不变
+    hook.cancel();
+    expect(hook.status.value, "取消未被交付时 status 也不变").toBe("idle");
+    expect(first.cancelCalls, "取消尚未打到 SDK —— 而 status 已经满足「已 idle」").toBe(0);
+
+    // 让 SDK 的启动定时器落地：A 的 `animationstart` 到达 → 安全窗口里才真正交付取消
+    await letSdkStart();
+    expect(first.cancelCalls, "安全窗口里才交付取消").toBe(1);
+    expect(hook.status.value, "交付之后才收敛回 idle").toBe("idle");
+
+    wrapper.unmount();
   });
 });
