@@ -225,7 +225,9 @@ const PAGE_JS = `
           excerpt: line.slice(Math.max(0, column - 120), column + 160),
         };
       } catch (e) {
-        return { located: true, line: lineNo, column: column, fetchError: msg(e) };
+        // 取不到原文时**不把缺失藏起来**：located 说的是「栈里解析出了行列号」，
+        // 而 excerpt 显式给 null（而不是干脆没有这个键）——否则读者会以为摘到了现场。
+        return { located: true, line: lineNo, column: column, excerpt: null, fetchError: msg(e) };
       }
     }
 
@@ -506,10 +508,9 @@ const PAGE_JS = `
             }
           }
           try { if (typeof v.destroy === "function") v.destroy(); } catch (e) {}
-          var checksOk = [
-            okCheck("View 构造成功", !!v),
-            okCheck("图层能挂上", layerOk === true, { layerError: layerErr }),
-          ];
+          // 「View 构造成功」不写成 check：走到这里就说明它没抛错（抛错会进下面的 catch），
+          // 那条断言恒真、只会让报告看起来多验了一件事。这里只留真正会不成立的那一条。
+          var checksOk = [okCheck("图层能挂上", layerOk === true, { layerError: layerErr })];
           var readingsOk = { panesBefore: panesBefore, layerCtors: layerNames.slice(0, 8) };
           if (!allOk(checksOk)) return inconclusive("最小路径 invariant 不成立", { layerError: layerErr }, checksOk, readingsOk);
           return verified({ viewCreated: true, layerAdded: layerOk }, checksOk, readingsOk);

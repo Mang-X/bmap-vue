@@ -97,7 +97,8 @@ describe("./advanced 的导出面是冻结的精确集合", () => {
   it("运行时导出与冻结清单逐名相等（多一个 / 少一个都要显式改清单）", () => {
     const actual = Object.keys(advanced).sort();
     expect(actual).toEqual(FROZEN_ADVANCED_EXPORTS);
-    // 空转守卫：清单本身非空（两侧都是空数组时上面那条会恒真）
+    // 空转守卫：清单本身非空。它挡的是「清单被误删空」这类改错（两侧都空时上面那条会恒真），
+    // 不是在验实现 —— 真正的判据是上面那条逐名相等。
     expect(FROZEN_ADVANCED_EXPORTS.length).toBeGreaterThan(10);
   });
 
@@ -160,7 +161,9 @@ describe("产物层：只用 ./advanced 的消费者不会拉进组件与官方 
   it("dist/advanced.mjs 的 import 闭包不含组件标记，也不引用官方 UI Kit", () => {
     const closure = closureOf(resolve(DIST, "advanced.mjs"));
 
-    // 空转守卫：闭包确实读到了文件
+    // 空转守卫：闭包确实读到了文件。它只能挡「entry 路径写错 / 目录不存在」，
+    // 挡不住「root 判定失效导致所有 import 都落进 external」——后者由下面那条正证挡住
+    // （根入口闭包必须命中组件标记，否则整条判据无区分力，用例会红）。
     expect(closure.files.length).toBeGreaterThan(0);
     expect(closure.files).toContain("advanced.mjs");
 
