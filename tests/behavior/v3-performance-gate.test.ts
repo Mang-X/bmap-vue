@@ -220,6 +220,61 @@ describe("门禁判定的纯函数（issue #37 评审 1 / 2 的回归）", () =>
   });
 });
 
+describe("文档口径与脚本常量一致（评审第 3 轮：旧口径会误导重录基线）", () => {
+  // 这组断言的由来：这轮迭代把噪声地板从 0.05 → 0.5 → 0.1、把可比性判据从 `platform + arch`
+  // 扩成 `+ cpuModel`、换了基线机器，但**文档里只改了一部分**——评审逐条列出来才发现。
+  // 写死「文档必须与脚本常量一致」，下次改常量时门禁会直接指出来。
+  const scriptPath = "scripts/collect-performance-baseline.mts";
+  const scriptText = readFileSync(resolve(repoRoot, scriptPath), "utf8");
+  const DOCS = [
+    "docs/adr/2026-09-21-performance-baseline-and-worker-decision.md",
+    "docs/zh-CN/contributing/performance-baseline.md",
+  ];
+  const docText = (doc: string): string => readFileSync(resolve(repoRoot, doc), "utf8");
+
+  it("噪声地板：脚本常量与两处文档里「噪声地板」那句话写的是同一个值", () => {
+    const match = /const FLOOR_UNITS = ([\d.]+);/.exec(scriptText);
+    expect(match, `脚本里找不到 FLOOR_UNITS 的常量定义`).not.toBeNull();
+    const floor = match![1]!;
+    for (const doc of DOCS) {
+      const lines = docText(doc).split(/\r?\n/);
+      const floorLines = lines.filter((line) => line.includes("噪声地板") || line.includes("归一化值低于"));
+      expect(floorLines.length, `${doc} 里没有「噪声地板」的说明`).toBeGreaterThan(0);
+      expect(
+        floorLines.some((line) => line.includes(floor)),
+        `${doc} 的噪声地板没有跟着脚本的 ${floor} 更新`,
+      ).toBe(true);
+    }
+  });
+
+  it("默认阈值：脚本常量与文档里「阈值」那句话写的是同一个倍数", () => {
+    const match = /const DEFAULT_TOLERANCE = ([\d.]+);/.exec(scriptText);
+    expect(match, "脚本里找不到 DEFAULT_TOLERANCE").not.toBeNull();
+    const tolerance = match![1]!;
+    for (const doc of DOCS) {
+      const toleranceLines = docText(doc)
+        .split(/\r?\n/)
+        .filter((line) => line.includes("阈值"));
+      expect(toleranceLines.length, `${doc} 里没有「阈值」的说明`).toBeGreaterThan(0);
+      expect(
+        toleranceLines.some((line) => new RegExp(`${tolerance}\\s*[×x]`).test(line)),
+        `${doc} 的默认阈值没有跟着脚本的 ${tolerance}× 更新`,
+      ).toBe(true);
+    }
+  });
+
+  it("可比性判据：脚本比较的每一项都写在文档里（不是只写 platform + arch）", () => {
+    for (const field of ["platform", "arch", "cpuModel"]) {
+      expect(scriptText, `脚本没有比较 ${field}`).toContain(field);
+    }
+    for (const doc of DOCS) {
+      expect(docText(doc), `${doc} 没写清可比性判据（应含 platform + arch + cpuModel）`).toContain(
+        "platform + arch + cpuModel",
+      );
+    }
+  });
+});
+
 describe("探针自身的判别力（负例自测：不能只测「能通过」）", () => {
   const HEAD = [
     "name: Quality",

@@ -33,7 +33,8 @@
  * 基线录在一台机器上，「本机读数 / 校准量」的比值仍然**跨平台不可比**：实测同一份代码在
  * Apple M4（开发机，安静~极载）与 GitHub runner（INTEL XEON / linux）之间差 **2 ~ 6 倍**，
  * 而且**校准量吸收不掉**——纯数字循环的 `min` 能在被抢占的间隙里找到空闲时刻，而分配密集的
- * workload 会整体退化。因此 `platform + arch` 与基线不一致时，本脚本打印比值但**不做门禁**
+ * workload 会整体退化。因此 **`platform + arch + cpuModel`** 与基线不一致时（实测同一个
+ * `ubuntu-latest` label 的相邻两次运行就是不同 SKU），本脚本打印比值但**不做门禁**（绝对值层）
  * （详见 ADR `2026-09-21-performance-baseline-and-worker-decision` 的决策 5），并在报告里记
  * `comparison.skipped`。要在本机启用门禁就先在本机 `--update`（基线会记下本机的身份）。
  *
@@ -815,7 +816,8 @@ function writeBaseline(report: Report): void {
     tolerance: DEFAULT_TOLERANCE,
     comparisonFloorUnits: FLOOR_UNITS,
     recordedAt: report.generatedAt,
-    // `machine` 是**门禁的键**（`platform + arch` 一致才做趋势门禁），`recordedOn` 是完整读档。
+    // `machine` 是**门禁的键**（`platform + arch + cpuModel` 一致才做绝对值层的趋势门禁），
+    // `recordedOn` 是完整读档。
     machine: {
       platform: report.environment.platform,
       arch: report.environment.arch,
