@@ -244,6 +244,12 @@ describe("文档口径与脚本常量一致（评审第 3 轮：旧口径会误�
         floorLines.some((line) => line.includes(floor)),
         `${doc} 的噪声地板没有跟着脚本的 ${floor} 更新`,
       ).toBe(true);
+      // 地板是**归一化单位**：绝对毫秒等价值随 `calibration.cpu` 变（当前 CI 基线 32.83ms ⇒ ≈3.3ms，
+      // 开发机 ≈1ms）。写成固定的「1ms」会把读者带偏 —— 所以那句话必须点明它是归一化单位。
+      expect(
+        floorLines.some((line) => line.includes("归一化单位")),
+        `${doc} 没有说明噪声地板是归一化单位（绝对值随 calibration 变）`,
+      ).toBe(true);
     }
   });
 

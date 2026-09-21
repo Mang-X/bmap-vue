@@ -73,7 +73,9 @@ const NORMALIZER = "calibration.cpu";
 const DEFAULT_TOLERANCE = 5;
 
 /**
- * 比较的**噪声地板**（归一化单位）。0.1 ≈ 1ms（本项目校准量 ~10ms）。
+ * 比较的**噪声地板**。**`0.1` 是归一化单位**，它的绝对毫秒等价值 = `0.1 × calibration.cpu`
+ * （随机器变：当前 CI 基线 32.83ms ⇒ ≈3.3ms；开发机 ≈10ms ⇒ ≈1ms）。文档里不要把它写成
+ * 固定的「1ms」（评审第 4 轮的措辞建议）。
  *
  * 低于这一档的读数是**计时器分辨率 / 单次调度**量级（实测 `scanValidItems@100` = 0.02、
  * `cluster@100` = 0.04、`data.replace.line@100` = 0.028），拿它比比值只会得到假红 ⇒ 只进报告。
