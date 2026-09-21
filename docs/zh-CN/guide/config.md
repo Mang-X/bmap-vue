@@ -164,21 +164,21 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 配置插件后，地图实例 ready 不会等待插件加载。请通过 [BMap 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
 
-**只有下表 `plugins` 列标 ✅ 的名字是内置的**，其余字符串会被当成未知插件、静默变成空实现
-（不报错，也不会加载任何脚本）。每个内置插件的 JSAPI 4.0 状态与依据见
-[插件兼容 inventory](../contributing/plugin-compat-inventory)。
+**只有下表 `plugins` 列标 ✅ 的名字是内置的**；其余字符串会被 `resolvePluginDefinition` 抛
+`BMAP_PLUGIN_UNKNOWN`（v3 早期版本会静默变成空实现，已修正）。每个内置插件的 JSAPI 4.0 状态、
+依据与**迁移路径**见 [插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
-| PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态                     |
-| ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | -------------- | ---------------------------------- |
-| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 声明面无缺口；最小运行时路径已验证，完整链路未验证 |
-| [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                              | ✅             | 不兼容（依赖 `_rd` 私有回调表）     |
-| [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。                | ✅             | 声明面无缺口；**最小运行时路径已验证**（构造 + 取绘制模式），完整绘制交互未验证；会自行注入两个脚本 |
-| [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | ✅             | 声明面无缺口；**最小运行时路径已验证**（10 个静态成员 + `getDistance` 数值正确），各谓词签名语义未完整核对 |
-| [DistanceTool](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#测距工具)       | 测距工具         | 测距工具类                                                                         | —              | 未内置，未评估                     |
-| [AreaRestriction](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#区域限制)    | 区域限制         | 浏览区域限制类                                                                     | —              | 未内置，未评估                     |
-| [InfoBox](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#自定义信息窗口)      | 自定义信息窗口   | 类似于 infoWindow，比 infoWindow 更有灵活性，比如可以定制 border，关闭按钮样式等。 | —              | 未内置，未评估                     |
-| [RichMarker](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#富标注)           | 富标注           | 富 Marker 类                                                                       | —              | 未内置，未评估                     |
-| [LuShu](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#路书)                  | 路书             | 路书类，实现 Marker 沿路线运动                                                     | —              | 未内置，未评估                     |
+| PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态与迁移路径                                                                                              |
+| ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 结论 `native`：**迁到原生 `<BTrackLineLayer>`**（播放命令面见 [#110](https://github.com/Mang-X/bmap-vue/issues/110)）。插件脚本本身最小运行时路径已验证，但本库不再为它提供封装 |
+| [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                              | ✅             | 结论 `incompatible`（**不兼容**）：依赖 `_rd` 私有回调表，且要挂 `getPanes().mapPane`（4.0 没有）⇒ **无迁移路径**，改用原生图层 |
+| [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。                | ✅             | 结论 `compatible`：**最小运行时路径已验证**（含真实指针序列画出一个多边形）；无原生替代，按官方文档直接使用；会自行注入两个脚本 |
+| [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | ✅             | 结论 `compatible`：**最小运行时路径已验证**（10 个静态成员 + `getDistance` 数值正确）；纯函数集合，按官方文档直接使用 |
+| [DistanceTool](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#测距工具)       | 测距工具         | 测距工具类                                                                         | —              | 未内置，未评估（`unverified` 的一种：不在本库的四个内置插件范围内）                                                    |
+| [AreaRestriction](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#区域限制)    | 区域限制         | 浏览区域限制类                                                                     | —              | 未内置，未评估                                                                                                        |
+| [InfoBox](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#自定义信息窗口)      | 自定义信息窗口   | 类似于 infoWindow，比 infoWindow 更有灵活性，比如可以定制 border，关闭按钮样式等。 | —              | 未内置，未评估                                                                                                        |
+| [RichMarker](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#富标注)           | 富标注           | 富 Marker 类                                                                       | —              | 未内置，未评估                                                                                                        |
+| [LuShu](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#路书)                  | 路书             | 路书类，实现 Marker 沿路线运动                                                     | —              | 未内置，未评估                                                                                                        |
 
 ### 更换插件资源链接
 

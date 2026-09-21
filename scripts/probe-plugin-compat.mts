@@ -11,6 +11,10 @@
  * `selfInjectedMarkers`）是**从产物里抽出来的观察值**。没有可复现的抽取过程，这些值就只是
  * 「某人曾经读过一遍 minified 源码」，下一个人无法判断它是不是过期了。
  *
+ * #43 起它还核对 **`artifactDigest`（sha256）**：三个 `BMapGLLib/*` URL 指向百度自托管镜像、
+ * 路径里**没有版本号**，上游换一次内容时 URL 与依赖声明都不会变。摘要不一致即判 `fail` 并提示
+ * 「重新核对结论并更新摘要」，把「什么时候变过」变成可发现的。
+ *
  * 判定口径（与 `scripts/probe-official-packages.mts` 同一套，两档必须分开）：
  *
  * | 结论 | 触发 | 退出码影响 |
@@ -28,6 +32,7 @@
  *   pnpm probe:plugin-compat
  *   pnpm probe:plugin-compat -- --json=/tmp/plugin-compat.json
  */
+import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -51,6 +56,7 @@ interface Entry {
   urlKey: string
   exposedGlobal: string
   required: boolean
+  artifactDigest: { algo: string; value: string }
   sdkNamespaceMembers: readonly string[]
   hasPrivateSurface: boolean
   privateSurfaceNote: string
@@ -65,6 +71,8 @@ interface Observation {
   status: 'pass' | 'fail' | 'blocked'
   code?: string
   bytes?: number
+  /** 拉到的产物内容摘要（`sha256`）——与 inventory 的 `artifactDigest` 比对，用于发现「URL 没变、内容变了」。 */
+  digest?: string
   /** 抽取到的「最后一个点号段」赋值点（用于核对 exposedGlobal）。 */
   exposedOk?: boolean
   sdkNamespaceMembers?: string[]
@@ -185,7 +193,7 @@ function checkExposedGlobal(source: string, exposedGlobal: string): boolean {
   return new RegExp(String.raw`\.${last}\s*=`).test(source)
 }
 
-function fetchArtifact(url: string): Promise<{ source: string; bytes: number }> {
+function fetchArtifact(url: string): Promise<{ source: string; bytes: number; digest: string }> {
   return fetch(url, {
     redirect: 'follow',
     signal: AbortSignal.timeout(timeoutMs),
@@ -198,8 +206,12 @@ function fetchArtifact(url: string): Promise<{ source: string; bytes: number }> 
         // 4xx：锁定 URL 失效是**事实**，不是环境问题。
         throw new Error(`HTTP ${response.status}（锁定 URL 已失效）`)
       }
-      const source = await response.text()
-      return { source, bytes: Buffer.byteLength(source, 'utf8') }
+      const buffer = Buffer.from(await response.arrayBuffer())
+      return {
+        source: buffer.toString('utf8'),
+        bytes: buffer.byteLength,
+        digest: createHash('sha256').update(buffer).digest('hex'),
+      }
     })
     .catch((error: unknown) => {
       if (error instanceof BlockedError) throw error
@@ -246,11 +258,23 @@ console.log(`[plugin-compat] check scope: ${CHECK_SCOPE}`)
 
     try {
       if (!url) throw new ScaffoldError(`BUILTIN_PLUGIN_URLS 里没有键 ${entry.urlKey}`)
-      const { source, bytes } = await fetchArtifact(url)
+      const { source, bytes, digest } = await fetchArtifact(url)
 
       const sdkNamespaceMembers = extractSdkNamespaceMembers(source)
       const privateSurface = extractPrivateSurface(source)
       const exposedOk = checkExposedGlobal(source, entry.exposedGlobal)
+
+      // 内容摘要（#43）：三个 BMapGLLib URL 指向自托管镜像、**没有版本号**，上游悄悄换一次
+      // 内容时 URL 与依赖声明都不会变。摘要不一致 ⇒ 结论必须重新核对，探针变红是正确行为
+      // （与「抽取结果不一致」同一档：都表示 inventory 过期）。
+      if (entry.artifactDigest.algo !== 'sha256') {
+        diffMessages.push(`inventory 的 artifactDigest.algo 不是 sha256：${entry.artifactDigest.algo}`)
+      } else if (entry.artifactDigest.value !== digest) {
+        diffMessages.push(
+          `产物内容变了（URL 没变）：inventory 记 ${entry.artifactDigest.value.slice(0, 16)}…，` +
+            `本次拉到 ${digest.slice(0, 16)}… ⇒ 请重新核对结论并更新 artifactDigest`,
+        )
+      }
 
       const expectedMembers = [...entry.sdkNamespaceMembers].sort()
       const missingMembers = expectedMembers.filter((name) => !sdkNamespaceMembers.includes(name))
@@ -294,6 +318,7 @@ console.log(`[plugin-compat] check scope: ${CHECK_SCOPE}`)
         status: diffMessages.length === 0 ? 'pass' : 'fail',
         code: diffMessages.length === 0 ? undefined : 'INVENTORY_DRIFT',
         bytes,
+        digest,
         exposedOk,
         sdkNamespaceMembers,
         privateSurface,

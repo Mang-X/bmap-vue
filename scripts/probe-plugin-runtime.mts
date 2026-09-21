@@ -28,18 +28,24 @@
  *
  * ## 与「插件页」的区别（ADR 2026-09-13-plugin-compat-inventory 决策 8）
  *
- * 本脚本是**证据生成器**，不是 smoke harness 的插件页：它不登记进 `tests/browser/jsapi-v4` 的
- * 检查表、不进任何 CI job、不参与必需链路的放行判定。把插件脚本塞进必需页面会让跨域脚本异常直接
- * 染红必需链路——那正是决策 8 要避免的。把结论搬进 nightly / CI 属 #43。
+ * 本脚本是**证据生成器 + 可选插件门禁**，不是 smoke harness 的插件页：它不登记进
+ * `tests/browser/jsapi-v4` 的检查表、不参与必需链路的放行判定。把插件脚本塞进必需页面会让
+ * 跨域脚本异常直接染红必需链路——那正是决策 8 要避免的。
+ *
+ * #43 起它**单独**进 nightly（`plugin-runtime` job）：可选插件的结论要能每天被核对，但与
+ * required smoke 分属两个 job，任一插件脚本抖动都不会影响必需链路的判定。
  *
  * ## 判定与退出码
  *
  * | 结论 | 触发 | 退出码 |
  * | --- | --- | --- |
- * | `pass` | 每个插件的脚本加载 + 全局暴露 + 最小路径都没抛错，且独立性断言成立 | 0 |
- * | `fail` | 有插件在运行时抛错（记下错误文本），或独立性断言被打破 | 1 |
- * | `blocked` | SDK 没起来 / 脚本取不到（AK、网络、浏览器不成立）⇒ 本轮无法判定 | 3 |
+ * | `pass` | 每次读数都与 inventory 记录的 `runtime.status` 一致，且独立性断言成立 | 0 |
+ * | `fail` | 独立性被打破；或读数与 inventory 不一致（inventory 已过期）；或**未登记过**的运行时抛错 | 1 |
+ * | `blocked` | SDK 没起来 / 脚本取不到（AK、网络、浏览器不成立）、最小路径 invariant 不成立 ⇒ 本轮无法判定 | 3 |
  * | 脚手架失败 | 读不到数据模块 / 找不到浏览器 / 页面没写报告 | 2 |
+ *
+ * ⚠️ **已登记的 `threw` 不算 fail**（#43 修正）：MapVGL 的结论就是「它在 4.0 上抛错」，
+ * 旧规则会让这个探针永远红。详见 `scripts/plugin-runtime-report.mts` 的说明。
  *
  * 输出里的 `ak=` 与 `BAIDU_MAP_AK` 一律脱敏。
  *
@@ -147,14 +153,80 @@ const PAGE_JS = `
     function okCheck(name, condition, detail) {
       return { name: name, ok: !!condition, detail: detail || null };
     }
-    function verified(detail, checks) {
-      return { status: "verified", detail: detail, checks: checks };
+    // 第三参 readings 是**不进判定**的补充读数（M8-ADAPTERS-ADVANCED / #43）：
+    // 只有「在真实 4.0 上确定会成立」的性质才配进 checks；结果未知的观察进 readings。
+    function verified(detail, checks, readings) {
+      return { status: "verified", detail: detail, checks: checks, readings: readings };
     }
-    function inconclusive(reason, detail, checks) {
-      return { status: "inconclusive", reason: reason, detail: detail || null, checks: checks || [] };
+    function inconclusive(reason, detail, checks, readings) {
+      return {
+        status: "inconclusive",
+        reason: reason,
+        detail: detail || null,
+        checks: checks || [],
+        readings: readings,
+      };
     }
     function allOk(checks) {
       return checks.every(function (c) { return c.ok; });
+    }
+
+    // 真实指针输入（#43）：DrawingManager 的绘制链路只认「SDK 归一化后的鼠标事件」，
+    // 所以驱动它必须发**真实 DOM 指针事件**，而不是调库的私有方法。
+    // 事件类型按脚本自己的检测口径选（PointerEvent 且设备报告触摸点时才用 pointer*）——
+    // 口径抄自产物里那段「三种事件名映射成 mousedown/mousemove/mouseup」的分支，别按名字猜。
+    var pointerMode = !!(window.PointerEvent || window.MSPointerEvent) &&
+      ((navigator.maxTouchPoints || 0) > 0 || (navigator.msMaxTouchPoints || 0) > 0);
+    var DOWN_EVENT = pointerMode ? "pointerdown" : "mousedown";
+    var MOVE_EVENT = pointerMode ? "pointermove" : "mousemove";
+
+    // 按容器内的**相对位置**开枪：默认打 elementFromPoint 命中的元素，事件随后冒泡上去。
+    // targetEl 可显式指定接收者 —— 绘制链路里工具条 / 提示 Label 会盖在掩膜上，
+    // 用「按下时命中的那个元素」继续发后续事件，才与真实用户在同一次绘制里的接收者一致。
+    function fireAt(rect, fx, fy, type, buttons, detail, targetEl) {
+      var x = rect.left + rect.width * fx;
+      var y = rect.top + rect.height * fy;
+      var target = targetEl || document.elementFromPoint(x, y) || div;
+      var init = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons: buttons,
+        detail: detail || 0,
+      };
+      var ev = pointerMode ? new PointerEvent(type, init) : new MouseEvent(type, init);
+      target.dispatchEvent(ev);
+      return { x: Math.round(x), y: Math.round(y), target: String(target.tagName || "") };
+    }
+
+    // 抛错点定位（MapVGL 的根因）：从 stack 里取「文件:行:列」，回到产物原文里剪一段出来。
+    // 只读不解释：把现场交给报告，避免在探针里写一句未经核对的因果。
+    async function throwSite(url, stackHead) {
+      // 刻意用 [0-9] 而**不是**反斜杠 d：本段文本既会被探针当模板串求值（反斜杠会少一层），
+      // 也会被静态守卫 v3-probe-page-scripts.test.ts 当成**原文**用 new Function 编译一次。
+      // 只有「两种读法都合法」的写法才安全 —— 转义换行的那两处恰好两种读法都对，
+      // 而反斜杠 d / 反斜杠右括号不是，所以这里一个反斜杠都不用。别改回去。
+      var m = /:([0-9]+):([0-9]+)[)]?$/.exec(String(stackHead || "").trim());
+      if (!m) return { located: false, stackHead: String(stackHead || "") };
+      var lineNo = Number(m[1]);
+      var column = Number(m[2]);
+      try {
+        var text = await (await fetch(url)).text();
+        var lines = text.split("\\n");
+        var line = lines[lineNo - 1] || "";
+        return {
+          located: true,
+          line: lineNo,
+          column: column,
+          lineLength: line.length,
+          excerpt: line.slice(Math.max(0, column - 120), column + 160),
+        };
+      } catch (e) {
+        return { located: true, line: lineNo, column: column, fetchError: msg(e) };
+      }
     }
 
     var probes = {
@@ -163,35 +235,104 @@ const PAGE_JS = `
         if (typeof C !== "function") return inconclusive("构造器不是 function", { ctorType: typeof C });
         var before = polyline.getPath().length;
         var zoomBefore = map.getZoom();
-        var ta = new C(map, polyline, { duration: 1500, overallView: false });
+        // onAnimateEnd 是**构造选项**（产物里 _initOpts 直接把它收进 _opts），不是私有成员。
+        // 用它观察「播放到结尾」这条分支；读数进 readings，是否成立不影响 status。
+        var pathAtAnimateEnd = null;
+        var ta = new C(map, polyline, {
+          duration: 2000,
+          overallView: false,
+          onAnimateEnd: function () {
+            if (pathAtAnimateEnd === null) pathAtAnimateEnd = polyline.getPath().length;
+          },
+        });
         ta.start();
         await sleep(400);
-        var after = polyline.getPath().length;
-        var zoomAfter = map.getZoom();
+        var afterStart = polyline.getPath().length;
+        var zoomDuring = map.getZoom();
+        ta.pause();
+        await sleep(150);
+        var atPause = polyline.getPath().length;
+        await sleep(400);
+        var afterPauseWait = polyline.getPath().length;
+        ta.continue();
+        await sleep(400);
+        var afterContinue = polyline.getPath().length;
+        // setSpeed 依赖上游**未声明**的 ViewAnimation 私有成员（animation / _options /
+        // _beginTime 与 setBeginTime / setDuration）。它在 4.0 上到底有没有入口，
+        // 此前只是「依据不足」；这里在**运行中**如实测一次，结果进 readings —— 抛出也是一种结论。
+        var setSpeedError = null;
+        try { ta.setSpeed(2); } catch (e) { setSpeedError = msg(e); }
+        await sleep(200);
+        var afterSetSpeed = polyline.getPath().length;
+        // 播放到结尾：轮询到 path 连续 800ms 不再变化为止（duration=2000，上限 8s）。
+        // 这条**不设门禁**：轮询到稳定的判定本身近乎恒真，写进 checks 只会制造一条没有区分力的
+        // 断言（ADR 2026-09-21 的取舍）；它的价值是 readings 里的结尾长度与 onAnimateEnd 是否回调。
+        var lastLength = afterSetSpeed;
+        var stableSince = null;
+        var elapsed = 0;
+        for (var w = 0; w < 40; w++) {
+          await sleep(200);
+          elapsed += 200;
+          var sampled = polyline.getPath().length;
+          if (sampled === lastLength) {
+            if (stableSince === null) stableSince = elapsed;
+          } else {
+            stableSince = null;
+            lastLength = sampled;
+          }
+          if (stableSince !== null && elapsed - stableSince >= 800) break;
+        }
+        var pathAfterPlayback = polyline.getPath().length;
         ta.cancel();
+        var readings = {
+          pathBefore: before,
+          pathAfterStart: afterStart,
+          zoomBefore: zoomBefore,
+          zoomDuringAnim: zoomDuring,
+          pathAtPause: atPause,
+          pathAfterPauseWait: afterPauseWait,
+          pathAfterContinue: afterContinue,
+          pathAfterSetSpeed: afterSetSpeed,
+          setSpeedError: setSpeedError,
+          pathAfterPlayback: pathAfterPlayback,
+          playbackStableAfterMs: stableSince === null ? null : elapsed,
+          animateEndFired: pathAtAnimateEnd !== null,
+          pathAtAnimateEnd: pathAtAnimateEnd,
+        };
         var checks = [
-          okCheck("path 增长（start 真的驱动了动画）", after > before, { before: before, after: after }),
-          okCheck("视角跟随（zoom 发生变化）", Math.abs(zoomAfter - zoomBefore) > 1e-6, {
+          okCheck("path 增长（start 真的驱动了动画）", afterStart > before, {
+            before: before,
+            afterStart: afterStart,
+          }),
+          okCheck("视角跟随（zoom 发生变化）", Math.abs(zoomDuring - zoomBefore) > 1e-6, {
             zoomBefore: zoomBefore,
-            zoomAfter: zoomAfter,
+            zoomDuringAnim: zoomDuring,
+          }),
+          okCheck("pause 真的停住（400ms 内 path 不再变化）", afterPauseWait === atPause, {
+            pathAtPause: atPause,
+            pathAfterPauseWait: afterPauseWait,
+          }),
+          okCheck("continue 真的继续（path 继续增长）", afterContinue > afterPauseWait, {
+            pathAfterPauseWait: afterPauseWait,
+            pathAfterContinue: afterContinue,
           }),
         ];
-        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
-        return verified(
-          {
-            pathBefore: before,
-            pathAfterStart: after,
-            zoomDuringAnim: zoomAfter,
-            statusAfter400ms: ta._status,
-          },
-          checks,
-        );
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks, readings);
+        return verified(readings, checks, readings);
       },
       DrawingManager: async function () {
         var C = getPath("BMapGLLib.DrawingManager");
         if (typeof C !== "function") return inconclusive("构造器不是 function", { ctorType: typeof C });
-        var dm = new C(map, { isOpen: false, enableCalculate: true, enableGpc: true });
-        var mode = typeof dm.getDrawingMode === "function" ? dm.getDrawingMode() : null;
+        // confirmVisible: false 是**公开构造选项**（产物里的判定是 t.confirmVisible !== false）。
+        // 缺省为 true 时，画完会先插入确认面板、等用户点「确定」才 complete；本探针要证的是
+        // 「绘制链路能画出几何体」，不是那个确认面板，所以显式关掉它 —— 不是绕过校验。
+        var dm = new C(map, {
+          isOpen: false,
+          confirmVisible: false,
+          enableCalculate: true,
+          enableGpc: true,
+        });
+        var modeInitial = typeof dm.getDrawingMode === "function" ? dm.getDrawingMode() : null;
         if (typeof dm.enableCalculate === "function") dm.enableCalculate();
         if (typeof dm.enableGpc === "function") dm.enableGpc();
         await sleep(1200);
@@ -201,19 +342,101 @@ const PAGE_JS = `
           var src = String(scripts[i].src || "");
           if (src.indexOf("GeoUtils") >= 0 || src.indexOf("gpc.js") >= 0) injected.push(src);
         }
+
+        // 真实绘制路径（#43）：打开工具条 -> 切到 polygon -> 用真实 DOM 指针序列画一个多边形。
+        // 全程只碰公开面（open / setDrawingMode / getDrawingMode / getOverlays / 事件 / 构造选项），
+        // 不碰任何下划线成员 —— 结论要能归到「用户操作」上，而不是「我们调了私有 API」。
+        var completedEvent = null;
+        var cancelEvent = null;
+        if (typeof dm.addEventListener === "function") {
+          dm.addEventListener("overlaycomplete", function (e) { completedEvent = e; });
+          dm.addEventListener("overlaycancel", function (e) { cancelEvent = e; });
+        }
+        var modeAfterSet = null;
+        var setModeError = null;
+        if (typeof dm.open === "function") dm.open();
+        if (typeof dm.setDrawingMode === "function") {
+          try { dm.setDrawingMode("polygon"); } catch (e) { setModeError = msg(e); }
+        }
+        if (typeof dm.getDrawingMode === "function") modeAfterSet = dm.getDrawingMode();
+        await sleep(200);
+        var rect = div.getBoundingClientRect();
+        var corners = [[0.2, 0.22], [0.76, 0.26], [0.7, 0.74], [0.24, 0.7]];
+        var pointerTrace = [];
+        var first = fireAt(rect, corners[0][0], corners[0][1], DOWN_EVENT, 1, 1);
+        var maskTarget = document.elementFromPoint(first.x, first.y) || div;
+        pointerTrace.push(first);
+        for (var c = 1; c < corners.length; c++) {
+          await sleep(70);
+          pointerTrace.push(
+            fireAt(rect, corners[c][0], corners[c][1], MOVE_EVENT, 1, 0, maskTarget),
+          );
+        }
+        await sleep(90);
+        // 多边形靠 dblclick 收尾（产物里的收尾分支：setPath -> enableEditing -> overlaycomplete）
+        fireAt(rect, corners[3][0], corners[3][1], "dblclick", 0, 2, maskTarget);
+        await sleep(600);
+        var drawn = completedEvent && completedEvent.overlay ? completedEvent.overlay : null;
+        var drawnKind = null;
+        var drawnPathPoints = null;
+        try {
+          drawnPathPoints = drawn && typeof drawn.getPath === "function" ? drawn.getPath().length : null;
+          drawnKind = drawn && drawn.constructor && drawn.constructor.name
+            ? String(drawn.constructor.name)
+            : null;
+        } catch (e) { /* 读数而已，读不到就留 null */ }
+        var drawnOnMap = false;
+        try {
+          drawnOnMap = !!drawn && map.getOverlays().indexOf(drawn) >= 0;
+        } catch (e) { /* 同上 */ }
+        var dmOverlays = typeof dm.getOverlays === "function" ? dm.getOverlays() : null;
+        var readings = {
+          drawingModeInitial: modeInitial,
+          drawingModeAfterSet: modeAfterSet,
+          setDrawingModeError: setModeError,
+          selfInjectedScripts: injected,
+          pointerMode: pointerMode,
+          downEvent: DOWN_EVENT,
+          pointerTrace: pointerTrace,
+          overlaycomplete: !!completedEvent,
+          overlaycancel: !!cancelEvent,
+          completePayloadDrawingMode: completedEvent ? completedEvent.drawingMode : null,
+          drawnOverlayKind: drawnKind,
+          drawnPathPoints: drawnPathPoints,
+          drawnOverlayOnMap: drawnOnMap,
+          drawingManagerOverlays: dmOverlays ? dmOverlays.length : null,
+          mapOverlaysCount: map.getOverlays().length,
+        };
         if (typeof dm.close === "function") dm.close();
         if (typeof dm.dispose === "function") { try { dm.dispose(); } catch (e) {} }
         var joined = injected.join(",");
         var checks = [
-          okCheck("getDrawingMode() 返回非空字符串", typeof mode === "string" && mode.length > 0, {
-            drawingMode: mode,
+          okCheck("getDrawingMode() 返回非空字符串", typeof modeInitial === "string" && modeInitial.length > 0, {
+            drawingMode: modeInitial,
           }),
           okCheck("自行注入 GeoUtils 与 gpc 两个脚本", joined.indexOf("GeoUtils") >= 0 && joined.indexOf("gpc.js") >= 0, {
             selfInjectedScripts: injected,
           }),
+          okCheck("setDrawingMode('polygon') 读回 polygon", modeAfterSet === "polygon", {
+            drawingMode: modeAfterSet,
+            error: setModeError,
+          }),
+          okCheck(
+            "真实指针序列画出一个多边形并收到 overlaycomplete（载荷 drawingMode 为 polygon）",
+            !!completedEvent && completedEvent.drawingMode === "polygon",
+            {
+              overlaycomplete: !!completedEvent,
+              payloadDrawingMode: completedEvent ? completedEvent.drawingMode : null,
+            },
+          ),
+          okCheck(
+            "画出的覆盖物真的在图上，且被 DrawingManager 记进自己的 overlays",
+            drawnOnMap && !!dmOverlays && dmOverlays.length === 1,
+            { drawnOverlayOnMap: drawnOnMap, drawingManagerOverlays: dmOverlays ? dmOverlays.length : null },
+          ),
         ];
-        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
-        return verified({ drawingMode: mode, selfInjectedScripts: injected }, checks);
+        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks, readings);
+        return verified(readings, checks, readings);
       },
       GeoUtils: function () {
         var G = getPath("BMapGLLib.GeoUtils");
@@ -232,7 +455,7 @@ const PAGE_JS = `
         if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", null, checks);
         return verified({ members: members, getDistance: dist, isPointInRect: rect }, checks);
       },
-      Mapvgl: function () {
+      Mapvgl: async function () {
         if (!window.mapvgl) return inconclusive("全局不存在");
         var View = window.mapvgl.View;
         if (typeof View !== "function") {
@@ -242,33 +465,65 @@ const PAGE_JS = `
           });
         }
         var layerNames = Object.keys(window.mapvgl).filter(function (k) { return /Layer$/.test(k); });
-        // 真实 4.0 上这一步会抛（View 挂载容器时读到 undefined）——抛出会被下面 catch 记成 threw
-        var v = new View({ map: map, mapType: "bmap" });
-        var LayerCtor = window.mapvgl.PointLayer || window.mapvgl.LineLayer || window.mapvgl.FillLayer;
-        var layerOk = null;
-        var layerErr = null;
-        if (typeof LayerCtor === "function") {
+        // 它抛错时读的是哪一层容器（#43 的根因读数）：getPanes() 的键与 mapPane 是否存在。
+        // 只记录事实，不在探针里下因果结论。
+        function readPanes() {
           try {
-            var layer = new LayerCtor({
-              data: [{ geometry: { type: "Point", coordinates: [116.404, 39.915] } }],
-              size: 6,
-              color: "#f00",
-            });
-            v.addLayer(layer);
-            layerOk = true;
-            v.removeLayer(layer);
-            if (typeof layer.destroy === "function") layer.destroy();
+            if (typeof map.getPanes !== "function") return { supported: false, reason: "Map#getPanes 不是 function" };
+            var panes = map.getPanes();
+            if (!panes) return { supported: true, panes: null };
+            return {
+              supported: true,
+              keys: Object.keys(panes),
+              hasMapPane: !!panes.mapPane,
+              mapPaneType: typeof panes.mapPane,
+            };
           } catch (e) {
-            layerErr = msg(e);
+            return { supported: false, error: msg(e) };
           }
         }
-        try { if (typeof v.destroy === "function") v.destroy(); } catch (e) {}
-        var checks = [
-          okCheck("View 构造成功", !!v),
-          okCheck("图层能挂上", layerOk === true, { layerError: layerErr }),
-        ];
-        if (!allOk(checks)) return inconclusive("最小路径 invariant 不成立", { layerError: layerErr }, checks);
-        return verified({ viewCreated: true, layerAdded: layerOk, layerCtors: layerNames.slice(0, 8) }, checks);
+        var panesBefore = readPanes();
+        // 真实 4.0 上这一步会抛（View 挂载容器时读到 undefined）。**刻意在探针内部捕获并显式返回
+        // threw，而不是让它冒到最外层：这样才能把「抛错现场」与「当时容器面的事实」一起带回报告。
+        try {
+          var v = new View({ map: map, mapType: "bmap" });
+          var LayerCtor = window.mapvgl.PointLayer || window.mapvgl.LineLayer || window.mapvgl.FillLayer;
+          var layerOk = null;
+          var layerErr = null;
+          if (typeof LayerCtor === "function") {
+            try {
+              var layer = new LayerCtor({
+                data: [{ geometry: { type: "Point", coordinates: [116.404, 39.915] } }],
+                size: 6,
+                color: "#f00",
+              });
+              v.addLayer(layer);
+              layerOk = true;
+              v.removeLayer(layer);
+              if (typeof layer.destroy === "function") layer.destroy();
+            } catch (e) {
+              layerErr = msg(e);
+            }
+          }
+          try { if (typeof v.destroy === "function") v.destroy(); } catch (e) {}
+          var checksOk = [
+            okCheck("View 构造成功", !!v),
+            okCheck("图层能挂上", layerOk === true, { layerError: layerErr }),
+          ];
+          var readingsOk = { panesBefore: panesBefore, layerCtors: layerNames.slice(0, 8) };
+          if (!allOk(checksOk)) return inconclusive("最小路径 invariant 不成立", { layerError: layerErr }, checksOk, readingsOk);
+          return verified({ viewCreated: true, layerAdded: layerOk }, checksOk, readingsOk);
+        } catch (e) {
+          var stackLines = String((e && e.stack) || "").split("\\n");
+          var site = await throwSite(URLS[spec.key], stackLines[1] || stackLines[0]);
+          return {
+            status: "threw",
+            error: msg(e),
+            detail: { stack: stackLines.slice(0, 3) },
+            checks: [okCheck("View 构造成功", false, { error: msg(e) })],
+            readings: { panesBefore: panesBefore, throwSite: site, layerCtors: layerNames.slice(0, 8) },
+          };
+        }
       },
     };
 

@@ -20,14 +20,24 @@
  *
  * | 退出码 | 含义 | 触发 |
  * | --- | --- | --- |
- * | `0` | 全部成立 | 每个期望的插件都有报告、SDK 都起来、脚本都加载、全局都暴露、独立性成立、**每个 `status` 都是 `verified`**，且与 inventory 记录的 `runtime.status` 一致 |
- * | `1` | 运行时不兼容 / 证据不成立 | 有插件 `threw`；或独立性被打破；或 `status` 与 inventory 不一致（说明 inventory 已过期） |
+ * | `0` | 全部成立 | 每个期望的插件都有报告、SDK 都起来、脚本都加载、全局都暴露、独立性成立，且每次读数都与 inventory 记录的 `runtime.status` **一致** |
+ * | `1` | 运行时不兼容 / 证据不成立 | 独立性被打破；或 `status` 与 inventory 不一致（说明 inventory 已过期）；或某个插件 `threw` **却没有登记过期望值** |
  * | `2` | **脚手架失败** | 缺 AK / 找不到浏览器（调用方提前返回）、页面脚本自身抛错（`fatal`）、期望的插件没有报告 |
  * | `3` | `blocked`（本轮无法判定，**不是通过**） | 任一页 `sdkLoaded !== true`；任一 run 没给出 `result`；`status` 缺失或不是三个取值之一；脚本加载/全局暴露不成立；**`inconclusive`（最小路径 invariant 不成立）** |
  *
  * 优先级：脚手架(2) > blocked(3) > fail(1) > 通过(0)。这与 smoke 门禁的
  * 「先按能不能判定分，再按有没有失败分」一致 —— 一个插件没跑通最小路径时，
  * 我们不该拿另一个插件的观察当结论。
+ *
+ * ## #43 修正的第 ⑩ 条：已登记的 `threw` 是**结论**，不是回归
+ *
+ * 旧规则写的是「有插件 `threw` ⇒ `1`」，于是 MapVGL 这种「结论就是它在 4.0 上抛错」的条目
+ * 会让这个探针**永远红**。把探针搬进 nightly（可选插件 smoke 单独执行）之后，这条规则会让
+ * 每天都产生一次假警报，而假警报训练出来的习惯是「不看它」——那比没有门禁更坏。
+ *
+ * 现在：`threw` 且与 inventory 的 `runtime.status` **一致** ⇒ 是**已登记的结论**，不算 fail
+ * （它仍然进 `counts.threw`，看得见）；`threw` 但没有登记过期望值 ⇒ `1`（新问题）。
+ * 「本来 verified 的插件开始抛错」这条回归由 ⑨ 的 `statusMismatch` 抓住，没有漏。
  */
 
 /** `BUILTIN_PLUGIN_URLS` 的键。 */
@@ -87,6 +97,16 @@ export interface PluginProbeOutcome {
   error?: string;
   /** 逐条 invariant 的结果。 */
   checks?: PluginProbeCheck[];
+  /**
+   * **不进判定**的补充读数（M8-ADAPTERS-ADVANCED / #43）。
+   *
+   * 与 `checks` 的分工是刻意的：`checks` 全部成立才算跑通最小路径，所以只有**在真实 4.0 上
+   * 确定会成立**的性质才能进 `checks`；而像「`setSpeed()` 调私有成员会不会抛」「mapvgl 抛错点
+   * 读的是哪个容器成员」这类**结果未知**的观察，写进 `checks` 会让门禁随上游行为天天红，
+   * 写掉又等于没测。它们进 `readings`：如实记录，用于填 inventory 的结论，
+   * **不参与 `status` 判定**。
+   */
+  readings?: unknown;
 }
 
 export interface PluginRuntimeRunResult {
@@ -280,10 +300,24 @@ export function decidePluginRuntimeExitCode(
     };
   }
 
-  // ⑩ fail：真正跑起来了但运行时抛错
-  const threw = idsOf(runs, (run) => readProbeStatus(run.result) === "threw");
+  // ⑩ fail：真正跑起来了但**没有被登记为结论**的运行时抛错（#43 修正）。
+  //    已登记的 `threw`（inventory 的 `runtime.status` 就是 `threw`）是结论，不是回归 ——
+  //    否则「结论就是它在 4.0 上抛错」的条目会让 nightly 每天红一次，而假警报会训练人忽略门禁。
+  //    「本来 verified 的插件开始抛错」这条回归由 ⑨ 的 statusMismatch 抓，没有漏。
+  const threw = runs.filter(
+    (run) =>
+      readProbeStatus(run.result) === "threw" &&
+      expectedById.get(run.only ?? "") !== "threw",
+  )
   if (threw.length > 0) {
-    return { exitCode: 1, reasons: [`运行时抛错：${threw.join(", ")}`], counts };
+    return {
+      exitCode: 1,
+      reasons: [
+        `未登记的运行时抛错：${threw.map((run) => run.only ?? "?").join(", ")}` +
+          `（inventory 没有把这些条目的 runtime.status 记成 threw）`,
+      ],
+      counts,
+    };
   }
 
   return { exitCode: 0, reasons: [], counts };

@@ -13,12 +13,18 @@
  */
 import { execSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { collectImportClosure, componentMarkersIn } from './advanced-bundle-shake.mts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const artifactsDir = resolve(root, '.artifacts')
 const fixturesDir = resolve(root, 'fixtures')
+
+/** 空转守卫：切出来的集合为空时，后面的「没有命中」不能作为证据。 */
+function expectNonEmpty(values: readonly unknown[], message: string): void {
+  if (values.length === 0) throw new Error(message)
+}
 
 function findTarball(): string {
   if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack --pack-destination .artifacts')
@@ -69,6 +75,189 @@ function main() {
     `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('baidu-map-gl-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('v3-consumer ESM import OK')})" && node -e "import('baidu-map-gl-vue/ui-kit').then(m=>{for(const k of ['BPlaceAutocomplete','BPlaceSearch','BPlaceDetail','BRoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
     v3Consumer,
     'v3-consumer typecheck + ESM import (v3 tarball)',
+  )
+
+  // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
+  //
+  //     `./advanced` 是**承诺维护**的扩展契约（第三方 Provider / Driver / Handle / Plugin 适配点），
+  //     所以它必须在真实消费方（tarball 装进 node_modules）里被**真正调用一次**，而不是只断言
+  //     「import 得动」。类型面由 `fixtures/v3-consumer/src/advanced-adapter.ts` 通过上面的
+  //     `vue-tsc` 覆盖；这里补运行面的可观察行为。
+  const advancedProbe = resolve(v3Consumer, 'advanced-probe.mjs')
+  writeFileSync(
+    advancedProbe,
+    [
+      "import {",
+      "  CAPABILITY_CATALOG,",
+      "  UnsupportedCapabilityError,",
+      "  assertLoadedSdk,",
+      "  createCapabilityRegistry,",
+      "  createHandle,",
+      "  normalizeProvider,",
+      "  unwrapRaw,",
+      "} from 'baidu-map-gl-vue/advanced'",
+      "import {",
+      "  BUILTIN_PLUGIN_NAMES,",
+      "  resolvePluginDefinition,",
+      "  urlPluginDefinition,",
+      "} from 'baidu-map-gl-vue/plugins'",
+      "",
+      "const fail = (message) => {",
+      "  throw new Error('[advanced-probe] ' + message)",
+      "}",
+      "",
+      "// ① raw 逃生口：handle -> raw",
+      "const handle = createHandle('map', { probe: true })",
+      "if (unwrapRaw(handle)?.probe !== true) fail('unwrapRaw 取不回 raw')",
+      "",
+      "// ② 能力表：不支持的条目必须抛出**同一个错误类型**（而不是裸字符串），",
+      "//    且策略为 throw 时不再「warn 一下继续跑」—— 这正是「不静默」的落点。",
+      "const registry = createCapabilityRegistry({",
+      "  engine: 'jsapi-v4',",
+      "  version: '4.0',",
+      "  rawSdk: {},",
+      "  unsupported: 'throw',",
+      "})",
+      "if (typeof registry.supports !== 'function' || typeof registry.require !== 'function') {",
+      "  fail('createCapabilityRegistry 的形状不对')",
+      "}",
+      "if (registry.supports('overlay.mapvgl') !== false) {",
+      "  fail('overlay.mapvgl 应当是不支持（它的结论是 incompatible）')",
+      "}",
+      "let unsupported = 0",
+      "let capabilityMismatch = 0",
+      "for (const id of Object.keys(CAPABILITY_CATALOG)) {",
+      "  if (registry.supports(id)) continue",
+      "  try {",
+      "    registry.require(id)",
+      "    fail('不支持的能力 require 没有抛错：' + id)",
+      "  } catch (error) {",
+      "    if (error instanceof UnsupportedCapabilityError) {",
+      "      unsupported += 1",
+      "      if (error.capability !== id) capabilityMismatch += 1",
+      "    } else {",
+      "      throw error",
+      "    }",
+      "  }",
+      "}",
+      "if (unsupported === 0) fail('没有一条 unsupported —— 能力表可能没装起来')",
+      "if (capabilityMismatch > 0) fail('UnsupportedCapabilityError 带的 capability 与查询的 id 不符')",
+      "",
+      "// ③ Provider 收口校验：不是 jsapi-v4 的结构化结果必须被拒",
+      "let rejectedLegacy = false",
+      "try {",
+      "  assertLoadedSdk({ engine: 'webgl-v1', version: 'x', namespace: {} })",
+      "} catch {",
+      "  rejectedLegacy = true",
+      "}",
+      "if (!rejectedLegacy) fail('assertLoadedSdk 没有拒绝旧引擎的加载结果')",
+      "",
+      "// ④ 插件入口：名字表 / 未知名字显式失败 / 第三方 definition 工厂",
+      "if (!BUILTIN_PLUGIN_NAMES.includes('TrackAnimation')) fail('内置插件名字表少了 TrackAnimation')",
+      "let unknownRejected = false",
+      "try {",
+      "  resolvePluginDefinition('TrackAnimatino')",
+      "} catch (error) {",
+      "  unknownRejected = error?.code === 'BMAP_PLUGIN_UNKNOWN'",
+      "}",
+      "if (!unknownRejected) fail('未知插件名没有以 BMAP_PLUGIN_UNKNOWN 失败')",
+      "const thirdParty = urlPluginDefinition('ThirdParty', 'https://example.com/x.js', () => undefined, {",
+      "  scope: 'global',",
+      "  required: false,",
+      "})",
+      "if (thirdParty.scope !== 'global' || thirdParty.required !== false || typeof thirdParty.load !== 'function') {",
+      "  fail('urlPluginDefinition 的选项没有生效')",
+      "}",
+      "",
+      "// ⑤ normalizeProvider 必须保住 class 型 Provider 的 this 绑定",
+      "class ClassProvider {",
+      "  constructor() { this.marker = 'bound' }",
+      "  getCacheKey() { return 'class-provider' }",
+      "  async load() { return this.marker }",
+      "}",
+      "const normalized = normalizeProvider(new ClassProvider())",
+      "if ((await normalized.load({}, undefined)) !== 'bound') fail('normalizeProvider 丢了 this')",
+      "if (normalized.getCacheKey({}) !== 'class-provider') fail('normalizeProvider 没转发 getCacheKey')",
+      "",
+      "process.stdout.write(JSON.stringify({",
+      "  capabilityCount: Object.keys(CAPABILITY_CATALOG).length,",
+      "  unsupported,",
+      "  pluginNames: BUILTIN_PLUGIN_NAMES.length,",
+      "}))",
+      "",
+    ].join('\n'),
+  )
+  const advancedProbeOut = execSync(`node ${JSON.stringify(advancedProbe)}`, {
+    cwd: v3Consumer,
+    encoding: 'utf8',
+    env: { ...process.env, CI: '1' },
+  })
+  console.log(`\n[verify-package] advanced contract probe OK: ${advancedProbeOut.trim()}`)
+  rmSync(advancedProbe, { force: true })
+
+  // 5c) tree-shaking：**只用 `./advanced`** 的打包产物不得把组件带进来（#43）。
+  //
+  //     这条必须在 tarball 消费方里做：仓库内那份闭包检查（tests/behavior/v3-advanced-contract.test.ts）
+  //     看的是我们自己的 dist，而这里看的是**真实打包器在真实依赖解析下**的产物。
+  //     两个对照入口（只用 ./advanced / 只用根入口）共用同一份配置与同一份判据，后者是正证。
+  const shakeDir = resolve(v3Consumer, 'shake')
+  const viteBin = resolve(root, 'node_modules/.bin/vite')
+  if (!existsSync(viteBin)) {
+    throw new Error('[verify-package] 找不到 vite（tree-shaking 对照需要真实打包器）')
+  }
+  const buildShake = (entryFile: string, outName: string): string => {
+    const outDir = resolve(v3Consumer, 'shake-out', outName)
+    execSync(`${JSON.stringify(viteBin)} build --config ${JSON.stringify(resolve(shakeDir, 'vite.config.mjs'))}`, {
+      cwd: v3Consumer,
+      stdio: 'inherit',
+      env: { ...process.env, CI: '1', SHAKE_ENTRY: resolve(shakeDir, entryFile), SHAKE_OUT: outDir },
+    })
+    return outDir
+  }
+  const closureOf = (outDir: string): { files: string[]; external: string[] } => {
+    const entry = resolve(outDir, 'entry.mjs')
+    if (!existsSync(entry)) {
+      throw new Error(`[verify-package] tree-shaking 对照没有产出 ${entry}`)
+    }
+    return collectImportClosure({
+      root: outDir,
+      entry,
+      resolve: (from, specifier) => resolve(dirname(from), specifier),
+      relative: (from, to) => relative(from, to),
+      exists: existsSync,
+      readFile: (file) => readFileSync(file, 'utf8'),
+    })
+  }
+  const markersIn = (closure: { files: string[] }, outDir: string): string[] =>
+    componentMarkersIn(
+      closure,
+      (file) => resolve(outDir, file),
+      (file) => readFileSync(file, 'utf8'),
+    )
+
+  const advancedOnlyOut = buildShake('advanced-only.ts', 'advanced-only')
+  const advancedOnlyClosure = closureOf(advancedOnlyOut)
+  // 空转守卫：闭包确实读到了文件（否则下面的「没有组件」可能只是没扫到）
+  expectNonEmpty(advancedOnlyClosure.files, '[verify-package] advanced-only 的产物闭包为空')
+  const advancedMarkers = markersIn(advancedOnlyClosure, advancedOnlyOut)
+  if (advancedMarkers.length > 0) {
+    throw new Error(
+      `[verify-package] 只用 ./advanced 的产物里出现了组件标记：${advancedMarkers.join(', ')}（tree-shaking 承诺不成立）`,
+    )
+  }
+
+  const rootEntryOut = buildShake('root-entry.ts', 'root-entry')
+  const rootEntryClosure = closureOf(rootEntryOut)
+  const rootMarkers = markersIn(rootEntryClosure, rootEntryOut)
+  if (rootMarkers.length === 0) {
+    throw new Error(
+      '[verify-package] 对照入口（只用根入口）的产物里没有组件标记 —— 说明这条判据没有区分力，' +
+        '上面「advanced-only 里没有组件」不能作为证据',
+    )
+  }
+  console.log(
+    `\n[verify-package] tree-shaking OK: advanced-only 闭包 ${advancedOnlyClosure.files.length} 个文件、0 个组件标记；` +
+      `对照（根入口）${rootEntryClosure.files.length} 个文件、命中 ${rootMarkers.join(' / ')}`,
   )
 
   // 6) 运行时依赖契约：默认在线路径委托官方 Loader（#71），因此发布包必须把它作为
