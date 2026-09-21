@@ -4,296 +4,303 @@
   "engine": "fake-v4",
   "normalizer": {
     "metric": "calibration.cpu",
-    "minMs": 11.72
+    "minMs": 30.19
   },
   "tolerance": 5,
   "comparisonFloorUnits": 0.05,
-  "recordedAt": "2026-09-21T02:42:15.604Z",
+  "recordedAt": "2026-09-21T02:49:03.130Z",
+  "machine": {
+    "platform": "linux",
+    "arch": "x64",
+    "cpuModel": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "cpuCount": 4,
+    "node": "v24.20.0"
+  },
   "recordedOn": {
-    "node": "v22.22.2",
-    "platform": "darwin",
-    "release": "25.6.0",
-    "arch": "arm64",
-    "cpuModel": "Apple M4",
-    "cpuCount": 10,
-    "totalMemoryGb": 24,
+    "node": "v24.20.0",
+    "platform": "linux",
+    "release": "6.17.0-1022-azure",
+    "arch": "x64",
+    "cpuModel": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "cpuCount": 4,
+    "totalMemoryGb": 15.6,
     "vitest": "5.0.0",
     "dom": "happy-dom 20.14.0",
     "sdk": "Fake v4（packages/test-utils/fake-bmap-v4）"
   },
   "metrics": {
     "mount.pointCollection@100": {
-      "normalized": 0.2577,
-      "minMs": 3.02,
-      "medianMs": 8.79,
-      "maxMs": 24.46
+      "normalized": 0.1761,
+      "minMs": 5.32,
+      "medianMs": 7.23,
+      "maxMs": 41.45
     },
     "setData.replace@100": {
-      "normalized": 0.0396,
-      "minMs": 0.46,
-      "medianMs": 1.09,
-      "maxMs": 4.63
-    },
-    "style.update@100": {
-      "normalized": 0.0232,
-      "minMs": 0.27,
-      "medianMs": 0.68,
-      "maxMs": 3.46
-    },
-    "unmount.pointCollection@100": {
-      "normalized": 0.028,
-      "minMs": 0.33,
-      "medianMs": 0.48,
-      "maxMs": 2.34
-    },
-    "mount.pointCollection@1000": {
-      "normalized": 0.2269,
-      "minMs": 2.66,
-      "medianMs": 4.54,
-      "maxMs": 4.91
-    },
-    "setData.replace@1000": {
-      "normalized": 0.116,
-      "minMs": 1.36,
-      "medianMs": 1.69,
+      "normalized": 0.0347,
+      "minMs": 1.05,
+      "medianMs": 1.65,
       "maxMs": 3.49
     },
+    "style.update@100": {
+      "normalized": 0.024,
+      "minMs": 0.73,
+      "medianMs": 1.96,
+      "maxMs": 11.97
+    },
+    "unmount.pointCollection@100": {
+      "normalized": 0.0213,
+      "minMs": 0.64,
+      "medianMs": 0.71,
+      "maxMs": 3.61
+    },
+    "mount.pointCollection@1000": {
+      "normalized": 0.2133,
+      "minMs": 6.44,
+      "medianMs": 7.05,
+      "maxMs": 7.48
+    },
+    "setData.replace@1000": {
+      "normalized": 0.1072,
+      "minMs": 3.24,
+      "medianMs": 3.85,
+      "maxMs": 5.31
+    },
     "style.update@1000": {
-      "normalized": 0.0375,
-      "minMs": 0.44,
-      "medianMs": 0.64,
-      "maxMs": 0.82
+      "normalized": 0.0423,
+      "minMs": 1.28,
+      "medianMs": 1.62,
+      "maxMs": 1.69
     },
     "unmount.pointCollection@1000": {
-      "normalized": 0.0241,
-      "minMs": 0.28,
-      "medianMs": 0.38,
-      "maxMs": 0.63
+      "normalized": 0.0155,
+      "minMs": 0.47,
+      "medianMs": 0.55,
+      "maxMs": 0.79
     },
     "mount.pointCollection@10000": {
-      "normalized": 1.0713,
-      "minMs": 12.56,
-      "medianMs": 13.84,
-      "maxMs": 15.07
+      "normalized": 0.6669,
+      "minMs": 20.14,
+      "medianMs": 20.65,
+      "maxMs": 26.84
     },
     "setData.replace@10000": {
-      "normalized": 2.0483,
-      "minMs": 24.01,
-      "medianMs": 28.37,
-      "maxMs": 30.92
+      "normalized": 1.301,
+      "minMs": 39.28,
+      "medianMs": 40.22,
+      "maxMs": 63.11
     },
     "style.update@10000": {
-      "normalized": 0.2361,
-      "minMs": 2.77,
-      "medianMs": 4.33,
-      "maxMs": 5.85
+      "normalized": 0.3992,
+      "minMs": 12.05,
+      "medianMs": 17.12,
+      "maxMs": 20.98
     },
     "unmount.pointCollection@10000": {
-      "normalized": 0.0288,
-      "minMs": 0.34,
-      "medianMs": 0.4,
-      "maxMs": 0.43
+      "normalized": 0.0148,
+      "minMs": 0.45,
+      "medianMs": 0.54,
+      "maxMs": 0.72
     },
     "mount.pointCollection@50000": {
-      "normalized": 5.7036,
-      "minMs": 66.86,
-      "medianMs": 102.25,
-      "maxMs": 161.06
+      "normalized": 3.1656,
+      "minMs": 95.57,
+      "medianMs": 105.42,
+      "maxMs": 109.63
     },
     "setData.replace@50000": {
-      "normalized": 13.6224,
-      "minMs": 159.69,
-      "medianMs": 184.09,
-      "maxMs": 404.39
+      "normalized": 7.7638,
+      "minMs": 234.4,
+      "medianMs": 250,
+      "maxMs": 310.87
     },
     "style.update@50000": {
-      "normalized": 1.2452,
-      "minMs": 14.6,
-      "medianMs": 40.38,
-      "maxMs": 47.5
+      "normalized": 1.199,
+      "minMs": 36.2,
+      "medianMs": 40.73,
+      "maxMs": 91.62
     },
     "unmount.pointCollection@50000": {
-      "normalized": 0.0288,
-      "minMs": 0.34,
-      "medianMs": 0.85,
-      "maxMs": 1.07
+      "normalized": 0.0217,
+      "minMs": 0.65,
+      "medianMs": 0.74,
+      "maxMs": 0.88
     },
     "replace100.perIterationMs": {
-      "normalized": 3.7168,
-      "minMs": 43.57,
-      "medianMs": 43.57,
-      "maxMs": 43.57
+      "normalized": 1.3827,
+      "minMs": 41.75,
+      "medianMs": 41.75,
+      "maxMs": 41.75
     },
     "mount.lineLayerGeoJson@50000": {
-      "normalized": 0.4359,
-      "minMs": 5.11,
-      "medianMs": 8.83,
-      "maxMs": 19.17
+      "normalized": 0.1239,
+      "minMs": 3.74,
+      "medianMs": 4.13,
+      "maxMs": 6.43
     },
     "replace.reactiveArray@50000": {
-      "normalized": 23.8769,
-      "minMs": 279.91,
-      "medianMs": 300.99,
-      "maxMs": 328.21
+      "normalized": 7.1,
+      "minMs": 214.36,
+      "medianMs": 214.67,
+      "maxMs": 228.99
     },
     "replace.markRawArray@50000": {
-      "normalized": 2.5727,
-      "minMs": 30.16,
-      "medianMs": 40.28,
-      "maxMs": 42.74
+      "normalized": 0.645,
+      "minMs": 19.47,
+      "medianMs": 28.3,
+      "maxMs": 34.92
     },
     "calibration.cpu": {
       "normalized": 1,
-      "minMs": 11.72,
-      "medianMs": 12.18,
-      "maxMs": 12.68
+      "minMs": 30.19,
+      "medianMs": 30.22,
+      "maxMs": 30.28
     },
     "calibration.local@100": {
-      "normalized": 0.9432,
-      "minMs": 11.06,
-      "medianMs": 13.5,
-      "maxMs": 13.5
+      "normalized": 1.0016,
+      "minMs": 30.24,
+      "medianMs": 30.43,
+      "maxMs": 30.43
     },
     "scanValidItems@100": {
-      "normalized": 0.0018,
+      "normalized": 0.0006,
       "minMs": 0.02,
-      "medianMs": 0.02,
-      "maxMs": 2.33
+      "medianMs": 0.04,
+      "maxMs": 0.08
     },
     "adaptPoints@100": {
-      "normalized": 0.0027,
+      "normalized": 0.0009,
       "minMs": 0.03,
-      "medianMs": 0.03,
-      "maxMs": 0.07
+      "medianMs": 0.05,
+      "maxMs": 0.13
     },
     "cluster@100": {
-      "normalized": 0.0064,
-      "minMs": 0.08,
-      "medianMs": 0.08,
-      "maxMs": 0.16
+      "normalized": 0.0012,
+      "minMs": 0.04,
+      "medianMs": 0.06,
+      "maxMs": 0.15
     },
     "calibration.local@1000": {
-      "normalized": 0.9416,
-      "minMs": 11.04,
-      "medianMs": 11.85,
-      "maxMs": 11.85
+      "normalized": 1,
+      "minMs": 30.19,
+      "medianMs": 30.25,
+      "maxMs": 30.25
     },
     "scanValidItems@1000": {
-      "normalized": 0.0036,
-      "minMs": 0.04,
-      "medianMs": 0.04,
-      "maxMs": 0.11
+      "normalized": 0.0031,
+      "minMs": 0.09,
+      "medianMs": 0.11,
+      "maxMs": 0.2
     },
     "adaptPoints@1000": {
-      "normalized": 0.0056,
-      "minMs": 0.07,
-      "medianMs": 0.07,
-      "maxMs": 1.36
+      "normalized": 0.0094,
+      "minMs": 0.28,
+      "medianMs": 0.37,
+      "maxMs": 0.71
     },
     "cluster@1000": {
-      "normalized": 0.0137,
-      "minMs": 0.16,
-      "medianMs": 0.29,
-      "maxMs": 0.53
+      "normalized": 0.0049,
+      "minMs": 0.15,
+      "medianMs": 0.31,
+      "maxMs": 2.36
     },
     "calibration.local@10000": {
-      "normalized": 1.0928,
-      "minMs": 12.81,
-      "medianMs": 22.76,
-      "maxMs": 22.76
+      "normalized": 1.0023,
+      "minMs": 30.26,
+      "medianMs": 30.29,
+      "maxMs": 30.29
     },
     "scanValidItems@10000": {
-      "normalized": 0.0591,
-      "minMs": 0.69,
-      "medianMs": 1.6,
-      "maxMs": 3.51
+      "normalized": 0.0396,
+      "minMs": 1.2,
+      "medianMs": 1.2,
+      "maxMs": 1.29
     },
     "adaptPoints@10000": {
-      "normalized": 0.1647,
-      "minMs": 1.93,
-      "medianMs": 2.78,
-      "maxMs": 6.45
+      "normalized": 0.0604,
+      "minMs": 1.82,
+      "medianMs": 3.29,
+      "maxMs": 3.4
     },
     "cluster@10000": {
-      "normalized": 0.1252,
-      "minMs": 1.47,
-      "medianMs": 1.6,
-      "maxMs": 3.57
+      "normalized": 0.048,
+      "minMs": 1.45,
+      "medianMs": 1.48,
+      "maxMs": 1.48
     },
     "calibration.local@50000": {
-      "normalized": 0.992,
-      "minMs": 11.63,
-      "medianMs": 12.15,
-      "maxMs": 12.15
+      "normalized": 1.0001,
+      "minMs": 30.19,
+      "medianMs": 30.24,
+      "maxMs": 30.24
     },
     "scanValidItems@50000": {
-      "normalized": 0.6621,
-      "minMs": 7.76,
-      "medianMs": 12.4,
-      "maxMs": 56.11
+      "normalized": 0.2516,
+      "minMs": 7.6,
+      "medianMs": 7.77,
+      "maxMs": 13.26
     },
     "adaptPoints@50000": {
-      "normalized": 3.2613,
-      "minMs": 38.23,
-      "medianMs": 45.02,
-      "maxMs": 78.95
+      "normalized": 0.5096,
+      "minMs": 15.39,
+      "medianMs": 25.65,
+      "maxMs": 46.01
     },
     "cluster@50000": {
-      "normalized": 0.8889,
-      "minMs": 10.42,
-      "medianMs": 12.46,
-      "maxMs": 17.06
+      "normalized": 0.2255,
+      "minMs": 6.81,
+      "medianMs": 6.86,
+      "maxMs": 7.36
     },
     "scanValidItems@10k-with-bad": {
-      "normalized": 0.1536,
-      "minMs": 1.8,
-      "medianMs": 4.77,
-      "maxMs": 5.98
+      "normalized": 0.0453,
+      "minMs": 1.37,
+      "medianMs": 1.48,
+      "maxMs": 4.5
     }
   },
   "bundle": {
-    "runtimeJs": 787582,
-    "esmJs": 787582,
+    "runtimeJs": 787545,
+    "esmJs": 787545,
     "cjs": 0,
     "css": 335,
     "dts": 1195870,
-    "sourceMaps": 5355794,
-    "allBytes": 7339581,
+    "sourceMaps": 5355609,
+    "allBytes": 7339359,
     "fileCount": 46
   },
   "readouts": {
     "features@100": 100,
-    "mount.pointCollection@100.firstMs": 24.46,
-    "mount.pointCollection@100.perItemMicros": 30.21,
+    "mount.pointCollection@100.firstMs": 41.45,
+    "mount.pointCollection@100.perItemMicros": 53.18,
     "features@1000": 1000,
-    "mount.pointCollection@1000.firstMs": 4.54,
-    "mount.pointCollection@1000.perItemMicros": 2.66,
+    "mount.pointCollection@1000.firstMs": 7.05,
+    "mount.pointCollection@1000.perItemMicros": 6.44,
     "features@10000": 10000,
-    "mount.pointCollection@10000.firstMs": 12.8,
-    "mount.pointCollection@10000.perItemMicros": 1.26,
+    "mount.pointCollection@10000.firstMs": 26.84,
+    "mount.pointCollection@10000.perItemMicros": 2.01,
     "features@50000": 50000,
-    "mount.pointCollection@50000.firstMs": 66.86,
-    "mount.pointCollection@50000.perItemMicros": 1.34,
-    "mount.pointCollection@50000.maxMs": 161.06,
+    "mount.pointCollection@50000.firstMs": 99.38,
+    "mount.pointCollection@50000.perItemMicros": 1.91,
+    "mount.pointCollection@50000.maxMs": 109.63,
     "mount.pointCollection@50000.exceedsLongTask": "yes",
-    "setData.replace@50000.maxMs": 404.39,
+    "setData.replace@50000.maxMs": 310.87,
     "setData.replace@50000.exceedsLongTask": "yes",
-    "unmount.pointCollection@50000.maxMs": 1.07,
+    "unmount.pointCollection@50000.maxMs": 0.88,
     "unmount.pointCollection@50000.exceedsLongTask": "no",
     "replace100.iterations": 100,
-    "replace100.totalMs": 4357.12,
-    "replace100.perReplaceMs": 43.57,
-    "replace100.retainedSeriesMb": "174.5 → 174.51 → 174.5 → 174.52 → 174.53 → 174.53",
-    "replace100.retainedGrowthMb": 0.02,
+    "replace100.totalMs": 4174.73,
+    "replace100.perReplaceMs": 41.75,
+    "replace100.retainedSeriesMb": "175.81 → 175.78 → 175.81 → 175.86 → 175.92 → 175.96",
+    "replace100.retainedGrowthMb": 0.15,
     "replace100.layerInstancesDelta": 0,
     "replace100.listenerSubscriptionsDelta": 0,
     "replace100.pendingListeners": 44,
     "mount.lineLayerGeoJson@50000.layersCreated": 5,
-    "mount.lineLayerGeoJson@50000.perItemMicros": 0.1,
-    "contrast.perItemRatio": 13.09,
-    "contrast.reactiveArrayMs": 279.91,
-    "contrast.markRawArrayMs": 30.16,
-    "contrast.reactiveOverMarkRaw": 9.28,
+    "mount.lineLayerGeoJson@50000.perItemMicros": 0.07,
+    "contrast.perItemRatio": 25.55,
+    "contrast.reactiveArrayMs": 214.36,
+    "contrast.markRawArrayMs": 19.47,
+    "contrast.reactiveOverMarkRaw": 11.01,
     "dataset.version": "1",
     "scanValidItems@100.kept": 100,
     "adaptPoints@100.features": 100,
@@ -319,22 +326,22 @@
     "cluster@50000.features": 1451,
     "cluster@50000.clusters": 1374,
     "cluster@50000.singles": 77,
-    "scanValidItems@1000.perItemNormalized": 3.8162,
-    "scanValidItems@50000.perItemNormalized": 13.3486,
-    "adaptPoints@1000.perItemNormalized": 5.9225,
-    "adaptPoints@50000.perItemNormalized": 65.7522,
-    "cluster@1000.perItemNormalized": 14.5478,
-    "cluster@50000.perItemNormalized": 17.9221,
-    "scanValidItems@50000.maxMs": 56.11,
-    "scanValidItems@50000.exceedsLongTask": "yes",
-    "adaptPoints@50000.maxMs": 78.95,
-    "adaptPoints@50000.exceedsLongTask": "yes",
-    "cluster@50000.maxMs": 17.06,
+    "scanValidItems@1000.perItemNormalized": 3.1025,
+    "scanValidItems@50000.perItemNormalized": 5.0308,
+    "adaptPoints@1000.perItemNormalized": 9.3872,
+    "adaptPoints@50000.perItemNormalized": 10.1905,
+    "cluster@1000.perItemNormalized": 4.9224,
+    "cluster@50000.perItemNormalized": 4.5104,
+    "scanValidItems@50000.maxMs": 13.26,
+    "scanValidItems@50000.exceedsLongTask": "no",
+    "adaptPoints@50000.maxMs": 46.01,
+    "adaptPoints@50000.exceedsLongTask": "no",
+    "cluster@50000.maxMs": 7.36,
     "cluster@50000.exceedsLongTask": "no",
-    "adaptPoints@100.perItemMicros": 0.31,
-    "adaptPoints@50000.perItemMicros": 0.76,
+    "adaptPoints@100.perItemMicros": 0.28,
+    "adaptPoints@50000.perItemMicros": 0.31,
     "scanValidItems@10k-with-bad.kept": 9900,
     "scanValidItems@10k-with-bad.dropped": 100,
-    "scanValidItems@10k-with-bad.maxMs": 5.98
+    "scanValidItems@10k-with-bad.maxMs": 4.5
   }
 }

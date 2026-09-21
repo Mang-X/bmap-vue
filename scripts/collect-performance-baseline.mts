@@ -28,6 +28,15 @@
  * 2 与 3 都**不是**通过：把「没跑」当成「通过」是这个仓库反复记过的一类失效。同理，**缺基线、
  * 指标集合漂移、数据集版本不一致都会落到 2**——那三种情形下「比较」根本没发生。
  *
+ * ## 跨平台：只出报告、不做门禁
+ *
+ * 基线录在一台机器上，「本机读数 / 校准量」的比值仍然**跨平台不可比**：实测同一份代码在
+ * Apple M4（开发机，安静~极载）与 GitHub runner（INTEL XEON / linux）之间差 **2 ~ 6 倍**，
+ * 而且**校准量吸收不掉**——纯数字循环的 `min` 能在被抢占的间隙里找到空闲时刻，而分配密集的
+ * workload 会整体退化。因此 `platform + arch` 与基线不一致时，本脚本打印比值但**不做门禁**
+ * （详见 ADR `2026-09-21-performance-baseline-and-worker-decision` 的决策 5），并在报告里记
+ * `comparison.skipped`。要在本机启用门禁就先在本机 `--update`（基线会记下本机的身份）。
+ *
  * ## 用法
  *
  * ```bash
@@ -149,6 +158,8 @@ interface Comparison {
   tolerance: number;
   regressions: ComparisonItem[];
   improvements: ComparisonItem[];
+  /** 非空 = 本次**没有**做趋势门禁（跨平台），内容是原因。 */
+  skipped: string | null;
 }
 
 /** 退出：`2` = 门禁没跑起来，`3` = 门禁没跑完，`1` = 真的回退了。 */
@@ -416,10 +427,14 @@ function printReport(report: Report, comparison: Comparison): void {
   for (const note of report.notMeasured) lines.push(`  - ${note}`);
   lines.push("");
   if (comparison.baseline) {
-    lines.push(
-      `趋势对比（相对基线，阈值 ${comparison.tolerance}×）：${comparison.regressions.length} 项越界 · ` +
-        `${comparison.improvements.length} 项明显改善`,
-    );
+    if (comparison.skipped) {
+      lines.push(`趋势对比：**本次不做门禁** —— ${comparison.skipped}`);
+    } else {
+      lines.push(
+        `趋势对比（相对基线，阈值 ${comparison.tolerance}×）：${comparison.regressions.length} 项越界 · ` +
+          `${comparison.improvements.length} 项明显改善`,
+      );
+    }
     for (const item of comparison.regressions) {
       lines.push(`  ⚠️ 回退 ${item.name}：${item.ratio}×（基线 ${item.baseline} → 现在 ${item.current}）`);
     }
@@ -441,7 +456,13 @@ function printReport(report: Report, comparison: Comparison): void {
  * 3. 数据集版本或引擎不一致（比的是两份不同的东西）。
  */
 function compareWithBaseline(report: Report, flags: CliFlags): Comparison {
-  const empty: Comparison = { baseline: null, tolerance: flags.tolerance, regressions: [], improvements: [] };
+  const empty: Comparison = {
+    baseline: null,
+    tolerance: flags.tolerance,
+    regressions: [],
+    improvements: [],
+    skipped: null,
+  };
   if (!existsSync(BASELINE_PATH)) {
     if (flags.update) return empty;
     // 缺基线 = 门禁的唯一输入不存在：不能报绿（那正是「门禁空转」）。
@@ -454,6 +475,7 @@ function compareWithBaseline(report: Report, flags: CliFlags): Comparison {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as {
     datasetVersion?: unknown;
     engine?: unknown;
+    machine?: { platform?: unknown; arch?: unknown; cpuModel?: unknown };
     metrics?: Record<string, { normalized: number }>;
   };
   const baselineMetrics = baseline.metrics ?? {};
@@ -467,6 +489,18 @@ function compareWithBaseline(report: Report, flags: CliFlags): Comparison {
       return empty;
     }
     fail(2, mismatch);
+  }
+
+  const crossPlatform = describeMachineMismatch(baseline.machine, report.environment);
+  if (crossPlatform) {
+    // 跨平台时**不门禁**：这不是「静默跳过」——报告里会有一行醒目的说明 + `comparison.skipped`。
+    return {
+      baseline: baselineMetrics,
+      tolerance: flags.tolerance,
+      regressions: [],
+      improvements: [],
+      skipped: crossPlatform,
+    };
   }
 
   const regressions: ComparisonItem[] = [];
@@ -486,7 +520,32 @@ function compareWithBaseline(report: Report, flags: CliFlags): Comparison {
   }
   regressions.sort((a, b) => b.ratio - a.ratio);
   improvements.sort((a, b) => a.ratio - b.ratio);
-  return { baseline: baselineMetrics, tolerance: flags.tolerance, regressions, improvements };
+  return { baseline: baselineMetrics, tolerance: flags.tolerance, regressions, improvements, skipped: null };
+}
+
+/**
+ * 本次机器与基线录制机器是否「可比」。
+ *
+ * 判据取 `platform + arch` 这一档**粗**的键：它正好把「同平台的 CI runner（SKU / 核数会轮换）」
+ * 归为一类，而把开发机排除在门禁之外——跨平台的比值实测差 2 ~ 6 倍，用同一个阈值去卡它就是
+ * issue 非目标第 2 条点名禁止的「把单次本机数字当跨平台硬阈值」。
+ */
+function describeMachineMismatch(
+  baselineMachine: { platform?: unknown; arch?: unknown; cpuModel?: unknown } | undefined,
+  environment: Record<string, unknown>,
+): string | null {
+  if (!baselineMachine?.platform || !baselineMachine.arch) {
+    return "基线没有记录机器身份（旧格式）：本次只出报告、不做门禁；用 --update 重录即可恢复";
+  }
+  if (baselineMachine.platform === environment.platform && baselineMachine.arch === environment.arch) {
+    return null;
+  }
+  return (
+    `基线录于 ${String(baselineMachine.platform)}/${String(baselineMachine.arch)}` +
+    `（${String(baselineMachine.cpuModel ?? "未知 CPU")}），本次是 ${String(environment.platform)}/${String(environment.arch)}` +
+    `（${String(environment.cpuModel ?? "未知 CPU")}）：跨平台的归一化比值仍差 2 ~ 6 倍，` +
+    "因此**本次不做趋势门禁**（比值只作参考）。要在本机启用门禁，先在本机跑 `pnpm perf:baseline --update`"
+  );
 }
 
 /**
@@ -528,6 +587,14 @@ function writeBaseline(report: Report): void {
     tolerance: DEFAULT_TOLERANCE,
     comparisonFloorUnits: FLOOR_UNITS,
     recordedAt: report.generatedAt,
+    // `machine` 是**门禁的键**（`platform + arch` 一致才做趋势门禁），`recordedOn` 是完整读档。
+    machine: {
+      platform: report.environment.platform,
+      arch: report.environment.arch,
+      cpuModel: report.environment.cpuModel,
+      cpuCount: report.environment.cpuCount,
+      node: report.environment.node,
+    },
     recordedOn: report.environment,
     metrics: Object.fromEntries(
       Object.entries(report.metrics).map(([name, entry]) => [
@@ -565,7 +632,9 @@ function main(): void {
   if (report.bundle.status !== "ok") {
     fail(3, `[perf] BLOCKED：${report.bundle.reason}`);
   }
-  console.log("[perf] OK：无超阈值回退");
+  console.log(
+    comparison.skipped ? "[perf] OK：本次跨平台，趋势门禁未启用（见上方说明）" : "[perf] OK：无超阈值回退",
+  );
 }
 
 try {
