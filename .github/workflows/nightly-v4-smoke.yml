@@ -102,3 +102,52 @@ jobs:
           path: ${{ runner.temp }}/plugin-compat.json
           if-no-files-found: warn
           retention-days: 14
+
+  # 可选插件的**运行时**结论核对（M8-ADAPTERS-ADVANCED / #43）。
+  #
+  # 与上面 `plugin-compat` job 的分工：那一个只看「产物面 + 声明面」（不需要 AK），
+  # 这一个看**运行时面** —— 真实 JSAPI 4.0 + 真实 AK + 真实浏览器，逐个插件跑最小功能链路
+  # （TrackAnimation 的 pause/continue/播放到结尾、DrawingManager **真的画出一个多边形**、
+  # MapVGL 的抛错根因）。
+  #
+  # 为什么单独一个 job：#43 的隔离口径要求「外部插件失败不污染必需链路，可选 smoke 单独执行」。
+  # 它**不是** required smoke 的一部分（插件脚本抖动不该染红必需链路），但每天都跑一次，
+  # 才能让「上游脚本换了内容 / 行为变了」当天就被发现，并且有 `artifactDigest` 佐证。
+  #
+  # 判定口径：`0` 与 inventory 记录一致；`1` 读数与 inventory 不一致（inventory 过期）或
+  # 独立性被打破；`3` blocked（AK / 网络 / 浏览器不成立，**不是通过**）；`2` 脚手架失败。
+  # ⚠️ **已登记的 `threw` 不算 fail**：MapVGL 的结论就是「它在 4.0 上抛错」，把它算成失败
+  # 会让这个 job 每天红一次（见 scripts/plugin-runtime-report.mts 的说明）。
+  plugin-runtime:
+    if: github.repository == 'Mang-X/bmap-vue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 浏览器不额外安装：runner 预装了 /usr/bin/google-chrome。探针的默认候选是 macOS 路径，
+      # 所以这里必须显式给 `SMOKE_BROWSER`（否则会退 2「浏览器不存在」，看起来像脚手架坏）。
+      - name: Probe plugin runtime on real JSAPI 4.0
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+          SMOKE_BROWSER: /usr/bin/google-chrome
+        run: pnpm probe:plugin-runtime -- --out="$RUNNER_TEMP/plugin-runtime.json"
+
+      - name: Upload plugin runtime report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-runtime-report
+          path: ${{ runner.temp }}/plugin-runtime.json
+          if-no-files-found: warn
+          retention-days: 14

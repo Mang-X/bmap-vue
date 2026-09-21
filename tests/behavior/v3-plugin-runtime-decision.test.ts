@@ -81,6 +81,7 @@ describe("判定函数的健康基线", () => {
       "runs=4",
       "results=4",
       "invalidStatus=0",
+      "mapNotReady=0",
       "inconclusive=0",
       "verified=4",
       "threw=0",
@@ -271,22 +272,75 @@ describe("其它形态各自的退出码", () => {
     expect(upgraded.reasons.join(" ")).toContain("inventory");
   });
 
-  it("真正跑起来但运行时抛错 ⇒ 1（且与 inventory 一致时不算漂移）", () => {
+  /**
+   * 评审 2026-09-21 P1：**地图夹具就绪**必须是判定前置条件。
+   *
+   * 旧判定只看 `sdkLoaded` / result / status / 脚本与全局 / 独立性。地图没建成时 `map` 是 null，
+   * 插件会因为拿到无效 map 而抛错；若该插件的 inventory 期望本来就是 `threw`（MapVGL 就是），
+   * 就会「与 inventory 一致」并落到 `0` —— 把「根本没在有效地图上验过」读成「确认仍然不兼容」。
+   */
+  it("地图夹具没建成 ⇒ blocked(3)：插件 `threw` 且与 inventory 一致也不能算通过", () => {
+    const expectations: PluginRuntimeExpectation[] = PLUGIN_SPECS.map((spec) => ({
+      id: spec.id,
+      status: spec.id === "Mapvgl" ? "threw" : "verified",
+    }));
+    const threwOutcome = { ...healthyRuns()[0]!.result! };
+
+    // 正证：把「地图建成了」这一项保持为 true 时，同一份输入本来是 0 ——
+    // 否则下面那条反例可能只是在验「另一条本来就失败的规则」。
+    const mapReady = withRun(healthyRuns(), "Mapvgl", (run) => ({
+      ...run,
+      result: { ...run.result!, probe: { status: "threw", error: "boom" } },
+    }));
+    expect(decidePluginRuntimeExitCode(mapReady, expectations).exitCode).toBe(0);
+    expect(threwOutcome.probe?.status).toBe("verified");
+
+    // 反例：唯一的差别是地图夹具没建成
+    const mapBroken = withRun(healthyRuns(), "Mapvgl", (run) => ({
+      ...run,
+      env: { ...run.env, mapCreated: false, mapError: "new BMap.Map 之后初始化失败" },
+      result: { ...run.result!, probe: { status: "threw", error: "boom" } },
+    }));
+    const decision = decidePluginRuntimeExitCode(mapBroken, expectations);
+    expect(decision.exitCode, "『根本没在有效地图上验过』不能算通过").toBe(3);
+    expect(decision.counts.mapNotReady).toBe(1);
+    expect(decision.reasons.join(" ")).toContain("地图夹具未就绪");
+    expect(decision.reasons.join(" ")).toContain("Mapvgl");
+  });
+
+  it("已登记的 threw 是结论、不是回归（#43 修正）；未登记的 threw 才是 1", () => {
     const runs = withRun(healthyRuns(), "Mapvgl", (run) => ({
       ...run,
       result: { ...run.result!, probe: { status: "threw", error: "boom" } },
     }));
-    const decision = decidePluginRuntimeExitCode(
-      runs,
-      PLUGIN_SPECS.map((spec) => ({
-        id: spec.id,
-        status: spec.id === "Mapvgl" ? ("threw" as const) : ("verified" as const),
-      })),
-    );
-    expect(decision.exitCode).toBe(1);
-    expect(decision.counts.threw).toBe(1);
-    expect(decision.counts.statusMismatch).toBe(0);
-    expect(decision.reasons.join(" ")).toContain("Mapvgl");
+    const expectationsFor = (
+      mapvgl: "threw" | "verified" | undefined,
+    ): PluginRuntimeExpectation[] =>
+      PLUGIN_SPECS.map((spec) => {
+        if (spec.id !== "Mapvgl") return { id: spec.id, status: "verified" as const };
+        // `status: undefined` 与「不写这个字段」在 `exactOptionalPropertyTypes` 下不是一回事：
+        // 这里要表达的是后者（= 没有登记过期望值）。
+        return mapvgl === undefined ? { id: spec.id } : { id: spec.id, status: mapvgl };
+      });
+
+    // 正证：inventory 记的就是 threw（MapVGL 的结论就是「它在 4.0 上抛错」）⇒ 不算 fail。
+    // 旧规则在这里退 1，于是把探针搬进 nightly 会每天产生一次假警报。
+    const registered = decidePluginRuntimeExitCode(runs, expectationsFor("threw"));
+    expect(registered.exitCode).toBe(0);
+    expect(registered.counts.threw).toBe(1);
+    expect(registered.counts.statusMismatch).toBe(0);
+    expect(registered.reasons).toEqual([]);
+
+    // 反证一：inventory 记 verified、实测 threw ⇒ 是漂移（⑨），仍然 1
+    const drifted = decidePluginRuntimeExitCode(runs, expectationsFor("verified"));
+    expect(drifted.exitCode).toBe(1);
+    expect(drifted.counts.statusMismatch).toBe(1);
+
+    // 反证二：**没有登记过期望值**的 threw ⇒ 1（新问题，不能静默）
+    const unregistered = decidePluginRuntimeExitCode(runs, expectationsFor(undefined));
+    expect(unregistered.exitCode).toBe(1);
+    expect(unregistered.reasons.join(" ")).toContain("未登记的运行时抛错");
+    expect(unregistered.reasons.join(" ")).toContain("Mapvgl");
   });
 
   it("脚手架(2) 优先于 blocked(3)：既有缺报告又有 SDK 没起来时判 2", () => {

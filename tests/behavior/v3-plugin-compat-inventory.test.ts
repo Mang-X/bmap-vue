@@ -22,9 +22,12 @@ import {
   BUILTIN_PLUGIN_URLS,
   geoUtilsPlugin,
   PLUGIN_COMPAT_INVENTORY,
+  PLUGIN_VERDICTS,
+  PLUGIN_VERDICT_MEANING,
   stringToPluginDefinitions,
 } from "../../packages/baidu-map-gl-vue/src/plugins";
 import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability";
+import { componentManifest } from "../../packages/baidu-map-gl-vue/src/manifest";
 import { createPluginRegistry } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginRegistry";
 import { ResourceScope } from "../../packages/baidu-map-gl-vue/src/core/lifecycle/ResourceScope";
 
@@ -92,13 +95,18 @@ describe("依据与结论不留空", () => {
     }
   });
 
-  it("声明面结论必须有 artifact + declaration 两档依据", () => {
+  it("结论强于依据的两类都必须有 artifact + declaration 两档（声明面不是运行时）", () => {
     for (const entry of ENTRIES) {
-      if (entry.verdict === "no-declaration-gap" || entry.verdict === "incompatible") {
+      if (entry.verdict === "compatible" || entry.verdict === "incompatible" || entry.verdict === "native") {
         expect(entry.basis, `${entry.id} 的结论强于依据`).toContain("artifact");
         expect(entry.basis, `${entry.id} 的结论强于依据`).toContain("declaration");
       }
     }
+    // 空转守卫：清单里确实有这三类结论
+    expect(
+      ENTRIES.filter((entry) => ["compatible", "incompatible", "native"].includes(entry.verdict))
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("标 incompatible 必须给出决定性依据（正证与反证共用同一条判定）", () => {
@@ -245,6 +253,134 @@ describe("依据与结论不留空", () => {
   it("内置插件一律 optional（必需功能不依赖插件脚本）", () => {
     for (const entry of ENTRIES) {
       expect(entry.required, `${entry.id} 应为 optional`).toBe(false);
+    }
+  });
+});
+
+describe("结论模型与迁移路径（M8-ADAPTERS-ADVANCED / #43）", () => {
+  /**
+   * #25 那版词汇是 `incompatible` / `no-declaration-gap` / `undetermined`，后者只表达「还没查完」，
+   * 不是一个**结论**。#43 换成五值词汇并给每条补 `migrationPath`：结论要落到「那我现在该用什么」上。
+   */
+  it("结论取值恰好是五个，且与 `PLUGIN_VERDICT_MEANING` 双向一致", () => {
+    expect(PLUGIN_VERDICTS.slice().sort()).toEqual(
+      ["adapter", "compatible", "incompatible", "native", "unverified"].sort(),
+    );
+    // 释义表必须覆盖**每一个**取值（Record 已保证漏一个编译不过；这里锁「多一个 / 名字漂移」）
+    expect(Object.keys(PLUGIN_VERDICT_MEANING).sort()).toEqual(PLUGIN_VERDICTS.slice().sort());
+    for (const entry of ENTRIES) {
+      expect(PLUGIN_VERDICTS, `${entry.id} 的结论不在词表里：${entry.verdict}`).toContain(
+        entry.verdict,
+      );
+    }
+  });
+
+  it("每条都有完整的迁移路径（kind / target / note 都不许留空）", () => {
+    const kinds = new Set(["native", "plugin", "none"]);
+    for (const entry of ENTRIES) {
+      const path = entry.migrationPath;
+      expect(kinds.has(path.kind), `${entry.id} 的 migrationPath.kind 非法：${path.kind}`).toBe(true);
+      expect(path.target.trim().length, `${entry.id} 没写迁移落点`).toBeGreaterThan(0);
+      expect(path.note.trim().length, `${entry.id} 没写迁移说明`).toBeGreaterThan(10);
+    }
+    // 空转守卫：三种 kind 都真的出现过（否则上面的集合检查可能只是没扫到）
+    expect(new Set(ENTRIES.map((entry) => entry.migrationPath.kind)).size).toBe(3);
+  });
+
+  /**
+   * 迁移落点写成一句**不存在的组件名**比不写更坏：读者会照着去 import，然后发现没这个东西。
+   * 判据用 `componentManifest` 的真实导出名，配正反两次调用**同一条**判据。
+   */
+  it("`native` 的迁移落点必须是本库真实存在的组件（同一条判据正反各验一次）", () => {
+    const exportNames = new Set(componentManifest.map((component) => component.exportName));
+    const exists = (name: string): boolean => exportNames.has(name);
+
+    const nativeEntries = ENTRIES.filter((entry) => entry.verdict === "native");
+    expect(nativeEntries.length, "清单里应当有 native 结论的条目").toBeGreaterThan(0);
+
+    for (const entry of nativeEntries) {
+      expect(entry.migrationPath.kind, `${entry.id} 判 native 却没给原生落点`).toBe("native");
+      const component = entry.migrationPath.nativeComponent;
+      expect(typeof component, `${entry.id} 判 native 却没写 nativeComponent`).toBe("string");
+      expect(exists(component!), `${entry.id} 把落点写成了一个不存在的组件：${component}`).toBe(
+        true,
+      );
+    }
+
+    // 反证：同一条判据必须能对「不存在」与「存在」分别给出 false / true
+    expect(exists("BDefinitelyNotAComponent")).toBe(false);
+    expect(exists("BTrackLineLayer")).toBe(true);
+  });
+
+  it("`compatible` 必须有运行时证据 —— 不许用「声明面通过」冒充「兼容」", () => {
+    const compatible = ENTRIES.filter((entry) => entry.verdict === "compatible");
+    expect(compatible.length, "清单里应当有 compatible 结论的条目").toBeGreaterThan(0);
+    for (const entry of compatible) {
+      expect(entry.basis, `${entry.id} 判 compatible 却没有 runtime 依据`).toContain("runtime");
+      expect(entry.runtime?.status, `${entry.id} 判 compatible 但没有「已验证」的运行时读数`).toBe(
+        "verified",
+      );
+    }
+  });
+
+  it("`unverified` 不得同时声称已跑通（结论不许强于证据）；当前无条目也要显式记录", () => {
+    for (const entry of ENTRIES) {
+      if (entry.verdict === "unverified") {
+        expect(entry.runtime?.status, `${entry.id} 判 unverified 却挂着已验证的读数`).not.toBe(
+          "verified",
+        );
+      }
+    }
+    // 这条门禁**当前**为空集合 —— 显式写出来，是为了让「把它填上」必须是一次有意的改动。
+    expect(
+      ENTRIES.filter((entry) => entry.verdict === "unverified").map((entry) => entry.id),
+    ).toEqual([]);
+  });
+
+  /**
+   * `adapter` 是合法取值但**不该有条目**：按 #43 的范围纠正，只有「结论明确是 adapter **且**
+   * 存在真实消费者」时才写 adapter 代码。四个内置插件都不满足。
+   *
+   * 这条断言的意义是「把将来新增 adapter 变成一次有意的动作」：真要加，必须同时给出消费者与
+   * 迁移落点，并删掉这条门禁。
+   */
+  it("`adapter` 当前无条目（要新增必须同时给消费者与落点）", () => {
+    expect(PLUGIN_VERDICTS).toContain("adapter");
+    expect(ENTRIES.filter((entry) => entry.verdict === "adapter").map((entry) => entry.id)).toEqual(
+      [],
+    );
+  });
+
+  it("每条都写明版本锁定情况与内容摘要（URL 没版本号时靠摘要锁内容）", () => {
+    for (const entry of ENTRIES) {
+      expect(typeof entry.versionLock.versioned, `${entry.id} 没写版本锁定`).toBe("boolean");
+      expect(entry.versionLock.note.trim().length, `${entry.id} 的版本锁定说明过短`)
+        .toBeGreaterThan(10);
+      expect(entry.artifactDigest.algo, `${entry.id} 的摘要算法要写 sha256`).toBe("sha256");
+      expect(entry.artifactDigest.value, `${entry.id} 的摘要不是 64 位 hex`).toMatch(
+        /^[0-9a-f]{64}$/,
+      );
+    }
+    // 正反两侧都要有：至少一条「URL 自带版本号」，至少一条「没有版本号、只能靠摘要锁」
+    expect(ENTRIES.some((entry) => entry.versionLock.versioned)).toBe(true);
+    expect(ENTRIES.some((entry) => !entry.versionLock.versioned)).toBe(true);
+  });
+
+  it("运行时读数写清「覆盖到哪几步 / 哪几步没覆盖」", () => {
+    const withRuntime = ENTRIES.filter((entry) => entry.runtime !== undefined);
+    expect(withRuntime.length).toBeGreaterThan(0);
+    for (const entry of withRuntime) {
+      expect(
+        entry.runtime!.covered.length,
+        `${entry.id} 没写覆盖到的子步骤`,
+      ).toBeGreaterThan(0);
+      expect(
+        entry.runtime!.uncovered.length,
+        `${entry.id} 没写没覆盖的子步骤（留白会被读成「也验过了」）`,
+      ).toBeGreaterThan(0);
+      for (const step of [...entry.runtime!.covered, ...entry.runtime!.uncovered]) {
+        expect(step.trim().length, `${entry.id} 的覆盖项过短：${step}`).toBeGreaterThan(1);
+      }
     }
   });
 });
@@ -448,6 +584,57 @@ describe("门禁真的被 workflow 跑起来", () => {
     const alwaysIndex = lines.findIndex((line) => /^\s*if: always\(\)/.test(line));
     expect(alwaysIndex, "夹具里应当存在一条带 if 的 step，否则上一条断言可能只是没扫到")
       .toBeGreaterThanOrEqual(0);
+  });
+
+  /**
+   * #43：可选插件的运行时结论要**单独**跑（隔离口径），且它有一个只在 CI 才暴露的坑：
+   * 探针的浏览器默认候选是 macOS 路径，runner 上必须显式给 `SMOKE_BROWSER`，否则会退 2
+   * 「浏览器不存在」——那看起来像脚手架坏了，而不是环境差异。
+   */
+  it("nightly 有独立的 plugin-runtime job，且显式给了 SMOKE_BROWSER", () => {
+    const nightly = resolve(ROOT, ".github/workflows/nightly-v4-smoke.yml");
+    const lines = readFileSync(nightly, "utf8").split(/\r?\n/);
+
+    // 切出 job 段：与 quality 那条同一套「找下一个二级键」的判据（跨 job 取首个匹配会把归属弄错）
+    const start = lines.findIndex((line) => line === "  plugin-runtime:");
+    expect(start, "找不到 plugin-runtime job 段").toBeGreaterThanOrEqual(0);
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[i]!)) {
+        end = i;
+        break;
+      }
+    }
+    const job = lines.slice(start, end);
+    expect(job.length, "切空了 job 段，下面的断言会恒真").toBeGreaterThan(3);
+
+    // 定位式必须**锚到 token 边界**：`/probe:plugin-runtime/` 会被 `probe:plugin-runtime-x`
+    // 满足，反证（改名后必须找不到）就成了空断言。
+    const locateRun = (lines: readonly string[]): number =>
+      lines.findIndex((line) => /^\s*run:\s*.*probe:plugin-runtime(\s|$)/.test(line));
+    const runIndex = locateRun(job);
+    expect(runIndex, "plugin-runtime job 里没有跑 probe:plugin-runtime").toBeGreaterThanOrEqual(0);
+
+    // 该 step 不得被 if / continue-on-error 架空
+    let stepStart = runIndex;
+    while (stepStart > 0 && !/^\s*- /.test(job[stepStart]!)) stepStart -= 1;
+    const stepLines = job.slice(stepStart, runIndex);
+    expect(stepLines.length, "没有切出 step 区块，架空检查无从判断").toBeGreaterThan(0);
+    expect(stepLines.some((line) => /^\s*-\s/.test(line))).toBe(true);
+    expect(stepLines.filter((line) => /^\s*(if|continue-on-error):/.test(line))).toEqual([]);
+    // 浏览器候选（探针的默认值是 macOS 路径）
+    expect(stepLines.some((line) => /^\s*SMOKE_BROWSER:\s*\S+/.test(line))).toBe(true);
+
+    // job 级 if 必须是**完整的 owner/repo**：仓库迁到组织后 `github.repository_owner` 不再是
+    // 个人账号，用 owner 判断会让整个 job 被永久跳过（看起来 CI 是绿的，其实没跑）。
+    expect(
+      job.some((line) => /^\s*if:\s*github\.repository == 'Mang-X\/bmap-vue'/.test(line)),
+      "plugin-runtime job 缺少完整 owner/repo 的 if 守卫（fork 上没有 secret）",
+    ).toBe(true);
+
+    // 反证：同一条定位式在改名后必须找不到
+    const renamed = job.map((line) => line.replace("probe:plugin-runtime", "probe:plugin-runtime-x"));
+    expect(locateRun(renamed)).toBe(-1);
   });
 });
 

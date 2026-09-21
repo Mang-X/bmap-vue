@@ -28,11 +28,16 @@ export {
   PLUGIN_COMPAT_BY_ID,
   PLUGIN_EVIDENCE_BASIS_MEANING,
   PLUGIN_VERDICT_MEANING,
+  // #43：五值词表的运行时清单（生成器与门禁用同一份来源，避免两处清单漂移）。
+  PLUGIN_VERDICTS,
 } from "./compat-inventory";
 export type {
   BuiltinPluginName,
   PluginCompatEntry,
   PluginEvidenceBasis,
+  PluginMigrationPath,
+  PluginRuntimeReading,
   PluginVerdict,
+  PluginVersionLock,
 } from "./compat-inventory";
 export type { BMapPluginDefinition } from "../core/plugins/PluginRegistry";

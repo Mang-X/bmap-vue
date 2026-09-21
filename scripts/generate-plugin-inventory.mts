@@ -36,6 +36,8 @@ interface Entry {
   urlKey: string
   exposedGlobal: string
   required: boolean
+  versionLock: { versioned: boolean; note: string }
+  artifactDigest: { algo: string; value: string }
   sdkNamespaceMembers: readonly string[]
   manualInstanceChecks: readonly string[]
   hasPrivateSurface: boolean
@@ -43,8 +45,19 @@ interface Entry {
   selfInjectedMarkers: readonly string[]
   capability?: string
   verdict: string
+  migrationPath: {
+    kind: string
+    target: string
+    nativeComponent?: string
+    note: string
+  }
   basis: readonly string[]
-  runtime?: { status: string; detail: string }
+  runtime?: {
+    status: string
+    detail: string
+    covered: readonly string[]
+    uncovered: readonly string[]
+  }
   summary: string
   residualRisks: readonly string[]
 }
@@ -63,6 +76,9 @@ const { BUILTIN_PLUGIN_URLS } = builtins
 
 const codeList = (values: readonly string[]): string =>
   values.length === 0 ? '—' : values.map((v) => `\`${v}\``).join(', ')
+
+/** 表格单元格里不能出现裸 `|`（会把列切开）——只转义竖线，其余 Markdown 原样保留。 */
+const escapePipes = (text: string): string => text.replace(/\|/g, '\\|')
 
 function renderMarkdown(): string {
   const lines: string[] = []
@@ -86,7 +102,8 @@ function renderMarkdown(): string {
   lines.push('没有跑过的档位不写进依据——把「声明面没缺口」说成「兼容」是把结论说得比证据强。')
   lines.push('')
   lines.push(
-    '三档各有自己的复现命令：`pnpm probe:plugin-runtime`（真实 4.0 + 真实 AK + 真实浏览器）、' +
+    '三档各有自己的复现命令：`pnpm probe:plugin-runtime`（真实 4.0 + 真实 AK + 真实浏览器，' +
+      'nightly 单独跑：它验的是**可选**插件，不进必需链路）、' +
       '`pnpm probe:plugin-compat`（真实发布产物 + 官方声明）、以及两者共用的生成物校验 ' +
       '`pnpm generate:plugin-inventory:check`。',
   )
@@ -113,15 +130,19 @@ function renderMarkdown(): string {
   lines.push('## 清单')
   lines.push('')
   lines.push(
-    '| 插件 | 锁定 URL | 暴露全局 | required | 引用的 SDK 命名空间成员 | 私有面 | 副作用标记 | 关联能力 | 结论 | 运行时 | 依据 |',
+    '| 插件 | 锁定 URL | 版本锁定 | 内容摘要（sha256 前 12 位） | 暴露全局 | required | 引用的 SDK 命名空间成员 | 私有面 | 副作用标记 | 关联能力 | 结论 | 迁移路径 | 运行时 | 依据 |',
   )
-  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+  lines.push(
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  )
   for (const entry of PLUGIN_COMPAT_INVENTORY) {
     const url = BUILTIN_PLUGIN_URLS[entry.urlKey]
     lines.push(
       [
         `\`${entry.id}\``,
         url ? `\`${url.replace(/^https:\/\//, '')}\`` : `\`${entry.urlKey}\``,
+        entry.versionLock.versioned ? '**有**' : '无（自托管镜像）',
+        `\`${entry.artifactDigest.value.slice(0, 12)}…\``,
         `\`${entry.exposedGlobal}\``,
         entry.required ? '**true**' : 'false',
         codeList(entry.sdkNamespaceMembers),
@@ -131,6 +152,7 @@ function renderMarkdown(): string {
           : codeList(entry.selfInjectedMarkers),
         entry.capability ? `\`${entry.capability}\`` : '—',
         `\`${entry.verdict}\``,
+        `\`${entry.migrationPath.kind}\` → ${escapePipes(entry.migrationPath.target)}`,
         entry.runtime
           ? entry.runtime.status === 'threw'
             ? '**抛错**'
@@ -165,6 +187,34 @@ function renderMarkdown(): string {
             entry.runtime.status === 'threw' ? '**抛错**' : '**已验证最小路径**'
           } —— ${entry.runtime.detail}`
         : '运行时：未跑（依据里不含 `runtime`）。',
+    )
+    lines.push('')
+    if (entry.runtime) {
+      // 「已验证」不是一个布尔值：范围写出来，没覆盖的也写出来。留白会被读成「也验过了」。
+      lines.push('**这条读数覆盖到**：')
+      lines.push('')
+      for (const step of entry.runtime.covered) lines.push(`- ${step}`)
+      lines.push('')
+      lines.push('**没覆盖**（写出来，别当成验过了）：')
+      lines.push('')
+      for (const step of entry.runtime.uncovered) lines.push(`- ${step}`)
+      lines.push('')
+    }
+    lines.push(
+      `迁移路径：\`${entry.migrationPath.kind}\` → ${entry.migrationPath.target}` +
+        (entry.migrationPath.nativeComponent
+          ? `（原生组件 \`${entry.migrationPath.nativeComponent}\`）`
+          : ''),
+    )
+    lines.push('')
+    lines.push(entry.migrationPath.note)
+    lines.push('')
+    lines.push(
+      `版本锁定：${entry.versionLock.versioned ? '**自带版本号**' : '**未版本化**'} —— ${entry.versionLock.note}`,
+    )
+    lines.push('')
+    lines.push(
+      `内容摘要（\`${entry.artifactDigest.algo}\`，由 \`pnpm probe:plugin-compat\` 每次拉取后核对）：\`${entry.artifactDigest.value}\``,
     )
     lines.push('')
     if (entry.residualRisks.length > 0) {
@@ -202,6 +252,8 @@ function renderJson(): string {
       url: BUILTIN_PLUGIN_URLS[entry.urlKey] ?? null,
       exposedGlobal: entry.exposedGlobal,
       required: entry.required,
+      versionLock: entry.versionLock,
+      artifactDigest: entry.artifactDigest,
       sdkNamespaceMembers: entry.sdkNamespaceMembers,
       manualInstanceChecks: entry.manualInstanceChecks,
       hasPrivateSurface: entry.hasPrivateSurface,
@@ -209,6 +261,7 @@ function renderJson(): string {
       selfInjectedMarkers: entry.selfInjectedMarkers,
       ...(entry.capability ? { capability: entry.capability } : {}),
       verdict: entry.verdict,
+      migrationPath: entry.migrationPath,
       basis: entry.basis,
       ...(entry.runtime ? { runtime: entry.runtime } : {}),
       summary: entry.summary,

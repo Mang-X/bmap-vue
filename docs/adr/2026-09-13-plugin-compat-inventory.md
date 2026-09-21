@@ -6,6 +6,13 @@
 - 相关：`packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts`、`scripts/generate-plugin-inventory.mts`、`scripts/probe-plugin-compat.mts`、`tests/behavior/v3-plugin-compat-inventory.test.ts`、`docs/zh-CN/contributing/plugin-compat-inventory.md`、`packages/baidu-map-gl-vue/src/driver/capability/catalog.ts`
 - 与既有决策的关系：不改动 [Official-first](./2026-09-13-official-first-loader-and-ui-kit.md) 与 [默认在线路径委托官方 Loader](./2026-09-13-default-online-loader-cutover.md)；本文只补它们没有覆盖的一角——**第三方插件脚本**（`plugins: [...]` 加载的那四个）在 JSAPI 4.0 上的状态与隔离口径。
 
+> ⚠️ **两处已被取代**（2026-09-21，[插件迁移结论定型与 `./advanced` 冻结](./2026-09-21-plugin-verdicts-and-advanced-freeze.md)）：
+> **决策 3** 的结论取值（`incompatible` / `no-declaration-gap` / `undetermined`）换成五值
+> `native` / `compatible` / `adapter` / `incompatible` / `unverified` 并补 `migrationPath`；
+> **决策 7** 退出码表里「有插件 `threw` ⇒ 1」改成「已登记的 `threw` 不算 fail」（并新增 nightly
+> `plugin-runtime` job）。本文其余决策（依据三档 / 私有面布尔口径 / 内置插件一律 optional /
+> 能力互锁 / 两个探针不进 PR 门禁 / 插件页不塞进必需链路）**仍然有效**。历史正文保留不变。
+
 ## 背景
 
 `#25` 的验收清单里有一条长期没有答案：「插件兼容 inventory 有证据；可选插件故障与必需功能隔离」。
@@ -52,6 +59,10 @@ CI 的 `quality` job 跑 `--check` 校验无漂移——与 `generate:capability
 没跑过的档位不写进依据。这条是刻意的：把「声明面没缺口」说成「兼容」，是把结论说得比证据强。
 
 ### 3. 结论取值三种，`no-declaration-gap` **不等于**兼容
+
+> ⚠️ **本节已被取代**（2026-09-21）：取值改为五值词汇并补 `migrationPath`，见
+> [插件迁移结论定型与 `./advanced` 冻结](./2026-09-21-plugin-verdicts-and-advanced-freeze.md) 决策 1 / 2。
+> 下面这段记录的是当时的取值，保留作历史。
 
 | 结论 | 含义 |
 | --- | --- |
@@ -117,6 +128,10 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
   （决策 8）：不登记进 `tests/browser/jsapi-v4` 的检查表、不进任何 CI job、不参与必需链路的放行判定。
 
 两个探针的判定与退出码沿用 `scripts/probe-official-packages.mts` 的口径：
+
+> ⚠️ **本表的最后一行（`fail`：有插件 `threw`）已被取代**（2026-09-21）：
+> 「已登记的 `threw`」是结论、不算 fail，只有未登记过期望值的 `threw` 才退 1。
+> 见 [插件迁移结论定型与 `./advanced` 冻结](./2026-09-21-plugin-verdicts-and-advanced-freeze.md) 决策 6。
 
 | 结论 | 触发 | 退出码 |
 | --- | --- | --- |

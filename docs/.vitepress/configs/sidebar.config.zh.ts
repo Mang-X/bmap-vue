@@ -27,6 +27,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "ui-kit",
         },
         {
+          text: "扩展契约（./advanced 与 ./core）",
+          link: "advanced",
+        },
+        {
           text: "全局组件事件",
           link: "com-events",
         },
