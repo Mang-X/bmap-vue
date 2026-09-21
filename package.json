@@ -4,7 +4,7 @@
   "version": "2.6.5",
   "scripts": {
     "test:unit": "vitest run tests/behavior tests/__smoke__.test.ts packages",
-    "test:performance": "vitest run tests/performance",
+    "test:performance": "vitest run --config tests/performance/vitest.config.ts",
     "smoke:v4:fixture": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=fixture",
     "smoke:v4": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=live",
     "verify:manifest": "node scripts/collect-api-manifest.mts --check",

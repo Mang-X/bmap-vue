@@ -255,7 +255,7 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 | `BMVTLayer` 基线 | 官方 React 组件库的经验（`PixelLayer` / `MVTLayer` / `BaiduVectorLayer` 是包在真 TileLayer 外面的壳、需要先拆壳才 `addLayer`，见该仓库 `src/drivers/v4Driver.ts` 的 `unwrapTileWrapper`）尚未由本库在真实运行时验证。**注**：`layer/MVTLayer.d.ts` 本身有完整的类声明（含 `updateState` / `clearState` / `setStyle`），所以缺口不在「有没有声明」，而在「怎么把它挂到地图上」这条机制 | 后续票（属本票「目标与范围」里被切出去的部分，用户已确认） |
 | `BGeoJSONLayer` 基线 | **不属于本票**：它由 #40 落地（`BGeoJSONLayer.vue`，走 `LayerDriver` 的 `geojson` kind，官方 `BMap.GeoJSONLayer`）。它是「覆盖物组合图层」而不是原生批量数据图层，没有要素状态 / 拾取面 | 无需动作（票面的这一项已在 #40 完成） |
 | 各种 geometry 的 GeoJSON 校验 | 本票的图层组件把它交给 SDK（官方 `setData(geojson: object)` 只声明了 `object`）；M6 的数据适配层（`core/data/*`）目前只覆盖 Point 几何 | 后续票（若需要线 / 面几何的前置校验） |
-| 大数据量用例 | 夹具与用例目前都是 1~2 个要素；「就地更新不重建、卸载不残留」已由 §1 / §4 覆盖，但**没有量级维度** | 后续票（`tests/performance` 已有基础设施） |
+| 大数据量用例 | 夹具与用例目前都是 1~2 个要素；「就地更新不重建、卸载不残留」已由 §1 / §4 覆盖，但**没有量级维度** | **#37 已收口**：`tests/performance` 已落地 100/1k/10k/50k 基准（含 `BPointCollection` 的挂载 / 替换 / 卸载与 100 次替换的保留内存趋势），见 [`2026-09-21-performance-baseline-and-worker-decision.md`](./2026-09-21-performance-baseline-and-worker-decision.md) |
 | symbol 型业务键在**公开 `id` / Feature State** 上不可用 | 公开 `id` 的取值域是官方 `updateState(keys: string \| number \| …)` 的签名；symbol 不参与 Feature State 的键（也不转字符串冒充） | 已写进 `readFeatureId` / `readFeatureKey` 的 JSDoc 与组件文档；拾取侧 `item`/`item-click` **不受影响**（有回归用例） |
 | 样式字段与上游声明的**类型层锁** | 组件 props 目前只能靠「逐字段核对 + 用例」守（与 #34 的 `BPointCollectionProps` 同一条既有口径）；`src/types/**` 属 raw SDK 禁区，`BMap.LineStyle` 只能在 driver 侧或测试里引用 | 若评审要求，可放进消费方 fixture 或 driver 侧的断言文件 |
 | 探针的 live 档覆盖新操作 | fixture 档已进 PR 门禁（`smoke:v4:fixture`）；live 档在 nightly 跑同一份操作表 | nightly（无需额外动作） |

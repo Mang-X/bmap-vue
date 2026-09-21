@@ -207,7 +207,9 @@ interface BMapClusterPick<Item> {
 - **不实现 fallback 聚合引擎**（票面纠正：缺口不成立。要做得先有 benchmark 与消费场景）。
 - 不实现 `Line` / `Fill` / `Heatmap` / `TrackLine` 的组件面（#36 / #43）。
 - 不做 Feature State / `hitTest` 的组件面（#36）。
-- 不做 Worker 预处理与性能预算（#37）。
+- 不做 Worker 预处理与性能预算（#37）。（**#37 已收口**：预算与基线已建立，Worker 按证据判定不引入，
+  见 [`2026-09-21-performance-baseline-and-worker-decision.md`](./2026-09-21-performance-baseline-and-worker-decision.md)；
+  本文件其余内容不变。）
 - 不把 `value` 归一化进 `DriverEvent`（仍走 `raw` 逃生口，欠账留给 #36 的拾取面收口）。
 
 ## 已知限制

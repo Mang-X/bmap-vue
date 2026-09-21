@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "datasetVersion": "1",
+  "engine": "fake-v4",
+  "normalizer": {
+    "metric": "calibration.cpu",
+    "minMs": 11.72
+  },
+  "tolerance": 5,
+  "comparisonFloorUnits": 0.05,
+  "recordedAt": "2026-09-21T02:42:15.604Z",
+  "recordedOn": {
+    "node": "v22.22.2",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "cpuCount": 10,
+    "totalMemoryGb": 24,
+    "vitest": "5.0.0",
+    "dom": "happy-dom 20.14.0",
+    "sdk": "Fake v4（packages/test-utils/fake-bmap-v4）"
+  },
+  "metrics": {
+    "mount.pointCollection@100": {
+      "normalized": 0.2577,
+      "minMs": 3.02,
+      "medianMs": 8.79,
+      "maxMs": 24.46
+    },
+    "setData.replace@100": {
+      "normalized": 0.0396,
+      "minMs": 0.46,
+      "medianMs": 1.09,
+      "maxMs": 4.63
+    },
+    "style.update@100": {
+      "normalized": 0.0232,
+      "minMs": 0.27,
+      "medianMs": 0.68,
+      "maxMs": 3.46
+    },
+    "unmount.pointCollection@100": {
+      "normalized": 0.028,
+      "minMs": 0.33,
+      "medianMs": 0.48,
+      "maxMs": 2.34
+    },
+    "mount.pointCollection@1000": {
+      "normalized": 0.2269,
+      "minMs": 2.66,
+      "medianMs": 4.54,
+      "maxMs": 4.91
+    },
+    "setData.replace@1000": {
+      "normalized": 0.116,
+      "minMs": 1.36,
+      "medianMs": 1.69,
+      "maxMs": 3.49
+    },
+    "style.update@1000": {
+      "normalized": 0.0375,
+      "minMs": 0.44,
+      "medianMs": 0.64,
+      "maxMs": 0.82
+    },
+    "unmount.pointCollection@1000": {
+      "normalized": 0.0241,
+      "minMs": 0.28,
+      "medianMs": 0.38,
+      "maxMs": 0.63
+    },
+    "mount.pointCollection@10000": {
+      "normalized": 1.0713,
+      "minMs": 12.56,
+      "medianMs": 13.84,
+      "maxMs": 15.07
+    },
+    "setData.replace@10000": {
+      "normalized": 2.0483,
+      "minMs": 24.01,
+      "medianMs": 28.37,
+      "maxMs": 30.92
+    },
+    "style.update@10000": {
+      "normalized": 0.2361,
+      "minMs": 2.77,
+      "medianMs": 4.33,
+      "maxMs": 5.85
+    },
+    "unmount.pointCollection@10000": {
+      "normalized": 0.0288,
+      "minMs": 0.34,
+      "medianMs": 0.4,
+      "maxMs": 0.43
+    },
+    "mount.pointCollection@50000": {
+      "normalized": 5.7036,
+      "minMs": 66.86,
+      "medianMs": 102.25,
+      "maxMs": 161.06
+    },
+    "setData.replace@50000": {
+      "normalized": 13.6224,
+      "minMs": 159.69,
+      "medianMs": 184.09,
+      "maxMs": 404.39
+    },
+    "style.update@50000": {
+      "normalized": 1.2452,
+      "minMs": 14.6,
+      "medianMs": 40.38,
+      "maxMs": 47.5
+    },
+    "unmount.pointCollection@50000": {
+      "normalized": 0.0288,
+      "minMs": 0.34,
+      "medianMs": 0.85,
+      "maxMs": 1.07
+    },
+    "replace100.perIterationMs": {
+      "normalized": 3.7168,
+      "minMs": 43.57,
+      "medianMs": 43.57,
+      "maxMs": 43.57
+    },
+    "mount.lineLayerGeoJson@50000": {
+      "normalized": 0.4359,
+      "minMs": 5.11,
+      "medianMs": 8.83,
+      "maxMs": 19.17
+    },
+    "replace.reactiveArray@50000": {
+      "normalized": 23.8769,
+      "minMs": 279.91,
+      "medianMs": 300.99,
+      "maxMs": 328.21
+    },
+    "replace.markRawArray@50000": {
+      "normalized": 2.5727,
+      "minMs": 30.16,
+      "medianMs": 40.28,
+      "maxMs": 42.74
+    },
+    "calibration.cpu": {
+      "normalized": 1,
+      "minMs": 11.72,
+      "medianMs": 12.18,
+      "maxMs": 12.68
+    },
+    "calibration.local@100": {
+      "normalized": 0.9432,
+      "minMs": 11.06,
+      "medianMs": 13.5,
+      "maxMs": 13.5
+    },
+    "scanValidItems@100": {
+      "normalized": 0.0018,
+      "minMs": 0.02,
+      "medianMs": 0.02,
+      "maxMs": 2.33
+    },
+    "adaptPoints@100": {
+      "normalized": 0.0027,
+      "minMs": 0.03,
+      "medianMs": 0.03,
+      "maxMs": 0.07
+    },
+    "cluster@100": {
+      "normalized": 0.0064,
+      "minMs": 0.08,
+      "medianMs": 0.08,
+      "maxMs": 0.16
+    },
+    "calibration.local@1000": {
+      "normalized": 0.9416,
+      "minMs": 11.04,
+      "medianMs": 11.85,
+      "maxMs": 11.85
+    },
+    "scanValidItems@1000": {
+      "normalized": 0.0036,
+      "minMs": 0.04,
+      "medianMs": 0.04,
+      "maxMs": 0.11
+    },
+    "adaptPoints@1000": {
+      "normalized": 0.0056,
+      "minMs": 0.07,
+      "medianMs": 0.07,
+      "maxMs": 1.36
+    },
+    "cluster@1000": {
+      "normalized": 0.0137,
+      "minMs": 0.16,
+      "medianMs": 0.29,
+      "maxMs": 0.53
+    },
+    "calibration.local@10000": {
+      "normalized": 1.0928,
+      "minMs": 12.81,
+      "medianMs": 22.76,
+      "maxMs": 22.76
+    },
+    "scanValidItems@10000": {
+      "normalized": 0.0591,
+      "minMs": 0.69,
+      "medianMs": 1.6,
+      "maxMs": 3.51
+    },
+    "adaptPoints@10000": {
+      "normalized": 0.1647,
+      "minMs": 1.93,
+      "medianMs": 2.78,
+      "maxMs": 6.45
+    },
+    "cluster@10000": {
+      "normalized": 0.1252,
+      "minMs": 1.47,
+      "medianMs": 1.6,
+      "maxMs": 3.57
+    },
+    "calibration.local@50000": {
+      "normalized": 0.992,
+      "minMs": 11.63,
+      "medianMs": 12.15,
+      "maxMs": 12.15
+    },
+    "scanValidItems@50000": {
+      "normalized": 0.6621,
+      "minMs": 7.76,
+      "medianMs": 12.4,
+      "maxMs": 56.11
+    },
+    "adaptPoints@50000": {
+      "normalized": 3.2613,
+      "minMs": 38.23,
+      "medianMs": 45.02,
+      "maxMs": 78.95
+    },
+    "cluster@50000": {
+      "normalized": 0.8889,
+      "minMs": 10.42,
+      "medianMs": 12.46,
+      "maxMs": 17.06
+    },
+    "scanValidItems@10k-with-bad": {
+      "normalized": 0.1536,
+      "minMs": 1.8,
+      "medianMs": 4.77,
+      "maxMs": 5.98
+    }
+  },
+  "bundle": {
+    "runtimeJs": 787582,
+    "esmJs": 787582,
+    "cjs": 0,
+    "css": 335,
+    "dts": 1195870,
+    "sourceMaps": 5355794,
+    "allBytes": 7339581,
+    "fileCount": 46
+  },
+  "readouts": {
+    "features@100": 100,
+    "mount.pointCollection@100.firstMs": 24.46,
+    "mount.pointCollection@100.perItemMicros": 30.21,
+    "features@1000": 1000,
+    "mount.pointCollection@1000.firstMs": 4.54,
+    "mount.pointCollection@1000.perItemMicros": 2.66,
+    "features@10000": 10000,
+    "mount.pointCollection@10000.firstMs": 12.8,
+    "mount.pointCollection@10000.perItemMicros": 1.26,
+    "features@50000": 50000,
+    "mount.pointCollection@50000.firstMs": 66.86,
+    "mount.pointCollection@50000.perItemMicros": 1.34,
+    "mount.pointCollection@50000.maxMs": 161.06,
+    "mount.pointCollection@50000.exceedsLongTask": "yes",
+    "setData.replace@50000.maxMs": 404.39,
+    "setData.replace@50000.exceedsLongTask": "yes",
+    "unmount.pointCollection@50000.maxMs": 1.07,
+    "unmount.pointCollection@50000.exceedsLongTask": "no",
+    "replace100.iterations": 100,
+    "replace100.totalMs": 4357.12,
+    "replace100.perReplaceMs": 43.57,
+    "replace100.retainedSeriesMb": "174.5 → 174.51 → 174.5 → 174.52 → 174.53 → 174.53",
+    "replace100.retainedGrowthMb": 0.02,
+    "replace100.layerInstancesDelta": 0,
+    "replace100.listenerSubscriptionsDelta": 0,
+    "replace100.pendingListeners": 44,
+    "mount.lineLayerGeoJson@50000.layersCreated": 5,
+    "mount.lineLayerGeoJson@50000.perItemMicros": 0.1,
+    "contrast.perItemRatio": 13.09,
+    "contrast.reactiveArrayMs": 279.91,
+    "contrast.markRawArrayMs": 30.16,
+    "contrast.reactiveOverMarkRaw": 9.28,
+    "dataset.version": "1",
+    "scanValidItems@100.kept": 100,
+    "adaptPoints@100.features": 100,
+    "adaptPoints@100.problems": 0,
+    "cluster@100.features": 61,
+    "cluster@100.clusters": 13,
+    "cluster@100.singles": 48,
+    "scanValidItems@1000.kept": 1000,
+    "adaptPoints@1000.features": 1000,
+    "adaptPoints@1000.problems": 0,
+    "cluster@1000.features": 241,
+    "cluster@1000.clusters": 41,
+    "cluster@1000.singles": 200,
+    "scanValidItems@10000.kept": 10000,
+    "adaptPoints@10000.features": 10000,
+    "adaptPoints@10000.problems": 0,
+    "cluster@10000.features": 1459,
+    "cluster@10000.clusters": 283,
+    "cluster@10000.singles": 1176,
+    "scanValidItems@50000.kept": 50000,
+    "adaptPoints@50000.features": 50000,
+    "adaptPoints@50000.problems": 0,
+    "cluster@50000.features": 1451,
+    "cluster@50000.clusters": 1374,
+    "cluster@50000.singles": 77,
+    "scanValidItems@1000.perItemNormalized": 3.8162,
+    "scanValidItems@50000.perItemNormalized": 13.3486,
+    "adaptPoints@1000.perItemNormalized": 5.9225,
+    "adaptPoints@50000.perItemNormalized": 65.7522,
+    "cluster@1000.perItemNormalized": 14.5478,
+    "cluster@50000.perItemNormalized": 17.9221,
+    "scanValidItems@50000.maxMs": 56.11,
+    "scanValidItems@50000.exceedsLongTask": "yes",
+    "adaptPoints@50000.maxMs": 78.95,
+    "adaptPoints@50000.exceedsLongTask": "yes",
+    "cluster@50000.maxMs": 17.06,
+    "cluster@50000.exceedsLongTask": "no",
+    "adaptPoints@100.perItemMicros": 0.31,
+    "adaptPoints@50000.perItemMicros": 0.76,
+    "scanValidItems@10k-with-bad.kept": 9900,
+    "scanValidItems@10k-with-bad.dropped": 100,
+    "scanValidItems@10k-with-bad.maxMs": 5.98
+  }
+}
