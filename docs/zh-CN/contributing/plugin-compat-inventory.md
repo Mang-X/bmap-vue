@@ -80,20 +80,20 @@
 
 ### `DrawingManager`
 
-引用的命名空间成员全部在官方类型声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），不依赖 SDK 内部模块。它用 `prototype = new BMapGL.Overlay` 继承覆盖物基类（官方声明明写「此类不可实例化」），但**真实 4.0 上用真实指针序列画出一个多边形、收到 `overlaycomplete`、覆盖物真的落在图上**。它还会**由脚本自己**动态注入 GeoUtils 与 GPC 两个外部脚本，绕过本库的加载与取消路径。
+引用的命名空间成员全部在官方类型声明内；`lang.Class` 是脚本**自带**的实现（`r.lang = r.lang || {}`），不依赖 SDK 内部模块。它用 `prototype = new BMapGL.Overlay` 继承覆盖物基类（官方声明明写「此类不可实例化」），但**真实 4.0 上用（合成的）指针事件序列画出了一个多边形、收到 `overlaycomplete`、覆盖物真的落在图上**。它还会**由脚本自己**动态注入 GeoUtils 与 GPC 两个外部脚本，绕过本库的加载与取消路径。
 
 私有面：无。
 
 成员核对：命名空间级成员由 `pnpm probe:plugin-compat` 自动核对；**实例成员**（Map#addOverlay、Map#removeOverlay、Map#addControl、Map#getPanes、Map#getContainer、Map#pointToPixel、Map#pointToOverlayPixel、Map#getDistance、Map#getBounds、Map#getCenter、Map#setCenter、Map#getSize、Map#getViewport、Map#setViewport、Map#enableDragging、Overlay#initialize、Overlay#draw、Overlay#dispose）是**人工**对照 `@baidumap/jsapi-v4-types` 声明核对的，**不在自动门禁内**。
 
-运行时（`pnpm probe:plugin-runtime`）：**已验证最小路径** —— 真实 4.0 上用**真实指针事件序列**走通一条完整绘制链路：`new BMapGLLib.DrawingManager(map, { isOpen: false, confirmVisible: false, enableCalculate: true, enableGpc: true })` 构造成功、`getDrawingMode()` 为 `marker`；`open()` + `setDrawingMode('polygon')` 读回 `polygon`；在掩膜上按下并拖动 3 次后双击收尾，收到 `overlaycomplete`（载荷 `drawingMode: "polygon"`），`map.getOverlays()` 里能找到同一个实例、`dm.getOverlays()` 记到 1 个。全程无抛错。另外证实它**自行注入** `GeoUtils.min.js` 与 `gpc.js` 两个脚本（各两次：构造选项与显式 `enable*()`）。
+运行时（`pnpm probe:plugin-runtime`）：**已验证最小路径** —— 真实 4.0 上沿**公开 DOM 事件链路**发**合成指针事件序列**（`dispatchEvent`，`isTrusted === false`）走通一条完整绘制链路：`new BMapGLLib.DrawingManager(map, { isOpen: false, confirmVisible: false, enableCalculate: true, enableGpc: true })` 构造成功、`getDrawingMode()` 为 `marker`；`open()` + `setDrawingMode('polygon')` 读回 `polygon`；在掩膜上按下并拖动 3 次后双击收尾，收到 `overlaycomplete`（载荷 `drawingMode: "polygon"`），`map.getOverlays()` 里能找到同一个实例、`dm.getOverlays()` 记到 1 个。全程无抛错。另外证实它**自行注入** `GeoUtils.min.js` 与 `gpc.js` 两个脚本（各两次：构造选项与显式 `enable*()`）。
 
 **这条读数覆盖到**：
 
 - 构造 + `getDrawingMode()`
 - `enableCalculate()` / `enableGpc()` 并观察到自行注入两个脚本
 - `open()` + `setDrawingMode('polygon')`（读回一致）
-- 真实指针序列画出多边形：按下 → 3 次拖动 → 双击收尾 → `overlaycomplete`（载荷 drawingMode 为 polygon）
+- 合成指针事件序列画出多边形：按下 → 3 次拖动 → 双击收尾 → `overlaycomplete`（载荷 drawingMode 为 polygon）
 - 画出的覆盖物真的在图上、并被记进 `dm.getOverlays()`
 
 **没覆盖**（写出来，别当成验过了）：
@@ -101,6 +101,7 @@
 - 确认面板分支（`confirmVisible` 缺省为 `true`，画完要先点「确定」才 complete）——探针显式关掉了它。
 - 其余绘制模式（marker / polyline / rectangle / circle）与编辑、裁切、合并、复制、移动等能力。
 - 顶点吸附（sorption）与 `limit` 面积 / 距离校验。
+- **浏览器真实用户输入**：事件是 `dispatchEvent` 造出来的（`isTrusted === false`），本探针验的是「库自己的公开 DOM 事件处理链路 + SDK 的坐标归一化」，不含浏览器输入层的差异（指针捕获 / 合成 click / 双击判定那一段）。
 - 脚本自行注入的 GeoUtils / GPC 的加载、失败与清理**不受本库管控**（只在真实运行时观察到）。
 
 迁移路径：`plugin` → （按官方文档直接使用；本库不封装组件）

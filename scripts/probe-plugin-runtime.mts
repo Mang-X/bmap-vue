@@ -171,8 +171,9 @@ const PAGE_JS = `
       return checks.every(function (c) { return c.ok; });
     }
 
-    // 真实指针输入（#43）：DrawingManager 的绘制链路只认「SDK 归一化后的鼠标事件」，
-    // 所以驱动它必须发**真实 DOM 指针事件**，而不是调库的私有方法。
+    // 指针输入（#43）：DrawingManager 的绘制链路只认「SDK 归一化后的鼠标事件」，所以驱动它必须
+    // 沿**公开 DOM 事件链路**发指针事件，而不是调库的私有方法。注意这些事件是 dispatchEvent
+    // 造出来的合成事件（isTrusted === false）—— 它验的是库自己的事件处理链路，不是浏览器输入层。
     // 事件类型按脚本自己的检测口径选（PointerEvent 且设备报告触摸点时才用 pointer*）——
     // 口径抄自产物里那段「三种事件名映射成 mousedown/mousemove/mouseup」的分支，别按名字猜。
     var pointerMode = !!(window.PointerEvent || window.MSPointerEvent) &&
@@ -345,7 +346,7 @@ const PAGE_JS = `
           if (src.indexOf("GeoUtils") >= 0 || src.indexOf("gpc.js") >= 0) injected.push(src);
         }
 
-        // 真实绘制路径（#43）：打开工具条 -> 切到 polygon -> 用真实 DOM 指针序列画一个多边形。
+        // 绘制路径（#43）：打开工具条 -> 切到 polygon -> 沿公开 DOM 事件链路发指针事件画出多边形。
         // 全程只碰公开面（open / setDrawingMode / getDrawingMode / getOverlays / 事件 / 构造选项），
         // 不碰任何下划线成员 —— 结论要能归到「用户操作」上，而不是「我们调了私有 API」。
         var completedEvent = null;
@@ -424,7 +425,7 @@ const PAGE_JS = `
             error: setModeError,
           }),
           okCheck(
-            "真实指针序列画出一个多边形并收到 overlaycomplete（载荷 drawingMode 为 polygon）",
+            "合成指针事件序列画出一个多边形并收到 overlaycomplete（载荷 drawingMode 为 polygon）",
             !!completedEvent && completedEvent.drawingMode === "polygon",
             {
               overlaycomplete: !!completedEvent,

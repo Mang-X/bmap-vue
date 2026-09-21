@@ -28,7 +28,7 @@
 | --- | --- | --- | --- |
 | `TrackAnimation` | `native` | `layer.track-line` → `<BTrackLineLayer>` | 4.0 有原生轨迹线图层；本库不该再为 legacy 插件提供封装 |
 | `GeoUtils` | `compatible` | 按官方文档直接用（本库只加载脚本） | 纯谓词集合、无私有面、无副作用 |
-| `DrawingManager` | `compatible` | 按官方文档直接用（本库只加载脚本） | 真实 4.0 上用真实指针序列**画出了一个多边形** |
+| `DrawingManager` | `compatible` | 按官方文档直接用（本库只加载脚本） | 真实 4.0 上用合成指针事件序列**画出了一个多边形** |
 | `Mapvgl` | `incompatible` | `none`（改用原生图层） | 私有回调表 + `getPanes().mapPane` 不存在 |
 | （无条目） | `adapter` | — | 见决策 2 |
 
@@ -53,11 +53,16 @@
 | 插件 | 新增覆盖 |
 | --- | --- |
 | TrackAnimation | `pause()` 后 path 冻结 → `continue()` 后恢复增长 → 播放到结尾（path 收敛 + 构造选项 `onAnimateEnd`）；`setSpeed()` 的实测结果进 `readings`（**不设门禁**，理由见决策 6） |
-| DrawingManager | `confirmVisible: false` 下用**真实 DOM 指针序列**（按下 → 3 次拖动 → 双击收尾）画出一个多边形：收到 `overlaycomplete`（载荷 `drawingMode: "polygon"`）、覆盖物真的在图上、且被记进 `dm.getOverlays()` |
+| DrawingManager | `confirmVisible: false` 下沿**公开 DOM 事件链路**发**合成指针事件序列**（`dispatchEvent`，`isTrusted === false`；按下 → 3 次拖动 → 双击收尾）画出一个多边形：收到 `overlaycomplete`（载荷 `drawingMode: "polygon"`）、覆盖物真的在图上、且被记进 `dm.getOverlays()` |
 | MapVGL | 抛错**根因**：产物里那一行是 `map.getPanes().mapPane.appendChild(div)`，而 4.0 的 `getPanes()` 只有 `floatPane` / `markerMouseTarget` / `floatShadow` / `labelPane` / `markerPane` |
 
 驱动方式刻意限定在**公开面**：构造选项、`open` / `setDrawingMode` / `getOverlays`、事件
 `overlaycomplete`。探针不碰任何下划线成员——结论要能归到「用户操作」上，而不是「我们调了私有 API」。
+
+> ⚠️ 措辞口径（评审 2026-09-21）：DrawingManager 那一行的输入是 `dispatchEvent` 造出来的**合成事件**
+> （`isTrusted === false`），它验的是「库自己的公开 DOM 事件处理链路 + SDK 的坐标归一化」，
+> **不等于**浏览器真实用户输入 —— 指针捕获 / 合成 `click` / 双击判定那一段没有覆盖，
+> 已明确写进 `runtime.uncovered`。文档、PR 与探针注释里都不要把它写成「真实指针输入」。
 
 ### 4. 未版本化的 URL 用**内容摘要**锁住
 

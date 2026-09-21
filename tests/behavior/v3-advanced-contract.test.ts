@@ -17,8 +17,9 @@
  * 需要先 `pnpm build:v3`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
  */
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import {
   collectImportClosure,
   componentMarkersIn,
@@ -135,6 +136,84 @@ describe("内部实现不得进入扩展契约（含正证守卫）", () => {
       COMPONENT_EXPORTS.filter((name) => advancedNames.has(name)),
       "组件不该出现在扩展契约里",
     ).toEqual([]);
+  });
+});
+
+describe("闭包解析器自身的能力（含副作用导入）", () => {
+  /**
+   * 评审 2026-09-21 P1：`importsOf` 曾经只认带 `from` 的 import 与 `import()`，
+   * 于是 `import "./x.mjs";` 这种**副作用导入**会被整条跳过 ——
+   * 而「某个 chunk 为了副作用把组件 chunk 拉进来」恰恰是本门禁最该防的一类情况
+   * （`advanced` 仍会显示「0 个组件标记」，假绿）。这里用最小夹具把三类说明符一起钉住。
+   */
+  const withFixture = (
+    files: Record<string, string>,
+    run: (dir: string) => void,
+  ): void => {
+    const dir = mkdtempSync(join(tmpdir(), "advanced-shake-"));
+    try {
+      for (const [name, content] of Object.entries(files)) {
+        writeFileSync(join(dir, name), content);
+      }
+      run(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  const closureOf = (dir: string): ImportClosure =>
+    collectImportClosure({
+      root: dir,
+      entry: join(dir, "entry.mjs"),
+      resolve: (from, specifier) => resolve(dirname(from), specifier),
+      relative: (from, to) => relative(from, to),
+      exists: existsSync,
+      readFile: (file) => readFileSync(file, "utf8"),
+    });
+
+  it("副作用导入（`import \"./x.mjs\"`）必须被纳入闭包，并在其中命中组件标记", () => {
+    withFixture(
+      {
+        "entry.mjs": 'import "./side-effect.mjs";\n',
+        "side-effect.mjs": 'export const marker = "BInfoWindow";\n',
+      },
+      (dir) => {
+        const closure = closureOf(dir);
+        // 反证的一半：只识别 `from` / `import()` 的实现会缺这一项
+        expect(closure.files).toContain("side-effect.mjs");
+        expect(closure.external, "相对路径的副作用导入不该落进 external").toEqual([]);
+        // 另一半：认出来了之后，标记真的会被命中（否则「纳入闭包」是空的）
+        expect(
+          componentMarkersIn(closure, (file) => resolve(dir, file), (file) => readFileSync(file, "utf8")),
+        ).toContain("BInfoWindow");
+      },
+    );
+  });
+
+  it("三类说明符都要认：带绑定 / 副作用 / 动态（同一个夹具里各一条，三条路径都必须在闭包里）", () => {
+    withFixture(
+      {
+        "entry.mjs": [
+          'import { bound } from "./bound.mjs";',
+          'import "./side-effect.mjs";',
+          'export const lazy = () => import("./lazy.mjs");',
+          "export const all = [bound, lazy];",
+          "",
+        ].join("\n"),
+        "bound.mjs": "export const bound = 1;\n",
+        "side-effect.mjs": "export const side = 2;\n",
+        "lazy.mjs": "export const lazy = 3;\n",
+      },
+      (dir) => {
+        const closure = closureOf(dir);
+        expect(closure.files).toContain("bound.mjs");
+        expect(closure.files).toContain("side-effect.mjs");
+        expect(closure.files).toContain("lazy.mjs");
+        expect(closure.files).toContain("entry.mjs");
+        // 空转守卫：闭包确实读到了多个文件（否则上面的「包含」可能是在单个文件上恒真）
+        expect(closure.files.length).toBeGreaterThan(1);
+      },
+    );
   });
 });
 

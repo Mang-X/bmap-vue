@@ -23,7 +23,7 @@
  * | `0` | 全部成立 | 每个期望的插件都有报告、SDK 都起来、脚本都加载、全局都暴露、独立性成立，且每次读数都与 inventory 记录的 `runtime.status` **一致** |
  * | `1` | 运行时不兼容 / 证据不成立 | 独立性被打破；或 `status` 与 inventory 不一致（说明 inventory 已过期）；或某个插件 `threw` **却没有登记过期望值** |
  * | `2` | **脚手架失败** | 缺 AK / 找不到浏览器（调用方提前返回）、页面脚本自身抛错（`fatal`）、期望的插件没有报告 |
- * | `3` | `blocked`（本轮无法判定，**不是通过**） | 任一页 `sdkLoaded !== true`；任一 run 没给出 `result`；`status` 缺失或不是三个取值之一；脚本加载/全局暴露不成立；**`inconclusive`（最小路径 invariant 不成立）** |
+ * | `3` | `blocked`（本轮无法判定，**不是通过**） | 任一页 `sdkLoaded !== true`；**任一页地图夹具没建成（`mapCreated !== true`）**；任一 run 没给出 `result`；`status` 缺失或不是三个取值之一；脚本加载/全局暴露不成立；**`inconclusive`（最小路径 invariant 不成立）** |
  *
  * 优先级：脚手架(2) > blocked(3) > fail(1) > 通过(0)。这与 smoke 门禁的
  * 「先按能不能判定分，再按有没有失败分」一致 —— 一个插件没跑通最小路径时，
@@ -145,6 +145,8 @@ export interface PluginRuntimeDecision {
     runs: number;
     results: number;
     sdkBlocked: number;
+    /** 地图夹具没建成的页面数（见 ③b）。 */
+    mapNotReady: number;
     missingResults: number;
     notIndependent: number;
     scriptFailed: number;
@@ -180,6 +182,7 @@ export function decidePluginRuntimeExitCode(
     runs: runs.length,
     results: runs.filter((run) => run.result !== null).length,
     sdkBlocked: runs.filter((run) => run.env.sdkLoaded !== true).length,
+    mapNotReady: runs.filter((run) => run.env.mapCreated !== true).length,
     missingResults: runs.filter((run) => run.result === null).length,
     notIndependent: runs.filter((run) => run.env.globalExistedBeforeLoad === true).length,
     scriptFailed: runs.filter((run) => run.result !== null && run.result.urlLoaded !== "ok").length,
@@ -214,6 +217,25 @@ export function decidePluginRuntimeExitCode(
     return {
       exitCode: 3,
       reasons: [`SDK 未就绪（blocked，不是通过）：${sdkBlocked.join(", ")}`],
+      counts,
+    };
+  }
+
+  // ③b blocked：**地图夹具**没建成 —— 该页的结论不可用
+  //
+  // 为什么必须单独判（评审 2026-09-21 P1）：`status` 只描述「这个插件的最小路径跑成什么样」。
+  // 地图没建成时 `map` 是 null，插件会因为拿到无效 map 而抛错；若那个插件的 inventory 期望
+  // **本来就是** `threw`（MapVGL 就是），结果会「与 inventory 一致」并落到 0 ——
+  // 把「根本没在有效地图上验过」读成「确认它仍然如预期不兼容」。这是纯粹的假绿。
+  // 所以「地图夹具就绪」是**判定前置条件**，与任何插件的结论无关。
+  const mapNotReady = idsOf(runs, (run) => run.env.mapCreated !== true);
+  if (mapNotReady.length > 0) {
+    return {
+      exitCode: 3,
+      reasons: [
+        `地图夹具未就绪（blocked，不是通过）：${mapNotReady.join(", ")}` +
+          `（该页在地图构造 / 初始化那一步就没走通，插件结论不可用）`,
+      ],
       counts,
     };
   }
@@ -328,7 +350,7 @@ export function formatPluginRuntimeSummary(decision: PluginRuntimeDecision): str
   const c = decision.counts;
   return (
     `[plugin-runtime] exit=${decision.exitCode} runs=${c.runs} results=${c.results} ` +
-    `sdkBlocked=${c.sdkBlocked} missingResults=${c.missingResults} ` +
+    `sdkBlocked=${c.sdkBlocked} mapNotReady=${c.mapNotReady} missingResults=${c.missingResults} ` +
     `invalidStatus=${c.invalidStatus} inconclusive=${c.inconclusive} verified=${c.verified} ` +
     `threw=${c.threw} statusMismatch=${c.statusMismatch} ` +
     `notIndependent=${c.notIndependent} scriptFailed=${c.scriptFailed} globalMissing=${c.globalMissing}`

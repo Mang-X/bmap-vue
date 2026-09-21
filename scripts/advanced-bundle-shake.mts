@@ -24,11 +24,21 @@ export const COMPONENT_MARKERS: readonly string[] = [
 /** 官方 UI Kit 的包名：`./advanced` 的闭包不得引用它（它是 optional peer，且 import 即碰 document）。 */
 export const UI_KIT_SPECIFIER = "@baidumap/jsapi-ui-kit";
 
-/** 读文件里的相对 / 裸说明符（静态 import 与动态 import 都算）。 */
+/**
+ * 读文件里的说明符：带绑定的 import / re-export、**副作用导入**、动态 import 三类都算。
+ *
+ * ⚠️ 副作用导入（`import "./x.mjs";` —— 没有 `from`、没有绑定名）**必须单独匹配**：
+ * 只认 `from "..."` 的实现会直接跳过它，而「某个 chunk 为了副作用把组件 chunk 拉进来」
+ * 恰恰是这条门禁最该防的一类情况（评审 2026-09-21 P1，配了单测反证）。
+ */
 export function importsOf(file: string, readFile: (file: string) => string): string[] {
   const source = readFile(file);
   const out: string[] = [];
+  // ① 带 `from` 的：`import x from "…"` / `export { a } from "…"` / `export * from "…"`
   for (const match of source.matchAll(/from\s*["']([^"']+)["']/g)) out.push(match[1]);
+  // ② 副作用导入：`import "…";`（`import(` 因为紧跟着 `(`，不会被这一条匹配到）
+  for (const match of source.matchAll(/\bimport\s*["']([^"']+)["']/g)) out.push(match[1]);
+  // ③ 动态 import
   for (const match of source.matchAll(/import\s*\(\s*["']([^"']+)["']\s*\)/g)) out.push(match[1]);
   return out;
 }

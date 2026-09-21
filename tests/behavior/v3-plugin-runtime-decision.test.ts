@@ -81,6 +81,7 @@ describe("判定函数的健康基线", () => {
       "runs=4",
       "results=4",
       "invalidStatus=0",
+      "mapNotReady=0",
       "inconclusive=0",
       "verified=4",
       "threw=0",
@@ -269,6 +270,42 @@ describe("其它形态各自的退出码", () => {
     expect(upgraded.exitCode).toBe(1);
     expect(upgraded.counts.statusMismatch).toBe(4);
     expect(upgraded.reasons.join(" ")).toContain("inventory");
+  });
+
+  /**
+   * 评审 2026-09-21 P1：**地图夹具就绪**必须是判定前置条件。
+   *
+   * 旧判定只看 `sdkLoaded` / result / status / 脚本与全局 / 独立性。地图没建成时 `map` 是 null，
+   * 插件会因为拿到无效 map 而抛错；若该插件的 inventory 期望本来就是 `threw`（MapVGL 就是），
+   * 就会「与 inventory 一致」并落到 `0` —— 把「根本没在有效地图上验过」读成「确认仍然不兼容」。
+   */
+  it("地图夹具没建成 ⇒ blocked(3)：插件 `threw` 且与 inventory 一致也不能算通过", () => {
+    const expectations: PluginRuntimeExpectation[] = PLUGIN_SPECS.map((spec) => ({
+      id: spec.id,
+      status: spec.id === "Mapvgl" ? "threw" : "verified",
+    }));
+    const threwOutcome = { ...healthyRuns()[0]!.result! };
+
+    // 正证：把「地图建成了」这一项保持为 true 时，同一份输入本来是 0 ——
+    // 否则下面那条反例可能只是在验「另一条本来就失败的规则」。
+    const mapReady = withRun(healthyRuns(), "Mapvgl", (run) => ({
+      ...run,
+      result: { ...run.result!, probe: { status: "threw", error: "boom" } },
+    }));
+    expect(decidePluginRuntimeExitCode(mapReady, expectations).exitCode).toBe(0);
+    expect(threwOutcome.probe?.status).toBe("verified");
+
+    // 反例：唯一的差别是地图夹具没建成
+    const mapBroken = withRun(healthyRuns(), "Mapvgl", (run) => ({
+      ...run,
+      env: { ...run.env, mapCreated: false, mapError: "new BMap.Map 之后初始化失败" },
+      result: { ...run.result!, probe: { status: "threw", error: "boom" } },
+    }));
+    const decision = decidePluginRuntimeExitCode(mapBroken, expectations);
+    expect(decision.exitCode, "『根本没在有效地图上验过』不能算通过").toBe(3);
+    expect(decision.counts.mapNotReady).toBe(1);
+    expect(decision.reasons.join(" ")).toContain("地图夹具未就绪");
+    expect(decision.reasons.join(" ")).toContain("Mapvgl");
   });
 
   it("已登记的 threw 是结论、不是回归（#43 修正）；未登记的 threw 才是 1", () => {
