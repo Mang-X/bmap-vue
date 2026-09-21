@@ -688,11 +688,20 @@ export interface ShapeRatioReading {
   readonly ratio: number;
 }
 
-/** 由（归一化后的）指标值算出同轮比值；缺任一端的条目进 `skipped`（不静默当成 0）。 */
-export function computeShapeRatios(normalized: Record<string, number>): {
-  readings: ShapeRatioReading[];
-  skipped: string[];
-} {
+/**
+ * 由（归一化后的）指标值算出同轮比值。
+ *
+ * 两种情形进 `skipped`（都**不静默**，报告里会打印条数与名字）：
+ * 1. 缺任一端（指标被删/改名）；
+ * 2. **任一端低于噪声地板** —— 比值的噪声等于两端噪声的叠加，拿一个亚毫秒读数当分母会把
+ *    噪声放大成「形状变化」。实测：`adaptPoints@1k` 在开发机上是 0.057ms、在 CI 上是 0.29ms，
+ *    于是 `adaptPointsTotal50kOver1k` 这个比值在两边是 175× 与 53×（**3.3× 的机器差异**），
+ *    而同一批数据里另外两条比值只差 1.07× / 1.25×。口径与「指标自身的地板」保持一致。
+ */
+export function computeShapeRatios(
+  normalized: Record<string, number>,
+  floorUnits: number = FLOOR_UNITS,
+): { readings: ShapeRatioReading[]; skipped: string[] } {
   const readings: ShapeRatioReading[] = [];
   const skipped: string[] = [];
   for (const spec of SHAPE_RATIOS) {
@@ -700,6 +709,10 @@ export function computeShapeRatios(normalized: Record<string, number>): {
     const denominator = normalized[spec.denominator];
     if (numerator === undefined || denominator === undefined || denominator <= 0) {
       skipped.push(spec.name);
+      continue;
+    }
+    if (numerator < floorUnits || denominator < floorUnits) {
+      skipped.push(`${spec.name}（有一端低于噪声地板 ${floorUnits}）`);
       continue;
     }
     readings.push({ name: spec.name, note: spec.note, ratio: round(numerator / denominator, 4) });
@@ -713,7 +726,7 @@ export function compareShapeRatios(
   baselineNormalized: Record<string, number>,
   tolerance: number,
 ): { regressions: ComparisonItem[]; improvements: ComparisonItem[] } {
-  const baseline = computeShapeRatios(baselineNormalized);
+  const baseline = computeShapeRatios(baselineNormalized, FLOOR_UNITS);
   const baselineByName = new Map(baseline.readings.map((entry) => [entry.name, entry.ratio]));
   const regressions: ComparisonItem[] = [];
   const improvements: ComparisonItem[] = [];

@@ -17,6 +17,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  compareShapeRatios,
+  computeShapeRatios,
   decideExitCode,
   describeKeySetMismatch,
   describeMachineMismatch,
@@ -168,6 +170,46 @@ describe("门禁判定的纯函数（issue #37 评审 1 / 2 的回归）", () =>
 
   it("机器身份：旧格式基线（没有 machine 记录）只出报告，不猜", () => {
     expect(describeMachineMismatch(undefined, { platform: "linux", arch: "x64", cpuModel: "X" })).toContain("旧格式");
+  });
+
+  it("同轮比值：任一端低于噪声地板时跳过（读数是真实 CI / 开发机的对照）", () => {
+    const values = {
+      // 实测：`adaptPoints@1k` 在开发机 0.057ms、CI 0.29ms ⇒ 被它当分母的比值两边差 3.3×
+      // （而同一批里另外两条比值只差 1.07× / 1.25×）。因此地板必须同时约束比值的两端。
+      "adaptPoints@50000": 52.9,
+      "adaptPoints@1000": 0.0088,
+      "mount.pointCollection@50000": 25.9,
+      "mount.lineLayerGeoJson@50000": 1.0,
+      "replace.reactiveArray@50000": 10.3,
+      "replace.markRawArray@50000": 1.0,
+      "mount.line@50000": 1.2,
+      "mount.line@1000": 0.17,
+    };
+    const { readings, skipped } = computeShapeRatios(values, 0.1);
+    expect(readings.map((entry) => entry.name)).toContain("adaptationOverPassthrough@50000");
+    expect(skipped.join(" "), "亚毫秒分母的比值必须被跳过").toContain("adaptPointsTotal50kOver1k");
+    expect(skipped.join(" ")).toContain("低于噪声地板");
+  });
+
+  it("同轮比值：一条指标变慢 10× 会被拦下（正证控件：不变时不拦）", () => {
+    // 直接用「归一化值」的量级（校准量当 1），并且每一项都高于噪声地板 ——
+    // 否则夹具自己会把条目跳过，测试就变成恒真（第一版就是这么写的）。
+    const baseline = {
+      "mount.pointCollection@50000": 25,
+      "mount.lineLayerGeoJson@50000": 1,
+      "replace.reactiveArray@50000": 10,
+      "replace.markRawArray@50000": 1,
+      "mount.line@50000": 1.2,
+      "mount.line@1000": 0.2,
+      "mount.pointCollection@1000": 1,
+    };
+    const same = computeShapeRatios(baseline, 0.1);
+    expect(compareShapeRatios(same.readings, baseline, 5).regressions, "同值不应拦").toEqual([]);
+
+    const slower = { ...baseline, "mount.pointCollection@50000": 25 * 10 };
+    const regressions = compareShapeRatios(computeShapeRatios(slower, 0.1).readings, baseline, 5).regressions;
+    expect(regressions.map((item) => item.name)).toContain("adaptationOverPassthrough@50000");
+    expect(regressions[0]!.ratio).toBeGreaterThan(5);
   });
 
   it("四态退出码：回退 > blocked > 通过（「没跑完」不许当通过）", () => {
