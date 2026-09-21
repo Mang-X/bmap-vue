@@ -1,0 +1,32 @@
+{
+  "_comment": "基准/性能测试的类型门禁（issue #37 评审要求：tests/** 此前不在任何 typecheck 的编译范围里，TS 错误只能靠人眼发现 —— 本 PR 就真的漏了一个 TS2554）。范围刻意只覆盖 tests/performance/**（它 import 的 test-utils / src 会被传递纳入）：tests/behavior/** 与 packages/**/*.test.ts 有大量既存错误，全量纳入是另一个票的工作量，不能悄悄塞进这张票。与 tsconfig.examples.json 同一形态：独立配置 + noEmit。",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "types": ["node", "vite/client", "@baidumap/jsapi-v4-types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./packages/baidu-map-gl-vue/node_modules",
+      "./packages/baidu-map-gl-vue/node_modules/@types"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@v2": ["packages"],
+      "@v2/*": ["packages/*"],
+      "mitt": ["./node_modules/mitt/index.d.ts"],
+      "@baidumap/jsapi-ui-kit": ["./packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts"]
+    }
+  },
+  "include": ["tests/performance/**/*.ts"],
+  "exclude": ["node_modules"]
+}

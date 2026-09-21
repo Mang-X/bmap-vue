@@ -198,7 +198,9 @@ MapRuntime.dispose()
 - **不为每个数据项绑定独立 Vue watcher**：diff / 合帧 / 最新项账本都在管理器里完成。
 - 不实现其余原生图层组件（`PointIcon` / `Cluster` / `Line` / `Fill` / `Heatmap` / `TrackLine`）与
   Feature State / `hitTest` 的组件面——那是 #35 / #36。
-- 不做 Worker 预计算与性能预算（#37）。
+- 不做 Worker 预计算与性能预算（#37）。（**#37 已收口**：预算与基线已建立，Worker 按证据判定不引入，
+  见 [`2026-09-21-performance-baseline-and-worker-decision.md`](./2026-09-21-performance-baseline-and-worker-decision.md)；
+  本文件其余内容不变。）
 
 ## 已知限制
 

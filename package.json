@@ -4,7 +4,7 @@
   "version": "2.6.5",
   "scripts": {
     "test:unit": "vitest run tests/behavior tests/__smoke__.test.ts packages",
-    "test:performance": "vitest run tests/performance",
+    "test:performance": "vitest run --config tests/performance/vitest.config.ts",
     "smoke:v4:fixture": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=fixture",
     "smoke:v4": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=live",
     "verify:manifest": "node scripts/collect-api-manifest.mts --check",
@@ -28,6 +28,7 @@
     "probe:layer-detached": "node --experimental-strip-types scripts/probe-layer-detached.mts",
     "build:v3": "node --experimental-strip-types scripts/build-v3.mts",
     "typecheck:v3": "pnpm exec vue-tsc -p packages/baidu-map-gl-vue/tsconfig.build.json",
+    "typecheck:tests": "vue-tsc -p tsconfig.tests.json",
     "pack:v3": "pnpm --filter baidu-map-gl-vue pack --pack-destination .artifacts",
     "playground:dev": "vp run -C apps/playground dev",
     "playground:build": "pnpm --filter playground build",
@@ -83,17 +84,18 @@
   "devDependencies": {
     "@baidumap/jsapi-loader": "1.0.0",
     "@baidumap/jsapi-ui-kit": "1.1.2",
+    "@changesets/cli": "^3.0.2",
+    "@types/node": "^26.4.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.5.0",
     "@vueuse/core": "14.4.0",
-    "vitest": "^5.0.0",
     "happy-dom": "^20.14.0",
     "jsdom": "^30.0.1",
-    "@vue/test-utils": "^2.5.0",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "vite": "^8.2.2",
     "typescript": "^5.9.0",
-    "vue-tsc": "^2.2.0",
-    "vite-plus": "0.3.0",
     "unplugin-vue": "^7.2.0",
-    "@changesets/cli": "^3.0.2"
+    "vite": "^8.2.2",
+    "vite-plus": "0.3.0",
+    "vitest": "^5.0.0",
+    "vue-tsc": "^2.2.0"
   }
 }

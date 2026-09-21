@@ -25,12 +25,12 @@ import {
 } from "./fake-bmap-v4/index.ts";
 
 /**
- * 组件挂在 Map 上的子资源种类（**领域读数**用的三种挂载面）。
+ * 组件挂在 Map 上的子资源种类（**领域读数**用的挂载面）。
  *
  * 刻意不复用 Fake v4 的 `FakeV4ResourceKind`：那是诊断计数器的记账分类（含 Map / Panorama
  * 这类生命周期类资源），与「组件挂在哪儿」不是同一个维度。
  */
-export type FakeV4MountKind = "overlay" | "control" | "layer";
+export type FakeV4MountKind = "overlay" | "control" | "layer" | "context-menu";
 
 /** 视野读数（领域口径）：最后一张地图当前的视野。 */
 export interface FakeV4View {
@@ -593,7 +593,8 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
           error ?? new Error("harness: failNextOverlayShow");
       },
       overlayVisibility: () => lastMap().overlays.map((overlay) => overlay.visible !== false),
-      overlayCalls: (index = -1) => [...(overlayAt(index).callLog ?? [])],
+      overlayCalls: (index = -1) =>
+        [...((overlayAt(index) as { callLog?: readonly string[] }).callLog ?? [])],
       visibleControls: () => lastMap().controls.filter((control) => control.isVisible()).length,
       openInfoWindows: () => (lastMap().infoWindow ? 1 : 0),
       mapsCreated: () => fake.diagnostics.snapshot().activity.mapsCreated,
@@ -726,7 +727,12 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         nativeLayerAt(index).emit("click", { value, latLng: { lng: 0, lat: 0 }, pixel: { x: 0, y: 0 } });
       },
       dispatchNativeLayerEventOnDetach: (index, type, value) => {
-        const layer = nativeLayerAt(index) as { onDetached?: () => void };
+        // 一个类型视图同时承载「注入摘除期间的回调」与「派发事件」两件事：
+        // 分层两次 cast 会让 `layer.emit` 落在没有 `emit` 的那一层视图上（类型门禁照出来的）。
+        const layer = nativeLayerAt(index) as {
+          onDetached?: () => void;
+          emit: (type: string, payload?: unknown) => void;
+        };
         layer.onDetached = () => layer.emit(type, { value });
       },
     },

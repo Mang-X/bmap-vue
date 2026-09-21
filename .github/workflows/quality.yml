@@ -73,6 +73,14 @@ jobs:
       - name: Type-check v3 package (official types + augmentations)
         run: pnpm typecheck:v3
 
+      # 测试代码的类型门禁（issue #37 评审 4）：tests/** 此前**不在任何 typecheck 的编译范围里**
+      # —— 一个 `recorder.sample(name, ms, extra)` 的 TS2554 就是这样从 PR 里漏过去的
+      # （vitest 只转译不做类型检查，CI 全绿）。范围只覆盖 tests/performance/**（它 import 的
+      # test-utils / src 会被传递纳入）；tests/behavior/** 与 packages/**\/*.test.ts 有大量既存
+      # 错误，全量纳入是另一张票的工作量（见 tsconfig.tests.json 的注释）。
+      - name: Type-check tests (tests/performance)
+        run: pnpm typecheck:tests
+
       # Behavior snapshot tests (data-driven, no external network/AK)
       - name: Build v3 artifacts for global bundle tests
         run: node --experimental-strip-types scripts/build-v3.mts
@@ -107,6 +115,45 @@ jobs:
           node --experimental-strip-types scripts/verify-package.mts
 
 
+
+  # 性能基准与预算（M6-PERFORMANCE / #37）。
+  #
+  # 判定口径（详见 ADR 2026-09-21）：
+  # - 只把**归一化**后的读数与提交基线（tests/performance/baseline.json）比，阈值默认 5×，
+  #   低于噪声地板的指标不参与——非目标明确禁止把单机绝对值当跨平台硬阈值；
+  # - 退出码四态：0 通过 / 1 超阈值回退 / 2 脚手架或判据失败 / 3 blocked。**2 与 3 都不是通过**，
+  #   所以这一步不能用 `continue-on-error` 架空；
+  # - 先 `build:v3`：包体与 worker chunk 读数需要 `dist`，缺了它基准会以 3（blocked）收场。
+  performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build v3 package (包体读数与 worker chunk 检查的前置)
+        run: node --experimental-strip-types scripts/build-v3.mts
+
+      - name: Performance baseline & trend gate
+        run: pnpm perf:baseline
+
+      # 报告在 job 日志里就能读（stdout 表格）；这一步是为了让「谁在什么时候跑出什么数」留档。
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-report
+          path: .artifacts/perf/
+          if-no-files-found: error
 
   # v4 浏览器 smoke 的确定性档（fixture）：无 AK、无外网，注入 Fake v4 命名空间跑同一份
   # 组件树。真 SDK 的 required smoke 在 nightly（见 nightly-v4-smoke.yml）——把两者分开，
