@@ -398,7 +398,7 @@
         "jsapi-v4"
       ],
       "rawMembers": [],
-      "description": "MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**——脚本的 JSONP 传输层依赖 SDK 的私有回调表（成员名 `_rd`），本库明令不得访问私有面（M3A3-07 / #25，依据与复现见 plugin-compat-inventory）"
+      "description": "MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**（结论 `incompatible`，无迁移路径）：脚本的 JSONP 传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。依据与复现见 plugin-compat-inventory（#25 / #43）"
     },
     {
       "id": "layer.tile",
@@ -630,7 +630,7 @@
       "rawMembers": [
         "TrackLine"
       ],
-      "description": "轨迹线（TrackLine）；数据的绘制/播放/跟随，属扩展 API；播放控制与迁移结论见 M8（#43）"
+      "description": "轨迹线（TrackLine）；数据的绘制属扩展 API。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放控制命令面归 #110。"
     },
     {
       "id": "service.local-search",
@@ -784,7 +784,7 @@
         "jsapi-v4"
       ],
       "rawMembers": [],
-      "description": "轨迹动画（BMapGLLib 插件）；脚本引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随跑通），**完整功能链路仍未验证**；本阶段不装配（4.0 的对应能力是原生图层 `layer.track-line`）；依据与复现见 plugin-compat-inventory（M3A3-07 / #25）"
+      "description": "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**（组件 `<BTrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面的归属见 #110。脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；依据与复现见 plugin-compat-inventory（#25 / #43）"
     },
     {
       "id": "panorama.viewer",
