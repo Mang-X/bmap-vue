@@ -31,8 +31,9 @@ issue #37 在 2026-09-19 被**开工前纠偏**过一次，那次纠偏决定了
 | --- | --- |
 | `tests/performance/dataset.ts` | 固定种子（LCG）的确定性数据集，前缀稳定（`makeItems(1000)` 是 `makeItems(50k)` 的前缀），80% 点聚在 32 个中心附近 ⇒ 聚合桶是真实存在的 |
 | `tests/performance/preprocess.perf.test.ts` | 纯函数步骤：`scanValidItems`（过滤）/ `adaptPoints`（GeoJSON 适配）/ `cluster`（fallback 聚合）+ 校准工作量 + 坏数据路径 |
-| `tests/performance/component-path.perf.test.ts` | 组件路径：挂载 / 换引用 / 样式 / 卸载 + 100 次替换的保留内存与资源趋势 + 响应式形态对照 |
+| `tests/performance/component-path.perf.test.ts` | 组件路径：挂载 / 换引用 / 样式 / 卸载 + 100 次替换的保留内存与资源趋势 + 响应式形态对照 + **四类原生图层 × 四种规模的 setData / style / 卸载矩阵**（§6，`#36` 交办的「大数据 setData/style/资源清理」欠账） |
 | `tests/performance/vitest.config.ts` | 基准专属配置：独立范围、**串行**、`--expose-gc`（理由见决策 5 与已知限制） |
+| `tsconfig.tests.json` + `pnpm typecheck:tests` | 测试代码的类型门禁（评审 4）：`tests/**` 此前不在任何 typecheck 的编译范围里，`vitest` 只转译不检查类型 ⇒ 一个 `TS2554` 从 PR 里漏了过去。范围**只覆盖 `tests/performance/**`**（传递纳入 test-utils / src）；`tests/behavior/**` 与 `packages/**/*.test.ts` 有大量既存错误，全量纳入是另一张票的工作量 |
 | `scripts/collect-performance-baseline.mts` | 采集 → 报告（含环境/数据集/包体/worker chunk）→ 与提交基线做趋势对比 |
 | `tests/performance/baseline.json` | 提交的基线（归一化值 + 本机绝对读数 + 记录环境） |
 | `.github/workflows/quality.yml` 的 `performance` job | 先 `build:v3`（包体读数前置），再跑同一条命令 |
@@ -64,6 +65,12 @@ issue #37 在 2026-09-19 被**开工前纠偏**过一次，那次纠偏决定了
 | 数据替换（宿主用 `ref([...])`，深响应） | 214 / 229ms | 97 ~ 217 / 103 ~ 413ms | **是** |
 | 数据替换（同一份数据 `markRaw` / `shallowRef`） | 19.5 / 34.9ms | 13.6 ~ 25.7 / 16.8 ~ 49.2ms | 否 |
 | 100 次替换 @10k（保留内存 / 实例 / 订阅增量） | 0.15MB / 0 / 0 | **0.03MB / 0 / 0**（5 次一致） | —— |
+
+**四类原生图层（GeoJSON 直通）在 50k 下的读数**（§6 的矩阵，CI 档）：挂载 1.1 ~ 2.3ms、
+换数据 0.2 ~ 0.4ms、样式更新 0.3 ~ 0.6ms、卸载 0.1 ~ 0.6ms（line / fill / heatmap / track-line 四类，
+每个组合都断言「1 个 SDK 资源 / 0 个逐要素覆盖物 / 换数据不换实例 / 卸载后归零」）。
+把它们与 `BPointCollection` 的 47 ~ 68ms 挂载放在一起看，就是本票「成本在**适配层 + 响应式读取**、
+不在图层内核」这句话的直接证据：同一份 50k 数据，直通路径比走适配层的路径便宜一个数量级。
 
 口径三条，缺一条都会把表读错：
 
@@ -106,8 +113,9 @@ issue #37 在 2026-09-19 被**开工前纠偏**过一次，那次纠偏决定了
 issue 的验收补充要求「没有真实消费者的通用 queue/protocol/adapter 不进入公共或稳定内部契约」，
 范围纠偏也点名禁止「先定义覆盖 GeoJSON/简化/过滤/聚类所有未来场景的通用 protocol 再去寻找消费者」。
 
-本票因此**没有改动 `packages/**` 的任何运行时源码**（`src/` 0 行改动）：没有消息格式、没有 TypedArray
-布局、没有 cancellation token、没有 queue/runtime。真要迁移时，消息格式由**那一个**被证明有问题的
+本票因此**没有改动任何运行时源码**（`src/` 0 行改动）：没有消息格式、没有 TypedArray 布局、
+没有 cancellation token、没有 queue/runtime。唯一的 `packages/**` 改动是**类型层**的四行修复
+（`packages/test-utils` 里新门禁照出来的既存类型错误，见决策 1 的最后一行）——行为不变。真要迁移时，消息格式由**那一个**被证明有问题的
 workload 决定（这也是 #104 的 ownership-first 口径：判据没有消费者就不建）。
 
 ### 4. 与官方 React 组件库（`huiyan-fe/react-bmap`）的对照
@@ -139,12 +147,18 @@ GeoJSON 直通路径的 **19.6 ~ 36.6 倍**（`contrast.perItemRatio`，5 次采
   回退（例如新增一遍 O(n) 全量遍历）。**精细回归的审查**按 issue 的分工交给人工：每次 CI 都会把完整
   报告（含比值列）打进日志并留档为 artifact，审查节奏与责任人属维护者决定，本 ADR 只规定「看什么」
   （比值列 + 关键读数），不发明流程；
-- **跨平台不做门禁**（本票实现时被实测逼出来的一条）：归一化比值**仍然跨平台不可比**——同一份代码
-  在开发机与 CI runner 之间差 2 ~ 6 倍，而且**校准量吸收不掉**（纯数字循环的 `min` 能在被抢占的间隙
-  里找到空闲时刻，而分配密集的 workload 会整体退化）。实测反证：把基线冒充成本机录制时，
-  `replace.markRawArray@50000` 会报出 39× 的**假回退**。因此判据取 `platform + arch`：**与基线一致
-  才做门禁**，不一致时打印比值但只出报告，并在报告里记 `comparison.skipped`（不是静默跳过）。
-  推论：**基线录在门禁运行的那台机器上**（本票录在 GitHub runner），要在本机启用门禁就在本机 `--update`；
+- **跨平台 / 跨 SKU 不做门禁**（评审 2 修准）：归一化比值**仍然不可比**——(a) 开发机与 CI runner
+  之间差 2 ~ 6 倍；(b) **同一个 `ubuntu-latest` label 的两次连续推送**实测就是不同 SKU
+  （`INTEL(R) XEON(R) PLATINUM 8573C` → `Intel(R) Xeon(R) 6973P-C`），连校准量都从 30.19ms 变成
+  21.99ms（27%）；而且**校准量吸收不掉**（纯数字循环的 `min` 能在被抢占的间隙里找到空闲时刻，
+  而分配密集的 workload 会整体退化）。实测反证：把基线冒充成本机录制时
+  `replace.markRawArray@50000` 报出 39× 的**假回退**。
+  ⇒ 判据取 **`platform + arch + cpuModel`**：与基线一致**才**做门禁；不一致时打印比值但只出报告，
+  并在报告里记 `comparison.skipped`（不是静默跳过）。**5× 宽阈值不能把「不可比」变成「可比」。**
+- **基线维护规则**（由上面那条推论出来，写进文档页）：**基线录在与门禁同一台/同一规格的机器上**。
+  本项目现在的基线录在 GitHub runner（linux/x64 · Xeon 8573C）；该 runner 换了 SKU 时，CI 会打印
+  「本次不做趋势门禁」并继续出报告 —— 此时由维护者在**那台机器**上跑 `pnpm perf:baseline --update`
+  重录（或决定改用固定规格的 runner）。**宁可明说不可比，也不要一个看起来生效的门禁。**
 - **不把「有没有 Worker」写成判据**：验收补充明确要求「性能门禁关注趋势和回退，不把实现方式
   （Worker 与否）冻结成需求」。报告里记录 worker chunk 与运行时 `new Worker(` 的出现次数，但它们是
   **读数**——将来若按上面的重新评估条件引入 Worker，门禁不应该因此变红；
@@ -156,12 +170,13 @@ GeoJSON 直通路径的 **19.6 ~ 36.6 倍**（`contrast.perItemRatio`，5 次采
 
 1. **真实 SDK 的重绘成本不在读数内**：本套的 SDK 是 Fake（`setData` 只记引用），环境是 happy-dom
    （无布局、无合成、无帧调度）。读数**不能**外推成「50k 点在页面上要多久」；同一段话写进了报告
-   （`notMeasured`）与文档页。
+   （`notMeasured`）与文档页。**真实浏览器档的读数另立票承接下来的工作**：**#123**（并把 #37 的
+   「重新评估条件」第三条挂到它的结论上）。
 2. **归一化只在同一平台内可比**：跨平台（`platform + arch` 不同）**不做门禁**，只出报告（决策 5，
    实测差异 2 ~ 6 倍）。基线的绝对值是**参考读数**，不是发布事实——同一台机器自己的读数在负载高低
    之间也有近 2 倍的差（见决策 2 的表），这是阈值取 5× 的原因。
 3. **深响应数组的更新路径仍是长任务**（50k：开发机 97 ~ 217ms / CI 214ms；同一份数据换 `markRaw`
-   是 13.6 ~ 25.7ms / 19.5ms）：本票只把它测出来并留下对照读数，见欠账表。
+   是 13.6 ~ 25.7ms / 19.5ms）：本票只把它测出来并留下对照读数，落地见 **#124**。
 4. **`路径简化` / 用户谓词过滤在本库不存在**（没有实现、也没有消费者）：因此没有它们的基准——不为
    凑清单先造一个能力（issue 的步骤清单里那两项按此登记）。
 5. **保留内存只在 `--expose-gc` 下可信**：缺 `gc()` 时基准**直接失败**而不是静默降级——不强制 GC 的
@@ -175,10 +190,11 @@ GeoJSON 直通路径的 **19.6 ~ 36.6 倍**（`contrast.perItemRatio`，5 次采
 
 | 欠账 | 依据 | 去处 |
 | --- | --- | --- |
-| 深响应输入在更新路径上的 ~100ms 长任务（50k） | 本票 §5 读数：同一函数对同一份数据，深响应输入 90 ~ 133ms（整条替换路径 97 ~ 217ms）vs `markRaw` 11 ~ 13ms（整条 13.6 ~ 25.7ms） | 新票（第一步取证：在 `flush: "sync"` 的 watcher 里读深响应数组的依赖收集成本；候选方案 `pauseTracking` 或文档化 `markRaw` / `shallowRef` 指引）。**本票不做**：它改的是共享内核在响应式 effect 里的读取语义，需要自己的证据与回归面 |
+| 深响应输入在更新路径上的 ~100ms 长任务（50k） | 本票 §5 读数：同一函数对同一份数据，深响应输入 90 ~ 133ms（整条替换路径 97 ~ 217ms）vs `markRaw` 11 ~ 13ms（整条 13.6 ~ 25.7ms） | **#124**（第一步取证：在 `flush: "sync"` 的 watcher 里读深响应数组的依赖收集成本；候选方案 `pauseTracking` 或文档化 `markRaw` / `shallowRef` 指引）。**本票不做**：它改的是共享内核在响应式 effect 里的读取语义，需要自己的证据与回归面 |
 | 50k 的**首次交付**本身就越过 50ms 线（挂载 46.6 ~ 67.5ms；线图层直通只 1.3 ~ 3.4ms） | 本票读数：一次性初始化成本，本票不做门禁（它是「一次性」而不是每次交互） | 若将来要支持更低端机器上的 50k 量级，优化的对象是这条（拆批 / 让宿主决定何时交付），不是 Worker |
 | `<BMap>` 每次挂载两条开发期告警（`restrictCenter` 已丢弃 / `setTraffic` 已忽略） | 本票顺带观察：`restrictCenter` / `enableTraffic` 是布尔 prop，Vue 的「缺省即 false」转换让驱动侧看到 `false` 而非 `undefined` | 新票（`{ default: undefined }` 或驱动侧把 `false` 视为「未表态」）。本票不做：与性能无关，且属地图组件的选项语义 |
-| 大数据量在**真实浏览器**里的重绘读数 | 本套只有 Fake + happy-dom | 与 #74 的浏览器 smoke 通道合并（nightly 档） |
+| 大数据量在**真实浏览器**里的重绘读数 | 本套只有 Fake + happy-dom | **#123**（评审 3 指出：原写到「与 #74 的浏览器 smoke 通道合并」，而 #74 已关闭、内容也不是大数据性能基准 ⇒ 欠账当时没有承接者，现另立票） |
+| `packages/test-utils` 的 `id_changed` 事件载荷**形状未建模**（官方是字符串，替身按对象展开成字符下标字段） | 新门禁 `typecheck:tests` 照出来的既存类型错误之一；现无消费方读该载荷，因此按「不猜上游形状」留原样 + 显式注释 | 需要时再取证（要动它先量真实事件形状）；登记在此以免被当成已建模 |
 | `size:baseline` 指向不存在的 `scripts/collect-package-size.mts` | 既有死脚本（本票把包体读数并进 perf 报告，未复用该脚本名） | 清理欠账：与其它死脚本条目一并处理 |
 
 ## 按 issue 的测试要求登记为「不适用」
@@ -190,16 +206,19 @@ issue 的「测试要求」有几条只在阶段 B（有 Worker）时才存在�
 | --- | --- |
 | Worker 取消和迟到结果 | 不适用：本票没有 Worker、也没有异步预处理任务。「cancellation / stale-result 只为实际异步任务存在」是验收补充第 4 条本身的要求 |
 | 每个进入 Worker 的 workload 都有 before/after 数据 | 不适用：没有任何 workload 进入 Worker（阶段 B 未启动） |
-| 10k/50k 数据主线程长任务对比 | 已交付：`preprocess.perf.test.ts` 的 `*.exceedsLongTask` 读数 + 每个规模的 `maxMs` |
+| 10k/50k 数据主线程长任务对比 | 已交付：`preprocess.perf.test.ts` 的 `*.exceedsLongTask` 读数 + 每个规模的 `maxMs`；组件路径的 `mount.*.exceedsLongTask` 也在报告里 |
+| 分开测「GeoJSON 解析 / 过滤 / 聚类 / **SDK setData / 重绘本身**」 | 前三项见 `preprocess.perf.test.ts` §1；**「SDK setData / 重绘本身」只有我们这一侧**（Fake 只记账 ⇒ 真实重绘不在读数内），因此另立 **#123** 承接（评审 3 的要求：欠账要有承接者） |
+| `#36` 交办的「四类原生图层的大数据 setData / style update / 资源清理」 | 已交付：`component-path.perf.test.ts` §6 的 line / fill / heatmap / track-line × 100 / 1k / 10k / 50k 矩阵（三个动作 + 卸载，逐个断言 1 个资源 / 0 个覆盖物 / 不换实例 / 归零）；`track-line` 的规模维度是**一条路径的顶点数**（官方只收单条 `LineString`） |
 | 100 次数据替换后的资源 / heap 趋势 | 已交付：`component-path.perf.test.ts` §3（保留内存 0.03MB / 实例增量 0 / 订阅增量 0） |
 | 包体与 worker chunk 体积 | 已交付：`perf:baseline` 的 bundle 段（dist 46 文件、运行时 787917 字节、worker chunk 0 个） |
 | 性能脚本在 CI 环境稳定可复现 | 已交付：`quality.yml` 的 `performance` job 跑同一条命令；本机连续 5 次采集的比值在 5× 阈值内（`v3-performance-gate.test.ts` 守着「它真的在跑」） |
 
 ## 参考
 
-- 基准与报告：`pnpm test:performance`（单跑基准）、`pnpm build:v3 && pnpm perf:baseline`（采集 + 报告 +
-  门禁）、`pnpm perf:baseline --update`（刷新基线）；说明见
-  [`docs/zh-CN/contributing/performance-baseline.md`](../zh-CN/contributing/performance-baseline.md)
+- 基准与报告：`pnpm test:performance`（单跑基准）、`pnpm typecheck:tests`（测试代码的类型门禁）、
+  `pnpm build:v3 && pnpm perf:baseline`（采集 + 报告 + 门禁）、`pnpm perf:baseline --update`（刷新基线）；
+  说明见 [`docs/zh-CN/contributing/performance-baseline.md`](../zh-CN/contributing/performance-baseline.md)
+- 承接票：**#123**（真实浏览器档的大数据读数）、**#124**（深响应输入的更新路径长任务）
 - 官方参考实现：`huiyan-fe/react-bmap`（描述即「官方 React 组件库」，`master` 全树 254 个文件）——
   worker 关键词命中 0 处、`scripts` 里没有 perf/bench 入口；本库与它同为「数据整包交给 SDK」，
   多一层适配与一套预算

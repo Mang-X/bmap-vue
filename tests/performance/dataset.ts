@@ -144,6 +144,75 @@ export function makeLineFeatures(count: number): PerfLineFeature[] {
   }));
 }
 
+/** 自持的 GeoJSON 点要素（热力图的输入形状）。 */
+export interface PerfPointFeature {
+  readonly type: "Feature";
+  readonly geometry: { readonly type: "Point"; readonly coordinates: readonly [number, number] };
+  readonly properties: Record<string, unknown>;
+}
+
+/** 几何自持的要素集合（不 import SDK 类型包：基准不该依赖上游声明）。 */
+export function featureCollection<Feature>(features: Feature[]): {
+  readonly type: "FeatureCollection";
+  readonly features: Feature[];
+} {
+  return { type: "FeatureCollection", features };
+}
+
+/**
+ * 四类原生图层的输入夹具（`BPointCollection` 之外的四个 kind；issue #37 评审 3 要求补齐
+ * 「四类图层的 setData / style / resource 大数据路径」）。
+ *
+ * 形状照组件文档与既有用例：`LineLayer` / `FillLayer` 吃 `FeatureCollection`、`Heatmap` 吃点集合、
+ * `TrackLine` 只接收**单条 `LineString` Feature**（见 `BTrackLineLayerProps.data`）。
+ * 三者都派生自同一份 `makeItems`，因此规模之间仍然前缀稳定、彼此可比。
+ */
+export function makePointFeatures(count: number): PerfPointFeature[] {
+  return makeItems(count).map((item, index) => ({
+    type: "Feature" as const,
+    geometry: { type: "Point" as const, coordinates: [item.lng, item.lat] as const },
+    properties: { id: `point-${index}` },
+  }));
+}
+
+/** 每个点一个 4 顶点小方块（`FillLayer` 的输入形状）。 */
+export function makePolygonFeatures(count: number) {
+  const delta = 0.0005;
+  return makeItems(count).map((item, index) => ({
+    type: "Feature" as const,
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [item.lng - delta, item.lat - delta],
+          [item.lng + delta, item.lat - delta],
+          [item.lng + delta, item.lat + delta],
+          [item.lng - delta, item.lat + delta],
+          [item.lng - delta, item.lat - delta],
+        ],
+      ],
+    },
+    properties: { id: `area-${index}` },
+  }));
+}
+
+/**
+ * 单条 `LineString` 轨迹，顶点数 = `vertexCount`（`TrackLine` 的输入形状）。
+ *
+ * 它的「大数据」维度与集合类图层不同：不是**要素数**而是一条路径上的**顶点数** ——
+ * 这正是 issue 里「路径预处理」那一类 workload 的真实形态（本库不做简化，只转发给 SDK）。
+ */
+export function makeTrackFeature(vertexCount: number) {
+  return {
+    type: "Feature" as const,
+    geometry: {
+      type: "LineString" as const,
+      coordinates: makeItems(vertexCount).map((item) => [item.lng, item.lat]),
+    },
+    properties: { id: "track" },
+  };
+}
+
 /** 数据集自述（进报告：没有它，两个不同数据集的读数会被并排比较）。 */
 export function datasetDescription(): Record<string, unknown> {
   return {

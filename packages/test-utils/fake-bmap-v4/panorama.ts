@@ -94,8 +94,12 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.callLog.push(`setId:${id}`)
     this.id = id
     void options
-    // 官方在切换 id 后会派发 `id_changed`（载荷是新的 id）
-    this.emit('id_changed', id)
+    // 官方在切换 id 后会派发 `id_changed`，且它的载荷**是一个字符串**（见
+    // `src/driver/types/panorama.ts` 的注释），而本替身的 `emit` 只建模对象载荷
+    // （对象会被展开成事件字段）。这里按现状转发并显式标注这个**建模缺口**：
+    // 现无消费方读取该载荷（`BPanorama` 的回调是 `() => emit("idChange", getId(viewer))`），
+    // 因此不去猜真实形状——要动它先取证，登记为已知缺口。
+    this.emit('id_changed', id as unknown as Record<string, unknown>)
   }
 
   setPosition(position: { lng: number; lat: number }): void {

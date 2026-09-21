@@ -48,13 +48,20 @@ import { defineComponent, h, markRaw, nextTick, ref, shallowRef, type VNodeChild
 import { createFakeV4Harness } from "../../packages/test-utils";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
 import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
 import {
   PERF_ITEM_KEY,
   PERF_SIZES,
   datasetDescription,
+  featureCollection,
   makeItems,
   makeLineFeatures,
+  makePointFeatures,
+  makePolygonFeatures,
+  makeTrackFeature,
   perfItemPosition,
   perfItemProperties,
   type PerfItem,
@@ -278,7 +285,7 @@ describe("§3 100 次数据替换：保留内存与资源趋势（10k）", () =>
     recorder.readout("replace100.layerInstancesDelta", layerGrowth);
     recorder.readout("replace100.listenerSubscriptionsDelta", listenerGrowth);
     recorder.readout("replace100.pendingListeners", harness.listenActivity().pending);
-    recorder.sample("replace100.perIterationMs", perReplaceMs, REPLACEMENTS);
+    recorder.sample("replace100.perIterationMs", perReplaceMs);
 
     // 先收尾（卸载）再断言：否则一条断言失败会把资源留到下一个用例，
     // 让「泄漏」以级联失败的形式出现在**别的**用例上（实测踩过）。
@@ -380,6 +387,165 @@ describe("§5 输入数据的响应式形态决定更新成本（阶段 A 结论
         "阶段 A 的结论依赖这条差值，若它不再成立需要更新 ADR",
     ).toBeGreaterThan(RATIO_FLOOR);
   }, 120_000);
+});
+
+/**
+ * §6 四类原生图层 × 四种规模（issue #37 评审 3 指出的缺口）。
+ *
+ * `#36` 把「大数据 setData / style update 与资源清理」交办给了本票，而原先的矩阵只覆盖
+ * `BPointCollection`（逐项 `Item[]` 路径）+ 一个 `BLineLayer` 的 50k 挂载对照。这里把**四类原生
+ * 图层**（line / fill / heatmap / track-line）在 100 / 1k / 10k / 50k 上都跑一遍四个动作，
+ * 并逐个断言「只有一个 SDK 资源 / 不逐要素建覆盖物 / 换数据不换实例 / 卸载后归零」。
+ *
+ * 口径说明：
+ * - 这四类的 `data` 是**直接吃 GeoJSON**（没有适配层），因此读数主要是「我们的转发 + 挂载链路成本」，
+ *   而不是逐要素算法成本——这正是与 `BPointCollection`（走 `adaptPoints`）的分工；
+ * - `track-line` 的大数据维度是**一条路径的顶点数**（官方只接收单条 `LineString` Feature），
+ *   且它的登记面只有 `setData`（没有 style），因此它的动作是三个而不是四个；
+ * - 采样 3 次（而非 5 次）：这一节的目的是**覆盖面**，不是精度；精度由 §1/§5 的规模曲线承担。
+ */
+interface NativeLayerCase {
+  /** 指标前缀与用例文案。 */
+  readonly name: string;
+  readonly component: unknown;
+  readonly data: (size: PerfSize) => object;
+  /**
+   * 「数据真的下发了」的**规模读数**：集合类数要素、`TrackLine` 数一条路径的顶点。
+   *
+   * 两种形状必须分开读：`TrackLine` 收的是单条 `LineString` Feature（没有 `features` 数组），
+   * 用集合的口径去数会恒为 0 —— 那会把「形状弄错了」伪装成「数据没下发」。
+   */
+  readonly volume: (data: unknown) => number;
+  /** 该 kind 的样式袋；`undefined` = 这个 kind 没有 style 面（`TrackLine` 只登记了 setData）。 */
+  readonly style?: Record<string, unknown>;
+}
+
+const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
+  {
+    name: "line",
+    component: BLineLayer,
+    data: (size) => featureCollection(makeLineFeatures(size)) as object,
+    volume: featureCount,
+    style: { strokeColor: "#ff5500", strokeWeight: 4 },
+  },
+  {
+    name: "fill",
+    component: BFillLayer,
+    data: (size) => featureCollection(makePolygonFeatures(size)) as object,
+    volume: featureCount,
+    style: { fillColor: "#ff5500", fillOpacity: 0.6 },
+  },
+  {
+    name: "heatmap",
+    component: BHeatmapLayer,
+    data: (size) => featureCollection(makePointFeatures(size)) as object,
+    volume: featureCount,
+    style: { radius: 20 },
+  },
+  {
+    name: "track-line",
+    component: BTrackLineLayer,
+    data: (size) => makeTrackFeature(size) as unknown as object,
+    volume: trackVertexCount,
+  },
+];
+
+/** 集合类夹具的规模：要素数。 */
+function featureCount(data: unknown): number {
+  const features = (data as { features?: unknown } | undefined)?.features;
+  return Array.isArray(features) ? features.length : 0;
+}
+
+/** `TrackLine` 夹具的规模：一条 `LineString` 的顶点数。 */
+function trackVertexCount(data: unknown): number {
+  const coordinates = (data as { geometry?: { coordinates?: unknown } } | undefined)?.geometry
+    ?.coordinates;
+  return Array.isArray(coordinates) ? coordinates.length : 0;
+}
+
+const MATRIX_SAMPLES = 3;
+
+describe("§6 四类原生图层 × 四种规模：setData / style / 卸载", () => {
+  const combos = NATIVE_LAYER_CASES.flatMap((entry) =>
+    PERF_SIZES.map((size) => [entry, size] as const),
+  );
+
+  it.each(combos.map(([entry, size]) => [`${entry.name}@${size}`, entry, size] as const))(
+    "%s：挂载 / 换数据 / 样式 / 卸载，且不换实例、不泄漏",
+    async (_label, entry, size) => {
+      const first = entry.data(size);
+      const second = entry.data(size);
+
+      for (let sample = 0; sample < MATRIX_SAMPLES; sample += 1) {
+        const layersBefore = harness.nativeLayersCreated();
+        const data = ref<object>(first);
+        const style = ref<Record<string, unknown>>({});
+
+        const mountStart = performance.now();
+        const wrapper = mountTree(() =>
+          h(entry.component as never, { data: data.value, idKey: "id", ...style.value }),
+        );
+        await settle();
+        recorder.sample(`mount.${entry.name}@${size}`, performance.now() - mountStart);
+
+        // 正证守卫：这条 kind 真的只建了 1 个 SDK 资源，且没有逐要素覆盖物。
+        const created = harness.nativeLayersCreated() - layersBefore;
+        expect(created, `${entry.name}@${size}：只应创建 1 个原生图层`).toBe(1);
+        expect(harness.attached("overlay"), `${entry.name}@${size}：不得逐要素建覆盖物`).toBe(0);
+        expect(
+          entry.volume(harness.nativeLayerData()),
+          `${entry.name}@${size}：下发的规模必须等于夹具规模`,
+        ).toBe(size);
+
+        const replaceStart = performance.now();
+        data.value = second;
+        await settle();
+        recorder.sample(`data.replace.${entry.name}@${size}`, performance.now() - replaceStart);
+        expect(
+          harness.nativeLayersCreated() - layersBefore,
+          `${entry.name}@${size}：换数据不得换实例`,
+        ).toBe(1);
+        expect(
+          harness.nativeLayerCalls().includes("setData"),
+          `${entry.name}@${size}：换数据走 setData`,
+        ).toBe(true);
+
+        if (entry.style) {
+          const styleStart = performance.now();
+          style.value = entry.style;
+          await settle();
+          recorder.sample(`style.update.${entry.name}@${size}`, performance.now() - styleStart);
+          expect(
+            harness.nativeLayersCreated() - layersBefore,
+            `${entry.name}@${size}：样式更新不得换实例`,
+          ).toBe(1);
+          recorder.readout(
+            `${entry.name}@${size}.styleCalls`,
+            harness.nativeLayerCalls().filter((call) => call === "setStyleOptions").length,
+          );
+        }
+
+        const unmountStart = performance.now();
+        wrapper.unmount();
+        await settle();
+        recorder.sample(`unmount.${entry.name}@${size}`, performance.now() - unmountStart);
+
+        // 资源归零：四类图层的卸载路径都不许留残留（#36 交办的另一半）。
+        harness.assertIdle(`${entry.name}@${size} 卸载后`);
+      }
+
+      recorder.readout(`volume.${entry.name}@${size}`, entry.volume(entry.data(size)));
+      recorder.readout(
+        `mount.${entry.name}@${size}.maxMs`,
+        round(recorder.stat(`mount.${entry.name}@${size}`).max),
+      );
+      recorder.readout(
+        `mount.${entry.name}@${size}.exceedsLongTask`,
+        recorder.stat(`mount.${entry.name}@${size}`).max > LONG_TASK_MS ? "yes" : "no",
+      );
+    },
+    120_000,
+  );
 });
 
 /** 从 Fake 收到的 `setData()` 数据里数要素（顺带证明数据真的下发了）。 */

@@ -73,6 +73,14 @@ jobs:
       - name: Type-check v3 package (official types + augmentations)
         run: pnpm typecheck:v3
 
+      # 测试代码的类型门禁（issue #37 评审 4）：tests/** 此前**不在任何 typecheck 的编译范围里**
+      # —— 一个 `recorder.sample(name, ms, extra)` 的 TS2554 就是这样从 PR 里漏过去的
+      # （vitest 只转译不做类型检查，CI 全绿）。范围只覆盖 tests/performance/**（它 import 的
+      # test-utils / src 会被传递纳入）；tests/behavior/** 与 packages/**\/*.test.ts 有大量既存
+      # 错误，全量纳入是另一张票的工作量（见 tsconfig.tests.json 的注释）。
+      - name: Type-check tests (tests/performance)
+        run: pnpm typecheck:tests
+
       # Behavior snapshot tests (data-driven, no external network/AK)
       - name: Build v3 artifacts for global bundle tests
         run: node --experimental-strip-types scripts/build-v3.mts

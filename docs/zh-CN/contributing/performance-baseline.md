@@ -14,6 +14,11 @@
 之后，换数据从 ~120ms 掉到 14 ~ 26ms（基准里 `component-path` §5 的常驻对照读数，比值 4.5 ~ 8.4×）。
 Worker 也要先把数据读出来再送过去，所以它解决不了这条。
 
+**四类原生图层（GeoJSON 直通）在 50k 下的读数**（`component-path` §6 的矩阵）：挂载 1.1 ~ 2.3ms、
+换数据 0.2 ~ 0.4ms、样式更新 0.3 ~ 0.6ms、卸载 0.1 ~ 0.6ms（line / fill / heatmap / track-line，
+每个组合都断言「1 个 SDK 资源 / 0 个逐要素覆盖物 / 换数据不换实例 / 卸载后归零」）。同一份 50k 数据
+经 GeoJSON 直通比走 `Item[]` 适配路径便宜一个数量级 ⇒ 成本在**适配层 + 响应式读取**，不在图层内核。
+
 ⚠️ 机器负载会把绝对值推高近 2 倍（本机被别的进程压满时 `adaptPoints@50k` 的 min 从 9ms 升到 24ms，
 `max` 甚至逼近 50ms 线）——这正是**只把比值当门禁、把「是否越过 50ms」当读数**的原因。
 
@@ -21,6 +26,7 @@ Worker 也要先把数据读出来再送过去，所以它解决不了这条。
 
 ```bash
 pnpm test:performance              # 只跑基准（自带判据：超线性 / 泄漏 / 保留内存）
+pnpm typecheck:tests               # 测试代码的类型门禁（tests/performance/**；vitest 不做类型检查）
 pnpm build:v3 && pnpm perf:baseline # 采集 + 报告 + 趋势门禁（CI 跑的就是这条）
 pnpm perf:baseline --update        # 同时刷新提交的基线（换机器 / 换数据集时才做）
 pnpm perf:baseline --tolerance=5   # 临时放宽阈值
@@ -34,11 +40,13 @@ pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标�
 - **归一化列**：`min / calibration.cpu`。校准工作量是一次固定的纯计算，用来抵消机器速度差；
   跨机器只比这一列，绝对毫秒只作参考。
 - **比值列**：与提交基线 `tests/performance/baseline.json` 的归一化比值。默认阈值 5×。
-  ⚠️ **跨平台不做门禁**：基线录在**门禁运行的那台机器**上（`platform + arch`，本项目录在 GitHub
-  runner 的 linux/x64 上）。若本次机器与基线不是同一 `platform + arch`，脚本会打印比值但**只出报告、
-  不做门禁**，并在报告里记 `comparison.skipped`——因为同一份代码在两台机器之间的归一化比值实测差
-  2 ~ 6 倍（纯数字校准量的 `min` 能在被抢占的间隙找到空闲时刻，分配密集的 workload 却会整体退化）。
-  要**在本机**启用门禁，先在本机跑一次 `pnpm perf:baseline --update`。
+  ⚠️ **跨平台 / 跨 SKU 不做门禁**：可比性判据是 `platform + arch + cpuModel`。实测两件事决定了这条：
+  ① 开发机与 CI runner 之间归一化比值差 2 ~ 6 倍；② **同一个 `ubuntu-latest` label 的两次连续推送**
+  就是不同 SKU（Xeon 8573C → Xeon 6973P-C，连校准量都差 27%）。不一致时脚本会打印比值但**只出报告、
+  不做门禁**，并在报告里记 `comparison.skipped`——**5× 宽阈值不能把「不可比」变成「可比」**。
+  **基线维护规则**：基线录在**与门禁同一台/同一规格的机器**上（本项目录在 GitHub runner）；
+  runner 换 SKU 时 CI 会打印「本次不做趋势门禁」，由维护者在那台机器上跑一次
+  `pnpm perf:baseline --update` 重录。要在**本机**启用门禁同理。
 - **低于噪声地板的指标**（归一化 < 0.05，即 0.5ms 量级）只进报告、不参与门禁：比 0.02ms 的读数
   只会得到假红。
 - **`*.exceedsLongTask`**：该步骤 50k 的最长单次耗时是否越过 50ms。它是「要不要迁出主线程」的判据，
@@ -63,6 +71,8 @@ CI 的 `performance` job 先 `build:v3`，因此 `3` 出现在 CI 里就意味�
 
 1. 数据集改动（生成规则）必须同时改 `tests/performance/dataset.ts` 的 `DATASET_VERSION`，
    并跑一次 `pnpm perf:baseline --update` 刷新基线；否则基线比较的是两份不同的数据。
+   **指标集合是双向校验的**：新增 / 改名 / 删除任何一条指标都会让门禁以退出码 `2` 拒绝运行
+   （而不是静默少测一项），确认合理后同样要 `--update` 重录。
 2. 新指标写在既有的两个基准文件里（`preprocess` / `component-path`），命名带上规模后缀
    （如 `adaptPoints@50000`）；跨文件重名会被采集脚本直接判失败。
 3. 判据优先选**机器无关的比值**；要用绝对毫秒时给极宽的上界（绊线），并在注释里写清它只抓数量级回归。
@@ -75,3 +85,4 @@ CI 的 `performance` job 先 `build:v3`，因此 `3` 出现在 CI 里就意味�
 - 单机单运行时：基线的绝对值只是**一份参考读数**，不是发布事实；跨平台（`platform + arch` 不同）
   的比值也只在同平台内可比，因此那种情况只出报告。
 - 基线录在 CI runner 上（见上）；本机读数与它不可比是**预期**的，不是缺陷。
+- 真实浏览器档的读数与深响应输入的长任务各自有承接票（**#123** / **#124**），结论落地后回来更新本页。

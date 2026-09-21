@@ -16,6 +16,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  decideExitCode,
+  describeKeySetMismatch,
+  describeMachineMismatch,
+} from "../../scripts/collect-performance-baseline.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
@@ -85,6 +90,15 @@ describe("#37 性能门禁：真的进 CI 且步骤没被架空", () => {
     expect(probe.step!.index, "build:v3 必须早于 perf:baseline").toBeGreaterThan(probe.buildStep!.index);
   });
 
+  it("测试代码的类型门禁在 CI 里真的跑了（评审 4 的durable 修法，不是一次性临时配置）", () => {
+    const block = stepBlockContaining(workflow, "pnpm typecheck:tests");
+    expect(block.length, "quality.yml 里找不到跑 `pnpm typecheck:tests` 的 step").toBeGreaterThan(0);
+    expect(
+      block.filter((line) => /^\s*(?:-\s+)?(if|continue-on-error)\s*:/.test(line)),
+      "该 step 被 if / continue-on-error 架空",
+    ).toEqual([]);
+  });
+
   it("package.json 里的基准入口指向真实存在的文件", () => {
     const pkg = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")) as {
       scripts: Record<string, string>;
@@ -95,13 +109,72 @@ describe("#37 性能门禁：真的进 CI 且步骤没被架空", () => {
     expect(pkg.scripts["perf:baseline"], "perf:baseline 必须走采集脚本").toContain(
       "scripts/collect-performance-baseline.mts",
     );
+    expect(pkg.scripts["typecheck:tests"], "typecheck:tests 必须走独立配置").toContain(
+      "tsconfig.tests.json",
+    );
     for (const relative of [
       "scripts/collect-performance-baseline.mts",
       "tests/performance/vitest.config.ts",
       "tests/performance/baseline.json",
+      "tsconfig.tests.json",
     ]) {
       expect(existsSync(resolve(repoRoot, relative)), `${relative} 不存在`).toBe(true);
     }
+  });
+});
+
+describe("门禁判定的纯函数（issue #37 评审 1 / 2 的回归）", () => {
+  it("指标集合漂移：报告侧**少**一条必须失败（原实现只看反方向，会静默少测一项）", () => {
+    // 评审给的最小复现：删掉一条既有 benchmark/metric ⇒ 它从报告里消失。
+    const message = describeKeySetMismatch(["a", "b"], ["a", "b", "cluster@50000"]);
+    expect(message).toContain("cluster@50000");
+    expect(message).toContain("基线有而报告没有");
+  });
+
+  it("指标集合漂移：报告侧**多**一条也要失败（改名 / 新增同罪）", () => {
+    expect(describeKeySetMismatch(["a", "renamed@50000"], ["a", "old@50000"])).toContain("old@50000");
+    expect(describeKeySetMismatch(["a", "renamed@50000"], ["a", "old@50000"])).toContain("renamed@50000");
+  });
+
+  it("集合一致 ⇒ 不拦（正证控件：否则判定恒返回失败也能过）", () => {
+    expect(describeKeySetMismatch(["a", "b"], ["b", "a"])).toBeNull();
+    expect(describeKeySetMismatch([], [])).toBeNull();
+  });
+
+  it("机器身份：只比 platform + arch 是不够的 —— 同平台不同 CPU 也必须只出报告", () => {
+    // 证据来自本 PR 的两次连续 CI 推送：同一个 `ubuntu-latest` label，SKU 从
+    // `INTEL(R) XEON(R) PLATINUM 8573C` 变成 `Intel(R) Xeon(R) 6973P-C`，calibration 30.19ms → 21.99ms。
+    const baseline = {
+      platform: "linux",
+      arch: "x64",
+      cpuModel: "INTEL(R) XEON(R) PLATINUM 8573C",
+    };
+    const message = describeMachineMismatch(baseline, {
+      platform: "linux",
+      arch: "x64",
+      cpuModel: "Intel(R) Xeon(R) 6973P-C",
+    });
+    expect(message, "同平台不同 SKU 必须判为不可比").not.toBeNull();
+    expect(message).toContain("CPU 不同");
+  });
+
+  it("机器身份：跨平台不可比；机器一致才可比", () => {
+    const baseline = { platform: "linux", arch: "x64", cpuModel: "Xeon X" };
+    expect(describeMachineMismatch(baseline, { platform: "darwin", arch: "arm64", cpuModel: "Apple M4" })).toContain(
+      "跨平台",
+    );
+    expect(describeMachineMismatch(baseline, { platform: "linux", arch: "x64", cpuModel: "Xeon X" })).toBeNull();
+  });
+
+  it("机器身份：旧格式基线（没有 machine 记录）只出报告，不猜", () => {
+    expect(describeMachineMismatch(undefined, { platform: "linux", arch: "x64", cpuModel: "X" })).toContain("旧格式");
+  });
+
+  it("四态退出码：回退 > blocked > 通过（「没跑完」不许当通过）", () => {
+    expect(decideExitCode({ regressions: 0, bundleStatus: "ok" })).toBe(0);
+    expect(decideExitCode({ regressions: 1, bundleStatus: "ok" })).toBe(1);
+    expect(decideExitCode({ regressions: 0, bundleStatus: "blocked" })).toBe(3);
+    expect(decideExitCode({ regressions: 2, bundleStatus: "blocked" }), "回退优先于 blocked").toBe(1);
   });
 });
 
