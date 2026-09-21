@@ -156,6 +156,16 @@ describe("§1 原生批量点组件：挂载 / 换引用 / 样式 / 卸载（100
       const items = ITEMS.get(size)!;
       const featuresPerMount: number[] = [];
 
+      // 采样前先做一次**丢弃的挂载 / 卸载**：`<BMap>` 的第一次挂载要付「client + loader + driver 装配 +
+      // Vue 首次 patch + 建图」这些**过程内一次性**成本（实测合并 main 后的第一次运行里，
+      // `mount.pointCollection@100` 的 min 是 16.15ms，紧接着再跑一次就掉回个位数毫秒）。
+      // 记的是**稳定态**的挂载；首次那一次仍然以 `.firstMs` 读数进报告（读数，不做门禁）。
+      const warmup = await mountPoints(reactiveHolder(items));
+      await settle();
+      warmup.wrapper.unmount();
+      await settle();
+      harness.assertIdle(`规模 ${size} 预热后`);
+
       for (let sample = 0; sample < SAMPLES; sample += 1) {
         const layersBefore = harness.nativeLayersCreated();
 

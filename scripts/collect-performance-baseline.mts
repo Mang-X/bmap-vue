@@ -72,12 +72,17 @@ const NORMALIZER = "calibration.cpu";
 const DEFAULT_TOLERANCE = 5;
 
 /**
- * 比较的**噪声地板**（归一化单位）。
+ * 比较的**噪声地板**（归一化单位）。0.1 ≈ 1ms（本项目校准量 ~10ms）。
  *
- * 0.02ms 那一档（`scanValidItems@100`）是计时器分辨率量级，跨机器比它的比值只会得到假红。
- * 按「基线归一化值」判定：低于地板的指标只进报告、不参与门禁。
+ * 低于这一档的读数是**计时器分辨率 / 单次调度**量级（实测 `scanValidItems@100` = 0.02、
+ * `cluster@100` = 0.04、`data.replace.line@100` = 0.028），拿它比比值只会得到假红 ⇒ 只进报告。
+ *
+ * 曾经把地板抬到 0.5 来掩盖一条 100 档的假回退（`mount.pointCollection@100` 报 5.8×）——
+ * 那条的**根因是冷启动**（过程内第一次挂载要付装配 + 首次 patch + 建图：实测 16.15ms vs
+ * 紧接着再跑一次的数毫秒），已在 `component-path.perf.test.ts` §1 用一次**丢弃的挂载**修掉
+ * （首次那一次仍以 `.firstMs` 读数进报告）。**根因在读数生成处修，不要用地板掩盖。**
  */
-const FLOOR_UNITS = 0.05;
+const FLOOR_UNITS = 0.1;
 
 /** 基准必须产出的两份指标（少一份说明范围被改窄了，不能当「通过」）。 */
 const REQUIRED_SNAPSHOTS = ["preprocess", "component-path"];
