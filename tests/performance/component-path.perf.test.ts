@@ -426,8 +426,21 @@ interface NativeLayerCase {
    * 用集合的口径去数会恒为 0 —— 那会把「形状弄错了」伪装成「数据没下发」。
    */
   readonly volume: (data: unknown) => number;
-  /** 该 kind 的样式袋；`undefined` = 这个 kind 没有 style 面（`TrackLine` 只登记了 setData）。 */
-  readonly style?: Record<string, unknown>;
+  /**
+   * 该 kind 的样式面：
+   * - `null` = 没有 style（`TrackLine` 只登记了 `setData`，因此**不要**给它传 `style`）；
+   * - 否则给出「更新一次样式**必须**看到的 SDK 调用」（含最小次数）。
+   *
+   * 为什么要把「必须看到什么」写进夹具：这一节第一版把样式字段**展开成顶层 prop** 传给组件
+   * （`...style.value`），而 `useVisualLayer` 读的是 `props.style` ⇒ 样式路径根本没跑，
+   * 而当时只把调用次数记成 readout、没有断言，矩阵照样是绿的（评审第 2 轮指出的假绿）。
+   * 现在按 kind 逐条断言：专页图层（line / fill）是 `setStyleOptions` + 显式 `doOnceDraw`，
+   * 扩展 API（heatmap）走它自己的 `setOptions`（依据见 `driver/jsapi-v4/native-layers.ts` 的 invoke 分流）。
+   */
+  readonly style: {
+    readonly value: Record<string, unknown>;
+    readonly expectCalls: ReadonlyArray<{ readonly call: string; readonly min: number }>;
+  } | null;
 }
 
 const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
@@ -436,29 +449,53 @@ const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
     component: BLineLayer,
     data: (size) => featureCollection(makeLineFeatures(size)) as object,
     volume: featureCount,
-    style: { strokeColor: "#ff5500", strokeWeight: 4 },
+    style: {
+      value: { strokeColor: "#ff5500", strokeWeight: 4 },
+      expectCalls: [
+        { call: "setStyleOptions", min: 1 },
+        { call: "doOnceDraw", min: 1 },
+      ],
+    },
   },
   {
     name: "fill",
     component: BFillLayer,
     data: (size) => featureCollection(makePolygonFeatures(size)) as object,
     volume: featureCount,
-    style: { fillColor: "#ff5500", fillOpacity: 0.6 },
+    style: {
+      value: { fillColor: "#ff5500", fillOpacity: 0.6 },
+      expectCalls: [
+        { call: "setStyleOptions", min: 1 },
+        { call: "doOnceDraw", min: 1 },
+      ],
+    },
   },
   {
     name: "heatmap",
     component: BHeatmapLayer,
     data: (size) => featureCollection(makePointFeatures(size)) as object,
     volume: featureCount,
-    style: { radius: 20 },
+    // 扩展 API 只公开整袋 `setOptions`（官方没有可核对的 Heatmap 声明）⇒ 断言它，而不是专页图层的 setter。
+    style: { value: { radius: 20 }, expectCalls: [{ call: "setOptions", min: 1 }] },
   },
   {
     name: "track-line",
     component: BTrackLineLayer,
     data: (size) => makeTrackFeature(size) as unknown as object,
     volume: trackVertexCount,
+    style: null,
   },
 ];
+
+/**
+ * 当前实例上某类 SDK 调用的**次数**。
+ *
+ * 增量断言必须用它：`nativeLayerCalls().includes("setData")` 会被**挂载阶段**那次调用满足，
+ * 于是「换引用路径退化成 no-op」也是绿的（评审第 2 轮指出的第二处假绿）。
+ */
+function nativeCallCount(call: string): number {
+  return harness.nativeLayerCalls().filter((entry) => entry === call).length;
+}
 
 /** 集合类夹具的规模：要素数。 */
 function featureCount(data: unknown): number {
@@ -489,11 +526,18 @@ describe("§6 四类原生图层 × 四种规模：setData / style / 卸载", ()
       for (let sample = 0; sample < MATRIX_SAMPLES; sample += 1) {
         const layersBefore = harness.nativeLayersCreated();
         const data = ref<object>(first);
-        const style = ref<Record<string, unknown>>({});
+        // 样式走**组件的 `style` prop**（一个袋子）。四类可视化图层的共享装配
+        // （`useVisualLayer`）读的是 `props.style`；把它展开成 `strokeColor` 之类的顶层字段
+        // 只会落进 attrs，样式路径根本不会跑（这一节第一版就是这么错的）。
+        const style = ref<Record<string, unknown> | undefined>(undefined);
 
         const mountStart = performance.now();
         const wrapper = mountTree(() =>
-          h(entry.component as never, { data: data.value, idKey: "id", ...style.value }),
+          h(entry.component as never, {
+            data: data.value,
+            idKey: "id",
+            ...(entry.style ? { style: style.value } : {}),
+          }),
         );
         await settle();
         recorder.sample(`mount.${entry.name}@${size}`, performance.now() - mountStart);
@@ -507,6 +551,7 @@ describe("§6 四类原生图层 × 四种规模：setData / style / 卸载", ()
           `${entry.name}@${size}：下发的规模必须等于夹具规模`,
         ).toBe(size);
 
+        const setDataBefore = nativeCallCount("setData");
         const replaceStart = performance.now();
         data.value = second;
         await settle();
@@ -515,23 +560,42 @@ describe("§6 四类原生图层 × 四种规模：setData / style / 卸载", ()
           harness.nativeLayersCreated() - layersBefore,
           `${entry.name}@${size}：换数据不得换实例`,
         ).toBe(1);
+        // **增量**断言（`includes("setData")` 会被挂载阶段那次调用满足 ⇒ 假绿），并且核对下发的
+        // 就是**新那份引用**：两条合起来才证明「换引用 → 真的重新下发了一次」。
         expect(
-          harness.nativeLayerCalls().includes("setData"),
-          `${entry.name}@${size}：换数据走 setData`,
-        ).toBe(true);
+          nativeCallCount("setData") - setDataBefore,
+          `${entry.name}@${size}：换引用必须恰好再下发一次 setData`,
+        ).toBe(1);
+        // 比的是**交出去的那份**（`data.value`）：`ref` 会把它深响应化成 Proxy，
+        // 拿原始对象比会因为 Proxy !== target 而假红 —— 那不是「没下发」的证据。
+        expect(
+          harness.nativeLayerData(),
+          `${entry.name}@${size}：下发的必须是新那份数据（换引用后交出去的那份）`,
+        ).toBe(data.value);
 
         if (entry.style) {
+          const before = new Map(entry.style.expectCalls.map((spec) => [spec.call, nativeCallCount(spec.call)]));
           const styleStart = performance.now();
-          style.value = entry.style;
+          style.value = entry.style.value;
           await settle();
           recorder.sample(`style.update.${entry.name}@${size}`, performance.now() - styleStart);
           expect(
             harness.nativeLayersCreated() - layersBefore,
             `${entry.name}@${size}：样式更新不得换实例`,
           ).toBe(1);
+          // 逐 kind 的正证：样式真的走完了它那条 SDK 路径（不是「父级重新 render 了一下」）。
+          for (const spec of entry.style.expectCalls) {
+            const delta = nativeCallCount(spec.call) - (before.get(spec.call) ?? 0);
+            expect(
+              delta,
+              `${entry.name}@${size}：样式更新必须触发 ${spec.call}（实际 delta=${delta}）`,
+            ).toBeGreaterThanOrEqual(spec.min);
+          }
           recorder.readout(
             `${entry.name}@${size}.styleCalls`,
-            harness.nativeLayerCalls().filter((call) => call === "setStyleOptions").length,
+            entry.style.expectCalls
+              .map((spec) => `${spec.call}+${nativeCallCount(spec.call) - (before.get(spec.call) ?? 0)}`)
+              .join(" "),
           );
         }
 

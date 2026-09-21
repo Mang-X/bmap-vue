@@ -16,7 +16,10 @@ Worker 也要先把数据读出来再送过去，所以它解决不了这条。
 
 **四类原生图层（GeoJSON 直通）在 50k 下的读数**（`component-path` §6 的矩阵）：挂载 1.1 ~ 2.3ms、
 换数据 0.2 ~ 0.4ms、样式更新 0.3 ~ 0.6ms、卸载 0.1 ~ 0.6ms（line / fill / heatmap / track-line，
-每个组合都断言「1 个 SDK 资源 / 0 个逐要素覆盖物 / 换数据不换实例 / 卸载后归零」）。同一份 50k 数据
+每个组合都断言「1 个 SDK 资源 / 0 个逐要素覆盖物 / 换数据不换实例 / 卸载后归零**、换引用恰好 `+1`
+次 `setData` 且下发的是新那份引用、样式更新按 kind 触发它那条 SDK 路径**（专页图层
+`setStyleOptions` + `doOnceDraw`；扩展 API `setOptions`））。断言一律用**增量**，不用
+`includes()`——后者会被挂载阶段的调用满足。同一份 50k 数据
 经 GeoJSON 直通比走 `Item[]` 适配路径便宜一个数量级 ⇒ 成本在**适配层 + 响应式读取**，不在图层内核。
 
 ⚠️ 机器负载会把绝对值推高近 2 倍（本机被别的进程压满时 `adaptPoints@50k` 的 min 从 9ms 升到 24ms，
@@ -46,7 +49,10 @@ pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标�
   不做门禁**，并在报告里记 `comparison.skipped`——**5× 宽阈值不能把「不可比」变成「可比」**。
   **基线维护规则**：基线录在**与门禁同一台/同一规格的机器**上（本项目录在 GitHub runner）；
   runner 换 SKU 时 CI 会打印「本次不做趋势门禁」，由维护者在那台机器上跑一次
-  `pnpm perf:baseline --update` 重录。要在**本机**启用门禁同理。
+  `pnpm perf:baseline --update` 重录；也可以直接下载 CI 那个 `performance` job 的 `perf-report`
+  artifact（`gh run download <run> -n perf-report`），用里面的 `report.json` 重录。
+  要在**本机**启用门禁同理。**改了指标准入口径（例如某个动作从「父级重渲染」变成真的走 SDK 路径）
+  也要重录**：那不是性能回退，但比值会动。
 - **低于噪声地板的指标**（归一化 < 0.05，即 0.5ms 量级）只进报告、不参与门禁：比 0.02ms 的读数
   只会得到假红。
 - **`*.exceedsLongTask`**：该步骤 50k 的最长单次耗时是否越过 50ms。它是「要不要迁出主线程」的判据，

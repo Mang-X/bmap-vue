@@ -31,7 +31,7 @@ issue #37 在 2026-09-19 被**开工前纠偏**过一次，那次纠偏决定了
 | --- | --- |
 | `tests/performance/dataset.ts` | 固定种子（LCG）的确定性数据集，前缀稳定（`makeItems(1000)` 是 `makeItems(50k)` 的前缀），80% 点聚在 32 个中心附近 ⇒ 聚合桶是真实存在的 |
 | `tests/performance/preprocess.perf.test.ts` | 纯函数步骤：`scanValidItems`（过滤）/ `adaptPoints`（GeoJSON 适配）/ `cluster`（fallback 聚合）+ 校准工作量 + 坏数据路径 |
-| `tests/performance/component-path.perf.test.ts` | 组件路径：挂载 / 换引用 / 样式 / 卸载 + 100 次替换的保留内存与资源趋势 + 响应式形态对照 + **四类原生图层 × 四种规模的 setData / style / 卸载矩阵**（§6，`#36` 交办的「大数据 setData/style/资源清理」欠账） |
+| `tests/performance/component-path.perf.test.ts` | 组件路径：挂载 / 换引用 / 样式 / 卸载 + 100 次替换的保留内存与资源趋势 + 响应式形态对照 + **四类原生图层 × 四种规模的 setData / style / 卸载矩阵**（§6，`#36` 交办的「大数据 setData/style/资源清理」欠账）。§6 的断言是**增量式**的：换引用必须恰好 `+1` 次 `setData` 且下发的是新那份引用；样式更新按 kind 正证（专页图层 `setStyleOptions` + `doOnceDraw`、扩展 API `setOptions`）——`includes()` 会被挂载阶段的调用满足，样式也要走 `style` prop（散成顶层字段只会落进 attrs），这两条都是评审第 2 轮指出的假绿 |
 | `tests/performance/vitest.config.ts` | 基准专属配置：独立范围、**串行**、`--expose-gc`（理由见决策 5 与已知限制） |
 | `tsconfig.tests.json` + `pnpm typecheck:tests` | 测试代码的类型门禁（评审 4）：`tests/**` 此前不在任何 typecheck 的编译范围里，`vitest` 只转译不检查类型 ⇒ 一个 `TS2554` 从 PR 里漏了过去。范围**只覆盖 `tests/performance/**`**（传递纳入 test-utils / src）；`tests/behavior/**` 与 `packages/**/*.test.ts` 有大量既存错误，全量纳入是另一张票的工作量 |
 | `scripts/collect-performance-baseline.mts` | 采集 → 报告（含环境/数据集/包体/worker chunk）→ 与提交基线做趋势对比 |
