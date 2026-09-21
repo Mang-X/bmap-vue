@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "mitt": "^3.0.0",
-    "vue": "^3.5.0"
+    "vue": "^3.5.43"
   },
   "peerDependencies": {
     "vue": "^3.0.0"
@@ -84,18 +84,18 @@
   "devDependencies": {
     "@baidumap/jsapi-loader": "1.0.0",
     "@baidumap/jsapi-ui-kit": "1.1.2",
-    "@changesets/cli": "^3.0.2",
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^26.4.1",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "@vue/test-utils": "^2.5.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "@vue/test-utils": "^2.5.1",
     "@vueuse/core": "14.4.0",
-    "happy-dom": "^20.14.0",
-    "jsdom": "^30.0.1",
+    "happy-dom": "^20.14.5",
+    "jsdom": "^30.1.0",
     "typescript": "^5.9.0",
     "unplugin-vue": "^7.2.0",
-    "vite": "^8.2.2",
-    "vite-plus": "0.3.0",
-    "vitest": "^5.0.0",
+    "vite": "^8.3.0",
+    "vite-plus": "0.3.3",
+    "vitest": "^5.0.1",
     "vue-tsc": "^2.2.0"
   }
 }
