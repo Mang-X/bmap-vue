@@ -147,7 +147,13 @@ hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步�
 所以可以依赖的承诺是「**在最早的合法时刻交付取消**」（这也是 `start()` 拿到 `deferred` 的含义），
 **不是**「提交新段之前图上一段不剩」。实测这条待启动路径上旧段来不及产生可观察的视角推进，
 但那是一条**读数**而不是承诺：旧段那次安全窗口的取消若失败，它会继续推进到下次 `cancel()` 或地图销毁
-重试为止。需要「确实只剩一段」的确定性时，请在自己的流程里等 `status` 收敛回 `idle` 再起播下一段。
+重试为止。
+
+**`status` 不能当作「旧段已确定停止」的 barrier**：它本来就是**观察值** —— `start()` 不乐观改写它，
+`cancel()` 拿到 `deferred`（取消还没交付）时也不改写它，所以「A 已提交给 SDK、`animationstart` 还没到」
+这个窗口里 `status` 就已经是 `idle` 了。本 hook 目前**不暴露**「pending cancel 已交付」的可等待信号；
+确实需要严格串行时，请按上面「事件监听」那条路径自己用 `client.driver.services.createViewAnimation()`
+持有实例，并等它自己的 `animationcancel` / `animationend`（那是按实例的公开事件，不依赖本 hook 的观察值）。
 
 ## TS 类型定义参考
 

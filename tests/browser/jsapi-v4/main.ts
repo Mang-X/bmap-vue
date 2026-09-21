@@ -1249,14 +1249,25 @@ const CHECKS: Record<string, CheckImpl> = {
       observe(newSegment, newMarks);
 
       // 旧段仍在启动窗口内：此刻取消拿不到交付（本库只能登记请求，稍后在安全窗口交付）
-      const pendingCancel = readCancelAttempt(raw, oldSegment);
-      startAnimation!.call(raw, oldSegment);
       let safePointCancel: CancelAttempt | null = null;
       oldSegment.addEventListener("animationstart", () => {
         void Promise.resolve().then(() => {
           safePointCancel = readCancelAttempt(raw, oldSegment);
         });
       });
+      startAnimation!.call(raw, oldSegment);
+      // **关键**：这一次读数必须落在 `startViewAnimation(A)` **返回之后**、`animationstart` **到达之前**
+      // —— 那才是 Driver 依赖的窗口（“从未 start 过”的实例由前面的 `neverStarted` 子场景覆盖，
+      // 拿它顶替的话，SDK 哪天允许“start 之后、事件之前”取消，这条 gate 也照样全绿。#122 复审 P1）
+      const dispatchedBeforeThisCancel = oldMarks.includes("animationstart");
+      const pendingCancel = readCancelAttempt(raw, oldSegment);
+      // 局部前提断言：让「这一次读数确实在窗口内」自证，不靠 ① 那条读数的旁证
+      assertSmoke(
+        !dispatchedBeforeThisCancel,
+        "BMAP_VIEWANIMATION_PENDING_WINDOW_MISSED",
+        "读这次取消的时候 `animationstart` 已经派发 —— 测到的不是「start 已返回、事件未到」那个窗口",
+        { oldMarks },
+      );
       // 旧段还没起播，新段就被提交 —— 这正是被评审指出的那条路径
       startAnimation!.call(raw, newSegment);
 
@@ -1275,9 +1286,11 @@ const CHECKS: Record<string, CheckImpl> = {
       const zoomAfterNewSegment = getZoom!.call(raw);
 
       assertSmoke(
-        pendingCancel.threw,
+        pendingCancel.threw && pendingCancel.name === "TypeError",
         "BMAP_VIEWANIMATION_PENDING_NOT_CANCELLABLE",
-        "旧段仍在启动窗口时 `cancelViewAnimation` 没有抛错 —— 这条路径的前提已经变了",
+        "`startViewAnimation` 已返回、`animationstart` 还没到的时候取消，没有抛 `TypeError`" +
+          `（读数 ${JSON.stringify(pendingCancel)}）—— 这条路径的前提已经变了：` +
+          "本库「该窗口内只能登记请求（`deferred`）」的契约随之失效",
         pendingCancel,
       );
       assertSmoke(
@@ -1321,6 +1334,7 @@ const CHECKS: Record<string, CheckImpl> = {
         zoomBeforeSafe,
         zoomAfterSafe,
         pendingCancel: pendingCancel.name,
+        dispatchedBeforeThisCancel,
         safePointCancel,
         minZoomWhileOverlapping,
         zoomAfterNewSegment,
