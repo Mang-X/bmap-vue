@@ -153,9 +153,24 @@ destroy(map):
     单槽位会把旧记录覆盖掉，那份动画就再也清理不到（复审 P2）。
   - `stopViewAnimation` 取消该地图上所有未结束的动画：未启动的登记取消请求，启动后由微任务取消；
     已启动的立即取消，**成功后才释放记录**；失败保留记录并抛出，可重试。
-  - `startViewAnimation` 先取消未结束的动画再登记新记录；**取消失败就拒绝替换**（旧记录保留可重试），
-    取消返回后**重新检查地图是否仍存活**——取消会同步触发业务的 `animationcancel` 回调，
-    业务可能在里面销毁地图（复审 P2）。
+    **[取证于 #104 第二批 / 2026-09-21：本条整图命令已删除，正文保留作为历史]** 取消改为**按实例**的
+    `MapDriver.cancelViewAnimation(map, animation)`（只处理该实例对应的那一条记录；已启动立即取消、
+    未启动登记请求、失败保留可重试）。删它的三条依据：零生产消费者（只有自身用例与注释）、其唯一
+    书面理由是「与 #26 已删除的 webgl-v1 的 `map.stopViewAnimation()` 一致」而该前提已消失、
+    整图语义与按实例所有权直接冲突（重试自己这一次会牵连同一张图上别人的动画）。
+    整图清场仍存在于 `destroy` 与 `startViewAnimation` 内部（`cancelAllAnimations`），但那不是对外命令。
+  - `startViewAnimation` 先**尽力清场**再登记新记录；**取消失败就拒绝替换**（旧记录
+    保留可重试），取消返回后**重新检查地图是否仍存活**——取消会同步触发业务的 `animationcancel` 回调，
+    业务可能在里面销毁地图（复审 P2）。清场的**交付时机对两条路径不同**（2026-09-21 真实 AK 实测，
+    读数见审计表 F-1；**#122 评审 P1 纠正了原先把两条路径写成同一种时序的说法**）：
+    - **已启动**的旧段 ⇒ **即时交付**：`cancelViewAnimation` 成功返回后才提交新段（实测相隔约 70ms）。
+      这是「先停旧、再起播」真正成立的那一半：不显式取消时实测两段会在重叠期**同时推进视角**
+      （旧段照旧跑到自己的 `animationend`），这正是清场存在的理由；
+    - **待启动**的旧段 ⇒ 此刻 SDK 取消必抛 `TypeError`，只能登记请求 ⇒ **新段先提交**，旧段的取消落在
+      **它自己的**启动安全窗口（实测与它的 `animationstart` 相隔 0.0–0.3ms，且它来不及产生可观察的推进
+      —— 轨迹只朝新段的末帧走）。
+    因此本决策的承诺是「**在最早的合法时刻交付取消**」，**不是**「提交新段之前图上一段不剩」——
+    后者在待启动路径上做不到。
   - `destroy` 分三条路径（复审 P1 的核心，第三轮 P1 补齐了兜底那条）：进入待销毁状态时**先登记
     取消请求**；有待启动动画时，按官方参考把「取消 + 销毁 Map」一起推迟到安全窗口
     （`animationstart` 之后的微任务），做到**先取消再销毁**；同时挂一个 0ms 兜底定时器，
@@ -170,11 +185,14 @@ destroy(map):
   - 记录按身份从集合移除（不影响同地图的其它动画记录）。
   - **[复核于 #104 / 2026-09-19：KEEP]** 这套 `started` / `settled` / `cancelRequested` + 三态销毁
     **保留**：它记账的是**我们自己**发起的启动/取消/销毁次序（本库拥有的异步写入），不是「这条 SDK
-    回包属于哪次命令」的因果身份——因此不在 #104 的删除面里。同时把它的**证据口径**写清楚：
-    「`animationstart` 在内部 Animation 构造之前同步派发、启动前 `cancelViewAnimation` 抛
-    `TypeError`」这两条目前**只有 Fake 建模**（`FakeV4ViewAnimation`），仓库里没有对应的 probe 脚本
-    或 live 读数，所以它是**防御模型**而不是可对外承诺的时序契约（已登记为审计表 F-1 的待取证项）。
-    `useBMapViewAnimation` 也据此不再镜像暂停/继续（见 #104）；Map 级
+    回包属于哪次命令」的因果身份——因此不在 #104 的删除面里。
+  - **[取证于 #104 / 2026-09-21：F-1 结清]** 上面两条前提原本只有 Fake 建模，现已用真实 AK +
+    headless Chromium 逐条实测（读数与判据见审计表 F-1 与 live gate `view-animation-cancel-window`）。
+    同时把措辞**精确化**：「`animationstart` 在内部 Animation 构造之前同步派发」里的「同步」只发生在
+    **它与内部控制器构造之间**（同一个任务内、先派发后构造，所以派发期间取消必抛错）；
+    相对 `startViewAnimation()` 的**返回**它是**异步**的（`delay: 0` 下实测 5–120ms 才到，
+    `delay: 900` 时约 1.28s）——读成「调用即同步派发」是错的。
+    `useBMapViewAnimation` 据此不再镜像暂停/继续；Map 级
     `pauseViewAnimation` / `continueViewAnimation` 至今没有任何生产者调用，也没有 live 证据。
 - destroy 之后的命令抛 `BMAP_RESOURCE_DISPOSED`（不可重试，`retryable === false`）。
 - **配套的 runtime 加固**：`MapRuntime` 在 `initializeView` 抛错时销毁那个「已创建但还没写进
@@ -234,7 +252,7 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
 | `destroy` 之后调用命令 | v4 抛 `BMAP_RESOURCE_DISPOSED`（webgl-v1 只保证幂等） | 组件/业务按既有 ResourceScope 顺序释放即可 |
 | `destroy` 的失败语义 | 逐项尽力清理 + 汇总抛 `BMAP_SDK_CALL_FAILED`；`disposed ≠ 清理完成`，失败可重试；重试**不会**二次销毁 SDK 对象（`tornDown`） | 调用方可重试 `destroy`；`MapRuntime.dispose()` 会 `logger.warn` |
 | **有待启动动画时 `destroy` 会推迟到安全窗口** | 这种情形下 `destroy()` 返回时 SDK 对象还没销毁，销毁发生在 `animationstart` 之后的微任务（或 0ms 兜底，后者**不**置 `released`） | 不要在 `destroy()` 返回后假定「底层已释放」；需要确定性时序时避免在未启动状态下销毁 |
-| 视角动画的停止/取消时机 | 未启动的动画改为「启动后微任务取消」，`stopViewAnimation` 不再同步立即生效；`stopViewAnimation` 会停止该地图上所有未结束的动画 | 判断状态请依赖 `animationend` / `animationcancel` |
+| 视角动画的停止/取消时机 | 未启动的动画改为「启动后微任务取消」，取消不再同步立即生效；取消**按实例**发（`cancelViewAnimation(map, animation)`，整图命令 `stopViewAnimation` 已在 #104 删除） | 判断状态请依赖 `animationend` / `animationcancel` |
 | 动画取消失败时替换新动画 | `startViewAnimation` 会抛错且不替换（旧动画仍可停） | 先解决取消失败，或销毁地图重建 |
 | `getHeading()` 返回带符号角度 | v4 的 `setHeading(270)` → `getHeading()` 为 `-90` | 不要用 heading 做**线性** round-trip 判断；类型化事件与状态属 #28。视野状态由 [ADR 2026-09-14](./2026-09-14-map-controlled-state.md) 的环绕判等（`-90 ≡ 270`）取代本条 |
 | `setInteraction(map, "tilt-gestures", …)` | 成员存在性在官方来源之间有分歧：有就生效，没有则告警一次并跳过 | #25 的真实 smoke 里确认该成员是否存在；存在即已自动生效，不存在时用构造 options 传 `enableTiltGestures: false` |
@@ -255,13 +273,26 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
   动画的安全取消窗口仍只在官方文档/类型层面核对过。其中 **`MapTypeId` 的成员名已被真实实测
   推翻并修正**（见 [2026-09-13 v4 required smoke](./2026-09-13-v4-required-smoke.md) 决策 5）；
   真实浏览器门禁已落地为 `pnpm smoke:v4`，上面这几项仍未逐条复核。
-- **动画的迟到启动窗口无法彻底关闭**：官方 `startViewAnimation` 内部 setTimeout 没有公开句柄，
-  `delay > 0` 时「启动前取消」做不到。本 Facet 的处理是：有问题动画时把 `destroy` 的清理推迟到
-  安全窗口（先取消再销毁），并用 0ms 兜底保证动画始终不启动时也能推进销毁；因此 **`delay > 0`
-  时 SDK 销毁仍可能先于取消发生**（兜底先到期），但那时**不会**置 `released`——取消失败后
-  `destroy` 仍可重试（第三轮 P1 修正的正是这一点）。兜底之后才启动的动画由记录自己的安全点取消。
-  若 SDK 既不派发 `animationstart` 也不再启动，只会留下一条 Driver 侧记录（随 raw map 一起被 GC）。
-  官方参考本身建议固定 `delay: 0`；该推荐路径下顺序是「先取消、再销毁」。
+- **起播前的清场不是「提交新段之前图上一段不剩」**（#122 评审 P1）：已启动的旧段是即时交付的，
+  但**待启动**的旧段此刻交付不了，新段会先提交、旧段的取消落在它自己的安全窗口（实测 0.0–0.3ms）。
+  实测这条路径上旧段来不及推进视角，但这是**读数**而不是**承诺**：残余风险是那条安全窗口的取消若失败
+  （`settleAtSafePoint` 只 `logger.warn`），旧段会继续推进到下次 `cancelViewAnimation` / `destroy`
+  重试为止。要更强保证（等旧段交付后再起播）需要另一套「延迟提交」机制，本 Facet 没有选。
+- **动画的迟到启动窗口无法彻底关闭**：官方 `startViewAnimation` 内部调度没有公开句柄，
+  「启动前取消」做不到。本 Facet 的处理是：有问题动画时把 `destroy` 的清理推迟到安全窗口
+  （先取消再销毁），并用 0ms 兜底保证动画始终不启动时也能推进销毁；因此销毁仍可能先于取消发生
+  （兜底先到期），但那时**不会**置 `released`——取消失败后 `destroy` 仍可重试（第三轮 P1 修正的正是
+  这一点）。兜底之后才启动的动画由记录自己的安全点取消。
+  **2026-09-21 实测把这个窗口量化了**（审计表 F-1）：`delay: 0` 下 `animationstart` 也要
+  **5–120ms** 才到（它相对 `startViewAnimation()` 的返回是**异步**的），而 `delay > 0` 时更晚
+  （`delay: 900` ≈ 1.28s）；0ms 兜底因此**几乎总是**先于动画启动到期。也就是说：
+  「先取消、再销毁」这一顺序在真实运行时是**针对已在飞的动画**成立的，对**待启动**的动画，
+  实际顺序是「兜底先推进销毁 → 迟到启动由记录自己的安全点收尾」。所以它是一条**尽力而为的
+  排序 + 一条保证活性的兜底**，不是「官方推荐路径下一定成立」的时序承诺
+  （Facet 用例里那条「delay: 0 ⇒ 先取消再销毁」是**夹具时序**下的结论，见审计表第 7 节）。
+  若 SDK 既不派发 `animationstart` 也不再启动，只会留下一条 Driver 侧记录（随 raw map 一起被 GC）；
+  实测在未启动时直接销毁地图，SDK **不抛错**，之后仍会派发一次 `animationstart` 且不再有
+  `animationend` / `animationcancel`——即销毁后动画就地停摆，不会把已销毁的地图拽回来。
 - **`released` 可能暂时不置位**：兜底推进销毁后，若仍有未 settled 的动画记录，`released` 保持
   false（资源已释放、但账没结清）。后续 `destroy` 会补上取消并置位；不调也不会漏释放——
   它只是幂等短路用的标记。破坏性为 0，故显式接受而不是再加一层状态。
@@ -273,6 +304,8 @@ v4 把路况收敛成 `TrafficLayer`（`map.addLayer`），`Map` 自身没有开
 - **`stopViewAnimation` 会取消该地图上所有未结束的动画**：v4 的取消入口需要动画实例，
   而 `MapDriver.stopViewAnimation` 没有入参，因此语义取「停掉这张地图上的视角动画」（与 webgl-v1 的
   `map.stopViewAnimation()` 一致）。需要精确终态时按官方建议在 `animationend` 回调里显式设置末帧视角。
+  **[取证于 #104 第二批 / 2026-09-21：该命令已删除，正文保留作为历史]** 现在只有按实例的
+  `cancelViewAnimation(map, animation)`；`destroy` 的整图清理仍是本库自己的销毁责任，但不是对外命令。
 - **Fake 不负责任值归一化**：`fake-bmap-v4` 记录「传进去什么」，不复刻 SDK 的 heading 归一与
   tilt 截断，因此共享契约只断言不依赖归一化的取值。
 - **webgl-v1 不追平新策略**：它是 #26 待删除实现，只补齐公共接口新增的成员（投影转换），

@@ -888,6 +888,45 @@ function capabilitySupported(client: unknown, capability: string): boolean | nul
   }
 }
 
+/**
+ * 在**原始 map 实例**上直连官方 `cancelViewAnimation`，把「抛没抛 / 抛了什么」记成读数。
+ *
+ * `view-animation-cancel-window` 要断言的就是「这个窗口里取消一定抛错」——抛错本身是结论，
+ * 所以必须先把它捕获成结构化读数，而不是让整条检查以一个未捕获异常结束。
+ *
+ * ⚠️ **成员缺失不是「取消抛错」**：官方把该成员改名/删掉时，若这里回一个「特殊字符串」再让调用方
+ * 用「抛了点什么」判通过，这条 required gate 会**静默变绿**（而生产侧 `callOptional` 对缺成员是
+ * 静默 no-op，这是该故障唯一的防线）。所以成员存在性单独断言，且返回的是带 `name` 的结构化读数，
+ * 便于断言「抛的确实是 `TypeError`」——`registry.mts` 与文档承诺的就是这个类型。
+ */
+interface CancelAttempt {
+  threw: boolean;
+  name: string | null;
+  message: string | null;
+}
+
+function readCancelAttempt(raw: Record<string, unknown>, animation: unknown): CancelAttempt {
+  const member = raw.cancelViewAnimation;
+  assertSmoke(
+    typeof member === "function",
+    "BMAP_VIEWANIMATION_NO_CANCEL_MEMBER",
+    "原始 Map 上没有 `cancelViewAnimation`（或不是函数）：这条检查的前提已经不成立，" +
+      "生产侧 `callOptional` 会把它静默吞掉，必须在这里红",
+    { candidates: Object.keys(raw).filter((key) => /anim|cancel/i.test(key)) },
+  );
+  const cancel = member as (target: unknown) => void;
+  try {
+    cancel.call(raw, animation);
+    return { threw: false, name: null, message: null };
+  } catch (error) {
+    return {
+      threw: true,
+      name: (error as Error)?.name ?? "Unknown",
+      message: (error as Error)?.message ?? String(error),
+    };
+  }
+}
+
 /* ------------------------------------------------------------------ 检查实现 */
 
 interface Ctx {
@@ -993,6 +1032,333 @@ const CHECKS: Record<string, CheckImpl> = {
       );
       assertSmoke(zoom === 14, "BMAP_ZOOM_MISMATCH", `初次 zoom 应为 14，实际 ${zoom}`, { zoom });
       return { center, zoom };
+    },
+  },
+
+  /**
+   * 视角动画的**启动窗口**（#104 审计表 F-1 的 live gate）。
+   *
+   * 为什么它必须是一条 **live** 检查：`MapDriver` 的动画簿记（`AnimationRecord` 的
+   * `started` / `cancelRequested`、把取消推迟到 `animationstart` 之后的微任务、销毁时按
+   * 「先取消再销毁」排序、0ms 兜底）整条正确性都建立在三条**只有真实 SDK 能证伪**的前提上：
+   *
+   * 1. 启动窗口真实存在 —— 动画还没进可取消窗口时调 `Map#cancelViewAnimation` 会抛 `TypeError`
+   *    （在 `animationstart` 派发期间也一样，因为内部控制器那时还没构造）；
+   * 2. 那个窗口**是可关闭的** —— `animationstart` 之后的微任务里取消成功，并且真的让视图停下；
+   * 3. **待启动旧段的「起播前清场」只能延后交付**（#122 评审 P1）：`startViewAnimation` 提交新段时
+   *    旧段的取消还交付不了，它落在旧段**自己的** `animationstart` 上；这条路径的代价（旧段会不会
+   *    在被取消前推进视角）必须实测，因为「提交新段前图上一段不剩」是做不到的。
+   *
+   * 用原始实例直连官方命令（不经过本库），因为要核对的正是**官方行为**本身；本库自己对这些读数的
+   * 反应由 Fake 上的 Facet 用例覆盖。第一次跑通这四条读数见
+   * `docs/zh-CN/contributing/architecture-ownership-audit.md` 的 F-1 行（2026-09-21）。
+   *
+   * 顺序刻意如此：先跑**正证控件**（一段正常播放真的推动了视图），后面的「取消之后视图没动」
+   * 才有区分力 —— 少了它，一个「什么都没发生」的环境也会让四条断言全绿。
+   */
+  "view-animation-cancel-window": {
+    async run(ctx) {
+      const raw = ctx.mounted.raw();
+      const namespace = (globalThis as { BMap?: { ViewAnimation?: unknown } }).BMap;
+      const AnimationCtor = namespace?.ViewAnimation;
+      assertSmoke(
+        typeof AnimationCtor === "function",
+        "BMAP_VIEWANIMATION_MISSING",
+        "全局命名空间上没有 `ViewAnimation` 构造器：无法在真实 SDK 上核对启动窗口",
+      );
+
+      const getZoom = raw.getZoom as undefined | (() => number);
+      const getCenter = raw.getCenter as undefined | (() => { lng: number; lat: number });
+      const startAnimation = raw.startViewAnimation as undefined | ((animation: unknown) => void);
+      const setZoom = raw.setZoom as undefined | ((zoom: number) => void);
+      assertSmoke(
+        typeof getZoom === "function" &&
+          typeof getCenter === "function" &&
+          typeof startAnimation === "function",
+        "BMAP_VIEWANIMATION_MISSING_API",
+        "原始 Map 缺少 getZoom / getCenter / startViewAnimation：这条检查无法进行",
+        { members: Object.keys(raw).filter((key) => /anim|zoom|center/i.test(key)) },
+      );
+      const from = getZoom!.call(raw);
+      const to = from + 3;
+
+      /** `target` 默认末帧 `to`；传别的值可以让两段动画朝**相反**方向走，轨迹才有判别力。 */
+      const make = (options: Record<string, unknown>, target = to) =>
+        new (AnimationCtor as new (frames: unknown[], options: Record<string, unknown>) => {
+          addEventListener: (name: string, fn: () => void) => void;
+        })(
+          [
+            { center: getCenter!.call(raw), zoom: from, percentage: 0 },
+            { center: getCenter!.call(raw), zoom: target, percentage: 1 },
+          ],
+          options,
+        );
+
+      const marks: string[] = [];
+      const observe = (
+        animation: { addEventListener: (name: string, fn: () => void) => void },
+        sink: string[] = marks,
+      ) => {
+        for (const name of ["animationstart", "animationend", "animationcancel"]) {
+          animation.addEventListener(name, () => sink.push(name));
+        }
+      };
+
+      /**
+       * 每个子场景都从**同一个已知视野**开始。
+       *
+       * 不复用上一个子场景留下的视野：动画起播时会**立即应用首帧**（实测），于是「取消之后
+       * `getZoom()` 落在哪里」这件事只有在前置视野确定时才可读 —— 第一次接这条检查时正是栽在
+       * 这里：取消前视野是上一段留下的 16.97，取消后落到本段的**首帧** 14，被误判成「仍在推进」。
+       */
+      const resetView = async () => {
+        setZoom!.call(raw, from);
+        await sleep(150);
+      };
+
+      /* ── 正证控件：一段正常播放必须真的推动视图 ── */
+      await resetView();
+      marks.length = 0;
+      const normal = make({ duration: 500, delay: 0 });
+      observe(normal);
+      startAnimation!.call(raw, normal);
+      /* ── 前提 0：启动窗口相对**调用返回**是异步的（同任务内还不该派发） ── */
+      const dispatchedBeforeReturn = marks.includes("animationstart");
+      assertSmoke(
+        !dispatchedBeforeReturn,
+        "BMAP_VIEWANIMATION_SYNC_DISPATCH",
+        "`startViewAnimation()` 返回时 `animationstart` 已经派发 —— 它变成同步的了；" +
+          "本库「启动前取消会抛错、要等安全窗口」的整条推理要从头复核",
+      );
+      await until(
+        () => (marks.includes("animationend") ? true : null),
+        5_000,
+        "BMAP_VIEWANIMATION_NO_END",
+        "正常播放的 animationend",
+      );
+      const zoomAfterNormal = getZoom!.call(raw);
+      assertSmoke(
+        zoomAfterNormal >= to - 0.5,
+        "BMAP_VIEWANIMATION_NOT_DRIVING",
+        `正常播放的动画没有把视图推到末帧（${zoomAfterNormal} / 期望 ${to}）——` +
+          "后面「取消之后视图没动」的读数就失去区分力",
+        { from, to, zoomAfterNormal },
+      );
+
+      /* ── 前提 1：启动窗口真实存在（未起播的实例上取消抛错） ── */
+      const neverStarted = make({ duration: 400, delay: 0 });
+      const beforeStart = readCancelAttempt(raw, neverStarted);
+      assertSmoke(
+        beforeStart.threw && beforeStart.name === "TypeError",
+        "BMAP_VIEWANIMATION_CANCEL_BEFORE_START",
+        "未起播的实例上 `cancelViewAnimation` 没有抛 `TypeError`（读数 " +
+          `${JSON.stringify(beforeStart)}）：启动窗口的假设已经不成立`,
+        beforeStart,
+      );
+
+      /* ── 前提 1 的另一半：派发期间同步取消同样抛错（内部控制器还没建） ── */
+      await resetView();
+      marks.length = 0;
+      const during = make({ duration: 700, delay: 0 });
+      observe(during);
+      // 用数组收集而不是「赋给局部变量」：回调里的赋值不在 TS 的控制流里，断言时会被收窄成 `never`
+      const duringAttempts: CancelAttempt[] = [];
+      during.addEventListener("animationstart", () => {
+        duringAttempts.push(readCancelAttempt(raw, during));
+      });
+      startAnimation!.call(raw, during);
+      await until(
+        () => (marks.includes("animationend") ? true : null),
+        5_000,
+        "BMAP_VIEWANIMATION_DURING_NO_END",
+        "派发期间取消之后动画仍跑完的 animationend",
+      );
+      const zoomAfterDuring = getZoom!.call(raw);
+      // 派发期间那次取消的读数（回调必须真的跑过，否则这里是 null → 下面的断言会红）
+      const duringAttempt = duringAttempts[0] ?? null;
+      assertSmoke(
+        duringAttempt !== null && duringAttempt.threw && duringAttempt.name === "TypeError",
+        "BMAP_VIEWANIMATION_CANCEL_DURING_DISPATCH",
+        "在 `animationstart` 处理器里同步取消没有抛 `TypeError`（读数 " +
+          `${JSON.stringify(duringAttempt)}）—— 内部控制器可能已经提前建好，` +
+          "本库「派发期间必须走延迟取消」的前提不再成立",
+        duringAttempt,
+      );
+      // 那次取消没生效：动画照旧跑到末帧。这是「派发期间不能取消」的**行为**证据（不是只看抛错）
+      assertSmoke(
+        zoomAfterDuring >= to - 0.5,
+        "BMAP_VIEWANIMATION_DURING_INEFFECTIVE",
+        `派发期间那次取消居然生效了（视图停在 ${zoomAfterDuring} / 末帧 ${to}）：与上一条读数矛盾`,
+        { zoomAfterDuring, to },
+      );
+
+      /* ── 前提 2：安全窗口可关闭它 —— 微任务里取消成功且视图不推进 ── */
+      await resetView();
+      marks.length = 0;
+      const safe = make({ duration: 1_200, delay: 0 });
+      observe(safe);
+      const zoomBeforeSafe = getZoom!.call(raw);
+      const safeAttempts: CancelAttempt[] = [];
+      safe.addEventListener("animationstart", () => {
+        void Promise.resolve().then(() => {
+          safeAttempts.push(readCancelAttempt(raw, safe));
+        });
+      });
+      startAnimation!.call(raw, safe);
+      await until(
+        () => (marks.includes("animationcancel") ? true : null),
+        5_000,
+        "BMAP_VIEWANIMATION_NO_CANCEL_EVENT",
+        "微任务取消后的 animationcancel",
+      );
+      await sleep(300);
+      const zoomAfterSafe = getZoom!.call(raw);
+      const safeAttempt = safeAttempts[0] ?? null;
+      assertSmoke(
+        safeAttempt !== null && !safeAttempt.threw,
+        "BMAP_VIEWANIMATION_MICROTASK_CANCEL",
+        `在 animationstart 之后的微任务里取消抛错了（读数 ${JSON.stringify(safeAttempt)}）——` +
+          "本库的「安全窗口 = 派发之后的微任务」不再成立",
+        safeAttempt,
+      );
+      // 判据是「停在**起始帧**、没有推进到末帧」：SDK 起播时会立即应用首帧，所以不能拿
+      // 「取消前后的视野差」当判据（那是取消失效与首帧生效的混合读数）。
+      assertSmoke(
+        Math.abs(zoomAfterSafe - from) <= 0.5,
+        "BMAP_VIEWANIMATION_CANCEL_INEFFECTIVE",
+        `微任务取消之后视图仍推进了（${zoomBeforeSafe} → ${zoomAfterSafe}；起始帧 ${from} / 末帧 ${to}）：` +
+          "取消没有真的生效",
+        { zoomBeforeSafe, zoomAfterSafe, from, to },
+      );
+
+      /* ── 前提 3（#122 评审 P1）：待启动旧段的「清场」只能延后交付，且旧段来不及推进视角 ──
+       *
+       * 这是本库 `startViewAnimation` 的真实路径：旧段还没进安全窗口时取消**交付不了**
+       * （`cancelViewAnimation` 必抛），只能登记请求，而新段紧接着就被提交给 SDK。
+       * 真实 4.0 上的形状（实测）：旧段的取消落在**它自己的 `animationstart`**（相隔 0.0–0.3ms），
+       * 新段不被排队到旧段之后，且**旧段来不及驱动视角**。
+       *
+       * 两段朝**相反**方向走（旧段缩小、新段放大），所以「轨迹有没有朝旧段的末帧掉」是可判别的。
+       */
+      await resetView();
+      const oldMarks: string[] = [];
+      const newMarks: string[] = [];
+      const oldSegment = make({ duration: 1_500, delay: 0 }, from - 4);
+      const newSegment = make({ duration: 1_500, delay: 0 });
+      observe(oldSegment, oldMarks);
+      observe(newSegment, newMarks);
+
+      // 旧段仍在启动窗口内：此刻取消拿不到交付（本库只能登记请求，稍后在安全窗口交付）
+      // 数组收集而不是「赋给局部变量」：回调里的赋值不在 TS 的控制流里，断言时会被收窄成 `never`
+      const safePointCancels: CancelAttempt[] = [];
+      oldSegment.addEventListener("animationstart", () => {
+        void Promise.resolve().then(() => {
+          safePointCancels.push(readCancelAttempt(raw, oldSegment));
+        });
+      });
+      startAnimation!.call(raw, oldSegment);
+      // **关键**：这一次读数必须落在 `startViewAnimation(A)` **返回之后**、`animationstart` **到达之前**
+      // —— 那才是 Driver 依赖的窗口（“从未 start 过”的实例由前面的 `neverStarted` 子场景覆盖，
+      // 拿它顶替的话，SDK 哪天允许“start 之后、事件之前”取消，这条 gate 也照样全绿。#122 复审 P1）
+      const dispatchedBeforeThisCancel = oldMarks.includes("animationstart");
+      const pendingCancel = readCancelAttempt(raw, oldSegment);
+      // 局部前提断言：让「这一次读数确实在窗口内」自证，不靠 ① 那条读数的旁证
+      assertSmoke(
+        !dispatchedBeforeThisCancel,
+        "BMAP_VIEWANIMATION_PENDING_WINDOW_MISSED",
+        "读这次取消的时候 `animationstart` 已经派发 —— 测到的不是「start 已返回、事件未到」那个窗口",
+        { oldMarks },
+      );
+      // 旧段还没起播，新段就被提交 —— 这正是被评审指出的那条路径
+      startAnimation!.call(raw, newSegment);
+
+      // 逐点采样：旧段若真的推动了视角，轨迹会朝 `from - 4` 掉下去
+      let minZoomWhileOverlapping = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 12; i += 1) {
+        await sleep(60);
+        minZoomWhileOverlapping = Math.min(minZoomWhileOverlapping, getZoom!.call(raw));
+      }
+      await until(
+        () => (newMarks.includes("animationend") ? true : null),
+        5_000,
+        "BMAP_VIEWANIMATION_PENDING_NO_END",
+        "提交新段之后它自己的 animationend",
+      );
+      const zoomAfterNewSegment = getZoom!.call(raw);
+      // 旧段那次安全窗口取消的读数（回调必须真的跑过，否则这里是 null → 下面第一条断言会红）
+      const safePointCancel = safePointCancels[0] ?? null;
+
+      assertSmoke(
+        pendingCancel.threw && pendingCancel.name === "TypeError",
+        "BMAP_VIEWANIMATION_PENDING_NOT_CANCELLABLE",
+        "`startViewAnimation` 已返回、`animationstart` 还没到的时候取消，没有抛 `TypeError`" +
+          `（读数 ${JSON.stringify(pendingCancel)}）—— 这条路径的前提已经变了：` +
+          "本库「该窗口内只能登记请求（`deferred`）」的契约随之失效",
+        pendingCancel,
+      );
+      // 旧段必须以「先 animationstart、再 animationcancel」收场。顺序用 indexOf 比较，但**先要求都存在**
+      // —— 少一个时 indexOf 返回 -1，直接比大小会恒真。
+      const oldStartedAt = oldMarks.indexOf("animationstart");
+      const oldCancelledAt = oldMarks.indexOf("animationcancel");
+      assertSmoke(
+        oldStartedAt >= 0 && oldCancelledAt > oldStartedAt,
+        "BMAP_VIEWANIMATION_PENDING_NOT_SETTLED",
+        `旧段没有按「先 animationstart 再 animationcancel」收场（旧段事件=${oldMarks.join(" → ")}）——` +
+          "登记下来的取消没有在它自己的安全窗口交付",
+        { oldMarks },
+      );
+      // ★ 这条**不能**由 ④ 替代（#122 复审 P1）：④ 只证明「单独一段动画」能在派发后的微任务里取消；
+      // 这里要证明的是组合条件 —— **B 已经先提交之后**，A 的 deferred 请求仍由本库成功交付。
+      // 少了它，SDK 哪天改成「B 存在时自己把 A 结束掉并派发 animationcancel」，本库的交付失败而
+      // 上面那条（只查事件到没到）照样全绿 —— 那正是这条 gate 要钉的契约。
+      assertSmoke(
+        safePointCancel !== null && !safePointCancel.threw,
+        "BMAP_VIEWANIMATION_PENDING_SAFE_CANCEL_FAILED",
+        `旧段进入自己的安全窗口后，本库这一次取消没有成功（读数 ${JSON.stringify(safePointCancel)}）——` +
+          "deferred 请求没有被真正交付",
+        safePointCancel,
+      );
+      // 核心断言：旧段**来不及**驱动视角（判据是轨迹方向，不是「有没有抛错」）
+      assertSmoke(
+        minZoomWhileOverlapping >= from - 0.5,
+        "BMAP_VIEWANIMATION_PENDING_OVERLAP",
+        `待启动旧段在被取消前推动了视角（重叠期最低 zoom=${minZoomWhileOverlapping}，` +
+          `旧段末帧=${from - 4}）——「清场只能延后交付」这条路径的代价比实测的大`,
+        { minZoomWhileOverlapping, from, to, oldMarks, newMarks },
+      );
+      // 正证控件：新段确实跑到了自己的末帧（否则上面那条「没掉下去」是空转）
+      assertSmoke(
+        zoomAfterNewSegment >= to - 0.5,
+        "BMAP_VIEWANIMATION_PENDING_NEW_NOT_DRIVING",
+        `提交的新段没有跑到自己的末帧（${zoomAfterNewSegment} / 期望 ${to}）`,
+        { zoomAfterNewSegment, to },
+      );
+
+      // 收尾：把视野还原，别把这一条检查改过的视图留给后面的检查（尽力而为）
+      try {
+        setZoom!.call(raw, from);
+      } catch {
+        /* 还原是尽力而为，失败不该让整条检查变红 */
+      }
+
+      return {
+        from,
+        to,
+        dispatchedBeforeReturn,
+        zoomAfterNormal,
+        beforeStart,
+        duringAttempt,
+        zoomAfterDuring,
+        zoomBeforeSafe,
+        zoomAfterSafe,
+        pendingCancel: pendingCancel.name,
+        dispatchedBeforeThisCancel,
+        safePointCancel,
+        minZoomWhileOverlapping,
+        zoomAfterNewSegment,
+        oldMarks,
+        newMarks,
+      };
     },
   },
 

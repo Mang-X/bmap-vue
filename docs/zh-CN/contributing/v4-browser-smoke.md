@@ -69,6 +69,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `fixture-namespace-reused` | — | ✅ | 复用注入的命名空间、且**零**官方入口 script |
 | `map-ready` | ✅ | ✅ | `MapHandle` + 容器有 SDK DOM（live）/ 账本可读（fixture） |
 | `map-view-round-trip` | ✅ | ✅ | `getCenter` / `getZoom` 与传入的 `center` / `zoom` 一致 |
+| `view-animation-cancel-window` | ✅ | — | **#104 审计表 F-1 的 live gate**：未起播的实例上 `cancelViewAnimation` 必抛 `TypeError`；在 `animationstart` 处理器里**同步**取消同样抛错、且动画照旧跑到末帧；`animationstart` 之后的**微任务**里取消成功、派发 `animationcancel`、且视图停在**该段首帧**（未推进到末帧）；**待启动旧段的「清场」只能延后交付**（#122 评审 P1）——旧段仍在启动窗口时取消拿不到交付、新段先提交，旧段在**它自己的** `animationstart` 上被取消，且**来不及驱动视角**（两段朝相反方向走，重叠期最低 zoom 不得越过起始值）。这一子场景的**读数点固定在 `startViewAnimation` 返回之后、`animationstart` 到达之前**，且该前提由它自己断言（不能拿「从未 start 过」那条顶替，#122 复审 P1）；「旧段收场」既钉**顺序**（`animationstart` 在 `animationcancel` 之前），也断言**本库那次安全窗口取消确实成功**（`safePointCancel.threw === false`）—— 只查「事件到没到」会在「SDK 自己把旧段结束掉、而本库交付失败」时假绿（#122 复审第三轮 P1）。自带两处正证控件：正常播放必须真的把 `getZoom()` 推到末帧；那条子场景里提交的新段也必须跑到自己的末帧。**只登记在 live 档**：它验的是真实 SDK 的启动窗口，Fake 上的同一套语义由 Facet 用例覆盖 |
 | `overlay-marker` | ✅ | ✅ | 覆盖物计数增长（live 用 `getOverlays()`，fixture 用账本） |
 | `overlay-polyline` | ✅ | ✅ | 同上 |
 | `overlay-rectangle` | ✅ | ✅ | v4 新增的 `<BRectangle>`：计数增长 + `getBounds()` 回读几何（#31） |
@@ -80,6 +81,10 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `layer-traffic` | ✅ | ✅ | 同 `layer-district`；`BTrafficLayer` 走官方路况服务，无需外部瓦片源 |
 | `layer-geojson` | ✅ | ✅ | 同 `layer-district`，另加「`setData` 写入的 `FeatureCollection` 被 SDK 接受」（线要素） |
 | `infowindow-visible` | ✅ | ✅ | 地图**活状态**非空（轮询）+ 内容节点 `display`/`visibility` 可见 + 文本非空 |
+| `infowindow-close-button-pair` | ✅ | — | 点气泡右上角的关闭按钮：`close` **恰好一次**、`clickclose` **至少一次**，且本库把模型收敛为关（回写 `update:open false`）。`clickclose` 的**条数**只作读数不断言 —— 实测它等于该实例被打开过几次，把它写成「一次点击一条」会得到一条假门禁（口径见该检查在 `tests/browser/jsapi-v4/main.ts` 里的注释）。**只登记在 live 档**：它验的是真实 SDK 的事件形状与 DOM |
+| `custom-overlay-visible` | ✅ | ✅ | `<BCustomOverlay>`：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置**不重建 DOM**、不产生第二个宿主；隐藏后实例仍在图上 |
+| `context-menu-attached` | — | ✅ | `<BContextMenu>`：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（读 Fake 账本） |
+| `context-menu-marker-target` | ✅ | — | `<BContextMenu>` 写在 `<BMarker>` 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员，不在类型包声明里）。**只登记在 live 档**：它验的是真实 SDK 的成员与 DOM |
 | `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空或超时都记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
 | `ui-kit-autocomplete-search` | ✅ | — | widget `ready`、检索写入输入框、宿主里出现官方 UI Kit 渲染的输入框、**卸载后宿主子树从文档撤走**（回收路径，见下） |
 | `ui-kit-placesearch-load` | ✅ | — | widget `ready`、检索结算、**`load` 事件带回 POI**（并从中取一个真实 uid 给下一条检查）、宿主里由 UI Kit 渲染出结果 DOM |
