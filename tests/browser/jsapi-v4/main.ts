@@ -1249,10 +1249,11 @@ const CHECKS: Record<string, CheckImpl> = {
       observe(newSegment, newMarks);
 
       // 旧段仍在启动窗口内：此刻取消拿不到交付（本库只能登记请求，稍后在安全窗口交付）
-      let safePointCancel: CancelAttempt | null = null;
+      // 数组收集而不是「赋给局部变量」：回调里的赋值不在 TS 的控制流里，断言时会被收窄成 `never`
+      const safePointCancels: CancelAttempt[] = [];
       oldSegment.addEventListener("animationstart", () => {
         void Promise.resolve().then(() => {
-          safePointCancel = readCancelAttempt(raw, oldSegment);
+          safePointCancels.push(readCancelAttempt(raw, oldSegment));
         });
       });
       startAnimation!.call(raw, oldSegment);
@@ -1284,6 +1285,8 @@ const CHECKS: Record<string, CheckImpl> = {
         "提交新段之后它自己的 animationend",
       );
       const zoomAfterNewSegment = getZoom!.call(raw);
+      // 旧段那次安全窗口取消的读数（回调必须真的跑过，否则这里是 null → 下面第一条断言会红）
+      const safePointCancel = safePointCancels[0] ?? null;
 
       assertSmoke(
         pendingCancel.threw && pendingCancel.name === "TypeError",
@@ -1293,12 +1296,27 @@ const CHECKS: Record<string, CheckImpl> = {
           "本库「该窗口内只能登记请求（`deferred`）」的契约随之失效",
         pendingCancel,
       );
+      // 旧段必须以「先 animationstart、再 animationcancel」收场。顺序用 indexOf 比较，但**先要求都存在**
+      // —— 少一个时 indexOf 返回 -1，直接比大小会恒真。
+      const oldStartedAt = oldMarks.indexOf("animationstart");
+      const oldCancelledAt = oldMarks.indexOf("animationcancel");
       assertSmoke(
-        oldMarks.includes("animationstart") && oldMarks.includes("animationcancel"),
+        oldStartedAt >= 0 && oldCancelledAt > oldStartedAt,
         "BMAP_VIEWANIMATION_PENDING_NOT_SETTLED",
-        `旧段最终没有得到「启动 + 取消」这一对事件（旧段事件=${oldMarks.join(",")}）——` +
+        `旧段没有按「先 animationstart 再 animationcancel」收场（旧段事件=${oldMarks.join(" → ")}）——` +
           "登记下来的取消没有在它自己的安全窗口交付",
-        { oldMarks, safePointCancel },
+        { oldMarks },
+      );
+      // ★ 这条**不能**由 ④ 替代（#122 复审 P1）：④ 只证明「单独一段动画」能在派发后的微任务里取消；
+      // 这里要证明的是组合条件 —— **B 已经先提交之后**，A 的 deferred 请求仍由本库成功交付。
+      // 少了它，SDK 哪天改成「B 存在时自己把 A 结束掉并派发 animationcancel」，本库的交付失败而
+      // 上面那条（只查事件到没到）照样全绿 —— 那正是这条 gate 要钉的契约。
+      assertSmoke(
+        safePointCancel !== null && !safePointCancel.threw,
+        "BMAP_VIEWANIMATION_PENDING_SAFE_CANCEL_FAILED",
+        `旧段进入自己的安全窗口后，本库这一次取消没有成功（读数 ${JSON.stringify(safePointCancel)}）——` +
+          "deferred 请求没有被真正交付",
+        safePointCancel,
       );
       // 核心断言：旧段**来不及**驱动视角（判据是轨迹方向，不是「有没有抛错」）
       assertSmoke(
