@@ -592,7 +592,9 @@ describe("视角动画", () => {
     const b = { frames: [], cancel: () => void canceled.push("b") };
 
     map.startViewAnimation(handle, a);
-    map.startViewAnimation(handle, b); // 起播前会先取消上一段 ⇒ a 被取消并已结算
+    // 这两个是**没有生命周期事件**的动画对象 ⇒ 记录按「已启动」处理，起播前的清场是**即时交付**的
+    // （真正的待启动窗口那条路径见下面「#122 评审 P1」的 describe）
+    map.startViewAnimation(handle, b);
     expect(canceled).toEqual(["a"]);
 
     // 传入 b：只取消 b 这一条记录
@@ -954,6 +956,78 @@ describe("视角动画生命周期（第三轮复审 P1：非零 delay）", () =
     const log = fake.createdMaps[0].callLog;
     expect(log.indexOf("cancelViewAnimation")).toBeLessThan(log.indexOf("destroy"));
     expect(animation.settled).toBe(true);
+  });
+});
+
+describe("视角动画生命周期（#122 评审 P1：待启动旧段的「清场」时机）", () => {
+  function createAnimation(fake: FakeBMapV4, options: Record<string, unknown> = {}) {
+    return new fake.namespace.ViewAnimation([{ percentage: 0 }, { percentage: 1 }], options);
+  }
+
+  /** `callLog` 里每个 `startViewAnimation` 的下标。 */
+  const startIndexes = (log: readonly string[]): number[] =>
+    log.map((call, index) => (call === "startViewAnimation" ? index : -1)).filter((i) => i >= 0);
+
+  /**
+   * **待启动**旧段：起播前的清场此刻交付不了 —— 只能登记请求，新段会先提交。
+   *
+   * 这是 #122 评审 P1 的形状：`cancelAnimation` 对未启动的记录只置 `cancelRequested` 就返回
+   * （此窗口内 SDK 取消必抛 `TypeError`，实测见审计表 F-1 ②），而 `startViewAnimation` 紧接着就把
+   * 新段提交给了 SDK。真实 4.0 上的读数是：旧段的取消落在**它自己的启动安全窗口**，
+   * 与它的 `animationstart` 相隔 0.0–0.3ms，因此旧段来不及推进视角（轨迹只朝新段的末帧走）。
+   *
+   * 本用例钉的是**契约**：不承诺「提交新段前图上一段不剩」，只承诺「在最早的合法时刻交付取消」。
+   * 想要更强保证（等旧段交付后再起播）是另一种设计，本库没有选 —— 见 PR #122 的回复。
+   */
+  it("[P1] 待启动旧段：提交新段时只登记请求，取消在旧段自己的安全窗口才交付", async () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const first = createAnimation(fake, { delay: 30 });
+    const second = createAnimation(fake, {});
+
+    map.startViewAnimation(handle, first);
+    expect(map.cancelViewAnimation(handle, first)).toBe("deferred");
+    map.startViewAnimation(handle, second);
+
+    const log = fake.createdMaps[0].callLog;
+    const starts = startIndexes(log);
+    expect(starts, "两次 startViewAnimation 都该交给 SDK").toHaveLength(2);
+    // 契约的形状（修复前这里描述成「起播前先清场」）：此刻**没有**任何已交付的取消
+    expect(
+      log.indexOf("cancelViewAnimation"),
+      `提交新段时不该有已交付的取消（callLog=${log.join(",")}）`,
+    ).toBe(-1);
+    expect(first.cancelCalls).toBe(0);
+
+    // 旧段进入安全窗口之后，登记下来的那次取消才真正交付 —— 且晚于新段的提交
+    await sleep(60);
+    const cancelAt = log.indexOf("cancelViewAnimation");
+    expect(cancelAt, `安全窗口里必须真的交付取消（callLog=${log.join(",")}）`).toBeGreaterThanOrEqual(0);
+    expect(cancelAt, `待启动旧段的取消晚于新段的提交（callLog=${log.join(",")}）`).toBeGreaterThan(starts[1]!);
+    expect(first.cancelCalls).toBe(1);
+    expect(first.settled).toBe(true);
+    // 新段不受影响，仍是本库跟踪的那一段
+    expect(second.settled).toBe(false);
+    expect(map.cancelViewAnimation(handle, second)).toBe("canceled");
+  });
+
+  it("[P1] 已启动旧段（对照）：取消在提交新段**之前**交付", async () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const first = createAnimation(fake, {});
+    const second = createAnimation(fake, {});
+    map.startViewAnimation(handle, first);
+    await sleep(); // first 已进安全窗口
+
+    map.startViewAnimation(handle, second);
+
+    const log = fake.createdMaps[0].callLog;
+    const starts = startIndexes(log);
+    expect(starts).toHaveLength(2);
+    const cancelAt = log.indexOf("cancelViewAnimation");
+    expect(cancelAt, `已启动旧段的取消必须先交付（callLog=${log.join(",")}）`).toBeGreaterThanOrEqual(0);
+    expect(cancelAt, `已启动旧段的清场排在提交新段之前（callLog=${log.join(",")}）`).toBeLessThan(starts[1]!);
+    expect(first.settled).toBe(true);
   });
 });
 

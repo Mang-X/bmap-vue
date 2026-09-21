@@ -120,7 +120,7 @@
 
 | 编号 | 待证事实 | 当前状态 | 约束 / 处置 |
 | --- | --- | --- | --- |
-| F-1 | `startViewAnimation` 的启动窗口：`animationstart` 是否真的在内部 Animation 构造前同步派发、启动前 `cancelViewAnimation` 是否真的抛 `TypeError` | **已结清（2026-09-21，真实 AK + headless Chromium）**。读数（同一轮里逐条复现，判据全部是「对象自身的结果」）：① `delay: 0` 时 `animationstart` 在调用返回后 **5–120ms** 才到（**不是**同步派发；`delay: 900` 时约 **1.28s**）；② 从未起播的实例上 `cancelViewAnimation` → `TypeError: Cannot read properties of undefined (reading 'cancel')`（`pauseViewAnimation` 报 `reading 'pause'`、`continueViewAnimation` 报 `reading '_doStart'`）；③ 在 `animationstart` **处理器里同步**取消 → 同样抛 `reading 'cancel'`，且动画照旧跑到末帧（视图确实推进 ⇒ 那次取消没生效）；④ 在 `animationstart` 之后的**微任务**里取消 → 不抛错、派发 `animationcancel`，视图停在**该段首帧**（末帧未到达）；⑤ 未显式取消就再 start 一段：前一段**不**派发 `animationcancel`、照旧跑到自己的 `animationend`，新一段的启动被推迟到不可预期时刻（实测 +0.9~1.6s）⇒ 重叠期里两段都在推进视角，「一张地图同时跑两段动画」不可依赖；⑥ 未启动时直接 `map.destroy()` 不抛错，之后仍派发一次 `animationstart` 且再无 end/cancel（销毁后动画就地停摆）。**gate**：live smoke 的 `view-animation-cancel-window`（required）把 ①②③④ 变成可回归断言，并自带正证控件（一段正常播放必须真的把视图推到末帧，否则「取消之后没推进」是空转） | 据此把 ADR 的措辞精确化（「同步」只存在于**派发与内部控制器构造之间**，相对 `startViewAnimation()` 返回是异步的），并写明「0ms 兜底几乎总是先于动画启动到期」这一真实排序。**仍然不许把该时序升级为对外承诺**：它是官方行为，官方可以改 —— 这正是 gate 的用途。**本条只覆盖「start 窗口 + 取消时序」**：Map 级 `pauseViewAnimation` / `continueViewAnimation` 既没有生产者、也没有取证计划（`plugins/compat-inventory.ts` 里那两条只是外部插件用到的成员清单），要开放它得先单立一张 probe 票，不算本条已覆盖范围 |
+| F-1 | `startViewAnimation` 的启动窗口：`animationstart` 是否真的在内部 Animation 构造前同步派发、启动前 `cancelViewAnimation` 是否真的抛 `TypeError` | **已结清（2026-09-21，真实 AK + headless Chromium）**。读数（同一轮里逐条复现，判据全部是「对象自身的结果」）：① `delay: 0` 时 `animationstart` 在调用返回后 **5–120ms** 才到（**不是**同步派发；`delay: 900` 时约 **1.28s**）；② 从未起播的实例上 `cancelViewAnimation` → `TypeError: Cannot read properties of undefined (reading 'cancel')`（`pauseViewAnimation` 报 `reading 'pause'`、`continueViewAnimation` 报 `reading '_doStart'`）；③ 在 `animationstart` **处理器里同步**取消 → 同样抛 `reading 'cancel'`，且动画照旧跑到末帧（视图确实推进 ⇒ 那次取消没生效）；④ 在 `animationstart` 之后的**微任务**里取消 → 不抛错、派发 `animationcancel`，视图停在**该段首帧**（末帧未到达）；⑤ 未显式取消就再 start 一段：前一段**不**派发 `animationcancel`、照旧跑到自己的 `animationend`，新一段的启动被推迟到不可预期时刻（实测 +0.9~1.6s）⇒ 重叠期里两段都在推进视角，「一张地图同时跑两段动画」不可依赖；⑥ 未启动时直接 `map.destroy()` 不抛错，之后仍派发一次 `animationstart` 且再无 end/cancel（销毁后动画就地停摆）；⑦ **待启动旧段的「清场」只能延后交付**（2026-09-21 追加，#122 评审 P1）：`startViewAnimation` 提交新段时，旧段仍在启动窗口 ⇒ `cancelViewAnimation` 拿不到交付（`TypeError`），**新段先提交**，旧段的取消落在**它自己的** `animationstart` 上（实测两段事件相隔 **0.0–0.3ms**）。实测这条路径的代价很小：两段朝**相反**方向走时，重叠期的最低 zoom 是 **14.07**（起始 14、旧段末帧 10、新段末帧 17）⇒ 旧段来不及驱动视角，轨迹只朝新段末帧走。**gate**：live smoke 的 `view-animation-cancel-window`（required）把 ①②③④ + ⑤/⑦ 的形状变成可回归断言，并自带正证控件（一段正常播放必须真的把视图推到末帧，否则「取消之后没推进」是空转；⑦ 的子场景也要求新段跑到自己的末帧） | 据此把 ADR 的措辞精确化（「同步」只存在于**派发与内部控制器构造之间**，相对 `startViewAnimation()` 返回是异步的）；把「起播前清场」按**两条路径**拆开写（已启动=提交前交付 / 待启动=旧段自己的安全窗口交付），并写明承诺粒度是「在最早的合法时刻交付取消」而不是「提交新段前图上一段不剩」；同时写明「0ms 兜底几乎总是先于动画启动到期」这一真实排序。**仍然不许把该时序升级为对外承诺**：它是官方行为，官方可以改 —— 这正是 gate 的用途。**本条只覆盖「start 窗口 + 取消时序」**：Map 级 `pauseViewAnimation` / `continueViewAnimation` 既没有生产者、也没有取证计划（`plugins/compat-inventory.ts` 里那两条只是外部插件用到的成员清单），要开放它得先单立一张 probe 票，不算本条已覆盖范围 |
 | F-2 | 官方 JSAPI 的 JSONP 回调全局名占用与「别人也注册了同名回调」的判定 | `ASSUMED` | 只在 `customScriptV4Provider` 的 jsonp 分支生效，不进 Stable 承诺 |
 | F-3 | SDK 实例 `destroy()` / `dispose()` 是否幂等、销毁期是否真会回调业务 | 已有反例（空 Panorama 的 `destroy()` 会抛），正向未证 | guard 保留；契约措辞一律写「本库保证」而非「官方保证」 |
 | F-4 | 原生 `addEventListener` 在同一函数重复注册时是否去重 | 未证 | 只影响测试期望数字，不影响生产路径 |
@@ -149,17 +149,20 @@ issue 的实施顺序里第 4 步是「**MapDriver animation teardown**：在 2/
 但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useBMapViewAnimation` /
 `useBMapTrackAnimation`）都在第一批完成了。这一批做的正是第 4 步，顺序是**先取证再动手**：
 
-1. **F-1 取证**（真实 AK + headless Chromium，六条读数见上表）：两条前提成立，措辞需要精确化；
-   另外顺手量到三条此前没有依据的行为（未显式取消就再起播、销毁后迟到启动、清场前先应用首帧）。
+1. **F-1 取证**（真实 AK + headless Chromium，七条读数见上表）：两条前提成立，措辞需要精确化；
+   另外顺手量到四条此前没有依据的行为（未显式取消就再起播、销毁后迟到启动、清场前先应用首帧、
+   待启动旧段的清场只能延后交付）。
 2. **落成 gate**：live smoke 新增 `view-animation-cancel-window`（required），把四条最关键的行为
-   变成可回归断言 + 一个正证控件。
+   拿到可回归断言里 + 一个正证控件；**#122 评审 P1 之后又补了第 5 个子场景**（待启动旧段的清场时机）。
 3. **删掉能删的那一个**：`MapDriver.stopViewAnimation(map)` —— 零生产消费者、理由是已删除的
-   webgl-v1、语义与按实例所有权冲突。`cancelAllAnimations` 因此只剩起播前清场与销毁两个调用点。
+   webgl-v1、语义与按实例所有权冲突。`cancelAllAnimations` 因此只剩起播前清场与销毁两个调用者。
 4. **teardown 本身判 KEEP**：取证之后它的每一部分都有人管（`started` 是安全窗口判据、
    `deferredFinish` + `fallbackTimer` 保证销毁既不早于取消也不被一个不启动的动画挂住、
-   `released` / `tornDown` 是重试入口的记账），且实测确认**不显式取消就会有两段动画在重叠期里
-   同时推进视角**（旧动画跑到自己的 `animationend`，新动画的启动被推迟到不可预期时刻），
-   所以「起播前清场 + 取消失败就拒绝替换」有真实依据，不是过度设计。
+   `released` / `tornDown` 是重试入口的记账）。清场的实测依据要**按两条路径分开读**（详见 F-1 ⑤ 与 ⑦）：
+   **已启动**的旧段是即时交付的，不显式取消时实测两段会在重叠期同时推进视角 —— 这是「取消失败就拒绝替换」
+   与「起播前尽力清场」的真实依据；**待启动**的旧段此刻交付不了（新段先提交），
+   所以这里的承诺是「在最早的合法时刻交付取消」，不是「提交新段之前图上一段不剩」
+   （#122 评审 P1 纠正的就是这一点）。
 
 **这一批刻意不做的**：Map 级 `pauseViewAnimation` / `continueViewAnimation`（没有消费者，
 F-1 不覆盖它们，要开放得先单立 probe 票）；`FakeV4ViewAnimation` 的 0ms 启动建模（它是让安全窗口

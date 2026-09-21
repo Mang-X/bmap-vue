@@ -1040,11 +1040,14 @@ const CHECKS: Record<string, CheckImpl> = {
    *
    * 为什么它必须是一条 **live** 检查：`MapDriver` 的动画簿记（`AnimationRecord` 的
    * `started` / `cancelRequested`、把取消推迟到 `animationstart` 之后的微任务、销毁时按
-   * 「先取消再销毁」排序、0ms 兜底）整条正确性都建立在两条**只有真实 SDK 能证伪**的前提上：
+   * 「先取消再销毁」排序、0ms 兜底）整条正确性都建立在三条**只有真实 SDK 能证伪**的前提上：
    *
    * 1. 启动窗口真实存在 —— 动画还没进可取消窗口时调 `Map#cancelViewAnimation` 会抛 `TypeError`
    *    （在 `animationstart` 派发期间也一样，因为内部控制器那时还没构造）；
-   * 2. 那个窗口**是可关闭的** —— `animationstart` 之后的微任务里取消成功，并且真的让视图停下。
+   * 2. 那个窗口**是可关闭的** —— `animationstart` 之后的微任务里取消成功，并且真的让视图停下；
+   * 3. **待启动旧段的「起播前清场」只能延后交付**（#122 评审 P1）：`startViewAnimation` 提交新段时
+   *    旧段的取消还交付不了，它落在旧段**自己的** `animationstart` 上；这条路径的代价（旧段会不会
+   *    在被取消前推进视角）必须实测，因为「提交新段前图上一段不剩」是做不到的。
    *
    * 用原始实例直连官方命令（不经过本库），因为要核对的正是**官方行为**本身；本库自己对这些读数的
    * 反应由 Fake 上的 Facet 用例覆盖。第一次跑通这四条读数见
@@ -1079,21 +1082,25 @@ const CHECKS: Record<string, CheckImpl> = {
       const from = getZoom!.call(raw);
       const to = from + 3;
 
-      const make = (options: Record<string, unknown>) =>
+      /** `target` 默认末帧 `to`；传别的值可以让两段动画朝**相反**方向走，轨迹才有判别力。 */
+      const make = (options: Record<string, unknown>, target = to) =>
         new (AnimationCtor as new (frames: unknown[], options: Record<string, unknown>) => {
           addEventListener: (name: string, fn: () => void) => void;
         })(
           [
             { center: getCenter!.call(raw), zoom: from, percentage: 0 },
-            { center: getCenter!.call(raw), zoom: to, percentage: 1 },
+            { center: getCenter!.call(raw), zoom: target, percentage: 1 },
           ],
           options,
         );
 
       const marks: string[] = [];
-      const observe = (animation: { addEventListener: (name: string, fn: () => void) => void }) => {
+      const observe = (
+        animation: { addEventListener: (name: string, fn: () => void) => void },
+        sink: string[] = marks,
+      ) => {
         for (const name of ["animationstart", "animationend", "animationcancel"]) {
-          animation.addEventListener(name, () => marks.push(name));
+          animation.addEventListener(name, () => sink.push(name));
         }
       };
 
@@ -1224,6 +1231,78 @@ const CHECKS: Record<string, CheckImpl> = {
         { zoomBeforeSafe, zoomAfterSafe, from, to },
       );
 
+      /* ── 前提 3（#122 评审 P1）：待启动旧段的「清场」只能延后交付，且旧段来不及推进视角 ──
+       *
+       * 这是本库 `startViewAnimation` 的真实路径：旧段还没进安全窗口时取消**交付不了**
+       * （`cancelViewAnimation` 必抛），只能登记请求，而新段紧接着就被提交给 SDK。
+       * 真实 4.0 上的形状（实测）：旧段的取消落在**它自己的 `animationstart`**（相隔 0.0–0.3ms），
+       * 新段不被排队到旧段之后，且**旧段来不及驱动视角**。
+       *
+       * 两段朝**相反**方向走（旧段缩小、新段放大），所以「轨迹有没有朝旧段的末帧掉」是可判别的。
+       */
+      await resetView();
+      const oldMarks: string[] = [];
+      const newMarks: string[] = [];
+      const oldSegment = make({ duration: 1_500, delay: 0 }, from - 4);
+      const newSegment = make({ duration: 1_500, delay: 0 });
+      observe(oldSegment, oldMarks);
+      observe(newSegment, newMarks);
+
+      // 旧段仍在启动窗口内：此刻取消拿不到交付（本库只能登记请求，稍后在安全窗口交付）
+      const pendingCancel = readCancelAttempt(raw, oldSegment);
+      startAnimation!.call(raw, oldSegment);
+      let safePointCancel: CancelAttempt | null = null;
+      oldSegment.addEventListener("animationstart", () => {
+        void Promise.resolve().then(() => {
+          safePointCancel = readCancelAttempt(raw, oldSegment);
+        });
+      });
+      // 旧段还没起播，新段就被提交 —— 这正是被评审指出的那条路径
+      startAnimation!.call(raw, newSegment);
+
+      // 逐点采样：旧段若真的推动了视角，轨迹会朝 `from - 4` 掉下去
+      let minZoomWhileOverlapping = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 12; i += 1) {
+        await sleep(60);
+        minZoomWhileOverlapping = Math.min(minZoomWhileOverlapping, getZoom!.call(raw));
+      }
+      await until(
+        () => (newMarks.includes("animationend") ? true : null),
+        5_000,
+        "BMAP_VIEWANIMATION_PENDING_NO_END",
+        "提交新段之后它自己的 animationend",
+      );
+      const zoomAfterNewSegment = getZoom!.call(raw);
+
+      assertSmoke(
+        pendingCancel.threw,
+        "BMAP_VIEWANIMATION_PENDING_NOT_CANCELLABLE",
+        "旧段仍在启动窗口时 `cancelViewAnimation` 没有抛错 —— 这条路径的前提已经变了",
+        pendingCancel,
+      );
+      assertSmoke(
+        oldMarks.includes("animationstart") && oldMarks.includes("animationcancel"),
+        "BMAP_VIEWANIMATION_PENDING_NOT_SETTLED",
+        `旧段最终没有得到「启动 + 取消」这一对事件（旧段事件=${oldMarks.join(",")}）——` +
+          "登记下来的取消没有在它自己的安全窗口交付",
+        { oldMarks, safePointCancel },
+      );
+      // 核心断言：旧段**来不及**驱动视角（判据是轨迹方向，不是「有没有抛错」）
+      assertSmoke(
+        minZoomWhileOverlapping >= from - 0.5,
+        "BMAP_VIEWANIMATION_PENDING_OVERLAP",
+        `待启动旧段在被取消前推动了视角（重叠期最低 zoom=${minZoomWhileOverlapping}，` +
+          `旧段末帧=${from - 4}）——「清场只能延后交付」这条路径的代价比实测的大`,
+        { minZoomWhileOverlapping, from, to, oldMarks, newMarks },
+      );
+      // 正证控件：新段确实跑到了自己的末帧（否则上面那条「没掉下去」是空转）
+      assertSmoke(
+        zoomAfterNewSegment >= to - 0.5,
+        "BMAP_VIEWANIMATION_PENDING_NEW_NOT_DRIVING",
+        `提交的新段没有跑到自己的末帧（${zoomAfterNewSegment} / 期望 ${to}）`,
+        { zoomAfterNewSegment, to },
+      );
+
       // 收尾：把视野还原，别把这一条检查改过的视图留给后面的检查（尽力而为）
       try {
         setZoom!.call(raw, from);
@@ -1241,6 +1320,12 @@ const CHECKS: Record<string, CheckImpl> = {
         zoomAfterDuring,
         zoomBeforeSafe,
         zoomAfterSafe,
+        pendingCancel: pendingCancel.name,
+        safePointCancel,
+        minZoomWhileOverlapping,
+        zoomAfterNewSegment,
+        oldMarks,
+        newMarks,
       };
     },
   },

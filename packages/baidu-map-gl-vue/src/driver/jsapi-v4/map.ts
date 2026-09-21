@@ -303,7 +303,8 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    * 在**安全窗口**内取消动画。
    *
    * - 未启动：只登记取消请求——此窗口内 SDK 会抛 `TypeError`，取消要等 `animationstart`
-   *   之后的微任务（见 `trackAnimation`）；
+   *   之后的微任务（见 `trackAnimation`）。所以「登记」不等于「已停止」：调用方拿到的是
+   *   `deferred`，真正的交付发生在旧段自己的安全窗口；
    * - 已启动：立即取消，**成功之后**才标记结束并释放记录。取消失败时记录保留，
    *   因此调用方（`cancelViewAnimation` / `startViewAnimation` / `destroy`）可以重试。
    */
@@ -331,10 +332,23 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    * 各出现一次），对外**没有**整图取消命令（官方 4.0 只有按实例的
    * `Map#cancelViewAnimation(viewAnimation)`，#104 因此删掉了自研的 `stopViewAnimation`）：
    *
-   * - `startViewAnimation`：一张地图上不该同时跑两段视角动画（2026-09-21 实测：不显式取消时 SDK
-   *   既不替换旧动画、也不并发，而是让旧动画照旧跑到自己的 `animationend`、把新动画的启动推迟到
-   *   不可预期的时刻 —— 两段在重叠期里都在推进视角），所以起播前先清场；
+   * - `startViewAnimation`：起播前清场（见下）；
    * - `destroy`：销毁前必须先把在飞动画停掉，否则 SDK 会在已销毁的地图上继续推进视角。
+   *
+   * ## 清场的交付时机对两条路径**不同**（2026-09-21 真实 AK 实测）
+   *
+   * 这里承诺的是「**在最早的合法时刻交付取消**」，**不是**「提交新段之前图上一段不剩」。
+   *
+   * - **已启动**的旧段 ⇒ **即时交付**：`cancelViewAnimation` 成功返回后才提交新段（实测两者相隔
+   *   约 70ms）。这是「先停旧、再起播」真正成立的那一半，也是本方法存在的实测理由 ——
+   *   不显式取消时实测两段动画会在重叠期**同时推进视角**（旧段照旧跑到自己的 `animationend`）。
+   * - **待启动**的旧段 ⇒ 此刻 SDK 取消必抛 `TypeError`，只能登记请求 ⇒ **新段会先提交**，
+   *   旧段的取消落在**它自己的启动安全窗口**（实测：`animationstart` 与 `animationcancel` 相隔
+   *   0.0–0.3ms，且旧段来不及产生可观察的推进 —— 轨迹只朝新段的末帧走）。#122 评审 P1 指出的正是
+   *   这一点：原先「起播前先清场」的说法把两条路径写成了同一种时序。
+   *
+   * 残余风险（未覆盖的窄角）：若那条安全窗口的取消**失败**（`settleAtSafePoint` 只
+   * `logger.warn` 并把记录留着），旧段会继续推进到下次 `cancelViewAnimation` / `destroy` 重试为止。
    */
   const cancelAllAnimations = (raw: object): void => {
     const records = recordsOf(raw);
@@ -824,8 +838,9 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       capabilities.require("map.animate");
       const instance = resolveAnimation(animation);
 
-      // 同一张地图不应同时跑两个动画：先把未结束的都停掉。
-      // 取消失败时**不替换**——旧记录保留可重试，否则它会变成再也清理不到的动画（复审 P2）。
+      // 起播前**尽力**清场：已启动的旧段即时取消（失败就**不替换** —— 旧记录保留可重试，否则它会变成
+      // 再也清理不到的动画，复审 P2）；**待启动**的旧段此刻取消必抛 TypeError，只能登记请求，
+      // 于是新段会先提交、旧段的取消落在它自己的启动安全窗口（交付时机的两条路径见 `cancelAllAnimations`）。
       cancelAllAnimations(raw);
 
       // 取消旧动画会同步触发业务的 animationcancel 回调，业务可能在里面销毁地图；

@@ -183,7 +183,7 @@ describe("useBMapViewAnimation：只用官方公开面", () => {
     expect(hook.status.value).toBe("playing");
     expect(first.getListenerCount()).toBeGreaterThan(0);
 
-    // 第一段还在播，直接起第二段：Driver 会在起播前同步取消上一段
+    // 第一段**已启动**（`status` 已是 playing），直接起第二段：Driver 会在起播前先取消上一段（即时交付）
     await hook.start(KEY_FRAMES);
     await letSdkStart();
 
