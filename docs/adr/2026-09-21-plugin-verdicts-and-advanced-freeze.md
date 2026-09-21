@@ -138,7 +138,10 @@
 1. **两个插件探针都不进 PR 门禁**（需要网络 / AK / 浏览器）。结论的新鲜度靠 nightly；PR 上只能保证
    「数据 ↔ 文档 ↔ 门禁」无漂移。
 2. **`./core` 仍是公开子路径**，本票只声明它是内部面、并用门禁防止内部实现进入 `./advanced`，
-   **没有**收缩 `./core` 的导出面。真正的收缩（`exports` 收窄 / 迁移 `Provider` 家族）需要独立的破坏性决策。
+   **没有**收缩 `./core` 的导出面。按 issue 原文，「把 `./core` 内部实现收缩为承诺维护的 `./advanced`
+   扩展契约」这件事的物理落点（`exports` 收窄 / `Provider` 家族迁移 / 内部面去留）属于
+   **#44（冻结 core / ui-kit / advanced 包出口）** —— 它是破坏性改动，需要与 `./ui-kit` 的出口面一起决策，
+   本文只把「哪一份是承诺维护的扩展契约」这件事冻结下来并留下可执行的门禁。（已在 [#44](https://github.com/Mang-X/bmap-vue/issues/44) 上登记。）
 3. **TrackAnimation 的播放命令面不在本票**：本票只把结论定型为 `native` 并指向 `layer.track-line`，
    播放控制（start / pause / resume / stop / setSpeed 一类）归 **#110**。
 4. **DrawingManager 只覆盖了 polygon 的「画一个」链路**：`confirmVisible` 缺省分支、其余绘制模式、
@@ -151,6 +154,16 @@
    本库不修，只把结论与替代路径写清楚。
 7. **内容摘要会随上游更新而红**：这是有意的（逼着重新核对并更新 inventory），但意味着 nightly 的
    `plugin-compat` job 偶发红时需要人判断「是漂移还是上游正常发布」。
+8. **插件脚本加载通道没有复用显式 `ScriptLoader`**：`urlPluginDefinition` 走的是自己的
+   `loadScriptWithExport`（只有一个 `<script>` + 全局导出短路 + `AbortSignal`），
+   因此**没有超时**，也没有 SRI / `nonce` 之类属性（上游脚本本来也不提供这些入口）。
+   这条与 [2026-09-13 ADR](./2026-09-13-plugin-compat-inventory.md) 已知限制里的「插件加载没有超时」
+   是同一件事；本票按「先判定、再适配」没有改动加载层，已拆成独立欠账票 [#121](https://github.com/Mang-X/bmap-vue/issues/121)。
+9. **CSP 没有被审计**：三个 `BMapGLLib` 脚本来自 `mapopen.bj.bcebos.com`、`Mapvgl` 来自 `unpkg.com`，
+   `DrawingManager` 还会**自己**注入 `mapopen.cdn.bcebos.com` 上的两个脚本；站点的 CSP 需要放行这些来源。
+   本票只在 `docs/zh-CN/guide/config.md` 写明这件事，没有做 CSP 的自动化核对。
+10. **计划键 `M8-06` ~ `M8-11` 在仓库与追踪票里都没有定义**（与 2026-09-14 ADR 那条同源现象）。
+    本票按**内容**逐条对照 issue 的「目标与范围 / 实施步骤 / 测试与验收」，不硬编键名到实现的映射。
 
 ## 非目标
 

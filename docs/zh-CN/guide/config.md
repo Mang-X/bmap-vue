@@ -180,6 +180,18 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 | [RichMarker](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#富标注)           | 富标注           | 富 Marker 类                                                                       | —              | 未内置，未评估                                                                                                        |
 | [LuShu](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#路书)                  | 路书             | 路书类，实现 Marker 沿路线运动                                                     | —              | 未内置，未评估                                                                                                        |
 
+### 插件脚本与 CSP
+
+三个 `BMapGLLib` 脚本来自 `mapopen.bj.bcebos.com`（自托管镜像）、`Mapvgl` 来自 `unpkg.com`；
+站点的 CSP 需要为它们放行 `script-src`（本库不注入 `nonce` / `integrity` —— 上游脚本没有这两个入口，
+「接收后忽略」属于假支持）。另外 **`DrawingManager` 会在运行时自己再注入两个脚本**
+（`GeoUtils.min.js` 与 `gpc.js`，来自 `mapopen.cdn.bcebos.com`），它们**不经过本库**：
+既不参与取消，也不受 `plugins` 配置管控，CSP 需要单独放行。依据与运行时读数见
+[插件兼容 inventory](../contributing/plugin-compat-inventory)。
+
+三个自托管 URL 的路径里**没有版本号**，上游换内容时 URL 不会变，本仓库用内容摘要（sha256）锁住版本，
+nightly 的 `probe:plugin-compat` 会核对并提示更新——换 URL 请一并更新 inventory。
+
 ### 更换插件资源链接
 
 如果需要自建或其他地址的资源链接，请使用 `customScriptV4Provider(scriptSrc)` 构造 Provider，

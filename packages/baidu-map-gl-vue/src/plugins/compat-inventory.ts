@@ -575,7 +575,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     residualRisks: [
       "加载期会注入百度统计脚本（`window._hmt`）——`builtins.ts` 的 `mapvgl` 分支因此用" +
         "「fetch + 去掉统计片段 + 内联」的方式加载，这条特例只对 MapVGL 成立，不要推广到别的插件。",
-      "即使去掉统计脚本，`_rd` 与 `mapPage` 这两条也不会因为本库的改动而消失：它们是脚本自己的实现，" +
+      "即使去掉统计脚本，`_rd` 与 `getPanes().mapPane` 这两条也不会因为本库的改动而消失：它们是脚本自己的实现，" +
         "要修只能改上游。本库**不修它**，只把结论写清楚。",
       "`getPanes().mapPane` 这条根因说明它面向的是 legacy 容器模型；上游若发布面向 4.0 的版本，" +
         "本条目需要重跑两个探针再改结论。",

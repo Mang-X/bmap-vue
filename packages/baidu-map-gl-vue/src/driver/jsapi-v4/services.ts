@@ -34,7 +34,8 @@
  *   （官方没有承诺跨请求顺序，`keyword` 也不是请求身份），而是靠「**一个实例一个未结算操作**」
  *   这条不变式：并发显式拒绝，取消/超时之后该实例要重建。见 `search()` 的契约与 ADR 决策 4；
  * - `TrackAnimation` 属 `BMapGLLib` 插件、不在 4.0 的运行时入口里（Catalog
- *   `service.track-animation` 为 `unsupported`，迁移结论属 M8 #43），因此**显式失败**
+ *   `service.track-animation` 为 `unsupported`；结论已定型为 `native`：4.0 用原生图层 `layer.track-line`，
+ *   本库不再为这个 legacy 插件提供封装）——见 ADR 2026-09-21），因此**显式失败**
  *   而不是静默给一个不能用的实例——4.0 的对应能力是原生图层 `TrackLine`。
  */
 import { BMapError } from "../../core/errors/BMapError";
@@ -1806,10 +1807,11 @@ export function createJsapiV4ServiceDriver(
     },
 
     createTrackAnimation(_map: MapHandle) {
-      // Catalog：`service.track-animation` 是 `unsupported`（迁移结论属 M8 #43）。
+      // Catalog：`service.track-animation` 是 `unsupported`；结论已定型为 `native`
+      // （改用原生图层 layer.track-line，见 ADR 2026-09-21 / plugin-compat-inventory）。
       throw new BMapError(
         "BMAP_CAPABILITY_UNSUPPORTED",
-        "JSAPI 4.0 没有 TrackAnimation 入口（该插件属 BMapGLLib，迁移结论待 M8 #43 定夺）；" +
+        "JSAPI 4.0 没有 TrackAnimation 入口（该插件属 BMapGLLib，本库已定型为「迁到原生图层」）；" +
           "4.0 的对应能力是原生图层 TrackLine（driver.nativeLayers.create('track-line')）",
         { engine: "jsapi-v4", capability: "service.track-animation" },
       );
