@@ -90,13 +90,14 @@ export interface MapDriver {
   setTraffic(map: MapHandle, enabled: boolean): void;
 
   startViewAnimation(map: MapHandle, animation: unknown): void;
-  stopViewAnimation(map: MapHandle): void;
   /**
    * 取消**这一个**视角动画实例（官方 `Map#cancelViewAnimation(viewAnimation)` 本来就是按实例的命令）。
    *
-   * 与 `stopViewAnimation(map)` 的差别只在范围：本方法只处理该实例对应的那一条记录，同一张图上
-   * 别的动画一律不碰。因此调用方可以反复重试自己发起的那一次取消，而不会停掉别人的动画。
-   * SDK 取消失败时抛错并保留记录（下一次调用或 `destroy` 仍可重试），语义与 `stopViewAnimation` 一致。
+   * 这是本 Facet **唯一**的取消入口：4.0 没有「停掉这张地图上的视角动画」这种命令，取消必须先有
+   * 实例。于是「重试自己发起的这一次取消」与「不牵连同一张图上别人的动画」可以同时成立 ——
+   * 整图语义做不到这一点（#105 评审第三、六轮各打中过一次），因此审计（#104）没有保留整图命令。
+   *
+   * SDK 取消失败时抛错并保留记录 ⇒ 下一次调用或 `destroy` 仍可重试。
    *
    * 返回值说的是**本库这一侧的交付状态**，不是 SDK 的终态（那条只能靠公开事件）：
    * `"deferred"` 也允许调用方据此保留重试入口。

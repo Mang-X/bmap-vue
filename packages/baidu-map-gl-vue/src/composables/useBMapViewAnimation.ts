@@ -27,7 +27,8 @@
  * ③ **重试入口**：Driver 报告 `"deferred"`（还没进安全窗口，只登记了取消请求）时**保留**，
  *    下一次 `cancel()` 会真的再打一次；已交付（`"canceled"` / `"already-settled"`）时收尾且不重复发。
  * 之前用整张图的 `stopViewAnimation(map)` 时，② 与 ③ 会互相牺牲（重试必牵连别人的动画 / 不重试就
- * 失去入口），#105 第三轮与第六轮各打中过一次；换成按实例之后两者同时成立。
+ * 失去入口），#105 第三轮与第六轮各打中过一次；换成按实例之后两者同时成立。那条整图命令本身也已在
+ * #104 的第二批里删除（官方 4.0 只有按实例的取消入口，它零生产消费者）。
  */
 import { onUnmounted, shallowRef, toRaw, type ShallowRef } from "vue";
 import { resolveMapContext } from "./resolveMapContext";

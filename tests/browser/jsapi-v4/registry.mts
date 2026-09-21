@@ -37,6 +37,10 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     id: "map-view-round-trip",
     name: "视野读写往返：getCenter/getZoom 与传入的 center/zoom 一致",
   },
+  "view-animation-cancel-window": {
+    id: "view-animation-cancel-window",
+    name: "视角动画的启动窗口（#104 审计表 F-1）：未起播/派发期间取消必抛 TypeError，animationstart 之后的微任务里取消成功且视图不再推进",
+  },
   "overlay-marker": { id: "overlay-marker", name: "<BMarker> 挂载后覆盖物计数真的增长" },
   "overlay-polyline": { id: "overlay-polyline", name: "<BPolyline> 挂载后覆盖物计数真的增长" },
   "overlay-rectangle": {
@@ -146,6 +150,7 @@ const liveChecks: string[] = [
   "provider-default-delegation",
   "map-ready",
   "map-view-round-trip",
+  "view-animation-cancel-window",
   "overlay-marker",
   "overlay-polyline",
   "overlay-rectangle",

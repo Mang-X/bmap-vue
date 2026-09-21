@@ -409,3 +409,83 @@ describe("#74 smoke 检查登记表：required 与页面的实现必须对齐", 
     expect(SMOKE_CHECKS.fixture.required).not.toContain("ui-kit-autocomplete-search");
   });
 });
+
+/**
+ * 文档的检查表 = 登记表的**镜像**（#104 第二批顺手补的一条门禁）。
+ *
+ * 为什么值得加：`v4-browser-smoke.md` 的检查表写着「登记表是单一事实源」，但它只是一张
+ * **手抄**的表。本批校对时发现它已经漂移了 **3 行**（`custom-overlay-visible` /
+ * `context-menu-attached` / `context-menu-marker-target` 在 #33、#41 之后没被补进来），
+ * 而没有任何门禁会响。手抄表一旦漂移，「哪些检查在哪一档」就会有两份互相矛盾的答案。
+ *
+ * 判定式只认「四列 + 第一列是反引号包住的 id」的行，并且只在 `## 检查清单` 这一节里找 ——
+ * 文档里还有别的表格（退出码五态、读数边界），不切范围会把它们当成检查行。
+ */
+describe("#104 文档的检查表必须与登记表镜像", () => {
+  const doc = readFileSync(
+    resolve(import.meta.dirname, "../../docs/zh-CN/contributing/v4-browser-smoke.md"),
+    "utf8",
+  );
+
+  /** 切出「## 检查清单」这一节：到下一个二级/三级标题为止。 */
+  function checklistSection(): string {
+    const heading = "## 检查清单";
+    const start = doc.indexOf(heading);
+    expect(start, `文档里找不到「${heading}」小节`).toBeGreaterThanOrEqual(0);
+    const rest = doc.slice(start + heading.length);
+    const end = rest.search(/^#{2,3} /m);
+    const section = end === -1 ? rest : rest.slice(0, end);
+    expect(section.length, "「检查清单」小节是空的").toBeGreaterThan(0);
+    return section;
+  }
+
+  /** `| \`id\` | live | fixture | 说明 |` → `id → { live, fixture }`。 */
+  function parseChecklist(source: string): Map<string, { live: boolean; fixture: boolean }> {
+    const rows = new Map<string, { live: boolean; fixture: boolean }>();
+    for (const line of source.split("\n")) {
+      const match = /^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
+      if (!match) continue;
+      rows.set(match[1]!, { live: match[2]!.includes("✅"), fixture: match[3]!.includes("✅") });
+    }
+    return rows;
+  }
+
+  it("文档表覆盖登记表的每一个 id（不多不少）", () => {
+    const rows = parseChecklist(checklistSection());
+    // 正证守卫：解析器必须先证明自己读到了东西，否则「两边都空」也会通过
+    expect(rows.size, "从文档表里解析出的行数").toBeGreaterThan(0);
+    expect([...rows.keys()].sort()).toEqual(allCheckSpecs().map((spec) => spec.id).sort());
+  });
+
+  it("文档表每一档的 ✅ / — 与登记表一致", () => {
+    const rows = parseChecklist(checklistSection());
+    const mismatches: string[] = [];
+    for (const spec of allCheckSpecs()) {
+      const row = rows.get(spec.id);
+      if (!row) continue; // 缺行由上一个用例点名
+      for (const mode of ["live", "fixture"] as const) {
+        const registered = SMOKE_CHECKS[mode].checks.some((entry) => entry.id === spec.id);
+        if (registered !== row[mode]) {
+          mismatches.push(`${spec.id}:${mode} 文档=${row[mode]} 登记表=${registered}`);
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  it("反证：把某一行的档位列改掉，同一条判定式必须报出不一致", () => {
+    // 反证必须**复用同一条判定式**（把 ✅ 抹成 —，再按同样的方式比对），而不是另写一条更严的正则
+    const sample = allCheckSpecs().find((spec) =>
+      SMOKE_CHECKS.live.checks.some((entry) => entry.id === spec.id),
+    )!.id;
+    const tampered = checklistSection().replace(
+      new RegExp(`^\\|\\s*\`${sample}\`[^\\n]*$`, "m"),
+      (line) => line.replace(/✅/g, "—"),
+    );
+    expect(tampered, "反证没有改到任何一行").not.toBe(checklistSection());
+    const row = parseChecklist(tampered).get(sample)!;
+    expect(row.live).not.toBe(
+      SMOKE_CHECKS.live.checks.some((entry) => entry.id === sample),
+    );
+  });
+});

@@ -179,7 +179,7 @@ describe("创建与销毁", () => {
       ["setInteraction", () => map.setInteraction(handle, "dragging", true)],
       ["setTraffic", () => map.setTraffic(handle, true)],
       ["startViewAnimation", () => map.startViewAnimation(handle, { frames: [] })],
-      ["stopViewAnimation", () => map.stopViewAnimation(handle)],
+      ["cancelViewAnimation", () => map.cancelViewAnimation(handle, { frames: [] })],
       ["destroy（幂等，不抛）", () => map.destroy(handle)],
     ];
 
@@ -572,7 +572,7 @@ describe("能力守卫", () => {
 });
 
 describe("视角动画", () => {
-  it("startViewAnimation 记住实例，stopViewAnimation 用同一实例 cancel", () => {
+  it("startViewAnimation 记住实例，cancelViewAnimation 用同一实例 cancel", () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     const animation = { frames: [] };
@@ -580,7 +580,7 @@ describe("视角动画", () => {
     map.startViewAnimation(handle, animation);
     expect(fake.createdMaps[0].lastAnimation).toBe(animation);
 
-    map.stopViewAnimation(handle);
+    expect(map.cancelViewAnimation(handle, animation)).toBe("canceled");
     expect(fake.createdMaps[0].canceledAnimation).toBe(animation);
   });
 
@@ -604,11 +604,14 @@ describe("视角动画", () => {
     expect(canceled).toEqual(["a", "b"]);
   });
 
-  it("stopViewAnimation 在没有活动动画时是 no-op，未销毁地图仍可用", () => {
-    const { map, container } = setup();
+  it("cancelViewAnimation 对本 Driver 没有记录的实例是 no-op（不触达 SDK），地图仍可用", () => {
+    const { map, container, fake } = setup();
     const handle = map.create(container);
     map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
-    expect(() => map.stopViewAnimation(handle)).not.toThrow();
+    // 「没有活动动画时停止是 no-op」这条旧语义现在只能按**实例**表达：本 Driver 没有该实例的
+    // 记录 ⇒ 报 `already-settled`，且一个 SDK 取消都不发（补发要假设 SDK 幂等，属 F-3 未证）。
+    expect(map.cancelViewAnimation(handle, { frames: [] })).toBe("already-settled");
+    expect(fake.createdMaps[0].callLog).not.toContain("cancelViewAnimation");
     expect(map.getZoom(handle)).toBe(12);
   });
 
@@ -644,14 +647,14 @@ describe("视角动画生命周期（首轮评审 P1/P2）", () => {
     expect(log.indexOf("destroy")).toBeGreaterThan(log.indexOf("cancelViewAnimation"));
   });
 
-  it("启动后立即 stop 不抛 TypeError，取消请求在启动后落地", async () => {
+  it("启动窗口内取消不抛 TypeError（请求登记下来），启动后落地", async () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     const animation = createAnimation(fake, { duration: 100 });
     map.startViewAnimation(handle, animation);
 
-    // 评审场景：这个窗口内直连 SDK 取消一定抛 TypeError
-    expect(() => map.stopViewAnimation(handle)).not.toThrow();
+    // 评审场景：这个窗口内直连 SDK 取消一定抛 TypeError（F-1 已在真实 4.0 上实测）
+    expect(map.cancelViewAnimation(handle, animation)).toBe("deferred");
     await sleep();
     await sleep();
 
@@ -659,23 +662,26 @@ describe("视角动画生命周期（首轮评审 P1/P2）", () => {
     expect(animation.settled).toBe(true);
   });
 
-  it("在 animationstart 回调里同步 stop 也能取消成功（取消被推迟到微任务）", async () => {
+  it("在 animationstart 回调里同步取消也能成功（请求被推迟到微任务）", async () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     const animation = createAnimation(fake, {});
+    let duringDispatch: string | null = null;
     animation.addEventListener("animationstart", () => {
-      map.stopViewAnimation(handle);
+      duringDispatch = map.cancelViewAnimation(handle, animation);
     });
 
     map.startViewAnimation(handle, animation);
     await sleep();
     await sleep();
 
+    // 派发期间内部控制器还不存在 ⇒ 这次取消只能是「登记请求」
+    expect(duringDispatch).toBe("deferred");
     expect(animation.cancelCalls).toBe(1);
     expect(animation.settled).toBe(true);
   });
 
-  it("取消失败不丢记录：下一次 stop 仍能重试", async () => {
+  it("取消失败不丢记录：下一次取消仍能重试", async () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     const animation = createAnimation(fake, {});
@@ -683,13 +689,13 @@ describe("视角动画生命周期（首轮评审 P1/P2）", () => {
     await sleep();
     animation.failNextCancel = true;
 
-    expect(() => map.stopViewAnimation(handle)).toThrowError(
+    expect(() => map.cancelViewAnimation(handle, animation)).toThrowError(
       expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
     );
     expect(animation.cancelCalls).toBe(1);
     expect(animation.settled).toBe(false);
 
-    expect(() => map.stopViewAnimation(handle)).not.toThrow();
+    expect(map.cancelViewAnimation(handle, animation)).toBe("canceled");
     expect(animation.cancelCalls).toBe(2);
     expect(animation.settled).toBe(true);
   });
@@ -703,7 +709,7 @@ describe("视角动画生命周期（首轮评审 P1/P2）", () => {
     animation.finish();
     expect(animation.settled).toBe(true);
 
-    map.stopViewAnimation(handle);
+    expect(map.cancelViewAnimation(handle, animation)).toBe("already-settled");
     map.destroy(handle);
     expect(animation.cancelCalls).toBe(0);
   });
@@ -721,7 +727,7 @@ describe("视角动画生命周期（首轮评审 P1/P2）", () => {
     expect(first.cancelCalls).toBe(1);
 
     await sleep();
-    map.stopViewAnimation(handle);
+    expect(map.cancelViewAnimation(handle, second)).toBe("canceled");
     expect(second.cancelCalls).toBe(1);
   });
 
@@ -796,13 +802,15 @@ describe("视角动画生命周期（复审 P1/P2）", () => {
     const anim = createAnimation(fake, {});
     map.startViewAnimation(handle, anim);
     // Driver 的监听器先注册 → 同一轮派发里业务回调后执行；此刻内部 Animation 还没建
+    let duringDispatch: string | null = null;
     anim.addEventListener("animationstart", () => {
-      map.stopViewAnimation(handle);
+      duringDispatch = map.cancelViewAnimation(handle, anim);
     });
 
     await sleep();
     await sleep();
 
+    expect(duringDispatch).toBe("deferred");
     expect(anim.cancelCalls).toBe(1);
     expect(anim.settled).toBe(true);
   });
@@ -811,14 +819,17 @@ describe("视角动画生命周期（复审 P1/P2）", () => {
     const { map, container, fake } = setup();
     const handle = map.create(container);
     const anim = createAnimation(fake, {});
+    let duringDispatch: string | null = null;
     anim.addEventListener("animationstart", () => {
-      map.stopViewAnimation(handle);
+      duringDispatch = map.cancelViewAnimation(handle, anim);
     });
     map.startViewAnimation(handle, anim);
 
     await sleep();
     await sleep();
 
+    // 业务监听器**先**注册也是同一结果：启动窗口内只能登记请求，真正取消落在微任务
+    expect(duringDispatch).toBe("deferred");
     expect(anim.cancelCalls).toBe(1);
     expect(anim.settled).toBe(true);
   });
@@ -837,7 +848,7 @@ describe("视角动画生命周期（复审 P1/P2）", () => {
     );
     // 旧动画没有被覆盖丢失：仍是当前动画，且可以再停掉（监听器归零 = 生命周期记录已释放）
     expect(fake.createdMaps[0].lastAnimation).toBe(first);
-    expect(() => map.stopViewAnimation(handle)).not.toThrow();
+    expect(map.cancelViewAnimation(handle, first)).toBe("canceled");
     expect(first.settled).toBe(true);
     expect(first.getListenerCount()).toBe(0);
   });

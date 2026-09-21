@@ -930,12 +930,19 @@ export interface FakeV4AnimationOptions {
 /**
  * Fake BMap v4 `ViewAnimation`
  *
- * 行为依据：官方 Skill `references/view-animation.md`（PR #60 评审 P1/P2 复现所需）
- * - `map.startViewAnimation()` 内部按 `delay` 用 setTimeout 异步启动，没有公开的定时器句柄；
+ * 行为依据：官方 Skill `references/view-animation.md`（PR #60 评审 P1/P2 复现所需），
+ * 以及 **2026-09-21 的真实 AK 读数**（#104 审计表 F-1，live gate `view-animation-cancel-window`）：
+ * - `map.startViewAnimation()` 内部按 `delay` 调度异步启动，没有公开的定时器句柄；
  * - `animationstart` 在**内部 Animation 构造之前**同步派发，因此在该监听器里同步 cancel 太早，
- *   至少要等到微任务；
+ *   至少要等到微任务（实测：派发期间同步 cancel 抛 `reading 'cancel' of undefined`，
+ *   派发后的微任务里 cancel 成功并派发 `animationcancel`）；
  * - 内部对象存在之前调用 `map.cancelViewAnimation()` 一律抛 `TypeError`（不只是 cancel）；
  * - `animationend` = 正常结束、`animationcancel` = 被取消；`'INFINITE'` 永不派发 `animationend`。
+ *
+ * ⚠️ **时序上的刻意简化**：本 Fake 把 `delay: 0` 建模成「一个 0ms 定时器后启动」，而真实 4.0 在
+ * `delay: 0` 下也要 **5–120ms** 才派发 `animationstart`（F-1 读数）。这个简化让「把清理推迟到安全
+ * 窗口」这条路径**可测**（否则用例要等真实时间、会脆），代价是：`delay: 0` 下「先取消再销毁」这条
+ * 用例证明的是**本库的排序逻辑**，不是真实运行时的必然顺序（真实排序见 ADR 已知限制）。
  *
  * 这个 Fake 刻意把「异步启动窗口」显式建模出来，因为 Driver 的动画生命周期正确性完全取决于它。
  */
@@ -953,8 +960,9 @@ export class FakeV4ViewAnimation extends FakeV4EventTarget {
   /**
    * 测试辅助：让 `cancel()` **成功但不派发 `animationcancel`**。
    *
-   * 真实 SDK 会不会在这种情况下不回调，仓库里没有取证（#104 审计表 F-1）——这个开关不是为了
-   * 声明官方行为，而是给「生产实现不能依赖该事件才交回所有权」留一条防御性用例。
+   * 真实 SDK 会不会在这种情况下不回调仍**未证**（#104 审计表 F-1 只测到了「成功取消**会**派发」
+   * 这一侧）——这个开关不是为了声明官方行为，而是给「生产实现不能依赖该事件才交回所有权」
+   * 留一条防御性用例。
    */
   suppressCancelEvent = false
 

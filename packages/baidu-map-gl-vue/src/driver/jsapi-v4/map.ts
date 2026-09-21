@@ -146,9 +146,16 @@ function numberOf(label: string, value: unknown): number {
 /**
  * 视角动画的生命周期记录（PR #60 评审 P1/P2、复审 P1/P2）。
  *
- * 官方 4.0 的动画是**异步启动**的（`startViewAnimation` 内部按 `delay` 用 setTimeout 启动，
- * 没有公开句柄），且 `animationstart` 在内部 Animation 构造**之前**同步派发。因此「取消」
- * 只在启动之后才合法，在这之前调用一律抛 `TypeError`。四个状态就是把
+ * 官方 4.0 的动画是**异步启动**的（`startViewAnimation` 内部按 `delay` 调度启动，没有公开句柄），
+ * 且在**内部动画控制器构造之前**派发 `animationstart`。两件事都要说准（2026-09-21 真实 AK 实测，
+ * 见审计表 F-1）：
+ *
+ * - 相对 `startViewAnimation()` 的调用，`animationstart` 是**异步**的（`delay: 0` 下实测 5–120ms
+ *   后才到，`delay > 0` 时在 delay 之后再等约一个同量级的窗口）——不是「调用即同步派发」；
+ * - 但在**派发那个任务内部**，它早于内部控制器构造：派发期间同步调 `cancelViewAnimation` 一定抛
+ *   `TypeError`（实测 `Cannot read properties of undefined (reading 'cancel')`），且动画照旧跑完。
+ *
+ * 因此「取消」只在启动之后才合法，在之前调用一律抛 `TypeError`。四个状态就是把
  * 「已派发启动事件」和「已经进入可取消窗口」分开：
  *
  * - `started=false` + `cancelRequested=true`：收到了停止/销毁请求，但要等启动后的微任务才取消；
@@ -156,8 +163,10 @@ function numberOf(label: string, value: unknown): number {
  * - `settled=true`：已正常结束或已取消，无需再取消。
  *
  * `started` **只能在 `animationstart` 那次派发结束后的微任务里置位**（复审 P2）：派发期间
- * 内部 Animation 还不存在，此时若认为「可取消」，同一轮派发里后执行的业务监听器就会
+ * 内部控制器还不存在，此时若认为「可取消」，同一轮派发里后执行的业务监听器就会
  * 立刻去取消而抛 `TypeError`。因此监听器的注册顺序不能影响结果——两种顺序都必须走延迟取消。
+ * 这条「微任务即安全窗口」也已被实测确认：派发后的微任务里取消成功、派发 `animationcancel`，
+ * 且视图确实没有推进（live gate `view-animation-cancel-window`）。
  */
 interface AnimationRecord {
   readonly instance: unknown;
@@ -296,7 +305,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    * - 未启动：只登记取消请求——此窗口内 SDK 会抛 `TypeError`，取消要等 `animationstart`
    *   之后的微任务（见 `trackAnimation`）；
    * - 已启动：立即取消，**成功之后**才标记结束并释放记录。取消失败时记录保留，
-   *   因此调用方（`stopViewAnimation` / `startViewAnimation` / `destroy`）可以重试。
+   *   因此调用方（`cancelViewAnimation` / `startViewAnimation` / `destroy`）可以重试。
    */
   const cancelAnimation = (raw: object, record: AnimationRecord): void => {
     if (record.settled) {
@@ -315,7 +324,18 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     dropRecord(raw, record);
   };
 
-  /** 取消该地图上所有未结束的动画；任一失败则汇总抛出（记录保留以便重试）。 */
+  /**
+   * 取消该地图上**所有**未结束的动画；任一失败则汇总抛出（记录保留以便重试）。
+   *
+   * 只有两个**调用者**，都是本库自己发起的「整图级」动作（`destroy` 路径上经 `finish` 与直接调用
+   * 各出现一次），对外**没有**整图取消命令（官方 4.0 只有按实例的
+   * `Map#cancelViewAnimation(viewAnimation)`，#104 因此删掉了自研的 `stopViewAnimation`）：
+   *
+   * - `startViewAnimation`：一张地图上不该同时跑两段视角动画（2026-09-21 实测：不显式取消时 SDK
+   *   既不替换旧动画、也不并发，而是让旧动画照旧跑到自己的 `animationend`、把新动画的启动推迟到
+   *   不可预期的时刻 —— 两段在重叠期里都在推进视角），所以起播前先清场；
+   * - `destroy`：销毁前必须先把在飞动画停掉，否则 SDK 会在已销毁的地图上继续推进视角。
+   */
   const cancelAllAnimations = (raw: object): void => {
     const records = recordsOf(raw);
     const failures: unknown[] = [];
@@ -329,7 +349,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     if (failures.length > 0) {
       throw new BMapError(
         "BMAP_SDK_CALL_FAILED",
-        `取消视角动画时有 ${failures.length} 项失败（记录保留，可再次 stop/destroy 重试）: ` +
+        `取消视角动画时有 ${failures.length} 项失败（记录保留，可再次 cancelViewAnimation/destroy 重试）: ` +
           failures.map((failure) => (failure as Error)?.message ?? String(failure)).join("; "),
         { cause: failures[0], engine: "jsapi-v4" },
       );
@@ -449,9 +469,9 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       try {
         cancelAnimation(raw, record);
       } catch (error) {
-        // 微任务里没有调用方能承接错误：告警并保留记录，让 stop/destroy 之后可以重试
+        // 微任务里没有调用方能承接错误：告警并保留记录，让 cancelViewAnimation/destroy 之后可以重试
         logger.warn(
-          `MapDriver: 视角动画的延迟取消失败（记录保留，可再次 stopViewAnimation/destroy 重试）: ${
+          `MapDriver: 视角动画的延迟取消失败（记录保留，可再次 cancelViewAnimation/destroy 重试）: ${
             (error as Error)?.message ?? String(error)
           }`,
         );
@@ -823,21 +843,12 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       callOptional(raw, "startViewAnimation", instance);
     },
 
-    stopViewAnimation(map) {
-      const raw = resolveLive(map);
-      capabilities.require("map.animate");
-      if (!animations.has(raw)) return;
-      // 未启动 → 登记取消请求（启动后由微任务取消）；已启动 → 立即取消；
-      // 取消失败 → 记录保留并抛出，下一次 stop/destroy 仍可重试
-      cancelAllAnimations(raw);
-    },
-
     cancelViewAnimation(map, animation) {
       const raw = resolveLive(map);
       capabilities.require("map.animate");
       const instance = resolveAnimation(animation);
       // 只认这一个实例的记录。别的动画一律不碰 —— 这是「重试自己那一次取消」能与
-      // 「不牵连别人的动画」同时成立的前提（`stopViewAnimation` 是整张图，做不到）。
+      // 「不牵连别人的动画」同时成立的前提。
       for (const record of recordsOf(raw)) {
         if (record.instance !== instance) continue;
         if (!record.started) {

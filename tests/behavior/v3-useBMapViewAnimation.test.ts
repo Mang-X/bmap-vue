@@ -215,8 +215,8 @@ describe("useBMapViewAnimation：只用官方公开面", () => {
 /**
  * 取消失败路径（#105 评审 P1）
  *
- * `MapDriver` 的契约是「`cancelViewAnimation` 失败时动画记录**保留**，下一次
- * `stopViewAnimation` / `destroy` 仍可重试」（`driver/jsapi-v4/map.ts` 的 `cancelAllAnimations`
+ * `MapDriver` 的契约是「`cancelViewAnimation` 失败时动画记录**保留**，下一次同一实例的
+ * `cancelViewAnimation` / `destroy` 仍可重试」（`driver/jsapi-v4/map.ts` 的 `cancelAllAnimations`
  * 汇总抛 `BMAP_SDK_CALL_FAILED`，且不置 `settled`）。这条契约在 hooks 侧有两个方向：
  *
  * - hooks **不能**在取消被接受之前丢掉自己那一段的归属——否则 SDK 那边还在播，hook 却已经没有
