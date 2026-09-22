@@ -74,7 +74,6 @@ const INTERNAL_ONLY_EXPORTS = [
   "MapRuntime",
   "SdkRegistry",
   "getProcessSdkRegistry",
-  "resetProcessSdkRegistryForTests",
   "ScriptLoader",
   "SharedLoadTask",
   "createMapEventBus",
@@ -89,6 +88,9 @@ const INTERNAL_ONLY_EXPORTS = [
   "createOverlayRegistry",
   "DataLayerManager",
   "BMapError",
+  // `resetProcessSdkRegistryForTests` 曾在这张表里（当时它从 `./core` 出口可达）。
+  // `#104` 第三批把它从 `./core` 摘掉之后，「它必须能在 `./core` 找到」这条正证不再成立，
+  // 因此改为由 `v3-core-surface.test.ts` 的负向清单守着 —— 那里断言它**不在**任何公共出口上。
 ];
 
 /** 组件名：它们属于根入口 / `./components`，不许出现在扩展契约里。 */

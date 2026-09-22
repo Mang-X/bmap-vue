@@ -161,7 +161,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | 配置 | 处置 | 依据 |
 | --- | --- | --- |
 | `ak` / `version` / `timeout` | 映射给官方 `load()`；`version` **只接受 `'4.0'`**（官方版本表里唯一的 v4 值），`timeout: 0` 原样传递 | 契约表「load(options) 参数」 |
-| `serviceHost` | 映射给官方 `load()`（代理模式，与 `ak` 二选一）；末尾斜杠按官方行为规范化（官方会 warn 后补 `/`），故 `/svc` 与 `/svc/` 是同一份配置。**参与指纹但只出现哈希**（`host:${hash(...)}`）——指纹会进错误消息与 `onConflict`，代理地址可能含内部域名 / userinfo / token；入口 metadata 记 `<serviceHost>/api?v=4.0` 且**不带 `ak`**，`akRef` 记 `none`。代理入口的 userinfo 在三处出口都被抹掉（`message` / `cause` / 指纹按哈希） | 同上；官方 React 封装 `react-bmap` 的 `<BMapProvider serviceHost>` 与 `stableHash` 的 load key 也是这个口径 |
+| `serviceHost` | 映射给官方 `load()`（代理模式，与 `ak` 二选一）；末尾斜杠按官方行为规范化（官方会 warn 后补 `/`），故 `/svc` 与 `/svc/` 是同一份配置。**参与指纹但只出现哈希**（`host:${hash(...)}`）——指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，代理地址可能含内部域名 / userinfo / token；入口 metadata 记 `<serviceHost>/api?v=4.0` 且**不带 `ak`**，`akRef` 记 `none`。代理入口的 userinfo 在三处出口都被抹掉（`message` / `cause` / 指纹按哈希） | 同上；官方 React 封装 `react-bmap` 的 `<BMapProvider serviceHost>` 与 `stableHash` 的 load key 也是这个口径 |
 | `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引「外部预加载 + `existingGlobalV4Provider()`」 | 上游没有入口（ADR 决策 7） |
 | `apiUrl` / `callbackParam` / `language` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引 `customScriptV4Provider()` | 入口 URL / 回调名 / 语言都不由本库决定 |
 

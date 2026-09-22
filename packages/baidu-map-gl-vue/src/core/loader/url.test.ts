@@ -65,7 +65,7 @@ describe("fingerprintConfig", () => {
     const b = fingerprintConfig({ serviceHost: "https://proxy-b.example/_BMapService/" });
     expect(a).not.toBe(b);
 
-    // 指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息与 `onConflict`，代理地址里可能有内部域名、
+    // 指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，代理地址里可能有内部域名、
     // 路径甚至 userinfo / token query：只以哈希入指纹（官方封装的 `stableHash` 同一口径）。
     expect(a).not.toContain("proxy-a.example");
     expect(a).not.toContain("_BMapService");
@@ -83,8 +83,9 @@ describe("fingerprintConfig", () => {
   });
 
   it("userinfo 也是凭据：指纹里只留哈希，不同凭据仍是不同身份", () => {
-    // CustomScript 的 scriptSrc 会经这里进 fingerprint，而 fingerprint 会进 conflict 文本与
-    // onConflict ⇒ userinfo 不能带原文。但也**不能**统一抹成同一个值：不同凭据是不同入口。
+    // CustomScript 的 scriptSrc 会经这里进 fingerprint，而 fingerprint 会进
+    // `BMAP_SDK_CONFIG_CONFLICT` 的文本 ⇒ userinfo 不能带原文。但也**不能**统一抹成同一个值：
+    // 不同凭据是不同入口。
     const a = fingerprintApiUrl("https://alice:s3cret@corp.example.com/api");
     const b = fingerprintApiUrl("https://bob:s3cret@corp.example.com/api");
     const same = fingerprintApiUrl("https://alice:s3cret@corp.example.com/api");
@@ -111,7 +112,7 @@ describe("fingerprintConfig", () => {
 
   it("非法 URL 也不得泄漏凭据：整串哈希成不透明标识", () => {
     // 解析不了的入口没法逐项脱敏（`new URL` 抛错），而 fingerprint 会直接进
-    // `BMAP_SDK_CONFIG_CONFLICT` 文本与 `onConflict({requested, active})` ——
+    // `BMAP_SDK_CONFIG_CONFLICT` 的文本 ——
     // 也就是说「域里已有另一份配置」时，凭据会在真正尝试加载之前就被打进日志。
     const unparseable = "https://alice:s3cret@[invalid?ak=secret-ak-123456";
     const fp = fingerprintApiUrl(unparseable);

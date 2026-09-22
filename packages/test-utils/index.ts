@@ -11,6 +11,7 @@ export {
   createFakeV4Harness,
 } from './fake-v4-harness'
 export type { FakeV4Harness, FakeV4MountKind } from './fake-v4-harness'
+export { stripComments } from './source-text'
 export { createManualFrames } from './manual-frames'
 export type { ManualFrames } from './manual-frames'
 export { browserShims, REDUCED_MOTION_QUERY } from './browser-shims'
