@@ -72,8 +72,13 @@ export interface PluginLoadChannelEnv {
   canvasCount?: number;
   hangUrl?: string;
   waitMs?: number;
-  /** 本库插件脚本超时常量；`null` = 这个常量还不存在（修复前的树）。 */
-  pluginTimeoutMs?: number | null;
+  /**
+   * **内置**插件工厂的超时常量（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）；`null` = 还不存在。
+   *
+   * 只对内置工厂有意义：`hang` 场景打补丁的是内置 `TrackAnimation` 的 URL，
+   * 公共 `urlPluginDefinition` 不设超时（评审 2026-09-22 P1）。
+   */
+  builtinPluginTimeoutMs?: number | null;
   urlPatched?: boolean;
   realTrackAnimationUrl?: string;
   userAgent?: string;
@@ -353,7 +358,7 @@ export function decidePluginLoadChannelExitCode(
     return failed(`hang：失败原因不可归类为超时（排查时没有抓手）—— ${hangErrorText}`);
   }
 
-  const configuredTimeout = readNumber(hangEnv.pluginTimeoutMs);
+  const configuredTimeout = readNumber(hangEnv.builtinPluginTimeoutMs);
   if (configuredTimeout !== null) {
     const hangSettledAtMs = readNumber(hangReadings.hangSettledAtMs);
     if (hangSettledAtMs === null) {

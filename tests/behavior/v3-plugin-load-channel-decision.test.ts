@@ -20,14 +20,14 @@ import {
   PLUGIN_LOAD_CHANNEL_SCENARIOS,
   type PluginLoadChannelRun,
 } from "../../scripts/plugin-load-channel-report.mts";
-import { PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
+import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 /**
  * 一份「三个场景都符合契约」的报告。
  *
  * 取值刻意**照抄一次真实成功运行**（`BAIDU_MAP_AK=… pnpm probe:plugin-load-channel` 的读数）：
- * 30s 超时、`plugin-error` 在 30030ms、脚本元素结算后归零、后一个插件 `attempts=1`。
+ * 内置工厂超时、`plugin-error` 在超时后约 30ms、脚本元素结算后归零、后一个插件 `attempts=1`。
  */
 function healthyRuns(): PluginLoadChannelRun[] {
   return [
@@ -57,7 +57,7 @@ function healthyRuns(): PluginLoadChannelRun[] {
         sdkLoaded: true,
         canvasCount: 1,
         urlPatched: true,
-        pluginTimeoutMs: PLUGIN_SCRIPT_TIMEOUT_MS,
+        builtinPluginTimeoutMs: BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS,
       },
       readings: {
         hang: {
@@ -66,20 +66,20 @@ function healthyRuns(): PluginLoadChannelRun[] {
             {
               name: "TrackAnimation",
               type: "plugin-error",
-              atMs: PLUGIN_SCRIPT_TIMEOUT_MS + 32,
+              atMs: BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS + 32,
               errorText:
                 'plugin "TrackAnimation" 未加载成功（status: error） | cause: plugin load timed out after ' +
-                PLUGIN_SCRIPT_TIMEOUT_MS +
+                BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS +
                 "ms: /__hang/plugin-load-channel",
             },
           ],
           mapReady: true,
           mapReadyAtMs: 30,
           settledWithinWindow: true,
-          hangSettledAtMs: PLUGIN_SCRIPT_TIMEOUT_MS + 32,
+          hangSettledAtMs: BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS + 32,
           hangSettleType: "plugin-error",
           hangErrorText:
-            "plugin load timed out after " + PLUGIN_SCRIPT_TIMEOUT_MS + "ms: /__hang/plugin-load-channel",
+            "plugin load timed out after " + BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS + "ms: /__hang/plugin-load-channel",
           // 挂起期间（结算之前）：还在 loading、还有一个消费者在等
           inspectedWhileHanging: {
             TrackAnimation: { status: "loading", attempts: 1, consumers: 1 },
@@ -405,10 +405,10 @@ describe("[#121] 插件加载通道探针的判定", () => {
     expect(healthyRuns().map((run) => run.scenario)).toEqual([...PLUGIN_LOAD_CHANNEL_SCENARIOS]);
   });
 
-  it("合成报告的读数与真实运行的关键字段一致（30s 超时 + 结算后归零）", () => {
+  it("合成报告的读数与真实运行的关键字段一致（超时结算 + 归零）", () => {
     // 正证守卫：如果哪天有人把健康报告改成「永远成立」的形状，这条会先红
     const healthy = readingsOf(healthyRuns(), "hang");
-    expect(healthy.hangSettledAtMs as number).toBeGreaterThanOrEqual(PLUGIN_SCRIPT_TIMEOUT_MS);
+    expect(healthy.hangSettledAtMs as number).toBeGreaterThanOrEqual(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS);
     expect(healthy.hangScriptsAtEnd).toBe(0);
     expect(healthy.scriptsWhileHanging).toBe(1);
   });

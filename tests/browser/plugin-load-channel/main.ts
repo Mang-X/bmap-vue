@@ -50,11 +50,11 @@ const REAL_TRACK_ANIMATION_URL = (builtins.BUILTIN_PLUGIN_URLS as Record<string,
 /**
  * 插件的脚本超时常量。
  *
- * 用**命名空间**取而不是 `import { PLUGIN_SCRIPT_TIMEOUT_MS }`：本探针要能在「还没有这个常量」的树上
+ * 用**命名空间**取而不是 `import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS }`：本探针要能在「还没有这个常量」的树上
  * 跑（那正是修复前的取证），而命名空间读缺失成员得到 `undefined`，具名导入会直接让整个模块加载失败。
  */
-const PLUGIN_SCRIPT_TIMEOUT_MS =
-  (builtins as Record<string, unknown>).PLUGIN_SCRIPT_TIMEOUT_MS ?? null;
+const BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS =
+  (builtins as Record<string, unknown>).BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS ?? null;
 
 const out: Record<string, any> = ((window as any).__PLUGIN_LOAD_CHANNEL__ = {
   scenario: SCENARIO,
@@ -63,7 +63,7 @@ const out: Record<string, any> = ((window as any).__PLUGIN_LOAD_CHANNEL__ = {
     hangUrl: HANG_URL,
     waitMs: WAIT_MS,
     /** 本库当前的插件脚本超时常量；`null` = 还没有这个常量（修复前）。 */
-    pluginTimeoutMs: typeof PLUGIN_SCRIPT_TIMEOUT_MS === "number" ? PLUGIN_SCRIPT_TIMEOUT_MS : null,
+    builtinPluginTimeoutMs: typeof BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS === "number" ? BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS : null,
     realTrackAnimationUrl: REAL_TRACK_ANIMATION_URL,
     /** 是否把内置 URL 表里的一项指到了永不响应的地址。 */
     urlPatched: false,

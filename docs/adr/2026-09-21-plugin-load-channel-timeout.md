@@ -31,14 +31,32 @@
 > `"load" | "jsonp"`（`ScriptLoaderMode`，`core/loader/SharedLoadTask.ts`），**没有** `runtime`。
 > 本票按实际代码判定，不动 mode 面。
 
-### 2. 插件通道内补**默认超时** `PLUGIN_SCRIPT_TIMEOUT_MS = 30_000`
+### 2. **内置工厂**内补默认超时 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000`（公共工厂语义不变）
 
-- 语义：超时 = **作废**（与取消同一类），错误文本形如
-  `plugin load timed out after 30000ms: <url>`，**可被调用方与日志归类为超时**；
-- 收尾：与既有的取消分支一致 —— **摘掉 `<script>`**、清掉计时器与 abort 监听；
+> ⚠️ **评审修正（2026-09-22，PR #125 评审 P1/P2）**：本决策第一版把超时加在**共用的**
+> `loadScriptWithExport` 上，并把 `urlPluginDefinition` 误当成内部函数（本文初稿写着「也不是公开导出」——
+> 这是一处**事实错误**：它从根入口 `src/index.ts` 与 `./plugins` 双导出，消费方用例见
+> `fixtures/v3-consumer/src/advanced-adapter.ts` 与 `scripts/verify-package.mts`）。
+> 后果是：任意第三方 / 自托管脚本插件也被强制截断，而调用方可以传 `{ required: true }`，
+> 于是「过去只是慢」的脚本会直接失败，公开面又没有任何选项能保留旧语义 —— 那是**兼容性回退**。
+> 现在把超时**收回到四个内置工厂**（`createUrlPluginDefinition` 这个内部入口），
+> 公共 `urlPluginDefinition` 保持不设超时；取值同时从 30s 提到 **60s**（见下面取值依据的算术）。
+
+- **范围**：只作用于四个内置工厂（`trackAnimationPlugin` / `mapvglPlugin` / `drawingManagerPlugin` /
+  `geoUtilsPlugin`）。公共扩展契约 `urlPluginDefinition(name, url, readExport, options)` 的语义
+  **与本票之前一字不差**：不设超时（`timeoutMs = 0`）。第三方要超时，它本来就持有
+  `load(context, signal)` 的完全控制权，可以自己包一层 —— 本库不替它决定。
+- **语义**：超时 = **作废**（与取消同一类），错误文本形如
+  `plugin load timed out after 60000ms: <url>`，**可被调用方与日志归类为超时**；
+- **收尾**：与既有的取消分支一致 —— **摘掉 `<script>`**、清掉计时器与 abort 监听；
 - `error` 事件 / 「脚本加载成功但没导出」/ `fetch` 失败这三条**既有路径的行为不变**（错误如实上报，元素处理沿用原语义）；
 - 计时器在**任何异步动作之前**起：`Mapvgl` 分支先 `fetch` 再内联，超时同样覆盖那一段；
-- 不复用 SDK 入口的 `timeout`：那个参数是**官方 Loader 的参数**（`0` = 不超时，见 `2026-09-13-official-first-loader-and-ui-kit`），把它挂到插件通道上会让一条已冻结的语义凭空多管一件事。
+- **不复用 SDK 入口的 `timeout`**：那个参数是**官方 Loader 的参数**（`0` = 不超时，见
+  `2026-09-13-official-first-loader-and-ui-kit`），把它挂到插件通道上会让一条已冻结的语义凭空多管一件事。
+
+**为什么不走评审给的另一条路（给公开 options 加 `timeout`，建议 `0 = 不超时`）**：那会新增一个
+**没有当前消费者**的公开配置面（本仓库明文：没有消费者不加），而默认值仍会改变第三方行为 ——
+兼容性照样要写迁移说明，却多了一个要长期维护的契约面。等真有消费者要它时再单独决策。
 
 取值依据（本轮实测的脚本体积，`curl -o /dev/null -w '%{size_download}'`）：
 
@@ -49,9 +67,11 @@
 | `GeoUtils` | 5.8 KB | 同上 |
 | `Mapvgl` | 621 KB | `unpkg`（走 `fetch` + 内联分支） |
 
-约束来自 `Mapvgl`：621 KB 在约 20 KB/s 的链路上需要约 30s。四个内置插件**都是 optional**
-（`required: false`），所以超时的后果是「这个插件没有就绪 + 回执 `plugin-error`」，不是「地图失败」——
-这正是默认值可以取「宁可宽松」的理由。
+约束来自 `Mapvgl`：621 KB 在 20 KB/s 的链路上**仅传输**就要约 **31s**；而计时器在 `fetch` **之前**起，
+还要吃掉响应头、`response.text()`、解析执行与调度 —— 取 30s 会在我们自己假设的链路条件下稳定误杀
+（本决策第一版就是 30s，被评审按同一张表算出来了）。**60s 给出约 2× 余量**（对应约 10 KB/s 仍能过）。
+代价只是「更晚才回执失败」；四个内置插件**都是 optional**（`required: false`），失败后果是
+「这个插件没有就绪 + 回执 `plugin-error`」（可重试），不是「地图失败」。
 
 ### 3. 取消语义**不变**，并顺手修掉一处同族的洞
 
@@ -112,7 +132,7 @@
 
 ## 后果
 
-- **挂起不再是无界的**：一次挂起最多占用一个超时窗口（30s），之后插件以 `error` 结算、回执
+- **挂起不再是无界的**：一次挂起最多占用一个超时窗口（内置工厂 60s），之后插件以 `error` 结算、回执
   `plugin-error`、后续插件继续加载 —— 诊断从「一直加载中」变成「明确的超时」。
 - **可重试**：失败条目会被 `PluginHost` 从缓存移除（`promise.catch(() => entries.delete(name))`），
   下一次 `whenPlugin` 真的重新加载。
@@ -130,13 +150,14 @@
 - **不改默认 SDK 加载路径**：那由 `2026-09-13-official-first-loader-and-ui-kit` 的契约冻结；
 - **不改插件作用域与 Catalog 语义**（`2026-09-14-plugin-catalog-scope-scheduling`）；
 - **不顺手改 `DrawingManager` 运行时自行注入脚本**：它绕过本库，属于上游行为，已在 inventory 里记录；
-- **不新增公开配置面**：`plugins: string[]` 不接受逐插件选项，`urlPluginDefinition` 也不是公开导出
-  （它只服务 Catalog），所以本票**不**给超时加一个没有消费者的公开选项。
+- **不新增公开配置面**：`plugins: string[]` 不接受逐插件选项，所以本票**不**给超时加一个没有消费者的
+  公开选项（评审 2026-09-22 给了这条替代路，见决策 2 的说明）。
 
 ## 已知限制
 
-1. **超时值不可按站点配置**：`PLUGIN_SCRIPT_TIMEOUT_MS` 是模块常量。要按站点调，得先有一个真实的
-   配置入口（`plugins` 目前只接受名字），那是一次独立的公开 API 决策，本票不做。
+1. **超时值不可按站点配置**：`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS` 是模块常量，只作用于四个内置工厂。
+   要按站点调，得先有一个真实的配置入口（`plugins` 目前只接受名字），那是一次独立的公开 API 决策。
+   第三方脚本插件**保持既有语义：没有超时**（它自己持有 `load`，要超时请自行包一层）。
 2. **失败的脚本元素仍留在文档里**（`error` / 「没暴露全局」两条路径）：这是**既有行为**，本票只改了
    「超时 / 取消」这两条**作废**路径（摘元素）。留着不动是为了让本票的行为增量可核对。
 3. **`Mapvgl` 分支的 `fetch` 本身不可取消**：取消 / 超时只保证「不再插脚本」，没有 `AbortController`

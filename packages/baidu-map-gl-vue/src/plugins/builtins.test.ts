@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
+  BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS,
   BUILTIN_PLUGIN_URLS,
-  PLUGIN_SCRIPT_TIMEOUT_MS,
   drawingManagerPlugin,
   geoUtilsPlugin,
   mapVglPlugin,
@@ -11,6 +11,7 @@ import {
 // `stringToPluginDefinitions` 随 M8-PLUGIN-CORE（#42）搬到 catalog：未知名字不再降级成空实现，
 // 因此它属于「名字 → definition」那个模块。完整语义（含未知名字抛错）在 `catalog.test.ts`。
 import { stringToPluginDefinitions } from "./catalog";
+import * as builtinsUrls from "./builtins";
 import { createPluginHost } from "../core/plugins/PluginHost";
 import { PLUGIN_COMPAT_BY_ID } from "./compat-inventory";
 
@@ -145,12 +146,14 @@ describe("plugin definitions", () => {
  * 这些真的被用到的成员），于是挂起是一个**确定性**状态，而超时语义仍然是真实代码路径。
  * 断言随之改成「元素在不在文档里」（`document.body.contains`）而不是 `document.scripts`。
  *
- * 用假计时器把「等 30 秒」变成一步，并**成对**断言：计时器真的起了（否则「到点拒绝」可能是别的
+ * 用假计时器把「等一个超时窗口」变成一步，并**成对**断言：计时器真的起了（否则「到点拒绝」可能是别的
  * 原因）→ 到点以可识别的超时错误拒绝 → 收尾把计时器与元素都清干净。
  */
 describe("插件脚本加载超时（issue #121）", () => {
   const context = { api: {}, map: {}, client: null } as never;
   const HANG_URL = "https://example.com/never-responds.js";
+  /** 真实内置 URL（本组会临时改表，afterEach 要还原到它）。 */
+  const REAL_TRACK_ANIMATION_URL = builtinsUrls.BUILTIN_PLUGIN_URLS.trackAnimation;
 
   /**
    * 模块级缓存原始 `createElement`：必须在**任何 spy 安装之前**取一次，否则
@@ -168,6 +171,29 @@ describe("插件脚本加载超时（issue #121）", () => {
       () => new Error("__resolved__"),
       (error: unknown) => error as Error,
     );
+  }
+
+  /**
+   * 观察一个 Promise 是否已结算（不 await —— 要断言「**没有**结算」）。
+   *
+   * 用容器而不是 `let settled = false`：TS 会把「只在回调里赋值」的变量收窄成 `never`
+   * （#122 的同一形态），读出来永远像没赋过值。
+   */
+  function trackSettlement(pending: Promise<unknown>): {
+    settled: boolean;
+    error: unknown;
+  } {
+    const state: { settled: boolean; error: unknown } = { settled: false, error: null };
+    void pending.then(
+      () => {
+        state.settled = true;
+      },
+      (error: unknown) => {
+        state.settled = true;
+        state.error = error;
+      },
+    );
+    return state;
   }
 
   function stubScriptCreation(): HTMLElement[] {
@@ -191,16 +217,56 @@ describe("插件脚本加载超时（issue #121）", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    // 本组会把内置 URL 表临时指向替身地址、并预置插件全局（模拟「脚本已执行完」），用完还原
+    (builtinsUrls as { BUILTIN_PLUGIN_URLS: Record<string, string> }).BUILTIN_PLUGIN_URLS.trackAnimation =
+      REAL_TRACK_ANIMATION_URL;
+    delete (window as any).BMapGLLib;
+  });
+
+  /**
+   * 复现 #121 评审 P1：**超时不能顺手改掉公共工厂的语义**。
+   *
+   * `urlPluginDefinition` 是从**根入口**与 `./plugins` 双导出的公共扩展契约
+   * （`src/index.ts` / `src/plugins/index.ts`；`fixtures/v3-consumer/src/advanced-adapter.ts`
+   * 与 `verify-package.mts` 的消费方检查都在用它），调用方可以传 `{ required: true }`。
+   * 把超时加在共用的 `loadScriptWithExport` 上，会让「过去只是慢」的第三方 / 自托管脚本在 30s 后
+   * 直接失败，而且**没有任何公开选项**能保留旧的「一直等」语义 —— 这是兼容性回退。
+   *
+   * 契约（本用例钉住）：**超时只属于四个内置工厂**；公共工厂的行为与本 PR 之前一字不差。
+   * 反向对照证明「没结算」不是因为计时器压根没起：同一个替身下，内置工厂必须被截断。
+   */
+  it("公共工厂（第三方扩展契约）不带超时；带超时的只有内置工厂", async () => {
+    const created = stubScriptCreation();
+    const thirdParty = urlPluginDefinition("ThirdParty", HANG_URL, () => undefined, {
+      required: true,
+    });
+    const publicState = trackSettlement(thirdParty.load(context, new AbortController().signal));
+    expect(created.length, "公共工厂应当照旧插入脚本").toBe(1);
+
+    await vi.advanceTimersByTimeAsync(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS * 3);
+    expect(
+      publicState.settled,
+      "公共 urlPluginDefinition 必须保持旧语义：服务器不响应就一直等（不能有超时）",
+    ).toBe(false);
+
+    // 对照：内置工厂在同一个替身下必须被超时截断（证明上面的「未结算」不是「计时器没起」）
+    const builtin = trackSettlement(trackAnimationPlugin().load(context, new AbortController().signal));
+    await vi.advanceTimersByTimeAsync(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS + 1);
+    expect(builtin.settled, "内置工厂必须被超时截断（本轮修复要解决的挂起）").toBe(true);
+    expect(String((builtin.error as Error).message)).toMatch(/timed out/i);
   });
 
   it("常量为有限正数（否则下面几条「到点超时」的断言会静默空转）", () => {
-    expect(Number.isFinite(PLUGIN_SCRIPT_TIMEOUT_MS)).toBe(true);
-    expect(PLUGIN_SCRIPT_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(Number.isFinite(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS)).toBe(true);
+    expect(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS).toBeGreaterThan(0);
   });
 
   it("永不响应的脚本：到点以超时错误拒绝，并摘掉那个脚本元素", async () => {
     const created = stubScriptCreation();
-    const def = urlPluginDefinition("Hang", HANG_URL, () => undefined);
+    // 超时属于**内置工厂**这个缝（公共工厂不设超时，见上面那条用例）：
+    // 这里用真实的内置工厂 + 被指向替身的 URL —— 两条通道的行为差异由这两条用例成对钉住。
+    (builtinsUrls as Record<string, string>).trackAnimation = HANG_URL;
+    const def = trackAnimationPlugin();
     const pending = def.load(context, new AbortController().signal);
     const settled = settledAsError(pending);
 
@@ -209,10 +275,10 @@ describe("插件脚本加载超时（issue #121）", () => {
     expect(document.body.contains(created[0]!), "脚本元素应当被插入文档").toBe(true);
     expect(vi.getTimerCount(), "应当已经武装了超时计时器").toBeGreaterThan(0);
 
-    await vi.advanceTimersByTimeAsync(PLUGIN_SCRIPT_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS);
     const error = await settled;
     expect(String(error.message)).toMatch(/timed out/i);
-    expect(String(error.message)).toContain(String(PLUGIN_SCRIPT_TIMEOUT_MS));
+    expect(String(error.message)).toContain(String(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS));
 
     expect(document.body.contains(created[0]!), "超时必须摘掉脚本元素").toBe(false);
     expect(vi.getTimerCount(), "结算后不得留下计时器").toBe(0);
@@ -220,19 +286,18 @@ describe("插件脚本加载超时（issue #121）", () => {
 
   it("脚本正常 onload：立即成功，不等到超时、也不判超时", async () => {
     const created = stubScriptCreation();
-    const url = "https://example.com/ok.js";
-    // 刻意**不**预置导出：预置会让「导出已存在」的短路生效，根本不会插脚本（那测的是另一条分支）
-    let exposed: unknown;
-    const def = urlPluginDefinition("Ok", url, () => exposed);
+    // 刻意**不**预置导出：预置会让「导出已存在」的短路生效，根本不会插脚本（那测的是另一条分支）。
+    // 走内置工厂（超时属于它这段），拿到脚本元素后再补上全局，模拟「脚本执行完并挂上全局」。
+    const def = trackAnimationPlugin();
     const pending = def.load(context, new AbortController().signal);
     expect(created.length).toBe(1);
     expect(vi.getTimerCount(), "加载期间计时器应当在飞").toBeGreaterThan(0);
 
-    exposed = { v: 1 };
+    (window as any).BMapGLLib = { TrackAnimation: { v: 1 } };
     created[0]!.dispatchEvent(new Event("load"));
 
     await expect(pending).resolves.toEqual({ v: 1 });
-    // 收尾：计时器必须被清掉（否则 30s 后会有一个无人认领的 reject）
+    // 收尾：计时器必须被清掉（否则超时窗口到点后会有一个无人认领的 reject）
     expect(vi.getTimerCount(), "成功后不得留下计时器").toBe(0);
     expect(document.body.contains(created[0]!), "成功保留脚本元素（既有行为）").toBe(true);
   });

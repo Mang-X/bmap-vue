@@ -40,7 +40,7 @@ import { defineComponent, h } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import { disposeDefaultPluginHost } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost";
-import { PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
+import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
 
 // #26 后 Provider 必须是结构化 v4 形状：harness.provider() 自述 engine + namespace。
 const { harness } = createFakeV4Harness();
@@ -208,7 +208,7 @@ describe("插件失败不阻断地图，且失败不被回执成成功", () => {
       expect(mounted.readyNames(), "还没结算就不该回执 plugin-ready").toEqual([]);
       expect(mounted.errorEvents(), "超时窗口没走完就不该报错").toEqual([]);
 
-      await vi.advanceTimersByTimeAsync(PLUGIN_SCRIPT_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS);
       await flushPromises();
 
       const errors = mounted.errorEvents();

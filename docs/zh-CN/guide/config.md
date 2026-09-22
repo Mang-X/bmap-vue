@@ -164,7 +164,7 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 配置插件后，地图实例 ready 不会等待插件加载。请通过 [BMap 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
 
-**挂起不会变成「永远加载中」**：插件脚本加载有 **30 秒默认超时**（`PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。决策与实测读数见 ADR [插件脚本加载通道的超时与取消语义](/adr/2026-09-21-plugin-load-channel-timeout)。
+**挂起不会变成「永远加载中」**：**四个内置插件**的脚本加载有 **60 秒默认超时**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。用 `urlPluginDefinition` 自建的第三方脚本插件**不受**这个超时影响（保持既有语义：不设超时；需要超时请自己在 `load(context, signal)` 里包一层）。决策与实测读数见 ADR [插件脚本加载通道的超时与取消语义](/adr/2026-09-21-plugin-load-channel-timeout)。
 
 **只有下表 `plugins` 列标 ✅ 的名字是内置的**；其余字符串会被 `resolvePluginDefinition` 抛
 `BMAP_PLUGIN_UNKNOWN`（v3 早期版本会静默变成空实现，已修正）。每个内置插件的 JSAPI 4.0 状态、

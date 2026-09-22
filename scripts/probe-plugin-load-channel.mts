@@ -68,7 +68,7 @@ async function resolveWaitMs(): Promise<{ waitMs: number; configuredTimeoutMs: n
   const builtins = (await import(
     freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/builtins.ts"))
   )) as Record<string, unknown>;
-  const raw = builtins.PLUGIN_SCRIPT_TIMEOUT_MS;
+  const raw = builtins.BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS;
   const configuredTimeoutMs = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
   return { waitMs: (configuredTimeoutMs ?? 20_000) + 5_000, configuredTimeoutMs };
 }
