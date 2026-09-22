@@ -40,6 +40,7 @@
 | [2026-09-19](./2026-09-19-native-point-layers-and-cluster.md) | 原生点图层与原生聚合（三个点图层共用 `pointLayerSpec` 内核 / `BPointCollection` → `BPointShapeLayer` / `BMarkerCluster` 原生优先且 `markers` 为显式选择 / 为 `point`、`cluster` 放开 `setVisible`） | Accepted |
 | [2026-09-21](./2026-09-21-performance-baseline-and-worker-decision.md) | 性能基准与预算；Worker 不进实现（固定数据集与 100/1k/10k/50k 分步骤基准 / 归一化趋势绊线与四态退出码 / 按证据判定不引入 Worker / 不建通用 protocol） | Accepted |
 | [2026-09-21](./2026-09-21-plugin-verdicts-and-advanced-freeze.md) | 插件迁移结论定型与 `./advanced` 冻结（五值结论 + 迁移路径 / 运行时覆盖范围进数据 / 未版本化 URL 用内容摘要锁 / `./core` 为内部面；取代 `2026-09-13-plugin-compat-inventory` 的决策 3 与决策 7 退出码表） | Accepted |
+| [2026-09-21](./2026-09-21-plugin-load-channel-timeout.md) | 插件脚本加载通道的超时与取消语义（保持两条通道分离的判据 / **内置工厂** 60s 默认超时与「作废」清理、公共工厂超时语义不变 / 取消语义三条读数 / 挂起隔离的边界；取代 `2026-09-13-plugin-compat-inventory` 的「插件加载没有超时」与 `2026-09-21-plugin-verdicts-and-advanced-freeze` 已知限制 8 的后半句） | Accepted |
 
 ## 约定
 

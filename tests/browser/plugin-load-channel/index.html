@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>插件脚本加载通道探针（超时 / 取消）</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        font:
+          13px/1.5 -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      /* 容器必须**非零尺寸且在视口内**：本探针要观察「地图照常 ready」，
+         而容器零尺寸或视口外会走 `useMapSuspension` 的门禁 / 暂停分支，
+         那会把「插件挂起」与「容器没放行」两件事混在一起。 */
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 400px;
+        height: 300px;
+      }
+      #report {
+        position: absolute;
+        left: 0;
+        top: 320px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <pre id="report">running…</pre>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

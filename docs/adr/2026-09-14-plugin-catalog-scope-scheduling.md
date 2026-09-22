@@ -196,7 +196,7 @@
 
 ## 已知限制
 
-- **插件加载仍然没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`，脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证「失败被隔离」与「消费者取消不被牵连」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策（与 [inventory](./2026-09-13-plugin-compat-inventory.md) 的同名限制一致，本轮未推进）。
+- **插件加载仍然没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`，脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证「失败被隔离」与「消费者取消不被牵连」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策（与 [inventory](./2026-09-13-plugin-compat-inventory.md) 的同名限制一致，本轮未推进）。（**已被 [2026-09-21 ADR](./2026-09-21-plugin-load-channel-timeout.md) 取代**：插件通道现在有 `PLUGIN_SCRIPT_TIMEOUT_MS = 30_000` 的默认超时，超时按「作废」结算并摘掉 `<script>`；本节其余内容不变。）
 - **全局脚本无法卸载**：`PluginHost.dispose()` 只释放本库登记的 `setup` disposer 与调用 `definition.dispose`，**不**删 `<script>`、**不**抹 `window.BMapGLLib`（上游没有卸载入口，见决策 4）。后果是双向的：① 「宿主 dispose 后重新加载」**不会**重新拉脚本（`loadScriptWithExport` 先读 `exportGetter()`，导出还在就直接 resolve），所以别把它当「干净起点」—— 这条由 `builtins.test.ts` 的用例钉住；② 用**自定义** `load`（没有这个短路）的宿主单测才会看到「重新加载」，别把那条例外用例读成「真实脚本会重拉」。
 - **挂起的候选孤儿是有界保留，不是即时释放**：旧纪元迟到成功而新纪元同名条目仍在飞时，实例会先被挂起，等这个名字下一次有结论（ready / 宿主 dispose）才判定。若这个名字此后再也没人 `acquire`，它就留到下一次 `dispose()` —— 刻意选择「多留一会儿」而不是「可能拆掉新纪元要用的单例」（评审第三轮 P1-1）。判定点本身不重复释放：同一个实例被新纪元 claim 时直接从候选里丢弃。
 - **宿主只记录第一个消费者的 context**：共享任务用发起那次加载的 `PluginContext`。内置脚本插件忽略 context，因此无影响；自定义 global 插件若依赖 context 要知道这件事。
