@@ -161,6 +161,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
+| `pnpm probe:plugin-load-channel` | 量**插件脚本加载通道自身**的边界行为（**需要 AK + 浏览器**，要真的等一个超时窗口）：把插件 URL 指到永不响应的地址，核对「地图照常 ready / 超时后如实失败且不残留脚本 / 列表里后面的插件不被永久阻塞」，以及取消语义的三条（`map` 作用域 abort 摘脚本、共享宿主里取消只解绑自己、宿主 `dispose()` 让在飞加载 abort）。`0` 契约成立 / `1` 契约不成立（含「永久挂起」）/ `3` 无法判定 / `2` 脚手架失败 |
 
 `pnpm check:public-dts` 与 `pnpm check:no-bmapgl` 的**公共声明相位**都需在 `pnpm build:v3` 之后运行；CI 的两个 job 都会在构建后执行。
 

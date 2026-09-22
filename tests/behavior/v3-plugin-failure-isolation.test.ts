@@ -40,6 +40,7 @@ import { defineComponent, h } from "vue";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import { disposeDefaultPluginHost } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost";
+import { PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
 
 // #26 后 Provider 必须是结构化 v4 形状：harness.provider() 自述 engine + namespace。
 const { harness } = createFakeV4Harness();
@@ -81,6 +82,21 @@ function failThirdPartyScripts(): void {
       }, 0);
     }
     return element;
+  }) as never);
+}
+
+/**
+ * 让**第三方**脚本的 `<script>` 既不 `load` 也不 `error` —— 「服务器建立连接但不响应」的替身。
+ *
+ * 不能靠「一个不存在的 URL」来造挂起：happy-dom 会在 `appendChild` 时**同步**给不可达的
+ * `<script src>` 派发 `error`（实测事件顺序是 `error → after-appendChild`），于是挂起变成了失败。
+ * 因此这里把 `createElement("script")` 换成普通元素：`loadScriptWithExport` 用到的
+ * `src` / `async` / `onload` / `onerror` / `remove` 它都有，但不会有任何事件被派发。
+ */
+function hangThirdPartyScripts(): void {
+  vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: unknown) => {
+    if (tag === "script") return realCreateElement("div", options as never) as never;
+    return realCreateElement(tag as never, options as never) as never;
   }) as never);
 }
 
@@ -164,5 +180,48 @@ describe("插件失败不阻断地图，且失败不被回执成成功", () => {
 
     failing.wrapper.unmount();
     succeeding.wrapper.unmount();
+  });
+
+  /**
+   * #121：脚本服务器「建立连接但不响应」时的第三条隔离场景 —— **挂起**。
+   *
+   * 前两条覆盖的是「失败被隔离」；挂起此前不在隔离口径里
+   * （#25 ADR 的已知限制：「插件加载没有超时」）。契约有三条，都由本用例钉住：
+   *
+   * 1. 「还没结算」既不是成功也不是失败：不回执 `plugin-ready`，也不该在超时窗口之前报错；
+   * 2. 超时窗口走完之后**如实回执 `plugin-error`**，且原因可识别为超时（排查时唯一的抓手）；
+   * 3. 同一个 `plugins` 列表里**后面的插件继续加载** —— `loadPluginsInBackground` 是顺序 `await`，
+   *    没有超时的话它会永远停在第一个插件上（真实读数见 `scripts/probe-plugin-load-channel.mts`：
+   *    挂起 25s 时后一个插件的 `attempts` 是 0）。
+   */
+  it("脚本永不结算（挂起）：超时后如实回执 plugin-error，且列表里后面的插件照常加载", async () => {
+    vi.useFakeTimers();
+    try {
+      hangThirdPartyScripts();
+      // 后一个插件走「导出已存在 ⇒ 直接 resolve」的短路分支，于是「它有没有被请求到」可观察
+      (window as any).BMapGLLib = { GeoUtils: { fake: true } };
+      const mounted = mountMap(["TrackAnimation", "GeoUtils"]);
+      await flushPromises();
+      await flushPromises();
+
+      expect(mounted.readyEvents().length, "插件挂起不得阻断 map ready").toBeGreaterThan(0);
+      expect(mounted.readyNames(), "还没结算就不该回执 plugin-ready").toEqual([]);
+      expect(mounted.errorEvents(), "超时窗口没走完就不该报错").toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(PLUGIN_SCRIPT_TIMEOUT_MS);
+      await flushPromises();
+
+      const errors = mounted.errorEvents();
+      expect(errors.length, "超时必须如实回执 plugin-error，而不是停在 loading").toBe(1);
+      expect(errors[0]!.name).toBe("TrackAnimation");
+      const cause = errors[0]!.error.cause as Error | undefined;
+      expect(cause, "cause 应当是插件加载的真实错误").toBeInstanceOf(Error);
+      expect(String(cause!.message)).toMatch(/timed out/i);
+
+      expect(mounted.readyNames(), "前一个插件超时之后，后面的插件仍然会被请求").toEqual(["GeoUtils"]);
+      mounted.wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

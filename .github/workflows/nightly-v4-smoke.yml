@@ -151,3 +151,51 @@ jobs:
           path: ${{ runner.temp }}/plugin-runtime.json
           if-no-files-found: warn
           retention-days: 14
+
+  # 插件**脚本加载通道**的边界行为（#121，承接 #43 的欠账）。
+  #
+  # 与上面两个 job 的分工：`plugin-compat` 看产物面 + 声明面，`plugin-runtime` 看「插件在真实 4.0 上
+  # 的最小功能路径」，本 job 看的是**通道本身**在两种边界下的行为：
+  #
+  # 1. **挂起**：把插件 URL 指到一个「建立连接但永不响应」的同源地址（dev server 的中间件）——
+  #    地图照常 ready、插件在超时窗口内以**可识别为超时**的失败结算、结算后不残留脚本元素、
+  #    同一个 `plugins` 列表里后面的插件不被永久阻塞；
+  # 2. **取消**：`map` 作用域 abort 真的摘脚本；共享宿主里一个消费者取消只解绑自己
+  #    （共享任务保留、脚本仍在）；宿主 `dispose()` 让在飞加载 abort。
+  #
+  # 判定口径：`0` 契约成立；`1` 契约不成立（含「永久挂起」这个本票修掉的缺陷形态）；
+  # `3` blocked（AK / 网络 / 浏览器 / 夹具不成立，**不是通过**）；`2` 脚手架失败。
+  #
+  # 为什么进 nightly 而不进 PR 门禁：它需要真实 AK + 外网 + 浏览器，并且要**真的等一个超时窗口**。
+  plugin-load-channel:
+    if: github.repository == 'Mang-X/bmap-vue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 与 plugin-runtime 同一个坑：探针的浏览器默认候选是 macOS 路径，runner 上必须显式指定。
+      - name: Probe plugin script load channel
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+          SMOKE_BROWSER: /usr/bin/google-chrome
+        run: pnpm probe:plugin-load-channel -- --out="$RUNNER_TEMP/plugin-load-channel.json"
+
+      - name: Upload plugin load channel report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-load-channel-report
+          path: ${{ runner.temp }}/plugin-load-channel.json
+          if-no-files-found: warn
+          retention-days: 14

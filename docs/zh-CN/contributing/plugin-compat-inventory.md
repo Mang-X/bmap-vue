@@ -11,6 +11,8 @@
 
 三档各有自己的复现命令：`pnpm probe:plugin-runtime`（真实 4.0 + 真实 AK + 真实浏览器，nightly 单独跑：它验的是**可选**插件，不进必需链路）、`pnpm probe:plugin-compat`（真实发布产物 + 官方声明）、以及两者共用的生成物校验 `pnpm generate:plugin-inventory:check`。
 
+插件**脚本加载通道**自身的行为（超时 / 取消）由另一个探针覆盖：`pnpm probe:plugin-load-channel`（真实浏览器 + 永不响应的地址；同样只在 nightly 跑）。决策见 ADR `2026-09-21-plugin-load-channel-timeout`。
+
 ## 依据档位
 
 | 依据 | 含义 |

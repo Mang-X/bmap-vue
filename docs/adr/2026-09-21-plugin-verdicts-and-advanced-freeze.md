@@ -164,6 +164,9 @@
    因此**没有超时**，也没有 SRI / `nonce` 之类属性（上游脚本本来也不提供这些入口）。
    这条与 [2026-09-13 ADR](./2026-09-13-plugin-compat-inventory.md) 已知限制里的「插件加载没有超时」
    是同一件事；本票按「先判定、再适配」没有改动加载层，已拆成独立欠账票 [#121](https://github.com/Mang-X/bmap-vue/issues/121)。
+   **后续（2026-09-21，[插件脚本加载通道的超时与取消语义](./2026-09-21-plugin-load-channel-timeout.md)）**：
+   欠账已落地 —— 插件通道现在有 `PLUGIN_SCRIPT_TIMEOUT_MS = 30_000` 的默认超时；本条的其余结论
+   （**不复用** `ScriptLoader`、**不接收** SRI / `nonce` 等属性）仍然成立。
 9. **CSP 没有被审计**：三个 `BMapGLLib` 脚本来自 `mapopen.bj.bcebos.com`、`Mapvgl` 来自 `unpkg.com`，
    `DrawingManager` 还会**自己**注入 `mapopen.cdn.bcebos.com` 上的两个脚本；站点的 CSP 需要放行这些来源。
    本票只在 `docs/zh-CN/guide/config.md` 写明这件事，没有做 CSP 的自动化核对。

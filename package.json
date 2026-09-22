@@ -24,6 +24,7 @@
     "generate:plugin-inventory:check": "node --experimental-strip-types scripts/generate-plugin-inventory.mts --check",
     "probe:plugin-compat": "node --experimental-strip-types scripts/probe-plugin-compat.mts",
     "probe:plugin-runtime": "node --experimental-strip-types scripts/probe-plugin-runtime.mts",
+    "probe:plugin-load-channel": "node --experimental-strip-types scripts/probe-plugin-load-channel.mts",
     "probe:layer-events": "node --experimental-strip-types scripts/probe-layer-events.mts",
     "probe:layer-detached": "node --experimental-strip-types scripts/probe-layer-detached.mts",
     "build:v3": "node --experimental-strip-types scripts/build-v3.mts",

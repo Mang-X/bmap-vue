@@ -108,6 +108,11 @@ function renderMarkdown(): string {
       '`pnpm generate:plugin-inventory:check`。',
   )
   lines.push('')
+  lines.push(
+    '插件**脚本加载通道**自身的行为（超时 / 取消）由另一个探针覆盖：`pnpm probe:plugin-load-channel`' +
+      '（真实浏览器 + 永不响应的地址；同样只在 nightly 跑）。决策见 ADR `2026-09-21-plugin-load-channel-timeout`。',
+  )
+  lines.push('')
 
   lines.push('## 依据档位')
   lines.push('')

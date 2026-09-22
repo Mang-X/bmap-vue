@@ -34,6 +34,49 @@ export interface PluginLoader {
 }
 
 /**
+ * 插件脚本的加载超时（毫秒）—— `plugins/**` 这一条通道自己的默认值。
+ *
+ * ## 为什么它不复用 SDK 入口的 `timeout`（ADR `2026-09-13-official-first-loader-and-ui-kit`）
+ *
+ * 那个 `timeout` 是**官方 Loader 的参数**（`0` = 不超时），语义与实现都归官方包；插件通道是
+ * 本库自建的第二条通道（第三条是显式高级路径的 `ScriptLoader`），把它挂到 SDK 入口的选项上
+ * 会让「SDK 入口超时」这一条冻结语义凭空多管一件事。
+ *
+ * ## 为什么不是「直接复用 `ScriptLoader`」（issue #121 实施步骤 3 的判据）
+ *
+ * 两条通道的**契约不同**，不是「同一件事的两种写法」：
+ *
+ * | 维度 | `ScriptLoader`（`core/loader`） | 本文件（插件通道） |
+ * | --- | --- | --- |
+ * | 就绪信号 | `load` 事件的载荷 / `jsonp` 回调 / `exportGetter` + `assertReady` | 「注入 `<script>` 后读一个**文档级全局**」 |
+ * | 去重键 | `src` + `mode` + 完整性属性 | **插件名**（`PluginHost` 那一层） |
+ * | 短路 | 无（已成功的配置直接复用结果） | **全局已存在 ⇒ 不插脚本**（宿主 dispose 后的复用依赖它） |
+ * | 内联注入 | 不支持 | **支持**（`Mapvgl` 分支要 `fetch` 后剥掉统计脚本再内联） |
+ * | 属性面 | `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 刻意不接收（接收后忽略属于假支持） |
+ *
+ * 尤其「内联注入」与「全局已存在短路」是**消费者真的需要**的行为：为了统一而统一，就要给
+ * `ScriptLoader` 加一条与 SDK 入口无关的 `inlineSource` 模式，或者把插件通道的两条既有语义搬走。
+ * 因此本票**保持两条通道分离**，只把缺口（没有超时）补上。
+ *
+ * ## 取值依据（本轮实测的脚本体积）
+ *
+ * | 插件 | 体积 | 说明 |
+ * | --- | --- | --- |
+ * | `TrackAnimation` | 4.9 KB | `mapopen.bj.bcebos.com`（百度自托管 GitHub 镜像） |
+ * | `DrawingManager` | 41.7 KB | 同上，且它会自己再注入两个脚本 |
+ * | `GeoUtils` | 5.8 KB | 同上 |
+ * | `Mapvgl` | 621 KB | `unpkg`，且走 `fetch` + 内联分支 |
+ *
+ * `Mapvgl` 是本值的主要约束：621 KB 在 ~20 KB/s 的链路上要约 30s。四个内置插件**都是 optional**
+ * （`required: false`，见下），所以「超时」在这里的后果是「这个插件没有就绪 + 回执 `plugin-error`」，
+ * 而不是「地图失败」——这正是这个默认值可以取「宁可宽松」的理由。
+ *
+ * 取值 `<= 0` 表示**关闭超时**（与 SDK 入口 `timeout` 的 `0` = 不超时是同一口径）。目前没有调用方
+ * 这么用；实现里保留这个分支是因为常量将来可能被调小到 0，而「立刻超时」显然不是那时的本意。
+ */
+export const PLUGIN_SCRIPT_TIMEOUT_MS = 30_000;
+
+/**
  * 从 URL 加载脚本并返回全局导出。
  *
  * `scope` 的缺省是 **`"global"`**，与 `BMapPluginDefinition.scope` 的缺省（`"map"`）**不同**，
@@ -56,7 +99,8 @@ export function urlPluginDefinition<T>(
       if (signal?.aborted) {
         throw new Error(`plugin "${name}" aborted`);
       }
-      // 简单 script 加载(生产应经 ScriptLoader 实现 timeout/SRI)
+      // 走本文件自己的加载通道（超时由 `PLUGIN_SCRIPT_TIMEOUT_MS` 兜底）；为什么不复用
+      // `ScriptLoader` 见 `PLUGIN_SCRIPT_TIMEOUT_MS` 的说明。
       const exported = await loadScriptWithExport(url, exportGetter, signal);
       return exported as T;
     },
@@ -82,44 +126,104 @@ function loadScriptWithExport(
       resolve(existing);
       return;
     }
+
+    /**
+     * 本次加载是否已经结算。
+     *
+     * 三个出口（成功 / 失败 / 取消）都要过它：
+     * - **超时 / 取消之后的迟到回包**不得再改动任何状态（旧实现里 `Mapvgl` 那条分支会在
+     *   `fetch` 之后再 `appendChild`，于是「已经取消掉的加载」照样会往文档里插一个内联脚本）；
+     * - `script.onload` 与定时器可能在同一轮事件循环里竞争，先到者胜。
+     */
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const script = document.createElement("script");
     // MapVGL bundles inject Baidu analytics scripts, which can be blocked by browser extensions.
     (window as any)._disable_hmt = true;
     script.async = true;
-    script.onload = () => {
+
+    /** 收尾：清计时器与 abort 监听、摘掉事件处理器；`removeScript` 时把 `<script>` 也摘掉。 */
+    function cleanup(removeScript: boolean): void {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      signal?.removeEventListener("abort", onAbort);
+      script.onload = null;
+      script.onerror = null;
+      if (removeScript) script.remove();
+    }
+
+    /** 成功：保留 `<script>`（与既有行为一致——宿主页面上这个脚本本来就该继续存在）。 */
+    function succeed(value: unknown): void {
+      if (settled) return;
+      settled = true;
+      cleanup(false);
+      resolve(value);
+    }
+
+    /** 失败（`error` 事件 / 全局没暴露 / `fetch` 失败）：错误如实上报，**元素的处理沿用既有语义**。 */
+    function fail(error: Error): void {
+      if (settled) return;
+      settled = true;
+      cleanup(false);
+      reject(error);
+    }
+
+    /**
+     * 作废（超时 / 取消）：错误如实上报，并**摘掉 `<script>`**。
+     *
+     * 与 `fail` 分开是为了让本票的行为增量可核对：既有实现只在取消时摘脚本，本次把**超时**并到
+     * 同一条清理上（一个永不响应的请求留在文档里除了占着连接没有别的用途），
+     * 而 `error` / 「脚本加载成功但没暴露全局」这两条既有路径的元素处理**保持不变**。
+     */
+    function discard(error: Error): void {
+      if (settled) return;
+      settled = true;
+      cleanup(true);
+      reject(error);
+    }
+
+    function readExportOrFail(): void {
       const exported = exportGetter();
-      if (exported) resolve(exported);
-      else reject(new Error(`plugin did not expose export: ${url}`));
-    };
-    script.onerror = () => reject(new Error(`failed to load plugin: ${url}`));
+      if (exported) succeed(exported);
+      else fail(new Error(`plugin did not expose export: ${url}`));
+    }
+
+    function onAbort(): void {
+      discard(new Error("plugin aborted"));
+    }
+
+    // 计时器必须在**任何异步动作之前**起：`Mapvgl` 分支先 `fetch` 再内联，超时同样要覆盖那段。
+    if (PLUGIN_SCRIPT_TIMEOUT_MS > 0) {
+      timer = setTimeout(() => {
+        discard(new Error(`plugin load timed out after ${PLUGIN_SCRIPT_TIMEOUT_MS}ms: ${url}`));
+      }, PLUGIN_SCRIPT_TIMEOUT_MS);
+    }
+
+    script.onload = () => readExportOrFail();
+    script.onerror = () => fail(new Error(`failed to load plugin: ${url}`));
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+
     if (url.includes("mapvgl")) {
       fetch(url)
         .then((response) => response.text())
         .then((source) => {
+          // 超时 / 取消之后不再插脚本（否则「已经作废的加载」会往文档里注入一个内联脚本）
+          if (settled) return;
           // MapVGL injects analytics on load; extensions commonly block that request.
           script.textContent = source.replace(
             /window\._disable_hmt\|\|\(window\._hmt[\s\S]*?\}\(\)\);?/g,
             "",
           );
           document.body.appendChild(script);
-          const exported = exportGetter();
-          if (exported) resolve(exported);
-          else reject(new Error(`plugin did not expose export: ${url}`));
+          readExportOrFail();
         })
-        .catch(() => reject(new Error(`failed to load plugin: ${url}`)));
+        .catch(() => fail(new Error(`failed to load plugin: ${url}`)));
     } else {
       script.src = url;
       document.body.appendChild(script);
-    }
-    if (signal) {
-      signal.addEventListener(
-        "abort",
-        () => {
-          script.remove();
-          reject(new Error("plugin aborted"));
-        },
-        { once: true },
-      );
     }
   });
 }
