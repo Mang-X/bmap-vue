@@ -31,7 +31,7 @@
 > `"load" | "jsonp"`（`ScriptLoaderMode`，`core/loader/SharedLoadTask.ts`），**没有** `runtime`。
 > 本票按实际代码判定，不动 mode 面。
 
-### 2. **内置工厂**内补默认超时 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000`（公共工厂语义不变）
+### 2. **内置工厂**内补默认超时 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000`（公共工厂的**超时语义**不变）
 
 > ⚠️ **评审修正（2026-09-22，PR #125 评审 P1/P2）**：本决策第一版把超时加在**共用的**
 > `loadScriptWithExport` 上，并把 `urlPluginDefinition` 误当成内部函数（本文初稿写着「也不是公开导出」——
@@ -87,9 +87,15 @@
 取消只对「还没插进文档的元素」调 `remove()`，于是**迟到的 `fetch` 回来时照样把内联脚本插进文档**。
 现在用一个 `settled` 标记统一挡掉所有「已作废之后」的写入。
 
+⚠️ **它的生效范围与超时不同**（评审第二轮 P2-2）：这处修复在**共用的** `loadScriptWithExport` 里，
+所以**用公共 `urlPluginDefinition` 构造的第三方 URL 插件同样受益** —— 尤其 URL 命中 `mapvgl` 分支时，
+取消竞态从「已经 reject 但迟到 `fetch` 仍然 `appendChild`」变成「reject 后不再写入」。
+因此准确的说法是：**公共 API 与超时语义不变；共用加载器里那处取消竞态修复覆盖所有调用者**
+（`builtins.test.ts` 里那条 `Mapvgl` 用例就是用公共工厂构造的，正是这条覆盖关系的证据）。
+
 ### 4. 隔离口径的边界写清楚（不扩大到「后续插件并发加载」）
 
-实测：插件挂起期间**地图照常 ready**（探针读数 `mapReadyAtMs = 30ms`）—— `BMap.vue` 的
+实测：插件挂起期间**地图照常 ready**（探针读数 `mapReadyAtMs`：修复前 30ms / 修复后 25ms）—— `BMap.vue` 的
 `loadPluginsInBackground` 本来就「不等插件」。但它是**顺序 `await`**，所以挂起会阻塞**同一个
 `plugins` 列表里后面的插件**：修复前 25s 窗口内后一个插件的 `attempts` 是 **0**（从未被请求）。
 本票**不**把顺序 await 改成并发加载（那会改变事件顺序与既有语义），而是让「一次挂起最多占用一个
@@ -101,19 +107,24 @@
 「永不响应」的地址是同源 dev server 的一个中间件（接受连接后不写响应也不关闭），
 唯一被替换的输入是 `BUILTIN_PLUGIN_URLS.trackAnimation`（`env.urlPatched` 如实记录）。
 
-| 场景 | 读数 | 修复前（`main` = `2290f8a`） | 修复后（本票） |
+| 场景 | 读数 | 修复前（`main` = `2290f8a`） | 本票（内置工厂 60s 超时） |
 | --- | --- | --- | --- |
-| `control`（真实内置 URL，正证） | map ready / plugin-ready / 脚本数 | 262ms / 465ms / 1 | 284ms / 491ms / 1 |
-| `hang` | 地图 ready | ✅ 30ms | ✅ 28–30ms |
-| `hang` | 挂起是否在窗口内结算 | ❌ **否**（25s 窗口内无任何事件） | ✅ 30030–30035ms 收到 `plugin-error` |
+| `control`（真实内置 URL，正证） | map ready / plugin-ready / 脚本数 | 262ms / 465ms / 1 | 285ms / 488ms / 1 |
+| `hang` | 地图 ready | ✅ 30ms | ✅ 25ms |
+| `hang` | 挂起是否在窗口内结算 | ❌ **否**（25s 窗口内无任何事件） | ✅ **60028ms** 收到 `plugin-error` |
 | `hang` | 注册表状态（挂起期间 → 结算之后） | `loading` / `consumers=1` —— 窗口内**一直**如此（永不结算） | 结算前 `loading` / `1` → 结算后 `error` / `0` |
-| `hang` | 失败原因 | （无） | `plugin load timed out after 30000ms: /__hang/plugin-load-channel` |
+| `hang` | 失败原因 | （无） | `plugin load timed out after 60000ms: /__hang/plugin-load-channel` |
 | `hang` | 结算后残留的脚本元素 | ❌ 1（永不响应的请求留在文档里） | ✅ 0 |
 | `hang` | 列表里后一个插件 `attempts` | ❌ 0（从未被请求） | ✅ 1 |
 | `cancel` | `map` 作用域 abort：脚本数 1 → 0 | ✅ | ✅ |
 | `cancel` | 共享宿主：`consumers` 2 → 1、脚本仍为 1、另一消费者未被结算 | ✅ | ✅ |
 | `cancel` | 宿主 `dispose()`：等待者结算、脚本归零 | ✅ | ✅ |
 | 退出码 | | **1**（`hang：插件在超时窗口内没有结算（永久挂起）`） | **0** |
+
+> 右列是**当前实现**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000`）的重跑读数。
+> 本票第一版是 30s，当时的读数（`30030–30035ms` 结算、错误文本 `timed out after 30000ms`）
+> **已被取代**：那正是评审按「621 KB / 20 KB/s ≈ 31s + 计时器覆盖 `fetch` 全段」判定余量不足、
+> 要求提高取值的依据（见决策 2 的评审修正段）。排障时请以右列这一版为基线。
 
 结论：① 挂起确实存在（不是理论担忧）；② 「失败被隔离」成立但**「挂起被隔离」只到「地图 ready」为止**——
 同一列表里后面的插件会被永久阻塞；③ 取消语义三条与 AGENTS.md 的口径一致，本票只需保证不破坏它们。
@@ -132,6 +143,8 @@
 
 ## 后果
 
+- **公共工厂只吃到一处独立修复**：`urlPluginDefinition` 的超时语义不变（不设超时），但共用加载器里
+  决策 3 的取消竞态修复对它同样生效 —— 影响面表述必须按这一条收窄，别写成「第三方完全不受影响」。
 - **挂起不再是无界的**：一次挂起最多占用一个超时窗口（内置工厂 60s），之后插件以 `error` 结算、回执
   `plugin-error`、后续插件继续加载 —— 诊断从「一直加载中」变成「明确的超时」。
 - **可重试**：失败条目会被 `PluginHost` 从缓存移除（`promise.catch(() => entries.delete(name))`），
@@ -139,10 +152,11 @@
 - 新增 nightly job `plugin-load-channel`（与 `plugin-runtime` 并列、`if: github.repository == …` 守卫、
   显式 `SMOKE_BROWSER`），并有「它真的在跑、没被 `if:` / `continue-on-error:` 架空」的门禁用例。
 
-**回滚**：把 `loadScriptWithExport` 里的计时器去掉、删掉 `PLUGIN_SCRIPT_TIMEOUT_MS` 与三处新用例
-（`builtins.test.ts` 的超时组、`v3-plugin-failure-isolation.test.ts` 的挂起用例、
+**回滚**：把 `loadScriptWithExport` 里的计时器去掉（或把内部入口
+`createUrlPluginDefinition(..., timeoutMs)` 的第四参固定为 `0`）、删掉 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`
+与三处新用例（`builtins.test.ts` 的超时组、`v3-plugin-failure-isolation.test.ts` 的挂起用例、
 `v3-plugin-load-channel-decision.test.ts` 的判定组），删 nightly job 与探针脚本即可。
-`settled` 守卫（决策 3 的顺带修复）与它无关，可独立保留。
+`settled` 守卫（决策 3 的顺带修复，覆盖所有调用者）与超时无关，可独立保留。
 
 ## 非目标
 

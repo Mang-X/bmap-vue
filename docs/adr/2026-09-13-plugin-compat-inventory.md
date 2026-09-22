@@ -234,7 +234,7 @@ Catalog 里被标为 `unsupported` 的插件类能力，必须在 inventory 里�
   的插件页仍属 #43。**「构造成功」不等于「功能可用」，读数里不这么写也是刻意的。**
 - **插件加载没有超时**：`urlPluginDefinition` 的 `loadScriptWithExport` 只认 `AbortSignal`
   （`scope.signal`），脚本服务器「不响应也不报错」时 `whenPlugin` 会一直挂着。本轮只保证
-  「失败被隔离」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策。（**已被 [2026-09-21 ADR](./2026-09-21-plugin-load-channel-timeout.md) 取代**：**四个内置插件**现在有 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000` 的默认超时（超时按「作废」结算并摘掉 `<script>`）；公共 `urlPluginDefinition` 的语义不变、仍无超时；本节其余内容不变。）
+  「失败被隔离」，**不保证**「挂起被隔离」。加超时属于加载层语义，需要单独决策。（**已被 [2026-09-21 ADR](./2026-09-21-plugin-load-channel-timeout.md) 取代**：**四个内置插件**现在有 `BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS = 60_000` 的默认超时（超时按「作废」结算并摘掉 `<script>`）；公共 `urlPluginDefinition` 的**超时语义**不变（仍不设超时；共用加载器里另有一处取消竞态修复对它同样生效）；本节其余内容不变。）
 - **实例成员没有被自动校验**：`probe:plugin-compat` 只做命名空间级存在性核对（`BMapGL.<Member>`）；
   `Map#getViewport` 这类实例成员是**人工**对照声明核对的（见各条目的 `manualInstanceChecks`）。
   上游若新增一个不存在的实例方法调用，nightly **不会**报——owner/member 级的 AST / 类型校验属 #43
