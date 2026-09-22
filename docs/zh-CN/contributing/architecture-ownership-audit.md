@@ -9,6 +9,10 @@
 > [ADR 2026-09-14 非目标（已兑现）](../../adr/2026-09-14-service-lifecycle-and-local-search.md)、
 > [ADR 2026-09-14 删除旧引擎（已知限制第 2 条已被取代）](../../adr/2026-09-14-remove-legacy-engine.md)。
 
+三个批次的落地 PR：[#105](https://github.com/Mang-X/bmap-vue/pull/105)（第一批，A1–A3 / B1 / R1–R11）、
+[#122](https://github.com/Mang-X/bmap-vue/pull/122)（第二批，实施步骤 4：动画 teardown + F-1 取证）、
+[#129](https://github.com/Mang-X/bmap-vue/pull/129)（第三批，实施步骤 6：`./core` 公共面复核）。
+
 审计对象是 **main 上已落地** 的实现，不预设它们有问题；每行给出「机制 / 消费者 / 证据 / 结论 / 处置」。
 
 ## 证据口径
@@ -150,7 +154,7 @@
 
 **没有**为了本次审计新建任何通用 Runtime / 状态框架（验收项 4）。上表标 SIMPLIFY 而三批都未做的行，全部是「要连带改夹具或改公共出口」的一类：**第三批把其中「纯删就完事」的收掉了，剩下的逐条登记到 #44**（评论已留），需要独立决策 / 测试 / 取证的另开票（#126 / #127 / #128），都不混进本票以免评审分不清两件事。
 
-## 第二批（2026-09-21）：issue「实施步骤 4」的动画面
+## 第二批（2026-09-21，PR #122）：issue「实施步骤 4」的动画面
 
 issue 的实施顺序里第 4 步是「**MapDriver animation teardown**：在 2/3 收窄后重新评估，可删多少删多少，
 但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useBMapViewAnimation` /
@@ -181,7 +185,7 @@ F-1 不覆盖它们，要开放得先单立 probe 票）；`FakeV4ViewAnimation`
 Runtime、先做具体场景再提共性、测试以业务结果与资源释放为主）。约束同时已进 `AGENTS.md`，本表是事实源。
 后续开新票时沿用这个标记，`gh issue view <n> --json body` 就能扫出覆盖面。
 
-## 第三批（2026-09-22）：issue 实施步骤 6 的「#44 冻结前公共面复核」
+## 第三批（2026-09-22，PR #129）：issue 实施步骤 6 的「#44 冻结前公共面复核」
 
 前两批做的是实施步骤 1–4（删抽象 / 收窄 hooks / 取证动画窗口）。这一批做**最后一步**：
 
