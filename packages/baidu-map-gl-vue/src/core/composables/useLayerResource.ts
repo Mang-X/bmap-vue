@@ -83,6 +83,13 @@ export interface UseLayerResourceResult {
   readonly handle: Readonly<ShallowRef<LayerHandle | null>>;
   readonly status: Readonly<ShallowRef<SdkResourceStatus>>;
   readonly error: Readonly<ShallowRef<BMapError | null>>;
+  /**
+   * **就绪会话**：当前 `(driver.layers, handle)` 对；未就绪 / 已释放时为 `null`。
+   *
+   * 只给**同时刻**的两个引用（与 `FeatureStateSession` 同形）：图层会因构造期选项变化换实例，
+   * 分开缓存 driver 与 handle 会在重建后把状态写进旧实例。`featureState` 一类命令面从这里取会话。
+   */
+  readonly session: () => { driver: LayerDriver; handle: LayerHandle } | null;
 }
 
 /**
@@ -590,6 +597,12 @@ export function useLayerResource<Props>(
     }
   };
 
+  /**
+   * 就绪后的 `MapReadyContext`（client / map 在地图生命周期内稳定；图层实例可能重建换代）。
+   * 供 `session()` 组装「同时刻的 driver + handle」。未就绪时为 `null`。
+   */
+  let readyContext: MapReadyContext | null = null;
+
   const resource = useSdkResource<Readonly<Props>, LayerHandle, MapReadyContext>({
     props,
     label: "layer-resource",
@@ -605,6 +618,7 @@ export function useLayerResource<Props>(
           "layer components must be used inside a <BMap> that owns a map instance（当前上下文只有 client）",
         );
       }
+      readyContext = context;
       return context;
     },
     spec: {
@@ -762,10 +776,24 @@ export function useLayerResource<Props>(
     },
   });
 
+  /**
+   * 就绪会话：`resource.resource` 与**它创建时的 MapReadyContext** 必须是同一代。
+   *
+   * `resolveContext` 在 `useSdkResource` 内部只在首次就绪时调用一次；之后图层可能因重建换实例，
+   * 但 MapReadyContext（client / map）在地图生命周期内稳定——因此这里用闭包捕获的 context 即可。
+   * 未就绪（`resource()` 为 `null`）时整段为 `null`，与 `FeatureStateSession` 的契约一致。
+   */
+  const session = (): { driver: LayerDriver; handle: LayerHandle } | null => {
+    const current = (resource.resource as ShallowRef<LayerHandle | null>).value;
+    if (!current || !readyContext) return null;
+    return { driver: readyContext.client.driver.layers, handle: current };
+  };
+
   return {
     handle: resource.resource as Readonly<ShallowRef<LayerHandle | null>>,
     status: resource.status,
     error: resource.error,
+    session,
   };
 }
 

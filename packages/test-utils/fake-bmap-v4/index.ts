@@ -40,6 +40,7 @@ import {
   FakeV4GeolocationControl,
   FakeV4Layer,
   FakeV4MapTypeControl,
+  FakeV4MVTLayer,
   FakeV4NavigationControl,
   FakeV4OverviewMapControl,
   FakeV4PanoramaCoverageLayer,
@@ -276,6 +277,8 @@ export interface FakeBMapV4Namespace {
   RasterTileLayer: new (options?: Record<string, unknown>) => FakeV4RasterTileLayer
   WMSLayer: new (options?: Record<string, unknown>) => FakeV4WMSLayer
   WMTSLayer: new (options?: Record<string, unknown>) => FakeV4WMTSLayer
+  /** MVT 矢量瓦片（#109）：`isTileLayer` + 要素状态五命令（官方入口名）。 */
+  MVTLayer: new (options?: Record<string, unknown>) => FakeV4MVTLayer
   /** 官方签名是 `(layerName, options)`——首参是图层名。 */
   GeoJSONLayer: new (
     layerName: string,
@@ -626,6 +629,12 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdLayers.push(this)
     }
   }
+  class MVTLayerClass extends FakeV4MVTLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdLayers.push(this)
+    }
+  }
   class GeoJSONLayerClass extends FakeV4GeoJSONLayer {
     constructor(layerName: string, options?: Record<string, unknown>) {
       super(layerName, options ?? {}, stats)
@@ -827,6 +836,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     RasterTileLayer: RasterTileLayerClass,
     WMSLayer: WMSLayerClass,
     WMTSLayer: WMTSLayerClass,
+    MVTLayer: MVTLayerClass,
     GeoJSONLayer: GeoJSONLayerClass,
     DOMLayer: DOMLayerClass,
     Geocoder: GeocoderClass,

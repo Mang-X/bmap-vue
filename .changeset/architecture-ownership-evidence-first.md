@@ -40,7 +40,8 @@ Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复�
   `DataLayerManager` 的 `DataLayerOptions`（其唯一成员 `minClusterSize` 类根本不接受）；
 - Capability Catalog：`runtime` 整个 family（四条都是本库自身模块，不是 SDK 能力，没有任何地方按 id 问过，
   删的是这四条目录项、联合成员 `"runtime"` 与 `CAPABILITY_FAMILIES` 里的那一项；`CapabilityFamily` 类型和
-  `CAPABILITY_FAMILIES` 常量本身保留，它们有真实消费者）、`layer.mvt`、`service.truck-route`
+  `CAPABILITY_FAMILIES` 常量本身保留，它们有真实消费者）、`layer.mvt`（后由 #109 重新加入——`BMVTLayer`
+  成为其消费者）、`service.truck-route`
   （ADR 明确「不做」，槽位只被当作测试夹具）。矩阵重生成后为 62 条能力。
 - `<BAutoComplete>` 卸载路径上那句「按结构化成员探测 `disposeAutocomplete`，探测不到就静默跳过」的
   引擎分支：#26 之后 `BMapEngine` 只有 `jsapi-v4`，分支永不成立，而它跳过的是 Driver 侧的订阅记账。

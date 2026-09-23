@@ -745,3 +745,59 @@ export const menuItemPropsSmoke = { menuItemProps, badMenuItemProps }
 
 // 四个新组件都在根入口（`BCustomOverlay` / `BContextMenu` 已存在，`BMenuItem` / `BMenuSeparator` 是新增）
 export const menuComponentSmoke = [BCustomOverlay, BContextMenu, BMenuItem, BMenuSeparator].length
+
+// ---------------------------------------------------------------------------
+// #109 BMVTLayer：公开契约锁（PR #133 评审 P1/P2）
+//
+// `@ts-expect-error` 是**双向**的：类型一旦被放宽，下面这些会变成「未使用的指令」而报错。
+// 由 `verify:package` 的 `vue-tsc --noEmit` 对 tarball 产物跑（public-dts 契约面）。
+// ---------------------------------------------------------------------------
+import type {
+  FeatureStateApi,
+  BMVTLayerProps,
+  BMVTLayerEntity,
+  BMVTLayerMouseEvent,
+  BMVTLayerMouseMoveEvent,
+  BMVTLayerPickEvent,
+} from 'baidu-map-gl-vue'
+import { BMVTLayer, mvtFeatureStateKey } from 'baidu-map-gl-vue'
+
+// P1：MVT feature-state 键域 = string-only（`keyDomain: "string"` ⇒ `FeatureStateApi<"string">`）
+declare const mvtState: FeatureStateApi<'string'>
+mvtState.update(mvtFeatureStateKey('lines', 42), { selected: true })
+// @ts-expect-error MVT 键必须是 string 复合键（`layerName_id`），number 必须编译失败
+mvtState.update(1, { selected: true })
+// @ts-expect-error number[] 同样必须编译失败
+mvtState.remove([1, 2])
+
+// 默认键域（#36 NativeLayer）仍是 `string | number`——不能顺手收窄
+declare const nativeState: FeatureStateApi
+nativeState.update(1, { selected: true })
+
+// P2a：mousemove.value 官方**必有** `Entity[]`（不能 alias 到 PickEvent 的可选）
+declare const mvtMove: BMVTLayerMouseMoveEvent
+const mvtMoveValue: BMVTLayerEntity[] = mvtMove.value
+// @ts-expect-error MouseMove 的 value 是必填：缺 value 的对象不能赋给它
+const badMvtMove: BMVTLayerMouseMoveEvent = { type: 'mousemove' }
+
+// P2b：Pick 的 value **可选**（未命中时 SDK 可能不带）
+declare const mvtPick: BMVTLayerPickEvent
+const mvtPickValue: BMVTLayerEntity[] | undefined = mvtPick.value
+
+// P2c：mouseout 载荷 = MouseEvent（pixel / latLng），不是 BaseEvent 也不是 PickEvent
+const onMvtOut: NonNullable<BMVTLayerProps['onmouseout']> = (e) => {
+  void e.pixel?.x
+  void e.latLng?.lng
+}
+declare const mvtOut: BMVTLayerMouseEvent
+void mvtOut.pixel?.x
+
+export const mvtContractSmoke = {
+  mvtState,
+  nativeState,
+  mvtMoveValue,
+  badMvtMove,
+  mvtPickValue,
+  onMvtOut,
+  BMVTLayer,
+}

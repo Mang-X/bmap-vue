@@ -6,7 +6,28 @@
 
 ## 本页导航
 
-[快速选择](#快速选择) · [最小示例](#最小可运行示例) · [核心 API](#核心-api) · [资源清理](#资源清理) · [常见错误](#常见错误)
+[快速选择](#快速选择) · [最小示例](#最小可运行示例) · [核心 API](#核心-api) · [资源清理](#资源清理) · [常见错误](#常见错误) · [live 探针读数](#live-探针读数)
+
+## 2026-09-23 live 探针读数（4.0 真机）
+
+以下条目来自 `scripts/probe-mvt-layer.mts` 在真实 AK + headless Chromium 上的截图差分 / 事件计数 / 源码对照，**以本节覆盖上文与官方注释冲突处**：
+
+| 主题 | 读数 | 依据 |
+|---|---|---|
+| 挂载 | `map.addLayer(mvt)` **直接可用**（壳带 `isTileLayer`）；拆壳非必需 | 挂载·直接 arm，方括号请求 ≈92；react-bmap 的 unwrap 守卫兼容有标记的壳 |
+| 卸载 | `map.removeLayer(壳)` **直接可用**（`directShell` / `a2Shell` / `curlyShell` 均 `threw:false`）。unwrap 臂构造了实例时一并 `removeLayer` 记入 `unwrapShell`；direct 可用时未构造则记 `skipped` | remove 对称 arm；探针 `remove.*` |
+| 占位符 | `[z]/[x]/[y]` 生效；`{z}/{x}/{y}` 会变成字面量/编码路径 | 占位符·方括号 vs 花括号 URL 样本 |
+| `layers` 选项 | 运行时要的是**源图层名字符串数组** `["roads","areas"]`；`MVTLayerConfig[]` 对象数组会让 worker `Xb` 的 `layers.indexOf(name)` 恒为 -1，整层解析为空。d.ts 的 `Array<MVTLayerConfig>` 与 worker 行为不一致，**以字符串数组为准**（需要 per-layer 可见性/缩放时另验） | worker `Wb`/`Xb`/`pb`；空 layers ⇒ `tileData.layers` keys=[] |
+| 样式键 | 运行时按**源图层名**读 `{ type, painter }`（`lines: { type:"polyline", painter:{…} }`）。官方 d.ts `MVTLayerStyle` 只列 `point/polyline/polygon` 平铺键，**与运行时不一致**；不传 `layers` 时才会走 `point/line/fill` 分类路径 | `resolveStyle` / `_styleFormat`；skill 形状编译为 `rawStyleExpress` 两键 |
+| 状态键 | **组合键 `layerName_id` 生效**（截图 Δ≈2.5KB）；裸 `id` 只有噪声级差分（Δ≈87B）。`evaluateContext` / `getRender` 都拼 `layerName_id` | 状态差分；`_stateCube[layerName_id]` |
+| 状态前提 | 样式里必须有 `feature-state` 表达式；纯色样式下 `updateState` 不改画面。`setStyle` 敏感度已由绿色对照证明 | 先 `setStyle(feature-state)` 再写状态的臂 |
+| 拾取 | `click`/`mousemove` 的 `value: Entity[]`（命中 `array[n]`）；`idProperty` 有→`id:"feat-1"`（string），无→`id:"1"`（feature id number）。`pickFeatures(x,y)` 在探针中心点返回 `array:0`（以事件载荷为准） | 事件计数 + 6 个命中样本 |
+| 事件 | 六个官方事件名 `addEventListener` 全部成功；`tilesloadstart`/`tilesloadend` 会触发 | 挂绑与计数 |
+| `setZIndex` | get/set 成功，值=5 | 声明面·setZIndex |
+| 原型额外成员 | `setZIndexTop` / `setUpLevel` / `setDownLevel` / `removeState` / `replaceAllState` / `getAllState` 存在；核心声明无缺失 | 原型枚举 |
+| 无 `setData`/`setVisible`/`setOpacity`/`setMinZoom`/`setMaxZoom` | 与 d.ts 一致；`minZoom`/`maxZoom` 构造期 | apiPresence |
+
+`clearState` 后画面回到 feature-state 默认色（与「状态进入样式求值」一致）；探针里 clear 前后偶发的字节不一致来自地图仍在派发标签/碰撞帧，不否定键形结论。
 
 ## 快速选择
 

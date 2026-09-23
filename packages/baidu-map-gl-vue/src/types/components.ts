@@ -936,6 +936,162 @@ export interface BPointLayerProps<Item> extends BMapDataProps<Item> {
   pickHeight?: number;
 }
 
+/**
+ * MVT 矢量瓦片图层的样式（`BMVTLayer` / #109）。
+ *
+ * ## 运行时形状（live 探针 2026-09-23，**与 d.ts 的扁平 `MVTLayerStyle` 不同**）
+ *
+ * 真实 4.0 读的是**以源图层名为键**的映射：
+ *
+ * ```ts
+ * { lines: { type: "polyline", painter: { strokeColor: "#0f0", strokeWeight: 2 } },
+ *   pts:   { type: "point",     painter: { color: "#f00", size: 6 } } }
+ * ```
+ *
+ * 没有给 `layers` 时才会退回 `point` / `line` / `fill` 的扁平路径（探针同一轮对照）。
+ * 本库**不复刻** `painter` 的字段表（上游没有可逐字段核对的声明面）：按源图层名的键值袋
+ * 原样透传，`type` 是官方专页给出的三档之一。
+ *
+ * 更新路径：`style` 有字段级 `setStyle(styleMap)`（`descriptor.mutable.style`）⇒ 变化时
+ * **就地写入，不重建**（刻意不用 `bagSetters`：那会再包一层 `{ style: … }`，与官方签名不符）。
+ */
+export interface BMVTLayerStyleEntry {
+  /** 几何类型：`point` / `line` / `polyline` / `polygon` / `fill`（官方示例用过的取值）。 */
+  type?: string;
+  /** 绘制参数（字段随上游走，本库不臆造字段表）。 */
+  painter?: Record<string, unknown>;
+  /** 其余官方可能读取的键（透传）。 */
+  [key: string]: unknown;
+}
+
+/** 源图层名 → 样式条目（探针确认的运行时键形）。 */
+export type BMVTLayerStyle = Record<string, BMVTLayerStyleEntry>;
+
+/**
+ * `BMVTLayer` 的官方事件载荷（`MVTLayerEventMap` 的项目侧投影，**不含** `BMap.*`）。
+ *
+ * 事件名与官方一一对应（live 探针确认六个名字全部可绑）：`click` / `dblclick` / `mousemove` /
+ * `mouseout` / `tilesloadstart` / `tilesloadend`。拾取走事件的 `value`（`Entity[]`），
+ * **不用** `pickFeatures(x,y)`（探针实测返回空）。
+ */
+export interface BMVTLayerEntity {
+  /** 要素身份：`idProperty` 有值时是该字段的值；没有时是 SDK 给的 feature number 的字符串形式。 */
+  id: string;
+  /** 源图层名（MVT 数据里的 source-layer；复合状态键 `layerName_id` 的前半段）。 */
+  layerName: string;
+  /** 业务属性袋。 */
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * 鼠标命中载荷的公共底座（官方 `MVTLayerMouseEvent` 的字段子集：`pixel` / `latLng` 必有语义，
+ * 本库按官方结构收窄；**不含** `value`——那是 Pick / MouseMove 各自加的）。
+ *
+ * 官方三个鼠标事件都继承它：`MVTLayerPickEvent` / `MVTLayerMouseMoveEvent` / `mouseout`。
+ */
+export interface BMVTLayerMouseEvent {
+  type?: string;
+  pixel?: { x: number; y: number };
+  latLng?: { lng: number; lat: number };
+  [key: string]: unknown;
+}
+
+/**
+ * 点击 / 双击载荷（官方 `MVTLayerPickEvent`：继承 `MVTLayerMouseEvent`，`value` **可选**——
+ * 未命中时 SDK 可能不带）。
+ */
+export interface BMVTLayerPickEvent extends BMVTLayerMouseEvent {
+  /** 命中的要素（可能为空数组 / 缺失——SDK 未命中时的形状由上游决定，本库不编造）。 */
+  value?: BMVTLayerEntity[];
+}
+
+/**
+ * `mousemove` 载荷（官方 `MVTLayerMouseMoveEvent`：继承 `MVTLayerMouseEvent`，
+ * `value` **必有** `Entity[]`——官方签名与 Pick 的可选相反，不能 alias 到 PickEvent）。
+ */
+export interface BMVTLayerMouseMoveEvent extends BMVTLayerMouseEvent {
+  value: BMVTLayerEntity[];
+}
+
+/** `tilesloadstart` / `tilesloadend` 的最小载荷（官方结构松散，不编造字段）。 */
+export interface BMVTLayerBaseEvent {
+  type?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * `BMVTLayer` 的公开属性（issue #109 基线）。
+ *
+ * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.4` + live 探针）；
+ * 未列出的字段经下方逃生口字段透传。**不声明** `opacity` / `setVisible` / `setData` 等
+ * 官方没有的入口（探针与 d.ts 双向确认）：
+ *
+ * | prop | 更新口径 |
+ * | --- | --- |
+ * | `visible` | 挂上 / 摘掉（图层没有 `show/hide`） |
+ * | `zIndex` | **就地** `setZIndex()`（字段级 setter） |
+ * | `minZoom` / `maxZoom` | **重建**（官方没有 setter） |
+ * | `style` | **就地** `setStyle()`（字段级，不重建） |
+ * | `tileUrlTemplate` / `layers` / `idProperty` / 其余构造项 | **重建**（没有对应 setter） |
+ *
+ * Feature State 经 `defineExpose({ featureState })` 给出；键必须是**复合** `layerName_id`
+ * 字符串（`mvtFeatureStateKey()`），且 `idProperty` 已声明——否则五个命令一律拒绝（告警一次）。
+ * 样式里必须先含 `feature-state` 表达式，写入才有可见效果（探针前置条件）。
+ */
+export interface BMVTLayerProps {
+  /** 是否挂在地图上（`false` = 摘掉，不是 `hide()`）。默认 `true`。 */
+  visible?: boolean;
+  /** 图层层叠顺序（挂载后 `setZIndex`）。 */
+  zIndex?: number;
+  /** 最小显示缩放级别（**构造期**：官方没有 setter）。 */
+  minZoom?: number;
+  /** 最大显示缩放级别（**构造期**）。 */
+  maxZoom?: number;
+  /**
+   * MVT 瓦片 URL 模板；占位符是 **`[z]` / `[x]` / `[y]`**（live 探针：`{z}` 不解析）。
+   * **构造期**：变化即重建。
+   */
+  tileUrlTemplate?: string;
+  /**
+   * 参与渲染的**源图层名字符串数组**（如 `["lines", "pts"]`）。
+   *
+   * ⚠️ 运行时 worker 用 `layers.indexOf(name)` 过滤，传对象数组会整层失效——探针实测。
+   * 官方 d.ts 的 `MVTLayerConfig[]` 与运行时不符，本库按运行时收窄。**构造期**。
+   */
+  layers?: string[];
+  /**
+   * 要素身份字段（官方 `idProperty`）：拾取 `Entity.id` 与 Feature State 的唯一口径。
+   * **构造期**（换身份字段必须换实例，否则同一图层上会出现两套 id 语义）。
+   * 同时是 Feature State 的身份前置——未声明时 `featureState.*` 五个命令一律拒绝。
+   */
+  idProperty?: string;
+  /**
+   * 源图层样式映射（见 `BMVTLayerStyle`）。变化时 `setStyle()` **就地写入，不重建**。
+   *
+   * 要让 `feature-state` 表达式生效，样式里必须先含 `feature-state` 污染（探针前置条件）。
+   */
+  style?: BMVTLayerStyle;
+  /**
+   * 其余 `MVTLayerOptions` 逃生口（`transform` / `gridModel` / `spanLevel` / `encrypt` /
+   * 四个 `on*` 构造回调 / …）。
+   *
+   * ⚠️ Vue 的 `defineProps` 不能带索引签名（与 `withDefaults` 冲突），因此逃生口收成
+   * 显式可选字段；Driver 侧 `LayerCreateOptions` 仍保留索引签名供进阶用法透传。
+   */
+  transform?: unknown;
+  gridModel?: unknown;
+  spanLevel?: number;
+  noCollision?: boolean;
+  useThumb?: boolean;
+  encrypt?: boolean;
+  /** 官方构造回调（与 `addEventListener` 并存的逃生口）。 */
+  onclick?: (e: BMVTLayerPickEvent) => void;
+  ondblclick?: (e: BMVTLayerPickEvent) => void;
+  onmousemove?: (e: BMVTLayerMouseMoveEvent) => void;
+  onmouseout?: (e: BMVTLayerMouseEvent) => void;
+}
+
 /* ------------------------------------------------ 原生聚合（#35） */
 
 /**

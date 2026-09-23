@@ -424,6 +424,7 @@ export const LAYER_FACET_KINDS: readonly LayerKind[] = [
   "wms",
   "wmts",
   "raster",
+  "mvt",
 ];
 
 /**

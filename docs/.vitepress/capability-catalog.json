@@ -583,6 +583,19 @@
       "description": "栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪"
     },
     {
+      "id": "layer.mvt",
+      "family": "layer",
+      "status": "native",
+      "runtimeOnly": false,
+      "engines": [
+        "jsapi-v4"
+      ],
+      "rawMembers": [
+        "MVTLayer"
+      ],
+      "description": "MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id"
+    },
+    {
       "id": "layer.cluster",
       "family": "layer",
       "status": "extended",

@@ -414,16 +414,23 @@ const ALL_LAYER_KINDS = [
   "wms",
   "wmts",
   "raster",
+  "mvt",
 ] as const;
 
 /**
  * 归一化操作 → 该 kind 上真正的官方入口名（`clearData` 在 `DOMLayer` 上是
- * `removeAllOverlays()`，见 `LAYER_DESCRIPTORS.clearEntry`）。
+ * `removeAllOverlays()`，见 `LAYER_DESCRIPTORS.clearEntry`；要素状态的
+ * `replaceState` / `getState` 在 `MVTLayer` 上是原型扩展 `replaceAllState` / `getAllState`）。
  */
 const OPERATION_ENTRY: Record<LayerOperation, string> = {
   setZIndex: "setZIndex",
   setData: "setData",
   clearData: "clearData",
+  updateState: "updateState",
+  removeState: "removeState",
+  clearState: "clearState",
+  replaceState: "replaceAllState",
+  getState: "getAllState",
 };
 
 /** `geojson` / `dom` 的官方构造签名是两参：这里给出「必需首参」。 */
@@ -527,7 +534,16 @@ describe("[#40] surface() / supports() / isMutableOption() 的能力面", () => 
   });
 
   it("没声明的操作在替身实例上也**不存在**（能力面与替身双向一致，不是单方面声明）", () => {
-    const allOperations: LayerOperation[] = ["setZIndex", "setData", "clearData"];
+    const allOperations: LayerOperation[] = [
+      "setZIndex",
+      "setData",
+      "clearData",
+      "updateState",
+      "removeState",
+      "clearState",
+      "replaceState",
+      "getState",
+    ];
     for (const kind of ALL_LAYER_KINDS) {
       const surface = ctx.layers.surface(kind);
       const handle = createOfKind(kind);
@@ -567,6 +583,13 @@ describe("[#40] surface() / supports() / isMutableOption() 的能力面", () => 
     // 归一化操作承载的 data
     expect(ctx.layers.isMutableOption("geojson", "data")).toBe(true);
     expect(ctx.layers.isMutableOption("tile", "data")).toBe(false);
+    // mvt：style 走整袋 setStyle；构造期项没有 setter（#109）
+    expect(ctx.layers.isMutableOption("mvt", "style")).toBe(true);
+    expect(ctx.layers.isMutableOption("mvt", "zIndex")).toBe(true);
+    expect(ctx.layers.isMutableOption("mvt", "tileUrlTemplate")).toBe(false);
+    expect(ctx.layers.isMutableOption("mvt", "layers")).toBe(false);
+    expect(ctx.layers.isMutableOption("mvt", "idProperty")).toBe(false);
+    expect(ctx.layers.isMutableOption("mvt", "opacity")).toBe(false);
     // 未知 kind 不抛错（能力探测语义）
     expect(ctx.layers.isMutableOption("nope" as LayerKind, "zIndex")).toBe(false);
   });
@@ -607,6 +630,62 @@ describe("[#40] 归一化操作：就地更新与显式拒绝", () => {
     expect((handle.raw as { callLog: string[] }).callLog).toContain("removeAllOverlays");
   });
 
+  it("mvt 的 style 走字段级 setStyle；要素状态五命令打到官方入口（#109）", () => {
+    const handle = ctx.layers.create("mvt", {
+      tileUrlTemplate: "https://f.example.com/[z]/[x]/[y].pbf",
+      layers: ["lines"],
+      idProperty: "fid",
+    });
+    ctx.layers.setOptions(handle, { style: { lines: { type: "polyline" } } });
+    const raw = handle.raw as {
+      appliedStyle: Record<string, unknown> | null;
+      callLog: string[];
+      state: Record<string, unknown>;
+    };
+    expect(raw.callLog).toContain("setStyle");
+    // 官方 setStyle(styleMap) 直接收样式袋，不是 option 键袋
+    expect(raw.appliedStyle).toEqual({ lines: { type: "polyline" } });
+
+    // 五命令：归一化名 ↔ 官方入口（replaceState → replaceAllState，getState → getAllState）
+    const layer = handle.raw as unknown as {
+      updateState: unknown;
+      removeState: unknown;
+      clearState: unknown;
+      replaceAllState: unknown;
+      getAllState: unknown;
+      state: Record<string, unknown>;
+      callLog: string[];
+    };
+    expect(typeof layer.updateState).toBe("function");
+    expect(typeof layer.removeState).toBe("function");
+    expect(typeof layer.clearState).toBe("function");
+    expect(typeof layer.replaceAllState).toBe("function");
+    expect(typeof layer.getAllState).toBe("function");
+
+    layer.updateState("lines_1", { selected: true });
+    expect(layer.state).toEqual({ lines_1: { selected: true } });
+    layer.updateState("lines_1", { selected: false });
+    expect(layer.state).toEqual({ lines_1: { selected: false } });
+    layer.replaceAllState({ lines_2: { hovered: true } });
+    expect(layer.state).toEqual({ lines_2: { hovered: true } });
+    expect(layer.getAllState()).toEqual({ lines_2: { hovered: true } });
+    layer.removeState("lines_2");
+    expect(layer.state).toEqual({});
+    layer.updateState("lines_3", { selected: true });
+    layer.clearState();
+    expect(layer.state).toEqual({});
+    expect(layer.callLog).toEqual(
+      expect.arrayContaining([
+        "setStyle",
+        "updateState",
+        "replaceAllState",
+        "getAllState",
+        "removeState",
+        "clearState",
+      ]),
+    );
+  });
+
   it.each([
     ["district", "setData"],
     ["tile", "setData"],
@@ -626,8 +705,8 @@ describe("[#40] 归一化操作：就地更新与显式拒绝", () => {
     );
   });
 
-  it("zIndex 就地更新：tile / xyz / wms / wmts / raster / traffic 都可用", () => {
-    for (const kind of ["tile", "xyz", "wms", "wmts", "raster", "traffic"] as const) {
+  it("zIndex 就地更新：tile / xyz / wms / wmts / raster / traffic / mvt 都可用", () => {
+    for (const kind of ["tile", "xyz", "wms", "wmts", "raster", "traffic", "mvt"] as const) {
       const handle = createOfKind(kind);
       ctx.layers.setZIndex(handle, 4);
       expect((handle.raw as { zIndex: number }).zIndex).toBe(4);
@@ -656,6 +735,7 @@ describe("[#40] 与官方类型包的构造器清单一致", () => {
       wms: "WMSLayer",
       wmts: "WMTSLayer",
       raster: "RasterTileLayer",
+      mvt: "MVTLayer",
     };
     const namespace = ctx.fake.namespace as unknown as Record<string, unknown>;
     for (const [kind, ctor] of Object.entries(expected)) {
