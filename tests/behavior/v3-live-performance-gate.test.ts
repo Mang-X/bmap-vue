@@ -40,6 +40,7 @@ function makeReading(layer: LivePerfLayerReadings["layer"]): LivePerfLayerReadin
     layer,
     size: 50_000,
     firstFrame: makeSample(120, 2, 60),
+    mountToPaintMs: layer === "pointCollection" ? 800 : 2500,
     setData: makeSample(layer === "pointCollection" ? 250 : 30, 1, 55),
     redraw: makeSample(layer === "pointCollection" ? 40 : 18, 0, 0),
     sdkSetDataMs: layer === "pointCollection" ? 42.5 : 1200.1,
@@ -235,10 +236,10 @@ describe("#123 纯函数：人读报告分 page·node 两段 + redactAk", () => 
     expect(text).toContain("node  exit=0");
     expect(text).toContain("fake contrast");
     expect(text).toContain("firstFrame");
+    expect(text).toContain("mountToPaint"); // #131 第四轮：建图成本旁路，不是 #123 目标 1
     expect(text).toContain("setData");
     // 独立窗口各自成行（#131 第 1/3 条）。
     expect(text).toContain("redraw");
-    expect(text).toContain("sdkSetData");
     expect(text).toContain("sdkSetData");
     expect(text).toContain("58.4"); // 真实 FPS，不是 0~1 比值（#131 第 5 条）
     expect(text).toContain("postFps"); // 更新后采样列名，不是「setData 期间 FPS」
@@ -353,7 +354,7 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(page).toContain("finish(`unhandledrejection:");
   });
 
-  it("页面计时：数据窗外预生成 + macrotask 隔离 + Fake 同款 settle + 交集归属 + 更新后 FPS（#131 第三轮）", () => {
+  it("页面计时：造数隔离 + 近似 settle + 交集归属 + postFps + firstFrame 起点=原生 setData（#131 第三/四轮）", () => {
     const page = readFileSync(resolve(repoRoot, "tests/browser/live-performance/main.ts"), "utf8");
     // 预生成在窗外，且必须跨 macrotask 与 setItems 隔开（否则整条造数 task 算进窗口）。
     expect(page).toMatch(/const next = variantData\(/);
@@ -366,7 +367,7 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
       "variantData 与 windowStart 之间必须有 macrotask 隔离",
     ).toMatch(/await macrotask\(\)/);
     expect(page).toMatch(/mounted\.host\.setItems\(next\)/);
-    // settle = Fake flushPromises 同款（setTimeout 跨 macrotask）+ nextTick，不是纯微任务。
+    // settle 跨 macrotask + nextTick（近似 Fake；#131 第三/四轮），不是纯微任务。
     expect(page).toMatch(/setTimeout\(resolve,\s*0\)/);
     expect(page).not.toMatch(/await Promise\.resolve\(\);\s*\n\s*await Promise\.resolve\(\);\s*\n\s*await nextTick\(\);/);
     // long task：页面级 collector + 窗末 flush + takeRecords + **窗口交集**归属。
@@ -376,13 +377,18 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(page).toMatch(/countIn\(windowStart, setDataEnd\)/);
     expect(page).toMatch(/countIn\(redrawStart, redrawEnd\)/);
     expect(page).toMatch(/Math\.min\(entryEnd,\s*end\)\s*-\s*Math\.max\(entryStart,\s*start\)/);
-    // firstFrame 在 stabilize sleep(200) **之前**采样（#131 复审第 2 条）。
+    // firstFrame 起点 = 原生 setData 进入，不是 app.mount；未捕获则 fatal 不回退。
+    expect(page).toMatch(/lastStart/);
+    expect(page).toMatch(/initialSetDataStart/);
+    expect(page).toMatch(/firstFrame: 首挂未捕获原生 setData 起点/);
+    expect(page).toMatch(/const firstFrame = sample\(/);
     const firstFrameSample = page.indexOf("const firstFrame = sample(");
     const stabilizeSleep = page.indexOf("await sleep(200)");
     expect(firstFrameSample, "找不到 firstFrame 采样").toBeGreaterThanOrEqual(0);
     expect(stabilizeSleep, "找不到稳定期 sleep").toBeGreaterThan(firstFrameSample);
-    // 协议表不得再写「ready + paint + 稳定等待」当 firstFrame 终点。
+    // 协议表不得再写「ready + paint + 稳定等待」当 firstFrame 终点，也不得把 mount 当起点。
     expect(page).not.toMatch(/ready \+ paint \+ 稳定等待/);
+    expect(page).toMatch(/mountToPaintMs/);
     // FPS 重命名为 postUpdateFps（更新后采样，不是 setData 期间）。
     expect(page).toContain("postUpdateFps");
     expect(page).not.toMatch(/\bfps:\s*await sampleFps/);
@@ -398,16 +404,20 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(page).not.toMatch(/frames\s*\/\s*\(elapsed\s*\/\s*1000\)\s*\/\s*60/);
   });
 
-  it("报告 schema 含 redraw / sdkSetDataMs / notes，家族清单与之一致", () => {
+  it("报告 schema 含 firstFrame 起点旁路 / redraw / sdkSetDataMs / notes，家族清单与之一致", () => {
     const reportSource = readFileSync(
       resolve(repoRoot, "tests/browser/live-performance/report.mts"),
       "utf8",
     );
     expect(reportSource).toContain("redraw: LivePerfSample");
+    expect(reportSource).toContain("mountToPaintMs: number");
     expect(reportSource).toContain("sdkSetDataMs: number | null");
     expect(reportSource).toContain("notes: string[]");
+    expect(LIVE_PERF_FAMILIES).toContain("firstFrame");
+    expect(LIVE_PERF_FAMILIES).toContain("mountToPaint");
     expect(LIVE_PERF_FAMILIES).toContain("redraw");
     expect(LIVE_PERF_FAMILIES).toContain("sdkSetData");
+    expect(LIVE_PERF_REPORT_VERSION).toBe(2);
   });
 
   it("人读报告渲染 notes（被忽略的 SDK worker 噪声进 artifact）", () => {

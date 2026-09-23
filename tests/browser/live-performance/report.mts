@@ -21,8 +21,8 @@
  * `runId` / `akUsed` / `mode` 三者必须与本轮请求一致，不一致按脚手架失败（2）处理。
  */
 
-/** 本套读数的载荷版本：报告要能自证「跑的是哪一版候选」。 */
-export const LIVE_PERF_REPORT_VERSION = 1;
+/** 本套读数的载荷版本：报告要能自证「跑的是哪一版候选”。 */
+export const LIVE_PERF_REPORT_VERSION = 2;
 
 /** 图层族（issue 验收：4 类读数 × 3 类图层）。 */
 export const LIVE_PERF_LAYERS = ["pointCollection", "line", "fill"] as const;
@@ -31,6 +31,7 @@ export type LivePerfLayer = (typeof LIVE_PERF_LAYERS)[number];
 /** 读数族（issue 目标 1~3；对照表由 Node 侧拼 Fake 基线）。 */
 export const LIVE_PERF_FAMILIES = [
   "firstFrame",
+  "mountToPaint",
   "setData",
   "redraw",
   "sdkSetData",
@@ -42,8 +43,10 @@ export type LivePerfFamily = (typeof LIVE_PERF_FAMILIES)[number];
 export interface LivePerfSample {
   /**
    * 单次窗口耗时（毫秒）。口径见 `main.ts` 文件头「计时协议」表：
-   * `setData` = 赋值 → settle（**Fake 对照窗**）；`redraw` = settle → paint；
-   * `firstFrame` = 该图层独立 mount → ready 后第一次 paint（**不含**之后的稳定期）。
+   * `setData` = 赋值 → 跨 macrotask + `nextTick` 的**近似 settle**（**Fake 对照窗**）；
+   * `redraw` = settle → paint；
+   * `firstFrame` = **首次原生 `setData` 进入** → ready 后第一次 paint（#123 目标 1；
+   * **不含**之后的稳定期；未捕到 setData 起点 ⇒ 页面 fatal，不回退 mount 起点）。
    */
   durationMs: number;
   /**
@@ -64,11 +67,19 @@ export interface LivePerfLayerReadings {
   layer: LivePerfLayer;
   /** 数据量（issue 固定 50k）。 */
   size: number;
-  /** 首帧：**本图层独立挂载**的 mount → ready 后第一次 paint（不含稳定期；不是三图层联合值的复制）。 */
+  /**
+   * 首帧（#123 目标 1）：**本图层独立挂载**后，首次原生 `setData` 进入 → ready 后第一次
+   * paint（不含稳定期；不是三图层联合值的复制，也不是 `app.mount` 起点）。
+   */
   firstFrame: LivePerfSample;
   /**
-   * 换数据 · Fake 对照窗：预生成数据（跨 macrotask 隔离后）的 `setItems` → Fake 同款
-   * settle（`setTimeout(0)` + `nextTick`，与 `flushPromises` 同边界）。
+   * `app.mount` → 同一次 paint 的旁路耗时（建图 / `whenReady` 成本）。
+   * **不是** #123 目标 1——目标 1 用 `firstFrame`。
+   */
+  mountToPaintMs: number;
+  /**
+   * 换数据 · Fake 对照窗：预生成数据（跨 macrotask 隔离后）的 `setItems` → 跨 macrotask +
+   * `nextTick` 的**近似 settle**（与 Fake `flushPromises` 同型，task source 可能不同）。
    * **只有这一族进 `buildFakeContrast`**。
    */
   setData: LivePerfSample;
@@ -198,8 +209,9 @@ export interface FakeContrastSource {
 /**
  * Fake 对照拼表：同一图层的 live 读数与 Fake 基线并排。
  *
- * `ours` **只取 `setData` 族**（setItems → Fake 同款 settle：`setTimeout(0)` + `nextTick`，
- * 与 `flushPromises` 同调度边界）；`redraw` / `sdkSetDataMs` 不进本表——它们的窗口与 Fake
+ * `ours` **只取 `setData` 族**（setItems → 跨 macrotask + `nextTick` 的**近似 settle**，
+ * 与 Fake `flushPromises` **同型**、task source 可能不同——#131 第四轮第 2 条）；
+ * `redraw` / `sdkSetDataMs` 不进本表——它们的窗口与 Fake
  * 不同，混进 delta 会把 rAF / 原生包装算成「SDK 内部成本」（#131 评审第 1 条）。
  *
  * `fake` = Fake 基线里同规模 `setData.replace@*` / `data.replace.*` 的 `minMs`（CI runner）。
@@ -303,6 +315,11 @@ export function formatLivePerfReport(input: {
     const fpsCell =
       entry.postUpdateFps === null ? "-" : String(round(entry.postUpdateFps, 2));
     lines.push(row(entry.layer.padEnd(18), "firstFrame", entry.firstFrame, "-"));
+    lines.push(
+      `${"".padEnd(18)}${"mountToPaint".padEnd(14)}` +
+        `${String(round(entry.mountToPaintMs)).padStart(10)}` +
+        `${"-".padStart(8)}${"-".padStart(12)}${"-".padStart(10)}`,
+    );
     lines.push(row("".padEnd(18), "setData", entry.setData, "-"));
     lines.push(row("".padEnd(18), "redraw", entry.redraw, fpsCell));
     lines.push(

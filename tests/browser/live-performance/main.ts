@@ -14,10 +14,11 @@
  *
  * | 窗口 | 起点 | 终点 | 与 Fake 对照？ |
  * | --- | --- | --- | --- |
- * | `setData` | `host.setItems(预生成数据)` | Fake 同款 settle（`setTimeout(0)` + `nextTick`） | **是**（`buildFakeContrast` 用它） |
+ * | `setData` | `host.setItems(预生成数据)` | 跨 macrotask + `nextTick` 的**近似 settle**（与 Fake 同型，task source 可能不同） | **是**（`buildFakeContrast` 用它） |
  * | `redraw` | settle 结束之后 | 再等 2×rAF paint 边界 | 否（渲染尾巴，不进 Fake 对照） |
  * | `sdkSetDataMs` | 原生 `prototype.setData` 进入 | 同函数返回 | 否（纯 SDK 返回墙钟） |
- * | `firstFrame` | `app.mount(stage)`（仅该图层） | ready 后**第一次** 2×rAF paint | 否（逐图层首帧；**不含**之后的 200ms 稳定期） |
+ * | `firstFrame` | **首次原生 `setData` 进入**（#123 目标 1） | ready 后**第一次** 2×rAF paint | 否（不含之后的 200ms 稳定期；未捕到 setData ⇒ fatal，不回退 mount 起点） |
+ * | `mountToPaintMs` | `app.mount(stage)` | 同上 paint | 否（建图 / ready 成本旁路，**不是** #123 目标 1） |
  * | `postUpdateFps` | redraw 结束后 | 再采 1s rAF | 否（更新**之后**的环境诊断，不是 setData 期间帧率） |
  *
  * 数据生成（`variantData` / `makeInitialData`）**必须跨 macrotask 与窗口隔开**——否则 50k
@@ -256,11 +257,13 @@ function nextPaintFrame(): Promise<void> {
 }
 
 /**
- * 与 Fake `settle()` 对齐的冲刷（#131 第三轮第 2 条）。
+ * 与 Fake `settle()` **同型**的近似冲刷（#131 第三轮第 2 条 + 第四轮第 2 条）。
  *
  * Fake（`component-path.perf.test.ts`）= `flushPromises()` + `nextTick`；
- * `@vue/test-utils@2.5.0` 的 `flushPromises` 是 `setTimeout(…, 0)`（**跨 macrotask**），
- * 不是纯微任务。live 必须复刻同一调度边界，否则「同边界 Fake 对照」不成立。
+ * `@vue/test-utils@2.5.0` 的 `flushPromises` 在 Node / Vitest 里通常走 **`setImmediate`**
+ * （有则优先），浏览器 live 侧没有 `setImmediate` ⇒ 用 `setTimeout(…, 0)`。
+ * 两者都**跨 macrotask** 再 `nextTick`，但 **task source 不必相同**——文档与注释只称
+ * 「近似边界 / 同型」，不称「完全同边界」（#131 第四轮第 2 条）。
  */
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => {
@@ -307,6 +310,8 @@ function sample(durationMs: number, longTasks: { count: number; longestMs: numbe
 interface SetDataProbe {
   /** 上一次原生 `setData` 的墙钟（ms）；本轮没触发过则为 `null`。 */
   last: () => number | null;
+  /** 上一次原生 `setData` 的**进入时刻**（`performance.now()`）；`firstFrame` 起点。 */
+  lastStart: () => number | null;
   /** 本轮是否真的进入了原生 `setData`（防「没调用却拿旧值」）。 */
   reset: () => void;
   restore: () => void;
@@ -324,10 +329,16 @@ interface SetDataProbe {
  */
 function instrumentNativeSetData(): SetDataProbe {
   let lastMs: number | null = null;
+  let lastStart: number | null = null;
   const restores: Array<() => void> = [];
   const namespace = (globalThis as { BMap?: Record<string, unknown> }).BMap;
   if (!namespace) {
-    return { last: () => null, reset: () => undefined, restore: () => undefined };
+    return {
+      last: () => null,
+      lastStart: () => null,
+      reset: () => undefined,
+      restore: () => undefined,
+    };
   }
   for (const name of ["PointShapeLayer", "LineLayer", "FillLayer"] as const) {
     const ctor = namespace[name] as { prototype?: Record<string, unknown> } | undefined;
@@ -336,6 +347,7 @@ function instrumentNativeSetData(): SetDataProbe {
     if (!proto || typeof original !== "function") continue;
     const wrapped = function setData(this: unknown, data: unknown): unknown {
       const callStart = performance.now();
+      lastStart = callStart;
       try {
         return (original as (d: unknown) => unknown).call(this, data);
       } finally {
@@ -349,8 +361,10 @@ function instrumentNativeSetData(): SetDataProbe {
   }
   return {
     last: () => lastMs,
+    lastStart: () => lastStart,
     reset: () => {
       lastMs = null;
+      lastStart = null;
     },
     restore: () => {
       for (const undo of restores) undo();
@@ -368,20 +382,28 @@ interface MountResult {
   app: App;
   host: LayerHost;
   firstFrame: LivePerfSample;
+  /** `app.mount` → 同一次 paint（建图 / ready 旁路；**不是** #123 目标 1 的 `firstFrame`）。 */
+  mountToPaintMs: number;
 }
 
 /**
- * **只挂一个图层**的完整交付窗口（issue 目标 1：逐类「setData 后到可交互」）。
+ * **只挂一个图层**的完整交付窗口（issue 目标 1：逐类「初始 `setData` → 可交互」）。
  *
  * 评审 #131 第 3 条：此前三图层同树共用一个 `firstFrame` 再复制三行，回答不了
  * 「点 / 线 / 面各自」的首帧。现在每类独立 mount / measure / unmount。
  *
- * 首帧从 `app.mount`（初始 data 进入组件树）起算，到 **ready 后第一次 paint** 即采样
- * （#131 复审第 2 条：固定 `sleep(200)` 稳定期在采样**之后**，不计入 `firstFrame`）。
+ * **#131 第四轮第 1 条**：`firstFrame` 起点必须是**首次原生 `setData` 进入时刻**，
+ * 终点是 ready 后第一次 paint——**不是** `app.mount`（那会把建图 / `whenReady` 成本
+ * 算进 #123 目标 1）。`app.mount` → paint 另记 `mountToPaintMs` 旁路。
+ * 未捕到 `setData` 起点 ⇒ `finish(fatal)`，**不回退** mount 起点。
+ * 稳定期（`sleep(200)`）仍在采样**之后**，不计入任何上报窗口（#131 复审第 2 条）。
+ *
+ * @param probe 原生 `setData` 探针；`null` = 预热挂载（SDK 尚未包装，读数丢弃）。
  */
 async function mountSingleLayer(
   layer: LivePerfLayer,
   longTasks: LongTaskCollector,
+  probe: SetDataProbe | null = null,
 ): Promise<MountResult> {
   const stage = document.getElementById("stage")!;
   stage.innerHTML = "";
@@ -420,8 +442,9 @@ async function mountSingleLayer(
     },
   });
 
+  probe?.reset();
   const app = createApp(Root);
-  const firstStart = performance.now();
+  const mountStart = performance.now();
   app.mount(stage);
 
   const host: LayerHost = {
@@ -432,7 +455,7 @@ async function mountSingleLayer(
 
   const deadline = performance.now() + READY_MS;
   while (!ready.value) {
-    if (report.blockedReason) break;
+    if (report.blockedReason || report.fatal) break;
     if (performance.now() > deadline) {
       finish(undefined, `BMap ready 超时（${READY_MS}ms）`);
       break;
@@ -444,15 +467,27 @@ async function mountSingleLayer(
   // 首帧终点：ready 后第一次 paint 边界（**不含**下面的稳定期）。
   await nextPaintFrame();
   const firstEnd = performance.now();
+  const mountToPaintMs = firstEnd - mountStart;
   await longTasks.flush();
-  const firstFrame = sample(firstEnd - firstStart, longTasks.countIn(firstStart, firstEnd));
+
+  // #123 目标 1：起点 = 首次原生 setData 进入；预热（probe=null）仍用 mount 起点但读数丢弃。
+  const initialSetDataStart = probe?.lastStart() ?? null;
+  if (probe && !report.fatal && !report.blockedReason && initialSetDataStart === null) {
+    finish(`firstFrame: 首挂未捕获原生 setData 起点（#123 目标 1 不可测，不回退 mount 起点）`);
+  }
+  const firstFrameStart =
+    initialSetDataStart !== null ? initialSetDataStart : mountStart;
+  const firstFrame = sample(
+    firstEnd - firstFrameStart,
+    longTasks.countIn(firstFrameStart, firstEnd),
+  );
 
   // 稳定期：隔离后续 setData/redraw 不受首帧尾巴影响；**不计入** firstFrame。
   await sleep(200);
   await nextTick();
   await nextPaintFrame();
 
-  return { app, host, firstFrame };
+  return { app, host, firstFrame, mountToPaintMs };
 }
 
 function renderLayer(layer: LivePerfLayer, dataValue: unknown) {
@@ -507,7 +542,7 @@ function variantData(layer: LivePerfLayer, offset: number): unknown {
  * 逐图层：首帧（独立挂载）+ 换数据三窗（setData / redraw / native）+ 更新后 FPS。
  *
  * long task **按窗口时间戳 + 交集时长归属**（页面级 collector，窗末 flush 再 countIn）：
- * - `setData` 窗：赋值 → Fake 同款 settle（`setTimeout(0)` + `nextTick`）；
+ * - `setData` 窗：赋值 → 跨 macrotask + `nextTick` 的**近似 settle**（与 Fake 同型）；
  * - `redraw` 窗：settle 之后 → paint（渲染尾巴算 redraw，不污染 Fake 对照窗）；
  * - 造数与窗口之间强制跨 macrotask，避免整条造数 task 被算进 setData。
  */
@@ -516,7 +551,7 @@ async function measureLayer(
   probe: SetDataProbe,
   longTasks: LongTaskCollector,
 ): Promise<LivePerfLayerReadings | null> {
-  const mounted = await mountSingleLayer(layer, longTasks);
+  const mounted = await mountSingleLayer(layer, longTasks, probe);
   if (report.blockedReason || report.fatal) {
     try {
       mounted.app.unmount();
@@ -556,6 +591,7 @@ async function measureLayer(
     layer,
     size: SIZE,
     firstFrame: mounted.firstFrame,
+    mountToPaintMs: mounted.mountToPaintMs,
     setData: sample(setDataMs, setDataTasks),
     redraw: sample(redrawMs, redrawTasks),
     sdkSetDataMs,
@@ -584,9 +620,10 @@ async function main(): Promise<void> {
   let probe: SetDataProbe | null = null;
   const longTasks = createLongTaskCollector();
   try {
-    // SDK 要等第一次 BMap ready 才存在；先挂一次点图层完成加载与原型包装，
-    // 丢弃其读数——否则第 0 个图层的 firstFrame 会混进 loader / 进程冷启动（与 Fake 预热同口径）。
-    const warmup = await mountSingleLayer("pointCollection", longTasks);
+  // SDK 要等第一次 BMap ready 才存在；先挂一次点图层完成加载与原型包装，
+  // 丢弃其读数——否则第 0 个图层的 firstFrame 会混进 loader / 进程冷启动（与 Fake 预热同口径）。
+  // 预热时 probe 尚未安装（`instrumentNativeSetData` 在下面），故 `probe=null` 不要求捕获 setData。
+  const warmup = await mountSingleLayer("pointCollection", longTasks, null);
     if (report.blockedReason || report.fatal) {
       warmup.app.unmount();
       return;
