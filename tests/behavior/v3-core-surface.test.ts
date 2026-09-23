@@ -25,10 +25,14 @@
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { stripComments } from "../../packages/test-utils";
 import * as advanced from "../../packages/baidu-map-gl-vue/src/advanced";
+import * as components from "../../packages/baidu-map-gl-vue/src/components";
+import * as composables from "../../packages/baidu-map-gl-vue/src/composables";
 import * as core from "../../packages/baidu-map-gl-vue/src/core";
+import * as plugins from "../../packages/baidu-map-gl-vue/src/plugins";
+import * as resolver from "../../packages/baidu-map-gl-vue/src/resolver";
 import * as root from "../../packages/baidu-map-gl-vue/src";
 import {
   getProcessSdkRegistry,
@@ -37,17 +41,28 @@ import {
 
 const PKG_DIR = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
 const DIST = resolve(PKG_DIR, "dist");
+const SRC = resolve(PKG_DIR, "src");
 
 /**
- * 三个**主要公共出口**的运行时命名空间（读的是 `src/**` 的入口模块，与 `v3-advanced-contract.test.ts` 同口径）。
+ * **七个可静态 import 的公共出口**的运行时命名空间（读 `src/**` 的入口模块，与
+ * `v3-advanced-contract.test.ts` 同口径）。
  *
- * 覆盖缺口是显式的：`./components` / `./composables` / `./plugins` / `./resolver` 的名字都被根入口
- * 逐个 re-export，因此已在其中；`./ui-kit` **不能静态 import**（无 DOM 环境 import 即失败，见
- * `AGENTS.md` 的 ui-kit 硬约束）⇒ 这两类由下面的**声明文本层**覆盖：`readDtsText()` 扫的是
- * `dist/*.d.ts` 的**全部八个入口**，`./ui-kit` 在其中。
+ * 为什么不是「三个主要出口」：`package.json#exports` 有八个入口，第一版只查了根 / `./core` /
+ * `./advanced`，评审（2026-09-23）指出「只从 `./components` / `./composables` / `./plugins` /
+ * `./resolver` 暴露的值不会触发这条不变量」。虽然这四个入口的名字当时都被根入口 re-export，
+ * 但那是**当时的巧合**而不是保证（`./plugins` 已经在 re-export `../core/plugins/PluginHost`，
+ * 说明子入口可以自己加东西）⇒ 逐个列上，不依赖「根入口覆盖了它们」。
+ *
+ * 唯一例外是第八个入口 `./ui-kit`：它**不能静态 import**（无 DOM 环境 import 即失败，见
+ * `AGENTS.md` 的 ui-kit 硬约束）⇒ 由**声明文本层**覆盖（`readDtsText()` 扫 `dist/*.d.ts` 的全部
+ * 八个入口，`./ui-kit` 在其中），并且 `*ForTests` 那条不变量在声明文本层对**标识符**扫，不看名单。
  */
 const ENTRIES: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ["根入口", root as unknown as Record<string, unknown>],
+  ["./components", components as unknown as Record<string, unknown>],
+  ["./composables", composables as unknown as Record<string, unknown>],
+  ["./plugins", plugins as unknown as Record<string, unknown>],
+  ["./resolver", resolver as unknown as Record<string, unknown>],
   ["./core", core as unknown as Record<string, unknown>],
   ["./advanced", advanced as unknown as Record<string, unknown>],
 ];
@@ -83,12 +98,31 @@ function mentions(text: string, name: string): boolean {
   return new RegExp(`\\b${name}\\b`).test(stripComments(text));
 }
 
+/**
+ * `package.json#exports` 里声明的公共入口数（排除 `./package.json` 那一项）。
+ *
+ * 用它当「dist 顶层该有几个 `.d.ts`」的判据，而不是写死一个数字：入口面变化时这条断言会自己跟上，
+ * 同时它仍然是一条**非空转守卫** —— 目标数量与产物数量不符时说明判定没有作用在全部入口上。
+ */
+const declaredPublicEntries = (): number => {
+  const pkg = JSON.parse(readFileSync(resolve(PKG_DIR, "package.json"), "utf8")) as {
+    exports?: Record<string, unknown>;
+  };
+  const entries = Object.keys(pkg.exports ?? {}).filter((key) => key !== "./package.json");
+  expect(entries.length, "package.json#exports 的入口面为空，判定没有着力点").toBeGreaterThan(0);
+  return entries.length;
+};
+
 const publicDtsFiles = (): string[] => {
   if (!existsSync(DIST)) {
     throw new Error(`缺少构建产物目录 ${DIST}：先跑 \`pnpm build:v3\`（读 dist 的用例都在 test:unit 里）`);
   }
   const files = readdirSync(DIST).filter((name) => name.endsWith(".d.ts"));
-  expect(files.length, "dist 顶层应当有多个 .d.ts 入口").toBeGreaterThan(3);
+  // 空转守卫：判定必须作用在**全部**公共入口上，而不是其中一个子集上。
+  expect(
+    files.length,
+    `dist 顶层的 .d.ts 数量与 package.json#exports 的入口数不符（${files.length} vs ${declaredPublicEntries()}）`,
+  ).toBe(declaredPublicEntries());
   return files.map((name) => resolve(DIST, name));
 };
 
@@ -98,13 +132,25 @@ describe("公共出口不得出现测试辅助（`*ForTests`）", () => {
   /**
    * 判定式：名字以 `ForTests` 结尾。
    *
-   * 这条是**可推广的不变量**（不是一次性清单）：测试辅助一旦出现在公共声明面，就会随
-   * `./core` / 根入口一起被冻结成 3.0 的承诺面，而它显然不该被承诺。
+   * 这条是**可推广的不变量**（不是一次性清单）：测试辅助一旦出现在公共面，就会随出口一起被冻结成
+   * 3.0 的承诺面，而它显然不该被承诺。
+   *
+   * **两层都要查**，因为它的两种载体不同（评审 2026-09-23 的 P2 指的正是第一版只查了值导出）：
+   * - **值导出**：`Object.keys` 看得到 ⇒ 逐个入口扫命名空间；
+   * - **类型导出与其它子入口**：`Object.keys` 看不到类型，而只从某个子入口暴露的值也不在根入口里
+   *   ⇒ 扫**全部八个声明入口**的**标识符**（不是扫名单）。后者才让「将来新增一个 `FooForTests`」
+   *   也会被抓住，而不是只守已经知道的那一个。
    */
   const isTestHelper = (names: readonly string[]): string[] =>
     names.filter((name) => name.endsWith("ForTests"));
 
-  it("三个主要出口的运行时导出里都没有 `*ForTests`（判定式的正证在本用例内自证）", () => {
+  /** 剥注释后文本里出现的 `*ForTests` **标识符**（去重排序，便于断言消息可读）。 */
+  const testHelperIdentifiersIn = (text: string): string[] => {
+    const matches = stripComments(text).match(/\b[A-Za-z_$][\w$]*ForTests\b/g) ?? [];
+    return [...new Set(matches)].sort();
+  };
+
+  it("运行时导出层：七个入口都没有 `*ForTests`（判定式的正证在本用例内自证）", () => {
     // 正证：用**同一条判定式**作用在一份含已知命中的合成输入上。少了这一段，
     // 「判定式写歪导致恒不命中」会让下面的负向断言静默变绿 —— 而它看起来完全一样。
     expect(isTestHelper(["useSdkResource", "resetProcessSdkRegistryForTests"])).toEqual([
@@ -118,10 +164,54 @@ describe("公共出口不得出现测试辅助（`*ForTests`）", () => {
       expect(isTestHelper(names), `${label} 泄漏了测试辅助`).toEqual([]);
     }
   });
+
+  it("声明文本层：**任意** `*ForTests` 标识符都不得出现（含类型导出与 `./ui-kit`）", () => {
+    // 正证 1（判定式本身）：同一判定式作用在合成输入上必须命中，且**值导出与类型导出两种形态**都要覆盖
+    // （后者正是运行时层结构上看不见的那一类）—— 挡住「判定式写歪」这类恒真。
+    expect(testHelperIdentifiersIn("export declare function resetFooForTests(): void;")).toEqual([
+      "resetFooForTests",
+    ]);
+    expect(testHelperIdentifiersIn("export type BarForTests = { ok: boolean };")).toEqual(["BarForTests"]);
+    // 反误报：注释里的提及不得命中（`SdkRegistry.ts` 的历史注记就是这种形态）。
+    expect(testHelperIdentifiersIn("// resetFooForTests 是测试辅助，已在两处收口\n")).toEqual([]);
+
+    // 正证 2（判定对象非空）：src 里**确实**还声明着这类名字。少了这一段，「公共面零命中」
+    // 在一个从来没有过这类名字的仓库里同样成立 —— 不变量会悄悄失去着力点。
+    // 逐个源文件读到第一个命中就停：这条守卫只需要「存在」，不该为此把整棵树读完
+    // （它旁边那条「剥注释后非空」的逐文件对照才是真正在意覆盖率的那一条）。
+    let declaredInSrc: string | undefined;
+    for (const relative of readdirSync(SRC, { recursive: true })) {
+      if (typeof relative !== "string" || !relative.endsWith(".ts")) continue;
+      const hit = /export function ([A-Za-z_$][\w$]*ForTests)\b/.exec(
+        readFileSync(join(SRC, relative), "utf8"),
+      );
+      if (hit) {
+        declaredInSrc = hit[1] as string;
+        break;
+      }
+    }
+    expect(
+      declaredInSrc,
+      "src 里已经没有任何 `*ForTests` 导出，这条不变量失去着力点（若是有意为之，请连同本用例一起删）",
+    ).toBeTruthy();
+
+    // 负向：**逐个**声明入口（含不能静态 import 的 `./ui-kit`）都零命中，
+    // 且每个入口各自再验一次「读得到内容」——防「文件读空 / 读歪」让负向恒绿。
+    const leaks: string[] = [];
+    for (const file of publicDtsFiles()) {
+      const raw = readFileSync(file, "utf8");
+      const stripped = stripComments(raw);
+      expect(stripped.trim().length, `${file} 剥注释后为空，判定没有着力点`).toBeGreaterThan(0);
+      for (const name of testHelperIdentifiersIn(raw)) {
+        leaks.push(`${file.split("/").pop()}: ${name}`);
+      }
+    }
+    expect(leaks, `公共声明面泄漏了测试辅助：${leaks.join(", ")}`).toEqual([]);
+  });
 });
 
 describe("被判定 REMOVE / 内部化的名字不得出现在公共面（#104 第三批）", () => {
-  it("值导出：三个主要出口没有它们；且被「内部化」的那个机制**真的还在工作**", () => {
+  it("值导出：七个出口都没有它们；且被「内部化」的那个机制**真的还在工作**", () => {
     for (const [label, entry] of ENTRIES) {
       const names = new Set(Object.keys(entry));
       const leaked = REMOVED_VALUE_EXPORTS.filter((name) => names.has(name));
