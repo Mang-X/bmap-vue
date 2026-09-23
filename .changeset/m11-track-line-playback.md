@@ -14,9 +14,9 @@
 | 面 | 说明 |
 | --- | --- |
 | `ref.playback` | 六条命令：`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`。参数在 SDK 调用**之前**校验（`BMAP_INVALID_ARGUMENT`）；未就绪告警一次并跳过（不排队） |
-| `ref.observed` | 事件派生的只读读数（`process` / `elapsed` / `distance` / `point` / `angle` + `status` / `statusName`）。**不是**内部播放状态机 |
+| `ref.observed` | 事件派生的只读读数（`process` / `elapsed` / `distance` / `point` / `angle` + `status` / `statusName`）。**不是**内部播放状态机。快照按 handle 分代：同代字段覆盖；换代后第一条事件从空快照重建（不混两代字段） |
 | `@progress` / `@statuschange` | 与 `observed` 同源的组件事件 |
-| `pauseOnHidden`（prop，默认 `false`） | 页面 hidden 时的可见性策略：**默认只停本库自己的观察**（SDK 继续播，探针实测）；opt-in 才自动 pause/resume，且只对**已送达 start/resume 且 handle 匹配**的实例（not-ready/抛错不留意图；stop/idle/跨代不被反向启动）；prop 变化按当前 `visibilityState` 立即收敛（hidden 中 opt-out 会 resume 本库造成的 pause） |
+| `pauseOnHidden`（prop，默认 `false`） | 页面 hidden 时的可见性策略：**默认只停本库自己的观察**（SDK 继续播，探针实测）；opt-in 才自动 pause/resume，且只对**已送达 start/resume 且 handle 匹配**的实例（not-ready/抛错不留意图；stop/idle/跨代不被反向启动；**已在 hidden 时新送达的 play 会立刻按当前 `visibilityState` 再 pause 一次**）；prop 变化按当前 `visibilityState` 立即收敛（hidden 中 opt-out 会 resume 本库造成的 pause） |
 
 **驱动层**：`NativeLayerDriver` 增加六条归一化方法（与 Fake v4 的 `FakeV4TrackLine` 一一对应）；
 `NativeLayerOperation` 相应扩充 `track-line` 的登记操作。

@@ -27,7 +27,8 @@
  * 不是基础默认：opt-in 打开时，hidden 仅对「**命令意图落在当前 handle 且仍要求在播**」的实例
  * `pause()`、shown 恢复 `resume()`，且只在「本次是因 visibility 暂停的**且 handle 仍是那一代**」
  * 时才 resume——用户 pause/stop、从未 start、not-ready start、跨代意图都不被 visibility 反向启动
- * （意图只在命令**确实送达**后记到该 handle；`pauseOnHidden` 变化会按当前 `visibilityState` 收敛）。
+ * （意图只在命令**确实送达**后记到该 handle；`pauseOnHidden` 变化会按当前 `visibilityState` 收敛；
+ * **已在 hidden 时新送达的 play 命令会立刻按当前 `visibilityState` 再跑一遍策略**，不绕过 opt-in）。
  *
  * 不依赖旧的 `BMapGLLib.TrackAnimation` 插件，也不触碰它的任何私有字段。
  */
@@ -58,10 +59,13 @@ const emit = defineEmits<{
  * 事件派生的进度读数（只读；不镜像成「播放状态机」）。
  *
  * 字段名取自 live 探针的 `progress` / `statuschange` 载荷键（`probe-track-line.live.json`）。
- * 换实例时**不清空**（重建是异步的，立刻清会让「隐藏再显示」闪一下 null）；新实例的事件
- * 到达时按字段覆盖。
+ * 换实例时**不清空**（重建是异步的，立刻清会让「隐藏再显示」闪一下 null）；但快照**按 handle
+ * 分代**：同代事件在上一条读数上字段覆盖；新一代的**第一条**事件从空快照开始（不继承上一代
+ * 的 `status` / `progress` 等字段——两代混在同一个快照里会给出「SDK 状态」的假读数）。
  */
 const observed = shallowRef<BTrackLineObserved | null>(null);
+/** `observed` 当前快照所属的 handle（`null` = 尚无事件）。换代后第一条事件据此重建快照。 */
+let observedHandle: NativeLayerHandle | null = null;
 
 /**
  * DriverEvent → raw 逃生口 → 载荷在 `value` 上（live 探针与 Fake 同口径）。
@@ -119,7 +123,8 @@ function bindPlaybackEvents({ handle, context, scope, isQuiescing }: NativeLayer
     if (!observing) return;
     const source = readTrackLineEventValue(raw);
     if (!source) return;
-    const prev = observed.value ?? {};
+    // 同代：在上一条读数上字段覆盖；换代后的第一条：从空快照重建（不混两代字段）
+    const prev = observedHandle === handle ? observed.value ?? {} : {};
     const next = {
       ...prev,
       ...(typeof source.process === "number" ? { process: source.process } : {}),
@@ -130,6 +135,7 @@ function bindPlaybackEvents({ handle, context, scope, isQuiescing }: NativeLayer
       ...(typeof source.status === "number" ? { status: source.status } : {}),
       ...(typeof source.statusName === "string" ? { statusName: source.statusName } : {}),
     };
+    observedHandle = handle;
     observed.value = next;
     // 逐名分派（与 `pickEmitterFor` 同源：`defineEmits` 的重载不吃联合事件名）
     if (type === "progress") emit("progress", next);
@@ -188,6 +194,10 @@ const playback = {
  * - 调用抛错：意图不改（命令没落地）；
  * - 送达：`play` 记当前 handle；`stop` 清空意图。两种成功路径都清 visibility 暂停账
  *   （新命令之后，旧 handle 上的 visibility pause 不再授权 resume）。
+ *
+ * **已在 hidden 时新送达的 `play`**：opt-in 下必须按当前 `visibilityState` 立刻再跑一遍
+ * 策略（`applyVisibility(true)`），否则「先 hidden 再 start / resume」会绕过 `pauseOnHidden`
+ * 把播放意图直接落在 SDK 上，与「opt-in ⇒ hidden 不在播」的契约矛盾。
  */
 function dispatchIntent(
   deliver: () => void,
@@ -201,6 +211,15 @@ function dispatchIntent(
   deliver();
   playingIntentHandle = next === "play" ? session.handle : null;
   visibilityPausedHandle = null;
+  if (
+    next === "play" &&
+    props.pauseOnHidden &&
+    typeof document !== "undefined" &&
+    document.visibilityState === "hidden"
+  ) {
+    // play 已送达且意图落在当前 handle ⇒ 与「opt-in + 已 hidden」同一收敛点
+    applyVisibility(true);
+  }
 }
 
 /** 页面可见性：默认只停/恢复**观察**；`pauseOnHidden` 才碰 SDK 播放。 */

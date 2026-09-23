@@ -189,7 +189,7 @@ function onProgress(o: BTrackLineObserved) {
 
 | 面 | 来源 | 说明 |
 | --- | --- | --- |
-| `observed`（expose） | 事件派生的只读读数 | 换实例时由新实例的事件重建；**不是**内部播放状态机 |
+| `observed`（expose） | 事件派生的只读读数 | 换实例时**不清空**（避免闪 `null`）；新一代的**第一条**事件从空快照重建（不继承上一代字段）；**不是**内部播放状态机 |
 | `@progress` | SDK `progress` 事件 | 载荷含 `process` / `elapsed` / `distance` / `point` / `angle` |
 | `@statuschange` | SDK `statuschange` 事件 | 载荷含 `status` / `statusName` |
 
@@ -202,7 +202,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | 策略 | 行为 |
 | --- | --- |
 | **默认**（`pauseOnHidden=false`） | 页面 hidden 时只停掉**本库自己的观察**（`observed` 不再更新），**不**改写业务播放意图（SDK 继续播） |
-| **显式 opt-in**（`pauseOnHidden=true`） | 只对「**已送达 start/resume 且 handle 仍是那一代**」的实例：hidden 触发 `pause()`、shown 恢复 `resume()`——**not-ready / 抛错的命令不留意图**（visibility 不补发迟到的 start），**stop/idle/跨代意图不被反向启动**；hidden 中把 prop 改成 `false` 会**立刻 resume 本库造成的 pause**，已 hidden 时改成 `true` 则立即按策略 pause |
+| **显式 opt-in**（`pauseOnHidden=true`） | 只对「**已送达 start/resume 且 handle 仍是那一代**」的实例：hidden 触发 `pause()`、shown 恢复 `resume()`——**not-ready / 抛错的命令不留意图**（visibility 不补发迟到的 start），**stop/idle/跨代意图不被反向启动**；hidden 中把 prop 改成 `false` 会**立刻 resume 本库造成的 pause**，已 hidden 时改成 `true` 则立即按策略 pause；**已在 hidden 时新送达的 `start` / `resume` 也会立刻按当前 `visibilityState` 再 pause 一次**（不绕过 opt-in） |
 
 自动 pause/resume 必须是 opt-in、不是基础默认，这是 issue #110 的硬约束。
 
