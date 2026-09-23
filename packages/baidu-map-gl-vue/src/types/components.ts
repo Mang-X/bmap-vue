@@ -984,25 +984,37 @@ export interface BMVTLayerEntity {
   [key: string]: unknown;
 }
 
-/** 点击 / 双击载荷（官方 `MVTLayerPickEvent` 的字段子集；`value` 可能缺失）。 */
-export interface BMVTLayerPickEvent {
+/**
+ * 鼠标命中载荷的公共底座（官方 `MVTLayerMouseEvent` 的字段子集：`pixel` / `latLng` 必有语义，
+ * 本库按官方结构收窄；**不含** `value`——那是 Pick / MouseMove 各自加的）。
+ *
+ * 官方三个鼠标事件都继承它：`MVTLayerPickEvent` / `MVTLayerMouseMoveEvent` / `mouseout`。
+ */
+export interface BMVTLayerMouseEvent {
   type?: string;
   pixel?: { x: number; y: number };
   latLng?: { lng: number; lat: number };
-  /** 命中的要素（可能为空数组 / 缺失——SDK 未命中时的形状由上游决定，本库不编造）。 */
-  value?: BMVTLayerEntity[];
   [key: string]: unknown;
 }
 
 /**
- * `mousemove` 载荷（官方 `MVTLayerMouseMoveEvent`：`value` 至少是数组）。
- *
- * 结构与 `BMVTLayerPickEvent` 同形（官方两者都继承 `MVTLayerMouseEvent`）；此处**别名**
- * 而不是复制一份字段，避免两处 JSDoc 漂移。
+ * 点击 / 双击载荷（官方 `MVTLayerPickEvent`：继承 `MVTLayerMouseEvent`，`value` **可选**——
+ * 未命中时 SDK 可能不带）。
  */
-export type BMVTLayerMouseMoveEvent = BMVTLayerPickEvent;
+export interface BMVTLayerPickEvent extends BMVTLayerMouseEvent {
+  /** 命中的要素（可能为空数组 / 缺失——SDK 未命中时的形状由上游决定，本库不编造）。 */
+  value?: BMVTLayerEntity[];
+}
 
-/** `mouseout` / `tilesloadstart` / `tilesloadend` 的最小载荷（官方结构松散，不编造字段）。 */
+/**
+ * `mousemove` 载荷（官方 `MVTLayerMouseMoveEvent`：继承 `MVTLayerMouseEvent`，
+ * `value` **必有** `Entity[]`——官方签名与 Pick 的可选相反，不能 alias 到 PickEvent）。
+ */
+export interface BMVTLayerMouseMoveEvent extends BMVTLayerMouseEvent {
+  value: BMVTLayerEntity[];
+}
+
+/** `tilesloadstart` / `tilesloadend` 的最小载荷（官方结构松散，不编造字段）。 */
 export interface BMVTLayerBaseEvent {
   type?: string;
   [key: string]: unknown;
@@ -1077,7 +1089,7 @@ export interface BMVTLayerProps {
   onclick?: (e: BMVTLayerPickEvent) => void;
   ondblclick?: (e: BMVTLayerPickEvent) => void;
   onmousemove?: (e: BMVTLayerMouseMoveEvent) => void;
-  onmouseout?: (e: BMVTLayerPickEvent) => void;
+  onmouseout?: (e: BMVTLayerMouseEvent) => void;
 }
 
 /* ------------------------------------------------ 原生聚合（#35） */

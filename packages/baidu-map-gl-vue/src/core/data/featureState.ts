@@ -64,20 +64,39 @@ export interface FeatureStateUpdateOptions {
   readonly append?: boolean;
 }
 
-export interface FeatureStateApi {
+/** 键域：`default` = NativeLayer 的 `string | number`；`string` = MVT 只收复合键（#109）。 */
+export type FeatureStateKeyDomain = "default" | "string";
+
+/**
+ * 键域 → 公开 API 的 keys 类型。
+ *
+ * - `"default"`：#36 NativeLayer 官方签名 `string | number | Array<string | number>`；
+ * - `"string"`：#109 MVT `updateState(keys: string | Array<string>)`——**类型层**就收窄，
+ *   不再只靠运行时 `keyDomain` 拒 number（#109 评审 P1：`update(1, …)` 必须编译失败）。
+ */
+export type FeatureStateKeysOf<KeyDomain extends FeatureStateKeyDomain = "default"> =
+  KeyDomain extends "string" ? string | ReadonlyArray<string> : NativeLayerFeatureKeys;
+
+/** 命令面的默认键域 keys（与 `NativeLayerFeatureKeys` 同形；`FeatureStateApi` 的缺省实参）。 */
+export type FeatureStateKeys = FeatureStateKeysOf<"default">;
+
+export interface FeatureStateApi<KeyDomain extends FeatureStateKeyDomain = "default"> {
   update(
-    keys: NativeLayerFeatureKeys,
+    keys: FeatureStateKeysOf<KeyDomain>,
     state: NativeLayerFeatureState,
     options?: FeatureStateUpdateOptions,
   ): void;
-  remove(keys: NativeLayerFeatureKeys): void;
+  remove(keys: FeatureStateKeysOf<KeyDomain>): void;
   clear(): void;
   replace(inputs: NativeLayerFeatureStateMap): void;
   /** 读回：不给 `keys` 就是全部；给了就只返回这些 id（不存在的 id 不会出现在结果里）。 */
-  get(keys?: NativeLayerFeatureKeys): NativeLayerFeatureStateMap;
+  get(keys?: FeatureStateKeysOf<KeyDomain>): NativeLayerFeatureStateMap;
 }
 
-export interface CreateFeatureStateApiInput<Handle = NativeLayerHandle> {
+export interface CreateFeatureStateApiInput<
+  Handle = NativeLayerHandle,
+  KeyDomain extends FeatureStateKeyDomain = "default",
+> {
   /**
    * **当前会话**（Driver + 句柄）的取值器；未就绪（或已释放）时返回 `null`。
    *
@@ -106,14 +125,15 @@ export interface CreateFeatureStateApiInput<Handle = NativeLayerHandle> {
    */
   identityProp?: string;
   /**
-   * 键域收窄。
+   * 键域收窄（**同时**决定返回 API 的静态 keys 类型，见 `FeatureStateKeysOf`）。
    *
    * - `"default"`（缺省）：`string | number`（#36 NativeLayer 的官方签名）；
    * - `"string"`：**只收 string**（#109 MVT 的 `updateState(keys: string | Array<string>)`）。
-   *   数字键在任何 SDK 调用之前被拒绝——MVT 的复合键 `layerName_id` 就是 string，
-   *   放行 number 会让「1」与 1 在类型层是两套身份、在 SDK 侧却是同一个槽位。
+   *   数字键在类型层（`FeatureStateApi<"string">`）与任何 SDK 调用之前（运行时）都被拒绝——
+   *   MVT 的复合键 `layerName_id` 就是 string，放行 number 会让「1」与 1 在类型层是两套身份、
+   *   在 SDK 侧却是同一个槽位。
    */
-  keyDomain?: "default" | "string";
+  keyDomain?: KeyDomain;
 }
 
 /**
@@ -252,10 +272,15 @@ function describeValue(value: unknown): string {
 
 /* ------------------------------------------------------------------ 命令面 */
 
-export function createFeatureStateApi<Handle = NativeLayerHandle>(
-  input: CreateFeatureStateApiInput<Handle>,
-): FeatureStateApi {
+export function createFeatureStateApi<
+  Handle = NativeLayerHandle,
+  KeyDomain extends FeatureStateKeyDomain = "default",
+>(
+  input: CreateFeatureStateApiInput<Handle, KeyDomain>,
+): FeatureStateApi<KeyDomain> {
   const { component, identityProp = "idKey", keyDomain = "default" } = input;
+  /** 运行时键域（与类型层 `FeatureStateKeysOf<KeyDomain>` 同口径的双保险）。 */
+  const runtimeDomain: FeatureStateKeyDomain = keyDomain;
   /**
    * 告警去重**按命令面实例**而不是模块级：同一个组件挂两个实例时，模块级的键会让第二个实例的
    * 「未就绪」告警被第一个吞掉（而那正是它需要看到的信息）。
@@ -307,7 +332,7 @@ export function createFeatureStateApi<Handle = NativeLayerHandle>(
 
   return {
     update(keys, state, options) {
-      const ids = normalizeKeys(component, keys, keyDomain);
+      const ids = normalizeKeys(component, keys, runtimeDomain);
       const params = normalizeState(component, state);
       if (ids.length === 0) return;
       const session = guard("update");
@@ -316,7 +341,7 @@ export function createFeatureStateApi<Handle = NativeLayerHandle>(
     },
 
     remove(keys) {
-      const ids = normalizeKeys(component, keys, keyDomain);
+      const ids = normalizeKeys(component, keys, runtimeDomain);
       if (ids.length === 0) return;
       const session = guard("remove");
       if (!session) return;
@@ -340,7 +365,9 @@ export function createFeatureStateApi<Handle = NativeLayerHandle>(
       // 先归一化 keys：非法键（含 keyDomain: "string" 下的数字）必须在任何 SDK 调用之前失败，
       // 与 update / remove 同一条口径——否则 get([bad]) 会先打一次 getAllState 再抛。
       const wantedIds =
-        keys === undefined ? null : normalizeKeys(component, keys, keyDomain).map((id) => String(id));
+        keys === undefined
+          ? null
+          : normalizeKeys(component, keys, runtimeDomain).map((id) => String(id));
       const session = guard("get");
       if (!session) return {};
       const all = session.driver.getState(session.handle);

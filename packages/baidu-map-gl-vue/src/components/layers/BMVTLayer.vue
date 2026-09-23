@@ -28,6 +28,7 @@ import { useLayerResource } from "../../core/composables/useLayerResource";
 import { pickLayerOptions } from "../../core/layers/LayerSpec";
 import type {
   BMVTLayerBaseEvent,
+  BMVTLayerMouseEvent,
   BMVTLayerMouseMoveEvent,
   BMVTLayerPickEvent,
   BMVTLayerProps,
@@ -50,7 +51,7 @@ const emit = defineEmits<{
   click: [e: BMVTLayerPickEvent];
   dblclick: [e: BMVTLayerPickEvent];
   mousemove: [e: BMVTLayerMouseMoveEvent];
-  mouseout: [e: BMVTLayerBaseEvent];
+  mouseout: [e: BMVTLayerMouseEvent];
   tilesloadstart: [e: BMVTLayerBaseEvent];
   tilesloadend: [e: BMVTLayerBaseEvent];
 }>();
@@ -95,7 +96,7 @@ const resource = useLayerResource<BMVTLayerProps>(props, {
     scope.add(
       events.on(handle, "mousemove", (e) => emit("mousemove", e as BMVTLayerMouseMoveEvent)),
     );
-    scope.add(events.on(handle, "mouseout", (e) => emit("mouseout", e as BMVTLayerBaseEvent)));
+    scope.add(events.on(handle, "mouseout", (e) => emit("mouseout", e as BMVTLayerMouseEvent)));
     scope.add(
       events.on(handle, "tilesloadstart", (e) =>
         emit("tilesloadstart", e as BMVTLayerBaseEvent),
@@ -110,8 +111,9 @@ const resource = useLayerResource<BMVTLayerProps>(props, {
 /**
  * 要素状态命令面。
  *
- * `keyDomain: "string"`：MVT 官方签名 `updateState(keys: string | Array<string>)`，数字键在
- * 任何 SDK 调用之前被拒绝。`identityProp: "idProperty"`：告警文案点名正确的 prop。
+ * `keyDomain: "string"`：MVT 官方签名 `updateState(keys: string | Array<string>)`——
+ * **类型层**（`FeatureStateApi<"string">`：`update(1, …)` 编译失败）与运行时（任何 SDK
+ * 调用之前）双重拒绝 number。`identityProp: "idProperty"`：告警文案点名正确的 prop。
  * 会话每次命令重新求值（`useLayerResource().session`），重建后不会写进旧实例。
  */
 const featureState = createFeatureStateApi({
@@ -119,7 +121,7 @@ const featureState = createFeatureStateApi({
   session: () => resource.session(),
   identity: () => normalizeIdField(props.idProperty),
   identityProp: "idProperty",
-  keyDomain: "string",
+  keyDomain: "string" as const,
 });
 
 defineExpose({
