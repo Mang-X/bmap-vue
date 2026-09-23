@@ -60,7 +60,7 @@
 import { onMounted, onScopeDispose, onUnmounted, watch } from "vue";
 import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
-import { createFeatureStateApi, type FeatureStateApi, type FeatureStateSession } from "../data/featureState";
+import { createFeatureStateApi, type FeatureStateApi } from "../data/featureState";
 import { normalizeIdField } from "../data/identity";
 import { BMapError } from "../errors/BMapError";
 import { createDevWarnOnce } from "../logger";
@@ -69,6 +69,7 @@ import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { stableLayerValue } from "../layers/LayerSpec";
 import { ResourceScope } from "../lifecycle/ResourceScope";
 import type {
+  NativeLayerDriver,
   NativeLayerHandle,
   NativeLayerKind,
   NativeLayerOperation,
@@ -171,7 +172,7 @@ export interface NativeLayerResource {
    * 与 `featureState` 同一条口径——图层会因构造期选项变化而换实例，闭包里的旧句柄会让
    * 命令打进一个已经不在地图上的图层。
    */
-  session(): FeatureStateSession | null;
+  session(): { readonly driver: NativeLayerDriver; readonly handle: NativeLayerHandle } | null;
   /**
    * 最近一次**成功送出**的数据。
    *
@@ -768,7 +769,7 @@ export function useNativeLayerResource<Props>(
   });
 
   /** 会话取值器（`featureState` 与组件侧第二命令面共用同一条求值路径）。 */
-  function session(): FeatureStateSession | null {
+  function session(): { readonly driver: NativeLayerDriver; readonly handle: NativeLayerHandle } | null {
     const state = instance;
     const context = readyCtx;
     if (!state || !context) return null;
