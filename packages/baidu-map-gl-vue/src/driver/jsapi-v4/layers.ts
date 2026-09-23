@@ -1,16 +1,16 @@
 /**
- * v4 LayerDriver（M3A2-CONTROLS-LAYERS / issue #22；M7-LAYERS / issue #40 扩到 10 种）
+ * v4 LayerDriver（M3A2-CONTROLS-LAYERS / issue #22；M7-LAYERS / issue #40 扩到 11 种）
  *
  * 把 JSAPI 4.0 的图层收敛成项目领域映射（`LayerDriver`）；公共 API 不新增 raw 成员，
- * 只把 `LayerHandle` 已有的品牌口径（`layer:<kind>`）落实到十种图层上。
+ * 只把 `LayerHandle` 已有的品牌口径（`layer:<kind>`）落实到十一种图层上。
  *
  * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4` + 官方 Skill
- * `references/tile-and-service-layers.md` / `administrative-district.md`）：
+ * `references/tile-and-service-layers.md` / `administrative-district.md` / `mvt-layer.md`）：
  *
  * - 4.0 用**统一**入口 `map.addLayer/removeLayer` 管理所有图层，按图层原型的家族标志位
  *   （`isDistrictLayer` / `isTileLayer` / `isGeoJSONLayer` / `isCustomHtmlLayer`）内部分发；
  *   `addDistrictLayer` / `addTileLayer` 已标记 `@deprecated`，因此这里一律走统一入口；
- * - 十种 kind 的构造器**都在 4.0.4 的类型声明里**，例外只有 `PanoramaCoverageLayer`
+ * - 十一种 kind 的构造器**都在 4.0.4 的类型声明里**，例外只有 `PanoramaCoverageLayer`
  *   （官方 4.0 公开它，但类型包没有类声明）——`declared: false` 的那一种只能按结构探测；
  * - 构造签名的三种形态由 `signature` 表达：`options`（大多数）、`layerName-options`
  *   （`GeoJSONLayer`）、`createDOM-options`（`DOMLayer`）。**这两个首参不是选项**，
@@ -25,7 +25,12 @@
  * - `TileLayer` 家族（含 `TrafficLayer`）只有 `zIndex` 有 setter；`TrafficLayer` 另有
  *   `setColors` / `setEdge`；`DOMLayer` 用整袋 `setStyleOptions` 更新构造项（`bagSetters`）；
  * - `GeoJSONLayer` 有 `setData` / `clearData`；`DOMLayer` 只有 `setData`（清空要
- *   `removeAllOverlays()`，不在本 issue 的归一化操作面里）。
+ *   `removeAllOverlays()`，不在本 issue 的归一化操作面里）；
+ * - `MVTLayer`（#109）：`style` 走整袋 `setStyle`；要素状态五命令归一化到
+ *   `updateState` / `removeState` / `clearState` / `replaceState` / `getState`（后两个
+ *   在官方入口上分别叫 `replaceAllState` / `getAllState`，与 #36 NativeLayer 同表）。
+ *   live 探针确认状态键是**复合** `layerName_id` 字符串，不是裸 id（skill
+ *   `references/mvt-layer.md`「live 探针读数」）。
  */
 import { BMapError } from "../../core/errors/BMapError";
 import type { Capability } from "../capability/catalog";
@@ -40,6 +45,11 @@ import {
   type LayerOperation,
   type LayerSurface,
 } from "../types/layers";
+import type {
+  NativeLayerFeatureKeys,
+  NativeLayerFeatureState,
+  NativeLayerFeatureStateMap,
+} from "../types/native-layers";
 import {
   assertJsapiV4Namespace,
   callRequired,
@@ -91,8 +101,11 @@ interface LayerDescriptor {
    * `removeAllOverlays()`（清掉这批 DOM 覆盖物即等价于把数据清空）。把两者映射到同一个
    * 领域操作，是为了让「数据驱动的图层都能被清空」成为一句可以验证的话，而不是调用方
    * 按 kind 分支。
+   *
+   * **只在 `operations` 含 `clearData` 的 kind 上给出**；瓦片家族 / `mvt` / `district`
+   * 等没有清空入口的 kind 刻意省略（写了也没读，属于假事实）。
    */
-  clearEntry: string;
+  clearEntry?: string;
   operations: readonly LayerOperation[];
 }
 
@@ -117,7 +130,6 @@ const LAYER_DESCRIPTORS = {
     aliases: { viewport: "autoViewport" },
     mutable: {},
     bagSetters: {},
-    clearEntry: "clearData",
     operations: [],
   },
   "panorama-coverage": {
@@ -129,7 +141,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: {},
     bagSetters: {},
-    clearEntry: "clearData",
     operations: [],
   },
   tile: {
@@ -143,7 +154,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: TILE_MUTABLE,
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
   },
   traffic: {
@@ -155,7 +165,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: { ...TILE_MUTABLE, colors: "setColors", edge: "setEdge" },
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
   },
   geojson: {
@@ -206,7 +215,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: TILE_MUTABLE,
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
   },
   wms: {
@@ -218,7 +226,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: TILE_MUTABLE,
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
   },
   wmts: {
@@ -230,7 +237,6 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: TILE_MUTABLE,
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
   },
   raster: {
@@ -242,8 +248,31 @@ const LAYER_DESCRIPTORS = {
     aliases: {},
     mutable: TILE_MUTABLE,
     bagSetters: {},
-    clearEntry: "clearData",
     operations: TILE_OPERATIONS,
+  },
+  // #109：MVT 矢量瓦片。官方没有 `opacity` / `setMinZoom` / `setMaxZoom` / `setData` / `clearData`；
+  // `zIndex` / `style` 都是字段级 setter（`setZIndex` / `setStyle(styleMap)` 直接收样式袋，
+  // 不是 `setStyleOptions` 那种「option 键袋」——bagSetters 会把 value 再包一层 `{ style: … }`，
+  // 与官方签名不符，因此 style 归 mutable）。
+  // 要素状态五个操作全部声明（`updateState`/`clearState` 在 d.ts，其余三个在原型上探到）。
+  // 刻意不给 `clearEntry`：官方 MVT 没有 `clearData`（探针 apiPresence.clearData = false）。
+  mvt: {
+    ctor: "MVTLayer",
+    declared: true,
+    signature: "options",
+    ctorSlots: ["minZoom", "maxZoom", "zIndex"],
+    ctorSlotKeys: {},
+    aliases: {},
+    mutable: { ...TILE_MUTABLE, style: "setStyle" },
+    bagSetters: {},
+    operations: [
+      "setZIndex",
+      "updateState",
+      "removeState",
+      "clearState",
+      "replaceState",
+      "getState",
+    ],
   },
 } as const satisfies Record<LayerKind, LayerDescriptor>;
 
@@ -259,6 +288,7 @@ const LAYER_CAPABILITIES: Readonly<Record<LayerKind, Capability>> = {
   wms: "layer.wms",
   wmts: "layer.wmts",
   raster: "layer.raster",
+  mvt: "layer.mvt",
 };
 
 export interface CreateJsapiV4LayerDriverInput {
@@ -595,7 +625,51 @@ export function createJsapiV4LayerDriver(input: CreateJsapiV4LayerDriverInput): 
 
     clearData(layer) {
       const { raw, descriptor } = open(layer, "clearData");
-      callRequired(raw, descriptor.clearEntry);
+      // open() 只在 operations 含 clearData 时放行；该 kind 必须给出 clearEntry（geojson / dom）。
+      const entry = descriptor.clearEntry;
+      if (!entry) {
+        throw new BMapError(
+          "BMAP_CAPABILITY_UNSUPPORTED",
+          `LayerDriver.clearData: ${kindOfLayer(layer)} 声明了 clearData 却没有 clearEntry`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      callRequired(raw, entry);
+    },
+
+    // 要素状态（#109）：归一化名 → 官方入口与 #36 NativeLayer 同一张表；
+    // 只有 `operations` 里声明了这些操作的 kind（当前仅 `mvt`）能通过 `open()`。
+    updateState(layer, keys, state, append = false) {
+      const { raw } = open(layer, "updateState");
+      callRequired(raw, "updateState", keys, state, append);
+    },
+
+    removeState(layer, keys) {
+      const { raw } = open(layer, "removeState");
+      callRequired(raw, "removeState", keys);
+    },
+
+    clearState(layer) {
+      const { raw } = open(layer, "clearState");
+      callRequired(raw, "clearState");
+    },
+
+    replaceState(layer, inputs) {
+      const { raw } = open(layer, "replaceState");
+      callRequired(raw, "replaceAllState", inputs);
+    },
+
+    getState(layer) {
+      const { raw } = open(layer, "getState");
+      const result = sdkCall("Layer.getAllState", () => callRequired(raw, "getAllState"));
+      if (result === null || typeof result !== "object" || Array.isArray(result)) {
+        throw new BMapError(
+          "BMAP_SDK_CALL_FAILED",
+          `LayerDriver.getState: getAllState() 应当返回 id → 状态的对象，实际是 ${typeof result}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      return result as NativeLayerFeatureStateMap;
     },
   };
 
@@ -700,6 +774,41 @@ type _AssertXyzVisibilityMembers = ExpectTrue<
 /** `district` 声明**没有**任何操作：官方类型上也不得出现这些成员（上游补了就该更新能力面）。 */
 type _AssertDistrictHasNoOperations = ExpectTrue<
   ExtraMembers<BMap.DistrictLayer, "setZIndex" | "setData" | "clearData" | "setOpacity"> extends never
+    ? true
+    : false
+>;
+
+/**
+ * `mvt`（#109）在官方 `MVTLayer` 类声明上**必须**有的成员（d.ts 可核对的那部分）。
+ *
+ * `removeState` / `replaceAllState` / `getAllState` 是原型上探到的扩展面，**不在** d.ts
+ * 的 class body 里（`declaredMembersOf` 交叉核对会对它们失败），因此它们只进运行时
+ * 测试与 fake 替身，不进这条断言。反向断言：官方没有本库声明会走重建假象的 setter。
+ */
+type _AssertMvtDeclaredMembers = ExpectTrue<
+  MissingMembers<
+    BMap.MVTLayer,
+    | "updateState"
+    | "clearState"
+    | "setStyle"
+    | "setZIndex"
+    | "getZIndex"
+    | "setZIndexTop"
+    | "setUpLevel"
+    | "setDownLevel"
+    | "addEventListener"
+    | "removeEventListener"
+  > extends never
+    ? true
+    : false
+>;
+
+/** `mvt` 上本库**不得**声明为「就地可更新」的成员（官方没有这些入口）。 */
+type _AssertMvtHasNoFalseSetters = ExpectTrue<
+  ExtraMembers<
+    BMap.MVTLayer,
+    "setData" | "clearData" | "setOpacity" | "setVisible" | "setMinZoom" | "setMaxZoom"
+  > extends never
     ? true
     : false
 >;

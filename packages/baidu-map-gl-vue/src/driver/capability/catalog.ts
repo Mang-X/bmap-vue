@@ -70,6 +70,7 @@ export type Capability =
   | "layer.wms"
   | "layer.wmts"
   | "layer.raster"
+  | "layer.mvt"
   | "layer.cluster"
   | "layer.point"
   | "layer.heatmap"
@@ -526,6 +527,17 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     rawMembers: ["RasterTileLayer"],
     engines: JSAPI_V4,
     status: "experimental",
+    runtimeOnly: false,
+  },
+  // #109：MVT 矢量瓦片。挂载（直接 `addLayer`）、`layers` 字符串数组、状态键 `layerName_id`
+  // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.4 有完整声明。
+  "layer.mvt": {
+    id: "layer.mvt",
+    family: "layer",
+    description: "MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id",
+    rawMembers: ["MVTLayer"],
+    engines: JSAPI_V4,
+    status: "native",
     runtimeOnly: false,
   },
   // 聚合：默认路径就是原生。`status: "extended"` 表达的是「本库在原生能力之上还提供了一个

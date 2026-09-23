@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
-import { createFeatureStateApi } from "./featureState";
+import { createFeatureStateApi, mvtFeatureStateKey } from "./featureState";
 import { createCapabilityRegistry } from "../../driver/capability/registry";
 import { createJsapiV4HandleRegistry } from "../../driver/jsapi-v4/registry";
 import { createJsapiV4NativeLayerDriver } from "../../driver/jsapi-v4/native-layers";
@@ -133,6 +133,50 @@ describe("Feature State：身份与校验", () => {
     const state = api();
     state.update(1, { selected: true });
     expect(state.get(1)).toEqual({ "1": { selected: true } });
+  });
+
+  it("keyDomain: \"string\"（MVT 键域）：数字键在任何 SDK 调用之前被拒绝", () => {
+    const state = createFeatureStateApi({
+      session,
+      identity: () => identityField,
+      component: "BMVTLayer",
+      identityProp: "idProperty",
+      keyDomain: "string",
+    });
+    const before = rawOf().callLog.length;
+
+    // update / remove / get 的 keys 是数组或单值：数字字面量在这里被拒
+    expect(() => state.update(1 as never, { selected: true })).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+    );
+    expect(() => state.remove(2 as never)).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+    );
+    expect(() => state.get([3] as never)).toThrowError(
+      expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+    );
+    expect(rawOf().callLog.length, "非法键不得碰到 SDK").toBe(before);
+
+    // replace 的入参是对象：Object.entries 的键在 JS 层永远是 string，
+    // 因此 keyDomain 对它没有可拒的形态（`"1"` 是合法复合键片段）——这条锁住该口径，
+    // 避免以后误以为 replace 也会拒「数字样」字符串键。
+    expect(() => state.replace({ "1": { selected: true } })).not.toThrow();
+    expect(rawOf().state).toEqual({ "1": { selected: true } });
+  });
+
+  it("keyDomain: \"string\" 合法字符串键照常写入；mvtFeatureStateKey 产出复合键", () => {
+    const key = mvtFeatureStateKey("lines", 42);
+    expect(key).toBe("lines_42");
+
+    const state = createFeatureStateApi({
+      session,
+      identity: () => identityField,
+      component: "BMVTLayer",
+      identityProp: "idProperty",
+      keyDomain: "string",
+    });
+    state.update(key, { selected: true });
+    expect(rawOf().state).toEqual({ lines_42: { selected: true } });
   });
 });
 

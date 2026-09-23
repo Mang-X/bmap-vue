@@ -90,6 +90,7 @@ export type { SdkResourceSpec, SdkResourceStatus } from "./core/composables/useS
 // 要素状态命令面（M6 / #36）：`<BLineLayer>` / `<BFillLayer>` / `<BPointCollection>` 的 ref expose
 // 拿到的是这个类型。只导出**类型**——创建它需要 Driver 与句柄，那是内核的职责。
 export type { FeatureStateApi, FeatureStateUpdateOptions } from "./core/data/featureState";
+export { mvtFeatureStateKey } from "./core/data/featureState";
 // 声明式覆盖物生命周期（M5-SPEC-MARKER / #30）：组件只声明 OverlaySpec，其余由这里驱动
 export { useOverlaySpec } from "./core/composables/useOverlaySpec";
 export { dynamicEmit } from "./core/composables/dynamicEmit";

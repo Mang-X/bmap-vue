@@ -45,7 +45,6 @@
 import { BMapError } from "../errors/BMapError";
 import { createDevWarnOnce } from "../logger";
 import type {
-  NativeLayerDriver,
   NativeLayerFeatureKeys,
   NativeLayerFeatureState,
   NativeLayerFeatureStateMap,
@@ -78,7 +77,7 @@ export interface FeatureStateApi {
   get(keys?: NativeLayerFeatureKeys): NativeLayerFeatureStateMap;
 }
 
-export interface CreateFeatureStateApiInput {
+export interface CreateFeatureStateApiInput<Handle = NativeLayerHandle> {
   /**
    * **当前会话**（Driver + 句柄）的取值器；未就绪（或已释放）时返回 `null`。
    *
@@ -89,9 +88,9 @@ export interface CreateFeatureStateApiInput {
    * - 命令面通常在 `onMounted` **之前**就被 expose 出去了（父级 ref 一拿到就可能调用），而那时
    *   连 Driver 都还没解析出来。
    */
-  session(): FeatureStateSession | null;
+  session(): FeatureStateSession<Handle> | null;
   /**
-   * **业务身份字段名**（构造期 `idKey`）的取值器；没表态时返回 `undefined`。
+   * **业务身份字段名**（构造期 `idKey` / MVT 的 `idProperty`）的取值器；没表态时返回 `undefined`。
    *
    * 身份未知时命令一律被拒绝（告警一次）——「按 id 定位」在没有身份字段的图层上没有意义，
    * 而放它过去就等价于悄悄依赖 SDK 的默认 `idKey`：同一个组件会在拾取上说「认不出身份」，
@@ -100,12 +99,52 @@ export interface CreateFeatureStateApiInput {
   identity(): string | undefined;
   /** 调用方名字（组件名）：参数错误与「未就绪」的告警都点名它。 */
   component: string;
+  /**
+   * 身份字段的 prop 名（诊断文案用；默认 `"idKey"`）。
+   *
+   * MVT 的官方构造选项叫 `idProperty`，告警里若仍写 `idKey` 会把调用方指去一个不存在的 prop。
+   */
+  identityProp?: string;
+  /**
+   * 键域收窄。
+   *
+   * - `"default"`（缺省）：`string | number`（#36 NativeLayer 的官方签名）；
+   * - `"string"`：**只收 string**（#109 MVT 的 `updateState(keys: string | Array<string>)`）。
+   *   数字键在任何 SDK 调用之前被拒绝——MVT 的复合键 `layerName_id` 就是 string，
+   *   放行 number 会让「1」与 1 在类型层是两套身份、在 SDK 侧却是同一个槽位。
+   */
+  keyDomain?: "default" | "string";
 }
 
-/** 一次可用的命令会话（两个引用必须来自**同一时刻**，因此一起给，不给两个 getter）。 */
-export interface FeatureStateSession {
-  readonly driver: NativeLayerDriver;
-  readonly handle: NativeLayerHandle;
+/**
+ * 一次可用的命令会话（两个引用必须来自**同一时刻**，因此一起给，不给两个 getter）。
+ *
+ * `Handle` 默认 `NativeLayerHandle`（#36 的线 / 面图层）；`LayerDriver` 的要素状态面
+ * （#109 `mvt`）用 `LayerHandle`，driver 形状由 `FeatureStateCommands` 约束——两侧结构同构，
+ * 因此同一个 `createFeatureStateApi` 实现服务两个 Facet。
+ */
+export interface FeatureStateSession<Handle = NativeLayerHandle> {
+  readonly driver: FeatureStateCommands<Handle>;
+  readonly handle: Handle;
+}
+
+/**
+ * 要素状态五命令的**最小结构**（`NativeLayerDriver` 与 `LayerDriver` 都满足它）。
+ *
+ * 刻意不写成 `NativeLayerDriver`：那是 #36 专属的宽接口；`mvt` 的句柄品牌是
+ * `layer:mvt` 而不是 `native-layer:*`，用宽接口会迫使调用方做不安全断言。
+ */
+export interface FeatureStateCommands<Handle> {
+  updateState(
+    handle: Handle,
+    keys: NativeLayerFeatureKeys,
+    state: NativeLayerFeatureState,
+    append?: boolean,
+  ): void;
+  removeState(handle: Handle, keys: NativeLayerFeatureKeys): void;
+  clearState(handle: Handle): void;
+  replaceState(handle: Handle, inputs: NativeLayerFeatureStateMap): void;
+  getState(handle: Handle): NativeLayerFeatureStateMap;
 }
 
 /* ------------------------------------------------------------------ 校验 */
@@ -128,12 +167,27 @@ function isUsableId(value: unknown): value is string | number {
   return typeof value === "string";
 }
 
-/** 归一化 keys：单个 id 或一批 id。空数组是合法的（= 什么都不做）。 */
-function normalizeKeys(component: string, keys: unknown): Array<string | number> {
+/**
+ * 归一化 keys：单个 id 或一批 id。空数组是合法的（= 什么都不做）。
+ *
+ * `keyDomain: "string"` 时数字键在任何 SDK 调用之前被拒绝（#109 MVT 的官方签名只收 string）。
+ */
+function normalizeKeys(
+  component: string,
+  keys: unknown,
+  keyDomain: "default" | "string" = "default",
+): Array<string | number> {
   const list = Array.isArray(keys) ? keys : [keys];
   const normalized: Array<string | number> = [];
   for (let index = 0; index < list.length; index += 1) {
     const candidate = list[index];
+    if (keyDomain === "string" && typeof candidate !== "string") {
+      throw invalidArgument(
+        component,
+        `feature state 的 id 必须是字符串（MVT 复合键 layerName_id），` +
+          `实际下标 ${index} 是 ${describeValue(candidate)}`,
+      );
+    }
     if (!isUsableId(candidate)) {
       throw invalidArgument(
         component,
@@ -163,7 +217,10 @@ function normalizeState(component: string, state: unknown): NativeLayerFeatureSt
  * 映射里的**每一个键**都要过身份判定：官方把它当成「一批要素的状态」而不是「一个对象的属性
  * 集合」，混进一个不可用的键只会让那一项静默失效。
  */
-function normalizeStateMap(component: string, inputs: unknown): NativeLayerFeatureStateMap {
+function normalizeStateMap(
+  component: string,
+  inputs: unknown,
+): NativeLayerFeatureStateMap {
   if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs)) {
     throw invalidArgument(
       component,
@@ -172,6 +229,7 @@ function normalizeStateMap(component: string, inputs: unknown): NativeLayerFeatu
   }
   const normalized: NativeLayerFeatureStateMap = {};
   for (const [key, state] of Object.entries(inputs as Record<string, unknown>)) {
+    // Object.entries 的键在 JS 层永远是 string，keyDomain 对这条路径没有可拒的形态。
     if (!isUsableId(key)) throw invalidArgument(component, `replace 的映射键 "${key}" 不是合法 id`);
     normalized[key] = { ...normalizeState(component, state) };
   }
@@ -194,8 +252,10 @@ function describeValue(value: unknown): string {
 
 /* ------------------------------------------------------------------ 命令面 */
 
-export function createFeatureStateApi(input: CreateFeatureStateApiInput): FeatureStateApi {
-  const { component } = input;
+export function createFeatureStateApi<Handle = NativeLayerHandle>(
+  input: CreateFeatureStateApiInput<Handle>,
+): FeatureStateApi {
+  const { component, identityProp = "idKey", keyDomain = "default" } = input;
   /**
    * 告警去重**按命令面实例**而不是模块级：同一个组件挂两个实例时，模块级的键会让第二个实例的
    * 「未就绪」告警被第一个吞掉（而那正是它需要看到的信息）。
@@ -223,16 +283,16 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
   const noIdentity = (command: FeatureStateCommand): void => {
     warnOnce(
       `${component}:${command}:no-identity`,
-      `[${component}] ${command}() 需要一个业务身份字段，而本组件没有声明 idKey：` +
+      `[${component}] ${command}() 需要一个业务身份字段，而本组件没有声明 ${identityProp}：` +
         "本次不做任何事——本库不猜 SDK 的默认 idKey（拾取在同样情况下也只会给出 id: null）。" +
-        "请设置 idKey 后重试",
+        `请设置 ${identityProp} 后重试`,
     );
   };
 
   /**
    * 命令的统一前置：会话与身份都就绪才继续。返回 `null` = 本次不执行（原因已经告警过）。
    */
-  const guard = (command: FeatureStateCommand): FeatureStateSession | null => {
+  const guard = (command: FeatureStateCommand): FeatureStateSession<Handle> | null => {
     const session = input.session();
     if (!session) {
       notReady(command);
@@ -247,7 +307,7 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
 
   return {
     update(keys, state, options) {
-      const ids = normalizeKeys(component, keys);
+      const ids = normalizeKeys(component, keys, keyDomain);
       const params = normalizeState(component, state);
       if (ids.length === 0) return;
       const session = guard("update");
@@ -256,7 +316,7 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
     },
 
     remove(keys) {
-      const ids = normalizeKeys(component, keys);
+      const ids = normalizeKeys(component, keys, keyDomain);
       if (ids.length === 0) return;
       const session = guard("remove");
       if (!session) return;
@@ -277,12 +337,16 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
     },
 
     get(keys) {
+      // 先归一化 keys：非法键（含 keyDomain: "string" 下的数字）必须在任何 SDK 调用之前失败，
+      // 与 update / remove 同一条口径——否则 get([bad]) 会先打一次 getAllState 再抛。
+      const wantedIds =
+        keys === undefined ? null : normalizeKeys(component, keys, keyDomain).map((id) => String(id));
       const session = guard("get");
       if (!session) return {};
       const all = session.driver.getState(session.handle);
-      if (keys === undefined) return all;
+      if (wantedIds === null) return all;
       // 过滤口径与写入一致：`String(id)`（SDK 的映射键就是 id 的字符串形式）
-      const wanted = new Set(normalizeKeys(component, keys).map((id) => String(id)));
+      const wanted = new Set(wantedIds);
       const picked: NativeLayerFeatureStateMap = {};
       for (const [key, state] of Object.entries(all)) {
         if (wanted.has(key)) picked[key] = state;
@@ -290,4 +354,18 @@ export function createFeatureStateApi(input: CreateFeatureStateApiInput): Featur
       return picked;
     },
   };
+}
+
+/**
+ * MVT 要素状态的**复合键**：`layerName_id`（#109 live 探针实测的唯一有效键形）。
+ *
+ * 裸 id（`"1"` / `"feat-1"`）在真实 4.0 上只产生噪声级 Δ（探针读数：Δ87B vs 复合键 Δ2578B）。
+ * `layerName` 是**源图层名**（MVT 数据里的 source-layer），不是地图上某一个 `Map` 的名字；
+ * `id` 是该源图层里要素的身份（通常来自 `idProperty` 字段值，或拾取事件的 `Entity.id`）。
+ *
+ * 导出这一小段拼接而不是让调用方手写 `` `${a}_${b}` ``：键形一旦要变（例如上游改成 `:`），
+ * 调用点只应有一处要改。
+ */
+export function mvtFeatureStateKey(layerName: string, id: string | number): string {
+  return `${layerName}_${id}`;
 }

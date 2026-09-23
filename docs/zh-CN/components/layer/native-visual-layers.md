@@ -171,4 +171,4 @@ function highlight(id: string) {
 - **`BTrackLineLayer` 只是基线**：播放控制（`start` / `pause` / `resume` / `stop`）与页面可见性联动
   **未实现**——官方类型包没有 `TrackLine` 的类声明，方法名必须先由真实运行时探针取证；本库也不会
   另建一套「镜像 SDK 播放状态」的内部状态机。该组件不依赖旧的 `BMapGLLib.TrackAnimation` 插件。
-- **`BMVTLayer` 尚未提供**（见 ADR 的欠账表）。
+- **`BMVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[BMVTLayer](./mvt-layer.md)」。

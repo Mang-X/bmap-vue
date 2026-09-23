@@ -275,6 +275,12 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/BRasterLayer.vue",
   },
+  {
+    name: "BMVTLayer",
+    exportName: "BMVTLayer",
+    category: "layer",
+    source: "./components/layers/BMVTLayer.vue",
+  },
   // M6 / issue #36：原生批量可视化图层（数据驱动，走 NativeLayerDriver 而不是 LayerDriver）。
   {
     name: "BLineLayer",

@@ -451,6 +451,108 @@ export class FakeV4WMSLayer extends FakeV4StandardTileLayer {}
 export class FakeV4WMTSLayer extends FakeV4StandardTileLayer {}
 
 /**
+ * MVT 矢量瓦片图层（官方 `MVTLayer`，#109）。
+ *
+ * 成员按 **live 探针 + d.ts** 双向建模（不按「和 TileLayer 一样」的猜测）：
+ * - d.ts：`updateState` / `clearState` / `setStyle` / `setZIndex` / `getZIndex` /
+ *   `setZIndexTop` / `setUpLevel` / `setDownLevel` / `addEventListener` / `removeEventListener`；
+ * - 探针原型扩展：`removeState` / `replaceAllState` / `getAllState`；
+ * - 探针**不存在**：`setData` / `clearData` / `setOpacity` / `setVisible` / `setMinZoom` /
+ *   `setMaxZoom` —— Fake 刻意**不**提供它们，以便「能力面双向一致」用例锁住。
+ *
+ * `isTileLayer = true`：挂载走统一 `map.addLayer`（探针确认壳有该家族标志）。
+ */
+export class FakeV4MVTLayer extends FakeV4Layer {
+  readonly isTileLayer = true
+  zIndex: number | null = null
+  appliedStyle: Record<string, unknown> | null = null
+  /** 要素状态（复合键 `layerName_id` → 状态对象）。 */
+  state: Record<string, Record<string, unknown>> = {}
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+  }
+
+  setZIndex(zIndex: number): void {
+    this.callLog.push('setZIndex')
+    this.zIndex = zIndex
+  }
+
+  getZIndex(): number | null {
+    this.callLog.push('getZIndex')
+    return this.zIndex
+  }
+
+  setStyle(style: Record<string, unknown>): void {
+    this.callLog.push('setStyle')
+    this.appliedStyle = { ...style }
+  }
+
+  setZIndexTop(): void {
+    this.callLog.push('setZIndexTop')
+  }
+
+  setUpLevel(): void {
+    this.callLog.push('setUpLevel')
+  }
+
+  setDownLevel(): void {
+    this.callLog.push('setDownLevel')
+  }
+
+  updateState(
+    keys: string | Array<string>,
+    params: Record<string, unknown>,
+    ifAppend?: boolean,
+  ): void {
+    this.callLog.push('updateState')
+    const list = Array.isArray(keys) ? keys : [keys]
+    for (const key of list) {
+      // 官方 MVT 签名 `updateState(keys: string | Array<string>)`：数字键在此拒绝
+      // （替身不得比真实契约宽容，ADR 2026-09-19 决策 7）。
+      if (typeof key !== 'string') {
+        throw new TypeError(`MVTLayer.updateState: keys 只收 string，实际 ${typeof key}`)
+      }
+      if (ifAppend && this.state[key]) {
+        this.state[key] = { ...this.state[key], ...params }
+      } else {
+        this.state[key] = { ...params }
+      }
+    }
+  }
+
+  removeState(keys: string | Array<string>): void {
+    this.callLog.push('removeState')
+    const list = Array.isArray(keys) ? keys : [keys]
+    for (const key of list) {
+      if (typeof key !== 'string') {
+        throw new TypeError(`MVTLayer.removeState: keys 只收 string，实际 ${typeof key}`)
+      }
+      delete this.state[key]
+    }
+  }
+
+  clearState(): void {
+    this.callLog.push('clearState')
+    this.state = {}
+  }
+
+  replaceAllState(inputs: Record<string, Record<string, unknown>>): void {
+    this.callLog.push('replaceAllState')
+    const next: Record<string, Record<string, unknown>> = {}
+    for (const [key, value] of Object.entries(inputs)) next[key] = { ...value }
+    this.state = next
+  }
+
+  getAllState(): Record<string, Record<string, unknown>> {
+    this.callLog.push('getAllState')
+    const snapshot: Record<string, Record<string, unknown>> = {}
+    for (const [key, value] of Object.entries(this.state)) snapshot[key] = { ...value }
+    return snapshot
+  }
+}
+
+/**
  * GeoJSON 覆盖物组合图层（官方 `GeoJSONLayer`）。
  *
  * 官方构造签名是 `(layerName, options)`——**首参是图层名而不是选项**。Fake 如实建模（首参
