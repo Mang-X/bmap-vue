@@ -25,7 +25,8 @@
  * **默认行为**是——页面 hidden 时只停掉**本库自己的观察**（不再更新 `observed`），**不**改写
  * 业务播放意图（SDK 继续播）。自动 pause/resume 是**显式 opt-in**（`pauseOnHidden` prop），
  * 不是基础默认：opt-in 打开时，hidden 触发 `pause()`、shown 恢复 `resume()`，且只在
- * 「本次是因 visibility 暂停的」时才 resume（用户自己 pause 过的不被 visibility 抢走）。
+ * 「本次是因 visibility 暂停的**且 handle 仍是那一代**」时才 resume（用户自己 pause 过的
+ * 不被 visibility 抢走；hidden 期间换实例也不对新实例补 resume）。
  *
  * 不依赖旧的 `BMapGLLib.TrackAnimation` 插件，也不触碰它的任何私有字段。
  */
@@ -38,6 +39,7 @@ import type {
   BTrackLineObserved,
 } from "../../types/components";
 import type { NativeLayerBindInput } from "../../core/composables/useNativeLayerResource";
+import type { NativeLayerHandle } from "../../driver/types/native-layers";
 
 const props = withDefaults(defineProps<BTrackLineLayerProps>(), {
   visible: true,
@@ -75,12 +77,16 @@ function readTrackLineEventValue(raw: unknown): Record<string, unknown> | null {
 /** 可见性观察是否处于「暂停观察」（默认策略：hidden 只停观察，不改 SDK 播放意图）。 */
 let observing = true;
 /**
- * `pauseOnHidden` opt-in 下，「本次 pause 是 visibility 发起的」——shown 时只在这种情况下 resume。
+ * `pauseOnHidden` opt-in 下，visibility 发起 pause 时**被 pause 的那个 handle**（`null` = 没有）。
+ *
+ * 绑定到 handle 而不是布尔量：`visible` 翻转 / `data: null` 等路径会换实例，hidden 期间资源
+ * 重建后 shown 时若仍按「有账就 resume」，会把 `resume()` 打到**从未被 visibility pause 的新
+ * 实例**上（跨代误发）。shown 时只在「当前 session 的 handle 还是这一个」才 resume，否则直接清账。
  *
  * 与 `userPaused` 分开记账：用户自己 pause 过的不能被 visibility 的 resume 抢走
  * （用户意图优先，与 `useMapSuspension` 的同一条口径）。
  */
-let pausedByVisibility = false;
+let visibilityPausedHandle: NativeLayerHandle | null = null;
 /** 用户**显式** pause 过、尚未 resume/stop——visibility 不得替用户 resume。 */
 let userPaused = false;
 
@@ -154,7 +160,7 @@ const playback = {
   },
   pause() {
     userPaused = true;
-    pausedByVisibility = false;
+    visibilityPausedHandle = null;
     playbackInternal.pause();
   },
   resume() {
@@ -176,7 +182,7 @@ const playback = {
 /** 用户命令（start/resume/stop）清掉两本可见性/用户意图账——pause 与 visibility 路径各自记账。 */
 function clearPlaybackIntent(): void {
   userPaused = false;
-  pausedByVisibility = false;
+  visibilityPausedHandle = null;
 }
 
 /** 页面可见性：默认只停/恢复**观察**；`pauseOnHidden` 才碰 SDK 播放。 */
@@ -185,17 +191,23 @@ function applyVisibility(hidden: boolean): void {
     observing = false;
     if (props.pauseOnHidden && !userPaused) {
       // 用户已经 pause 过 ⇒ 不碰（他们的意图优先）；只有「还能拿到会话」才记 visibility 暂停
-      if (resource.session()) {
+      const session = resource.session();
+      if (session) {
         playbackInternal.pause();
-        pausedByVisibility = true;
+        visibilityPausedHandle = session.handle;
       }
     }
     return;
   }
   observing = true;
-  if (props.pauseOnHidden && pausedByVisibility) {
-    pausedByVisibility = false;
-    playbackInternal.resume();
+  if (props.pauseOnHidden && visibilityPausedHandle) {
+    // 只恢复**本次由 visibility 暂停的那一代**：hidden 期间重建 ⇒ handle 已换，清账不 resume
+    const session = resource.session();
+    const sameHandle = session != null && session.handle === visibilityPausedHandle;
+    visibilityPausedHandle = null;
+    if (sameHandle) {
+      playbackInternal.resume();
+    }
   }
 }
 

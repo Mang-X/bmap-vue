@@ -16,7 +16,7 @@
 | `ref.playback` | 六条命令：`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`。参数在 SDK 调用**之前**校验（`BMAP_INVALID_ARGUMENT`）；未就绪告警一次并跳过（不排队） |
 | `ref.observed` | 事件派生的只读读数（`process` / `elapsed` / `distance` / `point` / `angle` + `status` / `statusName`）。**不是**内部播放状态机 |
 | `@progress` / `@statuschange` | 与 `observed` 同源的组件事件 |
-| `pauseOnHidden`（prop，默认 `false`） | 页面 hidden 时的可见性策略：**默认只停本库自己的观察**（SDK 继续播，探针实测）；opt-in 才自动 pause/resume，且**用户自己 pause 过的不被 visibility 抢走** |
+| `pauseOnHidden`（prop，默认 `false`） | 页面 hidden 时的可见性策略：**默认只停本库自己的观察**（SDK 继续播，探针实测）；opt-in 才自动 pause/resume，且**用户自己 pause 过的不被 visibility 抢走**；visibility 暂停记账绑 handle——hidden 期间换实例后 shown 只清账、不对新实例补 resume |
 
 **驱动层**：`NativeLayerDriver` 增加六条归一化方法（与 Fake v4 的 `FakeV4TrackLine` 一一对应）；
 `NativeLayerOperation` 相应扩充 `track-line` 的登记操作。

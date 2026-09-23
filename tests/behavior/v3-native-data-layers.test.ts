@@ -841,6 +841,46 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       setVisibility("visible");
       harness.assertIdle("轨迹线 pauseOnHidden");
     });
+
+    it("pauseOnHidden：hidden 期间重建后 shown 不对新实例发 resume（记账绑 handle）", async () => {
+      const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true, visible: true });
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as {
+        playback: { start(): void };
+      };
+
+      exposed.playback.start();
+      expect(lastRawTrackLine().playing).toBe(true);
+
+      // hidden：对实例 A 做 visibility pause，并记下 A 的 handle
+      setVisibility("hidden");
+      const rawA = lastRawTrackLine();
+      expect(rawA.playing, "opt-in 下 hidden 触发 pause").toBe(false);
+      const createdBeforeRebuild = createdSince();
+
+      // 仍 hidden 时换实例：TrackLine 没有 setVisible ⇒ 重新可见必须换一代（#98 实测口径）
+      props.value = { ...props.value, visible: false };
+      await settle();
+      expect(harness.attached("layer"), "hidden 期间先摘掉").toBe(0);
+      props.value = { ...props.value, visible: true };
+      await settle();
+      expect(createdSince(), "hidden 期间确实发生了重建").toBe(createdBeforeRebuild + 1);
+
+      const rawB = lastRawTrackLine();
+      expect(rawB, "rebuild 后拿到的是新一代实例").not.toBe(rawA);
+      expect(rawB.playing, "新实例默认未在播").toBe(false);
+
+      // shown：handle 已换 ⇒ 只清 visibility 账，不把 resume 打到 B 上
+      setVisibility("visible");
+      expect(rawB.playing, "新实例从未被 visibility pause，不得 resume").toBe(false);
+      expect(rawB.callLog, "新实例 callLog 里不得出现 resume").not.toContain("resume");
+
+      await unmountAndSettle(wrapper);
+      setVisibility("visible");
+      harness.assertIdle("轨迹线 hidden 重建");
+    });
   });
 
   describe("§6 样式里的函数：换实现不触发写，但 SDK 侧调用到新实现", () => {
