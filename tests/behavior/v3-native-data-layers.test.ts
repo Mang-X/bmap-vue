@@ -881,6 +881,57 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       setVisibility("visible");
       harness.assertIdle("轨迹线 hidden 重建");
     });
+
+    it("pauseOnHidden：start → stop → hidden → visible 不得被反向启动（命令意图）", async () => {
+      const wrapper = mountLayerTree(() =>
+        h(BTrackLineLayer, { data: TRACK, pauseOnHidden: true }),
+      );
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as {
+        playback: { start(): void; stop(): void };
+      };
+      const raw = lastRawTrackLine();
+
+      exposed.playback.start();
+      exposed.playback.stop();
+      expect(raw.playing, "显式 stop 后不播").toBe(false);
+
+      // stop 后 playingIntent=false ⇒ visibility 不得 pause/resume
+      setVisibility("hidden");
+      expect(raw.callLog, "stop 后 hidden 不该再发 pause").not.toContain("pause");
+      setVisibility("visible");
+      expect(raw.playing, "start → stop → hidden → visible 不得重新播放").toBe(false);
+      expect(raw.callLog, "shown 不得对已 stop 的实例发 resume").not.toContain("resume");
+
+      await unmountAndSettle(wrapper);
+      setVisibility("visible");
+      harness.assertIdle("轨迹线 stop 后可见性");
+    });
+
+    it("pauseOnHidden：从未 start 的 idle 实例 hidden/visible 不碰播放命令", async () => {
+      const wrapper = mountLayerTree(() =>
+        h(BTrackLineLayer, { data: TRACK, pauseOnHidden: true }),
+      );
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as Record<string, never>;
+      void exposed;
+
+      const raw = lastRawTrackLine();
+      expect(raw.playing, "初始 idle").toBe(false);
+      expect(raw.callLog, "挂载后无播放命令").not.toContain("start");
+
+      setVisibility("hidden");
+      expect(raw.callLog, "idle 不被 visibility pause").not.toContain("pause");
+      setVisibility("visible");
+      expect(raw.playing, "idle 不被 visibility resume 启动").toBe(false);
+      expect(raw.callLog, "idle 的 callLog 里不得出现 resume").not.toContain("resume");
+
+      await unmountAndSettle(wrapper);
+      setVisibility("visible");
+      harness.assertIdle("轨迹线 idle 可见性");
+    });
   });
 
   describe("§6 样式里的函数：换实现不触发写，但 SDK 侧调用到新实现", () => {

@@ -24,9 +24,10 @@
  * live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 继续推进）。因此本组件的
  * **默认行为**是——页面 hidden 时只停掉**本库自己的观察**（不再更新 `observed`），**不**改写
  * 业务播放意图（SDK 继续播）。自动 pause/resume 是**显式 opt-in**（`pauseOnHidden` prop），
- * 不是基础默认：opt-in 打开时，hidden 触发 `pause()`、shown 恢复 `resume()`，且只在
- * 「本次是因 visibility 暂停的**且 handle 仍是那一代**」时才 resume（用户自己 pause 过的
- * 不被 visibility 抢走；hidden 期间换实例也不对新实例补 resume）。
+ * 不是基础默认：opt-in 打开时，hidden 仅对「**命令意图仍在播放**」的实例 `pause()`、shown 恢复
+ * `resume()`，且只在「本次是因 visibility 暂停的**且 handle 仍是那一代**」时才 resume——
+ * 用户自己 pause/stop 过或从未 start 的不被 visibility 反向启动；hidden 期间换实例也不对新实例
+ * 补 resume（命令意图只记「用户期望是否在播」，**不**镜像 SDK 状态机）。
  *
  * 不依赖旧的 `BMapGLLib.TrackAnimation` 插件，也不触碰它的任何私有字段。
  */
@@ -83,12 +84,15 @@ let observing = true;
  * 重建后 shown 时若仍按「有账就 resume」，会把 `resume()` 打到**从未被 visibility pause 的新
  * 实例**上（跨代误发）。shown 时只在「当前 session 的 handle 还是这一个」才 resume，否则直接清账。
  *
- * 与 `userPaused` 分开记账：用户自己 pause 过的不能被 visibility 的 resume 抢走
- * （用户意图优先，与 `useMapSuspension` 的同一条口径）。
+ * 与 `playingIntent` 分开记账：用户 pause/stop 后 visibility 不得替用户 resume。
  */
 let visibilityPausedHandle: NativeLayerHandle | null = null;
-/** 用户**显式** pause 过、尚未 resume/stop——visibility 不得替用户 resume。 */
-let userPaused = false;
+/**
+ * **命令意图**：用户是否期望这条轨迹在播（`start`/`resume` ⇒ true；`pause`/`stop` ⇒ false；
+ * 初始 false）。只记调用方发过的命令，**不**读 SDK 事件、不镜像 `idle/running/paused` 状态机
+ * （#110：SDK 是唯一真值源；#132 P2：`stop()`/idle 不能被 visibility 的 pause→resume 反向启动）。
+ */
+let playingIntent = false;
 
 const { resource } = useVisualLayer<BTrackLineLayerProps>(props, {
   kind: "track-line",
@@ -148,27 +152,26 @@ const playbackInternal = createTrackLinePlaybackApi({
 });
 
 /**
- * 暴露给调用方的播放命令面：在内部命令面之上记账**用户意图**（`userPaused`）。
+ * 暴露给调用方的播放命令面：在内部命令面之上记账**命令意图**（`playingIntent`）。
  *
  * visibility 的 pause/resume 走 `playbackInternal`，**不**经过这一层——否则「visibility 暂停」
- * 会被误记成「用户暂停」，或反过来（#110 的 opt-in 硬约束）。
+ * 会被误记成用户意图，或反过来（#110 的 opt-in 硬约束）。
  */
 const playback = {
   start() {
-    clearPlaybackIntent();
+    setPlayingIntent(true);
     playbackInternal.start();
   },
   pause() {
-    userPaused = true;
-    visibilityPausedHandle = null;
+    setPlayingIntent(false);
     playbackInternal.pause();
   },
   resume() {
-    clearPlaybackIntent();
+    setPlayingIntent(true);
     playbackInternal.resume();
   },
   stop() {
-    clearPlaybackIntent();
+    setPlayingIntent(false);
     playbackInternal.stop();
   },
   setSpeed(speed: number) {
@@ -179,9 +182,12 @@ const playback = {
   },
 } as const;
 
-/** 用户命令（start/resume/stop）清掉两本可见性/用户意图账——pause 与 visibility 路径各自记账。 */
-function clearPlaybackIntent(): void {
-  userPaused = false;
+/**
+ * 用户命令更新播放意图，并清掉 visibility 暂停账（新命令之后，旧 handle 上的 visibility
+ * pause 不再授权 resume）。
+ */
+function setPlayingIntent(wantsPlay: boolean): void {
+  playingIntent = wantsPlay;
   visibilityPausedHandle = null;
 }
 
@@ -189,8 +195,8 @@ function clearPlaybackIntent(): void {
 function applyVisibility(hidden: boolean): void {
   if (hidden) {
     observing = false;
-    if (props.pauseOnHidden && !userPaused) {
-      // 用户已经 pause 过 ⇒ 不碰（他们的意图优先）；只有「还能拿到会话」才记 visibility 暂停
+    // 只暂停**命令意图仍在播放**的实例：stop/idle/用户 pause 不被 visibility 反向启动
+    if (props.pauseOnHidden && playingIntent) {
       const session = resource.session();
       if (session) {
         playbackInternal.pause();
@@ -201,11 +207,12 @@ function applyVisibility(hidden: boolean): void {
   }
   observing = true;
   if (props.pauseOnHidden && visibilityPausedHandle) {
-    // 只恢复**本次由 visibility 暂停的那一代**：hidden 期间重建 ⇒ handle 已换，清账不 resume
+    // 只恢复**本次由 visibility 暂停的那一代**，且意图仍要求在播：
+    // hidden 期间重建 ⇒ handle 已换；hidden 期间 stop/pause ⇒ 意图已变——都只清账不 resume
     const session = resource.session();
     const sameHandle = session != null && session.handle === visibilityPausedHandle;
     visibilityPausedHandle = null;
-    if (sameHandle) {
+    if (sameHandle && playingIntent) {
       playbackInternal.resume();
     }
   }
