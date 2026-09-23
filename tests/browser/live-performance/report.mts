@@ -29,13 +29,24 @@ export const LIVE_PERF_LAYERS = ["pointCollection", "line", "fill"] as const;
 export type LivePerfLayer = (typeof LIVE_PERF_LAYERS)[number];
 
 /** 读数族（issue 目标 1~3；对照表由 Node 侧拼 Fake 基线）。 */
-export const LIVE_PERF_FAMILIES = ["firstFrame", "setData", "longTask", "fps"] as const;
+export const LIVE_PERF_FAMILIES = [
+  "firstFrame",
+  "setData",
+  "redraw",
+  "sdkSetData",
+  "longTask",
+  "fps",
+] as const;
 export type LivePerfFamily = (typeof LIVE_PERF_FAMILIES)[number];
 
 export interface LivePerfSample {
-  /** 单次同步耗时（毫秒）。`setData` 族 = SDK 调用返回；`firstFrame` 族 = prop → 可交互。 */
+  /**
+   * 单次窗口耗时（毫秒）。口径见 `main.ts` 文件头「计时协议」表：
+   * `setData` = 赋值 → settle（**Fake 对照窗**）；`redraw` = settle → paint；
+   * `firstFrame` = 该图层独立 mount → 可交互。
+   */
   durationMs: number;
-  /** 本轮 `PerformanceObserver` 在该窗口内记到的 long task 条数。 */
+  /** 本轮 `PerformanceObserver` 在**该窗口**内记到的 long task 条数（分窗、不跨窗）。 */
   longTaskCount: number;
   /** 窗口内最长 long task（毫秒）；无则为 0。 */
   longestTaskMs: number;
@@ -45,11 +56,21 @@ export interface LivePerfLayerReadings {
   layer: LivePerfLayer;
   /** 数据量（issue 固定 50k）。 */
   size: number;
-  /** 首帧：`setData` 提交 → 画面可交互（rAF + 下一帧 paint 边界）。 */
+  /** 首帧：**本图层独立挂载**的 mount → 画面可交互（不是三图层联合值的复制）。 */
   firstFrame: LivePerfSample;
-  /** 换数据：再次 `setData` 的墙钟（我们这一侧 + SDK 调用返回）。 */
+  /**
+   * 换数据 · Fake 对照窗：预生成数据的 `setItems` → settle（≈ Fake `data.replace.*`）。
+   * **只有这一族进 `buildFakeContrast`**。
+   */
   setData: LivePerfSample;
-  /** 换数据窗口的 FPS 采样（0~1 之间的均值，或 `null` = 本轮没采到）。 */
+  /** 换数据 · paint 窗：settle 之后 → 2×rAF（端到端 redraw，不进 Fake 对照）。 */
+  redraw: LivePerfSample;
+  /**
+   * 原生 `prototype.setData` 返回墙钟（ms）；本轮没进原生调用则 `null`。
+   * **不进 Fake 对照**（Fake 没有可包装的真实类）。
+   */
+  sdkSetDataMs: number | null;
+  /** 换数据后的 **真实 FPS**（frames/second，不是 ÷60 比值；`null` = 没采到）。 */
   fps: number | null;
 }
 
@@ -160,9 +181,12 @@ export interface FakeContrastSource {
 /**
  * Fake 对照拼表：同一图层的 live 读数与 Fake 基线并排。
  *
- * `ours` = live 的 `setData.durationMs`（我们这一侧 + SDK 调用）；`fake` = Fake 基线里
- * 同规模 `setData.replace@*` / `data.replace.*` 的 `minMs`。差值量级 ≈ SDK 内部成本
- * （issue 目标：把「我们这一侧」与「SDK 内部」分开）。
+ * `ours` **只取 `setData` 族**（赋值 → settle，与 Fake `data.value = second + settle()` 同边界）；
+ * `redraw` / `sdkSetDataMs` 不进本表——它们的窗口与 Fake 不同，混进 delta 会把 rAF / 原生包装
+ * 算成「SDK 内部成本」（#131 评审第 1 条）。
+ *
+ * `fake` = Fake 基线里同规模 `setData.replace@*` / `data.replace.*` 的 `minMs`。
+ * 差值**量级参考**「我们这一侧之外多出来的成本」（含真实 SDK 调用），不是严格单因归因。
  */
 export function buildFakeContrast(
   readings: readonly LivePerfLayerReadings[],
@@ -174,6 +198,8 @@ export function buildFakeContrast(
   fakeSetDataMs: number | null;
   /** `live - fake`（负数表示 live 更快，如实记录，不夹逼）。 */
   deltaMs: number | null;
+  /** 同一次运行的原生 `setData` 返回墙钟（无包装 / 未触发 ⇒ `null`）；不参与 delta。 */
+  liveSdkSetDataMs: number | null;
 }> {
   const fakeKey = (layer: LivePerfLayer, size: number): string =>
     layer === "pointCollection" ? `setData.replace@${size}` : `data.replace.${layer}@${size}`;
@@ -186,6 +212,7 @@ export function buildFakeContrast(
       liveSetDataMs: round(entry.setData.durationMs),
       fakeSetDataMs: fakeMs === null ? null : round(fakeMs),
       deltaMs: fakeMs === null ? null : round(entry.setData.durationMs - fakeMs),
+      liveSdkSetDataMs: entry.sdkSetDataMs === null ? null : round(entry.sdkSetDataMs),
     };
   });
 }
@@ -211,8 +238,10 @@ function sampleCell(sample: LivePerfSample): string {
 /**
  * 人读报告：**page 与 node 两段分开**（issue 测试要求「页面侧读数与 Node 侧读数分开报告」）。
  *
- * - `page` 段：浏览器内测到的 4 类读数 × 3 图层 + 环境（浏览器 / 数据集版本 / 规模）；
- * - `node` 段：信封、退出码、Fake 对照拼表（Node 侧读的 Fake 基线）。
+ * - `page` 段：浏览器内测到的逐图层窗口（firstFrame / setData / redraw / sdkSetData）+ 环境；
+ * - `node` 段：信封、退出码、Fake 对照拼表（Node 侧读的 Fake 基线，含 sdk 旁路列）。
+ *
+ * 语义提醒（#131 第 5 条）：`fps` 列是 **frames/second**，不是 0~1 比值。
  */
 export function formatLivePerfReport(input: {
   report: LivePerfReport;
@@ -239,20 +268,26 @@ export function formatLivePerfReport(input: {
   lines.push(
     `${"layer".padEnd(18)}${"family".padEnd(12)}durationMs${"tasks".padStart(8)}${"longest".padStart(12)}${"fps".padStart(8)}`,
   );
+  const row = (
+    layerPad: string,
+    family: string,
+    s: LivePerfSample,
+    fpsCell: string,
+  ): string =>
+    `${layerPad}${family.padEnd(12)}` +
+    `${String(round(s.durationMs)).padStart(10)}` +
+    `${String(s.longTaskCount).padStart(8)}` +
+    `${String(round(s.longestTaskMs)).padStart(12)}` +
+    `${fpsCell.padStart(8)}`;
   for (const entry of report.readings) {
+    const fpsCell = entry.fps === null ? "-" : String(round(entry.fps, 2));
+    lines.push(row(entry.layer.padEnd(18), "firstFrame", entry.firstFrame, "-"));
+    lines.push(row("".padEnd(18), "setData", entry.setData, fpsCell));
+    lines.push(row("".padEnd(18), "redraw", entry.redraw, "-"));
     lines.push(
-      `${entry.layer.padEnd(18)}${"firstFrame".padEnd(12)}` +
-        `${String(round(entry.firstFrame.durationMs)).padStart(10)}` +
-        `${String(entry.firstFrame.longTaskCount).padStart(8)}` +
-        `${String(round(entry.firstFrame.longestTaskMs)).padStart(12)}` +
-        `${"-".padStart(8)}`,
-    );
-    lines.push(
-      `${"".padEnd(18)}${"setData".padEnd(12)}` +
-        `${String(round(entry.setData.durationMs)).padStart(10)}` +
-        `${String(entry.setData.longTaskCount).padStart(8)}` +
-        `${String(round(entry.setData.longestTaskMs)).padStart(12)}` +
-        `${entry.fps === null ? "-".padStart(8) : String(round(entry.fps, 3)).padStart(8)}`,
+      `${"".padEnd(18)}${"sdkSetData".padEnd(12)}` +
+        `${(entry.sdkSetDataMs === null ? "-" : String(round(entry.sdkSetDataMs))).padStart(10)}` +
+        `${"-".padStart(8)}${"-".padStart(12)}${"-".padStart(8)}`,
     );
   }
   lines.push("");
@@ -265,14 +300,15 @@ export function formatLivePerfReport(input: {
   if (input.contrast && input.contrast.length > 0) {
     lines.push("--- node: fake contrast (ours vs Fake baseline) ---");
     lines.push(
-      `${"layer".padEnd(18)}${"size".padStart(7)}${"liveSetData".padStart(12)}${"fakeSetData".padStart(12)}${"delta".padStart(10)}`,
+      `${"layer".padEnd(18)}${"size".padStart(7)}${"liveSetData".padStart(12)}${"fakeSetData".padStart(12)}${"delta".padStart(10)}${"sdkSetData".padStart(12)}`,
     );
     for (const row of input.contrast) {
       lines.push(
         `${row.layer.padEnd(18)}${String(row.size).padStart(7)}` +
           `${String(row.liveSetDataMs).padStart(12)}` +
           `${row.fakeSetDataMs === null ? "-".padStart(12) : String(row.fakeSetDataMs).padStart(12)}` +
-          `${row.deltaMs === null ? "-".padStart(10) : String(row.deltaMs).padStart(10)}`,
+          `${row.deltaMs === null ? "-".padStart(10) : String(row.deltaMs).padStart(10)}` +
+          `${row.liveSdkSetDataMs === null ? "-".padStart(12) : String(row.liveSdkSetDataMs).padStart(12)}`,
       );
     }
     lines.push("");

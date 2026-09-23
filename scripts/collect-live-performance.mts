@@ -229,26 +229,42 @@ function readFakeBaseline(): { metrics: Record<string, { minMs?: number } | unde
   }
 }
 
+/**
+ * 失败通道：**抛出**而不是 `process.exit`（#131 评审第 4 条）。
+ *
+ * `fail()` 若直接 `process.exit`，`VITE_NOT_READY` / `REPORT_MISSING` 发生在 vite/chrome
+ * 已启动之后时会绕过 `finally → shutdown()`，留下孤儿进程；`resolveBrowser` / `mkdtempSync`
+ * 若放在 `try` 外，抛错还会落到 Node 默认 exit 1 —— 破坏「永不返回 1」的合同。
+ * 因此：初始化也进 try；一切失败都变成 `LivePerfFail`，由统一 catch 结算 2/3 并走 finally。
+ */
+class LivePerfFail extends Error {
+  readonly code: 2 | 3;
+  constructor(code: 2 | 3, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 function fail(code: 2 | 3, message: string): never {
-  console.error(redactAk(message));
-  process.exit(code);
+  throw new LivePerfFail(code, message);
 }
 
 async function main(): Promise<void> {
-  if (!ak) {
-    fail(3, "BLOCKED：缺少 AK（`BAIDU_MAP_AK=<ak>` 或 `--ak=<ak>`）。读数采集不是通过。");
-  }
-
-  const browser = resolveBrowser();
-  const userDataDir = mkdtempSync(join(tmpdir(), "perf-live-"));
-  const query = new URLSearchParams({ mode: "live", run: runId, ak, size: String(SIZE) });
-  if (readyMs) query.set("readyMs", readyMs);
-  const url = `http://localhost:${port}/?${query.toString()}`;
   let vite: TrackedChild | null = null;
   let chrome: TrackedChild | null = null;
   let session: CdpSession | null = null;
-
+  let browser = "";
   try {
+    if (!ak) {
+      fail(3, "BLOCKED：缺少 AK（`BAIDU_MAP_AK=<ak>` 或 `--ak=<ak>`）。读数采集不是通过。");
+    }
+
+    browser = resolveBrowser();
+    const userDataDir = mkdtempSync(join(tmpdir(), "perf-live-"));
+    const query = new URLSearchParams({ mode: "live", run: runId, ak, size: String(SIZE) });
+    if (readyMs) query.set("readyMs", readyMs);
+    const url = `http://localhost:${port}/?${query.toString()}`;
+
     vite = spawnTracked(join(repoRoot, "node_modules/.bin/vite"), ["--config", join(pageDir, "vite.config.ts")], {
       cwd: pageDir,
       env: { ...process.env, PROBE_RUN_ID: runId, SMOKE_PORT: String(port) },
@@ -371,13 +387,16 @@ async function main(): Promise<void> {
         ? `CDP 会话在截止时间内未能完成：${error.message}`
         : String((error as Error)?.message ?? error);
     console.error(redactAk(`LIVE_PERF_FAILED：${reason}`));
-    process.exitCode = 2;
+    // `LivePerfFail` 保留自己的 2/3（缺 AK = blocked 3，不是脚手架 2）；
+    // 其它意外错误按脚手架失败 2 —— 任何路径都不落 1（见文件头退出码合同）。
+    process.exitCode = error instanceof LivePerfFail ? error.code : 2;
     // `--keep` 时 finally 不杀子进程 ⇒ 事件循环被 stdio 钉住、永远不退出（实测）。
     // 错误路径同样显式收口。
     if (hasFlag("keep")) {
       for (const tracked of [chrome, vite]) tracked?.child.unref?.();
       session?.close();
-      process.exit(2);
+      session = null;
+      process.exit(process.exitCode);
     }
   } finally {
     if (!hasFlag("keep")) shutdown([chrome, vite], session);

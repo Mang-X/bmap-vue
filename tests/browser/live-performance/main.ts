@@ -3,11 +3,23 @@
  *
  * ## 它要回答的四个问题（issue 目标 1~3 + 对照）
  *
- * 1. **首帧交付**：50k 点 / 线 / 面 `setData` 之后到画面可交互的时间；
- * 2. **SDK 调用本身**：同数据量下再次 `setData` 的墙钟（含 SDK 内部解析）；
- * 3. **交互阻塞**：主线程 long task（`PerformanceObserver`）与换数据窗口的 FPS；
- * 4. **对照**：Node 侧把本页读数与 `tests/performance/baseline.json` 的 Fake 读数并排
- *    （差值量级 ≈ SDK 内部成本）。
+ * 1. **首帧交付**：每类图层**独立挂载**后，初始 `setData` → 画面可交互的时间；
+ * 2. **SDK 调用本身**：同数据量下再次 `setData` —— 数据**提前生成**，窗口只覆盖
+ *    prop 赋值 → settle（与 Fake `data.replace.*` / `setData.replace@*` 同口径）；
+ *    另拆 **redraw**（settle → paint）与 **native setData 边界**（原型包装，纯 SDK 返回）；
+ * 3. **交互阻塞**：主线程 long task 按窗口分账（setData 窗 / redraw 窗）与换数据后的 FPS；
+ * 4. **对照**：Node 侧把本页 `setData` 读数与 `tests/performance/baseline.json` 的 Fake 读数并排。
+ *
+ * ## 计时协议（评审 #131 第 1 条；改窗口必须同步改 ADR / docs）
+ *
+ * | 窗口 | 起点 | 终点 | 与 Fake 对照？ |
+ * | --- | --- | --- | --- |
+ * | `setData` | `host.setItems(预生成数据)` | `nextTick` + 微任务冲刷（≈ Fake `settle`） | **是**（`buildFakeContrast` 用它） |
+ * | `redraw` | settle 结束之后 | 再等 2×rAF paint 边界 | 否（渲染尾巴，不进 Fake 对照） |
+ * | `sdkSetDataMs` | 原生 `prototype.setData` 进入 | 同函数返回 | 否（纯 SDK 返回墙钟） |
+ * | `firstFrame` | `app.mount(stage)`（仅该图层） | ready + paint + 稳定等待 | 否（逐图层首帧） |
+ *
+ * 数据生成（`variantData`）**必须在计时窗外**——否则 50k 造数会算进「SDK 耗时」。
  *
  * ## 页面只产出**读数**，不产出结论
  *
@@ -35,6 +47,7 @@ import {
   perfItemPosition,
   perfItemProperties,
   DATASET_VERSION,
+  type PerfItem,
 } from "../../../tests/performance/dataset.ts";
 import {
   LIVE_PERF_LAYERS,
@@ -59,7 +72,8 @@ const READY_MS = Number(params.get("readyMs") ?? "40000");
 
 const CENTER = { lng: 116.404, lat: 39.915 };
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, resolve));
+/** 等待 `ms` 毫秒（第二参必须是数字：早期草稿误传了 `resolve`，50/200ms 稳定等待全部失效）。 */
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const startedAtMs = Date.now();
 /**
@@ -113,10 +127,23 @@ function finish(fatal?: string, blocked?: string): void {
 }
 
 window.addEventListener("error", (event) => {
+  // SDK 的 Worker 往 `WorkerGlobalScope.importScripts` 拉 wasm 时的 NetworkError
+  // 是**可恢复噪声**（curl 同 URL 200；地图 ready 由下面的 READY_MS 负责）。
+  // 把它当 fatal 会让整轮 0 读数直接 exit=2（#131 复跑实测两次）。
+  // 只把**页面自身**的脚本错误记成 fatal。
+  if (/WorkerGlobalScope|importScripts/i.test(event.message)) {
+    console.warn(`[live-perf] ignored sdk worker error: ${event.message}`);
+    return;
+  }
   finish(`window.error: ${event.message}`);
 });
 window.addEventListener("unhandledrejection", (event) => {
-  finish(`unhandledrejection: ${String(event.reason)}`);
+  const message = String(event.reason);
+  if (/WorkerGlobalScope|importScripts/i.test(message)) {
+    console.warn(`[live-perf] ignored sdk worker rejection: ${message}`);
+    return;
+  }
+  finish(`unhandledrejection: ${message}`);
 });
 
 /* ------------------------------------------------------------------ 计时 */
@@ -159,7 +186,21 @@ function nextPaintFrame(): Promise<void> {
   });
 }
 
-/** FPS 采样：在 `windowMs` 内数 rAF 回调。 */
+/**
+ * 与 Fake `settle()` 对齐的冲刷：`flushPromises` + `nextTick` 的浏览器等价物。
+ *
+ * Fake（`component-path.perf.test.ts`）在 `data.value = second` 之后 `await settle()`；
+ * live 的 `setData` 窗口必须停在同一类边界上，否则 `live - Fake` 混进 rAF / 造数成本。
+ */
+async function settle(): Promise<void> {
+  // 微任务冲刷（≈ flushPromises：把 watcher 队列里同步排进来的 microtask 跑完）
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+  await Promise.resolve();
+}
+
+/** FPS 采样：在 `windowMs` 内数 rAF 回调，返回**真实帧率**（fps，不是 ÷60 的比值）。 */
 async function sampleFps(windowMs: number): Promise<number | null> {
   if (typeof requestAnimationFrame !== "function") return null;
   let frames = 0;
@@ -174,7 +215,7 @@ async function sampleFps(windowMs: number): Promise<number | null> {
   });
   const elapsed = performance.now() - started;
   if (elapsed <= 0) return null;
-  return frames / (elapsed / 1000) / 60;
+  return frames / (elapsed / 1000);
 }
 
 function sample(durationMs: number, longTasks: { count: number; longestMs: number }): LivePerfSample {
@@ -185,36 +226,90 @@ function sample(durationMs: number, longTasks: { count: number; longestMs: numbe
   };
 }
 
+/* ------------------------------------------------- 原生 setData 边界包装 */
+
+interface SetDataProbe {
+  /** 上一次原生 `setData` 的墙钟（ms）；本轮没触发过则为 `null`。 */
+  last: () => number | null;
+  /** 本轮是否真的进入了原生 `setData`（防「没调用却拿旧值」）。 */
+  reset: () => void;
+  restore: () => void;
+}
+
+/**
+ * 包装 v4 三个原生图层类的 `prototype.setData`，读**纯 SDK 返回**墙钟。
+ *
+ * - 页面在 `tests/browser` 下；raw SDK 边界门禁只扫 `packages` 的 `src` 白名单外禁区
+ *   ⇒ 这里读 `globalThis.BMap` 合法（与 `tests/browser/jsapi-v4/main.ts` 同口径）。
+ *   注释里别写字面量的 glob 结尾（星号紧跟斜杠）：那会提前关掉本块注释。
+ * - 三个 ctor 与 `BPointCollection` / `BLineLayer` / `BFillLayer` 落到的
+ *   `PointShapeLayer` / `LineLayer` / `FillLayer` 一一对应（`native-layers.ts` 描述符）。
+ * - **只包原型、不改行为**：`finally` 里记时，返回值原样透传；`restore()` 还原。
+ */
+function instrumentNativeSetData(): SetDataProbe {
+  let lastMs: number | null = null;
+  const restores: Array<() => void> = [];
+  const namespace = (globalThis as { BMap?: Record<string, unknown> }).BMap;
+  if (!namespace) {
+    return { last: () => null, reset: () => undefined, restore: () => undefined };
+  }
+  for (const name of ["PointShapeLayer", "LineLayer", "FillLayer"] as const) {
+    const ctor = namespace[name] as { prototype?: Record<string, unknown> } | undefined;
+    const proto = ctor?.prototype;
+    const original = proto?.setData;
+    if (!proto || typeof original !== "function") continue;
+    const wrapped = function setData(this: unknown, data: unknown): unknown {
+      const callStart = performance.now();
+      try {
+        return (original as (d: unknown) => unknown).call(this, data);
+      } finally {
+        lastMs = performance.now() - callStart;
+      }
+    };
+    proto.setData = wrapped;
+    restores.push(() => {
+      proto.setData = original;
+    });
+  }
+  return {
+    last: () => lastMs,
+    reset: () => {
+      lastMs = null;
+    },
+    restore: () => {
+      for (const undo of restores) undo();
+    },
+  };
+}
+
 /* ------------------------------------------------------------------ 夹具 */
 
 interface LayerHost {
   setItems: (next: unknown) => void;
-  unmount: () => void;
+}
+
+interface MountResult {
+  app: App;
+  host: LayerHost;
+  firstFrame: LivePerfSample;
 }
 
 /**
- * 挂载地图 + 三图层，并**在挂载窗口内**采首帧（issue 目标 1：`setData` 提交 → 可交互）。
+ * **只挂一个图层**的完整交付窗口（issue 目标 1：逐类「setData 后到可交互」）。
  *
- * 首帧必须从「给初始 data」起算：图层构造 + 首次 `setData` + 渲染都在这个窗口里；
- * 若先挂完再计时，测到的只是空转，不是交付。
+ * 评审 #131 第 3 条：此前三图层同树共用一个 `firstFrame` 再复制三行，回答不了
+ * 「点 / 线 / 面各自」的首帧。现在每类独立 mount / measure / unmount。
+ *
+ * 首帧从 `app.mount`（初始 data 进入组件树）起算：图层构造 + 首次 `setData` + 渲染
+ * 都在这个窗口里；若先挂完再计时，测到的只是空转。
  */
-async function mountMapWithLayers(): Promise<{
-  app: App;
-  hosts: Partial<Record<LivePerfLayer, LayerHost>>;
-  firstFrame: LivePerfSample;
-}> {
+async function mountSingleLayer(layer: LivePerfLayer): Promise<MountResult> {
   const stage = document.getElementById("stage")!;
   stage.innerHTML = "";
 
-  const items = makeItems(SIZE);
-  const lines = featureCollection(makeLineFeatures(SIZE));
-  const polygons = featureCollection(makePolygonFeatures(SIZE));
-
-  const pointData = ref<unknown>(items);
-  const lineData = ref<unknown>(lines);
-  const fillData = ref<unknown>(polygons);
+  const initialData = makeInitialData(layer);
+  const data = ref<unknown>(initialData);
   const ready = ref(false);
-  const hosts: Partial<Record<LivePerfLayer, LayerHost>> = {};
 
   const Root = defineComponent({
     setup() {
@@ -235,44 +330,21 @@ async function mountMapWithLayers(): Promise<{
               finish(undefined, `BMap error: ${JSON.stringify(error)}`);
             },
           }, {
-            default: () => [
-              h(BPointCollection, {
-                data: pointData.value as never,
-                itemKey: PERF_ITEM_KEY,
-                getPosition: perfItemPosition,
-                properties: perfItemProperties,
-              }),
-              h(BLineLayer, { data: lineData.value as never, idKey: "id" }),
-              h(BFillLayer, { data: fillData.value as never, idKey: "id" }),
-            ],
+            default: () => [renderLayer(layer, data.value)],
           }),
         );
     },
   });
 
   const app = createApp(Root);
-  // 首帧窗口：从 mount（初始 data 进入组件树）到 ready + 下一帧 paint。
   const firstObserver = observeLongTasks();
   const firstStart = performance.now();
   app.mount(stage);
 
-  hosts.pointCollection = {
+  const host: LayerHost = {
     setItems: (next) => {
-      pointData.value = next;
+      data.value = next;
     },
-    unmount: () => undefined,
-  };
-  hosts.line = {
-    setItems: (next) => {
-      lineData.value = next;
-    },
-    unmount: () => undefined,
-  };
-  hosts.fill = {
-    setItems: (next) => {
-      fillData.value = next;
-    },
-    unmount: () => undefined,
   };
 
   const deadline = performance.now() + READY_MS;
@@ -292,9 +364,33 @@ async function mountMapWithLayers(): Promise<{
   await nextPaintFrame();
   const firstFrame = sample(performance.now() - firstStart, firstObserver.stop());
 
-  return { app, hosts, firstFrame };
+  return { app, host, firstFrame };
 }
 
+function renderLayer(layer: LivePerfLayer, dataValue: unknown) {
+  if (layer === "pointCollection") {
+    // 与 `component-path.perf.test.ts` 同一形态：泛型 SFC 经 h() 会把 Item 推成 unknown，
+    // 调用点 `as never` 收掉（typecheck 只在此处放行，props 形状仍由组件自身声明守住）。
+    return h(BPointCollection as never, {
+      data: dataValue as PerfItem[],
+      itemKey: PERF_ITEM_KEY,
+      getPosition: perfItemPosition,
+      properties: perfItemProperties,
+    });
+  }
+  if (layer === "line") {
+    return h(BLineLayer, { data: dataValue as object, idKey: "id" });
+  }
+  return h(BFillLayer, { data: dataValue as object, idKey: "id" });
+}
+
+function makeInitialData(layer: LivePerfLayer): unknown {
+  if (layer === "pointCollection") return makeItems(SIZE);
+  if (layer === "line") return featureCollection(makeLineFeatures(SIZE));
+  return featureCollection(makePolygonFeatures(SIZE));
+}
+
+/** 第二份数据：**计时窗外**预生成**，窗口内只赋引用（与 Fake `second = entry.data(size)` 对齐）。 */
 function variantData(layer: LivePerfLayer, offset: number): unknown {
   if (layer === "pointCollection") {
     return makeItems(SIZE).map((item, index) => ({
@@ -319,37 +415,67 @@ function variantData(layer: LivePerfLayer, offset: number): unknown {
   );
 }
 
+/**
+ * 逐图层：首帧（独立挂载）+ 换数据三窗（setData / redraw / native）+ FPS。
+ *
+ * long task **分窗记账**：
+ * - `setData` 观察器只覆盖 赋值 → settle（与 Fake 同边界）；
+ * - `redraw` 观察器从 settle 之后起、到 paint 结束（渲染尾巴算 redraw，不污染 Fake 对照窗）。
+ */
 async function measureLayer(
   layer: LivePerfLayer,
-  hosts: Partial<Record<LivePerfLayer, LayerHost>>,
-  firstFrame: LivePerfSample,
-): Promise<void> {
-  const host = hosts[layer];
-  if (!host) {
-    finish(undefined, `缺少图层宿主：${layer}`);
-    return;
+  probe: SetDataProbe,
+): Promise<LivePerfLayerReadings | null> {
+  const mounted = await mountSingleLayer(layer);
+  if (report.blockedReason || report.fatal) {
+    try {
+      mounted.app.unmount();
+    } catch {
+      /* 已卸载 */
+    }
+    return null;
   }
 
-  // 换数据：再次 setData（SDK 调用返回墙钟 + long task）
-  const setObserver = observeLongTasks();
-  const setStart = performance.now();
-  host.setItems(variantData(layer, 2));
-  await nextTick();
-  // setData 是同步调用链；再等一帧让渲染有机会跟上，FPS 采样窗口从这里开始。
+  // 造数在窗外；native 探针先清零，避免读到挂载期那次 setData。
+  const next = variantData(layer, 2);
+  probe.reset();
+
+  const setDataObserver = observeLongTasks();
+  const windowStart = performance.now();
+  mounted.host.setItems(next);
+  await settle();
+  const setDataMs = performance.now() - windowStart;
+  const setDataTasks = setDataObserver.stop();
+  const sdkSetDataMs = probe.last();
+
+  // redraw 窗：从 settle 之后到 paint（不含造数、不含 Fake 对照窗已记的那段）
+  const redrawObserver = observeLongTasks();
+  const redrawStart = performance.now();
   await nextPaintFrame();
-  const setDuration = performance.now() - setStart;
-  const setTasks = setObserver.stop();
+  const redrawMs = performance.now() - redrawStart;
+  const redrawTasks = redrawObserver.stop();
 
   const fps = await sampleFps(1000);
 
-  // 首帧（挂载窗口）对三个图层是**同一段**交付时间（三图层同一棵树）；记在每行便于按图层读。
-  report.readings.push({
+  const reading: LivePerfLayerReadings = {
     layer,
     size: SIZE,
-    firstFrame,
-    setData: sample(setDuration, setTasks),
+    firstFrame: mounted.firstFrame,
+    setData: sample(setDataMs, setDataTasks),
+    redraw: sample(redrawMs, redrawTasks),
+    sdkSetDataMs,
     fps,
-  });
+  };
+
+  try {
+    mounted.app.unmount();
+  } catch {
+    /* 已卸载 */
+  }
+  // 图层之间让出一帧 + 短睡，避免上一层的渲染尾巴算进下一层首帧。
+  await sleep(50);
+  await nextPaintFrame();
+  return reading;
 }
 
 /* ------------------------------------------------------------------ main */
@@ -360,30 +486,34 @@ async function main(): Promise<void> {
     return;
   }
 
-  let app: App | null = null;
+  let probe: SetDataProbe | null = null;
   try {
-    const mounted = await mountMapWithLayers();
-    app = mounted.app;
-    if (report.blockedReason) return;
+    // SDK 要等第一次 BMap ready 才存在；先挂一次点图层完成加载与原型包装，
+    // 丢弃其读数——否则第 0 个图层的 firstFrame 会混进 loader / 进程冷启动（与 Fake 预热同口径）。
+    const warmup = await mountSingleLayer("pointCollection");
+    if (report.blockedReason || report.fatal) {
+      warmup.app.unmount();
+      return;
+    }
+    warmup.app.unmount();
+    await sleep(100);
+    await nextPaintFrame();
+
+    probe = instrumentNativeSetData();
 
     for (const layer of LIVE_PERF_LAYERS) {
-      await measureLayer(layer, mounted.hosts, mounted.firstFrame);
+      const reading = await measureLayer(layer, probe);
+      if (!reading) return;
+      report.readings.push(reading);
       if (report.blockedReason || report.fatal) return;
-      // 图层之间让出一帧，避免上一层的渲染尾巴算进下一层。
-      await sleep(50);
-      await nextPaintFrame();
     }
 
     finish();
   } catch (error) {
     finish(`fatal: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
-    // 读数已写入 window；卸载释放资源（泄漏不是本票门禁，但不该故意留着）。
-    try {
-      app?.unmount();
-    } catch {
-      /* 已卸载 */
-    }
+    // 计时用的原型包装在测量结束后立刻还原（与真实 0/2/3 路径无关，纯卫生）。
+    probe?.restore();
   }
 }
 
