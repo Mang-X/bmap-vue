@@ -25,7 +25,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { stripComments } from "../../packages/test-utils";
 import * as advanced from "../../packages/baidu-map-gl-vue/src/advanced";
 import * as components from "../../packages/baidu-map-gl-vue/src/components";
@@ -41,7 +41,6 @@ import {
 
 const PKG_DIR = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
 const DIST = resolve(PKG_DIR, "dist");
-const SRC = resolve(PKG_DIR, "src");
 
 /**
  * **七个可静态 import 的公共出口**的运行时命名空间（读 `src/**` 的入口模块，与
@@ -175,25 +174,10 @@ describe("公共出口不得出现测试辅助（`*ForTests`）", () => {
     // 反误报：注释里的提及不得命中（`SdkRegistry.ts` 的历史注记就是这种形态）。
     expect(testHelperIdentifiersIn("// resetFooForTests 是测试辅助，已在两处收口\n")).toEqual([]);
 
-    // 正证 2（判定对象非空）：src 里**确实**还声明着这类名字。少了这一段，「公共面零命中」
-    // 在一个从来没有过这类名字的仓库里同样成立 —— 不变量会悄悄失去着力点。
-    // 逐个源文件读到第一个命中就停：这条守卫只需要「存在」，不该为此把整棵树读完
-    // （它旁边那条「剥注释后非空」的逐文件对照才是真正在意覆盖率的那一条）。
-    let declaredInSrc: string | undefined;
-    for (const relative of readdirSync(SRC, { recursive: true })) {
-      if (typeof relative !== "string" || !relative.endsWith(".ts")) continue;
-      const hit = /export function ([A-Za-z_$][\w$]*ForTests)\b/.exec(
-        readFileSync(join(SRC, relative), "utf8"),
-      );
-      if (hit) {
-        declaredInSrc = hit[1] as string;
-        break;
-      }
-    }
-    expect(
-      declaredInSrc,
-      "src 里已经没有任何 `*ForTests` 导出，这条不变量失去着力点（若是有意为之，请连同本用例一起删）",
-    ).toBeTruthy();
+    // 这里**刻意不**再要求「src 里必须还存在一个 `*ForTests` 导出」（评审 2026-09-23 第二轮）：
+    // 那会把一条**公共面**不变量反向绑到**内部实现**是否还在上 —— 将来合法地删掉最后一个内部
+    // 测试辅助时，公共面仍然应该禁止 `*ForTests`，而那条守卫会先假红。判定式有没有着力点由上面
+    // 两条合成正证证明；判定对象是不是真的内容由下面逐文件的「剥注释后非空」证明。
 
     // 负向：**逐个**声明入口（含不能静态 import 的 `./ui-kit`）都零命中，
     // 且每个入口各自再验一次「读得到内容」——防「文件读空 / 读歪」让负向恒绿。
