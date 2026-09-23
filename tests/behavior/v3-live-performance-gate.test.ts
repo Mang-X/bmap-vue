@@ -56,6 +56,7 @@ function makeReport(overrides: Partial<LivePerfReport> = {}): LivePerfReport {
     done: true,
     fatal: null,
     blockedReason: null,
+    notes: [],
     env: {
       userAgent: "Mozilla/5.0",
       browser: "Chrome 130",
@@ -337,13 +338,14 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(page).not.toMatch(/setTimeout\(resolve,\s*resolve\)/);
   });
 
-  it("SDK worker importScripts 噪声不记 fatal（否则整轮 0 读数 exit=2）", () => {
+  it("SDK worker importScripts 噪声不记 fatal，且写进 report.notes", () => {
     const page = readFileSync(resolve(repoRoot, "tests/browser/live-performance/main.ts"), "utf8");
     // error / unhandledrejection 两侧都要过滤 WorkerGlobalScope|importScripts。
     expect(page).toMatch(/WorkerGlobalScope\|importScripts/);
-    // 过滤分支必须 return，不得落到 finish(fatal)。
+    // 过滤分支必须 return，不得落到 finish(fatal)；并 push 到 notes（nightly 可见）。
     expect(page).toMatch(/ignored sdk worker error/);
     expect(page).toMatch(/ignored sdk worker rejection/);
+    expect(page).toMatch(/report\.notes\.push\(/);
     // 正证：仍然会对页面自身错误调 finish(fatal)。
     expect(page).toContain("finish(`window.error:");
     expect(page).toContain("finish(`unhandledrejection:");
@@ -353,7 +355,7 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     const page = readFileSync(resolve(repoRoot, "tests/browser/live-performance/main.ts"), "utf8");
     // 预生成在窗外（setItems 之前已持有 next 引用）。
     expect(page).toMatch(/const next = variantData\(/);
-    expect(page).toMatch(/const setDataObserver = observeLongTasks\(\);\s*\n\s*const windowStart[\s\S]*?setItems\(next\)/);
+    expect(page).toMatch(/mounted\.host\.setItems\(next\)/);
     // 逐图层独立 mount / unmount，不是三图层同树复制首帧。
     expect(page).toContain("async function mountSingleLayer");
     expect(page).toContain("mounted.app.unmount()");
@@ -365,21 +367,45 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     // FPS = frames / seconds，不是 ÷60 比值。
     expect(page).toMatch(/return frames \/ \(elapsed \/ 1000\)/);
     expect(page).not.toMatch(/frames\s*\/\s*\(elapsed\s*\/\s*1000\)\s*\/\s*60/);
-    // redraw 与 setData 分窗（long task 各记各的）。
-    expect(page).toContain("const redrawObserver = observeLongTasks()");
-    expect(page).toContain("const setDataTasks = setDataObserver.stop()");
-    expect(page).toContain("const redrawTasks = redrawObserver.stop()");
+    // long task：页面级 collector + 窗末 flush + takeRecords，不是窗末直接 disconnect。
+    expect(page).toContain("createLongTaskCollector");
+    expect(page).toContain("takeRecords");
+    expect(page).toContain("longTasks.flush()");
+    expect(page).toMatch(/countIn\(windowStart, setDataEnd\)/);
+    expect(page).toMatch(/countIn\(redrawStart, redrawEnd\)/);
+    // firstFrame 在 stabilize sleep(200) **之前**采样（#131 复审第 2 条）。
+    const firstFrameSample = page.indexOf("const firstFrame = sample(");
+    const stabilizeSleep = page.indexOf("await sleep(200)");
+    expect(firstFrameSample, "找不到 firstFrame 采样").toBeGreaterThanOrEqual(0);
+    expect(stabilizeSleep, "找不到稳定期 sleep").toBeGreaterThan(firstFrameSample);
+    // 协议表不得再写「ready + paint + 稳定等待」当 firstFrame 终点。
+    expect(page).not.toMatch(/ready \+ paint \+ 稳定等待/);
   });
 
-  it("报告 schema 含 redraw / sdkSetDataMs，家族清单与之一致", () => {
+  it("报告 schema 含 redraw / sdkSetDataMs / notes，家族清单与之一致", () => {
     const reportSource = readFileSync(
       resolve(repoRoot, "tests/browser/live-performance/report.mts"),
       "utf8",
     );
     expect(reportSource).toContain("redraw: LivePerfSample");
     expect(reportSource).toContain("sdkSetDataMs: number | null");
+    expect(reportSource).toContain("notes: string[]");
     expect(LIVE_PERF_FAMILIES).toContain("redraw");
     expect(LIVE_PERF_FAMILIES).toContain("sdkSetData");
+  });
+
+  it("人读报告渲染 notes（被忽略的 SDK worker 噪声进 artifact）", () => {
+    const report = makeReport({ notes: ["ignored sdk worker error: boom"] });
+    const decision = decideLivePerfExit({
+      envelopeIssues: [],
+      fatal: null,
+      blockedReason: null,
+      done: true,
+      readingCount: 3,
+      expectedReadingCount: 3,
+    });
+    const text = formatLivePerfReport({ report, decision });
+    expect(text).toContain("page  NOTE: ignored sdk worker error: boom");
   });
 
   it("nightly 有 live-performance job，跑 perf:baseline:live，未被架空，且有 artifact", () => {

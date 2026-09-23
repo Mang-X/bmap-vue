@@ -43,10 +43,14 @@ export interface LivePerfSample {
   /**
    * 单次窗口耗时（毫秒）。口径见 `main.ts` 文件头「计时协议」表：
    * `setData` = 赋值 → settle（**Fake 对照窗**）；`redraw` = settle → paint；
-   * `firstFrame` = 该图层独立 mount → 可交互。
+   * `firstFrame` = 该图层独立 mount → ready 后第一次 paint（**不含**之后的稳定期）。
    */
   durationMs: number;
-  /** 本轮 `PerformanceObserver` 在**该窗口**内记到的 long task 条数（分窗、不跨窗）。 */
+  /**
+   * 与该窗口时间重叠的 long task 条数。
+   * 页面级 collector 收集后按 `startTime/duration` 归属（窗末 flush + `takeRecords`，
+   * 不是窗末直接 `disconnect`——#131 复审第 1 条）。
+   */
   longTaskCount: number;
   /** 窗口内最长 long task（毫秒）；无则为 0。 */
   longestTaskMs: number;
@@ -56,7 +60,7 @@ export interface LivePerfLayerReadings {
   layer: LivePerfLayer;
   /** 数据量（issue 固定 50k）。 */
   size: number;
-  /** 首帧：**本图层独立挂载**的 mount → 画面可交互（不是三图层联合值的复制）。 */
+  /** 首帧：**本图层独立挂载**的 mount → ready 后第一次 paint（不含稳定期；不是三图层联合值的复制）。 */
   firstFrame: LivePerfSample;
   /**
    * 换数据 · Fake 对照窗：预生成数据的 `setItems` → settle（≈ Fake `data.replace.*`）。
@@ -91,6 +95,11 @@ export interface LivePerfReport {
   fatal: string | null;
   /** 外部前置（AK / SDK ready）不成立的原因；`done=false` 且无 fatal 时用于 3。 */
   blockedReason: string | null;
+  /**
+   * 被忽略的可恢复噪声（SDK worker `importScripts` 等），进报告而非只 `console.warn`，
+   * 便于 nightly artifact 看到发生过什么（#131 复审非 blocker 建议）。
+   */
+  notes: string[];
   env: {
     userAgent: string;
     /** 浏览器主版本（报告要写明浏览器版本，issue 测试要求）。 */
@@ -262,6 +271,7 @@ export function formatLivePerfReport(input: {
   lines.push(`page  ua=${report.env.userAgent}`);
   if (report.fatal) lines.push(`page  FATAL: ${report.fatal}`);
   if (report.blockedReason) lines.push(`page  BLOCKED: ${report.blockedReason}`);
+  for (const note of report.notes ?? []) lines.push(`page  NOTE: ${note}`);
   lines.push("");
 
   lines.push("--- page: readings ---");

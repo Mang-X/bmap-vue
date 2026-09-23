@@ -10,21 +10,32 @@
  * 3. **交互阻塞**：主线程 long task 按窗口分账（setData 窗 / redraw 窗）与换数据后的 FPS；
  * 4. **对照**：Node 侧把本页 `setData` 读数与 `tests/performance/baseline.json` 的 Fake 读数并排。
  *
- * ## 计时协议（评审 #131 第 1 条；改窗口必须同步改 ADR / docs）
+ * ## 计时协议（评审 #131 两轮；改窗口必须同步改 ADR / docs）
  *
  * | 窗口 | 起点 | 终点 | 与 Fake 对照？ |
  * | --- | --- | --- | --- |
  * | `setData` | `host.setItems(预生成数据)` | `nextTick` + 微任务冲刷（≈ Fake `settle`） | **是**（`buildFakeContrast` 用它） |
  * | `redraw` | settle 结束之后 | 再等 2×rAF paint 边界 | 否（渲染尾巴，不进 Fake 对照） |
  * | `sdkSetDataMs` | 原生 `prototype.setData` 进入 | 同函数返回 | 否（纯 SDK 返回墙钟） |
- * | `firstFrame` | `app.mount(stage)`（仅该图层） | ready + paint + 稳定等待 | 否（逐图层首帧） |
+ * | `firstFrame` | `app.mount(stage)`（仅该图层） | ready 后**第一次** 2×rAF paint | 否（逐图层首帧；**不含**之后的 200ms 稳定期） |
  *
  * 数据生成（`variantData`）**必须在计时窗外**——否则 50k 造数会算进「SDK 耗时」。
+ *
+ * 稳定期（`sleep(200)` + paint）在 `firstFrame` **采样之后**执行，只隔离后续测量尾巴，
+ * **不计入**任何上报窗口。
+ *
+ * ## long task 归属（#131 复审第 1 条）
+ *
+ * 页面级**长生命周期** `PerformanceObserver` 收集 `{startTime, duration}`；每个窗口只记
+ * `start/end` 时间戳。窗口结束时先 `flush()`（跨一个 macrotask + `takeRecords()`）再按
+ * 时间重叠归属——不能在窗末直接 `disconnect()`（会清空 buffer，且 observer 回调本身
+ * 是另排的 task：实跑出现过 `sdkSetData=1250ms` 却 `setData long task=0` 的假 0）。
  *
  * ## 页面只产出**读数**，不产出结论
  *
  * 判定是纯函数（`report.mts`），可以用合成报告回归；放在浏览器里就只能靠人肉复查。
- * 因此这里只记录事实：duration / long task 条数 / 最长任务 / FPS / 环境。
+ * 因此这里只记录事实：duration / long task 条数 / 最长任务 / FPS / 环境 / 被忽略的
+ * SDK worker 噪声（`notes`）。
  *
  * ## 页面内测量逻辑**不单测**
  *
@@ -90,6 +101,7 @@ const report: LivePerfReport = {
   done: false,
   fatal: null,
   blockedReason: null,
+  notes: [],
   env: {
     userAgent: navigator.userAgent,
     browser: detectBrowser(),
@@ -130,8 +142,9 @@ window.addEventListener("error", (event) => {
   // SDK 的 Worker 往 `WorkerGlobalScope.importScripts` 拉 wasm 时的 NetworkError
   // 是**可恢复噪声**（curl 同 URL 200；地图 ready 由下面的 READY_MS 负责）。
   // 把它当 fatal 会让整轮 0 读数直接 exit=2（#131 复跑实测两次）。
-  // 只把**页面自身**的脚本错误记成 fatal。
+  // 只把**页面自身**的脚本错误记成 fatal；被忽略的进 `report.notes`（nightly artifact 可见）。
   if (/WorkerGlobalScope|importScripts/i.test(event.message)) {
+    report.notes.push(`ignored sdk worker error: ${event.message}`);
     console.warn(`[live-perf] ignored sdk worker error: ${event.message}`);
     return;
   }
@@ -140,6 +153,7 @@ window.addEventListener("error", (event) => {
 window.addEventListener("unhandledrejection", (event) => {
   const message = String(event.reason);
   if (/WorkerGlobalScope|importScripts/i.test(message)) {
+    report.notes.push(`ignored sdk worker rejection: ${message}`);
     console.warn(`[live-perf] ignored sdk worker rejection: ${message}`);
     return;
   }
@@ -148,16 +162,34 @@ window.addEventListener("unhandledrejection", (event) => {
 
 /* ------------------------------------------------------------------ 计时 */
 
-/** long task 观察器（`PerformanceObserver`；页面测量逻辑，不单测）。 */
-function observeLongTasks(): { stop: () => { count: number; longestMs: number }; reset: () => void } {
-  let count = 0;
-  let longestMs = 0;
+interface LongTaskEntry {
+  startTime: number;
+  duration: number;
+}
+
+interface LongTaskCollector {
+  /** 跨一个 macrotask + `takeRecords()`，把尚在 buffer / 未回调的 entry 收进来。 */
+  flush: () => Promise<void>;
+  /** 与 `[start, end)` 时间重叠的 long task 计数与最长一条。 */
+  countIn: (start: number, end: number) => { count: number; longestMs: number };
+  stop: () => void;
+}
+
+/**
+ * 页面级长生命周期 long task 收集器（#131 复审第 1 条）。
+ *
+ * 不能在每个测量窗末直接 `disconnect()`：`disconnect` 会 empty observer buffer，
+ * 且 PerformanceObserver 通知本身是**另排的 task**——`settle()` 只冲微任务，窗末
+ * 立刻 stop 会丢掉刚发生、尚未回调的 entry（实跑反证：`sdkSetData=1250ms` 却
+ * `setData long task=0`）。因此：长收、短 flush、按窗口时间戳重叠归属。
+ */
+function createLongTaskCollector(): LongTaskCollector {
+  const entries: LongTaskEntry[] = [];
   let observer: PerformanceObserver | null = null;
   try {
     observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
-        count += 1;
-        if (entry.duration > longestMs) longestMs = entry.duration;
+        entries.push({ startTime: entry.startTime, duration: entry.duration });
       }
     });
     observer.observe({ entryTypes: ["longtask"] });
@@ -165,14 +197,39 @@ function observeLongTasks(): { stop: () => { count: number; longestMs: number };
     // 某些环境没有 longtask 支持：读数记 0，不把整轮判死（报告会如实写 count=0）。
     observer = null;
   }
+
+  function absorbPending(): void {
+    if (!observer) return;
+    for (const record of observer.takeRecords()) {
+      entries.push({ startTime: record.startTime, duration: record.duration });
+    }
+  }
+
   return {
-    reset() {
-      count = 0;
-      longestMs = 0;
+    async flush() {
+      // 让 PerformanceObserver 的 task 跑完（通知是另排 task，不是微任务）。
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      absorbPending();
+    },
+    countIn(start, end) {
+      let count = 0;
+      let longestMs = 0;
+      for (const entry of entries) {
+        const entryStart = entry.startTime;
+        const entryEnd = entry.startTime + entry.duration;
+        if (entryStart < end && entryEnd > start) {
+          count += 1;
+          if (entry.duration > longestMs) longestMs = entry.duration;
+        }
+      }
+      return { count, longestMs };
     },
     stop() {
+      absorbPending();
       observer?.disconnect();
-      return { count, longestMs };
+      observer = null;
     },
   };
 }
@@ -300,10 +357,13 @@ interface MountResult {
  * 评审 #131 第 3 条：此前三图层同树共用一个 `firstFrame` 再复制三行，回答不了
  * 「点 / 线 / 面各自」的首帧。现在每类独立 mount / measure / unmount。
  *
- * 首帧从 `app.mount`（初始 data 进入组件树）起算：图层构造 + 首次 `setData` + 渲染
- * 都在这个窗口里；若先挂完再计时，测到的只是空转。
+ * 首帧从 `app.mount`（初始 data 进入组件树）起算，到 **ready 后第一次 paint** 即采样
+ * （#131 复审第 2 条：固定 `sleep(200)` 稳定期在采样**之后**，不计入 `firstFrame`）。
  */
-async function mountSingleLayer(layer: LivePerfLayer): Promise<MountResult> {
+async function mountSingleLayer(
+  layer: LivePerfLayer,
+  longTasks: LongTaskCollector,
+): Promise<MountResult> {
   const stage = document.getElementById("stage")!;
   stage.innerHTML = "";
 
@@ -337,7 +397,6 @@ async function mountSingleLayer(layer: LivePerfLayer): Promise<MountResult> {
   });
 
   const app = createApp(Root);
-  const firstObserver = observeLongTasks();
   const firstStart = performance.now();
   app.mount(stage);
 
@@ -358,11 +417,16 @@ async function mountSingleLayer(layer: LivePerfLayer): Promise<MountResult> {
     await nextTick();
   }
 
+  // 首帧终点：ready 后第一次 paint 边界（**不含**下面的稳定期）。
   await nextPaintFrame();
+  const firstEnd = performance.now();
+  await longTasks.flush();
+  const firstFrame = sample(firstEnd - firstStart, longTasks.countIn(firstStart, firstEnd));
+
+  // 稳定期：隔离后续 setData/redraw 不受首帧尾巴影响；**不计入** firstFrame。
   await sleep(200);
   await nextTick();
   await nextPaintFrame();
-  const firstFrame = sample(performance.now() - firstStart, firstObserver.stop());
 
   return { app, host, firstFrame };
 }
@@ -418,15 +482,16 @@ function variantData(layer: LivePerfLayer, offset: number): unknown {
 /**
  * 逐图层：首帧（独立挂载）+ 换数据三窗（setData / redraw / native）+ FPS。
  *
- * long task **分窗记账**：
- * - `setData` 观察器只覆盖 赋值 → settle（与 Fake 同边界）；
- * - `redraw` 观察器从 settle 之后起、到 paint 结束（渲染尾巴算 redraw，不污染 Fake 对照窗）。
+ * long task **按窗口时间戳归属**（页面级 collector，窗末 flush 再 countIn）：
+ * - `setData` 窗：赋值 → settle（与 Fake 同边界）；
+ * - `redraw` 窗：settle 之后 → paint（渲染尾巴算 redraw，不污染 Fake 对照窗）。
  */
 async function measureLayer(
   layer: LivePerfLayer,
   probe: SetDataProbe,
+  longTasks: LongTaskCollector,
 ): Promise<LivePerfLayerReadings | null> {
-  const mounted = await mountSingleLayer(layer);
+  const mounted = await mountSingleLayer(layer, longTasks);
   if (report.blockedReason || report.fatal) {
     try {
       mounted.app.unmount();
@@ -440,20 +505,22 @@ async function measureLayer(
   const next = variantData(layer, 2);
   probe.reset();
 
-  const setDataObserver = observeLongTasks();
   const windowStart = performance.now();
   mounted.host.setItems(next);
   await settle();
-  const setDataMs = performance.now() - windowStart;
-  const setDataTasks = setDataObserver.stop();
+  const setDataEnd = performance.now();
+  const setDataMs = setDataEnd - windowStart;
   const sdkSetDataMs = probe.last();
+  await longTasks.flush();
+  const setDataTasks = longTasks.countIn(windowStart, setDataEnd);
 
   // redraw 窗：从 settle 之后到 paint（不含造数、不含 Fake 对照窗已记的那段）
-  const redrawObserver = observeLongTasks();
   const redrawStart = performance.now();
   await nextPaintFrame();
-  const redrawMs = performance.now() - redrawStart;
-  const redrawTasks = redrawObserver.stop();
+  const redrawEnd = performance.now();
+  const redrawMs = redrawEnd - redrawStart;
+  await longTasks.flush();
+  const redrawTasks = longTasks.countIn(redrawStart, redrawEnd);
 
   const fps = await sampleFps(1000);
 
@@ -487,10 +554,11 @@ async function main(): Promise<void> {
   }
 
   let probe: SetDataProbe | null = null;
+  const longTasks = createLongTaskCollector();
   try {
     // SDK 要等第一次 BMap ready 才存在；先挂一次点图层完成加载与原型包装，
     // 丢弃其读数——否则第 0 个图层的 firstFrame 会混进 loader / 进程冷启动（与 Fake 预热同口径）。
-    const warmup = await mountSingleLayer("pointCollection");
+    const warmup = await mountSingleLayer("pointCollection", longTasks);
     if (report.blockedReason || report.fatal) {
       warmup.app.unmount();
       return;
@@ -502,7 +570,7 @@ async function main(): Promise<void> {
     probe = instrumentNativeSetData();
 
     for (const layer of LIVE_PERF_LAYERS) {
-      const reading = await measureLayer(layer, probe);
+      const reading = await measureLayer(layer, probe, longTasks);
       if (!reading) return;
       report.readings.push(reading);
       if (report.blockedReason || report.fatal) return;
@@ -514,6 +582,7 @@ async function main(): Promise<void> {
   } finally {
     // 计时用的原型包装在测量结束后立刻还原（与真实 0/2/3 路径无关，纯卫生）。
     probe?.restore();
+    longTasks.stop();
   }
 }
 
