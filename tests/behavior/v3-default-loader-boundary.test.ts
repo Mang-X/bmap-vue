@@ -15,25 +15,14 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+// 剥注释的判定式是共享实现（`#104` 第三批收口：此前本仓有 5 份逐字副本）。
+import { stripComments } from "../../packages/test-utils";
 
 const PKG_SRC = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue/src");
 const PKG_ROOT = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
 
 function read(relativePath: string): string {
   return readFileSync(join(PKG_SRC, relativePath), "utf8");
-}
-
-/**
- * 去掉注释，只留下**实现**。
- *
- * 这几条判定式的对象是「代码怎么加载」，而文件里完全可以正当地在注释里提到 legacy 工厂
- * （例如解释「以前的默认值是 `baiduCdnProvider()`，现在不是了」）。不剥注释就会得到
- * **误报**，而为了消误报去改注释则是本末倒置——那会让门禁的判定对象变成文案。
- */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
 }
 
 /** 提取**静态**导入/再导出的模块说明符；动态 `import()` 刻意不算（UI Kit 只能动态 import）。 */

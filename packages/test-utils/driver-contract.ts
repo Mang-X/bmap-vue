@@ -100,7 +100,7 @@ export const MAP_INTERACTIONS: readonly MapInteraction[] = [
 
 export function runMapFacetContract(createHarness: () => MapFacetHarness) {
   describe("Map facet contract", () => {
-    it("creates and destroys a map (destroy 幂等)", () => {
+    it("creates and destroys a map (重复 destroy 不抛错；官方幂等未取证，见 F-3)", () => {
       const harness = createHarness();
       const map = harness.driver().map.create(harness.container());
       expect(map.raw).toBeTruthy();
@@ -501,7 +501,15 @@ export function runControlFacetContract(createHarness: () => ControlFacetHarness
 
         controls.remove(target, control);
         expect(harness.attachedCount()).toBe(0);
-        // dispose 幂等：重复 remove 不抛错、计数不变成负数（SDK 侧的移除对未挂载资源是 no-op）
+        // 重复 remove 不抛错、计数不变成负数。
+        //
+        // ⚠️ 判据是 `harness.attachedCount()`，也就是**夹具（Fake）那一侧的假账本**
+        // （见上面 `attachedCount()` 的说明），它证伪的是「**夹具的**销账不会变成负数」——
+        // 既**不是**「SDK 侧的移除对未挂载资源是 no-op」的证据，也不是生产库 Driver/Registry
+        // 的记账证据。后两者属未取证项（审计表 F-3：`destroy()` / `dispose()` 是否幂等至今
+        // 没有正向证据；唯一相关读数是 ADR 2026-09-12 记的「真实 4.0 在**未加载场景**的实例上
+        // `destroy()` 会抛 `TypeError`」，那是反例不是正向）。
+        // 夹具的幂等是**我们对夹具的建模**，不能反过来当官方行为读；要升级成官方承诺得先 probe。
         expect(() => controls.remove(target, control)).not.toThrow();
         expect(harness.attachedCount()).toBe(0);
         // remove 之后可以重新挂载
@@ -607,7 +615,8 @@ export function runLayerFacetContract(createHarness: () => LayerFacetHarness) {
 
         layers.remove(target, layer);
         expect(harness.attachedCount()).toBe(0);
-        // dispose 幂等：重复 remove 不抛错、计数不变成负数
+        // 重复 remove 不抛错、计数不变成负数（口径同上面控件那处：证的是**夹具假账本**的销账，
+        // 不是 SDK 的幂等 —— 审计表 F-3 仍未取证）。
         expect(() => layers.remove(target, layer)).not.toThrow();
         expect(harness.attachedCount()).toBe(0);
         // remove 之后可以重新挂载
@@ -796,7 +805,7 @@ export interface PanoramaFacetHarness {
 
 export function runPanoramaFacetContract(createHarness: () => PanoramaFacetHarness) {
   describe("Panorama facet contract", () => {
-    it("supported / 视角 / 生命周期：destroy 幂等，检索调用结算且形状自洽", async () => {
+    it("supported / 视角 / 生命周期：重复 destroy 不抛错（官方幂等未取证，见 F-3），检索调用结算且形状自洽", async () => {
       const harness = createHarness();
       const probes = await probePanoramaFacet(harness.panorama(), harness.container());
 

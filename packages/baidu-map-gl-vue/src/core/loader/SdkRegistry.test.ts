@@ -3,7 +3,7 @@
  *
  * 覆盖 M3A1-PROVIDERS（issue #17）的 registry 语义：
  * - 同域同指纹复用同一任务，不同域互不影响；
- * - 域内已就绪配置与请求配置不一致时按策略处理，默认 `throw`；
+ * - 域内已就绪配置与请求配置不一致时**恒** reject `BMAP_SDK_CONFIG_CONFLICT`（唯一处置）；
  * - 失败 / 取消后条目移除，可重试；
  * - 不依赖 window / document（SSR 导入安全）。
  */
@@ -12,7 +12,6 @@ import {
   SdkRegistry,
   getProcessSdkRegistry,
   resetProcessSdkRegistryForTests,
-  type SdkConflictInfo,
 } from "./SdkRegistry";
 import { fingerprintConfig } from "./url";
 import { BMapError } from "../errors/BMapError";
@@ -117,48 +116,10 @@ describe("SdkRegistry", () => {
     expect((conflict as BMapError).message).toContain("SDK config conflict");
   });
 
-  it("honours an explicitly configured non-throwing policy", async () => {
-    const conflicts: SdkConflictInfo[] = [];
-    const registry = new SdkRegistry({
-      domain: "BMap",
-      conflictPolicy: "ignore",
-      onConflict: (info) => conflicts.push(info),
-    });
-
-    await registry.load({ fingerprint: CONFIG_A, loader: async () => "a" });
-    await expect(registry.load({ fingerprint: CONFIG_B, loader: async () => "b" })).resolves.toBe(
-      "b",
-    );
-
-    expect(conflicts).toEqual([{ domain: "BMap", requested: CONFIG_B, active: CONFIG_A }]);
-    // 域内已就绪配置不被后来的请求改写。
-    expect(registry.activeFingerprint).toBe(CONFIG_A);
-  });
-
-  it("honours the policy configured when the process domain is created", async () => {
-    const onConflict = vi.fn();
-    // 兼容策略只能通过显式配置开启；进程级域在首次创建时固化该策略。
-    const registry = getProcessSdkRegistry("BMap", {
-      domain: "BMap",
-      conflictPolicy: "warn",
-      onConflict,
-    });
-
-    await registry.load({ fingerprint: CONFIG_A, loader: async () => "a" });
-    await expect(registry.load({ fingerprint: CONFIG_B, loader: async () => "b" })).resolves.toBe(
-      "b",
-    );
-    expect(onConflict).toHaveBeenCalledWith({
-      domain: "BMap",
-      requested: CONFIG_B,
-      active: CONFIG_A,
-    });
-    expect(registry.policy).toBe("warn");
-  });
-
-  it("defaults to throw so compatibility policies never become implicit", () => {
-    expect(new SdkRegistry({ domain: "BMap" }).policy).toBe("throw");
-  });
+  // `#104` 第三批删掉了这里的三条策略用例（`conflictPolicy: "ignore"` / `"warn"` 与
+  // 「默认必须是 throw」）：那个开关没有任何生产消费者（三个 Provider 一律不传），
+  // 于是它随 `./core` 一起进公共声明面却没有被验证过。冲突处置现在只有一条路径，
+  // 由上面「throws structured config conflict across providers in the same domain」覆盖。
 
   it("rejects a second consumer that aborts, without touching the others", async () => {
     const deferred = createDeferred<unknown>();

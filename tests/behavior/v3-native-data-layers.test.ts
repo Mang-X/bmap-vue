@@ -26,7 +26,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, h, nextTick, ref, type VNodeChild } from "vue";
-import { browserShims, createFakeV4Harness } from "../../packages/test-utils";
+import { browserShims, createFakeV4Harness, stripComments } from "../../packages/test-utils";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
 import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
@@ -998,7 +998,3 @@ describe("§8 换实例的失败语义（严格 detach / unknown）", () => {
     harness.assertIdle("unknown 优先");
   });
 });
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
-}

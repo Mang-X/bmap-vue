@@ -39,8 +39,8 @@ Official-first ADR 已经把「默认加载委托官方 Loader」定成决策，
      （`0` = 不超时，原样传递，不当作「用默认值」）、`serviceHost`（代理模式；与 `ak` 二选一）；
    - `serviceHost` 的三条口径：
      ① **参与指纹**（`host:` 段），换代理就是另一份 SDK 配置，否则冲突会漏判；
-     ② 指纹里**只出现哈希**（`host:${hash(...)}`）——指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息
-     与 `onConflict`，代理地址可能含内部域名 / 路径 / userinfo / token query（官方封装的
+     ② 指纹里**只出现哈希**（`host:${hash(...)}`）——指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，
+     代理地址可能含内部域名 / 路径 / userinfo / token query（官方封装的
      `stableHash` 是同一口径）；
      ③ 末尾斜杠按官方行为**规范化**（官方会 warn 后补 `/`），因此 `/svc` 与 `/svc/` 是同一份配置；
    - **入口 metadata 按官方实际入口构造**：代理模式是 `<serviceHost>/api?v=4.0` 且**不带 `ak`**，
@@ -83,8 +83,7 @@ Official-first ADR 已经把「默认加载委托官方 Loader」定成决策，
 6. **`ak` 与 userinfo 两类 URL 凭据不得经错误文本外泄，且身份用途与展示用途分开处理。**
    入口 URL 可能带这两类凭据：`ak=` 与 userinfo（`https://user:pass@host/...` 的 HTTP 认证）。
    两类都要覆盖到**所有出口**：`message`、`cause.message` / `cause.stack`、`toJSON()`、
-   自研 transport 的失败文案，以及**指纹**（指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息与
-   `onConflict`）。统一口径：
+   自研 transport 的失败文案，以及**指纹**（指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息）。统一口径：
 
    - **展示 / 错误用途** → 抹成 `***`（`maskUserinfo()`，形状匹配 + 已知值兜底；AK 同理）；
    - **身份 / 指纹用途** → 换成**哈希**（AK 一直是哈希；userinfo 也改为哈希）——不能统一抹成
@@ -142,7 +141,7 @@ Official-first ADR 已经把「默认加载委托官方 Loader」定成决策，
 | 加载实现 | `dependencies: { "@baidumap/jsapi-loader": "^1.0.0" }`，`loadJSAPI()` 内部 `import('@baidumap/jsapi-loader')` | 同源：`dependencies` 精确锁定 `1.0.0`，`official.ts` 内委托官方 `load()` |
 | 「已有全局」怎么办 | 不自己探测 `window.BMap`，完全交给官方 Loader（注释：**不修改 `window.BMap` / `BMapGL` 原型、不做命名空间别名**） | 同上：本库只在官方结算后校验命名空间，不另建状态机 |
 | 去重 / 冲突 | 自建 `loader/registry.ts`：`loadKey`（version/ak/serviceHost/language/plugins）+ `globalRegistry` `Map` + `detectConflict` | 自建 `SdkRegistry` + `fingerprintConfig`，**共享在 `globalThis[Symbol.for(...)]`** 上（同页两份独立打包的副本也一致） |
-| 冲突默认行为 | `onLoadConflict` 回调 + **返回已加载的那份**（不覆盖） | 默认 `throw`（`BMAP_SDK_CONFIG_CONFLICT`），需要时按域 `conflictPolicy` 降级为 warn/ignore（ADR 2026-09-10 冻结） |
+| 冲突默认行为 | `onLoadConflict` 回调 + **返回已加载的那份**（不覆盖） | 恒 `throw`（`BMAP_SDK_CONFIG_CONFLICT`）——唯一的冲突处置，没有降级开关（ADR 2026-09-10 决策 6，其后半句已由 `#104` 第三批取代） |
 | 取消语义 | 消费者共用一个 Promise，没有「按消费者取消」的概念 | 每个消费者独立 `AbortSignal`；全部取消后保留在飞任务（ADR 决策 5） |
 | AK 脱敏 | src 内**没有**脱敏（`redact` / `脱敏` / `sanitiz` 零命中），错误原样经 `onError` / `console.error` 暴露（官方消息含入口 URL + `ak=`） | `message` / `cause` / `toJSON()` 三处统一脱敏（ADR 决策 6） |
 | 代理模式 | `<BMapProvider serviceHost="…">` 是公开 Prop（「隐藏 ak / 走代理」） | `BMapLoadOptions.serviceHost` → 官方 `load()`，并参与指纹（ADR 决策 3） |
