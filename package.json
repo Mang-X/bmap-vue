@@ -16,6 +16,7 @@
     "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",
     "size:baseline": "node --experimental-strip-types scripts/collect-package-size.mts",
     "perf:baseline": "node --experimental-strip-types scripts/collect-performance-baseline.mts",
+    "perf:baseline:live": "node --experimental-strip-types scripts/collect-live-performance.mts",
     "generate:manifest": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts",
     "generate:manifest:check": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check",
     "generate:capability-matrix": "node --experimental-strip-types scripts/generate-capability-matrix.mts",
