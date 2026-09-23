@@ -56,12 +56,14 @@ BAIDU_MAP_AK=<ak> pnpm perf:baseline:live
   基线同源（`tests/performance/dataset.ts`，固定 `DATASET_VERSION`，默认 50k）。计时协议见
   `tests/browser/live-performance/main.ts` 文件头表（改窗口必须同步本页与 ADR）：
   **首帧**（逐图层独立 mount → ready 后第一次 paint，**不含**之后的 200ms 稳定期）/
-  **`setData`**（窗外预生成 → `setItems` → settle，**唯一进 Fake 对照的窗口**）/
-  **`redraw`**（settle 之后 → 2×rAF）/ **`sdkSetData`**（原生 `prototype.setData` 进入 → 返回）
-  + long task **长收短 flush 再按时间重叠分账**（页面级常驻 observer，窗末 `flush()` /
-  `takeRecords()` 再 `countIn(start,end)`，不按窗末 `disconnect()` 丢 buffer）+ 真实 FPS
-  （frames/second）。Node 侧再与 `tests/performance/baseline.json` 的 Fake `min` 并排
-  （delta **只**用 `setData` 族）。
+  **`setData`**（造数跨 macrotask 隔离后 → `setItems` → Fake 同款 settle：`setTimeout(0)` +
+  `nextTick`，**唯一进 Fake 对照的窗口**）/ **`redraw`**（settle 之后 → 2×rAF）/
+  **`sdkSetData`**（原生 `prototype.setData` 进入 → 返回）
+  + long task **长收短 flush、按时间重叠取窗口交集**（页面级常驻 observer，窗末 `flush()` /
+  `takeRecords()`；`longest` = 交集时长，不是整条 `entry.duration`）+ **更新后** FPS
+  （redraw 后再采 1s 的 `postUpdateFps`，不是 setData 期间帧率）。Node 侧再与
+  `tests/performance/baseline.json` 的 Fake `min` 并排（delta **只**用 `setData` 族，
+  且只作**量级参考**——Fake 在另一台 CI 机器上，不能单独证明「差值 ≈ 原生返回」）。
 - **产物**：`.artifacts/perf-live/report.json` + stdout 的人读表（**page 段** = 浏览器内读数，
   **node 段** = 信封 / 退出码 / Fake 对照；AK 全程经 `redactAk` 脱敏）。
 - **退出码**：`0` 读数采齐、`2` 脚手架失败、`3` blocked（缺 AK / SDK 没 ready——**不是通过**）。
@@ -74,67 +76,68 @@ BAIDU_MAP_AK=<ak> pnpm perf:baseline:live
 页面内测量（rAF / `PerformanceObserver` / 原型包装）不进单测——只能真浏览器跑，由实跑读数
 取证；纯函数与接线契约在 `tests/behavior/v3-live-performance-gate.test.ts`。
 
-### 实跑读数（2026-09-23，#123 · 评审 #131 第二轮后口径）
+### 实跑读数（2026-09-23，#123 · 评审 #131 第三轮后口径）
 
-> 2026-09-23 · `pnpm perf:baseline:live` · exit **0** · 读数 **3/3** · 页面窗 **69.0s**
-> （跑数时机器负载中等：load avg ≈ **40**——仍偏高，绝对值只作本机参考；与第一轮
-> load ≈ 186 的读数不可比）。
+> 2026-09-23 · `pnpm perf:baseline:live` · exit **0** · 读数 **3/3** · 页面窗 **65.1s**
+> （跑数时机器负载较低：load avg ≈ **12**——绝对值仍只作本机参考；与前两轮
+> load ≈ 186 / 40 的读数**不可比**）。
 >
 > - **环境三元组**：Chrome **154**（headless）· Node **v24.18.0** / darwin **arm64**（Apple M4）·
 >   数据集 **v1** / **50k** · SDK engine **jsapi-v4** / **v=4.0**
 > - 报告：`.artifacts/perf-live/report.json`（含 `machine` / `sdk` / `dataset` 三元组字段）
 
-计时协议（#131 第二轮）：`setData` = **窗外**预生成的 `setItems` → settle（与 Fake
-`data.replace.*` / `setData.replace@*` 同边界，**唯一进对照表**）；`redraw` = settle 之后 →
-2×rAF；`sdkSetData` = 原生 `prototype.setData` 进入 → 返回；`firstFrame` = **该图层独立**
-mount → ready 后**第一次 paint**（**不含**之后 200ms 稳定期）。long task 用**页面级常驻
-`PerformanceObserver` 长收、窗末 `flush()`（跨 macrotask + `takeRecords()`）再按时间重叠
-`countIn(start,end)` 分账**——不是窗末 `disconnect()`（那会清 buffer，回调也另排 task）；
-FPS = `frames / seconds`（真实帧率，不是 ÷60 比值）。被忽略的 SDK Worker `importScripts`
-噪声写进 `report.notes`。
+计时协议（#131 第三轮）：`setData` = **造数跨 macrotask 隔离后**的 `setItems` → Fake 同款
+settle（`setTimeout(0)` + `nextTick`，对齐 `@vue/test-utils@2.5.0` 的 `flushPromises`）；
+`redraw` = settle 之后 → 2×rAF；`sdkSetData` = 原生 `prototype.setData` 进入 →返回；
+`firstFrame` = **该图层独立** mount → ready 后**第一次 paint**（**不含** 200ms 稳定期）。
+long task 用**页面级常驻 `PerformanceObserver` 长收、窗末 `flush()` 再按时间重叠取
+窗口交集**（`longest` = 交集，不是整条 task duration）；`postFps` = redraw **之后** 1s 的
+`postUpdateFps`。被忽略的 SDK Worker `importScripts` 噪声写进 `report.notes`。
 
-| 图层 | 族 | durationMs | long tasks | longest | FPS |
+| 图层 | 族 | durationMs | long tasks | overlap | postFps |
 | --- | --- | ---: | ---: | ---: | ---: |
-| pointCollection | firstFrame | 1125.9 | 4 | 681 | — |
-| | setData | **411.9** | 1 | **984** | 2.49 |
-| | redraw | 1631.4 | 2 | 1629 | — |
-| | sdkSetData | **231.3** | — | — | — |
-| line | firstFrame | **2236.4** | 4 | 1383 | — |
-| | setData | **746.9** | 1 | **1601** | 1.4 |
-| | redraw | **2137.2** | 2 | 2136 | — |
-| | sdkSetData | **714.7** | — | — | — |
-| fill | firstFrame | **11039.2** | 4 | 4810 | — |
-| | setData | **5641.1** | 1 | **8655** | 0.71 |
-| | redraw | **5359.9** | 2 | 5356 | — |
-| | sdkSetData | **5575.4** | — | — | — |
+| pointCollection | firstFrame | 725.7 | 2 | 427 | — |
+| | setData | **545.2** | 1 | **499** | — |
+| | redraw | 27.8 | 0 | 0 | 8.34 |
+| | sdkSetData | **291.1** | — | — | — |
+| line | firstFrame | **2916.8** | 4 | 2064 | — |
+| | setData | **5370.4** | 2 | **4403** | — |
+| | redraw | **2216.6** | 2 | 2215 | 1.02 |
+| | sdkSetData | **930.4** | — | — | — |
+| fill | firstFrame | **8972.3** | 5 | 4481 | — |
+| | setData | **5555.7** | 2 | **4652** | — |
+| | redraw | **1238.1** | 2 | 1235 | 1.2 |
+| | sdkSetData | **4595** | — | — | — |
 
-**Fake 对照**（`tests/performance/baseline.json`，CI runner / EPYC，只作量级参照、不作同机比；
-delta 只来自 `setData` 族）：
+**Fake 对照**（`tests/performance/baseline.json`，CI runner / EPYC，只作**量级参考**、
+不作同机比、也**不能**单独证明「差值 ≈ 原生返回」；delta 只来自 `setData` 族）：
 
 | 图层 | live setData | Fake min | delta | live sdkSetData |
 | --- | ---: | ---: | ---: | ---: |
-| pointCollection | 411.9 | 253.8（`setData.replace@50000`，含深响应读取） | +158.1 | 231.3 |
-| line | 746.9 | 0.61（`data.replace.line@50000`） | **+746.3** | 714.7 |
-| fill | 5641.1 | 0.43（`data.replace.fill@50000`） | **+5640.7** | 5575.4 |
+| pointCollection | 545.2 | 253.8（`setData.replace@50000`，含深响应读取） | +291.4 | 291.1 |
+| line | 5370.4 | 0.61（`data.replace.line@50000`） | **+5369.8** | 930.4 |
+| fill | 5555.7 | 0.43（`data.replace.fill@50000`） | **+5555.3** | 4595 |
 
-**这批读数改变了什么**（回填 ADR 已知限制 1 与「重新评估条件」第三条；对照第一轮旧口径读数）：
+**这批读数改变了什么**（回填 ADR 已知限制 1 与「重新评估条件」第三条）：
 
-1. **long task 归属修了**：第一轮窗末 `disconnect()` 丢 buffer，`setData` 窗 long task 全 0
-   而 `sdkSetData` 有 1250 / 7228ms——本轮长收短 flush 后，`setData` 窗记到 1 / 1 / 1 个
-   （最长 984 / 1601 / 8655），与同轮 `sdkSetData` **231 / 715 / 5575** 一致。
-2. **line / fill 的 `setData` 对照窗 ≈ 纯原生返回**：delta `+746 / +5641` 与同轮
-   `sdkSetData` **715 / 5575** 同量级（差额是 settle 对齐与包装误差）——在**分窗 + 正确
-   long task 归属之后**才说「差值主体在 SDK `prototype.setData` 返回」。
-3. **重绘尾巴另记 `redraw`**：line / fill 的 long task 主体（最长 2136 / 5356）在 paint 窗，
-   **不进 Fake 对照**；要压的是渲染路径，不是我们这一侧的 prop 转发。
-4. **pointCollection 不同**：`setData` 411.9、`sdkSetData` 231.3，与 Fake 253.8 同量级——瓶颈仍在
-   **适配层 + 响应式读取**（与阶段 A 一致），不是同步 SDK 解析大头。
-5. **首帧逐图层独立、不含稳定期**：point 1125.9ms、line 2236.4ms、fill 11039.2ms（各自 map
-   ready + 第一次 paint；**不要**与旧口径联合首帧 396ms 或含 200ms 稳定期的第一轮读数比，
-   也不要在未控负载时外推）。一次性初始化，不改变「不引入 Worker」。
-6. **FPS**：headless + `--disable-gpu` 下真实帧率 0.71 ~ 2.49 fps（rAF 被节流）——只记录、
-   不解读；有头/有 GPU 再采一档才能谈帧率。
-7. **「官方分片入口不够用」本轮未测** ⇒ ADR 重开条件第三条标**部分满足、待复核**，不自动重开
+1. **long task 归属 = 窗口交集，且造数与测量窗已隔开**：第二轮 `longest` 曾出现
+   984 / 1601 / 8655 **大于窗口本身**（整条含窗外造数的 task duration）；本轮交集
+   499 / 4403 / 4652 **均 ≤ duration**，不再把窗外造数算进 setData。
+2. **line / fill 的 `setData` 对照窗仍远大于 Fake 直通**：delta `+5370 / +5555`；同轮
+   `sdkSetData` **930 / 4595**——fill 的 delta 与原生返回同量级，**line 的 delta 明显
+   大于原生返回**（窗口还含 Vue 调度 + Fake 同款 settle 边界）。因此**只能说量级参考**，
+   不能把整段 delta 写成「≈ SDK 内部成本」；要压成本仍优先看渲染路径（`redraw` 窗
+   long task overlap 2215 / 1235）。
+3. **pointCollection 两侧都有显著成本**：`setData` 545.2、`sdkSetData` 291.1 ≈ delta 291.4
+   ——同轮原生返回约占窗口一半；历史 Fake 253.8 在**另一台机器**上。**不能**仅凭跨机
+   Fake 断言「瓶颈只在适配层 + 响应式」；更准确的表述是：适配/响应式与 SDK 同步
+   `setData` **两侧都存在显著成本**，主导侧需同机对照才能判。
+4. **首帧逐图层独立、不含稳定期**：point 725.7ms、line 2916.8ms、fill 8972.3ms（各自
+   map ready + 第一次 paint；load ≈ 12 下仍含 ready 等待，**不要**与旧口径联合首帧 396ms
+   比）。一次性初始化，不改变「不引入 Worker」。
+5. **`postUpdateFps`（更新后 1s）**：8.34 / 1.02 / 1.20 fps——是 redraw **之后**的环境
+   诊断，**不是** setData 期间帧率；headless + `--disable-gpu` 下 rAF 被节流，只记录。
+6. **「官方分片入口不够用」本轮未测** ⇒ ADR 重开条件第三条标**部分满足、待复核**，不自动重开
    Worker 票。
 
 ⚠️ SDK Worker 偶发 `importScripts` NetworkError 是**可恢复噪声**（同 URL curl 200）：页面

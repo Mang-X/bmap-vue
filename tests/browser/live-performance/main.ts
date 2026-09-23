@@ -14,28 +14,34 @@
  *
  * | 窗口 | 起点 | 终点 | 与 Fake 对照？ |
  * | --- | --- | --- | --- |
- * | `setData` | `host.setItems(预生成数据)` | `nextTick` + 微任务冲刷（≈ Fake `settle`） | **是**（`buildFakeContrast` 用它） |
+ * | `setData` | `host.setItems(预生成数据)` | Fake 同款 settle（`setTimeout(0)` + `nextTick`） | **是**（`buildFakeContrast` 用它） |
  * | `redraw` | settle 结束之后 | 再等 2×rAF paint 边界 | 否（渲染尾巴，不进 Fake 对照） |
  * | `sdkSetDataMs` | 原生 `prototype.setData` 进入 | 同函数返回 | 否（纯 SDK 返回墙钟） |
  * | `firstFrame` | `app.mount(stage)`（仅该图层） | ready 后**第一次** 2×rAF paint | 否（逐图层首帧；**不含**之后的 200ms 稳定期） |
+ * | `postUpdateFps` | redraw 结束后 | 再采 1s rAF | 否（更新**之后**的环境诊断，不是 setData 期间帧率） |
  *
- * 数据生成（`variantData`）**必须在计时窗外**——否则 50k 造数会算进「SDK 耗时」。
+ * 数据生成（`variantData` / `makeInitialData`）**必须跨 macrotask 与窗口隔开**——否则 50k
+ * 造数会和 `setItems` 同属一条 event-loop task，long task 整条 duration 会被算进窗口。
  *
  * 稳定期（`sleep(200)` + paint）在 `firstFrame` **采样之后**执行，只隔离后续测量尾巴，
  * **不计入**任何上报窗口。
  *
- * ## long task 归属（#131 复审第 1 条）
+ * ## long task 归属（#131 复审第 1 条 + 第三轮第 1 条）
  *
  * 页面级**长生命周期** `PerformanceObserver` 收集 `{startTime, duration}`；每个窗口只记
  * `start/end` 时间戳。窗口结束时先 `flush()`（跨一个 macrotask + `takeRecords()`）再按
  * 时间重叠归属——不能在窗末直接 `disconnect()`（会清空 buffer，且 observer 回调本身
  * 是另排的 task：实跑出现过 `sdkSetData=1250ms` 却 `setData long task=0` 的假 0）。
  *
+ * 归属取**窗口交集时长** `max(0, min(entryEnd,end) − max(entryStart,start))`，不是整条
+ * `entry.duration`——造数与 `setItems` 若同 task，整条时长会比窗口还长（第二轮实测
+ * longest ≈ 2× duration）。造数侧另加 macrotask 隔离，双保险。
+ *
  * ## 页面只产出**读数**，不产出结论
  *
  * 判定是纯函数（`report.mts`），可以用合成报告回归；放在浏览器里就只能靠人肉复查。
- * 因此这里只记录事实：duration / long task 条数 / 最长任务 / FPS / 环境 / 被忽略的
- * SDK worker 噪声（`notes`）。
+ * 因此这里只记录事实：duration / long task 条数 / 窗口交集最长任务 / 更新后 FPS /
+ * 环境 / 被忽略的 SDK worker 噪声（`notes`）。
  *
  * ## 页面内测量逻辑**不单测**
  *
@@ -170,7 +176,11 @@ interface LongTaskEntry {
 interface LongTaskCollector {
   /** 跨一个 macrotask + `takeRecords()`，把尚在 buffer / 未回调的 entry 收进来。 */
   flush: () => Promise<void>;
-  /** 与 `[start, end)` 时间重叠的 long task 计数与最长一条。 */
+  /**
+   * 与 `[start, end)` 时间重叠的 long task 计数与**窗口交集**最长一条。
+   * `longestMs` = `max(0, min(entryEnd,end) − max(entryStart,start))`，不是整条
+   * `entry.duration`（第三轮第 1 条：窗外造数与 setItems 同 task 时整条会 ≈2× 窗口）。
+   */
   countIn: (start: number, end: number) => { count: number; longestMs: number };
   stop: () => void;
 }
@@ -221,7 +231,9 @@ function createLongTaskCollector(): LongTaskCollector {
         const entryEnd = entry.startTime + entry.duration;
         if (entryStart < end && entryEnd > start) {
           count += 1;
-          if (entry.duration > longestMs) longestMs = entry.duration;
+          // 窗口交集（不是整条 task）：窗外部分不归本窗。
+          const overlap = Math.max(0, Math.min(entryEnd, end) - Math.max(entryStart, start));
+          if (overlap > longestMs) longestMs = overlap;
         }
       }
       return { count, longestMs };
@@ -244,20 +256,27 @@ function nextPaintFrame(): Promise<void> {
 }
 
 /**
- * 与 Fake `settle()` 对齐的冲刷：`flushPromises` + `nextTick` 的浏览器等价物。
+ * 与 Fake `settle()` 对齐的冲刷（#131 第三轮第 2 条）。
  *
- * Fake（`component-path.perf.test.ts`）在 `data.value = second` 之后 `await settle()`；
- * live 的 `setData` 窗口必须停在同一类边界上，否则 `live - Fake` 混进 rAF / 造数成本。
+ * Fake（`component-path.perf.test.ts`）= `flushPromises()` + `nextTick`；
+ * `@vue/test-utils@2.5.0` 的 `flushPromises` 是 `setTimeout(…, 0)`（**跨 macrotask**），
+ * 不是纯微任务。live 必须复刻同一调度边界，否则「同边界 Fake 对照」不成立。
  */
 async function settle(): Promise<void> {
-  // 微任务冲刷（≈ flushPromises：把 watcher 队列里同步排进来的 microtask 跑完）
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
   await nextTick();
-  await Promise.resolve();
 }
 
-/** FPS 采样：在 `windowMs` 内数 rAF 回调，返回**真实帧率**（fps，不是 ÷60 的比值）。 */
+/** 跨一个 macrotask（造数 task 与测量窗之间强制边界；与 Fake `flushPromises` 同型）。 */
+function macrotask(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+/** 更新后 FPS 采样：redraw 结束后再数 1s rAF，返回**真实帧率**（fps，不是 ÷60 比值）。 */
 async function sampleFps(windowMs: number): Promise<number | null> {
   if (typeof requestAnimationFrame !== "function") return null;
   let frames = 0;
@@ -368,6 +387,11 @@ async function mountSingleLayer(
   stage.innerHTML = "";
 
   const initialData = makeInitialData(layer);
+  // 造数 task 与 firstFrame 窗隔开：否则初始 50k 生成与 mount 同 task，
+  // firstFrame 的 long task 会混入窗外造数（第三轮第 1 条）。
+  await macrotask();
+  await longTasks.flush();
+
   const data = ref<unknown>(initialData);
   const ready = ref(false);
 
@@ -480,11 +504,12 @@ function variantData(layer: LivePerfLayer, offset: number): unknown {
 }
 
 /**
- * 逐图层：首帧（独立挂载）+ 换数据三窗（setData / redraw / native）+ FPS。
+ * 逐图层：首帧（独立挂载）+ 换数据三窗（setData / redraw / native）+ 更新后 FPS。
  *
- * long task **按窗口时间戳归属**（页面级 collector，窗末 flush 再 countIn）：
- * - `setData` 窗：赋值 → settle（与 Fake 同边界）；
- * - `redraw` 窗：settle 之后 → paint（渲染尾巴算 redraw，不污染 Fake 对照窗）。
+ * long task **按窗口时间戳 + 交集时长归属**（页面级 collector，窗末 flush 再 countIn）：
+ * - `setData` 窗：赋值 → Fake 同款 settle（`setTimeout(0)` + `nextTick`）；
+ * - `redraw` 窗：settle 之后 → paint（渲染尾巴算 redraw，不污染 Fake 对照窗）；
+ * - 造数与窗口之间强制跨 macrotask，避免整条造数 task 被算进 setData。
  */
 async function measureLayer(
   layer: LivePerfLayer,
@@ -501,9 +526,11 @@ async function measureLayer(
     return null;
   }
 
-  // 造数在窗外；native 探针先清零，避免读到挂载期那次 setData。
+  // 造数在窗外，且**跨 macrotask** 与 setItems 隔开；native 探针先清零。
   const next = variantData(layer, 2);
   probe.reset();
+  await macrotask();
+  await longTasks.flush();
 
   const windowStart = performance.now();
   mounted.host.setItems(next);
@@ -522,7 +549,8 @@ async function measureLayer(
   await longTasks.flush();
   const redrawTasks = longTasks.countIn(redrawStart, redrawEnd);
 
-  const fps = await sampleFps(1000);
+  // 更新**之后**的 rAF 频率（环境诊断，不是 setData / redraw 期间的帧率）。
+  const postUpdateFps = await sampleFps(1000);
 
   const reading: LivePerfLayerReadings = {
     layer,
@@ -531,7 +559,7 @@ async function measureLayer(
     setData: sample(setDataMs, setDataTasks),
     redraw: sample(redrawMs, redrawTasks),
     sdkSetDataMs,
-    fps,
+    postUpdateFps,
   };
 
   try {

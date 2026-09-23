@@ -43,7 +43,7 @@ function makeReading(layer: LivePerfLayerReadings["layer"]): LivePerfLayerReadin
     setData: makeSample(layer === "pointCollection" ? 250 : 30, 1, 55),
     redraw: makeSample(layer === "pointCollection" ? 40 : 18, 0, 0),
     sdkSetDataMs: layer === "pointCollection" ? 42.5 : 1200.1,
-    fps: 58.4,
+    postUpdateFps: 58.4,
   };
 }
 
@@ -241,6 +241,8 @@ describe("#123 纯函数：人读报告分 page·node 两段 + redactAk", () => 
     expect(text).toContain("sdkSetData");
     expect(text).toContain("sdkSetData");
     expect(text).toContain("58.4"); // 真实 FPS，不是 0~1 比值（#131 第 5 条）
+    expect(text).toContain("postFps"); // 更新后采样列名，不是「setData 期间 FPS」
+    expect(text).toContain("overlap"); // 窗口交集列，不是整条 task duration
   });
 
   it("redactAk：打码 ak 查询参数，保留其它参数", () => {
@@ -351,28 +353,29 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(page).toContain("finish(`unhandledrejection:");
   });
 
-  it("页面计时：数据窗外预生成 + 逐图层独立 mount + 原生 setData 探针 + 真实 FPS（#131 第 1/3/5 条）", () => {
+  it("页面计时：数据窗外预生成 + macrotask 隔离 + Fake 同款 settle + 交集归属 + 更新后 FPS（#131 第三轮）", () => {
     const page = readFileSync(resolve(repoRoot, "tests/browser/live-performance/main.ts"), "utf8");
-    // 预生成在窗外（setItems 之前已持有 next 引用）。
+    // 预生成在窗外，且必须跨 macrotask 与 setItems 隔开（否则整条造数 task 算进窗口）。
     expect(page).toMatch(/const next = variantData\(/);
+    expect(page).toMatch(/await macrotask\(\)/);
+    const variantLine = page.indexOf("const next = variantData(");
+    const windowStartLine = page.indexOf("const windowStart = performance.now()", variantLine);
+    expect(windowStartLine, "找不到 setData windowStart").toBeGreaterThan(variantLine);
+    expect(
+      page.slice(variantLine, windowStartLine),
+      "variantData 与 windowStart 之间必须有 macrotask 隔离",
+    ).toMatch(/await macrotask\(\)/);
     expect(page).toMatch(/mounted\.host\.setItems\(next\)/);
-    // 逐图层独立 mount / unmount，不是三图层同树复制首帧。
-    expect(page).toContain("async function mountSingleLayer");
-    expect(page).toContain("mounted.app.unmount()");
-    // 原生 setData 边界包装（纯 SDK 返回墙钟）。
-    expect(page).toContain("instrumentNativeSetData");
-    expect(page).toContain("PointShapeLayer");
-    expect(page).toContain("LineLayer");
-    expect(page).toContain("FillLayer");
-    // FPS = frames / seconds，不是 ÷60 比值。
-    expect(page).toMatch(/return frames \/ \(elapsed \/ 1000\)/);
-    expect(page).not.toMatch(/frames\s*\/\s*\(elapsed\s*\/\s*1000\)\s*\/\s*60/);
-    // long task：页面级 collector + 窗末 flush + takeRecords，不是窗末直接 disconnect。
+    // settle = Fake flushPromises 同款（setTimeout 跨 macrotask）+ nextTick，不是纯微任务。
+    expect(page).toMatch(/setTimeout\(resolve,\s*0\)/);
+    expect(page).not.toMatch(/await Promise\.resolve\(\);\s*\n\s*await Promise\.resolve\(\);\s*\n\s*await nextTick\(\);/);
+    // long task：页面级 collector + 窗末 flush + takeRecords + **窗口交集**归属。
     expect(page).toContain("createLongTaskCollector");
     expect(page).toContain("takeRecords");
     expect(page).toContain("longTasks.flush()");
     expect(page).toMatch(/countIn\(windowStart, setDataEnd\)/);
     expect(page).toMatch(/countIn\(redrawStart, redrawEnd\)/);
+    expect(page).toMatch(/Math\.min\(entryEnd,\s*end\)\s*-\s*Math\.max\(entryStart,\s*start\)/);
     // firstFrame 在 stabilize sleep(200) **之前**采样（#131 复审第 2 条）。
     const firstFrameSample = page.indexOf("const firstFrame = sample(");
     const stabilizeSleep = page.indexOf("await sleep(200)");
@@ -380,6 +383,19 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
     expect(stabilizeSleep, "找不到稳定期 sleep").toBeGreaterThan(firstFrameSample);
     // 协议表不得再写「ready + paint + 稳定等待」当 firstFrame 终点。
     expect(page).not.toMatch(/ready \+ paint \+ 稳定等待/);
+    // FPS 重命名为 postUpdateFps（更新后采样，不是 setData 期间）。
+    expect(page).toContain("postUpdateFps");
+    expect(page).not.toMatch(/\bfps:\s*await sampleFps/);
+    // 逐图层独立 mount / unmount + 原生 setData 探针。
+    expect(page).toContain("async function mountSingleLayer");
+    expect(page).toContain("mounted.app.unmount()");
+    expect(page).toContain("instrumentNativeSetData");
+    expect(page).toContain("PointShapeLayer");
+    expect(page).toContain("LineLayer");
+    expect(page).toContain("FillLayer");
+    // FPS = frames / seconds，不是 ÷60 比值。
+    expect(page).toMatch(/return frames \/ \(elapsed \/ 1000\)/);
+    expect(page).not.toMatch(/frames\s*\/\s*\(elapsed\s*\/\s*1000\)\s*\/\s*60/);
   });
 
   it("报告 schema 含 redraw / sdkSetDataMs / notes，家族清单与之一致", () => {
