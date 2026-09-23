@@ -815,14 +815,13 @@ export interface BHeatmapLayerProps {
 }
 
 /**
- * `BTrackLineLayer` 的 props（**基线**）。
+ * `BTrackLineLayer` 的 props。
  *
- * 与热力图同属扩展 API；驱动的登记面里它只有 `setData`，因此本组件只声明 `data` 与 `visible`。
+ * 与热力图同属扩展 API；驱动的登记面（#110 之后）包含 `setData` + 六条播放命令，因此本组件
+ * 声明 `data` / `visible`，并 expose 播放命令面（见 `BTrackLineLayerExpose`）。
  *
- * **播放控制（`start` / `pause` / `resume` / `stop`）与页面可见性联动刻意未实现**：官方类型包
- * 没有该类声明，方法名必须先经真实运行时探针取证（本机可跑的 live 探针），在没有证据之前
- * 不猜方法名、也不建一套镜像 SDK 播放状态的内部状态机。见 ADR
- * `2026-09-19-native-data-layer-components` 的欠账表。
+ * 播放命令的方法名均经 live 探针取证（`scripts/probe-track-line.mts`，2026-09-23，exit 0），
+ * 不是从类型包猜的——在拿到读数之前不猜方法名是 #110 的硬门（已过）。
  */
 export interface BTrackLineLayerProps {
   /**
@@ -831,13 +830,59 @@ export interface BTrackLineLayerProps {
    * 形状由调用方保证（本库不做 GeoJSON 校验：那属于数据适配层，而该 kind 没有任何可核对的声明
    * 来支撑「什么算合法」）。
    *
-   * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。这是
-   * 「无数据」在这一族里的唯一可收敛表达：驱动登记面里 `track-line` 只有 `setData`，没有清空入口
-   * （#106 评审的 P1-2）。
+   * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。
    */
   data?: object | null;
   /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达。 */
   visible?: boolean;
+  /**
+   * 页面 hidden 时是否**自动 pause**（shown 恢复 resume）。默认 `false`。
+   *
+   * live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 继续推进）。因此默认策略是
+   * 只停掉本库自己的观察（`observed` 不再更新），**不**改写业务播放意图。自动 pause/resume
+   * 必须是显式 opt-in（issue #110 的硬约束），且只在「本次 pause 是 visibility 发起的」时才
+   * resume——用户自己 pause 过的不被 visibility 抢走。
+   */
+  pauseOnHidden?: boolean;
+}
+
+/** 事件派生的进度读数（只读；不镜像成「播放状态机」）。 */
+export interface BTrackLineObserved {
+  /** 播放进度 0–1（`progress` 载荷的 `process`）。 */
+  process?: number;
+  /** 已播放时长（`progress` 载荷的 `elapsed`）。 */
+  elapsed?: number;
+  /** 已播放距离（`progress` 载荷的 `distance`）。 */
+  distance?: number;
+  /** 当前位置（`progress` 载荷的 `point`）。 */
+  point?: unknown;
+  /** 当前朝向角（`progress` 载荷的 `angle`）。 */
+  angle?: number;
+  /** 播放状态码（`statuschange` 载荷的 `status`）。 */
+  status?: number;
+  /** 播放状态名（`statuschange` 载荷的 `statusName`）。 */
+  statusName?: string;
+}
+
+/** `BTrackLineLayer` expose 的命令面与只读观察（#110）。 */
+export interface BTrackLineLayerExpose {
+  /**
+   * 播放命令面：`start / pause / resume / stop / setSpeed / setProcess`。
+   *
+   * 命令是**发出去**的：是否真的暂停由 SDK 的 `progress` / `statuschange` 事件回答
+   * （见 `observed`）。未就绪时命令告警一次并跳过（不排队）。
+   */
+  playback: import("../core/layers/trackLinePlayback").TrackLinePlaybackApi;
+  /**
+   * 事件派生的进度读数（只读；换实例时由新实例的事件重建）。
+   *
+   * **不**是内部播放状态机——它只是把 SDK 事件里我们认识的字段搬过来。
+   *
+   * 消费方经 `vm.observed` 读到的就是**值**（`defineExpose` 的 expose 面用取值 getter，
+   * 与 `BMapExpose` 同一口径）。需要追踪变化时用 `watch(() => vm.observed, …)`
+   * （getter 内部读 `shallowRef.value`，依赖仍会挂上）。
+   */
+  observed: BTrackLineObserved | null;
 }
 
 /* ------------------------------------------------ 点图层的另两个 kind（#35 新增） */

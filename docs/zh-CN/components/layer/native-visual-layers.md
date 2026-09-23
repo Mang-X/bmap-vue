@@ -15,7 +15,7 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'baidu-ma
 | `BLineLayer` | `LineLayer`（4.0.4 有声明） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
 | `BFillLayer` | `FillLayer`（有声明） | 同上（样式是 `BFillLayerStyle`） | 面状统计、区域着色 |
 | `BHeatmapLayer` | `Heatmap`（**无声明**，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
-| `BTrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐（**基线**） | 轨迹线（播放控制见文末） |
+| `BTrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
 
 「官方有没有声明」不是细节：**没有声明**的类只能按「运行时按需注入」处理，本库因此只暴露驱动已
 登记、且逐条核对过的入口。所以后两个组件**没有** `opacity` / `zIndex` / `minZoom` / `maxZoom`——
@@ -139,7 +139,72 @@ function highlight(id: string) {
   样式表达式的求值…在样式表达式中通过 `feature-state` 访问」），真正的视觉效果来自 `style` 里的
   数据驱动表达式（`BMapStyleExpression` 的 `object` 那一支）。
 
-`BHeatmapLayer` / `BTrackLineLayer` **没有**要素状态入口，因此不提供该命令面。
+`BHeatmapLayer` **没有**要素状态入口，因此不提供该命令面。`BTrackLineLayer` 的命令面是**播放控制**（见下节），不是要素状态。
+
+## 播放控制与进度观察（`BTrackLineLayer` / #110）
+
+`TrackLine` 的播放命令面与事件观察经 **live 探针取证**（`scripts/probe-track-line.mts`，2026-09-23，exit 0），方法名不是从类型包猜的。
+
+### 命令面（`ref.playback`）
+
+| 命令 | 官方入口 | 语义 |
+| --- | --- | --- |
+| `start()` | `start()` | 起播（从当前 `process` 继续） |
+| `pause()` | `pause()` | 暂停 |
+| `resume()` | `resume()` | 从暂停处继续 |
+| `stop()` | `stop()` | 停止播放（**不**归零 `process`：live 探针 `cmd.stop.observed` 保持原值） |
+| `setSpeed(n)` | `setSpeed(n)` | 播放倍速（正有限数；`BMAP_INVALID_ARGUMENT`） |
+| `setProcess(p)` | `setProcess(p)` | 跳到进度 `0–1`（越界同样 `BMAP_INVALID_ARGUMENT`） |
+
+四条口径：
+
+- **命令是发出去的**：是否真的暂停/跳转，由 SDK 的 `progress` / `statuschange` 事件回答（见 `observed`）。本组件**不建**内部播放状态机去镜像 SDK；
+- **参数在 SDK 调用之前校验**：`setSpeed` 必须是正有限数、`setProcess` 必须落在 `[0,1]`，非法值抛 `BMAP_INVALID_ARGUMENT`、不产生任何 SDK 调用；
+- **图层未就绪时命令不排队**：告警一次并跳过（与要素状态命令同一条口径）；
+- **不支持的操作显式失败**：`BMAP_CAPABILITY_UNSUPPORTED` 从 Driver 抛出，不在这一层静默 no-op。
+
+### 进度观察（`ref.observed` + 事件）
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { BTrackLineLayer } from 'baidu-map-gl-vue'
+import type { BTrackLineObserved } from 'baidu-map-gl-vue'
+
+const layer = ref<InstanceType<typeof BTrackLineLayer> | null>(null)
+
+function play() {
+  layer.value?.playback.start()
+}
+
+function onProgress(o: BTrackLineObserved) {
+  // o.process / o.elapsed / o.distance / o.point / o.angle 来自 progress 载荷
+}
+</script>
+
+<template>
+  <BTrackLineLayer ref="layer" :data="track" @progress="onProgress" />
+</template>
+```
+
+| 面 | 来源 | 说明 |
+| --- | --- | --- |
+| `observed`（expose） | 事件派生的只读读数 | 换实例时由新实例的事件重建；**不是**内部播放状态机 |
+| `@progress` | SDK `progress` 事件 | 载荷含 `process` / `elapsed` / `distance` / `point` / `angle` |
+| `@statuschange` | SDK `statuschange` 事件 | 载荷含 `status` / `statusName` |
+
+`defineExpose` 会把 ref **解包**：父级通过 `vm.observed` 读到的是**值**。要追踪变化用 `watch(() => vm.observed, …)`。
+
+### 页面可见性策略（`pauseOnHidden`）
+
+live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 继续推进）。因此：
+
+| 策略 | 行为 |
+| --- | --- |
+| **默认**（`pauseOnHidden=false`） | 页面 hidden 时只停掉**本库自己的观察**（`observed` 不再更新），**不**改写业务播放意图（SDK 继续播） |
+| **显式 opt-in**（`pauseOnHidden=true`） | hidden 触发 `pause()`、shown 恢复 `resume()`，且只在「本次是因 visibility 暂停的」时才 resume——**用户自己 pause 过的不被 visibility 抢走** |
+
+自动 pause/resume 必须是 opt-in、不是基础默认，这是 issue #110 的硬约束。
 
 ## 释放策略
 
@@ -168,7 +233,5 @@ function highlight(id: string) {
   核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `BLineLayer` / `BFillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
-- **`BTrackLineLayer` 只是基线**：播放控制（`start` / `pause` / `resume` / `stop`）与页面可见性联动
-  **未实现**——官方类型包没有 `TrackLine` 的类声明，方法名必须先由真实运行时探针取证；本库也不会
-  另建一套「镜像 SDK 播放状态」的内部状态机。该组件不依赖旧的 `BMapGLLib.TrackAnimation` 插件。
+- **`BTrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
 - **`BMVTLayer` 尚未提供**（见 ADR 的欠账表）。

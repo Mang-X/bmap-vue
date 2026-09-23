@@ -57,7 +57,15 @@ export type NativeLayerOperation =
   | "replaceState"
   | "getState"
   | "setEnablePicked"
-  | "hitTest";
+  | "hitTest"
+  // TrackLine 播放命令面（#110）：七条方法名均经 live 探针取证（`scripts/probe-track-line.mts`，
+  // 2026-09-23，exit 0），不是从类型包猜的。`setSpeed` / `setProcess` 带参数，其余无参。
+  | "start"
+  | "pause"
+  | "resume"
+  | "stop"
+  | "setSpeed"
+  | "setProcess";
 
 /**
  * 原生图层句柄。
@@ -166,4 +174,20 @@ export interface NativeLayerDriver {
   setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
   /** 主动命中测试（像素 → 要素）；只有声明该入口的 kind 有实现 */
   hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+
+  /**
+   * TrackLine 播放命令（#110；方法名均经 live 探针取证，不是从类型包猜的）。
+   *
+   * 只有 `track-line` kind 支持这六条；其它 kind 调用会显式抛 `BMAP_CAPABILITY_UNSUPPORTED`
+   * （与其它操作同一口径，不静默 no-op）。参数校验（`setProcess` 必须在 0–1、`setSpeed` 必须 > 0）
+   * 在 Driver 里前置于 SDK 调用：`BMAP_INVALID_ARGUMENT` 在打到 SDK 之前抛。
+   */
+  start(layer: NativeLayerHandle): void;
+  pause(layer: NativeLayerHandle): void;
+  resume(layer: NativeLayerHandle): void;
+  stop(layer: NativeLayerHandle): void;
+  /** 播放倍速：必须是有限正数（官方口径：正数，`setSpeed(0)` 语义未声明）。 */
+  setSpeed(layer: NativeLayerHandle, speed: number): void;
+  /** 进度 0–1（含端点）；越界抛 `BMAP_INVALID_ARGUMENT`，不静默 clamp。 */
+  setProcess(layer: NativeLayerHandle, process: number): void;
 }

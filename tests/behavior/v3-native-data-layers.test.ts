@@ -26,7 +26,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, h, nextTick, ref, type VNodeChild } from "vue";
-import { createFakeV4Harness } from "../../packages/test-utils";
+import { browserShims, createFakeV4Harness } from "../../packages/test-utils";
 import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
 import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
 import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
@@ -35,6 +35,7 @@ import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/laye
 import type { FeatureStateApi } from "../../packages/baidu-map-gl-vue/src/core/data/featureState";
 
 const { harness, fake } = createFakeV4Harness();
+const shims = browserShims();
 
 /* ------------------------------------------------------------------ 夹具 */
 
@@ -119,6 +120,16 @@ function lastRawLayer(): RawLayerView {
   const raw = list[list.length - 1];
   if (!raw) throw new Error("本用例还没有创建过原生图层");
   return raw;
+}
+
+/** TrackLine 播放字段的替身读数（FakeV4TrackLine）。 */
+function lastRawTrackLine(): { process: number; speed: number; playing: boolean; callLog: string[] } {
+  return lastRawLayer() as unknown as { process: number; speed: number; playing: boolean; callLog: string[] };
+}
+
+/** 切换页面可见性（`browserShims` 会覆盖 `visibilityState` 并派发 `visibilitychange`）。 */
+function setVisibility(state: "hidden" | "visible"): void {
+  shims.setDocumentHidden(state === "hidden");
 }
 
 function mountLayerTree(children: () => VNodeChild) {
@@ -695,6 +706,141 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       await unmountAndSettle(wrapper);
       harness.assertIdle("BTrackLineLayer");
     });
+
+    it("播放命令面：六条命令转发到实例；observed 由 progress / statuschange 事件派生", async () => {
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      // `defineExpose` 解包 ref：`vm.observed` 是**值**，每次访问都经 proxy 读 `.value`
+      const exposed = layer.vm as unknown as {
+        playback: {
+          start(): void;
+          pause(): void;
+          resume(): void;
+          stop(): void;
+          setSpeed(n: number): void;
+          setProcess(p: number): void;
+        };
+        observed: Record<string, unknown> | null;
+      };
+
+      // 命令面转发（Fake 的可观察读数直接读字段）
+      exposed.playback.setProcess(0.5);
+      exposed.playback.setSpeed(2);
+      exposed.playback.start();
+      const raw = lastRawTrackLine();
+      expect(raw.process).toBe(0.5);
+      expect(raw.speed).toBe(2);
+      expect(raw.playing).toBe(true);
+      expect(harness.nativeLayerCalls()).toEqual(
+        expect.arrayContaining(["setData", "setProcess", "setSpeed", "start"]),
+      );
+
+      exposed.playback.pause();
+      expect(raw.playing).toBe(false);
+      exposed.playback.resume();
+      expect(raw.playing).toBe(true);
+      exposed.playback.stop();
+      expect(raw.playing).toBe(false);
+      // live 探针：stop 不归零 process（夹具 cmd.stop.observed.process 保持原值）
+      expect(raw.process).toBe(0.5);
+
+      // observed 只读事件，不镜像状态机
+      expect(exposed.observed).toBeNull();
+      harness.emitNativeLayerEvent(-1, "progress", {
+        process: 0.25,
+        elapsed: 1200,
+        distance: 300,
+        angle: 45,
+      });
+      expect(exposed.observed).toMatchObject({ process: 0.25, elapsed: 1200, distance: 300, angle: 45 });
+
+      harness.emitNativeLayerEvent(-1, "statuschange", { status: 1, statusName: "playing" });
+      expect(exposed.observed).toMatchObject({ status: 1, statusName: "playing", process: 0.25 });
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("轨迹线播放命令面");
+    });
+
+    it("setProcess 越界在打到 SDK 之前抛 BMAP_INVALID_ARGUMENT（不静默 clamp）", async () => {
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as {
+        playback: { setProcess(p: number): void; setSpeed(n: number): void };
+      };
+      const before = harness.nativeLayerCalls().length;
+
+      expect(() => exposed.playback.setProcess(1.5)).toThrowError(
+        expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+      );
+      expect(() => exposed.playback.setSpeed(0)).toThrowError(
+        expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+      );
+      expect(harness.nativeLayerCalls().length, "非法参数不得碰到 SDK").toBe(before);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("轨迹线播放参数校验");
+    });
+
+    it("默认可见性策略：hidden 只停观察，不改写 SDK 播放意图（不自动 pause）", async () => {
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as {
+        playback: { start(): void };
+        observed: Record<string, unknown> | null;
+      };
+      const raw = lastRawTrackLine();
+
+      exposed.playback.start();
+      expect(raw.playing).toBe(true);
+
+      // 进入 hidden（默认 pauseOnHidden=false ⇒ 不碰 SDK）
+      setVisibility("hidden");
+      harness.emitNativeLayerEvent(-1, "progress", { process: 0.3 });
+      expect(raw.playing, "默认策略：SDK 继续播（live 探针实测）").toBe(true);
+      expect(exposed.observed, "hidden 时停掉本库自己的观察").toBeNull();
+
+      // 回到 shown：恢复观察，SDK 播放状态不受 visibility 影响
+      setVisibility("visible");
+      harness.emitNativeLayerEvent(-1, "progress", { process: 0.4 });
+      expect(exposed.observed).toMatchObject({ process: 0.4 });
+      expect(raw.playing).toBe(true);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("轨迹线默认可见性");
+    });
+
+    it("pauseOnHidden opt-in：hidden 才 pause；用户自己 pause 过的不被 visibility 抢走 resume", async () => {
+      const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true });
+      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      await settle();
+      const layer = wrapper.findComponent(BTrackLineLayer);
+      const exposed = layer.vm as unknown as {
+        playback: { start(): void; pause(): void };
+      };
+      const raw = lastRawTrackLine();
+
+      exposed.playback.start();
+      expect(raw.playing).toBe(true);
+
+      setVisibility("hidden");
+      expect(raw.playing, "opt-in 下 hidden 触发 pause").toBe(false);
+      setVisibility("visible");
+      expect(raw.playing, "shown 且本次是 visibility 发起的 pause ⇒ resume").toBe(true);
+
+      // 用户自己 pause：visibility 不该在 shown 时抢走 resume
+      exposed.playback.pause();
+      expect(raw.playing).toBe(false);
+      setVisibility("hidden");
+      setVisibility("visible");
+      expect(raw.playing, "用户 pause 过的不被 visibility resume").toBe(false);
+
+      await unmountAndSettle(wrapper);
+      setVisibility("visible");
+      harness.assertIdle("轨迹线 pauseOnHidden");
+    });
   });
 
   describe("§6 样式里的函数：换实现不触发写，但 SDK 侧调用到新实现", () => {
@@ -757,6 +903,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
         "packages/baidu-map-gl-vue/src/core/composables/useNativeLayerResource.ts",
         "packages/baidu-map-gl-vue/src/core/data/featureState.ts",
         "packages/baidu-map-gl-vue/src/core/layers/nativeLayerPick.ts",
+        "packages/baidu-map-gl-vue/src/core/layers/trackLinePlayback.ts",
       ];
       const raw = sources.map((path) => readSource(path)).join("\n");
 

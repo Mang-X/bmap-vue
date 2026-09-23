@@ -137,6 +137,13 @@ function removeClusterLayer() {
 
 `TrackLine` 接收单条 LineString Feature。播放状态通过 `start/pause/resume/stop` 控制；`setProcess()` 的取值范围是 0–1，`setSpeed()` 要求正数。
 
+**Live 探针补记（#110，2026-09-23，exit 0；夹具 `tests/behavior/fixtures/probe-track-line.live.json`）**：
+
+- 七个方法（`setData` / `start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）均存在且合法入参可调用；非法入参**未**在探针里穷举（SDK 拒绝行为未证，由消费方在调用前拦截）。
+- `stop()` 后 `process` **不**归零（`cmd.stop.observed.process` 保持调用前的值）；它停的是播放推进，不是进度复位。
+- 页面 hidden 时 **SDK 不自行暂停**：`progress` 在 hidden 窗口继续推进（`vis.hidden.observed`）。
+- `removeLayer` 之后 `progress` / `statuschange` **不再派发**（`rm.after.observed.count = 0`）⇒ 卸载路径不需要再显式 `stop` 才能停事件。
+
 ```javascript
 const trackLine = new BMap.TrackLine({
   color: '#1677ff',

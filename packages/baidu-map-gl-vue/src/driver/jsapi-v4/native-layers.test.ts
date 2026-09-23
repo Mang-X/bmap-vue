@@ -341,6 +341,77 @@ describe("v4 Native Layer Facet：拾取", () => {
   });
 });
 
+describe("v4 Native Layer Facet：TrackLine 播放命令（#110）", () => {
+  it("track-line 支持六条播放命令；其余 kind 全部显式失败", () => {
+    const trackOps = ["start", "pause", "resume", "stop", "setSpeed", "setProcess"] as const;
+    const track = layers.create("track-line");
+    for (const op of trackOps) {
+      expect(layers.supports("track-line", op), `track-line 应支持 ${op}`).toBe(true);
+    }
+    // 其余 kind 没有播放入口：显式失败，不静默 no-op
+    const other = layers.create("line");
+    for (const op of trackOps) {
+      expect(layers.supports("line", op), `line 不该支持 ${op}`).toBe(false);
+      expect(() => callNativeLayerOperation(layers, other, op)).toThrowError(
+        expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+      );
+    }
+  });
+
+  it("播放命令落到实例；setProcess / setSpeed 记下参数", () => {
+    const layer = layers.create("track-line");
+    layers.setData(layer, { type: "Feature", geometry: { type: "LineString", coordinates: [] } });
+    layers.setProcess(layer, 0.5);
+    layers.setSpeed(layer, 2);
+    layers.start(layer);
+    layers.pause(layer);
+    layers.resume(layer);
+    layers.stop(layer);
+
+    const raw = layer.raw as {
+      callLog: string[];
+      process: number;
+      speed: number;
+      playing: boolean;
+    };
+    expect(raw.callLog).toEqual([
+      "setData",
+      "setProcess",
+      "setSpeed",
+      "start",
+      "pause",
+      "resume",
+      "stop",
+    ]);
+    // live 探针：stop 不归零 process（夹具 cmd.stop.observed.process 保持原值）
+    expect(raw.process).toBe(0.5);
+    expect(raw.speed).toBe(2);
+    expect(raw.playing).toBe(false);
+  });
+
+  it("setProcess 越界 / setSpeed 非法值在打到 SDK 之前抛 BMAP_INVALID_ARGUMENT", () => {
+    const layer = layers.create("track-line");
+    const raw = layer.raw as { callLog: string[] };
+    const before = raw.callLog.length;
+
+    for (const bad of [-0.1, 1.1, Number.NaN]) {
+      expect(() => layers.setProcess(layer, bad)).toThrowError(
+        expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+      );
+    }
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => layers.setSpeed(layer, bad)).toThrowError(
+        expect.objectContaining({ code: "BMAP_INVALID_ARGUMENT" }),
+      );
+    }
+    expect(raw.callLog.length, "非法参数不得碰到 SDK").toBe(before);
+
+    // 合法边界：0 与 1 都是 setProcess 的合法值
+    expect(() => layers.setProcess(layer, 0)).not.toThrow();
+    expect(() => layers.setProcess(layer, 1)).not.toThrow();
+  });
+});
+
 describe("v4 Native Layer Facet：supports() 与实现一致", () => {
   /** 每个操作在「支持时必须不报 unsupported」与「不支持时必须报」两边的真实调用。 */
   it.each(KINDS.flatMap((kind) => OPERATIONS.map((op) => [kind, op] as const)))(
@@ -387,6 +458,13 @@ const OPERATION_MEMBERS: Readonly<Record<NativeLayerOperation, readonly string[]
   getState: ["getAllState"],
   setEnablePicked: ["setBaseOptions"],
   hitTest: ["hitTest"],
+  // TrackLine 播放：成员名与方法同名（live 探针逐一验证 `typeof === "function"`）
+  start: ["start"],
+  pause: ["pause"],
+  resume: ["resume"],
+  stop: ["stop"],
+  setSpeed: ["setSpeed"],
+  setProcess: ["setProcess"],
 };
 
 /** 四类「有类声明」的 kind（扩展 API 没有声明，由官方扩展参考的表钉住，不在这条检查里）。 */

@@ -48,3 +48,4 @@ milestone-docs/
 
 # WorkBuddy 工作区本地数据(记忆/会话/缓存,不提交)
 .workbuddy/
+.vitest

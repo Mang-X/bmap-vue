@@ -68,7 +68,7 @@
 
 迁移路径：`native` → layer.track-line（原生组件 `BTrackLineLayer`）
 
-改用原生轨迹线图层 `<BTrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。**播放命令面**（start / pause / resume / stop / setSpeed 一类）与页面可见性结论由 #110 收口，本票只给结论与去向：不要为 TrackAnimation 再写组件或 hook。
+改用原生轨迹线图层 `<BTrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。**播放命令面**（start / pause / resume / stop / setSpeed / setProcess）与页面可见性（`pauseOnHidden`）已由 #110 落地（方法名经 live 探针取证）；本票的结论与去向不变：不要为 TrackAnimation 再写组件或 hook。
 
 版本锁定：**未版本化** —— URL 指向百度自托管的 GitHub 镜像（路径里没有 tag / commit）⇒ 上游改内容而 URL 不变；本仓用 artifactDigest 锁内容，不做版本号承诺。
 
@@ -78,7 +78,7 @@
 
 - `setSpeed()` 依赖上游**未声明**的 `ViewAnimation` 私有成员（`animation` / `_options` / `_beginTime` 与 `setBeginTime` / `setDuration`）：4.0 上实测可用，但私有面随时可能消失 ⇒ 本库不提供它，也不承诺它。
 - `Polyline#_config.linkRight` 是实例私有字段，用于判断折线是否跨 180° 经线。
-- 播放命令面（start / pause / resume / stop / setSpeed）的原生对应物已排期在 **#110**：本票只给「迁到 `BTrackLineLayer`」的结论，播放控制由那张票收口。
+- 播放命令面的原生对应物已由 **#110** 落地在 `BTrackLineLayer` 的 `playback` expose 上（方法名经 live 探针取证，2026-09-23）。
 
 ### `DrawingManager`
 

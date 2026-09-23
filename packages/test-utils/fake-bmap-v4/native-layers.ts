@@ -262,4 +262,48 @@ export class FakeV4ClusterLayer extends FakeV4RuntimeLayer {}
 
 export class FakeV4Heatmap extends FakeV4RuntimeLayer {}
 
-export class FakeV4TrackLine extends FakeV4RuntimeLayer {}
+export class FakeV4TrackLine extends FakeV4RuntimeLayer {
+  /**
+   * 播放命令面的可观察状态（#110；方法名与语义均经 live 探针取证，
+   * `scripts/probe-track-line.mts`，2026-09-23，exit 0）。
+   *
+   * 字段是**可观察读数**（测试直接读），不是内部状态机：真实 SDK 的进度由渲染链推进，
+   * 替身只在 `setProcess` 时改 `process`（`stop` **不**归零——live 夹具
+   * `cmd.stop.observed.process` 保持原值），不模拟逐帧——逐帧由测试自己 `emit("progress", …)`
+   * 驱动（`FakeV4EventTarget.emit`）。
+   */
+  process = 0
+  speed = 1
+  playing = false
+
+  start(): void {
+    this.callLog.push('start')
+    this.playing = true
+  }
+
+  pause(): void {
+    this.callLog.push('pause')
+    this.playing = false
+  }
+
+  resume(): void {
+    this.callLog.push('resume')
+    this.playing = true
+  }
+
+  stop(): void {
+    this.callLog.push('stop')
+    this.playing = false
+    // 与 live 一致：stop 不重置 process（夹具 cmd.stop.observed.process ≠ 0）
+  }
+
+  setSpeed(speed: number): void {
+    this.callLog.push('setSpeed')
+    this.speed = speed
+  }
+
+  setProcess(process: number): void {
+    this.callLog.push('setProcess')
+    this.process = process
+  }
+}
