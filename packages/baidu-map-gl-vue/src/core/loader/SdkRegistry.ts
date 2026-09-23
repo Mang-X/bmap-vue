@@ -22,7 +22,6 @@
  * 旧引擎时代那个独立的 `BMapGL` 域已随 `#26` 删除（同一个 realm 里不再有两份配置需要分开记账）。
  */
 import { BMapError } from "../errors/BMapError";
-import { logger } from "../logger";
 
 /**
  * 请求级加载任务：`options` 已由 Provider 闭包捕获，因此同一 domain 可以服务
@@ -53,24 +52,26 @@ export interface SdkRegistryLoadRequest<T = unknown> {
   cancellable?: boolean;
 }
 
-/** 域内已就绪配置与请求配置冲突时的处理策略。 */
-export type SdkConflictPolicy = "throw" | "warn" | "ignore";
-
-export interface SdkConflictInfo {
-  readonly domain: string;
-  /** 本次请求的配置指纹。 */
-  readonly requested: string;
-  /** 域内已就绪（或正在加载）的配置指纹。 */
-  readonly active: string;
-}
-
+/**
+ * 冲突处置：**只有一种** —— reject `BMAP_SDK_CONFIG_CONFLICT`。
+ *
+ * 历史注记（`#104` 第三批）：这里曾经有一个 `conflictPolicy: "throw" | "warn" | "ignore"`
+ * 与配套的 `onConflict` 观测出口（ADR `2026-09-10-sdk-conflict-domain.md` 决策 6 的降级开关）。
+ * 审计结果是 **REMOVE**：三个 Provider（官方 / 自研 script / 复用既有全局）**一律不传**它，
+ * 仓库里只有 `SdkRegistry` 自己的单测可达 `warn` / `ignore` ⇒ 它是「没有人用的公共开关」，
+ * 而它会随 `./core` 一起被冻结进 3.0 的公共声明面。`./core` 冻结前的复核（issue #104
+ * 实施步骤 6）要求「内部判据不进入承诺」，因此在这里收成单一行为。
+ *
+ * 为什么不做成配置项而不是删掉：**冲突本身就是不可恢复的错误**（同一 realm 只能有一份
+ * 全局 SDK，见本文件头）。`ignore` 让调用方拿到一份「不是自己请求的那份 SDK」，
+ * 属于把不可解释的运行时状态合法化；要放宽也应该等出现第一个真实消费者时再按场景设计，
+ * 而不是保留一个无人验证的分支（`#104` 的一条既有结论）。参考实现
+ * `huiyan-fe/react-bmap`（`src/loader/registry.ts`）走的是「报告 + 复用已加载那份」，
+ * 与本库的 `warn` / `ignore` 都不是同一个语义，因此不能拿它当保留这两个取值的理由。
+ */
 export interface SdkRegistryOptions {
   /** 冲突域名称，用于错误信息与诊断。 */
   readonly domain?: string;
-  /** 冲突策略，默认 `throw`。 */
-  readonly conflictPolicy?: SdkConflictPolicy;
-  /** 冲突观测出口（`warn` / `ignore` 下用于上报）。 */
-  readonly onConflict?: (info: SdkConflictInfo) => void;
 }
 
 /** 域内一次共享加载任务的内部状态（不对外暴露：诊断请用 `size` / `activeFingerprint`）。 */
@@ -88,7 +89,6 @@ interface RegistryEntry {
   readonly cancellable: boolean;
 }
 
-const DEFAULT_CONFLICT_POLICY: SdkConflictPolicy = "throw";
 const DEFAULT_DOMAIN = "default";
 
 const PROCESS_SDK_REGISTRY_SYMBOL = Symbol.for("baidu-map-gl-vue.sdk-registry");
@@ -109,7 +109,7 @@ export function createConsumerAbortError(): BMapError {
  * 取同一 realm 内某个冲突域共享的 registry。
  *
  * `options` 只在**首次创建**该域时生效；后续调用复用既有实例，避免不同 Provider
- * 用各自的策略互相覆盖。
+ * 用各自的 domain 互相覆盖。
  */
 export function getProcessSdkRegistry(
   domain: string = DEFAULT_DOMAIN,
@@ -140,17 +140,9 @@ export class SdkRegistry {
   /** 域内正在加载、尚未就绪的配置指纹：首次并发不同配置时用它做占用判定。 */
   private occupiedFingerprint: string | undefined;
   private readonly domain: string;
-  private readonly onConflict: ((info: SdkConflictInfo) => void) | undefined;
-  private readonly conflictPolicy: SdkConflictPolicy;
 
   constructor(options: SdkRegistryOptions = {}) {
     this.domain = options.domain ?? DEFAULT_DOMAIN;
-    this.conflictPolicy = options.conflictPolicy ?? DEFAULT_CONFLICT_POLICY;
-    this.onConflict = options.onConflict;
-  }
-
-  get policy(): SdkConflictPolicy {
-    return this.conflictPolicy;
   }
 
   /** 域内已就绪的配置指纹，用于诊断与测试断言。 */
@@ -164,7 +156,8 @@ export class SdkRegistry {
 
   /**
    * 在域内加载：
-   * - 与域内已就绪 / 正在加载的配置冲突 → 交给冲突策略（默认 reject `BMAP_SDK_CONFIG_CONFLICT`）；
+   * - 与域内已就绪 / 正在加载的配置冲突 → reject `BMAP_SDK_CONFIG_CONFLICT`（唯一处置，
+   *   见 `SdkRegistryOptions` 的历史注记）；
    * - 同指纹已有任务 → 以独立消费者身份加入（`signal` 只影响自己）；
    * - 否则启动请求级 loader，成功后登记为域内已就绪配置。
    */
@@ -174,10 +167,8 @@ export class SdkRegistry {
     // 占用 = 已就绪配置 or 正在加载的配置：后者保证「首次并发不同配置」也会冲突。
     const active = this.loadedFingerprint ?? this.occupiedFingerprint;
     if (active !== undefined && active !== fingerprint) {
-      const conflict = this.conflictError(fingerprint);
       // 保持「返回 rejected Promise」语义：调用方 `await` 即可捕获。
-      // `warn` / `ignore` 策略下无冲突错误，继续走正常加载。
-      if (conflict) return Promise.reject(conflict);
+      return Promise.reject(this.conflictError(fingerprint));
     }
 
     const existing = this.entries.get(fingerprint);
@@ -310,19 +301,12 @@ export class SdkRegistry {
     });
   }
 
-  /** 构造冲突错误：策略为 `throw` 时抛出，否则记录观测并返回 `undefined`。 */
-  private conflictError(requested: string): Error | undefined {
+  /** 构造冲突错误：唯一处置，直接 reject。 */
+  private conflictError(requested: string): BMapError {
     const active = (this.loadedFingerprint ?? this.occupiedFingerprint) as string;
-    const info: SdkConflictInfo = { domain: this.domain, requested, active };
-    this.onConflict?.(info);
-    // 「active」既可能是已就绪配置，也可能是仍在加载的配置。
+    // 「active」既可能是已就绪配置，也可能是仍在加载的配置。指纹内 AK 与代理入口凭据都已哈希，
+    // 消息不会泄漏它们（这也是 `fingerprintConfig` / `fingerprintApiUrl` 只留哈希的原因）。
     const message = `SDK config conflict in ${this.domain}: requested ${requested}, already active ${active}`;
-    if (this.conflictPolicy === "throw") {
-      // 指纹内 AK 已哈希，消息不会泄漏完整 AK。
-      return new BMapError("BMAP_SDK_CONFIG_CONFLICT", message);
-    }
-    if (this.conflictPolicy === "warn") logger.warn(message);
-    // `ignore`：显式配置后才可能走到这里，保持静默。
-    return undefined;
+    return new BMapError("BMAP_SDK_CONFIG_CONFLICT", message);
   }
 }

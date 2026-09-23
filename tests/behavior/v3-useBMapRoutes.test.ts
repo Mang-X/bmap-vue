@@ -26,7 +26,7 @@ import { useBMapWalkingRoute } from "../../packages/baidu-map-gl-vue/src/composa
 import { useBMapRidingRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapRidingRoute";
 import { useBMapTransitRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapTransitRoute";
 import { DrivingPolicy } from "../../packages/baidu-map-gl-vue/src/driver/types/services";
-import { createFakeV4Harness } from "../../packages/test-utils";
+import { createFakeV4Harness, stripComments } from "../../packages/test-utils";
 
 let harness: ReturnType<typeof createFakeV4Harness>["harness"];
 let fake: ReturnType<typeof createFakeV4Harness>["fake"];
@@ -352,12 +352,6 @@ function sourcesIn(relativeDir: string): string[] {
 
 function sourceOf(relative: string): string {
   return readFileSync(join(PACKAGE_SRC, relative), "utf8");
-}
-
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
 }
 
 describe("UI 与 headless 分流（同一次界面操作只走一条路径）", () => {

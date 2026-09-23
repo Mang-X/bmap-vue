@@ -109,7 +109,7 @@ export function fingerprintApiUrl(
     const url = resolveBrowserUrl(normalized);
     const embedded = url.searchParams.get("ak");
     if (embedded) url.searchParams.set("ak", hash(embedded));
-    // userinfo 与 AK 同属凭据，指纹又会进 conflict 文本与 `onConflict` ⇒ 不能带原文。
+    // userinfo 与 AK 同属凭据，指纹又会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息 ⇒ 不能带原文。
     // 但**不能**统一抹成同一个值：不同凭据是不同的入口身份，合并会让冲突漏判 ⇒ 换成哈希。
     const userinfo = `${url.username}${url.password ? `:${url.password}` : ""}`;
     if (userinfo) {
@@ -119,7 +119,7 @@ export function fingerprintApiUrl(
     return url.toString();
   } catch {
     // 解析不了的入口没法逐项脱敏（`new URL` 直接抛错），而 fingerprint 会进
-    // `BMAP_SDK_CONFIG_CONFLICT` 文本与 `onConflict({ requested, active })` ⇒ 这里**不保留
+    // `BMAP_SDK_CONFIG_CONFLICT` 的消息文本 ⇒ 这里**不保留
     // 任何原文**：把整串哈希成不透明标识。身份区分能力保留（不同非法入口仍是不同配置），
     // 泄漏面归零（加载流程仍会用原始输入去报错，那条路径由脱敏函数处理）。
     return `invalid-url:${hash(normalized)}`;
@@ -172,7 +172,7 @@ export function canonicalServiceHost(serviceHost: string): string {
  * 计算配置 fingerprint，用于 SDK Registry 去重 / 冲突检测。
  *
  * 覆盖影响全局 SDK 语义的所有配置（版本、AK、apiUrl、serviceHost、语言）；AK 与
- * serviceHost 仅以哈希出现（指纹会进错误消息与 `onConflict`，不得外泄原始值）；
+ * serviceHost 仅以哈希出现（指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，不得外泄原始值）；
  * callback / timeout / nonce 等 script 级细节不参与——**除非**该回调参数不由 Loader 管理
  * （见 `managedCallbackParam`）。
  *
@@ -193,8 +193,8 @@ export function fingerprintConfig(
     `url:${fingerprintApiUrl(options.apiUrl, managed)}`,
   ];
   // 代理地址决定 SDK 从哪个入口加载，属「影响全局语义」的配置：不参与身份判定会让两个不同
-  // 代理的请求被当成同一份配置（冲突漏判）。但指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息与
-  // `onConflict`，而代理地址可能含内部域名 / 路径 / userinfo / token query——因此**只以哈希
+  // 代理的请求被当成同一份配置（冲突漏判）。但指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，
+  // 而代理地址可能含内部域名 / 路径 / userinfo / token query——因此**只以哈希
   // 入指纹**（官方 React 封装的 `stableHash({...})` 是同一口径）。
   if (options.serviceHost) {
     parts.push(`host:${hash(canonicalServiceHost(options.serviceHost))}`);

@@ -2,10 +2,16 @@
 
 > 对应 issue **#104**（P1，Stable 阻塞，须在 #44 冻结公共出口前完成）。
 > 原则四条已写进仓库根的 `AGENTS.md`（「服务层的硬约束」一节之后新增的 Ownership-first 段落）。
-> 决策记录侧：[ADR 2026-09-11（视角动画复核注记）](../../adr/2026-09-11-jsapi-v4-map-facet.md)、
+> 决策记录侧：[ADR 2026-09-10 决策 6 的后半句（已取代）](../../adr/2026-09-10-sdk-conflict-domain.md)、
+> [ADR 2026-09-11（视角动画复核注记）](../../adr/2026-09-11-jsapi-v4-map-facet.md)、
 > [ADR 2026-09-12 决策 5（已 superseded）](../../adr/2026-09-12-jsapi-v4-service-panorama-native-layers.md)、
+> [ADR 2026-09-13（默认路径委托官方 Loader；对照表已按第三批更新）](../../adr/2026-09-13-default-online-loader-cutover.md)、
 > [ADR 2026-09-14 非目标（已兑现）](../../adr/2026-09-14-service-lifecycle-and-local-search.md)、
 > [ADR 2026-09-14 删除旧引擎（已知限制第 2 条已被取代）](../../adr/2026-09-14-remove-legacy-engine.md)。
+
+三个批次的落地 PR：[#105](https://github.com/Mang-X/bmap-vue/pull/105)（第一批，A1–A3 / B1 / R1–R11）、
+[#122](https://github.com/Mang-X/bmap-vue/pull/122)（第二批，实施步骤 4：动画 teardown + F-1 取证）、
+[#129](https://github.com/Mang-X/bmap-vue/pull/129)（第三批，实施步骤 6：`./core` 公共面复核）。
 
 审计对象是 **main 上已落地** 的实现，不预设它们有问题；每行给出「机制 / 消费者 / 证据 / 结论 / 处置」。
 
@@ -52,8 +58,8 @@
 | --- | --- | --- | --- | --- | --- |
 | 自研 `ScriptLoader`（script/jsonp transport + 在飞/已完成缓存） | `core/loader/ScriptLoader.ts` | 只有 `customScriptV4Provider`（显式高级路径）；`v3-default-loader-boundary` 证明默认路径不碰它 | `OFFICIAL` 缺口（官方 loader 不支持非标准入口） | **KEEP** | 默认路径已在 #71 回到官方 loader |
 | `SharedLoadTask` 的进程级 `callbackRegistry` + 全局名占用 / foreign 回调捕获 | `core/loader/SharedLoadTask.ts:98` | 高级 jsonp 分支 | `ASSUMED`（官方 JSONP 回调命名是我们的读法，未取证） | **KEEP + 待取证** | 唯一保留的「恢复上游未公开身份」处：它服务的是显式高级路径，且**不**进 Stable 承诺。取证登记为 **F-2** |
-| `SdkRegistry` 的 `conflictPolicy: "warn" \| "ignore"` + `onConflict` | `core/loader/SdkRegistry.ts:71-73` | 三个 Provider 一律不传 ⇒ 只有单测可达 | 无消费者的分支 | **REMOVE** | 随 **#44** 的出口冻结一起做（同一批还有 `resetProcessSdkRegistryForTests` / `resetGlobalCallbackRegistryForTests` 从 `./core` 公共出口摘掉） |
-| `SdkRegistry.cancellable`（官方 loader 不可取消 vs 自研可取消） | 同文件 `:53` | 三条 Provider 路径 | `OFFICIAL` | **KEEP** | — |
+| `SdkRegistry` 的 `conflictPolicy: "warn" \| "ignore"` + `onConflict` | `core/loader/SdkRegistry.ts` | 三个 Provider 一律不传 ⇒ 只有单测可达 | 无消费者的分支 | **REMOVE** | **第三批已落地**：两个选项、`SdkConflictPolicy` / `SdkConflictInfo` 类型与 `policy` getter 一并删除，冲突处置收成唯一行为（恒 reject `BMAP_SDK_CONFIG_CONFLICT`）。ADR 2026-09-10 决策 6 已加取代注记（前半句不变）。同一批把 `resetProcessSdkRegistryForTests` 从 `./core` 出口摘掉（测试辅助不进公共声明面）——`resetGlobalCallbackRegistryForTests` 此前就没在出口上，无需处理 |
+| `SdkRegistry.cancellable`（官方 loader 不可取消 vs 自研可取消） | `core/loader/SdkRegistry.ts` 的 `SdkRegistryLoadRequest` | 三条 Provider 路径 | `OFFICIAL` | **KEEP** | — |
 | `createBaiduSdkUrl()`（旧 CDN 入口拼装） | 原 `core/loader/url.ts` | **生产 0**，但挂在 `./core` 出口上、被边界测试直接调用 | 迁移期遗留 | **REMOVE** | #104 R9：函数与其私有选项类型一并删除；`v3-default-loader-boundary` 改成**存在性否定**门禁（默认静态模块图里搜不到这个名字，同时正面证明 `core/loader/url.ts` 确实在图中） |
 | `providers/official.ts` 的 `OFFICIAL_LOADER_UNSUPPORTED_KEYS` 显式报错 | `:82-110` | 默认路径 | `OFFICIAL`（官方选项面） | **KEEP** | 「接收后忽略 = 假支持」的守卫本身，不是镜像 |
 | `markRejectedJsapiV4Global` / `isRejectedJsapiV4Global`（WeakSet 标记自家被拒残留） | `providers/namespace.ts:169-181` | 写入 `providers/load.ts:46`，读取 `providers/reuse.ts:68` | `OWNED`（跟的是我们自己的写） | **KEEP** | — |
@@ -95,7 +101,8 @@
 | `extractSdkEventNames` | 原 `core/events/EventBridge.ts` | 只有自身测试 | **REMOVE** | #104 R5 |
 | `shouldFullReplace` | 原 `core/data/diffData.ts` | 只有自身测试 | **REMOVE** | #104 R6 |
 | `useBMapServiceTask`（经 `export * from "./composables"` 外泄） | `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **SIMPLIFY** | 归 **#44**：要么给文档页要么从出口收窄 |
-| `SdkResourceAdapter` / `UseSdkResourceOptions` | `core/index.ts:84,89` | 定义处 | **SIMPLIFY** | 归 **#44** 的 `./core` 出口收窄 |
+| `useMapResource` / `SdkResourceAdapter` / `UseMapResourceResult` | 原 `core/composables/useMapResource.ts`（`core/index.ts` 出口） | **生产 0**（只有它自己的单测） | 被同目录的 `useSdkResource` 取代——后者的文件头写着「替代行为各异的 `useMapResource` / `useOverlayResource` / `useControlResource` / `useLayerResource`」 | **REMOVE** | **第三批已落地**：文件与单测删除、三处出口名一并摘掉 |
+| `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | 归 **#44**：`./core` 出口收窄时一并决定（`useBMapServiceTask` / `MapRuntimeOptions.clientFactory` 等同类项也在那里） |
 | `BAutoComplete` 里按结构化成员探测 `disposeAutocomplete` 的分支（`as { disposeAutocomplete?: … }`，探测失败即**静默不释放**） | 原 `components/autocomplete/BAutoComplete.vue` 的 `disposeService()` | 0：#26 之后 `BMapEngine` 只有 `jsapi-v4` 一个成员，分支永不成立（注释自己写着「#26 删除 webgl-v1 后这个探测可以收成直接调用」） | **REMOVE** | #104 R11：改成 `jsapiV4ServicesOf(client).disposeAutocomplete(instance)`——按 ADR 2026-09-14 的口径走**可运行时检查**的收窄点，而不是组件里另写一份 `as`。留着的代价不只是死代码：那条静默分支正好会跳过 Driver 侧的订阅记账 |
 
 ## 7. Fake 建模反向成为生产契约
@@ -106,13 +113,13 @@
 | --- | --- | --- | --- | --- |
 | `FakeV4CallbackQueue` 的微任务 FIFO + `delay` + `flushOne(index)` | `fake-bmap-v4/async.ts` | 曾经是唯一「suggest 归属成立」的证据 | **KEEP 为测试工具**，禁止再用于认证任何跨请求顺序 | A1 之后其消费者只剩 LocalSearch 的实例身份路径；`flushOne` 的正当用途恰恰是**打乱**顺序 |
 | `FakeV4Autocomplete.respond` / `.includeKeyword` / `AutocompleteResult.keyword` | `fake-bmap-v4/services.ts` | 生产已不读 `keyword` | **REMOVE** | #104 A1 一并删（留着就会有人重新按 keyword 建归属） |
-| `FakeMap.destroy()` 幂等 | `fake-bmap-v4/FakeMap.ts:667` | 我们的 guard 保留 | `ASSUMED` ⇒ guard 可以留，**契约不能这么写** | 后续票：`driver-contract.ts:504`、`:610` 那两行注释里的「SDK 侧的移除对未挂载资源是 no-op」要删掉或标明是**对本库记账**的断言——这两条现在只能证伪我们自己的计数，证不伪 SDK 的幂等性（另见 F-3） |
+| `FakeMap.destroy()` 幂等 | `fake-bmap-v4/FakeMap.ts` | 我们的 guard 保留 | `ASSUMED` ⇒ guard 可以留，**契约不能这么写** | **第三批已落地**：`driver-contract.ts` 里那两处「dispose 幂等」的注释与两条用例标题不再声称「SDK 侧的移除对未挂载资源是 no-op」——那两条断言的判据是 `harness.attachedCount()`，也就是**夹具那一侧的假账本**（本文件 `attachedCount()` 的说明写着「把假账本放在 harness 一侧」），因此它既不是官方幂等性的证据，也不是生产库 Driver/Registry 记账的证据（另见 F-3） |
 | 销毁期回调重入（`Autocomplete.onDispose` 等） | `fake-bmap-v4/services.ts:328-343` | Map / Panorama / service 三处 guard | `ASSUMED`（注释自己写的是「**可能**触发」） | **KEEP guard**，措辞保持「可能」，登记 **F-3** |
 | `addEventListener` 按函数身份去重（注释称「与官方一致」） | `fake-bmap-v4/event-target.ts:24-42` | 生产中立；只有某条用例的期望数字按它算 | `FAKE-ONLY` | 后续票：把该断言改成「夹具记账」口径，或 probe 一次（F-4） |
 | Fake 刻意比官方宽松（不剔除未声明 setter） | `fake-bmap-v4/objects.ts:53` 等 | 策略表仍按官方声明守 | **KEEP**（刻意的不对称，`FakeMap.ts:692` 已说明：宽松的夹具会藏 bug） | — |
 | `FakeV4ViewAnimation.suppressCancelEvent`（**新加的测试辅助**：取消成功但**不**派发 `animationcancel`） | `fake-bmap-v4/FakeMap.ts` | 只被防御性用例读：取消已交付时 hooks 必须收敛所有权；两个 hooks 共用一张地图时 H1 的重试与卸载都不得碰 H2 的动画 | 它建模的是 F-1 **未证的反面**（官方可能不派发该事件），因此**不能**当官方行为读 | **KEEP 为测试工具** | #105 评审第三轮：Fake 默认一定派发该事件，于是「等事件才交回所有权」在夹具里永远不会出错——生产实现是否依赖它，只有把派发关掉才看得出来。该用例（`第一段取消成功但无 animationcancel…`）证伪的是我们的依赖，不是官方的时序。F-1 于 2026-09-21 结清后这一条仍然成立：实测只覆盖了**成功取消会派发** `animationcancel` 这一侧，「取消成功却没有事件」依旧未证 |
 | `FakeV4ViewAnimation` 把 `delay: 0` 建模成「一个 0ms 定时器后启动」 | `fake-bmap-v4/FakeMap.ts` 的 `scheduleStart` / `startInternal` | `driver/jsapi-v4/map.test.ts` 的「`delay: 0` 的官方推荐路径仍然是『先取消、再销毁 SDK 对象』」 | **FAKE-ONLY 时序**：真实 4.0 在 `delay: 0` 下启动也要 **5–120ms**（F-1 读数），比销毁路径上那个 0ms 兜底**晚**，所以「先取消、再销毁」对**待启动**的动画在真实运行时大概率不成立 | **KEEP 为测试工具 + 登记** | 夹具的「几乎瞬时启动」是让「推迟到安全窗口」这条路径**可测**的必要简化（否则只能用真实时间等 100ms，用例会脆）。口径：该用例证明的是**本库的排序逻辑**在窗口成立时正确，不证明真实运行时一定落在那个顺序上——真实排序见 ADR 已知限制「动画的迟到启动窗口无法彻底关闭」 |
-| `driver-contract` 适配器上的 `expectation?: "fixture" \| "live"` 一档 | `test-utils/driver-contract.ts:685`、`:794`（跳过逻辑在 `:720`、`:812`、`:821`） | **两个调用方都传 `"fixture"`**（`v3-jsapi-v4-services-native-layers.test.ts:51`、`:71`），`"live"` 零使用者 | 这是**共享契约适配器**上的一档开关，不是 Fake 对象自身的属性；`smoke-jsapi-v4.mts --mode=live` 是另一条 runner，没有任何代码把这档喂给它 | **SIMPLIFY** | 后续票：要么删掉这一档（连同三处跳过分支），要么真的把它接到 live runner 上再留。本票不动——它不在删除面里，且改它要连带改契约适配器的入参形状 |
+| `driver-contract` 适配器上的 `expectation?: "fixture" \| "live"` 一档 | `test-utils/driver-contract.ts`（一支开关 + 三处跳过分支） | **两个调用方都传 `"fixture"`**（`v3-jsapi-v4-services-native-layers.test.ts:51`、`:71`），`"live"` 零使用者 | 这是**共享契约适配器**上的一档开关，不是 Fake 对象自身的属性；`smoke-jsapi-v4.mts --mode=live` 是另一条 runner，没有任何代码把这档喂给它 | **SIMPLIFY** | 后续票：要么删掉这一档（连同三处跳过分支），要么真的把它接到 live runner 上再留。本票不动——它不在删除面里，且改它要连带改契约适配器的入参形状 |
 
 ---
 
@@ -122,7 +129,7 @@
 | --- | --- | --- | --- |
 | F-1 | `startViewAnimation` 的启动窗口：`animationstart` 是否真的在内部 Animation 构造前同步派发、启动前 `cancelViewAnimation` 是否真的抛 `TypeError` | **已结清（2026-09-21，真实 AK + headless Chromium）**。读数（同一轮里逐条复现，判据全部是「对象自身的结果」）：① `delay: 0` 时 `animationstart` 在调用返回后 **5–120ms** 才到（**不是**同步派发；`delay: 900` 时约 **1.28s**）；② 从未起播的实例上 `cancelViewAnimation` → `TypeError: Cannot read properties of undefined (reading 'cancel')`（`pauseViewAnimation` 报 `reading 'pause'`、`continueViewAnimation` 报 `reading '_doStart'`）；③ 在 `animationstart` **处理器里同步**取消 → 同样抛 `reading 'cancel'`，且动画照旧跑到末帧（视图确实推进 ⇒ 那次取消没生效）；④ 在 `animationstart` 之后的**微任务**里取消 → 不抛错、派发 `animationcancel`，视图停在**该段首帧**（末帧未到达）；⑤ 未显式取消就再 start 一段：前一段**不**派发 `animationcancel`、照旧跑到自己的 `animationend`，新一段的启动被推迟到不可预期时刻（实测 +0.9~1.6s）⇒ 重叠期里两段都在推进视角，「一张地图同时跑两段动画」不可依赖；⑥ 未启动时直接 `map.destroy()` 不抛错，之后仍派发一次 `animationstart` 且再无 end/cancel（销毁后动画就地停摆）；⑦ **待启动旧段的「清场」只能延后交付**（2026-09-21 追加，#122 评审 P1）：`startViewAnimation` 提交新段时，旧段仍在启动窗口 ⇒ `cancelViewAnimation` 拿不到交付（`TypeError`），**新段先提交**，旧段的取消落在**它自己的** `animationstart` 上（实测两段事件相隔 **0.0–0.3ms**）。实测这条路径的代价很小：两段朝**相反**方向走时，重叠期的最低 zoom 是 **14.07**（起始 14、旧段末帧 10、新段末帧 17）⇒ 旧段来不及驱动视角，轨迹只朝新段末帧走。**gate**：live smoke 的 `view-animation-cancel-window`（required）把 ①②③④ + ⑤/⑦ 的形状变成可回归断言，并自带正证控件（一段正常播放必须真的把视图推到末帧，否则「取消之后没推进」是空转；⑦ 的子场景也要求新段跑到自己的末帧） | 据此把 ADR 的措辞精确化（「同步」只存在于**派发与内部控制器构造之间**，相对 `startViewAnimation()` 返回是异步的）；把「起播前清场」按**两条路径**拆开写（已启动=提交前交付 / 待启动=旧段自己的安全窗口交付），并写明承诺粒度是「在最早的合法时刻交付取消」而不是「提交新段前图上一段不剩」；同时写明「0ms 兜底几乎总是先于动画启动到期」这一真实排序。**仍然不许把该时序升级为对外承诺**：它是官方行为，官方可以改 —— 这正是 gate 的用途。**本条只覆盖「start 窗口 + 取消时序」**：Map 级 `pauseViewAnimation` / `continueViewAnimation` 既没有生产者、也没有取证计划（`plugins/compat-inventory.ts` 里那两条只是外部插件用到的成员清单），要开放它得先单立一张 probe 票，不算本条已覆盖范围 |
 | F-2 | 官方 JSAPI 的 JSONP 回调全局名占用与「别人也注册了同名回调」的判定 | `ASSUMED` | 只在 `customScriptV4Provider` 的 jsonp 分支生效，不进 Stable 承诺 |
-| F-3 | SDK 实例 `destroy()` / `dispose()` 是否幂等、销毁期是否真会回调业务 | 已有反例（空 Panorama 的 `destroy()` 会抛），正向未证 | guard 保留；契约措辞一律写「本库保证」而非「官方保证」 |
+| F-3 | SDK 实例 `destroy()` / `dispose()` 是否幂等、销毁期是否真会回调业务 | 已有反例、无正向读数：**唯一相关读数是 ADR 2026-09-12 的 smoke 记录**「真实 4.0 在**未加载场景**的实例上 `destroy()` 会抛 `TypeError`」（见该 ADR 的「真实 AK smoke 记录」）。它只能说明「不是无条件幂等」，**不能**支撑「重复 destroy 不抛错」 | guard 保留；契约措辞一律写「本库保证」而非「官方保证」。归 **#128** 取证；在取证之前，这类断言**不允许**被写成官方承诺（`driver-contract.ts` 的两处注释已在第三批按此收窄） |
 | F-4 | 原生 `addEventListener` 在同一函数重复注册时是否去重 | 未证 | 只影响测试期望数字，不影响生产路径 |
 
 > F-1 的读数原始输出不入库（与仓库既有约定一致，见 `docs/zh-CN/contributing/official-packages.md`）。
@@ -139,11 +146,15 @@
 - **B1**：MapDriver 动画 teardown 判 **KEEP**；其两条前提原为 `FAKE-ONLY`，**第二批已用真实 AK 取证**
   并升级为 `PROBED`（ADR 注记 + 本表 F-1 + live gate `view-animation-cancel-window`）。
 - **R1–R11**：全部落地，逐项删净实现、出口、引用、生成物与文档承诺（矩阵与 JSON 重生成后为 **62 条能力**；`v3-default-loader-boundary` 从「调用它」改成「断言它不存在」）。R6 删掉 `shouldFullReplace` 之后暴露出的 `DataLayerManager.sync` 死形参登记在第 5 节，**main 上的 #34 已把它连同整个位置签名一起改掉**。
-- 文档纠偏：`AGENTS.md` 的归属约束与能力族清单（`Runtime` 已随 R10 删除）、`<BAutoComplete>` 组件页、`useBMapViewAnimation` 文档与示例、迁移对照表新增三行、`docs/zh-CN/components/map.md` 的 `status` 取值、五处 ADR 的 superseded / 复核指针、能力矩阵重生成。
+- **第三批（实施步骤 6，公共面复核）**：`useMapResource` 一族 **REMOVE**、`SdkRegistry` 的零消费者
+  冲突开关（`conflictPolicy` / `onConflict` / 两个类型）**REMOVE**、`resetProcessSdkRegistryForTests`
+  **内部化**、`driver-contract` 的「dispose 幂等」注释与用例标题按 F-3 收窄；复核结论落成门禁
+  `tests/behavior/v3-core-surface.test.ts`。详见文末「第三批」一节。
+- 文档纠偏：`AGENTS.md` 的归属约束与能力族清单（`Runtime` 已随 R10 删除）、`<BAutoComplete>` 组件页、`useBMapViewAnimation` 文档与示例、迁移对照表新增三行、`docs/zh-CN/components/map.md` 的 `status` 取值、六处 ADR 的 superseded / 复核指针、能力矩阵重生成。
 
-**没有**为了本次审计新建任何通用 Runtime / 状态框架（验收项 4）。上表标 SIMPLIFY 而本票未做的行，全部是「要连带改夹具或改公共出口」的一类，逐条落到 **#44** 之后的独立票，不混进本票以免评审分不清两件事。
+**没有**为了本次审计新建任何通用 Runtime / 状态框架（验收项 4）。上表标 SIMPLIFY 而三批都未做的行，全部是「要连带改夹具或改公共出口」的一类：**第三批把其中「纯删就完事」的收掉了，剩下的逐条登记到 #44**（评论已留），需要独立决策 / 测试 / 取证的另开票（#126 / #127 / #128），都不混进本票以免评审分不清两件事。
 
-## 第二批（2026-09-21）：issue「实施步骤 4」的动画面
+## 第二批（2026-09-21，PR #122）：issue「实施步骤 4」的动画面
 
 issue 的实施顺序里第 4 步是「**MapDriver animation teardown**：在 2/3 收窄后重新评估，可删多少删多少，
 但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useBMapViewAnimation` /
@@ -173,3 +184,65 @@ F-1 不覆盖它们，要开放得先单立 probe 票）；`FakeV4ViewAnimation`
 都带 `<!-- ownership-first:2026-09-19 -->` 标记与对应约束**（fallback 不恢复内部身份、不建第二套
 Runtime、先做具体场景再提共性、测试以业务结果与资源释放为主）。约束同时已进 `AGENTS.md`，本表是事实源。
 后续开新票时沿用这个标记，`gh issue view <n> --json body` 就能扫出覆盖面。
+
+## 第三批（2026-09-22，PR #129）：issue 实施步骤 6 的「#44 冻结前公共面复核」
+
+前两批做的是实施步骤 1–4（删抽象 / 收窄 hooks / 取证动画窗口）。这一批做**最后一步**：
+
+> 6. **#44 冻结前完成 API/public-dts 复核，确保内部恢复机制不被误冻结成公共 API。**
+
+「复核」在本仓的形态是**逐项判据 + 一条会真变红的门禁**，不是一次阅读。做法：
+
+1. **逐项核对 `./core` 上「零消费者、但会随 #44 冻结进 3.0」的名字**，然后按「改它要不要连带动夹具或
+   命名约定」分成两堆 —— 纯删的一堆在本批做掉，牵连夹具 / 命名约定的一堆**登记到 #44**（评论已留，
+   清单在那条评论里；本表第 3–6 节的处置列同步指向它）。
+2. **落成门禁**：`tests/behavior/v3-core-surface.test.ts`。三层判定，各自都能被证伪：
+   - **值导出层**（`Object.keys`）：被删的值导出不得出现在根入口 / `./core` / `./advanced` 任一处；
+   - **声明文本层**（`Object.keys` 看不到的类型与选项字段）：剥注释后扫 `dist/*.d.ts`，
+     并配 **正证**（同一条判定式对一个确实在面上的名字必须命中）与 **反误报**
+     （注释里提到不得命中 —— 本文件与 `core/index.ts` 都在注释里写了这些名字）；
+   - **机制仍在层**：被「内部化」的东西必须仍在源码里。只写「它不在出口上」时，
+     「机制被整段删掉」与「机制被内部化」都会绿，但两者结论不同。
+   - 另加一条**可推广的不变量**：公共出口不得出现 `*ForTests` 后缀的名字（测试辅助不该被承诺）。
+3. **反证（本批最值钱的一步）**：在 `git archive HEAD` 出的干净快照上（补 `dist` 与软链 `node_modules`）
+   跑同一份门禁 → **3 条红、3 条绿**，且绿的那 3 条正是正证与包级前提。这证明门禁的
+   判别力来自「有没有收口」，而不是来自「判定式恒真」。
+
+**本批的代码处置**（逐条依据见上表对应行）：
+
+| 项 | 结论 | 处置 |
+| --- | --- | --- |
+| `useMapResource()` / `SdkResourceAdapter` / `UseMapResourceResult` | **REMOVE** | 文件 + 单测删除，三处出口名摘掉（零生产消费者；被 `useSdkResource` 取代，后者文件头自陈） |
+| `SdkRegistry` 的 `conflictPolicy: "warn" \| "ignore"` / `onConflict` / `SdkConflictPolicy` / `SdkConflictInfo` / `policy` | **REMOVE** | 冲突处置收成唯一行为（恒 reject `BMAP_SDK_CONFIG_CONFLICT`）；ADR 2026-09-10 决策 6 加取代注记（**点名取代「后半句」**），ADR 2026-09-13 与本表第 3 节同步；`url.ts` / `url.test.ts` / `official-packages.md` 里「指纹会进 … 与 `onConflict`」的凭据脱敏依据改写为「指纹会进冲突消息」 |
+| `resetProcessSdkRegistryForTests` | **内部化** | 从 `./core` 出口摘掉（实现与行为不变；仓库内测试一直按相对路径 import 源文件）。`v3-advanced-contract.test.ts` 的正证清单随之调整，那份「它必须在 `./core` 里」的正证改由新门禁的负向清单承担 |
+| `driver-contract.ts` 两处「dispose 幂等」注释 + 两条用例标题 | **措辞按 F-3 收窄** | 不再声称「SDK 侧的移除对未挂载资源是 no-op」；明确判据是**夹具（Fake）那一侧的假账本**（销账不变成负数），它既不是官方幂等性的证据，也不是生产库记账的证据 |
+
+**本批刻意不做的**（都写清去处，不留悬空）：
+
+- `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、单成员别名 `LoadedSdk`、
+  `client.version`、`optionKey()` 的一行转发、`useBMapServiceTask` 的根出口外泄、`UseSdkResourceOptions`
+  → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）；
+- 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision）；
+- 两处无判别力的内部判据（`BMap.mountMap()` 的防御性前置、`driver-contract` 的 `expectation` 档）→ **#127**（Test Debt）；
+- 探针债务 F-2 / F-3 / F-4 → **#128**（Probe Debt）；
+- **不冻结 `./core` 的全量导出面**（113 个值导出）：那是 #44「冻结 core 出口」的交付物，#104 只负责
+  「把不该被冻结的先收掉」。门禁里刻意写成「被删名单 + 不变量」而不是精确集合，就是为了不抢这一步。
+
+## 剩余欠账与归宿（#104 关闭条件 4）
+
+本票的关闭条件是「剩余非阻塞欠账都有独立 Issue 和清楚的分类」。逐条对照：
+
+| 欠账 | 分类 | 归宿 |
+| --- | --- | --- |
+| 能力目录 `engines` 维度 / `engine-unsupported` | Decision | #126 |
+| `BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档 | Test Debt | #127 |
+| F-2 / F-3 / F-4 三条未取证的第三方语义 | Probe Debt | #128。**其中 F-2 是 issue 验收标准第 5 条点名的那一类例外**：`SharedLoadTask` 的进程级 `callbackRegistry`（全局名占用 / foreign 回调判定）是审计表里**唯一保留**的「恢复上游未公开身份」处，而该验收标准要求「若存在例外，必须逐项写明 live guarantee 与 gate」——现状只有「不进 Stable 承诺」这句措辞与一张 probe 票，**既没有 live guarantee 也没有 gate**。→ 这一条在 #104 的账面上**记为未满足**（不是「已登记即满足」）：#128 的第一次取证必须先给出 guarantee 措辞与可回归 gate，在给出之前它**不得**被 #44 冻结进 Stable 承诺 |
+| 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |
+| `useBMapServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | #44 |
+| `getProcessSdkRegistry(domain, options)` 的首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 都写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | 出口形状收窄 | #44（与上面 7 项同批；本批只登记，不顺手改签名） |
+| `#101` 的 InfoWindow `openOutstanding` 一族 | 非目标 | 已在 #101 原 PR 内按 ownership/reconcile 纠正 |
+| `DataLayerManager` / Native Layer 失败恢复的直接测试 | Test Debt | #113。前置已满足：本表第 4 节（generation / epoch stale guard）与第 5 节（`native-layers.ts` 的 `supports()` 刻意不采纳实测可用的成员）都判 **KEEP**，即那套机制属于「真实所有权复杂度」而不是要 SIMPLIFY 的镜像状态（注意：本表**没有**「失败恢复状态机」的专行，`#113` 正文里的「前置」指的是这两行） |
+| `docs/.vitepress` 里那个插件名残留的死文件 | 文档卫生 | #90（纯 docs 清理，不阻塞发布） |
+
+**不需要等这些票关闭才关 #104** —— 否则又会把「证据优先」变成「发布前补全一切」。
+

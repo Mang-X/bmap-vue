@@ -25,6 +25,21 @@
 4. **最后一个消费者取消时同步释放条目与占用**，不等底层 Promise 异步收尾：否则「abort 之后同一同步回合内重试」会命中已取消的 entry，或被尚未释放的占用挡住。旧任务的异步收尾通过「是否仍是该指纹当前任务」的所有权检查决定能否写入域状态，避免清掉新任务的结果或占用。
 5. **registry 只做两件事**：任务复用 + 冲突判定。加载实现由请求级 `loader` 提供（`SdkRegistry.load({ fingerprint, loader })`），registry 不再持有 loader、不读 `window` / `document`，因此 SSR 导入安全、可脱离 DOM 单测。
 6. **默认冲突策略为 `throw`**（`BMAP_SDK_CONFIG_CONFLICT`）。`warn` / `ignore` 只能通过显式配置开启（`getProcessSdkRegistry(domain, { conflictPolicy })`），不能成为默认——全局 SDK 无法真正并存，静默忽略会把「加载了两份配置」变成运行时不可解释的行为。
+
+> **注（2026-09-22 起，`#104` 第三批；取代上面第 6 条的后半句）**
+>
+> `conflictPolicy` 与配套的 `onConflict` 观测出口已**删除**，冲突处置收成单一行为：
+> 恒 reject `BMAP_SDK_CONFIG_CONFLICT`。依据是审计（`#104`，见
+> [存量审计表](../zh-CN/contributing/architecture-ownership-audit.md) 第 3 节）：三个 Provider
+> （官方 / 自研 script / 复用既有全局）**一律不传**这两个选项，仓库内只有 `SdkRegistry` 自己的
+> 单测可达 `warn` / `ignore` ⇒ 它是「零消费者的公共开关」，而它会随 `./core` 一起被冻结进
+> 3.0 的公共声明面。#104 的实施步骤 6（「#44 冻结前完成 API / public-dts 复核，确保内部恢复
+> 机制不被误冻结成公共 API」）要求先把这类面收掉，再由 #44 冻结。
+>
+> 第 6 条的**前半句**（默认 `throw`、不允许静默忽略成为隐式行为）仍然成立，且现在是唯一行为。
+> 参考实现 `huiyan-fe/react-bmap` 的 `onLoadConflict` 走的是「报告 + 复用已加载那份」，
+> 与本库的 `warn` / `ignore` 不是同一语义，因此不能拿它当保留这两个取值的理由。
+> 与第 1 条里「进入冲突策略」的措辞差异也以此注为准（决策本身不变，只是没有第二、三种策略）。
 7. **失败与取消后条目与占用一并释放**，允许重试；成功条目复用其结果。
 8. **「就绪」的判定是必经的成功前校验（`assertReady`），不是取值兜底。** Provider 通过 Loader 的 `assertReady` 承担命名空间完整性（与自托管入口的版本来源）校验，校验失败走底层失败路径：不写成功缓存、移除 script。
    - 刻意**不**复用 `exportGetter` 当校验点：它只在「回调没带实参」时执行，回调带实参时会整段跳过，留下绕过路径。

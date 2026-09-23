@@ -41,6 +41,7 @@ import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src
 import { createFakeBMapV4 } from "../../packages/test-utils/fake-bmap-v4";
 import { createFakeV4Client } from "../../packages/test-utils/fake-v4-harness";
 import { MAP_EVENT_READBACK_FIELDS } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
+import { stripComments } from "../../packages/test-utils";
 
 /** 带尺寸的容器（Fake 的 `getSize()` 从内联样式解析）。 */
 function sizedContainer(): HTMLElement {
@@ -57,13 +58,6 @@ const BMAP_SFC = resolve(
   REPO_ROOT,
   "packages/baidu-map-gl-vue/src/components/map/BMap.vue",
 );
-
-/** 去掉注释后再做文本断言：文档/注释里「提到」某个标识符不算违规（与 no-bmapgl 门禁同口径）。 */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[\s;(){}])\/\/[^\n]*/g, "$1");
-}
 
 /** 定位上游类型包（与 `v3-upstream-types-case-patch.test.ts` 同一套候选路径）。 */
 function resolveUpstreamPackageDir(): string {

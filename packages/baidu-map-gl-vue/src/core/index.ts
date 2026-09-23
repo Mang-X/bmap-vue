@@ -56,14 +56,13 @@ export type {
 } from "./loader/ScriptLoader";
 export { SharedLoadTask } from "./loader/SharedLoadTask";
 export type { SharedLoadTaskHooks, SharedLoadTaskState } from "./loader/SharedLoadTask";
-export { SdkRegistry, getProcessSdkRegistry, resetProcessSdkRegistryForTests } from "./loader/SdkRegistry";
-export type {
-  SdkConflictInfo,
-  SdkConflictPolicy,
-  SdkLoader,
-  SdkRegistryLoadRequest,
-  SdkRegistryOptions,
-} from "./loader/SdkRegistry";
+// `#104` 第三批（`./core` 冻结前的出口复核）：这里只留**生产者真的用得到**的名字。
+// - `resetProcessSdkRegistryForTests` 已从出口摘掉：它是测试辅助（"for tests" 写在名字里），
+//   仓库内测试一直按相对路径直接 import 源文件，公共声明面里不该出现它；
+// - `conflictPolicy` / `onConflict` / `SdkConflictPolicy` / `SdkConflictInfo` 已删除：
+//   三个 Provider 一律不传 ⇒ 只有 `SdkRegistry` 单测可达，属于「没有人用的公共开关」。
+export { SdkRegistry, getProcessSdkRegistry } from "./loader/SdkRegistry";
+export type { SdkLoader, SdkRegistryLoadRequest, SdkRegistryOptions } from "./loader/SdkRegistry";
 export {
   DEFAULT_API_URL,
   DEFAULT_CALLBACK_PARAM,
@@ -80,8 +79,10 @@ export {
 export type { BMapLoadOptions, CrossOriginValue } from "./loader/url";
 export { MapRuntime } from "./runtime/MapRuntime";
 export type { MapRuntimeOptions } from "./runtime/MapRuntime";
-export { useMapResource } from "./composables/useMapResource";
-export type { SdkResourceAdapter, UseMapResourceResult } from "./composables/useMapResource";
+// `useMapResource` / `SdkResourceAdapter` / `UseMapResourceResult` 已删除（`#104` 第三批）：
+// 零生产消费者，且它自己的继任者（下面这个 `useSdkResource`）的文件头写着「替代行为各异的
+// useMapResource / useOverlayResource / useControlResource / useLayerResource」。
+// 它的单测只测它自己 ⇒ 留在出口上等于把一个已经被取代的旧底座冻结进 3.0。
 export { useSdkResource } from "./composables/useSdkResource";
 export type {
   SdkResourceSpec,
