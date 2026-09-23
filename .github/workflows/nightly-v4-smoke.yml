@@ -199,3 +199,54 @@ jobs:
           path: ${{ runner.temp }}/plugin-load-channel.json
           if-no-files-found: warn
           retention-days: 14
+
+  # 真实浏览器档性能读数（M6 / #123，承接 #37 的欠账 1）。
+  #
+  # 与 required smoke 的分工：smoke 是五态门禁（0/1/2/3），本 job 是**无阈值的读数采集**
+  # （0/2/3，永不返回 1）——两套退出码语义刻意不混。入口 `pnpm perf:baseline:live`，
+  # 独立脚本 + 独立页面（`scripts/collect-live-performance.mts` + `tests/browser/live-performance/**`）。
+  #
+  # 判定口径：`0` 读数采齐；`2` 脚手架失败；`3` blocked（缺 AK / SDK 没 ready，**不是通过**）。
+  live-performance:
+    if: github.repository == 'Mang-X/bmap-vue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require BAIDU_MAP_AK secret
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+        run: |
+          if [ -z "$BAIDU_MAP_AK" ]; then
+            echo "::error::缺少 secrets.BAIDU_MAP_AK。请在本仓库 Settings → Secrets and variables → Actions 添加该 secret（AK 的 Referer 白名单需允许 localhost）。"
+            exit 1
+          fi
+
+      # runner 预装 Chrome；与 plugin-runtime 同一个坑：探针默认候选是 macOS 路径。
+      - name: Collect live browser performance readings
+        env:
+          BAIDU_MAP_AK: ${{ secrets.BAIDU_MAP_AK }}
+          SMOKE_BROWSER: /usr/bin/google-chrome
+        run: pnpm perf:baseline:live -- --log="$RUNNER_TEMP/perf-live.log"
+
+      - name: Upload live performance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-performance-report
+          path: |
+            ${{ runner.temp }}/perf-live.log
+            .artifacts/perf-live/
+          if-no-files-found: warn
+          retention-days: 14

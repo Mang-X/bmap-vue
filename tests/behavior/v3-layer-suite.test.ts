@@ -34,6 +34,7 @@ import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layer
 import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BGeoJSONLayer.vue";
 import BPanoramaCoverageLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BPanoramaCoverageLayer.vue";
 import BRasterLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BRasterLayer.vue";
+import BMVTLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BMVTLayer.vue";
 import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
 import BTrafficLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrafficLayer.vue";
 import BWMSLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BWMSLayer.vue";
@@ -81,6 +82,7 @@ const LAYER_CASES: ReadonlyArray<{
   { name: "BWMSLayer", kind: "wms", component: BWMSLayer, props: { url: "https://c.example.com/wms", params: { LAYERS: "demo" } } },
   { name: "BWMTSLayer", kind: "wmts", component: BWMTSLayer, props: { url: "https://d.example.com/wmts", params: { Layer: "img" } } },
   { name: "BRasterLayer", kind: "raster", component: BRasterLayer, props: { url: "https://e.example.com/{z}/{x}/{y}.png" } },
+  { name: "BMVTLayer", kind: "mvt", component: BMVTLayer, props: { tileUrlTemplate: "https://f.example.com/[z]/[x]/[y].pbf" } },
 ];
 
 /**

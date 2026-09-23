@@ -5,13 +5,13 @@
 > 由 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**62**
+能力总数：**63**
 
 ## 状态说明
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 45 |
+| `native` | SDK 原生能力，直接映射官方 API | 46 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 2 |
 | `experimental` | 实验性能力，API 可能变更或移除 | 13 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
@@ -22,7 +22,7 @@
 | --- | --- |
 | `map` | 14 |
 | `overlay` | 15 |
-| `layer` | 18 |
+| `layer` | 19 |
 | `service` | 12 |
 | `panorama` | 3 |
 
@@ -75,6 +75,7 @@
 | layer | `layer.wms` | experimental | — | ✓ | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |
 | layer | `layer.wmts` | experimental | — | ✓ | WMTSLayer | WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求 |
 | layer | `layer.raster` | experimental | — | ✓ | RasterTileLayer | 栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪 |
+| layer | `layer.mvt` | native | — | ✓ | MVTLayer | MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id |
 | layer | `layer.cluster` | extended | ✓ | ✓ | — | 聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19 |
 | layer | `layer.point` | experimental | ✓ | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 BPointLayer 落地 |
 | layer | `layer.heatmap` | experimental | ✓ | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |

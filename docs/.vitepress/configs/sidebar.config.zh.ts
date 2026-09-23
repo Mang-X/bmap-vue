@@ -254,6 +254,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "BRasterLayer 栅格瓦片图层",
           link: "raster-layer",
         },
+        {
+          text: "BMVTLayer 矢量瓦片",
+          link: "mvt-layer",
+        },
       ],
     },
     {

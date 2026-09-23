@@ -6,7 +6,7 @@
  * M7-LAYERS（issue #40）在 #22 的三种底图图层（district / tile / panorama-coverage）之上
  * 补齐 Stable 常用图层，并把「各图层的接口面并不一致」这件事**显式建模**出来：
  *
- * - `LayerKind`：领域种类（10 种），与官方构造器一一对应；
+ * - `LayerKind`：领域种类（11 种），与官方构造器一一对应；
  * - `LayerCtorSlot` / `LayerOperation`：**统一槽位**（visible / opacity / minZoom / maxZoom /
  *   zIndex / data）在各 kind 上的两种落地方式——构造期选项与挂载后就地更新；
  * - `surface()`：把上面那张表作为**查询入口**暴露给上层（`core/layers` 的内核据此决定
@@ -18,17 +18,23 @@
  */
 import type { LayerHandle } from "./handles";
 import type { OverlayTarget } from "./overlays";
+import type {
+  NativeLayerFeatureKeys,
+  NativeLayerFeatureState,
+  NativeLayerFeatureStateMap,
+} from "./native-layers";
 
 /**
- * 图层种类（issue #40 的「Stable 常用 Layer」清单）。
+ * 图层种类（issue #40 的「Stable 常用 Layer」清单 + #109 的 `mvt`）。
  *
- * 前三种是 #22 已落地的底图图层；其余七种由本 issue 补齐：
+ * 前三种是 #22 已落地的底图图层；#40 补齐其余七种；#109 再补 `mvt`：
  * - `traffic` / `tile` / `xyz` / `wms` / `wmts` / `raster`：瓦片家族（`xyz` / `wms` / `wmts` /
  *   `raster` 是 4.0 的「第三方标准瓦片服务」基线，能力清单里标 `experimental`）；
- * - `geojson` / `dom`：数据驱动图层（`setData` 是一等公民）。
+ * - `geojson` / `dom`：数据驱动图层（`setData` 是一等公民）；
+ * - `mvt`：MVT 矢量瓦片（官方 `MVTLayer`，tile 家族 + 要素状态五操作，见 `LayerOperation`）。
  *
- * `district` / `tile` / `traffic` / `geojson` 在 `@baidumap/jsapi-v4-types@4.0.4` 里**有**类声明；
- * `panorama-coverage` **没有**（只能按结构探测，见 Driver 的 `declared` 口径）。
+ * `district` / `tile` / `traffic` / `geojson` / `mvt` 在 `@baidumap/jsapi-v4-types@4.0.4`
+ * 里**有**类声明；`panorama-coverage` **没有**（只能按结构探测，见 Driver 的 `declared` 口径）。
  */
 export type LayerKind =
   | "district"
@@ -40,7 +46,8 @@ export type LayerKind =
   | "xyz"
   | "wms"
   | "wmts"
-  | "raster";
+  | "raster"
+  | "mvt";
 
 /**
  * 统一槽位中**由构造选项承载**的那些。
@@ -77,12 +84,25 @@ export const LAYER_CTOR_SLOTS = [
  * 或整袋 setter（`DOMLayer` 的 `setStyleOptions({ zIndex })`）——后两种都由 Driver 的
  * `setOptions` 吸收，上层只写「更新这个槽位」。
  *
- * 这三个操作是**逐成员核对** `@baidumap/jsapi-v4-types@4.0.4` 的 8 个相关图层类之后剩下的
- * 全部：官方在这批图层上**没有**公开 `setOpacity` / `setMinZoom` / `setMaxZoom`
- * （`MVTLayer` 之外），因此统一槽位里的 `opacity` / `minZoom` / `maxZoom` 变更在本库一律走
+ * 这些操作是**逐成员核对** `@baidumap/jsapi-v4-types@4.0.4` 的相关图层类之后剩下的
+ * 大部分：官方在这批图层上**没有**公开 `setOpacity` / `setMinZoom` / `setMaxZoom`，
+ * 因此统一槽位里的 `opacity` / `minZoom` / `maxZoom` 变更在本库一律走
  * **重建**，而不是发明一个「设置生效了」的假象。
+ *
+ * #109（`mvt`）追加五个**要素状态**操作：官方 `MVTLayer` 的 `updateState` / `clearState`
+ * 在类声明里，`removeState` / `replaceAllState` / `getAllState` 由 live 探针在原型上证到
+ * （与 #36 的 NativeLayer 同一组归一化名）。只有声明了它们的 kind 才会出现在 `operations`
+ * 里——其余 kind 调用时仍走 `BMAP_CAPABILITY_UNSUPPORTED`。
  */
-export type LayerOperation = "setZIndex" | "setData" | "clearData";
+export type LayerOperation =
+  | "setZIndex"
+  | "setData"
+  | "clearData"
+  | "updateState"
+  | "removeState"
+  | "clearState"
+  | "replaceState"
+  | "getState";
 
 /**
  * 该 kind 的能力面（`surface()` 的返回值）。
@@ -157,6 +177,26 @@ export interface LayerDriver {
   setZIndex(layer: LayerHandle, zIndex: number): void;
   setData(layer: LayerHandle, data: LayerData): void;
   clearData(layer: LayerHandle): void;
+
+  /* ------------------------------------------------------ 要素状态（#109 / mvt） */
+
+  /**
+   * 要素状态五命令的归一化面（与 #36 `NativeLayerDriver` 同一组入口名与语义）。
+   *
+   * 只有 `surface().operations` 声明了对应操作的 kind（当前仅 `mvt`）才能调用；
+   * 其余 kind 走 `supports()` / `open()` 的 `BMAP_CAPABILITY_UNSUPPORTED`。
+   * 键域由 `createFeatureStateApi` 按 kind 收窄（MVT 只收 string 复合键 `layerName_id`）。
+   */
+  updateState(
+    layer: LayerHandle,
+    keys: NativeLayerFeatureKeys,
+    state: NativeLayerFeatureState,
+    append?: boolean,
+  ): void;
+  removeState(layer: LayerHandle, keys: NativeLayerFeatureKeys): void;
+  clearState(layer: LayerHandle): void;
+  replaceState(layer: LayerHandle, inputs: NativeLayerFeatureStateMap): void;
+  getState(layer: LayerHandle): NativeLayerFeatureStateMap;
 }
 
 /* -------------------------------------------------------------------------- */

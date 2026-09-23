@@ -234,4 +234,4 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
 - **`BTrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
-- **`BMVTLayer` 尚未提供**（见 ADR 的欠账表）。
+- **`BMVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[BMVTLayer](./mvt-layer.md)」。

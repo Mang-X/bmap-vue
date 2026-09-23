@@ -101,6 +101,19 @@ issue #37 在 2026-09-19 被**开工前纠偏**过一次，那次纠偏决定了
 - 出现**有明确消费者**的新预处理 workload（例如线 / 面几何简化），且它的 before/after 数据表明收益
   大于 startup + 序列化 + chunk 体积成本；
 - 真实浏览器档（非 Fake）证明 SDK 侧的 `setData` / 重绘是长任务主因，而官方的分片入口不够用。
+  —— **#123 本轮已核（Apple M4 / Chrome 154 headless / JSAPI 4.0 / dataset v1 / 50k，#131
+  第四轮口径：`firstFrame` 起点=原生 `setData`、造数 macrotask 隔离、交集归属、
+  跨 macrotask 近似 settle；页面窗 60.7s，load ≈ 12）**：
+  Fake 对照窗（`setItems` → 近似 settle）`line` `setData` 2764ms、`fill` 9280ms，与同轮原生
+  `prototype.setData` 返回墙钟 **916 / 6760ms** 并排——fill 同量级、line 的 delta **大于**原生
+  返回（窗口还含 Vue 调度 + settle 边界）⇒ Fake delta 只作**量级参考**，不能整段记成
+  「≈ 原生返回」；`setData` 窗 long task 的 `longest` 是**窗口交集**（543 / 1791 / 7078，
+  均 ≤ duration；第二轮整条 duration 口径曾出现 2× 窗口的假长）；paint 主体在 `redraw` 窗
+  （交集 941 / 3228 / 526，不进 Fake 对照）。
+  逐图层 `firstFrame`（首次原生 `setData` 进入 → ready 后第一次 paint，不含 200ms 稳定期；
+  `mountToPaint` 旁路另记）：point 1651ms、line 1651ms、fill 6603ms。
+  **前半条已成立；「官方分片入口不够用」本轮未测**（本套只打读数、不评估官方分片 API）⇒
+  整条**部分满足、待复核**——若要按本条重开 Worker 票，须先补「官方是否提供且不够用」的取证。
 
 ### 2b. 计划项与 issue 条目的映射（本票怎么对应 `M6-15` / `M6-16`）
 
@@ -172,10 +185,21 @@ GeoJSON 直通路径的 **19.6 ~ 36.6 倍**（`contrast.perItemRatio`，5 次采
 
 ## 已知限制
 
-1. **真实 SDK 的重绘成本不在读数内**：本套的 SDK 是 Fake（`setData` 只记引用），环境是 happy-dom
-   （无布局、无合成、无帧调度）。读数**不能**外推成「50k 点在页面上要多久」；同一段话写进了报告
-   （`notMeasured`）与文档页。**真实浏览器档的读数另立票承接下来的工作**：**#123**（并把 #37 的
-   「重新评估条件」第三条挂到它的结论上）。
+1. **Fake 档的重绘成本不在读数内**（本条只约束 Fake + happy-dom 那一套）：SDK 是 Fake
+   （`setData` 只记引用）、环境无布局/合成/帧调度，读数**不能**外推成「50k 点在页面上要多久」
+   （报告 `notMeasured` 与文档页同口径）。**真实浏览器档已取证（#123，2026-09-23 实跑，
+   #131 第四轮：`firstFrame` 起点=原生 `setData` + 造数 macrotask 隔离 + 交集归属 +
+   跨 macrotask 近似 settle）**：`pnpm perf:baseline:live`
+   （Apple M4 / Chrome 154 headless / JSAPI 4.0 / dataset v1 / 50k；页面窗 60.7s，load ≈ 12）——
+   `firstFrame`（setData→paint）**1739 / 1651 / 6603ms**，`mountToPaint` 旁路 1800 / 1665 / 6668ms；
+   Fake 对照窗 `setData`：point 598ms、line 2764ms、
+   fill 9280ms，同轮原生 `prototype.setData` 返回 **263 / 916 / 6760ms**
+   （point 约占窗口一半、fill 同量级、line 的 delta **大于**原生返回 ⇒ delta 只作量级参考，
+   不能整段记成「≈ 原生返回」；point 的主导侧需同机对照才能判，**不能**只凭跨机 Fake 断言
+   「瓶颈只在适配层」）。`setData` 窗 long task `longest` = **窗口交集**（543 / 1791 / 7078，
+   均 ≤ duration）；paint 主体在独立 `redraw` 窗（交集 941 / 3228 / 526）。更新后
+   `postUpdateFps` 1.36 / 1.08 / 0.75（rAF 节流，非 setData 期间帧率）。**无阈值**（0/2/3），
+   nightly 上传 `live-performance-report` artifact。
 2. **归一化只在同一「机器身份」内可比**：跨平台或跨 SKU（`platform + arch + cpuModel` 任一不同）
    **不做绝对值门禁**，只出报告（决策 5，实测差异 2 ~ 6 倍）；同轮比值层不受此限。基线的绝对值是**参考读数**，不是发布事实——同一台机器自己的读数在负载高低
    之间也有近 2 倍的差（见决策 2 的表），这是阈值取 5× 的原因。
@@ -197,7 +221,7 @@ GeoJSON 直通路径的 **19.6 ~ 36.6 倍**（`contrast.perItemRatio`，5 次采
 | 深响应输入在更新路径上的 ~100ms 长任务（50k） | 本票 §5 读数：同一函数对同一份数据，深响应输入 90 ~ 133ms（整条替换路径 97 ~ 217ms）vs `markRaw` 11 ~ 13ms（整条 13.6 ~ 25.7ms） | **#124**（第一步取证：在 `flush: "sync"` 的 watcher 里读深响应数组的依赖收集成本；候选方案 `pauseTracking` 或文档化 `markRaw` / `shallowRef` 指引）。**本票不做**：它改的是共享内核在响应式 effect 里的读取语义，需要自己的证据与回归面 |
 | 50k 的**首次交付**本身就越过 50ms 线（挂载 46.6 ~ 67.5ms；线图层直通只 1.3 ~ 3.4ms） | 本票读数：一次性初始化成本，本票不做门禁（它是「一次性」而不是每次交互） | 若将来要支持更低端机器上的 50k 量级，优化的对象是这条（拆批 / 让宿主决定何时交付），不是 Worker |
 | `<BMap>` 每次挂载两条开发期告警（`restrictCenter` 已丢弃 / `setTraffic` 已忽略） | 本票顺带观察：`restrictCenter` / `enableTraffic` 是布尔 prop，Vue 的「缺省即 false」转换让驱动侧看到 `false` 而非 `undefined` | 新票（`{ default: undefined }` 或驱动侧把 `false` 视为「未表态」）。本票不做：与性能无关，且属地图组件的选项语义 |
-| 大数据量在**真实浏览器**里的重绘读数 | 本套只有 Fake + happy-dom | **#123**（评审 3 指出：原写到「与 #74 的浏览器 smoke 通道合并」，而 #74 已关闭、内容也不是大数据性能基准 ⇒ 欠账当时没有承接者，现另立票） |
+| 大数据量在**真实浏览器**里的重绘读数 | 本套只有 Fake + happy-dom | **#123 已闭环**（2026-09-23 实跑 `exit=0`，#131 第四轮：`firstFrame` 起点=原生 `setData`、macrotask 隔离、交集归属、近似 settle 后复跑）：`pnpm perf:baseline:live` + nightly `live-performance` job；读数已回填已知限制 1 与文档页「真实浏览器档」——**firstFrame / mountToPaint / setData / sdkSetData / redraw 分账 + postUpdateFps**，后续若要优化 line/fill 重绘须另开票（本票只读不写） |
 | `packages/test-utils` 的 `id_changed` 事件载荷**形状未建模**（官方是字符串，替身按对象展开成字符下标字段） | 新门禁 `typecheck:tests` 照出来的既存类型错误之一；现无消费方读该载荷，因此按「不猜上游形状」留原样 + 显式注释 | 需要时再取证（要动它先量真实事件形状）；登记在此以免被当成已建模 |
 | `size:baseline` 指向不存在的 `scripts/collect-package-size.mts` | 既有死脚本（本票把包体读数并进 perf 报告，未复用该脚本名） | 清理欠账：与其它死脚本条目一并处理 |
 
@@ -211,7 +235,8 @@ issue 的「测试要求」有几条只在阶段 B（有 Worker）时才存在�
 | Worker 取消和迟到结果 | 不适用：本票没有 Worker、也没有异步预处理任务。「cancellation / stale-result 只为实际异步任务存在」是验收补充第 4 条本身的要求 |
 | 每个进入 Worker 的 workload 都有 before/after 数据 | 不适用：没有任何 workload 进入 Worker（阶段 B 未启动） |
 | 10k/50k 数据主线程长任务对比 | 已交付：`preprocess.perf.test.ts` 的 `*.exceedsLongTask` 读数 + 每个规模的 `maxMs`；组件路径的 `mount.*.exceedsLongTask` 也在报告里 |
-| 分开测「GeoJSON 解析 / 过滤 / 聚类 / **SDK setData / 重绘本身**」 | 前三项见 `preprocess.perf.test.ts` §1；**「SDK setData / 重绘本身」只有我们这一侧**（Fake 只记账 ⇒ 真实重绘不在读数内），因此另立 **#123** 承接（评审 3 的要求：欠账要有承接者） |
+| 分开测「GeoJSON 解析 / 过滤 / 聚类 / **SDK setData / 重绘本身**」 | 前三项见 `preprocess.perf.test.ts` §1；**「SDK setData / 重绘本身」已由 #123 真实浏览器档取证**（#131 后分五窗：Fake 对照 `setData` / 原生 `sdkSetData` / paint `redraw` / `firstFrame`
+  （起点=原生 `setData`，#123 目标 1）/ `mountToPaint` 旁路，delta 只用对照窗） |
 | `#36` 交办的「四类原生图层的大数据 setData / style update / 资源清理」 | 已交付：`component-path.perf.test.ts` §6 的 line / fill / heatmap / track-line × 100 / 1k / 10k / 50k 矩阵（三个动作 + 卸载，逐个断言 1 个资源 / 0 个覆盖物 / 不换实例 / 归零）；`track-line` 的规模维度是**一条路径的顶点数**（官方只收单条 `LineString`） |
 | 100 次数据替换后的资源 / heap 趋势 | 已交付：`component-path.perf.test.ts` §3（保留内存 0.03MB / 实例增量 0 / 订阅增量 0） |
 | 包体与 worker chunk 体积 | 已交付：`perf:baseline` 的 bundle 段（dist 46 文件、运行时 787917 字节、worker chunk 0 个） |
