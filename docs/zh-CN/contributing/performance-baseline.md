@@ -38,6 +38,100 @@ pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标�
 
 产物：`.artifacts/perf/report.json`（机器可读）与同一份内容的人读表格（打印到 stdout，CI 日志里可见）。
 
+## 真实浏览器档
+
+Fake + happy-dom 那套测不到真实 SDK 重绘与帧调度（ADR「已知限制」1）。**#123** 把这块读数
+单独采出来，入口与产物刻意与 smoke / Fake 基线分开（**无阈值**：只出读数，不作门禁——本档
+**永不返回退出码 `1`**）：
+
+```bash
+BAIDU_MAP_AK=<ak> pnpm perf:baseline:live
+# 可选：--port=5214 --out=… --log=… --timeout=300000 --keep（保留 vite/chrome 排障）
+```
+
+- **入口**：`pnpm perf:baseline:live` → `scripts/collect-live-performance.mts` + 独立页
+  `tests/browser/live-performance/**`（与 smoke 的 `tests/browser/jsapi-v4/**` 只共享
+  `official-probe/cdp.mts` + `readiness.mts` 两块，编排胶水按仓库既有口径刻意重复）。
+- **读数**：4 类 × 3 图层（`BPointCollection` / `BLineLayer` / `BFillLayer`），数据集与 Fake
+  基线同源（`tests/performance/dataset.ts`，固定 `DATASET_VERSION`，默认 50k）：
+  首帧交付 / `setData` 耗时 / long task + FPS；Node 侧再与 `tests/performance/baseline.json`
+  的 Fake `min` 并排成对照表（差值量级 ≈ SDK 内部成本）。
+- **产物**：`.artifacts/perf-live/report.json` + stdout 的人读表（**page 段** = 浏览器内读数，
+  **node 段** = 信封 / 退出码 / Fake 对照；AK 全程经 `redactAk` 脱敏）。
+- **退出码**：`0` 读数采齐、`2` 脚手架失败、`3` blocked（缺 AK / SDK 没 ready——**不是通过**）。
+  没有 `1`：本票不设跨机器硬阈值。
+- **CI**：nightly `live-performance` job 跑同一条命令并上传 `live-performance-report` artifact
+  （AK 来自 `secrets.BAIDU_MAP_AK`）。
+- **AK 渠道**：与 `docs/.vitepress/theme` 同一实践——**AK 不进本仓库新文件**，只经环境变量 /
+  URL 查询参数注入，页面与 Node 打印两侧都过 `redactAk`。
+
+页面内测量（rAF / `PerformanceObserver` / 原型包装）不进单测——只能真浏览器跑，由实跑读数
+取证；纯函数与接线契约在 `tests/behavior/v3-live-performance-gate.test.ts`。
+
+### 首次实跑读数（开发机，参考、非门禁）
+
+> 2026-09-23 · `pnpm perf:baseline:live` · exit **0** · 读数 3/3 · 页面窗 13.8s
+>
+> - **环境三元组**：Chrome **154**（headless）· Node **v24.18.0** / darwin **arm64**（Apple M4）·
+>   数据集 **v1** / **50k** · SDK engine **jsapi-v4** / **v=4.0**
+> - 报告：`.artifacts/perf-live/report.json`（含 `machine` / `sdk` / `dataset` 三元组字段）
+
+| 图层 | 首帧交付 | setData（换数据） | long task（setData 窗） | FPS 均值 |
+| --- | ---: | ---: | --- | ---: |
+| pointCollection | 396ms · 1 task / 62ms | **189ms** · 1 / 166ms | 见左 | 0.004 |
+| line | 396ms · 1 / 62ms | **1202ms** · 2 / 667ms | 见左 | 0.069 |
+| fill | 396ms · 1 / 62ms | **3840ms** · 2 / **3577ms** | 见左 | 0.064 |
+
+**Fake 对照（差值 ≈ SDK 内部成本）**：line `+1201ms`（fake 0.61ms）、fill `+3840ms`（fake 0.43ms）、
+pointCollection **−65ms**（fake 253.8ms —— Fake 那档含深响应读取，量级不同，**不要当回归**）。
+
+**这批读数改变了什么（结论，写进 ADR 已知限制 1 / 重开条件第三条）**：
+
+1. **line / fill 的长任务主体在 SDK 内部**（换数据 1.2s / 3.8s，最长单任务 3.5s ≫ 我们这一侧的
+   转发成本）；pointCollection 的 189ms 反而与 Fake 深响应路径同量级——**适配 + 响应式仍是点路径主因**。
+2. 首帧 396ms 是**三图层同一棵树的挂载窗口**，不是三段独立首帧；62ms 长任务越 50ms 线。
+3. headless + `--disable-gpu` 下 FPS 接近 0，**不能外推真实交互帧率**（rAF 被节流）。
+4. **不构成「重开 Worker」**：ADR 重开条件第三条要求「SDK 侧是主因 **且** 官方分片入口不够用」——
+   前半本轮已核，后半**未测** ⇒ 标「部分满足 / 待复核」，不自动重开。
+
+⚠️ 跨机器绝对毫秒只作参考（与 Fake 基线对照时两侧机器不同：本机 M4 vs 基线 EPYC）。
+
+### 首轮实跑读数（2026-09-23，#123 回填）
+
+**环境三元组**：Apple M4 / darwin arm64 · Chrome 154（headless，`--disable-gpu` + swiftshader）·
+JSAPI **4.0** · Node v24.18.0 · dataset **v1** · 规模 **50000** · `exit=0`（3/3 读数，13.8s 页面窗）。
+
+| 图层 | 族 | durationMs | long tasks | longest | FPS 均值 |
+| --- | --- | --- | --- | --- | --- |
+| pointCollection | firstFrame | 395.7 | 1 | 62 | — |
+| | setData | 188.6 | 1 | 166 | 0.004 |
+| line | firstFrame | 395.7 | 1 | 62 | — |
+| | setData | **1201.5** | 2 | **667** | 0.069 |
+| fill | firstFrame | 395.7 | 1 | 62 | — |
+| | setData | **3840.1** | 2 | **3577** | 0.064 |
+
+**Fake 对照**（`tests/performance/baseline.json`，CI runner / EPYC，只作量级参照、不作同机比）：
+
+| 图层 | live setData | Fake min | delta |
+| --- | --- | --- | --- |
+| pointCollection | 188.6 | 253.8（`setData.replace@50000`，含深响应读取） | −65.2 |
+| line | 1201.5 | 0.61（`data.replace.line@50000`） | **+1200.9** |
+| fill | 3840.1 | 0.43（`data.replace.fill@50000`） | **+3839.7** |
+
+**这批读数改变了什么**（回填 ADR 已知限制 1 与「重新评估条件」第三条）：
+
+1. **line / fill 的换数据长任务主体在 SDK 内部**：我们这一侧 Fake 直通只记亚毫秒，live 差出
+   1.2s / 3.8s，最长单任务 667ms / 3577ms —— 确认「SDK `setData` / 重绘是 long task 主因」的**前半条**。
+2. **pointCollection 不同**：live 189ms 与 Fake 深响应路径同量级，瓶颈仍在**适配层 + 响应式读取**
+   （与阶段 A 结论一致），不是 SDK 渲染。
+3. **首帧交付 396ms / 1 条 62ms 长任务**（三图层同一棵树，只挂一次）——跨 50ms 线，但是**一次性**
+   初始化，不改变「不引入 Worker」的结论；要压低的是这条交付路径，不是 Worker。
+4. **FPS 读数在本 headless 档接近 0**（`--disable-gpu` 下 rAF 节流）：只记录、不解读；有头/有 GPU
+   的机器再采一档才能谈帧率。
+5. **「官方分片入口不够用」本轮未测** ⇒ ADR 重开条件第三条标**部分满足、待复核**，不自动重开 Worker 票。
+
+机器不同 ⇒ **绝对毫秒不进任何门禁**（本档本就无阈值）；nightly 同机连续跑才有趋势意义。
+
 ## 报告怎么读
 
 - **归一化列**：`min / calibration.cpu`。校准工作量是一次固定的纯计算，用来抵消机器速度差；
@@ -60,8 +154,8 @@ pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标�
   但**依赖机器速度，因此只作读数**，不作门禁。
 - **包体**：`运行时（ESM/CJS/CSS）` 是消费方真正下载的部分；`d.ts` 与 `sourcemap` 分开列。
   `worker chunk` 与运行时 `new Worker(` 的出现次数是**读数**：门禁不冻结实现方式。
-- **本套测不到**：真实 SDK 重绘、真实浏览器调度、跨平台差异。报告末尾会逐条打印，别把读数外推到
-  「50k 点在页面上要多久」。
+- **本套（Fake 档）测不到**：真实 SDK 重绘、真实浏览器调度、跨平台差异。报告末尾会逐条打印，别把
+  Fake 读数外推到「50k 点在页面上要多久」——那一档见上文「真实浏览器档」（#123，已实跑）。
 
 ## 退出码（「没跑」不等于「通过」）
 
@@ -93,4 +187,5 @@ CI 的 `performance` job 先 `build:v3`，因此 `3` 出现在 CI 里就意味�
   （`platform + arch + cpuModel` 任一不同）的比值也只在同一机器身份内可比，因此那种情况只出报告
   （同轮比值层不受此限）。
 - 基线录在 CI runner 上（见上）；本机读数与它不可比是**预期**的，不是缺陷。
-- 真实浏览器档的读数与深响应输入的长任务各自有承接票（**#123** / **#124**），结论落地后回来更新本页。
+- 真实浏览器档见上文「真实浏览器档」（**#123** 已实跑并回填：`pnpm perf:baseline:live`）；
+  深响应输入的长任务仍由 **#124** 承接；line/fill 的 SDK 内部重绘优化若有消费者另开票。

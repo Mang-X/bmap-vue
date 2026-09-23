@@ -1,5 +1,5 @@
 {
-  "_comment": "基准/性能测试的类型门禁（issue #37 评审要求：tests/** 此前不在任何 typecheck 的编译范围里，TS 错误只能靠人眼发现 —— 本 PR 就真的漏了一个 TS2554）。范围刻意只覆盖 tests/performance/**（它 import 的 test-utils / src 会被传递纳入）：tests/behavior/** 与 packages/**/*.test.ts 有大量既存错误，全量纳入是另一个票的工作量，不能悄悄塞进这张票。与 tsconfig.examples.json 同一形态：独立配置 + noEmit。",
+  "_comment": "基准/性能测试的类型门禁（issue #37 评审要求：tests/** 此前不在任何 typecheck 的编译范围里，TS 错误只能靠人眼发现 —— 本 PR 就真的漏了一个 TS2554）。范围刻意覆盖 tests/performance/** 与 #123 的 tests/browser/live-performance/**（它 import 的 test-utils / src 会被传递纳入）：tests/behavior/** 与 packages/**/*.test.ts 有大量既存错误，全量纳入是另一个票的工作量，不能悄悄塞进这张票。与 tsconfig.examples.json 同一形态：独立配置 + noEmit。",
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
@@ -27,6 +27,6 @@
       "@baidumap/jsapi-ui-kit": ["./packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts"]
     }
   },
-  "include": ["tests/performance/**/*.ts"],
+  "include": ["tests/performance/**/*.ts", "tests/browser/live-performance/**/*.{ts,mts}"],
   "exclude": ["node_modules"]
 }
