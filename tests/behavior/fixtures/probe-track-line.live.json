@@ -1,0 +1,40 @@
+{
+  "note": "probe-track-line.mts 的一次成功 live 报告（只保留判定层消费的读数）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-track-line.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/v3-probe-track-line-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
+  "capturedAt": "2026-09-23",
+  "phase": "done",
+  "sdk": {
+    "version": "gl",
+    "trackLine": "function"
+  },
+  "readings": [
+    { "id": "method.setData.type", "type": "function" },
+    { "id": "method.start.type", "type": "function" },
+    { "id": "method.pause.type", "type": "function" },
+    { "id": "method.resume.type", "type": "function" },
+    { "id": "method.stop.type", "type": "function" },
+    { "id": "method.setSpeed.type", "type": "function" },
+    { "id": "method.setProcess.type", "type": "function" },
+    { "id": "track.setData", "threw": false, "message": null },
+    { "id": "track.addLayer", "threw": false, "message": null },
+    { "id": "track.readyState", "threw": false, "count": 1, "statusCount": 0 },
+    { "id": "event.statuschange.keys", "keys": ["status", "statusName"] },
+    { "id": "event.progress.keys", "keys": ["process", "elapsed", "trace", "distance", "point", "angle"] },
+    { "id": "control.start.attempt", "threw": false, "message": null },
+    { "id": "control.progress.baseline", "threw": false, "count": 7, "firstProcess": 0, "lastProcess": 0.005, "statusCount": 0, "lastStatusName": null },
+    { "id": "cmd.pause.attempt", "threw": false, "message": null },
+    { "id": "cmd.pause.observed", "threw": false, "count": 0, "status": null, "statusName": null, "process": null, "statusCount": 0 },
+    { "id": "cmd.resume.attempt", "threw": false, "message": null },
+    { "id": "cmd.resume.observed", "threw": false, "count": 16, "status": null, "statusName": null, "process": 0.045829999999999996, "statusCount": 0 },
+    { "id": "cmd.stop.attempt", "threw": false, "message": null },
+    { "id": "cmd.stop.observed", "threw": false, "count": 1, "status": null, "statusName": null, "process": 0.045829999999999996, "statusCount": 0 },
+    { "id": "cmd.setProcess.attempt", "threw": false, "message": null },
+    { "id": "cmd.setProcess.observed", "threw": false, "count": 1, "process": 0.5, "statusCount": 0, "lastStatusName": null },
+    { "id": "cmd.setSpeed.attempt", "threw": false, "message": null },
+    { "id": "cmd.setSpeed.observed", "threw": false, "count": 1, "process": 0.5, "statusCount": 0 },
+    { "id": "vis.hidden.observed", "threw": false, "count": 11, "status": null, "statusName": null, "firstProcess": 0.2749875999999999, "lastProcess": 0.3899875999999999, "statusCount": 0, "applied": true, "from": 36 },
+    { "id": "vis.shown.observed", "threw": false, "count": 20, "status": null, "statusName": null, "firstProcess": 0.48332759999999997, "lastProcess": 0.6316476000000001, "statusCount": 0, "applied": true },
+    { "id": "rm.remove.attempt", "threw": false, "message": null },
+    { "id": "rm.after.observed", "threw": false, "count": 0, "status": null, "statusName": null, "process": null, "statusCount": 0 },
+    { "id": "vis.method", "method": "synthetic" }
+  ]
+}

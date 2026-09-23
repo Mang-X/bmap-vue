@@ -28,6 +28,10 @@
  *   显式调用 `doOnceDraw()`——「样式改了但画面没变」是最容易被当成 SDK bug 的坑。
  */
 import { BMapError } from "../../core/errors/BMapError";
+import {
+  isValidTrackLineProcess,
+  isValidTrackLineSpeed,
+} from "../../core/layers/trackLinePlayback";
 import type { Capability } from "../capability/catalog";
 import type { CapabilityRegistry } from "../capability/registry";
 import type { Pixel } from "../types/geometry";
@@ -155,10 +159,22 @@ const NATIVE_LAYER_DESCRIPTORS = {
     operations: ["setData", "clearData", "setStyle", "setVisible"],
   },
   heatmap: { ctor: "Heatmap", declared: false, operations: ["setData", "clearData", "setStyle"] },
-  // TrackLine 只接收单条 LineString Feature；播放控制（start/pause/resume/stop/setSpeed/
-  // setProcess）在运行时确实存在，但不在本 issue 的接口面（setData/clearData/style/state/
-  // picking）内，属 M8 #43 的迁移结论，登记在 ADR 的欠账里。
-  "track-line": { ctor: "TrackLine", declared: false, operations: ["setData"] },
+  // TrackLine 播放命令面（#110）。方法名经 live 探针（`scripts/probe-track-line.mts`，
+  // 2026-09-23，exit 0）取证：`typeof layer.start === "function"` 等七条全部为真。
+  // 官方类型包没有 TrackLine 类声明（`declared: false`），因此这里只登记运行时已验证的入口。
+  "track-line": {
+    ctor: "TrackLine",
+    declared: false,
+    operations: [
+      "setData",
+      "start",
+      "pause",
+      "resume",
+      "stop",
+      "setSpeed",
+      "setProcess",
+    ],
+  },
 } as const satisfies Record<NativeLayerKind, NativeLayerDescriptor>;
 
 /** 每种原生图层对应的语义能力（能力清单是单一事实源：`driver/capability/catalog.ts`）。 */
@@ -278,6 +294,25 @@ export function createJsapiV4NativeLayerDriver(
           return;
         }
         callRequired(raw, "setEnablePicked", payload);
+        return;
+      // TrackLine 播放命令（#110；方法名均经 live 探针取证）
+      case "start":
+        callRequired(raw, "start");
+        return;
+      case "pause":
+        callRequired(raw, "pause");
+        return;
+      case "resume":
+        callRequired(raw, "resume");
+        return;
+      case "stop":
+        callRequired(raw, "stop");
+        return;
+      case "setSpeed":
+        callRequired(raw, "setSpeed", payload);
+        return;
+      case "setProcess":
+        callRequired(raw, "setProcess", payload);
         return;
     }
     // 完备性检查：新增归一化操作却忘了在上面处理时，`operation` 不会收窄成 `never`，
@@ -466,6 +501,57 @@ export function createJsapiV4NativeLayerDriver(
         dataIndex: Number.isFinite(dataIndex) ? dataIndex : -1,
         dataItem: result.dataItem,
       };
+    },
+
+    /* ------------------------------------------------------------ TrackLine 播放 */
+    // 六条命令共用 `open()` → `assertSupported()` → `invoke()`：不支持的 kind 显式失败，
+    // 与其它操作同一口径。参数校验前置于 `sdkCall`（`BMAP_INVALID_ARGUMENT` 不碰 SDK）。
+
+    start(layer) {
+      const { raw, descriptor, kind } = open(layer, "start");
+      invoke(raw, descriptor, kind, "start");
+    },
+
+    pause(layer) {
+      const { raw, descriptor, kind } = open(layer, "pause");
+      invoke(raw, descriptor, kind, "pause");
+    },
+
+    resume(layer) {
+      const { raw, descriptor, kind } = open(layer, "resume");
+      invoke(raw, descriptor, kind, "resume");
+    },
+
+    stop(layer) {
+      const { raw, descriptor, kind } = open(layer, "stop");
+      invoke(raw, descriptor, kind, "stop");
+    },
+
+    setSpeed(layer, speed) {
+      // 校验前置于 SDK 调用：非法参数不是 SDK 失败，不该走 `sdkCall` 的错误归一。
+      // 谓词与命令面共用（`trackLinePlayback.ts`），避免两处条件分叉。
+      if (!isValidTrackLineSpeed(speed)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `NativeLayerDriver.setSpeed: 速度必须是有限正数，实际是 ${String(speed)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      const { raw, descriptor, kind } = open(layer, "setSpeed");
+      invoke(raw, descriptor, kind, "setSpeed", speed);
+    },
+
+    setProcess(layer, process) {
+      // 官方参考面口径 0–1（含端点）；越界不静默 clamp——把非法值悄悄改成边界值会让调用方以为设置生效了
+      if (!isValidTrackLineProcess(process)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `NativeLayerDriver.setProcess: 进度必须在 [0, 1] 内，实际是 ${String(process)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      const { raw, descriptor, kind } = open(layer, "setProcess");
+      invoke(raw, descriptor, kind, "setProcess", process);
     },
   };
 }

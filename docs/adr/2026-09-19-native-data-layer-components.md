@@ -157,7 +157,7 @@ setMaxZoom` …），任何一个映射不到就红。配套的 **Fake 侧不变
 | --- | --- |
 | `BLineLayer` / `BFillLayer` | `data` + 统一槽位（visible/opacity/zIndex/minZoom/maxZoom）+ 强类型 `style` + 拾取 / 选中构造项 + 四个拾取事件 + `featureState` |
 | `BHeatmapLayer` | `data` / `style`（原样键值袋）/ `visible` |
-| `BTrackLineLayer` | `data` / `visible`（**基线**） |
+| `BTrackLineLayer` | `data` / `visible` / **`pauseOnHidden`**（#110） + expose 播放命令面（`playback`）与事件观察（`observed` / `@progress` / `@statuschange`） |
 
 「统一语义」指的是**同一批 prop 名与同一套「变化走哪条路」的判据**，而不是「所有 kind 都有这些
 prop」——后者会让「声明了却静默忽略」变成常态（issue 的非目标第一条）。
@@ -250,8 +250,8 @@ issue 的「统一 setData / style / base options / visible / opacity / zoom / z
 
 | 欠账 | 依据／为什么现在不做 | 去处 |
 | --- | --- | --- |
-| TrackLine 播放控制（`start` / `pause` / `resume` / `stop`） | 官方类型包**没有** `TrackLine` 类声明，方法名必须先由真实运行时探针取证；2026-09-19 的范围纠正要求「所有新增 capability/清理判据先有真实 SDK 证据」 | 后续票（先落 `scripts/probe-*.mts` 的探针，再决定薄命令面） |
-| 页面可见性联动（hidden/offscreen 自动暂停） | 自动 pause/resume 若会改变用户可观察状态，必须是**显式 opt-in** 而不是基础默认；官方语义未验证 | 同上 |
+| TrackLine 播放控制（`start` / `pause` / `resume` / `stop`） | 官方类型包**没有** `TrackLine` 类声明，方法名必须先由真实运行时探针取证；2026-09-19 的范围纠正要求「所有新增 capability/清理判据先有真实 SDK 证据」 | **#110 已收口**：live 探针（`scripts/probe-track-line.mts`，2026-09-23，exit 0）取证方法名与事件载荷；薄命令面经 `core/layers/trackLinePlayback.ts` 暴露（`playback.start/pause/resume/stop/setSpeed/setProcess`），参数在 SDK 调用前校验，未就绪不排队 |
+| 页面可见性联动（hidden/offscreen 自动暂停） | 自动 pause/resume 若会改变用户可观察状态，必须是**显式 opt-in** 而不是基础默认；官方语义未验证 | **#110 已收口**：live 探针实测「SDK 不会自行暂停」⇒ 默认只停本库观察；`pauseOnHidden` prop 是 opt-in，且只对**已送达 start/resume 且 handle 匹配**的实例 pause/resume（not-ready/抛错不留意图；stop/idle/跨代不被反向启动；prop 变化按 `visibilityState` 收敛；**已在 hidden 时新送达的 play 也会立刻再跑一遍策略**；`observed` 快照按 handle 分代、新一代第一条事件从空快照重建，#132 评审）；visibility 暂停记账**绑到被 pause 的 handle** |
 | ~~`BMVTLayer` 基线~~ | ~~挂载机制缺真实运行时证据~~ → **#109 已取证并落地**（2026-09-23）：直接 `addLayer` 可用、`removeLayer(壳)` 对称可用；`layers` 须为源图层名**字符串数组**；状态键为 `layerName_id`；样式按源图层名 `{type,painter}`。读数见 skill `references/mvt-layer.md`「live 探针读数」 | **已完成**（`BMVTLayer` 组件 + `layer.mvt` 能力） |
 | `BGeoJSONLayer` 基线 | **不属于本票**：它由 #40 落地（`BGeoJSONLayer.vue`，走 `LayerDriver` 的 `geojson` kind，官方 `BMap.GeoJSONLayer`）。它是「覆盖物组合图层」而不是原生批量数据图层，没有要素状态 / 拾取面 | 无需动作（票面的这一项已在 #40 完成） |
 | 各种 geometry 的 GeoJSON 校验 | 本票的图层组件把它交给 SDK（官方 `setData(geojson: object)` 只声明了 `object`）；M6 的数据适配层（`core/data/*`）目前只覆盖 Point 几何 | 后续票（若需要线 / 面几何的前置校验） |

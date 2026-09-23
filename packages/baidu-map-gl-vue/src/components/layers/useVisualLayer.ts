@@ -34,6 +34,7 @@ import { resolveFeaturePick } from "../../core/layers/nativeLayerPick";
 import { projectLayerStyle } from "../../core/layers/nativeLayerStyle";
 import {
   useNativeLayerResource,
+  type NativeLayerBindInput,
   type NativeLayerResource,
   type NativeLayerUnifiedFields,
 } from "../../core/composables/useNativeLayerResource";
@@ -115,6 +116,13 @@ export interface UseVisualLayerOptions<Props extends VisualLayerPropsLike> {
   /** 需要转发成同名领域事件的官方拾取事件；不给 = 该 kind 没有拾取面（不绑任何事件）。 */
   pickEvents?: readonly string[];
   emitPick?: PickEmitter;
+  /**
+   * 额外绑定（每个实例一次，重建时拿到的是新实例 + 新 scope）；不给 = 无。
+   *
+   * TrackLine 的播放观察（`progress` / `statuschange`）走这里：它不是「拾取事件」，
+   * 不经 `resolveFeaturePick`，因此不能塞进 `pickEvents`。
+   */
+  extraBind?(input: NativeLayerBindInput): void;
 }
 
 export interface VisualLayerRuntime {
@@ -162,7 +170,8 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
       value: () => props.data,
     },
     identity: (p) => normalizeIdField(p.idKey),
-    bind: ({ handle, context, scope, isQuiescing }) => {
+    bind: (input) => {
+      const { handle, context, scope, isQuiescing } = input;
       const events = context.client.driver.events;
       for (const name of options.pickEvents ?? []) {
         scope.add(
@@ -190,6 +199,7 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
           }),
         );
       }
+      options.extraBind?.(input);
     },
   });
 

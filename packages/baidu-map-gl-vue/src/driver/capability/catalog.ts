@@ -581,8 +581,10 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     id: "layer.track-line",
     family: "layer",
     description:
-      "轨迹线（TrackLine）；数据的绘制属扩展 API。**它是 legacy 插件 `service.track-animation` 的迁移目标**" +
-      "（结论见 plugin-compat-inventory）；播放控制命令面归 #110。",
+      "轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）" +
+      "属扩展 API，由 BTrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。" +
+      "**它是 legacy 插件 `service.track-animation` 的迁移目标**" +
+      "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。",
     rawMembers: ["TrackLine"],
     engines: JSAPI_V4,
     status: "experimental",
@@ -699,7 +701,8 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description:
       "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**" +
-      "（组件 `<BTrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面的归属见 #110。" +
+      "（组件 `<BTrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已由 #110 落地在" +
+      " `<BTrackLineLayer>` 的 `playback` expose 上。" +
       "脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**" +
       "（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；" +
       "依据与复现见 plugin-compat-inventory（#25 / #43）",

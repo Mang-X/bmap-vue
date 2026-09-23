@@ -174,6 +174,13 @@ export const NATIVE_LAYER_FACET_OPERATIONS = [
   "getState",
   "setEnablePicked",
   "hitTest",
+  // TrackLine 播放命令（#110；方法名经 live 探针取证）
+  "start",
+  "pause",
+  "resume",
+  "stop",
+  "setSpeed",
+  "setProcess",
 ] as const satisfies readonly NativeLayerOperation[];
 
 /**
@@ -230,6 +237,25 @@ export function callNativeLayerOperation(
       return;
     case "hitTest":
       driver.hitTest(layer, { x: 0, y: 0 });
+      return;
+    case "start":
+      driver.start(layer);
+      return;
+    case "pause":
+      driver.pause(layer);
+      return;
+    case "resume":
+      driver.resume(layer);
+      return;
+    case "stop":
+      driver.stop(layer);
+      return;
+    case "setSpeed":
+      // 合法载荷（有限正数）：契约只验证「不抛错」，非法值的边界由驱动自己的单测断言
+      driver.setSpeed(layer, 2);
+      return;
+    case "setProcess":
+      driver.setProcess(layer, 0.5);
       return;
     default: {
       const exhaustive: never = operation;

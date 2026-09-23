@@ -71,7 +71,7 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 [Capability Catalog 能力矩阵](/zh-CN/contributing/capability-matrix)；插件（`BMapGLLib` 系列）
 在 4.0 上的逐项实测结论与**迁移路径**看[插件兼容 inventory](/zh-CN/contributing/plugin-compat-inventory)：
 
-- `TrackAnimation` → 结论 `native`：**改用原生 `<BTrackLineLayer>`**（播放命令面见 [#110](https://github.com/Mang-X/bmap-vue/issues/110)）；
+- `TrackAnimation` → 结论 `native`：**改用原生 `<BTrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 可见性联动已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）；
 - `DrawingManager` / `GeoUtils` → 结论 `compatible`：没有原生替代，按官方文档直接使用（本库只负责加载脚本）；
 - `MapVGL` → 结论 `incompatible`：依赖 `_rd` 私有回调表，且视图容器要挂 `getPanes().mapPane`（4.0 没有）⇒ **无迁移路径**，改用原生图层；
 - 其余（DistanceTool / AreaRestriction / InfoBox / RichMarker / LuShu）：未内置，未评估。
@@ -79,7 +79,8 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 > 已知限制（3.0 现状，见 [ADR 2026-09-14](/adr/2026-09-14-remove-legacy-engine) 的「已知限制」）：
 > `useBMapTrackAnimation` 已于 #104 删除（它在 v4 上只会从 Driver 拿到
 > `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达）；4.0 的对应能力是原生图层
-> `track-line`，插件侧的迁移结论已由 M8 / #43 定型为 `native`，**播放命令面**归 #110。
+> `track-line`，插件侧的迁移结论已由 M8 / #43 定型为 `native`，**播放命令面**已由 #110
+> 落地在 `<BTrackLineLayer>` 的 `playback` expose 上（方法名经 live 探针取证）。
 >
 > `BContextMenu` 的挂载目标自 M5 / #33 起**已实测可用**：`map` 与 `marker` 两个目标都能挂
 > （`Marker#addContextMenu` 是 4.0 的**运行时扩展成员**——官方类型包只在 `Map` 上声明它，真实
@@ -91,7 +92,7 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 
 | 之前怎么写 | 现在怎么写 |
 | --- | --- |
-| `import { useBMapTrackAnimation } from 'baidu-map-gl-vue'` | 已删除（#104）。它在 v4 上只会从 Driver 拿到 `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达。轨迹改用原生 `<BTrackLineLayer>`（插件迁移结论已由 M8 / #43 定型）；播放命令面见 [#110](https://github.com/Mang-X/bmap-vue/issues/110) |
+| `import { useBMapTrackAnimation } from 'baidu-map-gl-vue'` | 已删除（#104）。它在 v4 上只会从 Driver 拿到 `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达。轨迹改用原生 `<BTrackLineLayer>`（插件迁移结论已由 M8 / #43 定型）；播放命令面在 #110 已落地（`ref.playback` + `pauseOnHidden`），见[原生批量可视化图层](../components/layer/native-visual-layers) |
 | `const { setKeyFrames, start, stop, proceed, status } = useBMapViewAnimation()` | 收窄为 `start(keyFrames)` / `cancel()` / `status`（#104）。`stop` / `proceed` 依赖 SDK 私有的 `_pause` / `_continue`，本库不再用私有面伪造暂停/继续；`status` 只剩 `idle` / `playing` 两个**观察值**，由公开事件写，命令不再乐观改它 |
 | `driver.services.suggest(autocomplete, keyword)` | 已删除（#104）。`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，程序化检索的归属只能靠 keyword/FIFO 猜；改用 `createAutocomplete({ input, onSearchComplete })` 监听原生回包，或换 `useBMapLocalSearch` / 官方 UI Kit |
 | `import { baiduCdnProvider, customScriptProvider, existingGlobalProvider } from 'baidu-map-gl-vue'` | 根入口**不再导出任何 Provider**；改用 `baidu-map-gl-vue/core` 的 `baiduJsapiV4Provider()` / `customScriptV4Provider()` / `existingGlobalV4Provider()` |

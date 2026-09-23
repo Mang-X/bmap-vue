@@ -69,6 +69,7 @@ import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { stableLayerValue } from "../layers/LayerSpec";
 import { ResourceScope } from "../lifecycle/ResourceScope";
 import type {
+  NativeLayerDriver,
   NativeLayerHandle,
   NativeLayerKind,
   NativeLayerOperation,
@@ -164,6 +165,14 @@ export interface NativeLayerResourceHooks<Props> {
 export interface NativeLayerResource {
   /** 要素状态命令面（按业务 id 定位；未就绪时命令不排队，见 `featureState.ts`）。 */
   readonly featureState: FeatureStateApi;
+  /**
+   * **当前会话**（Driver + 句柄）的取值器；未就绪（或已释放）时返回 `null`。
+   *
+   * 暴露给组件侧的**第二**命令面（如 TrackLine 的播放控制）复用：每条命令重新求值，
+   * 与 `featureState` 同一条口径——图层会因构造期选项变化而换实例，闭包里的旧句柄会让
+   * 命令打进一个已经不在地图上的图层。
+   */
+  session(): { readonly driver: NativeLayerDriver; readonly handle: NativeLayerHandle } | null;
   /**
    * 最近一次**成功送出**的数据。
    *
@@ -756,13 +765,16 @@ export function useNativeLayerResource<Props>(
     component: hooks.component,
     // 身份判定走唯一判定点（`""` / 非字符串都算未声明），与拾取读取用同一个判据
     identity: () => normalizeIdField(hooks.identity?.(props)),
-    session: () => {
-      const state = instance;
-      const context = readyCtx;
-      if (!state || !context) return null;
-      return { driver: nativeLayersOf(context.client), handle: state.handle };
-    },
+    session: () => session(),
   });
 
-  return { featureState, sentData: () => sent };
+  /** 会话取值器（`featureState` 与组件侧第二命令面共用同一条求值路径）。 */
+  function session(): { readonly driver: NativeLayerDriver; readonly handle: NativeLayerHandle } | null {
+    const state = instance;
+    const context = readyCtx;
+    if (!state || !context) return null;
+    return { driver: nativeLayersOf(context.client), handle: state.handle };
+  }
+
+  return { featureState, session, sentData: () => sent };
 }
