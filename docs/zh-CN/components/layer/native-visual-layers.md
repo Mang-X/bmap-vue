@@ -202,7 +202,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | 策略 | 行为 |
 | --- | --- |
 | **默认**（`pauseOnHidden=false`） | 页面 hidden 时只停掉**本库自己的观察**（`observed` 不再更新），**不**改写业务播放意图（SDK 继续播） |
-| **显式 opt-in**（`pauseOnHidden=true`） | 只对「**命令意图仍在播**」的实例：hidden 触发 `pause()`、shown 恢复 `resume()`，且只在「本次是因 visibility 暂停的**且 handle 仍是那一代**」时才 resume——**用户 pause/stop 过或从未 start 的不被 visibility 反向启动**；hidden 期间换实例（`visible` 翻转 / `data: null` 等）则只清账、**不对新实例补 resume** |
+| **显式 opt-in**（`pauseOnHidden=true`） | 只对「**已送达 start/resume 且 handle 仍是那一代**」的实例：hidden 触发 `pause()`、shown 恢复 `resume()`——**not-ready / 抛错的命令不留意图**（visibility 不补发迟到的 start），**stop/idle/跨代意图不被反向启动**；hidden 中把 prop 改成 `false` 会**立刻 resume 本库造成的 pause**，已 hidden 时改成 `true` 则立即按策略 pause |
 
 自动 pause/resume 必须是 opt-in、不是基础默认，这是 issue #110 的硬约束。
 
