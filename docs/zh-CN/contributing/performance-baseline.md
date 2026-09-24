@@ -17,6 +17,17 @@ Worker 也要先把数据读出来再送过去，所以它解决不了这条。*
 「大数据量」）；决策与取证见 ADR
 [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)。
 
+**这条长任务的主因已确认是 `flush:'sync'`**（#124 的 scheduler/batching 取证，本机受控实验）：内核
+watcher 在 `sync` 档下于**活动 effect 内**跑 `adapt`，逐项读取把依赖收集一并付掉——50k 换引用
+`sync` 112 ~ 128ms / `pre` 36.5 ~ 37.6ms / `post` 35.9 ~ 38.4ms（`markRaw` 输入三档都 ~10ms，`setData`
+次数一致）。剩下的差距是 **Proxy get 本身**，只能靠「数据别进深响应」消除。生产档是既有的
+`flush:'sync'`，其「逐字段 mutate 会触发多次 `sync()`」的行为被 `useNativeLayerResource.test.ts`
+的夹具依赖；是否切 `pre`/`post` 需要**单独 ADR + 回归面**（目前**没有**证据说原生数据图层的 sync 是为了
+v3 那条「同一提交落地」语义而设计——那条显式理由属于 overlay/路径内核），本轮**不改**。`pre`/`post`
+还会把「一次改 N 个字段 ⇒ N 次 reconcile」合并成 1 次。三档最终状态与 recreate 次数一致
+（`component-path` §7 钉住不变式）。决策见
+[scheduler/batching 取证 ADR](/adr/2026-09-24-scheduler-batching-hot-path)。
+
 **四类原生图层（GeoJSON 直通）在 50k 下的读数**（`component-path` §6 的矩阵）：挂载 1.1 ~ 2.3ms、
 换数据 0.2 ~ 0.4ms、样式更新 0.3 ~ 0.6ms、卸载 0.1 ~ 0.6ms（line / fill / heatmap / track-line，
 每个组合都断言「1 个 SDK 资源 / 0 个逐要素覆盖物 / 换数据不换实例 / 卸载后归零**、换引用恰好 `+1`
@@ -217,7 +228,8 @@ CI 的 `performance` job 先 `build:package`，因此 `3` 出现在 CI 里就意
   （同轮比值层不受此限）。
 - 基线录在 CI runner 上（见上）；本机读数与它不可比是**预期**的，不是缺陷。
 - 真实浏览器档见上文「真实浏览器档」（**#123** 已实跑并回填：`pnpm perf:baseline:live`）；
-  深响应大数组这一子问题的落地方式是文档指引（见
-  [ADR 2026-09-24](/adr/2026-09-24-deep-reactive-array-update-path)）；**#124** 在 2026-09-23
-  重新分类后新增的 scheduler/batching 取证仍在 #124（1.0 P1，前置 #134），未在本处收口；
-  line/fill 的 SDK 内部重绘优化若有消费者另开票。
+  深响应输入的长任务：**#124 仍 open**。已落盘的两部分——深响应子问题见
+  [ADR 2026-09-24（深响应）](/adr/2026-09-24-deep-reactive-array-update-path)，scheduler/batching 取证见
+  [ADR 2026-09-24（scheduler）](/adr/2026-09-24-scheduler-batching-hot-path)（`flush` 主因已确认、
+  不改 `flush`、多字段次数由 §7 钉住）；**剩余项 = §7 的 `multiUpdate.*@1000` readout 需要在门禁机
+  同机重录提交基线**（见该 ADR「后果」）。line/fill 的 SDK 内部重绘优化若有消费者另开票。
