@@ -9,6 +9,10 @@
  *
  * issue #128 的 F-3 两组问题 → 两条结论：
  * destroy/dispose 幂等性 / 销毁期是否回调业务。
+ *
+ * 退出码（#128：**0 = 全 pass** / 1 有 fail / 3 只有 blocked / 2 脚手架失败）：
+ * 控件不成立 → 命令层 exit 1；控件成立但仍有第三态结论 → `conclusionExitCode` 也必须
+ * 返回 1——stdout 说了「无法判定」，shell status 不得仍表示全通过。
  */
 
 /** 一条读数。字段可选正是「可能没测到」的来源，所以判定层必须逐字段查 presence。 */
@@ -36,18 +40,21 @@ const UNKNOWN = "**无法判定**（读数缺失）";
 /**
  * 正证控件：本轮实验能不能下结论。
  *
- * 三条硬门槛：
+ * 四条硬门槛：
  * 1. Map 首次 destroy 必须成功（正证：SDK 起来了、销毁路径可测）；
  * 2. Autocomplete 首次 dispose 必须成功（正证：服务实例可测）；
- * 3. Autocomplete **对照组** `callbackObserved.count >= 1`——同环境不 dispose 时
+ * 3. Autocomplete **对照组显式 `search()` 必须成功**（`auto.control.search.threw === false`）
+ *    ——否则 `callbackObserved >= 1` 可能来自同实例其它触发，不证明「本次 search 可回调」；
+ * 4. Autocomplete **对照组** `callbackObserved.count >= 1`——同环境不 dispose 时
  *    `onSearchComplete` 必须能到达；否则 dispose 臂的 0/0 无法区分「dispose 挡住了」
  *    与「网络/服务根本没回」（issue #128：每个探针要有对照组，否则挂起会退化成失败）。
  *
  * Panorama **未加载场景**的 destroy 抛错是**已知反例**，不进控件——它恰恰是 F-3 要测的一侧。
  *
- * 半边前置（进结论、不进全局控件）：
+ * 半边前置（进结论、**不**进本函数——否则 exit 1 时不再打印另一半有效结论）：
  * - `map.control.destroyListener.threw === false`：否则 Map 半边第三态；
  * - `auto.search.threw === false`：否则 Autocomplete 半边第三态。
+ * 控件成立后若仍有第三态，由 `conclusionExitCode` 收成退出码 1（#128：0 = 全 pass）。
  */
 export function controlFailures(report: ProbeReport): string[] {
   const failures: string[] = [];
@@ -65,6 +72,13 @@ export function controlFailures(report: ProbeReport): string[] {
     failures.push(
       `auto.control.disposeOnce 抛错或缺失（得到 ${String(autoOnce?.threw)}）——` +
         ` 首次释放都失败，后续幂等读数无意义`,
+    );
+  }
+  const autoCtrlSearch = byId.get("auto.control.search");
+  if (!autoCtrlSearch || autoCtrlSearch.threw !== false) {
+    failures.push(
+      `auto.control.search 抛错或缺失（得到 ${String(autoCtrlSearch?.threw)}）——` +
+        ` 对照组的显式 search 没发出，callbackObserved 可能来自其它触发，不证明本次可回调`,
     );
   }
   const autoCtrl = byId.get("auto.control.callbackObserved");
@@ -220,4 +234,15 @@ export function verdicts(report: ProbeReport): string[] {
   }
 
   return lines;
+}
+
+/**
+ * 控件成立后的**最终退出码**：`0` = 全 pass（每条结论都确定）；`1` = 至少一条仍是第三态。
+ *
+ * #128 退出码约定「0 全 pass」。半边前置（destroyListener / auto.search）刻意不进
+ * `controlFailures`，以便 stdout 仍打印另一半有效结论；但 shell status 不得在
+ * 「Map：**无法判定**」时仍返回 0——命令层在打印 verdicts 后必须调用本函数。
+ */
+export function conclusionExitCode(report: ProbeReport): 0 | 1 {
+  return verdicts(report).some((line) => line.includes("无法判定")) ? 1 : 0;
 }

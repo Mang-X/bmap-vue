@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  conclusionExitCode,
   controlFailures,
   verdicts,
   type ProbeReport,
@@ -283,6 +284,59 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
       report(COMPLETE.filter((r) => r.id !== "auto.control.callbackObserved")),
     );
     expect(ctrlMissing.join("\n")).toContain("auto.control.callbackObserved");
+
+    // 对照组显式 search 抛错/缺失 ⇒ 控件失败（callbackObserved 可能来自其它触发）
+    const ctrlSearchFail = controlFailures(
+      report(
+        COMPLETE.map((r) =>
+          r.id === "auto.control.search" ? { ...r, threw: true, message: "x" } : r,
+        ),
+      ),
+    );
+    expect(ctrlSearchFail.join("\n")).toContain("auto.control.search");
+
+    const ctrlSearchMissing = controlFailures(
+      report(COMPLETE.filter((r) => r.id !== "auto.control.search")),
+    );
+    expect(ctrlSearchMissing.join("\n")).toContain("auto.control.search");
+  });
+
+  it("半边前置失败 ⇒ controlFailures 仍为空，但 conclusionExitCode 必须是 1（#128：0 = 全 pass）", () => {
+    // destroyListener 抛错：stdout 打印 Map 半边「无法判定」+ Autocomplete 有效结论，
+    // shell status 不得仍是 0。
+    const destroyListenerFail = report(
+      COMPLETE.map((r) =>
+        r.id === "map.control.destroyListener" ? { ...r, threw: true, message: "x" } : r,
+      ),
+    );
+    expect(
+      controlFailures(destroyListenerFail),
+      "半边前置不进 controlFailures（否则不再打印另一半）",
+    ).toEqual([]);
+    expect(conclusionExitCode(destroyListenerFail)).toBe(1);
+    expect(lineOf(verdicts(destroyListenerFail), "[销毁期回调")).toContain(
+      "Map：**无法判定**",
+    );
+
+    // dispose 臂 auto.search 抛错：Autocomplete 半边第三态 ⇒ 同样 exit 1。
+    const autoSearchFail = report(
+      COMPLETE.map((r) =>
+        r.id === "auto.search" ? { ...r, threw: true, message: "x" } : r,
+      ),
+    );
+    expect(controlFailures(autoSearchFail)).toEqual([]);
+    expect(conclusionExitCode(autoSearchFail)).toBe(1);
+    expect(lineOf(verdicts(autoSearchFail), "[销毁期回调")).toContain(
+      "Autocomplete：**无法判定**",
+    );
+
+    // 缺读数同样第三态 ⇒ exit 1。
+    expect(conclusionExitCode(report(COMPLETE.filter((r) => r.id !== "map.destroyTwice")))).toBe(
+      1,
+    );
+
+    // COMPLETE（live 基线）⇒ 全部确定 ⇒ exit 0。
+    expect(conclusionExitCode(report(COMPLETE))).toBe(0);
   });
 
   it("读数齐备 ⇒ 两条结论都是确定结论（正证）", () => {

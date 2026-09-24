@@ -27,6 +27,8 @@
  *
  * - `map.control.destroyOnce.threw === false`；
  * - `auto.control.disposeOnce.threw === false`；
+ * - `auto.control.search.threw === false`：对照组的**显式 search** 必须发出——否则
+ *   `callbackObserved` 可能来自同实例其它触发，不证明「本次 search 可回调」；
  * - `auto.control.callbackObserved.count >= 1`：**对照组**——同环境同类实例不 dispose 时
  *   `onSearchComplete` 必须能到达；否则 dispose 臂的 0/0 无法区分「dispose 挡住了」与
  *   「网络/服务根本没回」（issue #128：每个探针要有对照组，否则挂起会退化成失败）。
@@ -41,17 +43,20 @@
  * - `auto.search.threw === false`：dispose 臂请求必须发出，否则 0/0 不构成
  *   「窗口内未见回调」（Autocomplete 半边第三态）。
  *
+ * 半边前置**不**进 `controlFailures`（否则 exit 1 时不再打印另一半有效结论）；
+ * 但打印 verdicts 后必须走 `conclusionExitCode`：任一结论仍含「无法判定」⇒ 退出码 1。
+ *
  * ## 判定与退出码
  *
  * | 结论 | 触发 | 退出码 |
  * | --- | --- | --- |
- * | `pass` | 正证控件成立，读数取到 | 0 |
- * | `fail` | 控件读数齐备但正证不成立（本轮无法判定） | 1 |
+ * | `pass` | 正证控件成立，**且**全部结论都是确定结论 | 0 |
+ * | `fail` | 控件不成立，**或**任一结论仍是第三态（无法判定） | 1 |
  * | `blocked` | SDK 没起来（`loadError`）或 `phase ≠ done`（**先于**控件判定） | 3 |
  * | 脚手架失败 | 缺 AK / 找不到浏览器 / 语法错 / 没写报告 | 2 |
  *
- * 判定顺序有意为 **blocked → 控件 → 结论**：SDK 没起来时控件读数通常也缺失，
- * 若先跑 `controlFailures` 会把「没起来」误报成 exit 1。
+ * 判定顺序有意为 **blocked → 控件 → 结论 → 第三态退出码**：SDK 没起来时控件读数
+ * 通常也缺失，若先跑 `controlFailures` 会把「没起来」误报成 exit 1。
  *
  * ## 它是证据生成器，不是门禁
  *
@@ -71,6 +76,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.mts";
 import {
+  conclusionExitCode,
   controlFailures,
   verdicts,
   type ProbeReport,
@@ -460,7 +466,13 @@ async function main(): Promise<number> {
       console.log(`原始报告（已脱敏）写入 ${outPath}`)
     }
     console.log(`summary: ${redact(lines.join(" | "))}`)
-    return 0
+    // #128「0 = 全 pass」：stdout 已有「无法判定」时 shell status 不得仍是 0。
+    // 半边前置不进 controlFailures，因此这里在打印完两半结论后再收退出码。
+    const exitCode = conclusionExitCode(report)
+    if (exitCode === 1) {
+      console.error("-- 存在第三态结论（无法判定）⇒ 退出码 1（#128：0 才是全 pass）--")
+    }
+    return exitCode
   } finally {
     session?.close()
     chrome?.kill()
