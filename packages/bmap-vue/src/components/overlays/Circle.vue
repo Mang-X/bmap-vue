@@ -7,7 +7,7 @@
  * `enableClicking` 是构造期属性（变化即重建）——全部由 `circleSpec` 声明。
  *
  * 事件面（17 个）由 `GraphEventMap` 派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";

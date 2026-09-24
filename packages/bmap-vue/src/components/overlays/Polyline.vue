@@ -7,7 +7,7 @@
  * `useOverlaySpec` 落地——组件里不再有 8 个手写 watcher。
  *
  * 事件面（17 个，含编辑六件套）由 `GraphEventMap` 派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";

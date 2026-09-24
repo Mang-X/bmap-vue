@@ -6,7 +6,7 @@
  * 判定一旦写在探针里，就只有「某一天真的跑真实浏览器」时才被执行到，于是只能靠人肉复查
  * （#97 / #104 / #122 的教训：把 `verdicts()` 抽成纯模块，用**合成报告**回归）。
  * 本文件只吃 JSON 形状的入参、只吐结论，不读 `process.argv` / 环境变量 / 文件，
- * 因此 `tests/behavior/v3-plugin-load-channel-decision.test.ts` 可以直接构造各种读数形状来钉它。
+ * 因此 `tests/behavior/plugin-load-channel-decision.test.ts` 可以直接构造各种读数形状来钉它。
  *
  * ## 这个探针要证明的契约（issue #121）
  *

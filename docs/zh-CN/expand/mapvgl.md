@@ -11,7 +11,7 @@ MapVGL，是一款基于 WebGL 的地理信息可视化库，可以用来展示�
 （所以 `new mapvgl.View(...)` 在 4.0 上直接抛 `Cannot read properties of undefined`）。
 依据与复现命令见[插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
-本章节示例来自 v2 时代，**在当前默认路径下不能直接使用**；请改用 4.0 的原生图层
+本章示例基于 `Mapvgl` 插件，**在默认路径下不能直接使用**；请改用 4.0 的原生图层
 （`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等）。
 :::
 
@@ -40,7 +40,7 @@ app.use(baiduMap, {
 </template>
 ```
 
-因为资源是通过异步方式加载，所以需要监听 `plugin-ready` 事件（载荷为插件名字符串；v2 的 `@pluginReady` 已移除）：
+因为资源是通过异步方式加载，所以需要监听 `plugin-ready` 事件（载荷为插件名字符串）：
 
 ```vue
 <template>

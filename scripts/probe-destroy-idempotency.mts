@@ -61,7 +61,7 @@
  * ## 它是证据生成器，不是门禁
  *
  * 与 `probe-layer-detached.mts` 同一口径：不进 CI 必需链路。**可回归 gate** 是
- * `tests/behavior/v3-probe-destroy-idempotency-verdicts.test.ts` 的 COMPLETE ↔ live fixture
+ * `tests/behavior/probe-destroy-idempotency-verdicts.test.ts` 的 COMPLETE ↔ live fixture
  * 一致性（读数固化）+ 既有 `driver-contract` 的 Fake 侧断言（OWNED）。
  *
  * 用法：
@@ -137,7 +137,7 @@ function resolveBrowser(): string {
  *    计 dispose 期间 / 之后回调次数 → 再 `dispose` 一次（幂等）；
  * 5. Panorama：已加载场景（`setId`）destroy ×2；未加载场景 destroy（已知反例对照）。
  *
- * ⚠️ 页面里**不出现反引号**（外层是 TS 模板串），由 `v3-probe-page-scripts.test.ts` 静态守卫。
+ * ⚠️ 页面里**不出现反引号**（外层是 TS 模板串），由 `probe-page-scripts.test.ts` 静态守卫。
  */
 const PAGE_JS = `
 (async () => {

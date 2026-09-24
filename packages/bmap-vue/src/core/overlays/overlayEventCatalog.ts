@@ -36,7 +36,7 @@
  *
  * 最后两行是 issue #33 补上的：此前本表把它们登记成「上游没有事件表」，而那是**只读了一个文件**
  * 得到的结论——两张表都在，只是不在 `OverlayEvent.d.ts` 里。事件名照旧由
- * `tests/behavior/v3-overlay-event-matrix.test.ts` 对着这三个文件做**双向**比对
+ * `tests/behavior/overlay-event-matrix.test.ts` 对着这三个文件做**双向**比对
  * （表里多一个、少一个、或某张表换了文件都红），因此「事件命名和 payload 由统一 Catalog 管理」
  * 是一条会红的检查，而不是文档承诺。
  *
@@ -51,9 +51,6 @@
  * **全部**没有分隔符（`vue === sdk`），因此内核只发一次名字就够——map 侧那种「规范名 + SDK
  * 拼写」的双发（`MAP_EVENT_EMIT_ALIASES`）在这里没有对象。`vue` 仍然派生而不是手写：
  * 规范只有一处，将来上游加了带 `_` 的事件名时不需要第二个口径。
- *
- * **历史名（`drag-end`）不在这套双发机制里**：它是弃用别名（有稳定 code、要告警、将来要删），
- * 归 `core/deprecations` 管。
  *
  * ## 载荷档（`payload`）
  *

@@ -84,11 +84,11 @@ describe("createBMapClient（默认 v4 收口）", () => {
     });
   });
 
-  it("拒绝已删除的旧引擎加载结果（webgl-v1）", async () => {
+  it("拒绝已删除的 engine 取值（webgl-v1）", async () => {
     await expect(
       createBMapClient({
         provider: {
-          // 旧引擎已在 3.0 删除：这类加载结果现在只能来自「有人把旧代码加回来」
+          // 旧引擎已删除：这类加载结果现在只能来自「有人把旧代码加回来」
           load: async () =>
             ({ engine: "webgl-v1", namespace: v4Namespace }) as unknown as LoadedJsapiV4,
         },
@@ -96,14 +96,14 @@ describe("createBMapClient（默认 v4 收口）", () => {
       }),
     ).rejects.toMatchObject({
       code: "BMAP_SDK_ENGINE_MISMATCH",
-      message: expect.stringContaining("旧引擎"),
+      message: expect.stringContaining("本库只支持 JSAPI 4.0"),
     });
   });
 
   it("拒绝裸 SDK unknown 加载结果（Provider 未结构化）", async () => {
     await expect(
       createBMapClient({
-        // 刻意绕过类型：运行期给的就是**裸命名空间**（v2 / v3-beta 的宽松 Provider 形状），
+        // 刻意绕过类型：运行期给的就是**裸命名空间**（已删除的宽松 Provider 形状），
         // 类型层用断言表达「这个形状本就不该出现在这里」。
         provider: { load: async () => v4Namespace as unknown as LoadedJsapiV4 },
         loadOptions: {},
@@ -117,7 +117,7 @@ describe("createBMapClient（默认 v4 收口）", () => {
   it("拒绝不完整的结构化结果（缺 version / load），不会产出 sdkVersion=undefined 的 client", async () => {
     // 评审 P2 的场景：`{ engine, namespace }` 这类半成品（JS 消费者 / `any` / 第三方 Provider 都能造出来）
     // 此前会被收窄成完整 `LoadedSdk`，`createBMapClient` 读到 `version: undefined` 并透传给 Driver，
-    // 最终 `client.sdkVersion` / `client.version` 也是 `undefined`。
+    // 最终 `client.sdkVersion` 也是 `undefined`。
     await expect(
       createBMapClient({
         provider: {
@@ -171,8 +171,6 @@ describe("createBMapClient（默认 v4 收口）", () => {
     expect(client.libraryVersion).toBe(LIBRARY_VERSION);
     expect(client.engine).toBe("jsapi-v4");
     expect(client.sdkVersion).toBe("4.0");
-    // 兼容别名 = sdkVersion（不是 libraryVersion）
-    expect(client.version).toBe("4.0");
     expect(typeof client.id).toBe("symbol");
     expect(client.rawSdk).toBe(v4Namespace);
   });

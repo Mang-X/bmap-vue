@@ -13,22 +13,16 @@
  *    Vitest 4 起该选项在**顶层**（`poolOptions` 已移除）。
  * 4. `testTimeout` 放大：50k 规模的多次采样 + 100 次替换 + 强制 GC 本来就是几十秒的量级。
  *
- * 其余项（`environment` / `globals` / `setupFiles` / `define` / `resolve.alias`）**必须与根配置
+ * 其余项（`environment` / `globals` / `setupFiles` / `define`）**必须与根配置
  * 逐字一致**——它们一旦漂移，症状是「基准里的用例莫名失败」而不是「配置错了」。
  * 这条约定由 `config-consistency.perf.test.ts` 守着（文本比对会假绿，所以那边 import 两份对象比）。
  */
 import { defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
-import { resolve } from "node:path";
 import { versionDefine } from "../../scripts/vite-version-define.mjs";
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: {
-    alias: {
-      "@v2": resolve(import.meta.dirname, "../../packages"),
-    },
-  },
   define: {
     ...versionDefine,
     __DEV__: "true",

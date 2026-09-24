@@ -6,7 +6,7 @@
  * 混合表达。
  *
  * M3A3-REMOVE-LEGACY（issue #26）：旧引擎删除后 Provider 只剩**结构化**一种形状，因此
- * `LooseBMapProviderLike`（v2 / v3-beta 的裸全局 `{ load }`）与 `AnyBMapProviderLike`
+ * `LooseBMapProviderLike`（已删除的宽松裸全局 `{ load }`）与 `AnyBMapProviderLike`
  * （两者的并集）一并移除——「接收裸全局再猜 engine」的入口不存在了。
  */
 import type { BMapLoadOptions } from "../core/loader/url";
@@ -50,8 +50,6 @@ export interface BMapClient {
   readonly libraryVersion: string;
   /** SDK 运行时版本（来自 Provider 的结构化加载结果）。 */
   readonly sdkVersion: string;
-  /** @deprecated 兼容别名，等于 `sdkVersion`；请按语义选择 `libraryVersion` / `sdkVersion`。 */
-  readonly version: string;
   readonly driver: BMapDriver;
   readonly capabilities: CapabilityRegistry;
   /** raw SDK 逃生口：普通业务代码请优先使用 driver；只有 `./advanced` 使用者才应读取 */

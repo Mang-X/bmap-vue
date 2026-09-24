@@ -88,6 +88,8 @@ pnpm docs:dev
 
 `bmap-vue` 源自开源项目 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。原项目的 MIT 许可与 `Copyright (c) 2021 yue1123` 声明继续保留；本项目在其基础上继续维护和发布，详见 [NOTICE.md](./NOTICE.md) 与 [LICENSE](./LICENSE)。
 
+1.0 只支持百度地图 JSAPI 4.0，**不提供旧版迁移路径**（无兼容别名、无弃用 shim）。
+
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Mang-X/bmap-vue&type=Timeline)](https://star-history.com/#Mang-X/bmap-vue&Timeline)

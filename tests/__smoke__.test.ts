@@ -4,8 +4,8 @@ import { createFakeV4Harness } from '../packages/test-utils'
 /**
  * Fake v4 健全性 smoke：证明测试替身本身可用。
  *
- * 原来是对 Fake BMapGL 的 `fake.stats.*`（listeners / overlaysCreated / mapsDestroyed）
- * 做同样的自检；Fake BMapGL 已随 #26 删除，这里换成 Fake v4 的口径：
+ * 原来是对 Fake BMapGL 的监听器 / 覆盖物 / 地图计数器做同样的自检；Fake BMapGL 已随 #26 删除，
+ * 这里换成 Fake v4 的口径：
  * `leaks`（当前未释放）逐项归零 + `harness.assertIdle()` 汇总门禁。
  */
 it('fake bmap v4 sanity: map create/destroy + listener & resource accounting', () => {

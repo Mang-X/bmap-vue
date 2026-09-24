@@ -1,5 +1,5 @@
 /**
- * v3 包 ESM 构建(Vite library mode + vite-plugin-dts)
+ * 包 ESM 构建(Vite library mode + vite-plugin-dts)
  *
  * 主要产出:
  * - dist/*.mjs(ESM,external vue,单入口独立 chunk)

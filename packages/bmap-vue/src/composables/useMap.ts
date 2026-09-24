@@ -1,7 +1,7 @@
 /**
  * 业务层公共 composable:useMap / useMapReady / useMapContext
  *
- * 让业务代码不再依赖“在哪个 initd callback 中全局 BMapGL 才存在”。
+ * 让业务代码不再依赖「全局 SDK 在什么时机才挂上」。
  */
 import { computed, type ComputedRef, type ShallowRef } from "vue";
 import { useRequiredMapContext } from "../core/context/inject";

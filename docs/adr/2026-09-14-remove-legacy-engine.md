@@ -187,6 +187,6 @@ ADR 2026-09-13 决策 10 明确把这两条挂到了本票。它们走的是 leg
 - [ADR 2026-09-11 LoadedSdk 客户端收口与迁移期 Driver 分派](./2026-09-11-loaded-sdk-client-boundary.md)
 - [ADR 2026-09-13 默认在线路径委托官方 Loader](./2026-09-13-default-online-loader-cutover.md)
 - [ADR 2026-09-12 Fake v4 诊断与双 Driver 矩阵](./2026-09-12-fake-v4-diagnostics-and-dual-driver-matrix.md)
-- [WebGL v1 → JSAPI 4.0 迁移指南](../zh-CN/guide/migration-v1-to-v4.md)
+- WebGL v1 → JSAPI 4.0 迁移指南（`../zh-CN/guide/migration-v1-to-v4.md`，**已随 #136 下线**：1.0 不提供旧版迁移路径）
 - [`react-bmap`](https://github.com/huiyan-fe/react-bmap)（官方 React 同名封装，`2.0.1`）——
   对照见本文决策 6

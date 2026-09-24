@@ -65,7 +65,7 @@ function argValue(name: string): string | undefined {
 
 /**
  * ⚠️ 本模板串里**不得出现反引号**（会截断外层 TS 模板串），由
- * `tests/behavior/v3-probe-page-scripts.test.ts` 静态守卫。同理不要用 `${` 插值。
+ * `tests/behavior/probe-page-scripts.test.ts` 静态守卫。同理不要用 `${` 插值。
  */
 const PAGE_JS = `
 (async () => {

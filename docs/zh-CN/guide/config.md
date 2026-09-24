@@ -5,7 +5,7 @@ lang: zh-CN
 
 # 配置
 
-本章节将为你讲述如何配置 ak、apiUrl 与插件。v3 通过 Client 定义表达 SDK 加载，
+本章节将为你讲述如何配置 ak、apiUrl 与插件。本库通过 Client 定义表达 SDK 加载，
 只有 `app.use()`（默认定义）、`<BMapProvider>`（子树覆盖）与 `<Map>` 自身 props 三处入口。
 
 ## Client 查找顺序
@@ -36,7 +36,7 @@ lang: zh-CN
 [ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)；
 旧引擎（`webgl-v1` / `BMapGL`）与迁移期的 engine 分派已在 `#26` 删除，见
 [ADR 2026-09-14 删除旧引擎](/adr/2026-09-14-remove-legacy-engine) 与
-[从 WebGL v1 迁移到 4.0](./migration-v1-to-v4)。
+本库只支持 JSAPI 4.0，`apiUrl` 仅用于**非标准入口**（企业自托管）场景。
 
 ::: warning 默认路径的配置面
 默认路径只表达官方 Loader 支持的配置：`ak`、`version`（只接受 `'4.0'`）、`timeout`（`0` = 不超时）、
@@ -162,12 +162,12 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 ## 扩展插件 plugins
 
-配置插件后，地图实例 ready 不会等待插件加载。请通过 [Map 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
+配置插件后，地图实例 ready 不会等待插件加载。请通过 [Map 组件的 `plugin-ready` 事件](../components/map#行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。事件名是 SDK 的 kebab 拼写。
 
 **挂起不会变成「永远加载中」**：**四个内置插件**的脚本加载有 **60 秒默认超时**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。用 `urlPluginDefinition` 自建的第三方脚本插件**不受**这个超时影响（**超时**语义保持既有行为：不设超时；需要超时请自己在 `load(context, signal)` 里包一层）。共用加载器自身的其它**修复**（例如取消之后不再延迟插入脚本）对第三方插件同样生效。决策与实测读数见 ADR [插件脚本加载通道的超时与取消语义](/adr/2026-09-21-plugin-load-channel-timeout)。
 
 **只有下表 `plugins` 列标 ✅ 的名字是内置的**；其余字符串会被 `resolvePluginDefinition` 抛
-`BMAP_PLUGIN_UNKNOWN`（v3 早期版本会静默变成空实现，已修正）。每个内置插件的 JSAPI 4.0 状态、
+`BMAP_PLUGIN_UNKNOWN`。每个内置插件的 JSAPI 4.0 状态、
 依据与**迁移路径**见 [插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
 | PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态与迁移路径                                                                                              |

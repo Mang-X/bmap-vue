@@ -25,7 +25,7 @@ autoComplete/index
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
+组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 | 事件名 | 说明 | 类型 |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` �
 | highlight | 键盘或鼠标移动使某条记录高亮后触发 | `(e: unknown) => void` |
 | confirm | 鼠标点击或回车选中某条记录后触发 | `(e: unknown) => void` |
 
-## v3 状态同步与清理
+## 状态同步与清理
 
 - `location` / `types` 变化会经 **Driver 的公开更新入口**（`setAutocompleteOptions`）落到 SDK 的 `setLocation` / `setTypes`；`location` 可以直接传 `string`、坐标点或 `<Map>` 的实例（内部句柄由 Driver 归一化，不会原样透传给 SDK）。
 - **`location` / `types` 变回 `undefined` = 恢复默认**（与构造期一致）：`location` 回到当前 `<Map>`，`types` 回到官方默认的 `[]`（全国范围）。Vue 的 props 无法区分「这次没传」与「显式传 `undefined`」，因此这里把两者都当成「恢复默认」。

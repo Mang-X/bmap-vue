@@ -51,11 +51,11 @@ describe("订阅与 disposer", () => {
     const second = vi.fn();
 
     const disposeFirst = events.on(map, "click", first);
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     // 组件重渲染时用新 handler 再订阅同一个事件：追加订阅，不重新绑定
     const disposeSecond = events.on(map, "click", second);
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     fake.createdMaps[0].emit("click", clickPayload());
     expect(first).toHaveBeenCalledTimes(1);
@@ -66,7 +66,7 @@ describe("订阅与 disposer", () => {
     fake.createdMaps[0].emit("click", clickPayload());
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(2);
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     disposeSecond();
   });
@@ -79,7 +79,7 @@ describe("订阅与 disposer", () => {
 
     dispose();
     expect(fake.createdMaps[0].getListenerCount("click")).toBe(0);
-    expect(fake.stats.liveListeners).toBe(0);
+    expect(fake.diagnostics.liveListeners).toBe(0);
 
     fake.createdMaps[0].emit("click", clickPayload());
     expect(listener).not.toHaveBeenCalled();
@@ -89,28 +89,28 @@ describe("订阅与 disposer", () => {
     const { events, map, fake } = setup();
     const disposeClick = events.on(map, "click", () => {});
     const disposeMove = events.on(map, "moveend", () => {});
-    expect(fake.stats.listenCalls).toBe(2);
+    expect(fake.diagnostics.listenCalls).toBe(2);
 
     disposeClick();
     expect(fake.createdMaps[0].getListenerCount("click")).toBe(0);
     expect(fake.createdMaps[0].getListenerCount("moveend")).toBe(1);
 
     disposeMove();
-    expect(fake.stats.liveListeners).toBe(0);
+    expect(fake.diagnostics.liveListeners).toBe(0);
   });
 
   it("释放后重新订阅会重新绑定（不留悬挂监听器）", () => {
     const { events, map, fake } = setup();
     const listener = vi.fn();
     events.on(map, "click", listener)();
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     const dispose = events.on(map, "click", listener);
-    expect(fake.stats.listenCalls).toBe(2);
+    expect(fake.diagnostics.listenCalls).toBe(2);
     fake.createdMaps[0].emit("click", clickPayload());
     expect(listener).toHaveBeenCalledTimes(1);
     dispose();
-    expect(fake.stats.liveListeners).toBe(0);
+    expect(fake.diagnostics.liveListeners).toBe(0);
   });
 
   it("目标没有事件能力时返回 no-op disposer，而不是抛错", () => {
@@ -127,7 +127,7 @@ describe("订阅与 disposer", () => {
 describe("Layer 目标", () => {
   it("Layer 与 Map/Overlay 走同一套订阅、归一化与释放路径", () => {
     const { events, registry, fake } = setup();
-    const rawLayer = new FakeV4EventTarget(fake.stats);
+    const rawLayer = new FakeV4EventTarget(fake.diagnostics);
     const layer = registry.adopt("layer:point-icon", rawLayer);
 
     const onClick = vi.fn();
@@ -243,9 +243,9 @@ describe("生命周期", () => {
     const map = registry.adopt("map", rawMap);
 
     events.on(map, "click", () => {});
-    expect(fake.stats.liveListeners).toBe(1);
+    expect(fake.diagnostics.liveListeners).toBe(1);
     rawMap.destroy();
-    expect(fake.stats.liveListeners).toBe(0);
+    expect(fake.diagnostics.liveListeners).toBe(0);
   });
 });
 
@@ -265,14 +265,14 @@ describe("回归 PR#59-P2-1：订阅记录必须与 disposer 一一对应", () =
 
     disposeA();
     // 同一 target+type 只绑定一次；释放一份订阅不足以解绑
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
     expect(rawMap.getListenerCount("click")).toBe(1);
 
     let calls = 0;
     const disposeNew = events.on(map, "click", () => {
       calls++;
     });
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     disposeB();
     expect(rawMap.getListenerCount("click")).toBe(1);
@@ -313,7 +313,7 @@ describe("回归 PR#59-P2-1：订阅记录必须与 disposer 一一对应", () =
 
     const disposeA = events.on(map, "click", shared);
     const disposeB = events.on(map, "click", shared);
-    expect(fake.stats.listenCalls).toBe(1);
+    expect(fake.diagnostics.listenCalls).toBe(1);
 
     rawMap.emit("click", { point: { lng: 1, lat: 2 } });
     expect(shared).toHaveBeenCalledTimes(1);
@@ -333,7 +333,7 @@ describe("回归 PR#59-P2-1：订阅记录必须与 disposer 一一对应", () =
     const disposeNew = events.on(map, "click", () => {
       calls.push(1);
     });
-    expect(fake.stats.listenCalls).toBe(2);
+    expect(fake.diagnostics.listenCalls).toBe(2);
 
     // 幂等 + 身份校验：不得触碰替换后的新分组
     disposeOld();

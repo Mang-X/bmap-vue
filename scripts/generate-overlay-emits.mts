@@ -19,17 +19,16 @@
  * `{ [K in keyof typeof CATALOG]: … }` 报 `Failed to resolve index type into finite keys`，
  * 值里含条件类型同样报错。**只有 import 进来的显式键 interface 能编过。**
  *
- * ## 三处事实源
+ * ## 两处事实源
  *
  * | 事实源 | 内容 |
  * | --- | --- |
  * | `core/overlays/overlayEventCatalog.ts` 的 `OVERLAY_EVENT_MATRIX` | 每个 kind 的 SDK 事件 + 载荷档 |
- * | `core/deprecations/aliases.ts` 的 `OVERLAY_EVENT_ALIASES` | 需保留的历史事件名（当前只有 marker 的 `drag-end`） |
  * | 本文件的 `NON_SDK_EVENTS` | **不是** SDK 事件的本库事件（v-model 回写 / 生命周期 / 菜单选中） |
  *
- * 历史别名不在矩阵里：它是**有 code、要告警、将来要删**的弃用名，与「无损双拼写」语义不同
- * （见 `aliases.ts`「为什么事件别名不放在事件矩阵里」）。但它**必须**出现在 emits 声明里：
- * Vue 只把已声明的名字交给 `emit` 匹配，未声明的落到 `attrs`，`emit()` 唤不醒它（静默失败）。
+ * 1.0 之前这里还有第三处——集中弃用层登记的**历史事件别名**（marker 的 `drag-end`）。集中弃用层
+ * 已随 #136 整层删除，1.0 不提供旧版迁移路径，别名**不再出现在任何 emits 声明里**
+ * （#154 并入了本生成器；删别名时必须同提交改这里，否则 `--check` 会把旧键留在产物中）。
  *
  * ## 两道防漂移
  *
@@ -65,12 +64,6 @@ interface EventMatrixEntry {
   readonly events: Readonly<Record<string, OverlayEventDefinition>>;
 }
 
-interface EventAlias {
-  readonly kind: string;
-  readonly canonical: string;
-  readonly alias: string;
-}
-
 interface NonSdkEvent {
   /** 派发点（相对 `packages/bmap-vue/src`），生成器回源码核对它真的 `emit` 了这个名字。 */
   readonly origin: string;
@@ -81,10 +74,6 @@ interface NonSdkEvent {
 const { OVERLAY_EVENT_MATRIX } = await loadSourceModule<{
   OVERLAY_EVENT_MATRIX: Record<string, EventMatrixEntry>;
 }>(resolve(root, "packages/bmap-vue/src/core/overlays/overlayEventCatalog.ts"));
-
-const { OVERLAY_EVENT_ALIASES } = await loadSourceModule<{
-  OVERLAY_EVENT_ALIASES: readonly EventAlias[];
-}>(resolve(root, "packages/bmap-vue/src/core/deprecations/aliases.ts"));
 
 /** 载荷档 → 载荷类型（与 `driver/types/events.ts` 的三个载荷类型一一对应）。 */
 const PAYLOAD_TYPE_BY_KIND: Record<PayloadKind, string> = {
@@ -162,8 +151,6 @@ const NON_SDK_EVENTS: Record<string, Record<string, NonSdkEvent>> = {
   },
   "info-window": {
     "update:open": { origin: "core/composables/useInfoWindow.ts", payload: "boolean" },
-    // 弃用的 v-model 名：主状态统一为 open，`show` 仍回写一次（与 `aliases.ts` 的 prop 别名同口径）。
-    "update:show": { origin: "core/composables/useInfoWindow.ts", payload: "boolean" },
     rebuild: { origin: "core/composables/useInfoWindow.ts", payload: "number" },
     destroy: { origin: "core/composables/useInfoWindow.ts", payload: "number" },
   },
@@ -209,7 +196,7 @@ interface EmitsEntry {
   readonly note: string;
 }
 
-/** 矩阵 + 别名 + 非 SDK 事件（减去显式排除）→ 该 kind 的完整键集。 */
+/** 矩阵 + 非 SDK 事件（减去显式排除）→ 该 kind 的完整键集。 */
 function entriesOf(kind: string): EmitsEntry[] {
   const matrix = OVERLAY_EVENT_MATRIX[kind];
   if (!matrix) throw new Error(`${kind} 不在 OVERLAY_EVENT_MATRIX 里`);
@@ -236,33 +223,6 @@ function entriesOf(kind: string): EmitsEntry[] {
         note: commentFor(kind, event.vue, "matrix") + (overridden ? FORWARDED_HINT : ""),
       };
     });
-
-  for (const alias of OVERLAY_EVENT_ALIASES) {
-    if (alias.kind !== kind) continue;
-    const canonical = matrix.events[alias.canonical];
-    if (!canonical) {
-      throw new Error(
-        `弃用别名 ${alias.alias} 的正典名 ${alias.canonical} 不在 ${kind} 的事件矩阵里`,
-      );
-    }
-    if (Object.hasOwn(excluded, alias.canonical)) {
-      throw new Error(
-        `${kind} 的弃用别名 ${alias.alias} 指向已排除的 ${alias.canonical}，两者必须一起处理`,
-      );
-    }
-    const overridden = Object.hasOwn(overrides, alias.canonical);
-    entries.push({
-      key: keyOf(alias.alias),
-      name: alias.alias,
-      // 别名与正典名同载荷：内核在派发正典名之后原样补发同一个载荷对象。
-      payload: overridden
-        ? overrides[alias.canonical]
-        : PAYLOAD_TYPE_BY_KIND[canonical.payload],
-      note:
-        `@deprecated 历史别名；规范名是 \`${alias.canonical}\`（kebab 拼写）。` +
-        "由集中弃用层在派发正典名之后补发，载荷相同。",
-    });
-  }
 
   for (const [name, entry] of Object.entries(NON_SDK_EVENTS[kind] ?? {})) {
     entries.push({
@@ -320,7 +280,7 @@ function assertSfcUsesGenerated(sfc: string, emitsName: string): void {
 }
 
 /**
- * 把 `name`（可能是 `"drag-end"` 这种带引号的键）拆回裸事件名。
+ * 把 `name`（带引号的键，如 `"update:open"`）拆回裸事件名。
  */
 function bareNameOf(key: string): string {
   return key.replace(/^"|"$/g, "");
@@ -346,11 +306,10 @@ function render(): string {
   const lines: string[] = [];
   lines.push("// Generated file. Do not edit directly.");
   lines.push("//");
-  lines.push("// 由 scripts/generate-overlay-emits.mts 生成，事实源四处：");
+  lines.push("// 由 scripts/generate-overlay-emits.mts 生成，事实源三处：");
   lines.push("//   1. core/overlays/overlayEventCatalog.ts 的 OVERLAY_EVENT_MATRIX（SDK 事件 + 载荷档）");
-  lines.push("//   2. core/deprecations/aliases.ts 的 OVERLAY_EVENT_ALIASES（历史事件名）");
-  lines.push("//   3. scripts/generate-overlay-emits.mts 的 NON_SDK_EVENTS（本库事件 + 派发点）");
-  lines.push("//   4. scripts/generate-overlay-emits.mts 的 EXCLUDED_EVENTS（矩阵有、但本库无派发点的键）");
+  lines.push("//   2. scripts/generate-overlay-emits.mts 的 NON_SDK_EVENTS（本库事件 + 派发点）");
+  lines.push("//   3. scripts/generate-overlay-emits.mts 的 EXCLUDED_EVENTS（矩阵有、但本库无派发点的键）");
   lines.push("//");
   lines.push("// 改事实源后跑 `pnpm generate:overlay-emits`；CI 用 `--check` 校验无漂移。");
   lines.push("//");
@@ -382,7 +341,7 @@ function render(): string {
     const localCount = entries.length - sdkCount;
     const parts = [`${sdkCount} 个 SDK 事件`];
     if (excludedNames.length > 0) parts.push(`（另排除 ${excludedNames.length} 个无派发点：${excludedNames.join("、")}）`);
-    if (localCount > 0) parts.push(`+ ${localCount} 个本库/别名事件`);
+    if (localCount > 0) parts.push(`+ ${localCount} 个本库事件`);
     lines.push(
       `/** \`${kind}\` 覆盖物的事件面：${parts.join(" ")}（共 ${entries.length} 个），` +
         `供 \`${sfc}\` 的 \`defineEmits\` 使用。 */`,

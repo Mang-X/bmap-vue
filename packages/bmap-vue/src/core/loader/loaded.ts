@@ -13,7 +13,7 @@
  * JS 消费者、`any`、第三方 Provider 都能绕过静态类型，所以这里不能「够用就行」：
  * `version` / `namespace` / `load` metadata 缺任何一项都当场失败。否则
  * `{ engine: "jsapi-v4", namespace }` 这种半成品会被收窄成完整 `LoadedSdk`，`createBMapClient()`
- * 读到 `version: undefined` 并透传给 Driver，最终 `client.sdkVersion` / `client.version` 也是
+ * 读到 `version: undefined` 并透传给 Driver，最终 `client.sdkVersion` 也是
  * `undefined`——一个「类型上不可能、运行期照样发生」的坏状态。
  *
  * 校验只覆盖「字段在不在、类型对不对」：`engine` / `providerId` / `mode` / `versionSource` 的
@@ -110,7 +110,7 @@ export function assertLoadedSdk(value: unknown): LoadedSdk {
     throw new BMapError(
       "BMAP_SDK_ENGINE_MISMATCH",
       `只接受 engine=${JSAPI_V4_ENGINE} 的加载结果，收到 engine=${String(engine)}；` +
-        "旧引擎（webgl-v1 / BMapGL）已在 3.0 删除，请改用 v4 Provider 家族",
+        "本库只支持 JSAPI 4.0，请改用 v4 Provider 家族（官方 jsapi-loader / 自定义脚本 / 已有全局）",
       { engine },
     );
   }

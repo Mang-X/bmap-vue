@@ -7,7 +7,7 @@
  *
  * 内容节点是 detached host：SDK 持有 host 元素，Vue `<Teleport>` 拥有它内部的渲染子树
  * （宿主页用 `[data-bmap-infowindow-content]` 定位它；`$attrs` 落在宿主内部的包装节点上）。
- * 打开状态的唯一主模型是 `v-model:open`，`v-model:show` 是兼容别名。
+ * 打开状态的唯一主模型是 `v-model:open`。
  *
  * 契约见 ADR `2026-09-18-infowindow-host-and-ownership`。
  *
@@ -31,9 +31,6 @@ const props = withDefaults(defineProps<InfoWindowProps>(), {
   height: 0,
   offset: () => ({ x: 0, y: 0 }),
   open: false,
-  // `show: undefined` 让「没传」= 「不表态」：Vue 的布尔 prop 会「缺省即 false」，
-  // 给一个 `undefined` 默认值即可关掉那次转换（`resolvePropValue` 的 `isAbsent && !hasDefault`）
-  show: undefined,
   enableMaximize: false,
   enableAutoPan: true,
   enableCloseOnClick: false,

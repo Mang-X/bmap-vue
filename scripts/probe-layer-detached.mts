@@ -62,7 +62,7 @@ import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.mts"
-// 判定层（读数 → 结论）单独成模块：它是纯函数，由 `tests/behavior/v3-probe-verdicts.test.ts`
+// 判定层（读数 → 结论）单独成模块：它是纯函数，由 `tests/behavior/probe-verdicts.test.ts`
 // 用合成报告直接驱动，所以「缺失读数 ⇒ 无法判定」这条口径是可回归验证的，不靠下次跑探针时肉眼看。
 import { controlFailures, verdicts, type ProbeReport } from "./probe-layer-detached-verdicts.mts"
 

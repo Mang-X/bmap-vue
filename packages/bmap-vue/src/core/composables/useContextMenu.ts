@@ -49,12 +49,6 @@ import type { MapReadyContext } from "../context/types";
 import { useSdkResource } from "./useSdkResource";
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import {
-  createDeprecationWarner,
-  describeDeprecation,
-  propAliasesOf,
-  resolvePropAliasValue,
-} from "../deprecations";
 import { overlayEventsOf } from "../overlays/overlayEventCatalog";
 import {
   contextMenuEntriesFingerprint,
@@ -111,9 +105,6 @@ export function useContextMenu(
   const emit = options.emit as DynamicEmit;
   const reportError = options.reportError;
 
-  const deprecation = createDeprecationWarner("context-menu");
-  const itemsAlias = propAliasesOf("context-menu").find((alias) => alias.canonical === "items");
-
   const children = createContextMenuChildrenRegistry();
   provide(contextMenuChildrenKey, children);
 
@@ -159,12 +150,14 @@ export function useContextMenu(
 
   /* ------------------------------------------------------------------ 条目解析 */
 
-  /** 数据 API 的取值：`items`；正典缺失时按集中弃用层读 `menuItems` 并告警一次。 */
+  /**
+   * 数据 API 的取值：`items`。
+   *
+   * 菜单项的数据入口只有 `items` 一种拼写（#136 起旧名 `menuItems` 随集中弃用层删除）。
+   * 声明式 children 走下面的 `children` 注册表，两条路径在这里汇合成同一份条目列表。
+   */
   function readDataItems(): unknown {
-    if (!itemsAlias) return rawProps.items;
-    const resolved = resolvePropAliasValue(itemsAlias, rawProps);
-    if (resolved.usedAlias) deprecation.warn(describeDeprecation(itemsAlias));
-    return resolved.value;
+    return rawProps.items;
   }
 
   /**
@@ -189,8 +182,7 @@ export function useContextMenu(
       }
       // **与数据 API 走同一条归一化路径**（`contextMenuEntryFromData`）：声明式的 `onSelect`
       // 就是数据 API 的 `callback`。此前这里手写了一遍同样的字段映射，于是「两份实现」在
-      // `onSelect` 的守卫上就已经分叉——那正是本 PR 在 `core/deprecations/resolve.ts` 里
-      // 明确要避免的形态。
+      // `onSelect` 的守卫上就已经分叉——同源逻辑只写一份，是本仓反复吃过亏的那条形态。
       entries.push(
         contextMenuEntryFromData({
           text: declaration.text,

@@ -10,7 +10,7 @@
  * 3. **target 切换**：同一份资源在两个 Map 之间移动时，诊断计数不能跟着翻倍或漏减。
  *
  * 最后一组是 driver 层的 100 次「建图 → 挂载 → 摘除 → 销毁」循环：它是组件层同名门禁
- * （`v3-dual-driver-components.test.ts`）的底座——组件层跑不通时，先看这里。
+ * （（旧的双引擎组件矩阵，已随 webgl-v1 删除）的底座——组件层跑不通时，先看这里。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {

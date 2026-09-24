@@ -6,14 +6,12 @@
  * - 默认 Provider 是 `baiduJsapiV4Provider()`（内部委托官方 Loader，R25-B / #71）；
  * - `#26`：默认 definition **不再经任何归一**（`withMigrationDriver` 已删除），原样交给
  *   `createBMapClient`；旧引擎的加载结果会被对方的收口拒绝。
- * - 旧 globalProperties 只保留迁移期兼容，并给出明确的 beta 警告。
+ * - `#136`：旧 `globalProperties` 映射（`$baiduMapAk` / `$baiduMapApiUrl`）已删除，安装不再
+ *   写任何全局属性、也不再打迁移警告。
  */
 import { createApp, inject } from "vue";
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  createBMapPlugin,
-  resetLegacyGlobalPropertiesWarningForTests,
-} from "./createBMapPlugin";
+import { describe, it, expect } from "vitest";
+import { createBMapPlugin } from "./createBMapPlugin";
 import { componentManifest } from "../manifest";
 import * as manifestComponents from "../components/index";
 import { DEFAULT_VERSION } from "../core/loader/url";
@@ -22,7 +20,6 @@ import { createBMapClient } from "../client/createBMapClient";
 import { createFakeBMapV4 } from "../../../test-utils";
 import { createLoadedJsapiV4 } from "../core/loader/providers";
 import type { CreateBMapClientOptions } from "../client/types";
-import { logger } from "../core/logger";
 
 function createTestApp() {
   return createApp({ template: "<div />", render: () => null });
@@ -41,10 +38,6 @@ function captureDefaultDefinition(plugin: ReturnType<typeof createBMapPlugin>) {
   app.mount(document.createElement("div"));
   return captured;
 }
-
-beforeEach(() => {
-  resetLegacyGlobalPropertiesWarningForTests();
-});
 
 describe("createBMapPlugin", () => {
   it("按 Manifest 全量注册组件（包含此前手写数组漏掉的 MarkerList）", () => {
@@ -124,28 +117,14 @@ describe("createBMapPlugin", () => {
     expect(custom.config.defaults.version).toBe("4.0.x");
   });
 
-  it("globalProperties 兼容映射给出明确的 beta 迁移警告，且进程内只提示一次", () => {
-    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+  it("安装不向 globalProperties 写任何东西（#136 删掉 v2 兼容映射）", () => {
     const app = createTestApp();
+    const before = Object.keys(app.config.globalProperties);
     app.use(createBMapPlugin({ ak: "test", apiUrl: "/offline/getApiScripts.js" }));
 
-    const props = app.config.globalProperties as Record<string, unknown>;
-    expect(props.$baiduMapAk).toBe("test");
-    expect(props.$baiduMapApiUrl).toBe("/offline/getApiScripts.js");
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).toContain("旧版兼容映射");
-    expect(String(warn.mock.calls[0]?.[0])).toContain("1.0.0 正式版");
-
-    // 第二次安装不再重复提示（避免多 app / 多插件实例刷屏）
-    const second = createTestApp();
-    second.use(createBMapPlugin({ ak: "test" }));
-    expect(warn).toHaveBeenCalledTimes(1);
-
-    // 未使用 globalProperties 时完全不提示
-    const silent = createTestApp();
-    silent.use(createBMapPlugin({}));
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    expect(Object.keys(app.config.globalProperties)).toEqual(before);
+    expect(app.config.globalProperties.$baiduMapAk).toBeUndefined();
+    expect(app.config.globalProperties.$baiduMapApiUrl).toBeUndefined();
   });
 });
 

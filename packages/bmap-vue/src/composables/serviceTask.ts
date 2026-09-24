@@ -72,9 +72,9 @@ export interface SimpleServiceTask<TResult, TArgs extends unknown[]> {
   isLoading: Readonly<ShallowRef<boolean>>;
   /** 当前引擎是否支持该能力（Client 就绪后立即判定，不需要先发一次请求）。 */
   supported: Readonly<ShallowRef<boolean>>;
-  /** 别名：`status === "failed"`（v2/v3 既有用法）。 */
+  /** 别名：`status === "failed"`（便捷别名）。 */
   isError: ComputedRef<boolean>;
-  /** 别名：`data === null`（v2/v3 既有用法）；注意 `empty` / `canceled` 也会是 `true`。 */
+  /** 别名：`data === null`（便捷别名）；注意 `empty` / `canceled` 也会是 `true`。 */
   isEmpty: ComputedRef<boolean>;
   /** 发起一次调用；**恒 resolve**（失败/超时/取消都在返回值里）。 */
   execute: (...args: TArgs) => Promise<ServiceResult<TResult>>;

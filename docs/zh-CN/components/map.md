@@ -225,7 +225,7 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 `checkResize()` 纠正即可（本库刻意不在这种时机销毁 WebGL 地图）。
 
 门禁不止覆盖首次挂载：**`retry()` 与首次建图共用同一个判据**（容器**当前**是否有非零尺寸），
-且**一次完整启动是单飞的**（并发 `retry()` 共享同一次启动，`ready` / `initd` / 插件加载都不会重复）。
+且**一次完整启动是单飞的**（并发 `retry()` 共享同一次启动，`ready` / 插件加载都不会重复）。
 
 - 「初始化失败 → Tab 收起 → 点重试」不会在 0×0 容器上建出第二张图：那次重试会**挂起**，
   等容器重新展开时由门禁接着放行；
@@ -295,7 +295,7 @@ api.resume()                      // 只摘掉 'user'；页面恢复可见不会
 `zoom` / `heading` / `tilt` 的规则与上表逐字相同，把 `center` 换成对应字段名即可。
 
 库默认视野：`center` = `{ lng: 116.403901, lat: 39.915185 }`、`zoom` = `14`、
-`heading` = `0`、`tilt` = `0`（与 v2/v3 的 props 默认值一致，**只在首次创建视野时**应用一次）。
+`heading` = `0`、`tilt` = `0`（与 props 默认值一致，**只在首次创建视野时**应用一次）。
 
 ### v-model 用法
 
@@ -360,7 +360,7 @@ const tilt = ref(0)
 ### 初次视野与「加载期间到达的受控值」
 
 视野在**地图创建时**一次性设定（SDK 的 `centerAndZoom` + `setHeading` / `setTilt`），此后
-不再重跑初始化路径。SDK 就绪之后、`ready` / `initd` 事件之前，组件会把**当前生效值**
+不再重跑初始化路径。SDK 就绪之后、`ready` 事件之前，组件会把**当前生效值**
 （受控时是外部值，非受控时是内部状态）收敛一次——因此「SDK 还在加载时父级就改了 `center`」，
 乃至「加载途中在受控与非受控之间切换过」都不会丢：
 
@@ -432,7 +432,7 @@ const tilt = ref(0)
 
 :::
 
-## v3 行为说明
+## 行为说明
 
 ### 地图初始化与更新
 
@@ -485,7 +485,6 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `ready` | 地图实例创建并完成初始配置后触发 | `{ client, map, container }`（`map` 为 `MapHandle`；raw SDK 仅经 `./advanced` 的 `unwrapRaw` 获取） |
 | `plugin-ready` | 单个插件加载完成后触发 | `name: string` |
 | `plugin-error` | 单个插件加载失败；不会改变已经 ready 的地图状态 | `{ name, error }` |
-| `initd` | `ready` 的兼容事件，建议迁移到 `ready` | `{ client, map, container }` |
 
 ## 地图类型
 
@@ -595,9 +594,8 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | 事件名          | 说明                                                                                        | 类型                                     |
 | --------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | ready           | 地图实例创建并完成初始配置后触发                                                            | `{ client, map, container }`             |
-| initd           | `ready` 的兼容事件，建议迁移到 `ready`                                                      | `{ client, map, container }`             |
 | unload          | 组件卸载时会触发此事件                                                                      | -                                        |
-| plugin-ready    | 单个插件加载完成后触发（载荷为插件名字符串；v2 的 `@pluginReady` 已移除）                   | `name: string`                           |
+| plugin-ready    | 单个插件加载完成后触发（载荷为插件名字符串）                   | `name: string`                           |
 | plugin-error    | 单个插件加载失败；不会改变已经 ready 的地图状态                                             | `{ name, error }`                        |
 | error           | 地图创建失败时触发                                                                          | `BMapError`                              |
 | update:center   | 用户交互后的中心点回写（`v-model:center`）                                                  | `{ lng, lat }`                           |

@@ -34,7 +34,7 @@ describe("plugin definitions", () => {
    *
    * `PluginRegistry` 的语义是 `required !== false ⇒ 失败即抛`，所以这条断言等价于
    * 「一个第三方 CDN 脚本下载失败不得让地图失败」。反证写在
-   * `tests/behavior/v3-plugin-compat-inventory.test.ts`（把 required 改成 true，隔离用例必须红）。
+   * `tests/behavior/plugin-compat-inventory.test.ts`（把 required 改成 true，隔离用例必须红）。
    */
   it("内置插件一律 optional，必需功能不依赖插件脚本", () => {
     const builtins = [

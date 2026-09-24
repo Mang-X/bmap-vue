@@ -60,7 +60,7 @@ export interface PlaceAutocompleteProps {
  * `isAbsent && !hasDefault → false`），所以声明了 `showSuggestion?: boolean` 而不给默认值时，
  * 用户没传也会拿到 `false`；照直透传给上游就会把官方默认的 `true` 静默改成 `false`。
  * 给上默认值后 `hasDefault` 为真、布尔转换不再介入，透传语义与官方一致（见用例
- * `v3-ui-kit-events.test.ts` 的「缺省布尔 props 不得把上游默认值改掉」）。
+ * `ui-kit-events.test.ts` 的「缺省布尔 props 不得把上游默认值改掉」）。
  */
 const props = withDefaults(defineProps<PlaceAutocompleteProps>(), {
   citylimit: false,
@@ -137,7 +137,7 @@ const { status, withWidget, applyIfReady, rebuild } = useUiKitWidget<UiKitAutoco
     {
       event: "highlight",
       handler: (...args: unknown[]) => {
-        // 上游载荷是变更对 `{ from, to }`（形状锁在 v3-ui-kit-widget-contract.test.ts）。
+        // 上游载荷是变更对 `{ from, to }`（形状锁在 ui-kit-widget-contract.test.ts）。
         const change = toHighlightChangeDTO(args[0]);
         if (change) emit("highlight", change);
       },

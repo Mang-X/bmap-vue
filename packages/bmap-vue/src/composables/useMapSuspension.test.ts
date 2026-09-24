@@ -3,7 +3,7 @@
  *
  * 这一层测的是**策略**（环境信号 → 暂停原因 / 门禁放行），因此用最小替身当 target：
  * 真正的「原因集合 → 是否恢复 / 是否补偿 checkResize」在 `core/runtime/MapRuntime.test.ts`，
- * 端到端行为在 `tests/behavior/v3-component-scenarios.test.ts`（那里的 target 是真的 MapRuntime）。
+ * 端到端行为在 `tests/behavior/component-scenarios.test.ts`（那里的 target 是真的 MapRuntime）。
  *
  * 覆盖四类容易只测 happy path 的点：
  * 1. **每次「不可用 → 可用」都放行**（不只首次），且每次都请求一次尺寸校正 —— 策略层不做

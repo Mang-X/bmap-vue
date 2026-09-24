@@ -7,7 +7,7 @@
  * 按 `labelSpec` 驱动——组件里不再有生命周期代码，也不再手写 6 个 watcher。
  *
  * 事件面（8 个）由 `label` 的事件矩阵（`LabelEventMap`）派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定（SFC 编译器解析不了 `keyof typeof <大对象>`，
+ * `overlay-suite.test.ts` 的门禁锁定（SFC 编译器解析不了 `keyof typeof <大对象>`，
  * 因此这一侧必须显式写名字，用门禁而不是 mapped type 来防漂移）。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";

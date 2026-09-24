@@ -11,7 +11,7 @@ export interface ComponentResolverLike {
 
 import { componentManifest } from "../manifest";
 
-/** v3 组件名(从 manifest 单一事实源生成) */
+/** 组件名（从 manifest 单一事实源生成） */
 const v3ComponentNames = componentManifest.map((c) => c.name) as readonly string[];
 
 const componentNameSet = new Set<string>(v3ComponentNames);

@@ -48,22 +48,22 @@
  *
  * 1. **事件面由矩阵派生**（`overlayEventsOf(spec.kind)`）：组件不再逐个手写 `emit("click", e)`，
  *    于是「同一类覆盖物的事件面不一致」在结构上不可能。`spec.events` 只剩**覆盖项**。
- * 2. **读 props 走「别名感知视图」**：集中弃用表登记的旧 prop 名（`startPoint` / `endPoint`）在
- *    **正典 prop 缺失**时才生效，并告警一次；`create` / watch / 更新队列读到的都是同一份值，
- *    因此不存在「初始用旧名、更新用新名」这类分叉。
+ * 2. **读 props 走「值投影视图」**：`spec.fieldValues` 登记的惰性值（如 GroundOverlay `url` 的
+ *    工厂函数）必须先求值再交给 SDK，因此读 props 经一个 Proxy；`create` / watch / 更新队列读到的
+ *    都是同一份值，不存在「初始用旧名、更新用新名」这类分叉。
+ *    （#136 起这里不再做 prop 别名解析——旧 prop 名的兼容读法已随集中弃用层删除。）
  * 3. **卸载路径上的事件不再回放**：实例被摘除后，SDK 在解绑窗口里派发的 `remove` 之类事件
  *    不再冒泡给调用方（`removeOverlay` 恰好发生在监听解绑之前）。
  */
 import {
   computed,
-  getCurrentInstance,
   onScopeDispose,
   provide,
   readonly,
   shallowRef,
   watch,
 } from "vue";
-import type { ComponentInternalInstance, ShallowRef } from "vue";
+import type { ShallowRef } from "vue";
 import { watchKeyedSources, type KeyedSource } from "../utils/keyedSources";
 import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
 import { useRequiredMapContext } from "../context/inject";
@@ -79,14 +79,6 @@ import { stableKeyOf } from "../utils/stableKey";
 import { assertOverlayFieldDeclarations } from "../overlays/OverlaySpec";
 import type { OverlayFieldUpdate, OverlaySpec } from "../overlays/OverlaySpec";
 import { overlayEventsOf } from "../overlays/overlayEventCatalog";
-import {
-  createDeprecationWarner,
-  describeDeprecation,
-  eventAliasesOf,
-  propAliasesOf,
-  resolvePropAliasValue,
-  type OverlayPropAlias,
-} from "../deprecations";
 
 /**
  * 位置字段的**双向同步模型**（`"position"` 策略）。
@@ -222,29 +214,6 @@ function resolveOverlayEvents<Props extends object, Resource>(
   });
 }
 
-/**
- * 父级是否给这个事件名绑了监听器（照 Vue `emit` 的查找规则：`on<Name>` 与 camelCase 两种拼写）。
- *
- * 判据只能从**当前组件的 vnode props** 读：Vue 的 `emit()` 本身就是在
- * `instance.vnode.props[toHandlerKey(name)]` 上找监听器（`@drag-end` 编译成 `onDrag-end`，
- * 而手写 `h()` 常见的是 `onDragEnd` ⇒ 两种都要认）。刻意**每轮派发现读**而不是在 setup 里快照：
- * 父级可以在运行期换掉监听器（动态 `v-if` / 换 handler 对象），快照会让告警判据过期。
- *
- * 读不到实例（比如在 setup 之外调用内核）时返回 `false`——宁可少提示，也不要误报。
- */
-function hasListenerFor(instance: ComponentInternalInstance | null, name: string): boolean {
-  // 实例必须在 **setup 期**捕获：`getCurrentInstance()` 只在 setup / render 的同步栈里有值，
-  // 而这里是在 SDK 的事件回调里被调用的（那时它已经是 null，直接调用会永远返回 false）。
-  const props = instance?.vnode.props as Record<string, unknown> | null | undefined;
-  if (!props) return false;
-  const camel = name.replace(/-([a-zA-Z])/g, (_, char: string) => char.toUpperCase());
-  const handlerKeys = [
-    `on${name.charAt(0).toUpperCase()}${name.slice(1)}`,
-    `on${camel.charAt(0).toUpperCase()}${camel.slice(1)}`,
-  ];
-  return handlerKeys.some((key) => typeof props[key] === "function");
-}
-
 export function useOverlaySpec<Props extends object, Resource>(
   props: Props,
   spec: OverlaySpec<Props, Resource>,
@@ -254,12 +223,6 @@ export function useOverlaySpec<Props extends object, Resource>(
   const overlayRegistry = mapContext.overlays;
   const emit = options.emit;
   const kind: OverlayKind | undefined = spec.kind;
-  /** 本组件实例（父级监听器的读取依据，见 `hasListenerFor`）；非组件上下文里为 null。 */
-  const ownerInstance = getCurrentInstance();
-
-  /** 集中弃用层：prop 别名（读取层）与事件别名（派发层）共用这一份「同实例一次」的去重。 */
-  const deprecation = createDeprecationWarner(spec.type);
-  const propAliases: readonly OverlayPropAlias[] = propAliasesOf(kind);
 
   /** ready 上下文：`useSdkResource` 内部缓存它，这里留一份给自己（更新路径要用 driver / map）。 */
   let readyCtx: MapReadyContext | null = null;
@@ -270,45 +233,26 @@ export function useOverlaySpec<Props extends object, Resource>(
   const rawProps = props as Record<string, unknown>;
 
   /**
-   * **统一 props 视图**：别名解析（旧 prop 名）+ 值投影（惰性值）。
+   * **统一 props 视图**：值投影（惰性值）。
    *
-   * 正典 prop（`bounds`）缺失、而旧名组（`startPoint` + `endPoint`）齐备时，读 `bounds`
-   * 得到的是旧名派生出来的值——`create` / watch / 更新队列因此看到同一份值，不存在
-   * 「初始用旧名、更新用新名」这类分叉。正典一旦有值，旧名**完全不参与**（连告警都不发）：
-   * 这是「新 API 优先」，不是「两边合并」。
-   *
-   * 值投影在别名之后：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
+   * `spec.fieldValues` 登记的工厂函数必须在**读取时**求值再交给 SDK（`setImage` 只接受真实
+   * 来源），因此经一个 Proxy 投影；`create` / watch / 更新队列读到的都是同一份值，不存在
+   * 「初始用工厂、更新用原值」这类分叉。没有登记任何投影时直接用 `rawProps`——不为了「统一」
+   * 给每个组件套一层无谓的 Proxy。
    */
-  function resolveAliasValue(alias: OverlayPropAlias, target: Record<string, unknown>): unknown {
-    // 读取规则（新 API 优先 / 旧名要齐备 / 不猜）收在 `core/deprecations/resolve.ts`：
-    // `ContextMenuSpec` 的 `menuItems` → `items` 用的是同一条规则，两处各写一遍必然分叉。
-    const resolved = resolvePropAliasValue(alias, target);
-    if (resolved.usedAlias) deprecation.warn(describeDeprecation(alias));
-    return resolved.value;
-  }
-
   const fieldValues: Partial<Record<keyof Props & string, (value: unknown) => unknown>> =
     spec.fieldValues ?? {};
-  const needsView = propAliases.length > 0 || Object.keys(fieldValues).length > 0;
+  const needsView = Object.keys(fieldValues).length > 0;
 
   /**
-   * 经视图读取一个 prop（别名 → 投影），等价于原 `propsView[key]`（#138：运行时 Proxy 已删除）。
+   * 经视图读取一个 prop（投影 → 原值），等价于原 `propsView[key]`（#138：运行时 Proxy 已删除）。
    *
-   * 两条规则的顺序**不能换**，与 Proxy 的 get trap 一致：
-   * - **别名优先于原值**：正典 prop 缺失而旧名组齐备时读到旧名派生值（`resolveAliasValue` 内部已按
-   *   「新 API 优先 / 旧名齐备 / 不猜」判定，并在真的用到旧名时告警一次）；
-   * - **投影在别名之后**：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
-   *
-   * 删掉 Proxy 的依据（#138）：别名表三组（`OVERLAY_PROP_ALIASES`）里走本内核的只有两组
-   * （`bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`；第三组 `info-window.open` ←
-   * `show` 由 `useInfoWindow` 自己解析，不经 `useOverlaySpec`），加上一处投影
-   * （`GroundOverlay.url`）——覆盖面小到可以用一个显式读取函数表达；
-   * 而 Proxy 的代价是**每次读 props 都过一层 trap**——覆盖物的 watch 源每个字段每轮都要读若干次。
-   * 显式读取把这份判断收到一个函数里，行为等价（读的名字与投影顺序逐条照抄），且可测。
+   * 唯一一条规则是**投影优先**：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实
+   * 来源）。集中弃用层（含 `bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`）已随 #136
+   * 删除，因此这里不再有「别名优先于原值」这一层。
    */
   function readProp(name: string): unknown {
-    const alias = propAliases.find((entry) => entry.canonical === name);
-    const value = alias ? resolveAliasValue(alias, rawProps) : rawProps[name];
+    const value = rawProps[name];
     const project = fieldValues[name as keyof Props & string];
     return project ? project(value) : value;
   }
@@ -321,7 +265,7 @@ export function useOverlaySpec<Props extends object, Resource>(
    *
    * **为什么必须按代而不是一次性**（#138 评审 P1）：`useSdkResource` 在 setup 时把 `props`
    * 解构成一个闭包常量，之后每次 `createOnce`（重建）都传**同一个对象**。一次性物化会让
-   * `GroundOverlay` 这类「有别名/投影且有构造期字段」的覆盖物在**重建后仍读到旧值**：
+   * `GroundOverlay` 这类「有投影且有构造期字段」的覆盖物在**重建后仍读到旧值**：
    * `type: "image" → "canvas"` 触发重建，新实例却按 `options.type === "image"` 建出来。
    *
    * **为什么按代物化仍只求值一次**：`fieldValues` 的投影（`GroundOverlay.url` 的惰性工厂）
@@ -345,7 +289,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   let generationProps: Readonly<Props> | null = null;
 
   /**
-   * **原始** prop（不经别名与投影）：只给按引用比较的 watch 源用。
+   * **原始** prop（不经投影）：只给按引用比较的 watch 源用。
    *
    * `reference`（惰性工厂）与 `versioned`（大数组根引用）两种源必须读到**原始引用**：
    * 投影会对工厂函数求值（`GroundOverlay.url` 每次求值出一个新的真实来源），按投影后的值比较
@@ -360,7 +304,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   }
 
   // 构造期自检：声明自相矛盾时立刻失败（判据与用例共用 `assertOverlayFieldDeclarations`）。
-  assertOverlayFieldDeclarations(spec, { propAliases });
+  assertOverlayFieldDeclarations(spec);
 
   /* ------------------------------------------------------------------ 实例挂载与 Registry */
 
@@ -654,21 +598,14 @@ export function useOverlaySpec<Props extends object, Resource>(
   const resolvedEvents = resolveOverlayEvents(spec);
 
   /**
-   * 派发一条事件：正典名 + **弃用别名**（各一次）。
+   * 派发一条事件：组件自定义处置，或按矩阵声明的 `emit` 名转发。
    *
-   * 别名在**首次派发**时告警一次，而不是在绑定时：只有真的有人触发它，旧名字才算被用到——
-   * 组件里绑了 `@click` 却从不点击，不该收到「你在用旧事件名」的提示。
+   * 事件名**只有**规范拼写一种（`overlayEventCatalog` 的 `vue` 列）。#136 起不再补发旧事件名
+   * （Marker 的 `drag-end`）：clean-slate 1.0 不兼容旧 API，收到旧名字只应静默失配。
    */
   function dispatchEvent(event: ResolvedOverlayEvent, payload: unknown): void {
     if (event.handle) event.handle(payload);
     else if (event.emit) emit?.(event.emit, payload);
-    for (const alias of eventAliasesOf(kind, event.vue)) {
-      // 兼容派发照旧（没人监听的 `emit` 是 no-op），但**告警只在父级真的绑了旧名字时发**
-      // （PR #103 评审 3）：只监听规范名的应用升级后不该收到迁移提示——「SDK 派发过某个事件」
-      // 与「调用方用了弃用名」是两件事。
-      if (hasListenerFor(ownerInstance, alias.alias)) deprecation.warn(describeDeprecation(alias));
-      emit?.(alias.alias, payload);
-    }
   }
 
   /* ------------------------------------------------------------------------------ 主体 */
@@ -694,7 +631,7 @@ export function useOverlaySpec<Props extends object, Resource>(
         // 的值：`undefined` 从来没进过构造器，不存在要撤回的东西。
         for (const [prop, update] of fields) {
           if (update === "visibility" || update === "position") continue;
-          if (update === "version" || update === "alias") continue;
+          if (update === "version") continue;
           const key = descriptorKeyOf(prop);
           if (key === null) continue;
           // 用**原始** prop 判「给过值没有」：`readProp` 会对 `fieldValues` 里的惰性字段
@@ -831,9 +768,9 @@ export function useOverlaySpec<Props extends object, Resource>(
         // 两者都闭包捕获了 `prop`，因此不需要把 prop 名再带一遍（判等与取值读的是同一个 prop）。
         const entries: KeyedSource<unknown>[] = [];
         for (const [prop, update] of fields) {
-          // 组件侧语义字段：`version` 只作为配对字段的 watch 源之一，`alias` 只经正典名被读取
+          // 组件侧语义字段不产生更新命令：`version` 只作为配对字段的 watch 源之一
           if (update === "visibility" || update === "position") continue;
-          if (update === "version" || update === "alias") continue;
+          if (update === "version") continue;
           const key = descriptorKeyOf(prop);
           if (key === null) continue;
           const source = spec.watchSources?.[prop as keyof Props & string] ?? "fingerprint";

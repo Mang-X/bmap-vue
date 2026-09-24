@@ -96,7 +96,7 @@ export function toHighlightItemDTO(value: unknown): PlaceHighlightDTO | null {
  * `highlight` 载荷 → 变更对 DTO。
  *
  * 上游真实载荷是 `{ from: HighlightItem | null, to: HighlightItem }`
- * （形状锁见 `v3-ui-kit-widget-contract.test.ts`）：
+ * （形状锁见 `ui-kit-widget-contract.test.ts`）：
  * - `to` 不可解析 → 整条事件不发（返回 `null`），不制造「看起来高亮变了」的假信号；
  * - `from` **为 `null`** → 规范化为 `null`：这是上游表达「此前没有高亮项」的合法取值；
  * - `from` **存在却解析不出来** → 同样整条不发。这里**不能**降级成 `null` ——

@@ -35,18 +35,6 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "com-events",
         },
         {
-          text: "Breaking Changes",
-          link: "breaking-changes",
-        },
-        {
-          text: "从 v2 迁移",
-          link: "migration-from-v2",
-        },
-        {
-          text: "从 WebGL v1 迁移到 4.0",
-          link: "migration-v1-to-v4",
-        },
-        {
           text: "FAQ",
           link: "faq",
         },

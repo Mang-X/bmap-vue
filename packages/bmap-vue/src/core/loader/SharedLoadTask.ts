@@ -32,7 +32,7 @@
  * - **首次**调用当下 `JSAPI_V4_REQUIRED_MEMBERS`（Map/Point/Marker）齐全（与
  *   `requireJsapiV4Global` / `assertReady` 同口径），见读数 `control.readyAtCall`；
  * - 该行为属于**官方实现，官方可改**——可回归 gate 是
- *   `tests/behavior/v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture
+ *   `tests/behavior/probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture
  *   一致性 + 上述单测（OWNED 侧）。#44 冻结前这两者必须同时在场。
  */
 import { BMapError } from "../errors/BMapError";

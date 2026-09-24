@@ -23,19 +23,14 @@ overlay/groundOverlay
 | opacity    | 透明度，范围 0-1                                     | `number`                                 |            | -                                  |
 | visible    | 是否显示                                             | `boolean`                                | `true`     | <Badge type="tip" text="^2.2.0" /> |
 
-### 从 `startPoint` + `endPoint` 迁移
-
-v2 / v3-beta 的 `startPoint`（西南角）与 `endPoint`（东北角）**仍然可用**，但它们已经弃用：
-内部只有一份几何模型 `bounds`，旧名由集中弃用层在**读取层**解析，并在控制台给出一次提示
-（同实例只提示一次）。新代码请直接用 `bounds`；两者同时出现时 **`bounds` 优先**，旧名完全不参与。
-
 ```vue
-<!-- 旧写法（仍可用，会提示一次） -->
-<GroundOverlay type="image" url="a.png" :start-point="sw" :end-point="ne" />
-
-<!-- 新写法 -->
 <GroundOverlay type="image" url="a.png" :bounds="{ southwest: sw, northeast: ne }" />
 ```
+
+::: warning 只有一种写法
+显示区域**只有 `bounds` 一种**（与上游 `createGroundOverlay(bounds, options)` 同形）。
+本库 1.0 不提供旧版写法，传入其它几何字段不会生效。
+:::
 
 ### bounds 图示
 

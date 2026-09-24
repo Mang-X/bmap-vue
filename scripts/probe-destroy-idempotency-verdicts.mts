@@ -93,7 +93,7 @@ export function controlFailures(report: ProbeReport): string[] {
 
 /**
  * 把读数映射成结论——本探针真正的产物。共 **2** 条，与
- * `v3-probe-destroy-idempotency-verdicts.test.ts` 的空报告用例条数锁在一起。
+ * `probe-destroy-idempotency-verdicts.test.ts` 的空报告用例条数锁在一起。
  */
 export function verdicts(report: ProbeReport): string[] {
   const byId = new Map(report.readings.map((r) => [r.id, r]));

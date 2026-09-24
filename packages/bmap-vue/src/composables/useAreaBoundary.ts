@@ -37,7 +37,7 @@ export function useAreaBoundary(map?: unknown) {
     },
   );
 
-  /** 区域边界数据；未取到（含失败 / 空结果）时是空数组，与 v2/v3 既有行为一致。 */
+  /** 区域边界数据；未取到（含失败 / 空结果）时是空数组，与既有行为一致。 */
   const boundaries: ComputedRef<AreaBoundary> = computed(() => task.data.value ?? []);
 
   const get = (area: string) => task.execute(area);

@@ -54,12 +54,11 @@ import type { ContextMenuProps } from "../../types/components";
 export type { ContextMenuProps };
 
 const props = withDefaults(defineProps<ContextMenuProps>(), {
-  // `width: 100` 是 v3 起的默认值（也是文档里的值）。M5 重写时漏掉了它 ⇒ Driver 拿到 `undefined`，
-  // 而 `width` 是**每项的构造期输入**（`MenuItemOptions.width`），行为与 v3 分叉（复审 P4）。
+  // `width: 100` 是默认值（也是文档里的值）。曾经漏掉它 ⇒ Driver 拿到 `undefined`，
+  // 而 `width` 是**每项的构造期输入**（`MenuItemOptions.width`），行为与文档分叉（复审 P4）。
   width: 100,
-  // `items` 与旧名 `menuItems` 都**不给运行期默认值**：集中弃用层的「新 API 优先」判据是
-  // 「正典值是不是 `undefined`」，给一个 `() => []` 的默认值会让旧名永远读不到
-  // （与 `InfoWindow` 的 `show` 落在同一类取舍上，见 InfoWindowSpec 的说明）。
+  // `items` **不给运行期默认值**：菜单的「空」与「没传」在行为上同义（空菜单不会被挂上），
+  // 给一个 `() => []` 的默认值只会让「父级还没算好数据」与「父级真的要空菜单」变得不可区分。
   visible: true,
 });
 
