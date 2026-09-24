@@ -18,8 +18,8 @@ import {
   type DriverHarness,
 } from "../../packages/test-utils/driver-contract";
 import type { FakeBMapV4, FakeV4Map } from "../../packages/test-utils";
-import type { BMapClient } from "../../packages/baidu-map-gl-vue/src/client/types";
-import type { OverlayTarget } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
+import type { BMapClient } from "../../packages/bmap-vue/src/client/types";
+import type { OverlayTarget } from "../../packages/bmap-vue/src/driver/types/overlays";
 
 let fake: FakeBMapV4;
 let client: BMapClient;

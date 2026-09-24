@@ -24,10 +24,10 @@
  * 依据，但依赖机器速度，拿它当门禁会在慢 CI 上假红。
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { adaptPoints } from "../../packages/baidu-map-gl-vue/src/core/data/geojsonAdapter";
-import { itemKeyReader, scanValidItems } from "../../packages/baidu-map-gl-vue/src/core/data/itemScan";
-import { cluster } from "../../packages/baidu-map-gl-vue/src/core/data/gridCluster";
-import { readValidPoint } from "../../packages/baidu-map-gl-vue/src/core/data/points";
+import { adaptPoints } from "../../packages/bmap-vue/src/core/data/geojsonAdapter";
+import { itemKeyReader, scanValidItems } from "../../packages/bmap-vue/src/core/data/itemScan";
+import { cluster } from "../../packages/bmap-vue/src/core/data/gridCluster";
+import { readValidPoint } from "../../packages/bmap-vue/src/core/data/points";
 import {
   DATASET_VERSION,
   PERF_ITEM_KEY,

@@ -35,7 +35,7 @@ describe("基准配置与根配置的一致性", () => {
     expect(perf.test?.environment, "DOM 环境").toBe(root.test?.environment);
     expect(perf.test?.globals, "globals").toBe(root.test?.globals);
     expect(perf.test?.setupFiles, "setup 文件").toEqual(root.test?.setupFiles);
-    expect(perf.define, "编译期常量（__DEV__ / __VERSION__）").toEqual(root.define);
+    expect(perf.define, "编译期常量（__DEV__）").toEqual(root.define);
     // 别名也要对齐：基准同样 import 组件库源码，少一个别名会以「模块解析失败」的形式炸在运行期。
     expect(perf.resolve?.alias, "resolve.alias").toEqual(root.resolve?.alias);
   });

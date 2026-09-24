@@ -8,7 +8,7 @@
  * 契约：
  * - 受版本控制的生成文件（`src/components/index.ts`、`component-index.json`）
  *   在 `--check` 下**逐字节不变**（只读比对），旧行为会因重写 `generatedAt` 而失败；
- * - `packages/baidu-map-gl-vue/volar.d.ts` 被 `.gitignore` 忽略，是纯发布产物，
+ * - `packages/bmap-vue/volar.d.ts` 被 `.gitignore` 忽略，是纯发布产物，
  *   两种模式下都生成（全新检出时它不存在，**不得**因此被判为漂移）。
  */
 import { execFileSync } from "node:child_process";
@@ -20,11 +20,11 @@ const ROOT = resolve(import.meta.dirname, "../..");
 const SCRIPT = resolve(ROOT, "scripts/generate-manifest-artifacts.mts");
 
 const TRACKED_GENERATED = [
-  "packages/baidu-map-gl-vue/src/components/index.ts",
+  "packages/bmap-vue/src/components/index.ts",
   "docs/.vitepress/component-index.json",
 ] as const;
 
-const UNTRACKED_ARTIFACT = "packages/baidu-map-gl-vue/volar.d.ts";
+const UNTRACKED_ARTIFACT = "packages/bmap-vue/volar.d.ts";
 
 function runCheck(): void {
   execFileSync(process.execPath, ["--experimental-strip-types", SCRIPT, "--check"], {

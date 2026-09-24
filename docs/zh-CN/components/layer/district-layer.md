@@ -3,7 +3,7 @@
 在地图上显示行政区划分。
 
 ```ts
-import { BDistrictLayer } from 'baidu-map-gl-vue'
+import { BDistrictLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -18,7 +18,7 @@ layer/districtLayer
 | ------------- | ---------------- | ------------------------------- | ------ | ---------------------- | ---------------------------------- |
 | name          | 行政区名字       | `string`                        | -      | `required`             |                                    |
 | kind          | 行政区类型       | [`DistrictType`](#districttype) | -      | `DistrictType['AREA']` |                                    |
-| adcode        | 行政区代码       | `string`                        | -      | -                      | <Badge type="tip" text="^3.0.0" /> |
+| adcode        | 行政区代码       | `string`                        | -      | -                      | <Badge type="tip" text="^1.0.0" /> |
 | fillColor     | 填充颜色         | `string`                        | -      | `#fdfd27`              |                                    |
 | fillOpacity   | 填充透明度       | `number`                        | -      | `1`                    |                                    |
 | strokeColor   | 描边线条颜色     | `string`                        | -      | `#231cf8`              |                                    |

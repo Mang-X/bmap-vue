@@ -25,11 +25,11 @@ import {
   PLUGIN_VERDICTS,
   PLUGIN_VERDICT_MEANING,
   stringToPluginDefinitions,
-} from "../../packages/baidu-map-gl-vue/src/plugins";
-import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability";
-import { componentManifest } from "../../packages/baidu-map-gl-vue/src/manifest";
-import { createPluginRegistry } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginRegistry";
-import { ResourceScope } from "../../packages/baidu-map-gl-vue/src/core/lifecycle/ResourceScope";
+} from "../../packages/bmap-vue/src/plugins";
+import { CAPABILITY_CATALOG } from "../../packages/bmap-vue/src/driver/capability";
+import { componentManifest } from "../../packages/bmap-vue/src/manifest";
+import { createPluginRegistry } from "../../packages/bmap-vue/src/core/plugins/PluginRegistry";
+import { ResourceScope } from "../../packages/bmap-vue/src/core/lifecycle/ResourceScope";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const DOC_MD = resolve(ROOT, "docs/zh-CN/contributing/plugin-compat-inventory.md");
@@ -658,7 +658,7 @@ describe("文档承诺的命令真的存在（防空口承诺）", () => {
   it("清单源码里指向的 ADR 都在仓库里，且不再指向已删除的 legacy 声明面", () => {
     const sourceFile = resolve(
       ROOT,
-      "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts",
+      "packages/bmap-vue/src/plugins/compat-inventory.ts",
     );
     const source = readFileSync(sourceFile, "utf8");
     const mentioned = [

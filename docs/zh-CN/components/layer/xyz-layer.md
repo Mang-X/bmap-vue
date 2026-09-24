@@ -1,9 +1,9 @@
-# BXYZLayer 标准瓦片图层 <Badge type="tip" text="^3.0.0" />
+# BXYZLayer 标准瓦片图层 <Badge type="tip" text="^1.0.0" />
 
 第三方标准瓦片服务（XYZ / WMTS / WMS / TMS）：内置 **EPSG:3857 → BD09MC** 转换。
 
 ```ts
-import { BXYZLayer } from 'baidu-map-gl-vue'
+import { BXYZLayer } from 'bmap-vue'
 ```
 
 ## 组件示例

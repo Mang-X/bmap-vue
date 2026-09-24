@@ -8,7 +8,7 @@
 
 | 维度 | 含义 | 当前取值 |
 | --- | --- | --- |
-| 组件库版本 | `baidu-map-gl-vue` 包版本 | `3.0.0-beta.x` |
+| 组件库版本 | `bmap-vue` 包版本 | `1.0.0-rc.x` |
 | SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 `#26` 删除） |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
 | 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.4`（精确锁定） |
@@ -67,7 +67,7 @@ npx skills update bmap-jsapi-v4
 
 ## 官方类型包
 
-`@baidumap/jsapi-v4-types` 以精确版本声明在 `packages/baidu-map-gl-vue/package.json`，并通过 `packages/baidu-map-gl-vue/tsconfig.build.json` 的 `compilerOptions.types` 接入。
+`@baidumap/jsapi-v4-types` 以精确版本声明在 `packages/bmap-vue/package.json`，并通过 `packages/bmap-vue/tsconfig.build.json` 的 `compilerOptions.types` 接入。
 
 - 纯 `.d.ts`，没有运行时代码，也不是运行时依赖。
 - 业务代码使用全局 `BMap.*`，**禁止具名导入**：
@@ -80,8 +80,8 @@ npx skills update bmap-jsapi-v4
   const map = new BMap.Map("container");
   ```
 
-- 官方声明缺口只在 `packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations/` 做最小 augmentation；禁止 `any`、禁止复制整套声明。
-- 每个 augmentation 文件都必须带 `@augmentation` / `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` / `@owner` 元数据，模板与删除流程见 [`augmentations/README.md`](https://github.com/Mang-X/bmap-vue/blob/main/packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations/README.md)。
+- 官方声明缺口只在 `packages/bmap-vue/src/driver/jsapi-v4/augmentations/` 做最小 augmentation；禁止 `any`、禁止复制整套声明。
+- 每个 augmentation 文件都必须带 `@augmentation` / `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` / `@owner` 元数据，模板与删除流程见 [`augmentations/README.md`](https://github.com/Mang-X/bmap-vue/blob/main/packages/bmap-vue/src/driver/jsapi-v4/augmentations/README.md)。
 - 入口文件 `src/driver/jsapi-v4/types-reference.d.ts` 只用三斜线引用官方类型与 augmentation 目录，本身不再内联声明。
 - 保持 `skipLibCheck: false`。升级类型包后必须重新核对 augmentation，官方补齐的声明要删除。
 
@@ -98,7 +98,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 
 处置（issue #50，决策见 [ADR 2026-09-13](../../adr/2026-09-13-upstream-types-case-patch.md)）：仓库用
 `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行，因此
-`pnpm typecheck:v3` 在任何平台都成立，并已重新纳入 `.github/workflows/quality.yml`。
+`pnpm typecheck:package` 在任何平台都成立，并已重新纳入 `.github/workflows/quality.yml`。
 
 - 补丁只改文件名大小写、不改声明内容；清单、生成方式与删除条件见仓库根目录的
   `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。
@@ -107,7 +107,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
   因此 macOS 与 Linux 结论一致。
 - 删除条件：上游发布修正大小写的版本后，升级精确版本并删除补丁与 `pnpm-workspace.yaml` 的
   `patchedDependencies` 条目。
-- 回滚：删除补丁后 `pnpm typecheck:v3` 会在 Linux 上重新失败，回滚必须同时把该 step 从 CI 摘掉，
+- 回滚：删除补丁后 `pnpm typecheck:package` 会在 Linux 上重新失败，回滚必须同时把该 step 从 CI 摘掉，
   并更新本页与 `CONTRIBUTING.md`。
 
 ## SDK 边界：raw SDK 与公共声明
@@ -116,7 +116,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 
 ### 目录白名单
 
-`BMap.*` / `BMapGL` 只允许出现在以下边界（相对 `packages/baidu-map-gl-vue/src`）：
+`BMap.*` / `BMapGL` 只允许出现在以下边界（相对 `packages/bmap-vue/src`）：
 
 | 边界 | 用途 |
 | --- | --- |
@@ -163,11 +163,11 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
 | `pnpm probe:plugin-load-channel` | 量**插件脚本加载通道自身**的边界行为（**需要 AK + 浏览器**，要真的等一个超时窗口）：把插件 URL 指到永不响应的地址，核对「地图照常 ready / 超时后如实失败且不残留脚本 / 列表里后面的插件不被永久阻塞」，以及取消语义的三条（`map` 作用域 abort 摘脚本、共享宿主里取消只解绑自己、宿主 `dispose()` 让在飞加载 abort）。`0` 契约成立 / `1` 契约不成立（含「永久挂起」）/ `3` 无法判定 / `2` 脚手架失败 |
 
-`pnpm check:public-dts` 与 `pnpm check:no-bmapgl` 的**公共声明相位**都需在 `pnpm build:v3` 之后运行；CI 的两个 job 都会在构建后执行。
+`pnpm check:public-dts` 与 `pnpm check:no-bmapgl` 的**公共声明相位**都需在 `pnpm build:package` 之后运行；CI 的两个 job 都会在构建后执行。
 
 ## Capability Catalog
 
-能力清单的单一事实源是 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts`，覆盖 **Map / Overlay / Layer / Service / Panorama / Runtime** 六个 family，并用 `status` 表达 `native` / `extended` / `experimental` / `unsupported` 四种状态、用 `runtimeOnly` 标注只能运行时探测的能力。
+能力清单的单一事实源是 `packages/bmap-vue/src/driver/capability/catalog.ts`，覆盖 **Map / Overlay / Layer / Service / Panorama / Runtime** 六个 family，并用 `status` 表达 `native` / `extended` / `experimental` / `unsupported` 四种状态、用 `runtimeOnly` 标注只能运行时探测的能力。
 
 - 能力矩阵由数据生成，请勿手工编辑：`pnpm generate:capability-matrix` 生成
   [Capability Catalog 能力矩阵](./capability-matrix) 与 `docs/.vitepress/capability-catalog.json`，
@@ -178,7 +178,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ## 插件兼容 inventory
 
 `plugins: [...]` 能识别的四个内置插件（TrackAnimation / DrawingManager / GeoUtils / Mapvgl）在 JSAPI 4.0 上的
-状态由 `packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts` 单一维护，它的生成物是两个：
+状态由 `packages/bmap-vue/src/plugins/compat-inventory.ts` 单一维护，它的生成物是两个：
 
 - [插件兼容 inventory](./plugin-compat-inventory)：人读，含依据档位、逐条结论与残余风险；
 - `docs/.vitepress/plugin-inventory.json`：机读，形如 `{ plugins: [{ id, url, verdict, basis, capability?, … }] }`，
@@ -198,12 +198,12 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ## 提交前验证
 
 ```bash
-pnpm typecheck:v3          # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并（须排在 build:v3 之前）
+pnpm typecheck:package          # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并（须排在 build:package 之前）
 pnpm test:unit
-pnpm build:v3
+pnpm build:package
 pnpm check:raw-sdk         # 禁区目录 raw SDK 边界
 pnpm check:raw-sdk:tree    # 整棵 src 按白名单校验
-pnpm check:public-dts      # 公共声明无 BMap.* 泄漏(需先 build:v3)
+pnpm check:public-dts      # 公共声明无 BMap.* 泄漏(需先 build:package)
 pnpm generate:capability-matrix:check
 pnpm docs:build            # 涉及文档时
 ```

@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": patch
+"bmap-vue": patch
 ---
 
 服务层收口：统一公开 JSAPI 服务状态、实现 headless LocalSearch，并删除 composable 自己那套通用请求框架。

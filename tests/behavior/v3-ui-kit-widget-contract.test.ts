@@ -4,7 +4,7 @@
  *
  * 为什么需要单独一条：本仓库构建期**刻意不消费**官方 UI Kit 的类型入口
  * （它带的 `/// <reference types="bmapgl-browser" />` 在 `skipLibCheck: false` 下直接报
- * TS2688 / TS2833，处置理由与取舍见 `packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts`）。
+ * TS2688 / TS2833，处置理由与取舍见 `packages/bmap-vue/types/ui-kit/upstream.d.ts`）。
  * 于是 `UiKitAutocompleteWidget` / `UiKitSearchWidget` 这两个「我们自以为上游长这样」的接口
  * 失去了编译器背书 —— 一旦成员名写错、签名放宽，只有真机上才会发现。
  *
@@ -22,12 +22,12 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
-const pkgRoot = join(repoRoot, "packages/baidu-map-gl-vue");
+const pkgRoot = join(repoRoot, "packages/bmap-vue");
 const virtualFile = join(repoRoot, "tests/__ui-kit-widget-contract__.ts");
 /** 相对虚拟文件的类型模块路径（平台无关，不写绝对路径）。 */
-const typesModule = "../packages/baidu-map-gl-vue/src/integrations/ui-kit/types";
+const typesModule = "../packages/bmap-vue/src/integrations/ui-kit/types";
 /** 桥模块路径（同样相对虚拟文件）。 */
-const bridgeModule = "../packages/baidu-map-gl-vue/src/integrations/ui-kit/useUiKitWidget";
+const bridgeModule = "../packages/bmap-vue/src/integrations/ui-kit/useUiKitWidget";
 
 const COMPILER_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
@@ -260,8 +260,8 @@ export const noInventedDrivingKey: never = drivingInvented;
    */
   it("RoutePlanDrivingPolicy 常量表与上游 DrivingPolicy 枚举逐成员同值同名", async () => {
     const { RoutePlanDrivingPolicy } = (await import(
-      "../../packages/baidu-map-gl-vue/src/integrations/ui-kit/types"
-    )) as typeof import("../../packages/baidu-map-gl-vue/src/integrations/ui-kit/types");
+      "../../packages/bmap-vue/src/integrations/ui-kit/types"
+    )) as typeof import("../../packages/bmap-vue/src/integrations/ui-kit/types");
 
     const upstream = readFileSync(
       join(UI_KIT_DTS, "components/route-plan/types.d.ts"),

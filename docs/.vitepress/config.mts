@@ -5,9 +5,9 @@ import { withPwa } from "@vite-pwa/vitepress";
 export default withPwa(
   defineConfig({
     lang: "zh-CN",
-    title: "Vue3 Baidu Map Gl",
+    title: "bmap-vue",
     description:
-      "基于百度地图 JSAPI 4.0（使用 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图）封装设计的 Vue3 组件/hooks 库，默认通过官方 @baidumap/jsapi-loader 加载 SDK。",
+      "基于百度地图 JSAPI 4.0 的 Vue 3 组件与 hooks 库，默认通过官方 @baidumap/jsapi-loader 加载 SDK。",
     lastUpdated: true,
     base: "/bmap-vue/",
     cleanUrls: true,
@@ -33,13 +33,13 @@ export default withPwa(
         // options: {
         //   appId: 'RT4OHPUGD1',
         //   apiKey: '76ba0d807534197fb89a2644c412240b',
-        //   indexName: 'baidu-map-gl-vue-zh'
+        //   indexName: 'bmap-vue-zh'
         // }
       },
 
       footer: {
         message: "Released under the MIT License.",
-        copyright: "Copyright © 2022-present dh and all contributors",
+        copyright: "Copyright © 2021 yue1123; 2022-present MangMax and contributors",
       },
       socialLinks: [{ icon: "github", link: "https://github.com/Mang-X/bmap-vue" }],
       sidebar: sidebarConfigZh,

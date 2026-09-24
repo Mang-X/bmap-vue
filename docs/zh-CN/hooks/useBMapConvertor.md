@@ -3,7 +3,7 @@
 用于将其他坐标系的坐标转换为百度坐标。
 
 ```ts
-import { useBMapConvertor } from 'baidu-map-gl-vue'
+import { useBMapConvertor } from 'bmap-vue'
 ```
 
 ## 示例
@@ -144,7 +144,7 @@ export enum CoordinatesToType {
 <BMap @ready="handleReady"></BMap>
 
 <script setup lang="ts">
-  import { useBMapConvertor, CoordinatesFromType, CoordinatesToType } from 'baidu-map-gl-vue'
+  import { useBMapConvertor, CoordinatesFromType, CoordinatesToType } from 'bmap-vue'
 
   const { convert, result } = useBMapConvertor()
 
@@ -163,7 +163,7 @@ export enum CoordinatesToType {
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 /**
  * 地图经纬度点
  */

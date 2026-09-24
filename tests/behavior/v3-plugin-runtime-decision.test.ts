@@ -23,7 +23,7 @@ import {
   type PluginRuntimeExpectation,
   type PluginRuntimeRun,
 } from "../../scripts/plugin-runtime-report.mts";
-import { PLUGIN_COMPAT_INVENTORY } from "../../packages/baidu-map-gl-vue/src/plugins/compat-inventory";
+import { PLUGIN_COMPAT_INVENTORY } from "../../packages/bmap-vue/src/plugins/compat-inventory";
 
 /** 一条「跑通最小路径」的结构化小结。 */
 function verifiedOutcome(): PluginProbeOutcome {

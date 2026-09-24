@@ -4,7 +4,7 @@
 换乘方案。它是四个路线服务里**结果刻意不同构**的那一个——方案是一条「步行段 + 乘车段」的序列。
 
 ```ts
-import { useBMapTransitRoute } from "baidu-map-gl-vue";
+import { useBMapTransitRoute } from "bmap-vue";
 ```
 
 它与 [useBMapDrivingRoute](./useBMapDrivingRoute.md) 共用状态口径、归属模型、绘制所有权与
@@ -58,6 +58,6 @@ for (const segment of plan.segments) {
 
 ## 与标准面板互斥
 
-`BRoutePlan`（`baidu-map-gl-vue/ui-kit`）在锁定版本里**只开放驾车**，因此公交没有标准面板可用；
+`BRoutePlan`（`bmap-vue/ui-kit`）在锁定版本里**只开放驾车**，因此公交没有标准面板可用；
 如果你用自定义 UI 的公交路线，别再给 `BRoutePlan` 传同一份检索参数（那会变成两套请求、两份结果）。
 详见 [useBMapDrivingRoute 的「与标准面板互斥」](./useBMapDrivingRoute.md#与标准面板互斥)。

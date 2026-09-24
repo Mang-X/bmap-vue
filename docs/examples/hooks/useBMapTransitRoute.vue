@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
 import { computed } from "vue";
-import { BMap, TransitPolicy, useBMapTransitRoute } from "baidu-map-gl-vue";
+import { BMap, TransitPolicy, useBMapTransitRoute } from "bmap-vue";
 
 // 公交支持关键字起终点（与驾车不同），并且是四个服务里配置面最宽的一个。
 const { data, status, sdkStatus, isLoading, isEmpty, search, clear } = useBMapTransitRoute({

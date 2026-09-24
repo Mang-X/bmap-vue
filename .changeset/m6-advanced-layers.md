@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增四个原生批量可视化图层、要素状态命令面与统一的拾取载荷（M6 / #36）。

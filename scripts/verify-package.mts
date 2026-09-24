@@ -3,12 +3,12 @@
  * M0-05: verify-package
  *
  * 步骤:
- * 1. 在 .artifacts 内找到 v3 .tgz。
- * 2. 复制到 fixtures/v3-consumer 临时目录安装。
- * 3. 跑 vue-tsc 类型检查 + ESM 导入 smoke(v3 发布硬前提)。
+ * 1. 在 .artifacts 内找到 package .tgz。
+ * 2. 复制到 fixtures/consumer 临时目录安装。
+ * 3. 跑 vue-tsc 类型检查 + ESM 导入 smoke(package 发布硬前提)。
  *
  * 用法:
- *   pnpm --filter baidu-map-gl-vue pack --pack-destination .artifacts
+ *   pnpm --filter bmap-vue pack --pack-destination .artifacts
  *   node scripts/verify-package.mts
  */
 import { execSync } from 'node:child_process'
@@ -27,12 +27,73 @@ function expectNonEmpty(values: readonly unknown[], message: string): void {
 }
 
 function findTarball(): string {
-  if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack --pack-destination .artifacts')
+  if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack:package')
   const tarballs = readdirSync(artifactsDir)
-    .filter((f) => f.endsWith('.tgz'))
+    .filter((f) => /^bmap-vue-\d+\.\d+\.\d+(?:-.+)?\.tgz$/.test(f))
     .sort()
   if (tarballs.length === 0) throw new Error('No .tgz found in .artifacts')
   return resolve(artifactsDir, tarballs[tarballs.length - 1])
+}
+
+function readTarballManifest(tarball: string): Record<string, unknown> {
+  const output = execSync(`tar -xOzf ${JSON.stringify(tarball)} package/package.json`, {
+    cwd: root,
+    encoding: 'utf8',
+  })
+  return JSON.parse(output) as Record<string, unknown>
+}
+
+function assertReleaseIdentity(tarball: string): void {
+  const manifest = readTarballManifest(tarball)
+  if (manifest.name !== 'bmap-vue') {
+    throw new Error(`[verify-package] tarball package.name must be bmap-vue: ${String(manifest.name)}`)
+  }
+  if (typeof manifest.version !== 'string' || !/^1\.0\.0(?:-rc\.\d+)?$/.test(manifest.version)) {
+    throw new Error(`[verify-package] tarball version must use the 1.0 release line: ${String(manifest.version)}`)
+  }
+  if (!manifest.exports || typeof manifest.exports !== 'object') {
+    throw new Error('[verify-package] tarball package.json must contain exports')
+  }
+  const exportsMap = manifest.exports as Record<string, unknown>
+  for (const subpath of [
+    '.',
+    './components',
+    './composables',
+    './plugins',
+    './resolver',
+    './core',
+    './advanced',
+    './ui-kit',
+  ]) {
+    const target = exportsMap[subpath]
+    if (!target || typeof target !== 'object') {
+      throw new Error(`[verify-package] tarball exports must contain ${subpath}`)
+    }
+    const conditions = target as Record<string, unknown>
+    for (const condition of ['types', 'import']) {
+      if (typeof conditions[condition] !== 'string' || !conditions[condition].startsWith('./dist/')) {
+        throw new Error(`[verify-package] tarball exports ${subpath}.${condition} must target dist`)
+      }
+    }
+  }
+  if (exportsMap['./package.json'] !== './package.json') {
+    throw new Error('[verify-package] tarball must expose package.json')
+  }
+  if (manifest.license !== 'MIT') {
+    throw new Error(`[verify-package] tarball license must be MIT: ${String(manifest.license)}`)
+  }
+  if (!manifest.repository || typeof manifest.repository !== 'object') {
+    throw new Error('[verify-package] tarball package.json must contain repository metadata')
+  }
+  if (typeof manifest.author !== 'string' || manifest.author.length === 0) {
+    throw new Error('[verify-package] tarball package.json must contain author metadata')
+  }
+  const metadata = JSON.stringify(manifest)
+  for (const legacy of ['baidu-map-gl-vue', '3.0.0']) {
+    if (metadata.includes(legacy)) {
+      throw new Error(`[verify-package] tarball metadata contains legacy release identity: ${legacy}`)
+    }
+  }
 }
 
 function run(cmd: string, cwd: string, label: string) {
@@ -65,25 +126,27 @@ function setupFixture(name: string): string {
 function main() {
   const tarball = findTarball()
   console.log(`[verify-package] tarball: ${tarball}`)
+  assertReleaseIdentity(tarball)
+  copyFileSync(tarball, resolve(artifactsDir, 'bmap-vue.tgz'))
 
 
-  // 5) v3-consumer:从 v3 tarball 安装,类型检查 + ESM 导入(发布 v3 的硬前提)
+  // 5) consumer:从 package tarball 安装,类型检查 + ESM 导入(发布包的硬前提)
   //    `./ui-kit` 子路径单独再 import 一次：它必须在**无 DOM 的 Node** 里可加载
   //    （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 #73。
-  const v3Consumer = setupFixture('v3-consumer')
+  const consumerFixture = setupFixture('consumer')
   run(
-    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('baidu-map-gl-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('v3-consumer ESM import OK')})" && node -e "import('baidu-map-gl-vue/ui-kit').then(m=>{for(const k of ['BPlaceAutocomplete','BPlaceSearch','BPlaceDetail','BRoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
-    v3Consumer,
-    'v3-consumer typecheck + ESM import (v3 tarball)',
+    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('bmap-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('bmap-vue/ui-kit').then(m=>{for(const k of ['BPlaceAutocomplete','BPlaceSearch','BPlaceDetail','BRoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
+    consumerFixture,
+    'consumer typecheck + ESM import (package tarball)',
   )
 
   // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
   //
   //     `./advanced` 是**承诺维护**的扩展契约（第三方 Provider / Driver / Handle / Plugin 适配点），
   //     所以它必须在真实消费方（tarball 装进 node_modules）里被**真正调用一次**，而不是只断言
-  //     「import 得动」。类型面由 `fixtures/v3-consumer/src/advanced-adapter.ts` 通过上面的
+  //     「import 得动」。类型面由 `fixtures/consumer/src/advanced-adapter.ts` 通过上面的
   //     `vue-tsc` 覆盖；这里补运行面的可观察行为。
-  const advancedProbe = resolve(v3Consumer, 'advanced-probe.mjs')
+  const advancedProbe = resolve(consumerFixture, 'advanced-probe.mjs')
   writeFileSync(
     advancedProbe,
     [
@@ -95,12 +158,12 @@ function main() {
       "  createHandle,",
       "  normalizeProvider,",
       "  unwrapRaw,",
-      "} from 'baidu-map-gl-vue/advanced'",
+      "} from 'bmap-vue/advanced'",
       "import {",
       "  BUILTIN_PLUGIN_NAMES,",
       "  resolvePluginDefinition,",
       "  urlPluginDefinition,",
-      "} from 'baidu-map-gl-vue/plugins'",
+      "} from 'bmap-vue/plugins'",
       "",
       "const fail = (message) => {",
       "  throw new Error('[advanced-probe] ' + message)",
@@ -188,7 +251,7 @@ function main() {
     ].join('\n'),
   )
   const advancedProbeOut = execSync(`node ${JSON.stringify(advancedProbe)}`, {
-    cwd: v3Consumer,
+    cwd: consumerFixture,
     encoding: 'utf8',
     env: { ...process.env, CI: '1' },
   })
@@ -200,15 +263,15 @@ function main() {
   //     这条必须在 tarball 消费方里做：仓库内那份闭包检查（tests/behavior/v3-advanced-contract.test.ts）
   //     看的是我们自己的 dist，而这里看的是**真实打包器在真实依赖解析下**的产物。
   //     两个对照入口（只用 ./advanced / 只用根入口）共用同一份配置与同一份判据，后者是正证。
-  const shakeDir = resolve(v3Consumer, 'shake')
+  const shakeDir = resolve(consumerFixture, 'shake')
   const viteBin = resolve(root, 'node_modules/.bin/vite')
   if (!existsSync(viteBin)) {
     throw new Error('[verify-package] 找不到 vite（tree-shaking 对照需要真实打包器）')
   }
   const buildShake = (entryFile: string, outName: string): string => {
-    const outDir = resolve(v3Consumer, 'shake-out', outName)
+    const outDir = resolve(consumerFixture, 'shake-out', outName)
     execSync(`${JSON.stringify(viteBin)} build --config ${JSON.stringify(resolve(shakeDir, 'vite.config.mjs'))}`, {
-      cwd: v3Consumer,
+      cwd: consumerFixture,
       stdio: 'inherit',
       env: { ...process.env, CI: '1', SHAKE_ENTRY: resolve(shakeDir, entryFile), SHAKE_OUT: outDir },
     })
@@ -264,7 +327,7 @@ function main() {
   //    **精确锁定的运行时依赖**声明，并且真的能被消费者解析。
   //    只断言「能 import」不够：依赖漏声明时 tarball 里的 import 仍然会通过（产物内联），
   //    于是「普通消费者不额外手动配置」这条契约会静默失效。
-  const installedPkgPath = resolve(v3Consumer, 'node_modules/baidu-map-gl-vue/package.json')
+  const installedPkgPath = resolve(consumerFixture, 'node_modules/bmap-vue/package.json')
   const installedPkg = JSON.parse(readFileSync(installedPkgPath, 'utf8')) as {
     dependencies?: Record<string, string>
   }
@@ -274,7 +337,7 @@ function main() {
       `[verify-package] 发布包必须以 dependencies 精确锁定 @baidumap/jsapi-loader@1.0.0，实际为 ${String(declared)}`,
     )
   }
-  const loaderPkgPath = resolve(v3Consumer, 'node_modules/@baidumap/jsapi-loader/package.json')
+  const loaderPkgPath = resolve(consumerFixture, 'node_modules/@baidumap/jsapi-loader/package.json')
   if (!existsSync(loaderPkgPath)) {
     throw new Error(
       '[verify-package] 消费者的 node_modules 里没有 @baidumap/jsapi-loader：运行时依赖没有被解析',
@@ -297,7 +360,7 @@ function main() {
       `[verify-package] 发布包必须以 dependencies 精确锁定 @vueuse/core@14.4.0，实际为 ${String(vueuseDeclared)}`,
     )
   }
-  const vueusePkgPath = resolve(v3Consumer, 'node_modules/@vueuse/core/package.json')
+  const vueusePkgPath = resolve(consumerFixture, 'node_modules/@vueuse/core/package.json')
   if (!existsSync(vueusePkgPath)) {
     throw new Error(
       '[verify-package] 消费者的 node_modules 里没有 @vueuse/core：运行时依赖没有被解析',
@@ -311,11 +374,11 @@ function main() {
 
   // 7) 负向消费测试:消费者未安装官方类型包时,全局 `BMap.*` 必须不可用
   //    (公共声明不得泄漏官方命名空间;泄漏会让下面的类型检查意外通过)
-  const negativeFile = resolve(v3Consumer, 'src/global-namespace-negative.ts')
+  const negativeFile = resolve(consumerFixture, 'src/global-namespace-negative.ts')
   writeFileSync(negativeFile, 'export declare const leaked: BMap.Point\n')
   let leaked = false
   try {
-    execSync('npx vue-tsc --noEmit', { cwd: v3Consumer, stdio: 'pipe', env: { ...process.env, CI: '1' } })
+    execSync('npx vue-tsc --noEmit', { cwd: consumerFixture, stdio: 'pipe', env: { ...process.env, CI: '1' } })
     leaked = true
   } catch {
     leaked = false
@@ -339,7 +402,7 @@ function main() {
   //    三步都验：① ESM 产物层面「标记还在」；② IIFE 档「没有裸 `process`」（那一档自己折叠）；
   //    ③ 行为层面「同一个产物在 development 下告警、在 production 下静默」——正是消费方
   //    打包器折叠后的两种终态。
-  const installedDist = resolve(v3Consumer, 'node_modules/baidu-map-gl-vue/dist')
+  const installedDist = resolve(consumerFixture, 'node_modules/bmap-vue/dist')
   const distFiles: string[] = []
   const collect = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -382,12 +445,12 @@ function main() {
     )
   }
 
-  const devProbe = resolve(v3Consumer, 'dev-warn-probe.mjs')
+  const devProbe = resolve(consumerFixture, 'dev-warn-probe.mjs')
   writeFileSync(
     devProbe,
     [
       "import { effectScope, ref } from 'vue'",
-      "import { useControllableState } from 'baidu-map-gl-vue/composables'",
+      "import { useControllableState } from 'bmap-vue/composables'",
       '',
       'const lines = []',
       'const original = console.warn',
@@ -416,7 +479,7 @@ function main() {
   )
   const runDevProbe = (nodeEnv: string) => {
     const out = execSync(`node ${JSON.stringify(devProbe)}`, {
-      cwd: v3Consumer,
+      cwd: consumerFixture,
       env: { ...process.env, NODE_ENV: nodeEnv, CI: '1' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

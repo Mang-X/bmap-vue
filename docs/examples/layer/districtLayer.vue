@@ -11,7 +11,7 @@
 </template>
 
 <script lang="ts" setup>
-import { DistrictType } from "baidu-map-gl-vue";
+import { DistrictType } from "bmap-vue";
 
 function handleMouseover(e: any) {
   e.currentTarget.setFillColor("#9169db");

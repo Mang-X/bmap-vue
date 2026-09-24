@@ -1,0 +1,16 @@
+{
+  "name": "fixture-consumer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {},
+  "dependencies": {
+    "vue": "^3.5.0",
+    "bmap-vue": "file:../../.artifacts/bmap-vue.tgz"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vue-tsc": "^2.1.0",
+    "@vue/compiler-sfc": "^3.5.0"
+  }
+}

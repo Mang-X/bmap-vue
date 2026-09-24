@@ -37,10 +37,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
-import { disposeDefaultPluginHost } from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost";
-import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
+import { disposeDefaultPluginHost } from "../../packages/bmap-vue/src/core/plugins/PluginHost";
+import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/bmap-vue/src/plugins/builtins";
 
 // #26 后 Provider 必须是结构化 v4 形状：harness.provider() 自述 engine + namespace。
 const { harness } = createFakeV4Harness();

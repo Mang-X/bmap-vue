@@ -24,7 +24,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useBMapIpLocation } from "baidu-map-gl-vue";
+import { useBMapIpLocation } from "bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
 const { get, location, isLoading } = useBMapIpLocation(map);

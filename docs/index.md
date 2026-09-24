@@ -1,14 +1,14 @@
 ---
 layout: home
-title: Vue3 Baidu Map Gl 
+title: bmap-vue
 
 hero:
-  name: Vue3 Baidu Map Gl 
+  name: bmap-vue
   text: Vue3 & 百度地图 JSAPI 4.0 组件库 + hooks 库
   tagline: 易用 & 完整 & 性能不错
   image:
     src: /logo.svg
-    alt: Vue3 BaiduMap GL
+    alt: bmap-vue
   actions:
     - theme: brand
       text: 开始使用

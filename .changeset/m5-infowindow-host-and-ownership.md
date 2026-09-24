@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 `<BInfoWindow>` 重构：detached host + Teleport，并改为 **ownership / reconcile** 状态模型（`M5-INFOWINDOW` / #32）。

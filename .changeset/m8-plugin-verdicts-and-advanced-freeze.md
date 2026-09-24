@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 插件迁移结论定型与 `./advanced` 冻结（#43 / M8-ADAPTERS-ADVANCED）。

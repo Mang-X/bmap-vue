@@ -33,7 +33,7 @@ PR 标题会成为 squash 之后的 commit 标题，请用 Conventional Commits�
 
 - [ ] `pnpm check:raw-sdk` 与 `pnpm check:raw-sdk:tree`
 - [ ] `pnpm generate:manifest:check` 与 `pnpm generate:capability-matrix:check`
-- [ ] `pnpm build:v3` 与 `pnpm check:public-dts`
+- [ ] `pnpm build:package` 与 `pnpm check:public-dts`
 - [ ] `pnpm test:unit`
 
 新增行为请说明用例在改动前是失败的（先红后绿），并贴出红/绿的失败信息。

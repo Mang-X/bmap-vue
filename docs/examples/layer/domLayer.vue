@@ -6,7 +6,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BDOMLayer } from "baidu-map-gl-vue";
+import { BDOMLayer } from "bmap-vue";
 
 /** 每个要素一个自定义 DOM；改成内联箭头函数也不会触发重建。 */
 function createDom(properties: object, point: { lng: number; lat: number }) {

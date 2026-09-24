@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 视角动画的**启动窗口取证**与取消面收窄（#104 第二批，接 [存量审计 changeset](./architecture-ownership-evidence-first.md)）。
@@ -12,7 +12,7 @@ probe 债务。这一批用真实 AK + headless Chromium 把两条前提逐条�
 而不是由用户发现**。读数与判据见
 [Ownership-first 存量审计表](../docs/zh-CN/contributing/architecture-ownership-audit.md) 的 F-1 行。
 
-**破坏性变更**（当前版本 `3.0.0-beta.0`，beta 阶段按 `minor` 发布；`MapDriver` 是根出口导出的类型，
+**破坏性变更**（当前版本 `1.0.0-rc.0`，beta 阶段按 `minor` 发布；`MapDriver` 是根出口导出的类型，
 所以这是一次**公共面**变更 —— 它正好落在 #104 实施步骤 6「#44 冻结前完成 API 复核」的范围里：
 把「内部恢复机制」在被冻结成公共承诺之前先收掉）
 

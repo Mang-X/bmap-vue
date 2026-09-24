@@ -21,7 +21,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { CoordinatesFromType, CoordinatesToType, useBMapConvertor } from "baidu-map-gl-vue";
+import { CoordinatesFromType, CoordinatesToType, useBMapConvertor } from "bmap-vue";
 const map = ref();
 const { convert, result, isLoading, isError } = useBMapConvertor(map);
 const googlePoint = { lng: 116.32715863448607, lat: 39.990912172420714 };

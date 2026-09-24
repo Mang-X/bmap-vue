@@ -19,28 +19,28 @@
  * 非 Map 目标的错误码、Rectangle / CustomOverlay 等）留在引擎自己的测试里断言。
  */
 import { describe, it, expect } from "vitest";
-import type { BMapClient } from "../baidu-map-gl-vue/src/client/types";
-import type { BMapDriver } from "../baidu-map-gl-vue/src/driver/types/bmap";
-import type { ControlKind } from "../baidu-map-gl-vue/src/driver/types/controls";
-import type { LayerHandle, MapHandle } from "../baidu-map-gl-vue/src/driver/types/handles";
-import type { LayerKind } from "../baidu-map-gl-vue/src/driver/types/layers";
-import type { MapInteraction } from "../baidu-map-gl-vue/src/driver/types/map";
+import type { BMapClient } from "../bmap-vue/src/client/types";
+import type { BMapDriver } from "../bmap-vue/src/driver/types/bmap";
+import type { ControlKind } from "../bmap-vue/src/driver/types/controls";
+import type { LayerHandle, MapHandle } from "../bmap-vue/src/driver/types/handles";
+import type { LayerKind } from "../bmap-vue/src/driver/types/layers";
+import type { MapInteraction } from "../bmap-vue/src/driver/types/map";
 import type {
   NativeLayerDriver,
   NativeLayerKind,
-} from "../baidu-map-gl-vue/src/driver/types/native-layers";
+} from "../bmap-vue/src/driver/types/native-layers";
 import type {
   OverlayDriver,
   OverlayHandle,
   OverlayTarget,
-} from "../baidu-map-gl-vue/src/driver/types/overlays";
-import type { PanoramaViewerDriver } from "../baidu-map-gl-vue/src/driver/types/panorama";
+} from "../bmap-vue/src/driver/types/overlays";
+import type { PanoramaViewerDriver } from "../bmap-vue/src/driver/types/panorama";
 import type {
   JsapiV4ServiceDriver,
   ServiceCallStatus,
   ServiceResult,
-} from "../baidu-map-gl-vue/src/driver/types/services";
-import type { Point } from "../baidu-map-gl-vue/src/driver/types/geometry";
+} from "../bmap-vue/src/driver/types/services";
+import type { Point } from "../bmap-vue/src/driver/types/geometry";
 import {
   DEFAULT_SERVICE_FACET_FIXTURE,
   probeNativeLayerFacet,

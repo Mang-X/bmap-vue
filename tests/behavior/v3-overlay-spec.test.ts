@@ -18,22 +18,22 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive, ref, watchEffect } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
 import {
   MARKER_DESCRIPTOR_KEYS,
   MARKER_FIELDS,
   createMarkerSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/markerSpec";
-import { assertOverlayFieldDeclarations } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
-import type { OverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
-import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
-import { useOverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/composables/useOverlaySpec";
-import { useParentOverlayHandle } from "../../packages/baidu-map-gl-vue/src/core/context/target";
-import type { MapContext } from "../../packages/baidu-map-gl-vue/src/core/context/types";
-import { OVERLAY_DESCRIPTORS, overlayPropertySpec } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
-import type { MarkerHandle, SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
-import type { BMarkerProps } from "../../packages/baidu-map-gl-vue/src/types/components";
+} from "../../packages/bmap-vue/src/components/overlays/markerSpec";
+import { assertOverlayFieldDeclarations } from "../../packages/bmap-vue/src/core/overlays/OverlaySpec";
+import type { OverlaySpec } from "../../packages/bmap-vue/src/core/overlays/OverlaySpec";
+import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
+import { useOverlaySpec } from "../../packages/bmap-vue/src/core/composables/useOverlaySpec";
+import { useParentOverlayHandle } from "../../packages/bmap-vue/src/core/context/target";
+import type { MapContext } from "../../packages/bmap-vue/src/core/context/types";
+import { OVERLAY_DESCRIPTORS, overlayPropertySpec } from "../../packages/bmap-vue/src/driver/types/overlays";
+import type { MarkerHandle, SdkHandle } from "../../packages/bmap-vue/src/driver/types/handles";
+import type { BMarkerProps } from "../../packages/bmap-vue/src/types/components";
 import { createFakeV4Harness, type FakeBMapV4, type FakeV4Harness, type FakeV4Marker } from "../../packages/test-utils";
 
 let harness: FakeV4Harness;

@@ -3,7 +3,7 @@
 用于通过百度地图 SDK 获取用户所在的位置信息，相比 [IP 定位](./useBMapIpLocation)获取的信息更丰富，但稳定性受浏览器权限和网络环境影响。
 
 ```ts
-import { useBMapGeolocation } from 'baidu-map-gl-vue'
+import { useBMapGeolocation } from 'bmap-vue'
 ```
 
 :::warning 注意
@@ -106,7 +106,7 @@ const { locate, location, isLoading, isError, status } = useBMapGeolocation(opti
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, Point, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus, Point, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 
 interface UseBrowserLocationOptions {
   /**

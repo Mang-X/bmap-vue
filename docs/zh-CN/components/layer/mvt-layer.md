@@ -1,10 +1,10 @@
-# BMVTLayer 矢量瓦片图层 <Badge type="tip" text="^3.0.0" />
+# BMVTLayer 矢量瓦片图层 <Badge type="tip" text="^1.0.0" />
 
 MVT 矢量瓦片（官方 `BMap.MVTLayer`，4.0）：按**源图层名**过滤要素、按源图层名套样式，
 并提供要素状态（feature-state）命令面。
 
 ```ts
-import { BMVTLayer, mvtFeatureStateKey } from 'baidu-map-gl-vue'
+import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -85,7 +85,7 @@ import { BMVTLayer, mvtFeatureStateKey } from 'baidu-map-gl-vue'
 经 `defineExpose({ featureState })` 给出命令面（不是 prop）：
 
 ```ts
-import { mvtFeatureStateKey } from 'baidu-map-gl-vue'
+import { mvtFeatureStateKey } from 'bmap-vue'
 
 const layerRef = ref<InstanceType<typeof BMVTLayer> | null>(null)
 

@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 收口数据组件：逐项 Marker 与批量点层的边界、`DataLayerManager` 的 item / version / latest 语义、

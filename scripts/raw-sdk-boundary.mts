@@ -28,7 +28,7 @@ export type RawSdkNamespace = (typeof RAW_SDK_NAMESPACES)[number];
  */
 export const GLOBAL_OBJECT_NAMES = ["window", "globalThis", "self", "global"] as const;
 
-/** 相对 `packages/baidu-map-gl-vue/src` 的禁区目录（`check-raw-sdk` 默认扫描范围）。 */
+/** 相对 `packages/bmap-vue/src` 的禁区目录（`check-raw-sdk` 默认扫描范围）。 */
 export const FORBIDDEN_SRC_DIRS = [
   "components",
   "composables",

@@ -47,9 +47,9 @@ window.BMapGL.apiLoad = function () {
 
 ```vue
 <script setup lang="ts">
-  import { BMap, BMarker } from 'baidu-map-gl-vue'
+  import { BMap, BMarker } from 'bmap-vue'
   // 自建入口经 v4 Provider 表达（`apiUrl` 在默认路径下会在加载前报错）
-  import { customScriptV4Provider } from 'baidu-map-gl-vue/core'
+  import { customScriptV4Provider } from 'bmap-vue/core'
 
   const offlineProvider = customScriptV4Provider('自建地址/getApiScripts.js')
 </script>

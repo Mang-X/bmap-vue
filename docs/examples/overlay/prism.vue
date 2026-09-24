@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useBMapAreaBoundary } from "baidu-map-gl-vue";
+import { useBMapAreaBoundary } from "bmap-vue";
 const topFillOpacity = ref<number>(0.5);
 const area = ref<string>("北京市");
 const map = ref();

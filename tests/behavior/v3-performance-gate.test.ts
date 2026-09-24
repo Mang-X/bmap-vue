@@ -8,7 +8,7 @@
  * 三条断言各自的失效方式都配了负例自测（synthetic workflow），确保**判定式本身**有判别力：
  * 1. `performance` job 真的存在，并且跑的是 `pnpm perf:baseline`；
  * 2. 那个 step 没被 `if:` / `continue-on-error` 架空；
- * 3. 它排在 `build:v3` **之后**（包体读数需要 `dist`，缺了会以 3（blocked）收场）。
+ * 3. 它排在 `build:package` **之后**（包体读数需要 `dist`，缺了会以 3（blocked）收场）。
  *
  * 另外锁住「脚本入口是真的」：`package.json` 里的 `test:performance` / `perf:baseline` 指向的
  * 文件必须存在（本仓库有过指向不存在脚本的死条目，值不了门禁但会误导人）。
@@ -59,7 +59,7 @@ function probePerfGate(text: string): PerfGateProbe {
   const runLine = text.split(/\r?\n/).findIndex((line) => line.includes(`run: ${PERF_STEP_COMMAND}`));
   const buildLine = text
     .split(/\r?\n/)
-    .findIndex((line) => line.includes("run: node --experimental-strip-types scripts/build-v3.mts"));
+    .findIndex((line) => line.includes("run: node --experimental-strip-types scripts/build-package.mts"));
   return {
     jobFound: job.length > 0,
     step: block.length > 0 && runLine >= 0 ? { index: runLine, block } : null,
@@ -87,9 +87,9 @@ describe("#37 性能门禁：真的进 CI 且步骤没被架空", () => {
     expect(probe.blockers.map((line) => line.trim()), "step 被开关架空").toEqual([]);
   });
 
-  it("包体读数的前置 `build:v3` 排在它之前", () => {
-    expect(probe.buildStep, "performance job 里没有 build:v3 step").not.toBeNull();
-    expect(probe.step!.index, "build:v3 必须早于 perf:baseline").toBeGreaterThan(probe.buildStep!.index);
+  it("包体读数的前置 `build:package` 排在它之前", () => {
+    expect(probe.buildStep, "performance job 里没有 build:package step").not.toBeNull();
+    expect(probe.step!.index, "build:package 必须早于 perf:baseline").toBeGreaterThan(probe.buildStep!.index);
   });
 
   it("测试代码的类型门禁在 CI 里真的跑了（评审 4 的durable 修法，不是一次性临时配置）", () => {

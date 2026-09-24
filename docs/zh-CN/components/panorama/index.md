@@ -3,7 +3,7 @@
 全景查看器（官方 `BMap.Panorama`）。
 
 ```ts
-import { BPanorama, BPanoramaLabel } from 'baidu-map-gl-vue'
+import { BPanorama, BPanoramaLabel } from 'bmap-vue'
 ```
 
 ## 组件示例

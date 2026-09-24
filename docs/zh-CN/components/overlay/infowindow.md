@@ -3,7 +3,7 @@
 使用 slot 模式渲染子节点向地图添加信息窗口，以及与地图相关的一些交互。
 
 ```ts
-import { BInfoWindow } from 'baidu-map-gl-vue'
+import { BInfoWindow } from 'bmap-vue'
 ```
 
 ::: tip 提示

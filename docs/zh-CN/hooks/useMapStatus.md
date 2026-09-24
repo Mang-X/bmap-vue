@@ -10,7 +10,7 @@ lang: zh-CN
 
 ```vue
 <script setup lang="ts">
-import { useMapStatus } from 'baidu-map-gl-vue'
+import { useMapStatus } from 'bmap-vue'
 
 const { center, zoom, moving } = useMapStatus()
 </script>

@@ -15,9 +15,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import BMarker from '../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue'
-import BInfoWindow from '../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import BMarker from '../../packages/bmap-vue/src/components/overlays/BMarker.vue'
+import BInfoWindow from '../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue'
 import {
   createFakeV4Harness,
   type FakeBMapV4,

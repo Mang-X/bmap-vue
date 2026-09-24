@@ -41,7 +41,7 @@
  * ## 用法
  *
  * ```bash
- * pnpm build:v3 && pnpm perf:baseline      # 采集 + 报告 + 门禁（CI 用的就是这条）
+ * pnpm build:package && pnpm perf:baseline      # 采集 + 报告 + 门禁（CI 用的就是这条）
  * pnpm perf:baseline --update             # 同时刷新提交的基线（换机器 / 换数据集时才做）
  * pnpm perf:baseline --metrics-dir=<dir>  # 复用已有指标（不重跑基准，用于调报告与看门禁）
  * pnpm perf:baseline --tolerance=5        # 临时放宽阈值（改数据量 / 大改实现时）
@@ -57,7 +57,7 @@ const BASELINE_PATH = resolve(root, "tests/performance/baseline.json");
 const OUT_DIR = resolve(root, ".artifacts/perf");
 const METRICS_DIR = resolve(OUT_DIR, "metrics");
 const REPORT_PATH = resolve(OUT_DIR, "report.json");
-const PACKAGE_DIST = resolve(root, "packages/baidu-map-gl-vue/dist");
+const PACKAGE_DIST = resolve(root, "packages/bmap-vue/dist");
 
 /** 归一化分母的指标名（基准里必须采到它，否则跨机器比较没有意义）。 */
 const NORMALIZER = "calibration.cpu";
@@ -291,7 +291,7 @@ function mergeReadouts(snapshots: Snapshot[]): Record<string, number | string> {
  * 包体与 worker chunk 读数。
  *
  * 依据：issue 的「测试要求」明确要记包体与 worker chunk 体积。没有 `dist` 时**不静默跳过**——
- * 报 blocked，由调用方交出退出码 3（CI 的 performance job 会先 `build:v3`）。
+ * 报 blocked，由调用方交出退出码 3（CI 的 performance job 会先 `build:package`）。
  *
  * ⚠️ 这里**只记录、不门禁**「有没有 Worker」：验收补充要求「性能门禁关注趋势和回退，不把实现方式
  * （Worker 与否）冻结成需求」，所以 worker 的存在与否是读数，不是判据。
@@ -300,7 +300,7 @@ function collectBundle(): BundleReport {
   if (!existsSync(PACKAGE_DIST)) {
     return {
       status: "blocked",
-      reason: `没有构建产物：${showPath(PACKAGE_DIST)}（先跑 pnpm build:v3）`,
+      reason: `没有构建产物：${showPath(PACKAGE_DIST)}（先跑 pnpm build:package）`,
     };
   }
   const files: Array<{ path: string; bytes: number }> = [];

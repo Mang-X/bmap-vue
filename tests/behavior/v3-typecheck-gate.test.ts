@@ -1,10 +1,10 @@
 /**
- * `typecheck:v3` CI 门禁回归（M3A0-BOUNDARY 衍生 / issue #50）
+ * `typecheck:package` CI 门禁回归（M3A0-BOUNDARY 衍生 / issue #50）
  *
- * `typecheck:v3` 曾因上游类型包的大小写引用缺陷被移出 CI（PR #49 只在原位留了 NOTE 注释），
+ * `typecheck:package` 曾因上游类型包的大小写引用缺陷被移出 CI（PR #49 只在原位留了 NOTE 注释），
  * 本次随补丁恢复（见 `v3-upstream-types-case-patch.test.ts` 与 ADR 2026-09-13）。
  *
- * 断言落在**真正的 step** 上：`expect(workflow).toContain("pnpm typecheck:v3")` 会被那段
+ * 断言落在**真正的 step** 上：`expect(workflow).toContain("pnpm typecheck:package")` 会被那段
  * NOTE 注释满足，等于空转；因此这里按 YAML 的缩进边界切出 `quality` job 段与其中的 step 区块
  * （`v3` job 里也有 build，跨 job 取首个匹配会把顺序断言弄错）。
  *
@@ -22,8 +22,8 @@ import { resolve } from "node:path";
 const WORKFLOW_PATH = resolve(import.meta.dirname, "../../.github/workflows/quality.yml");
 const workflowLf = readFileSync(WORKFLOW_PATH, "utf8");
 
-const TYPECHECK_COMMAND = "pnpm typecheck:v3";
-const BUILD_COMMAND = "node --experimental-strip-types scripts/build-v3\\.mts";
+const TYPECHECK_COMMAND = "pnpm typecheck:package";
+const BUILD_COMMAND = "node --experimental-strip-types scripts/build-package\\.mts";
 
 function toCrlf(text: string): string {
   return text.replace(/\r?\n/g, "\r\n");
@@ -130,13 +130,13 @@ function probeQualityGate(text: string): GateProbe {
 function problems(probe: GateProbe): string[] {
   const out: string[] = [];
   if (!probe.jobFound) out.push("找不到 quality job 段");
-  if (probe.jobFound && !probe.step) out.push("没有 `run: pnpm typecheck:v3` 这个 step");
+  if (probe.jobFound && !probe.step) out.push("没有 `run: pnpm typecheck:package` 这个 step");
   if (probe.blockers.length > 0) {
     out.push(`typecheck step 被 ${probe.blockers.map((l) => l.trim()).join(" / ")} 架空`);
   }
-  if (!probe.buildStep) out.push("quality job 里找不到 build:v3 step");
+  if (!probe.buildStep) out.push("quality job 里找不到 build:package step");
   if (probe.step && probe.buildStep && probe.step.index > probe.buildStep.index) {
-    out.push("typecheck:v3 排在了 build:v3 之后");
+    out.push("typecheck:package 排在了 build:package 之后");
   }
   return out;
 }
@@ -154,14 +154,14 @@ for (const [label, text] of [
   ["LF", workflowLf],
   ["CRLF", CRLF_WORKFLOW],
 ] as const) {
-  describe(`quality job 的 typecheck:v3 门禁（${label} 换行）`, () => {
+  describe(`quality job 的 typecheck:package 门禁（${label} 换行）`, () => {
     const probe = probeQualityGate(text);
 
     it("能定位到 quality job 段", () => {
       expect(probe.jobFound, `${label} 输入下找不到 quality job 段`).toBe(true);
     });
 
-    it("typecheck:v3 是可执行的 step（注释里提到不算）", () => {
+    it("typecheck:package 是可执行的 step（注释里提到不算）", () => {
       expect(probe.step, `${label} 输入下没有 \`run: ${TYPECHECK_COMMAND}\` step`).toBeDefined();
     });
 
@@ -171,9 +171,9 @@ for (const [label, text] of [
       expect(probe.blockers.map((l) => l.trim()), `${label} 输入下 step 被开关架空`).toEqual([]);
     });
 
-    it("typecheck:v3 排在 build:v3 之前（它在 dist 里 emit 声明，放在 build 之后会得到假失败）", () => {
+    it("typecheck:package 排在 build:package 之前（它在 dist 里 emit 声明，放在 build 之后会得到假失败）", () => {
       expect(probe.step, `${label} 输入下找不到 typecheck step`).toBeDefined();
-      expect(probe.buildStep, `${label} 输入下找不到 build:v3 step`).toBeDefined();
+      expect(probe.buildStep, `${label} 输入下找不到 build:package step`).toBeDefined();
       expect(probe.step!.index).toBeLessThan(probe.buildStep!.index);
     });
   });
@@ -196,7 +196,7 @@ const FIXTURE_TAIL = [
   "    runs-on: ubuntu-latest",
   "    steps:",
   "      - name: Build v3 package",
-  "        run: node --experimental-strip-types scripts/build-v3.mts",
+  "        run: node --experimental-strip-types scripts/build-package.mts",
   "",
 ].join("\n");
 
@@ -206,7 +206,7 @@ function fixture(qualitySteps: string): string {
 
 const BUILD_STEP = [
   "      - name: Build v3 artifacts for global bundle tests",
-  "        run: node --experimental-strip-types scripts/build-v3.mts",
+  "        run: node --experimental-strip-types scripts/build-package.mts",
 ];
 
 /** 合法形态：typecheck 在 build 之前。 */
@@ -227,7 +227,7 @@ describe("门禁判定自测（合成 workflow 负例）", () => {
       `        # run: ${TYPECHECK_COMMAND}`,
     );
     expect(problems(probeQualityGate(fixture(steps)))).toContain(
-      "没有 `run: pnpm typecheck:v3` 这个 step",
+      "没有 `run: pnpm typecheck:package` 这个 step",
     );
   });
 
@@ -295,7 +295,7 @@ describe("门禁判定自测（合成 workflow 负例）", () => {
       "\n",
     );
     expect(problems(probeQualityGate(fixture(steps)))).toContain(
-      "typecheck:v3 排在了 build:v3 之后",
+      "typecheck:package 排在了 build:package 之后",
     );
   });
 
@@ -313,7 +313,7 @@ describe("门禁判定自测（合成 workflow 负例）", () => {
       ].join("\n"),
     );
     expect(problems(probeQualityGate(onlyInV3))).toContain(
-      "没有 `run: pnpm typecheck:v3` 这个 step",
+      "没有 `run: pnpm typecheck:package` 这个 step",
     );
   });
 });

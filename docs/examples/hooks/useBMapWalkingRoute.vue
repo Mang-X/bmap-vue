@@ -22,7 +22,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BMap, useBMapWalkingRoute } from "baidu-map-gl-vue";
+import { BMap, useBMapWalkingRoute } from "bmap-vue";
 
 const start = ref("天安门");
 const end = ref("王府井");

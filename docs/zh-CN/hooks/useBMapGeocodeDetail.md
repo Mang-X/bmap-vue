@@ -3,7 +3,7 @@
 由坐标点解析地址信息
 
 ```ts
-import { useBMapGeocodeDetail } from 'baidu-map-gl-vue'
+import { useBMapGeocodeDetail } from 'bmap-vue'
 ```
 
 ## 单个坐标点解析
@@ -17,7 +17,7 @@ hooks/useBMapGeocodeDetail/index
 `result` 为 `Ref<GeocodeDetailResult | null>`，可直接解构使用：
 
 ```ts
-import { useBMapGeocodeDetail, type GeocodeDetailResult } from 'baidu-map-gl-vue'
+import { useBMapGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
 const { result } = useBMapGeocodeDetail(map)
 ```
 
@@ -34,7 +34,7 @@ hooks/useBMapGeocodeDetail/batch
 批量解析使用 `getBatch`，逐项返回 `{ point, detail, error? }`：
 
 ```ts
-import { useBMapGeocodeDetail, type GeocodeDetailResult } from 'baidu-map-gl-vue'
+import { useBMapGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
 const { getBatch } = useBMapGeocodeDetail(map)
 ```
 
@@ -129,7 +129,7 @@ import type {
   Point,
   ServiceErrorInfo,
   ServiceResult,
-} from 'baidu-map-gl-vue'
+} from 'bmap-vue'
 export interface GeocodeDetailResult {
   /**
    * 坐标点

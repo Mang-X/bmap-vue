@@ -9,7 +9,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import type { BMapClient, MapHandle } from "baidu-map-gl-vue";
+import type { BMapClient, MapHandle } from "bmap-vue";
 const zoom = ref(10);
 let _client: BMapClient | null = null;
 let _map: MapHandle | null = null;

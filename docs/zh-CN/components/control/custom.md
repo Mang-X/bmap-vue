@@ -3,7 +3,7 @@
 根据地图 `BMap` 组件提供的 Props，或者地图实例，自定义控件
 
 ```ts
-import { BControl } from 'baidu-map-gl-vue'
+import { BControl } from 'bmap-vue'
 ```
 
 ## 组件示例

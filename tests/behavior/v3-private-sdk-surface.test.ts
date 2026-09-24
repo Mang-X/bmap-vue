@@ -9,7 +9,7 @@
  *
  * 这份用例保护的是「没有被重新加回来」：
  *
- * - 只扫**生产源码**（`packages/baidu-map-gl-vue/src/**` 去掉 `*.test.ts`）——测试里允许出现
+ * - 只扫**生产源码**（`packages/bmap-vue/src/**` 去掉 `*.test.ts`）——测试里允许出现
  *   `_rd`（正证守卫、Fake 替身都需要）；
  * - 匹配的是**访问形态**（`x._rd` / `x["_rd"]` / `"_rd":`），不是裸露的字符串：注释里写
  *   「不嗅探 `_rd`」是允许的，把它读出来才不允许；
@@ -32,7 +32,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const SRC = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue/src");
+const SRC = resolve(import.meta.dirname, "../../packages/bmap-vue/src");
 
 /** 私有面：命中即「本库在靠 SDK 内部实现补齐能力」。 */
 const PRIVATE_SURFACES = [
@@ -95,7 +95,7 @@ describe("生产源码不访问 SDK 私有面（R25-C / #72）", () => {
     expect(findPrivateSurfaceUsages("const rd = sdk.guard;")).toEqual([]);
   });
 
-  it("`packages/baidu-map-gl-vue/src/**` 的生产文件里一处都没有", () => {
+  it("`packages/bmap-vue/src/**` 的生产文件里一处都没有", () => {
     const files = productionSources(SRC);
     // 防空转：文件数为 0（路径写错、递归失效）时下面的断言会「因为没有文件而通过」
     expect(files.length, `扫描到的生产文件数异常偏少（${files.length}）`).toBeGreaterThan(100);

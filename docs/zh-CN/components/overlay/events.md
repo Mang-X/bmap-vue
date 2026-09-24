@@ -1,6 +1,6 @@
 # 覆盖物事件矩阵
 
-> 这份表是**覆盖物事件面的单一事实源**（`packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog.ts`）
+> 这份表是**覆盖物事件面的单一事实源**（`packages/bmap-vue/src/core/overlays/overlayEventCatalog.ts`）
 > 的镜像：组件的 `defineEmits`、内核的 SDK 订阅、载荷类型三处都从它出发。
 > `tests/behavior/v3-overlay-event-matrix.test.ts` 直接解析上游
 > `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts` 做**双向比对**，因此这份表与上游

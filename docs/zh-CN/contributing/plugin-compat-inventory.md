@@ -2,7 +2,7 @@
 
 # 插件兼容 inventory
 
-> 由 `packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts` 生成，请勿手工编辑。
+> 由 `packages/bmap-vue/src/plugins/compat-inventory.ts` 生成，请勿手工编辑。
 > 更新数据后运行 `pnpm generate:plugin-inventory`，CI 用 `--check` 校验无漂移。
 
 这份清单覆盖 `plugins: [...]` 能识别的四个内置插件脚本。它区分**三类依据**：对锁定 URL 的

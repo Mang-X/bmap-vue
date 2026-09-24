@@ -23,8 +23,8 @@ curl -s "https://registry.npmjs.org/@baidumap%2Fjsapi-ui-kit" | jq '.versions["1
 
 **包名核对（#70 实施步骤 6）**：issue 正文里写的 `@baumap/jsapi-loader` / `@baumap/jsapi-ui-kit`
 在 npm 上**不存在**（`scope:baumap` 检索结果为 0，两个包名都是 404）——正确 scope 是 `@baidumap`。
-本仓库实际安装与锁定的就是 `@baidumap/*`。另：组件库 npm 包名仍是 `baidu-map-gl-vue`（仓库改名不改包名），
-源码路径仍是 `packages/baidu-map-gl-vue/src`。
+本仓库实际安装与锁定的就是 `@baidumap/*`。组件库发布包名是 `bmap-vue`，源码路径是
+`packages/bmap-vue/src`。
 
 - loader `1.0.0`：`sha512-f88EFIvbICW3AtnbhYcnvlpG/bIY2hZyokdCgf30RVXvs67aDkBtFJnDO/C8Bf7p4O8MvlTU6rW8jz8ev1MayA==`
 - ui-kit `1.1.2`：`sha512-VYiipooQSuhDUKHhVA8/n3wkHmNAXKL959/jZVoiy6WliP43BJe77U9rHTW1Qj0sety/5Yf3yi9K8ieH0ghNcg==`
@@ -206,4 +206,4 @@ ADR [2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-
 | `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless（#39） | `tests/behavior/v3-ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`v3-ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
 | `PlaceDetailOptions.layout` 纸面支持；`setPlace(uid)` 找不到时不发事件；详情请求失败无出口 | 不暴露 `layout`；不合成 `error`/空 `load`；文档写明「`setPlace` 是发起而不是完成」 | `v3-ui-kit-place-detail.test.ts`、`v3-ui-kit-widget-contract.test.ts`（`layout` 在产物里 0 命中、`!n` 分支先于 `emit("load")` 的形状锁） |
 | `RoutePlan` 的事件用 `type`、`search()` 返回值用 `routeType`；`search()` 先 emit `error` 再抛 | 统一成 `type`；`WeakMap` 按上游错误身份缓存，保证「事件载荷 === 动作拒绝」；`cause` 只挂过 `redactAk` 的副本 | `v3-ui-kit-route-plan.test.ts`（同一条错误、脱敏三处出口） |
-| 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts` |
+| 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/bmap-vue/types/ui-kit/upstream.d.ts` |

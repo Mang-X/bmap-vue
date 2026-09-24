@@ -6,7 +6,7 @@
 `RouteStep`）。差异只有下面三处。
 
 ```ts
-import { useBMapWalkingRoute } from "baidu-map-gl-vue";
+import { useBMapWalkingRoute } from "bmap-vue";
 ```
 
 ## 与驾车的差异

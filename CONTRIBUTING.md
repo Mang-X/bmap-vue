@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你愿意为 `baidu-map-gl-vue` 花时间。这份文档说明本仓库的提交约定与门禁要求；
+感谢你愿意为 `bmap-vue` 花时间。这份文档说明本仓库的提交约定与门禁要求；
 更深入的专题（AI 开发流程、Capability Catalog）见文档站：
 
 - [AI 开发与官方 Skill](https://Mang-X.github.io/bmap-vue/zh-CN/contributing/ai-development)
@@ -24,7 +24,7 @@
 
 ```bash
 git clone https://github.com/Mang-X/bmap-vue
-cd baidu-map-gl-vue
+cd bmap-vue
 pnpm install
 
 pnpm playground:dev   # 起 playground 手动验证
@@ -35,7 +35,7 @@ pnpm docs:dev         # 起文档站，写文档 / 调试组件
 
 | 维度 | 说明 |
 | --- | --- |
-| 组件库版本 | `packages/baidu-map-gl-vue/package.json` |
+| 组件库版本 | `packages/bmap-vue/package.json` |
 | SDK engine（内部） | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 M3A.3 / #26 删除） |
 | SDK version | 百度 JSAPI `4.0` |
 
@@ -46,7 +46,7 @@ pnpm docs:dev         # 起文档站，写文档 / 调试组件
 1. 从 `main` 切出语义化分支，例如 `m3a2-overlays`、`fix/infowindow-teleport`、`docs/contributing`。
 2. 提交信息用 [Conventional Commits](https://www.conventionalcommits.org/)：`feat` / `fix` / `chore` / `docs` / `refactor` / `test`，正文用中文描述即可。
 3. 推送后开 PR，按仓库的 PR 模板填写。**PR 标题会成为 squash 后的 commit 标题**，所以要按提交信息的规范写。
-4. `main` 已开启分支规则集：必须走 PR、必须通过 `quality (24)` 与 `v3` 两项检查、线性历史、只允许 squash 合并。
+4. `main` 已开启分支规则集：必须走 PR、必须通过 `quality (24)` 与 `package` 两项检查、线性历史、只允许 squash 合并。
    合入后源分支会自动删除。
 
 ## 提交前的本地门禁
@@ -58,18 +58,18 @@ pnpm install --frozen-lockfile
 
 pnpm check:raw-sdk              # 禁区目录静态扫描
 pnpm check:raw-sdk:tree         # 按白名单扫描整棵 src
-pnpm generate:manifest:check    # v3 组件 manifest 无漂移
+pnpm generate:manifest:check    # 组件 manifest 无漂移
 pnpm generate:capability-matrix:check
-pnpm typecheck:v3               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
-pnpm build:v3
+pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
+pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
 pnpm check:no-bmapgl            # 运行时源码 + 公共声明不得再出现 BMapGL / 已删除的 engine 取值
 pnpm test:unit
 ```
 
-顺序不是随意的：`typecheck:v3` 会把声明 emit 到 `dist/`，所以它要排在 `build:v3` **之前**
-（`build:v3` 会先清空 `dist`）；而 `check:public-dts` 与 `test:unit` 依赖 `dist/` 产物，必须排在
-`build:v3` 之后。
+顺序不是随意的：`typecheck:package` 会把声明 emit 到 `dist/`，所以它要排在 `build:package` **之前**
+（`build:package` 会先清空 `dist`）；而 `check:public-dts` 与 `test:unit` 依赖 `dist/` 产物，必须排在
+`build:package` 之后。
 
 如果 `generate:*:check` 报漂移，而你**确实**是有意改的，用对应的生成命令（`pnpm generate:manifest`、
 `pnpm generate:capability-matrix`）重新生成并一起提交；生成物不要手改。
@@ -77,11 +77,11 @@ pnpm test:unit
 包出口相关改动还要验证 tarball 消费方：
 
 ```bash
-pnpm --filter baidu-map-gl-vue pack --pack-destination .artifacts
+pnpm --filter bmap-vue pack --pack-destination .artifacts
 pnpm verify:package
 ```
 
-`pnpm typecheck:v3` 依赖 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`：上游 `4.0.4` 的
+`pnpm typecheck:package` 依赖 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`：上游 `4.0.4` 的
 `index.d.ts` 有一处文件名大小写缺陷，只在大小写敏感的文件系统上暴露（issue #50）。补丁清单与
 删除条件见 [`patches/README.md`](./patches/README.md)，决策见
 [ADR 2026-09-13](./docs/adr/2026-09-13-upstream-types-case-patch.md)。升级类型包时请一并处理这个补丁。
@@ -118,11 +118,14 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 
 ## 版本发布
 
-发布走 [Changesets](https://github.com/changesets/changesets)。
+发布走 [Changesets](https://github.com/changesets/changesets)。1.0 预发布已经进入 `rc` prerelease 状态（见 `.changeset/pre.json`），版本命令会沿 `1.0.0-rc.x` 线推进：
 
 ```bash
 pnpm changeset          # 交互式生成一个 changeset
 pnpm changeset status   # 查看当前待发布内容
+pnpm changeset version  # 应用版本
 ```
+
+进入预发布时使用 `pnpm changeset pre enter rc`；正式版前使用 `pnpm changeset pre exit` 后再执行 `pnpm changeset version`。
 
 面向使用者的行为变更（新组件、修 bug、破坏性变更）请补一个 changeset；纯文档 / CI / 内部重构不需要。

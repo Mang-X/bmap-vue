@@ -10,7 +10,7 @@ v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总�
 ## BMap：map 事件
 
 `<BMap>` 把 SDK 的 map 事件归一化后转发。下表是**完整清单**，它由
-`packages/baidu-map-gl-vue/src/core/events/eventCatalog.ts` 生成并被门禁逐行校验
+`packages/bmap-vue/src/core/events/eventCatalog.ts` 生成并被门禁逐行校验
 （名字、SDK 名与说明三者必须一致）——所以在模板里 `@` 能补全出全部 43 个名字。
 
 | 事件名                   | SDK 事件名               | 说明                                                         |
@@ -80,7 +80,7 @@ v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总�
 ```
 
 ```ts
-import type { MapEventPayloadOf } from 'baidu-map-gl-vue'
+import type { MapEventPayloadOf } from 'bmap-vue'
 
 function onClick(e: MapEventPayloadOf<'click'>) {
   console.log(e.point, e.pixel) // point 必有
@@ -107,7 +107,7 @@ function onTypeChange(e: MapEventPayloadOf<'maptypechange'>) {
 | `update:heading` | `number`                    | 用户交互后的旋转角回写（`v-model:heading`）      |
 | `update:tilt`    | `number`                    | 用户交互后的倾斜角回写（`v-model:tilt`）         |
 
-其中 `map` 为 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `baidu-map-gl-vue/advanced` 的 `unwrapRaw()` 获取），
+其中 `map` 为 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `bmap-vue/advanced` 的 `unwrapRaw()` 获取），
 `client` 提供 `driver` 领域接口（`driver.map / driver.overlays / driver.services / driver.geometry`）。
 
 ```vue
@@ -139,7 +139,7 @@ function onPluginReady(name: string) {
 子组件没有 `initd/unload` 事件；如需地图实例，请用 `useBMap()` + `whenReady()`：
 
 ```ts
-import { useBMap } from 'baidu-map-gl-vue'
+import { useBMap } from 'bmap-vue'
 
 const { whenReady } = useBMap() // 须在 <BMap> 子树内调用
 const { client, map } = await whenReady()

@@ -3,7 +3,7 @@
 比例尺控件，默认显示在地图左下角
 
 ```ts
-import { BScale } from 'baidu-map-gl-vue'
+import { BScale } from 'bmap-vue'
 ```
 
 ## 组件示例

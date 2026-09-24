@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, triggerRef } from "vue";
-import { BMap, BMarker, BMapMask, PointLike, type MapMaskShowRegion } from "baidu-map-gl-vue";
+import { BMap, BMarker, BMapMask, PointLike, type MapMaskShowRegion } from "bmap-vue";
 const path = shallowRef<PointLike[]>([]);
 const center = ref<PointLike>({ lng: 0, lat: 0 });
 const showRegion = ref<MapMaskShowRegion>("outside");

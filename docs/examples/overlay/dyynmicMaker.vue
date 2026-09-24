@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { BMap, BMarker, PointLike } from "baidu-map-gl-vue";
+import { BMap, BMarker, PointLike } from "bmap-vue";
 import { ref } from "vue";
 
 const center = { lng: 113.5213534078, lat: 27.6907991732 };

@@ -3,5 +3,5 @@
 
 # 下面这些路径的改动风险最高，将来引入协作者时建议单独指定 owner：
 #   /scripts/raw-sdk-boundary.mts  /scripts/raw-sdk-detector.mts   raw SDK 边界配置的单一事实源
-#   /packages/baidu-map-gl-vue/src/driver/capability/              Capability Catalog 单一事实源（能力矩阵由脚本生成）
+#   /packages/bmap-vue/src/driver/capability/              Capability Catalog 单一事实源（能力矩阵由脚本生成）
 #   /.github/workflows/  /.changeset/                              CI 门禁与发布配置

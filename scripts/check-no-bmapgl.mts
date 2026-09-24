@@ -9,8 +9,8 @@
  *
  * | 相位 | 默认目录 | 内容 |
  * | --- | --- | --- |
- * | 源码 | `packages/baidu-map-gl-vue/src` | 本库运行时源码（跳过 `*.test.ts`） |
- * | 公共声明 | `packages/baidu-map-gl-vue/dist` | `*.d.ts`（前置：`pnpm build:v3`） |
+ * | 源码 | `packages/bmap-vue/src` | 本库运行时源码（跳过 `*.test.ts`） |
+ * | 公共声明 | `packages/bmap-vue/dist` | `*.d.ts`（前置：`pnpm build:package`） |
  *
  * **明确不在扫描范围内**（否则就是误伤，也会逼出「为了过门禁而改注释」这种本末倒置）：
  *
@@ -56,8 +56,8 @@ import {
 import { scanSourceDirs, type ScannableViolation } from "./source-scan.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const DEFAULT_SRC = join(ROOT, "packages/baidu-map-gl-vue/src");
-const DEFAULT_DIST = join(ROOT, "packages/baidu-map-gl-vue/dist");
+const DEFAULT_SRC = join(ROOT, "packages/bmap-vue/src");
+const DEFAULT_DIST = join(ROOT, "packages/bmap-vue/dist");
 
 /** 本门禁只有两类规则；其余判定留在 `raw-sdk-detector.mts`（规则名不在这里重复定义）。 */
 type NoLegacyRule = Rule | "removed-engine-id";
@@ -218,7 +218,7 @@ function main(): number {
   }
   if (!existsSync(DEFAULT_DIST)) {
     console.error(
-      `no-bmapgl gate FAILED: declarations not found at ${relative(ROOT, DEFAULT_DIST)}. Run \`pnpm build:v3\` first.`,
+      `no-bmapgl gate FAILED: declarations not found at ${relative(ROOT, DEFAULT_DIST)}. Run \`pnpm build:package\` first.`,
     );
     return 1;
   }

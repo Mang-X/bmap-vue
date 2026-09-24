@@ -1,5 +1,6 @@
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, type Plugin } from "vite";
+import { versionDefine } from "../../../scripts/vite-version-define.mjs";
 
 /**
  * 插件脚本加载通道探针页的 dev server 配置（issue #121）。
@@ -39,6 +40,7 @@ const hangEndpoint: Plugin = {
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [vue(), hangEndpoint],
+  define: versionDefine,
   server: {
     host: "localhost",
     // 端口与 `smoke:v4`（5212）分开：两个 harness 同时在本机跑时不要互相抢端口。

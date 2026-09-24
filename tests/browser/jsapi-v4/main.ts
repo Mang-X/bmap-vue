@@ -40,14 +40,14 @@ import {
   BMenuItem,
   BMenuSeparator,
   useBMapGeocoder,
-} from "../../../packages/baidu-map-gl-vue/src/index.ts";
-import { existingGlobalV4Provider } from "../../../packages/baidu-map-gl-vue/src/core/index.ts";
+} from "../../../packages/bmap-vue/src/index.ts";
+import { existingGlobalV4Provider } from "../../../packages/bmap-vue/src/core/index.ts";
 import {
   BPlaceAutocomplete,
   BPlaceDetail,
   BPlaceSearch,
   BRoutePlan,
-} from "../../../packages/baidu-map-gl-vue/src/integrations/ui-kit/index.ts";
+} from "../../../packages/bmap-vue/src/integrations/ui-kit/index.ts";
 import { createFakeBMapV4 } from "../../../packages/test-utils/fake-bmap-v4/index.ts";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 import {

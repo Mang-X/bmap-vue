@@ -3,7 +3,7 @@
 在地图上绘制带高度的点覆盖物
 
 ```ts
-import { BMarker3d } from 'baidu-map-gl-vue'
+import { BMarker3d } from 'bmap-vue'
 ```
 
 ## 组件示例

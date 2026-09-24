@@ -1,6 +1,6 @@
 {
-  "version": "3.0.0-beta.0",
-  "source": "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts",
+  "version": "1.0.0-rc.0",
+  "source": "packages/bmap-vue/src/plugins/compat-inventory.ts",
   "basisMeaning": {
     "artifact": "对锁定 URL 的真实发布产物做静态抽取（`pnpm probe:plugin-compat`，可复现）",
     "declaration": "与官方 `@baidumap/jsapi-v4-types` 的声明核对——**自动部分只证明命名空间级成员存在**；实例成员（`Owner#member`）是人工核对的，见各条的 `manualInstanceChecks`",

@@ -22,8 +22,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
 import {
   createFakeBMapV4,
   createFakeV4Client,
@@ -33,9 +33,9 @@ import {
   type FakeV4Icon,
   type FakeV4Marker,
 } from "../../packages/test-utils";
-import type { MarkerIconInput } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
-import type { BMarkerProps } from "../../packages/baidu-map-gl-vue/src/types/components";
-import { DEFAULT_ICON_CACHE_SIZE } from "../../packages/baidu-map-gl-vue/src/core/icons/iconCache";
+import type { MarkerIconInput } from "../../packages/bmap-vue/src/driver/types/overlays";
+import type { BMarkerProps } from "../../packages/bmap-vue/src/types/components";
+import { DEFAULT_ICON_CACHE_SIZE } from "../../packages/bmap-vue/src/core/icons/iconCache";
 
 async function iconBuilder() {
   const fake = createFakeBMapV4();

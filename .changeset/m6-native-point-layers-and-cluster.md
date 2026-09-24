@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 原生点图层与原生聚合：三个点图层组件、`BMarkerCluster` 原生优先，以及 `BPointCollection` 的更名。
@@ -36,7 +36,7 @@
   `clusterRadius` / `clusterMinPoints` / `clusterMinZoom` / `clusterMaxZoom` / `fitViewOnClick` /
   `singleStyle` 只对 `native` 生效；与当前引擎不匹配的选项会指出名字并**告警一次**，不静默。
 - **`BPointCollection` → `BPointShapeLayer`（更名）**：`BPointCollectionProps` →
-  `BPointShapeLayerProps`。它在 `3.0.0-beta.0` 里并不存在（是未发布 changeset 里的新增），因此
+  `BPointShapeLayerProps`。它在 `1.0.0-rc.0` 里并不存在（是未发布 changeset 里的新增），因此
   **不留弃用别名**。改名后三个点图层的名字与它们各自落地的 SDK 类同名（官方 React 参考实现也只
   暴露 `PointIconLayer` / `PointShapeLayer`）。
 - **`point` / `cluster` 上的 `visible` 真正生效**：为这两个扩展 API 的 kind 放开了

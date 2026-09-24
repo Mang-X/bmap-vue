@@ -1,6 +1,6 @@
 {
-  "version": "3.0.0-beta.0",
-  "generatedAt": "2026-09-23T07:01:32.181Z",
+  "version": "1.0.0-rc.0",
+  "generatedAt": "2026-09-24T06:04:04.809Z",
   "components": [
     "BMapProvider",
     "BMap",

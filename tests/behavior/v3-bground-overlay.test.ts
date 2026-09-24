@@ -12,8 +12,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import BGroundOverlay from '../../packages/baidu-map-gl-vue/src/components/overlays/BGroundOverlay.vue'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import BGroundOverlay from '../../packages/bmap-vue/src/components/overlays/BGroundOverlay.vue'
 import { createFakeV4Harness, type FakeV4GroundOverlay } from '../../packages/test-utils'
 
 const { harness, fake } = createFakeV4Harness()

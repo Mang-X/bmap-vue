@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useBMapMarkerIcons, type BMapClient } from "baidu-map-gl-vue";
+import { useBMapMarkerIcons, type BMapClient } from "bmap-vue";
 let marker = ref({
   instance: null as { open(): void; closeAll(): void } | null,
   isDrawing: false,

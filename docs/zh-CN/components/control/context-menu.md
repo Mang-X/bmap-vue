@@ -3,7 +3,7 @@
 在地图或标注上添加自定义内容的右键菜单。
 
 ```ts
-import { BContextMenu, BMenuItem, BMenuSeparator } from 'baidu-map-gl-vue'
+import { BContextMenu, BMenuItem, BMenuSeparator } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -34,7 +34,7 @@ context-menu/index
 
 | 属性        | 说明                                                       | 类型                                                | 默认值 | 版本                               |
 | ----------- | ---------------------------------------------------------- | --------------------------------------------------- | ------ | ---------------------------------- |
-| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | <Badge type="tip" text="^3.0.0" /> |
+| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | <Badge type="tip" text="^1.0.0" /> |
 | menuItems   | ⚠️ 弃用的旧名（v3 起）：`items` 的兼容别名，见下节          | 同上                                                | -      | -                                  |
 | width       | 菜单宽度（单位 px）                                        | `number`                                            | `100`  | -                                  |
 | visible     | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节）  | `boolean`                                           | `true` | <Badge type="tip" text="^2.2.0" /> |

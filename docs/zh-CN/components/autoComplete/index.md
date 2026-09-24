@@ -3,7 +3,7 @@
 地址检索关键词提示
 
 ```ts
-import { BAutoComplete } from 'baidu-map-gl-vue'
+import { BAutoComplete } from 'bmap-vue'
 ```
 
 :::tip

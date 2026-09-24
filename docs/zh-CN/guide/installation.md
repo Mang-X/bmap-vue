@@ -2,27 +2,27 @@
 
 ## 使用包管理器
 
-我们建议您使用包管理器 (如 NPM、Yarn 或 pnpm) 安装 Vue3 BaiduMap GL，然后您就可以使用打包工具，例如 Vite 或 webpack。
+我们建议使用包管理器（如 npm、Yarn 或 pnpm）安装 `bmap-vue`，然后使用 Vite、webpack 等打包工具。
 
 ::: code-group
 
 ```bash [pnpm]
-pnpm add baidu-map-gl-vue
+pnpm add bmap-vue
 ```
 
 ```bash [yarn]
-yarn add baidu-map-gl-vue
+yarn add bmap-vue
 ```
 
 ```bash [npm]
-npm install baidu-map-gl-vue
+npm install bmap-vue
 ```
 
 :::
 
 ## 浏览器直接引入 <Badge type="tip" text="^0.0.21" />
 
-直接通过浏览器的 HTML 标签导入 Vue3 BaiduMap GL，然后就可以使用全局变量 `Vue3baiduMapGl` 了。
+直接通过浏览器的 HTML 标签引入 `bmap-vue`，然后使用全局变量 `BMapVue`。
 
 不同的 CDN 提供商有不同的引入方式，我们在这里以 [unpkg](https://unpkg.com) 和 [jsDelivr](https://www.jsdelivr.com) 举例。你也可以使用其它的 CDN 供应商。
 
@@ -31,32 +31,32 @@ npm install baidu-map-gl-vue
 ```html [unpkg]
 <head>
   <meta charset="utf-8" />
-  <!-- Import Vue3 -->
+  <!-- Import Vue -->
   <script src="https://unpkg.com/vue@3"></script>
-  <!-- Import Vue3 BaiduMap GL -->
-  <!-- Would use latest version, you'd better specify a version -->
-  <script src="https://unpkg.com/baidu-map-gl-vue"></script>
+  <!-- Import bmap-vue -->
+  <!-- 生产环境请锁定版本 -->
+  <script src="https://unpkg.com/bmap-vue"></script>
 </head>
 ```
 
 ```html [jsDelivr]
 <head>
   <!-- Import Vue 3 -->
-  <script src="https//cdn.jsdelivr.net/npm/vue@3"></script>
-  <!-- Import Vue3 BaiduMap GL -->
-  <script src="https://cdn.jsdelivr.net/npm/baidu-map-gl-vue"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+  <!-- Import bmap-vue -->
+  <script src="https://cdn.jsdelivr.net/npm/bmap-vue"></script>
 </head>
 ```
 
 :::
 
 ::: tip 提示
-我们建议使用 CDN 引入 Vue3 BaiduMap GL 的用户在链接地址上锁定版本，以免将来 Vue3BaiduMapGL 升级时受到非兼容性更新的影响
+我们建议使用 CDN 引入 `bmap-vue` 的用户锁定版本，以免将来发布更新时受到非兼容性更新的影响。
 :::
 
 ## Hello World
 
-[原库在线演示（作者 yue1123）](https://codepen.io/yue1123/pen/oNyQWeP)
+[在线演示](https://codepen.io/yue1123/pen/oNyQWeP)
 
-<iframe allow="accelerometer; camera; encrypted-media; display-capture; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write;" allowfullscreen="true" allowpaymentrequest="true" height="500" style="width: 100%;" scrolling="no" title="Vue3 BaiduMap GL" src="https://codepen.io/yue1123/embed/oNyQWeP?default-tab=html%2Cresult&theme-id=light" frameborder="no" loading="lazy">
+<iframe allow="accelerometer; camera; encrypted-media; display-capture; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write;" allowfullscreen="true" allowpaymentrequest="true" height="500" style="width: 100%;" scrolling="no" title="bmap-vue" src="https://codepen.io/yue1123/embed/oNyQWeP?default-tab=html%2Cresult&theme-id=light" frameborder="no" loading="lazy">
 </iframe>

@@ -7,7 +7,7 @@ title: Map 地图
 地图核心对象，地图控件、覆盖物、图层等需作为其子组件，以获得 map 的实例化对象
 
 ```ts
-import { BMap } from 'baidu-map-gl-vue'
+import { BMap } from 'bmap-vue'
 ```
 
 ## 渲染地图
@@ -158,7 +158,7 @@ map/theme2
   静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`（见
   [ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）；
 - 内置插件都是**文档级（`global`）资源**：同页面多张地图**共享同一次加载**（只插一份脚本），
-  并且**地图卸载不会释放它**（上游没有卸载入口）。`baidu-map-gl-vue/plugins` 的
+  并且**地图卸载不会释放它**（上游没有卸载入口）。`bmap-vue/plugins` 的
   `disposeDefaultPluginHost()` 只能清掉**宿主缓存的资源与在飞的等待**，它**不卸载**第三方脚本、
   也不抹掉 `window.BMapGLLib.*` —— 所以那次调用之后重新渲染地图会**复用已存在的全局**（不会重新
   拉脚本）。要真正的干净起点只能刷新文档。调用方还要自己负责「此刻没有地图还在用这些插件」；
@@ -173,14 +173,14 @@ map/theme2
 | width                  | 地图显示宽度                                                                                                                                                                   | `string / number`                     | `100%`            | <Badge type="tip" text="^1.0.1" /> |
 | height                 | 地图显示高度                                                                                                                                                                   | `string / number`                     | `550px`           | <Badge type="tip" text="^1.0.1" /> |
 | center                 | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） | - |
-| defaultCenter          | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - | <Badge type="tip" text="^3.0.0" /> |
+| defaultCenter          | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - | <Badge type="tip" text="^1.0.0" /> |
 | heading                | 地图旋转角度（**受控**，环绕角） | `number`                              | -（缺省时用 `0`）     | - |
-| defaultHeading         | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
+| defaultHeading         | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
 | tilt                   | 地图倾斜角度（**受控**） | `number`                              | -（缺省时用 `0`） | - |
-| defaultTilt            | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
+| defaultTilt            | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
 | mapType                | 地图类型 [mapType](#地图类型)                                                                                                                                                  | `string`                              | `BMAP_NORMAL_MAP` | -                                  |
 | zoom                   | 地图缩放级别（**受控**） | `number`                              | -（缺省时用 `14`） | - |
-| defaultZoom            | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^3.0.0" /> |
+| defaultZoom            | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
 | displayOptions         | 自定义地图属性 [详见](#displayoptions)                                                                                                                                         | -                                     | -                 | -                                  |
 | mapStyleId             | 个性化地图样式 ID [详见](#个性化地图)                                                                                                                                          | `string`                              | -                 | -                                  |
 | mapStyleJson           | 个性化地图样式 Json [详见](#个性化地图)                                                                                                                                        | `{featureType: string...}[]`          | -                 | -                                  |
@@ -193,7 +193,7 @@ map/theme2
 | enableDoubleClickZoom  | 启用地图双击缩放，左键双击放大、右键双击缩小                                                                                                                                   | `boolean`                             | `false`           | -                                  |
 | enableKeyboard         | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean`                             | `true`            | -                                  |
 | enablePinchToZoom      | 启用双指缩放地图                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^3.0.0" /> |
+| enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
 | loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
 
 ## 容器尺寸、自动重设与可见性策略
@@ -412,7 +412,7 @@ const tilt = ref(0)
 
 受控写入前会**读回地图当前值**再做容差判等，因此「相同值不同引用」「父级回写同一值」
 「SDK 读回带 ±1e-9 抖动」都不会产生多余的 SDK 命令。容差见
-`packages/baidu-map-gl-vue/src/core/utils/equality.ts`：
+`packages/bmap-vue/src/core/utils/equality.ts`：
 
 | 字段 | 判定 | 容差 |
 | --- | --- | --- |

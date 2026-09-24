@@ -21,7 +21,7 @@
 </template>
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useBMapGeocoder } from "baidu-map-gl-vue";
+import { useBMapGeocoder } from "bmap-vue";
 const map = ref();
 const addressList = [
   "包河区金寨路1号（金寨路与望江西路交叉口）",

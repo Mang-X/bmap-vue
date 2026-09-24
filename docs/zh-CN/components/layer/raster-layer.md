@@ -1,9 +1,9 @@
-# BRasterLayer 栅格瓦片图层 <Badge type="tip" text="^3.0.0" />
+# BRasterLayer 栅格瓦片图层 <Badge type="tip" text="^1.0.0" />
 
 面向 XYZ / TMS 类标准瓦片服务：比 `BXYZLayer` 多了子域轮询、TMS 翻转与四至裁剪。
 
 ```ts
-import { BRasterLayer } from 'baidu-map-gl-vue'
+import { BRasterLayer } from 'bmap-vue'
 ```
 
 ## 组件示例

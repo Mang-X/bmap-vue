@@ -38,7 +38,7 @@
 </template>
 
 <script lang="ts" setup>
-import { useBMapGeocodeDetail, GeocodeDetailResult } from "baidu-map-gl-vue";
+import { useBMapGeocodeDetail, GeocodeDetailResult } from "bmap-vue";
 const points = [
   { lng: 116.307852, lat: 40.057031 },
   { lng: 116.313082, lat: 40.047674 },

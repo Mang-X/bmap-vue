@@ -13,8 +13,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import BCircle from '../../packages/baidu-map-gl-vue/src/components/overlays/BCircle.vue'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import BCircle from '../../packages/bmap-vue/src/components/overlays/BCircle.vue'
 import {
   createFakeV4Harness,
   type FakeBMapV4,

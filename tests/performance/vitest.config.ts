@@ -20,6 +20,7 @@
 import { defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
+import { versionDefine } from "../../scripts/vite-version-define.mjs";
 
 export default defineConfig({
   plugins: [vue()],
@@ -29,8 +30,8 @@ export default defineConfig({
     },
   },
   define: {
+    ...versionDefine,
     __DEV__: "true",
-    __VERSION__: JSON.stringify("2.6.5"),
   },
   test: {
     include: ["tests/performance/**/*.test.ts"],

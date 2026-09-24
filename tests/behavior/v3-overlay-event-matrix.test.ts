@@ -32,18 +32,18 @@ import {
   overlayEventOf,
   overlayEventsOf,
   overlayPointerFallback,
-} from "../../packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog";
-import { toVueEventName } from "../../packages/baidu-map-gl-vue/src/core/events/eventCatalog";
+} from "../../packages/bmap-vue/src/core/overlays/overlayEventCatalog";
+import { toVueEventName } from "../../packages/bmap-vue/src/core/events/eventCatalog";
 import {
   normalizeDriverEvent,
   POINTER_EVENT_NAMES,
-} from "../../packages/baidu-map-gl-vue/src/driver/normalize/events";
-import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
+} from "../../packages/bmap-vue/src/driver/normalize/events";
+import { createJsapiV4GeometryDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/geometry";
 import {
   OVERLAY_DESCRIPTORS,
   overlayPropertySpec,
-} from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
-import type { OverlayKind } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
+} from "../../packages/bmap-vue/src/driver/types/overlays";
+import type { OverlayKind } from "../../packages/bmap-vue/src/driver/types/overlays";
 import { createFakeBMapV4 } from "../../packages/test-utils/fake-bmap-v4";
 import { createFakeV4Client } from "../../packages/test-utils/fake-v4-harness";
 
@@ -52,7 +52,7 @@ const REPO_ROOT = resolve(import.meta.dirname, "../..");
 /** 定位上游类型包（与 `v3-map-event-catalog.test.ts` 同一套候选路径）。 */
 function resolveUpstreamPackageDir(): string {
   const candidates = [
-    resolve(REPO_ROOT, "packages/baidu-map-gl-vue/node_modules/@baidumap/jsapi-v4-types"),
+    resolve(REPO_ROOT, "packages/bmap-vue/node_modules/@baidumap/jsapi-v4-types"),
     resolve(REPO_ROOT, "node_modules/@baidumap/jsapi-v4-types"),
   ];
   for (const candidate of candidates) {

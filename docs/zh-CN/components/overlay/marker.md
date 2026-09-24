@@ -3,7 +3,7 @@
 在地图上绘制点
 
 ```ts
-import { BMarker } from 'baidu-map-gl-vue'
+import { BMarker } from 'bmap-vue'
 ```
 
 ## 组件示例

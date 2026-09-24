@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": patch
+"bmap-vue": patch
 ---
 
 修复**四个内置插件**脚本「服务器不响应时永久挂起」：内置工厂现在有 60 秒默认超时（#121）。
@@ -28,7 +28,7 @@
 （约 2× 余量，对应约 10 KB/s 仍能过）。
 
 **公共 API 与超时语义不变（评审 2026-09-22 P1 的修正）**：`urlPluginDefinition` 从根入口与 `./plugins`
-双导出，是本库承诺给第三方的脚本插件工厂（`fixtures/v3-consumer/src/advanced-adapter.ts`、
+双导出，是本库承诺给第三方的脚本插件工厂（`fixtures/consumer/src/advanced-adapter.ts`、
 `scripts/verify-package.mts` 都在用）。超时**不再**加在共用的 `loadScriptWithExport` 上，
 **公共工厂的超时语义与本版之前一字不差：不设超时**（调用方仍可 `{ required: true }` 并自己决定等多久；
 需要超时请在自己的 `load(context, signal)` 里包一层）。超时是本库对**自己那四个内置插件**的决定，

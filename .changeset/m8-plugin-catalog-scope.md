@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": patch
+"bmap-vue": patch
 ---
 
 收口外部插件 Catalog、`global` / `map` 作用域与依赖调度（`M8-PLUGIN-CORE`，issue #42）。
@@ -17,7 +17,7 @@
   `GeoUtils` / `Mapvgl`）显式标了 `scope: 'global'`，由进程级宿主持有 —— 同页面多张地图
   **共享同一次加载**（此前每张地图各插一份 `<script>`），并且**地图卸载不再释放它**
   （上游没有卸载入口；此前卸载还可能取消别的地图正在等的加载）。
-  `baidu-map-gl-vue/plugins` 的 `disposeDefaultPluginHost()` 只能清掉宿主缓存的资源与在飞的等待：
+  `bmap-vue/plugins` 的 `disposeDefaultPluginHost()` 只能清掉宿主缓存的资源与在飞的等待：
   它**不卸载**第三方脚本、也不抹 `window.BMapGLLib.*`，所以之后重新取用会命中「导出已存在」的短路、
   复用同一个全局对象（**不会**重新拉脚本）。要真正的干净起点只能刷新文档。
   **手写 definition 不写 `scope` 时仍按 `'map'` 处理**（与之前一样由单张地图持有）。

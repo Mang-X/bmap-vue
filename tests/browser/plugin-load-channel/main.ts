@@ -31,9 +31,9 @@
  *   「script 已被移除」只有在「script 真的被插入过」时才成立。
  */
 import { createApp, defineComponent, h, type App } from "vue";
-import { BMap, useBMapContext } from "../../../packages/baidu-map-gl-vue/src/index.ts";
-import * as builtins from "../../../packages/baidu-map-gl-vue/src/plugins/builtins.ts";
-import { createPluginHost } from "../../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost.ts";
+import { BMap, useBMapContext } from "../../../packages/bmap-vue/src/index.ts";
+import * as builtins from "../../../packages/bmap-vue/src/plugins/builtins.ts";
+import { createPluginHost } from "../../../packages/bmap-vue/src/core/plugins/PluginHost.ts";
 
 /** 同源、永不响应的地址（中间件见 vite.config.ts）。 */
 const HANG_URL = "/__hang/plugin-load-channel";

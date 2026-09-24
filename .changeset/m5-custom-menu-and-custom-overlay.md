@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增 `<BCustomOverlay>`、给 `<BContextMenu>` 补上声明式菜单项，并让「菜单挂到标注上」这条路径真的可用。
@@ -35,7 +35,7 @@
   `BMAP_CAPABILITY_UNSUPPORTED`），不回退挂到地图上。
 - `ContextMenuItem` 的 `callback` 参数从 `(...args: any[]) => void` 收紧为
   `(payload: ContextMenuSelectPayload) => void`；`ContextMenuItem` / `ContextMenuSeparator` 改从
-  `baidu-map-gl-vue` 的类型入口导出（具名导入路径不变）。
+  `bmap-vue` 的类型入口导出（具名导入路径不变）。
 
 **顺带修掉一处契约错误**：事件矩阵此前把 `custom-overlay` 与 `context-menu` 登记成「上游没有事件表」，
 实际两张表都存在，只是在 `overlay/CustomOverlay.d.ts` 与 `context-menu/ContextMenu.d.ts` 里

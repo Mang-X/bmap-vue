@@ -9,7 +9,7 @@ import {
   BDistrictLayer, BPanoramaCoverageLayer,
   BTileLayer, BTrafficLayer, BGeoJSONLayer, BDOMLayer,
   BXYZLayer, BWMSLayer, BWMTSLayer, BRasterLayer,
-} from 'baidu-map-gl-vue'
+} from 'bmap-vue'
 ```
 
 ## 选哪个图层

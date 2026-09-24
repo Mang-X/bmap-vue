@@ -26,7 +26,7 @@ import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const SCRIPT = resolve(ROOT, "scripts/check-no-bmapgl.mts");
-const RUNTIME_SRC = resolve(ROOT, "packages/baidu-map-gl-vue/src");
+const RUNTIME_SRC = resolve(ROOT, "packages/bmap-vue/src");
 const RUNTIME_LABEL = "运行时源码";
 const DECLARATIONS_LABEL = "公共声明";
 
@@ -286,7 +286,7 @@ describe("no-bmapgl gate：真实仓库上的不变量", () => {
     // 先证明路径拼法确实能命中真实存在的文件——否则三个 not-exist 断言也可能只是路径写错
     expect(existsSync(resolve(RUNTIME_SRC, "plugins/compat-inventory.ts"))).toBe(true);
     expect(existsSync(resolve(RUNTIME_SRC, "driver/webgl-v1"))).toBe(false);
-    expect(existsSync(resolve(ROOT, "packages/baidu-map-gl-vue/types/BMapGL"))).toBe(false);
+    expect(existsSync(resolve(ROOT, "packages/bmap-vue/types/BMapGL"))).toBe(false);
     expect(existsSync(resolve(ROOT, "packages/test-utils/fake-bmapgl"))).toBe(false);
     expect(existsSync(resolve(ROOT, "packages/test-utils/lifecycle-inspector"))).toBe(false);
   });

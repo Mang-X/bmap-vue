@@ -6,7 +6,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BGeoJSONLayer } from "baidu-map-gl-vue";
+import { BGeoJSONLayer } from "bmap-vue";
 
 /** 一份最小的 GeoJSON 数据；`data` 变化时只调 setData()，不会重建图层。 */
 const geojson = ref({

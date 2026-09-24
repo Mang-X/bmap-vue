@@ -1,9 +1,9 @@
-# BTileLayer 瓦片图层 <Badge type="tip" text="^3.0.0" />
+# BTileLayer 瓦片图层 <Badge type="tip" text="^1.0.0" />
 
 加载**百度坐标系（BD09MC）**的自有瓦片。第三方标准瓦片服务（XYZ / WMTS / WMS / TMS）请用 `BXYZLayer`。
 
 ```ts
-import { BTileLayer } from 'baidu-map-gl-vue'
+import { BTileLayer } from 'bmap-vue'
 ```
 
 ## 组件示例

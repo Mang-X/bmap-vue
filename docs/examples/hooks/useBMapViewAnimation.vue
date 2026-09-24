@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useBMapViewAnimation, type ViewAnimationKeyFrames } from "baidu-map-gl-vue";
+import { useBMapViewAnimation, type ViewAnimationKeyFrames } from "bmap-vue";
 const map = ref(null);
 const { start, cancel, status } = useBMapViewAnimation(
   {

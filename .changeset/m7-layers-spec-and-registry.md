@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增图层套件（`M7-LAYERS` / #40）：十个图层组件共用同一个生命周期内核，并补齐瓦片 / 数据 /

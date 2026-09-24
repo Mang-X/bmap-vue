@@ -21,9 +21,9 @@ import {
   type PanoramaFacetHarness,
   type ServiceFacetHarness,
 } from "../../packages/test-utils/driver-contract";
-import { createJsapiV4Driver } from "../../packages/baidu-map-gl-vue/src/driver/createJsapiV4Driver";
-import type { JsapiV4Driver } from "../../packages/baidu-map-gl-vue/src/driver/types/bmap";
-import type { OverlayTarget } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
+import { createJsapiV4Driver } from "../../packages/bmap-vue/src/driver/createJsapiV4Driver";
+import type { JsapiV4Driver } from "../../packages/bmap-vue/src/driver/types/bmap";
+import type { OverlayTarget } from "../../packages/bmap-vue/src/driver/types/overlays";
 
 let fake: FakeBMapV4;
 let driver: JsapiV4Driver;

@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, onMounted, nextTick } from 'vue'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import { useBMapGeocodeDetail } from '../../packages/baidu-map-gl-vue/src/composables/useBMapGeocodeDetail'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import { useBMapGeocodeDetail } from '../../packages/bmap-vue/src/composables/useBMapGeocodeDetail'
 import { createFakeV4Harness } from '../../packages/test-utils'
 
 const { harness } = createFakeV4Harness()

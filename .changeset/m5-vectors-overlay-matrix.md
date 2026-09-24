@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增 `BRectangle`，把 Label / Polyline / Polygon / Circle / BezierCurve / Prism / GroundOverlay 迁移到与

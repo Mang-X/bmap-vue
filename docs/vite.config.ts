@@ -1,8 +1,10 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import { versionDefine } from "../scripts/vite-version-define.mjs";
 
 export default defineConfig(() => {
   return {
+    define: versionDefine,
     optimizeDeps: {
       exclude: ["@vueuse/core", "vitepress"],
     },
@@ -14,10 +16,7 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         // docs 引用 v3 源码(dev 热更新;生产构建走 vp pack 产物)
-        "baidu-map-gl-vue": resolve(
-          import.meta.dirname,
-          "../packages/baidu-map-gl-vue/src/index.ts",
-        ),
+        "bmap-vue": resolve(import.meta.dirname, "../packages/bmap-vue/src/index.ts"),
       },
     },
   };

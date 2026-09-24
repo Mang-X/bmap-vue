@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 `./core` 冻结前的公共面复核（#104 第三批）：把「零消费者却会随 `./core` 冻结进 3.0」的面收掉，
@@ -12,7 +12,7 @@
 逐项核对 `./core` 上还有哪些名字是「没有人用、但会被 #44 顺手冻结」的。逐条结论见
 [Ownership-first 存量审计表](../docs/zh-CN/contributing/architecture-ownership-audit.md)。
 
-**破坏性变更**（当前 `3.0.0-beta.0`，beta 阶段按 `minor` 发布；下面这些名字都从 **`./core` 子入口**取，根入口本来就没有它们）
+**破坏性变更**（当前 `1.0.0-rc.0`，beta 阶段按 `minor` 发布；下面这些名字都从 **`./core` 子入口**取，根入口本来就没有它们）
 
 | 变更 | 之前 | 现在 |
 | --- | --- | --- |

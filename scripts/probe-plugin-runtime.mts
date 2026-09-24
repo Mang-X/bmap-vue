@@ -70,7 +70,7 @@ import {
 const repoRoot = resolve(import.meta.dirname, "..")
 const ak = process.env.BAIDU_MAP_AK ?? ""
 
-const builtins = (await import(freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/builtins.ts")))) as {
+const builtins = (await import(freshModuleUrl(resolve(repoRoot, "packages/bmap-vue/src/plugins/builtins.ts")))) as {
   BUILTIN_PLUGIN_URLS: Record<string, string>
 }
 const urls = builtins.BUILTIN_PLUGIN_URLS
@@ -696,7 +696,7 @@ async function main(): Promise<number> {
 
   // 期望值来自 inventory 的 `runtime.status` —— 读数与记录不一致时会退 1 并提示更新 inventory
   const inventory = (await import(
-    freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts"))
+    freshModuleUrl(resolve(repoRoot, "packages/bmap-vue/src/plugins/compat-inventory.ts"))
   )) as { PLUGIN_COMPAT_BY_ID: Record<string, { runtime?: { status?: string } }> }
   const expectations = PLUGIN_SPECS.map((spec) => ({
     id: spec.id,

@@ -14,7 +14,7 @@
  *    `sideEffects: false` + 闭包不含组件，才是「只用 `./advanced` 的消费者不会把整个组件库拉进包里」
  *    这条 tree-shaking 承诺；正证是根入口的闭包**必须**含组件标记。
  *
- * 需要先 `pnpm build:v3`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
+ * 需要先 `pnpm build:package`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -26,18 +26,18 @@ import {
   UI_KIT_SPECIFIER,
   type ImportClosure,
 } from "../../scripts/advanced-bundle-shake.mts";
-import * as advanced from "../../packages/baidu-map-gl-vue/src/advanced";
-import * as core from "../../packages/baidu-map-gl-vue/src/core";
-import * as root from "../../packages/baidu-map-gl-vue/src";
+import * as advanced from "../../packages/bmap-vue/src/advanced";
+import * as core from "../../packages/bmap-vue/src/core";
+import * as root from "../../packages/bmap-vue/src";
 
-const PKG_DIR = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
+const PKG_DIR = resolve(import.meta.dirname, "../../packages/bmap-vue");
 const DIST = resolve(PKG_DIR, "dist");
 
 /**
  * 冻结的运行时导出面（21 个值导出）。
  *
  * 类型导出不在这里：`Object.keys` 只看得到值导出，类型面由 `v3-public-dts-gate` 与
- * 消费方 fixture（`fixtures/v3-consumer`）覆盖。
+ * 消费方 fixture（`fixtures/consumer`）覆盖。
  */
 const FROZEN_ADVANCED_EXPORTS = [
   "CAPABILITY_CATALOG",
@@ -223,7 +223,7 @@ describe("产物层：只用 ./advanced 的消费者不会拉进组件与官方 
   const closureOf = (entry: string): ImportClosure => {
     if (!existsSync(entry)) {
       throw new Error(
-        `缺少构建产物 ${entry}：先跑 \`pnpm build:v3\`（读 dist 的用例都在 test:unit 里）`,
+        `缺少构建产物 ${entry}：先跑 \`pnpm build:package\`（读 dist 的用例都在 test:unit 里）`,
       );
     }
     return collectImportClosure({

@@ -52,7 +52,7 @@ import {
   normalizeProvider,
   unwrapRaw,
   type BMapProviderLike,
-} from 'baidu-map-gl-vue/advanced'
+} from 'bmap-vue/advanced'
 
 export function createAdapter(provider: BMapProviderLike, options: { ak: string; rawSdk: unknown; version: string }) {
   const definition = createBMapClientDefinition({
@@ -72,13 +72,13 @@ export function createAdapter(provider: BMapProviderLike, options: { ak: string;
 `raw` 逃生口一律经 handle：
 
 ```ts
-import { createHandle, unwrapRaw } from 'baidu-map-gl-vue/advanced'
+import { createHandle, unwrapRaw } from 'bmap-vue/advanced'
 
 const handle = createHandle('map', rawMap) // rawMap 是 SDK 的 Map 实例
 const raw = unwrapRaw(handle) // 形状由 SDK 决定，本库不承诺
 ```
 
-这份代码在仓库里有**可编译的实例**：`fixtures/v3-consumer/src/advanced-adapter.ts`
+这份代码在仓库里有**可编译的实例**：`fixtures/consumer/src/advanced-adapter.ts`
 （由 `pnpm verify:package` 用 `vue-tsc` 对着 tarball 的声明编译）。
 
 ## tree-shaking 承诺
@@ -95,5 +95,5 @@ UI Kit）。所以「只用了 `./advanced`」的消费者不会把整个组件�
 
 ```bash
 # 消费方一侧的完整验证（会打包 tarball 并在 fixture 里安装）
-pnpm pack:v3 && pnpm verify:package
+pnpm pack:package && pnpm verify:package
 ```

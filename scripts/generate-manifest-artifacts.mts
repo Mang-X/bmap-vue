@@ -3,8 +3,8 @@
  * M7-01: 从 manifest 生成公开人工产物
  *
  * 生成:
- * - packages/baidu-map-gl-vue/src/components/index.ts(确保与 manifest 一致)
- * - packages/baidu-map-gl-vue/volar.d.ts(Volar GlobalComponents)
+ * - packages/bmap-vue/src/components/index.ts(确保与 manifest 一致)
+ * - packages/bmap-vue/volar.d.ts(Volar GlobalComponents)
  * - docs/.vitepress/component-index.json(文档组件索引)
  *
  * 生成文件顶部带 "Generated file. Do not edit directly."
@@ -22,7 +22,8 @@ import { fileURLToPath } from 'node:url'
 import { freshModuleUrl } from './fresh-module-url.mts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const manifestSrc = resolve(root, 'packages/baidu-map-gl-vue/src/manifest.ts')
+const packageJson = JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as { version: string }
+const manifestSrc = resolve(root, 'packages/bmap-vue/src/manifest.ts')
 const check = process.argv.includes('--check')
 
 // 动态加载 manifest(纯数据 .ts,node --experimental-strip-types 可解析;
@@ -37,8 +38,8 @@ const names = componentManifest.map((c) => ({
   source: c.source,
 }))
 
-const componentsIndexPath = resolve(root, 'packages/baidu-map-gl-vue/src/components/index.ts')
-const volarDtsPath = resolve(root, 'packages/baidu-map-gl-vue/volar.d.ts')
+const componentsIndexPath = resolve(root, 'packages/bmap-vue/src/components/index.ts')
+const volarDtsPath = resolve(root, 'packages/bmap-vue/volar.d.ts')
 const componentIndexJsonPath = resolve(root, 'docs/.vitepress/component-index.json')
 
 // 1) components/index.ts
@@ -50,7 +51,7 @@ const componentsIndex = [
 
 // 2) volar.d.ts(精确类型:Volar 通过 typeof import 解析组件真实 props/emits)
 //    vue-tsc 2(新 Volar)读 module 'vue';v2 时代读 '@vue/runtime-core';双声明兼容
-const componentsLines = names.map((c) => `    ${c.name}: typeof import('baidu-map-gl-vue')['${c.name}']`)
+const componentsLines = names.map((c) => `    ${c.name}: typeof import('bmap-vue')['${c.name}']`)
 const volarDts = [
   '// Generated file. Do not edit directly.',
   'declare module \'vue\' {',
@@ -69,7 +70,7 @@ const volarDts = [
 
 // 3) component index json(generatedAt 为生成时刻,比对时忽略)
 const json = {
-  version: '3.0.0-beta.0',
+   version: packageJson.version,
   generatedAt: new Date().toISOString(),
   components: names.map((c) => c.name),
 }

@@ -33,8 +33,8 @@
 
 <script lang="ts" setup>
 import { computed } from "vue";
-import { BMap, BMarker, useBMapDrivingRoute } from "baidu-map-gl-vue";
-import type { RoutePlan } from "baidu-map-gl-vue";
+import { BMap, BMarker, useBMapDrivingRoute } from "bmap-vue";
+import type { RoutePlan } from "bmap-vue";
 
 const from = { lng: 116.391, lat: 39.91 };
 const to = { lng: 116.431, lat: 39.931 };

@@ -40,7 +40,7 @@ import {
   BDistrictLayer,
   BPanoramaCoverageLayer,
   BAutoComplete,
-} from 'baidu-map-gl-vue'
+} from 'bmap-vue'
 import { bootPlayground, type PlaygroundEnvLike } from '@test-utils'
 
 const viteEnv = ((import.meta as unknown as { env?: PlaygroundEnvLike }).env ?? {}) as PlaygroundEnvLike
@@ -199,7 +199,7 @@ const App = defineComponent({
     const current = computed(() => scenes.find((s) => s.id === active.value)!)
     return () => [
       h('div', { style: 'font-family:system-ui;padding:12px;background:#f5f5f5;border-bottom:1px solid #ddd' }, [
-        h('h3', { style: 'margin:0 0 8px' }, `baidu-map-gl-vue v3 playground（${mode}）`),
+        h('h3', { style: 'margin:0 0 8px' }, `bmap-vue playground（${mode}）`),
         h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
           ...scenes.map((s) =>
             h('button', {

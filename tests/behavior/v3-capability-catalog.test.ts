@@ -21,7 +21,7 @@ import {
   createCapabilityRegistry,
   UnsupportedCapabilityError,
   type Capability,
-} from "../../packages/baidu-map-gl-vue/src/driver/capability";
+} from "../../packages/bmap-vue/src/driver/capability";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const MATRIX_MD = resolve(ROOT, "docs/zh-CN/contributing/capability-matrix.md");

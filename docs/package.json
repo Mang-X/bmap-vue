@@ -24,7 +24,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vite-pwa/vitepress": "^1.1.0",
-    "baidu-map-gl-vue": "workspace:*",
+    "bmap-vue": "workspace:*",
     "chalk": "^4.1.2",
     "consola": "^2.15.3",
     "escape-html": "^1.0.3",

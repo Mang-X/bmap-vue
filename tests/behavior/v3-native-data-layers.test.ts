@@ -27,12 +27,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, h, nextTick, ref, type VNodeChild } from "vue";
 import { browserShims, createFakeV4Harness, stripComments } from "../../packages/test-utils";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
-import type { FeatureStateApi } from "../../packages/baidu-map-gl-vue/src/core/data/featureState";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
+import type { FeatureStateApi } from "../../packages/bmap-vue/src/core/data/featureState";
 
 const { harness, fake } = createFakeV4Harness();
 const shims = browserShims();
@@ -1189,15 +1189,15 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   describe("§7 与旧 TrackAnimation 无关", () => {
     it("新组件与共享内核的源码里没有旧插件 / 私有面", () => {
       const sources = [
-        "packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue",
-        "packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue",
-        "packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue",
-        "packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue",
-        "packages/baidu-map-gl-vue/src/components/layers/useVisualLayer.ts",
-        "packages/baidu-map-gl-vue/src/core/composables/useNativeLayerResource.ts",
-        "packages/baidu-map-gl-vue/src/core/data/featureState.ts",
-        "packages/baidu-map-gl-vue/src/core/layers/nativeLayerPick.ts",
-        "packages/baidu-map-gl-vue/src/core/layers/trackLinePlayback.ts",
+        "packages/bmap-vue/src/components/layers/BTrackLineLayer.vue",
+        "packages/bmap-vue/src/components/layers/BLineLayer.vue",
+        "packages/bmap-vue/src/components/layers/BFillLayer.vue",
+        "packages/bmap-vue/src/components/layers/BHeatmapLayer.vue",
+        "packages/bmap-vue/src/components/layers/useVisualLayer.ts",
+        "packages/bmap-vue/src/core/composables/useNativeLayerResource.ts",
+        "packages/bmap-vue/src/core/data/featureState.ts",
+        "packages/bmap-vue/src/core/layers/nativeLayerPick.ts",
+        "packages/bmap-vue/src/core/layers/trackLinePlayback.ts",
       ];
       const raw = sources.map((path) => readSource(path)).join("\n");
 

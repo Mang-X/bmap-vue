@@ -19,26 +19,26 @@ import { resolve } from "node:path";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
-import BPolyline from "../../packages/baidu-map-gl-vue/src/components/overlays/BPolyline.vue";
-import BContextMenu from "../../packages/baidu-map-gl-vue/src/components/overlays/BContextMenu.vue";
-import BMenuItem from "../../packages/baidu-map-gl-vue/src/components/overlays/BMenuItem.vue";
-import BMenuSeparator from "../../packages/baidu-map-gl-vue/src/components/overlays/BMenuSeparator.vue";
-import { useBMapContext } from "../../packages/baidu-map-gl-vue/src/composables/useBMap";
-import { DEPRECATED_PROP_ALIAS_CODE } from "../../packages/baidu-map-gl-vue/src/core/deprecations";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import BPolyline from "../../packages/bmap-vue/src/components/overlays/BPolyline.vue";
+import BContextMenu from "../../packages/bmap-vue/src/components/overlays/BContextMenu.vue";
+import BMenuItem from "../../packages/bmap-vue/src/components/overlays/BMenuItem.vue";
+import BMenuSeparator from "../../packages/bmap-vue/src/components/overlays/BMenuSeparator.vue";
+import { useBMapContext } from "../../packages/bmap-vue/src/composables/useBMap";
+import { DEPRECATED_PROP_ALIAS_CODE } from "../../packages/bmap-vue/src/core/deprecations";
 import {
   OVERLAY_PROP_ALIASES,
   propAliasesOf,
-} from "../../packages/baidu-map-gl-vue/src/core/deprecations";
-import { overlayEventsOf } from "../../packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog";
-import { CONTEXT_MENU_FIELDS } from "../../packages/baidu-map-gl-vue/src/core/overlays/ContextMenuSpec";
-import { overlayPropertySpec } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
-import type { ContextMenuSelectPayload } from "../../packages/baidu-map-gl-vue/src/types/components";
+} from "../../packages/bmap-vue/src/core/deprecations";
+import { overlayEventsOf } from "../../packages/bmap-vue/src/core/overlays/overlayEventCatalog";
+import { CONTEXT_MENU_FIELDS } from "../../packages/bmap-vue/src/core/overlays/ContextMenuSpec";
+import { overlayPropertySpec } from "../../packages/bmap-vue/src/driver/types/overlays";
+import type { ContextMenuSelectPayload } from "../../packages/bmap-vue/src/types/components";
 import { createFakeV4Harness, FakeV4ContextMenu } from "../../packages/test-utils";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
-const TYPES_FILE = resolve(REPO_ROOT, "packages/baidu-map-gl-vue/src/types/components.ts");
+const TYPES_FILE = resolve(REPO_ROOT, "packages/bmap-vue/src/types/components.ts");
 
 /**
  * 从 `types/components.ts` 解析某个 props 接口的键（与 `v3-overlay-suite.test.ts` 同一手法）。

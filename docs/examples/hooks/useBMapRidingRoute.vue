@@ -20,7 +20,7 @@
 </template>
 
 <script lang="ts" setup>
-import { BMap, useBMapRidingRoute } from "baidu-map-gl-vue";
+import { BMap, useBMapRidingRoute } from "bmap-vue";
 
 // 与步行同形：支持关键字起终点、没有途经点与策略选项；结果的 routeType 是 6（骑行）。
 const { data, status, sdkStatus, isLoading, isEmpty, search, clear } = useBMapRidingRoute({
