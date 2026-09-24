@@ -15,7 +15,7 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
 
 | 项 | 结论 | 依据 |
 | --- | --- | --- |
-| ① Map model（`useControllableState`） | **保留接线，不迁 `defineModel` / `useModel`**；另把 `isControlled`、`warned` Set 改为**惰性创建**，`defaultValue` 告警 watcher 与档位 `mode` 改为**按条件存在** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：原型把 `useModel` 的**读、档位、写**三处限制各测成可复现的行为差异——真实非受控用法（`zoom` key 完全省略，`hasVModel=false`）下，`useModel` 读到的 `localValue` 是 Vue 自己的局部状态（读错、档位判错），且 `reset()` 无法同步它 ⇒ setter 的全局去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。**没有公开 API 能补**：读、档位改取外部 prop；写按档位分流——**整个非受控档直接 `emit`**（一次性 flag 只修「reset 后恰好写回旧值」这个特例，序列 `11 → reset → 10 → 11` 仍漏）。即便如此，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它的声明，11 条行为用例仍全过**——它换不到任何可观察行为。且在**同等冻结契约**下每个 number 字段实际注册的 `ReactiveEffect` 是 **3 vs 2**（口径 `getCurrentScope().effects.length`，**非生产**下）——**没有更省，反而多 1 个**；**production 下 helper 自身恒为 0**，差异方向不变。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
+| ① Map model（`useControllableState`） | **保留接线，不迁 `defineModel` / `useModel`**；另把 `isControlled`、`warned` Set 改为**惰性创建**，`defaultValue` 告警 watcher 与档位 `mode` 改为**按条件存在**（`mode` 连维护一并 gate） | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：原型把 `useModel` 的**读、档位、写**三处限制各测成可复现的行为差异——真实非受控用法（`zoom` key 完全省略，`hasVModel=false`）下，`useModel` 读到的 `localValue` 是 Vue 自己的局部状态（读错、档位判错），且 `reset()` 无法同步它 ⇒ setter 的全局去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。**没有公开 API 能补**：读、档位改取外部 prop；写按档位分流——**整个非受控档直接 `emit`**（一次性 flag 只修「reset 后恰好写回旧值」这个特例，序列 `11 → reset → 10 → 11` 仍漏）。即便如此，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它的声明，11 条行为用例仍全过**——它换不到任何可观察行为。且在**同等冻结契约**下每个 number 字段实际注册的 `ReactiveEffect` 是 **3 vs 2**（口径 `getCurrentScope().effects.length`，**非生产**下）——**没有更省，反而多 1 个**；**production 下 helper 自身恒为 0**，差异方向不变。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
 | ② MapRuntime retry / boot | **逐符号保留** | `mountStarted` / `bootTask` / `nextBootWaiters` / `deferredWaiters` / `containerUsableWaiters` / `assembledMap` / `whenMapCreated` 全部记**外部资源状态**（WebGL 句柄、0×0 容器、KeepAlive 下 `onUnmounted` 不触发），每个都有可翻红的行为用例。ADR `2026-09-14-map-handle-container-and-visibility` §5.1 给出逐符号消费者表 |
 | ③ batching | **无缺陷可修** | 实测：一次父提交同改 center+zoom+heading+tilt ⇒ 4 个独立 `flush:'post'` watcher 与「单个四元组 watcher」**都是 4 次写入**。四个字段是**四条不同 SDK 命令**，批处理省不掉；`flush:'post'` 已拿到全部可得收益。ADR `2026-09-24-scheduler-batching-hot-path` §2.1 |
 | ④ KeepAlive / 暂停 | **保留** | `onActivated` / `onDeactivated` 直接驱动 `keep-alive` 原因增删，本来就是 Vue-native；`disposed` 终态原因与容器门禁有真实 WebGL / 0×0 语义 |
@@ -39,16 +39,24 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
     却仍常驻 —— 这正是原型 A=2 里的第二个 effect，**比前两处的对象分配更重**。判定用从 logger
     导出的同源 `isDev()`（`devWarn` 内部也改用它，两边不会对「是不是开发环境」分歧）；`warnOnce`
     的短路放在**分配 Set 之前**。标记仍交给消费方折叠，未在发布构建里定死。
-  - **档位 `mode` 按条件存在**（`let mode: ControllableMode | undefined = warningsEnabled ? … : undefined`）。
+  - **档位 `mode` 按条件存在，且不再被维护**（`let mode: ControllableMode | undefined =
+    warningsEnabled ? … : undefined`，`syncExternal()` 里的两处读写一并 gate）。
     `mode` 唯一的消费者就是上面那条「受控 ↔ 非受控」dev warning，**不参与** `value` /
     `internal` / 容差相等 / `reset()` / SDK reconcile，却是**无条件初始化 + 无条件维护**的 ——
-    production 或 `warn:false` 下仍额外读一次 `value()`、常驻一个档位字符串、每次外部同步写一次。
+    production 或 `warn:false` 下原本会额外读一次 `value()`、常驻一个档位字符串、每次外部同步
+    写一次，**并且每次外部同步多做一次只为那条告警服务的容差比较**
+    （`mode === "uncontrolled" && !equals(next, internal.value)`，`mode` 不存在时 `&&` 短路）。
     watcher 注册 / `warnOnce` 短路 / `mode` 本身**统一读 `warningsEnabled = warn && isDev()`**。
+    ⚠️ 只 gate 初始化会让 `mode` 在第一次 `syncExternal` 时复活——实测当时全部用例**仍全绿**，
+    「构造期 `value()` 计数」那条 gate 抓不到运行期的维护。
   四条 gate 都**直接数分配 / 数 effect / 数调用次数**，不数行为（`computed` 数不出来、「无告警
   输出」也数不出来——production 下 eager 版同样一条不打印；`mode` 更是既非 effect、也不改变任何
-  可观察结果）：只断言「缓存命中」「告警次数」时 eager 版照样全过。`mode` 那条数的是 **`value()`
-  getter 调用次数**（production / `warn:false` 构造应为 1，development + `warn:true` 为 2）。
-  实测：改回 eager / 去掉任一条件，四条 gate 各自变红。
+  可观察结果）：只断言「缓存命中」「告警次数」时 eager 版照样全过。`mode` 有**两条** gate：
+  ① **`value()` getter 调用次数（构造期）**——production / `warn:false` 为 1，development +
+  `warn:true` 为 2；② **`equals` 调用次数（外部同步期间）**——production / `warn:false` 恒为 0、
+  development 为 1，序列须走满「受控同步 → 非受控同步 → 受控同步」三步才测得出差异（第一次
+  同步只是把 `mode` 置 `uncontrolled`，第二次才走到那条比较）。
+  实测：改回 eager / 去掉任一条件 / 只 gate 初始化而不 gate 维护，四条 gate 各自变红。
 
   ⚠️ 顺带修掉 `isDev()` 判据自身的一个 P0：`process.env?.NODE_ENV` 的 optional chaining
   **只保护 `env`、不保护裸标识符 `process`**，而构建还会剥掉 optional chaining ⇒ 裸浏览器里

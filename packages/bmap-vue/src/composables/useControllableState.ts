@@ -197,8 +197,9 @@ export function useControllableState<T>(
   const warningsEnabled = warn && isDev();
   // `mode` 是**纯告警状态**：它唯一的消费者是「受控 ↔ 非受控」那条开发期告警，不参与
   // `value` / `internal` / 容差相等 / `reset()` / SDK reconcile。因此告警不启用时**连它都不
-  // 存在**（`undefined`），也省掉构造期那一次多余的 `value()` 读取 —— 那正是「为
-  // controlled/uncontrolled 术语付不必要 runtime」的字面形态。
+  // 存在**（`undefined`）**、也不再被维护**（`syncExternal` 里的读写一并 gate 掉），
+  // 顺带省掉构造期那一次多余的 `value()` 读取，以及每次外部同步里那个**只为告警而做**的
+  // 容差比较 —— 那正是「为 controlled/uncontrolled 术语付不必要 runtime」的字面形态。
   let mode: ControllableMode | undefined = warningsEnabled
     ? value() === undefined
       ? "uncontrolled"
@@ -221,23 +222,31 @@ export function useControllableState<T>(
 
   function syncExternal(next: T | undefined): void {
     if (next === undefined) {
-      if (mode === "controlled") {
-        warnOnce(
-          "to-uncontrolled",
-          `${name} 由受控切换为非受控：内部状态接管，并保留最后一次外部值。受控与非受控请在组件生命周期内保持一致。`,
-        );
+      // ⚠️ 读写 `mode` 本身也要 gate（复审十二轮 P1）。只把**初始化**收进 `warningsEnabled`
+      // 是不够的：那样 production / `warn:false` 下第一次 `syncExternal` 就会把它从
+      // `undefined` 写成 `"uncontrolled"`，之后每次外部同步继续维护这个字符串 —— 省掉了
+      // 构造期判档，却没省掉后续的 controlled/uncontrolled runtime maintenance。
+      if (warningsEnabled) {
+        if (mode === "controlled") {
+          warnOnce(
+            "to-uncontrolled",
+            `${name} 由受控切换为非受控：内部状态接管，并保留最后一次外部值。受控与非受控请在组件生命周期内保持一致。`,
+          );
+        }
+        mode = "uncontrolled";
       }
-      mode = "uncontrolled";
       return;
     }
-    if (mode === "uncontrolled" && !equals(next, internal.value)) {
-      warnOnce(
-        "to-controlled",
-        `${name} 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。`,
-      );
+    if (warningsEnabled) {
+      if (mode === "uncontrolled" && !equals(next, internal.value)) {
+        warnOnce(
+          "to-controlled",
+          `${name} 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。`,
+        );
+      }
+      mode = "controlled";
     }
     internal.value = copy(next);
-    mode = "controlled";
   }
 
   function commit(next: T): boolean {

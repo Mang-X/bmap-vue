@@ -684,3 +684,76 @@ describe('mode 是纯告警状态，告警关闭时连它都不存在（#137 复
     }
   })
 })
+
+describe('告警关闭时 mode 连「维护」也不发生（#137 复审十二轮 P1）', () => {
+  /**
+   * 上一轮只把 `mode` 的**初始化**收进 `warningsEnabled`，漏了后半句：**后续每次
+   * `syncExternal()` 仍在无条件读写它**。那样 production / `warn:false` 下第一次同步就把
+   * `mode` 从 `undefined` 写成 `"uncontrolled"`，之后继续维护 —— 只省掉了构造期判档。
+   *
+   * ⚠️ **为什么上一轮的 gate 抓不到**（这条是本组存在的理由）：上一轮数的是**构造期**
+   * `value()` 读取次数，而「维护」发生在运行期。实测把维护 gate 去掉，那 46 条用例**全绿**。
+   *
+   * 口径是 **`equals` 的调用次数**——它是 `mode` 唯一那条读路径的可观察后果：
+   * `syncExternal()` 里 `mode === "uncontrolled" && !equals(next, internal.value)` 这个比较
+   * **只**服务于「非受控 → 受控冲突」那条告警。`mode` 活着，比较就会做；`mode` 不存在，
+   * 整个 `&&` 短路，比较**根本不发生**。所以「每次外部同步少一次容差比较」既可测，
+   * 也正是运行时真正省掉的东西（不是省一个字符串，是省一次比较）。
+   *
+   * 序列固定为 `受控同步 → 非受控同步 → 受控同步`：第一次把 `mode` 置 `uncontrolled`
+   * （无 gate 时），第二次才会走到那条比较。少于三步测不出差异。
+   */
+  function equalsCallsWhileSyncing(options: { env?: string; warn?: boolean } = {}): number {
+    const original = process.env.NODE_ENV
+    if (options.env) process.env.NODE_ENV = options.env
+    try {
+      const external = ref<number | undefined>(12)
+      let calls = 0
+      const state = effectScope().run(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => 8,
+          fallback: 14,
+          equals: (a, b) => {
+            calls += 1
+            return numbersEqual(a, b)
+          },
+          warn: options.warn,
+        }),
+      )!
+      const before = calls
+      external.value = 20
+      state.syncExternal(external.value)
+      state.syncExternal(undefined)
+      state.syncExternal(30)
+      return calls - before
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  it('production：外部同步不做任何只为告警而存在的容差比较', () => {
+    expect(
+      equalsCallsWhileSyncing({ env: 'production' }),
+      'production 下 mode 不存在 ⇒ 那个 && 左侧恒假，equals 不应被调用',
+    ).toBe(0)
+  })
+
+  it('warn: false：同样一次都不做', () => {
+    expect(
+      equalsCallsWhileSyncing({ warn: false }),
+      'warn:false 下 mode 不存在 ⇒ equals 不应被调用',
+    ).toBe(0)
+  })
+
+  it('development：告警契约仍在，那次比较必须发生（守卫 gate 本身不是恒真）', () => {
+    // 序列最后一步 `syncExternal(30)` 时 mode 已是 "uncontrolled"（无 gate）/ 在 development 下
+    // 被正常维护为 "uncontrolled" ⇒ 左边为真 ⇒ `equals` 必被调一次。
+    expect(
+      equalsCallsWhileSyncing({ env: 'development' }),
+      'development 下 mode 存在 ⇒ 那条冲突比较必须照常发生',
+    ).toBe(1)
+  })
+})

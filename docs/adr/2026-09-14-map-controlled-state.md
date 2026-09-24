@@ -432,7 +432,7 @@ Set**。⇒ 也改为惰性创建（`warnOnce` 里 `??= new Set()`）。**告警
 
 ⇒ #137 验收第 2 条在本票里因此有**四处真正的 runtime 收口**（`isControlled` 的 computed、
 `warned` 的 Set、`defaultValue` 的 watcher、告警档位 `mode`），都不是靠「删掉」，而是靠
-「不再为没人用的东西付费」。
+「不再为没人用的东西付费」。其中 `mode` 一项要**按条件存在 + 不维护**才算数（见下）。
 
 **第四处（复审十轮 P1）——把前三处认成同一条腿**：`mode`（`"controlled" | "uncontrolled"`）
 与上面三项看着无关，其实是**同一个用途**：它唯一的消费者就是「受控 ↔ 非受控」那条 dev warning，
@@ -445,6 +445,18 @@ runtime」的字面形态。
 ⇒ 三个消费点（`defaultValue` watcher 的注册、`warnOnce` 的短路、`mode` 本身）**统一读一个
 `warningsEnabled = warn && isDev()`**，`mode` 的类型放宽成 `ControllableMode | undefined`：
 告警不启用时它连状态都不存在。`isDev()` 仍是 `devWarn` 的**同一份**判定，分歧风险不变。
+
+**⚠️ 只 gate 初始化是不够的（复审十二轮 P1）**：那样 production / `warn:false` 下第一次
+`syncExternal()` 就会把 `mode` 从 `undefined` 写成 `"uncontrolled"`，之后每次外部同步继续维护
+——只省掉构造期判档，**没省掉后续的 controlled/uncontrolled runtime maintenance**。
+⇒ `syncExternal()` 里的**两处读写也一并 gate**。这一改动的可观察后果不止「少一个字符串」：
+`mode === "uncontrolled" && !equals(next, internal.value)` 那个比较**只**服务于冲突告警，
+`mode` 不存在 ⇒ `&&` 短路 ⇒ **每次外部同步少做一次容差比较**（`<Map>` 四个视野字段各一次）。
+「构造期 `value()` 计数」那条 gate **抓不到**这一层（它只数构造期读取）：实测把维护 gate 去掉，
+当时全部用例**仍然全绿**。补的 gate 改数 **`equals` 调用次数**（production / `warn:false` 恒为
+0，development 为 1），序列须走满 `受控同步 → 非受控同步 → 受控同步` 三步才测得出差异
+（第一次同步只是把 `mode` 置 `uncontrolled`，第二次才走到那条比较）。变异验证：去掉维护 gate
+⇒ 2 failed / 27 passed；恢复 ⇒ 29 passed。
 
 **这一处踩的仍是同一类坑（已实测）**：behavior 断言与 effect 计数都**分辨不出**它——
 `mode` 既不是 effect，`value()` 多读一次也不改变任何可观察结果。gate 用的是
