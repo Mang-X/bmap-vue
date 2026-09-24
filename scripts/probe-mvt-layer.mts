@@ -247,7 +247,7 @@ function buildProbeTile(): Buffer {
 
 /**
  * ⚠️ 本模板串里**不得出现反引号**、也不得出现 ${ 插值（会截断外层 TS 模板串），由
- * `tests/behavior/v3-probe-page-scripts.test.ts` 静态守卫。
+ * `tests/behavior/probe-page-scripts.test.ts` 静态守卫。
  */
 const PAGE_JS = `
 (async () => {

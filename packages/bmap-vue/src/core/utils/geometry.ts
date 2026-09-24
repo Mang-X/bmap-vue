@@ -1,5 +1,5 @@
 /**
- * v3 几何/坐标工具
+ * 几何 / 坐标工具
  *
  * 与 v2 utils 的区别:
  * - 不依赖全局 BMapGL(api 通过参数注入,遵守「SDK 只能从 runtime/context 获取」)

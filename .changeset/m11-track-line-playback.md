@@ -31,5 +31,5 @@
 - 默认策略**不**自动 pause/resume——那是 opt-in，不是基础默认。
 
 **取数依据**：`scripts/probe-track-line.mts` + `tests/behavior/fixtures/probe-track-line.live.json`
-（exit 0，方法名与事件键均来自真实 4.0 读数）；组件行为由 `tests/behavior/v3-native-data-layers.test.ts`
+（exit 0，方法名与事件键均来自真实 4.0 读数）；组件行为由 `tests/behavior/native-data-layers.test.ts`
 的 §5 钉住（默认可见性、opt-in、用户意图优先）。

@@ -24,7 +24,7 @@
 （Node 侧 `import` 直接崩）。因此：
 
 - 根入口 `bmap-vue` **不导出**这四个组件，产物里也不含 UI Kit 的代码与样式；
-  它的整条 ESM 闭包由 `tests/behavior/v3-ui-kit-entry.test.ts` 遍历断言；
+  它的整条 ESM 闭包由 `tests/behavior/ui-kit-entry.test.ts` 遍历断言；
 - 组件只在浏览器挂载后**动态 import** 上游包，所以 `./ui-kit` 本身在 SSR / 离线环境
   可以安全 `import`（不会触碰 DOM），但渲染 UI 组件没有意义 —— 服务端渲染时请不要渲染它们。
 
@@ -153,7 +153,7 @@ function onSuggest(items: PlaceSuggestionDTO[]) {
 | `highlight` | `PlaceHighlightChangeDTO` | 高亮项变化：`{ from, to }` 变更对；`from` 在首次高亮时为 `null` |
 
 `highlight` 保留上游的**变更对**语义（高亮从 `from` 移到 `to`），不压平成单条 —— 「从哪来」不是本库
-能替调用方决定的信息。载荷形状由 `tests/behavior/v3-ui-kit-widget-contract.test.ts` 对着发布产物锁定
+能替调用方决定的信息。载荷形状由 `tests/behavior/ui-kit-widget-contract.test.ts` 对着发布产物锁定
 （上一版曾把它错当成 `{ index, value }`，导致事件在真实运行时被静默丢弃）。
 
 载荷是**纯数据**：坐标统一为 `{ lng, lat }`，上游标注 `@deprecated` 的字段（如 `street`）不转发。
@@ -222,7 +222,7 @@ await api.goToPage(3);
 
 本组件**不**调用本库 headless 的 `LocalSearch`：一次交互只走 UI Kit 一条通道。
 上游自己用 `api.map.baidu.com` 的 JSONP 通道（`qt=` 私有请求码），本库源码不接触这些私有面。
-`tests/behavior/v3-ui-kit-events.test.ts` 用「`driver.services` 一次都没被读到」来锁这条。
+`tests/behavior/ui-kit-events.test.ts` 用「`driver.services` 一次都没被读到」来锁这条。
 
 ## 与 `Autocomplete` 的区别（迁移说明）
 
@@ -386,7 +386,7 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 | `BMAP_UI_KIT_UNAVAILABLE` | 无 DOM 环境调用了 UI 组件，或没装 `@baidumap/jsapi-ui-kit` | 服务端不要渲染 UI 组件；确认已安装 optional peer |
 | 组件渲染出来了但没有样式 | 没有显式引入官方 CSS | `import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css"` |
 | `BMAP_RESOURCE_DISPOSED` | 组件已卸载后仍调用公开动作 | 在 `onUnmounted` 之前调用，或用 `status` 判断 |
-| `BMAP_SERVICE_FAILED`（`RoutePlan`） | 路线搜索失败（上游的 `error`），或搜索成功但**回包形状无法识别**（上游实现可能已变更） | 看错误的 `message` 与 `cause`；形状漂移会先被 `v3-ui-kit-widget-contract.test.ts` 抓到 |
+| `BMAP_SERVICE_FAILED`（`RoutePlan`） | 路线搜索失败（上游的 `error`），或搜索成功但**回包形状无法识别**（上游实现可能已变更） | 看错误的 `message` 与 `cause`；形状漂移会先被 `ui-kit-widget-contract.test.ts` 抓到 |
 | `PlaceDetail` 一直没有 `load` 事件 | 上游对「uid 找不到」与「详情请求失败」**都不发事件**（见上文边界） | 给 `load` 设自己的截止时间；确认 `uid` 来自真实检索结果 |
 
 组件 ref 上还会暴露 `status`：`idle` / `loading` / `ready` / `error` / `disposed`。
@@ -400,15 +400,15 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 [详情与路线封装](/adr/2026-09-13-ui-kit-detail-route-wrappers) 的「后果 / 已知限制」一节）：
 
 - 所有权 / 竞态 / 释放顺序 / props 变更（重建 vs setter）/ 事件 DTO / 不重复请求 →
-  `tests/behavior/v3-ui-kit-lifecycle.test.ts`、`v3-ui-kit-events.test.ts`
+  `tests/behavior/ui-kit-lifecycle.test.ts`、`ui-kit-events.test.ts`
   （用会记账的假 widget，断言落在计数与监听集合上）；
-- `PlaceDetail` / `RoutePlan` 自己的那几条 → `v3-ui-kit-place-detail.test.ts`（uid 镜像、
-  `load` 投影、不暴露 `layout`）、`v3-ui-kit-route-plan.test.ts`（坐标经 Driver、事件与拒绝是
+- `PlaceDetail` / `RoutePlan` 自己的那几条 → `ui-kit-place-detail.test.ts`（uid 镜像、
+  `load` 投影、不暴露 `layout`）、`ui-kit-route-plan.test.ts`（坐标经 Driver、事件与拒绝是
   同一条错误、脱敏、不暴露 `switchType`）；
-- **事件载荷形状 / 上游声明 vs 我们的投影** → `v3-ui-kit-widget-contract.test.ts`：对着官方发布
+- **事件载荷形状 / 上游声明 vs 我们的投影** → `ui-kit-widget-contract.test.ts`：对着官方发布
   产物做形状锁（不靠夹具自证），并用「双向 `Exclude`」与「上游字段必须被投影读到」两类断言把
   自持类型的偏差变成编译器错误；
-- 产物隔离与消费方 → `v3-ui-kit-entry.test.ts`（含真实 Vite 生产构建）、`v3-ui-kit-ssr.test.ts`
+- 产物隔离与消费方 → `ui-kit-entry.test.ts`（含真实 Vite 生产构建）、`ui-kit-ssr.test.ts`
   （无 DOM 子进程 + DOM 访问记账）、`pnpm verify:package`（tarball 消费方类型检查与子路径 import）。
 
 **未验证项（如实标注，不要当成已证）**：

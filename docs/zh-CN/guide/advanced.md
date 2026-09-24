@@ -38,7 +38,7 @@
 `createPluginRegistry`、`useSdkResource`、`createLayerRegistry`、`createOverlayRegistry`、
 `DataLayerManager`、`BMapError`。
 
-这条边界由 `tests/behavior/v3-advanced-contract.test.ts` 双向钉住：上面这批名字**必须**在
+这条边界由 `tests/behavior/advanced-contract.test.ts` 双向钉住：上面这批名字**必须**在
 `./core` 里找得到（正证），**必须**不在 `./advanced` 里（负向）。只写负向是不行的——清单拼错或
 名字改名后，那条断言会静默变绿。
 
@@ -90,7 +90,7 @@ UI Kit）。所以「只用了 `./advanced`」的消费者不会把整个组件�
 
 | 位置 | 判据 |
 | --- | --- |
-| `tests/behavior/v3-advanced-contract.test.ts` | `dist/advanced.mjs` 的 import 闭包不含组件标记、不引用 `@baidumap/jsapi-ui-kit`；**对照**：根入口闭包必须含组件标记 |
+| `tests/behavior/advanced-contract.test.ts` | `dist/advanced.mjs` 的 import 闭包不含组件标记、不引用 `@baidumap/jsapi-ui-kit`；**对照**：根入口闭包必须含组件标记 |
 | `pnpm verify:package` | 在装了 tarball 的消费方里用真实打包器各打一次「只用 `./advanced`」与「只用根入口」，前者 0 个组件标记、后者必须命中 |
 
 ```bash

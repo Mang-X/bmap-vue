@@ -77,22 +77,26 @@ ADR `2026-09-13-ui-kit-subpath-and-type-boundary`：根入口不重导出 UI、�
 
 ## SDK 边界与门禁
 
-边界配置的单一事实源：`scripts/raw-sdk-boundary.mts`（白名单 + 命名空间/全局对象清单）；
-检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）；文件收集与 SFC 解析层：
-`scripts/source-scan.mts`（`check:raw-sdk` 与 `check:no-bmapgl` 共用）。
+边界配置的单一事实源：`scripts/raw-sdk-boundary.mts`（白名单 + 命名空间/全局对象清单 +
+旧引擎残留的 engine 取值清单）；检测引擎：`scripts/raw-sdk-detector.mts`（边界规则与
+旧引擎残留两个规则集，源码门禁与公共声明门禁共用）；文件收集与 SFC 解析层：
+`scripts/source-scan.mts`。三条命令（`check:raw-sdk` / `check:raw-sdk:tree` /
+`check:raw-sdk:declarations`）是**同一个**门禁脚本的三种模式。
 
 raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**`、`core/loader/**`、`plugins/**`；
 `packages/test-utils` 作为 Fake 边界在扫描范围之外。其余目录（`components`、`composables`、`core/runtime` 等）为禁区。
 
-`BMapGL`（旧引擎命名空间）自 #26 起**整棵运行时源码都不允许出现**——它不在任何白名单里，
-由 `check:no-bmapgl` 单独守（官方插件命名空间 `BMapGLLib` 与官方 runtime 自己挂的别名不受影响）。
+`BMapGL`（旧引擎命名空间）自 #26 起**整棵运行时源码与公共声明都不允许出现**——它与白名单
+无关，所以 `check:raw-sdk:tree` 对白名单目录也跑这条规则（#136 起并入 `check:raw-sdk`，
+原先那个独立的 `check:no-bmapgl` 门禁已删除）。官方插件命名空间 `BMapGLLib` 与官方 4.0 runtime
+自己挂的别名不受影响。
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm check:raw-sdk` | 禁区目录静态扫描（`BMapGL`、`window.BMap`、`new BMap.*`、`BMap.*` 类型、`namespace BMap`、官方类型包导入） |
-| `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src` |
+| `pnpm check:raw-sdk` | 禁区目录静态扫描（`window.BMap`、`new BMap.*`、`BMap.*` 类型、`namespace BMap`、官方类型包导入） |
+| `pnpm check:raw-sdk:tree` | 扫描整棵 `src`：非白名单路径跑全套边界规则，白名单路径只跑旧引擎残留规则（`BMapGL` / `"webgl-v1"` / `"jsapi-v3"`） |
+| `pnpm check:raw-sdk:declarations` | `dist/**/*.d.ts` 的旧引擎残留不变量（需先 `pnpm build:package`；`check:public-dts` 不管 engine 取值） |
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:package`） |
-| `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:package`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 | `pnpm generate:api-diff:check` | 公开 API 对照表（vs 官方 React 参考）无漂移 |
 | `pnpm generate:overlay-emits:check` | 覆盖物 `defineEmits` 静态契约（`core/overlays/overlayEventEmits.generated.ts`）无漂移 |
@@ -142,4 +146,4 @@ Capability Catalog 是能力清单的单一事实源（`src/driver/capability/ca
 Fake SDK 在 raw SDK 扫描范围之外，是「组件/Facet 与 SDK 之间」的替身边界。两条约定：
 
 - **诊断分两个口径**：`fake.diagnostics.snapshot()` 返回 `leaks`（当前**未释放**的资源，门槛值恒为 0，`assertNoLeaks()` 逐项点名）与 `activity`（累计发生过什么，不要求归零）。定时器与回调是「在飞」而非「未释放」，**只进 `activity` 与 `pendingAsync()`**——需要断言「没有在飞窗口」时要显式写出来。新增资源种类必须同时登记进 `LeakCounters` 与 `LEAK_FIELD_BY_KIND`（后者穷尽，漏登记会编译失败），并选对销账方式：`map` / `panorama` / `autocomplete` 是**生命周期类**（按实例销账，重复销毁同一个实例不能抵消别的实例的泄漏），其余是**挂载类**（按次数销账，因为 SDK 不去重、挂两次就要摘两次）。
-- **单一引擎的组件级场景用 Fake v4 harness**：`packages/test-utils/fake-v4-harness.ts` 提供 `createFakeV4Harness()`（结构化 Provider / 带尺寸容器 / 基线重置 / 泄漏门禁 / 逐族读数）与 `createFakeV4Client()`（走**默认路径**装 Client：Provider 归一 → `assertLoadedSdk` → 默认 Driver 工厂 → 组装）。组件级场景写在 `tests/behavior/v3-component-scenarios.test.ts`，用例只写领域语言（`harness.attached('overlay')` / `harness.assertIdle()`），不碰字段名。
+- **单一引擎的组件级场景用 Fake v4 harness**：`packages/test-utils/fake-v4-harness.ts` 提供 `createFakeV4Harness()`（结构化 Provider / 带尺寸容器 / 基线重置 / 泄漏门禁 / 逐族读数）与 `createFakeV4Client()`（走**默认路径**装 Client：Provider 归一 → `assertLoadedSdk` → 默认 Driver 工厂 → 组装）。组件级场景写在 `tests/behavior/component-scenarios.test.ts`，用例只写领域语言（`harness.attached('overlay')` / `harness.assertIdle()`），不碰字段名。

@@ -51,7 +51,7 @@ function onError() {}
 `definition` / `provider` 都直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）：
 `provider` 必须是**结构化**形状（`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。需要固定某个
 Driver 实现时直接传带 `driver` 的 `definition`。迁移期的 `withMigrationDriver` 归一与宽松
-Provider 形状已随旧引擎删除（`#26`），见[从 WebGL v1 迁移到 4.0](../guide/migration-v1-to-v4)。
+Provider 只接受结构化形状 `{ engine, version, namespace }`（`load()` 的返回值），不接受裸全局对象。
 
 ## 插槽
 

@@ -135,13 +135,13 @@ describe("创建与销毁", () => {
     const { map, container, events, fake } = setup();
     const handle = map.create(container);
     events.on(handle, "click", () => {});
-    expect(fake.stats.liveListeners).toBe(1);
+    expect(fake.diagnostics.liveListeners).toBe(1);
 
     map.destroy(handle);
     map.destroy(handle);
 
     expect(fake.createdMaps[0].destroyed).toBe(true);
-    expect(fake.stats.liveListeners).toBe(0);
+    expect(fake.diagnostics.liveListeners).toBe(0);
     expect(fake.createdMaps[0].callLog.filter((call) => call === "destroy")).toHaveLength(1);
   });
 

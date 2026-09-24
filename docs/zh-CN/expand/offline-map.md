@@ -1,54 +1,22 @@
-# 离线地图
+# 离线地图 / 企业自托管
 
-离线地图需要自建百度地图 api，并将自建的 api 地址通过 [`apiUrl`](../guide/config) 配置传给组件库。
+默认在线加载走官方 `@baidumap/jsapi-loader`（见[官方包与加载路径](../contributing/official-packages)），
+入口 URL 恒为 `api.map.baidu.com`，**本库不拼入口、不自管回调**。因此离线或企业自托管资源不属于默认路径。
 
-除此之外，还有一个很重要的处理，需要全局初始化一个回调函数，用于通知地图初始化。
+::: warning `apiUrl` 在默认路径上会显式报错
+`<Map api-url="...">` / `createBMapPlugin({ apiUrl })` 传入的 `apiUrl` 会被官方 Provider
+**在加载前拒绝**（`BMAP_INVALID_ARGUMENT`）。这不是「接收后忽略」的假支持：官方 Loader 1.0.0
+没有自定义入口的能力。自托管请走下面两条显式路径之一。
+:::
 
-```js
-window.BMapGL.apiLoad = function () {
-  delete window.BMapGL.apiLoad
-  if (typeof window._initBMap_ == 'function') {
-    window._initBMap_()
-  }
-}
-```
+## 路径一：自建入口脚本
 
-下面是一个离线地图 api 加载入口文件示例，是根据原版在线 api 的改动的，其中请求的 `bmapgl.min.js` 就是地图 api，这个资源地址需要自建。
-
-```js
-// getApiScripts.js
-;(function () {
-  var offmapcfg = (window.offmapcfg = {})
-  var JS__FILE__ = document.currentScript
-    ? document.currentScript.src
-    : document.scripts[document.scripts.length - 1].src
-  offmapcfg.home = JS__FILE__.substr(0, JS__FILE__.lastIndexOf('/') + 1) //地图API主目录
-
-  window.BMapGL_loadScriptTime = new Date().getTime()
-  window.BMapGL = window.BMapGL || {}
-  window.BMapGL.apiLoad = function () {
-    delete window.BMapGL.apiLoad
-    if (typeof window._initBMap_ == 'function') {
-      window._initBMap_()
-    }
-  }
-
-  var s = document.createElement('script')
-  var link = document.createElement('link')
-
-  s.src = offmapcfg.home + '/bmapgl.min.js'
-  link.setAttribute('rel', 'stylesheet')
-  link.setAttribute('type', 'text/css')
-  link.setAttribute('href', offmapcfg.home + '/css/bmap.css')
-  document.body.appendChild(s)
-  document.getElementsByTagName('head')[0].appendChild(link)
-})()
-```
+用 `customScriptV4Provider(scriptSrc)` 表达——它服务自研 `ScriptLoader`，**只**在这条显式高级路径上启用。
 
 ```vue
 <script setup lang="ts">
   import { Map, Marker } from 'bmap-vue'
-  // 自建入口经 v4 Provider 表达（`apiUrl` 在默认路径下会在加载前报错）
+  // 自建入口经显式 v4 Provider 表达
   import { customScriptV4Provider } from 'bmap-vue/core'
 
   const offlineProvider = customScriptV4Provider('自建地址/getApiScripts.js')
@@ -65,14 +33,28 @@ window.BMapGL.apiLoad = function () {
 </template>
 ```
 
-::: tip v3 推荐写法
-自建入口**不**通过 `apiUrl` 表达：默认路径的入口由官方 Loader 决定，`apiUrl` 在上游没有这个入口。
+Provider 可以经 `createBMapPlugin({ provider })` 装成全局默认，也可以逐个 `<Map :provider>` 传入。
 
-- `<Map api-url="...">` / `createBMapPlugin({ apiUrl })` 会在加载前显式报 `BMAP_INVALID_ARGUMENT`
-  （`apiUrl` 只对显式传入的 legacy Provider 有意义）；
-- 正确做法是用 `customScriptV4Provider(scriptSrc)` 构造 Provider，经 `createBMapPlugin({ provider })`
-  或 Client 定义传入，见[配置](../guide/config#更换插件资源链接)。
+自建入口脚本需要自己完成两件事（这是**你的入口**的职责，不是本库的）：
 
-如果 SDK 由宿主页面自己加载好（例如已有的离线入口脚本），改用 `existingGlobalV4Provider()`
-即可，本库只消费全局、不另插 script。
+1. 加载 JSAPI 4.0 的资源；
+2. 在资源就绪时把 `window.BMap` 挂上（官方入口会挂 `BMap`，并把 `BMapGL` 挂成同一对象的别名）。
+
+如果你的入口无法满足第 2 条（例如还需要额外初始化），改用路径二。
+
+## 路径二：宿主已加载
+
+宿主页面（或自己的引导脚本）已经把 SDK 装好时，用 `existingGlobalV4Provider()`——
+本库**只消费全局，不另插 script**：
+
+```ts
+import { existingGlobalV4Provider } from 'bmap-vue/core'
+
+const app = createApp(App).use(createBMapPlugin({ provider: existingGlobalV4Provider() }))
+```
+
+见[配置](../guide/config)。
+
+::: tip 组件取消等待 ≠ 终止加载
+没有官方取消接口：全部消费者取消后底层在飞任务**保留**，且不会为后续请求另插重复 script。
 :::

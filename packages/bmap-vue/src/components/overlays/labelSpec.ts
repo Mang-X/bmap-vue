@@ -1,7 +1,7 @@
 /**
  * Label 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
- * 从 SFC 里抽出来是为了**可测**：`v3-overlay-suite.test.ts` 拿 `LABEL_FIELDS` 与
+ * 从 SFC 里抽出来是为了**可测**：`overlay-suite.test.ts` 拿 `LABEL_FIELDS` 与
  * `LabelProps` 的键集、以及 Driver 的属性描述符逐条交叉核对。
  *
  * ## 每个公开属性的更新策略（`LABEL_FIELDS` 是唯一声明点）

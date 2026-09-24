@@ -8,7 +8,13 @@
  * 导入声明），注释、正则字面量、普通字符串天然不参与匹配。
  */
 import * as ts from "typescript";
-import { GLOBAL_OBJECT_NAMES, OFFICIAL_TYPES_PACKAGE } from "./raw-sdk-boundary.mts";
+import {
+  GLOBAL_OBJECT_NAMES,
+  LEGACY_ENGINE_IDS,
+  LEGACY_RULE_LABELS,
+  OFFICIAL_TYPES_PACKAGE,
+  type LegacyRule,
+} from "./raw-sdk-boundary.mts";
 
 export type Rule =
   | "legacy-namespace"
@@ -20,7 +26,7 @@ export type Rule =
   | "official-types-reference";
 
 export const RULE_LABELS: Record<Rule, string> = {
-  "legacy-namespace": "迁移期全局命名空间 BMapGL 越界",
+  "legacy-namespace": "旧引擎全局命名空间 BMapGL 越界（该引擎已删除）",
   "global-member": "全局对象成员访问 window/globalThis.BMap",
   "namespace-root": "BMap.* 成员访问 / new BMap.*",
   "type-position": "BMap.* 类型位置引用",
@@ -29,12 +35,24 @@ export const RULE_LABELS: Record<Rule, string> = {
   "official-types-reference": "三斜线 types 引用官方类型包",
 };
 
+export { LEGACY_RULE_LABELS };
+export type { LegacyRule };
+
 export interface Violation {
   file: string;
   line: number;
   column: number;
   text: string;
   rule: Rule;
+}
+
+/** 旧引擎残留的违规记录：形状与 `Violation` 相同，`rule` 收窄成 `LegacyRule`。 */
+export interface LegacyViolation {
+  file: string;
+  line: number;
+  column: number;
+  text: string;
+  rule: LegacyRule;
 }
 
 const V4_NAMESPACE = "BMap";
@@ -249,11 +267,86 @@ export function findViolations(
   return violations;
 }
 
-/** 稳定排序：文件 → 行 → 列。泛型以便其它门禁（如 no-bmapgl）复用自己的违规类型。 */
+/** 稳定排序：文件 → 行 → 列。泛型以便各门禁复用自己的违规类型。 */
 export function sortViolations<T extends { file: string; line: number; column: number }>(
   violations: T[],
 ): T[] {
   return [...violations].sort(
     (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column,
   );
+}
+
+/** 已删除的 engine 取值集合（精确匹配字符串字面量）。 */
+const LEGACY_ENGINE_ID_SET: ReadonlySet<string> = new Set(LEGACY_ENGINE_IDS);
+
+/**
+ * 收集「已删除的旧引擎残留」：`BMapGL` 标识符 / 精确字符串键 / `namespace BMapGL` 声明，
+ * 以及 `"webgl-v1"` / `"jsapi-v3"` 这两个已删除的 engine 取值。
+ *
+ * ## 为什么是独立 visitor，而不是给 `matchRule` 加个 flag
+ *
+ * `check-public-dts.mts` 也调 `findViolations` / `collectViolations`。把 `removed-engine-id`
+ * 塞进共享的 `Rule` 联合与 `RULE_LABELS`，会让公共声明门禁**免费**多出一条它并不需要的规则，
+ * 还会让 `--print-boundary` 的输出漂移。规则集不同，就该用不同的 visitor。
+ *
+ * ## 为什么必须自带一遍 AST walk（而不是复用 `matchRule`）
+ *
+ * `matchRule` 的 `namespace-declaration` 是**双用途**规则（`raw-sdk-detector.mts` 的
+ * `isNamespaceName` 同时接受 `BMap` 与 `BMapGL`），按规则**名字**过滤会**静默**漏掉
+ * `namespace BMapGL`——而那正是最该抓的那条。所以这里从 AST 节点**重新判定**。
+ *
+ * ## 覆盖范围
+ *
+ * 白名单目录（`driver/**`、`client/**`、`core/loader/**`、`plugins/**`）**允许** `BMap.*`
+ * ——那是它们存在的理由；但它们同样**不允许**旧引擎残留。因此 `check-raw-sdk.mts` 的
+ * `--src` 树模式在白名单内也跑本 visitor。
+ *
+ * ## 刻意不误伤的两类文本
+ *
+ * - **官方插件命名空间 `BMapGLLib`**（`TrackAnimation` / `DrawingManager` / `GeoUtils` 的
+ *   CDN URL 与全局）：`BMapGLLib` 是**单个标识符**，`node.text` 为 `"BMapGLLib"`，与
+ *   `"BMapGL"` 精确不等；CDN URL 是整串字面量，也不等。全程无 prefix/contains 判定。
+ * - **注释与长文本里对 `BMapGL` 的提及**（迁移说明、历史注释）：AST 看不见注释；
+ *   长文本的 `StringLiteral.text` 整串不等于 `"BMapGL"`。
+ */
+export function collectLegacyViolations(
+  file: string,
+  astText: string,
+  locationText: string,
+  offset: number,
+  violations: LegacyViolation[],
+  kind: ts.ScriptKind = ts.ScriptKind.TS,
+): void {
+  const ast = ts.createSourceFile(file, astText, ts.ScriptTarget.Latest, true, kind);
+  const lines = locationText.split("\n");
+  const index = buildLineIndex(locationText);
+
+  const report = (node: ts.Node, rule: LegacyRule): void => {
+    const { line, column } = locate(index, offset + node.getStart(ast));
+    violations.push({ file, line, column, text: (lines[line - 1] ?? "").trim(), rule });
+  };
+
+  const visit = (node: ts.Node): void => {
+    const rule = matchRule(node);
+    // `matchRule` 把 `namespace BMapGL` 与 `namespace BMap` / `declare global` 归到同一条
+    // 双用途规则上，这里按节点**重新判定**，否则白名单目录里的 `namespace BMapGL` 会漏报。
+    if (rule === "legacy-namespace") {
+      report(node, "legacy-namespace");
+    } else if (
+      rule === "namespace-declaration" &&
+      ts.isModuleDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === LEGACY_NAMESPACE
+    ) {
+      report(node, "legacy-namespace");
+    }
+    if (
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+      LEGACY_ENGINE_ID_SET.has(node.text)
+    ) {
+      report(node, "removed-engine-id");
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
 }

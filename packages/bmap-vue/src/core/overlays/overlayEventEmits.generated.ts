@@ -1,10 +1,9 @@
 // Generated file. Do not edit directly.
 //
-// 由 scripts/generate-overlay-emits.mts 生成，事实源四处：
+// 由 scripts/generate-overlay-emits.mts 生成，事实源三处：
 //   1. core/overlays/overlayEventCatalog.ts 的 OVERLAY_EVENT_MATRIX（SDK 事件 + 载荷档）
-//   2. core/deprecations/aliases.ts 的 OVERLAY_EVENT_ALIASES（历史事件名）
-//   3. scripts/generate-overlay-emits.mts 的 NON_SDK_EVENTS（本库事件 + 派发点）
-//   4. scripts/generate-overlay-emits.mts 的 EXCLUDED_EVENTS（矩阵有、但本库无派发点的键）
+//   2. scripts/generate-overlay-emits.mts 的 NON_SDK_EVENTS（本库事件 + 派发点）
+//   3. scripts/generate-overlay-emits.mts 的 EXCLUDED_EVENTS（矩阵有、但本库无派发点的键）
 //
 // 改事实源后跑 `pnpm generate:overlay-emits`；CI 用 `--check` 校验无漂移。
 //
@@ -21,7 +20,7 @@ import type {
 import type { Point } from "../../driver/types/geometry";
 import type { ContextMenuSelectPayload } from "../../types/components";
 
-/** `marker` 覆盖物的事件面：11 个 SDK 事件 + 2 个本库/别名事件（共 13 个），供 `Marker.vue` 的 `defineEmits` 使用。 */
+/** `marker` 覆盖物的事件面：11 个 SDK 事件 + 1 个本库事件（共 12 个），供 `Marker.vue` 的 `defineEmits` 使用。 */
 export interface MarkerEmits {
   /** 点击标注时触发 */
   click: [event: OverlayPointerEvent];
@@ -45,8 +44,6 @@ export interface MarkerEmits {
   dragend: [event: OverlayPointerEvent];
   /** 标注被移除（如 map.removeOverlay()）时触发 */
   remove: [event: OverlayEventPayload];
-  /** @deprecated 历史别名；规范名是 `dragend`（kebab 拼写）。由集中弃用层在派发正典名之后补发，载荷相同。 */
-  "drag-end": [event: OverlayPointerEvent];
   /** 本库事件（不是 SDK 事件）：components/overlays/markerSpec.ts 派发。 */
   "update:position": [event: Point];
 }
@@ -301,7 +298,7 @@ export interface GroundOverlayEmits {
   lineupdate: [event: OverlayEventPayload];
 }
 
-/** `info-window` 覆盖物的事件面：5 个 SDK 事件 （另排除 1 个无派发点：resize） + 4 个本库/别名事件（共 9 个），供 `InfoWindow.vue` 的 `defineEmits` 使用。 */
+/** `info-window` 覆盖物的事件面：5 个 SDK 事件 （另排除 1 个无派发点：resize） + 3 个本库事件（共 8 个），供 `InfoWindow.vue` 的 `defineEmits` 使用。 */
 export interface InfoWindowEmits {
   /** 信息窗口打开时触发（载荷按转发路径的真实形状声明，不按矩阵的档。） */
   open: [];
@@ -315,8 +312,6 @@ export interface InfoWindowEmits {
   restore: [event: unknown];
   /** 本库事件（不是 SDK 事件）：core/composables/useInfoWindow.ts 派发。 */
   "update:open": [event: boolean];
-  /** 本库事件（不是 SDK 事件）：core/composables/useInfoWindow.ts 派发。 */
-  "update:show": [event: boolean];
   /** 本库事件（不是 SDK 事件）：core/composables/useInfoWindow.ts 派发。 */
   rebuild: [event: number];
   /** 本库事件（不是 SDK 事件）：core/composables/useInfoWindow.ts 派发。 */
@@ -333,7 +328,7 @@ export interface CustomOverlayEmits {
   mouseout: [event: OverlayPointerEvent];
 }
 
-/** `context-menu` 覆盖物的事件面：2 个 SDK 事件 + 1 个本库/别名事件（共 3 个），供 `ContextMenu.vue` 的 `defineEmits` 使用。 */
+/** `context-menu` 覆盖物的事件面：2 个 SDK 事件 + 1 个本库事件（共 3 个），供 `ContextMenu.vue` 的 `defineEmits` 使用。 */
 export interface ContextMenuEmits {
   /** 菜单打开时触发（`sdk.show()` 与真实右键都会触发） */
   open: [event: OverlayPartialPointerEvent];

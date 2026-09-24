@@ -51,7 +51,7 @@ export interface PlaceHighlightDTO {
  * 其中 `from` 在「此前没有高亮项」（首次按方向键）时为 `null`。这里刻意保留上游语义，
  * 不压平成单条 —— 「从哪来」不是本库能替调用方决定的信息。
  *
- * ⚠️ 载荷形状由 `tests/behavior/v3-ui-kit-widget-contract.test.ts` 对着发布产物锁定；
+ * ⚠️ 载荷形状由 `tests/behavior/ui-kit-widget-contract.test.ts` 对着发布产物锁定；
  * 上游改形状时会先红，不要靠猜。
  */
 export interface PlaceHighlightChangeDTO {
@@ -217,7 +217,7 @@ export type RouteTransitSubType = "bus" | "subway" | "ferry" | "train" | "airpla
  * 驾车策略。
  *
  * 与上游 `DrivingPolicy` 枚举**逐值对齐**（本库自持，不 import 上游类型）：对齐关系由
- * `v3-ui-kit-widget-contract.test.ts` 把上游 `.d.ts` 的枚举成员解析出来逐项断言。
+ * `ui-kit-widget-contract.test.ts` 把上游 `.d.ts` 的枚举成员解析出来逐项断言。
  *
  * 它**既是类型也是值**（与 TS 枚举同形），这样调用方不必写魔法数字：
  *
@@ -438,7 +438,7 @@ export type UiKitWidgetOptions = Record<string, unknown> & { map: unknown };
  * **索引签名必须保留**：`loadUiKit()` 从 #73 起就是公开的进阶逃生口（「用上游还没被本库封装的
  * 成员时自己构造」），删掉它会让 `uiKit[someWidgetName]` 这类已有写法直接类型报错
  * （PR #82 评审 P1）。它带来的「差集查不出来」问题不靠收窄公共 API 解决 ——
- * 由 `v3-ui-kit-widget-contract.test.ts` 对着上游 `.d.ts` **逐成员**校验我们依赖的这四个具名成员。
+ * 由 `ui-kit-widget-contract.test.ts` 对着上游 `.d.ts` **逐成员**校验我们依赖的这四个具名成员。
  */
 export interface UiKitModule {
   PlaceAutocomplete: new (

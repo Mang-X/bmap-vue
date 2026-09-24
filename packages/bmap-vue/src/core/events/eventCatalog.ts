@@ -5,19 +5,19 @@
  *
  * 1. `<Map>` 的 `defineEmits`（模板与 TS 提示）与 map 事件的转发；
  * 2. `useMapEvent` / `useMapStatus` 解析订阅名（含 SDK 拼写与 kebab 拼写的互认）；
- * 3. 文档表格与测试 fixture 的对照（`tests/behavior/v3-map-event-catalog.test.ts`）。
+ * 3. 文档表格与测试 fixture 的对照（`tests/behavior/map-event-catalog.test.ts`）。
  *
  * ## 名字从哪来
  *
  * **上游权威清单**：`@baidumap/jsapi-v4-types@4.0.4` 的 `core/MapEvent.d.ts` 声明了
  * 「地图事件名称到事件对象类型的完整映射表」（41 个键），`core/Map.d.ts` 的
  * `addEventListener<K extends keyof MapEventMap>` 直接消费它。本表 `declared: true` 的条目
- * 与那份清单**逐键相等**，由 `v3-map-event-catalog.test.ts` 直接解析上游 `.d.ts` 文本比对
+ * 与那份清单**逐键相等**，由 `map-event-catalog.test.ts` 直接解析上游 `.d.ts` 文本比对
  * （双向取差集，任一方向非空即红）。
  *
  * **运行时可观察、上游类型未声明的两个**：`headingchange` / `tiltchange`。依据是它们
  * **已经在本库运行**：`<Map>` 的视野回写订阅（M4-STATE / #27）就绑在它们上面，行为由
- * `v3-component-scenarios.test.ts` 的 `simulateUserView()` 与 ADR `2026-09-14-map-controlled-state`
+ * `component-scenarios.test.ts` 的 `simulateUserView()` 与 ADR `2026-09-14-map-controlled-state`
  * 决策 5 冻结。这与 #74 发现的「`MapTypeId` 声明了 `BMAP_*_MAP` 而运行时只有
  * `NORMAL/EARTH/SATELLITE`」是同一类**声明与运行时不一致**，因此这里如实标 `declared: false`，
  * 不假装上游声明存在、也不把它们塞进「上游清单」。
@@ -59,7 +59,7 @@ import type {
  * `type` 在这里收成必填的依据：Driver 派发时总是知道自己是哪个订阅名
  * （`normalizeDriverEvent` 的第一个参数）。`DriverEvent.type` 声明为可选，是为了兼容另一个
  * 独立 helper（`normalizeMapMouseEvent` 可以在没有订阅上下文时被调用）；两条路径分别由
- * `v3-map-event-catalog.test.ts` 的 fixture 钉住。
+ * `map-event-catalog.test.ts` 的 fixture 钉住。
  */
 export type MapEventPayload = DriverEvent & { type: string };
 
@@ -565,7 +565,7 @@ export type MapEventPayloadOf<K extends MapEventName> = MapEventMap[K];
  *
  * 声明在类型位置、不产生运行时代码。任一条不成立都会让 `vue-tsc` 报 TS2344 —— 也就是说
  * 「手写的 emits 接口」与「Catalog 表」不可能悄悄漂移。两处的对应关系反过来也保住了
- * 运行时的那两张表（指针兜底清单 / 读回补齐表，由 `v3-map-event-catalog.test.ts` 对齐）。
+ * 运行时的那两张表（指针兜底清单 / 读回补齐表，由 `map-event-catalog.test.ts` 对齐）。
  */
 
 /** 参数类型必须是 `never`（差集非空即编译失败）。 */
@@ -690,18 +690,11 @@ export const MAP_EVENT_EMIT_ALIASES: Readonly<Record<string, readonly string[]>>
 export interface MapComponentEventDefinition {
   /** 一句话说明（进文档表格）。 */
   readonly description: string;
-  /** 兼容别名（`<Map>` 对规范名与别名各发一次；规范名恒为键名）。 */
-  readonly aliases?: readonly string[];
 }
 
 export const BMAP_COMPONENT_EVENT_CATALOG = {
   ready: {
     description: "地图就绪（client + map 可用）",
-    /**
-     * 历史别名：v2 用 `initd` 表达同一件事，v3 起规范名是 `ready`。
-     * `<Map>` 对规范名与别名**各发一次**（同载荷），映射集中在这张表里。
-     */
-    aliases: ["initd"],
   },
   "plugin-ready": {
     description: "单个插件加载完成（载荷为插件名）",
@@ -732,42 +725,3 @@ export const BMAP_COMPONENT_EVENT_CATALOG = {
 /** 组件事件规范名。 */
 export type MapComponentEventName = keyof typeof BMAP_COMPONENT_EVENT_CATALOG;
 
-/** 别名名（从表里的 `aliases` 派生；`initd` 是当前唯一一个）。 */
-export type MapComponentEventAliasName = {
-  [K in MapComponentEventName]: (typeof BMAP_COMPONENT_EVENT_CATALOG)[K] extends {
-    aliases: readonly (infer A extends string)[];
-  }
-    ? A
-    : never;
-}[MapComponentEventName];
-
-/** `<Map>` 的 emits 名集合 = 规范名 ∪ 别名。 */
-export type MapComponentEmitName = MapComponentEventName | MapComponentEventAliasName;
-
-/**
- * 规范名 → 历史别名：`<Map>` 对两者**各发一次**（同载荷）。
- *
- * 与 map 事件的 `MAP_EVENT_EMIT_ALIASES` 同形：组件读这张表来发别名，因此「旧名称的集中
- * deprecation」只有一处（issue #28 明令禁止组件各自兼容）。
- */
-export const BMAP_COMPONENT_EVENT_EMIT_ALIASES: Readonly<Record<string, readonly string[]>> =
-  Object.freeze(
-    Object.fromEntries(
-      (Object.keys(BMAP_COMPONENT_EVENT_CATALOG) as MapComponentEventName[])
-        .map((name) => {
-          const entry = BMAP_COMPONENT_EVENT_CATALOG[name] as { aliases?: readonly string[] };
-          return [name, entry.aliases ?? []] as const;
-        })
-        .filter(([, aliases]) => aliases.length > 0),
-    ),
-  );
-
-/** 别名 → 规范名（文档表格与测试用；从上面那张表派生，不手写第二份）。 */
-export const BMAP_COMPONENT_EVENT_ALIASES: Readonly<Record<string, MapComponentEventName>> =
-  Object.freeze(
-    Object.fromEntries(
-      Object.entries(BMAP_COMPONENT_EVENT_EMIT_ALIASES).flatMap(([name, aliases]) =>
-        aliases.map((alias) => [alias, name as MapComponentEventName]),
-      ),
-    ),
-  );

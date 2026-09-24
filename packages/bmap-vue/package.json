@@ -24,9 +24,9 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "volar.d.ts",
     "README.md",
-    "NOTICE.md",
-    "volar.d.ts"
+    "NOTICE.md"
   ],
   "exports": {
     ".": {

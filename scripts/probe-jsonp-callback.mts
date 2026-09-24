@@ -45,7 +45,7 @@
  * ## 它是证据生成器，不是门禁
  *
  * 与 `probe-layer-detached.mts` 同一口径：不进 CI 必需链路。F-2 的**可回归 gate** 是
- * `tests/behavior/v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture 一致性
+ * `tests/behavior/probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture 一致性
  * + `ScriptLoader.test.ts` 的 foreign 单测（那是本库 OWNED 侧的回归门）。
  *
  * 用法：
@@ -83,7 +83,7 @@ function argValue(name: string): string | undefined {
  * - **foreign 臂**：同名上先放外部原值 → 再装我们的 handler（覆盖）→ 再次加载（此时官方可能
  *   已缓存；若不回调则记 `foreign.callbackFired=0` 并由 verdict 判第三态侧）→ 释放后比对原引用。
  *
- * ⚠️ 页面里**不出现反引号**（外层是 TS 模板串），由 `v3-probe-page-scripts.test.ts` 静态守卫。
+ * ⚠️ 页面里**不出现反引号**（外层是 TS 模板串），由 `probe-page-scripts.test.ts` 静态守卫。
  */
 const PAGE_JS = `
 (async () => {

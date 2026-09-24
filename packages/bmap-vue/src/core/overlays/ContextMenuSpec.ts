@@ -1,7 +1,7 @@
 /**
  * `<ContextMenu>` 的属性声明、条目归一化与菜单指纹（M5-CUSTOM-MENU / issue #33）
  *
- * 从 SFC 里抽出来是为了**可测**：`tests/behavior/v3-bcontextmenu.test.ts` 要拿「声明面」与
+ * 从 SFC 里抽出来是为了**可测**：`tests/behavior/contextmenu.test.ts` 要拿「声明面」与
  * `ContextMenuProps` 的键集、以及 Driver 的属性描述符交叉核对；放在 `.vue` 里就只能靠人眼
  * （与 `markerSpec.ts` / `InfoWindowSpec.ts` 同一手法）。
  *
@@ -26,7 +26,6 @@
  * | prop | 落地 | 依据（`OVERLAY_DESCRIPTORS["context-menu"]`） |
  * | --- | --- | --- |
  * | `items` | **重建菜单**（`recreate`） | 描述符：`unsupported`——「菜单项经 addItem/removeItem 管理，项目侧走重建菜单路径」 |
- * | `menuItems` | `alias`：由集中弃用层在读取层解析成 `items`，自身不下发 | 不是 SDK 属性 |
  * | `width` | **重建菜单** | 描述符：`unsupported`——「宽度是 MenuItem 的构造选项（`MenuItemOptions.width`），ContextMenu 实例上没有宽度 setter」 |
  * | `visible` | **挂载 / 摘除**（不是弹层显隐） | 描述符：`visible: toggleBy(["show","hide"])`，但组件侧走 attach/detach（见决策） |
  *
@@ -96,8 +95,8 @@ export function contextMenuEntriesFingerprint(entries: readonly ContextMenuEntry
   );
 }
 
-/** prop → 落地方式的完整映射（`-?` 由类型层保证漏一个就编译失败）。 */
-export type ContextMenuFieldLanding = "rebuild" | "visibility" | "alias";
+/** prop → 落地方式的完整映射。 */
+export type ContextMenuFieldLanding = "rebuild" | "visibility";
 
 export type ContextMenuFieldMap<Props> = {
   readonly [K in keyof Props]-?: ContextMenuFieldLanding;
@@ -106,17 +105,18 @@ export type ContextMenuFieldMap<Props> = {
 /**
  * 每个公开属性的落地方式（唯一声明点）。
  *
- * 表与上面的模块注释逐行对应；`tests/behavior/v3-bcontextmenu.test.ts` 的「声明面」一组拿它与
+ * 表与上面的模块注释逐行对应；`tests/behavior/contextmenu.test.ts` 的「声明面」一组拿它与
  * `ContextMenuProps` 的键集、以及 `OVERLAY_DESCRIPTORS["context-menu"]` 交叉核对。
+ *
+ * ⚠️ 这个映射声明在**内联匿名类型**上（不是 `ContextMenuProps`）——所以从 `ContextMenuProps`
+ * 删字段**不会**让本表编译失败，键集必须手工保持一致。（#136：随旧名 `menuItems` 一并删除。）
  */
 export const CONTEXT_MENU_FIELDS: ContextMenuFieldMap<{
   items: unknown;
-  menuItems: unknown;
   width: unknown;
   visible: unknown;
 }> = {
   items: "rebuild",
-  menuItems: "alias",
   width: "rebuild",
   visible: "visibility",
 };

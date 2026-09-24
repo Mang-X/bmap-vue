@@ -5,7 +5,7 @@
  * 是什么状态**。此前 Capability Catalog 里 `overlay.mapvgl` / `service.track-animation`
  * 的说明是「迁移结论待定（M8）」——那不是结论，读者既不知道已经查过什么，也不知道还差什么。
  *
- * 三条约定（都由 `v3-plugin-compat-inventory.test.ts` 钉住，且配了反证）：
+ * 三条约定（都由 `plugin-compat-inventory.test.ts` 钉住，且配了反证）：
  *
  * 1. **依据分级，不混着写**。每条结论必须标出 `basis`：哪些是**对锁定 URL 的真实发布产物**
  *    的观察（`artifact`，命令 `pnpm probe:plugin-compat`）、哪些是与官方
@@ -33,7 +33,7 @@
  * 本文件是**单一事实源**：`pnpm generate:plugin-inventory` 由它生成
  * `docs/zh-CN/contributing/plugin-compat-inventory.md`（人读）与
  * `docs/.vitepress/plugin-inventory.json`（机读：给站点 / 工具链按 id 取结论用，形状由
- * `v3-plugin-compat-inventory.test.ts` 钉住，取用方式见 `docs/zh-CN/contributing/ai-development.md`），
+ * `plugin-compat-inventory.test.ts` 钉住，取用方式见 `docs/zh-CN/contributing/ai-development.md`），
  * CI 用 `--check` 校验无漂移。
  */
 import type { Capability } from "../driver/capability";
@@ -46,7 +46,7 @@ export type BuiltinPluginName = "TrackAnimation" | "DrawingManager" | "GeoUtils"
  *
  * 刻意**不**在这里 import `builtins.ts`：本文件要能被 Node 侧的生成器 / 探针以
  * `--experimental-strip-types` 直接加载，而 Node ESM 不解析无扩展名导入。URL 的单一事实源
- * 仍是 `builtins.ts`，两边的一致性由 `v3-plugin-compat-inventory.test.ts` 交叉断言
+ * 仍是 `builtins.ts`，两边的一致性由 `plugin-compat-inventory.test.ts` 交叉断言
  * （`Object.keys(BUILTIN_PLUGIN_URLS)` 必须与这里的键集合相等）。
  */
 export type PluginUrlKey = "trackAnimation" | "drawingManager" | "geoUtils" | "mapvgl";
@@ -92,7 +92,7 @@ export type PluginVerdict =
    *
    * ⚠️ **当前没有任何条目取这个值，这是刻意的**：按 #43 的口径，只有「结论明确是 adapter
    * **且**存在真实消费者」时才写 adapter 代码；四个内置插件都不满足该条件。要新增一条
-   * `adapter` 条目，必须同时给出消费者与迁移落点，并删掉 `v3-plugin-compat-inventory.test.ts`
+   * `adapter` 条目，必须同时给出消费者与迁移落点，并删掉 `plugin-compat-inventory.test.ts`
    * 里那条「当前无 adapter 条目」的门禁。
    */
   | "adapter"
@@ -197,7 +197,7 @@ export interface PluginCompatEntry {
    *
    * `true` 就是 `incompatible` 的决定性依据。这里只放布尔值、不放成员名清单，有两个原因：
    *
-   * 1. **门禁口径**：本库生产源码的私有面门禁（`tests/behavior/v3-private-sdk-surface.test.ts`）
+   * 1. **门禁口径**：本库生产源码的私有面门禁（`tests/behavior/private-sdk-surface.test.ts`）
    *    匹配的是**访问形态**——字符串字面量里写成「命名空间点号 + 成员名」与「真的去读它」在文本上
    *    无法区分，判违规是对的。门禁自己的约定就是「解释这类成员时只写成员名（反引号包起来）」，
    *    所以这里不给出可被误读的完整路径形态。

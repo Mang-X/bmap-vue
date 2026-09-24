@@ -1,7 +1,7 @@
 /**
  * Marker 的 `OverlaySpec` 声明（M5-SPEC-MARKER / issue #30）
  *
- * 从 SFC 里抽出来是为了**可测**：`tests/behavior/v3-overlay-spec.test.ts` 要拿 `fields` 与
+ * 从 SFC 里抽出来是为了**可测**：`tests/behavior/overlay-spec.test.ts` 要拿 `fields` 与
  * `MarkerProps` 的键集、以及 Driver 的属性描述符逐条交叉核对。放在 `.vue` 里就只能靠人眼。
  *
  * ## 每个公开属性的更新策略（`MARKER_FIELDS` 是唯一声明点）

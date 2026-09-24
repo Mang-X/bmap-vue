@@ -92,7 +92,7 @@ BAIDU_MAP_AK=<ak> pnpm perf:baseline:live
   URL 查询参数注入，页面与 Node 打印两侧都过 `redactAk`。
 
 页面内测量（rAF / `PerformanceObserver` / 原型包装）不进单测——只能真浏览器跑，由实跑读数
-取证；纯函数与接线契约在 `tests/behavior/v3-live-performance-gate.test.ts`。
+取证；纯函数与接线契约在 `tests/behavior/live-performance-gate.test.ts`。
 
 ### 实跑读数（2026-09-23，#123 · 评审 #131 第四轮后口径）
 

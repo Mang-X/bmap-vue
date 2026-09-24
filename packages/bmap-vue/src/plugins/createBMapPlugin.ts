@@ -1,5 +1,5 @@
 /**
- * M3: createBMapPlugin —— v3 安装 API
+ * M3: createBMapPlugin —— 安装 API
  *
  * 通过 app.use() 提供全局默认 Client definition(AK/版本/Provider),Map 组件从
  * app 级 config 与 definition 读取默认 provider(而非直接访问 window,符合依赖规则)。
@@ -14,12 +14,12 @@
  * - M3A3-REMOVE-LEGACY（#26）：迁移期的 `withMigrationDriver` 归一与 `allowExistingGlobal`
  *   一并删除。默认 definition 直接交给 `createBMapClient`（缺省注入 jsapi-v4 Driver 工厂），
  *   需要复用宿主已加载的 SDK 时显式传 `existingGlobalV4Provider()`；
- * - 旧 `globalProperties` 映射保留，但只作为迁移期兼容并给出明确的 beta 警告。
+ * - 旧 `globalProperties` 映射随 #136 删除：它绕过 Provider/Client 边界让组件直接读全局配置，
+ *   配置一律经 `<BMapProvider>` 或 `createBMapPlugin({ ak })` 的默认 Client definition。
  */
 import type { App, Component } from "vue";
 import { baiduJsapiV4Provider } from "../core/loader/providers/index";
 import { DEFAULT_VERSION, type BMapLoadOptions } from "../core/loader/url";
-import { logger } from "../core/logger";
 import { bmapConfigKey, type BMapPluginConfig } from "../core/context/pluginConfig";
 import { defaultClientDefinitionKey } from "../core/context/client";
 import type { BMapProviderLike, CreateBMapClientOptions } from "../client/types";
@@ -70,16 +70,9 @@ export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
       app.provide(bmapConfigKey, config);
       // 新规范:app.use 只提供默认 Client Definition,可被 <BMapProvider> 覆盖
       app.provide(defaultClientDefinitionKey, clientDefinition);
-      // 注册全局组件(与 v2 app.use 行为保持兼容)
+      // 注册全局组件（注册名取 manifest 清单，见下方 `installableComponents`）
       for (const [name, component] of installableComponents()) {
         if (component) app.component(name, component);
-      }
-      // 兼容旧 globalProperties 映射,便于迁移期 v2 组件读取
-      const appProp = app.config.globalProperties as Record<string, unknown>;
-      if (options.ak) appProp.$baiduMapAk = options.ak;
-      if (options.apiUrl) appProp.$baiduMapApiUrl = options.apiUrl;
-      if (options.ak || options.apiUrl) {
-        warnLegacyGlobalProperties();
       }
     },
     version: LIBRARY_VERSION,
@@ -89,7 +82,7 @@ export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
 }
 
 /**
- * v3 组件清单:来自 Manifest 生成的 `components/index.ts`(单一事实源)。
+ * 组件清单:来自 Manifest 生成的 `components/index.ts`(单一事实源)。
  *
  * 该文件由 `scripts/generate-manifest-artifacts.mts` 依据 `src/manifest.ts` 生成,
  * `pnpm generate:manifest:check` 会阻止漂移。注册名取 **manifest 的组件名**(导出名),
@@ -97,29 +90,4 @@ export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
  */
 function installableComponents(): readonly (readonly [string, Component])[] {
   return Object.entries(manifestComponents) as unknown as readonly (readonly [string, Component])[];
-}
-
-let legacyGlobalPropertiesWarned = false;
-
-/**
- * `app.config.globalProperties.$baiduMapAk` / `$baiduMapApiUrl` 是旧版兼容映射，
- * 不是 bmap-vue 公共契约：它绕过了 Provider/Client 边界，让组件直接读全局配置。1.0
- * 正式版会移除，因此这里显式 warn。
- *
- * 进程内只提示一次：模块级标记足以覆盖「多 app / 多插件实例」的常见用法，既不会让
- * 迁移者错过，也不会因为重复安装而刷屏。
- */
-function warnLegacyGlobalProperties(): void {
-  if (legacyGlobalPropertiesWarned) return;
-  legacyGlobalPropertiesWarned = true;
-  logger.warn(
-    "app.config.globalProperties.$baiduMapAk/$baiduMapApiUrl 是旧版兼容映射，" +
-      "将在 1.0.0 正式版移除；" +
-      "请改用 <BMapProvider> 或 app.use(createBMapPlugin({ ak })) 的默认 Client definition。",
-  );
-}
-
-/** 测试用：重置迁移期警告的一次性标记。 */
-export function resetLegacyGlobalPropertiesWarningForTests(): void {
-  legacyGlobalPropertiesWarned = false;
 }

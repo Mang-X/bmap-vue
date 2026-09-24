@@ -8,7 +8,7 @@
  * `@baidumap/jsapi-loader`。因此这一份里它的用例一律注入**官方 load 的替身**
  * （`OfficialJsapiLoader`），只断言本库该负责的四件事：配置映射 / 冲突 / 按消费者取消 /
  * LoadedSdk 归一化。真实的官方 loader（DOM、script 注入、单例、JSONP 回调）由
- * `tests/behavior/v3-official-loader-default.test.ts` 用真实模块驱动。
+ * `tests/behavior/official-loader-default.test.ts` 用真实模块驱动。
  *
  * `CustomScriptV4Provider` 仍走自研 `ScriptLoader` + happy-dom（手工触发就绪信号），
  * 因此这里的 script 追踪辅助函数继续服务它。

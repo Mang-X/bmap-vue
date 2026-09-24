@@ -24,7 +24,7 @@ pnpm patch-commit node_modules/.pnpm_patches/<pkg>@<version>
 | 改动 | `/// <reference path="core/displayOptions.d.ts" />` → `core/DisplayOptions.d.ts` |
 | 触发问题 | issue #50（发现于 #15 / PR #49 的 CI 首轮） |
 | 决策记录 | [`docs/adr/2026-09-13-upstream-types-case-patch.md`](../docs/adr/2026-09-13-upstream-types-case-patch.md) |
-| 门禁 | `tests/behavior/v3-upstream-types-case-patch.test.ts`、`pnpm typecheck:package` |
+| 门禁 | `tests/behavior/upstream-types-case-patch.test.ts`、`pnpm typecheck:package` |
 
 **为什么需要它**：发布产物中实际文件名是 `core/DisplayOptions.d.ts`，而入口引用写成了小写。
 macOS（APFS 默认大小写不敏感）能解析到真实文件，Linux / 任何大小写敏感的卷上
@@ -43,7 +43,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // core/Map.d.ts / core/MapOp
 1. 把 `packages/bmap-vue/package.json` 的 `@baidumap/jsapi-v4-types` 升到该精确版本；
 2. 删除本补丁文件与 `pnpm-workspace.yaml` 里的 `patchedDependencies` 条目；
 3. 重跑 `pnpm install`、`pnpm typecheck:package` 与 `pnpm test:unit`
-   （`v3-upstream-types-case-patch.test.ts` 会核对补丁已声明且已生效；删除补丁时需同步删掉该用例
+   （`upstream-types-case-patch.test.ts` 会核对补丁已声明且已生效；删除补丁时需同步删掉该用例
    的补丁断言，保留「无大小写不匹配引用」那条扫描断言 —— 上游修好之后它仍应通过）。
 
 这一步不会悄悄漏掉：`patchedDependencies` 的键是 `包名@精确版本`，只升级依赖而留下旧键时

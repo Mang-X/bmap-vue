@@ -30,11 +30,9 @@ import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import { createDeprecationWarner, describeDeprecation, propAliasesOf } from "../deprecations";
 import {
   INFO_WINDOW_DESCRIPTOR_KEYS,
   INFO_WINDOW_FIELDS,
-  infoWindowOpenIntentUsesAlias,
   positionKeyOf,
   resolveInfoWindowOpenIntent,
   type InfoWindowFieldUpdate,
@@ -162,13 +160,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   }
 
   assertFieldDeclarations();
-
-  // `show` 的弃用告警：经集中弃用层发（同实例一次、production 静默）
-  const deprecation = createDeprecationWarner(component);
-  if (infoWindowOpenIntentUsesAlias(props)) {
-    const alias = propAliasesOf("info-window").find((entry) => entry.canonical === "open");
-    if (alias) deprecation.warn(describeDeprecation(alias));
-  }
 
   /* ------------------------------------------------------------------ 收敛（reconcile） */
 

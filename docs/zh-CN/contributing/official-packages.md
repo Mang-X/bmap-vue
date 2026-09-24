@@ -167,8 +167,8 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 
 清单的单一事实源是 `src/core/loader/providers/official.ts` 的 `OFFICIAL_LOADER_UNSUPPORTED_KEYS`：
 单元测试（`official.test.ts`，逐项断言 code 与指引）直接引用它，行为测试
-（`v3-official-loader-default.test.ts`）按同一列表构造用例，静态门禁
-（`v3-default-loader-boundary.test.ts`）锁住默认 Provider 里不再出现自建 transport 的痕迹。
+（`official-loader-default.test.ts`）按同一列表构造用例，静态门禁
+（`default-loader-boundary.test.ts`）锁住默认 Provider 里不再出现自建 transport 的痕迹。
 **改这张表就必须同步改代码**（反之亦然）。
 
 默认路径**不**自己判定「是否已有全局」「是否要插 script」——那是官方 Loader 的状态机（ADR 决策 2）；
@@ -197,13 +197,13 @@ ADR [2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-
 
 | 上游契约（本页上文） | 本库的处置 | 可复现证据 |
 | --- | --- | --- |
-| `options.map` 必传、构造前须有可用地图 | 桥等 `whenReady()` 后构造；map handle 换代时先释放旧 widget 再重建 | `tests/behavior/v3-ui-kit-lifecycle.test.ts`、`v3-ui-kit-place-detail.test.ts`、`v3-ui-kit-route-plan.test.ts` |
-| UI Kit 只能浏览器内动态 import（无 DOM 时 import 即崩） | `./ui-kit` 入口及其依赖图**不含**上游包的静态 import；`loadUiKit()` 在无 DOM 时以 `BMAP_UI_KIT_UNAVAILABLE` 拒绝且不缓存失败 | `tests/behavior/v3-ui-kit-ssr.test.ts`（无 DOM 子进程 + DOM 访问记账）、`tests/behavior/v3-ui-kit-entry.test.ts` |
-| CSS 不在 JS 里注入 | `./ui-kit` 不自动引入样式；`UI_KIT_STYLE_PATH` 导出官方路径，消费方显式 `import` | `tests/behavior/v3-ui-kit-entry.test.ts`（真实 Vite 生产构建断言样式仍在） |
-| `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/v3-ui-kit-lifecycle.test.ts` |
-| **事件载荷形状**：`highlight` 是 `{ from: HighlightItem \| null, to: HighlightItem }` 变更对；`suggest` 是 `toEventSuggestion()` 生成的数组；`load` 是 POI 数组、`select` 是单条 POI（可能为 `undefined`） | 公共事件按同一形状投影（`PlaceHighlightChangeDTO { from, to }`，不压平）；POI/建议字段逐项对齐（`street` 等 deprecated 别名不转发） | `tests/behavior/v3-ui-kit-widget-contract.test.ts`（**发布产物形状锁**）、`v3-ui-kit-events.test.ts` |
-| 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/v3-ui-kit-events.test.ts`（`driver.services` 从未被读取） |
-| `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless（#39） | `tests/behavior/v3-ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`v3-ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
-| `PlaceDetailOptions.layout` 纸面支持；`setPlace(uid)` 找不到时不发事件；详情请求失败无出口 | 不暴露 `layout`；不合成 `error`/空 `load`；文档写明「`setPlace` 是发起而不是完成」 | `v3-ui-kit-place-detail.test.ts`、`v3-ui-kit-widget-contract.test.ts`（`layout` 在产物里 0 命中、`!n` 分支先于 `emit("load")` 的形状锁） |
-| `RoutePlan` 的事件用 `type`、`search()` 返回值用 `routeType`；`search()` 先 emit `error` 再抛 | 统一成 `type`；`WeakMap` 按上游错误身份缓存，保证「事件载荷 === 动作拒绝」；`cause` 只挂过 `redactAk` 的副本 | `v3-ui-kit-route-plan.test.ts`（同一条错误、脱敏三处出口） |
-| 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/v3-ui-kit-widget-contract.test.ts`、`packages/bmap-vue/types/ui-kit/upstream.d.ts` |
+| `options.map` 必传、构造前须有可用地图 | 桥等 `whenReady()` 后构造；map handle 换代时先释放旧 widget 再重建 | `tests/behavior/ui-kit-lifecycle.test.ts`、`ui-kit-place-detail.test.ts`、`ui-kit-route-plan.test.ts` |
+| UI Kit 只能浏览器内动态 import（无 DOM 时 import 即崩） | `./ui-kit` 入口及其依赖图**不含**上游包的静态 import；`loadUiKit()` 在无 DOM 时以 `BMAP_UI_KIT_UNAVAILABLE` 拒绝且不缓存失败 | `tests/behavior/ui-kit-ssr.test.ts`（无 DOM 子进程 + DOM 访问记账）、`tests/behavior/ui-kit-entry.test.ts` |
+| CSS 不在 JS 里注入 | `./ui-kit` 不自动引入样式；`UI_KIT_STYLE_PATH` 导出官方路径，消费方显式 `import` | `tests/behavior/ui-kit-entry.test.ts`（真实 Vite 生产构建断言样式仍在） |
+| `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/ui-kit-lifecycle.test.ts` |
+| **事件载荷形状**：`highlight` 是 `{ from: HighlightItem \| null, to: HighlightItem }` 变更对；`suggest` 是 `toEventSuggestion()` 生成的数组；`load` 是 POI 数组、`select` 是单条 POI（可能为 `undefined`） | 公共事件按同一形状投影（`PlaceHighlightChangeDTO { from, to }`，不压平）；POI/建议字段逐项对齐（`street` 等 deprecated 别名不转发） | `tests/behavior/ui-kit-widget-contract.test.ts`（**发布产物形状锁**）、`ui-kit-events.test.ts` |
+| 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/ui-kit-events.test.ts`（`driver.services` 从未被读取） |
+| `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless（#39） | `tests/behavior/ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
+| `PlaceDetailOptions.layout` 纸面支持；`setPlace(uid)` 找不到时不发事件；详情请求失败无出口 | 不暴露 `layout`；不合成 `error`/空 `load`；文档写明「`setPlace` 是发起而不是完成」 | `ui-kit-place-detail.test.ts`、`ui-kit-widget-contract.test.ts`（`layout` 在产物里 0 命中、`!n` 分支先于 `emit("load")` 的形状锁） |
+| `RoutePlan` 的事件用 `type`、`search()` 返回值用 `routeType`；`search()` 先 emit `error` 再抛 | 统一成 `type`；`WeakMap` 按上游错误身份缓存，保证「事件载荷 === 动作拒绝」；`cause` 只挂过 `redactAk` 的副本 | `ui-kit-route-plan.test.ts`（同一条错误、脱敏三处出口） |
+| 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/ui-kit-widget-contract.test.ts`、`packages/bmap-vue/types/ui-kit/upstream.d.ts` |

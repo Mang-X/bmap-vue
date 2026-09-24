@@ -2161,7 +2161,7 @@ const CHECKS: Record<string, CheckImpl> = {
       );
 
       // 回收路径（#72 欠账 3「Autocomplete 回收干净」）：卸载后整棵子树必须从文档里撤走。
-      // 精确的「destroy 被调用 / 监听解绑」记账由 `v3-ui-kit-lifecycle.test.ts` 的假 widget 负责
+      // 精确的「destroy 被调用 / 监听解绑」记账由 `ui-kit-lifecycle.test.ts` 的假 widget 负责
       // （浏览器里没有字节级的 widget 账本）；这里证明的是**真实链路下的可观察结果**。
       ctx.mounted.flags.autocomplete = false;
       await nextTick();

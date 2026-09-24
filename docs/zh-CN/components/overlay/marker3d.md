@@ -56,7 +56,7 @@ overlay/marker3d/withImg
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件；以下为实际发出的 typed emits（载荷为 SDK 原生事件）：
+组件没有 `unload` 事件；以下为实际发出的 typed emits（载荷为 SDK 原生事件）：
 
 | 事件名 | 说明 | 类型 |
 | --- | --- | --- |

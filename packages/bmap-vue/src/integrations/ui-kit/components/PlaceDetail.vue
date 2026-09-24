@@ -10,7 +10,7 @@
  * - **不暴露 `layout`**。上游 `PlaceDetailOptions` 里声明了 `layout?: 'default' | 'compact'`，
  *   但锁定版本 `1.1.2` 的产物里**没有任何读取点**（`layout` / `compact` 在 ESM 与 IIFE 两个
  *   产物里出现 0 次）。传了不生效 = 假支持，所以本库宁可不暴露；这条由
- *   `v3-ui-kit-widget-contract.test.ts` 对着发布产物锁定，上游真做出来时它会先红。
+ *   `ui-kit-widget-contract.test.ts` 对着发布产物锁定，上游真做出来时它会先红。
  * - **不合成 error 事件**。上游 `fetchDetailByUid()` 没有 `catch`，它返回的 Promise 被丢弃，
  *   请求失败不会经过任何事件出口（页面里只会看到一条 unhandled rejection）。本库不伪造一个
  *   「看起来收到了错误」的信号；要判断是否加载成功请看 `load` 事件是否到达（含超时兜底）。

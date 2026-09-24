@@ -27,6 +27,6 @@ Evidence-before-abstraction 删掉），选择**删列**。决策与依据见 AD
 **将来若真引入第二个引擎**：那是一个有判别力的变化（届时新引擎下部分能力不再恒真），必须
 重新引入引擎维度与判定分支，并新增 ADR——今天的实现刻意不在空壳上为它预留。
 
-**用例同步**：`registry.test.ts` 与 `tests/behavior/v3-capability-catalog.test.ts` 里
+**用例同步**：`registry.test.ts` 与 `tests/behavior/capability-catalog.test.ts` 里
 「每条能力必须声明当前引擎」断言改为「描述符**没有** `engines` 属性」（`not.toHaveProperty`），
 「目录未收录」用例改断言 `unlisted-capability`。

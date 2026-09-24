@@ -2,10 +2,10 @@
  * raw SDK / 公共声明边界配置（单一事实源）— M3A0-BOUNDARY（issue #15）
  *
  * 被以下位置消费，避免边界规则在脚本、测试与文档之间漂移：
- * - `scripts/check-raw-sdk.mts`    源码静态门禁
+ * - `scripts/check-raw-sdk.mts`    源码静态门禁（含 `--declarations` 公共声明相位）
  * - `scripts/check-public-dts.mts` 公共声明门禁
- * - `tests/behavior/v3-raw-sdk-scanner.test.ts`
- * - `tests/behavior/v3-public-dts-gate.test.ts`
+ * - `tests/behavior/raw-sdk-scanner.test.ts`
+ * - `tests/behavior/public-dts-gate.test.ts`
  *
  * 边界原则：`BMap.*`（JSAPI 4.0 的唯一命名空间）只能出现在 v4 Driver /
  * Client / Loader / 插件适配层与最小 augmentation；组件、业务 composable 与
@@ -14,7 +14,21 @@
  * `BMapGL` 自 M3A3-REMOVE-LEGACY（issue #26）起**在任何位置都是违规**——旧引擎已删除，
  * 它只剩两种合法出现：官方 4.0 runtime 自己挂的别名（不在本库源码里）与测试替身按真实形状
  * 做的镜像（`packages/test-utils` 在扫描范围之外）。跨整棵树的这条不变量由
- * `scripts/check-no-bmapgl.mts`（`pnpm check:no-bmapgl`）守。
+ * `scripts/check-raw-sdk.mts` 的「旧引擎残留」规则集守（#136：原先由独立的
+ * `check-no-bmapgl.mts` 守，两条规则已下沉合并到这里）。
+ *
+ * ## 两条规则集的分工（#136）
+ *
+ * | 规则集 | 适用范围 | 规则 |
+ * | --- | --- | --- |
+ * | **边界规则**（`RAW_SDK_NAMESPACES` 驱动的全套） | 禁区目录（组件 / composable / runtime / layers / integrations） | `BMap.*` 与全局对象成员访问等**当前**边界 |
+ * | **旧引擎残留**（`LEGACY_ENGINE_*`） | **整棵源码树**（含 `driver/**`、`client/**`、`core/loader/**`、`plugins/**` 白名单）**与公共声明（`dist` 下的 `.d.ts`）** | `BMapGL` 标识符 / `namespace BMapGL` / 已删除的 engine 取值 |
+ *
+ * 分工的必要性：白名单目录**允许** `BMap.*`（那是它们存在的理由），但**不允许**旧引擎
+ * 残留——后者与「白名单」无关。于是 `--src` 树模式按文件所属路径分派：白名单内只跑旧引擎
+ * 残留规则，非白名单文件**两个规则集都跑**（旧引擎残留是跨整棵树的不变量）。公共声明相位
+ * （`--declarations`）只跑旧引擎残留规则，因为 `check-public-dts.mts` 已经在那里禁掉了
+ * `BMap.*`。
  */
 
 /** SDK 全局命名空间：`BMap`（JSAPI 4.0）。`BMapGL` 保留在清单里作为**违规标记**。 */
@@ -60,6 +74,27 @@ export const OFFICIAL_TYPES_PACKAGE = "@baidumap/jsapi-v4-types";
 
 /** 公共声明禁止出现的全局命名空间标记（namespace / declare global）。 */
 export const PUBLIC_DTS_FORBIDDEN_MARKERS = ["declare global", "namespace BMap", "namespace BMapGL"] as const;
+
+/**
+ * 已删除的 engine 取值（issue #26）。
+ *
+ * 精确匹配**字符串字面量**——错误提示里的散文（「旧引擎（webgl-v1 / BMapGL）已删除」）
+ * 不该被当成违规，那种消息文本不等于 `"webgl-v1"`，因此天然不命中。
+ */
+export const LEGACY_ENGINE_IDS = ["webgl-v1", "jsapi-v3"] as const;
+
+/** 旧引擎残留规则集的名字（报告与门禁自测用它断言读数）。 */
+export const LEGACY_RULES_LABEL = "旧引擎残留";
+
+/** 旧引擎残留的规则名。刻意**不**进 `raw-sdk-detector.mts` 的共享 `Rule` 联合：
+ * `check-public-dts.mts` 也调 `findViolations`，把规则塞进共享联合会免费扩宽公共声明门禁
+ * 的规则集（计划外的作用域蔓延）。这里用独立类型 + 独立 visitor。 */
+export type LegacyRule = "legacy-namespace" | "removed-engine-id";
+
+export const LEGACY_RULE_LABELS: Record<LegacyRule, string> = {
+  "legacy-namespace": "已删除的旧引擎命名空间 BMapGL",
+  "removed-engine-id": "已删除的 engine 取值 webgl-v1 / jsapi-v3",
+};
 
 /** 极简 glob 匹配：支持 `dir/**`、`**\/name` 与精确路径。 */
 export function matchesPattern(pattern: string, relativePath: string): boolean {

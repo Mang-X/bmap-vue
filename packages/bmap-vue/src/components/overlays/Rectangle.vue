@@ -7,7 +7,7 @@
  * 产生多余命令），样式与编辑开关由 `rectangleSpec` 声明。
  *
  * 事件面（17 个，含编辑六件套）与 Circle / Polygon 相同（上游同为 `GraphEventMap`）；
- * `defineEmits` 与矩阵的一致性由 `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `defineEmits` 与矩阵的一致性由 `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";

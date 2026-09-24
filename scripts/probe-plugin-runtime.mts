@@ -207,7 +207,7 @@ const PAGE_JS = `
     // 只读不解释：把现场交给报告，避免在探针里写一句未经核对的因果。
     async function throwSite(url, stackHead) {
       // 刻意用 [0-9] 而**不是**反斜杠 d：本段文本既会被探针当模板串求值（反斜杠会少一层），
-      // 也会被静态守卫 v3-probe-page-scripts.test.ts 当成**原文**用 new Function 编译一次。
+      // 也会被静态守卫 probe-page-scripts.test.ts 当成**原文**用 new Function 编译一次。
       // 只有「两种读法都合法」的写法才安全 —— 转义换行的那两处恰好两种读法都对，
       // 而反斜杠 d / 反斜杠右括号不是，所以这里一个反斜杠都不用。别改回去。
       var m = /:([0-9]+):([0-9]+)[)]?$/.exec(String(stackHead || "").trim());

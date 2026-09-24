@@ -2,6 +2,8 @@
 
 `bmap-vue` is a continuation of the open-source project [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl).
 
+Version 1.0 targets Baidu Maps JSAPI 4.0 only and provides **no migration path from earlier releases**: compatibility shims, deprecated aliases and legacy-engine gates are deliberately absent.
+
 The original project is distributed under the MIT License. Its original copyright notice is preserved in the repository `LICENSE` file:
 
 > Copyright (c) 2021 yue1123

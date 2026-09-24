@@ -3,7 +3,7 @@
  *
  * 两处用它，**判据只写一份**：
  *
- * - `tests/behavior/v3-advanced-contract.test.ts`：直接读仓库自己的 `packages/.../dist`，
+ * - `tests/behavior/advanced-contract.test.ts`：直接读仓库自己的 `packages/.../dist`，
  *   断言 `./advanced` 入口的静态 import 闭包不含组件 / 官方 UI Kit；
  * - `scripts/verify-package.mts`：在装了 **tarball** 的消费方 fixture 里用真实打包器
  *   （vite）各打一次「只用 `./advanced`」与「只用根入口」，断言前者的产物闭包不含组件标记、
