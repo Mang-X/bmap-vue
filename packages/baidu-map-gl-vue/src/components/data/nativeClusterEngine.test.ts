@@ -27,6 +27,12 @@ type MutableProps = {
   -readonly [K in keyof NativeClusterEngineProps<Station>]: NativeClusterEngineProps<Station>[K];
 };
 
+/** 从引擎下发的 FeatureCollection 载荷里读出业务项 id（`idKey="id"`），用于「数据确实到了哪一侧」。 */
+function featureIds(layer: FakeV4ClusterLayer): unknown[] {
+  const data = layer.getData() as { features?: Array<{ properties?: Record<string, unknown> }> } | null;
+  return (data?.features ?? []).map((feature) => feature.properties?.id);
+}
+
 function sizedContainer(): HTMLElement {
   const el = document.createElement("div");
   el.style.width = "320px";
@@ -132,7 +138,8 @@ describe("nativeClusterEngine：unknown 期间一个字都不写 [#113]", () => 
     expect(f.fake.createdNativeLayers, "换新实例收敛").toHaveLength(2);
     const fresh = f.fake.createdNativeLayers.at(-1)! as FakeV4ClusterLayer;
     expect(fresh.callLog).toContain("setData");
-    expect(fresh.getData(), "新数据落在新实例上").toBeTruthy();
+    expect(featureIds(fresh), "新业务项 b 确实落在新实例上").toEqual(["b"]);
+    expect(featureIds(old), "旧数据 a 没有被新数据覆盖").toEqual(["a"]);
     expect(old.callLog, "旧句柄自失败之后没有再被写过").toEqual(frozen);
     expect(f.registry.size, "账本仍只有一个存活实例").toBe(1);
   });
