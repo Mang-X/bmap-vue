@@ -24,7 +24,7 @@
  * | --- | --- | --- |
  * | A1 | 无 `v-model` 时写 `useModel` **本地生效** | 非受控档：事实源是本地状态（**这一条两边一致**） |
  * | A2 | 有 `v-model` 时写只 emit、值等父级回写 | 受控档「prop 优先」（**这一条两边一致**） |
- * | A3 | **受控 prop 被摘掉后读到 `undefined`** | 证明 **`useModel` 本身不保存最后一次外部值** ⇒ 维持冻结语义「受控 → 非受控保留最后外部值」**必须补 bridge state**（即 `lastExternal`）。它**不是**「迁移不可能」的证明——见 `mapModel.prototype.test.ts`，补上 bridge 后行为可逐项复现 |
+ * | A3 | **受控 prop 被摘掉后读到 `undefined`** | 钉**能力事实**：**`useModel` 本身不保存最后一次外部值** ⇒ 维持冻结语义「受控 → 非受控保留最后外部值」**必须有独立的 bridge state**。**不下迁移结论**——迁移与否见 `mapModel.prototype.test.ts` 的完整原型（那里的限制不止这一处） |
  * | A4 | 写「**数值不同但在本库容差内**」的值**仍 emit** | 它是精确变化比较 ⇒ **没有容差相等**，而本库四个视野字段全部依赖容差（否则受控写入与 SDK 读回会形成往返） |
  * | A5 | `string \| Point` 联合 prop 在 `useModel` 上**可用** | 把「不迁移」的原因锁定在**语义**而非**类型**上，避免以后被误诊为类型不兼容 |
  */
@@ -119,9 +119,10 @@ describe("对照 `useModel`（#137：不迁移的依据）", () => {
       // useModel 给出的是 undefined ⇒ 它**自己不保存**最后一次外部值（undefined 是它表达
       //「现在没有受控值」的信号），所以要维持这条契约**必须额外补 bridge state**。
       //
-      // ⚠️ 这条**不是**「迁移不可能」的证明：补上 bridge（`lastExternal`）后行为可逐项复现 ——
-      // 见 `mapModel.prototype.test.ts` 的 B 线路。#137 最终不迁的依据是**bridge 的代价**，
-      // 不是「语义补不上」。
+      // ⚠️ 这条只钉**能力事实**，不下迁移结论。是否迁移由 `mapModel.prototype.test.ts` 的
+      //    完整原型决定：那里 `useModel` 的限制不止这一处（真实非受控用法下读 / 档位判定 /
+      //    reset 边界的 emit 都会出问题），且**把 `useModel` 整个去掉后行为用例仍全过** ——
+      //    即它换不到任何可观察行为。迁移与否按那份原型读，不按本条。
       expect(model.value, "useModel 不保存最后一次外部值").toBeUndefined();
     });
   });

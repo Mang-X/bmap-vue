@@ -131,6 +131,10 @@ export interface ControllableState<T> {
    *
    * 所以：**别再去找它的库内调用点**。若将来确实要移除，走单独的破坏性变更票，并同步
    * `docs/zh-CN/hooks/useControllableState.md`。
+   *
+   * **它被惰性创建**（#137 复审八轮 P1）：早先把「公共 API 保留该成员」当成「`<Map>` 必须为它
+   * 实例化这份 runtime」，是**两件被混成一件的事**。既然库内零消费者，就不必在每次
+   * `useControllableState()` 调用时都分配它——`get` 取用时才建，类型与消费方式都未变。
    */
   readonly isControlled: ComputedRef<boolean>;
   /** 首次解析出的初值（初次视野 / 初始渲染用）。 */
@@ -176,8 +180,17 @@ export function useControllableState<T>(
   // 内部状态**再拷一份**：`initial` 会被调用方长期持有（例如组件的「首次视野快照」），
   // 两者共享同一对象会让其中一方的原地修改影响另一方。
   const internal = shallowRef(copy(initial)) as ShallowRef<T>;
-  const isControlled = computed(() => value() !== undefined);
   const model = computed<T>(() => value() ?? internal.value);
+  // `isControlled` **惰性创建**（#137 复审八轮 P1）：它挂在**已发布的公共返回形状**上不能删，
+  // 但**库内零消费者** —— `<Map>` 判断档位用的是即时的 `value() !== undefined`，从不读这个成员。
+  // 「公共 API 必须保留该成员」与「`<Map>` 必须为它实例化 runtime」是**两件事**（复审指出早先
+  // 把它们当成一件，见 §6.2）。这里用 getter + 缓存：返回类型 `ComputedRef<boolean>` 一字未改，
+  // 公共消费者照旧 `state.isControlled.value`；没人访问就**不分配**那个 computed。
+  //
+  // 惰性创建时若已脱离 `setup()` 的 effect scope，那个 computed 不会随作用域释放 —— 但它只由
+  // 公共消费者触发，而它们都在 `setup()` / `effectScope()` 内调用（见本文件底部的调用位置要求），
+  // 与原先的构造时机等价。
+  let isControlledRef: ComputedRef<boolean> | undefined;
 
   let mode: ControllableMode = value() === undefined ? "uncontrolled" : "controlled";
   const warned = new Set<string>();
@@ -241,5 +254,17 @@ export function useControllableState<T>(
     });
   }
 
-  return { value: model, internal, isControlled, initial, syncExternal, commit, reset };
+  return {
+    value: model,
+    internal,
+    get isControlled(): ComputedRef<boolean> {
+      // 首次访问才建；之后同一个实例（`computed` 自带缓存，重建会丢缓存）。
+      isControlledRef ??= computed(() => value() !== undefined);
+      return isControlledRef;
+    },
+    initial,
+    syncExternal,
+    commit,
+    reset,
+  };
 }

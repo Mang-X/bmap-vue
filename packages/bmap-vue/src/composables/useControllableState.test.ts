@@ -283,3 +283,71 @@ describe('useControllableState', () => {
     expect(warnLines(warn).length).toBe(0)
   })
 })
+
+describe('isControlled 的惰性创建（#137 复审八轮 P1）', () => {
+  /**
+   * 惰性与否的可观察口径是「**分配了几个 computed**」，而**不是** effect 数 ——
+   * `computed` 懒求值、不挂 scope，从来不计入 `getCurrentScope().effects.length`
+   * （ADR §6.2 记录的盲区：effect gate 看不见这一类对象）。
+   *
+   * ⚠️ 这也是本组用例存在的理由：**把实现改回 eager，这些用例必须变红**。已实测：
+   * 只断言「重复访问是同一实例」时，eager 版照样全过 —— 也就是说「缓存命中」证明不了
+   * 「惰性」。唯一能判别的办法是直接数分配。
+   */
+  it('构造时**不**分配 `isControlled` 的 computed；首次访问才分配且此后命中缓存', async () => {
+    // ESM 的导出不可 spy，所以用 `vi.doMock` 换掉本模块看到的 `vue`（保留真实实现，只数次数）。
+    const vue = await import('vue')
+    let computedCount = 0
+    vi.resetModules()
+    vi.doMock('vue', async () => {
+      const actual = await vi.importActual<typeof import('vue')>('vue')
+      return {
+        ...actual,
+        computed: ((...args: Parameters<typeof actual.computed>) => {
+          computedCount += 1
+          return actual.computed(...args)
+        }) as typeof actual.computed,
+      }
+    })
+    try {
+      // 重新加载，让被测模块拿到被计数的 `computed`。
+      const mod = await import('./useControllableState')
+      const external = ref<number | undefined>(undefined)
+      const state = inScope(() =>
+        mod.useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          fallback: 14,
+          equals: numbersEqual,
+        }),
+      )
+      // 此刻零消费者：`<Map>` 从不读它 ⇒ **不该**为它分配任何 computed。
+      const beforeAccess = computedCount
+
+      const first = state.isControlled
+      const afterFirstAccess = computedCount
+      const second = state.isControlled
+
+      expect(
+        afterFirstAccess - beforeAccess,
+        '首次访问 isControlled 才分配（构造时那次 eager 分配会让这个差为 0）',
+      ).toBe(1)
+      expect(computedCount, '重复访问不得再分配').toBe(afterFirstAccess)
+      expect(first, '重复访问必须命中缓存').toBe(second)
+      expect(first.value).toBe(false)
+      external.value = 7
+      expect(first.value, '受控后变 true').toBe(true)
+      void vue
+    } finally {
+      vi.doUnmock('vue')
+      vi.resetModules()
+    }
+  })
+
+  it('公共返回形状未变：isControlled 仍是可直接赋给 ComputedRef<boolean> 的成员', () => {
+    const state = numberState()
+    // 静态形状断言：把它删掉、或改成非 `ComputedRef`，这行都会编译失败。
+    const controlled: import('vue').ComputedRef<boolean> = state.isControlled
+    expect(controlled.value).toBe(false)
+  })
+})
