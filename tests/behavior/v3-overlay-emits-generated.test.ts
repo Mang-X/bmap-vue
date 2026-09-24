@@ -26,7 +26,6 @@ import {
   OVERLAY_EVENT_MATRIX,
   overlayEventsOf,
 } from "../../packages/bmap-vue/src/core/overlays/overlayEventCatalog";
-import { OVERLAY_EVENT_ALIASES } from "../../packages/bmap-vue/src/core/deprecations";
 import type { OverlayKind } from "../../packages/bmap-vue/src/driver/types/overlays";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
@@ -140,20 +139,19 @@ describe("#138 生成的覆盖物 emits 静态契约", () => {
     }
   });
 
-  it("历史别名与正典名同载荷，并带 @deprecated 注释（不静默兼容）", () => {
+  it("集中弃用层的历史事件名一个都不在生成物里（#136 删除后不再有任何 @deprecated 事件别名）", () => {
+    // #154 引入本生成器时还有第三处事实源（`OVERLAY_EVENT_ALIASES`）与配套断言；
+    // 集中弃用层随 #136 整层删除后，旧事件名（marker 的 `drag-end` 等）必须**连声明都不剩**——
+    // 留着会制造「模板能绑、运行时永不触发」的死 handler。
     const source = readFileSync(GENERATED_FILE, "utf8");
+    expect(source, "生成物里不应再出现 @deprecated 历史别名注释").not.toContain("@deprecated 历史别名");
     const byInterface = new Map(readGenerated().map((d) => [d.name, d.entries]));
-    for (const alias of OVERLAY_EVENT_ALIASES) {
-      const declared = byInterface.get(kindToInterfaceName(alias.kind))!;
-      const canonical = overlayEventsOf(alias.kind).find((e) => e.vue === alias.canonical)!;
-      expect(declared[alias.alias], `${alias.alias} 没有被声明`).toBe(
-        declared[alias.canonical],
+    const declared = new Set([...byInterface.values()].flatMap((entries) => Object.keys(entries)));
+    // 逐个点名被删掉的两个旧事件名，避免「换了名字又回来」
+    for (const legacy of ["drag-end", "update:show"]) {
+      expect(declared.has(legacy), `${legacy} 是 1.0 已删除的旧事件名，不应出现在任何 interface 里`).toBe(
+        false,
       );
-      expect(declared[alias.alias], `${alias.alias} 的载荷应与正典名一致`).toBe(
-        PAYLOAD_TYPE_BY_KIND[canonical.payload],
-      );
-      // 注释在生成物里：读者在 IDE 悬停时能看到这是弃用名
-      expect(source).toContain(`/** @deprecated 历史别名；规范名是 \`${alias.canonical}\``);
     }
   });
 
@@ -162,7 +160,6 @@ describe("#138 生成的覆盖物 emits 静态契约", () => {
     // 这三条与生成脚本 NON_SDK_EVENTS 对齐
     expect(byInterface.get("MarkerEmits")!["update:position"]).toBe("Point");
     expect(byInterface.get("InfoWindowEmits")!["update:open"]).toBe("boolean");
-    expect(byInterface.get("InfoWindowEmits")!["update:show"]).toBe("boolean");
     expect(byInterface.get("InfoWindowEmits")!["rebuild"]).toBe("number");
     expect(byInterface.get("InfoWindowEmits")!["destroy"]).toBe("number");
     expect(byInterface.get("ContextMenuEmits")!["select"]).toBe("ContextMenuSelectPayload");

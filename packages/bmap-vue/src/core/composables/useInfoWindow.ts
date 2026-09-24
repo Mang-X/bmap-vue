@@ -3,7 +3,7 @@
  *
  * 职责：拥有组件创建的那个 InfoWindow（创建 / 重建 / 释放）、按 desired/observed 收敛、转发 SDK 事件。
  *
- * - desired：`open`（旧名 `show`）这条 prop 表达的意图。
+ * - desired：`open` 这条 prop 表达的意图（1.0 不接受旧名 `show`）。
  * - observed：地图上实际开着的是不是这一个（`driver.overlays.isCurrentInfoWindow`）。
  * - 收敛：期望开而没开 ⇒ 打开；开着但 `position` 变了 ⇒ 再开一次（官方没有 `setPosition`）；
  *   期望关而开着 ⇒ 关闭。
@@ -305,7 +305,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     reconcile();
   });
 
-  /** 意图变化的落点（`open` / `show` / `position` 合一的 watch）。 */
+  /** 意图变化的落点（`open` + `position` 合一的 watch）。 */
   function onIntentChanged(): void {
     const instance = activeInstance;
     if (!instance?.alive) return;
@@ -471,7 +471,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
       },
 
       watch: ({ scope }) => {
-        // `open` / `show` / `position` 合成一个 watch 源，`flush: "post"`（#138）
+        // `open` + `position` 合成一个 watch 源，`flush: "post"`（#138）
         //
         // 为什么 post：收敛要读父级 `v-model` 的**最终**值。与事件驱动的 `scheduleConverge`
         // 共用同一个 post-flush 时序，于是「prop 驱动」与「事件驱动」两条路在同一个队列里
@@ -565,7 +565,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (instance.echoedClosed) return;
     instance.echoedClosed = true;
     emit("update:open", false);
-    emit("update:show", false);
   }
 
   /**
