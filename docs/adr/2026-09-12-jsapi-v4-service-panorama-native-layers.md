@@ -317,8 +317,11 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
   「库回归」的 `fail` 严格分开（规则见 `report.mts`；`registry.mts` 只负责把 `service-geocode`
   登记进 live 档）。本档的处置只是把断言**静默跳过**，既不是「必须成功」也不是「前置不成立」，
   两头不靠。删除也不丢覆盖：两个调用方都传 `"fixture"`，那三处 `live` 分支是**死代码**。
-- `callNativeLayerOperation` 是「怎么调」的单一实现，Fake 侧单测与真实 smoke 共用，避免
-  「契约里测的那套调用」与「浏览器里跑的那套调用」各自漂移。
+- `callNativeLayerOperation` 是「怎么调」的单一实现，Fake 侧单测与契约共用，避免
+  「契约里测的那套调用」与「直测里跑的那套调用」各自漂移。
+  （**#127 更正**：原文写「与真实 smoke 共用」，但 `tests/browser/` 从未 import 这些探针
+  —— 真实 AK 走自己的 runner / checks。探针的零 vitest / 零 Fake 依赖形状保留，
+  便于日后真要接入时不必再拆。）
 
 ### 12. Capability Catalog 与运行时一致
 
@@ -486,7 +489,7 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
 | 实施步骤 1 / 2（callback → Promise/Result、迟到回调 / 空结果 / SDK status 标准化） | 已实现，见 §1 / §2 / §4；测试见 `serviceCall.test.ts` 与 `services.test.ts` |
 | 实施步骤 3（原生图层 setData/clearData/style/state/picking） | 已实现，见 §7 |
 | 实施步骤 4（对官方类型缺失的扩展成员建立最小 augmentation） | **刻意不做**：augmentation 治理白名单要求「无法通过项目领域类型绕开」，此处已用领域类型 + 结构探测绕开；`#22` 对 `PanoramaCoverageLayer` 是同一口径。已在「非目标」写明，PR 正文复述，避免被按字面判为漏项 |
-| 实施步骤 5 / 测试要求 5（同一 Harness 可跑 Fake v4 与真实 smoke 子集） | 探针拆成零 vitest 依赖的 `facet-probes.ts`，vitest 契约与真实 AK 页面共用同一份代码；**smoke 本身是一次性人工验证、不进门禁**（AK 来自 docs 示例，进门禁会把门禁绑到外部配额），此点在 ADR 与 PR 正文都明确标注 |
+| 实施步骤 5 / 测试要求 5（同一 Harness 可跑 Fake v4 与真实 smoke 子集） | 探针拆成零 vitest 依赖的 `facet-probes.ts`，形状已就位；**但「共用同一份代码」只在契约侧成立** —— 真实 AK 页面走自己的 runner / checks，`tests/browser/` 从未 import 这些探针（**#127 复核更正**，见 §11）。**smoke 本身是一次性人工验证、不进门禁**（AK 来自 docs 示例，进门禁会把门禁绑到外部配额），此点在 ADR 与 PR 正文都明确标注 |
 | 测试要求 1~4 | 逐条对应：`serviceCall.test.ts`(9)、`services.test.ts`(23)、`native-layers.test.ts`（含 8×12 一致性）、`panorama.test.ts`(12)、`v3-jsapi-v4-services-native-layers.test.ts`(12，跑装配后的 Driver) |
 | 验收标准 2「后续组件不需要访问 raw BMap 服务或图层」 | **部分达成**：seam 已就位（`driver.services.geocode(...)` / `driver.nativeLayers.*` 不需要 raw），但**现有 7 处 service composable 与 `BAutoComplete.vue` 仍用 `handle.raw`**——迁移属 M7 `#38`（与 ServiceSpec / AsyncTaskController 一并设计）。ADR「迁移影响」与「已知限制」都登记了这条，**不当作已完成** |
 | 验收标准 1「v4 Driver 覆盖 Cutover 前现有全部功能」 | 部分：LocalSearch / Route 服务类、TrackLine 播放控制、panorama 声明式能力、`layer.traffic` 均有据顺延（各自的 ADR / issue 已登记） |
