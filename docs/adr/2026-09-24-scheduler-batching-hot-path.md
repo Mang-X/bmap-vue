@@ -1,9 +1,10 @@
-# Vue scheduler/batching 取证：`flush:'sync'` 是深响应热路径的主因（#124 收口）
+# Vue scheduler/batching 取证：`flush:'sync'` 是深响应热路径的主因（#124 的 scheduler 取证项）
 
 - 状态：Accepted
 - 日期：2026-09-24
-- 关联：issue **#124**（本 ADR 承接其 2026-09-23 重新分类后新增的 scheduler/batching 取证范围）、
-  **#134**（1.0 身份重置，本 ADR 的前置，已完成）、ADR
+- 关联：issue **#124**（本 ADR 承接其 2026-09-23 重新分类后新增的 scheduler/batching 取证范围；
+  **该票整体仍 open**，剩余项见「后果」里的提交基线重录）、**#134**（1.0 身份重置，本 ADR 的前置，
+  已完成）、ADR
   [`2026-09-24-deep-reactive-array-update-path`](./2026-09-24-deep-reactive-array-update-path.md)（深响应子问题）、
   ADR [`2026-09-21-performance-baseline-and-worker-decision`](./2026-09-21-performance-baseline-and-worker-decision.md)
 - 取代范围：**不取代任何 ADR**。补齐 [`2026-09-24-deep-reactive-array-update-path`](./2026-09-24-deep-reactive-array-update-path.md)

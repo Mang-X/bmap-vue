@@ -228,7 +228,8 @@ CI 的 `performance` job 先 `build:package`，因此 `3` 出现在 CI 里就意
   （同轮比值层不受此限）。
 - 基线录在 CI runner 上（见上）；本机读数与它不可比是**预期**的，不是缺陷。
 - 真实浏览器档见上文「真实浏览器档」（**#123** 已实跑并回填：`pnpm perf:baseline:live`）；
-  深响应输入的长任务由 **#124** 收口：深响应子问题见
+  深响应输入的长任务：**#124 仍 open**。已落盘的两部分——深响应子问题见
   [ADR 2026-09-24（深响应）](/adr/2026-09-24-deep-reactive-array-update-path)，scheduler/batching 取证见
   [ADR 2026-09-24（scheduler）](/adr/2026-09-24-scheduler-batching-hot-path)（`flush` 主因已确认、
-  不改 `flush`、多字段次数由 §7 钉住）；line/fill 的 SDK 内部重绘优化若有消费者另开票。
+  不改 `flush`、多字段次数由 §7 钉住）；**剩余项 = §7 的 `multiUpdate.*@1000` readout 需要在门禁机
+  同机重录提交基线**（见该 ADR「后果」）。line/fill 的 SDK 内部重绘优化若有消费者另开票。
