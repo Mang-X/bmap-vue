@@ -306,6 +306,48 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     harness.assertIdle('快速开关')
   })
 
+  it('#138：一次事件驱动的收敛只发一轮命令（post-flush 替掉双 nextTick 的证据）', async () => {
+    // 双 `nextTick` 与「post-flush 排一次」的区别不在最终状态（两者都收敛），
+    // 而在**命令条数**：一个被 `echoedClosed` 挡住、另一个本可由 observed 读数挡住的空转，
+    // 都会表现为「同一次事件多发一条 open/close」。
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(
+      () => [
+        h(InfoWindow, {
+          position: POSITION,
+          open: open.value,
+          'onUpdate:open': (value: boolean) => (open.value = value),
+        }),
+      ],
+      el,
+    )
+    await settle()
+    const map = lastMap()
+    const opens0 = map.callLog.filter((c) => c === 'openInfoWindow').length
+    const closes0 = map.callLog.filter((c) => c === 'closeInfoWindow').length
+
+    // 走真实关闭按钮的形状（`close` 先到、`clickclose` 后到；`close` 让读回变成「不是我」）
+    expect(map.clickInfoWindowCloseButton({ shape: ['close', 'clickclose'] })).toBe(true)
+    await settle()
+    expect(open.value, '父级受控回写落地').toBe(false)
+    expect(currentInfoWindow(), '最终地图上没有气泡').toBeNull()
+    // 收敛只补**必要**的命令：用户点关闭按钮时 SDK 侧已经关掉了它，读回说「不在地图上」
+    // ⇒ 收敛既不补 close 也不补 open。命令条数正是 post-flush 换掉双 `nextTick` 的可观测差异。
+    expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(closes0)
+    expect(map.callLog.filter((c) => c === 'openInfoWindow').length).toBe(opens0)
+
+    // 父级已是 false 时再收到一条迟到的 `close`（同一实例重新打开后又关闭的形状）：
+    // 零命令——observed 说不在地图上、desired 为假，两个分支都无事可做
+    currentInfoWindow()?.emit('close')
+    await settle()
+    expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(closes0)
+    expect(map.callLog.filter((c) => c === 'openInfoWindow').length).toBe(opens0)
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('post-flush 收敛的命令条数')
+  })
+
   it('外部（别处）打开本组件拥有的实例：desired=false ⇒ 收敛为关，且如实转发 open', async () => {
     const el = harness.container()
     const wrapper = mountTree(() => [h(InfoWindow, { position: POSITION, open: false })], el)
