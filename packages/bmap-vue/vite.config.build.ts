@@ -14,6 +14,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import dts from 'vite-plugin-dts'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { versionDefine } from '../../scripts/vite-version-define.mjs'
 import { resolve, join } from 'node:path'
 
 const root = resolve(import.meta.dirname)
@@ -129,6 +130,7 @@ export default defineConfig({
     }),
   ],
   define: {
+    ...versionDefine,
     __DEV__: 'false',
     // ⚠️ **不要**在这里 define `process.env.NODE_ENV`（global 档可以，见 vite.config.global.ts）。
     // 这一档是发布给 npm 消费方的 ESM 产物：`core/logger.ts` 的 `devWarn` 靠这个标记让**消费方的**

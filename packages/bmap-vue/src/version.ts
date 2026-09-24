@@ -9,4 +9,6 @@
  * `BMapClient.libraryVersion` 报告这里的值，`BMapClient.sdkVersion` 报告 SDK 运行时版本，
  * 两者不得互相替代。`version.test.ts` 直接读 `package.json` 做一致性断言，防止漂移。
  */
-export const LIBRARY_VERSION = "1.0.0-rc.0";
+declare const __VERSION__: string
+
+export const LIBRARY_VERSION = __VERSION__

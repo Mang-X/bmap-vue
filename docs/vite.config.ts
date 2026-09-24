@@ -1,8 +1,10 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import { versionDefine } from "../scripts/vite-version-define.mjs";
 
 export default defineConfig(() => {
   return {
+    define: versionDefine,
     optimizeDeps: {
       exclude: ["@vueuse/core", "vitepress"],
     },

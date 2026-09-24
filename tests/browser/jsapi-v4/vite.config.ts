@@ -1,6 +1,7 @@
 
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
+import { versionDefine } from "../../../scripts/vite-version-define.mjs";
 
 /**
  * v4 required smoke 页的 dev server 配置。
@@ -22,6 +23,7 @@ if (!runId) {
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [vue()],
+  define: versionDefine,
   server: {
     host: "localhost",
     // 端口由 orchestrator 经 `SMOKE_PORT` 传入（`--port` 才能同时作用于 URL 与 dev server）；

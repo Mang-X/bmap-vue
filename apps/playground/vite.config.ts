@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'node:path'
+import { versionDefine } from '../../scripts/vite-version-define.mjs'
 
 export default defineConfig({
   plugins: [vue()],
+  define: versionDefine,
   resolve: {
     alias: {
       // playground 直接引用 v3 源码(clean checkout 免预构建)

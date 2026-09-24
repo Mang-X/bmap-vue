@@ -9,10 +9,12 @@
 import { resolve } from 'node:path'
 import VueRolldown from 'unplugin-vue/rolldown'
 import { defineConfig } from 'vite-plus'
+import { versionDefine } from './scripts/vite-version-define.mjs'
 
 const packageRoot = resolve(import.meta.dirname, 'packages/bmap-vue')
 
 export default defineConfig({
+  define: versionDefine,
   pack: {
     entry: {
       index: resolve(packageRoot, 'src/index.ts'),

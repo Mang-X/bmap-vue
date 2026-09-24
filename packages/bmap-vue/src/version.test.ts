@@ -1,8 +1,8 @@
 /**
  * `LIBRARY_VERSION` 必须与包版本一致。
  *
- * `BMapClient.libraryVersion` 会把它报告出去，而构建产物仍以 `package.json` 为版本事实源，
- * 因此这里直接锁定运行时常量和包元数据的一致性。
+ * `BMapClient.libraryVersion` 会把它报告出去，而构建期 define 由所有源码消费者统一注入；
+ * 这里以 `package.json` 为唯一事实源做漂移门禁。
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

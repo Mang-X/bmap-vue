@@ -8,12 +8,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'node:path'
+import { versionDefine } from '../../scripts/vite-version-define.mjs'
 
 const root = resolve(import.meta.dirname)
 
 export default defineConfig({
   plugins: [vue()],
   define: {
+    ...versionDefine,
     __DEV__: 'false',
     // 这一档是 `<script>` 直引的生产产物，浏览器里没有 `process`：必须在这里把
     // `core/logger.ts`（`devWarn`）的环境判定折叠掉，否则会留下裸 `process` 引用。

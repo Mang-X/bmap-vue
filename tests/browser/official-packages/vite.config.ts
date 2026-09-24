@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { versionDefine } from "../../../scripts/vite-version-define.mjs";
 
 /**
  * 官方包探针页的 dev server 配置。
@@ -18,6 +19,7 @@ if (!runId) {
 
 export default defineConfig({
   root: import.meta.dirname,
+  define: versionDefine,
   server: {
     host: "localhost",
     port: 5211,
