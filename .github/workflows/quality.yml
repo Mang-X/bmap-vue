@@ -250,10 +250,11 @@ jobs:
           npx -y @arethetypeswrong/cli --pack . --format table > /tmp/attw.txt 2>&1 || true
           grep -q 'node16 (from ESM).*🟢' /tmp/attw.txt || (cat /tmp/attw.txt; exit 1)
 
-      - name: v3 tarball consumer
+      - name: package tarball consumer
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
           pnpm --filter bmap-vue pack --pack-destination .artifacts
+          cp .artifacts/bmap-vue-*.tgz .artifacts/bmap-vue.tgz
           cd fixtures/consumer
           npm install --no-audit --no-fund --ignore-scripts
           npx vue-tsc --noEmit

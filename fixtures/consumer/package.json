@@ -6,7 +6,7 @@
   "scripts": {},
   "dependencies": {
     "vue": "^3.5.0",
-    "bmap-vue": "file:../../.artifacts/bmap-vue-1.0.0-rc.0.tgz"
+    "bmap-vue": "file:../../.artifacts/bmap-vue.tgz"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

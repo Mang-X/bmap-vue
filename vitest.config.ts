@@ -1,9 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-
-const packageJson = JSON.parse(readFileSync(resolve(import.meta.dirname, 'packages/bmap-vue/package.json'), 'utf8')) as { version: string }
 
 export default defineConfig({
   plugins: [vue()],
@@ -14,7 +11,6 @@ export default defineConfig({
   },
   define: {
     __DEV__: 'true',
-     __VERSION__: JSON.stringify(packageJson.version),
   },
   test: {
     include: ['packages/**/*.test.ts', 'tests/**/*.test.ts'],

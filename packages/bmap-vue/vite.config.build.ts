@@ -17,7 +17,6 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 
 const root = resolve(import.meta.dirname)
-const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string }
 
 /**
  * 从类型边界文件源码中提取会被打包内联的 `declare global` 块。
@@ -131,7 +130,6 @@ export default defineConfig({
   ],
   define: {
     __DEV__: 'false',
-     __VERSION__: JSON.stringify(packageJson.version),
     // ⚠️ **不要**在这里 define `process.env.NODE_ENV`（global 档可以，见 vite.config.global.ts）。
     // 这一档是发布给 npm 消费方的 ESM 产物：`core/logger.ts` 的 `devWarn` 靠这个标记让**消费方的**
     // 打包器 / 运行时决定开发还是生产。在 publish build 阶段定死成 `production`，消费方即使在自己

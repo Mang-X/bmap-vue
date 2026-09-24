@@ -29,7 +29,7 @@ function expectNonEmpty(values: readonly unknown[], message: string): void {
 function findTarball(): string {
   if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack:package')
   const tarballs = readdirSync(artifactsDir)
-    .filter((f) => f.endsWith('.tgz'))
+    .filter((f) => /^bmap-vue-\d+\.\d+\.\d+(?:-.+)?\.tgz$/.test(f))
     .sort()
   if (tarballs.length === 0) throw new Error('No .tgz found in .artifacts')
   return resolve(artifactsDir, tarballs[tarballs.length - 1])
@@ -127,6 +127,7 @@ function main() {
   const tarball = findTarball()
   console.log(`[verify-package] tarball: ${tarball}`)
   assertReleaseIdentity(tarball)
+  copyFileSync(tarball, resolve(artifactsDir, 'bmap-vue.tgz'))
 
 
   // 5) consumer:从 package tarball 安装,类型检查 + ESM 导入(发布包的硬前提)

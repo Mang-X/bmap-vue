@@ -118,11 +118,14 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 
 ## 版本发布
 
-发布走 [Changesets](https://github.com/changesets/changesets)。
+发布走 [Changesets](https://github.com/changesets/changesets)。1.0 预发布已经进入 `rc` prerelease 状态（见 `.changeset/pre.json`），版本命令会沿 `1.0.0-rc.x` 线推进：
 
 ```bash
 pnpm changeset          # 交互式生成一个 changeset
 pnpm changeset status   # 查看当前待发布内容
+pnpm changeset version  # 应用版本
 ```
+
+进入预发布时使用 `pnpm changeset pre enter rc`；正式版前使用 `pnpm changeset pre exit` 后再执行 `pnpm changeset version`。
 
 面向使用者的行为变更（新组件、修 bug、破坏性变更）请补一个 changeset；纯文档 / CI / 内部重构不需要。

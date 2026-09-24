@@ -7,17 +7,14 @@
  */
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname)
-const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string }
 
 export default defineConfig({
   plugins: [vue()],
   define: {
     __DEV__: 'false',
-    __VERSION__: JSON.stringify(packageJson.version),
     // 这一档是 `<script>` 直引的生产产物，浏览器里没有 `process`：必须在这里把
     // `core/logger.ts`（`devWarn`）的环境判定折叠掉，否则会留下裸 `process` 引用。
     // **只在这一档折叠**：ESM 档（vite.config.build.ts）必须原样保留这个标记，
