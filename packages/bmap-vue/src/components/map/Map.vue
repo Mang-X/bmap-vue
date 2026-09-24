@@ -257,6 +257,23 @@ function cloneCenter(value: MapCenter): MapCenter {
   return { lng: value.lng, lat: value.lat };
 }
 
+/**
+ * 四个视野字段的模型接线，**刻意不用 `defineModel`**（#137 已取证，理由见
+ * `useControllableState` 文件头与 ADR `2026-09-14-map-controlled-state`）：
+ *
+ * - **父↔子这一腿已经是 Vue-native**：`value: () => props.center` 就是**对 props 的 getter**
+ *   （不另存一份），写入侧是普通 `emit('update:center', …)`。这正是 `v-model` 的展开形态，
+ *   与 `Marker`（`update:position`）/ `InfoWindow` 全库统一，**没有**第二个状态机要收口。
+ * - **组件↔SDK 这一腿 Vue 拥有不了**：容差相等（`centerEquals` / `numbersEqual` /
+ *   `anglesEqual` / `tiltEquals`）、`copy` 落库（`cloneCenter`）、`reset()` 归位都是 SDK 侧
+ *   语义。Vue 3.5 的 `useModel` 在受控 prop 被摘掉时读到的是 `undefined`，与冻结的
+ *   「受控 → 非受控保留最后一次外部值」直接矛盾，也表达不了 default 只读一次与容差相等。
+ * - **不改冻结公共面**：`MapProps` 是被消费端 fixture 断言的公共类型，且这里是手写的
+ *   `defineProps<MapProps>()`。只迁 `<Map>` 会改动公共面、偏离全库写法，而上面那些规则仍要
+ *   留一层适配。
+ *
+ * ⇒ 保留 `useControllableState` 作为通用原语；下面四个调用点**不动逻辑**。
+ */
 const centerState = useControllableState<MapCenter>({
   name: "center",
   value: () => props.center,

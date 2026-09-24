@@ -423,6 +423,75 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
     harness.assertIdle("视野：相同值不写 SDK");
   });
 
+  it("同一次父更新同时改 center/zoom/交互开关：每项恰好下发一次、最终值一致", async () => {
+    // #137 item 3：证「同一次父更新同时改多个字段」走的是 Vue 的批处理，没有多余 SDK 调用。
+    //
+    // 口径：改动前记下计数，一次父提交后**按增量**断言——
+    //   - 每个改动的视野字段：写入数 +1（不是 +2、不是 0）；
+    //   - 交互开关：那一轮 `syncEnableProps` 遍历里，被显式传值的那个开关各写一次；
+    //   - 最终读数与提交值一致。
+    // 「为什么 4 个字段就是 4 次 SDK 调用、不是 1 次」：center/zoom/heading/tilt 是**四条不同的
+    // SDK 命令**，不是同一个命令的参数 —— 一条命令改不了四个字段。四个 `flush: "post"` watcher
+    // 各自批处理一次（同一个 watcher 内的多次快速变化才合并），同一次父提交里四个字段各触发一次
+    // 回调、恰好一个写入，这是**正确**的批处理形状，不是 #124 `flush:"sync"` 那个「多字段逐个
+    // mutate ⇒ 5 次 reconcile」的问题。详见 ADR `2026-09-24-scheduler-batching-hot-path`。
+    const props = ref<Record<string, unknown>>(
+      controlledViewProps({ heading: 0, tilt: 0, enableDragging: true, enableScrollWheelZoom: true }),
+    );
+    const { wrapper } = await mountControlledMap(() => props.value);
+
+    const viewBefore = harness.viewWrites();
+    const interactionBefore = harness.interactionWrites();
+
+    // ONE parent commit: center + zoom + 两个交互开关一起变。
+    props.value = {
+      ...props.value,
+      center: { lng: 121.5, lat: 31.2 },
+      zoom: 15,
+      enableDragging: false,
+      enableScrollWheelZoom: false,
+    };
+    await settleProps();
+
+    // 视野：两个改动的字段各 +1 写入
+    expect(harness.viewWrites().setCenter, "center 恰好一次").toBe(viewBefore.setCenter + 1);
+    expect(harness.viewWrites().setZoom, "zoom 恰好一次").toBe(viewBefore.setZoom + 1);
+    // 未改动的 heading/tilt 不得因为同批提交被顺带重写
+    expect(harness.viewWrites().setHeading).toBe(viewBefore.setHeading);
+    expect(harness.viewWrites().setTilt).toBe(viewBefore.setTilt);
+    // 读回一致 ⇒ 归位，不产生「重写自己」的往返
+    expect(harness.view()).toMatchObject({ center: { lng: 121.5, lat: 31.2 }, zoom: 15 });
+
+    // 交互：两个被改的开关各 +1 写入，最终值落地。
+    // 正证守卫：这两个开关在初始挂载时已被下发过一次，所以「前值不是 undefined」——
+    // 否则上面的 `?? 0` 会把「整条交互腿没接线」误读成「恰好一次」。
+    expect(interactionBefore.enableDragging, "初始挂载已下发过一次（正证守卫）").toBeGreaterThan(0);
+    expect(harness.interactionWrites().enableDragging, "enableDragging 恰好一次").toBe(
+      (interactionBefore.enableDragging ?? 0) + 1,
+    );
+    expect(harness.interactionWrites().enableScrollWheelZoom, "enableScrollWheelZoom 恰好一次").toBe(
+      (interactionBefore.enableScrollWheelZoom ?? 0) + 1,
+    );
+    expect(harness.interactions()).toMatchObject({ dragging: false, scrollWheelZoom: false });
+
+    // 父级若把同一批值**再提交一次**（新引用、同值），读回 / 开关态判定「已一致」⇒ 零新增命令。
+    const viewSettled = harness.viewWrites();
+    const interactionSettled = harness.interactionWrites();
+    props.value = {
+      ...props.value,
+      center: { lng: 121.5, lat: 31.2 },
+      zoom: 15,
+      enableDragging: false,
+      enableScrollWheelZoom: false,
+    };
+    await settleProps();
+    expect(harness.viewWrites(), "同值重提交不得重复下发").toEqual(viewSettled);
+    expect(harness.interactionWrites(), "同值重提交不得重复下发").toEqual(interactionSettled);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("视野+交互：同批多字段更新");
+  });
+
   it("用户交互回写 model 并通知父级；父级按 v-model 回写不再写 SDK", async () => {
     const props = ref<Record<string, unknown>>(controlledViewProps());
     // `v-model:center` 编译出来就是 `center` + `onUpdate:center` 这一对；

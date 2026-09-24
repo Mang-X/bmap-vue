@@ -3,6 +3,9 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-14
 - 计划键：`M4-HANDLE-UX`（issue #29，追踪 #12，前置 #28）
+- 复审：issue **#137**（「Map/model Vue-native 收口」）的启动 / 重试状态机审计 ——
+  逐符号消费者与判据见决策 5.1 小节。**不取代任何决策**，只是把「为什么不是 Vue 生命周期
+  能自然表达的等待」逐条落到证据上。
 - 相关：`packages/baidu-map-gl-vue/src/types/mapExpose.ts`、
   `packages/baidu-map-gl-vue/src/core/runtime/mapCommands.ts`、
   `packages/baidu-map-gl-vue/src/core/runtime/elementSize.ts`、
@@ -127,6 +130,30 @@ Catalog。官方参考实现走的是另一个方向（见决策 10 的对照表
    归零。
 3. **`disposed` 让「卸载后不再调 SDK」成为集合的性质**，而不是 `status` 守卫的巧合；并且它
    只能由 `dispose()` 添加（`suspend()` 显式拒绝），公开 API 无法把正常地图推进终态。
+
+#### 5.1 启动 / 重试状态机：逐符号的**消费者与判据**（#137 审计）
+
+#137 问的是「有没有用 Vue 生命周期 / 容器 watcher 就能自然表达的等待，却另建了一套状态机」。
+逐个符号的结论是**都保留** —— 理由不是「已经写了」，而是这一组符号全部是**外部资源状态**
+（WebGL 句柄、0×0 容器、KeepAlive 下的 `dispose` 缺席），属于 Vue 生命周期**覆盖不到**的那类：
+
+| 符号 | 它记的是什么外部事实 | 消费者 | 钉住它的行为用例 |
+| --- | --- | --- | --- |
+| `mountStarted` | 「已发起过挂载」——KeepAlive 下 `onMounted` 只跑一次，重试不能重复触发挂载 | `startBoot()` 的幂等判据 | 容器门禁一组（0×0 时不建图，展开才建） |
+| `bootTask` | 当前在飞的 `boot()` Promise（retry 需 await 同一个，single-flight） | `retry()` / `requestNextBoot()` | retry 期间不得并发建第二张图 |
+| `nextBootWaiters` | 「`@error` 同步重试」排队的一轮下一轮启动请求（boot 正在进行时按下重试） | `requestNextBoot()` | 「error 事件回调里同步 retry：真的排下一次重试（复审 P2）」 |
+| `deferredWaiters` | 被挂起的 `retry()`（容器不可用，等放行） | `onContainerReady()` 放行时接续 | 「被挂起的 retry：Observer 从未见过 0×0 也必须被唤醒（复审 P1）」 |
+| `containerUsableWaiters` | 等容器可用的建图等待点（`waitForUsableContainer` 的 `while` 循环） | `mountMap()` / 建图前判据 | 「挂起的 retry 期间每帧复查不得启动 boot：容器仍 0×0 时状态必须留在 error（#127）」 |
+| `assembledMap` | 已装配的地图句柄（**按实例身份**幂等：换图才重装配，同一张图不重跑装配副作用） | `assemble()` | ⚠️ 间接钉住：「状态插槽：error 插槽拿到结构化错误与重试入口…」里的「已经 ready 时再 retry：不重复建图、也不重复广播 ready」—— 它证的是**幂等的外部后果**（`mapsCreated()` 与 `ready` emit 都不增），**不是**装配次数的独立读数。装配是**纯副作用**（样式 / 类型 / 开关下发），没有可观测读数；本轮不为此加新读数 |
+| `whenMapCreated` | 「地图已创建」的一次性通知（**故意不 clear**，retry 的第二张图仍要发 `load`） | `bindViewEvents` / 状态插槽 | `failNextInitializeView` → retry 重建仍收到 `load` |
+
+**为什么 Vue 生命周期替不了**：这一组等待的**对手方是 SDK 与浏览器，不是 Vue 组件树**。
+容器 0×0 时组件「已挂载」但地图**建不出来**；KeepAlive 停用时 `onUnmounted` **不会**触发
+（只有 `onDeactivated`），所以「终态」不能挂在 `onUnmounted` 上。#29 的验收要的是「dispose 之后
+不再调 SDK」，这靠的是 `disposed` 终态原因 + 等待者被 reject，而不是某个 Vue hook 的到达。
+**能自然表达的那半**已经是 Vue-native 的：`onActivated` / `onDeactivated` 直接驱动
+`keep-alive` 原因增删，容器 watcher 直接驱动门禁放行 —— 没有「Vue 已有 watcher 却又并排建一套
+轮询状态机」的重叠部分。逐符号的取舍结论即上表。
 
 ### 6. 环境采集委托 `@vueuse/core`，决策留在本库
 

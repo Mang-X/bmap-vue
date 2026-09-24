@@ -4,7 +4,8 @@
 - 日期：2026-09-24
 - 关联：issue **#124**（本 ADR 承接其 2026-09-23 重新分类后新增的 scheduler/batching 取证范围；
   **该票整体仍 open**，剩余项见「后果」里的提交基线重录）、**#134**（1.0 身份重置，本 ADR 的前置，
-  已完成）、ADR
+  已完成）、**#137**（Map/model Vue-native 收口；`<Map>` 视野字段那一腿的对照取证见 §2.1）、
+  ADR
   [`2026-09-24-deep-reactive-array-update-path`](./2026-09-24-deep-reactive-array-update-path.md)（深响应子问题）、
   ADR [`2026-09-21-performance-baseline-and-worker-decision`](./2026-09-21-performance-baseline-and-worker-decision.md)
 - 取代范围：**不取代任何 ADR**。补齐 [`2026-09-24-deep-reactive-array-update-path`](./2026-09-24-deep-reactive-array-update-path.md)
@@ -65,6 +66,39 @@
 5 次 reconcile），其中样式被写了 2 次（多字段分批到达、去重指纹只让**最终值**落盘）；`pre`/`post`
 把一次提交合并成 **1 次**回调 / 1 次 reconcile。**三档 recreate 都是 0**：换数据 / 改样式 / 改显隐 /
 改层级都不重建实例（重建只由构造期项 / 字段撤回 / 重新可见触发）。
+
+#### 2.1 对照：`<Map>` 视野字段（#137 item 3 的取证）
+
+#137 问的是**另一条路径**——`<Map>` 的 center / zoom / heading / tilt 四个视野字段。它们与上表
+的 `data`/`style`/… 有两点不同，所以**没有** §2 那个 5→1 的可优化空间：
+
+| 维度 | `useNativeLayerResource`（上表） | `<Map>` 视野字段 |
+| --- | --- | --- |
+| 字段之间的关系 | 5 个字段**共同构成一个 `setData` / 一次 reconcile 的参数** | 4 个字段是**四条不同的 SDK 命令**（`setCenter` / `setZoom` / `setHeading` / `setTilt`），一条命令改不了四个字段 |
+| watcher 形状 | **一个** watcher 读 5 个 key，`flush:'sync'` 下逐字段 mutate 触发多次 reconcile | **四个**独立 `flush:'post'` watcher，各自读一个 prop |
+
+实测（Vue 3.5.42）：**一次父提交同时改 center+zoom+heading+tilt ⇒ 恰好 4 次写入、4 次 watcher
+回调**；换成「一个 watcher 读四元组」的写法**也是 4 次写入**。两种形状的 SDK 调用数**完全相同**
+—— 差异为零，因为批处理能省的只是**同一个命令**被重复下发，而这里四个字段本来就要下四条不同命令。
+
+⇒ **结论：`flush:'post'` 在这条路径上已经拿到全部可得收益，没有多余 SDK 调用可删。**
+把它并成单个 watcher 只会得到「一个 callback 里写 4 次」—— 观测面更少、语义完全一样，没有收益。
+本轮**不改** `<Map>` 的 watcher 形状。
+
+这条不变量已由常驻行为用例钉住（`v3-component-scenarios` 的「同一次父更新同时改
+center/zoom/交互开关」）：断言改动的字段各**恰好一次**写入、未改动的字段不跟着重写、读回一致
+后零新增命令。交互开关那一腿的判据用新加的 harness 读数 `interactionWrites()` / `interactions()`。
+该用例对「重复下发」是**可翻红**的（把 `syncEnableProps` 多调一次 ⇒ `enableDragging` 计数 +2 ⇒
+实测变红），不是恒真断言。
+
+**为什么「watcher callback 次数」不进常驻门禁**（#137 遗留的明确取舍）：watcher 回调是
+**Vue 侧**的量，Fake SDK 在边界之外、**结构上看不到它** —— 把它变成读数就得在 `Map.vue` 里插桩，
+而为了记录一次调度行为去改生产源码，代价与风险都超过收益（插桩本身会改变被观察的时序）。
+因此分工与本 ADR 决策 3 相同：**SDK 调用次数是常驻门禁**（可观测、会被回归打红），
+**watcher 回调次数是本 ADR 的取证**（需临时插桩，未常驻）。本节上表的 4 vs 4 属于后者 ——
+若将来 `Map.vue` 的 watcher 形状真的改了，本节会过期，届时需重跑一次临时探针复核，
+而不是靠常驻门禁发现（常驻门禁在两种形状下都通过，因为**结论就是两者相同**）。
+
 
 ### 3. 最终状态
 

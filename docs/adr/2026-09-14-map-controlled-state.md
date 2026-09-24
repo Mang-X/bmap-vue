@@ -3,6 +3,8 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-14
 - 计划键：`M4-STATE`（issue #27，追踪 #12，前置 #26）
+- 复审：issue **#137**（Map/model Vue-native 收口）—— 决策 6.1 / 6.2 小节是对决策 6 的
+  `defineModel` / `useModel` 对照取证与 `isControlled` 归属结论。**不取代任何决策**。
 - 取代（**只取代下列具体决策，不整份取代**）：
   - [ADR 2026-09-11 v4 Map Facet](./2026-09-11-jsapi-v4-map-facet.md)「迁移影响」表中
     `getHeading()` 行的处置「不要用 heading 做 round-trip 判断」——该条是当时「状态属 #28」的
@@ -178,6 +180,95 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 
 它只负责状态语义（`value` / `internal` / `isControlled` / `initial` / `syncExternal` / `commit`），
 **不碰 SDK**；写命令由组件在 watcher 里完成。
+
+#### 6.1 对照 `defineModel` / `useModel`：父↔子那一腿**已经是** Vue-native（#137）
+
+#137 的口径是「Vue owns Vue state; Core owns SDK state」，并问「内部是不是还在用 React 的
+controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分两半：
+
+**（一）父↔子那一腿已经是 Vue-native，没有第二套状态机。** `<Map>` 传的是
+`value: () => props.center` —— 这是**对 props 的 getter**，不是另存一份父级状态；写入侧是普通
+`emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，且与 `Marker`（`update:position`）/
+`InfoWindow` 全库统一。**全库没有任何组件使用 `defineModel`** —— 一致性本身就是当前约定。
+所以这条腿上「Vue 拥有」已经成立，没有可收口的对象。
+
+**（二）组件↔SDK 那一腿 `useModel` 表达不了。** Vue 3.5.42 的 `useModel(props, name)` 实现读过，
+并由**常驻用例** `useControllableState.vsUseModel.test.ts` 逐条实测（A1–A5）—— 它打的是本仓库
+已安装的 Vue，**无网络、无凭据、进 CI**。Vue 升级后若上游补上了这些能力，该用例会**变红**，
+本节随之必须重审。（本表即是那五条用例的结论摘要。）
+
+| `useControllableState` 的冻结能力 | `useModel` / `defineModel` 是否有 |
+| --- | --- |
+| 受控：prop 优先 / 非受控：本地为源 | ✅ 有，且语义一致 |
+| **受控 → 非受控保留最后一次外部值**（决策 4 §3） | ❌ **没有** —— 受控 prop 被摘掉时 `useModel` 读到的是 `undefined` |
+| `default*` 只在首次解析时读一次 | ❌ 没有 |
+| 读回容差相等（`centerEquals` / `anglesEqual` …） | ❌ 没有（`hasChanged` 是引用/原值比较） |
+| `copy` 防御性拷贝 + 首次快照 | ❌ 没有 |
+| `reset()` 归位 | ❌ 没有 |
+
+第一行是**硬冲突**：它与决策 4 §3 冻结的语义**直接矛盾**，且不是加适配层能补的（`undefined` 是
+`useModel` 表达「现在没有受控值」的信号，适配层拿不到「最后一次外部值」）。
+
+**（三）迁移还会改到冻结公共面。** `Map.vue` 用的是手写 `defineProps<MapProps>()`，而
+`MapProps` 是**被消费端 fixture 断言**的公共类型（`fixtures/consumer/src/index.ts`）。只把
+`<Map>` 迁到 `defineModel` 会改动公共面、让 `Map` 偏离全库统一写法，而上表里缺的每一项**仍要**
+留一层适配 —— 收益为零，成本为负。
+
+⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 「简单数字模型不该
+为 React 受控/非受控术语付运行代价」这条要求，按**归属**而非按**词汇**满足：React 术语只留在
+这个**已发布的公共 composable** 的名字与文档里；`<Map>` 里的四个视野字段没有第二套状态机、没有
+额外的调度器、没有 per-field 的 React 概念开销 —— 它们就是「一个 getter + 一个 emit + 一次容差
+判等的 SDK 写入」。
+
+##### 6.1.1 `center: string | Point` 的非对称：核对结论是「不套通用模型」（#137 明示项）
+
+#137 特别要求核对「`center` 字符串入、用户交互回写 Point 出」这个非对称，并**不强行套通用模型**。
+核对结论：**当前实现已经是「按形态分别判等」，不是「套一个通用模型」**，且非对称被显式记录在案。
+
+| 环节 | 形态处理 | 位置 |
+| --- | --- | --- |
+| 相等判定 | `centerEquals` 里**字符串与点永不相等**（`aIsString \|\| bIsString` 时只比「都是字符串且整串相同」）；`centerKey` 同样分 `s:` / `p:` 两个命名空间 | `core/utils/equality.ts` |
+| 防御性拷贝 | `cloneCenter`：字符串是不可变值原样返回，**只拷点** | `components/map/Map.vue` |
+| SDK 写入 | `centerAndZoom` 收到字符串就**原样透传**给官方（由官方地理编码），收到点才 `toRawPoint` | `driver/jsapi-v4/map.ts` |
+| 读回 | `getCenter()` **只给点** —— 字符串形态没有可比的读回 | 官方 `getCenter(): Point` 签名（`@baidumap/jsapi-v4-types@4.0.4`） |
+
+**非对称的代价与现有处置**：字符串 center 因此**做不了读回判等**，每次字符串值变化都会下发一次
+`setCenter`（`map.md` 「受控 / 非受控视野」小节已写明这是「不假支持」——我们不知道官方会把它
+解析到哪）。这条代价值得记一笔：它**不是**通用模型套错的后果，而是「读回只有点」这一上游事实的
+直接结果。缓解手段是「与首次快照相同」这条短路（`convergeViewToState` 的初始快照判等），它让
+**没变过的字符串 center 在 ready 时一条额外命令都不发**。
+
+⇒ 两条行为级用例已钉住这个非对称：「受控字符串 center：ready 时每个字段至多写一条命令
+（加载期间没变过）」与「受控字符串 center：加载期间变化时恰好写一条命令（不重复）」
+（`v3-component-scenarios`）。**#137 不改这一段**：把它「统一」成点会破坏 v2 兼容的
+`center="北京市"` 用法（`MapProps.center` 是冻结公共类型），而强行让字符串参与容差判等会得到
+**假支持**（我们没有字符串的解析结果可比）。维持「点走容差、字符串走整串 + 首次快照」的分歧处理。
+
+#### 6.2 `isControlled` 为什么保留（零消费者，但属冻结公共面）
+
+#137 的审计发现 `isControlled` **没有任何生产消费者**（`<Map>` 判断档位用的是即时的
+`value() !== undefined`）。按 AGENTS.md「没有消费者的抽象一律删除」，它是删除候选。但它挂在
+`useControllableState` 的返回类型上，而这个 composable 已被决策 6 定为**公开 API**（决策 6 原文：
+「这是一步不可逆的承诺」），返回值形状是冻结面的一部分 —— 删掉它是破坏性变更，与 #137「不改动
+#135 已冻结的公共语义」的验收直接冲突。
+
+⇒ **保留并标注**（源码 JSDoc + `docs/zh-CN/hooks/useControllableState.md` 均已注明「库内无消费者、
+供公共契约」），避免下一个读者去找一个不存在的调用点。AGENTS.md 的零消费者规则针对**内部**面；
+冻结公共成员是例外，真要移除应另开破坏性变更票。
+
+**「付不必要 runtime」这条验收的诚实口径**（#137 验收第 2 条）。该条问「简单 number model 是否为
+React controlled/uncontrolled **术语**支付了不必要 runtime」。逐个数清 `<Map>` 四个视野字段实际
+持有的响应式对象：`isControlled` computed ×1、`model` computed ×1、`internal` shallowRef ×1、
+`warned` Set ×1，外加有 `default*` 时一个 `defaultValue` watcher。**这些都还在，没有被本票删掉。**
+本票做到的是把「React 术语」限制在**一个已发布的公共 composable** 的名字与文档里，而**不是**把
+运行时对象减掉 —— 减掉就等于改公共契约（验收第 5 条禁止）。
+
+因此这条验收的达成口径是**归属**而非**体积**：`<Map>` 的四个 number 字段没有为「controlled /
+uncontrolled」付出**任何额外的调度或状态机**（没有第二套 watcher 体系、没有 per-field 的
+provider/store 抽象），它们就是「一个 getter + 一个 emit + 一次容差判等的 SDK 写入」；React 词汇
+只出现在 helper 的**命名与文档**上。**若将来要以「体积」而不是「归属」结清这一条**，那是一次
+独立的、面向 1.0 的公共 API 变更（`useControllableState` 降级为内部实现 + 提供 `defineModel`
+版本），必须单开票并走 ADR，不在 #137 范围内。
 
 ### 7. 与官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的对照
 

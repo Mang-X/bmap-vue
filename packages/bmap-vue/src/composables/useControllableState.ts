@@ -1,5 +1,27 @@
 /**
- * 通用受控 / 非受控状态（M4-STATE / issue #27）
+ * 通用受控 / 非受控状态（M4-STATE / issue #27、#137）
+ *
+ * ## 归属边界：Vue 拥有 Vue 的状态，本文件拥有 SDK 的状态
+ *
+ * #137 的口径是「Vue owns Vue state; Core owns SDK state」。这个 helper 恰好骑在两者的**缝**上，
+ * 所以先说清它到底拥有哪半：
+ *
+ * | 腿 | 谁拥有 | 这里的形态 |
+ * | --- | --- | --- |
+ * | 父组件 ↔ 组件（props / emits） | **Vue** | 调用方传 `value: () => props.center`——这是**对 props 的 getter**，不是另存一份；写入侧是 `emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，全库统一（`Map` / `Marker` / `InfoWindow` 都是「普通 prop + `update:*` emit」），**没有**第二个父↔子状态机需要收口。 |
+ * | 组件 ↔ SDK（读回 / 写回 / 归位） | **本文件** | `internal` 镜像是 SDK 侧事实源的本地投影，容差相等、`copy` 落库、`reset()` 归位都是 SDK 侧语义，Vue 不拥有、也无法替我们表达。 |
+ *
+ * **为什么不用 `defineModel` / `useModel`（#137 已取证，不是「没试过」）**：Vue 3.5 的
+ * `useModel` 确实自带「受控：prop 优先 / 非受控：本地为源」，但它**表达不了下面规则 3 的
+ * 受控 → 非受控那一半**——受控 prop 被摘掉时 `useModel` 读到的就是 `undefined`，而本文件
+ * 冻结的契约是「内部状态接管，**保留最后一次外部值**」。它同样没有 `defaultValue` 只读一次、
+ * 没有容差相等、没有 `copy`、没有首次快照。而且 `Map` 的 props 走的是**手写
+ * `defineProps<MapProps>()`**，`MapProps` 是被消费端 fixture 断言的冻结公共类型；只把
+ * `Map` 迁到 `defineModel` 会让它偏离全库统一写法、改动冻结公共面，而上面那些规则仍要
+ * 这层适配。⇒ 保留本 helper 作为通用原语，`<Map>` 的接线不动。详见 ADR
+ * `2026-09-14-map-controlled-state` 的「对照 `defineModel` / `useModel`」小节。
+ *
+ * ## 三种来源
  *
  * 一个字段有**三种来源**，优先级固定为：受控值 > 非受控初值 > 库默认值。
  *
@@ -79,7 +101,17 @@ export interface ControllableState<T> {
   readonly value: ComputedRef<T>;
   /** 内部状态（非受控模式的事实源；受控模式是外部值的镜像）。 */
   readonly internal: ShallowRef<T>;
-  /** 当前是否受控（外部值存在）。 */
+  /**
+   * 当前是否受控（外部值存在）。
+   *
+   * ⚠️ **库内没有消费者**（#137 审计结论）：`<Map>` 判断档位用的是 `value() !== undefined` 的
+   * 即时读取，不是这个 computed。它留在返回类型上是因为 `useControllableState` 是**已发布的
+   * 公共 composable**（ADR `2026-09-14-map-controlled-state` 决策 6），返回值形状属于冻结契约 ——
+   * 删掉它是破坏性变更，不在 #137「不改动已冻结公共语义」的范围内。
+   *
+   * 所以：**别再去找它的库内调用点**。若将来确实要移除，走单独的破坏性变更票，并同步
+   * `docs/zh-CN/hooks/useControllableState.md`。
+   */
   readonly isControlled: ComputedRef<boolean>;
   /** 首次解析出的初值（初次视野 / 初始渲染用）。 */
   readonly initial: T;
