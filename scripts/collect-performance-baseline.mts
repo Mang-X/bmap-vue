@@ -848,6 +848,111 @@ function writeBaseline(report: Report): void {
   console.log(`[perf] 已更新基线：${showPath(BASELINE_PATH)}`);
 }
 
+/** 报告格式版本：与 `buildReport` / `writeBaseline` 写出的 `version: 1` 同一个值。 */
+const REPORT_VERSION = 1;
+
+/** 非空字符串（报告里所有「标识类」字段的共同口径：空串等于没写）。 */
+function isFilledString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/** 有限数（`NaN` / `Infinity` 都不能进基线：它们会让归一化比值变成 `NaN` 并静默失去判别力）。 */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * `--from-report` 的**语义级**校验：顶层 key 齐全还不够，一份残缺 / 子集 / 手改的报告会让
+ * `--update` 写出一份「指标覆盖丢失」或「机器身份缺失」的基线，之后绝对值趋势门禁会**长期静默跳过**。
+ *
+ * 这里逐条给出可读的原因，`readReport` 据此退出码 2，且**在任何写入之前**返回 ⇒ 基线不会被碰到。
+ */
+export function validateReportShape(report: unknown): string[] {
+  if (!isPlainObject(report)) return ["报告不是对象"];
+  const problems: string[] = [];
+  if (report.version !== REPORT_VERSION) {
+    problems.push(`version 应为 ${REPORT_VERSION}（收到 ${JSON.stringify(report.version)}）`);
+  }
+  if (!isFilledString(report.generatedAt)) problems.push("generatedAt 缺失或为空");
+  if (!isPlainObject(report.dataset) || !isFilledString(report.dataset.version)) {
+    problems.push("dataset.version 缺失或为空");
+  }
+  if (!isFilledString(report.engine)) problems.push("engine 缺失或为空");
+
+  // 机器身份是门禁的键（`platform + arch + cpuModel`）：缺任何一项都会让门禁退化成「只出报告」。
+  const environment = isPlainObject(report.environment) ? report.environment : {};
+  for (const key of ["platform", "arch", "cpuModel", "node"] as const) {
+    if (!isFilledString(environment[key])) problems.push(`environment.${key} 缺失或为空（机器身份是门禁的键）`);
+  }
+
+  const normalizer = isPlainObject(report.normalizer) ? report.normalizer : {};
+  if (!isFilledString(normalizer.metric)) problems.push("normalizer.metric 缺失或为空");
+  if (!isFiniteNumber(normalizer.minMs) || normalizer.minMs <= 0) {
+    problems.push("normalizer.minMs 必须是正数（归一化的分母）");
+  }
+
+  const metrics = isPlainObject(report.metrics) ? report.metrics : null;
+  if (!metrics || Object.keys(metrics).length === 0) {
+    problems.push("metrics 为空：一份没有指标的基线等于把门禁输入删空");
+  } else {
+    for (const [name, entry] of Object.entries(metrics)) {
+      if (!isPlainObject(entry)) {
+        problems.push(`metrics.${name} 不是对象`);
+        continue;
+      }
+      for (const key of ["minMs", "medianMs", "maxMs", "normalized", "samples"] as const) {
+        if (!isFiniteNumber(entry[key])) problems.push(`metrics.${name}.${key} 不是有限数`);
+      }
+    }
+  }
+
+  if (!isPlainObject(report.readouts)) {
+    problems.push("readouts 不是对象");
+  } else {
+    for (const [key, value] of Object.entries(report.readouts)) {
+      if (typeof value === "string") continue;
+      if (!isFiniteNumber(value)) problems.push(`readouts.${key} 必须是有限数或字符串`);
+    }
+  }
+
+  const bundle = isPlainObject(report.bundle) ? report.bundle : null;
+  if (!bundle || !isFilledString(bundle.status)) {
+    problems.push("bundle.status 缺失或为空");
+  } else if (bundle.status === "ok" && !isPlainObject(bundle.totals)) {
+    problems.push("bundle.status=ok 但缺 bundle.totals（包体读数会静默变成空）");
+  }
+
+  if (report.notMeasured !== undefined && !Array.isArray(report.notMeasured)) {
+    problems.push("notMeasured 不是数组");
+  }
+  return problems;
+}
+
+/**
+ * 报告比基线**少**指标 ⇒ 这是一份残缺 artifact，不能据此重录。
+ *
+ * 与 `describeKeySetMismatch` 的区别：那条是**门禁**判据（任一方向漂移都失败），而重录是**维护**动作
+ * ——「报告多出指标」是新指标落地，允许；「报告少了基线已有的指标」则是采集不完整，写进去会让那些指标
+ * 从门禁里静默消失。两个方向因此必须分开判。
+ */
+export function describeDroppedMetrics(
+  reportMetricNames: readonly string[],
+  baselineMetricNames: readonly string[],
+): string | null {
+  const reportNames = new Set(reportMetricNames);
+  const dropped = baselineMetricNames.filter((name) => !reportNames.has(name));
+  if (dropped.length === 0) return null;
+  return (
+    `报告比基线少了 ${dropped.length} 条指标（${dropped.slice(0, 5).join("、")}` +
+    `${dropped.length > 5 ? " …" : ""}）：这是一份残缺 artifact，重录会让这些指标从门禁里静默消失` +
+    "。请确认采集完整，或改用门禁机上的 `pnpm perf:baseline --update` 重录"
+  );
+}
+
 /**
  * 从**既有报告**重录基线（`--from-report=<report.json>`）。
  *
@@ -857,45 +962,49 @@ function writeBaseline(report: Report): void {
  *
  * 它**不重跑基准**：读数全部来自那份报告，因此「录的是哪一次跑」这件事是可追溯的（打印机器身份）。
  */
-function readReport(path: string): Report {
+function readReport(path: string, flags: CliFlags): Report {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     fail(2, `[perf] 读不了报告 ${showPath(path)}：${String(error)}`);
   }
-  const report = parsed as Report;
-  const required = [
-    "version",
-    "generatedAt",
-    "dataset",
-    "engine",
-    "environment",
-    "normalizer",
-    "metrics",
-    "readouts",
-    "bundle",
-  ] as const;
-  const missing = required.filter((key) => report?.[key] === undefined);
-  if (missing.length > 0) {
-    fail(2, `[perf] ${showPath(path)} 不是一份完整报告（缺 ${missing.join(" / ")}）`);
+  // 语义校验先于任何写入：非法输入退出码 2，且**不会**碰到 baseline.json。
+  const problems = validateReportShape(parsed);
+  if (problems.length > 0) {
+    fail(
+      2,
+      `[perf] ${showPath(path)} 不是一份可用于重录的报告：\n` +
+        problems.map((problem) => `  - ${problem}`).join("\n") +
+        "\n[perf] 未改动基线。请用门禁机那次 CI 的 `perf-report` artifact 里的完整 report.json。",
+    );
   }
+  const report = parsed as Report;
   console.log(
     `[perf] 用既有报告重录（不重跑基准）：${showPath(path)}（录于 ${report.generatedAt}）\n` +
       `[perf]   报告机器：${String(report.environment.platform)}/${String(report.environment.arch)} · ` +
       `${String(report.environment.cpuModel ?? "未知 CPU")} · node ${String(report.environment.node)}`,
   );
-  // 重录的第一号风险是把**另一台机器**的读数写成基线（那会让门禁静默失效），所以在这里显式对照。
   if (existsSync(BASELINE_PATH)) {
     const current = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as {
       machine?: { platform?: unknown; arch?: unknown; cpuModel?: unknown };
+      metrics?: Record<string, unknown>;
     };
+    // 重录的第一号风险是把**另一台机器**的读数写成基线（那会让门禁静默失效），所以在这里显式对照。
     const mismatch = describeMachineMismatch(current.machine, report.environment);
     if (mismatch) {
       console.warn(
         `[perf] ⚠️ 报告机器与当前基线机器不同：${mismatch}\n` +
           "[perf]    仍会按报告重录——**确认这台就是新的门禁规格**，否则趋势门禁会静默失效。",
       );
+    }
+    // 第二号风险是**残缺 artifact**（少了基线已有的指标）：那不是「换规格」，是采集不完整。
+    if (flags.update) {
+      const dropped = describeDroppedMetrics(
+        Object.keys(report.metrics),
+        Object.keys(current.metrics ?? {}),
+      );
+      if (dropped) fail(2, `[perf] ${dropped}\n[perf] 未改动基线。`);
     }
   }
   return report;
@@ -905,7 +1014,7 @@ function main(): void {
   const flags = parseArgs(process.argv.slice(2));
   let report: Report;
   if (flags.fromReport) {
-    report = readReport(flags.fromReport);
+    report = readReport(flags.fromReport, flags);
   } else {
     const metricsDir = flags.metricsDir ?? METRICS_DIR;
     if (!flags.metricsDir) runBenchmarks(metricsDir);
