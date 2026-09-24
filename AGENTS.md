@@ -109,9 +109,10 @@ Capability Catalog 是能力清单的单一事实源（`src/driver/capability/ca
 能力矩阵由 `pnpm generate:capability-matrix` 生成，禁止手工编辑。
 
 覆盖物的事件**静态声明**同样是生成物（`src/core/overlays/overlayEventEmits.generated.ts`），
-事实源四处：`core/overlays/overlayEventCatalog.ts` 的矩阵、`core/deprecations/aliases.ts` 的事件别名表，
-以及 `scripts/generate-overlay-emits.mts` 内的非 SDK 事件表（附**派发点**，逐条回源码核对）
-与显式排除表（矩阵里有、但本库无派发点的键）。SFC 一律 `defineEmits<MarkerEmits>()` 消费它，
+事实源三处：`core/overlays/overlayEventCatalog.ts` 的矩阵，以及 `scripts/generate-overlay-emits.mts` 内的
+非 SDK 事件表（附**派发点**，逐条回源码核对）与显式排除表（矩阵里有、但本库无派发点的键）。
+1.0 没有事件别名——集中弃用层已随 #136 整层删除，因此没有第三处来源，加事件只改上面这三处。
+SFC 一律 `defineEmits<MarkerEmits>()` 消费它，
 **禁止**在组件里手抄键名——`@vue/compiler-sfc` 解析不了 mapped type，键名只能由生成器写死一次。
 
 ## Official-first 约束

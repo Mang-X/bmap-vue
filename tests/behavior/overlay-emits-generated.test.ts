@@ -15,7 +15,7 @@
  * 4. **`resize` 不进声明**：官方 `InfoWindowEventMap` 有它、本库没有派发点。这是一条**会红**的
  *    决定，不是注释里的一句话（见生成脚本的 `--forbid` 模式）。
  *
- * 与 `v3-overlay-suite.test.ts` 里那段门禁的分工：那里查「每个组件的声明面是什么」，
+ * 与 `overlay-suite.test.ts` 里那段门禁的分工：那里查「每个组件的声明面是什么」，
  * 这里查「声明面**怎么来的**、以及生成器自己有没有说谎」。
  */
 import { execFileSync } from "node:child_process";
