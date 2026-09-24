@@ -97,17 +97,18 @@ function onItemClick(station: Station) {
 
 ## 大数据量：`shallowRef` / `markRaw`
 
-数据组件的 `data` 只按**引用**比较，但组件处理这批数据时会**逐项读取**它：
-`BPointShapeLayer` / `BPointIconLayer` / `BPointLayer` 与 `BMarkerCluster` 的 `native` 引擎走
-`Item[]` → `FeatureCollection` 适配（`adaptPoints`）；`BMarkerList` 与 `BMarkerCluster` 的 `markers`
-引擎走 `DataLayerManager` 的 keyed diff / 网格聚合。如果 `data` 是 Vue 的**深响应**数组——
-`ref([...])` / `reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，
-代价随规模上升。
+数据组件的 `data` 只按**引用**比较，但组件处理这批数据时会**逐项读取**它。走 `adaptPoints`
+（`Item[]` → `FeatureCollection`）的路径包括 `BPointCollection` / `BPointIconLayer` / `BPointLayer`
+与 `BMarkerCluster` 的 `native` 引擎；`BMarkerList` 与 `BMarkerCluster` 的 `markers` 引擎走
+`DataLayerManager` 的 keyed diff / 网格聚合。只要 `data` 是 Vue 的**深响应**数组——`ref([...])` /
+`reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，代价随规模
+上升。**「深响应读取显著更贵」这条结论适用于所有复用 `adaptPoints` 的路径**（函数级成本分解见 ADR）。
 
-**本库只对 `adaptPoints`（`Item[]` → `FeatureCollection`）这一条路径取过证**（`BPointShapeLayer` 一族
-与 `BMarkerCluster` 的 `native` 引擎）：50k 换一次引用，深响应输入在组件路径里要 **0.1 ~ 0.2s**
-（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
-`BMarkerList` 与 `BMarkerCluster` 的 `markers` 引擎**未单独取证**，不要把这组数字套到它们身上。
+**组件整链路的具体读数只在 `BPointCollection` 上测过**（50k 换一次引用）：深响应输入在组件路径里要
+**0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
+这组数字含 watch / render effect / 资源同步 / `setData` 的整链路，**不要外推到其它组件**；
+`BMarkerCluster` 的 `native` 引擎虽然复用同一个 `adaptPoints`，但其 `ClusterLayer` 整链路
+**未单独取证**。
 
 大数据量建议把数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，不再代理每一项）：
 
@@ -133,7 +134,7 @@ function moveFirst() {
 </script>
 
 <template>
-  <BPointShapeLayer
+  <BPointCollection
     :data="stations"
     :data-version="version"
     item-key="id"
@@ -141,6 +142,10 @@ function moveFirst() {
   />
 </template>
 ```
+
+> 示例用**当前 head 实际导出的** `BPointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
+> （见上文「先选对组件」的说明）。1.0 的公共 API 命名对齐（[#135](https://github.com/Mang-X/bmap-vue/issues/135)）
+> 完成后，文档会统一改成新名。
 
 边界与代价：
 
