@@ -1,12 +1,12 @@
 <template>
-  <BMap :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
-    <BGeoJSONLayer layer-name="demo-geojson" :data="geojson" @click="handleClick" />
-  </BMap>
+  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+    <GeoJSONLayer layer-name="demo-geojson" :data="geojson" @click="handleClick" />
+  </Map>
 </template>
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BGeoJSONLayer } from "bmap-vue";
+import { GeoJSONLayer } from "bmap-vue";
 
 /** 一份最小的 GeoJSON 数据；`data` 变化时只调 setData()，不会重建图层。 */
 const geojson = ref({

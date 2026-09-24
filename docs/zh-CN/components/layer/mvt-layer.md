@@ -1,18 +1,18 @@
-# BMVTLayer 矢量瓦片图层 <Badge type="tip" text="^1.0.0" />
+# MVTLayer 矢量瓦片图层 <Badge type="tip" text="^1.0.0" />
 
 MVT 矢量瓦片（官方 `BMap.MVTLayer`，4.0）：按**源图层名**过滤要素、按源图层名套样式，
 并提供要素状态（feature-state）命令面。
 
 ```ts
-import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
+import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 ```
 
 ## 组件示例
 
 ```vue
 <template>
-  <BMap :center="{ lng: 116.4, lat: 39.9 }" :zoom="12">
-    <BMVTLayer
+  <Map :center="{ lng: 116.4, lat: 39.9 }" :zoom="12">
+    <MVTLayer
       tile-url-template="https://example.com/tiles/[z]/[x]/[y].pbf"
       :layers="['lines', 'pts']"
       id-property="fid"
@@ -22,7 +22,7 @@ import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
       }"
       @click="onPick"
     />
-  </BMap>
+  </Map>
 </template>
 ```
 
@@ -55,7 +55,7 @@ import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 | tileUrlTemplate | MVT 瓦片地址；占位符 `[z]` / `[x]` / `[y]` | `string` | - | **重建** |
 | layers | 参与渲染的源图层名数组 | `string[]` | - | **重建** |
 | idProperty | 要素身份字段（拾取与 feature-state 的唯一口径） | `string` | - | **重建** |
-| style | 源图层样式映射（见下） | `BMVTLayerStyle` | - | **就地** `setStyle()`（整袋） |
+| style | 源图层样式映射（见下） | `MVTLayerStyle` | - | **就地** `setStyle()`（整袋） |
 
 其余 `MVTLayerOptions`（`transform` / `gridModel` / `spanLevel` / `onclick` / `ondblclick` /
 `onmousemove` / `onmouseout` / …）经逃生口原样透传。
@@ -87,7 +87,7 @@ import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 ```ts
 import { mvtFeatureStateKey } from 'bmap-vue'
 
-const layerRef = ref<InstanceType<typeof BMVTLayer> | null>(null)
+const layerRef = ref<InstanceType<typeof MVTLayer> | null>(null)
 
 // 键必须是复合 `layerName_id`；样式须先含 feature-state 表达式才有可见效果
 layerRef.value?.featureState.update(mvtFeatureStateKey('lines', 'road-1'), { selected: true })

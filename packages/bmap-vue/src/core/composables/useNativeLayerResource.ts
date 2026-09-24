@@ -1,8 +1,8 @@
 /**
  * useNativeLayerResource —— 原生批量数据图层的**共享生命周期内核**（M6 / issue #36）
  *
- * `BPointCollection`（#34）与 #36 的四个可视化图层（`BLineLayer` / `BFillLayer` /
- * `BHeatmapLayer` / `BTrackLineLayer`）在生命周期上是同一件事：**一个 SDK 实例 + 数据 + 样式 +
+ * `PointCollection`（#34）与 #36 的四个可视化图层（`LineLayer` / `FillLayer` /
+ * `HeatmapLayer` / `TrackLineLayer`）在生命周期上是同一件事：**一个 SDK 实例 + 数据 + 样式 +
  * 几个字段级开关 + 拾取事件 + 释放**。差异只有三处，都由调用方（组件）以 hook 的形式给出：
  *
  * 1. **构造期选项与重建指纹**（`ctorOptions` / `rebuildKey`）：哪些 prop 是构造期的、

@@ -181,7 +181,7 @@ function resolveLoadOutcome(
 /**
  * 默认在线 Provider 工厂（与 legacy `baiduCdnProvider()` 对称；不收 AK，AK 经 loadOptions 传入）。
  *
- * 它是 `<BMap>` / `<BMapProvider>` / `createBMapPlugin` / Playground 在未显式指定 Provider 时
+ * 它是 `<Map>` / `<BMapProvider>` / `createBMapPlugin` / Playground 在未显式指定 Provider 时
  * 解析到的那一个：内部真的调用官方 `@baidumap/jsapi-loader`，不是「装了依赖但继续自研 JSONP」。
  */
 export function baiduJsapiV4Provider(

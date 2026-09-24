@@ -135,7 +135,7 @@ function main() {
   //    （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 #73。
   const consumerFixture = setupFixture('consumer')
   run(
-    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('bmap-vue').then(m=>{if(!m.BMap||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('bmap-vue/ui-kit').then(m=>{for(const k of ['BPlaceAutocomplete','BPlaceSearch','BPlaceDetail','BRoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
+    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('bmap-vue').then(m=>{if(!m.Map||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('bmap-vue/ui-kit').then(m=>{for(const k of ['PlaceAutocomplete','PlaceSearch','PlaceDetail','RoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
     consumerFixture,
     'consumer typecheck + ESM import (package tarball)',
   )

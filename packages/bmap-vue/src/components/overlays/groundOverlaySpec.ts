@@ -1,5 +1,5 @@
 /**
- * BGroundOverlay 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * GroundOverlay 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -26,10 +26,10 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
-import type { BGroundOverlayProps } from "../../types/components";
+import type { GroundOverlayProps } from "../../types/components";
 import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
-export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<BGroundOverlayProps> = {
+export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<GroundOverlayProps> = {
   bounds: "options",
   // 旧名：由 core/deprecations 的别名表在读取层解析（`assertOverlayFieldDeclarations` 会核对登记）
   startPoint: "alias",
@@ -63,7 +63,7 @@ export const GROUND_OVERLAY_FIELD_VALUES = {
   url: (value: unknown) => (typeof value === "function" ? value() : value),
 } as const;
 
-export function createGroundOverlaySpec(): OverlaySpec<BGroundOverlayProps, OverlayHandle> {
+export function createGroundOverlaySpec(): OverlaySpec<GroundOverlayProps, OverlayHandle> {
   return {
     type: "ground-overlay",
     kind: "ground-overlay",
@@ -75,7 +75,7 @@ export function createGroundOverlaySpec(): OverlaySpec<BGroundOverlayProps, Over
       // `bounds` 已经过别名解析：只给旧名（`startPoint` + `endPoint`）时这里也能拿到值
       if (!p.bounds) {
         throw new Error(
-          "BGroundOverlay 需要 bounds（{ southwest, northeast }），或旧的 startPoint + endPoint 组合",
+          "GroundOverlay 需要 bounds（{ southwest, northeast }），或旧的 startPoint + endPoint 组合",
         );
       }
       // **只读一次 `url`**（PR #103 评审 2）：`fieldValues` 的投影是「每次读取求值一次」，
@@ -84,7 +84,7 @@ export function createGroundOverlaySpec(): OverlaySpec<BGroundOverlayProps, Over
       // 自己取一次，这是 `fieldValues` 的显式契约（见 `OverlaySpec.fieldValues` 的 JSDoc）。
       const url = p.url;
       if (!url) {
-        throw new Error("BGroundOverlay url is required");
+        throw new Error("GroundOverlay url is required");
       }
       return context.client.driver.overlays.createGroundOverlay(p.bounds, {
         opacity: p.opacity,

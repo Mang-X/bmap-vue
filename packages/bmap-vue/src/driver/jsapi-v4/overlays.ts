@@ -94,7 +94,7 @@ export function createJsapiV4OverlayDriver(
    *
    * 作用域是 **Driver（= Client / SDK 域）**，不是单个实例：`createJsapiV4Driver` 每次装
    * Client 时创建一份，因此**同一个 Client 下的多张地图共用同一个缓存**（`<BMapProvider>` 下
-   * 渲染两个 `<BMap>` 就是这种情况），换一个 Client（换 AK / 换 Provider）就是另一份。
+   * 渲染两个 `<Map>` 就是这种情况），换一个 Client（换 AK / 换 Provider）就是另一份。
    *
    * - **descriptor 归一化**由 `core/icons/markerIcon` 负责（内置名 / 自定义描述的单一事实源），
    *   这里只做「descriptor → `BMap.Icon` 构造参数」——raw SDK 构造必须留在边界内；
@@ -107,7 +107,7 @@ export function createJsapiV4OverlayDriver(
    *   一旦我们原地改它，所有共享它的 Marker 都会跟着变；跨地图共享同理（Icon 是纯值对象，
    *   不属于任何一张地图）。**换图标 = 换 descriptor = 换缓存条目。**
    * - **只有库内部的 Marker 路径（`iconFor`）走缓存**：公共的 `buildIcon` 每次新建实例，
-   *   因为 `useBMapMarkerIcons()` 会把结果直接交给调用方，而 `BMap.Icon` 有可变面
+   *   因为 `useMarkerIcons()` 会把结果直接交给调用方，而 `BMap.Icon` 有可变面
    *   （外部评审 P2：公共 API 不得交出缓存持有的共享可变对象）。
    */
   const iconCache: IconCache<unknown> = createLruIconCache<unknown>(DEFAULT_ICON_CACHE_SIZE);
@@ -209,7 +209,7 @@ export function createJsapiV4OverlayDriver(
    * **公共** `buildIcon`：每次调用都返回一个**新的** `BMap.Icon`。
    *
    * `BMap.Icon` 有 `setImageUrl` / `setSize` / `setAnchor` 等可变面，而
-   * `useBMapMarkerIcons()`（公开 hook）把这里的结果直接交给调用方。公共 API **不得**交出
+   * `useMarkerIcons()`（公开 hook）把这里的结果直接交给调用方。公共 API **不得**交出
    * 缓存持有的共享可变对象——否则一个消费者改了自己那份，会污染同一 Client 下所有地图后续拿到的
    * 图标（外部评审 P2）。因此缓存只服务**库内部**的 Marker 路径（{@link iconFor}）。
    */
@@ -527,7 +527,7 @@ export function createJsapiV4OverlayDriver(
 
     createMapMask(path, options: Record<string, unknown> = {}) {
       // 同 `createMarker3D`：类型包无类声明，但真实 4.0 运行时提供 `MapMask`。
-      const Ctor = requireRuntimeCtor("map-mask", "本仓库的 <BMapMask> 需要该构造器");
+      const Ctor = requireRuntimeCtor("map-mask", "本仓库的 <MapMask> 需要该构造器");
       const opts = projectOptions(overlayDescriptor("map-mask"), options);
       const raw = sdkCall("MapMask", () => new Ctor(geometry.toRawPoints(path), opts));
       return adopt("map-mask", raw);

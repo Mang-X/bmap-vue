@@ -1,5 +1,5 @@
 /**
- * useInfoWindow —— BInfoWindow 的生命周期内核（M5-INFOWINDOW / issue #32）
+ * useInfoWindow —— InfoWindow 的生命周期内核（M5-INFOWINDOW / issue #32）
  *
  * 职责：拥有组件创建的那个 InfoWindow（创建 / 重建 / 释放）、按 desired/observed 收敛、转发 SDK 事件。
  *
@@ -94,7 +94,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   options: UseInfoWindowOptions,
 ): UseInfoWindowResult {
   const mapContext = useRequiredMapContext();
-  const component = options.component ?? "BInfoWindow";
+  const component = options.component ?? "InfoWindow";
   const scheduler = mapContext.scheduler;
 
   /** 每张地图一份的资源归属账本；Context 未提供时退化为组件自持。 */

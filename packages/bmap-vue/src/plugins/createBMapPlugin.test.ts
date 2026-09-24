@@ -47,12 +47,12 @@ beforeEach(() => {
 });
 
 describe("createBMapPlugin", () => {
-  it("按 Manifest 全量注册组件（包含此前手写数组漏掉的 BMarkerList）", () => {
+  it("按 Manifest 全量注册组件（包含此前手写数组漏掉的 MarkerList）", () => {
     const app = createTestApp();
     app.use(createBMapPlugin());
 
     const names = componentManifest.map((c) => c.name);
-    expect(names).toContain("BMarkerList");
+    expect(names).toContain("MarkerList");
     for (const name of names) {
       expect(app.component(name), `${name} 未注册`).toBeTruthy();
     }

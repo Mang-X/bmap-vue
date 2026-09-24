@@ -1,5 +1,5 @@
 /**
- * BPlaceDetail 的构造 / 释放 / 事件 / 动作（UIKIT-02 / issue #75）
+ * PlaceDetail 的构造 / 释放 / 事件 / 动作（UIKIT-02 / issue #75）
  *
  * 桥层的通性行为（异步窗口、generation 守卫、构造失败、SSR hydration）已在
  * `v3-ui-kit-lifecycle.test.ts` 里覆盖，这里只测 `PlaceDetail` **自己的**那几件事：
@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import BPlaceDetail from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceDetail.vue";
+import PlaceDetail from "../../packages/bmap-vue/src/integrations/ui-kit/components/PlaceDetail.vue";
 import {
   createFakeMapHarness,
   createFakeUiKit,
@@ -67,10 +67,10 @@ function upstreamDetail(overrides: Record<string, unknown> = {}): Record<string,
   };
 }
 
-describe("BPlaceDetail：构造与选项", () => {
+describe("PlaceDetail：构造与选项", () => {
   it("Map ready 后构造：宿主拿到 widget、构造选项带 raw map 与 display、load 已绑定", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {
+    const mounted = mountInMap(PlaceDetail, harness, {
       display: { comment: false, rank: true },
     });
     await flushPromises();
@@ -92,7 +92,7 @@ describe("BPlaceDetail：构造与选项", () => {
 
   it("没给 display 时不往构造选项里塞一个 undefined", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
 
     const widget = fake.instances[0]!;
@@ -106,7 +106,7 @@ describe("BPlaceDetail：构造与选项", () => {
 
   it("display 变更 → 重建 widget（上游没有 setter，不静默保留旧值）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ display?: Record<string, boolean> }>(BPlaceDetail, harness, {
+    const mounted = mountInMap<{ display?: Record<string, boolean> }>(PlaceDetail, harness, {
       display: { image: false },
     });
     await flushPromises();
@@ -129,10 +129,10 @@ describe("BPlaceDetail：构造与选项", () => {
   });
 });
 
-describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
+describe("PlaceDetail：uid ↔ setPlace / clear 镜像", () => {
   it("挂载时就带 uid：构造完成后恰好补一次 setPlace（构造期选项里没有 uid）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ uid?: string }>(BPlaceDetail, harness, { uid: "poi-uid" });
+    const mounted = mountInMap<{ uid?: string }>(PlaceDetail, harness, { uid: "poi-uid" });
     await flushPromises();
 
     const widget = fake.instances[0]!;
@@ -147,7 +147,7 @@ describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
 
   it("没给 uid 时既不 setPlace 也不 clear（构造出来就是空状态占位）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
 
     const widget = fake.instances[0]!;
@@ -159,7 +159,7 @@ describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
 
   it("uid 变化：未设置 → 有值走 setPlace、有值 → 有值走 setPlace，都不重建", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ uid?: string }>(BPlaceDetail, harness, {});
+    const mounted = mountInMap<{ uid?: string }>(PlaceDetail, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
 
@@ -177,7 +177,7 @@ describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
 
   it("uid 变回未设置 → clear（上游有明确定义的公开方法，不需要重建来猜语义）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ uid?: string }>(BPlaceDetail, harness, { uid: "a" });
+    const mounted = mountInMap<{ uid?: string }>(PlaceDetail, harness, { uid: "a" });
     await flushPromises();
     const widget = fake.instances[0]!;
 
@@ -200,7 +200,7 @@ describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
   it("重建后新实例要重新应用当前 uid（新 widget 是空的）", async () => {
     const harness = readyHarness();
     const mounted = mountInMap<{ uid?: string; display?: Record<string, boolean> }>(
-      BPlaceDetail,
+      PlaceDetail,
       harness,
       { uid: "a", display: { image: true } },
     );
@@ -221,10 +221,10 @@ describe("BPlaceDetail：uid ↔ setPlace / clear 镜像", () => {
   });
 });
 
-describe("BPlaceDetail：事件与动作", () => {
+describe("PlaceDetail：事件与动作", () => {
   it("load 投影成纯数据：坏坐标与非字符串 uid/tel 被丢弃", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
 
     fake.instances[0]!.emit("load", upstreamDetail());
@@ -254,7 +254,7 @@ describe("BPlaceDetail：事件与动作", () => {
 
   it("load 载荷不是对象时不发事件（不制造「看起来加载好了」的假信号）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
 
     fake.instances[0]!.emit("load", null);
@@ -267,7 +267,7 @@ describe("BPlaceDetail：事件与动作", () => {
 
   it("公开动作落到已验证的方法上；未就绪时等待、卸载后明确拒绝", async () => {
     const harness = createFakeMapHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as DetailApi;
 
@@ -289,7 +289,7 @@ describe("BPlaceDetail：事件与动作", () => {
 
   it("公开面只有 status / setPlace / clear（`layout` 与其它上游成员不冒充）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, {});
+    const mounted = mountInMap(PlaceDetail, harness, {});
     await flushPromises();
 
     expect(Object.keys(mounted.exposed.value ?? {}).sort()).toEqual(["clear", "setPlace", "status"]);
@@ -298,7 +298,7 @@ describe("BPlaceDetail：事件与动作", () => {
 
   it("单次交互只走 UI Kit：headless 服务面一次都没被读到", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, { uid: "a" });
+    const mounted = mountInMap(PlaceDetail, harness, { uid: "a" });
     await flushPromises();
     fake.instances[0]!.emit("load", upstreamDetail());
     await nextTick();
@@ -312,7 +312,7 @@ describe("BPlaceDetail：事件与动作", () => {
 
   it("卸载：先解绑再销毁，宿主 DOM 撤走，计数归零", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceDetail, harness, { uid: "a" });
+    const mounted = mountInMap(PlaceDetail, harness, { uid: "a" });
     await flushPromises();
     const widget = fake.instances[0]!;
 
@@ -332,7 +332,7 @@ describe("BPlaceDetail：事件与动作", () => {
   // issue #75 验收：「路线/详情所创建资源随 clear/destroy 正确释放，多地图不相互影响」。
   it("换 Map：旧 widget 先释放，新 widget 拿到新 raw map 并重新应用当前 uid", async () => {
     const harness = readyHarness("map-a");
-    const mounted = mountInMap<{ uid?: string }>(BPlaceDetail, harness, { uid: "a" });
+    const mounted = mountInMap<{ uid?: string }>(PlaceDetail, harness, { uid: "a" });
     await flushPromises();
     const first = fake.instances[0]!;
     expect(first.options.map).toEqual({ __fakeMap: "map-a" });
@@ -361,8 +361,8 @@ describe("BPlaceDetail：事件与动作", () => {
   it("多地图：各自一个 widget，卸载其中一个不牵连另一个", async () => {
     const harnessA = readyHarness("map-a");
     const harnessB = readyHarness("map-b");
-    const mountedA = mountInMap<{ uid?: string }>(BPlaceDetail, harnessA, { uid: "a" });
-    const mountedB = mountInMap<{ uid?: string }>(BPlaceDetail, harnessB, { uid: "b" });
+    const mountedA = mountInMap<{ uid?: string }>(PlaceDetail, harnessA, { uid: "a" });
+    const mountedB = mountInMap<{ uid?: string }>(PlaceDetail, harnessB, { uid: "b" });
     await flushPromises();
 
     expect(fake.stats.created).toBe(2);
@@ -395,7 +395,7 @@ describe("BPlaceDetail：事件与动作", () => {
    */
   it("快速切换 uid：每次调用都落到上游，load 事件照常转发并带 uid 供对账", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ uid?: string }>(BPlaceDetail, harness, {});
+    const mounted = mountInMap<{ uid?: string }>(PlaceDetail, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
 

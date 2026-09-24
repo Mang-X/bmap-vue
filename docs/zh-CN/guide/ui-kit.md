@@ -7,10 +7,10 @@
 
 | 上游 widget | 本库组件 | 一句话 |
 | --- | --- | --- |
-| `PlaceAutocomplete` | `BPlaceAutocomplete` | 输入建议下拉 + 键盘导航 |
-| `PlaceSearch` | `BPlaceSearch` | 结果列表 + 检索 / 翻页 API |
-| `PlaceDetail` | `BPlaceDetail` | 地点详情面板（uid 模式 / POI 模式） |
-| `RoutePlan` | `BRoutePlan` | 路线面板（锁定版本只开放驾车） |
+| `PlaceAutocomplete` | `PlaceAutocomplete` | 输入建议下拉 + 键盘导航 |
+| `PlaceSearch` | `PlaceSearch` | 结果列表 + 检索 / 翻页 API |
+| `PlaceDetail` | `PlaceDetail` | 地点详情面板（uid 模式 / POI 模式） |
+| `RoutePlan` | `RoutePlan` | 路线面板（锁定版本只开放驾车） |
 
 > 决策与依据见 ADR [Official-first](/adr/2026-09-13-official-first-loader-and-ui-kit)
 > 与 ADR [UI Kit 子路径与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)；
@@ -30,9 +30,9 @@
 
 ### 不受 `.vue` 自动导入（resolver）覆盖
 
-这四个组件**不在**组件 manifest 里，因此 `Vue3BaiduMapGlResolver` /
+这四个组件**不在**组件 manifest 里，因此 `BMapResolver` /
 `unplugin-vue-components` 的自动导入**不会**解析它们：必须显式写
-`import { BPlaceSearch } from "bmap-vue/ui-kit"`。
+`import { PlaceSearch } from "bmap-vue/ui-kit"`。
 
 这是刻意的：manifest 生成的 `components/index.ts` 会被**根入口**引用，把 UI Kit 放进去就等于
 把可选依赖与 DOM 副作用拖进所有消费者的产物图（见 ADR
@@ -51,7 +51,7 @@ pnpm add @baidumap/jsapi-ui-kit@1.1.2
 官方包**不在 JS 里注入样式**，不引入不会报错，只会「没有样式」：
 
 ```ts
-import { BPlaceSearch } from "bmap-vue/ui-kit"; // ❌ 这不会引入任何样式
+import { PlaceSearch } from "bmap-vue/ui-kit"; // ❌ 这不会引入任何样式
 ```
 
 正确写法：
@@ -72,19 +72,19 @@ console.log(UI_KIT_STYLE_PATH); // "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit
 ```vue
 <script setup lang="ts">
 import { ref } from "vue";
-import { BMap } from "bmap-vue";
+import { Map } from "bmap-vue";
 import {
-  BPlaceAutocomplete,
-  BPlaceDetail,
-  BPlaceSearch,
-  BRoutePlan,
+  PlaceAutocomplete,
+  PlaceDetail,
+  PlaceSearch,
+  RoutePlan,
 } from "bmap-vue/ui-kit";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 import type { PlacePoiDTO, PlaceSuggestionDTO } from "bmap-vue/ui-kit";
 
-const autocomplete = ref<InstanceType<typeof BPlaceAutocomplete> | null>(null);
-const search = ref<InstanceType<typeof BPlaceSearch> | null>(null);
-const routePlan = ref<InstanceType<typeof BRoutePlan> | null>(null);
+const autocomplete = ref<InstanceType<typeof PlaceAutocomplete> | null>(null);
+const search = ref<InstanceType<typeof PlaceSearch> | null>(null);
+const routePlan = ref<InstanceType<typeof RoutePlan> | null>(null);
 const detailUid = ref<string>();
 
 function onSelect(poi: PlacePoiDTO) {
@@ -97,28 +97,28 @@ function onSuggest(items: PlaceSuggestionDTO[]) {
 </script>
 
 <template>
-  <BMap :ak="ak">
+  <Map :ak="ak">
     <!-- host 只是一个容器：给它尺寸即可 -->
     <div style="width: 360px; height: 320px">
-      <BPlaceAutocomplete ref="autocomplete" location="北京" @suggest="onSuggest" />
+      <PlaceAutocomplete ref="autocomplete" location="北京" @suggest="onSuggest" />
     </div>
     <div style="width: 360px; height: 420px">
-      <BPlaceSearch ref="search" @select="onSelect" />
+      <PlaceSearch ref="search" @select="onSelect" />
     </div>
     <div style="width: 360px; height: 420px">
-      <BPlaceDetail :uid="detailUid" />
+      <PlaceDetail :uid="detailUid" />
     </div>
     <div style="width: 360px; height: 420px">
-      <BRoutePlan ref="routePlan" />
+      <RoutePlan ref="routePlan" />
     </div>
-  </BMap>
+  </Map>
 </template>
 ```
 
-四个组件都必须是 `<BMap>` 的后代：上游四个 widget 在构造期强制要求 `options.map`，
+四个组件都必须是 `<Map>` 的后代：上游四个 widget 在构造期强制要求 `options.map`，
 本库会等地图就绪后再构造，并且**跟随地图实例换代自动重建**。
 
-## `BPlaceAutocomplete`
+## `PlaceAutocomplete`
 
 ### Props
 
@@ -181,7 +181,7 @@ await api.hide();
 所以本库**不提供** `v-model:query`，也**不会**去 `querySelector` 上游内部的输入框 ——
 那是对上游内部 DOM 的隐式依赖。需要读当前值请调用 `getInputValue()`。
 
-## `BPlaceSearch`
+## `PlaceSearch`
 
 ### Props
 
@@ -224,22 +224,22 @@ await api.goToPage(3);
 上游自己用 `api.map.baidu.com` 的 JSONP 通道（`qt=` 私有请求码），本库源码不接触这些私有面。
 `tests/behavior/v3-ui-kit-events.test.ts` 用「`driver.services` 一次都没被读到」来锁这条。
 
-## 与 `BAutoComplete` 的区别（迁移说明）
+## 与 `Autocomplete` 的区别（迁移说明）
 
 两者**不是同一个东西**，本库不会静默替换：
 
-| | `BAutoComplete` | `BPlaceAutocomplete` |
+| | `Autocomplete` | `PlaceAutocomplete` |
 | --- | --- | --- |
 | 数据通道 | 本库 headless `Autocomplete`（`BMapGL.Autocomplete`） | 官方 UI Kit 的 JSONP 通道 |
 | UI | 无（只把输入框绑给 SDK，联想 UI 由 SDK 自己的下拉实现） | 官方 UI Kit 输入框 + 建议下拉 + 键盘导航 |
 | 入口 | 根入口 `bmap-vue` | 子入口 `bmap-vue/ui-kit` |
 | 额外依赖 | 无 | `@baidumap/jsapi-ui-kit`（optional peer）+ 手写引入 CSS |
 
-- 想要**官方样式与交互**、并且可以接受多一个可选依赖 → 用 `BPlaceAutocomplete`；
-- 已有页面在用 `BAutoComplete` 且不想改样式/依赖 → 保持现状，两者可以在同一页共存
+- 想要**官方样式与交互**、并且可以接受多一个可选依赖 → 用 `PlaceAutocomplete`；
+- 已有页面在用 `Autocomplete` 且不想改样式/依赖 → 保持现状，两者可以在同一页共存
   （它们走不同通道，互不干扰）。
 
-## `BPlaceDetail`
+## `PlaceDetail`
 
 详情面板（图片、标题、评分、营业时间、电话、标签、外链等）全部由官方 UI Kit 渲染。
 
@@ -277,7 +277,7 @@ await api.clear();                // 回到空状态占位
   请求失败也没有错误出口（上游把 Promise 丢掉了），本库**不合成** `error` 事件。
 - **POI 模式要求传上游能渲染的 POI 对象**。本库原样转发、不做字段转换，也不为它的内部结构
   背书：传本库的 `PlacePoiDTO`（`title` / `address` / …）**不会**得到完整详情。
-  要展示检索结果的详情，请用 uid —— `BPlaceSearch` 的 `select` 载荷里就带 `uid`。
+  要展示检索结果的详情，请用 uid —— `PlaceSearch` 的 `select` 载荷里就带 `uid`。
 - **快速切换 `uid` 时不要假设有请求去重**。上游的 `load` 载荷里没有「这是第几次请求」的标识，
   它自己也会把迟到的回包渲染进面板；本库因此**不做请求去重、也不丢事件**（只丢事件会变成
   「面板显示 B、事件却说 A」）。需要按当前 `uid` 过滤时，请在 `load` 载荷里比对 `uid`
@@ -287,7 +287,7 @@ await api.clear();                // 回到空状态占位
 但锁定版本 `1.1.2` 的两个产物里**没有任何读取点**（传了不生效）。假支持不如没有，
 所以本库不暴露它；上游真做出来时形状锁会先红。
 
-## `BRoutePlan`
+## `RoutePlan`
 
 路线面板（表单、类型标签、方案卡、开始导航按钮）全部由官方 UI Kit 渲染。
 
@@ -301,9 +301,9 @@ await api.clear();                // 回到空状态占位
 **既是类型也是值**（与 TS 枚举同形），所以不必写魔法数字：
 
 ```ts
-import { BRoutePlan, RoutePlanDrivingPolicy } from "bmap-vue/ui-kit";
+import { RoutePlan, RoutePlanDrivingPolicy } from "bmap-vue/ui-kit";
 
-// 模板里：<BRoutePlan :driving-options="{ policy: RoutePlanDrivingPolicy.AVOID_CONGESTION }" />
+// 模板里：<RoutePlan :driving-options="{ policy: RoutePlanDrivingPolicy.AVOID_CONGESTION }" />
 const props = {
   drivingOptions: { policy: RoutePlanDrivingPolicy.AVOID_CONGESTION, alternatives: 2 },
 };
@@ -382,12 +382,12 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| 第一次检索抛 `BMap AK is not set` | UI Kit 的 AK 解析链只认「页面里带 `ak=` 的 SDK `<script>`」或 `window.BMAP_AUTHENTIC_KEY` | 用默认 Provider（会自动注入 SDK script）；代理模式请补 `window.BMAP_AUTHENTIC_KEY` |
+| 第一次检索抛 `Map AK is not set` | UI Kit 的 AK 解析链只认「页面里带 `ak=` 的 SDK `<script>`」或 `window.BMAP_AUTHENTIC_KEY` | 用默认 Provider（会自动注入 SDK script）；代理模式请补 `window.BMAP_AUTHENTIC_KEY` |
 | `BMAP_UI_KIT_UNAVAILABLE` | 无 DOM 环境调用了 UI 组件，或没装 `@baidumap/jsapi-ui-kit` | 服务端不要渲染 UI 组件；确认已安装 optional peer |
 | 组件渲染出来了但没有样式 | 没有显式引入官方 CSS | `import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css"` |
 | `BMAP_RESOURCE_DISPOSED` | 组件已卸载后仍调用公开动作 | 在 `onUnmounted` 之前调用，或用 `status` 判断 |
-| `BMAP_SERVICE_FAILED`（`BRoutePlan`） | 路线搜索失败（上游的 `error`），或搜索成功但**回包形状无法识别**（上游实现可能已变更） | 看错误的 `message` 与 `cause`；形状漂移会先被 `v3-ui-kit-widget-contract.test.ts` 抓到 |
-| `BPlaceDetail` 一直没有 `load` 事件 | 上游对「uid 找不到」与「详情请求失败」**都不发事件**（见上文边界） | 给 `load` 设自己的截止时间；确认 `uid` 来自真实检索结果 |
+| `BMAP_SERVICE_FAILED`（`RoutePlan`） | 路线搜索失败（上游的 `error`），或搜索成功但**回包形状无法识别**（上游实现可能已变更） | 看错误的 `message` 与 `cause`；形状漂移会先被 `v3-ui-kit-widget-contract.test.ts` 抓到 |
+| `PlaceDetail` 一直没有 `load` 事件 | 上游对「uid 找不到」与「详情请求失败」**都不发事件**（见上文边界） | 给 `load` 设自己的截止时间；确认 `uid` 来自真实检索结果 |
 
 组件 ref 上还会暴露 `status`：`idle` / `loading` / `ready` / `error` / `disposed`。
 它是**取值**而不是 ref（`ref.value.status === "ready"`，不要写 `.status.value` —— 声明里也是取值类型），
@@ -402,7 +402,7 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 - 所有权 / 竞态 / 释放顺序 / props 变更（重建 vs setter）/ 事件 DTO / 不重复请求 →
   `tests/behavior/v3-ui-kit-lifecycle.test.ts`、`v3-ui-kit-events.test.ts`
   （用会记账的假 widget，断言落在计数与监听集合上）；
-- `BPlaceDetail` / `BRoutePlan` 自己的那几条 → `v3-ui-kit-place-detail.test.ts`（uid 镜像、
+- `PlaceDetail` / `RoutePlan` 自己的那几条 → `v3-ui-kit-place-detail.test.ts`（uid 镜像、
   `load` 投影、不暴露 `layout`）、`v3-ui-kit-route-plan.test.ts`（坐标经 Driver、事件与拒绝是
   同一条错误、脱敏、不暴露 `switchType`）；
 - **事件载荷形状 / 上游声明 vs 我们的投影** → `v3-ui-kit-widget-contract.test.ts`：对着官方发布

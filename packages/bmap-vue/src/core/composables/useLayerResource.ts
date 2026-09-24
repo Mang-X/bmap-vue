@@ -2,8 +2,8 @@
  * useLayerResource —— 图层组件的统一生命周期（M7-LAYERS / issue #40）
  *
  * 建立在 `useSdkResource` 之上的**图层挂载适配器**：它把「一份 `LayerSpec` → 一个 SDK 图层
- * 实例」的创建、挂载、就地更新、重建与释放收敛成一处，十个图层组件（`BDistrictLayer` …
- * `BRasterLayer`）只声明「自己的 props 怎么映射成 `LayerSpec`」。
+ * 实例」的创建、挂载、就地更新、重建与释放收敛成一处，十个图层组件（`DistrictLayer` …
+ * `RasterTileLayer`）只声明「自己的 props 怎么映射成 `LayerSpec`」。
  *
  * ## 三种变化，三条路径
  *
@@ -615,7 +615,7 @@ export function useLayerResource<Props>(
       const context = await mapContext.whenReady(signal);
       if (!context.map) {
         throw new Error(
-          "layer components must be used inside a <BMap> that owns a map instance（当前上下文只有 client）",
+          "layer components must be used inside a <Map> that owns a map instance（当前上下文只有 client）",
         );
       }
       readyContext = context;

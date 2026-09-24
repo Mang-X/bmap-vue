@@ -1,9 +1,9 @@
-# BPanoramaControl 全景控件 <Badge type="tip" text="^0.0.31" />
+# PanoramaControl 全景控件 <Badge type="tip" text="^0.0.31" />
 
 全景地图服务，360° 全景地图刻画真实世界，将街道场景带入到地图产品中，用户可以拖拽地图从不同的角度浏览真实的街景效果
 
 ```ts
-import { BPanoramaControl } from 'bmap-vue'
+import { PanoramaControl } from 'bmap-vue'
 ```
 
 :::tip
@@ -12,7 +12,7 @@ import { BPanoramaControl } from 'bmap-vue'
 
 ## 组件示例
 
-单独使用该组件不会显示全景地图覆盖情况，还需要搭配 `BPanoramaCoverageLayer` 组件使用。
+单独使用该组件不会显示全景地图覆盖情况，还需要搭配 `PanoramaCoverageLayer` 组件使用。
 
 :::demo
 control/panoramaControl
@@ -45,7 +45,7 @@ control/panoramaControl
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。
 

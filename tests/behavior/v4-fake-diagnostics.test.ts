@@ -1,5 +1,5 @@
 /**
- * Fake BMap v4 诊断计数器（M3A3-FAKE-DUAL / issue #24）
+ * Fake Map v4 诊断计数器（M3A3-FAKE-DUAL / issue #24）
  *
  * 这一层验证的是「诊断本身」：计数器是否真的跟着 Fake 的生命周期变化、`assertNoLeaks()`
  * 会不会空转、`reset()` 是否可清零。**行为语义**的断言（迟到回调、失败重试、target 切换

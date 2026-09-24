@@ -2,11 +2,11 @@
 "bmap-vue": minor
 ---
 
-`<BMap>` 的**命令面定型**、**容器门禁**与**可见性暂停策略**（`M4-HANDLE-UX` / #29）。
+`<Map>` 的**命令面定型**、**容器门禁**与**可见性暂停策略**（`M4-HANDLE-UX` / #29）。
 
-## 冻结的命令面：`BMapExpose`
+## 冻结的命令面：`MapExpose`
 
-`<BMap ref>` 拿到的是一份**小而稳定**的命令面（类型 `BMapExpose`），不是 `BMap.Map` 方法表的镜像：
+`<Map ref>` 拿到的是一份**小而稳定**的命令面（类型 `MapExpose`），不是 `BMap.Map` 方法表的镜像：
 
 ```ts
 const api = mapRef.value!

@@ -68,7 +68,7 @@ function eventBase(raw: unknown): EventBase {
  *
  * 两个入口（`normalizeMapMouseEvent` 与 `normalizeDriverEvent`）必须给出同一个答案，否则同一份 raw
  * 经不同路径会得到不同坐标（#28 自审抓到的实际不一致：前者认顶层 `lng/lat`、后者只认 `latLng`，
- * 于是 `<BMap @click>` 换到新路径后，raw 只有顶层坐标时会把真实点变成兜底的 `{lng:0,lat:0}`）。
+ * 于是 `<Map @click>` 换到新路径后，raw 只有顶层坐标时会把真实点变成兜底的 `{lng:0,lat:0}`）。
  */
 function readEventPoint(shape: Record<string, unknown>, geometry: GeometryDriver): Point | undefined {
   return (
@@ -98,7 +98,7 @@ export function normalizeMapMouseEvent(
  * 指针 / 拖拽类事件名（SDK 拼写）：这些事件上游**声明的载荷里 `point` 是必填的**，
  * 因此归一化必须给出 `point`——raw 里坐标残缺时补 `{lng:0,lat:0}`。
  *
- * 这条兜底不是新发明：`normalizeMapMouseEvent`（公开 helper，`<BMap @click>` 的既有契约）
+ * 这条兜底不是新发明：`normalizeMapMouseEvent`（公开 helper，`<Map @click>` 的既有契约）
  * 一直这么做。放在这里是为了让公开的 `MapEventMap` 里 `click` 等条目的 `point: Point`（必填）
  * 成为**可验证的事实**而不是类型谎话——raw 真带了坐标时用的就是那个坐标。
  *

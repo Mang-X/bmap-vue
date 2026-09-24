@@ -1,5 +1,5 @@
 <template>
-  <BMap v-bind="$attrs">
-    <BMapType type="BMAP_MAPTYPE_CONTROL_MAP" :show-street-layer="true" />
-  </BMap>
+  <Map v-bind="$attrs">
+    <MapTypeControl type="BMAP_MAPTYPE_CONTROL_MAP" :show-street-layer="true" />
+  </Map>
 </template>

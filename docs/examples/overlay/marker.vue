@@ -1,15 +1,15 @@
 <template>
-  <BMap :zoom="16">
+  <Map :zoom="16">
     <!-- 起点图标 -->
-    <BMarker :zIndex="99" :position="{ lat: 39.915185, lng: 116.403901 }" icon="start" />
+    <Marker :zIndex="99" :position="{ lat: 39.915185, lng: 116.403901 }" icon="start" />
     <!-- 终点图标 -->
-    <BMarker :position="{ lat: 39.915185, lng: 116.404901 }" icon="end" />
+    <Marker :position="{ lat: 39.915185, lng: 116.404901 }" icon="end" />
     <!-- 红色图标1 -->
-    <BMarker :position="{ lat: 39.915185, lng: 116.405901 }" icon="red1" />
+    <Marker :position="{ lat: 39.915185, lng: 116.405901 }" icon="red1" />
     <!-- 红色图标2 -->
-    <BMarker :position="{ lat: 39.915185, lng: 116.403901 }" icon="simple_red" />
+    <Marker :position="{ lat: 39.915185, lng: 116.403901 }" icon="simple_red" />
     <!-- 自定义图标 -->
-    <BMarker
+    <Marker
       :position="{ lat: 39.915185, lng: 116.400901 }"
       :icon="{
         imageUrl:
@@ -21,5 +21,5 @@
       }"
       enableDragging
     />
-  </BMap>
+  </Map>
 </template>

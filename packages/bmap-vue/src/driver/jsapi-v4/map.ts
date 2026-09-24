@@ -89,7 +89,7 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  *   带 `BMAP_` 前缀的那组常量挂在**全局**（`globalThis.BMAP_NORMAL_MAP`），
  *   `MapTypeId.BMAP_NORMAL_MAP` 是 `undefined`。
  *
- * 于是「只看声明」的实现在真实 SDK 上会让 `<BMap>` 直接落到 `error` 状态（ready 永远不来）。
+ * 于是「只看声明」的实现在真实 SDK 上会让 `<Map>` 直接落到 `error` 状态（ready 永远不来）。
  * 处置：**运行时名做主候选**，声明里的名字留作后备（不同构建/别名下仍可解析），
  * 每个名字都只经由 `readNamespaceMember` 读命名空间成员，**不猜常量值、不读全局**。
  * 依据见 ADR `2026-09-11-jsapi-v4-map-facet` §9 与 `docs/zh-CN/contributing/v4-browser-smoke.md`。
@@ -111,7 +111,7 @@ const PASSTHROUGH_OPTION_KEYS = ["minZoom", "maxZoom", "displayOptions"] as cons
 /**
  * 库固定默认的交互开关（写进构造 options，不依赖 v4 隐式默认）。
  *
- * 只列**库与 v4 默认不一致**或库已声明默认值的项：组件 `<BMap>` 的默认是
+ * 只列**库与 v4 默认不一致**或库已声明默认值的项：组件 `<Map>` 的默认是
  * `enableDragging: true` / `enableScrollWheelZoom: false`，而 v4 的 `enableWheelZoom`
  * 隐式默认是 `true`——不显式固定就会「同一个组件换引擎后行为改变」。其余交互项库没有声明默认值，
  * 沿用 v4 默认（差异清单见 ADR）。

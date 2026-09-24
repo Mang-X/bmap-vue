@@ -1,5 +1,5 @@
 /**
- * v4 Driver 基础契约 —— Fake BMap v4（M3A2-01/02 / issue #19）
+ * v4 Driver 基础契约 —— Fake Map v4（M3A2-01/02 / issue #19）
  *
  * 这一层验证的是「Driver facet 与结构化 v4 namespace 的组合行为」，而不是单个函数的
  * 边界值（后者在 `src/driver/jsapi-v4/*.test.ts`）：用 Fake v4 提供 raw 构造器与可观察

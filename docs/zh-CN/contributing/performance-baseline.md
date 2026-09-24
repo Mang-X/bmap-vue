@@ -67,7 +67,7 @@ BAIDU_MAP_AK=<ak> pnpm perf:baseline:live
 - **入口**：`pnpm perf:baseline:live` → `scripts/collect-live-performance.mts` + 独立页
   `tests/browser/live-performance/**`（与 smoke 的 `tests/browser/jsapi-v4/**` 只共享
   `official-probe/cdp.mts` + `readiness.mts` 两块，编排胶水按仓库既有口径刻意重复）。
-- **读数**：4 类 × 3 图层（`BPointCollection` / `BLineLayer` / `BFillLayer`），数据集与 Fake
+- **读数**：4 类 × 3 图层（`PointCollection` / `LineLayer` / `FillLayer`），数据集与 Fake
   基线同源（`tests/performance/dataset.ts`，固定 `DATASET_VERSION`，默认 50k）。计时协议见
   `tests/browser/live-performance/main.ts` 文件头表（改窗口必须同步本页与 ADR）：
   **`firstFrame`（#123 目标 1）**（首次原生 `setData` 进入 → ready 后第一次 paint；

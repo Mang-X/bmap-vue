@@ -1,5 +1,5 @@
 /**
- * `markers` 聚合引擎（M6-POINT-CLUSTER / issue #35；由 #34 的 `BMarkerCluster` 平移而来）
+ * `markers` 聚合引擎（M6-POINT-CLUSTER / issue #35；由 #34 的 `MarkerCluster` 平移而来）
  *
  * 先用 `gridCluster()` 做像素网格聚合，再用 `DataLayerManager` 把「簇 / 单点」落地成 Marker
  * （keyed diff + RAF 合帧 + 最新项账本）。不为每个点建 Vue 组件，也不为每个点建 watcher。
@@ -28,13 +28,13 @@ import { createProblemReporter } from "../../core/data/problems";
 import { BMapError } from "../../core/errors/BMapError";
 import { devWarn, logger } from "../../core/logger";
 import type { ClusterEngine, ClusterEngineInput } from "./clusterEngine";
-import type { BMapDataProps, BMarkerClusterEngine } from "../../types/components";
+import type { DataComponentProps, MarkerClusterEngine } from "../../types/components";
 import type { MapReadyContext } from "../../core/context/types";
 import type { MarkerHandle } from "../../driver/types/handles";
 import type { PointLike } from "../../core/data/points";
 
-/** 引擎真正读的 props（`BMarkerClusterProps` 的结构子集）。 */
-export interface MarkerClusterEngineProps<Item> extends BMapDataProps<Item> {
+/** 引擎真正读的 props（`MarkerClusterProps` 的结构子集）。 */
+export interface MarkerClusterEngineProps<Item> extends DataComponentProps<Item> {
   /** 像素网格边长（聚合桶的边长），默认 `128`。 */
   readonly gridSize?: number;
   /** 达到该数量才聚合；不足的点展开为独立 item。 */
@@ -177,7 +177,7 @@ export function createMarkerClusterEngine<Item>(
     });
   }
 
-  const kind: BMarkerClusterEngine = "markers";
+  const kind: MarkerClusterEngine = "markers";
 
   /**
    * 显隐的**唯一**写入点（props watcher 与 `sync()` 都走它）。

@@ -1,27 +1,27 @@
 <template>
-  <BMap v-bind="$attrs" :center="center">
+  <Map v-bind="$attrs" :center="center">
     <!-- 数据 API：`items` 是一份数组，`-` 表示分隔线 -->
-    <BContextMenu :items="list" :width="160" @select="onSelect" />
+    <ContextMenu :items="list" :width="160" @select="onSelect" />
 
-    <BMarker :icon="'simple_red'" :position="{ lat: 39.915185, lng: 116.403901 }">
+    <Marker :icon="'simple_red'" :position="{ lat: 39.915185, lng: 116.403901 }">
       <!--
-        写在 <BMarker> 里的菜单会挂到**该标注**上：只有右键这个标注才弹出来。
+        写在 <Marker> 里的菜单会挂到**该标注**上：只有右键这个标注才弹出来。
         声明式写法与上面的数据 API 等价（顺序、disabled、select 载荷都一致）。
       -->
-      <BContextMenu :width="200">
-        <BMenuItem text="标记此处" @select="onMarkerSelect" />
-        <BMenuSeparator />
-        <BMenuItem text="删除（禁用）" disabled />
-      </BContextMenu>
-    </BMarker>
-  </BMap>
+      <ContextMenu :width="200">
+        <MenuItem text="标记此处" @select="onMarkerSelect" />
+        <MenuSeparator />
+        <MenuItem text="删除（禁用）" disabled />
+      </ContextMenu>
+    </Marker>
+  </Map>
 </template>
 <script lang="ts" setup>
 import { ref } from "vue";
 import {
-  BContextMenu,
-  BMenuItem,
-  BMenuSeparator,
+  ContextMenu,
+  MenuItem,
+  MenuSeparator,
   type ContextMenuItem,
   type ContextMenuSeparator,
   type ContextMenuSelectPayload,

@@ -367,7 +367,7 @@ function sizedContainer(): HTMLElement {
   return el;
 }
 
-/** 取「最后一张创建的 Map」：读数都以它为准（用例必须先过 `<BMap>`）。 */
+/** 取「最后一张创建的 Map」：读数都以它为准（用例必须先过 `<Map>`）。 */
 function lastCreatedMap<T>(maps: readonly T[], label: string): T {
   const map = maps[maps.length - 1];
   if (!map) throw new Error(`${label}：用例必须先创建地图（BMap 组件）`);

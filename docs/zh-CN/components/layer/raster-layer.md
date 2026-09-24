@@ -1,9 +1,9 @@
-# BRasterLayer 栅格瓦片图层 <Badge type="tip" text="^1.0.0" />
+# RasterTileLayer 栅格瓦片图层 <Badge type="tip" text="^1.0.0" />
 
-面向 XYZ / TMS 类标准瓦片服务：比 `BXYZLayer` 多了子域轮询、TMS 翻转与四至裁剪。
+面向 XYZ / TMS 类标准瓦片服务：比 `XYZLayer` 多了子域轮询、TMS 翻转与四至裁剪。
 
 ```ts
-import { BRasterLayer } from 'bmap-vue'
+import { RasterTileLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -43,11 +43,11 @@ layer/rasterLayer
 
 ## 稳定性
 
-同 `BXYZLayer`：4.0 新增的构造器，本库标 `experimental`。
+同 `XYZLayer`：4.0 新增的构造器，本库标 `experimental`。
 
 ## 注意
 
-模板占位符是**花括号**（`{z}` / `{x}` / `{y}`），与 `BXYZLayer` 的方括号不同；`{-y}` 表示 TMS 的 y 轴翻转。
+模板占位符是**花括号**（`{z}` / `{x}` / `{y}`），与 `XYZLayer` 的方括号不同；`{-y}` 表示 TMS 的 y 轴翻转。
 
 ## 参考
 

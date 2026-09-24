@@ -7,6 +7,6 @@
  * ⚠️ 与 A 一样必须是**顶层副作用**，否则打包器会把整个入口摇成 0 字节，
  * 这条对照就变成了「什么都没打包」而不是「打包了组件」。
  */
-import { BInfoWindow, BMap } from 'bmap-vue'
+import { InfoWindow, Map } from 'bmap-vue'
 
-globalThis.__rootEntryProbe = [BMap, BInfoWindow]
+globalThis.__rootEntryProbe = [Map, InfoWindow]

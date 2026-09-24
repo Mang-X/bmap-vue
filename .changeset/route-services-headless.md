@@ -2,11 +2,11 @@
 "bmap-vue": minor
 ---
 
-路线服务（M7-ROUTES / #39）：新增四个 headless 路线规划 hooks，标准路线面板仍由 `./ui-kit` 的 `BRoutePlan` 提供。
+路线服务（M7-ROUTES / #39）：新增四个 headless 路线规划 hooks，标准路线面板仍由 `./ui-kit` 的 `RoutePlan` 提供。
 
 **新增**
 
-- `useBMapDrivingRoute()` / `useBMapWalkingRoute()` / `useBMapRidingRoute()` / `useBMapTransitRoute()`：
+- `useDrivingRoute()` / `useWalkingRoute()` / `useRidingRoute()` / `useTransitRoute()`：
   官方 `DrivingRoute` / `WalkingRoute` / `RidingRoute` / `TransitRoute` 的归一化封装，结果是**强类型的
   方案 / 路线 / 关键点**（`RouteResult` → `RoutePlan` / `TransitRoutePlan` → `RouteLeg` → `RouteStep`）。
   选项接受 `MaybeRefOrGetter`，**只有构造期字段（`location` / 各服务自己的策略选项 / `renderOptions`）
@@ -31,7 +31,7 @@
 **语义细节（值得知道）**
 
 - **默认不绘制**。要画就显式给 `renderOptions.map`（`MapHandle`，服务只需要 Client 上下文，
-  `<BMap>` / `<BMapProvider>` 子树都可用）；那时路线与标注由**服务自己**画，收回统一走官方公开的
+  `<Map>` / `<BMapProvider>` 子树都可用）；那时路线与标注由**服务自己**画，收回统一走官方公开的
   `clearResults()`（`clear()` / `clearRouteResults()` / `disposeRoute()`），本库不接管 SDK 画的覆盖物。
 - **归属靠实例身份**：四个服务的回包没有请求身份、官方也没承诺跨请求回调顺序，因此同一实例同一时刻
   只允许一个未结算检索（并发被显式拒绝）；`supersede` 策略是「取代即换新实例」，所以快速重复检索是
@@ -45,5 +45,5 @@
   `panel` **原样转发、不告警**：4.0.4 自相矛盾（`RenderOptions.panel` 的注释写「驾车路线规划无效」，
   `DrivingRoute.d.ts` 的官方示例却传了 `panel` 并说「结果面板已展示」）；真实 AK 实测**驾车有效**
   （容器 DOM `0 → 2417` 字符，`clearResults()` 后回 `0`）。
-- 与官方 UI Kit 的分流不变：`BRoutePlan` 是标准面板（自己发请求、自己画），本 hooks 是完全自定义 UI
+- 与官方 UI Kit 的分流不变：`RoutePlan` 是标准面板（自己发请求、自己画），本 hooks 是完全自定义 UI
   那条路；**同一次界面操作只走其中一条**，两条都接上会双发检索。该口径有静态门禁守。

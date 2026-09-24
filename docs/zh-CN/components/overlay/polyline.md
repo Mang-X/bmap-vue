@@ -1,9 +1,9 @@
-# BPolyline 折线
+# Polyline 折线
 
 在地图上绘制简单的折线
 
 ```ts
-import { BPolyline } from 'bmap-vue'
+import { Polyline } from 'bmap-vue'
 ```
 
 ## 组件示例

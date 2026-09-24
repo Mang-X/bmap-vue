@@ -87,7 +87,7 @@ describe("useNativeLayerResource：unknown 期间不写 [#113]", () => {
       },
     };
     const hooks: NativeLayerResourceHooks<LayerProps> = {
-      component: "BHeatmapLayer",
+      component: "HeatmapLayer",
       kind: "heatmap",
       ctorOptions: () => ({}),
       rebuildKey: () => "heatmap",
@@ -146,7 +146,7 @@ describe("useNativeLayerResource：unknown 期间不写 [#113]", () => {
     expect(layer.getData(), "数据未被替换").toBe(FEATURES);
     expect(events.emit, "失败经统一错误出口上报").toHaveBeenCalledWith(
       "resource:error",
-      expect.objectContaining({ component: "BHeatmapLayer" }),
+      expect.objectContaining({ component: "HeatmapLayer" }),
     );
   });
 });

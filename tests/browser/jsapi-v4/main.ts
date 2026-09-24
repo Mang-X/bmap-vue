@@ -20,33 +20,33 @@
  */
 import { createApp, defineComponent, h, nextTick, reactive, ref, type App, type VNode } from "vue";
 import {
-  BDistrictLayer,
-  BGeoJSONLayer,
-  BInfoWindow,
-  BMap,
-  BMapType,
-  BMarker,
-  BNavigation,
-  BOverview,
-  BPanorama,
-  BPolyline,
-  BRectangle,
-  BTileLayer,
-  BTrafficLayer,
-  BZoom,
+  DistrictLayer,
+  GeoJSONLayer,
+  InfoWindow,
+  Map,
+  MapTypeControl,
+  Marker,
+  NavigationControl,
+  OverviewMapControl,
+  Panorama,
+  Polyline,
+  Rectangle,
+  TileLayer,
+  TrafficLayer,
+  ZoomControl,
   // M5-CUSTOM-MENU / #33
-  BCustomOverlay,
-  BContextMenu,
-  BMenuItem,
-  BMenuSeparator,
-  useBMapGeocoder,
+  CustomOverlay,
+  ContextMenu,
+  MenuItem,
+  MenuSeparator,
+  useGeocoder,
 } from "../../../packages/bmap-vue/src/index.ts";
 import { existingGlobalV4Provider } from "../../../packages/bmap-vue/src/core/index.ts";
 import {
-  BPlaceAutocomplete,
-  BPlaceDetail,
-  BPlaceSearch,
-  BRoutePlan,
+  PlaceAutocomplete,
+  PlaceDetail,
+  PlaceSearch,
+  RoutePlan,
 } from "../../../packages/bmap-vue/src/integrations/ui-kit/index.ts";
 import { createFakeBMapV4 } from "../../../packages/test-utils/fake-bmap-v4/index.ts";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
@@ -87,7 +87,7 @@ const UI_MS = Number(params.get("uiMs") ?? (MODE === "live" ? 20_000 : 5_000));
 
 const CENTER = { lng: 116.404, lat: 39.915 };
 /**
- * `BTileLayer` 检查用的瓦片源：百度自己的瓦片主机（与 JSAPI 内部请求同源）。
+ * `TileLayer` 检查用的瓦片源：百度自己的瓦片主机（与 JSAPI 内部请求同源）。
  *
  * 刻意**不**用「随便一个第三方域名」当占位：那会让 live 档刷出一堆与库无关的网络错误，
  * 把「检查失败」和「瓦片源不可达」混成一件事。本检查断言的是「组件 → Driver → 真实
@@ -207,7 +207,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 interface ModeDescriptor {
   live: boolean;
-  /** 传给 `<BMap>` 的 provider；`live` 档刻意**不传**，以走默认入口。 */
+  /** 传给 `<Map>` 的 provider；`live` 档刻意**不传**，以走默认入口。 */
   provider: unknown;
   /**
    * 覆盖物**列表**读数：真实 SDK 走 `getOverlays()`，Fake 走自己的账本。
@@ -423,7 +423,7 @@ interface Mounted {
   container(): HTMLElement;
   raw(): Record<string, unknown>;
   client(): unknown;
-  /** `<BMap>` 默认插槽给出的运行时状态（`idle` / `loading` / `ready` / `error` …）。 */
+  /** `<Map>` 默认插槽给出的运行时状态（`idle` / `loading` / `ready` / `error` …）。 */
   status(): unknown;
   handle(): unknown;
   snapshot(): UnmountSnapshot;
@@ -438,7 +438,7 @@ interface Mounted {
    */
   infoOpen: { value: boolean };
   /**
-   * `<BInfoWindow>` 回写的 `update:open` 序列。
+   * `<InfoWindow>` 回写的 `update:open` 序列。
    *
    * `infowindow-close-button-pair` 用它证明「用户点了关闭按钮」这件事**真的到达了本库模型**
    * （而不只是 SDK 那边把气泡关了）。
@@ -453,7 +453,7 @@ interface Mounted {
    * 初始值刻意两两不同，改动后统一落到 `BMAP_ANCHOR_BOTTOM_LEFT`，这样「三个都变了」是可断言的。
    */
   controlProps: { navigationAnchor: string; mapTypeAnchor: string; overviewAnchor: string };
-  /** 四个 wrapper 的状态输入（`BPlaceDetail` 的 `uid` 由真实检索结果喂进来，不硬编码）。 */
+  /** 四个 wrapper 的状态输入（`PlaceDetail` 的 `uid` 由真实检索结果喂进来，不硬编码）。 */
   uiKit: { placeUid: string };
   /** wrapper 事件落点：检查体靠它断言「事件真的到达」，而不是只看返回值。 */
   uiKitEvents: {
@@ -464,11 +464,11 @@ interface Mounted {
     routeError: unknown[];
   };
   /* --------------------------------------------- M5-CUSTOM-MENU / #33 的可改状态 */
-  /** `<BCustomOverlay>` 的可改 props（检查要证明「换位置不重建 DOM」「隐藏不摘资源」）。 */
+  /** `<CustomOverlay>` 的可改 props（检查要证明「换位置不重建 DOM」「隐藏不摘资源」）。 */
   customOverlay: { position: { lng: number; lat: number }; visible: boolean };
-  /** `<BCustomOverlay>` 的事件落点。 */
+  /** `<CustomOverlay>` 的事件落点。 */
   customOverlayEvents: { clicks: number };
-  /** `<BContextMenu>` 的输入与事件落点（`items` 为正典；`menuItems` 由别名用例单独构造）。 */
+  /** `<ContextMenu>` 的输入与事件落点（`items` 为正典；`menuItems` 由别名用例单独构造）。 */
   menu: {
     items: Array<{ text: string; disabled?: boolean } | "-">;
     events: { open: number; close: number; selects: unknown[] };
@@ -548,7 +548,7 @@ function mountTree(): Mounted {
   const GeoProbe = defineComponent({
     name: "SmokeGeoProbe",
     setup() {
-      const geocoder = useBMapGeocoder();
+      const geocoder = useGeocoder();
       (globalThis as unknown as { __smokeGeocoder?: unknown }).__smokeGeocoder = geocoder;
       return () => h("div", { class: "smoke-geo-probe" });
     },
@@ -556,14 +556,14 @@ function mountTree(): Mounted {
 
   const children = (): VNode[] => {
     const nodes: VNode[] = [];
-    if (flags.marker) nodes.push(h(BMarker, { position: POINT, title: "smoke-marker" }));
+    if (flags.marker) nodes.push(h(Marker, { position: POINT, title: "smoke-marker" }));
     if (flags.polyline)
-      nodes.push(h(BPolyline, { path: [CENTER, POINT], strokeColor: "#ff0000", strokeWeight: 3 }));
+      nodes.push(h(Polyline, { path: [CENTER, POINT], strokeColor: "#ff0000", strokeWeight: 3 }));
     // M5-VECTORS / #31：v4 新增的矩形（对角两点定义）。几何回读要读它的实例，因此范围刻意取
     // 一个与 marker/polyline 都不同的坐标。
     if (flags.rectangle)
       nodes.push(
-        h(BRectangle, {
+        h(Rectangle, {
           bounds: { southwest: RECTANGLE_SW, northeast: RECTANGLE_NE },
           strokeColor: "#1677ff",
           fillOpacity: 0.25,
@@ -572,7 +572,7 @@ function mountTree(): Mounted {
     if (flags.info)
       nodes.push(
         h(
-          BInfoWindow,
+          InfoWindow,
           {
             open: infoOpen.value,
             position: POINT,
@@ -588,22 +588,22 @@ function mountTree(): Mounted {
           { default: () => "smoke-infowindow-content" },
         ),
       );
-    if (flags.zoom) nodes.push(h(BZoom, {}));
-    if (flags.district) nodes.push(h(BDistrictLayer, { name: "北京市" }));
+    if (flags.zoom) nodes.push(h(ZoomControl, {}));
+    if (flags.district) nodes.push(h(DistrictLayer, { name: "北京市" }));
     // M7-LAYERS（#40）的三条图层检查：瓦片模板指向百度自己的瓦片服务（与 SDK 内部同源），
     // 因此 live 档的瓦片请求不会因为「指向一个不存在的域名」而刷出网络错误。
     if (flags.tile)
       nodes.push(
-        h(BTileLayer, {
+        h(TileLayer, {
           tileUrlTemplate: `${SMOKE_TILE_ORIGIN}/?qt=tile&x={X}&y={Y}&z={Z}&styles=pl&scaler=1`,
           opacity: 0.9,
           zIndex: 3,
         }),
       );
-    if (flags.traffic) nodes.push(h(BTrafficLayer, {}));
+    if (flags.traffic) nodes.push(h(TrafficLayer, {}));
     if (flags.geojson)
       nodes.push(
-        h(BGeoJSONLayer, {
+        h(GeoJSONLayer, {
           layerName: "smoke-geojson",
           data: {
             type: "FeatureCollection",
@@ -618,12 +618,12 @@ function mountTree(): Mounted {
         }),
       );
     // #41 新增的三个 Stable 控件：锚点绑到 `controlProps`，用来断言「改 props 真的下发」
-    if (flags.navigation) nodes.push(h(BNavigation, { anchor: controlProps.navigationAnchor }));
-    if (flags.maptype) nodes.push(h(BMapType, { anchor: controlProps.mapTypeAnchor }));
-    if (flags.overview) nodes.push(h(BOverview, { anchor: controlProps.overviewAnchor }));
+    if (flags.navigation) nodes.push(h(NavigationControl, { anchor: controlProps.navigationAnchor }));
+    if (flags.maptype) nodes.push(h(MapTypeControl, { anchor: controlProps.mapTypeAnchor }));
+    if (flags.overview) nodes.push(h(OverviewMapControl, { anchor: controlProps.overviewAnchor }));
     if (flags.panorama) {
       nodes.push(
-        h(BPanorama, {
+        h(Panorama, {
           point: POINT,
           pov: { heading: 90, pitch: -10 },
           zoom: 1,
@@ -631,10 +631,10 @@ function mountTree(): Mounted {
         }),
       );
     }
-    if (flags.autocomplete) nodes.push(h(BPlaceAutocomplete as never, { ref: autoRef, location: CITY }));
+    if (flags.autocomplete) nodes.push(h(PlaceAutocomplete as never, { ref: autoRef, location: CITY }));
     if (flags.placesearch) {
       nodes.push(
-        h(BPlaceSearch as never, {
+        h(PlaceSearch as never, {
           ref: searchRef,
           onLoad: (pois: unknown) => uiKitEvents.searchLoad.push(pois),
           onSelect: (poi: unknown) => uiKitEvents.searchSelect.push(poi),
@@ -643,7 +643,7 @@ function mountTree(): Mounted {
     }
     if (flags.placedetail) {
       nodes.push(
-        h(BPlaceDetail as never, {
+        h(PlaceDetail as never, {
           ref: detailRef,
           // `uid` 由真实检索结果喂进来（见 `ui-kit-placesearch-load`），不硬编码某个 POI。
           uid: uiKit.placeUid || undefined,
@@ -653,7 +653,7 @@ function mountTree(): Mounted {
     }
     if (flags.routeplan) {
       nodes.push(
-        h(BRoutePlan as never, {
+        h(RoutePlan as never, {
           ref: routeRef,
           onResult: (result: unknown) => uiKitEvents.routeResult.push(result),
           onError: (error: unknown) => uiKitEvents.routeError.push(error),
@@ -666,7 +666,7 @@ function mountTree(): Mounted {
     if (flags.customOverlay) {
       nodes.push(
         h(
-          BCustomOverlay,
+          CustomOverlay,
           {
             position: customOverlay.position,
             visible: customOverlay.visible,
@@ -681,7 +681,7 @@ function mountTree(): Mounted {
     }
     if (flags.menu) {
       nodes.push(
-        h(BContextMenu as never, {
+        h(ContextMenu as never, {
           items: menu.items as never,
           width: 140,
           onOpen: () => {
@@ -695,18 +695,18 @@ function mountTree(): Mounted {
       );
     }
     if (flags.markerMenu) {
-      // 挂在 <BMarker> 里的菜单（target = marker）
+      // 挂在 <Marker> 里的菜单（target = marker）
       nodes.push(
-        h(BMarker as never, { position: CENTER }, () =>
+        h(Marker as never, { position: CENTER }, () =>
           h(
-            BContextMenu as never,
+            ContextMenu as never,
             {
               width: 160,
               onOpen: () => {
                 markerMenuOpen.count += 1;
               },
             },
-            () => [h(BMenuItem as never, { text: "smoke-marker-menu" }), h(BMenuSeparator as never)],
+            () => [h(MenuItem as never, { text: "smoke-marker-menu" }), h(MenuSeparator as never)],
           ),
         ),
       );
@@ -733,7 +733,7 @@ function mountTree(): Mounted {
         mapProps.ak = AK;
       }
       return h(
-        BMap as never,
+        Map as never,
         mapProps,
         {
           default: (slotProps: { client?: unknown; status?: unknown }) => {
@@ -754,7 +754,7 @@ function mountTree(): Mounted {
   const containerFn = (): HTMLElement => {
     const api = mapRef.value as { getContainer?: () => HTMLElement } | null;
     const el = api?.getContainer?.();
-    assertSmoke(el, "HARNESS_NO_CONTAINER", "拿不到 <BMap> 的容器元素");
+    assertSmoke(el, "HARNESS_NO_CONTAINER", "拿不到 <Map> 的容器元素");
     return el!;
   };
   const handleFn = (): unknown => {
@@ -813,7 +813,7 @@ function uiSignature(container: HTMLElement): string {
 /**
  * 气泡内容宿主的**直接读数**（M5-INFOWINDOW / #32）。
  *
- * `<BInfoWindow>` 的组件根是 `<Teleport>`，因此 `$el` 不再指向内容节点 —— 宿主页/探针要从
+ * `<InfoWindow>` 的组件根是 `<Teleport>`，因此 `$el` 不再指向内容节点 —— 宿主页/探针要从
  * 开放出来的 DOM 契约 `[data-bmap-infowindow-content]` 定位。这条读数直接回答两个问题：
  * 「内容在不在文档里」（可见性）与「关闭/卸载后有没有残留」（`null`）。
  */
@@ -1480,7 +1480,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "control",
           code: "BMAP_CONTROL_NOT_ATTACHED",
-          label: "<BZoom>",
+          label: "<ZoomControl>",
           rawMethod: "addControl",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1546,7 +1546,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "control",
           code: "BMAP_CONTROL_NOT_ATTACHED",
-          label: "<BNavigation> / <BMapType> / <BOverview>",
+          label: "<NavigationControl> / <MapTypeControl> / <OverviewMapControl>",
           rawMethod: "addControl",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1575,13 +1575,13 @@ const CHECKS: Record<string, CheckImpl> = {
       assertSmoke(
         countAfter > countBefore,
         "BMAP_PANORAMA_NOT_CREATED",
-        `挂载 <BPanorama> 后查看器计数没有增长：${countBefore} → ${countAfter}`,
+        `挂载 <Panorama> 后查看器计数没有增长：${countBefore} → ${countAfter}`,
         { countBefore, countAfter },
       );
       assertSmoke(
         consoleErrorsSince(mark).length === 0,
         "BMAP_PANORAMA_CONSOLE_ERROR",
-        "<BPanorama> 挂载期间出现 console.error",
+        "<Panorama> 挂载期间出现 console.error",
         { errors: consoleErrorsSince(mark).slice(0, 3) },
       );
       return { readApi: "fake-ledger (createdPanoramas)", countBefore, countAfter };
@@ -1601,7 +1601,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "layer",
           code: "BMAP_LAYER_NOT_ATTACHED",
-          label: "<BDistrictLayer>",
+          label: "<DistrictLayer>",
           rawMethod: "addLayer",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1630,7 +1630,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "layer",
           code: "BMAP_LAYER_NOT_ATTACHED",
-          label: "<BTileLayer>",
+          label: "<TileLayer>",
           rawMethod: "addLayer",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1659,7 +1659,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "layer",
           code: "BMAP_LAYER_NOT_ATTACHED",
-          label: "<BTrafficLayer>",
+          label: "<TrafficLayer>",
           rawMethod: "addLayer",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1688,7 +1688,7 @@ const CHECKS: Record<string, CheckImpl> = {
         return descriptor.assertAttached({
           kind: "layer",
           code: "BMAP_LAYER_NOT_ATTACHED",
-          label: "<BGeoJSONLayer>",
+          label: "<GeoJSONLayer>",
           rawMethod: "addLayer",
           rawCalls: recorder.calls.length,
           countBefore,
@@ -1859,7 +1859,7 @@ const CHECKS: Record<string, CheckImpl> = {
   },
 
   /**
-   * `<BCustomOverlay>`（M5-CUSTOM-MENU / #33）——两档共用。
+   * `<CustomOverlay>`（M5-CUSTOM-MENU / #33）——两档共用。
    *
    * 断言的都是**与实现方式无关**的事实：宿主被 SDK 搬进自己的容器、slot 内容在宿主里、
    * 换位置之后仍然只有一个宿主且它还在文档里、隐藏之后宿主仍连着（`hide` 不摘资源）。
@@ -1937,7 +1937,7 @@ const CHECKS: Record<string, CheckImpl> = {
   },
 
   /**
-   * `<BContextMenu>` 的组件级行为（M5-CUSTOM-MENU / #33）——**只登记在 fixture 档**。
+   * `<ContextMenu>` 的组件级行为（M5-CUSTOM-MENU / #33）——**只登记在 fixture 档**。
    *
    * 它读的是 Fake 的**挂载账本**（`map.contextMenus` / `Marker#contextMenu` 账本）：
    * 真实 4.0 的 `Map` 没有「已挂载菜单列表」的读回接口，因此 live 档这条读不出来
@@ -1973,7 +1973,7 @@ const CHECKS: Record<string, CheckImpl> = {
         "`disabled: true` 的菜单项没有被禁用",
       );
 
-      // target 切换：把菜单挂到 <BMarker> 上再挂回来，任何时刻都只有一个、且不会同时挂两处
+      // target 切换：把菜单挂到 <Marker> 上再挂回来，任何时刻都只有一个、且不会同时挂两处
       const before = raw.contextMenus.length;
       ctx.mounted.flags.markerMenu = true;
       await nextTick();
@@ -2035,7 +2035,7 @@ const CHECKS: Record<string, CheckImpl> = {
   },
 
   /**
-   * `<BContextMenu>` 挂在 `<BMarker>` 上**真的能打开**（M5-CUSTOM-MENU / #33）——**只登记在 live 档**。
+   * `<ContextMenu>` 挂在 `<Marker>` 上**真的能打开**（M5-CUSTOM-MENU / #33）——**只登记在 live 档**。
    *
    * 验的是真实 SDK 的运行时成员（`Marker#addContextMenu`，官方类型包未声明）与真实 DOM：
    * 右键标注的 DOM ⇒ 菜单派发 `open`、菜单 DOM 里能看到我们声明的项。
@@ -2100,7 +2100,7 @@ const CHECKS: Record<string, CheckImpl> = {
       const geocoder = (
         globalThis as { __smokeGeocoder?: { get: (a: string, c: string) => Promise<unknown> } }
       ).__smokeGeocoder;
-      assertSmoke(geocoder, "HARNESS_NO_GEOCODER", "geocode 探针没有拿到 useBMapGeocoder 实例");
+      assertSmoke(geocoder, "HARNESS_NO_GEOCODER", "geocode 探针没有拿到 useGeocoder 实例");
       const point = await withBlockedTimeout(
         geocoder!.get("北京市海淀区中关村", CITY),
         SERVICE_MS,
@@ -2133,7 +2133,7 @@ const CHECKS: Record<string, CheckImpl> = {
         },
         UI_MS,
         "UIKIT_AUTO_NOT_READY",
-        "BPlaceAutocomplete ready",
+        "PlaceAutocomplete ready",
       )) as unknown as {
         search(keyword: string): Promise<void>;
         getInputValue(): Promise<string>;
@@ -2147,7 +2147,7 @@ const CHECKS: Record<string, CheckImpl> = {
       );
       const inputValue = await api.getInputValue();
       const hostEl = (ctx.mounted.autoRef.value as { $el?: HTMLElement }).$el;
-      assertSmoke(hostEl, "UIKIT_AUTO_NO_HOST", "拿不到 BPlaceAutocomplete 的宿主元素");
+      assertSmoke(hostEl, "UIKIT_AUTO_NO_HOST", "拿不到 PlaceAutocomplete 的宿主元素");
       assertSmoke(
         hostEl!.querySelector("input"),
         "UIKIT_AUTO_NO_INPUT",
@@ -2169,7 +2169,7 @@ const CHECKS: Record<string, CheckImpl> = {
       assertSmoke(
         !document.body.contains(hostEl!),
         "UIKIT_AUTO_HOST_RESIDUE",
-        "卸载 BPlaceAutocomplete 之后宿主子树仍留在文档里，回收路径没有生效",
+        "卸载 PlaceAutocomplete 之后宿主子树仍留在文档里，回收路径没有生效",
       );
       assertSmoke(
         ctx.mounted.treeErrors.length === 0,
@@ -2202,7 +2202,7 @@ const CHECKS: Record<string, CheckImpl> = {
         },
         UI_MS,
         "UIKIT_SEARCH_NOT_READY",
-        "BPlaceSearch ready",
+        "PlaceSearch ready",
       )) as unknown as { search(keyword: string): Promise<void> };
       await withBlockedTimeout(
         api.search(KEYWORD),
@@ -2211,12 +2211,12 @@ const CHECKS: Record<string, CheckImpl> = {
         "UIKIT_SEARCH_TIMEOUT",
       );
       const hostEl = (ctx.mounted.searchRef.value as { $el?: HTMLElement }).$el;
-      assertSmoke(hostEl, "UIKIT_SEARCH_NO_HOST", "拿不到 BPlaceSearch 的宿主元素");
+      assertSmoke(hostEl, "UIKIT_SEARCH_NO_HOST", "拿不到 PlaceSearch 的宿主元素");
       // 宿主里的 DOM 全部由官方 UI Kit 渲染：检索结算后必须有子节点（本库不渲染列表）。
       assertSmoke(
         hostEl!.childElementCount > 0,
         "UIKIT_SEARCH_NO_DOM",
-        "检索结算后 BPlaceSearch 的宿主里没有任何 DOM，官方 UI Kit 可能没渲染结果列表",
+        "检索结算后 PlaceSearch 的宿主里没有任何 DOM，官方 UI Kit 可能没渲染结果列表",
         { html: (hostEl!.innerHTML ?? "").slice(0, 200) },
       );
       // 必需事件必须真的到达（不能只看 `search()` 结算）：`load` 是「一轮检索完成」的公开出口。
@@ -2227,7 +2227,7 @@ const CHECKS: Record<string, CheckImpl> = {
         },
         UI_MS,
         "UIKIT_SEARCH_NO_LOAD_EVENT",
-        "BPlaceSearch 的 load 事件载荷",
+        "PlaceSearch 的 load 事件载荷",
       );
       // 顺手把真实 uid 交给下一条检查（详情面板），避免硬编码某个 POI。
       const withUid = pois.find((poi) => typeof poi.uid === "string" && poi.uid.length > 0);
@@ -2263,7 +2263,7 @@ const CHECKS: Record<string, CheckImpl> = {
         },
         UI_MS,
         "UIKIT_DETAIL_NOT_READY",
-        "BPlaceDetail ready",
+        "PlaceDetail ready",
       )) as unknown as { status: string };
       assertSmoke(api.status === "ready", "UIKIT_DETAIL_STATUS", `状态应为 ready，实际 ${api.status}`);
       // `load` 到达 = 详情真的取回来了（该 wrapper 刻意不合成 error 事件，见组件文件头）。
@@ -2272,14 +2272,14 @@ const CHECKS: Record<string, CheckImpl> = {
           () => ctx.mounted.uiKitEvents.detailLoad.at(-1) ?? null,
           UI_MS,
           "UIKIT_DETAIL_NO_LOAD_EVENT",
-          "BPlaceDetail 的 load 事件",
+          "PlaceDetail 的 load 事件",
         ),
         UI_MS,
         "placedetail.load",
         "UIKIT_DETAIL_TIMEOUT",
       );
       const hostEl = (ctx.mounted.detailRef.value as { $el?: HTMLElement }).$el;
-      assertSmoke(hostEl, "UIKIT_DETAIL_NO_HOST", "拿不到 BPlaceDetail 的宿主元素");
+      assertSmoke(hostEl, "UIKIT_DETAIL_NO_HOST", "拿不到 PlaceDetail 的宿主元素");
       const rendered = hostEl!.childElementCount > 0;
       assertSmoke(
         rendered,
@@ -2300,7 +2300,7 @@ const CHECKS: Record<string, CheckImpl> = {
       assertSmoke(
         !document.body.contains(hostEl!),
         "UIKIT_DETAIL_HOST_RESIDUE",
-        "卸载 BPlaceDetail 之后宿主子树仍留在文档里",
+        "卸载 PlaceDetail 之后宿主子树仍留在文档里",
       );
       assertSmoke(
         consoleErrorsSince(mark).length === 0,
@@ -2327,7 +2327,7 @@ const CHECKS: Record<string, CheckImpl> = {
         },
         UI_MS,
         "UIKIT_ROUTE_NOT_READY",
-        "BRoutePlan ready",
+        "RoutePlan ready",
       )) as unknown as {
         search(options: {
           start: { lng: number; lat: number };
@@ -2364,7 +2364,7 @@ const CHECKS: Record<string, CheckImpl> = {
         { type: result.type, plans: result.plans?.length ?? null },
       );
       const hostEl = (ctx.mounted.routeRef.value as { $el?: HTMLElement }).$el;
-      assertSmoke(hostEl, "UIKIT_ROUTE_NO_HOST", "拿不到 BRoutePlan 的宿主元素");
+      assertSmoke(hostEl, "UIKIT_ROUTE_NO_HOST", "拿不到 RoutePlan 的宿主元素");
       assertSmoke(
         hostEl!.childElementCount > 0,
         "UIKIT_ROUTE_NO_DOM",
@@ -2390,7 +2390,7 @@ const CHECKS: Record<string, CheckImpl> = {
       assertSmoke(
         !document.body.contains(hostEl!),
         "UIKIT_ROUTE_HOST_RESIDUE",
-        "卸载 BRoutePlan 之后宿主子树仍留在文档里",
+        "卸载 RoutePlan 之后宿主子树仍留在文档里",
       );
       assertSmoke(
         consoleErrorsSince(mark).length === 0,
@@ -2412,7 +2412,7 @@ const CHECKS: Record<string, CheckImpl> = {
       const before = document.querySelectorAll('script[src*="api.map.baidu.com/api?"]').length;
       const second = mountTree();
       try {
-        await withTimeout(second.ready, READY_MS, "第二个 <BMap> ready", "BMAP_SECOND_READY_TIMEOUT");
+        await withTimeout(second.ready, READY_MS, "第二个 <Map> ready", "BMAP_SECOND_READY_TIMEOUT");
         await sleep(200);
         const after = document.querySelectorAll('script[src*="api.map.baidu.com/api?"]').length;
         assertSmoke(
@@ -2449,7 +2449,7 @@ const CHECKS: Record<string, CheckImpl> = {
 
   "remount-after-unmount": {
     async run() {
-      const again = await mountFresh(READY_MS, "重挂载 <BMap> ready");
+      const again = await mountFresh(READY_MS, "重挂载 <Map> ready");
       try {
         await nextTick();
         assertSmoke(again.handle(), "BMAP_REMOUNT_NO_HANDLE", "重挂载后拿不到 MapHandle");
@@ -2503,7 +2503,7 @@ const CHECKS: Record<string, CheckImpl> = {
           name: "SmokeContainerGate",
           render: () =>
             h(
-              BMap as never,
+              Map as never,
               mapProps,
               {
                 default: (slotProps: { status?: unknown }) => {
@@ -2531,7 +2531,7 @@ const CHECKS: Record<string, CheckImpl> = {
         checkResize(): void;
       }
       const api = apiRef.value as GateApi | null;
-      assertSmoke(api, "MAP_EXPOSE_MISSING", "挂载后拿不到 <BMap> 的 expose（defineExpose 没有生效）");
+      assertSmoke(api, "MAP_EXPOSE_MISSING", "挂载后拿不到 <Map> 的 expose（defineExpose 没有生效）");
 
       try {
         // ① 零尺寸阶段：给一个明确的观察窗口，再断言「真的没有建图」
@@ -2671,7 +2671,7 @@ const CHECKS: Record<string, CheckImpl> = {
 /**
  * 前置失败时的诊断快照。
  *
- * 没有它，「<BMap> ready 超时」只能得到一个 40 秒的等待结论——分不清是入口 script 没注入、
+ * 没有它，「<Map> ready 超时」只能得到一个 40 秒的等待结论——分不清是入口 script 没注入、
  * AK 被拒、还是容器/组件层的问题。字段全部经 `redactAk`，不外泄凭据。
  */
 function smokeDiagnostics(mounted: Mounted | null): Record<string, unknown> {
@@ -2724,7 +2724,7 @@ async function main(): Promise<void> {
   let mounted: Mounted | null = null;
   try {
     mounted = mountTree();
-    await withTimeout(mounted.ready, READY_MS, "<BMap> ready", "BMAP_READY_TIMEOUT");
+    await withTimeout(mounted.ready, READY_MS, "<Map> ready", "BMAP_READY_TIMEOUT");
     await sleep(MODE === "live" ? 400 : 50);
     const ctx: Ctx = {
       mounted,

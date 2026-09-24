@@ -12,7 +12,7 @@
  *
  * 释放顺序是硬约束（ADR 2026-09-11 §6，issue #22 实施步骤 4）：卸载时**先解绑业务事件**，
  * 再由 Map 移除 SDK 资源——否则 SDK 在 `removeControl` 期间同步派发的事件会打到已经开始
- * 拆解的业务回调上（`BLocation` 的 locationSuccess/locationError 就是这种绑定）。
+ * 拆解的业务回调上（`LocationControl` 的 locationSuccess/locationError 就是这种绑定）。
  * `useSdkResource` 的默认顺序是「先 registration.dispose、再 instanceScope.dispose」，
  * 所以本适配器把 `scope.dispose()` 放进 registration 的 `dispose()` 里自己保证这个顺序。
  *
@@ -276,7 +276,7 @@ export function useControlResource<Props extends ControlBaseProps>(
      *    但 4.0 会把构造选项**原样透传**」的键（后者依然可能在构造期生效，所以归 `recreate`）；
      * 2. `plan[key] === "mutable"` 且**值变回 `undefined`**（有值 → 没值）：语义是「回到 SDK
      *    默认」，而默认值只存在于构造期——就地写的话 `setOptions` 会按 `value === undefined`
-     *    跳过（#95 评审第 1 轮 P1：`BNavigation.type` 一旦设过 `SMALL`，`undefined` 就再也回不到
+     *    跳过（#95 评审第 1 轮 P1：`NavigationControl.type` 一旦设过 `SMALL`，`undefined` 就再也回不到
      *    默认）。
      *
      * 这里**必须带 `mutable` 这个限定**（第 4 轮 P2）：`anchor` / `offset` 与分类表里的就地项都是

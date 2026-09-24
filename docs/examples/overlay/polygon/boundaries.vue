@@ -1,5 +1,5 @@
 <template>
-  <BMap
+  <Map
     v-bind="$attrs"
     :minZoom="3"
     :zoom="zoom"
@@ -7,7 +7,7 @@
     ref="map"
     @ready="handleInitd"
   >
-    <BControl
+    <CustomControl
       style="
         border-radius: 4px;
         box-shadow: 0 2px 6px 0 rgba(27, 142, 236, 0.5);
@@ -24,8 +24,8 @@
         <option value="四川">四川</option>
         <option value="成都">成都</option>
       </select>
-    </BControl>
-    <BPolygon
+    </CustomControl>
+    <Polygon
       :key="area"
       isBoundary
       :path="pathPoints"
@@ -33,12 +33,12 @@
       fillColor="blue"
       :stroke-weight="1"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { useBMapAreaBoundary } from "bmap-vue";
+import { useAreaBoundary } from "bmap-vue";
 const zoom = ref<number>(11);
 const area = ref<string>("顺义区");
 const map = ref();
@@ -49,7 +49,7 @@ const areaZoomMap: Record<string, number> = {
   成都: 9,
 };
 
-const { boundaries: pathPoints, get } = useBMapAreaBoundary(map);
+const { boundaries: pathPoints, get } = useAreaBoundary(map);
 
 function handleInitd() {
   get(area.value);

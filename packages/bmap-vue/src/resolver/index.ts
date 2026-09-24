@@ -16,11 +16,10 @@ const v3ComponentNames = componentManifest.map((c) => c.name) as readonly string
 
 const componentNameSet = new Set<string>(v3ComponentNames);
 
-export function Vue3BaiduMapGlResolver(): ComponentResolverLike {
+export function BMapResolver(): ComponentResolverLike {
   return {
     type: "component",
     resolve(name) {
-      if (!name.startsWith("B")) return;
       if (!componentNameSet.has(name)) return;
       return {
         name,

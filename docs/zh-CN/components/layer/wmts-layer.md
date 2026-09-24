@@ -1,9 +1,9 @@
-# BWMTSLayer WMTS 图层 <Badge type="tip" text="^1.0.0" />
+# WMTSLayer WMTS 图层 <Badge type="tip" text="^1.0.0" />
 
 加载 WMTS 标准瓦片服务：官方内部拼接 `Service` / `Request` / `Version` / `Format` / `TileMatrixSet` 等参数，调用方只需服务地址与图层参数。
 
 ```ts
-import { BWMTSLayer } from 'bmap-vue'
+import { WMTSLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -45,7 +45,7 @@ layer/wmtsLayer
 
 ## 稳定性
 
-同 `BXYZLayer`：4.0 新增的构造器，本库标 `experimental`。
+同 `XYZLayer`：4.0 新增的构造器，本库标 `experimental`。
 
 ## 注意
 

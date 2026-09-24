@@ -14,9 +14,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createSSRApp, defineComponent, h, nextTick, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { mount, flushPromises } from '@vue/test-utils'
-import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import Map from '../../packages/bmap-vue/src/components/map/Map.vue'
 import BMapProvider from '../../packages/bmap-vue/src/components/provider/BMapProvider.vue'
-import BMarker from '../../packages/bmap-vue/src/components/overlays/BMarker.vue'
+import Marker from '../../packages/bmap-vue/src/components/overlays/Marker.vue'
 import { MapRuntime } from '../../packages/bmap-vue/src/core/runtime/MapRuntime'
 import { createClientContext } from '../../packages/bmap-vue/src/core/context/client'
 import { createFakeV4Harness } from '../../packages/test-utils'
@@ -44,11 +44,11 @@ describe('SSR', () => {
     expect(html).toContain('child')
   })
 
-  it('BMap SSR 仅输出容器 shell', async () => {
+  it('Map SSR 仅输出容器 shell', async () => {
     const app = createSSRApp(
       defineComponent({
-        components: { BMap },
-        setup: () => () => h(BMap, { provider: provider() }),
+        components: { Map },
+        setup: () => () => h(Map, { provider: provider() }),
       }),
     )
     const html = await renderToString(app)
@@ -111,7 +111,7 @@ describe('KeepAlive', () => {
     const Inner = defineComponent({
       setup() {
         return () =>
-          h(BMap, {
+          h(Map, {
             provider: provider(),
             keepAliveBehavior: 'suspend',
             ref: (v: unknown) => {
@@ -162,9 +162,9 @@ describe('PRE audit: context isolation & resource exit', () => {
     const prov = provider()
     const MarkerHost = defineComponent({
       setup: () => () =>
-        h(BMap, { provider: prov }, () =>
+        h(Map, { provider: prov }, () =>
           show.value
-            ? [h(BMarker, { position: { lng: 116.4, lat: 39.9 }, enableClicking: clicking.value })]
+            ? [h(Marker, { position: { lng: 116.4, lat: 39.9 }, enableClicking: clicking.value })]
             : [],
         ),
     })
@@ -208,8 +208,8 @@ describe('PRE audit: context isolation & resource exit', () => {
   it('多地图上下文互不隔离污染(实例级 client/scope)', async () => {
     const elA = host()
     const elB = host()
-    const wrapperA = mount(BMap, { attachTo: elA, props: { provider: provider() } })
-    const wrapperB = mount(BMap, { attachTo: elB, props: { provider: provider() } })
+    const wrapperA = mount(Map, { attachTo: elA, props: { provider: provider() } })
+    const wrapperB = mount(Map, { attachTo: elB, props: { provider: provider() } })
     await flushPromises()
     expect(activity().mapsCreated).toBe(2)
 

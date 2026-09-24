@@ -45,7 +45,7 @@ export interface SdkResourceSpec<Props, Resource, Context> {
      *
      * 这条路径上的 `mount` 只用于拿到 registration 再立刻 `dispose()`（让 SDK 侧把刚建出来的
      * 实例摘掉），因此 spec 在里面**不得执行组件侧副作用**——那是对一个马上消失的实例做业务动作，
-     * 而且回滚不了（PR #103 评审 1：`BGroundOverlay.afterMount` 的 `setViewport` 会改地图视野）。
+     * 而且回滚不了（PR #103 评审 1：`GroundOverlay.afterMount` 的 `setViewport` 会改地图视野）。
      */
     stale?: boolean;
   }): ResourceRegistration<Resource> | void;

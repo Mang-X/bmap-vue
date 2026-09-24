@@ -5,11 +5,11 @@
  *
  * | 路径 | 使用者 | 是否共享实例 |
  * | --- | --- | --- |
- * | `driver.overlays.buildIcon()`（**公共**） | `useBMapMarkerIcons()` 等业务代码 | **不共享**：每次调用新建，调用方拿到的是自己的可变对象 |
- * | Marker 的构造 / `setIcon`（**库内部**） | `<BMarker icon=...>` | **共享**：同 descriptor 命中同一个有界 LRU 缓存 |
+ * | `driver.overlays.buildIcon()`（**公共**） | `useMarkerIcons()` 等业务代码 | **不共享**：每次调用新建，调用方拿到的是自己的可变对象 |
+ * | Marker 的构造 / `setIcon`（**库内部**） | `<Marker icon=...>` | **共享**：同 descriptor 命中同一个有界 LRU 缓存 |
  *
  * 为什么公共路径必须新建：`BMap.Icon` 有 `setImageUrl` / `setSize` / `setAnchor` 等可变面，而
- * `useBMapMarkerIcons()` 把结果直接交给调用方——公共 API 交出缓存持有的共享对象，会让一个消费者
+ * `useMarkerIcons()` 把结果直接交给调用方——公共 API 交出缓存持有的共享对象，会让一个消费者
  * 的修改污染同一 Client 下所有地图后续拿到的图标。
  *
  * 验收标准里的「重复配置命中 cache 且有上限」由 Marker 路径的用例覆盖：
@@ -17,13 +17,13 @@
  * - **有界**：连换 200+ 个不同 descriptor 之后，最早那个被淘汰（再取会新建，而不是永远命中）。
  *
  * 走**默认路径**装 Client / 组件（`createFakeV4Client` / `createFakeV4Harness`），因此这里测到的
- * 就是 `<BMarker icon=...>` 实际会走的那条链。
+ * 就是 `<Marker icon=...>` 实际会走的那条链。
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
 import {
   createFakeBMapV4,
   createFakeV4Client,
@@ -34,7 +34,7 @@ import {
   type FakeV4Marker,
 } from "../../packages/test-utils";
 import type { MarkerIconInput } from "../../packages/bmap-vue/src/driver/types/overlays";
-import type { BMarkerProps } from "../../packages/bmap-vue/src/types/components";
+import type { MarkerProps } from "../../packages/bmap-vue/src/types/components";
 import { DEFAULT_ICON_CACHE_SIZE } from "../../packages/bmap-vue/src/core/icons/iconCache";
 
 async function iconBuilder() {
@@ -52,7 +52,7 @@ const custom = (imageUrl: string): MarkerIconInput => ({
   size: { width: 10, height: 20 },
 });
 
-const descriptor = (index: number): BMarkerProps["icon"] => ({
+const descriptor = (index: number): MarkerProps["icon"] => ({
   imageUrl: `https://example.com/sprite-${index}.png`,
   size: { width: 10, height: 10 },
 });
@@ -123,19 +123,19 @@ describe("Marker 路径：同 descriptor 命中缓存，且有上限", () => {
   }
 
   it("两个 Marker 用同一份图标配置时共用同一个 BMap.Icon 实例", async () => {
-    const icon: BMarkerProps["icon"] = {
+    const icon: MarkerProps["icon"] = {
       imageUrl: "https://example.com/shared.png",
       size: { width: 12, height: 12 },
     };
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: harness.provider() }, () => [
-              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, icon }),
-              h(BMarker, { position: { lng: 116.5, lat: 39.95 }, icon }),
-              h(BMarker, { position: { lng: 116.6, lat: 39.96 }, icon: descriptor(1) }),
+            h(Map, { provider: harness.provider() }, () => [
+              h(Marker, { position: { lng: 116.4, lat: 39.9 }, icon }),
+              h(Marker, { position: { lng: 116.5, lat: 39.95 }, icon }),
+              h(Marker, { position: { lng: 116.6, lat: 39.96 }, icon: descriptor(1) }),
             ]);
         },
       }),
@@ -156,14 +156,14 @@ describe("Marker 路径：同 descriptor 命中缓存，且有上限", () => {
   });
 
   it("写满上限后最久未用的条目被淘汰（缓存不是无界的）", async () => {
-    const icon = ref<BMarkerProps["icon"]>(descriptor(0));
+    const icon = ref<MarkerProps["icon"]>(descriptor(0));
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: harness.provider() }, () => [
-              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value }),
+            h(Map, { provider: harness.provider() }, () => [
+              h(Marker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value }),
             ]);
         },
       }),

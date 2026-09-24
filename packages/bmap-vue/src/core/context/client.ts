@@ -6,7 +6,7 @@
  *
  * M3A3-REMOVE-LEGACY（#26）：`definition` 在这里**直接**交给 `createBMapClient`
  * （后者缺省注入 jsapi-v4 的 Driver 工厂）。迁移期的 `withMigrationDriver` 归一已随
- * webgl-v1 删除，因此同一份 definition 在 `<BMap>` / `<BMapProvider>` /
+ * webgl-v1 删除，因此同一份 definition 在 `<Map>` / `<BMapProvider>` /
  * `resolveMapContext` / 插件默认 definition 上仍然行为一致，但不再有「宽松 Provider →
  * legacy Driver」这条隐式分派。
  */
@@ -66,20 +66,20 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
     if (!definition) {
       throw new BMapError(
         "BMAP_PARENT_CONTEXT_MISSING",
-        "No BMap client definition. Provide <BMapProvider> or app.use(createBMapPlugin(...)).",
+        "No Map client definition. Provide <BMapProvider> or app.use(createBMapPlugin(...)).",
       );
     }
     status.value = "loading";
     error.value = null;
     // 定义直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）。
-    // 这里是**唯一收口点**——`<BMap>` / `<BMapProvider>` / 插件默认 definition /
+    // 这里是**唯一收口点**——`<Map>` / `<BMapProvider>` / 插件默认 definition /
     // `resolveMapContext` 全部经此创建 Client，因此「同一份 definition 换一个入口就报
     // BMAP_SDK_ENGINE_MISMATCH」不会发生。显式传入的 `driver` 仍然优先。
     const loaded = await createBMapClient(definition, signal);
     if (signal?.aborted) {
       throw toBMapError(
         (signal as AbortSignal).reason,
-        "BMap client load aborted",
+        "Map client load aborted",
       );
     }
     if (disposed) {
@@ -96,7 +96,7 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
       throw new BMapError("BMAP_RESOURCE_DISPOSED", "BMapClientContext has been disposed");
     }
     if (signal?.aborted) {
-      return Promise.reject(toBMapError(signal.reason, "BMap client load aborted"));
+      return Promise.reject(toBMapError(signal.reason, "Map client load aborted"));
     }
     if (loadPromise) {
       if (!signal) return loadPromise;
@@ -114,7 +114,7 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
     try {
       return await loadPromise;
     } catch (e) {
-      const bmapErr = toBMapError(e, "BMap client load failed");
+      const bmapErr = toBMapError(e, "Map client load failed");
       // abort 不记为 error 状态,保持 idle 以便 retry
       if (signal?.aborted || (e as BMapError)?.code === "BMAP_PROVIDER_ABORTED") {
         if (status.value === "loading") status.value = "idle";
@@ -164,7 +164,7 @@ export function useRequiredClientContext(): BMapClientContext {
   if (!ctx) {
     throw new BMapError(
       "BMAP_PARENT_CONTEXT_MISSING",
-      "Component must be a descendant of <BMapProvider> or <BMap>. " +
+      "Component must be a descendant of <BMapProvider> or <Map>. " +
         "Add <BMapProvider> at the root or call app.use(createBMapPlugin(...)).",
     );
   }

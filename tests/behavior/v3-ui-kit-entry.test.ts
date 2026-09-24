@@ -113,7 +113,7 @@ describe("包清单与产物形状", () => {
 
   it("四个组件在声明里都是 Vue 组件（不是把上游的类透出去）", () => {
     const dts = readFileSync(join(distDir, "ui-kit.d.ts"), "utf8");
-    for (const name of ["BPlaceAutocomplete", "BPlaceSearch", "BPlaceDetail", "BRoutePlan"]) {
+    for (const name of ["PlaceAutocomplete", "PlaceSearch", "PlaceDetail", "RoutePlan"]) {
       // 上游的 widget 是普通 class（`export declare class PlaceDetail extends BaseWidget`），
       // 若被原样重新导出，`destroy()` 的所有权就落到用户手上，`app.use` 之类的遍历也会
       // 把它当组件；因此这里逐名断言「声明成 DefineComponent」。
@@ -186,7 +186,7 @@ describe("根入口与 UI 子路径的产物隔离", () => {
     );
     // 正证守卫：ui-kit 侧的闭包里确实带着错误类的实现（否则下面那条断言没有对象）。
     expect(errorChunk, "ui-kit 入口的闭包里找不到 BMapError 的实现").toBeTruthy();
-    // 根入口的闭包必须含**同一个文件**：`BRoutePlan` 的 `error` 事件载荷与 `search()` 的拒绝
+    // 根入口的闭包必须含**同一个文件**：`RoutePlan` 的 `error` 事件载荷与 `search()` 的拒绝
     // 都是这个类的实例，消费者从 `./core` 拿到的 `BMapError` 要能 `instanceof` 通过。
     // 两份实现会让它静默失效（类型上还长得一样，运行时判不出）。
     expect(esmClosure(distIndex), "两个入口各带一份 BMapError，`instanceof` 会失效").toContain(
@@ -198,10 +198,10 @@ describe("根入口与 UI 子路径的产物隔离", () => {
     const exported = (await import(distUiKit)) as Record<string, unknown>;
     expect(Object.keys(exported).sort()).toEqual(
       [
-        "BPlaceAutocomplete",
-        "BPlaceDetail",
-        "BPlaceSearch",
-        "BRoutePlan",
+        "PlaceAutocomplete",
+        "PlaceDetail",
+        "PlaceSearch",
+        "RoutePlan",
         "RoutePlanDrivingPolicy",
         "UI_KIT_PACKAGE",
         "UI_KIT_STYLE_PATH",
@@ -264,8 +264,8 @@ describe("真实生产构建下的消费方行为", () => {
     const projectDir = await buildConsumer(
       "basic",
       [
-        'import { BMap, createBMapPlugin } from "bmap-vue";',
-        "export const ok = typeof BMap !== 'undefined' && typeof createBMapPlugin === 'function';",
+        'import { Map, createBMapPlugin } from "bmap-vue";',
+        "export const ok = typeof Map !== 'undefined' && typeof createBMapPlugin === 'function';",
         "",
       ].join("\n"),
     );
@@ -298,9 +298,9 @@ describe("真实生产构建下的消费方行为", () => {
     const projectDir = await buildConsumer(
       "ui",
       [
-        'import { BPlaceAutocomplete, BPlaceDetail, BPlaceSearch, BRoutePlan, loadUiKit } from "bmap-vue/ui-kit";',
+        'import { PlaceAutocomplete, PlaceDetail, PlaceSearch, RoutePlan, loadUiKit } from "bmap-vue/ui-kit";',
         'import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";',
-        "export const ok = [BPlaceAutocomplete, BPlaceSearch, BPlaceDetail, BRoutePlan, loadUiKit].every(Boolean);",
+        "export const ok = [PlaceAutocomplete, PlaceSearch, PlaceDetail, RoutePlan, loadUiKit].every(Boolean);",
         "",
       ].join("\n"),
     );

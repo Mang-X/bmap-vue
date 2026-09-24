@@ -4,14 +4,14 @@
  * 对应 issue 的验收点：
  * - 「两组件…发出正确事件」；
  * - 「单次交互不重复发出 UI/headless 两套请求」；
- * - 「DTO 不泄漏 BMap/BMapGL 类型」；
+ * - 「DTO 不泄漏 Map/BMapGL 类型」；
  * - 实施步骤 5「只映射已验证公开 setter/事件」。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import BPlaceAutocomplete from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceAutocomplete.vue";
-import BPlaceSearch from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceSearch.vue";
+import PlaceAutocomplete from "../../packages/bmap-vue/src/integrations/ui-kit/components/PlaceAutocomplete.vue";
+import PlaceSearch from "../../packages/bmap-vue/src/integrations/ui-kit/components/PlaceSearch.vue";
 import {
   createFakeMapHarness,
   createFakeUiKit,
@@ -89,7 +89,7 @@ function upstreamSuggestion(overrides: Record<string, unknown> = {}): Record<str
 describe("事件 → 公共 DTO", () => {
   it("PlaceAutocomplete：suggest / select / highlight 都投影成纯数据，丢弃 deprecated 字段", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
 
@@ -135,7 +135,7 @@ describe("事件 → 公共 DTO", () => {
 
   it("PlaceAutocomplete：highlight 的 from 为 null（首次高亮）照常发出", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     fake.instances[0]!.emit("highlight", {
@@ -157,7 +157,7 @@ describe("事件 → 公共 DTO", () => {
 
   it("PlaceAutocomplete：异常载荷不抛错也不发事件（非数组 / 非对象 / 坏坐标）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
 
@@ -195,7 +195,7 @@ describe("事件 → 公共 DTO", () => {
 
   it("PlaceSearch：load / select 投影成 POI DTO，事件名与上游一致", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
     expect(widget.listeners.has("load")).toBe(true);
@@ -239,7 +239,7 @@ describe("事件 → 公共 DTO", () => {
 describe("公开动作", () => {
   it("PlaceAutocomplete：动作逐个落到已验证的公开方法上", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as AutocompleteApi;
     const widget = fake.instances[0]!;
@@ -283,7 +283,7 @@ describe("公开动作", () => {
 
   it("PlaceSearch：检索 / 翻页动作与上游签名一致，且坐标先经 Driver 转 raw Point", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as SearchApi;
     const widget = fake.instances[0]!;
@@ -330,7 +330,7 @@ describe("公开动作", () => {
 
   it("单次交互只走 UI Kit：headless 服务面一次都没被读到", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as SearchApi;
 
@@ -352,7 +352,7 @@ describe("公开动作", () => {
 describe("props → 已验证 setter", () => {
   it("运行期可变的 props 会镜像到对应 setter", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {
+    const mounted = mountInMap(PlaceAutocomplete, harness, {
       location: "北京",
       citylimit: true,
       types: "city",
@@ -380,7 +380,7 @@ describe("props → 已验证 setter", () => {
 
   it("types 由有值变回未设置：恢复上游默认 `all`（走 setter，不重建）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ types?: "all" | "city" }>(BPlaceAutocomplete, harness, {
+    const mounted = mountInMap<{ types?: "all" | "city" }>(PlaceAutocomplete, harness, {
       types: "city",
     });
     await flushPromises();
@@ -399,7 +399,7 @@ describe("props → 已验证 setter", () => {
 
   it("构造期选项变更 → 重建 widget（官方 react-bmap 的 ctorKey 口径）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, { placeholder: "搜地点", debounce: 300 });
+    const mounted = mountInMap(PlaceAutocomplete, harness, { placeholder: "搜地点", debounce: 300 });
     await flushPromises();
     const first = fake.instances[0]!;
 
@@ -430,7 +430,7 @@ describe("props → 已验证 setter", () => {
 
   it("构造期选项内容没变时不重建（内联对象字面量不得触发重建风暴）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, { display: { tag: true }, debounce: 300 });
+    const mounted = mountInMap(PlaceAutocomplete, harness, { display: { tag: true }, debounce: 300 });
     await flushPromises();
     expect(fake.stats.created).toBe(1);
 
@@ -449,7 +449,7 @@ describe("props → 已验证 setter", () => {
   it("构造期选项：键顺序不同但内容相同 → 不重建（排序序列化真的在起作用）", async () => {
     const harness = readyHarness();
     const mounted = mountInMap<{ display?: Record<string, boolean>; debounce?: number }>(
-      BPlaceAutocomplete,
+      PlaceAutocomplete,
       harness,
       { display: { tag: true, address: false }, debounce: 300 },
     );
@@ -469,7 +469,7 @@ describe("props → 已验证 setter", () => {
 
   it("缺省的布尔 props 不得把上游默认值改掉（Vue 的 Boolean 缺省即 false 陷阱）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     const options = fake.instances[0]!.options;

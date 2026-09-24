@@ -1,5 +1,5 @@
 /**
- * BCircle 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * Circle 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -18,7 +18,7 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { CircleHandle } from "../../driver/types/handles";
-import type { BCircleProps } from "../../types/components";
+import type { CircleProps } from "../../types/components";
 import {
   PATH_CLICKING_FIELD,
   PATH_FILL_FIELDS,
@@ -28,7 +28,7 @@ import {
   VISIBILITY_FIELD,
 } from "./overlayFields";
 
-export const CIRCLE_FIELDS: OverlayFieldMap<BCircleProps> = {
+export const CIRCLE_FIELDS: OverlayFieldMap<CircleProps> = {
   center: "position",
   radius: "options",
   ...PATH_STROKE_FIELDS,
@@ -43,7 +43,7 @@ export const CIRCLE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createCircleSpec(): OverlaySpec<BCircleProps, CircleHandle> {
+export function createCircleSpec(): OverlaySpec<CircleProps, CircleHandle> {
   return {
     type: "circle",
     kind: "circle",

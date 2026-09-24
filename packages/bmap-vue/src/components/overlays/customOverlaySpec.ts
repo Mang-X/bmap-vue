@@ -1,9 +1,9 @@
 /**
- * BCustomOverlay 的 `OverlaySpec` 声明（M5-CUSTOM-MENU / issue #33）
+ * CustomOverlay 的 `OverlaySpec` 声明（M5-CUSTOM-MENU / issue #33）
  *
  * 与其余九个覆盖物同构：组件只声明「我是哪个 kind、每个 prop 怎么落地」，创建 / 挂载 / 就地更新 /
  * 重建 / 卸载 / 事件绑定全部由 `useOverlaySpec` 驱动。`tests/behavior/v3-overlay-suite.test.ts`
- * 拿这张表与 `BCustomOverlayProps` 的键集、以及 `OVERLAY_DESCRIPTORS["custom-overlay"]` 逐条交叉核对。
+ * 拿这张表与 `CustomOverlayProps` 的键集、以及 `OVERLAY_DESCRIPTORS["custom-overlay"]` 逐条交叉核对。
  *
  * ## 每个公开属性的更新策略（`CUSTOM_OVERLAY_FIELDS` 是唯一声明点）
  *
@@ -40,10 +40,10 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
-import type { BCustomOverlayProps } from "../../types/components";
+import type { CustomOverlayProps } from "../../types/components";
 import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
-export const CUSTOM_OVERLAY_FIELDS: OverlayFieldMap<BCustomOverlayProps> = {
+export const CUSTOM_OVERLAY_FIELDS: OverlayFieldMap<CustomOverlayProps> = {
   position: "position",
   rotation: "options",
   properties: "options",
@@ -63,7 +63,7 @@ export const CUSTOM_OVERLAY_FIELDS: OverlayFieldMap<BCustomOverlayProps> = {
  * 走缺省（缺省语义是「同名」，不是「按命名规律推断」）。
  */
 export const CUSTOM_OVERLAY_DESCRIPTOR_KEYS: Partial<
-  Record<keyof BCustomOverlayProps & string, string | null>
+  Record<keyof CustomOverlayProps & string, string | null>
 > = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 };
@@ -82,7 +82,7 @@ export interface CustomOverlaySpecDeps {
 
 export function createCustomOverlaySpec(
   deps: CustomOverlaySpecDeps,
-): OverlaySpec<BCustomOverlayProps, OverlayHandle> {
+): OverlaySpec<CustomOverlayProps, OverlayHandle> {
   return {
     type: "custom-overlay",
     // 事件面由事件矩阵给出（`CustomOverlayEventMap` 的 click / mouseover / mouseout）；

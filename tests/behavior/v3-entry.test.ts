@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { createApp } from 'vue'
-import { createBMapPlugin, Vue3BaiduMapGlResolver, useBMapGeolocation, useControllableState } from '../../packages/bmap-vue/src'
+import { createBMapPlugin, BMapResolver, useGeolocation, useControllableState } from '../../packages/bmap-vue/src'
 import * as root from '../../packages/bmap-vue/src'
 import * as advanced from '../../packages/bmap-vue/src/advanced'
 
@@ -61,20 +61,20 @@ describe('v3 public entry', () => {
     const plugin = createBMapPlugin({ ak: 'test' })
     app.use(plugin)
     // 组件已注册
-    expect(app.component('BMap')).toBeTruthy()
-    expect(app.component('BZoom')).toBeTruthy()
+    expect(app.component('Map')).toBeTruthy()
+    expect(app.component('ZoomControl')).toBeTruthy()
   })
 
-  it('resolver resolves B-prefixed components to components path', () => {
-    const resolver = Vue3BaiduMapGlResolver()
-    const r = resolver.resolve('BMap')
-    expect(r).toEqual({ name: 'BMap', from: 'bmap-vue/components' })
+  it('resolver resolves official component names to components path', () => {
+    const resolver = BMapResolver()
+    const r = resolver.resolve('Map')
+    expect(r).toEqual({ name: 'Map', from: 'bmap-vue/components' })
     // 非组件名不解析
     expect(resolver.resolve('FooBar')).toBeUndefined()
   })
 
   it('exports composables from root', () => {
-    expect(typeof useBMapGeolocation).toBe('function')
+    expect(typeof useGeolocation).toBe('function')
     // M4-STATE / #27：受控/非受控状态原语是公开 composable（组件与业务侧同一套规则）
     expect(typeof useControllableState).toBe('function')
   })

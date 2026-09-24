@@ -2,8 +2,8 @@
  * ControlSpec —— 控件的**声明式**描述（M7-CONTROL-PANORAMA / issue #41）
  *
  * 控件的八件事（create / mount / unmount / anchor / offset / visible / options / events）此前
- * 由每个组件各写一份：`BZoom` / `BScale` / `BCityList` / `BLocation` / `BNavigation3d` /
- * `BPanoramaControl` / `BControl` 里 `addToMap` / `createWatchers` / `remove` 近乎逐字重复，
+ * 由每个组件各写一份：`ZoomControl` / `ScaleControl` / `CityListControl` / `LocationControl` / `NavigationControl3D` /
+ * `PanoramaControl` / `CustomControl` 里 `addToMap` / `createWatchers` / `remove` 近乎逐字重复，
  * 而且**都没有**接 anchor / offset 的动态更新。本模块把「怎么做」抽成一份 spec，
  * 由 `useControlResource` 执行；组件只声明「这个控件是什么」。
  *
@@ -88,7 +88,7 @@ export interface ControlSpec<Props extends ControlBaseProps> {
   /**
    * 覆盖默认的实例创建。默认是 `driver.controls.create(kind, options(props))`。
    *
-   * 覆盖的正当理由只有一类：**实例不由本组件独占**。`BCopyright` 就是这种——文档承诺
+   * 覆盖的正当理由只有一类：**实例不由本组件独占**。`CopyrightControl` 就是这种——文档承诺
    * 「多个相同位置版权控件会自动排列，避免重叠」，因此同一 anchor 的多个组件共用**一个**
    * `CopyrightControl` 实例、各自往里加一条版权项（`copyrightControlPosCache`）。
    */
@@ -97,7 +97,7 @@ export interface ControlSpec<Props extends ControlBaseProps> {
   /**
    * 覆盖默认的挂载动作。默认是 `driver.controls.add({kind: "map", handle: ctx.map}, res)`。
    *
-   * `BCopyright` 覆盖它：共享实例只在「当前没有任何版权项」时才需要 `addControl`，
+   * `CopyrightControl` 覆盖它：共享实例只在「当前没有任何版权项」时才需要 `addControl`，
    * 同时要登记本组件的那一条版权项。
    */
   mount?(input: ControlMountInput<Props>): void;
@@ -108,7 +108,7 @@ export interface ControlSpec<Props extends ControlBaseProps> {
    * 执行时机是**业务事件解绑之后**（ADR 2026-09-11 §6）。覆盖它就等于接管摘除动作——
    * adapter 不再补一次默认 `remove`，因此钩子必须自己把实例摘干净（或有意保留）。
    *
-   * `BCopyright` 覆盖它：先 `removeCopyright` 摘掉自己那一条，再在「已经没有任何版权项」时
+   * `CopyrightControl` 覆盖它：先 `removeCopyright` 摘掉自己那一条，再在「已经没有任何版权项」时
    * 把共享控件一并摘掉（`removeCopyrightControlIfEmpty`）——有兄弟组件仍在用时就保留挂载。
    */
   unmount?(input: ControlMountInput<Props>): void;
@@ -117,7 +117,7 @@ export interface ControlSpec<Props extends ControlBaseProps> {
    * SDK 事件 → 业务回调。每次（重）创建后绑定一次，随实例 scope 释放。
    *
    * 返回的是 `[SDK 事件名, 处理函数]` 对；事件名用**官方拼写**（`locationSuccess`、
-   * `viewchanged`），与 `<BMap>` 的领域事件名是两套（后者见 `core/events/eventCatalog`）。
+   * `viewchanged`），与 `<Map>` 的领域事件名是两套（后者见 `core/events/eventCatalog`）。
    */
   events?(props: Readonly<Props>): ReadonlyArray<readonly [string, (event: unknown) => void]>;
 
@@ -130,7 +130,7 @@ export interface ControlSpec<Props extends ControlBaseProps> {
    * `remove` 会**顺带停掉持续定位跟踪**（`stopLocationTrace`，见 ADR 2026-09-11 §5 的评审记录），
    * 于是「把它藏起来」会变成「把它关掉」。
    *
-   * `BCopyright` 覆盖它：同 anchor 的控件是**共享**的，隐藏整个控件会连带隐藏兄弟组件的内容，
+   * `CopyrightControl` 覆盖它：同 anchor 的控件是**共享**的，隐藏整个控件会连带隐藏兄弟组件的内容，
    * 所以「不可见」落到「本组件那一条版权项不登记」。
    */
   setVisible?(input: ControlVisibleInput<Props>): void;

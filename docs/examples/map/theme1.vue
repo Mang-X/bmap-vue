@@ -1,5 +1,5 @@
 <template>
-  <BMap
+  <Map
     v-bind="$attrs"
     :zoom="10"
     enableScrollWheelZoom

@@ -5,7 +5,7 @@
  *
  * 不自己写请求框架：超时 / 空结果 / 迟到回调 / 取消 / 先到者胜全部由 Driver 的
  * `createServiceCall` 负责，本文件只声明「这个服务是什么」（与其余七个服务 composable
- * 共用 `useBMapServiceTask`）。
+ * 共用 `useServiceTask`）。
  *
  * 两处口径：
  * - **官方只有两个检索入口**（`getPanoramaById` / `getPanoramaByLocation`）。参考实现
@@ -14,14 +14,14 @@
  * - 「查不到全景」是 `empty` 而不是 `failed`：官方在查不到时回调参数是 `null`（不是错误），
  *   `empty` 与 `failed` 的区别正是调用方能不能重试。
  *
- * 需要 BMap 上下文：`<BMap>` 子树，或（client-only 服务）`<BMapProvider>` 子树——本服务
- * **不需要地图实例**，也不需要 `<BPanorama>`（检索回来的 id 可以交给任何查看器使用）。
+ * 需要 Map 上下文：`<Map>` 子树，或（client-only 服务）`<BMapProvider>` 子树——本服务
+ * **不需要地图实例**，也不需要 `<Panorama>`（检索回来的 id 可以交给任何查看器使用）。
  */
 import type { PanoramaDataInfo, PanoramaServiceHandle } from "../driver/types/panorama";
 import type { Point } from "../driver/types/geometry";
 import { jsapiV4PanoramaOf } from "../core/panorama";
 import { resolveMapContext } from "./resolveMapContext";
-import { useBMapServiceTask } from "./useBMapServiceTask";
+import { useServiceTask } from "./useServiceTask";
 
 /** 一次检索请求（内部判别式联合：两种检索只差参数形状，共用同一份状态）。 */
 type PanoramaSearchRequest =
@@ -31,7 +31,7 @@ type PanoramaSearchRequest =
 export function usePanoramaService(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useBMapServiceTask<
+  const task = useServiceTask<
     PanoramaDataInfo,
     PanoramaServiceHandle,
     [PanoramaSearchRequest]

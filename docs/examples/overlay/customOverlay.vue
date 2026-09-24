@@ -1,6 +1,6 @@
 <template>
-  <BMap v-bind="$attrs" :center="center" :zoom="14">
-    <BCustomOverlay
+  <Map v-bind="$attrs" :center="center" :zoom="14">
+    <CustomOverlay
       :position="position"
       :offset="{ x: 0, y: -12 }"
       :rotation="rotation"
@@ -11,8 +11,8 @@
         <strong>自定义 DOM 覆盖物</strong>
         <p>点击了 {{ clicked }} 次</p>
       </div>
-    </BCustomOverlay>
-  </BMap>
+    </CustomOverlay>
+  </Map>
 
   <div class="demo-toolbar">
     <button type="button" @click="move">换个位置</button>
@@ -23,7 +23,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BCustomOverlay } from "bmap-vue";
+import { CustomOverlay } from "bmap-vue";
 
 const center = ref("北京市");
 const position = ref({ lng: 116.403901, lat: 39.915185 });

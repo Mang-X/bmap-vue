@@ -1,9 +1,9 @@
-# BPanorama 全景查看器
+# Panorama 全景查看器
 
 全景查看器（官方 `BMap.Panorama`）。
 
 ```ts
-import { BPanorama, BPanoramaLabel } from 'bmap-vue'
+import { Panorama, PanoramaLabel } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -18,18 +18,18 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 
 | 范围 | 内容 | 说明 |
 | --- | --- | --- |
-| **Stable** | `BZoom` / `BScale` / `BNavigation` / `BNavigation3d` / `BCityList` / `BLocation` / `BMapType` / `BOverview` / `BPanoramaControl` / `BCopyright` / `BControl` 与统一 `ControlSpec` | 控件都通过同一套 spec（创建 / 挂载 / 卸载 / anchor / offset / visible / options / 事件），Stable 发布前语义冻结 |
-| **post-stable（可选）** | `BPanorama` / `BPanoramaLabel` / `usePanoramaService` | 全景查看器与检索。**API 在 Stable 之前仍可能调整**；不与 Stable 控件共享发布节奏 |
+| **Stable** | `ZoomControl` / `ScaleControl` / `NavigationControl` / `NavigationControl3D` / `CityListControl` / `LocationControl` / `MapTypeControl` / `OverviewMapControl` / `PanoramaControl` / `CopyrightControl` / `CustomControl` 与统一 `ControlSpec` | 控件都通过同一套 spec（创建 / 挂载 / 卸载 / anchor / offset / visible / options / 事件），Stable 发布前语义冻结 |
+| **post-stable（可选）** | `Panorama` / `PanoramaLabel` / `usePanoramaService` | 全景查看器与检索。**API 在 Stable 之前仍可能调整**；不与 Stable 控件共享发布节奏 |
 
-两条范围之间的边界是稳定的：`PanoramaContext` 独立于 `MapContext`（`<BPanorama>` 不把内部容器当成地图），
+两条范围之间的边界是稳定的：`PanoramaContext` 独立于 `MapContext`（`<Panorama>` 不把内部容器当成地图），
 因此 post-stable 部分的增删不会影响 Stable 控件的契约。
 
 ## 与地图的关系
 
-`<BPanorama>` 与 `<BMap>` 是**并列**的两条生命周期，不是嵌套依赖：
+`<Panorama>` 与 `<Map>` 是**并列**的两条生命周期，不是嵌套依赖：
 
 - 查看器创建在自己的容器里（`new BMap.Panorama(container)`），既不挂在 Map 上，也不受地图的暂停 / 重试策略管辖；
-- 它只需要一个 **Client**，因此放在 `<BMap>` 或 `<BMapProvider>` 子树里都可以；
+- 它只需要一个 **Client**，因此放在 `<Map>` 或 `<BMapProvider>` 子树里都可以；
 - 容器尺寸必须由使用方给出（经 `class` / `style`），全景没有默认尺寸。
 
 ## 静态组件 Props
@@ -89,7 +89,7 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 
 ## 命令式接口
 
-`<BPanorama ref>` 暴露：
+`<Panorama ref>` 暴露：
 
 | 成员        | 说明                                                       |
 | ----------- | ---------------------------------------------------------- |

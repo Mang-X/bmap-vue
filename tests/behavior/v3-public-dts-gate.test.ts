@@ -45,15 +45,15 @@ function makeDist(files: Record<string, string>): string {
 }
 
 const CLEAN_DTS = [
-  'declare const BMap: import("vue").DefineComponent<{ zoom?: number }>;',
-  "export { BMap };",
-  "export declare type BMapProps = { zoom?: number };",
+  'declare const Map: import("vue").DefineComponent<{ zoom?: number }>;',
+  "export { Map };",
+  "export declare type MapProps = { zoom?: number };",
   "export declare const version: string;",
   "",
 ].join("\n");
 
 describe("public d.ts gate", () => {
-  it("放行组件同名导出 BMap 与纯业务类型", () => {
+  it("放行组件同名导出 Map 与纯业务类型", () => {
     const dir = makeDist({ "index.d.ts": CLEAN_DTS, "components.d.ts": CLEAN_DTS });
     const r = runGate(dir);
     expect(r.code).toBe(0);

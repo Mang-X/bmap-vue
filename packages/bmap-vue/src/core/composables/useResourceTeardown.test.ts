@@ -3,8 +3,8 @@
  *
  * 「确保 remove 先解绑业务事件，再由 Map 移除资源」是 issue 的实施要求，而它分别落在
  * `useControlResource` 与 `useLayerResource`（图层经内核的 `LayerRecord.dispose()`）的卸载路径上
- * ——组件的业务监听器都经 `scope.add(...)` 注册（`BLocation` 的 locationSuccess/locationError、
- * `BDistrictLayer` 的 click/mouseover/mouseout）。
+ * ——组件的业务监听器都经 `scope.add(...)` 注册（`LocationControl` 的 locationSuccess/locationError、
+ * `DistrictLayer` 的 click/mouseover/mouseout）。
  *
  * 这条顺序无法从组件级测试的外部行为观察，因此这里用一个**最小 MapContext 替身** + 记账 spec
  * 把它变成可断言的事实：卸载时必须是 `unbind → sdk-remove`，否则 SDK 在 `removeControl` /

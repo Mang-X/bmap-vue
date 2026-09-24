@@ -41,4 +41,4 @@ probe 债务。这一批用真实 AK + headless Chromium 把两条前提逐条�
 - 取消一个**已经结束**的动画不抛错（视图不变）；对一个**本 Driver 没有记录**的实例取消返回
   `"already-settled"` 且**不补发** SDK 命令（补发要假设 SDK 幂等，属 F-3 未证）。
 
-`useBMapViewAnimation` 的公开面**不变**，它本来就只用按实例的取消；`status` 仍完全是观察值。
+`useViewAnimation` 的公开面**不变**，它本来就只用按实例的取消；`status` 仍完全是观察值。

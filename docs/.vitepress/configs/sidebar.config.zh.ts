@@ -57,7 +57,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       collapsed: false,
       items: [
         {
-          text: "BMap 地图",
+          text: "Map 地图",
           link: "/zh-CN/components/map",
         },
         {
@@ -72,51 +72,51 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/components/control/",
       items: [
         {
-          text: "BControl 自定义",
+          text: "CustomControl 自定义",
           link: "custom",
         },
         {
-          text: "BCityList 城市列表",
+          text: "CityListControl 城市列表",
           link: "citylist",
         },
         {
-          text: "BNavigation3d 3D视角导航",
+          text: "NavigationControl3D 3D视角导航",
           link: "navigation3d",
         },
         {
-          text: "BNavigation 平移缩放",
+          text: "NavigationControl 平移缩放",
           link: "navigation",
         },
         {
-          text: "BMapType 地图类型",
+          text: "MapTypeControl 地图类型",
           link: "map-type",
         },
         {
-          text: "BOverview 鹰眼",
+          text: "OverviewMapControl 鹰眼",
           link: "overview",
         },
         {
-          text: "BCopyright 版权",
+          text: "CopyrightControl 版权",
           link: "copyright",
         },
         {
-          text: "BScale 比例尺",
+          text: "ScaleControl 比例尺",
           link: "scale",
         },
         {
-          text: "BZoom 缩放",
+          text: "ZoomControl 缩放",
           link: "zoom",
         },
         {
-          text: "BLocation 定位",
+          text: "LocationControl 定位",
           link: "location",
         },
         {
-          text: "BPanoramaControl 全景",
+          text: "PanoramaControl 全景",
           link: "panorama-control",
         },
         {
-          text: "BContextMenu 上下文菜单",
+          text: "ContextMenu 上下文菜单",
           link: "context-menu",
         },
       ],
@@ -127,55 +127,55 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/components/overlay/",
       items: [
         {
-          text: "BCircle 圆形",
+          text: "Circle 圆形",
           link: "circle",
         },
         {
-          text: "BLabel 文本标注",
+          text: "Label 文本标注",
           link: "label",
         },
         {
-          text: "BMarker 标注点",
+          text: "Marker 标注点",
           link: "marker",
         },
         {
-          text: "BMarker3d 带高度的点",
+          text: "Marker3D 带高度的点",
           link: "marker3d",
         },
         {
-          text: "BPolygon 多边形",
+          text: "Polygon 多边形",
           link: "polygon",
         },
         {
-          text: "BRectangle 矩形",
+          text: "Rectangle 矩形",
           link: "rectangle",
         },
         {
-          text: "BPolyline 折线",
+          text: "Polyline 折线",
           link: "polyline",
         },
         {
-          text: "BBezierCurve 贝塞尔曲线",
+          text: "BezierCurve 贝塞尔曲线",
           link: "bezierCurve",
         },
         {
-          text: "BInfoWindow 信息窗口",
+          text: "InfoWindow 信息窗口",
           link: "infowindow",
         },
         {
-          text: "BPrism 3d棱柱",
+          text: "Prism 3d棱柱",
           link: "prism",
         },
         {
-          text: "BGroundOverlay 地面叠加层",
+          text: "GroundOverlay 地面叠加层",
           link: "ground-overlay",
         },
         {
-          text: "BCustomOverlay 自定义 DOM 覆盖物",
+          text: "CustomOverlay 自定义 DOM 覆盖物",
           link: "custom-overlay",
         },
         {
-          text: "BMapMask 掩膜",
+          text: "MapMask 掩膜",
           link: "mapMask",
         },
         {
@@ -215,47 +215,47 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "index",
         },
         {
-          text: "BPanoramaCoverageLayer 全景图层",
+          text: "PanoramaCoverageLayer 全景图层",
           link: "panorama-coverage",
         },
         {
-          text: "BDistrictLayer 行政区图层",
+          text: "DistrictLayer 行政区图层",
           link: "district-layer",
         },
         {
-          text: "BTileLayer 瓦片图层",
+          text: "TileLayer 瓦片图层",
           link: "tile-layer",
         },
         {
-          text: "BTrafficLayer 路况图层",
+          text: "TrafficLayer 路况图层",
           link: "traffic-layer",
         },
         {
-          text: "BGeoJSONLayer GeoJSON 图层",
+          text: "GeoJSONLayer GeoJSON 图层",
           link: "geojson-layer",
         },
         {
-          text: "BDOMLayer DOM 图层",
+          text: "DOMLayer DOM 图层",
           link: "dom-layer",
         },
         {
-          text: "BXYZLayer 标准瓦片图层",
+          text: "XYZLayer 标准瓦片图层",
           link: "xyz-layer",
         },
         {
-          text: "BWMSLayer WMS 图层",
+          text: "WMSLayer WMS 图层",
           link: "wms-layer",
         },
         {
-          text: "BWMTSLayer WMTS 图层",
+          text: "WMTSLayer WMTS 图层",
           link: "wmts-layer",
         },
         {
-          text: "BRasterLayer 栅格瓦片图层",
+          text: "RasterTileLayer 栅格瓦片图层",
           link: "raster-layer",
         },
         {
-          text: "BMVTLayer 矢量瓦片",
+          text: "MVTLayer 矢量瓦片",
           link: "mvt-layer",
         },
       ],
@@ -266,11 +266,11 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/components/panorama/",
       items: [
         {
-          text: "BPanorama 全景查看器",
+          text: "Panorama 全景查看器",
           link: "index",
         },
         {
-          text: "BPanoramaLabel 全景标注",
+          text: "PanoramaLabel 全景标注",
           link: "label",
         },
       ],
@@ -281,7 +281,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/components/autoComplete/",
       items: [
         {
-          text: "BAutoComplete 自动填充",
+          text: "Autocomplete 自动填充",
           link: "index",
         },
       ],
@@ -296,60 +296,60 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "usePoint",
         },
         {
-          text: "useBMapMarkerIcons 图标",
-          link: "useBMapMarkerIcons",
+          text: "useMarkerIcons 图标",
+          link: "useMarkerIcons",
         },
         {
-          text: "useBMapIpLocation IP定位",
-          link: "useBMapIpLocation",
+          text: "useIpLocation IP定位",
+          link: "useIpLocation",
         },
         {
-          text: "useBMapGeolocation 百度定位",
-          link: "useBMapGeolocation",
+          text: "useGeolocation 百度定位",
+          link: "useGeolocation",
         },
         {
-          text: "useBMapGeocodeDetail 坐标点解析",
-          link: "useBMapGeocodeDetail",
+          text: "useGeocodeDetail 坐标点解析",
+          link: "useGeocodeDetail",
         },
         {
-          text: "useBMapGeocoder 地址解析",
-          link: "useBMapGeocoder",
+          text: "useGeocoder 地址解析",
+          link: "useGeocoder",
         },
         {
-          text: "useBMapConvertor 坐标转换",
-          link: "useBMapConvertor",
+          text: "useConvertor 坐标转换",
+          link: "useConvertor",
         },
         {
-          text: "useBMapAreaBoundary 区域边界",
-          link: "useBMapAreaBoundary",
+          text: "useAreaBoundary 区域边界",
+          link: "useAreaBoundary",
         },
         {
           text: "usePanoramaService 全景检索",
           link: "usePanoramaService",
         },
         {
-          text: "useBMapLocalSearch 本地检索",
-          link: "useBMapLocalSearch",
+          text: "useLocalSearch 本地检索",
+          link: "useLocalSearch",
         },
         {
-          text: "useBMapDrivingRoute 驾车路线",
-          link: "useBMapDrivingRoute",
+          text: "useDrivingRoute 驾车路线",
+          link: "useDrivingRoute",
         },
         {
-          text: "useBMapWalkingRoute 步行路线",
-          link: "useBMapWalkingRoute",
+          text: "useWalkingRoute 步行路线",
+          link: "useWalkingRoute",
         },
         {
-          text: "useBMapRidingRoute 骑行路线",
-          link: "useBMapRidingRoute",
+          text: "useRidingRoute 骑行路线",
+          link: "useRidingRoute",
         },
         {
-          text: "useBMapTransitRoute 公交路线",
-          link: "useBMapTransitRoute",
+          text: "useTransitRoute 公交路线",
+          link: "useTransitRoute",
         },
         {
-          text: "useBMapViewAnimation 3d视角动画",
-          link: "useBMapViewAnimation",
+          text: "useViewAnimation 3d视角动画",
+          link: "useViewAnimation",
         },
         {
           text: "useControllableState 受控/非受控状态",
@@ -396,6 +396,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "Capability Catalog 能力矩阵",
           link: "capability-matrix",
+        },
+        {
+          text: "公开 API 对照（官方 React）",
+          link: "official-api-alignment",
         },
         {
           text: "Ownership-first 存量审计表",

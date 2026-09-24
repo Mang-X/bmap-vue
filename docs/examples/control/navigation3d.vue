@@ -1,5 +1,5 @@
 <template>
-  <BMap v-bind="$attrs">
-    <BNavigation3d />
-  </BMap>
+  <Map v-bind="$attrs">
+    <NavigationControl3D />
+  </Map>
 </template>

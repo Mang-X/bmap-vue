@@ -1,10 +1,13 @@
 <template>
-  <BMap v-bind="$attrs" @ready="handleInitd" :zoom="zoom">
-    <BControl style="display: flex; background-color: #fff; padding: 10px" :offset="{ x: 0, y: 0 }">
+  <Map v-bind="$attrs" @ready="handleInitd" :zoom="zoom">
+    <CustomControl
+      style="display: flex; background-color: #fff; padding: 10px"
+      :offset="{ x: 0, y: 0 }"
+    >
       <button @click="handleZoomOut">缩小</button>
       <button @click="handleZoomIn">放大</button>
-    </BControl>
-  </BMap>
+    </CustomControl>
+  </Map>
 </template>
 
 <script setup lang="ts">

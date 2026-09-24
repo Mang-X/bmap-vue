@@ -1,5 +1,5 @@
 <template>
-  <BMap v-bind="$attrs">
-    <BNavigation type="BMAP_NAVIGATION_CONTROL_LARGE" />
-  </BMap>
+  <Map v-bind="$attrs">
+    <NavigationControl type="BMAP_NAVIGATION_CONTROL_LARGE" />
+  </Map>
 </template>

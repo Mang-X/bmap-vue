@@ -4,7 +4,7 @@
  * 原文针对的是「迁移期结构化 legacy definition 在任意入口都必须进入 legacy Driver」。
  * 旧引擎与 `withMigrationDriver` 归一删除后，这条性质收敛成更朴素、也更容易回归的一句：
  *
- * **同一份 definition 在任意入口（`<BMap>` / `<BMapProvider>` / 插件 `client` /
+ * **同一份 definition 在任意入口（`<Map>` / `<BMapProvider>` / 插件 `client` /
  * `resolveMapContext`）必须产出同一个 Client**；不应因为「放在组件 prop / 插件 client /
  * app 默认定义 / 地图外 context」而报 `BMAP_SDK_ENGINE_MISMATCH`。
  *
@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { defineComponent, h } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
 import { createBMapPlugin } from "../../packages/bmap-vue/src/plugins/createBMapPlugin";
 import { resolveMapContext } from "../../packages/bmap-vue/src/composables/resolveMapContext";
@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("默认 definition 在不同入口的一致性", () => {
-  it("<BMap :definition> 与 <BMapProvider :definition> 行为一致", async () => {
+  it("<Map :definition> 与 <BMapProvider :definition> 行为一致", async () => {
     const providerWrapper = mount(BMapProvider, {
       props: { definition: sharedDefinition() },
       slots: { default: () => h("div") },
@@ -70,7 +70,7 @@ describe("默认 definition 在不同入口的一致性", () => {
     );
     providerWrapper.unmount();
 
-    const mapWrapper = mount(BMap, {
+    const mapWrapper = mount(Map, {
       attachTo: host(),
       props: { definition: sharedDefinition() },
     });
@@ -78,13 +78,13 @@ describe("默认 definition 在不同入口的一致性", () => {
     const errorCodes = (mapWrapper.emitted("error") as [unknown][] | undefined)?.map(
       (e) => (e[0] as BMapError)?.code,
     );
-    expect(errorCodes ?? [], "<BMap :definition> 不应报错").not.toContain(
+    expect(errorCodes ?? [], "<Map :definition> 不应报错").not.toContain(
       "BMAP_SDK_ENGINE_MISMATCH",
     );
     expect(errorCodes ?? []).not.toContain("BMAP_CAPABILITY_UNSUPPORTED");
     const ready = mapWrapper.emitted("ready") as [{ client: BMapClient }][] | undefined;
-    expect(ready?.length, "<BMap :definition> 未产出 ready").toBeGreaterThan(0);
-    expectV4Client(ready?.[0]?.[0]?.client, "<BMap :definition>");
+    expect(ready?.length, "<Map :definition> 未产出 ready").toBeGreaterThan(0);
+    expectV4Client(ready?.[0]?.[0]?.client, "<Map :definition>");
     mapWrapper.unmount();
   });
 
@@ -168,9 +168,9 @@ describe("默认 definition 在不同入口的一致性", () => {
     ).toContain("BMAP_SDK_ENGINE_MISMATCH");
     providerWrapper.unmount();
 
-    const mapWrapper = mount(BMap, { attachTo: host(), props: { definition: definition() } });
+    const mapWrapper = mount(Map, { attachTo: host(), props: { definition: definition() } });
     await flushPromises();
-    expect(mapWrapper.emitted("ready"), "<BMap> 不该成功").toBeUndefined();
+    expect(mapWrapper.emitted("ready"), "<Map> 不该成功").toBeUndefined();
     expect(((mapWrapper.emitted("error") as [BMapError][]) ?? []).map((e) => e[0]?.code)).toContain(
       "BMAP_SDK_ENGINE_MISMATCH",
     );

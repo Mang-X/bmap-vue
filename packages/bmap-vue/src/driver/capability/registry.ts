@@ -12,13 +12,13 @@
  * 第三条是必须的，不是补充：真实 JSAPI 4.0 有一部分 Map 方法挂在**实例**上而不是原型上
  * （实测 `rawMap.setZoom` 是函数、`Map.prototype.setZoom` 是 `undefined`，而同组的 `getZoom`
  * 在原型上）。只查前两个来源会让 `supports("map.zoom")` 在真实引擎上**假阴性** —— 而
- * `supports()` 是 `<BMap ref>` 公开命令面的一部分，于是业务最自然的
+ * `supports()` 是 `<Map ref>` 公开命令面的一部分，于是业务最自然的
  * `if (map.supports("map.zoom")) map.setZoom(16)` 会在**真的支持** zoom 的引擎上被跳过。
  *
  * 实例成员只能在**对象建出来之后**才观察得到，因此由对应的 Facet 在创建成功后登记
  * （`driver/jsapi-v4/map.ts` 的 `create()` 调 `observeInstanceMembers(raw)`）。在还没有实例
  * 的那段时间里 `supports("map.zoom")` 仍可能是 `false` —— 而那时也**确实没有可操作的对象**，
- * 这条时序写进了 `BMapExpose.supports()` 的文档。
+ * 这条时序写进了 `MapExpose.supports()` 的文档。
  */
 import { logger } from "../../core/logger";
 import type { BMapEngine } from "../types/bmap";

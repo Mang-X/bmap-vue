@@ -1,13 +1,13 @@
-# BInfoWindow 信息窗口
+# InfoWindow 信息窗口
 
 使用 slot 模式渲染子节点向地图添加信息窗口，以及与地图相关的一些交互。
 
 ```ts
-import { BInfoWindow } from 'bmap-vue'
+import { InfoWindow } from 'bmap-vue'
 ```
 
 ::: tip 提示
-地图上只能同时显示一个 `infoWindow`：同一张地图上多个 `<BInfoWindow>` 同时 `v-model:open` 为
+地图上只能同时显示一个 `infoWindow`：同一张地图上多个 `<InfoWindow>` 同时 `v-model:open` 为
 `true` 时，**最后一个打开**的会显示出来，被顶掉的那个会收到 `update:open=false`（不需要手动处理
 两个气泡的竞争）。
 :::
@@ -117,14 +117,14 @@ overlay/dynmicInfoWindow
 `open` 是唯一的主状态，支持 `v-model:open`：
 
 ```vue
-<BInfoWindow
+<InfoWindow
   v-model:open="open"
   :position="position"
   title="北京"
   :width="320"
 >
   内容
-</BInfoWindow>
+</InfoWindow>
 ```
 
 ::: warning 打开气泡必须给出 `position`
@@ -168,5 +168,5 @@ slot 内容尺寸变化（文本更新、图片异步加载、字体变化…）
 
 ## SSR
 
-气泡内容依赖客户端的宿主节点，因此**服务端渲染的 HTML 里不含气泡内容**（`<BInfoWindow>` 在
+气泡内容依赖客户端的宿主节点，因此**服务端渲染的 HTML 里不含气泡内容**（`<InfoWindow>` 在
 SSR 期不渲染 slot、不创建宿主）。这与地图本身只在客户端可用是一致的。

@@ -13,23 +13,23 @@
  * 样式由消费方显式引入（与 #70 冻结的口径一致）：
  *
  * ```ts
- * import { BPlaceAutocomplete, BPlaceSearch } from "bmap-vue/ui-kit";
+ * import { PlaceAutocomplete, PlaceSearch } from "bmap-vue/ui-kit";
  * import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
  * ```
  *
  * 四个标准 UI widget（`PlaceAutocomplete` / `PlaceSearch` / `PlaceDetail` / `RoutePlan`）都有
- * Vue 薄封装：`BPlaceAutocomplete` / `BPlaceSearch`（#73）与 `BPlaceDetail` / `BRoutePlan`（#75）。
+ * Vue 薄封装：`PlaceAutocomplete` / `PlaceSearch`（#73）与 `PlaceDetail` / `RoutePlan`（#75）。
  * 上游声明了但产物里**没有入口**的能力（例如 `PlaceDetailOptions.layout`）刻意不暴露 ——
  * 「传了不生效」属于假支持，理由与证据见 ADR 2026-09-13（`./ui-kit` 的详情 / 路线封装）。
  */
-export { default as BPlaceAutocomplete } from "./components/BPlaceAutocomplete.vue";
-export { default as BPlaceSearch } from "./components/BPlaceSearch.vue";
-export { default as BPlaceDetail } from "./components/BPlaceDetail.vue";
-export { default as BRoutePlan } from "./components/BRoutePlan.vue";
-export type { BPlaceAutocompleteProps } from "./components/BPlaceAutocomplete.vue";
-export type { BPlaceSearchProps, PlaceBoundsDTO } from "./components/BPlaceSearch.vue";
-export type { BPlaceDetailProps } from "./components/BPlaceDetail.vue";
-export type { BRoutePlanProps } from "./components/BRoutePlan.vue";
+export { default as PlaceAutocomplete } from "./components/PlaceAutocomplete.vue";
+export { default as PlaceSearch } from "./components/PlaceSearch.vue";
+export { default as PlaceDetail } from "./components/PlaceDetail.vue";
+export { default as RoutePlan } from "./components/RoutePlan.vue";
+export type { PlaceAutocompleteProps } from "./components/PlaceAutocomplete.vue";
+export type { PlaceSearchProps, PlaceBoundsDTO } from "./components/PlaceSearch.vue";
+export type { PlaceDetailProps } from "./components/PlaceDetail.vue";
+export type { RoutePlanProps } from "./components/RoutePlan.vue";
 
 export { loadUiKit, isUiKitLoaded, UI_KIT_PACKAGE, UI_KIT_STYLE_PATH } from "./loadUiKit";
 export { useUiKitWidget } from "./useUiKitWidget";

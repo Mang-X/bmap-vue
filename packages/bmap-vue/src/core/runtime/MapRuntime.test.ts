@@ -66,7 +66,7 @@ describe("MapRuntime", () => {
     expect(rt.status.value).toBe("idle");
     const p = rt.mount();
     expect(["waiting-client", "loading"]).toContain(rt.status.value);
-    deferred.resolve({ BMap: {} });
+    deferred.resolve({ Map: {} });
     const ctx = await p;
     expect(rt.status.value).toBe("ready");
     expect(ctx.client.engine).toBe("jsapi-v4");

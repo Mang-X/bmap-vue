@@ -136,7 +136,7 @@ export function readFeatureKey(
  * **公开 id**：可以交给调用方、也可以用于 Feature State 的那部分业务身份。
  *
  * 取值域刻意收窄到 `string | number`：官方 `updateState(keys: string | number | …, …)` 的签名就是
- * 这两种，而 `BMapPointPick.id` 的用途之一正是「拿去调状态命令」。symbol 型业务键在这里返回 `null`
+ * 这两种，而 `PointPick.id` 的用途之一正是「拿去调状态命令」。symbol 型业务键在这里返回 `null`
  * （不猜、也不转成字符串冒充身份），但它**不影响命中判定，也不影响业务项的恢复**——后者由
  * `readFeatureKey` 与 `resolveFeaturePick` 的 `itemOf` 负责。
  *
@@ -198,7 +198,7 @@ function readPixel(value: unknown): NativeLayerPickPixel | null {
 /* ------------------------------------------------------------------ 领域载荷 */
 
 /**
- * 领域拾取载荷（与 `types/components.ts` 的 `BMapPointPick` / `BMapFeaturePick` 同形）。
+ * 领域拾取载荷（与 `types/components.ts` 的 `PointPick` / `FeaturePick` 同形）。
  *
  * 这里刻意**不** import 公共类型文件：`core` 是 `types` 的下游，反向依赖会让公共类型的变化
  * 牵动内核（而内核的用例只需要这个形状本身）。
@@ -226,7 +226,7 @@ export interface ResolveFeaturePickInput<Item> {
    * 身份 → 业务项。缺省时把 `properties` 本身当业务项（线 / 面图层的语义：数据就是 GeoJSON）。
    *
    * 判「找没找到」的返回值用 `undefined` 表示；实现**不要**用真值判断——`0` / `false` / `""`
-   * 都是合法业务项（`BPointCollection` 的评审 #102 F4 就是这条）。
+   * 都是合法业务项（`PointCollection` 的评审 #102 F4 就是这条）。
    */
   /**
    * 业务键 → 业务项（第二条参数是命中要素的 `properties`，可作兜底）。
@@ -262,7 +262,7 @@ export interface ResolveFeaturePickInput<Item> {
  *   symbol 型 `itemKey` 就是「`id` 为 `null`、`item` 有值」的情况；
  * - `latLng` / `pixel`：事件回包里的坐标（未命中时也有）。
  *
- * `itemOf` 是给「业务对象与要素分离」的组件用的（`BPointCollection` 的 `Item[]`）：它一旦提供就是
+ * `itemOf` 是给「业务对象与要素分离」的组件用的（`PointCollection` 的 `Item[]`）：它一旦提供就是
  * **权威**的，返回 `undefined` 表示「按这个业务键找不到业务项」，此时 `item` 为 `null`——而不是退回
  * 「拿 properties 当业务项」（那会把「找不到」变成「找到了一个形状不对的东西」）。
  */
@@ -276,7 +276,7 @@ export function resolveFeaturePick<Item = Record<string, unknown>>(
    *
    * ⚠️ 不能写成 `readFeatureProperties(dataItem) ?? readFeaturePropertiesAt(sentData, …)`：那样只有
    * **整个 `properties` 读不到**时才兜底，而 SDK 回包完全可能给出一个**不含业务键**的 `properties`
-   * （部分回包、symbol 属性没被保留……）。旧实现（迁移前的 `BPointCollection`）是两阶段的：key 读不到
+   * （部分回包、symbol 属性没被保留……）。旧实现（迁移前的 `PointCollection`）是两阶段的：key 读不到
    * 就用 `dataIndex` 回到自己的数据再取一次——这条兜底不能丢。
    */
   const eventProperties = readFeatureProperties(snapshot.dataItem);

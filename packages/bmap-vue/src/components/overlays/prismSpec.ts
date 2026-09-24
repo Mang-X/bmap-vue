@@ -1,5 +1,5 @@
 /**
- * BPrism 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * Prism 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -36,10 +36,10 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
-import type { BPrismProps } from "../../types/components";
+import type { PrismProps } from "../../types/components";
 import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
-export const PRISM_FIELDS: OverlayFieldMap<BPrismProps> = {
+export const PRISM_FIELDS: OverlayFieldMap<PrismProps> = {
   path: "options",
   altitude: "options",
   topFillColor: "options",
@@ -62,7 +62,7 @@ export const PRISM_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createPrismSpec(): OverlaySpec<BPrismProps, OverlayHandle> {
+export function createPrismSpec(): OverlaySpec<PrismProps, OverlayHandle> {
   return {
     type: "prism",
     kind: "prism",
@@ -71,7 +71,7 @@ export function createPrismSpec(): OverlaySpec<BPrismProps, OverlayHandle> {
     watchSources: PRISM_WATCH_SOURCES,
     create: (context, p) => {
       if (!p.path?.length) {
-        throw new Error("BPrism path is required");
+        throw new Error("Prism path is required");
       }
       return context.client.driver.overlays.createPrism(p.path, p.altitude, {
         topFillColor: p.topFillColor,

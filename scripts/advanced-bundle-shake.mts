@@ -17,8 +17,9 @@
 export const COMPONENT_MARKERS: readonly string[] = [
   "defineComponent",
   "createElementBlock",
-  "BInfoWindow",
-  "BPlaceSearch",
+  // `__name` 是 Vue SFC 编译产物的组件名注册；driver/core 无此属性。
+  // 不用裸组件名（如 `InfoWindow`）——改名后会与 driver 能力目录 / openInfoWindow 等撞车。
+  '__name: "',
 ];
 
 /** 官方 UI Kit 的包名：`./advanced` 的闭包不得引用它（它是 optional peer，且 import 即碰 document）。 */

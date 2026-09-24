@@ -1,9 +1,9 @@
-# BContextMenu 上下文菜单 <Badge type="tip" text="^0.0.29" />
+# ContextMenu 上下文菜单 <Badge type="tip" text="^0.0.29" />
 
 在地图或标注上添加自定义内容的右键菜单。
 
 ```ts
-import { BContextMenu, BMenuItem, BMenuSeparator } from 'bmap-vue'
+import { ContextMenu, MenuItem, MenuSeparator } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -20,14 +20,14 @@ context-menu/index
 
 ```vue
 <!-- 数据 API：`-` 表示一条分隔线 -->
-<BContextMenu :items="[{ text: '放大', callback: onZoom }, '-', { text: '删除', disabled: true }]" />
+<ContextMenu :items="[{ text: '放大', callback: onZoom }, '-', { text: '删除', disabled: true }]" />
 
 <!-- 声明式 API -->
-<BContextMenu>
-  <BMenuItem text="放大" @select="onZoom" />
-  <BMenuSeparator />
-  <BMenuItem text="删除" disabled />
-</BContextMenu>
+<ContextMenu>
+  <MenuItem text="放大" @select="onZoom" />
+  <MenuSeparator />
+  <MenuItem text="删除" disabled />
+</ContextMenu>
 ```
 
 ## 组件 Props
@@ -47,10 +47,10 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 
 ```vue
 <!-- 旧写法（仍可用，会提示一次） -->
-<BContextMenu :menu-items="list" />
+<ContextMenu :menu-items="list" />
 
 <!-- 新写法 -->
-<BContextMenu :items="list" />
+<ContextMenu :items="list" />
 ```
 
 ## ContextMenuItem
@@ -68,9 +68,9 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 > 也没有读回），因此「改一个字段就换一个菜单实例」是这条路径的固有代价；回调**不进指纹**，
 > 只换 `callback` 不会重建（新函数在下一次点击时生效）。
 
-## BMenuItem 组件 Props
+## MenuItem 组件 Props
 
-`<BMenuItem>` 不渲染 DOM，它只把「这里有一条菜单项」注册给父级 `<BContextMenu>`，
+`<MenuItem>` 不渲染 DOM，它只把「这里有一条菜单项」注册给父级 `<ContextMenu>`，
 位置由**模板里的书写顺序**决定（`v-if` 切换回来时也回到原来的位置）。
 
 | 属性     | 说明                        | 类型      | 默认值     |
@@ -80,7 +80,7 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 | width    | 该项自己的宽度              | `number`  | -          |
 | id       | 该项 DOM 的 id              | `string`  | -          |
 
-`<BMenuSeparator>` 没有 props。两者都必须放在 `<BContextMenu>` 的子节点里；放错位置会在控制台得到一条明确提示。
+`<MenuSeparator>` 没有 props。两者都必须放在 `<ContextMenu>` 的子节点里；放错位置会在控制台得到一条明确提示。
 
 ## 组件事件
 
@@ -88,7 +88,7 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 | ------- | ----------- | --------------------------------------------------------------- | ----------------------------- |
 | `open`  | SDK 事件    | 菜单真正展开时触发（用户右键；程序化 `show()` 也会触发）         | `OverlayPartialPointerEvent`  |
 | `close` | SDK 事件    | 菜单关闭时触发（选中某项、`hide()`、点击别处）                   | `OverlayPartialPointerEvent`  |
-| `select` | 本库事件   | 某一项被选中；同时也会调用该项自己的回调（数据 API 的 `callback` / `<BMenuItem @select>`） | [`ContextMenuSelectPayload`](#contextmenuselectpayload) |
+| `select` | 本库事件   | 某一项被选中；同时也会调用该项自己的回调（数据 API 的 `callback` / `<MenuItem @select>`） | [`ContextMenuSelectPayload`](#contextmenuselectpayload) |
 
 `open` / `close` 的载荷来自上游 `ContextMenuEvent`，其中 `point` / `pixel` 是 `Point | null`，
 因此本库的载荷里它们是**可选**的（`null` 与「缺失」都归一化成 `undefined`）。
@@ -110,8 +110,8 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 
 | 写法位置            | 目标     | SDK 入口                                             |
 | ------------------- | -------- | ---------------------------------------------------- |
-| 直接写在 `<BMap>` 下 | 地图     | `Map#addContextMenu(menu)`（官方 4.0 有声明）         |
-| 写在 `<BMarker>` 里  | 那个标注 | `Marker#addContextMenu(menu)`（**运行时扩展成员**）   |
+| 直接写在 `<Map>` 下 | 地图     | `Map#addContextMenu(menu)`（官方 4.0 有声明）         |
+| 写在 `<Marker>` 里  | 那个标注 | `Marker#addContextMenu(menu)`（**运行时扩展成员**）   |
 
 > `Marker#addContextMenu` / `#removeContextMenu` 在官方 4.0.4 的**类型包里没有声明**（只声明在 `Map` 上），
 > 但真实 4.0 运行时存在且可用：挂上之后右键该标注会派发菜单的 `open`，`removeContextMenu` 之后同样的
@@ -119,10 +119,10 @@ v3 的 `menuItems` **仍然可用**，但已经弃用：内部只有一份条目
 > [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)。
 
 **没有入口证据的目标会显式报错**（`BMAP_CAPABILITY_UNSUPPORTED`），而**不会**回退挂到地图上——
-例如写在 `<BPolyline>` 这类覆盖物里时，最近的挂载目标 `kind` 是 `overlay`，菜单没有可挂的地方。
+例如写在 `<Polyline>` 这类覆盖物里时，最近的挂载目标 `kind` 是 `overlay`，菜单没有可挂的地方。
 
-不提供挂载目标契约的组件（`BMapMask` / `BMarker3d` 这类）**不会成为目标**：它们不 provide
-`TargetContext`，因此其下的菜单会落到 `<BMap>` 自己的**地图**目标上，与「直接写在 `<BMap>` 下」同义。
+不提供挂载目标契约的组件（`MapMask` / `Marker3D` 这类）**不会成为目标**：它们不 provide
+`TargetContext`，因此其下的菜单会落到 `<Map>` 自己的**地图**目标上，与「直接写在 `<Map>` 下」同义。
 
 ## 行为细则
 

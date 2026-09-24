@@ -51,7 +51,7 @@ export interface UseUiKitWidgetOptions<TWidget extends UiKitWidgetHandle> {
    *
    * **可选**（不是必填）：`useUiKitWidget` 从 #73 起就是公开导出，给一个必填字段等于让已有调用方
    * 升级后直接类型报错（PR #82 评审 P1）。缺省时桥不安装重建 watch，**也不回退去用 `buildOptions()`** ——
-   * 因为 `buildOptions()` 里还包含**有 setter 的运行期选项**（例如 `BPlaceAutocomplete` 的 `location`），
+   * 因为 `buildOptions()` 里还包含**有 setter 的运行期选项**（例如 `PlaceAutocomplete` 的 `location`），
    * 拿它当重建依据会让「改城市」也重建，从而吃掉输入值 / 焦点 / 下拉展开状态。
    *
    * 为什么把这件事放在桥里：这是四个组件**共有**的一条语义（上游的构造期参数都没有 setter），
@@ -264,7 +264,7 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
     );
   }
 
-  // 换 Map：`<BMap>` 的 runtime 被重建（retry / 重新初始化）时 map handle 会换代，
+  // 换 Map：`<Map>` 的 runtime 被重建（retry / 重新初始化）时 map handle 会换代，
   // 旧 widget 仍握着旧地图实例 —— 必须重建，否则 PlaceSearch 会对着失效的地图取视野。
   watch(
     () => ctx.map.value,

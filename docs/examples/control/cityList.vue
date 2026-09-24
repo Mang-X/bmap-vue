@@ -1,5 +1,5 @@
 <template>
-  <BMap v-bind="$attrs">
-    <BCityList />
-  </BMap>
+  <Map v-bind="$attrs">
+    <CityListControl />
+  </Map>
 </template>

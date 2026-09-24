@@ -1,5 +1,5 @@
 /**
- * M5-SPEC-MARKER（issue #30）：`OverlaySpec` 声明面 + BMarker 生命周期
+ * M5-SPEC-MARKER（issue #30）：`OverlaySpec` 声明面 + Marker 生命周期
  *
  * issue #30 的五条测试要求逐条落在本文件：
  *
@@ -11,15 +11,15 @@
  * | Target 切换与 Registry 计数 | `Target 与 Registry` |
  * | 100 次重建后 listener/cache/ref 资源稳定 | `100 次重建…` |
  *
- * 另加两组「声明面自己会红」的检查：`MARKER_FIELDS` 必须**恰好覆盖** `BMarkerProps`，且声明为
+ * 另加两组「声明面自己会红」的检查：`MARKER_FIELDS` 必须**恰好覆盖** `MarkerProps`，且声明为
  * `options` / `recreate` 的字段在 Driver 属性描述符里必须真的是对应分类——「每个公开属性都有明确
  * 更新策略」因此是一条可执行的门禁，而不是文档承诺。
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive, ref, watchEffect } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
 import {
   MARKER_DESCRIPTOR_KEYS,
   MARKER_FIELDS,
@@ -33,7 +33,7 @@ import { useParentOverlayHandle } from "../../packages/bmap-vue/src/core/context
 import type { MapContext } from "../../packages/bmap-vue/src/core/context/types";
 import { OVERLAY_DESCRIPTORS, overlayPropertySpec } from "../../packages/bmap-vue/src/driver/types/overlays";
 import type { MarkerHandle, SdkHandle } from "../../packages/bmap-vue/src/driver/types/handles";
-import type { BMarkerProps } from "../../packages/bmap-vue/src/types/components";
+import type { MarkerProps } from "../../packages/bmap-vue/src/types/components";
 import { createFakeV4Harness, type FakeBMapV4, type FakeV4Harness, type FakeV4Marker } from "../../packages/test-utils";
 
 let harness: FakeV4Harness;
@@ -55,7 +55,7 @@ async function settle() {
 
 function lastMap() {
   const map = fake.createdMaps[fake.createdMaps.length - 1];
-  if (!map) throw new Error("用例必须先创建地图（<BMap>）");
+  if (!map) throw new Error("用例必须先创建地图（<Map>）");
   return map;
 }
 
@@ -103,18 +103,18 @@ const TargetProbe = defineComponent({
   },
 });
 
-/** 挂一个 `<BMap>`，把 BMarker（+ 可选子节点）放进去。 */
+/** 挂一个 `<Map>`，把 Marker（+ 可选子节点）放进去。 */
 function hostWith(
-  markerProps: () => BMarkerProps,
+  markerProps: () => MarkerProps,
   options: { probe?: boolean; targetProbe?: boolean } = {},
 ) {
   return defineComponent({
-    components: { BMap, BMarker },
+    components: { Map, Marker },
     setup() {
       return () =>
-        h(BMap, { provider: harness.provider() }, () => [
+        h(Map, { provider: harness.provider() }, () => [
           ...(options.probe ? [h(ContextProbe)] : []),
-          h(BMarker, markerProps(), () =>
+          h(Marker, markerProps(), () =>
             options.targetProbe ? [h(TargetProbe)] : [],
           ),
         ]);
@@ -123,7 +123,7 @@ function hostWith(
 }
 
 async function mountMarker(
-  markerProps: () => BMarkerProps,
+  markerProps: () => MarkerProps,
   options: { probe?: boolean; targetProbe?: boolean } = {},
 ) {
   const wrapper = mount(hostWith(markerProps, options), { attachTo: harness.container() });
@@ -135,7 +135,7 @@ async function mountMarker(
 /* ---------------------------------------------------------------------- 声明面 */
 
 describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
-  it("fields 恰好覆盖 BMarkerProps 的全部键", () => {
+  it("fields 恰好覆盖 MarkerProps 的全部键", () => {
     // 类型层：漏一个 prop 时 `OverlayFieldMap` 就赋不上值（编译期），这里再逐项点名一次
     expect(Object.keys(MARKER_FIELDS).sort()).toEqual(
       [
@@ -144,14 +144,14 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
       ].sort(),
     );
     // 反向：声明里不能有 props 上不存在的键
-    const declared = Object.keys(MARKER_FIELDS) as Array<keyof BMarkerProps>;
+    const declared = Object.keys(MARKER_FIELDS) as Array<keyof MarkerProps>;
     expect(declared).toHaveLength(9);
   });
 
   it("声明为 options / recreate / position 的字段与描述符分类逐项一致", () => {
     const descriptor = OVERLAY_DESCRIPTORS.marker;
     for (const [prop, update] of Object.entries(MARKER_FIELDS)) {
-      const declaredKey = MARKER_DESCRIPTOR_KEYS[prop as keyof BMarkerProps];
+      const declaredKey = MARKER_DESCRIPTOR_KEYS[prop as keyof MarkerProps];
       const descriptorKey = declaredKey === undefined ? prop : declaredKey;
       const spec = descriptorKey === null ? undefined : overlayPropertySpec("marker", descriptorKey);
       if (update === "visibility") {
@@ -185,7 +185,7 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
       type: "contradictory",
       fields: { icon: "options", visible: "visibility" },
       descriptorKeys: { icon: null, visible: "visible" },
-    } as unknown as OverlaySpec<BMarkerProps, unknown>;
+    } as unknown as OverlaySpec<MarkerProps, unknown>;
     expect(() => assertOverlayFieldDeclarations(contradictory)).toThrow(/不经描述符/);
 
     // 第二个用例：显隐字段没写成「不经描述符」——它会被当成 SDK 属性下发
@@ -194,7 +194,7 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
       type: "wrong-visibility",
       fields: { icon: "options", visible: "visibility" },
       descriptorKeys: {},
-    } as unknown as OverlaySpec<BMarkerProps, unknown>;
+    } as unknown as OverlaySpec<MarkerProps, unknown>;
     expect(() => assertOverlayFieldDeclarations(wrongVisibility)).toThrow(/组件侧语义/);
 
     // 第三个用例：多个 position 字段——第二个会被静默忽略，宁可起不来
@@ -203,7 +203,7 @@ describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
       type: "two-positions",
       fields: { position: "position", offset: "position", visible: "visibility" },
       descriptorKeys: { position: "position", offset: "offset", visible: null },
-    } as unknown as OverlaySpec<BMarkerProps, unknown>;
+    } as unknown as OverlaySpec<MarkerProps, unknown>;
     expect(() => assertOverlayFieldDeclarations(twoPositions)).toThrow(/多个 position 字段/);
   });
 });
@@ -270,15 +270,15 @@ describe("初始状态（构造期属性一次到位）", () => {
   });
 
   it("SDK 就绪之前改的 props 不丢（await 之后按当前 props 建实例）", async () => {
-    const icon = ref<BMarkerProps["icon"]>({ imageUrl: "https://example.com/a.png", size: { width: 10, height: 10 } });
+    const icon = ref<MarkerProps["icon"]>({ imageUrl: "https://example.com/a.png", size: { width: 10, height: 10 } });
     const title = ref("before-ready");
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: harness.deferredProvider() }, () => [
-              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value, title: title.value }),
+            h(Map, { provider: harness.deferredProvider() }, () => [
+              h(Marker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value, title: title.value }),
             ]);
         },
       }),
@@ -312,18 +312,18 @@ describe("初始状态（构造期属性一次到位）", () => {
     const tick = ref(0);
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: harness.provider() }, () => [
-              h(BMarker, {
+            h(Map, { provider: harness.provider() }, () => [
+              h(Marker, {
                 // 每次渲染都是**新的对象字面量**，内容相同
                 position: { lng: 116.4, lat: 39.9 },
                 offset: { x: 1, y: 2 },
                 icon: { imageUrl: "https://example.com/a.png", size: { width: 10, height: 10 } },
                 key: undefined,
                 "data-tick": tick.value,
-              } as unknown as BMarkerProps),
+              } as unknown as MarkerProps),
             ]);
         },
       }),
@@ -359,7 +359,7 @@ describe("mutable 就地更新，构造期属性重建", () => {
     const title = ref("a");
     const offset = ref({ x: 0, y: 0 });
     const dragging = ref(false);
-    const icon = ref<BMarkerProps["icon"]>({
+    const icon = ref<MarkerProps["icon"]>({
       imageUrl: "https://example.com/a.png",
       size: { width: 10, height: 10 },
     });
@@ -533,12 +533,12 @@ describe("drag-end 双向同步与回环抑制", () => {
     marker.emit("dragend", { point: { lng: 117.5, lat: 40.5 } });
     await settle();
 
-    expect(wrapper.findComponent(BMarker).emitted("update:position")).toEqual([
+    expect(wrapper.findComponent(Marker).emitted("update:position")).toEqual([
       [{ lng: 117.5, lat: 40.5 }],
     ]);
     // 两个历史拼写都发（`dragend` 与 kebab 别名）
-    expect(wrapper.findComponent(BMarker).emitted("dragend")).toHaveLength(1);
-    expect(wrapper.findComponent(BMarker).emitted("drag-end")).toHaveLength(1);
+    expect(wrapper.findComponent(Marker).emitted("dragend")).toHaveLength(1);
+    expect(wrapper.findComponent(Marker).emitted("drag-end")).toHaveLength(1);
 
     // 2) 父级按 v-model 回写同一个值 ⇒ 回环抑制：一条命令都不该发
     position.value = { lng: 117.5, lat: 40.5 };
@@ -548,7 +548,7 @@ describe("drag-end 双向同步与回环抑制", () => {
     // 3) SDK 重复派发同一位置：模型判等为「没变化」，不产生第二条 update
     marker.emit("dragend", { point: { lng: 117.5, lat: 40.5 } });
     await settle();
-    expect(wrapper.findComponent(BMarker).emitted("update:position")).toHaveLength(1);
+    expect(wrapper.findComponent(Marker).emitted("update:position")).toHaveLength(1);
 
     // 4) 父级真的改了位置：照常写入 SDK
     position.value = { lng: 118, lat: 41 };
@@ -559,7 +559,7 @@ describe("drag-end 双向同步与回环抑制", () => {
     // 5) 拖到「刚刚命令写入的那个位置」：与 SDK 一致 ⇒ 不重复 emit
     marker.emit("dragend", { point: { lng: 118, lat: 41 } });
     await settle();
-    expect(wrapper.findComponent(BMarker).emitted("update:position")).toHaveLength(1);
+    expect(wrapper.findComponent(Marker).emitted("update:position")).toHaveLength(1);
 
     wrapper.unmount();
     await settle();
@@ -720,9 +720,9 @@ describe("异步 create 的就绪窗口", () => {
       },
     });
     const Host = defineComponent({
-      components: { BMap, Probe },
+      components: { Map, Probe },
       setup() {
-        return () => h(BMap, { provider: harness.provider() }, () => [h(Probe)]);
+        return () => h(Map, { provider: harness.provider() }, () => [h(Probe)]);
       },
     });
     return { Host, state, release: () => release() };

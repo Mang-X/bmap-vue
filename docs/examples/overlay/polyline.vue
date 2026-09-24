@@ -1,6 +1,6 @@
 <template>
-  <BMap v-bind="$attrs" :zoom="16">
-    <BPolyline
+  <Map v-bind="$attrs" :zoom="16">
+    <Polyline
       :path="[
         { lng: 116.404, lat: 39.915 },
         { lng: 116.404, lat: 39.92 },
@@ -12,5 +12,5 @@
       :stroke-weight="3"
       enableEditing
     />
-  </BMap>
+  </Map>
 </template>

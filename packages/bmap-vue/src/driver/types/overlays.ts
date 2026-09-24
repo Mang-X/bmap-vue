@@ -368,7 +368,7 @@ export const OVERLAY_DESCRIPTORS = {
       // `open` 与 `position` 是同一类：**不是 SDK 属性**，而是本库状态机持有的语义。
       // 登记在这里（而不是「干脆不写」）有两个理由：① 「为什么不走实例属性」只有这一处事实源；
       // ② 集中弃用层的别名表要求「正典 prop 必须能在描述符里查到」（`v3-overlay-suite` 的门禁），
-      //    而 `BInfoWindow` 的旧名 `show` 的正典就是 `open` —— 与 `position` 用同一套口径。
+      //    而 `InfoWindow` 的旧名 `show` 的正典就是 `open` —— 与 `position` 用同一套口径。
       open: unsupported(
         "气泡的打开状态由地图级 openInfoWindow(map, infoWindow, position) 与 closeInfoWindow() 表达；InfoWindow 实例上没有 open 属性或 setter",
       ),
@@ -555,7 +555,7 @@ export const OVERLAY_DESCRIPTORS = {
       ),
       items: unsupported(
         "菜单项经 addItem/removeItem 管理（没有整袋替换入口），且 MenuItem 的 disable 之后无法再 enable、也没有读回；" +
-          "组件侧因此走「原子重建菜单」路径——数据 API 的 items 与声明式 <BMenuItem> 都归一化到同一份条目",
+          "组件侧因此走「原子重建菜单」路径——数据 API 的 items 与声明式 <MenuItem> 都归一化到同一份条目",
       ),
     }),
   },
@@ -578,7 +578,7 @@ export const OVERLAY_DESCRIPTORS = {
   },
 
   // `MapMask` 在真实运行时提供 setOptions / setZIndex / setPoints / setPathIn（**没有** setPath）。
-  // 本仓库 `<BMapMask>` 的 path 更新走 `rebuild()`，因此这里不映射任何键；
+  // 本仓库 `<MapMask>` 的 path 更新走 `rebuild()`，因此这里不映射任何键；
   // 若将来要从 Facet 侧更新掩膜，应先核对 `setPoints` / `setOptions` 的语义再补。
   "map-mask": {
     kind: "map-mask",
@@ -725,7 +725,7 @@ export interface OverlayDriver {
   /** 读当前气泡是不是这一个（`Map#getInfoWindow()` + handle 身份比对）。 */
   isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
 
-  /** 构建 Marker Icon（供 useBMapMarkerIcons 等业务复用） */
+  /** 构建 Marker Icon（供 useMarkerIcons 等业务复用） */
   buildIcon(icon: MarkerIconInput): unknown;
 }
 

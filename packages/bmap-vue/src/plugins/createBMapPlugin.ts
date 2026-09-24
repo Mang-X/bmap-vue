@@ -1,7 +1,7 @@
 /**
  * M3: createBMapPlugin —— v3 安装 API
  *
- * 通过 app.use() 提供全局默认 Client definition(AK/版本/Provider),BMap 组件从
+ * 通过 app.use() 提供全局默认 Client definition(AK/版本/Provider),Map 组件从
  * app 级 config 与 definition 读取默认 provider(而非直接访问 window,符合依赖规则)。
  *
  * M3A1-CLIENT（issue #18）的调整：

@@ -1,13 +1,13 @@
 <template>
-  <BMap enable-scroll-wheel-zoom :zoom="9">
-    <BDistrictLayer
+  <Map enable-scroll-wheel-zoom :zoom="9">
+    <DistrictLayer
       @mouseover="handleMouseover"
       @mouseout="handleMouseout"
       viewport
       :kind="DistrictType['AREA']"
       name="北京市"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script lang="ts" setup>

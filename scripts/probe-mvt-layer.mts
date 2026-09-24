@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * MVT 矢量瓦片图层的**运行时探针**（issue #109，BMVTLayer 基线）
+ * MVT 矢量瓦片图层的**运行时探针**（issue #109，MVTLayer 基线）
  *
  * ## 为什么需要它
  *
- * issue #109 把 `BMVTLayer` 从 #36 切出去的原因是「一处机制缺真实运行时证据」：v4 的
+ * issue #109 把 `MVTLayer` 从 #36 切出去的原因是「一处机制缺真实运行时证据」：v4 的
  * `map.addLayer` 靠实例上的 `isXxxLayer` 标记分派，而 MVT 这一族被官方 React 组件库
  * （`huiyan-fe/react-bmap` 的 `unwrapTileWrapper`）当成「包在真 TileLayer 外面的壳」处理；
  * 仓库内官方参考（`references/mvt-layer.md`）却说 MVTLayer **带** `isTileLayer` 标记、统一分发

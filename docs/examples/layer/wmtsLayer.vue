@@ -1,6 +1,6 @@
 <template>
-  <BMap :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
-    <BWMTSLayer
+  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+    <WMTSLayer
       url="https://t0.tianditu.gov.cn/img_w/wmts"
       :params="{
         Layer: 'img',
@@ -12,7 +12,7 @@
       :min-zoom="1"
       :max-zoom="18"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script lang="ts" setup></script>

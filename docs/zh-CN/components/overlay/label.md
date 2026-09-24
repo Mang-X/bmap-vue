@@ -1,9 +1,9 @@
-# BLabel 文本标注
+# Label 文本标注
 
 在地图上显示文本标注
 
 ```ts
-import { BLabel } from 'bmap-vue'
+import { Label } from 'bmap-vue'
 ```
 
 ## 组件示例

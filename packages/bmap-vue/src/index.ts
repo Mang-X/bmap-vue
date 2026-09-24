@@ -31,49 +31,49 @@ export type { PluginCatalogEntry } from "./plugins/catalog";
 // Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
 // 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
-export { Vue3BaiduMapGlResolver } from "./resolver/index";
+export { BMapResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
-  BMapProps,
-  BMarkerProps,
-  BInfoWindowProps,
-  BCircleProps,
-  BPolylineProps,
-  BLabelProps,
+  MapProps,
+  MarkerProps,
+  InfoWindowProps,
+  CircleProps,
+  PolylineProps,
+  LabelProps,
   LabelStyle,
-  BPolygonProps,
-  BRectangleProps,
-  BBezierCurveProps,
-  BPrismProps,
-  BGroundOverlayProps,
+  PolygonProps,
+  RectangleProps,
+  BezierCurveProps,
+  PrismProps,
+  GroundOverlayProps,
   GroundOverlayType,
   GroundOverlayUrl,
-  BMapDataProps,
-  BMarkerListProps,
-  BMarkerClusterProps,
-  BMarkerClusterEngine,
-  BMapClusterPick,
-  BMapClusterChange,
-  BPointCollectionProps,
-  BPointIconLayerProps,
-  BPointLayerProps,
-  BMapPointPick,
-  BMapFeaturePick,
-  BMapStyleExpression,
-  BLineLayerStyle,
-  BFillLayerStyle,
-  BMapNativeLayerCommonProps,
-  BMapNativeLayerPickOptions,
-  BLineLayerProps,
-  BFillLayerProps,
-  BHeatmapLayerProps,
-  BTrackLineLayerProps,
-  BTrackLineObserved,
-  BTrackLineLayerExpose,
+  DataComponentProps,
+  MarkerListProps,
+  MarkerClusterProps,
+  MarkerClusterEngine,
+  ClusterPick,
+  ClusterChange,
+  PointCollectionProps,
+  PointIconLayerProps,
+  PointLayerProps,
+  PointPick,
+  FeaturePick,
+  StyleExpression,
+  LineLayerStyle,
+  FillLayerStyle,
+  NativeLayerCommonProps,
+  NativeLayerPickOptions,
+  LineLayerProps,
+  FillLayerProps,
+  HeatmapLayerProps,
+  TrackLineLayerProps,
+  TrackLineObserved,
+  TrackLineLayerExpose,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapRuntimeStatus, MapStatus } from "./core/context/types";
-export { useBMapContext, useMapReady, useBMap } from "./composables/useBMap";
+export { useMapContext, useMapReady, useMap } from "./composables/useMap";
 // Client Context(服务类 composable 默认依赖,无需 Map 即可使用)
 export {
   bmapClientContextKey,
@@ -89,7 +89,7 @@ export type { TargetContext, TargetKind } from "./core/context/target";
 // 统一资源生命周期
 export { useSdkResource } from "./core/composables/useSdkResource";
 export type { SdkResourceSpec, SdkResourceStatus } from "./core/composables/useSdkResource";
-// 要素状态命令面（M6 / #36）：`<BLineLayer>` / `<BFillLayer>` / `<BPointCollection>` 的 ref expose
+// 要素状态命令面（M6 / #36）：`<LineLayer>` / `<FillLayer>` / `<PointCollection>` 的 ref expose
 // 拿到的是这个类型。只导出**类型**——创建它需要 Driver 与句柄，那是内核的职责。
 export type {
   FeatureStateApi,
@@ -186,10 +186,10 @@ export type {
 } from "./driver/types/handles";
 // Map 命令面与暂停原因（M4-HANDLE-UX / issue #29）
 //
-// `BMapExpose` 是 `<BMap ref>` 拿到的**组件级命令面**（常用 get/set/pan/fit/checkResize/supports
+// `MapExpose` 是 `<Map ref>` 拿到的**组件级命令面**（常用 get/set/pan/fit/checkResize/supports
 // + 生命周期 + 暂停策略），`MapHandle` 是 Driver 层的 SDK 句柄 —— 两者分工见
 // `src/types/mapExpose.ts` 的命名对照表。raw SDK 对象只经 `./advanced` 的 `unwrapRaw()`。
-export type { BMapExpose } from "./types/mapExpose";
+export type { MapExpose } from "./types/mapExpose";
 export type { MapCommands } from "./core/runtime/mapCommands";
 export { MAP_SUSPEND_REASONS } from "./core/runtime/suspension";
 export type { MapSuspendReason } from "./core/runtime/suspension";
@@ -216,7 +216,7 @@ export type {
   MapTypeChangeEvent,
 } from "./driver/types/events";
 // 事件 Catalog（M4-EVENTS / #28）：事件名、SDK 拼写与载荷类型的单一事实源。
-// `<BMap>` 的 emits、`useMapEvent` 的订阅名解析与文档表格都从这里出发。
+// `<Map>` 的 emits、`useMapEvent` 的订阅名解析与文档表格都从这里出发。
 export {
   BMAP_COMPONENT_EVENT_ALIASES,
   BMAP_COMPONENT_EVENT_CATALOG,
@@ -229,8 +229,8 @@ export {
   toVueEventName,
 } from "./core/events/eventCatalog";
 export type {
-  BMapComponentEmitName,
-  BMapComponentEventName,
+  MapComponentEmitName,
+  MapComponentEventName,
   MapEventDefinition,
   MapEventMap,
   MapEventName,
@@ -326,7 +326,7 @@ export type {
   EventDriver,
   PanoramaDriver,
 } from "./driver";
-// 全景的领域类型（M7-CONTROL-PANORAMA / #41）：`<BPanorama>` 的 props 与
+// 全景的领域类型（M7-CONTROL-PANORAMA / #41）：`<Panorama>` 的 props 与
 // `usePanoramaService` 的返回值用到它们，因此必须从根入口可取。
 export type {
   PanoramaDataInfo,
@@ -343,25 +343,25 @@ export type {
 //
 // M5-CUSTOM-MENU / #33：`ContextMenuItem` / `ContextMenuSeparator` 从此前「从 .vue 导出」改为
 // 从 `types/components.ts` 导出——`.vue` 的具名命名导出在纯 tsc 下解析不了（本文件头部的约定），
-// 而菜单这一族现在还有 `BMenuItemProps` / `ContextMenuSelectPayload` 要一起暴露。
+// 而菜单这一族现在还有 `MenuItemProps` / `ContextMenuSelectPayload` 要一起暴露。
 export type {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuSelectPayload,
-  BContextMenuProps,
-  BMenuItemProps,
-  BCustomOverlayProps,
+  ContextMenuProps,
+  MenuItemProps,
+  CustomOverlayProps,
 } from "./types/components";
-// BMVTLayer 公开类型（#109：事件按官方 `MVTLayerEventMap` 分层 + feature-state 键域收窄）
+// MVTLayer 公开类型（#109：事件按官方 `MVTLayerEventMap` 分层 + feature-state 键域收窄）
 export type {
-  BMVTLayerProps,
-  BMVTLayerStyle,
-  BMVTLayerStyleEntry,
-  BMVTLayerEntity,
-  BMVTLayerMouseEvent,
-  BMVTLayerPickEvent,
-  BMVTLayerMouseMoveEvent,
-  BMVTLayerBaseEvent,
+  MVTLayerProps,
+  MVTLayerStyle,
+  MVTLayerStyleEntry,
+  MVTLayerEntity,
+  MVTLayerMouseEvent,
+  MVTLayerPickEvent,
+  MVTLayerMouseMoveEvent,
+  MVTLayerBaseEvent,
 } from "./types/components";
 export type { MarkerIcon, MarkerIconName, MarkerCustomIcon } from "./types/components";
 

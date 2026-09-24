@@ -11,15 +11,15 @@ title: 数据组件
 
 | 场景 | 组件 | SDK 资源 |
 | --- | --- | --- |
-| 中小规模、需要逐点交互 | `BMarkerList` | **每项一个 Marker** |
-| 空间上邻近的点需要聚合 | `BMarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
-| 同上，但**事件里要有簇内业务项** | `BMarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
+| 中小规模、需要逐点交互 | `MarkerList` | **每项一个 Marker** |
+| 空间上邻近的点需要聚合 | `MarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
+| 同上，但**事件里要有簇内业务项** | `MarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
 | 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`） |
-| 大规模散点，画图标 | `BPointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`） |
-| 同一层里「有图标就用图标、没有就画图形」 | `BPointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
+| 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`） |
+| 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
 > 三个点图层组件落在**官方原生批量点图层**上：前两个（`PointShapeLayer` / `PointIconLayer`）在
-> `@baidumap/jsapi-v4-types@4.0.4` 里有完整类声明；`BPointLayer` 用的 `BMap.PointLayer` 属官方
+> `@baidumap/jsapi-v4-types@4.0.4` 里有完整类声明；`PointLayer` 用的 `BMap.PointLayer` 属官方
 > **扩展 API**（运行时存在、类型包没有类声明、可视化实现按需异步注入），因此它被标为
 > `experimental`：能力就绪之前创建会**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`，经 `resource:error`
 > 交出），**不会**自动改用另外两个类 —— 它们是不同的 SDK 能力，偷偷换等于改掉你的意图。
@@ -36,7 +36,7 @@ title: 数据组件
 | `dataVersion` | **引用不变、内容变了**时递增它 | `PropertyKey` |
 | `visible` | 是否显示（`false` = 隐藏，不是删掉） | `boolean`，默认 `true` |
 
-> `BPointCollection` 在 3.0 发布前更名为 `BPointShapeLayer`（它是**未发布** changeset 里的新增，
+> `PointCollection` 在 3.0 发布前更名为 `BPointShapeLayer`（它是**未发布** changeset 里的新增，
 > 因此**没有**留弃用别名）。改名的理由是三个组件的名字要能一眼看出各自落在哪个 SDK 类上。
 
 ## `Item` 类型会原样保留
@@ -62,7 +62,7 @@ function onItemClick(station: Station) {
 </script>
 
 <template>
-  <BMarkerList
+  <MarkerList
     :data="stations"
     item-key="id"
     :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -74,8 +74,8 @@ function onItemClick(station: Station) {
 生效范围要说准：**模板里**推断是完整的（消费方 fixture `fixtures/consumer/src/data-components.vue`
 用 `vue-tsc` 钉住）；用 `h()` 编程式构造时 `Item` 推不出来（vue-tsc 为泛型组件生成的 props 形状
 无法反推类型参数，带不带 `withDefaults` 都一样），那时请用公开的 props 类型显式标注：
-`BMarkerListProps<Station>` / `BMarkerClusterProps<Station>` / `BPointShapeLayerProps<Station>` /
-`BPointIconLayerProps<Station>` / `BPointLayerProps<Station>`。
+`MarkerListProps<Station>` / `MarkerClusterProps<Station>` / `BPointShapeLayerProps<Station>` /
+`PointIconLayerProps<Station>` / `PointLayerProps<Station>`。
 
 ## 数据更新语义
 
@@ -98,16 +98,16 @@ function onItemClick(station: Station) {
 ## 大数据量：`shallowRef` / `markRaw`
 
 数据组件的 `data` 只按**引用**比较，但组件处理这批数据时会**逐项读取**它。走 `adaptPoints`
-（`Item[]` → `FeatureCollection`）的路径包括 `BPointCollection` / `BPointIconLayer` / `BPointLayer`
-与 `BMarkerCluster` 的 `native` 引擎；`BMarkerList` 与 `BMarkerCluster` 的 `markers` 引擎走
+（`Item[]` → `FeatureCollection`）的路径包括 `PointCollection` / `PointIconLayer` / `PointLayer`
+与 `MarkerCluster` 的 `native` 引擎；`MarkerList` 与 `MarkerCluster` 的 `markers` 引擎走
 `DataLayerManager` 的 keyed diff / 网格聚合。只要 `data` 是 Vue 的**深响应**数组——`ref([...])` /
 `reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，代价随规模
 上升。**「深响应读取显著更贵」这条结论适用于所有复用 `adaptPoints` 的路径**（函数级成本分解见 ADR）。
 
-**组件整链路的具体读数只在 `BPointCollection` 上测过**（50k 换一次引用）：深响应输入在组件路径里要
+**组件整链路的具体读数只在 `PointCollection` 上测过**（50k 换一次引用）：深响应输入在组件路径里要
 **0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
 这组数字含 watch / render effect / 资源同步 / `setData` 的整链路，**不要外推到其它组件**；
-`BMarkerCluster` 的 `native` 引擎虽然复用同一个 `adaptPoints`，但其 `ClusterLayer` 整链路
+`MarkerCluster` 的 `native` 引擎虽然复用同一个 `adaptPoints`，但其 `ClusterLayer` 整链路
 **未单独取证**。
 
 大数据量建议把**原始（未被深响应化）的**数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，
@@ -135,7 +135,7 @@ function moveFirst() {
 </script>
 
 <template>
-  <BPointCollection
+  <PointCollection
     :data="stations"
     :data-version="version"
     item-key="id"
@@ -144,7 +144,7 @@ function moveFirst() {
 </template>
 ```
 
-> 示例用**当前 head 实际导出的** `BPointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
+> 示例用**当前 head 实际导出的** `PointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
 > （见上文「先选对组件」的说明）。1.0 的公共 API 命名对齐（[#135](https://github.com/Mang-X/bmap-vue/issues/135)）
 > 完成后，文档会统一改成新名。
 
@@ -163,10 +163,10 @@ function moveFirst() {
 依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
 对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
 
-## `BMarkerList`
+## `MarkerList`
 
 ```vue
-<BMarkerList
+<MarkerList
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -187,10 +187,10 @@ function moveFirst() {
 
 `visible=false` 用覆盖物自身的 `show` / `hide`（隐藏 ≠ 摘掉：资源、账本与「最新 item」都留着）。
 
-## `BMarkerCluster`
+## `MarkerCluster`
 
 ```vue
-<BMarkerCluster
+<MarkerCluster
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -235,8 +235,8 @@ Marker 的代价」），不是自动降级。
 
 | 事件 | 说明 | 参数 |
 | --- | --- | --- |
-| `cluster-click` | 簇被点击 | `BMapClusterPick<Item>`：`{ engine, id, size, position, items }` |
-| `cluster-change` | 聚合结果读数（两个引擎同名同形） | `BMapClusterChange`：`{ engine, clusters, singles, zoom }`（`zoom` 拿不到时为 `null`） |
+| `cluster-click` | 簇被点击 | `ClusterPick<Item>`：`{ engine, id, size, position, items }` |
+| `cluster-change` | 聚合结果读数（两个引擎同名同形） | `ClusterChange`：`{ engine, clusters, singles, zoom }`（`zoom` 拿不到时为 `null`） |
 | `item-click` | 未聚合的单点被点击 | 最新的业务 item |
 
 `items` 只在 `engine="markers"` 下是业务项数组，`native` 下是 `null` —— 用 `null` 而不是空数组，
@@ -272,7 +272,7 @@ Marker 的代价」），不是自动降级。
 | 事件 | 说明 | 参数 |
 | --- | --- | --- |
 | `item-click` | 命中某个要素 | 最新的业务 item |
-| `click` | 图层级拾取（**含未命中**） | `BMapPointPick<Item>`：`{ hit, dataIndex, id, item, latLng, pixel }` |
+| `click` | 图层级拾取（**含未命中**） | `PointPick<Item>`：`{ hit, dataIndex, id, item, latLng, pixel }` |
 
 未命中时官方**同样派发事件**（`dataIndex === -1`），因此 `click` 的 `hit` 为 `false`、`item` 为
 `null`，而 `item-click` 不会派发。`id` 是命中要素的**业务身份**（`properties[idKey]`）；认不出时为
@@ -280,7 +280,7 @@ Marker 的代价」），不是自动降级。
 
 ## 要素状态（Feature State）
 
-`BPointCollection` 通过组件 `ref` 暴露要素状态命令面，按业务 id（即 `itemKey` 指向的字段）定位：
+`PointCollection` 通过组件 `ref` 暴露要素状态命令面，按业务 id（即 `itemKey` 指向的字段）定位：
 
 ```ts
 const state = layer.value?.featureState
@@ -307,10 +307,10 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 字段名，是函数时用保留字段 `__id`），并把它作为图层的 `idKey` —— 少了它，拾取回来的要素认不出
 业务项。
 
-## `BPointIconLayer`
+## `PointIconLayer`
 
 ```vue
-<BPointIconLayer
+<PointIconLayer
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -336,10 +336,10 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
 `dataparsed` 不代表图标已经可见。
 
-## `BPointLayer`（`experimental`，扩展 API）
+## `PointLayer`（`experimental`，扩展 API）
 
 ```vue
-<BPointLayer
+<PointLayer
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -358,7 +358,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 
 1. **可视化实现是按需异步注入的**：就绪之前创建会经 `resource:error` 交出
    `BMAP_CAPABILITY_UNSUPPORTED`；注入完成之后重试即可成功（同一个组件，不必换实例）。
-2. **不会自动改用别的类**：要最稳就用 `BPointShapeLayer` / `BPointIconLayer`（两处都声明）。
+2. **不会自动改用别的类**：要最稳就用 `BPointShapeLayer` / `PointIconLayer`（两处都声明）。
 3. **命中载荷与另外两个不同**：官方在扩展 API 上**没有** `dataIndex`，业务键在
    `value.properties[idKey]` / `value.id` 上。因此 `click.dataIndex` 恒为 `-1`（载荷里那个
    `index` 字段的语义没有取证，本库不读它），`click.hit` 的判据是「能不能解析出业务身份」。
@@ -370,7 +370,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 ## 资源释放
 
 所有数据组件都随组件卸载释放全部资源（Marker 摘除 + 监听解绑）；四个落在原生图层上的组件
-（`BMarkerCluster` 的 `native` 引擎 + 三个点图层）还会把图层登记进地图的图层账本，因此
-**即使地图先被销毁**，图层也会在 `map.destroy()` 之前被摘掉 —— 这条依赖 `<BMap>` 提供的
+（`MarkerCluster` 的 `native` 引擎 + 三个点图层）还会把图层登记进地图的图层账本，因此
+**即使地图先被销毁**，图层也会在 `map.destroy()` 之前被摘掉 —— 这条依赖 `<Map>` 提供的
 `MapContext.layers`；自定义 Context 没有它时组件退化为自持账本，只保证「组件卸载」这一条路径。
 数据组件不持有跨组件的共享状态。

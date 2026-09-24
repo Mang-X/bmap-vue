@@ -3,7 +3,7 @@
  *
  * 三处消费同一份数据，避免「组件发的名字 / composable 收的名字 / 文档写的名字」三者漂移：
  *
- * 1. `<BMap>` 的 `defineEmits`（模板与 TS 提示）与 map 事件的转发；
+ * 1. `<Map>` 的 `defineEmits`（模板与 TS 提示）与 map 事件的转发；
  * 2. `useMapEvent` / `useMapStatus` 解析订阅名（含 SDK 拼写与 kebab 拼写的互认）；
  * 3. 文档表格与测试 fixture 的对照（`tests/behavior/v3-map-event-catalog.test.ts`）。
  *
@@ -16,7 +16,7 @@
  * （双向取差集，任一方向非空即红）。
  *
  * **运行时可观察、上游类型未声明的两个**：`headingchange` / `tiltchange`。依据是它们
- * **已经在本库运行**：`<BMap>` 的视野回写订阅（M4-STATE / #27）就绑在它们上面，行为由
+ * **已经在本库运行**：`<Map>` 的视野回写订阅（M4-STATE / #27）就绑在它们上面，行为由
  * `v3-component-scenarios.test.ts` 的 `simulateUserView()` 与 ADR `2026-09-14-map-controlled-state`
  * 决策 5 冻结。这与 #74 发现的「`MapTypeId` 声明了 `BMAP_*_MAP` 而运行时只有
  * `NORMAL/EARTH/SATELLITE`」是同一类**声明与运行时不一致**，因此这里如实标 `declared: false`，
@@ -36,7 +36,7 @@
  *   `maptypechange` / `tilesloaded` / `rightdblclick`。
  *
  * SDK 拼写永远仍可用：`resolveMapEventName()` 把 `-` / `_` / 大小写差异归一后再查索引，
- * 因此 `@style-loaded`、`@style_loaded`、`@styleLoaded` 都命中同一条目；`<BMap>` 对
+ * 因此 `@style-loaded`、`@style_loaded`、`@styleLoaded` 都命中同一条目；`<Map>` 对
  * `sdk !== vue` 的条目会**同时**发出规范名与 SDK 拼写（`MAP_EVENT_EMIT_ALIASES`），
  * 组件里没有第二份兼容代码。
  *
@@ -67,7 +67,7 @@ export type MapEventPayload = DriverEvent & { type: string };
  * 指针 / 拖拽类事件的载荷：`point` 必有。
  *
  * 依据是 Driver 对指针类事件做兜底（raw 缺坐标时补 `{lng:0,lat:0}`，见
- * `driver/normalize/events.ts` 的 `POINTER_EVENT_NAMES`）——与 `<BMap @click>` 的既有契约
+ * `driver/normalize/events.ts` 的 `POINTER_EVENT_NAMES`）——与 `<Map @click>` 的既有契约
  * （`normalizeMapMouseEvent` 一直如此）一致。**两处必须一致**，由 Catalog 的 `pointer` 标记
  * 与 Driver 导出的那份名字清单在测试里逐项比对。
  */
@@ -418,7 +418,7 @@ export type MapEventName = keyof typeof MAP_EVENT_CATALOG;
  *
  * 目前只有 `destroy`：它是「地图的终点」，而组件的卸载**先于**地图销毁
  * （Vue 的卸载顺序：父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，
- * 而地图销毁发生在 `<BMap>` 的 `onUnmounted` 里）。因此挂在调用方作用域上的订阅必然先被摘掉。
+ * 而地图销毁发生在 `<Map>` 的 `onUnmounted` 里）。因此挂在调用方作用域上的订阅必然先被摘掉。
  *
  * **登记 ≠ 一律不摘**（评审第三轮修正，见 ADR 决策 12）：列在这里的事件只在**整图 teardown** 时才
  * 把订阅留给上下文 scope（登记在 `ResourceScope` 上，随地图一起释放）；**子组件自己卸载**而地图继续
@@ -435,7 +435,7 @@ export type MapEventSdkName = (typeof MAP_EVENT_CATALOG)[MapEventName]["sdk"];
 /**
  * 兼容别名（SDK 拼写）名集合：`sdk !== vue` 的那些 `sdk`。
  *
- * 它们和规范名一样可以绑在 `<BMap>` 上（`@style-loaded` 与 `@style_loaded` 都能用），
+ * 它们和规范名一样可以绑在 `<Map>` 上（`@style-loaded` 与 `@style_loaded` 都能用），
  * 载荷与该条目的规范名相同。
  */
 export type MapEventEmitAliasName = {
@@ -444,7 +444,7 @@ export type MapEventEmitAliasName = {
     : (typeof MAP_EVENT_CATALOG)[K]["sdk"];
 }[MapEventName];
 
-/** `<BMap>` 上可绑的 map 事件名 = 规范名 ∪ 兼容别名。 */
+/** `<Map>` 上可绑的 map 事件名 = 规范名 ∪ 兼容别名。 */
 export type MapEventEmitName = MapEventName | MapEventEmitAliasName;
 
 /**
@@ -481,7 +481,7 @@ export type MapEventPayloadOfKind<K extends MapEventPayloadKind> = K extends "po
         : MapEventPayload;
 
 /**
- * `<BMap>` 的 map 事件 emits 声明（**显式键**，被 `defineEmits` 直接消费）。
+ * `<Map>` 的 map 事件 emits 声明（**显式键**，被 `defineEmits` 直接消费）。
  *
  * 为什么是手写接口而不是 mapped type：`@vue/compiler-sfc` 必须把 emits 类型解析成「有限个键」。
  * 实测（`@vue/compiler-sfc@3.5.42`，「这个位置能不能编过 SFC」）：
@@ -627,7 +627,7 @@ export function normalizeEventKey(name: string): string {
 }
 
 export interface ResolvedMapEvent {
-  /** 规范 Vue 名（`<BMap>` emit 的名字，也是 `MapEventName`）。 */
+  /** 规范 Vue 名（`<Map>` emit 的名字，也是 `MapEventName`）。 */
   readonly vue: MapEventName;
   /** SDK 订阅名。 */
   readonly sdk: MapEventSdkName;
@@ -666,7 +666,7 @@ export function resolveMapEventName(name: string): ResolvedMapEvent | undefined 
 }
 
 /**
- * `sdk !== vue` 的条目：`<BMap>` 在发出规范名之外**同时**发出这些 SDK 拼写。
+ * `sdk !== vue` 的条目：`<Map>` 在发出规范名之外**同时**发出这些 SDK 拼写。
  *
  * 集中在这一张表里，组件不写第二份兼容代码（issue #28「旧名称通过集中 deprecation 处理，
  * 禁止组件各自兼容」）。
@@ -682,15 +682,15 @@ export const MAP_EVENT_EMIT_ALIASES: Readonly<Record<string, readonly string[]>>
 
 /* ------------------------------------------------------------------ 组件级事件
  *
- * `<BMap>` 自身的事件（就绪、插件、生命周期、视野 v-model 回写）。与 map 事件分开两张表：
+ * `<Map>` 自身的事件（就绪、插件、生命周期、视野 v-model 回写）。与 map 事件分开两张表：
  * 它们的载荷不是 Driver 事件，也不参与 `useMapEvent` 订阅。
  */
 
 /** 单条组件事件定义。 */
-export interface BMapComponentEventDefinition {
+export interface MapComponentEventDefinition {
   /** 一句话说明（进文档表格）。 */
   readonly description: string;
-  /** 兼容别名（`<BMap>` 对规范名与别名各发一次；规范名恒为键名）。 */
+  /** 兼容别名（`<Map>` 对规范名与别名各发一次；规范名恒为键名）。 */
   readonly aliases?: readonly string[];
 }
 
@@ -699,7 +699,7 @@ export const BMAP_COMPONENT_EVENT_CATALOG = {
     description: "地图就绪（client + map 可用）",
     /**
      * 历史别名：v2 用 `initd` 表达同一件事，v3 起规范名是 `ready`。
-     * `<BMap>` 对规范名与别名**各发一次**（同载荷），映射集中在这张表里。
+     * `<Map>` 对规范名与别名**各发一次**（同载荷），映射集中在这张表里。
      */
     aliases: ["initd"],
   },
@@ -727,25 +727,25 @@ export const BMAP_COMPONENT_EVENT_CATALOG = {
   "update:tilt": {
     description: "用户交互后的倾斜角回写（v-model:tilt）",
   },
-} as const satisfies Record<string, BMapComponentEventDefinition>;
+} as const satisfies Record<string, MapComponentEventDefinition>;
 
 /** 组件事件规范名。 */
-export type BMapComponentEventName = keyof typeof BMAP_COMPONENT_EVENT_CATALOG;
+export type MapComponentEventName = keyof typeof BMAP_COMPONENT_EVENT_CATALOG;
 
 /** 别名名（从表里的 `aliases` 派生；`initd` 是当前唯一一个）。 */
-export type BMapComponentEventAliasName = {
-  [K in BMapComponentEventName]: (typeof BMAP_COMPONENT_EVENT_CATALOG)[K] extends {
+export type MapComponentEventAliasName = {
+  [K in MapComponentEventName]: (typeof BMAP_COMPONENT_EVENT_CATALOG)[K] extends {
     aliases: readonly (infer A extends string)[];
   }
     ? A
     : never;
-}[BMapComponentEventName];
+}[MapComponentEventName];
 
-/** `<BMap>` 的 emits 名集合 = 规范名 ∪ 别名。 */
-export type BMapComponentEmitName = BMapComponentEventName | BMapComponentEventAliasName;
+/** `<Map>` 的 emits 名集合 = 规范名 ∪ 别名。 */
+export type MapComponentEmitName = MapComponentEventName | MapComponentEventAliasName;
 
 /**
- * 规范名 → 历史别名：`<BMap>` 对两者**各发一次**（同载荷）。
+ * 规范名 → 历史别名：`<Map>` 对两者**各发一次**（同载荷）。
  *
  * 与 map 事件的 `MAP_EVENT_EMIT_ALIASES` 同形：组件读这张表来发别名，因此「旧名称的集中
  * deprecation」只有一处（issue #28 明令禁止组件各自兼容）。
@@ -753,7 +753,7 @@ export type BMapComponentEmitName = BMapComponentEventName | BMapComponentEventA
 export const BMAP_COMPONENT_EVENT_EMIT_ALIASES: Readonly<Record<string, readonly string[]>> =
   Object.freeze(
     Object.fromEntries(
-      (Object.keys(BMAP_COMPONENT_EVENT_CATALOG) as BMapComponentEventName[])
+      (Object.keys(BMAP_COMPONENT_EVENT_CATALOG) as MapComponentEventName[])
         .map((name) => {
           const entry = BMAP_COMPONENT_EVENT_CATALOG[name] as { aliases?: readonly string[] };
           return [name, entry.aliases ?? []] as const;
@@ -763,11 +763,11 @@ export const BMAP_COMPONENT_EVENT_EMIT_ALIASES: Readonly<Record<string, readonly
   );
 
 /** 别名 → 规范名（文档表格与测试用；从上面那张表派生，不手写第二份）。 */
-export const BMAP_COMPONENT_EVENT_ALIASES: Readonly<Record<string, BMapComponentEventName>> =
+export const BMAP_COMPONENT_EVENT_ALIASES: Readonly<Record<string, MapComponentEventName>> =
   Object.freeze(
     Object.fromEntries(
       Object.entries(BMAP_COMPONENT_EVENT_EMIT_ALIASES).flatMap(([name, aliases]) =>
-        aliases.map((alias) => [alias, name as BMapComponentEventName]),
+        aliases.map((alias) => [alias, name as MapComponentEventName]),
       ),
     ),
   );

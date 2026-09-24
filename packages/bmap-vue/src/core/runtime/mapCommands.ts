@@ -22,7 +22,7 @@
  * `2026-09-14-map-handle-container-and-visibility` 的「已知限制」里。
  *
  * `checkResize` **不在这里**：它必须与「容器门禁 + 暂停策略」同一口径（暂停期间不得下发 SDK
- * 命令），因此归 `<BMap>` 的 expose，由 `MapRuntime` 统一实现 —— 命令面自己再实现一份
+ * 命令），因此归 `<Map>` 的 expose，由 `MapRuntime` 统一实现 —— 命令面自己再实现一份
  * 就会与暂停策略漂移。
  */
 import type { BMapClient } from "../../client/types";
@@ -79,7 +79,7 @@ export interface MapCommands {
 /**
  * 命令面的数据来源。
  *
- * 刻意用**取值函数**而不是 ref：命令面既服务 `<BMap>` 自己的 expose（数据来自
+ * 刻意用**取值函数**而不是 ref：命令面既服务 `<Map>` 自己的 expose（数据来自
  * `MapRuntime` 的 shallow refs），也服务未来任何持有句柄的场景，取值函数是两者唯一的公共形状。
  */
 export interface MapCommandSource {

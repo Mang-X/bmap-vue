@@ -1,5 +1,5 @@
 <template>
-  <BMap
+  <Map
     v-bind="$attrs"
     :zoom="10"
     :tilt="50"
@@ -8,7 +8,7 @@
     ref="map"
     @ready="handleInitd"
   >
-    <BPrism
+    <Prism
       isBoundary
       :path="pathPoints"
       :autoCenter="false"
@@ -20,16 +20,16 @@
       @mouseover="handleMouseover"
       @mouseout="handleMouseout"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useBMapAreaBoundary } from "bmap-vue";
+import { useAreaBoundary } from "bmap-vue";
 const topFillOpacity = ref<number>(0.5);
 const area = ref<string>("北京市");
 const map = ref();
-const { boundaries: pathPoints, get } = useBMapAreaBoundary(map);
+const { boundaries: pathPoints, get } = useAreaBoundary(map);
 
 function handleInitd() {
   get(area.value);

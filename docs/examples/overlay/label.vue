@@ -1,8 +1,8 @@
 <template>
   文字内容:
   <input class="my-input" type="text" v-model="content" />
-  <BMap v-bind="$attrs">
-    <BLabel
+  <Map v-bind="$attrs">
+    <Label
       :content="content"
       :position="{ lng: 116.404, lat: 39.915 }"
       :style="{
@@ -14,7 +14,7 @@
         fontSize: '16px',
       }"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script setup lang="ts">

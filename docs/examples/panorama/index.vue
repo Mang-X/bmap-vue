@@ -1,5 +1,5 @@
 <template>
-  <BPanorama
+  <Panorama
     v-bind="$attrs"
     style="width: 100%; height: 480px"
     :id="panoId"

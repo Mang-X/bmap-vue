@@ -7,7 +7,7 @@
  * 分支数量或状态结构。
  *
  * 设备无关：`createFakeV4Client()` 交出真实默认路径的 Client，`client.driver.map.create()` 建一张
- * 地图（与 `useMapEvent.test.ts` 同一配方），无需挂载 `<BMap>`。
+ * 地图（与 `useMapEvent.test.ts` 同一配方），无需挂载 `<Map>`。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeV4Client, type FakeBMapV4, type FakeV4ClusterLayer } from "../../../../test-utils";
@@ -73,7 +73,7 @@ async function createFixture(props: MutableProps): Promise<Fixture> {
     {
       ready: { client, map },
       registry,
-      label: "BMarkerCluster",
+      label: "MarkerCluster",
       onProblem: vi.fn(),
       onClusterClick: vi.fn(),
       onItemClick: vi.fn(),

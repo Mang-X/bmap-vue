@@ -1,7 +1,7 @@
 /**
  * 原生可视化图层组件的**共享装配**（M6 / issue #36）
  *
- * `BLineLayer` / `BFillLayer` / `BHeatmapLayer` / `BTrackLineLayer` 四个组件在装配上的差异只有
+ * `LineLayer` / `FillLayer` / `HeatmapLayer` / `TrackLineLayer` 四个组件在装配上的差异只有
  * 四项，因此这里收成一处，避免四份同源实现各自漂移：
  *
  * | 差异 | 怎么表达 |
@@ -39,7 +39,7 @@ import {
   type NativeLayerUnifiedFields,
 } from "../../core/composables/useNativeLayerResource";
 import type { NativeLayerKind } from "../../driver/types/native-layers";
-import type { BMapFeaturePick } from "../../types/components";
+import type { FeaturePick } from "../../types/components";
 
 /** 官方四类专页图层共同派发的拾取事件（`NormalLayerEventMap` 去掉 `dataparsed`）。 */
 export const NATIVE_LAYER_PICK_EVENTS = [
@@ -53,7 +53,7 @@ export const NATIVE_LAYER_PICK_EVENTS = [
  * 四个组件 props 的**并集**（各组件只声明自己 kind 支持的那部分）。
  *
  * `style` 在这里是 `object` 而不是 `Record<string, unknown>`：各组件的强类型 style 接口（如
- * `BLineLayerStyle`）**没有隐式索引签名**，收窄成 `Record` 会让它们不满足这个约束（而那正是
+ * `LineLayerStyle`）**没有隐式索引签名**，收窄成 `Record` 会让它们不满足这个约束（而那正是
  * 「强类型 style」的意义）。
  */
 export interface VisualLayerPropsLike extends NativeLayerUnifiedFields {
@@ -69,14 +69,14 @@ export interface VisualLayerPropsLike extends NativeLayerUnifiedFields {
 }
 
 /** 领域事件派发器（组件把 `defineEmits` 的 emit 包一层传进来：事件名来自白名单）。 */
-export type PickEmitter = (event: string, pick: BMapFeaturePick) => void;
+export type PickEmitter = (event: string, pick: FeaturePick) => void;
 
 /** 四个拾取事件的**逐名**派发器（见 `pickEmitterFor`）。 */
 export interface VisualLayerEmitters {
-  click(pick: BMapFeaturePick): void;
-  dblclick(pick: BMapFeaturePick): void;
-  rightclick(pick: BMapFeaturePick): void;
-  mousemove(pick: BMapFeaturePick): void;
+  click(pick: FeaturePick): void;
+  dblclick(pick: FeaturePick): void;
+  rightclick(pick: FeaturePick): void;
+  mousemove(pick: FeaturePick): void;
 }
 
 /**

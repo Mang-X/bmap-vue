@@ -7,8 +7,8 @@
  * 1. **它们真的进了 PR 门禁**（`quality.yml` 的 `docs` job，且 step 没被 `if:` / `continue-on-error`
  *    架空）——「门禁不存在」比「门禁失败」更难发现；
  * 2. **`docs/tsconfig.json` 的类型解析面**：docs 示例是消费方，类型检查必须对着**发布声明面**
- *    （`dist/*.d.ts`）。退回映射组件库 `src/` 会重新把库内部的 `BMap` 全局引入 types 环境，
- *    立刻退化成 23 条 `Cannot find name 'BMap'`；
+ *    （`dist/*.d.ts`）。退回映射组件库 `src/` 会重新把库内部的 `Map` 全局引入 types 环境，
+ *    立刻退化成 23 条 `Cannot find name 'Map'`；
  * 3. **一类会把 `docs:build` 打挂的 markdown 写法**：行内代码里用**转义反引号**（`\``）。
  *    markdown-it 的代码跨度规则不把转义反引号当分隔符 ⇒ 该 span 不闭合 ⇒ 后面的裸 `<...>`
  *    会被当作 HTML/Vue 标签，最后报 `Element is missing end tag`，而且**报错位置指向别处**
@@ -93,7 +93,7 @@ describe("#74 文档站类型面：对着发布声明，而不是组件库源码
     ]);
   });
 
-  it("没有任何一条映射指回组件库 src（那会让库内部的 BMap 全局进入 docs 的 types 环境）", () => {
+  it("没有任何一条映射指回组件库 src（那会让库内部的 Map 全局进入 docs 的 types 环境）", () => {
     for (const [specifier, targets] of Object.entries(tsconfig.compilerOptions.paths)) {
       for (const target of targets) {
         expect(target, `${specifier} → ${target}`).not.toContain("packages/bmap-vue/src");
