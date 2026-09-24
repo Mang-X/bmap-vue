@@ -69,15 +69,18 @@ export function controlFailures(report: ProbeReport): string[] {
   }
   const readyAtCall = byId.get("control.readyAtCall");
   const missingAtCall = readyAtCall?.missing;
-  const missingOk =
-    missingAtCall === undefined ||
-    (Array.isArray(missingAtCall) && missingAtCall.length === 0);
-  if (!readyAtCall || readyAtCall.ready !== true || !missingOk) {
-    const missingNote = Array.isArray(missingAtCall) && missingAtCall.length > 0
-      ? `（缺 ${missingAtCall.join(", ")}）`
-      : "";
+  // 三态闭合：`missing` 字段本身必须在场（`ready=true` 却没有 `missing` 是「没测到」，
+  // 不是「测到了且齐全」）——与文件头「presence 先于取值」同口径。
+  const missingPresent = Array.isArray(missingAtCall);
+  const missingOk = missingPresent && missingAtCall!.length === 0;
+  if (!readyAtCall || readyAtCall.ready !== true || !missingPresent || !missingOk) {
+    const missingNote = missingPresent && missingAtCall!.length > 0
+      ? `（缺 ${missingAtCall!.join(", ")}）`
+      : !missingPresent
+        ? "（missing 字段缺失——无法确认 Map/Point/Marker 是否齐全）"
+        : "";
     failures.push(
-      `control.readyAtCall 不是 true（得到 ${String(readyAtCall?.ready)}）${missingNote}——` +
+      `control.readyAtCall 不是 true 或 missing 未就绪（得到 ready=${String(readyAtCall?.ready)}）${missingNote}——` +
         ` 首次 callback 当下 JSAPI_V4_REQUIRED_MEMBERS（Map/Point/Marker）未齐，` +
         `assertReady 会在 succeed() 当场失败；「最终 ready」不能代替它`,
     );
@@ -150,9 +153,9 @@ export function verdicts(report: ProbeReport): string[] {
         `首次调用时身份仍是我们的=${bool(same)}；` +
         `首次 callback 当下 readyAtCall=${bool(readyAtCall)}${missingNote}；` +
         `最终 bmapReady=${bool(readyFinal)} ⇒ ` +
-        (count === null || readyAtCall === null || same === null
+        (count === null || readyAtCall === null || same === null || missingAtCall === null
           ? UNKNOWN
-          : count >= 1 && same === true && readyAtCall === true
+          : count >= 1 && same === true && readyAtCall === true && missingAtCall.length === 0
             ? "**callback=NAME 契约成立**（官方在就绪时调用了我们安装的全局函数，" +
               "且 **首次 callback 当下** Map/Point/Marker 齐全——与 SharedLoadTask.succeed " +
               "的同步 assertReady 同拍）"

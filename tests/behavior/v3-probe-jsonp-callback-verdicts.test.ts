@@ -400,6 +400,20 @@ describe("[#128 F-2] JSONP 回调查针判定层的三态", () => {
     expect(inconsistentMissing.join("\n"), "ready=true 却缺成员不得过控件").toContain("control.readyAtCall");
     expect(inconsistentMissing.join("\n")).toContain("Point");
 
+    // ready=true 但 missing 字段整体缺失（三态：没测到 ≠ 测到了且齐全）⇒ 控件失败
+    const missingFieldAbsent = controlFailures(
+      report(
+        COMPLETE.map((r) =>
+          r.id === "control.readyAtCall" ? { id: r.id, threw: false, ready: true } : r,
+        ),
+      ),
+    );
+    expect(
+      missingFieldAbsent.join("\n"),
+      "ready=true 却没有 missing 字段不得过控件",
+    ).toContain("control.readyAtCall");
+    expect(missingFieldAbsent.join("\n")).toContain("missing");
+
     const finalOnlyFalse = controlFailures(
       report(COMPLETE.map((r) => (r.id === "control.bmapReady" ? { ...r, ready: false } : r))),
     );
@@ -430,6 +444,15 @@ describe("[#128 F-2] JSONP 回调查针判定层的三态", () => {
     expect(lineOf(lines, "[官方新增全局")).toContain("**有新增全局**");
     const officialKeys = COMPLETE.find((r) => r.id === "globals.officialCreated")?.keys ?? [];
     expect(officialKeys.some((key) => key.startsWith("__bmap_v4_custom_"))).toBe(false);
+  });
+
+  it("ready=true 但 missing 字段缺失 ⇒ 回调契约第三态（不得读成「齐全」）", () => {
+    const readings = COMPLETE.map((r) =>
+      r.id === "control.readyAtCall" ? { id: r.id, threw: false, ready: true } : r,
+    );
+    const line = lineOf(verdicts(report(readings)), "[回调契约");
+    expect(line, "missing 缺失必须第三态").toContain("无法判定");
+    expect(line, "不得读成契约成立").not.toContain("**callback=NAME 契约成立**");
   });
 });
 
