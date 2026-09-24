@@ -412,13 +412,11 @@ export function useInfoWindow<Props extends InfoWindowProps>(
 
       watch: ({ scope }) => {
         // `open` / `show` / `position` 合成一个 watch 源
-        scope.add(
-          watch(
-            () =>
-              `${resolveInfoWindowOpenIntent(props) ? 1 : 0}|${positionKeyOf(props.position)}`,
-            () => onIntentChanged(),
-            { immediate: true },
-          ),
+        watch(
+          () =>
+            `${resolveInfoWindowOpenIntent(props) ? 1 : 0}|${positionKeyOf(props.position)}`,
+          () => onIntentChanged(),
+          { immediate: true },
         );
         for (const [prop, update] of Object.entries(INFO_WINDOW_FIELDS) as Array<
           [string, InfoWindowFieldUpdate]
@@ -428,20 +426,16 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           const key = declared === undefined ? prop : declared;
           if (key === null) continue;
           if (update === "recreate") {
-            scope.add(
-              watch(
-                () => stableKeyOf((props as Record<string, unknown>)[prop]),
-                () => rebuild(),
-              ),
+            watch(
+              () => stableKeyOf((props as Record<string, unknown>)[prop]),
+              () => rebuild(),
             );
             continue;
           }
-          scope.add(
-            watch(
-              // 源用稳定序列化：内联对象按内容判等
-              () => stableKeyOf((props as Record<string, unknown>)[prop]),
-              () => void enqueueOptions({ [key]: (props as Record<string, unknown>)[prop] }),
-            ),
+          watch(
+            // 源用稳定序列化：内联对象按内容判等
+            () => stableKeyOf((props as Record<string, unknown>)[prop]),
+            () => void enqueueOptions({ [key]: (props as Record<string, unknown>)[prop] }),
           );
         }
       },

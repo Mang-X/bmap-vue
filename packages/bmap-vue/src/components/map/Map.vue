@@ -1217,7 +1217,6 @@ const context: MapContext = {
   handle: map as unknown as MapContext["handle"],
   error: error as unknown as MapContext["error"],
   resources: runtime.resources,
-  scope: runtime.resources,
   events: runtime.events,
   scheduler: runtime.scheduler,
   overlays: runtime.overlays,

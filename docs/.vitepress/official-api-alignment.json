@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 394,
+  "oursPublicCount": 387,
   "uiKitCount": 55,
   "matchedCount": 110,
   "officialOnlyCount": 292,
-  "oursOnlyCount": 284,
+  "oursOnlyCount": 277,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2043,11 +2043,6 @@
       "oursEntry": "."
     },
     {
-      "name": "useServiceTask",
-      "surface": "hook",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "useViewAnimation",
       "surface": "hook",
       "oursEntry": "./composables"
@@ -2159,11 +2154,6 @@
     },
     {
       "name": "DataComponentProps",
-      "surface": "type",
-      "oursEntry": "."
-    },
-    {
-      "name": "DisposeContext",
       "surface": "type",
       "oursEntry": "."
     },
@@ -2398,11 +2388,6 @@
       "oursEntry": "."
     },
     {
-      "name": "ServiceInvokeContext",
-      "surface": "type",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "ServiceResult",
       "surface": "type",
       "oursEntry": "."
@@ -2441,11 +2426,6 @@
       "name": "UseOverlaySpecResult",
       "surface": "type",
       "oursEntry": "."
-    },
-    {
-      "name": "UseServiceTaskOptions",
-      "surface": "type",
-      "oursEntry": "./composables"
     },
     {
       "name": "UseViewAnimationOptions",
@@ -3268,11 +3248,6 @@
       "oursEntry": "."
     },
     {
-      "name": "ServiceTask",
-      "surface": "other",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "SizeLike",
       "surface": "other",
       "oursEntry": "."
@@ -3286,16 +3261,6 @@
       "name": "StyleExpression",
       "surface": "other",
       "oursEntry": "."
-    },
-    {
-      "name": "SupersedeMode",
-      "surface": "other",
-      "oursEntry": "./composables"
-    },
-    {
-      "name": "SupersedePolicy",
-      "surface": "other",
-      "oursEntry": "./composables"
     },
     {
       "name": "targetContextKey",

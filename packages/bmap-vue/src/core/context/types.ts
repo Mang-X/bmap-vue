@@ -44,8 +44,6 @@ export interface MapRuntimeShape {
   readonly handle?: ShallowRef<MapHandle | null>;
   readonly error: ShallowRef<unknown>;
   readonly resources: ResourceScope;
-  /** Spec 别名:scope === resources */
-  readonly scope?: ResourceScope;
   readonly events: MapEventBus;
   readonly scheduler: FrameScheduler;
 

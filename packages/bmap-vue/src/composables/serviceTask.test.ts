@@ -1,9 +1,14 @@
 /**
- * useServiceTask —— 服务类 composable 的统一状态机（M7-SERVICE-CORE / #38）
+ * serviceTask —— 服务类 composable 的两档任务（M7-SERVICE-CORE / #38，#139 分层）
  *
- * 六个 service composable 共用这一个原语，因此它的契约要**直接**被钉住（而不是只靠上层用例
- * 间接覆盖）：能力门（不发请求）、实例缓存与重建、投影只作用于 data、`whenReady` 失败归一、
- * scope dispose 时释放实例、取消之后迟到回包不回写。
+ * 两档的契约都要**直接**被钉住（而不是只靠上层用例间接覆盖）：
+ *
+ * - **共有**（本文件上半）：能力门（不发请求）、实例按 Client 缓存、投影只作用于 data、
+ *   `whenReady` 失败归一、scope dispose 后状态冻结、取消之后迟到回包不回写；
+ * - **简单档特有**：`useSimpleServiceTask` **不接受** `release` / `supersede` / `refuseMessage`，
+ *   也**不暴露** `invalidateService`——官方没有为那 7 个服务提供实例销毁入口，携带这些状态
+ *   就是无消费者的死状态（#139 的验收项）；
+ * - **独占档特有**（下半）：释放失败重试 / `recreate` / `refuse` / 「等 `whenReady` 期间也算忙」。
  *
  * 用例里的「网络语义」用**真实的** `createServiceCall` 适配器，而不是手搭 Promise——
  * 这样断言的是真会跑的那份超时 / 先到者胜实现。
@@ -14,8 +19,9 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { mapContextKey, type MapContext } from "../core/context/types";
 import { createServiceCall } from "../driver/normalize/serviceCall";
 import { BMapError } from "../core/errors/BMapError";
-import type { ServiceCall, ServiceCallSettle } from "../driver/types/services";
-import { useServiceTask, type ServiceTask } from "./useServiceTask";
+import type { ServiceCallSettle } from "../driver/types/services";
+import { useSimpleServiceTask, useExclusiveServiceTask } from "./serviceTask";
+import type { SimpleServiceTask, ExclusiveServiceTask } from "./serviceTask";
 
 interface StubHandle {
   readonly serial: number;
@@ -47,7 +53,7 @@ interface StubServiceOptions {
   releaseFails?: number;
   /** `whenReady()` 挂起，直到调用 `service.releaseReady()`（验证「已开始但未拿到 ServiceCall」的窗口） */
   deferredReady?: boolean;
-  /** 取代策略（透传给 `useServiceTask`） */
+  /** 取代策略（只在独占档给） */
   supersede?: "cancel" | "recreate" | (() => "cancel" | "recreate" | "refuse");
 }
 
@@ -106,30 +112,30 @@ function taskOptions(service: StubService, options: StubServiceOptions = {}) {
         else settle.success(index * 10, 0);
       }, { label: "stub" });
     },
-    release: () => {
-      stats.releaseAttempts += 1;
-      if (stats.releaseAttempts <= (options.releaseFails ?? 0)) {
-        throw new Error(`release failed (attempt ${stats.releaseAttempts})`);
-      }
-      stats.released += 1;
-    },
-    ...(options.supersede ? { supersede: options.supersede } : {}),
   };
 }
 
-/**
- * 在**有 effect scope** 的组件里建任务（`onScopeDispose` 需要作用域），并把任务暴露给用例。
- * 返回的 `wrapper.unmount()` 就是「组件卸载」。
- */
+/** 独占档才有的 `release`：记录尝试次数，前 N 次抛错。 */
+function releaseOption(service: StubService, options: StubServiceOptions) {
+  return () => {
+    service.stats.releaseAttempts += 1;
+    if (service.stats.releaseAttempts <= (options.releaseFails ?? 0)) {
+      throw new Error(`release failed (attempt ${service.stats.releaseAttempts})`);
+    }
+    service.stats.released += 1;
+  };
+}
+
+/** 在有 effect scope 的组件里建**简单档**任务（`onScopeDispose` 需要作用域）。 */
 function mountTask<TResult = number>(
   service: StubService,
   options: StubServiceOptions = {},
   project?: (value: number) => TResult,
-): { wrapper: VueWrapper; task: ServiceTask<TResult, [], StubHandle> } {
-  let exposed: ServiceTask<TResult, [], StubHandle> | null = null;
+): { wrapper: VueWrapper; task: SimpleServiceTask<TResult, []> } {
+  let exposed: SimpleServiceTask<TResult, []> | null = null;
   const Child = defineComponent({
     setup() {
-      exposed = useServiceTask<number, StubHandle, [], TResult>(service.ctx, {
+      exposed = useSimpleServiceTask<number, StubHandle, [], TResult>(service.ctx, {
         ...taskOptions(service, options),
         ...(project ? { project } : {}),
       });
@@ -148,8 +154,36 @@ function mountTask<TResult = number>(
   return { wrapper, task: exposed };
 }
 
-describe("useServiceTask", () => {
-  it("实例按 Client 缓存：重复调用只创建一次；invalidateService 之后重建", async () => {
+/** 在有 effect scope 的组件里建**独占档**任务。 */
+function mountExclusiveTask<TResult = number>(
+  service: StubService,
+  options: StubServiceOptions = {},
+): { wrapper: VueWrapper; task: ExclusiveServiceTask<TResult, []> } {
+  let exposed: ExclusiveServiceTask<TResult, []> | null = null;
+  const Child = defineComponent({
+    setup() {
+      exposed = useExclusiveServiceTask<number, StubHandle, [], TResult>(service.ctx, {
+        ...taskOptions(service, options),
+        release: releaseOption(service, options),
+        ...(options.supersede ? { supersede: options.supersede } : {}),
+      });
+      return () => h("div");
+    },
+  });
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        provide(mapContextKey, service.ctx);
+        return () => h(Child);
+      },
+    }),
+  );
+  if (!exposed) throw new Error("任务未建立");
+  return { wrapper, task: exposed };
+}
+
+describe("useSimpleServiceTask（简单档：官方没有实例释放入口的那 7 个服务）", () => {
+  it("实例按 Client 缓存：重复调用只创建一次", async () => {
     const service = makeService();
     const { wrapper, task } = mountTask(service);
     await flushPromises();
@@ -159,14 +193,35 @@ describe("useServiceTask", () => {
     expect(service.stats.created, "同一 Client 只创建一个实例").toBe(1);
     expect(service.stats.invokes).toBe(2);
 
-    task.invalidateService();
-    expect(service.stats.released, "丢弃实例时先释放它").toBe(1);
-    await task.execute();
-    expect(service.stats.created).toBe(2);
+    wrapper.unmount();
+  });
+
+  it("不暴露 invalidateService：官方没有销毁入口，没有「丢弃实例」这个动作", async () => {
+    const service = makeService();
+    const { wrapper, task } = mountTask(service);
+    await flushPromises();
+
+    // #139 的验收项落在**公开面**上：简单任务没有这个成员，调用方想传也传不进来。
+    expect(Object.keys(task)).not.toContain("invalidateService");
+    // @ts-expect-error 简单档刻意不接受 `release`（官方无销毁入口）
+    void useSimpleServiceTask(service.ctx, { ...taskOptions(service), release: () => {} });
 
     wrapper.unmount();
+  });
+
+  it("卸载时不调用任何释放入口（简单档没有 release 回调可调）", async () => {
+    const service = makeService();
+    const { wrapper, task } = mountTask(service);
     await flushPromises();
-    expect(service.stats.released, "scope dispose 时释放缓存实例").toBe(2);
+
+    await task.execute();
+    expect(service.stats.created).toBe(1);
+    wrapper.unmount();
+    await flushPromises();
+    expect(
+      service.stats.releaseAttempts,
+      "官方没有释放入口 ⇒ 释放队列/重试机制在简单档是死状态",
+    ).toBe(0);
   });
 
   it("能力不支持 ⇒ unsupported，且不创建实例、不发起调用", async () => {
@@ -283,14 +338,30 @@ describe("useServiceTask", () => {
     expect(task.data.value).toBeNull();
     expect(task.status.value).toBe("loading");
     expect((await running).status).toBe("canceled");
-    expect(service.stats.released, "卸载时释放实例").toBe(1);
   });
 });
 
-describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", () => {
+describe("useExclusiveServiceTask：实例缓存、释放失败与取代策略（PR #89 评审 P2）", () => {
+  it("invalidateService 丢弃实例（释放旧实例），下一次调用重建", async () => {
+    const service = makeService();
+    const { wrapper, task } = mountExclusiveTask(service);
+    await flushPromises();
+
+    await task.execute();
+    expect(service.stats.created).toBe(1);
+    task.invalidateService();
+    expect(service.stats.released, "丢弃实例时先释放它").toBe(1);
+    await task.execute();
+    expect(service.stats.created).toBe(2);
+
+    wrapper.unmount();
+    await flushPromises();
+    expect(service.stats.released, "scope dispose 时释放缓存实例").toBe(2);
+  });
+
   it("释放失败不丢引用：同一次释放内重试，成功后销账（不静默泄漏）", async () => {
     const service = makeService();
-    const { wrapper, task } = mountTask(service, { releaseFails: 1 });
+    const { wrapper, task } = mountExclusiveTask(service, { releaseFails: 1 });
     await flushPromises();
 
     await task.execute();
@@ -303,7 +374,7 @@ describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", (
 
   it("释放持续失败：引用保留到下一次释放（scope 卸载时再试），不抛错", async () => {
     const service = makeService();
-    const { wrapper, task } = mountTask(service, { releaseFails: 2 });
+    const { wrapper, task } = mountExclusiveTask(service, { releaseFails: 2 });
     await flushPromises();
 
     await task.execute();
@@ -324,7 +395,10 @@ describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", (
       pending.push((value) => settle.success(value, index));
     };
     const service = makeService();
-    const { wrapper, task } = mountTask(service, { settle: settleHook, supersede: "recreate" });
+    const { wrapper, task } = mountExclusiveTask(service, {
+      settle: settleHook,
+      supersede: "recreate",
+    });
     await flushPromises();
 
     const first = task.execute();
@@ -349,12 +423,8 @@ describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", (
 
   it('supersede="recreate"：cancel 之后实例被标记过期，下一次调用重建', async () => {
     const pending: Array<(value: number) => void> = [];
-    const service = makeService({
-      settle: (settle) => {
-        pending.push((value) => settle.success(value, 0));
-      },
-    });
-    const { wrapper, task } = mountTask(service, {
+    const service = makeService();
+    const { wrapper, task } = mountExclusiveTask(service, {
       settle: (settle) => {
         pending.push((value) => settle.success(value, 0));
       },
@@ -384,12 +454,8 @@ describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", (
 
   it('supersede 返回 "refuse"：本次调用直接 failed，不发起请求、也不作废在飞调用', async () => {
     const pending: Array<(value: number) => void> = [];
-    const service = makeService({
-      settle: (settle) => {
-        pending.push((value) => settle.success(value, 0));
-      },
-    });
-    const { wrapper, task } = mountTask(service, {
+    const service = makeService();
+    const { wrapper, task } = mountExclusiveTask(service, {
       settle: (settle) => {
         pending.push((value) => settle.success(value, 0));
       },
@@ -413,10 +479,10 @@ describe("useServiceTask：释放失败与取代策略（PR #89 评审 P2）", (
   });
 });
 
-describe("useServiceTask：取代判定必须覆盖「还没拿到 ServiceCall」的窗口（PR #89 复审 P1）", () => {
+describe("useExclusiveServiceTask：取代判定必须覆盖「还没拿到 ServiceCall」的窗口（PR #89 复审 P1）", () => {
   it('supersede="refuse"：等 whenReady 期间的调用也要算「忙」，不得作废它', async () => {
     const service = makeService({ deferredReady: true });
-    const { wrapper, task } = mountTask(service, {
+    const { wrapper, task } = mountExclusiveTask(service, {
       deferredReady: true,
       supersede: () => "refuse",
     });

@@ -73,7 +73,6 @@ describe("MapRuntime", () => {
     expect(ctx.map).toEqual(createMap.mock.results[0].value);
     expect(rt.map.value).toBeTruthy();
     expect(rt.handle.value).toBe(rt.map.value);
-    expect(rt.scope).toBe(rt.resources);
   });
 
   it("whenReady returns cached context when already ready", async () => {

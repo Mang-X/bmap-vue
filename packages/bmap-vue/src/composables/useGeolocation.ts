@@ -10,7 +10,7 @@
 import type { ServiceHandle } from "../driver/types/handles";
 import type { GeolocationAddressInfo, GeolocationFix } from "../driver/types/services";
 import { resolveMapContext } from "./resolveMapContext";
-import { useServiceTask, type ServiceInvokeContext } from "./useServiceTask";
+import { useSimpleServiceTask, type ServiceInvokeContext } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 
 export interface BMapGeolocationOptions {
@@ -34,7 +34,7 @@ export interface BMapGeoResult {
 export function useGeolocation(options: BMapGeolocationOptions = {}, map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useServiceTask<
+  const task = useSimpleServiceTask<
     GeolocationFix,
     ServiceHandle<"service:geolocation">,
     [],

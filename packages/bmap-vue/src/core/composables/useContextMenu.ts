@@ -501,50 +501,42 @@ export function useContextMenu(
       },
       watch: ({ scope, replace, resource }) => {
         // 显隐 = 挂 / 不挂（**不是**弹层显隐，见模块注释）
-        scope.add(
-          watch(
-            () => readVisible(),
-            () => {
-              if (!resource()) return;
-              if (!readVisible()) {
-                detach();
-                return;
-              }
-              attachReportingErrors(resource());
-            },
-          ),
+        watch(
+          () => readVisible(),
+          () => {
+            if (!resource()) return;
+            if (!readVisible()) {
+              detach();
+              return;
+            }
+            attachReportingErrors(resource());
+          },
         );
         // target 变化：只做**资源所有权迁移**（先摘旧、再挂新）；不推断旧事件属于哪次迁移。
         // watch 源返回句柄对象本身 ⇒ Vue 按身份比较，重建出的新实例一定会被认出来。
-        scope.add(
-          watch(
-            () => (targetContext ? targetContext.target.value : null),
-            () => {
-              if (!resource()) return;
-              attachReportingErrors(resource());
-            },
-          ),
+        watch(
+          () => (targetContext ? targetContext.target.value : null),
+          () => {
+            if (!resource()) return;
+            attachReportingErrors(resource());
+          },
         );
         // 数据 API 变化：**无条件同步条目**（回调即使不进指纹也要换新），指纹不同才重建。
         // watch 源里做同步是刻意的：只换 callback 时指纹不变、回调不会被触发，只有「源每次求值都同步」
         // 才能让 `latestEntries` 跟上。
-        scope.add(
-          watch(
-            () => syncEntries(),
-            () => scheduleRebuild(replace, resource, () => scope.isDisposed),
-          ),
+        watch(
+          () => syncEntries(),
+          () => scheduleRebuild(replace, resource, () => scope.isDisposed),
         );
         // `width` 是 `MenuItemOptions.width`（**每项的构造期选项**，`ContextMenu` 实例上没有宽度
         // setter）：变化必须重建菜单。没有这一路就会变成「收了参数但忽略」——调用方改了 `width`
         // 什么都不发生，而那正是本库明确要避免的假支持。
-        scope.add(
-          watch(
-            () => props.width,
-            () => {
-              if (!resource()) return;
-              void replace();
-            },
-          ),
+        watch(
+          () => props.width,
+          () => {
+            if (!resource()) return;
+            void replace();
+          },
         );
         // 声明式 children 变化：宿主 DOM 的顺序要等本次 patch 结束才可读，因此排到 nextTick
         scope.add(

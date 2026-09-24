@@ -12,7 +12,7 @@ import { computed, type ComputedRef } from "vue";
 import type { ServiceHandle } from "../driver/types/handles";
 import type { BoundaryRings } from "../driver/types/services";
 import { resolveMapContext } from "./resolveMapContext";
-import { useServiceTask } from "./useServiceTask";
+import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 
 /** 官方边界点串数组（每项形如 `"lng,lat;lng,lat;…"`）。 */
@@ -21,7 +21,7 @@ export type AreaBoundary = string[];
 export function useAreaBoundary(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useServiceTask<
+  const task = useSimpleServiceTask<
     BoundaryRings,
     ServiceHandle<"service:boundary">,
     [string],

@@ -77,88 +77,74 @@ const { resource } = useOverlayResource<Marker3DProps, OverlayHandle>(
       on("remove", (e) => emit("remove", e));
       on("rightclick", (e) => emit("rightclick", e));
     },
-    createWatchers(getCtx, getResource, p, addDisposer) {
-      addDisposer(
-        watch(
-          () => p.position,
-          (pos) => {
-            const res = getResource();
+    createWatchers(getCtx, getResource, p) {
+      watch(
+        () => p.position,
+        (pos) => {
+          const res = getResource();
+          const ctx = getCtx();
+          if (!res || !ctx) return;
+          if (pos && typeof pos.lng === "number") ctx.client.driver.overlays.setPosition(res, pos);
+        },
+        { flush: "sync" },
+      );
+      watch(
+        () => p.height,
+        (h) => {
+          const r = getResource();
+          const ctx = getCtx();
+          if (r && ctx) ctx.client.driver.overlays.setOptions(r, { height: h });
+        },
+      );
+      watch(
+        () => p.fillColor,
+        (c) => {
+          const _v = c;
+          if (_v !== undefined) {
+            const x = getResource();
             const ctx = getCtx();
-            if (!res || !ctx) return;
-            if (pos && typeof pos.lng === "number") ctx.client.driver.overlays.setPosition(res, pos);
-          },
-          { flush: "sync" },
-        ),
+            if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillColor: _v });
+          }
+        },
       );
-      addDisposer(
-        watch(
-          () => p.height,
-          (h) => {
-            const r = getResource();
+      watch(
+        () => p.fillOpacity,
+        (o) => {
+          const _v = o;
+          if (_v !== undefined) {
+            const x = getResource();
             const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { height: h });
-          },
-        ),
+            if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillOpacity: _v });
+          }
+        },
       );
-      addDisposer(
-        watch(
-          () => p.fillColor,
-          (c) => {
-            const _v = c;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillColor: _v });
-            }
-          },
-        ),
+      watch(
+        () => p.icon,
+        (icon) => {
+          const res = getResource();
+          const ctx = getCtx();
+          if (res && ctx && icon) ctx.client.driver.overlays.setOptions(res, { icon });
+        },
       );
-      addDisposer(
-        watch(
-          () => p.fillOpacity,
-          (o) => {
-            const _v = o;
-            if (_v !== undefined) {
-              const x = getResource();
-              const ctx = getCtx();
-              if (x && ctx) ctx.client.driver.overlays.setOptions(x, { fillOpacity: _v });
-            }
-          },
-        ),
+      watch(
+        () => p.enableMassClear,
+        (en) => {
+          const r = getResource();
+          const ctx = getCtx();
+          if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
+        },
       );
-      addDisposer(
-        watch(
-          () => p.icon,
-          (icon) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (res && ctx && icon) ctx.client.driver.overlays.setOptions(res, { icon });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.enableMassClear,
-          (en) => {
-            const r = getResource();
-            const ctx = getCtx();
-            if (r && ctx) ctx.client.driver.overlays.setOptions(r, { enableMassClear: en });
-          },
-        ),
-      );
-      addDisposer(
-        watch(
-          () => p.visible,
-          (visible) => {
-            const res = getResource();
-            const ctx = getCtx();
-            if (!res || !ctx) return;
-            const overlays = ctx.client.driver.overlays;
-            const target = { kind: "map" as const, handle: ctx.map };
-            if (visible) overlays.add(target, res);
-            else overlays.remove(target, res);
-          },
-        ),
+      watch(
+        () => p.visible,
+        (visible) => {
+          const res = getResource();
+          const ctx = getCtx();
+          if (!res || !ctx) return;
+          const overlays = ctx.client.driver.overlays;
+          const target = { kind: "map" as const, handle: ctx.map };
+          if (visible) overlays.add(target, res);
+          else overlays.remove(target, res);
+        },
       );
     },
     remove: (res, ctx) => removeOverlay(res, ctx),

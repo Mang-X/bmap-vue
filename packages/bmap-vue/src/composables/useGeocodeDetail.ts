@@ -15,7 +15,7 @@ import type {
   ServiceErrorInfo,
 } from "../driver/types/services";
 import { resolveMapContext } from "./resolveMapContext";
-import { useServiceTask } from "./useServiceTask";
+import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf, runSequential, type BMapServiceStatus } from "../core/services";
 import type { GeoPoint } from "./useGeocoder";
 
@@ -76,7 +76,7 @@ function toDetail(address: GeocodedAddress, requested: GeoPoint): GeocodeDetailR
 export function useGeocodeDetail(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useServiceTask<
+  const task = useSimpleServiceTask<
     GeocodedAddress,
     ServiceHandle<"service:geocoder">,
     [GeoPoint],

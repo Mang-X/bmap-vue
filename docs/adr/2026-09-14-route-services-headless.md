@@ -70,7 +70,9 @@ interface RouteEndpointPoi { uid: string; point: Point; name?: string }
 - Driver 侧与 `LocalSearch` **共用同一份记账**（`activeOperations` / `supersededOperations` /
   `invokeSlotOperation` / `operationAdmissionFailure`）：一个实例同一时刻只有一个未结算操作，
   并发**显式拒绝**，取消 / 超时之后该实例不再接受新检索；
-- composable 侧 `supersede: "recreate"`：新检索取代在飞检索时**换新实例**，因此「快速重复检索」
+- composable 侧 `supersede: "recreate"`（**#139 后**：该策略只存在于**独占档**的实例通道
+  `core/services/instanceChannel.ts` 里，因为四个路线服务**有** `disposeRoute`；见 ADR
+  `2026-09-24-service-task-and-resource-scope-split.md`）：新检索取代在飞检索时**换新实例**，因此「快速重复检索」
   的最新者胜是由实例身份保证的，不依赖回调到达顺序；
 - **不采纳**参考实现 `react-bmap` 的「每次请求 `setSearchCompleteCallback(cb)` + `requestId` 守卫」：
   它的归属来源是一个**可变的「最近一次回调」**（即到达顺序），而官方没有承诺那条通道的语义。

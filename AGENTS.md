@@ -25,8 +25,15 @@
 - `core`：loader/provider、context、lifecycle、runtime、events、errors 等底座。
 - `core/services`：**框架无关**的服务层底座（状态口径 `BMapServiceStatus`、请求序列守卫
   `createRequestGuard`、顺序批处理 `runSequential`、归一化调用面的收窄点 `jsapiV4ServicesOf`）。
-  Vue 侧的绑定是 `composables/useServiceTask.ts`（能力门 / 实例缓存 / 只读 shallow refs /
-  过期保护）——七个 service composable 共用它，**不要**再各写一套 Promise + 定时器。
+  任务内核是 `core/services/serviceTaskCore.ts`（**框架无关**，只有状态口径：能力门 / 实例缓存 /
+  只读状态 / 过期保护），实例所有权交给 `core/services/instanceChannel.ts` 的两种通道。
+  Vue 侧的绑定是 `composables/serviceTask.ts`，分两档（#139）：
+  **简单档** `useSimpleServiceTask`（Geocoder / Convertor / Boundary / Geolocation / LocalCity /
+  GeocodeDetail / IpLocation —— 官方**没有**实例销毁入口，走**无状态**通道，**不暴露**
+  `invalidateService`）与**独占档** `useExclusiveServiceTask`（LocalSearch + 四个路线服务 ——
+  官方**有** `disposeLocalSearch` / `disposeRoute`，走有状态通道 + `invalidateService`）。
+  **分档判据是「该服务的 SDK 实例有没有公开的释放入口」**，不是「哪个服务看起来复杂」。
+  两档共用同一个内核，**不要**再各写一套 Promise + 定时器；任务内核一律**不**进公共出口。
 - `components`、`composables`：面向使用者的 Vue 组件与 hooks。
 - `plugins`、`resolver`、`advanced`：插件适配、按需解析、raw SDK 逃生口。
 - `integrations`：对接**官方包**的薄封装（当前只有 `integrations/ui-kit` → `./ui-kit` 子入口）。
@@ -46,7 +53,7 @@
   两者的区分是调用方能不能「重试」的依据，不要合并。
 - **回调归属不许按到达顺序猜**：官方对 JSONP 风格的服务只承诺「单次调用内部的顺序」，**没有**承诺
   多次请求之间的回调顺序（`LocalSearch` 的 4.0.4 声明里也没有）。因此归属只能靠**可验证的身份**：
-  `LocalSearch` 用「**一个实例一个未结算操作**」+ 调用方侧「取代即换新实例」（`useServiceTask`
+  `LocalSearch` 用「**一个实例一个未结算操作**」+ 调用方侧「取代即换新实例」（独占档的实例通道）
   的 `supersede` 策略）。没有身份可依据时**不建推断层**：`Autocomplete` 因此**没有**归一化调用面
   （#104 删掉了按 keyword/FIFO 猜回包的 `suggest()`），构造时传 `onSearchComplete` 原样转发，
   「这条结果属于哪次输入」由持有输入框的一方判断。
