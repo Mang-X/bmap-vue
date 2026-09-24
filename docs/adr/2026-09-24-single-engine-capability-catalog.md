@@ -90,8 +90,8 @@ Evidence-before-abstraction：**能否为这个维度写出一条会变红的用
 
 ## 非目标
 
-- 不动 `CapabilityReason` 其余取值（`not-implemented` / `upstream-missing` 一类真实依据）、
-  `CapabilityFamily` 与 `CAPABILITY_FAMILIES`（有真实消费者，#104 R10 已定过）。
+- 不动 `CapabilityReason` 其余取值（`raw-member-missing` / `status-unsupported` / `overridden`
+  各有真实判定依据）、`CapabilityFamily` 与 `CAPABILITY_FAMILIES`（有真实消费者，#104 R10 已定过）。
 - 不新增引擎、不建引擎抽象、不引入 per-engine 矩阵机制。
 - 不改 `BMapEngine` 类型与任何引擎标识的运行时来源。
 - 不动能力 id 的集合（本票前后都是 63 条）。
