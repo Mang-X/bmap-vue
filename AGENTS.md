@@ -95,6 +95,7 @@ raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**
 | `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:package`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 | `pnpm generate:api-diff:check` | 公开 API 对照表（vs 官方 React 参考）无漂移 |
+| `pnpm generate:overlay-emits:check` | 覆盖物 `defineEmits` 静态契约（`core/overlays/overlayEventEmits.generated.ts`）无漂移 |
 
 类型边界 augmentation 位于 `src/driver/jsapi-v4/augmentations/`，治理规则与元数据模板见该目录 `README.md`；
 每个文件必须带 `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` 元数据，禁止 `any`。
@@ -102,6 +103,12 @@ raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**
 Capability Catalog 是能力清单的单一事实源（`src/driver/capability/catalog.ts`），
 覆盖 Map / Overlay / Layer / Service / Panorama，用 `status`（`native` / `extended` / `experimental` / `unsupported`）与 `runtimeOnly` 表达能力语义；
 能力矩阵由 `pnpm generate:capability-matrix` 生成，禁止手工编辑。
+
+覆盖物的事件**静态声明**同样是生成物（`src/core/overlays/overlayEventEmits.generated.ts`），
+事实源四处：`core/overlays/overlayEventCatalog.ts` 的矩阵、`core/deprecations/aliases.ts` 的事件别名表，
+以及 `scripts/generate-overlay-emits.mts` 内的非 SDK 事件表（附**派发点**，逐条回源码核对）
+与显式排除表（矩阵里有、但本库无派发点的键）。SFC 一律 `defineEmits<MarkerEmits>()` 消费它，
+**禁止**在组件里手抄键名——`@vue/compiler-sfc` 解析不了 mapped type，键名只能由生成器写死一次。
 
 ## Official-first 约束
 

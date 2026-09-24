@@ -46,8 +46,10 @@ import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useContextMenu } from "../../core/composables/useContextMenu";
 import { useRequiredMapContext } from "../../core/context/inject";
 import type { BMapError } from "../../core/errors/BMapError";
-import type { OverlayPartialPointerEvent } from "../../driver/types/events";
-import type { ContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）；`select` 的载荷
+// 仍是本库类型（不是 SDK 事件），生成器从非 SDK 事件表里带出来。
+import type { ContextMenuEmits } from "../../core/overlays/overlayEventEmits.generated";
+import type { ContextMenuProps } from "../../types/components";
 
 export type { ContextMenuProps };
 
@@ -61,14 +63,7 @@ const props = withDefaults(defineProps<ContextMenuProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  /** SDK 事件：菜单真正展开（`ContextMenuEventMap`）。 */
-  open: [event: OverlayPartialPointerEvent];
-  /** SDK 事件：菜单关闭（选中某项、`hide()`、点击别处）。 */
-  close: [event: OverlayPartialPointerEvent];
-  /** 本库事件（**不是** SDK 事件）：某一项被选中，载荷见 `ContextMenuSelectPayload`。 */
-  select: [payload: ContextMenuSelectPayload];
-}>();
+const emit = defineEmits<ContextMenuEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 const ctx = useRequiredMapContext();

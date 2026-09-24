@@ -114,6 +114,10 @@ import { createFakeV4Harness, type FakeV4Harness, type FakeBMapV4 } from "../../
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const TYPES_FILE = resolve(REPO_ROOT, "packages/bmap-vue/src/types/components.ts");
 const OVERLAY_DIR = resolve(REPO_ROOT, "packages/bmap-vue/src/components/overlays");
+const GENERATED_EMITS_FILE = resolve(
+  REPO_ROOT,
+  "packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts",
+);
 const POINT = { lng: 116.4, lat: 39.9 };
 
 type AnyRecord = Record<string, any>;
@@ -686,7 +690,19 @@ describe("#31 声明面：fields 覆盖 props，且分类与描述符逐项一�
 
 /* ---------------------------------------------------------- 事件面 ↔ SFC emits */
 
-/** 载荷档 → 公共载荷类型名（`driver/types/events.ts`）。 */
+/**
+ * #138：SFC 的 `defineEmits` 不再手抄键名，而是 `defineEmits<MarkerEmits>()` 直接消费
+ * `core/overlays/overlayEventEmits.generated.ts`（由 `scripts/generate-overlay-emits.mts`
+ * 从事件矩阵 + 弃用别名表 + 非 SDK 事件表 join 出来）。
+ *
+ * 因此这一段不再是「刮 SFC 源码比对矩阵」——生成器已经做了 join，测试改查**两件类型层看不到的事**：
+ *
+ * 1. 生成器自带的 SFC 核对（`assertSfcUsesGenerated`：每个 kind 的 SFC 真的用了对应的生成接口）
+ *    加上 `pnpm generate:overlay-emits:check`（产物 == 三处事实源的 join 结果）；本文件逐 kind
+ *    再点一次「键集 = 矩阵 ∪ 别名 ∪ 非 SDK 表」，让 `EMITS_CASES` 继续是那张人可读的对照表；
+ * 2. `overlayEmitsOf` / `overlayEmitsPayloadOf` 这两个**测试侧的探针**——它们读的是生成器输入的
+ *    同一张矩阵，但换成 `defineEmits` 的键序与载荷口径（SFC 实际绑定的就是这份 interface）。
+ */
 const PAYLOAD_TYPE_BY_KIND: Record<string, string> = {
   pointer: "OverlayPointerEvent",
   "partial-pointer": "OverlayPartialPointerEvent",
@@ -711,38 +727,118 @@ const EMITS_CASES: readonly EmitsCase[] = [
   { file: "Prism.vue", kind: "prism" },
   { file: "GroundOverlay.vue", kind: "ground-overlay" },
   { file: "CustomOverlay.vue", kind: "custom-overlay" },
+  { file: "ContextMenu.vue", kind: "context-menu", extra: ["select"] },
+  { file: "InfoWindow.vue", kind: "info-window", extra: ["update:open", "update:show", "rebuild", "destroy"] },
 ];
 
-/** 解析 SFC 的 `defineEmits<{ … }>()` 块：键 + 载荷注解。 */
-function readEmits(file: string): Map<string, string> {
-  const source = readFileSync(resolve(OVERLAY_DIR, file), "utf8");
-  const start = source.indexOf("defineEmits<{");
-  if (start < 0) throw new Error(`${file} 里找不到 defineEmits<{…}>`);
-  const body = source.slice(start, source.indexOf("}>()", start));
-  const entries = new Map<string, string>();
-  for (const match of body.matchAll(/^\s{2}(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:\s*\[([^\]]*)\]/gm)) {
-    const name = match[1] ?? match[2] ?? match[3]!;
-    const annotation = match[4]!.trim();
-    const type = /:\s*([A-Za-z_$][\w$]*)/.exec(annotation)?.[1] ?? "";
-    entries.set(name, type);
-  }
-  // 解析守卫：下界取 3（当前最小的事件面是 `CustomOverlayEventMap` 的 3 个）；解析失效时会掉到 0
-  expect(entries.size, `${file} 的 defineEmits 解析结果为空`).toBeGreaterThanOrEqual(3);
-  return entries;
+/**
+ * 该 kind 的 SFC 实际绑定的键集（`defineEmits` 消费的那份生成 interface 的口径）。
+ *
+ * 与 `overlayEventsOf` 的差别只有一处，且是**已登记的显式限制**：`<InfoWindow>` 不转发官方
+ * `resize`（尺寸由 `width` / `height` prop 驱动重绘，官方事件在本库只被观察、不驱动状态，
+ * 理由见 `core/composables/useInfoWindow.ts` 的 `FORWARDED_SDK_EVENTS`）。这里按真实绑定面排除它，
+ * 不是悄悄少一个。
+ */
+function overlayEmitsOf(kind: OverlayKind): readonly string[] {
+  const excluded = kind === "info-window" ? new Set(["resize"]) : new Set<string>();
+  return overlayEventsOf(kind)
+    .filter((event) => !excluded.has(event.vue))
+    .map((event) => event.vue);
 }
 
-describe("#31 SFC emits ↔ 事件矩阵", () => {
-  it.each(EMITS_CASES)("$file：键集 = 矩阵 ∪ 显式额外项", (testCase) => {
-    const emits = readEmits(testCase.file);
-    const expected = [
-      ...overlayEventsOf(testCase.kind).map((event) => event.vue),
-      ...(testCase.extra ?? []),
-    ];
-    expect([...emits.keys()].sort()).toEqual([...expected].sort());
+/**
+ * `<InfoWindow>` 原样转发（不经归一化）的那几个事件——它们的载荷**不按矩阵的档**声明，
+ * 覆写逐条登记在 `scripts/generate-overlay-emits.mts` 的 `PAYLOAD_OVERRIDES_BY_KIND`
+ * （理由：上游不给 `open` / `close` 事件对象；`clickclose` / `maximize` / `restore`
+ * 转发的是上游内部结构，调用方按 `unknown` 收）。这里的键集与那张覆写表逐条对齐。
+ */
+const INFO_WINDOW_FORWARDED_PAYLOADS: Record<string, string | undefined> = {
+  open: undefined,
+  close: undefined,
+  clickclose: "unknown",
+  maximize: "unknown",
+  restore: "unknown",
+};
 
-    // 额外项必须有出处：v-model 回写，或集中弃用层登记过的历史别名
+/**
+ * 该 (kind, 事件名) 是否走「原样转发、载荷不按矩阵档」这条路。
+ *
+ * **必须带 kind 一起判**：`open` / `close` 同时存在于 `context-menu`（那里走 `useContextMenu`
+ * 的矩阵绑定，载荷**确实**是 `OverlayPartialPointerEvent`）。只按事件名判会把 ContextMenu
+ * 误判成覆写——这正是这张表存在的意义：偏离是 per-(kind, name) 的，不是 per-name 的。
+ */
+function isForwardedOverride(kind: OverlayKind, vue: string): boolean {
+  return kind === "info-window" && Object.hasOwn(INFO_WINDOW_FORWARDED_PAYLOADS, vue);
+}
+
+/** kind → 生成 interface 名（与 `scripts/generate-overlay-emits.mts` 的 `emitsNameOf` 同一条规则）。 */
+function emitsTypeNameOf(kind: OverlayKind): string {
+  const pascal = kind
+    .split("-")
+    .map((part) => part[0]!.toUpperCase() + part.slice(1))
+    .join("");
+  return `${pascal}Emits`;
+}
+
+/**
+ * 解析磁盘上的生成物：`<Kind>Emits` → `{ 事件名: 载荷类型名 }`（无载荷记 `""`）。
+ *
+ * 这是本门禁能成立的**唯一**依据：`defineEmits` 的类型实参是纯类型，运行时读不到泛型实参，
+ * 因此「声明了哪些键、各自什么载荷」只能从生成物文本上读。生成器自身另有 SFC 核对
+ * （`assertSfcUsesGenerated`，查的是 SFC 引用了哪个 interface），两边合起来才是完整门禁。
+ */
+function readGeneratedEmits(): Record<string, Record<string, string>> {
+  const source = readFileSync(GENERATED_EMITS_FILE, "utf8");
+  const result: Record<string, Record<string, string>> = {};
+  for (const block of source.matchAll(/export interface (\w+Emits) \{([\s\S]*?)\n\}/g)) {
+    const entries: Record<string, string> = {};
+    for (const line of block[2]!.split("\n")) {
+      const match = /^ {2}("?[\w:$?-]+"?): \[(?:event: (.+))?\];$/.exec(line);
+      if (match) entries[match[1]!.replace(/^"|"$/g, "")] = match[2] ?? "";
+    }
+    expect(Object.keys(entries).length, `${block[1]} 解析到 0 个条目（格式变了？）`).toBeGreaterThan(0);
+    result[block[1]!] = entries;
+  }
+  return result;
+}
+
+describe("#31/#138 SFC emits ↔ 事件矩阵", () => {
+  it.each(EMITS_CASES)("$file：SFC 真的消费了生成的 <Kind>Emits（而不是又手抄一遍）", (testCase) => {
+    const source = readFileSync(resolve(OVERLAY_DIR, testCase.file), "utf8");
+    const pascal = testCase.kind
+      .split("-")
+      .map((part) => part[0]!.toUpperCase() + part.slice(1))
+      .join("");
+    const emitsName = `${pascal}Emits`;
+    expect(source, `${testCase.file} 没有 import ${emitsName}`).toContain(emitsName);
+    expect(
+      source,
+      `${testCase.file} 的 defineEmits 泛型实参不是 ${emitsName}（SFC 编译器解析不了 mapped type，` +
+        "键名只能由生成器写死，见 ADR #138 决策 ⑥）",
+    ).toMatch(new RegExp(`defineEmits<\\s*${emitsName}\\s*>`));
+  });
+
+  it.each(EMITS_CASES)("$file：键集 = 矩阵 ∪ 显式额外项", (testCase) => {
+    const declared = Object.keys(readGeneratedEmits()[emitsTypeNameOf(testCase.kind)]!).sort();
+    const expected = [
+      ...overlayEmitsOf(testCase.kind),
+      ...(testCase.extra ?? []),
+    ].sort();
+    expect(declared).toEqual(expected);
+
+    // 额外项必须有出处，且**逐个点名**它属于哪一类。三类互斥且都要登记在案：
+    // ① v-model 回写 / 生命周期事件（生成脚本的 `NON_SDK_EVENTS`，附派发点）；
+    // ② 集中弃用层登记过的历史事件别名。
+    // （生成器侧已经逐条核对过派发点，这里再点一次「额外项不是随手加的」。）
     for (const extra of testCase.extra ?? []) {
-      if (extra.startsWith("update:")) continue;
+      if (extra === "select") {
+        expect(
+          testCase.kind,
+          "select 是 ContextMenu 的本库事件（菜单项被选中），不是 SDK 事件",
+        ).toBe("context-menu");
+        continue;
+      }
+      if (extra.startsWith("update:") || extra === "rebuild" || extra === "destroy") continue;
       const registered = OVERLAY_EVENT_ALIASES.some(
         (alias) => alias.kind === testCase.kind && alias.alias === extra,
       );
@@ -750,14 +846,52 @@ describe("#31 SFC emits ↔ 事件矩阵", () => {
     }
   });
 
-  it.each(EMITS_CASES)("$file：每个键的载荷注解与矩阵的载荷档一致", (testCase) => {
-    const emits = readEmits(testCase.file);
+  it.each(EMITS_CASES)("$file：生成 interface 的每个 SDK 键的载荷与矩阵的载荷档一致", (testCase) => {
+    // 读**磁盘上的生成物**——那才是 `defineEmits` 真正消费的类型。重新推导一遍等于
+    // 证明 `PAYLOAD_TYPE_BY_KIND` 自己等于自己，没有门禁价值。
+    const declared = readGeneratedEmits()[emitsTypeNameOf(testCase.kind)];
+    expect(declared, `${emitsTypeNameOf(testCase.kind)} 不在生成物里`).toBeDefined();
+    const bound = new Set(overlayEmitsOf(testCase.kind));
     for (const event of overlayEventsOf(testCase.kind)) {
-      const expected = PAYLOAD_TYPE_BY_KIND[event.payload]!;
-      expect(emits.get(event.vue), `${testCase.file} 的 ${event.vue}`).toBe(expected);
+      // 排除项（info-window.resize）没有派发点，不进声明。
+      if (!bound.has(event.vue)) continue;
+      const overridden = isForwardedOverride(testCase.kind, event.vue);
+      const expected = overridden
+        ? INFO_WINDOW_FORWARDED_PAYLOADS[event.vue]
+        : PAYLOAD_TYPE_BY_KIND[event.payload];
+      expect(declared![event.vue], `${testCase.file} 的 ${event.vue}`).toBe(expected ?? "");
     }
   });
+
+  it.each(EMITS_CASES)("$file：生成 interface 只比矩阵多出 EMITS_CASES 登记的额外项", (testCase) => {
+    const declared = Object.keys(readGeneratedEmits()[emitsTypeNameOf(testCase.kind)]!).sort();
+    const expected = [
+      ...overlayEmitsOf(testCase.kind),
+      ...(testCase.extra ?? []),
+    ].sort();
+    expect(declared, `${testCase.file} 的生成 interface 键集与矩阵 ∪ 额外项不符`).toEqual(expected);
+  });
+
+  it("info-window：原样转发的 5 个事件按覆写表声明载荷（不按矩阵档）", () => {
+    // 这些事件的载荷是**未经归一化的上游回调参数**：`open` / `close` 上游不给事件对象
+    // （声明成 `[]`），`clickclose` / `maximize` / `restore` 转发的是上游内部结构
+    // （调用方按 `unknown` 收）。矩阵说它们是 `base` 档，但本组件不走那层归一化。
+    for (const [name, payload] of Object.entries(INFO_WINDOW_FORWARDED_PAYLOADS)) {
+      const defined = overlayEventsOf("info-window").find((event) => event.vue === name);
+      expect(defined, `${name} 应在 info-window 的事件矩阵里`).toBeDefined();
+      expect(defined!.payload, `${name} 在矩阵里应是 base 档（被覆写的正是这一档）`).toBe("base");
+      // payload === undefined ⇔ 声明成 `open: []`；否则是 `unknown`
+      expect(payload === undefined || payload === "unknown").toBe(true);
+    }
+  });
+
+  it("info-window：官方 resize 不进声明（无派发点，绑定它只会得到一个永不触发的 handler）", () => {
+    expect(overlayEmitsOf("info-window")).not.toContain("resize");
+    // 矩阵里确实有它——排除是显式决定，不是「上游没有」
+    expect(overlayEventsOf("info-window").map((event) => event.vue)).toContain("resize");
+  });
 });
+
 
 /* ------------------------------------------------- path 大数组：根引用 + 版本 */
 

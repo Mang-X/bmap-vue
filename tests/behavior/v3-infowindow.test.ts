@@ -306,6 +306,52 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     harness.assertIdle('快速开关')
   })
 
+  it('#138：一次事件驱动的收敛不多发命令', async () => {
+    // 这里锁的是「不多发」：一个被 `echoedClosed` 挡住、或本可由 observed 读数挡住的空转，
+    // 都会表现为「同一次事件多发一条 open/close」。
+    //
+    // **如实说明边界**：本条**不是**「单入口收敛」的门禁。把 post effect 改成连跑两次
+    // `reconcile()`，本条照样通过——真正会红的是下面「关闭命令抛错」那条（第一次抛错、
+    // 第二次成功 ⇒ 多发一次 `closeInfoWindow`，吃掉「失败保持事实不变」这条不变量）。
+    // 单入口的证据在那条用例与 `useInfoWindow.ts` 的机制注释里，不在这里。
+    const el = harness.container()
+    const open = ref(true)
+    const wrapper = mountTree(
+      () => [
+        h(InfoWindow, {
+          position: POSITION,
+          open: open.value,
+          'onUpdate:open': (value: boolean) => (open.value = value),
+        }),
+      ],
+      el,
+    )
+    await settle()
+    const map = lastMap()
+    const opens0 = map.callLog.filter((c) => c === 'openInfoWindow').length
+    const closes0 = map.callLog.filter((c) => c === 'closeInfoWindow').length
+
+    // 走真实关闭按钮的形状（`close` 先到、`clickclose` 后到；`close` 让读回变成「不是我」）
+    expect(map.clickInfoWindowCloseButton({ shape: ['close', 'clickclose'] })).toBe(true)
+    await settle()
+    expect(open.value, '父级受控回写落地').toBe(false)
+    expect(currentInfoWindow(), '最终地图上没有气泡').toBeNull()
+    // 收敛只补**必要**的命令：用户点关闭按钮时 SDK 侧已经关掉了它，读回说「不在地图上」
+    // ⇒ 收敛既不补 close 也不补 open。
+    expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(closes0)
+    expect(map.callLog.filter((c) => c === 'openInfoWindow').length).toBe(opens0)
+
+    // 父级已是 false 时再收到一条迟到的 `close`（同一实例重新打开后又关闭的形状）：
+    // 零命令——observed 说不在地图上、desired 为假，两个分支都无事可做
+    currentInfoWindow()?.emit('close')
+    await settle()
+    expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(closes0)
+    expect(map.callLog.filter((c) => c === 'openInfoWindow').length).toBe(opens0)
+
+    await unmountAndSettle(wrapper)
+    harness.assertIdle('post-flush 收敛的命令条数')
+  })
+
   it('外部（别处）打开本组件拥有的实例：desired=false ⇒ 收敛为关，且如实转发 open', async () => {
     const el = harness.container()
     const wrapper = mountTree(() => [h(InfoWindow, { position: POSITION, open: false })], el)

@@ -63,6 +63,16 @@ jobs:
       - name: Check official API alignment
         run: node --experimental-strip-types scripts/generate-api-diff.mts --check
 
+      # 覆盖物 defineEmits 静态契约无漂移（#138）。
+      # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
+      # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。
+      # 同时核实 `resize` 没有被声明（官方事件表里有、本库无派发点）——那条命令会红，
+      # 意味着「暴露一个永不触发的事件」不可能悄悄发生。
+      - name: Check overlay emits contract
+        run: |
+          node --experimental-strip-types scripts/generate-overlay-emits.mts --check
+          node --experimental-strip-types scripts/generate-overlay-emits.mts --forbid=resize
+
       # Playground 是三档离线装配（fake-v4 / legacy-fake / real-v4）的真实消费者，也是
       # `main.ts` 里那些组件用法的唯一编译验证点——它此前不在任何 CI 里跑。
       # 用 `@test-utils` 别名引到源码，因此不依赖 `dist`，可以放在 build 之前。

@@ -435,7 +435,7 @@ describe("mutable 就地更新，构造期属性重建", () => {
     harness.assertIdle("构造期属性重建");
   });
 
-  it("同一轮里同时改构造期与就地属性：只重建一次，且就地值落在最终实例上", async () => {
+  it("同一轮里同时改构造期与就地属性：恰好重建一次，且就地值只落在最终实例上", async () => {
     const enableClicking = ref(true);
     const zIndex = ref(1);
     const wrapper = await mountMarker(() => ({
@@ -444,20 +444,143 @@ describe("mutable 就地更新，构造期属性重建", () => {
       zIndex: zIndex.value,
     }));
 
+    const doomed = currentMarker();
     const constructed = fake.createdOverlays.length;
-    // 同一个 tick 里改两个字段：队列必须把它们合并成**一批**，先重建再就地更新，
+    doomed.callLog.length = 0;
+    // 同一个 tick 里改两个字段：批处理必须把它们合并成**一批**，先重建再就地更新，
     // 否则就地值会写进一个马上被移除的中间实例（PR #61 的收敛点）
     enableClicking.value = false;
     zIndex.value = 7;
     await settle();
 
+    // **恰好**一次重建：不是「至少一次」——多一次意味着同一批里的构造期键各触发了一次 replace
     expect(fake.createdOverlays.length).toBe(constructed + 1);
     expect(harness.attached("overlay")).toBe(1);
-    expect(currentMarker().zIndex).toBe(7);
+
+    const survivor = currentMarker();
+    expect(survivor).not.toBe(doomed);
+    expect(survivor.zIndex).toBe(7);
+    // 就地值**只**落在最终实例上：被丢弃的那一代一次 setter 都不该收到
+    // （收到就说明「先就地更新、后重建」或「逐字段直接下单」这两种错误发生了）
+    expect(doomed.callLog).toEqual([]);
+    expect(survivor.callLog).toEqual(expect.arrayContaining(["setZIndex"]));
 
     wrapper.unmount();
     await settle();
     harness.assertIdle("构造期 + 就地属性同批更新");
+  });
+
+  it("replace 在飞行中到达的更新并入尾随队列：不额外重建，也不丢值", async () => {
+    // `sdk.replace()` 是异步的（`create` 可以 await），因此存在一个「旧实例即将被丢弃、
+    // 新实例还没建好」的窗口。该窗口里到达的更新既不能发给旧实例，也不能直接标脏
+    // ——#138 为此保留了**唯一**一条自研队列（`trailing`）。
+    const enableClicking = ref(true);
+    const zIndex = ref<number | undefined>(1);
+    const wrapper = await mountMarker(() => ({
+      position: { lng: 116.4, lat: 39.9 },
+      enableClicking: enableClicking.value,
+      zIndex: zIndex.value,
+    }));
+
+    const constructed = fake.createdOverlays.length;
+    // 只等一个 tick：让 replace 进入飞行中，**不**等它结算
+    enableClicking.value = false;
+    await nextTick();
+
+    // 窗口内再改一个就地字段
+    zIndex.value = 9;
+    await settle();
+
+    // 尾随的那一次**没有**自己触发第二次 replace（它跟着上一轮 replace 落到新实例上）
+    expect(fake.createdOverlays.length).toBe(constructed + 1);
+    expect(harness.attached("overlay")).toBe(1);
+    expect(currentMarker().zIndex).toBe(9);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("replace 窗口的尾随更新");
+  });
+
+  it("replace 窗口里同一个键连续变化：只并一次、最终落到实例上的是**新值**", async () => {
+    // 上面那条只覆盖「尾随批有 key 但没有再变」。这里覆盖更细的一格：**同一个 key 在
+    // replace 窗口里变了两次**。两次都写进 `trailing`，因此这条真正锁的是
+    // `markDirty` 的尾随合并 `trailing = { ...trailing, ...updates }`：**按键**折叠、
+    // **后到的值**胜。
+    //
+    // **不要**把它当成展开顺序的门禁：#138 取证确认这里**没有**放回路径（`reconciling`
+    // 保证并发 `markDirty` 进不了 `dirtyFields`，`applyBatch` 的两处「放回」已作为不可达
+    // 死代码删除）。实测把该合并的展开顺序反过来，本用例**照样通过**——因为
+    // `zIndex` 在 `descriptorKeys` 之外，窗口内的两次变化压根不进这条合并，而是各挂一整批
+    // `trailing`、由下一轮按后到的批生效。所以它守的是「键折叠 + 新值生效 + 只重建一次」，
+    // 不是「谁覆盖谁」的顺序。
+    //
+    // 窗口必须真的打开：fake 的 `createMarker` 是同步的，`await spec.create(...)` 只让出
+    // 一个微任务，因此换 `create` 为**挂起**版本（闸门），否则 replace 在第一个 `nextTick`
+    // 内就结算完了，测的是「正常路径」而不是 replace 窗口。
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gateOpen = true;
+    const state = reactive<{ position: { lng: number; lat: number }; zIndex: number | undefined; title: string }>({
+      position: { lng: 116.4, lat: 39.9 },
+      zIndex: 1,
+      title: "a",
+    });
+    const spec: OverlaySpec<typeof state, MarkerHandle> = {
+      type: "reorder-probe",
+      targetKind: "marker",
+      kind: "marker",
+      fields: { position: "position", zIndex: "options", title: "options" },
+      descriptorKeys: { position: "position" },
+      create: async (context, p) => {
+        if (!gateOpen) await gate;
+        return context.client.driver.overlays.createMarker({ ...p.position }, {
+          zIndex: p.zIndex,
+          title: p.title,
+        });
+      },
+    };
+    const Probe = defineComponent({
+      setup() {
+        useOverlaySpec(state, spec, { emit: () => {} });
+        return () => null;
+      },
+    });
+    const Host = defineComponent({
+      components: { Map, Probe },
+      setup() {
+        return () => h(Map, { provider: harness.provider() }, () => [h(Probe)]);
+      },
+    });
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    expect(fake.createdOverlays.length).toBe(1);
+
+    // 之后每次 replace 都挂起：窗口由此打开
+    gateOpen = false;
+    state.title = "b";
+    await nextTick();
+    expect(fake.createdOverlays.length, "闸门关着，replace 必须还在飞").toBe(1);
+
+    // 窗口内：同一个键连续两次变化，期望最终是后到的 30
+    state.zIndex = 20;
+    await nextTick();
+    state.zIndex = 30;
+    await settle();
+
+    release();
+    await settle();
+    await settle();
+
+    expect(harness.attached("overlay")).toBe(1);
+    const marker = fake.createdOverlays[fake.createdOverlays.length - 1] as unknown as FakeV4Marker;
+    expect(marker.zIndex, "窗口内后到的值必须赢").toBe(30);
+    expect(marker.title, "构造期字段走重建").toBe("b");
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("replace 窗口内的重复变更");
   });
 
   it("快速连续两次重建：地图上恰好一个实例，不重复挂载", async () => {

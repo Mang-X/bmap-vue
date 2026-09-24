@@ -12,10 +12,8 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+import type { LabelEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { LabelProps, LabelStyle } from "../../types/components";
 import { createLabelSpec } from "./labelSpec";
 
@@ -27,16 +25,7 @@ const props = withDefaults(defineProps<LabelProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<LabelEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

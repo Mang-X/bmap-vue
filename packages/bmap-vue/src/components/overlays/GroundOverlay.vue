@@ -16,10 +16,8 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-} from "../../driver/types/events";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+import type { GroundOverlayEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { GroundOverlayProps } from "../../types/components";
 import { createGroundOverlaySpec } from "./groundOverlaySpec";
 
@@ -31,19 +29,7 @@ const props = withDefaults(defineProps<GroundOverlayProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPartialPointerEvent];
-  dblclick: [event: OverlayPartialPointerEvent];
-  rightclick: [event: OverlayPartialPointerEvent];
-  rightdblclick: [event: OverlayPartialPointerEvent];
-  mousedown: [event: OverlayPartialPointerEvent];
-  mouseup: [event: OverlayPartialPointerEvent];
-  mouseover: [event: OverlayPartialPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPartialPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<GroundOverlayEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

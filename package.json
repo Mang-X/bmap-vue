@@ -25,6 +25,8 @@
     "generate:plugin-inventory:check": "node --experimental-strip-types scripts/generate-plugin-inventory.mts --check",
     "generate:api-diff": "node --experimental-strip-types scripts/generate-api-diff.mts",
     "generate:api-diff:check": "node --experimental-strip-types scripts/generate-api-diff.mts --check",
+    "generate:overlay-emits": "node --experimental-strip-types scripts/generate-overlay-emits.mts",
+    "generate:overlay-emits:check": "node --experimental-strip-types scripts/generate-overlay-emits.mts --check",
     "probe:plugin-compat": "node --experimental-strip-types scripts/probe-plugin-compat.mts",
     "probe:plugin-runtime": "node --experimental-strip-types scripts/probe-plugin-runtime.mts",
     "probe:plugin-load-channel": "node --experimental-strip-types scripts/probe-plugin-load-channel.mts",

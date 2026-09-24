@@ -153,11 +153,41 @@ export type OverlayPropertyValueKind =
   | "icon";
 
 /**
+ * 「撤回」（有值 → 未表态）后回到 SDK 自身默认的**落点**（issue #138）。
+ *
+ * 这是**正交**于 `policy` 的一维：`policy` 回答「值变化时怎么办」，`revert` 回答
+ * 「**这个值消失**了怎么办」。两者不能合并——把 `mutable` 降级成 `recreate` 会让
+ * `zIndex: 5 → 7` 这种纯值变化也重建（每次变值一次重建的性能回退），而实际上
+ * 5→7 完全可就地写。
+ *
+ * 唯一可选值是 `rebuild`（重建 ⇒ 构造期不传该键 ⇒ SDK 用自己的默认值）。这是**取证**后的
+ * 结论，不是省事：逐字段核对 `@baidumap/jsapi-v4-types@4.0.4` 后，**没有**任何一种更省的落点：
+ *
+ * | 候选落点 | 为什么不可用 |
+ * | --- | --- |
+ * | 「可靠 getter 读回旧值再写回」 | getter 返回的是**当前值**，不是 SDK 默认值——没有 baseline 可恢复 |
+ * | 「创建时快照一个 baseline」 | `create*` 总是把有值的 prop 传进构造器，快照到的就是 prop 自己的值，不是默认值 |
+ * | `setter(undefined)` | 语义不是「恢复默认」而是「传一个 undefined 进去」，官方没有为它定义行为 |
+ * | 猜一个 SDK 默认值 | 违反 Official-first 与 Evidence-before-abstraction：默认值会随版本变 |
+ *
+ * `zIndex` 是最能说明问题的一例：它在 8 个覆盖物类上有 `setZIndex`，在 **0** 个覆盖物类上有
+ * `getZIndex`（只有 `layer/*` 有）。所有 `enable*` / `disable*` 成对开关也**一律没有**公开读回。
+ * 见 ADR `2026-09-24-overlay-infowindow-vue-native-convergence` §5。
+ */
+export type OverlayPropertyRevert = "rebuild";
+
+/** 该属性当前没有「撤回」元数据时的落点（与逐字段表的取值相同）。 */
+export const DEFAULT_OVERLAY_PROPERTY_REVERT: OverlayPropertyRevert = "rebuild";
+
+/**
  * 单个属性的元数据。
  *
  * 用**判别联合**约束「分类 → 必须携带哪些依据」：
  * - `mutable` 必须给出 `setter` 或成对 `toggle`（二选一，不能都没有），否则分类没有落点；
  * - `recreate` / `unsupported` 必须给出 `reason`，避免把一个「不知道为什么」的分类留进代码。
+ *
+ * `revert` 声明在**所有**变体上（理由与 `valueArgs` 相同：让 `spec.revert` 在判别联合上
+ * 直接可读，调用点不必写类型断言）。
  */
 export type OverlayPropertySpec =
   | {
@@ -175,6 +205,8 @@ export type OverlayPropertySpec =
      */
     readonly valueArgs?: readonly unknown[];
       readonly toggle?: never;
+      /** 撤回（有值 → 未表态）后的落点，见 `OverlayPropertyRevert`。 */
+      readonly revert?: OverlayPropertyRevert;
     }
   | {
       readonly name: string;
@@ -184,6 +216,8 @@ export type OverlayPropertySpec =
       readonly setter?: never;
       readonly valueArgs?: readonly unknown[];
       readonly toggle: readonly [enable: string, disable: string];
+      /** 撤回（有值 → 未表态）后的落点，见 `OverlayPropertyRevert`。 */
+      readonly revert?: OverlayPropertyRevert;
     }
   | {
       readonly name: string;
@@ -195,6 +229,8 @@ export type OverlayPropertySpec =
       readonly setter?: never;
       readonly toggle?: never;
       readonly valueArgs?: readonly unknown[];
+      /** 撤回后的落点；与 `policy: "recreate"` 同义，写出来只为逐字段表的完整性。 */
+      readonly revert?: OverlayPropertyRevert;
     }
   | {
       readonly name: string;
@@ -205,6 +241,8 @@ export type OverlayPropertySpec =
       readonly toggle?: never;
       readonly value?: never;
       readonly valueArgs?: readonly unknown[];
+      /** 撤回后的落点；`unsupported` 字段本来就不会被写入，因此这一格是空占位。 */
+      readonly revert?: OverlayPropertyRevert;
     };
 
 export interface OverlayDescriptor {
@@ -623,6 +661,136 @@ export function mutableToggle(
 ): readonly [string, string] | undefined {
   return spec.policy === "mutable" ? spec.toggle : undefined;
 }
+
+/**
+ * 属性**撤回**（有值 → 未表态）后的落点；未声明时取 `DEFAULT_OVERLAY_PROPERTY_REVERT`。
+ *
+ * 未知键（`undefined` 的 spec）返回 `undefined`：**不猜**。逃生口键没有逐字段依据，
+ * 它是否需要重建由调用方自己决定——这与 `overlayPropertyPolicy` 对未知键的处理是同一条口径。
+ */
+export function overlayPropertyRevert(
+  kind: OverlayKind,
+  key: string,
+): OverlayPropertyRevert | undefined {
+  const spec = overlayPropertySpec(kind, key);
+  // 未知键返回 `undefined` 而不是默认值：**不猜**。逃生口键（不在描述符里）没有逐字段依据，
+  // 它是否需要撤回由调用方自己决定——与 `overlayPropertyPolicy` 对未知键的处理同一条口径。
+  if (!spec) return undefined;
+  return spec.revert ?? DEFAULT_OVERLAY_PROPERTY_REVERT;
+}
+
+/* ------------------------------------------------- 逐字段「撤回」依据表（issue #138）
+ *
+ * 「值消失 ⇒ 重建」是唯一落点（依据见 `OverlayPropertyRevert`），但**每个字段为什么**只能
+ * 这样，值得逐条写下来：这张表就是 issue 要求的「baseline restore 策略有逐字段测试」的载体。
+ *
+ * 判据只有两条，逐字段都落到其中一条：
+ * - **有可靠 getter 且 baseline 可得** ⇒ 经 getter 恢复（本表为空，见下）；
+ * - 其余（无 getter / 有 getter 但 baseline 无从取得）⇒ 重建。
+ *
+ * 「有 getter 但 baseline 无从取得」是本表最重要的一类：`Marker#offset` / `Marker#rotation` /
+ * `Marker#title` 都有公开读回，但读回的是**当前值**（此刻正等于我们刚写进去的那个值），
+ * 而不是 SDK 的默认值。`create*` 又总是把有值的 prop 传进构造器，所以「创建时快照」拿到的
+ * 也是 prop 自己的值。因此**没有任何一条能便宜地撤回**。
+ */
+export const OVERLAY_REVERT_RATIONALE = {
+  // ——— 没有公开读回 ———
+  zIndex:
+    "4.0.4 的 8 个覆盖物类上都有 setZIndex，但**没有一个**有 getZIndex（只有 layer/* 有）" +
+    "⇒ 无从读回，也没有 baseline 可恢复 ⇒ 重建",
+  enableDragging: "enableDragging / disableDragging 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
+  enableMassClear: "enableMassClear / disableMassClear 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
+  enableEditing: "enableEditing / disableEditing 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
+  enableClicking:
+    "只有构造选项 enableClicking（4.0.4 在 Marker 与图形族上都没有 setEnableClicking/disableClicking）" +
+    "⇒ policy 已是 recreate，撤回同样是重建",
+  enableMaximize: "InfoWindow 的 enableMaximize 只有构造选项，实例上无 setter 也无读回 ⇒ 重建",
+  enableAutoPan: "InfoWindow 的 enableAutoPan 只有构造选项，实例上无 setter 也无读回 ⇒ 重建",
+  enableCloseOnClick:
+    "InfoWindow 的 enableCloseOnClick 只有构造选项，实例上无 setter 也无读回 ⇒ 重建",
+  // ——— 有读回，但 baseline 无从取得（getter 给的是当前值）———
+  position:
+    "InfoWindow 的 position 根本不是 SDK 属性（打开位置由 map.openInfoWindow 的 point 参数提供）；" +
+    "其余覆盖物的位置由组件侧 position 模型保证，撤回时重建由「构造期第一个位置参数」本身决定" +
+    "⇒ 落点仍是重建",
+  content:
+    "Label 的 content 是**必填**构造参数（`new Label(content, opts)`），不是可撤的 option；" +
+    "InfoWindow 的 content 同理（`new InfoWindow(el, opts)`，`setContent` 只在部分运行时有）；" +
+    "policy 已是 recreate，撤回落点与之一致",
+  redraw:
+    "**不是属性**：`redraw()` 没有参数、没有对应构造选项，是「重画一遍」这个动作。" +
+    "登记它只是为了让 InfoWindow 的 `setOptions` 有一条显式的落点（大小变化后重绘）" +
+    "⇒ 不存在「值消失」这件事，落点无意义",
+  points:
+    "图形族的顶点列表是**必填**构造参数（createPolyline(path)），不是可撤的 option；" +
+    "路径变更本来就由 `versioned` 源强制重建（policy 为 recreate）",
+  path: "同上：路径是必填构造参数，policy 已是 recreate，撤回落点与之一致",
+  offset:
+    "Marker#offset / Label#offset 有 getOffset，但它返回**当前值**（此刻正等于我们写进去的），" +
+    "不是 SDK 默认值；构造期又总把有值 prop 传进去，创建快照也是 prop 自己的值 ⇒ 重建",
+  rotation:
+    "Marker#getRotation 返回**当前值**而非默认值；无 baseline 可取 ⇒ 重建",
+  title: "Marker#getTitle / Label#getTitle 返回**当前值**而非默认值；无 baseline 可取 ⇒ 重建",
+  icon:
+    "Marker#getIcon 返回**当前值**而非默认图标（默认图标是 SDK 内置的 unnamed icon，无从构造）" +
+    "⇒ 重建",
+  style: "Label#setStyles 有 getter 但返回当前值；默认样式由 SDK 内部决定、无从构造 ⇒ 重建",
+  opacity: "Label#setOpacity 在 4.0.4 **没有**公开读回 ⇒ 重建",
+  anchor: "Marker#anchor 只有构造选项（上游要等异步标注模块加载才挂 setter，不安全）⇒ 重建",
+  strokeColor: "图形族有 getStrokeColor，但返回当前值而非 SDK 默认色 ⇒ 重建",
+  strokeWeight: "图形族有 getStrokeWeight，但返回当前值而非 SDK 默认线宽 ⇒ 重建",
+  strokeOpacity: "图形族有 getStrokeOpacity，但返回当前值而非 SDK 默认透明度 ⇒ 重建",
+  strokeStyle: "图形族有 getStrokeStyle，但返回当前值而非 SDK 默认线型 ⇒ 重建",
+  fillColor: "图形族有 getFillColor，但返回当前值而非 SDK 默认填充色 ⇒ 重建",
+  fillOpacity: "图形族有 getFillOpacity，但返回当前值而非 SDK 默认填充透明度 ⇒ 重建",
+  width: "InfoWindow 的 width 只有构造选项；4.0.4 无 setWidth 也无 getWidth ⇒ 重建",
+  height: "InfoWindow 的 height 只有构造选项；4.0.4 无 setHeight 也无 getHeight ⇒ 重建",
+  maxWidth: "InfoWindow 的 maxWidth 只有构造选项；4.0.4 无对应读回 ⇒ 重建",
+  maxContent: "InfoWindow 的 maxContent 只有构造选项；4.0.4 无对应读回 ⇒ 重建",
+  // ——— 必填构造参数（与 position / content 同理）———
+  bounds:
+    "Rectangle 的 bounds 是**必填**构造参数（`new Rectangle(bounds, opts)`）；" +
+    "有 getBounds，但返回当前值而非默认范围 ⇒ 落点仍是重建",
+  center: "Circle 的 center 是**必填**构造参数（`new Circle(center, radius, opts)`）⇒ 重建",
+  radius: "Circle 的 radius 是**必填**构造参数（`new Circle(center, radius, opts)`）⇒ 重建",
+  altitude: "Prism 的 altitude 是**必填**构造参数（`new Prism(path, altitude, opts)`）⇒ 重建",
+  controlPoints:
+    "BezierCurve 的 controlPoints 是必填构造参数，policy 已是 recreate ⇒ 落点与之一致",
+  // ——— 只有构造选项的视图类属性（policy 多为 recreate）———
+  isBoundary:
+    "Polygon 的 isBoundary 决定路径是真实坐标还是行政区边界名，实例上无 setter 也无读回" +
+    "（切过去会画错东西）⇒ 重建",
+  minZoom: "CustomOverlay 的 minZoom 只有构造选项；实例上无 setter，也无稳定的公开读回 ⇒ 重建",
+  maxZoom: "CustomOverlay 的 maxZoom 只有构造选项；实例上无 setter，也无稳定的公开读回 ⇒ 重建",
+  type:
+    "GroundOverlay 的 type（图片 / 视频 / canvas 渲染类型）只有构造选项，决定内容如何被解释，" +
+    "实例上无 setter ⇒ 重建",
+  displayOnMinLevel:
+    "GroundOverlay 的 displayOnMinLevel 只有构造选项（4.0.4 无对应 setter / getter）⇒ 重建",
+  displayOnMaxLevel:
+    "GroundOverlay 的 displayOnMaxLevel 只有构造选项（4.0.4 无对应 setter / getter）⇒ 重建",
+  autoCenter:
+    "**不是 SDK 属性**：GroundOverlay.autoCenter 是本库的组件侧语义（按显示区域居中地图），" +
+    "走 afterMount 里的 map.setViewport ⇒ 不存在「值消失」，落点无意义",
+  visible:
+    "**不是 SDK 属性**：可见性由继承来的 show/hide 表达（没有构造选项、也没有 setter），" +
+    "policy 是组件侧的 `visibility` 策略 ⇒ 不存在「值消失」，落点无意义",
+  // ——— 开放形状（字段随 SDK 版本增减）———
+  url:
+    "GroundOverlay 的 url 接受 string / HTMLCanvasElement / 惰性工厂；setImage 接受真实来源。" +
+    "SDK 默认是「空内容」，无从构造一个「默认 url」⇒ 重建",
+  properties:
+    "CustomOverlay 的 properties 是传给业务渲染的开放字典；默认是「空字典」，" +
+    "实例上无 getter（4.0.4 只在 CustomOverlay 上声明了带 point/pixel 的事件，没有读回）⇒ 重建",
+  topFillColor:
+    "Prism 的 topFillColor 有 getTopFillColor，但返回当前值而非 SDK 默认色 ⇒ 重建",
+  topFillOpacity:
+    "Prism 的 topFillOpacity 有 getTopFillOpacity，但返回当前值而非默认透明度 ⇒ 重建",
+  sideFillColor:
+    "Prism 的 sideFillColor 有 getSideFillColor，但返回当前值而非默认色 ⇒ 重建",
+  sideFillOpacity:
+    "Prism 的 sideFillOpacity 有 getSideFillOpacity，但返回当前值而非默认透明度 ⇒ 重建",
+} as const satisfies Partial<Record<string, string>>;
 
 const OVERLAY_KINDS = Object.keys(OVERLAY_DESCRIPTORS) as OverlayKind[];
 const KIND_BY_BRAND = new Map<string, OverlayKind>(
