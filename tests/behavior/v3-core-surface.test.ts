@@ -74,7 +74,21 @@ const ENTRIES: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
  *   `./core` 一起会被冻结进 3.0。
  * - `resetProcessSdkRegistryForTests`：「for tests」写在名字里，公共声明面不该有它。
  */
-const REMOVED_VALUE_EXPORTS = ["useMapResource", "resetProcessSdkRegistryForTests"];
+/**
+ * #139：服务任务原语内部化。`useServiceTask` / `SupersedeMode` / `SupersedePolicy` /
+ * `useSimpleServiceTask` / `useExclusiveServiceTask` / `ServiceInstanceChannel` 都是**内部实现**——
+ * 12 个服务 composable 的出口是公共面，任务内核的状态机不是（把内部状态机冻结成公共 API
+ * 就等于承诺它不再变，而 #139 恰好在做收口）。
+ */
+const REMOVED_VALUE_EXPORTS = [
+  "useMapResource",
+  "resetProcessSdkRegistryForTests",
+  "useServiceTask",
+  "useSimpleServiceTask",
+  "useExclusiveServiceTask",
+  "createSharedInstanceChannel",
+  "createExclusiveInstanceChannel",
+];
 
 /**
  * 被判定 **REMOVE / 内部化（类型或选项字段）** 的名字：不得出现在公共声明面。
@@ -83,6 +97,16 @@ const REMOVED_VALUE_EXPORTS = ["useMapResource", "resetProcessSdkRegistryForTest
  */
 const REMOVED_TYPE_OR_FIELD_NAMES = [
   "useMapResource",
+  // #139：任务内核与实例通道的类型面（见 REMOVED_VALUE_EXPORTS 上方的理由）。
+  "useServiceTask",
+  "UseServiceTaskOptions",
+  "ServiceTask",
+  "SupersedeMode",
+  "SupersedePolicy",
+  "ServiceInstanceChannel",
+  "ExclusiveInstanceChannelOptions",
+  "ServiceTaskCore",
+  "ServiceTaskState",
   "SdkResourceAdapter",
   "UseMapResourceResult",
   "SdkConflictPolicy",

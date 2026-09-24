@@ -33,6 +33,7 @@
     "build:package": "node --experimental-strip-types scripts/build-package.mts",
     "typecheck:package": "pnpm exec vue-tsc -p packages/bmap-vue/tsconfig.build.json",
     "typecheck:tests": "vue-tsc -p tsconfig.tests.json",
+    "typecheck:type-contracts": "vue-tsc -p tsconfig.type-contracts.json",
     "pack:package": "pnpm --filter bmap-vue pack --pack-destination .artifacts",
     "playground:dev": "vp run -C apps/playground dev",
     "playground:build": "pnpm --filter playground build",

@@ -579,18 +579,16 @@ export function useOverlaySpec<Props extends object, Resource>(
       },
       watch: ({ scope }) => {
         if (visibilityField) {
-          scope.add(watch(() => readProp(visibilityField), () => applyVisibility()));
+          watch(() => readProp(visibilityField), () => applyVisibility());
         }
         if (positionModel) {
-          scope.add(
-            watch(
-              // 点按两个标量当 watch 源：父级传内联字面量时引用每次都变，deep / 引用比较会空跑
-              () => {
-                const next = readPosition();
-                return next ? `${next.lng},${next.lat}` : "";
-              },
-              () => positionModel.applyFromProps(readPosition()),
-            ),
+          watch(
+            // 点按两个标量当 watch 源：父级传内联字面量时引用每次都变，deep / 引用比较会空跑
+            () => {
+              const next = readPosition();
+              return next ? `${next.lng},${next.lat}` : "";
+            },
+            () => positionModel.applyFromProps(readPosition()),
           );
         }
         for (const [prop, update] of fields) {
@@ -604,21 +602,19 @@ export function useOverlaySpec<Props extends object, Resource>(
           if (source === "fingerprint") {
             // watch 源用**稳定序列化**：对象字段（icon / offset / style / bounds）必须按内容判等，
             // 否则父级每次渲染传内联字面量都会重新下发一次命令。
-            scope.add(watch(() => stableKeyOf(readProp(prop)), apply));
+            watch(() => stableKeyOf(readProp(prop)), apply);
             continue;
           }
           if (source === "reference") {
             // 内容不可序列化的字段（url 的惰性工厂）：只比根引用，读**原始** prop
-            scope.add(watch(() => readRawProp(prop), apply));
+            watch(() => readRawProp(prop), apply);
             continue;
           }
           // 大数组（path / controlPoints）：根引用 + 版本 prop，不做 O(n) 的内容指纹。
           // `flush: "sync"` 沿用 v3 既有语义：路径更新要与父级渲染同一次提交内落地。
-          scope.add(
-            watch([() => readRawProp(prop), () => readProp(source.versionProp)], apply, {
-              flush: "sync",
-            }),
-          );
+          watch([() => readRawProp(prop), () => readProp(source.versionProp)], apply, {
+            flush: "sync",
+          });
         }
       },
     },

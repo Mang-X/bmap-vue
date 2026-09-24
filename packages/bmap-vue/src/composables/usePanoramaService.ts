@@ -4,8 +4,8 @@
  * M7-CONTROL-PANORAMA / issue #41 实施步骤 5「实现 PanoramaService callback 状态层」。
  *
  * 不自己写请求框架：超时 / 空结果 / 迟到回调 / 取消 / 先到者胜全部由 Driver 的
- * `createServiceCall` 负责，本文件只声明「这个服务是什么」（与其余七个服务 composable
- * 共用 `useServiceTask`）。
+ * `createServiceCall` 负责，本文件只声明「这个服务是什么」（与其余六个服务 composable
+ * 共用简单档 `useSimpleServiceTask`；官方没有本实例的销毁入口，所以走无状态实例通道）。
  *
  * 两处口径：
  * - **官方只有两个检索入口**（`getPanoramaById` / `getPanoramaByLocation`）。参考实现
@@ -21,7 +21,7 @@ import type { PanoramaDataInfo, PanoramaServiceHandle } from "../driver/types/pa
 import type { Point } from "../driver/types/geometry";
 import { jsapiV4PanoramaOf } from "../core/panorama";
 import { resolveMapContext } from "./resolveMapContext";
-import { useServiceTask } from "./useServiceTask";
+import { useSimpleServiceTask } from "./serviceTask";
 
 /** 一次检索请求（内部判别式联合：两种检索只差参数形状，共用同一份状态）。 */
 type PanoramaSearchRequest =
@@ -31,7 +31,7 @@ type PanoramaSearchRequest =
 export function usePanoramaService(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useServiceTask<
+  const task = useSimpleServiceTask<
     PanoramaDataInfo,
     PanoramaServiceHandle,
     [PanoramaSearchRequest]

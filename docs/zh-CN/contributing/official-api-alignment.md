@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 394 |
+| 本库根入口导出 | 387 |
 | 名称对齐（交集） | 110 |
 | 仅官方有 | 292 |
-| 仅本库有 | 284 |
+| 仅本库有 | 277 |
 | `./ui-kit` 子路径导出 | 55 |
 | 手写语义例外 | 37 |
 
@@ -510,7 +510,6 @@ component 45 · hook 14 · type 51
 | `useParentOverlayHandle` | hook | — |
 | `useRequiredClientContext` | hook | — |
 | `useSdkResource` | hook | — |
-| `useServiceTask` | hook | — |
 | `useViewAnimation` | hook | — |
 | `BMAP_COMPONENT_EVENT_ALIASES` | constant | — |
 | `BMAP_COMPONENT_EVENT_CATALOG` | constant | — |
@@ -534,7 +533,6 @@ component 45 · hook 14 · type 51
 | `CreateBMapPluginOptions` | type | `createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。 |
 | `createClientContext` | type | — |
 | `DataComponentProps` | type | — |
-| `DisposeContext` | type | — |
 | `FeatureStateUpdateOptions` | type | — |
 | `GeocodeDetailItemResult` | type | — |
 | `GeocodeDetailResult` | type | — |
@@ -581,7 +579,6 @@ component 45 · hook 14 · type 51
 | `RouteServiceHandle` | type | — |
 | `SdkResourceStatus` | type | — |
 | `ServiceCallStatus` | type | — |
-| `ServiceInvokeContext` | type | — |
 | `ServiceResult` | type | — |
 | `TargetContext` | type | — |
 | `TrackLineLayerProps` | type | — |
@@ -590,7 +587,6 @@ component 45 · hook 14 · type 51
 | `UseMapStatusOptions` | type | — |
 | `UseOverlaySpecOptions` | type | — |
 | `UseOverlaySpecResult` | type | — |
-| `UseServiceTaskOptions` | type | — |
 | `UseViewAnimationOptions` | type | — |
 | `ViewAnimationStatus` | type | — |
 | `AreaBoundary` | other | — |
@@ -755,12 +751,9 @@ component 45 · hook 14 · type 51
 | `ServiceDriver` | other | — |
 | `ServiceErrorInfo` | other | — |
 | `ServiceInvocationDriver` | other | — |
-| `ServiceTask` | other | — |
 | `SizeLike` | other | — |
 | `stringToPluginDefinitions` | other | — |
 | `StyleExpression` | other | — |
-| `SupersedeMode` | other | — |
-| `SupersedePolicy` | other | — |
 | `targetContextKey` | other | — |
 | `TargetKind` | other | — |
 | `toSdkEventName` | other | — |

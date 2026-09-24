@@ -1,0 +1,29 @@
+{
+  "_comment": "公共**类型面**契约的独立门禁（issue #139 评审 P2）。这里只收 tests/type-contracts/**：那类 fixture 用 @ts-expect-error 钉住「某个类型面刻意不接受什么」——这类断言**必须**被某个 tsc 编译才成立，而 tsconfig.build.json 排除 src/**/*.test.ts、tsconfig.tests.json 只 include tests/performance/** 与 tests/browser/live-performance/**，所以原本 @ts-expect-error 落在 serviceTask.test.ts 里是**恒真**的（实测：把 SimpleServiceTaskOptions 放宽回接受 release 后，三个门禁 + 16 条运行时用例全绿）。不把 packages/**/*.test.ts 全量纳入——那些文件有大量既存错误，全量纳入是另一个票的量（见 tsconfig.tests.json 的注释）。命名用 *.type-test.ts 而非 *.test.ts，vitest 的 include 是 tests/**/*.test.ts，不该被当运行时用例收集。与 tsconfig.tests.json / tsconfig.examples.json 同一形态：独立配置 + noEmit。",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "types": ["node", "vite/client", "@baidumap/jsapi-v4-types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./packages/bmap-vue/node_modules",
+      "./packages/bmap-vue/node_modules/@types"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@baidumap/jsapi-ui-kit": ["./packages/bmap-vue/types/ui-kit/upstream.d.ts"]
+    }
+  },
+  "include": ["tests/type-contracts/**/*.ts"],
+  "exclude": ["node_modules"]
+}

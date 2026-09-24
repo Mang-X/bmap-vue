@@ -87,9 +87,8 @@ export class MapRuntime {
   readonly client: ShallowRef<BMapClient | null> = shallowRef(null);
   readonly map: ShallowRef<MapHandle | null> = shallowRef(null);
   readonly error: ShallowRef<unknown> = shallowRef(null);
-  /** Spec 别名:handle === map,scope === resources */
+  /** Spec 别名:handle === map */
   readonly handle: ShallowRef<MapHandle | null>;
-  readonly scope: ResourceScope;
   readonly resources: ResourceScope;
   readonly events: MapEventBus = createMapEventBus();
   readonly scheduler: FrameScheduler = createFrameScheduler();
@@ -144,7 +143,6 @@ export class MapRuntime {
     this.options = options;
     this.container = options.container;
     this.resources = new ResourceScope({ label: "map-runtime" });
-    this.scope = this.resources;
     this.handle = this.map;
     this.plugins = createPluginRegistry(
       // plugin context 动态读取当前 client/map,注册在 runtime 时已就绪

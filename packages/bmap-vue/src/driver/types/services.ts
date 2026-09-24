@@ -1011,7 +1011,7 @@ export interface ServiceInvocationDriver {
    * **归属模型与 `search()` 完全一致**（同一个 Driver、同一份记账）：路线服务也只有一条
    * `onSearchComplete`，回包里没有请求身份，官方也没有承诺多次请求之间的回调顺序。因此同样按
    * 「**一个实例同一时刻只有一个未结算操作**」归属——并发被显式拒绝、取消/超时之后该实例不再接受
-   * 新检索（调用方侧 `useServiceTask` 的 `supersede: "recreate"` 会在下一次检索时换新实例）。
+   * 新检索（调用方侧独占档实例通道的 `supersede: "recreate"` 会在下一次检索时换新实例）。
    *
    * 端点形态上驾车是**最窄的那一个**：官方签名 `search(start: Point | LocalResultPoi, end: …,
    * options?: { waypoints })` 里没有 `string`，因此传地名在类型层就被拒（`BMAP_INVALID_ARGUMENT`）。
@@ -1076,7 +1076,7 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
    * 「一个实例一个未结算操作」的槽位）；
    * 其余服务（Geocoder / Boundary / Convertor / LocalCity / Geolocation）的调用既没有登记在飞请求、
    * 也没有释放标记——通用入口会承诺「在飞调用会失败、释放后拒绝新调用」而实现做不到。
-   * 这条取舍（以及「统一状态口径由 composable 侧的 `useServiceTask` 承担」）冻结在 ADR
+   * 这条取舍（以及「统一状态口径由 composable 侧的服务任务内核承担」）冻结在 ADR
    * `2026-09-14-service-lifecycle-and-local-search.md`。
    *
    * 绑输入框的实例在结束使用时**应该**调用它：SDK 实例的 `dispose()` 不会随输入框一起被回收，

@@ -399,7 +399,7 @@ describe("usePanoramaService：检索状态层", () => {
     const before = baseline();
     const statuses: string[] = [];
     const wrapper = mountConsumer((api) => {
-      // **顺序**调用：并发下的取代语义属于 `useServiceTask` 的契约（已有专门用例），
+      // **顺序**调用：并发下的取代语义属于 `serviceTaskCore` 的契约（已有专门用例），
       // 这一条要验的是「两种重载形态都真的打到了 SDK」。
       void api
         .findByLocation({ lng: 116.4, lat: 39.9 })
@@ -410,7 +410,7 @@ describe("usePanoramaService：检索状态层", () => {
     await flushPromises();
     await flushPromises();
     expect(statuses).toEqual(["success", "success"]);
-    // 两个调用共用同一个服务实例（`useServiceTask` 的实例缓存）
+    // 两个调用共用同一个服务实例（`useSimpleServiceTask` 的实例缓存）
     expect(fake.createdPanoramaServices.length).toBe(before.services + 1);
     const callLog = fake.createdPanoramaServices.at(-1)!.callLog;
     expect(callLog).toContain("getPanoramaByLocation:args=2");

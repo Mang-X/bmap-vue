@@ -1825,7 +1825,7 @@ export function createJsapiV4ServiceDriver(
      * 后者还有「一个实例一个未结算操作」的槽位），其余服务
      * （Geocoder / Boundary / Convertor …）的调用**没有登记在飞请求、也没有释放标记**——一个通用的
      * `dispose()` 会承诺「在飞调用会失败、释放后拒绝新调用」，而实现做不到。统一的服务生命周期
-     * 统一状态口径由 composable 侧的 `useServiceTask` 承担（ADR `2026-09-14-service-lifecycle-and-local-search.md`）。
+     * 统一状态口径由 composable 侧的服务任务内核承担（ADR `2026-09-14-service-lifecycle-and-local-search.md`）。
      *
      * 语义：① 幂等；② **Driver 侧清理**（订阅释放）每次都执行（幂等）；③ **SDK 自身的
      * `dispose()` 只有成功才记账**：抛错时调用方会收到错误，而句柄保持「不再接受业务调用」，

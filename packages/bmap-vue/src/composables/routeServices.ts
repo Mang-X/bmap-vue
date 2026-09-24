@@ -5,7 +5,7 @@
  * `useTransitRoute`）只差三件事：能力 id、句柄种类、`search` 的入参形状。其余全部相同——
  * 因此「共用语义只写一处」，一个 hook 只描述自己那三件事：
  *
- * - **状态口径**：`useServiceTask`（`idle` / `loading` / `success` / `empty` / `failed` /
+ * - **状态口径**：服务任务内核（`idle` / `loading` / `success` / `empty` / `failed` /
  *   `timeout` / `canceled` / `unsupported`）。这一层**不复制请求框架**：超时、空结果、迟到回调、
  *   先到者胜都在 Driver 的 `ServiceCall` 适配器里。
  * - **构造期状态**：`location` / `renderOptions` / 各自策略字段变化 ⇒ **丢弃旧实例**（下一次检索
@@ -16,6 +16,7 @@
  *   新检索取代在飞检索时换新实例，旧的迟到回包只会落到被丢弃的实例上。
  */
 import { toValue, watch, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
+import type { BMapClient } from "../client/types";
 import { BMapError } from "../core/errors/BMapError";
 import type { MapContext } from "../core/context/types";
 import type { Capability } from "../driver/capability/catalog";
@@ -28,7 +29,7 @@ import type {
 } from "../driver/types/services";
 import type { BMapServiceStatus } from "../core/services";
 import type { GeoPoint } from "./useGeocoder";
-import { useServiceTask, type ServiceInvokeContext } from "./useServiceTask";
+import { useExclusiveServiceTask, type ServiceInvokeContext } from "./serviceTask";
 
 /** 路线检索区域：城市名 / 领域 Point / 本库 `MapHandle`。不传时取当前 `<Map>` 的地图实例。 */
 export type BMapRouteLocation = string | GeoPoint | MapHandle;
@@ -258,14 +259,19 @@ export interface CreateRouteTaskInput<TResult, THandle extends ServiceHandle<str
   /** 发起一次归一化调用（返回值即 Driver 的 `ServiceCall`） */
   invoke: (context: ServiceInvokeContext, handle: THandle, request: TRequest) => ServiceCall<TResult>;
   /** 释放实例（四类路线服务都走 `disposeRoute` → 公开的 `clearResults()`） */
-  release: (context: ServiceInvokeContext, handle: THandle) => void;
+  /**
+   * 释放服务实例。只有 `client` 与 `handle`：Driver 的 `disposeRoute` 只需要它们，且句柄
+   * 必须用**实例当初所属的那个** client 释放（跨 Client 会被 Driver 拒绝）。
+   */
+  release: (client: BMapClient, handle: THandle) => void;
   /** 构造期快照（每次都从可能变化的 ref / getter 里读一遍） */
   snapshot: () => TSnapshot;
   sameSnapshot: (a: TSnapshot, b: TSnapshot) => boolean;
 }
 
 /**
- * 建一个路线任务：`useServiceTask` + 「构造期状态变化 ⇒ 丢弃实例」。
+ * 建一个路线任务：`useExclusiveServiceTask`（独占档：官方有 `disposeRoute`，回包归属依赖
+ * 实例身份）+「构造期状态变化 ⇒ 丢弃实例」。
  *
  * 返回的是完整任务（含 `invalidateService` 之外的一切），供四个 hook 直接转成自己的公开面。
  */
@@ -278,7 +284,7 @@ export function createRouteTask<
   ctx: MapContext,
   input: CreateRouteTaskInput<TResult, THandle, TRequest, TSnapshot>,
 ): BMapRouteTask<TResult, TRequest> {
-  const task = useServiceTask<TResult, THandle, [TRequest]>(ctx, {
+  const task = useExclusiveServiceTask<TResult, THandle, [TRequest]>(ctx, {
     capability: input.capability,
     create: input.create,
     invoke: input.invoke,

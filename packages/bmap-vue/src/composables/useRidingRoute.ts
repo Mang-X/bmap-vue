@@ -10,6 +10,7 @@
  * 绘制物所有权）见 `./routeServices.ts`。
  */
 import { toValue, type MaybeRefOrGetter } from "vue";
+import type { BMapClient } from "../client/types";
 import type { ServiceHandle } from "../driver/types/handles";
 import type {
   RidingRouteOptions,
@@ -29,7 +30,7 @@ import {
   type BMapRouteRenderOptions,
   type RouteConstructionState,
 } from "./routeServices";
-import type { ServiceInvokeContext } from "./useServiceTask";
+import type { ServiceInvokeContext } from "./serviceTask";
 
 /** 骑行构造期选项；每个字段都可以是 ref / getter，**只有它们变化才重建 SDK 实例**。 */
 export interface BMapRidingRouteOptions {
@@ -73,8 +74,8 @@ export function useRidingRoute(options: MaybeRefOrGetter<BMapRidingRouteOptions>
     },
     invoke: (context: ServiceInvokeContext, handle, request) =>
       jsapiV4ServicesOf(context.client).searchRidingRoute(handle, request),
-    release: (context: ServiceInvokeContext, handle) => {
-      jsapiV4ServicesOf(context.client).disposeRoute(handle);
+    release: (client: BMapClient, handle) => {
+      jsapiV4ServicesOf(client).disposeRoute(handle);
     },
     snapshot: () => snapshotRouteState(readState()),
     sameSnapshot: sameRouteState,

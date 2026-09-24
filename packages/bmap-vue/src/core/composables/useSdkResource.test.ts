@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, ref, watch } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
 import { useSdkResource, type SdkResourceSpec } from "./useSdkResource";
 import { createHandle, type SdkHandle } from "../../driver/types/handles";
@@ -27,6 +27,46 @@ function spec(opts: { failCreate?: boolean } = {}): SdkResourceSpec<{ v: number 
 }
 
 describe("useSdkResource", () => {
+  it("[#139] spec.watch 建的 watcher 归 Vue 所有：挂载中会触发，卸载后**不再**触发", async () => {
+    // 这条钉住「effect 生命周期交回 Vue」这条**验收项**：`spec.watch` 建的 watcher 在组件卸载时
+    // 必须停掉。它真正能抓住的回归是「`spec.watch` 被挪进 async 钩子」——那时 watcher 逃出组件的
+    // effect scope（`getCurrentScope()` 为 null），Vue 不会停它，实测这条会翻红。
+    //
+    // 它**抓不到**「把 `scope.add(watch(...))` 加回来」：那份包装在卸载时同样会停（`componentScope`
+    // 自己在 `onUnmounted` 里 dispose），属于冗余但无害。删掉它的理由是「谁负责停它」不该有两个
+    // 答案 + 资源账本不该为 Vue 已有的东西计费，不是因为它会漏——这里如实说明，免得下一个维护者
+    // 以为这条断言比实际更强。
+    //
+    // 观察源用**组件外部的 ref**而不是 props：卸载之后组件实例已经不在树上，改 props 不会
+    // 触发任何东西，那样的断言是恒真的。外部 ref 才能真正回答「watcher 还活着吗」。
+    const source = ref(1);
+    const onSource = vi.fn();
+    const Comp = defineComponent({
+      setup() {
+        useSdkResource({
+          props: { v: 1 },
+          spec: {
+            ...spec(),
+            watch: () => {
+              watch(source, (next) => onSource(next), { flush: "sync" });
+            },
+          },
+          resolveContext: async () => ({ name: "ctx" }),
+        });
+        return () => h("div");
+      },
+    });
+
+    const wrapper = mount(Comp);
+    await flushPromises();
+    source.value = 2;
+    expect(onSource, "挂载中 watcher 正常触发").toHaveBeenCalledWith(2);
+
+    wrapper.unmount();
+    source.value = 3;
+    expect(onSource, "卸载后 Vue 已经停掉它").toHaveBeenCalledTimes(1);
+  });
+
   it("creates on mount and exposes ready status", async () => {
     let seen: ReturnType<typeof useSdkResource<{ v: number }, Res, Ctx>> | null = null;
     const Comp = defineComponent({

@@ -13,7 +13,6 @@ export * from "./useDrivingRoute";
 export * from "./useWalkingRoute";
 export * from "./useRidingRoute";
 export * from "./useTransitRoute";
-export * from "./useServiceTask";
 export * from "./usePanoramaService";
 export { useMapEvent } from "./useMapEvent";
 export type { MapEventHandler, MapEventPayloadForName, UseMapEventOptions } from "./useMapEvent";

@@ -3,7 +3,7 @@ export type { BMapErrorCode, BMapErrorOptions } from "./errors/BMapError";
 export { logger, redactAk, setAkForLogger } from "./logger";
 export type { Logger } from "./logger";
 export { ResourceScope } from "./lifecycle/ResourceScope";
-export type { Disposer, DisposeContext, ResourceScopeOptions } from "./lifecycle/ResourceScope";
+export type { Disposer, ResourceScopeOptions } from "./lifecycle/ResourceScope";
 export { createFrameScheduler } from "./scheduler/FrameScheduler";
 export type { FrameScheduler } from "./scheduler/FrameScheduler";
 export {

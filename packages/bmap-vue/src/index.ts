@@ -155,7 +155,7 @@ export type {
 } from "./core/deprecations";
 export type { OverlayKind } from "./driver/types/overlays";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
-export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
+export type { Disposer, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
 export type { BMapProviderProps } from "./components/provider/BMapProvider.vue";
 
 // Client/Driver 领域类型(稳定公开,raw SDK 只在 ./advanced)

@@ -12,7 +12,7 @@
  */
 import type { ServiceHandle } from "../driver/types/handles";
 import { resolveMapContext } from "./resolveMapContext";
-import { useServiceTask } from "./useServiceTask";
+import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 import type { CoordinateFromType, CoordinateToType } from "../driver/types/services";
 import type { GeoPoint } from "./useGeocoder";
@@ -39,7 +39,7 @@ export type { GeoPoint };
 export function useConvertor(map?: unknown) {
   const ctx = resolveMapContext(map);
 
-  const task = useServiceTask<
+  const task = useSimpleServiceTask<
     GeoPoint[],
     ServiceHandle<"service:convertor">,
     [readonly GeoPoint[], CoordinatesFromType, CoordinatesToType],

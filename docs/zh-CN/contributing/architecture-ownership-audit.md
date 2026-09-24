@@ -37,7 +37,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `suggest()` 的程序化归属层：`pendingSuggest` 队列 + 同关键词互斥 + FIFO 退化 + 「通道独占」前置条件（`watchInputActivity` / `isTypableInput` / `loseExclusivity` / `EXCLUSIVITY_LOST_HINT`） | `driver/jsapi-v4/services.ts`（原 814-1053 段） | **生产 0**。只有自身单测与 `facet-probes` 探针；`<Autocomplete>` 渲染可输入输入框、结构上不可能是消费者 | `FAKE-ONLY`：顺序来自 `FakeV4CallbackQueue` 发明的微任务 FIFO，关键字来自 `includeKeyword` 发明的回填 | **REMOVE** | #104 A1：整段删除。`Autocomplete` **不进归一化调用面**，构造时传 `onSearchComplete` 原样转发；`PlaceSuggestion` 类型与 `ServiceInvocationDriver.suggest` 一并从出口摘掉；`service.autocomplete` 由 `experimental` 回到 `native`（它唯一的降级理由就是这条假设） |
 | `LocalSearch` 的「一个实例同一时刻最多一个未结算操作」 | 同文件 `invokeSlotOperation` | 7 个 service composable + 组件 | `OWNED`：身份是**实例自己**，不需要按到达顺序猜 | **KEEP** | — |
-| `useServiceTask` 的 `supersede`（取代即换新实例） | `composables/useServiceTask.ts` | 全部 service composable | `OWNED` | **KEEP** | — |
+| 实例通道的 `supersede`（取代即换新实例） | `core/services/instanceChannel.ts`（**独占档**） | LocalSearch + 四个路线服务 | `OWNED`：依据是「该服务的 SDK 实例**有**公开释放入口」，且取消 / 超时后旧实例上可能有无法区分的回包 | **KEEP（收窄到独占档）** | #139：7 个官方无销毁入口的简单服务改走**无状态**共享通道，`supersede` / `refuse` / 待释放队列在它们身上是恒空状态，已从那个面上结构性移除 |
 | 超时 / 空结果 / 迟到回调 / 先到者胜 | `driver/normalize/serviceCall.ts`（单一实现点） | 全部归一化调用 | `OWNED` + `OFFICIAL` | **KEEP** | — |
 | ADR 2026-09-12 决策 3 的 `normalize/jsonpProbe.ts`（两引擎共用的空/失败嗅探） | — | — | — | 已消失 | #26 单引擎收敛时随文件删除；本表记录在案，避免按 ADR 原文再找这个模块 |
 
@@ -70,7 +70,7 @@
 | 机制 | 位置 | 消费者 | 证据 | 结论 | 处置 |
 | --- | --- | --- | --- | --- | --- |
 | 六条资源路径的 generation / epoch stale guard、`PluginHost.epochNumber`、`PluginRegistry.record.generation` | `core/composables/*`、`core/plugins/*` | 生产 | `OWNED`：比较的是「这还是我创建的那个实例/作用域吗」，**不**归属 SDK 回包 | **KEEP** | 本票的非目标：不因「看着复杂」删掉真实所有权机制 |
-| `ResourceScope` 的六个定时器别名（`requestAnimationFrame`+`frame`、`setTimeout`+`timeout`、`setInterval`+`interval`）与 `addCancellable` | 原 `core/lifecycle/ResourceScope.ts` | **生产 0**（只有同名测试在用） | 与 `core/scheduler/FrameScheduler` 重复的转发面，且两套语义还不一致（`setTimeout` 返回裸 id、`timeout` 返回 disposer） | **REMOVE** | #104 R1：六个别名 + `addCancellable` 全删；`ResourceScopeV2.test.ts` 里仍有效的 5 条（label/size、onDisposeError、fork×2、parentSignal、dispose reason）并入已存在的 `ResourceScope.test.ts`，3 条定时器/RAF 用例随被删实现一起消失 |
+| `ResourceScope` 的六个定时器别名（`requestAnimationFrame`+`frame`、`setTimeout`+`timeout`、`setInterval`+`interval`）与 `addCancellable` | 原 `core/lifecycle/ResourceScope.ts` | **生产 0**（只有同名测试在用） | 与 `core/scheduler/FrameScheduler` 重复的转发面，且两套语义还不一致（`setTimeout` 返回裸 id、`timeout` 返回 disposer） | **REMOVE** | #104 R1 已删。#139 续：随之一起从 `ResourceScope.test.ts` 消失的还有「`onDisposeError` / `parentSignal`」两条构造选项（同样生产 0 消费者）——但**它们承载的行为没丢**：容错改为断言 `logger.warn` 通道、「父释放 ⇒ 子释放」由 `fork()` 的 disposer 链路继续保证并补了一条「父已释放时 `fork()` 的子**同步**被释放」。`ResourceScope` 由此收成**最小外部资源内核**（`add` / `fork` / `signal` / `size` / `label` / `isDisposed` / `dispose`），`run()` 与内嵌 `effectScope` 一并删除——Vue 的 effect 生命周期交回 Vue |
 | `useResourceScope.ts` | 原 `core/lifecycle/useResourceScope.ts` | **0**（只有两行出口） | — | **REMOVE** | #104 R2：文件与两处出口删除 |
 | `MapRuntimeOptions.clientFactory`（与 `clientContext` 二选一） | `core/runtime/MapRuntime.ts:74` | 只有 3 个测试文件 | 无生产消费者的第二条臂 | **SIMPLIFY** | 后续票（收口要连带改 `v3-context-runtime-lifecycle` 的夹具） |
 | `MapRuntimeStatus` 的 `"loading"` 别名 | `core/context/types.ts:30` | 类型层，#71 起运行期不再写 | `OWNED` 但已过时 | **SIMPLIFY** | **本票已修文档承诺**：`docs/zh-CN/components/map.md` 两处不再把 `loading` 写成会发出的状态；类型别名到 #44 一并收 |
@@ -100,7 +100,7 @@
 | `defineCapabilityOverride` | 原 `src/advanced.ts` | 0（含 docs / apps / fixtures / scripts） | **REMOVE** | #104 R3 |
 | `extractSdkEventNames` | 原 `core/events/EventBridge.ts` | 只有自身测试 | **REMOVE** | #104 R5 |
 | `shouldFullReplace` | 原 `core/data/diffData.ts` | 只有自身测试 | **REMOVE** | #104 R6 |
-| `useServiceTask`（经 `export * from "./composables"` 外泄） | `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **SIMPLIFY** | 归 **#44**：要么给文档页要么从出口收窄 |
+| `useServiceTask`（经 `export * from "./composables"` 外泄） | 原 `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **已结（#139）** | **REMOVE**：`export * from "./useServiceTask"` 整条摘除，12 个**服务** composable 的出口不受影响。任务内核改名为 `composables/serviceTask.ts`（两档），一律只作内部实现——`tests/behavior/v3-core-surface.test.ts` 已把这 7 个名字加进负向清单钉住 |
 | `useMapResource` / `SdkResourceAdapter` / `UseMapResourceResult` | 原 `core/composables/useMapResource.ts`（`core/index.ts` 出口） | **生产 0**（只有它自己的单测） | 被同目录的 `useSdkResource` 取代——后者的文件头写着「替代行为各异的 `useMapResource` / `useOverlayResource` / `useControlResource` / `useLayerResource`」 | **REMOVE** | **第三批已落地**：文件与单测删除、三处出口名一并摘掉 |
 | `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | 归 **#44**：`./core` 出口收窄时一并决定（`useServiceTask` / `MapRuntimeOptions.clientFactory` 等同类项也在那里） |
 | `Autocomplete` 里按结构化成员探测 `disposeAutocomplete` 的分支（`as { disposeAutocomplete?: … }`，探测失败即**静默不释放**） | 原 `components/autocomplete/Autocomplete.vue` 的 `disposeService()` | 0：#26 之后 `BMapEngine` 只有 `jsapi-v4` 一个成员，分支永不成立（注释自己写着「#26 删除 webgl-v1 后这个探测可以收成直接调用」） | **REMOVE** | #104 R11：改成 `jsapiV4ServicesOf(client).disposeAutocomplete(instance)`——按 ADR 2026-09-14 的口径走**可运行时检查**的收窄点，而不是组件里另写一份 `as`。留着的代价不只是死代码：那条静默分支正好会跳过 Driver 侧的订阅记账 |
@@ -221,8 +221,9 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 **本批刻意不做的**（都写清去处，不留悬空）：
 
 - `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、单成员别名 `LoadedSdk`、
-  `client.version`、`optionKey()` 的一行转发、`useServiceTask` 的根出口外泄、`UseSdkResourceOptions`
-  → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）；
+  `client.version`、`optionKey()` 的一行转发、`UseSdkResourceOptions`
+  → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）。
+  （`useServiceTask` 的根出口外泄**已由 #139 结清**，见上表处置列；）
 - 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision；**已落地**：
   删列 + reason 改名 `unlisted-capability`，见上表处置列与 ADR `2026-09-24-single-engine-capability-catalog`）；
 - 两处无判别力的内部判据（`BMap.mountMap()` 的防御性前置、`driver-contract` 的 `expectation` 档）→ **#127**（Test Debt）—— **已结清**：`mountMap()` 的前置保留并补上能翻红的用例，`expectation` 档连同三处跳过分支删除；
@@ -240,7 +241,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 | ~~`BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档~~ | Test Debt | ~~#127~~ **已结清**：`mountMap()` 保留 + 补出能翻红的用例（删掉实测变红）；`expectation` 档删除 |
 | ~~F-2 / F-3 / F-4 三条未取证的第三方语义~~ | Probe Debt | ~~#128~~ **已结清（2026-09-24）**：F-2 是 issue 验收标准第 5 条点名的例外（`SharedLoadTask` 的 `callbackRegistry`），现已同时给出 **live guarantee**（`SharedLoadTask.ts` 模块头：本库保证 vs 官方可改分列）与 **可回归 gate**（`v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live 漂移守卫 + `ScriptLoader.test.ts` 的 foreign 单测）⇒ 可以进 #44 的 Stable 冻结评估；F-3 两条读数（幂等 / 销毁期回调）固化在 `probe-destroy-idempotency.live.json`，结论**与先前占位假说相反**（Map 第二次 destroy 抛错）；F-4 按 remove-first 改成夹具记账、不 probe。上表 F-2 / F-3 / F-4 行与 `driver-contract.ts` 三处注释均已按读数更新 |
 | 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |
-| `useServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | #44 |
+| `useServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | **#139 已结**（内部化，不给文档页） |
 | `getProcessSdkRegistry(domain, options)` 的首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 都写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | 出口形状收窄 | #44（与上面 7 项同批；本批只登记，不顺手改签名） |
 | `#101` 的 InfoWindow `openOutstanding` 一族 | 非目标 | 已在 #101 原 PR 内按 ownership/reconcile 纠正 |
 | `DataLayerManager` / Native Layer 失败恢复的直接测试 | Test Debt | #113。前置已满足：本表第 4 节（generation / epoch stale guard）与第 5 节（`native-layers.ts` 的 `supports()` 刻意不采纳实测可用的成员）都判 **KEEP**，即那套机制属于「真实所有权复杂度」而不是要 SIMPLIFY 的镜像状态（注意：本表**没有**「失败恢复状态机」的专行，`#113` 正文里的「前置」指的是这两行） |

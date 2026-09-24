@@ -87,6 +87,13 @@ jobs:
       - name: Type-check tests (tests/performance)
         run: pnpm typecheck:tests
 
+      # 公共**类型面**契约（issue #139 评审 P2）：@ts-expect-error 断言必须被某个 tsc 编译才成立，
+      # 而 serviceTask.test.ts 不在任何 typecheck 范围内（tsconfig.build.json 排除 *.test.ts，
+      # tsconfig.tests.json 只 include performance / live-performance）——实测把那层类型放宽后
+      # 三个门禁 + 16 条运行时用例全绿。范围只收 tests/type-contracts/，不碰 packages/ 下的既存错误。
+      - name: Type-check type contracts (@ts-expect-error gate)
+        run: pnpm typecheck:type-contracts
+
       # Behavior snapshot tests (data-driven, no external network/AK)
       - name: Build v3 artifacts for global bundle tests
         run: node --experimental-strip-types scripts/build-package.mts
