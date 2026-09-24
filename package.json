@@ -50,7 +50,9 @@
     "probe:point-pick": "node --experimental-strip-types scripts/probe-point-pick.mts",
     "probe:native-point-cluster": "node --experimental-strip-types scripts/probe-native-point-cluster.mts",
     "probe:track-line": "node --experimental-strip-types scripts/probe-track-line.mts",
-    "probe:mvt-layer": "node --experimental-strip-types scripts/probe-mvt-layer.mts"
+    "probe:mvt-layer": "node --experimental-strip-types scripts/probe-mvt-layer.mts",
+    "probe:jsonp-callback": "node --experimental-strip-types scripts/probe-jsonp-callback.mts",
+    "probe:destroy-idempotency": "node --experimental-strip-types scripts/probe-destroy-idempotency.mts"
   },
   "dependencies": {
     "mitt": "^3.0.0",

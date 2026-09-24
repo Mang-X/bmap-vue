@@ -601,7 +601,8 @@ describe("视角动画", () => {
     expect(map.cancelViewAnimation(handle, b)).toBe("canceled");
     expect(canceled).toEqual(["a", "b"]);
 
-    // a 早已结算 ⇒ 没有可取消的东西，也不补发一次 SDK 取消（那要假设 SDK 幂等，F-3 未证）
+    // a 早已结算 ⇒ 没有可取消的东西，也不补发一次 SDK 取消（那要假设 cancelViewAnimation 幂等，
+    // 不在 #128 F-3 的 destroy/dispose 取证范围，仍未证）
     expect(map.cancelViewAnimation(handle, a)).toBe("already-settled");
     expect(canceled).toEqual(["a", "b"]);
   });
@@ -611,7 +612,8 @@ describe("视角动画", () => {
     const handle = map.create(container);
     map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
     // 「没有活动动画时停止是 no-op」这条旧语义现在只能按**实例**表达：本 Driver 没有该实例的
-    // 记录 ⇒ 报 `already-settled`，且一个 SDK 取消都不发（补发要假设 SDK 幂等，属 F-3 未证）。
+    // 记录 ⇒ 报 `already-settled`，且一个 SDK 取消都不发（补发要假设 cancelViewAnimation 幂等，
+    // 不在 #128 F-3 的 destroy/dispose 取证范围，仍未证）。
     expect(map.cancelViewAnimation(handle, { frames: [] })).toBe("already-settled");
     expect(fake.createdMaps[0].callLog).not.toContain("cancelViewAnimation");
     expect(map.getZoom(handle)).toBe(12);

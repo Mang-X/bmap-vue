@@ -1,10 +1,12 @@
 /**
  * Fake BMap v4 EventTarget
  *
- * 与官方 JSAPI 4.0 一致的事件语义：
+ * **夹具记账**（F-4，#128）——这里的两条语义是本 Fake 的**建模选择**，不是对官方
+ * EventTarget 行为的断言（原注释曾写「与官方一致」，那是 `FAKE-ONLY` 推断，已按
+ * remove-first 收成夹具口径；生产路径本就中立，只有泄漏门禁与活动计数按它算）：
  * - 监听器按**函数身份**判等，同一个函数对象重复 `addEventListener` 只保留一份；
  * - `removeEventListener` 必须传入 `addEventListener` 时的同一个函数对象，否则不生效
- *   （这正是「用新匿名函数解绑一定失败」的 runtime 依据）。
+ *   （「用新匿名函数解绑一定失败」是**本夹具**的 runtime 依据，不是官方承诺）。
  *
  * 计数落在 `FakeV4Diagnostics`（`./diagnostics.ts`）上：监听器是**泄漏门禁**的一项
  * （`leaks.listeners`），调用次数是**活动口径**（`activity.listenCalls` / `unlistenCalls`）。
