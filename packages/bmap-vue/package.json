@@ -84,7 +84,7 @@
     "@microsoft/api-extractor": "^7.52.0",
     "@types/web-bluetooth": "0.0.21",
     "@vitejs/plugin-vue": "^6.0.8",
-    "@vue/language-core": "^2.2.0",
+    "@vue/language-core": "^3.3.11",
     "typescript": "^5.8.3",
     "vite": "^8.2.2",
     "vite-plugin-dts": "^5.1.0",
