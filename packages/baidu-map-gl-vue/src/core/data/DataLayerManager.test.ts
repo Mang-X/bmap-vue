@@ -477,3 +477,118 @@ describe("DataLayerManager：clear() 失败不得丢失所有权 [#102 F3]", () 
     m.dispose();
   });
 });
+
+/* ------------------------------------------------------------------ #113：失败恢复的直接读数
+ *
+ * 断言口径只取「最终资源归属 / 宿主可观察调用 / 可重试行为 / 告警出口」——不读
+ * `unknownKeys` 身份、分支数量或状态结构（issue #113 的执行约束）。`unknownSize`
+ * 是公开诊断读数，与 `size` 一起回答「归属是否收敛」。
+ */
+
+describe("DataLayerManager：remove 抛错后的 unknown 与恢复 [#113]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("remove 抛错 ⇒ 该 key 进入 unknown：保留所有权、告警、后续 updatePosition/setVisible 都不碰它", () => {
+    const warn = vi.fn();
+    const { host, removeMarker, updatePosition, setVisible } = makeHost();
+    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    m.sync(syncOf(items));
+    m.flush();
+
+    // b 摘除失败（摘之前抛：可能仍在图上）
+    removeMarker.mockImplementation((resource: { id: string }) => {
+      if (resource.id === "b") throw new Error("removeLayer failed");
+    });
+    m.sync(syncOf([{ id: "a", lng: 1, lat: 1 }]));
+    m.flush();
+    expect(warn, "失败必须可观测").toHaveBeenCalledWith(expect.stringContaining("摘除资源失败"));
+    expect(m.unknownSize, "b 的挂载态未知").toBe(1);
+    expect(m.size, "所有权保留：a + 未确认的 b").toBe(2);
+
+    // b 回到数据里（换新对象、坐标变了）——unknown 不吃 updatePosition
+    vi.clearAllMocks();
+    m.sync(
+      syncOf([
+        { id: "a", lng: 10, lat: 10 },
+        { id: "b", lng: 20, lat: 20 },
+      ]),
+    );
+    m.flush();
+    expect(
+      updatePosition.mock.calls.map((call) => (call[0] as { id: string }).id),
+      "已知的 a 仍写；unknown 的 b 一个字都不写",
+    ).toEqual(["a"]);
+    expect(m.unknownSize, "没有收敛动作时 unknown 持续").toBe(1);
+
+    // unknown 不吃 setVisible，且**不计入失败**（不抛、不把调用方推进到「永远重试」）
+    expect(() => m.setVisible(false)).not.toThrow();
+    expect(
+      setVisible.mock.calls.map((call) => (call[0] as { id: string }).id),
+      "只有已知资源收到显隐",
+    ).toEqual(["a"]);
+    expect(m.unknownSize).toBe(1);
+    m.dispose();
+  });
+
+  it("再次摘除成功 ⇒ 销账：unknownSize 归零、所有权与显隐恢复确定状态", () => {
+    const warn = vi.fn();
+    const { host, removeMarker, updatePosition } = makeHost();
+    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    m.sync(syncOf(items));
+    m.flush();
+
+    removeMarker.mockImplementation((resource: { id: string }) => {
+      if (resource.id === "b") throw new Error("removeLayer boom");
+    });
+    m.sync(syncOf([{ id: "a", lng: 1, lat: 1 }]));
+    m.flush();
+    expect(m.unknownSize).toBe(1);
+
+    // 修复宿主：下一次摘除成功 ⇒ 收敛
+    removeMarker.mockImplementation(() => {});
+    m.sync(syncOf([{ id: "a", lng: 1, lat: 1 }]));
+    m.flush();
+    // b 不在数据里 ⇒ 走删除路径；成功摘除后销账
+    expect(m.unknownSize, "成功摘除后销账").toBe(0);
+    expect(m.size).toBe(1);
+
+    // 归属确定后，普通写入路径恢复可用（a 坐标变化仍会下发）
+    vi.clearAllMocks();
+    m.sync(syncOf([{ id: "a", lng: 10, lat: 10 }]));
+    m.flush();
+    expect(updatePosition).toHaveBeenCalledTimes(1);
+    m.dispose();
+  });
+
+  it("显隐部分失败 ⇒ 抛给调用方、全部试过、下一次不被短路吞掉（可重试）", () => {
+    const { host, setVisible } = makeHost();
+    const m = new DataLayerManager(host, { label: "BMarkerList" });
+    m.sync(syncOf(items));
+    m.flush();
+    vi.clearAllMocks();
+
+    // b 显隐失败：逐条隔离——a、c 仍要对齐
+    setVisible.mockImplementation((resource: { id: string }, visible: boolean) => {
+      if (resource.id === "b") throw new Error("hide failed");
+      return true;
+    });
+    expect(() => m.setVisible(false), "失败必须让调用方知道").toThrowError(/hide failed/);
+    expect(
+      setVisible.mock.calls.map((call) => (call[0] as { id: string }).id),
+      "一条失败不中断其余对齐",
+    ).toEqual(["a", "b", "c"]);
+
+    // 内部目标值没推进 ⇒ 第二次 setVisible(false) 不被顶部短路吞掉，全员重对齐
+    setVisible.mockImplementation(() => true);
+    vi.clearAllMocks();
+    m.setVisible(false);
+    expect(setVisible, "同一批资源必须重试").toHaveBeenCalledTimes(3);
+    expect(setVisible.mock.calls.every((call) => call[1] === false)).toBe(true);
+
+    // 全部成功之后才推进：再调同值 ⇒ 幂等短路
+    vi.clearAllMocks();
+    m.setVisible(false);
+    expect(setVisible).not.toHaveBeenCalled();
+    m.dispose();
+  });
+});
