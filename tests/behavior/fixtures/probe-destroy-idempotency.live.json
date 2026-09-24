@@ -25,6 +25,16 @@
       "message": "Cannot set properties of undefined (setting 'enableAutoResize')"
     },
     {
+      "id": "auto.control.ctrlCreate",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "auto.control.callbackObserved",
+      "threw": false,
+      "count": 1
+    },
+    {
       "id": "auto.control.create",
       "threw": false,
       "message": null

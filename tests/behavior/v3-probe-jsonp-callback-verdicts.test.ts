@@ -39,7 +39,8 @@ function conclusionOf(line: string): string {
  * 一致（文件末尾的漂移用例做机器检查）。
  *
  * live 要点（2026-09-24 真实 AK）：官方按 `callback=NAME` 调用我们的 handler（count=1）；
- * args.length=0（走 `exportGetter` 回退）；调用时身份仍是我们的；foreign 释放后恢复原引用；
+ * args.length=0（走 `exportGetter` 回退）；调用时身份仍是我们的；**callback 当下 readyAtCall=true**
+ * （重跑后以 fixture 为准）；foreign 释放后恢复原引用；
  * 官方新增全局为大量 `BMAP_*` 常量与 `BMap`/`BMapGL` 等（`__bmap_v4_custom_` 前缀无冲突）。
  */
 const COMPLETE: Reading[] = [
@@ -47,6 +48,7 @@ const COMPLETE: Reading[] = [
   { id: "control.callbackFired", threw: false, count: 1 },
   { id: "control.argsLength", threw: false, count: 0, rawLength: 0 },
   { id: "control.handlerIdentityAtCall", threw: false, same: true },
+  { id: "control.readyAtCall", threw: false, ready: true },
   { id: "control.bmapReady", threw: false, ready: true },
   { id: "control.loadAttempt", threw: false, message: null },
   { id: "release.afterControl", threw: false, type: "absent" },
@@ -149,7 +151,6 @@ const COMPLETE: Reading[] = [
       "BMAP_POINT_DENSITY_LOW",
       "BMAP_POINT_DENSITY_MEDIUM",
       "BMAP_POINT_SHAPE_CIRCLE",
-      "BMAP_POINT_SHAPE_RECT",
       "BMAP_POINT_SHAPE_RHOMBUS",
       "BMAP_POINT_SHAPE_SQUARE",
       "BMAP_POINT_SHAPE_STAR",
@@ -197,6 +198,7 @@ const COMPLETE: Reading[] = [
       "BMAP_TRANSIT_POLICY_AVOID_SUBWAYS",
       "BMAP_TRANSIT_POLICY_FIRST_SUBWAYS",
       "BMAP_TRANSIT_POLICY_LEAST_TIME",
+      "BMAP_TRANSIT_POLICY_LEAST_TRANSFER",
       "BMAP_TRANSIT_POLICY_LEAST_WALKING",
       "BMAP_TRANSIT_POLICY_RECOMMEND",
       "BMAP_TRANSIT_TYPE_CROSS_CITY",
@@ -249,7 +251,7 @@ const COMPLETE: Reading[] = [
       "regeneratorRuntime",
       "vec2",
       "vec3",
-      "vec4",
+      "vec4"
     ],
   },
   { id: "foreign.preInstall", threw: false, type: "function", same: true },
@@ -367,7 +369,7 @@ describe("[#128 F-2] JSONP 回调查针判定层的三态", () => {
     expect(line).toContain("无法判定");
   });
 
-  it("正证控件：齐备时为空；缺 callbackFired / bmapReady / identity 时点名失败", () => {
+  it("正证控件：齐备时为空；缺 callbackFired / readyAtCall / identity 时点名失败", () => {
     expect(controlFailures(report(COMPLETE)), "齐备时控件成立").toEqual([]);
 
     const noFired = controlFailures(
@@ -375,10 +377,21 @@ describe("[#128 F-2] JSONP 回调查针判定层的三态", () => {
     );
     expect(noFired.join("\n")).toContain("control.callbackFired");
 
-    const noReady = controlFailures(
+    // readyAtCall 是控件；最终 bmapReady 只是诊断，改成 false 不应单独让控件失败
+    const noReadyAtCall = controlFailures(
+      report(COMPLETE.map((r) => (r.id === "control.readyAtCall" ? { ...r, ready: false } : r))),
+    );
+    expect(noReadyAtCall.join("\n")).toContain("control.readyAtCall");
+
+    const readyAtCallMissing = controlFailures(
+      report(COMPLETE.filter((r) => r.id !== "control.readyAtCall")),
+    );
+    expect(readyAtCallMissing.join("\n")).toContain("control.readyAtCall");
+
+    const finalOnlyFalse = controlFailures(
       report(COMPLETE.map((r) => (r.id === "control.bmapReady" ? { ...r, ready: false } : r))),
     );
-    expect(noReady.join("\n")).toContain("control.bmapReady");
+    expect(finalOnlyFalse, "最终 bmapReady 只是诊断，不进控件").toEqual([]);
 
     const noIdentity = controlFailures(
       report(

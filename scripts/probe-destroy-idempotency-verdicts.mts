@@ -36,9 +36,12 @@ const UNKNOWN = "**无法判定**（读数缺失）";
 /**
  * 正证控件：本轮实验能不能下结论。
  *
- * 两条硬门槛：
+ * 三条硬门槛：
  * 1. Map 首次 destroy 必须成功（正证：SDK 起来了、销毁路径可测）；
- * 2. Autocomplete 首次 dispose 必须成功（正证：服务实例可测）。
+ * 2. Autocomplete 首次 dispose 必须成功（正证：服务实例可测）；
+ * 3. Autocomplete **对照组** `callbackObserved.count >= 1`——同环境不 dispose 时
+ *    `onSearchComplete` 必须能到达；否则 dispose 臂的 0/0 无法区分「dispose 挡住了」
+ *    与「网络/服务根本没回」（issue #128：每个探针要有对照组）。
  *
  * Panorama **未加载场景**的 destroy 抛错是**已知反例**，不进控件——它恰恰是 F-3 要测的一侧。
  */
@@ -58,6 +61,13 @@ export function controlFailures(report: ProbeReport): string[] {
     failures.push(
       `auto.control.disposeOnce 抛错或缺失（得到 ${String(autoOnce?.threw)}）——` +
         ` 首次释放都失败，后续幂等读数无意义`,
+    );
+  }
+  const autoCtrl = byId.get("auto.control.callbackObserved");
+  if (!autoCtrl || typeof autoCtrl.count !== "number" || autoCtrl.count < 1) {
+    failures.push(
+      `auto.control.callbackObserved 的 count 不足（得到 ${String(autoCtrl?.count)}）——` +
+        ` 对照组没等到 onSearchComplete，dispose 臂的 0/0 无法解释（可能只是网络没回）`,
     );
   }
   return failures;
@@ -101,14 +111,22 @@ export function verdicts(report: ProbeReport): string[] {
     const panoLoadedTwice = threwOf("pano.loaded.destroyTwice");
     const panoEmpty = threwOf("pano.unloaded.destroy");
 
+    // Panorama(loaded) 第二次读数只有在 **first 成功** 时才构成「重复调用」取证；
+    // first 已抛错时 second 只是失败后的重试，不是幂等性的第二次调用。
+    const panoLoadedSecondMeaningful = panoLoadedOnce === false && panoLoadedTwice !== null;
+    const panoLoadedFirstFailed = panoLoadedOnce === true;
+
     lines.push(
       `[幂等性] Map first=${describeAttempt("map.control.destroyOnce")}` +
         ` / second=${describeAttempt("map.destroyTwice")}；` +
         `Autocomplete first=${describeAttempt("auto.control.disposeOnce")}` +
         ` / second=${describeAttempt("auto.disposeTwice")}；` +
         `Panorama(loaded) first=${describeAttempt("pano.loaded.destroyOnce")}` +
-        ` / second=${describeAttempt("pano.loaded.destroyTwice")}；` +
-        `Panorama(empty)=${describeAttempt("pano.unloaded.destroy")} ⇒ ` +
+        ` / second=${describeAttempt("pano.loaded.destroyTwice")}` +
+        (panoLoadedFirstFailed
+          ? "（**first 已抛错 ⇒ second 不构成幂等取证**）"
+          : "") +
+        `；Panorama(empty)=${describeAttempt("pano.unloaded.destroy")} ⇒ ` +
         (mapOnce === null || mapTwice === null || autoOnce === null || autoTwice === null
           ? UNKNOWN
           : mapOnce !== false || autoOnce !== false
@@ -121,36 +139,66 @@ export function verdicts(report: ProbeReport): string[] {
                     `Map/Autocomplete second=${mapTwice}/${autoTwice}）`
                   : mapTwice === true || autoTwice === true
                     ? "**重复调用抛错**（Map/Autocomplete 第二次 destroy/dispose 不是 no-op ⇒" +
-                      " 本库 guard 只能承诺「本库保证」，不能写成官方幂等）"
-                    : panoLoadedTwice === true
-                      ? "**已加载 Panorama 第二次抛错**（重复 destroy 不是 no-op）"
-                      : panoEmpty === true && mapTwice === false && autoTwice === false && panoLoadedTwice === false
-                        ? "**有条件幂等**（Map / Autocomplete / 已加载 Panorama 重复销毁不抛；" +
-                          "未加载 Panorama 首次即抛 —— 与 ADR 2026-09-12 已知反例一致）"
-                        : mapTwice === false && autoTwice === false && panoLoadedOnce === false && panoLoadedTwice === false
-                          ? "**三者均幂等**（含已加载与未加载 Panorama 的重复调用；" +
-                            `未加载首次=${describeAttempt("pano.unloaded.destroy")}）`
-                          : UNKNOWN),
+                      " 本库 guard 只能承诺「本库保证」，不能写成官方幂等）" +
+                      (panoLoadedFirstFailed
+                        ? "；已加载 Panorama first 已抛错，其 second 不构成幂等取证"
+                        : panoLoadedTwice === true
+                          ? "；已加载 Panorama 第二次也抛（first 成功 ⇒ 重复 destroy 不是 no-op）"
+                          : panoLoadedTwice === false
+                            ? "；已加载 Panorama 第二次不抛（first 成功 ⇒ 该侧幂等）"
+                            : "")
+                    : panoLoadedFirstFailed
+                      ? "**已加载 Panorama 首次即抛**（first 失败 ⇒ 其 second 不构成幂等取证；" +
+                        `Map/Autocomplete second=${mapTwice}/${autoTwice} 均不抛，` +
+                        `未加载首次=${describeAttempt("pano.unloaded.destroy")}）`
+                      : panoLoadedSecondMeaningful && panoLoadedTwice === true
+                        ? "**已加载 Panorama 第二次抛错**（first 成功 ⇒ 重复 destroy 不是 no-op）"
+                        : panoEmpty === true && mapTwice === false && autoTwice === false &&
+                          panoLoadedSecondMeaningful && panoLoadedTwice === false
+                          ? "**有条件幂等**（Map / Autocomplete / 已加载 Panorama 重复销毁不抛；" +
+                            "未加载 Panorama 首次即抛 —— 与 ADR 2026-09-12 已知反例一致）"
+                          : mapTwice === false && autoTwice === false &&
+                            panoLoadedSecondMeaningful && panoLoadedTwice === false
+                            ? "**三者均幂等**（含已加载与未加载 Panorama 的重复调用；" +
+                              `未加载首次=${describeAttempt("pano.unloaded.destroy")}）`
+                            : UNKNOWN),
     );
   }
 
   // ── 2. 销毁期是否回调业务 ──────────────────────────────────────────────
   {
     const mapDestroyEvents = countOf("map.destroyEventCount");
+    const autoControl = countOf("auto.control.callbackObserved");
     const autoDuring = countOf("auto.callbacksDuringDispose");
     const autoAfter = countOf("auto.callbacksAfterDispose");
+
+    // Map 路径与 Autocomplete 路径**分开**下结论：Map 的 destroy 事件不能外推成
+    // 「Autocomplete dispose 也会回写」；Autocomplete 的 0/0 在对照组不成立时也不能
+    // 落成「未见回调」（可能只是网络没回）。
+    const mapPart =
+      mapDestroyEvents === null
+        ? UNKNOWN
+        : mapDestroyEvents >= 1
+          ? `**Map destroy 会回调业务**（事件=${mapDestroyEvents} ⇒ Map 路径 guard 按「可能重入」防护）`
+          : `**Map destroy 未见业务回调**（事件=${mapDestroyEvents}；本轮窗口没测到，不等于官方永不回调）`;
+
+    const autoPart =
+      autoControl === null || autoDuring === null || autoAfter === null
+        ? UNKNOWN
+        : autoControl < 1
+          ? `**无法判定**（对照组 callbackObserved=${autoControl}，` +
+            `dispose 臂 期间/之后=${autoDuring}/${autoAfter} 无法区分「dispose 挡住」与「网络没回」）`
+          : autoDuring >= 1 || autoAfter >= 1
+            ? `**Autocomplete dispose 会回调业务**（对照组=${autoControl}；` +
+              `dispose 期间/之后=${autoDuring}/${autoAfter} ⇒ service 路径 guard 按「可能重入」防护）`
+            : `**Autocomplete dispose 窗口内未见回调**（对照组=${autoControl} 证明服务可回调；` +
+              `dispose 期间/之后=${autoDuring}/${autoAfter} —— 只说明本轮窗口没测到，不等于官方永不回调）`;
+
     lines.push(
       `[销毁期回调] Map destroy 事件到业务=${num(mapDestroyEvents)}；` +
-        `Autocomplete dispose 期间=${num(autoDuring)} / dispose 之后=${num(autoAfter)} ⇒ ` +
-        (mapDestroyEvents === null || autoDuring === null || autoAfter === null
-          ? UNKNOWN
-          : // 结论只陈述**哪条路径有读数**，不把「Map 有事件」外推成「Autocomplete dispose 也会回写」。
-            mapDestroyEvents >= 1 || autoDuring >= 1 || autoAfter >= 1
-            ? "**销毁期会回调业务**（有读数的路径在 destroy/dispose 前后触达了业务回调：" +
-              `Map destroy 事件=${mapDestroyEvents}，Autocomplete dispose 期间/之后=${autoDuring}/${autoAfter}` +
-              " ⇒ 对应路径的 guard 按「可能重入」防护；Autocomplete 计数为 0 的路径本轮未测到回写）"
-            : "**销毁期未见业务回调**（本轮窗口内 destroy/dispose 未触发业务回调；" +
-              "这不等于官方「永不回调」——只是本轮没测到，guard 仍按「可能」措辞保留）"),
+        `Autocomplete 对照组=${num(autoControl)} / dispose 期间=${num(autoDuring)}` +
+        ` / dispose 之后=${num(autoAfter)} ⇒ ` +
+        `Map：${mapPart}；Autocomplete：${autoPart}`,
     );
   }
 

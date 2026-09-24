@@ -40,15 +40,18 @@ function conclusionOf(line: string): string {
  *
  * live 要点（2026-09-24 真实 AK + chrome-headless-shell）：
  * - Map first 不抛、**second 抛** `enableAutoResize` ⇒ 重复 destroy 不是 no-op；
- * - Autocomplete first/second 都不抛；
+ * - Autocomplete **对照组 callbackObserved=1**（不 dispose 时回调能到达）；
+ *   first/second dispose 都不抛；dispose 期间/之后回调 count 均为 0（对照组成立 ⇒ 可解释）；
  * - `setId` 调用本身不抛，但 headless 下场景未真正加载（无 `id_changed`/`dataload`），
- *   destroy 仍抛 `START`（与未加载反例同形）；
- * - Map destroy 事件 count=1；Autocomplete dispose 期间/之后回调 count 均为 0。
+ *   destroy 仍抛 `START`（与未加载反例同形；first 已抛 ⇒ second 不构成幂等取证）；
+ * - Map destroy 事件 count=1。
  */
 const COMPLETE: Reading[] = [
   { id: "map.control.destroyOnce", threw: false, message: null },
   { id: "map.destroyEventCount", threw: false, count: 1 },
   { id: "map.destroyTwice", threw: true, message: "Cannot set properties of undefined (setting 'enableAutoResize')" },
+  { id: "auto.control.ctrlCreate", threw: false, message: null },
+  { id: "auto.control.callbackObserved", threw: false, count: 1 },
   { id: "auto.control.create", threw: false, message: null },
   { id: "auto.control.disposeOnce", threw: false, message: null },
   { id: "auto.callbacksDuringDispose", threw: false, count: 0 },
@@ -97,6 +100,22 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
     expect(line).not.toContain("**重复调用抛错**（Map/Autocomplete 第二次");
   });
 
+  it("pano.loaded first 抛错、second 不抛 ⇒ second 不构成幂等取证（不得落「有条件幂等」）", () => {
+    // 复现评审场景：first 已抛、second 是失败后的重试、Map/Auto second 都不抛、empty 首次抛。
+    const readings = COMPLETE.map((r) => {
+      if (r.id === "map.destroyTwice") return { ...r, threw: false, message: null };
+      if (r.id === "auto.disposeTwice") return { ...r, threw: false, message: null };
+      if (r.id === "pano.loaded.destroyOnce") return { ...r, threw: true, message: "START" };
+      if (r.id === "pano.loaded.destroyTwice") return { ...r, threw: false, message: null };
+      return r;
+    });
+    const line = lineOf(verdicts(report(readings)), "[幂等性");
+    expect(line, "first 已抛错时不得把 second 不抛读成幂等").not.toContain("**有条件幂等**");
+    expect(line, "first 已抛错时不得把 second 不抛读成三者均幂等").not.toContain("**三者均幂等**");
+    expect(line).toContain("first 已抛错");
+    expect(line).toContain("**已加载 Panorama 首次即抛**");
+  });
+
   it("pano.unloaded 不抛（反例消失）⇒ 未加载侧负结论点名", () => {
     const line = lineOf(
       verdicts(
@@ -128,21 +147,38 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
     );
     const line = lineOf(verdicts(report(filtered)), "[销毁期回调");
     expect(line).toContain("无法判定");
-    expect(line, "缺读数不得落成「会回调」").not.toContain("**销毁期会回调业务**");
-    expect(line, "缺读数也不得落成「未见回调」").not.toContain("**销毁期未见业务回调**");
+    expect(line, "缺读数不得落成 Map「会回调」").not.toContain("**Map destroy 会回调业务**");
+    expect(line, "缺读数也不得落成 Map「未见回调」").not.toContain("**Map destroy 未见业务回调**");
   });
 
-  it("任一 count>=1 ⇒ 销毁期会回调业务", () => {
+  it("对照组缺失/为 0 且 dispose 臂 0/0 ⇒ Autocomplete 第三态（不得借 Map 外推）", () => {
+    const noCtrl = COMPLETE.filter((r) => r.id !== "auto.control.callbackObserved");
+    const lineNo = lineOf(verdicts(report(noCtrl)), "[销毁期回调");
+    expect(lineNo).toContain("Autocomplete：**无法判定**");
+    expect(lineNo, "Map 路径仍可确定").toContain("**Map destroy 会回调业务**");
+    expect(lineNo).not.toContain("**Autocomplete dispose 窗口内未见回调**");
+
+    const zeroCtrl = COMPLETE.map((r) =>
+      r.id === "auto.control.callbackObserved" ? { ...r, count: 0 } : r,
+    );
+    const lineZero = lineOf(verdicts(report(zeroCtrl)), "[销毁期回调");
+    expect(lineZero).toContain("Autocomplete：**无法判定**");
+    expect(lineZero).not.toContain("**Autocomplete dispose 窗口内未见回调**");
+  });
+
+  it("对照组成立 + dispose 臂任一 count>=1 ⇒ Autocomplete dispose 会回调业务", () => {
     const readings = COMPLETE.map((r) =>
       r.id === "auto.callbacksDuringDispose" ? { ...r, count: 1 } : r,
     );
     const line = lineOf(verdicts(report(readings)), "[销毁期回调");
-    expect(line).toContain("**销毁期会回调业务**");
+    expect(line).toContain("**Autocomplete dispose 会回调业务**");
+    expect(line).toContain("**Map destroy 会回调业务**");
   });
 
-  it("map.destroyEventCount=1（live 基线）⇒ 销毁期会回调业务（确定结论，不是第三态）", () => {
+  it("map.destroyEventCount=1 + 对照组=1 + dispose 0/0（live 基线）⇒ 分路径确定结论", () => {
     const line = lineOf(verdicts(report(COMPLETE)), "[销毁期回调");
-    expect(line).toContain("**销毁期会回调业务**");
+    expect(line).toContain("**Map destroy 会回调业务**");
+    expect(line).toContain("**Autocomplete dispose 窗口内未见回调**");
     expect(line).not.toContain("无法判定");
   });
 
@@ -163,7 +199,7 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
     expect(line).toContain("无法判定");
   });
 
-  it("正证控件：齐备时为空；Map/Autocomplete first 失败时点名", () => {
+  it("正证控件：齐备时为空；Map/Autocomplete first 失败或对照组缺失时点名", () => {
     expect(controlFailures(report(COMPLETE)), "齐备时控件成立").toEqual([]);
 
     const mapFail = controlFailures(
@@ -188,14 +224,32 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
       report(COMPLETE.filter((r) => r.id !== "map.control.destroyOnce")),
     );
     expect(noMap.join("\n")).toContain("map.control.destroyOnce");
+
+    // 对照组 count=0 ⇒ 控件失败（0/0 不能当「dispose 挡住了」的证据）
+    const noCtrl = controlFailures(
+      report(
+        COMPLETE.map((r) =>
+          r.id === "auto.control.callbackObserved" ? { ...r, count: 0 } : r,
+        ),
+      ),
+    );
+    expect(noCtrl.join("\n")).toContain("auto.control.callbackObserved");
+
+    const ctrlMissing = controlFailures(
+      report(COMPLETE.filter((r) => r.id !== "auto.control.callbackObserved")),
+    );
+    expect(ctrlMissing.join("\n")).toContain("auto.control.callbackObserved");
   });
 
   it("读数齐备 ⇒ 两条结论都是确定结论（正证）", () => {
     const lines = verdicts(report(COMPLETE));
     expect(lines.filter((line) => line.includes("无法判定"))).toEqual([]);
-    // live（2026-09-24）：Map 第二次 destroy 抛 ⇒ 重复调用抛错；destroy 事件 count=1 ⇒ 销毁期会回调。
+    // live（2026-09-24）：Map 第二次 destroy 抛 ⇒ 重复调用抛错；
+    // 销毁期回调分路径：Map 会回调；Autocomplete 对照组成立 + 0/0 ⇒ 窗口内未见回调。
     expect(lineOf(lines, "[幂等性")).toContain("**重复调用抛错**");
-    expect(lineOf(lines, "[销毁期回调")).toContain("**销毁期会回调业务**");
+    expect(lineOf(lines, "[幂等性")).toContain("first 已抛错 ⇒ second 不构成幂等取证");
+    expect(lineOf(lines, "[销毁期回调")).toContain("**Map destroy 会回调业务**");
+    expect(lineOf(lines, "[销毁期回调")).toContain("**Autocomplete dispose 窗口内未见回调**");
   });
 });
 

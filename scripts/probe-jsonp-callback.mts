@@ -18,10 +18,13 @@
  * ## 正证控件
  *
  * - `control.callbackFired.count >= 1`：官方**必须**调用过我们的 handler；
- * - `control.bmapReady.ready === true`；
+ * - `control.readyAtCall.ready === true`：**callback 当下**（handler 内同步采样）
+ *   `BMap.Map` 已是函数——生产路径 `SharedLoadTask.succeed()` 会在这里同步跑 `assertReady`；
  * - `control.handlerIdentityAtCall.same === true`：调用时身份未被覆盖。
  *
- * 控件读数齐备但三条任一不成立 ⇒ 退出码 1、**本轮不出结论**（不是「SDK 行为不好」）；
+ * `control.bmapReady`（入口回调后轮询到的最终就绪）保留为**诊断读数**，不能代替 `readyAtCall`。
+ *
+ * 控件读数齐备但任一不成立 ⇒ 退出码 1、**本轮不出结论**（不是「SDK 行为不好」）；
  * 若是 SDK 没起来 / phase 未完成，走 blocked（退出码 3）。
  *
  * ## 判定与退出码
@@ -113,6 +116,10 @@ const PAGE_JS = `
     let fired = 0;
     let argsLength = -1;
     let identityAtCall = false;
+    // callback **当下**的就绪采样：生产路径 SharedLoadTask.succeed() 会在 handler 里同步跑
+    // assertReady（CustomScriptV4Provider 立刻 requireJsapiV4Global），所以「最终 ready」
+    // 不能代替「调用那一刻 ready」。null = 尚未被调用过。
+    let readyAtCall = null;
     let readyResolve;
     const readyPromise = new Promise((resolve) => { readyResolve = resolve; });
     const settleReady = function () { if (readyResolve) readyResolve(); };
@@ -121,6 +128,7 @@ const PAGE_JS = `
       fired += 1;
       argsLength = arguments.length;
       identityAtCall = window[NAME] === ourHandler;
+      readyAtCall = !!(window.BMap && typeof window.BMap.Map === "function");
       settleReady();
     };
     try {
@@ -150,6 +158,13 @@ const PAGE_JS = `
     push("control.callbackFired", { threw: false, count: fired });
     push("control.argsLength", { threw: false, count: argsLength < 0 ? 0 : argsLength, rawLength: argsLength });
     push("control.handlerIdentityAtCall", { threw: false, same: identityAtCall === true });
+    // readyAtCall：callback **当下**（handler 内同步采样）。从未被调用则不带 ready 字段 ⇒ 判定层第三态。
+    if (readyAtCall === null) {
+      push("control.readyAtCall", { threw: false });
+    } else {
+      push("control.readyAtCall", { threw: false, ready: readyAtCall });
+    }
+    // 最终 ready：诊断读数（入口回调后轮询到的成员齐全时刻），**不能**代替 readyAtCall。
     push("control.bmapReady", { threw: false, ready: bmapReady });
     push("control.loadAttempt", { threw: !!(report.loadError), message: report.loadError || null });
     report.sdk = bmapReady

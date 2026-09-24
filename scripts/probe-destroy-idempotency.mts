@@ -26,7 +26,10 @@
  * ## 正证控件
  *
  * - `map.control.destroyOnce.threw === false`；
- * - `auto.control.disposeOnce.threw === false`。
+ * - `auto.control.disposeOnce.threw === false`；
+ * - `auto.control.callbackObserved.count >= 1`：**对照组**——同环境同类实例不 dispose 时
+ *   `onSearchComplete` 必须能到达；否则 dispose 臂的 0/0 无法区分「dispose 挡住了」与
+ *   「网络/服务根本没回」（issue #128：每个探针要有对照组，否则挂起会退化成失败）。
  *
  * 控件读数齐备但任一不成立 ⇒ 退出码 1、**本轮不出结论**；
  * 若是 SDK 没起来 / phase 未完成，走 blocked（退出码 3）。
@@ -74,7 +77,11 @@ function argValue(name: string): string | undefined {
   return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 }
 
-/** 与 `smoke-jsapi-v4.mts` 同口径：优先 chrome-headless-shell（系统 Chrome 会挂死 setId）。 */
+/**
+ * 只接受 chrome-headless-shell（系统 Chrome 在 `--headless` 下调用 `Panorama#setId`
+ * 会挂死渲染主线程，与文件头记录一致）。系统 Chrome 若要做实验，仅允许用户显式
+ * `SMOKE_BROWSER` opt-in——不进自动回退链，避免静默选中已知坏路径后等到 CDP 截止才失败。
+ */
 function resolveBrowser(): string {
   const explicit = process.env.SMOKE_BROWSER;
   if (explicit) {
@@ -97,9 +104,11 @@ function resolveBrowser(): string {
       );
     }
   }
-  candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
   for (const candidate of candidates) if (existsSync(candidate)) return candidate;
-  throw new Error("找不到 Chromium：设置 SMOKE_BROWSER，或 `npx playwright install chromium`");
+  throw new Error(
+    "找不到 chrome-headless-shell：设置 SMOKE_BROWSER（显式 opt-in），或 `npx playwright install chromium`。" +
+      " 本探针**不**自动回退系统 Chrome（setId 会挂死渲染主线程）。",
+  );
 }
 
 /* ------------------------------------------------------------------ 页面脚本 */
@@ -110,7 +119,8 @@ function resolveBrowser(): string {
  * 1. 加载 SDK（带 `callback=` 入口）并等到 `BMap.Map` 是函数；
  * 2. 建图 + `centerAndZoom`，挂 `destroy` 监听计数；
  * 3. Map：第一次 destroy（正证）→ 等一会看事件 → 第二次 destroy；
- * 4. Autocomplete：挂 attached input → 构造 → `search` → **立刻** `dispose` →
+ * 4. Autocomplete **对照组**：同环境构造 → `search` → 等 `onSearchComplete`（不 dispose）
+ *    → 记 `callbackObserved`；再走 dispose 臂：`search` → **立刻** `dispose` →
  *    计 dispose 期间 / 之后回调次数 → 再 `dispose` 一次（幂等）；
  * 5. Panorama：已加载场景（`setId`）destroy ×2；未加载场景 destroy（已知反例对照）。
  *
@@ -174,7 +184,34 @@ const PAGE_JS = `
     push("map.destroyTwice", attempt(() => map.destroy()));
     await wait(300);
 
-    /* ---- Autocomplete：dispose 幂等 + 销毁期回调 ---- */
+    /* ---- Autocomplete 对照组：同环境 search，不 dispose，等 onSearchComplete ---- */
+    /* 先证明「这类实例在本环境下回调能到达」，再解释下面 dispose 臂的 0/0。 */
+    const inputCtrl = document.createElement("input");
+    inputCtrl.style.cssText = "width:200px";
+    document.body.appendChild(inputCtrl);
+    let ctrlCallbacks = 0;
+    let autoCtrl = null;
+    try {
+      autoCtrl = new window.BMap.Autocomplete({
+        input: inputCtrl,
+        onSearchComplete: function () { ctrlCallbacks += 1; },
+      });
+      push("auto.control.ctrlCreate", { threw: false, message: null });
+    } catch (error) {
+      push("auto.control.ctrlCreate", { threw: true, message: String(error && error.message ? error.message : error) });
+      throw error;
+    }
+    try {
+      autoCtrl.search("北京");
+    } catch (error) {
+      push("auto.control.search", { threw: true, message: String(error && error.message ? error.message : error) });
+    }
+    // 最多等 5s：JSONP 往返常见在 1–3s 内；超时则 count=0 ⇒ 控件不成立（exit 1），不把 0/0 当结论。
+    for (let i = 0; i < 50 && ctrlCallbacks < 1; i++) await wait(100);
+    push("auto.control.callbackObserved", { threw: false, count: ctrlCallbacks });
+    try { autoCtrl.dispose(); } catch (ignoreCtrlDispose) { void ignoreCtrlDispose; }
+
+    /* ---- Autocomplete dispose 臂：search → 立刻 dispose → 计回调 ---- */
     const input = document.createElement("input");
     input.style.cssText = "width:200px";
     document.body.appendChild(input);

@@ -45,9 +45,14 @@ const UNKNOWN = "**无法判定**（读数缺失）";
 /**
  * 正证控件：本轮实验能不能下结论。
  *
- * 两条硬门槛：
- * 1. `callback=` 契约必须成立 —— 我们的 handler 被官方调用过（`count >= 1`）且 BMap 就绪；
- * 2. 否则后面关于 foreign / 全局占用的读数都没有对照意义（SDK 根本没按我们的读法走）。
+ * 三条硬门槛：
+ * 1. `callback=` 契约必须成立 —— 我们的 handler 被官方调用过（`count >= 1`）；
+ * 2. **callback 当下** BMap 已就绪（`readyAtCall.ready === true`）——
+ *    生产路径 `SharedLoadTask.succeed()` 会在这里同步跑 `assertReady`，
+ *    「最终 ready」不能代替「调用那一刻 ready」；
+ * 3. 调用时全局值仍是我们的 handler（`identity.same === true`）。
+ *
+ * `control.bmapReady` 只作诊断，不进控件。
  */
 export function controlFailures(report: ProbeReport): string[] {
   const failures: string[] = [];
@@ -59,10 +64,12 @@ export function controlFailures(report: ProbeReport): string[] {
       `control.callbackFired 的 count 不足（得到 ${String(fired?.count)}）—— 官方没有调用我们安装的回调`,
     );
   }
-  const ready = byId.get("control.bmapReady");
-  if (!ready || ready.ready !== true) {
+  const readyAtCall = byId.get("control.readyAtCall");
+  if (!readyAtCall || readyAtCall.ready !== true) {
     failures.push(
-      `control.bmapReady 不是 true（得到 ${String(ready?.ready)}）—— BMap 未就绪，回调契约无对照意义`,
+      `control.readyAtCall 不是 true（得到 ${String(readyAtCall?.ready)}）——` +
+        ` callback 当下 BMap.Map 未就绪，assertReady 会在 succeed() 当场失败；` +
+        `「最终 ready」不能代替它`,
     );
   }
   const identity = byId.get("control.handlerIdentityAtCall");
@@ -115,21 +122,27 @@ export function verdicts(report: ProbeReport): string[] {
   // ── 1. 回调契约（F-2 问题一：官方是否按 callback=NAME 调用我们的全局函数） ──
   {
     const count = countOf("control.callbackFired");
-    const ready = readyOf("control.bmapReady");
+    const readyAtCall = readyOf("control.readyAtCall");
+    const readyFinal = readyOf("control.bmapReady");
     const same = sameOf("control.handlerIdentityAtCall");
     const argsLength = countOf("control.argsLength");
     lines.push(
       `[回调契约] handler 被调 ${num(count)} 次；args.length=${num(argsLength)}；` +
-        `调用时身份仍是我们的=${bool(same)}；BMap 就绪=${bool(ready)} ⇒ ` +
-        (count === null || ready === null || same === null
+        `调用时身份仍是我们的=${bool(same)}；` +
+        `callback 当下 readyAtCall=${bool(readyAtCall)}；最终 bmapReady=${bool(readyFinal)} ⇒ ` +
+        (count === null || readyAtCall === null || same === null
           ? UNKNOWN
-          : count >= 1 && same === true && ready === true
-            ? "**callback=NAME 契约成立**（官方在就绪时调用了我们安装的全局函数，且未先覆盖其身份）"
+          : count >= 1 && same === true && readyAtCall === true
+            ? "**callback=NAME 契约成立**（官方在就绪时调用了我们安装的全局函数，" +
+              "且 **callback 当下** BMap.Map 已是函数——与 SharedLoadTask.succeed 的同步 assertReady 同拍）"
             : count < 1
               ? "**回调未被调用**（官方没有按 callback=NAME 调用我们的 handler）"
               : same === false
                 ? "**调用时身份已被覆盖**（官方先改写了全局值再调用 ⇒ foreign 捕获的读法不可靠）"
-                : "**回调已调但 BMap 未就绪**（脚本加载成功 ≠ SDK 可用，需 assertReady 把关）"),
+                : "**回调已调但 callback 当下 BMap 未就绪**" +
+                  `（readyAtCall=${bool(readyAtCall)}，最终 bmapReady=${bool(readyFinal)} ⇒` +
+                  " 脚本加载成功 ≠ SDK 可用；生产路径 assertReady 会在 succeed() 当场失败，" +
+                  "「最终 ready」不能代替它）"),
     );
   }
 
