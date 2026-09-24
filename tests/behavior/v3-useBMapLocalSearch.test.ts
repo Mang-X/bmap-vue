@@ -13,10 +13,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
-import { useBMap } from "../../packages/baidu-map-gl-vue/src/composables/useBMap";
-import { useBMapLocalSearch } from "../../packages/baidu-map-gl-vue/src/composables/useBMapLocalSearch";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
+import { useBMap } from "../../packages/bmap-vue/src/composables/useBMap";
+import { useBMapLocalSearch } from "../../packages/bmap-vue/src/composables/useBMapLocalSearch";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
 /**

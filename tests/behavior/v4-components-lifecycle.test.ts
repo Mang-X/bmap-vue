@@ -19,11 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../packages/test-utils";
-import { createLoadedJsapiV4 } from "../../packages/baidu-map-gl-vue/src/core/loader/providers";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
-import BAutoComplete from "../../packages/baidu-map-gl-vue/src/components/autocomplete/BAutoComplete.vue";
-import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
+import { createLoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/providers";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BInfoWindow from "../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue";
+import BAutoComplete from "../../packages/bmap-vue/src/components/autocomplete/BAutoComplete.vue";
+import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
 
 const POSITION = { lng: 116.404, lat: 39.915 };
 

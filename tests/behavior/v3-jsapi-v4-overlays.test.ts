@@ -19,12 +19,12 @@ import {
   runOverlayFacetContract,
   type OverlayFacetHarness,
 } from "../../packages/test-utils/driver-contract";
-import { createCapabilityRegistry } from "../../packages/baidu-map-gl-vue/src/driver/capability/registry";
-import type { OverlayHandle, SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
-import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
-import { createJsapiV4EventDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
-import { createJsapiV4OverlayDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/overlays";
-import { createJsapiV4HandleRegistry } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/registry";
+import { createCapabilityRegistry } from "../../packages/bmap-vue/src/driver/capability/registry";
+import type { OverlayHandle, SdkHandle } from "../../packages/bmap-vue/src/driver/types/handles";
+import { createJsapiV4GeometryDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/geometry";
+import { createJsapiV4EventDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/events";
+import { createJsapiV4OverlayDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/overlays";
+import { createJsapiV4HandleRegistry } from "../../packages/bmap-vue/src/driver/jsapi-v4/registry";
 
 let fake: FakeBMapV4;
 let registry: ReturnType<typeof createJsapiV4HandleRegistry>;

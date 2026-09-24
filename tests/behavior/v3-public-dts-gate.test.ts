@@ -13,7 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const SCRIPT = resolve(import.meta.dirname, "../../scripts/check-public-dts.mts");
-const REAL_DIST = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue/dist");
+const REAL_DIST = resolve(import.meta.dirname, "../../packages/bmap-vue/dist");
 
 interface GateResult {
   code: number;
@@ -102,7 +102,7 @@ describe("public d.ts gate", () => {
     const dir = join(tmpdir(), `public-dts-missing-${Date.now()}`);
     const r = runGate(dir);
     expect(r.code).toBe(1);
-    expect(r.output).toContain("pnpm build:v3");
+    expect(r.output).toContain("pnpm build:package");
   });
 
   it.runIf(existsSync(REAL_DIST))("真实构建产物无 BMap 泄漏", () => {

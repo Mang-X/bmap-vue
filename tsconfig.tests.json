@@ -16,15 +16,15 @@
     "types": ["node", "vite/client", "@baidumap/jsapi-v4-types"],
     "typeRoots": [
       "./node_modules/@types",
-      "./packages/baidu-map-gl-vue/node_modules",
-      "./packages/baidu-map-gl-vue/node_modules/@types"
+      "./packages/bmap-vue/node_modules",
+      "./packages/bmap-vue/node_modules/@types"
     ],
     "baseUrl": ".",
     "paths": {
       "@v2": ["packages"],
       "@v2/*": ["packages/*"],
       "mitt": ["./node_modules/mitt/index.d.ts"],
-      "@baidumap/jsapi-ui-kit": ["./packages/baidu-map-gl-vue/types/ui-kit/upstream.d.ts"]
+      "@baidumap/jsapi-ui-kit": ["./packages/bmap-vue/types/ui-kit/upstream.d.ts"]
     }
   },
   "include": [

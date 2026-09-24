@@ -25,27 +25,27 @@ import {
   createManualFrames,
   type FakeV4Harness,
 } from "../../packages/test-utils";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
-import BInfoWindow from "../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue";
-import BControl from "../../packages/baidu-map-gl-vue/src/components/controls/BControl.vue";
-import BDistrictLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BDistrictLayer.vue";
-import BGeoJSONLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BGeoJSONLayer.vue";
-import BTileLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTileLayer.vue";
-import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
-import BMarkerList from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerList.vue";
-import BMarkerCluster from "../../packages/baidu-map-gl-vue/src/components/data/BMarkerCluster.vue";
-import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
-import BPointIconLayer from "../../packages/baidu-map-gl-vue/src/components/data/BPointIconLayer.vue";
-import BPointLayer from "../../packages/baidu-map-gl-vue/src/components/data/BPointLayer.vue";
-import { useBMapGeocoder } from "../../packages/baidu-map-gl-vue/src/composables/useBMapGeocoder";
-import { useMapEvent } from "../../packages/baidu-map-gl-vue/src/composables/useMapEvent";
-import { useMapStatus } from "../../packages/baidu-map-gl-vue/src/composables/useMapStatus";
-import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
-import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import BInfoWindow from "../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue";
+import BControl from "../../packages/bmap-vue/src/components/controls/BControl.vue";
+import BDistrictLayer from "../../packages/bmap-vue/src/components/layers/BDistrictLayer.vue";
+import BGeoJSONLayer from "../../packages/bmap-vue/src/components/layers/BGeoJSONLayer.vue";
+import BTileLayer from "../../packages/bmap-vue/src/components/layers/BTileLayer.vue";
+import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
+import BMarkerList from "../../packages/bmap-vue/src/components/data/BMarkerList.vue";
+import BMarkerCluster from "../../packages/bmap-vue/src/components/data/BMarkerCluster.vue";
+import BPointCollection from "../../packages/bmap-vue/src/components/data/BPointCollection.vue";
+import BPointIconLayer from "../../packages/bmap-vue/src/components/data/BPointIconLayer.vue";
+import BPointLayer from "../../packages/bmap-vue/src/components/data/BPointLayer.vue";
+import { useBMapGeocoder } from "../../packages/bmap-vue/src/composables/useBMapGeocoder";
+import { useMapEvent } from "../../packages/bmap-vue/src/composables/useMapEvent";
+import { useMapStatus } from "../../packages/bmap-vue/src/composables/useMapStatus";
+import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
+import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 
 const { harness, fake } = createFakeV4Harness();
 
@@ -110,7 +110,7 @@ async function mountControlledMap(
   return { wrapper, bmap: wrapper.findComponent(BMap) };
 }
 
-import type { BMapExpose } from "../../packages/baidu-map-gl-vue/src/types/mapExpose";
+import type { BMapExpose } from "../../packages/bmap-vue/src/types/mapExpose";
 
 /** 一套受控视野 props（父级从 setup 起就传值 ⇒ 受控）。 */
 function controlledViewProps(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1450,7 +1450,7 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
 describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", () => {
   /**
    * expose 的读法：直接按**真实契约** `BMapExpose` 断言（不再手写一份子集 —— 手写的那份
-   * 既会漂移，也挡不住「实现少了一个成员」；逐成员的类型契约由 `fixtures/v3-consumer` 锁）。
+   * 既会漂移，也挡不住「实现少了一个成员」；逐成员的类型契约由 `fixtures/consumer` 锁）。
    */
   const shims = browserShims();
   let frames: ReturnType<typeof createManualFrames> | null = null;

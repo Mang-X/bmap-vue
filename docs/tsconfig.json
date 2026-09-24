@@ -16,10 +16,10 @@
     // 文档示例是**消费方**：类型检查对着**发布声明面**（dist/*.d.ts），而不是组件库源码。
     // 两个好处：① 示例写不出「源码里有、发布产物里没有」的 API；② 不需要在 docs 侧引入
     // 上游 `@baidumap/jsapi-v4-types` 的全局声明（公共声明面按门禁不得泄漏 `BMap.*`）。
-    // 前置：先跑一次 `pnpm build:v3`（`docs:typecheck` 与 docs 的运行时用的是同一份 dist）。
+    // 前置：先跑一次 `pnpm build:package`（`docs:typecheck` 与 docs 的运行时用的是同一份 dist）。
     "paths": {
-      "baidu-map-gl-vue": ["../packages/baidu-map-gl-vue/dist/index.d.ts"],
-      "baidu-map-gl-vue/ui-kit": ["../packages/baidu-map-gl-vue/dist/ui-kit.d.ts"]
+      "bmap-vue": ["../packages/bmap-vue/dist/index.d.ts"],
+      "bmap-vue/ui-kit": ["../packages/bmap-vue/dist/ui-kit.d.ts"]
     },
     "types": [
       "node",
@@ -32,5 +32,5 @@
     ]
   },
   "include": ["./env.d.ts", "**/*.vue", "**/*.ts", "**/*.d.ts"],
-  "exclude": ["node_modules", "../packages/baidu-map-gl-vue/src/**/*.test.ts"]
+  "exclude": ["node_modules", "../packages/bmap-vue/src/**/*.test.ts"]
 }

@@ -71,7 +71,7 @@ function onItemClick(station: Station) {
 </template>
 ```
 
-生效范围要说准：**模板里**推断是完整的（消费方 fixture `fixtures/v3-consumer/src/data-components.vue`
+生效范围要说准：**模板里**推断是完整的（消费方 fixture `fixtures/consumer/src/data-components.vue`
 用 `vue-tsc` 钉住）；用 `h()` 编程式构造时 `Item` 推不出来（vue-tsc 为泛型组件生成的 props 形状
 无法反推类型参数，带不带 `withDefaults` 都一样），那时请用公开的 props 类型显式标注：
 `BMarkerListProps<Station>` / `BMarkerClusterProps<Station>` / `BPointShapeLayerProps<Station>` /

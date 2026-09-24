@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import BPlaceDetail from "../../packages/baidu-map-gl-vue/src/integrations/ui-kit/components/BPlaceDetail.vue";
+import BPlaceDetail from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceDetail.vue";
 import {
   createFakeMapHarness,
   createFakeUiKit,

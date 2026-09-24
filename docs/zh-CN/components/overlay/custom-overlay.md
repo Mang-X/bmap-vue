@@ -3,7 +3,7 @@
 把任意 Vue 内容渲染成地图上的 DOM 覆盖物（v4 的 `CustomOverlay`）。
 
 ```ts
-import { BCustomOverlay } from 'baidu-map-gl-vue'
+import { BCustomOverlay } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -16,15 +16,15 @@ overlay/customOverlay
 
 | 属性              | 说明                                            | 类型                      | 默认值     | 版本                               |
 | ----------------- | ----------------------------------------------- | ------------------------- | ---------- | ---------------------------------- |
-| position          | 覆盖物的地理坐标点                              | `Point`                   | `required` | <Badge type="tip" text="^3.0.0" /> |
-| offset            | 相对锚点的像素偏移（**构造期**）                | `{ x: number, y: number }` | `{ x: 0, y: 0 }` | <Badge type="tip" text="^3.0.0" /> |
-| anchor            | 锚点，左上角 `(0, 0)`、右下角 `(1, 1)`（**构造期**） | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` | <Badge type="tip" text="^3.0.0" /> |
-| rotation          | 旋转角度（度）                                  | `number`                  | `0`        | <Badge type="tip" text="^3.0.0" /> |
-| zIndex            | 层叠顺序（**构造期**）                          | `number`                  | `0`        | <Badge type="tip" text="^3.0.0" /> |
-| minZoom / maxZoom | 显示的最小 / 最大缩放级别（**构造期**）         | `number`                  | -          | <Badge type="tip" text="^3.0.0" /> |
-| properties        | 自定义业务属性，随实例携带                      | `Record<string, unknown>` | -          | <Badge type="tip" text="^3.0.0" /> |
-| visible           | 是否显示                                        | `boolean`                 | `true`     | <Badge type="tip" text="^3.0.0" /> |
-| enableMassClear   | 是否在调用 `map.clearOverlays` 清除此覆盖物     | `boolean`                 | `true`     | <Badge type="tip" text="^3.0.0" /> |
+| position          | 覆盖物的地理坐标点                              | `Point`                   | `required` | <Badge type="tip" text="^1.0.0" /> |
+| offset            | 相对锚点的像素偏移（**构造期**）                | `{ x: number, y: number }` | `{ x: 0, y: 0 }` | <Badge type="tip" text="^1.0.0" /> |
+| anchor            | 锚点，左上角 `(0, 0)`、右下角 `(1, 1)`（**构造期**） | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` | <Badge type="tip" text="^1.0.0" /> |
+| rotation          | 旋转角度（度）                                  | `number`                  | `0`        | <Badge type="tip" text="^1.0.0" /> |
+| zIndex            | 层叠顺序（**构造期**）                          | `number`                  | `0`        | <Badge type="tip" text="^1.0.0" /> |
+| minZoom / maxZoom | 显示的最小 / 最大缩放级别（**构造期**）         | `number`                  | -          | <Badge type="tip" text="^1.0.0" /> |
+| properties        | 自定义业务属性，随实例携带                      | `Record<string, unknown>` | -          | <Badge type="tip" text="^1.0.0" /> |
+| visible           | 是否显示                                        | `boolean`                 | `true`     | <Badge type="tip" text="^1.0.0" /> |
+| enableMassClear   | 是否在调用 `map.clearOverlays` 清除此覆盖物     | `boolean`                 | `true`     | <Badge type="tip" text="^1.0.0" /> |
 
 > 「构造期」= 官方只有构造选项、实例上没有对应 setter ⇒ 变化时**重建实例**（旧实例连同它的监听一起释放）。
 > 其余属性走字段级 setter，就地更新、不重建。

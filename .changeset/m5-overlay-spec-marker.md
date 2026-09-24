@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增声明式覆盖物生命周期 `OverlaySpec` / `useOverlaySpec`，并把 `BMarker` 迁移为它的样板。

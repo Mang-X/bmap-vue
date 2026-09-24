@@ -23,7 +23,7 @@
  * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到（与官方 React 封装
  * `<BMapProvider>` 负责加载、地图组件不携带密钥的分工一致）。
  */
-import { createBMapPlugin } from '../baidu-map-gl-vue/src/plugins/createBMapPlugin'
+import { createBMapPlugin } from '../bmap-vue/src/plugins/createBMapPlugin'
 import { createFakeV4Provider } from './fake-providers.ts'
 
 export type PlaygroundMode = 'real-v4' | 'fake-v4'

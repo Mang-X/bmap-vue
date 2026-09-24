@@ -23,12 +23,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import {
   disposeDefaultPluginHost,
   getDefaultPluginHost,
-} from "../../packages/baidu-map-gl-vue/src/core/plugins/PluginHost";
+} from "../../packages/bmap-vue/src/core/plugins/PluginHost";
 
 const { harness } = createFakeV4Harness();
 

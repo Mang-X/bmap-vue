@@ -5,11 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   extractDeclareGlobalBlocks,
   stripDeclareGlobalBlocks,
-} from "../../packages/baidu-map-gl-vue/vite.config.build";
+} from "../../packages/bmap-vue/vite.config.build";
 
 const augmentationsDir = resolve(
   import.meta.dirname,
-  "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/augmentations",
+  "../../packages/bmap-vue/src/driver/jsapi-v4/augmentations",
 );
 
 const augmentationFiles = readdirSync(augmentationsDir).filter((name) => name.endsWith(".d.ts"));
@@ -132,7 +132,7 @@ describe("augmentation 删除治理元数据（issue #15）", () => {
     for (const tag of REQUIRED_TAGS) {
       expect(readme, `README 应说明 ${tag}`).toContain(tag);
     }
-    expect(readme).toContain("pnpm typecheck:v3");
+    expect(readme).toContain("pnpm typecheck:package");
     expect(readme).toContain("pnpm check:public-dts");
   });
 

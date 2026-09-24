@@ -2,7 +2,7 @@
  * 公共声明门禁：主包公开 `dist/**` 下的 `*.d.ts` 不得泄漏官方 SDK 命名空间
  * （M3A0-04 / issue #15）
  *
- * 消费者应能只安装 `baidu-map-gl-vue` + `vue` 就获得完整类型，无需安装
+ * 消费者应能只安装 `bmap-vue` + `vue` 就获得完整类型，无需安装
  * `@baidumap/jsapi-v4-types`，也不会看到 `BMap.*` 全局命名空间。
  *
  * 检查项：
@@ -17,7 +17,7 @@
  *   node --experimental-strip-types scripts/check-public-dts.mts
  *   node --experimental-strip-types scripts/check-public-dts.mts --dir <dist>
  *
- * 前置：需先执行 `pnpm build:v3` 生成声明产物。
+ * 前置：需先执行 `pnpm build:package` 生成声明产物。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -25,7 +25,7 @@ import { boundarySummary } from "./raw-sdk-boundary.mts";
 import { RULE_LABELS, findViolations } from "./raw-sdk-detector.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const DEFAULT_DIST = join(ROOT, "packages/baidu-map-gl-vue/dist");
+const DEFAULT_DIST = join(ROOT, "packages/bmap-vue/dist");
 
 /** 发布产物中禁止出现的边界目录（源码侧类型边界，见 augmentations 治理规则）。 */
 const BOUNDARY_PATH_MARKERS = ["driver/jsapi-v4"] as const;
@@ -73,7 +73,7 @@ function main(): void {
 
   if (!existsSync(distDir)) {
     console.error(
-      `public d.ts gate FAILED: declarations not found at ${relative(ROOT, distDir) || distDir}. Run \`pnpm build:v3\` first.`,
+      `public d.ts gate FAILED: declarations not found at ${relative(ROOT, distDir) || distDir}. Run \`pnpm build:package\` first.`,
     );
     process.exit(1);
   }
@@ -81,7 +81,7 @@ function main(): void {
   const files = collectDtsFiles(distDir);
   if (files.length === 0) {
     console.error(
-      `public d.ts gate FAILED: no *.d.ts found under ${distDir}. Run \`pnpm build:v3\` first.`,
+      `public d.ts gate FAILED: no *.d.ts found under ${distDir}. Run \`pnpm build:package\` first.`,
     );
     process.exit(1);
   }

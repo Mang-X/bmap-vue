@@ -22,9 +22,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
-import BContextMenu from "../../packages/baidu-map-gl-vue/src/components/overlays/BContextMenu.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import BContextMenu from "../../packages/bmap-vue/src/components/overlays/BContextMenu.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
 const { harness, fake } = createFakeV4Harness();

@@ -7,7 +7,7 @@ title: BMapProvider Client 上下文
 `<BMapProvider>` 为子树提供 SDK Client 上下文（加载状态 + `BMapClient`），无需地图实例即可使用服务类 hooks（如 `useBMapGeocoder`）。`<BMap>` 会优先复用最近的 Provider 上下文。
 
 ```ts
-import { BMapProvider } from 'baidu-map-gl-vue'
+import { BMapProvider } from 'bmap-vue'
 ```
 
 ## 基础用法
@@ -24,7 +24,7 @@ import { BMapProvider } from 'baidu-map-gl-vue'
 </template>
 
 <script setup lang="ts">
-import { BMapProvider } from 'baidu-map-gl-vue'
+import { BMapProvider } from 'bmap-vue'
 
 function onReady() {}
 function onError() {}

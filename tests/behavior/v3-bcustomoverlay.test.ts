@@ -13,8 +13,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BCustomOverlay from "../../packages/baidu-map-gl-vue/src/components/overlays/BCustomOverlay.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BCustomOverlay from "../../packages/bmap-vue/src/components/overlays/BCustomOverlay.vue";
 import type { FakeBMapV4 } from "../../packages/test-utils";
 import { createFakeV4Harness } from "../../packages/test-utils";
 

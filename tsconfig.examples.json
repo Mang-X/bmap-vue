@@ -13,11 +13,11 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "baidu-map-gl-vue": [
-        "packages/baidu-map-gl-vue/src/index.ts"
+      "bmap-vue": [
+        "packages/bmap-vue/src/index.ts"
       ],
-      "baidu-map-gl-vue/*": [
-        "packages/baidu-map-gl-vue/src/*"
+      "bmap-vue/*": [
+        "packages/bmap-vue/src/*"
       ]
     }
   },

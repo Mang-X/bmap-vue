@@ -26,12 +26,12 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
 import { getStatus, reset } from "@baidumap/jsapi-loader";
-import { createBMapPlugin } from "../../packages/baidu-map-gl-vue/src/plugins/createBMapPlugin";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import { baiduJsapiV4Provider } from "../../packages/baidu-map-gl-vue/src/core/loader/providers/BaiduJsapiV4Provider";
-import { officialJsapiLoader } from "../../packages/baidu-map-gl-vue/src/core/loader/providers/official";
-import { resetProcessSdkRegistryForTests, getProcessSdkRegistry } from "../../packages/baidu-map-gl-vue/src/core/loader/SdkRegistry";
-import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
+import { createBMapPlugin } from "../../packages/bmap-vue/src/plugins/createBMapPlugin";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import { baiduJsapiV4Provider } from "../../packages/bmap-vue/src/core/loader/providers/BaiduJsapiV4Provider";
+import { officialJsapiLoader } from "../../packages/bmap-vue/src/core/loader/providers/official";
+import { resetProcessSdkRegistryForTests, getProcessSdkRegistry } from "../../packages/bmap-vue/src/core/loader/SdkRegistry";
+import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 import { createFakeBMapV4 } from "../../packages/test-utils/fake-bmap-v4/index.ts";
 
 const AK = "ak-abcdef123456";

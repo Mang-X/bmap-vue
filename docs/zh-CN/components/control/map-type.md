@@ -3,7 +3,7 @@
 地图类型切换控件（官方 `MapTypeControl`），默认位于地图右上角。
 
 ```ts
-import { BMapType } from 'baidu-map-gl-vue'
+import { BMapType } from 'bmap-vue'
 ```
 
 ## 组件示例

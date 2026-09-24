@@ -25,7 +25,7 @@
  * @deletionCondition 上游发布修正大小写的版本后：升级 `@baidumap/jsapi-v4-types`
  *   （精确版本）→ 删除 `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 与
  *   `pnpm-workspace.yaml` 的 `patchedDependencies` 条目 → 同步删除本用例的补丁断言
- *   （上游已修复时「大小写不匹配」扫描用例仍然应当通过）→ 重跑 `pnpm typecheck:v3`。
+ *   （上游已修复时「大小写不匹配」扫描用例仍然应当通过）→ 重跑 `pnpm typecheck:package`。
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
@@ -33,7 +33,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import * as ts from "typescript";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
-const LIB_PACKAGE_JSON = resolve(REPO_ROOT, "packages/baidu-map-gl-vue/package.json");
+const LIB_PACKAGE_JSON = resolve(REPO_ROOT, "packages/bmap-vue/package.json");
 const WORKSPACE_YAML = resolve(REPO_ROOT, "pnpm-workspace.yaml");
 
 const libManifest = JSON.parse(readFileSync(LIB_PACKAGE_JSON, "utf8")) as {
@@ -44,12 +44,12 @@ const PATCH_FILE = resolve(REPO_ROOT, `patches/@baidumap__jsapi-v4-types@${pinne
 
 /**
  * 定位**类型检查实际解析到的那份**上游类型包：优先包级 `node_modules`
- * （`packages/baidu-map-gl-vue` 是 `vue-tsc -p tsconfig.build.json` 的解析起点），
+ * （`packages/bmap-vue` 是 `vue-tsc -p tsconfig.build.json` 的解析起点），
  * 回退根 `node_modules`（`.npmrc` 的 `shamefully-hoist=true` 下也存在）。
  */
 function resolveUpstreamPackageDir(): string {
   const candidates = [
-    resolve(REPO_ROOT, "packages/baidu-map-gl-vue/node_modules/@baidumap/jsapi-v4-types"),
+    resolve(REPO_ROOT, "packages/bmap-vue/node_modules/@baidumap/jsapi-v4-types"),
     resolve(REPO_ROOT, "node_modules/@baidumap/jsapi-v4-types"),
   ];
   for (const candidate of candidates) {
@@ -96,7 +96,7 @@ function scanReferences(): { mismatches: string[]; scanned: number } {
 
 describe("上游类型包大小写引用补丁（issue #50）", () => {
   it("依赖以精确版本锁定（补丁按版本生效的前提）", () => {
-    expect(pinnedVersion, "packages/baidu-map-gl-vue/package.json 应精确锁定版本").toMatch(
+    expect(pinnedVersion, "packages/bmap-vue/package.json 应精确锁定版本").toMatch(
       /^\d+\.\d+\.\d+$/,
     );
     expect(
@@ -113,7 +113,7 @@ describe("上游类型包大小写引用补丁（issue #50）", () => {
     expect(
       mismatches,
       [
-        "上游类型包存在大小写不匹配的三斜线引用，Linux 上 `pnpm typecheck:v3` 会失败：",
+        "上游类型包存在大小写不匹配的三斜线引用，Linux 上 `pnpm typecheck:package` 会失败：",
         ...mismatches.map((m) => `  - ${m}`),
         "",
         `补丁文件：${relative(REPO_ROOT, PATCH_FILE)}`,

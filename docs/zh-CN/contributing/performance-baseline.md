@@ -33,7 +33,7 @@ Worker 也要先把数据读出来再送过去，所以它解决不了这条。*
 ```bash
 pnpm test:performance              # 只跑基准（自带判据：超线性 / 泄漏 / 保留内存）
 pnpm typecheck:tests               # 测试代码的类型门禁（tests/performance/**；vitest 不做类型检查）
-pnpm build:v3 && pnpm perf:baseline # 采集 + 报告 + 趋势门禁（CI 跑的就是这条）
+pnpm build:package && pnpm perf:baseline # 采集 + 报告 + 趋势门禁（CI 跑的就是这条）
 pnpm perf:baseline --update        # 同时刷新提交的基线（换机器 / 换数据集时才做）
 pnpm perf:baseline --tolerance=5   # 临时放宽阈值
 pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标，只重出报告
@@ -195,7 +195,7 @@ task source 可能不同）；`redraw` = settle 之后 → 2×rAF；`sdkSetData`
 | `2` | 脚手架 / 判据失败（vitest 挂了、指标缺失、环境不一致） |
 | `3` | blocked（前置缺失，例如没有 `dist` ⇒ 包体读数无法采集） |
 
-CI 的 `performance` job 先 `build:v3`，因此 `3` 出现在 CI 里就意味着门禁没跑完，需要人工看一眼。
+CI 的 `performance` job 先 `build:package`，因此 `3` 出现在 CI 里就意味着门禁没跑完，需要人工看一眼。
 
 ## 加一条基准
 

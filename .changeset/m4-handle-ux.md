@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 `<BMap>` 的**命令面定型**、**容器门禁**与**可见性暂停策略**（`M4-HANDLE-UX` / #29）。

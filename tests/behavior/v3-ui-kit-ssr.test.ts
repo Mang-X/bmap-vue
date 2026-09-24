@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
-const distUiKit = join(repoRoot, "packages/baidu-map-gl-vue/dist/ui-kit.mjs");
+const distUiKit = join(repoRoot, "packages/bmap-vue/dist/ui-kit.mjs");
 
 interface SsrReport {
   baselineAccesses: number;
@@ -84,7 +84,7 @@ function domDelta(report: SsrReport): string[] {
 }
 
 describe("无 DOM 环境下的 ./ui-kit", () => {
-  it("产物存在（本用例依赖 pnpm build:v3 的产出）", () => {
+  it("产物存在（本用例依赖 pnpm build:package 的产出）", () => {
     expect(existsSync(distUiKit)).toBe(true);
   });
 

@@ -1,9 +1,9 @@
-# BGeoJSONLayer GeoJSON 图层 <Badge type="tip" text="^3.0.0" />
+# BGeoJSONLayer GeoJSON 图层 <Badge type="tip" text="^1.0.0" />
 
 用一份 GeoJSON 数据渲染点 / 线 / 面覆盖物。数据变化时只调 `setData()`，不重建图层。
 
 ```ts
-import { BGeoJSONLayer } from 'baidu-map-gl-vue'
+import { BGeoJSONLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -29,7 +29,7 @@ layer/geojsonLayer
 
 | 属性 | 说明 | 类型 | 默认值 |
 | --- | --- | --- | --- |
-| layerName | 图层名（写入每个要素的属性）；变化时重建 | `string` | `baidu-map-gl-vue-geojson` |
+| layerName | 图层名（写入每个要素的属性）；变化时重建 | `string` | `bmap-vue-geojson` |
 | reference | 来源数据坐标系：`BD09LL` / `BD09MC` / `EPSG3857` / `GCJ02` / `WGS84` | `string` | `BD09LL` |
 | markerStyle | 点要素样式（或按属性计算的函数） | `object \| Function` | - |
 | polylineStyle | 线要素样式 | `object \| Function` | - |

@@ -14,9 +14,9 @@
  *    气泡活状态）；
  * 3. 泄漏门禁用 Fake v4 自己的诊断（`assertNoLeaks`），组件用例只写 `harness.assertIdle()`。
  */
-import type { BMapClient, BMapProviderLike } from "../baidu-map-gl-vue/src/client/types";
-import { createBMapClient } from "../baidu-map-gl-vue/src/client/createBMapClient";
-import { createLoadedJsapiV4 } from "../baidu-map-gl-vue/src/core/loader/providers";
+import type { BMapClient, BMapProviderLike } from "../bmap-vue/src/client/types";
+import { createBMapClient } from "../bmap-vue/src/client/createBMapClient";
+import { createLoadedJsapiV4 } from "../bmap-vue/src/core/loader/providers";
 import {
   createFakeBMapV4,
   type FakeBMapV4,

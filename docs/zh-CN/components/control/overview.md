@@ -3,7 +3,7 @@
 缩略地图控件（官方 `OverviewMapControl`），默认位于地图右下角。
 
 ```ts
-import { BOverview } from 'baidu-map-gl-vue'
+import { BOverview } from 'bmap-vue'
 ```
 
 ## 组件示例

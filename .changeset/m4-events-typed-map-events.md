@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增 `<BMap>` 的完整 map 事件与两个公开 hook：`useMapEvent`（事件订阅）与 `useMapStatus`（地图状态）。

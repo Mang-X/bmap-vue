@@ -4,7 +4,7 @@
  * 验证 dist/index.global.js:
  * - 存在
  * - Vue 完全 external(通过参数注入,而非打包)
- * - 全局变量名 Vue3BaiduMapGl
+ * - 全局变量名 BMapVue
  * - 可直接在 script 标签使用(仅依赖 window.Vue)
  */
 import { describe, it, expect } from 'vitest'
@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 
 const globalPath = resolve(
   import.meta.dirname,
-  '../../packages/baidu-map-gl-vue/dist/index.global.js',
+  '../../packages/bmap-vue/dist/index.global.js',
 )
 
 describe('v3 global build', () => {
@@ -21,9 +21,9 @@ describe('v3 global build', () => {
     expect(existsSync(globalPath)).toBe(true)
   })
 
-  it('exposes window global Vue3BaiduMapGl', () => {
+  it('exposes window global BMapVue', () => {
     const src = readFileSync(globalPath, 'utf8')
-    expect(src).toContain('var Vue3BaiduMapGl')
+    expect(src).toContain('var BMapVue')
   })
 
   it('externalizes Vue (no bundled vue, injected as parameter)', () => {

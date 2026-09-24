@@ -18,11 +18,11 @@ import {
   type MapFacetDriver,
   type MapFacetHarness,
 } from "../../packages/test-utils/driver-contract";
-import { createCapabilityRegistry } from "../../packages/baidu-map-gl-vue/src/driver/capability/registry";
-import { createJsapiV4EventDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
-import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
-import { createJsapiV4MapDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/map";
-import { createJsapiV4HandleRegistry } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/registry";
+import { createCapabilityRegistry } from "../../packages/bmap-vue/src/driver/capability/registry";
+import { createJsapiV4EventDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/events";
+import { createJsapiV4GeometryDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/geometry";
+import { createJsapiV4MapDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/map";
+import { createJsapiV4HandleRegistry } from "../../packages/bmap-vue/src/driver/jsapi-v4/registry";
 
 let fake: FakeBMapV4;
 let driver: MapFacetDriver;

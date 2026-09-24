@@ -1,9 +1,9 @@
-# BDOMLayer DOM 图层 <Badge type="tip" text="^3.0.0" />
+# BDOMLayer DOM 图层 <Badge type="tip" text="^1.0.0" />
 
 用回调创建自定义 DOM 覆盖物。`createDom` 对应官方构造签名的第一个参数 `createDOM`。
 
 ```ts
-import { BDOMLayer } from 'baidu-map-gl-vue'
+import { BDOMLayer } from 'bmap-vue'
 ```
 
 ## 组件示例

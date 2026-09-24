@@ -14,12 +14,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { h, nextTick } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
-import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
-import { createLoadedJsapiV4 } from "../../packages/baidu-map-gl-vue/src/core/loader/providers";
-import type { BMapLoadOptions } from "../../packages/baidu-map-gl-vue/src/core/loader/url";
-import type { BMapClient } from "../../packages/baidu-map-gl-vue/src/client/types";
-import type { LoadedSdk } from "../../packages/baidu-map-gl-vue/src/core/loader/loaded";
-import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
+import { createLoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/providers";
+import type { BMapLoadOptions } from "../../packages/bmap-vue/src/core/loader/url";
+import type { BMapClient } from "../../packages/bmap-vue/src/client/types";
+import type { LoadedSdk } from "../../packages/bmap-vue/src/core/loader/loaded";
+import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 
 // #26 后没有「宽松 Provider → legacy Driver」这条分派，engine 恒为 jsapi-v4。

@@ -3,7 +3,7 @@
 通过该 hooks 可获取行政区域的边界。
 
 ```ts
-import { useBMapAreaBoundary } from 'baidu-map-gl-vue'
+import { useBMapAreaBoundary } from 'bmap-vue'
 ```
 
 ## 示例
@@ -72,7 +72,7 @@ Driver 的归一化调用面（`driver.services.queryBoundary()`）——它的�
 
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { useBMapAreaBoundary } from 'baidu-map-gl-vue'
+  import { useBMapAreaBoundary } from 'bmap-vue'
 
   const map = ref()
   const { isLoading, boundaries, get } = useBMapAreaBoundary(map)
@@ -87,7 +87,7 @@ Driver 的归一化调用面（`driver.services.queryBoundary()`）——它的�
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 export declare type AreaBoundary = string[]
 /**
  * 获取地图区域边界

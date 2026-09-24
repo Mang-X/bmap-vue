@@ -15,7 +15,7 @@ lang: zh-CN
 
 ```ts
 import { createApp } from 'vue'
-import { createBMapPlugin } from 'baidu-map-gl-vue'
+import { createBMapPlugin } from 'bmap-vue'
 
 const app = createApp(App)
 // 全局提供默认 Client 定义（ak 等），子树可被 <BMapProvider> 覆盖
@@ -31,7 +31,7 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 {
   "compilerOptions": {
     // ...
-    "types": ["baidu-map-gl-vue/volar"]
+    "types": ["bmap-vue/volar"]
   }
 }
 ```
@@ -51,7 +51,7 @@ Vue3 BaiduMap GL 提供了基于 ES Module 开箱即用的 Tree Shaking 功能�
 </template>
 
 <script setup lang="ts">
-  import { BMap, BZoom } from 'baidu-map-gl-vue'
+  import { BMap, BZoom } from 'bmap-vue'
 </script>
 ```
 

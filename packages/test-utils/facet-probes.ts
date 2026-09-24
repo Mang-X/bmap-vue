@@ -11,18 +11,18 @@
  * 「同一 Contract Harness 可运行 Fake v4 和真实 smoke 子集」（issue #23 实施步骤 5）
  * 因此落成「探针共用 + 断言各自」这两半。
  */
-import type { Point } from "../baidu-map-gl-vue/src/driver/types/geometry";
+import type { Point } from "../bmap-vue/src/driver/types/geometry";
 import type {
   NativeLayerDriver,
   NativeLayerHandle,
   NativeLayerKind,
   NativeLayerOperation,
-} from "../baidu-map-gl-vue/src/driver/types/native-layers";
-import type { OverlayTarget } from "../baidu-map-gl-vue/src/driver/types/overlays";
+} from "../bmap-vue/src/driver/types/native-layers";
+import type { OverlayTarget } from "../bmap-vue/src/driver/types/overlays";
 import type {
   PanoramaDataInfo,
   PanoramaViewerDriver,
-} from "../baidu-map-gl-vue/src/driver/types/panorama";
+} from "../bmap-vue/src/driver/types/panorama";
 import type {
   AutocompleteOptions,
   BoundaryRequest,
@@ -36,7 +36,7 @@ import type {
   LocalSearchResult,
   ReverseGeocodeRequest,
   ServiceResult,
-} from "../baidu-map-gl-vue/src/driver/types/services";
+} from "../bmap-vue/src/driver/types/services";
 
 /* --------------------------------------------------------------------- Service */
 

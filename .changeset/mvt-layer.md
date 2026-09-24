@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 新增 `BMVTLayer`（MVT 矢量瓦片，issue #109）：官方 `BMap.MVTLayer` 的 Vue 封装——直接

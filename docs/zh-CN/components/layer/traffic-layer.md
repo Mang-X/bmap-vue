@@ -1,9 +1,9 @@
-# BTrafficLayer 路况图层 <Badge type="tip" text="^3.0.0" />
+# BTrafficLayer 路况图层 <Badge type="tip" text="^1.0.0" />
 
 实时路况图层。官方把它定义为「预配置的 `BTileLayer`」，因此构造选项与 `BTileLayer` 一致。
 
 ```ts
-import { BTrafficLayer } from 'baidu-map-gl-vue'
+import { BTrafficLayer } from 'bmap-vue'
 ```
 
 ## 组件示例

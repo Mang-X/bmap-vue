@@ -2,7 +2,7 @@
 /**
  * M3A0-06: 由 Capability Catalog 数据生成能力矩阵
  *
- * 生成（单一事实源：packages/baidu-map-gl-vue/src/driver/capability/catalog.ts）：
+ * 生成（单一事实源：packages/bmap-vue/src/driver/capability/catalog.ts）：
  * - docs/zh-CN/contributing/capability-matrix.md
  * - docs/.vitepress/capability-catalog.json
  *
@@ -19,9 +19,10 @@ import { fileURLToPath } from 'node:url'
 import { freshModuleUrl } from './fresh-module-url.mts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const packageJson = JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as { version: string }
 const catalogPath = resolve(
   root,
-  'packages/baidu-map-gl-vue/src/driver/capability/catalog.ts',
+  'packages/bmap-vue/src/driver/capability/catalog.ts',
 )
 
 interface Descriptor {
@@ -65,7 +66,7 @@ function renderMarkdown(): string {
   lines.push('# Capability Catalog 能力矩阵')
   lines.push('')
   lines.push(
-    '> 由 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。',
+    '> 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。',
   )
   lines.push('> 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。')
   lines.push('')
@@ -128,8 +129,8 @@ function renderMarkdown(): string {
 
 function renderJson(): string {
   const payload = {
-    version: '3.0.0-beta.0',
-    source: 'packages/baidu-map-gl-vue/src/driver/capability/catalog.ts',
+     version: packageJson.version,
+    source: 'packages/bmap-vue/src/driver/capability/catalog.ts',
     families: CAPABILITY_FAMILIES,
     statuses: CAPABILITY_STATUSES,
     engines: ENGINES,

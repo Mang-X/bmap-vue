@@ -18,14 +18,14 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
-import { useBMap } from "../../packages/baidu-map-gl-vue/src/composables/useBMap";
-import { useBMapDrivingRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapDrivingRoute";
-import { useBMapWalkingRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapWalkingRoute";
-import { useBMapRidingRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapRidingRoute";
-import { useBMapTransitRoute } from "../../packages/baidu-map-gl-vue/src/composables/useBMapTransitRoute";
-import { DrivingPolicy } from "../../packages/baidu-map-gl-vue/src/driver/types/services";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
+import { useBMap } from "../../packages/bmap-vue/src/composables/useBMap";
+import { useBMapDrivingRoute } from "../../packages/bmap-vue/src/composables/useBMapDrivingRoute";
+import { useBMapWalkingRoute } from "../../packages/bmap-vue/src/composables/useBMapWalkingRoute";
+import { useBMapRidingRoute } from "../../packages/bmap-vue/src/composables/useBMapRidingRoute";
+import { useBMapTransitRoute } from "../../packages/bmap-vue/src/composables/useBMapTransitRoute";
+import { DrivingPolicy } from "../../packages/bmap-vue/src/driver/types/services";
 import { createFakeV4Harness, stripComments } from "../../packages/test-utils";
 
 let harness: ReturnType<typeof createFakeV4Harness>["harness"];
@@ -327,7 +327,7 @@ describe("useBMapWalkingRoute / useBMapRidingRoute / useBMapTransitRoute", () =>
 
 const PACKAGE_SRC = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../packages/baidu-map-gl-vue/src",
+  "../../packages/bmap-vue/src",
 );
 
 /**

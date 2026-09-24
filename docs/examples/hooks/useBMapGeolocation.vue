@@ -40,7 +40,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useBMapGeolocation } from "baidu-map-gl-vue";
+import { useBMapGeolocation } from "bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
 const { get, location, isLoading, isError, status } = useBMapGeolocation({}, map);

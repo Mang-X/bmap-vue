@@ -3,7 +3,7 @@
 全景地图服务，360° 全景地图刻画真实世界，将街道场景带入到地图产品中，用户可以拖拽地图从不同的角度浏览真实的街景效果
 
 ```ts
-import { BPanoramaControl } from 'baidu-map-gl-vue'
+import { BPanoramaControl } from 'bmap-vue'
 ```
 
 :::tip

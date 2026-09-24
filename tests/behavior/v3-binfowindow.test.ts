@@ -8,17 +8,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref, watch, type VNode } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import BInfoWindow from '../../packages/baidu-map-gl-vue/src/components/overlays/BInfoWindow.vue'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import BInfoWindow from '../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue'
 import {
   INFO_WINDOW_DESCRIPTOR_KEYS,
   INFO_WINDOW_FIELDS,
   resolveInfoWindowOpenIntent,
-} from '../../packages/baidu-map-gl-vue/src/core/overlays/InfoWindowSpec'
-import { overlayPropertySpec } from '../../packages/baidu-map-gl-vue/src/driver/types/overlays'
-import { useRequiredMapContext } from '../../packages/baidu-map-gl-vue/src/core/context/inject'
-import type { MapContext } from '../../packages/baidu-map-gl-vue/src/core/context/types'
-import type { BInfoWindowProps } from '../../packages/baidu-map-gl-vue/src/types/components'
+} from '../../packages/bmap-vue/src/core/overlays/InfoWindowSpec'
+import { overlayPropertySpec } from '../../packages/bmap-vue/src/driver/types/overlays'
+import { useRequiredMapContext } from '../../packages/bmap-vue/src/core/context/inject'
+import type { MapContext } from '../../packages/bmap-vue/src/core/context/types'
+import type { BInfoWindowProps } from '../../packages/bmap-vue/src/types/components'
 import {
   browserShims,
   createFakeV4Harness,

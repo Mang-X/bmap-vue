@@ -70,7 +70,7 @@ describe("#74 文档站门禁：真的进 CI 且步骤没被架空", () => {
   });
 
   it("docs job 先构建组件库（docs 的类型检查与站点都对着发布产物）", () => {
-    const buildIndex = job.findIndex((line) => line.includes("scripts/build-v3.mts"));
+    const buildIndex = job.findIndex((line) => line.includes("scripts/build-package.mts"));
     const typecheckIndex = job.findIndex((line) => line.includes("pnpm docs:typecheck"));
     expect(buildIndex).toBeGreaterThan(-1);
     expect(typecheckIndex).toBeGreaterThan(-1);
@@ -85,18 +85,18 @@ describe("#74 文档站类型面：对着发布声明，而不是组件库源码
   ) as { compilerOptions: { paths: Record<string, string[]> } };
 
   it("两个公开入口都映射到 dist 的声明产物", () => {
-    expect(tsconfig.compilerOptions.paths["baidu-map-gl-vue"]).toEqual([
-      "../packages/baidu-map-gl-vue/dist/index.d.ts",
+    expect(tsconfig.compilerOptions.paths["bmap-vue"]).toEqual([
+      "../packages/bmap-vue/dist/index.d.ts",
     ]);
-    expect(tsconfig.compilerOptions.paths["baidu-map-gl-vue/ui-kit"]).toEqual([
-      "../packages/baidu-map-gl-vue/dist/ui-kit.d.ts",
+    expect(tsconfig.compilerOptions.paths["bmap-vue/ui-kit"]).toEqual([
+      "../packages/bmap-vue/dist/ui-kit.d.ts",
     ]);
   });
 
   it("没有任何一条映射指回组件库 src（那会让库内部的 BMap 全局进入 docs 的 types 环境）", () => {
     for (const [specifier, targets] of Object.entries(tsconfig.compilerOptions.paths)) {
       for (const target of targets) {
-        expect(target, `${specifier} → ${target}`).not.toContain("packages/baidu-map-gl-vue/src");
+        expect(target, `${specifier} → ${target}`).not.toContain("packages/bmap-vue/src");
       }
     }
   });

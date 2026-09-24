@@ -55,7 +55,7 @@ import {
   BLineLayer,
   BMap,
   BPointCollection,
-} from "../../../packages/baidu-map-gl-vue/src/index.ts";
+} from "../../../packages/bmap-vue/src/index.ts";
 import {
   featureCollection,
   makeItems,

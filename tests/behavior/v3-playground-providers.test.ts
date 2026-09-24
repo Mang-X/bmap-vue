@@ -14,9 +14,9 @@ import {
   resolvePlaygroundMode,
   type PlaygroundEnvLike,
 } from "../../packages/test-utils/playground-modes";
-import { createBMapClient } from "../../packages/baidu-map-gl-vue/src/client/createBMapClient";
-import { isJsapiV4Namespace } from "../../packages/baidu-map-gl-vue/src/core/loader/providers/namespace";
-import type { CreateBMapClientOptions } from "../../packages/baidu-map-gl-vue/src/client/types";
+import { createBMapClient } from "../../packages/bmap-vue/src/client/createBMapClient";
+import { isJsapiV4Namespace } from "../../packages/bmap-vue/src/core/loader/providers/namespace";
+import type { CreateBMapClientOptions } from "../../packages/bmap-vue/src/client/types";
 import { createFakeV4Provider } from "../../packages/test-utils";
 
 const boots: { restore(): void }[] = [];

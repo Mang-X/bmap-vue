@@ -2,7 +2,7 @@
 
 # Capability Catalog 能力矩阵
 
-> 由 `packages/baidu-map-gl-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
+> 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
 能力总数：**63**

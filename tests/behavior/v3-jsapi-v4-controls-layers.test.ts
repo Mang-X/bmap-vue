@@ -22,15 +22,15 @@ import {
   type ControlFacetHarness,
   type LayerFacetHarness,
 } from "../../packages/test-utils/driver-contract";
-import { CAPABILITY_CATALOG } from "../../packages/baidu-map-gl-vue/src/driver/capability/catalog";
-import { createCapabilityRegistry } from "../../packages/baidu-map-gl-vue/src/driver/capability/registry";
-import type { Capability } from "../../packages/baidu-map-gl-vue/src/driver/capability/catalog";
-import type { ControlHandle, LayerHandle, SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
-import type { LayerKind } from "../../packages/baidu-map-gl-vue/src/driver/types/layers";
-import { createJsapiV4ControlDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/controls";
-import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
-import { createJsapiV4LayerDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/layers";
-import { createJsapiV4HandleRegistry } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/registry";
+import { CAPABILITY_CATALOG } from "../../packages/bmap-vue/src/driver/capability/catalog";
+import { createCapabilityRegistry } from "../../packages/bmap-vue/src/driver/capability/registry";
+import type { Capability } from "../../packages/bmap-vue/src/driver/capability/catalog";
+import type { ControlHandle, LayerHandle, SdkHandle } from "../../packages/bmap-vue/src/driver/types/handles";
+import type { LayerKind } from "../../packages/bmap-vue/src/driver/types/layers";
+import { createJsapiV4ControlDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/controls";
+import { createJsapiV4GeometryDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/geometry";
+import { createJsapiV4LayerDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/layers";
+import { createJsapiV4HandleRegistry } from "../../packages/bmap-vue/src/driver/jsapi-v4/registry";
 
 let fake: FakeBMapV4;
 let registry: ReturnType<typeof createJsapiV4HandleRegistry>;

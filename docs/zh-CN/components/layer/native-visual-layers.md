@@ -1,11 +1,11 @@
-# 原生批量可视化图层 <Badge type="tip" text="^3.0.0" />
+# 原生批量可视化图层 <Badge type="tip" text="^1.0.0" />
 
 四个 JSAPI 4.0 **原生批量图层**：`BLineLayer`（线）/ `BFillLayer`（面）/ `BHeatmapLayer`（热力）/
 `BTrackLineLayer`（轨迹线）。它们与[图层组件](./index)的区别是：**数据是一等公民**（`setData` /
 要素状态 / 拾取），因此一个组件承载成千上万个要素，渲染在 SDK 内部完成。
 
 ```ts
-import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'baidu-map-gl-vue'
+import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'bmap-vue'
 ```
 
 ## 先选对组件（差别来自**官方有没有声明**）
@@ -55,8 +55,8 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'baidu-ma
 
 ```vue
 <script setup lang="ts">
-import { BLineLayer } from 'baidu-map-gl-vue'
-import type { BMapFeaturePick } from 'baidu-map-gl-vue'
+import { BLineLayer } from 'bmap-vue'
+import type { BMapFeaturePick } from 'bmap-vue'
 
 function onClick(pick: BMapFeaturePick) {
   if (!pick.hit) return          // 官方未命中也派发事件
@@ -107,7 +107,7 @@ function onClick(pick: BMapFeaturePick) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BLineLayer } from 'baidu-map-gl-vue'
+import { BLineLayer } from 'bmap-vue'
 
 const layer = ref<InstanceType<typeof BLineLayer> | null>(null)
 
@@ -168,8 +168,8 @@ function highlight(id: string) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BTrackLineLayer } from 'baidu-map-gl-vue'
-import type { BTrackLineObserved } from 'baidu-map-gl-vue'
+import { BTrackLineLayer } from 'bmap-vue'
+import type { BTrackLineObserved } from 'bmap-vue'
 
 const layer = ref<InstanceType<typeof BTrackLineLayer> | null>(null)
 

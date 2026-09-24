@@ -21,7 +21,7 @@
 import { createFakeBMapV4, type FakeBMapV4 } from './fake-bmap-v4/index.ts'
 // `existingGlobalV4Provider` 是组件库的公开 Provider 家族成员。test-utils 是「组件与 SDK 之间」
 // 的替身边界，直接 import 组件库源码，与 `fake-v4-harness.ts` 的做法一致。
-import { existingGlobalV4Provider } from '../baidu-map-gl-vue/src/core/loader/providers'
+import { existingGlobalV4Provider } from '../bmap-vue/src/core/loader/providers'
 
 /** Fake v4 Provider 的句柄：`restore()` 负责把注入的全局还原。 */
 export interface FakeV4ProviderHandle {

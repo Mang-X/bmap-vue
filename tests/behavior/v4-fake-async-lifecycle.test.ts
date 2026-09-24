@@ -19,8 +19,8 @@ import {
   FAKE_V4_RUNTIME_INJECTED_MEMBERS,
   type FakeBMapV4,
 } from "../../packages/test-utils";
-import type { JsapiV4Driver } from "../../packages/baidu-map-gl-vue/src/driver/types/bmap";
-import type { OverlayTarget } from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
+import type { JsapiV4Driver } from "../../packages/bmap-vue/src/driver/types/bmap";
+import type { OverlayTarget } from "../../packages/bmap-vue/src/driver/types/overlays";
 import type { FakeV4Map } from "../../packages/test-utils";
 
 const POINT = { lng: 116.404, lat: 39.915 };

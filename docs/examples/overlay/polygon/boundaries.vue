@@ -38,7 +38,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { useBMapAreaBoundary } from "baidu-map-gl-vue";
+import { useBMapAreaBoundary } from "bmap-vue";
 const zoom = ref<number>(11);
 const area = ref<string>("顺义区");
 const map = ref();

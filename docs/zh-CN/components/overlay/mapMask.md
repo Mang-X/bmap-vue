@@ -6,7 +6,7 @@
 - 局部隐藏：隐藏掉局部区域地图元素，比如隐藏掉指定园区范围的地图元素，然后自定义叠加园区模型。
 
 ```ts
-import { BMapMask } from 'baidu-map-gl-vue'
+import { BMapMask } from 'bmap-vue'
 ```
 
 :::tip 注意

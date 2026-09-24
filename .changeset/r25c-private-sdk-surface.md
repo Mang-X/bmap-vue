@@ -1,10 +1,10 @@
 ---
-"baidu-map-gl-vue": patch
+"bmap-vue": patch
 ---
 
 删除 SDK 私有面嗅探（`_rd`），修复 `<BInfoWindow>` 在 JSAPI 4.0 上的打开与内容可见性，并补齐 `BAutoComplete` 的清理路径。
 
-**服务失败的表现变了**（`baidu-map-gl-vue` 的 `BMapError` 契约不受影响，但服务调用结果与 composable 的返回会变）：
+**服务失败的表现变了**（`bmap-vue` 的 `BMapError` 契约不受影响，但服务调用结果与 composable 的返回会变）：
 
 - 地理编码 / 逆地理编码 / 行政区边界 / IP 定位在**服务端失败**（配额用尽、Referer 白名单等等）时，不再被还原成服务端错误码。官方没有公开的错误码入口，本库也不去嗅探它的私有回调表，因此这类失败与「查无结果」一样表现为 `empty`（`data` 为 `null`）。
 - `useBMapGeocoder` / `useBMapGeocodeDetail` 因此不再因配额 / Referer 失败而 reject，改为解析出 `null`（`isEmpty` 为 `true`）；**超时仍会报 `BMAP_SERVICE_FAILED`**（`... timed out after 15000ms`）。

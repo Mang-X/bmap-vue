@@ -3,7 +3,7 @@
 通过地址解析坐标点
 
 ```ts
-import { useBMapGeocoder } from 'baidu-map-gl-vue'
+import { useBMapGeocoder } from 'bmap-vue'
 ```
 
 ## 单个地址解析
@@ -17,7 +17,7 @@ hooks/useBMapGeocoder/index
 在 Ts 中使用单个解析地址时，使用泛型 `Point` 内部可推断 `point` 为可推断为 `Point`，从而避免读取值时 ts 的报错。
 
 ```ts
-import type { Point } from 'baidu-map-gl-vue'
+import type { Point } from 'bmap-vue'
 const { point } = useBMapGeocoder(map)
 ```
 
@@ -34,7 +34,7 @@ hooks/useBMapGeocoder/batch
 在 Ts 中使用批量解析地址时，使用泛型 `Point[]` 内部可推断 `point` 为可推断为 `Point[]`，从而避免遍历时 ts 的报错。
 
 ```ts
-import type { Point } from 'baidu-map-gl-vue'
+import type { Point } from 'bmap-vue'
 const { getBatch } = useBMapGeocoder(map)
 ```
 
@@ -104,7 +104,7 @@ type Point = { lng: number; lat: number }
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, GeoPoint, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus, GeoPoint, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 
 export interface GeocodeItemResult {
   address: string

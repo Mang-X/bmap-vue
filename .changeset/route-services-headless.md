@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 路线服务（M7-ROUTES / #39）：新增四个 headless 路线规划 hooks，标准路线面板仍由 `./ui-kit` 的 `BRoutePlan` 提供。

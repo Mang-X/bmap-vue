@@ -9,7 +9,7 @@ lang: zh-CN
 [组件事件](../guide/com-events) 页的「BMap：map 事件」一节（`<BMap>` 的 `@` 与它共用同一份数据）。
 
 ```ts
-import { useMapEvent } from 'baidu-map-gl-vue'
+import { useMapEvent } from 'bmap-vue'
 
 // 在 <BMap> 子树里：自动取最近的地图
 useMapEvent('click', (e) => console.log(e.point, e.pixel))
@@ -45,7 +45,7 @@ useMapEvent(name, handler, options?): () => void
 > 要精确类型就用规范名（列表见上面那一页）。
 
 ```ts
-import type { MapEventPayloadOf } from 'baidu-map-gl-vue'
+import type { MapEventPayloadOf } from 'bmap-vue'
 
 useMapEvent('click', (e: MapEventPayloadOf<'click'>) => {
   e.point // 指针事件恒有 point

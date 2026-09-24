@@ -2,7 +2,7 @@
 
 ## 项目
 
-`baidu-map-gl-vue`：Vue 3 的百度地图组件/hooks 库。
+`bmap-vue`：Vue 3 的百度地图组件/hooks 库。
 
 工程：pnpm workspace（Node >= 24，pnpm >= 12），Vite + vue-tsc + Vitest + VitePress。
 
@@ -10,7 +10,7 @@
 
 | 维度 | 说明 |
 | --- | --- |
-| 组件库版本 | `packages/baidu-map-gl-vue/package.json` |
+| 组件库版本 | `packages/bmap-vue/package.json` |
 | SDK engine（内部） | `jsapi-v4`（唯一；旧引擎 `webgl-v1` / `jsapi-v3` 已在 #26 删除） |
 | SDK version | `4.0`（`v=4.0`） |
 
@@ -18,7 +18,7 @@
 
 ## 架构与模块分布
 
-组件库源码在 `packages/baidu-map-gl-vue/src`，顶层模块：
+组件库源码在 `packages/bmap-vue/src`，顶层模块：
 
 - `driver`：raw SDK 边界与 Facet Driver。
 - `client`：`createBMapClient`，聚合 Driver 与运行时能力。
@@ -69,7 +69,7 @@ ADR `2026-09-13-ui-kit-subpath-and-type-boundary`：根入口不重导出 UI、�
 检测引擎：`scripts/raw-sdk-detector.mts`（源码门禁与公共声明门禁共用）；文件收集与 SFC 解析层：
 `scripts/source-scan.mts`（`check:raw-sdk` 与 `check:no-bmapgl` 共用）。
 
-raw SDK 白名单（相对 `packages/baidu-map-gl-vue/src`）：`driver/**`、`client/**`、`core/loader/**`、`plugins/**`；
+raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**`、`core/loader/**`、`plugins/**`；
 `packages/test-utils` 作为 Fake 边界在扫描范围之外。其余目录（`components`、`composables`、`core/runtime` 等）为禁区。
 
 `BMapGL`（旧引擎命名空间）自 #26 起**整棵运行时源码都不允许出现**——它不在任何白名单里，
@@ -79,8 +79,8 @@ raw SDK 白名单（相对 `packages/baidu-map-gl-vue/src`）：`driver/**`、`c
 | --- | --- |
 | `pnpm check:raw-sdk` | 禁区目录静态扫描（`BMapGL`、`window.BMap`、`new BMap.*`、`BMap.*` 类型、`namespace BMap`、官方类型包导入） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src` |
-| `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:v3`） |
-| `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:v3`） |
+| `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:package`） |
+| `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:package`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 
 类型边界 augmentation 位于 `src/driver/jsapi-v4/augmentations/`，治理规则与元数据模板见该目录 `README.md`；

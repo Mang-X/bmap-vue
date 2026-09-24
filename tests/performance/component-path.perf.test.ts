@@ -46,12 +46,12 @@ import { afterAll, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, markRaw, nextTick, ref, shallowRef, type VNodeChild } from "vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/baidu-map-gl-vue/src/components/layers/BTrackLineLayer.vue";
-import BPointCollection from "../../packages/baidu-map-gl-vue/src/components/data/BPointCollection.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
+import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
+import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
+import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
+import BPointCollection from "../../packages/bmap-vue/src/components/data/BPointCollection.vue";
 import {
   PERF_ITEM_KEY,
   PERF_SIZES,

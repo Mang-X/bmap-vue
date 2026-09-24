@@ -9,7 +9,7 @@
  * | path 大数组根引用与版本更新 | `path 大数组：根引用 + 版本令牌` |
  * | 编辑事件与 listener 清理 | `事件面来自矩阵` / `编辑能力边界与卸载路径` |
  * | 旧 alias 只警告一次且新 API 优先 | `集中弃用层` |
- * | Volar/consumer 类型测试 | `fixtures/v3-consumer/src/index.ts`（由 `verify:package` 的 vue-tsc 跑） |
+ * | Volar/consumer 类型测试 | `fixtures/consumer/src/index.ts`（由 `verify:package` 的 vue-tsc 跑） |
  *
  * 另外三条**声明面自己会红**的检查（防止「迁移完了但声明是空转」）：
  *
@@ -25,77 +25,77 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BLabel from "../../packages/baidu-map-gl-vue/src/components/overlays/BLabel.vue";
-import BPolyline from "../../packages/baidu-map-gl-vue/src/components/overlays/BPolyline.vue";
-import BPolygon from "../../packages/baidu-map-gl-vue/src/components/overlays/BPolygon.vue";
-import BRectangle from "../../packages/baidu-map-gl-vue/src/components/overlays/BRectangle.vue";
-import BCircle from "../../packages/baidu-map-gl-vue/src/components/overlays/BCircle.vue";
-import BBezierCurve from "../../packages/baidu-map-gl-vue/src/components/overlays/BBezierCurve.vue";
-import BPrism from "../../packages/baidu-map-gl-vue/src/components/overlays/BPrism.vue";
-import BGroundOverlay from "../../packages/baidu-map-gl-vue/src/components/overlays/BGroundOverlay.vue";
-import BCustomOverlay from "../../packages/baidu-map-gl-vue/src/components/overlays/BCustomOverlay.vue";
-import BMarker from "../../packages/baidu-map-gl-vue/src/components/overlays/BMarker.vue";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BLabel from "../../packages/bmap-vue/src/components/overlays/BLabel.vue";
+import BPolyline from "../../packages/bmap-vue/src/components/overlays/BPolyline.vue";
+import BPolygon from "../../packages/bmap-vue/src/components/overlays/BPolygon.vue";
+import BRectangle from "../../packages/bmap-vue/src/components/overlays/BRectangle.vue";
+import BCircle from "../../packages/bmap-vue/src/components/overlays/BCircle.vue";
+import BBezierCurve from "../../packages/bmap-vue/src/components/overlays/BBezierCurve.vue";
+import BPrism from "../../packages/bmap-vue/src/components/overlays/BPrism.vue";
+import BGroundOverlay from "../../packages/bmap-vue/src/components/overlays/BGroundOverlay.vue";
+import BCustomOverlay from "../../packages/bmap-vue/src/components/overlays/BCustomOverlay.vue";
+import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
 import {
   LABEL_FIELDS,
   LABEL_DESCRIPTOR_KEYS,
   createLabelSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/labelSpec";
+} from "../../packages/bmap-vue/src/components/overlays/labelSpec";
 import {
   POLYLINE_FIELDS,
   POLYLINE_DESCRIPTOR_KEYS,
   POLYLINE_WATCH_SOURCES,
   createPolylineSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/polylineSpec";
+} from "../../packages/bmap-vue/src/components/overlays/polylineSpec";
 import {
   POLYGON_FIELDS,
   POLYGON_DESCRIPTOR_KEYS,
   createPolygonSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/polygonSpec";
+} from "../../packages/bmap-vue/src/components/overlays/polygonSpec";
 import {
   RECTANGLE_FIELDS,
   RECTANGLE_DESCRIPTOR_KEYS,
   createRectangleSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/rectangleSpec";
+} from "../../packages/bmap-vue/src/components/overlays/rectangleSpec";
 import {
   CIRCLE_FIELDS,
   CIRCLE_DESCRIPTOR_KEYS,
   createCircleSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/circleSpec";
+} from "../../packages/bmap-vue/src/components/overlays/circleSpec";
 import {
   BEZIER_CURVE_FIELDS,
   BEZIER_CURVE_DESCRIPTOR_KEYS,
   BEZIER_CURVE_WATCH_SOURCES,
   createBezierCurveSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/bezierCurveSpec";
+} from "../../packages/bmap-vue/src/components/overlays/bezierCurveSpec";
 import {
   PRISM_FIELDS,
   PRISM_DESCRIPTOR_KEYS,
   createPrismSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/prismSpec";
+} from "../../packages/bmap-vue/src/components/overlays/prismSpec";
 import {
   GROUND_OVERLAY_FIELDS,
   GROUND_OVERLAY_DESCRIPTOR_KEYS,
   GROUND_OVERLAY_WATCH_SOURCES,
   createGroundOverlaySpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/groundOverlaySpec";
+} from "../../packages/bmap-vue/src/components/overlays/groundOverlaySpec";
 import {
   MARKER_DESCRIPTOR_KEYS,
   MARKER_FIELDS,
   createMarkerSpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/markerSpec";
+} from "../../packages/bmap-vue/src/components/overlays/markerSpec";
 import {
   CUSTOM_OVERLAY_DESCRIPTOR_KEYS,
   CUSTOM_OVERLAY_FIELDS,
   createCustomOverlaySpec,
-} from "../../packages/baidu-map-gl-vue/src/components/overlays/customOverlaySpec";
-import { assertOverlayFieldDeclarations } from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
-import { useOverlaySpec } from "../../packages/baidu-map-gl-vue/src/core/composables/useOverlaySpec";
+} from "../../packages/bmap-vue/src/components/overlays/customOverlaySpec";
+import { assertOverlayFieldDeclarations } from "../../packages/bmap-vue/src/core/overlays/OverlaySpec";
+import { useOverlaySpec } from "../../packages/bmap-vue/src/core/composables/useOverlaySpec";
 import type {
   OverlayFieldUpdate,
   OverlaySpec,
-} from "../../packages/baidu-map-gl-vue/src/core/overlays/OverlaySpec";
-import { overlayEventsOf } from "../../packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog";
+} from "../../packages/bmap-vue/src/core/overlays/OverlaySpec";
+import { overlayEventsOf } from "../../packages/bmap-vue/src/core/overlays/overlayEventCatalog";
 import {
   DEPRECATED_EVENT_ALIAS_CODE,
   DEPRECATED_PROP_ALIAS_CODE,
@@ -103,17 +103,17 @@ import {
   OVERLAY_PROP_ALIASES,
   createDeprecationWarner,
   propAliasesOf,
-} from "../../packages/baidu-map-gl-vue/src/core/deprecations";
+} from "../../packages/bmap-vue/src/core/deprecations";
 import {
   OVERLAY_DESCRIPTORS,
   overlayPropertySpec,
   type OverlayKind,
-} from "../../packages/baidu-map-gl-vue/src/driver/types/overlays";
+} from "../../packages/bmap-vue/src/driver/types/overlays";
 import { createFakeV4Harness, type FakeV4Harness, type FakeBMapV4 } from "../../packages/test-utils";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
-const TYPES_FILE = resolve(REPO_ROOT, "packages/baidu-map-gl-vue/src/types/components.ts");
-const OVERLAY_DIR = resolve(REPO_ROOT, "packages/baidu-map-gl-vue/src/components/overlays");
+const TYPES_FILE = resolve(REPO_ROOT, "packages/bmap-vue/src/types/components.ts");
+const OVERLAY_DIR = resolve(REPO_ROOT, "packages/bmap-vue/src/components/overlays");
 const POINT = { lng: 116.4, lat: 39.9 };
 
 type AnyRecord = Record<string, any>;

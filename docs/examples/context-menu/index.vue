@@ -25,7 +25,7 @@ import {
   type ContextMenuItem,
   type ContextMenuSeparator,
   type ContextMenuSelectPayload,
-} from "baidu-map-gl-vue";
+} from "bmap-vue";
 
 const center = ref("北京市");
 

@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 `<BMap>` 的 `center` / `zoom` / `heading` / `tilt` 改为受控 / 非受控双模，并支持 `v-model:center` 等多 model 绑定。

@@ -60,8 +60,8 @@ lang: zh-CN
 AK / userinfo 脱敏）：
 
 ```ts
-import type { BMapProviderLike } from 'baidu-map-gl-vue'
-import { createLoadedJsapiV4 } from 'baidu-map-gl-vue/core'
+import type { BMapProviderLike } from 'bmap-vue'
+import { createLoadedJsapiV4 } from 'bmap-vue/core'
 
 const provider: BMapProviderLike = {
   id: 'my-loader',
@@ -107,7 +107,7 @@ Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDrive
 ```ts
 import { createApp } from 'vue'
 import App from './App.vue'
-import { createBMapPlugin } from 'baidu-map-gl-vue'
+import { createBMapPlugin } from 'bmap-vue'
 
 const app = createApp(App)
 app.use(createBMapPlugin({ ak: '百度地图ak' }))
@@ -132,7 +132,7 @@ app.mount('#app')
 </template>
 
 <script setup lang="ts">
-import { BMapProvider } from 'baidu-map-gl-vue'
+import { BMapProvider } from 'bmap-vue'
 
 function onReady() {}
 function onError() {}
@@ -143,7 +143,7 @@ function onError() {}
 也就是 `baiduJsapiV4Provider()`（官方 Loader）。只有子树需要用**别的入口**时才显式传：
 
 ```ts
-import { customScriptV4Provider, existingGlobalV4Provider } from 'baidu-map-gl-vue/core'
+import { customScriptV4Provider, existingGlobalV4Provider } from 'bmap-vue/core'
 
 // 自托管 / 非标准资源入口
 const selfHosted = { provider: customScriptV4Provider('https://self.hosted/bmap.js') }
@@ -200,9 +200,9 @@ nightly 的 `probe:plugin-compat` 会核对并提示更新——换 URL 请一�
 再经 `createBMapPlugin({ provider })` 或 Client 定义传入：
 
 ```ts
-import { createBMapPlugin } from 'baidu-map-gl-vue'
-// v4 Provider 家族在 `baidu-map-gl-vue/core` 子入口公开
-import { customScriptV4Provider } from 'baidu-map-gl-vue/core'
+import { createBMapPlugin } from 'bmap-vue'
+// v4 Provider 家族在 `bmap-vue/core` 子入口公开
+import { customScriptV4Provider } from 'bmap-vue/core'
 
 app.use(createBMapPlugin({
   provider: customScriptV4Provider('https://self.hosted/bmap.js'),
@@ -234,7 +234,7 @@ M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
   scope 就变成全局共享。内置四个插件都是 `'global'`。
   注意 `urlPluginDefinition(...)` 这个**脚本插件工厂**的缺省是 `'global'`（它加载的就是文档级脚本），
   需要按地图隔离时显式传 `{ scope: 'map' }`；两个缺省不一样是有意的，别当成一个。
-  要清掉宿主缓存的全局状态（测试 / 热更新）用 `baidu-map-gl-vue/plugins` 的
+  要清掉宿主缓存的全局状态（测试 / 热更新）用 `bmap-vue/plugins` 的
   `disposeDefaultPluginHost()`。**它不是「回到没加载过」**：第三方脚本与 `window.BMapGLLib.*` 都留在
   原地，内置脚本插件下一次会命中「导出已存在」的短路、复用同一个全局对象（不重新拉脚本）。
 - **未知名字明确失败**：`resolvePluginDefinition` / `stringToPluginDefinitions` 抛

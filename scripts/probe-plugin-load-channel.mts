@@ -66,7 +66,7 @@ const runId = randomUUID();
 /** 页面脚本等多久（超时常量 + 余量）；无常量（修复前的树）时给固定窗口。 */
 async function resolveWaitMs(): Promise<{ waitMs: number; configuredTimeoutMs: number | null }> {
   const builtins = (await import(
-    freshModuleUrl(resolve(repoRoot, "packages/baidu-map-gl-vue/src/plugins/builtins.ts"))
+    freshModuleUrl(resolve(repoRoot, "packages/bmap-vue/src/plugins/builtins.ts"))
   )) as Record<string, unknown>;
   const raw = builtins.BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS;
   const configuredTimeoutMs = typeof raw === "number" && Number.isFinite(raw) ? raw : null;

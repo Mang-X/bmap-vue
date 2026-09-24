@@ -1,7 +1,7 @@
 /**
  * 源码静态扫描门禁：raw SDK 边界（M3A0-03 / issue #15）
  *
- * 默认扫描范围（禁区，相对 packages/baidu-map-gl-vue/src）：
+ * 默认扫描范围（禁区，相对 packages/bmap-vue/src）：
  *   - components
  *   - composables
  *   - core/runtime
@@ -32,7 +32,7 @@ import { RULE_LABELS, sortViolations, type Violation } from "./raw-sdk-detector.
 import { scanSourceDirs } from "./source-scan.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const PKG = join(ROOT, "packages/baidu-map-gl-vue/src");
+const PKG = join(ROOT, "packages/bmap-vue/src");
 
 /** 文件收集与 SFC 解析在 `./source-scan.mts`（与 no-bmapgl 门禁共用）。 */
 const scanDirs = (

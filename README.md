@@ -4,20 +4,20 @@
   </a>
 </p>
 
-<h1 align="center"><img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" />&nbsp;Vue3 BaiduMap Gl&nbsp;<img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" /></h1>
+<h1 align="center"><img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" />&nbsp;bmap-vue&nbsp;<img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" /></h1>
 
 <p align="center">易用 & 完整 & 高性能</p>
 <p align="center">
 <img src="https://img.shields.io/github/license/Mang-X/bmap-vue?style=flat-square" alt="" />
 <img src="https://img.shields.io/github/package-json/v/Mang-X/bmap-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
-<img alt="npm" src="https://img.shields.io/npm/dm/baidu-map-gl-vue?logo=npm&style=flat-square" />
+<img alt="npm" src="https://img.shields.io/npm/dm/bmap-vue?logo=npm&style=flat-square" />
 <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Mang-X/bmap-vue?style=flat-square&color=%23daaa3f">
 <img alt="GitHub issues" src="https://img.shields.io/github/issues/Mang-X/bmap-vue?style=flat-square" />
 <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
 <br />
 </p>
 
-面向 Vue 3 的百度地图组件与 hooks 库，开箱即用。
+面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JSAPI 4.0。
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star
 
@@ -42,13 +42,13 @@
 
 ```bash
 # with pnpm
-pnpm add baidu-map-gl-vue
+pnpm add bmap-vue
 
 # or with yarn
-yarn add baidu-map-gl-vue
+yarn add bmap-vue
 
 # or with npm
-npm install baidu-map-gl-vue
+npm install bmap-vue
 ```
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Open%20Book.png" alt="Open Book" width="25" height="25" /> 文档
@@ -57,7 +57,6 @@ npm install baidu-map-gl-vue
 
 - [安装](https://Mang-X.github.io/bmap-vue/zh-CN/guide/installation)
 - [快速开始](https://Mang-X.github.io/bmap-vue/zh-CN/guide/quick-start)
-- [从 v2 迁移](https://Mang-X.github.io/bmap-vue/zh-CN/guide/migration-from-v2)
 - [AI 开发与官方 Skill](https://Mang-X.github.io/bmap-vue/zh-CN/contributing/ai-development)
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Hammer%20and%20Wrench.png" alt="Hammer and Wrench" width="25" height="25" /> 开发参与贡献
@@ -84,6 +83,10 @@ pnpm docs:dev
 完整的贡献流程、分支与提交约定、本地门禁清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)；
 用法讨论请走 [Discussions](https://github.com/Mang-X/bmap-vue/discussions)，
 安全问题请按 [SECURITY.md](./SECURITY.md) 私密上报。
+
+## 项目来源与致谢
+
+`bmap-vue` 源自开源项目 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。原项目的 MIT 许可与 `Copyright (c) 2021 yue1123` 声明继续保留；本项目在其基础上继续维护和发布，详见 [NOTICE.md](./NOTICE.md) 与 [LICENSE](./LICENSE)。
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 

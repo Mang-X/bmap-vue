@@ -32,7 +32,7 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { BMap, BMarker, useBMapLocalSearch } from "baidu-map-gl-vue";
+import { BMap, BMarker, useBMapLocalSearch } from "bmap-vue";
 
 const keyword = ref("天安门");
 const focused = ref<{ lng: number; lat: number } | null>(null);

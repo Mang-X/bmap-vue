@@ -167,9 +167,9 @@ importers:
 
   apps/playground:
     dependencies:
-      baidu-map-gl-vue:
+      bmap-vue:
         specifier: workspace:*
-        version: link:../../packages/baidu-map-gl-vue
+        version: link:../../packages/bmap-vue
       vue:
         specifier: ^3.5.0
         version: 3.5.42(typescript@5.9.3)
@@ -205,9 +205,9 @@ importers:
       '@vite-pwa/vitepress':
         specifier: ^1.1.0
         version: 1.1.0(vite-plugin-pwa@1.3.0(supports-color@8.1.1)(vite@8.2.2(@types/node@24.13.3)(less@4.9.1(supports-color@8.1.1))(terser@5.51.2)(yaml@2.9.0))(workbox-build@7.4.1(supports-color@8.1.1))(workbox-window@7.4.1))
-      baidu-map-gl-vue:
+      bmap-vue:
         specifier: workspace:*
-        version: link:../packages/baidu-map-gl-vue
+        version: link:../packages/bmap-vue
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -248,7 +248,7 @@ importers:
         specifier: ^0.8.2
         version: 0.8.2(supports-color@8.1.1)
 
-  packages/baidu-map-gl-vue:
+  packages/bmap-vue:
     dependencies:
       '@baidumap/jsapi-loader':
         specifier: 1.0.0

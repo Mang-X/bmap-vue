@@ -12,7 +12,7 @@
  * 3. **真实打包**：用 Vite 各打一次 basic / UI 消费方（生产模式），basic 产物必须没有
  *    UI Kit 代码与样式，UI 产物必须**有**样式与运行代码（正向对照，否则第 2 层可能是空转）。
  *
- * 类型可用性由 `verify:package`（`fixtures/v3-consumer` 里 import `baidu-map-gl-vue/ui-kit`
+ * 类型可用性由 `verify:package`（`fixtures/consumer` 里 import `bmap-vue/ui-kit`
  * 后 `vue-tsc --noEmit`）在 CI 里验证；本文件只断言声明产物自身不引用上游类型包。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
 import { build } from "vite";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
-const pkgRoot = join(repoRoot, "packages/baidu-map-gl-vue");
+const pkgRoot = join(repoRoot, "packages/bmap-vue");
 const distDir = join(pkgRoot, "dist");
 const distIndex = join(distDir, "index.mjs");
 const distUiKit = join(distDir, "ui-kit.mjs");
@@ -219,8 +219,8 @@ describe("根入口与 UI 子路径的产物隔离", () => {
 describe("真实生产构建下的消费方行为", () => {
   const workDir = join(repoRoot, ".artifacts", "ui-kit-consumer");
   const aliases = [
-    { find: /^baidu-map-gl-vue$/, replacement: distIndex },
-    { find: /^baidu-map-gl-vue\/ui-kit$/, replacement: distUiKit },
+    { find: /^bmap-vue$/, replacement: distIndex },
+    { find: /^bmap-vue\/ui-kit$/, replacement: distUiKit },
   ];
 
   async function buildConsumer(name: string, entrySource: string): Promise<string> {
@@ -264,7 +264,7 @@ describe("真实生产构建下的消费方行为", () => {
     const projectDir = await buildConsumer(
       "basic",
       [
-        'import { BMap, createBMapPlugin } from "baidu-map-gl-vue";',
+        'import { BMap, createBMapPlugin } from "bmap-vue";',
         "export const ok = typeof BMap !== 'undefined' && typeof createBMapPlugin === 'function';",
         "",
       ].join("\n"),
@@ -298,7 +298,7 @@ describe("真实生产构建下的消费方行为", () => {
     const projectDir = await buildConsumer(
       "ui",
       [
-        'import { BPlaceAutocomplete, BPlaceDetail, BPlaceSearch, BRoutePlan, loadUiKit } from "baidu-map-gl-vue/ui-kit";',
+        'import { BPlaceAutocomplete, BPlaceDetail, BPlaceSearch, BRoutePlan, loadUiKit } from "bmap-vue/ui-kit";',
         'import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";',
         "export const ok = [BPlaceAutocomplete, BPlaceSearch, BPlaceDetail, BRoutePlan, loadUiKit].every(Boolean);",
         "",

@@ -9,7 +9,7 @@ title: useControllableState
 [Map 地图](../components/map) 的「受控 / 非受控视野」一节）。
 
 ```ts
-import { useControllableState } from 'baidu-map-gl-vue'
+import { useControllableState } from 'bmap-vue'
 ```
 
 ## 优先与模式
@@ -25,7 +25,7 @@ import { useControllableState } from 'baidu-map-gl-vue'
 ## 基本用法
 
 ```ts
-import { useControllableState } from 'baidu-map-gl-vue'
+import { useControllableState } from 'bmap-vue'
 import { shallowRef, watch, computed } from 'vue'
 
 const props = defineProps<{ value?: number; defaultValue?: number }>()
@@ -112,5 +112,5 @@ const state = useControllableState<{ lng: number; lat: number }>({
 （打包器替换成字面量、Node / SSR 读真实环境变量），因此不会因为发布构建而永远消失。
 
 相等判定的现成实现见
-`packages/baidu-map-gl-vue/src/core/utils/equality.ts`（`pointEquals` / `numbersEqual` /
+`packages/bmap-vue/src/core/utils/equality.ts`（`pointEquals` / `numbersEqual` /
 `anglesEqual`）。

@@ -18,8 +18,8 @@ import { dirname, join, resolve } from "node:path";
 // 剥注释的判定式是共享实现（`#104` 第三批收口：此前本仓有 5 份逐字副本）。
 import { stripComments } from "../../packages/test-utils";
 
-const PKG_SRC = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue/src");
-const PKG_ROOT = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
+const PKG_SRC = resolve(import.meta.dirname, "../../packages/bmap-vue/src");
+const PKG_ROOT = resolve(import.meta.dirname, "../../packages/bmap-vue");
 
 function read(relativePath: string): string {
   return readFileSync(join(PKG_SRC, relativePath), "utf8");

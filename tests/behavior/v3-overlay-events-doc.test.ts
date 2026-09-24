@@ -16,11 +16,11 @@ import { describe, expect, it } from "vitest";
 import {
   OVERLAY_EVENT_MATRIX,
   OVERLAY_KINDS_WITHOUT_EVENT_MATRIX,
-} from "../../packages/baidu-map-gl-vue/src/core/overlays/overlayEventCatalog";
+} from "../../packages/bmap-vue/src/core/overlays/overlayEventCatalog";
 import {
   OVERLAY_EVENT_ALIASES,
   OVERLAY_PROP_ALIASES,
-} from "../../packages/baidu-map-gl-vue/src/core/deprecations";
+} from "../../packages/bmap-vue/src/core/deprecations";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const DOC_PATH = resolve(REPO_ROOT, "docs/zh-CN/components/overlay/events.md");

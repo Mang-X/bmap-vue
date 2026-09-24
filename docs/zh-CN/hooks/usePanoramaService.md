@@ -3,14 +3,14 @@
 按 id 或坐标检索全景数据（官方 `BMap.PanoramaService`）。
 
 ```ts
-import { usePanoramaService } from 'baidu-map-gl-vue'
+import { usePanoramaService } from 'bmap-vue'
 ```
 
 ## 基本用法
 
 ```vue
 <script setup lang="ts">
-import { usePanoramaService } from 'baidu-map-gl-vue'
+import { usePanoramaService } from 'bmap-vue'
 
 const { data, status, isLoading, findById, findByLocation } = usePanoramaService()
 

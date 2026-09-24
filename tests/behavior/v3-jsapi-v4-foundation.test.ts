@@ -11,10 +11,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 import { FakeV4Point } from "../../packages/test-utils/fake-bmap-v4";
-import { createJsapiV4EventDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/events";
-import { createJsapiV4GeometryDriver } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/geometry";
-import { createJsapiV4HandleRegistry } from "../../packages/baidu-map-gl-vue/src/driver/jsapi-v4/registry";
-import type { SdkHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
+import { createJsapiV4EventDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/events";
+import { createJsapiV4GeometryDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/geometry";
+import { createJsapiV4HandleRegistry } from "../../packages/bmap-vue/src/driver/jsapi-v4/registry";
+import type { SdkHandle } from "../../packages/bmap-vue/src/driver/types/handles";
 
 interface Harness {
   fake: FakeBMapV4;

@@ -1,6 +1,6 @@
 # 官方 UI Kit（`./ui-kit`）
 
-`baidu-map-gl-vue/ui-kit` 是**独立按需子入口**：四个标准 UI（输入建议下拉、结果列表、
+`bmap-vue/ui-kit` 是**独立按需子入口**：四个标准 UI（输入建议下拉、结果列表、
 详情面板、路线面板）全部由官方
 [`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 渲染，
 本库只负责 host 容器、生命周期、props → 已验证 setter / 构造选项、事件数据与公开动作。
@@ -23,7 +23,7 @@
 `@baidumap/jsapi-ui-kit` 是**可选依赖**，而且它在**模块求值期**就会访问 `document`
 （Node 侧 `import` 直接崩）。因此：
 
-- 根入口 `baidu-map-gl-vue` **不导出**这四个组件，产物里也不含 UI Kit 的代码与样式；
+- 根入口 `bmap-vue` **不导出**这四个组件，产物里也不含 UI Kit 的代码与样式；
   它的整条 ESM 闭包由 `tests/behavior/v3-ui-kit-entry.test.ts` 遍历断言；
 - 组件只在浏览器挂载后**动态 import** 上游包，所以 `./ui-kit` 本身在 SSR / 离线环境
   可以安全 `import`（不会触碰 DOM），但渲染 UI 组件没有意义 —— 服务端渲染时请不要渲染它们。
@@ -32,7 +32,7 @@
 
 这四个组件**不在**组件 manifest 里，因此 `Vue3BaiduMapGlResolver` /
 `unplugin-vue-components` 的自动导入**不会**解析它们：必须显式写
-`import { BPlaceSearch } from "baidu-map-gl-vue/ui-kit"`。
+`import { BPlaceSearch } from "bmap-vue/ui-kit"`。
 
 这是刻意的：manifest 生成的 `components/index.ts` 会被**根入口**引用，把 UI Kit 放进去就等于
 把可选依赖与 DOM 副作用拖进所有消费者的产物图（见 ADR
@@ -41,7 +41,7 @@
 ## 安装
 
 ```bash
-pnpm add baidu-map-gl-vue vue
+pnpm add bmap-vue vue
 # 只有用到 ./ui-kit 时才需要（版本由本库精确锁定为 optional peer）
 pnpm add @baidumap/jsapi-ui-kit@1.1.2
 ```
@@ -51,7 +51,7 @@ pnpm add @baidumap/jsapi-ui-kit@1.1.2
 官方包**不在 JS 里注入样式**，不引入不会报错，只会「没有样式」：
 
 ```ts
-import { BPlaceSearch } from "baidu-map-gl-vue/ui-kit"; // ❌ 这不会引入任何样式
+import { BPlaceSearch } from "bmap-vue/ui-kit"; // ❌ 这不会引入任何样式
 ```
 
 正确写法：
@@ -63,7 +63,7 @@ import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 `UI_KIT_STYLE_PATH` 导出的就是这个路径，可用于避免手写错：
 
 ```ts
-import { UI_KIT_STYLE_PATH } from "baidu-map-gl-vue/ui-kit";
+import { UI_KIT_STYLE_PATH } from "bmap-vue/ui-kit";
 console.log(UI_KIT_STYLE_PATH); // "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css"
 ```
 
@@ -72,15 +72,15 @@ console.log(UI_KIT_STYLE_PATH); // "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit
 ```vue
 <script setup lang="ts">
 import { ref } from "vue";
-import { BMap } from "baidu-map-gl-vue";
+import { BMap } from "bmap-vue";
 import {
   BPlaceAutocomplete,
   BPlaceDetail,
   BPlaceSearch,
   BRoutePlan,
-} from "baidu-map-gl-vue/ui-kit";
+} from "bmap-vue/ui-kit";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
-import type { PlacePoiDTO, PlaceSuggestionDTO } from "baidu-map-gl-vue/ui-kit";
+import type { PlacePoiDTO, PlaceSuggestionDTO } from "bmap-vue/ui-kit";
 
 const autocomplete = ref<InstanceType<typeof BPlaceAutocomplete> | null>(null);
 const search = ref<InstanceType<typeof BPlaceSearch> | null>(null);
@@ -232,7 +232,7 @@ await api.goToPage(3);
 | --- | --- | --- |
 | 数据通道 | 本库 headless `Autocomplete`（`BMapGL.Autocomplete`） | 官方 UI Kit 的 JSONP 通道 |
 | UI | 无（只把输入框绑给 SDK，联想 UI 由 SDK 自己的下拉实现） | 官方 UI Kit 输入框 + 建议下拉 + 键盘导航 |
-| 入口 | 根入口 `baidu-map-gl-vue` | 子入口 `baidu-map-gl-vue/ui-kit` |
+| 入口 | 根入口 `bmap-vue` | 子入口 `bmap-vue/ui-kit` |
 | 额外依赖 | 无 | `@baidumap/jsapi-ui-kit`（optional peer）+ 手写引入 CSS |
 
 - 想要**官方样式与交互**、并且可以接受多一个可选依赖 → 用 `BPlaceAutocomplete`；
@@ -301,7 +301,7 @@ await api.clear();                // 回到空状态占位
 **既是类型也是值**（与 TS 枚举同形），所以不必写魔法数字：
 
 ```ts
-import { BRoutePlan, RoutePlanDrivingPolicy } from "baidu-map-gl-vue/ui-kit";
+import { BRoutePlan, RoutePlanDrivingPolicy } from "bmap-vue/ui-kit";
 
 // 模板里：<BRoutePlan :driving-options="{ policy: RoutePlanDrivingPolicy.AVOID_CONGESTION }" />
 const props = {
@@ -368,7 +368,7 @@ await api.getLastResult();       // 没搜索过 / 被清空时为 null
 不用 Vue 组件、或要用上游还没被本库封装的成员时，可以经 `loadUiKit()` 原生构造，自行负责销毁：
 
 ```ts
-import { loadUiKit } from "baidu-map-gl-vue/ui-kit";
+import { loadUiKit } from "bmap-vue/ui-kit";
 
 const uiKit = await loadUiKit();
 const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });

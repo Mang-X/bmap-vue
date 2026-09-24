@@ -3,7 +3,7 @@
 用于获取用户所在的城市位置信息。(根据用户 IP 自动定位到城市)
 
 ```ts
-import { useBMapIpLocation } from 'baidu-map-gl-vue'
+import { useBMapIpLocation } from 'bmap-vue'
 ```
 
 ## 示例
@@ -75,7 +75,7 @@ const { get, location, isLoading } = useBMapIpLocation(map)
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, PointLike, ServiceErrorInfo, ServiceResult } from 'baidu-map-gl-vue'
+import type { BMapServiceStatus, PointLike, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 interface BMapIpLocationResult {
   name: string
   /** SDK 未给出时为 null（不伪造 0/0） */

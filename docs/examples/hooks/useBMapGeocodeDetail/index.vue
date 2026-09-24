@@ -29,7 +29,7 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { useBMapGeocodeDetail, type MapMouseEvent } from "baidu-map-gl-vue";
+import { useBMapGeocodeDetail, type MapMouseEvent } from "bmap-vue";
 const map = ref();
 const { get, result, isLoading, isEmpty, isError, error } = useBMapGeocodeDetail(map);
 const errorMessage = computed(() => {

@@ -1,5 +1,5 @@
 ---
-"baidu-map-gl-vue": minor
+"bmap-vue": minor
 ---
 
 建立声明式 `ControlSpec` / `useControlResource`，把全部控件收进统一生命周期；补齐三个 Stable 控件组件

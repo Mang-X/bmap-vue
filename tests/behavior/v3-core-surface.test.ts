@@ -21,25 +21,25 @@
  *    只写「它不在出口上」时，「机制被整段删掉」与「机制被内部化」都绿 —— 但审计表写的是后者，
  *    两者结论不同。
  *
- * 需要先 `pnpm build:v3`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
+ * 需要先 `pnpm build:package`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripComments } from "../../packages/test-utils";
-import * as advanced from "../../packages/baidu-map-gl-vue/src/advanced";
-import * as components from "../../packages/baidu-map-gl-vue/src/components";
-import * as composables from "../../packages/baidu-map-gl-vue/src/composables";
-import * as core from "../../packages/baidu-map-gl-vue/src/core";
-import * as plugins from "../../packages/baidu-map-gl-vue/src/plugins";
-import * as resolver from "../../packages/baidu-map-gl-vue/src/resolver";
-import * as root from "../../packages/baidu-map-gl-vue/src";
+import * as advanced from "../../packages/bmap-vue/src/advanced";
+import * as components from "../../packages/bmap-vue/src/components";
+import * as composables from "../../packages/bmap-vue/src/composables";
+import * as core from "../../packages/bmap-vue/src/core";
+import * as plugins from "../../packages/bmap-vue/src/plugins";
+import * as resolver from "../../packages/bmap-vue/src/resolver";
+import * as root from "../../packages/bmap-vue/src";
 import {
   getProcessSdkRegistry,
   resetProcessSdkRegistryForTests as registryResetFromSource,
-} from "../../packages/baidu-map-gl-vue/src/core/loader/SdkRegistry";
+} from "../../packages/bmap-vue/src/core/loader/SdkRegistry";
 
-const PKG_DIR = resolve(import.meta.dirname, "../../packages/baidu-map-gl-vue");
+const PKG_DIR = resolve(import.meta.dirname, "../../packages/bmap-vue");
 const DIST = resolve(PKG_DIR, "dist");
 
 /**
@@ -114,7 +114,7 @@ const declaredPublicEntries = (): number => {
 
 const publicDtsFiles = (): string[] => {
   if (!existsSync(DIST)) {
-    throw new Error(`缺少构建产物目录 ${DIST}：先跑 \`pnpm build:v3\`（读 dist 的用例都在 test:unit 里）`);
+    throw new Error(`缺少构建产物目录 ${DIST}：先跑 \`pnpm build:package\`（读 dist 的用例都在 test:unit 里）`);
   }
   const files = readdirSync(DIST).filter((name) => name.endsWith(".d.ts"));
   // 空转守卫：判定必须作用在**全部**公共入口上，而不是其中一个子集上。

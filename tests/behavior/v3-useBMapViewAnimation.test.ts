@@ -12,10 +12,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import { useRequiredMapContext } from "../../packages/baidu-map-gl-vue/src/core/context/inject";
-import { useBMapViewAnimation } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
-import type { ViewAnimationKeyFrames } from "../../packages/baidu-map-gl-vue/src/composables/useBMapViewAnimation";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
+import { useBMapViewAnimation } from "../../packages/bmap-vue/src/composables/useBMapViewAnimation";
+import type { ViewAnimationKeyFrames } from "../../packages/bmap-vue/src/composables/useBMapViewAnimation";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import type { FakeV4ViewAnimation } from "../../packages/test-utils";
 

@@ -25,10 +25,10 @@ import {
   mapContextKey,
   type MapContext,
   type MapReadyContext,
-} from "../../packages/baidu-map-gl-vue/src/core/context/types";
-import { createMapEventBus } from "../../packages/baidu-map-gl-vue/src/core/events/MapEventBus";
-import { ResourceScope } from "../../packages/baidu-map-gl-vue/src/core/lifecycle/ResourceScope";
-import { createHandle, type MapHandle } from "../../packages/baidu-map-gl-vue/src/driver/types/handles";
+} from "../../packages/bmap-vue/src/core/context/types";
+import { createMapEventBus } from "../../packages/bmap-vue/src/core/events/MapEventBus";
+import { ResourceScope } from "../../packages/bmap-vue/src/core/lifecycle/ResourceScope";
+import { createHandle, type MapHandle } from "../../packages/bmap-vue/src/driver/types/handles";
 
 export { mapContextKey };
 

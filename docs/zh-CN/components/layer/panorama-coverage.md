@@ -3,7 +3,7 @@
 全景地图服务，360° 全景地图刻画真实世界，将街道场景带入到地图产品中，用户可以拖拽地图从不同的角度浏览真实的街景效果
 
 ```ts
-import { BPanoramaCoverageLayer } from 'baidu-map-gl-vue'
+import { BPanoramaCoverageLayer } from 'bmap-vue'
 ```
 
 :::tip 提示
@@ -22,7 +22,7 @@ layer/panoramaCoverage
 
 | 属性    | 说明         | 类型      | 默认值 | 版本                               |
 | ------- | ------------ | --------- | ------ | ---------------------------------- |
-| visible | 是否挂在地图上 | `boolean` | `true` | <Badge type="tip" text="^3.0.0" /> |
+| visible | 是否挂在地图上 | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
 
 `visible` 的语义是「挂上 / 摘掉」（`addLayer` / `removeLayer`）。
 

@@ -22,7 +22,7 @@
 
 <script lang="ts" setup>
 import { ref, watch } from "vue";
-import { useBMapGeocoder } from "baidu-map-gl-vue";
+import { useBMapGeocoder } from "bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
 const addressList = ref([

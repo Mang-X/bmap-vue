@@ -8,8 +8,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
-import BMap from '../../packages/baidu-map-gl-vue/src/components/map/BMap.vue'
-import BPrism from '../../packages/baidu-map-gl-vue/src/components/overlays/BPrism.vue'
+import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
+import BPrism from '../../packages/bmap-vue/src/components/overlays/BPrism.vue'
 import { createFakeV4Harness, type FakeV4Prism } from '../../packages/test-utils'
 
 const { harness, fake } = createFakeV4Harness()

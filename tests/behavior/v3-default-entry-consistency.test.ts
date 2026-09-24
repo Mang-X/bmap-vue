@@ -14,14 +14,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { defineComponent, h } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
-import BMap from "../../packages/baidu-map-gl-vue/src/components/map/BMap.vue";
-import BMapProvider from "../../packages/baidu-map-gl-vue/src/components/provider/BMapProvider.vue";
-import { createBMapPlugin } from "../../packages/baidu-map-gl-vue/src/plugins/createBMapPlugin";
-import { resolveMapContext } from "../../packages/baidu-map-gl-vue/src/composables/resolveMapContext";
+import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
+import { createBMapPlugin } from "../../packages/bmap-vue/src/plugins/createBMapPlugin";
+import { resolveMapContext } from "../../packages/bmap-vue/src/composables/resolveMapContext";
 import { createFakeV4Harness } from "../../packages/test-utils";
-import type { BMapClient, BMapDriverFactory } from "../../packages/baidu-map-gl-vue/src/client/types";
-import type { LoadedSdk } from "../../packages/baidu-map-gl-vue/src/core/loader/loaded";
-import { BMapError } from "../../packages/baidu-map-gl-vue/src/core/errors/BMapError";
+import type { BMapClient, BMapDriverFactory } from "../../packages/bmap-vue/src/client/types";
+import type { LoadedSdk } from "../../packages/bmap-vue/src/core/loader/loaded";
+import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 
 const { harness, fake } = createFakeV4Harness();
 

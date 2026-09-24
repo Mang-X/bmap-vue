@@ -92,8 +92,8 @@ function fail(message: string): never {
 /* 数据模块与官方声明索引                                                       */
 /* -------------------------------------------------------------------------- */
 
-const inventoryPath = resolve(root, 'packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts')
-const builtinsPath = resolve(root, 'packages/baidu-map-gl-vue/src/plugins/builtins.ts')
+const inventoryPath = resolve(root, 'packages/bmap-vue/src/plugins/compat-inventory.ts')
+const builtinsPath = resolve(root, 'packages/bmap-vue/src/plugins/builtins.ts')
 
 async function loadData(): Promise<{
   entries: readonly Entry[]
@@ -118,7 +118,7 @@ async function loadData(): Promise<{
   if (entries.length === 0) fail('inventory 为空，探针没有可核对的对象')
 
   // 官方类型包：用**包自身**的 package.json 解析，避免依赖调用方的 cwd。
-  const pkgJson = resolve(root, 'packages/baidu-map-gl-vue/package.json')
+  const pkgJson = resolve(root, 'packages/bmap-vue/package.json')
   let typesDir: string
   let typesVersion: string
   try {

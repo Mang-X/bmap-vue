@@ -20,7 +20,7 @@ import {
   PLUGIN_LOAD_CHANNEL_SCENARIOS,
   type PluginLoadChannelRun,
 } from "../../scripts/plugin-load-channel-report.mts";
-import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/baidu-map-gl-vue/src/plugins/builtins";
+import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/bmap-vue/src/plugins/builtins";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 /**

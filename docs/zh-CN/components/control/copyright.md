@@ -3,7 +3,7 @@
 地图 3D 控件，可以控制地图的旋转、倾斜，默认位于地图右下角
 
 ```ts
-import { BCopyright } from 'baidu-map-gl-vue'
+import { BCopyright } from 'bmap-vue'
 ```
 
 ## 组件示例
