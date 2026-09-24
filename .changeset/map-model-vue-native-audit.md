@@ -42,7 +42,9 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
   （A 现状 / B₀ 只 `useModel` / B `useModel` + 最小桥接）都手写 `defineProps`/`defineEmits`、
   props 形状一致，真实挂载后比较：① 唯一计数口径（`getCurrentScope().effects.length`，由 Vue
   自己记账，纠正了早先手数表漏掉 `useModel` 内部 `watchSyncEffect` 的问题）② A=2 / B₀=1 / B=2
-  ③ A 与 B 的四项可观察行为逐项同构。读数断言已做变异验证（可翻红）。
+  ③ A 与 B 的五项可观察行为逐项同构。
+  **变异验证证明 B 真的是 Vue-native 路线**：删掉 B 里的 `useModel` 整行 ⇒ **两条行为用例都变红**。
+  （早先版本删掉它行为仍全过——`model` 当时没参与任何读写，是个只被计数的死对象；复审 P1 指出。）
 
 **公共面不变**：`useControllableState` 的签名 / 返回形状、`<Map>` 的 props 与 `update:*` 事件、
 ADR 决策 6 冻结的模型语义均未改动；`pnpm generate:api-diff:check` 与

@@ -14,6 +14,13 @@
  * - **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接 + **同一条** SDK 腿 watcher。
  * - **B₀（对照下界）**：只 `useModel`，没有桥接也没有 SDK 腿。用来量「另外两层各自的边际成本」。
  *
+ * **B 必须真的用 `useModel` 承担父子通道**（复审 P1 指出过一个假阳性版本）：早先的 B 虽然
+ * 调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
+ * `model` **从未参与任何读写**，只是个被拿来计数的死对象。删掉整行 `useModel` 行为断言仍然
+ * 全过（已实测）。现在 `model` 是**唯一**父子通道：受控值从 `model.value` 读，写回走
+ * `model.value = next`；删掉它会让**两条行为用例都变红**（已实测）—— 这是「B 真的是 Vue-native
+ * 路线」的可复核证据。
+ *
  * **SDK 腿为什么两边都有**：`Map.vue:1225` 的 `watch(() => props.zoom, …)` 干的是
  * `driver.map.setZoom` —— **写 SDK 不是 Vue 的职责**，`useModel` 也不会替你写。所以它不是
  * 「受控/非受控运行时」的一部分，但**两条路线都得付**，必须计入才叫同口径。把它排除在外的
@@ -140,28 +147,31 @@ function mountRoute(route: Route): Harness {
           return true;
         };
       } else {
-        // B：`useModel` + **最小**桥接。父↔子归 Vue；桥接只留冻结语义里 Vue 覆盖不了的部分
-        // （A3：受控 prop 被摘掉后 `useModel` 读到 `undefined`，而本库冻结的是「保留最后
-        // 一次外部值」）+ equality / reconcile。`defaultValue` 只读一次与 `copy` 对 number
-        // 不适用，故不引入。
+        // B：`useModel` + **最小**桥接。父↔子归 Vue（`model` 是**唯一**的父子通道：受控值从
+        // `model.value` 读，写回走 `model.value = next` 让 Vue 自己决定「本地更新还是 emit」）。
+        // 桥接只留 Vue 覆盖不了的三样：容差相等（reconcile）、SDK 写入、以及
+        // 「记住最后一次外部值」（A3：`useModel` 在受控 prop 被摘掉时读到 `undefined`，
+        // 而本库冻结的是「内部接管，保留最后一次外部值」）。
+        //
+        // `defaultValue` 只读一次与 `copy` 对 number 不适用，故不引入。
         const model = useModel(childProps, "zoom");
-        const lastExternal = shallowRef<number | undefined>(childProps.zoom);
-        const internal = shallowRef<number>(childProps.defaultZoom ?? 4);
-        const effective = computed<number | undefined>(() => lastExternal.value ?? internal.value);
+        // 首次解析：受控值 > 非受控初值 > 库默认（与 A 的优先级一致）。
+        const internal = shallowRef<number>((model.value as number | undefined) ?? childProps.defaultZoom ?? 4);
+        const effective = computed<number | undefined>(() => (model.value as number | undefined) ?? internal.value);
         read = () => effective.value;
-        // 镜像 A 的 reconcile 规则：SDK 回写先落 `internal`，只有**容差判定为真变化**才通知父级。
-        // （`model` 这个句柄在受控档下由 Vue 自己管「写＝emit」，桥接不重复 emit。）
         commit = (next) => {
           if (numbersEqual(internal.value, next)) return false;
           internal.value = next;
-          emit("update:zoom", next);
+          // **写通道真的走 useModel**：受控档下 Vue 会 emit，非受控档下 Vue 会本地更新。
+          model.value = next;
           return true;
         };
-        // 记「最后外部值」并写 SDK：同一条 watcher 兼两职，避免为了记 lastExternal 再加一条。
+        // 记住「最后外部值」并写 SDK：同一条 watcher 兼两职。`undefined`（受控被摘掉）时
+        // **不清 internal** —— 那正是「保留最后一次外部值」的实现点。
         watch(
-          () => childProps.zoom,
+          () => model.value,
           (next) => {
-            lastExternal.value = next;
+            if (next !== undefined) internal.value = next;
             syncSdk(next);
           },
           { flush: "post" },
@@ -267,11 +277,29 @@ describe("#137 Map model prototype（对照读数）", () => {
     // B₀：只有 useModel 内部的 watchSyncEffect = 1
     expect(b0, "B₀：只有 useModel 内部 effect").toBe(1);
     // B：useModel 内部 effect + 兼任「记 lastExternal 与写 SDK」的 watcher = 2
+    // （B 的 `model` 是真实父子通道，删掉它行为断言会红 —— 见文件头与下面的变异说明）
     expect(b, "B：useModel 内部 effect + 兼任 watcher").toBe(2);
 
     // 结论只能说到这里：B 没有比 A **少**注册 effect。effect 数不等于成本大小，
     // 「更贵」需要 profile，不在本文件的证据范围内（见文件头）。
-    expect(b, "B 相对 A 没有减少 effect").toBeGreaterThanOrEqual(a - 1);
+    //
+    // ⚠️ 这条是「结论 guard」，必须真的挡住「更少」：写成 `a - 1` 会放行 B=1，与文案相反
+    // （复审 P2 指出）。`toBe(a)` 把当前读数钉死；B 真的少了要重审 §6.2 时，
+    // 改这一行**并且**改 ADR，而不是悄悄放宽。
+    expect(b, "B 相对 A 没有减少 effect").toBe(a);
+  });
+
+  it("行为：纯父级受控更新后撤控，两边都保留最后外部值（不经过 commit）", async () => {
+    // 这条专治「先 commit 再撤控」把状态写脏的假通过：全程**不调 commit**，只有父级改 prop。
+    // A 靠 `syncExternal(8)` 把内部镜像同步成 8；B 靠 `watch(model.value)` 把 8 记进 internal。
+    // 撤控后两边都必须是 8，而不是回落到 `defaultZoom`。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route);
+      await h.setZoom(8);
+      expect(h.read(), `${route}：父级受控更新应立即生效`).toBe(8);
+      await h.setZoom(undefined);
+      expect(h.read(), `${route}：撤控后保留最后外部值（不是 defaultZoom）`).toBe(8);
+    }
   });
 
   it("行为：B 与 A 逐项同构（受控抖动、真实变化、受控→非受控保留最后值、default 只读一次）", async () => {

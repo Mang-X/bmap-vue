@@ -277,12 +277,19 @@ React controlled/uncontrolled **术语**支付了不必要 runtime」。
 props 形状完全一致（`zoom` + `defaultZoom`），差别只有模型层：
 
 - **A（现状）**：`useControllableState` + 与 `Map.vue:1225` 同形的 SDK 腿 watcher。
-- **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`lastExternal` /
-  `internal` / `effective` + 兼任 watcher）+ **同一条** SDK 腿 watcher。
+- **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`internal` / `effective`
+  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`model` 是唯一的父子通道**：受控值从
+  `model.value` 读，写回走 `model.value = next`（由 Vue 自己决定「本地更新还是 emit」）。
 - **B₀（对照下界）**：只 `useModel`，无桥接、无 SDK 腿。
 
 **SDK 腿两边都计入**：`Map.vue:1225` 那条 watcher 干的是 `driver.map.setZoom` —— **写 SDK 不是
 Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显得更省，那正是要避免的偏差。
+
+**「B 真的用了 `useModel`」是可复核的，不是声明**（复审 P1 指出过一个假阳性版本）：早先的 B
+虽然调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
+`model` **从未参与任何读写**，只是个被拿来计数的死对象。**删掉整行 `useModel`，当时四条行为
+断言仍然全部通过**（已实测）。修正后 B 让 `model` 承担唯一父子通道，**再删整行 `useModel`
+会让两条行为用例都变红**（已实测）—— 这条变异就是「B 真的是 Vue-native 路线」的证据。
 
 ##### 计数口径：唯一、且由 Vue 自己记账
 
@@ -313,9 +320,15 @@ Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显
 profile，本文件不提供，**也不该由结构数或 effect 数推断**。（早先版本写的是「6 vs 5 ⇒ 更贵」，
 已按复审意见删除该推论。）
 
-**行为侧同样有据**：原型用同一组断言跑 A 与 B 的四项可观察结果（容差内抖动不写 SDK、不通知
-父级；真实变化恰好写一次；`defaultZoom` 之后变化不覆盖；受控→非受控保留最后外部值），**两边完全
-一致** —— 补上 bridge 之后行为确实做得到，收益为零而代价是多一个 `lastExternal`。
+**行为侧同样有据**：原型用同一组断言跑 A 与 B 的五项可观察结果（容差内抖动不写 SDK、不通知
+父级；真实变化恰好写一次；`defaultZoom` 之后变化不覆盖；受控→非受控保留最后外部值；**纯父级
+受控更新后撤控**），**两边完全一致**。
+
+其中「纯父级受控更新后撤控」这一项是补上的（复审 P1 指出原测试有假通过）：旧 B 在摘掉受控 prop
+时把自己的 `lastExternal` 也清成 `undefined`，于是回落到 `defaultZoom`（实测 A=8 / B=4），而旧
+用例因为**先调了 `commit(9)`** 恰好把 B 的内部状态写成了 9，把 bug 遮住了。现在 bridge 把「最后
+外部值」记进 `internal`（`next === undefined` 时**不清**），且该用例**全程不调 commit**。
+⇒ 补上 bridge 之后行为确实做得到，收益为零而代价是多一个 `internal`。
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
 「React 术语不好听」这种口味判断，而是有**可重跑的原型读数**支撑：在本库的冻结规则下，
