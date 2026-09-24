@@ -25,7 +25,7 @@
  *   （容差抖动、真实变化、受控→非受控保留最后值、default 只读一次）。所以「做不到」是错的说法。
  * - **代价上（实测，唯一口径）**：按「每个 number 字段实际注册的 `ReactiveEffect` 数」
  *   （`getCurrentScope().effects.length`，由 Vue 自己记账）—— 现状 **2**，`useModel` + 桥接
- *   也是 **2**。Vue-native **没有更省**。
+ *   是 **3**（含 `default*` 告警 watcher）。Vue-native **没有更省**。
  * - **措辞纪律**：这**只能**说「没减少 effect」，**不能**说「runtime 更贵」——effect 数与结构数
  *   都推不出成本大小，那需要 profile。
  *

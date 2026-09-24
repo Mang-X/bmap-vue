@@ -270,7 +270,8 @@ function cloneCenter(value: MapCenter): MapCenter {
  *   也没有 default 只读一次与容差相等 ⇒ 要维持冻结语义**必须补 bridge state**。
  * - **没有更省**（别拿「会改公共面」搪塞——`useModel` 接受现成 `props`，不动 `MapProps`）：
  *   原型实测，补上 `lastExternal` 桥接后**能**复现全部可观察行为，但每个 number 字段实际注册
- *   的 `ReactiveEffect` 数是 **2 vs 2**（口径：`getCurrentScope().effects.length`）—— Vue-native
+ *   的 `ReactiveEffect` 数是 **3 vs 2**（口径：`getCurrentScope().effects.length`；含 `default*` 告警、
+ *   档位切换告警与 `reset()` 这套**同等冻结契约**）—— Vue-native
  *   没有更省。这**不等于**「更贵」：effect 数推不出成本大小。`defineModel` 才会改到被 fixture
  *   断言的冻结 `MapProps`，那只是它**额外**的成本，不是不迁 `useModel` 的理由。
  *

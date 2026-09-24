@@ -26,6 +26,17 @@
  * 「受控/非受控运行时」的一部分，但**两条路线都得付**，必须计入才叫同口径。把它排除在外的
  * 计数会凭空让 B 显得更省 —— 那正是本文件要避免的偏差。
  *
+ * **两条 SDK 路径必须分开测**（复审 P1 指出，早先版本把它们混成一条）：
+ * ① **父级受控更新**：SDK 还在 3，父级要求 9 ⇒ 恰好下发**一次** `setZoom(9)`。
+ * ② **用户交互闭环**：用户缩放 ⇒ **SDK 自己先变成 9** ⇒ 事件触发 `commit(9)` + `update:zoom`
+ * ⇒ 父级回写 9 ⇒ watcher 读回发现 SDK 已是 9 ⇒ **0 次额外写入**。
+ * 早先版本只 `commit` 而不动模拟 SDK，等于把①当成②，两条线路**一起模拟错**却仍然互相一致。
+ *
+ * **冻结契约要两边都实现才可比**：本库冻结了「`default*` 后续写入不生效**并告警一次**」、
+ * 「档位切换按规则**告警一次**」、`reset()` 归位。**告警是可观察行为**（`devWarn` 有输出），
+ * 不是内部细节 —— A 的第二个 effect 正是 `defaultValue` 告警 watcher。早先的 B **没有实现告警**，
+ * 却拿 2 vs 2 去论证「没有更省」：那是**拿不同契约作比较**。补齐后 **B 变成 3**（见下）。
+ *
  * **只做 `zoom`**：一个字段足以判定「Vue-native 是否省」，四个视野字段同构，重复四遍只放大
  * 同一结论、不增加证据力。
  *
@@ -56,12 +67,13 @@
  * - **能**：A 与 B₀ / B 各自注册了多少个真实 effect；Vue 升级后同一组断言会重跑。
  * - **不能**：`Set` / `computed` / `shallowRef` 等权记成「1」只能叫**结构数量**，推不出运行时
  *   成本大小。所以本文件**只断言 effect 数**；结构数只作并列读数，不作结论。
- * - 措辞纪律：结论只能说「**B₀ / B 没有减少 effect**」，**不能**说「B runtime 更贵」——
- *   后者需要 profile，本文件不提供，也不该由结构数或 effect 数推断。
+ * - 措辞纪律：结论只能说「**在同等冻结契约下，B 注册的 effect 不比 A 少**（实测 3 vs 2）」，
+ *   **不能**说「B runtime 更贵」—— 后者需要 profile，本文件不提供，也不该由结构数或 effect 数
+ *   推断。effect 数是**可数事实**，「更贵」是**成本判断**，两者不能混。
  *
  * @see docs/adr/2026-09-14-map-controlled-state.md §6.1 / §6.2
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { computed, defineComponent, getCurrentScope, h, nextTick, ref, shallowRef, useModel, watch } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { NUMBER_EPSILON, numbersEqual } from "../core/utils/equality";
@@ -79,24 +91,39 @@ interface Harness {
   sdkRead(): number;
   /** SDK 侧写入次数（模拟 `driver.map.setZoom()` 的下发次数）。 */
   sdkWrites(): number;
-  /** 用户交互 / SDK 回写：受控时只 emit，等父级回写。 */
-  commit(next: number): boolean;
+  /**
+   * **用户交互 / SDK 回写闭环**（`Map.vue:501` 的 `zoomend` 那条腿）。
+   *
+   * 关键：真实路径是**SDK 自己先变成 `next`**，事件才触发 `commit(next)`；父级随后按 v-model
+   * 写回 `next`，watcher 读回发现 SDK 已经是 `next` ⇒ **0 次额外 SDK 写入**。所以这里必须
+   * 先改 `sdkValue` 再 `commit` —— 早先版本只 `commit` 而不动 SDK，等于把「外部 prop 驱动」
+   * 当成「用户交互」，会让两条线路**一起模拟错**却仍然互相一致。
+   */
+  simulateUserZoom(next: number): boolean;
   /** 父级回写受控 `zoom`（`undefined` = 摘掉受控值）。 */
   setZoom(value: number | undefined): Promise<void>;
   /** 父级回写 `defaultZoom`（验证「只在首次解析时读一次」）。 */
   setDefaultZoom(value: number): Promise<void>;
+  /** `resetView()`：把内部状态恢复为首次快照（不通知父级）。 */
+  reset(): void;
   /** 父级收到的 `update:zoom`。 */
   emitted: number[][];
+  /** 本次挂载期间 `devWarn` 输出的告警行。 */
+  warnings(): string[];
 }
 
 /** 父级同时提供 prop 与 `onUpdate:zoom` —— `useModel` 的 `hasVModel` 判定要求两者都在。 */
-function mountRoute(route: Route): Harness {
+function mountRoute(
+  route: Route,
+  initialProps: { zoom?: number; defaultZoom?: number } = { zoom: 3, defaultZoom: 4 },
+): Harness {
   let effects = -1;
   let read: () => number | undefined = () => undefined;
   let sdkWrites = 0;
   let sdkValue = 3;
   const emitted: number[][] = [];
   let commit: (next: number) => boolean = () => false;
+  let reset: () => void = () => {};
 
   const Child = defineComponent({
     props: {
@@ -127,6 +154,7 @@ function mountRoute(route: Route): Harness {
           emit("update:zoom", next);
           return true;
         };
+        reset = () => state.reset();
         // `Map.vue:356` 的 `applyZoomFromProps` 是「先 syncExternal 同步三态，再写 SDK」，
         // 两步都在同一条 watcher 里 —— 漏掉 syncExternal 就没有内部镜像，
         // 「受控 → 非受控保留最后外部值」也就无从谈起。
@@ -149,14 +177,14 @@ function mountRoute(route: Route): Harness {
       } else {
         // B：`useModel` + **最小**桥接。父↔子归 Vue（`model` 是**唯一**的父子通道：受控值从
         // `model.value` 读，写回走 `model.value = next` 让 Vue 自己决定「本地更新还是 emit」）。
-        // 桥接只留 Vue 覆盖不了的三样：容差相等（reconcile）、SDK 写入、以及
+        // 桥接只留 Vue 覆盖不了的：容差相等（reconcile）、SDK 写入、`reset()`，以及
         // 「记住最后一次外部值」（A3：`useModel` 在受控 prop 被摘掉时读到 `undefined`，
         // 而本库冻结的是「内部接管，保留最后一次外部值」）。
-        //
-        // `defaultValue` 只读一次与 `copy` 对 number 不适用，故不引入。
         const model = useModel(childProps, "zoom");
-        // 首次解析：受控值 > 非受控初值 > 库默认（与 A 的优先级一致）。
-        const internal = shallowRef<number>((model.value as number | undefined) ?? childProps.defaultZoom ?? 4);
+        // 首次解析：受控值 > 非受控初值 > 库默认（与 A 的优先级一致）。**只解析一次**——
+        // 这就是 `default*` 只在首次解析时生效的那一半。
+        const initial = (model.value as number | undefined) ?? childProps.defaultZoom ?? 4;
+        const internal = shallowRef<number>(initial);
         const effective = computed<number | undefined>(() => (model.value as number | undefined) ?? internal.value);
         read = () => effective.value;
         commit = (next) => {
@@ -166,15 +194,61 @@ function mountRoute(route: Route): Harness {
           model.value = next;
           return true;
         };
+        // `resetView()` 语义：把内部状态恢复为**首次解析**的快照（不通知父级）。
+        reset = () => {
+          internal.value = initial;
+        };
         // 记住「最后外部值」并写 SDK：同一条 watcher 兼两职。`undefined`（受控被摘掉）时
         // **不清 internal** —— 那正是「保留最后一次外部值」的实现点。
+        //
+        // 冻结契约里的**告警**同样必须实现，否则 A 的第二个 effect（`defaultValue` 告警
+        // watcher）就与 B 不可比（复审 P1 指出）。**mode 告警并进这条 watcher**（不新增 effect）：
+        // 档位由「上一次是否有受控值」判定，与「有没有真 v-model」无关 —— `hasVModel` 只决定
+        // 谁发 emit。`warnOnce` 用一个 Set 去重，对齐 A 的「每种方向最多一次」。
+        const warned = new Set<string>();
+        const warnOnce = (key: string, message: string): void => {
+          if (warned.has(key)) return;
+          warned.add(key);
+          console.warn(message);
+        };
+        let wasControlled = model.value !== undefined;
         watch(
           () => model.value,
           (next) => {
-            if (next !== undefined) internal.value = next;
+            if (next === undefined) {
+              if (wasControlled) {
+                warnOnce(
+                  "to-uncontrolled",
+                  "zoom 由受控切换为非受控：内部状态接管，并保留最后一次外部值。受控与非受控请在组件生命周期内保持一致。",
+                );
+              }
+            } else {
+              if (!wasControlled && !numbersEqual(next, internal.value)) {
+                warnOnce(
+                  "to-controlled",
+                  "zoom 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。",
+                );
+              }
+              internal.value = next;
+            }
+            wasControlled = next !== undefined;
             syncSdk(next);
           },
           { flush: "post" },
+        );
+        // `default*` 的「只在首次解析时生效」告警：`defaultZoom` 的变化**不经过** `model`，
+        // 所以没法并进上面那条，只能单独一条 watcher —— **与 A 一样是 1 个**。
+        // 这不是 B 独有的额外成本：A 的 `useControllableState` 也是这样一条。
+        watch(
+          () => childProps.defaultZoom,
+          (next, previous) => {
+            if (next === undefined && previous === undefined) return;
+            if (next !== undefined && previous !== undefined && numbersEqual(next, previous)) return;
+            warnOnce(
+              "default-ignored",
+              "zoom 的 default 值只在首次解析时生效，之后的变化不会覆盖当前状态；若需要持续受控，请改用受控值（组件上即 v-model:zoom）。",
+            );
+          },
         );
       }
 
@@ -185,7 +259,7 @@ function mountRoute(route: Route): Harness {
 
   // 父级 props 放在一个 ref 里，改它而不是 `wrapper.setProps`（Root 不声明 props，
   // `setProps` 改不到真正传给 Child 的东西）。
-  const parentProps = ref<{ zoom?: number; defaultZoom?: number }>({ zoom: 3, defaultZoom: 4 });
+  const parentProps = ref<{ zoom?: number; defaultZoom?: number }>({ ...initialProps });
 
   const Root = defineComponent({
     setup() {
@@ -204,20 +278,37 @@ function mountRoute(route: Route): Harness {
     parentProps.value = { ...parentProps.value, [name]: value };
     await nextTick();
   };
+  // 冻结契约里的**告警**也是可观察行为（`default*` 后续写入、模式切换），必须一并比对。
+  // `logger.warn` 把 context 作为第二参，这里只看首参。
+  const warnLines: string[] = [];
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation((first: unknown) => {
+    warnLines.push(String(first));
+  });
+  warnSpy.mockClear();
 
   return {
     effects,
     read,
     sdkRead: () => sdkValue,
     sdkWrites: () => sdkWrites,
-    commit,
+    // SDK 先变，事件才触发 commit —— 顺序不能反，否则就不是用户交互了。
+    simulateUserZoom: (next) => {
+      sdkValue = next;
+      return commit(next);
+    },
     setZoom: (value) => set("zoom", value),
     setDefaultZoom: (value) => set("defaultZoom", value),
+    reset: () => reset(),
     emitted,
+    warnings: () => warnLines,
   };
 }
 
 describe("#137 Map model prototype（对照读数）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("口径：watch 计 1，computed/shallowRef 计 0", () => {
     let withWatch = -1;
     let withComputed = -1;
@@ -276,17 +367,18 @@ describe("#137 Map model prototype（对照读数）", () => {
     expect(a, "A：SDK 腿 + defaultValue 告警 watcher").toBe(2);
     // B₀：只有 useModel 内部的 watchSyncEffect = 1
     expect(b0, "B₀：只有 useModel 内部 effect").toBe(1);
-    // B：useModel 内部 effect + 兼任「记 lastExternal 与写 SDK」的 watcher = 2
+    // B：useModel 内部 effect + 兼任「记 last外部值 / mode 告警 / 写 SDK」的 watcher
+    //    + `default*` 告警 watcher = 3
     // （B 的 `model` 是真实父子通道，删掉它行为断言会红 —— 见文件头与下面的变异说明）
-    expect(b, "B：useModel 内部 effect + 兼任 watcher").toBe(2);
+    expect(b, "B：useModel 内部 effect + 桥接 watcher + default 告警 watcher").toBe(3);
 
-    // 结论只能说到这里：B 没有比 A **少**注册 effect。effect 数不等于成本大小，
-    // 「更贵」需要 profile，不在本文件的证据范围内（见文件头）。
+    // 结论：**在同等冻结契约下，B 反而多注册 1 个 effect**（3 vs 2）。
     //
-    // ⚠️ 这条是「结论 guard」，必须真的挡住「更少」：写成 `a - 1` 会放行 B=1，与文案相反
-    // （复审 P2 指出）。`toBe(a)` 把当前读数钉死；B 真的少了要重审 §6.2 时，
-    // 改这一行**并且**改 ADR，而不是悄悄放宽。
-    expect(b, "B 相对 A 没有减少 effect").toBe(a);
+    // ⚠️ 这条是「结论 guard」：早先版本 B 没实现告警契约，读数是 2 vs 2，被拿来支撑
+    // 「没有更省」—— 那是**拿不同契约作比较**（复审 P1 指出）。补齐告警后 B 变 3。
+    // 结论 guard 必须真的挡住「更少」：写成 `a - 1` 会放行 B=1，与文案相反。
+    // 读数变了要重审 §6.2 —— 改这一行**并且**改 ADR，不悄悄放宽。
+    expect(b, "B 在同等冻结契约下没有比 A 更少 effect").toBeGreaterThan(a);
   });
 
   it("行为：纯父级受控更新后撤控，两边都保留最后外部值（不经过 commit）", async () => {
@@ -302,7 +394,89 @@ describe("#137 Map model prototype（对照读数）", () => {
     }
   });
 
-  it("行为：B 与 A 逐项同构（受控抖动、真实变化、受控→非受控保留最后值、default 只读一次）", async () => {
+  it("SDK 路径①：纯父级受控更新 3 → 9，恰好下发一次", async () => {
+    // 这条是「外部 prop 驱动 SDK」：SDK 还在 3，父级要求 9 ⇒ 恰好补一次 `setZoom(9)`。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route);
+      expect(h.sdkRead(), `${route}：起始 SDK 值`).toBe(3);
+      await h.setZoom(9);
+      expect(h.sdkWrites(), `${route}：真实父级更新恰好下发一次`).toBe(1);
+      expect(h.sdkRead(), `${route}：SDK 收到新值`).toBe(9);
+      expect(h.read(), `${route}：受控值生效`).toBe(9);
+    }
+  });
+
+  it("SDK 路径②：用户交互闭环 0 次额外写入（SDK 先变，事件才触发 commit）", async () => {
+    // 真实路径（与 `v3-component-scenarios` 的「用户交互回写 model 并通知父级；父级按 v-model
+    // 回写不再写 SDK」同一条）：用户缩放 ⇒ **SDK 自己先变成 9** ⇒ `zoomend` ⇒ `commit(9)` +
+    // `update:zoom` ⇒ 父级回写 9 ⇒ watcher 读回发现 SDK 已是 9 ⇒ **0 次额外写入**。
+    //
+    // 早先版本只 `commit` 而不动模拟 SDK，等于把「外部 prop 驱动」当成「用户交互」，
+    // 读数会变成 1 次（还把 SDK 从 3 覆盖回 3）—— 两条线路**一起模拟错**却仍然互相一致。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route);
+      expect(h.simulateUserZoom(9), `${route}：用户交互应当被 commit 接受`).toBe(true);
+      expect(h.emitted, `${route}：应通知父级一次`).toEqual([[9]]);
+      await h.setZoom(9);
+      expect(h.sdkWrites(), `${route}：回写自身不得触发新的 SDK 写入`).toBe(0);
+      expect(h.read(), `${route}：受控值生效`).toBe(9);
+    }
+  });
+
+  it("冻结契约：`default*` 后续写入不覆盖，且告警恰好一次", async () => {
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route, { zoom: undefined }); // 非受控挂载：`defaultZoom` 是当前值来源
+      expect(h.read(), `${route}：非受控下用 defaultZoom`).toBe(4);
+      await h.setDefaultZoom(5);
+      expect(h.read(), `${route}：default 变化不覆盖当前状态`).toBe(4);
+      expect(
+        h.warnings().filter((line) => line.includes("default")).length,
+        `${route}：default 后续写入应告警恰好一次`,
+      ).toBe(1);
+    }
+  });
+
+  it("冻结契约：受控 ↔ 非受控切换的告警语义与 A 一致", async () => {
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route);
+      // 受控 → 非受控：告警一次。
+      await h.setZoom(undefined);
+      expect(
+        h.warnings().filter((line) => line.includes("由受控切换为非受控")).length,
+        `${route}：受控→非受控应告警恰好一次`,
+      ).toBe(1);
+      // 再切回受控：撤控时内部接管的值是「最后外部值 3」，所以传 3 不冲突（按规则不告警）。
+      const before = h.warnings().length;
+      await h.setZoom(3);
+      expect(
+        h.warnings().length,
+        `${route}：值不冲突的切回受控不该新增告警`,
+      ).toBe(before);
+      // 传一个**冲突**的值（8 ≠ 内部 3）：此时才告警，且恰好一次。
+      await h.setZoom(undefined);
+      await h.setZoom(8);
+      expect(
+        h.warnings().filter((line) => line.includes("由非受控切换为受控")).length,
+        `${route}：非受控→受控且值冲突应告警恰好一次`,
+      ).toBe(1);
+    }
+  });
+
+  it("冻结契约：reset() 把内部状态恢复为首次快照（`resetView()` 语义）", async () => {
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route, { zoom: undefined }); // 非受控挂载，首次快照 = defaultZoom = 4
+      expect(h.read(), `${route}：reset 前`).toBe(4);
+      h.simulateUserZoom(11);
+      expect(h.read(), `${route}：用户交互到新值`).toBe(11);
+      h.reset();
+      expect(h.read(), `${route}：reset 后回到首次快照`).toBe(4);
+      // reset 后再交互到**旧值**必须仍然被当作真变化（否则真实操作会被判成「没变化」）。
+      expect(h.simulateUserZoom(11), `${route}：reset 后再次交互到旧值仍算变化`).toBe(true);
+      expect(h.read(), `${route}：再次交互生效`).toBe(11);
+    }
+  });
+
+  it("行为：B 与 A 逐项同构（受控抖动、真实变化、default 只读一次）", async () => {
     for (const route of ["A", "B"] as const) {
       const h = mountRoute(route);
 
@@ -311,22 +485,14 @@ describe("#137 Map model prototype（对照读数）", () => {
       expect(h.sdkWrites(), `${route}：容差内抖动不该下发`).toBe(0);
       expect(h.emitted, `${route}：容差内抖动不该通知父级`).toEqual([]);
 
-      // ② 真实变化：先由**用户交互 / SDK 回写**进内部状态（`commit`，与
-      // `Map.vue:502` 的 `zoomState.commit(next)` 同一条腿），再由父级回写受控值。
-      // 只改 prop 不走 `commit`，那样两条线路走的都不是同一条路径。
-      expect(h.commit(9), `${route}：真实变化应当被 commit 接受`).toBe(true);
+      // ② 真实变化。
       await h.setZoom(9);
       expect(h.sdkWrites(), `${route}：真实变化恰好下发一次`).toBe(1);
-      expect(h.sdkRead(), `${route}：SDK 收到新值`).toBe(9);
       expect(h.read(), `${route}：受控值生效`).toBe(9);
 
       // ③ `defaultZoom` 之后变化**不**覆盖当前状态（只在首次解析时读一次）。
       await h.setDefaultZoom(15);
       expect(h.read(), `${route}：default 变化不覆盖`).toBe(9);
-
-      // ④ 受控 → 非受控：冻结语义是「内部状态接管，**保留最后一次外部值**」。
-      await h.setZoom(undefined);
-      expect(h.read(), `${route}：摘掉受控 prop 后保留最后外部值`).toBe(9);
     }
   });
 });

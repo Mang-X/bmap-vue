@@ -12,7 +12,7 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
 
 | 项 | 结论 | 依据 |
 | --- | --- | --- |
-| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：补上 `lastExternal` 桥接后行为能逐项复现，但每个 number 字段实际注册的 `ReactiveEffect` 是 **2 vs 2**（口径 `getCurrentScope().effects.length`）——**没有更省**。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
+| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：补上 `lastExternal` 桥接后行为能逐项复现，但在**同等冻结契约**下（含 `default*` 告警、档位切换告警、`reset()`）每个 number 字段实际注册的 `ReactiveEffect` 是 **3 vs 2**（口径 `getCurrentScope().effects.length`）——**没有更省，反而多 1 个**。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
 | ② MapRuntime retry / boot | **逐符号保留** | `mountStarted` / `bootTask` / `nextBootWaiters` / `deferredWaiters` / `containerUsableWaiters` / `assembledMap` / `whenMapCreated` 全部记**外部资源状态**（WebGL 句柄、0×0 容器、KeepAlive 下 `onUnmounted` 不触发），每个都有可翻红的行为用例。ADR `2026-09-14-map-handle-container-and-visibility` §5.1 给出逐符号消费者表 |
 | ③ batching | **无缺陷可修** | 实测：一次父提交同改 center+zoom+heading+tilt ⇒ 4 个独立 `flush:'post'` watcher 与「单个四元组 watcher」**都是 4 次写入**。四个字段是**四条不同 SDK 命令**，批处理省不掉；`flush:'post'` 已拿到全部可得收益。ADR `2026-09-24-scheduler-batching-hot-path` §2.1 |
 | ④ KeepAlive / 暂停 | **保留** | `onActivated` / `onDeactivated` 直接驱动 `keep-alive` 原因增删，本来就是 Vue-native；`disposed` 终态原因与容器门禁有真实 WebGL / 0×0 语义 |
@@ -41,7 +41,7 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
 - `mapModel.prototype.test.ts`（#137 的 Map model prototype，**提交进仓库**）—— 三条线路
   （A 现状 / B₀ 只 `useModel` / B `useModel` + 最小桥接）都手写 `defineProps`/`defineEmits`、
   props 形状一致，真实挂载后比较：① 唯一计数口径（`getCurrentScope().effects.length`，由 Vue
-  自己记账，纠正了早先手数表漏掉 `useModel` 内部 `watchSyncEffect` 的问题）② A=2 / B₀=1 / B=2
+  自己记账，纠正了早先手数表漏掉 `useModel` 内部 `watchSyncEffect` 的问题）② A=2 / B₀=1 / **B=3**（补齐告警契约后）
   ③ A 与 B 的五项可观察行为逐项同构。
   **变异验证证明 B 真的是 Vue-native 路线**：删掉 B 里的 `useModel` 整行 ⇒ **两条行为用例都变红**。
   （早先版本删掉它行为仍全过——`model` 当时没参与任何读写，是个只被计数的死对象；复审 P1 指出。）
