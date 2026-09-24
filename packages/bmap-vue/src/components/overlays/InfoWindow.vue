@@ -10,10 +10,15 @@
  * 打开状态的唯一主模型是 `v-model:open`，`v-model:show` 是兼容别名。
  *
  * 契约见 ADR `2026-09-18-infowindow-host-and-ownership`。
+ *
+ * #138：事件面的类型声明是生成物（`core/overlays/overlayEventEmits.generated.ts`）。
+ * `<InfoWindow>` 不走 `useOverlaySpec`，事件由 `useInfoWindow` 原样转发，因此它的载荷**不**按
+ * 事件矩阵的档声明——理由与逐条依据见生成脚本里的 `PAYLOAD_OVERRIDES_BY_KIND`。
  */
 import { useInfoWindow } from "../../core/composables/useInfoWindow";
 import { useRequiredMapContext } from "../../core/context/inject";
 import type { BMapError } from "../../core/errors/BMapError";
+import type { InfoWindowEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { InfoWindowProps } from "../../types/components";
 
 export type { InfoWindowProps };
@@ -34,22 +39,7 @@ const props = withDefaults(defineProps<InfoWindowProps>(), {
   enableCloseOnClick: false,
 });
 
-const emit = defineEmits<{
-  "update:open": [v: boolean];
-  "update:show": [v: boolean];
-  open: [];
-  close: [];
-  /** 用户点了气泡上的关闭按钮（官方 `clickclose`）。 */
-  clickclose: [e: unknown];
-  /** 气泡被最大化（需 `enableMaximize`，官方 `maximize`）。 */
-  maximize: [e: unknown];
-  /** 气泡从最大化还原（官方 `restore`）。 */
-  restore: [e: unknown];
-  /** 实例被重建（构造期属性变化），载荷是新的实例代次。 */
-  rebuild: [generation: number];
-  /** 实例被释放，载荷是被释放的实例代次。 */
-  destroy: [generation: number];
-}>();
+const emit = defineEmits<InfoWindowEmits>();
 
 /** 事件转发入口：动态名在这里集中收窄一次（不让 `as` 扩散到组件其它地方）。 */
 const emitDynamic = emit as unknown as (name: string, payload?: unknown) => void;

@@ -54,6 +54,19 @@ import { useSdkResource } from "./useSdkResource";
 const FORWARDED_SDK_EVENTS = ["open", "close", "clickclose", "maximize", "restore"] as const;
 type ForwardedSdkEvent = (typeof FORWARDED_SDK_EVENTS)[number];
 
+/**
+ * `resize` 在事件矩阵里、但**没有**派发点——这不是遗漏，是一个已知的显式限制。
+ *
+ * 官方 `InfoWindowEventMap` 声明了 6 个事件，本文件只转发 5 个：气泡尺寸由组件自己的
+ * `width` / `height` prop 驱动并经 `setContent` 重绘（见 `drainOptions`），
+ * 官方的 `resize` 事件本库**只观察尺寸变化并转发载荷**（`emit(name, event)`），
+ * 并不由它驱动任何状态。留着它就没有派发点：声明了却永不触发（Vue 不报错，比缺声明更糟）。
+ *
+ * 因此 `<InfoWindow>` 的 `defineEmits` **不包含** `resize`，也不把它算进事件面
+ * （`scripts/generate-overlay-emits.mts` 的载荷覆写表同款口径，见 ADR #138 决策 ⑥）。
+ * 真要暴露它，得先回答「调用方拿它做什么」——目前没有可回答的消费者。
+ */
+
 export interface UseInfoWindowOptions {
   /** 组件的 `emit`。 */
   readonly emit: (name: string, payload?: unknown) => void;

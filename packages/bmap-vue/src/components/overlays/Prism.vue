@@ -11,11 +11,7 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+import type { PrismEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { PrismProps } from "../../types/components";
 import { createPrismSpec } from "./prismSpec";
 
@@ -32,19 +28,7 @@ const props = withDefaults(defineProps<PrismProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  rightdblclick: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<PrismEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

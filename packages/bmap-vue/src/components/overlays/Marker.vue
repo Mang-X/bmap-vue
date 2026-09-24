@@ -13,13 +13,15 @@
  * 的处置方式（先转发、再回写位置模型）。**历史别名 `drag-end` 不由组件发**：它登记在集中弃用层
  * （`core/deprecations`），由内核在派发 `dragend` 之后补发一次并告警一次——组件里因此不再出现
  * 旧名字（issue #28 明令禁止「组件各自兼容」）。
+ *
+ * #138：这一段的**类型声明**是生成物（`core/overlays/overlayEventEmits.generated.ts`），
+ * 由事件矩阵 + 弃用别名表 + 非 SDK 事件表 join 出来；组件里不再手抄 13 行键名。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec, type OverlayPositionModel } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+// #138：事件面的**类型声明**由生成器从事件矩阵 + 弃用别名 + 非 SDK 事件表派生，
+// 不再手抄（生成物由 `pnpm generate:overlay-emits` 产出，`--check` 守漂移）。
+import type { MarkerEmits } from "../../core/overlays/overlayEventEmits.generated";
 import { createMarkerSpec } from "./markerSpec";
 import type { MarkerProps } from "../../types/components";
 
@@ -33,22 +35,7 @@ const props = withDefaults(defineProps<MarkerProps>(), {
   enableDragging: false,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPointerEvent];
-  dragstart: [event: OverlayPointerEvent];
-  dragging: [event: OverlayPointerEvent];
-  dragend: [event: OverlayPointerEvent];
-  /** @deprecated 历史别名（kebab 拼写）；规范名是 `dragend`。由集中弃用层补发。 */
-  "drag-end": [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  "update:position": [position: { lng: number; lat: number }];
-}>();
+const emit = defineEmits<MarkerEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 
