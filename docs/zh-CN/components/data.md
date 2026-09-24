@@ -110,7 +110,8 @@ function onItemClick(station: Station) {
 `BMarkerCluster` 的 `native` 引擎虽然复用同一个 `adaptPoints`，但其 `ClusterLayer` 整链路
 **未单独取证**。
 
-大数据量建议把数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，不再代理每一项）：
+大数据量建议把**原始（未被深响应化）的**数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，
+不再代理每一项）：
 
 ```vue
 <script setup lang="ts">
@@ -152,8 +153,12 @@ function moveFirst() {
 - `shallowRef` / `markRaw` 之后，**原地改内容**（`stations.value[0].lng = …`）不会自动被感知——这与
   现有契约一致（`data` 只按引用比较）：原地改请递增 `dataVersion`。用深响应数组时本来也得靠它
   （组件不 watch 大数组的深层变化），所以这**不是**新增的约束。
-- 组件这一侧**不做任何隐式转换**（不替使用者美化输入），因此读数与行为都反映你的真实写法；若数据
-  还要被别处的模板消费、不想放弃深响应，可以在宿主侧另做一份 `markRaw` 视图再传进来。
+- **要拿到这里的收益，传给地图组件的数组与其 item 必须在进入 Vue 深响应系统之前就是 raw / 不可变的。**
+  `markRaw` / `shallowRef` 只阻止**后续**的深代理转换，**不会把已经存在的 Proxy 还原成 raw**：
+  `markRaw(list.value)` 返回的仍是那个 reactive Proxy，`markRaw([...list.value])` 展开出的每个 item
+  也仍是 Proxy——两种情况 `adaptPoints` 逐项读 `item.lng` 时照旧走 Proxy get（以及 effect 内的
+  tracking），收益不成立。若同一份数据还要给模板做深响应，应**从原始数据源分别构造**一份 reactive
+  状态与一份 raw / plain snapshot，而不是把现有 Proxy 容器再 `markRaw` 一次。
 
 依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
 对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
