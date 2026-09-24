@@ -709,6 +709,8 @@ describe("§7 一次父更新同时改 data/style/visible/zIndex：调用与重�
     // 收敛后的**最终状态**（不只数调用，还要证明最终值真的落到位）。
     const finalStyle = harness.nativeLayerStyle();
     const finalVisible = harness.nativeLayerVisible();
+    const finalZIndex = harness.nativeLayerZIndex();
+    const finalAttached = harness.nativeLayerAttached();
     const finalFeatures = readFeatures(harness.nativeLayerData());
 
     // 先收尾（卸载）再断言：否则一条断言失败会把资源留到下一个用例，让泄漏以级联失败出现在别处。
@@ -730,6 +732,10 @@ describe("§7 一次父更新同时改 data/style/visible/zIndex：调用与重�
     expect(delta.setVisible, "改 visible 必须写到 setVisible").toBe(1);
     expect(delta.setZIndex, "改 zIndex 必须写到 setZIndex").toBe(1);
     expect(finalVisible, "显隐最终落到 visible=false").toBe(false);
+    // 只数调用证明不了**写入的是最终值**（`setZIndex(stale)` 同样会被计数放过），故断言读数。
+    expect(finalZIndex, "层级最终落到 zIndex=5").toBe(5);
+    // `visible=false` 对**有 setVisible** 的 kind 是字段 setter，不是摘图层：实例必须仍在图上。
+    expect(finalAttached, "visible=false 不得把图层摘掉（点图层走 setter）").toBe(true);
   }, 60_000);
 });
 

@@ -236,6 +236,13 @@ export interface FakeV4Harness {
   /** 第 `index` 个原生图层的显隐读数（`setVisible` 是否真的落地）。 */
   nativeLayerVisible(index?: number): boolean;
   /**
+   * 第 `index` 个原生图层的层级读数（`setZIndex` 是否真的落地）。
+   *
+   * 与 `nativeLayerVisible()` 同一用途：`nativeLayerCalls()` 只能证明**调用发生过**，证明不了
+   * 写入的是**最终值**（一次错误的 `setZIndex(stale)` 同样会被调用计数放过）。
+   */
+  nativeLayerZIndex(index?: number): number;
+  /**
    * 注入**一次**地图级 `removeLayer` 失败（**摘除之前**抛：图层仍留在图上）。
    *
    * 重建 / 换引擎路径的判别力全在这条上：`removeLayer` 抛错时，「旧实例到底摘掉了没有」在
@@ -635,6 +642,7 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
       nativeLayerData: (index = -1) => (nativeLayerAt(index) as { data?: unknown }).data,
       nativeLayerAttached: (index = -1) => nativeLayerAt(index).attachedMap !== null,
       nativeLayerVisible: (index = -1) => Boolean((nativeLayerAt(index) as { visible?: unknown }).visible),
+      nativeLayerZIndex: (index = -1) => Number((nativeLayerAt(index) as { zIndex?: unknown }).zIndex ?? 0),
       failNextRemoveLayer: (error) => {
         lastMap().failNextRemoveLayer = error ?? new Error("harness: failNextRemoveLayer");
       },

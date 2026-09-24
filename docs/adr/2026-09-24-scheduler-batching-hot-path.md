@@ -130,6 +130,15 @@ issue 要求的基线对照两半都在：**性能那半**由 `component-path` �
   维护者与 1.0 预算参考。
 - 一次改多字段会触发多次 reconcile（`sync` 档）——这是既有语义（字段去重后最终值正确），不是回归；
   §7 的读数把它显式化，避免「以为只有一次」。
+- **提交基线待重录（必须在门禁机做）**：§7 新增了 `multiUpdate.*@1000` 这组 readout，而
+  `tests/performance/baseline.json` 的 `readouts` 段还没有它们。`collect-performance-baseline.mts` 的
+  key-set 双向校验**只比较 `metrics`**（`readouts` 合并进报告但不参与校验），所以 CI **不会**因为基线
+  落后而红——这正是「静默落后」，必须显式记账。
+  **不能在开发机 `--update`**：门禁键是 `platform + arch + cpuModel`，用本机（darwin/arm64）重录会让
+  CI（linux/x64）判定不可比并 `comparison.skipped` 静默跳过趋势门禁 —— 正是
+  [`performance-baseline.md`](../zh-CN/contributing/performance-baseline.md) 明令避免的「一个看起来
+  生效的门禁」。正确做法：在门禁机（CI `performance` job）跑 `pnpm perf:baseline --update`，或用该 job
+  的 `perf-report` artifact 里的 `report.json` 重录。**本票不把「基线已同步」写成已完成。**
 - **回滚**：本 ADR 的产物是 §7 用例（测试）+ 文档；回滚 = 移除 §7 与 perf 文档段落并把本 ADR 标
   `Superseded`，不动任何运行时源码（本次取证用的 `flush` 开关已回退）。
 
