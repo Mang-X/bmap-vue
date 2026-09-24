@@ -89,9 +89,20 @@
 `propsView = new Proxy(rawProps, …)` 换成 `readProp(name)`：别名解析优先、`fieldValues` 投影随后
 （顺序与原实现一致，有注释依据），`readRawProp(name)` 保留给按引用比较的 watch 源。
 
-`useSdkResource` 原本收到 `props: propsView as Props`；现在传一个**一次性物化的普通对象**
-（只在 `needsView` 时把 `spec.fields` 的键各取一次）。判据：别名只服务「读 prop」这一个动作，
-构造期物化一次与之等价，而且不进入每帧路径。
+`useSdkResource` 原本收到 `props: propsView as Props`（动态 Proxy，每次读取都现求值）；现在
+`needsView` 为假时直接传 `rawProps`（零拷贝），为真时**按代物化**一份普通对象：每一代实例
+（首次创建或 `replace()` 重建）开头把 `spec.fields` 的键各取一次。
+
+**必须按代而不是在 setup 时一次性物化**（外部评审 P1，取证见 `useOverlaySpec` 的
+`materializeLifecycleProps`）：`useSdkResource` 在 setup 时把 `props` 解构成闭包常量，之后每次
+`createOnce`（重建）传的都是**同一个对象**。一次性物化会让 `GroundOverlay` 这类「有别名/投影
+且有构造期字段」的覆盖物**重建后仍读到旧值**——`type: "image" → "canvas"` 触发重建，新实例却按
+`options.type === "image"` 建出来。用例在 `v3-ground-overlay.test.ts`。
+
+**按代物化仍保住「惰性投影一代只求值一次」**（`GroundOverlay.url` 的工厂每求值一次就新建一份
+canvas，PR #103 评审 2 的契约）：物化结果存在 `generationProps`，**同一代的 `create` 与 `mount`
+共用这一份**（`createOnce` 里两者先后调用、不跨代），因此下一代才重新求值——这条也有专门用例
+钉住（并经变异验证：让 `mount` 重新物化会让「一代一次」变红）。
 
 **不保留 Proxy**。若将来出现别名/投影形态的增加，判据是「读路径是否回到每帧」，而不是「要不要留个
 Proxy 兜着」。

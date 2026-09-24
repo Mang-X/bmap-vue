@@ -27,7 +27,10 @@ const initialBounds: Bounds = {
   northeast: { lng: 116.5, lat: 40.9 },
 }
 
-function mountOverlay(bounds = ref<Bounds>(initialBounds)) {
+function mountOverlay(
+  bounds = ref<Bounds>(initialBounds),
+  overrides: Record<string, unknown> = {},
+) {
   const el = host()
   const wrapper = mount(
     defineComponent({
@@ -40,6 +43,7 @@ function mountOverlay(bounds = ref<Bounds>(initialBounds)) {
               url: 'a.png',
               bounds: bounds.value,
               opacity: 0.5,
+              ...overrides,
             }),
           ])
       },
@@ -91,6 +95,92 @@ describe('GroundOverlay v3', () => {
     expect(go.bounds.getCenter()!.lng).toBeCloseTo(108.25, 2)
     wrapper.unmount()
     await nextTick()
+  })
+
+  it('#138：改 recreate 字段后重建，新实例用的是**更新后**的构造值（不是 setup 快照）', async () => {
+    // `type` 是构造期字段（实例上没有 `setType`）⇒ 变更必须重建。断言的重点不在
+    // 「重建了几次」，而在**新一代的构造选项**：`lifecycleProps` 若是 setup 时的一次性快照，
+    // 实例虽然重建了，`options.type` 仍会是旧值（#138 评审 P1）。
+    const type = ref<'image' | 'canvas'>('image')
+    const el = host()
+    const wrapper = mount(
+      defineComponent({
+        components: { Map, GroundOverlay },
+        setup() {
+          return () =>
+            h(Map, { provider: provider() }, () => [
+              h(GroundOverlay, {
+                type: type.value,
+                url: 'a.png',
+                bounds: initialBounds,
+                autoCenter: false,
+              }),
+            ])
+        },
+      }),
+      { attachTo: el },
+    )
+    await flushPromises()
+    const created = fake.createdOverlays.length
+    expect(currentGroundOverlay().options.type).toBe('image')
+
+    type.value = 'canvas'
+    await flushPromises()
+
+    expect(fake.createdOverlays.length, '构造期字段变更 ⇒ 恰好重建一次').toBe(created + 1)
+    const fresh = currentGroundOverlay()
+    // 新实例的构造值必须来自**当前** prop，而不是 setup 时的物化快照
+    expect(fresh.options.type, '新一代的 ctor options 必须用更新后的值').toBe('canvas')
+
+    wrapper.unmount()
+    await nextTick()
+    harness.assertIdle('GroundOverlay recreate')
+  })
+
+  it('#138：重建后 url 惰性工厂仍然是「一代一次」，不是每代两次', async () => {
+    // `materializeLifecycleProps` 按代物化（#138 评审 P1 修复），因此必须钉住
+    // 「同一代里 `create` 与 `mount` 共用一份快照」——否则惰性工厂每代求值两次，
+    // 交给 SDK 的 canvas 与校验过的 canvas 会变成两个实例（PR #103 评审 2 的契约）。
+    let calls = 0;
+    const factory = (): string => {
+      calls += 1;
+      return `canvas-${calls}.png`;
+    };
+    const type = ref<'image' | 'canvas'>('image');
+    const el = host();
+    const wrapper = mount(
+      defineComponent({
+        components: { Map, GroundOverlay },
+        setup() {
+          return () =>
+            h(Map, { provider: provider() }, () => [
+              h(GroundOverlay, {
+                type: type.value,
+                url: factory,
+                bounds: initialBounds,
+                autoCenter: false,
+              } as never),
+            ])
+        },
+      }),
+      { attachTo: el },
+    )
+    await flushPromises()
+    expect(calls, '首次创建：一代一次').toBe(1)
+    expect(currentGroundOverlay().options.url).toBe('canvas-1.png')
+
+    // 账本是跨用例累计的（`harness.reset()` 只重置诊断计数），因此用相对读数
+    const beforeRebuild = fake.createdOverlays.length
+    type.value = 'canvas'
+    await flushPromises()
+    expect(fake.createdOverlays.length).toBe(beforeRebuild + 1)
+    // 第二代重新求值一次（**不是**两次：create 一次、mount 再一次）
+    expect(calls, '重建：新一代恰好再求值一次').toBe(2)
+    expect(currentGroundOverlay().options.url, '新一代用的是新一代求值的来源').toBe('canvas-2.png')
+
+    wrapper.unmount()
+    await nextTick()
+    harness.assertIdle('GroundOverlay 重建后 url 工厂')
   })
 
   it('releases listeners on unmount', async () => {

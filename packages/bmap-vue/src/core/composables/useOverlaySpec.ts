@@ -316,15 +316,33 @@ export function useOverlaySpec<Props extends object, Resource>(
   /**
    * 供 `useSdkResource` 透传给 `spec.create` / `spec.afterMount` 的 props。
    *
-   * 这两个回调**只在创建期各调一次**（`afterMount` 每次挂载一次），因此这里**物化**一份普通对象
-   * 取代 Proxy 视图即可——别名感知的值仍然到位（`create` 看到的与 `readProp` 相同），
-   * 但不进每帧路径。`needsView` 为假时直接给 `rawProps`（零拷贝，行为与原缺省分支相同）。
+   * `needsView` 为假时给 `rawProps` 本身（零拷贝，行为与原缺省分支相同）。为真时**按代物化**：
+   * 每一代实例（首次创建或 `replace()` 重建）开头现读一次 `rawProps`，而不是在 setup 时固定一份。
+   *
+   * **为什么必须按代而不是一次性**（#138 评审 P1）：`useSdkResource` 在 setup 时把 `props`
+   * 解构成一个闭包常量，之后每次 `createOnce`（重建）都传**同一个对象**。一次性物化会让
+   * `GroundOverlay` 这类「有别名/投影且有构造期字段」的覆盖物在**重建后仍读到旧值**：
+   * `type: "image" → "canvas"` 触发重建，新实例却按 `options.type === "image"` 建出来。
+   *
+   * **为什么按代物化仍只求值一次**：`fieldValues` 的投影（`GroundOverlay.url` 的惰性工厂）
+   * 契约是「一次创建里只求值一次」，而工厂每求值一次就新建一份 canvas。物化结果存在
+   * `generationProps` 里，**同一代的 `create` 与 `mount` 共用这一份**（`useSdkResource` 的
+   * `createOnce` 里两者是先后调用，不跨代），因此下一代才重新求值。
    */
-  const lifecycleProps = !needsView
-    ? rawProps
-    : Object.fromEntries(
-        Object.keys(spec.fields).map((name) => [name, readProp(name)]),
-      );
+  function materializeLifecycleProps(): Readonly<Props> {
+    if (!needsView) return rawProps as Readonly<Props>;
+    return Object.fromEntries(
+      Object.keys(spec.fields).map((name) => [name, readProp(name)]),
+    ) as Readonly<Props>;
+  }
+
+  /**
+   * 当前这一代实例的 props 快照（`create` 开头写入，`mount` 读取）。
+   *
+   * `mount` 拿不到「自己属于哪一代」的标识，因此用「最近一次 `create` 物化的结果」——
+   * `createOnce` 严格先 `create` 后 `mount`，中间没有别的 `create` 可以插进来。
+   */
+  let generationProps: Readonly<Props> | null = null;
 
   /**
    * **原始** prop（不经别名与投影）：只给按引用比较的 watch 源用。
@@ -656,7 +674,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   /* ------------------------------------------------------------------------------ 主体 */
 
   const sdk = useSdkResource<Props, Resource, MapReadyContext>({
-    props: lifecycleProps as Props,
+    props: rawProps as Readonly<Props>,
     label: `overlay:${spec.type}`,
     resolveContext: async (signal) => {
       const ready = await mapContext.whenReady(signal);
@@ -665,7 +683,10 @@ export function useOverlaySpec<Props extends object, Resource>(
     },
     spec: {
       type: spec.type,
-      create: ({ context, props: current }) => {
+      create: ({ context, props: ignoredProps }) => {
+        // 这一代的 props 快照：`useSdkResource` 传下来的 `props` 是 setup 时的常量，
+        // 经视图读取的字段（别名 / 投影）必须**按代现读**（#138 评审 P1，见 `materializeLifecycleProps`）。
+        const current: Readonly<Props> = (generationProps = materializeLifecycleProps());
         // 「实例是按哪个位置建的」必须在**调用 create 之前**取，理由见 `createdPosition`。
         createdPosition = positionField ? (readPosition() ?? null) : null;
         // #138：构造期给过值的字段**记进「可能已写入」**——`spec.create` 把它传进了构造器，
@@ -685,7 +706,11 @@ export function useOverlaySpec<Props extends object, Resource>(
         }
         return spec.create(context, current);
       },
-      mount: ({ context, resource, props: current, scope, stale }) => {
+      mount: ({ context, resource, scope, stale }) => {
+        // 复用**这一代** `create` 物化的快照（同一代里 `create` → `mount` 先后调用），
+        // 因此惰性投影不会被求值第二次。竞态清理路径（`stale: true`）上 `create` 一定先跑过，
+        // 快照不会是 null；仍用 `?? materializeLifecycleProps()` 兜住不变式被打破的情形。
+        const current = generationProps ?? materializeLifecycleProps();
         // **先登记，再做副作用**（PR #103 评审 1b）：`addToMap` 与 `afterMount` 都可能失败
         // （SDK 抛错 / 组件侧副作用抛错），而唯一的回滚入口是 registration 的 `remove`。
         // 登记在前 ⇒ 任一失败都能经 `registration.dispose()` 把已 add 的实例摘掉 + 摘记录；
