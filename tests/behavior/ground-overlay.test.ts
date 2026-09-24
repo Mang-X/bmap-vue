@@ -6,8 +6,9 @@
  * - `bounds` 是实例字段，直接读；
  * - 监听 / 资源的释放用 `harness.assertIdle()`（泄漏门禁覆盖「监听 + 资源」两个口径）。
  *
- * 旧 prop 名（`startPoint` + `endPoint`）的行为在 `overlay-suite.test.ts` 的「集中弃用层」
- * 一组里覆盖（新 API 优先 + 同实例只警告一次）；本文件只走**正典** `bounds`。
+ * 旧 prop 名（`startPoint` + `endPoint`）的兼容读法已随 #136 的集中弃用层删除，`bounds`
+ * 因此是**唯一**几何入口、也是必填 prop。必填性本身由 `tests/type-contracts/` 下的
+ * 类型契约钉住（那里才是会被 tsc 真正编译的地方）。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'

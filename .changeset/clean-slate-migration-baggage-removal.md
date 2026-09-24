@@ -8,6 +8,7 @@ Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（#136）。本库 1.0 **�
 
 - 集中弃用层整层删除（`core/deprecations/**`）：`OVERLAY_PROP_ALIASES` / `OVERLAY_EVENT_ALIASES` / `propAliasesOf()` / `describeDeprecation()` / `createDeprecationWarner()` / `DEPRECATED_PROP_ALIAS_CODE` / `DEPRECATED_EVENT_ALIAS_CODE` 一并从根入口与 `./core` 出口移除。
 - 旧 prop 写法删除：`InfoWindow` 的 `show` / `v-model:show`、`GroundOverlay` 的 `startPoint` + `endPoint`、`ContextMenu` 的 `menuItems`。正典分别是 `open`、`bounds`、`items`。
+- `GroundOverlayProps.bounds` 由**可选改为必填**：删掉两个旧角点 prop 后它是唯一几何入口，运行时缺失即抛错、文档也标 `required`，类型层不再接受「不传」。
 - 旧事件名删除：`Marker` 不再发 `drag-end`（SDK 名 `dragend` 原样转发）；`<Map>` 不再发 `initd`（用 `ready`）。无损双拼写的 `MAP_EVENT_EMIT_ALIASES`（`style_loaded` ↔ `style-loaded` 等）**保留**，它不是弃用别名。
 - 组件级事件别名机制整层删除（`BMAP_COMPONENT_EVENT_ALIASES` / `BMAP_COMPONENT_EVENT_EMIT_ALIASES` / `MapComponentEventAliasName` / `MapComponentEmitName`）：`initd` 是它唯一的占用者，别名通道随之空掉，按「不留没有消费者的扩展面」一并删。
 - `BMapClient.version`（`sdkVersion` 的 `@deprecated` 别名）删除；请按语义选 `libraryVersion` / `sdkVersion`。

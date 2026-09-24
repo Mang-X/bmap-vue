@@ -401,8 +401,8 @@ export type GroundOverlayUrl =
  * 已随集中弃用层在 #136 删除——clean-slate 1.0 不兼容旧 API。
  */
 export interface GroundOverlayProps {
-  /** 显示区域（西南 / 东北角点）。 */
-  bounds?: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
+  /** 显示区域（西南 / 东北角点）。**必填**——它是唯一的几何入口，缺失时构造期即抛错。 */
+  bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   type: GroundOverlayType;
   url: GroundOverlayUrl;
   opacity?: number;

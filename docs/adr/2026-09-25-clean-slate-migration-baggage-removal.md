@@ -68,6 +68,29 @@
 测试**移植**进已有的 `raw-sdk-scanner.test.ts`，不新建文件——按 #104 的 Ownership-first，
 新建一份只为「覆盖刚被删掉的门」的文件是纯冗余。
 
+> **评审 P1 的回应（2026-09-25）**：评审指出「删了名字却把同一判定接进 `check:raw-sdk`，
+> 属于语义迁移」，要么改票面口径、要么从 CI 移除。**核实后不改，理由是「旧引擎不变量」与
+> 「迁移期临时 gate」是两件事**，前者当前仍然成立：
+>
+> 1. **被守的规则在本票之前就已经是仓库的不变量**：`raw-sdk-boundary.mts` 的
+>    `RAW_SDK_NAMESPACES` 含 `BMapGL` 且注明「自 #26 起在任何位置都是违规」，
+>    `PUBLIC_DTS_FORBIDDEN_MARKERS` 含 `namespace BMapGL`。也就是说「BMapGL 是违规标记」这条
+>    **不是本票引入的**——本票没有新增一条迁移期规则，只是把**已在规则表里、但没人执行**的
+>    覆盖面接上（`--src` 对白名单目录整体 skip）。
+> 2. **它守的现状是当前事实，不是历史**：`BMapGL` 在 4.0 时代是官方入口自己挂的**同对象别名**，
+>    因此「读到 `BMapGL` 就算就绪」是一个**今天仍可能写错**的错误（`namespace.ts` 专门只认 `BMap`
+>    正是因为这个别名存在）。官方插件命名空间 `BMapGLLib` 也仍被 `plugins/builtins.ts` 真实加载。
+>    这道门拦的是「误认 `BMapGL` 为就绪」，保护的是 1.0 的运行期正确性。
+> 3. **三份覆盖里有两份是本票之前无人覆盖的**：`--src` 跳过白名单目录、
+>    `check-public-dts` 不禁 engine 取值字面量、`check:raw-sdk` 无 fail-closed 守卫。
+>    直接删掉那三份能力比保留它们更接近「删干净」。
+>
+> 票面「CI 不再运行『证明一次迁移已完成』的临时 gate」据此读作：删掉**只**为证明历史、
+> 判别力已退化为常量的那部分。`scanned === 0`（目录配错就静默放行）与 engine 取值
+> （`"webgl-v1"` 会重新出现在发布产物上）都属于**当下**的错误，不是历史证明。
+> **若评审坚持按字面读**，正确的顺序是先改票面口径、再删门禁——反过来先删，会同时拿掉
+> 「误用 `BMapGL` 当就绪」这条仍然有效的守卫。
+
 其中最关键的一条实现约束：`namespace-declaration` 是**双用途**规则（同时覆盖 `namespace BMapGL`、
 `namespace BMap` 与 `declare global`），按规则**名字**过滤会静默漏掉 `namespace BMapGL`。
 必须像旧门禁那样**从 AST 节点重新判定**。这条已由「白名单路径里的 `namespace BMapGL`」
@@ -100,6 +123,12 @@
 
 ## 后果
 
+- **`GroundOverlayProps.bounds` 由可选改为必填**（评审 P2）：删掉 `startPoint` / `endPoint`
+  后 `bounds` 是唯一几何入口，运行时 `create()` 缺它即抛错、文档也标 `required`，但类型层
+  仍留 `?`——「类型说可选、运行时说必填」是 AGENTS.md 禁止的假支持。必填性由
+  `tests/type-contracts/ground-overlay-bounds.type-test.ts` 钉住（那个目录是 #139 立的
+  **唯一真会被 tsc 编译**的类型门禁；`tests/behavior/**` 不在任何 typecheck 范围内，
+  在那里写类型断言会得到一条恒真的假门禁）。
 - **公共 API 破坏性变更**（1.0 clean-slate 正确）：弃用层 7 个符号、`InfoWindow.show`、
   `GroundOverlay.startPoint` / `endPoint`、`ContextMenu.menuItems`、`Marker` 的 `drag-end`、
   `<Map>` 的 `initd` 事件与组件级事件别名机制 4 个符号、`BMapClient.version`、`"alias"` 字段策略、
