@@ -2,7 +2,7 @@
  * InfoWindow 的公开属性面与「每个属性怎么落地」的声明（M5-INFOWINDOW / issue #32）
  *
  * 与 `markerSpec.ts` 同构：把「声明」从 SFC 里抽出来，让**用例能拿它跟 Driver 的属性描述符
- * 逐条交叉核对**（`tests/behavior/v3-binfowindow.test.ts` 的「声明面」一组）。放在 `.vue` 里
+ * 逐条交叉核对**（`tests/behavior/infowindow.test.ts` 的「声明面」一组）。放在 `.vue` 里
  * 就只能靠人眼。
  *
  * ## 三种落地方式
@@ -20,9 +20,8 @@
  *
  * ## 唯一主模型
  *
- * `open` 是**唯一**主状态（`v-model:open`）。`show` 是 v2 迁移期的兼容别名：它**只被读取**
- * （`resolveInfoWindowOpenIntent()` 一处收口），并带一条集中告警，绝不构成第二份主状态。
- * 这也是 issue 的非目标「不保留 show/open 两套主状态」的落点。
+ * `open` 是**唯一**主状态（`v-model:open`），读法收在 `resolveInfoWindowOpenIntent()` 一处。
+ * v2 沿用的 `show` 已随集中弃用层在 #136 删除——clean-slate 1.0 不兼容旧 API。
  */
 import type { Point, Pixel } from "../../driver/types/geometry";
 
@@ -44,12 +43,6 @@ export interface InfoWindowProps {
   offset?: Pixel;
   /** 唯一主状态：是否打开（`v-model:open`）。 */
   open?: boolean;
-  /**
-   * @deprecated `open` 的兼容别名（v2 沿用 `v-model:show`）。
-   *
-   * 只被读取、不构成第二份主状态；使用时会打印一次集中告警。请迁移到 `open`。
-   */
-  show?: boolean;
   /** 是否开启信息窗最大化功能（官方默认关闭）。 */
   enableMaximize?: boolean;
   /** 是否开启打开时地图自动平移。 */
@@ -85,7 +78,7 @@ export type InfoWindowDescriptorKeys<Props> = Partial<
  * | prop | 策略 | 依据（`OVERLAY_DESCRIPTORS["info-window"]`） |
  * | --- | --- | --- |
  * | `position` | `state` | 描述符里是 `unsupported(...)`：位置由 `openInfoWindow(map, iw, position)` 提供 |
- * | `open` / `show` | `state` | 不是 SDK 属性，只在打开意图里消费 |
+ * | `open` | `state` | 不是 SDK 属性，只在打开意图里消费 |
  * | `title` / `width` / `height` | `options` | `mutateBy("setTitle"/"setWidth"/"setHeight")` ⇒ `mutable` |
  * | `enableMaximize` / `enableAutoPan` / `enableCloseOnClick` | `options` | `toggleBy([...])` ⇒ `mutable` |
  * | `offset` | `recreate` | 官方只有 `getOffset()`，**没有** `setOffset` ⇒ 构造期属性 |
@@ -97,7 +90,6 @@ export const INFO_WINDOW_FIELDS: InfoWindowFieldMap<InfoWindowProps> = {
   height: "options",
   offset: "recreate",
   open: "state",
-  show: "state",
   enableMaximize: "options",
   enableAutoPan: "options",
   enableCloseOnClick: "options",
@@ -106,51 +98,26 @@ export const INFO_WINDOW_FIELDS: InfoWindowFieldMap<InfoWindowProps> = {
 /**
  * prop → Driver 描述符键的**显式**映射。
  *
- * 只写「不经描述符」的三项：`position` 在描述符里没有可写入口，`open` / `show` 根本不是 SDK 属性。
+ * 只写「不经描述符」的两项：`position` 在描述符里没有可写入口，`open` 根本不是 SDK 属性。
  * 其余字段与描述符键同名，走缺省（缺省语义是「同名」，不是「按命名规律推断」）。
  */
 export const INFO_WINDOW_DESCRIPTOR_KEYS: InfoWindowDescriptorKeys<InfoWindowProps> = {
   position: null,
   open: null,
-  show: null,
 };
 
 /**
- * 解析 `open` / `show` 两个 prop 的**唯一**收口。
+ * 解析 `open` 的**唯一**收口。
  *
- * 规则：**旧名 `show` 只在显式给出时覆盖 `open`**（`undefined` = 没表态）。
- * 收在一处的意义是让「主状态只有一个」在结构上成立——组件里任何地方想读打开意图都必须走这里。
- *
- * ## 与集中弃用层的 `resolveAliasValue()` 有一处**刻意差异**，原因在默认值
- *
- * `useOverlaySpec` 的 prop 别名读法是「**正典有值 ⇒ 旧名完全不参与**」，因为那里的正典
- * （`bounds`）是必填 prop —— 「正典缺失」是可观测的（`undefined`）。
- * 本组件的正典 `open` 带**运行期默认值**（`withDefaults` 里写了 `open: false`，为的是让
- * 模板里的裸布尔属性 `<InfoWindow open />` 仍按 Vue 惯例视为 `true`），于是「父级没传 `open`」
- * 与「父级传了 `open: false`」在 props 上**不可区分**。
- *
- * 若照搬「正典优先」，默认值会让 `open` 永远算「有值」，`v-model:show`（v2 的唯一写法）
- * 就完全失效 —— 那不是兼容，是静默破坏。因此这里取**可观测**的那条规则：显式给出的旧名生效。
- * 代价写在明面上：两个都传时以 `show` 为准（调用方自己给了两个来源）。
- * 要严格对齐集中层，就得去掉 `open` 的默认值，代价是裸布尔属性失效 —— 取舍记在 ADR
- * `2026-09-18-infowindow-host-and-ownership` 的已知限制里。
+ * `?? false` 的兜底是**承重**的，不是防御性冗余：组件的 `withDefaults` 写了 `open: false`，
+ * 为的是让模板里的裸布尔属性 `<InfoWindow open />` 仍按 Vue 惯例视为 `true`；而 `defineProps`
+ * 侧的类型面允许 `open` 缺省。收在一处的意义是让「主状态只有一个」在结构上成立——组件里任何
+ * 地方想读打开意图都必须走这里。
  */
 export function resolveInfoWindowOpenIntent(
-  props: Readonly<Pick<InfoWindowProps, "open" | "show">>,
+  props: Readonly<Pick<InfoWindowProps, "open">>,
 ): boolean {
-  return props.show ?? props.open ?? false;
-}
-
-/**
- * 这次读取是不是用到了弃用的旧名（`show` 被显式给出）。
- *
- * 单独一个纯函数是为了让「什么时候该告警」与「读哪个值」分开：告警由调用方经
- * `core/deprecations` 的 warner 发（同实例一次、稳定 code），本函数只回答事实。
- */
-export function infoWindowOpenIntentUsesAlias(
-  props: Readonly<Pick<InfoWindowProps, "open" | "show">>,
-): boolean {
-  return props.show !== undefined;
+  return props.open ?? false;
 }
 
 /** 位置指纹：没有可用位置时返回 `null`（按值判等，父级传内联字面量也认）。 */

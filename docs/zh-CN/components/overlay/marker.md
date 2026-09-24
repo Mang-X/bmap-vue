@@ -71,7 +71,7 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 详见 [覆盖物事件矩阵](./events)。
 
-## v3 生命周期与更新行为
+## 生命周期与更新行为
 
 `Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
 issue #30），组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
@@ -110,4 +110,4 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 读回 SDK 现值）见 ADR [2026-09-17 声明式 OverlaySpec、Marker 状态模型与图标缓存](/adr/2026-09-17-overlay-spec-and-marker)
 的决策 4 与已知限制 1。
 
-v3 支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend`、`drag-end` 和 `remove`。
+支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend` 和 `remove`。

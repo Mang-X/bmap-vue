@@ -23,6 +23,7 @@
  *   （`failed` + 说明），而不是让 SDK 空转等超时。
  */
 import { toValue, watch, type MaybeRefOrGetter } from "vue";
+import type { BMapClient } from "../client/types";
 import type { MapHandle } from "../driver/types/handles";
 import type { ServiceHandle } from "../driver/types/handles";
 import type {
@@ -35,10 +36,7 @@ import type {
 } from "../driver/types/services";
 import { BMapError } from "../core/errors/BMapError";
 import { resolveMapContext } from "./resolveMapContext";
-import {
-  useServiceTask,
-  type ServiceInvokeContext,
-} from "./useServiceTask";
+import { useExclusiveServiceTask, type ServiceInvokeContext } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 import type { GeoPoint } from "./useGeocoder";
 
@@ -153,7 +151,7 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     };
   };
 
-  const task = useServiceTask<
+  const task = useExclusiveServiceTask<
     LocalSearchResult[],
     ServiceHandle<"service:local-search">,
     [BMapLocalSearchOperation]
@@ -221,8 +219,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
           }
         }
       },
-      release: (context: ServiceInvokeContext, handle: ServiceHandle<"service:local-search">) => {
-        jsapiV4ServicesOf(context.client).disposeLocalSearch(handle);
+      release: (client: BMapClient, handle: ServiceHandle<"service:local-search">) => {
+        jsapiV4ServicesOf(client).disposeLocalSearch(handle);
       },
       // 归属依赖实例身份（见文件头）：检索类调用取代在飞调用时换新实例；翻页必须落在同一条
       // 结果集上，因此在「未结算 / 实例已过期」时拒绝，而不是让它空转。

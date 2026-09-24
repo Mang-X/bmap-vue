@@ -1,7 +1,7 @@
 /**
  * Playground:多场景演示(方案 §15.2 / M7-05)
  *
- * 覆盖 v3 组件全家族。两档模式（见 `./providers`，M3A3-04 / issue #25；#26 收敛为两档）：
+ * 覆盖组件全家族。两档模式（见 `./providers`，M3A3-04 / issue #25；#26 收敛为两档）：
  * 配了 `VITE_BMAP_AK` 走默认官方 Loader 的真实 v4；否则默认走 **Fake v4**
  * （`existingGlobalV4Provider()` 复用注入的 Fake v4 全局，组件仍然在 v4 Driver 上）。
  * 原先的 `VITE_BMAP_MODE=legacy-fake` 对照档随旧引擎删除（#26）。

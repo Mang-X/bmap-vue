@@ -3,7 +3,7 @@ export type { BMapErrorCode, BMapErrorOptions } from "./errors/BMapError";
 export { logger, redactAk, setAkForLogger } from "./logger";
 export type { Logger } from "./logger";
 export { ResourceScope } from "./lifecycle/ResourceScope";
-export type { Disposer, DisposeContext, ResourceScopeOptions } from "./lifecycle/ResourceScope";
+export type { Disposer, ResourceScopeOptions } from "./lifecycle/ResourceScope";
 export { createFrameScheduler } from "./scheduler/FrameScheduler";
 export type { FrameScheduler } from "./scheduler/FrameScheduler";
 export {
@@ -210,22 +210,6 @@ export type {
   OverlayEventMatrixEntry,
   OverlayEventPayloadKind,
 } from "./overlays/overlayEventCatalog";
-export {
-  DEPRECATED_EVENT_ALIAS_CODE,
-  DEPRECATED_PROP_ALIAS_CODE,
-  OVERLAY_EVENT_ALIASES,
-  OVERLAY_PROP_ALIASES,
-  createDeprecationWarner,
-  describeDeprecation,
-  eventAliasesOf,
-  propAliasesOf,
-} from "./deprecations";
-export type {
-  DeprecationNotice,
-  DeprecationWarner,
-  OverlayEventAlias,
-  OverlayPropAlias,
-} from "./deprecations";
 export { useOverlaySpec } from "./composables/useOverlaySpec";
 export { dynamicEmit } from "./composables/dynamicEmit";
 export type {
@@ -240,7 +224,7 @@ export type {
   PluginRegistry,
   PluginStatus,
 } from "./plugins/PluginRegistry";
-// 工具函数(v3 独立 utils,api 参数化,无全局 BMapGL)
+// 工具函数（独立 utils，api 参数化，不碰全局 SDK）
 export {
   toSdkPoints,
   toSdkPoint,

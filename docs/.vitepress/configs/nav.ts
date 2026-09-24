@@ -42,10 +42,6 @@ export const nav: DefaultTheme.Config["nav"] = [
         text: "百度地图开发资源下载",
         link: "https://lbsyun.baidu.com/index.php?title=open/dev-res",
       },
-      {
-        text: "百度地图GL v1.0类参考",
-        link: "https://mapopen-pub-jsapi.bj.bcebos.com/jsapi/reference/jsapi_webgl_1_0.html",
-      },
     ],
   },
   {

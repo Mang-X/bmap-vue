@@ -40,8 +40,8 @@ jobs:
       - name: Check raw SDK boundaries (whole src tree)
         run: node --experimental-strip-types scripts/check-raw-sdk.mts --src packages/bmap-vue/src
 
-      # v3 组件 manifest 无漂移
-      - name: Check v3 API manifest
+      # 组件 manifest 无漂移
+      - name: Check API manifest
         run: node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check
 
       # Capability Catalog 能力矩阵无漂移
@@ -63,20 +63,30 @@ jobs:
       - name: Check official API alignment
         run: node --experimental-strip-types scripts/generate-api-diff.mts --check
 
+      # 覆盖物 defineEmits 静态契约无漂移（#138）。
+      # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
+      # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。
+      # 同时核实 `resize` 没有被声明（官方事件表里有、本库无派发点）——那条命令会红，
+      # 意味着「暴露一个永不触发的事件」不可能悄悄发生。
+      - name: Check overlay emits contract
+        run: |
+          node --experimental-strip-types scripts/generate-overlay-emits.mts --check
+          node --experimental-strip-types scripts/generate-overlay-emits.mts --forbid=resize
+
       # Playground 是三档离线装配（fake-v4 / legacy-fake / real-v4）的真实消费者，也是
       # `main.ts` 里那些组件用法的唯一编译验证点——它此前不在任何 CI 里跑。
       # 用 `@test-utils` 别名引到源码，因此不依赖 `dist`，可以放在 build 之前。
       - name: Build playground
         run: pnpm playground:build
 
-      # v3 类型门禁：官方类型 + 最小 augmentation 必须在 `skipLibCheck: false` 下可合并。
+      # 类型门禁：官方类型 + 最小 augmentation 必须在 `skipLibCheck: false` 下可合并。
       # 上游 `@baidumap/jsapi-v4-types@4.0.4` 的 `index.d.ts` 有一处文件名大小写缺陷
       # （引用 `core/displayOptions.d.ts`，实际文件是 `core/DisplayOptions.d.ts`，只在
       # 大小写敏感的文件系统上暴露），由 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`
       # 在安装期修补；处置决策见 docs/adr/2026-09-13-upstream-types-case-patch.md（issue #50）。
       # 必须排在 `build:package` 之前：vue-tsc 会把声明 emit 到 `dist/`，位于 build 之后会让
       # `check:public-dts` 看到 typecheck 的产物而假失败（build 会先清空 dist）。
-      - name: Type-check v3 package (official types + augmentations)
+      - name: Type-check package (official types + augmentations)
         run: pnpm typecheck:package
 
       # 测试代码的类型门禁（issue #37 评审 4）：tests/** 此前**不在任何 typecheck 的编译范围里**
@@ -87,32 +97,36 @@ jobs:
       - name: Type-check tests (tests/performance)
         run: pnpm typecheck:tests
 
+      # 公共**类型面**契约（issue #139 评审 P2）：@ts-expect-error 断言必须被某个 tsc 编译才成立，
+      # 而 serviceTask.test.ts 不在任何 typecheck 范围内（tsconfig.build.json 排除 *.test.ts，
+      # tsconfig.tests.json 只 include performance / live-performance）——实测把那层类型放宽后
+      # 三个门禁 + 16 条运行时用例全绿。范围只收 tests/type-contracts/，不碰 packages/ 下的既存错误。
+      - name: Type-check type contracts (@ts-expect-error gate)
+        run: pnpm typecheck:type-contracts
+
       # Behavior snapshot tests (data-driven, no external network/AK)
-      - name: Build v3 artifacts for global bundle tests
+      - name: Build artifacts for global bundle tests
         run: node --experimental-strip-types scripts/build-package.mts
 
       # 公共声明边界:dist/**/*.d.ts 不得泄漏 BMap.* / 官方类型包引用
       - name: Check public d.ts boundaries
         run: node --experimental-strip-types scripts/check-public-dts.mts
 
-      # 旧引擎不变量（M3A3-REMOVE-LEGACY / #26）:运行时源码与公共声明都不得再出现 BMapGL /
-      # 已删除的 engine 取值。与上一步的分工：上一步是「边界」门禁（BMap.* / 官方类型包 /
-      # 边界目录），这一步是「删除是否可持续」的门禁，扫的是**整棵运行时源码**（含被 raw SDK
-      # 白名单放行的 driver/client/core-loader/plugins）。必须排在 `build:package` 之后：公共声明
-      # 相位读 `dist`。
-      - name: Check no legacy BMapGL / engine ids
-        run: pnpm check:no-bmapgl
+      # 旧引擎不变量（M3A3-REMOVE-LEGACY / #26，合并进 check-raw-sdk 于 #136）：整棵源码树
+      # （含被 raw SDK 白名单放行的 driver/client/core-loader/plugins）不得再出现 BMapGL /
+      # 已删除的 engine 取值。这一步就是上面「whole src tree」那一步的第二套规则集——树模式
+      # 对白名单目录只跑旧引擎残留规则、对禁区内跑全套，所以它一条命令覆盖两组边界。
+      #
+      # 公共声明相位（`dist/**/*.d.ts`）必须排在 `build:package` 之后：它读 `dist`，而且
+      # `check-public-dts` 只禁 `BMap.*`，**不**禁已删除的 engine 取值字面量——那要靠这一步。
+      - name: Check no legacy engine ids in public declarations
+        run: pnpm check:raw-sdk:declarations
 
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
       - name: Unit & behavior tests
         run: pnpm test:unit
 
-      # v2 leak assertion removed (v2 sources deleted); v3 lifecycle covered by v3 tests
-
-      # v2 sources removed: repo is v3-only (彻底重构)
-      - name: Legacy v2 build
-        run: echo "v2 sources removed (v3-only repo)"
       # Package tarball consumer verification
       - name: Verify package consumers
         run: |
@@ -146,7 +160,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build v3 package (包体读数与 worker chunk 检查的前置)
+      - name: Build package (包体读数与 worker chunk 检查的前置)
         run: node --experimental-strip-types scripts/build-package.mts
 
       - name: Performance baseline & trend gate
@@ -206,7 +220,7 @@ jobs:
 
       # docs 的类型检查与运行时都对着**发布产物**（见 docs/tsconfig.json 的 paths），
       # 因此先构建组件库；顺序反了会得到「找不到 dist/*.d.ts」的假失败。
-      - name: Build v3 package (docs 类型检查 / 站点的前置)
+      - name: Build package (docs 类型检查 / 站点的前置)
         run: node --experimental-strip-types scripts/build-package.mts
 
       - name: Docs format check
@@ -221,8 +235,8 @@ jobs:
       - name: Docs build
         run: pnpm docs:build
 
-  # v3 package: build + type-check + publint + attw + tarball consumer
-  v3:
+  # package: build + type-check + publint + attw + tarball consumer
+  package:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -236,10 +250,10 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
-      - name: Install dependencies (pnpm workspace incl. v3)
+      - name: Install dependencies (pnpm workspace)
         run: pnpm install --frozen-lockfile
 
-      - name: Build v3 package (vp pack)
+      - name: Build package (vp pack)
         run: node --experimental-strip-types scripts/build-package.mts
 
       - name: Check public d.ts boundaries

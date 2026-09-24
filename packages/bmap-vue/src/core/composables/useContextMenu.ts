@@ -49,12 +49,6 @@ import type { MapReadyContext } from "../context/types";
 import { useSdkResource } from "./useSdkResource";
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import {
-  createDeprecationWarner,
-  describeDeprecation,
-  propAliasesOf,
-  resolvePropAliasValue,
-} from "../deprecations";
 import { overlayEventsOf } from "../overlays/overlayEventCatalog";
 import {
   contextMenuEntriesFingerprint,
@@ -111,9 +105,6 @@ export function useContextMenu(
   const emit = options.emit as DynamicEmit;
   const reportError = options.reportError;
 
-  const deprecation = createDeprecationWarner("context-menu");
-  const itemsAlias = propAliasesOf("context-menu").find((alias) => alias.canonical === "items");
-
   const children = createContextMenuChildrenRegistry();
   provide(contextMenuChildrenKey, children);
 
@@ -159,12 +150,14 @@ export function useContextMenu(
 
   /* ------------------------------------------------------------------ 条目解析 */
 
-  /** 数据 API 的取值：`items`；正典缺失时按集中弃用层读 `menuItems` 并告警一次。 */
+  /**
+   * 数据 API 的取值：`items`。
+   *
+   * 菜单项的数据入口只有 `items` 一种拼写（#136 起旧名 `menuItems` 随集中弃用层删除）。
+   * 声明式 children 走下面的 `children` 注册表，两条路径在这里汇合成同一份条目列表。
+   */
   function readDataItems(): unknown {
-    if (!itemsAlias) return rawProps.items;
-    const resolved = resolvePropAliasValue(itemsAlias, rawProps);
-    if (resolved.usedAlias) deprecation.warn(describeDeprecation(itemsAlias));
-    return resolved.value;
+    return rawProps.items;
   }
 
   /**
@@ -189,8 +182,7 @@ export function useContextMenu(
       }
       // **与数据 API 走同一条归一化路径**（`contextMenuEntryFromData`）：声明式的 `onSelect`
       // 就是数据 API 的 `callback`。此前这里手写了一遍同样的字段映射，于是「两份实现」在
-      // `onSelect` 的守卫上就已经分叉——那正是本 PR 在 `core/deprecations/resolve.ts` 里
-      // 明确要避免的形态。
+      // `onSelect` 的守卫上就已经分叉——同源逻辑只写一份，是本仓反复吃过亏的那条形态。
       entries.push(
         contextMenuEntryFromData({
           text: declaration.text,
@@ -501,50 +493,42 @@ export function useContextMenu(
       },
       watch: ({ scope, replace, resource }) => {
         // 显隐 = 挂 / 不挂（**不是**弹层显隐，见模块注释）
-        scope.add(
-          watch(
-            () => readVisible(),
-            () => {
-              if (!resource()) return;
-              if (!readVisible()) {
-                detach();
-                return;
-              }
-              attachReportingErrors(resource());
-            },
-          ),
+        watch(
+          () => readVisible(),
+          () => {
+            if (!resource()) return;
+            if (!readVisible()) {
+              detach();
+              return;
+            }
+            attachReportingErrors(resource());
+          },
         );
         // target 变化：只做**资源所有权迁移**（先摘旧、再挂新）；不推断旧事件属于哪次迁移。
         // watch 源返回句柄对象本身 ⇒ Vue 按身份比较，重建出的新实例一定会被认出来。
-        scope.add(
-          watch(
-            () => (targetContext ? targetContext.target.value : null),
-            () => {
-              if (!resource()) return;
-              attachReportingErrors(resource());
-            },
-          ),
+        watch(
+          () => (targetContext ? targetContext.target.value : null),
+          () => {
+            if (!resource()) return;
+            attachReportingErrors(resource());
+          },
         );
         // 数据 API 变化：**无条件同步条目**（回调即使不进指纹也要换新），指纹不同才重建。
         // watch 源里做同步是刻意的：只换 callback 时指纹不变、回调不会被触发，只有「源每次求值都同步」
         // 才能让 `latestEntries` 跟上。
-        scope.add(
-          watch(
-            () => syncEntries(),
-            () => scheduleRebuild(replace, resource, () => scope.isDisposed),
-          ),
+        watch(
+          () => syncEntries(),
+          () => scheduleRebuild(replace, resource, () => scope.isDisposed),
         );
         // `width` 是 `MenuItemOptions.width`（**每项的构造期选项**，`ContextMenu` 实例上没有宽度
         // setter）：变化必须重建菜单。没有这一路就会变成「收了参数但忽略」——调用方改了 `width`
         // 什么都不发生，而那正是本库明确要避免的假支持。
-        scope.add(
-          watch(
-            () => props.width,
-            () => {
-              if (!resource()) return;
-              void replace();
-            },
-          ),
+        watch(
+          () => props.width,
+          () => {
+            if (!resource()) return;
+            void replace();
+          },
         );
         // 声明式 children 变化：宿主 DOM 的顺序要等本次 patch 结束才可读，因此排到 nextTick
         scope.add(

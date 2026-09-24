@@ -63,7 +63,6 @@ function assembleClient(loaded: LoadedSdk, driver: BMapDriver): BMapClient {
     engine: driver.engine,
     libraryVersion: LIBRARY_VERSION,
     sdkVersion,
-    version: sdkVersion,
     driver,
     capabilities: driver.capabilities,
     rawSdk: driver.rawSdk,

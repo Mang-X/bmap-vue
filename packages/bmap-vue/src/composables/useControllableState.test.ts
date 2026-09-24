@@ -2,7 +2,7 @@
  * `useControllableState` 单测（M4-STATE / issue #27）
  *
  * 用例只写「受控 / 非受控 / 缺省」三态的领域语义，不碰组件与 SDK：
- * 组件侧的接线（哪次变化写哪条 SDK 命令）由 `tests/behavior/v3-bmap.test.ts` 覆盖。
+ * 组件侧的接线（哪次变化写哪条 SDK 命令）由 `tests/behavior/map.test.ts` 覆盖。
  */
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { effectScope, getCurrentScope, nextTick, ref, type EffectScope } from 'vue'

@@ -5,7 +5,7 @@ lang: zh-CN
 
 # 组件事件
 
-v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总线。
+组件使用类型化 `emits` 直接对外广播，不经过内部事件总线。
 
 ## Map：map 事件
 
@@ -97,7 +97,6 @@ function onTypeChange(e: MapEventPayloadOf<'maptypechange'>) {
 | 事件名           | 载荷                        | 说明                                             |
 | ---------------- | --------------------------- | ------------------------------------------------ |
 | `ready`          | `{ client, map, container }` | 地图就绪（`client + map` 可用）                  |
-| `initd`          | 同 `ready`                  | `ready` 的历史别名（deprecated，请改用 `ready`） |
 | `plugin-ready`   | `name: string`              | 单个插件加载完成（载荷为插件名）                 |
 | `plugin-error`   | `{ name, error }`           | 单个插件加载失败                                 |
 | `unload`         | -                           | 地图组件卸载                                     |
@@ -136,7 +135,7 @@ function onPluginReady(name: string) {
 
 覆盖物 / 控件 / 图层组件各自声明自己的 typed emits（如 `Marker` 的 `click/dblclick/dragend/update:position`、
 `InfoWindow` 的 `open/close`、`ContextMenu` 的 `open/close`），详见各组件文档的事件表。
-子组件没有 `initd/unload` 事件；如需地图实例，请用 `useMap()` + `whenReady()`：
+子组件没有 `unload` 事件；如需地图实例，请用 `useMap()` + `whenReady()`：
 
 ```ts
 import { useMap } from 'bmap-vue'

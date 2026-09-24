@@ -26,7 +26,8 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useCustomOverlay } from "../../core/composables/useCustomOverlay";
-import type { OverlayPointerEvent } from "../../driver/types/events";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+import type { CustomOverlayEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { CustomOverlayProps } from "../../types/components";
 
 export type { CustomOverlayProps };
@@ -43,11 +44,7 @@ const props = withDefaults(defineProps<CustomOverlayProps>(), {
   // 「没传」= 「不表态」，构造选项里不会出现这几个键（假支持的反面）。
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPointerEvent];
-}>();
+const emit = defineEmits<CustomOverlayEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

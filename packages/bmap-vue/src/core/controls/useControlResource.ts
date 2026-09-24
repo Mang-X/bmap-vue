@@ -167,29 +167,25 @@ export function useControlResource<Props extends ControlBaseProps>(
     watch({ context, resource, props: current, replace, scope }) {
       // 选项 diff：anchor / offset 与 kind 专属选项走同一条路径（此前 anchor/offset 完全没有
       // 更新入口，是 issue #41 要修的缺口）。
-      scope.add(
-        watch(
-          // 源用稳定键，而不是选项对象：父级每次渲染传内联字面量不应触发任何下发。
-          () => optionKey(controlSpec.options(current)),
-          () => {
-            const handle = resource();
-            const ready = context();
-            if (!handle || !ready) return;
-            applyOptions(ready, handle, current, replace);
-          },
-        ),
+      watch(
+        // 源用稳定键，而不是选项对象：父级每次渲染传内联字面量不应触发任何下发。
+        () => optionKey(controlSpec.options(current)),
+        () => {
+          const handle = resource();
+          const ready = context();
+          if (!handle || !ready) return;
+          applyOptions(ready, handle, current, replace);
+        },
       );
 
-      scope.add(
-        watch(
-          () => current.visible,
-          (visible) => {
-            const handle = resource();
-            const ready = context();
-            if (!handle || !ready || visible === undefined) return;
-            applyVisible(ready, handle, current, visible);
-          },
-        ),
+      watch(
+        () => current.visible,
+        (visible) => {
+          const handle = resource();
+          const ready = context();
+          if (!handle || !ready || visible === undefined) return;
+          applyVisible(ready, handle, current, visible);
+        },
       );
     },
   };

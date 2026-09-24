@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { defineComponent, h, provide, reactive } from "vue";
+import { defineComponent, h, provide, reactive, ref, watch } from "vue";
 import { mapContextKey, type MapContext } from "../context/types";
 import { useOverlayResource, type OverlayLifecycle, type UseOverlayResourceResult } from "./useOverlayResource";
 
@@ -109,6 +109,54 @@ async function mountWithFirstInstance(harness: ReturnType<typeof setupHarness>) 
   harness.pendingCreates[0].resolve({ id: 1 });
   await flushPromises();
 }
+
+describe("useOverlayResource：watcher 归 Vue 所有（#139）", () => {
+  it("[#139] createWatchers 建的 watcher 在卸载后**不再**触发", async () => {
+    // 与 useSdkResource 的那条同形：#139 把 `createWatchers` 的 `addDisposer` 参数删掉，
+    // watcher 归组件的 effect scope 所有。观察源用**组件外部的 ref**——卸载后改 props 不会
+    // 触发任何东西，那样的断言是恒真的。
+    const source = ref(1);
+    const onSource = vi.fn();
+    const readyCtx = {
+      client: { driver: { overlays: { updatePolicy: () => "mutable", setOptions: vi.fn() } } },
+      map: { raw: {} },
+    };
+    const mapCtx = {
+      whenReady: async () => readyCtx,
+      events: { emit: vi.fn() },
+    } as unknown as MapContext;
+    const lifecycle: OverlayLifecycle<Record<string, unknown>, Instance> = {
+      create: async () => ({ id: 1 }),
+      addToMap: () => {},
+      remove: () => {},
+      createWatchers: () => {
+        watch(source, (next) => onSource(next), { flush: "sync" });
+      },
+    };
+    const Consumer = defineComponent({
+      setup() {
+        useOverlayResource<Record<string, unknown>, Instance>(reactive({ title: "t" }), lifecycle);
+        return () => h("div");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          provide(mapContextKey, mapCtx);
+          return () => h(Consumer);
+        },
+      }),
+    );
+    await flushPromises();
+
+    source.value = 2;
+    expect(onSource, "挂载中 watcher 正常触发").toHaveBeenCalledWith(2);
+
+    wrapper.unmount();
+    source.value = 3;
+    expect(onSource, "卸载后 Vue 已经停掉它").toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("useOverlayResource.applyOptions 与进行中的 rebuild", () => {
   it("重建期间到达的更新不会被丢弃：最终实例仍应用最新 props", async () => {

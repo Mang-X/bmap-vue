@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 394 |
+| 本库根入口导出 | 373 |
 | 名称对齐（交集） | 110 |
 | 仅官方有 | 292 |
-| 仅本库有 | 284 |
+| 仅本库有 | 263 |
 | `./ui-kit` 子路径导出 | 55 |
 | 手写语义例外 | 37 |
 
@@ -510,9 +510,7 @@ component 45 · hook 14 · type 51
 | `useParentOverlayHandle` | hook | — |
 | `useRequiredClientContext` | hook | — |
 | `useSdkResource` | hook | — |
-| `useServiceTask` | hook | — |
 | `useViewAnimation` | hook | — |
-| `BMAP_COMPONENT_EVENT_ALIASES` | constant | — |
 | `BMAP_COMPONENT_EVENT_CATALOG` | constant | — |
 | `BMapClientContext` | type | Client 注入上下文；官方无同名导出。保留 `BMap*` 前缀以区别于地图实例上下文。 |
 | `BMapDrivingRouteOptions` | type | 路线服务选项；官方 hook 选项形态不同，不镜像同名 type。 |
@@ -534,7 +532,6 @@ component 45 · hook 14 · type 51
 | `CreateBMapPluginOptions` | type | `createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。 |
 | `createClientContext` | type | — |
 | `DataComponentProps` | type | — |
-| `DisposeContext` | type | — |
 | `FeatureStateUpdateOptions` | type | — |
 | `GeocodeDetailItemResult` | type | — |
 | `GeocodeDetailResult` | type | — |
@@ -581,7 +578,6 @@ component 45 · hook 14 · type 51
 | `RouteServiceHandle` | type | — |
 | `SdkResourceStatus` | type | — |
 | `ServiceCallStatus` | type | — |
-| `ServiceInvokeContext` | type | — |
 | `ServiceResult` | type | — |
 | `TargetContext` | type | — |
 | `TrackLineLayerProps` | type | — |
@@ -590,7 +586,6 @@ component 45 · hook 14 · type 51
 | `UseMapStatusOptions` | type | — |
 | `UseOverlaySpecOptions` | type | — |
 | `UseOverlaySpecResult` | type | — |
-| `UseServiceTaskOptions` | type | — |
 | `UseViewAnimationOptions` | type | — |
 | `ViewAnimationStatus` | type | — |
 | `AreaBoundary` | other | — |
@@ -624,13 +619,7 @@ component 45 · hook 14 · type 51
 | `CoordinatesToType` | other | — |
 | `createBMapClientDefinition` | other | — |
 | `createBMapPlugin` | other | — |
-| `createDeprecationWarner` | other | — |
 | `defaultClientDefinitionKey` | other | — |
-| `DEPRECATED_EVENT_ALIAS_CODE` | other | — |
-| `DEPRECATED_PROP_ALIAS_CODE` | other | — |
-| `DeprecationNotice` | other | — |
-| `DeprecationWarner` | other | — |
-| `describeDeprecation` | other | — |
 | `Disposer` | other | — |
 | `DistrictType` | other | — |
 | `DistrictTypeValue` | other | — |
@@ -639,7 +628,6 @@ component 45 · hook 14 · type 51
 | `DrivingRouteRequest` | other | — |
 | `dynamicEmit` | other | — |
 | `EqualFn` | other | — |
-| `eventAliasesOf` | other | — |
 | `EventDriver` | other | — |
 | `FeaturePick` | other | — |
 | `FeatureStateApi` | other | — |
@@ -671,7 +659,6 @@ component 45 · hook 14 · type 51
 | `MAP_EVENT_NAMES` | other | — |
 | `MAP_SUSPEND_REASONS` | other | — |
 | `MapCommands` | other | — |
-| `MapComponentEmitName` | other | — |
 | `MapComponentEventName` | other | — |
 | `MapDriver` | other | — |
 | `MapEventDefinition` | other | — |
@@ -705,12 +692,9 @@ component 45 · hook 14 · type 51
 | `NativeLayerKind` | other | — |
 | `NativeLayerOperation` | other | — |
 | `normalizeEventKey` | other | — |
-| `OVERLAY_EVENT_ALIASES` | other | — |
 | `OVERLAY_EVENT_MATRIX` | other | — |
 | `OVERLAY_KINDS_WITHOUT_EVENT_MATRIX` | other | — |
-| `OVERLAY_PROP_ALIASES` | other | — |
 | `OverlayDriver` | other | — |
-| `OverlayEventAlias` | other | — |
 | `OverlayEventDefinition` | other | — |
 | `OverlayEventMatrixEntry` | other | — |
 | `OverlayEventMatrixKey` | other | — |
@@ -724,7 +708,6 @@ component 45 · hook 14 · type 51
 | `OverlayKind` | other | — |
 | `overlayPointerFallback` | other | — |
 | `OverlayPositionModel` | other | — |
-| `OverlayPropAlias` | other | — |
 | `OverlaySpec` | other | — |
 | `PanoramaDataInfo` | other | — |
 | `PanoramaDriver` | other | — |
@@ -735,7 +718,6 @@ component 45 · hook 14 · type 51
 | `PointInput` | other | — |
 | `PointLike` | other | — |
 | `PointPick` | other | — |
-| `propAliasesOf` | other | — |
 | `resolveMapEventName` | other | — |
 | `resolvePluginDefinition` | other | — |
 | `ResourceScope` | other | — |
@@ -755,12 +737,9 @@ component 45 · hook 14 · type 51
 | `ServiceDriver` | other | — |
 | `ServiceErrorInfo` | other | — |
 | `ServiceInvocationDriver` | other | — |
-| `ServiceTask` | other | — |
 | `SizeLike` | other | — |
 | `stringToPluginDefinitions` | other | — |
 | `StyleExpression` | other | — |
-| `SupersedeMode` | other | — |
-| `SupersedePolicy` | other | — |
 | `targetContextKey` | other | — |
 | `TargetKind` | other | — |
 | `toSdkEventName` | other | — |

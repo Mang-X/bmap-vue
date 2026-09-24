@@ -102,7 +102,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 
 - 补丁只改文件名大小写、不改声明内容；清单、生成方式与删除条件见仓库根目录的
   `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。
-- 「补丁已生效」由 `tests/behavior/v3-upstream-types-case-patch.test.ts` 把关：它用 `readdirSync`
+- 「补丁已生效」由 `tests/behavior/upstream-types-case-patch.test.ts` 把关：它用 `readdirSync`
   的精确名字比对核对已安装上游声明的全部三斜线引用（`existsSync` 在大小写不敏感卷上会误判），
   因此 macOS 与 Linux 结论一致。
 - 删除条件：上游发布修正大小写的版本后，升级精确版本并删除补丁与 `pnpm-workspace.yaml` 的
@@ -142,7 +142,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 
 组件同名导出 `export { Map }`、字符串 `"Map"`、`BMapProvider` 等复合名、以及 `h(Map)` / `{ Map }` 这类把 `Map` 当组件值的用法都不会误报。注意：仅做「重命名到另一个变量再访问」的别名（如 `const M = Map; new M.Map()`）不在静态门禁范围内——这需要数据流分析，目前依靠目录白名单约束。
 
-`no-bmapgl` 门禁在上面七条之外多一条**旧引擎专用**规则（它扫的是整棵树，因此只保留这一条，
+上面七条之外，`check:raw-sdk` 还多一组**旧引擎专用**规则（它扫的是整棵树，因此只保留这一组，
 `BMap.*` / 全局成员访问在 `driver/**`、`client/**`、`core/loader/**`、`plugins/**` 是合法的）：
 
 | 规则 | 说明 |
@@ -157,13 +157,13 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:raw-sdk` | 扫描禁区目录（`components` / `composables` / `core/runtime`） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src`，白名单外的任何 raw SDK 引用都会失败 |
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
-| `pnpm check:no-bmapgl` | 旧引擎不变量：**运行时源码**（含被白名单放行的 `driver` / `client` / `core/loader` / `plugins`）与**公共声明**都不得再出现 `BMapGL` 或已删除的 engine 取值。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分）。扫描范围刻意不含 `node_modules`、`docs/**` 与 `tests/**`（官方 runtime 自己就挂 `BMapGL` 别名、迁移指南要能写出旧名字、Fake v4 按真实形状镜像那个别名）；官方插件命名空间 `BMapGLLib` 与注释里的提及按 AST 判定天然不命中 |
+| `pnpm check:raw-sdk:declarations` | 旧引擎残留在**公共声明**上的不变量：`dist/**/*.d.ts` 不得再出现 `BMapGL` 或已删除的 engine 取值。`check:public-dts` 只禁 `BMap.*` / `BMapGL` / 官方类型包，**不**禁 engine 取值字面量，所以发布产物上这条覆盖是独立的一步。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分） |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
 | `pnpm probe:plugin-load-channel` | 量**插件脚本加载通道自身**的边界行为（**需要 AK + 浏览器**，要真的等一个超时窗口）：把插件 URL 指到永不响应的地址，核对「地图照常 ready / 超时后如实失败且不残留脚本 / 列表里后面的插件不被永久阻塞」，以及取消语义的三条（`map` 作用域 abort 摘脚本、共享宿主里取消只解绑自己、宿主 `dispose()` 让在飞加载 abort）。`0` 契约成立 / `1` 契约不成立（含「永久挂起」）/ `3` 无法判定 / `2` 脚手架失败 |
 
-`pnpm check:public-dts` 与 `pnpm check:no-bmapgl` 的**公共声明相位**都需在 `pnpm build:package` 之后运行；CI 的两个 job 都会在构建后执行。
+`pnpm check:public-dts` 与 `pnpm check:raw-sdk:declarations` 都需在 `pnpm build:package` 之后运行；CI 的两个 job 都会在构建后执行。运行时源码侧的旧引擎残留由 `pnpm check:raw-sdk:tree` 承担——它对被 raw SDK 白名单放行的 `driver` / `client` / `core/loader` / `plugins` 也跑这条规则，因为 `BMapGL` 与白名单无关。扫描范围刻意不含 `node_modules`、`docs/**` 与 `tests/**`（官方 runtime 自己就挂 `BMapGL` 别名、ADR 要能写出旧名字、Fake v4 按真实形状镜像那个别名）；官方插件命名空间 `BMapGLLib` 与注释里的提及按 AST 判定天然不命中。
 
 ## Capability Catalog
 
@@ -183,7 +183,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 - [插件兼容 inventory](./plugin-compat-inventory)：人读，含依据档位、逐条结论与残余风险；
 - `docs/.vitepress/plugin-inventory.json`：机读，形如 `{ plugins: [{ id, url, verdict, basis, capability?, … }] }`，
   供站点或工具链**按 `id` 取结论**（例如「某个插件在本仓库到底算不算支持」）；
-  取用口径由 `tests/behavior/v3-plugin-compat-inventory.test.ts` 钉住，改形状会红。
+  取用口径由 `tests/behavior/plugin-compat-inventory.test.ts` 钉住，改形状会红。
 
 三条约定：结论必须标依据档位（`artifact` / `declaration` / `runtime`，没跑过的不写）、
 内置插件一律 optional（必需功能不依赖插件脚本）、Catalog 里标 `unsupported` 的插件类能力必须在清单里有条目。
@@ -202,8 +202,9 @@ pnpm typecheck:package          # 官方类型 + 最小 augmentation 在 skipLib
 pnpm test:unit
 pnpm build:package
 pnpm check:raw-sdk         # 禁区目录 raw SDK 边界
-pnpm check:raw-sdk:tree    # 整棵 src 按白名单校验
+pnpm check:raw-sdk:tree    # 整棵 src 按白名单校验(含旧引擎残留)
 pnpm check:public-dts      # 公共声明无 BMap.* 泄漏(需先 build:package)
+pnpm check:raw-sdk:declarations # 公共声明无旧引擎残留(需先 build:package)
 pnpm generate:capability-matrix:check
 pnpm docs:build            # 涉及文档时
 ```

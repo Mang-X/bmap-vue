@@ -44,6 +44,8 @@
 | [2026-09-24](./2026-09-24-deep-reactive-array-update-path.md) | 深响应大数组的更新路径：文档指引落地、`pauseTracking` 不落地（`shallowRef` / `markRaw` + `dataVersion` 用法引导 / `pauseTracking` 因公开边界与模块身份耦合不落地；结算 `2026-09-21-performance-baseline-and-worker-decision` 欠账表的「深响应输入」一行 / #124 **深响应子问题**，scheduler 结论见下条） | Accepted |
 | [2026-09-24](./2026-09-24-scheduler-batching-hot-path.md) | Vue scheduler/batching 取证（#124 的 scheduler 取证项）：`flush:'sync'` 是深响应热路径主因（依赖收集）/ 维持 `shallowRef` + `dataVersion` 文档结论 / 不改共享内核 `flush` 语义 / 多字段同更新次数由 `component-path` §7 钉住；#124 仍 open（提交基线同机重录未做） | Accepted |
 | [2026-09-24](./2026-09-24-single-engine-capability-catalog.md) | 单引擎能力目录收口：删除 `engines` 维度、`engine-unsupported` 改名 `unlisted-capability`（描述符不再声明引擎 / 判定链删恒真白名单分支 / 矩阵与 JSON 重生成 / 结算 `2026-09-14-remove-legacy-engine` 已知限制第 4 条，#126） | Accepted |
+| [2026-09-24](./2026-09-24-overlay-infowindow-vue-native-convergence.md) | Overlay / InfoWindow 的 Vue-native 收口：删自研调度队列（改 Vue batching + 一个数组源 post-flush watcher + replace 窗口的最小尾随队列 / 大数组 `flush:'sync'` 不动）/ 删运行时 Proxy / 定形几何用标量键 / InfoWindow 双 `nextTick` 收成单一 post-flush 入口 / **baseline restore 只有重建一条路**（getter 给当前值、ctor 快照不是默认值，§5 逐条反证）/ 覆盖物 `defineEmits` 改为生成（#138） | Accepted |
+| [2026-09-25](./2026-09-25-clean-slate-migration-baggage-removal.md) | Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（集中弃用层与旧 prop/event 别名一并删除 / `check:no-bmapgl` 三份独家覆盖并入 `check:raw-sdk` / `v3-` 前缀与库版本措辞中性化 / 官方事实与工程史保留；#136） | Accepted |
 
 ## 约定
 

@@ -7,7 +7,7 @@
 - **F-2（JSONP 回调全局名占用 / foreign 捕获）— 保留 + 取证 + gate**：新增 `pnpm probe:jsonp-callback`
   与判定层 `probe-jsonp-callback-verdicts.mts`；live 读数固化在
   `tests/behavior/fixtures/probe-jsonp-callback.live.json`；可回归 gate =
-  `v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live 漂移守卫 +
+  `probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live 漂移守卫 +
   `ScriptLoader.test.ts` 的 foreign 单测。`SharedLoadTask` 模块头补齐 guarantee 措辞
   （本库保证 install/release 可靠 vs 官方行为可改），仅作用于显式高级 `customScriptV4Provider`
   路径，**不进 Stable 承诺**。

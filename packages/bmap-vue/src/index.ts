@@ -1,5 +1,5 @@
 /**
- * v3 公开入口(packages/bmap-vue)
+ * 公共入口(packages/bmap-vue)
  *
  * 仅导出稳定公共 API。core 内部实现不直接暴露。
  */
@@ -135,27 +135,9 @@ export type {
   OverlayPartialPointerEvent,
   OverlayPointerEvent,
 } from "./driver/types/events";
-// 集中弃用层（#31）：旧 prop / 事件别名的身份与「同实例只警告一次」的告警器。
-// 组件**不写**自己的兼容代码（#28 明令禁止「组件各自兼容」）。
-export {
-  DEPRECATED_EVENT_ALIAS_CODE,
-  DEPRECATED_PROP_ALIAS_CODE,
-  OVERLAY_EVENT_ALIASES,
-  OVERLAY_PROP_ALIASES,
-  createDeprecationWarner,
-  describeDeprecation,
-  eventAliasesOf,
-  propAliasesOf,
-} from "./core/deprecations";
-export type {
-  DeprecationNotice,
-  DeprecationWarner,
-  OverlayEventAlias,
-  OverlayPropAlias,
-} from "./core/deprecations";
 export type { OverlayKind } from "./driver/types/overlays";
 export { ResourceScope } from "./core/lifecycle/ResourceScope";
-export type { Disposer, DisposeContext, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
+export type { Disposer, ResourceScopeOptions } from "./core/lifecycle/ResourceScope";
 export type { BMapProviderProps } from "./components/provider/BMapProvider.vue";
 
 // Client/Driver 领域类型(稳定公开,raw SDK 只在 ./advanced)
@@ -218,7 +200,6 @@ export type {
 // 事件 Catalog（M4-EVENTS / #28）：事件名、SDK 拼写与载荷类型的单一事实源。
 // `<Map>` 的 emits、`useMapEvent` 的订阅名解析与文档表格都从这里出发。
 export {
-  BMAP_COMPONENT_EVENT_ALIASES,
   BMAP_COMPONENT_EVENT_CATALOG,
   MAP_EVENT_CATALOG,
   MAP_EVENT_EMIT_ALIASES,
@@ -229,7 +210,6 @@ export {
   toVueEventName,
 } from "./core/events/eventCatalog";
 export type {
-  MapComponentEmitName,
   MapComponentEventName,
   MapEventDefinition,
   MapEventMap,

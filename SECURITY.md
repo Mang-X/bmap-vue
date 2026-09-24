@@ -8,7 +8,7 @@
 | `1.0.0-rc.x` | 仅修复安全问题，正式版发布后停止维护 |
 | `<= 0.x` | 不再维护 |
 
-仍在使用 2.x 的话，请参考[从 v2 迁移](https://Mang-X.github.io/bmap-vue/zh-CN/guide/migration-from-v2)。
+本库 1.0 只支持 JSAPI 4.0，不提供旧版迁移路径；请以[公开 API 对照表](docs/zh-CN/contributing/official-api-alignment.md)为准。
 
 ## 上报漏洞
 

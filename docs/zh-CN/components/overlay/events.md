@@ -2,7 +2,7 @@
 
 > 这份表是**覆盖物事件面的单一事实源**（`packages/bmap-vue/src/core/overlays/overlayEventCatalog.ts`）
 > 的镜像：组件的 `defineEmits`、内核的 SDK 订阅、载荷类型三处都从它出发。
-> `tests/behavior/v3-overlay-event-matrix.test.ts` 直接解析上游
+> `tests/behavior/overlay-event-matrix.test.ts` 直接解析上游
 > `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts` 做**双向比对**，因此这份表与上游
 > 不可能悄悄漂移（多一个、少一个都红）。
 
@@ -26,9 +26,9 @@
 第三档里上游声明过但本库**没有归一化**的字段（`lineupdate.action`、编辑事件的 `overlay` / `from`）统一经
 `raw` 读取——与 map 事件对 `mousewheel.trend` 这类字段的口径一致，不做猜测式补齐。
 
-## `remove` 的到达时机（v3 起的两条口径）
+## `remove` 的到达时机（两条口径）
 
-`remove` 由 SDK 在**覆盖物被摘除**时派发。v3 把「组件的显隐」统一成 `show()` / `hide()`（实例留在图上），
+`remove` 由 SDK 在**覆盖物被摘除**时派发。本库把「组件的显隐」统一成 `show()` / `hide()`（实例留在图上），
 因此这条事件只在**外部**摘除（`map.removeOverlay()` / `map.clearOverlays()`）时到达组件：
 
 | 动作 | `remove` 是否到达组件 |
@@ -252,7 +252,3 @@
 - `map-mask`：掩膜：4.0.4 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）
 - `marker3d`：3D 标注：构造器 Marker3D 不在 4.0.4 的类声明里，因此也没有事件表；事件面要等运行时取证（与 TrafficLayer / 图层事件同一路径）
 
-## 弃用别名
-
-事件 `drag-end` → `dragend`（marker）；事件名统一为 SDK 的 dragend 拼写（v2 的 drag-end 仍会发出，但将在后续大版本移除）
-prop `startPoint` + `endPoint` → `bounds`（ground-overlay）；改用单个 bounds（{ southwest, northeast }）：startPoint 是西南角、endPoint 是东北角

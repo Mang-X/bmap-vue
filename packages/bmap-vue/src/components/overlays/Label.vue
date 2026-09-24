@@ -7,15 +7,13 @@
  * 按 `labelSpec` 驱动——组件里不再有生命周期代码，也不再手写 6 个 watcher。
  *
  * 事件面（8 个）由 `label` 的事件矩阵（`LabelEventMap`）派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定（SFC 编译器解析不了 `keyof typeof <大对象>`，
+ * `overlay-suite.test.ts` 的门禁锁定（SFC 编译器解析不了 `keyof typeof <大对象>`，
  * 因此这一侧必须显式写名字，用门禁而不是 mapped type 来防漂移）。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+import type { LabelEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { LabelProps, LabelStyle } from "../../types/components";
 import { createLabelSpec } from "./labelSpec";
 
@@ -27,16 +25,7 @@ const props = withDefaults(defineProps<LabelProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<LabelEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

@@ -25,7 +25,7 @@
  *    只是让「上游声明文件自身不可消费」这件事不再污染本包的类型检查。
  *
  * 代价与补偿：`src/integrations/ui-kit/types.ts` 里的结构化接口不再由编译器对着上游声明校验，
- * 因此补了一条**契约测试**（`tests/behavior/v3-ui-kit-widget-contract.test.ts`）直接解析
+ * 因此补了一条**契约测试**（`tests/behavior/ui-kit-widget-contract.test.ts`）直接解析
  * 安装目录里上游公布组件 `.d.ts`，逐成员核对名字与调用形态；运行时可用性由 #70 的真实探针
  * （`pnpm probe:official`）覆盖。
  */

@@ -31,15 +31,19 @@ export interface OverlayLifecycle<Props, Resource> {
     scope: ResourceScope,
   ): void;
   /**
-   * 在 setup 阶段同步注册的 watcher(保证响应式)。
+   * 在 **setup 同步期**注册的 watcher(保证响应式)。#139 起 watcher 的生命周期归 Vue 所有，
+   * 因此**没有** `addDisposer` 参数了:组件卸载时 Vue 自己会停。
+   *
+   * ⚠️ 「必须同步期」是被 `assertSetupSynchronous()` 现场检查的**不变式**，不是建议:
+   * 挪进 `onMounted` / async 钩子会让 watcher 逃出组件的 effect scope ⇒ 卸载后仍触发。
+   * 真需要在 async 钩子里建 watcher 时，自己 `scope.add(stop)`。
+   *
    * 通过 getResource() 读取当前实例(可能为 null),getCtx() 读取 ready 上下文。
-   * 全部 watcher 应返回停止函数或注册到该 composable 的 scope。
    */
   createWatchers?(
     getCtx: () => MapReadyContext | null,
     getResource: () => Resource | null,
     props: Readonly<Props>,
-    addDisposer: (d: () => void) => void,
   ): void;
   /** 从地图移除并销毁 SDK 实例 */
   remove(resource: Resource, context: MapReadyContext): void;
@@ -102,14 +106,10 @@ export function useOverlayResource<Props, Resource>(
     return instanceScope;
   };
 
-  // 在 setup 同步注册响应式 watcher(避免 async 续体丢失响应式)
-  // watcher 本体进入 componentScope（跨 rebuild 存活），通过 getResource 读取当前实例
-  lifecycle.createWatchers?.(
-    () => readyCtx,
-    () => resource.value,
-    props,
-    (d) => componentScope.add(d),
-  );
+  // 在 setup 同步注册响应式 watcher(避免 async 续体丢失响应式)。#139: watcher 归 Vue 所有,
+  // 通过 getResource 读取当前实例，因此跨 rebuild 存活靠的是**组件级** scope 而不是自建 scope。
+  // ⚠️ 依赖「本行在 setup 同步期执行」,理由与防护同 useSdkResource 的 spec.watch。
+  lifecycle.createWatchers?.(() => readyCtx, () => resource.value, props);
 
   onMounted(async () => {
     const token = ++createToken;

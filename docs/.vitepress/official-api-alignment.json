@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 394,
+  "oursPublicCount": 373,
   "uiKitCount": 55,
   "matchedCount": 110,
   "officialOnlyCount": 292,
-  "oursOnlyCount": 284,
+  "oursOnlyCount": 263,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2043,19 +2043,9 @@
       "oursEntry": "."
     },
     {
-      "name": "useServiceTask",
-      "surface": "hook",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "useViewAnimation",
       "surface": "hook",
       "oursEntry": "./composables"
-    },
-    {
-      "name": "BMAP_COMPONENT_EVENT_ALIASES",
-      "surface": "constant",
-      "oursEntry": "."
     },
     {
       "name": "BMAP_COMPONENT_EVENT_CATALOG",
@@ -2159,11 +2149,6 @@
     },
     {
       "name": "DataComponentProps",
-      "surface": "type",
-      "oursEntry": "."
-    },
-    {
-      "name": "DisposeContext",
       "surface": "type",
       "oursEntry": "."
     },
@@ -2398,11 +2383,6 @@
       "oursEntry": "."
     },
     {
-      "name": "ServiceInvokeContext",
-      "surface": "type",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "ServiceResult",
       "surface": "type",
       "oursEntry": "."
@@ -2441,11 +2421,6 @@
       "name": "UseOverlaySpecResult",
       "surface": "type",
       "oursEntry": "."
-    },
-    {
-      "name": "UseServiceTaskOptions",
-      "surface": "type",
-      "oursEntry": "./composables"
     },
     {
       "name": "UseViewAnimationOptions",
@@ -2613,37 +2588,7 @@
       "oursEntry": "."
     },
     {
-      "name": "createDeprecationWarner",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
       "name": "defaultClientDefinitionKey",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "DEPRECATED_EVENT_ALIAS_CODE",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "DEPRECATED_PROP_ALIAS_CODE",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "DeprecationNotice",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "DeprecationWarner",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "describeDeprecation",
       "surface": "other",
       "oursEntry": "."
     },
@@ -2686,11 +2631,6 @@
       "name": "EqualFn",
       "surface": "other",
       "oursEntry": "./composables"
-    },
-    {
-      "name": "eventAliasesOf",
-      "surface": "other",
-      "oursEntry": "."
     },
     {
       "name": "EventDriver",
@@ -2844,11 +2784,6 @@
     },
     {
       "name": "MapCommands",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "MapComponentEmitName",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3018,11 +2953,6 @@
       "oursEntry": "."
     },
     {
-      "name": "OVERLAY_EVENT_ALIASES",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
       "name": "OVERLAY_EVENT_MATRIX",
       "surface": "other",
       "oursEntry": "."
@@ -3033,17 +2963,7 @@
       "oursEntry": "."
     },
     {
-      "name": "OVERLAY_PROP_ALIASES",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
       "name": "OverlayDriver",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "OverlayEventAlias",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3113,11 +3033,6 @@
       "oursEntry": "."
     },
     {
-      "name": "OverlayPropAlias",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
       "name": "OverlaySpec",
       "surface": "other",
       "oursEntry": "."
@@ -3164,11 +3079,6 @@
     },
     {
       "name": "PointPick",
-      "surface": "other",
-      "oursEntry": "."
-    },
-    {
-      "name": "propAliasesOf",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3268,11 +3178,6 @@
       "oursEntry": "."
     },
     {
-      "name": "ServiceTask",
-      "surface": "other",
-      "oursEntry": "./composables"
-    },
-    {
       "name": "SizeLike",
       "surface": "other",
       "oursEntry": "."
@@ -3286,16 +3191,6 @@
       "name": "StyleExpression",
       "surface": "other",
       "oursEntry": "."
-    },
-    {
-      "name": "SupersedeMode",
-      "surface": "other",
-      "oursEntry": "./composables"
-    },
-    {
-      "name": "SupersedePolicy",
-      "surface": "other",
-      "oursEntry": "./composables"
     },
     {
       "name": "targetContextKey",

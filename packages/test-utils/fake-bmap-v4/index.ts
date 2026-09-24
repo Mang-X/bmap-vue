@@ -339,12 +339,9 @@ export interface FakeBMapV4 {
   /**
    * 诊断计数（泄漏门禁 + 活动口径）。
    *
-   * `stats` 是同一对象的别名（#24 之前的名字只统计监听器）；新代码请用 `diagnostics`，
-   * 两者指向同一个实例，调用 `reset()` 任一即可清零。
+   * `snapshot()` 分两口径：`leaks`（当前**未释放**的资源）与 `activity`（累计发生过什么）。
    */
   diagnostics: FakeV4Diagnostics
-  /** @deprecated 诊断对象的历史别名，等价于 `diagnostics`。 */
-  stats: FakeV4Diagnostics
   /** 测试辅助：记录已创建的 Map 实例 */
   createdMaps: FakeV4Map[]
   /** 测试辅助：记录已创建的覆盖物实例（构造器调用计数，用于「重建一次」断言） */
@@ -870,7 +867,6 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       nextCenterAndZoomError = error ?? new Error('initializeView failed')
     },
     diagnostics: stats,
-    stats,
     runtimeExtensions: new FakeV4RuntimeExtensions(namespace),
     createdMaps,
     createdOverlays,

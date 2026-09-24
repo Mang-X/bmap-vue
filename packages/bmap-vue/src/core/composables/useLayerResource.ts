@@ -692,86 +692,84 @@ export function useLayerResource<Props>(
         hooks.bind?.({ handle, context, scope });
       },
       watch: ({ props: current, context, resource: currentHandle, replace, scope }) => {
-        scope.run(() => {
-          /**
-           * **唯一的换实例入口**：先确认旧实例真的下来了，再 `replace()`。
-           *
-           * 为什么要收口成一个入口：`replace()` 释放旧实例时最终经过 `LayerRegistry.dispose()`，
-           * 而它按「组件卸载 / Map 卸载都要继续走完」的口径**吞掉** `removeLayer` 的失败、并把记录
-           * 永久删除。于是只要那次摘除失败（旧实例可能仍在图上），紧接着 `addLayer` 的新实例就会让
-           * 图上出现**两份**，而旧实例连账本都没了。这条不变量对**所有**创建新实例的路径都成立，
-           * 不只对「重新可见」那条——所以三条重建路径（构造指纹变化 / 重新可见 / 已写入值变回未表态）
-           * 一律从这里出去，别再各自 `void replace()`：漏一条就是一个静默的两份同图。
-           *
-           * 收敛失败时**什么都不做**（不换实例、也不重新挂载）：失败经 `resource:error` 交出，
-           * 留到下一次 props 变化或永久销毁再试。宁可暂时不回来，也不能出现两份。
-           *
-           * 顺序（**收敛那一步先解绑、再摘除**）：收敛不会走 `record.dispose()`，所以
-           * `LayerRecord.dispose()` 的「先释放 child scope、再 `removeLayer`」这条顺序要由
-           * `tryConvergeToDetached()` 自己补上（`releaseListeners()`，见它的说明）。因此
-           * `replace()` 内部 dispose 里那次摘除成为 no-op（`mountAttempted` 已复位）、
-           * `scope.dispose()` 也成了幂等的第二次调用；数据清空（`tearDownData`）随之落到摘除
-           * **之后**，即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
-           * 在 `removeLayer` 之后仍有效、`DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
-           * ⚠️ 早先这里写过「摘除时 child scope 还活着不是新形态（`visible=false` 也这样）」——
-           * 那个类比**不成立**：`visible=false` 是临时摘挂、不销毁资源，而这里是销毁旧一代。
-           */
-          const replaceAfterDetached = (state: InstanceState, context: MapReadyContext): void => {
-            if (!tryConvergeToDetached(state, context)) return;
-            void replace();
-          };
+        /**
+         * **唯一的换实例入口**：先确认旧实例真的下来了，再 `replace()`。
+         *
+         * 为什么要收口成一个入口：`replace()` 释放旧实例时最终经过 `LayerRegistry.dispose()`，
+         * 而它按「组件卸载 / Map 卸载都要继续走完」的口径**吞掉** `removeLayer` 的失败、并把记录
+         * 永久删除。于是只要那次摘除失败（旧实例可能仍在图上），紧接着 `addLayer` 的新实例就会让
+         * 图上出现**两份**，而旧实例连账本都没了。这条不变量对**所有**创建新实例的路径都成立，
+         * 不只对「重新可见」那条——所以三条重建路径（构造指纹变化 / 重新可见 / 已写入值变回未表态）
+         * 一律从这里出去，别再各自 `void replace()`：漏一条就是一个静默的两份同图。
+         *
+         * 收敛失败时**什么都不做**（不换实例、也不重新挂载）：失败经 `resource:error` 交出，
+         * 留到下一次 props 变化或永久销毁再试。宁可暂时不回来，也不能出现两份。
+         *
+         * 顺序（**收敛那一步先解绑、再摘除**）：收敛不会走 `record.dispose()`，所以
+         * `LayerRecord.dispose()` 的「先释放 child scope、再 `removeLayer`」这条顺序要由
+         * `tryConvergeToDetached()` 自己补上（`releaseListeners()`，见它的说明）。因此
+         * `replace()` 内部 dispose 里那次摘除成为 no-op（`mountAttempted` 已复位）、
+         * `scope.dispose()` 也成了幂等的第二次调用；数据清空（`tearDownData`）随之落到摘除
+         * **之后**，即走 ADR 决策 12 的 **detached cleanup** 那条路（#98 实测：`clearData()`
+         * 在 `removeLayer` 之后仍有效、`DOMLayer` 的 `removeAllOverlays()` 是安全 no-op）。
+         * ⚠️ 早先这里写过「摘除时 child scope 还活着不是新形态（`visible=false` 也这样）」——
+         * 那个类比**不成立**：`visible=false` 是临时摘挂、不销毁资源，而这里是销毁旧一代。
+         */
+        const replaceAfterDetached = (state: InstanceState, context: MapReadyContext): void => {
+          if (!tryConvergeToDetached(state, context)) return;
+          void replace();
+        };
 
-          watch(
-            // 廉价指纹：不含 Driver 信息、也不深遍历 data，SDK 未就绪也能算
-            // （见 `layerWatchKey` 与文件头「就绪之前怎么处理」）。
-            () => layerWatchKey(hooks.toSpec(current)),
-            () => {
-              const ready = context();
-              const handle = currentHandle();
-              const state = instance;
-              // 还没就绪或没有实例：`create()` 会读到最新的规格，这里不需要动作。
-              if (!ready || !handle || !state) return;
-              // 这一步里的 SDK 调用都可能抛错，抛出来就是 unhandled rejection —— 必须收成
-              // `resource:error`（与 mount 路径同一条诊断通道）。
-              try {
-                const next = hooks.toSpec(current);
-                if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
-                  replaceAfterDetached(state, ready);
-                  return;
-                }
-                state.spec = next;
-
-                // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
-                // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
-                if (needsRemountRebuild(state)) {
-                  replaceAfterDetached(state, ready);
-                  return;
-                }
-
-                // **先判定、后执行**：一旦确定「必须重建」，就不再执行就地写入——否则同一次更新里
-                // 一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次
-                // （第三轮评审发现 3）。
-                const removed = detectRemovedState(state, ready);
-                if (removed.length > 0) {
-                  devWarn(
-                    `[layer:${state.spec.kind}] ${removed.join(" / ")} 由有值变为未表态：` +
-                      "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
-                  );
-                  replaceAfterDetached(state, ready);
-                  return;
-                }
-
-                // 各步互相隔离：一次写入失败不该连带吞掉同一次更新里其它步骤（各自上报为
-                // `resource:error`；失败的记账不会提交，下一次变化或重挂载会重试）。
-                runIsolated(() => syncMounted(state, ready));
-                runIsolated(() => syncPostMountSlots(state, ready));
-                runIsolated(() => syncMutableOptions(state, ready));
-              } catch (error) {
-                reportResourceError(error);
+        watch(
+          // 廉价指纹：不含 Driver 信息、也不深遍历 data，SDK 未就绪也能算
+          // （见 `layerWatchKey` 与文件头「就绪之前怎么处理」）。
+          () => layerWatchKey(hooks.toSpec(current)),
+          () => {
+            const ready = context();
+            const handle = currentHandle();
+            const state = instance;
+            // 还没就绪或没有实例：`create()` 会读到最新的规格，这里不需要动作。
+            if (!ready || !handle || !state) return;
+            // 这一步里的 SDK 调用都可能抛错，抛出来就是 unhandled rejection —— 必须收成
+            // `resource:error`（与 mount 路径同一条诊断通道）。
+            try {
+              const next = hooks.toSpec(current);
+              if (layerRebuildKey(next, probeOf(ready)) !== state.rebuildKey) {
+                replaceAfterDetached(state, ready);
+                return;
               }
-            },
-          );
-        });
+              state.spec = next;
+
+              // **重新可见**要换实例（`removeLayer` 之后的实例再也渲染不了，见 `needsRemountRebuild`）：
+              // 与「必须重建」同一条通道，判定同样放在任何就地写入之前。
+              if (needsRemountRebuild(state)) {
+                replaceAfterDetached(state, ready);
+                return;
+              }
+
+              // **先判定、后执行**：一旦确定「必须重建」，就不再执行就地写入——否则同一次更新里
+              // 一步 SDK 异常会把这个已经确定的收敛挡掉，而 props 已稳定、不会再来一次
+              // （第三轮评审发现 3）。
+              const removed = detectRemovedState(state, ready);
+              if (removed.length > 0) {
+                devWarn(
+                  `[layer:${state.spec.kind}] ${removed.join(" / ")} 由有值变为未表态：` +
+                    "SDK 没有 unset 入口，本库不猜默认值 ⇒ 重建图层，让它回到 SDK 自己的默认状态",
+                );
+                replaceAfterDetached(state, ready);
+                return;
+              }
+
+              // 各步互相隔离：一次写入失败不该连带吞掉同一次更新里其它步骤（各自上报为
+              // `resource:error`；失败的记账不会提交，下一次变化或重挂载会重试）。
+              runIsolated(() => syncMounted(state, ready));
+              runIsolated(() => syncPostMountSlots(state, ready));
+              runIsolated(() => syncMutableOptions(state, ready));
+            } catch (error) {
+              reportResourceError(error);
+            }
+          },
+        );
       },
     },
   });

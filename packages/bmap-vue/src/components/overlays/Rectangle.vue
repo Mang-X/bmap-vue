@@ -7,15 +7,11 @@
  * 产生多余命令），样式与编辑开关由 `rectangleSpec` 声明。
  *
  * 事件面（17 个，含编辑六件套）与 Circle / Polygon 相同（上游同为 `GraphEventMap`）；
- * `defineEmits` 与矩阵的一致性由 `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `defineEmits` 与矩阵的一致性由 `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+import type { RectangleEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { RectangleProps } from "../../types/components";
 import { createRectangleSpec } from "./rectangleSpec";
 
@@ -35,25 +31,7 @@ const props = withDefaults(defineProps<RectangleProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  rightdblclick: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-  editstart: [event: OverlayEventPayload];
-  editend: [event: OverlayEventPayload];
-  linevertexdragstart: [event: OverlayEventPayload];
-  linevertexdragging: [event: OverlayEventPayload];
-  linevertexdragend: [event: OverlayEventPayload];
-  linevertexdel: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<RectangleEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

@@ -27,7 +27,7 @@ layer/districtLayer
 | viewport      | 自动聚焦地图中心 | `boolean`                       | -      | `false`                |                                    |
 
 > 4.0 的 `DistrictLayer` **没有任何字段级 setter**：上面这些 Props 变化时会**重建图层**
-> （旧实例先摘掉、旧监听随它那一代释放）。此前它们的变化是静默不生效的，见 3.0 的迁移说明。
+> （旧实例先摘掉、旧监听随它那一代释放）。1.0 只提供这一种行为，不提供「静默不生效」的旧行为。
 
 ## 动态组件 Props
 
@@ -47,7 +47,7 @@ layer/districtLayer
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
+组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 | 事件名 | 说明 | 类型 |
 | --- | --- | --- |

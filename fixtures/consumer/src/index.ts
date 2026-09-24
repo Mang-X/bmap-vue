@@ -1,4 +1,4 @@
-// v3 tarball 消费 smoke:按需导入 + app.use 全量安装 + 类型解析
+// tarball 消费 smoke:按需导入 + app.use 全量安装 + 类型解析
 import { h, shallowRef } from 'vue'
 import {
   createBMapPlugin,
@@ -96,7 +96,7 @@ export type { PlacePoiDTO, PlaceSuggestionDTO }
 // exposed API 类型 smoke（#73 评审第 2 项）：公开动作与 `status` 在消费者侧必须直接可用。//
 // ⚠️ 这条 smoke 的**边界**：`InstanceType<typeof Comp>` 会把 `defineExpose` 的 ref 解包
 // （Vue 的公开实例类型本来就这样），所以它**判定不了**「声明里写的是 `Ref` 还是取值」——
-// 那条由 `tests/behavior/v3-ui-kit-entry.test.ts` 直接读 `dist/ui-kit.d.ts` 锁定。
+// 那条由 `tests/behavior/ui-kit-entry.test.ts` 直接读 `dist/ui-kit.d.ts` 锁定。
 const autocompleteInstance = null as unknown as InstanceType<typeof PlaceAutocomplete>
 const searchInstance = null as unknown as InstanceType<typeof PlaceSearch>
 const searchStatus: UiKitWidgetStatus = searchInstance.status
@@ -175,7 +175,7 @@ const routeSearch: (options: {
 export const detailRouteApiSmoke = { setPlaceCall, routeSearch }
 
 // 公共 API 兼容性 smoke（PR #82 评审 P1）：`useUiKitWidget` 与 `UiKitModule` 从 #73 起就是公开导出，
-// 所以「老写法必须仍然能编译」要在**真实消费方**这一侧也钉一遍（`v3` CI job 用 tarball 跑 vue-tsc）。
+// 所以「最宽松的合法写法必须仍然能编译」要在**真实消费方**这一侧也钉一遍（`package` CI job 用 tarball 跑 vue-tsc）。
 // 1) 老调用不传 `constructorOptions`（它必须是可选的，且缺省时不改变已有语义）；
 
 const legacyHost = shallowRef<HTMLElement | null>(null)
@@ -194,7 +194,7 @@ export const escapeHatch: unknown = uiKitModule[upstreamExportName]
 // 文档里那段「自研加载器怎么写 Provider」（`docs/zh-CN/guide/config.md`）的**可执行对照**：
 // 消费方只有 tarball + vue，也必须能原样编译。文档给一段抄不起来的片断，就等于写了一条
 // 跑不起来的命令——所以这里逐字对齐那段示例（含 `createLoadedJsapiV4` 与全局命名空间的字符串键写法）。
-// 证据由 `scripts/verify-package.mts` 与本仓库 `v3` CI job 的 tarball `vue-tsc` 提供。
+// 证据由 `scripts/verify-package.mts` 与本仓库 `package` CI job 的 tarball `vue-tsc` 提供。
 export const customProviderSmoke: BMapProviderLike = {
   id: 'my-loader',
   getCacheKey: () => 'my-loader',
@@ -215,7 +215,7 @@ export const customProviderSmoke: BMapProviderLike = {
 
 // 服务类 composable 的**消费方编译 smoke**（#38）：这段代码只依赖 tarball 的公共类型，
 // 用来钉住「动作恒 resolve 成 `ServiceResult`」与「状态是只读 shallow ref」这两条公开契约。
-// 证据由本仓库 `v3` CI job 的 tarball `vue-tsc` 提供（`scripts/verify-package.mts`）。
+// 证据由本仓库 `package` CI job 的 tarball `vue-tsc` 提供（`scripts/verify-package.mts`）。
 import { useLocalSearch, useGeocoder, type ServiceResult, type LocalSearchResult } from 'bmap-vue'
 import type { BMapServiceStatus } from 'bmap-vue'
 
@@ -431,7 +431,7 @@ export const markerIconNameSmoke = { markerIconName, unknownMarkerIconName }
 
 // raw 逃生口（`./advanced`）在**产物层**的消费方 smoke（#29 评审补充）。
 //
-// 此前的「raw 只在 `./advanced`」只在**源码级**被锁（`tests/behavior/v3-entry.test.ts` 的成对断言 +
+// 此前的「raw 只在 `./advanced`」只在**源码级**被锁（`tests/behavior/entry.test.ts` 的成对断言 +
 // `check:public-dts`），没有任何代码消费那个子路径 ⇒ 打包产物里「它还在不在、类型能不能用」没人验。
 // 这几行补上：`createHandle` / `unwrapRaw` / `HANDLE_BRAND` 三个名字在 tarball 层必须可用且可类型化。
 import { HANDLE_BRAND, createHandle, unwrapRaw } from 'bmap-vue/advanced'
@@ -441,7 +441,7 @@ const advancedProbeRaw: { ok: boolean } = unwrapRaw(advancedProbe)
 const advancedProbeBrand: string = advancedProbe[HANDLE_BRAND]
 export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }
 
-/* ==================== 覆盖物统一 spec / 事件矩阵 / 集中弃用层（M5-VECTORS / #31） ====================
+/* ==================== 覆盖物统一 spec / 事件矩阵（M5-VECTORS / #31） ====================
  *
  * 这一段的每条断言都对应 #31 的一条公开承诺，而且都必须落在**消费方**上下文里：
  * 本文件由 `scripts/verify-package.mts` 的 `vue-tsc` 对着 tarball 编译（CI 跑），
@@ -453,12 +453,8 @@ import {
   Polygon,
   GroundOverlay,
   OVERLAY_EVENT_MATRIX,
-  OVERLAY_PROP_ALIASES,
-  DEPRECATED_PROP_ALIAS_CODE,
-  describeDeprecation,
   overlayEventOf,
   overlayEventsOf,
-  propAliasesOf,
   type GroundOverlayProps,
   type PolygonProps,
   type RectangleProps,
@@ -479,13 +475,7 @@ const rectangleProps: RectangleProps = {
 // @ts-expect-error strokeStyle 只接受 solid / dashed / dotted
 const invalidRectangleProps: RectangleProps = { ...rectangleProps, strokeStyle: 'wavy' }
 
-// 2) 旧 prop 别名仍然可编译（弃用但未移除）：`startPoint` + `endPoint` 与正典 `bounds` 二选一
-const legacyGroundOverlayProps: GroundOverlayProps = {
-  type: 'image',
-  url: 'a.png',
-  startPoint: { lng: 116.3, lat: 39.8 },
-  endPoint: { lng: 116.5, lat: 40 },
-}
+// 2) 正典 `bounds` 写法
 const canonicalGroundOverlayProps: GroundOverlayProps = {
   type: 'canvas',
   url: () => document.createElement('canvas'),
@@ -515,16 +505,11 @@ const groundOverlayClick = h(GroundOverlay, {
   onClick: (event: OverlayEventPayload) => void event.type,
 })
 
-// 4) 事件矩阵与弃用表是公开的读数面（自定义覆盖物与工具链要用）
+// 4) 事件矩阵是公开的读数面（自定义覆盖物与工具链要用）
 const polygonEventNames: string[] = overlayEventsOf('polygon').map((event) => event.sdk)
 const polygonMouseoutPayload: string | undefined = overlayEventOf('polygon', 'mouseout')?.payload
 const rectangleUpstream: string = OVERLAY_EVENT_MATRIX.rectangle.upstream
 const overlayKinds: OverlayKind[] = ['marker', 'label', 'polyline', 'polygon', 'rectangle', 'circle']
-const propAliases = propAliasesOf('ground-overlay')
-const propAliasNotice = describeDeprecation(OVERLAY_PROP_ALIASES[0]!)
-const propAliasNoticeText: string = propAliasNotice.message
-const propAliasNoticeCode: string = propAliasNotice.code
-const deprecatedCode: string = DEPRECATED_PROP_ALIAS_CODE
 
 // 5) 字段策略与 watch 源是公开类型（自定义覆盖物的声明面）
 const customPolygonFields: OverlayFieldMap<PolygonProps> = {
@@ -546,7 +531,6 @@ const customWatchSource: OverlayFieldWatch = { source: 'versioned', versionProp:
 export const overlaySpecSmoke = {
   rectangleProps,
   invalidRectangleProps,
-  legacyGroundOverlayProps,
   canonicalGroundOverlayProps,
   polygonClick,
   polygonMouseout,
@@ -555,10 +539,6 @@ export const overlaySpecSmoke = {
   polygonMouseoutPayload,
   rectangleUpstream,
   overlayKinds,
-  propAliases,
-  propAliasNoticeText,
-  propAliasNoticeCode,
-  deprecatedCode,
   customPolygonFields,
   customWatchSource,
   rectangleComponent: Rectangle,

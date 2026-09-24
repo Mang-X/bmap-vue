@@ -131,7 +131,6 @@ function createClientAdapter(clientContext: BMapClientContext, map?: unknown): M
     handle: mapRef as unknown as MapContext["handle"],
     error: errorRef,
     resources,
-    scope: resources,
     events,
     scheduler,
     overlays,

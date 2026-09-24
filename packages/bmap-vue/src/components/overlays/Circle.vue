@@ -7,15 +7,11 @@
  * `enableClicking` 是构造期属性（变化即重建）——全部由 `circleSpec` 声明。
  *
  * 事件面（17 个）由 `GraphEventMap` 派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+import type { CircleEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { CircleProps } from "../../types/components";
 import { createCircleSpec } from "./circleSpec";
 
@@ -34,25 +30,7 @@ const props = withDefaults(defineProps<CircleProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  rightdblclick: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-  editstart: [event: OverlayEventPayload];
-  editend: [event: OverlayEventPayload];
-  linevertexdragstart: [event: OverlayEventPayload];
-  linevertexdragging: [event: OverlayEventPayload];
-  linevertexdragend: [event: OverlayEventPayload];
-  linevertexdel: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<CircleEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

@@ -10,65 +10,75 @@
  * | 创建（create） | `useSdkResource` → `spec.create` | 每次创建一个**新的实例 child scope** |
  * | 挂载（mount） | 本文件：`driver.overlays.add({ kind: "map" })` + Registry registration | registration 与实例 scope 绑定 |
  * | 绑定（bind） | 本文件：**kind 的事件矩阵 + `spec.events` 覆盖项** → SDK 事件 | 全部进实例 scope，重建即释放 |
- * | 就地更新 / 重建 | 本文件：**按键合并的待办队列** → `driver.overlays.setOptions` / `replace()` | 分类来自 Driver 描述符 |
+ * | 就地更新 / 重建 | 本文件：**按键标脏 + 一次 reconcile** → `driver.overlays.setOptions` / `replace()` | 分类来自 Driver 描述符 |
  * | 卸载（unmount） | `useSdkResource`：先摘 registration，再释放实例 scope，最后释放组件 scope | 幂等 |
  *
- * ## 为什么更新走「按键合并的待办队列」而不是每个字段直接调用
+ * ## #138：更新路径为什么不再自研一套调度（`pendingApply` → Vue batching）
  *
- * 同一次父级更新里可能同时改掉构造期属性（`recreate`）与就地属性（`mutable`）。逐字段直接下单会
- * 得到两种错误：mutable 落在一个**马上要被移除**的中间实例上（值丢失），或者构造期属性各触发
- * 一次重建（N 个字段 → N 次重建）。队列保证：
+ * 本层原先自带 `pendingApply` / `draining` / `requeueStaleBatch` / `drainAppliedUpdates` 一整套
+ * 单飞队列，在 Vue 自己的 watcher batching **之上**又叠了一层合并。#138 把两者合成一层：
  *
- * 1. 同一轮里的所有更新合并成一批；
- * 2. 批里只要有 `recreate` 键就**先重建**，再把 mutable 落到**最终存活**的实例；
- * 3. 排空过程中新到的更新并入同一轮，因此**后到的值总是最后生效**。
+ * - **合并交给 Vue**：watch 源只「按键标脏」，真正的「一次提交改 N 个字段 ⇒ 一轮下发」由
+ *   post-flush 的 batching 完成（依据：ADR `2026-09-24-scheduler-batching-hot-path.md` §2
+ *   对 `pre` / `post` 的取证——`sync` 档下一次提交改 5 个字段是 5 次回调，`pre`/`post` 是 1 次）。
+ * - **按键合并仍在**（`dirtyFields` 是 `Record`）：同名字段一轮里只留最后一个值。
+ * - **只保留一条最小尾随队列**（`trailing`）：`sdk.replace()` 是异步的，在它 in-flight 期间
+ *   到达的更新**不能**发给即将被丢弃的旧实例、也不能直接标脏（`replace()` 已把
+ *   `sdk.resource.value` 置空）。#138 明确要求这一条保留；窗口之外的更新一律不排队。
  *
- * 这套语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 #31 迁移过来的
+ * **不变的正确性保证**（#138 验收口径）：批里只要有 `recreate` 键就**先重建**，再把 `mutable`
+ * 落到**最终存活**的实例——`applyBatch()` 在 `await sdk.replace()` 之后**重新读**
+ * `sdk.resource.value` 才下发，这一步是全部要害。
+ *
+ * 语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 #31 迁移过来的
  * 八个覆盖物共用；`MapMask` / `Marker3D` / `InfoWindow` / `ContextMenu` 仍走旧层，
  * 理由见 ADR `2026-09-18-overlay-event-matrix` 的已知限制。
+ *
+ * ## #138：props 视图不再用运行时 Proxy
+ *
+ * 别名解析（旧 prop 名）+ 值投影（惰性值）原先挂在一个 `new Proxy(rawProps, …)` 上，代价是
+ * **每次读 props 都过一层 trap**（watch 源每字段每轮都要读若干次）。别名表（`OVERLAY_PROP_ALIASES`）
+ * 总共三组，但走本内核的只有两组（`bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`），
+ * 加上一处投影（`GroundOverlay.url`）——覆盖面小到可以用一个显式读取函数表达，
+ * 因此收成一个显式的 `readProp()`；而 `useSdkResource` 需要的「整份 props」只在 `create` /
+ * `afterMount` 各读一次，**物化**一份普通对象即可（见 `lifecycleProps`）。
+ * `readRawProp` 保留原始引用语义——`reference` / `versioned` 两种源必须读到未投影的根引用。
  *
  * ## issue #31 在本层加的三件事
  *
  * 1. **事件面由矩阵派生**（`overlayEventsOf(spec.kind)`）：组件不再逐个手写 `emit("click", e)`，
  *    于是「同一类覆盖物的事件面不一致」在结构上不可能。`spec.events` 只剩**覆盖项**。
- * 2. **读 props 走「别名感知视图」**：集中弃用表登记的旧 prop 名（`startPoint` / `endPoint`）在
- *    **正典 prop 缺失**时才生效，并告警一次；`create` / watch / 更新队列读到的都是同一份值，
- *    因此不存在「初始用旧名、更新用新名」这类分叉。
+ * 2. **读 props 走「值投影视图」**：`spec.fieldValues` 登记的惰性值（如 GroundOverlay `url` 的
+ *    工厂函数）必须先求值再交给 SDK，因此读 props 经一个 Proxy；`create` / watch / 更新队列读到的
+ *    都是同一份值，不存在「初始用旧名、更新用新名」这类分叉。
+ *    （#136 起这里不再做 prop 别名解析——旧 prop 名的兼容读法已随集中弃用层删除。）
  * 3. **卸载路径上的事件不再回放**：实例被摘除后，SDK 在解绑窗口里派发的 `remove` 之类事件
  *    不再冒泡给调用方（`removeOverlay` 恰好发生在监听解绑之前）。
  */
 import {
   computed,
-  getCurrentInstance,
   onScopeDispose,
   provide,
   readonly,
   shallowRef,
   watch,
 } from "vue";
-import type { ComponentInternalInstance, ShallowRef } from "vue";
+import type { ShallowRef } from "vue";
+import { watchKeyedSources, type KeyedSource } from "../utils/keyedSources";
 import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
 import { useRequiredMapContext } from "../context/inject";
 import { targetContextKey, type TargetContext, type TargetKind } from "../context/target";
 import type { MapReadyContext } from "../context/types";
-import type { Point } from "../../driver/types/geometry";
+import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
-import type { OverlayKind } from "../../driver/types/overlays";
+import { overlayPropertyRevert, overlayPropertySpec, type OverlayKind } from "../../driver/types/overlays";
 import type { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import { pointEquals } from "../utils/equality";
+import { boundsKey, pixelKey, pointEquals, pointKey } from "../utils/equality";
 import { stableKeyOf } from "../utils/stableKey";
 import { assertOverlayFieldDeclarations } from "../overlays/OverlaySpec";
 import type { OverlayFieldUpdate, OverlaySpec } from "../overlays/OverlaySpec";
 import { overlayEventsOf } from "../overlays/overlayEventCatalog";
-import {
-  createDeprecationWarner,
-  describeDeprecation,
-  eventAliasesOf,
-  propAliasesOf,
-  resolvePropAliasValue,
-  type OverlayPropAlias,
-} from "../deprecations";
 
 /**
  * 位置字段的**双向同步模型**（`"position"` 策略）。
@@ -124,6 +134,35 @@ function clonePoint(point: Point): Point {
   return { lng: point.lng, lat: point.lat };
 }
 
+/**
+ * 该描述符键的值是否**定形**，是则返回它的标量键函数（#138）。
+ *
+ * 形状取自 `OVERLAY_DESCRIPTORS` 的 `value` 档（`point` / `size` / `bounds`）——**不新增声明位**，
+ * 分类的事实源仍然是那张表。`raw`（`icon` / `style` / `title` / `zIndex` …）与 `path` / `points` /
+ * `point-groups` / `icon` 一律返回 `undefined`：前者字段随 SDK 版本增减、手写键会漏字段；
+ * 后者是**大数组**，本来就由 `reference` / `versioned` 两种源处理，绝不能在这里被拉回逐点比较。
+ */
+function fixedShapeKeyOf(
+  kind: OverlayKind | undefined,
+  key: string,
+): ((value: unknown) => string) | undefined {
+  if (!kind) return undefined;
+  const spec = overlayPropertySpec(kind, key);
+  switch (spec?.value) {
+    case "point":
+      return (value) => pointKey(value as Point | undefined);
+    case "size":
+      // 组件侧对外的偏移是 **Pixel**（`{x, y}`，见 `MarkerProps.offset` / `LabelProps.offset`），
+      // 不是 Size（`{width, height}`）——尽管描述符按上游 `MarkerOptions.offset` 登记成 `value: "size"`。
+      // 两者键必须不同：否则 `{x:2,y:2}` 与 `{width:2,height:2}` 会互相被判成「没变」。
+      return (value) => pixelKey(value as Pixel | undefined);
+    case "bounds":
+      return (value) => boundsKey(value as Bounds | undefined);
+    default:
+      return undefined;
+  }
+}
+
 /** 解析后的一条事件绑定：SDK 名 + 组件 emit 名 + 可选的组件侧处置。 */
 interface ResolvedOverlayEvent {
   /** SDK 订阅名。 */
@@ -175,29 +214,6 @@ function resolveOverlayEvents<Props extends object, Resource>(
   });
 }
 
-/**
- * 父级是否给这个事件名绑了监听器（照 Vue `emit` 的查找规则：`on<Name>` 与 camelCase 两种拼写）。
- *
- * 判据只能从**当前组件的 vnode props** 读：Vue 的 `emit()` 本身就是在
- * `instance.vnode.props[toHandlerKey(name)]` 上找监听器（`@drag-end` 编译成 `onDrag-end`，
- * 而手写 `h()` 常见的是 `onDragEnd` ⇒ 两种都要认）。刻意**每轮派发现读**而不是在 setup 里快照：
- * 父级可以在运行期换掉监听器（动态 `v-if` / 换 handler 对象），快照会让告警判据过期。
- *
- * 读不到实例（比如在 setup 之外调用内核）时返回 `false`——宁可少提示，也不要误报。
- */
-function hasListenerFor(instance: ComponentInternalInstance | null, name: string): boolean {
-  // 实例必须在 **setup 期**捕获：`getCurrentInstance()` 只在 setup / render 的同步栈里有值，
-  // 而这里是在 SDK 的事件回调里被调用的（那时它已经是 null，直接调用会永远返回 false）。
-  const props = instance?.vnode.props as Record<string, unknown> | null | undefined;
-  if (!props) return false;
-  const camel = name.replace(/-([a-zA-Z])/g, (_, char: string) => char.toUpperCase());
-  const handlerKeys = [
-    `on${name.charAt(0).toUpperCase()}${name.slice(1)}`,
-    `on${camel.charAt(0).toUpperCase()}${camel.slice(1)}`,
-  ];
-  return handlerKeys.some((key) => typeof props[key] === "function");
-}
-
 export function useOverlaySpec<Props extends object, Resource>(
   props: Props,
   spec: OverlaySpec<Props, Resource>,
@@ -207,12 +223,6 @@ export function useOverlaySpec<Props extends object, Resource>(
   const overlayRegistry = mapContext.overlays;
   const emit = options.emit;
   const kind: OverlayKind | undefined = spec.kind;
-  /** 本组件实例（父级监听器的读取依据，见 `hasListenerFor`）；非组件上下文里为 null。 */
-  const ownerInstance = getCurrentInstance();
-
-  /** 集中弃用层：prop 别名（读取层）与事件别名（派发层）共用这一份「同实例一次」的去重。 */
-  const deprecation = createDeprecationWarner(spec.type);
-  const propAliases: readonly OverlayPropAlias[] = propAliasesOf(kind);
 
   /** ready 上下文：`useSdkResource` 内部缓存它，这里留一份给自己（更新路径要用 driver / map）。 */
   let readyCtx: MapReadyContext | null = null;
@@ -223,45 +233,68 @@ export function useOverlaySpec<Props extends object, Resource>(
   const rawProps = props as Record<string, unknown>;
 
   /**
-   * **统一 props 视图**：别名解析（旧 prop 名）+ 值投影（惰性值）。
+   * **统一 props 视图**：值投影（惰性值）。
    *
-   * 正典 prop（`bounds`）缺失、而旧名组（`startPoint` + `endPoint`）齐备时，读 `bounds`
-   * 得到的是旧名派生出来的值——`create` / watch / 更新队列因此看到同一份值，不存在
-   * 「初始用旧名、更新用新名」这类分叉。正典一旦有值，旧名**完全不参与**（连告警都不发）：
-   * 这是「新 API 优先」，不是「两边合并」。
-   *
-   * 值投影在别名之后：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
+   * `spec.fieldValues` 登记的工厂函数必须在**读取时**求值再交给 SDK（`setImage` 只接受真实
+   * 来源），因此经一个 Proxy 投影；`create` / watch / 更新队列读到的都是同一份值，不存在
+   * 「初始用工厂、更新用原值」这类分叉。没有登记任何投影时直接用 `rawProps`——不为了「统一」
+   * 给每个组件套一层无谓的 Proxy。
    */
-  function resolveAliasValue(alias: OverlayPropAlias, target: Record<string, unknown>): unknown {
-    // 读取规则（新 API 优先 / 旧名要齐备 / 不猜）收在 `core/deprecations/resolve.ts`：
-    // `ContextMenuSpec` 的 `menuItems` → `items` 用的是同一条规则，两处各写一遍必然分叉。
-    const resolved = resolvePropAliasValue(alias, target);
-    if (resolved.usedAlias) deprecation.warn(describeDeprecation(alias));
-    return resolved.value;
-  }
-
   const fieldValues: Partial<Record<keyof Props & string, (value: unknown) => unknown>> =
     spec.fieldValues ?? {};
-  const needsView = propAliases.length > 0 || Object.keys(fieldValues).length > 0;
+  const needsView = Object.keys(fieldValues).length > 0;
 
-  const propsView: Record<string, unknown> = !needsView
-    ? rawProps
-    : new Proxy(rawProps, {
-        get(target, key, receiver) {
-          if (typeof key !== "string") return Reflect.get(target, key, receiver);
-          const alias = propAliases.find((entry) => entry.canonical === key);
-          const value = alias
-            ? resolveAliasValue(alias, target)
-            : Reflect.get(target, key, receiver);
-          const project = fieldValues[key as keyof Props & string];
-          return project ? project(value) : value;
-        },
-      });
+  /**
+   * 经视图读取一个 prop（投影 → 原值），等价于原 `propsView[key]`（#138：运行时 Proxy 已删除）。
+   *
+   * 唯一一条规则是**投影优先**：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实
+   * 来源）。集中弃用层（含 `bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`）已随 #136
+   * 删除，因此这里不再有「别名优先于原值」这一层。
+   */
+  function readProp(name: string): unknown {
+    const value = rawProps[name];
+    const project = fieldValues[name as keyof Props & string];
+    return project ? project(value) : value;
+  }
 
-  /** 经视图读取（别名 + 投影）：`create` / watch / 更新队列都用它。 */
-  const readProp = (name: string): unknown => propsView[name];
+  /**
+   * 供 `useSdkResource` 透传给 `spec.create` / `spec.afterMount` 的 props。
+   *
+   * `needsView` 为假时给 `rawProps` 本身（零拷贝，行为与原缺省分支相同）。为真时**按代物化**：
+   * 每一代实例（首次创建或 `replace()` 重建）开头现读一次 `rawProps`，而不是在 setup 时固定一份。
+   *
+   * **为什么必须按代而不是一次性**（#138 评审 P1）：`useSdkResource` 在 setup 时把 `props`
+   * 解构成一个闭包常量，之后每次 `createOnce`（重建）都传**同一个对象**。一次性物化会让
+   * `GroundOverlay` 这类「有投影且有构造期字段」的覆盖物在**重建后仍读到旧值**：
+   * `type: "image" → "canvas"` 触发重建，新实例却按 `options.type === "image"` 建出来。
+   *
+   * **为什么按代物化仍只求值一次**：`fieldValues` 的投影（`GroundOverlay.url` 的惰性工厂）
+   * 契约是「一次创建里只求值一次」，而工厂每求值一次就新建一份 canvas。物化结果存在
+   * `generationProps` 里，**同一代的 `create` 与 `mount` 共用这一份**（`useSdkResource` 的
+   * `createOnce` 里两者是先后调用，不跨代），因此下一代才重新求值。
+   */
+  function materializeLifecycleProps(): Readonly<Props> {
+    if (!needsView) return rawProps as Readonly<Props>;
+    return Object.fromEntries(
+      Object.keys(spec.fields).map((name) => [name, readProp(name)]),
+    ) as Readonly<Props>;
+  }
 
-  /** **原始** prop（不经别名与投影）：只给按引用比较的 watch 源用。 */
+  /**
+   * 当前这一代实例的 props 快照（`create` 开头写入，`mount` 读取）。
+   *
+   * `mount` 拿不到「自己属于哪一代」的标识，因此用「最近一次 `create` 物化的结果」——
+   * `createOnce` 严格先 `create` 后 `mount`，中间没有别的 `create` 可以插进来。
+   */
+  let generationProps: Readonly<Props> | null = null;
+
+  /**
+   * **原始** prop（不经投影）：只给按引用比较的 watch 源用。
+   *
+   * `reference`（惰性工厂）与 `versioned`（大数组根引用）两种源必须读到**原始引用**：
+   * 投影会对工厂函数求值（`GroundOverlay.url` 每次求值出一个新的真实来源），按投影后的值比较
+   * 会把「换了一个工厂」误判成「内容相同」。
+   */
   const readRawProp = (name: string): unknown => rawProps[name];
 
   /** prop → 描述符键：缺省同名，显式 `null` 表示该字段不经描述符。 */
@@ -271,7 +304,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   }
 
   // 构造期自检：声明自相矛盾时立刻失败（判据与用例共用 `assertOverlayFieldDeclarations`）。
-  assertOverlayFieldDeclarations(spec, { propAliases });
+  assertOverlayFieldDeclarations(spec);
 
   /* ------------------------------------------------------------------ 实例挂载与 Registry */
 
@@ -358,47 +391,125 @@ export function useOverlaySpec<Props extends object, Resource>(
       }
     : null;
 
-  /* ------------------------------------------------------------------------ 更新队列 */
-
-  let pendingApply: Record<string, unknown> | null = null;
-  let draining = false;
+  /* ------------------------------------------------------------------------ 字段更新 */
 
   /**
-   * 把**更早取出的旧批次**放回待办。
+   * 标脏的字段（待下发的键值）。
    *
-   * 展开顺序必须是「已有队列在后」：`batch` 是先前取走的那一批，而 `pendingApply` 里可能已经
-   * 积压了等待期间到达的**更新**的值；反过来展开会让旧值覆盖新值。
+   * #138 之后这里**不是**一套自研调度队列：watch 源只负责「把这个键标脏」，真正的合并交给 Vue 的
+   * post-flush batching —— 「一次提交改 N 个字段 ⇒ N 条命令」由 Vue 收成 1 次
+   * （依据见 ADR `2026-09-24-scheduler-batching-hot-path.md` §2 对 `pre` / `post` 的取证）。
+   * 这里仍保留一个 `Record`，因为**按键合并**本身有价值：同名字段一轮里只留最后一个值。
    */
-  function requeueStaleBatch(batch: Record<string, unknown>): void {
-    pendingApply = { ...batch, ...(pendingApply ?? {}) };
-  }
+  let dirtyFields: Record<string, unknown> | null = null;
 
-  /** 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。 */
+  /**
+   * 唯一存活于 **replace 窗口**的尾随批（#138 明确要求保留的那一条最小尾随队列）。
+   *
+   * 为什么它不能省：`sdk.replace()` 是异步的（`create` 可以 await），在它 in-flight 期间到达的更新
+   * **不能**发给旧实例（它马上就要被 `disposeInstance()` 丢掉），也不能直接标脏
+   * （`replace()` 已把 `sdk.resource.value` 置空，此刻下发要么落空、要么打到一个还没建好的代次上）。
+   * 因此 replace 期间把到达的更新挂到这里，replace 结算后再并入同一轮。
+   *
+   * 为什么它不能扩大：replace 窗口**之外**的更新一律直接进 `dirtyFields`，不经过这里。
+   */
+  let trailing: Record<string, unknown> | null = null;
+
+  /** 换实例是否在飞行中（决定新到达的更新挂 `trailing` 还是直接标脏）。 */
+  let replacing = false;
+
+  /**
+   * 「**可能**已写入 SDK」的字段键（issue #138 的撤回判据）。
+   *
+   * **为什么是「可能」而不是「成功」**：`setOptions` 是逐 setter 调用，第一个键写成功、
+   * 第二个键抛错时前一个键**已经**真的改了 SDK。按成功记账会让一次部分成功的写入变成
+   * 永久分叉——那个键此后变回未表态时不会被判成「需要撤回」，SDK 永久保留旧值。
+   * 与图层侧 `useLayerResource.possiblyAppliedOptions` 是同一条理由、同一份实现口径。
+   *
+   * **为什么单调只增不减**：「曾经尝试过」这个事实不会过期；删掉它意味着忘记，而忘记
+   * 的代价是 SDK 与声明静默分叉。
+   *
+   * **构造期就记**：值在 `create` 那一刻已经进了构造器，因此「给过一个非 `undefined` 的值」
+   * 就必须进这个集合——否则一个从 `zIndex=5` 起步的 Marker 在 `zIndex` 变回 `undefined` 时
+   * 不会重建，而 SDK 侧还留着 5。这正是 issue 验收口径 (d) 要求的「有值 → undefined 必重建」。
+   */
+  const possiblyApplied = new Set<string>();
+
+  /**
+   * 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。
+   *
+   * **「实例不可用」在这里不是一个分支，而是一个不变式**（#138 取证）：
+   * `reconcileFields` 的排空条件是 `while (dirtyFields && sdk.resource.value)`，因此
+   * `applyBatch` 只会带着 `sdk.resource.value` 非空进来；`reconciling` 又保证并发进入的
+   * `markDirty` 不会往 `dirtyFields` 里塞第二批。因此**不需要**把批放回去——v3 那条
+   * 「放回 + 重排」（`requeueStaleBatch`）与 Vue batching 叠加后不再有可达入口，留着就是一段
+   * 永远不执行、却要求读者推断展开顺序的代码（实测：即使让 `create` 在 replace 中抛错也进不去）。
+   * 真正承担「不丢值」的是两处：`trailing`（replace 窗口）与 `bind()`（就绪窗口）。
+   */
   async function applyBatch(batch: Record<string, unknown>): Promise<void> {
     const context = readyCtx;
     const current = sdk.resource.value;
     if (!context || !current) {
-      requeueStaleBatch(batch);
-      return;
+      // 不变式被打破时的显式失败，而不是静默吞掉一批更新
+      throw new Error(
+        `useOverlaySpec(${spec.type}).applyBatch: 排空条件之外拿到了没有实例的一批更新`,
+      );
     }
     const overlays = context.client.driver.overlays;
     const handle = current as unknown as OverlayHandle;
+    // 撤回落点查 `OVERLAY_DESCRIPTORS` 的 `revert` 档（缺省即 `rebuild`，逐字段依据见
+    // `OVERLAY_REVERT_RATIONALE`）。`kind` 为空（第三方覆盖物）⇒ **不撤回**：没有逐字段依据
+    // 就不猜落点，代价是那种键保持旧值，收益是 SDK 与声明不会静默分叉。
+    const revertsToRebuild = (key: string): boolean =>
+      kind !== undefined && overlayPropertyRevert(kind, key) === "rebuild";
     const inPlace: Record<string, unknown> = {};
     let needsReplace = false;
     for (const [key, value] of Object.entries(batch)) {
+      // #138：**撤回**（有值 → 未表态）是独立于 `policy` 的一维，判据是
+      // ① 这个键「**可能**已写入」（`possiblyApplied`）且 ② 它的撤回落点是 `rebuild`。
+      // 两个条件都成立才升级为一次重建；`policy` 仍是「值变化时怎么办」的分类。
+      if (value === undefined && possiblyApplied.has(key) && revertsToRebuild(key)) {
+        needsReplace = true;
+        continue;
+      }
       if (overlays.updatePolicy(handle, key) === "recreate") {
         needsReplace = true;
         continue;
       }
       inPlace[key] = value;
     }
-    if (needsReplace) await sdk.replace();
+    if (needsReplace) {
+      // 换实例期间到达的更新一律进尾随队列，绝不发给即将被丢弃的旧实例。
+      replacing = true;
+      try {
+        await sdk.replace();
+      } finally {
+        replacing = false;
+      }
+      // 尾随批必须在读 `sdk.resource.value` **之前**并进来：replace 期间可能又到了一批更新，
+      // 它们同样要跟着这次 replace 落到新实例上，而不是再触发一次 replace。
+      if (trailing) {
+        const arrived = trailing;
+        trailing = null;
+        dirtyFields = { ...dirtyFields, ...arrived };
+      }
+    }
     const target = sdk.resource.value;
     if (!target) {
-      requeueStaleBatch(batch);
+      // replace 之后实例仍不可用（`create` 抛错 / 被新一代取代）。**不放回**：这批里已经
+      // 下发过的部分不必重放，而没下发的部分会由 `bind()` 的那次排空按待办重新走一遍
+      // （`markDirty` 在 replace 窗口里写的是 `trailing`，它已并入 `dirtyFields`）。
+      // 「值不丢」的保证来自就绪窗口，不来自这里——与上面那条不变式是同一件事。
       return;
     }
     if (Object.keys(inPlace).length === 0) return;
+    // 「尝试过」整批**先**记（`setOptions` 是逐 setter 调用：第一个键写成功、第二个键抛错时，
+    // 前一个键已经真的改了 SDK，整批不记就会在它撤回时漏掉重建）。判据因此是「可能已写入」
+    // 而不是「成功写入过」——按成功判断会让一次**部分成功**的写入变成永久分叉
+    // （与图层侧 `useLayerResource.possiblyAppliedOptions` 同一条理由，PR #61 第四轮评审发现 2）。
+    for (const key of Object.keys(inPlace)) {
+      if (inPlace[key] !== undefined) possiblyApplied.add(key);
+    }
     try {
       overlays.setOptions(target as unknown as OverlayHandle, inPlace);
     } catch (error) {
@@ -412,29 +523,57 @@ export function useOverlaySpec<Props extends object, Resource>(
   }
 
   /**
-   * 排空待办：**单飞 + while**。排空过程中新到的更新继续并入待办、由同一轮消费 ——
-   * 因此旧批永远不会覆盖后到的新值。
+   * 是否已有一轮 reconcile 在飞（单飞标记）。
    *
-   * 返回值语义与 `useOverlayResource` 一致：**不等待在飞的那一轮**（值已并入待办，一定会被消费）。
+   * 刻意**不**作为 `reconcileFields` 的入口闸：那条 `while` 循环是**排他**的
+   * （`dirtyFields` 在循环内被取空），并发进入的第二条线会把 `dirtyFields` 抢走，值因此丢失。
+   * 正确入口在 `markDirty`：飞行中直接标脏、由在飞那轮的 `while` 消费。
+   * 唯一例外是 `bind` 里的「就绪窗口补一次」，那里必须**强制**排一轮
+   * （`while` 之后新标脏的才被消费），因此它自己显式处理重入。
    */
-  async function drainAppliedUpdates(): Promise<void> {
-    if (draining) return;
-    draining = true;
+  let reconciling = false;
+
+  /**
+   * 唯一的更新落点：把**当前**标脏的字段合并成一批下发。
+   *
+   * 与旧 `drainAppliedUpdates()` 的差别是刻意的：旧的靠自研 `draining` / `while` 保证「新值胜出」，
+   * 新的靠两件事——① **按键合并**保证同名字段只留最后一个值（后到的覆盖先到的）；
+   * ② `while` 保证排空期间新标脏的由同一轮消费。
+   *
+   * 不返回值语义与 `useOverlayResource` 一致：**不等待在飞的那一轮**（值已并入待办，一定会被消费）。
+   */
+  async function reconcileFields(): Promise<void> {
+    reconciling = true;
     try {
-      while (pendingApply && sdk.resource.value) {
-        const batch = pendingApply;
-        pendingApply = null;
+      // `sdk.resource.value` 这一半**不是**优化，是不变式的另一半：`applyBatch` 只在实例可见时
+      // 才被调用（见它的入参不变式），因此这一行同时是「排空条件」与「不会空转」的保证。
+      // #138 之前这里还兼着一个挡板角色——旧的 `applyBatch` 在实例未就绪时会把整批放回
+      // `dirtyFields`，只看 `dirtyFields` 就会原地取回再放回、死循环。放回路径已经删除，
+      // 挡板也就不需要了，但条件本身保留：它让「实例不可用 ⇒ 不排空」成为显式契约。
+      while (dirtyFields && sdk.resource.value) {
+        const batch = dirtyFields;
+        dirtyFields = null;
         await applyBatch(batch);
       }
     } finally {
-      draining = false;
+      reconciling = false;
     }
   }
 
-  /** 按键合并入队：没有存活实例时留在待办里，等下一次挂载后排空。 */
-  async function enqueue(updates: Record<string, unknown>): Promise<void> {
-    pendingApply = { ...(pendingApply ?? {}), ...updates };
-    await drainAppliedUpdates();
+  /**
+   * 按键标脏（watch 源的落点）。
+   *
+   * 换实例飞行中 ⇒ 挂到**尾随队列**（#138 保留的那条最小自研队列）；否则直接标脏并排一次。
+   * 不在 replace 窗口内的更新**不排队**：post-flush 的 batching 已经把它们合成一轮。
+   */
+  function markDirty(updates: Record<string, unknown>): void {
+    if (replacing) {
+      trailing = { ...(trailing ?? {}), ...updates };
+      return;
+    }
+    dirtyFields = { ...(dirtyFields ?? {}), ...updates };
+    if (reconciling) return;
+    void reconcileFields();
   }
 
   /** 显隐：优先 `show`/`hide`（不破坏覆盖物归属），SDK 没有这两个成员时退回 `add`/`remove`。 */
@@ -459,27 +598,20 @@ export function useOverlaySpec<Props extends object, Resource>(
   const resolvedEvents = resolveOverlayEvents(spec);
 
   /**
-   * 派发一条事件：正典名 + **弃用别名**（各一次）。
+   * 派发一条事件：组件自定义处置，或按矩阵声明的 `emit` 名转发。
    *
-   * 别名在**首次派发**时告警一次，而不是在绑定时：只有真的有人触发它，旧名字才算被用到——
-   * 组件里绑了 `@click` 却从不点击，不该收到「你在用旧事件名」的提示。
+   * 事件名**只有**规范拼写一种（`overlayEventCatalog` 的 `vue` 列）。#136 起不再补发旧事件名
+   * （Marker 的 `drag-end`）：clean-slate 1.0 不兼容旧 API，收到旧名字只应静默失配。
    */
   function dispatchEvent(event: ResolvedOverlayEvent, payload: unknown): void {
     if (event.handle) event.handle(payload);
     else if (event.emit) emit?.(event.emit, payload);
-    for (const alias of eventAliasesOf(kind, event.vue)) {
-      // 兼容派发照旧（没人监听的 `emit` 是 no-op），但**告警只在父级真的绑了旧名字时发**
-      // （PR #103 评审 3）：只监听规范名的应用升级后不该收到迁移提示——「SDK 派发过某个事件」
-      // 与「调用方用了弃用名」是两件事。
-      if (hasListenerFor(ownerInstance, alias.alias)) deprecation.warn(describeDeprecation(alias));
-      emit?.(alias.alias, payload);
-    }
   }
 
   /* ------------------------------------------------------------------------------ 主体 */
 
   const sdk = useSdkResource<Props, Resource, MapReadyContext>({
-    props: propsView as Props,
+    props: rawProps as Readonly<Props>,
     label: `overlay:${spec.type}`,
     resolveContext: async (signal) => {
       const ready = await mapContext.whenReady(signal);
@@ -488,12 +620,34 @@ export function useOverlaySpec<Props extends object, Resource>(
     },
     spec: {
       type: spec.type,
-      create: ({ context, props: current }) => {
+      create: ({ context, props: ignoredProps }) => {
+        // 这一代的 props 快照：`useSdkResource` 传下来的 `props` 是 setup 时的常量，
+        // 经视图读取的字段（别名 / 投影）必须**按代现读**（#138 评审 P1，见 `materializeLifecycleProps`）。
+        const current: Readonly<Props> = (generationProps = materializeLifecycleProps());
         // 「实例是按哪个位置建的」必须在**调用 create 之前**取，理由见 `createdPosition`。
         createdPosition = positionField ? (readPosition() ?? null) : null;
+        // #138：构造期给过值的字段**记进「可能已写入」**——`spec.create` 把它传进了构造器，
+        // 因此它此后变回未表态时需要一次重建才能回到 SDK 自己的默认值。只记**非 undefined**
+        // 的值：`undefined` 从来没进过构造器，不存在要撤回的东西。
+        for (const [prop, update] of fields) {
+          if (update === "visibility" || update === "position") continue;
+          if (update === "version") continue;
+          const key = descriptorKeyOf(prop);
+          if (key === null) continue;
+          // 用**原始** prop 判「给过值没有」：`readProp` 会对 `fieldValues` 里的惰性字段
+          // （`GroundOverlay.url` 的工厂）求值，而 `OverlaySpec.fieldValues` 的契约是
+          // 「一次创建里只求值一次」——这里多求一次就会破坏它（用例会红）。
+          // 投影**不可能**把一个有值变成 `undefined`（它只会求值，不会产出 undefined 之外的东西），
+          // 因此按原始引用判与按投影后的值判等价。
+          if (readRawProp(prop) !== undefined) possiblyApplied.add(key);
+        }
         return spec.create(context, current);
       },
-      mount: ({ context, resource, props: current, scope, stale }) => {
+      mount: ({ context, resource, scope, stale }) => {
+        // 复用**这一代** `create` 物化的快照（同一代里 `create` → `mount` 先后调用），
+        // 因此惰性投影不会被求值第二次。竞态清理路径（`stale: true`）上 `create` 一定先跑过，
+        // 快照不会是 null；仍用 `?? materializeLifecycleProps()` 兜住不变式被打破的情形。
+        const current = generationProps ?? materializeLifecycleProps();
         // **先登记，再做副作用**（PR #103 评审 1b）：`addToMap` 与 `afterMount` 都可能失败
         // （SDK 抛错 / 组件侧副作用抛错），而唯一的回滚入口是 registration 的 `remove`。
         // 登记在前 ⇒ 任一失败都能经 `registration.dispose()` 把已 add 的实例摘掉 + 摘记录；
@@ -572,53 +726,92 @@ export function useOverlaySpec<Props extends object, Resource>(
         // 此刻 `resource` 已经可见（`useSdkResource` 在 `bind` 之前赋值），因此在这里补一次：
         // - 位置：与「建实例时用的值」不等时补一条 `setPosition`；相等时 `applyFromProps`
         //   自己会短路，因此**不会**产生多余命令（幂等，有专门用例）；
-        // - 待办队列：排空（就地更新落到这个实例上）。
+        // - 待办字段：排一次（就地更新落到这个实例上）。
         // 不做这一步的后果是外部评审 P1 复现的那条：更新永久停摆、位置在模型与 SDK 之间分叉。
         if (positionModel) positionModel.applyFromProps(readPosition());
-        void drainAppliedUpdates();
+        // 就绪窗口的这一次是**强制**排（不像 `markDirty` 那样把重入交给在飞那轮）：
+        // 没有在飞的一轮时把标脏的待办清空，有则在飞那轮自然会消费。
+        if (reconciling) return;
+        void reconcileFields();
       },
       watch: ({ scope }) => {
         if (visibilityField) {
-          scope.add(watch(() => readProp(visibilityField), () => applyVisibility()));
+          watch(() => readProp(visibilityField), () => applyVisibility());
         }
         if (positionModel) {
+          // 点的标量键（#138：原先在这里手拼 `lng,lat`，与 `core/utils/equality.ts` 的
+          // `pointKey` 是同一条规则，两处各写一遍必然分叉）。父级传内联字面量时引用每次都变，
+          // 引用比较 / deep 会空跑。
           scope.add(
             watch(
-              // 点按两个标量当 watch 源：父级传内联字面量时引用每次都变，deep / 引用比较会空跑
-              () => {
-                const next = readPosition();
-                return next ? `${next.lng},${next.lat}` : "";
-              },
+              () => pointKey(readPosition()),
               () => positionModel.applyFromProps(readPosition()),
             ),
           );
         }
+        // #138：这里**不是**「每个字段一个 watcher」，而是**一个** array-source watcher。
+        //
+        // 为什么不各写各的：同一 flush 内 Vue 会按注册顺序逐个跑 N 个回调，于是第一个回调里
+        // `markDirty` → `reconcileFields()` 同步 drain，`setZIndex` 就**先**打到了即将被丢弃的
+        // 旧实例上（`doomed.callLog === []` 断言会红）。合成一个 watcher 后，依赖仍由 Vue 收集，
+        // 而「一轮只有一次回调」由 Vue 的 batching 保证——这才是 #138 要的「合并交给 Vue」：
+        // 不靠 N 个回调互相等待，只靠**回调数本身是 1**。
+        //
+        // `flush: "post"`：批在**本轮 DOM 更新之后**下发，父级受控回写先落地；
+        // `markDirty` 因此不需要自己再排一次微任务。
+        //
+        // **例外：`versioned`（大数组）不进这张表**。它的 `flush: "sync"` 是 v3 的既有语义
+        // （路径更新要与父级渲染同一次提交内落地，见 ADR `2026-09-24-scheduler-batching-hot-path.md`
+        // 的取证与 #138 的明确约束），合成 post-flush 批会把它改回 `pre` 档。
+        // `key` 是下发给 Driver 的描述符键（`spec.descriptorKeys` 覆写后可能与 prop 名不同）；
+        // `source` 是触发判定用的读法（指纹 / 标量键 / 引用）；`read` 取当前值——
+        // 两者都闭包捕获了 `prop`，因此不需要把 prop 名再带一遍（判等与取值读的是同一个 prop）。
+        const entries: KeyedSource<unknown>[] = [];
         for (const [prop, update] of fields) {
-          // 组件侧语义字段：`version` 只作为配对字段的 watch 源之一，`alias` 只经正典名被读取
+          // 组件侧语义字段不产生更新命令：`version` 只作为配对字段的 watch 源之一
           if (update === "visibility" || update === "position") continue;
-          if (update === "version" || update === "alias") continue;
+          if (update === "version") continue;
           const key = descriptorKeyOf(prop);
           if (key === null) continue;
           const source = spec.watchSources?.[prop as keyof Props & string] ?? "fingerprint";
-          const apply = () => void enqueue({ [key]: readProp(prop) });
-          if (source === "fingerprint") {
-            // watch 源用**稳定序列化**：对象字段（icon / offset / style / bounds）必须按内容判等，
-            // 否则父级每次渲染传内联字面量都会重新下发一次命令。
-            scope.add(watch(() => stableKeyOf(readProp(prop)), apply));
+          if (typeof source === "object" && source.source === "versioned") {
+            scope.add(
+              watch([() => readRawProp(prop), () => readProp(source.versionProp)], () =>
+                markDirty({ [key]: readProp(prop) }),
+                { flush: "sync" },
+              ),
+            );
             continue;
           }
           if (source === "reference") {
             // 内容不可序列化的字段（url 的惰性工厂）：只比根引用，读**原始** prop
-            scope.add(watch(() => readRawProp(prop), apply));
+            entries.push({ key, source: () => readRawProp(prop), read: () => readProp(prop) });
             continue;
           }
-          // 大数组（path / controlPoints）：根引用 + 版本 prop，不做 O(n) 的内容指纹。
-          // `flush: "sync"` 沿用 v3 既有语义：路径更新要与父级渲染同一次提交内落地。
-          scope.add(
-            watch([() => readRawProp(prop), () => readProp(source.versionProp)], apply, {
-              flush: "sync",
-            }),
-          );
+          // watch 源：形状是**定形**时用标量键，否则用稳定序列化（#138）。
+          //
+          // 定形（`Point` / `Pixel` / `Bounds`）此前也走 `stableKeyOf`——那对 2~4 个标量
+          // 是纯浪费（建中间对象 + 排序 + 序列化），而 watch 源每字段每轮都要读。标量键是
+          // `core/utils/equality.ts` 里的一条直线，读数里能直接看出比的是哪几个分量。
+          //
+          // 形状从 **Driver 描述符的 `value` 档**取得（`point` / `size` / `bounds`），
+          // 因此**不新增声明位**——分类的事实源仍然是 `OVERLAY_DESCRIPTORS`。
+          // 开放形状（`icon` / `style` / `properties` / url 工厂）的 `value` 是 `raw`，
+          // 继续走 `stableKeyOf`：它们的字段随 SDK 版本增减，手写键会漏字段。
+          const shape = fixedShapeKeyOf(kind, key);
+          if (shape) {
+            entries.push({ key, source: () => shape(readProp(prop)), read: () => readProp(prop) });
+            continue;
+          }
+          // 通用稳定序列化：对象字段（icon / offset / style / bounds）必须按内容判等，
+          // 否则父级每次渲染传内联字面量都会重新下发一次命令。
+          entries.push({ key, source: () => stableKeyOf(readProp(prop)), read: () => readProp(prop) });
+        }
+
+        if (entries.length > 0) {
+          // 回调只报「哪些描述符键变了」；取值在回调那一刻做，因此 post-flush 读到的是
+          // **本轮最终**的值（不是触发时那一刻的中间值）。机制见 `watchKeyedSources`。
+          scope.add(watchKeyedSources(entries, markDirty));
         }
       },
     },
@@ -648,7 +841,10 @@ export function useOverlaySpec<Props extends object, Resource>(
   provide(targetContextKey, targetContext);
 
   onScopeDispose(() => {
-    pendingApply = null;
+    // 组件卸载后一切输入丢弃：待办与尾随批一起清空（不会有在飞的排空再把它们写回去）。
+    dirtyFields = null;
+    trailing = null;
+    possiblyApplied.clear();
     readyCtx = null;
   });
 

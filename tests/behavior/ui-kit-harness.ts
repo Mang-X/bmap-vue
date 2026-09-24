@@ -17,7 +17,7 @@
  *    这比「读源码没看到关键字」有落点得多（raw SDK 也可能绕过去）。
  *
  * widget 的成员签名必须与 `src/integrations/ui-kit/types.ts` 的结构化接口一致——
- * 若不一致，`tests/behavior/v3-ui-kit-widget-contract.test.ts` 会对着官方 `.d.ts` 报出来。
+ * 若不一致，`tests/behavior/ui-kit-widget-contract.test.ts` 会对着官方 `.d.ts` 报出来。
  */
 import { h, provide, ref, shallowRef, type Component, type Ref, type ShallowRef } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";

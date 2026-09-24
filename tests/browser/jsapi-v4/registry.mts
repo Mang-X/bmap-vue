@@ -3,7 +3,7 @@
  *
  * 这里是「哪些检查在哪些档里跑、哪些算 required」的**单一事实源**。页面（`main.ts`）按登记
  * 表执行并上报；orchestrator 按登记表判定（见 `report.mts` 的 `evaluateSmokeReport`）；
- * 单测（`tests/behavior/v3-v4-smoke-gate.test.ts`）按登记表做一致性校验。
+ * 单测（`tests/behavior/v4-smoke-gate.test.ts`）按登记表做一致性校验。
  *
  * 三条口径（R25-E / issue #74）：
  *

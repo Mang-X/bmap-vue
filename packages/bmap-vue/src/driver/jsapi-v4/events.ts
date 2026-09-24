@@ -100,7 +100,7 @@ function createDisposer(release: () => void): () => void {
  * 与其把公共契约写成 optional（那就等于宣布「我们不保证」），不如**在 Driver 边界读回地图补上**：
  * 这几个事件都是低频事件（每个会话一次 / 容器尺寸变化时），多一次 getter 调用可以忽略。
  *
- * 与 Catalog 的 `payload` 种类一一对应，由 `tests/behavior/v3-map-event-catalog.test.ts` 逐项比对。
+ * 与 Catalog 的 `payload` 种类一一对应，由 `tests/behavior/map-event-catalog.test.ts` 逐项比对。
  */
 export const MAP_EVENT_READBACK_FIELDS: Readonly<Record<string, readonly ReadbackField[]>> =
   Object.freeze({

@@ -1,15 +1,9 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { resolve } from 'node:path'
 import { versionDefine } from './scripts/vite-version-define.mjs'
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: {
-    alias: {
-      '@v2': resolve(import.meta.dirname, 'packages'),
-    },
-  },
   define: {
     ...versionDefine,
     __DEV__: 'true',

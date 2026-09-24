@@ -260,7 +260,7 @@ function main() {
 
   // 5c) tree-shaking：**只用 `./advanced`** 的打包产物不得把组件带进来（#43）。
   //
-  //     这条必须在 tarball 消费方里做：仓库内那份闭包检查（tests/behavior/v3-advanced-contract.test.ts）
+  //     这条必须在 tarball 消费方里做：仓库内那份闭包检查（tests/behavior/advanced-contract.test.ts）
   //     看的是我们自己的 dist，而这里看的是**真实打包器在真实依赖解析下**的产物。
   //     两个对照入口（只用 ./advanced / 只用根入口）共用同一份配置与同一份判据，后者是正证。
   const shakeDir = resolve(consumerFixture, 'shake')

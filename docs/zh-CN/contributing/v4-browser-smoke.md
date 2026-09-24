@@ -139,12 +139,12 @@ Node 侧不信任页面的自报：`mode` / `runId` / `akUsed` 三者必须与**
 | --- | --- | --- |
 | PR 门禁（每次 PR） | `pnpm smoke:v4:fixture`（无 AK、无外网、结论确定） | `.github/workflows/quality.yml` 的 `smoke-v4-fixture` job |
 | nightly / 手动 | `pnpm smoke:v4`（真实 AK、真实外网） | `.github/workflows/nightly-v4-smoke.yml` |
-| 单测（每次 PR） | 判定逻辑与登记表的纯逻辑用例，**不依赖浏览器** | `tests/behavior/v3-v4-smoke-gate.test.ts` |
+| 单测（每次 PR） | 判定逻辑与登记表的纯逻辑用例，**不依赖浏览器** | `tests/behavior/v4-smoke-gate.test.ts` |
 
 nightly 的 job 守卫写的是完整 `owner/repo`（`github.repository == 'Mang-X/bmap-vue'`）：
 仓库迁到组织后 `github.repository_owner` 已不是个人账号，用 owner 判断会让 job 被**永久跳过**
 ——「CI 是绿的」与「CI 根本没跑」必须可区分。同一类守卫（含「fixture 档真的被 PR 门禁跑起来」）
-由 `tests/behavior/v3-v4-smoke-workflow.test.ts` 静态锁定，并配合成负例自测。
+由 `tests/behavior/v4-smoke-workflow.test.ts` 静态锁定，并配合成负例自测。
 
 ## 回收路径的证据分层
 
@@ -152,7 +152,7 @@ nightly 的 job 守卫写的是完整 `owner/repo`（`github.repository == 'Mang
 
 - **浏览器档**（`ui-kit-autocomplete-search`）：真实链路下卸载后整棵宿主子树从文档撤走、
   期间无 `console.error`、地图组件无报错——证明**可观察结果**；
-- **行为测试**（`tests/behavior/v3-ui-kit-lifecycle.test.ts`）：假 widget 逐条记
+- **行为测试**（`tests/behavior/ui-kit-lifecycle.test.ts`）：假 widget 逐条记
   `on` / `off` / `destroy` 与宿主 DOM，证明**销毁确实被调用、监听确实解绑**。
 
 浏览器里没有字节级的 widget 账本，所以「只写一层」必然留一个缺口：只写行为测试证明不了真实链路，

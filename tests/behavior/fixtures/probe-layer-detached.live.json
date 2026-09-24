@@ -1,5 +1,5 @@
 {
-  "note": "probe-layer-detached.mts 的一次成功 live 报告（只保留判定层消费的读数）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-layer-detached.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/v3-probe-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
+  "note": "probe-layer-detached.mts 的一次成功 live 报告（只保留判定层消费的读数）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-layer-detached.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/probe-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
   "capturedAt": "2026-09-18",
   "sdk": {
     "version": "gl",

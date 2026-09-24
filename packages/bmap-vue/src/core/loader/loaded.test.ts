@@ -5,7 +5,7 @@
  * 因此它必须与公开契约（`LoadedJsapiV4` = `engine` + `version` + `namespace` + `load` metadata）
  * **一致**地 fail-fast。此前只校验 `engine` 与 `namespace`，于是
  * `{ engine: "jsapi-v4", namespace }` 会被收窄成完整结果，`createBMapClient()` 读到
- * `version: undefined` 并把它传给 Driver，最终 `client.sdkVersion` / `client.version` 都是
+ * `version: undefined` 并把它传给 Driver，最终 `client.sdkVersion` 都是
  * `undefined`——一个「类型上不可能、运行期照样发生」的半成品。
  *
  * 这里逐项钉住「缺什么就拒什么」，并保证报错点名到具体字段（否则调用方只能靠猜）。
@@ -87,12 +87,12 @@ describe("LoadedSdk 的运行时校验与契约一致", () => {
     expectRejected({ ...valid(), load: { ...valid().load, loadedAt: "now" } }, "loadedAt");
   });
 
-  it("旧引擎（webgl-v1）结果被拒绝，且文案指向删除决策", () => {
+  it("已删除的 engine 取值（webgl-v1）被拒绝，且文案指向唯一受支持的引擎", () => {
     expect(isLoadedSdk({ engine: "webgl-v1", namespace: namespace() })).toBe(false);
     expect(() => assertLoadedSdk({ engine: "webgl-v1", namespace: namespace() })).toThrowError(
       expect.objectContaining({
         code: "BMAP_SDK_ENGINE_MISMATCH",
-        message: expect.stringContaining("旧引擎"),
+        message: expect.stringContaining("本库只支持 JSAPI 4.0"),
       }),
     );
   });

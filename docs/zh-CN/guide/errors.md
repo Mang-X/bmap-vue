@@ -1,6 +1,6 @@
 # 错误码与排障
 
-> v3 运行时通过统一的 [`BMapError`](../../packages/bmap-vue/src/core/errors/BMapError.ts) 报告错误。
+运行时通过统一的 [`BMapError`](../../packages/bmap-vue/src/core/errors/BMapError.ts) 报告错误。
 > 所有错误携带 `code`(稳定标识)、`message`、可选 `cause`/`mapId`/`component`/`plugin`。
 
 ## 错误码总览
@@ -166,4 +166,4 @@ ctx.events.on('resource:error', (e) => {
 })
 ```
 
-> v2 迁移:错误处理从 `initd` 回调切换到统一错误事件/`BMapError`,见[迁移指南](./migration-from-v2.md)。
+错误统一经 `resource:error` 事件与 `BMapError` 上报，没有回调式的旧入口。

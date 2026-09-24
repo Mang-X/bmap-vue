@@ -13,7 +13,8 @@
  * 1. **全局要按真实形状同时提供 `BMap` 与 `BMapGL`**。真实 4.0 入口把 `BMapGL` 作为同一对象的
  *    别名挂上，UI Kit 也从它取 AK 配置；只挂 `BMap` 会让「离线也能跑 UI Kit」这条路在 playground
  *    里假失败。注意这里镜像的是**官方 SDK 自己设置的别名**，不是本库回退旧引擎——
- *    `pnpm check:no-bmapgl` 的扫描范围刻意不含 `packages/test-utils`（见该脚本的文件头）。
+ *    `pnpm check:raw-sdk:tree` 的扫描范围刻意不含 `packages/test-utils`（它作为独立测试
+ *    替身边界存在，见 `scripts/raw-sdk-boundary.mts` 的文件头）。
  * 2. **每次构造都要让指纹不同**（默认 `ak` 带序号）。v4 的加载走进程级 `BMap` 冲突域，缓存键是
  *    `fingerprintConfig(options)`——两次构造出的两个 Fake 命名空间如果共用指纹，第二次会直接拿到
  *    第一次缓存的 `LoadedJsapiV4`，用例上表现为「换了一个 Fake 却没换命名空间」。

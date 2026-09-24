@@ -16,7 +16,7 @@
  *   逐条核对得来），更新一律经 `driver.overlays.setOptions` 落地，由描述符决定就地更新还是
  *   告警/重建。组件**不**探测 raw SDK 成员形状（raw SDK 边界规则）。
  *
- * 两者由用例交叉锁定（`v3-overlay-spec.test.ts` / `v3-overlay-suite.test.ts`）：声明的键集必须
+ * 两者由用例交叉锁定（`overlay-spec.test.ts` / `overlay-suite.test.ts`）：声明的键集必须
  * **恰好覆盖**组件的全部 props，且声明为 `options` 的字段在描述符里必须是 `mutable`、声明为
  * `recreate` 的必须是 `recreate`。
  *
@@ -62,15 +62,11 @@ import type { MapReadyContext } from "../context/types";
  * | `recreate` | 构造期属性：变化即**重建实例**（旧实例连同 child scope 一起释放） | 描述符里该键必须是 `recreate` |
  * | `visibility` | 显隐：优先 `show`/`hide`（不破坏覆盖物归属），不可用时退回 `add`/`remove` | 描述符里**没有**该键 |
  * | `version` | **版本令牌**：只作为某个字段的 watch 源之一（`watchSources` 的 `versioned`），自身不产生任何命令 | 描述符里**没有**该键，且必须被某条 `versioned` 引用 |
- * | `alias` | **旧 prop 名**：由集中弃用层（`core/deprecations`）在读取层解析成正典 prop 的值 | 描述符里**没有**该键，且必须在别名表里登记 |
+ *
+ * （曾有第六个取值 `alias`——旧 prop 名由集中弃用层在读取层解析。#136 起弃用层整体删除，
+ * 「旧 prop 名」不再是本库支持的输入，那条策略随之消失。）
  */
-export type OverlayFieldUpdate =
-  | "position"
-  | "options"
-  | "recreate"
-  | "visibility"
-  | "version"
-  | "alias";
+export type OverlayFieldUpdate = "position" | "options" | "recreate" | "visibility" | "version";
 
 /**
  * 「组件侧语义」的字段策略：它们**不进** Driver 属性描述符。
@@ -81,7 +77,6 @@ export type OverlayFieldUpdate =
 export const OVERLAY_COMPONENT_ONLY_UPDATES: readonly OverlayFieldUpdate[] = Object.freeze([
   "visibility",
   "version",
-  "alias",
 ]);
 
 /**
@@ -105,7 +100,7 @@ export type OverlayFieldMap<Props> = {
  *   指纹比较会让「换了一个工厂」被静默忽略。**按引用是这里唯一正确的判据**。
  * - `{ source: "versioned", versionProp }`：根引用 + 一个**版本 prop** 作为强制刷新开关。大数组
  *   （`path` / `controlPoints`）用它：内容指纹是 O(n) 的序列化，而路径动辄上万点，每次父级渲染
- *   都算一遍不可接受（沿用 v3 既有约定：`pathVersion` 这类 prop 就是给「原地改数组」准备的逃生口）。
+ *   都算一遍不可接受（沿用既有约定：`pathVersion` 这类 prop 就是给「原地改数组」准备的逃生口）。
  */
 export type OverlayFieldWatch =
   | "fingerprint"
@@ -209,37 +204,25 @@ export interface OverlaySpec<Props extends object, Resource> {
   readonly events?: readonly OverlayEventSpec[];
 }
 
-/** 声明自检的输入：除了 spec 本身，还要能查到该 kind 的 prop 别名（集中弃用表）。 */
-export interface OverlayFieldDeclarationChecks {
-  /** 该 kind 已登记的 prop 别名（`core/deprecations` 的 `propAliasesOf`）。 */
-  readonly propAliases?: readonly {
-    readonly canonical: string;
-    readonly deprecated: readonly string[];
-  }[];
-}
-
 /**
  * 声明自检（纯函数，`useOverlaySpec` 与用例共用）。
  *
  * 拦的是「声明自相矛盾」这一类错误，它们的运行时表现是「改了 prop 没反应」，排查成本极高：
  *
- * - 组件侧语义的字段（`visibility` / `version` / `alias`）**必须**被标成 `descriptorKeys[prop] = null`；
+ * - 组件侧语义的字段（`visibility` / `version`）**必须**被标成 `descriptorKeys[prop] = null`；
  * - 其余字段**不得**被标成 `null`（不经描述符 ⇒ 永远不会被下发）；
  * - **多个** `position` / `visibility` 字段：这两种策略各有一套单例状态（位置模型、挂载记账），
  *   第二个字段会被静默忽略——与其忽略，不如起不来；
  * - `versioned` watch 引用的版本 prop 必须是 `version` 字段，且每个 `version` 字段都要**真的被引用**
- *   （没被引用的版本令牌是一个「看起来能刷新、其实什么都不做」的 prop）；
- * - `alias` 字段必须在集中弃用表里登记过（否则它就是「收下但没人读」的假支持）。
+ *   （没被引用的版本令牌是一个「看起来能刷新、其实什么都不做」的 prop）。
  *
  * 抛 `Error`（不是 `BMapError`）：这是**编码期**错误，不是运行时环境问题，不该被错误边界当成
  * 可恢复的失败吞掉。
  */
 export function assertOverlayFieldDeclarations<Props extends object, Resource>(
   spec: OverlaySpec<Props, Resource>,
-  checks: OverlayFieldDeclarationChecks = {},
 ): void {
   const entries = Object.entries(spec.fields) as Array<[string, OverlayFieldUpdate]>;
-  const aliasEntries = checks.propAliases ?? [];
 
   for (const [prop, update] of entries) {
     const declared = spec.descriptorKeys?.[prop as keyof Props & string];
@@ -255,12 +238,6 @@ export function assertOverlayFieldDeclarations<Props extends object, Resource>(
       throw new Error(
         `OverlaySpec(${spec.type}): 字段 "${prop}" 声明为 ${update}，却标记为不经描述符；` +
           `只有 ${OVERLAY_COMPONENT_ONLY_UPDATES.join(" / ")} 这类组件侧语义可以 descriptorKeys[prop] = null`,
-      );
-    }
-    if (update === "alias" && !aliasEntries.some((alias) => alias.deprecated.includes(prop))) {
-      throw new Error(
-        `OverlaySpec(${spec.type}): 字段 "${prop}" 声明为 alias，但集中弃用表里没有登记它；` +
-          "旧 prop 名必须进 core/deprecations 的别名表，否则它就是收下但没人读的假支持",
       );
     }
   }

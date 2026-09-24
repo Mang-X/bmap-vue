@@ -14,7 +14,7 @@
  * ## `path` 为什么不是内容指纹
  *
  * `path` 是**大数组**（路线动辄上万点）。按内容取指纹意味着每次父级渲染都做一次 O(n) 序列化，
- * 而「路径变了没有」在 v3 里本来就有更便宜的答案：**根引用 + `pathVersion`**
+ * 而「路径变了没有」本来就有更便宜的答案：**根引用 + `pathVersion`**
  * （`watchSources: { path: { source: "versioned", versionProp: "pathVersion" } }`）。
  * 两种写法都在用：替换根引用（不可变风格）与原地改数组 + 递增 `pathVersion`。
  *

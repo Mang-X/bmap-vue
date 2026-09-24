@@ -1,6 +1,15 @@
+/**
+ * ResourceScope —— **最小外部资源内核**（#139）
+ *
+ * 本类不再管 Vue 的 effect 生命周期（`run()` 已删）。剩下的契约是**外部资源**的：
+ * 幂等、逆序释放、单个 disposer 抛错不连坐、已释放时 `add` 立即执行、以及 fork 的
+ * 父子释放顺序。Vue 侧「watcher 在组件卸载时会停」由
+ * `useSdkResource.test.ts` / `useOverlayResource.test.ts` 各一条回归用例钉住——
+ * 那才是「effect 交回 Vue」这条命题的断言位置。
+ */
 import { describe, it, expect, vi } from "vitest";
-import { watch, ref, nextTick } from "vue";
 import { ResourceScope } from "./ResourceScope";
+import { logger } from "../logger";
 
 describe("ResourceScope", () => {
   it("is idempotent on dispose", () => {
@@ -16,43 +25,6 @@ describe("ResourceScope", () => {
 
     expect(disposeA).toHaveBeenCalledTimes(1);
     expect(disposeB).toHaveBeenCalledTimes(1);
-  });
-
-  it("stops Vue watchers created inside scope", async () => {
-    const scope = new ResourceScope();
-    const source = ref(0);
-    const onFn = vi.fn();
-
-    scope.run(() => {
-      watch(source, () => onFn(), { flush: "sync" });
-    });
-
-    source.value = 1;
-    expect(onFn).toHaveBeenCalledTimes(1);
-
-    scope.dispose();
-    source.value = 2;
-    expect(onFn).toHaveBeenCalledTimes(1); // watcher 已停止
-  });
-
-  it("registers DOM event listeners and removes them on dispose", () => {
-    const scope = new ResourceScope();
-    const target = document.createElement("div");
-    const listener = vi.fn();
-    scope.addEventListener(target, "click", listener);
-
-    target.dispatchEvent(new Event("click"));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    scope.dispose();
-    target.dispatchEvent(new Event("click"));
-    expect(listener).toHaveBeenCalledTimes(1); // 已移除
-  });
-
-  it("throws when running after dispose", () => {
-    const scope = new ResourceScope();
-    scope.dispose();
-    expect(() => scope.run(() => 1)).toThrow("ResourceScope has been disposed");
   });
 
   it("aborts signal on dispose", () => {
@@ -80,13 +52,40 @@ describe("ResourceScope", () => {
     expect(order).toEqual(["c", "b", "a"]);
   });
 
-  it("registers observer and disconnects on dispose", () => {
+  it("add returns a remover that releases early and is safe to call twice", () => {
     const scope = new ResourceScope();
-    const observer = { disconnect: vi.fn() };
-    scope.observe(observer);
-    expect(observer.disconnect).not.toHaveBeenCalled();
+    const dispose = vi.fn();
+    const remove = scope.add(dispose);
+    expect(scope.size).toBe(1);
+
+    remove();
+    remove();
+    expect(dispose, "remover 幂等").toHaveBeenCalledTimes(1);
+    expect(scope.size, "提前摘除后不再计入账本").toBe(0);
+
     scope.dispose();
-    expect(observer.disconnect).toHaveBeenCalledTimes(1);
+    expect(dispose, "已摘除的不再被 dispose 调到").toHaveBeenCalledTimes(1);
+  });
+
+  it("reports dispose errors via logger.warn without interrupting others", () => {
+    // 「一个 disposer 抛错不得中断其余释放」是**行为契约**（逆序释放是确定的），
+    // 删掉这条断言就等于没人再钉它——所以改成断言真正的告警通道 `logger.warn`。
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    const scope = new ResourceScope({ label: "map-runtime" });
+    const order: string[] = [];
+    scope.add(() => order.push("a"));
+    scope.add(() => {
+      throw new Error("boom");
+    });
+    scope.add(() => order.push("c"));
+
+    scope.dispose();
+
+    expect(order, "坏掉的 disposer 不连坐其余释放").toEqual(["c", "a"]);
+    expect(warn, "释放失败必须留下可观察信号（不静默泄漏）").toHaveBeenCalledTimes(1);
+    // 告警文案点名 scope：否则「哪个 scope 释放失败」不可追。
+    expect(String(warn.mock.calls[0]?.[0])).toContain("map-runtime");
+    warn.mockRestore();
   });
 
   it("exposes label and size", () => {
@@ -100,28 +99,13 @@ describe("ResourceScope", () => {
     expect(scope.size).toBe(0);
   });
 
-  it("reports dispose errors via onDisposeError without interrupting others", () => {
-    const seen: unknown[] = [];
-    const scope = new ResourceScope({
-      onDisposeError: (e) => seen.push(e),
-    });
-    const order: string[] = [];
-    scope.add(() => order.push("a"));
-    scope.add(() => {
-      throw new Error("boom");
-    });
-    scope.add(() => order.push("c"));
-    scope.dispose();
-    expect(order).toEqual(["c", "a"]);
-    expect(seen).toHaveLength(1);
-  });
-
   it("fork links parent dispose and detaches on child dispose", () => {
     const parent = new ResourceScope({ label: "parent" });
     const child = parent.fork("child");
     expect(child.label).toBe("child");
     expect(parent.size).toBe(1);
     child.dispose();
+    // 主动释放的 child 必须从父摘除：覆盖物/图层重建会反复 fork，不摘除则父的账本无界增长。
     expect(parent.size).toBe(0);
     parent.dispose();
   });
@@ -134,13 +118,22 @@ describe("ResourceScope", () => {
     expect(child.isDisposed).toBe(true);
   });
 
-  it("aborts when parentSignal aborts", async () => {
+  it("fork on an already-disposed parent disposes the child synchronously", () => {
     const parent = new ResourceScope();
-    const child = new ResourceScope({ parentSignal: parent.signal });
-    expect(child.isDisposed).toBe(false);
-    parent.dispose("test");
-    await Promise.resolve();
+    parent.dispose();
+    const child = parent.fork();
+    // **同步**，而不是排一个 microtask：晚一拍会让「父没了 ⇒ 子也没了」出现可观察窗口。
     expect(child.isDisposed).toBe(true);
+  });
+
+  it("repeated fork/dispose cycles do not grow the parent's ledger", () => {
+    // 钉住 fork() 覆盖 child.dispose 的**理由**（否则这条只是实现细节）：
+    // 图层/覆盖物反复重建，父只 dispose 一次 ⇒ 不摘除的话这里会线性增长。
+    const parent = new ResourceScope();
+    for (let index = 0; index < 50; index += 1) {
+      parent.fork(`instance-${index}`).dispose();
+    }
+    expect(parent.size, "完成的 child 不得留在父的 disposers 里").toBe(0);
   });
 
   it("dispose accepts a reason", () => {

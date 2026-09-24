@@ -1,5 +1,5 @@
 {
-  "note": "probe-destroy-idempotency.mts 的一次成功 live 报告（phase/sdk/readings 原样抄录，判定层消费其中子集）。生成方式：SMOKE_BROWSER=<chrome-headless-shell> BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-destroy-idempotency.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。必须用 chrome-headless-shell（系统 Chrome 在 headless 下 setId 会挂死主线程）。tests/behavior/v3-probe-destroy-idempotency-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
+  "note": "probe-destroy-idempotency.mts 的一次成功 live 报告（phase/sdk/readings 原样抄录，判定层消费其中子集）。生成方式：SMOKE_BROWSER=<chrome-headless-shell> BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-destroy-idempotency.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。必须用 chrome-headless-shell（系统 Chrome 在 headless 下 setId 会挂死主线程）。tests/behavior/probe-destroy-idempotency-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
   "capturedAt": "2026-09-24",
   "phase": "done",
   "sdk": {

@@ -3,7 +3,7 @@
  *
  * 职责：拥有组件创建的那个 InfoWindow（创建 / 重建 / 释放）、按 desired/observed 收敛、转发 SDK 事件。
  *
- * - desired：`open`（旧名 `show`）这条 prop 表达的意图。
+ * - desired：`open` 这条 prop 表达的意图（1.0 不接受旧名 `show`）。
  * - observed：地图上实际开着的是不是这一个（`driver.overlays.isCurrentInfoWindow`）。
  * - 收敛：期望开而没开 ⇒ 打开；开着但 `position` 变了 ⇒ 再开一次（官方没有 `setPosition`）；
  *   期望关而开着 ⇒ 关闭。
@@ -18,17 +18,21 @@
  *
  * 契约细节见 ADR `2026-09-18-infowindow-host-and-ownership`。
  */
-import { nextTick, onScopeDispose, shallowRef, watch, type ShallowRef } from "vue";
+import {
+  onScopeDispose,
+  shallowRef,
+  watch,
+  watchPostEffect,
+  type ShallowRef,
+} from "vue";
 import { useResizeObserver } from "@vueuse/core";
 import { useRequiredMapContext } from "../context/inject";
 import type { MapReadyContext } from "../context/types";
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import { createDeprecationWarner, describeDeprecation, propAliasesOf } from "../deprecations";
 import {
   INFO_WINDOW_DESCRIPTOR_KEYS,
   INFO_WINDOW_FIELDS,
-  infoWindowOpenIntentUsesAlias,
   positionKeyOf,
   resolveInfoWindowOpenIntent,
   type InfoWindowFieldUpdate,
@@ -42,11 +46,26 @@ import type { InfoWindowHandle } from "../../driver/types/handles";
 import type { ResourceRegistration } from "../overlays/OverlayRegistry";
 import { readElementSize } from "../runtime/elementSize";
 import { stableKeyOf } from "../utils/stableKey";
+import { watchKeyedSources, type KeyedSource } from "../utils/keyedSources";
 import { useSdkResource } from "./useSdkResource";
 
 /** 转发的 SDK 事件名（官方 `InfoWindowEventMap` 去掉 `resize`）。 */
 const FORWARDED_SDK_EVENTS = ["open", "close", "clickclose", "maximize", "restore"] as const;
 type ForwardedSdkEvent = (typeof FORWARDED_SDK_EVENTS)[number];
+
+/**
+ * `resize` 在事件矩阵里、但**没有**派发点——这不是遗漏，是一个已知的显式限制。
+ *
+ * 官方 `InfoWindowEventMap` 声明了 6 个事件，本文件只转发 5 个：气泡尺寸由组件自己的
+ * `width` / `height` prop 驱动并经 `setContent` 重绘（见 `drainOptions`），
+ * 官方的 `resize` 事件在本库**没有派发点**——`bindSdkEvents` 只遍历
+ * `FORWARDED_SDK_EVENTS`，`resize` 从未注册监听，也因此没有载荷可转发；
+ * 它在本库既不驱动任何状态、也不对外暴露。
+ *
+ * 因此 `<InfoWindow>` 的 `defineEmits` **不包含** `resize`，也不把它算进事件面
+ * （`scripts/generate-overlay-emits.mts` 的载荷覆写表同款口径，见 ADR #138 决策 ⑥）。
+ * 真要暴露它，得先回答「调用方拿它做什么」——目前没有可回答的消费者。
+ */
 
 export interface UseInfoWindowOptions {
   /** 组件的 `emit`。 */
@@ -141,13 +160,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   }
 
   assertFieldDeclarations();
-
-  // `show` 的弃用告警：经集中弃用层发（同实例一次、production 静默）
-  const deprecation = createDeprecationWarner(component);
-  if (infoWindowOpenIntentUsesAlias(props)) {
-    const alias = propAliasesOf("info-window").find((entry) => entry.canonical === "open");
-    if (alias) deprecation.warn(describeDeprecation(alias));
-  }
 
   /* ------------------------------------------------------------------ 收敛（reconcile） */
 
@@ -252,21 +264,48 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     }
   }
 
-  /** 观测驱动的收敛：每个 task 合并一次，并等父级的受控更新落地（两跳 `nextTick`）。 */
-  let convergeQueued = false;
+  /**
+   * 观测驱动的收敛：**一个计数器 + 一个 post-flush effect**（#138 替掉原来的双 `nextTick`）。
+   *
+   * ## 为什么双 `nextTick` 是承重的，以及它为什么必须被换掉
+   *
+   * `clickclose` 的收敛链是「转发 → `echoClosed()` 发 `update:open(false)` → 父级 `v-model`
+   * 写 ref → 父组件重渲染 → 子组件 props 更新」。真正要等的是**最后一次**：收敛读的是
+   * `props.open`（`readIntent()` 现读），父级重渲染之前那个值还是旧的。
+   *
+   * 而两跳之所以能等到，恰恰因为 `nextTick` **排在父级的 `flushJobs` 之前**：
+   * `nextTick(cb)` 先入微任务队列，随后 `emit` 触发的父级更新再入一个（`queueFlush`），
+   * 于是顺序是 `cb1 → flushJobs（父级重渲染）→ cb2`，`cb2` 才看得到新意图。
+   * 这是一个**靠队列入队顺序**成立的时序，也是它难读、难改、难证明的原因。
+   *
+   * 换成 post-flush 后这个顺序由 Vue 自己保证：`watchPostEffect` 的回调在**本轮 flush 的
+   * post queue** 里跑，而 post queue 排在 render effects **之后**——父级重渲染必然已经完成。
+   * 于是「等父级落地」不再需要手写跳数。
+   *
+   * `convergeTick` 的作用从「数 tick」变成「同一轮里合并多个 SDK 事件」：
+   * `open` + `close` + `clickclose` 在一次派发里连着到达时只排一次 post effect
+   * （Vue 对同一轮里的多次 `trigger` 天然合并；计数器在此只当「有没有待收敛」的标志位用，
+   * `=== 0` 表示尚无请求）。
+   *
+   * **收敛只有一个 post-flush 入口**（#138）：`onIntentChanged` 与 `scheduleConverge` 都只
+   * 「请求」收敛，不自己跑。两者分离出第二个 `reconcile()` 调用点时，post effect 会紧接着
+   * 再跑一次——「关闭命令抛错」那条用例正是因此多发了一次 `closeInfoWindow`（第一次抛错、
+   * 第二次成功），把「失败保持事实不变、下一次触发才重试」这条不变量吃掉了。
+   */
+  const convergeTick = shallowRef(0);
 
   function scheduleConverge(): void {
-    if (convergeQueued) return;
-    convergeQueued = true;
-    void nextTick(() => {
-      void nextTick(() => {
-        convergeQueued = false;
-        reconcile();
-      });
-    });
+    convergeTick.value += 1;
   }
 
-  /** 意图变化的落点（`open` / `show` / `position` 合一的 watch）。 */
+  // 收敛读的是实时意图（`readIntent()` 现读 `props`），因此 post-flush 读到的必然是本轮最终值。
+  // `watchPostEffect` 注册在本组件的 effect scope 里，`onScopeDispose` 随之释放。
+  watchPostEffect(() => {
+    if (convergeTick.value === 0) return;
+    reconcile();
+  });
+
+  /** 意图变化的落点（`open` + `position` 合一的 watch）。 */
   function onIntentChanged(): void {
     const instance = activeInstance;
     if (!instance?.alive) return;
@@ -276,7 +315,8 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     } else {
       instance.suppressed = false;
     }
-    reconcile();
+    // 与事件驱动共用同一个 post-flush 入口（见上）
+    scheduleConverge();
   }
 
   /* ------------------------------------------------------------------ 尺寸与重绘 */
@@ -313,20 +353,39 @@ export function useInfoWindow<Props extends InfoWindowProps>(
 
   /* ------------------------------------------------------------------ 选项落地 */
 
-  let pendingOptions: Record<string, unknown> | null = null;
-  let draining = false;
+  /**
+   * 标脏的选项（#138：与覆盖物内核同构——「按键标脏 + 一次排空」，合并交给 Vue 的 batching）。
+   *
+   * 全部 `options` 字段的 watcher 合成**一个** array-source watcher（见 `watch` 里那一段），
+   * 因此「一次提交改 N 个选项」本来就只有一次回调；这里保留 `Record` 是为了同名字段只留最后
+   * 一个值，以及实例未就绪时把值留到 `bind` 排空（不丢值）。
+   */
+  let dirtyOptions: Record<string, unknown> | null = null;
 
-  /** 选项更新队列：同键合并、单飞排空；实例未就绪时留在待办里由 `bind` 排空。 */
-  async function enqueueOptions(updates: Record<string, unknown>): Promise<void> {
-    pendingOptions = { ...(pendingOptions ?? {}), ...updates };
-    if (draining) return;
-    draining = true;
+  /** 排空重入闸。排空期间新标脏的由 `while` 消费，因此入口直接返回即可。 */
+  let drainingOptions = false;
+
+  /** 按键标脏（`options` 字段的 watcher 落点）。 */
+  function markOptionsDirty(updates: Record<string, unknown>): void {
+    dirtyOptions = { ...(dirtyOptions ?? {}), ...updates };
+    void drainOptions();
+  }
+
+  /**
+   * 排空标脏的选项。`while (dirtyOptions && …)` 的两个条件各挡一类死循环：
+   * - `activeInstance?.alive && readyCtx`：实例未就绪时值原样留在 `dirtyOptions`，由 `bind` 排空
+   *   （否则「取出来 → 下不下发 → 放回去」会原地转）；
+   * - `dirtyOptions`：取走即置空。
+   */
+  async function drainOptions(): Promise<void> {
+    if (drainingOptions) return;
+    drainingOptions = true;
     try {
-      while (pendingOptions && activeInstance?.alive && readyCtx) {
+      while (dirtyOptions && activeInstance?.alive && readyCtx) {
         const instance = activeInstance;
         const context = readyCtx;
-        const batch = pendingOptions;
-        pendingOptions = null;
+        const batch = dirtyOptions;
+        dirtyOptions = null;
         if (Object.keys(batch).length === 0) continue;
         try {
           context.client.driver.overlays.setOptions(instance.handle, batch);
@@ -341,7 +400,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         }
       }
     } finally {
-      draining = false;
+      drainingOptions = false;
     }
   }
 
@@ -407,19 +466,33 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         bindSdkEvents(context, instance);
         // 就绪窗口的收敛：`create` 与 `bind` 之间到达的 prop 变化此刻补一次
         reconcile();
-        void enqueueOptions({});
+        // 同理排一次选项：标脏期间（`create` 是异步的）到达的选项变化此刻落到这个实例上
+        void drainOptions();
       },
 
       watch: ({ scope }) => {
-        // `open` / `show` / `position` 合成一个 watch 源
+        // `open` + `position` 合成一个 watch 源，`flush: "post"`（#138）
+        //
+        // 为什么 post：收敛要读父级 `v-model` 的**最终**值。与事件驱动的 `scheduleConverge`
+        // 共用同一个 post-flush 时序，于是「prop 驱动」与「事件驱动」两条路在同一个队列里
+        // 相遇，一条 `onIntentChanged` 就够——不再需要「谁先谁后」的隐式约定。
         scope.add(
           watch(
             () =>
               `${resolveInfoWindowOpenIntent(props) ? 1 : 0}|${positionKeyOf(props.position)}`,
             () => onIntentChanged(),
-            { immediate: true },
+            { immediate: true, flush: "post" },
           ),
         );
+
+        // #138：所有 `options` 字段合成**一个** array-source watcher（与覆盖物内核同构）。
+        // 各写各的会让 N 个回调在同一 flush 里逐个跑，第一个就把 `setOptions` 发出去；
+        // 合成之后「一轮一次回调」由 Vue 的 batching 保证。
+        //
+        // 每个 option 源同时带「下发给 Driver 的描述符键 `key`」（声明缺省时等于 prop 名）与
+        // 取当前值的 `read`——两者**同趟循环产出**：分两趟派生会分叉，而分叉的后果是
+        // 「改了 prop 却改了另一个键」。
+        const optionSources: KeyedSource<unknown>[] = [];
         for (const [prop, update] of Object.entries(INFO_WINDOW_FIELDS) as Array<
           [string, InfoWindowFieldUpdate]
         >) {
@@ -428,6 +501,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           const key = declared === undefined ? prop : declared;
           if (key === null) continue;
           if (update === "recreate") {
+            // 构造期字段各自重建：`rebuild()` 本身单飞（飞行中的请求合并成一次尾随重建）
             scope.add(
               watch(
                 () => stableKeyOf((props as Record<string, unknown>)[prop]),
@@ -436,13 +510,18 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             );
             continue;
           }
-          scope.add(
-            watch(
-              // 源用稳定序列化：内联对象按内容判等
-              () => stableKeyOf((props as Record<string, unknown>)[prop]),
-              () => void enqueueOptions({ [key]: (props as Record<string, unknown>)[prop] }),
-            ),
-          );
+          // 源用稳定序列化：内联对象按内容判等
+          optionSources.push({
+            key,
+            source: () => stableKeyOf((props as Record<string, unknown>)[prop]),
+            read: () => (props as Record<string, unknown>)[prop],
+          });
+        }
+
+        if (optionSources.length > 0) {
+          // 回调在 post-flush 跑，因此读到的是**本轮最终**的值（不是触发那一刻的中间值）。
+          // 机制见 `watchKeyedSources`（与 `useOverlaySpec` 共用同一个数组源 watcher）。
+          scope.add(watchKeyedSources(optionSources, markOptionsDirty));
         }
       },
     },
@@ -486,7 +565,6 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     if (instance.echoedClosed) return;
     instance.echoedClosed = true;
     emit("update:open", false);
-    emit("update:show", false);
   }
 
   /**

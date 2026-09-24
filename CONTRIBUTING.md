@@ -61,19 +61,20 @@ pnpm check:raw-sdk:tree         # 按白名单扫描整棵 src
 pnpm generate:manifest:check    # 组件 manifest 无漂移
 pnpm generate:capability-matrix:check
 pnpm generate:api-diff:check        # 公开 API 对照（vs 官方 React 参考）无漂移
+pnpm generate:overlay-emits:check  # 覆盖物 defineEmits 静态契约无漂移（#138）
 pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
 pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
-pnpm check:no-bmapgl            # 运行时源码 + 公共声明不得再出现 BMapGL / 已删除的 engine 取值
+pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
 pnpm test:unit
 ```
 
 顺序不是随意的：`typecheck:package` 会把声明 emit 到 `dist/`，所以它要排在 `build:package` **之前**
-（`build:package` 会先清空 `dist`）；而 `check:public-dts` 与 `test:unit` 依赖 `dist/` 产物，必须排在
-`build:package` 之后。
+（`build:package` 会先清空 `dist`）；而 `check:public-dts`、`check:raw-sdk:declarations` 与
+`test:unit` 依赖 `dist/` 产物，必须排在 `build:package` 之后。
 
 如果 `generate:*:check` 报漂移，而你**确实**是有意改的，用对应的生成命令（`pnpm generate:manifest`、
-`pnpm generate:capability-matrix`、`pnpm generate:api-diff`）重新生成并一起提交；生成物不要手改。
+`pnpm generate:capability-matrix`、`pnpm generate:api-diff`、`pnpm generate:overlay-emits`）重新生成并一起提交；生成物不要手改。
 
 包出口相关改动还要验证 tarball 消费方：
 

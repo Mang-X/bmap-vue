@@ -7,15 +7,11 @@
  * `useOverlaySpec` 落地——组件里不再有 8 个手写 watcher。
  *
  * 事件面（17 个，含编辑六件套）由 `GraphEventMap` 派生；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+import type { PolylineEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { PolylineProps } from "../../types/components";
 import { createPolylineSpec } from "./polylineSpec";
 
@@ -31,25 +27,7 @@ const props = withDefaults(defineProps<PolylineProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  rightdblclick: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-  editstart: [event: OverlayEventPayload];
-  editend: [event: OverlayEventPayload];
-  linevertexdragstart: [event: OverlayEventPayload];
-  linevertexdragging: [event: OverlayEventPayload];
-  linevertexdragend: [event: OverlayEventPayload];
-  linevertexdel: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<PolylineEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

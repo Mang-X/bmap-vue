@@ -139,7 +139,11 @@ idle | loading | success | empty | failed | timeout | canceled | unsupported
 两种情况下「哪一次请求产生了这个回包」这个事实都不存在，所以本库不再猜：把歧义**变成不可能**，
 代价是取消/超时之后要重建实例。
 
-**调用方（composable）如何实现「最新者胜」**：`useBMapServiceTask` 的 `supersede` 策略。
+**调用方（composable）如何实现「最新者胜」**：实例通道的 `supersede` 策略。
+> ⚠️ **本节的载体已被 #139 取代，取证与决策本身仍然成立**：当时它是「所有 service 共用的
+> `useServiceTask` 上的一个选项」；现在 `supersede` 只存在于**独占档**的实例通道
+> （`core/services/instanceChannel.ts`）里，且 `useExclusiveServiceTask` 只给「官方有实例
+> 销毁入口」的服务用。见 ADR `2026-09-24-service-task-and-resource-scope-split.md`。
 LocalSearch 声明 `supersede: (op) => op.kind === "page" ? "refuse" : "recreate"`：
 新检索取代在飞检索时，先取消旧的、再**释放旧实例**（→ 公开的 `clearResults()`，顺带清掉它画出的标注），
 并为新检索建一个新实例；`cancel()` / 超时之后的实例被标记为过期，下一次检索同样重建。

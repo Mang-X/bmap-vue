@@ -1,13 +1,13 @@
 /**
  * Fake Map v4 上的**全量** Driver Contract（M3A3-FAKE-DUAL / issue #24）
  *
- * 与 `v3-jsapi-v4-*.test.ts` 的分工：那些文件把契约跑在**手工组合的 facet** 或装配后的
+ * 与 `jsapi-v4-*.test.ts` 的分工：那些文件把契约跑在**手工组合的 facet** 或装配后的
  * `createJsapiV4Driver` 上；这里跑的是 `runMapDriverContract` —— 需要 `BMapClient` 的那一层，
  * 也就是组件默认路径真正会拿到的对象（Provider 归一 → 默认 Driver 工厂 → Client 组装）。
  *
  * issue #24 的验收标准之一是「Fake v4 能支撑普通 PR 的全部行为测试」：那意味着共享契约必须
  * 在 Fake v4 上**全通过**，而不是只在 webgl-v1 上通过（此前只有后者，见
- * `tests/behavior/v3-driver-contract.test.ts`）。契约里凡是两个引擎都必须满足的部分
+ * `tests/behavior/v4-driver-contract.test.ts`）。契约里凡是两个引擎都必须满足的部分
  * （Map / Overlay / Control / Layer 的构造-挂载-更新-摘除、非 Map 目标必须失败、
  * 属性分类一致）都在这一份里得到验证。
  */

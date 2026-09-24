@@ -6,15 +6,11 @@
  * `isBoundary`（构造期 → 变化即重建）、`enableEditing`（成对开关）全部由 `polygonSpec` 声明。
  *
  * 事件面（17 个）与 Polyline 相同（上游同为 `GraphEventMap`）；`defineEmits` 与矩阵的一致性由
- * `v3-overlay-suite.test.ts` 的门禁锁定。
+ * `overlay-suite.test.ts` 的门禁锁定。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-import type {
-  OverlayEventPayload,
-  OverlayPartialPointerEvent,
-  OverlayPointerEvent,
-} from "../../driver/types/events";
+import type { PolygonEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { PolygonProps } from "../../types/components";
 import { createPolygonSpec } from "./polygonSpec";
 
@@ -33,25 +29,7 @@ const props = withDefaults(defineProps<PolygonProps>(), {
   visible: true,
 });
 
-const emit = defineEmits<{
-  click: [event: OverlayPointerEvent];
-  dblclick: [event: OverlayPointerEvent];
-  mousedown: [event: OverlayPointerEvent];
-  mouseup: [event: OverlayPointerEvent];
-  mouseover: [event: OverlayPointerEvent];
-  mouseout: [event: OverlayPartialPointerEvent];
-  mousemove: [event: OverlayPointerEvent];
-  rightclick: [event: OverlayPointerEvent];
-  rightdblclick: [event: OverlayPointerEvent];
-  remove: [event: OverlayEventPayload];
-  lineupdate: [event: OverlayEventPayload];
-  editstart: [event: OverlayEventPayload];
-  editend: [event: OverlayEventPayload];
-  linevertexdragstart: [event: OverlayEventPayload];
-  linevertexdragging: [event: OverlayEventPayload];
-  linevertexdragend: [event: OverlayEventPayload];
-  linevertexdel: [event: OverlayEventPayload];
-}>();
+const emit = defineEmits<PolygonEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 

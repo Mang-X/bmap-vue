@@ -30,7 +30,6 @@ import { DEFAULT_VERSION } from "../../core/loader/url";
 import { baiduJsapiV4Provider } from "../../core/loader/providers/index";
 import type { BMapClient, BMapProviderLike, CreateBMapClientOptions } from "../../client/types";
 import {
-  BMAP_COMPONENT_EVENT_EMIT_ALIASES,
   MAP_EVENT_CATALOG,
   MAP_EVENT_EMIT_ALIASES,
   MAP_EVENT_NAMES,
@@ -99,7 +98,6 @@ let tearingDown = false;
 const emit = defineEmits<
   {
     ready: [payload: MapReadyPayload];
-    initd: [payload: MapReadyPayload];
     "plugin-ready": [name: string];
     "plugin-error": [payload: { name: string; error: unknown }];
     unload: [];
@@ -126,18 +124,12 @@ function forwardMapEvent(vue: MapEventName, event: unknown): void {
 }
 
 /**
- * 发 `ready` 与它的历史别名（`initd`）。
+ * 发 `ready`。
  *
- * 别名从 Catalog 的 `BMAP_COMPONENT_EVENT_EMIT_ALIASES` 读，因此「旧名称的集中 deprecation」
- * 只有这一处（issue #28 禁止组件各自兼容）。此前 `ready` / `initd` 这对组合在 `boot()` 里
- * 写了两遍（就绪早退路径与正常路径各一次），改一处漏一处就会漂移。
- * 其余组件事件没有别名，照常走类型化的 `emit(...)`。
+ * 就绪早退路径与正常路径都走这里，`boot()` 不会写两遍（改一处漏一处就会漂移）。
  */
 function emitReady(payload: MapReadyPayload): void {
   emit("ready", payload);
-  for (const alias of BMAP_COMPONENT_EVENT_EMIT_ALIASES.ready ?? []) {
-    emitDynamic(alias, payload);
-  }
 }
 
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -237,7 +229,7 @@ if (ownClientContext) {
  *    这条最常见的闭环自然收敛。
  */
 
-/** 库默认视野（「缺省」档的兜底）：与 v2/v3 的 props 默认值保持一致。 */
+/** 库默认视野（「缺省」档的兜底）：与 props 默认值保持一致。 */
 const DEFAULT_VIEW = {
   center: { lng: 116.403901, lat: 39.915185 },
   zoom: 14,
@@ -683,7 +675,7 @@ const containerReady: Readonly<ShallowRef<boolean>> = suspension.containerReady;
  * 而不是只让 Runtime 的建图单飞：
  *
  * 1. **并发 retry 共享同一次 boot**：否则两次 `start()` 都会 `await` 同一个 `mountPromise`，
- *    地图只建一张，但 `emitReady` / `initd` / 插件加载会各跑两遍；
+ *    地图只建一张，但 `emitReady` / 插件加载会各跑两遍；
  * 2. **容器不可用时的 retry 要「挂起」而不是「立刻失败」**：`MapRuntime.whenReady()` 在 error
  *    态是立即 reject，用它表达「还没开始」会把「等容器展开」误报成「重试失败了」；
  * 3. **首挂载、普通 retry、延迟 retry 走同一条路径**（`mountMap()` 只判断「现在能不能启动」）。
@@ -1104,7 +1096,7 @@ async function boot(): Promise<MapReadyContext> {
  *
  * 1. **已经 ready**：立刻 resolve 当前上下文（幂等：不重跑装配、不重复广播 `ready`）；
  * 2. **已经在启动中**（首挂载或上一次 retry 还在飞）：返回**同一个** Promise —— 复审 P2：
- *    `boot()` 必须单飞，否则 `ready` / `initd` / 插件加载会跟着重复；
+ *    `boot()` 必须单飞，否则 `ready` / 插件加载会跟着重复；
  * 3. **容器当前不可用**（Tab / Drawer 收起、宿主隐藏）：**不建图**（复审 P2：门禁要覆盖
  *    retry / recreate），这次请求挂到 `deferredWaiters` 上并返回一个 **pending** 的 Promise，
  *    容器重新可用时由放行回调启动，同一个 Promise 随结果 settle。
@@ -1242,7 +1234,6 @@ const context: MapContext = {
   handle: map as unknown as MapContext["handle"],
   error: error as unknown as MapContext["error"],
   resources: runtime.resources,
-  scope: runtime.resources,
   events: runtime.events,
   scheduler: runtime.scheduler,
   overlays: runtime.overlays,

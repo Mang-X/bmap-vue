@@ -29,7 +29,7 @@ import {
 
 const center = ref("北京市");
 
-// 沿用 v2/v3 的文档示例：菜单里放两个缩放项（`map` 是 MapHandle，缩放走 raw 逃生口）
+// 文档示例：菜单里放两个缩放项（`map` 是 MapHandle，缩放走 raw 逃生口）
 type ZoomableRaw = { zoomIn(): void; zoomOut(): void };
 
 // 数组元素的类型是 `ContextMenuItem | ContextMenuSeparator`——`"-"` 就是一条分隔线

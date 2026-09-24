@@ -145,7 +145,7 @@ export interface MarkerProps {
 export interface InfoWindowProps extends InfoWindowSpecProps {
   // 字段全部来自 `InfoWindowProps`（单一事实源，见上面的注释）。
   //
-  // ⚠️ 这里**必须**保持「多行花括号」的写法：`tests/behavior/v3-overlay-suite.test.ts` 的
+  // ⚠️ 这里**必须**保持「多行花括号」的写法：`tests/behavior/overlay-suite.test.ts` 的
   // `readPropsKeys()` 用 `([\s\S]*?)\n\}` 切接口正文（为的是不把行内对象类型 `{ lng, lat }`
   // 当成分隔符）。写成单行 `{}` 会让那个非贪婪匹配**继续往后吞**，把紧随其后的接口正文并进
   // 这一次匹配里 —— 结果是那几个接口在解析表里消失、声明面门禁误报（PR #101 合并 #31 后实测）。
@@ -243,12 +243,6 @@ export interface ContextMenuSelectPayload {
 export interface ContextMenuProps {
   /** 菜单项（数据 API）。写法与声明式 `<MenuItem>` / `<MenuSeparator>` 等价。 */
   items?: (ContextMenuItem | ContextMenuSeparator)[];
-  /**
-   * @deprecated `items` 的兼容别名（v3 起的名字）。
-   *
-   * 只在 `items` **缺失**时生效（与集中弃用层同一条「新 API 优先」规则），使用时会打印一次告警。
-   */
-  menuItems?: (ContextMenuItem | ContextMenuSeparator)[];
   /** 菜单宽度（像素）。官方上是 `MenuItemOptions.width`，因此变化即重建菜单。 */
   width?: number;
   /**
@@ -282,7 +276,7 @@ export interface MenuItemProps {
 /**
  * 描边样式：Polyline / Polygon / Rectangle / Circle 共享（M5-VECTORS / #31）。
  *
- * 与 Driver 描述符的 `PATH_STYLE` 逐键对应，由 `v3-overlay-suite.test.ts` 交叉锁定。
+ * 与 Driver 描述符的 `PATH_STYLE` 逐键对应，由 `overlay-suite.test.ts` 交叉锁定。
  */
 export interface PathStrokeProps {
   strokeColor?: string;
@@ -403,16 +397,12 @@ export type GroundOverlayUrl =
 /**
  * 地面叠加层。
  *
- * `bounds` 是正典 prop；`startPoint` / `endPoint` 是 v2/v3-beta 的旧名，由集中弃用层
- * （`core/deprecations`）在读取层解析——**新 API 优先**：`bounds` 一旦有值，旧名完全不参与。
+ * 显示区域只有 `bounds` 一种写法（`{ southwest, northeast }` 两个角点）。旧的两个角点 prop
+ * 已随集中弃用层在 #136 删除——clean-slate 1.0 不兼容旧 API。
  */
 export interface GroundOverlayProps {
-  /** 显示区域（西南 / 东北角点）。与旧的 `startPoint` + `endPoint` 二选一。 */
-  bounds?: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
-  /** @deprecated 旧名（西南角）；改用 `bounds.southwest`。 */
-  startPoint?: { lng: number; lat: number };
-  /** @deprecated 旧名（东北角）；改用 `bounds.northeast`。 */
-  endPoint?: { lng: number; lat: number };
+  /** 显示区域（西南 / 东北角点）。**必填**——它是唯一的几何入口，缺失时构造期即抛错。 */
+  bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   type: GroundOverlayType;
   url: GroundOverlayUrl;
   opacity?: number;

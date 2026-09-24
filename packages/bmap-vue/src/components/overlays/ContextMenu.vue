@@ -46,29 +46,23 @@ import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useContextMenu } from "../../core/composables/useContextMenu";
 import { useRequiredMapContext } from "../../core/context/inject";
 import type { BMapError } from "../../core/errors/BMapError";
-import type { OverlayPartialPointerEvent } from "../../driver/types/events";
-import type { ContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）；`select` 的载荷
+// 仍是本库类型（不是 SDK 事件），生成器从非 SDK 事件表里带出来。
+import type { ContextMenuEmits } from "../../core/overlays/overlayEventEmits.generated";
+import type { ContextMenuProps } from "../../types/components";
 
 export type { ContextMenuProps };
 
 const props = withDefaults(defineProps<ContextMenuProps>(), {
-  // `width: 100` 是 v3 起的默认值（也是文档里的值）。M5 重写时漏掉了它 ⇒ Driver 拿到 `undefined`，
-  // 而 `width` 是**每项的构造期输入**（`MenuItemOptions.width`），行为与 v3 分叉（复审 P4）。
+  // `width: 100` 是默认值（也是文档里的值）。曾经漏掉它 ⇒ Driver 拿到 `undefined`，
+  // 而 `width` 是**每项的构造期输入**（`MenuItemOptions.width`），行为与文档分叉（复审 P4）。
   width: 100,
-  // `items` 与旧名 `menuItems` 都**不给运行期默认值**：集中弃用层的「新 API 优先」判据是
-  // 「正典值是不是 `undefined`」，给一个 `() => []` 的默认值会让旧名永远读不到
-  // （与 `InfoWindow` 的 `show` 落在同一类取舍上，见 InfoWindowSpec 的说明）。
+  // `items` **不给运行期默认值**：菜单的「空」与「没传」在行为上同义（空菜单不会被挂上），
+  // 给一个 `() => []` 的默认值只会让「父级还没算好数据」与「父级真的要空菜单」变得不可区分。
   visible: true,
 });
 
-const emit = defineEmits<{
-  /** SDK 事件：菜单真正展开（`ContextMenuEventMap`）。 */
-  open: [event: OverlayPartialPointerEvent];
-  /** SDK 事件：菜单关闭（选中某项、`hide()`、点击别处）。 */
-  close: [event: OverlayPartialPointerEvent];
-  /** 本库事件（**不是** SDK 事件）：某一项被选中，载荷见 `ContextMenuSelectPayload`。 */
-  select: [payload: ContextMenuSelectPayload];
-}>();
+const emit = defineEmits<ContextMenuEmits>();
 
 const emitDynamic = dynamicEmit(emit);
 const ctx = useRequiredMapContext();

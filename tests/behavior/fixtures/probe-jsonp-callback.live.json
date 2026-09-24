@@ -1,5 +1,5 @@
 {
-  "note": "probe-jsonp-callback.mts 的一次成功 live 报告（phase/sdk/readings 原样抄录，判定层消费其中子集）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-jsonp-callback.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/v3-probe-jsonp-callback-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
+  "note": "probe-jsonp-callback.mts 的一次成功 live 报告（phase/sdk/readings 原样抄录，判定层消费其中子集）。生成方式：BAIDU_MAP_AK=<ak> node --experimental-strip-types scripts/probe-jsonp-callback.mts --out=<tmp>，退出码必须为 0，再把 phase/sdk/readings 抄过来（丢掉 console/error）。tests/behavior/probe-jsonp-callback-verdicts.test.ts 会断言 COMPLETE 的每条读数与它逐字段一致。",
   "capturedAt": "2026-09-24",
   "phase": "done",
   "sdk": {
