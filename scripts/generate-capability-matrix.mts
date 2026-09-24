@@ -30,7 +30,6 @@ interface Descriptor {
   family: string
   description: string
   rawMembers?: readonly string[]
-  engines: readonly string[]
   status: string
   runtimeOnly: boolean
 }
@@ -45,9 +44,6 @@ const catalog = (await import(freshModuleUrl(catalogPath))) as {
 }
 
 const { CAPABILITY_CATALOG, CAPABILITY_IDS, CAPABILITY_FAMILIES, CAPABILITY_STATUSES } = catalog
-
-// 单引擎基线（M3A3-REMOVE-LEGACY / #26）：旧引擎删除后只剩 jsapi-v4，引擎列因此只有一列。
-const ENGINES = ['jsapi-v4'] as const
 
 const STATUS_MEANING: Record<string, string> = {
   native: 'SDK 原生能力，直接映射官方 API',
@@ -93,14 +89,19 @@ function renderMarkdown(): string {
   }
   lines.push('')
 
-  lines.push('## 引擎矩阵')
+  lines.push('## 能力矩阵')
   lines.push('')
   lines.push(
     '「运行时探测」表示该能力只能通过实例/原型成员在运行时探测（官方类型包无对应静态声明）。',
   )
   lines.push('')
+  lines.push(
+    '单引擎基线（#26 删除 `webgl-v1` / `jsapi-v3`，#126 结算退化维度）：能力目录**不再**按引擎区分，' +
+      '因此没有引擎列——所有条目都面向当前唯一引擎 `jsapi-v4`。',
+  )
+  lines.push('')
 
-  const headerCells = ['家族', '能力', '状态', '运行时探测', ...ENGINES, 'raw members', '说明']
+  const headerCells = ['家族', '能力', '状态', '运行时探测', 'raw members', '说明']
   lines.push(`| ${headerCells.join(' | ')} |`)
   lines.push(`| ${headerCells.map(() => '---').join(' | ')} |`)
 
@@ -108,14 +109,12 @@ function renderMarkdown(): string {
     for (const id of CAPABILITY_IDS) {
       const d = CAPABILITY_CATALOG[id]
       if (d.family !== family) continue
-      const engineCells = ENGINES.map((engine) => mark(d.engines.includes(engine)))
       const members = (d.rawMembers ?? []).join(', ') || '—'
       const cells = [
         family,
         `\`${id}\``,
         d.status,
         mark(d.runtimeOnly),
-        ...engineCells,
         members,
         d.description,
       ]
@@ -133,7 +132,7 @@ function renderJson(): string {
     source: 'packages/bmap-vue/src/driver/capability/catalog.ts',
     families: CAPABILITY_FAMILIES,
     statuses: CAPABILITY_STATUSES,
-    engines: ENGINES,
+    // #126：单引擎收口后不再输出 engines（原先的 `engines` / 每条 `engines` 字段已删）。
     capabilities: CAPABILITY_IDS.map((id) => {
       const d = CAPABILITY_CATALOG[id]
       return {
@@ -141,7 +140,6 @@ function renderJson(): string {
         family: d.family,
         status: d.status,
         runtimeOnly: d.runtimeOnly,
-        engines: d.engines,
         rawMembers: d.rawMembers ?? [],
         description: d.description,
       }

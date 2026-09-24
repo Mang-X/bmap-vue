@@ -1,7 +1,7 @@
 /**
  * CapabilityRegistry
  *
- * 运行时能力探测：显式 override → 声明状态 → engine 白名单 → raw member 存在性。
+ * 运行时能力探测：显式 override → 目录是否收录 → 声明状态 → raw member 存在性。
  * require() 按 unsupported 策略 throw/warn/silent。
  *
  * ## 「成员存在性」有三个来源（#29 评审 P1）
@@ -34,7 +34,11 @@ import { UnsupportedCapabilityError, type UnsupportedBehavior } from "./unsuppor
 
 export type CapabilityReason =
   | "supported"
-  | "engine-unsupported"
+  /**
+   * 目录**未收录**该 id（#126 取代 `engine-unsupported`：单引擎下「引擎不在白名单」不可达，
+   * 原 reason 的唯一可达路径就是描述符缺失）。调用方带着外部字符串或 `as Capability` 探针进来时命中。
+   */
+  | "unlisted-capability"
   | "raw-member-missing"
   | "status-unsupported"
   | "overridden";
@@ -118,12 +122,9 @@ export function createCapabilityRegistry(
     capability: Capability,
   ): { supported: boolean; reason: BaseReason; descriptor: CapabilityDescriptor | undefined } => {
     const descriptor = CAPABILITY_CATALOG[capability];
-    if (!descriptor) return { supported: false, reason: "engine-unsupported", descriptor };
+    if (!descriptor) return { supported: false, reason: "unlisted-capability", descriptor };
     if (descriptor.status === "unsupported") {
       return { supported: false, reason: "status-unsupported", descriptor };
-    }
-    if (!descriptor.engines.includes(engine)) {
-      return { supported: false, reason: "engine-unsupported", descriptor };
     }
     for (const member of descriptor.rawMembers ?? []) {
       if (!hasMember(rawSdk, member) && !observedMembers.has(member)) {
@@ -162,8 +163,8 @@ export function createCapabilityRegistry(
 
     explain(capability) {
       // `Capability` 是目录 id 的联合，但调用方可以带着**未收录**的 id 进来（外部字符串、
-      // 或 `as Capability` 的探针），而「未收录」正是单引擎下 `engine-unsupported` 的唯一可达路径
-      // （见 registry.test.ts 与 v3-capability-catalog.test.ts 的 `does.not-exist`）。
+      // 或 `as Capability` 的探针）；`unlisted-capability` 就是这条路径（#26 删除旧引擎后，
+      // 「引擎不在白名单」不再可达，#126 随之把该 reason 改名为与路径一致的名字）。
       // 所以这里按「可能没有描述符」写：`family` 留空（不编一个值——原先兜的是 `"runtime"`，
       // 那个 family 已随 #104 R10 删除，报出来就是个没人能解释的幽灵值）。
       const descriptor: CapabilityDescriptor | undefined = CAPABILITY_CATALOG[capability];
