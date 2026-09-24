@@ -48,6 +48,7 @@ import type { InfoWindowHandle } from "../../driver/types/handles";
 import type { ResourceRegistration } from "../overlays/OverlayRegistry";
 import { readElementSize } from "../runtime/elementSize";
 import { stableKeyOf } from "../utils/stableKey";
+import { watchKeyedSources, type KeyedSource } from "../utils/keyedSources";
 import { useSdkResource } from "./useSdkResource";
 
 /** 转发的 SDK 事件名（官方 `InfoWindowEventMap` 去掉 `resize`）。 */
@@ -59,8 +60,9 @@ type ForwardedSdkEvent = (typeof FORWARDED_SDK_EVENTS)[number];
  *
  * 官方 `InfoWindowEventMap` 声明了 6 个事件，本文件只转发 5 个：气泡尺寸由组件自己的
  * `width` / `height` prop 驱动并经 `setContent` 重绘（见 `drainOptions`），
- * 官方的 `resize` 事件本库**只观察尺寸变化并转发载荷**（`emit(name, event)`），
- * 并不由它驱动任何状态。留着它就没有派发点：声明了却永不触发（Vue 不报错，比缺声明更糟）。
+ * 官方的 `resize` 事件在本库**没有派发点**——`bindSdkEvents` 只遍历
+ * `FORWARDED_SDK_EVENTS`，`resize` 从未注册监听，也因此没有载荷可转发；
+ * 它在本库既不驱动任何状态、也不对外暴露。
  *
  * 因此 `<InfoWindow>` 的 `defineEmits` **不包含** `resize`，也不把它算进事件面
  * （`scripts/generate-overlay-emits.mts` 的载荷覆写表同款口径，见 ADR #138 决策 ⑥）。
@@ -289,8 +291,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
    * post queue** 里跑，而 post queue 排在 render effects **之后**——父级重渲染必然已经完成。
    * 于是「等父级落地」不再需要手写跳数。
    *
-   * `convergeQueued` 保留，但作用从「数 tick」变成「同一轮里合并多个 SDK 事件」：
-   * `open` + `close` + `clickclose` 在一次派发里连着到达时只排一次。
+   * `convergeTick` 的作用从「数 tick」变成「同一轮里合并多个 SDK 事件」：
+   * `open` + `close` + `clickclose` 在一次派发里连着到达时只排一次 post effect
+   * （Vue 对同一轮里的多次 `trigger` 天然合并；计数器在此只当「有没有待收敛」的标志位用，
+   * `=== 0` 表示尚无请求）。
    *
    * **收敛只有一个 post-flush 入口**（#138）：`onIntentChanged` 与 `scheduleConverge` 都只
    * 「请求」收敛，不自己跑。两者分离出第二个 `reconcile()` 调用点时，post effect 会紧接着
@@ -494,11 +498,10 @@ export function useInfoWindow<Props extends InfoWindowProps>(
         // 各写各的会让 N 个回调在同一 flush 里逐个跑，第一个就把 `setOptions` 发出去；
         // 合成之后「一轮一次回调」由 Vue 的 batching 保证。
         //
-        // `optionKeys`（下发给 Driver 的描述符键）与 `optionProps`（读 props 用的名字）
-        // **同趟循环产出**：两趟派生会分叉，而分叉的后果是「改了 prop 却改了另一个键」。
-        const optionSources: Array<() => unknown> = [];
-        const optionKeys: string[] = [];
-        const optionProps: string[] = [];
+        // 每个 option 源同时带「下发给 Driver 的描述符键 `key`」（声明缺省时等于 prop 名）与
+        // 取当前值的 `read`——两者**同趟循环产出**：分两趟派生会分叉，而分叉的后果是
+        // 「改了 prop 却改了另一个键」。
+        const optionSources: KeyedSource<unknown>[] = [];
         for (const [prop, update] of Object.entries(INFO_WINDOW_FIELDS) as Array<
           [string, InfoWindowFieldUpdate]
         >) {
@@ -517,27 +520,17 @@ export function useInfoWindow<Props extends InfoWindowProps>(
             continue;
           }
           // 源用稳定序列化：内联对象按内容判等
-          optionSources.push(() => stableKeyOf((props as Record<string, unknown>)[prop]));
-          optionKeys.push(key);
-          optionProps.push(prop);
+          optionSources.push({
+            key,
+            source: () => stableKeyOf((props as Record<string, unknown>)[prop]),
+            read: () => (props as Record<string, unknown>)[prop],
+          });
         }
 
         if (optionSources.length > 0) {
-          scope.add(
-            watch(
-              optionSources,
-              // 回调在 post-flush 跑，因此读到的是**本轮最终**的值（不是触发那一刻的中间值）
-              (next, prev) => {
-                const changed: Record<string, unknown> = {};
-                for (let i = 0; i < next.length; i++) {
-                  if (next[i] === prev[i]) continue;
-                  changed[optionKeys[i]] = (props as Record<string, unknown>)[optionProps[i]];
-                }
-                if (Object.keys(changed).length > 0) markOptionsDirty(changed);
-              },
-              { flush: "post" },
-            ),
-          );
+          // 回调在 post-flush 跑，因此读到的是**本轮最终**的值（不是触发那一刻的中间值）。
+          // 机制见 `watchKeyedSources`（与 `useOverlaySpec` 共用同一个数组源 watcher）。
+          scope.add(watchKeyedSources(optionSources, markOptionsDirty));
         }
       },
     },

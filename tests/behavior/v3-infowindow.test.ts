@@ -306,10 +306,14 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     harness.assertIdle('快速开关')
   })
 
-  it('#138：一次事件驱动的收敛只发一轮命令（post-flush 替掉双 nextTick 的证据）', async () => {
-    // 双 `nextTick` 与「post-flush 排一次」的区别不在最终状态（两者都收敛），
-    // 而在**命令条数**：一个被 `echoedClosed` 挡住、另一个本可由 observed 读数挡住的空转，
+  it('#138：一次事件驱动的收敛不多发命令', async () => {
+    // 这里锁的是「不多发」：一个被 `echoedClosed` 挡住、或本可由 observed 读数挡住的空转，
     // 都会表现为「同一次事件多发一条 open/close」。
+    //
+    // **如实说明边界**：本条**不是**「单入口收敛」的门禁。把 post effect 改成连跑两次
+    // `reconcile()`，本条照样通过——真正会红的是下面「关闭命令抛错」那条（第一次抛错、
+    // 第二次成功 ⇒ 多发一次 `closeInfoWindow`，吃掉「失败保持事实不变」这条不变量）。
+    // 单入口的证据在那条用例与 `useInfoWindow.ts` 的机制注释里，不在这里。
     const el = harness.container()
     const open = ref(true)
     const wrapper = mountTree(
@@ -333,7 +337,7 @@ describe('所有权与收敛：desired（open）→ 地图上的实际状态', (
     expect(open.value, '父级受控回写落地').toBe(false)
     expect(currentInfoWindow(), '最终地图上没有气泡').toBeNull()
     // 收敛只补**必要**的命令：用户点关闭按钮时 SDK 侧已经关掉了它，读回说「不在地图上」
-    // ⇒ 收敛既不补 close 也不补 open。命令条数正是 post-flush 换掉双 `nextTick` 的可观测差异。
+    // ⇒ 收敛既不补 close 也不补 open。
     expect(map.callLog.filter((c) => c === 'closeInfoWindow').length).toBe(closes0)
     expect(map.callLog.filter((c) => c === 'openInfoWindow').length).toBe(opens0)
 

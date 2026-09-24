@@ -27,7 +27,7 @@
  * 非数值（`NaN` / `±Infinity`）**不参与容差比较**：只有严格相等才算等。否则
  * `numbersEqual(NaN, NaN)` 会返回 true，把「引擎读不出值」伪装成「值一致」。
  */
-import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
+import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
 
 /** 经纬度容差（度）：约 1.1cm。 */
 export const POINT_EPSILON = 1e-7
@@ -108,7 +108,7 @@ export function centerKey(value: CenterLike | null | undefined): string {
  * 定形几何的标量键（#138）
  *
  * 用途与 `centerKey` 相同——给 `watch` 当源——但覆盖的是**定形**（字段固定、浅层）的值：
- * `Point` / `Pixel` / `Size` / `Bounds`。这四类此前走 `stableKeyOf` 的通用稳定序列化
+ * `Point` / `Pixel` / `Bounds`。这三类此前走 `stableKeyOf` 的通用稳定序列化
  * （`core/utils/stableKey.ts`：排序 key + `JSON.stringify`），对 2~4 个标量的对象是**纯浪费**：
  * 每次读都要建中间对象、排序、再序列化一遍，而 watch 源每个字段每轮都要读。
  *
@@ -118,14 +118,16 @@ export function centerKey(value: CenterLike | null | undefined): string {
  *
  * 与 `centerKey` 一致的取舍：键只回答「**可能要变**」，**不带容差**。容差判定交给 `*Equals`
  * 那一族（`pointEquals` 等）。反过来（键带容差）会让抖动范围内的**真实改动**在 watch 层被直接吃掉。
- * 前缀（`p:` / `px:` / `sz:` / `b:`）是防形态撞键：不同字段的键会进同一批待办，
- * `px:1,2` 与 `sz:1,2` 撞成同一个键会让一次真实变更被判成「没变」。
+ * 前缀（`p:` / `px:` / `b:`）是防形态撞键：不同字段的键会进同一批待办，
+ * 两个同值的键撞成同一个会让一次真实变更被判成「没变」。
  *
  * **`size` 档的现实形态是 Pixel 而不是 Size**：`MarkerProps.offset` / `LabelProps.offset` 公开的
  * 都是 `{ x, y }`（`types/components.ts`），尽管描述符把它们登记为 `value: "size"`
  * （上游 `MarkerOptions.offset` 确实吃 `Size` 对象，本库对外用 Pixel 这一约定保持历史面）。
- * 因此 `size` 档的实际键是 `px:` —— 组件侧的 `{x,y}` 与 `Size` 的 `{width,height}` 键不同，
- * 但两者不会同时出现在一个覆盖物上。
+ * 因此 `size` 档的实际键是 `px:` —— 组件侧的 `{x,y}` 与 `Size` 的 `{width,height}` 必须不同键，
+ * 否则一次真实变更会被判成「没变」（`setOffset` 用例一度因此空跑）。
+ * 顺带一条结论：**没有** `sizeKey` —— `Size` 形态在本库没有对外字段，留着就是
+ * 「以后可能有用」的扩展面（与 `2026-09-14-service-lifecycle-and-local-search` 的判据一致）。
  * -------------------------------------------------------------------------------- */
 
 /** `Point` 的标量键（经纬度）。 */
@@ -138,12 +140,6 @@ export function pointKey(value: Point | null | undefined): string {
 export function pixelKey(value: Pixel | null | undefined): string {
   if (value == null) return ''
   return `px:${value.x},${value.y}`
-}
-
-/** `Size`（`{width, height}`）的标量键。 */
-export function sizeKey(value: Size | null | undefined): string {
-  if (value == null) return ''
-  return `sz:${value.width},${value.height}`
 }
 
 /** `Bounds`（`{southwest, northeast}`）的标量键：两个点摊平成四个标量。 */

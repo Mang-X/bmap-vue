@@ -501,6 +501,88 @@ describe("mutable 就地更新，构造期属性重建", () => {
     harness.assertIdle("replace 窗口的尾随更新");
   });
 
+  it("replace 窗口里同一个键连续变化：只并一次、最终落到实例上的是**新值**", async () => {
+    // 上面那条只覆盖「尾随批有 key 但没有再变」。这里覆盖更细的一格：**同一个 key 在
+    // replace 窗口里变了两次**。两次都写进 `trailing`，因此这条真正锁的是
+    // `markDirty` 的尾随合并 `trailing = { ...trailing, ...updates }`：**按键**折叠、
+    // **后到的值**胜。
+    //
+    // **不要**把它当成展开顺序的门禁：#138 取证确认这里**没有**放回路径（`reconciling`
+    // 保证并发 `markDirty` 进不了 `dirtyFields`，`applyBatch` 的两处「放回」已作为不可达
+    // 死代码删除）。实测把该合并的展开顺序反过来，本用例**照样通过**——因为
+    // `zIndex` 在 `descriptorKeys` 之外，窗口内的两次变化压根不进这条合并，而是各挂一整批
+    // `trailing`、由下一轮按后到的批生效。所以它守的是「键折叠 + 新值生效 + 只重建一次」，
+    // 不是「谁覆盖谁」的顺序。
+    //
+    // 窗口必须真的打开：fake 的 `createMarker` 是同步的，`await spec.create(...)` 只让出
+    // 一个微任务，因此换 `create` 为**挂起**版本（闸门），否则 replace 在第一个 `nextTick`
+    // 内就结算完了，测的是「正常路径」而不是 replace 窗口。
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gateOpen = true;
+    const state = reactive<{ position: { lng: number; lat: number }; zIndex: number | undefined; title: string }>({
+      position: { lng: 116.4, lat: 39.9 },
+      zIndex: 1,
+      title: "a",
+    });
+    const spec: OverlaySpec<typeof state, MarkerHandle> = {
+      type: "reorder-probe",
+      targetKind: "marker",
+      kind: "marker",
+      fields: { position: "position", zIndex: "options", title: "options" },
+      descriptorKeys: { position: "position" },
+      create: async (context, p) => {
+        if (!gateOpen) await gate;
+        return context.client.driver.overlays.createMarker({ ...p.position }, {
+          zIndex: p.zIndex,
+          title: p.title,
+        });
+      },
+    };
+    const Probe = defineComponent({
+      setup() {
+        useOverlaySpec(state, spec, { emit: () => {} });
+        return () => null;
+      },
+    });
+    const Host = defineComponent({
+      components: { Map, Probe },
+      setup() {
+        return () => h(Map, { provider: harness.provider() }, () => [h(Probe)]);
+      },
+    });
+    const wrapper = mount(Host, { attachTo: harness.container() });
+    await settle();
+    expect(fake.createdOverlays.length).toBe(1);
+
+    // 之后每次 replace 都挂起：窗口由此打开
+    gateOpen = false;
+    state.title = "b";
+    await nextTick();
+    expect(fake.createdOverlays.length, "闸门关着，replace 必须还在飞").toBe(1);
+
+    // 窗口内：同一个键连续两次变化，期望最终是后到的 30
+    state.zIndex = 20;
+    await nextTick();
+    state.zIndex = 30;
+    await settle();
+
+    release();
+    await settle();
+    await settle();
+
+    expect(harness.attached("overlay")).toBe(1);
+    const marker = fake.createdOverlays[fake.createdOverlays.length - 1] as unknown as FakeV4Marker;
+    expect(marker.zIndex, "窗口内后到的值必须赢").toBe(30);
+    expect(marker.title, "构造期字段走重建").toBe("b");
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("replace 窗口内的重复变更");
+  });
+
   it("快速连续两次重建：地图上恰好一个实例，不重复挂载", async () => {
     const enableClicking = ref(true);
     const zIndex = ref(0);

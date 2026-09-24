@@ -792,9 +792,6 @@ export const OVERLAY_REVERT_RATIONALE = {
     "Prism 的 sideFillOpacity 有 getSideFillOpacity，但返回当前值而非默认透明度 ⇒ 重建",
 } as const satisfies Partial<Record<string, string>>;
 
-/** 逐字段表里登记过的字段名（测试按它逐条核对「表与描述符都覆盖了这个字段」）。 */
-export type OverlayRevertRationaleKey = keyof typeof OVERLAY_REVERT_RATIONALE;
-
 const OVERLAY_KINDS = Object.keys(OVERLAY_DESCRIPTORS) as OverlayKind[];
 const KIND_BY_BRAND = new Map<string, OverlayKind>(
   OVERLAY_KINDS.map((kind) => [`overlay:${kind}`, kind]),

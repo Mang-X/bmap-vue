@@ -37,8 +37,9 @@
  * ## #138：props 视图不再用运行时 Proxy
  *
  * 别名解析（旧 prop 名）+ 值投影（惰性值）原先挂在一个 `new Proxy(rawProps, …)` 上，代价是
- * **每次读 props 都过一层 trap**（watch 源每字段每轮都要读若干次）。覆盖面其实只有两组别名
- * （`bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`）与一处投影（`GroundOverlay.url`），
+ * **每次读 props 都过一层 trap**（watch 源每字段每轮都要读若干次）。别名表（`OVERLAY_PROP_ALIASES`）
+ * 总共三组，但走本内核的只有两组（`bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`），
+ * 加上一处投影（`GroundOverlay.url`）——覆盖面小到可以用一个显式读取函数表达，
  * 因此收成一个显式的 `readProp()`；而 `useSdkResource` 需要的「整份 props」只在 `create` /
  * `afterMount` 各读一次，**物化**一份普通对象即可（见 `lifecycleProps`）。
  * `readRawProp` 保留原始引用语义——`reference` / `versioned` 两种源必须读到未投影的根引用。
@@ -63,6 +64,7 @@ import {
   watch,
 } from "vue";
 import type { ComponentInternalInstance, ShallowRef } from "vue";
+import { watchKeyedSources, type KeyedSource } from "../utils/keyedSources";
 import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
 import { useRequiredMapContext } from "../context/inject";
 import { targetContextKey, type TargetContext, type TargetKind } from "../context/target";
@@ -297,8 +299,10 @@ export function useOverlaySpec<Props extends object, Resource>(
    *   「新 API 优先 / 旧名齐备 / 不猜」判定，并在真的用到旧名时告警一次）；
    * - **投影在别名之后**：`url` 的工厂函数必须先求值再交给 SDK（`setImage` 只接受真实来源）。
    *
-   * 删掉 Proxy 的依据（#138）：它服务的只有两组别名（`bounds` ← `startPoint`+`endPoint`、
-   * `items` ← `menuItems`）与一处投影（`GroundOverlay.url`），覆盖面小到可以用一个显式读取函数表达；
+   * 删掉 Proxy 的依据（#138）：别名表三组（`OVERLAY_PROP_ALIASES`）里走本内核的只有两组
+   * （`bounds` ← `startPoint`+`endPoint`、`items` ← `menuItems`；第三组 `info-window.open` ←
+   * `show` 由 `useInfoWindow` 自己解析，不经 `useOverlaySpec`），加上一处投影
+   * （`GroundOverlay.url`）——覆盖面小到可以用一个显式读取函数表达；
    * 而 Proxy 的代价是**每次读 props 都过一层 trap**——覆盖物的 watch 源每个字段每轮都要读若干次。
    * 显式读取把这份判断收到一个函数里，行为等价（读的名字与投影顺序逐条照抄），且可测。
    */
@@ -469,16 +473,25 @@ export function useOverlaySpec<Props extends object, Resource>(
    */
   const possiblyApplied = new Set<string>();
 
-  /** 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。 */
+  /**
+   * 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。
+   *
+   * **「实例不可用」在这里不是一个分支，而是一个不变式**（#138 取证）：
+   * `reconcileFields` 的排空条件是 `while (dirtyFields && sdk.resource.value)`，因此
+   * `applyBatch` 只会带着 `sdk.resource.value` 非空进来；`reconciling` 又保证并发进入的
+   * `markDirty` 不会往 `dirtyFields` 里塞第二批。因此**不需要**把批放回去——v3 那条
+   * 「放回 + 重排」（`requeueStaleBatch`）与 Vue batching 叠加后不再有可达入口，留着就是一段
+   * 永远不执行、却要求读者推断展开顺序的代码（实测：即使让 `create` 在 replace 中抛错也进不去）。
+   * 真正承担「不丢值」的是两处：`trailing`（replace 窗口）与 `bind()`（就绪窗口）。
+   */
   async function applyBatch(batch: Record<string, unknown>): Promise<void> {
     const context = readyCtx;
     const current = sdk.resource.value;
     if (!context || !current) {
-      // 实例还没就绪：留在待办里，等 `bind` 排空（不丢值）。
-      // 整批放回「已有待办之后」：batch 是先取走的那一批，`dirtyFields` 里可能已积压更新的值，
-      // 反过来展开会让旧值覆盖新值。
-      dirtyFields = { ...(dirtyFields ?? {}), ...batch };
-      return;
+      // 不变式被打破时的显式失败，而不是静默吞掉一批更新
+      throw new Error(
+        `useOverlaySpec(${spec.type}).applyBatch: 排空条件之外拿到了没有实例的一批更新`,
+      );
     }
     const overlays = context.client.driver.overlays;
     const handle = current as unknown as OverlayHandle;
@@ -521,9 +534,10 @@ export function useOverlaySpec<Props extends object, Resource>(
     }
     const target = sdk.resource.value;
     if (!target) {
-      // 同上：放回已有待办之后（旧值不覆盖新值）。走到这里说明 replace 之后实例仍不可用
-      // （`create` 抛错等），值留给 `bind` 的那次排空，不丢。
-      dirtyFields = { ...(dirtyFields ?? {}), ...batch };
+      // replace 之后实例仍不可用（`create` 抛错 / 被新一代取代）。**不放回**：这批里已经
+      // 下发过的部分不必重放，而没下发的部分会由 `bind()` 的那次排空按待办重新走一遍
+      // （`markDirty` 在 replace 窗口里写的是 `trailing`，它已并入 `dirtyFields`）。
+      // 「值不丢」的保证来自就绪窗口，不来自这里——与上面那条不变式是同一件事。
       return;
     }
     if (Object.keys(inPlace).length === 0) return;
@@ -569,9 +583,11 @@ export function useOverlaySpec<Props extends object, Resource>(
   async function reconcileFields(): Promise<void> {
     reconciling = true;
     try {
-      // `sdk.resource.value` 这一半**不是**优化，是死循环的唯一挡板：`applyBatch` 在实例未就绪时
-      // 会把整批原样放回 `dirtyFields`（「不丢值，等 bind 排空」），若条件只看 `dirtyFields`
-      // 就会原地取回同一批、再放回，永远不退出。旧 `while (pendingApply && sdk.resource.value)` 同理。
+      // `sdk.resource.value` 这一半**不是**优化，是不变式的另一半：`applyBatch` 只在实例可见时
+      // 才被调用（见它的入参不变式），因此这一行同时是「排空条件」与「不会空转」的保证。
+      // #138 之前这里还兼着一个挡板角色——旧的 `applyBatch` 在实例未就绪时会把整批放回
+      // `dirtyFields`，只看 `dirtyFields` 就会原地取回再放回、死循环。放回路径已经删除，
+      // 挡板也就不需要了，但条件本身保留：它让「实例不可用 ⇒ 不排空」成为显式契约。
       while (dirtyFields && sdk.resource.value) {
         const batch = dirtyFields;
         dirtyFields = null;
@@ -785,15 +801,10 @@ export function useOverlaySpec<Props extends object, Resource>(
         // **例外：`versioned`（大数组）不进这张表**。它的 `flush: "sync"` 是 v3 的既有语义
         // （路径更新要与父级渲染同一次提交内落地，见 ADR `2026-09-24-scheduler-batching-hot-path.md`
         // 的取证与 #138 的明确约束），合成 post-flush 批会把它改回 `pre` 档。
-        type WatchEntry = {
-          /** 下发给 Driver 的描述符键（`spec.descriptorKeys` 覆写后可能与 prop 名不同）。 */
-          readonly key: string;
-          /** 触发判定用的读法（指纹 / 标量键 / 引用）。 */
-          readonly source: () => unknown;
-          /** 下发时取值用的 prop 名（**读 prop 用**，`key` 只是 Driver 侧的名字）。 */
-          readonly prop: string;
-        };
-        const entries: WatchEntry[] = [];
+        // `key` 是下发给 Driver 的描述符键（`spec.descriptorKeys` 覆写后可能与 prop 名不同）；
+        // `source` 是触发判定用的读法（指纹 / 标量键 / 引用）；`read` 取当前值——
+        // 两者都闭包捕获了 `prop`，因此不需要把 prop 名再带一遍（判等与取值读的是同一个 prop）。
+        const entries: KeyedSource<unknown>[] = [];
         for (const [prop, update] of fields) {
           // 组件侧语义字段：`version` 只作为配对字段的 watch 源之一，`alias` 只经正典名被读取
           if (update === "visibility" || update === "position") continue;
@@ -812,7 +823,7 @@ export function useOverlaySpec<Props extends object, Resource>(
           }
           if (source === "reference") {
             // 内容不可序列化的字段（url 的惰性工厂）：只比根引用，读**原始** prop
-            entries.push({ key, prop, source: () => readRawProp(prop) });
+            entries.push({ key, source: () => readRawProp(prop), read: () => readProp(prop) });
             continue;
           }
           // watch 源：形状是**定形**时用标量键，否则用稳定序列化（#138）。
@@ -827,32 +838,18 @@ export function useOverlaySpec<Props extends object, Resource>(
           // 继续走 `stableKeyOf`：它们的字段随 SDK 版本增减，手写键会漏字段。
           const shape = fixedShapeKeyOf(kind, key);
           if (shape) {
-            entries.push({ key, prop, source: () => shape(readProp(prop)) });
+            entries.push({ key, source: () => shape(readProp(prop)), read: () => readProp(prop) });
             continue;
           }
           // 通用稳定序列化：对象字段（icon / offset / style / bounds）必须按内容判等，
           // 否则父级每次渲染传内联字面量都会重新下发一次命令。
-          entries.push({ key, prop, source: () => stableKeyOf(readProp(prop)) });
+          entries.push({ key, source: () => stableKeyOf(readProp(prop)), read: () => readProp(prop) });
         }
 
         if (entries.length > 0) {
-          scope.add(
-            watch(
-              entries.map((entry) => entry.source),
-              // 回调只报「哪些描述符键变了」；取值在这一刻做，因此 post-flush 读到的是
-              // **本轮最终**的值（不是触发时那一刻的中间值）。
-              (next, prev) => {
-                const changed: Record<string, unknown> = {};
-                for (let i = 0; i < next.length; i++) {
-                  if (next[i] === prev[i]) continue;
-                  // 同一 prop 出现两次时（`versioned` 已单独处理，这里理论上不会）取最后一个
-                  changed[entries[i].key] = readProp(entries[i].prop);
-                }
-                if (Object.keys(changed).length > 0) markDirty(changed);
-              },
-              { flush: "post" },
-            ),
-          );
+          // 回调只报「哪些描述符键变了」；取值在回调那一刻做，因此 post-flush 读到的是
+          // **本轮最终**的值（不是触发时那一刻的中间值）。机制见 `watchKeyedSources`。
+          scope.add(watchKeyedSources(entries, markDirty));
         }
       },
     },
