@@ -30,7 +30,7 @@ title: 数据组件
 
 | 属性 | 说明 | 类型 |
 | --- | --- | --- |
-| `data` | 数据数组（只按**引用**比较） | `readonly Item[]` |
+| `data` | 数据数组（只按**引用**比较；**大数组建议 `shallowRef` / `markRaw`**，见下文「大数据量」） | `readonly Item[]` |
 | `itemKey` | 唯一键：属性名或取值函数 | `keyof Item \| ((item: Item) => PropertyKey)` |
 | `getPosition` | 取坐标；返回 `null` / `undefined` = 这一项没有位置 | `(item: Item) => { lng: number; lat: number } \| null \| undefined` |
 | `dataVersion` | **引用不变、内容变了**时递增它 | `PropertyKey` |
@@ -94,6 +94,58 @@ function onItemClick(station: Station) {
   **`(0, 0)` 是合法坐标**，不会被当作「缺失」；
 - 同一批数据里 key 重复 ⇒ **后者胜**（重复 id 的行为官方没有声明，因此不能交给 SDK）；
 - `properties()` 里写了 id 字段 ⇒ 被要素身份覆盖并告警（否则拾取回来的 key 与业务项对不上）。
+
+## 大数据量：`shallowRef` / `markRaw`
+
+数据组件的 `data` 只按**引用**比较，但这个引用会在一次 **O(n) 转换**里被逐项读取（`Item[]` → 内部
+`FeatureCollection`）。如果 `data` 是 Vue 的**深响应**数组——`ref([...])` / `reactive([...])` 是最常见的
+写法——这次转换里的每个字段读取都要穿过 Proxy 并做**依赖收集**：50k 项换一次引用在组件路径里要
+**0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），而同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
+贵的不是算法，是「在响应式 effect 里逐项读一份大数组」。
+
+大数据量请把数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，不再代理每一项）：
+
+```vue
+<script setup lang="ts">
+import { markRaw, ref, shallowRef } from 'vue'
+
+interface Station { id: string; lng: number; lat: number; name: string }
+
+const stations = shallowRef<Station[]>([])
+const version = ref(0)
+
+function replace(next: Station[]) {
+  // markRaw 让这份数据整体退出响应式系统；换引用本身仍被 shallowRef 感知
+  stations.value = markRaw(next)
+}
+
+function moveFirst() {
+  stations.value[0]!.lng += 0.001
+  // 原地改内容不会换引用 ⇒ 必须递增 dataVersion 让组件重新读取（既有契约）
+  version.value += 1
+}
+</script>
+
+<template>
+  <BPointShapeLayer
+    :data="stations"
+    :data-version="version"
+    item-key="id"
+    :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
+  />
+</template>
+```
+
+边界与代价：
+
+- `shallowRef` / `markRaw` 之后，**原地改内容**（`stations.value[0].lng = …`）不会自动被感知——这与
+  现有契约一致（`data` 只按引用比较）：原地改请递增 `dataVersion`。用深响应数组时本来也得靠它
+  （组件不 watch 大数组的深层变化），所以这**不是**新增的约束。
+- 组件这一侧**不做任何隐式转换**（不替使用者美化输入），因此读数与行为都反映你的真实写法；若数据
+  还要被别处的模板消费、不想放弃深响应，可以在宿主侧另做一份 `markRaw` 视图再传进来。
+
+依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
+对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
 
 ## `BMarkerList`
 
