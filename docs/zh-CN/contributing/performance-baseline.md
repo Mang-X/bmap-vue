@@ -12,7 +12,7 @@
 越过这条线的是**组件路径在 50k 上的整段交付**（一次性挂载 47 ~ 68ms、换数据 97 ~ 217ms），但它的
 代价主体不是我们的算法，而是**在响应式上下文里读这份大数组**：同一份数据换 `markRaw` / `shallowRef`
 之后，换数据从 ~120ms 掉到 14 ~ 26ms（基准里 `component-path` §5 的常驻对照读数，比值 4.5 ~ 8.4×）。
-Worker 也要先把数据读出来再送过去，所以它解决不了这条。**#124 已据此收口**：大数据量请用
+Worker 也要先把数据读出来再送过去，所以它解决不了这条。**#124 的深响应子问题据此落地**：大数据量请用
 `shallowRef` / `markRaw`（原地改内容靠 `dataVersion`，见 [数据组件](/zh-CN/components/data) 的
 「大数据量」）；决策与取证见 ADR
 [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)。
@@ -217,6 +217,7 @@ CI 的 `performance` job 先 `build:v3`，因此 `3` 出现在 CI 里就意味�
   （同轮比值层不受此限）。
 - 基线录在 CI runner 上（见上）；本机读数与它不可比是**预期**的，不是缺陷。
 - 真实浏览器档见上文「真实浏览器档」（**#123** 已实跑并回填：`pnpm perf:baseline:live`）；
-  深响应输入的长任务由 **#124** 收口（文档指引，见
-  [ADR 2026-09-24](/adr/2026-09-24-deep-reactive-array-update-path)）；line/fill 的 SDK 内部重绘优化
-  若有消费者另开票。
+  深响应大数组这一子问题的落地方式是文档指引（见
+  [ADR 2026-09-24](/adr/2026-09-24-deep-reactive-array-update-path)）；**#124** 在 2026-09-23
+  重新分类后新增的 scheduler/batching 取证仍在 #124（1.0 P1，前置 #134），未在本处收口；
+  line/fill 的 SDK 内部重绘优化若有消费者另开票。

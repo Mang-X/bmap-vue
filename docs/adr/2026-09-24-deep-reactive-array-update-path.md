@@ -1,13 +1,16 @@
-# 深响应大数组的更新路径：文档指引落地、`pauseTracking` 不落地（#124）
+# 深响应大数组的更新路径：文档指引落地、`pauseTracking` 不落地（#124 深响应子问题）
 
 - 状态：Accepted
 - 日期：2026-09-24
-- 关联：issue **#124**（本 ADR 的承接对象）、**#37**（`M6-PERFORMANCE`，本 ADR 结算其欠账表的一行）、
-  #34 / #35 / #36（数据组件与共享内核）、#104（ownership-first / evidence-before-abstraction 口径）
+- 关联：issue **#124**（本 ADR 只承接其**深响应子问题**）、**#37**（`M6-PERFORMANCE`，本 ADR 结算其欠账
+  表的一行）、#134（#124 的前置，P0）、#34 / #35 / #36（数据组件与共享内核）、
+  #104（ownership-first / evidence-before-abstraction 口径）
 - 取代范围：**不取代任何 ADR**。**结算** `2026-09-21-performance-baseline-and-worker-decision`
   欠账表的「深响应输入在更新路径上的 ~100ms 长任务（50k）」一行（该行原指向 #124），并把该 ADR
   已知限制 3 的「落地见 #124」推进到本决策。原 ADR 按仓库约定（`README.md`：已接受即冻结）**不改写**，
-  指向关系记在本文件。
+  指向关系记在本文件。**范围限于「深响应大数组的读取成本」这一子问题**：#124 在 2026-09-23 被重新
+  分类为 1.0 P1 / Stable 阻塞后新增的 Vue scheduler/batching 取证**不在**本 ADR（见背景与「非目标」），
+  因此本文件**不**构成 #124 的整体收口。
 
 ## 背景
 
@@ -21,7 +24,15 @@
 > 50k 深响应数组的长任务是真实性能欠账，但不应为了发布前“清零”贸然改变共享响应式语义。3.0 先明确
 > 推荐 `shallowRef / markRaw + dataVersion` 的大数据用法；实现级优化必须有取证和回归后再落地。
 
-本 ADR 就是那次「取证 → 决定」的落盘。
+**范围更新（2026-09-23，事实核对）**：#124 已被**重新分类**为
+**1.0 Pre-release · P1 · Stable 阻塞：是**（前置 **#134**，P0，当前 open），并新增
+**Vue scheduler/batching 取证**要求：对照 hot path 的 `flush:'sync'` vs 默认 pre vs post；在同一次
+父更新同时修改 `data` / `style` / `visible` / `zIndex` 时记录 watcher callback / reconcile / SDK call /
+recreate 次数；在这些取证之后再决定是否维持本文档结论。**那部分不在本 ADR 的范围** —— 本 ADR 只
+结算旧版 #124 的「深响应大数组读取成本」子问题；#124 保持 open，直到 scheduler/batching 取证与结论
+落盘。
+
+本 ADR 就是那次「取证 → 决定」的落盘（限深响应子问题）。
 
 ## 取证（受控实验；Apple M4 / darwin / Node v24 / happy-dom，**不是提交基线**）
 
@@ -116,11 +127,14 @@
 - 不顺带改造其它组件的响应式读取（本 ADR 只针对数据组件的 `data` 转换这一条路径；
   `BMarkerList` / `BMarkerCluster` 的逐项 diff 读取不在范围内）；
 - 不动「`data` 按引用比较 + `dataVersion` 表态」的既有契约（#34 / #35）；
-- **不新增 `@vue/reactivity` 依赖**（这正是 (a) 不落地的首要理由）。
+- **不新增 `@vue/reactivity` 依赖**（这正是 (a) 不落地的首要理由）；
+- **Vue scheduler/batching 的取证与决定不在本 ADR**：`flush:'sync'` vs pre vs post、同一次父更新同时改
+  `data`/`style`/`visible`/`zIndex` 的 watcher callback / reconcile / SDK call / recreate 次数读数，
+  属 #124 2026-09-23 重新分类后的新增范围（1.0 P1，前置 #134），留在 #124。
 
 ## 参考
 
-- 承接票：**#124**（本 ADR 的承接对象）；被结算的欠账：**#37** 的 ADR
+- 承接范围：**#124 的深响应子问题**（#124 整体仍为 open，见背景「范围更新」）；被结算的欠账：**#37** 的 ADR
   [`2026-09-21-performance-baseline-and-worker-decision`](./2026-09-21-performance-baseline-and-worker-decision.md)
   （已知限制 3、欠账表、决策 2）
 - 使用引导：[`docs/zh-CN/components/data.md`](../zh-CN/components/data.md)「大数据量」、
