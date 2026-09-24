@@ -351,3 +351,115 @@ describe('isControlled 的惰性创建（#137 复审八轮 P1）', () => {
     expect(controlled.value).toBe(false)
   })
 })
+
+describe('告警去重集合的惰性创建（#137 复审九轮 P1）', () => {
+  /**
+   * 口径是「分配了几个 `Set`」。`Set` 是全局，可以直接 `vi.spyOn(globalThis, 'Set')` ——
+   * 不像 `computed` 那样受 ESM 导出不可 spy 的限制。
+   *
+   * ⚠️ 只断言「告警次数」证明不了惰性（eager 版次数完全一样），必须数分配。
+   */
+  function countingSets() {
+    const RealSet = globalThis.Set
+    let allocated = 0
+    // 用普通 function（箭头函数不可 new），并保留原型链与静态方法。
+    function CountingSet(this: unknown, ...args: unknown[]) {
+      allocated += 1
+      return new RealSet(...(args as []))
+    }
+    CountingSet.prototype = RealSet.prototype
+    Object.setPrototypeOf(CountingSet, RealSet)
+    const spy = vi
+      .spyOn(globalThis, 'Set')
+      .mockImplementation(CountingSet as unknown as SetConstructor)
+    // vitest / spy 自身也可能用 Set（`new Set(...)`、spy registry 等）——先测**基线**，
+    // 用增量而不是绝对值，否则测的是 vitest 而不是被测代码。
+    const baseline = allocated
+    return {
+      get baseline() {
+        return baseline
+      },
+      get allocated() {
+        return allocated
+      },
+      restore: () => spy.mockRestore(),
+    }
+  }
+
+  it('无告警的正常路径不分配 Set；首次真实告警才分配一次，之后复用同一个', async () => {
+    const warn = spyWarn()
+    const counter = countingSets()
+    try {
+      const external = ref<number | undefined>(12)
+      const fallbackDefault = ref<number | undefined>(8)
+      const state = inScope(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => fallbackDefault.value,
+          fallback: 14,
+          equals: numbersEqual,
+        }),
+      )
+      // 常规路径：受控值变化、提交、摘控**都不冲突** ⇒ 不该有任何告警。
+      external.value = 13
+      await nextTick()
+      state.syncExternal(13)
+      state.commit(15)
+      await nextTick()
+      expect(warnLines(warn).length, '这些操作本身不产生告警').toBe(0)
+      expect(
+        counter.allocated - counter.baseline,
+        '无告警路径不应分配去重 Set',
+      ).toBe(0)
+
+      // 第一次**真实**告警：受控 → 非受控。
+      state.syncExternal(undefined)
+      expect(warnLines(warn).length, '受控→非受控应告警一次').toBe(1)
+      expect(counter.allocated - counter.baseline, '首次告警才分配，且只分配一个').toBe(1)
+
+      // 后续同类告警复用同一个 Set，不再分配。
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      await nextTick()
+      expect(counter.allocated - counter.baseline, '复用同一个去重 Set，不再分配').toBe(1)
+      // 每种方向最多一次：受控→非受控 1 次；非受控→受控（值冲突）1 次。
+      expect(warnLines(warn).filter((l) => l.includes('由受控切换为非受控')).length).toBe(1)
+      expect(warnLines(warn).filter((l) => l.includes('由非受控切换为受控')).length).toBe(1)
+    } finally {
+      counter.restore()
+      warn.mockRestore()
+    }
+  })
+
+  it('warn: false 时即使触发模式/default 变化也永不分配 Set', async () => {
+    const warn = spyWarn()
+    const counter = countingSets()
+    try {
+      const external = ref<number | undefined>(12)
+      const fallbackDefault = ref<number | undefined>(8)
+      const state = inScope(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => fallbackDefault.value,
+          fallback: 14,
+          equals: numbersEqual,
+          warn: false,
+        }),
+      )
+      state.syncExternal(undefined)
+      fallbackDefault.value = 9
+      await nextTick()
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      await nextTick()
+
+      expect(warnLines(warn).length, 'warn:false 下静默').toBe(0)
+      expect(counter.allocated - counter.baseline, 'warn:false 下永不分配去重 Set').toBe(0)
+    } finally {
+      counter.restore()
+      warn.mockRestore()
+    }
+  })
+})

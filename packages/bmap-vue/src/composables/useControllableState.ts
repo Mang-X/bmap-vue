@@ -193,10 +193,14 @@ export function useControllableState<T>(
   let isControlledRef: ComputedRef<boolean> | undefined;
 
   let mode: ControllableMode = value() === undefined ? "uncontrolled" : "controlled";
-  const warned = new Set<string>();
+  // **告警去重集合惰性创建**（#137 复审九轮 P1）：它的唯一作用是「某条告警真的发生之后记住
+  // 对应 key」。正常生命周期里既没有档位冲突、也没有 `default*` 后续写入 ⇒ 这个 Set 从创建到
+  // 销毁一次都不会被碰。对 `<Map>` 的四个视野字段，就是每次实例化白扔 4 个 Set。
+  // 与 `isControlled` 同理：**告警行为是冻结的，不等于去重容器必须在构造期分配**。
+  let warned: Set<string> | undefined;
   const warnOnce = (key: string, message: string): void => {
-    if (!warn || warned.has(key)) return;
-    warned.add(key);
+    if (!warn || warned?.has(key)) return;
+    (warned ??= new Set()).add(key);
     devWarn(message, { field: name });
   };
 
