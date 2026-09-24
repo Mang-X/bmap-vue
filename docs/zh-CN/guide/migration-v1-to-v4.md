@@ -2,7 +2,7 @@
 
 > 面向两类使用者：
 > - **`baidu-map-gl-vue@2.x` 用户**：2.x 的 SDK 基线是百度地图 JavaScript API **GL 版**
->   （`type=webgl&v=1.0`，全局 `BMapGL`）。3.0 改为 JSAPI **4.0**（全局 `Map`），
+>   （`type=webgl&v=1.0`，全局 `BMapGL`）。3.0 改为 JSAPI **4.0**（全局 `BMap`），
 >   且**不提供 `BMapGL` 回退开关**。
 > - **`3.0.0-beta` 用户**：已经在 4.0 上，但用过迁移期入口（`baiduCdnProvider()`、
 >   `withMigrationDriver()`、`<Map allowExistingGlobal>` 等）。这些入口已随旧引擎删除。
@@ -52,11 +52,11 @@ v4 的 Provider 家族在 `baidu-map-gl-vue/core`：
 import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider } from 'baidu-map-gl-vue/core'
 ```
 
-## 2. SDK 世代差异：`BMapGL` → `Map`（4.0）
+## 2. SDK 世代差异：`BMapGL` → `BMap`（4.0）
 
 这是 2.x 用户的主要工作量。下面每条都有对应的 ADR / inventory 作为依据。
 
-| 维度 | WebGL v1（`BMapGL`） | JSAPI 4.0（`Map`） | 你要做什么 |
+| 维度 | WebGL v1（`BMapGL`） | JSAPI 4.0（`BMap`） | 你要做什么 |
 | --- | --- | --- | --- |
 | 全局命名空间 | `window.BMapGL` | `window.BMap`（4.0 入口同时把 `BMapGL` 作为**同一对象的别名**挂上） | 不要读 `BMapGL`；宿主预加载场景用 `existingGlobalV4Provider()` |
 | 一次设定中心 + 级别 | 有 `setView` | **没有** `setView`；用 `centerAndZoom(center, zoom, options)` | 把 `setView` 用法换掉（本库的 `initializeView` 已封装该语义） |

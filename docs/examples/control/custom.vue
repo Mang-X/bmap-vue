@@ -1,6 +1,9 @@
 <template>
   <Map v-bind="$attrs" @ready="handleInitd" :zoom="zoom">
-    <CustomControl style="display: flex; background-color: #fff; padding: 10px" :offset="{ x: 0, y: 0 }">
+    <CustomControl
+      style="display: flex; background-color: #fff; padding: 10px"
+      :offset="{ x: 0, y: 0 }"
+    >
       <button @click="handleZoomOut">缩小</button>
       <button @click="handleZoomIn">放大</button>
     </CustomControl>

@@ -59,7 +59,7 @@ npx skills update bmap-jsapi-v4
 
 ### 使用规则
 
-- 只把它当作 `v=4.0` + 全局 `Map` 的 API 参考，**禁止混用其他版本的加载参数与命名空间**（如 `BMapGL`、`v=1.0`）。
+- 只把它当作 `v=4.0` + 全局 `BMap` 的 API 参考，**禁止混用其他版本的加载参数与命名空间**（如 `BMapGL`、`v=1.0`）。
 - 从 reference 中选取满足需求的最小 API 组合，不要凭类名猜测构造参数、事件或清理方法。
 - 创建监听器、覆盖物、控件、图层、服务结果、动画、全景或 `Map` 时，必须同时给出解绑/移除/取消/销毁路径。
 - 依赖 AK、在线服务、CORS、WebGL 或真实数据的结果**必须在真实浏览器验证**；类型检查通过不等于运行成功。
@@ -134,8 +134,8 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | --- | --- |
 | `legacy-namespace` | `BMapGL` 标识符 / `"BMapGL"` 字符串键 |
 | `global-member` | `window.BMap` / `globalThis.BMap` / `self.BMap` / `window["BMap"]`（含 `as any` 双转型） |
-| `namespace-root` | `BMap.*` 成员访问、方括号访问与 `new BMap.*()`；接收者会先解包 `( )`、`as`、非空断言与 `satisfies`，因此 `new (Map as any).Point()` 同样被拦截 |
-| `type-position` | `BMap.*` 类型位置（`BMap.Point`、`Map["Point"]`、`typeof Map`） |
+| `namespace-root` | `BMap.*` 成员访问、方括号访问与 `new BMap.*()`；接收者会先解包 `( )`、`as`、非空断言与 `satisfies`，因此 `new (BMap as any).Point()` 同样被拦截 |
+| `type-position` | `BMap.*` 类型位置（`BMap.Point`、`BMap["Point"]`、`typeof BMap`） |
 | `namespace-declaration` | `namespace BMap` / `declare global` |
 | `official-types-import` | 具名导入 `@baidumap/jsapi-v4-types` |
 | `official-types-reference` | 三斜线 `/// <reference types="@baidumap/jsapi-v4-types" />`（按包名判定，属性顺序、引号与空格不影响） |
@@ -210,6 +210,6 @@ pnpm docs:build            # 涉及文档时
 
 涉及 SDK 行为的改动，在 PR 描述中说明：
 
-- SDK 依据（`v=4.0`/`Map` 还是迁移期 `webgl-v1`）；
+- SDK 依据（`v=4.0`/`BMap` 还是迁移期 `webgl-v1`）；
 - 生命周期检查（监听器/覆盖物/控件/图层/异步/动画的释放路径）；
 - 迁移影响（是否改变公共 API、是否影响 2.x/3.x 支持政策）。

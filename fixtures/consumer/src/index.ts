@@ -207,7 +207,7 @@ export const customProviderSmoke: BMapProviderLike = {
       options: { ak: 'YOUR_AK' },
       fingerprint: 'my-loader',
       // 你的加载器把命名空间放在哪就读哪；这里用「字符串键」写法，
-      // 因此**不依赖**官方类型包对全局 `Map` 的声明
+      // 因此**不依赖**官方类型包对全局 `BMap` 的声明
       namespace: (globalThis as { BMap?: unknown }).BMap,
     }),
 }

@@ -44,7 +44,7 @@ interface BMapErrorLike {
 ### `BMAP_SDK_LOAD_FAILED`
 
 **原因**:官方 Loader 无法注入入口脚本(默认路径从 `api.map.baidu.com/api?v=4.0` 取),或脚本已执行但
-`Map` 命名空间缺失 / 不完整(至少需要 `Map` / `Point` / `Marker`)。
+`BMap` 命名空间缺失 / 不完整(至少需要 `Map` / `Point` / `Marker`)。
 **排查**:
 - 检查网络能否访问 `api.map.baidu.com/api`。
 - 检查 CSP `script-src` 是否放行。

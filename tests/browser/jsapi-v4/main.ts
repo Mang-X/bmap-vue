@@ -284,7 +284,7 @@ function createDescriptor(): ModeDescriptor {
   if (MODE === "fixture") {
     fake = createFakeBMapV4();
     // 「宿主已加载」路径：全局就位后再用 existingGlobalV4Provider 复用，全程零外部请求。
-    (globalThis as unknown as { Map?: unknown }).BMap = fake.namespace;
+    (globalThis as unknown as { BMap?: unknown }).BMap = fake.namespace;
     const ledger = (raw: Record<string, unknown>): Record<string, unknown[]> =>
       raw as unknown as Record<string, unknown[]>;
     return {
@@ -975,7 +975,7 @@ const CHECKS: Record<string, CheckImpl> = {
         { src: redactAk(src) },
       );
       assertSmoke(
-        typeof (globalThis as { Map?: { Map?: unknown } }).BMap?.Map === "function",
+        typeof (globalThis as { BMap?: { Map?: unknown } }).BMap?.Map === "function",
         "BMAP_NAMESPACE",
         "入口 script 执行后 globalThis.BMap.Map 仍不是构造器",
       );
@@ -996,7 +996,7 @@ const CHECKS: Record<string, CheckImpl> = {
         `fixture 档不应出现官方入口 script，实际 ${scripts.length} 个`,
       );
       assertSmoke(
-        (globalThis as { Map?: unknown }).BMap,
+        (globalThis as { BMap?: unknown }).BMap,
         "FIXTURE_NO_NAMESPACE",
         "fixture 档没有注入 v4 命名空间",
       );
@@ -1059,7 +1059,7 @@ const CHECKS: Record<string, CheckImpl> = {
   "view-animation-cancel-window": {
     async run(ctx) {
       const raw = ctx.mounted.raw();
-      const namespace = (globalThis as { Map?: { ViewAnimation?: unknown } }).BMap;
+      const namespace = (globalThis as { BMap?: { ViewAnimation?: unknown } }).BMap;
       const AnimationCtor = namespace?.ViewAnimation;
       assertSmoke(
         typeof AnimationCtor === "function",
@@ -2432,11 +2432,11 @@ const CHECKS: Record<string, CheckImpl> = {
       const snapshot = ctx.mounted.snapshot();
       // 取**引用**而不是 `typeof`：`globalThis.BMap = {}` 之后 `typeof` 仍是 `"object"`，
       // 只比 typeof 发现不了「全局被改写」，而「不得改写上游全局」正是这条要守的契约。
-      const globalBefore = (globalThis as { Map?: unknown }).BMap;
+      const globalBefore = (globalThis as { BMap?: unknown }).BMap;
       await ctx.mounted.unmount();
       await sleep(300);
       descriptor.assertNoLeaks(snapshot);
-      const globalAfter = (globalThis as { Map?: unknown }).BMap;
+      const globalAfter = (globalThis as { BMap?: unknown }).BMap;
       assertSmoke(
         globalAfter === globalBefore,
         "GLOBAL_REPLACED",
@@ -2678,7 +2678,7 @@ function smokeDiagnostics(mounted: Mounted | null): Record<string, unknown> {
   const scripts = [...document.querySelectorAll<HTMLScriptElement>("script[src]")].map((s) =>
     redactAk(s.src),
   );
-  const bmap = (globalThis as { Map?: Record<string, unknown> }).BMap;
+  const bmap = (globalThis as { BMap?: Record<string, unknown> }).BMap;
   return {
     entryScripts: scripts.filter((src) => src.includes("api.map.baidu.com")),
     scriptCount: scripts.length,
