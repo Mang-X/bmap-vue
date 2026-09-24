@@ -97,13 +97,19 @@ function onItemClick(station: Station) {
 
 ## 大数据量：`shallowRef` / `markRaw`
 
-数据组件的 `data` 只按**引用**比较，但这个引用会在一次 **O(n) 转换**里被逐项读取（`Item[]` → 内部
-`FeatureCollection`）。如果 `data` 是 Vue 的**深响应**数组——`ref([...])` / `reactive([...])` 是最常见的
-写法——这次转换里的每个字段读取都要穿过 Proxy 并做**依赖收集**：50k 项换一次引用在组件路径里要
-**0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），而同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
-贵的不是算法，是「在响应式 effect 里逐项读一份大数组」。
+数据组件的 `data` 只按**引用**比较，但组件处理这批数据时会**逐项读取**它：
+`BPointShapeLayer` / `BPointIconLayer` / `BPointLayer` 与 `BMarkerCluster` 的 `native` 引擎走
+`Item[]` → `FeatureCollection` 适配（`adaptPoints`）；`BMarkerList` 与 `BMarkerCluster` 的 `markers`
+引擎走 `DataLayerManager` 的 keyed diff / 网格聚合。如果 `data` 是 Vue 的**深响应**数组——
+`ref([...])` / `reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，
+代价随规模上升。
 
-大数据量请把数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，不再代理每一项）：
+**本库只对 `adaptPoints`（`Item[]` → `FeatureCollection`）这一条路径取过证**（`BPointShapeLayer` 一族
+与 `BMarkerCluster` 的 `native` 引擎）：50k 换一次引用，深响应输入在组件路径里要 **0.1 ~ 0.2s**
+（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
+`BMarkerList` 与 `BMarkerCluster` 的 `markers` 引擎**未单独取证**，不要把这组数字套到它们身上。
+
+大数据量建议把数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，不再代理每一项）：
 
 ```vue
 <script setup lang="ts">
