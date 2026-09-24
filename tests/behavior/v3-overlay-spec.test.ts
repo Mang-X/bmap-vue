@@ -435,7 +435,7 @@ describe("mutable 就地更新，构造期属性重建", () => {
     harness.assertIdle("构造期属性重建");
   });
 
-  it("同一轮里同时改构造期与就地属性：只重建一次，且就地值落在最终实例上", async () => {
+  it("同一轮里同时改构造期与就地属性：恰好重建一次，且就地值只落在最终实例上", async () => {
     const enableClicking = ref(true);
     const zIndex = ref(1);
     const wrapper = await mountMarker(() => ({
@@ -444,20 +444,61 @@ describe("mutable 就地更新，构造期属性重建", () => {
       zIndex: zIndex.value,
     }));
 
+    const doomed = currentMarker();
     const constructed = fake.createdOverlays.length;
-    // 同一个 tick 里改两个字段：队列必须把它们合并成**一批**，先重建再就地更新，
+    doomed.callLog.length = 0;
+    // 同一个 tick 里改两个字段：批处理必须把它们合并成**一批**，先重建再就地更新，
     // 否则就地值会写进一个马上被移除的中间实例（PR #61 的收敛点）
     enableClicking.value = false;
     zIndex.value = 7;
     await settle();
 
+    // **恰好**一次重建：不是「至少一次」——多一次意味着同一批里的构造期键各触发了一次 replace
     expect(fake.createdOverlays.length).toBe(constructed + 1);
     expect(harness.attached("overlay")).toBe(1);
-    expect(currentMarker().zIndex).toBe(7);
+
+    const survivor = currentMarker();
+    expect(survivor).not.toBe(doomed);
+    expect(survivor.zIndex).toBe(7);
+    // 就地值**只**落在最终实例上：被丢弃的那一代一次 setter 都不该收到
+    // （收到就说明「先就地更新、后重建」或「逐字段直接下单」这两种错误发生了）
+    expect(doomed.callLog).toEqual([]);
+    expect(survivor.callLog).toEqual(expect.arrayContaining(["setZIndex"]));
 
     wrapper.unmount();
     await settle();
     harness.assertIdle("构造期 + 就地属性同批更新");
+  });
+
+  it("replace 在飞行中到达的更新并入尾随队列：不额外重建，也不丢值", async () => {
+    // `sdk.replace()` 是异步的（`create` 可以 await），因此存在一个「旧实例即将被丢弃、
+    // 新实例还没建好」的窗口。该窗口里到达的更新既不能发给旧实例，也不能直接标脏
+    // ——#138 为此保留了**唯一**一条自研队列（`trailing`）。
+    const enableClicking = ref(true);
+    const zIndex = ref<number | undefined>(1);
+    const wrapper = await mountMarker(() => ({
+      position: { lng: 116.4, lat: 39.9 },
+      enableClicking: enableClicking.value,
+      zIndex: zIndex.value,
+    }));
+
+    const constructed = fake.createdOverlays.length;
+    // 只等一个 tick：让 replace 进入飞行中，**不**等它结算
+    enableClicking.value = false;
+    await nextTick();
+
+    // 窗口内再改一个就地字段
+    zIndex.value = 9;
+    await settle();
+
+    // 尾随的那一次**没有**自己触发第二次 replace（它跟着上一轮 replace 落到新实例上）
+    expect(fake.createdOverlays.length).toBe(constructed + 1);
+    expect(harness.attached("overlay")).toBe(1);
+    expect(currentMarker().zIndex).toBe(9);
+
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("replace 窗口的尾随更新");
   });
 
   it("快速连续两次重建：地图上恰好一个实例，不重复挂载", async () => {
