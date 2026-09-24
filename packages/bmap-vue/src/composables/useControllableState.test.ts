@@ -592,3 +592,95 @@ describe('production 下不为开发期提示付出 runtime（#137 复审十轮 
     }
   })
 })
+
+describe('mode 是纯告警状态，告警关闭时连它都不存在（#137 复审十轮 P1）', () => {
+  /**
+   * 口径是 **`value()` getter 的调用次数**，理由与前两轮一致：行为断言和 effect 计数都
+   * 分辨不出「惰性 / 急切」，必须直接数**分配 / 读取**。
+   *
+   * `mode` 的唯一消费者是「受控 ↔ 非受控」那条开发期告警——它不参与 `value` / `internal` /
+   * 容差相等 / `reset()` / SDK reconcile。所以 production 或 `warn:false` 下：
+   * - 构造期**不该**为它多读一次 `value()`（`model` 是 `computed`，懒求值，不读）；
+   * - `syncExternal()` **不该**继续维护它（写一个只在告警里读的状态）。
+   *
+   * 改回 eager 初始化（`let mode = value() === undefined ? …`）会让下面的计数 +1。
+   */
+  function valueReadsIn(options: { warn?: boolean } = {}): number {
+    const external = ref<number | undefined>(12)
+    let reads = 0
+    effectScope().run(() => {
+      useControllableState<number>({
+        name: 'zoom',
+        value: () => {
+          reads += 1
+          return external.value
+        },
+        defaultValue: () => 8,
+        fallback: 14,
+        equals: numbersEqual,
+        warn: options.warn,
+      })
+    })
+    return reads
+  }
+
+  function withNodeEnv<T>(value: string | undefined, body: () => T): T {
+    const original = process.env.NODE_ENV
+    if (value === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = value
+    try {
+      return body()
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  it('production：构造期只读一次 value()（仅为 initial 解析），不为 mode 再读一次', () => {
+    expect(
+      withNodeEnv('production', () => valueReadsIn()),
+      'production 下 mode 不存在，构造期不应多读一次 value()',
+    ).toBe(1)
+  })
+
+  it('warn: false：同样只读一次（显式声明「永不告警」时 mode 也没有消费者）', () => {
+    expect(valueReadsIn({ warn: false }), 'warn:false 下 mode 不存在').toBe(1)
+  })
+
+  it('development + warn:true：mode 存在，构造期读两次（initial 解析 + 档位判定）', () => {
+    expect(valueReadsIn(), '开发期要判定档位，mode 必须存在').toBe(2)
+  })
+
+  it('告警关闭时 syncExternal 不再维护 mode（无写入、无额外读取）', () => {
+    const warn = spyWarn()
+    try {
+      const external = ref<number | undefined>(12)
+      let reads = 0
+      const state = withNodeEnv('production', () =>
+        effectScope().run(() =>
+          useControllableState<number>({
+            name: 'zoom',
+            value: () => {
+              reads += 1
+              return external.value
+            },
+            defaultValue: () => 8,
+            fallback: 14,
+            equals: numbersEqual,
+          }),
+        ),
+      )!
+      const before = reads
+      external.value = undefined
+      state.syncExternal(undefined)
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      expect(reads, 'syncExternal 只吃 next，不再回头读 value() 判档位').toBe(before)
+      // 守卫生效性：档位判定的唯一读点在 mode 初始化处，这里若 mode 被急切初始化，
+      // 构造期计数就会是 2（见上面那条 development 用例）。
+      expect(warnLines(warn).length, 'production 下不打印').toBe(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})

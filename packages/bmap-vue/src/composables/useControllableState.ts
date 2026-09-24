@@ -192,16 +192,29 @@ export function useControllableState<T>(
   // 与原先的构造时机等价。
   let isControlledRef: ComputedRef<boolean> | undefined;
 
-  let mode: ControllableMode = value() === undefined ? "uncontrolled" : "controlled";
+  // **「开发期告警是否启用」一次性判定**（#137 复审十轮 P1）。`defaultValue` watcher 的
+  // 注册、`warnOnce` 的短路、以及下面这个 `mode` 全部围绕它 —— 三者都是**同一条腿**。
+  const warningsEnabled = warn && isDev();
+  // `mode` 是**纯告警状态**：它唯一的消费者是「受控 ↔ 非受控」那条开发期告警，不参与
+  // `value` / `internal` / 容差相等 / `reset()` / SDK reconcile。因此告警不启用时**连它都不
+  // 存在**（`undefined`），也省掉构造期那一次多余的 `value()` 读取 —— 那正是「为
+  // controlled/uncontrolled 术语付不必要 runtime」的字面形态。
+  let mode: ControllableMode | undefined = warningsEnabled
+    ? value() === undefined
+      ? "uncontrolled"
+      : "controlled"
+    : undefined;
   // **告警去重集合惰性创建**（#137 复审九轮 P1）：它的唯一作用是「某条告警真的发生之后记住
   // 对应 key」。正常生命周期里既没有档位冲突、也没有 `default*` 后续写入 ⇒ 这个 Set 从创建到
   // 销毁一次都不会被碰。对 `<Map>` 的四个视野字段，就是每次实例化白扔 4 个 Set。
   // 与 `isControlled` 同理：**告警行为是冻结的，不等于去重容器必须在构造期分配**。
   let warned: Set<string> | undefined;
   const warnOnce = (key: string, message: string): void => {
-    // ⚠️ `isDev()` 必须在**分配 Set 之前**短路（复审十轮 P1）：否则 production 下发生模式
-    // 切换时仍会「分配 Set → 记 key → 调 devWarn → 在 devWarn 里 return」，白做三步。
-    if (!warn || !isDev() || warned?.has(key)) return;
+    // ⚠️ 短路必须发生在**分配 Set 之前**（复审十轮 P1）：否则告警关闭时发生模式切换仍会
+    // 「分配 Set → 记 key → 调 devWarn → 在 devWarn 里 return」，白做三步。
+    // 判定统一读上面那个 `warningsEnabled`（`warn && isDev()` 的一次性结果）——它同时把
+    // `mode` 本身也一并消掉，所以这里连「哪个 mode」都不必问。
+    if (!warningsEnabled || warned?.has(key)) return;
     (warned ??= new Set()).add(key);
     devWarn(message, { field: name });
   };
@@ -253,9 +266,10 @@ export function useControllableState<T>(
   // - production —— `devWarn` 会早退，`<Map>` 四个视野字段就是**四个永远静音的常驻
   //   `ReactiveEffect`**。这正是原型 A=2 里的第二个 effect，比前两轮收掉的对象更重。
   //
-  // 判定用 logger 的 `isDev()`——**必须与 `devWarn` 同源**，否则两边会分歧（一边认为在生产、
-  // 一边却注册了监听）。它保留 `process.env.NODE_ENV` 标记给消费方折叠，不在发布构建里定死。
-  if (defaultValue && warn && isDev()) {
+  // 判定统一用上面那个 `warningsEnabled`——它里面的 `isDev()` 与 `devWarn` **同源**，否则两边
+  // 会分歧（一边认为在生产、一边却注册了监听）。`isDev()` 保留 `process.env.NODE_ENV` 标记给
+  // 消费方折叠，不在发布构建里定死。
+  if (defaultValue && warningsEnabled) {
     watch(defaultValue, (next, previous) => {
       // 首次解析之后**任何** default 写入都不生效，都该告警一次：值改变、从无到有、从有到无。
       // 「两边都没给」与「值没变」不算写入——父级每次渲染传内联字面量时引用会变，但语义没变。

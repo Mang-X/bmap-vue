@@ -430,14 +430,41 @@ Set**。⇒ 也改为惰性创建（`warnOnce` 里 `??= new Set()`）。**告警
 恒为 0**（它内部只有这一个 watcher），A 只剩 `Map.vue` 侧那条 SDK 腿 watcher，而 B 仍多一个
 `useModel` 内部 effect —— **差异方向不变，绝对值变小**。
 
-⇒ #137 验收第 2 条在本票里因此有**三处真正的 runtime 收口**（`isControlled` 的 computed、
-`warned` 的 Set、`defaultValue` 的 watcher），都不是靠「删掉」，而是靠「不再为没人用的东西付费」。
+⇒ #137 验收第 2 条在本票里因此有**四处真正的 runtime 收口**（`isControlled` 的 computed、
+`warned` 的 Set、`defaultValue` 的 watcher、告警档位 `mode`），都不是靠「删掉」，而是靠
+「不再为没人用的东西付费」。
 
-**这两处也各自踩了「用错口径」的坑，用例都是数分配、不是数行为**（已实测）：
+**第四处（复审十轮 P1）——把前三处认成同一条腿**：`mode`（`"controlled" | "uncontrolled"`）
+与上面三项看着无关，其实是**同一个用途**：它唯一的消费者就是「受控 ↔ 非受控」那条 dev warning，
+**不参与** `value` / `internal` / 容差相等 / `reset()` / SDK reconcile。而它是**无条件初始化、
+无条件维护**的（`let mode = value() === undefined ? …`，每次 `syncExternal()` 继续改写），
+所以 production 或 `warn:false` 下仍要付：构造期**额外读一次 `value()`**、常驻一个档位字符串、
+每次外部同步一次写入。这正是验收第 2 条原文要消除的「为 controlled/uncontrolled 术语付不必要
+runtime」的字面形态。
+
+⇒ 三个消费点（`defaultValue` watcher 的注册、`warnOnce` 的短路、`mode` 本身）**统一读一个
+`warningsEnabled = warn && isDev()`**，`mode` 的类型放宽成 `ControllableMode | undefined`：
+告警不启用时它连状态都不存在。`isDev()` 仍是 `devWarn` 的**同一份**判定，分歧风险不变。
+
+**这一处踩的仍是同一类坑（已实测）**：behavior 断言与 effect 计数都**分辨不出**它——
+`mode` 既不是 effect，`value()` 多读一次也不改变任何可观察结果。gate 用的是
+**`value()` getter 的调用次数**（`model` 是 `computed`、懒求值，构造期不读；所以 1 次 = 只有
+`initial` 解析）：production / `warn:false` 构造应为 **1**，development + `warn:true` 为 **2**。
+把 `mode` 改回急切初始化 ⇒ 前两条用例翻红（实测 2 failed / 24 passed）。
+
+**另外三处也各自踩了「用错口径」的坑，用例都是数分配、不是数行为**（已实测）：
 - `isControlled`：只断言「重复访问命中缓存」时，**eager 版照样全过**；
 - `warned`：只断言「告警次数」时，eager 版次数**完全一样**。
 另外 `warned` 那条 gate 有个实现细节：`vi.spyOn(globalThis, 'Set')` 必须在**所有其它 spy
 之后**建立、再取基线——`vi.spyOn(console, 'warn')` 自身会分配 `Set`，否则测到的是 vitest。
+
+**⚠️ `isDev()` 判据本身踩过一次 P0（复审十轮）**：初版写 `process.env?.NODE_ENV`，
+`process.env?.NODE_ENV` 的 optional chaining **只保护 `env`，不保护裸标识符 `process`**；
+构建还会把 optional chaining 剥掉，产物里就是裸 `process.env.NODE_ENV`。浏览器里没有 `process`
+时 `ReferenceError` —— 而 `devWarn` 里的同类写法一直没炸，是因为它只在**真的告警**时才被调用，
+`isDev()` 却是 `useControllableState` **构造期**就调（四个视野字段 ⇒ 每个 `<Map>` 实例化必现，
+被 `smoke-v4-fixture` 抓到）。⇒ 补 `typeof process === "undefined" ||` 兜底，并用 `node:vm`
+空沙箱**实测**（`runInContext` 取出表达式求值）把这条钉成常驻用例。
 
 
 ### 7. 与官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的对照
