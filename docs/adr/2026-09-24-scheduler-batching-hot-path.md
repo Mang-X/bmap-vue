@@ -131,15 +131,15 @@ issue 要求的基线对照两半都在：**性能那半**由 `component-path` �
   维护者与 1.0 预算参考。
 - 一次改多字段会触发多次 reconcile（`sync` 档）——这是既有语义（字段去重后最终值正确），不是回归；
   §7 的读数把它显式化，避免「以为只有一次」。
-- **提交基线待重录（必须在门禁机做）**：§7 新增了 `multiUpdate.*@1000` 这组 readout，而
-  `tests/performance/baseline.json` 的 `readouts` 段还没有它们。`collect-performance-baseline.mts` 的
-  key-set 双向校验**只比较 `metrics`**（`readouts` 合并进报告但不参与校验），所以 CI **不会**因为基线
-  落后而红——这正是「静默落后」，必须显式记账。
-  **不能在开发机 `--update`**：门禁键是 `platform + arch + cpuModel`，用本机（darwin/arm64）重录会让
-  CI（linux/x64）判定不可比并 `comparison.skipped` 静默跳过趋势门禁 —— 正是
-  [`performance-baseline.md`](../zh-CN/contributing/performance-baseline.md) 明令避免的「一个看起来
-  生效的门禁」。正确做法：在门禁机（CI `performance` job）跑 `pnpm perf:baseline --update`，或用该 job
-  的 `perf-report` artifact 里的 `report.json` 重录。**本票不把「基线已同步」写成已完成。**
+- **提交基线已同步（用 CI 报告重录）**：§7 新增的 `multiUpdate.*@1000` 这组 readout 原先不在
+  `tests/performance/baseline.json` 里，而 `collect-performance-baseline.mts` 的 key-set 双向校验**只
+  比较 `metrics`**（`readouts` 合并进报告但不参与校验），所以基线会**静默落后**、CI 不会红。
+  重录走的是**门禁机那次 CI 的报告**：`gh run download <run> -n perf-report` 取回 `report.json`，再
+  `pnpm perf:baseline --from-report=<report.json> --update`（新增 flag：不重跑基准，读数全部取自那份
+  报告，因此「录的是哪一次跑」可追溯；它会打印机器身份并在机器不同时告警）。本次录的是
+  `linux/x64 · AMD EPYC 7763`——与原基线**同一规格**，所以趋势门禁保持可比；98 个 `metrics` 键**无
+  增删**（key-set 校验仍满足），只新增那 6 个 readout。**不要在别的机器上重录**：那会让 CI 判定不可比
+  并 `comparison.skipped` 静默跳过趋势门禁——正是本文档明令避免的「一个看起来生效的门禁」。
 - **回滚**：本 ADR 的产物是 §7 用例（测试）+ 文档；回滚 = 移除 §7 与 perf 文档段落并把本 ADR 标
   `Superseded`，不动任何运行时源码（本次取证用的 `flush` 开关已回退）。
 
