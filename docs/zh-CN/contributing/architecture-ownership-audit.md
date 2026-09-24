@@ -83,8 +83,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `LAYER_DESCRIPTORS` 的 `declared` / `signature` / `ctorSlots` / `mutable` / `bagSetters` + 约 10 条类型层断言（含**负向**断言：`district` 不得长出 `setZIndex`） | `driver/jsapi-v4/layers.ts:108-248` | 生产（`LayerSpec` → `useLayerResource`） | `OFFICIAL` | **KEEP** | 正面样板：读不回就**拒绝**，不猜 |
 | `native-layers.ts:111-115`：实测扩展图层**确实**继承了 `setVisible/setOpacity/setZIndex`，但 `supports()` 仍答 unsupported | 同文件 | 生产 | `PROBED` 且刻意不采纳 | **KEEP** | 与「用私有面补齐」相反的选择 |
-| `engines` 维度 + `CapabilityReason: "engine-unsupported"` | `driver/capability/catalog.ts:118-129` | 单引擎后只剩「目录未收录」一条可达路径（用例已把这句话说成结论） | 已登记的退化 | **SIMPLIFY** | 已在 ADR 2026-09-14 记为独立欠账，须与矩阵列一起重生成 ⇒ 后续票 |
-| `runtime` 能力族四条（`resource-scope` / `capability-override` / `fake-sdk` / `async-task`） | 同文件（原 `:745-776`） | **没有任何** `supports()` / 组件 / 测试按 id 问过；只被「每个 family ≥1 条」这条断言养着 | 类别错误（拿自家模块冒充实测风险等级） | **REMOVE** | #104 R10：删掉这一**族**——四条目录项、`CapabilityFamily` 联合里的 `"runtime"`、以及 `CAPABILITY_FAMILIES` 数组里的那一项；矩阵与 JSON 重生成（62 条能力），「每个 family ≥1 条」的循环随之变成五族。`CapabilityFamily` 类型与 `CAPABILITY_FAMILIES` 常量**本身保留**（`registry.ts:48` 的字段类型、`registry.test.ts:202/292` 在读），本票没删符号。合并 main 之后又扫出同一个幽灵值的最后一处：`registry.ts` 的 `explain()` 里 `?? ("runtime" as CapabilityFamily)` 兜底。（无）（`does.not-exist` 这类未收录 id 是单引擎下 `engine-unsupported` 的唯一入口，两条用例都在走），所以不能删兜底 —— 改成 `CapabilityExplanation.family?` 留空：没有描述符就没有 family 可报，不编一个值。断言在 `registry.test.ts` 的「目录未收录的 id 按 engine-unsupported 拒绝」里 |
+| `engines` 维度 + `CapabilityReason: "engine-unsupported"` | `driver/capability/catalog.ts`（原 `:118-129` 的 `JSAPI_V4` 常量与 `engines` 字段声明） | 单引擎后只剩「目录未收录」一条可达路径（用例已把这句话说成结论） | 已登记的退化 | **SIMPLIFY（已由 #126 落地）** | #126 按 Evidence-before-abstraction 判据选择**删列**：写不出会变红的用例 ⇒ 删掉 `CapabilityDescriptor.engines`（含 63 行赋值与 `JSAPI_V4` 常量）、判定链的恒真白名单分支、生成器的引擎列，并矩阵 / JSON 重生成（63 条能力不变）；`engine-unsupported` **改名** `unlisted-capability`（唯一可达路径=描述符缺失，名字与路径一致）。用例把「每条能力必须声明当前引擎」改成「描述符**没有** `engines` 属性」（`not.toHaveProperty`）。ADR：`2026-09-24-single-engine-capability-catalog`（结算 #26 已知限制第 4 条；按仓库约定该已接受 ADR **未被改写**，取代指针记在新 ADR 的「取代范围」与本表）。引擎身份在 `CapabilityExplanation.engine` / `UnsupportedCapabilityError` 上保留（那里有消费者） |
+| `runtime` 能力族四条（`resource-scope` / `capability-override` / `fake-sdk` / `async-task`） | 同文件（原 `:745-776`） | **没有任何** `supports()` / 组件 / 测试按 id 问过；只被「每个 family ≥1 条」这条断言养着 | 类别错误（拿自家模块冒充实测风险等级） | **REMOVE** | #104 R10：删掉这一**族**——四条目录项、`CapabilityFamily` 联合里的 `"runtime"`、以及 `CAPABILITY_FAMILIES` 数组里的那一项；矩阵与 JSON 重生成（62 条能力），「每个 family ≥1 条」的循环随之变成五族。`CapabilityFamily` 类型与 `CAPABILITY_FAMILIES` 常量**本身保留**（`registry.ts:48` 的字段类型、`registry.test.ts:202/292` 在读），本票没删符号。合并 main 之后又扫出同一个幽灵值的最后一处：`registry.ts` 的 `explain()` 里 `?? ("runtime" as CapabilityFamily)` 兜底。（无）（`does.not-exist` 这类未收录 id 是「目录未收录」这条拒绝路径的唯一入口，两条用例都在走；该 reason 已随 #126 改名 `unlisted-capability`），所以不能删兜底 —— 改成 `CapabilityExplanation.family?` 留空：没有描述符就没有 family 可报，不编一个值。断言在 `registry.test.ts` 的「目录未收录的 id 按 unlisted-capability 拒绝」里 |
 | `service.truck-route` 目录槽位 | 同文件 `:645` | 只被当作 override/过滤用例的任意 id；ADR 明说「不做 TruckRoute」 | 为未实现功能留位 | **REMOVE** | #104 R10（用例改用真实存在的 id，例如 `overlay.mapvgl`） |
 | `DataLayerManager.sync(items, getKey, itemVersion, force)` 的 `itemVersion` 形参 | 原 `core/data/DataLayerManager.ts:34` | 两个 data 组件都在传，但 `apply()` **从不读**它（R6 删掉 `shouldFullReplace` 之后彻底没有实现） | 无消费者的参数＝假支持；但类挂在 `./core` 公共出口上，外部调用方按位置传参时会把第 4 个实参错位成 `force` | **SIMPLIFY（已由 #34 落地）** | 本票只登记不删（要连带改 `./core` 的位置签名，与 `SdkResourceAdapter` 同批归 #44）。**main 上的 #34 已经把它做掉了**：`sync(input: DataLayerSync)` 改成对象入参，`version` 真实生效（同引用 + 同版本 ⇒ 零 SDK 调用；版本变 ⇒ 重新读坐标逐项下发），四个位置参数留下的「谁也没表态」问题随之消失。本行保留是为了记住这个形状的坑曾在这里。组件的 `dataVersion` prop 依然成立，走的是同一套版本语义 |
 | `useResolvedTarget`（含「找不到 TargetContext 就回落到 Map 的 add/remove」闭包）、`createStaticTarget`、`useOptionalTargetContext`、`useParentOverlayHandle` 里旧 `overlayContextKey` 那条读法 | 原 `core/context/target.ts` | 测试或 0（生产走 `useOverlaySpec` provide 的 `TargetContext`，旧臂在仓内不可达） | 为「可能有外部消费者」留的兼容面，且无任何文档承诺 | **REMOVE** | #104 R7：三个出口与旧读法全删，`overlayContextKey` 这个 InjectionKey 也随最后一个读写点消失；最近 TargetContext / 晚就绪的行为由 `tests/behavior/v3-overlay-spec.test.ts` 的 `TargetProbe` 继续钉住 |
@@ -222,7 +222,8 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 - `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、单成员别名 `LoadedSdk`、
   `client.version`、`optionKey()` 的一行转发、`useBMapServiceTask` 的根出口外泄、`UseSdkResourceOptions`
   → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）；
-- 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision）；
+- 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision；**已落地**：
+  删列 + reason 改名 `unlisted-capability`，见上表处置列与 ADR `2026-09-24-single-engine-capability-catalog`）；
 - 两处无判别力的内部判据（`BMap.mountMap()` 的防御性前置、`driver-contract` 的 `expectation` 档）→ **#127**（Test Debt）；
 - 探针债务 F-2 / F-3 / F-4 → **#128**（Probe Debt）；
 - **不冻结 `./core` 的全量导出面**（113 个值导出）：那是 #44「冻结 core 出口」的交付物，#104 只负责
@@ -234,7 +235,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 
 | 欠账 | 分类 | 归宿 |
 | --- | --- | --- |
-| 能力目录 `engines` 维度 / `engine-unsupported` | Decision | #126 |
+| 能力目录 `engines` 维度 / `engine-unsupported` | Decision | #126（**已关闭**：删列 + 改名 `unlisted-capability`） |
 | `BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档 | Test Debt | #127 |
 | F-2 / F-3 / F-4 三条未取证的第三方语义 | Probe Debt | #128。**其中 F-2 是 issue 验收标准第 5 条点名的那一类例外**：`SharedLoadTask` 的进程级 `callbackRegistry`（全局名占用 / foreign 回调判定）是审计表里**唯一保留**的「恢复上游未公开身份」处，而该验收标准要求「若存在例外，必须逐项写明 live guarantee 与 gate」——现状只有「不进 Stable 承诺」这句措辞与一张 probe 票，**既没有 live guarantee 也没有 gate**。→ 这一条在 #104 的账面上**记为未满足**（不是「已登记即满足」）：#128 的第一次取证必须先给出 guarantee 措辞与可回归 gate，在给出之前它**不得**被 #44 冻结进 Stable 承诺 |
 | 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |

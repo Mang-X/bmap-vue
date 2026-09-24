@@ -14,18 +14,12 @@
     "experimental",
     "unsupported"
   ],
-  "engines": [
-    "jsapi-v4"
-  ],
   "capabilities": [
     {
       "id": "map.view-state",
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "getCenter",
         "setCenter"
@@ -37,9 +31,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "getZoom",
         "setZoom"
@@ -51,9 +42,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "centerAndZoom"
       ],
@@ -64,9 +52,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "getBounds",
         "setBounds"
@@ -78,9 +63,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "getViewport",
         "setViewport"
@@ -92,9 +74,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "setHeading"
       ],
@@ -105,9 +84,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "setTilt"
       ],
@@ -118,9 +94,6 @@
       "family": "map",
       "status": "extended",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "panTo"
       ],
@@ -131,9 +104,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "startViewAnimation",
         "cancelViewAnimation"
@@ -145,9 +115,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "getScreenshot"
       ],
@@ -158,9 +125,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "checkResize"
       ],
@@ -171,9 +135,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "pointToPixel",
         "pixelToPoint"
@@ -185,9 +146,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "setMapStyle"
       ],
@@ -198,9 +156,6 @@
       "family": "map",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "destroy"
       ],
@@ -211,9 +166,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Marker"
       ],
@@ -224,9 +176,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Label"
       ],
@@ -237,9 +186,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "InfoWindow"
       ],
@@ -250,9 +196,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Circle"
       ],
@@ -263,9 +206,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Polyline"
       ],
@@ -276,9 +216,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Polygon"
       ],
@@ -289,9 +226,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Rectangle"
       ],
@@ -302,9 +236,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "CustomOverlay"
       ],
@@ -315,9 +246,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "GroundOverlay"
       ],
@@ -328,9 +256,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PointCollection"
       ],
@@ -341,9 +266,6 @@
       "family": "overlay",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "ContextMenu",
         "MenuItem"
@@ -355,9 +277,6 @@
       "family": "overlay",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Prism"
       ],
@@ -368,9 +287,6 @@
       "family": "overlay",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "BezierCurve"
       ],
@@ -381,9 +297,6 @@
       "family": "overlay",
       "status": "experimental",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Marker3D"
       ],
@@ -394,9 +307,6 @@
       "family": "overlay",
       "status": "unsupported",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [],
       "description": "MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**（结论 `incompatible`，无迁移路径）：脚本的 JSONP 传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。依据与复现见 plugin-compat-inventory（#25 / #43）"
     },
@@ -405,9 +315,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "TileLayer"
       ],
@@ -418,9 +325,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "TrafficLayer"
       ],
@@ -431,9 +335,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "GeoJSONLayer"
       ],
@@ -444,9 +345,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PointIconLayer"
       ],
@@ -457,9 +355,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PointShapeLayer"
       ],
@@ -470,9 +365,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "DistrictLayer"
       ],
@@ -483,9 +375,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PanoramaCoverageLayer"
       ],
@@ -496,9 +385,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "LineLayer"
       ],
@@ -509,9 +395,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "FillLayer"
       ],
@@ -522,9 +405,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "DOMLayer"
       ],
@@ -535,9 +415,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "XYZLayer"
       ],
@@ -548,9 +425,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "WMSLayer"
       ],
@@ -561,9 +435,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "WMTSLayer"
       ],
@@ -574,9 +445,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "RasterTileLayer"
       ],
@@ -587,9 +455,6 @@
       "family": "layer",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "MVTLayer"
       ],
@@ -600,9 +465,6 @@
       "family": "layer",
       "status": "extended",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [],
       "description": "聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19"
     },
@@ -611,9 +473,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PointLayer"
       ],
@@ -624,9 +483,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Heatmap"
       ],
@@ -637,9 +493,6 @@
       "family": "layer",
       "status": "experimental",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "TrackLine"
       ],
@@ -650,9 +503,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "LocalSearch"
       ],
@@ -663,9 +513,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Autocomplete"
       ],
@@ -676,9 +523,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "DrivingRoute"
       ],
@@ -689,9 +533,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "WalkingRoute"
       ],
@@ -702,9 +543,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "RidingRoute"
       ],
@@ -715,9 +553,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "TransitRoute"
       ],
@@ -728,9 +563,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Geocoder"
       ],
@@ -741,9 +573,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Geolocation"
       ],
@@ -754,9 +583,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "LocalCity"
       ],
@@ -767,9 +593,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Boundary"
       ],
@@ -780,9 +603,6 @@
       "family": "service",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Convertor"
       ],
@@ -793,9 +613,6 @@
       "family": "service",
       "status": "unsupported",
       "runtimeOnly": true,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [],
       "description": "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**（组件 `<BTrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已由 #110 落地在 `<BTrackLineLayer>` 的 `playback` expose 上。脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；依据与复现见 plugin-compat-inventory（#25 / #43）"
     },
@@ -804,9 +621,6 @@
       "family": "panorama",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "Panorama"
       ],
@@ -817,9 +631,6 @@
       "family": "panorama",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PanoramaService"
       ],
@@ -830,9 +641,6 @@
       "family": "panorama",
       "status": "native",
       "runtimeOnly": false,
-      "engines": [
-        "jsapi-v4"
-      ],
       "rawMembers": [
         "PanoramaLabel"
       ],

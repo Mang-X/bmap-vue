@@ -26,7 +26,8 @@
   `LoadedSdk`、`client.version`、`optionKey()` 的一行转发、`useBMapServiceTask` 经
   `export * from "./composables"` 外泄、`UseSdkResourceOptions` —— 这些要连带改夹具或改公共命名约定，
   属于 #44 的出口收窄；本批只**登记**（评论留在 #44）。
-- 能力目录的 `engines` 维度与 `engine-unsupported` 原因（**#126**）、两处无判别力的内部判据
+- 能力目录的 `engines` 维度与 `engine-unsupported` 原因（**#126**，本登记发出时已另行落地：
+  删列 + reason 改名 `unlisted-capability`，见 `single-engine-capability-catalog` changeset）、两处无判别力的内部判据
   （`BMap.mountMap` 的防御性前置、`driver-contract` 的 `expectation` 档，**#127**）、探针债务
   F-2 / F-3 / F-4（**#128**）—— 都有独立票，逐条对照见审计表的「剩余欠账与归宿」。
 - 不冻结 `./core` 的全量导出面（那是 #44 的交付物）；本批只守「已被判定为 REMOVE / 内部化」的名字。

@@ -10,10 +10,9 @@ import {
 } from "./catalog";
 
 /**
- * M3A3-REMOVE-LEGACY（#26）：`BMapEngine` 只剩 `jsapi-v4`，因此原先用 `webgl-v1` / `jsapi-v3`
- * 构造 registry 的用例改为单一引擎。两处**语义**变化要显式钉住：
- * - 目录里每条能力都必须声明当前唯一引擎（否则那张能力在运行时永远探不到）；
- * - 白名单不命中只剩「目录未收录该 id」这一条防御路径（引擎维度的区分已随旧引擎消失）。
+ * #126：单引擎收口后 `engines` 维度已删除（目录描述符不再声明引擎），判定链的**第一顺位**
+ * 变成「目录是否收录该 id」——未收录的 id 以 `unlisted-capability` 拒绝（唯一可达路径）。
+ * 引擎白名单分支与「每条能力必须声明当前引擎」断言一并删除：单引擎下它们恒不产生区分。
  */
 const fakeSdk = {
   Map: class {},
@@ -82,22 +81,16 @@ describe("CapabilityRegistry", () => {
     expect(registry.supports("map.check-resize")).toBe(true)
   })
 
-  it("catalog 的每条能力都声明当前引擎（单引擎基线，M3A3-REMOVE-LEGACY）", () => {
-    for (const id of CAPABILITY_IDS) {
-      expect(CAPABILITY_CATALOG[id].engines, `${id} 未声明 jsapi-v4`).toContain("jsapi-v4");
-    }
-  });
-
-  it("目录未收录的 id 按 engine-unsupported 拒绝", () => {
+  it("目录未收录的 id 按 unlisted-capability 拒绝（#126：engines 维度删除后的唯一可达路径）", () => {
     const registry = createCapabilityRegistry({
       engine: "jsapi-v4",
       version: "4.0",
       rawSdk: fakeSdk,
       unsupported: "silent",
     });
-    // 白名单检查在单引擎下的**唯一**可达路径：没有描述符
+    // 目录未收录的 id（`#26` 删除旧引擎后引擎白名单恒命中，这成为唯一拒绝路径）
     expect(registry.supports("does.not-exist" as Capability)).toBe(false);
-    expect(registry.explain("does.not-exist" as Capability).reason).toBe("engine-unsupported");
+    expect(registry.explain("does.not-exist" as Capability).reason).toBe("unlisted-capability");
     // 没有描述符就没有 family 可报：留空，而不是兜一个值（#104 R10 删掉 `runtime` 族之后，
     // 原先兜的 `"runtime"` 是一个没人能解释的幽灵值）
     expect(registry.explain("does.not-exist" as Capability).family).toBeUndefined();
@@ -279,7 +272,7 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
     expect(noMember.reason).toBe("raw-member-missing");
   });
 
-  it("descriptor() 暴露只读描述符，且条目 id / 描述 / engine 完整", () => {
+  it("descriptor() 暴露只读描述符，且条目 id / 描述 / family / status 完整（#126：不再有 engines 字段）", () => {
     const registry = createCapabilityRegistry({
       engine: "jsapi-v4",
       version: "4.0",
@@ -291,7 +284,7 @@ describe("Capability Catalog 状态语义（M3A0-06 / issue #15）", () => {
       expect(descriptor, `${id} 缺少 descriptor`).toBeDefined();
       expect(descriptor?.id).toBe(id);
       expect(descriptor?.description.length).toBeGreaterThan(0);
-      expect(descriptor?.engines.length).toBeGreaterThan(0);
+      expect(descriptor).not.toHaveProperty("engines");
       expect(CAPABILITY_FAMILIES).toContain(descriptor?.family);
       expect(CAPABILITY_STATUSES).toContain(descriptor?.status);
     }

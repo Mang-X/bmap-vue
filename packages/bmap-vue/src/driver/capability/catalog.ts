@@ -20,7 +20,6 @@
  * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 为基准核对：
  * `core/Map.d.ts` 的 Map 原型方法与各子目录 `declare namespace BMap` 类声明。
  */
-import type { BMapEngine } from "../types/bmap";
 
 export type Capability =
   // Map
@@ -104,24 +103,21 @@ export interface CapabilityDescriptor {
   description: string;
   /** SDK 顶层构造器名或 Map 原型方法名；空数组表示无 SDK 成员 */
   rawMembers?: readonly string[];
-  engines: readonly BMapEngine[];
   status: CapabilityStatus;
   /** 只能在运行时探测（官方类型包无静态声明） */
   runtimeOnly: boolean;
 }
 
 /**
- * 单引擎基线（M3A3-REMOVE-LEGACY / issue #26）。
+ * 单引擎收口（#26 删除 `webgl-v1` / `jsapi-v3`，#126 结算退化维度）。
  *
- * 旧引擎（`webgl-v1`）删除后 `BMapEngine` 只剩 `jsapi-v4`，原先用来区分
- * 「三个引擎都支持 / webgl-v4 支持 / 仅 v4 支持」的三个常量因此合并为一个：能力矩阵里的
- * 引擎列退化成一列，这是**如实反映单引擎基线**，而不是把旧引擎的支持状态留成历史注解。
- *
- * 已知欠账：`engines` 维度与 `CapabilityReason` 的 `engine-unsupported` 随之退化
- * （唯一引擎恒命中白名单；该 reason 只剩「描述符缺失」这条防御分支可达）。
- * 是否移除整个维度属独立决策，见 ADR 2026-09-14-remove-legacy-engine 的「已知限制」。
+ * 描述符**不再**声明 `engines`：单引擎下「已收录能力按引擎区分」不产生任何区分力
+ * （每条都恒为全集），留着它只是为未实现的多引擎留位。原字段的**唯一**可达拒绝路径
+ * ——「目录未收录该 id」——已改由 `CapabilityReason` 的 `unlisted-capability` 表达，
+ * 名字与该路径一致。引擎身份仍在 `CapabilityRegistry` / `CapabilityExplanation` 的
+ * `engine` 字段与错误信息里（那是有消费者的），删掉的只是目录里恒真的那一列。
+ * 决策见 ADR `2026-09-24-single-engine-capability-catalog`。
  */
-const JSAPI_V4: readonly BMapEngine[] = ["jsapi-v4"];
 
 export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // ---------------------------------------------------------------- Map
@@ -130,7 +126,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "视图中心读写（getCenter / setCenter）",
     rawMembers: ["getCenter", "setCenter"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -139,7 +134,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "缩放级别读写（getZoom / setZoom）",
     rawMembers: ["getZoom", "setZoom"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -148,7 +142,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "一次调用同时设置中心与缩放（centerAndZoom）",
     rawMembers: ["centerAndZoom"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -157,7 +150,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "可视范围读写（getBounds / setBounds）",
     rawMembers: ["getBounds", "setBounds"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -166,7 +158,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "视口（中心 + 缩放 + 旋转 + 倾斜）读写（getViewport / setViewport）",
     rawMembers: ["getViewport", "setViewport"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -175,7 +166,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "地图旋转角（setHeading）",
     rawMembers: ["setHeading"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -184,7 +174,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "地图倾斜角（setTilt）",
     rawMembers: ["setTilt"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -193,7 +182,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "平滑飞行定位（v4 原生 flyTo；探测成员 panTo）",
     rawMembers: ["panTo"],
-    engines: JSAPI_V4,
     status: "extended",
     runtimeOnly: true,
   },
@@ -202,7 +190,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "视角关键帧动画（startViewAnimation / cancelViewAnimation）",
     rawMembers: ["startViewAnimation", "cancelViewAnimation"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -211,7 +198,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "地图截图（getScreenshot）",
     rawMembers: ["getScreenshot"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -220,7 +206,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "容器尺寸变化后重算视图（checkResize）",
     rawMembers: ["checkResize"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -229,10 +214,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "经纬度与像素互转（pointToPixel / pixelToPoint）",
     rawMembers: ["pointToPixel", "pixelToPoint"],
-    // M3A2-MAP（#20）曾经因为「公共 MapDriver 成员在 webgl-v1 上也要可用」把这条从
-    // 「仅 v4」放宽过一次；旧引擎删除后（#26）所有条目都只声明 `jsapi-v4`，这里不再需要
-    // 单独说明——`engines` 维度的整体退化见本文件顶部的单引擎基线注释。
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -241,7 +222,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "个性化地图样式（setMapStyle）",
     rawMembers: ["setMapStyle"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -250,7 +230,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "map",
     description: "销毁地图并释放资源（v4 destroy）",
     rawMembers: ["destroy"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -261,7 +240,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "点标记（Marker）",
     rawMembers: ["Marker"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -270,7 +248,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "文本标注（Label）",
     rawMembers: ["Label"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -279,7 +256,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "信息窗口（InfoWindow）",
     rawMembers: ["InfoWindow"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -288,7 +264,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "圆（Circle）",
     rawMembers: ["Circle"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -297,7 +272,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "折线（Polyline）",
     rawMembers: ["Polyline"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -306,7 +280,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "多边形（Polygon）",
     rawMembers: ["Polygon"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -315,7 +288,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "矩形（Rectangle）",
     rawMembers: ["Rectangle"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -324,7 +296,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "自定义 DOM 覆盖物（CustomOverlay）",
     rawMembers: ["CustomOverlay"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -333,7 +304,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "地面叠加层（GroundOverlay）",
     rawMembers: ["GroundOverlay"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -342,7 +312,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "海量点（PointCollection）；官方 4.0.4 文档引用但未声明类型",
     rawMembers: ["PointCollection"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -351,7 +320,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "右键菜单（ContextMenu / MenuItem）",
     rawMembers: ["ContextMenu", "MenuItem"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -360,7 +328,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "3D 棱柱（Prism）",
     rawMembers: ["Prism"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -369,7 +336,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "贝塞尔曲线（BezierCurve）",
     rawMembers: ["BezierCurve"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -378,7 +344,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "3D 标记（Marker3D）；官方 4.0.4 文档引用但未声明类型",
     rawMembers: ["Marker3D"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: true,
   },
@@ -390,7 +355,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、" +
       "而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。" +
       "依据与复现见 plugin-compat-inventory（#25 / #43）",
-    engines: JSAPI_V4,
     status: "unsupported",
     runtimeOnly: true,
   },
@@ -401,7 +365,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "瓦片图层（TileLayer）",
     rawMembers: ["TileLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -410,7 +373,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "实时路况图层（TrafficLayer）",
     rawMembers: ["TrafficLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -419,7 +381,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "GeoJSON 图层（GeoJSONLayer）",
     rawMembers: ["GeoJSONLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -428,7 +389,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "点图标图层（PointIconLayer）",
     rawMembers: ["PointIconLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -437,7 +397,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "点形状图层（PointShapeLayer）",
     rawMembers: ["PointShapeLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -446,11 +405,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "行政区划图层（DistrictLayer）",
     rawMembers: ["DistrictLayer"],
-    // M3A2-CONTROLS-LAYERS（#22）曾经因为「`LayerDriver` 的共享契约要求两个引擎都能创建行政区
-    // 图层」把这条从「仅 v4」放宽过一次；旧引擎删除后（#26）所有条目都只声明 `jsapi-v4`，
-    // 这里不再需要单独说明——`engines` 维度的整体退化见本文件顶部的单引擎基线注释。
-    // （与 #20 对 `map.pixel-conversion` 的处理同源）。
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -459,7 +413,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型",
     rawMembers: ["PanoramaCoverageLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: true,
   },
@@ -468,7 +421,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "线图层（LineLayer）",
     rawMembers: ["LineLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -477,7 +429,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "面图层（FillLayer）",
     rawMembers: ["FillLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -486,7 +437,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "DOM 图层（DOMLayer）",
     rawMembers: ["DOMLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -498,7 +448,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务",
     rawMembers: ["XYZLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -507,7 +456,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求",
     rawMembers: ["WMSLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -516,7 +464,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求",
     rawMembers: ["WMTSLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -525,7 +472,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪",
     rawMembers: ["RasterTileLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: false,
   },
@@ -536,7 +482,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id",
     rawMembers: ["MVTLayer"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -551,7 +496,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     description:
       "聚合图层（ClusterLayer）；BMarkerCluster 的默认路径；另有显式可选的 markers 引擎" +
       "（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19",
-    engines: JSAPI_V4,
     status: "extended",
     runtimeOnly: true,
   },
@@ -564,7 +508,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 BPointLayer 落地",
     rawMembers: ["PointLayer"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: true,
   },
@@ -573,7 +516,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description: "热力图（Heatmap）；按权重渲染点密度，属扩展 API",
     rawMembers: ["Heatmap"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: true,
   },
@@ -586,7 +528,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "**它是 legacy 插件 `service.track-animation` 的迁移目标**" +
       "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。",
     rawMembers: ["TrackLine"],
-    engines: JSAPI_V4,
     status: "experimental",
     runtimeOnly: true,
   },
@@ -597,7 +538,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "本地检索（LocalSearch）",
     rawMembers: ["LocalSearch"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -609,7 +549,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，" +
       "已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit）",
     rawMembers: ["Autocomplete"],
-    engines: JSAPI_V4,
     // #104：原先标 `experimental` 的唯一理由是程序化 `suggest()` 的归属假设；该调用面已删除，
     // 剩下的构造 / 绑定 / 转发都有官方声明支撑，因此回到 `native`。
     status: "native",
@@ -620,7 +559,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "驾车路线规划（DrivingRoute）",
     rawMembers: ["DrivingRoute"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -629,7 +567,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "步行路线规划（WalkingRoute）",
     rawMembers: ["WalkingRoute"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -638,7 +575,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "骑行路线规划（RidingRoute）",
     rawMembers: ["RidingRoute"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -647,7 +583,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "公交路线规划（TransitRoute）",
     rawMembers: ["TransitRoute"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -656,7 +591,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "地理编码 / 逆地理编码（Geocoder）",
     rawMembers: ["Geocoder"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -665,7 +599,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "浏览器定位（Geolocation）",
     rawMembers: ["Geolocation"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -674,7 +607,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "IP 定位城市（LocalCity）",
     rawMembers: ["LocalCity"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -683,7 +615,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "行政区边界（Boundary）",
     rawMembers: ["Boundary"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -692,7 +623,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description: "坐标转换（Convertor）",
     rawMembers: ["Convertor"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -706,7 +636,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**" +
       "（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；" +
       "依据与复现见 plugin-compat-inventory（#25 / #43）",
-    engines: JSAPI_V4,
     status: "unsupported",
     runtimeOnly: true,
   },
@@ -717,7 +646,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "panorama",
     description: "全景查看器（Panorama）",
     rawMembers: ["Panorama"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -726,7 +654,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "panorama",
     description: "全景服务（PanoramaService）",
     rawMembers: ["PanoramaService"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
@@ -738,7 +665,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**" +
       "（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表）",
     rawMembers: ["PanoramaLabel"],
-    engines: JSAPI_V4,
     status: "native",
     runtimeOnly: false,
   },
