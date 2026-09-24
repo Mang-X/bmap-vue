@@ -36,16 +36,25 @@
  *    「回到初值」之后再次交互到该值**必须**是真实变化并通知父级。
  * 3. **没有公开 API 能静默重置 `localValue`** —— 所以这条不是「多写几行就补上」。
  *
- * ⇒ 现在 B 的**读与档位取自外部 prop**（`external()`），`internal` 是唯一事实源；**写**优先走
- * `useModel`，但**在 `reset()` 之后的第一次写入上直接 `emit`** 绕过它（记一个
- * `rewrittenByReset` 标志）。这是三条路里最小的补丁。
+ * ⇒ 现在 B 的**读与档位取自外部 prop**（`external()`），`internal` 是唯一事实源；**写**按档位
+ * 分流——**非受控档直接 `emit`**，完全不让 `useModel` 的 local state 参与（受控档才走
+ * `useModel`，那里它的 local state 由父级 prop 持续同步）。
+ *
+ * ⚠️ **为什么是「整个非受控档」而不是「reset 后那一次」**（复审七轮 P1）：早先版本在
+ * `reset()` 后置一个一次性 flag，只绕开**下一次**写。那修的是特例，不是状态分叉本身 ——
+ * 绕开的那次同样不更新 `useModel` 内部状态，于是序列 `11 → reset → 10 → 11` 里第二次回 11
+ * 照样被吞（实测 A 三次 / 旧 B 两次）。只要非受控写回还经过 `useModel`，它的 `localValue` /
+ * `prevSetValue` 就与 `internal` 永久分叉（`reset()` 两条更新途径都不经过），**后续任意**真实
+ * 交互都可能被它的去重吃掉。
  *
  * ⚠️ **即便如此，现在也不能说「B 真的是 Vue-native 路线」**（这是本文件最有价值的一条负面读数）：
- * 加上这条绕过之后，`commit` 已经不再需要 `useModel` —— **删掉 `useModel` 整行，11 条行为用例
- * 仍然全过**（已实测；只有 effect 计数那条变红，因为少注册 1 个 effect）。也就是说 `useModel`
- * 在本线路里**已经换不到任何可观察行为**，只剩一个多注册的 effect。
+ * 变异操作是——**把 B 剩余的 `useModel` 写通道也换成直接 `emit`，再删掉 `const model =
+ * useModel(childProps, "zoom");` 整行**（不能只删那一行：声明删了源码就跑不起来，那不是一次
+ * 可复现的变异）。这样改完，**11 条行为用例仍然全过**，只有 2 条 effect 计数变红（B 少 1 个
+ * effect；B₀ 塌成 0）。也就是说 `useModel` 在本线路里**换不到任何可观察行为**，只剩多注册的
+ * effect。
  * ⇒ 这**不是**「`useModel` 可用」的证据，而是反过来：**`useModel` 无法作为完整写通道复现冻结的
- * reset 语义**，补上绕过之后它在本线路里就不再是承重构件。这条结论与下面「3 vs 2」的读数
+ * reset 语义**，补上分流之后它在本线路里就不再是承重构件。这条结论与下面「3 vs 2」的读数
  * 同向，**独立地**否掉了迁移。
  *
  * **SDK 腿为什么两边都有**：`Map.vue:1225` 的 `watch(() => props.zoom, …)` 干的是
@@ -230,12 +239,14 @@ function mountRoute(
         commit = (next) => {
           if (numbersEqual(internal.value, next)) return false;
           internal.value = next;
-          // **写通道优先走 `useModel`**（这是它在本线路里的真实职责）。但**不能只走它** ——
-          // 见下面「写通道也去重」那条：`reset()` 之后 `useModel` 的 `localValue` 仍停在被
-          // reset 掉的值上，setter 的去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。
-          // 所以在「reset 过」这个边界上直接 `emit`，其余情况走 `useModel`。
-          if (rewrittenByReset) {
-            rewrittenByReset = false;
+          // **写通道分档**（复审七轮 P1）：非受控档**直接 `emit`**，不让 `useModel` 的
+          // local state 参与。早先版本在这里也走 `useModel`（或用一次性 flag 在 reset 后绕开
+          // 一次），两种写法都会漏 emit：`localValue` / `prevSetValue` 只有 `useModel` 自己的
+          // setter 与内部 `watchSyncEffect` 会更新，而 `reset()` 两条都不经过 ⇒ 写通道的输入态
+          // 与 `internal` **永久分叉**。一次性 flag 只修「reset 后恰好写回旧值」这个特例，
+          // 序列 `11 → reset → 10 → 11` 里第二次回 11 时照样被吞（实测 A 三次 / 旧 B 两次）。
+          // 受控档才走 `useModel` —— 那里它的 local state 由父级 prop 持续同步。
+          if (external() === undefined) {
             emit("update:zoom", next);
           } else {
             model.value = next;
@@ -250,11 +261,12 @@ function mountRoute(
         // 只有两条变化途径：`useModel` 自己的 setter（`hasVModel=false` 时本地生效），以及
         // 它内部那条 `watchSyncEffect` 从 prop 同步。`reset()` 只改 `internal`，**两条都不经过**
         // ⇒ 写通道的输入态和 `internal` 永久分家。修**读**侧不够，**写**侧同样会被它污染。
-        // 标记一下，让 `commit` 在这一次上绕开 `useModel`（理由见上）。
-        let rewrittenByReset = false;
+        // 早先版本在这里置一个「reset 过」的一次性 flag 让 `commit` 绕开一次 —— 那是**特例**，
+        // 不是修好状态分叉本身：绕开的那次同样不更新 `useModel` 内部状态，序列
+        // `11 → reset → 10 → 11` 里第二次回 11 照样被吞（复审七轮 P1）。现改为**整个非受控档
+        // 都不让 `useModel` 参与写**（见上面 `commit` 里的分档）。
         reset = () => {
           internal.value = initial;
-          rewrittenByReset = true;
         };
         // 冻结契约里的**告警**同样必须实现，否则 A 的第二个 effect（`defaultValue` 告警
         // watcher）就与 B 不可比（复审四轮 P1 指出）。**mode 告警并进这条 watcher**（不新增
@@ -551,6 +563,34 @@ describe("#137 Map model prototype（对照读数）", () => {
         h.emitted,
         `${route}：reset 后的第二次真实交互也必须 emit（不能被写通道的去重吞掉）`,
       ).toEqual([[11], [11]]);
+    }
+  });
+
+  it("真实非受控用法：reset 后任意真实交互都不得被 `useModel` 的残留状态吞掉", async () => {
+    // gate 序列（复审七轮 P1）：`11 → reset → 10 → 11`。
+    // 关键在**中间那次 10**：它命中 reset 后的第一次绕过，而那次**没有经过** `useModel`，
+    // 于是它内部的 `localValue` / `prevSetValue` 仍停在 11。接着回到 11 时，若写通道还
+    // 指望 `useModel` 的去重帮忙，就会**再次 early return，不 emit**。
+    // 「reset 后立刻再写 11」那条用例碰不到这个分叉——它只证明了一个特例。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route, { defaultZoom: 4 });
+      expect(h.simulateUserZoom(11), `${route}：首次交互`).toBe(true);
+      await nextTick();
+      expect(h.emitted, `${route}：首次交互应通知父级`).toEqual([[11]]);
+
+      h.reset();
+      expect(h.read(), `${route}：reset 回到首次快照`).toBe(4);
+
+      expect(h.simulateUserZoom(10), `${route}：reset 后交互到别的值`).toBe(true);
+      await nextTick();
+      expect(h.emitted, `${route}：reset 后第一次交互应通知父级`).toEqual([[11], [10]]);
+
+      expect(h.simulateUserZoom(11), `${route}：再回到残留的旧值仍是真变化`).toBe(true);
+      await nextTick();
+      expect(
+        h.emitted,
+        `${route}：每次真实变化都必须通知父级（不能被写通道的残留状态吞掉）`,
+      ).toEqual([[11], [10], [11]]);
     }
   });
 

@@ -279,8 +279,8 @@ props 形状完全一致（`zoom` + `defaultZoom`），差别只有模型层：
 
 - **A（现状）**：`useControllableState` + 与 `Map.vue:1225` 同形的 SDK 腿 watcher。
 - **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`internal` / `effective`
-  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`useModel` 只承担写通道**，且**在 `reset()` 之后的
-  第一次写入上会被绕过**（读与档位一律取自外部 prop —— 理由见下）。
+  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`useModel` 只承担受控档的写通道**：读与档位一律
+  取自外部 prop，非受控档的写**直接 `emit`**、完全不让 `useModel` 参与（理由见下）。
 - **B₀（对照下界）**：只 `useModel`，无桥接、无 SDK 腿。
 
 **SDK 腿两边都计入**：`Map.vue:1225` 那条 watcher 干的是 `driver.map.setZoom` —— **写 SDK 不是
@@ -289,9 +289,9 @@ Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显
 **「B 真的用了 `useModel`」是可复核的，不是声明**（复审 P1 指出过一个假阳性版本）：早先的 B
 虽然调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
 `model` **从未参与任何读写**，只是个被拿来计数的死对象。**删掉整行 `useModel`，当时四条行为
-断言仍然全部通过**（已实测）。修正后 B 让 `model` 承担唯一父子通道，**再删整行 `useModel`
-会让两条行为用例都变红**（已实测）。⚠️ 但这条证据**只成立于补上 reset 绕过之前**：见本节末的
-反面读数——补完之后删掉 `useModel`，行为用例仍全过。
+断言仍然全部通过**（已实测）。修正后 B 让 `model` 承担写通道，**再删整行 `useModel` 会让两条行为
+用例都变红**（已实测）。⚠️ 但这条证据**只成立于补上 reset 边界的修复之前**：见本节末的反面
+读数——补完之后 `useModel` 在 B 里换不到任何可观察行为。
 
 ##### 计数口径：唯一、且由 Vue 自己记账
 
@@ -364,11 +364,18 @@ profile，本文件不提供，**也不该由结构数或 effect 数推断**。e
   —— 已改成断言 `emitted` 真的收到两次。**没有公开 API 能静默重置 `localValue`**，所以这条不是
   「多写几行就补上」。
 
-⇒ **本次审计最有价值的一条负面读数**：补上「reset 后直接 `emit`」这条绕过之后，B 的 `commit`
-已经不再需要 `useModel` —— **删掉 `useModel` 整行，11 条行为用例仍然全过**（已实测；只有 effect
-计数那条变红，因为少注册 1 个 effect）。也就是说 `useModel` 在这条线路上**换不到任何可观察行为**，
-只剩一个多注册的 effect。这与「3 vs 2」同向，且**独立地**否掉了迁移：
-**`useModel` 无法作为完整写通道复现冻结的 reset 语义，补上绕过之后它也不再是承重构件。**
+- **一次性绕过不够，状态分叉才是问题**（复审七轮 P1）。上一版在 `reset()` 后置一个 flag 只绕开
+  **下一次**写 —— 那修的是特例。序列 `11 → reset → 10 → 11` 里，绕开的那次（10）同样不更新
+  `useModel` 内部状态，再回 11 时照样被吞（实测 A 三次 / 旧 B 两次）。只要非受控写回还经过
+  `useModel`，它的 `localValue` / `prevSetValue` 就与 `internal` 永久分叉，**后续任意**真实交互
+  都可能被去重吃掉。⇒ 现改为**整个非受控档直接 `emit`**，完全不让 `useModel` 参与写。
+
+⇒ **本次审计最有价值的一条负面读数**：改完之后，变异操作是——**把 B 剩余的 `useModel` 写通道也
+换成直接 `emit`，再删掉 `const model = useModel(childProps, "zoom");` 整行**（**不能只删那一行**：
+声明删了源码就跑不起来，那不是一次可复现的变异 —— 复审七轮 P2 指出）。这样改完，**11 条行为用例
+仍然全过**，只有 2 条 effect 计数变红（B 少 1 个 effect；B₀ 塌成 0）。也就是说 `useModel` 在这条
+线路上**换不到任何可观察行为**，只剩多注册的 effect。这与「3 vs 2」同向，且**独立地**否掉了迁移：
+**`useModel` 无法作为完整写通道复现冻结的 reset 语义，改完之后它也不再是承重构件。**
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
 「React 术语不好听」这种口味判断，而是有**可重跑的原型读数**支撑：在本库的冻结规则下，

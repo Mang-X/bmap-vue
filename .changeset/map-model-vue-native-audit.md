@@ -12,7 +12,7 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
 
 | 项 | 结论 | 依据 |
 | --- | --- | --- |
-| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：原型把 `useModel` 的**读、档位、写**三处限制各测成可复现的行为差异——真实非受控用法（`zoom` key 完全省略，`hasVModel=false`）下，`useModel` 读到的 `localValue` 是 Vue 自己的局部状态（读错、档位判错），且 `reset()` 无法同步它 ⇒ setter 的全局去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。**没有公开 API 能补**：读、档位改取外部 prop，写在 `reset()` 后这一次直接 `emit` 绕过。即便如此，**删掉 `useModel` 整行 11 条行为用例仍全过**——它换不到任何可观察行为。且在**同等冻结契约**下每个 number 字段实际注册的 `ReactiveEffect` 是 **3 vs 2**（口径 `getCurrentScope().effects.length`）——**没有更省，反而多 1 个**。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
+| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：原型把 `useModel` 的**读、档位、写**三处限制各测成可复现的行为差异——真实非受控用法（`zoom` key 完全省略，`hasVModel=false`）下，`useModel` 读到的 `localValue` 是 Vue 自己的局部状态（读错、档位判错），且 `reset()` 无法同步它 ⇒ setter 的全局去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。**没有公开 API 能补**：读、档位改取外部 prop；写按档位分流——**整个非受控档直接 `emit`**（一次性 flag 只修「reset 后恰好写回旧值」这个特例，序列 `11 → reset → 10 → 11` 仍漏）。即便如此，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它的声明，11 条行为用例仍全过**——它换不到任何可观察行为。且在**同等冻结契约**下每个 number 字段实际注册的 `ReactiveEffect` 是 **3 vs 2**（口径 `getCurrentScope().effects.length`）——**没有更省，反而多 1 个**。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
 | ② MapRuntime retry / boot | **逐符号保留** | `mountStarted` / `bootTask` / `nextBootWaiters` / `deferredWaiters` / `containerUsableWaiters` / `assembledMap` / `whenMapCreated` 全部记**外部资源状态**（WebGL 句柄、0×0 容器、KeepAlive 下 `onUnmounted` 不触发），每个都有可翻红的行为用例。ADR `2026-09-14-map-handle-container-and-visibility` §5.1 给出逐符号消费者表 |
 | ③ batching | **无缺陷可修** | 实测：一次父提交同改 center+zoom+heading+tilt ⇒ 4 个独立 `flush:'post'` watcher 与「单个四元组 watcher」**都是 4 次写入**。四个字段是**四条不同 SDK 命令**，批处理省不掉；`flush:'post'` 已拿到全部可得收益。ADR `2026-09-24-scheduler-batching-hot-path` §2.1 |
 | ④ KeepAlive / 暂停 | **保留** | `onActivated` / `onDeactivated` 直接驱动 `keep-alive` 原因增删，本来就是 Vue-native；`disposed` 终态原因与容器门禁有真实 WebGL / 0×0 语义 |
@@ -50,9 +50,12 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
   `useModel` 的 `hasVModel` 看的是 vnode raw props 的 key 存在性，省略 key 时它读到的
   `localValue` 是 Vue 自己的局部状态，不是受控值。**写通道的 reset 边界**也钉住：去掉
   「`reset()` 后直接 `emit`」的绕过 ⇒ 该用例变红（A 收到两次 `update:zoom`，B 只收到一次）。
-  ⚠️ 最后一个变异是**反面读数**且已写进 ADR：补上绕过之后**删掉 `useModel` 整行，11 条行为用例
-  仍全过**（只有 effect 计数变红）——所以现在的结论**不是**「B 是可用的 Vue-native 路线」，
-  而是「`useModel` 无法作为完整写通道复现冻结的 reset 语义，补上绕过后它也不再是承重构件」。
+  序列 `11 → reset → 10 → 11` 那条 gate 另由两次变异各自钉住：写一律走 `useModel` ⇒ 上一条
+  reset 用例红；退回一次性 flag ⇒ gate 序列红。
+  ⚠️ 最后一个变异是**反面读数**且已写进 ADR：把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉
+  它的声明，**11 条行为用例仍全过**（只有 2 条 effect 计数变红）——所以现在的结论**不是**
+  「B 是可用的 Vue-native 路线」，而是「`useModel` 无法作为完整写通道复现冻结的 reset 语义，
+  改完之后它也不再是承重构件」。
 
 **公共面不变**：`useControllableState` 的签名 / 返回形状、`<Map>` 的 props 与 `update:*` 事件、
 ADR 决策 6 冻结的模型语义均未改动；`pnpm generate:api-diff:check` 与

@@ -276,8 +276,9 @@ function cloneCenter(value: MapCenter): MapCenter {
  *   **同等冻结契约**）—— Vue-native
  *   没有更省。这**不等于**「更贵」：effect 数推不出成本大小。`defineModel` 才会改到被 fixture
  *   断言的冻结 `MapProps`，那只是它**额外**的成本，不是不迁 `useModel` 的理由。
- * - **最强的反面读数**：三处补完之后，**删掉 `useModel` 整行原型的 11 条行为用例仍全过**——
- *   它换不到任何可观察行为，只剩那 1 个多注册的 effect。这与「3 vs 2」同向且更直接。
+ * - **最强的反面读数**：三处补完之后，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它的
+ *   声明，原型的 11 条行为用例仍全过**——它换不到任何可观察行为，只剩那 1 个多注册的 effect。
+ *   这与「3 vs 2」同向且更直接。
  *
  * ⇒ 保留 `useControllableState` 作为通用原语；下面四个调用点**不动逻辑**。
  */
