@@ -209,10 +209,17 @@ controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分�
 第一行是**硬冲突**：它与决策 4 §3 冻结的语义**直接矛盾**，且不是加适配层能补的（`undefined` 是
 `useModel` 表达「现在没有受控值」的信号，适配层拿不到「最后一次外部值」）。
 
-**（三）迁移还会改到冻结公共面。** `Map.vue` 用的是手写 `defineProps<MapProps>()`，而
-`MapProps` 是**被消费端 fixture 断言**的公共类型（`fixtures/consumer/src/index.ts`）。只把
-`<Map>` 迁到 `defineModel` 会改动公共面、让 `Map` 偏离全库统一写法，而上表里缺的每一项**仍要**
-留一层适配 —— 收益为零，成本为负。
+**（三）`defineModel` 会改到冻结公共面；但 `useModel` 不会 —— 这条要分开说。**（2026-09-24 复审修正）
+
+`Map.vue` 用的是手写 `defineProps<MapProps>()` + `defineEmits`，而 `MapProps` 是**被消费端 fixture
+断言**的公共类型（`fixtures/consumer/src/index.ts`）。`defineModel` 宏会**自己生成** prop 与 emit，
+用它就得把 `MapProps` 里那四个字段搬进宏 —— 那确实改公共面。**但 `useModel` 不需要这样**：
+它接受现成的 `props` 对象，只替换读写通道，**`defineProps`/`defineEmits`/`MapProps` 全部原样保留**。
+（复审指出「defineModel 改公共面 ⇒ useModel 也改」是跳跃论证，本节按此更正。）
+
+所以否决 `useModel` 的理由**不能**是「它会改公共面」。真正的理由是 §6.1.1 之后的原型读数：
+按构造计数，Vue-native 路线并不更省（详见下）。**行为上它确实能做到**（原型逐项复现了现状的
+可观察结果），只是**代价更高而收益为零**。
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 「简单数字模型不该
 为 React 受控/非受控术语付运行代价」这条要求，按**归属**而非按**词汇**满足：React 术语只留在
@@ -257,18 +264,30 @@ controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分�
 冻结公共成员是例外，真要移除应另开破坏性变更票。
 
 **「付不必要 runtime」这条验收的诚实口径**（#137 验收第 2 条）。该条问「简单 number model 是否为
-React controlled/uncontrolled **术语**支付了不必要 runtime」。逐个数清 `<Map>` 四个视野字段实际
-持有的响应式对象：`isControlled` computed ×1、`model` computed ×1、`internal` shallowRef ×1、
-`warned` Set ×1，外加有 `default*` 时一个 `defaultValue` watcher。**这些都还在，没有被本票删掉。**
-本票做到的是把「React 术语」限制在**一个已发布的公共 composable** 的名字与文档里，而**不是**把
-运行时对象减掉 —— 减掉就等于改公共契约（验收第 5 条禁止）。
+React controlled/uncontrolled **术语**支付了不必要 runtime」。
 
-因此这条验收的达成口径是**归属**而非**体积**：`<Map>` 的四个 number 字段没有为「controlled /
-uncontrolled」付出**任何额外的调度或状态机**（没有第二套 watcher 体系、没有 per-field 的
-provider/store 抽象），它们就是「一个 getter + 一个 emit + 一次容差判等的 SDK 写入」；React 词汇
-只出现在 helper 的**命名与文档**上。**若将来要以「体积」而不是「归属」结清这一条**，那是一次
-独立的、面向 1.0 的公共 API 变更（`useControllableState` 降级为内部实现 + 提供 `defineModel`
-版本），必须单开票并走 ADR，不在 #137 范围内。
+#137 复审要求先做**真实原型**再定论，而不是靠论证。原型已做（临时脚本，按构造计数，跑完即删，
+读数固化在此）：同一个 `zoom` 字段，两种完整接线都**手写 `defineProps`/`defineEmits`**（不碰
+`MapProps`、不动公共面），B 形状就是 `useModel(props, "zoom")` + 补齐 Vue 覆盖不到的那几样。
+
+| 每个 number 字段构造的响应式对象 | A：现状 `useControllableState` | B：原型 `useModel` + 最小桥接 |
+| --- | ---: | ---: |
+| `shallowRef` | 1（`internal`） | 2（`lastExternal` + `internal`） |
+| `computed` | 2（`isControlled` + `model`） | 1（`effective`） |
+| `watch` | 1（`defaultValue` 告警 watcher） | 1（prop → 桥接） |
+| `useModel` 自带的 `customRef` | — | 1（`useModel` 内部） |
+| `Set`（告警去重） | 1 | 1 |
+| **合计** | **5** | **6** |
+
+读法：**原型没有更省，反而多一个对象**。省下的那个 computed（`isControlled`）被 `lastExternal`
+这个 ref 抵掉了 —— 因为「受控 → 非受控保留最后一次外部值」这条规则**必须**有人记，而 `useModel`
+不记（§6.1 的 A3），所以只能由桥接自己记。**逐项可观察行为两边完全一致**（含容差内抖动、
+真实变化、受控→非受控保留最后值、reset 归位），原型没有带来任何行为或体积上的收益。
+
+⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
+「React 术语不好听」这种口味判断，而是有原型读数支撑：Vue-native 那条路在本库的冻结规则下
+**不更便宜**。`isControlled` 之所以保留也不再是「不必要 runtime」——它确实是多余的一个 computed，
+但删它要动公共返回类型（破坏性变更），而原型证明换成 `useModel` 连这一个都省不下来。
 
 ### 7. 与官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的对照
 

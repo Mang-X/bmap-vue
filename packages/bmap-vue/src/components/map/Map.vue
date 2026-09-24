@@ -258,8 +258,8 @@ function cloneCenter(value: MapCenter): MapCenter {
 }
 
 /**
- * 四个视野字段的模型接线，**刻意不用 `defineModel`**（#137 已取证，理由见
- * `useControllableState` 文件头与 ADR `2026-09-14-map-controlled-state`）：
+ * 四个视野字段的模型接线，**刻意不用 `defineModel` / `useModel`**（#137 已做原型取实测，
+ * 理由见 `useControllableState` 文件头与 ADR `2026-09-14-map-controlled-state` §6.1 / §6.1.1）：
  *
  * - **父↔子这一腿已经是 Vue-native**：`value: () => props.center` 就是**对 props 的 getter**
  *   （不另存一份），写入侧是普通 `emit('update:center', …)`。这正是 `v-model` 的展开形态，
@@ -268,9 +268,11 @@ function cloneCenter(value: MapCenter): MapCenter {
  *   `anglesEqual` / `tiltEquals`）、`copy` 落库（`cloneCenter`）、`reset()` 归位都是 SDK 侧
  *   语义。Vue 3.5 的 `useModel` 在受控 prop 被摘掉时读到的是 `undefined`，与冻结的
  *   「受控 → 非受控保留最后一次外部值」直接矛盾，也表达不了 default 只读一次与容差相等。
- * - **不改冻结公共面**：`MapProps` 是被消费端 fixture 断言的公共类型，且这里是手写的
- *   `defineProps<MapProps>()`。只迁 `<Map>` 会改动公共面、偏离全库写法，而上面那些规则仍要
- *   留一层适配。
+ * - **不更便宜**（别拿「会改公共面」搪塞——`useModel` 接受现成 `props`，不动 `MapProps`）：
+ *   原型实测，`useModel` + 最小桥接**能**复现全部可观察行为，但每个 number 字段的构造计数是
+ *   6 vs 现状 5 —— 省下的 `isControlled` computed 正好被桥接为「记住最后外部值」而必须新增的
+ *   `lastExternal` ref 抵掉，`useModel` 自己还带一个 `customRef`。`defineModel` 才会改到被 fixture
+ *   断言的冻结 `MapProps`，那只是它**额外**的成本，不是不迁 `useModel` 的理由。
  *
  * ⇒ 保留 `useControllableState` 作为通用原语；下面四个调用点**不动逻辑**。
  */

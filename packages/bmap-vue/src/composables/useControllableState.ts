@@ -11,15 +11,25 @@
  * | 父组件 ↔ 组件（props / emits） | **Vue** | 调用方传 `value: () => props.center`——这是**对 props 的 getter**，不是另存一份；写入侧是 `emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，全库统一（`Map` / `Marker` / `InfoWindow` 都是「普通 prop + `update:*` emit」），**没有**第二个父↔子状态机需要收口。 |
  * | 组件 ↔ SDK（读回 / 写回 / 归位） | **本文件** | `internal` 镜像是 SDK 侧事实源的本地投影，容差相等、`copy` 落库、`reset()` 归位都是 SDK 侧语义，Vue 不拥有、也无法替我们表达。 |
  *
- * **为什么不用 `defineModel` / `useModel`（#137 已取证，不是「没试过」）**：Vue 3.5 的
+ * **为什么不用 `defineModel` / `useModel`（#137 已做原型，不是「没试过」）**：Vue 3.5 的
  * `useModel` 确实自带「受控：prop 优先 / 非受控：本地为源」，但它**表达不了下面规则 3 的
  * 受控 → 非受控那一半**——受控 prop 被摘掉时 `useModel` 读到的就是 `undefined`，而本文件
  * 冻结的契约是「内部状态接管，**保留最后一次外部值**」。它同样没有 `defaultValue` 只读一次、
- * 没有容差相等、没有 `copy`、没有首次快照。而且 `Map` 的 props 走的是**手写
- * `defineProps<MapProps>()`**，`MapProps` 是被消费端 fixture 断言的冻结公共类型；只把
- * `Map` 迁到 `defineModel` 会让它偏离全库统一写法、改动冻结公共面，而上面那些规则仍要
- * 这层适配。⇒ 保留本 helper 作为通用原语，`<Map>` 的接线不动。详见 ADR
- * `2026-09-14-map-controlled-state` 的「对照 `defineModel` / `useModel`」小节。
+ * 没有容差相等、没有 `copy`、没有首次快照。
+ *
+ * #137 复审要求先做**真实原型**再定论，原型已做（两种接线都手写 `defineProps`/`defineEmits`，
+ * 不动 `MapProps`）。结论分两层，别混：
+ *
+ * - **行为上**：`useModel` + 一个最小桥接**能**逐项复现现状的可观察结果（容差抖动、真实变化、
+ *   受控→非受控保留最后值、reset 归位）。所以「做不到」是错的说法。
+ * - **代价上**（按构造计数，每个 number 字段）：现状 5 个响应式对象，`useModel` 路线 6 个 ——
+ *   省下的 `isControlled` computed 正好被桥接为「记住最后外部值」而必须新增的 `lastExternal`
+ *   ref 抵掉，`useModel` 自己还带一个 `customRef`。**Vue-native 不更便宜。**
+ *
+ * `defineModel` 另有一层：它自己生成 prop/emit，会改到被 fixture 断言的冻结 `MapProps`；而
+ * `useModel` 不需要（它接受现成 `props`）。**但这不构成否决 `useModel` 的理由** —— 真正的理由
+ * 是上面那句「不更便宜」。⇒ 保留本 helper 作为通用原语，`<Map>` 的接线不动。详见 ADR
+ * `2026-09-14-map-controlled-state` §6.1 与 §6.1.1 的原型读数。
  *
  * ## 三种来源
  *

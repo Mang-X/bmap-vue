@@ -25,12 +25,13 @@
  * | A1 | 无 `v-model` 时写 `useModel` **本地生效** | 非受控档：事实源是本地状态（**这一条两边一致**） |
  * | A2 | 有 `v-model` 时写只 emit、值等父级回写 | 受控档「prop 优先」（**这一条两边一致**） |
  * | A3 | **受控 prop 被摘掉后读到 `undefined`** | ← **决定性理由**：与冻结的「受控 → 非受控保留最后一次外部值」直接矛盾 |
- * | A4 | 写同一个值**不 emit** | 它是 `hasChanged` 语义 ⇒ **没有容差相等**，而本库四个视野字段全部依赖容差 |
+ * | A4 | 写「**数值不同但在本库容差内**」的值**仍 emit** | 它是精确变化比较 ⇒ **没有容差相等**，而本库四个视野字段全部依赖容差（否则受控写入与 SDK 读回会形成往返） |
  * | A5 | `string \| Point` 联合 prop 在 `useModel` 上**可用** | 把「不迁移」的原因锁定在**语义**而非**类型**上，避免以后被误诊为类型不兼容 |
  */
 import { describe, expect, it } from "vitest";
 import { defineComponent, h, nextTick, ref, useModel } from "vue";
 import { mount } from "@vue/test-utils";
+import { NUMBER_EPSILON, numbersEqual } from "../core/utils/equality";
 
 /**
  * 挂一个最小 `<Child>`，把 `useModel` 句柄、父级改 props 的能力与 emit 日志交出去。
@@ -121,13 +122,34 @@ describe("对照 `useModel`（#137：不迁移的依据）", () => {
     });
   });
 
-  it("A4 写同一个值不 emit：hasChanged 语义 ⇒ 没有容差相等", async () => {
+  it("A4 写「本库容差内但数值不同」的值仍 emit：证明它是精确变化比较，不是容差相等", async () => {
+    // 判别力说明：初值取 3，写入 `3 + NUMBER_EPSILON / 2`。
+    //
+    //   - 本库 `numbersEqual(3, 3 + 5e-7)` 为 **true**（差值 5e-7 ≤ 容差 1e-6）⇒
+    //     `useControllableState` 会判「没变化」，**不写内部状态、不通知父级**；
+    //   - `useModel` 若只有精确比较（`hasChanged`），这次写入**必须 emit**。
+    //
+    // 早先这条写的是「写完全相同的 3 ⇒ 不 emit」—— 那个输入没有判别力：严格相等、
+    // `Object.is`、乃至任何容差相等都会让它通过，撑不起「没有容差相等」的结论。
+    // 用「数值不同但在本库容差内」的值，两种语义才会分道扬镳。
+    const WITHIN_LIBRARY_TOLERANCE = 3 + NUMBER_EPSILON / 2;
     await withModel({ modelValue: 3 }, async ({ model, emitted }) => {
-      model.value = 3;
+      // 正证守卫：这个差值在本库的容差相等口径下**确实相等**——否则下面的断言
+      // 可能只是因为「差值太大、两边都判不等」而通过，判别力又没了。
+      expect(
+        numbersEqual(3, WITHIN_LIBRARY_TOLERANCE),
+        "守卫：这个差值必须落在本库容差内，否则本用例测不到容差语义",
+      ).toBe(true);
+      expect(WITHIN_LIBRARY_TOLERANCE, "守卫：且它在数值上确实不等于初值").not.toBe(3);
+
+      model.value = WITHIN_LIBRARY_TOLERANCE;
       await nextTick();
-      expect(emitted, "同值写入被去重 ⇒ 它按引用/原值比较，不认容差").toEqual([]);
-      // 本库四个视野字段全部依赖容差相等（`centerEquals` / `numbersEqual` / `anglesEqual`），
-      // 否则受控写入与 SDK 读回会形成「每次都判定为变化」的往返。
+
+      // ⇒ 结论：useModel 把这次写入当成「变了」，而本库会当成「没变」。
+      // 这正是四个视野字段必须自带容差相等的原因（否则受控写入与 SDK 读回
+      // 会形成「每次都判定为变化」的往返）。若上游将来给 useModel 补上容差相等，
+      // 本条会翻红。
+      expect(emitted, "容差内的抖动被 useModel 当成真实变化").toEqual([[WITHIN_LIBRARY_TOLERANCE]]);
     });
   });
 
