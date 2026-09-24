@@ -122,7 +122,7 @@ describe("DataLayerManager", () => {
   it("缺 key / 非法坐标 ⇒ 跳过该项并报告（不创建任何资源）", () => {
     const problems: ItemProblem[] = [];
     const { host, createMarker } = makeHost();
-    const m = new DataLayerManager(host, { label: "BMarkerList", onProblem: (p) => problems.push(p) });
+    const m = new DataLayerManager(host, { label: "MarkerList", onProblem: (p) => problems.push(p) });
     m.sync(
       syncOf([
         items[0]!,
@@ -231,7 +231,7 @@ describe("DataLayerManager", () => {
     const { createMarker, removeMarker, updatePosition } = makeHost();
     const m = new DataLayerManager(
       { createMarker, removeMarker, updatePosition },
-      { label: "BMarkerList", warn },
+      { label: "MarkerList", warn },
     );
     m.sync(syncOf(items));
     m.flush();
@@ -301,7 +301,7 @@ describe("DataLayerManager 的失败隔离（SDK 调用抛错时不许把整轮 
     removeMarker.mockImplementation((resource: { id: string }) => {
       if (resource.id === "b") throw new Error("removeLayer failed");
     });
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
 
@@ -326,7 +326,7 @@ describe("DataLayerManager 的失败隔离（SDK 调用抛错时不许把整轮 
       if (item.id === "b") throw new Error("create failed");
       return { id: item.id, position: { lng: item.lng, lat: item.lat } };
     });
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
     expect(m.size, "失败项不进账本").toBe(2);
@@ -346,7 +346,7 @@ describe("DataLayerManager 的失败隔离（SDK 调用抛错时不许把整轮 
     updatePosition.mockImplementation(() => {
       throw new Error("setPosition failed");
     });
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
     vi.clearAllMocks();
@@ -409,7 +409,7 @@ describe("DataLayerManager：失败的更新必须能重试 [#102 F2]", () => {
   it("updatePosition 抛错之后，用**同一批输入**再 sync 必须重试（不被短路吞掉）", () => {
     const warn = vi.fn();
     const { host, updatePosition } = makeHost();
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     const item: Item = { id: "a", lng: 1, lat: 1 };
     m.sync(syncOf([item]));
     m.flush();
@@ -460,7 +460,7 @@ describe("DataLayerManager：clear() 失败不得丢失所有权 [#102 F3]", () 
     removeMarker.mockImplementation((resource: { id: string }) => {
       if (resource.id === "b") throw new Error("remove failed");
     });
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
 
@@ -491,7 +491,7 @@ describe("DataLayerManager：remove 抛错后的 unknown 与恢复 [#113]", () =
   it("remove 抛错 ⇒ 该 key 进入 unknown：保留所有权、告警、后续 updatePosition/setVisible 都不碰它", () => {
     const warn = vi.fn();
     const { host, removeMarker, updatePosition, setVisible } = makeHost();
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
 
@@ -533,7 +533,7 @@ describe("DataLayerManager：remove 抛错后的 unknown 与恢复 [#113]", () =
   it("再次摘除成功 ⇒ 销账：unknownSize 归零、所有权与显隐恢复确定状态", () => {
     const warn = vi.fn();
     const { host, removeMarker, updatePosition } = makeHost();
-    const m = new DataLayerManager(host, { label: "BMarkerList", warn });
+    const m = new DataLayerManager(host, { label: "MarkerList", warn });
     m.sync(syncOf(items));
     m.flush();
 
@@ -562,7 +562,7 @@ describe("DataLayerManager：remove 抛错后的 unknown 与恢复 [#113]", () =
 
   it("显隐部分失败 ⇒ 抛给调用方、全部试过、下一次不被短路吞掉（可重试）", () => {
     const { host, setVisible } = makeHost();
-    const m = new DataLayerManager(host, { label: "BMarkerList" });
+    const m = new DataLayerManager(host, { label: "MarkerList" });
     m.sync(syncOf(items));
     m.flush();
     vi.clearAllMocks();

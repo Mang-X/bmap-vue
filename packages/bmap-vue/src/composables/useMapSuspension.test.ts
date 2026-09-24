@@ -224,7 +224,7 @@ describe("useMapSuspension：释放", () => {
     const first = createContainer({ width: 320, height: 240 });
     const second = createContainer({ width: 320, height: 240 });
     // 用 ref 而不是普通变量：观察器跟着 getter 的**响应式依赖**换元素，
-    // 这也是 `<BMap>` 的真实形态（`measure: () => rootRef.value`）
+    // 这也是 `<Map>` 的真实形态（`measure: () => rootRef.value`）
     const current = shallowRef<HTMLElement>(first);
     const target = createTarget();
     const controller = useMapSuspension({

@@ -9,7 +9,7 @@
  * ## 为什么字段要**声明**策略，而不是让组件各写一套 watcher
  *
  * 迁移前每个覆盖物组件手写 3~11 个 `watch`，且「哪个属性是构造期属性」这个判断散落在组件里
- * （BMarker 为了 icon 还去探测过 raw SDK 有没有 `setIcon`）。现在：
+ * （Marker 为了 icon 还去探测过 raw SDK 有没有 `setIcon`）。现在：
  *
  * - 组件声明**意图**（`fields`：这个 prop 是位置 / 就地更新 / 构造期 / 显隐 / 版本令牌 / 旧别名）；
  * - **分类的事实源仍是 Driver 的属性描述符**（`OVERLAY_DESCRIPTORS`，由官方类型包与 API 参考
@@ -100,7 +100,7 @@ export type OverlayFieldMap<Props> = {
  * - `"fingerprint"`：对**内容**取稳定序列化指纹（`core/utils/stableKey.ts`）后比较。标量、
  *   小对象（`offset` / `icon` / `style` / `bounds`）用它：父级每次渲染传内联字面量时引用都会变，
  *   按引用比较会让「内容没变」也重新下发一次命令。
- * - `"reference"`：只比**根引用**。给「内容不可序列化」的值用：`BGroundOverlay` 的 `url` 允许
+ * - `"reference"`：只比**根引用**。给「内容不可序列化」的值用：`GroundOverlay` 的 `url` 允许
  *   惰性工厂（`() => HTMLCanvasElement`），而 `stableKeyOf` 把函数折叠成常量 `"fn"` ⇒
  *   指纹比较会让「换了一个工厂」被静默忽略。**按引用是这里唯一正确的判据**。
  * - `{ source: "versioned", versionProp }`：根引用 + 一个**版本 prop** 作为强制刷新开关。大数组
@@ -173,7 +173,7 @@ export interface OverlaySpec<Props extends object, Resource> {
   /**
    * prop → **下发前的值投影**（缺省原样）。用于组件侧允许的「惰性值」。
    *
-   * 唯一的当前消费者是 `BGroundOverlay.url`：它接受 `string | HTMLCanvasElement | (() => …)`，
+   * 唯一的当前消费者是 `GroundOverlay.url`：它接受 `string | HTMLCanvasElement | (() => …)`，
    * 而上游 `GroundOverlayOptions.url` / `setImage(url)` 只接受真实来源——工厂函数必须在这里被
    * 求值，否则会把一个函数交给 SDK（本库不允许「收下但没人读」的假支持）。
    *
@@ -181,7 +181,7 @@ export interface OverlaySpec<Props extends object, Resource> {
    *
    * **投影可能被多次求值**（每次读取求一次，没有缓存）：`fieldValues` 只保证「哪些字段要投影」，
    * 不保证「一轮里只投影一次」。因此对**有副作用 / 每次都产生新实例**的投影（工厂函数），
-   * 调用点必须**自己先取一次**再复用（`BGroundOverlay.create` 就是 `const url = p.url` 那一行），
+   * 调用点必须**自己先取一次**再复用（`GroundOverlay.create` 就是 `const url = p.url` 那一行），
    * 否则校验用的对象与交给 SDK 的对象会是两个不同实例（PR #103 评审 2）。
    */
   readonly fieldValues?: Partial<Record<keyof Props & string, (value: unknown) => unknown>>;
@@ -189,7 +189,7 @@ export interface OverlaySpec<Props extends object, Resource> {
   /**
    * 挂载完成后的**组件侧副作用**（实例已经走完 `add` 与登记，`context` / `resource` 都可用）。
    *
-   * 唯一的当前消费者是 `BGroundOverlay.autoCenter`（按显示区域居中地图，走 `map.setViewport`）。
+   * 唯一的当前消费者是 `GroundOverlay.autoCenter`（按显示区域居中地图，走 `map.setViewport`）。
    * 它在语义上属于「创建完成」而不是「字段更新」，因此只在这里调用一次——与迁移前
    * `addToMap` 里那段 `if (p.autoCenter) setViewport(...)` 的位置一致。
    */

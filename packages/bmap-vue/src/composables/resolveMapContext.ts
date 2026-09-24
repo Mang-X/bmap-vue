@@ -1,13 +1,13 @@
 /**
  * MapContext 解析:不再伪造空 resources/events/scheduler Context。
  *
- * 查找顺序(与 <BMap> 的 Client 查找顺序一致):
- * 1. 最近注入的 MapContext(<BMap> 子树,推荐)。
+ * 查找顺序(与 <Map> 的 Client 查找顺序一致):
+ * 1. 最近注入的 MapContext(<Map> 子树,推荐)。
  * 2. 最近注入的 ClientContext(<BMapProvider> 子树,client-only 服务)。
  * 3. app.use(createBMapPlugin(...)) 的默认定义或旧 bmapConfig:就地创建真实
  *    ClientContext 适配器(真实 ResourceScope/EventBus/Scheduler/Registries)。
  * 4. 以上皆无:抛出明确 BMAP_PARENT_CONTEXT_MISSING,不再静默构造假 Context,
- *    也不再有任何全局兜底——旧引擎(读 `BMap ?? BMapGL` 的 legacy Provider)已在 3.0 删除;
+ *    也不再有任何全局兜底——旧引擎(读 `Map ?? BMapGL` 的 legacy Provider)已在 3.0 删除;
  *    宿主自己加载了 SDK 时请显式传 `existingGlobalV4Provider()`。
  */
 import { shallowRef, toRaw } from "vue";
@@ -49,8 +49,8 @@ export function resolveMapContext(map?: unknown): MapContext {
 
   throw new BMapError(
     "BMAP_PARENT_CONTEXT_MISSING",
-    "Component must be a descendant of <BMap> (or <BMapProvider> for client-only services). " +
-      "Use the component inside a <BMap> root.",
+    "Component must be a descendant of <Map> (or <BMapProvider> for client-only services). " +
+      "Use the component inside a <Map> root.",
   );
 }
 
@@ -111,7 +111,7 @@ function createClientAdapter(clientContext: BMapClientContext, map?: unknown): M
     clientRef.value = client;
     const rawMap = readValue(map);
     // Client-only 服务(map 未传):仅需 client,直接返回,map 置空;
-    // 需要 map 能力的调用方应使用 <BMap> 内上下文。
+    // 需要 map 能力的调用方应使用 <Map> 内上下文。
     if (!rawMap) {
       const existing = mapRef.value;
       if (existing) return { client, map: existing };

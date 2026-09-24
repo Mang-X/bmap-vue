@@ -7,9 +7,9 @@ lang: zh-CN
 
 v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总线。
 
-## BMap：map 事件
+## Map：map 事件
 
-`<BMap>` 把 SDK 的 map 事件归一化后转发。下表是**完整清单**，它由
+`<Map>` 把 SDK 的 map 事件归一化后转发。下表是**完整清单**，它由
 `packages/bmap-vue/src/core/events/eventCatalog.ts` 生成并被门禁逐行校验
 （名字、SDK 名与说明三者必须一致）——所以在模板里 `@` 能补全出全部 43 个名字。
 
@@ -62,13 +62,13 @@ v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总�
 三点约定：
 
 - **名字**：规范名 = SDK 名把分隔符 `_` 换成 `-`（只有 5 个 `style_*` / `language_change`
-  需要换）。`@style-loaded`、`@style_loaded`、`@styleLoaded` 都能绑上同一条——`<BMap>` 对
+  需要换）。`@style-loaded`、`@style_loaded`、`@styleLoaded` 都能绑上同一条——`<Map>` 对
   两者都会发出，兼容拼写集中在 Catalog 一处，组件里没有第二份兼容代码。
 - **载荷**：`{ type, point?, pixel?, size?, zoom?, targetZoom?, trend?, mapType?, exMapType?, domEvent?, raw, preventDefault(), stopPropagation() }`。
   指针 / 拖拽类事件恒有 `point`；未归一化的原样细节走 `raw` 逃生口。
 - **订阅是固定集合**：地图就绪时一次性订阅上表全部事件，不随你改绑监听器而变化。这么做的原因是
   Vue 判子组件要不要重渲染时**不比较 emit listener**（`hasPropsChanged` 里显式跳过），
-  所以「监听器从 `undefined` 变成函数」这类变化不会让 `<BMap>` 重渲染 —— 依赖重渲染做增量的方案
+  所以「监听器从 `undefined` 变成函数」这类变化不会让 `<Map>` 重渲染 —— 依赖重渲染做增量的方案
   会**静默丢事件**。未绑定 handler 的事件由 Vue 直接丢弃（一次属性查找）。
 - **高频事件合帧**：上表标注「按帧合帧」的 5 个事件一帧最多提交一次、取最后一次载荷。
 - **`.once` 可用**：`@click.once` / `@styleLoaded.once` 都按 Vue 的语义只触发一次
@@ -76,7 +76,7 @@ v3 组件使用类型化 `emits` 直接对外广播，不经过内部事件总�
   不在 `emit("maptypechange")` 的查找链上）。
 
 ```vue
-<BMap ak="xxx" @click="onClick" @maptypechange="onTypeChange" />
+<Map ak="xxx" @click="onClick" @maptypechange="onTypeChange" />
 ```
 
 ```ts
@@ -90,7 +90,7 @@ function onTypeChange(e: MapEventPayloadOf<'maptypechange'>) {
 }
 ```
 
-## BMap：组件事件
+## Map：组件事件
 
 与地图无关的事件（就绪、插件、生命周期、视野 v-model 回写）：
 
@@ -111,7 +111,7 @@ function onTypeChange(e: MapEventPayloadOf<'maptypechange'>) {
 `client` 提供 `driver` 领域接口（`driver.map / driver.overlays / driver.services / driver.geometry`）。
 
 ```vue
-<BMap ak="xxx" @ready="onReady" @plugin-ready="onPluginReady" />
+<Map ak="xxx" @ready="onReady" @plugin-ready="onPluginReady" />
 ```
 
 ```ts
@@ -126,7 +126,7 @@ function onPluginReady(name: string) {
 
 ## 在组件外订阅：useMapEvent / useMapStatus
 
-`<BMap>` 的 `@` 只覆盖模板；需要在 setup 里按条件订阅、或读地图外部状态时用这两个 hook：
+`<Map>` 的 `@` 只覆盖模板；需要在 setup 里按条件订阅、或读地图外部状态时用这两个 hook：
 
 - [`useMapEvent`](../hooks/useMapEvent)：按事件名订阅，handler 更新不重绑，高频事件按帧合帧；
 - [`useMapStatus`](../hooks/useMapStatus)：`center / zoom / bounds / size / heading / tilt / moving / zooming`
@@ -134,14 +134,14 @@ function onPluginReady(name: string) {
 
 ## 子组件
 
-覆盖物 / 控件 / 图层组件各自声明自己的 typed emits（如 `BMarker` 的 `click/dblclick/dragend/update:position`、
-`BInfoWindow` 的 `open/close`、`BContextMenu` 的 `open/close`），详见各组件文档的事件表。
-子组件没有 `initd/unload` 事件；如需地图实例，请用 `useBMap()` + `whenReady()`：
+覆盖物 / 控件 / 图层组件各自声明自己的 typed emits（如 `Marker` 的 `click/dblclick/dragend/update:position`、
+`InfoWindow` 的 `open/close`、`ContextMenu` 的 `open/close`），详见各组件文档的事件表。
+子组件没有 `initd/unload` 事件；如需地图实例，请用 `useMap()` + `whenReady()`：
 
 ```ts
-import { useBMap } from 'bmap-vue'
+import { useMap } from 'bmap-vue'
 
-const { whenReady } = useBMap() // 须在 <BMap> 子树内调用
+const { whenReady } = useMap() // 须在 <Map> 子树内调用
 const { client, map } = await whenReady()
 ```
 

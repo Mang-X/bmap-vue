@@ -6,9 +6,9 @@
 
 ```ts
 import {
-  BDistrictLayer, BPanoramaCoverageLayer,
-  BTileLayer, BTrafficLayer, BGeoJSONLayer, BDOMLayer,
-  BXYZLayer, BWMSLayer, BWMTSLayer, BRasterLayer,
+  DistrictLayer, PanoramaCoverageLayer,
+  TileLayer, TrafficLayer, GeoJSONLayer, DOMLayer,
+  XYZLayer, WMSLayer, WMTSLayer, RasterTileLayer,
 } from 'bmap-vue'
 ```
 
@@ -16,17 +16,17 @@ import {
 
 | 场景 | 用哪个 |
 | --- | --- |
-| 行政区划（省 / 市 / 县区） | `BDistrictLayer` |
-| 自有瓦片，数据**已是**百度坐标系（BD09MC） | `BTileLayer` |
-| 第三方标准瓦片（XYZ / WMTS / WMS / TMS） | `BXYZLayer`（内置 EPSG:3857 → BD09MC 转换） |
-| 栅格瓦片（子域轮询 / TMS 翻转 / 四至裁剪） | `BRasterLayer` |
-| WMS 服务 | `BWMSLayer` |
-| WMTS 服务 | `BWMTSLayer` |
-| 实时路况 | `BTrafficLayer` |
-| GeoJSON 数据（点 / 线 / 面） | `BGeoJSONLayer` |
-| 批量线 / 面 / 热力 / 轨迹线（数据驱动 + 要素状态） | `BLineLayer` / `BFillLayer` / `BHeatmapLayer` / `BTrackLineLayer`（见[原生批量可视化图层](./native-visual-layers)） |
-| 自定义 DOM 覆盖物 | `BDOMLayer` |
-| 全景覆盖 | `BPanoramaCoverageLayer`（搭配 `BPanoramaControl`） |
+| 行政区划（省 / 市 / 县区） | `DistrictLayer` |
+| 自有瓦片，数据**已是**百度坐标系（BD09MC） | `TileLayer` |
+| 第三方标准瓦片（XYZ / WMTS / WMS / TMS） | `XYZLayer`（内置 EPSG:3857 → BD09MC 转换） |
+| 栅格瓦片（子域轮询 / TMS 翻转 / 四至裁剪） | `RasterTileLayer` |
+| WMS 服务 | `WMSLayer` |
+| WMTS 服务 | `WMTSLayer` |
+| 实时路况 | `TrafficLayer` |
+| GeoJSON 数据（点 / 线 / 面） | `GeoJSONLayer` |
+| 批量线 / 面 / 热力 / 轨迹线（数据驱动 + 要素状态） | `LineLayer` / `FillLayer` / `HeatmapLayer` / `TrackLineLayer`（见[原生批量可视化图层](./native-visual-layers)） |
+| 自定义 DOM 覆盖物 | `DOMLayer` |
+| 全景覆盖 | `PanoramaCoverageLayer`（搭配 `PanoramaControl`） |
 
 > 上面大半是**底图家族**（走 `LayerDriver`：行政区 / 瓦片 / 路况 / GeoJSON / DOM / 全景覆盖），
 > 它们的「显隐」统一表达为**挂上 / 摘掉**。四个原生批量可视化图层走的是另一条 Facet
@@ -39,7 +39,7 @@ import {
 | --- | --- | --- |
 | `visible` | 是否在地图上 | 挂上 / 摘掉（所有图层一致，**不**用 `hide()`） |
 | `opacity` / `minZoom` / `maxZoom` | 透明度 / 显示层级范围 | 构造选项；官方这批图层没有对应 setter，变化时**重建** |
-| `zIndex` | 层叠顺序 | 有 setter 的图层就地更新；没有的（如 `BDistrictLayer`）不支持该槽位 |
+| `zIndex` | 层叠顺序 | 有 setter 的图层就地更新；没有的（如 `DistrictLayer`）不支持该槽位 |
 | `data` | 数据（仅数据驱动图层） | 就地 `setData()`；`null` = 清空 |
 
 > 非目标之一：**不在 `map.addLayer` 之前执行依赖地图的操作**。层级一类的写入只在挂载后发生。
@@ -60,7 +60,7 @@ import {
 
 | 类别 | 例子 | 换实现时的行为 |
 | --- | --- | --- |
-| **每个瓦片 / 每次请求都会再调用** | `url`（`BRasterLayer`）、`tileLoadFunction`、XYZ/WMTS 的 `xTemplate` / `yTemplate` / `zTemplate` / `bTemplate` | **立即生效，不重建**（本库交给 SDK 的是身份稳定、每次调用读最新 prop 的包装函数） |
+| **每个瓦片 / 每次请求都会再调用** | `url`（`RasterTileLayer`）、`tileLoadFunction`、XYZ/WMTS 的 `xTemplate` / `yTemplate` / `zTemplate` / `bTemplate` | **立即生效，不重建**（本库交给 SDK 的是身份稳定、每次调用读最新 prop 的包装函数） |
 | **只在解析数据时求一次** | GeoJSON 的 `markerStyle` / `polylineStyle` / `polygonStyle`、`BDOMPLayer` 的 `createDom` | **重建图层**（既有要素 / DOM 只能靠重新解析数据换实现） |
 
 由此有两条要注意的：
@@ -107,7 +107,7 @@ import {
 （`tileload` / `tileerror` / …）——所以本库不发明事件，改为提供一个**观察面**：
 
 ```vue
-<BTileLayer
+<TileLayer
   tile-url-template="https://yourhost/tile?x={X}&y={Y}&z={Z}"
   :tile-load-observer="{
     onRequest: ({ url }) => console.log('要加载', url),
@@ -129,7 +129,7 @@ import {
 - 与官方 `tileLoadFunction` **同时给**时：加载交给你的函数（接管），本库只在旁边观察；
 - 观察者回调抛错不影响加载（捕获 + 开发期告警）。
 
-`BXYZLayer` 的官方构造选项里**没有** `tileLoadFunction`，因此它没有观察面（只有 `addLayer` 的调用
+`XYZLayer` 的官方构造选项里**没有** `tileLoadFunction`，因此它没有观察面（只有 `addLayer` 的调用
 可由使用方从自己的网络面板观察）。
 
 ## 排障：图层挂上了但看不到东西
@@ -138,11 +138,11 @@ import {
 
 1. **CORS**：第三方瓦片服务通常要求开启跨域（`Access-Control-Allow-Origin`）。浏览器会拦截
    图片以外的读取（拾取、绘制到 canvas）。本库只负责发起请求，**不保证源服务可用**。
-2. **坐标系**：`BTileLayer` 的坐标**必须**是 BD09MC；第三方标准服务（EPSG:3857 / WGS84 /
-   GCJ02）用 `BXYZLayer` / `BRasterLayer` / `BWMSLayer` / `BWMTSLayer`。用错的表现是**整体偏移**
+2. **坐标系**：`TileLayer` 的坐标**必须**是 BD09MC；第三方标准服务（EPSG:3857 / WGS84 /
+   GCJ02）用 `XYZLayer` / `RasterTileLayer` / `WMSLayer` / `WMTSLayer`。用错的表现是**整体偏移**
    而不是报错。GeoJSON 数据要按 `reference` 声明来源坐标系。
-3. **占位符写法**：`BXYZLayer` 用方括号 `[z]` / `[x]` / `[y]`；`BRasterLayer` 用花括号
-   `{z}` / `{x}` / `{y}`（TMS 用 `{-y}`）；`BTileLayer` 用花括号 `{X}` / `{Y}` / `{Z}`。
+3. **占位符写法**：`XYZLayer` 用方括号 `[z]` / `[x]` / `[y]`；`RasterTileLayer` 用花括号
+   `{z}` / `{x}` / `{y}`（TMS 用 `{-y}`）；`TileLayer` 用花括号 `{X}` / `{Y}` / `{Z}`。
    写错的表现是「图层挂得好好的，但瓦片全 404」。
 4. **掩膜与范围**：`boundary` / `showRegion` / `extent` / `bounds` 会把瓦片裁到某个范围内，
    范围写错时图层在视野内是空的。
@@ -156,7 +156,7 @@ import {
   等价于「摘掉 + 换一个新实例」。代价是一次重建；不这么做的话，真实环境里隐藏再显示会**内容消失**。
 - **重建**：构造期选项（URL、`params`、`transparentPng`…）变化会**换一个实例**：旧实例先摘掉、
   旧监听随它那一代的作用域释放，因此不会有「旧图层的请求/回调影响新图层」。
-- **数据**：`BGeoJSONLayer` / `BDOMLayer` 的 `data` 变化只调 `setData()`，**不重建**
+- **数据**：`GeoJSONLayer` / `DOMLayer` 的 `data` 变化只调 `setData()`，**不重建**
   （重建会让所有覆盖物重做，DOM 图层会肉眼可见地闪）。
 - **释放**：组件卸载、地图销毁（含 `keepAliveBehavior="dispose"` 的停用）都会摘掉图层并释放
   监听；诊断计数归零有测试锁住。数据驱动图层在永久销毁时走一次统一的「清空」入口

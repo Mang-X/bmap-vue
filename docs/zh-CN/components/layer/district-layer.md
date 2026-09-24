@@ -1,9 +1,9 @@
-# BDistrictLayer 行政区图层 <Badge type="tip" text="^1.1.2" />
+# DistrictLayer 行政区图层 <Badge type="tip" text="^1.1.2" />
 
 在地图上显示行政区划分。
 
 ```ts
-import { BDistrictLayer } from 'bmap-vue'
+import { DistrictLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -47,7 +47,7 @@ layer/districtLayer
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 | 事件名 | 说明 | 类型 |
 | --- | --- | --- |

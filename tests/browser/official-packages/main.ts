@@ -155,7 +155,7 @@ function blocked(reason: string): never {
 
 /** 读一次当前全局命名空间形状。 */
 function readSdkSnapshot(): SdkSnapshot {
-  const w = window as unknown as { BMap?: unknown; BMapGL?: unknown };
+  const w = window as unknown as { Map?: unknown; BMapGL?: unknown };
   return {
     bmap: typeof w.BMap === "object" && w.BMap !== null,
     bmapgl: typeof w.BMapGL === "object" && w.BMapGL !== null,
@@ -243,7 +243,7 @@ async function main(): Promise<void> {
   await probe("loader.status-initial", "加载前状态机为 notload 且全局命名空间不存在", null, async () => {
     expect(loader.getStatus() === "notload", `初始状态为 ${loader.getStatus()}`);
     expect(
-      (window as unknown as { BMap?: unknown }).BMap === undefined,
+      (window as unknown as { Map?: unknown }).BMap === undefined,
       "加载前 window.BMap 已存在（复用路径会掩盖真实加载）",
     );
     return { status: loader.getStatus(), scriptCount: sdkScriptCount() };
@@ -297,9 +297,9 @@ async function main(): Promise<void> {
     sdkReady = sdkSnapshot.bmap;
     return {
       status: loader.getStatus(),
-      resolvedIsWindowBMap: ns === (window as unknown as { BMap?: unknown }).BMap,
+      resolvedIsWindowBMap: ns === (window as unknown as { Map?: unknown }).BMap,
       ...sdkSnapshot,
-      hasVersionKey: "VERSION" in ((window as { BMap?: object }).BMap ?? {}),
+      hasVersionKey: "VERSION" in ((window as { Map?: object }).BMap ?? {}),
     };
   });
 
@@ -369,7 +369,7 @@ async function main(): Promise<void> {
   /* --- 5. UI Kit：四个 widget 的构造 / 释放 ------------------------ */
 
   const map = sdkReady
-    ? new ((window as unknown as { BMap: { Map: new (id: string) => unknown } }).BMap.Map)("map")
+    ? new ((window as unknown as { Map: { Map: new (id: string) => unknown } }).BMap.Map)("map")
     : null;
 
   interface WidgetHandle {
@@ -473,7 +473,7 @@ async function main(): Promise<void> {
         .slice(0, 8),
       scriptCountAfterDestroy: sdkScriptCount(),
       scriptCountAtStart,
-      globalStillPresent: typeof (window as unknown as { BMap?: unknown }).BMap === "object",
+      globalStillPresent: typeof (window as unknown as { Map?: unknown }).BMap === "object",
     };
   });
 
@@ -584,11 +584,11 @@ async function main(): Promise<void> {
       search: (options: Record<string, unknown>) => Promise<unknown>;
       destroy: () => void;
     };
-    const BMap = (window as unknown as { BMap: { Point: new (lng: number, lat: number) => unknown } })
+    const Map = (window as unknown as { Map: { Point: new (lng: number, lat: number) => unknown } })
       .BMap;
     const result = (await instance.search({
-      start: new BMap.Point(116.404, 39.915),
-      end: new BMap.Point(116.305, 39.982),
+      start: new Map.Point(116.404, 39.915),
+      end: new Map.Point(116.305, 39.982),
     })) as { plans?: unknown[]; routeType?: unknown } | null;
     instance.destroy();
     host.remove();
@@ -626,7 +626,7 @@ async function main(): Promise<void> {
       settled,
       statusAfterReset: loader.getStatus(),
       globalsAfterReset: {
-        bmap: typeof (window as unknown as { BMap?: unknown }).BMap,
+        bmap: typeof (window as unknown as { Map?: unknown }).BMap,
         bmapgl: typeof (window as unknown as { BMapGL?: unknown }).BMapGL,
       },
     };

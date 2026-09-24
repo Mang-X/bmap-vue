@@ -28,18 +28,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { KeepAlive, defineComponent, h, nextTick, ref, type VNodeChild } from "vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BDOMLayer from "../../packages/bmap-vue/src/components/layers/BDOMLayer.vue";
-import BDistrictLayer from "../../packages/bmap-vue/src/components/layers/BDistrictLayer.vue";
-import BGeoJSONLayer from "../../packages/bmap-vue/src/components/layers/BGeoJSONLayer.vue";
-import BPanoramaCoverageLayer from "../../packages/bmap-vue/src/components/layers/BPanoramaCoverageLayer.vue";
-import BRasterLayer from "../../packages/bmap-vue/src/components/layers/BRasterLayer.vue";
-import BMVTLayer from "../../packages/bmap-vue/src/components/layers/BMVTLayer.vue";
-import BTileLayer from "../../packages/bmap-vue/src/components/layers/BTileLayer.vue";
-import BTrafficLayer from "../../packages/bmap-vue/src/components/layers/BTrafficLayer.vue";
-import BWMSLayer from "../../packages/bmap-vue/src/components/layers/BWMSLayer.vue";
-import BWMTSLayer from "../../packages/bmap-vue/src/components/layers/BWMTSLayer.vue";
-import BXYZLayer from "../../packages/bmap-vue/src/components/layers/BXYZLayer.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import DOMLayer from "../../packages/bmap-vue/src/components/layers/DOMLayer.vue";
+import DistrictLayer from "../../packages/bmap-vue/src/components/layers/DistrictLayer.vue";
+import GeoJSONLayer from "../../packages/bmap-vue/src/components/layers/GeoJSONLayer.vue";
+import PanoramaCoverageLayer from "../../packages/bmap-vue/src/components/layers/PanoramaCoverageLayer.vue";
+import RasterTileLayer from "../../packages/bmap-vue/src/components/layers/RasterTileLayer.vue";
+import MVTLayer from "../../packages/bmap-vue/src/components/layers/MVTLayer.vue";
+import TileLayer from "../../packages/bmap-vue/src/components/layers/TileLayer.vue";
+import TrafficLayer from "../../packages/bmap-vue/src/components/layers/TrafficLayer.vue";
+import WMSLayer from "../../packages/bmap-vue/src/components/layers/WMSLayer.vue";
+import WMTSLayer from "../../packages/bmap-vue/src/components/layers/WMTSLayer.vue";
+import XYZLayer from "../../packages/bmap-vue/src/components/layers/XYZLayer.vue";
 import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
 import { createCapabilityRegistry } from "../../packages/bmap-vue/src/driver/capability/registry";
 import { createJsapiV4EventDriver } from "../../packages/bmap-vue/src/driver/jsapi-v4/events";
@@ -72,17 +72,17 @@ const LAYER_CASES: ReadonlyArray<{
   component: unknown;
   props: Record<string, unknown>;
 }> = [
-  { name: "BDistrictLayer", kind: "district", component: BDistrictLayer, props: { name: "北京市" } },
-  { name: "BPanoramaCoverageLayer", kind: "panorama-coverage", component: BPanoramaCoverageLayer, props: {} },
-  { name: "BTileLayer", kind: "tile", component: BTileLayer, props: { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" } },
-  { name: "BTrafficLayer", kind: "traffic", component: BTrafficLayer, props: {} },
-  { name: "BGeoJSONLayer", kind: "geojson", component: BGeoJSONLayer, props: { data: FEATURE_COLLECTION } },
-  { name: "BDOMLayer", kind: "dom", component: BDOMLayer, props: { createDom: createDOM, data: FEATURE_COLLECTION } },
-  { name: "BXYZLayer", kind: "xyz", component: BXYZLayer, props: { tileUrlTemplate: "https://b.example.com/[z]/[x]/[y].png" } },
-  { name: "BWMSLayer", kind: "wms", component: BWMSLayer, props: { url: "https://c.example.com/wms", params: { LAYERS: "demo" } } },
-  { name: "BWMTSLayer", kind: "wmts", component: BWMTSLayer, props: { url: "https://d.example.com/wmts", params: { Layer: "img" } } },
-  { name: "BRasterLayer", kind: "raster", component: BRasterLayer, props: { url: "https://e.example.com/{z}/{x}/{y}.png" } },
-  { name: "BMVTLayer", kind: "mvt", component: BMVTLayer, props: { tileUrlTemplate: "https://f.example.com/[z]/[x]/[y].pbf" } },
+  { name: "DistrictLayer", kind: "district", component: DistrictLayer, props: { name: "北京市" } },
+  { name: "PanoramaCoverageLayer", kind: "panorama-coverage", component: PanoramaCoverageLayer, props: {} },
+  { name: "TileLayer", kind: "tile", component: TileLayer, props: { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" } },
+  { name: "TrafficLayer", kind: "traffic", component: TrafficLayer, props: {} },
+  { name: "GeoJSONLayer", kind: "geojson", component: GeoJSONLayer, props: { data: FEATURE_COLLECTION } },
+  { name: "DOMLayer", kind: "dom", component: DOMLayer, props: { createDom: createDOM, data: FEATURE_COLLECTION } },
+  { name: "XYZLayer", kind: "xyz", component: XYZLayer, props: { tileUrlTemplate: "https://b.example.com/[z]/[x]/[y].png" } },
+  { name: "WMSLayer", kind: "wms", component: WMSLayer, props: { url: "https://c.example.com/wms", params: { LAYERS: "demo" } } },
+  { name: "WMTSLayer", kind: "wmts", component: WMTSLayer, props: { url: "https://d.example.com/wmts", params: { Layer: "img" } } },
+  { name: "RasterTileLayer", kind: "raster", component: RasterTileLayer, props: { url: "https://e.example.com/{z}/{x}/{y}.png" } },
+  { name: "MVTLayer", kind: "mvt", component: MVTLayer, props: { tileUrlTemplate: "https://f.example.com/[z]/[x]/[y].pbf" } },
 ];
 
 /**
@@ -100,10 +100,10 @@ beforeEach(() => {
   createdBase = harness.layersCreated();
 });
 
-/** 挂一棵 `<BMap>` + 子节点；返回 wrapper 与「重渲染用」的根组件。 */
+/** 挂一棵 `<Map>` + 子节点；返回 wrapper 与「重渲染用」的根组件。 */
 function mountLayerTree(children: () => VNodeChild, mapProps: Record<string, unknown> = {}) {
   const Root = defineComponent({
-    setup: () => () => h(BMap, { provider: harness.provider(), ...mapProps }, children),
+    setup: () => () => h(Map, { provider: harness.provider(), ...mapProps }, children),
   });
   return mount(Root, { attachTo: harness.container() });
 }
@@ -119,7 +119,7 @@ async function unmountAndSettle(wrapper: { unmount(): void }) {
 }
 
 /**
- * 挂一棵带 `resource:error` 探针的 `<BMap>`：把组件的创建 / 挂载失败收成可断言的结果。
+ * 挂一棵带 `resource:error` 探针的 `<Map>`：把组件的创建 / 挂载失败收成可断言的结果。
  *
  * 与 `v3-component-scenarios.test.ts` 里的同名探针同源（那条路走 `useRequiredMapContext`
  * 读上下文的事件总线）。
@@ -521,9 +521,9 @@ describe("[#40] §4 GeoJSON / DOM 的响应式更新（就地 setData，不重�
 describe("[#40] §5 Registry 与 Map dispose 一致", () => {
   it("普通卸载：图层被摘掉、账本无残留、诊断归零", async () => {
     const wrapper = mountLayerTree(() => [
-      h(BTileLayer, { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" }),
-      h(BTrafficLayer),
-      h(BDistrictLayer, { name: "北京市" }),
+      h(TileLayer, { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" }),
+      h(TrafficLayer),
+      h(DistrictLayer, { name: "北京市" }),
     ]);
     await settle();
     expect(harness.attached("layer")).toBe(3);
@@ -546,12 +546,12 @@ describe("[#40] §5 Registry 与 Map dispose 一致", () => {
           default: () =>
             show.value
               ? h(
-                  BMap,
+                  Map,
                   // `dispose` 档下 `onDeactivated` 直接销毁 Runtime，而组件树仍在 KeepAlive 的
                   // cache 里 —— 这正是「Registry 与 Map dispose 一致」唯一能走到的路径：
                   // 子组件的 `onUnmounted` 不会发生，图层只能由账本的 `disposeAll()` 摘掉。
                   { provider: harness.provider(), keepAliveBehavior: "dispose" },
-                  () => [h(BTileLayer, { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" })],
+                  () => [h(TileLayer, { tileUrlTemplate: "https://a.example.com/{X}/{Y}/{Z}.png" })],
                 )
               : null,
         }),
@@ -583,7 +583,7 @@ describe("[#40] §6 事件与重建后的监听归属", () => {
     const onEvent = vi.fn();
     const layerName = ref("pois");
     const wrapper = mountLayerTree(() =>
-      h(BGeoJSONLayer, {
+      h(GeoJSONLayer, {
         data: FEATURE_COLLECTION,
         layerName: layerName.value,
         onClick: onEvent,
@@ -618,7 +618,7 @@ describe("[#40] §6 事件与重建后的监听归属", () => {
   it("payload 原样透传（geoJSON 的 click 载荷带 features）", async () => {
     const received: unknown[] = [];
     const wrapper = mountLayerTree(() =>
-      h(BGeoJSONLayer, {
+      h(GeoJSONLayer, {
         data: FEATURE_COLLECTION,
         onClick: (e: unknown) => received.push(e),
       } as never),
@@ -671,7 +671,7 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
   });
 
   it("[评审 2] 回调型构造 option 换成另一个函数后，SDK 手上的回调必须转发到最新的那个", async () => {
-    // `BRasterLayer.url` 是 `string | ((x,y,z) => string)`：函数 → 函数 的切换在指纹里被折叠成 `fn`，
+    // `RasterTileLayer.url` 是 `string | ((x,y,z) => string)`：函数 → 函数 的切换在指纹里被折叠成 `fn`，
     // 因此不会重建（这是刻意的，否则内联箭头会让父级每次渲染都重建图层）——
     // 但 SDK 手上的那份必须**转发到当前 prop**，否则就是「换了回调但永远用旧的」。
     const urlA = (x: number) => `A:${x}`;
@@ -752,7 +752,7 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
 
   it("[评审 4] addLayer 已经挂上之后再抛错：mount 的错误补偿必须把它摘掉", async () => {
     const show = ref(false);
-    const wrapper = mountLayerTree(() => (show.value ? h(BTrafficLayer, {}) : null));
+    const wrapper = mountLayerTree(() => (show.value ? h(TrafficLayer, {}) : null));
     await settle();
     expect(createdSince()).toBe(0);
 
@@ -774,7 +774,7 @@ describe("[#40] §8 评审修正：可见性切换、回调替换、键移除与
   it("[评审 4] 挂载之后切可见时的失败同样不留下孤儿，且经 resource:error 可诊断", async () => {
     const errors: unknown[] = [];
     const visible = ref(false);
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTrafficLayer, { visible: visible.value }));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TrafficLayer, { visible: visible.value }));
     await settle();
     expect(createdSince()).toBe(1);
 
@@ -946,7 +946,7 @@ describe("[#40] §10 评审修正：DOM 事件契约、覆盖物清理与重建�
   });
 
   it("[三轮 1] 官方契约下 DOMLayer 的事件订阅会被 EventDriver 拒绝（warn + no-op）", () => {
-    // 这条是「为什么 BDOMLayer 不公开事件」的机制正证：不是我们不想绑，是契约上**绑了就解不掉**。
+    // 这条是「为什么 DOMLayer 不公开事件」的机制正证：不是我们不想绑，是契约上**绑了就解不掉**。
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { layers, events } = createFakeDriverPair();
     const dom = layers.create("dom", { createDOM });
@@ -1007,8 +1007,8 @@ describe("[#40] §10 评审修正：DOM 事件契约、覆盖物清理与重建�
         h(KeepAlive, null, {
           default: () =>
             show.value
-              ? h(BMap, { provider: harness.provider(), keepAliveBehavior: "dispose" }, () => [
-                  h(BDOMLayer, { createDom: createDOM, data: FEATURE_COLLECTION } as never),
+              ? h(Map, { provider: harness.provider(), keepAliveBehavior: "dispose" }, () => [
+                  h(DOMLayer, { createDom: createDOM, data: FEATURE_COLLECTION } as never),
                 ])
               : null,
         }),
@@ -1081,7 +1081,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
   it("[四轮 1] visible=false 时 removeLayer 抛错：永久销毁必须**再试一次**摘除（不留孤儿）", async () => {
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
     expect(harness.attached("layer")).toBe(1);
 
@@ -1108,7 +1108,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // 但可观测且不重复挂载）。见已知限制 14。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
 
     const map = fake.createdMaps[fake.createdMaps.length - 1]!;
@@ -1142,7 +1142,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // 收口的是 `map.destroy()` 自己。此时唯一正确的承诺是「可观测」，不是「无残留」。
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mountLayerTree(() =>
-      h(BTileLayer as never, { ...LAYER_CASES[2]!.props } as never),
+      h(TileLayer as never, { ...LAYER_CASES[2]!.props } as never),
     );
     await settle();
 
@@ -1164,7 +1164,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // Driver 只能**逐 setter** 调用，于是「第一个键生效、第二个键抛错」是真实可达的部分成功。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({});
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTrafficLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TrafficLayer as never, props.value));
     await settle();
 
     const layerOf = () =>
@@ -1201,7 +1201,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
   it("[四轮 2] 统一槽位的写入失败同样记「尝试过」：槽位消失时保守重建", async () => {
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
 
     const layerOf = () =>
@@ -1235,7 +1235,7 @@ describe("[#40] §11 评审修正：摘除失败的重试、部分成功的记�
     // 没有任何成功记录。此时若不重建，声明（未表态）与 SDK（3）就永久分叉。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[5]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BDOMLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(DOMLayer as never, props.value));
     await settle();
 
     const layerOf = () =>
@@ -1544,7 +1544,7 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     // ⇒ 图上两份。这条钉住「换实例之前必须先确认旧实例真的下来了」。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
 
     const map = fake.createdMaps[fake.createdMaps.length - 1]!;
@@ -1577,7 +1577,7 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     // `addLayer` ⇒ 图上两份（旧实例连账本都没了）。这条钉住「入口只有一个」。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
     expect(harness.attached("layer"), "前置：旧实例正常挂着（不是 unknown）").toBe(1);
 
@@ -1605,7 +1605,7 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     // 但换实例这一步必须是同一个入口，否则同样能挂出两份。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props, zIndex: 5 });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
     expect(harness.attached("layer")).toBe(1);
 
@@ -1628,7 +1628,7 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     // 重试成功之后新一代带着自己的 `bind` 监听，`attach` / 卸载都能正常收尾。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
 
     const map = fake.createdMaps[fake.createdMaps.length - 1]!;
@@ -1660,7 +1660,7 @@ describe("[#40] §13 评审修正：清空入口的调用时机与「重复摘�
     // 因为「猜已经下去了」去 `add` 而出现两份。
     const errors: unknown[] = [];
     const props = ref<Record<string, unknown>>({ ...LAYER_CASES[2]!.props });
-    const wrapper = mountTreeWithErrorProbe(errors, () => h(BTileLayer as never, props.value));
+    const wrapper = mountTreeWithErrorProbe(errors, () => h(TileLayer as never, props.value));
     await settle();
 
     const map = fake.createdMaps[fake.createdMaps.length - 1]!;
@@ -1753,9 +1753,9 @@ describe("[#97] §14 网络图层的加载观察面", () => {
 
   it("WMS / WMTS / Raster 三个家族同样接上观察面（不是只改了 tile）", async () => {
     for (const [index, name] of [
-      [7, "BWMSLayer"],
-      [8, "BWMTSLayer"],
-      [9, "BRasterLayer"],
+      [7, "WMSLayer"],
+      [8, "WMTSLayer"],
+      [9, "RasterTileLayer"],
     ] as const) {
       const onRequest = vi.fn();
       const { wrapper } = await mountOneLayer(index, { tileLoadObserver: { onRequest } });

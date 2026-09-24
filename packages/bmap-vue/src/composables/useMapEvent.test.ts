@@ -102,7 +102,7 @@ describe("useMapEvent：显式 MapSource 与载荷", () => {
     scope.stop();
   });
 
-  it("没有显式 source 又不在 <BMap> 子树里：明确报 BMAP_PARENT_CONTEXT_MISSING", () => {
+  it("没有显式 source 又不在 <Map> 子树里：明确报 BMAP_PARENT_CONTEXT_MISSING", () => {
     const scope = effectScope();
     let error: unknown;
     scope.run(() => {

@@ -43,20 +43,20 @@ Vue3 BaiduMap GL 提供了基于 ES Module 开箱即用的 Tree Shaking 功能�
 <!-- prettier-ignore -->
 ```vue
 <template>
-  <!-- ak 可直接写在 BMap 上；也可由全局 createBMapPlugin 或上层 <BMapProvider> 提供 -->
-  <BMap ak="百度地图ak">
-    <BZoom />
+  <!-- ak 可直接写在 Map 上；也可由全局 createBMapPlugin 或上层 <BMapProvider> 提供 -->
+  <Map ak="百度地图ak">
+    <ZoomControl />
     <!-- ... -->
-  </BMap>
+  </Map>
 </template>
 
 <script setup lang="ts">
-  import { BMap, BZoom } from 'bmap-vue'
+  import { Map, ZoomControl } from 'bmap-vue'
 </script>
 ```
 
 ::: tip Client 查找顺序
-`<BMap>` 按以下顺序解析 SDK Client：显式 `client` prop > 显式 `definition` > 显式 `provider/ak` > 最近的 `<BMapProvider>` > `app.use(createBMapPlugin(...))` 默认定义。无任何定义时将报错，请至少提供一种。
+`<Map>` 按以下顺序解析 SDK Client：显式 `client` prop > 显式 `definition` > 显式 `provider/ak` > 最近的 `<BMapProvider>` > `app.use(createBMapPlugin(...))` 默认定义。无任何定义时将报错，请至少提供一种。
 :::
 
 ## 申请 ak 密钥

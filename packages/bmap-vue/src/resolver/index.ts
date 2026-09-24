@@ -20,7 +20,6 @@ export function Vue3BaiduMapGlResolver(): ComponentResolverLike {
   return {
     type: "component",
     resolve(name) {
-      if (!name.startsWith("B")) return;
       if (!componentNameSet.has(name)) return;
       return {
         name,

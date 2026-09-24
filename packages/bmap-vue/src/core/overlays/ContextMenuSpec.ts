@@ -1,8 +1,8 @@
 /**
- * `<BContextMenu>` 的属性声明、条目归一化与菜单指纹（M5-CUSTOM-MENU / issue #33）
+ * `<ContextMenu>` 的属性声明、条目归一化与菜单指纹（M5-CUSTOM-MENU / issue #33）
  *
  * 从 SFC 里抽出来是为了**可测**：`tests/behavior/v3-bcontextmenu.test.ts` 要拿「声明面」与
- * `BContextMenuProps` 的键集、以及 Driver 的属性描述符交叉核对；放在 `.vue` 里就只能靠人眼
+ * `ContextMenuProps` 的键集、以及 Driver 的属性描述符交叉核对；放在 `.vue` 里就只能靠人眼
  * （与 `markerSpec.ts` / `InfoWindowSpec.ts` 同一手法）。
  *
  * ## 为什么菜单不走 `OverlaySpec` 内核
@@ -17,7 +17,7 @@
  *
  * ## 两种写法，一份条目
  *
- * 数据 API（`items`）与声明式 API（`<BMenuItem>` / `<BMenuSeparator>`）最终都归一化成
+ * 数据 API（`items`）与声明式 API（`<MenuItem>` / `<MenuSeparator>`）最终都归一化成
  * `ContextMenuEntry`：菜单构建、指纹、`select` 派发都只看这一份结构。「两种写法行为一致」
  * 因此是结构上成立的，而不是靠两处分别对齐。
  *
@@ -107,7 +107,7 @@ export type ContextMenuFieldMap<Props> = {
  * 每个公开属性的落地方式（唯一声明点）。
  *
  * 表与上面的模块注释逐行对应；`tests/behavior/v3-bcontextmenu.test.ts` 的「声明面」一组拿它与
- * `BContextMenuProps` 的键集、以及 `OVERLAY_DESCRIPTORS["context-menu"]` 交叉核对。
+ * `ContextMenuProps` 的键集、以及 `OVERLAY_DESCRIPTORS["context-menu"]` 交叉核对。
  */
 export const CONTEXT_MENU_FIELDS: ContextMenuFieldMap<{
   items: unknown;

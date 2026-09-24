@@ -1,9 +1,9 @@
-# BTrafficLayer 路况图层 <Badge type="tip" text="^1.0.0" />
+# TrafficLayer 路况图层 <Badge type="tip" text="^1.0.0" />
 
-实时路况图层。官方把它定义为「预配置的 `BTileLayer`」，因此构造选项与 `BTileLayer` 一致。
+实时路况图层。官方把它定义为「预配置的 `TileLayer`」，因此构造选项与 `TileLayer` 一致。
 
 ```ts
-import { BTrafficLayer } from 'bmap-vue'
+import { TrafficLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -41,7 +41,7 @@ layer/trafficLayer
 
 官方 `TrafficLayer` 是**页面级单实例**：`map` / 瓦片缓存 / 刷新 timer 在所有实例之间共享，
 因此本库**不承诺**「挂两个路况图层互不影响」（`autoRefresh` / `refreshInterval` 以最后一次
-写入为准）。需要严格隔离时请一个 `<BMap>` 只放一个路况图层。
+写入为准）。需要严格隔离时请一个 `<Map>` 只放一个路况图层。
 
 ## 参考
 

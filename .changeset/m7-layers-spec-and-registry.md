@@ -5,8 +5,8 @@
 新增图层套件（`M7-LAYERS` / #40）：十个图层组件共用同一个生命周期内核，并补齐瓦片 / 数据 /
 路况 / 行政区 / 全景五类常用图层。
 
-**新增组件**（八种）：`BTileLayer`、`BTrafficLayer`、`BGeoJSONLayer`、`BDOMLayer`、
-`BXYZLayer`、`BWMSLayer`、`BWMTSLayer`、`BRasterLayer`。
+**新增组件**（八种）：`TileLayer`、`TrafficLayer`、`GeoJSONLayer`、`DOMLayer`、
+`XYZLayer`、`WMSLayer`、`WMTSLayer`、`RasterTileLayer`。
 
 **统一槽位与三条更新路径**：`visible` / `opacity` / `minZoom` / `maxZoom` / `zIndex` / `data`
 由同一个内核处理——`visible` 表达为「挂上 / 摘掉」，可就地更新的槽位（有 setter 的 `zIndex`、
@@ -22,17 +22,17 @@
 
 **迁移注意**：
 
-- `BDistrictLayer` 的构造项（`fillColor` / `kind` / `viewport`…）此前变化**静默不生效**，
+- `DistrictLayer` 的构造项（`fillColor` / `kind` / `viewport`…）此前变化**静默不生效**，
   现在会**重建图层**（4.0 的 `DistrictLayer` 没有任何字段级 setter）；新增 `adcode` prop。
-- `BPanoramaCoverageLayer` 新增 `visible` prop（默认 `true`）；原文档里那份 `anchor` / `offset`
+- `PanoramaCoverageLayer` 新增 `visible` prop（默认 `true`）；原文档里那份 `anchor` / `offset`
   表格是复制残留，已删除。
-- `BGeoJSONLayer` / `BDOMLayer` 的事件回调收到的是**归一化事件**：要素集合在 `e.raw.features`。
-- `BGeoJSONLayer` 不提供 `opacity` / `zIndex`（官方该图层没有这两个语义），`BDistrictLayer`
+- `GeoJSONLayer` / `DOMLayer` 的事件回调收到的是**归一化事件**：要素集合在 `e.raw.features`。
+- `GeoJSONLayer` 不提供 `opacity` / `zIndex`（官方该图层没有这两个语义），`DistrictLayer`
   同样不提供 `opacity` / `zIndex`。
 - 显隐统一走 `visible` prop（挂上 / 摘掉）；直接调 `driver.layers.create(kind, { visible })`
   时该键会被忽略并告警一次（组件层没有把 `visible` 放进 `options` 的入口）。
-- `BTrafficLayer` **不承诺多实例隔离**（官方 `TrafficLayer` 是页面级单实例）。
-- `BDOMLayer` **不提供交互事件**（没有 `@click` / `@mouseover` / `@mouseout`）：官方 4.0.4 的
+- `TrafficLayer` **不承诺多实例隔离**（官方 `TrafficLayer` 是页面级单实例）。
+- `DOMLayer` **不提供交互事件**（没有 `@click` / `@mouseover` / `@mouseout`）：官方 4.0.4 的
   `DOMLayer` 只声明了 `addEventListener`、没有 `removeEventListener`，而本库的事件订阅要求两者
   同时存在才生效（缺一个就告警 + no-op）—— 也就是说这类订阅绑上就解不掉。需要交互时在
   `createDom` 里给元素自己挂监听（元素随数据/图层销毁）。
@@ -44,10 +44,10 @@
     内联箭头会因引用每次变化而重建。对象型 style 仍按值比较（同内容不重建）。
   - **对象内部**的函数（`{ icon: fn }`）不在覆盖范围内：指纹把嵌套函数折叠成 `fn`，换外层对象
     也没用 ⇒ 把 style 写成函数，或在 Vue 层用 `:key` 强制重挂载。
-  - `BDOMLayer` 的 `createDom` 按官方参考实现的 `useLatest` 语义处理：**不重建**，但下一次数据
+  - `DOMLayer` 的 `createDom` 按官方参考实现的 `useLatest` 语义处理：**不重建**，但下一次数据
     解析（`setData`，含重新赋值 `data`）会用新实现。
-- **网络图层新增加载观察面 `tileLoadObserver`**（`BTileLayer` / `BWMSLayer` / `BWMTSLayer` /
-  `BRasterLayer`）：给 `{ onRequest, onLoaded, onError }` 即可知道「SDK 什么时候要求加载哪张瓦片、
+- **网络图层新增加载观察面 `tileLoadObserver`**（`TileLayer` / `WMSLayer` / `WMTSLayer` /
+  `RasterTileLayer`）：给 `{ onRequest, onLoaded, onError }` 即可知道「SDK 什么时候要求加载哪张瓦片、
   它成功还是失败」，**不需要自己接管加载**（本库在内部完成）。依据是 live 取证：这些图层的类声明与
   运行时都**不派发**常见瓦片事件（所以本库仍不发明事件），而官方 `tileLoadFunction` 是**接管式**的
   （设了它 SDK 就不再自己加载）。不给观察者时该 option 保持缺席，行为与之前完全一致。

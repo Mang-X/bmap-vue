@@ -12,12 +12,12 @@
 | `BMAP_SDK_CONFIG_CONFLICT` | SDK 配置 | ❌ | 进程级 SdkRegistry 检测到冲突配置 |
 | `BMAP_PROVIDER_ABORTED` | 取消 | ✅ | 加载或等待被 `AbortSignal` 中止（Provider 加载、以及插件的 `whenPlugin(name, signal)`） |
 | `BMAP_RUNTIME_DISPOSED` | 运行时 | ❌ | 在 MapRuntime 销毁后访问 |
-| `BMAP_PARENT_CONTEXT_MISSING` | 上下文 | ❌ | 子组件未挂在 `BMap` 内(缺少 map context) |
+| `BMAP_PARENT_CONTEXT_MISSING` | 上下文 | ❌ | 子组件未挂在 `Map` 内(缺少 map context) |
 | `BMAP_RESOURCE_CREATE_FAILED` | 资源 | ❌ | Overlay/Control/Layer 创建失败 |
 | `BMAP_PLUGIN_LOAD_FAILED` | 插件 | ✅ | 插件脚本加载或初始化失败 |
 | `BMAP_PLUGIN_UNKNOWN` | 插件 | ❌ | `plugins: [...]` 里的名字不在 Catalog（拼写错误等）；不重试，先改正名字 |
 | `BMAP_SERVICE_FAILED` | 服务 | ✅ | 服务调用失败：SDK 公开状态码非 0、或服务端在 `timeout` 内未回包 |
-| `BMAP_INVALID_ARGUMENT` | 参数 | ❌ | 参数与官方 API 契约不符（例如 `<BInfoWindow open>` 没给 `position`） |
+| `BMAP_INVALID_ARGUMENT` | 参数 | ❌ | 参数与官方 API 契约不符（例如 `<InfoWindow open>` 没给 `position`） |
 | `BMAP_INVALID_POINT` | 参数 | ❌ | 传入非法坐标(缺 lng/lat) |
 | `BMAP_UI_KIT_UNAVAILABLE` | 依赖/环境 | ❌ | `./ui-kit` 在无 DOM 环境被调用，或未安装 optional peer `@baidumap/jsapi-ui-kit` |
 
@@ -44,7 +44,7 @@ interface BMapErrorLike {
 ### `BMAP_SDK_LOAD_FAILED`
 
 **原因**:官方 Loader 无法注入入口脚本(默认路径从 `api.map.baidu.com/api?v=4.0` 取),或脚本已执行但
-`BMap` 命名空间缺失 / 不完整(至少需要 `Map` / `Point` / `Marker`)。
+`Map` 命名空间缺失 / 不完整(至少需要 `Map` / `Point` / `Marker`)。
 **排查**:
 - 检查网络能否访问 `api.map.baidu.com/api`。
 - 检查 CSP `script-src` 是否放行。
@@ -76,8 +76,8 @@ interface BMapErrorLike {
 
 ### `BMAP_PARENT_CONTEXT_MISSING`
 
-**原因**:`BMarker`/`BCircle` 等子组件未包裹在 `BMap` 内，且上层也没有 `<BMapProvider>` 提供 Client 上下文。
-**解决**:将子组件放在 `<BMap>` 的默认插槽中；纯服务 hooks（`useBMapGeocoder` 等）可放在 `<BMapProvider>` 子树内。
+**原因**:`Marker`/`Circle` 等子组件未包裹在 `Map` 内，且上层也没有 `<BMapProvider>` 提供 Client 上下文。
+**解决**:将子组件放在 `<Map>` 的默认插槽中；纯服务 hooks（`useGeocoder` 等）可放在 `<BMapProvider>` 子树内。
 
 ### `BMAP_RESOURCE_CREATE_FAILED`
 
@@ -91,7 +91,7 @@ interface BMapErrorLike {
 
 ### `BMAP_PLUGIN_UNKNOWN`
 
-**原因**:`<BMap :plugins="[...]">`（或 `resolvePluginDefinition` / `stringToPluginDefinitions`）里的名字
+**原因**:`<Map :plugins="[...]">`（或 `resolvePluginDefinition` / `stringToPluginDefinitions`）里的名字
 不在 Catalog 里 —— 认得的只有 `TrackAnimation` / `DrawingManager` / `GeoUtils` / `Mapvgl`。
 错误消息与会话里的 `plugin` 字段都带上了那个名字，消息里还列出全部认得的名字。
 **解决**:改正名字。组件层不会因此阻断地图：该名字发 `plugin-error`，同一列表里的其它插件照常加载。
@@ -111,7 +111,7 @@ interface BMapErrorLike {
 
 **关于「配额用尽 / Referer 白名单拦截」**：百度 JSAPI 在这类失败时只回**空结果**，官方没有公开的错误码入口（错误码在它的私有回调表里，本库**不**去嗅探——见 [ADR 2026-09-13](../../adr/2026-09-13-private-sdk-surface-removal.md)）。因此：
 
-- `useBMapGeocoder` / `useBMapGeocodeDetail` 等服务在服务端失败时**不会报错**，而是以 `status === 'empty'` 结算（`data` 为 `null`、`error` 也是 `null`）——它与「真的查无结果」在公开面上**不可区分**；
+- `useGeocoder` / `useGeocodeDetail` 等服务在服务端失败时**不会报错**，而是以 `status === 'empty'` 结算（`data` 为 `null`、`error` 也是 `null`）——它与「真的查无结果」在公开面上**不可区分**；
 - 「动作恒 resolve」：所有服务动作返回 `Promise<ServiceResult<T>>`、不 reject，失败/超时/取消都在返回值里（`status` 是 `failed` / `timeout` / `canceled`）；
 - 需要区分时只能按业务口径处理（重试、提示、或换 AK / 查 Referer 白名单），并在自己的埋点里记录调用上下文。
 
@@ -124,12 +124,12 @@ interface BMapErrorLike {
 
 ### `BMAP_INVALID_ARGUMENT`
 
-**原因**：调用与官方 API 的契约不符，最典型的是**打开气泡没给位置** —— `<BInfoWindow open>` 没有
+**原因**：调用与官方 API 的契约不符，最典型的是**打开气泡没给位置** —— `<InfoWindow open>` 没有
 `position`。官方 4.0 的 `Map#openInfoWindow(infoWnd, point)` 要求 `point`，`InfoWindow` 实例也没有
 公开的 `openInfoWindow()`，因此没有「用一个默认位置打开」的语义；组件不会打开气泡，而是把这条错误交到
 内部诊断总线（见下方[统一捕获](#统一捕获)）。
 
-**解决**：给 `<BInfoWindow>` 传 `position`。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
+**解决**：给 `<InfoWindow>` 传 `position`。气泡挂到 Marker 上的「目标级打开」属后续里程碑。
 
 ### `BMAP_INVALID_POINT`
 
@@ -145,7 +145,7 @@ interface BMapErrorLike {
 2. **未安装** `@baidumap/jsapi-ui-kit`（它是 optional peer），或加载失败。
 
 **排查/解决**:
-- 服务端渲染时不要渲染 `BPlaceAutocomplete` / `BPlaceSearch`（只渲染地图即可，UI 部分等挂载后再渲染）；
+- 服务端渲染时不要渲染 `PlaceAutocomplete` / `PlaceSearch`（只渲染地图即可，UI 部分等挂载后再渲染）；
 - 确认已安装 `@baidumap/jsapi-ui-kit@1.1.2`：`pnpm add @baidumap/jsapi-ui-kit@1.1.2`。
 
 **可重试性**:标记为❌ —— 它不是「加载/配置类」错误，而是**环境或依赖未满足**；
@@ -154,13 +154,13 @@ interface BMapErrorLike {
 
 ## 统一捕获
 
-`BMap` 通过 `@error` 事件接收加载错误；各子组件的创建失败经内部诊断总线 `resource:error` 上报，
-可在 `<BMap>` 子树内订阅：
+`Map` 通过 `@error` 事件接收加载错误；各子组件的创建失败经内部诊断总线 `resource:error` 上报，
+可在 `<Map>` 子树内订阅：
 
 ```ts
-import { useBMapContext } from 'bmap-vue'
+import { useMapContext } from 'bmap-vue'
 
-const ctx = useBMapContext() // 须在 <BMap> 子树内调用
+const ctx = useMapContext() // 须在 <Map> 子树内调用
 ctx.events.on('resource:error', (e) => {
   console.error(e.error.code, e.error.toJSON())
 })

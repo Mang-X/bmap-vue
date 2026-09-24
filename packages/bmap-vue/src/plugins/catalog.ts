@@ -24,7 +24,7 @@
  * 为什么与 `BMAP_PLUGIN_LOAD_FAILED` 分开：前者是调用方配置错误（重试无意义），后者是
  * 脚本 / 依赖加载失败（CDN 抖动，可重试）。合成一个码会让 `BMapError.retryable` 说谎。
  *
- * 组件层（`BMap.vue`）不会因为这里抛错而崩：它逐个名字捕获，把未知名字**回执成
+ * 组件层（`Map.vue`）不会因为这里抛错而崩：它逐个名字捕获，把未知名字**回执成
  * `plugin-error`**，地图照常 ready、其余插件照常加载。理由见 ADR
  * `2026-09-14-plugin-catalog-scope-scheduling` 决策 2 —— 「明确失败」不等于「让整张地图失败」。
  */
@@ -93,7 +93,7 @@ export function resolvePluginDefinition(name: string): BMapPluginDefinition<unkn
  *
  * **整体失败**：列表里只要有一个未知名字就抛错，不做「部分成功」。部分成功比整体失败更糟——
  * 调用方会以为列表里的插件都装上了。需要逐个名字容错的调用方请自行遍历
- * `resolvePluginDefinition` 并捕获（`BMap.vue` 就是这么做的）。
+ * `resolvePluginDefinition` 并捕获（`Map.vue` 就是这么做的）。
  */
 export function stringToPluginDefinitions(
   names: readonly string[],

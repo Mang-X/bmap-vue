@@ -19,7 +19,7 @@
  *
  * **默认档是 `fake-v4`**：本地/CI 无 AK 时的默认行为必须是最接近生产的那条离线路径。
  *
- * 两档都**不给 `<BMap>` 传 `provider`**：解析始终落在 `app.use` 的默认 definition 上，
+ * 两档都**不给 `<Map>` 传 `provider`**：解析始终落在 `app.use` 的默认 definition 上，
  * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到（与官方 React 封装
  * `<BMapProvider>` 负责加载、地图组件不携带密钥的分工一致）。
  */

@@ -290,7 +290,7 @@ export function createFeatureStateApi<
   /**
    * 未就绪时的统一出口：**不做任何事**，但要说出来。
    *
-   * 刻意不抛（与 `<BMap>` 的 expose 同一条口径：命令面不该逼调用方写时序守卫），也刻意不排队
+   * 刻意不抛（与 `<Map>` 的 expose 同一条口径：命令面不该逼调用方写时序守卫），也刻意不排队
    * ——排队会让「什么时候生效」变成一个看不见的状态；调用方需要确定性时应当等到挂载完成。
    */
   const notReady = (command: FeatureStateCommand): void => {

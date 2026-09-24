@@ -2,15 +2,16 @@
 import { h, shallowRef } from 'vue'
 import {
   createBMapPlugin,
-  BMap,
-  BMarker,
-  BInfoWindow,
-  BCircle,
-  BPolyline,
-  useBMap,
+  Map,
+  Marker,
+  InfoWindow,
+  Circle,
+  Polyline,
+  useMap,
+  useMapContext,
   Vue3BaiduMapGlResolver,
   type BMapProviderLike,
-  type BMapProps,
+  type MapProps,
   type MarkerIconName,
 } from 'bmap-vue'
 // v4 Provider 家族从 `./core` 暴露（#17）。M3A3-REMOVE-LEGACY（#26）之后根入口**不再**导出
@@ -24,18 +25,18 @@ import {
 // UI Kit 子入口（#73）：消费方**不安装** `@baidumap/jsapi-ui-kit` 也必须能拿到类型
 // —— 公共声明自持（纯数据 DTO），不引用上游类型包。
 import {
-  BPlaceAutocomplete,
-  BPlaceDetail,
-  BPlaceSearch,
-  BRoutePlan,
+  PlaceAutocomplete,
+  PlaceDetail,
+  PlaceSearch,
+  RoutePlan,
   RoutePlanDrivingPolicy,
   loadUiKit,
   useUiKitWidget,
   UI_KIT_STYLE_PATH,
-  type BPlaceAutocompleteProps,
-  type BPlaceDetailProps,
-  type BPlaceSearchProps,
-  type BRoutePlanProps,
+  type PlaceAutocompleteProps,
+  type PlaceDetailProps,
+  type PlaceSearchProps,
+  type RoutePlanProps,
   type PlaceDetailDTO,
   type PlaceHighlightChangeDTO,
   type PlacePoiDTO,
@@ -48,14 +49,14 @@ import {
 const center = shallowRef({ lng: 116.4, lat: 39.9 })
 
 // 类型 smoke
-const props: BMapProps = { zoom: 12, center: { lng: 116.4, lat: 39.9 } }
+const props: MapProps = { zoom: 12, center: { lng: 116.4, lat: 39.9 } }
 // Provider 的公共形状是**结构化**的 `BMapProviderLike`（#26 删掉了宽松的
 // `AnyBMapProviderLike` / `LooseBMapProviderLike`）。
 const provider: BMapProviderLike = baiduJsapiV4Provider()
 
 // 按需导入组件
 export const App = {
-  components: { BMap, BMarker, BInfoWindow, BCircle, BPolyline },
+  components: { Map, Marker, InfoWindow, Circle, Polyline },
   setup() {
     return { center, props, provider }
   },
@@ -76,14 +77,15 @@ export const pluginWithV4Custom = createBMapPlugin({
 export const resolver = Vue3BaiduMapGlResolver()
 
 // composable 类型 smoke
-export type { BMapProps }
-export const useBMapRef = useBMap
+export type { MapProps }
+export const useMapRef = useMap
+export { useMapContext }
 
 // UI Kit 子入口类型 smoke（#73）：props 类型、事件 DTO 与样式路径都必须可用
-const autocompleteProps: BPlaceAutocompleteProps = { location: '北京', citylimit: true }
-const searchProps: BPlaceSearchProps = { pageCapacity: 10 }
+const autocompleteProps: PlaceAutocompleteProps = { location: '北京', citylimit: true }
+const searchProps: PlaceSearchProps = { pageCapacity: 10 }
 export const uiKitSmoke = {
-  components: [BPlaceAutocomplete, BPlaceSearch],
+  components: [PlaceAutocomplete, PlaceSearch],
   loader: loadUiKit,
   stylePath: UI_KIT_STYLE_PATH,
   autocompleteProps,
@@ -95,8 +97,8 @@ export type { PlacePoiDTO, PlaceSuggestionDTO }
 // ⚠️ 这条 smoke 的**边界**：`InstanceType<typeof Comp>` 会把 `defineExpose` 的 ref 解包
 // （Vue 的公开实例类型本来就这样），所以它**判定不了**「声明里写的是 `Ref` 还是取值」——
 // 那条由 `tests/behavior/v3-ui-kit-entry.test.ts` 直接读 `dist/ui-kit.d.ts` 锁定。
-const autocompleteInstance = null as unknown as InstanceType<typeof BPlaceAutocomplete>
-const searchInstance = null as unknown as InstanceType<typeof BPlaceSearch>
+const autocompleteInstance = null as unknown as InstanceType<typeof PlaceAutocomplete>
+const searchInstance = null as unknown as InstanceType<typeof PlaceSearch>
 const searchStatus: UiKitWidgetStatus = searchInstance.status
 const autocompleteStatus: UiKitWidgetStatus = autocompleteInstance.status
 const searchCall: (keyword: string, option?: { city?: string }) => Promise<void> = searchInstance.search
@@ -120,13 +122,13 @@ export const exposedApiSmoke = {
 }
 
 // 四个标准 UI 都要能被消费方按需导入（#75 补齐详情 / 路线）。
-const detailProps: BPlaceDetailProps = { uid: 'poi-uid', display: { comment: false } }
+const detailProps: PlaceDetailProps = { uid: 'poi-uid', display: { comment: false } }
 // 驾车策略是自持的常量表（值 + 类型同名，与 TS 枚举同形）：消费者不该写魔法数字。
-const routePlanProps: BRoutePlanProps = {
+const routePlanProps: RoutePlanProps = {
   drivingOptions: { policy: RoutePlanDrivingPolicy.AVOID_CONGESTION, alternatives: 2 },
 }
 export const uiKitFourComponents = {
-  components: [BPlaceAutocomplete, BPlaceSearch, BPlaceDetail, BRoutePlan],
+  components: [PlaceAutocomplete, PlaceSearch, PlaceDetail, RoutePlan],
   detailProps,
   routePlanProps,
   drivingPolicy: RoutePlanDrivingPolicy.AVOID_CONGESTION,
@@ -162,9 +164,9 @@ const routeResult: RoutePlanResultDTO = {
 }
 export const detailRoutePayloadSmoke = { detailPayload, routeResult }
 
-// `BRoutePlan` 的公开动作（Promise 面）与 `BPlaceDetail` 的 uid 镜像。
-const detailInstance = null as unknown as InstanceType<typeof BPlaceDetail>
-const routePlanInstance = null as unknown as InstanceType<typeof BRoutePlan>
+// `RoutePlan` 的公开动作（Promise 面）与 `PlaceDetail` 的 uid 镜像。
+const detailInstance = null as unknown as InstanceType<typeof PlaceDetail>
+const routePlanInstance = null as unknown as InstanceType<typeof RoutePlan>
 const setPlaceCall: (uidOrPoi: string | object) => Promise<void> = detailInstance.setPlace
 const routeSearch: (options: {
   start: { lng: number; lat: number } | string
@@ -205,7 +207,7 @@ export const customProviderSmoke: BMapProviderLike = {
       options: { ak: 'YOUR_AK' },
       fingerprint: 'my-loader',
       // 你的加载器把命名空间放在哪就读哪；这里用「字符串键」写法，
-      // 因此**不依赖**官方类型包对全局 `BMap` 的声明
+      // 因此**不依赖**官方类型包对全局 `Map` 的声明
       namespace: (globalThis as { BMap?: unknown }).BMap,
     }),
 }
@@ -214,11 +216,11 @@ export const customProviderSmoke: BMapProviderLike = {
 // 服务类 composable 的**消费方编译 smoke**（#38）：这段代码只依赖 tarball 的公共类型，
 // 用来钉住「动作恒 resolve 成 `ServiceResult`」与「状态是只读 shallow ref」这两条公开契约。
 // 证据由本仓库 `v3` CI job 的 tarball `vue-tsc` 提供（`scripts/verify-package.mts`）。
-import { useBMapLocalSearch, useBMapGeocoder, type ServiceResult, type LocalSearchResult } from 'bmap-vue'
+import { useLocalSearch, useGeocoder, type ServiceResult, type LocalSearchResult } from 'bmap-vue'
 import type { BMapServiceStatus } from 'bmap-vue'
 
-declare const searchHook: ReturnType<typeof useBMapLocalSearch>
-declare const geocoderHook: ReturnType<typeof useBMapGeocoder>
+declare const searchHook: ReturnType<typeof useLocalSearch>
+declare const geocoderHook: ReturnType<typeof useGeocoder>
 
 const searchOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.search('餐厅')
 const searchNearbyOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.searchNearby(
@@ -256,20 +258,20 @@ import {
   IntercityPolicy,
   TransitPolicy,
   TransitVehiclePolicy,
-  useBMapDrivingRoute,
-  useBMapRidingRoute,
-  useBMapTransitRoute,
-  useBMapWalkingRoute,
+  useDrivingRoute,
+  useRidingRoute,
+  useTransitRoute,
+  useWalkingRoute,
   type DrivingRouteResult,
   type RidingRouteResult,
   type TransitRouteResult,
   type WalkingRouteResult,
 } from 'bmap-vue'
 
-declare const drivingRoute: ReturnType<typeof useBMapDrivingRoute>
-declare const walkingRoute: ReturnType<typeof useBMapWalkingRoute>
-declare const ridingRoute: ReturnType<typeof useBMapRidingRoute>
-declare const transitRoute: ReturnType<typeof useBMapTransitRoute>
+declare const drivingRoute: ReturnType<typeof useDrivingRoute>
+declare const walkingRoute: ReturnType<typeof useWalkingRoute>
+declare const ridingRoute: ReturnType<typeof useRidingRoute>
+declare const transitRoute: ReturnType<typeof useTransitRoute>
 
 const driveOnce: Promise<ServiceResult<DrivingRouteResult>> = drivingRoute.search(
   { lng: 116.391, lat: 39.91 },
@@ -316,27 +318,27 @@ export const routeComposableSmoke = {
   routePolicies,
 }
 
-// `<BMap>` 的组件级命令面（M4-HANDLE-UX / #29）在**消费方**这一侧的编译 smoke。
+// `<Map>` 的组件级命令面（M4-HANDLE-UX / #29）在**消费方**这一侧的编译 smoke。
 //
 // 这段代码只依赖 tarball 的公共类型，证据由 `scripts/verify-package.mts` 与 `v3` CI job 的
 // tarball `vue-tsc` 提供（本仓库的 `tests/**` 不在任何 typecheck 门禁里，所以「类型层被拒」
 // 这类承诺必须钉在消费方）。它钉住四件事：
 //
-// ① 组件实例类型与冻结的 `BMapExpose` **互相可赋值**（少一个成员就编译失败）；
+// ① 组件实例类型与冻结的 `MapExpose` **互相可赋值**（少一个成员就编译失败）；
 // ② `resetCenter` 已从 expose 移除（`@ts-expect-error` 是双向的：留着它就变成「多余指令」而报错）；
 // ③ 读命令的返回值不退化成 `any`（同样用 `@ts-expect-error` 反证）；
 // ④ 写命令的参数类型没有被放宽（传字符串地名必须编译失败）。
 import {
   MAP_SUSPEND_REASONS,
-  type BMapExpose,
+  type MapExpose,
   type MapCommands,
   type MapReadyContext,
   type MapSuspendReason,
 } from 'bmap-vue'
 
-// ① 组件实例 → 契约：`defineExpose()` 推导出的实例类型必须覆盖 `BMapExpose` 的每一个成员。
-const bmapApi: BMapExpose = null as unknown as InstanceType<typeof BMap>
-// ① 反向：`BMapExpose` 的成员在实例上都能取到（漏一个时上面那行就会报错）
+// ① 组件实例 → 契约：`defineExpose()` 推导出的实例类型必须覆盖 `MapExpose` 的每一个成员。
+const bmapApi: MapExpose = null as unknown as InstanceType<typeof Map>
+// ① 反向：`MapExpose` 的成员在实例上都能取到（漏一个时上面那行就会报错）
 const commandSurface: MapCommands = bmapApi
 export const mapExposeSmoke = { bmapApi, commandSurface }
 
@@ -376,7 +378,7 @@ const badCapability: string = bmapApi.supports('map.zoom')
 // @ts-expect-error `setCenter` 只接受点对象
 bmapApi.setCenter('北京市')
 // ② 废弃别名已移除。若 `resetCenter` 重新出现，下面这条指令会变成「未使用的 @ts-expect-error」。
-// @ts-expect-error `resetCenter` 已从 BMapExpose 移除（改用 resetView）
+// @ts-expect-error `resetCenter` 已从 MapExpose 移除（改用 resetView）
 bmapApi.resetCenter()
 
 export const mapExposeApiSmoke = {
@@ -399,25 +401,25 @@ export const mapExposeApiSmoke = {
 
 // `./composables` 子入口的消费方 smoke（外部评审 P1）。
 //
-// `MarkerIconName` **原先定义在 `composables/useBMapMarkerIcons.ts` 里**，而 `composables/index.ts`
+// `MarkerIconName` **原先定义在 `composables/useMarkerIcons.ts` 里**，而 `composables/index.ts`
 // 是 `export *` ⇒ 它一直是这个子入口的既有公共 API。把定义收进 `types/components` 之后如果忘了
 // 在这里 re-export，`import type { MarkerIconName } from 'bmap-vue/composables'` 会直接
 // 编译失败——而当时的 smoke 只 import 根入口，刚好覆盖不到这个回归。这条补上：
 // 既验证名字在（类型 + 值导出），也验证「未知名字编译失败」。
-import { useBMapMarkerIcons, useControllableState } from 'bmap-vue/composables'
+import { useMarkerIcons, useControllableState } from 'bmap-vue/composables'
 import type { MarkerIconName as ComposableMarkerIconName } from 'bmap-vue/composables'
 
 const composablesMarkerIconName: ComposableMarkerIconName = 'simple_blue'
 // @ts-expect-error 不在内置名清单里的字符串必须编译失败
 const unknownComposablesMarkerIconName: ComposableMarkerIconName = 'ghost_icon'
 export const composablesSubpathSmoke = {
-  useBMapMarkerIcons,
+  useMarkerIcons,
   useControllableState,
   composablesMarkerIconName,
   unknownComposablesMarkerIconName,
 }
 
-// BMarker 的图标名是**封闭**联合，且派生自内置图标表（M5-SPEC-MARKER / #30）：
+// Marker 的图标名是**封闭**联合，且派生自内置图标表（M5-SPEC-MARKER / #30）：
 // 「类型里有、实际渲染不出来」在结构上不可能。下面两条是这条承诺的**门禁** ——
 // 本文件由 `scripts/verify-package.mts` 的 `vue-tsc` 编译（CI 会跑），
 // 而 `src/**/*.test.ts` 里的类型断言**不在任何门禁的编译范围**里
@@ -447,9 +449,9 @@ export const advancedSubpathSmoke = { advancedProbeRaw, advancedProbeBrand }
  * （`packages/bmap-vue/tsconfig.build.json` 排除了前者，后者从来没被编译过）。
  */
 import {
-  BRectangle,
-  BPolygon,
-  BGroundOverlay,
+  Rectangle,
+  Polygon,
+  GroundOverlay,
   OVERLAY_EVENT_MATRIX,
   OVERLAY_PROP_ALIASES,
   DEPRECATED_PROP_ALIAS_CODE,
@@ -457,9 +459,9 @@ import {
   overlayEventOf,
   overlayEventsOf,
   propAliasesOf,
-  type BGroundOverlayProps,
-  type BPolygonProps,
-  type BRectangleProps,
+  type GroundOverlayProps,
+  type PolygonProps,
+  type RectangleProps,
   type OverlayEventPayload,
   type OverlayFieldMap,
   type OverlayFieldWatch,
@@ -468,23 +470,23 @@ import {
   type OverlayPointerEvent,
 } from 'bmap-vue'
 
-// 1) 新组件 BRectangle 的 props（对角两点定义）
-const rectangleProps: BRectangleProps = {
+// 1) 新组件 Rectangle 的 props（对角两点定义）
+const rectangleProps: RectangleProps = {
   bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
   strokeStyle: 'dashed',
   enableEditing: true,
 }
 // @ts-expect-error strokeStyle 只接受 solid / dashed / dotted
-const invalidRectangleProps: BRectangleProps = { ...rectangleProps, strokeStyle: 'wavy' }
+const invalidRectangleProps: RectangleProps = { ...rectangleProps, strokeStyle: 'wavy' }
 
 // 2) 旧 prop 别名仍然可编译（弃用但未移除）：`startPoint` + `endPoint` 与正典 `bounds` 二选一
-const legacyGroundOverlayProps: BGroundOverlayProps = {
+const legacyGroundOverlayProps: GroundOverlayProps = {
   type: 'image',
   url: 'a.png',
   startPoint: { lng: 116.3, lat: 39.8 },
   endPoint: { lng: 116.5, lat: 40 },
 }
-const canonicalGroundOverlayProps: BGroundOverlayProps = {
+const canonicalGroundOverlayProps: GroundOverlayProps = {
   type: 'canvas',
   url: () => document.createElement('canvas'),
   bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
@@ -494,21 +496,21 @@ const canonicalGroundOverlayProps: BGroundOverlayProps = {
 //    - `click`（pointer）：`point` 必填；
 //    - `mouseout`（图形族 partial-pointer）：`point` 可缺——上游 `GraphMouseOutEvent` 就是这么声明的，
 //      本库**不**用 `(0,0)` 兜底，因此调用方必须自己判空。
-const polygonClick = h(BPolygon, {
+const polygonClick = h(Polygon, {
   path: [{ lng: 116.4, lat: 39.9 }],
   onClick: (event: OverlayPointerEvent) => {
     const lng: number = event.point.lng
     void lng
   },
 })
-const polygonMouseout = h(BPolygon, {
+const polygonMouseout = h(Polygon, {
   path: [{ lng: 116.4, lat: 39.9 }],
   onMouseout: (event: OverlayPartialPointerEvent) => {
     const lng: number | undefined = event.point?.lng
     void lng
   },
 })
-const groundOverlayClick = h(BGroundOverlay, {
+const groundOverlayClick = h(GroundOverlay, {
   ...canonicalGroundOverlayProps,
   onClick: (event: OverlayEventPayload) => void event.type,
 })
@@ -525,7 +527,7 @@ const propAliasNoticeCode: string = propAliasNotice.code
 const deprecatedCode: string = DEPRECATED_PROP_ALIAS_CODE
 
 // 5) 字段策略与 watch 源是公开类型（自定义覆盖物的声明面）
-const customPolygonFields: OverlayFieldMap<BPolygonProps> = {
+const customPolygonFields: OverlayFieldMap<PolygonProps> = {
   path: 'options',
   pathVersion: 'version',
   isBoundary: 'recreate',
@@ -559,7 +561,7 @@ export const overlaySpecSmoke = {
   deprecatedCode,
   customPolygonFields,
   customWatchSource,
-  rectangleComponent: BRectangle,
+  rectangleComponent: Rectangle,
 }
 
 // 数据组件（M6 / #34）的**消费方编译 smoke**。
@@ -572,11 +574,11 @@ export const overlaySpecSmoke = {
 // - **推断**（`Item` 不退化成 `unknown` / `any`）由 `src/data-components.vue` 的模板用法钉住；
 // - **公开 props 类型本身**在这里钉住（可具名使用 + 约束真的在起作用）。
 import {
-  BMarkerList,
-  type BMarkerListProps,
-  type BPointIconLayerProps,
-  type BPointLayerProps,
-  type BPointCollectionProps,
+  MarkerList,
+  type MarkerListProps,
+  type PointIconLayerProps,
+  type PointLayerProps,
+  type PointCollectionProps,
 } from 'bmap-vue'
 
 interface Station {
@@ -592,32 +594,32 @@ const stations: Station[] = [
 ]
 
 // 泛型 props 类型可直接具名使用，且 `Item` 参与约束（不是 `any`）。
-const listProps: BMarkerListProps<Station> = {
+const listProps: MarkerListProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
 }
-const badListProps: BMarkerListProps<Station> = {
+const badListProps: MarkerListProps<Station> = {
   // @ts-expect-error `Item` 是 Station：缺 id / 坐标的项不能被接受
   data: [{ name: '缺字段' }],
   itemKey: 'id',
   getPosition: () => null,
 }
 // @ts-expect-error `itemKey` 必须是 `Item` 的键（`'nope'` 不存在）
-const badItemKey: BMarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
+const badItemKey: MarkerListProps<Station> = { ...listProps, itemKey: 'nope' }
 
-// `BPointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
-const collectionProps: BPointCollectionProps<Station> = {
+// `PointCollection` 的样式面只到「官方真的支持的那几个字段」，取值也是官方的枚举数字。
+const collectionProps: PointCollectionProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
   shape: 7,
 }
 // @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
-const badShape: BPointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
+const badShape: PointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
 
 // 图标层：样式字段名与形状层**不同**（官方 `PointIconStyle`），`isFlat` / `isFixed` 是构造期项。
-const iconProps: BPointIconLayerProps<Station> = {
+const iconProps: PointIconLayerProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
@@ -627,10 +629,10 @@ const iconProps: BPointIconLayerProps<Station> = {
   isFlat: true,
 }
 // @ts-expect-error 图标层的样式里没有 `shape`（那是形状层的字段）
-const badIcon: BPointIconLayerProps<Station> = { ...iconProps, shape: 0 }
+const badIcon: PointIconLayerProps<Station> = { ...iconProps, shape: 0 }
 
 // 扩展 API 点层：选项是**扁平**的（`fillColor` 而不是 `color`）。
-const extensionPointProps: BPointLayerProps<Station> = {
+const extensionPointProps: PointLayerProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
@@ -639,7 +641,7 @@ const extensionPointProps: BPointLayerProps<Station> = {
   fillColor: '#1677ff',
 }
 // @ts-expect-error 扁平选项里没有 `style` 袋（那是形状层 / 图标层的写法）
-const badFlat: BPointLayerProps<Station> = { ...extensionPointProps, style: { size: 18 } }
+const badFlat: PointLayerProps<Station> = { ...extensionPointProps, style: { size: 18 } }
 
 export const dataComponentPropsSmoke = {
   listProps,
@@ -667,7 +669,7 @@ export const dataComponentPropsSmoke = {
 // 1. 指令必须贴在**实际报错的那一行**。vue-tsc 把 overload 不匹配报在某个属性上（实测是最后一个
 //    与签名冲突的属性），所以把 props 先收成一个变量、让 `h(...)` 调用成为唯一的报错行，
 //    断言才不会随属性顺序漂移；
-// 2. 早期版本的 `BMarkerList` **忘了导入**，于是指令吞掉的是 `Cannot find name` 而不是「推不出
+// 2. 早期版本的 `MarkerList` **忘了导入**，于是指令吞掉的是 `Cannot find name` 而不是「推不出
 //    `Item`」—— 断言看起来通过、实际是空的。现在导入齐了，去掉指令会得到这样的报错原文：
 //    `TS2769: No overload matches this call … Types of property 'itemKey' are incompatible`
 //    （展开里能看到它期望的 `itemKey: (item: unknown) => PropertyKey`）。
@@ -676,30 +678,30 @@ const programmaticProps = {
   itemKey: 'id',
   getPosition: (item: { lng: number; lat: number }) => ({ lng: item.lng, lat: item.lat }),
 }
-// @ts-expect-error `h()` 推不出 `Item`（模板用法可以；需要显式类型时用 BMarkerListProps<Station>）
-export const programmaticGenericLimit = h(BMarkerList, programmaticProps)
+// @ts-expect-error `h()` 推不出 `Item`（模板用法可以；需要显式类型时用 MarkerListProps<Station>）
+export const programmaticGenericLimit = h(MarkerList, programmaticProps)
 
 // ---------------------------------------------------------------------------
-// M5-CUSTOM-MENU / #33：`<BCustomOverlay>` 与声明式菜单的**公共类型面**（消费方视角）
+// M5-CUSTOM-MENU / #33：`<CustomOverlay>` 与声明式菜单的**公共类型面**（消费方视角）
 //
 // 这一节是「新公开面能不能被消费者正确消费」的真门禁（`verify:package` 里的 vue-tsc 跑它）：
 // 测试文件里的类型断言不在任何 typecheck 门禁的编译范围里，放在这里才有落点。
 // ---------------------------------------------------------------------------
 import {
-  BCustomOverlay,
-  BContextMenu,
-  BMenuItem,
-  BMenuSeparator,
-  type BCustomOverlayProps,
-  type BContextMenuProps,
-  type BMenuItemProps,
+  CustomOverlay,
+  ContextMenu,
+  MenuItem,
+  MenuSeparator,
+  type CustomOverlayProps,
+  type ContextMenuProps,
+  type MenuItemProps,
   type ContextMenuItem,
   type ContextMenuSeparator,
   type ContextMenuSelectPayload,
   type MapHandle,
 } from 'bmap-vue'
 
-const overlayProps: BCustomOverlayProps = {
+const overlayProps: CustomOverlayProps = {
   position: { lng: 116.404, lat: 39.915 },
   offset: { x: 0, y: -12 },
   anchor: { x: 0.5, y: 1 },
@@ -710,7 +712,7 @@ const overlayProps: BCustomOverlayProps = {
   enableMassClear: true,
 }
 // @ts-expect-error `position` 是必填：DOM 覆盖物没有位置就没有可解释的语义
-const badOverlayProps: BCustomOverlayProps = { rotation: 30 }
+const badOverlayProps: CustomOverlayProps = { rotation: 30 }
 export const customOverlayPropsSmoke = { overlayProps, badOverlayProps }
 
 // 数据 API 的条目：`"-"` 是分隔线（`ContextMenuSeparator`），两者可以混在一个数组里
@@ -733,34 +735,34 @@ const menuItems: (ContextMenuItem | ContextMenuSeparator)[] = [
   },
   '-',
 ]
-const menuProps: BContextMenuProps = { items: menuItems, width: 160, visible: true }
+const menuProps: ContextMenuProps = { items: menuItems, width: 160, visible: true }
 // @ts-expect-error 旧的 `menuItems` 名字**仍可编译**，但类型上必须同时给出 `items` 的形状约束
-const badMenuProps: BContextMenuProps = { items: [{ text: 'x', callback: 42 }] }
+const badMenuProps: ContextMenuProps = { items: [{ text: 'x', callback: 42 }] }
 export const contextMenuPropsSmoke = { menuProps, badMenuProps }
 
-const menuItemProps: BMenuItemProps = { text: '删除', disabled: true, width: 120, id: 'del' }
+const menuItemProps: MenuItemProps = { text: '删除', disabled: true, width: 120, id: 'del' }
 // @ts-expect-error `text` 是必填
-const badMenuItemProps: BMenuItemProps = { disabled: true }
+const badMenuItemProps: MenuItemProps = { disabled: true }
 export const menuItemPropsSmoke = { menuItemProps, badMenuItemProps }
 
-// 四个新组件都在根入口（`BCustomOverlay` / `BContextMenu` 已存在，`BMenuItem` / `BMenuSeparator` 是新增）
-export const menuComponentSmoke = [BCustomOverlay, BContextMenu, BMenuItem, BMenuSeparator].length
+// 四个新组件都在根入口（`CustomOverlay` / `ContextMenu` 已存在，`MenuItem` / `MenuSeparator` 是新增）
+export const menuComponentSmoke = [CustomOverlay, ContextMenu, MenuItem, MenuSeparator].length
 
 // ---------------------------------------------------------------------------
-// #109 BMVTLayer：公开契约锁（PR #133 评审 P1/P2）
+// #109 MVTLayer：公开契约锁（PR #133 评审 P1/P2）
 //
 // `@ts-expect-error` 是**双向**的：类型一旦被放宽，下面这些会变成「未使用的指令」而报错。
 // 由 `verify:package` 的 `vue-tsc --noEmit` 对 tarball 产物跑（public-dts 契约面）。
 // ---------------------------------------------------------------------------
 import type {
   FeatureStateApi,
-  BMVTLayerProps,
-  BMVTLayerEntity,
-  BMVTLayerMouseEvent,
-  BMVTLayerMouseMoveEvent,
-  BMVTLayerPickEvent,
+  MVTLayerProps,
+  MVTLayerEntity,
+  MVTLayerMouseEvent,
+  MVTLayerMouseMoveEvent,
+  MVTLayerPickEvent,
 } from 'bmap-vue'
-import { BMVTLayer, mvtFeatureStateKey } from 'bmap-vue'
+import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 
 // P1：MVT feature-state 键域 = string-only（`keyDomain: "string"` ⇒ `FeatureStateApi<"string">`）
 declare const mvtState: FeatureStateApi<'string'>
@@ -775,21 +777,21 @@ declare const nativeState: FeatureStateApi
 nativeState.update(1, { selected: true })
 
 // P2a：mousemove.value 官方**必有** `Entity[]`（不能 alias 到 PickEvent 的可选）
-declare const mvtMove: BMVTLayerMouseMoveEvent
-const mvtMoveValue: BMVTLayerEntity[] = mvtMove.value
+declare const mvtMove: MVTLayerMouseMoveEvent
+const mvtMoveValue: MVTLayerEntity[] = mvtMove.value
 // @ts-expect-error MouseMove 的 value 是必填：缺 value 的对象不能赋给它
-const badMvtMove: BMVTLayerMouseMoveEvent = { type: 'mousemove' }
+const badMvtMove: MVTLayerMouseMoveEvent = { type: 'mousemove' }
 
 // P2b：Pick 的 value **可选**（未命中时 SDK 可能不带）
-declare const mvtPick: BMVTLayerPickEvent
-const mvtPickValue: BMVTLayerEntity[] | undefined = mvtPick.value
+declare const mvtPick: MVTLayerPickEvent
+const mvtPickValue: MVTLayerEntity[] | undefined = mvtPick.value
 
 // P2c：mouseout 载荷 = MouseEvent（pixel / latLng），不是 BaseEvent 也不是 PickEvent
-const onMvtOut: NonNullable<BMVTLayerProps['onmouseout']> = (e) => {
+const onMvtOut: NonNullable<MVTLayerProps['onmouseout']> = (e) => {
   void e.pixel?.x
   void e.latLng?.lng
 }
-declare const mvtOut: BMVTLayerMouseEvent
+declare const mvtOut: MVTLayerMouseEvent
 void mvtOut.pixel?.x
 
 export const mvtContractSmoke = {
@@ -799,5 +801,5 @@ export const mvtContractSmoke = {
   badMvtMove,
   mvtPickValue,
   onMvtOut,
-  BMVTLayer,
+  MVTLayer,
 }

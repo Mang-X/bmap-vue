@@ -49,7 +49,7 @@
     </select>
     <br />
     <br />
-    <BMap
+    <Map
       v-bind="$attrs"
       :heading="64.5"
       :tilt="73"
@@ -74,9 +74,9 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { BMapProps } from "bmap-vue";
+import { MapProps } from "bmap-vue";
 const type = ref<string>("BMAP_NORMAL_MAP");
-const mapSetting = ref<BMapProps>({
+const mapSetting = ref<MapProps>({
   enableDragging: true,
   enableInertialDragging: true,
   enableScrollWheelZoom: false,

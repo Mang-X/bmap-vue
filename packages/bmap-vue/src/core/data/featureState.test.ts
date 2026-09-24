@@ -124,8 +124,8 @@ describe("Feature State：身份与校验", () => {
   });
 
   it("错误文案点名调用方与出错的取值（诊断要能直接定位）", () => {
-    const state = api("BLineLayer");
-    expect(() => state.update(Number.NaN, { selected: true })).toThrowError(/BLineLayer/);
+    const state = api("LineLayer");
+    expect(() => state.update(Number.NaN, { selected: true })).toThrowError(/LineLayer/);
     expect(() => state.update(Number.NaN, { selected: true })).toThrowError(/下标 0/);
   });
 
@@ -139,7 +139,7 @@ describe("Feature State：身份与校验", () => {
     const state = createFeatureStateApi({
       session,
       identity: () => identityField,
-      component: "BMVTLayer",
+      component: "MVTLayer",
       identityProp: "idProperty",
       keyDomain: "string",
     });
@@ -171,7 +171,7 @@ describe("Feature State：身份与校验", () => {
     const state = createFeatureStateApi({
       session,
       identity: () => identityField,
-      component: "BMVTLayer",
+      component: "MVTLayer",
       identityProp: "idProperty",
       keyDomain: "string",
     });
@@ -230,7 +230,7 @@ describe("Feature State：读回与就绪", () => {
 
   it("身份字段没声明时五个命令都**拒绝执行**（不猜 SDK 的默认 idKey）", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const state = api("BLineLayer");
+    const state = api("LineLayer");
     const callsBefore = rawOf().callLog.length;
     identityField = undefined;
 

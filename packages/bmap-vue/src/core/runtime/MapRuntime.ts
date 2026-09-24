@@ -62,7 +62,7 @@ export interface MapRuntimeOptions {
   /**
    * 建图前的**最后一个等待点**（可选）：在 `driver.map.create()` 之前 `await` 它。
    *
-   * `<BMap>` 用它把「容器当前是否有可用尺寸」这条**异步门禁**放到这里 —— 只「在启动之前判一次」
+   * `<Map>` 用它把「容器当前是否有可用尺寸」这条**异步门禁**放到这里 —— 只「在启动之前判一次」
    * 会有 TOCTOU 窗口：`doMount()` 中途要 `await` SDK 加载，慢网络下加载完成时容器可能已经被
    * 收起成 0×0，于是仍会在零尺寸容器上建出一张 0×0 的画布（#29 三轮复审 P1）。
    *
@@ -121,7 +121,7 @@ export class MapRuntime {
   /**
    * 当前生效的暂停原因（M4-HANDLE-UX / #29）。
    *
-   * 用 shallow ref 存**数组快照**而不是可变 Set：`<BMap>` 的状态插槽要按它渲染，
+   * 用 shallow ref 存**数组快照**而不是可变 Set：`<Map>` 的状态插槽要按它渲染，
    * 而 `suspend` / `resume` 本来就该逐次替换（同 `status` / `error` 的写法）。
    * 刻意**不**按运行时状态短路：地图还没 ready 时「页面前后台」这类环境事实已经成立，
    * 丢掉它会让首次恢复的补偿动作（`checkResize`）与后续优先级判断都失去依据；
@@ -503,7 +503,7 @@ export class MapRuntime {
       /* ignore */
     }
     this.overlays.dispose();
-    // 气泡账本先清记账：真正的关闭由每个 BInfoWindow 自己的释放路径完成（组件先于 Map 卸载）
+    // 气泡账本先清记账：真正的关闭由每个 InfoWindow 自己的释放路径完成（组件先于 Map 卸载）
     this.infoWindows.dispose();
     // 4. destroy map
     const currentClient = this.client.value;

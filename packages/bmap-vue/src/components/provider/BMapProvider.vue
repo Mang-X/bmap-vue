@@ -22,7 +22,7 @@ export interface BMapProviderProps {
   client?: BMapClient;
   definition?: CreateBMapClientOptions;
   /**
-   * 便捷 Provider 接口（与 `<BMap>` 的 `provider` prop 对称）。
+   * 便捷 Provider 接口（与 `<Map>` 的 `provider` prop 对称）。
    *
    * M3A3-REMOVE-LEGACY（#26）：Provider 必须是**结构化**形状（`load()` 返回
    * `LoadedSdk`，engine = `jsapi-v4`）。需要固定某个 Driver 实现时直接传带 `driver`
@@ -78,7 +78,7 @@ const context: BMapClientContext = props.client
 const isOwnContext = context !== parentClient;
 if (isOwnContext) {
   provide(bmapClientContextKey, context);
-  // 子树 <BMap> 无显式 definition 时可经此覆盖后的 definition 解析
+  // 子树 <Map> 无显式 definition 时可经此覆盖后的 definition 解析
   if (ownDefinition.value) {
     provide(defaultClientDefinitionKey, ownDefinition.value);
   }

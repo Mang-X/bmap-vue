@@ -12,7 +12,7 @@ MapVGL，是一款基于 WebGL 的地理信息可视化库，可以用来展示�
 依据与复现命令见[插件兼容 inventory](../contributing/plugin-compat-inventory)。
 
 本章节示例来自 v2 时代，**在当前默认路径下不能直接使用**；请改用 4.0 的原生图层
-（`BPointShapeLayer` / `BMarkerCluster` / `BHeatmapLayer` / `BLineLayer` / `BFillLayer` 等）。
+（`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等）。
 :::
 
 本章节演示通过插件形式加载 MapVGL 资源，并展示几个官方图层示例。
@@ -36,7 +36,7 @@ app.use(baiduMap, {
 
 ```vue
 <template>
-  <BMap :plugins="['Mapvgl']"></BMap>
+  <Map :plugins="['Mapvgl']"></Map>
 </template>
 ```
 
@@ -44,7 +44,7 @@ app.use(baiduMap, {
 
 ```vue
 <template>
-  <BMap :plugins="['Mapvgl']" @plugin-ready="handlePluginReady"></BMap>
+  <Map :plugins="['Mapvgl']" @plugin-ready="handlePluginReady"></Map>
 </template>
 <script lang="ts" setup>
   function handlePluginReady(name: string) {

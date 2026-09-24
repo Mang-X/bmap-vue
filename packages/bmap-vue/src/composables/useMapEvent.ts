@@ -2,7 +2,7 @@
  * useMapEvent —— 订阅 map 事件（M4-EVENTS / issue #28）
  *
  * ```ts
- * // 在 <BMap> 子树里（最常见）
+ * // 在 <Map> 子树里（最常见）
  * useMapEvent('click', (e) => console.log(e.point, e.pixel))
  * useMapEvent('moving', (e) => console.log('moving', e.raw))  // 高频：一帧最多一次
  *
@@ -25,17 +25,17 @@
  *
  * 两条与「普通事件」不同的规则，都来自同一件事实：**组件卸载先于地图销毁**（Vue 的卸载顺序是
  * 父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，而地图销毁在
- * `<BMap>` 的 `onUnmounted` 里）：
+ * `<Map>` 的 `onUnmounted` 里）：
  *
  * - `load`：用上下文提供的 `whenMapCreated`（`create()` 之后、`initializeView()` **之前**）提前订阅，
  *   否则等句柄可见时官方 `load` 已经派发完；
  * - `destroy`：订阅寿命**按「谁在消失」分档**（判据 `MapContext.isTearingDown()`）：
- *   - **整图 teardown**（`<BMap>` 卸载 / 路由离开整页）：订阅登记在**上下文的 `ResourceScope`** 上
+ *   - **整图 teardown**（`<Map>` 卸载 / 路由离开整页）：订阅登记在**上下文的 `ResourceScope`** 上
  *     （`MAP_CONTEXT_OWNED_EVENTS`）—— 这时它**不能**被子作用域摘掉，要活到地图销毁那一刻；
  *   - **子组件自己卸载**（条件渲染 / Tab / 路由切页签，地图还活着）：与普通事件一样随作用域
  *     **立即释放**，否则反复挂载会累积旧 handler，地图销毁时把已卸载组件的回调也一起唤醒。
  *
- *   `isTearingDown()` 由 `<BMap>` 在 `onBeforeUnmount` 置位 —— 那一刻早于子树卸载，所以子组件在
+ *   `isTearingDown()` 由 `<Map>` 在 `onBeforeUnmount` 置位 —— 那一刻早于子树卸载，所以子组件在
  *   `onScopeDispose` 里问得出。要提前停止始终可用返回的 disposer。
  *
  * **显式 `MapEventSource` 保持 SDK 订阅语义**：没有这两个上下文能力，`load` 在「订阅时地图已初始化」
@@ -81,7 +81,7 @@ export type MapEventPayloadForName<K extends string> = K extends MapEventName
 export type MapEventHandler<K extends string> = (event: MapEventPayloadForName<K>) => void;
 
 export interface UseMapEventOptions {
-  /** 显式订阅源；省略时取最近注入的 MapContext（须在 `<BMap>` 子树内）。 */
+  /** 显式订阅源；省略时取最近注入的 MapContext（须在 `<Map>` 子树内）。 */
   source?: MapEventSourceInput;
   /**
    * 是否按帧合帧。省略时按 Catalog 的高频标记判定

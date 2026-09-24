@@ -528,7 +528,7 @@ export interface BootstrapVerdict {
 }
 
 /**
- * 判定「`<BMap>` 没能 ready」这件事该归给谁。
+ * 判定「`<Map>` 没能 ready」这件事该归给谁。
  *
  * 为什么要区分（第 1 轮评审 P1）：初始挂载失败时所有 required 检查都没跑，而门禁把「缺席的
  * required」判成 `fail`——于是网络/CDN/AK 这类**外部前置**问题会得到退出码 1（库回归），
@@ -582,7 +582,7 @@ export function bootstrapDeclarations(
   checks: { id: string; name: string }[],
 ): BootstrapDeclaration[] {
   if (verdict.kind !== "external") return [];
-  const reason = `前置（<BMap> ready）不成立：${verdict.code} — ${verdict.reason}`;
+  const reason = `前置（<Map> ready）不成立：${verdict.code} — ${verdict.reason}`;
   return checks.map((spec) => ({ id: spec.id, name: spec.name, verdict: "blocked", reason }));
 }
 

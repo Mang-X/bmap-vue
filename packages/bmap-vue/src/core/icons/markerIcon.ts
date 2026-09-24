@@ -5,11 +5,11 @@
  *
  * 同一份「内置图标名 → 雪碧图偏移」的表此前存在**两份**：一份在
  * `driver/jsapi-v4/overlays.ts`（7 个名字 + `start`/`end` 的两个 data URL 覆盖），一份在
- * `composables/useBMapMarkerIcons.ts`（27 个名字）。而 `BMarkerProps.icon` 的类型
+ * `composables/useMarkerIcons.ts`（27 个名字）。而 `MarkerProps.icon` 的类型
  * （`types/components.ts` 的 `MarkerIconName`）认的是 **27 个**名字 —— 于是另外 20 个名字走到
  * Driver 时落进「未知名字」的兜底分支，**静默渲染成 `simple_red` 的雪碧图位置**。
  *
- * 现在表只有一份（本文件），两侧都从这里读：`useBMapMarkerIcons` 取雪碧图条目，
+ * 现在表只有一份（本文件），两侧都从这里读：`useMarkerIcons` 取雪碧图条目，
  * Driver 取「data URL 覆盖优先、雪碧图兜底」的完整解析结果。
  *
  * ## `BMap.Icons` 的处置（issue 原文提到的「`BMap.Icons` adapter」）
@@ -27,7 +27,7 @@
  */
 import { normalizeIconDescriptor, type IconDescriptor } from "./iconCache";
 
-/** 内置图标使用的雪碧图（与线上 `<BMarker icon="simple_red">` 的历史观感一致）。 */
+/** 内置图标使用的雪碧图（与线上 `<Marker icon="simple_red">` 的历史观感一致）。 */
 export const MARKER_ICON_SPRITE_URL =
   "https://mapopen.bj.bcebos.com/cms/react-bmap/markers_new2x_fbb9e99.png";
 
@@ -73,15 +73,15 @@ export const MARKER_ICON_HD_SCALE = 2;
 
 export type BuiltinMarkerIconName = keyof typeof MARKER_ICON_SPRITES;
 
-/** 内置图标名清单（顺序与声明顺序一致，供 `useBMapMarkerIcons` 与文档使用）。 */
+/** 内置图标名清单（顺序与声明顺序一致，供 `useMarkerIcons` 与文档使用）。 */
 export const BUILTIN_MARKER_ICON_NAMES = Object.keys(
   MARKER_ICON_SPRITES,
 ) as BuiltinMarkerIconName[];
 
 /**
- * 个别内置名**不用雪碧图**，改用内联 SVG（历史行为，`<BMarker icon="start">` 的观感依赖它）。
+ * 个别内置名**不用雪碧图**，改用内联 SVG（历史行为，`<Marker icon="start">` 的观感依赖它）。
  *
- * 与雪碧图条目分开存放：`useBMapMarkerIcons` 返回的是雪碧图版本（它给的是「一整张图上的
+ * 与雪碧图条目分开存放：`useMarkerIcons` 返回的是雪碧图版本（它给的是「一整张图上的
  * 图标集」），而 Driver 的 `buildIcon` 优先用这里的覆盖。这个差异在迁移前就存在，本次**不改变**它
  * ——只把两份表合成一份，去掉「20 个名字静默回落」这个真实缺陷。
  */
@@ -141,9 +141,9 @@ function spriteDescriptor(name: BuiltinMarkerIconName): IconDescriptor {
 /**
  * 内置图标在**雪碧图**上的 descriptor（**不**应用 {@link BUILTIN_MARKER_ICON_URL_OVERRIDES}）。
  *
- * 用途是「一次性拿到整套内置图标」的场景（`useBMapMarkerIcons` 返回的名称 → Icon 映射）：
+ * 用途是「一次性拿到整套内置图标」的场景（`useMarkerIcons` 返回的名称 → Icon 映射）：
  * 那套图标的语义是「同一张雪碧图上的 27 个位置」，因此 `start` / `end` 在这里也是雪碧图版本。
- * 单个 `<BMarker icon="start">` 走 {@link resolveMarkerIconDescriptor}，会用 data URL 覆盖。
+ * 单个 `<Marker icon="start">` 走 {@link resolveMarkerIconDescriptor}，会用 data URL 覆盖。
  */
 export function builtinMarkerIconDescriptor(name: BuiltinMarkerIconName): IconDescriptor {
   return spriteDescriptor(name);

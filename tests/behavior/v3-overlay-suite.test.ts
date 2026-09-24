@@ -25,17 +25,17 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BLabel from "../../packages/bmap-vue/src/components/overlays/BLabel.vue";
-import BPolyline from "../../packages/bmap-vue/src/components/overlays/BPolyline.vue";
-import BPolygon from "../../packages/bmap-vue/src/components/overlays/BPolygon.vue";
-import BRectangle from "../../packages/bmap-vue/src/components/overlays/BRectangle.vue";
-import BCircle from "../../packages/bmap-vue/src/components/overlays/BCircle.vue";
-import BBezierCurve from "../../packages/bmap-vue/src/components/overlays/BBezierCurve.vue";
-import BPrism from "../../packages/bmap-vue/src/components/overlays/BPrism.vue";
-import BGroundOverlay from "../../packages/bmap-vue/src/components/overlays/BGroundOverlay.vue";
-import BCustomOverlay from "../../packages/bmap-vue/src/components/overlays/BCustomOverlay.vue";
-import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
+import MapComponent from "../../packages/bmap-vue/src/components/map/Map.vue";
+import Label from "../../packages/bmap-vue/src/components/overlays/Label.vue";
+import Polyline from "../../packages/bmap-vue/src/components/overlays/Polyline.vue";
+import Polygon from "../../packages/bmap-vue/src/components/overlays/Polygon.vue";
+import Rectangle from "../../packages/bmap-vue/src/components/overlays/Rectangle.vue";
+import Circle from "../../packages/bmap-vue/src/components/overlays/Circle.vue";
+import BezierCurve from "../../packages/bmap-vue/src/components/overlays/BezierCurve.vue";
+import Prism from "../../packages/bmap-vue/src/components/overlays/Prism.vue";
+import GroundOverlay from "../../packages/bmap-vue/src/components/overlays/GroundOverlay.vue";
+import CustomOverlay from "../../packages/bmap-vue/src/components/overlays/CustomOverlay.vue";
+import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
 import {
   LABEL_FIELDS,
   LABEL_DESCRIPTOR_KEYS,
@@ -140,7 +140,7 @@ async function settle() {
 /** 当前地图上挂着的覆盖物（raw 实例）。 */
 function attachedOverlays(): AnyRecord[] {
   const map = fake.createdMaps[fake.createdMaps.length - 1];
-  if (!map) throw new Error("用例必须先创建地图（<BMap>）");
+  if (!map) throw new Error("用例必须先创建地图（<Map>）");
   return map.overlays as unknown as AnyRecord[];
 }
 
@@ -181,9 +181,9 @@ interface OverlayCase {
 
 const CASES: readonly OverlayCase[] = [
   {
-    name: "BMarker",
+    name: "Marker",
     kind: "marker",
-    component: BMarker,
+    component: Marker,
     fields: MARKER_FIELDS,
     props: { position: POINT, title: "标记", rotation: 30, zIndex: 3 },
     mutable: [
@@ -202,9 +202,9 @@ const CASES: readonly OverlayCase[] = [
     stateExpect: { title: "标记", rotation: 30, position: { lng: 116.4, lat: 39.9 } },
   },
   {
-    name: "BLabel",
+    name: "Label",
     kind: "label",
-    component: BLabel,
+    component: Label,
     fields: LABEL_FIELDS,
     props: {
       content: "文本",
@@ -229,9 +229,9 @@ const CASES: readonly OverlayCase[] = [
     stateExpect: { content: "文本" },
   },
   {
-    name: "BPolyline",
+    name: "Polyline",
     kind: "polyline",
-    component: BPolyline,
+    component: Polyline,
     fields: POLYLINE_FIELDS,
     props: {
       path: [
@@ -248,9 +248,9 @@ const CASES: readonly OverlayCase[] = [
     ctorExpect: { strokeColor: "#123456" },
   },
   {
-    name: "BPolygon",
+    name: "Polygon",
     kind: "polygon",
-    component: BPolygon,
+    component: Polygon,
     fields: POLYGON_FIELDS,
     props: {
       path: [
@@ -267,9 +267,9 @@ const CASES: readonly OverlayCase[] = [
     ctorExpect: { fillColor: "#00ff00" },
   },
   {
-    name: "BRectangle",
+    name: "Rectangle",
     kind: "rectangle",
-    component: BRectangle,
+    component: Rectangle,
     fields: RECTANGLE_FIELDS,
     props: {
       bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
@@ -283,9 +283,9 @@ const CASES: readonly OverlayCase[] = [
     ctorExpect: { strokeWeight: 3, enableClicking: true },
   },
   {
-    name: "BCircle",
+    name: "Circle",
     kind: "circle",
-    component: BCircle,
+    component: Circle,
     fields: CIRCLE_FIELDS,
     props: { center: POINT, radius: 100, fillOpacity: 0.3 },
     mutable: [
@@ -298,9 +298,9 @@ const CASES: readonly OverlayCase[] = [
     stateExpect: { radius: 100 },
   },
   {
-    name: "BBezierCurve",
+    name: "BezierCurve",
     kind: "bezier-curve",
-    component: BBezierCurve,
+    component: BezierCurve,
     fields: BEZIER_CURVE_FIELDS,
     props: {
       path: [
@@ -319,9 +319,9 @@ const CASES: readonly OverlayCase[] = [
     recreate: [],
   },
   {
-    name: "BPrism",
+    name: "Prism",
     kind: "prism",
-    component: BPrism,
+    component: Prism,
     fields: PRISM_FIELDS,
     props: {
       path: [
@@ -339,9 +339,9 @@ const CASES: readonly OverlayCase[] = [
     stateExpect: { altitude: 120 },
   },
   {
-    name: "BGroundOverlay",
+    name: "GroundOverlay",
     kind: "ground-overlay",
-    component: BGroundOverlay,
+    component: GroundOverlay,
     fields: GROUND_OVERLAY_FIELDS,
     props: {
       type: "image",
@@ -354,9 +354,9 @@ const CASES: readonly OverlayCase[] = [
     ctorExpect: { opacity: 0.5, url: "a.png", type: "image" },
   },
   {
-    name: "BCustomOverlay",
+    name: "CustomOverlay",
     kind: "custom-overlay",
-    component: BCustomOverlay,
+    component: CustomOverlay,
     fields: CUSTOM_OVERLAY_FIELDS,
     props: {
       position: POINT,
@@ -380,10 +380,10 @@ const CASES: readonly OverlayCase[] = [
 async function mountCase(testCase: OverlayCase) {
   const state = ref<Record<string, unknown>>({ ...testCase.props });
   const Host = defineComponent({
-    components: { BMap, [testCase.name]: testCase.component as never },
+    components: { Map: MapComponent, [testCase.name]: testCase.component as never },
     setup() {
       return () =>
-        h(BMap, { provider: harness.provider() }, () => [
+        h(MapComponent, { provider: harness.provider() }, () => [
           h(testCase.component as never, state.value as never),
         ]);
     },
@@ -540,81 +540,81 @@ interface DeclarationCase {
 
 const DECLARATIONS: readonly DeclarationCase[] = [
   {
-    name: "BMarker",
+    name: "Marker",
     kind: "marker",
-    propsInterface: "BMarkerProps",
+    propsInterface: "MarkerProps",
     fields: MARKER_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: MARKER_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createMarkerSpec as never,
   },
   {
-    name: "BLabel",
+    name: "Label",
     kind: "label",
-    propsInterface: "BLabelProps",
+    propsInterface: "LabelProps",
     fields: LABEL_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: LABEL_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createLabelSpec as never,
   },
   {
-    name: "BPolyline",
+    name: "Polyline",
     kind: "polyline",
-    propsInterface: "BPolylineProps",
+    propsInterface: "PolylineProps",
     fields: POLYLINE_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: POLYLINE_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createPolylineSpec as never,
   },
   {
-    name: "BPolygon",
+    name: "Polygon",
     kind: "polygon",
-    propsInterface: "BPolygonProps",
+    propsInterface: "PolygonProps",
     fields: POLYGON_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: POLYGON_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createPolygonSpec as never,
   },
   {
-    name: "BRectangle",
+    name: "Rectangle",
     kind: "rectangle",
-    propsInterface: "BRectangleProps",
+    propsInterface: "RectangleProps",
     fields: RECTANGLE_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: RECTANGLE_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createRectangleSpec as never,
   },
   {
-    name: "BCircle",
+    name: "Circle",
     kind: "circle",
-    propsInterface: "BCircleProps",
+    propsInterface: "CircleProps",
     fields: CIRCLE_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: CIRCLE_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createCircleSpec as never,
   },
   {
-    name: "BBezierCurve",
+    name: "BezierCurve",
     kind: "bezier-curve",
-    propsInterface: "BBezierCurveProps",
+    propsInterface: "BezierCurveProps",
     fields: BEZIER_CURVE_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: BEZIER_CURVE_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createBezierCurveSpec as never,
   },
   {
-    name: "BPrism",
+    name: "Prism",
     kind: "prism",
-    propsInterface: "BPrismProps",
+    propsInterface: "PrismProps",
     fields: PRISM_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: PRISM_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createPrismSpec as never,
   },
   {
-    name: "BGroundOverlay",
+    name: "GroundOverlay",
     kind: "ground-overlay",
-    propsInterface: "BGroundOverlayProps",
+    propsInterface: "GroundOverlayProps",
     fields: GROUND_OVERLAY_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: GROUND_OVERLAY_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     spec: createGroundOverlaySpec as never,
   },
   {
-    name: "BCustomOverlay",
+    name: "CustomOverlay",
     kind: "custom-overlay",
-    propsInterface: "BCustomOverlayProps",
+    propsInterface: "CustomOverlayProps",
     fields: CUSTOM_OVERLAY_FIELDS as Record<string, OverlayFieldUpdate>,
     descriptorKeys: CUSTOM_OVERLAY_DESCRIPTOR_KEYS as unknown as Record<string, string | null>,
     // spec 工厂要一个 `ensureHost` 依赖，但本组用例只做**声明面**核对（不调 `create`），
@@ -701,16 +701,16 @@ interface EmitsCase {
 }
 
 const EMITS_CASES: readonly EmitsCase[] = [
-  { file: "BMarker.vue", kind: "marker", extra: ["drag-end", "update:position"] },
-  { file: "BLabel.vue", kind: "label" },
-  { file: "BPolyline.vue", kind: "polyline" },
-  { file: "BPolygon.vue", kind: "polygon" },
-  { file: "BRectangle.vue", kind: "rectangle" },
-  { file: "BCircle.vue", kind: "circle" },
-  { file: "BBezierCurve.vue", kind: "bezier-curve" },
-  { file: "BPrism.vue", kind: "prism" },
-  { file: "BGroundOverlay.vue", kind: "ground-overlay" },
-  { file: "BCustomOverlay.vue", kind: "custom-overlay" },
+  { file: "Marker.vue", kind: "marker", extra: ["drag-end", "update:position"] },
+  { file: "Label.vue", kind: "label" },
+  { file: "Polyline.vue", kind: "polyline" },
+  { file: "Polygon.vue", kind: "polygon" },
+  { file: "Rectangle.vue", kind: "rectangle" },
+  { file: "Circle.vue", kind: "circle" },
+  { file: "BezierCurve.vue", kind: "bezier-curve" },
+  { file: "Prism.vue", kind: "prism" },
+  { file: "GroundOverlay.vue", kind: "ground-overlay" },
+  { file: "CustomOverlay.vue", kind: "custom-overlay" },
 ];
 
 /** 解析 SFC 的 `defineEmits<{ … }>()` 块：键 + 载荷注解。 */
@@ -763,8 +763,8 @@ describe("#31 SFC emits ↔ 事件矩阵", () => {
 
 describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）", () => {
   it.each([
-    { name: "BPolyline", component: BPolyline, label: "BPolyline" },
-    { name: "BPolygon", component: BPolygon, label: "BPolygon" },
+    { name: "Polyline", component: Polyline, label: "Polyline" },
+    { name: "Polygon", component: Polygon, label: "Polygon" },
   ])("$label：换根引用 → 一条 setPath；原地改数组 → 不发命令（版本令牌才触发）", async (testCase) => {
     const path = ref([
       { lng: 116.4, lat: 39.9 },
@@ -772,10 +772,10 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
     ]);
     const version = ref(0);
     const Host = defineComponent({
-      components: { BMap, [testCase.name]: testCase.component as never },
+      components: { Map: MapComponent, [testCase.name]: testCase.component as never },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
+          h(MapComponent, { provider: harness.provider() }, () => [
             h(testCase.component as never, {
               path: path.value,
               pathVersion: version.value,
@@ -815,7 +815,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
     harness.assertIdle(`${testCase.label} path 版本`);
   });
 
-  it("BBezierCurve：path 与 controlPoints 各有自己的版本令牌", async () => {
+  it("BezierCurve：path 与 controlPoints 各有自己的版本令牌", async () => {
     const path = ref([
       { lng: 116.4, lat: 39.9 },
       { lng: 116.6, lat: 40.1 },
@@ -829,11 +829,11 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
     const pathVersion = ref(0);
     const controlPointsVersion = ref(0);
     const Host = defineComponent({
-      components: { BMap, BBezierCurve },
+      components: { Map: MapComponent, BezierCurve },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BBezierCurve, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(BezierCurve, {
               path: path.value,
               controlPoints: controlPoints.value,
               pathVersion: pathVersion.value,
@@ -862,7 +862,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
 
     wrapper.unmount();
     await settle();
-    harness.assertIdle("BBezierCurve 两个版本令牌");
+    harness.assertIdle("BezierCurve 两个版本令牌");
   });
 
   it("声明面：versioned 的字段都配了版本令牌；Prism 的 path 明确不用（小数组）", () => {
@@ -903,11 +903,11 @@ describe("#31 编辑能力边界与卸载路径", () => {
   it("卸载过程中 SDK 派发的 remove 事件不再回放给调用方", async () => {
     const removed: unknown[] = [];
     const Host = defineComponent({
-      components: { BMap, BPolyline },
+      components: { Map: MapComponent, Polyline },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BPolyline, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(Polyline, {
               path: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.5, lat: 40 },
@@ -947,11 +947,11 @@ describe("#31 编辑能力边界与卸载路径", () => {
 describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () => {
   it("prop 别名：只给 startPoint + endPoint 时按旧名建实例，并警告一次", async () => {
     const Host = defineComponent({
-      components: { BMap, BGroundOverlay },
+      components: { Map: MapComponent, GroundOverlay },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BGroundOverlay, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(GroundOverlay, {
               type: "image",
               url: "a.png",
               startPoint: { lng: 116.3, lat: 39.8 },
@@ -970,16 +970,16 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
 
     wrapper.unmount();
     await settle();
-    harness.assertIdle("BGroundOverlay 旧别名");
+    harness.assertIdle("GroundOverlay 旧别名");
   });
 
   it("prop 别名：正典 bounds 有值时旧名完全不参与（连告警都不发）", async () => {
     const Host = defineComponent({
-      components: { BMap, BGroundOverlay },
+      components: { Map: MapComponent, GroundOverlay },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BGroundOverlay, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(GroundOverlay, {
               type: "image",
               url: "a.png",
               bounds: { southwest: { lng: 100, lat: 30 }, northeast: { lng: 110, lat: 40 } },
@@ -1006,11 +1006,11 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
     // 迁移提示（「SDK 派发过某事件」≠「调用方用了弃用名」）。因此本用例显式绑上 `@drag-end`。
     const legacy: unknown[] = [];
     const Host = defineComponent({
-      components: { BMap, BMarker },
+      components: { Map: MapComponent, Marker },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BMarker, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(Marker, {
               position: POINT,
               enableDragging: true,
               "onDrag-end": (event: unknown) => legacy.push(event),
@@ -1023,7 +1023,7 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
     await settle();
 
     const marker = currentOverlay() as AnyRecord;
-    const child = wrapper.findComponent(BMarker);
+    const child = wrapper.findComponent(Marker);
 
     marker.emit("dragend", { point: { lng: 117, lat: 40 } });
     await settle();
@@ -1038,7 +1038,7 @@ describe("#31 集中弃用层：旧别名只警告一次且新 API 优先", () =
 
     wrapper.unmount();
     await settle();
-    harness.assertIdle("BMarker 事件别名");
+    harness.assertIdle("Marker 事件别名");
   });
 
   it("弃用表自身：code 稳定、正典名在矩阵里、旧名不在描述符/矩阵里", () => {
@@ -1089,9 +1089,9 @@ describe("#31 内核的观察面：useOverlaySpec 报告的 events", () => {
       },
     });
     return defineComponent({
-      components: { BMap, Probe },
+      components: { Map: MapComponent, Probe },
       setup() {
-        return () => h(BMap, { provider: harness.provider() }, () => [h(Probe)]);
+        return () => h(MapComponent, { provider: harness.provider() }, () => [h(Probe)]);
       },
     });
   }
@@ -1190,9 +1190,9 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
       },
     });
     const Host = defineComponent({
-      components: { BMap, Probe },
+      components: { Map: MapComponent, Probe },
       setup() {
-        return () => h(BMap, { provider: harness.provider() }, () => [h(Probe)]);
+        return () => h(MapComponent, { provider: harness.provider() }, () => [h(Probe)]);
       },
     });
     return { Host, release, afterMountCalls };
@@ -1245,7 +1245,7 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
   });
 });
 
-describe("[评审 2] BGroundOverlay 的 url 惰性工厂只求值一次", () => {
+describe("[评审 2] GroundOverlay 的 url 惰性工厂只求值一次", () => {
   it("一次 create 只调用一次工厂（校验用的对象就是交给 SDK 的那个）", async () => {
     let calls = 0;
     const factory = () => {
@@ -1253,11 +1253,11 @@ describe("[评审 2] BGroundOverlay 的 url 惰性工厂只求值一次", () => 
       return `canvas-${calls}.png`;
     };
     const Host = defineComponent({
-      components: { BMap, BGroundOverlay },
+      components: { Map: MapComponent, GroundOverlay },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BGroundOverlay, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(GroundOverlay, {
               type: "image",
               url: factory,
               bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
@@ -1282,11 +1282,11 @@ describe("[评审 2] BGroundOverlay 的 url 惰性工厂只求值一次", () => 
 describe("[评审 3] 弃用事件告警只在实例上真的绑了旧名字时发", () => {
   function markerHost(listeners: Record<string, unknown>) {
     return defineComponent({
-      components: { BMap, BMarker },
+      components: { Map: MapComponent, Marker },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BMarker, { position: POINT, enableDragging: true, ...listeners }),
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(Marker, { position: POINT, enableDragging: true, ...listeners }),
           ]);
       },
     });
@@ -1323,7 +1323,7 @@ describe("[评审 3] 弃用事件告警只在实例上真的绑了旧名字时�
     await settle();
     await settle();
     const marker = currentOverlay();
-    const child = wrapper.findComponent(BMarker);
+    const child = wrapper.findComponent(Marker);
 
     marker.emit("dragend", { point: { lng: 117, lat: 40 } });
     await settle();
@@ -1345,11 +1345,11 @@ describe("[评审 4] remove 事件的可观察时机（文档与用例一起对�
     const removed: unknown[] = [];
     const visible = ref(true);
     const Host = defineComponent({
-      components: { BMap, BBezierCurve },
+      components: { Map: MapComponent, BezierCurve },
       setup() {
         return () =>
-          h(BMap, { provider: harness.provider() }, () => [
-            h(BBezierCurve, {
+          h(MapComponent, { provider: harness.provider() }, () => [
+            h(BezierCurve, {
               path: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.6, lat: 40.1 },

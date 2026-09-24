@@ -424,7 +424,7 @@ export interface FakeMapHarness {
   toRawPointCalls: unknown[];
   /** client / driver 上的属性访问路径（如 `driver.geometry`、`driver.services`）。 */
   propertyAccesses: string[];
-  /** 模拟 `<BMap>` 卸载：后续 `whenReady()` 一律拒绝。 */
+  /** 模拟 `<Map>` 卸载：后续 `whenReady()` 一律拒绝。 */
   dispose(): void;
 }
 

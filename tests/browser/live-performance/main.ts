@@ -51,10 +51,10 @@
  */
 import { createApp, defineComponent, h, nextTick, ref, type App } from "vue";
 import {
-  BFillLayer,
-  BLineLayer,
-  BMap,
-  BPointCollection,
+  FillLayer,
+  LineLayer,
+  Map,
+  PointCollection,
 } from "../../../packages/bmap-vue/src/index.ts";
 import {
   featureCollection,
@@ -323,7 +323,7 @@ interface SetDataProbe {
  * - 页面在 `tests/browser` 下；raw SDK 边界门禁只扫 `packages` 的 `src` 白名单外禁区
  *   ⇒ 这里读 `globalThis.BMap` 合法（与 `tests/browser/jsapi-v4/main.ts` 同口径）。
  *   注释里别写字面量的 glob 结尾（星号紧跟斜杠）：那会提前关掉本块注释。
- * - 三个 ctor 与 `BPointCollection` / `BLineLayer` / `BFillLayer` 落到的
+ * - 三个 ctor 与 `PointCollection` / `LineLayer` / `FillLayer` 落到的
  *   `PointShapeLayer` / `LineLayer` / `FillLayer` 一一对应（`native-layers.ts` 描述符）。
  * - **只包原型、不改行为**：`finally` 里记时，返回值原样透传；`restore()` 还原。
  */
@@ -423,7 +423,7 @@ async function mountSingleLayer(
         h(
           "div",
           { style: "width:100%;height:100%" },
-          h(BMap, {
+          h(Map, {
             center: CENTER,
             zoom: 11,
             ak: AK,
@@ -433,7 +433,7 @@ async function mountSingleLayer(
               ready.value = true;
             },
             onError: (error: unknown) => {
-              finish(undefined, `BMap error: ${JSON.stringify(error)}`);
+              finish(undefined, `Map error: ${JSON.stringify(error)}`);
             },
           }, {
             default: () => [renderLayer(layer, data.value)],
@@ -457,7 +457,7 @@ async function mountSingleLayer(
   while (!ready.value) {
     if (report.blockedReason || report.fatal) break;
     if (performance.now() > deadline) {
-      finish(undefined, `BMap ready 超时（${READY_MS}ms）`);
+      finish(undefined, `Map ready 超时（${READY_MS}ms）`);
       break;
     }
     await sleep(100);
@@ -494,7 +494,7 @@ function renderLayer(layer: LivePerfLayer, dataValue: unknown) {
   if (layer === "pointCollection") {
     // 与 `component-path.perf.test.ts` 同一形态：泛型 SFC 经 h() 会把 Item 推成 unknown，
     // 调用点 `as never` 收掉（typecheck 只在此处放行，props 形状仍由组件自身声明守住）。
-    return h(BPointCollection as never, {
+    return h(PointCollection as never, {
       data: dataValue as PerfItem[],
       itemKey: PERF_ITEM_KEY,
       getPosition: perfItemPosition,
@@ -502,9 +502,9 @@ function renderLayer(layer: LivePerfLayer, dataValue: unknown) {
     });
   }
   if (layer === "line") {
-    return h(BLineLayer, { data: dataValue as object, idKey: "id" });
+    return h(LineLayer, { data: dataValue as object, idKey: "id" });
   }
-  return h(BFillLayer, { data: dataValue as object, idKey: "id" });
+  return h(FillLayer, { data: dataValue as object, idKey: "id" });
 }
 
 function makeInitialData(layer: LivePerfLayer): unknown {
@@ -620,7 +620,7 @@ async function main(): Promise<void> {
   let probe: SetDataProbe | null = null;
   const longTasks = createLongTaskCollector();
   try {
-  // SDK 要等第一次 BMap ready 才存在；先挂一次点图层完成加载与原型包装，
+  // SDK 要等第一次 Map ready 才存在；先挂一次点图层完成加载与原型包装，
   // 丢弃其读数——否则第 0 个图层的 firstFrame 会混进 loader / 进程冷启动（与 Fake 预热同口径）。
   // 预热时 probe 尚未安装（`instrumentNativeSetData` 在下面），故 `probe=null` 不要求捕获 setData。
   const warmup = await mountSingleLayer("pointCollection", longTasks, null);

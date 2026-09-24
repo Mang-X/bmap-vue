@@ -314,9 +314,9 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     migrationPath: {
       kind: "native",
       target: "layer.track-line",
-      nativeComponent: "BTrackLineLayer",
+      nativeComponent: "TrackLineLayer",
       note:
-        "改用原生轨迹线图层 `<BTrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。" +
+        "改用原生轨迹线图层 `<TrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。" +
         "**播放命令面**（start / pause / resume / stop / setSpeed / setProcess）与页面可见性" +
         "（`pauseOnHidden`）已由 #110 落地（方法名经 live 探针取证）；本票的结论与去向不变：" +
         "不要为 TrackAnimation 再写组件或 hook。",
@@ -352,7 +352,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
         "`_beginTime` 与 `setBeginTime` / `setDuration`）：4.0 上实测可用，但私有面随时可能消失 ⇒ " +
         "本库不提供它，也不承诺它。",
       "`Polyline#_config.linkRight` 是实例私有字段，用于判断折线是否跨 180° 经线。",
-      "播放命令面的原生对应物已由 **#110** 落地在 `BTrackLineLayer` 的 `playback` expose 上" +
+      "播放命令面的原生对应物已由 **#110** 落地在 `TrackLineLayer` 的 `playback` expose 上" +
         "（方法名经 live 探针取证，2026-09-23）。",
     ],
   },
@@ -548,8 +548,8 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
       target: "（无）",
       note:
         "没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。" +
-        "改用官方 4.0 原生图层（`BPointShapeLayer` / `BMarkerCluster` / `BHeatmapLayer` / " +
-        "`BLineLayer` / `BFillLayer` 等），或按你自行评估的其它可视化方案。",
+        "改用官方 4.0 原生图层（`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / " +
+        "`LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。",
     },
     basis: ["artifact", "declaration", "runtime"],
     runtime: {

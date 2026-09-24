@@ -2,10 +2,10 @@
 
 > 面向两类使用者：
 > - **`baidu-map-gl-vue@2.x` 用户**：2.x 的 SDK 基线是百度地图 JavaScript API **GL 版**
->   （`type=webgl&v=1.0`，全局 `BMapGL`）。3.0 改为 JSAPI **4.0**（全局 `BMap`），
+>   （`type=webgl&v=1.0`，全局 `BMapGL`）。3.0 改为 JSAPI **4.0**（全局 `Map`），
 >   且**不提供 `BMapGL` 回退开关**。
 > - **`3.0.0-beta` 用户**：已经在 4.0 上，但用过迁移期入口（`baiduCdnProvider()`、
->   `withMigrationDriver()`、`<BMap allowExistingGlobal>` 等）。这些入口已随旧引擎删除。
+>   `withMigrationDriver()`、`<Map allowExistingGlobal>` 等）。这些入口已随旧引擎删除。
 >
 > 决策与依据：[ADR 2026-09-14 删除旧引擎](/adr/2026-09-14-remove-legacy-engine)、
 > [ADR 2026-09-10 冻结 JSAPI 4.0 单引擎基线](/adr/2026-09-10-jsapi-v4-only-baseline)。
@@ -41,7 +41,7 @@ app.use(createBMapPlugin({ ak: 'YOUR_AK' }))
 | 配置 | 3.0 行为 | 替代路径 |
 | --- | --- | --- |
 | `version`（除 `'4.0'`） | 报 `BMAP_INVALID_ARGUMENT` | 删掉它 |
-| `apiUrl` / `<BMap api-url>` | 报 `BMAP_INVALID_ARGUMENT` | `customScriptV4Provider(scriptSrc)`（自托管 / 非标准入口） |
+| `apiUrl` / `<Map api-url>` | 报 `BMAP_INVALID_ARGUMENT` | `customScriptV4Provider(scriptSrc)`（自托管 / 非标准入口） |
 | `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 报 `BMAP_INVALID_ARGUMENT` | 外部预加载 SDK 后 `existingGlobalV4Provider()` |
 | `language` | 报 `BMAP_INVALID_ARGUMENT` | 上游 Loader 没有这个入口，暂不支持 |
 | `timeout` | 支持；`0` = **不超时** | 需要截止时间就显式给毫秒数 |
@@ -52,11 +52,11 @@ v4 的 Provider 家族在 `baidu-map-gl-vue/core`：
 import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider } from 'baidu-map-gl-vue/core'
 ```
 
-## 2. SDK 世代差异：`BMapGL` → `BMap`（4.0）
+## 2. SDK 世代差异：`BMapGL` → `Map`（4.0）
 
 这是 2.x 用户的主要工作量。下面每条都有对应的 ADR / inventory 作为依据。
 
-| 维度 | WebGL v1（`BMapGL`） | JSAPI 4.0（`BMap`） | 你要做什么 |
+| 维度 | WebGL v1（`BMapGL`） | JSAPI 4.0（`Map`） | 你要做什么 |
 | --- | --- | --- | --- |
 | 全局命名空间 | `window.BMapGL` | `window.BMap`（4.0 入口同时把 `BMapGL` 作为**同一对象的别名**挂上） | 不要读 `BMapGL`；宿主预加载场景用 `existingGlobalV4Provider()` |
 | 一次设定中心 + 级别 | 有 `setView` | **没有** `setView`；用 `centerAndZoom(center, zoom, options)` | 把 `setView` 用法换掉（本库的 `initializeView` 已封装该语义） |
@@ -71,7 +71,7 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 [Capability Catalog 能力矩阵](/zh-CN/contributing/capability-matrix)；插件（`BMapGLLib` 系列）
 在 4.0 上的逐项实测结论与**迁移路径**看[插件兼容 inventory](/zh-CN/contributing/plugin-compat-inventory)：
 
-- `TrackAnimation` → 结论 `native`：**改用原生 `<BTrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 可见性联动已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）；
+- `TrackAnimation` → 结论 `native`：**改用原生 `<TrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 可见性联动已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）；
 - `DrawingManager` / `GeoUtils` → 结论 `compatible`：没有原生替代，按官方文档直接使用（本库只负责加载脚本）；
 - `MapVGL` → 结论 `incompatible`：依赖 `_rd` 私有回调表，且视图容器要挂 `getPanes().mapPane`（4.0 没有）⇒ **无迁移路径**，改用原生图层；
 - 其余（DistanceTool / AreaRestriction / InfoBox / RichMarker / LuShu）：未内置，未评估。
@@ -80,9 +80,9 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 > `useBMapTrackAnimation` 已于 #104 删除（它在 v4 上只会从 Driver 拿到
 > `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达）；4.0 的对应能力是原生图层
 > `track-line`，插件侧的迁移结论已由 M8 / #43 定型为 `native`，**播放命令面**已由 #110
-> 落地在 `<BTrackLineLayer>` 的 `playback` expose 上（方法名经 live 探针取证）。
+> 落地在 `<TrackLineLayer>` 的 `playback` expose 上（方法名经 live 探针取证）。
 >
-> `BContextMenu` 的挂载目标自 M5 / #33 起**已实测可用**：`map` 与 `marker` 两个目标都能挂
+> `ContextMenu` 的挂载目标自 M5 / #33 起**已实测可用**：`map` 与 `marker` 两个目标都能挂
 > （`Marker#addContextMenu` 是 4.0 的**运行时扩展成员**——官方类型包只在 `Map` 上声明它，真实
 > 运行时存在且可用，读数见 [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)）。
 > 其余目标（`overlay` / `clusterer` / 旧层组件下的菜单）**没有入口证据**，会**显式报错**而不是
@@ -92,15 +92,15 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 
 | 之前怎么写 | 现在怎么写 |
 | --- | --- |
-| `import { useBMapTrackAnimation } from 'baidu-map-gl-vue'` | 已删除（#104）。它在 v4 上只会从 Driver 拿到 `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达。轨迹改用原生 `<BTrackLineLayer>`（插件迁移结论已由 M8 / #43 定型）；播放命令面在 #110 已落地（`ref.playback` + `pauseOnHidden`），见[原生批量可视化图层](../components/layer/native-visual-layers) |
-| `const { setKeyFrames, start, stop, proceed, status } = useBMapViewAnimation()` | 收窄为 `start(keyFrames)` / `cancel()` / `status`（#104）。`stop` / `proceed` 依赖 SDK 私有的 `_pause` / `_continue`，本库不再用私有面伪造暂停/继续；`status` 只剩 `idle` / `playing` 两个**观察值**，由公开事件写，命令不再乐观改它 |
-| `driver.services.suggest(autocomplete, keyword)` | 已删除（#104）。`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，程序化检索的归属只能靠 keyword/FIFO 猜；改用 `createAutocomplete({ input, onSearchComplete })` 监听原生回包，或换 `useBMapLocalSearch` / 官方 UI Kit |
+| `import { useBMapTrackAnimation } from 'baidu-map-gl-vue'` | 已删除（#104）。它在 v4 上只会从 Driver 拿到 `BMAP_CAPABILITY_UNSUPPORTED`，自有播放状态机因此永远不可达。轨迹改用原生 `<TrackLineLayer>`（插件迁移结论已由 M8 / #43 定型）；播放命令面在 #110 已落地（`ref.playback` + `pauseOnHidden`），见[原生批量可视化图层](../components/layer/native-visual-layers) |
+| `const { setKeyFrames, start, stop, proceed, status } = useViewAnimation()` | 收窄为 `start(keyFrames)` / `cancel()` / `status`（#104）。`stop` / `proceed` 依赖 SDK 私有的 `_pause` / `_continue`，本库不再用私有面伪造暂停/继续；`status` 只剩 `idle` / `playing` 两个**观察值**，由公开事件写，命令不再乐观改它 |
+| `driver.services.suggest(autocomplete, keyword)` | 已删除（#104）。`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，程序化检索的归属只能靠 keyword/FIFO 猜；改用 `createAutocomplete({ input, onSearchComplete })` 监听原生回包，或换 `useLocalSearch` / 官方 UI Kit |
 | `import { baiduCdnProvider, customScriptProvider, existingGlobalProvider } from 'baidu-map-gl-vue'` | 根入口**不再导出任何 Provider**；改用 `baidu-map-gl-vue/core` 的 `baiduJsapiV4Provider()` / `customScriptV4Provider()` / `existingGlobalV4Provider()` |
 | `withMigrationDriver({ provider, loadOptions })` | 删掉这层包装，直接把 `{ provider, loadOptions }` 交给 `createBMapClient()` / `<BMapProvider :definition>`；`createBMapClient` 的默认 Driver 工厂已是 v4 |
 | `createLegacyBMapClient({ provider })` | 已删除。旧引擎不在 3.0 里，请用默认 `createBMapClient()` |
 | Provider 返回**裸全局对象**（`load: async () => window.BMap`） | 必须返回结构化结果（`LoadedJsapiV4`）。**优先用内置家族**（它们内部就返回结构化结果）；自研加载器用公开的 `createLoadedJsapiV4()` 构造，**不要**手写 `{ engine, version, namespace }` 字面量（`load` metadata 必填，手写会少字段） | 见[配置 → Provider 的返回值](./config)，那里有一段可直接抄的代码 |
 | 根入口的 `BMapProvider` 类型 | 改用 `BMapProviderLike`（结构化 Provider 的形状） |
-| `<BMap allowExistingGlobal>` / `createBMapPlugin({ allowExistingGlobal })` | prop 已删除；传 `provider: existingGlobalV4Provider()`（并且不再有「页面恰好有全局就用它」的隐式回退） |
+| `<Map allowExistingGlobal>` / `createBMapPlugin({ allowExistingGlobal })` | prop 已删除；传 `provider: existingGlobalV4Provider()`（并且不再有「页面恰好有全局就用它」的隐式回退） |
 | `./advanced` 的 `detectEngine()` / `createDriver({ engine })` | 只用 `createJsapiV4Driver({ rawSdk, version, unsupported })`（engine 猜测已删除） |
 | 自己拼 `{ engine: 'webgl-v1', namespace }` 作为加载结果 | 会收到 `BMAP_SDK_ENGINE_MISMATCH`（旧引擎已删除） |
 | Playground `VITE_BMAP_MODE=legacy-fake` | 该档与开关已删除；传了会被忽略并落到默认档 `fake-v4` |
@@ -108,7 +108,7 @@ import { baiduJsapiV4Provider, customScriptV4Provider, existingGlobalV4Provider 
 ## 4. 迁移检查清单
 
 1. 升级到 `3.0.0-beta.x` 之后，先确认**只用默认路径**能否跑通：`createBMapPlugin({ ak })` +
-   `<BMap>`，不传 `provider`。
+   `<Map>`，不传 `provider`。
 2. 搜索 `BMapGL`：业务代码里对它的直接引用要全部清掉（3.0 不再提供它）。
 3. 搜索 `baiduCdnProvider` / `withMigrationDriver` / `createLegacyBMapClient` / `detectEngine`：
    按第 3 节逐条替换。

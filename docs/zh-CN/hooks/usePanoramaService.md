@@ -22,7 +22,7 @@ findByLocation({ lng: 116.404, lat: 39.915 }, 200)
 </script>
 ```
 
-只需要 **Client**：本服务不需要地图实例，也不需要 `<BPanorama>`，放在 `<BMapProvider>` 子树里即可。
+只需要 **Client**：本服务不需要地图实例，也不需要 `<Panorama>`，放在 `<BMapProvider>` 子树里即可。
 检索回来的 `id` 可以交给任意查看器使用。
 
 ## 返回值

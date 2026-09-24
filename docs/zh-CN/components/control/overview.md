@@ -1,9 +1,9 @@
-# BOverview 鹰眼控件
+# OverviewMapControl 鹰眼控件
 
 缩略地图控件（官方 `OverviewMapControl`），默认位于地图右下角。
 
 ```ts
-import { BOverview } from 'bmap-vue'
+import { OverviewMapControl } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -60,6 +60,6 @@ control/overview
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。

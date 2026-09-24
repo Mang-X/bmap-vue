@@ -1,18 +1,18 @@
 <template>
-  <BMap
+  <Map
     enableScrollWheelZoom
     v-bind="$attrs"
     :center="{ lat: 39.915185, lng: 116.400901 }"
     :zoom="16"
   >
-    <BMarker
+    <Marker
       v-for="(item, index) in markers"
       :position="item.position"
       :icon="`blue${(index + 1) as 1 | 2}`"
       @click="() => handleClick(item)"
       enableClicking
     />
-    <BInfoWindow
+    <InfoWindow
       v-model:open="show"
       :position="position"
       :title="title"
@@ -23,12 +23,12 @@
         y: -10,
       }"
     />
-  </BMap>
+  </Map>
 </template>
 
 <script lang="ts" setup>
 import { ref, type UnwrapRef } from "vue";
-import { BMap, BMarker, BInfoWindow } from "bmap-vue";
+import { Map, Marker, InfoWindow } from "bmap-vue";
 let markers = ref([
   {
     position: { lat: 39.915185, lng: 116.400101 },

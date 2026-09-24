@@ -1,8 +1,8 @@
 /**
  * 声明式菜单项的注册表（M5-CUSTOM-MENU / issue #33）
  *
- * `<BMenuItem>` / `<BMenuSeparator>` 不渲染任何有意义的 DOM，它们只把「这里有一条菜单项」告诉父级
- * `<BContextMenu>`。这条交接走 provide/inject：父级 provide 一个注册表，子组件在 `setup` 期
+ * `<MenuItem>` / `<MenuSeparator>` 不渲染任何有意义的 DOM，它们只把「这里有一条菜单项」告诉父级
+ * `<ContextMenu>`。这条交接走 provide/inject：父级 provide 一个注册表，子组件在 `setup` 期
  * 登记自己，卸载时销账。
  *
  * ## 顺序从哪来（这是本文件唯一需要解释的设计）
@@ -21,7 +21,7 @@
  *
  * ## 为什么存**读取器**而不是值快照
  *
- * 子组件的 props 会变（`<BMenuItem :text="dynamic" />`）。存快照就必须再配一条「同步快照」的路径，
+ * 子组件的 props 会变（`<MenuItem :text="dynamic" />`）。存快照就必须再配一条「同步快照」的路径，
  * 而那条路径迟早会漏字段。存读取器时父级每次解析都拿到最新 props，**没有第二份副本**；
  * 子组件只需要在值变化时 `invalidate()` 提醒父级重新解析（父级用指纹决定要不要真的重建菜单）。
  *
@@ -47,7 +47,7 @@ export interface ContextMenuDeclarationItem {
    * 选中时的回调。
    *
    * 与数据 API 的 `ContextMenuItem.callback` 归一化到同一处（父级调用它 ⇒ 两种写法行为一致）；
-   * `<BMenuItem>` 在自己的这个回调里派发 `@select`。
+   * `<MenuItem>` 在自己的这个回调里派发 `@select`。
    */
   readonly onSelect?: (payload: ContextMenuSelectPayload) => void;
 }
@@ -129,7 +129,7 @@ export function createContextMenuChildrenRegistry(): ContextMenuChildrenRegistry
 /**
  * 子组件拿到的「我属于哪个菜单」。
  *
- * 返回 `undefined` 表示**没有父级菜单**（`<BMenuItem>` 被放错地方了）：调用方应当告警一次并什么
+ * 返回 `undefined` 表示**没有父级菜单**（`<MenuItem>` 被放错地方了）：调用方应当告警一次并什么
  * 都不渲染——把「放错位置」静默变成一个永远不出现的菜单项，是本库明确要避免的假支持。
  */
 export function useOptionalContextMenuChildren(): ContextMenuChildrenRegistry | undefined {

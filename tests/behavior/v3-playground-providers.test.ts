@@ -63,7 +63,7 @@ describe("离线档走真实路径（本档的核心断言）", () => {
     expect(await engineOf(boot.plugin)).toBe("jsapi-v4");
   });
 
-  it("fake-v4 档把 Fake 命名空间按真实形状挂上（BMap 就绪、BMapGL 是同一对象的别名）", () => {
+  it("fake-v4 档把 Fake 命名空间按真实形状挂上（Map 就绪、BMapGL 是同一对象的别名）", () => {
     const boot = bootPlayground({});
     boots.push(boot);
 
@@ -89,7 +89,7 @@ describe("Fake v4 Provider 的注入与还原", () => {
     const scope = globalThis as unknown as { BMap?: unknown; BMapGL?: unknown };
     // M3A3-REMOVE-LEGACY（#26）：测试环境不再预置任何假 SDK 全局，因此「原本不存在」
     // 是常态；这条断言同时防止有人把全局假 SDK 又塞回 `tests/setup.ts`。
-    expect(scope.BMap, "测试环境不应预置 BMap").toBeUndefined();
+    expect(scope.BMap, "测试环境不应预置 Map").toBeUndefined();
     expect(scope.BMapGL, "测试环境不应预置 BMapGL").toBeUndefined();
 
     const handle = createFakeV4Provider();

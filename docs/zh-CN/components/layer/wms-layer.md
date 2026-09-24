@@ -1,9 +1,9 @@
-# BWMSLayer WMS 图层 <Badge type="tip" text="^1.0.0" />
+# WMSLayer WMS 图层 <Badge type="tip" text="^1.0.0" />
 
 加载瓦片式 WMS 服务：官方内部拼接 `SERVICE` / `REQUEST` / `VERSION` / `FORMAT` / `CRS` 等参数，并用 `BBOX` / `WIDTH` / `HEIGHT` 驱动瓦片请求。
 
 ```ts
-import { BWMSLayer } from 'bmap-vue'
+import { WMSLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -48,7 +48,7 @@ layer/wmsLayer
 
 ## 稳定性
 
-同 `BXYZLayer`：4.0 新增的构造器，本库标 `experimental`。
+同 `XYZLayer`：4.0 新增的构造器，本库标 `experimental`。
 
 ## 注意
 

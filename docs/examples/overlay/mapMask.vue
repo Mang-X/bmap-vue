@@ -4,7 +4,7 @@
     <option value="outside">局部隐藏</option>
     <option value="inside">局部显示</option>
   </select>
-  <BMap
+  <Map
     v-bind="$attrs"
     :center="center"
     :zoom="18"
@@ -12,14 +12,14 @@
     enable-scroll-wheel-zoom
     :backgroundColor="[192, 214, 213, 100]"
   >
-    <BMarker :position="center"></BMarker>
-    <BMapMask :path="path" :show-region="showRegion" isPoiMask isBuildingMask isMapMask></BMapMask>
-  </BMap>
+    <Marker :position="center"></Marker>
+    <MapMask :path="path" :show-region="showRegion" isPoiMask isBuildingMask isMapMask></MapMask>
+  </Map>
 </template>
 
 <script setup lang="ts">
 import { ref, shallowRef, triggerRef } from "vue";
-import { BMap, BMarker, BMapMask, PointLike, type MapMaskShowRegion } from "bmap-vue";
+import { Map, Marker, MapMask, PointLike, type MapMaskShowRegion } from "bmap-vue";
 const path = shallowRef<PointLike[]>([]);
 const center = ref<PointLike>({ lng: 0, lat: 0 });
 const showRegion = ref<MapMaskShowRegion>("outside");

@@ -25,7 +25,7 @@
 - `core`：loader/provider、context、lifecycle、runtime、events、errors 等底座。
 - `core/services`：**框架无关**的服务层底座（状态口径 `BMapServiceStatus`、请求序列守卫
   `createRequestGuard`、顺序批处理 `runSequential`、归一化调用面的收窄点 `jsapiV4ServicesOf`）。
-  Vue 侧的绑定是 `composables/useBMapServiceTask.ts`（能力门 / 实例缓存 / 只读 shallow refs /
+  Vue 侧的绑定是 `composables/useServiceTask.ts`（能力门 / 实例缓存 / 只读 shallow refs /
   过期保护）——七个 service composable 共用它，**不要**再各写一套 Promise + 定时器。
 - `components`、`composables`：面向使用者的 Vue 组件与 hooks。
 - `plugins`、`resolver`、`advanced`：插件适配、按需解析、raw SDK 逃生口。
@@ -46,7 +46,7 @@
   两者的区分是调用方能不能「重试」的依据，不要合并。
 - **回调归属不许按到达顺序猜**：官方对 JSONP 风格的服务只承诺「单次调用内部的顺序」，**没有**承诺
   多次请求之间的回调顺序（`LocalSearch` 的 4.0.4 声明里也没有）。因此归属只能靠**可验证的身份**：
-  `LocalSearch` 用「**一个实例一个未结算操作**」+ 调用方侧「取代即换新实例」（`useBMapServiceTask`
+  `LocalSearch` 用「**一个实例一个未结算操作**」+ 调用方侧「取代即换新实例」（`useServiceTask`
   的 `supersede` 策略）。没有身份可依据时**不建推断层**：`Autocomplete` 因此**没有**归一化调用面
   （#104 删掉了按 keyword/FIFO 猜回包的 `suggest()`），构造时传 `onSearchComplete` 原样转发，
   「这条结果属于哪次输入」由持有输入框的一方判断。
@@ -82,6 +82,7 @@ raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:package`） |
 | `pnpm check:no-bmapgl` | 旧引擎残留不变量：运行时源码 + 公共声明都不得出现 `BMapGL` / `"webgl-v1"` / `"jsapi-v3"`（需先 `pnpm build:package`） |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
+| `pnpm generate:api-diff:check` | 公开 API 对照表（vs 官方 React 参考）无漂移 |
 
 类型边界 augmentation 位于 `src/driver/jsapi-v4/augmentations/`，治理规则与元数据模板见该目录 `README.md`；
 每个文件必须带 `@upstream` / `@upstreamVersion` / `@runtimeBasis` / `@deletionCondition` 元数据，禁止 `any`。

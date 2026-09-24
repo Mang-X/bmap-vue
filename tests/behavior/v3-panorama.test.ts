@@ -9,17 +9,17 @@
  * | 真实 v4 常用控件 smoke | `tests/browser/jsapi-v4/main.ts` 的 `panorama-viewer` 检查（本文件是
  *   Fake 档的同名语义） |
  *
- * 以及一份**Context 隔离**的证据：`<BPanorama>` 只需要 Client，不需要地图实例，因此它能长在
+ * 以及一份**Context 隔离**的证据：`<Panorama>` 只需要 Client，不需要地图实例，因此它能长在
  * `<BMapProvider>` 子树里；而「Panorama 内部 Map 不是普通 MapContext」这条非目标也因此可断言
- * ——`<BPanoramaLabel>` 只认 `PanoramaContext`，脱离 `<BPanorama>` 会明确失败。
+ * ——`<PanoramaLabel>` 只认 `PanoramaContext`，脱离 `<Panorama>` 会明确失败。
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, onMounted, reactive, ref, type Component } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
-import BPanorama from "../../packages/bmap-vue/src/components/panorama/BPanorama.vue";
-import BPanoramaLabel from "../../packages/bmap-vue/src/components/panorama/BPanoramaLabel.vue";
+import Panorama from "../../packages/bmap-vue/src/components/panorama/Panorama.vue";
+import PanoramaLabel from "../../packages/bmap-vue/src/components/panorama/PanoramaLabel.vue";
 import { usePanoramaService } from "../../packages/bmap-vue/src/composables/usePanoramaService";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
@@ -60,12 +60,12 @@ function mountIn(
   );
 }
 
-describe("BPanorama：查看器生命周期", () => {
+describe("Panorama：查看器生命周期", () => {
   beforeEach(() => harness.reset());
 
   it("挂载创建一个查看器，卸载后实例被销毁且无泄漏", async () => {
     const before = baseline();
-    const wrapper = mountIn(BMap, () => [h(BPanorama, { point: POINT })]);
+    const wrapper = mountIn(Map, () => [h(Panorama, { point: POINT })]);
     await flushPromises();
     await nextTick();
 
@@ -80,12 +80,12 @@ describe("BPanorama：查看器生命周期", () => {
     await flushPromises();
     expect(viewer.destroyCalls).toBe(1);
     expect(leaks().panoramas).toBe(0);
-    harness.assertIdle("BPanorama 卸载");
+    harness.assertIdle("Panorama 卸载");
   });
 
   it("在 <BMapProvider> 子树里同样可用（全景只需要 Client，不需要地图实例）", async () => {
     const before = baseline();
-    const wrapper = mountIn(BMapProvider, () => [h(BPanorama, { id: "pano-1" })]);
+    const wrapper = mountIn(BMapProvider, () => [h(Panorama, { id: "pano-1" })]);
     await flushPromises();
     await nextTick();
 
@@ -93,7 +93,7 @@ describe("BPanorama：查看器生命周期", () => {
     expect(fake.createdPanoramas.length).toBe(before.panoramas + 1);
     expect(viewer.callLog).toContain("setId:pano-1");
     expect(viewer.getId()).toBe("pano-1");
-    // 整棵树里没有地图：`<BMap>` 没有参与
+    // 整棵树里没有地图：`<Map>` 没有参与
     expect(fake.createdMaps.length).toBe(before.maps);
 
     wrapper.unmount();
@@ -103,27 +103,27 @@ describe("BPanorama：查看器生命周期", () => {
   });
 
   it("查看器容器就是本组件渲染出的宿主 DOM", async () => {
-    const wrapper = mountIn(BMap, () => [h(BPanorama, { point: POINT })]);
+    const wrapper = mountIn(Map, () => [h(Panorama, { point: POINT })]);
     await flushPromises();
     await nextTick();
     const container = lastViewer().container as HTMLElement;
-    // 容器是**本组件渲染出的宿主 div**：在组件树里、是 `<BMap>` 容器的后代，
+    // 容器是**本组件渲染出的宿主 div**：在组件树里、是 `<Map>` 容器的后代，
     // 但不是地图容器本身（用 class 区分，比按顺序取第几个 div 稳）
     expect(container.tagName).toBe("DIV");
     expect(container.className).not.toContain("bmap-container");
     expect((wrapper.element as HTMLElement).contains(container)).toBe(true);
-    expect(wrapper.findAllComponents(BPanorama)).toHaveLength(1);
+    expect(wrapper.findAllComponents(Panorama)).toHaveLength(1);
     wrapper.unmount();
     await nextTick();
   });
 });
 
-describe("BPanorama：受控写入", () => {
+describe("Panorama：受控写入", () => {
   beforeEach(() => harness.reset());
 
   it("point / pov / zoom / visible 变化都会下发", async () => {
     const props = ref<Record<string, unknown>>({ point: POINT, visible: true });
-    const wrapper = mountIn(BMap, () => [h(BPanorama, props.value)]);
+    const wrapper = mountIn(Map, () => [h(Panorama, props.value)]);
     await flushPromises();
     await nextTick();
     const viewer = lastViewer();
@@ -154,7 +154,7 @@ describe("BPanorama：受控写入", () => {
 
   it("scrollWheelZoom 走成对的 enable / disable，poiType 走 setPanoramaPOIType", async () => {
     const props = ref<Record<string, unknown>>({ point: POINT });
-    const wrapper = mountIn(BMap, () => [h(BPanorama, props.value)]);
+    const wrapper = mountIn(Map, () => [h(Panorama, props.value)]);
     await flushPromises();
     await nextTick();
     const viewer = lastViewer();
@@ -183,7 +183,7 @@ describe("BPanorama：受控写入", () => {
       point: POINT,
       options: { navigationControl: false },
     });
-    const wrapper = mountIn(BMap, () => [h(BPanorama, props.value)]);
+    const wrapper = mountIn(Map, () => [h(Panorama, props.value)]);
     await flushPromises();
     await nextTick();
     const viewer = lastViewer();
@@ -201,7 +201,7 @@ describe("BPanorama：受控写入", () => {
   });
 });
 
-describe("BPanorama：事件回报（*_changed 的载荷来自回读 getter）", () => {
+describe("Panorama：事件回报（*_changed 的载荷来自回读 getter）", () => {
   beforeEach(() => harness.reset());
 
   it("position_changed / zoom_changed / id_changed / scene_type_changed / links_changed / dataload / pano_error", async () => {
@@ -209,7 +209,7 @@ describe("BPanorama：事件回报（*_changed 的载荷来自回读 getter）",
     const Probe = defineComponent({
       setup() {
         return () =>
-          h(BPanorama, {
+          h(Panorama, {
             point: POINT,
             onPositionChange: (position: unknown) => (seen.value.position = position),
             onZoomChange: (zoom: unknown) => (seen.value.zoom = zoom),
@@ -221,7 +221,7 @@ describe("BPanorama：事件回报（*_changed 的载荷来自回读 getter）",
           });
       },
     });
-    const wrapper = mountIn(BMap, () => [h(Probe)]);
+    const wrapper = mountIn(Map, () => [h(Probe)]);
     await flushPromises();
     await nextTick();
     const viewer = lastViewer();
@@ -253,14 +253,14 @@ describe("BPanorama：事件回报（*_changed 的载荷来自回读 getter）",
   });
 });
 
-describe("BPanoramaLabel：标注生命周期", () => {
+describe("PanoramaLabel：标注生命周期", () => {
   beforeEach(() => harness.reset());
 
   it("挂载后挂到查看器上，卸载后摘除（标注泄漏归零）", async () => {
     const before = baseline();
-    const wrapper = mountIn(BMap, () => [
-      h(BPanorama, { point: POINT }, () => [
-        h(BPanoramaLabel, { content: "标签", position: POINT, altitude: 5 }),
+    const wrapper = mountIn(Map, () => [
+      h(Panorama, { point: POINT }, () => [
+        h(PanoramaLabel, { content: "标签", position: POINT, altitude: 5 }),
       ]),
     ]);
     await flushPromises();
@@ -279,7 +279,7 @@ describe("BPanoramaLabel：标注生命周期", () => {
     // 子组件先摘自己（父的 onUnmounted 晚于子树），再由父销毁查看器
     expect(lastViewer().overlays).toHaveLength(0);
     expect(leaks().panoramaLabels).toBe(0);
-    harness.assertIdle("BPanoramaLabel 卸载");
+    harness.assertIdle("PanoramaLabel 卸载");
   });
 
   it("content / position / altitude 有 setter ⇒ 就地更新", async () => {
@@ -289,8 +289,8 @@ describe("BPanoramaLabel：标注生命周期", () => {
       position: POINT,
       altitude: 2,
     });
-    const wrapper = mountIn(BMap, () => [
-      h(BPanorama, { point: POINT }, () => [h(BPanoramaLabel, props.value)]),
+    const wrapper = mountIn(Map, () => [
+      h(Panorama, { point: POINT }, () => [h(PanoramaLabel, props.value)]),
     ]);
     await flushPromises();
     await nextTick();
@@ -315,8 +315,8 @@ describe("BPanoramaLabel：标注生命周期", () => {
   it("displayDistance 只有构造期 ⇒ 重建标注并把新值交给构造期", async () => {
     const before = baseline();
     const props = ref<Record<string, unknown>>({ content: "标签", position: POINT });
-    const wrapper = mountIn(BMap, () => [
-      h(BPanorama, { point: POINT }, () => [h(BPanoramaLabel, props.value)]),
+    const wrapper = mountIn(Map, () => [
+      h(Panorama, { point: POINT }, () => [h(PanoramaLabel, props.value)]),
     ]);
     await flushPromises();
     await nextTick();
@@ -339,16 +339,16 @@ describe("BPanoramaLabel：标注生命周期", () => {
     expect(leaks().panoramaLabels).toBe(0);
   });
 
-  it("脱离 <BPanorama> 时明确失败（不把全景内部容器当成普通 MapContext）", () => {
+  it("脱离 <Panorama> 时明确失败（不把全景内部容器当成普通 MapContext）", () => {
     // 失败发生在 `setup`（inject 拿不到 PanoramaContext），Vue 在测试环境会把它抛出来
     expect(() =>
       mount(
         defineComponent({
-          setup: () => () => h(BMap, { provider: provider() }, () => [h(BPanoramaLabel, {})]),
+          setup: () => () => h(Map, { provider: provider() }, () => [h(PanoramaLabel, {})]),
         }),
         { attachTo: host() },
       ),
-    ).toThrow(/BPanorama/);
+    ).toThrow(/Panorama/);
   });
 });
 
@@ -371,7 +371,7 @@ describe("usePanoramaService：检索状态层", () => {
     );
   }
 
-  it("findById 拿到回包（不需要地图实例，也不需要 <BPanorama>）", async () => {
+  it("findById 拿到回包（不需要地图实例，也不需要 <Panorama>）", async () => {
     const before = baseline();
     let data: unknown = null;
     let status = "";
@@ -399,7 +399,7 @@ describe("usePanoramaService：检索状态层", () => {
     const before = baseline();
     const statuses: string[] = [];
     const wrapper = mountConsumer((api) => {
-      // **顺序**调用：并发下的取代语义属于 `useBMapServiceTask` 的契约（已有专门用例），
+      // **顺序**调用：并发下的取代语义属于 `useServiceTask` 的契约（已有专门用例），
       // 这一条要验的是「两种重载形态都真的打到了 SDK」。
       void api
         .findByLocation({ lng: 116.4, lat: 39.9 })
@@ -410,7 +410,7 @@ describe("usePanoramaService：检索状态层", () => {
     await flushPromises();
     await flushPromises();
     expect(statuses).toEqual(["success", "success"]);
-    // 两个调用共用同一个服务实例（`useBMapServiceTask` 的实例缓存）
+    // 两个调用共用同一个服务实例（`useServiceTask` 的实例缓存）
     expect(fake.createdPanoramaServices.length).toBe(before.services + 1);
     const callLog = fake.createdPanoramaServices.at(-1)!.callLog;
     expect(callLog).toContain("getPanoramaByLocation:args=2");
@@ -459,7 +459,7 @@ describe("评审复现：options 在 viewer 异步 ready 前变化", () => {
     const props = ref<Record<string, unknown>>({ point: POINT });
     const wrapper = mount(
       defineComponent({
-        setup: () => () => h(BMap, { provider: deferred }, () => [h(BPanorama, props.value)]),
+        setup: () => () => h(Map, { provider: deferred }, () => [h(Panorama, props.value)]),
       }),
       { attachTo: host() },
     );

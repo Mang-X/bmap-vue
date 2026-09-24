@@ -1,9 +1,9 @@
-# BMarker 标注点
+# Marker 标注点
 
 在地图上绘制点
 
 ```ts
-import { BMarker } from 'bmap-vue'
+import { Marker } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -47,7 +47,7 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 蓝色图标：blue1，blue2，blue3，blue4，blue5，blue6，blue7，blue8，blue9，blue10
 
 以上 27 个名字都解析到雪碧图上各自的格子（`start` / `end` 使用内联 SVG，与
-`useBMapMarkerIcons()` 返回的雪碧图版本刻意不同）。未知名字按 `simple_red` 渲染并告警一次。
+`useMarkerIcons()` 返回的雪碧图版本刻意不同）。未知名字按 `simple_red` 渲染并告警一次。
 
 其余图标可根据下图自行定位裁切：
 
@@ -73,7 +73,7 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## v3 生命周期与更新行为
 
-`BMarker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
+`Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
 issue #30），组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
 并由用例与 Driver 的属性描述符逐条交叉核对：
 
@@ -89,7 +89,7 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 - `icon` 走「descriptor → 有界 LRU 缓存 → `setIcon`」：**相同图标配置只构造一次 `BMap.Icon`**
   （缓存上限 200 条；作用域是同一个 Client / `<BMapProvider>`，因此它下面的多张地图共用），
   更新时始终重新 `setIcon` ——官方指南明确「直接改 Icon 的属性之后 Marker 不会同步刷新」。
-  这份缓存**只服务组件内部**：`useBMapMarkerIcons()` 拿到的始终是每次新建的独立实例，
+  这份缓存**只服务组件内部**：`useMarkerIcons()` 拿到的始终是每次新建的独立实例，
   你可以安全地持有或修改它，不会影响别处。
 - 组件的每次重建都会释放旧实例的 child scope（SDK 监听、Registry 记录一并归零），因此反复重建
   不会累积资源。
@@ -102,11 +102,11 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 `update:position`：
 
 ```vue
-<BMarker v-model:position="position" :enable-dragging="true" />
+<Marker v-model:position="position" :enable-dragging="true" />
 ```
 
 两条方向都有回环抑制：父级把刚上报的位置写回时不会重复下发 `setPosition`，SDK 重复派发同一位置
-也不会产生第二条 `update:position`。取舍（为什么这里用「最后一次同步值」而不是像 `<BMap>` 那样
+也不会产生第二条 `update:position`。取舍（为什么这里用「最后一次同步值」而不是像 `<Map>` 那样
 读回 SDK 现值）见 ADR [2026-09-17 声明式 OverlaySpec、Marker 状态模型与图标缓存](/adr/2026-09-17-overlay-spec-and-marker)
 的决策 4 与已知限制 1。
 

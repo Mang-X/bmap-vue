@@ -3,7 +3,7 @@
  *
  * ## 它解决什么
  *
- * 迁移前每个覆盖物组件各自 `emit("click", e)` / `emit("dblclick", e)`（BCircle 甚至只有
+ * 迁移前每个覆盖物组件各自 `emit("click", e)` / `emit("dblclick", e)`（Circle 甚至只有
  * 这两个），于是三种漂移无法避免：
  *
  * 1. **同一类覆盖物的事件面不一致**：Polyline / Polygon / Circle 都是上游的

@@ -145,7 +145,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
   //
   // `setVisible` 是**唯一的例外**，理由是 #35 的**实测取证**（`scripts/probe-native-point-cluster.mts`，
   // 2026-09-19）：`PointLayer` / `ClusterLayer` 上 `setVisible(false)` 之后 `getVisible() === false`、
-  // 再 `setVisible(true)` 能恢复 —— 而这三类数据组件共享 `BMapDataProps.visible`，
+  // 再 `setVisible(true)` 能恢复 —— 而这三类数据组件共享 `DataComponentProps.visible`，
   // 「隐藏」是它们共同的最小契约的一部分。取证与取代关系见 ADR
   // `2026-09-19-native-point-layers-and-cluster`；其它继承成员仍然关闭（没有消费者，也没有取证）。
   point: {

@@ -35,9 +35,9 @@
 
 | 机制 | 位置 | 消费者 | 证据 | 结论 | 处置 |
 | --- | --- | --- | --- | --- | --- |
-| `suggest()` 的程序化归属层：`pendingSuggest` 队列 + 同关键词互斥 + FIFO 退化 + 「通道独占」前置条件（`watchInputActivity` / `isTypableInput` / `loseExclusivity` / `EXCLUSIVITY_LOST_HINT`） | `driver/jsapi-v4/services.ts`（原 814-1053 段） | **生产 0**。只有自身单测与 `facet-probes` 探针；`<BAutoComplete>` 渲染可输入输入框、结构上不可能是消费者 | `FAKE-ONLY`：顺序来自 `FakeV4CallbackQueue` 发明的微任务 FIFO，关键字来自 `includeKeyword` 发明的回填 | **REMOVE** | #104 A1：整段删除。`Autocomplete` **不进归一化调用面**，构造时传 `onSearchComplete` 原样转发；`PlaceSuggestion` 类型与 `ServiceInvocationDriver.suggest` 一并从出口摘掉；`service.autocomplete` 由 `experimental` 回到 `native`（它唯一的降级理由就是这条假设） |
+| `suggest()` 的程序化归属层：`pendingSuggest` 队列 + 同关键词互斥 + FIFO 退化 + 「通道独占」前置条件（`watchInputActivity` / `isTypableInput` / `loseExclusivity` / `EXCLUSIVITY_LOST_HINT`） | `driver/jsapi-v4/services.ts`（原 814-1053 段） | **生产 0**。只有自身单测与 `facet-probes` 探针；`<Autocomplete>` 渲染可输入输入框、结构上不可能是消费者 | `FAKE-ONLY`：顺序来自 `FakeV4CallbackQueue` 发明的微任务 FIFO，关键字来自 `includeKeyword` 发明的回填 | **REMOVE** | #104 A1：整段删除。`Autocomplete` **不进归一化调用面**，构造时传 `onSearchComplete` 原样转发；`PlaceSuggestion` 类型与 `ServiceInvocationDriver.suggest` 一并从出口摘掉；`service.autocomplete` 由 `experimental` 回到 `native`（它唯一的降级理由就是这条假设） |
 | `LocalSearch` 的「一个实例同一时刻最多一个未结算操作」 | 同文件 `invokeSlotOperation` | 7 个 service composable + 组件 | `OWNED`：身份是**实例自己**，不需要按到达顺序猜 | **KEEP** | — |
-| `useBMapServiceTask` 的 `supersede`（取代即换新实例） | `composables/useBMapServiceTask.ts` | 全部 service composable | `OWNED` | **KEEP** | — |
+| `useServiceTask` 的 `supersede`（取代即换新实例） | `composables/useServiceTask.ts` | 全部 service composable | `OWNED` | **KEEP** | — |
 | 超时 / 空结果 / 迟到回调 / 先到者胜 | `driver/normalize/serviceCall.ts`（单一实现点） | 全部归一化调用 | `OWNED` + `OFFICIAL` | **KEEP** | — |
 | ADR 2026-09-12 决策 3 的 `normalize/jsonpProbe.ts`（两引擎共用的空/失败嗅探） | — | — | — | 已消失 | #26 单引擎收敛时随文件删除；本表记录在案，避免按 ADR 原文再找这个模块 |
 
@@ -45,12 +45,12 @@
 
 | 机制 | 位置 | 消费者 | 证据 | 结论 | 处置 |
 | --- | --- | --- | --- | --- | --- |
-| `useBMapViewAnimation` 的 `stop()` / `proceed()` → `handle.raw._pause` / `_continue` / `_cancel` | `composables/useBMapViewAnimation.ts`（原 98/105/114 行） | 只有文档页与示例引用 | 官方 4.0.4 **没有**声明这三个成员 ⇒ 私有面 | **REMOVE** | #104 A2：收窄为 `start(keyFrames)` / `cancel()` / `status` / `ready`。静态门禁抓不到 `handle.raw.*`（`check:raw-sdk` 只匹配 `BMap`/`BMapGL` 标识符），所以这条靠审计而不是靠 gate |
+| `useViewAnimation` 的 `stop()` / `proceed()` → `handle.raw._pause` / `_continue` / `_cancel` | `composables/useViewAnimation.ts`（原 98/105/114 行） | 只有文档页与示例引用 | 官方 4.0.4 **没有**声明这三个成员 ⇒ 私有面 | **REMOVE** | #104 A2：收窄为 `start(keyFrames)` / `cancel()` / `status` / `ready`。静态门禁抓不到 `handle.raw.*`（`check:raw-sdk` 只匹配 `Map`/`BMapGL` 标识符），所以这条靠审计而不是靠 gate |
 | 同 hooks 的 `viewAnimation` 句柄 ref + `setKeyFrames` 两段式 + `disableDragging` | 同上 | 只有文档 | 句柄每次 `start()` 都被换掉、`disableDragging` 从未生效 ⇒ 退化成常量 | **REMOVE** | #104 A2 一并删除；`status` 改成**观察值**（`idle` / `playing`），命令不乐观改写它 —— 唯一例外是本库对自己那次取消的交付确认（形状见下面两行） |
 | MapDriver 的视角动画 teardown：`AnimationRecord{started,settled,cancelRequested}` + `Teardown{disposed,disposing,tornDown,released,deferredFinish,fallbackTimer}` | `driver/jsapi-v4/map.ts:193-210` | `MapDriver.destroy` / `startViewAnimation`，约 20 条行为用例 | 记账对象是**我们自己**发起的启动/取消/销毁次序 ⇒ `OWNED`，合法；其前提「`animationstart` 在内部控制器构造前派发、启动前 `cancelViewAnimation` 抛 `TypeError`」原为 `FAKE-ONLY`，**2026-09-21 已由真实 AK 读数升级为 `PROBED`**（见下方 F-1） | **KEEP（证据已补）** | #104 B1：保留（它不恢复 SDK 的因果身份）；F-1 已结清，并落成 live gate `view-animation-cancel-window`。口径仍不得升级为「对外的时序承诺」：那两条前提是**官方行为**，官方可以改，gate 就是用来在它改的时候变红的。ADR 2026-09-11 已加取证注记 |
-| 同一处前提在 hooks 侧的两处**残留用法**：① 被取代那一段的三条监听只由该段的 `animationcancel` 释放；② `cancel()` **当时**发的是**整张图**的 `stopViewAnimation(map)`（#105 已改为按实例；那条整图命令本身在第二批也已删除，见本行末） | `composables/useBMapViewAnimation.ts`（`AnimationRun` / `start` / `stopRun`）＋ `driver/jsapi-v4/map.ts` 的动画记录 | 该 hook 自己（`EventDriver.groups` 是强引用 Map，未释放即泄漏）；以及跨 hooks：同一张图上另一个 `useBMapViewAnimation` 的在飞段 | 两处都依赖同一条 `FAKE-ONLY` 时序。②最要命：`stopViewAnimation` 的范围是整张图，于是**「保留重试入口」与「不牵连别人的动画」互斥** —— #105 第三轮以「H1 第二次 cancel 停掉了 H2 的 B」打中一次，第六轮以「延迟取消失败后 H1 永久失去重试入口」打中另一次；把 `cancelCommitted` guard 去掉实测就红，确认两条不能同时满足 | **SIMPLIFY（本票已做）** | 取消换成官方本来就有的**按实例**命令：给 `MapDriver` 加 `cancelViewAnimation(map, animation)`，v4 实现只挑该实例那一条记录、复用 `cancelAnimation`，并返回本库侧的交付状态 `canceled / deferred / already-settled`。hooks 据此把三件事分开：**当前观察对象**（`current`）、**取消是否仍需重试**（`undelivered`）、**每段自己的监听**（交付即释放）：`deferred` 保留重试入口（第二次 `cancel()` 真打到 SDK），已交付则幂等收尾且不补发命令（补发要假设 SDK 幂等，属 F-3 未证）。回归：`v3-useBMapViewAnimation.test.ts` 的「取消失败时保留重试入口」「deferred 与已交付的取消走不同的收尾」「收尾按动画身份收敛」三节，加 Facet 侧 `map.test.ts` 的「只碰传入的那个实例」。**公开的语义不建立在『接管时旧段监听恰好已释放』这个时机上**：接管那一支按**交付状态**分岔 —— 已交付（`canceled` / `already-settled`）当场释放旧段监听，未交付（`deferred`）则把监听留着、旧段进 `undelivered`，由后续 `cancel()` 与卸载继续推到终态（#105 第八/九/十轮）；两条路都由 `finishRun` 的身份守卫挡住旧段清掉新段的 `playing`。一次公开 `cancel()` 里**每段只尝试一次**：当前段被 deferred 时它同时是 `current` 与 `undelivered` 的成员，快照按 `Set` 去重，否则「抛错说没交付」与「同一次调用里第二份已重试成功并收尾」会自相矛盾（#105 第十一轮 P1）。**第二批收口**：「② 的根源」——整图命令 `MapDriver.stopViewAnimation(map)` 已**删除**（它零生产消费者、唯一的书面理由是「与 #26 已删除的 webgl-v1 一致」、且与按实例所有权直接冲突），`cancelAllAnimations` 因此只剩两个本库自己的整图动作（起播前清场 / 销毁） |
+| 同一处前提在 hooks 侧的两处**残留用法**：① 被取代那一段的三条监听只由该段的 `animationcancel` 释放；② `cancel()` **当时**发的是**整张图**的 `stopViewAnimation(map)`（#105 已改为按实例；那条整图命令本身在第二批也已删除，见本行末） | `composables/useViewAnimation.ts`（`AnimationRun` / `start` / `stopRun`）＋ `driver/jsapi-v4/map.ts` 的动画记录 | 该 hook 自己（`EventDriver.groups` 是强引用 Map，未释放即泄漏）；以及跨 hooks：同一张图上另一个 `useViewAnimation` 的在飞段 | 两处都依赖同一条 `FAKE-ONLY` 时序。②最要命：`stopViewAnimation` 的范围是整张图，于是**「保留重试入口」与「不牵连别人的动画」互斥** —— #105 第三轮以「H1 第二次 cancel 停掉了 H2 的 B」打中一次，第六轮以「延迟取消失败后 H1 永久失去重试入口」打中另一次；把 `cancelCommitted` guard 去掉实测就红，确认两条不能同时满足 | **SIMPLIFY（本票已做）** | 取消换成官方本来就有的**按实例**命令：给 `MapDriver` 加 `cancelViewAnimation(map, animation)`，v4 实现只挑该实例那一条记录、复用 `cancelAnimation`，并返回本库侧的交付状态 `canceled / deferred / already-settled`。hooks 据此把三件事分开：**当前观察对象**（`current`）、**取消是否仍需重试**（`undelivered`）、**每段自己的监听**（交付即释放）：`deferred` 保留重试入口（第二次 `cancel()` 真打到 SDK），已交付则幂等收尾且不补发命令（补发要假设 SDK 幂等，属 F-3 未证）。回归：`v3-useViewAnimation.test.ts` 的「取消失败时保留重试入口」「deferred 与已交付的取消走不同的收尾」「收尾按动画身份收敛」三节，加 Facet 侧 `map.test.ts` 的「只碰传入的那个实例」。**公开的语义不建立在『接管时旧段监听恰好已释放』这个时机上**：接管那一支按**交付状态**分岔 —— 已交付（`canceled` / `already-settled`）当场释放旧段监听，未交付（`deferred`）则把监听留着、旧段进 `undelivered`，由后续 `cancel()` 与卸载继续推到终态（#105 第八/九/十轮）；两条路都由 `finishRun` 的身份守卫挡住旧段清掉新段的 `playing`。一次公开 `cancel()` 里**每段只尝试一次**：当前段被 deferred 时它同时是 `current` 与 `undelivered` 的成员，快照按 `Set` 去重，否则「抛错说没交付」与「同一次调用里第二份已重试成功并收尾」会自相矛盾（#105 第十一轮 P1）。**第二批收口**：「② 的根源」——整图命令 `MapDriver.stopViewAnimation(map)` 已**删除**（它零生产消费者、唯一的书面理由是「与 #26 已删除的 webgl-v1 一致」、且与按实例所有权直接冲突），`cancelAllAnimations` 因此只剩两个本库自己的整图动作（起播前清场 / 销毁） |
 | `useBMapTrackAnimation` 的插件状态机（`INITIAL` / `PLAYING` / `STOPPING` / …） | 原 `composables/useBMapTrackAnimation.ts` | **生产 0**：v4 上 `createTrackAnimation()` 必抛 `BMAP_CAPABILITY_UNSUPPORTED` | 状态机的全部可达分支 = 一条失败分支 ⇒ 退化成常量 | **REMOVE** | #104 A3：hook、文档页、示例、行为用例全部删除；轨迹走原生图层 `track-line`，插件侧结论仍在 **#43**。参考实现 `huiyan-fe/react-bmap`（236 个 TS 文件）没有任何 TrackAnimation 抽象 |
-| suspension reason 集（`user` / `keepAlive` / `document` / `offscreen` / `disposed`）、boot 单飞 + `deferredWaiters` + 0ms 活性兜底、`tileLoadObserver` 的两本账 | `core/runtime/suspension.ts`、`components/map/BMap.vue:691`、`components/layers/tileLoadObserver.ts` | 生产，组件生命周期 | `OWNED`；`tileLoadObserver` 另有 `PROBED`（`scripts/probe-layer-events.mts` 三臂对照 `12 / 0 / 12`） | **KEEP** | 反面样板：`tileLoadObserver.ts:38-40` 明确**拒绝**做瓦片回包归属，只记所有权 |
+| suspension reason 集（`user` / `keepAlive` / `document` / `offscreen` / `disposed`）、boot 单飞 + `deferredWaiters` + 0ms 活性兜底、`tileLoadObserver` 的两本账 | `core/runtime/suspension.ts`、`components/map/Map.vue:691`、`components/layers/tileLoadObserver.ts` | 生产，组件生命周期 | `OWNED`；`tileLoadObserver` 另有 `PROBED`（`scripts/probe-layer-events.mts` 三臂对照 `12 / 0 / 12`） | **KEEP** | 反面样板：`tileLoadObserver.ts:38-40` 明确**拒绝**做瓦片回包归属，只记所有权 |
 
 ## 3. Loader / Provider / SDK Registry
 
@@ -74,8 +74,8 @@
 | `useResourceScope.ts` | 原 `core/lifecycle/useResourceScope.ts` | **0**（只有两行出口） | — | **REMOVE** | #104 R2：文件与两处出口删除 |
 | `MapRuntimeOptions.clientFactory`（与 `clientContext` 二选一） | `core/runtime/MapRuntime.ts:74` | 只有 3 个测试文件 | 无生产消费者的第二条臂 | **SIMPLIFY** | 后续票（收口要连带改 `v3-context-runtime-lifecycle` 的夹具） |
 | `MapRuntimeStatus` 的 `"loading"` 别名 | `core/context/types.ts:30` | 类型层，#71 起运行期不再写 | `OWNED` 但已过时 | **SIMPLIFY** | **本票已修文档承诺**：`docs/zh-CN/components/map.md` 两处不再把 `loading` 写成会发出的状态；类型别名到 #44 一并收 |
-| `BMap.vue:813-825` 的 `mountMap()` 前置检查（曾自陈「删掉整句，1799 条用例仍全绿」） | `components/map/BMap.vue` | `ensureUsableRecheck` 的每帧复查 + `onContainerReady` | **已取证**：`ensureUsableRecheck` 每帧调 `mountMap()`，容器仍 0×0 时少了这句就会 `startBoot()` | **KEEP（#127 落地）** | **#127 选了 (a) 保留并补上能翻红的用例**：`v3-component-scenarios` 的「挂起的 retry 期间每帧复查不得启动 boot」—— 删掉该句实测变红（`expected 'creating' to be 'error'`）。它拦的不是「0×0 建图」（那由 `waitForUsableContainer()` 兜底），而是「启动一次注定被拦的 boot」：失败态下状态从 `error` 被推进到 `creating`，`#error` 插槽连同它的重试按钮被 `#loading` 顶掉，业务「重试一次」的入口凭空消失，而这次重试其实一条命令都没发出去 |
-| `PanoramaStatus` 七态（运行期只有 `error` 被内部读） | `core/panorama/index.ts:34-50` | `BPanorama.vue` 公开 expose + 文档页列全 | `OWNED` + 已文档化 | **KEEP** | 外部消费者无法自证为零，故不在本票删除 |
+| `Map.vue:813-825` 的 `mountMap()` 前置检查（曾自陈「删掉整句，1799 条用例仍全绿」） | `components/map/Map.vue` | `ensureUsableRecheck` 的每帧复查 + `onContainerReady` | **已取证**：`ensureUsableRecheck` 每帧调 `mountMap()`，容器仍 0×0 时少了这句就会 `startBoot()` | **KEEP（#127 落地）** | **#127 选了 (a) 保留并补上能翻红的用例**：`v3-component-scenarios` 的「挂起的 retry 期间每帧复查不得启动 boot」—— 删掉该句实测变红（`expected 'creating' to be 'error'`）。它拦的不是「0×0 建图」（那由 `waitForUsableContainer()` 兜底），而是「启动一次注定被拦的 boot」：失败态下状态从 `error` 被推进到 `creating`，`#error` 插槽连同它的重试按钮被 `#loading` 顶掉，业务「重试一次」的入口凭空消失，而这次重试其实一条命令都没发出去 |
+| `PanoramaStatus` 七态（运行期只有 `error` 被内部读） | `core/panorama/index.ts:34-50` | `Panorama.vue` 公开 expose + 文档页列全 | `OWNED` + 已文档化 | **KEEP** | 外部消费者无法自证为零，故不在本票删除 |
 
 ## 5. Overlay / Layer / Control / Panorama 与 Capability Catalog
 
@@ -90,7 +90,7 @@
 | `useResolvedTarget`（含「找不到 TargetContext 就回落到 Map 的 add/remove」闭包）、`createStaticTarget`、`useOptionalTargetContext`、`useParentOverlayHandle` 里旧 `overlayContextKey` 那条读法 | 原 `core/context/target.ts` | 测试或 0（生产走 `useOverlaySpec` provide 的 `TargetContext`，旧臂在仓内不可达） | 为「可能有外部消费者」留的兼容面，且无任何文档承诺 | **REMOVE** | #104 R7：三个出口与旧读法全删，`overlayContextKey` 这个 InjectionKey 也随最后一个读写点消失；最近 TargetContext / 晚就绪的行为由 `tests/behavior/v3-overlay-spec.test.ts` 的 `TargetProbe` 继续钉住 |
 | `optionKey()` 对 `stableKeyOf` 的一行转发 | `core/controls/optionKey.ts:39` | 生产 | 命名转发，无逻辑 | **SIMPLIFY** | 后续票（同文件的 `optionSnapshot` / `changedOptionKeys` 是 #95 的真实修复，KEEP） |
 | `DataLayerOptions<Item>`（唯一成员 `minClusterSize` 全仓再无处出现，类也不接受该参数） | 原 `core/data/DataLayerManager.ts` | 0 | 幽灵字段 | **REMOVE** | #104 R8 |
-| `#101` 的 InfoWindow `openOutstanding` / `closeOutstanding` / `explicitClosePair` 一族 | `core/overlays/*`、`BInfoWindow.vue` | — | — | 不在本票 | #101 已在原 PR 内按 ownership/reconcile 方向纠正；本票只登记为「非目标」，避免以为还欠着 |
+| `#101` 的 InfoWindow `openOutstanding` / `closeOutstanding` / `explicitClosePair` 一族 | `core/overlays/*`、`InfoWindow.vue` | — | — | 不在本票 | #101 已在原 PR 内按 ownership/reconcile 方向纠正；本票只登记为「非目标」，避免以为还欠着 |
 
 ## 6. 无当前消费者的公共出口（#44 冻结前必须清）
 
@@ -100,10 +100,10 @@
 | `defineCapabilityOverride` | 原 `src/advanced.ts` | 0（含 docs / apps / fixtures / scripts） | **REMOVE** | #104 R3 |
 | `extractSdkEventNames` | 原 `core/events/EventBridge.ts` | 只有自身测试 | **REMOVE** | #104 R5 |
 | `shouldFullReplace` | 原 `core/data/diffData.ts` | 只有自身测试 | **REMOVE** | #104 R6 |
-| `useBMapServiceTask`（经 `export * from "./composables"` 外泄） | `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **SIMPLIFY** | 归 **#44**：要么给文档页要么从出口收窄 |
+| `useServiceTask`（经 `export * from "./composables"` 外泄） | `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **SIMPLIFY** | 归 **#44**：要么给文档页要么从出口收窄 |
 | `useMapResource` / `SdkResourceAdapter` / `UseMapResourceResult` | 原 `core/composables/useMapResource.ts`（`core/index.ts` 出口） | **生产 0**（只有它自己的单测） | 被同目录的 `useSdkResource` 取代——后者的文件头写着「替代行为各异的 `useMapResource` / `useOverlayResource` / `useControlResource` / `useLayerResource`」 | **REMOVE** | **第三批已落地**：文件与单测删除、三处出口名一并摘掉 |
-| `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | 归 **#44**：`./core` 出口收窄时一并决定（`useBMapServiceTask` / `MapRuntimeOptions.clientFactory` 等同类项也在那里） |
-| `BAutoComplete` 里按结构化成员探测 `disposeAutocomplete` 的分支（`as { disposeAutocomplete?: … }`，探测失败即**静默不释放**） | 原 `components/autocomplete/BAutoComplete.vue` 的 `disposeService()` | 0：#26 之后 `BMapEngine` 只有 `jsapi-v4` 一个成员，分支永不成立（注释自己写着「#26 删除 webgl-v1 后这个探测可以收成直接调用」） | **REMOVE** | #104 R11：改成 `jsapiV4ServicesOf(client).disposeAutocomplete(instance)`——按 ADR 2026-09-14 的口径走**可运行时检查**的收窄点，而不是组件里另写一份 `as`。留着的代价不只是死代码：那条静默分支正好会跳过 Driver 侧的订阅记账 |
+| `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | 归 **#44**：`./core` 出口收窄时一并决定（`useServiceTask` / `MapRuntimeOptions.clientFactory` 等同类项也在那里） |
+| `Autocomplete` 里按结构化成员探测 `disposeAutocomplete` 的分支（`as { disposeAutocomplete?: … }`，探测失败即**静默不释放**） | 原 `components/autocomplete/Autocomplete.vue` 的 `disposeService()` | 0：#26 之后 `BMapEngine` 只有 `jsapi-v4` 一个成员，分支永不成立（注释自己写着「#26 删除 webgl-v1 后这个探测可以收成直接调用」） | **REMOVE** | #104 R11：改成 `jsapiV4ServicesOf(client).disposeAutocomplete(instance)`——按 ADR 2026-09-14 的口径走**可运行时检查**的收窄点，而不是组件里另写一份 `as`。留着的代价不只是死代码：那条静默分支正好会跳过 Driver 侧的订阅记账 |
 
 ## 7. Fake 建模反向成为生产契约
 
@@ -141,7 +141,7 @@
 ## 本票的代码处置
 
 - **A1**：删除 `Autocomplete` 的程序化检索与归属层（Driver 侧约 640 行 + 类型面 + 出口 + 探针槽位 + 契约条目 + 归属类用例），Fake 侧同步删掉 `keyword`/`respond` 建模。
-- **A2**：`useBMapViewAnimation` 重写成公开面（`start` / `cancel` / `status` / `ready`），删除私有成员读写与 `setKeyFrames` 两段式。补上的首份行为用例（该 hook 原先零覆盖）另外暴露出两处既有缺陷：取消原先排在微任务里，而 `<BMap>` 在父组件 `onUnmounted` 销毁地图 ⇒ 每次卸载抛一个无人接收的 `BMAP_RESOURCE_DISPOSED`；监听释放原先共用一个槽位 ⇒ 被取代那段的 `animationcancel` 会摘掉新段的订阅并把状态写回 `idle`。两处都改为**每段自带现场 + 同步取消**。#105 评审第二、三、六轮又追出四处同源问题（详见第 2 节的动画各行）：归属被提前清掉（丢重试入口）、新段在起播被拒前就提交现场、卸载中取消失败打断钩子并留下订阅、以及把「收到 `animationcancel`」当成所有权交付的唯一凭据；现在分成**观察对象 / 订阅释放 / 是否仍需重试**三件事，收尾统一走带身份守卫的 `finishRun`，共补 12 条回归；为此给 `MapDriver` **新增**了 `cancelViewAnimation(map, animation)`（官方 `Map#cancelViewAnimation(viewAnimation)` 的形状），它随本票一起进 #44 的冻结面。
+- **A2**：`useViewAnimation` 重写成公开面（`start` / `cancel` / `status` / `ready`），删除私有成员读写与 `setKeyFrames` 两段式。补上的首份行为用例（该 hook 原先零覆盖）另外暴露出两处既有缺陷：取消原先排在微任务里，而 `<Map>` 在父组件 `onUnmounted` 销毁地图 ⇒ 每次卸载抛一个无人接收的 `BMAP_RESOURCE_DISPOSED`；监听释放原先共用一个槽位 ⇒ 被取代那段的 `animationcancel` 会摘掉新段的订阅并把状态写回 `idle`。两处都改为**每段自带现场 + 同步取消**。#105 评审第二、三、六轮又追出四处同源问题（详见第 2 节的动画各行）：归属被提前清掉（丢重试入口）、新段在起播被拒前就提交现场、卸载中取消失败打断钩子并留下订阅、以及把「收到 `animationcancel`」当成所有权交付的唯一凭据；现在分成**观察对象 / 订阅释放 / 是否仍需重试**三件事，收尾统一走带身份守卫的 `finishRun`，共补 12 条回归；为此给 `MapDriver` **新增**了 `cancelViewAnimation(map, animation)`（官方 `Map#cancelViewAnimation(viewAnimation)` 的形状），它随本票一起进 #44 的冻结面。
 - **A3**：删除 `useBMapTrackAnimation`（hook + 文档页 + 示例 + 行为用例 + 侧栏条目），并把「不向用户承诺该 hook」钉成一条审计用例。
 - **B1**：MapDriver 动画 teardown 判 **KEEP**；其两条前提原为 `FAKE-ONLY`，**第二批已用真实 AK 取证**
   并升级为 `PROBED`（ADR 注记 + 本表 F-1 + live gate `view-animation-cancel-window`）。
@@ -150,14 +150,14 @@
   冲突开关（`conflictPolicy` / `onConflict` / 两个类型）**REMOVE**、`resetProcessSdkRegistryForTests`
   **内部化**、`driver-contract` 的「dispose 幂等」注释与用例标题按 F-3 收窄；复核结论落成门禁
   `tests/behavior/v3-core-surface.test.ts`。详见文末「第三批」一节。
-- 文档纠偏：`AGENTS.md` 的归属约束与能力族清单（`Runtime` 已随 R10 删除）、`<BAutoComplete>` 组件页、`useBMapViewAnimation` 文档与示例、迁移对照表新增三行、`docs/zh-CN/components/map.md` 的 `status` 取值、六处 ADR 的 superseded / 复核指针、能力矩阵重生成。
+- 文档纠偏：`AGENTS.md` 的归属约束与能力族清单（`Runtime` 已随 R10 删除）、`<Autocomplete>` 组件页、`useViewAnimation` 文档与示例、迁移对照表新增三行、`docs/zh-CN/components/map.md` 的 `status` 取值、六处 ADR 的 superseded / 复核指针、能力矩阵重生成。
 
 **没有**为了本次审计新建任何通用 Runtime / 状态框架（验收项 4）。上表标 SIMPLIFY 而三批都未做的行，全部是「要连带改夹具或改公共出口」的一类：**第三批把其中「纯删就完事」的收掉了，剩下的逐条登记到 #44**（评论已留），需要独立决策 / 测试 / 取证的另开票（#126 / #127 / #128），都不混进本票以免评审分不清两件事。
 
 ## 第二批（2026-09-21，PR #122）：issue「实施步骤 4」的动画面
 
 issue 的实施顺序里第 4 步是「**MapDriver animation teardown**：在 2/3 收窄后重新评估，可删多少删多少，
-但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useBMapViewAnimation` /
+但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useViewAnimation` /
 `useBMapTrackAnimation`）都在第一批完成了。这一批做的正是第 4 步，顺序是**先取证再动手**：
 
 1. **F-1 取证**（真实 AK + headless Chromium，七条读数见上表）：两条前提成立，措辞需要精确化；
@@ -220,7 +220,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 **本批刻意不做的**（都写清去处，不留悬空）：
 
 - `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、单成员别名 `LoadedSdk`、
-  `client.version`、`optionKey()` 的一行转发、`useBMapServiceTask` 的根出口外泄、`UseSdkResourceOptions`
+  `client.version`、`optionKey()` 的一行转发、`useServiceTask` 的根出口外泄、`UseSdkResourceOptions`
   → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）；
 - 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision；**已落地**：
   删列 + reason 改名 `unlisted-capability`，见上表处置列与 ADR `2026-09-24-single-engine-capability-catalog`）；
@@ -239,7 +239,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 | ~~`BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档~~ | Test Debt | ~~#127~~ **已结清**：`mountMap()` 保留 + 补出能翻红的用例（删掉实测变红）；`expectation` 档删除 |
 | F-2 / F-3 / F-4 三条未取证的第三方语义 | Probe Debt | #128。**其中 F-2 是 issue 验收标准第 5 条点名的那一类例外**：`SharedLoadTask` 的进程级 `callbackRegistry`（全局名占用 / foreign 回调判定）是审计表里**唯一保留**的「恢复上游未公开身份」处，而该验收标准要求「若存在例外，必须逐项写明 live guarantee 与 gate」——现状只有「不进 Stable 承诺」这句措辞与一张 probe 票，**既没有 live guarantee 也没有 gate**。→ 这一条在 #104 的账面上**记为未满足**（不是「已登记即满足」）：#128 的第一次取证必须先给出 guarantee 措辞与可回归 gate，在给出之前它**不得**被 #44 冻结进 Stable 承诺 |
 | 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |
-| `useBMapServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | #44 |
+| `useServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | #44 |
 | `getProcessSdkRegistry(domain, options)` 的首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 都写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | 出口形状收窄 | #44（与上面 7 项同批；本批只登记，不顺手改签名） |
 | `#101` 的 InfoWindow `openOutstanding` 一族 | 非目标 | 已在 #101 原 PR 内按 ownership/reconcile 纠正 |
 | `DataLayerManager` / Native Layer 失败恢复的直接测试 | Test Debt | #113。前置已满足：本表第 4 节（generation / epoch stale guard）与第 5 节（`native-layers.ts` 的 `supports()` 刻意不采纳实测可用的成员）都判 **KEEP**，即那套机制属于「真实所有权复杂度」而不是要 SIMPLIFY 的镜像状态（注意：本表**没有**「失败恢复状态机」的专行，`#113` 正文里的「前置」指的是这两行） |

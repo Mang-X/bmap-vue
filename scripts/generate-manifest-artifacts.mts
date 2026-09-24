@@ -133,7 +133,7 @@ function jsonMatches(current: string, expected: Record<string, unknown>): boolea
  * manifest 的 `source`（`./components/<相对路径>`）→ `components/index.ts` 里的相对说明符。
  *
  * 曾经这里是一张**手写的 exportName → 路径**表，与 manifest 的 `source` 各自漂移：新增一个
- * 组件只改 manifest 时，生成出来的 import 会退化成 `./BNavigation` 这种不存在的路径
+ * 组件只改 manifest 时，生成出来的 import 会退化成 `./NavigationControl` 这种不存在的路径
  * （M7-CONTROL-PANORAMA / #41 实测），而且失败发生在**测试运行时**而不是生成时。
  * 现在路径只有一个事实源（manifest 的 `source`），本函数只做前缀剥离。
  *

@@ -6,12 +6,12 @@ describe("BMapError", () => {
     const err = new BMapError("BMAP_SDK_LOAD_FAILED", "load failed", {
       cause: new Error("network"),
       mapId: Symbol("m1"),
-      component: "BMap",
+      component: "Map",
     });
     expect(err.name).toBe("BMapError");
     expect(err.code).toBe("BMAP_SDK_LOAD_FAILED");
     expect(err.retryable).toBe(true);
-    expect(err.component).toBe("BMap");
+    expect(err.component).toBe("Map");
     expect(err.toJSON().mapId).toBeDefined();
   });
 

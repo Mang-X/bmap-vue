@@ -1,6 +1,6 @@
 <template>
-  <BMap v-bind="$attrs" enableScrollWheelZoom>
-    <BPanoramaControl />
-    <BPanoramaCoverageLayer />
-  </BMap>
+  <Map v-bind="$attrs" enableScrollWheelZoom>
+    <PanoramaControl />
+    <PanoramaCoverageLayer />
+  </Map>
 </template>

@@ -5,7 +5,7 @@ title: useControllableState
 # useControllableState 受控 / 非受控状态
 
 把一个字段的**受控值 / 非受控初值 / 库默认值**三种来源收成同一套规则，供组件与业务侧复用。
-`<BMap>` 的 `center` / `zoom` / `heading` / `tilt` 就是用它实现的（规则与状态表见
+`<Map>` 的 `center` / `zoom` / `heading` / `tilt` 就是用它实现的（规则与状态表见
 [Map 地图](../components/map) 的「受控 / 非受控视野」一节）。
 
 ```ts

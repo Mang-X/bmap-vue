@@ -1,9 +1,9 @@
-# BDOMLayer DOM 图层 <Badge type="tip" text="^1.0.0" />
+# DOMLayer DOM 图层 <Badge type="tip" text="^1.0.0" />
 
 用回调创建自定义 DOM 覆盖物。`createDom` 对应官方构造签名的第一个参数 `createDOM`。
 
 ```ts
-import { BDOMLayer } from 'bmap-vue'
+import { DOMLayer } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -41,7 +41,7 @@ layer/domLayer
 
 官方 4.0.4 的 `DOMLayer` 只声明了 `addEventListener`、**没有** `removeEventListener`，而本库的
 事件订阅要求两者同时存在才生效（缺一个就告警 + no-op）—— 也就是说这类订阅**绑上就解不掉**。
-官方技能文档把「在短生命周期组件注册 DOMLayer 事件」列为常见错误。因此 `BDOMLayer` **没有**
+官方技能文档把「在短生命周期组件注册 DOMLayer 事件」列为常见错误。因此 `DOMLayer` **没有**
 `@click` / `@mouseover` / `@mouseout`：与其公开一个真实契约下收不到的事件，不如不提供。
 
 需要交互时：

@@ -1,5 +1,5 @@
 /**
- * useContextMenu —— `<BContextMenu>` 的生命周期内核（M5-CUSTOM-MENU / issue #33）
+ * useContextMenu —— `<ContextMenu>` 的生命周期内核（M5-CUSTOM-MENU / issue #33）
  *
  * ## 它拥有什么、不拥有什么（ownership-first）
  *
@@ -29,13 +29,13 @@
  *
  * | 最近的 `TargetContext` | 结果 |
  * | --- | --- |
- * | `kind: "map"`（`<BMap>` 自己 provide 的那个） | 挂到地图 |
- * | `kind: "marker"`（写在 `<BMarker>` 里） | 挂到该标注 |
+ * | `kind: "map"`（`<Map>` 自己 provide 的那个） | 挂到地图 |
+ * | `kind: "marker"`（写在 `<Marker>` 里） | 挂到该标注 |
  * | 其它 kind（`overlay` / `clusterer` / …） | **显式失败**（`driver.overlays.attachContextMenu` 也拒绝，两层一致） |
  * | 一个都没有 | 回退到地图 |
  *
- * 「一个都没有」这一档只在 `<BMap>` 之外成立——`<BMap>` 子树里总有它自己的地图 target，因此
- * **不提供 `TargetContext` 的组件**（`BMapMask` / `BMarker3d` 这类）不会被当成目标，其下的菜单
+ * 「一个都没有」这一档只在 `<Map>` 之外成立——`<Map>` 子树里总有它自己的地图 target，因此
+ * **不提供 `TargetContext` 的组件**（`MapMask` / `Marker3D` 这类）不会被当成目标，其下的菜单
  * 等价于挂在地图级。⚠️ 这条口径在合并 #105 时改过一次：此前判据依赖 `overlayContextKey`，
  * 而 #104 审计把那个 key 整条删了（「不恢复上游没公开的身份」方向的同一件事），于是本层不再
  * 试图区分「父链上有旧层覆盖物」——没有契约可依据时就不猜（改法与理由见 ADR 的评审修正一节）。
@@ -63,7 +63,7 @@ import {
 } from "../overlays/ContextMenuSpec";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
 import type { OverlayTarget } from "../../driver/types/overlays";
-import type { BContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
+import type { ContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
 import type { Pixel, Point } from "../../driver/types/geometry";
 
 export interface UseContextMenuOptions {
@@ -77,7 +77,7 @@ export interface UseContextMenuResult {
   /**
    * 声明式 children 的渲染宿主（detached `<div>`，永不在文档里）。
    *
-   * 组件把它当 `<Teleport :to>` 的目标：`<BMenuItem>` 们因此能挂载（从而登记自己）却不出现在
+   * 组件把它当 `<Teleport :to>` 的目标：`<MenuItem>` 们因此能挂载（从而登记自己）却不出现在
    * 地图容器的 DOM 里。SSR 下为 `null`（没有 `document`），子组件不渲染。
    *
    * 只返回它：注册表由本层 `provide` 给子组件（不需要经返回值），实例 / 状态 / 错误由组件
@@ -103,7 +103,7 @@ type TargetPlan =
 type DynamicEmit = (name: string, payload: unknown) => void;
 
 export function useContextMenu(
-  props: Readonly<BContextMenuProps>,
+  props: Readonly<ContextMenuProps>,
   options: UseContextMenuOptions,
 ): UseContextMenuResult {
   const mapContext = useRequiredMapContext();
@@ -121,7 +121,7 @@ export function useContextMenu(
    * 声明式 children 的渲染宿主，**setup 期**就创建。
    *
    * 与 `useCustomOverlay` 的「第一次 create 才创建宿主」不同，这是**刻意的**：那边宿主只交给 SDK、
-   * 不必在首次渲染前存在；这边它是 `<Teleport :to>` 的目标，而 `<BMenuItem>` 要在**首次渲染**时
+   * 不必在首次渲染前存在；这边它是 `<Teleport :to>` 的目标，而 `<MenuItem>` 要在**首次渲染**时
    * 就挂载（从而登记自己），因此必须提前可用。
    *
    * SSR 安全靠同一句 `typeof document === "undefined"` 守卫：真服务端没有 `document` ⇒ `null` ⇒
@@ -266,7 +266,7 @@ export function useContextMenu(
   function unsupportedTargetError(targetKind: string): BMapError {
     return new BMapError(
       "BMAP_CAPABILITY_UNSUPPORTED",
-      `BContextMenu: 无法把菜单挂到 ${targetKind} 目标上；` +
+      `ContextMenu: 无法把菜单挂到 ${targetKind} 目标上；` +
         "JSAPI 4.0 的右键菜单只有 map 与 marker 两个实测入口" +
         "（旧层覆盖物不提供 TargetContext，其下的菜单没有可挂的目标）",
       { engine: "jsapi-v4" },
@@ -329,7 +329,7 @@ export function useContextMenu(
       );
     } catch (error) {
       logger.warn(
-        `BContextMenu: 从 ${current.kind} 目标上摘除菜单失败（目标可能已被重建或销毁）: ${
+        `ContextMenu: 从 ${current.kind} 目标上摘除菜单失败（目标可能已被重建或销毁）: ${
           (error as Error)?.message ?? String(error)
         }`,
       );
@@ -403,7 +403,7 @@ export function useContextMenu(
   /**
    * 合帧的重建。
    *
-   * 必须等 `nextTick`：`<BMenuItem>` 的挂载 / 卸载发生在 patch 期间，而占位元素的最终顺序要等 patch
+   * 必须等 `nextTick`：`<MenuItem>` 的挂载 / 卸载发生在 patch 期间，而占位元素的最终顺序要等 patch
    * 结束才可读。没有存活实例时**不做**（第一次 `create` 会读到最新的条目，无需空转一次）。
    */
   function scheduleRebuild(

@@ -1,5 +1,5 @@
 /**
- * BRectangle 的 `OverlaySpec` 声明（M5-VECTORS / issue #31：v4 新增的矩形覆盖物）
+ * Rectangle 的 `OverlaySpec` 声明（M5-VECTORS / issue #31：v4 新增的矩形覆盖物）
  *
  * ## 每个公开属性的更新策略
  *
@@ -19,7 +19,7 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
-import type { BRectangleProps } from "../../types/components";
+import type { RectangleProps } from "../../types/components";
 import {
   PATH_CLICKING_FIELD,
   PATH_FILL_FIELDS,
@@ -29,7 +29,7 @@ import {
   VISIBILITY_FIELD,
 } from "./overlayFields";
 
-export const RECTANGLE_FIELDS: OverlayFieldMap<BRectangleProps> = {
+export const RECTANGLE_FIELDS: OverlayFieldMap<RectangleProps> = {
   bounds: "options",
   ...PATH_STROKE_FIELDS,
   ...PATH_FILL_FIELDS,
@@ -43,7 +43,7 @@ export const RECTANGLE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createRectangleSpec(): OverlaySpec<BRectangleProps, OverlayHandle> {
+export function createRectangleSpec(): OverlaySpec<RectangleProps, OverlayHandle> {
   return {
     type: "rectangle",
     kind: "rectangle",

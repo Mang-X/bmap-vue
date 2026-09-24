@@ -3,7 +3,7 @@
  *
  * `PluginRegistry` 那一层已经有用例证明「optional 插件失败只发事件、不抛」。组件层还要钉三件事：
  *
- * 1. **失败不得阻断地图** —— `BMap.vue` 的承诺是「ready 不等插件」（`loadPluginsInBackground`）；
+ * 1. **失败不得阻断地图** —— `Map.vue` 的承诺是「ready 不等插件」（`loadPluginsInBackground`）；
  * 2. **失败不得被回执成成功** —— 对 optional 插件，注册表在失败时是以 `null` **resolve** 的
  *    （`PluginRegistry.loadPlugin`），所以 `await` 拿到返回值**不等于**成功；
  * 3. **但 `null` 之外的值也不等于失败**（评审 #85 P1-2 抓到的反向错误）—— 只注入副作用、不产出
@@ -37,7 +37,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import { disposeDefaultPluginHost } from "../../packages/bmap-vue/src/core/plugins/PluginHost";
 import { BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS } from "../../packages/bmap-vue/src/plugins/builtins";
@@ -103,11 +103,11 @@ function hangThirdPartyScripts(): void {
 function mountMap(plugins: string[]) {
   const wrapper = mount(
     defineComponent({
-      render: () => h(BMap, { plugins, provider: makeGlobalProvider() } as never),
+      render: () => h(Map, { plugins, provider: makeGlobalProvider() } as never),
     }),
     { attachTo: createHost() },
   );
-  const inner = wrapper.findComponent(BMap);
+  const inner = wrapper.findComponent(Map);
   return {
     wrapper,
     readyEvents: () => inner.emitted("ready") ?? [],

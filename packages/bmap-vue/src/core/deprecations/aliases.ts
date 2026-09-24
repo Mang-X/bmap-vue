@@ -1,8 +1,8 @@
 /**
  * 集中弃用别名表（M5-VECTORS / issue #31）
  *
- * 迁移前「兼容旧名字」是散在各组件里的一行行手写代码：`BMarker` 的
- * `deps.emit("drag-end", event)` 与 `BInfoWindow` 里手写的 `show` 告警都是同类
+ * 迁移前「兼容旧名字」是散在各组件里的一行行手写代码：`Marker` 的
+ * `deps.emit("drag-end", event)` 与 `InfoWindow` 里手写的 `show` 告警都是同类
  * （#31 收掉前者、#32 收掉后者，两边现在都只读本表）。
  * 那种写法有三个必然的后果：**没有稳定 code**（无法在文档/日志里指认）、
  * **没有统一文案**、**没有人负责去重**（同一次会话里同一个警告刷屏）。
@@ -76,8 +76,8 @@ export interface OverlayEventAlias {
 }
 
 /**
- * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）、`BInfoWindow` 的 `show`
- * （v3 起用唯一的打开主状态 `open`），以及 `BContextMenu` 的 `menuItems`（#33 起用 `items`）。
+ * prop 别名表：GroundOverlay 的角点组合（v3 起用 `bounds`）、`InfoWindow` 的 `show`
+ * （v3 起用唯一的打开主状态 `open`），以及 `ContextMenu` 的 `menuItems`（#33 起用 `items`）。
  * 承载的是已发布过的 prop 名，删掉会让老代码静默失效。
  *
  * 消费者是 `useOverlaySpec`、`useContextMenu` 与 `useInfoWindow`（信息窗不走 `OverlaySpec`），

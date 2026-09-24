@@ -6,11 +6,11 @@
  *
  * - 查看器有自己的容器，创建在**独立 DOM** 上（`new BMap.Panorama(container)`），既不挂在
  *   Map 上、也不受地图的 ready / retry / 暂停策略管辖；
- * - 把两者合成一个 context 会让「在 `<BMap>` 子树里放一个 `<BPanorama>`」这种合法而常见的
+ * - 把两者合成一个 context 会让「在 `<Map>` 子树里放一个 `<Panorama>`」这种合法而常见的
  *   组合出现两个互相矛盾的 `whenReady()`（一个等地图、一个等查看器）。
  *
- * 因此 `BPanorama` 提供一个**独立**的 `PanoramaContext`：`<BPanoramaLabel>` 从它拿查看器，
- * 组件可以从 `<BMap>` 或 `<BMapProvider>` 子树里取 Client —— 全景只依赖 Client，不需要地图。
+ * 因此 `Panorama` 提供一个**独立**的 `PanoramaContext`：`<PanoramaLabel>` 从它拿查看器，
+ * 组件可以从 `<Map>` 或 `<BMapProvider>` 子树里取 Client —— 全景只依赖 Client，不需要地图。
  *
  * 两处收窄与所有权：
  * - `BMapDriver.panorama` 是共享面（只有 `supported`），占位/投影面按 `#23` 的分层决策只挂在
@@ -82,7 +82,7 @@ export function jsapiV4PanoramaOf(client: BMapClient): PanoramaViewerDriver {
     throw new BMapError(
       "BMAP_CAPABILITY_UNSUPPORTED",
       `当前 engine(${client.engine}) 的 Driver 没有全景查看器面：` +
-        "`<BPanorama>` 依赖 `PanoramaViewerDriver`（JSAPI 4.0 Driver 提供）",
+        "`<Panorama>` 依赖 `PanoramaViewerDriver`（JSAPI 4.0 Driver 提供）",
       { engine: client.engine },
     );
   }
@@ -96,10 +96,10 @@ function toBMapError(error: unknown, code: "BMAP_RESOURCE_CREATE_FAILED" | "BMAP
 }
 
 /**
- * 创建 `PanoramaContext`。**由 `BPanorama` 在 setup 里调用并提供给子树**；其它组件用
+ * 创建 `PanoramaContext`。**由 `Panorama` 在 setup 里调用并提供给子树**；其它组件用
  * `useOptionalPanoramaContext()` / `useRequiredPanoramaContext()` 取。
  *
- * `mapContext` 只是**取 Client 的通道**（`resolveMapContext()` 的结果：`<BMap>` 子树里是地图
+ * `mapContext` 只是**取 Client 的通道**（`resolveMapContext()` 的结果：`<Map>` 子树里是地图
  * context，`<BMapProvider>` 子树里是 client-only 适配器）。全景不读它的 `map`。
  */
 export function createPanoramaContext(input: { mapContext: MapContext }): PanoramaContext {
@@ -247,7 +247,7 @@ export function createPanoramaContext(input: { mapContext: MapContext }): Panora
         // 的真实 AK smoke 记录）。组件卸载路径**不能**因此抛错——那只会在 Vue 的卸载流程里
         // 制造一个没人处理的异常。这里告警一次：诊断可见，卸载继续。
         logger.warn(
-          "BPanorama 销毁查看器失败（未加载场景的实例在官方 4.0 上会抛错；组件仍会释放本库资源）：" +
+          "Panorama 销毁查看器失败（未加载场景的实例在官方 4.0 上会抛错；组件仍会释放本库资源）：" +
             `${(caught as Error)?.message ?? String(caught)}`,
         );
       }
@@ -275,7 +275,7 @@ export function useRequiredPanoramaContext(): PanoramaContext {
   if (!context) {
     throw new BMapError(
       "BMAP_PARENT_CONTEXT_MISSING",
-      "Component must be a descendant of <BPanorama>.",
+      "Component must be a descendant of <Panorama>.",
     );
   }
   return context;

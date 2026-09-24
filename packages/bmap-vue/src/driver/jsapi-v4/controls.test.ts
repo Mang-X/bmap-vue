@@ -131,7 +131,7 @@ describe("内置控件的创建与构造参数映射", () => {
 /* 2. 自定义控件                                                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("自定义控件（BControl 的 Driver 侧）", () => {
+describe("自定义控件（CustomControl 的 Driver 侧）", () => {
   it("defaultAnchor / defaultOffset 用 4.0 取值，initialize 拿到地图容器", () => {
     const rendered: HTMLElement[] = [];
     const handle = ctx.controls.createCustomControl({
@@ -541,17 +541,17 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
    * 空循环「通过」（恒真的空转）。因此断言前先要求解析出的 prop 里包含 `anchor`。
    */
   const CONTROL_COMPONENTS: ReadonlyArray<readonly [string, string, ControlKind]> = [
-    ["controls", "BZoom.vue", "zoom"],
-    ["controls", "BScale.vue", "scale"],
-    ["controls", "BNavigation.vue", "navigation"],
-    ["controls", "BNavigation3d.vue", "navigation-3d"],
-    ["controls", "BCityList.vue", "city-list"],
-    ["controls", "BLocation.vue", "location"],
-    ["controls", "BMapType.vue", "map-type"],
-    ["controls", "BOverview.vue", "overview"],
-    ["controls", "BPanoramaControl.vue", "panorama"],
-    ["controls", "BCopyright.vue", "copyright"],
-    ["controls", "BControl.vue", "custom"],
+    ["controls", "ZoomControl.vue", "zoom"],
+    ["controls", "ScaleControl.vue", "scale"],
+    ["controls", "NavigationControl.vue", "navigation"],
+    ["controls", "NavigationControl3D.vue", "navigation-3d"],
+    ["controls", "CityListControl.vue", "city-list"],
+    ["controls", "LocationControl.vue", "location"],
+    ["controls", "MapTypeControl.vue", "map-type"],
+    ["controls", "OverviewMapControl.vue", "overview"],
+    ["controls", "PanoramaControl.vue", "panorama"],
+    ["controls", "CopyrightControl.vue", "copyright"],
+    ["controls", "CustomControl.vue", "custom"],
   ];
 
   /** 全部控件共有的 props（`anchor` / `offset` / `visible`），不算「控件专属选项」。 */
@@ -586,17 +586,17 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
   it("解析出的组件选项 prop 清单确实覆盖了三个新组件的可更新 / 构造期项（防空转）", () => {
     // 这条是上一条的**正证**：如果 `componentPropNames` 哪天退化成只读 `anchor`，
     // 上一条会静默通过——所以这里点名校验几个已知的选项 prop。
-    expect(componentPropNames("controls", "BMapType.vue")).toEqual(
+    expect(componentPropNames("controls", "MapTypeControl.vue")).toEqual(
       expect.arrayContaining(["type", "mapTypes", "showStreetLayer"]),
     );
-    expect(componentPropNames("controls", "BOverview.vue")).toEqual(
+    expect(componentPropNames("controls", "OverviewMapControl.vue")).toEqual(
       expect.arrayContaining(["size", "isOpen", "zoomInterval", "padding"]),
     );
-    expect(componentPropNames("controls", "BNavigation.vue")).toEqual(
+    expect(componentPropNames("controls", "NavigationControl.vue")).toEqual(
       expect.arrayContaining(["type", "showZoomInfo", "enableGeolocation"]),
     );
     // 全景组件的选项（`displayDistance` 只有构造期生效）也在解析范围内
-    expect(componentPropNames("panorama", "BPanoramaLabel.vue")).toEqual(
+    expect(componentPropNames("panorama", "PanoramaLabel.vue")).toEqual(
       expect.arrayContaining(["content", "position", "altitude", "displayDistance"]),
     );
   });

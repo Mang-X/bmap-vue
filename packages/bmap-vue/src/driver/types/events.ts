@@ -102,7 +102,7 @@ export interface MapTypeChangeEvent extends DriverEvent {
  *
  * 哪些事件属于哪一档由 `core/overlays/overlayEventCatalog.ts` 的矩阵声明（单一事实源），
  * 由 `driver/jsapi-v4/events.ts` 在**订阅时**按目标句柄的种类翻译成归一化策略。
- * 这份契约与 `<BMap>` 的 map 事件共用同一套 `DriverEvent` 底座：字段名不因目标而变。
+ * 这份契约与 `<Map>` 的 map 事件共用同一套 `DriverEvent` 底座：字段名不因目标而变。
  */
 
 /** 覆盖物事件的公共底座：Driver 归一化后的领域事件 + **恒有的 `type`**（订阅名）。 */

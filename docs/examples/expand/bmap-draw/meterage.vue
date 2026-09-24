@@ -8,7 +8,7 @@
       测量面积
     </button>
     <button class="myButton" type="button" v-else @click="measure.toggle">取消测量面积</button>
-    <BMap
+    <Map
       v-bind="$attrs"
       :center="{ lng: 116.385243, lat: 39.913063 }"
       :zoom="13.5"

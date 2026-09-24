@@ -1,7 +1,7 @@
 /**
  * 聚合引擎的**内部契约**（M6-POINT-CLUSTER / issue #35）
  *
- * `BMarkerCluster` 有两个引擎，它们的资源形态完全不同：
+ * `MarkerCluster` 有两个引擎，它们的资源形态完全不同：
  *
  * | 引擎 | 落地成什么 | 说明 |
  * | --- | --- | --- |
@@ -13,7 +13,7 @@
  * 生命周期内**换掉整个引擎**（旧引擎先释放、新引擎再挂载），而 `onMounted` / `onUnmounted`
  * 这类钩子做不到「中途停掉一个」。SFC 只负责「等待地图就绪 → 选引擎 → 把 props 变化分发下去」。
  */
-import type { BMapClusterChange, BMapClusterPick, BMarkerClusterEngine } from "../../types/components";
+import type { ClusterChange, ClusterPick, MarkerClusterEngine } from "../../types/components";
 import type { MapReadyContext } from "../../core/context/types";
 import type { PointLike } from "../../core/data/points";
 
@@ -25,7 +25,7 @@ export interface ClusterReadout<Item> {
   readonly size: number;
   /** 簇位置。 */
   readonly position: PointLike;
-  /** 簇内业务项；该引擎拿不到时为 `null`（见 `BMapClusterPick.items`）。 */
+  /** 簇内业务项；该引擎拿不到时为 `null`（见 `ClusterPick.items`）。 */
   readonly items: Item[] | null;
 }
 
@@ -69,7 +69,7 @@ export interface ClusterChangeReadout {
  * （`BMAP_CAPABILITY_UNSUPPORTED` 是预期内的失败），这条路径必须只有一个出口。
  */
 export interface ClusterEngine<Item> {
-  readonly kind: BMarkerClusterEngine;
+  readonly kind: MarkerClusterEngine;
   /** 建立资源（创建 + 挂载 + 首次交付数据）。 */
   mount(): void;
   /** props 变化后的收敛（数据 / 聚合参数 / 可见性）。 */
@@ -95,9 +95,9 @@ export interface ClusterEngine<Item> {
 
 /** 供两个引擎共用的「载荷组装」——两种引擎的 `cluster-click` 只有 `items` 一项不同。 */
 export function toClusterPick<Item>(
-  engine: BMarkerClusterEngine,
+  engine: MarkerClusterEngine,
   readout: ClusterReadout<Item>,
-): BMapClusterPick<Item> {
+): ClusterPick<Item> {
   return {
     engine,
     id: readout.id,
@@ -109,8 +109,8 @@ export function toClusterPick<Item>(
 
 /** 同上的「聚合结果」投影（`cluster-change` 的载荷）。 */
 export function toClusterChange(
-  engine: BMarkerClusterEngine,
+  engine: MarkerClusterEngine,
   readout: ClusterChangeReadout,
-): BMapClusterChange {
+): ClusterChange {
   return { engine, clusters: readout.clusters, singles: readout.singles, zoom: readout.zoom };
 }

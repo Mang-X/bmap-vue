@@ -1,9 +1,9 @@
-# BCircle 圆形
+# Circle 圆形
 
 在地图上绘制简单的圆形
 
 ```ts
-import { BCircle } from 'bmap-vue'
+import { Circle } from 'bmap-vue'
 ```
 
 ## 组件示例

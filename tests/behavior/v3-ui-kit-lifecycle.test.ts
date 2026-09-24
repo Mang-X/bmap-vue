@@ -13,8 +13,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createSSRApp, h, provide } from "vue";
 import { renderToString } from "vue/server-renderer";
-import BPlaceAutocomplete from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceAutocomplete.vue";
-import BPlaceSearch from "../../packages/bmap-vue/src/integrations/ui-kit/components/BPlaceSearch.vue";
+import PlaceAutocomplete from "../../packages/bmap-vue/src/integrations/ui-kit/components/PlaceAutocomplete.vue";
+import PlaceSearch from "../../packages/bmap-vue/src/integrations/ui-kit/components/PlaceSearch.vue";
 import {
   createFakeMapHarness,
   createFakeUiKit,
@@ -83,7 +83,7 @@ function readyHarness(label = "map-a"): { harness: FakeMapHarness; handle: unkno
 describe("UI Kit 组件的构造与释放", () => {
   it("Map ready 后构造：宿主拿到 widget、构造选项带上 raw map、事件按契约绑定", async () => {
     const { harness } = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     expect(fake.stats.created).toBe(1);
@@ -102,7 +102,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("卸载：先逐条解绑事件、再 destroy，宿主 DOM 被撤走", async () => {
     const { harness } = readyHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     const widget = fake.instances[0]!;
@@ -127,7 +127,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("Map ready 之前卸载：不构造、不报错", async () => {
     const harness = createFakeMapHarness();
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     // 先确认流程真的停在 whenReady（否则本用例什么都证明不了）。
@@ -149,7 +149,7 @@ describe("UI Kit 组件的构造与释放", () => {
     // 控制组：同样的准备，只是不卸载 —— 证明「构造确实会发生」，被测组才不是空转。
     {
       const { harness } = readyHarness("control");
-      const control = mountInMap(BPlaceAutocomplete, harness, {});
+      const control = mountInMap(PlaceAutocomplete, harness, {});
       await flushPromises();
       expect(fake.stats.created).toBe(1);
       control.unmount();
@@ -159,7 +159,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
     // 被测组：mount 之后立刻卸载；此时流程正停在 `await loadUiKit()`。
     const { harness } = readyHarness("late-unmount");
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     mounted.unmount();
     await flushPromises();
 
@@ -170,7 +170,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("换 Map：旧 widget 先释放，新 widget 拿到新的 raw map", async () => {
     const { harness } = readyHarness("map-a");
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
 
     expect(fake.stats.created).toBe(1);
@@ -198,7 +198,7 @@ describe("UI Kit 组件的构造与释放", () => {
   it("路由重复进入（连续挂载 / 卸载 5 轮）：计数守恒，不留残骸", async () => {
     const { harness } = readyHarness();
     for (let round = 0; round < 5; round += 1) {
-      const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+      const mounted = mountInMap(PlaceAutocomplete, harness, {});
       await flushPromises();
       expect(mounted.host.querySelector(".fake-ui-kit-widget")).not.toBeNull();
       mounted.unmount();
@@ -221,8 +221,8 @@ describe("UI Kit 组件的构造与释放", () => {
   it("多地图：各自一个 widget，卸载其中一个不牵连另一个", async () => {
     const first = readyHarness("map-1");
     const second = readyHarness("map-2");
-    const one = mountInMap(BPlaceAutocomplete, first.harness, {});
-    const two = mountInMap(BPlaceAutocomplete, second.harness, {});
+    const one = mountInMap(PlaceAutocomplete, first.harness, {});
+    const two = mountInMap(PlaceAutocomplete, second.harness, {});
     await flushPromises();
 
     expect(fake.stats.created).toBe(2);
@@ -266,7 +266,7 @@ describe("UI Kit 组件的构造与释放", () => {
       return widget;
     } as unknown as typeof fake.module.PlaceAutocomplete;
 
-    const mounted = mountInMap(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap(PlaceAutocomplete, harness, {});
     await flushPromises();
 
     const instance = fake.instances[0]!;
@@ -294,7 +294,7 @@ describe("UI Kit 组件的构造与释放", () => {
       throw new Error("widget ctor boom");
     };
     const { harness } = readyHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
 
     expect(fake.stats.created).toBe(0);
@@ -302,7 +302,7 @@ describe("UI Kit 组件的构造与释放", () => {
     expect(api.status).toBe("error");
     expect(harness.resourceErrors).toHaveLength(1);
     const payload = harness.resourceErrors[0] as { component: string; error: { code: string; message: string } };
-    expect(payload.component).toBe("BPlaceSearch");
+    expect(payload.component).toBe("PlaceSearch");
     expect(payload.error.code).toBe("BMAP_RESOURCE_CREATE_FAILED");
     expect(payload.error.message).toContain("widget ctor boom");
     // `resource:error` 的载荷与动作 reject 的必须是同一条错误（否则排查要重新拼线索）。
@@ -317,7 +317,7 @@ describe("UI Kit 组件的构造与释放", () => {
       createSSRApp({
         setup() {
           provide(mapContextKey, harness.context);
-          return () => h(BPlaceAutocomplete, {});
+          return () => h(PlaceAutocomplete, {});
         },
       });
 
@@ -348,7 +348,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("未就绪时动作等待就绪；已卸载时动作明确拒绝", async () => {
     const harness = createFakeMapHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, {});
+    const mounted = mountInMap(PlaceSearch, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as SearchApi;
 
@@ -376,7 +376,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("location 由有值变回未设置：按构造期输入变化重建，不去猜 setLocation 的清除语义", async () => {
     const { harness } = readyHarness();
-    const mounted = mountInMap<{ location?: string }>(BPlaceAutocomplete, harness, {
+    const mounted = mountInMap<{ location?: string }>(PlaceAutocomplete, harness, {
       location: "北京",
     });
     await flushPromises();
@@ -401,9 +401,9 @@ describe("UI Kit 组件的构造与释放", () => {
     expect(fake.stats.offCount).toBe(fake.stats.onCount);
   });
 
-  it("BPlaceSearch：构造期选项变更同样重建（不静默保留旧值）", async () => {
+  it("PlaceSearch：构造期选项变更同样重建（不静默保留旧值）", async () => {
     const { harness } = readyHarness();
-    const mounted = mountInMap(BPlaceSearch, harness, { pageCapacity: 10 });
+    const mounted = mountInMap(PlaceSearch, harness, { pageCapacity: 10 });
     await flushPromises();
     const first = fake.instances[0]!;
     expect(first.options.pageCapacity).toBe(10);
@@ -424,7 +424,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("location 由未设置变有值：走已验证的 setLocation，不重建（不吃掉用户可见状态）", async () => {
     const { harness } = readyHarness();
-    const mounted = mountInMap<{ location?: string }>(BPlaceAutocomplete, harness, {});
+    const mounted = mountInMap<{ location?: string }>(PlaceAutocomplete, harness, {});
     await flushPromises();
     const widget = fake.instances[0]!;
     expect("location" in widget.options).toBe(false);
@@ -444,7 +444,7 @@ describe("UI Kit 组件的构造与释放", () => {
 
   it("地图就绪前连续变更构造期输入：不累积等待者，只保留最后一次的 widget", async () => {
     const harness = createFakeMapHarness();
-    const mounted = mountInMap<{ placeholder?: string }>(BPlaceAutocomplete, harness, {
+    const mounted = mountInMap<{ placeholder?: string }>(PlaceAutocomplete, harness, {
       placeholder: "a",
     });
     await flushPromises();

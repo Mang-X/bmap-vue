@@ -245,7 +245,7 @@
 上游把这两条声明在 `context-menu/ContextMenu.d.ts`，载荷 `ContextMenuEvent` 的
 `point` / `pixel` 都是 `Point | null`——因此它们属于「坐标可缺」那一档，**不补** `(0,0)`。
 菜单项的**选中**不是 SDK 事件（由 `MenuItem` 的构造回调给出），因此不在这张表里：
-`<BContextMenu @select>` 与 `<BMenuItem @select>` 是本库在自己的回调里派发的。
+`<ContextMenu @select>` 与 `<MenuItem @select>` 是本库在自己的回调里派发的。
 
 ## 上游没有事件表的种类
 

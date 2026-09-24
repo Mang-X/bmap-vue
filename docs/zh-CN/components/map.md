@@ -7,7 +7,7 @@ title: Map 地图
 地图核心对象，地图控件、覆盖物、图层等需作为其子组件，以获得 map 的实例化对象
 
 ```ts
-import { BMap } from 'bmap-vue'
+import { Map } from 'bmap-vue'
 ```
 
 ## 渲染地图
@@ -50,7 +50,7 @@ map/theme2
 
 ## 自定义地图加载中
 
-在 `status !== 'ready'` 且 `status !== 'error'` 时，`<BMap>` 会渲染 `loading` 具名插槽
+在 `status !== 'ready'` 且 `status !== 'error'` 时，`<Map>` 会渲染 `loading` 具名插槽
 （不提供时是居中灰字）：
 
 - **容器还没有拿到非零尺寸**（未展开的 Tab / Drawer / 折叠面板）：`waiting for container size...`
@@ -65,14 +65,14 @@ map/theme2
 <!-- prettier-ignore -->
 ```html
 <template>
-  <BMap ak="百度地图ak">
+  <Map ak="百度地图ak">
     <template #loading>
       <div class="spinner">
         <div class="double-bounce1"></div>
         <div class="double-bounce2"></div>
       </div>
     </template>
-  </BMap>
+  </Map>
 </template>
 
 <style lang="css">
@@ -184,7 +184,7 @@ map/theme2
 | displayOptions         | 自定义地图属性 [详见](#displayoptions)                                                                                                                                         | -                                     | -                 | -                                  |
 | mapStyleId             | 个性化地图样式 ID [详见](#个性化地图)                                                                                                                                          | `string`                              | -                 | -                                  |
 | mapStyleJson           | 个性化地图样式 Json [详见](#个性化地图)                                                                                                                                        | `{featureType: string...}[]`          | -                 | -                                  |
-| enableTraffic          | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `BTrafficLayer`，见「[图层总览](./layer/index.md)」）                                                                                                                                                           | `boolean`                             | `false`           | -                                  |
+| enableTraffic          | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `TrafficLayer`，见「[图层总览](./layer/index.md)」）                                                                                                                                                           | `boolean`                             | `false`           | -                                  |
 | enableDragging         | 启用地图拖拽                                                                                                                                                                   | `boolean`                             | `true`            | -                                  |
 | enableInertialDragging | 启用地图惯性拖拽                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
 | enableScrollWheelZoom  | 允许地图可被鼠标滚轮缩放                                                                                                                                                       | `boolean`                             | `false`           | -                                  |
@@ -200,7 +200,7 @@ map/theme2
 
 ### 容器门禁：零尺寸不建图
 
-容器拿到**非零尺寸**之前，`<BMap>` **不会创建地图**。零尺寸建图在真实浏览器上会得到一个 0×0 的
+容器拿到**非零尺寸**之前，`<Map>` **不会创建地图**。零尺寸建图在真实浏览器上会得到一个 0×0 的
 WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠面板在展开之前正是 0×0 —— 于是
 用户会看到「地图加载完了但一片空白」。
 
@@ -248,7 +248,7 @@ WebGL 画布（JSAPI 4.0 不会自己重算尺寸），而 Tab / Drawer / 折叠
 
 ### 暂停策略：按**原因**记账
 
-`<BMap>` 与 `expose` 的 `suspend()` / `resume()` 不是「一个开关」，而是一组**暂停原因**。
+`<Map>` 与 `expose` 的 `suspend()` / `resume()` 不是「一个开关」，而是一组**暂停原因**。
 只有原因集合**变空**才真正恢复（并补偿一次 `checkResize()`）：
 
 | 原因 | 谁加 | 谁移除 | 说明 |
@@ -276,7 +276,7 @@ api.resume()                      // 只摘掉 'user'；页面恢复可见不会
 ### 减少动画偏好
 
 `expose.prefersReducedMotion()` 暴露 `(prefers-reduced-motion: reduce)` 的当前取值，供**可选动画**
-决定要不要跳过。它**不参与暂停**、也不阻断任何必要的数据更新；`<BMap>` 自身没有可选动画
+决定要不要跳过。它**不参与暂停**、也不阻断任何必要的数据更新；`<Map>` 自身没有可选动画
 （首次视野一直是 `noAnimation`），所以它是暴露给调用方的只读信号。
 
 ## 受控 / 非受控视野
@@ -301,7 +301,7 @@ api.resume()                      // 只摘掉 'user'；页面恢复可见不会
 
 ```vue
 <template>
-  <BMap
+  <Map
     ak="百度地图ak"
     v-model:center="center"
     v-model:zoom="zoom"
@@ -323,13 +323,13 @@ const tilt = ref(0)
 只想给初值、不想自己维护状态时，用非受控写法：
 
 ```vue
-<BMap ak="百度地图ak" :default-center="{ lng: 121.424333, lat: 31.228604 }" :default-zoom="12" />
+<Map ak="百度地图ak" :default-center="{ lng: 121.424333, lat: 31.228604 }" :default-zoom="12" />
 ```
 
 用户交互后仍能拿到回执（非受控模式同样会 emit）：
 
 ```vue
-<BMap ak="百度地图ak" :default-zoom="12" @update:zoom="(z) => console.log(z)" />
+<Map ak="百度地图ak" :default-zoom="12" @update:zoom="(z) => console.log(z)" />
 ```
 
 ### 事件
@@ -366,7 +366,7 @@ const tilt = ref(0)
 
 ```vue
 <template>
-  <BMap ak="百度地图ak" :center="loaded ? spot : undefined" :zoom="loaded ? 16 : undefined" />
+  <Map ak="百度地图ak" :center="loaded ? spot : undefined" :zoom="loaded ? 16 : undefined" />
 </template>
 ```
 
@@ -460,24 +460,24 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 `<KeepAlive>` 的 cache 里仍活着，但地图相关资源已经归零；`activated` 不会复活它（需要重新挂载）。
 
 ```vue
-<BMap ak="百度地图ak" keepAliveBehavior="suspend" />
+<Map ak="百度地图ak" keepAliveBehavior="suspend" />
 ```
 
 ### 子资源挂载目标
 
-覆盖物默认挂载到地图。`BMarker` 会为其子树提供新的挂载目标，因此 `BContextMenu` 写在
-`BMarker` 内时自动挂到该 Marker；父资源晚于子组件就绪时，子组件会自动等待并原子挂载
+覆盖物默认挂载到地图。`Marker` 会为其子树提供新的挂载目标，因此 `ContextMenu` 写在
+`Marker` 内时自动挂到该 Marker；父资源晚于子组件就绪时，子组件会自动等待并原子挂载
 （先从旧目标移除，再挂到新目标，不会同时残留）。
 
 ```vue
-<BMap
+<Map
   ak="百度地图ak"
   :plugins="['TrackAnimation']"
   @ready="onReady"
   @plugin-ready="onPluginReady"
   @plugin-error="onPluginError"
 >
-</BMap>
+</Map>
 ```
 
 | 事件 | 说明 | 参数 |
@@ -515,7 +515,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 ## 组件方法
 
-`<BMap ref>` 拿到的是一份**冻结的命令面**（类型 `BMapExpose`）。它只包含常用能力，不是
+`<Map ref>` 拿到的是一份**冻结的命令面**（类型 `MapExpose`）。它只包含常用能力，不是
 `BMap.Map` 方法表的镜像 —— 要别的能力先问 `supports()`，要 raw SDK 对象走 `./advanced`。
 
 ### 常用命令
@@ -562,7 +562,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 加载与错误状态都有具名插槽，**业务不需要监听内部 Runtime**：
 
 ```vue
-<BMap ak="百度地图ak">
+<Map ak="百度地图ak">
   <template #loading="{ status, containerReady }">
     <p>{{ containerReady ? '地图加载中…' : '容器还没展开' }}</p>
   </template>
@@ -570,7 +570,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
     <p>加载失败：{{ error }}</p>
     <button @click="retry()">重试</button>
   </template>
-</BMap>
+</Map>
 ```
 
 两个插槽收到**同一份**载荷（`error` 是 `unknown`：通常是 `BMapError`，要读 `code` / `message`
@@ -607,7 +607,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 **map 事件（43 个规范名 + 5 个 SDK 拼写兼容名）**——`click` / `moveend` / `maptypechange` /
 `style-loaded` / `moving` 等全部可绑，完整清单与载荷字段见
-见 [组件事件](../guide/com-events) 页的「BMap：map 事件」一节。两点行为约定：
+见 [组件事件](../guide/com-events) 页的「Map：map 事件」一节。两点行为约定：
 
 - **订阅固定**：地图就绪时一次订全部 map 事件（不随改绑监听器变化，原因是 Vue 不会因 emit listener
   变化重渲染子组件，见 [组件事件](../guide/com-events) 的说明）；未绑定 handler 的事件不会触发任何回调。

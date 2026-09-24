@@ -31,7 +31,7 @@
  *   「script 已被移除」只有在「script 真的被插入过」时才成立。
  */
 import { createApp, defineComponent, h, type App } from "vue";
-import { BMap, useBMapContext } from "../../../packages/bmap-vue/src/index.ts";
+import { Map, useMapContext } from "../../../packages/bmap-vue/src/index.ts";
 import * as builtins from "../../../packages/bmap-vue/src/plugins/builtins.ts";
 import { createPluginHost } from "../../../packages/bmap-vue/src/core/plugins/PluginHost.ts";
 
@@ -122,7 +122,7 @@ function textOf(error: unknown): string {  if (error && typeof error === "object
 interface MountedMap {
   app: App;
   events: Array<{ name: string | null; type: string; atMs: number; errorText: string | null }>;
-  /** 地图就绪后从 `<BMap>` 内部 context 拿到的注册表（`inspect` 读数用）。 */
+  /** 地图就绪后从 `<Map>` 内部 context 拿到的注册表（`inspect` 读数用）。 */
   plugins: () => any;
   status: () => unknown;
   unmount: () => void;
@@ -130,11 +130,11 @@ interface MountedMap {
 
 let capturedContext: any = null;
 
-/** 子组件：借公开的 `useBMapContext()` 拿到地图自己的 `PluginRegistry`（`BMapExpose` 不含它）。 */
+/** 子组件：借公开的 `useMapContext()` 拿到地图自己的 `PluginRegistry`（`MapExpose` 不含它）。 */
 const ProbeTap = defineComponent({
   name: "ProbeTap",
   setup() {
-    capturedContext = useBMapContext();
+    capturedContext = useMapContext();
     return () => null;
   },
 });
@@ -151,7 +151,7 @@ function mountBMap(plugins: string[]): MountedMap {
     name: "ProbeRoot",
     render: () =>
       h(
-        BMap as never,
+        Map as never,
         {
           ak: AK,
           center: { lng: 116.404, lat: 39.915 },

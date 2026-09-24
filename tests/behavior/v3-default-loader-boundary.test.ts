@@ -5,7 +5,7 @@
  *
  * 1. 默认在线 Provider 不得再出现自建 JSONP transport 的任何痕迹（拼入口 URL、生成回调名、
  *    自研 `ScriptLoader` / `SharedLoadTask`、自己 `document.createElement`）；
- * 2. 默认入口（`createBMapPlugin` / `<BMap>` 的隐式 Provider）必须解析到 `baiduJsapiV4Provider()`；
+ * 2. 默认入口（`createBMapPlugin` / `<Map>` 的隐式 Provider）必须解析到 `baiduJsapiV4Provider()`；
  * 3. 根入口与 `./core` 入口的**静态**模块图不得触达 UI Kit 或任何 CSS
  *    （UI Kit 无 DOM 即 import 失败，且 CSS 必须由消费方显式引入——#73 的边界）。
  *
@@ -194,8 +194,8 @@ describe("默认入口解析到 v4 官方 Provider", () => {
     expect(existsSync(join(PKG_SRC, "core/loader/providers/index.ts"))).toBe(true);
   });
 
-  it("<BMap> 隐式 Provider 的兜底也是 baiduJsapiV4Provider()", () => {
-    const source = stripComments(read("components/map/BMap.vue"));
+  it("<Map> 隐式 Provider 的兜底也是 baiduJsapiV4Provider()", () => {
+    const source = stripComments(read("components/map/Map.vue"));
     expect(source).toMatch(/appConfig\?\.provider\s*\?\?\s*baiduJsapiV4Provider\(\)/);
     // 兜底里不再出现 legacy 工厂调用，也不再从 legacy 模块导入任何东西。
     // #26 之后组件的两条全局兜底（`allowExistingGlobal` 与「页面已有全局就自动回退」）也删掉了，
@@ -213,7 +213,7 @@ describe("根入口静态模块图不得触达 UI Kit 或 CSS", () => {
     // 可达文件数量与「确实走到了 .vue 组件」是这条门禁的**正证**：如果解析器坏了，
     // files 会退化成只有入口本身，下面的断言就会静默通过。
     expect(graph.files.length).toBeGreaterThan(30);
-    expect(graph.files.some((file) => file.endsWith("components/map/BMap.vue"))).toBe(true);
+    expect(graph.files.some((file) => file.endsWith("components/map/Map.vue"))).toBe(true);
   });
 
   it("没有任何可达模块导入官方 UI Kit", () => {

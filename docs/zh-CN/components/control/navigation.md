@@ -1,9 +1,9 @@
-# BNavigation 平移缩放控件
+# NavigationControl 平移缩放控件
 
 地图的平移缩放控件（官方 `NavigationControl`），默认位于地图左上角。
 
 ```ts
-import { BNavigation } from 'bmap-vue'
+import { NavigationControl } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -68,6 +68,6 @@ control/navigation
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。

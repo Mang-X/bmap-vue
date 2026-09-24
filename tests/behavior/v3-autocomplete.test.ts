@@ -1,5 +1,5 @@
 /**
- * BAutoComplete 迁移验证
+ * Autocomplete 迁移验证
  *
  * #26 之后组件默认路径直接走 v4 Driver。BMapGL 时代的 fake Autocomplete **构造时就回调**
  * `onSearchComplete`；v4 的 `Autocomplete` 是**事件式**服务（`packages/test-utils/fake-bmap-v4/
@@ -13,15 +13,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
-import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
-import BAutoComplete from '../../packages/bmap-vue/src/components/autocomplete/BAutoComplete.vue'
+import Map from '../../packages/bmap-vue/src/components/map/Map.vue'
+import Autocomplete from '../../packages/bmap-vue/src/components/autocomplete/Autocomplete.vue'
 import { createFakeV4Harness, FakeV4AutocompleteResult } from '../../packages/test-utils'
 
 const { harness, fake } = createFakeV4Harness()
 const provider = () => harness.provider()
 const host = () => harness.container()
 
-describe('BAutoComplete v3', () => {
+describe('Autocomplete v3', () => {
   beforeEach(() => harness.reset())
 
   it('creates autocomplete bound to input and emits searchComplete', async () => {
@@ -29,10 +29,10 @@ describe('BAutoComplete v3', () => {
     let gotResult: unknown = null
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BAutoComplete },
+        components: { Map, Autocomplete },
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BAutoComplete, {
+          h(Map, { provider: provider() }, () => [
+            h(Autocomplete, {
               location: '北京市',
               types: ['city'],
               onSearchComplete: (e: unknown) => {
@@ -69,10 +69,10 @@ describe('BAutoComplete v3', () => {
     const location = ref('北京市')
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BAutoComplete },
+        components: { Map, Autocomplete },
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BAutoComplete, { location: location.value, types: ['city'] }),
+          h(Map, { provider: provider() }, () => [
+            h(Autocomplete, { location: location.value, types: ['city'] }),
           ]),
       }),
       { attachTo: el },
