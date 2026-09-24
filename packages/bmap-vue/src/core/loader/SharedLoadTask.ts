@@ -13,6 +13,25 @@
  *
  * 初始化（含回调安装）具备异常安全性：同步异常统一转为 `BMapError` 进入 `fail()`，
  * 不会把任务留在 `loading` 状态。
+ *
+ * ## F-2 取证与保证边界（#128 / 2026-09-24）
+ *
+ * 下面的 `callbackRegistry` / 全局名占用 / foreign 捕获服务的是**显式高级路径**
+ * （`customScriptV4Provider` 的 `jsonp` 分支），**不进 Stable 承诺**。
+ *
+ * **本库保证**（OWNED，与上游无关，由 `ScriptLoader.test.ts` 的 F1/F2 单测回归）：
+ * - 同名回调按安装栈管理，交叠失败不残留失效 handler；
+ * - 外部接管后释放**不触碰**外部值；同名重试重新捕获当前外部原值；
+ * - 释放后全局名恢复到「安装前的外部原值」或删除本库安装的名（仅当自己仍是所有者）。
+ *
+ * **官方行为**（PROBED 2026-09-24，真实 AK + headless Chromium；读数
+ * `tests/behavior/fixtures/probe-jsonp-callback.live.json`）：
+ * - 入口 URL 的 `callback=<名>` 会让官方在就绪时调用 `window[<名>]`（`args.length` 见读数）；
+ * - 调用时全局值**仍是**我们安装的 handler（官方未先覆盖身份）——这一条是
+ *   foreign 捕获读法成立的前提；
+ * - 该行为属于**官方实现，官方可改**——可回归 gate 是
+ *   `tests/behavior/v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture
+ *   一致性 + 上述单测（OWNED 侧）。#44 冻结前这两者必须同时在场。
  */
 import { BMapError } from "../errors/BMapError";
 import { redactAk } from "../logger";

@@ -103,11 +103,14 @@ export const MAP_INTERACTIONS: readonly MapInteraction[] = [
 
 export function runMapFacetContract(createHarness: () => MapFacetHarness) {
   describe("Map facet contract", () => {
-    it("creates and destroys a map (重复 destroy 不抛错；官方幂等未取证，见 F-3)", () => {
+    it("creates and destroys a map (本库保证短路；官方第二次 destroy 会抛，见 F-3 live)", () => {
       const harness = createHarness();
       const map = harness.driver().map.create(harness.container());
       expect(map.raw).toBeTruthy();
       harness.driver().map.destroy(map);
+      // Fake 记账保证：第二次 destroy 不再打到 SDK。真实 4.0 第二次会抛
+      // `Cannot set properties of undefined (setting 'enableAutoResize')`
+      // （#128 F-3 live，2026-09-24），因此本断言是**本库 OWNED**，不是官方幂等。
       expect(() => harness.driver().map.destroy(map)).not.toThrow();
     });
 
@@ -510,10 +513,9 @@ export function runControlFacetContract(createHarness: () => ControlFacetHarness
         // ⚠️ 判据是 `harness.attachedCount()`，也就是**夹具（Fake）那一侧的假账本**
         // （见上面 `attachedCount()` 的说明），它证伪的是「**夹具的**销账不会变成负数」——
         // 既**不是**「SDK 侧的移除对未挂载资源是 no-op」的证据，也不是生产库 Driver/Registry
-        // 的记账证据。后两者属未取证项（审计表 F-3：`destroy()` / `dispose()` 是否幂等至今
-        // 没有正向证据；唯一相关读数是 ADR 2026-09-12 记的「真实 4.0 在**未加载场景**的实例上
-        // `destroy()` 会抛 `TypeError`」，那是反例不是正向）。
-        // 夹具的幂等是**我们对夹具的建模**，不能反过来当官方行为读；要升级成官方承诺得先 probe。
+        // 的记账证据。官方幂等已于 #128 F-3 live 取证（2026-09-24）：**Map 第二次 destroy 会抛**、
+        // Autocomplete 重复 dispose 本轮不抛、Panorama 首次 destroy 即抛 `START`。
+        // 夹具的幂等仍是**我们对夹具的建模**，不能反过来当官方行为读。
         expect(() => controls.remove(target, control)).not.toThrow();
         expect(harness.attachedCount()).toBe(0);
         // remove 之后可以重新挂载
@@ -620,7 +622,7 @@ export function runLayerFacetContract(createHarness: () => LayerFacetHarness) {
         layers.remove(target, layer);
         expect(harness.attachedCount()).toBe(0);
         // 重复 remove 不抛错、计数不变成负数（口径同上面控件那处：证的是**夹具假账本**的销账，
-        // 不是 SDK 的幂等 —— 审计表 F-3 仍未取证）。
+        // 不是 SDK 的幂等 —— 官方侧已于 #128 F-3 live 取证，结论以读数为准，见审计表 F-3）。
         expect(() => layers.remove(target, layer)).not.toThrow();
         expect(harness.attachedCount()).toBe(0);
         // remove 之后可以重新挂载
@@ -809,13 +811,14 @@ export interface PanoramaFacetHarness {
 
 export function runPanoramaFacetContract(createHarness: () => PanoramaFacetHarness) {
   describe("Panorama facet contract", () => {
-    it("supported / 视角 / 生命周期：重复 destroy 不抛错（官方幂等未取证，见 F-3），检索调用结算且形状自洽", async () => {
+    it("supported / 视角 / 生命周期：重复 destroy 不抛错（本库短路；官方首次即可能抛，见 F-3），检索调用结算且形状自洽", async () => {
       const harness = createHarness();
       const probes = await probePanoramaFacet(harness.panorama(), harness.container());
 
       expect(probes.supported).toBe(true);
-      // 幂等只在「第一次销毁成功」时可断言：失败会释放记账以便重试（真实 4.0 在未加载
-      // 场景的实例上 destroy 会抛 TypeError，见 ADR 的 smoke 记录），此时第二次仍会打到 SDK。
+      // 幂等只在「第一次销毁成功」时可断言：失败会释放记账以便重试。真实 4.0 在未加载
+      // 场景的实例上 destroy 会抛 `START`（ADR 2026-09-12 + #128 F-3 live：即使调过 setId、
+      // headless 下场景未真正加载时，首次 destroy 同样抛），此时第二次仍会打到 SDK。
       if (probes.destroyStatus === "ok") {
         expect(
           probes.destroyIdempotent,
