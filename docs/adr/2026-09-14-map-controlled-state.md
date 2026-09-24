@@ -200,14 +200,19 @@ controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分�
 | `useControllableState` 的冻结能力 | `useModel` / `defineModel` 是否有 |
 | --- | --- |
 | 受控：prop 优先 / 非受控：本地为源 | ✅ 有，且语义一致 |
-| **受控 → 非受控保留最后一次外部值**（决策 4 §3） | ❌ **没有** —— 受控 prop 被摘掉时 `useModel` 读到的是 `undefined` |
+| **受控 → 非受控保留最后一次外部值**（决策 4 §3） | ❌ **没有**（受控 prop 被摘掉时 `useModel` 读到 `undefined`）⇒ **需 bridge state**，见 §6.1.1 |
 | `default*` 只在首次解析时读一次 | ❌ 没有 |
 | 读回容差相等（`centerEquals` / `anglesEqual` …） | ❌ 没有（`hasChanged` 是引用/原值比较） |
 | `copy` 防御性拷贝 + 首次快照 | ❌ 没有 |
 | `reset()` 归位 | ❌ 没有 |
 
-第一行是**硬冲突**：它与决策 4 §3 冻结的语义**直接矛盾**，且不是加适配层能补的（`undefined` 是
-`useModel` 表达「现在没有受控值」的信号，适配层拿不到「最后一次外部值」）。
+第一行是**语义缺口**：`useModel` **本身**不保存最后一次外部值——受控 prop 被摘掉时它读到
+`undefined`（那是它表达「现在没有受控值」的信号）。**要维持决策 4 §3，就必须额外补一段 bridge
+state**（记住最后外部值），这是 §6.1.1 原型里 `lastExternal` 的由来。
+
+（2026-09-24 复审更正：本节早先写的是「不是加适配层能补的」，与本文件后面「最小桥接**能**逐项
+复现全部可观察行为」**自相矛盾**。正确说法是上面的两段——缺口真实存在，但**可由 bridge state
+补**；补的代价由 §6.1.1 的读数承担，而不是「补不上」。）
 
 **（三）`defineModel` 会改到冻结公共面；但 `useModel` 不会 —— 这条要分开说。**（2026-09-24 复审修正）
 
@@ -266,28 +271,57 @@ controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分�
 **「付不必要 runtime」这条验收的诚实口径**（#137 验收第 2 条）。该条问「简单 number model 是否为
 React controlled/uncontrolled **术语**支付了不必要 runtime」。
 
-#137 复审要求先做**真实原型**再定论，而不是靠论证。原型已做（临时脚本，按构造计数，跑完即删，
-读数固化在此）：同一个 `zoom` 字段，两种完整接线都**手写 `defineProps`/`defineEmits`**（不碰
-`MapProps`、不动公共面），B 形状就是 `useModel(props, "zoom")` + 补齐 Vue 覆盖不到的那几样。
+#137 复审要求先做**真实原型**再定论，而不是靠论证。原型**已提交进仓库**：
+`packages/bmap-vue/src/composables/mapModel.prototype.test.ts`（常驻 CI，Vue 升级后重跑同一组断言）。
+同一个 `zoom` 字段，三条线路都**手写 `defineProps`/`defineEmits`**（不碰 `MapProps`、不动公共面），
+props 形状完全一致（`zoom` + `defaultZoom`），差别只有模型层：
 
-| 每个 number 字段构造的响应式对象 | A：现状 `useControllableState` | B：原型 `useModel` + 最小桥接 |
-| --- | ---: | ---: |
-| `shallowRef` | 1（`internal`） | 2（`lastExternal` + `internal`） |
-| `computed` | 2（`isControlled` + `model`） | 1（`effective`） |
-| `watch` | 1（`defaultValue` 告警 watcher） | 1（prop → 桥接） |
-| `useModel` 自带的 `customRef` | — | 1（`useModel` 内部） |
-| `Set`（告警去重） | 1 | 1 |
-| **合计** | **5** | **6** |
+- **A（现状）**：`useControllableState` + 与 `Map.vue:1225` 同形的 SDK 腿 watcher。
+- **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`lastExternal` /
+  `internal` / `effective` + 兼任 watcher）+ **同一条** SDK 腿 watcher。
+- **B₀（对照下界）**：只 `useModel`，无桥接、无 SDK 腿。
 
-读法：**原型没有更省，反而多一个对象**。省下的那个 computed（`isControlled`）被 `lastExternal`
-这个 ref 抵掉了 —— 因为「受控 → 非受控保留最后一次外部值」这条规则**必须**有人记，而 `useModel`
-不记（§6.1 的 A3），所以只能由桥接自己记。**逐项可观察行为两边完全一致**（含容差内抖动、
-真实变化、受控→非受控保留最后值、reset 归位），原型没有带来任何行为或体积上的收益。
+**SDK 腿两边都计入**：`Map.vue:1225` 那条 watcher 干的是 `driver.map.setZoom` —— **写 SDK 不是
+Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显得更省，那正是要避免的偏差。
+
+##### 计数口径：唯一、且由 Vue 自己记账
+
+早先这里是一张**手数**的结构表（`customRef` 算 1、它内部的 effect 不算），口径不一致，结论不可
+复核。已改为：在组件 `setup()` 末尾读 `getCurrentScope().effects.length`，数**实际注册的
+`ReactiveEffect`**。`computed`（懒求值）与 `shallowRef`（只挂 dep）都**不挂 scope**，一律记 0；
+`watch` / `watchSyncEffect` 各记 1。
+
+这条口径还纠正了一个**实质漏项**：Vue 3.5.42 的 `useModel()`（`runtime-core.cjs.js`）在
+`customRef(...)` **内部**建了一个 `watchSyncEffect` 把 prop 同步进去。只数「`useModel` 算 1 个
+`customRef`」会漏掉它。按本口径它被计入，且与 A 侧 `defaultValue` 的 `watch` **同层**。
+（该内部 effect 是**无条件**创建的 —— `hasVModel` 只门控 `customRef` 的 **setter** 分支。原型里
+有一条断言专门钉住这个事实。）
+
+| 每个 number 字段实际注册的 `ReactiveEffect` | A：现状 | B₀：只 `useModel` | B：`useModel` + 桥接 |
+| --- | ---: | ---: | ---: |
+| SDK 腿 watcher（写 SDK，两边都有） | 1 | — | 1 |
+| `defaultValue` 告警 watcher / prop→桥接 watcher | 1 | — | 1 |
+| `useModel` 内部 `watchSyncEffect` | — | 1 | 1 |
+| **合计** | **2** | **1** | **2** |
+
+**读法与措辞纪律**：B **没有**比 A 少注册 effect（2 = 2）。B₀ 少 1，但代价是它既没有 SDK 腿（地图
+根本不会跟着 prop 变）也没有冻结语义（`default*` 只读一次、容差相等、受控→非受控保留最后值），
+**不是可用方案**。所以结论只能说「**Vue-native 路线没有减少 effect**」。
+
+**不能说「B runtime 更贵」**：`Set` / `computed` / `shallowRef` 等权记成「1」只能叫**结构数量**，
+推不出运行时成本大小（一个 `computed` 可能比一个 `watch` 贵也可能更便宜）。要下这个结论需要
+profile，本文件不提供，**也不该由结构数或 effect 数推断**。（早先版本写的是「6 vs 5 ⇒ 更贵」，
+已按复审意见删除该推论。）
+
+**行为侧同样有据**：原型用同一组断言跑 A 与 B 的四项可观察结果（容差内抖动不写 SDK、不通知
+父级；真实变化恰好写一次；`defaultZoom` 之后变化不覆盖；受控→非受控保留最后外部值），**两边完全
+一致** —— 补上 bridge 之后行为确实做得到，收益为零而代价是多一个 `lastExternal`。
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
-「React 术语不好听」这种口味判断，而是有原型读数支撑：Vue-native 那条路在本库的冻结规则下
-**不更便宜**。`isControlled` 之所以保留也不再是「不必要 runtime」——它确实是多余的一个 computed，
-但删它要动公共返回类型（破坏性变更），而原型证明换成 `useModel` 连这一个都省不下来。
+「React 术语不好听」这种口味判断，而是有**可重跑的原型读数**支撑：在本库的冻结规则下，
+Vue-native 那条路**没有更省**。`isControlled` 之所以保留也不再是「不必要 runtime」——它确实是
+多余的一个 computed，但删它要动公共返回类型（破坏性变更），而原型证明换成 `useModel` 连这一个
+都省不下来。
 
 ### 7. 与官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的对照
 

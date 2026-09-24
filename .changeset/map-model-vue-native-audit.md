@@ -12,7 +12,7 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
 
 | 项 | 结论 | 依据 |
 | --- | --- | --- |
-| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` 表达不了冻结的「受控 → 非受控保留最后一次外部值」，也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset`。**复审补做了真实原型**：`useModel` + 最小桥接行为上能逐项复现，但不更便宜（每个 number 字段 6 个响应式对象 vs 现状 5 个），结论从口味判断变成实测。ADR `2026-09-14-map-controlled-state` §6.1 / §6.1.1 |
+| ① Map model（`useControllableState`） | **保留，不迁 `defineModel` / `useModel`** | 父↔子那一腿**已经是** Vue-native（`value: () => props.center` 是对 props 的 getter + 普通 `emit`，即 `v-model` 展开形态，全库统一）；组件↔SDK 那一腿 `useModel` **不保存最后一次外部值**（受控 prop 摘掉后读到 `undefined`），也没有 `default*` 只读一次 / 容差相等 / `copy` / `reset` ⇒ 维持冻结语义**必须补 bridge state**。**复审补做真实原型并提交进仓库**（`mapModel.prototype.test.ts`，常驻 CI）：补上 `lastExternal` 桥接后行为能逐项复现，但每个 number 字段实际注册的 `ReactiveEffect` 是 **2 vs 2**（口径 `getCurrentScope().effects.length`）——**没有更省**。措辞纪律：这只能推出「没减少 effect」，**推不出**「更贵」。ADR `2026-09-14-map-controlled-state` §6.1 / §6.2 |
 | ② MapRuntime retry / boot | **逐符号保留** | `mountStarted` / `bootTask` / `nextBootWaiters` / `deferredWaiters` / `containerUsableWaiters` / `assembledMap` / `whenMapCreated` 全部记**外部资源状态**（WebGL 句柄、0×0 容器、KeepAlive 下 `onUnmounted` 不触发），每个都有可翻红的行为用例。ADR `2026-09-14-map-handle-container-and-visibility` §5.1 给出逐符号消费者表 |
 | ③ batching | **无缺陷可修** | 实测：一次父提交同改 center+zoom+heading+tilt ⇒ 4 个独立 `flush:'post'` watcher 与「单个四元组 watcher」**都是 4 次写入**。四个字段是**四条不同 SDK 命令**，批处理省不掉；`flush:'post'` 已拿到全部可得收益。ADR `2026-09-24-scheduler-batching-hot-path` §2.1 |
 | ④ KeepAlive / 暂停 | **保留** | `onActivated` / `onDeactivated` 直接驱动 `keep-alive` 原因增删，本来就是 Vue-native；`disposed` 终态原因与容器门禁有真实 WebGL / 0×0 语义 |
@@ -35,9 +35,14 @@ controlled/uncontrolled 词汇与手写调度器。四项逐条核过，**结论
   可翻红：把 `syncEnableProps` 多调一次 ⇒ 交互计数 +2 ⇒ 实测变红。
 - `useControllableState.vsUseModel.test.ts`（A1–A5）—— 把「不迁 `useModel`」的依据从断言变成
   **会红的用例**：打的是本仓库已安装的 Vue（无网络、无凭据、进 CI），断言受控 prop 撤回后
-  `useModel` 读到 `undefined`、写「数值不同但在本库容差内」的值仍 emit（`hasChanged` 精确比较
-  ⇒ 无容差相等）等。Vue 升级若补上这些能力，用例变红 ⇒ ADR §6.1 必须重审。
+  `useModel` 读到 `undefined`（⇒ 必须补 bridge state）、写「数值不同但在本库容差内」的值仍 emit
+  （`hasChanged` 精确比较 ⇒ 无容差相等）等。Vue 升级若补上这些能力，用例变红 ⇒ ADR §6.1 必须重审。
   **可翻红**：A4 把判定换成容差相等、A3 反转断言，均实测变红。
+- `mapModel.prototype.test.ts`（#137 的 Map model prototype，**提交进仓库**）—— 三条线路
+  （A 现状 / B₀ 只 `useModel` / B `useModel` + 最小桥接）都手写 `defineProps`/`defineEmits`、
+  props 形状一致，真实挂载后比较：① 唯一计数口径（`getCurrentScope().effects.length`，由 Vue
+  自己记账，纠正了早先手数表漏掉 `useModel` 内部 `watchSyncEffect` 的问题）② A=2 / B₀=1 / B=2
+  ③ A 与 B 的四项可观察行为逐项同构。读数断言已做变异验证（可翻红）。
 
 **公共面不变**：`useControllableState` 的签名 / 返回形状、`<Map>` 的 props 与 `update:*` 事件、
 ADR 决策 6 冻结的模型语义均未改动；`pnpm generate:api-diff:check` 与

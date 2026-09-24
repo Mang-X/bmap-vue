@@ -24,7 +24,7 @@
  * | --- | --- | --- |
  * | A1 | 无 `v-model` 时写 `useModel` **本地生效** | 非受控档：事实源是本地状态（**这一条两边一致**） |
  * | A2 | 有 `v-model` 时写只 emit、值等父级回写 | 受控档「prop 优先」（**这一条两边一致**） |
- * | A3 | **受控 prop 被摘掉后读到 `undefined`** | ← **决定性理由**：与冻结的「受控 → 非受控保留最后一次外部值」直接矛盾 |
+ * | A3 | **受控 prop 被摘掉后读到 `undefined`** | 证明 **`useModel` 本身不保存最后一次外部值** ⇒ 维持冻结语义「受控 → 非受控保留最后外部值」**必须补 bridge state**（即 `lastExternal`）。它**不是**「迁移不可能」的证明——见 `mapModel.prototype.test.ts`，补上 bridge 后行为可逐项复现 |
  * | A4 | 写「**数值不同但在本库容差内**」的值**仍 emit** | 它是精确变化比较 ⇒ **没有容差相等**，而本库四个视野字段全部依赖容差（否则受控写入与 SDK 读回会形成往返） |
  * | A5 | `string \| Point` 联合 prop 在 `useModel` 上**可用** | 把「不迁移」的原因锁定在**语义**而非**类型**上，避免以后被误诊为类型不兼容 |
  */
@@ -112,13 +112,17 @@ describe("对照 `useModel`（#137：不迁移的依据）", () => {
     });
   });
 
-  it("A3 决定性：受控 prop 被摘掉后 useModel 读到 undefined —— 与冻结的「保留最后一次外部值」矛盾", async () => {
+  it("A3 受控 prop 被摘掉后 useModel 读到 undefined ⇒ 维持冻结语义必须补 bridge state", async () => {
     await withModel({ modelValue: 7 }, async ({ model, setProps }) => {
       await setProps({});
       // 本库 ADR 决策 4 §3 冻结的语义：受控 → 非受控时**内部状态接管，保留最后一次外部值**。
-      // useModel 给出的是 undefined ⇒ 迁移会破坏这条已发布契约，且这不是加适配层能补的
-      //（undefined 正是 useModel 表达「现在没有受控值」的信号）。
-      expect(model.value, "这就是 #137 决定不迁 useModel 的原因").toBeUndefined();
+      // useModel 给出的是 undefined ⇒ 它**自己不保存**最后一次外部值（undefined 是它表达
+      //「现在没有受控值」的信号），所以要维持这条契约**必须额外补 bridge state**。
+      //
+      // ⚠️ 这条**不是**「迁移不可能」的证明：补上 bridge（`lastExternal`）后行为可逐项复现 ——
+      // 见 `mapModel.prototype.test.ts` 的 B 线路。#137 最终不迁的依据是**bridge 的代价**，
+      // 不是「语义补不上」。
+      expect(model.value, "useModel 不保存最后一次外部值").toBeUndefined();
     });
   });
 
