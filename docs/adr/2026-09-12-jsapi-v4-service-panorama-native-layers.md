@@ -338,8 +338,13 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 
 - 正面：v4 有了完整可用的 Service / Panorama / Native Layer 三个面，且**装配完成**——
   用 v4 Provider 的组件路径从「明确失败」变成「可用」；服务调用不再需要业务自己写
-  「超时 / 空结果 / 迟到回调」三件套；原生数据图层的「调了没反应」被显式失败取代；
-  契约在两个环境（Fake 与真实 AK）跑同一份探针代码。
+  「超时 / 空结果 / 迟到回调」三件套；原生数据图层的「调了没反应」被显式失败取代。
+- 探针的**零 vitest / 零 Fake 依赖**形状保留：Fake 契约（`driver-contract.ts`）与
+  native-layer 直测复用同一份「怎么调」的实现，真实 browser smoke 由**独立** runner /
+  checks 负责（`tests/browser/jsapi-v4/`，不 import `facet-probes`）。
+  （**#127 更正**：原文写「契约在两个环境（Fake 与真实 AK）跑同一份探针代码」，
+  但那条 smoke 路径今天没有消费这些探针；本节下方「真实 AK smoke 记录」记的是当时的
+  临时 Vite harness，属历史实测，与当前仓库消费关系不矛盾。）
 - 负面 / 成本：新增三个 v4 独有类型面（`JsapiV4Driver` / `NativeLayerDriver` /
   `ServiceInvocationDriver`）；`createJsapiV4Driver` 的返回类型从 `BMapDriver` 收窄为
   `JsapiV4Driver`（子类型，不破坏既有调用方）；`facet-probes.ts` 与
