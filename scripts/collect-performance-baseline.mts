@@ -45,6 +45,9 @@
  * pnpm perf:baseline --update             # 同时刷新提交的基线（换机器 / 换数据集时才做）
  * pnpm perf:baseline --metrics-dir=<dir>  # 复用已有指标（不重跑基准，用于调报告与看门禁）
  * pnpm perf:baseline --tolerance=5        # 临时放宽阈值（改数据量 / 大改实现时）
+ * pnpm perf:baseline --from-report=<report.json> --update
+ *                                           # 用**既有报告**重录基线（不重跑基准）：runner 换 SKU 后，
+ *                                           # 在门禁机跑过一次 CI 就能重录，不必把机器留住
  * ```
  */
 import { execFileSync } from "node:child_process";
@@ -96,6 +99,7 @@ export type PerfExitCode = 0 | 1 | 2 | 3;
 interface CliFlags {
   update: boolean;
   metricsDir: string | null;
+  fromReport: string | null;
   tolerance: number;
 }
 
@@ -199,11 +203,13 @@ function round(value: number, digits = 2): number {
 }
 
 function parseArgs(argv: string[]): CliFlags {
-  const flags: CliFlags = { update: false, metricsDir: null, tolerance: DEFAULT_TOLERANCE };
+  const flags: CliFlags = { update: false, metricsDir: null, fromReport: null, tolerance: DEFAULT_TOLERANCE };
   for (const arg of argv) {
     if (arg === "--update") flags.update = true;
     else if (arg.startsWith("--metrics-dir=")) {
       flags.metricsDir = resolve(root, arg.slice("--metrics-dir=".length));
+    } else if (arg.startsWith("--from-report=")) {
+      flags.fromReport = resolve(root, arg.slice("--from-report=".length));
     } else if (arg.startsWith("--tolerance=")) {
       flags.tolerance = Number(arg.slice("--tolerance=".length));
     } else {
@@ -842,14 +848,71 @@ function writeBaseline(report: Report): void {
   console.log(`[perf] 已更新基线：${showPath(BASELINE_PATH)}`);
 }
 
+/**
+ * 从**既有报告**重录基线（`--from-report=<report.json>`）。
+ *
+ * 为什么需要它：runner 换 SKU 时门禁会自动跳过（见 `describeMachineMismatch`），而重录又要求在
+ * **门禁那台机器**上执行——CI 跑完就把机器还回去了。于是唯一可执行的路径就是把该次 CI 的
+ * `perf-report` artifact 取回来重录（`performance-baseline.md` 的「基线维护规则」写的就是这条）。
+ *
+ * 它**不重跑基准**：读数全部来自那份报告，因此「录的是哪一次跑」这件事是可追溯的（打印机器身份）。
+ */
+function readReport(path: string): Report {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    fail(2, `[perf] 读不了报告 ${showPath(path)}：${String(error)}`);
+  }
+  const report = parsed as Report;
+  const required = [
+    "version",
+    "generatedAt",
+    "dataset",
+    "engine",
+    "environment",
+    "normalizer",
+    "metrics",
+    "readouts",
+    "bundle",
+  ] as const;
+  const missing = required.filter((key) => report?.[key] === undefined);
+  if (missing.length > 0) {
+    fail(2, `[perf] ${showPath(path)} 不是一份完整报告（缺 ${missing.join(" / ")}）`);
+  }
+  console.log(
+    `[perf] 用既有报告重录（不重跑基准）：${showPath(path)}（录于 ${report.generatedAt}）\n` +
+      `[perf]   报告机器：${String(report.environment.platform)}/${String(report.environment.arch)} · ` +
+      `${String(report.environment.cpuModel ?? "未知 CPU")} · node ${String(report.environment.node)}`,
+  );
+  // 重录的第一号风险是把**另一台机器**的读数写成基线（那会让门禁静默失效），所以在这里显式对照。
+  if (existsSync(BASELINE_PATH)) {
+    const current = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as {
+      machine?: { platform?: unknown; arch?: unknown; cpuModel?: unknown };
+    };
+    const mismatch = describeMachineMismatch(current.machine, report.environment);
+    if (mismatch) {
+      console.warn(
+        `[perf] ⚠️ 报告机器与当前基线机器不同：${mismatch}\n` +
+          "[perf]    仍会按报告重录——**确认这台就是新的门禁规格**，否则趋势门禁会静默失效。",
+      );
+    }
+  }
+  return report;
+}
+
 function main(): void {
   const flags = parseArgs(process.argv.slice(2));
-  const metricsDir = flags.metricsDir ?? METRICS_DIR;
-  if (!flags.metricsDir) runBenchmarks(metricsDir);
-
-  const snapshots = readSnapshots(metricsDir);
-  assertSameEnvironment(snapshots);
-  const report = buildReport(snapshots, collectBundle());
+  let report: Report;
+  if (flags.fromReport) {
+    report = readReport(flags.fromReport);
+  } else {
+    const metricsDir = flags.metricsDir ?? METRICS_DIR;
+    if (!flags.metricsDir) runBenchmarks(metricsDir);
+    const snapshots = readSnapshots(metricsDir);
+    assertSameEnvironment(snapshots);
+    report = buildReport(snapshots, collectBundle());
+  }
   const comparison = compareWithBaseline(report, flags);
   printReport(report, comparison);
 

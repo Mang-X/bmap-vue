@@ -48,6 +48,7 @@ pnpm build:package && pnpm perf:baseline # 采集 + 报告 + 趋势门禁（CI �
 pnpm perf:baseline --update        # 同时刷新提交的基线（换机器 / 换数据集时才做）
 pnpm perf:baseline --tolerance=5   # 临时放宽阈值
 pnpm perf:baseline --metrics-dir=.artifacts/perf/metrics  # 复用已有指标，只重出报告
+pnpm perf:baseline --from-report=<report.json> --update  # 用既有报告重录基线（不重跑基准，见下）
 ```
 
 产物：`.artifacts/perf/report.json`（机器可读）与同一份内容的人读表格（打印到 stdout，CI 日志里可见）。
@@ -182,9 +183,17 @@ task source 可能不同）；`redraw` = settle 之后 → 2×rAF；`sdkSetData`
   就是不同 SKU（Xeon 8573C → Xeon 6973P-C，连校准量都差 27%）。不一致时脚本会打印比值但**只出报告、
   不做门禁**，并在报告里记 `comparison.skipped`——**5× 宽阈值不能把「不可比」变成「可比」**。
   **基线维护规则**：基线录在**与门禁同一台/同一规格的机器**上（本项目录在 GitHub runner）；
-  runner 换 SKU 时 CI 会打印「本次不做趋势门禁」，由维护者在那台机器上跑一次
-  `pnpm perf:baseline --update` 重录；也可以直接下载 CI 那个 `performance` job 的 `perf-report`
-  artifact（`gh run download <run> -n perf-report`），用里面的 `report.json` 重录。
+  runner 换 SKU 时 CI 会打印「本次不做趋势门禁」，此时有两条路：维护者在那台机器上跑一次
+  `pnpm perf:baseline --update` 重录；或者——CI 跑完就把机器还回去了，所以实际用得更多的是
+  **把该次 CI 的 `perf-report` artifact 取回来重录**（`gh run download <run> -n perf-report`）：
+
+  ```bash
+  gh run download <run> -n perf-report -D <dir>
+  pnpm perf:baseline --from-report=<dir>/report.json --update
+  ```
+
+  `--from-report` **不重跑基准**：读数全部取自那份报告，所以「录的是哪一次跑」可追溯；它会打印报告的
+  机器身份，并在**与现有基线机器不同**时告警（把另一台机器的读数写成基线会让趋势门禁静默失效）。
   要在**本机**启用门禁同理。**改了指标准入口径（例如某个动作从「父级重渲染」变成真的走 SDK 路径）
   也要重录**：那不是性能回退，但比值会动。
 - **低于噪声地板的指标**（归一化 < **0.1** —— 它是**归一化单位**，绝对毫秒等价值 = `0.1 ×
@@ -231,5 +240,6 @@ CI 的 `performance` job 先 `build:package`，因此 `3` 出现在 CI 里就意
   深响应输入的长任务：**#124 仍 open**。已落盘的两部分——深响应子问题见
   [ADR 2026-09-24（深响应）](/adr/2026-09-24-deep-reactive-array-update-path)，scheduler/batching 取证见
   [ADR 2026-09-24（scheduler）](/adr/2026-09-24-scheduler-batching-hot-path)（`flush` 主因已确认、
-  不改 `flush`、多字段次数由 §7 钉住）；**剩余项 = §7 的 `multiUpdate.*@1000` readout 需要在门禁机
-  同机重录提交基线**（见该 ADR「后果」）。line/fill 的 SDK 内部重绘优化若有消费者另开票。
+  不改 `flush`、多字段次数由 §7 钉住）；§7 的 `multiUpdate.*@1000` readout 也已用门禁机那次 CI 的
+  `perf-report` 重录进提交基线（见「基线维护规则」的 `--from-report`）。line/fill 的 SDK 内部重绘优化
+  若有消费者另开票。
