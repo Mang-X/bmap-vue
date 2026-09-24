@@ -15,7 +15,7 @@
     "lint:zh": "pnpm zhlint '**/*.md' --fix"
   },
   "dependencies": {
-    "@vueuse/core": "^14.4.0",
+    "@vueuse/core": "^15.0.0",
     "bmap-draw": "^1.0.19",
     "prism-theme-vars": "^0.2.5",
     "three": "^0.158.0",
