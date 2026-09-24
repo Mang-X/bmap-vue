@@ -48,7 +48,7 @@ beforeEach(() => {
 /* --------------------------------------------------------------- 共享契约 */
 
 function createServiceHarness(): ServiceFacetHarness {
-  return { services: () => driver.services, expectation: "fixture" };
+  return { services: () => driver.services };
 }
 
 function createNativeLayerHarness(): NativeLayerFacetHarness {
@@ -68,7 +68,6 @@ function createPanoramaHarness(): PanoramaFacetHarness {
   return {
     panorama: () => driver.panorama,
     container: () => document.createElement("div"),
-    expectation: "fixture",
   };
 }
 

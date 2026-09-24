@@ -3,7 +3,8 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-12
 - 计划键：`M3A2-SERVICES-NATIVE`（issue #23，追踪 #12）
-- 取代：无
+- 取代：无（决策 11 的「契约带 `expectation` 两档」由 #127 **部分取代** —— 那一档已删除，
+  其余决策不变；见下方 §11 的取代注记）
 - 相关：[`2026-09-11-jsapi-v4-driver-foundation`](./2026-09-11-jsapi-v4-driver-foundation.md)、[`2026-09-11-jsapi-v4-map-facet`](./2026-09-11-jsapi-v4-map-facet.md)、[`2026-09-11-jsapi-v4-overlay-facet`](./2026-09-11-jsapi-v4-overlay-facet.md)、[`2026-09-11-jsapi-v4-control-layer-facets`](./2026-09-11-jsapi-v4-control-layer-facets.md)、[`2026-09-10-bmap-raw-sdk-boundary`](./2026-09-10-bmap-raw-sdk-boundary.md)
 
 ## 背景
@@ -306,9 +307,16 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 - `packages/test-utils/driver-contract.ts`：新增 `runServiceFacetContract` /
   `runNativeLayerFacetContract` / `runPanoramaFacetContract`，用 vitest 断言探针结果，并把探针
   再导出（调用方不必知道文件怎么切）。
-- 契约带 `expectation: "fixture" | "live"` 两档：Fake 环境要求「命中 fixture」；真实环境只要求
+- ~~契约带 `expectation: "fixture" | "live"` 两档：Fake 环境要求「命中 fixture」；真实环境只要求
   「结算且形状自洽」——配额、网络与 Referer 都不受本库控制，把「真实环境必须成功」写进契约
-  只会得到一个不稳定的门禁。
+  只会得到一个不稳定的门禁。~~
+  **#127 取代（前半段关于「不受本库控制」的事实不变，结论改了）**：这一档与三处跳过分支已删除，
+  契约固定要求「命中 fixture」。删它的理由不是「live 档没人用」，而是它在道理上不成立：真实 AK
+  那一侧由 `tests/browser/jsapi-v4/` 那条 runner 负责，它有一档**本契约不提供**的口径 ——
+  把「前置不成立」（AK 权限 / 配额 / Referer / 网络）记成 `blocked`（退出码 3，不可放行），与
+  「库回归」的 `fail` 严格分开（规则见 `report.mts`；`registry.mts` 只负责把 `service-geocode`
+  登记进 live 档）。本档的处置只是把断言**静默跳过**，既不是「必须成功」也不是「前置不成立」，
+  两头不靠。删除也不丢覆盖：两个调用方都传 `"fixture"`，那三处 `live` 分支是**死代码**。
 - `callNativeLayerOperation` 是「怎么调」的单一实现，Fake 侧单测与真实 smoke 共用，避免
   「契约里测的那套调用」与「浏览器里跑的那套调用」各自漂移。
 

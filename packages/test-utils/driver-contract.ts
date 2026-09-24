@@ -49,8 +49,11 @@ import {
 } from "./facet-probes";
 
 /**
- * 探针（`./facet-probes`）是本文件与真实 AK smoke 共用的那一半：这里再导出一次，
- * 让「契约」这个入口同时提供纯探针与 vitest 断言，调用方不必知道文件怎么切。
+ * 探针（`./facet-probes`）在这里被再导出一次，让「契约」这个入口同时提供纯探针与
+ * vitest 断言，调用方不必知道文件怎么切。
+ *
+ * （#127 更正：这份注释原写「本文件与真实 AK smoke 共用的那一半」，但 `tests/browser/`
+ * 从未引用探针 —— 真实 smoke 走的是它自己那套检查。拆分本身保留，见下方 §11。）
  */
 export {
   DEFAULT_SERVICE_FACET_FIXTURE,
@@ -649,16 +652,23 @@ export function expectMapHandle(map: unknown): asserts map is MapHandle {
  *
  * 前者是「两个引擎都必须满足」的跨引擎契约；Service / Native Layer / Panorama 是 v4
  * 独有的面（webgl-v1 没有原生数据图层，也没有归一化服务调用面），因此契约的消费者是
- * **v4 Fake** 与 **真实 AK smoke 子集**（issue #23 实施步骤 5）。
+ * **v4 Fake**（issue #23 实施步骤 5）。
  *
- * 为了「同一套 Harness 两边都能跑」，每个 facet 拆成两半：
- * - `./facet-probes` 的 `probeXxxFacet`：纯函数，只做调用与结构化记录，**不 import vitest**
- *   （浏览器里的 smoke 直接用它）；
+ * 「调用」与「断言」刻意拆成两半：
+ * - `./facet-probes` 的 `probeXxxFacet`：纯函数，只做调用与结构化记录，**不 import vitest**；
  * - 本文件的 `runXxxFacetContract`：用 vitest 断言探针的结果。
  *
- * Fake 侧另有一档 `expectation: "fixture" | "live"`：Fake 环境要求「命中 fixture」，
- * 真实环境只要求「结算且形状自洽」——配额、网络与 Referer 都不受本库控制，
- * 把「真实环境必须成功」写进契约只会得到一个不稳定的门禁。
+ * ⚠️ 这里**刻意没有**「fixture / live」两档开关（#127 删除）。真实 AK 的那一侧由
+ * `tests/browser/jsapi-v4/` 那条 runner 负责，而它有**本文件不提供**的一档口径 ——
+ * 把「前置不成立」（AK 权限 / 配额 / Referer / 网络）记成 `blocked`（退出码 3，不可放行），
+ * 与「库回归」的 `fail` 严格分开（`report.mts` 的 `blocked` / 退出码规则；`registry.mts`
+ * 只负责把 `service-geocode` 登记进 live 档）。真实环境「必须成功」的门禁既做不到
+ * （不受本库控制），也不该写进契约；一个只把断言**静默跳过**的开关则两头不靠，
+ * 正是被删的那一档。
+ *
+ * 探针那一半目前**只**被本文件消费（`tests/browser/` 没有引用它）：拆开当初是为了让
+ * 浏览器侧能共用，而真实 smoke 最终走的是自己那套检查（见上一段）。若日后真要把探针
+ * 接进那条 runner，拆分形状已经在那儿，不需要再拆一次。
  */
 
 const SERVICE_CALL_STATUSES: readonly ServiceCallStatus[] = [
@@ -688,11 +698,6 @@ export function assertServiceResultShape<T>(label: string, result: ServiceResult
 export interface ServiceFacetHarness {
   services(): JsapiV4ServiceDriver;
   fixture?: Parameters<typeof probeServiceFacet>[1];
-  /**
-   * `fixture`（默认）：Fake 环境，要求每个调用都真的命中 fixture；
-   * `live`：真实 SDK/网络，只要求「结算且形状自洽」。
-   */
-  expectation?: "fixture" | "live";
 }
 
 export function runServiceFacetContract(createHarness: () => ServiceFacetHarness) {
@@ -725,9 +730,8 @@ export function runServiceFacetContract(createHarness: () => ServiceFacetHarness
       expect(probes.canceled.error).toBeNull();
     });
 
-    it("fixture 环境下每个基础服务都命中结果", async () => {
+    it("每个基础服务都命中结果（Fake：命中 fixture 是本库可控的那一半）", async () => {
       const harness = createHarness();
-      if ((harness.expectation ?? "fixture") !== "fixture") return;
       const probes = await probeServiceFacet(harness.services(), harness.fixture);
 
       const entries: ReadonlyArray<readonly [string, ServiceResult<unknown>]> = [
@@ -801,7 +805,6 @@ export function runNativeLayerFacetContract(createHarness: () => NativeLayerFace
 export interface PanoramaFacetHarness {
   panorama(): PanoramaViewerDriver;
   container(): HTMLElement;
-  expectation?: "fixture" | "live";
 }
 
 export function runPanoramaFacetContract(createHarness: () => PanoramaFacetHarness) {
@@ -819,16 +822,13 @@ export function runPanoramaFacetContract(createHarness: () => PanoramaFacetHarne
           "首次销毁成功，重复销毁必须是短路（不再次打到 SDK）",
         ).toBe(true);
       }
-      if ((harness.expectation ?? "fixture") === "fixture") {
-        expect(probes.destroyStatus, `destroy 失败：${probes.destroyError ?? ""}`).toBe("ok");
-      }
+      expect(probes.destroyStatus, `destroy 失败：${probes.destroyError ?? ""}`).toBe("ok");
       assertServiceResultShape("panorama.byId", probes.byId);
       assertServiceResultShape("panorama.byLocation", probes.byLocation);
     });
 
-    it("fixture 环境下两个检索都命中结果", async () => {
+    it("两个检索都命中结果（Fake：命中 fixture 是本库可控的那一半）", async () => {
       const harness = createHarness();
-      if ((harness.expectation ?? "fixture") !== "fixture") return;
       const probes = await probePanoramaFacet(harness.panorama(), harness.container());
 
       expect(probes.byId.status).toBe("success");
