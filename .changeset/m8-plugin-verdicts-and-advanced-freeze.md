@@ -21,7 +21,7 @@
 
 | 插件 | 结论 | 迁移路径 |
 | --- | --- | --- |
-| `TrackAnimation` | `native` | 改用原生 `<BTrackLineLayer>`（播放命令面见 #110）；本库不再为它提供封装 |
+| `TrackAnimation` | `native` | 改用原生 `<TrackLineLayer>`（播放命令面见 #110）；本库不再为它提供封装 |
 | `DrawingManager` | `compatible` | 无原生替代，按官方文档直接用（本库只加载脚本）；真实 4.0 上已用真实指针序列画出多边形 |
 | `GeoUtils` | `compatible` | 纯谓词集合，按官方文档直接用 |
 | `Mapvgl` | `incompatible` | 无迁移路径：依赖 `_rd` 私有回调表，且要挂 `getPanes().mapPane`（4.0 没有）；改用原生图层 |

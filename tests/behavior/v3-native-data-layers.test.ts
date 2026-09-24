@@ -27,11 +27,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, h, nextTick, ref, type VNodeChild } from "vue";
 import { browserShims, createFakeV4Harness, stripComments } from "../../packages/test-utils";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import LineLayer from "../../packages/bmap-vue/src/components/layers/LineLayer.vue";
+import FillLayer from "../../packages/bmap-vue/src/components/layers/FillLayer.vue";
+import HeatmapLayer from "../../packages/bmap-vue/src/components/layers/HeatmapLayer.vue";
+import TrackLineLayer from "../../packages/bmap-vue/src/components/layers/TrackLineLayer.vue";
 import type { FeatureStateApi } from "../../packages/bmap-vue/src/core/data/featureState";
 
 const { harness, fake } = createFakeV4Harness();
@@ -86,8 +86,8 @@ const VISUAL_LAYER_CASES: ReadonlyArray<{
   component: unknown;
   props: Record<string, unknown>;
 }> = [
-  { name: "BLineLayer", component: BLineLayer, props: { data: LINES, idKey: "id" } },
-  { name: "BFillLayer", component: BFillLayer, props: { data: POLYGONS, idKey: "id" } },
+  { name: "LineLayer", component: LineLayer, props: { data: LINES, idKey: "id" } },
+  { name: "FillLayer", component: FillLayer, props: { data: POLYGONS, idKey: "id" } },
 ];
 
 /** 替身实例上对本文件有用的字段（显式列出，读起来就是「这一条依赖替身的哪几项」）。 */
@@ -134,7 +134,7 @@ function setVisibility(state: "hidden" | "visible"): void {
 
 function mountLayerTree(children: () => VNodeChild) {
   const Root = defineComponent({
-    setup: () => () => h(BMap, { provider: harness.provider() }, children),
+    setup: () => () => h(Map, { provider: harness.provider() }, children),
   });
   return mount(Root, { attachTo: harness.container() });
 }
@@ -188,7 +188,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       expect(harness.attached("layer")).toBe(1);
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BLineLayer 卸载");
+      harness.assertIdle("LineLayer 卸载");
     });
 
     it.each(VISUAL_LAYER_CASES.map((entry, index) => [entry.name, index] as const))(
@@ -378,7 +378,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   describe("§2 拾取：未命中 / 命中 / data 更新后的最新 item", () => {
     it("命中回传业务身份与 properties；未命中只有 hit:false", async () => {
       const { wrapper } = await mountOneVisual(0);
-      const layer = wrapper.findComponent(BLineLayer);
+      const layer = wrapper.findComponent(LineLayer);
 
       harness.simulateNativePick({ dataIndex: 1, latLng: { lng: 116.55, lat: 39.92 }, pixel: { x: 3, y: 4 } });
       const hit = layer.emitted("click")!.at(-1)![0] as {
@@ -405,12 +405,12 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       expect(miss.item).toBeNull();
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BLineLayer 拾取");
+      harness.assertIdle("LineLayer 拾取");
     });
 
     it("data 更新后，同一个要素下标回传的是新 properties", async () => {
       const { wrapper, setProp } = await mountOneVisual(0);
-      const layer = wrapper.findComponent(BLineLayer);
+      const layer = wrapper.findComponent(LineLayer);
 
       await setProp({
         data: {
@@ -433,7 +433,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
     it("没有 idKey 时身份如实为 null（不猜官方默认值），但仍给出命中要素的 properties", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { wrapper } = await mountOneVisual(0, { idKey: undefined });
-      const layer = wrapper.findComponent(BLineLayer);
+      const layer = wrapper.findComponent(LineLayer);
 
       harness.simulateNativePick({ dataIndex: 0 });
       const pick = layer.emitted("click")!.at(-1)![0] as {
@@ -454,7 +454,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   describe("§3 Feature State：单选 / 多选 / 替换 / 清空 / 读回", () => {
     it("命令面写进 SDK，并按业务 id 定位", async () => {
       const { wrapper } = await mountOneVisual(0);
-      const state = featureStateOf(wrapper, BLineLayer);
+      const state = featureStateOf(wrapper, LineLayer);
 
       state.update("a", { selected: true });
       state.update(["a", "b"], { hovered: true }, { append: true });
@@ -478,7 +478,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("get 走 SDK 的公开读回（不是本地账本），且能按 keys 过滤", async () => {
       const { wrapper } = await mountOneVisual(0);
-      const state = featureStateOf(wrapper, BLineLayer);
+      const state = featureStateOf(wrapper, LineLayer);
 
       state.update(["a", "b"], { selected: true });
       expect(state.get()).toEqual({ a: { selected: true }, b: { selected: true } });
@@ -502,18 +502,18 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
         ],
       };
       const props = ref<Record<string, unknown>>({ data: blankKeyData, idKey: "" });
-      const wrapper = mountLayerTree(() => h(BLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(LineLayer, props.value));
       await settle();
 
       expect(harness.nativeLayerOptions(), "空字符串字段名照交给 SDK").toMatchObject({ idKey: "" });
 
-      const state = featureStateOf(wrapper, BLineLayer);
+      const state = featureStateOf(wrapper, LineLayer);
       const before = harness.nativeLayerCalls().length;
       state.update("line-1", { selected: true });
       expect(harness.nativeLayerCalls().length, "身份已声明 ⇒ 命令真的执行").toBeGreaterThan(before);
       expect(state.get("line-1")).toEqual({ "line-1": { selected: true } });
 
-      const layer = wrapper.findComponent(BLineLayer);
+      const layer = wrapper.findComponent(LineLayer);
       harness.simulateNativePick({ dataIndex: 0 });
       const pick = layer.emitted("click")!.at(-1)![0] as { hit: boolean; id: unknown };
       expect(pick.hit).toBe(true);
@@ -526,7 +526,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
     it("没有声明 idKey 时命令面**拒绝执行**（不让它悄悄落回 SDK 的默认身份）", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { wrapper } = await mountOneVisual(0, { idKey: undefined });
-      const state = featureStateOf(wrapper, BLineLayer);
+      const state = featureStateOf(wrapper, LineLayer);
       const before = harness.nativeLayerCalls().length;
 
       expect(() => state.update("a", { selected: true })).not.toThrow();
@@ -540,7 +540,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("非法 id 在调用之前失败（不产生 SDK 调用）", async () => {
       const { wrapper } = await mountOneVisual(0);
-      const state = featureStateOf(wrapper, BLineLayer);
+      const state = featureStateOf(wrapper, LineLayer);
       const calls = harness.nativeLayerCalls().length;
 
       expect(() => state.update(Number.NaN, { selected: true })).toThrowError(
@@ -599,7 +599,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   describe("§5 逐 kind 的能力面：不假支持", () => {
     it("热力图只声明 data / style / visible（不产生不支持的字段调用）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, style: { radius: 30 } });
-      const wrapper = mountLayerTree(() => h(BHeatmapLayer, props.value));
+      const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
 
       expect(createdSince()).toBe(1);
@@ -611,12 +611,12 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       }
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BHeatmapLayer");
+      harness.assertIdle("HeatmapLayer");
     });
 
     it("不表态期间「隐藏 → 显示」同样要继承数据（扩展 API 图层的强制重建路径）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
-      const wrapper = mountLayerTree(() => h(BHeatmapLayer, props.value));
+      const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
       const created = createdSince();
 
@@ -638,7 +638,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("热力图的 visible 用挂上-摘掉表达；重新可见换实例（摘掉的实例渲染不了）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
-      const wrapper = mountLayerTree(() => h(BHeatmapLayer, props.value));
+      const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
       const created = createdSince();
 
@@ -652,12 +652,12 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       expect(createdSince(), "重新可见必须换实例（#98 live 实测）").toBe(created + 1);
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BHeatmapLayer 显隐");
+      harness.assertIdle("HeatmapLayer 显隐");
     });
 
     it("轨迹线：data → null 真的清掉旧轨迹（不再有「仍在画上一条轨迹」的状态）", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
       expect(harness.nativeLayerData(), "初始轨迹已下发").toEqual(TRACK);
       const created = createdSince();
@@ -686,7 +686,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("轨迹线基线：只下发数据，没有其它能力调用；显隐同样用挂上-摘掉", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, visible: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
 
       expect(createdSince()).toBe(1);
@@ -704,13 +704,13 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       expect(createdSince(), "重新可见必须换实例（与热力图同一条证据）").toBe(created + 1);
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BTrackLineLayer");
+      harness.assertIdle("TrackLineLayer");
     });
 
     it("播放命令面：六条命令转发到实例；observed 由 progress / statuschange 事件派生", async () => {
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, { data: TRACK }));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       // `defineExpose` 解包 ref：`vm.observed` 是**值**，每次访问都经 proxy 读 `.value`
       const exposed = layer.vm as unknown as {
         playback: {
@@ -764,9 +764,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("observed：换代后第一条事件从空快照重建（不混两代 status/progress）", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, visible: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as { observed: Record<string, unknown> | null };
 
       // 第一代：progress + statuschange 都写进同一快照
@@ -796,9 +796,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
     });
 
     it("setProcess 越界在打到 SDK 之前抛 BMAP_INVALID_ARGUMENT（不静默 clamp）", async () => {
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, { data: TRACK }));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { setProcess(p: number): void; setSpeed(n: number): void };
       };
@@ -817,9 +817,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
     });
 
     it("默认可见性策略：hidden 只停观察，不改写 SDK 播放意图（不自动 pause）", async () => {
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, { data: TRACK }));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, { data: TRACK }));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void };
         observed: Record<string, unknown> | null;
@@ -847,9 +847,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden opt-in：hidden 才 pause；用户自己 pause 过的不被 visibility 抢走 resume", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void; pause(): void };
       };
@@ -877,9 +877,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：hidden 期间重建后 shown 不对新实例发 resume（记账绑 handle）", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true, visible: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void };
       };
@@ -917,10 +917,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：start → stop → hidden → visible 不得被反向启动（命令意图）", async () => {
       const wrapper = mountLayerTree(() =>
-        h(BTrackLineLayer, { data: TRACK, pauseOnHidden: true }),
+        h(TrackLineLayer, { data: TRACK, pauseOnHidden: true }),
       );
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void; stop(): void };
       };
@@ -944,10 +944,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：从未 start 的 idle 实例 hidden/visible 不碰播放命令", async () => {
       const wrapper = mountLayerTree(() =>
-        h(BTrackLineLayer, { data: TRACK, pauseOnHidden: true }),
+        h(TrackLineLayer, { data: TRACK, pauseOnHidden: true }),
       );
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as Record<string, never>;
       void exposed;
 
@@ -969,9 +969,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
     it("pauseOnHidden：not-ready start 不留意图，后续 ready 的 hidden→visible 不 pause/resume", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       // 不 settle：`onMounted` 尚未拿到 readyCtx ⇒ session 为 null（真 not-ready 窗口）
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as { playback: { start(): void } };
       const createdBeforeStart = fake.createdNativeLayers.length;
       exposed.playback.start();
@@ -1000,9 +1000,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：start 后 visible 状态重建，意图不跨代——hidden→visible 不 resume 新 handle", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void };
       };
@@ -1034,9 +1034,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：hidden 中 opt-out（true→false）撤销本库造成的 pause", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: true });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void };
       };
@@ -1065,9 +1065,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：页面已 hidden 时 opt-in（false→true）立即对有意图的实例 pause", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, pauseOnHidden: false });
-      const wrapper = mountLayerTree(() => h(BTrackLineLayer, props.value));
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void };
       };
@@ -1093,10 +1093,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
     it("pauseOnHidden：已在 hidden 时 start/resume 立刻按策略 pause（不绕过 opt-in）", async () => {
       const wrapper = mountLayerTree(() =>
-        h(BTrackLineLayer, { data: TRACK, pauseOnHidden: true }),
+        h(TrackLineLayer, { data: TRACK, pauseOnHidden: true }),
       );
       await settle();
-      const layer = wrapper.findComponent(BTrackLineLayer);
+      const layer = wrapper.findComponent(TrackLineLayer);
       const exposed = layer.vm as unknown as {
         playback: { start(): void; resume(): void };
       };
@@ -1147,7 +1147,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       const fnB = (properties: Record<string, unknown>) => `#b-${String(properties.id)}`;
 
       const wrapper = mountLayerTree(() =>
-        h(BLineLayer, {
+        h(LineLayer, {
           data: LINES,
           idKey: "id",
           style: {
@@ -1189,10 +1189,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   describe("§7 与旧 TrackAnimation 无关", () => {
     it("新组件与共享内核的源码里没有旧插件 / 私有面", () => {
       const sources = [
-        "packages/bmap-vue/src/components/layers/BTrackLineLayer.vue",
-        "packages/bmap-vue/src/components/layers/BLineLayer.vue",
-        "packages/bmap-vue/src/components/layers/BFillLayer.vue",
-        "packages/bmap-vue/src/components/layers/BHeatmapLayer.vue",
+        "packages/bmap-vue/src/components/layers/TrackLineLayer.vue",
+        "packages/bmap-vue/src/components/layers/LineLayer.vue",
+        "packages/bmap-vue/src/components/layers/FillLayer.vue",
+        "packages/bmap-vue/src/components/layers/HeatmapLayer.vue",
         "packages/bmap-vue/src/components/layers/useVisualLayer.ts",
         "packages/bmap-vue/src/core/composables/useNativeLayerResource.ts",
         "packages/bmap-vue/src/core/data/featureState.ts",
@@ -1203,7 +1203,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
       // **正证守卫**：先证明真的读到了内容（否则「什么都没读到」也会让下面的反向断言通过）
       expect(raw.length, "必须真的读到源码").toBeGreaterThan(8000);
-      expect(raw, "读到的内容里应当包含新组件名").toContain("BTrackLineLayer");
+      expect(raw, "读到的内容里应当包含新组件名").toContain("TrackLineLayer");
 
       /**
        * 判定对象是**代码**，不是文案：文件头正好在解释「刻意不用 TrackAnimation」，注释里出现
@@ -1261,7 +1261,7 @@ describe("§8 换实例的失败语义（严格 detach / unknown）", () => {
 
     // 「保留旧实例」必须包含**行为**：摘除失败**没有**解绑业务监听 ⇒ 旧实例上的拾取仍然到得了组件。
     // （修前是「先 releaseListeners 再 detach」：监听已经被不可逆地释放掉，这里就一个事件都收不到。）
-    const layer = wrapper.findComponent(BLineLayer);
+    const layer = wrapper.findComponent(LineLayer);
     harness.simulateNativePick({ dataIndex: 0 });
     expect(layer.emitted("click"), "旧实例仍然可交互（监听没被提前释放）").toBeTruthy();
 

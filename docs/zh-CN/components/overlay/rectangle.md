@@ -1,9 +1,9 @@
-# BRectangle 矩形
+# Rectangle 矩形
 
 在地图上绘制矩形（v4 的 `Rectangle` 覆盖物，由对角两点定义的 `bounds` 描述）。
 
 ```ts
-import { BRectangle } from 'bmap-vue'
+import { Rectangle } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -29,7 +29,7 @@ overlay/rectangle
 | visible         | 是否显示                                    | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
 
 > `bounds` 按**内容**判等：父级每次渲染传内联字面量不会产生多余的 SDK 命令。
-> 这与 `BPolyline` / `BPolygon` 的 `path`（根引用 + 版本 prop）不同——矩形只有四个数字。
+> 这与 `Polyline` / `Polygon` 的 `path`（根引用 + 版本 prop）不同——矩形只有四个数字。
 
 ## 更新方式
 

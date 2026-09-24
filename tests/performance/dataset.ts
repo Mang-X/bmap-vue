@@ -10,8 +10,8 @@
  *    而本票的全部结论都建立在「同一份数据的前后对比」上。
  * 2. **有真实结构**。80% 的点聚在 32 个「城市」附近，20% 均匀散布：全均匀分布会让 fallback
  *    聚类退化成「一个点一个桶」，测出来的是「建 50k 个桶」的成本，不是聚类的成本。
- * 3. **与组件输入同形**：`Item[]` + `itemKey` + `getPosition`，即 `BPointCollection` /
- *    `BMarkerList` / `BMarkerCluster` 真实消费的形状（不是为基准另造一种输入）。
+ * 3. **与组件输入同形**：`Item[]` + `itemKey` + `getPosition`，即 `PointCollection` /
+ *    `MarkerList` / `MarkerCluster` 真实消费的形状（不是为基准另造一种输入）。
  *
  * ## 它不是「未来 Worker 协议的消息格式」
  *
@@ -38,7 +38,7 @@ export type PerfSize = (typeof PERF_SIZES)[number];
 export const DATASET_CITY_COUNT = 32;
 export const DATASET_CLUSTERED_RATIO = 0.8;
 
-/** 业务项形状：与 `BPointCollection` 的 `data` 逐项同形。 */
+/** 业务项形状：与 `PointCollection` 的 `data` 逐项同形。 */
 export interface PerfItem {
   readonly id: string;
   readonly lng: number;
@@ -160,11 +160,11 @@ export function featureCollection<Feature>(features: Feature[]): {
 }
 
 /**
- * 四类原生图层的输入夹具（`BPointCollection` 之外的四个 kind；issue #37 评审 3 要求补齐
+ * 四类原生图层的输入夹具（`PointCollection` 之外的四个 kind；issue #37 评审 3 要求补齐
  * 「四类图层的 setData / style / resource 大数据路径」）。
  *
  * 形状照组件文档与既有用例：`LineLayer` / `FillLayer` 吃 `FeatureCollection`、`Heatmap` 吃点集合、
- * `TrackLine` 只接收**单条 `LineString` Feature**（见 `BTrackLineLayerProps.data`）。
+ * `TrackLine` 只接收**单条 `LineString` Feature**（见 `TrackLineLayerProps.data`）。
  * 三者都派生自同一份 `makeItems`，因此规模之间仍然前缀稳定、彼此可比。
  */
 export function makePointFeatures(count: number): PerfPointFeature[] {

@@ -362,7 +362,7 @@ export function createJsapiV4PanoramaDriver(
     //
     // 标注**不是** Control / Overlay 家族的成员：它只存在于某个查看器内部
     // （`Panorama#addOverlay` / `removeOverlay`），因此这里不引入 add/remove 之外的
-    // 生命周期记账——所有权由「谁创建谁摘除」表达（`BPanoramaLabel` 在实例 scope 里摘除）。
+    // 生命周期记账——所有权由「谁创建谁摘除」表达（`PanoramaLabel` 在实例 scope 里摘除）。
     createLabel(content: string, options?: PanoramaLabelOptions) {
       const Label = namespaceCtor(namespace, "PanoramaLabel");
       return registry.adopt(

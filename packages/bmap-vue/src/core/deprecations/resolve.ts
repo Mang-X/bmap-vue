@@ -1,7 +1,7 @@
 /**
  * prop 别名的**读取规则**（M5-CUSTOM-MENU / issue #33）
  *
- * 「新 API 优先」这条规则原本只写在 `useOverlaySpec` 里。`<BContextMenu>` 的 `menuItems` → `items`
+ * 「新 API 优先」这条规则原本只写在 `useOverlaySpec` 里。`<ContextMenu>` 的 `menuItems` → `items`
  * 需要**同一条**规则，而把它在两个地方各写一遍，正是本仓库反复吃过亏的形态（两份同源实现会在
  * 「正典为 `undefined` 算不算缺失」「旧名只给一半怎么办」这类细节上分叉，而分叉的表现是
  * 「旧名有时生效有时不生效」）。因此规则收在这里，两个消费者共用：

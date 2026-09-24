@@ -8,7 +8,7 @@
  * `PluginRegistry` 是**每个地图实例一份**，`whenPlugin` 又把地图自己的 `scope.signal`
  * 传给 `load()`。两个后果：
  *
- * 1. 同页面两张 `<BMap :plugins="['TrackAnimation']">` ⇒ 同一份脚本插两次；
+ * 1. 同页面两张 `<Map :plugins="['TrackAnimation']">` ⇒ 同一份脚本插两次；
  * 2. 地图 A 卸载 ⇒ A 的 scope abort ⇒ 如果 B 恰好复用同一条在飞加载，B 会跟着一起挂。
  *    「谁先谁后」决定 B 的成败，这本身就是 bug。
  *

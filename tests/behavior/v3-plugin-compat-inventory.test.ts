@@ -309,7 +309,7 @@ describe("结论模型与迁移路径（M8-ADAPTERS-ADVANCED / #43）", () => {
 
     // 反证：同一条判据必须能对「不存在」与「存在」分别给出 false / true
     expect(exists("BDefinitelyNotAComponent")).toBe(false);
-    expect(exists("BTrackLineLayer")).toBe(true);
+    expect(exists("TrackLineLayer")).toBe(true);
   });
 
   it("`compatible` 必须有运行时证据 —— 不许用「声明面通过」冒充「兼容」", () => {

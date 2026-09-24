@@ -1,5 +1,5 @@
 /**
- * Fake BMap v4 上的**全量** Driver Contract（M3A3-FAKE-DUAL / issue #24）
+ * Fake Map v4 上的**全量** Driver Contract（M3A3-FAKE-DUAL / issue #24）
  *
  * 与 `v3-jsapi-v4-*.test.ts` 的分工：那些文件把契约跑在**手工组合的 facet** 或装配后的
  * `createJsapiV4Driver` 上；这里跑的是 `runMapDriverContract` —— 需要 `BMapClient` 的那一层，

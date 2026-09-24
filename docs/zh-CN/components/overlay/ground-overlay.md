@@ -1,9 +1,9 @@
-# BGroundOverlay 地面叠加层 <Badge type="tip" text="^0.0.32" />
+# GroundOverlay 地面叠加层 <Badge type="tip" text="^0.0.32" />
 
 在地图底面上叠加覆盖物，覆盖物可以是图片、自定义 Canvas、视频。
 
 ```ts
-import { BGroundOverlay } from 'bmap-vue'
+import { GroundOverlay } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -31,10 +31,10 @@ v2 / v3-beta 的 `startPoint`（西南角）与 `endPoint`（东北角）**仍�
 
 ```vue
 <!-- 旧写法（仍可用，会提示一次） -->
-<BGroundOverlay type="image" url="a.png" :start-point="sw" :end-point="ne" />
+<GroundOverlay type="image" url="a.png" :start-point="sw" :end-point="ne" />
 
 <!-- 新写法 -->
-<BGroundOverlay type="image" url="a.png" :bounds="{ southwest: sw, northeast: ne }" />
+<GroundOverlay type="image" url="a.png" :bounds="{ southwest: sw, northeast: ne }" />
 ```
 
 ### bounds 图示

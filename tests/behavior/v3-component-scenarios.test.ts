@@ -8,7 +8,7 @@
  * 每个场景结尾都调用 `harness.assertIdle()`：**诊断计数在这里当生命周期门禁用**——卸载之后
  * SDK 侧必须没有任何未释放资源。
  *
- * ## `<BInfoWindow>` 的缺口已由 R25-C（#72）关掉
+ * ## `<InfoWindow>` 的缺口已由 R25-C（#72）关掉
  *
  * 组件曾经在 `onMounted` 里走 `overlays.add({ kind: "map" }, infoWindow)`，而 v4 的 OverlayDriver
  * 明确拒绝这条路（气泡是地图级 API，要用 `openInfoWindow` / `closeInfoWindow`）并抛
@@ -25,23 +25,23 @@ import {
   createManualFrames,
   type FakeV4Harness,
 } from "../../packages/test-utils";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
-import BInfoWindow from "../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue";
-import BControl from "../../packages/bmap-vue/src/components/controls/BControl.vue";
-import BDistrictLayer from "../../packages/bmap-vue/src/components/layers/BDistrictLayer.vue";
-import BGeoJSONLayer from "../../packages/bmap-vue/src/components/layers/BGeoJSONLayer.vue";
-import BTileLayer from "../../packages/bmap-vue/src/components/layers/BTileLayer.vue";
-import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
-import BMarkerList from "../../packages/bmap-vue/src/components/data/BMarkerList.vue";
-import BMarkerCluster from "../../packages/bmap-vue/src/components/data/BMarkerCluster.vue";
-import BPointCollection from "../../packages/bmap-vue/src/components/data/BPointCollection.vue";
-import BPointIconLayer from "../../packages/bmap-vue/src/components/data/BPointIconLayer.vue";
-import BPointLayer from "../../packages/bmap-vue/src/components/data/BPointLayer.vue";
-import { useBMapGeocoder } from "../../packages/bmap-vue/src/composables/useBMapGeocoder";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
+import InfoWindow from "../../packages/bmap-vue/src/components/overlays/InfoWindow.vue";
+import CustomControl from "../../packages/bmap-vue/src/components/controls/CustomControl.vue";
+import DistrictLayer from "../../packages/bmap-vue/src/components/layers/DistrictLayer.vue";
+import GeoJSONLayer from "../../packages/bmap-vue/src/components/layers/GeoJSONLayer.vue";
+import TileLayer from "../../packages/bmap-vue/src/components/layers/TileLayer.vue";
+import LineLayer from "../../packages/bmap-vue/src/components/layers/LineLayer.vue";
+import FillLayer from "../../packages/bmap-vue/src/components/layers/FillLayer.vue";
+import HeatmapLayer from "../../packages/bmap-vue/src/components/layers/HeatmapLayer.vue";
+import TrackLineLayer from "../../packages/bmap-vue/src/components/layers/TrackLineLayer.vue";
+import MarkerList from "../../packages/bmap-vue/src/components/data/MarkerList.vue";
+import MarkerCluster from "../../packages/bmap-vue/src/components/data/MarkerCluster.vue";
+import PointCollection from "../../packages/bmap-vue/src/components/data/PointCollection.vue";
+import PointIconLayer from "../../packages/bmap-vue/src/components/data/PointIconLayer.vue";
+import PointLayer from "../../packages/bmap-vue/src/components/data/PointLayer.vue";
+import { useGeocoder } from "../../packages/bmap-vue/src/composables/useGeocoder";
 import { useMapEvent } from "../../packages/bmap-vue/src/composables/useMapEvent";
 import { useMapStatus } from "../../packages/bmap-vue/src/composables/useMapStatus";
 import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
@@ -56,7 +56,7 @@ beforeEach(() => {
 });
 
 /**
- * 挂一份 `<BMap>` + 子节点，就绪后返回 wrapper。
+ * 挂一份 `<Map>` + 子节点，就绪后返回 wrapper。
  *
  * `onError` 用于把「组件 mounted 钩子里抛出的错误」收成领域结果：Vue 会把它交给
  * `config.errorHandler`，不接住就是 unhandled rejection（噪声大且不可断言）。
@@ -66,7 +66,7 @@ async function mountMapTree(
   onError?: (error: unknown) => void,
 ) {
   const Root = defineComponent({
-    setup: () => () => h(BMap, { provider: harness.provider() }, children),
+    setup: () => () => h(Map, { provider: harness.provider() }, children),
   });
   const wrapper = mount(Root, {
     attachTo: harness.container(),
@@ -85,9 +85,9 @@ async function unmountAndSettle(wrapper: { unmount(): void }) {
 }
 
 /**
- * 挂一份由 `props` 驱动的 `<BMap>`（视野用例需要从外部改变 props，见 M4-STATE / #27）。
+ * 挂一份由 `props` 驱动的 `<Map>`（视野用例需要从外部改变 props，见 M4-STATE / #27）。
  *
- * `emit` 从 `<BMap>` 自己的 wrapper 上读：`wrapper.emitted()` 只记录父级 emit 的事件。
+ * `emit` 从 `<Map>` 自己的 wrapper 上读：`wrapper.emitted()` 只记录父级 emit 的事件。
  * `onError` 把「组件 mounted / watcher 回调里抛出的错误」收成可断言的结果
  * （与 `mountMapTree` 同一口径：Vue 会交给 `config.errorHandler`，不接住就是 unhandled）。
  */
@@ -100,17 +100,17 @@ async function mountControlledMap(
     attachTo?: HTMLElement;
   } = {},
 ) {
-  const Root = defineComponent({ setup: () => () => h(BMap, getProps(), options.children) });
+  const Root = defineComponent({ setup: () => () => h(Map, getProps(), options.children) });
   const wrapper = mount(Root, {
     attachTo: options.attachTo ?? harness.container(),
     global: options.onError ? { config: { errorHandler: options.onError } } : undefined,
   });
   await flushPromises();
   await nextTick();
-  return { wrapper, bmap: wrapper.findComponent(BMap) };
+  return { wrapper, bmap: wrapper.findComponent(Map) };
 }
 
-import type { BMapExpose } from "../../packages/bmap-vue/src/types/mapExpose";
+import type { MapExpose } from "../../packages/bmap-vue/src/types/mapExpose";
 
 /** 一套受控视野 props（父级从 setup 起就传值 ⇒ 受控）。 */
 function controlledViewProps(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -143,7 +143,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
     });
 
     const wrapper = await mountMapTree(() => [h(EngineProbe)]);
-    const bmap = wrapper.findComponent(BMap);
+    const bmap = wrapper.findComponent(Map);
     expect(seenEngine, "组件树里的 client.engine 必须是 jsapi-v4").toBe("jsapi-v4");
     expect(wrapper.find(".bmap-canvas-host").exists()).toBe(true);
     expect((bmap.vm as unknown as { status: string }).status).toBe("ready");
@@ -158,7 +158,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
   it("Marker：position 变化只更新同一个覆盖物，卸载后无残留", async () => {
     const position = ref(POSITION);
     const wrapper = await mountMapTree(() => [
-      h(BMarker, { position: position.value, title: "marker" }),
+      h(Marker, { position: position.value, title: "marker" }),
     ]);
 
     expect(harness.overlayPositions()).toEqual([POSITION]);
@@ -180,7 +180,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
     const errors: Array<{ code?: string }> = [];
     const open = ref(true);
     const wrapper = await mountMapTree(
-      () => [h(BInfoWindow, { position: POSITION, open: open.value, title: "iw" }, () => h("span", "气泡内容"))],
+      () => [h(InfoWindow, { position: POSITION, open: open.value, title: "iw" }, () => h("span", "气泡内容"))],
       (error) => errors.push(error as { code?: string }),
     );
 
@@ -218,7 +218,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
   it("Control：自定义控件挂载与可见性切换", async () => {
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BControl, { visible: visible.value }, () => h("button", "自定义控件")),
+      h(CustomControl, { visible: visible.value }, () => h("button", "自定义控件")),
     ]);
     expect(harness.attached("control")).toBe(1);
     expect(harness.visibleControls()).toBe(1);
@@ -244,7 +244,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
   it("Layer：行政区图层挂载与可见性切换", async () => {
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BDistrictLayer, { name: "北京市", visible: visible.value }),
+      h(DistrictLayer, { name: "北京市", visible: visible.value }),
     ]);
     expect(harness.attached("layer")).toBe(1);
 
@@ -259,8 +259,8 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
 
   it("Marker 与 Layer 混挂在同一张地图：两类读数与位置投影都按族划分", async () => {
     const wrapper = await mountMapTree(() => [
-      h(BMarker, { position: POSITION }),
-      h(BDistrictLayer, { name: "北京市" }),
+      h(Marker, { position: POSITION }),
+      h(DistrictLayer, { name: "北京市" }),
     ]);
     expect({
       overlays: harness.attached("overlay"),
@@ -272,14 +272,14 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
     harness.assertIdle("Marker + Layer 混挂");
   });
 
-  it("基础服务：useBMapGeocoder 把 SDK 回包归一成 Point", async () => {
+  it("基础服务：useGeocoder 把 SDK 回包归一成 Point", async () => {
     const outcome: { status: "resolved" | "failed"; finite: boolean } = {
       status: "failed",
       finite: false,
     };
     const GeocodeProbe = defineComponent({
       setup() {
-        const geocoder = useBMapGeocoder();
+        const geocoder = useGeocoder();
         onMounted(async () => {
           try {
             // #38 起动作恒 resolve 成 ServiceResult：不 reject，「有没有结果」看 status/data
@@ -312,12 +312,12 @@ describe("生命周期门禁（组件层）", () => {
   it("100 次挂载 / 卸载整棵组件树之后诊断归零", async () => {
     for (let i = 0; i < 100; i++) {
       const wrapper = await mountMapTree(() => [
-        h(BMarker, { position: POSITION }),
-        h(BControl, {}, () => h("span", "c")),
-        h(BDistrictLayer, { name: "北京市" }),
+        h(Marker, { position: POSITION }),
+        h(CustomControl, {}, () => h("span", "c")),
+        h(DistrictLayer, { name: "北京市" }),
         // 气泡也进循环：它走的是**地图级**专用入口（不是 addOverlay），因此它的释放路径
         // 与其它三个族完全不同，混挂时最容易被漏掉（R25-C / #72）
-        h(BInfoWindow, { position: POSITION, open: true }),
+        h(InfoWindow, { position: POSITION, open: true }),
       ]);
       // 每一轮都必须真的挂上（否则「归零」可能是「从来没挂过」）。四个族都断言。
       expect(harness.attached("overlay")).toBe(1);
@@ -355,7 +355,7 @@ describe("生命周期门禁（组件层）", () => {
  * 规范（三态语义、回环抑制、已知限制）见 ADR `2026-09-14-map-controlled-state` 与
  * `docs/zh-CN/components/map.md` 的状态表。
  */
-describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
+describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
   const AMERICA = { lng: -74.006, lat: 40.7128 };
 
   it("初次视野只设定一次；后续 center 变化走字段级写入且不重置 zoom", async () => {
@@ -922,7 +922,7 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
       setup() {
         const mapContext = useRequiredMapContext();
         return () => {
-          // 首帧渲染时 client 还没就绪（探针挂在 `<BMap>` 的默认插槽里，先于 mount 完成渲染），
+          // 首帧渲染时 client 还没就绪（探针挂在 `<Map>` 的默认插槽里，先于 mount 完成渲染），
           // 因此这里要能容忍 undefined，等 client 就绪后的那次重渲染再捕获。
           const driver = mapContext.client.value?.driver as unknown as
             | { map: Record<string, unknown> }
@@ -969,17 +969,17 @@ describe("BMap 视野的受控 / 非受控（M4-STATE / #27）", () => {
 /* ------------------------------------------------------------------ map 事件（M4-EVENTS / #28）
  *
  * 组件级场景只写领域语言（`harness.dispatch()` / `bmap.emitted()` / `harness.assertIdle()`）：
- * - `<BMap>` 的 map 事件**按需订阅**（父级绑了才订）；
+ * - `<Map>` 的 map 事件**按需订阅**（父级绑了才订）；
  * - 模板上绑 `@maxtypechange` / `@style_loaded`（别名拼写）都能收到；
  * - 内联 handler 随渲染更新不重绑；卸载后监听器归零；
  * - 高频事件一帧最多提交一次；
- * - 两张地图的订阅互不串线（`<BMap>` 的 @ 与 `useMapEvent` 两条路径都验证）。
+ * - 两张地图的订阅互不串线（`<Map>` 的 @ 与 `useMapEvent` 两条路径都验证）。
  */
 describe("map 事件与状态（M4-EVENTS / #28）", () => {
   it("map 事件无条件订阅（不依赖 prop 检测）：handler 从 undefined 变成函数也不会丢事件", async () => {
     // 为什么不做「按需订阅」：Vue 判子组件要不要重渲染时 **emit listener 不参与属性比较**
     // （`hasPropsChanged` 里 `!isEmitListener(...)`），于是「onClick 从 undefined 变成函数」这种
-    // 变化不会让 <BMap> 重渲染 —— 依赖 onUpdated 的增量同步看不到它，事件会静默丢失。
+    // 变化不会让 <Map> 重渲染 —— 依赖 onUpdated 的增量同步看不到它，事件会静默丢失。
     const props = ref<Record<string, unknown>>({ provider: harness.provider(), onClick: undefined });
     const { wrapper } = await mountControlledMap(() => props.value);
 
@@ -993,7 +993,7 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     harness.dispatch("click", { point: { lng: 1, lat: 2 } });
     expect(otherEvent, "没绑 click 的事件不该被唤醒").not.toHaveBeenCalled();
 
-    // **关键回归**：同一个 key 从 undefined 变成函数。Vue 不会因此让 <BMap> 重渲染
+    // **关键回归**：同一个 key 从 undefined 变成函数。Vue 不会因此让 <Map> 重渲染
     // （emit listener 不参与属性比较），父级也没改任何别的 prop —— 事件仍然必须到达
     const spy = vi.fn();
     props.value = { ...props.value, onClick: spy };
@@ -1259,7 +1259,7 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     harness.assertIdle("map 事件：scope 记账");
   });
 
-  it("Map Context 下的 useMapEvent 也能收到 load / destroy（与 <BMap @...> 同一可观察集合）", async () => {
+  it("Map Context 下的 useMapEvent 也能收到 load / destroy（与 <Map @...> 同一可观察集合）", async () => {
     const loadSpy = vi.fn();
     const destroySpy = vi.fn();
     const LifecycleProbe = defineComponent({
@@ -1353,7 +1353,7 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
     const props = ref<Record<string, unknown>>({ provider: harness.provider(), show: true });
     const Tree = defineComponent({
       setup: () => () =>
-        h(BMap, props.value as never, {
+        h(Map, props.value as never, {
           default: () => (props.value.show ? [h(ExplicitProbe)] : []),
         }),
     });
@@ -1449,7 +1449,7 @@ describe("map 事件与状态（M4-EVENTS / #28）", () => {
  */
 describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", () => {
   /**
-   * expose 的读法：直接按**真实契约** `BMapExpose` 断言（不再手写一份子集 —— 手写的那份
+   * expose 的读法：直接按**真实契约** `MapExpose` 断言（不再手写一份子集 —— 手写的那份
    * 既会漂移，也挡不住「实现少了一个成员」；逐成员的类型契约由 `fixtures/consumer` 锁）。
    */
   const shims = browserShims();
@@ -1467,7 +1467,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     frames = null;
   });
 
-  const exposeOf = (bmap: { vm: unknown }): BMapExpose => bmap.vm as unknown as BMapExpose;
+  const exposeOf = (bmap: { vm: unknown }): MapExpose => bmap.vm as unknown as MapExpose;
   const statusOf = (bmap: { vm: unknown }): string => (bmap.vm as { status: string }).status;
 
   it("expose 的常用命令真的读写 SDK（get / set / supports）", async () => {
@@ -1519,7 +1519,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
   it("expose 不再有 resetCenter，resetView 仍在", async () => {
     const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
     const vm = bmap.vm as unknown as Record<string, unknown>;
-    // 验收：`BMapExpose` 不包含错误的 `resetCenter()` 实现（名字说重置中心、实现重置整个视野）
+    // 验收：`MapExpose` 不包含错误的 `resetCenter()` 实现（名字说重置中心、实现重置整个视野）
     expect(vm.resetCenter, "废弃别名必须被移除").toBeUndefined();
     expect(typeof vm.resetView).toBe("function");
 
@@ -1709,8 +1709,8 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     useManualFrames();
     const hostA = harness.container();
     const hostB = harness.container();
-    const wrapperA = mount(BMap, { attachTo: hostA, props: { provider: harness.provider() } });
-    const wrapperB = mount(BMap, { attachTo: hostB, props: { provider: harness.provider() } });
+    const wrapperA = mount(Map, { attachTo: hostA, props: { provider: harness.provider() } });
+    const wrapperB = mount(Map, { attachTo: hostB, props: { provider: harness.provider() } });
     await settleProps();
 
     expect(harness.mapsCreated()).toBe(2);
@@ -1732,7 +1732,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     const defaultSeen: Array<Record<string, unknown>> = [];
     const Root = defineComponent({
       setup: () => () =>
-        h(BMap, { provider: harness.provider(), center: { ...POSITION }, zoom: 12 }, {
+        h(Map, { provider: harness.provider(), center: { ...POSITION }, zoom: 12 }, {
           error: (props: Record<string, unknown>) => {
             seen.push(props);
             return h("button", { class: "retry-slot" }, "retry");
@@ -1746,7 +1746,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     });
     const wrapper = mount(Root, { attachTo: harness.container() });
     await settleProps();
-    const bmap = wrapper.findComponent(BMap);
+    const bmap = wrapper.findComponent(Map);
 
     expect(statusOf(bmap)).toBe("error");
     expect(bmap.emitted("error"), "结构化错误经 `error` 事件上报").toHaveLength(1);
@@ -1784,7 +1784,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     const seen: Array<Record<string, unknown>> = [];
     const Root = defineComponent({
       setup: () => () =>
-        h(BMap, { provider: harness.provider(), width: "0px", height: "0px" }, {
+        h(Map, { provider: harness.provider(), width: "0px", height: "0px" }, {
           loading: (props: Record<string, unknown>) => {
             seen.push(props);
             return h("span", { class: "loading-slot" }, "custom-loading");
@@ -1810,7 +1810,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     const zero = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap as never, { provider: harness.provider(), width: "0px", height: "0px" }),
+          h(Map as never, { provider: harness.provider(), width: "0px", height: "0px" }),
       }),
       { attachTo: harness.container() },
     );
@@ -1822,7 +1822,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.failNextInitializeView();
     const failed = mount(
       defineComponent({
-        setup: () => () => h(BMap as never, { provider: harness.provider() }),
+        setup: () => () => h(Map as never, { provider: harness.provider() }),
       }),
       { attachTo: harness.container() },
     );
@@ -1844,7 +1844,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     let slotProps: Record<string, unknown> | null = null;
     const Root = defineComponent({
       setup: () => () =>
-        h(BMap, { provider: harness.provider() }, {
+        h(Map, { provider: harness.provider() }, {
           default: (props: Record<string, unknown>) => {
             slotProps = props;
             return h("span", "child");
@@ -1867,9 +1867,9 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
   });
 
   /**
-   * 挂一棵 `<KeepAlive>` + `<BMap>`，返回控制「是否挂载」的开关。
+   * 挂一棵 `<KeepAlive>` + `<Map>`，返回控制「是否挂载」的开关。
    *
-   * KeepAlive 的语义正是评审 P1-2 那条路径：`show=false` 让 `<BMap>` **deactivate** 而组件
+   * KeepAlive 的语义正是评审 P1-2 那条路径：`show=false` 让 `<Map>` **deactivate** 而组件
    * 仍在 cache 里（不发生 `onUnmounted`），此时只有 `runtime.dispose()` 会跑
    * （`keepAliveBehavior="dispose"` 下）。
    */
@@ -1883,7 +1883,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
           {
             default: () =>
               show.value
-                ? h(BMap, { provider: harness.provider(), keepAliveBehavior: behavior })
+                ? h(Map, { provider: harness.provider(), keepAliveBehavior: behavior })
                 : null,
           } as never,
         ),
@@ -1891,7 +1891,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     const wrapper = mount(Root, { attachTo: harness.container() });
     await settleProps();
     await nextTick();
-    return { wrapper, show, bmap: wrapper.findComponent(BMap) };
+    return { wrapper, show, bmap: wrapper.findComponent(Map) };
   }
 
   it("KeepAlive + keepAliveBehavior=dispose：停用即释放观察器（评审 P1）", async () => {
@@ -2321,15 +2321,15 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
 
   it("error 事件回调里同步 retry：真的排下一次重试（复审 P2）", async () => {
     harness.failNextInitializeView();
-    let api: BMapExpose | null = null;
+    let api: MapExpose | null = null;
     const retries: Array<Promise<unknown>> = [];
     const Root = defineComponent({
       setup: () => () =>
         h(
-          BMap as never,
+          Map as never,
           {
             ref: (value: unknown) => {
-              api = value as BMapExpose | null;
+              api = value as MapExpose | null;
             },
             provider: harness.provider(),
             center: { ...POSITION },
@@ -2345,7 +2345,7 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     await settleProps();
     await nextTick();
     await nextTick();
-    const bmap = wrapper.findComponent(BMap);
+    const bmap = wrapper.findComponent(Map);
 
     expect(retries, "error 事件里确实发起了 retry").toHaveLength(1);
     expect(
@@ -2373,9 +2373,9 @@ describe("图层套件在同图共存时的领域行为（M7-LAYERS / #40）", (
   it("行政区 + 瓦片 + GeoJSON 同图共存；显隐各自独立，卸载后无残留", async () => {
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BDistrictLayer, { name: "北京市" }),
-      h(BTileLayer, { tileUrlTemplate: "https://example.com/{X}/{Y}/{Z}.png" }),
-      h(BGeoJSONLayer, { data: { type: "FeatureCollection", features: [] }, visible: visible.value }),
+      h(DistrictLayer, { name: "北京市" }),
+      h(TileLayer, { tileUrlTemplate: "https://example.com/{X}/{Y}/{Z}.png" }),
+      h(GeoJSONLayer, { data: { type: "FeatureCollection", features: [] }, visible: visible.value }),
     ]);
     expect(harness.attached("layer")).toBe(3);
 
@@ -2397,8 +2397,8 @@ describe("图层套件在同图共存时的领域行为（M7-LAYERS / #40）", (
 
 /* ------------------------------------------------------------------ 数据组件（M6 / #34）
 
- * 数据组件的边界就是这一节的标题：`BMarkerList` / `BMarkerCluster` 逐项（或逐簇）落地成
- * **SDK Marker**，`BPointCollection` 用**一个**原生批量图层承载全部点。
+ * 数据组件的边界就是这一节的标题：`MarkerList` / `MarkerCluster` 逐项（或逐簇）落地成
+ * **SDK Marker**，`PointCollection` 用**一个**原生批量图层承载全部点。
  * 验收「资源数量证明 PointCollection 不是逐点 Marker」在这里落成两条读数：
  * `harness.nativeLayersCreated()`（原生图层数）与 `harness.attached("overlay")`（覆盖物数）。
  */
@@ -2421,7 +2421,7 @@ const STATIONS: readonly Station[] = [
   /**
    * 诊断总线探针：从组件树**内部**订阅 `resource:error`。
    *
-   * 组件的失败出口是每条 Runtime 独立的内部事件总线（`ctx.events`），挂在 `<BMap>` 的插槽里
+   * 组件的失败出口是每条 Runtime 独立的内部事件总线（`ctx.events`），挂在 `<Map>` 的插槽里
    * 才能拿到同一个实例 —— 这也是「能力未就绪」这类预期内失败在组件级唯一可观察的落点。
    */
   function errorsProbe(sink: unknown[]) {
@@ -2435,16 +2435,16 @@ const STATIONS: readonly Station[] = [
   }
 
 describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
-  it("BMarkerList：每项一个 Marker，点击回传**最新**业务 item", async () => {
+  it("MarkerList：每项一个 Marker，点击回传**最新**业务 item", async () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerList, {
+      h(MarkerList, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
       }),
     ]);
-    const list = wrapper.findComponent(BMarkerList);
+    const list = wrapper.findComponent(MarkerList);
     expect(harness.attached("overlay"), "三个 item = 三个 Marker").toBe(3);
     const staleItem = data.value[2];
 
@@ -2465,13 +2465,13 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("overlay")).toBe(0);
-    harness.assertIdle("BMarkerList 卸载");
+    harness.assertIdle("MarkerList 卸载");
   });
 
-  it("BMarkerList：data 变化只做 keyed diff（新增 / 删除各一次）", async () => {
+  it("MarkerList：data 变化只做 keyed diff（新增 / 删除各一次）", async () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
     const { activity } = fake.diagnostics.snapshot();
     const attachedBefore = activity.overlaysAttached;
@@ -2483,13 +2483,13 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(after.overlaysAttached - attachedBefore, "只新建了新增的那一个").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerList keyed diff");
+    harness.assertIdle("MarkerList keyed diff");
   });
 
-  it("BMarkerList：visible=false 隐藏而不是删除（资源与数据都留着）", async () => {
+  it("MarkerList：visible=false 隐藏而不是删除（资源与数据都留着）", async () => {
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerList, {
+      h(MarkerList, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2508,10 +2508,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.visibleOverlays()).toBe(3);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerList 隐藏往返");
+    harness.assertIdle("MarkerList 隐藏往返");
   });
 
-  it("BMarkerList：坏数据跳过并告警（缺 key / 非法坐标 / 重复 key）", async () => {
+  it("MarkerList：坏数据跳过并告警（缺 key / 非法坐标 / 重复 key）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const data = ref<readonly Station[]>([
       { id: "ok", lng: 1, lat: 1 },
@@ -2520,17 +2520,17 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
       { id: "ok", lng: 2, lat: 2 },
     ]);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
     expect(harness.attached("overlay"), "两项坏数据被跳过；重复 key 只留一个 Marker").toBe(1);
-    expect(warnLines(warn).some((line) => line.includes("BMarkerList")), "坏数据必须告警").toBe(true);
+    expect(warnLines(warn).some((line) => line.includes("MarkerList")), "坏数据必须告警").toBe(true);
     expect(warnLines(warn).some((line) => line.includes("itemKey 重复"))).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerList 坏数据");
+    harness.assertIdle("MarkerList 坏数据");
   });
 
-  it("BMarkerCluster：附近点聚合、远处点独立；不同桶的单点不撞同一个 id", async () => {
+  it("MarkerCluster：附近点聚合、远处点独立；不同桶的单点不撞同一个 id", async () => {
     const data = ref<readonly Station[]>([
       { id: "a", lng: 116.4, lat: 39.9 },
       { id: "b", lng: 116.41, lat: 39.91 },
@@ -2541,7 +2541,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
       { id: "guangzhou", lng: 113.3, lat: 23.1 },
     ]);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2555,10 +2555,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.attached("overlay"), "1 个簇 + 2 个独立单点").toBe(3);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 卸载");
+    harness.assertIdle("MarkerCluster 卸载");
   });
 
-  it("BMarkerCluster：簇与单点各自点击，回传的是**最新**业务数据", async () => {
+  it("MarkerCluster：簇与单点各自点击，回传的是**最新**业务数据", async () => {
     const data = ref<readonly Station[]>([
       { id: "a", lng: 116.4, lat: 39.9 },
       { id: "b", lng: 116.41, lat: 39.91 },
@@ -2566,7 +2566,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
       { id: "solo", lng: 121.5, lat: 31.2 },
     ]);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2576,7 +2576,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
         minClusterSize: 3,
       }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
     expect(harness.attached("overlay"), "1 个簇 + 1 个单点").toBe(2);
 
     // 点本用例的第 1 个 marker = 簇（北京三点）：覆盖物账本**不随 reset 清空**，所以用负索引
@@ -2601,14 +2601,14 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect((itemClicks![0]![0] as Station).name).toBe("新对象");
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 点击投影");
+    harness.assertIdle("MarkerCluster 点击投影");
   });
 
-  it("BPointCollection：单个批量资源（0 个覆盖物 + 1 个原生图层）", async () => {
+  it("PointCollection：单个批量资源（0 个覆盖物 + 1 个原生图层）", async () => {
     // 实例账本**刻意**不随 `harness.reset()` 清空（跨用例安全靠负索引），因此这里比的是增量。
     const layersBefore = harness.nativeLayersCreated();
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2625,15 +2625,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointCollection 卸载");
+    harness.assertIdle("PointCollection 卸载");
   });
 
-  it("BPointCollection：data 走 setData 不重建；样式走 setStyle 并显式重绘", async () => {
+  it("PointCollection：data 走 setData 不重建；样式走 setStyle 并显式重绘", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const data = ref<readonly Station[]>(STATIONS);
     const color = ref("#1677ff");
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2657,16 +2657,16 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.nativeLayerCalls().filter((call) => call === "doOnceDraw")).toHaveLength(2);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 更新");
+    harness.assertIdle("PointCollection 更新");
   });
 
-  it("BPointCollection：visible / opacity / zIndex / 缩放范围走字段级 setter，不重建", async () => {
+  it("PointCollection：visible / opacity / zIndex / 缩放范围走字段级 setter，不重建", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const visible = ref(true);
     const opacity = ref(1);
     const zIndex = ref(1);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2692,15 +2692,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(harness.nativeLayerCalls()).toContain("setMaxZoom");
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 字段级 setter");
+    harness.assertIdle("PointCollection 字段级 setter");
   });
 
-  it("BPointCollection：构造期项（enablePicked）变化 ⇒ 换实例（先摘后建）", async () => {
+  it("PointCollection：构造期项（enablePicked）变化 ⇒ 换实例（先摘后建）", async () => {
     // 实例账本不随 `harness.reset()` 清空 ⇒ 比增量（跨用例安全）
     const layersBefore = harness.nativeLayersCreated();
     const enabled = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2719,15 +2719,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointCollection 重建");
+    harness.assertIdle("PointCollection 重建");
   });
 
-  it("BPointCollection：字段由有值变回未表态 ⇒ 重建（SDK 没有 unset 入口，不猜默认值）", async () => {
+  it("PointCollection：字段由有值变回未表态 ⇒ 重建（SDK 没有 unset 入口，不猜默认值）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const layersBefore = harness.nativeLayersCreated();
     const opacity = ref<number | undefined>(0.4);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2745,15 +2745,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(warnLines(warn).some((line) => line.includes("由有值变为未表态"))).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 撤回字段");
+    harness.assertIdle("PointCollection 撤回字段");
   });
 
-  it("BPointCollection：点击返回**最新**业务 item；未命中只有 click(hit:false)", async () => {
+  it("PointCollection：点击返回**最新**业务 item；未命中只有 click(hit:false)", async () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(PointCollection, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
 
     harness.simulateNativePick({ dataIndex: 1, latLng: { lng: 116.41, lat: 39.92 }, pixel: { x: 10, y: 20 } });
     let picks = layer.emitted("item-click");
@@ -2775,15 +2775,15 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(layer.emitted("item-click")!.length).toBe(beforeMiss);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 拾取");
+    harness.assertIdle("PointCollection 拾取");
   });
 
-  it("BPointCollection：父级每次渲染传新的内联回调 ⇒ 不产生多余的 SDK 命令", async () => {
+  it("PointCollection：父级每次渲染传新的内联回调 ⇒ 不产生多余的 SDK 命令", async () => {
     const tick = ref(0);
     const data = ref<readonly Station[]>(STATIONS);
     const color = ref("#1677ff");
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: data.value,
         itemKey: "id",
         // 内联箭头：每次渲染都是新函数对象（最常见、也最容易踩坑的写法）
@@ -2815,16 +2815,16 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     ).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 内联回调");
+    harness.assertIdle("PointCollection 内联回调");
   });
 
-  it("BPointCollection：样式**逐字段**撤回也要被发现（merge 语义下旧值会留在 SDK 上）", async () => {
+  it("PointCollection：样式**逐字段**撤回也要被发现（merge 语义下旧值会留在 SDK 上）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const layersBefore = harness.nativeLayersCreated();
     const color = ref<string | undefined>("#ff4d4f");
     const size = ref<number>(18);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2844,10 +2844,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(styleCalls.length, "新实例挂载时写入当前样式").toBeGreaterThanOrEqual(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 样式撤回");
+    harness.assertIdle("PointCollection 样式撤回");
   });
 
-  it("BPointCollection：properties 映射进要素；非法坐标与重复 key 被挡在适配层", async () => {
+  it("PointCollection：properties 映射进要素；非法坐标与重复 key 被挡在适配层", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const data = ref<readonly Station[]>([
       { id: "a", lng: 116.404, lat: 39.915 },
@@ -2856,7 +2856,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
       { id: "a", lng: 116.5, lat: 39.9, name: "百度大厦" },
     ]);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -2870,10 +2870,10 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     expect(warnLines(warn).some((line) => line.includes("itemKey 重复"))).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 适配");
+    harness.assertIdle("PointCollection 适配");
   });
 
-  it("BPointCollection：地图被销毁而组件还在时，图层由地图账本摘掉（不是靠组件卸载）", async () => {
+  it("PointCollection：地图被销毁而组件还在时，图层由地图账本摘掉（不是靠组件卸载）", async () => {
     let disposeMap: (() => void) | null = null;
     const Capture = defineComponent({
       setup() {
@@ -2884,7 +2884,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     });
     const wrapper = await mountMapTree(() => [
       h(Capture),
-      h(BPointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+      h(PointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
     ]);
     const map = fake.createdMaps.at(-1)!;
     expect(harness.attached("layer")).toBe(1);
@@ -2892,7 +2892,7 @@ describe("数据组件领域行为（jsapi-v4 / Fake v4）", () => {
     // 组件**不卸载**，只销毁地图：这条路径只有地图账本能覆盖（组件自持的 scope 到不了）
     disposeMap!();
     await flushPromises();
-    expect(wrapper.findComponent(BPointCollection).exists(), "组件还在").toBe(true);
+    expect(wrapper.findComponent(PointCollection).exists(), "组件还在").toBe(true);
     expect(harness.attached("layer"), "地图销毁前图层已被摘掉").toBe(0);
     expect(map.destroyedWithLayers, "销毁那一刻图上没有残留图层").toBe(0);
     harness.assertIdle("Map 销毁顺序");
@@ -2951,10 +2951,10 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     // 实例账本**刻意**不随 `harness.reset()` 清空（跨用例安全靠负索引），因此这里比的是增量。
     const layersBefore = harness.nativeLayersCreated();
     const wrapper = await mountMapTree(() => [
-      h(BLineLayer, { data: LINES, idKey: "id" }),
-      h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" }),
-      h(BHeatmapLayer, { data: POLYGON_AREAS }),
-      h(BTrackLineLayer, { data: TRACK_LINE }),
+      h(LineLayer, { data: LINES, idKey: "id" }),
+      h(FillLayer, { data: POLYGON_AREAS, idKey: "id" }),
+      h(HeatmapLayer, { data: POLYGON_AREAS }),
+      h(TrackLineLayer, { data: TRACK_LINE }),
     ]);
 
     expect(harness.nativeLayersCreated() - layersBefore, "四个组件 = 四个原生资源").toBe(4);
@@ -2970,7 +2970,7 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     const data = ref<object>(LINES);
     const picked = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BLineLayer, { data: data.value, idKey: "id", enablePicked: picked.value }),
+      h(LineLayer, { data: data.value, idKey: "id", enablePicked: picked.value }),
     ]);
     const created = harness.nativeLayersCreated();
 
@@ -2988,8 +2988,8 @@ describe("原生批量可视化图层（M6 / #36）", () => {
   });
 
   it("拾取：命中回传业务身份与属性；未命中只有 hit:false", async () => {
-    const wrapper = await mountMapTree(() => [h(BLineLayer, { data: LINES, idKey: "id" })]);
-    const layer = wrapper.findComponent(BLineLayer);
+    const wrapper = await mountMapTree(() => [h(LineLayer, { data: LINES, idKey: "id" })]);
+    const layer = wrapper.findComponent(LineLayer);
 
     harness.simulateNativePick({ dataIndex: 1 });
     const hit = layer.emitted("click")!.at(-1)![0] as {
@@ -3011,8 +3011,8 @@ describe("原生批量可视化图层（M6 / #36）", () => {
   });
 
   it("要素状态命令面：按业务 id 写状态，读回的是 SDK 的当前值", async () => {
-    const wrapper = await mountMapTree(() => [h(BFillLayer, { data: POLYGON_AREAS, idKey: "id" })]);
-    const state = wrapper.findComponent(BFillLayer).vm.featureState;
+    const wrapper = await mountMapTree(() => [h(FillLayer, { data: POLYGON_AREAS, idKey: "id" })]);
+    const state = wrapper.findComponent(FillLayer).vm.featureState;
 
     state.update(["area-1"], { selected: true });
     expect(state.get("area-1")).toEqual({ "area-1": { selected: true } });
@@ -3024,20 +3024,20 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     harness.assertIdle("要素状态命令面");
   });
 
-  it("BPointCollection 也暴露同一份命令面（迁移到共享内核之后）", async () => {
+  it("PointCollection 也暴露同一份命令面（迁移到共享内核之后）", async () => {
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+      h(PointCollection, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
     ]);
-    const state = wrapper.findComponent(BPointCollection).vm.featureState;
+    const state = wrapper.findComponent(PointCollection).vm.featureState;
 
     state.update("a", { selected: true });
     expect(state.get("a"), "状态键是业务 id（itemKey 指向的字段）").toEqual({ a: { selected: true } });
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 命令面");
+    harness.assertIdle("PointCollection 命令面");
   });
 
-  it('BPointCollection：itemKey=""（空字符串字段名）时构造 / 拾取 / 命令三侧口径一致', async () => {
+  it('PointCollection：itemKey=""（空字符串字段名）时构造 / 拾取 / 命令三侧口径一致', async () => {
     // 空字符串是合法的 `PropertyKey`（`isUsableItemKey` 照收），因此这里唯一正确的行为是「照收」：
     // SDK 的 idKey、数据里的字段名、Feature State 的身份判定必须是同一个，不能出现
     // 「SDK 认为有身份、组件自己认为没有」的分叉（#106 第三轮评审的 P1 回退）。
@@ -3051,14 +3051,14 @@ describe("原生批量可视化图层（M6 / #36）", () => {
       { "": "b", lng: 116.5, lat: 39.9 },
     ];
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: items,
         itemKey: "",
         getPosition: (item: BlankKeyStation) => ({ lng: item.lng, lat: item.lat }),
       }),
     ]);
 
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
     harness.simulateNativePick({ dataIndex: 0 });
     const pick = layer.emitted("click")!.at(-1)![0] as {
       hit: boolean;
@@ -3076,10 +3076,10 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     expect(state.get("a"), "空字符串字段名的身份可写可读").toEqual({ a: { selected: true } });
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 空字段名");
+    harness.assertIdle("PointCollection 空字段名");
   });
 
-  it("BPointCollection：回包只给部分 properties（缺业务键）时，item-click 仍要派发", async () => {
+  it("PointCollection：回包只给部分 properties（缺业务键）时，item-click 仍要派发", async () => {
     // #106 第四轮评审的组件级复现：SDK 回包里 `properties` 存在但没有 idKey 字段，
     // 旧实现会按 dataIndex 回到本库自己送出的数据再取一次 key —— 这条兜底不能丢。
     const items: Station[] = [
@@ -3087,10 +3087,10 @@ describe("原生批量可视化图层（M6 / #36）", () => {
       { id: "b", lng: 116.5, lat: 39.9 },
     ];
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, { data: items, itemKey: "id", getPosition: stationPosition }),
+      h(PointCollection, { data: items, itemKey: "id", getPosition: stationPosition }),
     ]);
 
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
     harness.simulateNativePick({ dataIndex: 0, properties: { name: "partial" } });
     const pick = layer.emitted("click")!.at(-1)![0] as {
       hit: boolean;
@@ -3103,10 +3103,10 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     expect(layer.emitted("item-click"), "item-click 必须派发").toHaveLength(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 部分回包");
+    harness.assertIdle("PointCollection 部分回包");
   });
 
-  it("BPointCollection：函数式 itemKey 返回 symbol 时，命中仍要回传最新业务项", async () => {
+  it("PointCollection：函数式 itemKey 返回 symbol 时，命中仍要回传最新业务项", async () => {
     // `itemKey` 的公开类型是 `keyof Item | ((item) => PropertyKey)`，PropertyKey 含 symbol；
     // 适配层会把 key 写进 `properties.__id`。symbol 不能作为公开 `id`（Feature State 的取值域是
     // string | number），但**业务项恢复与 item-click 不受它影响**（#106 第三轮评审的 P1 回退）。
@@ -3117,14 +3117,14 @@ describe("原生批量可视化图层（M6 / #36）", () => {
       { id: keyB as unknown as string, lng: 116.5, lat: 39.9 },
     ];
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: items,
         itemKey: (item: Station) => item.id as unknown as PropertyKey,
         getPosition: stationPosition,
       }),
     ]);
 
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
     harness.simulateNativePick({ dataIndex: 1 });
     const pick = layer.emitted("click")!.at(-1)![0] as {
       hit: boolean;
@@ -3137,18 +3137,18 @@ describe("原生批量可视化图层（M6 / #36）", () => {
     expect(layer.emitted("item-click")?.[0]?.[0], "item-click 必须派发").toBe(items[1]);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection symbol 业务键");
+    harness.assertIdle("PointCollection symbol 业务键");
   });
 });
 
 /* ------------------------------------------------------------------ 评审（PR #102）的组件级复现 */
 
 describe("数据组件：评审 #102 的语义修正（组件级）", () => {
-  it("BMarkerList：换新数组 + 复用同一 item 对象（原地改坐标）⇒ Marker 必须挪到新位置 [#102 F1]", async () => {
+  it("MarkerList：换新数组 + 复用同一 item 对象（原地改坐标）⇒ Marker 必须挪到新位置 [#102 F1]", async () => {
     const station: Station = { id: "a", lng: 116.4, lat: 39.9 };
     const data = ref<readonly Station[]>([station]);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerList, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
     expect(harness.overlayPositions(), "初始位置").toEqual([{ lng: 116.4, lat: 39.9 }]);
 
@@ -3161,20 +3161,20 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     ]);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerList 根引用变化");
+    harness.assertIdle("MarkerList 根引用变化");
   });
 
-  it("BPointCollection：falsy 业务项（0）也必须能被拾取 [#102 F4]", async () => {
+  it("PointCollection：falsy 业务项（0）也必须能被拾取 [#102 F4]", async () => {
     const data = ref<readonly number[]>([0, 1]);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: data.value,
         // 泛型没有被约束成 object ⇒ 0 / false / "" 都是合法业务项
         itemKey: (item: number) => item,
         getPosition: (item: number) => ({ lng: 116.4 + item * 0.01, lat: 39.9 }),
       }),
     ]);
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
 
     harness.simulateNativePick({ dataIndex: 0 });
     const picks = layer.emitted("click")!;
@@ -3187,13 +3187,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(layer.emitted("item-click")!.at(-1)![0]).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection falsy 业务项");
+    harness.assertIdle("PointCollection falsy 业务项");
   });
 
-  it("BPointIconLayer：落到原生 point-icon；图标样式走 setStyleOptions + 显式重绘", async () => {
+  it("PointIconLayer：落到原生 point-icon；图标样式走 setStyleOptions + 显式重绘", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const wrapper = await mountMapTree(() => [
-      h(BPointIconLayer, {
+      h(PointIconLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3216,14 +3216,14 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointIconLayer 卸载");
+    harness.assertIdle("PointIconLayer 卸载");
   });
 
-  it("BPointIconLayer：isFlat / isFixed 是构造期项 ⇒ 变化时换实例", async () => {
+  it("PointIconLayer：isFlat / isFixed 是构造期项 ⇒ 变化时换实例", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const flat = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BPointIconLayer, {
+      h(PointIconLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3241,14 +3241,14 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("layer")).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointIconLayer 重建");
+    harness.assertIdle("PointIconLayer 重建");
   });
 
-  it("BPointLayer：落到扩展 API 的 point；扁平选项走 setOptions；命中载荷没有 dataIndex", async () => {
+  it("PointLayer：落到扩展 API 的 point；扁平选项走 setOptions；命中载荷没有 dataIndex", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BPointLayer, {
+      h(PointLayer, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3263,7 +3263,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayerCalls()).toContain("setOptions");
     expect(harness.nativeLayerOptions()).toMatchObject({ shape: "circle", size: 18, fillColor: "#1677ff" });
 
-    const layer = wrapper.findComponent(BPointLayer);
+    const layer = wrapper.findComponent(PointLayer);
     harness.simulateNativeExtensionPick({ key: "b" });
     const clicks = layer.emitted("click")!;
     const payload = clicks.at(-1)![0] as { hit: boolean; dataIndex: number; item: Station | null };
@@ -3273,13 +3273,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointLayer 卸载");
+    harness.assertIdle("PointLayer 卸载");
   });
 
-  it("BPointLayer：扩展 API 没有入口的字段显式告警，不静默收下", async () => {
+  it("PointLayer：扩展 API 没有入口的字段显式告警，不静默收下", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = await mountMapTree(() => [
-      h(BPointLayer, {
+      h(PointLayer, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3291,13 +3291,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayerCalls(), "不该假装写了一次 setOpacity").not.toContain("setOpacity");
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointLayer 字段不支持");
+    harness.assertIdle("PointLayer 字段不支持");
   });
 
-  it("BMarkerCluster：默认走原生 ClusterLayer（1 个原生图层 + 0 个覆盖物）", async () => {
+  it("MarkerCluster：默认走原生 ClusterLayer（1 个原生图层 + 0 个覆盖物）", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
     ]);
     expect(harness.nativeLayersCreated() - layersBefore, "整批点只落一个原生资源").toBe(1);
     expect(harness.attached("overlay"), "原生引擎不建任何 Marker").toBe(0);
@@ -3309,15 +3309,15 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BMarkerCluster 原生引擎卸载");
+    harness.assertIdle("MarkerCluster 原生引擎卸载");
   });
 
-  it("BMarkerCluster：原生命中——簇只有元数据（items=null），单点回传最新业务项", async () => {
+  it("MarkerCluster：原生命中——簇只有元数据（items=null），单点回传最新业务项", async () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
 
     harness.simulateNativeClusterHit({ clusterId: 7, pointCount: 3, latLng: { lng: 116.4, lat: 39.9 } });
     const picks = cluster.emitted("cluster-click")!;
@@ -3335,13 +3335,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(cluster.emitted("item-click")!.at(-1)![0], "载荷是最新业务对象").toBe(data.value[1]);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 原生命中");
+    harness.assertIdle("MarkerCluster 原生命中");
   });
 
-  it("BMarkerCluster：可见性走原生 setVisible（隐藏 ≠ 摘掉）", async () => {
+  it("MarkerCluster：可见性走原生 setVisible（隐藏 ≠ 摘掉）", async () => {
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
+      h(MarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
     ]);
     expect(harness.nativeLayerVisible()).toBe(true);
 
@@ -3355,14 +3355,14 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayerVisible()).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 显隐");
+    harness.assertIdle("MarkerCluster 显隐");
   });
 
-  it("BMarkerCluster：聚合参数变化 ⇒ 换实例（先摘后建，不会两份同图）", async () => {
+  it("MarkerCluster：聚合参数变化 ⇒ 换实例（先摘后建，不会两份同图）", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const radius = ref(60);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3379,13 +3379,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("layer")).toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 重建");
+    harness.assertIdle("MarkerCluster 重建");
   });
 
-  it("BMarkerCluster：与 engine 不匹配的选项要告警（收下不生效属于假支持）", async () => {
+  it("MarkerCluster：与 engine 不匹配的选项要告警（收下不生效属于假支持）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3396,16 +3396,16 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(warnLines(warn).some((line) => line.includes("gridSize")), "必须点名那个不生效的选项").toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 选项不匹配");
+    harness.assertIdle("MarkerCluster 选项不匹配");
   });
 
-  it("BMarkerCluster：engine 切换会换掉整条引擎（原生图层摘掉、Marker 建起来）", async () => {
+  it("MarkerCluster：engine 切换会换掉整条引擎（原生图层摘掉、Marker 建起来）", async () => {
     // 实例账本不随 `harness.reset()` 清空 ⇒ 比增量（跨用例安全）
     const layersBefore = harness.nativeLayersCreated();
     const engine = ref<"native" | "markers">("native");
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+      h(MarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
     ]);
     expect(harness.nativeLayersCreated() - layersBefore).toBe(1);
     expect(harness.attached("layer")).toBe(1);
@@ -3425,20 +3425,20 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayersCreated() - layersBefore, "换回来时新建了一个原生图层").toBe(2);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 引擎切换");
+    harness.assertIdle("MarkerCluster 引擎切换");
   });
 
-  it("BMarkerCluster：重建之后点击仍然有效（listenerScope 必须每代一份）", async () => {
+  it("MarkerCluster：重建之后点击仍然有效（listenerScope 必须每代一份）", async () => {
     const radius = ref(60);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
         clusterRadius: radius.value,
       }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
 
     radius.value = 80;
     await settleProps();
@@ -3451,13 +3451,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(cluster.emitted("item-click"), "重建后单点点击仍然到得了组件").toBeTruthy();
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 重建后的监听");
+    harness.assertIdle("MarkerCluster 重建后的监听");
   });
 
-  it("BMarkerCluster：两个引擎都给同一份 cluster-change 读数", async () => {
+  it("MarkerCluster：两个引擎都给同一份 cluster-change 读数", async () => {
     const engine = ref<"native" | "markers">("native");
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3466,7 +3466,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
         zoom: 8,
       }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
     harness.simulateNativeClusterChange({ clusters: 2, singles: 1, zoom: 9 });
     const nativeChange = cluster.emitted("cluster-change")!.at(-1)![0] as {
       engine: string;
@@ -3487,10 +3487,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(markersChange.clusters, "STATIONS 三点在 zoom 8 下同桶 ⇒ 一簇").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster change 读数");
+    harness.assertIdle("MarkerCluster change 读数");
   });
 
-  it("BMarkerCluster：能力未就绪经 resource:error 交出，注入完成后同一组件可成功", async () => {
+  it("MarkerCluster：能力未就绪经 resource:error 交出，注入完成后同一组件可成功", async () => {
     // 原生聚合是**异步注入**的扩展 API：注入完成前 create() 会抛 BMAP_CAPABILITY_UNSUPPORTED。
     const namespace = fake.namespace as unknown as Record<string, unknown>;
     const original = namespace.ClusterLayer;
@@ -3502,7 +3502,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
       const Probe = errorsProbe(errors);
       const wrapper = await mountMapTree(() => [
         h(Probe),
-        h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
+        h(MarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition }),
       ]);
       expect(errors.length, "必须经 resource:error 交出，而不是冒成 unhandled rejection").toBeGreaterThan(0);
       expect(harness.attached("layer")).toBe(0);
@@ -3514,7 +3514,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
       expect(harness.attached("layer"), "能力就绪后不必换组件").toBe(1);
 
       await unmountAndSettle(wrapper);
-      harness.assertIdle("BMarkerCluster 能力就绪");
+      harness.assertIdle("MarkerCluster 能力就绪");
     } finally {
       namespace.ClusterLayer = original;
     }
@@ -3530,7 +3530,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const shapeBefore = harness.nativeLayersCreated();
     const shape = ref<readonly Station[]>(many);
     const shapeWrapper = await mountMapTree(() => [
-      h(BPointCollection, { data: shape.value, itemKey: "id", getPosition: stationPosition }),
+      h(PointCollection, { data: shape.value, itemKey: "id", getPosition: stationPosition }),
     ]);
     expect(harness.nativeLayersCreated() - shapeBefore, "5 万个点也只有一个原生图层").toBe(1);
     expect(harness.attached("overlay"), "没有任何逐点资源（= 不产生逐点 Vue watcher 的等价读数）").toBe(0);
@@ -3548,7 +3548,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     const clusterBefore = harness.nativeLayersCreated();
     const clusterWrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: many, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerCluster, { data: many, itemKey: "id", getPosition: stationPosition }),
     ]);
     expect(harness.nativeLayersCreated() - clusterBefore).toBe(1);
     expect(harness.attached("overlay")).toBe(0);
@@ -3570,19 +3570,19 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
    * | P1-3 | `visible` 的独立 watcher 绕过了统一的 `resource:error` 出口 |
    */
 
-  it("BPointCollection：重建只摘一次，且摘除期间业务监听已经解绑（P1-1）", async () => {
+  it("PointCollection：重建只摘一次，且摘除期间业务监听已经解绑（P1-1）", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const enabled = ref(true);
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
         enablePicked: enabled.value,
       }),
     ]);
-    const layer = wrapper.findComponent(BPointCollection);
+    const layer = wrapper.findComponent(PointCollection);
     // 真实 SDK 在 removeLayer 内会同步派发事件 ⇒ 监听若还活着，这次事件会被当成业务命中
     harness.dispatchNativeLayerEventOnDetach(-1, "click", {
       dataIndex: 0,
@@ -3603,17 +3603,17 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("layer"), "新实例在图上、旧的已摘掉").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection 重建顺序");
+    harness.assertIdle("PointCollection 重建顺序");
   });
 
-  it("BPointCollection：整套生命周期都不依赖「重复摘除安全」（悲观契约）", async () => {
+  it("PointCollection：整套生命周期都不依赖「重复摘除安全」（悲观契约）", async () => {
     // 官方没有承诺「对已经摘下的图层再 removeLayer 是安全的」。开启这条粘性契约之后，
     // 只要有任何一处对**已经不在图上**的实例再摘一次，它就会抛错 ⇒ 动作序列里会多出一条；
     // 因此这条用例钉的是「每代实例恰好摘一次」（挂 → 重建 → 卸载三次动作，两次摘除）。
     harness.failRemoveLayerWhenDetached();
     const enabled = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3626,17 +3626,17 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
 
     expect(harness.layerOps()).toEqual(["addLayer", "removeLayer", "addLayer", "removeLayer"]);
     expect(harness.attached("layer")).toBe(0);
-    harness.assertIdle("BPointCollection 悲观摘除契约");
+    harness.assertIdle("PointCollection 悲观摘除契约");
   });
 
-  it("BMarkerCluster：换引擎时旧资源未确认摘除 ⇒ 放弃切换，不会两套同图（P1-1）", async () => {
+  it("MarkerCluster：换引擎时旧资源未确认摘除 ⇒ 放弃切换，不会两套同图（P1-1）", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const engine = ref<"native" | "markers">("native");
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+      h(MarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
     ]);
     expect(harness.attached("layer")).toBe(1);
 
@@ -3662,10 +3662,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("overlay"), "重试成功后新引擎的 Marker 建起来了").toBeGreaterThan(0);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 换引擎失败");
+    harness.assertIdle("MarkerCluster 换引擎失败");
   });
 
-  it("BMarkerCluster：显隐失败仍走统一 resource:error，且后续收敛会重试（P1-3）", async () => {
+  it("MarkerCluster：显隐失败仍走统一 resource:error，且后续收敛会重试（P1-3）", async () => {
     const errors: unknown[] = [];
     const unhandled: unknown[] = [];
     const Probe = errorsProbe(errors);
@@ -3675,7 +3675,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const wrapper = await mountMapTree(
       () => [
         h(Probe),
-        h(BMarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
+        h(MarkerCluster, { data: data.value, itemKey: "id", getPosition: stationPosition, visible: visible.value }),
       ],
       (error) => unhandled.push(error),
     );
@@ -3694,15 +3694,15 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayerVisible(), "后续收敛必须把没生效的显隐补上").toBe(false);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 显隐失败");
+    harness.assertIdle("MarkerCluster 显隐失败");
   });
 
-  it("BMarkerCluster：原生簇命中缺必要元数据时不派发 cluster-click（P1-2）", async () => {
+  it("MarkerCluster：原生簇命中缺必要元数据时不派发 cluster-click（P1-2）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
+      h(MarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
 
     // 载荷里有 clusterId / pointCount，但**没有**位置：不得把它当成「簇在 (0,0)」
     harness.simulateMalformedNativeClusterHit({ isCluster: true, clusterId: 7, pointCount: 3 });
@@ -3717,7 +3717,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(cluster.emitted("cluster-click")!.at(-1)![0]).toMatchObject({ id: "7", size: 3 });
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster malformed 命中");
+    harness.assertIdle("MarkerCluster malformed 命中");
   });
 
   /*
@@ -3731,15 +3731,15 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
    *        失败后重试被内层短路吞掉，失败的资源永远补不上 |
    */
 
-  it("BMarkerCluster：换引擎摘除失败后，旧原生引擎仍然**可用**（不只是还在图上）", async () => {
+  it("MarkerCluster：换引擎摘除失败后，旧原生引擎仍然**可用**（不只是还在图上）", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const engine = ref<"native" | "markers">("native");
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
+      h(MarkerCluster, { data: STATIONS, itemKey: "id", getPosition: stationPosition, engine: engine.value }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
 
     harness.failNextRemoveLayer(); // 摘除在**副作用之前**抛错：旧图层确实还留在图上
     engine.value = "markers";
@@ -3754,10 +3754,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(cluster.emitted("item-click"), "旧引擎的单点命中仍然可用").toBeTruthy();
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 摘除失败后的旧引擎");
+    harness.assertIdle("MarkerCluster 摘除失败后的旧引擎");
   });
 
-  it("BMarkerCluster：markers 部分摘除失败 ⇒ 旧引擎恢复完整并可继续交互", async () => {
+  it("MarkerCluster：markers 部分摘除失败 ⇒ 旧引擎恢复完整并可继续交互", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const engine = ref<"native" | "markers">("markers");
@@ -3765,7 +3765,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3774,7 +3774,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
         minClusterSize: 3,
       }),
     ]);
-    const cluster = wrapper.findComponent(BMarkerCluster);
+    const cluster = wrapper.findComponent(MarkerCluster);
     const overlaysBefore = harness.attached("overlay");
     expect(overlaysBefore, "需要多个 Marker 才能测「部分失败」").toBeGreaterThan(1);
 
@@ -3821,10 +3821,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     ).toBe("新对象");
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster 部分摘除失败");
+    harness.assertIdle("MarkerCluster 部分摘除失败");
   });
 
-  it("BMarkerCluster：markers 显隐失败后，下一次收敛把所有 Marker 对齐（P2-2）", async () => {
+  it("MarkerCluster：markers 显隐失败后，下一次收敛把所有 Marker 对齐（P2-2）", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const visible = ref(true);
@@ -3832,7 +3832,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3864,7 +3864,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     ).toBe(true);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster markers 显隐重试");
+    harness.assertIdle("MarkerCluster markers 显隐重试");
   });
 
   /*
@@ -3879,7 +3879,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
    * 组件既不能说「已恢复」、也不能继续按「已挂上」处理。
    */
 
-  it("BMarkerCluster：removeLayer「先摘掉再抛错」⇒ 不按已挂上处理，下一次收敛完成重建", async () => {
+  it("MarkerCluster：removeLayer「先摘掉再抛错」⇒ 不按已挂上处理，下一次收敛完成重建", async () => {
     const layersBefore = harness.nativeLayersCreated();
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
@@ -3889,7 +3889,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3926,10 +3926,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("layer"), "收敛之后图层回到图上").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster after-detach 失败");
+    harness.assertIdle("MarkerCluster after-detach 失败");
   });
 
-  it("BMarkerCluster：markers「先摘掉再抛错」⇒ 上报 unknown，不制造假恢复", async () => {
+  it("MarkerCluster：markers「先摘掉再抛错」⇒ 上报 unknown，不制造假恢复", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const engine = ref<"native" | "markers">("markers");
@@ -3937,7 +3937,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3964,13 +3964,13 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("overlay"), "幻影所有权不会凭空变出一个 Marker").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster markers after-detach 失败");
+    harness.assertIdle("MarkerCluster markers after-detach 失败");
   });
 
-  it("BPointCollection：isFlat 是构造期选项 —— 不表态不进选项袋，表态后换实例（#35 收口）", async () => {
+  it("PointCollection：isFlat 是构造期选项 —— 不表态不进选项袋，表态后换实例（#35 收口）", async () => {
     const isFlat = ref<boolean | undefined>(undefined);
     const wrapper = await mountMapTree(() => [
-      h(BPointCollection, {
+      h(PointCollection, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -3978,7 +3978,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
       }),
     ]);
 
-    // 不表态：**不**把官方默认值（`true`）显式发下去 —— 与 BPointIconLayer 同一条口径
+    // 不表态：**不**把官方默认值（`true`）显式发下去 —— 与 PointIconLayer 同一条口径
     expect(
       Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(), "isFlat"),
       "不表态不进构造选项袋（让 SDK 自己的默认值生效）",
@@ -3993,14 +3993,14 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("layer"), "同一时刻只有一个实例").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BPointCollection isFlat");
+    harness.assertIdle("PointCollection isFlat");
   });
 
-  it("BMarkerCluster：换引擎的严格 detach 失败也标 unknown —— 取消切换前不写、之后收敛", async () => {
+  it("MarkerCluster：换引擎的严格 detach 失败也标 unknown —— 取消切换前不写、之后收敛", async () => {
     const engine = ref<"native" | "markers">("native");
     const visible = ref(true);
     const wrapper = await mountMapTree(() => [
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: STATIONS,
         itemKey: "id",
         getPosition: stationPosition,
@@ -4048,14 +4048,14 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
    * | markers：unknown 只活在错误文案里 | 取消切换（engine 改回 markers）后，未知句柄又被当成正常资源做位置 / 显隐写入 |
    */
 
-  it("BMarkerCluster：unknown 优先于构造指纹 —— 参数改回旧值也会主动收敛（不静默冻结）", async () => {
+  it("MarkerCluster：unknown 优先于构造指纹 —— 参数改回旧值也会主动收敛（不静默冻结）", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const radius = ref(60);
     const data = ref<readonly Station[]>(STATIONS);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -4085,10 +4085,10 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.nativeLayerCalls().length, "收敛之后恢复普通写入").toBeGreaterThan(callsBefore);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster unknown 优先级");
+    harness.assertIdle("MarkerCluster unknown 优先级");
   });
 
-  it("BMarkerCluster：markers 的 unknown 是持久状态 —— 取消切换后不再被当成正常资源写", async () => {
+  it("MarkerCluster：markers 的 unknown 是持久状态 —— 取消切换后不再被当成正常资源写", async () => {
     const errors: unknown[] = [];
     const Probe = errorsProbe(errors);
     const engine = ref<"native" | "markers">("markers");
@@ -4099,7 +4099,7 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     const data = ref<readonly Station[]>([...STATIONS, { id: "solo", lng: 121.5, lat: 31.2 }]);
     const wrapper = await mountMapTree(() => [
       h(Probe),
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: data.value,
         itemKey: "id",
         getPosition: stationPosition,
@@ -4142,6 +4142,6 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     expect(harness.attached("overlay"), "未知的那个不会被当成现存资源补建（不会重复挂）").toBe(1);
 
     await unmountAndSettle(wrapper);
-    harness.assertIdle("BMarkerCluster markers unknown 持久化");
+    harness.assertIdle("MarkerCluster markers unknown 持久化");
   });
 });

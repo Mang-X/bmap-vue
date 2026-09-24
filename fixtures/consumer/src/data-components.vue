@@ -13,13 +13,13 @@
 -->
 <script setup lang="ts">
 import {
-  BMarkerCluster,
-  BMarkerList,
-  BPointIconLayer,
-  BPointLayer,
-  BPointCollection,
-  type BMapClusterPick,
-  type BMapPointPick,
+  MarkerCluster,
+  MarkerList,
+  PointIconLayer,
+  PointLayer,
+  PointCollection,
+  type ClusterPick,
+  type PointPick,
 } from 'bmap-vue'
 
 interface Station {
@@ -41,12 +41,12 @@ function onItemClick(item: Station): void {
   void notANumber
 }
 
-function onPick(pick: BMapPointPick<Station>): void {
+function onPick(pick: PointPick<Station>): void {
   const item: Station | null = pick.item
   void item
 }
 
-function onClusterClick(pick: BMapClusterPick<Station>): void {
+function onClusterClick(pick: ClusterPick<Station>): void {
   // `items` 是可空的业务项数组（原生引擎下为 null）——不是 `any`、也不是永远有值
   const items: Station[] | null = pick.items
   void items
@@ -58,14 +58,14 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
 
 <template>
   <!-- ② 逆变门：处理器参数类型写死为 Station；推断成 unknown / any 都会失败 -->
-  <BMarkerList
+  <MarkerList
     :data="stations"
     item-key="id"
     :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
     @item-click="onItemClick"
   />
   <!-- 默认引擎已是原生聚合（#35）；显式 engine="markers" 时 items 才有业务项 -->
-  <BMarkerCluster
+  <MarkerCluster
     :data="stations"
     :item-key="(item) => item.id"
     :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
@@ -73,7 +73,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
     @item-click="onItemClick"
     @cluster-click="onClusterClick"
   />
-  <BMarkerCluster
+  <MarkerCluster
     engine="markers"
     :data="stations"
     item-key="id"
@@ -81,7 +81,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
     :grid-size="64"
     @cluster-click="(cluster) => void (cluster.items?.[0] as Station | undefined)"
   />
-  <BPointCollection
+  <PointCollection
     :data="stations"
     item-key="id"
     :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
@@ -92,7 +92,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
     @item-click="onItemClick"
     @click="onPick"
   />
-  <BPointIconLayer
+  <PointIconLayer
     :data="stations"
     item-key="id"
     :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"
@@ -102,7 +102,7 @@ function onClusterClick(pick: BMapClusterPick<Station>): void {
     :is-flat="true"
     @item-click="onItemClick"
   />
-  <BPointLayer
+  <PointLayer
     :data="stations"
     :item-key="(item) => item.id"
     :get-position="(item: Station) => ({ lng: item.lng, lat: item.lat })"

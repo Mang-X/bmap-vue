@@ -1,7 +1,7 @@
 /**
  * M3: MapContext provide/inject 接线
  *
- * parent 层(最近 BMap)创建 MapRuntime 并通过 mapContextKey provide,
+ * parent 层(最近 Map)创建 MapRuntime 并通过 mapContextKey provide,
  * 子组件通过 useRequiredMapContext 取得,取得不到时给出明确错误。
  */
 import { inject, type InjectionKey, type ShallowRef } from "vue";
@@ -13,7 +13,7 @@ export function useRequiredMapContext(): MapContext {
   if (!ctx) {
     throw new BMapError(
       "BMAP_PARENT_CONTEXT_MISSING",
-      "Component must be a descendant of <BMap>. Use the component inside a <BMap> root.",
+      "Component must be a descendant of <Map>. Use the component inside a <Map> root.",
     );
   }
   return ctx;

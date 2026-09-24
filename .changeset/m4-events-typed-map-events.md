@@ -2,9 +2,9 @@
 "bmap-vue": minor
 ---
 
-新增 `<BMap>` 的完整 map 事件与两个公开 hook：`useMapEvent`（事件订阅）与 `useMapStatus`（地图状态）。
+新增 `<Map>` 的完整 map 事件与两个公开 hook：`useMapEvent`（事件订阅）与 `useMapStatus`（地图状态）。
 
-**`<BMap>` 的 map 事件**（43 个，含 5 个 SDK 拼写别名）：事件名来自单一事实源
+**`<Map>` 的 map 事件**（43 个，含 5 个 SDK 拼写别名）：事件名来自单一事实源
 （`core/events/eventCatalog.ts`），`@` 在模板与 TS 里都有完整提示。
 
 - 事件名 = SDK 名把分隔符 `_` 换成 `-`（只有 `style_willchange` / `style_loaded` /
@@ -13,9 +13,9 @@
 - `maptypechange` / `tilesloaded` 这类**没有官方词边界**的名字不拆词，原样保留。
 - **订阅固定集合**：地图就绪时一次订全部事件（不随改绑监听器变化）。原因：Vue 判子组件要不要
   重渲染时**不比较 emit listener**（`hasPropsChanged` 显式跳过），因此「监听器从 `undefined` 变成
-  函数」不会让 `<BMap>` 重渲染 —— 按需订阅的实现会静默丢事件。未绑定 handler 的事件由 Vue 丢弃。
+  函数」不会让 `<Map>` 重渲染 —— 按需订阅的实现会静默丢事件。未绑定 handler 的事件由 Vue 丢弃。
 - **`.once` 可用**：`@click.once` / `@styleLoaded.once` 按 Vue 语义只触发一次。
-- **生命周期两端可用**：`<BMap @load>` / `@destroy` 与 `useMapEvent('load' | 'destroy')` 都收得到。
+- **生命周期两端可用**：`<Map @load>` / `@destroy` 与 `useMapEvent('load' | 'destroy')` 都收得到。
   `load` 用上下文的「地图已创建」挂载点提前订阅；`destroy` 的订阅在**整张地图正在卸载**时延伸寿命到
   销毁那一刻，而子组件单独卸载（条件渲染 / Tab / 路由）时照常释放。显式 `MapEventSource` 仍是 SDK 订阅语义。
 - 高频事件（`mousemove` / `touchmove` / `dragging` / `moving` / `zooming`）**一帧最多提交一次**，

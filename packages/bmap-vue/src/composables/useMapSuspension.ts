@@ -29,13 +29,13 @@
  *
  * 1. **释放点唯一**：不依赖「Vue 顺手帮我在组件作用域停止时收尾」，因此没有第二条释放路径
  *    可以漂移（对照：`#27` / `#28` 冻结的「收敛 / 同步路径只能有一条」）；
- * 2. **顺序确定**：`<BMap>` 的 `onUnmounted` 注册顺序保证「先 `suspension.dispose()`（断源），
+ * 2. **顺序确定**：`<Map>` 的 `onUnmounted` 注册顺序保证「先 `suspension.dispose()`（断源），
  *    再 `runtime.dispose()`」—— 反过来会让观察器在 Runtime 已经 disposed 之后仍尝试请求
  *    `checkResize`（虽然那时会被短路，但「先断源再收尾」是能自证的一步）。
  *
  * 代价要说清：**组件卸载即释放**，而「地图实例」在 `retry()` 之后会换新的（旧的被销毁）。
  * 对本控制器没有影响 —— 它观察的是**容器元素**，而容器在整个组件生命周期里是同一个
- * （`<BMap>` 的根 div），与地图实例的换新无关。
+ * （`<Map>` 的根 div），与地图实例的换新无关。
  *
  * 释放之后（`dispose()`）迟到的观察器回调一律被忽略（`disposed` 门闩），因此不会再触发
  * `checkResize` 或 SDK 调用 —— 这条对应验收「disposed 后不再调 SDK」。
@@ -74,7 +74,7 @@ const VIEWPORT_MARGIN = "64px";
 /**
  * 策略要用的运行时能力（结构类型，不依赖 `MapRuntime` 这个类）。
  *
- * 只声明「策略真的会调用」的四项，`<BMap>` 传进来的就是 `MapRuntime`：
+ * 只声明「策略真的会调用」的四项，`<Map>` 传进来的就是 `MapRuntime`：
  * 这样策略的用例可以拿一个最小替身跑，不必搭出完整 Runtime。
  */
 export interface MapSuspensionTarget {
@@ -91,7 +91,7 @@ export interface MapSuspensionTarget {
 export interface UseMapSuspensionOptions {
   target: MapSuspensionTarget;
   /**
-   * **被观察**的元素：决定可视尺寸的那一个（`<BMap>` 的根容器）。
+   * **被观察**的元素：决定可视尺寸的那一个（`<Map>` 的根容器）。
    *
    * 它不一定等于建图用的容器：组件内部还有一个 `position: absolute; inset: 0` 的宿主节点，
    * 尺寸由根容器决定。把两者写成一个 getter 会掩盖「测量谁」这个选择，所以这里单独命名。
@@ -122,14 +122,14 @@ export interface MapSuspensionController {
    *
    * 「地图建好之后容器又变成 0」不算门禁被取消（ADR 决策 4：那种情况不销毁地图），
    * 因此它不会回退。需要「**当前**能不能建图」时读 `measureNow()` + `isUsableSize()` ——
-   * `<BMap>` 的 `mountMap()` / 建图等待点就是这么做（#29 评审 P2 / 四轮复审 P1）。
+   * `<Map>` 的 `mountMap()` / 建图等待点就是这么做（#29 评审 P2 / 四轮复审 P1）。
    */
   readonly containerReady: Readonly<ShallowRef<boolean>>;
   /**
    * **最近一次测得**的容器尺寸（`null` = 还没测量过 / 读不到）。
    *
    * ⚠️ 它是缓存的读数：观察器**交付之前**它可能已经过期（DOM 变了、回调还没到）。需要
-   * 「这一刻到底能不能建图」的调用方请用 `measureNow()`（`<BMap>` 的建图等待点就是这么做的）。
+   * 「这一刻到底能不能建图」的调用方请用 `measureNow()`（`<Map>` 的建图等待点就是这么做的）。
    */
   readonly size: Readonly<ShallowRef<ElementSize | null>>;
 
@@ -185,7 +185,7 @@ export function useMapSuspension(options: UseMapSuspensionOptions): MapSuspensio
     if (usable && !wasUsable) {
       // 「不可用 → 可用」：放行建图。**每次**这种转换都回调（不只是第一次）—— 评审 P2 指出
       // 「收起期间调用 retry()」不能被一次性 latch 挡住：容器重新展开时必须能接着放行。
-      // 调用方负责幂等（`<BMap>` 用「当前尺寸 + 是否有人要求重试」判断，重复调用是 no-op）。
+      // 调用方负责幂等（`<Map>` 用「当前尺寸 + 是否有人要求重试」判断，重复调用是 no-op）。
       //
       // 这里**不 return**：同一次转换对「已经就绪的地图」还意味着「容器尺寸回来了，去校正尺寸」
       // （#29 复审 P1：`ready(320) → 0×0 → 320` 若只放行不请求 resize，就违背了

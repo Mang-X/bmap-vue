@@ -1,7 +1,7 @@
 /**
  * 视野相等判定与浮点抖动抑制（M4-STATE / issue #27）
  *
- * `BMap` 的 `center` / `zoom` / `heading` / `tilt` 是**受控/非受控双模**的：外部值变化要写
+ * `Map` 的 `center` / `zoom` / `heading` / `tilt` 是**受控/非受控双模**的：外部值变化要写
  * SDK，SDK 的用户交互事件要回写 model。这两条路径一旦用 `===` 判等就会互相激发：
  *
  * ```
@@ -88,7 +88,7 @@ export function centerEquals(
 /**
  * `center` 的**字段级变化键**：点取 `lng,lat` 两个标量，字符串取整串。
  *
- * 用途是给 `watch` 当源（相对 `src/components/map/BMap.vue` 的 `centerKey(props.center)`）：
+ * 用途是给 `watch` 当源（相对 `src/components/map/Map.vue` 的 `centerKey(props.center)`）：
  * 直接 watch 对象会让「父级传内联字面量」（引用每次都新）每次都触发，受控写入因此空跑。
  *
  * 两种形态加 `p:` / `s:` 前缀，避免「点 `116.4,39.9`」与「字符串 `"116.4,39.9"`」撞成同一个键

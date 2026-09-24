@@ -57,6 +57,12 @@ jobs:
       - name: Check plugin compat inventory
         run: node --experimental-strip-types scripts/generate-plugin-inventory.mts --check
 
+      # 公开 API 对照（vs 官方 React 参考）无漂移（#135）。
+      # 生成物是 docs/zh-CN/contributing/official-api-alignment.md 与
+      # docs/.vitepress/official-api-alignment.json；官方侧是 scripts/api-diff/ 快照。
+      - name: Check official API alignment
+        run: node --experimental-strip-types scripts/generate-api-diff.mts --check
+
       # Playground 是三档离线装配（fake-v4 / legacy-fake / real-v4）的真实消费者，也是
       # `main.ts` 里那些组件用法的唯一编译验证点——它此前不在任何 CI 里跑。
       # 用 `@test-utils` 别名引到源码，因此不依赖 `dist`，可以放在 build 之前。
@@ -258,4 +264,4 @@ jobs:
           cd fixtures/consumer
           npm install --no-audit --no-fund --ignore-scripts
           npx vue-tsc --noEmit
-          node -e "import('bmap-vue').then(m=>{if(!m.BMap)throw new Error('missing BMap');console.log('consumer OK')})"
+          node -e "import('bmap-vue').then(m=>{if(!m.Map)throw new Error('missing Map');console.log('consumer OK')})"

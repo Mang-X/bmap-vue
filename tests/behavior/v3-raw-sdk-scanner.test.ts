@@ -312,8 +312,8 @@ describe("check-raw-sdk: JSAPI 4.0 `BMap` 边界（issue #15）", () => {
     expect(isRawSdkAllowedPath("core/loader/Provider.ts")).toBe(true);
     expect(isRawSdkAllowedPath("client/createBMapClient.ts")).toBe(true);
     expect(isRawSdkAllowedPath("plugins/builtins.ts")).toBe(true);
-    expect(isRawSdkAllowedPath("components/map/BMap.vue")).toBe(false);
-    expect(isRawSdkAllowedPath("composables/useBMap.ts")).toBe(false);
+    expect(isRawSdkAllowedPath("components/map/Map.vue")).toBe(false);
+    expect(isRawSdkAllowedPath("composables/useMap.ts")).toBe(false);
     expect(isRawSdkAllowedPath("core/runtime/MapRuntime.ts")).toBe(false);
     expect(isRawSdkAllowedPath("integrations/ui-kit/loadUiKit.ts")).toBe(false);
   });

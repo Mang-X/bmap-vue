@@ -1,6 +1,6 @@
 <template>
-  <BMap v-bind="$attrs" :zoom="13">
-    <BRectangle
+  <Map v-bind="$attrs" :zoom="13">
+    <Rectangle
       :bounds="bounds"
       stroke-color="#1677ff"
       :stroke-weight="3"
@@ -8,7 +8,7 @@
       :fill-opacity="0.25"
       enableEditing
     />
-  </BMap>
+  </Map>
 </template>
 
 <script lang="ts" setup>

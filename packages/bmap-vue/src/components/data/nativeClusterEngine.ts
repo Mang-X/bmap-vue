@@ -1,5 +1,5 @@
 /**
- * `native` 聚合引擎（M6-POINT-CLUSTER / issue #35）—— `BMarkerCluster` 的**默认**路径
+ * `native` 聚合引擎（M6-POINT-CLUSTER / issue #35）—— `MarkerCluster` 的**默认**路径
  *
  * 落地在官方扩展 API `BMap.ClusterLayer`（运行时存在、`@baidumap/jsapi-v4-types@4.0.4` 无类声明、
  * 可视化实现按需异步注入）。它是本票「原生层是默认路径」的落点。
@@ -47,13 +47,13 @@ import { readPickValue } from "../../core/layers/nativeLayerPick";
 import { readPayloadPointLike } from "../../core/data/points";
 import { devWarn } from "../../core/logger";
 import type { ClusterEngine, ClusterEngineInput } from "./clusterEngine";
-import type { BMarkerClusterEngine } from "../../types/components";
+import type { MarkerClusterEngine } from "../../types/components";
 import type { LayerRecord, LayerRegistry } from "../../core/layers/LayerRegistry";
 import type { MapReadyContext } from "../../core/context/types";
 import type { NativeLayerHandle } from "../../driver/types/native-layers";
 import type { PointLike } from "../../core/data/points";
 
-/** 引擎真正读的 props（`BMarkerClusterProps` 的结构子集）。 */
+/** 引擎真正读的 props（`MarkerClusterProps` 的结构子集）。 */
 export interface NativeClusterEngineProps<Item> {
   readonly data: readonly Item[];
   readonly itemKey: keyof Item | ((item: Item) => PropertyKey);
@@ -429,7 +429,7 @@ export function createNativeClusterEngine<Item>(
     createInstance();
   }
 
-  const kind: BMarkerClusterEngine = "native";
+  const kind: MarkerClusterEngine = "native";
 
   return {
     kind,

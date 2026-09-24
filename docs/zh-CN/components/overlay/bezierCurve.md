@@ -1,9 +1,9 @@
-# BBezierCurve 折线
+# BezierCurve 折线
 
 在地图上绘制二阶贝塞尔曲线
 
 ```ts
-import { BBezierCurve } from 'bmap-vue'
+import { BezierCurve } from 'bmap-vue'
 ```
 
 ::: tip 提示

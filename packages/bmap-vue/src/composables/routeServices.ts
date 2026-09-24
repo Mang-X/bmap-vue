@@ -1,11 +1,11 @@
 /**
  * 路线服务 composable 的**共用底座**（M7-ROUTES / issue #39）
  *
- * 四个路线 hooks（`useBMapDrivingRoute` / `useBMapWalkingRoute` / `useBMapRidingRoute` /
- * `useBMapTransitRoute`）只差三件事：能力 id、句柄种类、`search` 的入参形状。其余全部相同——
+ * 四个路线 hooks（`useDrivingRoute` / `useWalkingRoute` / `useRidingRoute` /
+ * `useTransitRoute`）只差三件事：能力 id、句柄种类、`search` 的入参形状。其余全部相同——
  * 因此「共用语义只写一处」，一个 hook 只描述自己那三件事：
  *
- * - **状态口径**：`useBMapServiceTask`（`idle` / `loading` / `success` / `empty` / `failed` /
+ * - **状态口径**：`useServiceTask`（`idle` / `loading` / `success` / `empty` / `failed` /
  *   `timeout` / `canceled` / `unsupported`）。这一层**不复制请求框架**：超时、空结果、迟到回调、
  *   先到者胜都在 Driver 的 `ServiceCall` 适配器里。
  * - **构造期状态**：`location` / `renderOptions` / 各自策略字段变化 ⇒ **丢弃旧实例**（下一次检索
@@ -27,10 +27,10 @@ import type {
   ServiceResult,
 } from "../driver/types/services";
 import type { BMapServiceStatus } from "../core/services";
-import type { GeoPoint } from "./useBMapGeocoder";
-import { useBMapServiceTask, type BMapServiceInvokeContext } from "./useBMapServiceTask";
+import type { GeoPoint } from "./useGeocoder";
+import { useServiceTask, type ServiceInvokeContext } from "./useServiceTask";
 
-/** 路线检索区域：城市名 / 领域 Point / 本库 `MapHandle`。不传时取当前 `<BMap>` 的地图实例。 */
+/** 路线检索区域：城市名 / 领域 Point / 本库 `MapHandle`。不传时取当前 `<Map>` 的地图实例。 */
 export type BMapRouteLocation = string | GeoPoint | MapHandle;
 
 /**
@@ -61,7 +61,7 @@ export interface BMapRouteRenderOptions {
   /**
    * 绘制目标：本库的 `MapHandle`（或它的 ref / getter）。不传 = 纯 headless，不绘制。
    *
-   * 允许 `null`：`useBMap()` 返回的 `map` 是 `MapHandle | null`（地图尚未 ready 时为 `null`），
+   * 允许 `null`：`useMap()` 返回的 `map` 是 `MapHandle | null`（地图尚未 ready 时为 `null`），
    * 直接把它传进来是最自然的写法——`null` 与 `undefined` 一样表示「现在没有绘制目标」。
    */
   map?: MaybeRefOrGetter<MapHandle | null | undefined>;
@@ -192,7 +192,7 @@ export function sameRouteState<T extends object>(
 }
 
 /**
- * 检索区域：显式给的优先，否则取当前 `<BMap>` 的地图实例。
+ * 检索区域：显式给的优先，否则取当前 `<Map>` 的地图实例。
  *
  * 两者都没有（`<BMapProvider>` 子树里没给 `location`）时**显式失败**而不是把 `undefined` 传给
  * SDK——那样只会得到一个不可解释的 SDK 侧异常。
@@ -254,18 +254,18 @@ export interface BMapRouteTask<TResult, TRequest> {
 export interface CreateRouteTaskInput<TResult, THandle extends ServiceHandle<string>, TRequest, TSnapshot> {
   capability: Capability;
   /** 创建服务实例（每个 Client 一次；抛错会被归一成 `failed`） */
-  create: (context: BMapServiceInvokeContext) => THandle;
+  create: (context: ServiceInvokeContext) => THandle;
   /** 发起一次归一化调用（返回值即 Driver 的 `ServiceCall`） */
-  invoke: (context: BMapServiceInvokeContext, handle: THandle, request: TRequest) => ServiceCall<TResult>;
+  invoke: (context: ServiceInvokeContext, handle: THandle, request: TRequest) => ServiceCall<TResult>;
   /** 释放实例（四类路线服务都走 `disposeRoute` → 公开的 `clearResults()`） */
-  release: (context: BMapServiceInvokeContext, handle: THandle) => void;
+  release: (context: ServiceInvokeContext, handle: THandle) => void;
   /** 构造期快照（每次都从可能变化的 ref / getter 里读一遍） */
   snapshot: () => TSnapshot;
   sameSnapshot: (a: TSnapshot, b: TSnapshot) => boolean;
 }
 
 /**
- * 建一个路线任务：`useBMapServiceTask` + 「构造期状态变化 ⇒ 丢弃实例」。
+ * 建一个路线任务：`useServiceTask` + 「构造期状态变化 ⇒ 丢弃实例」。
  *
  * 返回的是完整任务（含 `invalidateService` 之外的一切），供四个 hook 直接转成自己的公开面。
  */
@@ -278,7 +278,7 @@ export function createRouteTask<
   ctx: MapContext,
   input: CreateRouteTaskInput<TResult, THandle, TRequest, TSnapshot>,
 ): BMapRouteTask<TResult, TRequest> {
-  const task = useBMapServiceTask<TResult, THandle, [TRequest]>(ctx, {
+  const task = useServiceTask<TResult, THandle, [TRequest]>(ctx, {
     capability: input.capability,
     create: input.create,
     invoke: input.invoke,

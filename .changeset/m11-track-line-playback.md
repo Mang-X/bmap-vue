@@ -2,9 +2,9 @@
 "bmap-vue": minor
 ---
 
-`BTrackLineLayer` 的播放命令面、进度观察与页面可见性联动（#110）。
+`TrackLineLayer` 的播放命令面、进度观察与页面可见性联动（#110）。
 
-**为什么做这件事**：M6（#36）交付的 `BTrackLineLayer` 只有 `data` / `visible` 基线——播放控制与页面
+**为什么做这件事**：M6（#36）交付的 `TrackLineLayer` 只有 `data` / `visible` 基线——播放控制与页面
 可见性被刻意切出去，因为官方类型包**没有** `TrackLine` 类声明，方法名必须先由真实运行时探针取证
 （2026-09-19 的范围纠正）。#110 的 live 探针（`scripts/probe-track-line.mts`，2026-09-23，exit 0）
 取证了七个方法、`progress` / `statuschange` 载荷形状、以及「SDK 不会在页面 hidden 时自行暂停」。
@@ -21,7 +21,7 @@
 **驱动层**：`NativeLayerDriver` 增加六条归一化方法（与 Fake v4 的 `FakeV4TrackLine` 一一对应）；
 `NativeLayerOperation` 相应扩充 `track-line` 的登记操作。
 
-**公开类型新增**：`BTrackLineObserved`、`BTrackLineLayerExpose`；`BTrackLineLayerProps` 增加
+**公开类型新增**：`TrackLineObserved`、`TrackLineLayerExpose`；`TrackLineLayerProps` 增加
 `pauseOnHidden`。
 
 **刻意不做的**：

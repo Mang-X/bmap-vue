@@ -1,4 +1,4 @@
-# BMapMask 掩膜 <Badge type="tip" text="^2.1.0" />
+# MapMask 掩膜 <Badge type="tip" text="^2.1.0" />
 
 控制地图元素的局部显示与隐藏
 
@@ -6,7 +6,7 @@
 - 局部隐藏：隐藏掉局部区域地图元素，比如隐藏掉指定园区范围的地图元素，然后自定义叠加园区模型。
 
 ```ts
-import { BMapMask } from 'bmap-vue'
+import { MapMask } from 'bmap-vue'
 ```
 
 :::tip 注意

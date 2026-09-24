@@ -6,12 +6,12 @@ lang: zh-CN
 # useMapEvent
 
 订阅地图事件。事件名、SDK 拼写与载荷类型都来自
-[组件事件](../guide/com-events) 页的「BMap：map 事件」一节（`<BMap>` 的 `@` 与它共用同一份数据）。
+[组件事件](../guide/com-events) 页的「Map：map 事件」一节（`<Map>` 的 `@` 与它共用同一份数据）。
 
 ```ts
 import { useMapEvent } from 'bmap-vue'
 
-// 在 <BMap> 子树里：自动取最近的地图
+// 在 <Map> 子树里：自动取最近的地图
 useMapEvent('click', (e) => console.log(e.point, e.pixel))
 useMapEvent('moving', (e) => console.log('moving', e.raw)) // 高频：一帧最多一次
 ```
@@ -36,7 +36,7 @@ useMapEvent(name, handler, options?): () => void
 - **SDK 拼写**：`style_loaded` 也能命中同一条目（`@style-loaded` 与 `@style_loaded` 都能用）；
 - **Catalog 之外的名字原样订阅**——上游以后新增的事件不必等本库发版，代价是载荷类型只能是公共底座
   `MapEventPayload`（表内事件有逐事件的精确类型，官方清单见
-  [组件事件](../guide/com-events) 页的「BMap：map 事件」一节）。
+  [组件事件](../guide/com-events) 页的「Map：map 事件」一节）。
 
 > **宽松拼写 vs 精确类型**：运行时接受任意拼写（`styleLoaded`、`MAPTYPECHANGE`、`mouse_move`…都归一
 > 到同一条目），但**只有规范名 `MapEventName` 保证精确的载荷推导**。例如
@@ -57,7 +57,7 @@ useMapEvent('some-future-event', (e) => {
 
 ## 生命周期事件（`load` / `destroy`）
 
-`useMapEvent` 与 `<BMap>` 的 `@` 在生命周期两端给出**同一个可观察集合**：
+`useMapEvent` 与 `<Map>` 的 `@` 在生命周期两端给出**同一个可观察集合**：
 
 ```ts
 useMapEvent('load', () => console.log('地图初始化完成'))   // 首次视野确定后一次
@@ -65,7 +65,7 @@ useMapEvent('destroy', () => console.log('地图实例销毁'))  // 随地图销
 ```
 
 两条规则与普通事件不同（原因：**组件卸载先于地图销毁** —— Vue 的卸载顺序是「父 `beforeUnmount` →
-父作用域 stop → 子树卸载 → 父 `unmounted`」，而地图销毁发生在 `<BMap>` 的 `onUnmounted` 里）：
+父作用域 stop → 子树卸载 → 父 `unmounted`」，而地图销毁发生在 `<Map>` 的 `onUnmounted` 里）：
 
 - `load` 通过上下文的「地图已创建」挂载点（`initializeView()` **之前**）提前订阅，否则等句柄可见时
   它已经派发完了；
@@ -78,7 +78,7 @@ useMapEvent('destroy', () => console.log('地图实例销毁'))  // 随地图销
 
 ## 显式订阅源（多地图）
 
-默认从最近的 `<BMap>` 子树取地图；要订阅「别处的地图」时显式给一个 source
+默认从最近的 `<Map>` 子树取地图；要订阅「别处的地图」时显式给一个 source
 （只需「地图句柄 + 提供 EventDriver 的 Client」）：
 
 ```ts
@@ -118,11 +118,11 @@ handler.value = implB // 不重绑，下一次派发就走 B
 > 这也是本库与 React 封装的差别：React 每次渲染都会造一个新函数，因此必须用 ref 存最新值；
 > Vue 的闭包读的就是响应式对象，不需要每轮换 handler。
 
-## 与 `<BMap>` 的 `@` 的关系
+## 与 `<Map>` 的 `@` 的关系
 
-`<BMap>` 在地图就绪时**一次订全部 map 事件**（含 43 个规范名的 SDK 事件；未绑定 handler 的由
+`<Map>` 在地图就绪时**一次订全部 map 事件**（含 43 个规范名的 SDK 事件；未绑定 handler 的由
 Vue 丢弃）。这里不按 prop 做「按需订阅」是有意的：Vue 判子组件要不要重渲染时**不比较 emit
-listener**，所以「监听器从 `undefined` 变成函数」不会让 `<BMap>` 重渲染，靠重渲染做增量的方案会
+listener**，所以「监听器从 `undefined` 变成函数」不会让 `<Map>` 重渲染，靠重渲染做增量的方案会
 静默丢事件。
 
 `useMapEvent` 是「在 setup 里按条件订阅 / 订阅别处地图 / 只要订某几个事件」时需要的那条路；

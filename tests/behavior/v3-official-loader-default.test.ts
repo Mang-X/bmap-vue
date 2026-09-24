@@ -4,7 +4,7 @@
  * 这一份用**真实官方模块**（不 mock 它的实现）驱动默认路径，覆盖 issue 里那些「只能在真实
  * 加载器上验证」的验收点：
  *
- * - `createBMapPlugin()` / `<BMap>` 未显式指定 Provider 时，官方 `load()` 真的被调用，
+ * - `createBMapPlugin()` / `<Map>` 未显式指定 Provider 时，官方 `load()` 真的被调用，
  *   并且注入的 script 是官方形状（`callback=__bmapJSApiOnLoad_<n>`，本库源码里没有这个字面量）；
  * - 同配置并发只加载一次；不同配置按冲突拒绝；
  * - 取消一个消费者不影响另一个；**全部**消费者取消后底层任务保留，后续请求不重复插 script；
@@ -27,7 +27,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
 import { getStatus, reset } from "@baidumap/jsapi-loader";
 import { createBMapPlugin } from "../../packages/bmap-vue/src/plugins/createBMapPlugin";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import { baiduJsapiV4Provider } from "../../packages/bmap-vue/src/core/loader/providers/BaiduJsapiV4Provider";
 import { officialJsapiLoader } from "../../packages/bmap-vue/src/core/loader/providers/official";
 import { resetProcessSdkRegistryForTests, getProcessSdkRegistry } from "../../packages/bmap-vue/src/core/loader/SdkRegistry";
@@ -99,7 +99,7 @@ describe("默认入口真的委托官方 Loader", () => {
     // 默认 provider 的 id 直接可读：不是「装了依赖但默认仍走自研」。
     expect((plugin.config.provider as { id: string }).id).toBe("baidu-jsapi-v4");
 
-    const wrapper = mount(defineComponent({ setup: () => () => h(BMap) }), {
+    const wrapper = mount(defineComponent({ setup: () => () => h(Map) }), {
       attachTo: sizedHost(),
       global: { plugins: [plugin] },
     });
@@ -120,7 +120,7 @@ describe("默认入口真的委托官方 Loader", () => {
     // 地图真的建起来了（默认路径不只是「load 被调用」，而是整条链可用）。
     expect(fake.createdMaps).toHaveLength(1);
     expect(
-      (wrapper.findComponent(BMap).vm as unknown as { getMapInstance: () => unknown }).getMapInstance(),
+      (wrapper.findComponent(Map).vm as unknown as { getMapInstance: () => unknown }).getMapInstance(),
     ).toBeTruthy();
 
     wrapper.unmount();
@@ -228,7 +228,7 @@ describe("销毁 Map 不破坏进程级全局 SDK", () => {
     const fake = createFakeBMapV4();
     const plugin = createBMapPlugin({ ak: AK });
 
-    const wrapper = mount(defineComponent({ setup: () => () => h(BMap) }), {
+    const wrapper = mount(defineComponent({ setup: () => () => h(Map) }), {
       attachTo: sizedHost(),
       global: { plugins: [plugin] },
     });
@@ -249,14 +249,14 @@ describe("销毁 Map 不破坏进程级全局 SDK", () => {
     expect(getStatus()).toBe("loaded");
 
     // 重新建图：不需要新的 script，也不需要新的官方加载。
-    const second = mount(defineComponent({ setup: () => () => h(BMap) }), {
+    const second = mount(defineComponent({ setup: () => () => h(Map) }), {
       attachTo: sizedHost(),
       global: { plugins: [createBMapPlugin({ ak: AK })] },
     });
     await flushPromises();
     await nextTick();
     expect(
-      (second.findComponent(BMap).vm as unknown as { getMapInstance: () => unknown }).getMapInstance(),
+      (second.findComponent(Map).vm as unknown as { getMapInstance: () => unknown }).getMapInstance(),
     ).toBeTruthy();
     expect(fake.createdMaps).toHaveLength(2);
     expect(scriptCount()).toBe(1);

@@ -1,14 +1,14 @@
-# BPrism 3d 棱柱
+# Prism 3d 棱柱
 
 通过该组件可在地图上绘制 3d 棱柱，可以基于位置经纬度，高度，顶面和侧面的颜色、透明度等属性来绘制不规则的棱柱体。
 
 ```ts
-import { BPrism } from 'bmap-vue'
+import { Prism } from 'bmap-vue'
 ```
 
 ## 示例
 
-:::demo 通过 [`useBMapAreaBoundary`](../hooks/useBMapAreaBoundary) 获取边界字符串，并传给 `BPrism` 的 `path`，同时设置 `isBoundary` 为 `true`
+:::demo 通过 [`useAreaBoundary`](../hooks/useAreaBoundary) 获取边界字符串，并传给 `Prism` 的 `path`，同时设置 `isBoundary` 为 `true`
 overlay/prism
 :::
 

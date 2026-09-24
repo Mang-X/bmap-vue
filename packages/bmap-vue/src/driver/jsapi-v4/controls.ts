@@ -364,7 +364,7 @@ export function createJsapiV4ControlDriver(
     // `CopyrightControl`，各自往里加一条版权项）。对共享实例就地 `setAnchor()` 会让「实例」与
     // 「它服务的 anchor」脱钩，于是后续同 anchor 的组件找不到它、另建一个，同一个位置上出现两个
     // 控件（#95 评审 P1 的复现）。因此这里把 `copyright.anchor` 判成构造期项：变化时重建，
-    // 由 `BCopyright` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移。
+    // 由 `CopyrightControl` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移。
     if (key === "anchor" && kind === "copyright") {
       return {
         status: "recreate",
@@ -581,7 +581,7 @@ export function createJsapiV4ControlDriver(
       const entries = callRequired(raw, "getCopyrightCollection") as
         | readonly { id: number; content?: string; bounds?: unknown }[]
         | undefined;
-      // `bounds` 一并回读：`BCopyright` 的更新路径会带着旧 bounds 重新 addCopyright，
+      // `bounds` 一并回读：`CopyrightControl` 的更新路径会带着旧 bounds 重新 addCopyright，
       // 丢掉它会让「内容变了但适用范围变回全局」（webgl-v1 的 listCopyrights 没有回读 bounds，
       // 差异登记在 ADR「已知限制」里）。
       return (entries ?? []).map((entry) => {

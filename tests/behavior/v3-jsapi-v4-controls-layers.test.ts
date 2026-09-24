@@ -161,7 +161,7 @@ describe("v4 Control / Layer facet 与 webgl-v1 的已知差异", () => {
     const bounds = { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } };
     controls.addCopyright(control, { id: 1, content: "a", bounds });
 
-    // `BCopyright` 的更新路径会带着旧 bounds 重新 addCopyright：丢掉它会让「内容变了但适用范围变回全局」
+    // `CopyrightControl` 的更新路径会带着旧 bounds 重新 addCopyright：丢掉它会让「内容变了但适用范围变回全局」
     expect(controls.listCopyrights(control)).toEqual([{ id: 1, content: "a", bounds }]);
     expect(rawOf(control).callLog).toContain("addCopyright");
   });

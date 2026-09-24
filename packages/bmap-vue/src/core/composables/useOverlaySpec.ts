@@ -24,7 +24,7 @@
  * 3. 排空过程中新到的更新并入同一轮，因此**后到的值总是最后生效**。
  *
  * 这套语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 #31 迁移过来的
- * 八个覆盖物共用；`BMapMask` / `BMarker3d` / `BInfoWindow` / `BContextMenu` 仍走旧层，
+ * 八个覆盖物共用；`MapMask` / `Marker3D` / `InfoWindow` / `ContextMenu` 仍走旧层，
  * 理由见 ADR `2026-09-18-overlay-event-matrix` 的已知限制。
  *
  * ## issue #31 在本层加的三件事
@@ -79,7 +79,7 @@ import {
  * - `observeFromSdk`：SDK 侧观测到新位置（如 Marker `dragend`）→ 更新模型并告诉调用方「是否真的变了」，
  *   调用方据此决定要不要 `emit("update:position")`。
  *
- * **为什么不是「读回 SDK 现值判等」**（`<BMap>` 视野用的那条路）：覆盖物的位置在
+ * **为什么不是「读回 SDK 现值判等」**（`<Map>` 视野用的那条路）：覆盖物的位置在
  * `OverlayDriver` 上**没有读回入口**（`getPosition` 只在具体覆盖物原型上，不在本库的归一化调用面里；
  * 补一个位置读回 API 属于其它覆盖物的范围）。这里的判据仍是**值**而不是「来源标记」：两条方向都会
  * 更新它，因此不依赖「事件与命令谁先到」的隐式假设。
@@ -632,7 +632,7 @@ export function useOverlaySpec<Props extends object, Resource>(
    *
    * `add` / `remove` 刻意是 **no-op**，不是「帮你挂到父覆盖物上」：JSAPI 4.0 的覆盖物只能挂到
    * Map（`OverlayDriver` 对 `kind !== "map"` 的目标显式拒绝），子资源应该经 `TargetContext.target`
-   * 自己去挂（例如 `BContextMenu` 的 `attachContextMenu`）。这里若悄悄回退到 Map，
+   * 自己去挂（例如 `ContextMenu` 的 `attachContextMenu`）。这里若悄悄回退到 Map，
    * 就把「这个目标不支持」变成了「挂错地方」——假支持比明确的失败更难排查。
    */
   const targetKindRef = shallowRef<TargetKind>(spec.targetKind ?? "overlay");

@@ -34,7 +34,7 @@ describe("createTrackLinePlaybackApi", () => {
 
   it("六条命令在会话就绪时转发到 Driver", () => {
     const api = createTrackLinePlaybackApi({
-      component: "BTrackLineLayer",
+      component: "TrackLineLayer",
       session: () => session,
     });
 
@@ -57,7 +57,7 @@ describe("createTrackLinePlaybackApi", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     session = null;
     const api = createTrackLinePlaybackApi({
-      component: "BTrackLineLayer",
+      component: "TrackLineLayer",
       session: () => session,
     });
 
@@ -75,7 +75,7 @@ describe("createTrackLinePlaybackApi", () => {
 
   it("setProcess 越界在任何会话判定之前抛 BMAP_INVALID_ARGUMENT", () => {
     const api = createTrackLinePlaybackApi({
-      component: "BTrackLineLayer",
+      component: "TrackLineLayer",
       session: () => session,
     });
 
@@ -94,7 +94,7 @@ describe("createTrackLinePlaybackApi", () => {
 
   it("setSpeed 非法值（0 / 负数 / 非有限）在任何会话判定之前抛", () => {
     const api = createTrackLinePlaybackApi({
-      component: "BTrackLineLayer",
+      component: "TrackLineLayer",
       session: () => session,
     });
 
@@ -109,7 +109,7 @@ describe("createTrackLinePlaybackApi", () => {
 
   it("会话在命令之间可以变化（每次重新求值，不捕获旧句柄）", () => {
     const api = createTrackLinePlaybackApi({
-      component: "BTrackLineLayer",
+      component: "TrackLineLayer",
       session: () => session,
     });
     api.start();

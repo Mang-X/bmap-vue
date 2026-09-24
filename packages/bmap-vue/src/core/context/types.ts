@@ -62,7 +62,7 @@ export interface MapRuntimeShape {
   /**
    * 承载这张地图的组件是否**已经开始卸载**（M4-EVENTS / #28）。
    *
-   * `<BMap>` 在 `onBeforeUnmount` 里置位 —— 那一刻早于子树卸载（Vue 的顺序：父 `beforeUnmount` →
+   * `<Map>` 在 `onBeforeUnmount` 里置位 —— 那一刻早于子树卸载（Vue 的顺序：父 `beforeUnmount` →
    * 父作用域 stop → 卸载子树 → 父 `unmounted`，地图销毁在最后一步）。
    * `useMapEvent` 用它区分两种「订阅方消失」：
    *
@@ -102,7 +102,7 @@ export interface MapContext extends MapRuntimeShape {
    * 这张地图的气泡账本（M5-INFOWINDOW / issue #32）：`current()` 是当前打开的那个，
    * `isCurrent(h)` 是同一判定的便捷形式，`size` 是存活实例数（不是「此刻显示几个」）。
    *
-   * 可选；不提供时气泡组件退化为组件自持的账本（同页多个 `<BInfoWindow>` 不再互相察觉）。
+   * 可选；不提供时气泡组件退化为组件自持的账本（同页多个 `<InfoWindow>` 不再互相察觉）。
    */
   readonly infoWindows?: InfoWindowManager;
   readonly controls?: unknown;

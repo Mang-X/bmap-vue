@@ -8,28 +8,28 @@
  *    对应那一条上红；
  * 2. 「位置、offset、visible 动态更新」——`anchor` / `offset` 此前只在构造期生效，本文件把
  *    「改 props → SDK 侧真的变了」变成断言（`getAnchor()` / `getOffset()`）；
- * 3. 「控件创建 / 更新 / 重建 / 移除」——`recreate` 类选项（`BMapType.type`、`BOverview.isOpen`）
- *    变化时**重建控件**；`mutable` 类选项（`BNavigation.type`、`BMapType.showStreetLayer`、
- *    `BOverview.size`、`BCityList.expand`）**就地更新、不重建**。
+ * 3. 「控件创建 / 更新 / 重建 / 移除」——`recreate` 类选项（`MapTypeControl.type`、`OverviewMapControl.isOpen`）
+ *    变化时**重建控件**；`mutable` 类选项（`NavigationControl.type`、`MapTypeControl.showStreetLayer`、
+ *    `OverviewMapControl.size`、`CityListControl.expand`）**就地更新、不重建**。
  *
  * 显隐语义（issue 的「统一 visible」）在 #41 定型为 SDK 基类的 `show()` / `hide()`：控件始终
- * 挂载，只切换可见性。`BCopyright` 是唯一例外（共享实例 + 版权项级显隐），单独一节覆盖。
+ * 挂载，只切换可见性。`CopyrightControl` 是唯一例外（共享实例 + 版权项级显隐），单独一节覆盖。
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive, ref, type Component } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BZoom from "../../packages/bmap-vue/src/components/controls/BZoom.vue";
-import BScale from "../../packages/bmap-vue/src/components/controls/BScale.vue";
-import BNavigation from "../../packages/bmap-vue/src/components/controls/BNavigation.vue";
-import BNavigation3d from "../../packages/bmap-vue/src/components/controls/BNavigation3d.vue";
-import BCityList from "../../packages/bmap-vue/src/components/controls/BCityList.vue";
-import BLocation from "../../packages/bmap-vue/src/components/controls/BLocation.vue";
-import BMapType from "../../packages/bmap-vue/src/components/controls/BMapType.vue";
-import BOverview from "../../packages/bmap-vue/src/components/controls/BOverview.vue";
-import BPanoramaControl from "../../packages/bmap-vue/src/components/controls/BPanoramaControl.vue";
-import BControl from "../../packages/bmap-vue/src/components/controls/BControl.vue";
-import BCopyright from "../../packages/bmap-vue/src/components/controls/BCopyright.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import ZoomControl from "../../packages/bmap-vue/src/components/controls/ZoomControl.vue";
+import ScaleControl from "../../packages/bmap-vue/src/components/controls/ScaleControl.vue";
+import NavigationControl from "../../packages/bmap-vue/src/components/controls/NavigationControl.vue";
+import NavigationControl3D from "../../packages/bmap-vue/src/components/controls/NavigationControl3D.vue";
+import CityListControl from "../../packages/bmap-vue/src/components/controls/CityListControl.vue";
+import LocationControl from "../../packages/bmap-vue/src/components/controls/LocationControl.vue";
+import MapTypeControl from "../../packages/bmap-vue/src/components/controls/MapTypeControl.vue";
+import OverviewMapControl from "../../packages/bmap-vue/src/components/controls/OverviewMapControl.vue";
+import PanoramaControl from "../../packages/bmap-vue/src/components/controls/PanoramaControl.vue";
+import CustomControl from "../../packages/bmap-vue/src/components/controls/CustomControl.vue";
+import CopyrightControl from "../../packages/bmap-vue/src/components/controls/CopyrightControl.vue";
 import { useControlResource } from "../../packages/bmap-vue/src/core/controls";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
@@ -56,7 +56,7 @@ function controlsOnMap() {
 /**
  * 控件当前的偏移量读数。
  *
- * 自定义控件（`BControl`）的构造期偏移走官方自定义控件契约里的 `defaultOffset`
+ * 自定义控件（`CustomControl`）的构造期偏移走官方自定义控件契约里的 `defaultOffset`
  * （`initialize()` 之前就要求存在），`getOffset()` 在运行期写入之前是 `null`；内置控件的
  * 构造期偏移则由构造选项直接落到 `offset`。两条路径对使用者是同一件事，读数时合并。
  */
@@ -74,10 +74,10 @@ function lastCreatedControl(): { options: Record<string, unknown> } & Record<str
  *
  * - `ctor`：它在 Fake 命名空间里的构造器名。`location` 的领域名对应 Fake 里的
  *   `GeolocationControl`（4.0 的写法）。
- * - `anchorMode`：**anchor 的落地方式**。10 个控件就地 `setAnchor()`；`BCopyright` 是
+ * - `anchorMode`：**anchor 的落地方式**。10 个控件就地 `setAnchor()`；`CopyrightControl` 是
  *   构造期项（实例按停靠位置共享 ⇒ anchor 是它的 identity），变化时重建并完成共享组迁移。
  * - `visibleMode`：**显隐的落地方式**。10 个控件走 SDK 基类的 `show()` / `hide()`；
- *   `BCopyright` 是唯一例外——它的实例按 anchor **共享**（文档承诺「多个相同位置版权控件会自动
+ *   `CopyrightControl` 是唯一例外——它的实例按 anchor **共享**（文档承诺「多个相同位置版权控件会自动
  *   排列」），隐藏整个控件会连带隐藏兄弟组件的内容，因此它的「可见」落在**版权项**的登记 /
  *   摘除上。例外在这里显式命名，而不是把它整行排除在门禁之外：`anchor` / `offset` /
  *   卸载归零 / 挂载这几条对它同样适用，排除掉就等于「11 个 Stable 控件里只有 10 个过了统一 spec」。
@@ -91,19 +91,19 @@ const STABLE_CONTROLS: ReadonlyArray<{
   props?: Record<string, unknown>;
   slots?: Record<string, () => unknown>;
 }> = [
-  { name: "BZoom", component: BZoom, ctor: "ZoomControl", visibleMode: "control" },
-  { name: "BScale", component: BScale, ctor: "ScaleControl", visibleMode: "control" },
-  { name: "BNavigation", component: BNavigation, ctor: "NavigationControl", visibleMode: "control" },
-  { name: "BNavigation3d", component: BNavigation3d, ctor: "NavigationControl3D", visibleMode: "control" },
-  { name: "BCityList", component: BCityList, ctor: "CityListControl", visibleMode: "control" },
-  { name: "BLocation", component: BLocation, ctor: "GeolocationControl", visibleMode: "control" },
-  { name: "BMapType", component: BMapType, ctor: "MapTypeControl", visibleMode: "control" },
-  { name: "BOverview", component: BOverview, ctor: "OverviewMapControl", visibleMode: "control" },
-  { name: "BPanoramaControl", component: BPanoramaControl, ctor: "PanoramaControl", visibleMode: "control" },
-  { name: "BControl", component: BControl, ctor: "Control", visibleMode: "control" },
+  { name: "ZoomControl", component: ZoomControl, ctor: "ZoomControl", visibleMode: "control" },
+  { name: "ScaleControl", component: ScaleControl, ctor: "ScaleControl", visibleMode: "control" },
+  { name: "NavigationControl", component: NavigationControl, ctor: "NavigationControl", visibleMode: "control" },
+  { name: "NavigationControl3D", component: NavigationControl3D, ctor: "NavigationControl3D", visibleMode: "control" },
+  { name: "CityListControl", component: CityListControl, ctor: "CityListControl", visibleMode: "control" },
+  { name: "LocationControl", component: LocationControl, ctor: "GeolocationControl", visibleMode: "control" },
+  { name: "MapTypeControl", component: MapTypeControl, ctor: "MapTypeControl", visibleMode: "control" },
+  { name: "OverviewMapControl", component: OverviewMapControl, ctor: "OverviewMapControl", visibleMode: "control" },
+  { name: "PanoramaControl", component: PanoramaControl, ctor: "PanoramaControl", visibleMode: "control" },
+  { name: "CustomControl", component: CustomControl, ctor: "Control", visibleMode: "control" },
   {
-    name: "BCopyright",
-    component: BCopyright,
+    name: "CopyrightControl",
+    component: CopyrightControl,
     ctor: "CopyrightControl",
     visibleMode: "entries",
     anchorMode: "recreate",
@@ -114,7 +114,7 @@ const STABLE_CONTROLS: ReadonlyArray<{
   },
 ];
 
-/** 用响应式 props 挂一个控件到 `<BMap>` 子树里。 */
+/** 用响应式 props 挂一个控件到 `<Map>` 子树里。 */
 function mountControl(
   component: Component,
   initial: Record<string, unknown> = {},
@@ -123,7 +123,7 @@ function mountControl(
   const reactiveProps = ref<Record<string, unknown>>({ ...initial });
   const wrapper = mount(
     defineComponent({
-      setup: () => () => h(BMap, { provider: provider() }, () => [h(component, reactiveProps.value, slots as never)]),
+      setup: () => () => h(Map, { provider: provider() }, () => [h(component, reactiveProps.value, slots as never)]),
     }),
     { attachTo: host() },
   );
@@ -200,7 +200,7 @@ describe("控件统一 spec：每个 Stable 控件同一批断言", () => {
         expect(control.callLog).toContain("hide");
         expect(control.isVisible()).toBe(false);
       } else {
-        // `BCopyright`：整个控件**不**隐藏（兄弟组件还在用），只摘掉本组件那一条版权项
+        // `CopyrightControl`：整个控件**不**隐藏（兄弟组件还在用），只摘掉本组件那一条版权项
         expect(control.callLog).toContain("removeCopyright");
         expect(control.isVisible()).toBe(true);
         expect((control as unknown as { copyrights: unknown[] }).copyrights).toHaveLength(0);
@@ -242,12 +242,12 @@ describe("Map 卸载时控件被清理", () => {
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BZoom, {}),
-            h(BScale, {}),
-            h(BNavigation, {}),
-            h(BMapType, {}),
-            h(BOverview, {}),
+          h(Map, { provider: provider() }, () => [
+            h(ZoomControl, {}),
+            h(ScaleControl, {}),
+            h(NavigationControl, {}),
+            h(MapTypeControl, {}),
+            h(OverviewMapControl, {}),
           ]),
       }),
       { attachTo: host() },
@@ -266,8 +266,8 @@ describe("Map 卸载时控件被清理", () => {
 describe("选项更新：live 就地写、recreate 重建", () => {
   beforeEach(() => harness.reset());
 
-  it("BMapType.showStreetLayer 就地下发（官方唯一字段级 setter，成员名不是 set<Key> 形状）", async () => {
-    const { wrapper, setProps } = mountControl(BMapType);
+  it("MapTypeControl.showStreetLayer 就地下发（官方唯一字段级 setter，成员名不是 set<Key> 形状）", async () => {
+    const { wrapper, setProps } = mountControl(MapTypeControl);
     await flushPromises();
     const created = fake.createdControls.length;
     const control = lastCreatedControl() as unknown as {
@@ -283,8 +283,8 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     await nextTick();
   });
 
-  it("BMapType.type 只有构造期生效 ⇒ 重建控件，新实例带上新值", async () => {
-    const { wrapper, setProps } = mountControl(BMapType);
+  it("MapTypeControl.type 只有构造期生效 ⇒ 重建控件，新实例带上新值", async () => {
+    const { wrapper, setProps } = mountControl(MapTypeControl);
     await flushPromises();
     const created = fake.createdControls.length;
     const first = lastCreatedControl();
@@ -301,8 +301,8 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     await nextTick();
   });
 
-  it("BOverview.size 走 setSize 就地更新；isOpen 走重建（官方只有 changeView 的切换语义）", async () => {
-    const { wrapper, setProps } = mountControl(BOverview, { size: { x: 150, y: 150 } });
+  it("OverviewMapControl.size 走 setSize 就地更新；isOpen 走重建（官方只有 changeView 的切换语义）", async () => {
+    const { wrapper, setProps } = mountControl(OverviewMapControl, { size: { x: 150, y: 150 } });
     await flushPromises();
     const created = fake.createdControls.length;
     const control = lastCreatedControl() as unknown as {
@@ -324,8 +324,8 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     await nextTick();
   });
 
-  it("BNavigation.type 走 setType 就地更新（真实 4.0 要求控件已挂载 ⇒ create → add → setOptions）", async () => {
-    const { wrapper, setProps } = mountControl(BNavigation);
+  it("NavigationControl.type 走 setType 就地更新（真实 4.0 要求控件已挂载 ⇒ create → add → setOptions）", async () => {
+    const { wrapper, setProps } = mountControl(NavigationControl);
     await flushPromises();
     const created = fake.createdControls.length;
     const control = lastCreatedControl() as unknown as {
@@ -344,8 +344,8 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     await nextTick();
   });
 
-  it("BCityList.expand 走 open() / close()（成对动作，没有幂等 setter）", async () => {
-    const { wrapper, setProps } = mountControl(BCityList, { expand: false });
+  it("CityListControl.expand 走 open() / close()（成对动作，没有幂等 setter）", async () => {
+    const { wrapper, setProps } = mountControl(CityListControl, { expand: false });
     await flushPromises();
     const created = fake.createdControls.length;
     const control = lastCreatedControl() as unknown as {
@@ -366,16 +366,16 @@ describe("选项更新：live 就地写、recreate 重建", () => {
   });
 });
 
-describe("BCopyright：共享实例 + 版权项级显隐", () => {
+describe("CopyrightControl：共享实例 + 版权项级显隐", () => {
   beforeEach(() => harness.reset());
 
   it("同 anchor 的两个组件共用一个控件，各自登记一条版权项", async () => {
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-1" }),
-            h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-2" }),
+          h(Map, { provider: provider() }, () => [
+            h(CopyrightControl, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-1" }),
+            h(CopyrightControl, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-2" }),
           ]),
       }),
       { attachTo: host() },
@@ -393,13 +393,13 @@ describe("BCopyright：共享实例 + 版权项级显隐", () => {
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
+          h(Map, { provider: provider() }, () => [
             h(
-              BCopyright,
+              CopyrightControl,
               { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT", visible: first.value },
               { default: () => "no-1" },
             ),
-            h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-2" }),
+            h(CopyrightControl, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "no-2" }),
           ]),
       }),
       { attachTo: host() },
@@ -437,9 +437,9 @@ describe("评审复现：动态改 anchor 不得污染版权控件的共享缓�
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BCopyright, { anchor: anchorA.value }, { default: () => "A" }),
-            h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" }),
+          h(Map, { provider: provider() }, () => [
+            h(CopyrightControl, { anchor: anchorA.value }, { default: () => "A" }),
+            h(CopyrightControl, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" }),
           ]),
       }),
       { attachTo: host() },
@@ -473,10 +473,10 @@ describe("评审复现：动态改 anchor 不得污染版权控件的共享缓�
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
-            h(BCopyright, { anchor: anchorA.value }, { default: () => "A" }),
+          h(Map, { provider: provider() }, () => [
+            h(CopyrightControl, { anchor: anchorA.value }, { default: () => "A" }),
             showOthers.value
-              ? h(BCopyright, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" })
+              ? h(CopyrightControl, { anchor: "BMAP_ANCHOR_BOTTOM_RIGHT" }, { default: () => "B" })
               : null,
           ]),
       }),
@@ -503,7 +503,7 @@ describe("评审复现：option 从有值变回 undefined", () => {
   beforeEach(() => harness.reset());
 
   it("live option 变回 undefined 时必须回到构造期默认（不能永久停在旧值）", async () => {
-    const { wrapper, setProps } = mountControl(BNavigation);
+    const { wrapper, setProps } = mountControl(NavigationControl);
     await flushPromises();
     await setProps({ type: "BMAP_NAVIGATION_CONTROL_SMALL" });
     expect((lastCreatedControl() as unknown as { type: unknown }).type).toBe(
@@ -533,19 +533,19 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
     const shared = reactive<Record<string, unknown>>({});
     const wrapper = mount(
       defineComponent({
-        setup: () => () => h(BMap, { provider: provider() }, () => [node(shared) as never]),
+        setup: () => () => h(Map, { provider: provider() }, () => [node(shared) as never]),
       }),
       { attachTo: host() },
     );
     return { wrapper, shared };
   }
 
-  it("BZoom：同一 offset 对象原地改 x/y 必须下发 setOffset", async () => {
+  it("ZoomControl：同一 offset 对象原地改 x/y 必须下发 setOffset", async () => {
     const shared = reactive({ offset: { x: 7, y: 9 } });
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [h(BZoom, { offset: shared.offset })]),
+          h(Map, { provider: provider() }, () => [h(ZoomControl, { offset: shared.offset })]),
       }),
       { attachTo: host() },
     );
@@ -564,12 +564,12 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
     await nextTick();
   });
 
-  it("BOverview：同一 size 对象原地修改必须下发 setSize，且不重建", async () => {
+  it("OverviewMapControl：同一 size 对象原地修改必须下发 setSize，且不重建", async () => {
     const shared = reactive({ size: { x: 150, y: 150 } });
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [h(BOverview, { size: shared.size })]),
+          h(Map, { provider: provider() }, () => [h(OverviewMapControl, { size: shared.size })]),
       }),
       { attachTo: host() },
     );
@@ -593,12 +593,12 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
     await nextTick();
   });
 
-  it("BMapType：同一 mapTypes 数组原地 push 必须重建（构造期项）", async () => {
+  it("MapTypeControl：同一 mapTypes 数组原地 push 必须重建（构造期项）", async () => {
     const shared = reactive({ mapTypes: [1, 2] });
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [h(BMapType, { mapTypes: shared.mapTypes })]),
+          h(Map, { provider: provider() }, () => [h(MapTypeControl, { mapTypes: shared.mapTypes })]),
       }),
       { attachTo: host() },
     );
@@ -637,7 +637,7 @@ describe("统一 adapter：就地写做不到时的两种反应（重建 / 有�
     const value = ref(1);
     const wrapper = mount(
       defineComponent({
-        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+        setup: () => () => h(Map, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
       }),
       { attachTo: host() },
     );
@@ -672,7 +672,7 @@ describe("统一 adapter：就地写做不到时的两种反应（重建 / 有�
     const value = ref(1);
     const wrapper = mount(
       defineComponent({
-        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+        setup: () => () => h(Map, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
       }),
       { attachTo: host() },
     );
@@ -716,7 +716,7 @@ describe("统一 adapter：就地写做不到时的两种反应（重建 / 有�
     const value = ref<number | undefined>(1);
     const wrapper = mount(
       defineComponent({
-        setup: () => () => h(BMap, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
+        setup: () => () => h(Map, { provider: provider() }, () => [h(Probe, { nope: value.value })]),
       }),
       { attachTo: host() },
     );
@@ -767,7 +767,7 @@ describe("统一 adapter：就地写做不到时的两种反应（重建 / 有�
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
-          h(BMap, { provider: provider() }, () => [
+          h(Map, { provider: provider() }, () => [
             h(Probe, { nope: state.nope, shift: state.shift }),
           ]),
       }),

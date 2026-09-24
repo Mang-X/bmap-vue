@@ -6,40 +6,40 @@
  * （`existingGlobalV4Provider()` 复用注入的 Fake v4 全局，组件仍然在 v4 Driver 上）。
  * 原先的 `VITE_BMAP_MODE=legacy-fake` 对照档随旧引擎删除（#26）。
  *
- * 两档都不给 `<BMap>` 传 `provider` —— 解析始终落在 `app.use` 的默认 definition 上，
+ * 两档都不给 `<Map>` 传 `provider` —— 解析始终落在 `app.use` 的默认 definition 上，
  * 因此「默认 Provider 安装入口」本身也被 playground 覆盖到。
  */
 import { createApp, h, ref, shallowRef, defineComponent, computed } from 'vue'
 import {
-  BMap,
-  BMarker,
-  BMarker3d,
-  BMarkerCluster,
-  BCircle,
-  BPolyline,
-  BPolygon,
-  BRectangle,
-  BLabel,
-  BInfoWindow,
-  BPrism,
-  BGroundOverlay,
-  BContextMenu,
-  BBezierCurve,
-  BMapMask,
-  BPointCollection,
-  BPointIconLayer,
-  BPointLayer,
-  BZoom,
-  BScale,
-  BCityList,
-  BLocation,
-  BNavigation3d,
-  BCopyright,
-  BControl,
-  BPanoramaControl,
-  BDistrictLayer,
-  BPanoramaCoverageLayer,
-  BAutoComplete,
+  Map,
+  Marker,
+  Marker3D,
+  MarkerCluster,
+  Circle,
+  Polyline,
+  Polygon,
+  Rectangle,
+  Label,
+  InfoWindow,
+  Prism,
+  GroundOverlay,
+  ContextMenu,
+  BezierCurve,
+  MapMask,
+  PointCollection,
+  PointIconLayer,
+  PointLayer,
+  ZoomControl,
+  ScaleControl,
+  CityListControl,
+  LocationControl,
+  NavigationControl3D,
+  CopyrightControl,
+  CustomControl,
+  PanoramaControl,
+  DistrictLayer,
+  PanoramaCoverageLayer,
+  Autocomplete,
 } from 'bmap-vue'
 import { bootPlayground, type PlaygroundEnvLike } from '@test-utils'
 
@@ -76,26 +76,26 @@ type SceneDef = {
 /** 基础场景:Marker + InfoWindow + 形状 */
 function basicScene(): () => unknown {
   const open = ref(false)
-  return () => h(BMap, baseMapProps(), () => [
-    h(BMarker, { position: centerRef.value, onClick: () => (open.value = true) }),
-    h(BCircle, { center: centerRef.value, radius: 800, strokeColor: '#ff0000' }),
-    h(BPolyline, { path: [{ lng: 116.35, lat: 39.87 }, { lng: 116.5, lat: 39.96 }], strokeColor: '#00ff00' }),
-    h(BPolygon, { path: [{ lng: 116.36, lat: 39.88 }, { lng: 116.45, lat: 39.88 }, { lng: 116.42, lat: 39.95 }], fillColor: 'rgba(0,0,255,0.2)' }),
+  return () => h(Map, baseMapProps(), () => [
+    h(Marker, { position: centerRef.value, onClick: () => (open.value = true) }),
+    h(Circle, { center: centerRef.value, radius: 800, strokeColor: '#ff0000' }),
+    h(Polyline, { path: [{ lng: 116.35, lat: 39.87 }, { lng: 116.5, lat: 39.96 }], strokeColor: '#00ff00' }),
+    h(Polygon, { path: [{ lng: 116.36, lat: 39.88 }, { lng: 116.45, lat: 39.88 }, { lng: 116.42, lat: 39.95 }], fillColor: 'rgba(0,0,255,0.2)' }),
     // M5-VECTORS / #31：v4 新增的矩形（对角两点）
-    h(BRectangle, { bounds: { southwest: { lng: 116.3, lat: 39.85 }, northeast: { lng: 116.34, lat: 39.88 } }, strokeColor: '#1677ff' }),
-    h(BInfoWindow, { position: centerRef.value, open: open.value, title: '北京' }),
-    h(BZoom),
+    h(Rectangle, { bounds: { southwest: { lng: 116.3, lat: 39.85 }, northeast: { lng: 116.34, lat: 39.88 } }, strokeColor: '#1677ff' }),
+    h(InfoWindow, { position: centerRef.value, open: open.value, title: '北京' }),
+    h(ZoomControl),
   ])
 }
 
 /** 3D + 标注 + 右键菜单 */
 function marker3dScene(): () => unknown {
   return () =>
-    h(BMap, baseMapProps(), () => [
-      h(BMarker3d, { position: centerRef.value, height: 1200, size: 30, fillColor: '#ff6600' }),
-      h(BLabel, { content: '3D 标注', position: centerRef.value, offset: { x: 0, y: -30 } }),
-      h(BContextMenu, {}, () => [h('div', { style: 'padding:8px' }, '右键菜单内容')]),
-      h(BScale),
+    h(Map, baseMapProps(), () => [
+      h(Marker3D, { position: centerRef.value, height: 1200, size: 30, fillColor: '#ff6600' }),
+      h(Label, { content: '3D 标注', position: centerRef.value, offset: { x: 0, y: -30 } }),
+      h(ContextMenu, {}, () => [h('div', { style: 'padding:8px' }, '右键菜单内容')]),
+      h(ScaleControl),
     ])
 }
 
@@ -103,15 +103,15 @@ function marker3dScene(): () => unknown {
 function bulkScene(): () => unknown {
   const pts = shallowRef(demoPoints())
   return () =>
-    h(BMap, baseMapProps(), () => [
-      h(BPointCollection, {
+    h(Map, baseMapProps(), () => [
+      h(PointCollection, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
       }),
       // 图标层与扩展 API 点层（#35）：三者都是「整批一个原生图层」，一起放是为了肉眼比对
       // 三种点样式的差异；真实场景里按需选一个。
-      h(BPointIconLayer, {
+      h(PointIconLayer, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
@@ -119,7 +119,7 @@ function bulkScene(): () => unknown {
         width: 24,
         height: 24,
       }),
-      h(BPointLayer, {
+      h(PointLayer, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
@@ -128,7 +128,7 @@ function bulkScene(): () => unknown {
         fillColor: '#ff6600',
       }),
       // 默认引擎已是原生聚合（#35）；要 `cluster-click` 回传业务项时写 engine="markers"
-      h(BMarkerCluster, {
+      h(MarkerCluster, {
         data: pts.value,
         itemKey: 'id',
         getPosition: (p: { lng: number; lat: number }) => ({ lng: p.lng, lat: p.lat }),
@@ -139,47 +139,47 @@ function bulkScene(): () => unknown {
 /** Controls 全家族 */
 function controlsScene(): () => unknown {
   return () =>
-    h(BMap, baseMapProps(), () => [
-      h(BZoom),
-      h(BScale),
-      h(BCityList, { expand: true }),
-      h(BLocation),
-      h(BNavigation3d),
-      h(BCopyright, {}, () => [h('div', { style: 'font-size:12px' }, '© 2026 demo')]),
-      h(BPanoramaControl),
-      h(BControl, {}, () => [h('button', { style: 'padding:4px 8px' }, '自定义控件')]),
+    h(Map, baseMapProps(), () => [
+      h(ZoomControl),
+      h(ScaleControl),
+      h(CityListControl, { expand: true }),
+      h(LocationControl),
+      h(NavigationControl3D),
+      h(CopyrightControl, {}, () => [h('div', { style: 'font-size:12px' }, '© 2026 demo')]),
+      h(PanoramaControl),
+      h(CustomControl, {}, () => [h('button', { style: 'padding:4px 8px' }, '自定义控件')]),
     ])
 }
 
 /** Layers */
 function layersScene(): () => unknown {
   return () =>
-    h(BMap, baseMapProps(), () => [
-      h(BDistrictLayer, { name: '北京市', strokeColor: '#ff0000' }),
-      h(BPanoramaCoverageLayer),
+    h(Map, baseMapProps(), () => [
+      h(DistrictLayer, { name: '北京市', strokeColor: '#ff0000' }),
+      h(PanoramaCoverageLayer),
     ])
 }
 
 /** 特殊覆盖物 */
 function specialScene(): () => unknown {
   return () =>
-    h(BMap, baseMapProps({ tilt: 45, heading: 30 }), () => [
-      h(BPrism, { path: [{ lng: 116.38, lat: 39.9 }, { lng: 116.42, lat: 39.9 }, { lng: 116.4, lat: 39.93 }], altitude: 200, topFillColor: '#00ccff' }),
-      h(BGroundOverlay, { bounds: { sw: { lng: 116.36, lat: 39.87 }, ne: { lng: 116.44, lat: 39.95 } }, url: 'https://picsum.photos/200' }),
-      h(BBezierCurve, {
+    h(Map, baseMapProps({ tilt: 45, heading: 30 }), () => [
+      h(Prism, { path: [{ lng: 116.38, lat: 39.9 }, { lng: 116.42, lat: 39.9 }, { lng: 116.4, lat: 39.93 }], altitude: 200, topFillColor: '#00ccff' }),
+      h(GroundOverlay, { bounds: { sw: { lng: 116.36, lat: 39.87 }, ne: { lng: 116.44, lat: 39.95 } }, url: 'https://picsum.photos/200' }),
+      h(BezierCurve, {
         path: [{ lng: 116.37, lat: 39.88 }, { lng: 116.47, lat: 39.93 }],
         controlPoints: [[{ lng: 116.41, lat: 39.9 }]],
         strokeColor: '#aa00ff',
       }),
-      h(BMapMask, { path: [{ lng: 116.35, lat: 39.86 }, { lng: 116.48, lat: 39.86 }, { lng: 116.46, lat: 39.97 }] }),
+      h(MapMask, { path: [{ lng: 116.35, lat: 39.86 }, { lng: 116.48, lat: 39.86 }, { lng: 116.46, lat: 39.97 }] }),
     ])
 }
 
 /** Autocomplete */
 function autocompleteScene(): () => unknown {
   return () =>
-    h(BMap, baseMapProps(), () => [
-      h(BAutoComplete, { location: '北京市', types: ['city'], onSearchComplete: (e: unknown) => console.log('searchComplete', e) }),
+    h(Map, baseMapProps(), () => [
+      h(Autocomplete, { location: '北京市', types: ['city'], onSearchComplete: (e: unknown) => console.log('searchComplete', e) }),
     ])
 }
 

@@ -107,7 +107,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | 样式 | **不在 JS 里注入**：JS 入口 eval 后页面里 0 个 UI Kit 样式节点；必须显式引入 `@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css` |
 | 依赖的 JSAPI 面 | 只要求全局 `window.BMapGL`（`new BMapGL.Point` 是裸全局引用）+ 地图实例的 `getCenter` / `getZoom` / `getProjection`（或 `getMapType().getProjection()`）。**不使用** `BMapGL.LocalSearch` |
 | 检索通道 | 自建 JSONP 到 `api.map.baidu.com`，使用私有请求码（`qt=cen/s/con/bd/nb/bda/sa/nba/inf/cur/placesug/drct` 等）与 `getSeckeyAndSign` 签名（读 `window.___abvk` / `localStorage.BMAP_SECKEY`） |
-| AK 解析链 | `window.BMAP_AUTHENTIC_KEY` → 文档里 `script[src*="api.map.baidu.com/api"]` 的 `ak=`（命中即缓存到 `window.BMAP_AUTHENTIC_KEY`）→ 都没有则抛 `BMap AK is not set` |
+| AK 解析链 | `window.BMAP_AUTHENTIC_KEY` → 文档里 `script[src*="api.map.baidu.com/api"]` 的 `ak=`（命中即缓存到 `window.BMAP_AUTHENTIC_KEY`）→ 都没有则抛 `Map AK is not set` |
 | SSR | **import 即失败**，且两个入口的顶层崩溃点不同：CJS/IIFE 入口（`main`，Node 默认解析到它）→ `ReferenceError: document is not defined`；ESM 产物 → 更早死在打包进去的 `js-md5` / `Buffer` interop 上（`TypeError: Cannot read properties of undefined (reading 'from')`）。两者都在**模块求值期**，因此 UI Kit 只能浏览器挂载后动态 import |
 | 释放 | `destroy()` 撤除自身 DOM；四个 widget 生命周期内 UI Kit 自己只挂 **1 个** `document` 级监听（`PlaceAutocomplete` 的外点关闭），`destroy()` 同数归还，净 0 |
 

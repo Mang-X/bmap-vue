@@ -1,9 +1,9 @@
-# BNavigation3d 3D 视角导航控件
+# NavigationControl3D 3D 视角导航控件
 
 地图 3D 控件，可以控制地图的旋转、倾斜，默认位于地图右下角
 
 ```ts
-import { BNavigation3d } from 'bmap-vue'
+import { NavigationControl3D } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -39,7 +39,7 @@ control/navigation3d
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。
 

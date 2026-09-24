@@ -23,7 +23,7 @@
 **刻意不做**（登记在 #44 与独立票里，不在本批混做）：
 
 - `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、单成员别名
-  `LoadedSdk`、`client.version`、`optionKey()` 的一行转发、`useBMapServiceTask` 经
+  `LoadedSdk`、`client.version`、`optionKey()` 的一行转发、`useServiceTask` 经
   `export * from "./composables"` 外泄、`UseSdkResourceOptions` —— 这些要连带改夹具或改公共命名约定，
   属于 #44 的出口收窄；本批只**登记**（评论留在 #44）。
 - 能力目录的 `engines` 维度与 `engine-unsupported` 原因（**#126**，本登记发出时已另行落地：

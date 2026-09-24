@@ -2,7 +2,7 @@
 
 本页是 **JSAPI 4.0 required smoke** 的使用说明与判定口径单一事实源。它解决的是
 「类型/文档层面核对过、但没在真实运行时跑过」这一类假设——#74 用它第一次跑就抓到一个
-`<BMap>` 在真实 SDK 上永远进不了 `ready` 的缺陷（见文末「实测收获」）。
+`<Map>` 在真实 SDK 上永远进不了 `ready` 的缺陷（见文末「实测收获」）。
 
 决策依据：[ADR 2026-09-13：v4 required smoke 的判定口径](/adr/2026-09-13-v4-required-smoke)。
 官方包自身的发布契约另见 [官方包发布契约（Loader / UI Kit）](/zh-CN/contributing/official-packages)。
@@ -72,19 +72,19 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 | `view-animation-cancel-window` | ✅ | — | **#104 审计表 F-1 的 live gate**：未起播的实例上 `cancelViewAnimation` 必抛 `TypeError`；在 `animationstart` 处理器里**同步**取消同样抛错、且动画照旧跑到末帧；`animationstart` 之后的**微任务**里取消成功、派发 `animationcancel`、且视图停在**该段首帧**（未推进到末帧）；**待启动旧段的「清场」只能延后交付**（#122 评审 P1）——旧段仍在启动窗口时取消拿不到交付、新段先提交，旧段在**它自己的** `animationstart` 上被取消，且**来不及驱动视角**（两段朝相反方向走，重叠期最低 zoom 不得越过起始值）。这一子场景的**读数点固定在 `startViewAnimation` 返回之后、`animationstart` 到达之前**，且该前提由它自己断言（不能拿「从未 start 过」那条顶替，#122 复审 P1）；「旧段收场」既钉**顺序**（`animationstart` 在 `animationcancel` 之前），也断言**本库那次安全窗口取消确实成功**（`safePointCancel.threw === false`）—— 只查「事件到没到」会在「SDK 自己把旧段结束掉、而本库交付失败」时假绿（#122 复审第三轮 P1）。自带两处正证控件：正常播放必须真的把 `getZoom()` 推到末帧；那条子场景里提交的新段也必须跑到自己的末帧。**只登记在 live 档**：它验的是真实 SDK 的启动窗口，Fake 上的同一套语义由 Facet 用例覆盖 |
 | `overlay-marker` | ✅ | ✅ | 覆盖物计数增长（live 用 `getOverlays()`，fixture 用账本） |
 | `overlay-polyline` | ✅ | ✅ | 同上 |
-| `overlay-rectangle` | ✅ | ✅ | v4 新增的 `<BRectangle>`：计数增长 + `getBounds()` 回读几何（#31） |
+| `overlay-rectangle` | ✅ | ✅ | v4 新增的 `<Rectangle>`：计数增长 + `getBounds()` 回读几何（#31） |
 | `control-zoom` | ✅ | ✅ | **拦截真实 `Map.addControl` 的调用**（live）/ 账本计数增长（fixture），另附容器 DOM 增量作为 detail |
-| `controls-stable-set` | ✅ | ✅ | #41 新增的三个 Stable 控件（`<BNavigation>` / `<BMapType>` / `<BOverview>`）各发生一次 `Map.addControl`；随后把三者的 `anchor` 一起改成一个新值，**从拦截到的实例上回读 `getAnchor()`** 必须全部变成 `BOTTOM_LEFT`（这是「anchor 真的动态下发」在真实 SDK 上的证据）；挂载期间无 `console.error` |
-| `panorama-viewer` | — | ✅ | `<BPanorama>` 挂载后查看器计数增长（fixture 的实例账本）。**live 档不登记**：真实查看器需要真实全景场景与网络，`descriptor.panoramas()` 在 live 档恒为 `-1`，登记进来只会得到一条假失败（真实图块加载属 nightly 的观察项） |
+| `controls-stable-set` | ✅ | ✅ | #41 新增的三个 Stable 控件（`<NavigationControl>` / `<MapTypeControl>` / `<OverviewMapControl>`）各发生一次 `Map.addControl`；随后把三者的 `anchor` 一起改成一个新值，**从拦截到的实例上回读 `getAnchor()`** 必须全部变成 `BOTTOM_LEFT`（这是「anchor 真的动态下发」在真实 SDK 上的证据）；挂载期间无 `console.error` |
+| `panorama-viewer` | — | ✅ | `<Panorama>` 挂载后查看器计数增长（fixture 的实例账本）。**live 档不登记**：真实查看器需要真实全景场景与网络，`descriptor.panoramas()` 在 live 档恒为 `-1`，登记进来只会得到一条假失败（真实图块加载属 nightly 的观察项） |
 | `layer-district` | ✅ | ✅ | **拦截真实 `Map.addLayer` 的调用**（live）/ 账本计数增长（fixture），另附能力表声明与无 `console.error` 作为辅助 |
 | `layer-tile` | ✅ | ✅ | 同 `layer-district`（拦截真实 `Map.addLayer`），瓦片模板指向**百度自己的瓦片主机**（与 SDK 内部同源）以便 live 档不产生无关的网络错误；**瓦片是否画出来不由本库保证** |
-| `layer-traffic` | ✅ | ✅ | 同 `layer-district`；`BTrafficLayer` 走官方路况服务，无需外部瓦片源 |
+| `layer-traffic` | ✅ | ✅ | 同 `layer-district`；`TrafficLayer` 走官方路况服务，无需外部瓦片源 |
 | `layer-geojson` | ✅ | ✅ | 同 `layer-district`，另加「`setData` 写入的 `FeatureCollection` 被 SDK 接受」（线要素） |
 | `infowindow-visible` | ✅ | ✅ | 地图**活状态**非空（轮询）+ 内容节点 `display`/`visibility` 可见 + 文本非空 |
 | `infowindow-close-button-pair` | ✅ | — | 点气泡右上角的关闭按钮：`close` **恰好一次**、`clickclose` **至少一次**，且本库把模型收敛为关（回写 `update:open false`）。`clickclose` 的**条数**只作读数不断言 —— 实测它等于该实例被打开过几次，把它写成「一次点击一条」会得到一条假门禁（口径见该检查在 `tests/browser/jsapi-v4/main.ts` 里的注释）。**只登记在 live 档**：它验的是真实 SDK 的事件形状与 DOM |
-| `custom-overlay-visible` | ✅ | ✅ | `<BCustomOverlay>`：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置**不重建 DOM**、不产生第二个宿主；隐藏后实例仍在图上 |
-| `context-menu-attached` | — | ✅ | `<BContextMenu>`：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（读 Fake 账本） |
-| `context-menu-marker-target` | ✅ | — | `<BContextMenu>` 写在 `<BMarker>` 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员，不在类型包声明里）。**只登记在 live 档**：它验的是真实 SDK 的成员与 DOM |
+| `custom-overlay-visible` | ✅ | ✅ | `<CustomOverlay>`：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置**不重建 DOM**、不产生第二个宿主；隐藏后实例仍在图上 |
+| `context-menu-attached` | — | ✅ | `<ContextMenu>`：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（读 Fake 账本） |
+| `context-menu-marker-target` | ✅ | — | `<ContextMenu>` 写在 `<Marker>` 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员，不在类型包声明里）。**只登记在 live 档**：它验的是真实 SDK 的成员与 DOM |
 | `service-geocode` | ✅ | — | headless 地理编码真实回包非空；**回包为空或超时都记 `blocked`**（AK 权限 / 配额 / 网络不成立，不是库回归） |
 | `ui-kit-autocomplete-search` | ✅ | — | widget `ready`、检索写入输入框、宿主里出现官方 UI Kit 渲染的输入框、**卸载后宿主子树从文档撤走**（回收路径，见下） |
 | `ui-kit-placesearch-load` | ✅ | — | widget `ready`、检索结算、**`load` 事件带回 POI**（并从中取一个真实 uid 给下一条检查）、宿主里由 UI Kit 渲染出结果 DOM |
@@ -105,7 +105,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 
 - 它证明的是「组件 → Driver → **真实 SDK 的那次调用**」确实发生过——比「没抛错所以大概挂上了」
   或「容器 DOM 变了」强得多（第 1 轮评审：只断言能力表 + 无 `console.error` 时，图层静默 no-op
-  仍会 PASS；实测把 `<BDistrictLayer>` 的挂载改成 no-op 后，该断言现在会红）；
+  仍会 PASS；实测把 `<DistrictLayer>` 的挂载改成 no-op 后，该断言现在会红）；
 - **它的边界同样要说清**：拦截只能证明调用发生了，**不能证明 SDK 采纳了它**。要证明采纳需要 SDK
   提供读数接口，上游 4.0.4 没有。拦截器必须在 `finally` 里还原，否则会影响后续检查。
 - 能力表断言只在 Catalog 里**真有**该 id 时才做（`layer.district` 有，控件没有对应 id，因此控件
@@ -113,7 +113,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
 
 ### bootstrap 失败归谁：外部前置 ⇒ `blocked`（退出 3）
 
-`<BMap>` 在预算内没有 ready 时，**不能**让所有 required 以「缺席」收场——那会被门禁判成
+`<Map>` 在预算内没有 ready 时，**不能**让所有 required 以「缺席」收场——那会被门禁判成
 `REQUIRED_CHECK_MISSING` ⇒ `fail`（退出 1），于是网络 / CDN / AK 这类前置问题被写成「库回归」，
 恰恰在最关键的初始化场景把两类问题混在一起。处置：
 
@@ -163,7 +163,7 @@ nightly 的 job 守卫写的是完整 `owner/repo`（`github.repository == 'Mang
 第一次真实档运行（修复前）就抓到一条只在真实运行时暴露的缺陷：
 
 ```
-BLOCKED harness-bootstrap — <BMap> ready 在 25000ms 内没有结算
+BLOCKED harness-bootstrap — <Map> ready 在 25000ms 内没有结算
 loadErrors=["BMapError: BMap.MapTypeId.BMAP_NORMAL_MAP is not available"]
 diagnostics: {"mapTypeId":{"keys":["NORMAL","EARTH","SATELLITE"]}}
 ```

@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { BMap, BMarker, PointLike } from "bmap-vue";
+import { Map, Marker, PointLike } from "bmap-vue";
 import { ref } from "vue";
 
 const center = { lng: 113.5213534078, lat: 27.6907991732 };
@@ -16,8 +16,8 @@ const handleUpdate = () => {
 </script>
 
 <template>
-  <BMap :center="center">
-    <BMarker v-for="(item, index) in data" :key="index" :position="item" icon="loc_red" />
-  </BMap>
+  <Map :center="center">
+    <Marker v-for="(item, index) in data" :key="index" :position="item" icon="loc_red" />
+  </Map>
   <button class="myButton no-m-b" type="button" @click="handleUpdate">更新</button>
 </template>

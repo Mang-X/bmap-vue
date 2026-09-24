@@ -1,12 +1,12 @@
 <template>
-  <BMap :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
-    <BDOMLayer :create-dom="createDom" :data="geojson" :min-zoom="5" enable-dragging-map />
-  </BMap>
+  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+    <DOMLayer :create-dom="createDom" :data="geojson" :min-zoom="5" enable-dragging-map />
+  </Map>
 </template>
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { BDOMLayer } from "bmap-vue";
+import { DOMLayer } from "bmap-vue";
 
 /** 每个要素一个自定义 DOM；改成内联箭头函数也不会触发重建。 */
 function createDom(properties: object, point: { lng: number; lat: number }) {

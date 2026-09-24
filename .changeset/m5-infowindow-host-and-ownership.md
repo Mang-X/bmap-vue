@@ -2,7 +2,7 @@
 "bmap-vue": minor
 ---
 
-`<BInfoWindow>` 重构：detached host + Teleport，并改为 **ownership / reconcile** 状态模型（`M5-INFOWINDOW` / #32）。
+`<InfoWindow>` 重构：detached host + Teleport，并改为 **ownership / reconcile** 状态模型（`M5-INFOWINDOW` / #32）。
 
 **内容宿主的所有权变了**：组件创建一块独立的内容宿主节点交给 SDK（SDK 会在打开时把它搬进自己的
 容器），Vue 的渲染子树由 `<Teleport>` 挂到它上面 —— SDK 搬动宿主时不再会动到 Vue 管理的节点树。

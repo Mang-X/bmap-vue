@@ -154,7 +154,7 @@ describe("readFeatureKey / readFeatureId：业务键与公开 id 是两个取值
 
   it("两阶段兜底：回包有 properties 但**缺业务键**时，用 dataIndex 回到自己的快照再取一次", () => {
     // #106 第四轮评审：`dataItem.properties` 存在但没有 idKey 字段（部分回包）也要能兜底，
-    // 这条与迁移前的 BPointCollection 行为等价。
+    // 这条与迁移前的 PointCollection 行为等价。
     const collection = {
       type: "FeatureCollection",
       features: [

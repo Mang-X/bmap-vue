@@ -94,7 +94,7 @@ const INTERNAL_ONLY_EXPORTS = [
 ];
 
 /** 组件名：它们属于根入口 / `./components`，不许出现在扩展契约里。 */
-const COMPONENT_EXPORTS = ["BMap", "BMapProvider", "BMarker", "BInfoWindow", "BTrackLineLayer"];
+const COMPONENT_EXPORTS = ["Map", "BMapProvider", "Marker", "InfoWindow", "TrackLineLayer"];
 
 describe("./advanced 的导出面是冻结的精确集合", () => {
   it("运行时导出与冻结清单逐名相等（多一个 / 少一个都要显式改清单）", () => {
@@ -177,7 +177,7 @@ describe("闭包解析器自身的能力（含副作用导入）", () => {
     withFixture(
       {
         "entry.mjs": 'import "./side-effect.mjs";\n',
-        "side-effect.mjs": 'export const marker = "BInfoWindow";\n',
+        "side-effect.mjs": 'export const marker = "defineComponent";\n',
       },
       (dir) => {
         const closure = closureOf(dir);
@@ -187,7 +187,7 @@ describe("闭包解析器自身的能力（含副作用导入）", () => {
         // 另一半：认出来了之后，标记真的会被命中（否则「纳入闭包」是空的）
         expect(
           componentMarkersIn(closure, (file) => resolve(dir, file), (file) => readFileSync(file, "utf8")),
-        ).toContain("BInfoWindow");
+        ).toContain("defineComponent");
       },
     );
   });

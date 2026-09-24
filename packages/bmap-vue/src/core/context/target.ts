@@ -22,7 +22,7 @@ export const targetContextKey: InjectionKey<TargetContext> = Symbol(
 
 /**
  * 读最近 TargetContext 的挂载目标:不在任何 target 下则为 null。
- * 用于 BContextMenu 等需要响应父 Marker 晚就绪的场景。
+ * 用于 ContextMenu 等需要响应父 Marker 晚就绪的场景。
  */
 export function useParentOverlayHandle(): ShallowRef<SdkHandle<string> | null> {
   const targetCtx = inject(targetContextKey, undefined);

@@ -4,7 +4,7 @@ title: BMapProvider Client 上下文
 
 # BMapProvider Client 上下文
 
-`<BMapProvider>` 为子树提供 SDK Client 上下文（加载状态 + `BMapClient`），无需地图实例即可使用服务类 hooks（如 `useBMapGeocoder`）。`<BMap>` 会优先复用最近的 Provider 上下文。
+`<BMapProvider>` 为子树提供 SDK Client 上下文（加载状态 + `BMapClient`），无需地图实例即可使用服务类 hooks（如 `useGeocoder`）。`<Map>` 会优先复用最近的 Provider 上下文。
 
 ```ts
 import { BMapProvider } from 'bmap-vue'
@@ -41,7 +41,7 @@ function onError() {}
 | ----------- | ------------------------------------------------- | --------------------------- | ------ |
 | client      | 已创建好的 `BMapClient`（最高优先级）             | `BMapClient`                | -      |
 | definition  | 完整 Client 定义（覆盖默认定义）                  | `CreateBMapClientOptions`   | -      |
-| provider    | 便捷 Provider（与 `<BMap>` 的 `provider` 对称）    | `BMapProviderLike`          | -      |
+| provider    | 便捷 Provider（与 `<Map>` 的 `provider` 对称）    | `BMapProviderLike`          | -      |
 | loadOptions | 配合 `provider` 使用的加载选项                    | `BMapLoadOptions`           | `{}`   |
 | autoLoad    | 挂载后自动加载 SDK（`false` 时需手动 `load()`）   | `boolean`                   | `true` |
 | suspense    | 保留字段                                          | `boolean`                   | `false` |
@@ -80,4 +80,4 @@ Provider 形状已随旧引擎删除（`#26`），见[从 WebGL v1 迁移到 4.0
 ## 与 `app.use()` 的关系
 
 `app.use(createBMapPlugin({ ak }))` 只提供**默认** Client 定义；`<BMapProvider>` 可覆盖其子树的默认值。
-`<BMap>` 的查找顺序见[配置](../guide/config#client-查找顺序)。
+`<Map>` 的查找顺序见[配置](../guide/config#client-查找顺序)。

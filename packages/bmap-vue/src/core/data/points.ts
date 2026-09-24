@@ -1,7 +1,7 @@
 /**
  * 点坐标的读取与校验（M6-MARKER-POINTCOLLECTION / issue #34）
  *
- * 数据组件（`BMarkerList` / `BMarkerCluster` / `BPointShapeLayer`）都从业务数据里读坐标，
+ * 数据组件（`MarkerList` / `MarkerCluster` / `BPointShapeLayer`）都从业务数据里读坐标，
  * 三处必须用**同一份**判定，否则「什么样的坐标算坏数据」会有三个版本。因此校验收在这里，
  * 组件只负责「跳过 + 报告」。
  *

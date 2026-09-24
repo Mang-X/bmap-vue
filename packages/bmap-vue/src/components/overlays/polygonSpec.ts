@@ -1,5 +1,5 @@
 /**
- * BPolygon 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * Polygon 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -17,7 +17,7 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { PolygonHandle } from "../../driver/types/handles";
-import type { BPolygonProps } from "../../types/components";
+import type { PolygonProps } from "../../types/components";
 import {
   PATH_FILL_FIELDS,
   PATH_STROKE_FIELDS,
@@ -26,7 +26,7 @@ import {
   VISIBILITY_FIELD,
 } from "./overlayFields";
 
-export const POLYGON_FIELDS: OverlayFieldMap<BPolygonProps> = {
+export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
   path: "options",
   pathVersion: "version",
   isBoundary: "recreate",
@@ -46,7 +46,7 @@ export const POLYGON_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createPolygonSpec(): OverlaySpec<BPolygonProps, PolygonHandle> {
+export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
   return {
     type: "polygon",
     kind: "polygon",

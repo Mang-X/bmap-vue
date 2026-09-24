@@ -55,12 +55,12 @@ import {
   type VNodeChild,
 } from "vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
-import BFillLayer from "../../packages/bmap-vue/src/components/layers/BFillLayer.vue";
-import BHeatmapLayer from "../../packages/bmap-vue/src/components/layers/BHeatmapLayer.vue";
-import BTrackLineLayer from "../../packages/bmap-vue/src/components/layers/BTrackLineLayer.vue";
-import BPointCollection from "../../packages/bmap-vue/src/components/data/BPointCollection.vue";
+import MapComponent from "../../packages/bmap-vue/src/components/map/Map.vue";
+import LineLayer from "../../packages/bmap-vue/src/components/layers/LineLayer.vue";
+import FillLayer from "../../packages/bmap-vue/src/components/layers/FillLayer.vue";
+import HeatmapLayer from "../../packages/bmap-vue/src/components/layers/HeatmapLayer.vue";
+import TrackLineLayer from "../../packages/bmap-vue/src/components/layers/TrackLineLayer.vue";
+import PointCollection from "../../packages/bmap-vue/src/components/data/PointCollection.vue";
 import {
   PERF_ITEM_KEY,
   PERF_SIZES,
@@ -133,7 +133,7 @@ function shallowHolder(items: readonly PerfItem[]): DataHolder {
 
 function mountTree(children: () => VNodeChild) {
   const Root = defineComponent({
-    setup: () => () => h(BMap, { provider: harness.provider() }, children),
+    setup: () => () => h(MapComponent, { provider: harness.provider() }, children),
   });
   return mount(Root, { attachTo: harness.container() });
 }
@@ -143,11 +143,11 @@ async function settle(): Promise<void> {
   await nextTick();
 }
 
-/** 挂一个 `BPointCollection`（数据来自 `holder`，样式可写）。 */
+/** 挂一个 `PointCollection`（数据来自 `holder`，样式可写）。 */
 async function mountPoints(holder: DataHolder) {
   const style = ref<Record<string, unknown>>({ size: 6, color: "#0055ff" });
   const wrapper = mountTree(() =>
-    h(BPointCollection as never, {
+    h(PointCollection as never, {
       data: holder.get(),
       itemKey: PERF_ITEM_KEY,
       getPosition: perfItemPosition,
@@ -165,7 +165,7 @@ describe("§1 原生批量点组件：挂载 / 换引用 / 样式 / 卸载（100
       const items = ITEMS.get(size)!;
       const featuresPerMount: number[] = [];
 
-      // 采样前先做一次**丢弃的挂载 / 卸载**：`<BMap>` 的第一次挂载要付「client + loader + driver 装配 +
+      // 采样前先做一次**丢弃的挂载 / 卸载**：`<Map>` 的第一次挂载要付「client + loader + driver 装配 +
       // Vue 首次 patch + 建图」这些**过程内一次性**成本（实测合并 main 后的第一次运行里，
       // `mount.pointCollection@100` 的 min 是 16.15ms，紧接着再跑一次就掉回个位数毫秒）。
       // 记的是**稳定态**的挂载；首次那一次仍然以 `.firstMs` 读数进报告（读数，不做门禁）。
@@ -331,7 +331,7 @@ describe("§4 对照：GeoJSON 直通的原生图层（我们的逐要素成本�
     for (let sample = 0; sample < SAMPLES; sample += 1) {
       const start = performance.now();
       const wrapper = mountTree(() =>
-        h(BLineLayer as never, { data: { type: "FeatureCollection", features }, idKey: "id" }),
+        h(LineLayer as never, { data: { type: "FeatureCollection", features }, idKey: "id" }),
       );
       await settle();
       recorder.sample("mount.lineLayerGeoJson@50000", performance.now() - start);
@@ -417,13 +417,13 @@ describe("§5 输入数据的响应式形态决定更新成本（阶段 A 结论
  * §6 四类原生图层 × 四种规模（issue #37 评审 3 指出的缺口）。
  *
  * `#36` 把「大数据 setData / style update 与资源清理」交办给了本票，而原先的矩阵只覆盖
- * `BPointCollection`（逐项 `Item[]` 路径）+ 一个 `BLineLayer` 的 50k 挂载对照。这里把**四类原生
+ * `PointCollection`（逐项 `Item[]` 路径）+ 一个 `LineLayer` 的 50k 挂载对照。这里把**四类原生
  * 图层**（line / fill / heatmap / track-line）在 100 / 1k / 10k / 50k 上都跑一遍四个动作，
  * 并逐个断言「只有一个 SDK 资源 / 不逐要素建覆盖物 / 换数据不换实例 / 卸载后归零」。
  *
  * 口径说明：
  * - 这四类的 `data` 是**直接吃 GeoJSON**（没有适配层），因此读数主要是「我们的转发 + 挂载链路成本」，
- *   而不是逐要素算法成本——这正是与 `BPointCollection`（走 `adaptPoints`）的分工；
+ *   而不是逐要素算法成本——这正是与 `PointCollection`（走 `adaptPoints`）的分工；
  * - `track-line` 的大数据维度是**一条路径的顶点数**（官方只接收单条 `LineString` Feature），
  *   且它的登记面只有 `setData`（没有 style），因此它的动作是三个而不是四个；
  * - 采样 3 次（而非 5 次）：这一节的目的是**覆盖面**，不是精度；精度由 §1/§5 的规模曲线承担。
@@ -460,7 +460,7 @@ interface NativeLayerCase {
 const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
   {
     name: "line",
-    component: BLineLayer,
+    component: LineLayer,
     data: (size) => featureCollection(makeLineFeatures(size)) as object,
     volume: featureCount,
     style: {
@@ -473,7 +473,7 @@ const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
   },
   {
     name: "fill",
-    component: BFillLayer,
+    component: FillLayer,
     data: (size) => featureCollection(makePolygonFeatures(size)) as object,
     volume: featureCount,
     style: {
@@ -486,7 +486,7 @@ const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
   },
   {
     name: "heatmap",
-    component: BHeatmapLayer,
+    component: HeatmapLayer,
     data: (size) => featureCollection(makePointFeatures(size)) as object,
     volume: featureCount,
     // 扩展 API 只公开整袋 `setOptions`（官方没有可核对的 Heatmap 声明）⇒ 断言它，而不是专页图层的 setter。
@@ -494,7 +494,7 @@ const NATIVE_LAYER_CASES: readonly NativeLayerCase[] = [
   },
   {
     name: "track-line",
-    component: BTrackLineLayer,
+    component: TrackLineLayer,
     data: (size) => makeTrackFeature(size) as unknown as object,
     volume: trackVertexCount,
     style: null,
@@ -662,8 +662,8 @@ describe("§7 一次父更新同时改 data/style/visible/zIndex：调用与重�
     });
     const Root = defineComponent({
       setup: () => () =>
-        h(BMap, { provider: harness.provider() }, () =>
-          h(BPointCollection as never, {
+        h(MapComponent, { provider: harness.provider() }, () =>
+          h(PointCollection as never, {
             data: state.data,
             itemKey: PERF_ITEM_KEY,
             getPosition: perfItemPosition,

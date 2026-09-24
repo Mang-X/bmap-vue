@@ -1,5 +1,5 @@
 /**
- * BRoutePlan 的构造 / 释放 / 事件 / 动作（UIKIT-02 / issue #75）
+ * RoutePlan 的构造 / 释放 / 事件 / 动作（UIKIT-02 / issue #75）
  *
  * 这个组件的判别点在**请求与事件的边界**上，所以用例分三类：
  *
@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import BRoutePlan from "../../packages/bmap-vue/src/integrations/ui-kit/components/BRoutePlan.vue";
+import RoutePlan from "../../packages/bmap-vue/src/integrations/ui-kit/components/RoutePlan.vue";
 import {
   FakeUiKitRoutePlan,
   createFakeMapHarness,
@@ -79,10 +79,10 @@ function searchOptions(): Record<string, unknown> {
   };
 }
 
-describe("BRoutePlan：构造与选项", () => {
+describe("RoutePlan：构造与选项", () => {
   it("Map ready 后构造：drivingOptions 透传、六个上游事件全部绑上", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {
+    const mounted = mountInMap(RoutePlan, harness, {
       drivingOptions: { policy: 5, alternatives: 2 },
     });
     await flushPromises();
@@ -108,7 +108,7 @@ describe("BRoutePlan：构造与选项", () => {
 
   it("没给 drivingOptions 时不往构造选项里塞一个 undefined", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     expect("drivingOptions" in routeWidget().options).toBe(false);
@@ -117,7 +117,7 @@ describe("BRoutePlan：构造与选项", () => {
 
   it("drivingOptions 变更 → 重建 widget（上游没有 setter）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap<{ drivingOptions?: Record<string, number> }>(BRoutePlan, harness, {
+    const mounted = mountInMap<{ drivingOptions?: Record<string, number> }>(RoutePlan, harness, {
       drivingOptions: { policy: 0 },
     });
     await flushPromises();
@@ -138,10 +138,10 @@ describe("BRoutePlan：构造与选项", () => {
   });
 });
 
-describe("BRoutePlan：search 动作", () => {
+describe("RoutePlan：search 动作", () => {
   it("坐标经 Driver 转成引擎原生点后再交给上游，返回值投影成纯数据", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -204,7 +204,7 @@ describe("BRoutePlan：search 动作", () => {
 
   it("字符串端点（地点名 / uid）原样透传，不经过 Driver；waypoints 逐点转换", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -228,7 +228,7 @@ describe("BRoutePlan：search 动作", () => {
 
   it("失败：事件载荷与动作拒绝是**同一条** BMapError", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -248,7 +248,7 @@ describe("BRoutePlan：search 动作", () => {
 
   it("失败文案脱敏：message / cause.message / toJSON() 三处都不含 ak", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -276,7 +276,7 @@ describe("BRoutePlan：search 动作", () => {
 
   it("回包形状不认识：拒绝而不是用「空结果」冒充成功", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -291,7 +291,7 @@ describe("BRoutePlan：search 动作", () => {
 
   it("未就绪时动作等待就绪；卸载后动作明确拒绝", async () => {
     const harness = createFakeMapHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -314,10 +314,10 @@ describe("BRoutePlan：search 动作", () => {
   });
 });
 
-describe("BRoutePlan：事件 → 公共 DTO", () => {
+describe("RoutePlan：事件 → 公共 DTO", () => {
   it("result：起点 / 终点 / 方案 / 路段逐字段投影，判别键不认识的项被丢弃", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     routeWidget().emit("result", {
@@ -376,7 +376,7 @@ describe("BRoutePlan：事件 → 公共 DTO", () => {
 
   it("result：形状不可用时不发事件（不制造「搜到路线了」的假信号）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     const widget = routeWidget();
@@ -391,7 +391,7 @@ describe("BRoutePlan：事件 → 公共 DTO", () => {
 
   it("typechange / planselect / navclick / clear 各自投影；不可用载荷不发", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const widget = routeWidget();
 
@@ -426,10 +426,10 @@ describe("BRoutePlan：事件 → 公共 DTO", () => {
   });
 });
 
-describe("BRoutePlan：其它公开动作", () => {
+describe("RoutePlan：其它公开动作", () => {
   it("getCurrentType / getLastResult 落到上游同名方法上", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -452,7 +452,7 @@ describe("BRoutePlan：其它公开动作", () => {
 
   it("公开面不含 switchType（锁定版本里它是 no-op / 只 warn）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     const exposed = mounted.exposed.value ?? {};
@@ -470,7 +470,7 @@ describe("BRoutePlan：其它公开动作", () => {
 
   it("单次交互只走 UI Kit：headless 路线服务面一次都没被读到", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -485,7 +485,7 @@ describe("BRoutePlan：其它公开动作", () => {
 
   it("卸载：先解绑六个事件再销毁，宿主 DOM 撤走", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const widget = routeWidget();
 
@@ -504,7 +504,7 @@ describe("BRoutePlan：其它公开动作", () => {
 
   it("route-widget 的默认夹具回包形状与本库 DTO 对得上（防止夹具随口成真）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -526,7 +526,7 @@ describe("BRoutePlan：其它公开动作", () => {
    */
   it("连续两次 search：两次都落到上游，各自拿到自己的结算", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -549,7 +549,7 @@ describe("BRoutePlan：其它公开动作", () => {
   // issue #75 验收：「路线/详情所创建资源随 clear/destroy 正确释放，多地图不相互影响」。
   it("换 Map：旧 widget 先释放，新 widget 拿到新 raw map 与当前 drivingOptions", async () => {
     const harness = readyHarness("map-a");
-    const mounted = mountInMap<{ drivingOptions?: Record<string, number> }>(BRoutePlan, harness, {
+    const mounted = mountInMap<{ drivingOptions?: Record<string, number> }>(RoutePlan, harness, {
       drivingOptions: { policy: 5 },
     });
     await flushPromises();
@@ -578,8 +578,8 @@ describe("BRoutePlan：其它公开动作", () => {
   it("多地图：各自一个 widget，卸载其中一个不牵连另一个", async () => {
     const harnessA = readyHarness("map-a");
     const harnessB = readyHarness("map-b");
-    const mountedA = mountInMap(BRoutePlan, harnessA, {});
-    const mountedB = mountInMap(BRoutePlan, harnessB, {});
+    const mountedA = mountInMap(RoutePlan, harnessA, {});
+    const mountedB = mountInMap(RoutePlan, harnessB, {});
     await flushPromises();
 
     expect(fake.stats.created).toBe(2);
@@ -612,7 +612,7 @@ describe("BRoutePlan：其它公开动作", () => {
  *
  * 契约依据：上游 `.d.ts` 里 `plans` 与 `segments` 都是**必填数组**，因此「不是数组」同样属于形状漂移。
  */
-describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
+describe("RoutePlan：整批投影失败的形状漂移守卫", () => {
   /** 一个合法的端点（`location` 是上游必填字段）。 */
   function endpoint(title: string, lng: number, lat: number): Record<string, unknown> {
     return { title, location: { lng, lat } };
@@ -631,7 +631,7 @@ describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
 
   it("result：plans 非空但整体漂移 → 不发事件（不能伪装成「没有路线」）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     routeWidget().emit("result", {
@@ -648,7 +648,7 @@ describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
 
   it("search：同一载荷拒绝，而不是返回 plans: [] 冒充成功", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -667,7 +667,7 @@ describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
 
   it("getLastResult：缓存结果整体漂移时拒绝（不把漂移读成「没有结果」）", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const api = mounted.exposed.value as unknown as RouteApi;
 
@@ -686,7 +686,7 @@ describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
 
   it("segments 不是数组 / 非空但整体漂移 → 该方案无效；同批的好方案照常保留", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
 
     routeWidget().emit("result", {
@@ -736,7 +736,7 @@ describe("BRoutePlan：整批投影失败的形状漂移守卫", () => {
 
   it("navclick：`result` / `plan` 为 null/undefined 是合法缺失，存在却解析不出来则整条不发", async () => {
     const harness = readyHarness();
-    const mounted = mountInMap(BRoutePlan, harness, {});
+    const mounted = mountInMap(RoutePlan, harness, {});
     await flushPromises();
     const widget = routeWidget();
 

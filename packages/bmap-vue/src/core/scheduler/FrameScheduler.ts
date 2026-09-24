@@ -27,7 +27,7 @@
  * - **`runFrame()` 再判一次 `paused`**：即使取消没赶上（同一帧内 `schedule → pause` 的时序），
  *   那一帧也不提交任何任务 —— 只靠 `cancelFrame` 会留下依赖时序的漏洞；
  * - **`flush()` 不受暂停影响**：它是显式的「现在就要结果」，由调用方负责语义
- *   （`<BMap>` 的合帧 checkResize 走 `schedule()` 而不是 `flush()`）。
+ *   （`<Map>` 的合帧 checkResize 走 `schedule()` 而不是 `flush()`）。
  */
 export interface FrameScheduler {
   schedule(key: PropertyKey, task: () => void): void;

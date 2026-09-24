@@ -6,11 +6,11 @@ lang: zh-CN
 # 配置
 
 本章节将为你讲述如何配置 ak、apiUrl 与插件。v3 通过 Client 定义表达 SDK 加载，
-只有 `app.use()`（默认定义）、`<BMapProvider>`（子树覆盖）与 `<BMap>` 自身 props 三处入口。
+只有 `app.use()`（默认定义）、`<BMapProvider>`（子树覆盖）与 `<Map>` 自身 props 三处入口。
 
 ## Client 查找顺序
 
-`<BMap>` 按以下顺序解析 SDK Client，命中即停：
+`<Map>` 按以下顺序解析 SDK Client，命中即停：
 
 1. 显式 `client` prop（已创建好的 `BMapClient`）
 2. 显式 `definition` prop（`createBMapClientDefinition({ provider, loadOptions })`）
@@ -19,7 +19,7 @@ lang: zh-CN
 5. `app.use(createBMapPlugin(...))` 提供的默认定义
 6. 否则报错（默认**不读取任何全局**；宿主自己加载了 SDK 的场景请显式传 `provider: existingGlobalV4Provider()`）
 
-服务类 hooks（如 `useBMapGeocoder`）只需要 Client，可在 `<BMap>` 或 `<BMapProvider>` 子树内直接使用，无需地图实例。
+服务类 hooks（如 `useGeocoder`）只需要 Client，可在 `<Map>` 或 `<BMapProvider>` 子树内直接使用，无需地图实例。
 
 ## 配置方式
 
@@ -28,9 +28,9 @@ lang: zh-CN
 
 ### Driver 选择与默认加载器
 
-3.0 只有**一个引擎**（`jsapi-v4`）：组件默认路径（`app.use` / `<BMapProvider>` / `<BMap>`）
+3.0 只有**一个引擎**（`jsapi-v4`）：组件默认路径（`app.use` / `<BMapProvider>` / `<Map>`）
 直接交给 `createBMapClient`，由默认的 `jsapiV4DriverFactory` 装出 v4 Driver。默认 Provider 是
-`baiduJsapiV4Provider()`——`createBMapPlugin()` 不传 `provider`、`<BMap>` 只给 `ak`、以及
+`baiduJsapiV4Provider()`——`createBMapPlugin()` 不传 `provider`、`<Map>` 只给 `ak`、以及
 `<BMapProvider>` 未覆盖时，用的都是它；它内部真的调用官方 `@baidumap/jsapi-loader`
 （精确锁定 `1.0.0`）。决策与回滚见
 [ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)；
@@ -86,7 +86,7 @@ const provider: BMapProviderLike = {
 （旧引擎结果）都会以 `BMAP_SDK_ENGINE_MISMATCH` 失败，报错文案会指出原因。
 
 `./core` 的 `createClientContext()` 走同一条路：**同一份 definition 在任何入口
-（`<BMap>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定
+（`<Map>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定
 Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDriver` 归一已随旧引擎删除
 （`#26`），definition 现在原样交给 Client。
 
@@ -151,18 +151,18 @@ const selfHosted = { provider: customScriptV4Provider('https://self.hosted/bmap.
 const hostLoaded = { provider: existingGlobalV4Provider() }
 ```
 
-### 3。组件 `BMap` 传入 [`props`](/zh-CN/components/map#%E9%9D%99%E6%80%81%E7%BB%84%E4%BB%B6-props) 配置
+### 3。组件 `Map` 传入 [`props`](/zh-CN/components/map#%E9%9D%99%E6%80%81%E7%BB%84%E4%BB%B6-props) 配置
 
 <!-- prettier-ignore -->
 ```html
-<BMap
+<Map
   ak='百度地图ak'
 />
 ```
 
 ## 扩展插件 plugins
 
-配置插件后，地图实例 ready 不会等待插件加载。请通过 [BMap 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
+配置插件后，地图实例 ready 不会等待插件加载。请通过 [Map 组件的 `plugin-ready` 事件](../components/map#v3-行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。v2 的 `pluginReady` 事件在 v3 已移除，请改用 kebab 写法 `@plugin-ready`。
 
 **挂起不会变成「永远加载中」**：**四个内置插件**的脚本加载有 **60 秒默认超时**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。用 `urlPluginDefinition` 自建的第三方脚本插件**不受**这个超时影响（**超时**语义保持既有行为：不设超时；需要超时请自己在 `load(context, signal)` 里包一层）。共用加载器自身的其它**修复**（例如取消之后不再延迟插入脚本）对第三方插件同样生效。决策与实测读数见 ADR [插件脚本加载通道的超时与取消语义](/adr/2026-09-21-plugin-load-channel-timeout)。
 
@@ -172,7 +172,7 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 | PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态与迁移路径                                                                                              |
 | ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 结论 `native`：**迁到原生 `<BTrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）。插件脚本本身最小运行时路径已验证，但本库不再为它提供封装 |
+| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 结论 `native`：**迁到原生 `<TrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）。插件脚本本身最小运行时路径已验证，但本库不再为它提供封装 |
 | [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                              | ✅             | 结论 `incompatible`（**不兼容**）：依赖 `_rd` 私有回调表，且要挂 `getPanes().mapPane`（4.0 没有）⇒ **无迁移路径**，改用原生图层 |
 | [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。                | ✅             | 结论 `compatible`：**最小运行时路径已验证**（含沿公开 DOM 事件链路发合成指针事件序列画出一个多边形）；无原生替代，按官方文档直接使用；会自行注入两个脚本 |
 | [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | ✅             | 结论 `compatible`：**最小运行时路径已验证**（10 个静态成员 + `getDistance` 数值正确）；纯函数集合，按官方文档直接使用 |
@@ -215,7 +215,7 @@ app.use(createBMapPlugin({
 
 <!-- prettier-ignore -->
 ```html
-<BMap :provider="selfHostedProvider" />
+<Map :provider="selfHostedProvider" />
 ```
 
 ### 自定义插件定义
@@ -238,7 +238,7 @@ M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
   `disposeDefaultPluginHost()`。**它不是「回到没加载过」**：第三方脚本与 `window.BMapGLLib.*` 都留在
   原地，内置脚本插件下一次会命中「导出已存在」的短路、复用同一个全局对象（不重新拉脚本）。
 - **未知名字明确失败**：`resolvePluginDefinition` / `stringToPluginDefinitions` 抛
-  `BMAP_PLUGIN_UNKNOWN`（不再降级成永远成功的空实现）。`<BMap :plugins="[...]">` 在组件层逐个名字捕获，
+  `BMAP_PLUGIN_UNKNOWN`（不再降级成永远成功的空实现）。`<Map :plugins="[...]">` 在组件层逐个名字捕获，
   未知名字回执 `plugin-error`，**不阻断地图**；它不会在注册表留下记录，所以 `getStatus(name)` 是
   `undefined` 而不是 `'error'`。
 - **取消只影响自己**：`whenPlugin(name, signal)` 的 signal abort 只会让本次等待以

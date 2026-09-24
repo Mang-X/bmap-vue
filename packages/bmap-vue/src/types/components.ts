@@ -6,11 +6,11 @@
  * - 根入口从此文件导出,避免从 `*.vue` 导出类型(TS 无法在纯 tsc 下解析 .vue 具名命名导出)。
  * - 精确的组件实例类型仍由 Volar 从 SFC 解析。
  */
-import type { InfoWindowProps } from "../core/overlays/InfoWindowSpec";
+import type { InfoWindowProps as InfoWindowSpecProps } from "../core/overlays/InfoWindowSpec";
 import type { Pixel, Point } from "../driver/types/geometry";
 import type { MapHandle, SdkHandle } from "../driver/types/handles";
 
-/** BMapMask 掩膜显示区域 */
+/** MapMask 掩膜显示区域 */
 export type MapMaskShowRegion = "inside" | "outside";
 
 /**
@@ -25,7 +25,7 @@ export const DistrictType = {
 
 export type DistrictTypeValue = (typeof DistrictType)[keyof typeof DistrictType];
 
-export interface BMapProps {
+export interface MapProps {
   ak?: string;
   apiUrl?: string;
   /**
@@ -106,7 +106,7 @@ export interface BMapProps {
 }
 
 /**
- * BMarker 图标:内置名称或自定义图标描述
+ * Marker 图标:内置名称或自定义图标描述
  *
  * `MarkerIconName` **派生自内置图标表**（`core/icons/markerIcon` 的 `BUILTIN_MARKER_ICON_NAMES`），
  * 而不是手写第二份名单：手写的那份曾与 Driver 的解析表漂移，导致 20 个名字静默渲染成
@@ -125,7 +125,7 @@ export interface MarkerCustomIcon {
 
 export type MarkerIcon = MarkerIconName | MarkerCustomIcon
 
-export interface BMarkerProps {
+export interface MarkerProps {
   position: { lng: number; lat: number };
   offset?: { x: number; y: number };
   zIndex?: number;
@@ -139,10 +139,10 @@ export interface BMarkerProps {
 }
 
 /**
- * BInfoWindow 的公开属性。字段与逐字段语义的声明点在 `core/overlays/InfoWindowSpec.ts`
+ * InfoWindow 的公开属性。字段与逐字段语义的声明点在 `core/overlays/InfoWindowSpec.ts`
  * （含「每个属性怎么落地」的策略表），这里只暴露公开类型名。
  */
-export interface BInfoWindowProps extends InfoWindowProps {
+export interface InfoWindowProps extends InfoWindowSpecProps {
   // 字段全部来自 `InfoWindowProps`（单一事实源，见上面的注释）。
   //
   // ⚠️ 这里**必须**保持「多行花括号」的写法：`tests/behavior/v3-overlay-suite.test.ts` 的
@@ -152,15 +152,15 @@ export interface BInfoWindowProps extends InfoWindowProps {
 }
 
 /**
- * BCustomOverlay 的公开属性（M5-CUSTOM-MENU / issue #33）。
+ * CustomOverlay 的公开属性（M5-CUSTOM-MENU / issue #33）。
  *
  * 字段与「每个属性怎么落地」的声明点在 `components/overlays/customOverlaySpec.ts`，这里只暴露
- * 公开类型名（与 `BInfoWindowProps` 同一手法）。键集与 `OVERLAY_DESCRIPTORS["custom-overlay"]`
+ * 公开类型名（与 `InfoWindowProps` 同一手法）。键集与 `OVERLAY_DESCRIPTORS["custom-overlay"]`
  * 的条目**一一对应**：能在构造期设置的写 `recreate`，有字段级 setter 的写 `options`。
  *
- * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ * ⚠️ 与 `InfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
  */
-export interface BCustomOverlayProps {
+export interface CustomOverlayProps {
   /** 覆盖物的地理坐标点。 */
   position: { lng: number; lat: number };
   /** 相对锚点的像素偏移。**构造期属性**：官方没有 `setOffset`。 */
@@ -184,9 +184,9 @@ export interface BCustomOverlayProps {
 }
 
 /**
- * `BContextMenu` 的一条菜单项（数据 API）。
+ * `ContextMenu` 的一条菜单项（数据 API）。
  *
- * 与 `<BMenuItem>`（声明式 API）产出的条目**同形**：两种写法最终都归一化成这份结构，只是
+ * 与 `<MenuItem>`（声明式 API）产出的条目**同形**：两种写法最终都归一化成这份结构，只是
  * 「谁来解析」不同。`"-"`（`ContextMenuSeparator`）表示一条分隔线。
  */
 export interface ContextMenuItem {
@@ -234,14 +234,14 @@ export interface ContextMenuSelectPayload {
 }
 
 /**
- * BContextMenu 的公开属性（M5-CUSTOM-MENU / issue #33）。
+ * ContextMenu 的公开属性（M5-CUSTOM-MENU / issue #33）。
  *
  * 声明点在 `core/overlays/ContextMenuSpec.ts`（含「每个属性怎么落地」的表）。
  *
- * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ * ⚠️ 与 `InfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
  */
-export interface BContextMenuProps {
-  /** 菜单项（数据 API）。写法与声明式 `<BMenuItem>` / `<BMenuSeparator>` 等价。 */
+export interface ContextMenuProps {
+  /** 菜单项（数据 API）。写法与声明式 `<MenuItem>` / `<MenuSeparator>` 等价。 */
   items?: (ContextMenuItem | ContextMenuSeparator)[];
   /**
    * @deprecated `items` 的兼容别名（v3 起的名字）。
@@ -261,14 +261,14 @@ export interface BContextMenuProps {
 }
 
 /**
- * BMenuItem 的公开属性（声明式 API）。
+ * MenuItem 的公开属性（声明式 API）。
  *
- * 组件本身**不渲染任何 DOM**：它只把「这里有一条菜单项」注册给父级 `<BContextMenu>`，
+ * 组件本身**不渲染任何 DOM**：它只把「这里有一条菜单项」注册给父级 `<ContextMenu>`，
  * 由父级按顺序交给 SDK 构建菜单。`select` 由本组件派发（载荷与数据 API 的 `callback` 相同）。
  *
- * ⚠️ 与 `BInfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
+ * ⚠️ 与 `InfoWindowProps` 相同的约束：**必须保持多行花括号**（同一条正则门禁）。
  */
-export interface BMenuItemProps {
+export interface MenuItemProps {
   /** 菜单项文字。 */
   text: string;
   /** 是否禁用该菜单项。 */
@@ -320,13 +320,13 @@ export interface PathEditableProps {
  * `path` 与 `pathVersion` 是一对：`path` 按**根引用**比较（大数组不做内容指纹，见
  * `OverlaySpec` 的 `watchSources`），原地修改数组时靠 `pathVersion` 递增触发更新。
  */
-export interface BPolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
+export interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
   path: { lng: number; lat: number }[];
   pathVersion?: string | number;
 }
 
 /** 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。 */
-export interface BPolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
   path: ({ lng: number; lat: number } | string)[];
   pathVersion?: string | number;
   /** 构造期属性：路径按 SDK 原生边界名解析（如 `"北京市"`）。变化即重建。 */
@@ -334,19 +334,19 @@ export interface BPolygonProps extends PathStrokeProps, PathFillProps, PathShape
 }
 
 /** 矩形（v4 起提供；由对角两点构成的 `bounds` 定义）。 */
-export interface BRectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface RectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
   bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   enableClicking?: boolean;
 }
 
-export interface BCircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface CircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
   center: { lng: number; lat: number };
   radius: number;
   enableClicking?: boolean;
 }
 
 /** 贝塞尔曲线：`path` 与 `controlPoints` 各有一个版本令牌。 */
-export interface BBezierCurveProps extends PathStrokeProps, PathShapeProps {
+export interface BezierCurveProps extends PathStrokeProps, PathShapeProps {
   path: { lng: number; lat: number }[];
   controlPoints: { lng: number; lat: number }[][];
   pathVersion?: string | number;
@@ -356,7 +356,7 @@ export interface BBezierCurveProps extends PathStrokeProps, PathShapeProps {
 /** 文本标注的样式对象（驼峰 CSS 属性）。 */
 export type LabelStyle = Record<string, unknown>;
 
-export interface BLabelProps {
+export interface LabelProps {
   content: string;
   position: { lng: number; lat: number };
   offset?: { x: number; y: number };
@@ -373,7 +373,7 @@ export interface BLabelProps {
  * `PrismOptions` 里没有这两个键（4.0 运行时是否读取未取证），因此它们既不被当作字段级更新，
  * 也不被宣称支持——只在创建时原样交给 SDK（分类与理由见 `OVERLAY_DESCRIPTORS.prism`）。
  */
-export interface BPrismProps {
+export interface PrismProps {
   path: ({ lng: number; lat: number } | string)[];
   altitude: number;
   topFillColor?: string;
@@ -406,7 +406,7 @@ export type GroundOverlayUrl =
  * `bounds` 是正典 prop；`startPoint` / `endPoint` 是 v2/v3-beta 的旧名，由集中弃用层
  * （`core/deprecations`）在读取层解析——**新 API 优先**：`bounds` 一旦有值，旧名完全不参与。
  */
-export interface BGroundOverlayProps {
+export interface GroundOverlayProps {
   /** 显示区域（西南 / 东北角点）。与旧的 `startPoint` + `endPoint` 二选一。 */
   bounds?: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   /** @deprecated 旧名（西南角）；改用 `bounds.southwest`。 */
@@ -425,9 +425,9 @@ export interface BGroundOverlayProps {
  *
  * 三个数据组件的公开 props 都在这里声明（与各 SFC 的 `defineProps` 单一来源对齐）：
  *
- * - `BMarkerList`：**每一项一个 SDK Marker**，适合中小规模、需要逐点交互的数据；
- * - `BMarkerCluster`：网格聚合，簇也是 Marker；
- * - `BPointCollection`：**单个批量 SDK 资源**（v4 原生 `PointShapeLayer`），适合大规模散点。
+ * - `MarkerList`：**每一项一个 SDK Marker**，适合中小规模、需要逐点交互的数据；
+ * - `MarkerCluster`：网格聚合，簇也是 Marker；
+ * - `PointCollection`：**单个批量 SDK 资源**（v4 原生 `PointShapeLayer`），适合大规模散点。
  *
  * 三者的取数面刻意一致（`data` + `itemKey` + `getPosition` + `dataVersion`），因此业务数据可以在
  * 它们之间平移；差别只在「落地成什么资源」——这正是「边界清晰」的含义。
@@ -438,7 +438,7 @@ export interface BGroundOverlayProps {
  */
 
 /** 三个数据组件共用的取数面。 */
-export interface BMapDataProps<Item> {
+export interface DataComponentProps<Item> {
   /**
    * 数据数组（只按**引用**比较；原地修改请配合 `dataVersion`）。
    *
@@ -465,13 +465,13 @@ export interface BMapDataProps<Item> {
    * 「引用没换、内容变了」时需要；它也是「宿主侧自行改过位置、需要对回来」时的显式逃生口。
    */
   dataVersion?: PropertyKey;
-  /** 是否显示；`false` = 隐藏（`BMarkerList` 用 `show/hide`，`BPointCollection` 用原生 `setVisible`）。 */
+  /** 是否显示；`false` = 隐藏（`MarkerList` 用 `show/hide`，`PointCollection` 用原生 `setVisible`）。 */
   visible?: boolean;
 }
 
-export interface BMarkerListProps<Item> extends BMapDataProps<Item> {}
+export interface MarkerListProps<Item> extends DataComponentProps<Item> {}
 
-export interface BMarkerClusterProps<Item> extends BMapDataProps<Item> {
+export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
   /** 像素网格边长（聚合桶的边长），默认 `128`。 */
   gridSize?: number;
   /** 达到该数量才聚合；不足的点展开为独立 item，不会丢点。默认 `3`。 */
@@ -481,12 +481,12 @@ export interface BMarkerClusterProps<Item> extends BMapDataProps<Item> {
 }
 
 /**
- * `BPointCollection` 的 props。
+ * `PointCollection` 的 props。
  *
- * 取数面与 `BMarkerList` 一致；样式面只暴露 v4 原生点图层**真的支持**的那几个字段
+ * 取数面与 `MarkerList` 一致；样式面只暴露 v4 原生点图层**真的支持**的那几个字段
  * （`PointShapeStyle` 的子集，逐条核对 `@baidumap/jsapi-v4-types@4.0.4`）。
  */
-export interface BPointCollectionProps<Item> extends BMapDataProps<Item> {
+export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
   /**
    * 属性映射：写进每个要素的 `properties`。
    *
@@ -540,11 +540,11 @@ export interface BPointCollectionProps<Item> extends BMapDataProps<Item> {
 /**
  * 图层级拾取事件（原生批量数据图层的 `click` / `mousemove` / `dblclick` / `rightclick`）。
  *
- * 五个原生数据图层共用这一个载荷形状（`BPointCollection` 与 #36 的 `BLineLayer` / `BFillLayer`）：
+ * 五个原生数据图层共用这一个载荷形状（`PointCollection` 与 #36 的 `LineLayer` / `FillLayer`）：
  * 「未命中」「身份确认不到」这两种情况必须能被**区分**出来，所以 `hit` / `id` / `item` 三个字段
  * 各自表达一件事。
  */
-export interface BMapPointPick<Item> {
+export interface PointPick<Item> {
   /** 是否命中要素（未命中时官方**也**派发事件，用 `dataIndex === -1` 区分）。 */
   hit: boolean;
   /** 命中的要素在本次 `setData` 里的下标；未命中为 `-1`。 */
@@ -562,7 +562,7 @@ export interface BMapPointPick<Item> {
    *
    * 与 `id` 是**两件事**（`id` 的取值域更窄，见上）：`item` 只要求「命中并且能按**业务键**找回」，
    * 因此 `id` 为 `null` 时 `item` 往往仍然有值——没设置 `idKey` 时线 / 面图层仍会给出命中要素的
-   * `properties`；函数式 `itemKey` 返回 symbol 时逐项数据组件（`BPointCollection`）也照样回传最新业务项。
+   * `properties`；函数式 `itemKey` 返回 symbol 时逐项数据组件（`PointCollection`）也照样回传最新业务项。
    */
   item: Item | null;
   /** 地理坐标（未命中时也有）。 */
@@ -574,12 +574,12 @@ export interface BMapPointPick<Item> {
 /**
  * 线 / 面图层的拾取载荷：**业务项就是要素的 `properties`**。
  *
- * 与 `BPointCollection` 的差别只在 `Item` 的形状：逐项数据组件的业务对象是调用方给的 `Item[]`，
+ * 与 `PointCollection` 的差别只在 `Item` 的形状：逐项数据组件的业务对象是调用方给的 `Item[]`，
  * 而线 / 面图层的数据本身就是 GeoJSON，因此「命中的业务项」只能是那条要素的属性袋——身份
  * （`properties[idKey]`）也就在里面。不再包一层 `{ properties }` 是为了让 `pick.item[字段名]`
  * 直接可用（包一层之后每次取值都要多写一次 `.properties`）。
  */
-export type BMapFeaturePick = BMapPointPick<Record<string, unknown>>;
+export type FeaturePick = PointPick<Record<string, unknown>>;
 
 /**
  * 官方 `StyleExpress`（数据驱动样式表达式）：`string | object | ((properties) => any)`。
@@ -587,7 +587,7 @@ export type BMapFeaturePick = BMapPointPick<Record<string, unknown>>;
  * 本库**如实透传**而不是猜它的结构：`object` 那一支是 SDK 自己的表达式语法（`['match', …]` 一
  * 类），复刻一份必然会与上游漂移。函数那一支的参数是要素的 `properties`。
  */
-export type BMapStyleExpression =
+export type StyleExpression =
   | string
   | Record<string, unknown>
   | ((properties: Record<string, unknown>) => unknown);
@@ -595,7 +595,7 @@ export type BMapStyleExpression =
 /* ------------------------------------------------------------------ 原生批量线 / 面图层（#36） */
 
 /**
- * `BLineLayer` 的样式（官方 `LineStyle` 的**逐字段**投影）。
+ * `LineLayer` 的样式（官方 `LineStyle` 的**逐字段**投影）。
  *
  * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.4` 的 `LineStyle` 为准；这里只做类型搬运，
  * 不重新解释语义（默认值写在文档里，实现不补默认值——`undefined` = 不表态，由 SDK 决定）。
@@ -603,7 +603,7 @@ export type BMapStyleExpression =
  * ⚠️ 样式是**逐字段 merge**（官方 `setStyleOptions`）：把某个字段改成 `undefined` 时，SDK 侧仍
  * 留着上一次的值，因此本库会**重建图层**让它回到 SDK 自己的默认（并告警一次）。
  */
-export interface BLineLayerStyle {
+export interface LineLayerStyle {
   /** 是否采用间隔填充纹理。默认 `false`。 */
   sequence?: boolean;
   /** 间隔距离（像素）。默认 `16`。 */
@@ -613,29 +613,29 @@ export interface BLineLayerStyle {
   /** 是否受内部填充区域掩膜。默认 `true`。 */
   borderMask?: boolean;
   /** 描边宽度（像素）。默认 `0`。 */
-  borderWeight?: number | BMapStyleExpression;
+  borderWeight?: number | StyleExpression;
   /** 描边颜色。默认 `'rgba(27, 142, 236, 1)'`。 */
-  borderColor?: string | BMapStyleExpression;
+  borderColor?: string | StyleExpression;
   /** 填充纹理图片地址（竖向表达，自动横向处理）。 */
-  strokeTextureUrl?: string | BMapStyleExpression;
+  strokeTextureUrl?: string | StyleExpression;
   /** 填充纹理图片宽度（2 的 n 次方）。 */
-  strokeTextureWidth?: number | BMapStyleExpression;
+  strokeTextureWidth?: number | StyleExpression;
   /** 填充纹理图片高度（2 的 n 次方）。 */
-  strokeTextureHeight?: number | BMapStyleExpression;
+  strokeTextureHeight?: number | StyleExpression;
   /** 线连接处类型：`'miter'` / `'round'` / `'bevel'`。默认 `'round'`。 */
-  strokeLineJoin?: string | BMapStyleExpression;
+  strokeLineJoin?: string | StyleExpression;
   /** 线端头类型：`'round'` / `'butt'` / `'square'`。默认 `'square'`。 */
-  strokeLineCap?: string | BMapStyleExpression;
+  strokeLineCap?: string | StyleExpression;
   /** 线颜色。默认 `'rgba(25, 25, 250, 1)'`。 */
-  strokeColor?: string | BMapStyleExpression;
+  strokeColor?: string | StyleExpression;
   /** 线宽度（像素）。默认 `2`。 */
-  strokeWeight?: number | BMapStyleExpression;
+  strokeWeight?: number | StyleExpression;
   /** 线透明度（0-1）。默认 `1`。 */
-  strokeOpacity?: number | BMapStyleExpression;
+  strokeOpacity?: number | StyleExpression;
   /** 线类型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
-  strokeStyle?: string | BMapStyleExpression;
+  strokeStyle?: string | StyleExpression;
   /** 虚线设置（实线部分与间隙部分长度的数组）。默认 `[8, 4]`。 */
-  dashArray?: number[] | BMapStyleExpression;
+  dashArray?: number[] | StyleExpression;
   /** `MultiLineString` 是否以多段线组成一条线（配合 `strokeColorControl` 逐段上色）。默认 `false`。 */
   linksLine?: boolean;
   /** 输入「第几条路线、第几段」，输出颜色字符串。 */
@@ -649,20 +649,20 @@ export interface BLineLayerStyle {
   /** 痕迹颜色（RGB，0-255）。 */
   traceColor?: [number, number, number];
   /** 线图层高度。默认 `0`。 */
-  height?: number | BMapStyleExpression;
+  height?: number | StyleExpression;
 }
 
 /**
- * `BFillLayer` 的样式（官方 `FillLayerStyle` 的逐字段投影）。
+ * `FillLayer` 的样式（官方 `FillLayerStyle` 的逐字段投影）。
  *
  * 含「纯色 / 描边 / 纹理（掩膜或贴图）」三套；纹理模式下 `patternMask` 决定 `fillColor` 是否生效
  * （详见各字段文档，取自官方声明）。
  */
-export interface BFillLayerStyle {
+export interface FillLayerStyle {
   /** 填充颜色。`patternMask=true`（掩膜模式）下纹理不透明区域显示该颜色。默认 `'#142655'`。 */
-  fillColor?: string | BMapStyleExpression;
+  fillColor?: string | StyleExpression;
   /** 填充透明度（直接参与最终 alpha）。默认 `1`。 */
-  fillOpacity?: number | BMapStyleExpression;
+  fillOpacity?: number | StyleExpression;
   /** 是否采用纹理填充（需同时给 `patternUrl`）。默认 `false`。 */
   pattern?: boolean;
   /** 纹理渲染模式：`true` 掩膜（裁剪 `fillColor`）/ `false` 贴图（显示纹理颜色）。默认 `true`。 */
@@ -670,11 +670,11 @@ export interface BFillLayerStyle {
   /** 纹理雪碧图地址（需支持跨域）。默认 `''`。 */
   patternUrl?: string;
   /** 雪碧图中的纹理区域：`'x, y, width, height'`（像素）。默认 `'0, 0, 32, 32'`。 */
-  patternMapping?: string | BMapStyleExpression;
+  patternMapping?: string | StyleExpression;
   /** 纹理缩放比例（以 zoom=18 为基准）。默认 `1`。 */
-  patternScale?: number | BMapStyleExpression;
+  patternScale?: number | StyleExpression;
   /** 纹理 UV 偏移量：`'u, v'`（0-1）。默认 `'0, 0'`。 */
-  patternOffset?: string | BMapStyleExpression;
+  patternOffset?: string | StyleExpression;
   /** 是否采用间隔填充纹理。默认 `false`。 */
   sequence?: boolean;
   /** 间隔距离（像素）。默认 `16`。 */
@@ -684,31 +684,31 @@ export interface BFillLayerStyle {
   /** 是否受内部填充区域掩膜。默认 `true`。 */
   borderMask?: boolean;
   /** 描边宽度（像素）。默认 `0`。 */
-  borderWeight?: number | BMapStyleExpression;
+  borderWeight?: number | StyleExpression;
   /** 描边颜色。默认 `'rgba(27, 142, 236, 1)'`。 */
-  borderColor?: string | BMapStyleExpression;
+  borderColor?: string | StyleExpression;
   /** 填充纹理图片地址。 */
-  strokeTextureUrl?: string | BMapStyleExpression;
+  strokeTextureUrl?: string | StyleExpression;
   /** 填充纹理图片宽度（2 的 n 次方）。 */
-  strokeTextureWidth?: number | BMapStyleExpression;
+  strokeTextureWidth?: number | StyleExpression;
   /** 填充纹理图片高度（2 的 n 次方）。 */
-  strokeTextureHeight?: number | BMapStyleExpression;
+  strokeTextureHeight?: number | StyleExpression;
   /** 线连接处类型：`'miter'` / `'round'` / `'bevel'`。默认 `'round'`。 */
-  strokeLineJoin?: string | BMapStyleExpression;
+  strokeLineJoin?: string | StyleExpression;
   /** 线端头类型：`'round'` / `'butt'` / `'square'`。默认 `'square'`。 */
-  strokeLineCap?: string | BMapStyleExpression;
+  strokeLineCap?: string | StyleExpression;
   /** 描边线颜色。默认 `'rgba(25, 25, 250, 1)'`。 */
-  strokeColor?: string | BMapStyleExpression;
+  strokeColor?: string | StyleExpression;
   /** 描边线宽度（像素）。默认 `2`。 */
-  strokeWeight?: number | BMapStyleExpression;
+  strokeWeight?: number | StyleExpression;
   /** 描边线透明度（0-1）。默认 `1`。 */
-  strokeOpacity?: number | BMapStyleExpression;
+  strokeOpacity?: number | StyleExpression;
   /** 描边线类型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
-  strokeStyle?: string | BMapStyleExpression;
+  strokeStyle?: string | StyleExpression;
   /** 虚线设置。默认 `[8, 4]`。 */
-  dashArray?: number[] | BMapStyleExpression;
+  dashArray?: number[] | StyleExpression;
   /** 面图层高度。默认 `0`。 */
-  height?: number | BMapStyleExpression;
+  height?: number | StyleExpression;
 }
 
 /**
@@ -719,7 +719,7 @@ export interface BFillLayerStyle {
  * 例如 `Heatmap` / `TrackLine` 没有 `setVisible` / `setOpacity` / 缩放范围 setter，因此对应组件
  * **不声明**这些 prop（声明了却忽略 = 假支持）。`visible` 在那种 kind 上表达为「挂上 / 摘掉」。
  */
-export interface BMapNativeLayerCommonProps {
+export interface NativeLayerCommonProps {
   /** 是否显示。默认 `true`。 */
   visible?: boolean;
   /** 图层透明度（0-1）。 */
@@ -733,7 +733,7 @@ export interface BMapNativeLayerCommonProps {
 }
 
 /** 四个可视化图层共用的**构造期**拾取 / 选中选项（变化 ⇒ 换实例，官方只有整袋 `setBaseOptions`）。 */
-export interface BMapNativeLayerPickOptions {
+export interface NativeLayerPickOptions {
   /**
    * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`。
    *
@@ -762,7 +762,7 @@ export interface BMapNativeLayerPickOptions {
 }
 
 /**
- * `BLineLayer` 的 props。
+ * `LineLayer` 的 props。
  *
  * `data` 的三个取值承担三件事（与 `LayerSpec` 的口径一致，别用一个值兼表两件事）：
  *
@@ -772,22 +772,22 @@ export interface BMapNativeLayerPickOptions {
  *   已知限制）；
  * - **`undefined`** ⇒ 不表态：不产生任何 SDK 调用，已画出来的数据保持不变。
  */
-export interface BLineLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
+export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
   data?: object | null;
-  /** 线样式（见 `BLineLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
-  style?: BLineLayerStyle;
+  /** 线样式（见 `LineLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
+  style?: LineLayerStyle;
 }
 
-/** `BFillLayer` 的 props。 */
-export interface BFillLayerProps extends BMapNativeLayerCommonProps, BMapNativeLayerPickOptions {
+/** `FillLayer` 的 props。 */
+export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /**
    * GeoJSON 数据；有值时走 `setData()`（不重建），`null` = 没有数据（换一个空实例）、
-   * `undefined` = 不表态。详见 `BLineLayerProps.data` 的三条口径。
+   * `undefined` = 不表态。详见 `LineLayerProps.data` 的三条口径。
    */
   data?: object | null;
-  /** 面样式（见 `BFillLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
-  style?: BFillLayerStyle;
+  /** 面样式（见 `FillLayerStyle`）。变化时 `setStyleOptions` + `doOnceDraw`，不重建。 */
+  style?: FillLayerStyle;
   /**
    * 是否显示描边（官方构造选项 `border`，**官方默认 `true`**）。
    *
@@ -798,14 +798,14 @@ export interface BFillLayerProps extends BMapNativeLayerCommonProps, BMapNativeL
 }
 
 /**
- * `BHeatmapLayer` 的 props。
+ * `HeatmapLayer` 的 props。
  *
  * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` 没有类声明，可视化实现是
  * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `setStyle`；驱动也登记了
  * `clearData`，但本组件不调用它——见下），因此**没有** `opacity` / `zIndex` / `minZoom` /
  * `maxZoom`：官方这些图层不公开对应 setter，声明了也只是静默忽略。
  */
-export interface BHeatmapLayerProps {
+export interface HeatmapLayerProps {
   /**
    * GeoJSON 点数据；`null` = 没有数据，`undefined` = 不表态。
    *
@@ -824,15 +824,15 @@ export interface BHeatmapLayerProps {
 }
 
 /**
- * `BTrackLineLayer` 的 props。
+ * `TrackLineLayer` 的 props。
  *
  * 与热力图同属扩展 API；驱动的登记面（#110 之后）包含 `setData` + 六条播放命令，因此本组件
- * 声明 `data` / `visible`，并 expose 播放命令面（见 `BTrackLineLayerExpose`）。
+ * 声明 `data` / `visible`，并 expose 播放命令面（见 `TrackLineLayerExpose`）。
  *
  * 播放命令的方法名均经 live 探针取证（`scripts/probe-track-line.mts`，2026-09-23，exit 0），
  * 不是从类型包猜的——在拿到读数之前不猜方法名是 #110 的硬门（已过）。
  */
-export interface BTrackLineLayerProps {
+export interface TrackLineLayerProps {
   /**
    * 轨迹数据：官方 `TrackLine` 只接收**单条 `LineString` Feature**。
    *
@@ -856,7 +856,7 @@ export interface BTrackLineLayerProps {
 }
 
 /** 事件派生的进度读数（只读；不镜像成「播放状态机」）。 */
-export interface BTrackLineObserved {
+export interface TrackLineObserved {
   /** 播放进度 0–1（`progress` 载荷的 `process`）。 */
   process?: number;
   /** 已播放时长（`progress` 载荷的 `elapsed`）。 */
@@ -873,8 +873,8 @@ export interface BTrackLineObserved {
   statusName?: string;
 }
 
-/** `BTrackLineLayer` expose 的命令面与只读观察（#110）。 */
-export interface BTrackLineLayerExpose {
+/** `TrackLineLayer` expose 的命令面与只读观察（#110）。 */
+export interface TrackLineLayerExpose {
   /**
    * 播放命令面：`start / pause / resume / stop / setSpeed / setProcess`。
    *
@@ -888,21 +888,21 @@ export interface BTrackLineLayerExpose {
    * **不**是内部播放状态机——它只是把 SDK 事件里我们认识的字段搬过来。
    *
    * 消费方经 `vm.observed` 读到的就是**值**（`defineExpose` 的 expose 面用取值 getter，
-   * 与 `BMapExpose` 同一口径）。需要追踪变化时用 `watch(() => vm.observed, …)`
+   * 与 `MapExpose` 同一口径）。需要追踪变化时用 `watch(() => vm.observed, …)`
    * （getter 内部读 `shallowRef.value`，依赖仍会挂上）。
    */
-  observed: BTrackLineObserved | null;
+  observed: TrackLineObserved | null;
 }
 
 /* ------------------------------------------------ 点图层的另两个 kind（#35 新增） */
 
 /**
- * `BPointIconLayer` 的 props（原生 `PointIconLayer`）。
+ * `PointIconLayer` 的 props（原生 `PointIconLayer`）。
  *
  * 样式字段是官方 `PointIconStyle` 的子集；`isFlat` / `isFixed` 是**构造期**选项
  * （它们决定渲染通道，官方写在 `PointIconLayerOptions` 上而不是 style 里）。
  */
-export interface BPointIconLayerProps<Item> extends BMapDataProps<Item> {
+export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   /** 属性映射：写进每个要素的 `properties`（口径同 `BPointShapeLayerProps.properties`）。 */
   properties?: (item: Item) => Record<string, unknown> | null | undefined;
   /** 图标 URL。 */
@@ -940,7 +940,7 @@ export interface BPointIconLayerProps<Item> extends BMapDataProps<Item> {
 }
 
 /**
- * `BPointLayer` 的 props（原生 `BMap.PointLayer`，**扩展 API**）。
+ * `PointLayer` 的 props（原生 `BMap.PointLayer`，**扩展 API**）。
  *
  * ⚠️ 它是三者里唯一「运行时存在、类型包没有类声明」的：可视化实现由 SDK **按需异步注入**，
  * 因此在注入完成之前创建会显式失败（`BMAP_CAPABILITY_UNSUPPORTED`）。它**不会**自动改用
@@ -949,7 +949,7 @@ export interface BPointIconLayerProps<Item> extends BMapDataProps<Item> {
  * 选项是**扁平**的（官方专页的例子是 `new BMap.PointLayer({ shape, size, fillColor })`），
  * 与 `BPointShapeLayer` 的 `style` 袋不同。
  */
-export interface BPointLayerProps<Item> extends BMapDataProps<Item> {
+export interface PointLayerProps<Item> extends DataComponentProps<Item> {
   /** 属性映射：写进每个要素的 `properties`（口径同 `BPointShapeLayerProps.properties`）。 */
   properties?: (item: Item) => Record<string, unknown> | null | undefined;
   /** 几何图形（官方 `shape`，如 `"circle"`）。未配置 `icon` 时按它绘制几何图元。 */
@@ -991,7 +991,7 @@ export interface BPointLayerProps<Item> extends BMapDataProps<Item> {
 }
 
 /**
- * MVT 矢量瓦片图层的样式（`BMVTLayer` / #109）。
+ * MVT 矢量瓦片图层的样式（`MVTLayer` / #109）。
  *
  * ## 运行时形状（live 探针 2026-09-23，**与 d.ts 的扁平 `MVTLayerStyle` 不同**）
  *
@@ -1009,7 +1009,7 @@ export interface BPointLayerProps<Item> extends BMapDataProps<Item> {
  * 更新路径：`style` 有字段级 `setStyle(styleMap)`（`descriptor.mutable.style`）⇒ 变化时
  * **就地写入，不重建**（刻意不用 `bagSetters`：那会再包一层 `{ style: … }`，与官方签名不符）。
  */
-export interface BMVTLayerStyleEntry {
+export interface MVTLayerStyleEntry {
   /** 几何类型：`point` / `line` / `polyline` / `polygon` / `fill`（官方示例用过的取值）。 */
   type?: string;
   /** 绘制参数（字段随上游走，本库不臆造字段表）。 */
@@ -1019,16 +1019,16 @@ export interface BMVTLayerStyleEntry {
 }
 
 /** 源图层名 → 样式条目（探针确认的运行时键形）。 */
-export type BMVTLayerStyle = Record<string, BMVTLayerStyleEntry>;
+export type MVTLayerStyle = Record<string, MVTLayerStyleEntry>;
 
 /**
- * `BMVTLayer` 的官方事件载荷（`MVTLayerEventMap` 的项目侧投影，**不含** `BMap.*`）。
+ * `MVTLayer` 的官方事件载荷（`MVTLayerEventMap` 的项目侧投影，**不含** `BMap.*`）。
  *
  * 事件名与官方一一对应（live 探针确认六个名字全部可绑）：`click` / `dblclick` / `mousemove` /
  * `mouseout` / `tilesloadstart` / `tilesloadend`。拾取走事件的 `value`（`Entity[]`），
  * **不用** `pickFeatures(x,y)`（探针实测返回空）。
  */
-export interface BMVTLayerEntity {
+export interface MVTLayerEntity {
   /** 要素身份：`idProperty` 有值时是该字段的值；没有时是 SDK 给的 feature number 的字符串形式。 */
   id: string;
   /** 源图层名（MVT 数据里的 source-layer；复合状态键 `layerName_id` 的前半段）。 */
@@ -1044,7 +1044,7 @@ export interface BMVTLayerEntity {
  *
  * 官方三个鼠标事件都继承它：`MVTLayerPickEvent` / `MVTLayerMouseMoveEvent` / `mouseout`。
  */
-export interface BMVTLayerMouseEvent {
+export interface MVTLayerMouseEvent {
   type?: string;
   pixel?: { x: number; y: number };
   latLng?: { lng: number; lat: number };
@@ -1055,27 +1055,27 @@ export interface BMVTLayerMouseEvent {
  * 点击 / 双击载荷（官方 `MVTLayerPickEvent`：继承 `MVTLayerMouseEvent`，`value` **可选**——
  * 未命中时 SDK 可能不带）。
  */
-export interface BMVTLayerPickEvent extends BMVTLayerMouseEvent {
+export interface MVTLayerPickEvent extends MVTLayerMouseEvent {
   /** 命中的要素（可能为空数组 / 缺失——SDK 未命中时的形状由上游决定，本库不编造）。 */
-  value?: BMVTLayerEntity[];
+  value?: MVTLayerEntity[];
 }
 
 /**
  * `mousemove` 载荷（官方 `MVTLayerMouseMoveEvent`：继承 `MVTLayerMouseEvent`，
  * `value` **必有** `Entity[]`——官方签名与 Pick 的可选相反，不能 alias 到 PickEvent）。
  */
-export interface BMVTLayerMouseMoveEvent extends BMVTLayerMouseEvent {
-  value: BMVTLayerEntity[];
+export interface MVTLayerMouseMoveEvent extends MVTLayerMouseEvent {
+  value: MVTLayerEntity[];
 }
 
 /** `tilesloadstart` / `tilesloadend` 的最小载荷（官方结构松散，不编造字段）。 */
-export interface BMVTLayerBaseEvent {
+export interface MVTLayerBaseEvent {
   type?: string;
   [key: string]: unknown;
 }
 
 /**
- * `BMVTLayer` 的公开属性（issue #109 基线）。
+ * `MVTLayer` 的公开属性（issue #109 基线）。
  *
  * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.4` + live 探针）；
  * 未列出的字段经下方逃生口字段透传。**不声明** `opacity` / `setVisible` / `setData` 等
@@ -1093,7 +1093,7 @@ export interface BMVTLayerBaseEvent {
  * 字符串（`mvtFeatureStateKey()`），且 `idProperty` 已声明——否则五个命令一律拒绝（告警一次）。
  * 样式里必须先含 `feature-state` 表达式，写入才有可见效果（探针前置条件）。
  */
-export interface BMVTLayerProps {
+export interface MVTLayerProps {
   /** 是否挂在地图上（`false` = 摘掉，不是 `hide()`）。默认 `true`。 */
   visible?: boolean;
   /** 图层层叠顺序（挂载后 `setZIndex`）。 */
@@ -1121,11 +1121,11 @@ export interface BMVTLayerProps {
    */
   idProperty?: string;
   /**
-   * 源图层样式映射（见 `BMVTLayerStyle`）。变化时 `setStyle()` **就地写入，不重建**。
+   * 源图层样式映射（见 `MVTLayerStyle`）。变化时 `setStyle()` **就地写入，不重建**。
    *
    * 要让 `feature-state` 表达式生效，样式里必须先含 `feature-state` 污染（探针前置条件）。
    */
-  style?: BMVTLayerStyle;
+  style?: MVTLayerStyle;
   /**
    * 其余 `MVTLayerOptions` 逃生口（`transform` / `gridModel` / `spanLevel` / `encrypt` /
    * 四个 `on*` 构造回调 / …）。
@@ -1140,16 +1140,16 @@ export interface BMVTLayerProps {
   useThumb?: boolean;
   encrypt?: boolean;
   /** 官方构造回调（与 `addEventListener` 并存的逃生口）。 */
-  onclick?: (e: BMVTLayerPickEvent) => void;
-  ondblclick?: (e: BMVTLayerPickEvent) => void;
-  onmousemove?: (e: BMVTLayerMouseMoveEvent) => void;
-  onmouseout?: (e: BMVTLayerMouseEvent) => void;
+  onclick?: (e: MVTLayerPickEvent) => void;
+  ondblclick?: (e: MVTLayerPickEvent) => void;
+  onmousemove?: (e: MVTLayerMouseMoveEvent) => void;
+  onmouseout?: (e: MVTLayerMouseEvent) => void;
 }
 
 /* ------------------------------------------------ 原生聚合（#35） */
 
 /**
- * `BMarkerCluster` 的聚合引擎。
+ * `MarkerCluster` 的聚合引擎。
  *
  * | 值 | 落地成什么 | 依据 |
  * | --- | --- | --- |
@@ -1161,15 +1161,15 @@ export interface BMVTLayerProps {
  * （issue #35 的范围纠正：fallback 只由真实缺口触发）。它保留下来是因为它**多给一样东西**：
  * 簇的业务项（`cluster-click` 的 `items`）—— 原生引擎拿不到（官方没有公开入口）。
  */
-export type BMarkerClusterEngine = "native" | "markers";
+export type MarkerClusterEngine = "native" | "markers";
 
-export interface BMarkerClusterProps<Item> extends BMapDataProps<Item> {
+export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
   /**
    * 聚合引擎，默认 `"native"`。
    *
    * 换引擎 = 换资源形态（一个原生图层 ⇄ 一堆 Marker），因此它是**构造期**选项：变化时整层重建。
    */
-  engine?: BMarkerClusterEngine;
+  engine?: MarkerClusterEngine;
   /* ----------------------------------------------- engine: "markers" 的选项 */
   /** 像素网格边长（聚合桶的边长），默认 `128`。只在 `engine: "markers"` 下生效。 */
   gridSize?: number;
@@ -1203,15 +1203,15 @@ export interface BMarkerClusterProps<Item> extends BMapDataProps<Item> {
 }
 
 /**
- * 簇点击载荷（`BMarkerCluster` 的 `cluster-click`）。
+ * 簇点击载荷（`MarkerCluster` 的 `cluster-click`）。
  *
  * 两种引擎的**公共最小契约**由前四个字段构成（它们在任何引擎上都成立）；差异收在 `items` 上，
  * 而不是把两种形态塞进同一个字段名（issue #35 的范围纠正：「不为了 native/fallback API 看起来
  * 一样去恢复 SDK 没有公开的内部状态或事件身份」）。
  */
-export interface BMapClusterPick<Item> {
+export interface ClusterPick<Item> {
   /** 哪个引擎产出的这一簇。 */
-  engine: BMarkerClusterEngine;
+  engine: MarkerClusterEngine;
   /**
    * 稳定标识：`native` 用官方 `clusterId`；`markers` 用网格 id（`c-<cellX>:<cellY>`）。
    *
@@ -1236,15 +1236,15 @@ export interface BMapClusterPick<Item> {
 }
 
 /**
- * 聚合结果读数（`BMarkerCluster` 的 `cluster-change`）。
+ * 聚合结果读数（`MarkerCluster` 的 `cluster-change`）。
  *
  * 两个引擎给出同一份面：`native` 转发官方 `ClusterLayer` 的 `change` 事件（官方口径：
  * 载荷是 `{ singles, clusters, zoom }`），`markers` 在本层重算之后给出同样的读数。
  * 它只是**读数转发** —— 本库不把它存成组件状态，也不据此推导业务行为（组件拥有的只有 props）。
  */
-export interface BMapClusterChange {
+export interface ClusterChange {
   /** 哪个引擎产出的读数。 */
-  engine: BMarkerClusterEngine;
+  engine: MarkerClusterEngine;
   /** 当前聚合出的簇数量。 */
   clusters: number;
   /** 未参与聚合（被展开成独立点）的数量。 */

@@ -7,7 +7,7 @@
  * - Target 切换先从旧目标移除再挂新目标。
  *
  * 这三条经 `useOverlayResource.applyOptions`（分类来自 Driver 的 `updatePolicy`）落地，
- * 组件侧因此不再自行探测 raw SDK 成员形状（BMarker 原先会读 `raw.setIcon`）。
+ * 组件侧因此不再自行探测 raw SDK 成员形状（Marker 原先会读 `raw.setIcon`）。
  *
  * #26 之后组件默认路径直接走 v4 Driver，读法随之调整（都以 `packages/test-utils/fake-bmap-v4/`
  * 为准）：
@@ -22,9 +22,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BMarker from "../../packages/bmap-vue/src/components/overlays/BMarker.vue";
-import BContextMenu from "../../packages/bmap-vue/src/components/overlays/BContextMenu.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
+import ContextMenu from "../../packages/bmap-vue/src/components/overlays/ContextMenu.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 
 const { harness, fake } = createFakeV4Harness();
@@ -42,7 +42,7 @@ function currentOverlays(): FakeOverlay[] {
   return fake.createdMaps[fake.createdMaps.length - 1]!.overlays as unknown as FakeOverlay[];
 }
 
-/** 当前地图上挂着的覆盖物（BMarker 重建后是新实例）。 */
+/** 当前地图上挂着的覆盖物（Marker 重建后是新实例）。 */
 function currentMarker(): FakeOverlay {
   return currentOverlays()[0]!;
 }
@@ -63,11 +63,11 @@ describe("mutable 属性就地更新（不重建）", () => {
     });
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: provider() }, () => [
-              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value }),
+            h(Map, { provider: provider() }, () => [
+              h(Marker, { position: { lng: 116.4, lat: 39.9 }, icon: icon.value }),
             ]);
         },
       }),
@@ -102,11 +102,11 @@ describe("recreate 属性只重建一次", () => {
     const enableClicking = ref(true);
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker },
+        components: { Map, Marker },
         setup() {
           return () =>
-            h(BMap, { provider: provider() }, () => [
-              h(BMarker, {
+            h(Map, { provider: provider() }, () => [
+              h(Marker, {
                 position: { lng: 116.4, lat: 39.9 },
                 enableClicking: enableClicking.value,
               }),
@@ -139,13 +139,13 @@ describe("recreate 属性只重建一次", () => {
     wrapper.unmount();
     await nextTick();
     expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0);
-    harness.assertIdle("BMarker enableClicking 重建");
+    harness.assertIdle("Marker enableClicking 重建");
   });
 });
 
 describe("Target 切换先从旧目标移除再挂新目标", () => {
   /**
-   * 稳定的 menuItems 引用：父组件重渲染时若 key 变，`BContextMenu` 会按 `menuItems` 重建菜单
+   * 稳定的 menuItems 引用：父组件重渲染时若 key 变，`ContextMenu` 会按 `menuItems` 重建菜单
    * （那是另一条策略），会把「target 切换」的调用序列混进重建的摘挂。这里刻意固定引用，
    * 只观察 target 切换本身。
    */
@@ -156,12 +156,12 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
     const enableClicking = ref(true);
     const wrapper = mount(
       defineComponent({
-        components: { BMap, BMarker, BContextMenu },
+        components: { Map, Marker, ContextMenu },
         setup() {
           return () =>
-            h(BMap, { provider: provider() }, () => [
-              h(BMarker, { position: { lng: 116.4, lat: 39.9 }, enableClicking: enableClicking.value }, () => [
-                h(BContextMenu, { width: 120, items: MENU_ITEMS }),
+            h(Map, { provider: provider() }, () => [
+              h(Marker, { position: { lng: 116.4, lat: 39.9 }, enableClicking: enableClicking.value }, () => [
+                h(ContextMenu, { width: 120, items: MENU_ITEMS }),
               ]),
             ]);
         },
@@ -172,12 +172,12 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
     await flushPromises();
 
     const oldMarker = currentMarker();
-    // 探针：经 BMap 的公开 `whenReady()` 拿 Client，再观察 Driver 的挂载入口调用序列。
+    // 探针：经 Map 的公开 `whenReady()` 拿 Client，再观察 Driver 的挂载入口调用序列。
     // BMapGL 时代这条标准观察的是 marker 的 `addContextMenu/removeContextMenu`（组件当时把菜单
     // 挂到父 Marker）；v4 起**同一个 Driver 入口**也能挂到 marker（`Marker#addContextMenu` 是运行时
     // 扩展成员，见 ADR 2026-09-19），因此这里继续观察 Driver 公开入口的调用序列——
     // 「先摘旧、再挂新」正是该条标准的原文。
-    const ready = await (wrapper.findComponent(BMap).vm as unknown as {
+    const ready = await (wrapper.findComponent(Map).vm as unknown as {
       whenReady(): Promise<{
         client: { driver: { overlays: Record<string, unknown> } };
         map: unknown;
@@ -210,7 +210,7 @@ describe("Target 切换先从旧目标移除再挂新目标", () => {
 
     // 「先摘旧、再挂新」：每一次挂载都紧跟在一次摘除之后，没有「先挂后摘」的重叠窗口。
     //
-    // ⚠️ 这条期望在 M5-CUSTOM-MENU / #33 变过（**行为变更**，不是修测试）：此前 `BMarker` 重建期间
+    // ⚠️ 这条期望在 M5-CUSTOM-MENU / #33 变过（**行为变更**，不是修测试）：此前 `Marker` 重建期间
     // `TargetContext.target` 会短暂为 `null`，那时的实现会**回退挂到地图**，于是序列里多出一对
     // `attach(map) / detach(map)`（旧注释把它记成「时序产物」）。现在目标未就绪时**什么都不做**
     // （`planTarget` 的 `pending` 分支），不再产生指向地图的中间调用 —— 否则「挂在标注上」的菜单

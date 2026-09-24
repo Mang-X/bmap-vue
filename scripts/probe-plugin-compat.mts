@@ -147,7 +147,7 @@ async function loadData(): Promise<{
   if (files.length === 0) fail(`类型包 ${typesDir} 下没有 .d.ts`)
 
   // 声明索引：只取「名字被声明过」这一层事实。
-  // 有意做得**保守**（不区分 BMap / MapVGL 命名空间，也把类成员一并收进来）：它只用于回答
+  // 有意做得**保守**（不区分 Map / MapVGL 命名空间，也把类成员一并收进来）：它只用于回答
   // 「这个名字在官方声明里存在吗」，宽松方向是「少报缺口」，不会制造假缺口。
   const declarationNames = new Set<string>()
   const namePattern =

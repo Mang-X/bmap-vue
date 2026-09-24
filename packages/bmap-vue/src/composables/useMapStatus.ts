@@ -49,7 +49,7 @@ export interface MapStatusRefs {
 }
 
 export interface UseMapStatusOptions {
-  /** 显式订阅源；省略时取最近注入的 MapContext（须在 `<BMap>` 子树内）。 */
+  /** 显式订阅源；省略时取最近注入的 MapContext（须在 `<Map>` 子树内）。 */
   source?: MapEventSourceInput;
 }
 

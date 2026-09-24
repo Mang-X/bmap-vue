@@ -1,9 +1,9 @@
-# BControl 自定义控件
+# CustomControl 自定义控件
 
-根据地图 `BMap` 组件提供的 Props，或者地图实例，自定义控件
+根据地图 `Map` 组件提供的 Props，或者地图实例，自定义控件
 
 ```ts
-import { BControl } from 'bmap-vue'
+import { CustomControl } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -39,7 +39,7 @@ control/custom
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。
 

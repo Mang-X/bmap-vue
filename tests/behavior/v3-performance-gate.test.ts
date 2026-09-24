@@ -13,15 +13,19 @@
  * 另外锁住「脚本入口是真的」：`package.json` 里的 `test:performance` / `perf:baseline` 指向的
  * 文件必须存在（本仓库有过指向不存在脚本的死条目，值不了门禁但会误导人）。
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   compareShapeRatios,
   computeShapeRatios,
   decideExitCode,
+  describeDroppedMetrics,
   describeKeySetMismatch,
   describeMachineMismatch,
+  validateReportShape,
 } from "../../scripts/collect-performance-baseline.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
@@ -121,6 +125,105 @@ describe("#37 性能门禁：真的进 CI 且步骤没被架空", () => {
       "tsconfig.tests.json",
     ]) {
       expect(existsSync(resolve(repoRoot, relative)), `${relative} 不存在`).toBe(true);
+    }
+  });
+});
+
+describe("重录基线的输入校验（#124 最后一项验收的回归）", () => {
+  /** 一份**最小但合法**的报告（各条校验的正证控件：改坏其中一项必须被抓住）。 */
+  function validReport(): Record<string, unknown> {
+    return {
+      version: 1,
+      generatedAt: "2026-09-24T08:52:37.358Z",
+      dataset: { version: "1" },
+      engine: "fake-v4",
+      environment: {
+        platform: "linux",
+        arch: "x64",
+        cpuModel: "AMD EPYC 7763 64-Core Processor",
+        node: "v24.20.0",
+      },
+      normalizer: { metric: "calibration.cpu", minMs: 32.81 },
+      metrics: {
+        "mount.pointCollection@100": {
+          minMs: 7.99,
+          medianMs: 9.04,
+          maxMs: 16.39,
+          samples: 5,
+          normalized: 0.2433,
+        },
+      },
+      readouts: { "multiUpdate.setData@1000": 1, "volume.line@1000": "1000" },
+      notMeasured: [],
+      bundle: { status: "ok", totals: { runtimeBytes: 787917 } },
+    };
+  }
+
+  it("正证控件：完整报告不报任何问题（否则下面几条会恒真）", () => {
+    expect(validateReportShape(validReport())).toEqual([]);
+  });
+
+  it("顶层字段齐全但 metrics 为空 ⇒ 必须拒绝（否则 `--update` 会把门禁输入删空）", () => {
+    const problems = validateReportShape({ ...validReport(), metrics: {} });
+    expect(problems.join("；")).toContain("metrics 为空");
+  });
+
+  it("机器身份缺一项 ⇒ 必须拒绝（缺了它门禁会退化成「只出报告」）", () => {
+    for (const key of ["platform", "arch", "cpuModel", "node"]) {
+      const environment: Record<string, unknown> = { ...(validReport().environment as object) };
+      delete environment[key];
+      expect(
+        validateReportShape({ ...validReport(), environment }).join("；"),
+        `缺 environment.${key} 必须被拒`,
+      ).toContain(`environment.${key}`);
+    }
+  });
+
+  it("指标值非有限数 / 归一化分母非正数 ⇒ 必须拒绝（NaN 会让比值静默失去判别力）", () => {
+    const nan = validReport();
+    (nan.metrics as Record<string, Record<string, unknown>>)["mount.pointCollection@100"]!.minMs =
+      "oops";
+    expect(validateReportShape(nan).join("；")).toContain("不是有限数");
+    expect(validateReportShape({ ...validReport(), normalizer: { metric: "x", minMs: 0 } }).join("；")).toContain(
+      "normalizer.minMs",
+    );
+  });
+
+  it("bundle.status=ok 却缺 totals ⇒ 必须拒绝（包体读数会静默变空）", () => {
+    expect(validateReportShape({ ...validReport(), bundle: { status: "ok" } }).join("；")).toContain(
+      "bundle.totals",
+    );
+  });
+
+  it("子集报告（少指标）必须被识别：报告缺基线已有指标 ⇒ 不能据此重录", () => {
+    expect(describeDroppedMetrics(["a", "b"], ["a", "b", "c"])).toContain("c");
+    // 正证控件：指标齐全（哪怕顺序不同 / 只多不少）不拦
+    expect(describeDroppedMetrics(["b", "a", "d"], ["a", "b"])).toBeNull();
+  });
+
+  it("端到端：残缺报告 + `--update` 退出码 2，且 baseline.json 不被改写", () => {
+    // 这一条真的跑脚本（不只测纯函数）：保证「校验在任何写入之前」这个次序不被以后的重构改掉。
+    const baselinePath = resolve(repoRoot, "tests/performance/baseline.json");
+    const before = readFileSync(baselinePath, "utf8");
+    const broken = { ...validReport(), metrics: {} };
+    const dir = mkdtempSync(join(tmpdir(), "perf-bad-report-"));
+    const reportPath = join(dir, "report.json");
+    writeFileSync(reportPath, JSON.stringify(broken));
+    try {
+      const res = spawnSync(
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          resolve(repoRoot, "scripts/collect-performance-baseline.mts"),
+          `--from-report=${reportPath}`,
+          "--update",
+        ],
+        { cwd: repoRoot, encoding: "utf8" },
+      );
+      expect(res.status, `残缺报告必须被拒：\n${res.stdout}${res.stderr}`).toBe(2);
+      expect(readFileSync(baselinePath, "utf8"), "被拒时不得改写提交基线").toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

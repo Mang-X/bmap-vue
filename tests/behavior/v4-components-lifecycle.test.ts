@@ -20,9 +20,9 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { createFakeBMapV4, FakeV4AutocompleteResult, type FakeBMapV4 } from "../../packages/test-utils";
 import { createLoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/providers";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
-import BInfoWindow from "../../packages/bmap-vue/src/components/overlays/BInfoWindow.vue";
-import BAutoComplete from "../../packages/bmap-vue/src/components/autocomplete/BAutoComplete.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import InfoWindow from "../../packages/bmap-vue/src/components/overlays/InfoWindow.vue";
+import Autocomplete from "../../packages/bmap-vue/src/components/autocomplete/Autocomplete.vue";
 import { useRequiredMapContext } from "../../packages/bmap-vue/src/core/context/inject";
 
 const POSITION = { lng: 116.404, lat: 39.915 };
@@ -60,10 +60,10 @@ function container(): HTMLElement {
   return el;
 }
 
-/** 挂一棵 `<BMap>` + 子节点，等就绪。 */
+/** 挂一棵 `<Map>` + 子节点，等就绪。 */
 async function mountTree(children: () => unknown, host: HTMLElement) {
   const Root = defineComponent({
-    setup: () => () => h(BMap, { provider: provider() }, children as never),
+    setup: () => () => h(Map, { provider: provider() }, children as never),
   });
   const wrapper = mount(Root, { attachTo: host });
   await flushPromises();
@@ -92,11 +92,11 @@ describe("两张地图的组件实例相互隔离（R25-C / #72）", () => {
     const hostA = container();
     const hostB = container();
     const wrapperA = await mountTree(
-      () => [h(BInfoWindow, { position: POSITION, open: true, title: "A" })],
+      () => [h(InfoWindow, { position: POSITION, open: true, title: "A" })],
       hostA,
     );
     const wrapperB = await mountTree(
-      () => [h(BInfoWindow, { position: POSITION, open: true, title: "B" })],
+      () => [h(InfoWindow, { position: POSITION, open: true, title: "B" })],
       hostB,
     );
 
@@ -118,7 +118,7 @@ describe("两张地图的组件实例相互隔离（R25-C / #72）", () => {
   });
 });
 
-describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => {
+describe("Autocomplete 的 watcher / 监听 / dispose（R25-C / #72）", () => {
   it("props 变化经 Driver 的公开更新入口落到 SDK（不再是组件内的 raw setter）", async () => {
     const host = container();
     const location = ref<unknown>("北京市");
@@ -140,7 +140,7 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     });
 
     const wrapper = await mountTree(
-      () => [h(BAutoComplete, { location: location.value, types: types.value }), h(Probe)],
+      () => [h(Autocomplete, { location: location.value, types: types.value }), h(Probe)],
       host,
     );
     await flushPromises();
@@ -167,7 +167,7 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
   // 这里同时守住反面：组件与 Driver 都不碰输入框的事件监听，也就没有「忘摘」的可能。
   it("卸载只调用 Driver 的 dispose，不给输入框挂事件监听，实例账归零", async () => {
     const host = container();
-    const wrapper = await mountTree(() => [h(BAutoComplete, { location: "北京市" })], host);
+    const wrapper = await mountTree(() => [h(Autocomplete, { location: "北京市" })], host);
     await flushPromises();
 
     const raw = fake.createdAutocompletes[0]!;
@@ -183,7 +183,7 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     expect(addSpy).not.toHaveBeenCalled();
     expect(removeSpy).not.toHaveBeenCalled();
     expect(fake.diagnostics.snapshot().leaks.autocompletes).toBe(0);
-    fake.diagnostics.assertNoLeaks("BAutoComplete 卸载");
+    fake.diagnostics.assertNoLeaks("Autocomplete 卸载");
   });
 
   it("反复挂载 / 卸载 20 轮：气泡与 Autocomplete 的账都对得上，异步窗口不残留", async () => {
@@ -191,8 +191,8 @@ describe("BAutoComplete 的 watcher / 监听 / dispose（R25-C / #72）", () => 
     for (let round = 0; round < 20; round += 1) {
       const wrapper = await mountTree(
         () => [
-          h(BAutoComplete, { location: "北京市", types: ["city"] }),
-          h(BInfoWindow, { position: POSITION, open: true, title: `round-${round}` }),
+          h(Autocomplete, { location: "北京市", types: ["city"] }),
+          h(InfoWindow, { position: POSITION, open: true, title: `round-${round}` }),
         ],
         host,
       );
@@ -232,7 +232,7 @@ describe("评审复现：迟到的回包与打开契约（R25-C 复审 P1-1 / P1
     const host = container();
     const onSearchComplete = vi.fn();
     const wrapper = await mountTree(
-      () => [h(BAutoComplete, { location: "北京市", onSearchComplete })],
+      () => [h(Autocomplete, { location: "北京市", onSearchComplete })],
       host,
     );
     await flushPromises();
@@ -255,7 +255,7 @@ describe("评审复现：迟到的回包与打开契约（R25-C 复审 P1-1 / P1
     const host = container();
     const { errors, Probe } = errorProbe();
     const wrapper = await mountTree(
-      () => [h(BInfoWindow, { open: true, title: "no-position" }), h(Probe)],
+      () => [h(InfoWindow, { open: true, title: "no-position" }), h(Probe)],
       host,
     );
     await flushPromises();
@@ -276,7 +276,7 @@ describe("评审复现：迟到的回包与打开契约（R25-C 复审 P1-1 / P1
     const location = ref<unknown>("上海市");
     const types = ref<string[] | undefined>(["city"]);
     const wrapper = await mountTree(
-      () => [h(BAutoComplete, { location: location.value, types: types.value })],
+      () => [h(Autocomplete, { location: location.value, types: types.value })],
       host,
     );
     await flushPromises();
@@ -305,7 +305,7 @@ describe("评审第 2 轮复现：position 的声明式同步（P1 / P2）", () 
     const position = ref<{ lng: number; lat: number } | undefined>(undefined);
     const { errors, Probe } = errorProbe();
     const wrapper = await mountTree(
-      () => [h(BInfoWindow, { open: true, position: position.value, title: "late" }), h(Probe)],
+      () => [h(InfoWindow, { open: true, position: position.value, title: "late" }), h(Probe)],
       host,
     );
     await flushPromises();
@@ -331,7 +331,7 @@ describe("评审第 2 轮复现：position 的声明式同步（P1 / P2）", () 
     const position = ref<{ lng: number; lat: number } | undefined>({ ...POSITION });
     const { errors, Probe } = errorProbe();
     const wrapper = await mountTree(
-      () => [h(BInfoWindow, { open: true, position: position.value, title: "drop" }), h(Probe)],
+      () => [h(InfoWindow, { open: true, position: position.value, title: "drop" }), h(Probe)],
       host,
     );
     await flushPromises();
@@ -352,7 +352,7 @@ describe("评审第 2 轮复现：position 的声明式同步（P1 / P2）", () 
     const position = ref<{ lng: number; lat: number }>({ ...POSITION });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = await mountTree(
-      () => [h(BInfoWindow, { open: true, position: position.value, title: "move" })],
+      () => [h(InfoWindow, { open: true, position: position.value, title: "move" })],
       host,
     );
     await flushPromises();

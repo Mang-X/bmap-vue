@@ -1,5 +1,5 @@
 /**
- * BPolyline 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * Polyline 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -26,7 +26,7 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { PolylineHandle } from "../../driver/types/handles";
-import type { BPolylineProps } from "../../types/components";
+import type { PolylineProps } from "../../types/components";
 import {
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
@@ -34,7 +34,7 @@ import {
   VISIBILITY_FIELD,
 } from "./overlayFields";
 
-export const POLYLINE_FIELDS: OverlayFieldMap<BPolylineProps> = {
+export const POLYLINE_FIELDS: OverlayFieldMap<PolylineProps> = {
   path: "options",
   pathVersion: "version",
   ...PATH_STROKE_FIELDS,
@@ -55,7 +55,7 @@ export const POLYLINE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createPolylineSpec(): OverlaySpec<BPolylineProps, PolylineHandle> {
+export function createPolylineSpec(): OverlaySpec<PolylineProps, PolylineHandle> {
   return {
     type: "polyline",
     kind: "polyline",

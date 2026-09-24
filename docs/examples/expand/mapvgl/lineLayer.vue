@@ -1,5 +1,5 @@
 <template>
-  <BMap
+  <Map
     v-bind="$attrs"
     :zoom="15"
     :center="{ lat: 39.915185, lng: 116.403901 }"

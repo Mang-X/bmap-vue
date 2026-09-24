@@ -1,5 +1,5 @@
 /**
- * BInfoWindow 的公开属性面与「每个属性怎么落地」的声明（M5-INFOWINDOW / issue #32）
+ * InfoWindow 的公开属性面与「每个属性怎么落地」的声明（M5-INFOWINDOW / issue #32）
  *
  * 与 `markerSpec.ts` 同构：把「声明」从 SFC 里抽出来，让**用例能拿它跟 Driver 的属性描述符
  * 逐条交叉核对**（`tests/behavior/v3-binfowindow.test.ts` 的「声明面」一组）。放在 `.vue` 里
@@ -27,7 +27,7 @@
 import type { Point, Pixel } from "../../driver/types/geometry";
 
 /**
- * 组件公开属性（`BInfoWindowProps` 从它派生，见 `types/components.ts`）。
+ * 组件公开属性（`InfoWindowProps` 从它派生，见 `types/components.ts`）。
  *
  * 每个字段一句「它会怎么落地」，与 `INFO_WINDOW_FIELDS` 一一对应。
  */
@@ -126,7 +126,7 @@ export const INFO_WINDOW_DESCRIPTOR_KEYS: InfoWindowDescriptorKeys<InfoWindowPro
  * `useOverlaySpec` 的 prop 别名读法是「**正典有值 ⇒ 旧名完全不参与**」，因为那里的正典
  * （`bounds`）是必填 prop —— 「正典缺失」是可观测的（`undefined`）。
  * 本组件的正典 `open` 带**运行期默认值**（`withDefaults` 里写了 `open: false`，为的是让
- * 模板里的裸布尔属性 `<BInfoWindow open />` 仍按 Vue 惯例视为 `true`），于是「父级没传 `open`」
+ * 模板里的裸布尔属性 `<InfoWindow open />` 仍按 Vue 惯例视为 `true`），于是「父级没传 `open`」
  * 与「父级传了 `open: false`」在 props 上**不可区分**。
  *
  * 若照搬「正典优先」，默认值会让 `open` 永远算「有值」，`v-model:show`（v2 的唯一写法）

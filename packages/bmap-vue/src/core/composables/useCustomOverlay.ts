@@ -1,5 +1,5 @@
 /**
- * useCustomOverlay —— BCustomOverlay 的宿主所有权（M5-CUSTOM-MENU / issue #33）
+ * useCustomOverlay —— CustomOverlay 的宿主所有权（M5-CUSTOM-MENU / issue #33）
  *
  * 与 `useInfoWindow`（#32）**同构**的一层薄封装：覆盖物的创建 / 挂载 / 更新 / 重建 / 释放仍由
  * `useOverlaySpec` 驱动（本函数只是把 spec 与 props 接上去），这里多加的只有一件内核不该管的事 ——
@@ -31,7 +31,7 @@
 import { onScopeDispose, shallowRef, type ShallowRef } from "vue";
 import { useOverlaySpec } from "./useOverlaySpec";
 import { createCustomOverlaySpec } from "../../components/overlays/customOverlaySpec";
-import type { BCustomOverlayProps } from "../../types/components";
+import type { CustomOverlayProps } from "../../types/components";
 
 export interface UseCustomOverlayOptions {
   /** 组件的 `emit`（事件矩阵派发经它落地）。 */
@@ -49,7 +49,7 @@ export interface UseCustomOverlayResult {
 }
 
 export function useCustomOverlay(
-  props: Readonly<BCustomOverlayProps>,
+  props: Readonly<CustomOverlayProps>,
   options: UseCustomOverlayOptions,
 ): UseCustomOverlayResult {
   const host = shallowRef<HTMLElement | null>(null);
@@ -58,7 +58,7 @@ export function useCustomOverlay(
    * 惰性创建宿主。
    *
    * 创建点必须是**第一次 create**（即 `onMounted` 之后），而不是 `setup` 期：SSR 没有 `document`，
-   * `setup` 期碰它会让「import 无副作用、SSR 可渲染」这条约定失效。`<BCustomOverlay>` 的模板用
+   * `setup` 期碰它会让「import 无副作用、SSR 可渲染」这条约定失效。`<CustomOverlay>` 的模板用
    * `v-if="host"` 把 Teleport 挡在 SSR 之外，两侧因此一致。
    */
   function ensureHost(): HTMLElement {

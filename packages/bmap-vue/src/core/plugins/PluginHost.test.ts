@@ -5,7 +5,7 @@
  * 打断**：`PluginRegistry` 每个地图实例各建一份，`whenPlugin` 又把**地图自己的** `scope.signal`
  * 传给 `load()`。于是：
  *
- * - 同页面两张 `<BMap :plugins="['TrackAnimation']">` ⇒ 插两次 `<script>`；
+ * - 同页面两张 `<Map :plugins="['TrackAnimation']">` ⇒ 插两次 `<script>`；
  * - 地图 A 卸载 ⇒ A 的 scope abort ⇒ A 那条加载被取消，而 B 走的是另一条加载，
  *   「谁先谁后」决定 B 会不会跟着一起挂。
  *

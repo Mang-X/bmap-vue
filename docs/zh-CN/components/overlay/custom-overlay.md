@@ -1,9 +1,9 @@
-# BCustomOverlay 自定义 DOM 覆盖物
+# CustomOverlay 自定义 DOM 覆盖物
 
 把任意 Vue 内容渲染成地图上的 DOM 覆盖物（v4 的 `CustomOverlay`）。
 
 ```ts
-import { BCustomOverlay } from 'bmap-vue'
+import { CustomOverlay } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -66,7 +66,7 @@ overlay/customOverlay
 
 详见 [覆盖物事件矩阵](./events)。
 
-## 与 `<BInfoWindow>` 的两处不同
+## 与 `<InfoWindow>` 的两处不同
 
 - **没有尺寸重绘**：`InfoWindow` 有官方的 `redraw()` 入口，因此内容尺寸变化后会重绘气泡；
   `CustomOverlay` **没有**重绘入口（位置刷新由 SDK 自己的渲染循环负责，官方为此提供构造选项 `synUpdate`），

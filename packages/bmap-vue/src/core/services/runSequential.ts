@@ -5,7 +5,7 @@
  * 而且多数量级下调用方要的是「每一项各自的终态」而不是总耗时。
  *
  * 为什么值得抽成一个具名原语：它是「批量动作 + 部分成功」这条语义的落点——
- * `useBMapGeocoder.getBatch` 与 `useBMapGeocodeDetail.getBatch` 逐项返回
+ * `useGeocoder.getBatch` 与 `useGeocodeDetail.getBatch` 逐项返回
  * `{ …, status, error }`，两处都必须是**同一份**顺序 / 逐项口径，否则「部分成功」的
  * 语义会在两个服务之间漂移。
  */

@@ -1,7 +1,7 @@
 /**
  * Map 事件 Catalog 门禁（M4-EVENTS / issue #28）
  *
- * 事件名是公共契约：`<BMap @xxx>`、`useMapEvent("xxx")` 与文档表格必须来自**同一份数据**。
+ * 事件名是公共契约：`<Map @xxx>`、`useMapEvent("xxx")` 与文档表格必须来自**同一份数据**。
  * 本文件把「同一份数据」变成可执行断言，四类：
  *
  * 1. **上游权威清单**：直接解析 `@baidumap/jsapi-v4-types@4.0.4` 的 `core/MapEvent.d.ts`，
@@ -56,7 +56,7 @@ const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const DOCS_EVENTS_PAGE = resolve(REPO_ROOT, "docs/zh-CN/guide/com-events.md");
 const BMAP_SFC = resolve(
   REPO_ROOT,
-  "packages/bmap-vue/src/components/map/BMap.vue",
+  "packages/bmap-vue/src/components/map/Map.vue",
 );
 
 /** 定位上游类型包（与 `v3-upstream-types-case-patch.test.ts` 同一套候选路径）。 */
@@ -326,7 +326,7 @@ describe("#28 payload 种类 ↔ Driver 的两张表", () => {
       normalizeDriverEvent("click", raw, geometry).point;
     const mousePoint = (raw: Record<string, unknown>) => normalizeMapMouseEvent(raw, geometry).point;
 
-    // 顶层 lng/lat：旧 `@click` 契约认这一形态（`<BMap @click>` 已经换到 Driver 路径，
+    // 顶层 lng/lat：旧 `@click` 契约认这一形态（`<Map @click>` 已经换到 Driver 路径，
     // 两个入口必须给出同一个答案，否则真实点会被兜底成 0/0）
     expect(driverPoint({ lng: 1, lat: 2 })).toEqual({ lng: 1, lat: 2 });
     expect(mousePoint({ lng: 1, lat: 2 })).toEqual({ lng: 1, lat: 2 });
@@ -369,15 +369,15 @@ describe("#28 组件级事件表", () => {
     }
   });
 
-  it("别名只在 Catalog 一处决定：BMap 里不出现别名事件名的字符串字面量", () => {
+  it("别名只在 Catalog 一处决定：Map 里不出现别名事件名的字符串字面量", () => {
     // 正证：别名表非空（否则下面的循环一次都不跑，门禁等于不存在）
     expect(Object.keys(BMAP_COMPONENT_EVENT_ALIASES)).toEqual(["initd"]);
     const code = stripComments(readFileSync(BMAP_SFC, "utf8"));
     for (const alias of Object.keys(BMAP_COMPONENT_EVENT_ALIASES)) {
       // 判定对象是**字符串字面量**而不是某个调用形态：`emit("initd")` 与 `emitDynamic("initd", …)`
       // 都算「组件自己兼容旧名」，都必须走 Catalog 的表（#28 自审发现只匹配 `emit(` 会漏）
-      expect(code, `BMap.vue 不得出现 "${alias}" 字面量`).not.toContain(`"${alias}"`);
-      expect(code, `BMap.vue 不得出现 '${alias}' 字面量`).not.toContain(`'${alias}'`);
+      expect(code, `Map.vue 不得出现 "${alias}" 字面量`).not.toContain(`"${alias}"`);
+      expect(code, `Map.vue 不得出现 '${alias}' 字面量`).not.toContain(`'${alias}'`);
     }
     expect(code, "别名通过 Catalog 的表发出去").toContain("BMAP_COMPONENT_EVENT_EMIT_ALIASES");
   });

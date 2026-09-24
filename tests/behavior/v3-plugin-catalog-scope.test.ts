@@ -1,14 +1,14 @@
 /**
  * 插件 Catalog 与作用域的**组件级**契约（M8-PLUGIN-CORE / issue #42）
  *
- * 这一层要钉的是 issue 里几条只有走到 `<BMap>` 才能观察的验收点：
+ * 这一层要钉的是 issue 里几条只有走到 `<Map>` 才能观察的验收点：
  *
  * 1. **unknown 名字明确失败，但不阻断地图**（issue 实施步骤 2 + 非目标「不让所有插件故障都被忽略」）。
  *    此前未知名字会被降级成一个永远成功的空实现 ⇒ `plugin-ready` 照发、`getStatus()` 是 `ready`。
  *    现在要发 `plugin-error`（`BMAP_PLUGIN_UNKNOWN`），地图照常 ready，同一 `plugins` 列表里的
  *    其它插件照常加载。判据刻意用**同一个列表里既有错名字又有好名字**来构造：只测「全是错名字」
  *    或「全是好名字」都分不清「整体失败」与「逐项失败」。
- * 2. **global 插件跨地图共享同一次加载**（issue 实施步骤 3）：同页面两张 `<BMap>`，脚本只注入一次。
+ * 2. **global 插件跨地图共享同一次加载**（issue 实施步骤 3）：同页面两张 `<Map>`，脚本只注入一次。
  * 3. **地图卸载不释放 global 资源**（issue 实施步骤 4 + AGENTS.md「不得删除/改写上游注入的
  *    script」）：卸载其中一张后，共享条目仍是 ready，另一张地图不被牵连。
  *
@@ -23,7 +23,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
-import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
+import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import {
   disposeDefaultPluginHost,
@@ -78,11 +78,11 @@ interface Mounted {
 function mountMap(plugins: string[]): Mounted {
   const wrapper = mount(
     defineComponent({
-      render: () => h(BMap, { plugins, provider: harness.provider() } as never),
+      render: () => h(Map, { plugins, provider: harness.provider() } as never),
     }),
     { attachTo: harness.container() },
   );
-  const inner = wrapper.findComponent(BMap);
+  const inner = wrapper.findComponent(Map);
   return {
     wrapper,
     readyCount: () => (inner.emitted("ready") ?? []).length,

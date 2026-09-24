@@ -23,6 +23,8 @@
     "generate:capability-matrix:check": "node --experimental-strip-types scripts/generate-capability-matrix.mts --check",
     "generate:plugin-inventory": "node --experimental-strip-types scripts/generate-plugin-inventory.mts",
     "generate:plugin-inventory:check": "node --experimental-strip-types scripts/generate-plugin-inventory.mts --check",
+    "generate:api-diff": "node --experimental-strip-types scripts/generate-api-diff.mts",
+    "generate:api-diff:check": "node --experimental-strip-types scripts/generate-api-diff.mts --check",
     "probe:plugin-compat": "node --experimental-strip-types scripts/probe-plugin-compat.mts",
     "probe:plugin-runtime": "node --experimental-strip-types scripts/probe-plugin-runtime.mts",
     "probe:plugin-load-channel": "node --experimental-strip-types scripts/probe-plugin-load-channel.mts",

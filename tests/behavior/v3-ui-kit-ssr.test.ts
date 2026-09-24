@@ -95,10 +95,10 @@ describe("无 DOM 环境下的 ./ui-kit", () => {
     `);
     expect(report.exportNames).toEqual(
       [
-        "BPlaceAutocomplete",
-        "BPlaceDetail",
-        "BPlaceSearch",
-        "BRoutePlan",
+        "PlaceAutocomplete",
+        "PlaceDetail",
+        "PlaceSearch",
+        "RoutePlan",
         "RoutePlanDrivingPolicy",
         "UI_KIT_PACKAGE",
         "UI_KIT_STYLE_PATH",

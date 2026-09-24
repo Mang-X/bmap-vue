@@ -3,10 +3,10 @@
 ---
 
 建立声明式 `ControlSpec` / `useControlResource`，把全部控件收进统一生命周期；补齐三个 Stable 控件组件
-并建立 Panorama 基线（含独立的 `PanoramaContext`、`<BPanorama>` 与 `usePanoramaService`）。
+并建立 Panorama 基线（含独立的 `PanoramaContext`、`<Panorama>` 与 `usePanoramaService`）。
 
-**控件侧**：8 个既有控件（`BZoom` / `BScale` / `BCityList` / `BLocation` / `BNavigation3d` /
-`BPanoramaControl` / `BCopyright` / `BControl`）各自手写的 `addToMap` / `createWatchers` / `remove`
+**控件侧**：8 个既有控件（`ZoomControl` / `ScaleControl` / `CityListControl` / `LocationControl` / `NavigationControl3D` /
+`PanoramaControl` / `CopyrightControl` / `CustomControl`）各自手写的 `addToMap` / `createWatchers` / `remove`
 收敛为一份 `ControlSpec` + 一个从 `useSdkResource` 派生的统一 adapter；组件只声明「这个控件是什么」，
 创建 / 挂载 / 就地更新 / 重建 / 卸载 / 事件绑定统一由 adapter 执行。**既有组件的 props 表一个都没变**。
 
@@ -24,16 +24,16 @@
 - **修复**：`map-type.showStreetLayer` 此前被静默丢弃（成员名不是 `set<Key>` 形状，落在结构逃生口的
   「没有入口」分支里）；现在注销就地更新。
 - **行为变更**：控件的 `visible` 由「摘挂载」改为 SDK 基类的 `show()` / `hide()`（控件始终挂载，
-  只切换可见性）——`BLocation` 不再因隐藏而顺带停掉持续定位跟踪。`BCopyright` 保持版权项级显隐，
+  只切换可见性）——`LocationControl` 不再因隐藏而顺带停掉持续定位跟踪。`CopyrightControl` 保持版权项级显隐，
   且它的 `anchor` 是构造期项（实例按停靠位置共享，变化即重建并完成共享组迁移）。
-- **修复**：`BCopyright` 的共享控件缓存由「模块级 + 仅按 anchor」改为「按 Client + anchor 分桶」，
-  修掉同一页面两个 `<BMap>` 复用同一句柄导致的 `BMAP_HANDLE_FOREIGN`。
-- 新增组件：`BNavigation`（平移缩放）、`BMapType`（地图类型）、`BOverview`（鹰眼）。
+- **修复**：`CopyrightControl` 的共享控件缓存由「模块级 + 仅按 anchor」改为「按 Client + anchor 分桶」，
+  修掉同一页面两个 `<Map>` 复用同一句柄导致的 `BMAP_HANDLE_FOREIGN`。
+- 新增组件：`NavigationControl`（平移缩放）、`MapTypeControl`（地图类型）、`OverviewMapControl`（鹰眼）。
 - `./core` 的 `useControlResource` 签名由 `(props, adapter)` 变为 `(props, spec)`；
   无消费者的 `buildControlOptions` / `buildControlEvents` 删除。自建控件请按 `ControlSpec` 重写。
 
-**Panorama 侧（post-stable）**：`PanoramaContext` 独立于 `MapContext`（`<BPanorama>` 只需要 Client，
-不把全景内部容器当成地图）；新增 `<BPanorama>` / `<BPanoramaLabel>` 与 `usePanoramaService`；
+**Panorama 侧（post-stable）**：`PanoramaContext` 独立于 `MapContext`（`<Panorama>` 只需要 Client，
+不把全景内部容器当成地图）；新增 `<Panorama>` / `<PanoramaLabel>` 与 `usePanoramaService`；
 `PanoramaViewerDriver` 补齐读取面、场景切换、配置写回、滚轮缩放、标注与原样事件订阅
 （共享 `EventDriver` 按 Map 事件形状归一化，会把 `dataload.data` 这类载荷丢掉）。
 

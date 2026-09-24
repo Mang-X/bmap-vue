@@ -21,7 +21,7 @@
     </button>
     <button class="myButton" type="button" v-else @click="rectangle.toggle">禁用绘制矩形</button>
     <button class="myButton" type="button" @click="clearFn">清空</button>
-    <BMap
+    <Map
       v-bind="$attrs"
       :center="{ lng: 116.385243, lat: 39.913063 }"
       :zoom="16"
@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useBMapMarkerIcons, type BMapClient } from "bmap-vue";
+import { useMarkerIcons, type BMapClient } from "bmap-vue";
 let marker = ref({
   instance: null as { open(): void; closeAll(): void } | null,
   isDrawing: false,
@@ -101,7 +101,7 @@ function handleInitd({ map, client }: { map: { raw: unknown }; client: BMapClien
       const scene = new DrawScene(map.raw);
       clearFn.value = () => scene.clearData();
       // 点绘制
-      const defaultIcons = useBMapMarkerIcons(client);
+      const defaultIcons = useMarkerIcons(client);
       marker.value.instance = new MarkerDraw(scene, {
         isOpen: false,
         isSeries: true,

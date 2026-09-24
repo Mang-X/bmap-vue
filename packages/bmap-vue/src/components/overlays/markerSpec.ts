@@ -1,8 +1,8 @@
 /**
- * BMarker 的 `OverlaySpec` 声明（M5-SPEC-MARKER / issue #30）
+ * Marker 的 `OverlaySpec` 声明（M5-SPEC-MARKER / issue #30）
  *
  * 从 SFC 里抽出来是为了**可测**：`tests/behavior/v3-overlay-spec.test.ts` 要拿 `fields` 与
- * `BMarkerProps` 的键集、以及 Driver 的属性描述符逐条交叉核对。放在 `.vue` 里就只能靠人眼。
+ * `MarkerProps` 的键集、以及 Driver 的属性描述符逐条交叉核对。放在 `.vue` 里就只能靠人眼。
  *
  * ## 每个公开属性的更新策略（`MARKER_FIELDS` 是唯一声明点）
  *
@@ -21,15 +21,15 @@
 import type { OverlaySpec, OverlayFieldMap } from "../../core/overlays/OverlaySpec";
 import type { OverlayPositionModel } from "../../core/composables/useOverlaySpec";
 import type { MarkerHandle } from "../../driver/types/handles";
-import type { BMarkerProps } from "../../types/components";
+import type { MarkerProps } from "../../types/components";
 
 /**
  * prop → 更新策略。
  *
- * 类型是 `OverlayFieldMap<BMarkerProps>`（映射类型带 `-?`）：**漏一个 prop 就编译失败**，
+ * 类型是 `OverlayFieldMap<MarkerProps>`（映射类型带 `-?`）：**漏一个 prop 就编译失败**，
  * 因此「Marker 所有公开属性都有明确更新策略」是编译期保证，不是文档承诺。
  */
-export const MARKER_FIELDS: OverlayFieldMap<BMarkerProps> = {
+export const MARKER_FIELDS: OverlayFieldMap<MarkerProps> = {
   position: "position",
   offset: "options",
   title: "options",
@@ -50,7 +50,7 @@ export const MARKER_FIELDS: OverlayFieldMap<BMarkerProps> = {
  *
  * 其余字段与描述符键同名，走缺省（`useOverlaySpec` 的缺省是「同名」，而不是按命名规律推断语义）。
  */
-export const MARKER_DESCRIPTOR_KEYS: Partial<Record<keyof BMarkerProps & string, string | null>> = {
+export const MARKER_DESCRIPTOR_KEYS: Partial<Record<keyof MarkerProps & string, string | null>> = {
   position: "position",
   visible: null,
 };
@@ -88,7 +88,7 @@ function readDragEndPoint(event: unknown): { lng: number; lat: number } | null {
   return { lng: point.lng, lat: point.lat };
 }
 
-export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<BMarkerProps, MarkerHandle> {
+export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps, MarkerHandle> {
   return {
     type: "marker",
     // 事件面由事件矩阵给出（`MarkerEventMap` 的 11 个事件）；这里只覆盖 `dragend` 的处置方式。

@@ -1,9 +1,9 @@
-# BZoom 缩放控件
+# ZoomControl 缩放控件
 
 缩放控件，默认位于地图右下角
 
 ```ts
-import { BZoom } from 'bmap-vue'
+import { ZoomControl } from 'bmap-vue'
 ```
 
 ## 组件示例
@@ -39,7 +39,7 @@ control/zoom
 
 ## 组件事件
 
-v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<BMap>` 子树内用 `useBMap()` + `whenReady()`。
+v3 子组件没有 `initd/unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。
 

@@ -1,13 +1,13 @@
 /**
- * `BCopyright` 的共享控件缓存
+ * `CopyrightControl` 的共享控件缓存
  *
  * 文档承诺「多个相同位置版权控件会自动排列，避免重叠」，实现方式是**同一 anchor 的多个组件
  * 共用一个 `CopyrightControl` 实例**、各自往里加一条版权项。
  *
  * 本模块原先是一张**模块级** `Map<string, ControlHandle>`（键只有 anchor），于是同一页面上的
- * 两个 `<BMap>`（两个 Client）会复用同一个句柄——而句柄的所有权绑定在创建它的 Client 上，
+ * 两个 `<Map>`（两个 Client）会复用同一个句柄——而句柄的所有权绑定在创建它的 Client 上，
  * 跨 Client 使用会被 Driver 的注册表判成 `BMAP_HANDLE_FOREIGN`（M7-CONTROL-PANORAMA / #41
- * 实测：第二个 Client 下的 `<BCopyright>` 直接建不出控件）。因此键改成
+ * 实测：第二个 Client 下的 `<CopyrightControl>` 直接建不出控件）。因此键改成
  * **Client 身份 + anchor**，用 `WeakMap` 分桶：
  *
  * - 跨 Client 不会复用（修掉上面那条真实缺陷）；
@@ -64,7 +64,7 @@ export function removeCopyrightControlIfEmpty(
   // **按身份出桶**：只有这个桶确实指向本实例时才删。调用方可能带着过期的 anchor 到来
   // （例如实例已被移动到别处、而调用方手里还是旧键），无条件 `delete` 会把**别人**刚登记
   // 的同名条目一起删掉——那个控件还在图上，后续同 anchor 的组件却会另建一个（#95 评审 P1 的
-  // 第二种症状）。`BCopyright` 已按创建时的 anchor 调用，这里是第二道保险。
+  // 第二种症状）。`CopyrightControl` 已按创建时的 anchor 调用，这里是第二道保险。
   const bucketOfClient = bucket(ctx.client, false);
   if (bucketOfClient?.get(anchor) === control) bucketOfClient.delete(anchor);
 }

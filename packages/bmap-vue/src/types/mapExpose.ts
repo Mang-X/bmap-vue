@@ -1,17 +1,17 @@
 /**
- * `BMapExpose` —— `<BMap>` 组件对外冻结的命令式接口（M4-HANDLE-UX / issue #29）
+ * `MapExpose` —— `<Map>` 组件对外冻结的命令式接口（M4-HANDLE-UX / issue #29）
  *
  * ## 两个「句柄」的分工（命名对照，改名前请先读这里）
  *
  * | 名字 | 归属 | 形状 | 怎么拿到 | 用途 |
  * | --- | --- | --- | --- | --- |
- * | `MapHandle` | Driver 层（SDK 侧句柄） | `SdkHandle<"map">`：品牌 + `raw` | `ready` 载荷 / `useBMapContext().map` / `BMapExpose.getMapInstance()` | 交给 Facet Driver 用；raw SDK 对象经 `./advanced` 的 `unwrapRaw()` |
- * | `BMapExpose`（本文件） | 组件层（用户侧命令面） | 常用命令 + 生命周期 | `<BMap ref>` / `defineExpose()` | 业务在父组件里下命令、订阅就绪、重试加载 |
+ * | `MapHandle` | Driver 层（SDK 侧句柄） | `SdkHandle<"map">`：品牌 + `raw` | `ready` 载荷 / `useMapContext().map` / `MapExpose.getMapInstance()` | 交给 Facet Driver 用；raw SDK 对象经 `./advanced` 的 `unwrapRaw()` |
+ * | `MapExpose`（本文件） | 组件层（用户侧命令面） | 常用命令 + 生命周期 | `<Map ref>` / `defineExpose()` | 业务在父组件里下命令、订阅就绪、重试加载 |
  *
- * issue #29 把两者都写了「MapHandle / BMapExpose」这个名字对：**driver 句柄保持精简**
+ * issue #29 把两者都写了「MapHandle / MapExpose」这个名字对：**driver 句柄保持精简**
  * （它只是一个品牌 + raw，不挂任何方法 —— 一旦挂上方法就会被组件、Driver、Fake 三处同时消费，
  * 再也改不动），**用户侧命令面单独定型**。所以本文件不引入新的「`MapHandle` 同名物」，
- * 也不把 `useBMapViewAnimation` 一类内部代码依赖的 `getMapInstance()` 改名。
+ * 也不把 `useViewAnimation` 一类内部代码依赖的 `getMapInstance()` 改名。
  *
  * ## 冻结面
  *
@@ -27,13 +27,13 @@ import type { MapSuspendReason } from "../core/runtime/suspension";
 import type { MapHandle } from "../driver/types/handles";
 
 /**
- * `<BMap>` 的 expose 形状。
+ * `<Map>` 的 expose 形状。
  *
- * 组件里的实现由 `createBMapExpose()` 返回**显式标注为本类型**的对象，
- * 因此 `defineExpose()` 推导出的实例类型就是它（`InstanceType<typeof BMap>`），
+ * 组件里的实现由 `createExpose()` 返回**显式标注为本类型**的对象，
+ * 因此 `defineExpose()` 推导出的实例类型就是它（`InstanceType<typeof Map>`），
  * 消费方（含 `fixtures/consumer` 的真实 tarball 类型检查）能拿到逐成员的类型。
  */
-export interface BMapExpose extends MapCommands {
+export interface MapExpose extends MapCommands {
   /* ------------------------------------------------------------------ 容器 */
   /** 地图容器 DOM（SDK 在其内部创建 canvas；`null` = 尚未挂载）。 */
   getContainer(): HTMLElement | null;
@@ -97,7 +97,7 @@ export interface BMapExpose extends MapCommands {
    * 当前的「减少动画」偏好（`prefers-reduced-motion: reduce`）。
    *
    * **只读信号**：它不会暂停地图、也不会阻断任何必要的数据更新 —— 只供**可选动画**
-   * 决定要不要跳过。本库的 `<BMap>` 自身没有可选动画（首次视野一直是 `noAnimation`），
+   * 决定要不要跳过。本库的 `<Map>` 自身没有可选动画（首次视野一直是 `noAnimation`），
    * 因此它是暴露给调用方的，不是组件内部用来停任务的开关。
    */
   prefersReducedMotion(): boolean;

@@ -1,5 +1,5 @@
 /**
- * BBezierCurve 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
+ * BezierCurve 的 `OverlaySpec` 声明（M5-VECTORS / issue #31）
  *
  * ## 每个公开属性的更新策略
  *
@@ -21,10 +21,10 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
-import type { BBezierCurveProps } from "../../types/components";
+import type { BezierCurveProps } from "../../types/components";
 import { PATH_STROKE_FIELDS, VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
-export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BBezierCurveProps> = {
+export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
   path: "options",
   pathVersion: "version",
   controlPoints: "options",
@@ -47,7 +47,7 @@ export const BEZIER_CURVE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
-export function createBezierCurveSpec(): OverlaySpec<BBezierCurveProps, OverlayHandle> {
+export function createBezierCurveSpec(): OverlaySpec<BezierCurveProps, OverlayHandle> {
   return {
     type: "bezier-curve",
     kind: "bezier-curve",

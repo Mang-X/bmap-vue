@@ -1,11 +1,11 @@
 /**
- * BPanoramaControl / BBezierCurve / BMapMask / BMarker3d 迁移验证
+ * PanoramaControl / BezierCurve / MapMask / Marker3D 迁移验证
  *
  * #26 之后组件默认路径直接走 v4 Driver。两处与 BMapGL 时代的读法差异：
  *
  * 1. `map.overlays` / `map.controls` 在 Fake v4 里是**数组**（BMapGL fake 里是 `Set`），
  *    覆盖物的点集字段是 `path`（BMapGL 的 fake 叫 `points`）；
- * 2. `BMapMask` / `BMarker3d` 依赖的 `BMap.MapMask` / `BMap.Marker3D` **不在** Fake v4 的
+ * 2. `MapMask` / `Marker3D` 依赖的 `BMap.MapMask` / `BMap.Marker3D` **不在** Fake v4 的
  *    命名空间里（4.0.4 类型包也没有类声明，真实运行时才异步注入）。因此这两条用例在 v4 上
  *    的可观察事实是**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED` 经 `resource:error` 交出），
  *    而不是静默降级成一个假的覆盖物。
@@ -13,12 +13,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
-import BMap from '../../packages/bmap-vue/src/components/map/BMap.vue'
-import BPanoramaControl from '../../packages/bmap-vue/src/components/controls/BPanoramaControl.vue'
-import BControl from '../../packages/bmap-vue/src/components/controls/BControl.vue'
-import BBezierCurve from '../../packages/bmap-vue/src/components/overlays/BBezierCurve.vue'
-import BMapMask from '../../packages/bmap-vue/src/components/overlays/BMapMask.vue'
-import BMarker3d from '../../packages/bmap-vue/src/components/overlays/BMarker3d.vue'
+import Map from '../../packages/bmap-vue/src/components/map/Map.vue'
+import PanoramaControl from '../../packages/bmap-vue/src/components/controls/PanoramaControl.vue'
+import CustomControl from '../../packages/bmap-vue/src/components/controls/CustomControl.vue'
+import BezierCurve from '../../packages/bmap-vue/src/components/overlays/BezierCurve.vue'
+import MapMask from '../../packages/bmap-vue/src/components/overlays/MapMask.vue'
+import Marker3D from '../../packages/bmap-vue/src/components/overlays/Marker3D.vue'
 import { useRequiredMapContext } from '../../packages/bmap-vue/src/core/context/inject'
 import { createFakeV4Harness } from '../../packages/test-utils'
 
@@ -50,19 +50,19 @@ function mountInMap(children: () => any[], props: Record<string, unknown> = {}) 
   const el = host()
   const wrapper = mount(
     defineComponent({
-      components: { BMap },
-      setup: () => () => h(BMap, { provider: provider(), ...props }, children),
+      components: { Map },
+      setup: () => () => h(Map, { provider: provider(), ...props }, children),
     }),
     { attachTo: el },
   )
   return wrapper
 }
 
-describe('BMap extra overlays/controls v3', () => {
+describe('Map extra overlays/controls v3', () => {
   beforeEach(() => harness.reset())
 
-  it('BPanoramaControl adds a panorama control and toggles visible', async () => {
-    const wrapper = mountInMap(() => [h(BPanoramaControl, { visible: true })])
+  it('PanoramaControl adds a panorama control and toggles visible', async () => {
+    const wrapper = mountInMap(() => [h(PanoramaControl, { visible: true })])
     await flushPromises()
     const map = currentMap()
     expect(map.controls).toHaveLength(1)
@@ -71,9 +71,9 @@ describe('BMap extra overlays/controls v3', () => {
     expect(map.controls).toHaveLength(0)
   })
 
-  it('BControl creates a custom control with slot DOM', async () => {
+  it('CustomControl creates a custom control with slot DOM', async () => {
     const wrapper = mountInMap(() => [
-      h(BControl, { anchor: 'BMAP_ANCHOR_TOP_LEFT' }, () => [h('div', { class: 'my-control' }, 'hello')]),
+      h(CustomControl, { anchor: 'BMAP_ANCHOR_TOP_LEFT' }, () => [h('div', { class: 'my-control' }, 'hello')]),
     ])
     await flushPromises()
     const map = currentMap()
@@ -85,18 +85,18 @@ describe('BMap extra overlays/controls v3', () => {
     expect(control.attachedMap).toBe(map)
     // slot DOM 真的被挂进了地图容器（自定义控件契约：addControl → initialize → render(container)）
     const slotEl = document.querySelector('.my-control') as HTMLElement
-    expect(slotEl, 'BControl 必须把 slot DOM 挂出去').toBeTruthy()
+    expect(slotEl, 'CustomControl 必须把 slot DOM 挂出去').toBeTruthy()
     expect(map.container.contains(slotEl)).toBe(true)
     wrapper.unmount()
     await nextTick()
     expect(map.controls).toHaveLength(0)
   })
 
-  it('BBezierCurve creates bezier with path/controlPoints and updates', async () => {
+  it('BezierCurve creates bezier with path/controlPoints and updates', async () => {
     const path = ref([{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }])
     const cps = ref([[{ lng: 1.5, lat: 1.2 }], [{ lng: 2.5, lat: 2.2 }]])
     const wrapper = mountInMap(() => [
-      h(BBezierCurve, { path: path.value, controlPoints: cps.value, strokeColor: '#112233' }),
+      h(BezierCurve, { path: path.value, controlPoints: cps.value, strokeColor: '#112233' }),
     ])
     await flushPromises()
     const map = currentMap()
@@ -115,9 +115,9 @@ describe('BMap extra overlays/controls v3', () => {
     await nextTick()
   })
 
-  it('BBezierCurve releases listeners on unmount', async () => {
+  it('BezierCurve releases listeners on unmount', async () => {
     const wrapper = mountInMap(() => [
-      h(BBezierCurve, {
+      h(BezierCurve, {
         path: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }],
         controlPoints: [[{ lng: 1.5, lat: 1.2 }]],
       }),
@@ -127,13 +127,13 @@ describe('BMap extra overlays/controls v3', () => {
     wrapper.unmount()
     await nextTick()
     expect(fake.diagnostics.snapshot().leaks.listeners).toBe(0)
-    harness.assertIdle('BBezierCurve 卸载')
+    harness.assertIdle('BezierCurve 卸载')
   })
 
-  it('BMapMask 在 v4 上是显式失败（Fake v4 的命名空间没有 MapMask）', async () => {
+  it('MapMask 在 v4 上是显式失败（Fake v4 的命名空间没有 MapMask）', async () => {
     const { errors, Probe } = errorProbe()
     const wrapper = mountInMap(() => [
-      h(BMapMask, { path: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }, { lng: 3, lat: 3 }], showRegion: 'outside' }),
+      h(MapMask, { path: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }, { lng: 3, lat: 3 }], showRegion: 'outside' }),
       h(Probe),
     ])
     await flushPromises()
@@ -145,14 +145,14 @@ describe('BMap extra overlays/controls v3', () => {
     expect(currentMap().overlays).toHaveLength(0)
     wrapper.unmount()
     await nextTick()
-    harness.assertIdle('BMapMask 显式失败')
+    harness.assertIdle('MapMask 显式失败')
   })
 
-  it('BMarker3d 在 v4 上是显式失败（Fake v4 的命名空间没有 Marker3D）', async () => {
+  it('Marker3D 在 v4 上是显式失败（Fake v4 的命名空间没有 Marker3D）', async () => {
     const { errors, Probe } = errorProbe()
     const pos = ref({ lng: 116.4, lat: 39.9 })
     const wrapper = mountInMap(() => [
-      h(BMarker3d, { position: pos.value, height: 1000, size: 20, fillColor: '#00ff00' }),
+      h(Marker3D, { position: pos.value, height: 1000, size: 20, fillColor: '#00ff00' }),
       h(Probe),
     ])
     await flushPromises()
@@ -167,6 +167,6 @@ describe('BMap extra overlays/controls v3', () => {
     expect(currentMap().overlays).toHaveLength(0)
     wrapper.unmount()
     await nextTick()
-    harness.assertIdle('BMarker3d 显式失败')
+    harness.assertIdle('Marker3D 显式失败')
   })
 })

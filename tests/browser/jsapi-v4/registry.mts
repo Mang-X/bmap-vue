@@ -32,7 +32,7 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     id: "fixture-namespace-reused",
     name: "fixture 档复用注入的 v4 命名空间（existingGlobalV4Provider），且零官方入口 script",
   },
-  "map-ready": { id: "map-ready", name: "<BMap> 就绪并拿到 MapHandle、容器里有 SDK DOM" },
+  "map-ready": { id: "map-ready", name: "<Map> 就绪并拿到 MapHandle、容器里有 SDK DOM" },
   "map-view-round-trip": {
     id: "map-view-round-trip",
     name: "视野读写往返：getCenter/getZoom 与传入的 center/zoom 一致",
@@ -41,73 +41,73 @@ const SPECS: Record<string, SmokeCheckSpec> = {
     id: "view-animation-cancel-window",
     name: "视角动画的启动窗口（#104 审计表 F-1）：未起播/派发期间取消必抛 TypeError，animationstart 之后的微任务里取消成功且视图不再推进；待启动旧段的「清场」只能延后交付、旧段来不及驱动视角、且本库那次安全窗口取消必须真的成功（#122 评审 P1 / 复审 P1）",
   },
-  "overlay-marker": { id: "overlay-marker", name: "<BMarker> 挂载后覆盖物计数真的增长" },
-  "overlay-polyline": { id: "overlay-polyline", name: "<BPolyline> 挂载后覆盖物计数真的增长" },
+  "overlay-marker": { id: "overlay-marker", name: "<Marker> 挂载后覆盖物计数真的增长" },
+  "overlay-polyline": { id: "overlay-polyline", name: "<Polyline> 挂载后覆盖物计数真的增长" },
   "overlay-rectangle": {
     id: "overlay-rectangle",
-    name: "<BRectangle>（v4 新增）挂载后覆盖物计数增长，且 getBounds() 读回的就是传入的对角两点",
+    name: "<Rectangle>（v4 新增）挂载后覆盖物计数增长，且 getBounds() 读回的就是传入的对角两点",
   },
-  "control-zoom": { id: "control-zoom", name: "基础控件 <BZoom> 真的挂上（账本计数或容器 DOM 增量）" },
+  "control-zoom": { id: "control-zoom", name: "基础控件 <ZoomControl> 真的挂上（账本计数或容器 DOM 增量）" },
   "controls-stable-set": {
     id: "controls-stable-set",
-    name: "#41 新增的 Stable 控件（<BNavigation> / <BMapType> / <BOverview>）真的挂上，且改 anchor 后即时下发",
+    name: "#41 新增的 Stable 控件（<NavigationControl> / <MapTypeControl> / <OverviewMapControl>）真的挂上，且改 anchor 后即时下发",
   },
   "panorama-viewer": {
     id: "panorama-viewer",
-    name: "<BPanorama> 建出查看器并接受受控写入（只登记在 fixture 档：live 需要真实全景场景）",
+    name: "<Panorama> 建出查看器并接受受控写入（只登记在 fixture 档：live 需要真实全景场景）",
   },
   "layer-district": {
     id: "layer-district",
-    name: "基础图层 <BDistrictLayer> 真的挂上（账本计数或容器 DOM 增量）",
+    name: "基础图层 <DistrictLayer> 真的挂上（账本计数或容器 DOM 增量）",
   },
   "layer-tile": {
     id: "layer-tile",
-    name: "瓦片图层 <BTileLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
+    name: "瓦片图层 <TileLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
   },
   "layer-traffic": {
     id: "layer-traffic",
-    name: "路况图层 <BTrafficLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
+    name: "路况图层 <TrafficLayer> 真的挂上（拦截真实 Map.addLayer 的调用，且无 console.error）",
   },
   "layer-geojson": {
     id: "layer-geojson",
-    name: "GeoJSON 图层 <BGeoJSONLayer> 真的挂上、`setData` 被 SDK 接受（拦截真实 Map.addLayer，且无 console.error）",
+    name: "GeoJSON 图层 <GeoJSONLayer> 真的挂上、`setData` 被 SDK 接受（拦截真实 Map.addLayer，且无 console.error）",
   },
   "infowindow-visible": {
     id: "infowindow-visible",
-    name: "<BInfoWindow>：detached host 被 SDK 搬进自己的容器、内容可见；关闭后地图无当前气泡且宿主不残留（#32 / #72 可见性回归）",
+    name: "<InfoWindow>：detached host 被 SDK 搬进自己的容器、内容可见；关闭后地图无当前气泡且宿主不残留（#32 / #72 可见性回归）",
   },
   "infowindow-close-button-pair": {
     id: "infowindow-close-button-pair",
-    name: "<BInfoWindow>：点关闭按钮时 `close` 恰好一次、`clickclose` 至少一次，且本库收敛为关（只登记在 live 档——它验的是真实 SDK 的事件与 DOM）",
+    name: "<InfoWindow>：点关闭按钮时 `close` 恰好一次、`clickclose` 至少一次，且本库收敛为关（只登记在 live 档——它验的是真实 SDK 的事件与 DOM）",
   },
   "custom-overlay-visible": {
     id: "custom-overlay-visible",
-    name: "<BCustomOverlay>：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置不重建 DOM、不产生第二个宿主；隐藏后实例仍在图上",
+    name: "<CustomOverlay>：detached 宿主被 SDK 搬进自己的容器、slot 内容可见；换位置不重建 DOM、不产生第二个宿主；隐藏后实例仍在图上",
   },
   "context-menu-attached": {
     id: "context-menu-attached",
-    name: "<BContextMenu>：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（fixture 档读 Fake 账本）",
+    name: "<ContextMenu>：数据与声明式两套菜单项产出同一份条目、菜单挂到目标上；切 target 时先摘旧再挂新、任何时刻只有一个（fixture 档读 Fake 账本）",
   },
   "context-menu-marker-target": {
     id: "context-menu-marker-target",
-    name: "<BContextMenu> 写在 <BMarker> 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员）——只登记在 live 档，它验的是真实 SDK 的成员与 DOM",
+    name: "<ContextMenu> 写在 <Marker> 里：右键该标注时菜单真的打开（`Marker#addContextMenu` 是 4.0 的运行时扩展成员）——只登记在 live 档，它验的是真实 SDK 的成员与 DOM",
   },
   "service-geocode": { id: "service-geocode", name: "headless 地理编码拿到真实回包" },
   "ui-kit-autocomplete-search": {
     id: "ui-kit-autocomplete-search",
-    name: "BPlaceAutocomplete：ready、检索写入输入框、官方 UI Kit 渲染出输入框、卸载后宿主子树撤走",
+    name: "PlaceAutocomplete：ready、检索写入输入框、官方 UI Kit 渲染出输入框、卸载后宿主子树撤走",
   },
   "ui-kit-placesearch-load": {
     id: "ui-kit-placesearch-load",
-    name: "BPlaceSearch：ready、检索结算、`load` 事件带回 POI、宿主由 UI Kit 渲染出结果 DOM、卸载后撤走",
+    name: "PlaceSearch：ready、检索结算、`load` 事件带回 POI、宿主由 UI Kit 渲染出结果 DOM、卸载后撤走",
   },
   "ui-kit-placedetail-load": {
     id: "ui-kit-placedetail-load",
-    name: "BPlaceDetail：用真实检索到的 uid 打开、`load` 事件带回详情、宿主由 UI Kit 渲染、卸载后撤走",
+    name: "PlaceDetail：用真实检索到的 uid 打开、`load` 事件带回详情、宿主由 UI Kit 渲染、卸载后撤走",
   },
   "ui-kit-routeplan-search": {
     id: "ui-kit-routeplan-search",
-    name: "BRoutePlan：驾车检索返回方案、`result` 事件与返回值同源、面板由 UI Kit 渲染、卸载后撤走",
+    name: "RoutePlan：驾车检索返回方案、`result` 事件与返回值同源、面板由 UI Kit 渲染、卸载后撤走",
   },
   "second-provider-reuses-sdk": {
     id: "second-provider-reuses-sdk",

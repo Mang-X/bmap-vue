@@ -3,7 +3,7 @@
  *
  * `useMapEvent` / `useMapStatus` 都能在**两种**场景工作：
  *
- * 1. 在 `<BMap>` 子树里调用（最常见）——用最近注入的 `MapContext`，它同时带 `scheduler`；
+ * 1. 在 `<Map>` 子树里调用（最常见）——用最近注入的 `MapContext`，它同时带 `scheduler`；
  * 2. 显式给一个 `MapEventSource`——只要求「地图句柄 + 提供 EventDriver 的 Client」，
  *    用于「拿到别处（多地图、`defineExpose()` 的句柄）的地图」这类场景。
  *
@@ -60,7 +60,7 @@ export type MapEventSourceInput = MapContext | MapEventSource;
 /**
  * 解析订阅源：显式 source 优先，其次最近注入的 `MapContext`。
  *
- * 两者都没有时抛 `BMAP_PARENT_CONTEXT_MISSING`——与 `<BMap>` 子组件的报错口径一致，
+ * 两者都没有时抛 `BMAP_PARENT_CONTEXT_MISSING`——与 `<Map>` 子组件的报错口径一致，
  * 不做「静默不订阅」（那会让「订阅了但永远不触发」变成最难查的一类问题）。
  */
 export function resolveMapEventSource(explicit?: MapEventSourceInput): MapEventSource {
@@ -71,7 +71,7 @@ export function resolveMapEventSource(explicit?: MapEventSourceInput): MapEventS
   if (injected) return injected;
   throw new BMapError(
     "BMAP_PARENT_CONTEXT_MISSING",
-    "useMapEvent / useMapStatus must be called inside a <BMap> subtree, " +
+    "useMapEvent / useMapStatus must be called inside a <Map> subtree, " +
       "or be given an explicit `source` ({ map, client }).",
   );
 }

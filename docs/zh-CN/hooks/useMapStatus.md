@@ -35,7 +35,7 @@ const { center, zoom, moving } = useMapStatus()
 | `dispose` | `() => void`                        | 释放订阅（幂等）；组件 / `effectScope` 内自动释放 |
 
 ```ts
-// 不传 = 取最近的 <BMap> 子树里那张地图；显式订阅源用于「别处的地图」
+// 不传 = 取最近的 <Map> 子树里那张地图；显式订阅源用于「别处的地图」
 const status = useMapStatus({ source: { map, client } })
 ```
 
@@ -55,12 +55,12 @@ watch(status.center, (p) => console.log('中心点变了', p)) // 同一视野�
 同一帧里 `moving` 若被推迟到下一帧、而 `moveend` 同步处理，标志会被后到的 `moving` 重新置为 `true`，
 出现「已结束却仍在移动」。
 
-## 与 `useBMap()` 的分工
+## 与 `useMap()` 的分工
 
-- `useBMap()` 给的是**运行时**状态（`status` / `map` / `client` / `whenReady`），回答「地图准备好了吗」；
+- `useMap()` 给的是**运行时**状态（`status` / `map` / `client` / `whenReady`），回答「地图准备好了吗」；
 - `useMapStatus()` 给的是**地图外部状态**（视野与尺寸），回答「地图现在看的是哪里」。
 
-需要命令式操作地图（`setCenter` / `fitBounds` / 截图…）时，用 `useBMap()` 拿到 `client` + `map`
+需要命令式操作地图（`setCenter` / `fitBounds` / 截图…）时，用 `useMap()` 拿到 `client` + `map`
 再走 `client.driver.map.*`。
 
 ## 释放

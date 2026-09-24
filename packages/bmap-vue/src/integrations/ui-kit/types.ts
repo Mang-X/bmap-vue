@@ -222,7 +222,7 @@ export type RouteTransitSubType = "bus" | "subway" | "ferry" | "train" | "airpla
  * 它**既是类型也是值**（与 TS 枚举同形），这样调用方不必写魔法数字：
  *
  * ```ts
- * <BRoutePlan :driving-options="{ policy: RoutePlanDrivingPolicy.AVOID_CONGESTION }" />
+ * <RoutePlan :driving-options="{ policy: RoutePlanDrivingPolicy.AVOID_CONGESTION }" />
  * ```
  */
 export const RoutePlanDrivingPolicy = {

@@ -1,21 +1,21 @@
 # 原生批量可视化图层 <Badge type="tip" text="^1.0.0" />
 
-四个 JSAPI 4.0 **原生批量图层**：`BLineLayer`（线）/ `BFillLayer`（面）/ `BHeatmapLayer`（热力）/
-`BTrackLineLayer`（轨迹线）。它们与[图层组件](./index)的区别是：**数据是一等公民**（`setData` /
+四个 JSAPI 4.0 **原生批量图层**：`LineLayer`（线）/ `FillLayer`（面）/ `HeatmapLayer`（热力）/
+`TrackLineLayer`（轨迹线）。它们与[图层组件](./index)的区别是：**数据是一等公民**（`setData` /
 要素状态 / 拾取），因此一个组件承载成千上万个要素，渲染在 SDK 内部完成。
 
 ```ts
-import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'bmap-vue'
+import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 ```
 
 ## 先选对组件（差别来自**官方有没有声明**）
 
 | 组件 | 官方类 | 能力面 | 适合 |
 | --- | --- | --- | --- |
-| `BLineLayer` | `LineLayer`（4.0.4 有声明） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
-| `BFillLayer` | `FillLayer`（有声明） | 同上（样式是 `BFillLayerStyle`） | 面状统计、区域着色 |
-| `BHeatmapLayer` | `Heatmap`（**无声明**，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
-| `BTrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
+| `LineLayer` | `LineLayer`（4.0.4 有声明） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
+| `FillLayer` | `FillLayer`（有声明） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
+| `HeatmapLayer` | `Heatmap`（**无声明**，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
+| `TrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
 
 「官方有没有声明」不是细节：**没有声明**的类只能按「运行时按需注入」处理，本库因此只暴露驱动已
 登记、且逐条核对过的入口。所以后两个组件**没有** `opacity` / `zIndex` / `minZoom` / `maxZoom`——
@@ -45,8 +45,8 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'bmap-vue
 
 | kind | 隐藏的语义 |
 | --- | --- |
-| `BLineLayer` / `BFillLayer`（有 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
-| `BHeatmapLayer` / `BTrackLineLayer`（没有 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
+| `LineLayer` / `FillLayer`（有 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
+| `HeatmapLayer` / `TrackLineLayer`（没有 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
 
 后者的行为来自实测：`removeLayer` 之后的实例再也渲染不了（重挂不会让内容回来），所以本库不去猜
 「复用可行」。文档只承诺能做到的事。
@@ -55,10 +55,10 @@ import { BLineLayer, BFillLayer, BHeatmapLayer, BTrackLineLayer } from 'bmap-vue
 
 ```vue
 <script setup lang="ts">
-import { BLineLayer } from 'bmap-vue'
-import type { BMapFeaturePick } from 'bmap-vue'
+import { LineLayer } from 'bmap-vue'
+import type { FeaturePick } from 'bmap-vue'
 
-function onClick(pick: BMapFeaturePick) {
+function onClick(pick: FeaturePick) {
   if (!pick.hit) return          // 官方未命中也派发事件
   if (pick.id === null) return   // 身份认不出（没设置 idKey / 该字段不是数字或字符串）
   console.log(pick.id, pick.item?.name)
@@ -66,7 +66,7 @@ function onClick(pick: BMapFeaturePick) {
 </script>
 
 <template>
-  <BLineLayer
+  <LineLayer
     :data="geojson"
     id-key="id"
     :style="{ strokeColor: '#0055ff', strokeWeight: 4 }"
@@ -77,7 +77,7 @@ function onClick(pick: BMapFeaturePick) {
 
 | 事件 | 说明 |
 | --- | --- |
-| `click` / `dblclick` / `rightclick` / `mousemove` | 载荷为 `BMapFeaturePick`（见下） |
+| `click` / `dblclick` / `rightclick` / `mousemove` | 载荷为 `FeaturePick`（见下） |
 
 官方**不派发** `mouseover` / `mouseout`，本库也不声明。
 
@@ -107,9 +107,9 @@ function onClick(pick: BMapFeaturePick) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BLineLayer } from 'bmap-vue'
+import { LineLayer } from 'bmap-vue'
 
-const layer = ref<InstanceType<typeof BLineLayer> | null>(null)
+const layer = ref<InstanceType<typeof LineLayer> | null>(null)
 
 function highlight(id: string) {
   const state = layer.value?.featureState
@@ -120,7 +120,7 @@ function highlight(id: string) {
 </script>
 
 <template>
-  <BLineLayer ref="layer" :data="geojson" id-key="id" />
+  <LineLayer ref="layer" :data="geojson" id-key="id" />
 </template>
 ```
 
@@ -137,11 +137,11 @@ function highlight(id: string) {
 - **图层未就绪时命令不排队**：告警一次并跳过。需要确定性时等挂载完成后再调用；
 - **状态样式要靠样式表达式读取**：官方的 `updateState` 只是把状态写进要素（声明原文：「状态会参与
   样式表达式的求值…在样式表达式中通过 `feature-state` 访问」），真正的视觉效果来自 `style` 里的
-  数据驱动表达式（`BMapStyleExpression` 的 `object` 那一支）。
+  数据驱动表达式（`StyleExpression` 的 `object` 那一支）。
 
-`BHeatmapLayer` **没有**要素状态入口，因此不提供该命令面。`BTrackLineLayer` 的命令面是**播放控制**（见下节），不是要素状态。
+`HeatmapLayer` **没有**要素状态入口，因此不提供该命令面。`TrackLineLayer` 的命令面是**播放控制**（见下节），不是要素状态。
 
-## 播放控制与进度观察（`BTrackLineLayer` / #110）
+## 播放控制与进度观察（`TrackLineLayer` / #110）
 
 `TrackLine` 的播放命令面与事件观察经 **live 探针取证**（`scripts/probe-track-line.mts`，2026-09-23，exit 0），方法名不是从类型包猜的。
 
@@ -168,22 +168,22 @@ function highlight(id: string) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BTrackLineLayer } from 'bmap-vue'
-import type { BTrackLineObserved } from 'bmap-vue'
+import { TrackLineLayer } from 'bmap-vue'
+import type { TrackLineObserved } from 'bmap-vue'
 
-const layer = ref<InstanceType<typeof BTrackLineLayer> | null>(null)
+const layer = ref<InstanceType<typeof TrackLineLayer> | null>(null)
 
 function play() {
   layer.value?.playback.start()
 }
 
-function onProgress(o: BTrackLineObserved) {
+function onProgress(o: TrackLineObserved) {
   // o.process / o.elapsed / o.distance / o.point / o.angle 来自 progress 载荷
 }
 </script>
 
 <template>
-  <BTrackLineLayer ref="layer" :data="track" @progress="onProgress" />
+  <TrackLineLayer ref="layer" :data="track" @progress="onProgress" />
 </template>
 ```
 
@@ -229,9 +229,9 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 - **`data = null` 的代价是一次重建**：官方专页这一族没有公开的清空入口（见「释放策略」的注），
   因此「没有数据」只能用「换一个没有数据的实例」表达。它是离散动作、代价可控，但**不是零成本**；
   需要「临时不显示」的用 `visible`（不要用 `data = null`）。
-- **`BHeatmapLayer` 的 `style` 是原样透传的键值袋**：官方扩展 API 只公开整袋 `setOptions`，没有可
-  核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `BLineLayer` / `BFillLayer`。
+- **`HeatmapLayer` 的 `style` 是原样透传的键值袋**：官方扩展 API 只公开整袋 `setOptions`，没有可
+  核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `LineLayer` / `FillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
-- **`BTrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
-- **`BMVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[BMVTLayer](./mvt-layer.md)」。
+- **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
+- **`MVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[MVTLayer](./mvt-layer.md)」。

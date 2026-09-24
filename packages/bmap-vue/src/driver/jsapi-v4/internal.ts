@@ -217,7 +217,7 @@ export function createMountTracker(): MountTracker {
  *
  * 非 Map 目标显式失败（`BMAP_CAPABILITY_UNSUPPORTED`）而不是让 SDK 调用变成静默 no-op；
  * 同时 `warn` 一次保证「组件 catch 了挂载异常」时仍可观测（与 Overlay Facet 对
- * `<BContextMenu>` 挂 Marker 的处理同源）。
+ * `<ContextMenu>` 挂 Marker 的处理同源）。
  */
 export function createMapTargetResolver(options: {
   /** Driver 名，用于告警与错误信息（例：`ControlDriver`）。 */

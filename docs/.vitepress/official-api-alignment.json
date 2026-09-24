@@ -1,0 +1,3437 @@
+{
+  "officialPackage": "@baidumap/react-bmap",
+  "officialVersion": "2.0.6",
+  "officialCommit": "fde5bbd3e5b4f85672174a4513acda3d7616744a",
+  "officialSource": "https://github.com/huiyan-fe/react-bmap",
+  "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
+  "officialPublicCount": 402,
+  "oursPublicCount": 394,
+  "uiKitCount": 55,
+  "matchedCount": 110,
+  "officialOnlyCount": 292,
+  "oursOnlyCount": 284,
+  "exceptions": [
+    {
+      "ours": "MapExpose",
+      "official": "MapRef",
+      "kind": "renamed",
+      "note": "官方叫 `MapRef`；本库 expose 面是 `createExpose()` 拼出的只读命令集，命名对齐组件而非 ref 类型别名。"
+    },
+    {
+      "ours": "useMapContext",
+      "official": "useBMapContext",
+      "kind": "renamed",
+      "note": "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。"
+    },
+    {
+      "ours": "useAreaBoundary",
+      "official": "useBoundary",
+      "kind": "renamed",
+      "note": "官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。"
+    },
+    {
+      "ours": "Autocomplete",
+      "official": null,
+      "kind": "ours-only",
+      "note": "官方只有 `useAutocomplete` hook，没有同名组件；本库有声明式 `<Autocomplete>` 薄封装。"
+    },
+    {
+      "ours": "MarkerCluster",
+      "official": null,
+      "kind": "ours-only",
+      "note": "官方 React 封装没有聚合组件（参考清单 0 命中）。"
+    },
+    {
+      "ours": "MarkerList",
+      "official": null,
+      "kind": "ours-only",
+      "note": "官方没有 `MarkerList`；本库数据组件。"
+    },
+    {
+      "ours": null,
+      "official": "useMapRef",
+      "kind": "official-only",
+      "note": "官方专用 ref hook；本库等价路径是 `<Map>` ref + `MapExpose`（不另设 `useMapRef`）。"
+    },
+    {
+      "ours": null,
+      "official": "useCapabilities",
+      "kind": "official-only",
+      "note": "官方 capability 读取 hook；本库能力目录在 `CAPABILITY_*` / `advanced` 入口，不镜像该 hook。"
+    },
+    {
+      "ours": null,
+      "official": "useDriver",
+      "kind": "official-only",
+      "note": "官方 driver 逃生 hook；本库逃生口是 `./advanced` 的 `createJsapiV4Driver` / `unwrapRaw`。"
+    },
+    {
+      "ours": null,
+      "official": "BMapErrorBoundary",
+      "kind": "official-only",
+      "note": "React error boundary 形态；Vue 对应物是插件级错误上报，不提供同名组件。"
+    },
+    {
+      "ours": null,
+      "official": "PlaceDetail",
+      "kind": "official-only",
+      "note": "官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。"
+    },
+    {
+      "ours": "PlaceSearch",
+      "official": null,
+      "kind": "ours-only",
+      "note": "标准 UI 在 `./ui-kit` 子路径；官方 React 根清单未导出同名组件（它用 `RoutePlan` 类型名占位）。"
+    },
+    {
+      "ours": "BMapClient",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。"
+    },
+    {
+      "ours": "BMapClientContext",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Client 注入上下文；官方无同名导出。保留 `BMap*` 前缀以区别于地图实例上下文。"
+    },
+    {
+      "ours": "BMapDriverFactory",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Driver 工厂类型；#135 不把 raw-SDK 边界类型改名（会与 `BMapDriver` 断开）。"
+    },
+    {
+      "ours": "BMapDriverInput",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Driver 构造入参；同上，raw-SDK 边界类型保留 `BMap*`。"
+    },
+    {
+      "ours": "BMapEngine",
+      "official": null,
+      "kind": "ours-only",
+      "note": "引擎 id 判别类型（`\"jsapi-v4\"`）；官方无对应导出。"
+    },
+    {
+      "ours": "BMapDrivingRouteOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "路线服务选项；官方 hook 选项形态不同，不镜像同名 type。"
+    },
+    {
+      "ours": "BMapRidingRouteOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "骑行路线选项；同上。"
+    },
+    {
+      "ours": "BMapWalkingRouteOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "步行路线选项；同上。"
+    },
+    {
+      "ours": "BMapTransitRouteOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "公交路线选项；同上。"
+    },
+    {
+      "ours": "BMapGeolocationOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "定位选项；官方 hook 不导出同名 options。"
+    },
+    {
+      "ours": "BMapGeoResult",
+      "official": null,
+      "kind": "ours-only",
+      "note": "地理编码结果 DTO；官方无同名 type。"
+    },
+    {
+      "ours": "BMapIpLocationResult",
+      "official": null,
+      "kind": "ours-only",
+      "note": "IP 定位结果 DTO；官方无同名 type。"
+    },
+    {
+      "ours": "BMapLocalSearchOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "本地检索 options；本库 service 层独立状态机，官方无同名 type。"
+    },
+    {
+      "ours": "BMapLocalSearchRenderOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "本地检索绘制 options；同上。"
+    },
+    {
+      "ours": "BMapLocalSearchOperation",
+      "official": null,
+      "kind": "ours-only",
+      "note": "本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。"
+    },
+    {
+      "ours": "BMapServiceStatus",
+      "official": null,
+      "kind": "ours-only",
+      "note": "服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。"
+    },
+    {
+      "ours": "BMapPluginConfig",
+      "official": null,
+      "kind": "ours-only",
+      "note": "插件配置；官方无同名导出。"
+    },
+    {
+      "ours": "BMapProviderLike",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。"
+    },
+    {
+      "ours": "CreateBMapClientOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "`createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。"
+    },
+    {
+      "ours": "CreateBMapPluginOptions",
+      "official": null,
+      "kind": "ours-only",
+      "note": "`createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。"
+    },
+    {
+      "ours": "bmapClientContextKey",
+      "official": null,
+      "kind": "ours-only",
+      "note": "Client 上下文 InjectionKey；Vue DI 键，官方 React 无对应。"
+    },
+    {
+      "ours": "bmapConfigKey",
+      "official": null,
+      "kind": "ours-only",
+      "note": "插件配置 InjectionKey；同上。"
+    },
+    {
+      "ours": null,
+      "official": "BMapContextValue",
+      "kind": "official-only",
+      "note": "官方 React context value 类型；Vue 对应是 `useMapContext` 返回面 / `MapContext*`。"
+    },
+    {
+      "ours": null,
+      "official": "BMapEvent",
+      "kind": "official-only",
+      "note": "官方事件对象类型；本库 typed emits + `MapComponentEvent*` 矩阵。"
+    },
+    {
+      "ours": null,
+      "official": "BMapVersion",
+      "kind": "official-only",
+      "note": "官方 SDK 版本类型；本库经 `BMapEngine` / loader 元数据表达。"
+    }
+  ],
+  "matched": [
+    {
+      "name": "BezierCurve",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "BMapProvider",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Circle",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "CityListControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "ContextMenu",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "CopyrightControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "CustomControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "CustomOverlay",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "DistrictLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "DOMLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "FillLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "GeoJSONLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "GroundOverlay",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "InfoWindow",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Label",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "LineLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "LocationControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Map",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MapMask",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MapTypeControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Marker",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Marker3D",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MenuItem",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MVTLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "NavigationControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "NavigationControl3D",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "OverviewMapControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Panorama",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PanoramaControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PanoramaCoverageLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PanoramaLabel",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PointCollection",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PointIconLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Polygon",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Polyline",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Prism",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "RasterTileLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "Rectangle",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "ScaleControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "TileLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "TrafficLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "WMSLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "WMTSLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "XYZLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "ZoomControl",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "useConvertor",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useDrivingRoute",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useGeocoder",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useGeolocation",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useLocalSearch",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMap",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMapContext",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMapEvent",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMapReady",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMapStatus",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "usePanoramaService",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useRidingRoute",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useTransitRoute",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useWalkingRoute",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BezierCurveProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapDriver",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapProviderProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "Bounds",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "Capability",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "CircleProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ContextMenuProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "CustomOverlayProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "DrivingPolicy",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "DrivingRouteOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "DrivingRouteResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "FillLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "FillLayerStyle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "GroundOverlayProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "InfoWindowProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LabelProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LayerHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LineLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LineLayerStyle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchRenderOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapMouseEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MenuItemProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaPov",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "Pixel",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "Point",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointCollectionProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointIconLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolygonProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolylineProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PrismProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RectangleProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RidingRouteOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RidingRouteResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RoutePlan",
+      "surface": "type",
+      "oursEntry": "./ui-kit"
+    },
+    {
+      "name": "ServiceHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "Size",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitPolicy",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitRouteOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitRouteResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "UnsupportedBehavior",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ViewAnimationKeyFrames",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "WalkingRouteOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "WalkingRouteResult",
+      "surface": "type",
+      "oursEntry": "."
+    }
+  ],
+  "officialOnly": [
+    {
+      "name": "BaiduLayer",
+      "surface": "component"
+    },
+    {
+      "name": "CanvasLayer",
+      "surface": "component"
+    },
+    {
+      "name": "CAPABILITY_MATRIX",
+      "surface": "component"
+    },
+    {
+      "name": "CustomLayer",
+      "surface": "component"
+    },
+    {
+      "name": "FeatureLayer",
+      "surface": "component"
+    },
+    {
+      "name": "GeolocationControl",
+      "surface": "component"
+    },
+    {
+      "name": "GroundPoint",
+      "surface": "component"
+    },
+    {
+      "name": "Hotspot",
+      "surface": "component"
+    },
+    {
+      "name": "Icon",
+      "surface": "component"
+    },
+    {
+      "name": "IconSequence",
+      "surface": "component"
+    },
+    {
+      "name": "LogoControl",
+      "surface": "component"
+    },
+    {
+      "name": "NormalLayer",
+      "surface": "component"
+    },
+    {
+      "name": "PixelLayer",
+      "surface": "component"
+    },
+    {
+      "name": "PlaceDetail",
+      "surface": "component"
+    },
+    {
+      "name": "PlaceDetailPanel",
+      "surface": "component"
+    },
+    {
+      "name": "PointShapeLayer",
+      "surface": "component"
+    },
+    {
+      "name": "RawControl",
+      "surface": "component"
+    },
+    {
+      "name": "RawOverlay",
+      "surface": "component"
+    },
+    {
+      "name": "SimpleInfoWindow",
+      "surface": "component"
+    },
+    {
+      "name": "Symbol",
+      "surface": "component"
+    },
+    {
+      "name": "ThreeLayer",
+      "surface": "component"
+    },
+    {
+      "name": "useAutocomplete",
+      "surface": "hook"
+    },
+    {
+      "name": "useBMapContext",
+      "surface": "hook"
+    },
+    {
+      "name": "useBoundary",
+      "surface": "hook"
+    },
+    {
+      "name": "useBusLineSearch",
+      "surface": "hook"
+    },
+    {
+      "name": "useCapabilities",
+      "surface": "hook"
+    },
+    {
+      "name": "useDriver",
+      "surface": "hook"
+    },
+    {
+      "name": "useIcon",
+      "surface": "hook"
+    },
+    {
+      "name": "useLocalCity",
+      "surface": "hook"
+    },
+    {
+      "name": "useMapRef",
+      "surface": "hook"
+    },
+    {
+      "name": "useOverlayTarget",
+      "surface": "hook"
+    },
+    {
+      "name": "usePlaceDetail",
+      "surface": "hook"
+    },
+    {
+      "name": "useRawControl",
+      "surface": "hook"
+    },
+    {
+      "name": "useRawOverlay",
+      "surface": "hook"
+    },
+    {
+      "name": "useSymbol",
+      "surface": "hook"
+    },
+    {
+      "name": "useTruckRoute",
+      "surface": "hook"
+    },
+    {
+      "name": "BMAP_ANCHOR_BOTTOM_CENTER",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_BOTTOM_LEFT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_BOTTOM_RIGHT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_CENTER",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_MIDDLE_LEFT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_MIDDLE_RIGHT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_TOP_CENTER",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_TOP_LEFT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANCHOR_TOP_RIGHT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANIMATION_BOUNCE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_ANIMATION_DROP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_CONGESTION",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_CONGESTION_PAY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_HIGHWAYS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_HIGHWAYS_CONGESTION",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_HIGHWAYS_CONGESTION_PAY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_HIGHWAYS_PAY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_AVOID_PAY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_DEFAULT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_DESTANCE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_DISTANCE_PRIORITY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_FIRST_HIGHWAYS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_HIGHWAYS_AVOID_CONGESTION",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_DRIVING_POLICY_TIME_PRIORITY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_EARTH_MAP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_HYBRID_MAP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_LANG_CN",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_LANG_EN",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_MAPTYPE_CONTROL_DROPDOWN",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_MAPTYPE_CONTROL_HORIZONTAL",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_MAPTYPE_CONTROL_MAP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_NAVIGATION_CONTROL_LARGE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_NAVIGATION_CONTROL_PAN",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_NAVIGATION_CONTROL_SMALL",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_NAVIGATION_CONTROL_ZOOM",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_NORMAL_MAP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_ARROW",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_ARROW_TAIL",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_CIRCLE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_CROSS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_DIAMOND",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_SQUARE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_STAR",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_TRIANGLE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_POINT_SHAPE_LAYER_WATERDROP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_SATELLITE_MAP",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_SHAPE_CIRCLE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_SHAPE_RECTANGLE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_CITY_LIST",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_INVALID_KEY",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_INVALID_REQUEST",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_PERMISSION_DENIED",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_SERVICE_UNAVAILABLE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_SUCCESS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_TIMEOUT",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_UNKNOWN_LOCATION",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_STATUS_UNKNOWN_ROUTE",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_AVOID_SUBWAYS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_FIRST_SUBWAYS",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_LEAST_TIME",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_LEAST_TRANSFER",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_LEAST_WALKING",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_TRANSIT_POLICY_RECOMMEND",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_UNIT_IMPERIAL",
+      "surface": "constant"
+    },
+    {
+      "name": "BMAP_UNIT_METRIC",
+      "surface": "constant"
+    },
+    {
+      "name": "AddressComponent",
+      "surface": "type"
+    },
+    {
+      "name": "Animation",
+      "surface": "type"
+    },
+    {
+      "name": "AutocompleteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "AutocompleteOptions",
+      "surface": "type"
+    },
+    {
+      "name": "AutocompleteResult",
+      "surface": "type"
+    },
+    {
+      "name": "AutocompleteResultPoi",
+      "surface": "type"
+    },
+    {
+      "name": "BaiduLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "BaiduLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "BezierCurveOptions",
+      "surface": "type"
+    },
+    {
+      "name": "BMapContextValue",
+      "surface": "type"
+    },
+    {
+      "name": "BMapErrorBoundary",
+      "surface": "type"
+    },
+    {
+      "name": "BMapEvent",
+      "surface": "type"
+    },
+    {
+      "name": "BMapVersion",
+      "surface": "type"
+    },
+    {
+      "name": "BoundaryHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "BoundaryResult",
+      "surface": "type"
+    },
+    {
+      "name": "BusLine",
+      "surface": "type"
+    },
+    {
+      "name": "BusLineSearchHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "BusLineSearchOptions",
+      "surface": "type"
+    },
+    {
+      "name": "BusListItem",
+      "surface": "type"
+    },
+    {
+      "name": "BusListResult",
+      "surface": "type"
+    },
+    {
+      "name": "BusStation",
+      "surface": "type"
+    },
+    {
+      "name": "CanvasLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "CanvasLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "CircleOptions",
+      "surface": "type"
+    },
+    {
+      "name": "CityListControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "CityListControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "ControlAnchor",
+      "surface": "type"
+    },
+    {
+      "name": "ConvertorHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "CopyrightControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "CopyrightControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "CopyrightItem",
+      "surface": "type"
+    },
+    {
+      "name": "CustomControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "CustomLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "CustomLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "CustomOverlayOptions",
+      "surface": "type"
+    },
+    {
+      "name": "DisplayOptions",
+      "surface": "type"
+    },
+    {
+      "name": "DistrictLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "DistrictLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "DOMLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "DOMLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "DrivingRouteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "FeatureLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "FeatureLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "FillLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "GeocoderHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "GeocoderResult",
+      "surface": "type"
+    },
+    {
+      "name": "GeoJSONLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "GeoJSONLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "GeolocationControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "GeolocationControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "GeolocationHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "GeolocationResult",
+      "surface": "type"
+    },
+    {
+      "name": "GroundOverlayOptions",
+      "surface": "type"
+    },
+    {
+      "name": "GroundPointOptions",
+      "surface": "type"
+    },
+    {
+      "name": "GroundPointProps",
+      "surface": "type"
+    },
+    {
+      "name": "HotspotOptions",
+      "surface": "type"
+    },
+    {
+      "name": "HotspotProps",
+      "surface": "type"
+    },
+    {
+      "name": "IconOptions",
+      "surface": "type"
+    },
+    {
+      "name": "IconProps",
+      "surface": "type"
+    },
+    {
+      "name": "IconSequenceHandle",
+      "surface": "type"
+    },
+    {
+      "name": "IconSequenceProps",
+      "surface": "type"
+    },
+    {
+      "name": "InfoWindowOptions",
+      "surface": "type"
+    },
+    {
+      "name": "LabelOptions",
+      "surface": "type"
+    },
+    {
+      "name": "Language",
+      "surface": "type"
+    },
+    {
+      "name": "LengthUnit",
+      "surface": "type"
+    },
+    {
+      "name": "LineLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "LoadKeyComponents",
+      "surface": "type"
+    },
+    {
+      "name": "LocalCityHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "LocalCityResult",
+      "surface": "type"
+    },
+    {
+      "name": "LocalResult",
+      "surface": "type"
+    },
+    {
+      "name": "LocalResultPoi",
+      "surface": "type"
+    },
+    {
+      "name": "LocalSearchHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "LocationControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "LocationControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "LogoControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "LogoControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "MapContextValue",
+      "surface": "type"
+    },
+    {
+      "name": "MapCustomArea",
+      "surface": "type"
+    },
+    {
+      "name": "MapEvent",
+      "surface": "type"
+    },
+    {
+      "name": "MapLabel",
+      "surface": "type"
+    },
+    {
+      "name": "MapMaskOptions",
+      "surface": "type"
+    },
+    {
+      "name": "MapMaskProps",
+      "surface": "type"
+    },
+    {
+      "name": "MapMoveEvent",
+      "surface": "type"
+    },
+    {
+      "name": "MapPanes",
+      "surface": "type"
+    },
+    {
+      "name": "MapRef",
+      "surface": "type"
+    },
+    {
+      "name": "MapSnapshot",
+      "surface": "type"
+    },
+    {
+      "name": "MapStyleConfig",
+      "surface": "type"
+    },
+    {
+      "name": "MapStyleV2Options",
+      "surface": "type"
+    },
+    {
+      "name": "MapTypeControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "MapTypeControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "MapTypeControlType",
+      "surface": "type"
+    },
+    {
+      "name": "MapTypeId",
+      "surface": "type"
+    },
+    {
+      "name": "MapZoomEvent",
+      "surface": "type"
+    },
+    {
+      "name": "Marker3DOptions",
+      "surface": "type"
+    },
+    {
+      "name": "Marker3DProps",
+      "surface": "type"
+    },
+    {
+      "name": "MarkerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "MVTLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "NavigationControl3DOptions",
+      "surface": "type"
+    },
+    {
+      "name": "NavigationControl3DProps",
+      "surface": "type"
+    },
+    {
+      "name": "NavigationControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "NavigationControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "NavigationControlType",
+      "surface": "type"
+    },
+    {
+      "name": "NormalLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "NormalLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "OpResult",
+      "surface": "type"
+    },
+    {
+      "name": "OverlayReactProps",
+      "surface": "type"
+    },
+    {
+      "name": "OverlayTargetContextValue",
+      "surface": "type"
+    },
+    {
+      "name": "OverviewMapControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "OverviewMapControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaCoverageLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaData",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaLabelProps",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaProps",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaRef",
+      "surface": "type"
+    },
+    {
+      "name": "PanoramaServiceHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "PixelLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PixelLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "PlaceDetailHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "PlaceDetailOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PlaceDetailPanelProps",
+      "surface": "type"
+    },
+    {
+      "name": "PlaceDetailProps",
+      "surface": "type"
+    },
+    {
+      "name": "PlaceDetailRenderOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PlainIcon",
+      "surface": "type"
+    },
+    {
+      "name": "PointCollectionOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PointIconLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PointIconStyle",
+      "surface": "type"
+    },
+    {
+      "name": "PointShapeLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PointShapeLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "PointShapeLayerShapeType",
+      "surface": "type"
+    },
+    {
+      "name": "PointShapeStyle",
+      "surface": "type"
+    },
+    {
+      "name": "PolygonOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PolylineOptions",
+      "surface": "type"
+    },
+    {
+      "name": "PredictDate",
+      "surface": "type"
+    },
+    {
+      "name": "PrismOptions",
+      "surface": "type"
+    },
+    {
+      "name": "Projection",
+      "surface": "type"
+    },
+    {
+      "name": "RasterTileLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "RasterTileLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "RawControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "RawOverlayProps",
+      "surface": "type"
+    },
+    {
+      "name": "RectangleOptions",
+      "surface": "type"
+    },
+    {
+      "name": "RenderOptions",
+      "surface": "type"
+    },
+    {
+      "name": "RidingRouteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "Route",
+      "surface": "type"
+    },
+    {
+      "name": "ScaleControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "ScaleControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "ServiceStatus",
+      "surface": "type"
+    },
+    {
+      "name": "ShapeType",
+      "surface": "type"
+    },
+    {
+      "name": "SimpleInfoWindowOptions",
+      "surface": "type"
+    },
+    {
+      "name": "SimpleInfoWindowProps",
+      "surface": "type"
+    },
+    {
+      "name": "Step",
+      "surface": "type"
+    },
+    {
+      "name": "SymbolIcon",
+      "surface": "type"
+    },
+    {
+      "name": "SymbolOptions",
+      "surface": "type"
+    },
+    {
+      "name": "SymbolProps",
+      "surface": "type"
+    },
+    {
+      "name": "SymbolShapeType",
+      "surface": "type"
+    },
+    {
+      "name": "TaxiFare",
+      "surface": "type"
+    },
+    {
+      "name": "TaxiFareDetail",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeLayerHook",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeLayerInstance",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeLayerRef",
+      "surface": "type"
+    },
+    {
+      "name": "ThreeObject",
+      "surface": "type"
+    },
+    {
+      "name": "TileLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "TileLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "TrafficLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "TrafficLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "TransitLine",
+      "surface": "type"
+    },
+    {
+      "name": "TransitPlan",
+      "surface": "type"
+    },
+    {
+      "name": "TransitRouteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "TranslateResults",
+      "surface": "type"
+    },
+    {
+      "name": "TruckRouteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "TruckRouteOptions",
+      "surface": "type"
+    },
+    {
+      "name": "UnsupportedCapabilityError",
+      "surface": "type"
+    },
+    {
+      "name": "ViewAnimation",
+      "surface": "type"
+    },
+    {
+      "name": "ViewAnimationOptions",
+      "surface": "type"
+    },
+    {
+      "name": "Viewport",
+      "surface": "type"
+    },
+    {
+      "name": "ViewportOptions",
+      "surface": "type"
+    },
+    {
+      "name": "WalkingRouteHookResult",
+      "surface": "type"
+    },
+    {
+      "name": "WMSLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "WMSLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "WMTSLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "WMTSLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "XYZLayerOptions",
+      "surface": "type"
+    },
+    {
+      "name": "XYZLayerProps",
+      "surface": "type"
+    },
+    {
+      "name": "ZoomControlOptions",
+      "surface": "type"
+    },
+    {
+      "name": "ZoomControlProps",
+      "surface": "type"
+    },
+    {
+      "name": "createDriver",
+      "surface": "other"
+    },
+    {
+      "name": "getSdkConstant",
+      "surface": "other"
+    },
+    {
+      "name": "tryOp",
+      "surface": "other"
+    }
+  ],
+  "oursOnly": [
+    {
+      "name": "Autocomplete",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "HeatmapLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MarkerCluster",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MarkerList",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "MenuSeparator",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PointLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "TrackLineLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "useAreaBoundary",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useControllableState",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useGeocodeDetail",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useIpLocation",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useMarkerIcons",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useOptionalClientContext",
+      "surface": "hook",
+      "oursEntry": "."
+    },
+    {
+      "name": "useOverlaySpec",
+      "surface": "hook",
+      "oursEntry": "."
+    },
+    {
+      "name": "useParentOverlayHandle",
+      "surface": "hook",
+      "oursEntry": "."
+    },
+    {
+      "name": "useRequiredClientContext",
+      "surface": "hook",
+      "oursEntry": "."
+    },
+    {
+      "name": "useSdkResource",
+      "surface": "hook",
+      "oursEntry": "."
+    },
+    {
+      "name": "useServiceTask",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "useViewAnimation",
+      "surface": "hook",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMAP_COMPONENT_EVENT_ALIASES",
+      "surface": "constant",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMAP_COMPONENT_EVENT_CATALOG",
+      "surface": "constant",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapClientContext",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapDrivingRouteOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapGeolocationOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapGeoResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapIpLocationResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapLocalSearchOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapLocalSearchRenderOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapRidingRouteOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapServiceStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapTransitRouteOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapWalkingRouteOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CapabilityStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "CircleHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ClientStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ContextMenuSelectPayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlOptionStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "CreateBMapClientOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "CreateBMapPluginOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "createClientContext",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "DataComponentProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "DisposeContext",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeatureStateUpdateOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "GeocodeDetailItemResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "GeocodeDetailResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "GeocodeItemResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "HeatmapLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "InfoWindowHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "InitialMapOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LabelHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapContext",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventPayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapLoadEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapLoadPayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapPointerEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapReadyContext",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapResizeEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapResizePayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapRuntimeStatus",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapTypeChangeEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapTypeChangePayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerClusterProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerListProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerBaseEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerMouseEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerMouseMoveEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerPickEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "NativeLayerCommonProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "NativeLayerPickOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventPayload",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayPartialPointerEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayPointerEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaLabelHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaLabelOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolygonHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolylineHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ResolvedMapEvent",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "resolveMapContext",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ResourceScopeOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteRenderOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteServiceHandle",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "SdkResourceStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceCallStatus",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceInvokeContext",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ServiceResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "TargetContext",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "TrackLineLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "UseControllableStateOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "UseMapEventOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "UseMapStatusOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "UseOverlaySpecOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "UseOverlaySpecResult",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "UseServiceTaskOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "UseViewAnimationOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ViewAnimationStatus",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "AreaBoundary",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapClient",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "bmapClientContextKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "bmapConfigKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapDriverFactory",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapDriverInput",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapEngine",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapLocalSearchOperation",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "BMapPluginConfig",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapProviderLike",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BMapResolver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BoundaryRings",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BUILTIN_PLUGIN_CATALOG",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BUILTIN_PLUGIN_NAMES",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "BUILTIN_PLUGIN_URLS",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "CapabilityDescriptor",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "CapabilityExplanation",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "CapabilityFamily",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "CapabilityRegistry",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ClusterChange",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ClusterPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ContextMenuItem",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ContextMenuSeparator",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControllableMode",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ControllableState",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CoordinatesFromType",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CoordinatesToType",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "createBMapClientDefinition",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "createBMapPlugin",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "createDeprecationWarner",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "defaultClientDefinitionKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DEPRECATED_EVENT_ALIAS_CODE",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DEPRECATED_PROP_ALIAS_CODE",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DeprecationNotice",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DeprecationWarner",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "describeDeprecation",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "Disposer",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DistrictType",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DistrictTypeValue",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "drawingManagerPlugin",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DrivingRouteEndpoint",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "DrivingRouteRequest",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "dynamicEmit",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "EqualFn",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "eventAliasesOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "EventDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeaturePick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeatureStateApi",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeatureStateKeyDomain",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeatureStateKeys",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "FeatureStateKeysOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GeocodedAddress",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GeocodedAddressComponents",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GeocodeDetailAddressComponents",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "GeometryDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GeoPoint",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "geoUtilsPlugin",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GroundOverlayType",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "GroundOverlayUrl",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "IntercityPolicy",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "JsapiV4Driver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LabelStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LayerDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LoadedSdk",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchBounds",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchInBoundsRequest",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchKeyword",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchLocation",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LocalSearchNearbyRequest",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchPoi",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "LocalSearchSearchOption",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MAP_EVENT_CATALOG",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MAP_EVENT_EMIT_ALIASES",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MAP_EVENT_NAMES",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MAP_SUSPEND_REASONS",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapCommands",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapComponentEmitName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapComponentEventName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventDefinition",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventHandler",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapEventMap",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventPayloadForName",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapEventPayloadKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventPayloadOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventSdkName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapEventSource",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapEventSourceInput",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapExpose",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapInteraction",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapMaskShowRegion",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapStatusRefs",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MapStyleInput",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapSuspendReason",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapType",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "mapVglPlugin",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MapView",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerClusterEngine",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerCustomIcon",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerIcon",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MarkerIconName",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "mvtFeatureStateKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerEntity",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "MVTLayerStyleEntry",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "NativeLayerDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "NativeLayerKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "NativeLayerOperation",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "normalizeEventKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OVERLAY_EVENT_ALIASES",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OVERLAY_EVENT_MATRIX",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OVERLAY_PROP_ALIASES",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventAlias",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventDefinition",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventMatrixEntry",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventMatrixKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "overlayEventOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventPayloadKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "overlayEventsOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayEventSpec",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayFieldMap",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayFieldUpdate",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayFieldWatch",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "overlayPointerFallback",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayPositionModel",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayPropAlias",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlaySpec",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaDataInfo",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaPoiType",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaSceneType",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PanoramaViewerDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PluginCatalogEntry",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointInput",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointLike",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PointPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "propAliasesOf",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "resolveMapEventName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "resolvePluginDefinition",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ResourceScope",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteEndpoint",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteEndpointInfo",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteEndpointPoi",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteLeg",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteRenderState",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteRequest",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteServiceKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteState",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteStep",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteTaxiFare",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "RouteTaxiFareDetail",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "SdkResourceSpec",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceCall",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceErrorInfo",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceInvocationDriver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ServiceTask",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "SizeLike",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "stringToPluginDefinitions",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "StyleExpression",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "SupersedeMode",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "SupersedePolicy",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "targetContextKey",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TargetKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "toSdkEventName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "toVueEventName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "trackAnimationPlugin",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TrackLineLayerExpose",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TrackLineObserved",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitLineSegment",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitRoutePlan",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitRouteRequest",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitRouteSegment",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitVehiclePolicy",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TransitWalkSegment",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "urlPluginDefinition",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "UseViewAnimationReturn",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "XYLike",
+      "surface": "other",
+      "oursEntry": "."
+    }
+  ],
+  "uiKitOnly": [
+    "isUiKitLoaded",
+    "loadUiKit",
+    "PlaceAutocomplete",
+    "PlaceAutocompleteDisplayDTO",
+    "PlaceAutocompleteProps",
+    "PlaceBoundsDTO",
+    "PlaceDetail",
+    "PlaceDetailDisplayDTO",
+    "PlaceDetailDTO",
+    "PlaceDetailPlaceInput",
+    "PlaceDetailPlaceObject",
+    "PlaceDetailProps",
+    "PlaceHighlightChangeDTO",
+    "PlaceHighlightDTO",
+    "PlacePoiDTO",
+    "PlacePointDTO",
+    "PlaceSearch",
+    "PlaceSearchDisplayDTO",
+    "PlaceSearchProps",
+    "PlaceSuggestionDTO",
+    "RouteDriveSegmentDTO",
+    "RoutePlanDrivingOptionsDTO",
+    "RoutePlanDrivingPolicy",
+    "RoutePlanDTO",
+    "RoutePlanEndpointInput",
+    "RoutePlanMode",
+    "RoutePlanNavClickDTO",
+    "RoutePlanPlanSelectDTO",
+    "RoutePlanProps",
+    "RoutePlanResultDTO",
+    "RoutePlanSearchOptionsDTO",
+    "RoutePlanTypeChangeDTO",
+    "RoutePointDTO",
+    "RouteRidingSegmentDTO",
+    "RouteSegmentBaseDTO",
+    "RouteSegmentDTO",
+    "RouteSegmentType",
+    "RouteTransitSegmentDTO",
+    "RouteTransitSubType",
+    "RouteWalkSegmentDTO",
+    "UI_KIT_PACKAGE",
+    "UI_KIT_STYLE_PATH",
+    "UiKitAutocompleteWidget",
+    "UiKitModule",
+    "UiKitPlaceDetailWidget",
+    "UiKitRoutePlanWidget",
+    "UiKitSearchWidget",
+    "UiKitSubscription",
+    "UiKitWidgetHandle",
+    "UiKitWidgetOptions",
+    "UiKitWidgetStatus",
+    "useUiKitWidget",
+    "UseUiKitWidgetOptions",
+    "UseUiKitWidgetResult"
+  ]
+}
