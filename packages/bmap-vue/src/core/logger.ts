@@ -77,8 +77,26 @@ declare const process: { env?: Record<string, string | undefined> };
  * `default*` 被覆盖…），出现在最终用户的 console 里没有意义。
  */
 export function devWarn(message: string, context?: Record<string, unknown>): void {
-  if (process.env?.NODE_ENV === "production") return;
+  if (!isDev()) return;
   logger.warn(message, context);
+}
+
+/**
+ * 是否「非生产」环境 —— `devWarn` 的**同一个**判定，供调用方决定**要不要为开发期提示付出
+ * runtime**（#137 复审十轮 P1）。
+ *
+ * 存在的理由：`devWarn` 自己在 production 早退，但这只省掉了**输出**。若某个 watcher 的**唯一**
+ * 用途就是驱动 `devWarn`，它在 production 仍然会注册并常驻（`useControllableState` 的
+ * `defaultValue` 告警 watcher 就是这样：`<Map>` 四个视野字段各一个，共 4 个 `ReactiveEffect`，
+ * production 下永远静音）。**只判「会不会打印」不够，还要判「值不值得为它注册监听」。**
+ *
+ * ⚠️ 必须与 `devWarn` 用**同一份**判定，否则两边会对「现在是不是开发环境」产生分歧（例如
+ * `devWarn` 认为不是、watcher 却注册了）。同理**不要**在发布构建里把它定死——见上面
+ * `declare const process` 的注释：判定留给消费方折叠，ESM 档保留可折叠标记，IIFE 档由
+ * `vite.config.global.ts` define。
+ */
+export function isDev(): boolean {
+  return process.env?.NODE_ENV !== "production";
 }
 
 /**

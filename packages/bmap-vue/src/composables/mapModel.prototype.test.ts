@@ -437,7 +437,15 @@ describe("#137 Map model prototype（对照读数）", () => {
 
     // A：SDK 腿 watcher（Map.vue:1225 同形）+ useControllableState 内部的 defaultValue 告警
     //    watcher（`defaultZoom` 有传，所以会建）= 2
-    expect(a, "A：SDK 腿 + defaultValue 告警 watcher").toBe(2);
+    //
+    // ⚠️ **这个 2 是「非生产」下的读数**。`defaultValue` 告警 watcher 现在按 `isDev()` 门控
+    //（#137 复审十轮 P1），而本文件跑在 vitest 里（`NODE_ENV=test` ≠ production）⇒ 仍会注册。
+    // **production 下这个 helper 自己注册的 effect 恒为 0**（实测：告警 watcher 不再注册，
+    // 而 `useControllableState` 内部**只有**这一个 watcher）——于是整条 A 线路只剩 `Map.vue`
+    // 侧那条 SDK 腿 watcher，B 线路仍多一个 `useModel` 内部 effect：**差异方向不变，绝对值变了**。
+    // ⚠️ 别把这个 0 读成「A 什么都不注册」：`Map.vue` 的 SDK 腿 watcher 在组件侧，不在本 helper 内。
+    // 门控本身的判别力由 `useControllableState.test.ts` 的 effect gate 覆盖（同一套口径）。
+    expect(a, "A：SDK 腿 + defaultValue 告警 watcher（非生产）").toBe(2);
     // B₀：只有 useModel 内部的 watchSyncEffect = 1
     expect(b0, "B₀：只有 useModel 内部 effect").toBe(1);
     // B：useModel 内部 effect + 兼任「记最后外部值 / mode 告警 / 写 SDK」的**单条** watcher

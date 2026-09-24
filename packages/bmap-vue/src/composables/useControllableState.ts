@@ -79,7 +79,7 @@
  * （内部会注册一个 `defaultValue` 变化的告警 watcher，需要随作用域一起释放）。
  */
 import { computed, shallowRef, watch, type ComputedRef, type ShallowRef } from "vue";
-import { devWarn } from "../core/logger";
+import { devWarn, isDev } from "../core/logger";
 
 /** 相等判定。**必须容忍浮点抖动**（见 `core/utils/equality`），否则受控写入与 SDK 回写会形成往返。 */
 export type EqualFn<T> = (a: T, b: T) => boolean;
@@ -199,7 +199,9 @@ export function useControllableState<T>(
   // 与 `isControlled` 同理：**告警行为是冻结的，不等于去重容器必须在构造期分配**。
   let warned: Set<string> | undefined;
   const warnOnce = (key: string, message: string): void => {
-    if (!warn || warned?.has(key)) return;
+    // ⚠️ `isDev()` 必须在**分配 Set 之前**短路（复审十轮 P1）：否则 production 下发生模式
+    // 切换时仍会「分配 Set → 记 key → 调 devWarn → 在 devWarn 里 return」，白做三步。
+    if (!warn || !isDev() || warned?.has(key)) return;
     (warned ??= new Set()).add(key);
     devWarn(message, { field: name });
   };
@@ -245,7 +247,15 @@ export function useControllableState<T>(
     internal.value = copy(initial);
   }
 
-  if (defaultValue) {
+  // **只在「真的可能告警」时才注册这个 watcher**（#137 复审十轮 P1）。它的唯一用途是驱动
+  // `devWarn`，而两个条件任一不成立，它就永远不会产生任何可观察输出：
+  // - `warn: false` —— 调用方显式声明「永不 warning」，这个 effect 仍常驻就是纯浪费；
+  // - production —— `devWarn` 会早退，`<Map>` 四个视野字段就是**四个永远静音的常驻
+  //   `ReactiveEffect`**。这正是原型 A=2 里的第二个 effect，比前两轮收掉的对象更重。
+  //
+  // 判定用 logger 的 `isDev()`——**必须与 `devWarn` 同源**，否则两边会分歧（一边认为在生产、
+  // 一边却注册了监听）。它保留 `process.env.NODE_ENV` 标记给消费方折叠，不在发布构建里定死。
+  if (defaultValue && warn && isDev()) {
     watch(defaultValue, (next, previous) => {
       // 首次解析之后**任何** default 写入都不生效，都该告警一次：值改变、从无到有、从有到无。
       // 「两边都没给」与「值没变」不算写入——父级每次渲染传内联字面量时引用会变，但语义没变。

@@ -412,8 +412,26 @@ Vue-native 那条路**没有更省**（3 vs 2），且 `useModel` 在 B 里换�
 Set**。⇒ 也改为惰性创建（`warnOnce` 里 `??= new Set()`）。**告警行为是冻结的**（每种方向最多一次），
 **不等于去重容器必须在构造期分配** —— 与 `isControlled` 完全同一条推理。
 
-⇒ #137 验收第 2 条在本票里因此有**两处真正的 runtime 收口**（`isControlled` 与 `warned`），
-都不是靠「删掉」，而是靠「不再为没人用的东西付费」。
+**第三处（复审十轮 P1）——比前两处更重**：`defaultValue` 的 dev 告警 watcher 是
+**无条件注册**的，而 `<Map>` 四个视野字段**始终**都传 `defaultValue` ⇒ 每次实例化**恒定 4 个
+`ReactiveEffect`**，唯一用途是将来 `default*` 变化时给一条 **dev warning**。两个条件下它永远不会
+产生任何可观察输出，却仍常驻：
+
+- `warn: false` —— 调用方已显式声明「永不 warning」；
+- production —— `devWarn` 早退。这正是原型 A=2 里的**第二个 effect**。
+
+⇒ 改为 `if (defaultValue && warn && isDev())`。`isDev()` 是从 logger 导出的**同源**判定
+（`devWarn` 内部也改用它），避免两边对「是不是开发环境」产生分歧；`warnOnce` 里的 `!isDev()`
+短路放在**分配 Set 之前**，否则 production 下模式切换仍会白做「分配 Set → 记 key → 调
+`devWarn` → 早退」三步。判定仍保留 `process.env.NODE_ENV` 标记交给消费方折叠，**没有**在发布
+构建里定死（IIFE 档仍由 `vite.config.global.ts` define，package verifier 的 marker 检查不受影响）。
+
+**实测影响**：非生产下 A=2 / B=3 不变；**production 下 `useControllableState` 自身注册的 effect
+恒为 0**（它内部只有这一个 watcher），A 只剩 `Map.vue` 侧那条 SDK 腿 watcher，而 B 仍多一个
+`useModel` 内部 effect —— **差异方向不变，绝对值变小**。
+
+⇒ #137 验收第 2 条在本票里因此有**三处真正的 runtime 收口**（`isControlled` 的 computed、
+`warned` 的 Set、`defaultValue` 的 watcher），都不是靠「删掉」，而是靠「不再为没人用的东西付费」。
 
 **这两处也各自踩了「用错口径」的坑，用例都是数分配、不是数行为**（已实测）：
 - `isControlled`：只断言「重复访问命中缓存」时，**eager 版照样全过**；

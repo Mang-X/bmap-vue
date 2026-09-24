@@ -5,7 +5,7 @@
  * 组件侧的接线（哪次变化写哪条 SDK 命令）由 `tests/behavior/v3-bmap.test.ts` 覆盖。
  */
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import { effectScope, nextTick, ref, type EffectScope } from 'vue'
+import { effectScope, getCurrentScope, nextTick, ref, type EffectScope } from 'vue'
 import { useControllableState, type EqualFn, type UseControllableStateOptions } from './useControllableState'
 import { numbersEqual } from '../core/utils/equality'
 
@@ -459,6 +459,135 @@ describe('告警去重集合的惰性创建（#137 复审九轮 P1）', () => {
       expect(counter.allocated - counter.baseline, 'warn:false 下永不分配去重 Set').toBe(0)
     } finally {
       counter.restore()
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('defaultValue 告警 watcher 的注册条件（#137 复审十轮 P1）', () => {
+  /**
+   * 口径是「注册了几个 `ReactiveEffect`」——这正是原型 `mapModel.prototype.test.ts` 用的
+   * 同一套口径（`getCurrentScope().effects.length`，由 Vue 自己记账）。
+   *
+   * ⚠️ 只断言「有没有告警输出」证明不了注册与否：production 下 `devWarn` 早退，eager 版
+   * **一条也不会打印**，但那个 effect 照样常驻。必须数 effect。
+   */
+  function effectsWith(options: { warn?: boolean; withDefault?: boolean } = {}): number {
+    return effectScope().run(() => {
+      const external = ref<number | undefined>(12)
+      useControllableState<number>({
+        name: 'zoom',
+        value: () => external.value,
+        defaultValue: options.withDefault === false ? undefined : () => 8,
+        fallback: 14,
+        equals: numbersEqual,
+        warn: options.warn,
+      })
+      // `useControllableState` 只注册 defaultValue 告警 watcher，所以这个数就是它的个数。
+      return getCurrentScope()!.effects.length
+    })!
+  }
+
+  it('warn: false ⇒ 不注册 defaultValue 告警 watcher', () => {
+    expect(effectsWith({ warn: false }), 'warn:false 不该注册任何 effect').toBe(0)
+  })
+
+  it('development + warn:true ⇒ 注册（告警契约仍在）', async () => {
+    expect(effectsWith({ warn: true }), '开发期要注册').toBe(1)
+  })
+
+  it('development 下 default* 后续变化仍告警恰好一次', async () => {
+    const warn = spyWarn()
+    const fallbackDefault = ref<number | undefined>(8)
+    try {
+      const state = numberState({ defaultValue: () => fallbackDefault.value })
+      fallbackDefault.value = 9
+      await nextTick()
+      fallbackDefault.value = 10
+      await nextTick()
+      expect(warnLines(warn).filter((l) => l.includes('只在首次解析时生效')).length).toBe(1)
+      void state
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('production 下不为开发期提示付出 runtime（#137 复审十轮 P1）', () => {
+  /**
+   * `isDev()` 读 `process.env.NODE_ENV`，而判定**必须留在消费方**（见 logger 的注释）。
+   * 所以这里改的是**运行时的环境变量**，不是构建期替换 —— 与「库在发布构建里不该把它定死」
+   * 是同一件事的两面：这里模拟「消费方的 bundler 已折叠成 production」。
+   */
+  function withNodeEnv<T>(value: string | undefined, body: () => T): T {
+    const original = process.env.NODE_ENV
+    if (value === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = value
+    try {
+      return body()
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  function effectsInProduction(options: { warn?: boolean } = {}): number {
+    return withNodeEnv('production', () =>
+      effectScope().run(() => {
+        const external = ref<number | undefined>(12)
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => 8,
+          fallback: 14,
+          equals: numbersEqual,
+          warn: options.warn,
+        })
+        return getCurrentScope()!.effects.length
+      })!,
+    )
+  }
+
+  it('production：即使 warn 默认 true 也不注册 defaultValue 告警 watcher', () => {
+    expect(effectsInProduction(), 'production 下不该常驻开发期 watcher').toBe(0)
+  })
+
+  it('production：模式切换不分配 warned 去重 Set（short-circuit 在分配之前）', () => {
+    const RealSet = globalThis.Set
+    let allocated = 0
+    function CountingSet(this: unknown, ...args: unknown[]) {
+      allocated += 1
+      return new RealSet(...(args as []))
+    }
+    CountingSet.prototype = RealSet.prototype
+    Object.setPrototypeOf(CountingSet, RealSet)
+    const spy = vi
+      .spyOn(globalThis, 'Set')
+      .mockImplementation(CountingSet as unknown as SetConstructor)
+    const warn = spyWarn()
+    try {
+      const baseline = allocated
+      withNodeEnv('production', () => {
+        const external = ref<number | undefined>(12)
+        const state = effectScope().run(() =>
+          useControllableState<number>({
+            name: 'zoom',
+            value: () => external.value,
+            defaultValue: () => 8,
+            fallback: 14,
+            equals: numbersEqual,
+          }),
+        )!
+        // 受控 → 非受控：在 dev 下会告警一次并分配去重 Set；production 下应完全短路。
+        external.value = undefined
+        state.syncExternal(undefined)
+        state.syncExternal(20)
+        state.syncExternal(undefined)
+      })
+      expect(warnLines(warn).length, 'production 下不打印').toBe(0)
+      expect(allocated - baseline, 'production 下连去重 Set 都不该分配').toBe(0)
+    } finally {
+      spy.mockRestore()
       warn.mockRestore()
     }
   })
