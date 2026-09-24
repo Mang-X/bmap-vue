@@ -439,7 +439,16 @@ export interface BGroundOverlayProps {
 
 /** 三个数据组件共用的取数面。 */
 export interface BMapDataProps<Item> {
-  /** 数据数组（只按**引用**比较；原地修改请配合 `dataVersion`）。 */
+  /**
+   * 数据数组（只按**引用**比较；原地修改请配合 `dataVersion`）。
+   *
+   * **大数据量请把未深响应化的原始数据源交给 `shallowRef` / `markRaw`**：组件会逐项处理这批数据，
+   * 深响应数组（`ref([...])`）的每次字段读取都要穿过 Proxy 并做依赖收集，代价随规模上升。
+   * 注意 `markRaw` / `shallowRef` **不会把已存在的 Proxy 还原成 raw**（对 reactive 数组元素无效）。
+   * 代价与既有契约一致：原地改内容仍需递增 `dataVersion`（组件不 watch 大数组的深层变化）。具体
+   * 取证读数（只覆盖 `adaptPoints` 那条路径）与适用范围见 `docs/zh-CN/components/data.md`「大数据量」
+   * 与 ADR `2026-09-24-deep-reactive-array-update-path`。
+   */
   data: readonly Item[];
   /** item 的唯一键：属性名或取值函数（`PropertyKey`）。 */
   itemKey: keyof Item | ((item: Item) => PropertyKey);

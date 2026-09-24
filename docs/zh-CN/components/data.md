@@ -30,7 +30,7 @@ title: 数据组件
 
 | 属性 | 说明 | 类型 |
 | --- | --- | --- |
-| `data` | 数据数组（只按**引用**比较） | `readonly Item[]` |
+| `data` | 数据数组（只按**引用**比较；**大数组建议 `shallowRef` / `markRaw`**，见下文「大数据量」） | `readonly Item[]` |
 | `itemKey` | 唯一键：属性名或取值函数 | `keyof Item \| ((item: Item) => PropertyKey)` |
 | `getPosition` | 取坐标；返回 `null` / `undefined` = 这一项没有位置 | `(item: Item) => { lng: number; lat: number } \| null \| undefined` |
 | `dataVersion` | **引用不变、内容变了**时递增它 | `PropertyKey` |
@@ -94,6 +94,74 @@ function onItemClick(station: Station) {
   **`(0, 0)` 是合法坐标**，不会被当作「缺失」；
 - 同一批数据里 key 重复 ⇒ **后者胜**（重复 id 的行为官方没有声明，因此不能交给 SDK）；
 - `properties()` 里写了 id 字段 ⇒ 被要素身份覆盖并告警（否则拾取回来的 key 与业务项对不上）。
+
+## 大数据量：`shallowRef` / `markRaw`
+
+数据组件的 `data` 只按**引用**比较，但组件处理这批数据时会**逐项读取**它。走 `adaptPoints`
+（`Item[]` → `FeatureCollection`）的路径包括 `BPointCollection` / `BPointIconLayer` / `BPointLayer`
+与 `BMarkerCluster` 的 `native` 引擎；`BMarkerList` 与 `BMarkerCluster` 的 `markers` 引擎走
+`DataLayerManager` 的 keyed diff / 网格聚合。只要 `data` 是 Vue 的**深响应**数组——`ref([...])` /
+`reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，代价随规模
+上升。**「深响应读取显著更贵」这条结论适用于所有复用 `adaptPoints` 的路径**（函数级成本分解见 ADR）。
+
+**组件整链路的具体读数只在 `BPointCollection` 上测过**（50k 换一次引用）：深响应输入在组件路径里要
+**0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
+这组数字含 watch / render effect / 资源同步 / `setData` 的整链路，**不要外推到其它组件**；
+`BMarkerCluster` 的 `native` 引擎虽然复用同一个 `adaptPoints`，但其 `ClusterLayer` 整链路
+**未单独取证**。
+
+大数据量建议把**原始（未被深响应化）的**数据源换成 `shallowRef` / `markRaw`（Vue 只跟踪引用本身，
+不再代理每一项）：
+
+```vue
+<script setup lang="ts">
+import { markRaw, ref, shallowRef } from 'vue'
+
+interface Station { id: string; lng: number; lat: number; name: string }
+
+const stations = shallowRef<Station[]>([])
+const version = ref(0)
+
+function replace(next: Station[]) {
+  // markRaw 让这份数据整体退出响应式系统；换引用本身仍被 shallowRef 感知
+  stations.value = markRaw(next)
+}
+
+function moveFirst() {
+  stations.value[0]!.lng += 0.001
+  // 原地改内容不会换引用 ⇒ 必须递增 dataVersion 让组件重新读取（既有契约）
+  version.value += 1
+}
+</script>
+
+<template>
+  <BPointCollection
+    :data="stations"
+    :data-version="version"
+    item-key="id"
+    :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
+  />
+</template>
+```
+
+> 示例用**当前 head 实际导出的** `BPointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
+> （见上文「先选对组件」的说明）。1.0 的公共 API 命名对齐（[#135](https://github.com/Mang-X/bmap-vue/issues/135)）
+> 完成后，文档会统一改成新名。
+
+边界与代价：
+
+- `shallowRef` / `markRaw` 之后，**原地改内容**（`stations.value[0].lng = …`）不会自动被感知——这与
+  现有契约一致（`data` 只按引用比较）：原地改请递增 `dataVersion`。用深响应数组时本来也得靠它
+  （组件不 watch 大数组的深层变化），所以这**不是**新增的约束。
+- **要拿到这里的收益，传给地图组件的数组与其 item 必须在进入 Vue 深响应系统之前就是 raw / 不可变的。**
+  `markRaw` / `shallowRef` 只阻止**后续**的深代理转换，**不会把已经存在的 Proxy 还原成 raw**：
+  `markRaw(list.value)` 返回的仍是那个 reactive Proxy，`markRaw([...list.value])` 展开出的每个 item
+  也仍是 Proxy——两种情况 `adaptPoints` 逐项读 `item.lng` 时照旧走 Proxy get（以及 effect 内的
+  tracking），收益不成立。若同一份数据还要给模板做深响应，应**从原始数据源分别构造**一份 reactive
+  状态与一份 raw / plain snapshot，而不是把现有 Proxy 容器再 `markRaw` 一次。
+
+依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
+对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
 
 ## `BMarkerList`
 
