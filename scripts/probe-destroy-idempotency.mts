@@ -34,6 +34,13 @@
  * 控件读数齐备但任一不成立 ⇒ 退出码 1、**本轮不出结论**；
  * 若是 SDK 没起来 / phase 未完成，走 blocked（退出码 3）。
  *
+ * ## 半边前置（进结论、不进全局控件）
+ *
+ * - `map.control.destroyListener.threw === false`：destroy 监听必须挂上，否则
+ *   `destroyEventCount=0` 不构成「未见回调」（Map 半边第三态）；
+ * - `auto.search.threw === false`：dispose 臂请求必须发出，否则 0/0 不构成
+ *   「窗口内未见回调」（Autocomplete 半边第三态）。
+ *
  * ## 判定与退出码
  *
  * | 结论 | 触发 | 退出码 |
@@ -173,9 +180,10 @@ const PAGE_JS = `
     const map = new window.BMap.Map(host);
     map.centerAndZoom(new window.BMap.Point(116.404, 39.915), 13);
     let destroyEvents = 0;
-    try {
+    // 监听安装本身也要留读数：安装失败时 destroyEventCount=0 不构成「未见回调」。
+    push("map.control.destroyListener", attempt(function () {
       map.addEventListener("destroy", function () { destroyEvents += 1; });
-    } catch (e) { /* 监听失败不阻断主实验 */ }
+    }));
     await wait(600);
 
     push("map.control.destroyOnce", attempt(() => map.destroy()));
@@ -201,11 +209,7 @@ const PAGE_JS = `
       push("auto.control.ctrlCreate", { threw: true, message: String(error && error.message ? error.message : error) });
       throw error;
     }
-    try {
-      autoCtrl.search("北京");
-    } catch (error) {
-      push("auto.control.search", { threw: true, message: String(error && error.message ? error.message : error) });
-    }
+    push("auto.control.search", attempt(function () { autoCtrl.search("北京"); }));
     // 最多等 5s：JSONP 往返常见在 1–3s 内；超时则 count=0 ⇒ 控件不成立（exit 1），不把 0/0 当结论。
     for (let i = 0; i < 50 && ctrlCallbacks < 1; i++) await wait(100);
     push("auto.control.callbackObserved", { threw: false, count: ctrlCallbacks });
@@ -230,11 +234,9 @@ const PAGE_JS = `
       push("auto.control.create", { threw: true, message: String(error && error.message ? error.message : error) });
       throw error;
     }
-    try {
-      auto.search("北京");
-    } catch (error) {
-      push("auto.search", { threw: true, message: String(error && error.message ? error.message : error) });
-    }
+    // 成功/失败都要留读数：search 抛错时 0/0 不构成「窗口内未见回调」的证据
+    //（判定层读 auto.search.threw 作 Autocomplete 半边前置）。
+    push("auto.search", attempt(function () { auto.search("北京"); }));
     // 立刻 dispose（模拟组件卸载：请求在飞时释放）
     disposing = true;
     push("auto.control.disposeOnce", attempt(() => auto.dispose()));

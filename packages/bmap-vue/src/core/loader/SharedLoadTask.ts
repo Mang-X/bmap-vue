@@ -27,8 +27,10 @@
  * **官方行为**（PROBED 2026-09-24，真实 AK + headless Chromium；读数
  * `tests/behavior/fixtures/probe-jsonp-callback.live.json`）：
  * - 入口 URL 的 `callback=<名>` 会让官方在就绪时调用 `window[<名>]`（`args.length` 见读数）；
- * - 调用时全局值**仍是**我们安装的 handler（官方未先覆盖身份）——这一条是
- *   foreign 捕获读法成立的前提；
+ * - **首次**调用时全局值**仍是**我们安装的 handler（官方未先覆盖身份；生产只消费
+ *   第一次回调，判定层也只采 first-call 快照）——这一条是 foreign 捕获读法成立的前提；
+ * - **首次**调用当下 `JSAPI_V4_REQUIRED_MEMBERS`（Map/Point/Marker）齐全（与
+ *   `requireJsapiV4Global` / `assertReady` 同口径），见读数 `control.readyAtCall`；
  * - 该行为属于**官方实现，官方可改**——可回归 gate 是
  *   `tests/behavior/v3-probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture
  *   一致性 + 上述单测（OWNED 侧）。#44 冻结前这两者必须同时在场。

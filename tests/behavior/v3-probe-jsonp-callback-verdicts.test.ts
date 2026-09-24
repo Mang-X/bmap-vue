@@ -39,8 +39,9 @@ function conclusionOf(line: string): string {
  * 一致（文件末尾的漂移用例做机器检查）。
  *
  * live 要点（2026-09-24 真实 AK）：官方按 `callback=NAME` 调用我们的 handler（count=1）；
- * args.length=0（走 `exportGetter` 回退）；调用时身份仍是我们的；**callback 当下 readyAtCall=true**
- * （重跑后以 fixture 为准）；foreign 释放后恢复原引用；
+ * args.length=0（走 `exportGetter` 回退）；**首次**调用时身份仍是我们的；
+ * **首次 callback 当下 readyAtCall=true、missing=[]**（Map/Point/Marker 齐全，
+ * 与 requireJsapiV4Global 同口径）；foreign 释放后恢复原引用；
  * 官方新增全局为大量 `BMAP_*` 常量与 `BMap`/`BMapGL` 等（`__bmap_v4_custom_` 前缀无冲突）。
  */
 const COMPLETE: Reading[] = [
@@ -48,8 +49,8 @@ const COMPLETE: Reading[] = [
   { id: "control.callbackFired", threw: false, count: 1 },
   { id: "control.argsLength", threw: false, count: 0, rawLength: 0 },
   { id: "control.handlerIdentityAtCall", threw: false, same: true },
-  { id: "control.readyAtCall", threw: false, ready: true },
-  { id: "control.bmapReady", threw: false, ready: true },
+  { id: "control.readyAtCall", threw: false, ready: true, missing: [] },
+  { id: "control.bmapReady", threw: false, ready: true, missing: [] },
   { id: "control.loadAttempt", threw: false, message: null },
   { id: "release.afterControl", threw: false, type: "absent" },
   {
@@ -388,6 +389,17 @@ describe("[#128 F-2] JSONP 回调查针判定层的三态", () => {
     );
     expect(readyAtCallMissing.join("\n")).toContain("control.readyAtCall");
 
+    // ready=true 但 missing 非空（与 requireJsapiV4Global 口径矛盾）⇒ 控件仍失败
+    const inconsistentMissing = controlFailures(
+      report(
+        COMPLETE.map((r) =>
+          r.id === "control.readyAtCall" ? { ...r, ready: true, missing: ["Point"] } : r,
+        ),
+      ),
+    );
+    expect(inconsistentMissing.join("\n"), "ready=true 却缺成员不得过控件").toContain("control.readyAtCall");
+    expect(inconsistentMissing.join("\n")).toContain("Point");
+
     const finalOnlyFalse = controlFailures(
       report(COMPLETE.map((r) => (r.id === "control.bmapReady" ? { ...r, ready: false } : r))),
     );
@@ -443,7 +455,7 @@ describe("[#128 F-2] 正证基线（COMPLETE）与 live 报告一致", () => {
 
   it("`COMPLETE` 的每条读数都与 live 报告逐字段一致", () => {
     const byId = new Map(live.readings.map((reading) => [reading.id, reading]));
-    const fields = ["type", "threw", "message", "count", "rawLength", "same", "ready", "keys"] as const;
+    const fields = ["type", "threw", "message", "count", "rawLength", "same", "ready", "missing", "keys"] as const;
     const drifted = COMPLETE.flatMap((expected) => {
       const actual = byId.get(expected.id);
       if (actual === undefined) return [`${expected.id}：live 报告里没有这条读数`];

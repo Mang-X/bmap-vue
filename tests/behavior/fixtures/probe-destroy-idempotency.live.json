@@ -10,6 +10,11 @@
   },
   "readings": [
     {
+      "id": "map.control.destroyListener",
+      "threw": false,
+      "message": null
+    },
+    {
       "id": "map.control.destroyOnce",
       "threw": false,
       "message": null
@@ -30,12 +35,22 @@
       "message": null
     },
     {
+      "id": "auto.control.search",
+      "threw": false,
+      "message": null
+    },
+    {
       "id": "auto.control.callbackObserved",
       "threw": false,
       "count": 1
     },
     {
       "id": "auto.control.create",
+      "threw": false,
+      "message": null
+    },
+    {
+      "id": "auto.search",
       "threw": false,
       "message": null
     },

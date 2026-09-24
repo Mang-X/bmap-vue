@@ -42,17 +42,21 @@ function conclusionOf(line: string): string {
  * - Map first 不抛、**second 抛** `enableAutoResize` ⇒ 重复 destroy 不是 no-op；
  * - Autocomplete **对照组 callbackObserved=1**（不 dispose 时回调能到达）；
  *   first/second dispose 都不抛；dispose 期间/之后回调 count 均为 0（对照组成立 ⇒ 可解释）；
+ *   **dispose 臂 auto.search 成功**（threw=false）⇒ 0/0 可解释为「窗口内未见回调」；
  * - `setId` 调用本身不抛，但 headless 下场景未真正加载（无 `id_changed`/`dataload`），
  *   destroy 仍抛 `START`（与未加载反例同形；first 已抛 ⇒ second 不构成幂等取证）；
- * - Map destroy 事件 count=1。
+ * - Map destroy 事件 count=1，**destroyListener 安装成功**。
  */
 const COMPLETE: Reading[] = [
+  { id: "map.control.destroyListener", threw: false, message: null },
   { id: "map.control.destroyOnce", threw: false, message: null },
   { id: "map.destroyEventCount", threw: false, count: 1 },
   { id: "map.destroyTwice", threw: true, message: "Cannot set properties of undefined (setting 'enableAutoResize')" },
   { id: "auto.control.ctrlCreate", threw: false, message: null },
+  { id: "auto.control.search", threw: false, message: null },
   { id: "auto.control.callbackObserved", threw: false, count: 1 },
   { id: "auto.control.create", threw: false, message: null },
+  { id: "auto.search", threw: false, message: null },
   { id: "auto.control.disposeOnce", threw: false, message: null },
   { id: "auto.callbacksDuringDispose", threw: false, count: 0 },
   { id: "auto.callbacksAfterDispose", threw: false, count: 0 },
@@ -149,6 +153,46 @@ describe("[#128 F-3] destroy/dispose 幂等探针判定层的三态", () => {
     expect(line).toContain("无法判定");
     expect(line, "缺读数不得落成 Map「会回调」").not.toContain("**Map destroy 会回调业务**");
     expect(line, "缺读数也不得落成 Map「未见回调」").not.toContain("**Map destroy 未见业务回调**");
+  });
+
+  it("destroyListener 安装失败（threw=true）⇒ Map 半边第三态，不得把 0 读成「未见回调」", () => {
+    const readings = COMPLETE.map((r) =>
+      r.id === "map.control.destroyListener" ? { ...r, threw: true, message: "x" } : r,
+    );
+    const line = lineOf(verdicts(report(readings)), "[销毁期回调");
+    expect(line, "Map 半边必须第三态").toContain("Map：**无法判定**");
+    expect(line).not.toContain("**Map destroy 未见业务回调**");
+    expect(line).not.toContain("**Map destroy 会回调业务**");
+    expect(line, "Autocomplete 半边不受影响").toContain("**Autocomplete dispose 窗口内未见回调**");
+  });
+
+  it("缺 map.control.destroyListener ⇒ Map 半边第三态", () => {
+    const line = lineOf(
+      verdicts(report(COMPLETE.filter((r) => r.id !== "map.control.destroyListener"))),
+      "[销毁期回调",
+    );
+    expect(line).toContain("Map：**无法判定**");
+    expect(line).not.toContain("**Map destroy 未见业务回调**");
+  });
+
+  it("auto.search 抛错（threw=true）⇒ Autocomplete 半边第三态，0/0 不得读成「未见回调」", () => {
+    const readings = COMPLETE.map((r) =>
+      r.id === "auto.search" ? { ...r, threw: true, message: "x" } : r,
+    );
+    const line = lineOf(verdicts(report(readings)), "[销毁期回调");
+    expect(line, "Autocomplete 半边必须第三态").toContain("Autocomplete：**无法判定**");
+    expect(line).not.toContain("**Autocomplete dispose 窗口内未见回调**");
+    expect(line).not.toContain("**Autocomplete dispose 会回调业务**");
+    expect(line, "Map 半边不受影响").toContain("**Map destroy 会回调业务**");
+  });
+
+  it("缺 auto.search ⇒ Autocomplete 半边第三态", () => {
+    const line = lineOf(
+      verdicts(report(COMPLETE.filter((r) => r.id !== "auto.search"))),
+      "[销毁期回调",
+    );
+    expect(line).toContain("Autocomplete：**无法判定**");
+    expect(line).not.toContain("**Autocomplete dispose 窗口内未见回调**");
   });
 
   it("对照组缺失/为 0 且 dispose 臂 0/0 ⇒ Autocomplete 第三态（不得借 Map 外推）", () => {

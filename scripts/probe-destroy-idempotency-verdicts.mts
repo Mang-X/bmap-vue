@@ -41,9 +41,13 @@ const UNKNOWN = "**无法判定**（读数缺失）";
  * 2. Autocomplete 首次 dispose 必须成功（正证：服务实例可测）；
  * 3. Autocomplete **对照组** `callbackObserved.count >= 1`——同环境不 dispose 时
  *    `onSearchComplete` 必须能到达；否则 dispose 臂的 0/0 无法区分「dispose 挡住了」
- *    与「网络/服务根本没回」（issue #128：每个探针要有对照组）。
+ *    与「网络/服务根本没回」（issue #128：每个探针要有对照组，否则挂起会退化成失败）。
  *
  * Panorama **未加载场景**的 destroy 抛错是**已知反例**，不进控件——它恰恰是 F-3 要测的一侧。
+ *
+ * 半边前置（进结论、不进全局控件）：
+ * - `map.control.destroyListener.threw === false`：否则 Map 半边第三态；
+ * - `auto.search.threw === false`：否则 Autocomplete 半边第三态。
  */
 export function controlFailures(report: ProbeReport): string[] {
   const failures: string[] = [];
@@ -167,36 +171,49 @@ export function verdicts(report: ProbeReport): string[] {
 
   // ── 2. 销毁期是否回调业务 ──────────────────────────────────────────────
   {
+    const destroyListenerThrew = threwOf("map.control.destroyListener");
     const mapDestroyEvents = countOf("map.destroyEventCount");
     const autoControl = countOf("auto.control.callbackObserved");
+    const autoSearchThrew = threwOf("auto.search");
     const autoDuring = countOf("auto.callbacksDuringDispose");
     const autoAfter = countOf("auto.callbacksAfterDispose");
 
     // Map 路径与 Autocomplete 路径**分开**下结论：Map 的 destroy 事件不能外推成
     // 「Autocomplete dispose 也会回写」；Autocomplete 的 0/0 在对照组不成立时也不能
     // 落成「未见回调」（可能只是网络没回）。
+    // 半边前置：监听未挂上 / search 未发出 ⇒ 对应半边第三态，0 不构成「未见回调」。
     const mapPart =
-      mapDestroyEvents === null
-        ? UNKNOWN
-        : mapDestroyEvents >= 1
-          ? `**Map destroy 会回调业务**（事件=${mapDestroyEvents} ⇒ Map 路径 guard 按「可能重入」防护）`
-          : `**Map destroy 未见业务回调**（事件=${mapDestroyEvents}；本轮窗口没测到，不等于官方永不回调）`;
+      destroyListenerThrew === null || destroyListenerThrew !== false
+        ? destroyListenerThrew === true
+          ? UNKNOWN.replace("（读数缺失）", "（destroy 监听未挂上，destroyEventCount=0 不构成「未见回调」）")
+          : UNKNOWN
+        : mapDestroyEvents === null
+          ? UNKNOWN
+          : mapDestroyEvents >= 1
+            ? `**Map destroy 会回调业务**（事件=${mapDestroyEvents} ⇒ Map 路径 guard 按「可能重入」防护）`
+            : `**Map destroy 未见业务回调**（事件=${mapDestroyEvents}；本轮窗口没测到，不等于官方永不回调）`;
 
     const autoPart =
-      autoControl === null || autoDuring === null || autoAfter === null
-        ? UNKNOWN
-        : autoControl < 1
-          ? `**无法判定**（对照组 callbackObserved=${autoControl}，` +
-            `dispose 臂 期间/之后=${autoDuring}/${autoAfter} 无法区分「dispose 挡住」与「网络没回」）`
-          : autoDuring >= 1 || autoAfter >= 1
-            ? `**Autocomplete dispose 会回调业务**（对照组=${autoControl}；` +
-              `dispose 期间/之后=${autoDuring}/${autoAfter} ⇒ service 路径 guard 按「可能重入」防护）`
-            : `**Autocomplete dispose 窗口内未见回调**（对照组=${autoControl} 证明服务可回调；` +
-              `dispose 期间/之后=${autoDuring}/${autoAfter} —— 只说明本轮窗口没测到，不等于官方永不回调）`;
+      autoSearchThrew === null || autoSearchThrew !== false
+        ? autoSearchThrew === true
+          ? UNKNOWN.replace("（读数缺失）", "（auto.search 抛错，dispose 臂 0/0 不构成「未见回调」）")
+          : UNKNOWN
+        : autoControl === null || autoDuring === null || autoAfter === null
+          ? UNKNOWN
+          : autoControl < 1
+            ? `**无法判定**（对照组 callbackObserved=${autoControl}，` +
+              `dispose 臂 期间/之后=${autoDuring}/${autoAfter} 无法区分「dispose 挡住」与「网络没回」）`
+            : autoDuring >= 1 || autoAfter >= 1
+              ? `**Autocomplete dispose 会回调业务**（对照组=${autoControl}；` +
+                `dispose 期间/之后=${autoDuring}/${autoAfter} ⇒ service 路径 guard 按「可能重入」防护）`
+              : `**Autocomplete dispose 窗口内未见回调**（对照组=${autoControl} 证明服务可回调；` +
+                `dispose 期间/之后=${autoDuring}/${autoAfter} —— 只说明本轮窗口没测到，不等于官方永不回调）`;
 
     lines.push(
-      `[销毁期回调] Map destroy 事件到业务=${num(mapDestroyEvents)}；` +
-        `Autocomplete 对照组=${num(autoControl)} / dispose 期间=${num(autoDuring)}` +
+      `[销毁期回调] Map 监听=${destroyListenerThrew === null ? "—" : destroyListenerThrew ? "抛错" : "ok"}` +
+        ` / destroy 事件=${num(mapDestroyEvents)}；` +
+        `Autocomplete search=${autoSearchThrew === null ? "—" : autoSearchThrew ? "抛错" : "ok"}` +
+        ` / 对照组=${num(autoControl)} / dispose 期间=${num(autoDuring)}` +
         ` / dispose 之后=${num(autoAfter)} ⇒ ` +
         `Map：${mapPart}；Autocomplete：${autoPart}`,
     );

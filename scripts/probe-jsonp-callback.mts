@@ -18,11 +18,15 @@
  * ## 正证控件
  *
  * - `control.callbackFired.count >= 1`：官方**必须**调用过我们的 handler；
- * - `control.readyAtCall.ready === true`：**callback 当下**（handler 内同步采样）
- *   `BMap.Map` 已是函数——生产路径 `SharedLoadTask.succeed()` 会在这里同步跑 `assertReady`；
- * - `control.handlerIdentityAtCall.same === true`：调用时身份未被覆盖。
+ * - `control.readyAtCall.ready === true`：**首次 callback 当下**（handler 内同步采样，
+ *   后续调用不覆盖）与生产 `requireJsapiV4Global` 同口径——`JSAPI_V4_REQUIRED_MEMBERS`
+ *   （Map / Point / Marker）齐全；生产路径 `SharedLoadTask.succeed()` 会在这里同步跑
+ *   `assertReady`；
+ * - `control.handlerIdentityAtCall.same === true`：**首次**调用时身份未被覆盖
+ *   （生产只消费第一次回调；身份 / args / 成员快照均只取 first-call）。
  *
- * `control.bmapReady`（入口回调后轮询到的最终就绪）保留为**诊断读数**，不能代替 `readyAtCall`。
+ * `control.bmapReady`（入口回调后轮询到的最终就绪，同三成员口径）保留为**诊断读数**，
+ * 不能代替 `readyAtCall`。
  *
  * 控件读数齐备但任一不成立 ⇒ 退出码 1、**本轮不出结论**（不是「SDK 行为不好」）；
  * 若是 SDK 没起来 / phase 未完成，走 blocked（退出码 3）。
@@ -107,6 +111,17 @@ const PAGE_JS = `
   const windowKeys = () => {
     try { return Object.getOwnPropertyNames(window).sort(); } catch (error) { return []; }
   };
+  // 与生产 findMissingJsapiV4Members 同口径：JSAPI_V4_REQUIRED_MEMBERS 缺一不可
+  //（undefined / null 即缺；命名空间本身不是对象/函数时三成员全缺）。
+  const REQUIRED_MEMBERS = ["Map", "Point", "Marker"];
+  const missingMembers = () => {
+    const ns = window.BMap;
+    if (ns === null || ns === undefined) return REQUIRED_MEMBERS.slice();
+    if (typeof ns !== "object" && typeof ns !== "function") return REQUIRED_MEMBERS.slice();
+    return REQUIRED_MEMBERS.filter(function (member) {
+      return ns[member] === undefined || ns[member] === null;
+    });
+  };
 
   try {
     /* ---- 基线：加载前 window 键集合（后面算差集） ---- */
@@ -114,21 +129,25 @@ const PAGE_JS = `
 
     /* ---- control 臂：安装我们的 handler，再加载官方入口 ---- */
     let fired = 0;
-    let argsLength = -1;
-    let identityAtCall = false;
-    // callback **当下**的就绪采样：生产路径 SharedLoadTask.succeed() 会在 handler 里同步跑
-    // assertReady（CustomScriptV4Provider 立刻 requireJsapiV4Global），所以「最终 ready」
-    // 不能代替「调用那一刻 ready」。null = 尚未被调用过。
+    // **只取首次回调**的快照：生产 assertReady / 回调消费的是第一次调用；
+    // 后续调用不得覆盖 first-call 身份 / args / 成员就绪。null = 尚未被调用过。
+    let firstArgsLength = -1;
+    let firstIdentityAtCall = null;
+    let firstMissingMembers = null;
     let readyAtCall = null;
     let readyResolve;
     const readyPromise = new Promise((resolve) => { readyResolve = resolve; });
     const settleReady = function () { if (readyResolve) readyResolve(); };
     // ourHandler 同时是就绪信号：首次被调即 settleReady。
     const ourHandler = function () {
+      const firstCall = fired === 0;
       fired += 1;
-      argsLength = arguments.length;
-      identityAtCall = window[NAME] === ourHandler;
-      readyAtCall = !!(window.BMap && typeof window.BMap.Map === "function");
+      if (firstCall) {
+        firstArgsLength = arguments.length;
+        firstIdentityAtCall = window[NAME] === ourHandler;
+        firstMissingMembers = missingMembers();
+        readyAtCall = firstMissingMembers.length === 0;
+      }
       settleReady();
     };
     try {
@@ -145,27 +164,34 @@ const PAGE_JS = `
     script.onerror = () => { report.loadError = "SDK 入口脚本加载失败（script error）"; };
     document.head.appendChild(script);
     await Promise.race([readyPromise, wait(60000)]);
-    // 再等成员齐全（入口回调可能先于 getscript 成员）
+    // 再等成员齐全（入口回调可能先于 getscript 成员）——与 assertReady 同三成员口径
     for (let i = 0; i < 150; i++) {
-      if (window.BMap && typeof window.BMap.Map === "function") break;
+      if (missingMembers().length === 0) break;
       if (fired > 0 && i > 10) break;
       await wait(200);
     }
     // 若 ourHandler 还没被调但 BMap 已就绪，再等一会（官方可能在成员就绪后才调 callback）
     for (let i = 0; i < 30 && fired === 0; i++) await wait(200);
 
-    const bmapReady = !!(window.BMap && typeof window.BMap.Map === "function");
+    const finalMissing = missingMembers();
+    const bmapReady = finalMissing.length === 0;
     push("control.callbackFired", { threw: false, count: fired });
-    push("control.argsLength", { threw: false, count: argsLength < 0 ? 0 : argsLength, rawLength: argsLength });
-    push("control.handlerIdentityAtCall", { threw: false, same: identityAtCall === true });
-    // readyAtCall：callback **当下**（handler 内同步采样）。从未被调用则不带 ready 字段 ⇒ 判定层第三态。
-    if (readyAtCall === null) {
+    // args / identity：**首次**回调的快照（生产只消费第一次；后续调用不覆盖）。
+    push("control.argsLength", {
+      threw: false,
+      count: firstArgsLength < 0 ? 0 : firstArgsLength,
+      rawLength: firstArgsLength,
+    });
+    push("control.handlerIdentityAtCall", { threw: false, same: firstIdentityAtCall === true });
+    // readyAtCall：**首次** callback 当下（handler 内同步采样，Map/Point/Marker 齐全）。
+    // 从未被调用则不带 ready / missing 字段 ⇒ 判定层第三态。
+    if (readyAtCall === null || firstMissingMembers === null) {
       push("control.readyAtCall", { threw: false });
     } else {
-      push("control.readyAtCall", { threw: false, ready: readyAtCall });
+      push("control.readyAtCall", { threw: false, ready: readyAtCall, missing: firstMissingMembers });
     }
     // 最终 ready：诊断读数（入口回调后轮询到的成员齐全时刻），**不能**代替 readyAtCall。
-    push("control.bmapReady", { threw: false, ready: bmapReady });
+    push("control.bmapReady", { threw: false, ready: bmapReady, missing: finalMissing });
     push("control.loadAttempt", { threw: !!(report.loadError), message: report.loadError || null });
     report.sdk = bmapReady
       ? { version: String(window.BMap.version), map: typeof window.BMap.Map }

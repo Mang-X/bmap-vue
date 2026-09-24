@@ -32,12 +32,14 @@
     {
       "id": "control.readyAtCall",
       "threw": false,
-      "ready": true
+      "ready": true,
+      "missing": []
     },
     {
       "id": "control.bmapReady",
       "threw": false,
-      "ready": true
+      "ready": true,
+      "missing": []
     },
     {
       "id": "control.loadAttempt",
