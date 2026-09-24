@@ -69,7 +69,7 @@ import { targetContextKey, type TargetContext, type TargetKind } from "../contex
 import type { MapReadyContext } from "../context/types";
 import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
-import { overlayPropertySpec, type OverlayKind } from "../../driver/types/overlays";
+import { overlayPropertyRevert, overlayPropertySpec, type OverlayKind } from "../../driver/types/overlays";
 import type { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
 import { boundsKey, pixelKey, pointEquals, pointKey } from "../utils/equality";
@@ -452,6 +452,23 @@ export function useOverlaySpec<Props extends object, Resource>(
   /** 换实例是否在飞行中（决定新到达的更新挂 `trailing` 还是直接标脏）。 */
   let replacing = false;
 
+  /**
+   * 「**可能**已写入 SDK」的字段键（issue #138 的撤回判据）。
+   *
+   * **为什么是「可能」而不是「成功」**：`setOptions` 是逐 setter 调用，第一个键写成功、
+   * 第二个键抛错时前一个键**已经**真的改了 SDK。按成功记账会让一次部分成功的写入变成
+   * 永久分叉——那个键此后变回未表态时不会被判成「需要撤回」，SDK 永久保留旧值。
+   * 与图层侧 `useLayerResource.possiblyAppliedOptions` 是同一条理由、同一份实现口径。
+   *
+   * **为什么单调只增不减**：「曾经尝试过」这个事实不会过期；删掉它意味着忘记，而忘记
+   * 的代价是 SDK 与声明静默分叉。
+   *
+   * **构造期就记**：值在 `create` 那一刻已经进了构造器，因此「给过一个非 `undefined` 的值」
+   * 就必须进这个集合——否则一个从 `zIndex=5` 起步的 Marker 在 `zIndex` 变回 `undefined` 时
+   * 不会重建，而 SDK 侧还留着 5。这正是 issue 验收口径 (d) 要求的「有值 → undefined 必重建」。
+   */
+  const possiblyApplied = new Set<string>();
+
   /** 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。 */
   async function applyBatch(batch: Record<string, unknown>): Promise<void> {
     const context = readyCtx;
@@ -465,9 +482,21 @@ export function useOverlaySpec<Props extends object, Resource>(
     }
     const overlays = context.client.driver.overlays;
     const handle = current as unknown as OverlayHandle;
+    // 撤回落点查 `OVERLAY_DESCRIPTORS` 的 `revert` 档（缺省即 `rebuild`，逐字段依据见
+    // `OVERLAY_REVERT_RATIONALE`）。`kind` 为空（第三方覆盖物）⇒ **不撤回**：没有逐字段依据
+    // 就不猜落点，代价是那种键保持旧值，收益是 SDK 与声明不会静默分叉。
+    const revertsToRebuild = (key: string): boolean =>
+      kind !== undefined && overlayPropertyRevert(kind, key) === "rebuild";
     const inPlace: Record<string, unknown> = {};
     let needsReplace = false;
     for (const [key, value] of Object.entries(batch)) {
+      // #138：**撤回**（有值 → 未表态）是独立于 `policy` 的一维，判据是
+      // ① 这个键「**可能**已写入」（`possiblyApplied`）且 ② 它的撤回落点是 `rebuild`。
+      // 两个条件都成立才升级为一次重建；`policy` 仍是「值变化时怎么办」的分类。
+      if (value === undefined && possiblyApplied.has(key) && revertsToRebuild(key)) {
+        needsReplace = true;
+        continue;
+      }
       if (overlays.updatePolicy(handle, key) === "recreate") {
         needsReplace = true;
         continue;
@@ -498,6 +527,13 @@ export function useOverlaySpec<Props extends object, Resource>(
       return;
     }
     if (Object.keys(inPlace).length === 0) return;
+    // 「尝试过」整批**先**记（`setOptions` 是逐 setter 调用：第一个键写成功、第二个键抛错时，
+    // 前一个键已经真的改了 SDK，整批不记就会在它撤回时漏掉重建）。判据因此是「可能已写入」
+    // 而不是「成功写入过」——按成功判断会让一次**部分成功**的写入变成永久分叉
+    // （与图层侧 `useLayerResource.possiblyAppliedOptions` 同一条理由，PR #61 第四轮评审发现 2）。
+    for (const key of Object.keys(inPlace)) {
+      if (inPlace[key] !== undefined) possiblyApplied.add(key);
+    }
     try {
       overlays.setOptions(target as unknown as OverlayHandle, inPlace);
     } catch (error) {
@@ -616,6 +652,21 @@ export function useOverlaySpec<Props extends object, Resource>(
       create: ({ context, props: current }) => {
         // 「实例是按哪个位置建的」必须在**调用 create 之前**取，理由见 `createdPosition`。
         createdPosition = positionField ? (readPosition() ?? null) : null;
+        // #138：构造期给过值的字段**记进「可能已写入」**——`spec.create` 把它传进了构造器，
+        // 因此它此后变回未表态时需要一次重建才能回到 SDK 自己的默认值。只记**非 undefined**
+        // 的值：`undefined` 从来没进过构造器，不存在要撤回的东西。
+        for (const [prop, update] of fields) {
+          if (update === "visibility" || update === "position") continue;
+          if (update === "version" || update === "alias") continue;
+          const key = descriptorKeyOf(prop);
+          if (key === null) continue;
+          // 用**原始** prop 判「给过值没有」：`readProp` 会对 `fieldValues` 里的惰性字段
+          // （`GroundOverlay.url` 的工厂）求值，而 `OverlaySpec.fieldValues` 的契约是
+          // 「一次创建里只求值一次」——这里多求一次就会破坏它（用例会红）。
+          // 投影**不可能**把一个有值变成 `undefined`（它只会求值，不会产出 undefined 之外的东西），
+          // 因此按原始引用判与按投影后的值判等价。
+          if (readRawProp(prop) !== undefined) possiblyApplied.add(key);
+        }
         return spec.create(context, current);
       },
       mount: ({ context, resource, props: current, scope, stale }) => {
@@ -834,6 +885,7 @@ export function useOverlaySpec<Props extends object, Resource>(
     // 组件卸载后一切输入丢弃：待办与尾随批一起清空（不会有在飞的排空再把它们写回去）。
     dirtyFields = null;
     trailing = null;
+    possiblyApplied.clear();
     readyCtx = null;
   });
 
