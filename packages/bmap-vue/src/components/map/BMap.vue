@@ -816,11 +816,12 @@ function mountMap(): void {
   const host = containerRef.value;
   // 判据与建图等待点共用同一个读数（fresh DOM，不是观察器缓存）。
   //
-  // ⚠️ 这一句是**防御性前置**，不是唯一的拦截点：真正会让「0×0 建图」不发生的可观察结果是
-  // `waitForUsableContainer()`（`beforeCreateMap` 里的最后一次 fresh 判定）；本句的价值是
-  // 「别启动一次注定被拦的 boot」（省一次无用装配、也不把状态推进 `creating`）。
-  // 独立复核记录：把本句整条删掉，现有 1799 条用例仍全绿 ⇒ 它**没有独立用例**，
-  // 别以为它被覆盖了（真正被用例钉住的是 `retry()` 的 fresh 判据与建图等待点）。
+  // 本句拦的**不是**「0×0 建图」——那由 `waitForUsableContainer()`（`beforeCreateMap` 里
+  // 最后一次 fresh 判定）兜住；本句拦的是「**启动一次注定被拦的 boot**」。
+  // 独立用例（#127）：`挂起的 retry 期间每帧复查不得启动 boot` —— `ensureUsableRecheck`
+  // 每帧都会调本函数，容器仍 0×0 时少了这句就会 `startBoot()`，把状态从 `error` 推进到
+  // `creating`：失败态下 `#error` 插槽（连同它的重试按钮）被 `#loading` 顶掉，业务
+  // 「重试一次」的入口凭空消失，而这次重试其实一条命令都没发出去。
   if (!host || !isUsableSize(suspension.measureNow())) return;
   // 先唤醒「建图等待点」里等容器可用的那一次挂载（它已经跑到 SDK 加载之后了）
   for (const resolve of containerUsableWaiters.splice(0)) resolve();

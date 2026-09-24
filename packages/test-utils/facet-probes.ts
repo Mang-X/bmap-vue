@@ -2,14 +2,17 @@
  * Facet 探针（M3A2-SERVICES-NATIVE / issue #23）
  *
  * 与 `driver-contract.ts` 的分工：这里只有**纯调用与结构化记录**，不 import vitest、
- * 不 import Fake，因此同一段代码可以在两个环境里跑：
+ * 不 import Fake。拆开当初是给「浏览器里也能 import」留的形状
+ * （`driver-contract.ts` 顶部 import 了 vitest，浏览器里根本加载不了）。
  *
- * - vitest（Fake v4）：`driver-contract.ts` 的 `run*FacetContract` 用 vitest 断言这里的结果；
- * - 真实 AK smoke（浏览器 / headless Chromium）：直接 `import` 本文件，把结果写进页面。
+ * ⚠️ **#127 更正消费关系**：真实 AK smoke **没有**消费这些探针 ——
+ * `tests/browser/jsapi-v4/` 从未 import 本文件，它走自己的 runner / checks
+ * （`report.mts` / `registry.mts`）。当前的消费者只有 `driver-contract.ts` 的
+ * `run*FacetContract`（Fake v4）与 `driver/jsapi-v4/native-layers.test.ts`（`callNativeLayerOperation`）。
  *
- * 拆开是被逼出来的：`driver-contract.ts` 顶部 import 了 vitest，浏览器里根本加载不了。
- * 「同一 Contract Harness 可运行 Fake v4 和真实 smoke 子集」（issue #23 实施步骤 5）
- * 因此落成「探针共用 + 断言各自」这两半。
+ * 拆分形状保留：探针仍是零 vitest / 零 Fake 依赖的纯函数，若日后真要把 browser smoke
+ * 接到这层，不必再拆一次。但「真实 smoke 共用探针」在今天**不是**事实，
+ * 别把它当成已接好的公共件。
  */
 import type { Point } from "../bmap-vue/src/driver/types/geometry";
 import type {
@@ -92,8 +95,10 @@ export interface ServiceFacetProbes {
  * `Autocomplete` **不在这一面上**（#104）：它绑输入框、只有一条不带请求身份的
  * `onSearchComplete`，所以这里只走「构造 + 释放」，不猜回包。
  *
- * 注意 `live` 环境（真实 AK）里 `geocode` / `search` 的结果取决于配额与网络，
- * 因此这里**只负责记录**，期望值由调用方给（vitest 侧分 fixture / live 两档）。
+ * 本函数**只负责记录**，期望值由调用方给 —— 因为真实 AK 里 `geocode` / `search` 的结果
+ * 取决于配额与网络，那一侧的口径不在本文件（#127 起 vitest 侧也**不再**分
+ * fixture / live 两档，只要求命中 fixture；真实 AK 由 `tests/browser/jsapi-v4/`
+ * 那条独立 runner 负责，它把「前置不成立」记成 `blocked`）。
  */
 export async function probeServiceFacet(
   services: JsapiV4ServiceDriver,
@@ -186,8 +191,9 @@ export const NATIVE_LAYER_FACET_OPERATIONS = [
 /**
  * 每个归一化操作的最小可调用载荷。
  *
- * Fake 侧单测与真实 smoke 共用同一份「怎么调」——否则「契约里测的那套调用」与
- * 「浏览器里跑的那套调用」会各自漂移。
+ * 「怎么调」只有这一份实现：`driver-contract.ts` 的契约与
+ * `driver/jsapi-v4/native-layers.test.ts` 的直测共用它，避免同一批操作各写一遍而漂移。
+ * （#127 更正：原文写「Fake 侧单测与真实 smoke 共用」，但 browser smoke 没有消费方。）
  */
 export function callNativeLayerOperation(
   driver: NativeLayerDriver,

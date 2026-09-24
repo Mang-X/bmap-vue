@@ -3,7 +3,8 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-12
 - 计划键：`M3A2-SERVICES-NATIVE`（issue #23，追踪 #12）
-- 取代：无
+- 取代：无（决策 11 的「契约带 `expectation` 两档」由 #127 **部分取代** —— 那一档已删除，
+  其余决策不变；见下方 §11 的取代注记）
 - 相关：[`2026-09-11-jsapi-v4-driver-foundation`](./2026-09-11-jsapi-v4-driver-foundation.md)、[`2026-09-11-jsapi-v4-map-facet`](./2026-09-11-jsapi-v4-map-facet.md)、[`2026-09-11-jsapi-v4-overlay-facet`](./2026-09-11-jsapi-v4-overlay-facet.md)、[`2026-09-11-jsapi-v4-control-layer-facets`](./2026-09-11-jsapi-v4-control-layer-facets.md)、[`2026-09-10-bmap-raw-sdk-boundary`](./2026-09-10-bmap-raw-sdk-boundary.md)
 
 ## 背景
@@ -306,11 +307,21 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 - `packages/test-utils/driver-contract.ts`：新增 `runServiceFacetContract` /
   `runNativeLayerFacetContract` / `runPanoramaFacetContract`，用 vitest 断言探针结果，并把探针
   再导出（调用方不必知道文件怎么切）。
-- 契约带 `expectation: "fixture" | "live"` 两档：Fake 环境要求「命中 fixture」；真实环境只要求
+- ~~契约带 `expectation: "fixture" | "live"` 两档：Fake 环境要求「命中 fixture」；真实环境只要求
   「结算且形状自洽」——配额、网络与 Referer 都不受本库控制，把「真实环境必须成功」写进契约
-  只会得到一个不稳定的门禁。
-- `callNativeLayerOperation` 是「怎么调」的单一实现，Fake 侧单测与真实 smoke 共用，避免
-  「契约里测的那套调用」与「浏览器里跑的那套调用」各自漂移。
+  只会得到一个不稳定的门禁。~~
+  **#127 取代（前半段关于「不受本库控制」的事实不变，结论改了）**：这一档与三处跳过分支已删除，
+  契约固定要求「命中 fixture」。删它的理由不是「live 档没人用」，而是它在道理上不成立：真实 AK
+  那一侧由 `tests/browser/jsapi-v4/` 那条 runner 负责，它有一档**本契约不提供**的口径 ——
+  把「前置不成立」（AK 权限 / 配额 / Referer / 网络）记成 `blocked`（退出码 3，不可放行），与
+  「库回归」的 `fail` 严格分开（规则见 `report.mts`；`registry.mts` 只负责把 `service-geocode`
+  登记进 live 档）。本档的处置只是把断言**静默跳过**，既不是「必须成功」也不是「前置不成立」，
+  两头不靠。删除也不丢覆盖：两个调用方都传 `"fixture"`，那三处 `live` 分支是**死代码**。
+- `callNativeLayerOperation` 是「怎么调」的单一实现，Fake 侧单测与契约共用，避免
+  「契约里测的那套调用」与「直测里跑的那套调用」各自漂移。
+  （**#127 更正**：原文写「与真实 smoke 共用」，但 `tests/browser/` 从未 import 这些探针
+  —— 真实 AK 走自己的 runner / checks。探针的零 vitest / 零 Fake 依赖形状保留，
+  便于日后真要接入时不必再拆。）
 
 ### 12. Capability Catalog 与运行时一致
 
@@ -327,8 +338,13 @@ v4 的 `createTrackAnimation` 抛出带 `capability: "service.track-animation"` 
 
 - 正面：v4 有了完整可用的 Service / Panorama / Native Layer 三个面，且**装配完成**——
   用 v4 Provider 的组件路径从「明确失败」变成「可用」；服务调用不再需要业务自己写
-  「超时 / 空结果 / 迟到回调」三件套；原生数据图层的「调了没反应」被显式失败取代；
-  契约在两个环境（Fake 与真实 AK）跑同一份探针代码。
+  「超时 / 空结果 / 迟到回调」三件套；原生数据图层的「调了没反应」被显式失败取代。
+- 探针的**零 vitest / 零 Fake 依赖**形状保留：Fake 契约（`driver-contract.ts`）与
+  native-layer 直测复用同一份「怎么调」的实现，真实 browser smoke 由**独立** runner /
+  checks 负责（`tests/browser/jsapi-v4/`，不 import `facet-probes`）。
+  （**#127 更正**：原文写「契约在两个环境（Fake 与真实 AK）跑同一份探针代码」，
+  但那条 smoke 路径今天没有消费这些探针；本节下方「真实 AK smoke 记录」记的是当时的
+  临时 Vite harness，属历史实测，与当前仓库消费关系不矛盾。）
 - 负面 / 成本：新增三个 v4 独有类型面（`JsapiV4Driver` / `NativeLayerDriver` /
   `ServiceInvocationDriver`）；`createJsapiV4Driver` 的返回类型从 `BMapDriver` 收窄为
   `JsapiV4Driver`（子类型，不破坏既有调用方）；`facet-probes.ts` 与
@@ -478,7 +494,7 @@ smoke 顺带确认（并已回写进决策）的运行时事实：
 | 实施步骤 1 / 2（callback → Promise/Result、迟到回调 / 空结果 / SDK status 标准化） | 已实现，见 §1 / §2 / §4；测试见 `serviceCall.test.ts` 与 `services.test.ts` |
 | 实施步骤 3（原生图层 setData/clearData/style/state/picking） | 已实现，见 §7 |
 | 实施步骤 4（对官方类型缺失的扩展成员建立最小 augmentation） | **刻意不做**：augmentation 治理白名单要求「无法通过项目领域类型绕开」，此处已用领域类型 + 结构探测绕开；`#22` 对 `PanoramaCoverageLayer` 是同一口径。已在「非目标」写明，PR 正文复述，避免被按字面判为漏项 |
-| 实施步骤 5 / 测试要求 5（同一 Harness 可跑 Fake v4 与真实 smoke 子集） | 探针拆成零 vitest 依赖的 `facet-probes.ts`，vitest 契约与真实 AK 页面共用同一份代码；**smoke 本身是一次性人工验证、不进门禁**（AK 来自 docs 示例，进门禁会把门禁绑到外部配额），此点在 ADR 与 PR 正文都明确标注 |
+| 实施步骤 5 / 测试要求 5（同一 Harness 可跑 Fake v4 与真实 smoke 子集） | 探针拆成零 vitest 依赖的 `facet-probes.ts`，形状已就位；**但「共用同一份代码」只在契约侧成立** —— 真实 AK 页面走自己的 runner / checks，`tests/browser/` 从未 import 这些探针（**#127 复核更正**，见 §11）。**smoke 本身是一次性人工验证、不进门禁**（AK 来自 docs 示例，进门禁会把门禁绑到外部配额），此点在 ADR 与 PR 正文都明确标注 |
 | 测试要求 1~4 | 逐条对应：`serviceCall.test.ts`(9)、`services.test.ts`(23)、`native-layers.test.ts`（含 8×12 一致性）、`panorama.test.ts`(12)、`v3-jsapi-v4-services-native-layers.test.ts`(12，跑装配后的 Driver) |
 | 验收标准 2「后续组件不需要访问 raw BMap 服务或图层」 | **部分达成**：seam 已就位（`driver.services.geocode(...)` / `driver.nativeLayers.*` 不需要 raw），但**现有 7 处 service composable 与 `BAutoComplete.vue` 仍用 `handle.raw`**——迁移属 M7 `#38`（与 ServiceSpec / AsyncTaskController 一并设计）。ADR「迁移影响」与「已知限制」都登记了这条，**不当作已完成** |
 | 验收标准 1「v4 Driver 覆盖 Cutover 前现有全部功能」 | 部分：LocalSearch / Route 服务类、TrackLine 播放控制、panorama 声明式能力、`layer.traffic` 均有据顺延（各自的 ADR / issue 已登记） |

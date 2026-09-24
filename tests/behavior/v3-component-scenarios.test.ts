@@ -2246,6 +2246,46 @@ describe("MapHandle / 容器门禁 / 可见性策略（M4-HANDLE-UX / #29）", (
     harness.assertIdle("deferredWaiters 的活性兜底");
   });
 
+  it("挂起的 retry 期间每帧复查不得启动 boot：容器仍 0×0 时状态必须留在 error（#127）", async () => {
+    useManualFrames();
+    harness.failNextInitializeView();
+    const { wrapper, bmap } = await mountControlledMap(controlledViewProps);
+    const api = exposeOf(bmap);
+    const root = bmap.element as HTMLElement;
+    expect(statusOf(bmap), "起点是失败态").toBe("error");
+    const created = harness.mapsCreated();
+
+    // DOM 变 0×0 但**不交付**（缓存仍 320×240）→ retry 走 fresh 判据 ⇒ 挂起进 deferredWaiters，
+    // 并起一个每帧的 fresh 复查（`ensureUsableRecheck`）。
+    shims.setElementSize(root, { width: 0, height: 0 });
+    const pending = api.retry();
+    await settleProps();
+    expect(statusOf(bmap), "retry 挂起时不得启动 boot").toBe("error");
+
+    // 容器**仍然**是 0×0 时把复查帧跑掉若干轮：复查的唯一目的就是「容器已变可用 → 唤醒等待者」，
+    // 不可用时它必须什么都不做。少了 `mountMap()` 里的 fresh 尺寸判据，这里的每帧复查会直接
+    // `startBoot()`，把状态从 `error` 推进到 `creating` —— 失败态下 `#error` 插槽（连同它的
+    // 重试按钮）被 `#loading` 顶掉，业务「重试一次」的入口凭空消失，而这次重试一条命令都没发。
+    frames!.flush();
+    frames!.flush();
+    await settleProps();
+    expect(
+      statusOf(bmap),
+      "容器仍不可用时每帧复查不得启动 boot（状态应留在 error，而不是 creating）",
+    ).toBe("error");
+    expect(harness.mapsCreated(), "复查期间不建图").toBe(created);
+
+    // 容器真的变可用 → 复查按契约唤醒挂起的这次 retry
+    shims.setElementSize(root, { width: 320, height: 240 });
+    frames!.flush();
+    await expect(pending, "容器可用后挂起的 retry 必须继续").resolves.toBeTruthy();
+    expect(statusOf(bmap)).toBe("ready");
+    expect(harness.mapsCreated(), "放行后只建一张").toBe(created + 1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("复查帧不得启动 boot");
+  });
+
   it("fresh 门禁阻塞后：缓存层没有发生转换也必须被唤醒（复审 P1，活性兜底）", async () => {
     useManualFrames();
     const { wrapper, bmap } = await mountControlledMap(() => ({

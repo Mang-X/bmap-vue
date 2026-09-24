@@ -74,7 +74,7 @@
 | `useResourceScope.ts` | 原 `core/lifecycle/useResourceScope.ts` | **0**（只有两行出口） | — | **REMOVE** | #104 R2：文件与两处出口删除 |
 | `MapRuntimeOptions.clientFactory`（与 `clientContext` 二选一） | `core/runtime/MapRuntime.ts:74` | 只有 3 个测试文件 | 无生产消费者的第二条臂 | **SIMPLIFY** | 后续票（收口要连带改 `v3-context-runtime-lifecycle` 的夹具） |
 | `MapRuntimeStatus` 的 `"loading"` 别名 | `core/context/types.ts:30` | 类型层，#71 起运行期不再写 | `OWNED` 但已过时 | **SIMPLIFY** | **本票已修文档承诺**：`docs/zh-CN/components/map.md` 两处不再把 `loading` 写成会发出的状态；类型别名到 #44 一并收 |
-| `BMap.vue:819-824` 的防御性前置检查（文件自陈「删掉整句，1799 条用例仍全绿」） | `components/map/BMap.vue` | 无 | `UNKNOWN` | **SIMPLIFY** | 后续票：要么补一条能翻红的用例，要么删 |
+| `BMap.vue:813-825` 的 `mountMap()` 前置检查（曾自陈「删掉整句，1799 条用例仍全绿」） | `components/map/BMap.vue` | `ensureUsableRecheck` 的每帧复查 + `onContainerReady` | **已取证**：`ensureUsableRecheck` 每帧调 `mountMap()`，容器仍 0×0 时少了这句就会 `startBoot()` | **KEEP（#127 落地）** | **#127 选了 (a) 保留并补上能翻红的用例**：`v3-component-scenarios` 的「挂起的 retry 期间每帧复查不得启动 boot」—— 删掉该句实测变红（`expected 'creating' to be 'error'`）。它拦的不是「0×0 建图」（那由 `waitForUsableContainer()` 兜底），而是「启动一次注定被拦的 boot」：失败态下状态从 `error` 被推进到 `creating`，`#error` 插槽连同它的重试按钮被 `#loading` 顶掉，业务「重试一次」的入口凭空消失，而这次重试其实一条命令都没发出去 |
 | `PanoramaStatus` 七态（运行期只有 `error` 被内部读） | `core/panorama/index.ts:34-50` | `BPanorama.vue` 公开 expose + 文档页列全 | `OWNED` + 已文档化 | **KEEP** | 外部消费者无法自证为零，故不在本票删除 |
 
 ## 5. Overlay / Layer / Control / Panorama 与 Capability Catalog
@@ -119,7 +119,7 @@
 | Fake 刻意比官方宽松（不剔除未声明 setter） | `fake-bmap-v4/objects.ts:53` 等 | 策略表仍按官方声明守 | **KEEP**（刻意的不对称，`FakeMap.ts:692` 已说明：宽松的夹具会藏 bug） | — |
 | `FakeV4ViewAnimation.suppressCancelEvent`（**新加的测试辅助**：取消成功但**不**派发 `animationcancel`） | `fake-bmap-v4/FakeMap.ts` | 只被防御性用例读：取消已交付时 hooks 必须收敛所有权；两个 hooks 共用一张地图时 H1 的重试与卸载都不得碰 H2 的动画 | 它建模的是 F-1 **未证的反面**（官方可能不派发该事件），因此**不能**当官方行为读 | **KEEP 为测试工具** | #105 评审第三轮：Fake 默认一定派发该事件，于是「等事件才交回所有权」在夹具里永远不会出错——生产实现是否依赖它，只有把派发关掉才看得出来。该用例（`第一段取消成功但无 animationcancel…`）证伪的是我们的依赖，不是官方的时序。F-1 于 2026-09-21 结清后这一条仍然成立：实测只覆盖了**成功取消会派发** `animationcancel` 这一侧，「取消成功却没有事件」依旧未证 |
 | `FakeV4ViewAnimation` 把 `delay: 0` 建模成「一个 0ms 定时器后启动」 | `fake-bmap-v4/FakeMap.ts` 的 `scheduleStart` / `startInternal` | `driver/jsapi-v4/map.test.ts` 的「`delay: 0` 的官方推荐路径仍然是『先取消、再销毁 SDK 对象』」 | **FAKE-ONLY 时序**：真实 4.0 在 `delay: 0` 下启动也要 **5–120ms**（F-1 读数），比销毁路径上那个 0ms 兜底**晚**，所以「先取消、再销毁」对**待启动**的动画在真实运行时大概率不成立 | **KEEP 为测试工具 + 登记** | 夹具的「几乎瞬时启动」是让「推迟到安全窗口」这条路径**可测**的必要简化（否则只能用真实时间等 100ms，用例会脆）。口径：该用例证明的是**本库的排序逻辑**在窗口成立时正确，不证明真实运行时一定落在那个顺序上——真实排序见 ADR 已知限制「动画的迟到启动窗口无法彻底关闭」 |
-| `driver-contract` 适配器上的 `expectation?: "fixture" \| "live"` 一档 | `test-utils/driver-contract.ts`（一支开关 + 三处跳过分支） | **两个调用方都传 `"fixture"`**（`v3-jsapi-v4-services-native-layers.test.ts:51`、`:71`），`"live"` 零使用者 | 这是**共享契约适配器**上的一档开关，不是 Fake 对象自身的属性；`smoke-jsapi-v4.mts --mode=live` 是另一条 runner，没有任何代码把这档喂给它 | **SIMPLIFY** | 后续票：要么删掉这一档（连同三处跳过分支），要么真的把它接到 live runner 上再留。本票不动——它不在删除面里，且改它要连带改契约适配器的入参形状 |
+| ~~`driver-contract` 适配器上的 `expectation?: "fixture" \| "live"` 一档~~ | ~~`test-utils/driver-contract.ts`（一支开关 + 三处跳过分支）~~ | — | — | **REMOVE（#127 落地）** | **#127 选了 (a) 删除**：这一档 + 三处跳过分支已删，两个 harness 的 `expectation` 字段一并摘掉。**为什么 (b) 在道理上就不成立**：live 侧并不是「没有契约」，而是有**本文件不提供的第三档口径** —— `tests/browser/jsapi-v4/` 那条 runner 把「前置不成立」（AK 权限 / 配额 / Referer / 网络）记成 `blocked`（退出码 3，不可放行），与「库回归」的 `fail` 严格分开（规则见 `report.mts`；`registry.mts` 只负责把 `service-geocode` 登记进 live 档）。真实环境「必须成功」既做不到也不该写进契约；而这一档的处置只是把断言**静默跳过**，两头不靠。删除不丢覆盖：两个调用方都传 `"fixture"`，那三处 `live` 分支是**死代码**，而 `panorama-viewer` 在 live 档本就不登记（`registry.mts`，「live 需要真实全景场景」） |
 
 ---
 
@@ -224,7 +224,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
   → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）；
 - 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision；**已落地**：
   删列 + reason 改名 `unlisted-capability`，见上表处置列与 ADR `2026-09-24-single-engine-capability-catalog`）；
-- 两处无判别力的内部判据（`BMap.mountMap()` 的防御性前置、`driver-contract` 的 `expectation` 档）→ **#127**（Test Debt）；
+- 两处无判别力的内部判据（`BMap.mountMap()` 的防御性前置、`driver-contract` 的 `expectation` 档）→ **#127**（Test Debt）—— **已结清**：`mountMap()` 的前置保留并补上能翻红的用例，`expectation` 档连同三处跳过分支删除；
 - 探针债务 F-2 / F-3 / F-4 → **#128**（Probe Debt）；
 - **不冻结 `./core` 的全量导出面**（113 个值导出）：那是 #44「冻结 core 出口」的交付物，#104 只负责
   「把不该被冻结的先收掉」。门禁里刻意写成「被删名单 + 不变量」而不是精确集合，就是为了不抢这一步。
@@ -236,7 +236,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 | 欠账 | 分类 | 归宿 |
 | --- | --- | --- |
 | 能力目录 `engines` 维度 / `engine-unsupported` | Decision | #126（**已关闭**：删列 + 改名 `unlisted-capability`） |
-| `BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档 | Test Debt | #127 |
+| ~~`BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档~~ | Test Debt | ~~#127~~ **已结清**：`mountMap()` 保留 + 补出能翻红的用例（删掉实测变红）；`expectation` 档删除 |
 | F-2 / F-3 / F-4 三条未取证的第三方语义 | Probe Debt | #128。**其中 F-2 是 issue 验收标准第 5 条点名的那一类例外**：`SharedLoadTask` 的进程级 `callbackRegistry`（全局名占用 / foreign 回调判定）是审计表里**唯一保留**的「恢复上游未公开身份」处，而该验收标准要求「若存在例外，必须逐项写明 live guarantee 与 gate」——现状只有「不进 Stable 承诺」这句措辞与一张 probe 票，**既没有 live guarantee 也没有 gate**。→ 这一条在 #104 的账面上**记为未满足**（不是「已登记即满足」）：#128 的第一次取证必须先给出 guarantee 措辞与可回归 gate，在给出之前它**不得**被 #44 冻结进 Stable 承诺 |
 | 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |
 | `useBMapServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | #44 |
