@@ -17,9 +17,16 @@
  * **B 必须真的用 `useModel` 承担父子通道**（复审 P1 指出过一个假阳性版本）：早先的 B 虽然
  * 调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
  * `model` **从未参与任何读写**，只是个被拿来计数的死对象。删掉整行 `useModel` 行为断言仍然
- * 全过（已实测）。现在 `model` 是**唯一**父子通道：受控值从 `model.value` 读，写回走
- * `model.value = next`；删掉它会让**两条行为用例都变红**（已实测）—— 这是「B 真的是 Vue-native
- * 路线」的可复核证据。
+ * 全过（已实测）。现在 `model` 是**唯一**写通道：写回走 `model.value = next`；删掉它会让
+ * **两条行为用例都变红**（已实测）—— 这是「B 真的是 Vue-native 路线」的可复核证据。
+ *
+ * ⚠️ **`useModel` 只能承担「写」，不能承担「读」与「档位判定」**（复审五轮 P1，第二个假阳性
+ * 版本）。`useModel` 判档用的是 `hasVModel` —— 它看的是 **vnode raw props 上有没有这个 key**，
+ * 而 key 省略时 `get()` 返回的 `localValue` 就是 **Vue 自己的局部状态**：写 `model.value` 会
+ * **本地生效**，读它会把「非受控本地值」误当成「受控值」。后果是两条：① `reset()` 归位后
+ * 仍读到交互值（实测 A 归位 4 / 旧 B 仍是 11）；② 档位切换告警一次都不触发（实测 A 1 次 /
+ * 旧 B 0 次）。所以 B 的**读与档位一律取自外部 prop**（`external()`），`internal` 是唯一事实源，
+ * `useModel` 只提供「写回父级 / 非受控本地生效」这条通道。这两条已各有一条用例钉住。
  *
  * **SDK 腿为什么两边都有**：`Map.vue:1225` 的 `watch(() => props.zoom, …)` 干的是
  * `driver.map.setZoom` —— **写 SDK 不是 Vue 的职责**，`useModel` 也不会替你写。所以它不是
@@ -175,17 +182,30 @@ function mountRoute(
           return true;
         };
       } else {
-        // B：`useModel` + **最小**桥接。父↔子归 Vue（`model` 是**唯一**的父子通道：受控值从
-        // `model.value` 读，写回走 `model.value = next` 让 Vue 自己决定「本地更新还是 emit」）。
-        // 桥接只留 Vue 覆盖不了的：容差相等（reconcile）、SDK 写入、`reset()`，以及
-        // 「记住最后一次外部值」（A3：`useModel` 在受控 prop 被摘掉时读到 `undefined`，
-        // 而本库冻结的是「内部接管，保留最后一次外部值」）。
+        // B：`useModel` + **最小**桥接。父↔子归 Vue（写回走 `model.value = next`，由 Vue 自己
+        // 决定「本地更新还是 emit」）。桥接只留 Vue 覆盖不了的：容差相等（reconcile）、
+        // SDK 写入、`reset()`，以及「记住最后一次外部值」（A3：`useModel` 在受控 prop 被摘掉
+        // 时读到 `undefined`，而本库冻结的是「内部接管，保留最后一次外部值」）。
+        //
+        // ⚠️ **不能把 `model.value` 当成「当前受控值」来读**（复审五轮 P1）：`useModel` 判定
+        // `hasVModel` 用的是 **vnode raw props 的 key 是否存在**。本库文档推荐的
+        // `<Map :default-zoom="12" />`（**根本没有 `zoom` key**）⇒ `hasVModel = false`，
+        // 此时 `model.value` 是 `useModel` 自己的 **localValue**：非受控下写它会**本地生效**，
+        // 于是 `model.value` 变成用户交互值 —— 再读它会把「非受控的本地值」误当成「受控值」，
+        // `reset()` 也压不住（实测 A 回到 4 / B 停在 11）。
+        //
+        // 所以**「受控档的权威值」一律读 `childProps.zoom`（外部 prop）**，档位也由它判定 ——
+        // 这与本库自己的判据（「受控值是否为 undefined」）一致，且不受 `hasVModel` 影响。
+        // `useModel` 只承担**写通道**（以及受控档下「值停在 prop 上等父级回写」的行为）。
         const model = useModel(childProps, "zoom");
         // 首次解析：受控值 > 非受控初值 > 库默认（与 A 的优先级一致）。**只解析一次**——
         // 这就是 `default*` 只在首次解析时生效的那一半。
-        const initial = (model.value as number | undefined) ?? childProps.defaultZoom ?? 4;
+        const external = (): number | undefined => childProps.zoom;
+        const initial = external() ?? childProps.defaultZoom ?? 4;
+        // **内部镜像是唯一事实源**：`useControllableState` 的 `internal` 同理。读值优先级与 A
+        // 一致：受控读外部，否则读 internal。
         const internal = shallowRef<number>(initial);
-        const effective = computed<number | undefined>(() => (model.value as number | undefined) ?? internal.value);
+        const effective = computed<number>(() => external() ?? internal.value);
         read = () => effective.value;
         commit = (next) => {
           if (numbersEqual(internal.value, next)) return false;
@@ -195,25 +215,25 @@ function mountRoute(
           return true;
         };
         // `resetView()` 语义：把内部状态恢复为**首次解析**的快照（不通知父级）。
+        // 改 `internal` 就够 —— `effective` 在非受控档只读 internal，不会被 `useModel` 的
+        // localValue 压住（这正是上一版 B 的 bug）。
         reset = () => {
           internal.value = initial;
         };
-        // 记住「最后外部值」并写 SDK：同一条 watcher 兼两职。`undefined`（受控被摘掉）时
-        // **不清 internal** —— 那正是「保留最后一次外部值」的实现点。
-        //
         // 冻结契约里的**告警**同样必须实现，否则 A 的第二个 effect（`defaultValue` 告警
-        // watcher）就与 B 不可比（复审 P1 指出）。**mode 告警并进这条 watcher**（不新增 effect）：
-        // 档位由「上一次是否有受控值」判定，与「有没有真 v-model」无关 —— `hasVModel` 只决定
-        // 谁发 emit。`warnOnce` 用一个 Set 去重，对齐 A 的「每种方向最多一次」。
+        // watcher）就与 B 不可比（复审四轮 P1 指出）。**mode 告警并进这条 watcher**（不新增
+        // effect）：watch 的是**外部 prop**而不是 `model.value` —— 后者在 `hasVModel=false`
+        // 时含 Vue 自己的本地状态，会把「非受控本地值」误记成「已受控」（复审五轮 P1 指出）。
+        // `warnOnce` 用一个 Set 去重，对齐 A 的「每种方向最多一次」。
         const warned = new Set<string>();
         const warnOnce = (key: string, message: string): void => {
           if (warned.has(key)) return;
           warned.add(key);
           console.warn(message);
         };
-        let wasControlled = model.value !== undefined;
+        let wasControlled = external() !== undefined;
         watch(
-          () => model.value,
+          external,
           (next) => {
             if (next === undefined) {
               if (wasControlled) {
@@ -229,6 +249,7 @@ function mountRoute(
                   "zoom 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。",
                 );
               }
+              // 受控值变化 → 写进内部镜像（受控档下「值以外部为准」的那一半）。
               internal.value = next;
             }
             wasControlled = next !== undefined;
@@ -236,6 +257,10 @@ function mountRoute(
           },
           { flush: "post" },
         );
+        // 非受控档不需要「把 `useModel` 的本地写搬进 `internal`」这条 watcher：`commit()` 里
+        // `internal.value = next` 已经先落库了（上一版多写一条 watcher 是因为读值还经过
+        // `model.value`；现在读值只认「外部 prop，否则 internal」，那条就多余了）。
+        //
         // `default*` 的「只在首次解析时生效」告警：`defaultZoom` 的变化**不经过** `model`，
         // 所以没法并进上面那条，只能单独一条 watcher —— **与 A 一样是 1 个**。
         // 这不是 B 独有的额外成本：A 的 `useControllableState` 也是这样一条。
@@ -454,6 +479,43 @@ describe("#137 Map model prototype（对照读数）", () => {
       ).toBe(before);
       // 传一个**冲突**的值（8 ≠ 内部 3）：此时才告警，且恰好一次。
       await h.setZoom(undefined);
+      await h.setZoom(8);
+      expect(
+        h.warnings().filter((line) => line.includes("由非受控切换为受控")).length,
+        `${route}：非受控→受控且值冲突应告警恰好一次`,
+      ).toBe(1);
+    }
+  });
+
+  it("真实非受控用法：`zoom` key 完全省略（不是 `zoom: undefined`）", async () => {
+    // 这是文档推荐的写法：`<Map :default-zoom="12" />` —— **根本没有 `zoom` key**。
+    // 对 `useModel` 而言这是 **hasVModel = false**（它看 vnode raw props 的 key 是否存在），
+    // 此时 `model.value` 是 useModel 自己的 **localValue**：非受控下写它会本地生效。
+    // 所以「把 `model.value` 当当前受控值读」是错的 —— 会让 reset 压不住、档位判错。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route, { defaultZoom: 4 });
+      expect(h.read(), `${route}：省略 zoom 时用 defaultZoom`).toBe(4);
+      expect(h.simulateUserZoom(11), `${route}：非受控交互应被接受`).toBe(true);
+      await nextTick();
+      expect(h.read(), `${route}：非受控交互本地生效`).toBe(11);
+
+      const emittedBeforeReset = h.emitted.length;
+      h.reset();
+      expect(h.read(), `${route}：reset 必须回首次快照`).toBe(4);
+      expect(h.emitted, `${route}：reset 不得通知父级`).toHaveLength(emittedBeforeReset);
+
+      // reset 后再次交互到**旧值**仍必须是真变化（决策 5）。
+      expect(h.simulateUserZoom(11), `${route}：reset 后再交互到旧值仍算真变化`).toBe(true);
+    }
+  });
+
+  it("真实非受控用法：先非受控交互，再传入冲突的受控值 ⇒ 告警恰好一次", async () => {
+    // 档位必须按**外部 prop 是否有有效值**判定，不能按 `model.value`：省略 prop 时
+    // `model.value` 含 Vue 自己的本地状态，会把「非受控本地值」误记成「已受控」而漏告警。
+    for (const route of ["A", "B"] as const) {
+      const h = mountRoute(route, { defaultZoom: 4 });
+      expect(h.simulateUserZoom(5), `${route}：非受控交互应被接受`).toBe(true);
+      await nextTick();
       await h.setZoom(8);
       expect(
         h.warnings().filter((line) => line.includes("由非受控切换为受控")).length,

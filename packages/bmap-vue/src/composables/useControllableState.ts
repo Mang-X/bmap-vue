@@ -21,7 +21,8 @@
  * `mapModel.prototype.test.ts`（两种接线都手写 `defineProps`/`defineEmits`，不动 `MapProps`，
  * props 形状完全一致）。结论分三层，别混：
  *
- * - **语义缺口是真的，但可补**：补上 `lastExternal` 桥接后，**能**逐项复现现状的可观察结果
+ * - **语义缺口是真的，但可补**：补上一段「记住最后外部值」的 bridge state（原型里叫 `internal`
+ *   镜像）后，**能**逐项复现现状的可观察结果
  *   （容差抖动、真实变化、受控→非受控保留最后值、default 只读一次）。所以「做不到」是错的说法。
  * - **代价上（实测，唯一口径）**：按「每个 number 字段实际注册的 `ReactiveEffect` 数」
  *   （`getCurrentScope().effects.length`，由 Vue 自己记账）—— 现状 **2**，`useModel` + 桥接
