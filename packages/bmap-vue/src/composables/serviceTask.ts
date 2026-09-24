@@ -8,7 +8,8 @@
  * 2. **能力门**：`supports()` 为 false 时状态直接 `unsupported`（与 `failed` 严格区分）；
  * 3. **生命周期**：`onScopeDispose` 冻结回写并释放实例；
  * 4. **分档**：简单服务用**无状态**通道且**不暴露** `invalidateService`；只有回包归属依赖
- *    实例身份的服务（LocalSearch / 四个路线服务）才用独占通道与可丢弃实例。
+ *    实例身份的服务（`useLocalSearch` / 四个路线 composable）才用独占通道与可丢弃实例。
+ *    名单与判据见 `core/services/instanceChannel.ts` 文件头。
  *
  * 为什么实例缓存要「Client 变化就重建」：跨 Client 的句柄会被 Driver 拒绝
  * （`BMAP_HANDLE_FOREIGN`）。把缓存绑在 Client 身份上，重建是自动的，调用方不需要记得清缓存。
@@ -192,7 +193,7 @@ function bindTask<TDriver, THandle, TArgs extends unknown[], TResult>(
   return { task, core };
 }
 
-/** 简单服务任务：官方没有实例释放入口的那一类（Geocoder / Boundary / LocalCity …）。 */
+/** 简单服务任务：官方没有实例释放入口的那 7 个 composable（见 `instanceChannel.ts` 文件头）。 */
 export function useSimpleServiceTask<TDriver, THandle, TArgs extends unknown[], TResult = TDriver>(
   ctx: MapContext,
   options: SimpleServiceTaskOptions<TDriver, THandle, TArgs, TResult>,

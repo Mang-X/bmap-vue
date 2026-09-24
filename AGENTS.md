@@ -28,11 +28,16 @@
   任务内核是 `core/services/serviceTaskCore.ts`（**框架无关**，只有状态口径：能力门 / 实例缓存 /
   只读状态 / 过期保护），实例所有权交给 `core/services/instanceChannel.ts` 的两种通道。
   Vue 侧的绑定是 `composables/serviceTask.ts`，分两档（#139）：
-  **简单档** `useSimpleServiceTask`（Geocoder / Convertor / Boundary / Geolocation / LocalCity /
-  GeocodeDetail / IpLocation —— 官方**没有**实例销毁入口，走**无状态**通道，**不暴露**
-  `invalidateService`）与**独占档** `useExclusiveServiceTask`（LocalSearch + 四个路线服务 ——
+  **简单档** `useSimpleServiceTask`（7 个 composable：`useGeocoder` / `useGeocodeDetail` /
+  `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService`
+  —— 官方**没有**实例销毁入口，走**无状态**通道，**不暴露** `invalidateService`）与
+  **独占档** `useExclusiveServiceTask`（`useLocalSearch` + 四个路线 composable ——
   官方**有** `disposeLocalSearch` / `disposeRoute`，走有状态通道 + `invalidateService`）。
   **分档判据是「该服务的 SDK 实例有没有公开的释放入口」**，不是「哪个服务看起来复杂」。
+  名单**统一按 composable 名字**列（不要混用 SDK service 类名，`useIpLocation` 背后才是官方
+  `BMap.LocalCity`，`useGeocodeDetail` 与 `useGeocoder` 共用 `service.geocoder` 能力）——判据要能
+  被逐个核对，混层会让审计判据本身变得困难。完整名单与逐条依据见
+  `src/core/services/instanceChannel.ts` 文件头。
   两档共用同一个内核，**不要**再各写一套 Promise + 定时器；任务内核一律**不**进公共出口。
 - `components`、`composables`：面向使用者的 Vue 组件与 hooks。
 - `plugins`、`resolver`、`advanced`：插件适配、按需解析、raw SDK 逃生口。

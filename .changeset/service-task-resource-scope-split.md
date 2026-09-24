@@ -4,7 +4,7 @@
 
 服务任务分两档 + ResourceScope 收成最小外部资源内核（#139）。
 
-**服务任务分层**：按「该服务的 SDK 实例**有没有公开的释放入口**」分成两档，而不是让所有服务共用一套实例身份语义。Geocoder / GeocodeDetail / Convertor / Boundary / Geolocation / LocalCity / IpLocation 走简单档（无状态实例通道），**不再**携带无消费者的 recreate / refuse / 待释放队列状态，也不再暴露 `invalidateService`；LocalSearch 与四个路线服务走独占档（官方有 `disposeLocalSearch` / `disposeRoute`），保留 supersede 语义与释放失败重试。两档共用同一个框架无关内核。
+**服务任务分层**：按「该服务的 SDK 实例**有没有公开的释放入口**」分成两档，而不是让所有服务共用一套实例身份语义。`useGeocoder` / `useGeocodeDetail` / `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService` 走简单档（无状态实例通道），**不再**携带无消费者的 recreate / refuse / 待释放队列状态，也不再暴露 `invalidateService`；LocalSearch 与四个路线服务走独占档（官方有 `disposeLocalSearch` / `disposeRoute`），保留 supersede 语义与释放失败重试。两档共用同一个框架无关内核。
 
 **公共面收窄**：`useServiceTask` / `UseServiceTaskOptions` / `ServiceTask` / `ServiceInvokeContext` / `SupersedeMode` / `SupersedePolicy` 全部内部化，不再从根入口导出（对外只有 12 个服务 composable 本身）。根入口导出数 394 → 387。
 

@@ -4,7 +4,9 @@
  * #139 的判据：**这个服务的 SDK 实例有没有公开的释放入口**。这是唯一让「释放失败重试」与
  * 「取消 / 超时后实例过期」不再是猜测的事实：
  *
- * - Geocoder / Convertor / Boundary / Geolocation / LocalCity / PanoramaService 官方**没有**
+ * - `useGeocoder`（`service.geocoder`）/ `useGeocodeDetail`（同能力，逆地理编码详情）/
+ *   `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation`（`service.local-city`，
+ *   即官方 `BMap.LocalCity`）/ `usePanoramaService`（`panorama.service`）官方**没有**本实例的
  *   `destroy` / `dispose`，实例随 Client 被 GC 回收 ⇒ `createSharedInstanceChannel()`：
  *   只有「按 Client 缓存一个实例」这一件事，**没有**取代 / 过期 / 待释放队列；
  * - LocalSearch（`clearResults`）与四个路线服务（`clearResults`）有公开释放入口 ⇒

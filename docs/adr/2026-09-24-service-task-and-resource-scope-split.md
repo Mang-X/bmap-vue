@@ -25,7 +25,7 @@
 
 | 档 | 服务 | 官方释放入口 | 实例通道 |
 | --- | --- | --- | --- |
-| **简单档** | Geocoder / GeocodeDetail / Convertor / Boundary / Geolocation / LocalCity / IpLocation | 无（随 Client 被 GC 回收） | `createSharedInstanceChannel()`：**无状态** |
+| **简单档** | `useGeocoder` / `useGeocodeDetail` / `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService` | 无（随 Client 被 GC 回收） | `createSharedInstanceChannel()`：**无状态** |
 | **独占档** | LocalSearch / Driving / Riding / Transit / Walking | `disposeLocalSearch` / `disposeRoute` | `createExclusiveInstanceChannel()`：有状态 |
 
 **判据不是「哪个服务看起来复杂」**，而是**一个能在官方声明里核对到的事实**：
@@ -162,6 +162,64 @@ Vue 3.5 提供了 `onWatcherCleanup`，issue 也点名要评估它。**结论是
    改成**白名单**（恰好是接口 9 个成员，挡住属性形态）；② 读 `createSharedInstanceChannel.toString()`
    断言那三个名字一次都没出现（挡闭包形态）。两道都实测能在注入死状态时翻红。
 4. **`ServiceTaskCore.isDisposed` 零消费者** ⇒ 按本仓「零消费者的扩展面一律删掉」的规则删除。
+
+## 复审（评审 P2 / P3）的修正
+
+### P2：`@ts-expect-error` 当时**不是**自动化门禁——已立独立门禁
+
+原 `serviceTask.test.ts` 用 `@ts-expect-error` 证明简单档类型面不接受 `release`，PR 与本 ADR
+都把它描述成「编译期断言」。**事实是它没有判别力**：`tsconfig.build.json` 排除 `src/` 下的
+`*.test.ts`，`tsconfig.tests.json` 只 include `tests/performance` 与 `tests/browser/live-performance`
+——该文件不在任何一个 typecheck 的编译范围里。
+
+**实测过**（不是推断）：给 `SimpleServiceTaskOptions` 加回 `release?`（即把简单档意外放宽，
+正是那条断言声称能抓住的回归）之后——
+
+| 门禁 | 结果 |
+| --- | --- |
+| `typecheck:package` | 退出码 0 |
+| `typecheck:tests` | 退出码 0 |
+| `serviceTask.test.ts` 运行时用例 | 16/16 绿 |
+
+⇒ **新增独立门禁** `tsconfig.type-contracts.json` + `pnpm typecheck:type-contracts`
+（CI 有对应步骤），范围只收 `tests/type-contracts/`：`service-task-tiers.type-test.ts`。
+按评审建议**没有**把 `packages/` 下的 `*.test.ts` 全量纳入——那些文件有大量既存错误，全量纳入
+是另一个票的量（`tsconfig.tests.json` 的注释早就记了这件事）。
+
+门禁本身的两点值得记下来：
+
+- **双向可判别**：`@ts-expect-error` 在「错误消失」时变成 TS2578（unused）而翻红。所以类型被
+  放宽**或**指令失效，都会红。重新注入上面那个回归 ⇒ 该文件报 TS2578 ×2 + TS2353，退出码非 0；
+  撤掉后恢复绿。
+- **正控**：独占档**确实**接受 `release` / `invalidateService` 的用例同时在文件里，保证它不是
+  「因为两边都退化成 `any`」而恒绿。
+
+写这个 fixture 时踩到两个真坑，都记在文件头：① 块注释里写 `src/**/*.test.ts` 会让其中的
+`**/` **提前结束注释**（TS1443 满屏，文件根本解析不了）；② 多行字面量上 TS 的多余属性检查报在
+**具体属性行**而不是 `const` 行，指令贴在 `const` 上会判 unused——但三个字段不能各贴一条，
+TS 在第一个未知属性处就短路。
+
+`serviceTask.test.ts` 里那条 `@ts-expect-error` 保留（它对**直接**打开该文件的人仍是可读的意图
+声明），但文件头已注明**本文件不在任何 typecheck 范围内、那条指令在这里没有判别力**，判别力由
+`tests/type-contracts/` 承担。
+
+### P3：档位名单混了层级，且漏了 PanoramaService——已统一口径
+
+原名单把两套口径混在一起：`GeocodeDetail` / `IpLocation` 是 **composable 语义**，
+`LocalCity` 却是 `useIpLocation` **背后的 SDK service**；同时代码里 `usePanoramaService`
+明确走 `useSimpleServiceTask`（能力 `panorama.service`），名单里却没有它。
+
+判据本身是「官方实例有没有公开销毁入口」，所以名单必须能被**逐个核对**——混层会让审计判据本身
+变得困难（这正是评审指出的风险）。⇒ **统一按 composable 名字**列，并补上 `usePanoramaService`：
+
+| 档 | composable（7 + 5） | 能力 id |
+| --- | --- | --- |
+| 简单 | `useGeocoder` / `useGeocodeDetail` / `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService` | `service.geocoder`（前两个共用）/ `service.convertor` / `service.boundary` / `service.geolocation` / `service.local-city` / `panorama.service` |
+| 独占 | `useLocalSearch` / 四个路线 composable | `service.local-search` / `service.*-route` |
+
+`useGeocodeDetail` 与 `useGeocoder` 共用 `service.geocoder`、`useIpLocation` 背后才是官方
+`BMap.LocalCity`——这两点正是混层会掩盖的信息，现在写进了 `instanceChannel.ts` 文件头
+（单一事实源）、`AGENTS.md` 与本 ADR，并注明「不要混用 SDK service 类名」。
 
 > 顺带记一条**没有**修的既存缺口：`packages/bmap-vue/src/**/*.test.ts` 共 64 处既存类型错误
 > （`layers.test.ts` 16 / `useMapStatus.test.ts` 13 / `overlays.test.ts` 10 …），因此**整目录的

@@ -7,7 +7,8 @@
  *   `whenReady` 失败归一、scope dispose 后状态冻结、取消之后迟到回包不回写；
  * - **简单档特有**：`useSimpleServiceTask` **不接受** `release` / `supersede` / `refuseMessage`，
  *   也**不暴露** `invalidateService`——官方没有为那 7 个服务提供实例销毁入口，携带这些状态
- *   就是无消费者的死状态（#139 的验收项）；
+ *   就是无消费者的死状态（#139 的验收项）。**类型面**由 `tests/type-contracts/` 的独立门禁守
+ *   （本文件不在任何 typecheck 范围内，`@ts-expect-error` 在这里没有判别力），这里只守运行期；
  * - **独占档特有**（下半）：释放失败重试 / `recreate` / `refuse` / 「等 `whenReady` 期间也算忙」。
  *
  * 用例里的「网络语义」用**真实的** `createServiceCall` 适配器，而不是手搭 Promise——
