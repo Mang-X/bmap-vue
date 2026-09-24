@@ -603,6 +603,7 @@ component 45 · hook 14 · type 51
 | `BMapLocalSearchOperation` | other | 本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。 |
 | `BMapPluginConfig` | other | 插件配置；官方无同名导出。 |
 | `BMapProviderLike` | other | Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。 |
+| `BMapResolver` | other | — |
 | `BoundaryRings` | other | — |
 | `BUILTIN_PLUGIN_CATALOG` | other | — |
 | `BUILTIN_PLUGIN_NAMES` | other | — |
@@ -775,7 +776,6 @@ component 45 · hook 14 · type 51
 | `TransitWalkSegment` | other | — |
 | `urlPluginDefinition` | other | — |
 | `UseViewAnimationReturn` | other | — |
-| `Vue3BaiduMapGlResolver` | other | — |
 | `XYLike` | other | — |
 
 ## `./ui-kit` 子路径

@@ -31,7 +31,7 @@ export type { PluginCatalogEntry } from "./plugins/catalog";
 // Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
 // 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
 // Resolver
-export { Vue3BaiduMapGlResolver } from "./resolver/index";
+export { BMapResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
   MapProps,

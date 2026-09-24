@@ -30,7 +30,7 @@
 
 ### 不受 `.vue` 自动导入（resolver）覆盖
 
-这四个组件**不在**组件 manifest 里，因此 `Vue3BaiduMapGlResolver` /
+这四个组件**不在**组件 manifest 里，因此 `BMapResolver` /
 `unplugin-vue-components` 的自动导入**不会**解析它们：必须显式写
 `import { PlaceSearch } from "bmap-vue/ui-kit"`。
 

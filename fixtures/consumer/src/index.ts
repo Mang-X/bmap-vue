@@ -9,7 +9,7 @@ import {
   Polyline,
   useMap,
   useMapContext,
-  Vue3BaiduMapGlResolver,
+  BMapResolver,
   type BMapProviderLike,
   type MapProps,
   type MarkerIconName,
@@ -74,7 +74,7 @@ export const pluginWithV4Custom = createBMapPlugin({
 })
 
 // resolver
-export const resolver = Vue3BaiduMapGlResolver()
+export const resolver = BMapResolver()
 
 // composable 类型 smoke
 export type { MapProps }

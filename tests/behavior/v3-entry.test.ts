@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { createApp } from 'vue'
-import { createBMapPlugin, Vue3BaiduMapGlResolver, useGeolocation, useControllableState } from '../../packages/bmap-vue/src'
+import { createBMapPlugin, BMapResolver, useGeolocation, useControllableState } from '../../packages/bmap-vue/src'
 import * as root from '../../packages/bmap-vue/src'
 import * as advanced from '../../packages/bmap-vue/src/advanced'
 
@@ -66,7 +66,7 @@ describe('v3 public entry', () => {
   })
 
   it('resolver resolves official component names to components path', () => {
-    const resolver = Vue3BaiduMapGlResolver()
+    const resolver = BMapResolver()
     const r = resolver.resolve('Map')
     expect(r).toEqual({ name: 'Map', from: 'bmap-vue/components' })
     // 非组件名不解析

@@ -42,6 +42,7 @@ app.use(createBMapPlugin({
 | v2 API | v3 处理 | 迁移动作 |
 |---|---|---|
 | `app.use(Vue3BaiduMapGl, { ak })`（默认导出） | 已移除，改用具名 `createBMapPlugin({ ak })` | 必须迁移 |
+| `Vue3BaiduMapGlResolver`（unplugin-vue-components） | 已重命名为 `BMapResolver`（clean-slate，无旧名 alias） | 改导入 `BMapResolver` |
 | 按需导入组件(`Map` 等) | 保留组件名与根 named exports | 无需改动 |
 | `@initd` | 保留并 **deprecate**,新增 `@ready` | 建议改为 `@ready` |
 | `getMapInstance()` | 保留,返回 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `./advanced` 的 `unwrapRaw` 获取）,新增 `whenReady()` | 涉及 raw 地图访问时迁移 |

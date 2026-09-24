@@ -2508,6 +2508,11 @@
       "oursEntry": "."
     },
     {
+      "name": "BMapResolver",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
       "name": "BoundaryRings",
       "surface": "other",
       "oursEntry": "."
@@ -3366,11 +3371,6 @@
       "name": "UseViewAnimationReturn",
       "surface": "other",
       "oursEntry": "./composables"
-    },
-    {
-      "name": "Vue3BaiduMapGlResolver",
-      "surface": "other",
-      "oursEntry": "."
     },
     {
       "name": "XYLike",
