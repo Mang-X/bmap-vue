@@ -14,19 +14,39 @@
  * - **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接 + **同一条** SDK 腿 watcher。
  * - **B₀（对照下界）**：只 `useModel`，没有桥接也没有 SDK 腿。用来量「另外两层各自的边际成本」。
  *
- * **B 必须真的用 `useModel` 承担父子通道**（复审 P1 指出过一个假阳性版本）：早先的 B 虽然
- * 调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
+ * **B 用 `useModel` 承担父子通道**（复审 P1 指出过一个假阳性版本）：早先的 B 虽然调了
+ * `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
  * `model` **从未参与任何读写**，只是个被拿来计数的死对象。删掉整行 `useModel` 行为断言仍然
- * 全过（已实测）。现在 `model` 是**唯一**写通道：写回走 `model.value = next`；删掉它会让
- * **两条行为用例都变红**（已实测）—— 这是「B 真的是 Vue-native 路线」的可复核证据。
+ * 全过（已实测）。
  *
- * ⚠️ **`useModel` 只能承担「写」，不能承担「读」与「档位判定」**（复审五轮 P1，第二个假阳性
- * 版本）。`useModel` 判档用的是 `hasVModel` —— 它看的是 **vnode raw props 上有没有这个 key**，
- * 而 key 省略时 `get()` 返回的 `localValue` 就是 **Vue 自己的局部状态**：写 `model.value` 会
- * **本地生效**，读它会把「非受控本地值」误当成「受控值」。后果是两条：① `reset()` 归位后
- * 仍读到交互值（实测 A 归位 4 / 旧 B 仍是 11）；② 档位切换告警一次都不触发（实测 A 1 次 /
- * 旧 B 0 次）。所以 B 的**读与档位一律取自外部 prop**（`external()`），`internal` 是唯一事实源，
- * `useModel` 只提供「写回父级 / 非受控本地生效」这条通道。这两条已各有一条用例钉住。
+ * ⚠️ **`useModel` 既不能承担「读」与「档位判定」，也不能完整承担「写」**（复审五轮、六轮 P1，
+ * 两次假阳性）。这不是措辞问题，是三条各自可复现的行为差异：
+ *
+ * 1. **读 / 档位**：`useModel` 判档用的是 `hasVModel` —— 它看的是 **vnode raw props 上有没有
+ *    这个 key**。本库文档推荐的 `<Map :default-zoom="12" />`（**根本没有 `zoom` key**）⇒
+ *    `hasVModel = false` ⇒ `get()` 返回的 `localValue` 就是 **Vue 自己的局部状态**：写它会
+ *    **本地生效**，读它会把「非受控本地值」误当成「受控值」。后果：`reset()` 归位后仍读到交互值
+ *    （实测 A 归位 4 / 旧 B 停在 11）；档位切换告警一次都不触发（实测 A 1 次 / 旧 B 0 次）。
+ * 2. **写（reset 边界）**：`localValue` 只有两条变化途径——`useModel` 自己的 setter，以及它内部
+ *    那条 `watchSyncEffect` 从 prop 同步。`reset()` 只改 `internal`，**两条都不经过** ⇒ 写通道的
+ *    输入态与 `internal` 永久分家。Vue 3.5.42 的 setter 第一段是**全局去重**（`runtime-core.cjs.js:4438`）：
+ *    `if (!hasChanged(emittedValue, localValue) && !(prevSetValue !== EMPTY_OBJ && hasChanged(value, prevSetValue))) return;`
+ *    reset 后再次交互到被 reset 掉的那个值时 `emittedValue === localValue === prevSetValue`，
+ *    **直接 return，不 emit**（实测 A 两次 / 旧 B 一次）。而这正是本库 `resetView()` 冻结语义要保的：
+ *    「回到初值」之后再次交互到该值**必须**是真实变化并通知父级。
+ * 3. **没有公开 API 能静默重置 `localValue`** —— 所以这条不是「多写几行就补上」。
+ *
+ * ⇒ 现在 B 的**读与档位取自外部 prop**（`external()`），`internal` 是唯一事实源；**写**优先走
+ * `useModel`，但**在 `reset()` 之后的第一次写入上直接 `emit`** 绕过它（记一个
+ * `rewrittenByReset` 标志）。这是三条路里最小的补丁。
+ *
+ * ⚠️ **即便如此，现在也不能说「B 真的是 Vue-native 路线」**（这是本文件最有价值的一条负面读数）：
+ * 加上这条绕过之后，`commit` 已经不再需要 `useModel` —— **删掉 `useModel` 整行，11 条行为用例
+ * 仍然全过**（已实测；只有 effect 计数那条变红，因为少注册 1 个 effect）。也就是说 `useModel`
+ * 在本线路里**已经换不到任何可观察行为**，只剩一个多注册的 effect。
+ * ⇒ 这**不是**「`useModel` 可用」的证据，而是反过来：**`useModel` 无法作为完整写通道复现冻结的
+ * reset 语义**，补上绕过之后它在本线路里就不再是承重构件。这条结论与下面「3 vs 2」的读数
+ * 同向，**独立地**否掉了迁移。
  *
  * **SDK 腿为什么两边都有**：`Map.vue:1225` 的 `watch(() => props.zoom, …)` 干的是
  * `driver.map.setZoom` —— **写 SDK 不是 Vue 的职责**，`useModel` 也不会替你写。所以它不是
@@ -210,15 +230,31 @@ function mountRoute(
         commit = (next) => {
           if (numbersEqual(internal.value, next)) return false;
           internal.value = next;
-          // **写通道真的走 useModel**：受控档下 Vue 会 emit，非受控档下 Vue 会本地更新。
-          model.value = next;
+          // **写通道优先走 `useModel`**（这是它在本线路里的真实职责）。但**不能只走它** ——
+          // 见下面「写通道也去重」那条：`reset()` 之后 `useModel` 的 `localValue` 仍停在被
+          // reset 掉的值上，setter 的去重会把 reset 后的下一次真实交互**整个吞掉**（不 emit）。
+          // 所以在「reset 过」这个边界上直接 `emit`，其余情况走 `useModel`。
+          if (rewrittenByReset) {
+            rewrittenByReset = false;
+            emit("update:zoom", next);
+          } else {
+            model.value = next;
+          }
           return true;
         };
         // `resetView()` 语义：把内部状态恢复为**首次解析**的快照（不通知父级）。
         // 改 `internal` 就够 —— `effective` 在非受控档只读 internal，不会被 `useModel` 的
         // localValue 压住（这正是上一版 B 的 bug）。
+        //
+        // ⚠️ **但 `reset()` 会让 `useModel` 的 `localValue` 变成过期值**（复审六轮 P1）。`localValue`
+        // 只有两条变化途径：`useModel` 自己的 setter（`hasVModel=false` 时本地生效），以及
+        // 它内部那条 `watchSyncEffect` 从 prop 同步。`reset()` 只改 `internal`，**两条都不经过**
+        // ⇒ 写通道的输入态和 `internal` 永久分家。修**读**侧不够，**写**侧同样会被它污染。
+        // 标记一下，让 `commit` 在这一次上绕开 `useModel`（理由见上）。
+        let rewrittenByReset = false;
         reset = () => {
           internal.value = initial;
+          rewrittenByReset = true;
         };
         // 冻结契约里的**告警**同样必须实现，否则 A 的第二个 effect（`defaultValue` 告警
         // watcher）就与 B 不可比（复审四轮 P1 指出）。**mode 告警并进这条 watcher**（不新增
@@ -392,10 +428,13 @@ describe("#137 Map model prototype（对照读数）", () => {
     expect(a, "A：SDK 腿 + defaultValue 告警 watcher").toBe(2);
     // B₀：只有 useModel 内部的 watchSyncEffect = 1
     expect(b0, "B₀：只有 useModel 内部 effect").toBe(1);
-    // B：useModel 内部 effect + 兼任「记 last外部值 / mode 告警 / 写 SDK」的 watcher
+    // B：useModel 内部 effect + 兼任「记最后外部值 / mode 告警 / 写 SDK」的**单条** watcher
     //    + `default*` 告警 watcher = 3
-    // （B 的 `model` 是真实父子通道，删掉它行为断言会红 —— 见文件头与下面的变异说明）
-    expect(b, "B：useModel 内部 effect + 桥接 watcher + default 告警 watcher").toBe(3);
+    // ⚠️ 那个「桥接 watcher」**同时就是 SDK 腿 watcher**（同一个 `watch(external, … syncSdk)`），
+    //    不是两条。把它在表里列成两行会被读成 4 —— 那是表的错，不是代码的错。
+    // （B 的 `model` 现在**不是**承重构件：删掉它 11 条行为用例仍全过，只有这一行计数会红。
+    //   见文件头 —— 这条负面读数是本次审计最有价值的结论之一。）
+    expect(b, "B：useModel 内部 effect + 桥接兼 SDK 腿的 watcher + default 告警 watcher").toBe(3);
 
     // 结论：**在同等冻结契约下，B 反而多注册 1 个 effect**（3 vs 2）。
     //
@@ -504,8 +543,14 @@ describe("#137 Map model prototype（对照读数）", () => {
       expect(h.read(), `${route}：reset 必须回首次快照`).toBe(4);
       expect(h.emitted, `${route}：reset 不得通知父级`).toHaveLength(emittedBeforeReset);
 
-      // reset 后再次交互到**旧值**仍必须是真变化（决策 5）。
+      // reset 后再次交互到**旧值**仍必须是真变化（决策 5），而且**必须真的通知父级**——
+      // 只断言 `commit` 的返回值会漏掉「bridge 认为变了、emit 通道却把这次吞掉」。
       expect(h.simulateUserZoom(11), `${route}：reset 后再交互到旧值仍算真变化`).toBe(true);
+      await nextTick();
+      expect(
+        h.emitted,
+        `${route}：reset 后的第二次真实交互也必须 emit（不能被写通道的去重吞掉）`,
+      ).toEqual([[11], [11]]);
     }
   });
 

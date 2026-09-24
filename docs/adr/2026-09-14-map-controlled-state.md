@@ -223,8 +223,9 @@ state**（记住最后外部值），这是 §6.2 原型里 `internal` 的由来
 （复审指出「defineModel 改公共面 ⇒ useModel 也改」是跳跃论证，本节按此更正。）
 
 所以否决 `useModel` 的理由**不能**是「它会改公共面」。真正的理由是 §6.2 的原型读数：
-按构造计数，Vue-native 路线并不更省（详见下）。**行为上它确实能做到**（原型逐项复现了现状的
-可观察结果），只是**没有观察到 effect 数减少，且没有行为收益**（原型实测 3 vs 2，见下）。
+按构造计数，Vue-native 路线并不更省（详见下）。而且**行为上它也不是干净的**——要靠桥接补上
+`useModel` 的三处限制（读、档位、reset 边界的 emit），补完之后 `useModel` 本身就不再承重
+（见 §6.2 末的反面读数）。
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 「简单数字模型不该
 为 React 受控/非受控术语付运行代价」这条要求，按**归属**而非按**词汇**满足：React 术语只留在
@@ -278,8 +279,8 @@ props 形状完全一致（`zoom` + `defaultZoom`），差别只有模型层：
 
 - **A（现状）**：`useControllableState` + 与 `Map.vue:1225` 同形的 SDK 腿 watcher。
 - **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`internal` / `effective`
-  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`model` 是唯一的父子通道**：受控值从
-  `model.value` 读，写回走 `model.value = next`（由 Vue 自己决定「本地更新还是 emit」）。
+  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`useModel` 只承担写通道**，且**在 `reset()` 之后的
+  第一次写入上会被绕过**（读与档位一律取自外部 prop —— 理由见下）。
 - **B₀（对照下界）**：只 `useModel`，无桥接、无 SDK 腿。
 
 **SDK 腿两边都计入**：`Map.vue:1225` 那条 watcher 干的是 `driver.map.setZoom` —— **写 SDK 不是
@@ -289,7 +290,8 @@ Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显
 虽然调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
 `model` **从未参与任何读写**，只是个被拿来计数的死对象。**删掉整行 `useModel`，当时四条行为
 断言仍然全部通过**（已实测）。修正后 B 让 `model` 承担唯一父子通道，**再删整行 `useModel`
-会让两条行为用例都变红**（已实测）—— 这条变异就是「B 真的是 Vue-native 路线」的证据。
+会让两条行为用例都变红**（已实测）。⚠️ 但这条证据**只成立于补上 reset 绕过之前**：见本节末的
+反面读数——补完之后删掉 `useModel`，行为用例仍全过。
 
 ##### 计数口径：唯一、且由 Vue 自己记账
 
@@ -306,11 +308,14 @@ Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显
 
 | 每个 number 字段实际注册的 `ReactiveEffect` | A：现状 | B₀：只 `useModel` | B：`useModel` + 桥接 |
 | --- | ---: | ---: | ---: |
-| SDK 腿 watcher（写 SDK，两边都有） | 1 | — | 1 |
+| SDK 腿 watcher（写 SDK，两边都有） | 1 | — | 与下一行**同一条** |
 | `default*` 告警 watcher（两边都有） | 1 | — | 1 |
-| 桥接 watcher（记最后外部值 / 档位告警 / 写 SDK） | — | — | 1 |
+| 桥接 watcher（记最后外部值 / 档位告警 / 写 SDK） | — | — | 1（**就是上面那条 SDK 腿 watcher**） |
 | `useModel` 内部 `watchSyncEffect` | — | 1 | 1 |
 | **合计** | **2** | **1** | **3** |
+
+⚠️ 读这张表别把 B 的后两行当成两条 watcher：B 的桥接 watcher 与 SDK 腿 watcher 是**同一个**
+`watch(external, … syncSdk)`（复审六轮 P2 指出），代码里也只有这一条。列成两行会被读成 4。
 
 **读法与措辞纪律**：**在同等冻结契约下，B 反而多注册 1 个 effect（3 vs 2）**。B₀ 少 2，但代价是
 它既没有 SDK 腿（地图根本不会跟着 prop 变）也没有任何冻结语义，**不是可用方案**。
@@ -348,6 +353,22 @@ profile，本文件不提供，**也不该由结构数或 effect 数推断**。e
   告警一次都不触发（实测 A 1 次 / 旧 B 0 次）。现 B 的**读与档位一律取自外部 prop**
   （`external()`），`internal` 才是唯一事实源，`useModel` 只承担**写通道**。两条独立用例
   （读/交互/归位/不 emit/再交互，和冲突受控值的告警）已钉住。
+- **写通道也被 `useModel` 污染**（复审六轮 P1）。`localValue` 只有两条变化途径：`useModel` 自己的
+  setter（`hasVModel=false` 时本地生效），以及它内部那条 `watchSyncEffect` 从 prop 同步。
+  `reset()` 只改 `internal`，**两条都不经过** ⇒ 写通道的输入态与 `internal` 永久分家。Vue 3.5.42
+  的 setter 第一段是**全局去重**（`runtime-core.cjs.js:4438`，`prevSetValue` 参与判断）：
+  `if (!hasChanged(emittedValue, localValue) && !(prevSetValue !== EMPTY_OBJ && hasChanged(value, prevSetValue))) return;`
+  reset 后再次交互到被 reset 掉的那个值时 `emittedValue === localValue === prevSetValue`，
+  **直接 return，不 emit**（实测 A emit 两次 / 旧 B 一次）。而这正是 `resetView()` 冻结语义要保的。
+  旧用例只断言 `commit` 的返回值（`toBe(true)`），**恰好漏掉**「bridge 认为变了、emit 通道却吞了」
+  —— 已改成断言 `emitted` 真的收到两次。**没有公开 API 能静默重置 `localValue`**，所以这条不是
+  「多写几行就补上」。
+
+⇒ **本次审计最有价值的一条负面读数**：补上「reset 后直接 `emit`」这条绕过之后，B 的 `commit`
+已经不再需要 `useModel` —— **删掉 `useModel` 整行，11 条行为用例仍然全过**（已实测；只有 effect
+计数那条变红，因为少注册 1 个 effect）。也就是说 `useModel` 在这条线路上**换不到任何可观察行为**，
+只剩一个多注册的 effect。这与「3 vs 2」同向，且**独立地**否掉了迁移：
+**`useModel` 无法作为完整写通道复现冻结的 reset 语义，补上绕过之后它也不再是承重构件。**
 
 ⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
 「React 术语不好听」这种口味判断，而是有**可重跑的原型读数**支撑：在本库的冻结规则下，
