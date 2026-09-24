@@ -44,7 +44,16 @@
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, markRaw, nextTick, ref, shallowRef, type VNodeChild } from "vue";
+import {
+  defineComponent,
+  h,
+  markRaw,
+  nextTick,
+  reactive,
+  ref,
+  shallowRef,
+  type VNodeChild,
+} from "vue";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import BMap from "../../packages/bmap-vue/src/components/map/BMap.vue";
 import BLineLayer from "../../packages/bmap-vue/src/components/layers/BLineLayer.vue";
@@ -625,6 +634,103 @@ describe("§6 四类原生图层 × 四种规模：setData / style / 卸载", ()
     },
     120_000,
   );
+});
+
+/**
+ * §7 单次父更新同时改多个字段：SDK 调用与重建次数（issue #124 的 scheduler/batching 取证）
+ *
+ * 一次父级更新里**同时**改 `data` / `style` / `visible` / `zIndex`，记录内核产出的 SDK 调用与
+ * **recreate** 次数。这里钉的是「无论更新多少字段、无论字段怎么变，**换数据不换实例、每个字段
+ * 最多落一次最终值**」这条不变式；各字段实际被写几次（`flush:"sync"` 下同一 tick 内多次 mutate 会
+ * 多次进 `sync()`，但 `applied` 指纹去重后最终只留一次真实写入）作为**读数**进报告，供跨版本对照。
+ *
+  * 规模固定 1k 且用 `markRaw`：本节量的是**更新机制**（调用次数 / 是否重建 / 字段最终值），不是深响应
+   * 读取成本（那是 §5）。`flush` 三档（sync / pre / post）的墙钟对照在 ADR 决策里，本节跑生产档
+ * （`sync`）并只守与 `flush` 无关的结构不变式。
+ */
+describe("§7 一次父更新同时改 data/style/visible/zIndex：调用与重建次数", () => {
+  it("换数据不重建、每个字段落到最终值，调用次数可解释", async () => {
+    const items = ITEMS.get(1_000)!;
+    // 新数据用**不同规模**，这样「下发的是新那份」才能被要素数区分（换同规模的新引用无法区分）。
+    const nextItems = items.slice(0, 800);
+    const state = reactive({
+      data: markRaw([...items]) as readonly PerfItem[],
+      size: 6,
+      color: "#0055ff",
+      visible: true,
+      zIndex: 1,
+    });
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMap, { provider: harness.provider() }, () =>
+          h(BPointCollection as never, {
+            data: state.data,
+            itemKey: PERF_ITEM_KEY,
+            getPosition: perfItemPosition,
+            properties: perfItemProperties,
+            size: state.size,
+            color: state.color,
+            visible: state.visible,
+            zIndex: state.zIndex,
+          }),
+        ),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await settle();
+
+    const layersBefore = harness.nativeLayersCreated();
+    const before = {
+      setData: nativeCallCount("setData"),
+      setStyleOptions: nativeCallCount("setStyleOptions"),
+      doOnceDraw: nativeCallCount("doOnceDraw"),
+      setVisible: nativeCallCount("setVisible"),
+      setZIndex: nativeCallCount("setZIndex"),
+    };
+
+    // 一次提交里同时改五个字段。
+    state.data = markRaw([...nextItems]);
+    state.size = 10;
+    state.color = "#ff5500";
+    state.visible = false;
+    state.zIndex = 5;
+    await settle();
+
+    const delta = {
+      setData: nativeCallCount("setData") - before.setData,
+      setStyleOptions: nativeCallCount("setStyleOptions") - before.setStyleOptions,
+      doOnceDraw: nativeCallCount("doOnceDraw") - before.doOnceDraw,
+      setVisible: nativeCallCount("setVisible") - before.setVisible,
+      setZIndex: nativeCallCount("setZIndex") - before.setZIndex,
+    };
+    const recreated = harness.nativeLayersCreated() - layersBefore;
+    for (const [field, count] of Object.entries({ ...delta, recreated })) {
+      recorder.readout(`multiUpdate.${field}@1000`, count);
+    }
+    // 收敛后的**最终状态**（不只数调用，还要证明最终值真的落到位）。
+    const finalStyle = harness.nativeLayerStyle();
+    const finalVisible = harness.nativeLayerVisible();
+    const finalFeatures = readFeatures(harness.nativeLayerData());
+
+    // 先收尾（卸载）再断言：否则一条断言失败会把资源留到下一个用例，让泄漏以级联失败出现在别处。
+    wrapper.unmount();
+    await settle();
+    harness.assertIdle("§7 卸载后");
+
+    // 换数据 / 改样式 / 改显隐 / 改层级都**不重建**实例（重建只在构造期项 / 撤回 / 重新可见时发生）。
+    expect(recreated, "多字段更新不得重建原生图层实例").toBe(0);
+    // 换引用 ⇒ 恰好一次 setData，且下发的是新那份数据（用不同规模区分）。
+    expect(delta.setData, "换引用必须恰好再下发一次 setData").toBe(1);
+    expect(finalFeatures, "下发的是新数据的要素集（规模 800）").toBe(800);
+    // 样式走到官方样式入口并显式重绘（`setStyleOptions` + `doOnceDraw`），最终值是本轮的新值。
+    expect(delta.setStyleOptions, "改样式必须走 setStyleOptions").toBeGreaterThanOrEqual(1);
+    expect(delta.doOnceDraw, "改样式必须显式重绘 doOnceDraw").toBeGreaterThanOrEqual(1);
+    expect(finalStyle.size, "样式最终落到新 size").toBe(10);
+    expect(finalStyle.color, "样式最终落到新 color").toBe("#ff5500");
+    // 显隐与层级各落到一次最终值（`flush:"sync"` 可能多次进 sync，但指纹去重后真实写入只留最终值）。
+    expect(delta.setVisible, "改 visible 必须写到 setVisible").toBe(1);
+    expect(delta.setZIndex, "改 zIndex 必须写到 setZIndex").toBe(1);
+    expect(finalVisible, "显隐最终落到 visible=false").toBe(false);
+  }, 60_000);
 });
 
 /** 从 Fake 收到的 `setData()` 数据里数要素（顺带证明数据真的下发了）。 */

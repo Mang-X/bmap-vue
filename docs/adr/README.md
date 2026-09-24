@@ -41,7 +41,8 @@
 | [2026-09-21](./2026-09-21-performance-baseline-and-worker-decision.md) | 性能基准与预算；Worker 不进实现（固定数据集与 100/1k/10k/50k 分步骤基准 / 归一化趋势绊线与四态退出码 / 按证据判定不引入 Worker / 不建通用 protocol） | Accepted |
 | [2026-09-21](./2026-09-21-plugin-verdicts-and-advanced-freeze.md) | 插件迁移结论定型与 `./advanced` 冻结（五值结论 + 迁移路径 / 运行时覆盖范围进数据 / 未版本化 URL 用内容摘要锁 / `./core` 为内部面；取代 `2026-09-13-plugin-compat-inventory` 的决策 3 与决策 7 退出码表） | Accepted |
 | [2026-09-21](./2026-09-21-plugin-load-channel-timeout.md) | 插件脚本加载通道的超时与取消语义（保持两条通道分离的判据 / **内置工厂** 60s 默认超时与「作废」清理、公共工厂超时语义不变 / 取消语义三条读数 / 挂起隔离的边界；取代 `2026-09-13-plugin-compat-inventory` 的「插件加载没有超时」与 `2026-09-21-plugin-verdicts-and-advanced-freeze` 已知限制 8 的后半句） | Accepted |
-| [2026-09-24](./2026-09-24-deep-reactive-array-update-path.md) | 深响应大数组的更新路径：文档指引落地、`pauseTracking` 不落地（`shallowRef` / `markRaw` + `dataVersion` 用法引导 / `pauseTracking` 因公开边界与模块身份耦合不落地；结算 `2026-09-21-performance-baseline-and-worker-decision` 欠账表的「深响应输入」一行 / #124 **深响应子问题**，#124 其余 scheduler/batching 范围仍 open） | Accepted |
+| [2026-09-24](./2026-09-24-deep-reactive-array-update-path.md) | 深响应大数组的更新路径：文档指引落地、`pauseTracking` 不落地（`shallowRef` / `markRaw` + `dataVersion` 用法引导 / `pauseTracking` 因公开边界与模块身份耦合不落地；结算 `2026-09-21-performance-baseline-and-worker-decision` 欠账表的「深响应输入」一行 / #124 **深响应子问题**，scheduler 结论见下条） | Accepted |
+| [2026-09-24](./2026-09-24-scheduler-batching-hot-path.md) | Vue scheduler/batching 取证（#124 收口）：`flush:'sync'` 是深响应热路径主因（依赖收集）/ 维持 `shallowRef` + `dataVersion` 文档结论 / 不改共享内核 `flush` 语义 / 多字段同更新次数由 `component-path` §7 钉住） | Accepted |
 | [2026-09-24](./2026-09-24-single-engine-capability-catalog.md) | 单引擎能力目录收口：删除 `engines` 维度、`engine-unsupported` 改名 `unlisted-capability`（描述符不再声明引擎 / 判定链删恒真白名单分支 / 矩阵与 JSON 重生成 / 结算 `2026-09-14-remove-legacy-engine` 已知限制第 4 条，#126） | Accepted |
 
 ## 约定
