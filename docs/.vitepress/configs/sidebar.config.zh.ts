@@ -35,8 +35,16 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "com-events",
         },
         {
+          text: "错误码与排障",
+          link: "errors",
+        },
+        {
           text: "FAQ",
           link: "faq",
+        },
+        {
+          text: "Headless 服务",
+          link: "services",
         },
       ],
     },
