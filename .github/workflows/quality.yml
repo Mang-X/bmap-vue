@@ -124,8 +124,16 @@ jobs:
 
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
+      #
+      # CONTRAST_DIFF_BASE = 本 PR 的 base（`base_ref…HEAD`）。#140 的门禁
+      # 「benchmark 没有改生产语义」要比的正是「本 PR 改了什么」，不是「工作区脏不脏」——
+      # 不注入 base 时那条门禁在干净的 CI checkout 上恒绿（工作区 = HEAD）。
+      # 没有 `CONTRAST_DIFF_BASE`（例如手工跑）时门禁退回本地 `merge-base HEAD main`；
+      # 浅克隆取不到 base 就明确失败，不静默放行。
       - name: Unit & behavior tests
         run: pnpm test:unit
+        env:
+          CONTRAST_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
 
       # Package tarball consumer verification
       - name: Verify package consumers

@@ -23,11 +23,27 @@ export const CONTRAST_REPORT_VERSION = 1;
 export interface ContrastSideReadings {
   /** 墙钟毫秒（`null` = 本轮没测到；**不填 0**，0 会被读成「快得不可能」）。 */
   readonly durationMs: number | null;
-  /** 该动作窗口内发生的 SDK 调用次数（**增量**，不含挂载阶段）。 */
+  /**
+   * 窗口内**某一个** SDK 调用面的调用次数（**增量**，不含挂载阶段）。
+   *
+   * ⚠️ **它不是票面那个泛指的「SDK 调用总数」**——Fake v4 没有「所有 SDK 调用」的单一
+   * 计数器（真实 SDK 也没有），所以这一列必须带名字才是诚实的。默认口径是
+   * `listenCalls`（监听订阅次数），场景 3/4/5 各自按 SDK 语义覆盖成 `setPosition` /
+   * `setPath`；`callKind` 说明这一行**具体数的是哪个调用面**。票面原口径「SDK 调用
+   * 总数」进 `notMeasured`（第 1 轮评审第 8 条）。
+   */
   readonly sdkCalls: number;
+  /** `sdkCalls` 具体数的调用面（`listen` / `setPosition` / `setPath`）。 */
+  readonly callKind: string;
   /** 该动作窗口内**新建**的 SDK 实例数（地图 / 覆盖物 / 图层，按实例计）。 */
   readonly recreates: number;
-  /** 触发本侧组件重渲染的次数（dev-only 钩子计数，**只作读数**）。 */
+  /**
+   * 窗口内触发的**组件渲染**次数（Vue devtools `perf:start`，`type === "render"`，dev-only）。
+   *
+   * ⚠️ 它**不是**票面的「watcher 回调次数」——Vue 3 没有公开的 watcher 计数面，本档量的是
+   * 组件渲染；两者不等价（一次渲染可以触发 0..N 个 watcher）。票面原口径进 `notMeasured`
+   * （第 1 轮评审第 8 条）。
+   */
   readonly renderCallbacks: number;
   /** 动作结束后**仍未释放**的 SDK 资源数（0 = 干净）。本库应为 0；官方如实记录。 */
   readonly retainedResources: number;
@@ -139,6 +155,12 @@ export interface ContrastDecision {
  *
  * 注意**没有**「比官方慢就算回退」这一条：那正是票面禁止的营销式排名。比值只进报告。
  * 唯一能返回 1 的是不变式（架构预期被破坏），它与机器快慢无关。
+ *
+ * ## `scenarioCount` 必须是「**真的测到**」的数，不是「**填了行**」的数
+ *
+ * `buildScenarioReadings()` 永远按场景表逐条产出一行（没跑到的填 `ours: null`），
+ * 因此 `report.scenarios.length` **恒等于**场景表条数——拿它当「采齐了没」是恒真的
+ * 假绿（第 1 轮评审第 6 条）。调用方必须数 `ours !== null` 的行。
  */
 export function decideContrastExit(input: {
   envelopeIssues: readonly string[];
@@ -147,6 +169,15 @@ export function decideContrastExit(input: {
   done: boolean;
   expectedScenarioCount: number;
   scenarioCount: number;
+  /**
+   * 声明了官方等价物（可比较）的场景数；`null` / `undefined` = 本档不做这项校验。
+   *
+   * 配套的 `comparableScenarioCount` 是「真的拿到官方侧读数（`officialSide !== null`）
+   * 的可比较场景数」。两者不等就是**缺一侧的对照**——那不是本库的回归，但它也**不是**
+   * 「这个场景已对照」。票面要的是同场景对照，缺一侧必须显式报出来，不能被读成通过。
+   */
+  expectedComparableScenarios?: number | null;
+  comparableScenarioCount?: number;
   invariants: readonly ContrastInvariant[];
 }): ContrastDecision {
   const reasons: string[] = [];
@@ -160,6 +191,17 @@ export function decideContrastExit(input: {
   if (input.done && input.scenarioCount < input.expectedScenarioCount) {
     reasons.push(
       `INCOMPLETE: 场景 ${input.scenarioCount}/${input.expectedScenarioCount}（缺项不能当通过）`,
+    );
+  }
+  if (
+    input.expectedComparableScenarios != null &&
+    input.comparableScenarioCount != null &&
+    input.done &&
+    input.comparableScenarioCount < input.expectedComparableScenarios
+  ) {
+    reasons.push(
+      `INCOMPLETE: 可比场景缺官方侧读数 ` +
+        `${input.comparableScenarioCount}/${input.expectedComparableScenarios}（缺一侧不算已对照）`,
     );
   }
   for (const invariant of input.invariants) {
@@ -183,6 +225,13 @@ export function decideContrastExit(input: {
   if (!input.done || input.blockedReason || input.scenarioCount < input.expectedScenarioCount) {
     return { exitCode: 3, ok: false, reasons };
   }
+  if (
+    input.expectedComparableScenarios != null &&
+    input.comparableScenarioCount != null &&
+    input.comparableScenarioCount < input.expectedComparableScenarios
+  ) {
+    return { exitCode: 3, ok: false, reasons };
+  }
   return { exitCode: 0, ok: true, reasons };
 }
 
@@ -197,7 +246,7 @@ function round(value: number | null, digits = 2): string {
 function sideCell(side: ContrastSideReadings | null): string {
   if (!side) return "-";
   return (
-    `${round(side.durationMs)}ms / calls=${side.sdkCalls} / recreate=${side.recreates} / ` +
+    `${round(side.durationMs)}ms / ${side.callKind}=${side.sdkCalls} / recreate=${side.recreates} / ` +
     `render=${side.renderCallbacks} / retain=${side.retainedResources}+${side.retainedListeners}listeners`
   );
 }
@@ -278,5 +327,10 @@ export function formatContrastReport(input: {
   lines.push("本档测不到（不要外推）：");
   for (const text of report.notMeasured) lines.push(`  - ${text}`);
   lines.push("  - 真实 SDK 重绘 / 真实浏览器帧调度（那是另一档，见 perf:contrast:live）");
+  lines.push("");
+  lines.push("口径注记（避免把列名读成票面原词）：");
+  lines.push("  - `listen` / `setPosition` / `setPath` 那一列是**某个调用面**的次数，");
+  lines.push("    不是票面泛指的「SDK 调用总数」（真实与 Fake 都没有单一计数器）；");
+  lines.push("  - `render` 是**组件渲染**次数（devtools perf:start），不是「watcher 回调次数」；");
   return lines.join("\n");
 }

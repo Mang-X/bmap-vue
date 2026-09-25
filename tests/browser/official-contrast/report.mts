@@ -23,7 +23,8 @@
  *
  * ## AK 绝不写入任何产物
  *
- * AK 只经 `BAIDU_MAP_AK` / `--ak=` 进入，并由编排脚本经 **CDP** 注入页面
+ * AK 只经 `BAIDU_MAP_AK` 进入（**不接受** `--ak=`——argv 进 `ps`），并由编排脚本经 **CDP**
+ * 注入页面
  * （**不进页面 URL、不进 chrome argv、不进 vite env**——三条路径各自会把 AK 送进
  * `ps` / CI 的 job log / 被 vite 内联的构建产物）。因此 `redactAk` 在**两条出口**上
  * 仍过一遍（stdout 与落盘 JSON）：页面错误消息会进 `report.fatal` / `notes`，
@@ -64,10 +65,14 @@ export interface LiveContrastSideReadings {
   readonly longTaskMs: LiveContrastSample;
   readonly fps: LiveContrastSample;
   /**
-   * 换数据后的堆增长（字节）。
+   * 挂载前 → **换完数据之后**的堆净增长（字节）。
    *
    * 真实浏览器里**没有** `gc()`，因此这个值是「采样间隔内的净增长」，含未回收的垃圾——
    * 只在同一浏览器、同一场景、同一数据下**两侧互比**有意义，**绝不**跨机比较。
+   *
+   * ⚠️ 采样区间**必须真的包含一次换数据**。此前这一项的注释写着「换数据后的堆增长」，
+   * 而当时窗口里并没有换任何数据（`redraw` 只等了一次 paint）——名不副实的读数比没有
+   * 读数更坏（第 1 轮评审第 3 条）。现在 `redraw` 窗口里真换一份平移后的数据。
    */
   readonly heapGrowthBytes: number | null;
 }

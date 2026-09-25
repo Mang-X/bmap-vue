@@ -29,6 +29,14 @@
  *
  * 刻意**没有**「比官方慢就算回退」：那是票面禁止的营销式排名。绝对毫秒只进报告。
  *
+ * ## 两条容易变成假绿的接线（都被钉住）
+ *
+ * - **「采齐了没」数的是真测到的场景，不是填了行的场景**：报告永远按场景表逐条产出一行，
+ *   因此 `scenarios.length` 恒等于场景表条数；这里数 `ours !== null` 的行，并额外要求每条
+ *   可比较场景都真的拿到官方侧读数。
+ * - **基准红了不等于脚手架坏了**：不变式被破坏时 vitest 非零退出，编排**按报告判定结算**，
+ *   判定为不变式破坏就如实给 1；只有报告缺失 / 读不出来才归 2。
+ *
  * ## 约束（`node --experimental-strip-types`）
  *
  * 不得使用 TS 参数属性；本地模块导入必须带扩展名。
@@ -43,6 +51,7 @@ import {
   decideContrastExit,
   formatContrastReport,
   OFFICIAL_BASELINE_VERSION,
+  type ContrastDecision,
   type ContrastReport,
 } from "../tests/performance/official-contrast/report.mts";
 import { CONTRAST_SCENARIOS } from "../tests/performance/officialScenarios.ts";
@@ -108,34 +117,72 @@ function readReport(): ContrastReport | null {
   return JSON.parse(readFileSync(reportPath, "utf8")) as ContrastReport;
 }
 
+/**
+ * 报告里**真的测到**的场景数（`ours !== null` 的行）。
+ *
+ * ⚠️ 不能用 `report.scenarios.length`：`buildScenarioReadings()` 永远按场景表逐条产出
+ * 一行（没跑到的填 `ours: null`），那个长度**恒等于**场景表条数——拿它判「采齐了没」
+ * 是一条恒真的假绿路径（第 1 轮评审第 6 条）。这里数真正有读数的行。
+ */
+function measuredScenarioCount(report: ContrastReport): number {
+  return report.scenarios.filter((entry) => entry.ours !== null).length;
+}
+
+/** 场景表里声明了官方等价物（可比较）的条数。 */
+function comparableScenarioTotal(): number {
+  return CONTRAST_SCENARIOS.filter((scenario) => scenario.official !== null).length;
+}
+
+/** 可比较场景里**真的**拿到官方侧读数的条数（`officialSide !== null`）。 */
+function measuredComparableCount(report: ContrastReport): number {
+  return report.scenarios.filter(
+    (entry) => entry.official !== null && entry.officialSide !== null,
+  ).length;
+}
+
+/** 一份报告的全部判定入参——两处调用点共用，避免它们漂移。 */
+function decide(report: ContrastReport): ContrastDecision {
+  return decideContrastExit({
+    envelopeIssues: checkContrastEnvelope(report, {
+      runId,
+      datasetVersion: DATASET_VERSION,
+    }),
+    fatal: report.fatal,
+    blockedReason: report.blockedReason,
+    done: report.done,
+    expectedScenarioCount: CONTRAST_SCENARIOS.length,
+    scenarioCount: measuredScenarioCount(report),
+    expectedComparableScenarios: comparableScenarioTotal(),
+    comparableScenarioCount: measuredComparableCount(report),
+    invariants: report.invariants,
+  });
+}
+
 async function main(): Promise<void> {
   const benchExit = await runBenchmark();
   if (benchExit !== 0) {
-    // 基准自己红了：要么断言挂了（不变式破坏），要么用例崩了。两种都不该被重跑掩盖，
-    // 因此直接按「拿不到可信报告」处理，并把基准的退出码带出来。
+    // 基准自己红了：要么断言挂了（不变式破坏），要么用例崩了。两种都不该被重跑掩盖。
     const report = readReport();
-    if (report) {
-      const decision = decideContrastExit({
-        envelopeIssues: checkContrastEnvelope(report, {
-          runId,
-          datasetVersion: DATASET_VERSION,
-        }),
-        fatal: report.fatal,
-        blockedReason: report.blockedReason,
-        done: report.done,
-        expectedScenarioCount: CONTRAST_SCENARIOS.length,
-        scenarioCount: report.scenarios.length,
-        invariants: report.invariants,
-      });
-      console.log(formatContrastReport({ report, decision }));
-      console.error(`[perf:contrast] 基准退出码 ${benchExit}，判定 exit=${decision.exitCode}`);
-      process.exitCode = benchExit !== 0 ? 2 : decision.exitCode;
+    if (!report) {
+      console.error(
+        `[perf:contrast] 基准退出码 ${benchExit} 且没有产出报告（${reportPath}）——按脚手架失败 2`,
+      );
+      process.exitCode = 2;
       return;
     }
+    // ⚠️ **不再**把「基准红了」一律映射成 2（第 1 轮评审第 7 条）。此前
+    // `benchExit !== 0 ? 2 : ...` 让那条唯一的 1（不变式被破坏）在 `pnpm perf:contrast`
+    // 下**永不可达**——`recordInvariant` 用 `expect(...).toBe(true)` 让 vitest 非零退出，
+    // 编排再把非零一律压成 2，文档里写的「1 = 不变式被破坏」在唯一的正式入口上从来没发生过。
+    // 报告与信封**可读**时按报告自身判定结算，判定为不变式破坏就如实给 1；只有报告缺失 /
+    // 读不出来这类「拿不到可信读数」的情况才归 2。
+    const decision = decide(report);
+    console.log(formatContrastReport({ report, decision }));
     console.error(
-      `[perf:contrast] 基准退出码 ${benchExit} 且没有产出报告（${reportPath}）——按脚手架失败 2`,
+      `[perf:contrast] 基准退出码 ${benchExit}，判定 exit=${decision.exitCode}\n` +
+        decision.reasons.map((r) => `  ${r}`).join("\n"),
     );
-    process.exitCode = 2;
+    process.exitCode = decision.exitCode;
     return;
   }
 
@@ -146,23 +193,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  const envelopeIssues = checkContrastEnvelope(report, {
-    runId,
-    datasetVersion: DATASET_VERSION,
-  });
-  const decision = decideContrastExit({
-    envelopeIssues,
-    fatal: report.fatal,
-    blockedReason: report.blockedReason,
-    done: report.done,
-    expectedScenarioCount: CONTRAST_SCENARIOS.length,
-    scenarioCount: report.scenarios.length,
-    invariants: report.invariants,
-  });
+  const decision = decide(report);
   console.log(formatContrastReport({ report, decision }));
   console.error(
     `[perf:contrast] exit=${decision.exitCode} ok=${decision.ok} ` +
-      `scenarios=${report.scenarios.length}/${CONTRAST_SCENARIOS.length} ` +
+      `scenarios=${measuredScenarioCount(report)}/${CONTRAST_SCENARIOS.length} ` +
+      `comparable=${measuredComparableCount(report)}/${comparableScenarioTotal()} ` +
       `official=${OFFICIAL_BASELINE_VERSION}\n` +
       decision.reasons.map((r) => `  ${r}`).join("\n"),
   );

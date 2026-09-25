@@ -12,7 +12,7 @@
  * | 窗口 | 起点 | 终点 |
  * | --- | --- | --- |
  * | `firstFrame` | `app.mount(stage)` | ready 后**第一次** 2×rAF paint |
- * | `redraw` | settle 之后（数据已生效） | 再等 2×rAF paint 边界 |
+ * | `redraw` | **换一份数据**（造数与窗口隔开） | 数据生效后的 2×rAF paint 边界 |
  * | `longTaskMs` | 与 `redraw` 同步 | 同上——它不是一个独立窗口，而是**按窗口归属**的长任务读数 |
  * | `fps` | `redraw` 结束后 | 再采 1s rAF |
  *
@@ -35,13 +35,14 @@
  * 本页与编排已落地，但**没有产出任何数据**。缺 AK 时编排脚本走退出码 3（blocked），
  * 页面不会被当成「跑过了」。文档与 ADR 都如实标注，不从 Fake 读数外推。
  */
-import { createApp, defineComponent, h, nextTick, type App } from "vue";
+import { createApp, defineComponent, h, nextTick, shallowRef, type App } from "vue";
 import { Map, PointCollection } from "../../../packages/bmap-vue/src/index.ts";
 import {
   DATASET_VERSION,
   PERF_ITEM_KEY,
   datasetDescription,
   makeItems,
+  makeMovedItems,
   perfItemPosition,
   perfItemProperties,
   type PerfItem,
@@ -294,7 +295,11 @@ async function measureOurs(
 
   // 造数**在挂载前完成**，且跨一个 macrotask 隔开：否则造数与 `mount` 同属一条 task，
   // long task 的窗口交集会被整条撑大（#131 复审第 1 条）。
-  const items: readonly PerfItem[] = ITEMS;
+  //
+  // `items` 放进 `ref` 是因为 redraw 窗口要**换一份真实数据**（见下）。原先它是 `const`，
+  // `redraw` 窗口因此只是「再等 2×rAF」——**什么都没重画**，窗口名与实际量的东西对不上
+  // （第 1 轮评审第 3 条）。堆增长那一项此前文档写的是「换数据后的堆增长」，同样名不副实。
+  const items = shallowRef<readonly PerfItem[]>(ITEMS);
   await settle();
   const heapBefore = heapUsed();
 
@@ -320,7 +325,9 @@ async function measureOurs(
             // `(item: unknown) => …` 而不兼容。泛型参数在**调用点**由 data 决定，
             // 渲染期不存在泛型——`as never` 是这一处的正确收窄（与 Fake 档基准同一处理）。
             h(PointCollection as never, {
-              data: items,
+              // 读 `.value` 才有重渲染的输入：写死 `ITEMS` 会让下面那次换数据
+              // 同样退化成 no-op（与 Fake 档 §3 同一条教训）。
+              data: items.value,
               itemKey: PERF_ITEM_KEY,
               getPosition: perfItemPosition,
               properties: perfItemProperties,
@@ -339,13 +346,22 @@ async function measureOurs(
   await paintBoundary();
   const firstFrame = await sampleWindow(collector, firstStart);
 
-  // redraw：settle 之后 → 再等 2×rAF（渲染尾巴）。
+  // redraw：**真换一份数据** → 数据生效 → 2×rAF paint 边界。
+  //
+  // 造数（`makeMovedItems`）必须**在窗口之外**且跨一个 macrotask 完成（同 #131 复审第 1 条）：
+  // 否则 5 万条的构造与 `setData` 同属一条 task，long task 的窗口交集量到的是造数。
+  const moved = makeMovedItems(ITEMS, 0.5);
+  await settle();
   const redrawStart = performance.now();
+  items.value = moved;
+  await nextTick();
   await paintBoundary();
   const redraw = await sampleWindow(collector, redrawStart);
 
   // fps：redraw 之后采 1s rAF。
   const fps = await sampleFps();
+  // 堆增长：自 `heapBefore`（挂载前）到**换完数据之后**——这就是文档承诺的
+  // 「换数据后的堆增长」，先前那份文档在没有任何换数据动作时就这么写着。
   const heapAfter = heapUsed();
 
   app.unmount();
@@ -394,6 +410,12 @@ function heapUsed(): number | null {
  * 官方侧：**本场景 4.0 无等价物**（`BMap.PointCollection` 已在 4.0 整体移除），因此
  * `official: null`。留一个显式空实现而不是注释掉，是为了让「为什么没有对照」出现在代码里
  * 而不是消失在提交记录里——与 Fake 档场景表的判据一致。
+ *
+ * ⚠️ **因此本档目前**不是**跨库对照**：它只在官方无等价物的扩展档上量本库自己的
+ * long task / 重绘 / FPS / 堆增长，两侧并排那一节永远是空的。这是**已知缺口**，由
+ * follow-up issue 接手（见 ADR 的「本档尚未完成」一节）。因此 PR **不**用 `Closes #140`
+ * 关掉票面——真实浏览器档的双边对照是 #140 的一条验收项，一个「能 exit 0、但没有 official
+ * 侧」的骨架不该把它提前关掉（第 1 轮评审第 3 条）。
  */
 async function measureOfficial(_ak: string): Promise<LiveContrastSideReadings[] | null> {
   return null;
@@ -417,7 +439,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!ak) {
-    report.blockedReason = "缺 AK（BAIDU_MAP_AK / --ak=）：本档不产出任何读数";
+    report.blockedReason = "缺 AK（BAIDU_MAP_AK）：本档不产出任何读数";
     publish();
     return;
   }

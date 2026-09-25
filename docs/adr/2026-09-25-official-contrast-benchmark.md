@@ -32,6 +32,24 @@ issue #140 要求与官方 `@baidumap/vue-bmap` 在**同一环境、同一 JSAPI
 | --- | --- | --- |
 | **Fake 同机档**（主） | `pnpm perf:contrast` | ✅ 已跑，可复现，可入 CI |
 | 真实浏览器档 | `pnpm perf:contrast:live` | ⛔ **未实跑**（无 AK）——页面与编排留骨架，不产出数据 |
+| 包体档 | `pnpm perf:contrast:bundle` | ✅ 已跑，确定性字节门禁 |
+
+### 1a. 真实浏览器档**尚未完成双边对照**，因此本 PR 不关掉 #140
+
+首轮评审指出：live 档的 `measureOfficial()` 恒返回 `null`，唯一的场景是「本库扩展档」，
+于是那一档虽然能 `exit 0`，却**没有任何官方侧读数**。一个「可 exit 0、但没有 official
+侧」的骨架若在 PR 上写 `Closes #140`，就会把 issue 的验收项提前关掉。
+
+因此：
+
+- **本 PR 不使用 `Closes #140`**，改用 `Refs #140` + 一条明确的 follow-up issue 接手
+  「真实浏览器档的双边对照」（拿到 AK 之后做）；
+- live 档的已知缺口写进 `tests/browser/official-contrast/main.ts` 的注释与本 ADR，
+  不用「骨架已完成」的措辞。
+
+这不是拖延：票面要求的「与官方同场景对照」在 Fake 档（主档）已经真的做了，live 档补的是
+Fake 测不到的 long task / 重绘 / FPS / 堆增长——它需要真实 AK，本轮拿不到。把两件事混成
+一件会让主档的可复现性被 live 档的「不可跑」拖住。
 
 Fake 档能成立，靠的是一个**已实测**的事实：`@baidumap/jsapi-loader@1.0.0` 的 `load()` 在检测
 到已存在的 `window.BMap` 时**直接复用**（不插 script）。把本仓库的 Fake v4 挂到 `window.BMap`
@@ -102,42 +120,64 @@ Vue 3 删掉了 Vue 2 的 `app.on("app:renderTriggered")`，公开观测口只�
 - 计数桶必须在**根组件的 `setup()` 里**建立。挂载型场景整棵树在 `mount()` 内部建完，事后建桶
   永远读到 0（官方侧因为要等 ready、注册发生在动作之前，会出现「一边 0 一边 103」）。
 
-### 7. 计时窗只包住「动作」
+### 7. 计时窗只包住「动作」，且**两侧切分必须逐场景对称**
 
-每个场景拆成 `setup → act → teardown`，只有 `act` 进计时窗。官方 `Map` 的 ready 信号在 Fake
-上要等它自己的兜底定时器（**夹具差异**，不是性能差），把它算进动作会让场景 1/2/8/9 的读数
-变成「谁等得久」而不是「谁建的资源多」。残留读数取**卸载之后**的快照——挂载型场景在动作窗口
-结束时资源本来就还挂着，那是动作本身，不是泄漏。
+每个场景拆成 `setup → act → teardown`，只有 `act` 进计时窗。但「切在哪」必须**按场景性质**
+定，并且**两侧一致**（首轮评审第 2 条）：
+
+| 场景类型 | 切分 | 理由 |
+| --- | --- | --- |
+| **挂载型**（§1/§2/§6/§7/§9） | 挂载留在 **act** | 动作**就是**挂载。放进 setup 会让 `act` 变空、`recreates` 恒读 0——基准空转 |
+| **更新 / 生命周期型**（§3/§4/§5/§8/§10） | 挂载与 ready 等待移进 **setup** | 被问的是「换数据 / 改状态」，首挂是准备 |
+
+此前官方侧在 §3/§4/§5/§8 把 `mountOfficial()`（含 ready 等待）留在 act 里，而本库侧在
+setup 里挂——官方侧的时长 / 重建数 / 渲染数把「首挂 1 000 个 Marker」一起吃进去，两侧量的
+不是同一件事。这不是理论风险：修之前 §3 官方侧读到 `recreate=1001 / render=1001`，把
+1k **换位置**读成了 1k **挂载**。修之后是 `setPosition=1000 / recreate=0`。
 
 对齐 ready 口径时打开了 Fake 的 `emitTilesLoadedOnFirstView`（夹具开关，不是官方语义）：
 官方 ready 从 ~500ms 降到 ~8ms。否则「本库立即 ready / 官方 500ms 后 ready」会被读成两库
 的性能差。
 
-### 8. benchmark 不得成为改生产语义的理由 —— 门禁化
+**更新场景必须断言「真的更新了」**（首轮评审第 1 条）。§3 的渲染闭包此前捕获 `first`
+而不是读 `data.value`，于是换引用不触发任何重渲染，而「0 次重建」在 no-op 下**恰好也是 0**
+——两件方向相反的事互相抵消，基准全绿。现在 §3 钉住语义前提：`setPosition` 恰好 1 000 次、
+重建恰好 0 次；§4/§5 的 `setPath` 断言同理由 `sdkCallKind` 带上具体调用面名。
+
+### 8. benchmark 不得成为改生产语义的理由 —— 门禁化，且**比的是 PR base**
 
 这条不写成文档提醒，而是**门禁**：`tests/behavior/official-contrast-gate.test.ts` 断言
-`git diff HEAD -- packages/bmap-vue/src` 为**空**。要让对照跑绿就去改 `src/`，门禁会红。
-本档对生产源码的改动量必须是**零**。
+**本 PR 的 base 相对 HEAD 没有动过 `packages/bmap-vue/src`**。要让对照跑绿就去改 `src/`，
+门禁会红。
+
+⚠️ 比的基准必须是 `base…HEAD` 三点语法，**不是** `HEAD`（首轮评审第 5 条）：`git diff HEAD
+-- src` 在**干净的 CI checkout 上恒为空**（工作区 = HEAD），哪怕本 PR 的提交里真的动了
+`src/`。CI 因此把 `github.event.pull_request.base.sha`（或 `github.event.before`）注入成
+`CONTRAST_DIFF_BASE` 喂给门禁；本地没注入时退回 `merge-base HEAD origin/main`，浅克隆取不到
+base 就**明确失败**，不静默放行——门禁自身不能有稳定的假绿路径。
 
 ### 9. AK 绝不入库，且**不进任何会被别人读到的通道**
 
-Fake 档与包体档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）。真实浏览器档的 AK 只走
-`BAIDU_MAP_AK` 环境变量 / `--ak=`，并由编排脚本经 **CDP** 注入页面。门禁断言代码里没有写死的
+Fake 档与包体档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）。真实浏览器档的 AK
+**只从 `BAIDU_MAP_AK` 环境变量读**，并由编排脚本经 **CDP** 注入页面。门禁断言代码里没有写死的
 AK 字面量。
 
-「不入库」是最低要求，**不够**：AK 还要不进**别的进程与日志能读到的地方**。三条常见路径各自
-被否掉，各有理由：
+「不入库」是最低要求，**不够**：AK 还要不进**别的进程、日志与产物能读到的地方**。四条常见
+路径各自被否掉，各有理由：
 
 | 路径 | 为什么不行 |
 | --- | --- |
 | `import.meta.env.VITE_*` | vite 会把它**内联进构建产物**——AK 落进可能被上传的 `.artifacts` |
 | 页面 URL 查询串 | URL 是 chrome 的**命令行参数**，因此进 `ps`（同机器任何进程可无凭据读）；它同时是 vite 的一次请求 URL，而 vite 的 info 级请求日志会写进 stdout——**CI 里 stdout 就是 job log**，读者范围比 secrets 大得多 |
-| `--verbose` 继承子进程 stdio | 同上，且绕开脚本自己的 `redactAk` 出口 |
+| `--ak=` 命令行 | 同上，且它进的是**本进程**（`ps` 同样看得到）。环境变量至少不进 OS 进程表 |
+| 子进程继承父 env | vite 会把 env 内联进产物（见第一行）；chrome 继承则让 AK 进入浏览器进程的整份环境，而浏览器进程是**会被崩溃报告 / 调试器附加 dump** 的那一类 |
 
-因此：AK 走 **CDP**（本进程持有的内存 socket），页面用 `window.__CONTRAST_AK_TAKEN__` **领一次**、
-领完自删（不留给后续 `Runtime.evaluate` 读走）；vite 配置 `logLevel: "silent"` 让它根本不打请求行；
-编排**不接受** `--verbose`。报告里只有 `akUsed` 布尔，**没有 AK 字段**。`redactAk` 仍保留在
-stdout 与落盘 JSON 两条出口——按「页面错误消息可能含敏感串」处理，不当第一道防线。
+因此：**编排不接受 `--ak=`**（只读 `BAIDU_MAP_AK`）；**vite 与 chrome 都拿一份
+`BAIDU_MAP_AK` 被显式删掉的净化 env**（`childEnvWithoutAk()`）；AK 只走 **CDP**（本进程持有的
+内存 socket），页面用 `window.__CONTRAST_AK_TAKEN__` **领一次**、领完自删（不留给后续
+`Runtime.evaluate` 读走）；vite 配置 `logLevel: "silent"` 让它根本不打请求行；编排**不接受**
+`--verbose`。报告里只有 `akUsed` 布尔，**没有 AK 字段**。`redactAk` 仍保留在 stdout 与落盘
+JSON 两条出口——按「页面错误消息可能含敏感串」处理，不当第一道防线。
 
 （`scripts/collect-live-performance.mts` 里仍是 URL 传 AK 的旧写法；那是 #123 的既存文件，
 本票不改它，另票处理。）
@@ -171,6 +211,32 @@ npm 的账。
 **基线是独立文件** `tests/performance/bundle-baseline.json`，**不**混进 `baseline.json`：
 后者是运行时指标集且有一��双向校验，混进去会让它炸掉；更要紧的是「运行时回退」与「包体回退」
 的失败处理不同——前者跨机不可比、只出报告，后者是确定性字节差、可以当门禁。
+
+### 11. 指标**按它实际量的东西命名**，票面量不到的原口径进 `notMeasured`
+
+首轮评审第 8 条指出两处列名与票面原词不符。处理原则是**宁可改名，不可让列名冒充它量的
+东西**——名不副实的读数比没有读数更坏：
+
+| 票面指标 | 本档实测量 | 处理 |
+| --- | --- | --- |
+| 「SDK 调用次数」 | **某一个调用面**的次数（`listen` / `setPosition` / `setPath`） | 报告带 `callKind` 名字，票面「总数」进 `notMeasured`（真实与 Fake 都没有单一计数器） |
+| 「watcher 回调次数」 | **组件渲染**次数（devtools `perf:start`，dev-only） | 列名写明是渲染，票面「watcher 回调」进 `notMeasured`（Vue 3 无公开 watcher 计数面） |
+
+`notMeasured` 是这套 benchmark 的一等公民：它让「哪些票面项本档真的没量」变成报告里的显式
+清单，而不是靠读者猜。`formatContrastReport` 末尾另有一节「口径注记」，提醒读者别把
+`listen`/`render` 读成票面原词。
+
+### 12. 「采齐了没」数**真测到的**场景，且可比场景缺一侧要被报出来
+
+报告的 `buildScenarioReadings()` 永远按场景表逐条产出一行（没跑到的填 `ours: null`），因此
+`report.scenarios.length` **恒等于**场景表条数——拿它判「采齐了没」是一条恒真的假绿路径
+（首轮评审第 6 条）。编排因此数 `ours !== null` 的行，并额外要求：每条声明了官方等价物
+（可比较）的场景**真的**拿到官方侧读数（`officialSide !== null`），否则报
+`INCOMPLETE: 可比场景缺官方侧读数`。缺一侧不是本库的失败，但它**不是**「已对照」。
+
+同理，**基准红了不等于脚手架坏了**（首轮评审第 7 条）：不变式被破坏时 vitest 非零退出，编排
+**按报告自身判定结算**（可能是 1），只有报告缺失 / 读不出来才归 2。文档里写的「1 = 不变式被
+破坏」在唯一正式入口 `pnpm perf:contrast` 上必须真的可达。
 
 ## 后果（含回滚）
 

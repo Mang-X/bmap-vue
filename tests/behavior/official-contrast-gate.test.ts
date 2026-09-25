@@ -217,6 +217,30 @@ describe("#140 纯函数：退出码 0·1·2·3", () => {
     expect(decision.exitCode).toBe(3);
     expect(decision.reasons.join()).toContain("INCOMPLETE");
   });
+
+  it("可比场景缺官方侧读数 ⇒ 3（缺一侧**不算**已对照）", () => {
+    // 场景行填了、`ours` 有读数，但声明了官方等价物却没拿到官方侧 ⇒ 票面要的
+    // 「同场景对照」没发生。这是第 1 轮评审第 6 条要求补的那一条。
+    const decision = decideContrastExit({
+      ...base,
+      expectedComparableScenarios: 7,
+      comparableScenarioCount: 6,
+    });
+    expect(decision.exitCode).toBe(3);
+    expect(decision.reasons.join()).toContain("缺官方侧读数");
+  });
+
+  it("可比场景两侧齐全 ⇒ 0（这项校验不制造假红）", () => {
+    expect(
+      decideContrastExit({
+        ...base,
+        expectedComparableScenarios: 7,
+        comparableScenarioCount: 7,
+      }).exitCode,
+    ).toBe(0);
+    // 不传这两项 = 本档不做这项校验（老调用点仍能给出确定结果）。
+    expect(decideContrastExit(base).exitCode).toBe(0);
+  });
 });
 
 /* ------------------------------------------------------------------ 纯函数：人读报告 */
@@ -475,8 +499,48 @@ describe("#140 接线契约：入口 / 版本锁 / AK / CI / 文档", () => {
 
   it("benchmark 没有成为改生产语义的理由：src/ 零改动", () => {
     // 票面第 4 条验收。本档只允许动 tests/、scripts/、docs/、packages/test-utils/。
-    const changed = runGit(["diff", "--name-only", "HEAD", "--", "packages/bmap-vue/src"]);
-    expect(changed, `生产源码被改动：${changed}`).toBe("");
+    //
+    // ⚠️ 比的**基准**必须是本 PR 的 base，不是 `HEAD`（第 1 轮评审第 5 条）：
+    // `git diff HEAD -- src` 在**干净的 CI checkout 上恒为空**（工作区 = HEAD），
+    // 于是这条门禁在 CI 上恒绿，哪怕本 PR 的提交里真的动了 `src/`。必须比
+    // 「PR 的 base …… HEAD」。
+    const base = process.env.CONTRAST_DIFF_BASE?.trim() || discoverMergeBase();
+    if (!base) {
+      // 求不出 base（浅克隆 / 没有远端 main 引用）时**明确失败**，而不是退回 `HEAD` ——
+      // 后者正是恒绿的那条。门禁自身不能有稳定的假绿路径。
+      throw new Error(
+        "无法确定 PR base：CONTRAST_DIFF_BASE 未注入，且与 origin/main 求不出合并基" +
+          "（浅克隆请用 fetch-depth: 0）",
+      );
+    }
+    const changed = runGit([
+      "diff",
+      "--name-only",
+      `${base}...HEAD`,
+      "--",
+      "packages/bmap-vue/src",
+    ]);
+    expect(changed, `生产源码被本 PR 改动（base=${base}）：${changed}`).toBe("");
+  });
+
+  it("CI 把 PR base 注入 CONTRAST_DIFF_BASE，且那条 job 有完整历史", () => {
+    // 没有这一步，上面那条门禁在 CI 上就会退回「工作区 vs HEAD」= 恒空。
+    const quality = readWorkflow("quality.yml");
+    // 门禁跑在 `test:unit` 里（`official-contrast-gate.test.ts` 属 tests/behavior），
+    // 因此 env 要挂在**那个** step 上，而不是跑基准的 official-contrast job。
+    // 搜 `run:` 那一行而不是命令本身——文件里还有提到这个命令的说明性注释，
+    // 搜命令会命中注释所在的那一段，切出错误的区块。
+    // `stepBlockContaining` 返回该 step 的**逐行数组**（沿用 workflow-helpers 的约定，
+    // 其它门禁都 `join("\n")` 后再匹配），所以这里也要 join 一次。
+    const unitStep = stepBlockContaining(quality, "run: pnpm test:unit");
+    expect(unitStep.length, "找不到跑 test:unit 的 step").toBeGreaterThan(0);
+    expect(unitStep.join("\n"), "test:unit step 没注入 CONTRAST_DIFF_BASE").toContain(
+      "CONTRAST_DIFF_BASE",
+    );
+    // `...` 三点语法要历史里真的有 base，因此跑门禁的那个 job 必须不是浅克隆。
+    expect(quality, "quality job 的 checkout 不是全历史，三点 diff 会取不到 base").toContain(
+      "fetch-depth: 0",
+    );
   });
 
   it("官方对照基准文件不硬编码 AK，且不读环境里的 AK", () => {
@@ -485,6 +549,100 @@ describe("#140 接线契约：入口 / 版本锁 / AK / CI / 文档", () => {
       "utf8",
     );
     expect(perfTest).not.toMatch(/BAIDU_MAP_AK/);
+  });
+
+  it("基准红了**不**一律映射成 2：不变式被破坏时如实给 1", () => {
+    // `recordInvariant` 用 `expect(...).toBe(true)` 让 vitest 非零退出；编排此前
+    // `benchExit !== 0 ? 2 : …` 把它压成 2，于是文档写的「1 = 不变式被破坏」在唯一的
+    // 正式入口 `pnpm perf:contrast` 上**从来没发生过**（第 1 轮评审第 7 条）。
+    // 现在的契约是：报告与信封可读 ⇒ 按报告判定结算（可能是 1）；读不到报告才归 2。
+    const code = stripComments(scriptText);
+    expect(code, "编排仍把「基准红了」压成 2").not.toMatch(/benchExit\s*!==?\s*0\s*\?\s*2/);
+    expect(code, "编排没有按报告判定结算").toContain("const decision = decide(report)");
+  });
+
+  it("「采齐了没」数的是真测到的场景，不是填了行的场景", () => {
+    // `report.scenarios.length` 恒等于场景表条数（报告永远逐条填行）⇒ 拿它判采齐是
+    // 恒真的假绿（第 1 轮评审第 6 条）。必须数 `ours !== null`。
+    const code = stripComments(scriptText);
+    expect(code, "编排仍在用 scenarios.length 当采齐数").not.toMatch(
+      /scenarioCount:\s*report\.scenarios\.length/,
+    );
+    expect(code, "编排没数真正测到的场景").toContain("entry.ours !== null");
+    // 可比场景缺官方侧读数也要报出来。
+    expect(code, "编排不校验可比场景的官方侧读数").toContain(
+      "entry.officialSide !== null",
+    );
+  });
+
+  it("SDK 调用那一列**带名字**：票面原口径进 notMeasured，不冒充「总数」", () => {
+    // `sdkCalls` 量的只是某一个调用面（listen / setPosition / setPath），真实与 Fake 都
+    // 没有「全部 SDK 调用」的单一计数器；`renderCallbacks` 是组件渲染不是 watcher 回调。
+    // 列名冒充它量的东西比没有这一列更坏（第 1 轮评审第 8 条）。
+    const perfTest = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast.perf.test.ts"),
+      "utf8",
+    );
+    const report = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast/report.mts"),
+      "utf8",
+    );
+    expect(report, "报告读数没有 callKind").toContain("callKind");
+    expect(report, "人读报告仍把那一列叫笼统的 calls=").not.toMatch(/calls=\$\{/);
+    expect(perfTest, "基准没把票面的「SDK 调用总数」写进 notMeasured").toContain(
+      "SDK 调用总数",
+    );
+    expect(perfTest, "基准没把票面的「watcher 回调次数」写进 notMeasured").toContain(
+      "watcher 回调次数",
+    );
+  });
+
+  it("§3 的换数据是**真的会更新**的：渲染闭包读 data.value", () => {
+    // 渲染闭包捕获 `first` 就等于换引用也不更新，场景退化成 no-op，而「0 次重建」在
+    // no-op 下恰好也是 0——两件方向相反的事互相抵消，基准全绿（第 1 轮评审第 1 条）。
+    const perfTest = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast.perf.test.ts"),
+      "utf8",
+    );
+    const section = perfTest.slice(
+      perfTest.indexOf("§3 1k Marker position update"),
+      perfTest.indexOf("§4 Polyline 10k"),
+    );
+    expect(section, "§3 的渲染闭包没读 data.value").toMatch(/data:\s*data\.value/);
+    // 语义断言：真的发了 1 000 次位置写入，且没有重建覆盖物。
+    expect(section, "§3 没有断言 1 000 次 setPosition").toMatch(
+      /delta\.sdkCalls[\s\S]{0,80}toBe\(1_000\)/,
+    );
+    expect(section, "§3 没有断言 0 次重建").toMatch(/delta\.recreates[\s\S]{0,80}toBe\(0\)/);
+  });
+
+  it("更新类场景的两侧计时窗对称：官方侧的挂载与 ready 落在 setup，不在 act", () => {
+    // 官方侧此前在 act 里 `mountOfficial(...)`（含 ready 等待），本库侧在 setup 里挂 ——
+    // 官方侧的时长 / 重建数 / 渲染数把「首挂」一起吃进去，两侧量的不是同一件事
+    // （第 1 轮评审第 2 条）。
+    const perfTest = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast.perf.test.ts"),
+      "utf8",
+    );
+    // 切片覆盖 §3–§8（更新 / 生命周期类场景，含中间的两条扩展档 §6/§7——它们官方侧
+    // 本就无等价物、不挂官方，故本区间应恰好出现 4 处 `mountOfficial`）。
+    const section = perfTest.slice(
+      perfTest.indexOf("§3 1k Marker position update"),
+      perfTest.indexOf("§9 Router"),
+    );
+    // 每个官方侧 `mountOfficial` 调用都必须**先**经过一个 `setup:`（挂载与 ready 等待
+    // 在 setup 里），不能出现在 `act:` 之后。逐个挂载点检查它前面最近的阶段键。
+    const mounts = [...section.matchAll(/mountOfficial\(/g)];
+    expect(mounts.length, "§3/§4/§5/§8 应有 4 处官方侧挂载").toBe(4);
+    for (const mount of mounts) {
+      const before = section.slice(0, mount.index);
+      const lastSetup = before.lastIndexOf("setup: async");
+      const lastAct = before.lastIndexOf("act: async");
+      expect(
+        lastSetup,
+        "有一处官方侧挂载不在 setup 里（最近的阶段键是 act 或更早）",
+      ).toBeGreaterThan(lastAct);
+    }
   });
 });
 
@@ -776,19 +934,51 @@ describe("#140 接线契约：真实浏览器档（骨架，本轮未实跑）",
     expect(tsconfig).toContain("tests/browser/official-contrast/**/*.mts");
   });
 
-  it("AK 只经 env / --ak= 进入，且**不进页面 URL、不进 chrome argv、不进 vite env**", () => {
-    expect(liveScript).toContain("BAIDU_MAP_AK");
-    expect(liveScript).toContain("--ak=");
+  it("AK 只经 BAIDU_MAP_AK 进入，**不进 argv、不进页面 URL、不进任何子进程 env**", () => {
+    const code = stripComments(liveScript);
+    expect(code).toContain("BAIDU_MAP_AK");
+    // ⚠️ **不接受** `--ak=`：argv 进本进程命令行，因此进 `ps`——同机器任何进程
+    // （CI 并行 step、容器 sidecar、开发者机器上的任何程序）都能无凭据读到（第 1 轮评审
+    // 第 4 条）。环境变量至少不进 OS 进程表。
+    expect(code, "编排仍支持 --ak=（argv 进 ps）").not.toMatch(/argValue\(\s*["']ak["']\s*\)/);
+    expect(code, "编排仍把 AK 从 argv 读进来").not.toMatch(/\bak\s*=\s*[^;]*argValue/);
+    // 两个子进程都必须拿**净化 env**（BAIDU_MAP_AK 被显式删掉）。
+    expect(code, "没有净化子进程 env 的辅助函数").toContain("childEnvWithoutAk");
+    expect(code, "净化 env 没有显式删掉 BAIDU_MAP_AK").toContain("delete env.BAIDU_MAP_AK");
+    // vite 与 chrome 两处都要用；`{}` = 继承父 env = AK 进了浏览器进程的整份环境。
+    const uses = code.match(/childEnvWithoutAk\(/g) ?? [];
+    expect(uses.length, "childEnvWithoutAk 调用点少于 2 处（vite / chrome）").toBeGreaterThanOrEqual(2);
+    expect(code, "chrome 仍以 {} 继承父 env（含 AK）").not.toMatch(/env:\s*\{\s*\}\s*,?\s*\n?\s*\)/);
     // 页面 URL 仍然带非敏感的运行标识（run / ours / official）——它们会进 vite 日志与 CDP。
     expect(pageText).toContain("URLSearchParams(location.search)");
     // 但 AK **不在** URL 构造里。
-    const urlConstruction = /new URLSearchParams\(\{[\s\S]*?\}\)/.exec(stripComments(liveScript));
+    const urlConstruction = /new URLSearchParams\(\{[\s\S]*?\}\)/.exec(code);
     expect(urlConstruction, "没找到页面 URL 的构造").not.toBeNull();
     expect(urlConstruction?.[0], "AK 出现在页面 URL 查询串里——那会进 chrome argv 与 vite 请求日志")
       .not.toMatch(/\bak\b/);
     // vite env 会被 import.meta.env 内联进产物，同样不能走。
     expect(stripComments(pageText)).not.toContain("import.meta.env");
-    expect(stripComments(liveScript)).not.toMatch(/VITE_[A-Z_]*AK/);
+    expect(code).not.toMatch(/VITE_[A-Z_]*AK/);
+  });
+
+  it("真实档的 redraw 窗口**真的重画**：换一份数据，不是只等一次 paint", () => {
+    // `redraw` 此前只是 `await paintBoundary()`，没换任何数据——窗口名与实际量的东西
+    // 对不上，而 `heapGrowthBytes` 的注释还写着「换数据后的堆增长」（第 1 轮评审第 3 条）。
+    const code = stripComments(pageText);
+    expect(code, "redraw 窗口没换数据").toMatch(/items\.value\s*=\s*moved/);
+    expect(code, "没造那份平移后的数据").toContain("makeMovedItems");
+    // 造数必须在窗口**之外**且跨一个 macrotask，否则 long task 窗口交集量到的是造数。
+    expect(code, "造数没有在 redraw 窗口之外").toMatch(
+      /makeMovedItems\([\s\S]{0,200}?settle\(\)[\s\S]{0,200}?redrawStart/,
+    );
+  });
+
+  it("真实档如实标注它**不是**跨库对照（本场景官方无等价物 ⇒ official 恒为 null）", () => {
+    // 一个「能 exit 0、但没有 official 侧」的骨架不该把 #140 的验收项提前关掉
+    // （第 1 轮评审第 3 条）。因此代码与文档都要说清这是已知缺口。
+    expect(stripComments(pageText)).toContain("measureOfficial");
+    expect(pageText, "页面没写明真实档尚未完成双边对照").toMatch(/不是\*\*跨库对照|已知缺口/);
+    expect(liveScript, "编排没写明本轮未实跑").toMatch(/未实跑/);
   });
 
   it("AK 经 **CDP** 注入（内存 socket，不进 OS 进程表 / 日志 / 磁盘）", () => {
@@ -922,6 +1112,26 @@ function makeBundleReport(overrides: Partial<BundleReport> = {}): BundleReport {
 /** 跑一条只读 git 查询并取回 stdout。 */
 function runGit(args: string[]): string {
   return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8" }).trim();
+}
+
+/**
+ * 本地兜底：与 `origin/main` 求合并基。
+ *
+ * 刻意用 `origin/main` 而不是 `main`——工作区里的 `main` 引用可能长期落后于远端
+ * （开发分支是从旧 `main` 拉出、中途没 fetch 的），拿它当 base 会把「base 之后别的 PR
+ * 改过的 `src/`」算成「本 PR 改的」，让这条门禁**假红**。远端引用不存在时返回 `null`，
+ * 由调用方明确失败。
+ */
+function discoverMergeBase(): string | null {
+  for (const ref of ["origin/main", "main"]) {
+    try {
+      const base = runGit(["merge-base", "HEAD", ref]);
+      if (base) return base;
+    } catch {
+      /* 该引用不存在，试下一个 */
+    }
+  }
+  return null;
 }
 
 /**

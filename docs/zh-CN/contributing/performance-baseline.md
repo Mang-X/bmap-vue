@@ -87,10 +87,21 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
 | `0` | 采齐、信封自检通过、不变式未破 |
 | `1` | **不变式被破坏**（本库侧的架构预期没了）——唯一能返回 1 的原因 |
 | `2` | 脚手架失败（基准没跑起来 / 报告缺失 / 官方版本漂移） |
-| `3` | blocked——**不是通过** |
+| `3` | blocked——**不是通过**（含「可比场景缺官方侧读数」） |
 
 绝对毫秒**只作读数**：Fake 没有真实渲染，跨机器本就不可比。刻意**没有**「比官方慢就算回退」
 这一条。CI job 因此只会在不变式破坏 / 脚手架坏 / 没跑成时红，不会因为 runner 快慢而红。
+
+**「采齐了没」的口径**（避免恒真的假绿）：报告的 `scenarios` 永远按场景表逐条产出一行，
+因此 `scenarios.length` **恒等于**场景表条数，不能拿它判采齐。编排数的是 `ours !== null` 的
+行（真测到的场景），并额外要求每条**可比**场景都真的拿到官方侧读数（`officialSide !== null`）
+——缺一侧报 `INCOMPLETE` 并给 3。**基准红了不等于脚手架坏了**：不变式被破坏时 vitest 非零
+退出，编排**按报告自身判定结算**（可能是 1），只有报告缺失/读不出来才归 2。
+
+**指标按它实际量的东西命名**：报告里 `listen` / `setPosition` / `setPath` 那一列是**某个调用
+面**的次数（真实与 Fake 都没有「全部 SDK 调用」的单一计数器），`render` 是**组件渲染**次数
+（不是票面写的「watcher 回调次数」——Vue 3 无公开 watcher 计数面）。票面量不到的原口径逐条
+列在报告的 `notMeasured` 一节。表末另有一节「口径注记」提醒读者别把列名读成票面原词。
 
 **官方侧的读数也会被如实记录，但不是门禁**：例如官方 `Marker` 卸载后 100/1000 个覆盖物仍挂着、
 1k 位置更新重建了 1001 个覆盖物。这些进报告的「可比场景」表，`retained` / `recreates` 列一眼
@@ -101,21 +112,27 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
 - **Fake 同机档已跑**：`pnpm perf:contrast` exit=0，10/10 场景。
 - **包体档已跑**：`pnpm perf:contrast:bundle` exit=0，基线已录。**本库比官方大**（见上表），
   不为了「赢」去加优化层，也不从包体差反推「所以要加 layer」。
-- **真实浏览器档未实跑**：本轮**没有 AK**（票面也要求 raw AK 绝不入库），因此
-  `pnpm perf:contrast:live` **没有产出任何数据**。不要引用、也不要从 Fake 读数外推浏览器表现。
-  long task / 真实重绘 / FPS / 堆增长 / 官方侧真实网络与鉴权路径，报告的「本档测不到」一节
-  逐条列出。
+- **真实浏览器档未实跑、且尚未完成双边对照**：本轮**没有 AK**（票面也要求 raw AK 绝不入库），
+  因此 `pnpm perf:contrast:live` **没有产出任何数据**。不要引用、也不要从 Fake 读数外推浏览器
+  表现。更进一步：live 档当前唯一的场景是「本库扩展档」（官方 4.0 无等价物），因此
+  `measureOfficial()` 恒返回 `null`——它补的是 Fake 测不到的 long task / 真实重绘 / FPS /
+  堆增长，**不是**跨库对照。真实浏览器档的**双边**对照由 follow-up issue 接手（需真实 AK）。
+  票面 #140 因此**不被本 PR 关掉**。
 - **AK 绝不入库**：Fake 档与包体档都不需要 AK（官方侧 provider 传的是字面量 `"fake"`）；
-  真实档的 AK 只走 `BAIDU_MAP_AK` / `--ak=`，并由编排脚本经 **CDP** 注入页面。
+  真实档的 AK **只**从 `BAIDU_MAP_AK` 读，并由编排脚本经 **CDP** 注入页面。
   **「不入库」不等于「够」**——AK 也不进页面 URL（那会进 chrome argv → `ps`、以及 vite 的
-  请求日志 → CI job log）、不进 `import.meta.env`（会被 vite 内联进产物）、不接受
-  `--verbose`。报告里只有 `akUsed` 布尔，没有 AK 字段。详见
+  请求日志 → CI job log）、**不接受 `--ak=`**（argv 进 `ps`）、不进任何**子进程 env**
+  （vite 会把 env 内联进产物；chrome 继承则让 AK 进入浏览器进程整份环境——崩溃报告 /
+  调试器附加会 dump 它；两处都拿一份删掉 `BAIDU_MAP_AK` 的净化 env）、不进
+  `import.meta.env`、不接受 `--verbose`。报告里只有 `akUsed` 布尔，没有 AK 字段。详见
   [ADR 2026-09-25（官方对照）决策 9](/adr/2026-09-25-official-contrast-benchmark)。
 
 **benchmark 不得成为改生产语义的理由**：这条是**门禁**而非文档提醒——
-`tests/behavior/official-contrast-gate.test.ts` 断言 `git diff HEAD -- packages/bmap-vue/src`
-为空。要让对照跑绿就去改 `src/`，门禁会红。决策细节见
-[ADR 2026-09-25（官方对照）](/adr/2026-09-25-official-contrast-benchmark)。
+`tests/behavior/official-contrast-gate.test.ts` 断言**本 PR 的 base 相对 HEAD 没有动过
+`packages/bmap-vue/src`**。要比的是 `base…HEAD` 三点语法，**不是** `HEAD`（`git diff HEAD`
+在干净的 CI checkout 上恒为空，哪怕本 PR 真动了 `src/`）；CI 把 `base.sha` 注入成
+`CONTRAST_DIFF_BASE`，本地退回 `merge-base HEAD origin/main`，浅克隆取不到就明确失败。决策
+细节见 [ADR 2026-09-25（官方对照）](/adr/2026-09-25-official-contrast-benchmark)。
 
 ### 包体档（指标 8）
 

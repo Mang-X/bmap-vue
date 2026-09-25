@@ -18,13 +18,21 @@
  * 两边都跑在本仓库的 Fake v4 上（机制见 `officialContrastHarness.ts` 文件头）。
  * 真实浏览器档（long task / 真实重绘 / FPS）是**另一档**，由 `perf:contrast:live` 采集。
  *
- * ## 计时窗只包住「动作」
+ * ## 计时窗只包住「动作」，且**两侧的 setup/act 切分必须逐场景对齐**
  *
  * 每个场景都拆成 `setup → act → teardown` 三段，只有 `act` 进计时窗。这不是洁癖：
  * 官方 `Map` 的 ready 信号在 Fake 上要等它自己的兜底定时器（装配成本里最大的一块是**夹具
- * 差异**，不是性能差），把它算进动作里会让场景 1/2/8/9 的读数变成「谁等得久」而不是
- * 「谁建的资源多」。残留读数则取**卸载之后**的快照——挂载型场景在动作窗口结束时资源本来
- * 就还挂着，那是动作本身，不是泄漏。
+ * 差异**，不是性能差），把它算进动作里会让读数变成「谁等得久」而不是「谁建的资源多」。
+ * 残留读数则取**卸载之后**的快照——挂载型场景在动作窗口结束时资源本来就还挂着，那是动作
+ * 本身，不是泄漏。
+ *
+ * ⚠️ 切分必须**两侧对称**，且**按场景性质**定，不能一刀切（这是第 1 轮评审的第 2 条）：
+ * - **挂载型场景**（§1 / §2 / §6 / §7 / §9）：动作**就是**挂载——放进 setup 会让 `act` 变成
+ *   空操作、`recreates` 恒读 0，基准空转。因此两侧的挂载都留在 act 里；
+ * - **更新 / 生命周期场景**（§3 / §4 / §5 / §8 / §10）：挂载与 ready 等待是**准备**，两侧都
+ *   移进 `setup`，窗口里只留被问的那件事。官方侧此前把挂载放在 act 里，于是它的
+ *   时长 / 重建数 / 渲染数把「首挂 1 000 个 Marker」一起吃进去，而本库侧没有——两侧量的
+ *   根本不是同一件事。
  *
  * ## 数据
  *
@@ -210,6 +218,7 @@ interface SideReadings {
   readonly durationMs: number;
   readonly delta: {
     readonly sdkCalls: number;
+    readonly callKind: string;
     readonly recreates: number;
     readonly renderCallbacks: number;
     readonly retainedResources: number;
@@ -287,7 +296,12 @@ async function measureBoth(
       return null;
     }
     const window = deltaBetween(before, fake.diagnostics.snapshot(), side.renders());
-    if (side.sdkCallCount) window.sdkCalls = side.sdkCallCount();
+    if (side.sdkCallCount) {
+      // 数字与**它量的那个调用面名字**一起覆盖：只换数字不换名字，报告里那一列就会
+      // 继续顶着 `listenCalls` 的默认名，读起来像量了全部 SDK 交互（第 1 轮评审第 8 条）。
+      window.sdkCalls = side.sdkCallCount();
+      window.callKind = side.sdkCallKind ?? window.callKind;
+    }
     await side.teardown();
     await settle();
     return {
@@ -462,16 +476,25 @@ describe("§3 1k Marker position update", () => {
     // 第二份：同一批点、经度整体平移 —— 「真的换了位置」而不是换了引用就完事。
     const second: PerfItem[] = first.map((item) => ({ ...item, lng: item.lng + 0.5 }));
 
-    await measureBoth(
+    const result = await measureBoth(
       "marker1k.update",
       async () => {
-        const side = createOurSideFactory(() => h(MarkerList as never, { data: first, ...MARKER_DATA }));
+        const side = createOurSideFactory(() =>
+          // ⚠️ 必须读 `data.value`：渲染闭包捕获 `first` 就等于**换引用也不更新**，
+        // 场景退化成「什么都没发生」——`act()` 里的赋值触发不了任何重渲染，于是
+        // 「0 次重建」读成的是「0 次更新」而不是「更新了但复用实例」。`children` 是个
+        // 每次渲染都重新调用的 thunk（见 `createOurSideFactory`），所以读得到最新值。
+          h(MarkerList as never, { data: data.value, ...MARKER_DATA }),
+        );
         const data = shallowRef(markRaw(first as readonly PerfItem[]));
+        let baseline = 0;
         return {
           ready: true,
           setup: async () => {
             side.mount();
             await settle();
+            // 基线取在装配之后、动作之前：装配建的那批点不算「动作发的写入」。
+            baseline = countOverlayCalls(ourFake, "setPosition");
           },
           act: async () => {
             data.value = markRaw(second as readonly PerfItem[]);
@@ -483,20 +506,32 @@ describe("§3 1k Marker position update", () => {
           },
           renders: side.renders,
           resetRenders: side.resetRenders,
+          // 按 SDK 语义覆盖：票面要的是「换位置发了多少次 SDK 写入」，而 `listenCalls`
+          // 分辨不出位置写入。1 000 个点换位置 ⇒ 恰好 1 000 次 `setPosition`（复用实例）。
+          sdkCallCount: () => countOverlayCalls(ourFake, "setPosition") - baseline,
+          sdkCallKind: "setPosition",
         };
       },
       async () => {
         const current = ref<readonly PerfItem[]>(first);
         let mounted: Awaited<ReturnType<typeof mountOfficial>> | null = null;
         let ok = true;
+        let baseline = 0;
         return {
           get ready() {
             return true;
           },
-          setup: async () => {},
-          act: async () => {
+          // 官方侧的挂载与 ready 等待**移进 setup**（不在 act 里）：本场景问的是
+          // 「换位置数据」，首挂不是被问的那件事。此前把 `mountOfficial` 放在 act 里
+          // 会让官方侧的时长 / 重建数 / 渲染数把「首次挂载 1 000 个 Marker」一起吃进去，
+          // 而本库侧在 setup 里挂——两侧量的就不是同一件事了。
+          setup: async () => {
             mounted = await mountOfficial(official, () => officialMarkers(current.value));
             ok = mounted.ready;
+            await settle();
+            baseline = countOverlayCalls(officialFake, "setPosition");
+          },
+          act: async () => {
             current.value = second;
             await settle();
           },
@@ -507,9 +542,19 @@ describe("§3 1k Marker position update", () => {
           },
           renders: () => mounted?.renders() ?? 0,
           resetRenders: () => mounted?.resetRenders(),
+          sdkCallCount: () => countOverlayCalls(officialFake, "setPosition") - baseline,
+          sdkCallKind: "setPosition",
         };
       },
     );
+
+    // 语义断言：这场景的**前提**是「真的更新了 1 000 个位置」。没有它，一个再次退化成
+    // no-op 的基准仍然全绿（第 1 条评审意见就是它）——而「0 次重建」在 no-op 下
+    // 恰好也是 0，方向相反的两件事会互相抵消。
+    expect(result.ours.delta.sdkCalls, "本库 1k 换位置应发 1000 次 setPosition").toBe(1_000);
+    expect(result.official?.delta.sdkCalls, "官方 1k 换位置应发 1000 次 setPosition").toBe(1_000);
+    // 0 次重建 = 复用实例改位置；重建数非 0 意味着「删了重建」而不是「原地更新」。
+    expect(result.ours.delta.recreates, "本库 1k 换位置不应重建覆盖物").toBe(0);
   }, 180_000);
 });
 
@@ -549,6 +594,7 @@ describe("§4 Polyline 10k 点：父级无关状态更新", () => {
           renders: side.renders,
           resetRenders: side.resetRenders,
           sdkCallCount: () => countOverlayCalls(ourFake, "setPath") - baseline,
+          sdkCallKind: "setPath",
         };
       },
       async () => {
@@ -560,8 +606,10 @@ describe("§4 Polyline 10k 点：父级无关状态更新", () => {
           get ready() {
             return true;
           },
-          setup: async () => {},
-          act: async () => {
+          // 挂载与 ready 等待在 **setup**（与本库侧同位置）：本场景问的只是「父级改一个
+          // 与 path 无关的状态」，首挂 10k 折线不是被问的那件事。放在 act 里会让两侧
+          // 量的不是同一件事（本库侧在 setup 里挂、官方侧在 act 里挂 + 等 ready）。
+          setup: async () => {
             mounted = await mountOfficial(official, () => {
               void parentState.value;
               return officialPolyline(PATH_10K);
@@ -569,6 +617,8 @@ describe("§4 Polyline 10k 点：父级无关状态更新", () => {
             ok = mounted.ready;
             await settle();
             baseline = countOverlayCalls(officialFake, "setPath");
+          },
+          act: async () => {
             parentState.value += 1;
             await settle();
           },
@@ -580,6 +630,7 @@ describe("§4 Polyline 10k 点：父级无关状态更新", () => {
           renders: () => mounted?.renders() ?? 0,
           resetRenders: () => mounted?.resetRenders(),
           sdkCallCount: () => countOverlayCalls(officialFake, "setPath") - baseline,
+          sdkCallKind: "setPath",
         };
       },
     );
@@ -635,6 +686,7 @@ describe("§5 Polyline 10k 点：真实 path replacement", () => {
           renders: side.renders,
           resetRenders: side.resetRenders,
           sdkCallCount: () => countOverlayCalls(ourFake, "setPath") - baseline,
+          sdkCallKind: "setPath",
         };
       },
       async () => {
@@ -646,12 +698,14 @@ describe("§5 Polyline 10k 点：真实 path replacement", () => {
           get ready() {
             return true;
           },
-          setup: async () => {},
-          act: async () => {
+          // 同 §4：挂载与 ready 在 setup，窗口里只留「换 path」这一件事。
+          setup: async () => {
             mounted = await mountOfficial(official, () => officialPolyline(path.value));
             ok = mounted.ready;
             await settle();
             baseline = countOverlayCalls(officialFake, "setPath");
+          },
+          act: async () => {
             path.value = PATH_10K_MOVED;
             await settle();
           },
@@ -663,6 +717,7 @@ describe("§5 Polyline 10k 点：真实 path replacement", () => {
           renders: () => mounted?.renders() ?? 0,
           resetRenders: () => mounted?.resetRenders(),
           sdkCallCount: () => countOverlayCalls(officialFake, "setPath") - baseline,
+          sdkCallKind: "setPath",
         };
       },
     );
@@ -807,8 +862,9 @@ describe("§8 InfoWindow mount/update/destroy", () => {
           get ready() {
             return true;
           },
-          setup: async () => {},
-          act: async () => {
+          // 挂载与 ready 在 setup：本场景问的是「打开 / 更新内容 / 关闭」三步，首挂不是
+          // 被问的那件事（与本库侧的 setup/act 切分对齐）。
+          setup: async () => {
             mounted = await mountOfficial(official, () =>
               h(official.InfoWindow as never, {
                 content: content.value,
@@ -818,6 +874,8 @@ describe("§8 InfoWindow mount/update/destroy", () => {
             );
             ok = mounted.ready;
             await settle();
+          },
+          act: async () => {
             open.value = true;
             await settle();
             content.value = "更新";
@@ -1026,6 +1084,7 @@ function toSideReadings(readings: SideReadings): ContrastSideReadings {
   return {
     durationMs: readings.durationMs,
     sdkCalls: readings.delta.sdkCalls,
+    callKind: readings.delta.callKind,
     recreates: readings.delta.recreates,
     renderCallbacks: readings.delta.renderCallbacks,
     retainedResources: readings.delta.retainedResources,
@@ -1071,6 +1130,14 @@ afterAll(() => {
   recorder.notMeasured("真实 SDK 重绘 / 帧调度 / FPS");
   recorder.notMeasured("堆增长（--expose-gc 下的 heapUsed）→ Fake 档不测，真实浏览器档才出");
   recorder.notMeasured("官方侧真实网络与 AK 鉴权路径（本档复用 window.BMap，无 script 加载）");
+  // 票面原口径与本档实测口径**明确分开**，不让列名冒充它量的东西（第 1 轮评审第 8 条）。
+  recorder.notMeasured(
+    "票面的「SDK 调用总数」：真实与 Fake v4 都没有单一计数器，报告按调用面分列 " +
+      "（listen / setPosition / setPath），没有一项是「总数」",
+  );
+  recorder.notMeasured(
+    "票面的「watcher 回调次数」：Vue 3 没有公开的 watcher 计数面（本档记的是组件渲染次数）",
+  );
   recorder.readout("scenarios", CONTRAST_SCENARIOS.length);
   recorder.readout("datasetVersion", DATASET_VERSION);
 

@@ -33,8 +33,11 @@
  * 根上。两侧用**同一段代码**计数，因此「本库渲染 N 次 / 官方渲染 M 次」可比——可比的关键是
  * **同一把尺子**，不是尺子有多细。
  *
- * ⚠️ 它数的是「组件渲染次数」，**不是**「SDK 调用次数」。一次渲染里可能有 0 次、也可能有
- * 多次 SDK 写入。票面把这两项都列为指标，因此报告里也是两列。
+ * ⚠️ 它数的是「组件渲染次数」，**不是**票面写的「watcher 回调次数」，也**不是**「SDK 调用
+ * 次数」。一次渲染里可能有 0 次、也可能有多个 watcher、0 次或多次 SDK 写入。票面把 watcher
+ * 回调次数列为指标，但 Vue 3 没有公开的 watcher 计数面（`app.on("app:renderTriggered")` 在
+ * Vue 2 就被删了），因此本档记**组件渲染**、在报告里带名字，并把它与票面原口径的差距写进
+ * `notMeasured`（第 1 轮评审第 8 条：宁可改名字，不可让列名冒充它量的东西）。
  *
  * ⚠️ devtools 钩子是**进程级单例**：后装的覆盖先装的。因此这里装**一次**全局钩子、内部按根
  * 实例分流，而不是两侧各装一个（那会互相把对方顶掉）。
@@ -109,16 +112,23 @@ export type FakeSnapshot = FakeV4DiagnosticsSnapshot;
 /** 一侧在某个动作窗口内的增量读数（报告里的一行）。 */
 export interface SideDelta {
   /**
-   * 窗口内的 SDK 侧调用次数。
+   * 窗口内**某一个** SDK 调用面的调用次数。
    *
-   * 默认口径是 `listenCalls` 的增量（Fake 里唯一一个「所有 SDK 侧订阅都过」的计数器），
-   * 它是**通用下界**。按 SDK 语义更精确的计数（如「重发 path 恰好 N 次」）由调用方按场景
-   * 自己从 `overlayCalls()` / `nativeLayerCalls()` 取，在基准里显式覆盖这个字段。
+   * ⚠️ **刻意不叫「SDK 调用总数」**：真实 SDK 与 Fake v4 都没有这样一个单一计数器——把它
+   * 笼统叫成 `sdkCalls` 会让报告读起来像量了全部 SDK 交互，而它其实只是下述某一个面。
+   * `callKind` 与这个数字**成对读**，缺了名字的计数在这套读数里是不诚实的（第 1 轮评审
+   * 第 8 条）。
+   *
+   * 默认口径是 `listenCalls` 的增量（Fake 里唯一一个「所有 SDK 侧订阅都过」的计数器）。
+   * 按 SDK 语义更精确的计数（如「换位置发了 N 次 `setPosition`」「重发 path 恰好 N 次
+   * `setPath`」）由调用方按场景从 `countOverlayCalls()` 取，并**同时**覆盖 `callKind`。
    */
   sdkCalls: number;
+  /** `sdkCalls` 量的**是哪个调用面**：`listen` / `setPosition` / `setPath`。 */
+  callKind: string;
   /** 窗口内**新建**的 SDK 实例数（地图 / 覆盖物 / 图层，按实例计）。 */
   recreates: number;
-  /** 窗口内触发的组件渲染次数（与 SDK 调用分开记，见文件头第 3 条）。 */
+  /** 窗口内触发的组件渲染次数（不是 watcher 回调次数，见文件头第 3 条）。 */
   renderCallbacks: number;
   /** 窗口结束后**仍未释放**的 SDK 资源数（0 = 干净）。 */
   retainedResources: number;
@@ -140,6 +150,7 @@ function sumResources(leaks: object): number {
 export function deltaBetween(before: FakeSnapshot, after: FakeSnapshot, renders: number): SideDelta {
   return {
     sdkCalls: after.activity.listenCalls - before.activity.listenCalls,
+    callKind: "listen",
     recreates:
       after.activity.mapsCreated -
       before.activity.mapsCreated +
@@ -232,12 +243,16 @@ export interface ContrastSide {
   /** 动作开始前把组件渲染计数归零。 */
   resetRenders(): void;
   /**
-   * 「窗口内 SDK 调用次数」的**按语义覆盖口径**（缺省 = `listenCalls` 增量，见 `SideDelta.sdkCalls`）。
+   * 「窗口内某一个 SDK 调用面的次数」的**按语义覆盖口径**（缺省 = `listenCalls` 增量，
+   * 见 `SideDelta.sdkCalls`）。返回值与 `sdkCallKind` **成对**给出。
    *
-   * 场景 4/5 用它把 `listenCalls`（订阅面）换成「`setPath` 被调用了几次」——票面关心的是
-   * 「父级无关更新会不会重发 path」，而 `listenCalls` 分辨不出 path。
+   * 场景 3/4/5 用它把 `listenCalls`（订阅面）换成「`setPosition` / `setPath` 被调用了
+   * 几次」——票面关心的是「换位置发了多少写入」「父级无关更新会不会重发 path」，而
+   * `listenCalls` 分辨不出这两件事。
    */
   sdkCallCount?(): number;
+  /** `sdkCallCount` 量的调用面名（`setPosition` / `setPath`）；缺省即 `listen`。 */
+  sdkCallKind?: string;
   /**
    * 动作**之后**才判定的「这一侧是不是没跑成」（返回 `null` = 跑成了）。
    *

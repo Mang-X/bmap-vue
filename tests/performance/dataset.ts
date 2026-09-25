@@ -116,6 +116,20 @@ export function makeItems(count: number): PerfItem[] {
   return items;
 }
 
+/**
+ * 同一批点的**位置平移**副本（经度整体 `+deltaLng`）：内容全变、`id` 不变。
+ *
+ * 用途是「换数据」场景（#140 官方对照的 1k Marker 位置更新、真实浏览器档的 `redraw`
+ * 窗口）：它换的是**真的位置**而不是引用，因此一次 `setPosition` / `setData` 是有内容的
+ * 写入——只换引用会让「更新场景」退化成「什么都没发生」（第 1 轮评审第 1、3 条）。
+ */
+export function makeMovedItems(
+  items: readonly PerfItem[],
+  deltaLng: number,
+): readonly PerfItem[] {
+  return items.map((item) => ({ ...item, lng: item.lng + deltaLng }));
+}
+
 /** 自持的 GeoJSON 线要素（**不** import SDK 类型包：基准不该依赖上游声明）。 */
 export interface PerfLineFeature {
   readonly type: "Feature";

@@ -30,11 +30,12 @@
  *
  * ## AK 处置
  *
- * AK 只经 `--ak=` / `BAIDU_MAP_AK` 进入，**不进页面 URL、不进 chrome argv、不进 vite env**：
- * 由本脚本经 **CDP** 注入页面（`injectAkOverCdp`）——那条通道是本进程持有的内存 socket，
- * 不进 OS 进程表（`ps`）、不进任何日志、不落盘。三条被否掉的路径各有一票否决的理由，
- * 见 `main()` 里 `injectAkOverCdp` 调用处的注释。此外 stdout 与落盘 JSON 两条出口仍过
- * `redactAk`（页面错误消息会进 `report.fatal` / `notes`，那里可能带上 URL）。
+ * AK **只**从 `BAIDU_MAP_AK` 环境变量读，**不接受** `--ak=`（argv 进 `ps`）；子进程
+ * （vite 与 chrome）拿到的都是**删掉了 `BAIDU_MAP_AK` 的净化 env**。唯一一条传递通道是本脚本
+ * 经 **CDP** 注入页面（`injectAkOverCdp`）——本进程持有的内存 socket，不进 OS 进程表、不进
+ * 任何日志、不落盘。四条被否掉的路径各有一票否决的理由，见 `main()` 里 `injectAkOverCdp`
+ * 调用处的注释。此外 stdout 与落盘 JSON 两条出口仍过 `redactAk`（页面错误消息会进
+ * `report.fatal` / `notes`，那里可能带上 URL）。
  *
  * ## 约束（`node --experimental-strip-types`）
  *
@@ -86,9 +87,34 @@ const hasFlag = (name: string): boolean => process.argv.includes(`--${name}`);
 const port = Number(argValue("port") ?? "5215");
 const outPath = argValue("out");
 const logPath = argValue("log");
-const ak = argValue("ak") ?? process.env.BAIDU_MAP_AK ?? "";
+/**
+ * AK **只**从 `BAIDU_MAP_AK` 环境变量读，**不接受** `--ak=`。
+ *
+ * 理由是 argv 的读者范围：`--ak=<raw>` 会进**本进程**的命令行，因此进 `ps`——同机器任何
+ * 进程（CI 上并行的其它 step、容器里的 sidecar、开发者机器上的任何程序）都能无凭据读到。
+ * 环境变量至少不进 OS 进程表。CDP 注入那条通道已经是父进程内存 → 页面的一次传递，
+ * 没必要再多开一个 argv 入口（第 1 轮评审第 4 条）。
+ */
+const ak = process.env.BAIDU_MAP_AK ?? "";
 const overallTimeoutMs = Number(argValue("timeout") ?? 300_000);
 const runId = randomUUID();
+
+/**
+ * 传给子进程的**净化 env**：`BAIDU_MAP_AK` 被**显式删掉**。
+ *
+ * 两条理由，缺一不可：
+ * - vite 会把 `import.meta.env.VITE_*` **内联进构建产物**，AK 若在子进程 env 里就有机会被
+ *   写进可能被上传的输出（页面侧本就不读 `import.meta.env`，但子进程 env 仍会流进 vite 自身
+ *   的日志与诊断面）；
+ * - chrome 继承父 env 就意味着 AK 进了浏览器进程的整份环境，而浏览器进程是**会被 dump** 的
+ *   那一类（崩溃报告 / 调试器附加）。CDP 已经承担了「把 AK 从父进程内存递到页面」这件事，
+ *   子进程不需要、也不该持有它。
+ */
+function childEnvWithoutAk(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  delete env.BAIDU_MAP_AK;
+  return env;
+}
 
 /**
  * 本档只跑**一个**场景：5 万点批量图层。
@@ -305,7 +331,7 @@ async function main(): Promise<void> {
   let browser = "";
   try {
     if (!ak) {
-      fail(3, "BLOCKED：缺少 AK（`BAIDU_MAP_AK=<ak>` 或 `--ak=<ak>`）。本档没有产出读数，不是通过。");
+      fail(3, "BLOCKED：缺少 AK（`BAIDU_MAP_AK=<ak>`）。本档没有产出读数，不是通过。");
     }
 
     browser = resolveBrowser();
@@ -321,7 +347,7 @@ async function main(): Promise<void> {
 
     vite = spawnTracked(join(repoRoot, "node_modules/.bin/vite"), ["--config", join(pageDir, "vite.config.ts")], {
       cwd: pageDir,
-      env: { ...process.env, CONTRAST_RUN_ID: runId, SMOKE_PORT: String(port) },
+      env: childEnvWithoutAk({ CONTRAST_RUN_ID: runId, SMOKE_PORT: String(port) }),
       // ⚠️ 刻意**不接受** `--verbose`（继承 stdio）：vite 的 info 级请求日志会把 URL 原样写进
       // stdout，而 stdout 在 CI 里就是 job log——那是比进程表更广的读者。诊断需求由
       // `collect-live-performance.mts` 那条链承担；本档要保的是「AK 不进任何日志」。
@@ -353,7 +379,10 @@ async function main(): Promise<void> {
         `--user-data-dir=${userDataDir}`,
         url,
       ],
-      {},
+      // ⚠️ 刻意**给一份净化 env**（`{}` = 继承父 env = AK 进了浏览器进程整份环境，
+      // 而浏览器进程是会被崩溃报告 / 调试器附加 dump 的那一类）。CDP 已经承担了
+      // 「父进程内存 → 页面」的单次传递，子进程不需要持有 AK。
+      { env: childEnvWithoutAk() },
     );
 
     const devtoolsPort = await waitForDevToolsPort(userDataDir, chrome.exited, 30_000);
@@ -372,7 +401,8 @@ async function main(): Promise<void> {
     // 在 CI 里 stdout 就是 job log，读者范围比 secrets 大得多。
     //
     // 为什么不走 env：vite 会把 `import.meta.env.VITE_*` **内联进产物**——AK 会被写进
-    // 可能被上传的构建输出。这条禁令在 `main.ts` 文件头也写着。
+    // 可能被上传的构建输出；chrome 继承 env 则让 AK 进入浏览器进程的整份环境（崩溃报告 /
+    // 调试器附加会 dump 它）。因此两个子进程都只拿 `childEnvWithoutAk()`。
     //
     // CDP 通道是本进程持有的内存 socket，不进 OS 进程表、不进任何日志、不落盘。
     await injectAkOverCdp(session, ak);
