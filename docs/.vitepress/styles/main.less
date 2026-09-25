@@ -1,27 +1,76 @@
+/*
+ * 品牌色：百度地图橙。
+ *
+ * **两套色阶是必需的，不是重复。** 原色 `#F29313` 在白底上对比度只有 2.34:1 ——
+ * 达不到 WCAG AA 对正文文本的 4.5:1，当按钮文字 / 链接色用就是「看着清楚、读不清」。
+ * 所以浅色模式用同色相的**压深**档，深色模式才回到原色（在深底上 7.32:1）。
+ * 让同一个十六进制值同时服务两套主题，是这类主题最常见的可访问性回归来源。
+ */
 :root {
   --vp-layout-max-width: 1520px;
+
+  /* 品牌橙：百度地图标识色 #F29313 及其同色相深浅档 */
+  --bmap-orange: #f29313;
+  --bmap-orange-deep: #c96a00;
+  --bmap-orange-ink: #a85600;
+  --bmap-orange-wash: rgba(242, 147, 19, 0.12);
+
   --vp-home-hero-image-background-image: -webkit-radial-gradient(
-    rgba(96, 137, 241, 0.4) 40%,
-    rgba(66, 211, 146, 0.25) 60%
+    rgba(242, 147, 19, 0.45) 40%,
+    rgba(242, 147, 19, 0.18) 60%
   );
   --vp-home-hero-image-background-image: radial-gradient(
-    rgba(96, 137, 241, 0.4) 40%,
-    rgba(66, 211, 146, 0.25) 60%
+    rgba(242, 147, 19, 0.45) 40%,
+    rgba(242, 147, 19, 0.18) 60%
   );
   --vp-home-hero-image-filter: blur(50px);
   --vp-sidebar-width: 282px;
-  --vp-c-brand-1: #10b981;
-  --vp-c-brand-2: #059669;
-  --vp-c-indigo-3: #10b981;
-  --vp-c-warning-1: #eab306;
-  --vp-c-danger-1: #fff;
-  --vp-c-danger-soft: #660000;
+
+  /* 文本与链接用压深档（≥4.5:1 on white）；大色块与边框用原色。 */
+  --vp-c-brand-1: #a85600;
+  --vp-c-brand-2: #c96a00;
+  --vp-c-brand-3: #f29313;
+  --vp-c-brand-soft: var(--bmap-orange-wash);
+
+  --vp-c-indigo-1: #a85600;
+  --vp-c-indigo-2: #c96a00;
+  --vp-c-indigo-3: #f29313;
+  --vp-c-indigo-soft: var(--bmap-orange-wash);
+
+  --vp-c-warning-1: #b45309;
+  /* 之前是 `#fff`：浅色底上等于隐形，danger 文案与边框根本看不见。 */
+  --vp-c-danger-1: #c0392b;
+  --vp-c-danger-2: #e74c3c;
+  --vp-c-danger-soft: rgba(192, 57, 43, 0.14);
+
   --pwa-border: #ffffff75;
-  --vp-c-indigo-soft: rgba(16, 185, 129, 0.05);
-  --vp-home-hero-name-background: linear-gradient(-347deg, #10b981 20%, #32475b);
+  --vp-home-hero-name-background: linear-gradient(-347deg, #f29313 20%, #8a4700);
   --vp-home-hero-name-color: transparent;
-  --vp-badge-tip-border: #059669;
+  --vp-badge-tip-border: #c96a00;
   --vp-custom-block-info-border: rgba(82, 82, 89, 0.68);
+}
+
+/*
+ * 深色模式回原色：在深底上 `#F29313` 是 7.32:1，而压深的 `#A85600` 掉到 3.27:1。
+ * 两套值必须各自验过对比度，不能简单互换。
+ */
+.dark {
+  --vp-c-brand-1: #f29313;
+  --vp-c-brand-2: #e08b0c;
+  --vp-c-brand-3: #c96a00;
+  --vp-c-brand-soft: rgba(242, 147, 19, 0.16);
+
+  --vp-c-indigo-1: #f29313;
+  --vp-c-indigo-2: #e08b0c;
+  --vp-c-indigo-3: #c96a00;
+  --vp-c-indigo-soft: rgba(242, 147, 19, 0.16);
+
+  --vp-c-warning-1: #eab308;
+  --vp-c-danger-1: #f0685c;
+  --vp-c-danger-2: #e74c3c;
+  --vp-c-danger-soft: rgba(240, 104, 92, 0.16);
+
+  --vp-badge-tip-border: #e08b0c;
 }
 
 .image-bg {

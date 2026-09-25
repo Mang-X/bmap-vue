@@ -8,18 +8,24 @@ export const nav: DefaultTheme.Config["nav"] = [
     items: [
       {
         text: "指南",
-        link: "/zh-CN/guide/installation",
+        link: "/zh-CN/guide/introduction",
         activeMatch: "/guide/",
       },
       {
         text: "组件",
-        link: "zh-CN/components/map",
+        // 指向组件总览而不是某一个具体组件：总览页按族分组，是「我在找哪个组件」的入口。
+        link: "/zh-CN/components/index",
         activeMatch: "/components/",
       },
       {
-        text: "Hooks",
-        activeMatch: "/hooks/",
+        text: "Hook",
         link: "/zh-CN/hooks/useMarkerIcons",
+        activeMatch: "/hooks/",
+      },
+      {
+        text: "服务",
+        link: "/zh-CN/guide/services",
+        activeMatch: "/guide/services",
       },
     ],
   },

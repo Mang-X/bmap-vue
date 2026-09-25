@@ -23,15 +23,15 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "config",
         },
         {
-          text: "官方 UI Kit（./ui-kit）",
+          text: "官方 UI Kit 集成",
           link: "ui-kit",
         },
         {
-          text: "扩展契约（./advanced 与 ./core）",
+          text: "扩展契约（./advanced）",
           link: "advanced",
         },
         {
-          text: "全局组件事件",
+          text: "组件事件",
           link: "com-events",
         },
         {
@@ -42,16 +42,16 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "FAQ",
           link: "faq",
         },
-        {
-          text: "Headless 服务",
-          link: "services",
-        },
       ],
     },
     {
-      text: "基础组件",
+      text: "地图与上下文",
       collapsed: false,
       items: [
+        {
+          text: "组件总览",
+          link: "/zh-CN/components/index",
+        },
         {
           text: "Map 地图",
           link: "/zh-CN/components/map",
@@ -191,7 +191,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       ],
     },
     {
-      text: "原生批量可视化图层",
+      text: "原生批量可视化",
       collapsed: false,
       base: "/zh-CN/components/layer/",
       items: [
