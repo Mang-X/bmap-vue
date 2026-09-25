@@ -128,6 +128,38 @@ function setupFixture(name: string): string {
   return tmp
 }
 
+/**
+ * 把文档站的示例组件复制进消费方 fixture，让它们**对着 tarball** 做类型检查。
+ *
+ * 文档示例的日常门禁是 `docs:typecheck`（`docs/tsconfig.json` 把 `bmap-vue` 映到
+ * `../packages/bmap-vue/dist/index.d.ts`）——那已经是发布声明面，但仍然是**仓库内**的
+ * dist。这条把它再收紧一格：装进 `node_modules` 的**正式 tarball**，因此
+ * 「示例能用某个导出」与「那个导出真的跟着包发出去」不会各说各话。
+ *
+ * 复制的目录要跟着示例的子目录一起搬（`expand/bmap-draw/*` 依赖 `bmap-draw`，
+ * 它在 fixture 的 devDependencies 里），因此保持相对路径而不是拍平。
+ */
+function copyDocsExamples(dest: string): number {
+  const src = resolve(root, 'docs/examples')
+  const target = resolve(dest, 'docs-examples')
+  rmSync(target, { recursive: true, force: true })
+  mkdirSync(target, { recursive: true })
+  const walk = (from: string, to: string): void => {
+    for (const entry of readdirSync(from)) {
+      const s = resolve(from, entry)
+      const d = resolve(to, entry)
+      if (statSync(s).isDirectory()) {
+        mkdirSync(d, { recursive: true })
+        walk(s, d)
+      } else if (entry.endsWith('.vue')) {
+        copyFileSync(s, d)
+      }
+    }
+  }
+  walk(src, target)
+  return readdirSync(target).length
+}
+
 function main() {
   const tarball = findTarball()
   console.log(`[verify-package] tarball: ${tarball}`)
@@ -139,11 +171,19 @@ function main() {
   //    `./ui-kit` 子路径单独再 import 一次：它必须在**无 DOM 的 Node** 里可加载
   //    （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 #73。
   const consumerFixture = setupFixture('consumer')
+  // 文档示例对着**正式 tarball** 类型检查（issue #141 的「示例代码从正式 tarball 运行」）。
+  // 排在 `npm install` 之前：文件必须在依赖装好之前就位。
+  const copiedExampleGroups = copyDocsExamples(consumerFixture)
   run(
     `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('bmap-vue').then(m=>{if(!m.Map||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('bmap-vue/ui-kit').then(m=>{for(const k of ['PlaceAutocomplete','PlaceSearch','PlaceDetail','RoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
     consumerFixture,
     'consumer typecheck + ESM import (package tarball)',
   )
+  if (copiedExampleGroups > 0) {
+    console.log(
+      `\n[verify-package] docs examples OK: ${copiedExampleGroups} 组示例已对着 tarball 完成 vue-tsc。`,
+    )
+  }
 
   // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
   //
