@@ -37,6 +37,7 @@ import {
   type BundleReport,
   type BundleSideReading,
 } from "../performance/official-contrast/bundle.mts";
+import { OURS_MANIFEST, readOursVersion } from "../performance/oursVersion.mts";
 import { decideLiveContrastExit } from "../browser/official-contrast/report.mts";
 import {
   CONTRAST_SCENARIOS,
@@ -328,6 +329,80 @@ describe("#140 编排读报告：损坏 / 形状不对 ⇒ 2，绝不逃成 exit
 });
 
 /* ---------------------------------------------------- 纯函数：形状守卫（真跑它，不是正则） */
+
+describe("#140 纯函数：本库版本号只有一份实现，且真的读得出来", () => {
+  const consumers = [
+    "scripts/collect-bundle-contrast.mts",
+    "scripts/collect-official-contrast-live.mts",
+    "tests/performance/official-contrast.perf.test.ts",
+  ];
+
+  it("读得出真实版本号（不是 unknown）", () => {
+    // ⚠️ 这条真的红过一次：把 `readOursVersion` 别名成 `oursVersion` 之后，三处调用点仍是
+    // **零参** `oursVersion()` ⇒ `repoRoot` 是 undefined ⇒ 落进 catch ⇒ 报 `unknown`。
+    // vue-tsc 抓不到（`.mts` 在 strip-types 下对零参调用不报错），而 Fake 档的
+    // `oursVersion` 只是**展示**字段——那条路上没有退出码兜底，会静默把
+    // 「跑的是哪一版候选」报成 unknown。
+    expect(readOursVersion(repoRoot)).not.toBe("unknown");
+    expect(readOursVersion(repoRoot)).toBe(
+      JSON.parse(readFileSync(resolve(repoRoot, OURS_MANIFEST), "utf8")).version,
+    );
+  });
+
+  it("读不到时给 unknown 而不是抛（报告仍能出，自证「不知道」）", () => {
+    expect(readOursVersion(resolve(repoRoot, "no-such-dir"))).toBe("unknown");
+  });
+
+  it("消费方**传了仓库根**——零参调用不会被类型系统拦下", () => {
+    // 这是上面那条回归的直接判据：共享实现接的是仓库根，调用点漏传时 vue-tsc 不响、
+    // Fake 档不响，只有这里会响。
+    //
+    // 两处命名都认：编排脚本把 `readOursVersion` 别名成 `oursVersion(repoRoot)`，基准直接用
+    // 原名 `readOursVersion(PERF_REPO_ROOT)`（那边没有 `repoRoot` 这个局部量）。仓库根本身
+    // 叫 `repoRoot` 还是 `PERF_REPO_ROOT` 不重要，重要的是**带了参数**。
+    for (const path of consumers) {
+      const text = readFileSync(resolve(repoRoot, path), "utf8");
+      expect(text, `${path} 零参调用（仓库根丢失 ⇒ 报 unknown）`).not.toMatch(
+        /(?:oursVersion|readOursVersion)\(\s*\)/,
+      );
+      expect(text, `${path} 没有把仓库根传给版本读取`).toMatch(
+        /(?:oursVersion|readOursVersion)\((?:PERF_REPO_ROOT|repoRoot)\)/,
+      );
+    }
+  });
+
+  it("三个消费方**共用**这一份实现，不再各抄一份", () => {
+    // 逐字重复曾有四处；副本漂移不会让任何门禁变红，而本库版本是报告的自证字段。
+    for (const path of consumers) {
+      const text = readFileSync(resolve(repoRoot, path), "utf8");
+      expect(stripComments(text), `${path} 又自己抄了一份版本读取`).not.toMatch(
+        /bmap-vue\/package\.json/,
+      );
+      expect(text, `${path} 没有引用共享实现`).toMatch(/oursVersion\.mts/);
+    }
+  });
+});
+
+describe("#140 接线契约：页面注释不得与 ADR 决策 9 相反", () => {
+  it("页面注释**不得**把 AK 说成走 URL 查询参数（决策 9 明确否决的那条路）", () => {
+    // 五轮评审第 1 条。`index.html` 的注释曾写「AK 只经 URL 查询参数传入」——正好是
+    // 决策 9 否决的路（URL 会经 `ps` 与 vite job log 外泄），而它还引用了决策 9 的编号，
+    // 读起来像「文档说的」。运行时门禁全绿（`stripComments` 剥掉了注释），于是错话能一直
+    // 躺着，把后来读代码的人引向已否决的方案。
+    const html = readFileSync(
+      resolve(repoRoot, "tests/browser/official-contrast/index.html"),
+      "utf8",
+    );
+    // ⚠️ 不能用 `/AK[^\n]*URL[^\n]*查询参数/`：那会连**否定句**一起命中——正确写法
+    // 「AK …… 不走 URL 查询参数」也含这三个词，于是门禁对着正确的注释红。只拦**肯定**说法。
+    expect(html, "页面注释宣称 AK 走 URL 查询参数（决策 9 已否决）").not.toMatch(
+      /AK[^\n]*(?:只经|经由|经)[^\n]*(?:URL|查询参数)[^\n]*传入/,
+    );
+    // 反向也要有：注释应当说清实际机制与被否决的通道，免得下次又被改回去。
+    expect(html, "页面注释没写明 AK 走 CDP 注入").toMatch(/CDP/);
+    expect(html, "页面注释没说清 URL 通道已被否决").toMatch(/不[走经由].{0,4}URL/);
+  });
+});
 
 describe("#140 纯函数：报告形状守卫把「读不出来」与「解引用崩掉」分开", () => {
   const good = makeReport({});

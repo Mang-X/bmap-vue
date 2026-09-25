@@ -62,6 +62,7 @@ import {
 } from "./dataset";
 import { createPerfRecorder } from "./metrics";
 import { bucketForInstance } from "./vueRenderCounter.ts";
+import { readOursVersion } from "./oursVersion.mts";
 import {
   CONTRAST_SCENARIOS,
   contrastDatasetDescription,
@@ -113,6 +114,9 @@ const recorder = createPerfRecorder({
  * （一个给趋势基线、一个给门禁与报告），合在一起会让两边都要在对方的字段里找东西。
  */
 const REPORT_DIR = process.env.PERF_CONTRAST_DIR ?? ".artifacts/perf-contrast";
+/** 仓库根（读 package manifest 用；两侧版本号从这里解析）。 */
+const PERF_REPO_ROOT = resolve(import.meta.dirname, "../..");
+
 /** 报告文件名。编排脚本用 `PERF_CONTRAST_REPORT` 指向别处（CI 收 artifact 用）。 */
 const REPORT_FILE = process.env.PERF_CONTRAST_REPORT
   ? resolve(process.env.PERF_CONTRAST_REPORT)
@@ -1199,8 +1203,8 @@ afterAll(() => {
     ],
     envelope: {
       runId: RUN_ID,
-      oursVersion: readVersion("packages/bmap-vue/package.json"),
-      officialVersion: readVersion("node_modules/@baidumap/vue-bmap/package.json"),
+      oursVersion: readOursVersion(PERF_REPO_ROOT),
+      officialVersion: readPackageVersion("node_modules/@baidumap/vue-bmap/package.json"),
       datasetVersion: DATASET_VERSION,
       platform: env.platform ?? "unknown",
       arch: env.arch ?? "unknown",
@@ -1219,10 +1223,18 @@ afterAll(() => {
   recorder.flush();
 });
 
-/** 报告要自述「跑的是哪一版」：版本从**实际安装的** manifest 读，缺失时给 `unknown`。 */
-function readVersion(manifestPath: string): string {
+/**
+ * 报告要自述「跑的是哪一版」：版本从**实际安装的** manifest 读，缺失时给 `unknown`。
+ *
+ * ⚠️ 本库侧走 `readOursVersion`（与两个编排脚本**同一份**实现，见 `oursVersion.mts` 的文件头：
+ * 这段逻辑曾逐字重复四处，改一处不会让任何门禁变红，而「本库版本」是报告自证用的字段）。
+ * 官方侧读的是**已安装包**的 manifest，路径不同，所以留本地的通用读法。
+ */
+function readPackageVersion(manifestPath: string): string {
   try {
-    const parsed = JSON.parse(readFileSync(resolve(manifestPath), "utf8")) as { version?: string };
+    const parsed = JSON.parse(readFileSync(resolve(PERF_REPO_ROOT, manifestPath), "utf8")) as {
+      version?: string;
+    };
     return parsed.version ?? "unknown";
   } catch {
     return "unknown";

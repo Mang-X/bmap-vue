@@ -46,6 +46,7 @@ import {
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { OFFICIAL_BASELINE_VERSION } from "../tests/performance/official-contrast/report.mts";
+import { readOursVersion as oursVersion } from "../tests/performance/oursVersion.mts";
 import {
   BUNDLE_REPORT_VERSION,
   decideBundleExit,
@@ -252,7 +253,7 @@ function readSide(side: "ours" | "official"): BundleSideReading {
   if (side === "ours") {
     return {
       package: "bmap-vue",
-      version: oursVersion(),
+      version: oursVersion(repoRoot),
       entryImports: importSpecifiers(outDir),
       ...measured,
       distBytes: runtimeDistBytes(resolve(repoRoot, "packages/bmap-vue/dist")),
@@ -267,16 +268,6 @@ function readSide(side: "ours" | "official"): BundleSideReading {
   };
 }
 
-function oursVersion(): string {
-  try {
-    const parsed = JSON.parse(
-      readFileSync(resolve(repoRoot, "packages/bmap-vue/package.json"), "utf8"),
-    ) as { version?: string };
-    return parsed.version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-}
 
 /** 官方版本必须**精确**等于票面锁定的 1.0.1：对着别的版本出的字节数不能叫「与 1.0.1 的对照」。 */
 function checkOfficialVersion(): void {
@@ -376,7 +367,7 @@ async function main(): Promise<void> {
       blockedReason: report.blockedReason,
       done: false,
       oursEntryBytes: 0,
-      version: oursVersion(),
+      version: oursVersion(repoRoot),
       baseline: null,
     });
     console.error(`[perf:contrast:bundle] FATAL：${report.fatal}`);

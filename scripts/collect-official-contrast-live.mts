@@ -63,6 +63,7 @@ import {
 } from "./official-probe/cdp.mts";
 import { ViteNotReadyError, waitForViteReady, type ChildExit } from "./official-probe/readiness.mts";
 import { DATASET_VERSION } from "../tests/performance/dataset.ts";
+import { readOursVersion as oursVersion } from "../tests/performance/oursVersion.mts";
 import {
   checkLiveContrastEnvelope,
   decideLiveContrastExit,
@@ -263,16 +264,6 @@ function shutdown(children: (TrackedChild | null)[], session: CdpSession | null)
 }
 
 /** 本库版本（`packages/bmap-vue/package.json`），报告必须自述「跑的是哪一版」。 */
-function oursVersion(): string {
-  try {
-    const parsed = JSON.parse(
-      readFileSync(resolve(repoRoot, "packages/bmap-vue/package.json"), "utf8"),
-    ) as { version?: string };
-    return parsed.version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-}
 
 /**
  * 失败通道：**抛出**而不是 `process.exit`（沿用 `collect-live-performance.mts` 的 #131 评审第 4 条）。
@@ -340,7 +331,7 @@ async function main(): Promise<void> {
     // URL 只带非敏感的运行标识：它会进 vite 的请求日志、chrome 的启动参数与 CDP 诊断。
     const query = new URLSearchParams({
       run: runId,
-      ours: oursVersion(),
+      ours: oursVersion(repoRoot),
       official: OFFICIAL_BASELINE_VERSION,
     });
     const url = `http://localhost:${port}/?${query.toString()}`;
