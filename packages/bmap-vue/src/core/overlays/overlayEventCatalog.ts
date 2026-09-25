@@ -213,7 +213,7 @@ const GRAPH_EVENTS_WITHOUT_EDITING: Record<string, OverlayEventInput> = { ...GRA
 
 /** `GroundOverlayEventMap`（11 个）：全部指针事件的字段在上游都是可缺的（`GroundOverlayMouseEvent`）。 */
 const GROUND_OVERLAY_EVENTS: Record<string, OverlayEventInput> = {
-  click: partialPointer("点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标）"),
+  click: partialPointer("点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段）"),
   dblclick: partialPointer("双击覆盖物时触发（同上）"),
   rightclick: partialPointer("右键点击覆盖物时触发"),
   rightdblclick: partialPointer("右键双击覆盖物时触发"),
