@@ -216,7 +216,9 @@ const EXCEPTIONS: Exception[] = [
     ours: "useMapContext",
     official: "useBMapContext",
     kind: "renamed",
-    note: "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。",
+    // 品牌门禁（`check:docs-brand`）的逐行豁免**必须由生成器写进 note**：本文件是生成物，
+    // 手写在 .md 上的豁免会在下一次 `pnpm generate:api-diff` 时被覆盖掉，两道门禁就会互相打架。
+    note: "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->",
   },
   {
     ours: "useAreaBoundary",

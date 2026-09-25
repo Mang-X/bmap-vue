@@ -21,7 +21,7 @@
       "ours": "useMapContext",
       "official": "useBMapContext",
       "kind": "renamed",
-      "note": "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。"
+      "note": "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->"
     },
     {
       "ours": "useAreaBoundary",

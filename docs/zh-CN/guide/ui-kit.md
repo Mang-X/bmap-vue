@@ -390,9 +390,7 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 
 ## 验证状态与已知留白
 
-本库侧的行为都有可复现证据（命令见 ADR
-[UI Kit 子路径与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary) 与
-[详情与路线封装](/adr/2026-09-13-ui-kit-detail-route-wrappers) 的「后果 / 已知限制」一节）：
+本库侧的行为都有可复现证据：
 
 - 所有权 / 竞态 / 释放顺序 / props 变更（重建 vs setter）/ 事件 DTO / 不重复请求 →
   `tests/behavior/ui-kit-lifecycle.test.ts`、`ui-kit-events.test.ts`
@@ -408,8 +406,8 @@ const detail = new uiKit.PlaceDetail(container as HTMLElement, { map: rawMap });
 
 **未验证项（如实标注，不要当成已证）**：
 
-- **未经本库 Vue 组件、在真实 AK 与真实 v4 上的端到端 smoke**。#70 的探针覆盖的是**原生 widget**
-  在真实 v4 上的构造 / 检索回包 / 释放；本库四个 wrapper 的真机验收由 #74 用同一候选提交统一收口。
+- **未经本库 Vue 组件、在真实 AK 与真实 v4 上的端到端 smoke**。已有的探针覆盖的是**原生 widget**
+  在真实 v4 上的构造 / 检索回包 / 释放；本库四个 wrapper 的真机验收留待后续统一收口。
 - **`typechange` / `navclick` 的真实载荷**：`typechange` 在锁定版本不可达；
   `navclick` 的微信 `wx-open-launch-app` 路径会按需注入外部脚本，未纳入探针。
 - **`PlaceDetail` 的 POI 模式**在真实 v4 上只用过「上游能渲染的 POI 对象」这一条路径，
