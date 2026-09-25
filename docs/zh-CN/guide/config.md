@@ -32,10 +32,7 @@ lang: zh-CN
 直接交给 `createBMapClient`，由默认的 `jsapiV4DriverFactory` 装出 v4 Driver。默认 Provider 是
 `baiduJsapiV4Provider()`——`createBMapPlugin()` 不传 `provider`、`<Map>` 只给 `ak`、以及
 `<BMapProvider>` 未覆盖时，用的都是它；它内部真的调用官方 `@baidumap/jsapi-loader`
-（精确锁定 `1.0.0`）。决策与回滚见
-[ADR 2026-09-13 默认在线路径委托官方 Loader](/adr/2026-09-13-default-online-loader-cutover)；
-旧引擎（`webgl-v1` / `BMapGL`）与迁移期的 engine 分派已在 `#26` 删除，见
-[ADR 2026-09-14 删除旧引擎](/adr/2026-09-14-remove-legacy-engine) 与
+（精确锁定 `1.0.0`）。旧引擎（`webgl-v1` / `BMapGL`）与迁移期的 engine 分派已删除，
 本库只支持 JSAPI 4.0，`apiUrl` 仅用于**非标准入口**（企业自托管）场景。
 
 ::: warning 默认路径的配置面
@@ -87,8 +84,8 @@ const provider: BMapProviderLike = {
 
 内部的 `createClientContext()` 走同一条路：**同一份 definition 在任何入口
 （`<Map>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定
-Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDriver` 归一已随旧引擎删除
-（`#26`），definition 现在原样交给 Client。
+Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDriver` 归一已随旧引擎删除，
+definition 现在原样交给 Client。
 
 ### 1。通过全局注册配置 ak 与插件
 
@@ -164,7 +161,7 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 配置插件后，地图实例 ready 不会等待插件加载。请通过 [Map 组件的 `plugin-ready` 事件](../components/map#行为说明) 获取单个已加载插件的名称（载荷即插件名字符串）；插件加载失败通过 `plugin-error` 处理。事件名是 SDK 的 kebab 拼写。
 
-**挂起不会变成「永远加载中」**：**四个内置插件**的脚本加载有 **60 秒默认超时**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。用 `urlPluginDefinition` 自建的第三方脚本插件**不受**这个超时影响（**超时**语义保持既有行为：不设超时；需要超时请自己在 `load(context, signal)` 里包一层）。共用加载器自身的其它**修复**（例如取消之后不再延迟插入脚本）对第三方插件同样生效。决策与实测读数见 ADR [插件脚本加载通道的超时与取消语义](/adr/2026-09-21-plugin-load-channel-timeout)。
+**挂起不会变成「永远加载中」**：**四个内置插件**的脚本加载有 **60 秒默认超时**（`BUILTIN_PLUGIN_SCRIPT_TIMEOUT_MS`）。脚本服务器「建立连接但不响应」时，该插件会在超时后以 `plugin-error` 结算（错误文本含 `timed out`），并且那个永不响应的 `<script>` 会从文档里移除。`plugins` 列表是**顺序加载**，所以列表里**后面的插件最多多等一个超时窗口**、不会永久卡住。用 `urlPluginDefinition` 自建的第三方脚本插件**不受**这个超时影响（**超时**语义保持既有行为：不设超时；需要超时请自己在 `load(context, signal)` 里包一层）。共用加载器自身的其它**修复**（例如取消之后不再延迟插入脚本）对第三方插件同样生效。
 
 **只有下表 `plugins` 列标 ✅ 的名字是内置的**；其余字符串会被 `resolvePluginDefinition` 抛
 `BMAP_PLUGIN_UNKNOWN`。每个内置插件的 JSAPI 4.0 状态、
@@ -172,7 +169,7 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
 
 | PluginId                                                                                 | 插件名称         | 描述                                                                               | `plugins` 内置 | JSAPI 4.0 状态与迁移路径                                                                                              |
 | ---------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 结论 `native`：**迁到原生 `<TrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 已由 #110 落地，见[原生批量可视化图层](../components/layer/native-visual-layers)）。插件脚本本身最小运行时路径已验证，但本库不再为它提供封装 |
+| [TrackAnimation](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#视角轨迹动画) | 视角轨迹动画     | TrackAnimation 类提供视角轨迹动画展示效果。                                        | ✅             | 结论 `native`：**迁到原生 `<TrackLineLayer>`**（播放命令面 `ref.playback` 与 `pauseOnHidden` 见[原生批量可视化图层](../components/layer/native-visual-layers)）。插件脚本本身最小运行时路径已验证，但本库不再为它提供封装 |
 | [Mapvgl](https://mapv.baidu.com/gl/docs/index.html)                                     | MapVGL 可视化    | 基于 WebGL 的点、线、面和热力图图层。                                              | ✅             | 结论 `incompatible`（**不兼容**）：依赖 `_rd` 私有回调表，且要挂 `getPanes().mapPane`（4.0 没有）⇒ **无迁移路径**，改用原生图层 |
 | [DrawingManager](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file)              | 鼠标绘制工具条库 | 提供鼠标绘制点、线、面、多边形（矩形、圆）的编辑工具条的开源代码库。                | ✅             | 结论 `compatible`：**最小运行时路径已验证**（含沿公开 DOM 事件链路发合成指针事件序列画出一个多边形）；无原生替代，按官方文档直接使用；会自行注入两个脚本 |
 | [GeoUtils](https://github.com/huiyan-fe/BMapGLLib?tab=readme-ov-file#几何运算)           | 几何运算         | 提供若干几何算法                                                                   | ✅             | 结论 `compatible`：**最小运行时路径已验证**（10 个静态成员 + `getDistance` 数值正确）；纯函数集合，按官方文档直接使用 |
@@ -201,7 +198,7 @@ nightly 的 `probe:plugin-compat` 会核对并提示更新——换 URL 请一�
 
 ```ts
 import { createBMapPlugin } from 'bmap-vue'
-// v4 Provider 家族在 `bmap-vue/advanced` 子入口公开（#44 取消了 `bmap-vue/core`）
+// v4 Provider 家族在 `bmap-vue/advanced` 子入口公开
 import { customScriptV4Provider } from 'bmap-vue/advanced'
 
 app.use(createBMapPlugin({
@@ -226,8 +223,7 @@ app.use(createBMapPlugin({
 用 `urlPluginDefinition` 或 `stringToPluginDefinitions` 构造，并在需要地图的组件内经 PluginRegistry 注册。
 插件加载结果通过 `plugin-ready` / `plugin-error` 事件回执。
 
-M8-PLUGIN-CORE（[#42](https://github.com/Mang-X/bmap-vue/issues/42)，决策见
-[ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）之后：
+插件 Catalog 与作用域定型后，作用域语义如下：
 
 - **`scope` 决定资源归谁**：`'global'`（文档级脚本，跨地图共享、由进程级宿主持有，地图卸载**不**释放）
   或 `'map'`（随地图释放）。**手写 definition 不写 `scope` 就是 `'map'`** —— 自定义插件不会因为没写

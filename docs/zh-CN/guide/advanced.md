@@ -24,7 +24,7 @@
 | 用途 | 导出 |
 | --- | --- |
 | Provider / Client | `normalizeProvider`、`createBMapClientDefinition`、`createBMapClient`、`jsapiV4DriverFactory` |
-| v4 Provider 家族（#44 从 `./core` 并入） | `baiduJsapiV4Provider`、`customScriptV4Provider`、`existingGlobalV4Provider`、`createLoadedJsapiV4` |
+| v4 Provider 家族 | `baiduJsapiV4Provider`、`customScriptV4Provider`、`existingGlobalV4Provider`、`createLoadedJsapiV4` |
 | Driver | `createJsapiV4Driver`、`assertLoadedSdk`、`isLoadedSdk` |
 | Handle（含 raw 逃生口） | `unwrapRaw`、`createHandle`、`HANDLE_BRAND` |
 | Capability | `createCapabilityRegistry`、`UnsupportedCapabilityError`、`CAPABILITY_CATALOG`、`CAPABILITY_FAMILIES`、`CAPABILITY_IDS`、`CAPABILITY_STATUSES` |

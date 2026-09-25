@@ -155,8 +155,7 @@ map/theme2
 - `plugins` 里的名字必须是**内置**的四个之一。**名字不认识时该插件明确失败**：发 `plugin-error`
   （`code: 'BMAP_PLUGIN_UNKNOWN'`），地图与同一列表里其它插件不受影响。注意它**不会**在注册表里留下
   记录，所以 `getStatus(name)` / `inspect(name)` 是 `undefined`，而不是 `'error'`。此前未知名字会被
-  静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`（见
-  [ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）；
+  静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`）；
 - 内置插件都是**文档级（`global`）资源**：同页面多张地图**共享同一次加载**（只插一份脚本），
   并且**地图卸载不会释放它**（上游没有卸载入口）。`bmap-vue/plugins` 的
   `disposeDefaultPluginHost()` 只能清掉**宿主缓存的资源与在飞的等待**，它**不卸载**第三方脚本、
@@ -345,7 +344,7 @@ const tilt = ref(0)
 需要 `moving` / `zooming` 这类中途事件时用 map 事件（`@moving` / `@zooming`）或
 [`useMapStatus`](../hooks/useMapStatus) 的 `moving` / `zooming` 标志——它们与回写是两条独立的订阅。
 
-### 三条规则（发布后不易修改，改前请先读 ADR）
+### 三条规则（发布后不易修改）
 
 1. **`default*` 只在首次解析时读一次。** 之后它的变化不会覆盖当前状态——否则「用户拖到 A，
    父级重算 default 得到 B」会把用户操作静默吃掉。**任何**后续写入（值改变、从无到有、从有到无）
@@ -452,8 +451,7 @@ const tilt = ref(0)
 ### KeepAlive
 
 地图组件在 `deactivated` 时默认**不销毁** WebGL 地图（`keepAliveBehavior="suspend"`），仅暂停高频计算；
-`activated` 时自动恢复并**补偿一次** `checkResize()`（只补偿一次：组件层不再重复下发，见
-[ADR](/adr/2026-09-14-map-handle-container-and-visibility) 决策 5）。
+`activated` 时自动恢复并**补偿一次** `checkResize()`（只补偿一次：组件层不再重复下发）。
 
 设为 `"dispose"` 时，`deactivated` 会**销毁地图并一并释放容器观察器**（Resize /
 Intersection、页面前后台与减少动画偏好的监听都挂在地图实例的资源作用域上）—— 组件在
@@ -577,7 +575,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `status` | `MapStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`（#44 冻结时删掉了带 `"loading"` 别名的旧名 `MapRuntimeStatus`，公共面只剩 `MapStatus`，所以这里不再有「兼容旧值」一说） |
+| `status` | `MapStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`（带 `"loading"` 别名的旧名 `MapRuntimeStatus` 已删除，公共面只剩 `MapStatus`，所以这里不再有「兼容旧值」一说） |
 | `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
 | `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
 | `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图；容器收起时保持 pending，容器恢复后由门禁接着执行） |

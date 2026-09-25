@@ -73,8 +73,7 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## 生命周期与更新行为
 
-`Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
-issue #30），组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
+`Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动，组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
 并由用例与 Driver 的属性描述符逐条交叉核对：
 
 | 属性 | 更新策略 | 落地 |

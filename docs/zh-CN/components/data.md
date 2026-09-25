@@ -102,7 +102,7 @@ function onItemClick(station: Station) {
 与 `MarkerCluster` 的 `native` 引擎；`MarkerList` 与 `MarkerCluster` 的 `markers` 引擎走
 `DataLayerManager` 的 keyed diff / 网格聚合。只要 `data` 是 Vue 的**深响应**数组——`ref([...])` /
 `reactive([...])` 是最常见的写法——逐项读取时每个字段都要穿过 Proxy 并做**依赖收集**，代价随规模
-上升。**「深响应读取显著更贵」这条结论适用于所有复用 `adaptPoints` 的路径**（函数级成本分解见 ADR）。
+上升。**「深响应读取显著更贵」这条结论适用于所有复用 `adaptPoints` 的路径**。
 
 **组件整链路的具体读数只在 `PointCollection` 上测过**（50k 换一次引用）：深响应输入在组件路径里要
 **0.1 ~ 0.2s**（越过浏览器 50ms 长任务线），同一份数据换 `shallowRef` / `markRaw` 只要 **10 ~ 26ms**。
@@ -158,8 +158,7 @@ function moveFirst() {
   tracking），收益不成立。若同一份数据还要给模板做深响应，应**从原始数据源分别构造**一份 reactive
   状态与一份 raw / plain snapshot，而不是把现有 Proxy 容器再 `markRaw` 一次。
 
-依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
-对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
+同一份对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
 
 ## `MarkerList`
 

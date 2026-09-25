@@ -38,7 +38,7 @@ autoComplete/index
 - `location` / `types` 变化会经 **Driver 的公开更新入口**（`setAutocompleteOptions`）落到 SDK 的 `setLocation` / `setTypes`；`location` 可以直接传 `string`、坐标点或 `<Map>` 的实例（内部句柄由 Driver 归一化，不会原样透传给 SDK）。
 - **`location` / `types` 变回 `undefined` = 恢复默认**（与构造期一致）：`location` 回到当前 `<Map>`，`types` 回到官方默认的 `[]`（全国范围）。Vue 的 props 无法区分「这次没传」与「显式传 `undefined`」，因此这里把两者都当成「恢复默认」。
 - 组件卸载时调用 Driver 的公开释放入口，落到 SDK 自己的 `dispose()`。**释放之后到达的检索回包不会再转给 `searchComplete`**（含 SDK 在 `dispose()` 内同步回调的重入路径）。
-- 本库**不**在你的输入框上挂任何事件监听（#104）：`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，「这条结果属于哪次输入」由持有输入框的一方判断，组件不去猜。
+- 本库**不**在你的输入框上挂任何事件监听：`Autocomplete` 只有一条不带请求身份的 `onSearchComplete`，「这条结果属于哪次输入」由持有输入框的一方判断，组件不去猜。
 - SDK 事件订阅、实例与服务都登记在组件的 `ResourceScope` 里（外部资源，卸载时按逆序释放）；
   props 变化的 watcher 不登记——它建在 `async` 钩子里（Vue 的 effect scope 已经不在了），
   所以它的 `stop` 句柄**显式**登记为 disposer，卸载后不再回写。
