@@ -305,6 +305,49 @@ Actions run 36092344781 实锤）。
 （截断 / `{` / `[]` / `null` / `"s"` / `envelope:null` / `envelope:"x"` / `scenarios:{}` /
 `scenarios:[null]` / `invariants:[null]`）全部按 **2** 结算，且消息指名具体哪一条不对。
 
+### 16. 读数**入库**为「快照 / reference result」，刻意**不叫 baseline**，也**不判漂移**
+
+票面验收第一条要「数据与脚本入库」。`.artifacts` 被 `.gitignore` 排除，跑完的读数默认不留痕。
+因此采集编排带一个**显式** flag `--record-reference`，把当轮读数整形成稳定 schema 写进
+`tests/performance/official-contrast/recorded-result.json`；它带着 **provenance**：
+`sourceCommit`（真 SHA，**不是** `HEAD~1` 这类引用，也不是 `unknown`）、`recordedAt`、
+机器身份（`platform`/`arch`/`cpuModel`/`node`/DOM）、`datasetVersion` 与两个库版本。
+只有 `recordedAt` 的话，几年后只剩一个日期，对不上代码——所以 SHA 是必填。
+
+⚠️ **它不是 baseline，名字与语义都刻意避开那个词。** #37 的 `tests/performance/baseline.json`
+是**真基线**：后续运行会拿它做趋势判定，带 normalizer / tolerance / 机器身份比较。本机制
+**不做**这件事，也不该被后来的人加上——票面明说「不做谁整体更快的营销排名」，毫秒在 GitHub
+runner 与开发机上完全不可比。一旦快照参与漂移判定，维护者迟早会补上 tolerance、runner 换 SKU
+处理、跨机归一化，那正是本票要避免的机制。落地口径：
+
+```text
+perf:contrast
+  ├─ 产当前 report
+  ├─ 用 invariants 判 CI（1 / 2 / 3 / 0）
+  └─ **不**与 recorded-result.json 做任何毫秒比较
+```
+
+编排**只写不读**快照（判据是「有 `writeFileSync(REFERENCE_PATH)`、无 `readFileSync(REFERENCE_PATH)`」，
+由门禁断言）。`runId` / `startedAt` / `finishedAt` / `durationMs` 这些一次性编排字段**不录**：
+每次都变，录进去只制造无谓 diff，掩盖「读数真的动了」。
+
+**保鲜门禁有两条，且刻意都不是性能门禁**：
+
+1. **场景 ID 必须与场景表完整一致**（不多、不少、不重）——场景表改了却没重录，读数会静默对不上票面；
+2. **envelope 合法**：schema `version` / `datasetVersion` / 官方 `1.0.1` / `sourceCommit` 是真 SHA /
+   扩展档带官方跳过原因。
+
+**明确不做的**：断言「当前毫秒接近快照毫秒」。那会把快照变成基线，正是上面要避免的。
+
+**人读视图是生成物，不是手抄的第二份数字。** A+B 最大的坑是两份事实源漂移：JSON 一套数字、
+Markdown 又手抄一套，下次更新快照忘了更新文档，两边慢慢对不上且**没有任何门禁会响**。因此
+`docs/zh-CN/contributing/performance-baseline.md` 里那段是
+`pnpm generate:official-contrast:reference` 生成的，`…:check` 按字节比对；渲染措辞写死在
+`referenceReport.mts` 里（不排序、不给百分比/倍数、毫秒必带「非跨机阈值」那句），改文案等于改代码。
+渲染刻意分两节，对应验收第二条点名要「**解释**」的两件事：简单路径**如实给同轮原始读数**（不预设
+谁更贵——上一版曾把「本库的抽象是有成本的」写死在渲染里，而同一份快照的表显示本库更快，一句
+硬编码结论被自己生成的数据当场否掉）；高级路径讲**结构差**（`recreate` / 调用面 / 残留）而不是倍数。
+
 ## 后果（含回滚）
 
 **得到的**：

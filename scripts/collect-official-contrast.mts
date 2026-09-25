@@ -40,13 +40,24 @@
  *   `invariants` 判定模型，其中一条挂掉时 `afterAll` 仍可能写出 `done=true` / 不变式全 PASS
  *   的报告。「vitest 非零 + 报告判 0」这种组合按 2 结算，绝不按报告放行。
  *
+ * ## `--record-reference`：把本轮读数录成**版本化实验快照**
+ *
+ * 票面验收第一条要「数据与脚本入库」。`.artifacts` 被 `.gitignore` 排除，所以跑完的读数
+ * 默认不留痕；加这个 flag 才把**当轮**读数整形成稳定 schema 写进
+ * `tests/performance/official-contrast/recorded-result.json`（唯一入库的数据事实源）。
+ *
+ * ⚠️ 快照**不参与任何毫秒判定**——它只承担 provenance（哪次跑 / 哪版 / 哪台机器），
+ * 详见 `reference.mts` 文件头。所以这个 flag 是**显式**的：跑基准不等于更新快照。
+ * 录完再跑 `pnpm generate:official-contrast:reference` 让人读视图跟着更新。
+ *
  * ## 约束（`node --experimental-strip-types`）
  *
  * 不得使用 TS 参数属性；本地模块导入必须带扩展名。
  */
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DATASET_VERSION } from "../tests/performance/dataset.ts";
 import {
@@ -60,6 +71,11 @@ import {
   type ContrastReport,
 } from "../tests/performance/official-contrast/report.mts";
 import { CONTRAST_SCENARIOS } from "../tests/performance/officialScenarios.ts";
+import {
+  REFERENCE_RESULT_VERSION,
+  toReferenceSide,
+  type ReferenceResult,
+} from "../tests/performance/official-contrast/reference.mts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const CONTRAST_DIR = resolve(repoRoot, ".artifacts/perf-contrast");
@@ -207,6 +223,71 @@ function decide(report: ContrastReport): ContrastDecision {
   });
 }
 
+/** 快照的入库路径（唯一的数据事实源；人读视图由它派生，不手写第二份数字）。 */
+const REFERENCE_PATH = resolve(
+  repoRoot,
+  "tests/performance/official-contrast/recorded-result.json",
+);
+
+/**
+ * 把当轮报告整形成**版本化实验快照**并写入仓库。
+ *
+ * 刻意**不是** baseline：快照不参与毫秒比较（见 `reference.mts` 文件头），只回答
+ * 「这是哪一次跑、哪一版实现、哪台机器、哪份数据、哪两个库版本」。因此它带 `sourceCommit`
+ * ——只有 `recordedAt` 的话，几年后只剩一个日期，对不上代码。
+ *
+ * `runId` / `startedAt` / `finishedAt` / `durationMs` 这些**一次性编排字段不录**：每次都变，
+ * 录进去只会制造无谓 diff，掩盖「读数真的动了」这件事。
+ */
+function recordReference(report: ContrastReport): void {
+  let sourceCommit: string;
+  try {
+    sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    // 取不到 SHA 时**不**编一个：快照的核心价值就是「对得上代码」，SHA 缺失就明说缺失。
+    console.error(
+      "[perf:contrast] 取不到 git HEAD（不在 git 仓库里？）——快照的 sourceCommit 会记为 unknown，\n" +
+        "  它将无法回答「这组读数对应哪一版实现」。",
+    );
+    sourceCommit = "unknown";
+  }
+  const reference: ReferenceResult = {
+    version: REFERENCE_RESULT_VERSION,
+    mode: "fake-v4",
+    recordedAt: report.finishedAt,
+    sourceCommit,
+    datasetVersion: report.envelope.datasetVersion,
+    oursVersion: report.envelope.oursVersion,
+    officialVersion: report.envelope.officialVersion,
+    environment: {
+      platform: report.envelope.platform,
+      arch: report.envelope.arch,
+      cpuModel: report.envelope.cpuModel,
+      node: report.envelope.node,
+      dom: "happy-dom",
+    },
+    scenarios: report.scenarios.map((entry) => ({
+      id: entry.id,
+      official: entry.official,
+      ours: toReferenceSide(entry.ours),
+      officialSide: toReferenceSide(entry.officialSide),
+      ...(entry.officialSkippedReason
+        ? { officialSkippedReason: entry.officialSkippedReason }
+        : {}),
+    })),
+    notMeasured: report.notMeasured,
+  };
+  writeFileSync(REFERENCE_PATH, `${JSON.stringify(reference, null, 2)}\n`);
+  console.log(
+    `[perf:contrast] 已录入实验快照 ${REFERENCE_PATH}\n` +
+      `  来源 commit ${sourceCommit} · 录于 ${report.finishedAt} · ${reference.scenarios.length} 场景\n` +
+      `  下一步：pnpm generate:official-contrast:reference（让人读视图跟上）`,
+  );
+}
+
 async function main(): Promise<void> {
   const benchExit = await runBenchmark();
   if (benchExit !== 0) {
@@ -276,6 +357,9 @@ async function main(): Promise<void> {
       decision.reasons.map((r) => `  ${r}`).join("\n"),
   );
   process.exitCode = decision.exitCode;
+  if (hasFlag("record-reference") && decision.exitCode === 0) {
+    recordReference(report);
+  }
 }
 
 await main();

@@ -230,6 +230,12 @@ jobs:
       - name: Bundle contrast (entry bytes vs own baseline, deterministic)
         run: pnpm perf:contrast:bundle
 
+      # ⚠️ 这条**不判性能**：它只判「入库的实验快照没腐烂」+「文档里的人读视图与快照一致」。
+      # 场景表 / 数据集 / schema 一变却没重录就红；反过来，快照里的毫秒**不**与本 job 的读数
+      # 做任何比较（毫秒跨机不可比，那会把快照变成 #37 意义上的基线）。详见 ADR 决策 16。
+      - name: Reference snapshot + generated report are fresh (no ms gate)
+        run: pnpm generate:official-contrast:reference:check
+
       # 读数要能事后核对「哪一版在什么机器上跑出了什么」，而不是只看 job 变绿。
       - name: Upload official contrast report
         if: always()

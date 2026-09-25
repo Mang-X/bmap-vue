@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "mode": "fake-v4",
+  "recordedAt": "2026-09-25T05:30:50.474Z",
+  "sourceCommit": "a41f00d9c470489915af1c8b9141010a211c2eee",
+  "datasetVersion": "1",
+  "oursVersion": "1.0.0-rc.0",
+  "officialVersion": "1.0.1",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "node": "v24.18.0",
+    "dom": "happy-dom"
+  },
+  "scenarios": [
+    {
+      "id": "map-cold-mount",
+      "official": "Map",
+      "ours": {
+        "actMs": 4.1782499999999345,
+        "teardownMs": 1.4728750000001583,
+        "sdkCalls": 43,
+        "callKind": "listen",
+        "recreates": 1,
+        "renderCallbacks": 5,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 22.780249999999796,
+        "teardownMs": 1.3016670000001795,
+        "sdkCalls": 5,
+        "callKind": "listen",
+        "recreates": 1,
+        "renderCallbacks": 5,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "marker-100-mount",
+      "official": "100 × Marker",
+      "ours": {
+        "actMs": 4.511792000000014,
+        "teardownMs": 1.5625830000001315,
+        "sdkCalls": 143,
+        "callKind": "listen",
+        "recreates": 101,
+        "renderCallbacks": 6,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 22.22612500000014,
+        "teardownMs": 2.0585000000000946,
+        "sdkCalls": 1105,
+        "callKind": "listen",
+        "recreates": 101,
+        "renderCallbacks": 105,
+        "retainedResources": 100,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "marker-1k-update",
+      "official": "1 000 × Marker",
+      "ours": {
+        "actMs": 2.281500000000051,
+        "teardownMs": 2.173667000000023,
+        "sdkCalls": 1000,
+        "callKind": "setPosition",
+        "recreates": 0,
+        "renderCallbacks": 2,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 26.20854200000008,
+        "teardownMs": 6.99695799999995,
+        "sdkCalls": 1000,
+        "callKind": "setPosition",
+        "recreates": 0,
+        "renderCallbacks": 1001,
+        "retainedResources": 1000,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "polyline-10k-parent-update",
+      "official": "Polyline",
+      "ours": {
+        "actMs": 2.4318339999999807,
+        "teardownMs": 1.3614999999999782,
+        "sdkCalls": 0,
+        "callKind": "setPath",
+        "recreates": 0,
+        "renderCallbacks": 1,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 7.24799999999982,
+        "teardownMs": 1.2642080000000533,
+        "sdkCalls": 0,
+        "callKind": "setPath",
+        "recreates": 0,
+        "renderCallbacks": 2,
+        "retainedResources": 1,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "polyline-10k-path-replace",
+      "official": "Polyline",
+      "ours": {
+        "actMs": 1.6327500000002146,
+        "teardownMs": 1.4467079999999441,
+        "sdkCalls": 1,
+        "callKind": "setPath",
+        "recreates": 0,
+        "renderCallbacks": 2,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 8.381082999999762,
+        "teardownMs": 1.3027499999998327,
+        "sdkCalls": 1,
+        "callKind": "setPath",
+        "recreates": 0,
+        "renderCallbacks": 2,
+        "retainedResources": 1,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "pointcollection-50k",
+      "official": null,
+      "ours": {
+        "actMs": 20.38541699999996,
+        "teardownMs": 1.0089160000002266,
+        "sdkCalls": 44,
+        "callKind": "listen",
+        "recreates": 2,
+        "renderCallbacks": 6,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": null,
+      "officialSkippedReason": "官方无等价物（场景表登记为本库扩展档）"
+    },
+    {
+      "id": "native-point-50k",
+      "official": null,
+      "ours": {
+        "actMs": 12.199708999999984,
+        "teardownMs": 1.4420419999996739,
+        "sdkCalls": 44,
+        "callKind": "listen",
+        "recreates": 2,
+        "renderCallbacks": 6,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": null,
+      "officialSkippedReason": "官方无等价物（场景表登记为本库扩展档）"
+    },
+    {
+      "id": "infowindow-lifecycle",
+      "official": "InfoWindow",
+      "ours": {
+        "actMs": 4.111875000000055,
+        "teardownMs": 1.4536250000001019,
+        "sdkCalls": 0,
+        "callKind": "listen",
+        "recreates": 0,
+        "renderCallbacks": 6,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 4.885250000000269,
+        "teardownMs": 1.2545839999997952,
+        "sdkCalls": 0,
+        "callKind": "listen",
+        "recreates": 0,
+        "renderCallbacks": 6,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "router-remount",
+      "official": "Map",
+      "ours": {
+        "actMs": 5.886124999999993,
+        "teardownMs": 1.5152079999998023,
+        "sdkCalls": 43,
+        "callKind": "listen",
+        "recreates": 1,
+        "renderCallbacks": 15,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": {
+        "actMs": 24.13774999999987,
+        "teardownMs": 1.2835000000000036,
+        "sdkCalls": 5,
+        "callKind": "listen",
+        "recreates": 1,
+        "renderCallbacks": 12,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      }
+    },
+    {
+      "id": "keepalive-toggle",
+      "official": null,
+      "ours": {
+        "actMs": 2.8135839999999916,
+        "teardownMs": 1.4107919999996739,
+        "sdkCalls": 0,
+        "callKind": "listen",
+        "recreates": 0,
+        "renderCallbacks": 3,
+        "retainedResources": 0,
+        "retainedListeners": 0
+      },
+      "officialSide": null,
+      "officialSkippedReason": "官方无等价物（场景表登记为本库扩展档）"
+    }
+  ],
+  "notMeasured": [
+    "long task（happy-dom 无 PerformanceObserver longtask）→ 真实浏览器档才出",
+    "真实 SDK 重绘 / 帧调度 / FPS",
+    "堆增长（--expose-gc 下的 heapUsed）→ Fake 档不测，真实浏览器档才出",
+    "官方侧真实网络与 AK 鉴权路径（本档复用 window.BMap，无 script 加载）",
+    "票面的「SDK 调用总数」：真实与 Fake v4 都没有单一计数器，报告按调用面分列 （listen / setPosition / setPath），没有一项是「总数」",
+    "票面的「watcher 回调次数」：Vue 3 没有公开的 watcher 计数面（本档记的是组件渲染次数）"
+  ]
+}

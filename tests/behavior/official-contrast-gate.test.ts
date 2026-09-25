@@ -40,12 +40,23 @@ import {
 import { OURS_MANIFEST, readOursVersion } from "../performance/oursVersion.mts";
 import { decideLiveContrastExit } from "../browser/official-contrast/report.mts";
 import {
+  checkReferenceResult,
+  type ReferenceResult,
+} from "../performance/official-contrast/reference.mts";
+import {
+  formatReferenceReport,
+  REFERENCE_TABLE_BEGIN,
+  REFERENCE_TABLE_END,
+} from "../performance/official-contrast/referenceReport.mts";
+import {
   CONTRAST_SCENARIOS,
+  CONTRAST_SCENARIO_IDS,
   comparableScenarios,
   measureToScenarioTable,
   oursOnlyScenarios,
   scenarioIdOfMeasure,
 } from "../performance/officialScenarios.ts";
+import { DATASET_VERSION } from "../performance/dataset.ts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
@@ -401,6 +412,109 @@ describe("#140 接线契约：页面注释不得与 ADR 决策 9 相反", () => 
     // 反向也要有：注释应当说清实际机制与被否决的通道，免得下次又被改回去。
     expect(html, "页面注释没写明 AK 走 CDP 注入").toMatch(/CDP/);
     expect(html, "页面注释没说清 URL 通道已被否决").toMatch(/不[走经由].{0,4}URL/);
+  });
+});
+
+describe("#140 纯函数：入库实验快照（reference result）— 只保鲜，不判性能", () => {
+  const snapshot = () =>
+    JSON.parse(
+      readFileSync(
+        resolve(repoRoot, "tests/performance/official-contrast/recorded-result.json"),
+        "utf8",
+      ),
+    ) as unknown;
+
+  it("入库快照存在，且通过「有没有腐烂」校验", () => {
+    // 票面验收第一条：「数据与脚本入库」。`.artifacts` 被 gitignore 排除，所以这份快照
+    // 是**唯一**留在仓库里的读数证据——它不在，就等于这轮实验不可核对。
+    expect(existsSync(resolve(repoRoot, "tests/performance/official-contrast/recorded-result.json")))
+      .toBe(true);
+    const issues = checkReferenceResult(snapshot(), {
+      scenarioIds: CONTRAST_SCENARIO_IDS,
+      datasetVersion: DATASET_VERSION,
+    });
+    expect(issues, `快照已腐烂：
+${issues.join("\n")}`).toEqual([]);
+  });
+
+  it("场景 ID 与场景表**完整一致**（不多、不少、不重）", () => {
+    // 场景表改了却没重录 ⇒ 读数静默对不上票面。这条只查覆盖，**不查毫秒**。
+    const recorded = (snapshot() as { scenarios: { id: string }[] }).scenarios.map((e) => e.id);
+    expect([...recorded].sort()).toEqual([...CONTRAST_SCENARIO_IDS].sort());
+  });
+
+  it("快照带 provenance：sourceCommit 是真 SHA，且不等于 unknown", () => {
+    // 只有 recordedAt 的话，几年后只剩一个日期，对不上代码——这正是「可核对」的前提。
+    const ref = snapshot() as { sourceCommit: string; recordedAt: string; environment: unknown };
+    expect(ref.sourceCommit).toMatch(/^[0-9a-f]{7,40}$/);
+    expect(ref.sourceCommit).not.toBe("unknown");
+    expect(ref.recordedAt).not.toBe("");
+    expect(ref.environment).toBeTruthy();
+  });
+
+  it("官方版本仍是票面锁定的 1.0.1（快照也不能悄悄换基线）", () => {
+    expect((snapshot() as { officialVersion: string }).officialVersion).toBe(
+      OFFICIAL_BASELINE_VERSION,
+    );
+  });
+
+  it("⚠️ **不**拿快照的毫秒做判定——没有 tolerance、没有漂移门禁", () => {
+    // 这条把「快照不是 baseline」钉成可执行的事实：CI 路径里**不得**出现任何
+    // 「当前毫秒 vs 记录毫秒」的比对。一旦有人加回来，这条立刻红。
+    const collector = readFileSync(resolve(repoRoot, "scripts/collect-official-contrast.mts"), "utf8");
+    const code = stripComments(collector);
+    expect(code, "编排里出现了拿快照毫秒做比较的代码").not.toMatch(
+      /(tolerance|drift|regression)/i,
+    );
+    // 编排只**写**快照（`--record-reference`），从不**读**它——读了就有机会拿它判性能。
+    // ⚠️ 判据必须是「没有 readFileSync(REFERENCE_PATH)」而不是「文件名字符串没出现」：
+    // 写入路径常量里本来就含这个文件名（REFERENCE_PATH），按后者断言会永远红。
+    expect(code, "编排只写不读才对——出现读快照就意味着可能拿历史毫秒判当前").toMatch(
+      /writeFileSync\(REFERENCE_PATH/,
+    );
+    expect(code, "编排读了 recorded-result.json").not.toMatch(/readFileSync\(REFERENCE_PATH/);
+    expect(code, "快照必须只在 --record-reference 下写入").toMatch(
+      /hasFlag\("record-reference"\)[\s\S]{0,120}recordReference\(report\)/,
+    );
+  });
+
+  it("文档里的人读视图由快照生成，且与快照一致（不是第二份手写事实源）", () => {
+    // 票面验收第二条要「人读报告**解释**简单路径成本与高级路径收益」；A+B 最大的坑是
+    // JSON 一套数字、markdown 又手抄一套，下次更新 A 忘了更新 B，两边慢慢漂。
+    const doc = readFileSync(
+      resolve(repoRoot, "docs/zh-CN/contributing/performance-baseline.md"),
+      "utf8",
+    );
+    const expected = formatReferenceReport(snapshot() as ReferenceResult);
+    const begin = doc.indexOf(REFERENCE_TABLE_BEGIN);
+    const end = doc.indexOf(REFERENCE_TABLE_END);
+    expect(begin, "文档里找不到生成段落的定界标记").toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(begin);
+    const actual = doc.slice(begin, end + REFERENCE_TABLE_END.length);
+    expect(
+      actual,
+      "文档里的人读视图与 recorded-result.json 不一致——跑 pnpm generate:official-contrast:reference",
+    ).toBe(expected);
+  });
+
+  it("人读视图**解释**两件事，且不给百分比 / 倍数 / 排名", () => {
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    // 票面验收第二条点名的两半，缺一不可。
+    expect(text).toMatch(/简单路径/);
+    expect(text).toMatch(/高级路径/);
+    // 「结果使用规则」明禁的营销式表述。
+    expect(text, "人读视图出现了「X 倍更快」这类表述").not.toMatch(/\d+\s*倍|快\s*\d+|提升\s*\d+(\.\d+)?%/);
+    // 不预设方向：表里本库更快，结论句就不该写「本库有成本」——那句曾被自己的数据否掉。
+    expect(text, "人读视图预设了方向（本库更贵/更快）").not.toMatch(/本库的.{0,8}是有成本的/);
+  });
+
+  it("人读视图里的结构数字**取自快照**而非写死", () => {
+    // 写死的数字下一次重录就与上表不一致——那正是「两份事实源漂移」，只是搬进了渲染器。
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    const mount = (snapshot() as { scenarios: { id: string; officialSide?: { sdkCalls: number } | null }[] })
+      .scenarios.find((entry) => entry.id === "marker-100-mount");
+    expect(mount?.officialSide).toBeTruthy();
+    expect(text).toContain(String(mount?.officialSide?.sdkCalls));
   });
 });
 

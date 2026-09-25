@@ -172,6 +172,73 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
 两个变量成对出现，缺一个门禁会判错。决策细节见
 [ADR 2026-09-25（官方对照）决策 8](/adr/2026-09-25-official-contrast-benchmark)。
 
+### 入库记录（数据与脚本入库）
+
+`.artifacts` 被 `.gitignore` 排除，所以**跑完的读数默认不留痕**。要把某一轮录成版本化证据：
+
+```bash
+pnpm perf:contrast --record-reference        # 跑基准 + 把当轮读数录进仓库
+pnpm generate:official-contrast:reference    # 由快照重新生成下面这段人读视图
+```
+
+产物 `tests/performance/official-contrast/recorded-result.json` 是**唯一的数据事实源**，带
+`recordedAt` + **`sourceCommit`** + 机器身份 + 两库版本 + 数据集版本——回答「这是哪一次跑、
+哪一版实现、哪台机器、哪份数据」。
+
+⚠️ **它不是 baseline**：`perf:contrast` **不**拿它做毫秒比较，CI 也不按它判回退。它只承担
+provenance。理由与边界见 `reference.mts` 文件头——快照一旦参与漂移判定，维护者迟早会补上
+tolerance、跨机归一化、runner 换 SKU 处理，那正是票面「不做营销排名」要避免的机制。CI 唯一
+能判失败的是**不变式被破坏**（1）/ **脚手架坏**（2）/ **没跑成**（3）。
+
+下面这段是**生成物**（`pnpm generate:official-contrast:reference:check` 按字节比对，漂移即红），
+**不要手改**：
+
+<!-- bmap-vue-1.0:official-contrast -->
+### 本次记录（由 `recorded-result.json` 生成，勿手改）
+
+录于 `2026-09-25T05:30:50.474Z`，来源 commit `a41f00d9c470489915af1c8b9141010a211c2eee`；本库 1.0.0-rc.0 vs 官方 1.0.1，数据集 v1。
+
+机器：Apple M4 · darwin/arm64 · node v24.18.0 · happy-dom。
+
+> 毫秒为**该 Fake v4 / happy-dom / 上述机器的同轮读数**，仅用于解释此次实验，**不是跨机器阈值**。本节不按快慢排序，也不给百分比或倍数——票面禁止营销式排名。
+
+#### 简单路径（Map / 100 Marker）：同轮读数
+
+| 场景 | 本库 act ms | 官方 act ms | 结构读数（本库 / 官方） |
+| --- | ---: | ---: | --- |
+| map-cold-mount | 4.18 | 22.78 | recreate 1 / 1 · listen 43 / listen 5 · render 5 / 5 · 残留 0 / 0 |
+| marker-100-mount | 4.51 | 22.23 | recreate 101 / 101 · listen 143 / listen 1105 · render 6 / 105 · 残留 0 / 100 |
+
+简单路径的**同轮毫秒**与**结构读数**见上表。方向由数据决定，本文不预设结论：换机器、换 Node、换官方补丁版本都可能反过来。票面要求「若官方更轻，如实记录」——**如实**指的是不挑选、不排序、不给倍数，不是预先假定哪边更贵。
+
+可复现的**结构差**（与快慢无关，跨机成立）：`marker-100-mount` 的 `listen` 调用面本库 143 / 官方 1105；卸载后**残留**本库 0 / 官方 100 —— 官方那侧覆盖物没有被摘掉。
+
+#### 高级路径的收益在结构指标上
+
+| 场景 | 本库 | 官方 | 结构读数（本库 / 官方） |
+| --- | --- | --- | --- |
+| marker-1k-update | 2.28 ms | 26.21 ms | recreate 0 / 0 · setPosition 1000 / setPosition 1000 · render 2 / 1001 · 残留 0 / 1000 |
+| polyline-10k-parent-update | 2.43 ms | 7.25 ms | recreate 0 / 0 · setPath 0 / setPath 0 · render 1 / 2 · 残留 0 / 1 |
+| polyline-10k-path-replace | 1.63 ms | 8.38 ms | recreate 0 / 0 · setPath 1 / setPath 1 · render 2 / 2 · 残留 0 / 1 |
+| infowindow-lifecycle | 4.11 ms | 4.89 ms | recreate 0 / 0 · listen 0 / listen 0 · render 6 / 6 · 残留 0 / 0 |
+
+收益在这里是**可复现的架构差**，不是快慢：更新走 `setPosition` 复用实例而不重建覆盖物、父级无关更新不重发 `setPath`、卸载后本库无残留而官方有——这些是 #138 Vue-native 收口真正要防回归的东西，也是 CI 里不变式门禁盯的读数。
+
+#### 本库扩展档（官方无等价契约，**不硬比较**）
+
+- **pointcollection-50k**：本库 act 20.39 ms —— 官方无等价物（场景表登记为本库扩展档）。
+- **native-point-50k**：本库 act 12.20 ms —— 官方无等价物（场景表登记为本库扩展档）。
+- **keepalive-toggle**：本库 act 2.81 ms —— 官方无等价物（场景表登记为本库扩展档）。
+
+本档**测不到**（不要外推）：
+- long task（happy-dom 无 PerformanceObserver longtask）→ 真实浏览器档才出
+- 真实 SDK 重绘 / 帧调度 / FPS
+- 堆增长（--expose-gc 下的 heapUsed）→ Fake 档不测，真实浏览器档才出
+- 官方侧真实网络与 AK 鉴权路径（本档复用 window.BMap，无 script 加载）
+- 票面的「SDK 调用总数」：真实与 Fake v4 都没有单一计数器，报告按调用面分列 （listen / setPosition / setPath），没有一项是「总数」
+- 票面的「watcher 回调次数」：Vue 3 没有公开的 watcher 计数面（本档记的是组件渲染次数）
+<!-- /bmap-vue-1.0:official-contrast -->
+
 ### 包体档（指标 8）
 
 ```bash
