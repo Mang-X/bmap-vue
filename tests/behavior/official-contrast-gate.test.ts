@@ -602,6 +602,56 @@ ${issues.join("\n")}`).toEqual([]);
     ).toBe(expected);
   });
 
+  it("成本对比**只比同一个调用面**（`callKind` 不同不硬凑差值）", () => {
+    // `sdkCalls` 的单位由 `callKind` 决定（reference.mts：「**不是**总数」）。把
+    // `setPosition` 的 43 和 `listen` 的 5 并排不是「本库多 38」，是拿两个东西做减法。
+    // 上一版丢了这条守卫——注入一个错 callKind 就能让报告说这种话。
+    const mismatched = snapshot() as ReferenceResult;
+    const target = mismatched.scenarios.find(
+      (entry) => entry.ours !== null && entry.officialSide !== null,
+    );
+    (target!.ours as { callKind: string }).callKind = "setPosition";
+    const text = formatReferenceReport(mismatched);
+    expect(text, "两侧调用面不同却仍被拿来比差值").toMatch(/无可比的调用面读数|两侧的 SDK 调用面不同/);
+  });
+
+  it("「本库更贵」的判据与它**列出的两项同域**（不能自相矛盾）", () => {
+    // 上一版 `heavier` 只看 `sdkCalls`，而那一行**同时**报了 `renderCallbacks`：
+    // 一个「调用面便宜、渲染更贵」的场景会被判成「本库不更贵」，与它自己上一行打架。
+    const renderHeavy = snapshot() as ReferenceResult;
+    const target = renderHeavy.scenarios.find(
+      (entry) => entry.ours !== null && entry.officialSide !== null,
+    );
+    // 让调用面**便宜**、渲染**更贵**——若判据只看调用面，这条会被判成「不更贵」。
+    (target!.ours as { sdkCalls: number }).sdkCalls = 1;
+    (target!.ours as { renderCallbacks: number }).renderCallbacks = 99_999;
+    const text = formatReferenceReport(renderHeavy);
+    expect(text, "渲染更贵却被判成「本库不更贵」——与它上一行矛盾").toMatch(
+      /本库更贵的地方在这里|本轮简单档\*\*没有\*\*本库更贵的场景/,
+    );
+    expect(text).toMatch(/本库多 99999|本库多 \d{5}/);
+  });
+
+  it("高级路径只把**两侧真的不同**的列说成收益（持平的不是收益）", () => {
+    // 上一版把「recreate 0/0、setPosition 1000/1000、setPath 0/0」这些**持平**的列写成
+    // 收益，而真正分高下的 render（2/1001）与 retained（0/1000）一个都没点名。
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    const advanced = (snapshot() as { scenarios: ReferenceScenario[] }).scenarios.filter(
+      (entry) => entry.official !== null && entry.officialSide !== null &&
+        ["marker-1k-update", "polyline-10k-parent-update", "polyline-10k-path-replace",
+         "infowindow-lifecycle", "router-remount"].includes(entry.id),
+    );
+    // 收益句必须点名至少一个**真的有差**的列。
+    const renderWins = advanced.some(
+      (entry) => entry.officialSide!.renderCallbacks > entry.ours!.renderCallbacks,
+    );
+    if (renderWins) expect(text, "渲染分出高下却没被点名").toMatch(/组件渲染次数/);
+    const retainWins = advanced.some(
+      (entry) => entry.officialSide!.retainedResources > entry.ours!.retainedResources,
+    );
+    if (retainWins) expect(text, "残留分出高下却没被点名").toMatch(/卸载后残留/);
+  });
+
   it("人读视图**解释**两件事，且不给百分比 / 倍数 / 排名", () => {
     const text = formatReferenceReport(snapshot() as ReferenceResult);
     // 票面验收第二条点名的两半，缺一不可。
@@ -669,6 +719,31 @@ ${issues.join("\n")}`).toEqual([]);
     expect(check((d) => (d.engine.oursUnderTest = "wasm"))).toContain(
       "REFERENCE_ENGINE_OURS_UNDER_TEST_UNKNOWN: wasm",
     );
+  });
+
+  it("⚠️ 冒充真实 JSAPI 时，**渲染输出**也不能说真实 JSAPI（不只校验层）", () => {
+    // 上一版只断言校验器发码；而危害发生在**渲染层**——把渲染器改成永远打印 Fake 措辞
+    // （`engine.kind === "fake" ? … : true`），上一版 112 条**全绿**。危害是印出去的那句话。
+    const impostor = snapshot() as ReferenceResult;
+    impostor.engine = {
+      kind: "real",
+      version: "4.0",
+      oursUnderTest: "source",
+    } as ReferenceResult["engine"];
+    // 校验层必须拦（mode 与 kind 不同档）；
+    expect(
+      checkReferenceResult(impostor, {
+        scenarioIds: CONTRAST_SCENARIO_IDS,
+        datasetVersion: DATASET_VERSION,
+      }).join("\n"),
+    ).toContain("REFERENCE_MODE_KIND_MISMATCH");
+    // 渲染层即使拿到这份**非法**快照，也不得替它印「真实 JSAPI 4.0」——本档是 Fake 跑的。
+    // （`formatReferenceReport` 本身不校验入参，所以这条防的是「渲染层照单全收」。）
+    const text = formatReferenceReport(impostor);
+    expect(
+      text,
+      "渲染层照着 kind 印「真实 JSAPI」——本档明明是 Fake v4 跑出来的",
+    ).not.toMatch(/引擎：\*\*真实 JSAPI|引擎：真实 JSAPI/);
   });
 
   it("`mode` 与 `engine.kind` **必须指向同一档**（不得冒充真实 JSAPI）", () => {

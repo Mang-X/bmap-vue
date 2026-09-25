@@ -242,8 +242,13 @@ const RECORDED_MODE: ReferenceResult["mode"] = "fake-v4";
  * `dom` 直接写 "happy-dom"：**本档就是** Fake v4 + happy-dom，这是事实陈述，不是前瞻。
  * （上一版写「`dom` 由 `mode` 决定」并配一个 `mode === "fake-v4" ? … : undefined` 三元——
  * 那是**假话**：`mode` 是字面量类型，那个 `undefined` 分支不可达，注释与代码互相打脸。）
- * 真出第二种 mode 时，TS 会在这里报错，那时再决定新档的 DOM——**不预先**为一个不存在的
- * 未来编分支。
+ *
+ * ⚠️ 这里**不**宣称「换 mode 时 TS 会报错」——那也是假话，实测过两条都不成立：
+ * ① `toReferenceEnvironment` 根本不收 `mode` 参数，硬编码的 `dom` 与 mode 没有任何类型
+ * 关联；② `scripts/**` **不在任何 tsconfig 的 include 里**（`tsconfig.tests.json` 只管
+ * tests、`tsconfig.json` 只管 packages），本文件靠 `--experimental-strip-types` 跑，
+ * 塞一个类型错误进去照样 exit 0。真出第二种 mode 时，**要人来改这里**——那正是把字面量
+ * 写在这里、而不是编一个不可达三元的原因：改的地方是显式的。
  */
 function toReferenceEnvironment(envelope: {
   platform: string;
@@ -258,7 +263,8 @@ function toReferenceEnvironment(envelope: {
     node: envelope.node,
     // ⚠️ 刻意**不加** `mode === "fake-v4" ? … : undefined` 这种前瞻分支：`mode` 现在就是
     // 字面量类型 `"fake-v4"`，那个 `undefined` 分支**不可达**，写它等于对着一份不存在的
-    // 未来编故事。真出第二种 mode 时，TS 会在这里报错，那时再改。
+    // 未来编故事。真出第二种 mode 时，**要人来改这一行**（TS 不会拦：本文件不在任何
+    // tsconfig 的 include 里，靠 `--experimental-strip-types` 跑，类型错误不拦）。
     dom: "happy-dom",
   };
 }
@@ -312,8 +318,8 @@ function recordReference(report: ContrastReport): void {
     oursVersion: report.envelope.oursVersion,
     officialVersion: report.envelope.officialVersion,
     // ⚠️ 字段名**不在这里重打一遍**：`ReferenceEnvironment` 加字段时，编排若还手写这份
-    // 字面量就会静默漏掉新增字段（TS 不报错——少一个可选字段照样过）。`mode` 决定 DOM，
-    // 不是在这里写死 "happy-dom"：将来真加一档别的 mode，写死会把这档的机器标错。
+    // 字面量就会静默漏掉新增字段（少一个可选字段照样过）。DOM 固定写 "happy-dom" 的理由
+    // 见 `toReferenceEnvironment` 的注释——**本档就是** happy-dom，换 mode 时要人来改。
     environment: toReferenceEnvironment(report.envelope),
     scenarios: report.scenarios.map((entry) => ({
       id: entry.id,

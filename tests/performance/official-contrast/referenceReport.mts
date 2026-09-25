@@ -108,17 +108,24 @@ export function formatReferenceReport(result: ReferenceResult): string {
   // `oursVersion`（读自 package.json），看起来像发布物版本；实际被测的是 `src/**`，引擎是
   // Fake 替身。票面对照版本写的是「最终 1.0 RC tarball」、环境写的是「同 JSAPI 4.0」，
   // 本档两条都达不到——不写出来，读者会把下面那张表默认读成「发布物 × 真实 JSAPI 4.0」。
+  // ⚠️ 渲染层**不信任**入参的 `engine`：它只管排版，不做校验（校验在
+  // `checkReferenceResult`）。但「印出真实 JSAPI」这句话的危害太大——万一有人绕过校验直接
+  // 渲染一份非法快照（手工改 JSON、脚本漏调校验），这里就成了一台「把 Fake 读数说成
+  // 真实 JSAPI」的机器。所以渲染时**两个判别器一起看**：只有 `mode` 与 `kind` 指向同一档
+  // 才敢印那一档的说法，否则一律按**本档真实跑法**（Fake）印，并在旁边说明快照自相矛盾。
   const engine = result.engine;
+  const engineAgrees = result.mode === "fake-v4" && engine.kind === "fake";
   const underTest =
     engine.oursUnderTest === "dist"
       ? "本库发布产物（dist / tarball）"
       : "本库**源码**（`packages/bmap-vue/src/**`）——**不是**打包产物";
   lines.push(
     `被测对象：${underTest}；引擎：` +
-      (engine.kind === "fake"
+      (engineAgrees
         ? `**Fake v4 替身**（\`${engine.version}\`）——**不是**真实 JSAPI，本轮无 AK、无网络，` +
           "官方库经 `jsapi-loader` 复用已存在的 `window.BMap` 跑通"
-        : `真实 JSAPI \`${engine.version}\``) +
+        : `**本档实为 Fake v4**（快照的 \`engine.kind=${engine.kind}\` 与 \`mode=${result.mode}\` ` +
+          "自相矛盾，已按本档真实跑法书写）") +
       "。",
   );
   lines.push("");
@@ -182,15 +189,19 @@ export function formatReferenceReport(result: ReferenceResult): string {
   const direction = (ours: number, off: number): string =>
     ours === off ? "持平" : ours > off ? `本库多 ${ours - off}` : `本库少 ${off - ours}`;
   if (simpleRows.length > 0) {
-    // 逐场景列，并**点名本库更贵的那几条**——那才是「简单路径成本」要暴露的东西。
-    const heavier = simpleRows.filter(
-      (entry) => entry.ours!.sdkCalls > entry.officialSide!.sdkCalls,
+    // ⚠️ **只比同一个调用面**。`sdkCalls` 的单位由 `callKind` 决定（`reference.mts`：
+    // 「**不是**总数，callKind 说明数的是哪个面」），把 `setPosition` 的 43 和 `listen`
+    // 的 5 并排不是「本库多 38」，是拿两个不同的东西做减法。上一版丢了这条守卫，
+    // 注入一个错 `callKind` 就能让报告说出这种话。两侧 `callKind` 不一致就**不列**。
+    const comparable_ = simpleRows.filter(
+      (entry) => entry.ours!.callKind === entry.officialSide!.callKind,
     );
-    lines.push(
-      "**简单路径的结构成本**（逐场景、跨机成立，与上表毫秒无关）：",
+    const skipped = simpleRows.filter(
+      (entry) => entry.ours!.callKind !== entry.officialSide!.callKind,
     );
+    lines.push("**简单路径的结构成本**（逐场景、跨机成立，与上表毫秒无关）：");
     lines.push("");
-    for (const entry of simpleRows) {
+    for (const entry of comparable_) {
       lines.push(
         `- \`${entry.id}\`：\`${entry.ours!.callKind}\` 调用面 ` +
           `本库 ${entry.ours!.sdkCalls} / 官方 ${entry.officialSide!.sdkCalls}` +
@@ -199,15 +210,34 @@ export function formatReferenceReport(result: ReferenceResult): string {
           `（${direction(entry.ours!.renderCallbacks, entry.officialSide!.renderCallbacks)}）。`,
       );
     }
-    lines.push("");
-    lines.push(
-      heavier.length > 0
-        ? `**本库更贵的地方在这里**：${heavier.map((entry) => `\`${entry.id}\``).join("、")}` +
-          ` —— 组件与生命周期抽象在这些路径上要多付 ${heavier[0]!.ours!.callKind} 绑定与渲染。` +
-          `代价换来的东西在下一节（卸载残留归零、大数据更新不重建实例）；` +
-          `哪一边的**毫秒**更小由上表说话，本文不替他下结论。`
-        : "本轮简单档**没有**本库更贵的场景（见上）；结构性收益在下一节。",
+    // ⚠️ 「本库更贵」的判据必须与**上面列出的两项**同域：只看 `sdkCalls` 时，一个
+    // 「调用面便宜、渲染更贵」的场景会被判成「本库不更贵」，与它自己上一行
+    // 「本库多 N（渲染）」直接打架——正是决策 23 要杀掉的那类自相矛盾。
+    const heavier = comparable_.filter(
+      (entry) =>
+        entry.ours!.sdkCalls > entry.officialSide!.sdkCalls ||
+        entry.ours!.renderCallbacks > entry.officialSide!.renderCallbacks,
     );
+    lines.push("");
+    if (heavier.length > 0) {
+      const kinds = [...new Set(heavier.map((entry) => entry.ours!.callKind))].join(" / ");
+      lines.push(
+        `**本库更贵的地方在这里**：${heavier.map((entry) => `\`${entry.id}\``).join("、")}` +
+          ` —— 组件与生命周期抽象在这些路径上要多付 ${kinds} 绑定或渲染。` +
+          `代价换来的东西在下一节（卸载残留归零、大数据更新不重建实例）；` +
+          `哪一边的**毫秒**更小由上表说话，本文不替他下结论。`,
+      );
+    } else {
+      lines.push("本轮简单档**没有**本库更贵的场景（见上）；结构性收益在下一节。");
+    }
+    if (skipped.length > 0) {
+      // 两侧调用面不同 = 没有可比的调用面读数，如实说出来，而不是硬凑一个差值。
+      lines.push("");
+      lines.push(
+        `（${skipped.map((entry) => `\`${entry.id}\``).join("、")} 两侧的 SDK 调用面不同，` +
+          "无可比的调用面读数，故不列成本对比。）",
+      );
+    }
     lines.push("");
   }
 
@@ -260,10 +290,55 @@ export function formatReferenceReport(result: ReferenceResult): string {
     );
   }
   lines.push("");
+  // ⚠️ 这段**只许说**两侧**真的不同**的列。上一版写死「更新走 setPosition 复用实例而不重建
+  // 覆盖物、父级无关更新不重发 setPath」——而表里 `recreate` 是 0/0、`setPosition` 1000/1000、
+  // `setPath` 0/0 与 1/1：**全是平的**。把持平的列说成「收益」，而真正分出高下的
+  // `render`（2 / 1001）与 `retained`（0 / 1000）**一个都没点名**——那不是解释，是指错方向。
+  //
+  // 收益因此**从读数里挑**：哪一列两侧差得最多就点哪一列，并指名场景。数据说话，不是文案说话。
+  const advancedRows = comparable.filter((entry) => advancedIds.includes(entry.id));
+  const renderGap = advancedRows
+    .map((entry) => ({
+      entry,
+      gap: entry.officialSide!.renderCallbacks - entry.ours!.renderCallbacks,
+    }))
+    .filter((row) => row.gap > 0)
+    .sort((a, b) => b.gap - a.gap)[0];
+  const retainGap = advancedRows
+    .map((entry) => ({
+      entry,
+      gap: entry.officialSide!.retainedResources - entry.ours!.retainedResources,
+    }))
+    .filter((row) => row.gap > 0)
+    .sort((a, b) => b.gap - a.gap)[0];
+  const benefits: string[] = [];
+  if (renderGap) {
+    benefits.push(
+      `组件渲染次数：\`${renderGap.entry.id}\` 本库 ${renderGap.entry.ours!.renderCallbacks} / ` +
+        `官方 ${renderGap.entry.officialSide!.renderCallbacks}——高频更新下本库不必重渲整棵树`,
+    );
+  }
+  if (retainGap) {
+    benefits.push(
+      `卸载后残留：\`${retainGap.entry.id}\` 本库 ${retainGap.entry.ours!.retainedResources} / ` +
+        `官方 ${retainGap.entry.officialSide!.retainedResources}——覆盖物确实被摘掉了`,
+    );
+  }
+  const tied = advancedRows.filter(
+    (entry) =>
+      entry.ours!.recreates === entry.officialSide!.recreates &&
+      entry.ours!.sdkCalls === entry.officialSide!.sdkCalls,
+  );
   lines.push(
-    "收益在这里是**可复现的架构差**，不是快慢：更新走 `setPosition` 复用实例而不重建覆盖物、" +
-      "父级无关更新不重发 `setPath`、卸载后本库无残留而官方有——这些是 #138 Vue-native 收口真正" +
-      "要防回归的东西，也是 CI 里不变式门禁盯的读数。",
+    benefits.length > 0
+      ? "收益在这里是**可复现的架构差**，不是快慢：" +
+          benefits.join("；") +
+          "。这些是 #138 Vue-native 收口真正要防回归的东西，也是 CI 里不变式门禁盯的读数。" +
+          (tied.length > 0
+            ? `（另有 ${tied.length} 个场景的 \`recreate\` 与 SDK 调用面**两侧持平**——` +
+              "持平的不是收益，只是没有回退。）"
+            : "")
+      : "本轮高级档**没有**本库占优的结构读数；按票面「结果使用规则」应回到 #124/#138 复看。",
   );
   lines.push("");
 
