@@ -239,8 +239,11 @@ const RECORDED_MODE: ReferenceResult["mode"] = "fake-v4";
 /**
  * 由报告信封拼出快照的机器身份（字段名只在这里一处落地一次）。
  *
- * `dom` 由 `mode` 决定而非写死：本档是 Fake v4 + happy-dom，但把 "happy-dom" 硬编码在
- * 调用点，等于宣称「将来任何 mode 都是 happy-dom」——那会把新档的机器标错还不报错。
+ * `dom` 直接写 "happy-dom"：**本档就是** Fake v4 + happy-dom，这是事实陈述，不是前瞻。
+ * （上一版写「`dom` 由 `mode` 决定」并配一个 `mode === "fake-v4" ? … : undefined` 三元——
+ * 那是**假话**：`mode` 是字面量类型，那个 `undefined` 分支不可达，注释与代码互相打脸。）
+ * 真出第二种 mode 时，TS 会在这里报错，那时再决定新档的 DOM——**不预先**为一个不存在的
+ * 未来编分支。
  */
 function toReferenceEnvironment(envelope: {
   platform: string;

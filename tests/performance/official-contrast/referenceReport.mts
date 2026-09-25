@@ -171,31 +171,42 @@ export function formatReferenceReport(result: ReferenceResult): string {
       "不排序、不给倍数，不是预先假定哪边更贵。",
   );
   lines.push("");
-  // 结构成本：逐条**从读数算**，不写死、不预设方向。
+  // 结构成本：**逐场景**说，不求和。
+  //
+  // ⚠️ 上一版把简单档的 listen / render **求和**后只报一个方向（「本库少 924」），而它上面
+  // 那张表里 `map-cold-mount` 是 **43 / 5（本库多 38）**、`marker-100-mount` 才是 143 / 1105。
+  // 两边方向相反，求和既**与相邻表格直接矛盾**，又把「本库在哪条路上更贵」这一条**抹掉**了——
+  // 而「暴露简单路径成本」正是票面点名要的东西。求和口径是评审钉出来的、但口径本身错了：
+  // 成本发生在**某条路径上**，不是一个可加的标量。
   const simpleRows = comparable.filter((entry) => simpleIds.includes(entry.id));
-  const listenRows = simpleRows.filter((entry) => entry.ours!.callKind === entry.officialSide!.callKind);
-  if (listenRows.length > 0) {
-    const oursTotal = listenRows.reduce((sum, entry) => sum + entry.ours!.sdkCalls, 0);
-    const offTotal = listenRows.reduce((sum, entry) => sum + entry.officialSide!.sdkCalls, 0);
-    const renderOurs = simpleRows.reduce((sum, entry) => sum + entry.ours!.renderCallbacks, 0);
-    const renderOff = simpleRows.reduce((sum, entry) => sum + entry.officialSide!.renderCallbacks, 0);
-    const side = (ours: number, off: number): string =>
-      ours === off ? "两侧持平" : ours > off ? `本库多 ${ours - off}` : `本库少 ${off - ours}`;
-    // ⚠️ 结论句**也**跟着读数走：本轮这两项本库是「少」的，所以不能说「多付」——
-    // 上一版就把「本库的抽象是有成本的」写死，而同一份快照的表恰好否掉它。同一类错两次，
-    // 所以这里连「多付 / 少付」都不预设：只有读数**真的**显示本库更贵时才那么说。
-    const oursHeavier = oursTotal > offTotal || renderOurs > renderOff;
-    const tradeoff = oursHeavier
-      ? "本库在简单路径上**多付**的正是这层组件与生命周期抽象"
-      : oursTotal < offTotal && renderOurs < renderOff
-        ? "本轮这两项本库反而**更少**——简单路径上没体现出「抽象更贵」的代价"
-        : "本轮这两项两侧**方向不一**（见上）";
+  const direction = (ours: number, off: number): string =>
+    ours === off ? "持平" : ours > off ? `本库多 ${ours - off}` : `本库少 ${off - ours}`;
+  if (simpleRows.length > 0) {
+    // 逐场景列，并**点名本库更贵的那几条**——那才是「简单路径成本」要暴露的东西。
+    const heavier = simpleRows.filter(
+      (entry) => entry.ours!.sdkCalls > entry.officialSide!.sdkCalls,
+    );
     lines.push(
-      `**简单路径的结构成本**（跨机成立，与上表毫秒无关）：组件事件绑定的 \`listen\` 调用面` +
-        `累计本库 ${oursTotal} / 官方 ${offTotal}（${side(oursTotal, offTotal)}）；` +
-        `组件渲染次数本库 ${renderOurs} / 官方 ${renderOff}（${side(renderOurs, renderOff)}）。` +
-        `${tradeoff}。本库的结构性收益在下一节（卸载残留归零、大数据更新不重建实例）。` +
-        `哪一边的**毫秒**更小由上表说话，本文不替他下结论。`,
+      "**简单路径的结构成本**（逐场景、跨机成立，与上表毫秒无关）：",
+    );
+    lines.push("");
+    for (const entry of simpleRows) {
+      lines.push(
+        `- \`${entry.id}\`：\`${entry.ours!.callKind}\` 调用面 ` +
+          `本库 ${entry.ours!.sdkCalls} / 官方 ${entry.officialSide!.sdkCalls}` +
+          `（${direction(entry.ours!.sdkCalls, entry.officialSide!.sdkCalls)}）；` +
+          `组件渲染本库 ${entry.ours!.renderCallbacks} / 官方 ${entry.officialSide!.renderCallbacks}` +
+          `（${direction(entry.ours!.renderCallbacks, entry.officialSide!.renderCallbacks)}）。`,
+      );
+    }
+    lines.push("");
+    lines.push(
+      heavier.length > 0
+        ? `**本库更贵的地方在这里**：${heavier.map((entry) => `\`${entry.id}\``).join("、")}` +
+          ` —— 组件与生命周期抽象在这些路径上要多付 ${heavier[0]!.ours!.callKind} 绑定与渲染。` +
+          `代价换来的东西在下一节（卸载残留归零、大数据更新不重建实例）；` +
+          `哪一边的**毫秒**更小由上表说话，本文不替他下结论。`
+        : "本轮简单档**没有**本库更贵的场景（见上）；结构性收益在下一节。",
     );
     lines.push("");
   }

@@ -1,5 +1,5 @@
 {
-  "_comment": "基准/性能测试的类型门禁（issue #37 评审要求：tests/** 此前不在任何 typecheck 的编译范围里，TS 错误只能靠人眼发现 —— 本 PR 就真的漏了一个 TS2554）。范围刻意覆盖 tests/performance/**、#123 的 tests/browser/live-performance/** 与 #140 的 tests/browser/official-contrast/**（它们 import 的 test-utils / src 会被传递纳入）。⚠️ `tests/performance/**/*.mts` 这条是七轮评审补上的：`official-contrast/{reference,referenceReport,bundle}.mts` 三个模块此前**完全不在**本配置的编译范围里，于是 `reference.mts` 里一个从未声明的 `ReferenceEngine` 类型（TS2304）一路绿灯放行——门禁只查**值**、类型错误没人看，是同一条缝。：TS 的 include **不支持 brace expansion**（`*.{ts,mts}` 会匹配 0 个文件——#131 评审实锤），必须拆成两条 pattern。tests/behavior/** 与 packages/**/*.test.ts 有大量既存错误，全量纳入是另一个票的工作量，不能悄悄塞进这张票。与 tsconfig.examples.json 同一形态：独立配置 + noEmit。",
+  "_comment": "基准/性能测试的类型门禁（issue #37 评审要求：tests/** 此前不在任何 typecheck 的编译范围里，TS 错误只能靠人眼发现 —— 本 PR 就真的漏了一个 TS2554）。范围刻意覆盖 tests/performance/**、#123 的 tests/browser/live-performance/** 与 #140 的 tests/browser/official-contrast/**（它们 import 的 test-utils / src 会被传递纳入）。⚠️ `tests/performance/**/*.mts` 这条是七轮评审补上的：`official-contrast/{reference,referenceReport,bundle}.mts` 三个模块此前**完全不在**本配置的编译范围里，于是 `reference.mts` 里一个从未声明的 `ReferenceEngine` 类型（TS2304）一路绿灯放行——门禁只查**值**、类型错误没人看，是同一条缝。TS 的 include **不支持 brace expansion**（`*.{ts,mts}` 会匹配 0 个文件——#131 评审实锤），必须拆成两条 pattern。tests/behavior/** 与 packages/**/*.test.ts 有大量既存错误，全量纳入是另一个票的工作量，不能悄悄塞进这张票。与 tsconfig.examples.json 同一形态：独立配置 + noEmit。",
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
@@ -29,7 +29,6 @@
   },
   "include": [
     "tests/performance/**/*.ts",
-    "tests/performance/**/*.mts",
     "tests/performance/**/*.mts",
     "tests/browser/live-performance/**/*.ts",
     "tests/browser/live-performance/**/*.mts",

@@ -211,6 +211,17 @@ export function checkReferenceResult(
     //
     // 「合法配对」刻意写成**表**而不是 `kind === "fake" ? ... : ...`：将来真上真实 JSAPI
     // 档时，往表里加一行即可；用三元会逼着下一个维护者去改判断逻辑，而那张表是数据。
+    // ⚠️ `mode` 与 `engine.kind` 是**两个判别器**，必须**一起**判：各自放行时，
+    // `mode: "fake-v4"` 配 `kind: "real"` 能过全部校验，而渲染层会照着 `kind` 印出
+    // 「引擎：真实 JSAPI 4.0」——决策 22 说要堵的「冒充真实 JSAPI」那条路，从上一层
+    // 又通了。判据：`mode` 说的是本档怎么跑，`kind` 说的是引擎是谁，两者必须指向同一个档。
+    if (value.mode === "fake-v4" && value.engine.kind !== "fake") {
+      issues.push(
+        `REFERENCE_MODE_KIND_MISMATCH: mode=${String(value.mode)} 与 engine.kind=` +
+          `${String(value.engine.kind)} 指向不同的档——本档是 Fake v4 跑出来的读数，` +
+          "不能标成真实 JSAPI",
+      );
+    }
     const expectedVersion = ENGINE_VERSION_BY_KIND[value.engine.kind as EngineKind];
     if (expectedVersion !== undefined && value.engine.version !== expectedVersion) {
       issues.push(

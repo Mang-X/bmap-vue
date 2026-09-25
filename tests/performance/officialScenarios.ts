@@ -94,7 +94,13 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     ours: ["Map"],
     official: "Map",
     size: null,
-    measures: "一张地图的建立与释放（挂载→ready→卸载），含资源销账。",
+    // ⚠️ 「cold」只到**实例**级：每个采样都新建一份 Map（无跨采样复用），但进程跑过
+    // WARMUP 轮、被取中位数的是预热后的采样。所以这是「每轮都新建 Map」，**不是**首次
+    // 冷启动。票面写的是 "Map cold mount"，不写清楚会被读成「进程级冷启动读数」——
+    // 而进程级冷启动在同机对照里根本不可比（谁先跑谁吃亏）。
+    measures:
+      "一张地图的建立与释放（挂载→ready→卸载），含资源销账。" +
+      "**冷只在实例级**：每轮新建 Map，但进程已预热、被取中位数的是预热后采样。",
     tier: "simple",
   },
   {

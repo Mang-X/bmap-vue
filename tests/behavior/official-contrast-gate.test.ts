@@ -42,6 +42,7 @@ import { decideLiveContrastExit } from "../browser/official-contrast/report.mts"
 import {
   checkReferenceResult,
   type ReferenceResult,
+  type ReferenceScenario,
 } from "../performance/official-contrast/reference.mts";
 import {
   formatReferenceReport,
@@ -457,11 +458,36 @@ ${issues.join("\n")}`).toEqual([]);
     // `git rev-parse HEAD` 记下的是**父提交**——那个 commit 里根本没有 `engine` 字段。
     // 渲染层却把这个 SHA 当权威来源印在表头。判据因此必须是「那个 commit 里存在这份文件」。
     const ref = snapshot() as { sourceCommit: string };
-    const atCommit = execFileSync(
-      "git",
-      ["show", `${ref.sourceCommit}:tests/performance/official-contrast/recorded-result.json`],
-      { cwd: repoRoot, encoding: "utf8" },
-    );
+    // ⚠️ 浅克隆（`--depth 1`）里那个 commit **取不到**，`git show` 抛 `fatal: invalid object`。
+    // 那是**环境没拉全**，不是 provenance 造假——两者必须分开，否则贡献者在自己机器上
+    // 看到一条「快照在说谎」的假警报，而真正的造假反而被同一条噪音盖住。
+    // CI 的 `official-contrast` 与 `quality` job 都用 `fetch-depth: 0`，所以那边判据照常生效。
+    let atCommit: string;
+    try {
+      atCommit = execFileSync(
+        "git",
+        ["show", `${ref.sourceCommit}:tests/performance/official-contrast/recorded-result.json`],
+        { cwd: repoRoot, encoding: "utf8" },
+      );
+    } catch {
+      const isShallow =
+        execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
+          cwd: repoRoot,
+          encoding: "utf8",
+        }).trim() === "true";
+      if (isShallow) {
+        // 浅克隆**核不了历史**：这是环境没拉全，不是快照说谎。明说「本次没验」，
+        // 既不假装通过、也不谎报造假；CI 用 `fetch-depth: 0`，那边照常生效。
+        console.warn(
+          "[#140] 浅克隆：本次跳过 sourceCommit 核对（`git fetch --unshallow` 后可验）",
+        );
+        return;
+      }
+      throw new Error(
+        `sourceCommit ${ref.sourceCommit} 取不到，且仓库不是浅克隆——` +
+          "这通常意味着该 commit 已被 rebase / force-push 掉，快照的 provenance 真的失效了",
+      );
+    }
     // 比对**内容**而非只查存在：重录后快照必然与旧 commit 里的不同，那属于正常——
     // 真正要抓的是「这个 SHA 下压根没有这份文件 / 有但结构不是同一份 schema」。
     const historic = JSON.parse(atCommit) as { engine?: unknown; version?: number };
@@ -587,24 +613,75 @@ ${issues.join("\n")}`).toEqual([]);
     expect(text, "人读视图预设了方向（本库更贵/更快）").not.toMatch(/本库的.{0,8}是有成本的/);
   });
 
-  it("「简单路径成本」的结论句**跟着读数走**（不得预设本库更贵）", () => {
-    // 票面验收第二条要报告**解释**「简单路径成本」。此前这里只有一句「方向由数据决定」——
-    // 那是不解释，把责任推给读表的人；补上结构成本后又差点把「本库多付」写死，而本轮
-    // 数据恰好显示本库 listen / render 都**更少**。同一类错犯两次，所以钉死：
-    // 结论句必须随读数变化，且当前读数下不得出现「多付」。
-    const cheap = formatReferenceReport(snapshot() as ReferenceResult);
-    expect(cheap, "没解释简单路径成本").toMatch(/简单路径的结构成本/);
+  it("「简单路径成本」**逐场景**说，不求和（求和会与相邻表格矛盾）", () => {
+    // 上一版把简单档 listen/render 求和后只报一个方向，而它上面那张表里
+    // `map-cold-mount` 是本库**多**、只有 `marker-100-mount` 是本库少——求和既与表格
+    // 直接矛盾，又把「本库在哪条路上更贵」抹掉了。成本发生在**某条路径**上，不是标量。
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    expect(text, "结构成本没逐场景列").toMatch(/简单路径的结构成本/);
+    const simple = (snapshot() as { scenarios: ReferenceScenario[] }).scenarios.filter(
+      (entry) => entry.official !== null && ["map-cold-mount", "marker-100-mount"].includes(entry.id),
+    );
+    for (const entry of simple) expect(text).toContain(entry.id);
+    // 方向相反的两行必须**都**如实出现——不能只报一个合计。
+    expect(text).toMatch(/本库多 \d+/);
+    expect(text).toMatch(/本库少 \d+/);
+  });
 
-    const heavy = snapshot() as ReferenceResult;
-    const marker = heavy.scenarios.find((entry) => entry.ours !== null);
-    expect(marker?.ours).toBeTruthy();
-    (marker!.ours as { sdkCalls: number }).sdkCalls = 99_999;
-    (marker!.ours as { renderCallbacks: number }).renderCallbacks = 99_999;
-    const expensive = formatReferenceReport(heavy);
-    expect(expensive, "读数显示本库更重时，结论句没跟着变").not.toBe(cheap);
-    expect(expensive).toMatch(/多付/);
-    // 当前这份快照本库更少 ⇒ 报告不得说「多付」。
-    expect(cheap, "结论句预设了本库更贵——被自己的数据否掉过一次").not.toMatch(/多付/);
+  it("本库更贵的那条简单路径**被点名**（票面要「暴露简单路径成本」）", () => {
+    // 求和口径的真正危害：它恰好会吞掉这一条。读数显示 map-cold-mount 本库 listen 43/5
+    // 更贵时，报告必须**说出来**；若哪天不再更贵，措辞也得跟着消失。
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    const map = (snapshot() as { scenarios: ReferenceScenario[] }).scenarios.find(
+      (entry) => entry.id === "map-cold-mount",
+    );
+    const oursMore = (map?.ours?.sdkCalls ?? 0) > (map?.officialSide?.sdkCalls ?? 0);
+    if (oursMore) {
+      expect(text, "本库更贵的路径没被点名").toMatch(/本库更贵的地方在这里/);
+      expect(text).toContain("map-cold-mount");
+    } else {
+      expect(text, "读数已反转，措辞仍在说本库更贵").not.toMatch(/本库更贵的地方在这里/);
+    }
+  });
+
+  it("引擎三件套的每条校验**都能红**（逐条注入，不靠一条综合断言）", () => {
+    // 上一轮引入了 PAIR_MISMATCH，但**没有单测碰过**——决策 22 的招牌修复是未验证的。
+    // 逐条注入，确认每条 code 真的会发出来。
+    /** 从磁盘快照出发、改一处、交给校验——每次都重新读，避免测试间互相污染。 */
+    const check = (mutate: (d: Record<string, any>) => void): string[] => {
+      const draft = snapshot() as Record<string, any>;
+      mutate(draft);
+      return checkReferenceResult(draft, {
+        scenarioIds: CONTRAST_SCENARIO_IDS,
+        datasetVersion: DATASET_VERSION,
+      });
+    };
+    expect(check((d) => delete d.engine)).toContain("REFERENCE_ENGINE_MISSING");
+    expect(check((d) => (d.engine.kind = "unknown"))).toContain(
+      "REFERENCE_ENGINE_KIND_UNKNOWN: unknown",
+    );
+    expect(check((d) => (d.engine.version = ""))).toContain("REFERENCE_ENGINE_VERSION_MISSING");
+    // ⚠️ `toContain` 对数组要求**精确元素**，不吃 `expect.stringContaining`；这里断言
+    // 「issues 里有一条**提到**该 code」而不是「数组里有这个精确字符串」。
+    expect(check((d) => (d.engine.version = "4.0")).join("\n")).toContain(
+      "REFERENCE_ENGINE_PAIR_MISMATCH",
+    );
+    expect(check((d) => (d.engine.oursUnderTest = "wasm"))).toContain(
+      "REFERENCE_ENGINE_OURS_UNDER_TEST_UNKNOWN: wasm",
+    );
+  });
+
+  it("`mode` 与 `engine.kind` **必须指向同一档**（不得冒充真实 JSAPI）", () => {
+    // 这条是上一轮漏的：两个判别器各自放行时，`mode: "fake-v4"` 配 `kind: "real"` 能过
+    // 全部校验，而渲染层会照 kind 印出「引擎：真实 JSAPI 4.0」——决策 22 要堵的冒充，
+    // 从上一层又通了。
+    const fakeModeRealKind = snapshot() as Record<string, any>;
+    fakeModeRealKind.engine = { kind: "real", version: "4.0", oursUnderTest: "source" };
+    const issues = checkReferenceResult(fakeModeRealKind, {
+      scenarioIds: CONTRAST_SCENARIO_IDS,
+      datasetVersion: DATASET_VERSION,
+    });
+    expect(issues.join("\n")).toContain("REFERENCE_MODE_KIND_MISMATCH");
   });
 
   it("人读视图里的结构数字**取自快照**而非写死", () => {
