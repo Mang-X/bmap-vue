@@ -452,6 +452,29 @@ ${issues.join("\n")}`).toEqual([]);
     expect(ref.environment).toBeTruthy();
   });
 
+  it("⚠️ `sourceCommit` 指向的 commit **真的包含这份快照**（provenance 不是摆设）", () => {
+    // 上一版只断言「是个 SHA」，于是**假 provenance 一路绿灯**：我在改动还没提交时录了快照，
+    // `git rev-parse HEAD` 记下的是**父提交**——那个 commit 里根本没有 `engine` 字段。
+    // 渲染层却把这个 SHA 当权威来源印在表头。判据因此必须是「那个 commit 里存在这份文件」。
+    const ref = snapshot() as { sourceCommit: string };
+    const atCommit = execFileSync(
+      "git",
+      ["show", `${ref.sourceCommit}:tests/performance/official-contrast/recorded-result.json`],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    // 比对**内容**而非只查存在：重录后快照必然与旧 commit 里的不同，那属于正常——
+    // 真正要抓的是「这个 SHA 下压根没有这份文件 / 有但结构不是同一份 schema」。
+    const historic = JSON.parse(atCommit) as { engine?: unknown; version?: number };
+    expect(historic.version, "该 commit 里的快照 schema 版本对不上").toBe(
+      (snapshot() as { version: number }).version,
+    );
+    expect(
+      historic.engine,
+      `sourceCommit ${ref.sourceCommit} 处的快照没有 engine 字段——` +
+        "这个 SHA 记的不是录出这份快照的那次跑（多半是改动未提交时录的）",
+    ).toBeTruthy();
+  });
+
   it("官方版本仍是票面锁定的 1.0.1（快照也不能悄悄换基线）", () => {
     expect((snapshot() as { officialVersion: string }).officialVersion).toBe(
       OFFICIAL_BASELINE_VERSION,

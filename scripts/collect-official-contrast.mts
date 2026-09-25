@@ -72,6 +72,7 @@ import {
 } from "../tests/performance/official-contrast/report.mts";
 import { CONTRAST_SCENARIOS } from "../tests/performance/officialScenarios.ts";
 import {
+  ENGINE_VERSION_BY_KIND,
   REFERENCE_RESULT_VERSION,
   toReferenceSide,
   type ReferenceEnvironment,
@@ -231,28 +232,31 @@ function decide(report: ContrastReport): ContrastDecision {
  * 它的"版本"就是这串字符串——写进快照，是为了**如实记下**测的到底是哪套引擎，
  * 而不是含糊地让 "4.0" 指代一个从未加载过的官方 SDK。
  */
-const FAKE_ENGINE_VERSION = "fake-v4";
-
-/** 本采集脚本只跑 Fake 档；快照的 `mode` 与引擎三件套都从它来，避免两处写死漂掉。 */
+/** 本采集脚本只跑 Fake 档。`mode` 与 `engine.version` 都从 `reference.mts` 的配对表取。 */
 const RECORDED_MODE: ReferenceResult["mode"] = "fake-v4";
 
 /** 快照的入库路径（唯一的数据事实源；人读视图由它派生，不手写第二份数字）。 */
 /**
- * 由报告信封 + 运行档位拼出快照的机器身份（字段名只在这里一处落地一次）。
+ * 由报告信封拼出快照的机器身份（字段名只在这里一处落地一次）。
  *
  * `dom` 由 `mode` 决定而非写死：本档是 Fake v4 + happy-dom，但把 "happy-dom" 硬编码在
  * 调用点，等于宣称「将来任何 mode 都是 happy-dom」——那会把新档的机器标错还不报错。
  */
-function toReferenceEnvironment(
-  envelope: { platform: string; arch: string; cpuModel: string; node: string },
-  mode: ReferenceResult["mode"],
-): ReferenceEnvironment {
+function toReferenceEnvironment(envelope: {
+  platform: string;
+  arch: string;
+  cpuModel: string;
+  node: string;
+}): ReferenceEnvironment {
   return {
     platform: envelope.platform,
     arch: envelope.arch,
     cpuModel: envelope.cpuModel,
     node: envelope.node,
-    dom: mode === "fake-v4" ? "happy-dom" : undefined,
+    // ⚠️ 刻意**不加** `mode === "fake-v4" ? … : undefined` 这种前瞻分支：`mode` 现在就是
+    // 字面量类型 `"fake-v4"`，那个 `undefined` 分支**不可达**，写它等于对着一份不存在的
+    // 未来编故事。真出第二种 mode 时，TS 会在这里报错，那时再改。
+    dom: "happy-dom",
   };
 }
 
@@ -294,7 +298,7 @@ function recordReference(report: ContrastReport): void {
     // 让渲染层**据此加限定语**，而不是让读者默认「测的是发布物 × 真实 JSAPI」。
     engine: {
       kind: "fake",
-      version: FAKE_ENGINE_VERSION,
+      version: ENGINE_VERSION_BY_KIND.fake,
       // 量的是 src/**，不是 tarball——`oursVersion` 读自 package.json，说的是版本号，
       // 不是「被加载的那个构建」。两者都真，合起来才是误导。
       oursUnderTest: "source",
@@ -307,7 +311,7 @@ function recordReference(report: ContrastReport): void {
     // ⚠️ 字段名**不在这里重打一遍**：`ReferenceEnvironment` 加字段时，编排若还手写这份
     // 字面量就会静默漏掉新增字段（TS 不报错——少一个可选字段照样过）。`mode` 决定 DOM，
     // 不是在这里写死 "happy-dom"：将来真加一档别的 mode，写死会把这档的机器标错。
-    environment: toReferenceEnvironment(report.envelope, RECORDED_MODE),
+    environment: toReferenceEnvironment(report.envelope),
     scenarios: report.scenarios.map((entry) => ({
       id: entry.id,
       official: entry.official,

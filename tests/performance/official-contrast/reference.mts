@@ -75,6 +75,56 @@ export interface ReferenceScenario {
   readonly officialSkippedReason?: string;
 }
 
+/** 引擎种类。 */
+export type EngineKind = "fake" | "real";
+
+/** 本仓库 Fake 替身的引擎版本标识。票面写的是「同 JSAPI 4.0」，本档**没有**真实 JSAPI。 */
+export const FAKE_ENGINE_VERSION = "fake-v4";
+
+/** 真实档的引擎版本（票面锁定 JSAPI 4.0，`v=4.0`）。本轮未实跑。 */
+export const REAL_ENGINE_VERSION = "4.0";
+
+/**
+ * `engine.kind` → 引擎版本的**唯一**配对表（`kind` 与 `version` 必须成对自洽）。
+ *
+ * ⚠️ 这张表是**事实源**：`collect-official-contrast.mts` 从它取 `engine.version`，
+ * `checkReferenceResult` 拿它验「已入库的快照有没有自相矛盾」。两处各写一份就是两份事实源。
+ */
+export const ENGINE_VERSION_BY_KIND = {
+  fake: FAKE_ENGINE_VERSION,
+  real: REAL_ENGINE_VERSION,
+} as const satisfies Record<EngineKind, string>;
+
+/**
+ * **实际被测的是什么**（票面「同环境、同 JSAPI 4.0」在 Fake 档不成立，得写进数据）。
+ *
+ * 票面对照版本写的是「本库最终 1.0 RC tarball」、环境写的是「同 JSAPI 4.0」。本档两条都
+ * 达不到：无 AK ⇒ 没有真实 JSAPI 可加载（`jsapi-loader` 复用已存在的 `window.BMap`），
+ * 而组件场景量的是 `src/**` 而不是打包产物。**达不成就写清楚**，而不是让 `mode: "fake-v4"`
+ * 埋在 JSON 里、让人读视图照旧摆出一张「同 JSAPI 4.0」模样的表。
+ */
+export interface ReferenceEngine {
+  /** `fake` = 本仓库 Fake v4 替身；`real` = 真实 JSAPI。 */
+  readonly kind: EngineKind;
+  /**
+   * 引擎版本：Fake 档为 `fake-v4`；真实档是票面锁定的 `4.0`（`v=4.0`）。
+   *
+   * ⚠️ 与 `kind` **成对校验**，不各自放行：`kind: "fake"` 配 `version: "4.0"` 会让这组读数
+   * 冒充「跑在真实 JSAPI 4.0 上」——正是本票最忌讳的那类含糊（同一个坑 AGENTS.md 在引擎
+   * 取值上也钉过）。单看 `kind` 或单看 `version` 都挡不住，判据见 `checkReferenceResult` 的
+   * `REFERENCE_ENGINE_PAIR_MISMATCH`。
+   */
+  readonly version: string;
+  /**
+   * 本库侧被测的是**源码还是产物**。
+   *
+   * ⚠️ 这一栏存在的理由：场景导入 `packages/bmap-vue/src/**`，而快照同时记着
+   * `oursVersion: 1.0.0-rc.0`（读自 `package.json`）。两个都真，但**合起来是误导**——
+   * provenance 说的那个构建从未被加载过。不写这一栏，读者会默认「测的是发布物」。
+   */
+  readonly oursUnderTest: "source" | "dist";
+}
+
 /** 入库的实测快照。**只承担 provenance，不参与任何毫秒判定。** */
 export interface ReferenceResult {
   readonly version: number;
@@ -154,6 +204,19 @@ export function checkReferenceResult(
     }
     if (typeof value.engine.version !== "string" || value.engine.version === "") {
       issues.push("REFERENCE_ENGINE_VERSION_MISSING");
+    }
+    // ⚠️ `kind` 与 `version` **成对**判，不各自放行：分开看都合法的一对（`fake` + `4.0`）
+    // 正是这张票最忌讳的含糊——读数会冒充「跑在真实 JSAPI 4.0 上」。这是 AGENTS.md 对引擎
+    // 取值那条要求的同一类：命名空间与版本必须自洽，不能各说各话。
+    //
+    // 「合法配对」刻意写成**表**而不是 `kind === "fake" ? ... : ...`：将来真上真实 JSAPI
+    // 档时，往表里加一行即可；用三元会逼着下一个维护者去改判断逻辑，而那张表是数据。
+    const expectedVersion = ENGINE_VERSION_BY_KIND[value.engine.kind as EngineKind];
+    if (expectedVersion !== undefined && value.engine.version !== expectedVersion) {
+      issues.push(
+        `REFERENCE_ENGINE_PAIR_MISMATCH: kind=${String(value.engine.kind)} ` +
+          `配 version=${String(value.engine.version)}，该 kind 的版本应是 ${expectedVersion}`,
+      );
     }
     if (value.engine.oursUnderTest !== "source" && value.engine.oursUnderTest !== "dist") {
       issues.push(`REFERENCE_ENGINE_OURS_UNDER_TEST_UNKNOWN: ${String(value.engine.oursUnderTest)}`);
