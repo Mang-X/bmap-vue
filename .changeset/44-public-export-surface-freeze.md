@@ -55,14 +55,18 @@ Runtime / Registry / Scope。issue 的决策门明确「禁止『先全导出以
   `plugins` 9 / `ui-kit` 21（`resolver` 0）。这些类型在报告里只剩一个名字、结构漂移不改基线
   文本，**名字集合**是唯一还能看见它们的量；比条数会漏掉「删一个 + 新增一个」与「先降后涨回」
   （#159 二轮评审 P1），所以新增与清理都得经 `pnpm generate:api` 在 diff 里留痕。
+- **每个出口都有一份类型级签名基线** `packages/bmap-vue/etc/<出口>/bmap-vue.dts.md`
+  （`dist/<出口>.d.ts` 经 TypeScript printer `removeComments` 规范化后的全文）：`MapProps`、
+  组件的 props / emits / slots / 暴露方法、根入口函数签名、以及**未导出类型的结构**一改就红。
+  后者是 report 与身份集合都看不见的那层 —— `ae-forgotten-export` 在 report 里只留
+  `getInputValue: typeof getInputValue` 这种名字引用，签名一改两层都不动（#159 三轮评审 P1）。
+  AE 分析不了 ≠ 没有基线。
 - 根入口与 `./components` **进不了 API report**：Volar 生成的多声明 `var`（`__VLS_1` / `__VLS_3` /
   `__VLS_5`）没被 `bundleTypes` 带进合并后的 d.ts，留下悬空引用，AE 抛
   `Symbol not found for identifier: __VLS_*`。这不是本票引入的（源与打包配置都没动），门禁对这两个
   出口跑**探针**并断言失败模式仍是这一种——阻塞被修好或变质都会红。
-  同时它们各有一份**类型级签名基线** `packages/bmap-vue/etc/<出口>/bmap-vue.dts.md`
-  （`dist/<出口>.d.ts` 经 TypeScript printer `removeComments` 规范化后的全文）：`MapProps`、
-  组件的 props / emits / slots / 暴露方法、根入口函数签名一改就红。AE 分析不了 ≠ 没有基线。
-  另有 `check:public-dts` + 上面的值集合测试 + `generate:api-diff:check` + `verify:package` 四道守。
+  对这两个出口，签名基线就是它们**唯一**的类型面基线。另有 `check:public-dts` + 上面的值集合测试 +
+  `generate:api-diff:check` + `verify:package` 四道守。
 
 `UseSdkResourceOptions` 作为**未导出**的参数类型仍出现在 `dist/index.d.ts` 的 `useSdkResource`
 签名里：它进不了「声明文本里不得出现」的名单（那样必然误报），但**已经**被上面那份根入口签名基线
@@ -72,5 +76,5 @@ Provider 家族迁进 `./advanced` 时留下的注入面欠账**已收口**（#1
 与 `loader?: ScriptLoader` 引用的两个类型没有被导出，而它们又带私有成员、外部**无法构造** ——
 留在公共选项里就是「赋不了值、结构也不进报告」的假支持，因此从公共选项**移除**，只留在内部选项里。
 可构造的那部分反过来**补上了导出**：`OfficialJsapiLoader` / `OfficialJsapiLoadOptions` /
-`JsapiV4ScriptMode` / `JsapiV4Provider`。结构仍不可见的存量由身份集合基线兜底，逐条清理是后续票的事。
+`JsapiV4ScriptMode` / `JsapiV4Provider`。未导出类型的存量由**身份集合**（守名字）与**签名基线**（守结构）两层兜底，逐条清理是后续票的事。
 详见 [ADR 2026-09-25 后果](../docs/adr/2026-09-25-public-export-surface-freeze.md)。

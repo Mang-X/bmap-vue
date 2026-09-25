@@ -123,19 +123,23 @@ Vite 构建入口去掉 `core`、`verify:package` 的必需子路径清单去掉
 读这些字段，加进去只会把 Capability Catalog 与 API diff **抄第二遍**，制造新的漂移面。
 `generate:manifest:check` 已经在守「生成物无手工漂移」。
 
-### 5. API report：5 份基线 + 2 份签名基线 + 2 个**探针**（而不是静默跳过）
+### 5. API report + 身份集合 + 7 份签名基线 + 2 个**探针**（而不是静默跳过）
 
 `scripts/check-api.mts`（`pnpm check:api` / `pnpm generate:api`）：
 
 - **有基线**：`./advanced` `./composables` `./plugins` `./resolver` `./ui-kit` ——
   报告在 `packages/bmap-vue/etc/<出口>/bmap-vue.api.md`，与基线不一致就红，
   这就是「API report 只有经过审核的新 1.0 面」那条验收。
-- **没有 report 但有类型级签名基线**：`.` 与 `./components` 在
-  `etc/<出口>/bmap-vue.dts.md` —— 它是 `dist/<出口>.d.ts` 经 TypeScript printer
-  （`removeComments: true`）规范化后的全文快照。**只有探针等于「已知分析不了 ⇒ 没人守」**：
-  AE 分析不了不等于这两个出口没有基线，`MapProps`、组件的 props / emits / slots / 暴露方法、
-  根入口函数签名一改就红（#159 评审 P1-1；走的是评审给的第二条路 —— 修 Volar `__VLS_`
-  打包属于另一件事，见「非目标」）。
+- **每个出口都有一份类型级签名基线**：`etc/<出口>/bmap-vue.dts.md` —— 它是 `dist/<出口>.d.ts`
+  经 TypeScript printer（`removeComments: true`）规范化后的全文快照，`pnpm generate:api` 生成、
+  全等比对。**只有探针等于「已知分析不了 ⇒ 没人守」**：AE 分析不了不等于没有基线，`MapProps`、
+  组件的 props / emits / slots / 暴露方法、根入口函数签名一改就红（#159 评审 P1-1；走的是评审
+  给的第二条路 —— 修 Volar `__VLS_` 打包属于另一件事，见「非目标」）。
+  有 report 的五个出口同样要这一层：`ae-forgotten-export` 在 report 里只留
+  `getInputValue: typeof getInputValue` 这种**名字引用**，底下那个函数的签名一改，report 文本与
+  名字集合**都不动** —— 三轮评审 P1 拿 `./ui-kit` 的 `getInputValue()` 举了这个例子，实测把返回
+  类型改成 `Promise<string | undefined>` 后只有签名基线红，另外两层全绿。三层的分工因而是：
+  report 守**已导出**面、身份集合守**未导出类型的名字**、签名基线守**结构**（含 AE 展不开的那部分）。
 - **没有基线但每次真的跑一遍**：同一个 `.` 与 `./components` 还各有一道**探针**。API Extractor
   的符号表无法分析 Volar 生成的**多声明 `var`**（`declare var __VLS_1: {...}, __VLS_3: {...};`），
   `vite-plugin-dts` 的 `bundleTypes` 又没把它带进合并后的声明，于是 `dist/index.d.ts` 与
@@ -149,7 +153,9 @@ Vite 构建入口去掉 `core`、`verify:package` 的必需子路径清单去掉
   27」，遂改成集合）。原因见「后果」：这类类型在报告里只剩一个名字、结构漂移不会改变基线
   文本，**名字**是唯一还能看见它们的量；新增与清理**两个方向**都要跑 `pnpm generate:api`
   才变绿，于是每次消长都必须出现在评审 diff 里。存量清零之后这些文件就是 `[]` —— 门禁从
-  「存量清单」变成「零容忍」，机制本身要留着，它就是那道 freeze 门。
+  「存量清单」变成「零容忍」，机制本身要留着，它就是那道 freeze 门。它只管**名字**：同名结构
+  的漂移由该出口的签名基线守（上一层），两层缺一不可 —— 集合不看结构，快照不看「这个名字该不该
+  被导出」。
 
 `--local` 写基线时还有一条**回滚**规则：AE 是先落盘、后判定成败的（`_writeApiReport` 早于
 success 判定），`localBuild` 下即使分析报错也会覆盖既有基线。所以报错时先把文件恢复成运行前的
@@ -171,8 +177,8 @@ success 判定），`localBuild` 下即使分析报错也会覆盖既有基线�
 **正面**
 
 - 冻结面第一次变成**可执行的**：根入口 + 六个子入口的值导出集合（7 个 `exports` 键，另有
-  `./package.json`）、五份 API report、两个出口的类型级签名基线、组件集合与 Manifest 的
-  相等关系，四处都是一改就红。
+  `./package.json`）、五份 API report、五份未导出类型身份集合、**七个出口**的类型级签名基线、
+  组件集合与 Manifest 的相等关系，五处都是一改就红。
 - `./advanced` 成为唯一的扩展契约入口，v4 Provider 家族只此一处（根入口反证也钉住）。
 - `./core` 的 105 个值导出里，**82 个内部实现**不再被冻结成 3.0 的契约；另外 23 个本来就有
   根入口 / `./advanced` 这两个落点，取消子路径不改变它们的公共身份。
@@ -207,12 +213,13 @@ success 判定），`localBuild` 下即使分析报错也会覆盖既有基线�
   `JsapiV4Provider`（AE 报告**不渲染 `private` 成员** —— `ApiReportGenerator` 对
   `ModifierFlags.Private` 直接 `return false` —— 所以返回契约只含 `id` / `getCacheKey` / `load`，
   实现里的私有状态不会被冻结）。
-- **结构仍不可见的存量**由 `etc/<出口>/forgotten-exports.json` 的**身份集合**兜底（全等才通过）：
-  `advanced` 27 / `composables` 41 / `plugins` 9 / `ui-kit` 21（`resolver` 已是 0）。逐条决定
-  「导出还是收窄签名」是后续票的事，这条门保证它不会**静默变多**、也不会**换个名字进来**：
-  只比条数时「同一次改动里删一个 + 新增一个」与「先降到 26、下次再涨回 27」都不改变读数
-  （#159 二轮评审 P1 举的两个漏法），集合基线两种都拦 —— 新增的名字不在基线里，清理掉的
-  名字还留在基线里，各自都得经 `pnpm generate:api` 才能变绿。
+- **未导出类型的存量分两层守**：`etc/<出口>/forgotten-exports.json` 的**身份集合**（全等才通过）
+  守「名字有没有换」—— `advanced` 27 / `composables` 41 / `plugins` 9 / `ui-kit` 21
+  （`resolver` 已是 0）；同名**结构**的漂移由该出口的**签名基线**守，因为 report 对这类引用只写
+  `typeof getInputValue`，看不见结构（#159 三轮评审 P1）。逐条决定「导出还是收窄签名」是后续票
+  的事，这两条门保证它不会**静默变多**、不会**换个名字进来**、也不会**原地改形状**：只比条数时
+  「同一次改动里删一个 + 新增一个」与「先降到 26、下次再涨回 27」都不改变读数（#159 二轮评审 P1
+  举的两个漏法），集合基线两种都拦，两个方向都得经 `pnpm generate:api` 才能变绿。
 
 **回滚**
 

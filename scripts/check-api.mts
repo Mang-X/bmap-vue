@@ -18,16 +18,19 @@
  * 于是 `dist/index.d.ts` / `dist/components.d.ts` 里留下 `typeof __VLS_1` 这样的**悬空引用**，
  * API Extractor 一碰到就抛 `Symbol not found for identifier: __VLS_*`。
  *
- * 因此本门禁对这两个出口分两道：
+ * 因此本门禁分三层，**每个出口都有一层签名基线**：
  *
- * - **探针**：每次运行都真的跑一遍 AE，并断言失败模式仍然是这一种。一旦它被修好（或变成
- *   别的错误）门禁会红，提示把这两个出口加进 `REPORTED`。**跳过而不探测**才是真正的风险：
- *   没人会发现阻塞已经消失或变质。
- * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 评审 P1-1）：AE 分析不了不等于
- *   这两个出口没有基线。它是 `dist/<出口>.d.ts` 经 TypeScript printer
- *   （`removeComments: true`）规范化后的全文快照——`MapProps`、组件的 props / emits /
- *   slots / 暴露方法与根入口函数签名一改就红，`pnpm generate:api` 更新基线。
- *   只有探针没有基线，等于「已知分析不了 ⇒ 这两个出口的类型面没人守」。
+ * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 评审 P1-1 引入、三轮评审 P1 推广到
+ *   全部七个出口）：`dist/<出口>.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的
+ *   全文快照，`pnpm generate:api` 生成、全等比对。对 `.` / `./components` 它是**唯一**的基线
+ *   （AE 根本分析不了它们）；对五个有 report 的出口，它补的是 report 补不到的那一层 ——
+ *   `ae-forgotten-export` 在 report 里只留 `getInputValue: typeof getInputValue` 这种**名字引用**，
+ *   底下那个函数的签名一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红
+ *   （#159 三轮评审 P1 举的例子）。只有 report 没有快照，等于「未导出类型的结构没人守」。
+ * - **探针**（只对 `.` / `./components`）：每次运行都真的跑一遍 AE，并断言失败模式仍然是这一种。
+ *   一旦它被修好（或变成别的错误）门禁会红，提示把这两个出口加进 `REPORTED`。
+ *   **跳过而不探测**才是真正的风险：没人会发现阻塞已经消失或变质。
+ * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：见下节。
  *
  * 另外五道门继续守根入口与组件的其余面：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
  * `tests/behavior/export-surface-freeze.test.ts`（值导出精确集合）、
@@ -72,6 +75,9 @@ const REPORTED = ["advanced", "composables", "plugins", "resolver", "ui-kit"] as
 
 /** 已知无法分析的出口：探针断言失败模式，而不是静默跳过。 */
 const KNOWN_BLOCKED = ["index", "components"] as const;
+
+/** 七个出口：签名基线对每个出口都生效，report / 身份集合只对 REPORTED 生效。 */
+const ALL_ENTRIES: readonly Entry[] = [...REPORTED, ...KNOWN_BLOCKED];
 
 /** Volar 悬空引用的失败特征。换成别的错误 ⇒ 门禁红，要求重新评估名单。 */
 const KNOWN_BLOCKER_PATTERN = /Symbol not found for identifier: __VLS_/;
@@ -325,10 +331,11 @@ function updateMode(): void {
         `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}) → ${target}`,
     );
   }
-  for (const entry of KNOWN_BLOCKED) writeSignatureBaseline(entry);
+  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
+  for (const entry of ALL_ENTRIES) writeSignatureBaseline(entry);
 }
 
-/** 写两个 AE 分析不了的出口的类型级签名基线。 */
+/** 写某个出口的类型级签名基线（七个出口都写）。 */
 function writeSignatureBaseline(entry: string): void {
   const target = signaturePath(entry);
   mkdirSync(dirname(target), { recursive: true });
@@ -483,13 +490,13 @@ function checkMode(): void {
   console.log(
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
       `${REPORTED.length} 份未导出类型身份集合基线一致，` +
-      `${KNOWN_BLOCKED.length} 份类型级签名基线一致`,
+      `${ALL_ENTRIES.length} 份类型级签名基线一致`,
   );
 }
 
-/** AE 分析不了的两个出口：比对 `etc/<entry>/bmap-vue.dts.md` 与当前 `dist` 的规范化签名。 */
+/** 每个出口：比对 `etc/<entry>/bmap-vue.dts.md` 与当前 `dist` 的规范化签名。 */
 function checkSignatureBaselines(failures: string[]): void {
-  for (const entry of KNOWN_BLOCKED) {
+  for (const entry of ALL_ENTRIES) {
     const target = signaturePath(entry);
     if (!existsSync(target)) {
       failures.push(`${entry}: 签名基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`);
