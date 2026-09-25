@@ -178,7 +178,7 @@
 
 迁移路径：`none` → （无）
 
-没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。改用官方 4.0 原生图层（`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。
+没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。改用官方 4.0 原生图层（`PointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。
 
 版本锁定：**自带版本号** —— URL 内含精确版本 `mapvgl@1.0.0-beta.188`（unpkg）⇒ 版本可追踪，仍同时用 artifactDigest 锁内容。
 

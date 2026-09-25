@@ -49,7 +49,7 @@
 | 同 hooks 的 `viewAnimation` 句柄 ref + `setKeyFrames` 两段式 + `disableDragging` | 同上 | 只有文档 | 句柄每次 `start()` 都被换掉、`disableDragging` 从未生效 ⇒ 退化成常量 | **REMOVE** | #104 A2 一并删除；`status` 改成**观察值**（`idle` / `playing`），命令不乐观改写它 —— 唯一例外是本库对自己那次取消的交付确认（形状见下面两行） |
 | MapDriver 的视角动画 teardown：`AnimationRecord{started,settled,cancelRequested}` + `Teardown{disposed,disposing,tornDown,released,deferredFinish,fallbackTimer}` | `driver/jsapi-v4/map.ts:193-210` | `MapDriver.destroy` / `startViewAnimation`，约 20 条行为用例 | 记账对象是**我们自己**发起的启动/取消/销毁次序 ⇒ `OWNED`，合法；其前提「`animationstart` 在内部控制器构造前派发、启动前 `cancelViewAnimation` 抛 `TypeError`」原为 `FAKE-ONLY`，**2026-09-21 已由真实 AK 读数升级为 `PROBED`**（见下方 F-1） | **KEEP（证据已补）** | #104 B1：保留（它不恢复 SDK 的因果身份）；F-1 已结清，并落成 live gate `view-animation-cancel-window`。口径仍不得升级为「对外的时序承诺」：那两条前提是**官方行为**，官方可以改，gate 就是用来在它改的时候变红的。ADR 2026-09-11 已加取证注记 |
 | 同一处前提在 hooks 侧的两处**残留用法**：① 被取代那一段的三条监听只由该段的 `animationcancel` 释放；② `cancel()` **当时**发的是**整张图**的 `stopViewAnimation(map)`（#105 已改为按实例；那条整图命令本身在第二批也已删除，见本行末） | `composables/useViewAnimation.ts`（`AnimationRun` / `start` / `stopRun`）＋ `driver/jsapi-v4/map.ts` 的动画记录 | 该 hook 自己（`EventDriver.groups` 是强引用 Map，未释放即泄漏）；以及跨 hooks：同一张图上另一个 `useViewAnimation` 的在飞段 | 两处都依赖同一条 `FAKE-ONLY` 时序。②最要命：`stopViewAnimation` 的范围是整张图，于是**「保留重试入口」与「不牵连别人的动画」互斥** —— #105 第三轮以「H1 第二次 cancel 停掉了 H2 的 B」打中一次，第六轮以「延迟取消失败后 H1 永久失去重试入口」打中另一次；把 `cancelCommitted` guard 去掉实测就红，确认两条不能同时满足 | **SIMPLIFY（本票已做）** | 取消换成官方本来就有的**按实例**命令：给 `MapDriver` 加 `cancelViewAnimation(map, animation)`，v4 实现只挑该实例那一条记录、复用 `cancelAnimation`，并返回本库侧的交付状态 `canceled / deferred / already-settled`。hooks 据此把三件事分开：**当前观察对象**（`current`）、**取消是否仍需重试**（`undelivered`）、**每段自己的监听**（交付即释放）：`deferred` 保留重试入口（第二次 `cancel()` 真打到 SDK），已交付则幂等收尾且不补发命令（补发要假设 `cancelViewAnimation` 幂等——**不在 F-3 的 destroy/dispose 取证范围**，仍未证）。回归：`useViewAnimation.test.ts` 的「取消失败时保留重试入口」「deferred 与已交付的取消走不同的收尾」「收尾按动画身份收敛」三节，加 Facet 侧 `map.test.ts` 的「只碰传入的那个实例」。**公开的语义不建立在『接管时旧段监听恰好已释放』这个时机上**：接管那一支按**交付状态**分岔 —— 已交付（`canceled` / `already-settled`）当场释放旧段监听，未交付（`deferred`）则把监听留着、旧段进 `undelivered`，由后续 `cancel()` 与卸载继续推到终态（#105 第八/九/十轮）；两条路都由 `finishRun` 的身份守卫挡住旧段清掉新段的 `playing`。一次公开 `cancel()` 里**每段只尝试一次**：当前段被 deferred 时它同时是 `current` 与 `undelivered` 的成员，快照按 `Set` 去重，否则「抛错说没交付」与「同一次调用里第二份已重试成功并收尾」会自相矛盾（#105 第十一轮 P1）。**第二批收口**：「② 的根源」——整图命令 `MapDriver.stopViewAnimation(map)` 已**删除**（它零生产消费者、唯一的书面理由是「与 #26 已删除的 webgl-v1 一致」、且与按实例所有权直接冲突），`cancelAllAnimations` 因此只剩两个本库自己的整图动作（起播前清场 / 销毁） |
-| `useBMapTrackAnimation` 的插件状态机（`INITIAL` / `PLAYING` / `STOPPING` / …） | 原 `composables/useBMapTrackAnimation.ts` | **生产 0**：v4 上 `createTrackAnimation()` 必抛 `BMAP_CAPABILITY_UNSUPPORTED` | 状态机的全部可达分支 = 一条失败分支 ⇒ 退化成常量 | **REMOVE** | #104 A3：hook、文档页、示例、行为用例全部删除；轨迹走原生图层 `track-line`，插件侧结论仍在 **#43**。参考实现 `huiyan-fe/react-bmap`（236 个 TS 文件）没有任何 TrackAnimation 抽象 |
+| `useBMapTrackAnimation` 的插件状态机（`INITIAL` / `PLAYING` / `STOPPING` / …） | 原 `composables/useBMapTrackAnimation.ts` | **生产 0**：v4 上 `createTrackAnimation()` 必抛 `BMAP_CAPABILITY_UNSUPPORTED` | 状态机的全部可达分支 = 一条失败分支 ⇒ 退化成常量 | **REMOVE** | #104 A3：hook、文档页、示例、行为用例全部删除；轨迹走原生图层 `track-line`，插件侧结论仍在 **#43**。参考实现 `huiyan-fe/react-bmap`（236 个 TS 文件）没有任何 TrackAnimation 抽象 | <!-- brand-gate:allow 存量审计表逐行记录被判定 REMOVE 的对象，旧名本身就是该行的判据 -->
 | suspension reason 集（`user` / `keepAlive` / `document` / `offscreen` / `disposed`）、boot 单飞 + `deferredWaiters` + 0ms 活性兜底、`tileLoadObserver` 的两本账 | `core/runtime/suspension.ts`、`components/map/Map.vue:691`、`components/layers/tileLoadObserver.ts` | 生产，组件生命周期 | `OWNED`；`tileLoadObserver` 另有 `PROBED`（`scripts/probe-layer-events.mts` 三臂对照 `12 / 0 / 12`） | **KEEP** | 反面样板：`tileLoadObserver.ts:38-40` 明确**拒绝**做瓦片回包归属，只记所有权 |
 
 ## 3. Loader / Provider / SDK Registry
@@ -149,7 +149,7 @@
 
 - **A1**：删除 `Autocomplete` 的程序化检索与归属层（Driver 侧约 640 行 + 类型面 + 出口 + 探针槽位 + 契约条目 + 归属类用例），Fake 侧同步删掉 `keyword`/`respond` 建模。
 - **A2**：`useViewAnimation` 重写成公开面（`start` / `cancel` / `status` / `ready`），删除私有成员读写与 `setKeyFrames` 两段式。补上的首份行为用例（该 hook 原先零覆盖）另外暴露出两处既有缺陷：取消原先排在微任务里，而 `<Map>` 在父组件 `onUnmounted` 销毁地图 ⇒ 每次卸载抛一个无人接收的 `BMAP_RESOURCE_DISPOSED`；监听释放原先共用一个槽位 ⇒ 被取代那段的 `animationcancel` 会摘掉新段的订阅并把状态写回 `idle`。两处都改为**每段自带现场 + 同步取消**。#105 评审第二、三、六轮又追出四处同源问题（详见第 2 节的动画各行）：归属被提前清掉（丢重试入口）、新段在起播被拒前就提交现场、卸载中取消失败打断钩子并留下订阅、以及把「收到 `animationcancel`」当成所有权交付的唯一凭据；现在分成**观察对象 / 订阅释放 / 是否仍需重试**三件事，收尾统一走带身份守卫的 `finishRun`，共补 12 条回归；为此给 `MapDriver` **新增**了 `cancelViewAnimation(map, animation)`（官方 `Map#cancelViewAnimation(viewAnimation)` 的形状），它随本票一起进 #44 的冻结面。
-- **A3**：删除 `useBMapTrackAnimation`（hook + 文档页 + 示例 + 行为用例 + 侧栏条目），并把「不向用户承诺该 hook」钉成一条审计用例。
+- **A3**：删除 `useBMapTrackAnimation`（hook + 文档页 + 示例 + 行为用例 + 侧栏条目），并把「不向用户承诺该 hook」钉成一条审计用例。 <!-- brand-gate:allow 存量审计表逐行记录被判定 REMOVE 的对象，旧名本身就是该行的判据 -->
 - **B1**：MapDriver 动画 teardown 判 **KEEP**；其两条前提原为 `FAKE-ONLY`，**第二批已用真实 AK 取证**
   并升级为 `PROBED`（ADR 注记 + 本表 F-1 + live gate `view-animation-cancel-window`）。
 - **R1–R11**：全部落地，逐项删净实现、出口、引用、生成物与文档承诺（矩阵与 JSON 重生成后为 **62 条能力**；`default-loader-boundary` 从「调用它」改成「断言它不存在」）。R6 删掉 `shouldFullReplace` 之后暴露出的 `DataLayerManager.sync` 死形参登记在第 5 节，**main 上的 #34 已把它连同整个位置签名一起改掉**。
@@ -165,7 +165,7 @@
 
 issue 的实施顺序里第 4 步是「**MapDriver animation teardown**：在 2/3 收窄后重新评估，可删多少删多少，
 但真实 destroy 责任保留」，而第 1–3 步（Autocomplete `suggest` / `useViewAnimation` /
-`useBMapTrackAnimation`）都在第一批完成了。这一批做的正是第 4 步，顺序是**先取证再动手**：
+`useBMapTrackAnimation`）都在第一批完成了。这一批做的正是第 4 步，顺序是**先取证再动手**： <!-- brand-gate:allow 存量审计表逐行记录被判定 REMOVE 的对象，旧名本身就是该行的判据 -->
 
 1. **F-1 取证**（真实 AK + headless Chromium，七条读数见上表）：两条前提成立，措辞需要精确化；
    另外顺手量到四条此前没有依据的行为（未显式取消就再起播、销毁后迟到启动、清场前先应用首帧、
@@ -200,7 +200,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 
 「复核」在本仓的形态是**逐项判据 + 一条会真变红的门禁**，不是一次阅读。做法：
 
-1. **逐项核对 `./core` 上「零消费者、但会随 #44 冻结进 3.0」的名字**，然后按「改它要不要连带动夹具或
+1. **逐项核对 `./core` 上「零消费者、但会随公共出口冻结定型」的名字**，然后按「改它要不要连带动夹具或
    命名约定」分成两堆 —— 纯删的一堆在本批做掉，牵连夹具 / 命名约定的一堆**登记到 #44**（评论已留，
    清单在那条评论里；本表第 3–6 节的处置列同步指向它）。
 2. **落成门禁**：`tests/behavior/core-surface.test.ts`。三层判定，各自都能被证伪：

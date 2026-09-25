@@ -156,7 +156,7 @@ component 45 · hook 14 · type 56
 | 本库 | 官方 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | `MapExpose` | `MapRef` | renamed | 官方叫 `MapRef`；本库 expose 面是 `createExpose()` 拼出的只读命令集，命名对齐组件而非 ref 类型别名。 |
-| `useMapContext` | `useBMapContext` | renamed | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 |
+| `useMapContext` | `useBMapContext` | renamed | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->
 | `useAreaBoundary` | `useBoundary` | renamed | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `Autocomplete` | — | ours-only | 官方只有 `useAutocomplete` hook，没有同名组件；本库有声明式 `<Autocomplete>` 薄封装。 |
 | `MarkerCluster` | — | ours-only | 官方 React 封装没有聚合组件（参考清单 0 命中）。 |
@@ -221,7 +221,7 @@ component 45 · hook 14 · type 56
 | `Symbol` | component | — |
 | `ThreeLayer` | component | — |
 | `useAutocomplete` | hook | — |
-| `useBMapContext` | hook | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 |
+| `useBMapContext` | hook | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->
 | `useBoundary` | hook | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `useBusLineSearch` | hook | — |
 | `useCapabilities` | hook | 官方 capability 读取 hook；本库能力目录在 `CAPABILITY_*` / `advanced` 入口，不镜像该 hook。 |

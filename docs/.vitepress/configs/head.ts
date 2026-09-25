@@ -26,7 +26,7 @@ export const head: HeadConfig[] = [
     {
       name: "keywords",
       content:
-        "vue3,vue component,baidu map,baidu map gl,baidu jsapi 4.0,bmap-vue,vue3-bmap-gl,百度地图,组件库,vue3组件库,vue百度地图",
+        "vue3,vue component,baidu map,baidu map gl,baidu jsapi 4.0,bmap-vue,bmap vue,百度地图,组件库,vue3组件库,vue百度地图",
     },
   ],
 ];

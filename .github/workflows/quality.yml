@@ -63,6 +63,16 @@ jobs:
       - name: Check official API alignment
         run: node --experimental-strip-types scripts/generate-api-diff.mts --check
 
+      # 已退役的发布身份不得回到**已发布**文档面（#134 身份复位 / #135 命名对齐 / #136 clean-slate / #141）。
+      # 扫 README / NOTICE / docs/**/*.md / docs/.vitepress 配置与主题 / docs/examples/**——
+      # 后者是被 :::demo 容器逐字内联进页面的（configs/plugins.ts 读 examples/*.vue），所以同样是发布面。
+      # 刻意**不含**：docs/adr/**（已接受即冻结的决策史，正要写出旧名）、CHANGELOG.md（上游继承史）、
+      # docs/.vitepress/*.json（生成物，归 generate:*:check 管）、scripts/verify-package.mts（它把旧名当拒绝表）。
+      # 合法的上游引用不误伤：官方 loader 的 `version: '3.0'` 选项、`BMap.*` 这个 JSAPI 4.0 命名空间、
+      # 官方插件命名空间 `BMapGLLib`、活的 CDN 全局名 `BMapVue`，以及 yue1123/vue3-baidu-map-gl 的 MIT 署名。
+      - name: Check docs brand drift
+        run: node --experimental-strip-types scripts/check-docs-brand.mts
+
       # 覆盖物 defineEmits 静态契约无漂移（#138）。
       # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
       # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。

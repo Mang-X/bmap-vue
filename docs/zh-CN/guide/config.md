@@ -28,7 +28,7 @@ lang: zh-CN
 
 ### Driver 选择与默认加载器
 
-3.0 只有**一个引擎**（`jsapi-v4`）：组件默认路径（`app.use` / `<BMapProvider>` / `<Map>`）
+本库只有**一个引擎**（`jsapi-v4`）：组件默认路径（`app.use` / `<BMapProvider>` / `<Map>`）
 直接交给 `createBMapClient`，由默认的 `jsapiV4DriverFactory` 装出 v4 Driver。默认 Provider 是
 `baiduJsapiV4Provider()`——`createBMapPlugin()` 不传 `provider`、`<Map>` 只给 `ak`、以及
 `<BMapProvider>` 未覆盖时，用的都是它；它内部真的调用官方 `@baidumap/jsapi-loader`

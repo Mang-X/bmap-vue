@@ -5,7 +5,7 @@ lang: zh-CN
 
 # 快速开始
 
-本节将介绍如何在项目中使用 Vue3 BaiduMap GL。
+本节带你从零跑通第一张地图。
 
 ## 用法
 
@@ -38,7 +38,7 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 
 ### 按需导入 <Badge type="tip" text="推荐" />
 
-Vue3 BaiduMap GL 提供了基于 ES Module 开箱即用的 Tree Shaking 功能。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
+bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
 
 <!-- prettier-ignore -->
 ```vue

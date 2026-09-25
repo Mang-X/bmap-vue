@@ -14,7 +14,7 @@ title: 数据组件
 | 中小规模、需要逐点交互 | `MarkerList` | **每项一个 Marker** |
 | 空间上邻近的点需要聚合 | `MarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
 | 同上，但**事件里要有簇内业务项** | `MarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
-| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`） |
+| 大规模散点，画几何图形 | `PointCollection` | **整批一个原生图层**（`BMap.PointShapeLayer`） |
 | 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`） |
 | 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
@@ -23,7 +23,7 @@ title: 数据组件
 > **扩展 API**（运行时存在、类型包没有类声明、可视化实现按需异步注入），因此它被标为
 > `experimental`：能力就绪之前创建会**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`，经 `resource:error`
 > 交出），**不会**自动改用另外两个类 —— 它们是不同的 SDK 能力，偷偷换等于改掉你的意图。
-> v3 时代那个 `BMap.PointCollection` 类在 4.0 的**类型包里没有声明**（运行时仍然存在，本库探针实测
+> `BMap.PointCollection` 那个类在 4.0 的**类型包里没有声明**（运行时仍然存在，本库探针实测
 > `typeof BMap.PointCollection === "function"`），本库按 official-first 只使用**两处都声明**的等价 API。
 
 所有数据组件的**取数面完全一致**，业务数据可以在它们之间平移：
@@ -36,8 +36,8 @@ title: 数据组件
 | `dataVersion` | **引用不变、内容变了**时递增它 | `PropertyKey` |
 | `visible` | 是否显示（`false` = 隐藏，不是删掉） | `boolean`，默认 `true` |
 
-> `PointCollection` 在 3.0 发布前更名为 `BPointShapeLayer`（它是**未发布** changeset 里的新增，
-> 因此**没有**留弃用别名）。改名的理由是三个组件的名字要能一眼看出各自落在哪个 SDK 类上。
+> 三个点图层的命名刻意与它们各自落地的 SDK 类一一对应（`PointCollection` → `BMap.PointShapeLayer`、
+> `PointIconLayer` → `BMap.PointIconLayer`、`PointLayer` → `BMap.PointLayer`），方便从组件名一眼看出代价。
 
 ## `Item` 类型会原样保留
 
@@ -74,7 +74,7 @@ function onItemClick(station: Station) {
 生效范围要说准：**模板里**推断是完整的（消费方 fixture `fixtures/consumer/src/data-components.vue`
 用 `vue-tsc` 钉住）；用 `h()` 编程式构造时 `Item` 推不出来（vue-tsc 为泛型组件生成的 props 形状
 无法反推类型参数，带不带 `withDefaults` 都一样），那时请用公开的 props 类型显式标注：
-`MarkerListProps<Station>` / `MarkerClusterProps<Station>` / `BPointShapeLayerProps<Station>` /
+`MarkerListProps<Station>` / `MarkerClusterProps<Station>` / `PointCollectionProps<Station>` /
 `PointIconLayerProps<Station>` / `PointLayerProps<Station>`。
 
 ## 数据更新语义
@@ -144,9 +144,7 @@ function moveFirst() {
 </template>
 ```
 
-> 示例用**当前 head 实际导出的** `PointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
-> （见上文「先选对组件」的说明）。1.0 的公共 API 命名对齐（[#135](https://github.com/Mang-X/bmap-vue/issues/135)）
-> 完成后，文档会统一改成新名。
+> 三个点图层组件的取数面完全一致，示例可以在这三者之间平移（见上文「先选对组件」）。
 
 边界与代价：
 
@@ -245,10 +243,10 @@ Marker 的代价」），不是自动降级。
 聚合参数（`clusterRadius` 等）是**构造期**选项：改变 ⇒ 重建实例（不重建就没法保证生效：
 官方同时列了 `setOptions` 与 `redraw`，但本库没有取证「改了再 `redraw()` 会重新聚簇」）。
 
-## `BPointShapeLayer`
+## `PointCollection`
 
 ```vue
-<BPointShapeLayer
+<PointCollection
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -321,7 +319,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 />
 ```
 
-与 `BPointShapeLayer` 的差异只有「每个点画什么」：前者画几何图元，后者画一张图标。
+与 `PointCollection` 的差异只有「每个点画什么」：前者画几何图元，后者画一张图标。
 
 | 属性 | 说明 | 默认值 |
 | --- | --- | --- |
@@ -332,7 +330,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 | `enablePicked` | 是否开启鼠标拾取 | **`true`**（官方默认 `false`，这里刻意不同） |
 | `pickWidth` / `pickHeight` | 点击拾取矩形尺寸（像素） | 官方默认（30） |
 
-事件与 `BPointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。
+事件与 `PointCollection` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。
 注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
 `dataparsed` 不代表图标已经可见。
 
@@ -351,14 +349,14 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 ```
 
 它的选项是**扁平**的（`shape` / `icon` / `size` / `fillColor` / `fillOpacity` / `strokeColor` /
-`strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `BPointShapeLayer` 的样式字段名
+`strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `PointCollection` 的样式字段名
 **不同**（那里是官方的 `PointShapeStyle`）。未配置 `icon` 时按 `shape` 画几何图元，配置了就走图标模式。
 
 三处要提前知道的事：
 
 1. **可视化实现是按需异步注入的**：就绪之前创建会经 `resource:error` 交出
    `BMAP_CAPABILITY_UNSUPPORTED`；注入完成之后重试即可成功（同一个组件，不必换实例）。
-2. **不会自动改用别的类**：要最稳就用 `BPointShapeLayer` / `PointIconLayer`（两处都声明）。
+2. **不会自动改用别的类**：要最稳就用 `PointCollection` / `PointIconLayer`（两处都声明）。
 3. **命中载荷与另外两个不同**：官方在扩展 API 上**没有** `dataIndex`，业务键在
    `value.properties[idKey]` / `value.id` 上。因此 `click.dataIndex` 恒为 `-1`（载荷里那个
    `index` 字段的语义没有取证，本库不读它），`click.hit` 的判据是「能不能解析出业务身份」。
