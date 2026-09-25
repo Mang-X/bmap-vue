@@ -1,0 +1,11 @@
+[
+  "BMapLoadOptions",
+  "BMapProviderLike",
+  "Capability",
+  "CreateBMapClientOptions",
+  "Disposer",
+  "PluginContext",
+  "PluginHostEntryStatus",
+  "PluginScope",
+  "PluginUrlKey"
+]

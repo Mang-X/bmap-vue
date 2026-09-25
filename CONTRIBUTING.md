@@ -66,7 +66,7 @@ pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 sk
 pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
-pnpm check:api                  # 5 份 API report 基线无漂移（#44 冻结的公共类型面）
+pnpm check:api                  # API report + 未导出类型身份集合 + 签名基线三类基线无漂移（#44）
 pnpm test:unit
 ```
 

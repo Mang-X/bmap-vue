@@ -50,9 +50,11 @@ Runtime / Registry / Scope。issue 的决策门明确「禁止『先全导出以
 - `pnpm check:api`（新）—— API Extractor 基线报告，`packages/bmap-vue/etc/<出口>/bmap-vue.api.md`，
   覆盖 `./advanced` `./composables` `./plugins` `./resolver` `./ui-kit`；改了公共类型面而没跑
   `pnpm generate:api` 就红。CI 在 `typecheck:*` → `build:package` 之后跑它（`dist` 是它的输入）。
-- `pnpm check:api` 同时钉住各出口 `ae-forgotten-export` 的**条数上限**（`FORGOTTEN_EXPORT_CEILING`，
-  只许减不许增）：`advanced` 27 / `composables` 41 / `plugins` 9 / `ui-kit` 21（`resolver` 0）。
-  这些类型在报告里只剩一个名字、结构漂移不改基线文本，条数是唯一可比的量。
+- `pnpm check:api` 同时钉住各出口 `ae-forgotten-export` 的**身份集合**
+  （`etc/<出口>/forgotten-exports.json`，全等才通过）：`advanced` 27 / `composables` 41 /
+  `plugins` 9 / `ui-kit` 21（`resolver` 0）。这些类型在报告里只剩一个名字、结构漂移不改基线
+  文本，**名字集合**是唯一还能看见它们的量；比条数会漏掉「删一个 + 新增一个」与「先降后涨回」
+  （#159 二轮评审 P1），所以新增与清理都得经 `pnpm generate:api` 在 diff 里留痕。
 - 根入口与 `./components` **进不了 API report**：Volar 生成的多声明 `var`（`__VLS_1` / `__VLS_3` /
   `__VLS_5`）没被 `bundleTypes` 带进合并后的 d.ts，留下悬空引用，AE 抛
   `Symbol not found for identifier: __VLS_*`。这不是本票引入的（源与打包配置都没动），门禁对这两个
@@ -70,5 +72,5 @@ Provider 家族迁进 `./advanced` 时留下的注入面欠账**已收口**（#1
 与 `loader?: ScriptLoader` 引用的两个类型没有被导出，而它们又带私有成员、外部**无法构造** ——
 留在公共选项里就是「赋不了值、结构也不进报告」的假支持，因此从公共选项**移除**，只留在内部选项里。
 可构造的那部分反过来**补上了导出**：`OfficialJsapiLoader` / `OfficialJsapiLoadOptions` /
-`JsapiV4ScriptMode` / `JsapiV4Provider`。结构仍不可见的存量由条数上限兜底，逐条清理是后续票的事。
+`JsapiV4ScriptMode` / `JsapiV4Provider`。结构仍不可见的存量由身份集合基线兜底，逐条清理是后续票的事。
 详见 [ADR 2026-09-25 后果](../docs/adr/2026-09-25-public-export-surface-freeze.md)。

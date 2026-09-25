@@ -41,15 +41,17 @@
  * - `ae-undocumented` / `ae-missing-release-tag` / 全部 tsdoc 消息配成 `none` ——
  *   仓库现有注释不是 TSDoc 体例，上百条噪音会把真消息淹掉；
  * - `ae-forgotten-export` 保留 `warning` —— 它正是「导出面之外被引用的类型」的信号，
- *   每条都算进 `warningCount`，按 messageId 汇总在输出里，并与
- *   `FORGOTTEN_EXPORT_CEILING` 逐出口比对：**只允许减少**，新增（哪怕报告正文没变）一律红
- *   （#159 评审 P1-2）——报告里这类类型只剩一个名字，结构漂移看不见，上限是唯一能拦住
- *   「悄悄多漏一个类型」的门；
+ *   每条都算进 `warningCount`、按 messageId 汇总在输出里，并额外被**身份集合基线**
+ *   `etc/<出口>/forgotten-exports.json` 钉死（#159 二轮评审 P1）：比**名字集合**而不是条数。
+ *   只比条数会漏掉两种很实际的走法——同一次改动里「删一个旧的 + 新增一个新的」条数不变，
+ *   以及「先把 27 降到 26、下一次再涨回 27」；集合基线两种都拦，因为新增的名字不在基线里、
+ *   清理掉的名字留在基线里，**两个方向都要跑 `pnpm generate:api` 才能变绿**，于是每一次
+ *   消长都出现在 diff 里。报告正文不含这些名字，所以这份集合是唯一能看见它们的基线；
  * - 本脚本用 `messageCallback` 接管**打印**（`handled=true` 只拦打印、不拦计数），
  *   所以 `result.errorCount` / `result.warningCount` 仍然可信；`--verbose` 打印每条消息正文。
  *
  * 比对本身交给 API Extractor（`apiReportChanged`，按空白归一后逐字符比），本脚本不再字节比对；
- * 签名基线则由本脚本自己做全等比（产物本身已规范化，不需要空白归一）。
+ * 签名基线与未导出类型集合基线则由本脚本自己做全等比（产物本身已规范化/已排序，不需要空白归一）。
  *
  * `--local` 写基线时，AE 是**先落盘再判定成败**的（`_writeApiReport` 早于 success 判定），
  * 所以分析报错时必须**回滚**旧文件内容，否则会留下一份被污染的基线（#159 评审 P2）。
@@ -99,19 +101,25 @@ type Entry = (typeof REPORTED)[number] | (typeof KNOWN_BLOCKED)[number];
 const CONFIG_PATH = resolve(PKG, "api-extractor.json");
 
 /**
- * `ae-forgotten-export` 的**逐出口上限**：只允许减少，新增一律红（#159 评审 P1-2）。
+ * `ae-forgotten-export` 的**身份集合基线**（#159 二轮评审 P1）：`etc/<出口>/forgotten-exports.json`。
  *
- * 这些数字不是「允许漏这么多」，而是「当前已知的存量欠账」——报告里未导出类型只剩一个名字，
- * 它们的结构漂移不会改变基线文本，上限是唯一能拦住「顺手多漏一个」的门。把存量清零之后
- * 这张表就退化成 0，届时可以直接删掉。
+ * 这些名字不是「允许漏这么多」，而是「当前已知的存量欠账」——报告里未导出类型只剩一个名字，
+ * 它们的结构漂移不会改变基线文本，**名字集合**是唯一还能看见它们的量。判据是全等：
+ * 新增（不在基线里）与清理（基线里有、当前没有）都会红，逼着每一次消长都经 `generate:api`
+ * 写进基线、出现在评审 diff 里；只比条数则允许 1-for-1 替换与跨提交回弹（评审原话）。
+ * 存量清零后这些文件就是 `[]` —— 门禁从「存量清单」变成「零容忍」，机制本身要留着：它就是那道 freeze 门。
  */
-const FORGOTTEN_EXPORT_CEILING: Record<string, number> = {
-  advanced: 27,
-  composables: 41,
-  plugins: 9,
-  resolver: 0,
-  "ui-kit": 21,
-};
+function forgottenPath(entry: string): string {
+  return resolve(ETC, entry, "forgotten-exports.json");
+}
+
+/** AE 给这条消息的固定句式：`The symbol "X" needs to be exported by the entry point <file>`。 */
+const FORGOTTEN_SYMBOL_PATTERN = /The symbol "([^"]+)" needs to be exported by the entry point /;
+
+/** 集合基线的期望内容：排序后的名字数组，`JSON.stringify(names, null, 2)` + 末尾换行。 */
+function expectedForgottenFile(symbols: readonly string[]): string {
+  return `${JSON.stringify([...symbols], null, 2)}\n`;
+}
 
 let baseConfig: Record<string, unknown> | undefined;
 function readBaseConfig(): Record<string, unknown> {
@@ -167,12 +175,6 @@ function expectedSignatureFile(entry: string): string {
   ].join("\n");
 }
 
-/** 从 `runExtractor` 的摘要里读出 `ae-forgotten-export` 的条数（没有该消息 ⇒ 0）。 */
-function forgottenExportCount(summary: string): number {
-  const match = /(?:^|, )ae-forgotten-export×(\d+)(?:, |$)/.exec(summary);
-  return match === null ? 0 : Number(match[1]);
-}
-
 /**
  * 以 `api-extractor.json` 为底，只覆盖**逐出口**的三个字段。
  *
@@ -221,6 +223,8 @@ type CollectedMessage = { logLevel: string; messageId: string; text: string };
 function runExtractor(entry: Entry, localBuild: boolean): {
   result: ReturnType<typeof Extractor.invoke>;
   summary: string;
+  /** `ae-forgotten-export` 的符号名集合（排序去重），用于身份集合基线比对。 */
+  forgotten: string[];
 } {
   const collected: CollectedMessage[] = [];
   const result = Extractor.invoke(configFor(entry), {
@@ -254,12 +258,25 @@ function runExtractor(entry: Entry, localBuild: boolean): {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([id, count]) => `${id}×${count}`)
     .join(", ");
+  // 身份集合：从消息正文里把符号名取出来（上游句式变了就红，不静默降级成「读不出＝0 条」）。
+  const forgottenSet = new Set<string>();
+  for (const message of collected) {
+    if (message.messageId !== "ae-forgotten-export") continue;
+    const match = FORGOTTEN_SYMBOL_PATTERN.exec(message.text);
+    if (match === null) {
+      throw new Error(
+        `[check-api] ${entry}: 无法从 ae-forgotten-export 消息解析符号名 —— 上游句式变了？\n${message.text}`,
+      );
+    }
+    forgottenSet.add(match[1]!);
+  }
+  const forgotten = [...forgottenSet].sort();
   if (process.argv.includes("--verbose")) {
     for (const message of collected) {
       console.log(`      ${message.logLevel}: ${message.text}`);
     }
   }
-  return { result, summary };
+  return { result, summary, forgotten };
 }
 
 /** AE **先落盘、后判定成败**；报错时把基线恢复成运行前的内容（原本不存在则删掉）。 */
@@ -280,7 +297,15 @@ function updateMode(): void {
     // 跑之前先留一份：`_writeApiReport` 早于 success 判定执行，`localBuild` 下即使 errorCount > 0
     // 也会把既有基线覆盖掉（#159 评审 P2）。只删新写的文件是不够的 —— 老基线同样会被改。
     const previous = existsSync(target) ? readFileSync(target, "utf8") : undefined;
-    const { result, summary } = runExtractor(entry, true);
+    let run: ReturnType<typeof runExtractor>;
+    try {
+      run = runExtractor(entry, true);
+    } catch (error) {
+      // AE 抛错（报告可能已落盘）与「解析不出符号名」走同一条回滚路径，不留半写状态。
+      restoreBaseline(target, previous);
+      throw error;
+    }
+    const { result, summary, forgotten } = run;
     // 分析报错时写出的基线不可信。把它留着等于给「坏基线」开了个提交口子，所以：报错就回滚。
     if (result.errorCount > 0) {
       restoreBaseline(target, previous);
@@ -293,6 +318,7 @@ function updateMode(): void {
     if (!existsSync(target)) {
       throw new Error(`[check-api] ${entry}: --local 之后基线仍不存在: ${target}`);
     }
+    writeForgottenBaseline(entry, forgotten);
     const lines = readFileSync(target, "utf8").split("\n").length;
     console.log(
       `[check-api] ${entry}: 基线已生成 (${lines} 行, error=${result.errorCount}` +
@@ -313,6 +339,70 @@ function writeSignatureBaseline(entry: string): void {
   }
   writeFileSync(target, expected);
   console.log(`[check-api] ${entry}: 签名基线已生成 → ${target}`);
+}
+
+/** 写某出口的未导出类型**身份集合**基线；内容没变就不动文件（免得空跑也制造 diff）。 */
+function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
+  const target = forgottenPath(entry);
+  mkdirSync(dirname(target), { recursive: true });
+  const expected = expectedForgottenFile(symbols);
+  if (existsSync(target) && readFileSync(target, "utf8") === expected) {
+    console.log(`[check-api] ${entry}: 未导出类型集合未变 (${symbols.length} 个)`);
+    return;
+  }
+  writeFileSync(target, expected);
+  console.log(`[check-api] ${entry}: 未导出类型集合已写入 (${symbols.length} 个) → ${target}`);
+}
+
+/**
+ * 比对 `ae-forgotten-export` 的**身份集合**与基线，**全等**才通过（#159 二轮评审 P1）。
+ *
+ * 两个方向都红，而且都要求跑 `pnpm generate:api`，好让每一次消长都出现在评审 diff 里：
+ *
+ * - **新增**（当前有、基线没有）：冻结面不接受新的未导出类型。先按 ADR 2026-09-25 的二选一
+ *   处置（升为公共导出 / 让引用消失），确属刻意接受才更新基线；
+ * - **清理**（基线有、当前没有）：名字留在基线里等于给它留了重新加回来的口子——评审举的
+ *   「27 → 26 → 下次再涨回 27」在身份这一层同样成立，所以存量减少也必须同步基线。
+ *
+ * 刻意不用「当前 ⊆ 基线」的子集判据：子集判据下清理是**静默绿**的，基线会随时间烂掉，
+ * 几个月后被删掉的名字仍然"合法"。全等是子集判据的严格加强，两处漏法都堵上。
+ */
+function forgottenBaselineFailure(entry: string, actual: readonly string[]): string | undefined {
+  const target = forgottenPath(entry);
+  if (!existsSync(target)) {
+    return `${entry}: 未导出类型身份基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`;
+  }
+  const expected = expectedForgottenFile(actual);
+  const raw = readFileSync(target, "utf8");
+  if (raw === expected) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return `${entry}: 未导出类型身份基线不是合法 JSON: ${target} —— 跑 pnpm generate:api 重新生成`;
+  }
+  const baseline = Array.isArray(parsed)
+    ? parsed.filter((name): name is string => typeof name === "string")
+    : [];
+  const added = actual.filter((name) => !baseline.includes(name));
+  const removed = baseline.filter((name) => !actual.includes(name));
+  const details =
+    [
+      ...(added.length ? [`新增 ${added.length} 个: ${added.join(", ")}（基线里没有）`] : []),
+      ...(removed.length
+        ? [`清理掉 ${removed.length} 个: ${removed.join(", ")}（仍留在基线里）`]
+        : []),
+      ...(added.length === 0 && removed.length === 0
+        ? ["集合内容一致，但文件不是生成器的规范化形式（被手工编辑过）"]
+        : []),
+    ].join("；");
+  const temp = resolve(TEMP, entry, "forgotten-exports.json");
+  mkdirSync(dirname(temp), { recursive: true });
+  writeFileSync(temp, expected);
+  return (
+    `${entry}: 未导出类型身份基线漂移 —— ${details}。审阅 ${temp} 后跑 pnpm generate:api` +
+    ` 并把基线一起提交（新增的必须先按 ADR 2026-09-25 的二选一处置，别用生成器盖过去）`
+  );
 }
 
 function probeKnownBlocked(): void {
@@ -349,20 +439,24 @@ function checkMode(): void {
     }
     let result: ReturnType<typeof Extractor.invoke>;
     let summary = "";
+    let forgotten: string[] = [];
     try {
-      ({ result, summary } = runExtractor(entry, false));
+      ({ result, summary, forgotten } = runExtractor(entry, false));
     } catch (error) {
       failures.push(`${entry}: 分析抛错 —— ${error instanceof Error ? error.message : String(error)}`);
       continue;
     }
-    // 未导出类型在报告里只剩一个名字，结构漂移不改基线文本 ⇒ 只有「条数」是可比的（P1-2）。
-    const forgotten = forgottenExportCount(summary);
-    const ceiling = FORGOTTEN_EXPORT_CEILING[entry] ?? 0;
-    if (forgotten > ceiling) {
-      failures.push(
-        `${entry}: ae-forgotten-export ${forgotten} 条，超过上限 ${ceiling} —— ` +
-          `新增的未导出类型要么导出（消费方要能命名），要么显式评审后调低上限`,
-      );
+    // 分析报错时消息不全，比出来的集合不可信 —— 先报错，别拿半截集合去和基线比。
+    if (result.errorCount > 0) {
+      failures.push(`${entry}: 分析报错 ${result.errorCount} 个（${summary || "无摘要"}）`);
+      continue;
+    }
+    let entryFailed = false;
+    // 未导出类型在报告里只剩一个名字，结构漂移不改基线文本 ⇒ 只有**名字集合**可比（二轮评审 P1）。
+    const forgottenFailure = forgottenBaselineFailure(entry, forgotten);
+    if (forgottenFailure !== undefined) {
+      failures.push(forgottenFailure);
+      entryFailed = true;
     }
     // 比对交给 AE 自己（它按 areEquivalentApiFileContents 判等），不要按字节再判一遍。
     if (result.apiReportChanged) {
@@ -370,16 +464,13 @@ function checkMode(): void {
         `${entry}: API report 与基线不一致 —— 公共类型面变了。审阅 .artifacts/api-extractor/` +
           `${entry}/bmap-vue.api.md 后跑 pnpm generate:api 并把基线一起提交`,
       );
-      continue;
+      entryFailed = true;
     }
-    if (result.errorCount > 0) {
-      failures.push(`${entry}: 分析报错 ${result.errorCount} 个`);
-      continue;
-    }
+    if (entryFailed) continue;
     console.log(
       `[check-api] ${entry}: 与基线一致` +
         `${summary ? ` (warning=${result.warningCount}: ${summary})` : ""}` +
-        `，未导出类型 ${forgotten}/${ceiling}`,
+        `，未导出类型 ${forgotten.length} 个与身份基线一致`,
     );
   }
 
@@ -391,6 +482,7 @@ function checkMode(): void {
   }
   console.log(
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
+      `${REPORTED.length} 份未导出类型身份集合基线一致，` +
       `${KNOWN_BLOCKED.length} 份类型级签名基线一致`,
   );
 }
