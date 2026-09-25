@@ -12,10 +12,6 @@
 | `PlaceDetail` | `PlaceDetail` | 地点详情面板（uid 模式 / POI 模式） |
 | `RoutePlan` | `RoutePlan` | 路线面板（锁定版本只开放驾车） |
 
-> 决策与依据见 ADR [Official-first](/adr/2026-09-13-official-first-loader-and-ui-kit)
-> 与 ADR [UI Kit 子路径与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)；
-> 详情 / 路线这两个封装的判断（含「上游声明了但没实现」的处置）见
-> ADR [详情与路线封装](/adr/2026-09-13-ui-kit-detail-route-wrappers)；
 > 上游逐项行为以[官方包发布契约](/zh-CN/contributing/official-packages)为准。
 
 ## 为什么是独立入口
@@ -35,8 +31,7 @@
 `import { PlaceSearch } from "bmap-vue/ui-kit"`。
 
 这是刻意的：manifest 生成的 `components/index.ts` 会被**根入口**引用，把 UI Kit 放进去就等于
-把可选依赖与 DOM 副作用拖进所有消费者的产物图（见 ADR
-[UI Kit 子路径与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary) 决策 1）。
+把可选依赖与 DOM 副作用拖进所有消费者的产物图。
 
 ## 安装
 

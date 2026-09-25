@@ -11,7 +11,6 @@
     "lint": "vp lint . --vue-plugin --node-plugin --import-plugin",
     "typecheck": "vp exec vue-tsc -p tsconfig.json --noEmit",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck",
-    "fix-dot": "fixdot ./zh-CN/base/* ./zh-CN/control/* ./zh-CN/guide/* ./zh-CN/overlay/* ./index.md -d -p",
     "lint:zh": "pnpm zhlint '**/*.md' --fix"
   },
   "dependencies": {

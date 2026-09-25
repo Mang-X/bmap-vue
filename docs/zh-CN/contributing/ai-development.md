@@ -157,6 +157,8 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:raw-sdk` | 扫描禁区目录（`components` / `composables` / `core/runtime`） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src`，白名单外的任何 raw SDK 引用都会失败 |
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
+| `pnpm check:docs-brand` | 已退役的发布身份（包名 / 产品名 / 去前缀前的组件名 / 库版本措辞 `3.0`）不得回到发布文档面。判据按**结构**而非名单：`3.0` 按引号分档（带引号是官方 loader 的 `version` 取值）、`<BMap` 按位置（后面是空白/斜杠/尖括号才算 Vue 标签）、MIT 署名用 lookbehind 排除。逐行豁免 `brand-gate:allow <理由>`，理由必填、只豁免本行、有预算上限 |
+| `pnpm check:docs-links` | 文档锚点与导航覆盖（页面级死链归 `vitepress build`） |
 | `pnpm check:raw-sdk:declarations` | 旧引擎残留在**公共声明**上的不变量：`dist/**/*.d.ts` 不得再出现 `BMapGL` 或已删除的 engine 取值。`check:public-dts` 只禁 `BMap.*` / `BMapGL` / 官方类型包，**不**禁 engine 取值字面量，所以发布产物上这条覆盖是独立的一步。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分） |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |

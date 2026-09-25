@@ -21,7 +21,6 @@ export default withPwa(
     //   items: [{ text: '简体中文', link: '/zh-CN/' }]
     // },
     themeConfig: {
-      i18nRouting: true,
       returnToTopLabel: "top",
       logo: "/logo.svg",
       nav,

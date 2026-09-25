@@ -11,23 +11,11 @@
 
 （`./components` / `./composables` / `./resolver` 是根入口的等价视图，承诺与 `.` 相同。）
 
-**`./core` 子路径已取消（#44）**。它曾经是「内部实现面」：Loader / Registry / Runtime /
-缓存 / 工具都在那里，文档也一直写着「不承诺稳定」。#44 按 issue 的逐导出判定门槛复核后结论是——
-那 105 个值导出里**只有 4 个有真实公开消费者**（本页与[离线地图](../expand/offline-map.md)的
-加载器示例、消费方 fixture）：`baiduJsapiV4Provider`、`customScriptV4Provider`、
-`existingGlobalV4Provider`、`createLoadedJsapiV4`。既然文档自己已经告诉用户「不要依赖它」，
-把它整体保留成一个不承诺稳定的公开出口就只剩成本。于是：
+**没有 `./core` 子路径。** 1.0 的公共出口只有上面那几个。要写第三方 adapter、
+自研 Provider / Driver、或者要拿 raw SDK 对象，都用 `./advanced`。
 
-- 这 4 个名字并入 `./advanced`（与 `normalizeProvider` / `createBMapClientDefinition` 同属装配面）；
-- `./core` 从 `package.json#exports` 移除，`dist/core.*` 不再构建；
-- 其余 101 个值导出**不公开**——它们仍存在于仓库内部的 `src/core` barrel，供组件与内部实现使用。
-
-要写第三方 adapter、自研 Provider / Driver、或者要拿 raw SDK 对象，用 `./advanced`。
 `MapRuntime`、`SdkRegistry`、`ScriptLoader`、`hash` 这类内部实现**没有任何公开出口可达**，
 它们随时可能改。
-
-决策与依据见 [ADR 2026-09-21 插件迁移结论定型与 `./advanced` 冻结](/adr/2026-09-21-plugin-verdicts-and-advanced-freeze)
-与 `#44` 的取消记录（ADR `2026-09-25-export-surface-freeze.md`）。
 
 ## `./advanced` 导出什么
 
@@ -52,10 +40,9 @@
 `createPluginRegistry`、`useSdkResource`、`createLayerRegistry`、`createOverlayRegistry`、
 `DataLayerManager`、`BMapError`。
 
-这条边界由 `tests/behavior/advanced-contract.test.ts` 双向钉住：上面这批名字**必须**能在
-内部 barrel `src/core` 里找到（正证），**必须**不在 `./advanced` 里（负向）。只写负向是不行的——
-清单拼错或名字改名后，那条断言会静默变绿。`tests/behavior/core-surface.test.ts` 另外守
-「它们也不在其余六个出口上」以及「`./core` 子路径没有被重新加回 `package.json#exports`」。
+这条边界由回归测试双向钉住：上面这批内部名字**必须**能在一个内部 barrel 里找到（正证），
+**必须**不在任何公开子路径上（负向）。只写负向是不够的——清单拼错或名字改名后，
+那条断言会静默变绿。`./core` 子路径也不会被重新加回 `package.json#exports`。
 
 ## 第三方 adapter 的最小装配
 
@@ -94,7 +81,7 @@ const raw = unwrapRaw(handle) // 形状由 SDK 决定，本库不承诺
 ```
 
 这份代码在仓库里有**可编译的实例**：`fixtures/consumer/src/advanced-adapter.ts`
-（由 `pnpm verify:package` 用 `vue-tsc` 对着 tarball 的声明编译）。
+（由 `pnpm verify:package` 对着 tarball 编译）。
 
 ## tree-shaking 承诺
 
@@ -105,7 +92,7 @@ UI Kit）。所以「只用了 `./advanced`」的消费者不会把整个组件�
 
 | 位置 | 判据 |
 | --- | --- |
-| `tests/behavior/advanced-contract.test.ts` | `dist/advanced.mjs` 的 import 闭包不含组件标记、不引用 `@baidumap/jsapi-ui-kit`；**对照**：根入口闭包必须含组件标记 |
+| 行为测试 | `dist/advanced.mjs` 的 import 闭包不含组件标记、不引用 `@baidumap/jsapi-ui-kit`；**对照**：根入口闭包必须含组件标记 |
 | `pnpm verify:package` | 在装了 tarball 的消费方里用真实打包器各打一次「只用 `./advanced`」与「只用根入口」，前者 0 个组件标记、后者必须命中 |
 
 ```bash
