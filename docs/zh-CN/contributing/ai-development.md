@@ -210,6 +210,7 @@ pnpm check:raw-sdk:declarations # 公共声明无旧引擎残留(需先 build:pa
 pnpm generate:capability-matrix:check
 pnpm check:docs-brand      # 发布文档面无退役品牌串
 pnpm check:docs-links      # 文档锚点与导航覆盖
+pnpm check:snippet-consistency # 三处 API 示例一致(需先 build:package)
 pnpm docs:build            # 涉及文档时
 ```
 

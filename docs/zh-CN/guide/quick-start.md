@@ -9,6 +9,26 @@ lang: zh-CN
 
 ## 用法
 
+```vue
+<template>
+  <Map :ak="ak" v-model:center="center" :zoom="12">
+    <Marker :position="center" />
+    <NavigationControl anchor="BMAP_ANCHOR_TOP_RIGHT" />
+  </Map>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { Map, Marker, NavigationControl } from 'bmap-vue'
+import type { Point } from 'bmap-vue'
+
+const ak = '百度地图ak'
+const center = ref<Point>({ lng: 116.404, lat: 39.915 })
+</script>
+```
+
+地图 SDK 由本库默认通过官方 `@baidumap/jsapi-loader` 加载，不需要手动引脚本。
+
 ### 完整引入
 
 失去 Tree Shaking 的功能，打包有冗余代码。如果你对打包后的文件大小不是很在乎，那么使用完整导入会更方便。

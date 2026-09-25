@@ -80,6 +80,12 @@ jobs:
       - name: Check docs links
         run: node --experimental-strip-types scripts/check-docs-links.mts
 
+      # README / npm 包 / 文档站三处的 API 示例一致。判据是「示例里用到的每个标识符都必须
+      # 真的在 dist/*.d.ts 里，且三处形状一致」——不是「三处文本相等」：后者没有区分力
+      # （三处都写错照样绿），还会因为文案风格差异逼人锁死措辞。需先 build:package。
+      - name: Check API snippet consistency
+        run: node --experimental-strip-types scripts/check-snippet-consistency.mts
+
       # 覆盖物 defineEmits 静态契约无漂移（#138）。
       # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
       # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。

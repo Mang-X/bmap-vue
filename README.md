@@ -51,6 +51,54 @@ yarn add bmap-vue
 npm install bmap-vue
 ```
 
+## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Play%20Button.png" alt="Play Button" width="25" height="25" /> 用法
+
+```vue
+<template>
+  <Map :ak="ak" v-model:center="center" :zoom="12">
+    <Marker :position="center" />
+    <NavigationControl anchor="BMAP_ANCHOR_TOP_RIGHT" />
+  </Map>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { Map, Marker, NavigationControl } from 'bmap-vue'
+import type { Point } from 'bmap-vue'
+
+const ak = '你的百度地图 ak'
+const center = ref<Point>({ lng: 116.404, lat: 39.915 })
+</script>
+```
+
+`ak` 可以在多棵子树间共享：`<BMapProvider>` 提供 Client 上下文，服务 composable 也能在
+没有 `<Map>` 的情况下单独使用。
+
+```vue
+<template>
+  <BMapProvider :ak="ak">
+    <Map :zoom="12">
+      <ZoomControl />
+    </Map>
+  </BMapProvider>
+</template>
+
+<script setup lang="ts">
+import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
+</script>
+```
+
+需要在多处复用同一个 `ak` 时，用全局插件注入一次即可：
+
+```ts
+import { createApp } from 'vue'
+import { createBMapPlugin } from 'bmap-vue'
+
+app.use(createBMapPlugin({ ak: '你的百度地图 ak' }))
+```
+
+地图 SDK 由本库默认通过官方 `@baidumap/jsapi-loader` 加载，不需要手动引脚本。
+
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Open%20Book.png" alt="Open Book" width="25" height="25" /> 文档
 
 [中文文档](https://Mang-X.github.io/bmap-vue/)
