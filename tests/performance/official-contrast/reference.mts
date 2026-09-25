@@ -28,6 +28,10 @@
  * 每次重录的 diff 都是「读数真的动了」而不是「时间戳动了」。
  */
 
+// ⚠️ 从 `report.mts` 复用，**不**在本文件再抄一份：两处字面量相同的实现就是「两份事实源」，
+// 抄一份的那天起，形状守卫与快照校验就会各改各的（同 ADR decision 15 的教训）。
+import { isPlainObject } from "./report.mts";
+
 /** 快照 schema 版本。结构变了要 +1，门禁会挡住旧 schema 混入。 */
 export const REFERENCE_RESULT_VERSION = 1;
 
@@ -75,6 +79,8 @@ export interface ReferenceScenario {
 export interface ReferenceResult {
   readonly version: number;
   readonly mode: "fake-v4";
+  /** 引擎与被测物的真实身份（见 `ReferenceEngine`）。人读视图**必须**据此加限定语。 */
+  readonly engine: ReferenceEngine;
   /** 录下来的时刻（ISO）。与 `sourceCommit` 一起构成「哪一次跑」。 */
   readonly recordedAt: string;
   /** 跑出这份读数的 **commit SHA**——没有它，几年后只剩一个日期，对不上代码。 */
@@ -138,6 +144,21 @@ export function checkReferenceResult(
   if (value.mode !== "fake-v4") {
     issues.push(`REFERENCE_MODE_UNKNOWN: ${String(value.mode)}`);
   }
+  // 引擎三件套（kind / version / oursUnderTest）缺任一条，人读视图就没法说清「测的到底是什么」，
+  // 于是那张表会被默认读成「发布物 × 真实 JSAPI 4.0」——本档两条都不成立。
+  if (!isPlainObject(value.engine)) {
+    issues.push("REFERENCE_ENGINE_MISSING");
+  } else {
+    if (value.engine.kind !== "fake" && value.engine.kind !== "real") {
+      issues.push(`REFERENCE_ENGINE_KIND_UNKNOWN: ${String(value.engine.kind)}`);
+    }
+    if (typeof value.engine.version !== "string" || value.engine.version === "") {
+      issues.push("REFERENCE_ENGINE_VERSION_MISSING");
+    }
+    if (value.engine.oursUnderTest !== "source" && value.engine.oursUnderTest !== "dist") {
+      issues.push(`REFERENCE_ENGINE_OURS_UNDER_TEST_UNKNOWN: ${String(value.engine.oursUnderTest)}`);
+    }
+  }
   // provenance 三件套：缺任一条，这份快照就无法回答「这是哪一次跑、哪一版、哪台机器」。
   for (const key of ["recordedAt", "sourceCommit", "datasetVersion", "oursVersion", "officialVersion"]) {
     if (typeof value[key] !== "string" || value[key] === "") {
@@ -186,8 +207,4 @@ export function checkReferenceResult(
     }
   }
   return issues;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

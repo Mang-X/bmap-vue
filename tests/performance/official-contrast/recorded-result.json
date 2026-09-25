@@ -1,8 +1,13 @@
 {
   "version": 1,
   "mode": "fake-v4",
-  "recordedAt": "2026-09-25T05:30:50.474Z",
-  "sourceCommit": "a41f00d9c470489915af1c8b9141010a211c2eee",
+  "engine": {
+    "kind": "fake",
+    "version": "fake-v4",
+    "oursUnderTest": "source"
+  },
+  "recordedAt": "2026-09-25T05:49:43.219Z",
+  "sourceCommit": "2528069f853f4fd116a95b28fdfef8ee58ccad63",
   "datasetVersion": "1",
   "oursVersion": "1.0.0-rc.0",
   "officialVersion": "1.0.1",
@@ -18,8 +23,8 @@
       "id": "map-cold-mount",
       "official": "Map",
       "ours": {
-        "actMs": 4.1782499999999345,
-        "teardownMs": 1.4728750000001583,
+        "actMs": 3.923582999999894,
+        "teardownMs": 1.4104160000000547,
         "sdkCalls": 43,
         "callKind": "listen",
         "recreates": 1,
@@ -28,8 +33,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 22.780249999999796,
-        "teardownMs": 1.3016670000001795,
+        "actMs": 22.305415999999923,
+        "teardownMs": 1.31899999999996,
         "sdkCalls": 5,
         "callKind": "listen",
         "recreates": 1,
@@ -42,8 +47,8 @@
       "id": "marker-100-mount",
       "official": "100 × Marker",
       "ours": {
-        "actMs": 4.511792000000014,
-        "teardownMs": 1.5625830000001315,
+        "actMs": 4.517166999999972,
+        "teardownMs": 1.6553750000000491,
         "sdkCalls": 143,
         "callKind": "listen",
         "recreates": 101,
@@ -52,8 +57,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 22.22612500000014,
-        "teardownMs": 2.0585000000000946,
+        "actMs": 21.878167000000076,
+        "teardownMs": 2.2625409999998283,
         "sdkCalls": 1105,
         "callKind": "listen",
         "recreates": 101,
@@ -66,8 +71,8 @@
       "id": "marker-1k-update",
       "official": "1 000 × Marker",
       "ours": {
-        "actMs": 2.281500000000051,
-        "teardownMs": 2.173667000000023,
+        "actMs": 2.305166999999983,
+        "teardownMs": 2.1782499999999345,
         "sdkCalls": 1000,
         "callKind": "setPosition",
         "recreates": 0,
@@ -76,8 +81,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 26.20854200000008,
-        "teardownMs": 6.99695799999995,
+        "actMs": 22.251042000000098,
+        "teardownMs": 6.676417000000129,
         "sdkCalls": 1000,
         "callKind": "setPosition",
         "recreates": 0,
@@ -90,8 +95,8 @@
       "id": "polyline-10k-parent-update",
       "official": "Polyline",
       "ours": {
-        "actMs": 2.4318339999999807,
-        "teardownMs": 1.3614999999999782,
+        "actMs": 2.4351250000001983,
+        "teardownMs": 1.3641660000000684,
         "sdkCalls": 0,
         "callKind": "setPath",
         "recreates": 0,
@@ -100,8 +105,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 7.24799999999982,
-        "teardownMs": 1.2642080000000533,
+        "actMs": 6.864332999999988,
+        "teardownMs": 1.248166000000083,
         "sdkCalls": 0,
         "callKind": "setPath",
         "recreates": 0,
@@ -114,8 +119,8 @@
       "id": "polyline-10k-path-replace",
       "official": "Polyline",
       "ours": {
-        "actMs": 1.6327500000002146,
-        "teardownMs": 1.4467079999999441,
+        "actMs": 1.5795419999999467,
+        "teardownMs": 1.4141669999999067,
         "sdkCalls": 1,
         "callKind": "setPath",
         "recreates": 0,
@@ -124,8 +129,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 8.381082999999762,
-        "teardownMs": 1.3027499999998327,
+        "actMs": 8.561292000000094,
+        "teardownMs": 1.2957499999999982,
         "sdkCalls": 1,
         "callKind": "setPath",
         "recreates": 0,
@@ -138,8 +143,8 @@
       "id": "pointcollection-50k",
       "official": null,
       "ours": {
-        "actMs": 20.38541699999996,
-        "teardownMs": 1.0089160000002266,
+        "actMs": 16.170000000000073,
+        "teardownMs": 0.9827920000000177,
         "sdkCalls": 44,
         "callKind": "listen",
         "recreates": 2,
@@ -154,8 +159,8 @@
       "id": "native-point-50k",
       "official": null,
       "ours": {
-        "actMs": 12.199708999999984,
-        "teardownMs": 1.4420419999996739,
+        "actMs": 13.925707999999759,
+        "teardownMs": 1.4376250000000255,
         "sdkCalls": 44,
         "callKind": "listen",
         "recreates": 2,
@@ -170,8 +175,8 @@
       "id": "infowindow-lifecycle",
       "official": "InfoWindow",
       "ours": {
-        "actMs": 4.111875000000055,
-        "teardownMs": 1.4536250000001019,
+        "actMs": 4.33745799999997,
+        "teardownMs": 1.4757919999997284,
         "sdkCalls": 0,
         "callKind": "listen",
         "recreates": 0,
@@ -180,8 +185,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 4.885250000000269,
-        "teardownMs": 1.2545839999997952,
+        "actMs": 4.830209000000195,
+        "teardownMs": 1.2705000000000837,
         "sdkCalls": 0,
         "callKind": "listen",
         "recreates": 0,
@@ -194,8 +199,8 @@
       "id": "router-remount",
       "official": "Map",
       "ours": {
-        "actMs": 5.886124999999993,
-        "teardownMs": 1.5152079999998023,
+        "actMs": 5.023290999999972,
+        "teardownMs": 1.4631670000003396,
         "sdkCalls": 43,
         "callKind": "listen",
         "recreates": 1,
@@ -204,8 +209,8 @@
         "retainedListeners": 0
       },
       "officialSide": {
-        "actMs": 24.13774999999987,
-        "teardownMs": 1.2835000000000036,
+        "actMs": 23.440958000000137,
+        "teardownMs": 1.2669999999998254,
         "sdkCalls": 5,
         "callKind": "listen",
         "recreates": 1,
@@ -218,8 +223,8 @@
       "id": "keepalive-toggle",
       "official": null,
       "ours": {
-        "actMs": 2.8135839999999916,
-        "teardownMs": 1.4107919999996739,
+        "actMs": 3.862833000000137,
+        "teardownMs": 1.4381250000001273,
         "sdkCalls": 0,
         "callKind": "listen",
         "recreates": 0,

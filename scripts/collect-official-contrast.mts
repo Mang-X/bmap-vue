@@ -74,6 +74,7 @@ import { CONTRAST_SCENARIOS } from "../tests/performance/officialScenarios.ts";
 import {
   REFERENCE_RESULT_VERSION,
   toReferenceSide,
+  type ReferenceEnvironment,
   type ReferenceResult,
 } from "../tests/performance/official-contrast/reference.mts";
 
@@ -223,7 +224,38 @@ function decide(report: ContrastReport): ContrastDecision {
   });
 }
 
+/**
+ * Fake 替身引擎的版本标识。
+ *
+ * 票面写的是「同 JSAPI 4.0」。本档没有真实 JSAPI（无 AK），跑的是本仓库的 Fake v4；
+ * 它的"版本"就是这串字符串——写进快照，是为了**如实记下**测的到底是哪套引擎，
+ * 而不是含糊地让 "4.0" 指代一个从未加载过的官方 SDK。
+ */
+const FAKE_ENGINE_VERSION = "fake-v4";
+
+/** 本采集脚本只跑 Fake 档；快照的 `mode` 与引擎三件套都从它来，避免两处写死漂掉。 */
+const RECORDED_MODE: ReferenceResult["mode"] = "fake-v4";
+
 /** 快照的入库路径（唯一的数据事实源；人读视图由它派生，不手写第二份数字）。 */
+/**
+ * 由报告信封 + 运行档位拼出快照的机器身份（字段名只在这里一处落地一次）。
+ *
+ * `dom` 由 `mode` 决定而非写死：本档是 Fake v4 + happy-dom，但把 "happy-dom" 硬编码在
+ * 调用点，等于宣称「将来任何 mode 都是 happy-dom」——那会把新档的机器标错还不报错。
+ */
+function toReferenceEnvironment(
+  envelope: { platform: string; arch: string; cpuModel: string; node: string },
+  mode: ReferenceResult["mode"],
+): ReferenceEnvironment {
+  return {
+    platform: envelope.platform,
+    arch: envelope.arch,
+    cpuModel: envelope.cpuModel,
+    node: envelope.node,
+    dom: mode === "fake-v4" ? "happy-dom" : undefined,
+  };
+}
+
 const REFERENCE_PATH = resolve(
   repoRoot,
   "tests/performance/official-contrast/recorded-result.json",
@@ -256,19 +288,26 @@ function recordReference(report: ContrastReport): void {
   }
   const reference: ReferenceResult = {
     version: REFERENCE_RESULT_VERSION,
-    mode: "fake-v4",
+    mode: RECORDED_MODE,
+    // 票面说「同 JSAPI 4.0」「本库最终 1.0 RC tarball」，本档两条都达不到：组件场景导入
+    // `src/**`，且 `jsapi-loader` 复用 Fake（无 AK、无网络）。因此把真实身份写进快照，
+    // 让渲染层**据此加限定语**，而不是让读者默认「测的是发布物 × 真实 JSAPI」。
+    engine: {
+      kind: "fake",
+      version: FAKE_ENGINE_VERSION,
+      // 量的是 src/**，不是 tarball——`oursVersion` 读自 package.json，说的是版本号，
+      // 不是「被加载的那个构建」。两者都真，合起来才是误导。
+      oursUnderTest: "source",
+    },
     recordedAt: report.finishedAt,
     sourceCommit,
     datasetVersion: report.envelope.datasetVersion,
     oursVersion: report.envelope.oursVersion,
     officialVersion: report.envelope.officialVersion,
-    environment: {
-      platform: report.envelope.platform,
-      arch: report.envelope.arch,
-      cpuModel: report.envelope.cpuModel,
-      node: report.envelope.node,
-      dom: "happy-dom",
-    },
+    // ⚠️ 字段名**不在这里重打一遍**：`ReferenceEnvironment` 加字段时，编排若还手写这份
+    // 字面量就会静默漏掉新增字段（TS 不报错——少一个可选字段照样过）。`mode` 决定 DOM，
+    // 不是在这里写死 "happy-dom"：将来真加一档别的 mode，写死会把这档的机器标错。
+    environment: toReferenceEnvironment(report.envelope, RECORDED_MODE),
     scenarios: report.scenarios.map((entry) => ({
       id: entry.id,
       official: entry.official,

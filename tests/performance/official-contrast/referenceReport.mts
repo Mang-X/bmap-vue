@@ -21,6 +21,8 @@
  *
  * 后者才是 #138 Vue-native 收口真正要防回归的东西；前者要如实承认，不能藏。
  */
+import { CONTRAST_SCENARIOS } from "../officialScenarios.ts";
+import type { ContrastTier } from "../officialScenarios.ts";
 import type { ReferenceResult, ReferenceScenario } from "./reference.mts";
 
 /** 人读视图的定界标记：生成器按它定位替换，文档里手改的正文不受影响。 */
@@ -30,6 +32,32 @@ export const REFERENCE_TABLE_END = "<!-- /bmap-vue-1.0:official-contrast -->";
 function ms(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "-";
   return value.toFixed(2);
+}
+
+/**
+ * 某一档里**可比较**（有官方等价物）的场景 id——**从场景表取**，不在这里写硬编码 id。
+ *
+ * ⚠️ 上一版把 id 直接写成两个数组字面量，代价有两处：分档这个**票面叙事**没有数据来源，
+ * 而且 `if (!entry) continue` 会让「场景表里的某个高级场景没测到 / 被删掉」**只少一行、
+ * 不报错**——静默少报，正是 decision 15 为 `report.mts` 修掉的那一类。
+ * 现在缺行走 `missingRows()`，渲染直接把它说出来。
+ *
+ * 过滤掉 `official === null` 是必须的：那些是**本库扩展档**，官方侧本就无读数，
+ * 列进对照表再报「缺读数」是自己造的假警报。它们由「本库扩展档」一节单独交代。
+ */
+function comparableIdsOfTier(tier: ContrastTier): readonly string[] {
+  return CONTRAST_SCENARIOS.filter(
+    (scenario) => scenario.tier === tier && scenario.official !== null,
+  ).map((scenario) => scenario.id);
+}
+
+/** 场景表要的行里，快照**没读到**的那些。空 = 读齐了。 */
+function missingRows(
+  rows: readonly ReferenceScenario[],
+  ids: readonly string[],
+): readonly string[] {
+  const present = new Set(rows.map((entry) => entry.id));
+  return ids.filter((id) => !present.has(id));
 }
 
 /** 可比场景（两侧都拿到读数）的结构摘要，**不排名**。 */
@@ -72,9 +100,28 @@ export function formatReferenceReport(result: ReferenceResult): string {
       `${env.vitest ? ` · vitest ${env.vitest}` : ""}${env.dom ? ` · ${env.dom}` : ""}。`,
   );
   lines.push("");
+  // ⚠️ 这一段是**读表的人最该先看到**的东西，也是上一版缺的那句。快照里本库侧记的是
+  // `oursVersion`（读自 package.json），看起来像发布物版本；实际被测的是 `src/**`，引擎是
+  // Fake 替身。票面对照版本写的是「最终 1.0 RC tarball」、环境写的是「同 JSAPI 4.0」，
+  // 本档两条都达不到——不写出来，读者会把下面那张表默认读成「发布物 × 真实 JSAPI 4.0」。
+  const engine = result.engine;
+  const underTest =
+    engine.oursUnderTest === "dist"
+      ? "本库发布产物（dist / tarball）"
+      : "本库**源码**（`packages/bmap-vue/src/**`）——**不是**打包产物";
   lines.push(
-    "> 毫秒为**该 Fake v4 / happy-dom / 上述机器的同轮读数**，仅用于解释此次实验，**不是跨机器阈值**。" +
-      "本节不按快慢排序，也不给百分比或倍数——票面禁止营销式排名。",
+    `被测对象：${underTest}；引擎：` +
+      (engine.kind === "fake"
+        ? `**Fake v4 替身**（\`${engine.version}\`）——**不是**真实 JSAPI，本轮无 AK、无网络，` +
+          "官方库经 `jsapi-loader` 复用已存在的 `window.BMap` 跑通"
+        : `真实 JSAPI \`${engine.version}\``) +
+      "。",
+  );
+  lines.push("");
+  lines.push(
+    "> 毫秒为**该引擎 / 上述机器的同轮读数**，仅用于解释此次实验，**不是跨机器阈值**，" +
+      "也**不代表**真实 JSAPI + 浏览器下的耗时。本节不按快慢排序，也不给百分比或倍数——" +
+      "票面禁止营销式排名。",
   );
   lines.push("");
 
@@ -83,12 +130,21 @@ export function formatReferenceReport(result: ReferenceResult): string {
   lines.push("");
   lines.push("| 场景 | 本库 act ms | 官方 act ms | 结构读数（本库 / 官方） |");
   lines.push("| --- | ---: | ---: | --- |");
-  for (const id of ["map-cold-mount", "marker-100-mount"] as const) {
+  const simpleIds = comparableIdsOfTier("simple");
+  for (const id of simpleIds) {
     const entry = comparable.find((scenario) => scenario.id === id);
     if (!entry) continue;
     lines.push(
       `| ${entry.id} | ${ms(entry.ours?.actMs ?? null)} | ${ms(entry.officialSide?.actMs ?? null)} | ` +
         `${structureRow(entry)} |`,
+    );
+  }
+  const absentSimple = missingRows(comparable, simpleIds);
+  if (absentSimple.length > 0) {
+    // 不 `continue` 悄悄跳过：少报的那一行必须**说出来**，否则「解释简单路径成本」缺一块也没人知道。
+    lines.push(
+      `| ⚠️ 缺读数 | — | — | ${absentSimple.join(" / ")} —— 场景表里有，快照里没读到；` +
+        "该档解释不完整，请重录快照 |",
     );
   }
   lines.push("");
@@ -105,17 +161,28 @@ export function formatReferenceReport(result: ReferenceResult): string {
       "不给倍数，不是预先假定哪边更贵。",
   );
   lines.push("");
-  // ⚠️ 数字**从快照里取**，不写死：写死的数字下一次重录就与上表不一致——而这正是
-  // 「两份事实源漂移」那个坑，只是从 markdown 搬进了渲染器。
-  const mountEntry = comparable.find((scenario) => scenario.id === "marker-100-mount");
-  if (mountEntry?.ours && mountEntry.officialSide) {
-    const oursMount = mountEntry.ours;
-    const offMount = mountEntry.officialSide;
+  // ⚠️ 这句里的**每个数字都从快照取**，场景也是**选出来**的，不是写死 `marker-100-mount`：
+  // 简单档里「残留差」最大的那一行。写死场景 id 等于渲染器自己持一份事实源（票面叙事分成
+  // 数据在场景表，数字在快照——这里两样都该从上游来）；而且场景改名会让这句话悄悄失去对象。
+  //
+  // 选「残留差最大」而不是「第一个有残留的」：残留是本库与官方**架构分水岭**的那个读数
+  // （#138 Vue-native 收口要防的就是它），最刺眼的那一行最该被点出来。
+  // ⚠️ 只在**简单档**里选：这句活在「简单路径」一节里，挑中高级档的行会让它解释错档。
+  const worstRetain = comparable
+    .filter((entry) => simpleIds.includes(entry.id) && entry.ours && entry.officialSide)
+    .map((entry) => ({ entry, gap: entry.officialSide!.retainedResources - entry.ours!.retainedResources }))
+    .filter((row) => row.gap !== 0)
+    .sort((a, b) => b.gap - a.gap)[0];
+  if (worstRetain) {
+    const oursSide = worstRetain.entry.ours!;
+    const offSide = worstRetain.entry.officialSide!;
     lines.push(
-      `可复现的**结构差**（与快慢无关，跨机成立）：\`marker-100-mount\` 的 \`${oursMount.callKind}\` ` +
-        `调用面本库 ${oursMount.sdkCalls} / 官方 ${offMount.sdkCalls}；卸载后**残留**本库 ` +
-        `${oursMount.retainedResources} / 官方 ${offMount.retainedResources} —— ` +
-        (offMount.retainedResources > 0 ? "官方那侧覆盖物没有被摘掉。" : "两侧都摘干净。"),
+      `可复现的**结构差**（与快慢无关，跨机成立）：\`${worstRetain.entry.id}\` 的 \`${oursSide.callKind}\` ` +
+        `调用面本库 ${oursSide.sdkCalls} / 官方 ${offSide.sdkCalls}；卸载后**残留**本库 ` +
+        `${oursSide.retainedResources} / 官方 ${offSide.retainedResources} —— ` +
+        (offSide.retainedResources > 0
+          ? "官方那侧覆盖物没有被摘掉。"
+          : "本库那侧尚有残留，值得复查。"),
     );
     lines.push("");
   }
@@ -125,17 +192,20 @@ export function formatReferenceReport(result: ReferenceResult): string {
   lines.push("");
   lines.push("| 场景 | 本库 | 官方 | 结构读数（本库 / 官方） |");
   lines.push("| --- | --- | --- | --- |");
-  for (const id of [
-    "marker-1k-update",
-    "polyline-10k-parent-update",
-    "polyline-10k-path-replace",
-    "infowindow-lifecycle",
-  ] as const) {
+  const advancedIds = comparableIdsOfTier("advanced");
+  for (const id of advancedIds) {
     const entry = comparable.find((scenario) => scenario.id === id);
     if (!entry) continue;
     lines.push(
       `| ${entry.id} | ${ms(entry.ours?.actMs ?? null)} ms | ${ms(entry.officialSide?.actMs ?? null)} ms | ` +
         `${structureRow(entry)} |`,
+    );
+  }
+  const absentAdvanced = missingRows(comparable, advancedIds);
+  if (absentAdvanced.length > 0) {
+    lines.push(
+      `| ⚠️ 缺读数 | — | — | ${absentAdvanced.join(" / ")} —— 场景表里有，快照里没读到；` +
+        "该档解释不完整，请重录快照 |",
     );
   }
   lines.push("");

@@ -478,6 +478,62 @@ ${issues.join("\n")}`).toEqual([]);
     );
   });
 
+  it("快照记下**引擎与被测物**的真实身份（票面「同 JSAPI 4.0」在本档不成立）", () => {
+    // 票面对照版本写「本库最终 1.0 RC tarball」、环境写「同 JSAPI 4.0」。本档两条都达不到：
+    // 组件场景导入 `src/**`，且 jsapi-loader 复用 Fake（无 AK）。快照必须**写出来**，
+    // 否则 `oursVersion: 1.0.0-rc.0` 会被读成「发布物 × 真实 JSAPI 4.0」——它两样都不是。
+    const ref = snapshot() as {
+      engine: { kind: string; version: string; oursUnderTest: string };
+    };
+    expect(ref.engine.kind).toBe("fake");
+    expect(ref.engine.version).toBe("fake-v4");
+    expect(ref.engine.oursUnderTest).toBe("source");
+  });
+
+  it("人读视图**明写**被测的是源码 + Fake 引擎，不让读者默认是发布物 × 真实 JSAPI", () => {
+    // 上一版只列机器身份，表照旧摆出——落在这一节的人会把那当发布物读数。
+    const text = formatReferenceReport(snapshot() as ReferenceResult);
+    expect(text).toMatch(/本库\*\*源码\*\*/);
+    expect(text).toMatch(/不是\*\*真实 JSAPI/);
+    expect(text).toMatch(/不是跨机器阈值/);
+    // 限定语必须**由快照驱动**：engine 换成 dist / real 时文案必须跟着变，否则这段是装饰。
+    const asDist = snapshot() as ReferenceResult;
+    (asDist.engine as { oursUnderTest: string }).oursUnderTest = "dist";
+    (asDist.engine as { kind: string }).kind = "real";
+    const realText = formatReferenceReport(asDist);
+    expect(realText, "文案没有随 engine 改变——限定语是写死的装饰").not.toBe(text);
+    expect(realText).toMatch(/本库发布产物/);
+  });
+
+  it("场景分档住在**场景表**里，不在渲染器里（分档要有数据来源）", () => {
+    // 分档是票面要人读报告「解释」的两件事，住在渲染器的两个数组字面量里时，
+    // 它既无事实来源、也无法被门禁查。渲染器因此**不得**出现硬编码场景 id。
+    const renderer = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast/referenceReport.mts"),
+      "utf8",
+    );
+    const code = stripComments(renderer);
+    for (const id of CONTRAST_SCENARIO_IDS) {
+      expect(code, `渲染器里写死了场景 id ${id}——分档应从场景表取`).not.toContain(id);
+    }
+    // 分档字段本身必须在场景表里，且两档都非空（否则某一节会渲染成空表）。
+    const tiers = CONTRAST_SCENARIOS.map((scenario) => scenario.tier);
+    expect(tiers.filter((tier) => tier === "simple").length).toBeGreaterThan(0);
+    expect(tiers.filter((tier) => tier === "advanced").length).toBeGreaterThan(0);
+  });
+
+  it("人读视图**不静默少报**：场景表里可比较的行缺读数时必须显式说出来", () => {
+    // 旧渲染器 `if (!entry) continue`——少一行、不报错，正是 decision 15 修掉的「静默少报」。
+    // 这条门禁先复现那个缺读数，确认它**真的**被说出来。
+    const holed = snapshot() as ReferenceResult;
+    const target = holed.scenarios.find((entry) => entry.official !== null);
+    expect(target).toBeTruthy();
+    holed.scenarios = holed.scenarios.filter((entry) => entry.id !== target?.id);
+    const text = formatReferenceReport(holed);
+    expect(text, "缺读数被静默跳过了").toMatch(/缺读数/);
+    expect(text).toContain(target?.id);
+  });
+
   it("文档里的人读视图由快照生成，且与快照一致（不是第二份手写事实源）", () => {
     // 票面验收第二条要「人读报告**解释**简单路径成本与高级路径收益」；A+B 最大的坑是
     // JSON 一套数字、markdown 又手抄一套，下次更新 A 忘了更新 B，两边慢慢漂。

@@ -73,7 +73,18 @@ export interface ContrastScenario {
    * 它是「读数能证明什么」的边界声明——写不下的结论不许从这张表推导。
    */
   readonly measures: string;
+  /**
+   * 票面要人读报告**解释**的两档（#140 验收第二条）。
+   *
+   * ⚠️ 它住在场景表里、而不是渲染器里，是有代价换来的：分档只存在于渲染器的两个数组
+   * 字面量里时，**删掉一个高级场景只会让它那一行悄悄消失**，所有门禁照样绿——那正是
+   * decision 15 为 `report.mts` 修掉的「静默少报」类。分档落在数据里，门禁才能查。
+   */
+  readonly tier: ContrastTier;
 }
+
+/** 简单路径（诚实承认成本）/ 高级路径（本库的结构收益所在）。 */
+export type ContrastTier = "simple" | "advanced";
 
 /** 票面的 10 个场景，逐条登记。顺序即报告里的顺序（与票面一致）。 */
 export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
@@ -84,6 +95,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     official: "Map",
     size: null,
     measures: "一张地图的建立与释放（挂载→ready→卸载），含资源销账。",
+    tier: "simple",
   },
   {
     id: "marker-100-mount",
@@ -92,6 +104,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     official: "100 × Marker",
     size: 100,
     measures: "100 个点的挂载与卸载；两边都是**逐点 Marker**（本库不偷偷换批量路径）。",
+    tier: "simple",
   },
   {
     id: "marker-1k-update",
@@ -100,6 +113,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     official: "1 000 × Marker",
     size: 1_000,
     measures: "1000 个点换一份新位置数据：SDK 写入次数与实例重建次数。",
+    tier: "advanced",
   },
   {
     id: "polyline-10k-parent-update",
@@ -109,6 +123,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     size: 10_000,
     measures:
       "父级改一个**与 path 无关**的状态。理想是「不重发 path」；本场景钉的是这条**不变式**，不是速度。",
+    tier: "advanced",
   },
   {
     id: "polyline-10k-path-replace",
@@ -117,6 +132,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     official: "Polyline",
     size: 10_000,
     measures: "真的换一份 10k path：SDK 写入次数、是否重建实例、墙钟。",
+    tier: "advanced",
   },
   {
     id: "pointcollection-50k",
@@ -126,6 +142,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     size: 50_000,
     measures:
       "5 万个点走**单个** SDK 批量资源（v4 `PointShapeLayer`）。官方 `BMap.PointCollection` 在 4.0 已整体移除。",
+    tier: "advanced",
   },
   {
     id: "native-point-50k",
@@ -135,6 +152,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     size: 50_000,
     measures:
       "5 万个点走扩展 API 的原生点图层（`BMap.PointLayer`）。官方 binding 没有对应组件封装。",
+    tier: "advanced",
   },
   {
     id: "infowindow-lifecycle",
@@ -143,6 +161,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     official: "InfoWindow",
     size: null,
     measures: "信息窗的建立、内容/位置更新、关闭与释放。",
+    tier: "advanced",
   },
   {
     id: "router-remount",
@@ -152,6 +171,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     size: null,
     measures:
       "真实路由反复进出同一路由。**两边都接 `vue-router`**（官方 README 的示例写法），否则不是同一个问题。",
+    tier: "advanced",
   },
   {
     id: "keepalive-toggle",
@@ -161,6 +181,7 @@ export const CONTRAST_SCENARIOS: readonly ContrastScenario[] = [
     size: null,
     measures:
       "KeepAlive 下 deactivate/activate：地图应挂起而非重建。官方库无 KeepAlive 语义，只记本库行为。",
+    tier: "advanced",
   },
 ];
 
