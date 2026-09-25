@@ -6,6 +6,9 @@
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "unpkg": "./dist/index.global.js",
+  "jsdelivr": "./dist/index.global.js",
+  "style": "./dist/bmap-vue.css",
   "private": false,
   "license": "MIT",
   "keywords": [

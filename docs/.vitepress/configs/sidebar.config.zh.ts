@@ -39,6 +39,18 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "errors",
         },
         {
+          text: "Vue 模式",
+          link: "vue-patterns",
+        },
+        {
+          text: "服务端渲染与生命周期",
+          link: "ssr",
+        },
+        {
+          text: "与官方库的关系",
+          link: "comparison",
+        },
+        {
           text: "FAQ",
           link: "faq",
         },
@@ -373,6 +385,24 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "bmap-draw 鼠标测量与绘制",
           link: "bmap-draw",
+        },
+        {
+          text: "插件",
+          link: "plugins",
+        },
+        {
+          text: "Resolver（自动导入）",
+          link: "resolver",
+        },
+      ],
+    },
+    {
+      text: "关于",
+      collapsed: false,
+      items: [
+        {
+          text: "项目来源与致谢",
+          link: "/zh-CN/about",
         },
       ],
     },
