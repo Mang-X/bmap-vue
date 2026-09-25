@@ -627,6 +627,23 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (!this.loadEmitted) {
       this.loadEmitted = true
       this.emit('load', { point: this.center, zoom: this.zoom })
+      // `tilesloaded` 是**瓦片**就绪，真实 SDK 在首帧渲染后派发一次。默认**不发**（见
+      // `emitTilesLoadedOnFirstView`）：绝大多数用例根本不等它，擅自派发会凭空多出一次事件。
+      //
+      // 只有 #140 的官方对照基准需要它：官方 `@baidumap/vue-bmap` 的 `Map` 以 `tilesloaded`
+      // 作为 ready 信号，没有它就只能等它自己的 500ms 兜底定时器——那会让「本库立即 ready /
+      // 官方 500ms 后 ready」这个**夹具差异**被当成两库的性能差。打开它，两边才在同一口径上。
+      //
+      // ⚠️ 必须**延到下一个 macrotask**，不能在这里同步 emit：官方是「先 centerAndZoom 返回、
+      // 再 addEventListener('tilesloaded')」这个顺序，同步派发它根本收不到（实测仍退回 500ms
+      // 兜底）。真实 SDK 的瓦片就绪本来也发生在之后的某一帧。
+      if (this.stats.emitTilesLoadedOnFirstView) {
+        this.stats.timerScheduled()
+        setTimeout(() => {
+          this.stats.timerFired()
+          if (!this.destroyed) this.emit('tilesloaded', {})
+        }, 0)
+      }
     }
   }
 

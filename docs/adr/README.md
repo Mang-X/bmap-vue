@@ -46,6 +46,7 @@
 | [2026-09-24](./2026-09-24-single-engine-capability-catalog.md) | 单引擎能力目录收口：删除 `engines` 维度、`engine-unsupported` 改名 `unlisted-capability`（描述符不再声明引擎 / 判定链删恒真白名单分支 / 矩阵与 JSON 重生成 / 结算 `2026-09-14-remove-legacy-engine` 已知限制第 4 条，#126） | Accepted |
 | [2026-09-24](./2026-09-24-overlay-infowindow-vue-native-convergence.md) | Overlay / InfoWindow 的 Vue-native 收口：删自研调度队列（改 Vue batching + 一个数组源 post-flush watcher + replace 窗口的最小尾随队列 / 大数组 `flush:'sync'` 不动）/ 删运行时 Proxy / 定形几何用标量键 / InfoWindow 双 `nextTick` 收成单一 post-flush 入口 / **baseline restore 只有重建一条路**（getter 给当前值、ctor 快照不是默认值，§5 逐条反证）/ 覆盖物 `defineEmits` 改为生成（#138） | Accepted |
 | [2026-09-25](./2026-09-25-clean-slate-migration-baggage-removal.md) | Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（集中弃用层与旧 prop/event 别名一并删除 / `check:no-bmapgl` 三份独家覆盖并入 `check:raw-sdk` / `v3-` 前缀与库版本措辞中性化 / 官方事实与工程史保留；#136） | Accepted |
+| [2026-09-25](./2026-09-25-official-contrast-benchmark.md) | 与 `@baidumap/vue-bmap@1.0.1` 的同场景对照（#140）：Fake 同机档为主档、真实浏览器档留骨架**未实跑**（无 AK）/ 两侧同进程但**不共用 Fake 账本** / 官方基线版本精确锁定 / 官方无等价物的三条场景单列为「本库扩展档」不硬比较 / **唯一能判失败的是不变式不是快慢**（官方侧那条只是读数）/ 渲染次数取 devtools `perf:start`（钩子须先于 `vue` 求值、实例是 `args[2]`、桶须在根 `setup()` 里建）/ 「不改生产语义」门禁化为 `git diff HEAD -- packages/bmap-vue/src` 为空 | Accepted |
 
 ## 约定
 

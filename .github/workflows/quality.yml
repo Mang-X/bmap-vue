@@ -175,6 +175,42 @@ jobs:
           path: .artifacts/perf/
           if-no-files-found: error
 
+  # 与 `@baidumap/vue-bmap@1.0.1`（票面锁定的基线版本）的**同机同进程**对照（#140）。
+  #
+  # 刻意**不设跨机器阈值**：两侧读数并排是为了看「架构差」（实例重建、SDK 写入、残留），
+  # 绝对毫秒在 GitHub runner 上与本地不可比。唯一能让本 job 失败的是**不变式被破坏**
+  # （退出码 1）或**脚手架坏了**（2）/ **没跑成**（3）——都不是机器差异。
+  #
+  # 也不需要 `build:package` 与 AK：Fake 档用 `createFakeV4Harness()`，官方库经
+  # `jsapi-loader` 复用 `window.BMap`（见 tests/performance/officialContrastHarness.ts 文件头）。
+  official-contrast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Official contrast (bmap-vue vs @baidumap/vue-bmap@1.0.1, no AK)
+        run: pnpm perf:contrast
+
+      # 读数要能事后核对「哪一版在什么机器上跑出了什么」，而不是只看 job 变绿。
+      - name: Upload official contrast report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: official-contrast-report
+          path: .artifacts/perf-contrast/
+          if-no-files-found: error
+
   # v4 浏览器 smoke 的确定性档（fixture）：无 AK、无外网，注入 Fake v4 命名空间跑同一份
   # 组件树。真 SDK 的 required smoke 在 nightly（见 nightly-v4-smoke.yml）——把两者分开，
   # 是因为「基础加载失败」不该等到 nightly 才发现，而真实 AK/外网又不该进 PR 门禁。

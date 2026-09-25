@@ -245,6 +245,23 @@ export class FakeV4Diagnostics {
   private callbacksQueued = 0;
   private callbacksSettled = 0;
 
+  /* ------------------------------------------------ 夹具行为开关（非官方语义） */
+
+  /**
+   * 首次 `centerAndZoom` 之后**额外**派发一次 `tilesloaded`（默认关）。
+   *
+   * 它是给 #140 的官方对照基准用的：官方 `@baidumap/vue-bmap` 的 `Map` 以 `tilesloaded` 作为
+   * ready 信号，Fake ���认不发就只能等它自己的 500ms 兜底定时器——那会让「本库立即 ready /
+   * 官方 500ms 后 ready」这个**夹具差异**被读成两库的性能差。打开它，两边才在同一口径上。
+   *
+   * ⚠️ 它**不是**可被断言的官方语义：真实 SDK 的 `tilesloaded` 由瓦片加载完成驱动，而 Fake
+   * 没有瓦片。因此只有「需要 ready 对齐」的对照基准才打开它，其余用例保持默认关闭。
+   *
+   * ⚠️ `reset()` **不清**这个开关：它是「这份 Fake 扮演什么角色」的配置，不是「本轮发生过什么」
+   * 的基线；用例开头调 `reset()` 不应把对照口径悄悄关掉。
+   */
+  emitTilesLoadedOnFirstView = false;
+
   private aliveOf(kind: FakeV4LifecycleKind): WeakSet<object> {
     let set = this.aliveInstances.get(kind);
     if (!set) {

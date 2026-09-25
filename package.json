@@ -15,6 +15,7 @@
     "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",
     "perf:baseline": "node --experimental-strip-types scripts/collect-performance-baseline.mts",
     "perf:baseline:live": "node --experimental-strip-types scripts/collect-live-performance.mts",
+    "perf:contrast": "node --experimental-strip-types scripts/collect-official-contrast.mts",
     "generate:manifest": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts",
     "generate:manifest:check": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check",
     "generate:capability-matrix": "node --experimental-strip-types scripts/generate-capability-matrix.mts",
@@ -92,6 +93,7 @@
   "devDependencies": {
     "@baidumap/jsapi-loader": "1.0.0",
     "@baidumap/jsapi-ui-kit": "1.1.2",
+    "@baidumap/vue-bmap": "1.0.1",
     "@changesets/cli": "^3.0.2",
     "@types/node": "^26.4.1",
     "@vitejs/plugin-vue": "^6.0.8",
@@ -104,6 +106,7 @@
     "vite": "^8.2.2",
     "vite-plus": "0.3.0",
     "vitest": "^5.0.0",
+    "vue-router": "^4.6.4",
     "vue-tsc": "^2.2.0"
   }
 }
