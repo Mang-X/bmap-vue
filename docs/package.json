@@ -18,7 +18,7 @@
     "@vueuse/core": "^14.4.0",
     "bmap-draw": "^1.0.19",
     "prism-theme-vars": "^0.2.5",
-    "three": "^0.158.0",
+    "three": "^0.186.0",
     "vitepress": "2.0.0-alpha.20"
   },
   "devDependencies": {
