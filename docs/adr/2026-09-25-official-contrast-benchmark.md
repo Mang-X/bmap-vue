@@ -285,6 +285,26 @@ Actions run 36092344781 实锤）。
 
 把跨库指标录进 `baseline.json` 是有害的：场景表一改就红，且官方侧的毫秒会挡住本库自己的趋势。
 
+### 15. 报告形状守卫**验到元素**，且住在**纯模块**里而不是编排脚本里
+
+「报告读不出来」必须按**脚手架失败 2** 结算，而 1 在本脚本的合同里专指「本库不变式被破坏」——
+把两者搞反是**误报方向反了**（三、四轮评审第 1、2 条）。但「能 `JSON.parse`」不等于「能用」：
+`checkContrastEnvelope` 会解引用 `report.envelope.runId`、`measuredScenarioCount` 会读
+`entry.ours`、`decideContrastExit` 会读 `invariant.holds`——这些都是**裸解引用**，遇到形状不对
+的 JSON 会抛 TypeError；它从顶层 `await main()` 逃出去后，Node 默认以 **1** 结束。垃圾报告于是
+又被报成「不变式回退」。
+
+⚠️ **验到元素这一层不是洁癖**（四轮评审第 1 条，P1）：`scenarios: [null]` 能过「是数组」那一关，
+随后 `entry.ours` 解引用 `null` 崩掉。实测修复前 `pnpm perf:contrast` 对这种报告正是 **exit 1**。
+所以判据是「**下游会不会解引用它**」，一路验到数组元素（元素为 `null` / 数组同样会崩），不做
+全字段校验。
+
+⚠️ **守卫住在纯模块**（`official-contrast/report.mts`）**而不是编排脚本**里：住脚本里就只能用
+「文件文本断言」钉，于是断言与被钉的代码各改各的——上面那个 P1 正是这么漏过去的。移进纯模块
+后门禁对**合成输入**断言（包括 `scenarios: [null]` 这条），不再是正则。已实测 10 种畸形报告
+（截断 / `{` / `[]` / `null` / `"s"` / `envelope:null` / `envelope:"x"` / `scenarios:{}` /
+`scenarios:[null]` / `invariants:[null]`）全部按 **2** 结算，且消息指名具体哪一条不对。
+
 ## 后果（含回滚）
 
 **得到的**：

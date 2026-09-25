@@ -20,7 +20,9 @@ import { describe, expect, it } from "vitest";
 import {
   checkContrastEnvelope,
   decideContrastExit,
+  describeReportShapeFault,
   formatContrastReport,
+  isContrastReport,
   OFFICIAL_BASELINE_VERSION,
   sameMachine,
   CONTRAST_REPORT_VERSION,
@@ -277,6 +279,117 @@ describe("#140 编排结算：vitest 红 + 报告判 0 ⇒ 2（绝不按报告�
   });
 });
 
+/* ------------------------------------------------------------------ 纯函数：读报告的健壮性 */
+
+describe("#140 编排读报告：损坏 / 形状不对 ⇒ 2，绝不逃成 exit 1", () => {
+  const script = readFileSync(
+    resolve(repoRoot, "scripts/collect-official-contrast.mts"),
+    "utf8",
+  );
+
+  it("JSON.parse 被 try/catch 包住，且失败有专属归因", () => {
+    // 三轮评审第 2 条。顶层 `await main()` 的脚本里，未捕获异常由 Node 默认以 **exit 1**
+    // 结束——而本脚本的合同里 **1 = 本库不变式被破坏**、**2 = 脚手架 / 报告损坏**。
+    // 报告被 kill / 写盘中断 / 截断时把「读不出来」报成「不变式回退」是**误报方向反了**。
+    expect(script, "JSON.parse 没有被 try/catch 包住").toMatch(/try \{[\s\S]*?JSON\.parse/);
+    // ⚠️ 下面两条**必须锚在 console.error 调用上**，不能只 `toContain` 字面量：那些字面量
+    // 也出现在本文件上方的注释里，只查字面量的话，把整个运行时分支删掉门禁照样绿。
+    expect(script, "解析失败没有专属归因").toMatch(
+      /console\.error\([\s\S]*?REPORT_INVALID/,
+    );
+    // 文件不存在与解析不了要分开说：后者报 REPORT_MISSING 会把人引去查「基准是不是没跑到
+    // 写报告」，方向是错的。
+    expect(script, "解析失败与文件缺失没有区分").toMatch(
+      /console\.error\([\s\S]*?REPORT_MISSING/,
+    );
+  });
+
+  it("合法 JSON 但形状不对，也当「读不出来」而不是解引用崩掉", () => {
+    // 实测 `{}` / `[]` / `null` / `"s"` 都是合法 JSON，而 `checkContrastEnvelope` 会解引用
+    // `report.envelope.runId` —— 那时抛 TypeError，同样以未捕获异常逃出 main() ⇒ exit 1。
+    // 「能 parse」不等于「是报告」，形状必须先验一次。
+    expect(script, "没有报告形状守卫").toContain("isContrastReport");
+  });
+
+  it("两个调用点都按「读不出来」结算 2", () => {
+    // 两处 `readReport()` 都要归 2。漏掉任一处，那条路径就会把 exit 1 漏出去。
+    const guarded = script.match(/if \(!report\) \{/g) ?? [];
+    expect(guarded.length, "readReport 的调用点没有被逐一守住").toBe(2);
+    // ⚠️ 只数出现次数不够（第 4 轮评审第 3 条）：块里**没有**那行 `process.exitCode = 2`
+    // 时脚本照样数得对、却会把 1 漏出去。逐块断言**该块内**确实结算 2。
+    const blocks = script.split(/if \(!report\) \{/).slice(1);
+    for (const [index, block] of blocks.entries()) {
+      const body = block.slice(0, block.indexOf("\n  }") + 5);
+      expect(body, `第 ${index + 1} 个 readReport 调用点没有结算 exitCode = 2`).toContain(
+        "process.exitCode = 2",
+      );
+    }
+  });
+});
+
+/* ---------------------------------------------------- 纯函数：形状守卫（真跑它，不是正则） */
+
+describe("#140 纯函数：报告形状守卫把「读不出来」与「解引用崩掉」分开", () => {
+  const good = makeReport({});
+
+  it("真报告放行，且**不**被守卫本身误伤", () => {
+    expect(isContrastReport(good)).toBe(true);
+    // 反向最容易出的错：守卫太宽或太严都会把健康报告挡在门外——那会让每次 CI 都红。
+    expect(isContrastReport(JSON.parse(JSON.stringify(good)) as unknown)).toBe(true);
+  });
+
+  it("顶层不是对象（null / 数组 / 字符串 / 数字）一律拒", () => {
+    // 这些是**合法 JSON**。`checkContrastEnvelope` 随后解引用 `report.envelope.runId`
+    // 会抛 TypeError → 逃出 main() → Node 以 1 结束 = 误报成「不变式回退」。
+    for (const value of [null, [], "hello", 42, true]) {
+      expect(isContrastReport(value), `${JSON.stringify(value)} 不该放行`).toBe(false);
+    }
+  });
+
+  it("缺关键字段拒（envelope / scenarios / invariants / done）", () => {
+    for (const key of ["envelope", "scenarios", "invariants", "done"] as const) {
+      const broken: Record<string, unknown> = { ...good };
+      delete broken[key];
+      expect(isContrastReport(broken), `缺 ${key} 不该放行`).toBe(false);
+    }
+  });
+
+  it("键都在但**类型不对**也拒——空缺键列表不构成通过", () => {
+    // `envelope: null` 过了「键在不在」那一关，只有验类型才拦得住；而下游照样会崩。
+    expect(isContrastReport({ ...good, envelope: null })).toBe(false);
+    expect(isContrastReport({ ...good, envelope: "nope" })).toBe(false);
+    expect(isContrastReport({ ...good, scenarios: {} })).toBe(false);
+    expect(isContrastReport({ ...good, invariants: 7 })).toBe(false);
+  });
+
+  it("数组里的**元素**为 null 也拒（第 4 轮评审 P1，文本断言永远抓不到的那条）", () => {
+    // 回归：`scenarios: [null]` 能过「是数组」那一关，随后 `measuredScenarioCount` 读
+    // `entry.ours` 抛 TypeError 逃出 main() → Node 以 **1** 结束。
+    // 实测过修复前 `pnpm perf:contrast` 就是这个结果（exit 1，而不是脚手架失败 2）。
+    // 守卫一旦退回「只验容器不验元素」，这条断言当场红。
+    expect(isContrastReport({ ...good, scenarios: [null] })).toBe(false);
+    expect(isContrastReport({ ...good, invariants: [null] })).toBe(false);
+    // 同理，元素是数组（`Array.isArray` 对它也为 true 的近邻）也要拒。
+    expect(isContrastReport({ ...good, scenarios: [[]] })).toBe(false);
+  });
+
+  it("归因消息**指名道姓**，不留空缺字段列表", () => {
+    // 回归：四个键都在、只是类型不对时，「缺什么」列表是空的 → 消息曾变成
+    // 「JSON 合法但不是对照报告（缺 ）」，既自相矛盾又指不出问题。
+    const fault = describeReportShapeFault({ ...good, envelope: null });
+    expect(fault).toContain("envelope");
+    expect(fault).not.toMatch(/（缺\s*）/);
+    // 顶层不是对象时也别只说「缺 对象本身」——说清实际类型才指得准。
+    expect(describeReportShapeFault([])).toContain("数组");
+    expect(describeReportShapeFault([])).not.toMatch(/（缺\s*）/);
+  });
+
+  it("健康报告**没有** fault 可讲（返回 null，不编兜底理由）", () => {
+    // 「没毛病」时编一条「形状与 v1 契约不符」会把「守卫与叙述不一致」这个真信号盖掉。
+    expect(describeReportShapeFault(good)).toBeNull();
+  });
+});
+
 /* ------------------------------------------------------------------ 纯函数：人读报告 */
 
 describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
@@ -364,7 +477,7 @@ describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
     });
     // 两个耗时**各自**渲染成 `-`：动作与卸载都缺时不能只让一边缺，也不能填 0
     // （0 会被读成「快得不可能」）。
-    expect(text).toMatch(/map-cold-mount\s+act=-ms teardown=-ms/);
+    expect(text).toMatch(/map-cold-mount\s+\|\s+act=-ms teardown=-ms/);
   });
 
   it("卸载/销毁有独立读数与独立窗口（票面指标 5 是 mount/unmount 两个动作）", () => {
@@ -404,6 +517,88 @@ describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
     );
     expect(perfTest, "基准没有独立计时 teardown").toContain("const teardownStart = performance.now();");
     expect(perfTest, "teardown 读数没进指标").toContain(".teardown\`, readings.teardownMs");
+  });
+
+  it("人读表格按实际最长值算列宽，列间用 ` | ` 分隔（不写死宽度）", () => {
+    // 三轮评审第 3 条。写死 `padEnd(76)` 在加 `teardown=` 之后失效：单元格实测 83~99 字符，
+    // 而 `padEnd` 对超长内容既不截断也不补空格 ⇒ ours / official / delta 三列**直接粘在一起**，
+    // CI 日志里 `…retain=0+0listenersact=…` 分不出列边界。票面验收明确要一份人读报告。
+    const text = formatContrastReport({
+      report: makeReport({
+        scenarios: [
+          {
+            id: "map-cold-mount",
+            official: "Map",
+            ours: makeSide({ durationMs: 1, teardownMs: 2 }),
+            // 这一侧刻意更长：写死宽度时它会把下一列顶掉。
+            officialSide: makeSide({
+              durationMs: 12_345.678,
+              teardownMs: 9_876.543,
+              sdkCalls: 123_456,
+              callKind: "setPosition",
+              recreates: 7,
+              renderCallbacks: 8,
+              retainedResources: 9,
+              retainedListeners: 10,
+            }),
+          },
+        ],
+      }),
+      decision: decideContrastExit({
+        envelopeIssues: [],
+        fatal: null,
+        blockedReason: null,
+        done: true,
+        expectedScenarioCount: 1,
+        scenarioCount: 1,
+        invariants: [],
+      }),
+    });
+    const row = text.split("\n").find((line) => line.startsWith("map-cold-mount"));
+    expect(row, "找不到场景行").toBeTruthy();
+    // 四个字段齐全 ⇒ 三个分隔符一个不少（上一版在超长单元格处就没有分隔符了）。
+    expect(row!.match(/ \| /g)?.length, "列分隔符不足，单元格粘在一起了").toBe(3);
+    // 头部同样有分隔符，且各列起点对齐（动态宽度而非碰巧没撞上）。
+    const header = text.split("\n").find((line) => line.startsWith("scenario"));
+    expect(header).toMatch(/^scenario\s+\|\s+ours\s+\|\s+official\s+\|\s+delta$/);
+  });
+
+  it("两个墙钟各自取中位数（teardown 不再搭 act-median 那条 sample 的便车）", () => {
+    // 三轮评审第 1 条。delta 以前基本是确定性计数，按 `durationMs` 排序取整条 sample 影响不大；
+    // 但 `teardownMs` 是**另一个独立的噪声型**墙钟，于是报告里的 teardown 变成「act 耗时位于
+    // 中间的那一轮，它碰巧对应的 teardown」：
+    //
+    //   act: 5, 6, 7 → 取 6；teardown: 1, 100, 2 → 旧写法给 100，真正的中位数是 2
+    //
+    // 后果不是「小数点差一位」：recorder 的 `*.teardown` 统计与报告的 `teardownMs` 会给出
+    // **不同的代表值**，读者据此比较两侧就得到一个两边口径不同的 `teardownΔ`。
+    const perfTest = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast.perf.test.ts"),
+      "utf8",
+    );
+    // 两个 medians 各自排自己的字段。
+    expect(perfTest, "act 没有按 durationMs 排序").toContain(
+      "sort((a, b) => a.durationMs - b.durationMs)",
+    );
+    expect(perfTest, "teardown 没有按自己的字段排序").toContain(
+      "sort((a, b) => a.teardownMs - b.teardownMs)",
+    );
+    // ⚠️ 上面两条只证明「排了」，不证明「**用对了**」。第 4 轮评审指出：只禁掉旧写法那一行
+    // 的话，`return { ...byAct[mid]! }`（teardown 又搭回 act-median 那条 sample）照样全绿。
+    // 因此这里断言**返回值的形状**——act 取 act-median、teardown 取 teardown-median 的
+    // teardownMs，两者是同一个对象字面量里各取一次。
+    expect(perfTest, "返回值没有把 act-median 的 teardownMs 换成 teardown-median 的").toMatch(
+      /return\s*\{\s*\.\.\.byAct\[mid\]!,\s*teardownMs:\s*byTeardown\[mid\]!\.teardownMs\s*\}/,
+    );
+    // 旧写法：整条 sample 原样返回，teardown 只能搭便车。
+    expect(perfTest, "仍在返回 act-median 那整条 sample（teardown 搭便车）").not.toContain(
+      "return sorted[Math.floor(sorted.length / 2)]!;",
+    );
+    // 计数类 delta 仍取同一条——它们是同一轮动作产生的账本增量，逐字段各取中位数会把
+    // 「建了多少」与「重建了多少」拆到不同轮次去，反而对不上。
+    expect(perfTest, "计数 delta 没有保持同源").not.toContain(
+      "recreates: median(recreates)",
+    );
   });
 
   it("报告自带身份：机器 / 两库版本 / 数据集版本", () => {

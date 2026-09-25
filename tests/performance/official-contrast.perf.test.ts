@@ -370,9 +370,29 @@ async function measureBoth(
   }
 
   if (oursReadings.length === 0) throw new Error(`${name} ours 侧一次都没测到（基准空转）`);
+  /**
+   * 场景级聚合。
+   *
+   * ⚠️ **两个墙钟指标各自取中位数**（三轮评审第 1 条）。此前只按 `durationMs` 排序，然后把
+   * 那一整条 sample 当成中位数——在 delta 基本是确定性计数时影响不大，但 `teardownMs`
+   * 是**另一个独立的噪声型**墙钟指标，于是报告里的 teardown 实际是「act 耗时位于中间的
+   * 那一轮，它碰巧对应的 teardown」，而不是 teardown 自己的中位数。
+   *
+   * 这不是吹毛求疵：同一轮基准的**两个产物**（recorder 的 `*.teardown` 与报告的
+   * `teardownMs`）会给出不同的代表值，读者据此比较两侧就会得到一个两边口径不同的差值。
+   *
+   *   act:      5, 6, 7      → 取 6
+   *   teardown: 1, 100, 2    → 取 2（而不是「act=6 那一轮的 100」）
+   *
+   * 计数类 `delta` 则**继续取 act-median 那一条**：它们是同一轮动作产生的账本增量，
+   * 逐字段各取一个中位数会把「建了多少」与「重建了多少」拆到不同轮次去，比对时反而对不上。
+   * 这条分界不是「有的聚合有的不聚合」，而是**墙钟各自取中位数、计数保持同源**。
+   */
   const median = (values: readonly SideReadings[]): SideReadings => {
-    const sorted = [...values].sort((a, b) => a.durationMs - b.durationMs);
-    return sorted[Math.floor(sorted.length / 2)]!;
+    const byAct = [...values].sort((a, b) => a.durationMs - b.durationMs);
+    const byTeardown = [...values].sort((a, b) => a.teardownMs - b.teardownMs);
+    const mid = Math.floor(values.length / 2);
+    return { ...byAct[mid]!, teardownMs: byTeardown[mid]!.teardownMs };
   };
   const official = officialReadings.length > 0 ? median(officialReadings) : null;
   // 官方没读到数时，`officialSkippedReason` **必须**有值（报告里「本库扩展档」那一节要写

@@ -263,6 +263,27 @@ function sideCell(side: ContrastSideReadings | null): string {
 }
 
 /**
+ * 按**实际最长值**算列宽，并用 ` | ` 分隔。
+ *
+ * 不写死宽度：`padEnd(n)` 对超长内容既不截断也不补空格，因此任何「再加一个字段」都会
+ * 让相邻列粘在一起——上一轮加 `teardown=` 时就是这样（76 → 实测 83~99）。动态算 + 显式
+ * 分隔符让这件事不可能再发生。
+ */
+function formatTable(header: readonly string[], rows: readonly (readonly string[])[]): string[] {
+  const widths = header.map((title, column) =>
+    Math.max(title.length, ...rows.map((row) => (row[column] ?? "").length)),
+  );
+  const render = (cells: readonly string[]): string =>
+    cells
+      .map((cell, column) =>
+        // 末列不补尾随空格（否则每行都拖一串看不见的空白）。
+        column === cells.length - 1 ? cell : cell.padEnd(widths[column]!),
+      )
+      .join(" | ");
+  return [render(header), ...rows.map(render)];
+}
+
+/**
  * 人读报告。
  *
  * **分三节**，这是票面「不伪造官方等价物」在输出层的落点：
@@ -297,8 +318,13 @@ export function formatContrastReport(input: {
   const oursOnly = report.scenarios.filter((entry) => entry.official === null);
 
   lines.push("--- 可比场景（两边都有官方等价物）---");
-  lines.push(`--- ${"scenario".padEnd(30)}${"ours".padEnd(76)}${"official".padEnd(76)}delta`);
-  for (const entry of comparable) {
+  // ⚠️ 列宽**动态算**，不写死（三轮评审第 3 条）。此前 ours / official 各自 `padEnd(76)`，
+  // 而加了 `teardown=` 之后单元格实测 83 ~ 99 字符 —— `padEnd` 对超长内容**不截断也不补空格**，
+  // 于是三列直接粘在一起：`…retain=0+0listenersact=…`，CI 日志里根本分不出列边界。
+  //
+  // 靠固定宽度兜底迟早再被新字段顶破（这是第二轮加 teardown 时发生的）。因此按本表**实际
+  // 最长值**算宽度，并用显式 `|` 分隔：再长的字段也不会让两列粘住。
+  const rows = comparable.map((entry) => {
     const ours = entry.ours;
     const off = entry.officialSide;
     let delta = "-";
@@ -311,19 +337,24 @@ export function formatContrastReport(input: {
           : "";
       delta = `${diff}ms${teardownDiff}`;
     }
-    lines.push(
-      `${entry.id.padEnd(30)}${sideCell(entry.ours).padEnd(76)}${sideCell(entry.officialSide).padEnd(76)}${delta}`,
-    );
+    return [entry.id, sideCell(entry.ours), sideCell(entry.officialSide), delta] as const;
+  });
+  for (const line of formatTable(["scenario", "ours", "official", "delta"], rows)) {
+    lines.push(line);
+  }
+  for (const entry of comparable) {
     if (entry.officialSkippedReason) {
-      lines.push(`${"".padEnd(30)}official skipped: ${entry.officialSkippedReason}`);
+      lines.push(`${" ".repeat(Math.max(entry.id.length, 8))} | official skipped: ${entry.officialSkippedReason}`);
     }
   }
   lines.push("");
 
   lines.push("--- 本库扩展档（官方无等价契约，**不硬比较**）---");
   for (const entry of oursOnly) {
-    lines.push(`${entry.id.padEnd(30)}${sideCell(entry.ours)}`);
-    lines.push(`${"".padEnd(30)}official: 无等价物 — ${entry.officialSkippedReason ?? "未提供说明"}`);
+    lines.push(`${entry.id.padEnd(Math.max(entry.id.length, 8))} | ${sideCell(entry.ours)}`);
+    lines.push(
+      `${" ".repeat(Math.max(entry.id.length, 8))} | official: 无等价物 — ${entry.officialSkippedReason ?? "未提供说明"}`,
+    );
   }
   lines.push("");
 
@@ -349,4 +380,104 @@ export function formatContrastReport(input: {
   lines.push("    不是票面泛指的「SDK 调用总数」（真实与 Fake 都没有单一计数器）；");
   lines.push("  - `render` 是**组件渲染**次数（devtools perf:start），不是「watcher 回调次数」；");
   return lines.join("\n");
+}
+
+/* ------------------------------------------------------------------ 报告形状守卫 */
+
+/**
+ * 读回的报告**能不能用**，在这里判一次。
+ *
+ * ⚠️ 这段逻辑一度住在编排脚本里，只能用「文件文本断言」钉——于是断言和被钉的代码
+ * 各改各的，回归过一次（`scenarios: [null]` 能过「是数组」那一关，随后
+ * `measuredScenarioCount` 解引用 null 抛 TypeError，逃出 `main()` 让 Node 以 **1** 结束，
+ * 把「报告损坏」报成「不变式回退」）。移进纯模块是为了能**真的跑它**：门禁现在对
+ * 合成输入断言，而不是对源文本做正则。
+ *
+ * 判据只有一条：**下游会不会解引用它**。所以验到数组**元素**这一层（元素为 `null`
+ * 同样会崩），但不做全字段校验。
+ */
+/** 顶层不是一个对象（`null` / `[]` / 字符串 / 数字……）——下游会解引用 `.envelope`，必崩。 */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 把「形状不对」讲成**具体哪一条不对**，而不是只列缺哪个键。
+ *
+ * ⚠️ 只报「缺什么」有个假绿读数：四个必需键**都在**、但**类型不对**时（`envelope: null`、
+ * `scenarios: {}`），缺键列表是**空的** → 消息会变成「JSON 合法但不是对照报告（缺 ）」，
+ * 既自相矛盾又指不出问题在哪。这里逐条给出实际的错。
+ *
+ * 返回 `null` = **形状没问题**。不要为「没毛病」编一条兜底 fault：调用方只在该拒时调用
+ * 本函数，能走到空列表就说明守卫与叙述**不一致**（改了一边忘了另一边）——那本身要看得见，
+ * 编个「形状与 v1 契约不符」把它盖掉才是真的看不见。
+ */
+export function describeReportShapeFault(value: unknown): string | null {
+  if (isContrastReport(value)) return null;
+  if (!isPlainObject(value)) {
+    return `JSON 合法但不是对照报告（顶层是 ${describeJsonType(value)}，需为对象）`;
+  }
+  const faults: string[] = [];
+  for (const key of REQUIRED_REPORT_FIELDS) {
+    if (value[key] === undefined) faults.push(`缺 ${key}`);
+  }
+  // 键都在但类型不对：下游照样会崩（checkContrastEnvelope 会解引用 envelope.runId，
+  // 计数函数会 .filter 数组），所以这里把「类型不对」也当形状错误，而不是放行。
+  if (!isPlainObject(value.envelope)) {
+    faults.push(`envelope 是 ${describeJsonType(value.envelope)}，需为对象`);
+  }
+  for (const key of ["scenarios", "invariants"] as const) {
+    if (value[key] !== undefined && !Array.isArray(value[key])) {
+      faults.push(`${key} 是 ${describeJsonType(value[key])}，需为数组`);
+    } else if (Array.isArray(value[key])) {
+      // ⚠️ 元素也要看：`scenarios: [null]` 能过「是数组」这一关，但计数函数随后
+      // `entry.ours` 就解引用 null → TypeError 逃出 main() → Node 以 **1** 结束 ——
+      // 正是本函数要消灭的「垃圾报告被报成不变式回退」。所以形状验到**元素**这一层。
+      const items = value[key] as unknown[];
+      const bad = items.findIndex((item) => !isPlainObject(item));
+      if (bad >= 0) {
+        faults.push(`${key}[${bad}] 是 ${describeJsonType(items[bad])}，需为对象`);
+      }
+    }
+  }
+  return `JSON 合法但不是对照报告（${faults.join(" / ") || "形状与 v1 契约不符"}）`;
+}
+
+export function describeJsonType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "数组";
+  const names: Record<string, string> = {
+    string: "字符串",
+    number: "数字",
+    boolean: "布尔",
+    bigint: "bigint",
+    symbol: "symbol",
+    function: "函数",
+    undefined: "undefined",
+    object: "对象",
+  };
+  return names[typeof value] ?? typeof value;
+}
+
+/** 下游一定会解引用的四个字段。 */
+const REQUIRED_REPORT_FIELDS = ["envelope", "scenarios", "invariants", "done"] as const;
+
+/**
+ * 形状守卫：验「下游会解引用的东西在不在、类型对不对」，不做全字段校验。
+ *
+ * 验到**数组元素**这一层不是洁癖：`measuredScenarioCount` 会 `entry.ours`、
+ * `decideContrastExit` 会读 `invariant.holds / .side`——元素是 `null` 时这些都抛 TypeError，
+ * 逃出 `main()` 后 Node 以 **1** 结束，把「报告损坏」说成「不变式回退」。只验容器不验元素，
+ * 那条假绿路径原封不动地留着（`scenarios: [null]` 就是现成的例子）。
+ */
+export function isContrastReport(value: unknown): value is ContrastReport {
+  if (!isPlainObject(value)) return false;
+  if (REQUIRED_REPORT_FIELDS.some((key) => value[key] === undefined)) return false;
+  if (!isPlainObject(value.envelope)) return false;
+  for (const key of ["scenarios", "invariants"] as const) {
+    const items = value[key];
+    if (!Array.isArray(items)) return false;
+    if (!items.every((item) => isPlainObject(item))) return false;
+  }
+  return true;
 }

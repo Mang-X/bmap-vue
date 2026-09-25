@@ -106,6 +106,16 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
   资源构成、§10 的不重建……），其中一条挂掉时 `afterAll` 仍会写出 `done=true` / 不变式全 PASS
   的报告。把判定原样写进退出码等于**把测试失败吞成通过**——已实测复现（修复前 exit **0**）。
 
+**报告读不出来（`REPORT_INVALID`）也归 2，且是「形状」问题不只是「JSON 坏」**：`JSON.parse`
+抛错、或 parse 成功但形状不对（顶层非对象 / 缺 `envelope`/`scenarios`/`invariants`/`done` /
+类型不对 / **数组元素为 `null`**），一律按脚手架失败 2 结算。⚠️ 判据是「**下游会不会解引用
+它**」：`checkContrastEnvelope` 解引用 `report.envelope.runId`、`measuredScenarioCount` 读
+`entry.ours`，遇到垃圾报告会抛 TypeError，从顶层 `await main()` 逃出去后 Node 默认以 **1**
+结束——那正是「不变式被破坏」的口径，**误报方向反了**。其中 `scenarios: [null]` 能过「是数组」
+那一关却照样崩，实测修复前就是 exit 1，所以守卫验到**元素**。守卫住在纯模块
+`official-contrast/report.mts`（不是编排脚本）以便门禁用合成输入直接单测。已实测 10 种畸形
+报告全部按 2 结算，消息会指名具体哪一条不对。
+
 **两套基准的执行范围是隔离的**：#37 单库趋势基线（`pnpm perf:baseline`）与 #140 跨库对照
 （`pnpm perf:contrast`）跑**不同的 vitest 配置**、写**不同的指标目录**。曾经只有一份配置，
 对照基准被 `perf:baseline` 顺带跑进 `PERF_METRICS_DIR`，基线的指标集合校验随即确定性红。

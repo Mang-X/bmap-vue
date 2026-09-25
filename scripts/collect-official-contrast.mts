@@ -52,7 +52,9 @@ import { DATASET_VERSION } from "../tests/performance/dataset.ts";
 import {
   checkContrastEnvelope,
   decideContrastExit,
+  describeReportShapeFault,
   formatContrastReport,
+  isContrastReport,
   OFFICIAL_BASELINE_VERSION,
   type ContrastDecision,
   type ContrastReport,
@@ -121,10 +123,48 @@ function runBenchmark(): Promise<number> {
   });
 }
 
+/**
+ * 读回基准写的报告。
+ *
+ * ⚠️ **`JSON.parse` 的异常不许逃出**（三轮评审第 2 条）。基准进程被 kill、写盘中断、文件被
+ * 截断都会让它抛 `SyntaxError`，而这里是个顶层 `await main()` 的脚本——未捕获异常会由 Node
+ * 默认以 **exit 1** 结束。可本脚本的四态合同里 **1 = 本库不变式被破坏**、**2 = 脚手架 /
+ * 报告损坏**：把「报告读不出来」报成「不变式回退」是**误报方向反了**，比单纯崩掉更糟——
+ * 它会让读报告的人以为架构预期破了。
+ *
+ * 因此解析失败与「文件不存在」一样归到「拿不到可信读数」，由调用方按脚手架失败 2 结算，
+ * 并把 `REPORT_INVALID` 与解析器给的原因一起打出来（截断的 JSON 报
+ * `Unexpected end of JSON input` 恰好能指认是写盘中断，不是格式版本漂移）。
+ *
+ * 「能 parse」也不等于「是报告」，形状由 `isContrastReport` 把关；两种失败都进
+ * `reportReadError`，因为**调用方对它们的处置完全一样**（按 2 结算），差别只在措辞。
+ */
 function readReport(): ContrastReport | null {
   if (!existsSync(reportPath)) return null;
-  return JSON.parse(readFileSync(reportPath, "utf8")) as ContrastReport;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(reportPath, "utf8"));
+  } catch (error) {
+    reportReadError = error instanceof Error ? error.message : String(error);
+    return null;
+  }
+  // ⚠️ 「能 parse」不等于「是报告」。`{}` / `[]` / `null` / `scenarios:[null]` 都是合法
+  // JSON，而下游 `checkContrastEnvelope` 会解引用 `report.envelope.runId`、计数函数会读
+  // `entry.ours` —— 那时抛的是 TypeError，同样以未捕获异常的形式**逃出 main() 并让
+  // Node 以 1 结束**，把「拿到一份垃圾」报成「不变式回退」。因此形状在这里先验一次
+  // （验到元素，见 `isContrastReport` 的注释），不对就当「读不出来」。
+  if (!isContrastReport(parsed)) {
+    // `isContrastReport` 刚判过 false，所以这里**必然**拿到非 null 的 fault（`??` 只是为了
+    // 满足类型；若真为 null，说明守卫与叙述各改一边，那条消息反而有用，不该吞掉）。
+    reportReadError =
+      describeReportShapeFault(parsed) ?? "报告形状与 v1 契约不符，且守卫未能指出具体一条";
+    return null;
+  }
+  return parsed;
 }
+
+/** 报告读不出来时的原因（`readReport` 写入；为 `null` 表示「文件不存在」而非「解析失败」）。 */
+let reportReadError: string | null = null;
 
 /**
  * 报告里**真的测到**的场景数（`ours !== null` 的行）。
@@ -173,8 +213,15 @@ async function main(): Promise<void> {
     // 基准自己红了：要么断言挂了（不变式破坏），要么用例崩了。两种都不该被重跑掩盖。
     const report = readReport();
     if (!report) {
+      // 两种「拿不到读数」要分开说：文件根本没写出来 vs 写了但**不可用**（解析不了 / 形状
+      // 不对）。后者几乎总是写盘中断 / 进程被 kill（`Unexpected end of JSON input` 能指认
+      // 这一点），报 REPORT_MISSING 会把人引去查「基准是不是没跑到写报告」，方向是错的。
       console.error(
-        `[perf:contrast] 基准退出码 ${benchExit} 且没有产出报告（${reportPath}）——按脚手架失败 2`,
+        reportReadError
+          ? `[perf:contrast] 基准退出码 ${benchExit}，报告不可用（${reportPath}）：` +
+              `${reportReadError}\n  REPORT_INVALID: 报告存在但不是可用的对照报告——按脚手架失败 2` +
+              `（**不是** 1：1 专指不变式被破坏）`
+          : `[perf:contrast] 基准退出码 ${benchExit} 且没有产出报告（${reportPath}）——按脚手架失败 2`,
       );
       process.exitCode = 2;
       return;
@@ -210,7 +257,11 @@ async function main(): Promise<void> {
 
   const report = readReport();
   if (!report) {
-    console.error(`[perf:contrast] REPORT_MISSING：${reportPath}`);
+    console.error(
+      reportReadError
+        ? `[perf:contrast] REPORT_INVALID：${reportPath} 不是可用的对照报告（${reportReadError}）——按脚手架失败 2`
+        : `[perf:contrast] REPORT_MISSING：${reportPath}`,
+    );
     process.exitCode = 2;
     return;
   }
