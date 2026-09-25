@@ -63,7 +63,7 @@
 | `createBaiduSdkUrl()`（旧 CDN 入口拼装） | 原 `core/loader/url.ts` | **生产 0**，但挂在 `./core` 出口上、被边界测试直接调用 | 迁移期遗留 | **REMOVE** | #104 R9：函数与其私有选项类型一并删除；`default-loader-boundary` 改成**存在性否定**门禁（默认静态模块图里搜不到这个名字，同时正面证明 `core/loader/url.ts` 确实在图中） |
 | `providers/official.ts` 的 `OFFICIAL_LOADER_UNSUPPORTED_KEYS` 显式报错 | `:82-110` | 默认路径 | `OFFICIAL`（官方选项面） | **KEEP** | 「接收后忽略 = 假支持」的守卫本身，不是镜像 |
 | `markRejectedJsapiV4Global` / `isRejectedJsapiV4Global`（WeakSet 标记自家被拒残留） | `providers/namespace.ts:169-181` | 写入 `providers/load.ts:46`，读取 `providers/reuse.ts:68` | `OWNED`（跟的是我们自己的写） | **KEEP** | — |
-| ~~`LoadedSdk = LoadedJsapiV4` 单成员别名；`client.version` 的 `@deprecated` 别名~~ | `core/loader/loaded.ts:30`、`client/types.ts:53` | 类型层 | #26 删引擎后失去意义 | **REMOVE（#136 已做）** | #136 结算：`client.version` 别名与其赋值、断言一并删除，`BMapClient` 只按语义分列 `libraryVersion` / `sdkVersion`。`LoadedSdk` 单成员别名**保留**——它不是旧版包袱，而是「结构化加载结果」这一边界的名字（`assertLoadedSdk` 与 `LoadedJsapiV4` 仍共用它） |
+| ~~`LoadedSdk = LoadedJsapiV4` 单成员别名；`client.version` 的 `@deprecated` 别名~~ | `core/loader/loaded.ts:30`、`client/types.ts:53` | 类型层 | #26 删引擎后失去意义 | **REMOVE（#136 已做）** | #136 结算：`client.version` 别名与其赋值、断言一并删除，`BMapClient` 只按语义分列 `libraryVersion` / `sdkVersion`。`LoadedSdk` 单成员别名**保留**——它不是旧版包袱，而是「结构化加载结果」这一边界的名字（`assertLoadedSdk` 与 `LoadedJsapiV4` 仍共用它） —— **#44 已结清**：1.0 冻结面不留别名，该别名删除，公共面只剩 `LoadedJsapiV4`（ADR `2026-09-25-public-export-surface-freeze` 决策 3，取代 ADR `2026-09-14-remove-legacy-engine` 决策 2 的「保留为别名」） |
 
 ## 4. MapRuntime / 生命周期
 
@@ -72,8 +72,8 @@
 | 六条资源路径的 generation / epoch stale guard、`PluginHost.epochNumber`、`PluginRegistry.record.generation` | `core/composables/*`、`core/plugins/*` | 生产 | `OWNED`：比较的是「这还是我创建的那个实例/作用域吗」，**不**归属 SDK 回包 | **KEEP** | 本票的非目标：不因「看着复杂」删掉真实所有权机制 |
 | `ResourceScope` 的六个定时器别名（`requestAnimationFrame`+`frame`、`setTimeout`+`timeout`、`setInterval`+`interval`）与 `addCancellable` | 原 `core/lifecycle/ResourceScope.ts` | **生产 0**（只有同名测试在用） | 与 `core/scheduler/FrameScheduler` 重复的转发面，且两套语义还不一致（`setTimeout` 返回裸 id、`timeout` 返回 disposer） | **REMOVE** | #104 R1 已删。#139 续：随之一起从 `ResourceScope.test.ts` 消失的还有「`onDisposeError` / `parentSignal`」两条构造选项（同样生产 0 消费者）——但**它们承载的行为没丢**：容错改为断言 `logger.warn` 通道、「父释放 ⇒ 子释放」由 `fork()` 的 disposer 链路继续保证并补了一条「父已释放时 `fork()` 的子**同步**被释放」。`ResourceScope` 由此收成**最小外部资源内核**（`add` / `fork` / `signal` / `size` / `label` / `isDisposed` / `dispose`），`run()` 与内嵌 `effectScope` 一并删除——Vue 的 effect 生命周期交回 Vue |
 | `useResourceScope.ts` | 原 `core/lifecycle/useResourceScope.ts` | **0**（只有两行出口） | — | **REMOVE** | #104 R2：文件与两处出口删除 |
-| `MapRuntimeOptions.clientFactory`（与 `clientContext` 二选一） | `core/runtime/MapRuntime.ts:74` | 只有 3 个测试文件 | 无生产消费者的第二条臂 | **SIMPLIFY** | 后续票（收口要连带改 `context-runtime-lifecycle` 的夹具） |
-| `MapRuntimeStatus` 的 `"loading"` 别名 | `core/context/types.ts:30` | 类型层，#71 起运行期不再写 | `OWNED` 但已过时 | **SIMPLIFY** | **本票已修文档承诺**：`docs/zh-CN/components/map.md` 两处不再把 `loading` 写成会发出的状态；类型别名到 #44 一并收 |
+| `MapRuntimeOptions.clientFactory`（与 `clientContext` 二选一） | `core/runtime/MapRuntime.ts:74` | 只有 3 个测试文件 | 无生产消费者的第二条臂 | **SIMPLIFY** | **#44 已结**：第二条臂删除，实现与夹具收敛到 `clientContext`；`MapRuntimeOptions` 随 `./core` 取消只在内部 barrel 上 |
+| `MapRuntimeStatus` 的 `"loading"` 别名 | `core/context/types.ts:30` | 类型层，#71 起运行期不再写 | `OWNED` 但已过时 | **SIMPLIFY** | **本票已修文档承诺**：`docs/zh-CN/components/map.md` 两处不再把 `loading` 写成会发出的状态；类型别名到 #44 一并收 —— **#44 已结**：别名类型删除，唯一名字是 `MapStatus` |
 | `Map.vue:813-825` 的 `mountMap()` 前置检查（曾自陈「删掉整句，1799 条用例仍全绿」） | `components/map/Map.vue` | `ensureUsableRecheck` 的每帧复查 + `onContainerReady` | **已取证**：`ensureUsableRecheck` 每帧调 `mountMap()`，容器仍 0×0 时少了这句就会 `startBoot()` | **KEEP（#127 落地）** | **#127 选了 (a) 保留并补上能翻红的用例**：`component-scenarios` 的「挂起的 retry 期间每帧复查不得启动 boot」—— 删掉该句实测变红（`expected 'creating' to be 'error'`）。它拦的不是「0×0 建图」（那由 `waitForUsableContainer()` 兜底），而是「启动一次注定被拦的 boot」：失败态下状态从 `error` 被推进到 `creating`，`#error` 插槽连同它的重试按钮被 `#loading` 顶掉，业务「重试一次」的入口凭空消失，而这次重试其实一条命令都没发出去 |
 | `PanoramaStatus` 七态（运行期只有 `error` 被内部读） | `core/panorama/index.ts:34-50` | `Panorama.vue` 公开 expose + 文档页列全 | `OWNED` + 已文档化 | **KEEP** | 外部消费者无法自证为零，故不在本票删除 |
 | 启动 / 重试状态机（`mountStarted` / `bootTask` / `nextBootWaiters` / `deferredWaiters` / `containerUsableWaiters` / `assembledMap` / `whenMapCreated`） | `components/map/Map.vue`（约 670-1150）、`core/runtime/MapRuntime.ts` | 组件挂载 / `@error` 重试 / 容器放行 / 建图等待点 | `OWNED`：记的是**本库自己**发起的建图 / 重试 / 放行次序；每个符号都有行为用例钉住外部后果（逐符号映射见 ADR `2026-09-14-map-handle-container-and-visibility` §5.1）。**不是** `PROBED` —— 按本表「证据口径」，`PROBED` 要求真实运行时读数，这里只有 Fake 场景 | **KEEP** | #137 逐符号复核的结论：这一组记的是**外部资源状态**（WebGL 句柄、0×0 容器、KeepAlive 下 `onUnmounted` 不触发），对手方是 SDK 与浏览器而非 Vue 组件树 ⇒ Vue 生命周期覆盖不到。能自然表达的那半**已经是** Vue-native（`onActivated`/`onDeactivated` 直接驱动 `keep-alive` 原因，容器 watcher 直接驱动放行），不存在「Vue 已有 watcher 又并排建一套状态机」的重叠 |
@@ -98,7 +98,7 @@
 | `DataLayerOptions<Item>`（唯一成员 `minClusterSize` 全仓再无处出现，类也不接受该参数） | 原 `core/data/DataLayerManager.ts` | 0 | 幽灵字段 | **REMOVE** | #104 R8 |
 | `#101` 的 InfoWindow `openOutstanding` / `closeOutstanding` / `explicitClosePair` 一族 | `core/overlays/*`、`InfoWindow.vue` | — | — | 不在本票 | #101 已在原 PR 内按 ownership/reconcile 方向纠正；本票只登记为「非目标」，避免以为还欠着 |
 
-## 6. 无当前消费者的公共出口（#44 冻结前必须清）
+## 6. 无当前消费者的公共出口（#44 冻结前必须清；**已于 #44 结清**）
 
 | 出口 | 位置 | 消费者 | 结论 | 处置 |
 | --- | --- | --- | --- | --- |
@@ -108,7 +108,7 @@
 | `shouldFullReplace` | 原 `core/data/diffData.ts` | 只有自身测试 | **REMOVE** | #104 R6 |
 | `useServiceTask`（经 `export * from "./composables"` 外泄） | 原 `src/index.ts:9` | 内部引擎（18 个文件），文档只字未提 | **已结（#139）** | **REMOVE**：`export * from "./useServiceTask"` 整条摘除，12 个**服务** composable 的出口不受影响。任务内核改名为 `composables/serviceTask.ts`（两档），一律只作内部实现——`tests/behavior/v3-core-surface.test.ts` 已把这 7 个名字加进负向清单钉住 |
 | `useMapResource` / `SdkResourceAdapter` / `UseMapResourceResult` | 原 `core/composables/useMapResource.ts`（`core/index.ts` 出口） | **生产 0**（只有它自己的单测） | 被同目录的 `useSdkResource` 取代——后者的文件头写着「替代行为各异的 `useMapResource` / `useOverlayResource` / `useControlResource` / `useLayerResource`」 | **REMOVE** | **第三批已落地**：文件与单测删除、三处出口名一并摘掉 |
-| `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | 归 **#44**：`./core` 出口收窄时一并决定（`useServiceTask` / `MapRuntimeOptions.clientFactory` 等同类项也在那里） |
+| `UseSdkResourceOptions`（经 `./core` 出口） | `core/index.ts` | 定义处 | 与 `SdkResourceAdapter` 同批登记的出口收窄项；`useSdkResource` 本身有生产消费者，收窄要连带它的导出形状 | **SIMPLIFY** | **#44 已结**：随 `./core` 子入口取消而内部化，`UseUnifiedSdkResourceResult` 别名一并删除（`useSdkResource` 仍以 `UseSdkResourceResult` 从根入口导出）。如实登记的欠账：`UseSdkResourceOptions` 仍作为**未导出**的参数类型出现在 `dist/index.d.ts` 的 `useSdkResource` 签名里，消费方无法为它命名 ⇒ 它**不能**进「声明文本里不得出现」的负向名单，否则必然误报 |
 | `Autocomplete` 里按结构化成员探测 `disposeAutocomplete` 的分支（`as { disposeAutocomplete?: … }`，探测失败即**静默不释放**） | 原 `components/autocomplete/Autocomplete.vue` 的 `disposeService()` | 0：#26 之后 `BMapEngine` 只有 `jsapi-v4` 一个成员，分支永不成立（注释自己写着「#26 删除 webgl-v1 后这个探测可以收成直接调用」） | **REMOVE** | #104 R11：改成 `jsapiV4ServicesOf(client).disposeAutocomplete(instance)`——按 ADR 2026-09-14 的口径走**可运行时检查**的收窄点，而不是组件里另写一份 `as`。留着的代价不只是死代码：那条静默分支正好会跳过 Driver 侧的订阅记账 |
 
 ## 7. Fake 建模反向成为生产契约
@@ -228,7 +228,7 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 
 - `MapRuntimeOptions.clientFactory`、`MapRuntimeStatus` 的 `"loading"` 别名、
   `optionKey()` 的一行转发、`UseSdkResourceOptions`
-  → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）。
+  → **#44 的出口收窄**（清单与理由已在 #44 的评论里，含「为什么要连带改夹具」）—— **#44 已结**，四项逐条处置见 ADR `2026-09-25-public-export-surface-freeze` 决策 3。
   （`useServiceTask` 的根出口外泄**已由 #139 结清**，见上表处置列；
   `client.version` / 单成员别名 `LoadedSdk` 一行**已由 #136 结清**，见上表处置列。）
 - 能力目录的 `engines` 维度与 `engine-unsupported` 原因 → **#126**（Decision；**已落地**：
@@ -237,6 +237,10 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 - 探针债务 F-2 / F-3 / F-4 → **#128**（Probe Debt）；
 - **不冻结 `./core` 的全量导出面**（113 个值导出）：那是 #44「冻结 core 出口」的交付物，#104 只负责
   「把不该被冻结的先收掉」。门禁里刻意写成「被删名单 + 不变量」而不是精确集合，就是为了不抢这一步。
+  —— **#44 已结，落点不是「冻结」而是「取消」**：`package.json#exports` 去掉 `./core`，4 个有真实扩展
+  消费者的 v4 Provider 值迁到 `./advanced`，其余 101 个留在内部 barrel（ADR `2026-09-25` 决策 1）。
+  口径说明：上面这个 113 是本表第三批**之前**的读数；第三批删掉 `useMapResource` 一族后，
+  #44 冻结点实测是 **105** 个值导出（4 迁出 + 101 内部）。
 
 ## 剩余欠账与归宿（#104 关闭条件 4）
 
@@ -247,9 +251,9 @@ Runtime、先做具体场景再提共性、测试以业务结果与资源释放�
 | 能力目录 `engines` 维度 / `engine-unsupported` | Decision | #126（**已关闭**：删列 + 改名 `unlisted-capability`） |
 | ~~`BMap.mountMap()` 防御性前置、`driver-contract` 的 `expectation` 档~~ | Test Debt | ~~#127~~ **已结清**：`mountMap()` 保留 + 补出能翻红的用例（删掉实测变红）；`expectation` 档删除 |
 | ~~F-2 / F-3 / F-4 三条未取证的第三方语义~~ | Probe Debt | ~~#128~~ **已结清（2026-09-24）**：F-2 是 issue 验收标准第 5 条点名的例外（`SharedLoadTask` 的 `callbackRegistry`），现已同时给出 **live guarantee**（`SharedLoadTask.ts` 模块头：本库保证 vs 官方可改分列）与 **可回归 gate**（`probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live 漂移守卫 + `ScriptLoader.test.ts` 的 foreign 单测）⇒ 可以进 #44 的 Stable 冻结评估；F-3 两条读数（幂等 / 销毁期回调）固化在 `probe-destroy-idempotency.live.json`，结论**与先前占位假说相反**（Map 第二次 destroy 抛错）；F-4 按 remove-first 改成夹具记账、不 probe。上表 F-2 / F-3 / F-4 行与 `driver-contract.ts` 三处注释均已按读数更新 |
-| 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | #44（评论已登记）+ 本表处置列 |
+| 7 项出口收窄 / 命名收口（第 3–6 节的 SIMPLIFY 行） | Stable 冻结前动作 | **#44 已结**：7 项逐条处置见 ADR `2026-09-25-public-export-surface-freeze` 决策 3 与本表处置列（删 3 / 内部化 3 / 已由 #136 与 #139 先行结清 2），冻结面不留任何别名 |
 | `useServiceTask` 文档只字未提 | 同上（#44 的出口收窄） | **#139 已结**（内部化，不给文档页） |
-| `getProcessSdkRegistry(domain, options)` 的首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 都写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | 出口形状收窄 | #44（与上面 7 项同批；本批只登记，不顺手改签名） |
+| `getProcessSdkRegistry(domain, options)` 的首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 都写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | 出口形状收窄 | **#44 已结**：签名收成单参 `getProcessSdkRegistry(domain = DEFAULT_DOMAIN)`，且随 `./core` 取消只在内部 barrel 上（ADR `2026-09-10-sdk-conflict-domain` 已加后续注记） |
 | `#101` 的 InfoWindow `openOutstanding` 一族 | 非目标 | 已在 #101 原 PR 内按 ownership/reconcile 纠正 |
 | `DataLayerManager` / Native Layer 失败恢复的直接测试 | Test Debt | #113。前置已满足：本表第 4 节（generation / epoch stale guard）与第 5 节（`native-layers.ts` 的 `supports()` 刻意不采纳实测可用的成员）都判 **KEEP**，即那套机制属于「真实所有权复杂度」而不是要 SIMPLIFY 的镜像状态（注意：本表**没有**「失败恢复状态机」的专行，`#113` 正文里的「前置」指的是这两行） |
 | `docs/.vitepress` 里那个插件名残留的死文件 | 文档卫生 | #90（纯 docs 清理，不阻塞发布） |

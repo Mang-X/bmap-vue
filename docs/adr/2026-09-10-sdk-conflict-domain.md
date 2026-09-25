@@ -5,6 +5,14 @@
 - 计划键：`M3A1-PROVIDERS`（issue #17，追踪 #12）
 - 取代：无
 - 相关：`packages/baidu-map-gl-vue/src/core/loader/SdkRegistry.ts`、`packages/baidu-map-gl-vue/src/core/loader/providers/**`
+- **后续（2026-09-25，issue #44）**：`./core` 子入口已**取消**
+  （[ADR 2026-09-25 公共出口冻结](./2026-09-25-public-export-surface-freeze.md)）。
+  本文决策 13 / 14 与非目标里所有以 `./core` 为落点的措辞，现在只作用于**内部 barrel**
+  `src/core/index.ts`——没有公共出口，也就没有兼容层问题（非目标那条「不为 `./core` 提供
+  beta 期兼容层」因此变成空条款）。其中 `getProcessSdkRegistry` 的签名后来又被收窄成
+  **单参** `getProcessSdkRegistry(domain = DEFAULT_DOMAIN)`：#104 删掉 `conflictPolicy` /
+  `onConflict` 后 `options.domain` 恒等于首参，第二个形参失去意义。冲突处置的唯一行为
+  （恒 reject `BMAP_SDK_CONFIG_CONFLICT`）不变。
 
 ## 背景
 

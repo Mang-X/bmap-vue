@@ -110,13 +110,13 @@ describe("createBMapClient（默认 v4 收口）", () => {
       }),
     ).rejects.toMatchObject({
       code: "BMAP_SDK_ENGINE_MISMATCH",
-      message: expect.stringContaining("LoadedSdk"),
+      message: expect.stringContaining("LoadedJsapiV4"),
     });
   });
 
   it("拒绝不完整的结构化结果（缺 version / load），不会产出 sdkVersion=undefined 的 client", async () => {
     // 评审 P2 的场景：`{ engine, namespace }` 这类半成品（JS 消费者 / `any` / 第三方 Provider 都能造出来）
-    // 此前会被收窄成完整 `LoadedSdk`，`createBMapClient` 读到 `version: undefined` 并透传给 Driver，
+    // 此前会被收窄成完整 `LoadedJsapiV4`，`createBMapClient` 读到 `version: undefined` 并透传给 Driver，
     // 最终 `client.sdkVersion` 也是 `undefined`。
     await expect(
       createBMapClient({

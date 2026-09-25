@@ -122,6 +122,13 @@ jobs:
       - name: Check no legacy engine ids in public declarations
         run: pnpm check:raw-sdk:declarations
 
+      # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
+      # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。
+      # 根入口 / ./components 暂时进不了报告（Volar __VLS_ 悬空引用），脚本对它们跑探针：
+      # 阻塞消失或变质都会让这一步红，见 scripts/check-api.mts 文件头。
+      - name: Check API report baselines
+        run: pnpm check:api
+
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
       - name: Unit & behavior tests

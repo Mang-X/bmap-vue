@@ -28,7 +28,7 @@ import * as manifestComponents from "../components/index";
 
 export interface CreateBMapPluginOptions {
   /**
-   * 默认 SDK Provider（结构化：`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。
+   * 默认 SDK Provider（结构化：`load()` 返回 `LoadedJsapiV4`，engine = `jsapi-v4`）。
    *
    * 内置 v4 家族：`baiduJsapiV4Provider()`（默认）/ `existingGlobalV4Provider()` /
    * `customScriptV4Provider()`。

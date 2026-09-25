@@ -8,7 +8,8 @@
  *
  * 1. **导出面是精确集合**：多一个 / 少一个都要显式改这张表。不是「包含关系」——包含关系挡不住
  *    悄悄新增一个内部实现（那正是这条契约最容易破的方式）。
- * 2. **内部面不在 `./advanced`**：负向断言 + **正证守卫**（同一批名字必须能在 `./core` 里找到）
+ * 2. **内部面不在 `./advanced`**：负向断言 + **正证守卫**（同一批名字必须能在仓内的内部 barrel
+ *    `src/core` 里找到 —— `./core` 子路径已随 #44 取消，正证读的是**源码 barrel**，不是包出口）
  *    —— 没有正证的话，「列表拼错 / 名字早就改名了」会让这条断言永远为真。
  * 3. **产物层**：`dist/advanced.mjs` 的静态 import 闭包里不得出现组件或官方 UI Kit。
  *    `sideEffects: false` + 闭包不含组件，才是「只用 `./advanced` 的消费者不会把整个组件库拉进包里」
@@ -34,7 +35,7 @@ const PKG_DIR = resolve(import.meta.dirname, "../../packages/bmap-vue");
 const DIST = resolve(PKG_DIR, "dist");
 
 /**
- * 冻结的运行时导出面（21 个值导出）。
+ * 冻结的运行时导出面（25 个值导出）。
  *
  * 类型导出不在这里：`Object.keys` 只看得到值导出，类型面由公共声明门禁与
  * 消费方 fixture（`fixtures/consumer`）覆盖。
@@ -47,11 +48,15 @@ const FROZEN_ADVANCED_EXPORTS = [
   "HANDLE_BRAND",
   "UnsupportedCapabilityError",
   "assertLoadedSdk",
+  "baiduJsapiV4Provider",
   "createBMapClient",
   "createBMapClientDefinition",
   "createCapabilityRegistry",
   "createHandle",
   "createJsapiV4Driver",
+  "createLoadedJsapiV4",
+  "customScriptV4Provider",
+  "existingGlobalV4Provider",
   "isLoadedSdk",
   "isPointLike",
   "jsapiV4DriverFactory",
@@ -66,7 +71,7 @@ const FROZEN_ADVANCED_EXPORTS = [
 /**
  * **只属于内部实现**、不得成为扩展契约的名字。
  *
- * 每一条都同时断言两件事：`./advanced` 里没有它，`./core` 里有它。后者是**正证守卫** ——
+ * 每一条都同时断言两件事：`./advanced` 里没有它，内部 barrel `src/core` 里有它。后者是**正证守卫** ——
  * 只写负向断言时，把某个名字拼错（或上游哪天改了名）会让断言静默变绿；有了正证，
  * 「这批名字确实存在、只是不在 `./advanced`」才是被证明的。
  */
@@ -89,7 +94,8 @@ const INTERNAL_ONLY_EXPORTS = [
   "DataLayerManager",
   "BMapError",
   // `resetProcessSdkRegistryForTests` 曾在这张表里（当时它从 `./core` 出口可达）。
-  // `#104` 第三批把它从 `./core` 摘掉之后，「它必须能在 `./core` 找到」这条正证不再成立，
+  // `#104` 第三批把它从 `./core` 摘掉、`#44` 又取消了 `./core` 子路径之后，
+  // 「它必须能在 `./core` 找到」这条正证不再成立，
   // 因此改为由 `core-surface.test.ts` 的负向清单守着 —— 那里断言它**不在**任何公共出口上。
 ];
 
@@ -114,13 +120,13 @@ describe("./advanced 的导出面是冻结的精确集合", () => {
 });
 
 describe("内部实现不得进入扩展契约（含正证守卫）", () => {
-  it("内部面既不在 ./advanced，又确实存在于 ./core", () => {
+  it("内部面既不在 ./advanced，又确实存在于内部 barrel src/core（正证守卫）", () => {
     const advancedNames = new Set(Object.keys(advanced));
     const coreNames = new Set(Object.keys(core));
 
     // 正证守卫：这批名字必须真的存在（拼错 / 改名会让下面的负向断言静默变绿）
     const missingInCore = INTERNAL_ONLY_EXPORTS.filter((name) => !coreNames.has(name));
-    expect(missingInCore, `内部面清单里有名字在 ./core 找不到（清单过期了）：${missingInCore.join(", ")}`)
+    expect(missingInCore, `内部面清单里有名字在 src/core 里找不到（清单过期了）：${missingInCore.join(", ")}`)
       .toEqual([]);
 
     // 负向：一个都不许出现在扩展契约里

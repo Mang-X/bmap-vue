@@ -49,7 +49,7 @@ function onError() {}
 无 `definition` 时，Provider 复用 `app.use(createBMapPlugin(...))` 的默认定义或最近父 Provider 的上下文。
 
 `definition` / `provider` 都直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）：
-`provider` 必须是**结构化**形状（`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。需要固定某个
+`provider` 必须是**结构化**形状（`load()` 返回 `LoadedJsapiV4`，engine = `jsapi-v4`）。需要固定某个
 Driver 实现时直接传带 `driver` 的 `definition`。迁移期的 `withMigrationDriver` 归一与宽松
 Provider 只接受结构化形状 `{ engine, version, namespace }`（`load()` 的返回值），不接受裸全局对象。
 

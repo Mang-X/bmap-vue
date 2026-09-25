@@ -5,6 +5,12 @@
 - 计划键：`M8-ADAPTERS-ADVANCED`（issue #43，追踪 #12）
 - 相关：`packages/baidu-map-gl-vue/src/plugins/compat-inventory.ts`、`packages/baidu-map-gl-vue/src/advanced.ts`、`packages/baidu-map-gl-vue/src/core/index.ts`、`scripts/probe-plugin-runtime.mts`、`scripts/probe-plugin-compat.mts`、`scripts/plugin-runtime-report.mts`、`scripts/advanced-bundle-shake.mts`、`scripts/verify-package.mts`、`tests/behavior/v3-plugin-compat-inventory.test.ts`、`tests/behavior/v3-advanced-contract.test.ts`、`fixtures/v3-consumer/`、`.github/workflows/nightly-v4-smoke.yml`
 - 与既有决策的关系：**取代** [插件兼容 inventory](./2026-09-13-plugin-compat-inventory.md) 的**决策 3**（结论取值三种）与**决策 7 里那行的退出码表**（「有插件 `threw` ⇒ 1」）。其余决策（依据三档 / 私有面布尔口径 / 内置插件一律 optional / 能力互锁 / 两个探针不进 PR 门禁 / 插件页不塞进必需链路）**仍然成立**，本文不改动。
+- **后续（2026-09-25，issue #44）**：决策 5 当时明确写「`./core` **仍然是公开子路径**，
+  把它整体删除或搬迁是破坏性改动，需要独立的决策」——
+  [ADR 2026-09-25 公共出口冻结](./2026-09-25-public-export-surface-freeze.md) 就是那个独立决策：
+  `./core` 子入口已**取消**，v4 Provider 家族（`baiduJsapiV4Provider` / `customScriptV4Provider` /
+  `existingGlobalV4Provider` / `createLoadedJsapiV4`）迁到 `./advanced`。本文决策 5 的
+  「内部实现不得进入 `./advanced`」与**正证守卫**（同一批名字必须能在内部 barrel 找到）**不变**。
 
 ## 背景
 

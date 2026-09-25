@@ -27,9 +27,6 @@ export type MapStatus =
   | "disposing"
   | "disposed";
 
-/** 向后兼容:旧 "loading" 视为 "waiting-client" 别名 */
-export type MapRuntimeStatus = MapStatus | "loading";
-
 export interface MapReadyContext {
   readonly client: BMapClient;
   readonly map: MapHandle;
@@ -37,7 +34,7 @@ export interface MapReadyContext {
 
 export interface MapRuntimeShape {
   readonly id: symbol;
-  readonly status: ShallowRef<MapRuntimeStatus>;
+  readonly status: ShallowRef<MapStatus>;
   readonly client: ShallowRef<BMapClient | null>;
   readonly map: ShallowRef<MapHandle | null>;
   /** Spec 别名:handle === map */

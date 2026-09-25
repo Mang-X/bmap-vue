@@ -116,6 +116,10 @@ Vue 3.5 提供了 `onWatcherCleanup`，issue 也点名要评估它。**结论是
 对外的 external-resource 内核。被删的成员自动从导出类型面消失。
 `MapRuntimeShape.scope`（`resources` 的零读者别名）一并删除。
 
+> **后续（2026-09-25，issue #44）**：`./core` 子入口已取消，`ResourceScope` 只从**根入口**导出
+> （见 [ADR 2026-09-25](./2026-09-25-public-export-surface-freeze.md)）。上面「保留」的判断与
+> 「它是 `MapContext.resources` 的公开类型」都不变，变的只是它有几处出口。
+
 ## 顺带删掉的死成员
 
 `ResourceScope` 的 `addEventListener` / `observe` / `remove` / `onDisposeError` /

@@ -146,7 +146,6 @@ export default defineConfig({
         composables: resolve(root, 'src/composables/index.ts'),
         plugins: resolve(root, 'src/plugins/index.ts'),
         resolver: resolve(root, 'src/resolver/index.ts'),
-        core: resolve(root, 'src/core/index.ts'),
         advanced: resolve(root, 'src/advanced.ts'),
         'ui-kit': resolve(root, 'src/integrations/ui-kit/index.ts'),
       },

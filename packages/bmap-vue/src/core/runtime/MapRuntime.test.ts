@@ -42,13 +42,13 @@ function createRuntime(overrides: Partial<MapRuntime["options"]> = {}) {
   const initializeView = vi.fn();
   const checkResize = vi.fn();
   const mapDriver = { create: createMap, destroy: destroyMap, initializeView, checkResize };
-  const clientFactory = vi.fn(() => deferred.promise.then((loaded) => createFakeClient(mapDriver)));
+  const loadClient = vi.fn(() => deferred.promise.then(() => createFakeClient(mapDriver)));
   const rt = new MapRuntime({
-    clientFactory: clientFactory as never,
+    clientContext: { load: loadClient } as never,
     container: document.createElement("div"),
     ...overrides,
   });
-  return { rt, deferred, clientFactory, mapDriver, createMap, destroyMap, checkResize };
+  return { rt, deferred, loadClient, mapDriver, createMap, destroyMap, checkResize };
 }
 
 /** 建到 ready 的公共前置（暂停相关用例都要一张真存在的地图）。 */
@@ -65,7 +65,7 @@ describe("MapRuntime", () => {
     const { rt, deferred, createMap } = createRuntime();
     expect(rt.status.value).toBe("idle");
     const p = rt.mount();
-    expect(["waiting-client", "loading"]).toContain(rt.status.value);
+    expect(rt.status.value).toBe("waiting-client");
     deferred.resolve({ Map: {} });
     const ctx = await p;
     expect(rt.status.value).toBe("ready");
@@ -125,7 +125,7 @@ describe("MapRuntime", () => {
     const { rt, deferred } = createRuntime();
     const p1 = rt.mount();
     const p2 = rt.mount();
-    expect(["waiting-client", "loading", "creating", "initializing"]).toContain(rt.status.value);
+    expect(["waiting-client", "creating", "initializing"]).toContain(rt.status.value);
     deferred.resolve({ ok: 1 });
     await Promise.all([p1, p2]);
     expect(rt.status.value).toBe("ready");

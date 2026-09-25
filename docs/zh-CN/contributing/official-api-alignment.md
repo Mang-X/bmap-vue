@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 373 |
+| 本库根入口导出 | 372 |
 | 名称对齐（交集） | 110 |
 | 仅官方有 | 292 |
-| 仅本库有 | 263 |
+| 仅本库有 | 262 |
 | `./ui-kit` 子路径导出 | 55 |
 | 手写语义例外 | 37 |
 
@@ -549,7 +549,6 @@ component 45 · hook 14 · type 51
 | `MapReadyContext` | type | — |
 | `MapResizeEvent` | type | — |
 | `MapResizePayload` | type | — |
-| `MapRuntimeStatus` | type | — |
 | `MapStatus` | type | — |
 | `MapTypeChangeEvent` | type | — |
 | `MapTypeChangePayload` | type | — |
@@ -646,7 +645,7 @@ component 45 · hook 14 · type 51
 | `JsapiV4Driver` | other | — |
 | `LabelStyle` | other | — |
 | `LayerDriver` | other | — |
-| `LoadedSdk` | other | — |
+| `LoadedJsapiV4` | other | — |
 | `LocalSearchBounds` | other | — |
 | `LocalSearchInBoundsRequest` | other | — |
 | `LocalSearchKeyword` | other | — |

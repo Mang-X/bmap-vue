@@ -72,7 +72,7 @@ export type {
   TrackLineLayerExpose,
 } from "./types/components";
 // core 领域类型(供业务使用)
-export type { MapContext, MapReadyContext, MapRuntimeStatus, MapStatus } from "./core/context/types";
+export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";
 export { useMapContext, useMapReady, useMap } from "./composables/useMap";
 // Client Context(服务类 composable 默认依赖,无需 Map 即可使用)
 export {
@@ -149,7 +149,7 @@ export type {
   BMapProviderLike,
   CreateBMapClientOptions,
 } from "./client/types";
-export type { LoadedSdk } from "./core/loader/loaded";
+export type { LoadedJsapiV4 } from "./core/loader/loaded";
 export type { BMapDriver, BMapEngine } from "./driver/types/bmap";
 export type {
   MapHandle,

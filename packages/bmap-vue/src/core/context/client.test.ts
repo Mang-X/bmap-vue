@@ -3,7 +3,7 @@ import { createClientContext } from "./client";
 import type { BMapClient, BMapDriverFactory, CreateBMapClientOptions } from "../../client/types";
 import type { BMapDriver } from "../../driver/types/bmap";
 import { createLoadedJsapiV4 } from "../loader/providers";
-import type { LoadedSdk } from "../loader/loaded";
+import type { LoadedJsapiV4 } from "../loader/loaded";
 
 /**
  * M3A3-REMOVE-LEGACY（#26）：`withMigrationDriver` 归一已删除，definition 直接交给
@@ -14,7 +14,7 @@ import type { LoadedSdk } from "../loader/loaded";
  */
 const stubDriver: BMapDriverFactory = () => ({ engine: "jsapi-v4" }) as unknown as BMapDriver;
 
-function loaded(): LoadedSdk {
+function loaded(): LoadedJsapiV4 {
   return createLoadedJsapiV4({
     providerId: "existing-global-v4",
     mode: "existing-global",

@@ -2,8 +2,8 @@
  * M7: 公共入口与安装器 smoke
  *
  * M3A3-REMOVE-LEGACY（#26）：根入口不再导出旧引擎的 Provider factory（`baiduCdnProvider`
- * 家族随 `core/loader/Provider.ts` 一起删除）。v4 Provider 家族从 `bmap-vue/core`
- * 子入口公开（既有入口，不因为这次删除而改变）。
+ * 家族随 `core/loader/Provider.ts` 一起删除）。v4 Provider 家族的公开出口是 `bmap-vue/advanced`
+ * （#44 取消了 `bmap-vue/core` 子路径：那 105 个值导出里只有这 4 个有真实公开消费者）。
  */
 import { describe, it, expect } from 'vitest'
 import { createApp } from 'vue'
@@ -71,6 +71,25 @@ describe('public entry', () => {
     expect(r).toEqual({ name: 'Map', from: 'bmap-vue/components' })
     // 非组件名不解析
     expect(resolver.resolve('FooBar')).toBeUndefined()
+  })
+
+  /**
+   * #44：v4 Provider 家族（4 个值）只在 `./advanced`，根入口**不**导出它们。
+   *
+   * 正向与负向成对：只断言「根入口没有」是可能恒真的空断言（改个名字就绕过），
+   * 因此同时断言 `./advanced` 确实导出 —— 这四个名字是「这次真的查了这条规则」的守卫，
+   * 同时钉住「取消 `./core` 之后它们没有变成不可达」。
+   */
+  it('v4 Provider 家族只在 ./advanced（根入口不导出）', () => {
+    for (const name of [
+      'baiduJsapiV4Provider',
+      'customScriptV4Provider',
+      'existingGlobalV4Provider',
+      'createLoadedJsapiV4',
+    ]) {
+      expect(root, `根入口不得导出 ${name}`).not.toHaveProperty(name)
+      expect(advanced, `./advanced 必须导出 ${name}`).toHaveProperty(name)
+    }
   })
 
   it('exports composables from root', () => {

@@ -5,7 +5,7 @@
  * SDK 版本差异、构造函数、raw 对象与“不支持能力”全部限制在 Client/Driver 边界内。
  *
  * M3A1-CLIENT（issue #18）：
- * - `BMapProviderLike.load` 返回结构化 `LoadedSdk`（不再返回裸 `unknown`）；
+ * - `BMapProviderLike.load` 返回结构化 `LoadedJsapiV4`（不再返回裸 `unknown`）；
  * - **默认注入 `jsapiV4DriverFactory`（内部 `createJsapiV4Driver`），因此默认只接受
  *   `jsapi-v4`**，不做运行时 engine 猜测。
  *
@@ -13,7 +13,7 @@
  * `withMigrationDriver` / `createLegacyBMapClient`）一并删除，`assertLoadedSdk` 成为
  * 加载结果唯一的收口点。
  */
-import { assertLoadedSdk, type LoadedSdk } from "../core/loader/loaded";
+import { assertLoadedSdk, type LoadedJsapiV4 } from "../core/loader/loaded";
 import type { BMapLoadOptions } from "../core/loader/url";
 import { createJsapiV4Driver } from "../driver/createJsapiV4Driver";
 import type { BMapDriver } from "../driver/types/bmap";
@@ -24,7 +24,7 @@ export interface NormalizedProvider {
   readonly id: string;
   /** 恒为函数：Provider 未提供指纹时返回 `custom`。 */
   getCacheKey(options: BMapLoadOptions): string;
-  load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedSdk>;
+  load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
 
 export function normalizeProvider(provider: BMapProviderLike): NormalizedProvider {
@@ -54,7 +54,7 @@ export const jsapiV4DriverFactory: BMapDriverFactory = (input) => {
   });
 };
 
-function assembleClient(loaded: LoadedSdk, driver: BMapDriver): BMapClient {
+function assembleClient(loaded: LoadedJsapiV4, driver: BMapDriver): BMapClient {
   // SDK 运行时版本一律来自结构化加载结果（Provider 声明）；旧引擎「由 Driver 探测」的
   // 分支已随 webgl-v1 删除。
   const sdkVersion = loaded.version;

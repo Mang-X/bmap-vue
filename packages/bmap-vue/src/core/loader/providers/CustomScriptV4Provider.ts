@@ -60,7 +60,7 @@ export class CustomScriptV4Provider implements JsapiV4Provider {
     this.mode = options.mode ?? "load";
     this.loader = options.loader ?? new ScriptLoader();
     this.domain =
-      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN });
+      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
   }
 
   getCacheKey(options: BMapLoadOptions): string {

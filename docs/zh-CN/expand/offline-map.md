@@ -17,7 +17,7 @@
 <script setup lang="ts">
   import { Map, Marker } from 'bmap-vue'
   // 自建入口经显式 v4 Provider 表达
-  import { customScriptV4Provider } from 'bmap-vue/core'
+  import { customScriptV4Provider } from 'bmap-vue/advanced'
 
   const offlineProvider = customScriptV4Provider('自建地址/getApiScripts.js')
 </script>
@@ -48,7 +48,7 @@ Provider 可以经 `createBMapPlugin({ provider })` 装成全局默认，也可�
 本库**只消费全局，不另插 script**：
 
 ```ts
-import { existingGlobalV4Provider } from 'bmap-vue/core'
+import { existingGlobalV4Provider } from 'bmap-vue/advanced'
 
 const app = createApp(App).use(createBMapPlugin({ provider: existingGlobalV4Provider() }))
 ```

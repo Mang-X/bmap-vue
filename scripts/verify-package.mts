@@ -61,7 +61,6 @@ function assertReleaseIdentity(tarball: string): void {
     './composables',
     './plugins',
     './resolver',
-    './core',
     './advanced',
     './ui-kit',
   ]) {

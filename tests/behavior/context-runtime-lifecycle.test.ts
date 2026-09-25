@@ -64,7 +64,7 @@ describe('MapRuntime retry/suspend/resume', () => {
     let calls = 0
     const deferredOk = { v: 1 }
     void deferredOk
-    const clientFactory = vi.fn(async () => {
+    const loadClient = vi.fn(async () => {
       calls++
       if (calls <= failures) throw new Error('sdk down')
       return {
@@ -78,8 +78,11 @@ describe('MapRuntime retry/suspend/resume', () => {
         },
       } as never
     })
-    const rt = new MapRuntime({ clientFactory: clientFactory as never, container: document.createElement('div') })
-    return { rt, clientFactory }
+    const rt = new MapRuntime({
+      clientContext: { load: loadClient } as never,
+      container: document.createElement('div'),
+    })
+    return { rt, loadClient }
   }
 
   it('retry 从 error 恢复到 ready', async () => {
@@ -243,16 +246,18 @@ describe('PRE audit: context isolation & resource exit', () => {
     expect(ctx.status.value).toBe('disposed')
 
     const rt = new MapRuntime({
-      clientFactory: (async () => ({
-        driver: {
-          map: {
-            create: (c: HTMLElement) => ({ raw: new fake.namespace.Map(c, {}) }),
-            destroy: () => {},
-            initializeView: () => {},
-            checkResize: () => {},
+      clientContext: {
+        load: (async () => ({
+          driver: {
+            map: {
+              create: (c: HTMLElement) => ({ raw: new fake.namespace.Map(c, {}) }),
+              destroy: () => {},
+              initializeView: () => {},
+              checkResize: () => {},
+            },
           },
-        },
-      }) as never) as never,
+        })) as never,
+      } as never,
       container: document.createElement('div'),
     })
     await rt.mount()

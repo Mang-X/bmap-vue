@@ -25,7 +25,7 @@ export interface BMapProviderProps {
    * 便捷 Provider 接口（与 `<Map>` 的 `provider` prop 对称）。
    *
    * M3A3-REMOVE-LEGACY（#26）：Provider 必须是**结构化**形状（`load()` 返回
-   * `LoadedSdk`，engine = `jsapi-v4`）。需要固定某个 Driver 实现时直接传带 `driver`
+   * `LoadedJsapiV4`，engine = `jsapi-v4`）。需要固定某个 Driver 实现时直接传带 `driver`
    * 的 `definition`。
    */
   provider?: BMapProviderLike;

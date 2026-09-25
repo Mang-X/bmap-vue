@@ -12,7 +12,7 @@
  *    同指纹复用同一任务、不同 AK 报结构化冲突；
  * 3. **调用方取消等待**：每个消费者各持 `AbortSignal`，取消只结算自己，不影响同任务上的
  *    其它消费者；
- * 4. **LoadedSdk 归一化**：官方 resolve 出来的东西必须**真的是可用的 v4 命名空间**才算成功，
+ * 4. **LoadedJsapiV4 归一化**：官方 resolve 出来的东西必须**真的是可用的 v4 命名空间**才算成功，
  *    然后组装成 `LoadedJsapiV4`（含脱敏 metadata）。
  *
  * 刻意**不**做的事（都属于官方 Loader 自有语义，重复一份就是两套状态机）：
@@ -67,7 +67,7 @@ export class BaiduJsapiV4Provider implements JsapiV4Provider {
   constructor(options: BaiduJsapiV4ProviderOptions = {}) {
     this.loader = options.loader ?? officialJsapiLoader;
     this.domain =
-      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN });
+      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
   }
 
   getCacheKey(options: BMapLoadOptions): string {

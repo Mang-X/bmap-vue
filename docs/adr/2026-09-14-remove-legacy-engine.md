@@ -12,6 +12,12 @@
     Playground legacy 档条目。
 - 相关：`packages/baidu-map-gl-vue/src/driver/types/bmap.ts`、`client/createBMapClient.ts`、
   `core/loader/loaded.ts`、`scripts/check-no-bmapgl.mts`、`packages/test-utils/fake-v4-harness.ts`
+- **后续（2026-09-25，issue #44）**：本文决策 2 里「`LoadedSdk` 保留为 `LoadedJsapiV4` 的别名
+  （名字不变，避免无谓的签名抖动）」**已被
+  [ADR 2026-09-25 公共出口冻结](./2026-09-25-public-export-surface-freeze.md) 取代**：
+  1.0 冻结面里不留 deprecation / 单成员别名，`LoadedSdk` 直接改名为 `LoadedJsapiV4`（要出一次
+  release note）。本文其余决策——单一 engine 取值、`assertLoadedSdk` 是唯一收口点、
+  Provider 只接受结构化形状、`no-bmapgl` 门禁——**全部仍然有效**。
 
 ## 背景
 
@@ -52,6 +58,10 @@ GL v1（`BMapGL`）只是迁移期过渡实现，M3A.3 删除。R25 阶段（#70
 `LoadedSdk` 保留为 `LoadedJsapiV4` 的**别名**（名字不变，避免无谓的签名抖动），
 `assertLoadedSdk` 成为唯一收口点，两个失败形态各自有明确错误码与文案：缺 `engine`
 （裸全局对象）、`engine !== "jsapi-v4"`（旧引擎结果）。
+
+> **后续（2026-09-25，issue #44）**：上面那句「保留为别名」不再成立——别名已删除，公共面里
+> 只有 `LoadedJsapiV4`（见 [ADR 2026-09-25](./2026-09-25-public-export-surface-freeze.md) 决策 3）。
+> 「`assertLoadedSdk` 是唯一收口点」与两条错误文案**不变**。
 
 ### 3. Provider 只接受结构化形状
 
@@ -124,7 +134,7 @@ ADR 2026-09-13 决策 10 明确把这两条挂到了本票。它们走的是 leg
 | --- | --- | --- | --- |
 | 根入口 Provider factory | `baiduCdnProvider()` / `customScriptProvider()` / `existingGlobalProvider()` | 根入口**不再导出任何 Provider**；v4 家族在 `baidu-map-gl-vue/core`（既有入口） | 改用 `baiduJsapiV4Provider()` / `customScriptV4Provider()` / `existingGlobalV4Provider()` |
 | `./advanced` 的 Driver 构造 | `createDriver({ engine, rawSdk })`、`detectEngine()` | 只剩 `createJsapiV4Driver({ rawSdk, version, unsupported })` | 显式给 `version`（来自结构化加载结果）；不要再猜 engine |
-| `./advanced` / `./core` 的加载结果 | `LoadedSdk = LoadedJsapiV4 \| LoadedLegacySdk`、`isLoadedLegacySdk` / `toLoadedLegacySdk` / `assertLoadedJsapiV4` | `LoadedSdk = LoadedJsapiV4`；只留 `isLoadedSdk` / `assertLoadedSdk` | 判别联合退化为单成员；`assertLoadedSdk` 就是「只接受 4.0」的判定点 |
+| `./advanced` / `./core` 的加载结果（`./core` 已于 #44 取消子入口） | `LoadedSdk = LoadedJsapiV4 \| LoadedLegacySdk`、`isLoadedLegacySdk` / `toLoadedLegacySdk` / `assertLoadedJsapiV4` | `LoadedSdk = LoadedJsapiV4`；只留 `isLoadedSdk` / `assertLoadedSdk`（#44 起别名删除，名字就是 `LoadedJsapiV4`） | 判别联合退化为单成员；`assertLoadedSdk` 就是「只接受 4.0」的判定点 |
 | Provider 形状 | `AnyBMapProviderLike`（结构化 + 宽松裸值） | 只有结构化 `BMapProviderLike` | 让 `load()` 返回 `{ engine: "jsapi-v4", version, namespace, … }` |
 | 组件默认路径 | `withMigrationDriver(definition)` 归一 | 定义**原样**交给 `createBMapClient` | 无需改动；自己拼 definition 的调用方删掉那层包装即可 |
 | `<BMap allowExistingGlobal>` / 插件 `allowExistingGlobal` | 显式 opt-in 复用已有全局 | prop 已删除 | 传 `provider: existingGlobalV4Provider()` |

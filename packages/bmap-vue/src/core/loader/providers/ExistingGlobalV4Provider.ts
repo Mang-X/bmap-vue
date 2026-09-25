@@ -25,7 +25,7 @@ export class ExistingGlobalV4Provider implements JsapiV4Provider {
 
   constructor(options: JsapiV4ProviderOptions = {}) {
     this.domain =
-      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN });
+      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
   }
 
   getCacheKey(options: BMapLoadOptions): string {

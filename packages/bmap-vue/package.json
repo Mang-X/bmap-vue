@@ -49,10 +49,6 @@
       "types": "./dist/resolver.d.ts",
       "import": "./dist/resolver.mjs"
     },
-    "./core": {
-      "types": "./dist/core.d.ts",
-      "import": "./dist/core.mjs"
-    },
     "./advanced": {
       "types": "./dist/advanced.d.ts",
       "import": "./dist/advanced.mjs"
