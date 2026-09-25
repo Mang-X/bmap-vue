@@ -587,6 +587,26 @@ ${issues.join("\n")}`).toEqual([]);
     expect(text, "人读视图预设了方向（本库更贵/更快）").not.toMatch(/本库的.{0,8}是有成本的/);
   });
 
+  it("「简单路径成本」的结论句**跟着读数走**（不得预设本库更贵）", () => {
+    // 票面验收第二条要报告**解释**「简单路径成本」。此前这里只有一句「方向由数据决定」——
+    // 那是不解释，把责任推给读表的人；补上结构成本后又差点把「本库多付」写死，而本轮
+    // 数据恰好显示本库 listen / render 都**更少**。同一类错犯两次，所以钉死：
+    // 结论句必须随读数变化，且当前读数下不得出现「多付」。
+    const cheap = formatReferenceReport(snapshot() as ReferenceResult);
+    expect(cheap, "没解释简单路径成本").toMatch(/简单路径的结构成本/);
+
+    const heavy = snapshot() as ReferenceResult;
+    const marker = heavy.scenarios.find((entry) => entry.ours !== null);
+    expect(marker?.ours).toBeTruthy();
+    (marker!.ours as { sdkCalls: number }).sdkCalls = 99_999;
+    (marker!.ours as { renderCallbacks: number }).renderCallbacks = 99_999;
+    const expensive = formatReferenceReport(heavy);
+    expect(expensive, "读数显示本库更重时，结论句没跟着变").not.toBe(cheap);
+    expect(expensive).toMatch(/多付/);
+    // 当前这份快照本库更少 ⇒ 报告不得说「多付」。
+    expect(cheap, "结论句预设了本库更贵——被自己的数据否掉过一次").not.toMatch(/多付/);
+  });
+
   it("人读视图里的结构数字**取自快照**而非写死", () => {
     // 写死的数字下一次重录就与上表不一致——那正是「两份事实源漂移」，只是搬进了渲染器。
     const text = formatReferenceReport(snapshot() as ReferenceResult);

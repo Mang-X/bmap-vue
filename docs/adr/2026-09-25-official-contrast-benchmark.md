@@ -383,6 +383,51 @@ Markdown 又手抄一套，下次更新快照忘了更新文档，两边慢慢�
 「可复现的结构差」那句也从写死 `marker-100-mount` 改为**在简单档里选残留差最大的那一行**：
 数字与场景都从上游来，场景改名或读数变化时它自己跟着走。
 
+### 19. `.mts` 必须进 `tsconfig.tests.json`——不然类型错误只靠人眼发现
+
+七轮评审的**唯一硬违规**：`reference.mts` 写着 `readonly engine: ReferenceEngine`，而
+`ReferenceEngine` **全仓库没有声明**（单独 tsc 即报 `TS2304`）。`pnpm typecheck:tests`
+之所以全绿：`tsconfig.tests.json` 只 include 了 `tests/performance/**/*.ts`，而 #140 的三个
+模块（`reference` / `referenceReport` / `bundle`）都是 `.mts`——**整个 reference 快照机制
+（最近两个 commit）此前完全不在类型门禁的编译范围里**。同一份 tsconfig 里
+`tests/browser/official-contrast/**/*.mts` 那条恰好说明作者知道 `.mts` 要单列，只是漏了
+`tests/performance` 这一侧。
+
+⚠️ 这条教训比那个类型本身重要：**门禁只查「值」，类型错误没人看**，于是两轮评审、六次
+mutation 测试全绿，一个从没声明过的类型就这么躺在被引用处。已补 `export interface
+ReferenceEngine` + `"tests/performance/**/*.mts"`，并实测新覆盖面会红（往两个 `.mts` 各塞一个
+类型错误，exit 2）。补覆盖时当场抓到我自己引入的 TDZ 排序错误——正是补上覆盖的价值。
+
+### 20. `sourceCommit` 必须**真的**指向录出快照的那次跑
+
+同上评审抓到：我上一轮在 `engine` / `tier` 改动**还没提交**时录了快照，`git rev-parse HEAD`
+记下的是**父提交**——那个 commit 里的快照**没有** `engine` 字段。而渲染层把这个 SHA 当权威
+来源印在表头。快照机制存在的全部意义就是「对得上代码」，这一条正是它要防的那件事，而**没有
+任何门禁能抓到**：原判据只断言「是个 SHA」，假 SHA 一路照过。
+
+判据因此改成「**那个 commit 里真的存在这份文件、且 schema 对得上**」。这不是门禁洁癖：
+一个指向「没有这份快照」的 commit 的 SHA，是一份**假 provenance**，而它恰好印在最显眼的位置。
+
+### 21. 简单路径的「成本」要**解释**，但方向不预设
+
+验收第二条要人读报告解释「简单路径成本」。此前该节只有一句「方向由数据决定，本文不预设结论」
+——那**不是解释**，是把解释的责任推给读表的人。补上结构成本（`listen` 调用面、渲染次数，
+两者都跨机成立、可在别的机器上重跑复核），毫秒那两列仍由表说话。
+
+⚠️ 补的过程中**同一类错又犯了一次**：先写成「本库在简单路径上多付的正是这层抽象」，而同一段
+里自己算出来的读数是本库 `listen` **少** 924、渲染**少** 99。这与更早那次被自己的表否掉的
+「抽象是有成本的」是**同一个 bug**，所以结论句现在也钉成数据驱动：`oursHeavier` 为假时就不许
+出现「多付」。已用「把本库读数改成 99999」验证措辞会跟着变。
+
+### 22. 指标 6 可测的那半要进表；引擎 `kind`/`version` 要成对
+
+- `retainedListeners` 是票面指标 6「heap delta / retained listeners」**可测的那半**（heap
+  delta 本档测不到，已进 `notMeasured`）。它此前被结构摘要漏掉——**全为 0 时漏掉也看不出来**，
+  正是最容易被静默丢的一列；
+- `engine.kind` 配 `engine.version` **成对**校验：`kind: "fake"` 配 `version: "4.0"` 能过校验，
+  而这组读数会冒充「跑在真实 JSAPI 4.0 上」——本票最忌讳的含糊，也是 AGENTS.md 对引擎取值那条
+  要求的同一类。`ENGINE_VERSION_BY_KIND` 成为**唯一**配对表（编排取它、校验验它）。
+
 ## 后果（含回滚）
 
 **得到的**：

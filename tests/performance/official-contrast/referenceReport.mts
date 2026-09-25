@@ -69,7 +69,11 @@ function structureRow(scenario: ReferenceScenario): string {
     `recreate ${ours.recreates} / ${off.recreates} · ` +
     `${ours.callKind} ${ours.sdkCalls} / ${off.callKind} ${off.sdkCalls} · ` +
     `render ${ours.renderCallbacks} / ${off.renderCallbacks} · ` +
-    `残留 ${ours.retainedResources} / ${off.retainedResources}`
+    `残留 ${ours.retainedResources} / ${off.retainedResources}` +
+    // ⚠️ `retainedListeners` 是票面指标 6「heap delta / retained listeners」**可测的那半**
+    // （heap delta 本档测不到，已进 notMeasured）。它此前被结构摘要漏掉——全为 0 时漏掉也
+    // 看不出来，正是最容易被静默丢的一列。要么两列都进表，要么这票的指标就少了一半。
+    ` · 监听残留 ${ours.retainedListeners} / ${off.retainedListeners}`
   );
 }
 
@@ -148,19 +152,54 @@ export function formatReferenceReport(result: ReferenceResult): string {
     );
   }
   lines.push("");
-  // ⚠️ 刻意**不写**「简单路径上本库更贵 / 更快」这类结论句。上一版把
-  // 「本库的组件与生命周期抽象是有成本的」写死在渲染里，而**同一份快照的表就在它上面**，
-  // 读数是本库更快（见上表）——一句硬编码的结论被自己生成的数据当场否掉。方向是**数据决定**的：
-  // 换机器、换 Node、换官方补丁版本都可能反过来。表格给数，结论留给读表的人。
+  // ⚠️ 这里要分清两件事，混了就是错话：
   //
-  // 票面「结果使用规则」说的是「简单 Marker/Map 若官方更轻，如实记录」——**谁更轻由读数说话**，
-  // 写死任何一边都是把一次实验的结论冒充成这张票的结论。
+  // **毫秒方向不预设**：上一版把「本库的组件与生命周期抽象是有成本的」写死在渲染里，而同一份
+  // 快照的表就在它上面，读数是本库更快（见上表）——一句硬编码的结论被自己生成的数据当场否掉。
+  // 换机器、换 Node、换官方补丁版本都可能反过来，所以时序方向由读数说话，本文不替他下结论。
+  //
+  // **结构成本要说明**（票面验收第二条点名的就是「解释简单路径成本」）：组件与生命周期抽象
+  // 到底**多付了什么**，是跨机成立的事实，不是某次跑出来的快慢。下列三行因此**从快照取**
+  // ——本库多发的 `listen`（组件事件绑定的代价）、本库多出的渲染次数、以及本库在这条路上
+  // **多出来的开销方向**。这三项可复现、可在别的机器上重跑复核；毫秒那两列不是。
+  //
+  // 若这里只写「方向由数据决定」而不说结构成本，验收要的「解释」就落空了——不是解释，
+  // 是把解释的责任推给读表的人。
   lines.push(
-    "简单路径的**同轮毫秒**与**结构读数**见上表。方向由数据决定，本文不预设结论：换机器、换 Node、" +
-      "换官方补丁版本都可能反过来。票面要求「若官方更轻，如实记录」——**如实**指的是不挑选、不排序、" +
-      "不给倍数，不是预先假定哪边更贵。",
+    "简单路径的**同轮毫秒**与**结构读数**见上表。**毫秒的方向本文不预设**：换机器、换 Node、" +
+      "换官方补丁版本都可能反过来，票面要求「若官方更轻，如实记录」——**如实**指的是不挑选、" +
+      "不排序、不给倍数，不是预先假定哪边更贵。",
   );
   lines.push("");
+  // 结构成本：逐条**从读数算**，不写死、不预设方向。
+  const simpleRows = comparable.filter((entry) => simpleIds.includes(entry.id));
+  const listenRows = simpleRows.filter((entry) => entry.ours!.callKind === entry.officialSide!.callKind);
+  if (listenRows.length > 0) {
+    const oursTotal = listenRows.reduce((sum, entry) => sum + entry.ours!.sdkCalls, 0);
+    const offTotal = listenRows.reduce((sum, entry) => sum + entry.officialSide!.sdkCalls, 0);
+    const renderOurs = simpleRows.reduce((sum, entry) => sum + entry.ours!.renderCallbacks, 0);
+    const renderOff = simpleRows.reduce((sum, entry) => sum + entry.officialSide!.renderCallbacks, 0);
+    const side = (ours: number, off: number): string =>
+      ours === off ? "两侧持平" : ours > off ? `本库多 ${ours - off}` : `本库少 ${off - ours}`;
+    // ⚠️ 结论句**也**跟着读数走：本轮这两项本库是「少」的，所以不能说「多付」——
+    // 上一版就把「本库的抽象是有成本的」写死，而同一份快照的表恰好否掉它。同一类错两次，
+    // 所以这里连「多付 / 少付」都不预设：只有读数**真的**显示本库更贵时才那么说。
+    const oursHeavier = oursTotal > offTotal || renderOurs > renderOff;
+    const tradeoff = oursHeavier
+      ? "本库在简单路径上**多付**的正是这层组件与生命周期抽象"
+      : oursTotal < offTotal && renderOurs < renderOff
+        ? "本轮这两项本库反而**更少**——简单路径上没体现出「抽象更贵」的代价"
+        : "本轮这两项两侧**方向不一**（见上）";
+    lines.push(
+      `**简单路径的结构成本**（跨机成立，与上表毫秒无关）：组件事件绑定的 \`listen\` 调用面` +
+        `累计本库 ${oursTotal} / 官方 ${offTotal}（${side(oursTotal, offTotal)}）；` +
+        `组件渲染次数本库 ${renderOurs} / 官方 ${renderOff}（${side(renderOurs, renderOff)}）。` +
+        `${tradeoff}。本库的结构性收益在下一节（卸载残留归零、大数据更新不重建实例）。` +
+        `哪一边的**毫秒**更小由上表说话，本文不替他下结论。`,
+    );
+    lines.push("");
+  }
+
   // ⚠️ 这句里的**每个数字都从快照取**，场景也是**选出来**的，不是写死 `marker-100-mount`：
   // 简单档里「残留差」最大的那一行。写死场景 id 等于渲染器自己持一份事实源（票面叙事分成
   // 数据在场景表，数字在快照——这里两样都该从上游来）；而且场景改名会让这句话悄悄失去对象。
@@ -179,7 +218,8 @@ export function formatReferenceReport(result: ReferenceResult): string {
     lines.push(
       `可复现的**结构差**（与快慢无关，跨机成立）：\`${worstRetain.entry.id}\` 的 \`${oursSide.callKind}\` ` +
         `调用面本库 ${oursSide.sdkCalls} / 官方 ${offSide.sdkCalls}；卸载后**残留**本库 ` +
-        `${oursSide.retainedResources} / 官方 ${offSide.retainedResources} —— ` +
+        `${oursSide.retainedResources} / 官方 ${offSide.retainedResources}、**监听残留**本库 ` +
+        `${oursSide.retainedListeners} / 官方 ${offSide.retainedListeners} —— ` +
         (offSide.retainedResources > 0
           ? "官方那侧覆盖物没有被摘掉。"
           : "本库那侧尚有残留，值得复查。"),

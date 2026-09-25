@@ -196,7 +196,7 @@ tolerance、跨机归一化、runner 换 SKU 处理，那正是票面「不做�
 <!-- bmap-vue-1.0:official-contrast -->
 ### 本次记录（由 `recorded-result.json` 生成，勿手改）
 
-录于 `2026-09-25T05:49:43.219Z`，来源 commit `2528069f853f4fd116a95b28fdfef8ee58ccad63`；本库 1.0.0-rc.0 vs 官方 1.0.1，数据集 v1。
+录于 `2026-09-25T06:43:32.383Z`，来源 commit `75601f4667170a1e9e42a270de34cfb876034031`；本库 1.0.0-rc.0 vs 官方 1.0.1，数据集 v1。
 
 机器：Apple M4 · darwin/arm64 · node v24.18.0 · happy-dom。
 
@@ -208,30 +208,32 @@ tolerance、跨机归一化、runner 换 SKU 处理，那正是票面「不做�
 
 | 场景 | 本库 act ms | 官方 act ms | 结构读数（本库 / 官方） |
 | --- | ---: | ---: | --- |
-| map-cold-mount | 3.92 | 22.31 | recreate 1 / 1 · listen 43 / listen 5 · render 5 / 5 · 残留 0 / 0 |
-| marker-100-mount | 4.52 | 21.88 | recreate 101 / 101 · listen 143 / listen 1105 · render 6 / 105 · 残留 0 / 100 |
+| map-cold-mount | 3.75 | 22.46 | recreate 1 / 1 · listen 43 / listen 5 · render 5 / 5 · 残留 0 / 0 · 监听残留 0 / 0 |
+| marker-100-mount | 4.12 | 22.76 | recreate 101 / 101 · listen 143 / listen 1105 · render 6 / 105 · 残留 0 / 100 · 监听残留 0 / 0 |
 
-简单路径的**同轮毫秒**与**结构读数**见上表。方向由数据决定，本文不预设结论：换机器、换 Node、换官方补丁版本都可能反过来。票面要求「若官方更轻，如实记录」——**如实**指的是不挑选、不排序、不给倍数，不是预先假定哪边更贵。
+简单路径的**同轮毫秒**与**结构读数**见上表。**毫秒的方向本文不预设**：换机器、换 Node、换官方补丁版本都可能反过来，票面要求「若官方更轻，如实记录」——**如实**指的是不挑选、不排序、不给倍数，不是预先假定哪边更贵。
 
-可复现的**结构差**（与快慢无关，跨机成立）：`marker-100-mount` 的 `listen` 调用面本库 143 / 官方 1105；卸载后**残留**本库 0 / 官方 100 —— 官方那侧覆盖物没有被摘掉。
+**简单路径的结构成本**（跨机成立，与上表毫秒无关）：组件事件绑定的 `listen` 调用面累计本库 186 / 官方 1110（本库少 924）；组件渲染次数本库 11 / 官方 110（本库少 99）。本轮这两项本库反而**更少**——简单路径上没体现出「抽象更贵」的代价。本库的结构性收益在下一节（卸载残留归零、大数据更新不重建实例）。哪一边的**毫秒**更小由上表说话，本文不替他下结论。
+
+可复现的**结构差**（与快慢无关，跨机成立）：`marker-100-mount` 的 `listen` 调用面本库 143 / 官方 1105；卸载后**残留**本库 0 / 官方 100、**监听残留**本库 0 / 官方 0 —— 官方那侧覆盖物没有被摘掉。
 
 #### 高级路径的收益在结构指标上
 
 | 场景 | 本库 | 官方 | 结构读数（本库 / 官方） |
 | --- | --- | --- | --- |
-| marker-1k-update | 2.31 ms | 22.25 ms | recreate 0 / 0 · setPosition 1000 / setPosition 1000 · render 2 / 1001 · 残留 0 / 1000 |
-| polyline-10k-parent-update | 2.44 ms | 6.86 ms | recreate 0 / 0 · setPath 0 / setPath 0 · render 1 / 2 · 残留 0 / 1 |
-| polyline-10k-path-replace | 1.58 ms | 8.56 ms | recreate 0 / 0 · setPath 1 / setPath 1 · render 2 / 2 · 残留 0 / 1 |
-| infowindow-lifecycle | 4.34 ms | 4.83 ms | recreate 0 / 0 · listen 0 / listen 0 · render 6 / 6 · 残留 0 / 0 |
-| router-remount | 5.02 ms | 23.44 ms | recreate 1 / 1 · listen 43 / listen 5 · render 15 / 12 · 残留 0 / 0 |
+| marker-1k-update | 2.32 ms | 27.60 ms | recreate 0 / 0 · setPosition 1000 / setPosition 1000 · render 2 / 1001 · 残留 0 / 1000 · 监听残留 0 / 0 |
+| polyline-10k-parent-update | 2.50 ms | 6.35 ms | recreate 0 / 0 · setPath 0 / setPath 0 · render 1 / 2 · 残留 0 / 1 · 监听残留 0 / 0 |
+| polyline-10k-path-replace | 1.61 ms | 8.15 ms | recreate 0 / 0 · setPath 1 / setPath 1 · render 2 / 2 · 残留 0 / 1 · 监听残留 0 / 0 |
+| infowindow-lifecycle | 5.28 ms | 4.83 ms | recreate 0 / 0 · listen 0 / listen 0 · render 6 / 6 · 残留 0 / 0 · 监听残留 0 / 0 |
+| router-remount | 5.16 ms | 23.62 ms | recreate 1 / 1 · listen 43 / listen 5 · render 15 / 12 · 残留 0 / 0 · 监听残留 0 / 0 |
 
 收益在这里是**可复现的架构差**，不是快慢：更新走 `setPosition` 复用实例而不重建覆盖物、父级无关更新不重发 `setPath`、卸载后本库无残留而官方有——这些是 #138 Vue-native 收口真正要防回归的东西，也是 CI 里不变式门禁盯的读数。
 
 #### 本库扩展档（官方无等价契约，**不硬比较**）
 
-- **pointcollection-50k**：本库 act 16.17 ms —— 官方无等价物（场景表登记为本库扩展档）。
-- **native-point-50k**：本库 act 13.93 ms —— 官方无等价物（场景表登记为本库扩展档）。
-- **keepalive-toggle**：本库 act 3.86 ms —— 官方无等价物（场景表登记为本库扩展档）。
+- **pointcollection-50k**：本库 act 17.94 ms —— 官方无等价物（场景表登记为本库扩展档）。
+- **native-point-50k**：本库 act 12.01 ms —— 官方无等价物（场景表登记为本库扩展档）。
+- **keepalive-toggle**：本库 act 2.70 ms —— 官方无等价物（场景表登记为本库扩展档）。
 
 本档**测不到**（不要外推）：
 - long task（happy-dom 无 PerformanceObserver longtask）→ 真实浏览器档才出
