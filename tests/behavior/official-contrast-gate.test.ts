@@ -52,7 +52,9 @@ const repoRoot = resolve(import.meta.dirname, "../..");
 function makeSide(overrides: Partial<ContrastSideReadings> = {}): ContrastSideReadings {
   return {
     durationMs: 10,
+    teardownMs: 4,
     sdkCalls: 0,
+    callKind: "listen",
     recreates: 0,
     renderCallbacks: 0,
     retainedResources: 0,
@@ -243,6 +245,38 @@ describe("#140 纯函数：退出码 0·1·2·3", () => {
   });
 });
 
+/* ------------------------------------------------------------------ 纯函数：编排的退出码结算 */
+
+describe("#140 编排结算：vitest 红 + 报告判 0 ⇒ 2（绝不按报告放行）", () => {
+  const script = readFileSync(
+    resolve(repoRoot, "scripts/collect-official-contrast.mts"),
+    "utf8",
+  );
+
+  it("benchExit!==0 分支把判定为 0 的情况改判 2", () => {
+    // 第 2 轮评审第 1 条。这条是本套最严重的一条假绿：基准里有大量**普通 `expect`**
+    // （§3 的 setPosition / recreates、卸载残留归零、§6/§7 的资源构成、§10 的不重建），
+    // 它们不写进 `invariants` 判定模型。其中一条挂掉时 vitest 非零退出，而 `afterAll`
+    // 仍可能写出一份 `done=true` / 10-10 / 不变式全 PASS 的报告 ⇒ 判定 0。
+    // 上一版把 `decision.exitCode` 原样写入 `process.exitCode`，于是**测试失败被吞成通过**。
+    expect(script, "编排必须把「判定 0」与「vitest 非零」这个组合改判").toContain(
+      "decision.exitCode === 0 ? 2 : decision.exitCode",
+    );
+    // 且必须留下一条可读的归因，而不是静默改码。
+    expect(script, "改判时要说明归因").toContain("VITEST_FAILED_UNMODELLED");
+  });
+
+  it("vitest 红但报告明确判到 1/2/3 时按报告结算（那条 1 不能被重新压回 2）", () => {
+    // 反向守卫：不能为了修「0 的假绿」把「1 永不可达」那条（第 1 轮评审第 7 条）又装回去。
+    // `1 / 2 / 3` 三个取值都必须**原样透传**。
+    expect(script, "1/2/3 原样透传的表达式不能被改回 benchExit!==0?2:…").not.toMatch(
+      /process\.exitCode\s*=\s*benchExit\s*!==\s*0\s*\?\s*2/,
+    );
+    // 显式钉住这条表达式：它就是「报告判什么就结算什么（0 除外）」的实现。
+    expect(script).toContain("const exitCode = decision.exitCode === 0 ? 2 : decision.exitCode;");
+  });
+});
+
 /* ------------------------------------------------------------------ 纯函数：人读报告 */
 
 describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
@@ -305,14 +339,14 @@ describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
     expect(text).toContain("-18ms");
   });
 
-  it("没测到的场景 durationMs 为 null（渲染成 `-`），不填 0", () => {
+  it("没测到的场景两个耗时都为 null（渲染成 `-`），不填 0", () => {
     const text = formatContrastReport({
       report: makeReport({
         scenarios: [
           {
             id: "map-cold-mount",
             official: "Map",
-            ours: makeSide({ durationMs: null }),
+            ours: makeSide({ durationMs: null, teardownMs: null }),
             officialSide: null,
             officialSkippedReason: "blocked",
           },
@@ -328,7 +362,48 @@ describe("#140 纯函数：人读报告分三节 + 扩展档不并排", () => {
         invariants: [],
       }),
     });
-    expect(text).toMatch(/map-cold-mount\s+-/);
+    // 两个耗时**各自**渲染成 `-`：动作与卸载都缺时不能只让一边缺，也不能填 0
+    // （0 会被读成「快得不可能」）。
+    expect(text).toMatch(/map-cold-mount\s+act=-ms teardown=-ms/);
+  });
+
+  it("卸载/销毁有独立读数与独立窗口（票面指标 5 是 mount/unmount 两个动作）", () => {
+    // 第 2 轮评审第 5 条。场景名写着「mount / destroy」「mount / unmount」，此前
+    // `durationMs` 只包 `act()`、teardown 完全在窗外 —— 销毁成本没有任何读数。
+    // 报告里两个耗时**各自**带标签与差值，读者不必猜场景名的另一半测没测。
+    const text = formatContrastReport({
+      report: makeReport({
+        scenarios: [
+          {
+            id: "map-cold-mount",
+            official: "Map",
+            ours: makeSide({ durationMs: 12, teardownMs: 5 }),
+            officialSide: makeSide({ durationMs: 20, teardownMs: 3 }),
+          },
+        ],
+      }),
+      decision: decideContrastExit({
+        envelopeIssues: [],
+        fatal: null,
+        blockedReason: null,
+        done: true,
+        expectedScenarioCount: 1,
+        scenarioCount: 1,
+        invariants: [],
+      }),
+    });
+    expect(text, "两侧的 act 耗时都要打出来").toContain("act=12ms").and.toContain("act=20ms");
+    expect(text, "两侧的 teardown 耗时都要打出来").toContain("teardown=5ms").and.toContain("teardown=3ms");
+    // 差值列也带上卸载差，读者不必自己相减。
+    expect(text, "差值列缺 teardown 差值").toMatch(/teardownΔ2ms/);
+
+    // 且基准里 teardown 必须在**独立窗口**内计时：把它并进 act 的窗口会让时长不可归因。
+    const perfTest = readFileSync(
+      resolve(repoRoot, "tests/performance/official-contrast.perf.test.ts"),
+      "utf8",
+    );
+    expect(perfTest, "基准没有独立计时 teardown").toContain("const teardownStart = performance.now();");
+    expect(perfTest, "teardown 读数没进指标").toContain(".teardown\`, readings.teardownMs");
   });
 
   it("报告自带身份：机器 / 两库版本 / 数据集版本", () => {
@@ -497,22 +572,35 @@ describe("#140 接线契约：入口 / 版本锁 / AK / CI / 文档", () => {
     expect(index).toContain("2026-09-25-official-contrast-benchmark");
   });
 
-  it("benchmark 没有成为改生产语义的理由：src/ 零改动", () => {
+  it("benchmark 没有成为改生产语义的理由：src/ 零改动（仅对显式开启的 benchmark PR 生效）", () => {
     // 票面第 4 条验收。本档只允许动 tests/、scripts/、docs/、packages/test-utils/。
     //
+    // ⚠️⚠️ 这条约束是「**#140 这张 benchmark PR** 的属性」，不是「仓库从此禁止任何 PR 改
+    // src」（第 2 轮评审第 2 条）。做成无条件永久 `test:unit` 用例的后果是：#156 合并后，
+    // 下一张**任何**正常修改 `packages/bmap-vue/src/**` 的 PR 都会在 Unit & behavior
+    // tests 里红；push 到 main 时还会拿 `github.event.before...HEAD` 做同样限制。
+    //
+    // 因此它必须**显式 opt-in**：CI 只在打了 `benchmark-no-src-change` 标签的 PR 上注入
+    // `CONTRAST_DIFF_BASE`，本用例也只在拿到该 base 时才断言。没 opt-in 时它**不构成通过**，
+    // 而是不适用——对应的「接线」在下一条用例里单独钉（防止它被悄悄删掉）。
+    const base = process.env.CONTRAST_DIFF_BASE?.trim();
+    if (!base) {
+      // 未 opt-in：显式跳过，并把「为什么允许跳过」说清楚，避免读者以为它恒绿。
+      expect(
+        process.env.CONTRAST_ASSERT_NO_SRC,
+        "注入了 CONTRAST_DIFF_BASE 却没声明 CONTRAST_ASSERT_NO_SRC=1：opt-in 要成对出现，" +
+          "否则无法区分「本该断言」与「不适用」",
+      ).not.toBe("1");
+      return;
+    }
+    expect(
+      process.env.CONTRAST_ASSERT_NO_SRC,
+      "CI 注入了 base 却没声明这是一张 benchmark-only PR——门禁会误伤正常源码 PR",
+    ).toBe("1");
     // ⚠️ 比的**基准**必须是本 PR 的 base，不是 `HEAD`（第 1 轮评审第 5 条）：
     // `git diff HEAD -- src` 在**干净的 CI checkout 上恒为空**（工作区 = HEAD），
     // 于是这条门禁在 CI 上恒绿，哪怕本 PR 的提交里真的动了 `src/`。必须比
     // 「PR 的 base …… HEAD」。
-    const base = process.env.CONTRAST_DIFF_BASE?.trim() || discoverMergeBase();
-    if (!base) {
-      // 求不出 base（浅克隆 / 没有远端 main 引用）时**明确失败**，而不是退回 `HEAD` ——
-      // 后者正是恒绿的那条。门禁自身不能有稳定的假绿路径。
-      throw new Error(
-        "无法确定 PR base：CONTRAST_DIFF_BASE 未注入，且与 origin/main 求不出合并基" +
-          "（浅克隆请用 fetch-depth: 0）",
-      );
-    }
     const changed = runGit([
       "diff",
       "--name-only",
@@ -523,20 +611,31 @@ describe("#140 接线契约：入口 / 版本锁 / AK / CI / 文档", () => {
     expect(changed, `生产源码被本 PR 改动（base=${base}）：${changed}`).toBe("");
   });
 
-  it("CI 把 PR base 注入 CONTRAST_DIFF_BASE，且那条 job 有完整历史", () => {
-    // 没有这一步，上面那条门禁在 CI 上就会退回「工作区 vs HEAD」= 恒空。
+  it("src 零改动门禁只挂在 opt-in 的 job 上，不在 test:unit 里", () => {
     const quality = readWorkflow("quality.yml");
-    // 门禁跑在 `test:unit` 里（`official-contrast-gate.test.ts` 属 tests/behavior），
-    // 因此 env 要挂在**那个** step 上，而不是跑基准的 official-contrast job。
-    // 搜 `run:` 那一行而不是命令本身——文件里还有提到这个命令的说明性注释，
-    // 搜命令会命中注释所在的那一段，切出错误的区块。
     // `stepBlockContaining` 返回该 step 的**逐行数组**（沿用 workflow-helpers 的约定，
-    // 其它门禁都 `join("\n")` 后再匹配），所以这里也要 join 一次。
+    // 其它门禁都 `join("\n")` 后再匹配），所以这里也要 join 一次。搜 `run:` 那一行
+    // 而不是命令本身——文件里还有提到这个命令的说明性注释，搜命令会命中错误的区块。
     const unitStep = stepBlockContaining(quality, "run: pnpm test:unit");
     expect(unitStep.length, "找不到跑 test:unit 的 step").toBeGreaterThan(0);
-    expect(unitStep.join("\n"), "test:unit step 没注入 CONTRAST_DIFF_BASE").toContain(
-      "CONTRAST_DIFF_BASE",
+    // ⚠️ 反向守卫（第 2 轮评审第 2 条）：base **不能**注入 `test:unit`。注入了就等于
+    // 把「本 PR 不改 src」变成全仓每张 PR 的硬约束，合并后立刻开始误伤正常源码 PR。
+    expect(
+      stepCode(unitStep),
+      "test:unit 不该注入 CONTRAST_DIFF_BASE（会把一次性 PR 属性变成永久仓库约束）",
+    ).not.toContain("CONTRAST_DIFF_BASE");
+
+    // 正向守卫：opt-in 的那个 step 必须在，且**由标签门控**（不是无条件）。
+    // 搜 `CONTRAST_DIFF_BASE:` 这一**赋值行**而不是变量名本身——step 上方那段解释性注释
+    // 里也提到了这个变量，按名字搜会命中注释、切出上一个 step 的区块（第一版就是这么
+    // 假红的：断言在 `test:unit` 那个 step 上找标签门控，永远找不到）。
+    const gated = stepCode(stepBlockContaining(quality, "CONTRAST_DIFF_BASE:"));
+    expect(gated.length, "找不到注入 CONTRAST_DIFF_BASE 的 step").toBeGreaterThan(0);
+    expect(gated, "opt-in 必须由 PR 标签门控，否则退化成无条件").toContain(
+      "benchmark-no-src-change",
     );
+    expect(gated, "opt-in 必须显式声明 CONTRAST_ASSERT_NO_SRC=1").toContain("CONTRAST_ASSERT_NO_SRC");
+    expect(gated, "该 step 被架空").not.toContain("continue-on-error");
     // `...` 三点语法要历史里真的有 base，因此跑门禁的那个 job 必须不是浅克隆。
     expect(quality, "quality job 的 checkout 不是全历史，三点 diff 会取不到 base").toContain(
       "fetch-depth: 0",
@@ -1115,23 +1214,17 @@ function runGit(args: string[]): string {
 }
 
 /**
- * 本地兜底：与 `origin/main` 求合并基。
+ * 一个 step 区块的**可执行** YAML（去注释行）。
  *
- * 刻意用 `origin/main` 而不是 `main`——工作区里的 `main` 引用可能长期落后于远端
- * （开发分支是从旧 `main` 拉出、中途没 fetch 的），拿它当 base 会把「base 之后别的 PR
- * 改过的 `src/`」算成「本 PR 改的」，让这条门禁**假红**。远端引用不存在时返回 `null`，
- * 由调用方明确失败。
+ * 必须去注释再断言「这个 step 有没有注入 X」：step 区块的切片从本 step 的 `-` 行起算、
+ * 到下一个同级 `-` 行止，因此**上一个 step 之后的说明性注释**会落进这个区块。workflow
+ * 里恰好有一段注释在讲「为什么不能注入 CONTRAST_DIFF_BASE」——文本匹配会把它读成
+ * 「注入了」，于是门禁自己把自己写的说明当成违规。
  */
-function discoverMergeBase(): string | null {
-  for (const ref of ["origin/main", "main"]) {
-    try {
-      const base = runGit(["merge-base", "HEAD", ref]);
-      if (base) return base;
-    } catch {
-      /* 该引用不存在，试下一个 */
-    }
-  }
-  return null;
+function stepCode(block: readonly string[]): string {
+  return block
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
 }
 
 /**

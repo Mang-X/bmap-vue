@@ -24,6 +24,14 @@ export interface ContrastSideReadings {
   /** 墙钟毫秒（`null` = 本轮没测到；**不填 0**，0 会被读成「快得不可能」）。 */
   readonly durationMs: number | null;
   /**
+   * **卸载 / 销毁**的墙钟毫秒（独立窗口）。
+   *
+   * 票面指标 5 写的是「mount/unmount time」——两个动作。合成一个数字就没法归因「慢在挂载
+   * 还是慢在卸载」，只报一个数字又会让读者以为两个都测了（第 2 轮评审第 5 条）。本档此前
+   * 只有 mount 一侧，销毁成本没有任何读数。
+   */
+  readonly teardownMs: number | null;
+  /**
    * 窗口内**某一个** SDK 调用面的调用次数（**增量**，不含挂载阶段）。
    *
    * ⚠️ **它不是票面那个泛指的「SDK 调用总数」**——Fake v4 没有「所有 SDK 调用」的单一
@@ -245,8 +253,11 @@ function round(value: number | null, digits = 2): string {
 
 function sideCell(side: ContrastSideReadings | null): string {
   if (!side) return "-";
+  // 动作耗时与卸载耗时**都**打出来，并各自带标签：场景名写着「mount / destroy」时，
+  // 只给一个数字会被读成两个动作都测了。
   return (
-    `${round(side.durationMs)}ms / ${side.callKind}=${side.sdkCalls} / recreate=${side.recreates} / ` +
+    `act=${round(side.durationMs)}ms teardown=${round(side.teardownMs)}ms / ` +
+    `${side.callKind}=${side.sdkCalls} / recreate=${side.recreates} / ` +
     `render=${side.renderCallbacks} / retain=${side.retainedResources}+${side.retainedListeners}listeners`
   );
 }
@@ -293,7 +304,12 @@ export function formatContrastReport(input: {
     let delta = "-";
     if (ours?.durationMs != null && off?.durationMs != null) {
       const diff = round(ours.durationMs - off.durationMs);
-      delta = `${diff}ms`;
+      // 差值列同时给动作与卸载两段，读者不必自己相减才能看出卸载差多少。
+      const teardownDiff =
+        ours.teardownMs != null && off.teardownMs != null
+          ? ` / teardownΔ${round(ours.teardownMs - off.teardownMs)}ms`
+          : "";
+      delta = `${diff}ms${teardownDiff}`;
     }
     lines.push(
       `${entry.id.padEnd(30)}${sideCell(entry.ours).padEnd(76)}${sideCell(entry.officialSide).padEnd(76)}${delta}`,

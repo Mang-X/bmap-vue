@@ -215,7 +215,15 @@ const officialPolyline = (path: readonly { lng: number; lat: number }[]) =>
 
 /** 一次测量采齐的两侧读数。 */
 interface SideReadings {
+  /** **动作**（挂载 / 换数据 / 生命周期切换）本身的墙钟毫秒。 */
   readonly durationMs: number;
+  /**
+   * **卸载 / 销毁**的墙钟毫秒（独立窗口，第 2 轮评审第 5 条）。
+   *
+   * 与 `durationMs` 分开是因为场景名同时含两个动作（"mount / destroy"）：合成一个数字
+   * 就没法归因「慢在挂载还是慢在卸载」，只有一个数字时又会让读者误以为两个都测了。
+   */
+  readonly teardownMs: number;
   readonly delta: {
     readonly sdkCalls: number;
     readonly callKind: string;
@@ -302,10 +310,19 @@ async function measureBoth(
       window.sdkCalls = side.sdkCallCount();
       window.callKind = side.sdkCallKind ?? window.callKind;
     }
+    // 卸载/销毁**单独计时**（票面指标 5 的另一半，第 2 轮评审第 5 条）。
+    //
+    // 此前 teardown 完全在计时窗外：场景名写着「mount / destroy」「mount / unmount」，
+    // 读数却只有 mount 的时长，销毁成本**没有任何独立读数**——读者会把 durationMs
+    // 读成「挂载+卸载」。这里给它自己的窗口：`act` 仍是那件事本身（不许把两个动作塞进
+    // 同一个窗，否则时长不再是可归因的）。
+    const teardownStart = performance.now();
     await side.teardown();
+    const teardownMs = performance.now() - teardownStart;
     await settle();
     return {
       durationMs,
+      teardownMs,
       delta: {
         ...withRenders(window, side.renders()),
         ...retainedAfter(before, fake.diagnostics.snapshot()),
@@ -338,6 +355,8 @@ async function measureBoth(
       if (!readings) continue;
       (sideName === "ours" ? oursReadings : officialReadings).push(readings);
       recorder.sample(`${name}.${sideName}`, readings.durationMs);
+      // 卸载/销毁另记一条（票面指标 5 是「mount/unmount time」，两个都得有独立读数）。
+      recorder.sample(`${name}.${sideName}.teardown`, readings.teardownMs);
       recorder.readout(
         `${name}.${sideName}.delta.${i}`,
         JSON.stringify(readings.delta),
@@ -1083,6 +1102,7 @@ describe("§10 KeepAlive activate/deactivate（本库扩展档）", () => {
 function toSideReadings(readings: SideReadings): ContrastSideReadings {
   return {
     durationMs: readings.durationMs,
+    teardownMs: readings.teardownMs,
     sdkCalls: readings.delta.sdkCalls,
     callKind: readings.delta.callKind,
     recreates: readings.delta.recreates,
@@ -1138,6 +1158,9 @@ afterAll(() => {
   recorder.notMeasured(
     "票面的「watcher 回调次数」：Vue 3 没有公开的 watcher 计数面（本档记的是组件渲染次数）",
   );
+  // 票面指标 5「mount/unmount time」：两个动作各有一个独立窗口（`act` / `teardown`），
+  // 不合并成一个数字——合成后无法归因「慢在挂载还是慢在卸载」。
+  recorder.readout("timingWindows", "act（挂载或更新）+ teardown（卸载/销毁）各一个窗口");
   recorder.readout("scenarios", CONTRAST_SCENARIOS.length);
   recorder.readout("datasetVersion", DATASET_VERSION);
 

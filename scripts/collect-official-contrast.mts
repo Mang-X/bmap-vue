@@ -35,7 +35,10 @@
  *   因此 `scenarios.length` 恒等于场景表条数；这里数 `ours !== null` 的行，并额外要求每条
  *   可比较场景都真的拿到官方侧读数。
  * - **基准红了不等于脚手架坏了**：不变式被破坏时 vitest 非零退出，编排**按报告判定结算**，
- *   判定为不变式破坏就如实给 1；只有报告缺失 / 读不出来才归 2。
+ *   判定为不变式破坏就如实给 1。
+ * - **报告说没事 ≠ 进程说没事**（反方向同样要钉）：基准里大量**普通 `expect`** 不写进
+ *   `invariants` 判定模型，其中一条挂掉时 `afterAll` 仍可能写出 `done=true` / 不变式全 PASS
+ *   的报告。「vitest 非零 + 报告判 0」这种组合按 2 结算，绝不按报告放行。
  *
  * ## 约束（`node --experimental-strip-types`）
  *
@@ -80,11 +83,17 @@ function runBenchmark(): Promise<number> {
       [
         // 用 vitest 的 JS API 之外最朴素的一种：`vitest run` 子进程。这样基准跑在与本脚本
         // 无关的环境里，它的 `process.env`（CONTRAST_RUN_ID / PERF_CONTRAST_DIR）由我们注入。
+        //
+        // ⚠️ 必须用**对照基准自己的**配置，不能用 `tests/performance/vitest.config.ts`：
+        // 那是 #37 单库趋势基线的配置，它把 `PERF_METRICS_DIR` 喂给 `baseline.json` 的
+        // 指标集校验。反过来也不能把对照基准挂在基线配置下（它已被那份配置 exclude），
+        // 否则 `perf:baseline` 顺带跑一遍跨库基准 → 指标集漂移 → `performance` job 红
+        // （#140 第 2 轮评审第 3 条）。两份配置的隔离理由见
+        // `tests/performance/official-contrast.vitest.config.ts` 文件头。
         resolve(repoRoot, "node_modules/vitest/vitest.mjs"),
         "run",
-        "tests/performance/official-contrast.perf.test.ts",
         "--config",
-        "tests/performance/vitest.config.ts",
+        "tests/performance/official-contrast.vitest.config.ts",
       ],
       {
         cwd: repoRoot,
@@ -174,15 +183,28 @@ async function main(): Promise<void> {
     // `benchExit !== 0 ? 2 : ...` 让那条唯一的 1（不变式被破坏）在 `pnpm perf:contrast`
     // 下**永不可达**——`recordInvariant` 用 `expect(...).toBe(true)` 让 vitest 非零退出，
     // 编排再把非零一律压成 2，文档里写的「1 = 不变式被破坏」在唯一的正式入口上从来没发生过。
-    // 报告与信封**可读**时按报告自身判定结算，判定为不变式破坏就如实给 1；只有报告缺失 /
-    // 读不出来这类「拿不到可信读数」的情况才归 2。
+    // 报告与信封**可读**时按报告自身判定结算，判定为不变式破坏就如实给 1。
     const decision = decide(report);
+    // ⚠️ 但「判定为 0」**不能**原样放行（第 2 轮评审第 1 条）。基准里有大量**普通
+    // `expect`**（§3 的 setPosition/recreates、卸载残留归零、§6/§7 的资源构成、§10 的
+    // 不重建……），它们不写进 `invariants` 判定模型；某一条挂掉时 vitest 非零退出，而
+    // `afterAll` 仍可能写出一份 `done=true` / 10-10 / 不变式全 PASS 的报告 ⇒ 判定 0。
+    // 原样结算等于**把测试失败吞成通过**，是比「1 不可达」更严重的一条假绿。
+    //
+    // 因此：报告明确判到 1/2/3 就按它结算；只有「报告说没事、进程说有事」这种**无法归类**
+    // 的组合归 2（脚手架 / 断言失败）——它绝不能变绿。
+    const exitCode = decision.exitCode === 0 ? 2 : decision.exitCode;
     console.log(formatContrastReport({ report, decision }));
     console.error(
-      `[perf:contrast] 基准退出码 ${benchExit}，判定 exit=${decision.exitCode}\n` +
+      `[perf:contrast] 基准退出码 ${benchExit}，判定 exit=${exitCode}` +
+        (exitCode === 2 && decision.exitCode === 0
+          ? "\n  VITEST_FAILED_UNMODELLED: 基准进程非零退出，但报告判定模型未覆盖到它" +
+            "（普通 expect 失败 / 用例崩溃）。按脚手架失败 2 结算——不按报告放行。"
+          : "") +
+        "\n" +
         decision.reasons.map((r) => `  ${r}`).join("\n"),
     );
-    process.exitCode = decision.exitCode;
+    process.exitCode = exitCode;
     return;
   }
 

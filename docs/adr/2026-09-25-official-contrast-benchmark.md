@@ -144,17 +144,28 @@ setup 里挂——官方侧的时长 / 重建数 / 渲染数把「首挂 1 000 �
 ——两件方向相反的事互相抵消，基准全绿。现在 §3 钉住语义前提：`setPosition` 恰好 1 000 次、
 重建恰好 0 次；§4/§5 的 `setPath` 断言同理由 `sdkCallKind` 带上具体调用面名。
 
-### 8. benchmark 不得成为改生产语义的理由 —— 门禁化，且**比的是 PR base**
+### 8. benchmark 不得成为改生产语义的理由 —— 门禁化，但**只对 benchmark PR 生效**
 
 这条不写成文档提醒，而是**门禁**：`tests/behavior/official-contrast-gate.test.ts` 断言
 **本 PR 的 base 相对 HEAD 没有动过 `packages/bmap-vue/src`**。要让对照跑绿就去改 `src/`，
 门禁会红。
 
 ⚠️ 比的基准必须是 `base…HEAD` 三点语法，**不是** `HEAD`（首轮评审第 5 条）：`git diff HEAD
--- src` 在**干净的 CI checkout 上恒为空**（工作区 = HEAD），哪怕本 PR 的提交里真的动了
-`src/`。CI 因此把 `github.event.pull_request.base.sha`（或 `github.event.before`）注入成
-`CONTRAST_DIFF_BASE` 喂给门禁；本地没注入时退回 `merge-base HEAD origin/main`，浅克隆取不到
-base 就**明确失败**，不静默放行——门禁自身不能有稳定的假绿路径。
+-- src` 在**干净的 CI checkout 上恒为空**（工作区 = HEAD），哪怕本 PR 的提交里真的动了 `src/`。
+
+⚠️⚠️ 但这条约束是「**#140 这张 benchmark PR** 的属性」，不是「仓库从此禁止任何 PR 改 src」
+（二轮评审第 2 条）。做成无条件永久 `test:unit` 用例的后果是：#156 合并后，下一张**任何**正常
+修改 `src/**` 的 PR 都会在 Unit & behavior tests 里红；push 分支还会拿
+`github.event.before…HEAD` 做同样限制。因此它是**显式 opt-in**：
+
+| 触发条件 | 行为 |
+| --- | --- |
+| PR 打了 `benchmark-no-src-change` 标签 | CI 注入 `CONTRAST_DIFF_BASE` + `CONTRAST_ASSERT_NO_SRC=1`，门禁断言 src 零改动 |
+| 没有该标签 | 门禁**不适用**（不是「通过」）；`test:unit` **不再**被注入 base |
+
+两个环境变量必须**成对出现**（用例会校验），否则无法区分「本该断言」与「不适用」——只注入 base
+会让正常源码 PR 误伤，只注入 flag 则让这条门禁永远不跑。接线（标签门控 + 不在 `test:unit`
+里）由另一条用例单独钉住，防止它被悄悄删掉后没人发现。
 
 ### 9. AK 绝不入库，且**不进任何会被别人读到的通道**
 
@@ -238,6 +249,42 @@ npm 的账。
 **按报告自身判定结算**（可能是 1），只有报告缺失 / 读不出来才归 2。文档里写的「1 = 不变式被
 破坏」在唯一正式入口 `pnpm perf:contrast` 上必须真的可达。
 
+⚠️⚠️ **反方向那条假绿更严重（二轮评审第 1 条）**：基准里有大量**普通 `expect`** 不写进
+`invariants` 判定模型（§3 的 `setPosition` / `recreates`、卸载残留归零、§6/§7 的资源构成、
+§10 的不重建……）。其中一条挂掉时 vitest 非零退出，而 `afterAll` 仍会写出一份
+`done=true` / 10-10 / 不变式全 PASS 的报告 ⇒ 判定 **0**。若把判定原样写进
+`process.exitCode`，**测试失败就被吞成通过**。
+
+因此结算规则是：报告判 **1/2/3** 就原样透传；**只有「报告判 0 而进程非零」这一组合归 2**，
+并打上 `VITEST_FAILED_UNMODELLED` 说明归因。实测（临时注入一条失败 expect、跑完整 10 场景）：
+
+| 状态 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 10 场景全测到 + 不变式全 PASS + 一条普通 `expect` 挂 | **0（假绿）** | 2 + `VITEST_FAILED_UNMODELLED` |
+
+### 13. 卸载/销毁是**独立计时窗口**，与动作窗口分开
+
+票面指标 5 写的是「mount/unmount time」——两个动作。合成一个数字就无法归因「慢在挂载还是慢在
+卸载」；只报一个数字则会让读者以为两个都测了——而场景名恰恰同时含两个动作（"mount / destroy"、
+"mount / unmount"），此前 `durationMs` 只包 `act()`、teardown 完全在窗外，销毁成本没有任何读数
+（二轮评审第 5 条）。因此 `SideReadings` 带 `teardownMs`，报告里渲染成 `act=…ms teardown=…ms`，
+差值列也带 `teardownΔ`。**不合并**：合并后时长不再可归因，而这正是这套基准唯一在意的维度。
+
+### 14. 两套基准**执行范围隔离**，共用一个指标目录是不许的
+
+#37 单库趋势基线与 #140 跨库对照是**两件不可互相替代的东西**，指标集形状也不同（前者固定
+一列参与 `baseline.json` 双向校验，后者 `*.ours` / `*.official` 成对出现且随场景表增减）。
+曾���只有一份 vitest 配置（include 覆盖 `tests/performance` 全部 `.test.ts`），于是
+`perf:baseline` 顺带跑了对照基准，把 `map.lifecycle.ours` / `marker100.mount.official` ……
+写进**同一个** `PERF_METRICS_DIR`，基线的指标集合校验随之确定性红（二轮评审第 3 条，
+Actions run 36092344781 实锤）。
+
+隔离**做在配置层**，不靠「记得别跑那条命令」：基线配置 `exclude` 掉对照基准，对照基准有自己的
+`official-contrast.vitest.config.ts`（从基线配置**派生**并覆盖 `include` / `env`，共享项不许
+手抄漂移），并把 `PERF_METRICS_DIR` 钉到基线目录**之外**的绝对路径。
+
+把跨库指标录进 `baseline.json` 是有害的：场景表一改就红，且官方侧的毫秒会挡住本库自己的趋势。
+
 ## 后果（含回滚）
 
 **得到的**：
@@ -247,8 +294,14 @@ npm 的账。
   时失败，不会因为 runner 快慢而红。
 - 一份**可核对**的 10 场景清单（场景表是数据，报告逐条列出，未跑到的也留行）。
 - 本轮如实记下的**架构差**：官方 `Marker` 卸载后 100/1000 个覆盖物仍挂着（`retained=100` /
-  `1000`），1k 位置更新重建了 1001 个覆盖物而本库 0（用 `setPosition` 复用实例）；官方
-  `Polyline` 卸载后覆盖物未摘（`retained=1`）。这些是**读数**，不是攻击点，但它们是可复现的。
+  `1000`）；1k 位置更新两侧都复用实例（官方 `recreate=0`、本库 `recreate=0`，各发 1000 次
+  `setPosition`），差别在**组件渲染**（官方 `render=1001`、本库 `render=2`）与**残留**
+  （官方 1000、本库 0）；官方 `Polyline` 卸载后覆盖物未摘（`retained=1`）。这些是**读数**，
+  不是攻击点，但它们是可复现的。
+
+  ⚠️ 这里刻意**不再**写「官方 1k 更新重建 1001 个覆盖物」：那是计时窗修好**之前**的读数
+  （把首次挂载误算进更新窗口），ADR 决策 7 已经记了那次误判。当前 CI 读数以报告为准，
+  已确认失效的数字不再对外引用（第 2 轮评审第 4 条）。
 - 报告与门禁读**同一个来源**（`recordInvariant` 只记录一次，判定与渲染都读它），不会出现
   「CI 说过了、报告说没说」的分叉。
 - 一条**确定性**的包体门禁：本库基本路径入口相对**自己**的基线变大即 exit=1。与机器无关，

@@ -95,17 +95,40 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
 **「采齐了没」的口径**（避免恒真的假绿）：报告的 `scenarios` 永远按场景表逐条产出一行，
 因此 `scenarios.length` **恒等于**场景表条数，不能拿它判采齐。编排数的是 `ours !== null` 的
 行（真测到的场景），并额外要求每条**可比**场景都真的拿到官方侧读数（`officialSide !== null`）
-——缺一侧报 `INCOMPLETE` 并给 3。**基准红了不等于脚手架坏了**：不变式被破坏时 vitest 非零
-退出，编排**按报告自身判定结算**（可能是 1），只有报告缺失/读不出来才归 2。
+——缺一侧报 `INCOMPLETE` 并给 3。
+
+**基准红了怎么结算**（两个方向都要钉，否则各自有假绿）：
+
+- **报告判 1/2/3 ⇒ 原样透传。** 不变式被破坏时 vitest 非零退出，编排按报告自身判定结算给 1，
+  文档里那条「1 = 不变式被破坏」在唯一正式入口上真的可达；只有报告缺失/读不出来才归 2。
+- **报告判 0 而进程非零 ⇒ 2**，打上 `VITEST_FAILED_UNMODELLED`。基准里有大量**普通
+  `expect`** 不写进不变式判定模型（§3 的 `setPosition`/`recreates`、卸载残留归零、§6/§7 的
+  资源构成、§10 的不重建……），其中一条挂掉时 `afterAll` 仍会写出 `done=true` / 不变式全 PASS
+  的报告。把判定原样写进退出码等于**把测试失败吞成通过**——已实测复现（修复前 exit **0**）。
+
+**两套基准的执行范围是隔离的**：#37 单库趋势基线（`pnpm perf:baseline`）与 #140 跨库对照
+（`pnpm perf:contrast`）跑**不同的 vitest 配置**、写**不同的指标目录**。曾经只有一份配置，
+对照基准被 `perf:baseline` 顺带跑进 `PERF_METRICS_DIR`，基线的指标集合校验随即确定性红。
+所以新增基准文件时先确认它属于哪一套：属于单库趋势的改 `tests/performance/vitest.config.ts`，
+属于跨库对照的要有自己那份（见 `official-contrast.vitest.config.ts` 文件头）。
+
+**挂载与卸载是两个独立窗口**：报告里每侧渲染成 `act=…ms teardown=…ms`，差值列也带 `teardownΔ`。
+票面指标 5 写的是「mount/unmount time」——两个动作；合成一个数字就无法归因「慢在挂载还是慢在
+卸载」，只报一个则会让读者以为两个都测了（而场景名恰恰同时含两个动作）。**不要合并**。
 
 **指标按它实际量的东西命名**：报告里 `listen` / `setPosition` / `setPath` 那一列是**某个调用
 面**的次数（真实与 Fake 都没有「全部 SDK 调用」的单一计数器），`render` 是**组件渲染**次数
 （不是票面写的「watcher 回调次数」——Vue 3 无公开 watcher 计数面）。票面量不到的原口径逐条
 列在报告的 `notMeasured` 一节。表末另有一节「口径注记」提醒读者别把列名读成票面原词。
 
-**官方侧的读数也会被如实记录，但不是门禁**：例如官方 `Marker` 卸载后 100/1000 个覆盖物仍挂着、
-1k 位置更新重建了 1001 个覆盖物。这些进报告的「可比场景」表，`retained` / `recreates` 列一眼
-可见；它们是**可复现的架构差**，不是攻击点。
+**官方侧的读数也会被如实记录，但不是门禁**：例如官方 `Marker` 卸载后 100/1000 个覆盖物仍挂着
+（`retained=100` / `1000`）；1k 位置更新两侧都复用实例（`recreate=0`），差别在组件渲染
+（官方 `render=1001`、本库 `render=2`）与残留（官方 1000、本库 0）。这些进报告的「可比场景」表，
+`retained` / `recreates` / `render` 列一眼可见；它们是**可复现的架构差**，不是攻击点。
+
+⚠️ 别把早先版本文档里的「官方 1k 更新重建 1001 个覆盖物」当结论——那 1001 是**渲染**次数，
+且来自计时窗修好之前的读数（把首次挂载误算进更新窗口）。当前结论以报告为准，已确认失效的
+数字不再对外引用。
 
 ### 本轮状态（如实标注）
 
@@ -130,9 +153,14 @@ pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节
 **benchmark 不得成为改生产语义的理由**：这条是**门禁**而非文档提醒——
 `tests/behavior/official-contrast-gate.test.ts` 断言**本 PR 的 base 相对 HEAD 没有动过
 `packages/bmap-vue/src`**。要比的是 `base…HEAD` 三点语法，**不是** `HEAD`（`git diff HEAD`
-在干净的 CI checkout 上恒为空，哪怕本 PR 真动了 `src/`）；CI 把 `base.sha` 注入成
-`CONTRAST_DIFF_BASE`，本地退回 `merge-base HEAD origin/main`，浅克隆取不到就明确失败。决策
-细节见 [ADR 2026-09-25（官方对照）](/adr/2026-09-25-official-contrast-benchmark)。
+在干净的 CI checkout 上恒为空，哪怕本 PR 真动了 `src/`）。
+
+⚠️ 但它是 **benchmark PR 专属的 opt-in**，不是仓库的永久约束：只有打了
+`benchmark-no-src-change` 标签的 PR 才会被 CI 注入 `CONTRAST_DIFF_BASE` +
+`CONTRAST_ASSERT_NO_SRC=1`；没打标签的普通 PR 该门禁**不适用**，`pnpm test:unit` 也不会被
+注入 base。（做成无条件会让 #156 合并后，下一张任何正常改 `src/**` 的 PR 直接红。）
+两个变量成对出现，缺一个门禁会判错。决策细节见
+[ADR 2026-09-25（官方对照）决策 8](/adr/2026-09-25-official-contrast-benchmark)。
 
 ### 包体档（指标 8）
 

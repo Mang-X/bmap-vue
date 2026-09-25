@@ -16,8 +16,12 @@
  * 其余项（`environment` / `globals` / `setupFiles` / `define`）**必须与根配置
  * 逐字一致**——它们一旦漂移，症状是「基准里的用例莫名失败」而不是「配置错了」。
  * 这条约定由 `config-consistency.perf.test.ts` 守着（文本比对会假绿，所以那边 import 两份对象比）。
+ *
+ * 5. `exclude` 掉 #140 的跨库对照基准：它有**自己的**配置与**自己的**指标目录
+ *    （见 `official-contrast.vitest.config.ts` 的文件头）。两套基准混进同一个
+ *    `PERF_METRICS_DIR` 会让基线的指标集��校验确定性红。
  */
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import { versionDefine } from "../../scripts/vite-version-define.mjs";
 
@@ -29,6 +33,19 @@ export default defineConfig({
   },
   test: {
     include: ["tests/performance/**/*.test.ts"],
+    // 「单库趋势基线」这一套的**边界**：#140 的跨库对照基准跑在**自己的**配置里
+    // （`official-contrast.vitest.config.ts`），不进入本配置的 `PERF_METRICS_DIR`。
+    //
+    // 曾经两份共用这一个 include，于是 `perf:baseline` 顺带跑了对照基准，把
+    // `*.ours` / `*.official` 成对的跨库指标写进基线目录，随后基线的「指标集合双向校验」
+    // 判定「报告有而基线没有」⇒ `performance` job 确定性红（#140 第 2 轮评审第 3 条）。
+    // 指标集一改就红，且官方侧毫秒会挡住本库自己的趋势——所以是**执行范围隔离**，
+    // 不是往 baseline.json 里补录这些指标。两侧理由见
+    // `official-contrast.vitest.config.ts` 的文件头。
+    //
+    // ⚠️ 必须带 `configDefaults.exclude`：**写 `exclude` 就是整份替换默认值**，
+    // 裸写一条会把 `node_modules` / `dist` 的默认排除弄掉，让 vitest 去收集依赖目录。
+    exclude: [...configDefaults.exclude, "tests/performance/official-contrast.perf.test.ts"],
     environment: "happy-dom",
     globals: true,
     setupFiles: ["tests/setup.ts"],

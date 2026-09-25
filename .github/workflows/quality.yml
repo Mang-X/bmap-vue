@@ -124,16 +124,27 @@ jobs:
 
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
-      #
-      # CONTRAST_DIFF_BASE = 本 PR 的 base（`base_ref…HEAD`）。#140 的门禁
-      # 「benchmark 没有改生产语义」要比的正是「本 PR 改了什么」，不是「工作区脏不脏」——
-      # 不注入 base 时那条门禁在干净的 CI checkout 上恒绿（工作区 = HEAD）。
-      # 没有 `CONTRAST_DIFF_BASE`（例如手工跑）时门禁退回本地 `merge-base HEAD main`；
-      # 浅克隆取不到 base 就明确失败，不静默放行。
       - name: Unit & behavior tests
         run: pnpm test:unit
+
+      # #140 的「benchmark 没有改生产语义」门禁：**只对打了 `benchmark-no-src-change`
+      # 标签的 PR 生效**。
+      #
+      # 这条约束是「那张 benchmark PR」的属性，不是「仓库禁止任何 PR 改 src」——无条件
+      # 挂在 `test:unit` 上会在 #156 合并后，让下一张任何正常修改 `src/**` 的 PR 直接红
+      # （push 分支还会拿 `github.event.before...HEAD` 做同样限制）。因此单独开一个
+      # 由标签门控的 step：普通 PR 走不到这里，`test:unit` 里的那条用例识别到没有 base
+      # 就判定「不适用」而不是「通过」。
+      #
+      # `CONTRAST_DIFF_BASE` 是本 PR 的 base（`base_ref…HEAD` 三点 diff）——比 base 而不是
+      # `HEAD`：干净的 CI checkout 上工作区 = HEAD，`git diff HEAD` 恒为空。
+      # `CONTRAST_ASSERT_NO_SRC=1` 是 opt-in 的另一半，与 base 成对出现（用例会校验这一对）。
+      - name: Benchmark PR must not change production sources
+        if: contains(github.event.pull_request.labels.*.name, 'benchmark-no-src-change')
+        run: pnpm test:unit
         env:
-          CONTRAST_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CONTRAST_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+          CONTRAST_ASSERT_NO_SRC: '1'
 
       # Package tarball consumer verification
       - name: Verify package consumers
