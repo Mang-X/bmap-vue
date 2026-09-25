@@ -61,6 +61,7 @@ pnpm perf:baseline --from-report=<report.json> --update  # 用既有报告重录
 
 ```bash
 pnpm perf:contrast      # 跑对照基准 → 出人读表格 + 退出码（CI 的 official-contrast job 跑的就是这条）
+pnpm perf:contrast:bundle   # 包体档（指标 8）：基本路径入口字节 vs 官方，见下
 ```
 
 产物：`.artifacts/perf-contrast/contrast-report.json`（机器可读）与 stdout 的人读表格。
@@ -98,17 +99,73 @@ pnpm perf:contrast      # 跑对照基准 → 出人读表格 + 退出码（CI �
 ### 本轮状态（如实标注）
 
 - **Fake 同机档已跑**：`pnpm perf:contrast` exit=0，10/10 场景。
+- **包体档已跑**：`pnpm perf:contrast:bundle` exit=0，基线已录。**本库比官方大**（见上表），
+  不为了「赢」去加优化层，也不从包体差反推「所以要加 layer」。
 - **真实浏览器档未实跑**：本轮**没有 AK**（票面也要求 raw AK 绝不入库），因此
   `pnpm perf:contrast:live` **没有产出任何数据**。不要引用、也不要从 Fake 读数外推浏览器表现。
   long task / 真实重绘 / FPS / 堆增长 / 官方侧真实网络与鉴权路径，报告的「本档测不到」一节
   逐条列出。
-- **AK 绝不入库**：Fake 档不需要 AK（官方侧 provider 传的是字面量 `"fake"`）；真实档的 AK
-  只走 `BAIDU_MAP_AK` / `--ak=`，全程经 `redactAk`。
+- **AK 绝不入库**：Fake 档与包体档都不需要 AK（官方侧 provider 传的是字面量 `"fake"`）；
+  真实档的 AK 只走 `BAIDU_MAP_AK` / `--ak=`，并由编排脚本经 **CDP** 注入页面。
+  **「不入库」不等于「够」**——AK 也不进页面 URL（那会进 chrome argv → `ps`、以及 vite 的
+  请求日志 → CI job log）、不进 `import.meta.env`（会被 vite 内联进产物）、不接受
+  `--verbose`。报告里只有 `akUsed` 布尔，没有 AK 字段。详见
+  [ADR 2026-09-25（官方对照）决策 9](/adr/2026-09-25-official-contrast-benchmark)。
 
 **benchmark 不得成为改生产语义的理由**：这条是**门禁**而非文档提醒——
 `tests/behavior/official-contrast-gate.test.ts` 断言 `git diff HEAD -- packages/bmap-vue/src`
 为空。要让对照跑绿就去改 `src/`，门禁会红。决策细节见
 [ADR 2026-09-25（官方对照）](/adr/2026-09-25-official-contrast-benchmark)。
+
+### 包体档（指标 8）
+
+```bash
+pnpm build:package            # 必须先有 dist —— 本库不是被安装的依赖，而是「待测对象」
+pnpm perf:contrast:bundle     # 量 + 判 + 出报告
+pnpm perf:contrast:bundle -- --update   # 重录基线（换打包配置或确实要接受变大时才用）
+```
+
+**「基本路径」的口径**（两侧**必须**是同一份任务，否则数字没意义）：`BMapProvider` / `Map` /
+`Marker` / `InfoWindow` 四个公开面——即场景 1（Map 冷挂载）+ 场景 2（Marker）+ 场景 8（InfoWindow）
+真正用到的东西。官方侧是**同名**组件，不挑它的轻量替代品，否则等于给自己挑赢的样本。
+这条「两侧 import 形状必须逐项相同」是**门禁**（`official-contrast-gate.test.ts` 从两个入口文件里
+解析出具名 import 集合并断言相等）——挑轻量面做小包体差是这条读数最容易被做假的地方。
+
+**打包条件进报告**（`external[vue] minify=true target=es2020`）：换任何一项这些数字就换意义。
+`vue` 是 peer 依赖、由应用提供，所以 external；`@vueuse/core` 与 `@baidumap/jsapi-loader`
+**不** external——把它们剔掉会把真实的消费方成本藏起来。
+
+**本轮读数（如实记录，官方更小）**：
+
+| | 基本路径入口 | 闭包合计 | 发布物（不含 `.map` / `.d.ts`） |
+| --- | --- | --- | --- |
+| bmap-vue | 194 704 B | 194 704 B | 805 803 B |
+| @baidumap/vue-bmap@1.0.1 | 107 055 B | 110 582 B | 298 328 B |
+
+**本库的基本路径比官方大**，这是票面明说要「暴露」的那类事实，照实记。成因不是意外：
+本库根入口重导出全部组件 / composable / 图层 / 服务，并在根入口静态引了官方 loader
+（Official-first 的默认在线路径），而官方是**单文件**产物（`dist/index.js` 一处装全）。
+**打包形态不同是上游事实，不是谁更强**——因此本档**不判谁比谁小**。
+
+唯一能判回退的是**本库相对自己基线**的入口字节变大（确定性、与机器无关）：
+
+| 码 | 含义 |
+| --- | --- |
+| `0` | 采齐、入口没比基线大 |
+| `1` | **本库入口比自己的基线大了**——唯一能返回 1 的原因 |
+| `2` | 脚手架失败（缺 dist / 缺官方依赖 / 官方版本漂移 / 打包配置漂移 / 基线是另一版本） |
+| `3` | blocked（没有基线）——**不是通过** |
+
+「没有基线」与「基线里查无此项」是**两条不同的失败**（3 vs 2）：前者是「还没录基准」，
+后者是「基线对不上当前版本，量出来的东西不可归因」。合成一处会得到一个查不到原因的绿。
+
+**发布物字节刻意排除 `.map` 与 `.d.ts`**：两侧发不发 sourcemap 是**发布偏好**（本库 17 张 map
+共 5.6 MB，官方 0 张），算进去量到的不是「库有多大」而是「谁更爱发 sourcemap」。
+压缩后的 tarball 体积不在这一档——那是 `verify-package` / npm 的账。
+
+**基线是独立文件** `tests/performance/bundle-baseline.json`，**不**混进
+`baseline.json`：后者是运行时指标集，有一套双向校验，混进去会让它炸掉；而且「运行时回退」
+与「包体回退」的失败处理完全不同（前者跨机不可比，后者是确定性字节差）。
 
 ## 真实浏览器档
 

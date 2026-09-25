@@ -202,6 +202,15 @@ jobs:
       - name: Official contrast (bmap-vue vs @baidumap/vue-bmap@1.0.1, no AK)
         run: pnpm perf:contrast
 
+      # 包体档（指标 8）需要 dist：本库不是被安装的依赖，而是「待测对象」，
+      # 打包配置 alias 指向 packages/bmap-vue/dist/index.mjs。缺 dist 时脚本按脚手架失败
+      # （exit 2）报「先 build:package」，不拿 src 现编顶替——那量的不是发布物。
+      - name: Build package (bundle contrast target)
+        run: pnpm build:package
+
+      - name: Bundle contrast (entry bytes vs own baseline, deterministic)
+        run: pnpm perf:contrast:bundle
+
       # 读数要能事后核对「哪一版在什么机器上跑出了什么」，而不是只看 job 变绿。
       - name: Upload official contrast report
         if: always()
@@ -209,6 +218,14 @@ jobs:
         with:
           name: official-contrast-report
           path: .artifacts/perf-contrast/
+          if-no-files-found: error
+
+      - name: Upload bundle contrast report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: official-contrast-bundle-report
+          path: .artifacts/perf-contrast-bundle/bundle-report.json
           if-no-files-found: error
 
   # v4 浏览器 smoke 的确定性档（fixture）：无 AK、无外网，注入 Fake v4 命名空间跑同一份

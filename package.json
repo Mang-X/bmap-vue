@@ -16,6 +16,8 @@
     "perf:baseline": "node --experimental-strip-types scripts/collect-performance-baseline.mts",
     "perf:baseline:live": "node --experimental-strip-types scripts/collect-live-performance.mts",
     "perf:contrast": "node --experimental-strip-types scripts/collect-official-contrast.mts",
+    "perf:contrast:live": "node --experimental-strip-types scripts/collect-official-contrast-live.mts",
+    "perf:contrast:bundle": "node --experimental-strip-types scripts/collect-bundle-contrast.mts",
     "generate:manifest": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts",
     "generate:manifest:check": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check",
     "generate:capability-matrix": "node --experimental-strip-types scripts/generate-capability-matrix.mts",

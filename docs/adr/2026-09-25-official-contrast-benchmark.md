@@ -119,11 +119,58 @@ Vue 3 删掉了 Vue 2 的 `app.on("app:renderTriggered")`，公开观测口只�
 `git diff HEAD -- packages/bmap-vue/src` 为**空**。要让对照跑绿就去改 `src/`，门禁会红。
 本档对生产源码的改动量必须是**零**。
 
-### 9. AK 绝不入库
+### 9. AK 绝不入库，且**不进任何会被别人读到的通道**
 
-Fake 档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）。真实浏览器档的 AK 只走
-`BAIDU_MAP_AK` 环境变量 / `--ak=`，全程经 `redactAk`。门禁断言代码里没有写死的 AK 字面量，
-编排脚本也不读 AK。
+Fake 档与包体档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）。真实浏览器档的 AK 只走
+`BAIDU_MAP_AK` 环境变量 / `--ak=`，并由编排脚本经 **CDP** 注入页面。门禁断言代码里没有写死的
+AK 字面量。
+
+「不入库」是最低要求，**不够**：AK 还要不进**别的进程与日志能读到的地方**。三条常见路径各自
+被否掉，各有理由：
+
+| 路径 | 为什么不行 |
+| --- | --- |
+| `import.meta.env.VITE_*` | vite 会把它**内联进构建产物**——AK 落进可能被上传的 `.artifacts` |
+| 页面 URL 查询串 | URL 是 chrome 的**命令行参数**，因此进 `ps`（同机器任何进程可无凭据读）；它同时是 vite 的一次请求 URL，而 vite 的 info 级请求日志会写进 stdout——**CI 里 stdout 就是 job log**，读者范围比 secrets 大得多 |
+| `--verbose` 继承子进程 stdio | 同上，且绕开脚本自己的 `redactAk` 出口 |
+
+因此：AK 走 **CDP**（本进程持有的内存 socket），页面用 `window.__CONTRAST_AK_TAKEN__` **领一次**、
+领完自删（不留给后续 `Runtime.evaluate` 读走）；vite 配置 `logLevel: "silent"` 让它根本不打请求行；
+编排**不接受** `--verbose`。报告里只有 `akUsed` 布尔，**没有 AK 字段**。`redactAk` 仍保留在
+stdout 与落盘 JSON 两条出口——按「页面错误消息可能含敏感串」处理，不当第一道防线。
+
+（`scripts/collect-live-performance.mts` 里仍是 URL 传 AK 的旧写法；那是 #123 的既存文件，
+本票不改它，另票处理。）
+
+### 10. 包体档（指标 8）**不判谁比谁小**，只判本库相对自己的基线
+
+票面的第 8 项指标是「bundle / tarball 入口大小」。这一档的结论与前两档**方向相反**：
+本库的基本路径**比官方大**（入口 194 704 B vs 107 055 B）。如实记，不为了「赢」去加优化层。
+
+之所以不判胜负，是因为两库的**打包形态根本不同**：本库是多 chunk、根入口重导出全部
+组件 / composable / 图层 / 服务并静态引了官方 loader（Official-first 的默认在线路径）；
+官方是**单文件**产物（`dist/index.js` 一处装全，`sideEffects: false` 但没有可摇的粒度）。
+这是上游事实，不是谁更强——把它做成门禁等于用别人的打包形态当标尺。
+
+三道防止这条读数被做假的约束：
+
+1. **两侧入口形状必须逐项相同**（`BMapProvider` / `Map` / `Marker` / `InfoWindow`），并且这是
+   **门禁**：从两个入口文件解析出具名 import 集合断言相等。挑轻量面（少 import 一个）就能把
+   包体差做小——这是这条读数最容易被操纵的地方，所以钉在代码上而不是钉在约定上。
+2. **入口必须写成顶层副作用**：只有 `export const` 的入口会被摇成 0 字节，量到的「包体」
+   是「什么都没打包」。脚本另有 `BUNDLE_EMPTY_PROBE` 守卫。
+3. **打包条件进报告**（`external[vue] minify=true target=es2020`）：换任何一项数字就换意义。
+   `vue` 是 peer 依赖由应用提供所以 external；`@vueuse/core` 与 `@baidumap/jsapi-loader`
+   **不** external——剔掉它们会把真实的消费方成本藏起来。
+
+**发布物字节排除 `.map` 与 `.d.ts`**：两侧发不发 sourcemap 是发布偏好（本库 17 张 map 共
+5.6 MB，官方 0 张），算进去量到的是「谁更爱发 sourcemap」而不是「库有多大」；`.d.ts` 只在
+编译期被读，浏览器一行都不下载。压缩后的 tarball 体积不属于这一档——那是 `verify-package` /
+npm 的账。
+
+**基线是独立文件** `tests/performance/bundle-baseline.json`，**不**混进 `baseline.json`：
+后者是运行时指标集且有一��双向校验，混进去会让它炸掉；更要紧的是「运行时回退」与「包体回退」
+的失败处理不同——前者跨机不可比、只出报告，后者是确定性字节差、可以当门禁。
 
 ## 后果（含回滚）
 
@@ -137,12 +184,17 @@ Fake 档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）�
   `1000`），1k 位置更新重建了 1001 个覆盖物而本库 0（用 `setPosition` 复用实例）；官方
   `Polyline` 卸载后覆盖物未摘（`retained=1`）。这些是**读数**，不是攻击点，但它们是可复现的。
 - 报告与门禁读**同一个来源**（`recordInvariant` 只记录一次，判定与渲染都读它），不会出现
-  「CI 说过了、报告说没过」的分叉。
+  「CI 说过了、报告说没说」的分叉。
+- 一条**确定性**的包体门禁：本库基本路径入口相对**自己**的基线变大即 exit=1。与机器无关，
+  可以像 CI 那样跑而不受 runner 快慢影响。首轮如实记下「本库比官方大」这个事实。
 
 **代价 / 限制**：
 
 - Fake 档**测不到**：long task、真实 SDK 重绘 / 帧调度 / FPS、堆增长、官方侧真实网络与 AK
   鉴权路径。报告的「本档测不到」一节逐条列出，**禁止把 Fake 读数外推到浏览器**。
+- 包体档的「基本路径」是**四件套**（Provider + Map + Marker + InfoWindow），不是最小单组件。
+  它也不覆盖路由 / 5 万点图层 / UI Kit 入口——那些是**别的场景**的口径，混进来会把能力差
+  算成包体差。
 - 渲染次数的计数依赖 **dev 构建**的 devtools 钩子；生产构建下 `perf:start` 不发，本档读数
   在生产 bundle 上无意义（它只用于本档诊断）。
 - `packages/test-utils` 的 Fake 多了一个 `emitTilesLoadedOnFirstView` 夹具开关。它**不是**可
@@ -169,6 +221,10 @@ Fake 档根本不需要 AK（官方侧 provider 传的是字面量 `"fake"`）�
 - `tests/performance/officialContrastHarness.ts`（两侧装配、Fake 双账本、ready 口径）
 - `tests/performance/vueRenderCounter.ts`（渲染次数的观测口与两个必须踩准的实现事实）
 - `tests/performance/official-contrast/report.mts`（信封 / 退出码 / 人读报告，纯函数）
+- `tests/performance/official-contrast/bundle.mts`（包体档的判据与渲染，纯函数）
 - `scripts/collect-official-contrast.mts`（编排：spawn → 读 JSON → 判定 → 退出码）
+- `scripts/collect-bundle-contrast.mts`（包体档编排：两次真实打包 → 度量 → 对基线）
+- `fixtures/consumer/shake/basic-{ours,official}.ts`（两侧同形状的「基本路径」入口）
+- `tests/browser/official-contrast/**` + `scripts/collect-official-contrast-live.mts`（真实浏览器档骨架）
 - `docs/zh-CN/contributing/performance-baseline.md` 的「官方对照档」一节
 - `2026-09-21-performance-baseline-and-worker-decision.md`（单库趋势基线，与本条口径不同）

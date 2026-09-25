@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "recipe": {
+    "external": [
+      "vue"
+    ],
+    "minify": "true",
+    "target": "es2020",
+    "format": "esm"
+  },
+  "ours": {
+    "package": "bmap-vue",
+    "version": "1.0.0-rc.0",
+    "entryImports": [
+      "vue"
+    ],
+    "entryBytes": 194704,
+    "chunkBytes": 0,
+    "cssBytes": 0,
+    "chunkCount": 0,
+    "distBytes": 805803
+  }
+}

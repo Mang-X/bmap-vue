@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>官方对照 · 真实浏览器档（#140）</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        font:
+          13px/1.5 -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      /*
+        容器必须非零宽高。地图容器尺寸为 0 时真实 SDK 不铺瓦片，`ready` 迟迟不来——
+        那会被读成「首帧很慢」，而真实原因是「压根没画」。
+        AK 只经 URL 查询参数传入，**不落盘**（见 ADR 2026-09-25 决策 9）。
+      */
+      #report {
+        white-space: pre-wrap;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <pre id="report">running…</pre>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
