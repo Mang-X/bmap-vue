@@ -577,7 +577,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `status` | `MapRuntimeStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`。类型上还兼容旧值 `"loading"`，但自 #71 起**不会再被发出**（别按它写分支） |
+| `status` | `MapStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`（#44 冻结时删掉了带 `"loading"` 别名的旧名 `MapRuntimeStatus`，公共面只剩 `MapStatus`，所以这里不再有「兼容旧值」一说） |
 | `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
 | `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
 | `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图；容器收起时保持 pending，容器恢复后由门禁接着执行） |

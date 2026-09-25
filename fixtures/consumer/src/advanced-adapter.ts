@@ -26,7 +26,7 @@ import {
   type Capability,
   type CapabilityRegistry,
   type CreateBMapClientOptions,
-  type LoadedSdk,
+  type LoadedJsapiV4,
   type MapHandle,
 } from 'bmap-vue/advanced'
 import {
@@ -83,7 +83,7 @@ export function createAdapter(input: {
 }
 
 /** Provider 的返回值必须能过公开的收口校验（第三方自研 Provider 的核对点）。 */
-export function assertProviderResult(value: unknown): LoadedSdk {
+export function assertProviderResult(value: unknown): LoadedJsapiV4 {
   return assertLoadedSdk(value)
 }
 

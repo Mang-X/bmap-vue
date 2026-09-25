@@ -18,7 +18,7 @@ import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapPr
 import { createLoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/providers";
 import type { BMapLoadOptions } from "../../packages/bmap-vue/src/core/loader/url";
 import type { BMapClient } from "../../packages/bmap-vue/src/client/types";
-import type { LoadedSdk } from "../../packages/bmap-vue/src/core/loader/loaded";
+import type { LoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/loaded";
 import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 
@@ -26,7 +26,7 @@ import { createFakeBMapV4, type FakeBMapV4 } from "../../packages/test-utils";
 let fake: FakeBMapV4;
 
 /** 结构化 v4 加载结果（`assertLoadedSdk` 只认 engine + namespace）。 */
-function loadedV4(): LoadedSdk {
+function loadedV4(): LoadedJsapiV4 {
   return createLoadedJsapiV4({
     providerId: "custom-script-v4",
     mode: "jsonp",
@@ -39,7 +39,7 @@ function loadedV4(): LoadedSdk {
   });
 }
 
-function definitionFor(load: (options: BMapLoadOptions) => Promise<LoadedSdk>) {
+function definitionFor(load: (options: BMapLoadOptions) => Promise<LoadedJsapiV4>) {
   return {
     provider: { id: "test-v4", getCacheKey: () => "fp", load },
     loadOptions: { ak: "test" },
@@ -70,10 +70,10 @@ beforeEach(() => {
 
 describe("<BMapProvider> 状态插槽", () => {
   it("loading → ready：loading 插槽出现，默认插槽常驻并 emit ready", async () => {
-    let resolveLoad!: (value: LoadedSdk) => void;
+    let resolveLoad!: (value: LoadedJsapiV4) => void;
     const load = vi.fn(
       () =>
-        new Promise<LoadedSdk>((resolve) => {
+        new Promise<LoadedJsapiV4>((resolve) => {
           resolveLoad = resolve;
         }),
     );

@@ -9,6 +9,7 @@ export { ExistingGlobalV4Provider, existingGlobalV4Provider } from "./ExistingGl
 export {
   CustomScriptV4Provider,
   customScriptV4Provider,
+  type CustomScriptV4ProviderInternalOptions,
   type CustomScriptV4ProviderOptions,
 } from "./CustomScriptV4Provider";
 export { createLoadedJsapiV4 } from "./loaded";
@@ -45,6 +46,7 @@ export {
   resolveExistingJsapiV4Version,
 } from "./namespace";
 export type {
+  BaiduJsapiV4ProviderInternalOptions,
   BaiduJsapiV4ProviderOptions,
   JsapiV4Engine,
   JsapiV4LoadMetadata,
@@ -52,7 +54,7 @@ export type {
   JsapiV4Namespace,
   JsapiV4Provider,
   JsapiV4ProviderId,
-  JsapiV4ProviderOptions,
+  JsapiV4ProviderInternalOptions,
   JsapiV4ScriptMode,
   JsapiV4VersionSource,
   LoadedJsapiV4,

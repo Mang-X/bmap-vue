@@ -20,17 +20,17 @@ import { createBMapPlugin } from "../../packages/bmap-vue/src/plugins/createBMap
 import { resolveMapContext } from "../../packages/bmap-vue/src/composables/resolveMapContext";
 import { createFakeV4Harness } from "../../packages/test-utils";
 import type { BMapClient, BMapDriverFactory } from "../../packages/bmap-vue/src/client/types";
-import type { LoadedSdk } from "../../packages/bmap-vue/src/core/loader/loaded";
+import type { LoadedJsapiV4 } from "../../packages/bmap-vue/src/core/loader/loaded";
 import { BMapError } from "../../packages/bmap-vue/src/core/errors/BMapError";
 
 const { harness, fake } = createFakeV4Harness();
 
 /** 结构化的 v4 Provider：自述 engine，namespace 是完整的 Fake v4 命名空间。 */
-function v4Provider(load?: () => Promise<LoadedSdk>) {
+function v4Provider(load?: () => Promise<LoadedJsapiV4>) {
   return {
     id: "review-v4",
     getCacheKey: () => "review-v4",
-    load: load ?? (async (): Promise<LoadedSdk> => (await harness.provider().load({})) as LoadedSdk),
+    load: load ?? (async (): Promise<LoadedJsapiV4> => (await harness.provider().load({})) as LoadedJsapiV4),
   };
 }
 
@@ -130,7 +130,7 @@ describe("默认 definition 在不同入口的一致性", () => {
 
   it("显式 driver 优先：不会因为定义未声明 driver 而被默认工厂顶掉", async () => {
     const seen: string[] = [];
-    const injectedDriver = ((input: { loaded: LoadedSdk }) => {
+    const injectedDriver = ((input: { loaded: LoadedJsapiV4 }) => {
       seen.push(input.loaded.engine);
       // 返回一个明确的失败，用来证明「真的是这个工厂被调用了」
       throw new BMapError("BMAP_CAPABILITY_UNSUPPORTED", "injected driver");
@@ -153,7 +153,7 @@ describe("默认 definition 在不同入口的一致性", () => {
 
   it("各入口对「已删除引擎」的加载结果一致失败（不会换个入口就成功）", async () => {
     const legacyLoaded = async () =>
-      ({ engine: "webgl-v1", namespace: fake.namespace }) as unknown as LoadedSdk;
+      ({ engine: "webgl-v1", namespace: fake.namespace }) as unknown as LoadedJsapiV4;
 
     const definition = () => ({ provider: v4Provider(legacyLoaded), loadOptions: {} });
 

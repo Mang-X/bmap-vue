@@ -14,14 +14,15 @@ import {
   type MapProps,
   type MarkerIconName,
 } from 'bmap-vue'
-// v4 Provider 家族从 `./core` 暴露（#17）。M3A3-REMOVE-LEGACY（#26）之后根入口**不再**导出
-// 任何 Provider factory（原先那三个是 legacy 的 `baiduCdnProvider` 家族），这里改成 v4 家族。
+// v4 Provider 家族与 SDK 装配面同在 `./advanced`（#44 取消了 `./core` 子路径：它只有这四个
+// 有真实公开消费者的名字，其余 101 个值导出全是仓内实现）。根入口**不**导出 Provider
+// factory（#26 起，legacy `baiduCdnProvider` 家族已删）。
 import {
   baiduJsapiV4Provider,
   createLoadedJsapiV4,
   existingGlobalV4Provider,
   customScriptV4Provider,
-} from 'bmap-vue/core'
+} from 'bmap-vue/advanced'
 // UI Kit 子入口（#73）：消费方**不安装** `@baidumap/jsapi-ui-kit` 也必须能拿到类型
 // —— 公共声明自持（纯数据 DTO），不引用上游类型包。
 import {

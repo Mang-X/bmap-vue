@@ -427,11 +427,11 @@ describe("SdkRegistry", () => {
   });
 
   it("shares one registry per process domain and resets for tests", async () => {
-    const first = getProcessSdkRegistry("BMap", { domain: "BMap" });
-    const second = getProcessSdkRegistry("BMap", { domain: "BMap" });
+    const first = getProcessSdkRegistry("BMap");
+    const second = getProcessSdkRegistry("BMap");
     expect(second).toBe(first);
 
-    const otherDomain = getProcessSdkRegistry("BMapGL", { domain: "BMapGL" });
+    const otherDomain = getProcessSdkRegistry("BMapGL");
     expect(otherDomain).not.toBe(first);
 
     await first.load({ fingerprint: CONFIG_A, loader: async () => "a" });
@@ -439,6 +439,6 @@ describe("SdkRegistry", () => {
     expect(otherDomain.activeFingerprint).toBeUndefined();
 
     resetProcessSdkRegistryForTests();
-    expect(getProcessSdkRegistry("BMap", { domain: "BMap" })).not.toBe(first);
+    expect(getProcessSdkRegistry("BMap")).not.toBe(first);
   });
 });

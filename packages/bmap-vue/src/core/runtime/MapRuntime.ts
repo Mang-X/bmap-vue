@@ -3,7 +3,6 @@
  *
  * 每个地图实例的运行时容器:
  * - 状态机 idle/waiting-client/creating/initializing/ready/error/disposing/disposed
- *   ("loading" 保留为 waiting-client 别名,向后兼容)
  * - Runtime 只管理 Map,不再加载 Plugin(PluginRegistry 的 map-scope 实例属于 Runtime)
  * - mount 去重经 mountPromise;retry 清错重入;suspend/resume 供 KeepAlive
  * - **暂停按原因集合记账**（M4-HANDLE-UX / #29，见下）
@@ -35,7 +34,7 @@ import { createInfoWindowManager, type InfoWindowManager } from "../overlays/Inf
 import { createLayerRegistry, type LayerRegistry } from "../layers/LayerRegistry";
 import { createPluginRegistry, type PluginRegistry } from "../plugins/PluginRegistry";
 import type { BMapClientContext } from "../context/client";
-import type { MapReadyContext, MapRuntimeStatus } from "../context/types";
+import type { MapReadyContext, MapStatus } from "../context/types";
 import { MAP_SUSPEND_REASONS, type MapSuspendReason } from "./suspension";
 
 export type { MapSuspendReason };
@@ -69,10 +68,8 @@ export interface MapRuntimeOptions {
    * 约定：实现应当「等到可以建图」再 resolve（例如等到容器重新可用）；抛错则按建图失败处理。
    */
   beforeCreateMap?: () => Promise<void> | void;
-  /** 新规范:经 ClientContext 加载(推荐) */
-  clientContext?: BMapClientContext;
-  /** 向后兼容:直接工厂(测试/旧调用) */
-  clientFactory?: (signal?: AbortSignal) => Promise<BMapClient>;
+  /** 新规范:经 ClientContext 加载 */
+  clientContext: BMapClientContext;
   /** 创建 map 的容器（mount 时回填） */
   container: HTMLElement;
   initialView?: MapView;
@@ -83,7 +80,7 @@ export type KeepAliveBehavior = "suspend" | "dispose";
 
 export class MapRuntime {
   readonly id = Symbol("map-runtime");
-  readonly status: ShallowRef<MapRuntimeStatus> = shallowRef("idle");
+  readonly status: ShallowRef<MapStatus> = shallowRef("idle");
   readonly client: ShallowRef<BMapClient | null> = shallowRef(null);
   readonly map: ShallowRef<MapHandle | null> = shallowRef(null);
   readonly error: ShallowRef<unknown> = shallowRef(null);
@@ -134,10 +131,10 @@ export class MapRuntime {
   container: HTMLElement;
 
   constructor(options: MapRuntimeOptions) {
-    if (!options.clientContext && !options.clientFactory) {
+    if (!options.clientContext) {
       throw new BMapError(
         "BMAP_INVALID_ARGUMENT",
-        "MapRuntime requires clientContext or clientFactory",
+        "MapRuntime requires clientContext",
       );
     }
     this.options = options;
@@ -221,7 +218,6 @@ export class MapRuntime {
         : this.whenReady();
     }
     if (
-      this.status.value === "loading" ||
       this.status.value === "waiting-client" ||
       this.status.value === "creating" ||
       this.status.value === "initializing"
@@ -247,9 +243,7 @@ export class MapRuntime {
   private async doMount(): Promise<MapReadyContext> {
     this.status.value = "waiting-client";
     try {
-      const client = this.options.clientContext
-        ? await this.options.clientContext.load(this.resources.signal)
-        : await this.options.clientFactory!(this.resources.signal);
+      const client = await this.options.clientContext.load(this.resources.signal);
       if (this.resources.isDisposed) {
         throw new BMapError("BMAP_RUNTIME_DISPOSED", "MapRuntime disposed during SDK load");
       }
@@ -304,7 +298,7 @@ export class MapRuntime {
         const cur = this.status.value as string;
         this.status.value =
           cur === "disposing" || cur === "disposed"
-            ? (cur as MapRuntimeStatus)
+            ? (cur as MapStatus)
             : "error";
         this.error.value = err;
         this.flushWaitersError(err);

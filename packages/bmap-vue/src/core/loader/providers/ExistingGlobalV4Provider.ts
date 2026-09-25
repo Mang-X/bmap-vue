@@ -17,15 +17,15 @@ import type { BMapLoadOptions } from "../url";
 import { fingerprintConfig } from "../url";
 import { JSAPI_V4_DOMAIN, assertSupportedJsapiV4Version } from "./namespace";
 import { reuseExistingJsapiV4 } from "./reuse";
-import type { JsapiV4Provider, JsapiV4ProviderOptions, LoadedJsapiV4 } from "./types";
+import type { JsapiV4Provider, JsapiV4ProviderInternalOptions, LoadedJsapiV4 } from "./types";
 
 export class ExistingGlobalV4Provider implements JsapiV4Provider {
   readonly id = "existing-global-v4" as const;
   private readonly domain: SdkRegistry;
 
-  constructor(options: JsapiV4ProviderOptions = {}) {
+  constructor(options: JsapiV4ProviderInternalOptions = {}) {
     this.domain =
-      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN });
+      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
   }
 
   getCacheKey(options: BMapLoadOptions): string {
@@ -63,7 +63,7 @@ export class ExistingGlobalV4Provider implements JsapiV4Provider {
 
 /** 复用既有 v4 全局的 Provider 工厂。 */
 export function existingGlobalV4Provider(
-  options: JsapiV4ProviderOptions = {},
+  options: JsapiV4ProviderInternalOptions = {},
 ): ExistingGlobalV4Provider {
   return new ExistingGlobalV4Provider(options);
 }

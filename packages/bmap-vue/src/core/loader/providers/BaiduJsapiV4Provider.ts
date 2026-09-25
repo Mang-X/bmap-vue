@@ -12,7 +12,7 @@
  *    同指纹复用同一任务、不同 AK 报结构化冲突；
  * 3. **调用方取消等待**：每个消费者各持 `AbortSignal`，取消只结算自己，不影响同任务上的
  *    其它消费者；
- * 4. **LoadedSdk 归一化**：官方 resolve 出来的东西必须**真的是可用的 v4 命名空间**才算成功，
+ * 4. **LoadedJsapiV4 归一化**：官方 resolve 出来的东西必须**真的是可用的 v4 命名空间**才算成功，
  *    然后组装成 `LoadedJsapiV4`（含脱敏 metadata）。
  *
  * 刻意**不**做的事（都属于官方 Loader 自有语义，重复一份就是两套状态机）：
@@ -46,7 +46,7 @@ import {
   type OfficialJsapiLoader,
 } from "./official";
 import type {
-  BaiduJsapiV4ProviderOptions,
+  BaiduJsapiV4ProviderInternalOptions,
   JsapiV4LoadMetadata,
   JsapiV4Provider,
   LoadedJsapiV4,
@@ -64,10 +64,10 @@ export class BaiduJsapiV4Provider implements JsapiV4Provider {
   private readonly loader: OfficialJsapiLoader;
   private readonly domain: SdkRegistry;
 
-  constructor(options: BaiduJsapiV4ProviderOptions = {}) {
+  constructor(options: BaiduJsapiV4ProviderInternalOptions = {}) {
     this.loader = options.loader ?? officialJsapiLoader;
     this.domain =
-      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN });
+      options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
   }
 
   getCacheKey(options: BMapLoadOptions): string {
@@ -185,7 +185,7 @@ function resolveLoadOutcome(
  * 解析到的那一个：内部真的调用官方 `@baidumap/jsapi-loader`，不是「装了依赖但继续自研 JSONP」。
  */
 export function baiduJsapiV4Provider(
-  options: BaiduJsapiV4ProviderOptions = {},
+  options: BaiduJsapiV4ProviderInternalOptions = {},
 ): BaiduJsapiV4Provider {
   return new BaiduJsapiV4Provider(options);
 }

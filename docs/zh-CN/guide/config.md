@@ -50,7 +50,7 @@ lang: zh-CN
 :::
 
 `./advanced` 的 `createBMapClient()` 与组件默认路径同一条收口：**只接受 `jsapi-v4` 的加载结果**，
-`provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedSdk`，也就是
+`provider` 必须是结构化的 `BMapProviderLike`——`load()` 返回 `LoadedJsapiV4`，也就是
 `LoadedJsapiV4`（`engine` + `version` + `namespace` + **必填的 `load` metadata**）。
 
 **绝大多数场景不需要自己写 Provider**：`baiduJsapiV4Provider()`（默认）/ `customScriptV4Provider(scriptSrc)`
@@ -61,7 +61,7 @@ AK / userinfo 脱敏）：
 
 ```ts
 import type { BMapProviderLike } from 'bmap-vue'
-import { createLoadedJsapiV4 } from 'bmap-vue/core'
+import { createLoadedJsapiV4 } from 'bmap-vue/advanced'
 
 const provider: BMapProviderLike = {
   id: 'my-loader',
@@ -81,11 +81,11 @@ const provider: BMapProviderLike = {
 }
 ```
 
-`LoadedSdk` 现在就是 `LoadedJsapiV4` 的别名（旧引擎的 `LoadedLegacySdk` 已删除），
+`LoadedJsapiV4` 现在就是 `LoadedJsapiV4` 的别名（旧引擎的 `LoadedLegacySdk` 已删除），
 `assertLoadedSdk()` 是唯一收口点：缺 `engine`（裸全局对象）或 `engine !== "jsapi-v4"`
 （旧引擎结果）都会以 `BMAP_SDK_ENGINE_MISMATCH` 失败，报错文案会指出原因。
 
-`./core` 的 `createClientContext()` 走同一条路：**同一份 definition 在任何入口
+内部的 `createClientContext()` 走同一条路：**同一份 definition 在任何入口
 （`<Map>` / `<BMapProvider>` / 插件默认 definition / `resolveMapContext`）行为一致**；需要固定
 Driver 实现时显式传 `definition.driver`。迁移期的 `withMigrationDriver` 归一已随旧引擎删除
 （`#26`），definition 现在原样交给 Client。
@@ -143,7 +143,7 @@ function onError() {}
 也就是 `baiduJsapiV4Provider()`（官方 Loader）。只有子树需要用**别的入口**时才显式传：
 
 ```ts
-import { customScriptV4Provider, existingGlobalV4Provider } from 'bmap-vue/core'
+import { customScriptV4Provider, existingGlobalV4Provider } from 'bmap-vue/advanced'
 
 // 自托管 / 非标准资源入口
 const selfHosted = { provider: customScriptV4Provider('https://self.hosted/bmap.js') }
@@ -201,8 +201,8 @@ nightly 的 `probe:plugin-compat` 会核对并提示更新——换 URL 请一�
 
 ```ts
 import { createBMapPlugin } from 'bmap-vue'
-// v4 Provider 家族在 `bmap-vue/core` 子入口公开
-import { customScriptV4Provider } from 'bmap-vue/core'
+// v4 Provider 家族在 `bmap-vue/advanced` 子入口公开（#44 取消了 `bmap-vue/core`）
+import { customScriptV4Provider } from 'bmap-vue/advanced'
 
 app.use(createBMapPlugin({
   provider: customScriptV4Provider('https://self.hosted/bmap.js'),

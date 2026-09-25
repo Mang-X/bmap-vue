@@ -215,7 +215,7 @@ describe("取消等待的隔离（消费者 A 取消不影响 B）", () => {
     // A 真正结算后：记账落在 A 上（真实成功不会被遗忘），同配置复用、其它配置继续冲突。
     deliverNamespace(lastInjectedCallback(), createFakeBMapV4().namespace);
     await expect(provider.load({ ak: AK })).resolves.toMatchObject({ engine: "jsapi-v4" });
-    const domain = getProcessSdkRegistry("BMap", { domain: "BMap" });
+    const domain = getProcessSdkRegistry("BMap");
     expect(domain.activeFingerprint).toBe(baiduJsapiV4Provider().getCacheKey({ ak: AK }));
     await expect(provider.load({ ak: "ak-zzzzzzzzzzzz" })).rejects.toMatchObject({
       code: "BMAP_SDK_CONFIG_CONFLICT",

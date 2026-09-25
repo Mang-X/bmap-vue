@@ -73,13 +73,18 @@ export interface JsapiV4Provider {
 }
 
 /**
- * v4 Provider 的公共注入点（测试 / 高级用法）。
- * 三个 Provider 统一接受这一形状，避免各自一套构造参数。
+ * v4 Provider 的**内部**注入点（仅实现与测试）。
  *
- * 注意：`loader` 是**自研 `ScriptLoader`**，只有还走自研 transport 的 CustomScript 用得上；
+ * 三个 Provider 统一接受这一形状，避免各自一套构造参数。它**不**进 `./advanced` 的公共选项：
+ * `SdkRegistry` 与自研 `ScriptLoader` 都带私有成员，仓库之外无法构造 —— 留在公共选项里，
+ * 消费方既不能赋值，它们的结构也进不了 API report（`ae-forgotten-export` 只留一个名字），
+ * 属于假支持。公共面只承诺外部能自己构造的注入点（见 `BaiduJsapiV4ProviderOptions`），
+ * 判定与处置见 ADR 2026-09-25 决策 5。
+ *
+ * 注意 `loader` 是**自研 `ScriptLoader`**，只有还走自研 transport 的 CustomScript 用得上；
  * 默认在线路径（官方 Loader）的注入点见 `BaiduJsapiV4ProviderOptions`。
  */
-export interface JsapiV4ProviderOptions {
+export interface JsapiV4ProviderInternalOptions {
   /** 底层 script 加载器；缺省每个 Provider 自建一个。 */
   loader?: ScriptLoader;
   /** 共享的冲突域；缺省用进程级 `BMap` 域。 */
@@ -87,17 +92,20 @@ export interface JsapiV4ProviderOptions {
 }
 
 /**
- * 默认在线路径（`baiduJsapiV4Provider`）的注入点。
+ * 默认在线路径（`baiduJsapiV4Provider`）的公共注入点（`./advanced` 承诺的形状）。
  *
- * 与 `JsapiV4ProviderOptions` 分开是刻意的：默认路径的加载实现**不是** `ScriptLoader`，
- * 而是官方 `@baidumap/jsapi-loader`；把两者塞进同一个字段会得到一个「类型不匹配但看起来
- * 能传」的入口。这里只接受官方的 `load` 注入点（见 `./official`）。
+ * 与内部注入分开是刻意的：默认路径的加载实现**不是** `ScriptLoader`，而是官方
+ * `@baidumap/jsapi-loader`；把两者塞进同一个字段会得到一个「类型不匹配但看起来能传」的入口。
+ * 这里只接受官方的 `load` 注入点 —— `OfficialJsapiLoader` 是全公开接口，外部真的能实现它。
  *
  * `reset()` 不进注入点：它是进程级破坏性操作，组件生命周期里任何一处都不许调用（ADR 决策 6）。
  */
 export interface BaiduJsapiV4ProviderOptions {
-  /** 官方 Loader 的 `load` 注入点（测试 / 高级用法）；缺省用官方具名导出。 */
+  /** 官方 Loader 的 `load` 注入点；缺省用官方具名导出。 */
   loader?: OfficialJsapiLoader;
-  /** 共享的冲突域；缺省用进程级 `BMap` 域。 */
-  registry?: SdkRegistry;
 }
+
+/** 默认在线路径的内部选项：公共注入点 + 冲突域（测试隔离用）。 */
+export interface BaiduJsapiV4ProviderInternalOptions
+  extends BaiduJsapiV4ProviderOptions,
+    Pick<JsapiV4ProviderInternalOptions, "registry"> {}

@@ -29,7 +29,7 @@ export interface MapProps {
   ak?: string;
   apiUrl?: string;
   /**
-   * 显式 Provider（结构化：`load()` 返回 `LoadedSdk`，engine = `jsapi-v4`）。
+   * 显式 Provider（结构化：`load()` 返回 `LoadedJsapiV4`，engine = `jsapi-v4`）。
    *
    * M3A3-REMOVE-LEGACY（#26）：不再接受裸全局对象形状，也不再有任何「已有全局自动回退」。
    * 宿主自己加载了 SDK 时显式传 `existingGlobalV4Provider()`。

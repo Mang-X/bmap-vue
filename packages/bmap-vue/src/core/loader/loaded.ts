@@ -4,15 +4,16 @@
  * M3A1-CLIENT（issue #18）：Client 不再接收裸 SDK `unknown` 作为公共加载结果。
  * Provider 必须返回**结构化**的加载结果：`engine` 判别字段 + `version` + `namespace` + load metadata。
  *
- * M3A3-REMOVE-LEGACY（issue #26）：旧引擎（`webgl-v1`）删除后，判别联合只剩一个成员，
- * 因此 `LoadedSdk` 现在是 `LoadedJsapiV4` 的**别名**——名字保留是为了让 Provider / Client /
- * Driver 工厂的公共签名不必跟着改。
+ * #44（1.0 Freeze）：`LoadedSdk` 这个单成员别名**已删除**——#26 删掉旧引擎后它不再表达任何
+ * 判别意义，而「deprecation alias 不在稳定声明里」是 1.0 的冻结验收项。公共与内部签名统一用
+ * `LoadedJsapiV4`（定义在 `./providers/types.ts`，本文件只负责 re-export 与运行时校验）；
+ * 这是一次公共类型改名，发布说明见对应的 changeset。
  *
  * ## `assertLoadedSdk` 是**运行时**边界，校验口径必须等于公开契约
  *
  * JS 消费者、`any`、第三方 Provider 都能绕过静态类型，所以这里不能「够用就行」：
  * `version` / `namespace` / `load` metadata 缺任何一项都当场失败。否则
- * `{ engine: "jsapi-v4", namespace }` 这种半成品会被收窄成完整 `LoadedSdk`，`createBMapClient()`
+ * `{ engine: "jsapi-v4", namespace }` 这种半成品会被收窄成完整 `LoadedJsapiV4`，`createBMapClient()`
  * 读到 `version: undefined` 并透传给 Driver，最终 `client.sdkVersion` 也是
  * `undefined`——一个「类型上不可能、运行期照样发生」的坏状态。
  *
@@ -26,8 +27,6 @@ import type { LoadedJsapiV4 } from "./providers/types";
 
 export type { LoadedJsapiV4 };
 
-/** 唯一的加载结果：JSAPI 4.0。 */
-export type LoadedSdk = LoadedJsapiV4;
 
 /** Provider 必须自述的 engine 判别值。 */
 const JSAPI_V4_ENGINE = "jsapi-v4";
@@ -86,23 +85,23 @@ function describeContractGaps(value: unknown): string[] {
  * 残缺结果（有 engine、少 version / namespace / load）必须被判为**不是**合法加载结果：否则它会
  * 一路走到 Driver 装配才炸，错误码与失败点都会退化成「第一个碰巧用到该字段的地方决定报错」。
  */
-export function isLoadedSdk(value: unknown): value is LoadedSdk {
+export function isLoadedSdk(value: unknown): value is LoadedJsapiV4 {
   return readEngine(value) === JSAPI_V4_ENGINE && describeContractGaps(value).length === 0;
 }
 
 /**
- * 客户端收口：加载结果必须是完整的 `LoadedSdk`（JSAPI 4.0）。
+ * 客户端收口：加载结果必须是完整的 `LoadedJsapiV4`（JSAPI 4.0）。
  *
  * 三种失败形态各自有明确文案：裸 `unknown`（无 engine 判别字段）、旧引擎 `engine`、
  * 以及「声明了 engine 但不满足契约」（逐字段点名）。旧引擎时代的宽松归一入口
  * （`withMigrationDriver` / `createLegacyBMapClient`）已随 webgl-v1 一并删除。
  */
-export function assertLoadedSdk(value: unknown): LoadedSdk {
+export function assertLoadedSdk(value: unknown): LoadedJsapiV4 {
   const engine = readEngine(value);
   if (engine === undefined) {
     throw new BMapError(
       "BMAP_SDK_ENGINE_MISMATCH",
-      "Provider 必须返回结构化的 LoadedSdk（engine + version + namespace + load metadata），" +
+      "Provider 必须返回结构化的 LoadedJsapiV4（engine + version + namespace + load metadata），" +
         "不接受裸 SDK unknown；手工构造请用公开的 createLoadedJsapiV4()",
     );
   }
@@ -118,10 +117,10 @@ export function assertLoadedSdk(value: unknown): LoadedSdk {
   if (gaps.length > 0) {
     throw new BMapError(
       "BMAP_SDK_ENGINE_MISMATCH",
-      `加载结果声明了 engine=${engine}，但不满足 LoadedSdk 契约：${gaps.join("；")}；` +
+      `加载结果声明了 engine=${engine}，但不满足 LoadedJsapiV4 契约：${gaps.join("；")}；` +
         "完整结构请用公开的 createLoadedJsapiV4() 构造，不要手写字面量",
       { engine },
     );
   }
-  return value as LoadedSdk;
+  return value as LoadedJsapiV4;
 }

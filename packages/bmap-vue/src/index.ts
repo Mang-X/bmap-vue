@@ -28,8 +28,9 @@ export {
   stringToPluginDefinitions,
 } from "./plugins/catalog";
 export type { PluginCatalogEntry } from "./plugins/catalog";
-// Provider:结构化的 v4 家族在 `./core` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
-// 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族）。
+// Provider:结构化的 v4 家族在 `./advanced` 子入口公开（M3A3-REMOVE-LEGACY / #26 之后根入口
+// 不再导出任何 Provider factory——原先那三个是 legacy 的 `baiduCdnProvider` 家族；
+// #44 取消 `./core` 后落点是 `./advanced`）。根入口不导出它们，见 export-surface-freeze.test.ts。
 // Resolver
 export { BMapResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
@@ -72,7 +73,7 @@ export type {
   TrackLineLayerExpose,
 } from "./types/components";
 // core 领域类型(供业务使用)
-export type { MapContext, MapReadyContext, MapRuntimeStatus, MapStatus } from "./core/context/types";
+export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";
 export { useMapContext, useMapReady, useMap } from "./composables/useMap";
 // Client Context(服务类 composable 默认依赖,无需 Map 即可使用)
 export {
@@ -149,7 +150,7 @@ export type {
   BMapProviderLike,
   CreateBMapClientOptions,
 } from "./client/types";
-export type { LoadedSdk } from "./core/loader/loaded";
+export type { LoadedJsapiV4 } from "./core/loader/loaded";
 export type { BMapDriver, BMapEngine } from "./driver/types/bmap";
 export type {
   MapHandle,

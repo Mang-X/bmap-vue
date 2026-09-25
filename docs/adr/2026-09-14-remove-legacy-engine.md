@@ -12,6 +12,16 @@
     Playground legacy 档条目。
 - 相关：`packages/baidu-map-gl-vue/src/driver/types/bmap.ts`、`client/createBMapClient.ts`、
   `core/loader/loaded.ts`、`scripts/check-no-bmapgl.mts`、`packages/test-utils/fake-v4-harness.ts`
+- **后续（2026-09-25，issue #44）**：两处口径已被
+  [ADR 2026-09-25 公共出口冻结](./2026-09-25-public-export-surface-freeze.md) 取代：
+  1. 决策 2 里「`LoadedSdk` 保留为 `LoadedJsapiV4` 的别名（名字不变，避免无谓的签名抖动）」——
+     1.0 冻结面里不留 deprecation / 单成员别名，`LoadedSdk` 直接改名为 `LoadedJsapiV4`
+     （要出一次 release note）；
+  2. 下面「迁移影响」表里 `baidu-map-gl-vue/core` 那个落点——`./core` 子入口已于 #44 取消，
+     v4 Provider 家族改从 `bmap-vue/advanced` 取。
+  那张表按 ADR 惯例**保持原文不动**（它记录的是 #26 当时的迁移口径），现状以 ADR 2026-09-25 为准。
+  本文其余决策——单一 engine 取值、`assertLoadedSdk` 是唯一收口点、
+  Provider 只接受结构化形状、`no-bmapgl` 门禁——**全部仍然有效**。
 
 ## 背景
 
@@ -52,6 +62,10 @@ GL v1（`BMapGL`）只是迁移期过渡实现，M3A.3 删除。R25 阶段（#70
 `LoadedSdk` 保留为 `LoadedJsapiV4` 的**别名**（名字不变，避免无谓的签名抖动），
 `assertLoadedSdk` 成为唯一收口点，两个失败形态各自有明确错误码与文案：缺 `engine`
 （裸全局对象）、`engine !== "jsapi-v4"`（旧引擎结果）。
+
+> **后续（2026-09-25，issue #44）**：上面那句「保留为别名」不再成立——别名已删除，公共面里
+> 只有 `LoadedJsapiV4`（见 [ADR 2026-09-25](./2026-09-25-public-export-surface-freeze.md) 决策 3）。
+> 「`assertLoadedSdk` 是唯一收口点」与两条错误文案**不变**。
 
 ### 3. Provider 只接受结构化形状
 

@@ -108,13 +108,10 @@ export function createConsumerAbortError(): BMapError {
 /**
  * 取同一 realm 内某个冲突域共享的 registry。
  *
- * `options` 只在**首次创建**该域时生效；后续调用复用既有实例，避免不同 Provider
+ * 域在**首次创建**时按 `domain` 定死；后续调用复用既有实例，避免不同 Provider
  * 用各自的 domain 互相覆盖。
  */
-export function getProcessSdkRegistry(
-  domain: string = DEFAULT_DOMAIN,
-  options: SdkRegistryOptions = {},
-): SdkRegistry {
+export function getProcessSdkRegistry(domain: string = DEFAULT_DOMAIN): SdkRegistry {
   const globalObject = globalThis as GlobalWithRegistry;
   let byDomain = globalObject[PROCESS_SDK_REGISTRY_SYMBOL];
   if (!byDomain) {
@@ -123,7 +120,7 @@ export function getProcessSdkRegistry(
   }
   const existing = byDomain.get(domain);
   if (existing) return existing;
-  const created = new SdkRegistry({ domain, ...options });
+  const created = new SdkRegistry({ domain });
   byDomain.set(domain, created);
   return created;
 }

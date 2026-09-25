@@ -5,7 +5,7 @@
  */
 import { computed, type ComputedRef, type ShallowRef } from "vue";
 import { useRequiredMapContext } from "../core/context/inject";
-import type { MapReadyContext, MapRuntimeStatus } from "../core/context/types";
+import type { MapReadyContext } from "../core/context/types";
 
 export function useMapContext() {
   return useRequiredMapContext();
@@ -27,4 +27,4 @@ export function useMap() {
   };
 }
 
-export type { MapReadyContext, MapRuntimeStatus };
+export type { MapReadyContext };

@@ -1,7 +1,7 @@
 /**
  * BMapClient 类型
  *
- * M3A1-CLIENT（issue #18）：Client 从结构化的 `LoadedSdk` 创建 Driver，metadata 上把
+ * M3A1-CLIENT（issue #18）：Client 从结构化的 `LoadedJsapiV4` 创建 Driver，metadata 上把
  * **组件库版本 / engine / SDK 运行时版本** 三个维度独立报告，不再用同一个 `version`
  * 混合表达。
  *
@@ -10,14 +10,14 @@
  * （两者的并集）一并移除——「接收裸全局再猜 engine」的入口不存在了。
  */
 import type { BMapLoadOptions } from "../core/loader/url";
-import type { LoadedSdk } from "../core/loader/loaded";
+import type { LoadedJsapiV4 } from "../core/loader/loaded";
 import type { Capability } from "../driver/capability/catalog";
 import type { CapabilityRegistry } from "../driver/capability/registry";
 import type { UnsupportedBehavior } from "../driver/capability/unsupported";
 import type { BMapDriver, BMapEngine } from "../driver/types/bmap";
 
 /**
- * 结构化 Provider：`load` 必须返回 `LoadedSdk`（JSAPI 4.0）。
+ * 结构化 Provider：`load` 必须返回 `LoadedJsapiV4`（JSAPI 4.0）。
  *
  * 内置 v4 家族（`baiduJsapiV4Provider()` / `existingGlobalV4Provider()` /
  * `customScriptV4Provider()`）与测试替身都满足这一形状。
@@ -25,12 +25,12 @@ import type { BMapDriver, BMapEngine } from "../driver/types/bmap";
 export interface BMapProviderLike {
   readonly id?: string;
   getCacheKey?(options: BMapLoadOptions): string;
-  load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedSdk>;
+  load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
 
 /** Driver 工厂的输入：结构化加载结果 + 能力策略。 */
 export interface BMapDriverInput {
-  readonly loaded: LoadedSdk;
+  readonly loaded: LoadedJsapiV4;
   readonly unsupported: UnsupportedBehavior;
   readonly capabilityOverrides?: Partial<Record<Capability, boolean>>;
 }
@@ -57,7 +57,7 @@ export interface BMapClient {
 }
 
 export interface CreateBMapClientOptions {
-  /** 结构化的 Provider：`load` 必须返回 `LoadedSdk`（不接受裸全局对象）。 */
+  /** 结构化的 Provider：`load` 必须返回 `LoadedJsapiV4`（不接受裸全局对象）。 */
   provider: BMapProviderLike;
   loadOptions: BMapLoadOptions;
   /**
