@@ -24,7 +24,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -234,6 +234,26 @@ describe("check-docs-brand · 豁免机制不是后门", () => {
     expect(r.code).toBe(1);
   });
 
+  it("放行项在**通过**时也能被看见（`--list-escapes`）", () => {
+    // 逐行豁免的全部价值在「理由跟着文本走、review 看得见」。只在超标失败路径上打印
+    // 等于没人看——这个 flag 一度只写在文件头里、没有实现。
+    const r = runGate(["--list-escapes"]);
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("逐行豁免：");
+    // 至少列出真实树里那几条，且**带上理由**（不是只报行号）。
+    expect(r.output).toMatch(/docs\/zh-CN\/.+ -> .+\S/);
+    for (const line of r.output.split("\n").filter((l) => l.trim().startsWith("docs/"))) {
+      expect(line.split("->")[1]?.trim(), `放行项没有理由：${line}`).toBeTruthy();
+    }
+  });
+
+  it("门禁自己的文档不会把自己文档里的字面 token 当成放行", () => {
+    // `ai-development.md` 要说明豁免语法，就会写出 token 本身。扫描器必须认出那不是
+    // 一条真的放行——否则「解释规则的那行」自己就获得了豁免权。
+    const r = runGate([]);
+    expect(r.output).not.toContain("ai-development.md");
+  });
+
   it("豁免只覆盖它所在的那一行", () => {
     const r = scanDir(
       makeFixture({
@@ -259,6 +279,24 @@ describe("check-docs-brand · 空转守卫", () => {
     const r = scanDir(dir);
     expect(r.code, r.output).toBe(0);
     expect(phaseScans(r.output)["explicit-dir"]).toBeGreaterThanOrEqual(1);
+  });
+
+  it("扫描不跟随符号链接（`docs/node_modules` 是 pnpm 链接，会把依赖树带进来）", () => {
+    // 用**真实**扫描根跑：夹具走 `--dir` 分支，那条路径不经过 collectFiles。
+    // 造一个名字不是 node_modules 的越界链接，证明判定按**链接本身**而不是按名字——
+    // 只写 `entry === "node_modules"` 特判的话，别的链接照样穿透。
+    const dep = mkdtempSync(join(tmpdir(), "docs-brand-dep-"));
+    fixtureDirs.push(dep);
+    writeFileSync(join(dep, "leak.md"), "npm install baidu-map-gl-vue\n");
+    const link = join(ROOT, "docs/zzz-dep-link-probe");
+    symlinkSync(dep, link);
+    try {
+      const r = runGate([]);
+      expect(r.output, "顺着符号链接走进去了").not.toContain("zzz-dep-link-probe");
+      expect(r.output).toContain("docs brand scan OK");
+    } finally {
+      rmSync(link, { force: true });
+    }
   });
 });
 

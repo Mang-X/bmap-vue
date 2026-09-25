@@ -25,7 +25,7 @@
  * `markdown-it-anchor` 的默认 slugify：小写、保留字母数字与 CJK、其余转连字符、空格转连字符、
  * 重复连字符压成一个。带引号包裹的 ATX 标题要剥掉引号。
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { isExcludedDocPath } from "./docs-brand-boundary.mts";
 
@@ -35,7 +35,7 @@ const DOCS = resolve(ROOT, "docs");
 export interface LinkProblem {
   file: string;
   line: number;
-  kind: "dead-anchor" | "orphan-page" | "nav-target-missing";
+  kind: "dead-anchor" | "orphan-page";
   detail: string;
 }
 
@@ -44,10 +44,14 @@ function collectDocPages(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
-      // `docs/node_modules` 是 pnpm 建的**符号链接**指向依赖包。`statSync` 会跟随它，
-      // 于是递归会走出 docs/ 把整个 node_modules 的 README 收进来——必须先判链接再判目录。
-      if (entry === "node_modules" || entry === ".vitepress") continue;
       const full = join(dir, entry);
+      // **按链接本身判，不按名字判**。`docs/node_modules` 是 pnpm 建的符号链接指向依赖
+      // store，`statSync` 会跟随它，于是递归会走出 docs/ 把整个依赖树的 README 收进来。
+      // 只写 `entry === "node_modules"` 那种特判是不够的：任何指向 docs/ 外的链接
+      // （用户自己挂的、别的工具生成的）都会同样越界，而特判对它们无效。
+      // 这里用 `lstatSync` 看**链接本身**的形态——它不跟随链接。
+      if (lstatSync(full).isSymbolicLink()) continue;
+      if (entry === ".vitepress") continue;
       const rel = relative(ROOT, full).replace(/\\/g, "/");
       if (isExcludedDocPath(rel)) continue;
       if (statSync(full).isDirectory()) walk(full);
@@ -144,7 +148,9 @@ export function scanLinks(pages: readonly string[]): LinkProblem[] {
         if (anchor.length === 0) continue;
         // ADR 锚点随标题漂移，不当门禁。
         if (relative(ROOT, target).replace(/\\/g, "/").startsWith("docs/adr/")) continue;
-        if (!anchorsFor(target).has(normalizeAnchor(anchor)) && !anchorsFor(target).has(anchor)) {
+        // 只需一次归一化比对：`anchorsOf` 产出的 slug 已经全小写，链接侧也归一化后
+        // 就能直接比。早先这里还留了一个「不归一化再比一次」的分支，它是恒假的死代码。
+        if (!anchorsFor(target).has(normalizeAnchor(anchor))) {
           problems.push({
             file: rel,
             line: index + 1,

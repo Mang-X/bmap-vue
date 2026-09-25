@@ -333,19 +333,15 @@ export function ruleAppliesToFile(rule: DocsBrandRule, relativePath: string): bo
   return rule.scopes.some((pattern) => matchesPattern(pattern, relativePath));
 }
 
-/** 极简 glob：支持 `dir/**`、精确路径。与 `raw-sdk-boundary.matchesPattern` 同形。 */
-export function matchesPattern(pattern: string, relativePath: string): boolean {
-  const path = relativePath.replace(/\\/g, "/").replace(/^\.\//, "");
-  if (pattern.endsWith("/**")) {
-    const prefix = pattern.slice(0, -3);
-    return path === prefix || path.startsWith(`${prefix}/`);
-  }
-  if (pattern.startsWith("**/")) {
-    const suffix = pattern.slice(3);
-    return path === suffix || path.endsWith(`/${suffix}`);
-  }
-  return path === pattern;
-}
+/**
+ * 极简 glob：支持 `dir/**`、精确路径。
+ *
+ * 直接复用 `raw-sdk-boundary.mts` 的同名实现——两份 glob 迟早会漂移，而这里只需要
+ * 极简语义（`dir/**` 与精确路径），不值得为它养第二份实现。
+ */
+import { matchesPattern } from "./raw-sdk-boundary.mts";
+
+export { matchesPattern };
 
 /** 结构化配置，供 `--print-boundary` 与门禁自测断言使用。 */
 export function docsBrandSummary(): {

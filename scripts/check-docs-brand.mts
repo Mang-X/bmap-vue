@@ -13,7 +13,7 @@
  * **没有 `--check` / 写出模式**：这道门禁没有单一事实源要渲染，「期望输出」就是「零命中」，
  * 写模式无事可写。需要看规则表用 `--print-boundary`，需要看放行项用 `--list-escapes`。
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import {
   DOCS_BRAND_RULES,
@@ -48,13 +48,17 @@ function describe(phase: DocsScanPhase): string {
   return `${phase.label}=${phase.dir === "" ? "." : phase.dir}`;
 }
 
-/** 递归收目录下匹配扩展名的文件（跳过 node_modules 与排除区）。 */
+/** 递归收目录下匹配扩展名的文件（跳过符号链接与排除区）。 */
 function collectFiles(dir: string, phase: DocsScanPhase): string[] {
   const out: string[] = [];
   const walk = (current: string): void => {
     for (const entry of readdirSync(current)) {
-      if (entry === "node_modules") continue;
       const full = join(current, entry);
+      // **按链接本身判，不按名字判**：`docs/node_modules` 是 pnpm 的符号链接，`statSync`
+      // 会跟随它，于是扫描会走出 docs/ 把整个依赖树收进来。写成 `entry === "node_modules"`
+      // 的特判只挡住这一个名字；任何别的越界链接都照样穿透。用 `lstatSync`（不跟随链接）
+      // 判链接本身才是根因修法。
+      if (lstatSync(full).isSymbolicLink()) continue;
       const rel = relative(ROOT, full).replace(/\\/g, "/");
       if (isExcludedDocPath(rel)) continue;
       if (statSync(full).isDirectory()) {
@@ -109,7 +113,7 @@ interface PhaseScan {
   scanned: number;
 }
 
-function runPhases(phases: readonly DocsScanPhase[], reportRoot: string = ROOT): number {
+function runPhases(phases: readonly DocsScanPhase[], reportRoot: string = ROOT, listEscapes = false): number {
   const hits: BrandHit[] = [];
   const escapes: BrandEscape[] = [];
 
@@ -173,6 +177,14 @@ function runPhases(phases: readonly DocsScanPhase[], reportRoot: string = ROOT):
   console.log(
     `docs brand scan OK: ${phases.map(describe).join(", ")} are clean. (${scanLabel}; ${escapes.length} 处放行)`,
   );
+  // 放行项在**通过**时也要可见：逐行豁免的价值全在「理由跟着文本走、review 看得见」，
+  // 只在超标失败路径上打印等于没人看。`--list-escapes` 把它们逐条 dump 出来。
+  if (listEscapes) {
+    console.log("逐行豁免：");
+    for (const e of escapes) {
+      console.log(`  ${e.file}:${e.line} -> ${e.reason}`);
+    }
+  }
   return 0;
 }
 
@@ -196,7 +208,7 @@ function main(): number {
     );
   }
 
-  return runPhases(DOCS_SCAN_PHASES);
+  return runPhases(DOCS_SCAN_PHASES, ROOT, argv.includes("--list-escapes"));
 }
 
 process.exitCode = main();

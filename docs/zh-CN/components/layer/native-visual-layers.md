@@ -141,7 +141,7 @@ function highlight(id: string) {
 
 `HeatmapLayer` **没有**要素状态入口，因此不提供该命令面。`TrackLineLayer` 的命令面是**播放控制**（见下节），不是要素状态。
 
-## 播放控制与进度观察（`TrackLineLayer` / #110）
+## 播放控制与进度观察（`TrackLineLayer`）
 
 `TrackLine` 的播放命令面与事件观察经 **live 探针取证**（`scripts/probe-track-line.mts`，2026-09-23，exit 0），方法名不是从类型包猜的。
 
@@ -204,7 +204,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | **默认**（`pauseOnHidden=false`） | 页面 hidden 时只停掉**本库自己的观察**（`observed` 不再更新），**不**改写业务播放意图（SDK 继续播） |
 | **显式 opt-in**（`pauseOnHidden=true`） | 只对「**已送达 start/resume 且 handle 仍是那一代**」的实例：hidden 触发 `pause()`、shown 恢复 `resume()`——**not-ready / 抛错的命令不留意图**（visibility 不补发迟到的 start），**stop/idle/跨代意图不被反向启动**；hidden 中把 prop 改成 `false` 会**立刻 resume 本库造成的 pause**，已 hidden 时改成 `true` 则立即按策略 pause；**已在 hidden 时新送达的 `start` / `resume` 也会立刻按当前 `visibilityState` 再 pause 一次**（不绕过 opt-in） |
 
-自动 pause/resume 必须是 opt-in、不是基础默认，这是 issue #110 的硬约束。
+自动 pause/resume 必须是 opt-in、不是基础默认，这是硬约束。
 
 ## 释放策略
 
@@ -233,5 +233,5 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
   核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `LineLayer` / `FillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
-- **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
-- **`MVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[MVTLayer](./mvt-layer.md)」。
+- **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）均由原生图层提供，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
+- **`MVTLayer`**：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[MVTLayer](./mvt-layer.md)」。

@@ -105,8 +105,6 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 ```
 
 两条方向都有回环抑制：父级把刚上报的位置写回时不会重复下发 `setPosition`，SDK 重复派发同一位置
-也不会产生第二条 `update:position`。取舍（为什么这里用「最后一次同步值」而不是像 `<Map>` 那样
-读回 SDK 现值）见 ADR [2026-09-17 声明式 OverlaySpec、Marker 状态模型与图标缓存](/adr/2026-09-17-overlay-spec-and-marker)
-的决策 4 与已知限制 1。
+也不会产生第二条 `update:position`。取舍：这里用「最后一次同步值」而不是像 `<Map>` 那样读回 SDK 现值。
 
 支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend` 和 `remove`。

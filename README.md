@@ -90,7 +90,9 @@ pnpm docs:dev
 
 `bmap-vue` 源自开源项目 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。
 感谢原作者 yue1123 与所有历史贡献者。原项目的 MIT 许可与 `Copyright (c) 2021 yue1123` 声明原样保留；
-1.0 之后的架构重构与维护由本项目维护者与贡献者完成。详见 [NOTICE.md](./NOTICE.md) 与 [LICENSE](./LICENSE)。
+1.0 之后的架构重构与维护由本项目维护者与贡献者完成。
+
+来源、许可与致谢：[NOTICE.md](./NOTICE.md) · [ACKNOWLEDGEMENTS.md](./ACKNOWLEDGEMENTS.md) · [LICENSE](./LICENSE)。
 
 1.0 只支持百度地图 JSAPI 4.0，**不提供旧版迁移路径**（无兼容别名、无弃用 shim）。
 

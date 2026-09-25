@@ -152,22 +152,26 @@ describe("check-docs-links · 范围与空转", () => {
 
   it("docs/node_modules 是符号链接，递归不能顺着它走进依赖树", () => {
     // 用**真实** docs 根跑：夹具走的是 `--dir` 分支，那条路径不经过 collectDocPages，
-    // 测不到这个 bug。临时在真实 docs 下挂一个会炸的链接目录，跑完即删。
+    // 测不到这个 bug。
+    //
+    // 两层断言，因为它们覆盖的是不同的东西：
+    // ① 已装依赖的 README（真实 `docs/node_modules`）不该进扫描面——这正是本 bug
+    //    最初的形态（pnpm 把它做成指向 store 的符号链接，statSync 会跟着它走）。
+    // ② 自己造一个**名字不是 node_modules 的**依赖目录做链接，证明判定是按名字/链接
+    //    拦的而不是碰巧：之前只测「node_modules 恰好存在」那条早退分支，造链接的代码
+    //    在本机永远执行不到，删掉也不会有任何用例变红。
+    const real = runGate([]);
+    expect(real.code, real.output).toBe(0);
+    expect(real.output, "已装依赖的 README 不该被扫进来").not.toContain("node_modules");
+
     const dep = mkdtempSync(join(tmpdir(), "docs-links-dep-"));
     fixtureDirs.push(dep);
     writeFileSync(join(dep, "README.md"), "# 依赖的 README\n\n[坏的](#根本不存在)\n");
-    const link = join(ROOT, "docs/node_modules");
-    if (statSync(link, { throwIfNoEntry: false })) {
-      // 真实 docs 下已经有 node_modules（pnpm 装的），那它本身就是这个用例的对象。
-      const r = runGate([]);
-      expect(r.output, "node_modules 里的 README 不该被扫进来").not.toContain("docs-links-dep");
-      expect(r.output).not.toContain("@types/node/README");
-      return;
-    }
+    const link = join(ROOT, "docs/zzz-dep-link-probe");
     symlinkSync(dep, link);
     try {
       const r = runGate([]);
-      expect(r.output, "顺着符号链接走进去了").not.toContain("docs-links-dep");
+      expect(r.output, "顺着符号链接走进去了").not.toContain("zzz-dep-link-probe");
     } finally {
       rmSync(link, { force: true });
     }
