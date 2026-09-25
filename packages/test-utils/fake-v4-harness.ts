@@ -19,6 +19,7 @@ import { createBMapClient } from "../bmap-vue/src/client/createBMapClient";
 import { createLoadedJsapiV4 } from "../bmap-vue/src/core/loader/providers";
 import {
   createFakeBMapV4,
+  FAKE_V4_INTERACTIONS,
   type FakeBMapV4,
   type FakeV4Layer,
   type FakeV4Map,
@@ -150,6 +151,27 @@ export interface FakeV4Harness {
   view(): FakeV4View;
   /** 最后一张地图收到的视野命令次数（按字段分开计数）。 */
   viewWrites(): FakeV4ViewWrites;
+  /**
+   * 最后一张地图当前生效的交互开关（**领域读数**：现在是什么状态）。
+   *
+   * key 是**交互名**（`dragging` / `scrollWheelZoom` / …，与 `FAKE_V4_INTERACTIONS` 同词表），
+   * **不是** props 名。value 是布尔值。
+   *
+   * 与 {@link viewWrites} 分工：那个数「视野命令写了几次」，这个读「开关现在是什么状态」。
+   * 两者一起才能断言「同一次父更新里改了视野 + 交互项，每项恰好落一次」——
+   * 单看状态看不出有没有重复写，单看次数看不出最终值。
+   */
+  interactions(): Record<string, boolean>;
+  /**
+   * 最后一张地图收到的交互开关**写入次数**。
+   *
+   * key 是 **props 名**（`enableDragging` / `enableScrollWheelZoom` / …）：调用日志里
+   * `enableDragging` 与 `disableDragging` 归并到**同一个** `enableDragging` 计数上。
+   *
+   * `syncEnableProps` 一次遍历全部 `enableXxx`，所以次数是「这一轮下发了多少次调用」，
+   * 不是「某个开关改了几次」。
+   */
+  interactionWrites(): Record<string, number>;
   /**
    * 模拟用户交互：SDK 内部状态变化 + 派发对应的**结束**事件
    * （`moveend` / `zoomend` / `headingchange` / `tiltchange`）。
@@ -392,7 +414,6 @@ function toPositions(overlays: Iterable<unknown>): Array<{ lng: number; lat: num
   });
 }
 
-
 /** 视野命令计数：`centerAndZoom` 一次性与四个字段级 `setXxx` 分开数。 */
 function countViewWrites(callLog: readonly string[]): FakeV4ViewWrites {
   const count = (command: string): number =>
@@ -404,6 +425,43 @@ function countViewWrites(callLog: readonly string[]): FakeV4ViewWrites {
     setHeading: count("setHeading"),
     setTilt: count("setTilt"),
   };
+}
+
+/**
+ * 交互开关写入计数：把调用日志里的 `enableXxx` / `disableXxx` 两条（同一个开关的两种写法）
+ * 归并到**一个 props 名**下。
+ *
+ * 归并是必要的：`setInteraction` 只记最终值（`enableDragging` 或 `disableDragging`），
+ * 按前缀分开数会把「同一次 `syncEnableProps` 遍历」数成两次。
+ */
+function countInteractionWrites(callLog: readonly string[]): Record<string, number> {
+  const writes: Record<string, number> = {};
+  for (const entry of callLog) {
+    const name = interactionNameOf(entry);
+    if (!name) continue;
+    writes[name] = (writes[name] ?? 0) + 1;
+  }
+  return writes;
+}
+
+/**
+ * `enableDragging` / `disableDragging` → `enableDragging`（props 名）；不是交互开关则 `null`。
+ *
+ * 刻意**不从前缀猜**：`enable` / `disable` 是两个开放前缀，将来地图级命令里出现同前缀的
+ * 非交互项就会被折叠进这个计数、**虚增**用例要断言的「恰好一次」。因此改成对照
+ * `FAKE_V4_INTERACTIONS`（`FakeMap` 侧那份**封闭**词表）取交集 —— 词表加了成员，这里自动跟上，
+ * 词表外的任何条目一律返回 `null` 被忽略。
+ */
+function interactionNameOf(entry: string): string | null {
+  const name = entry.startsWith("disable")
+    ? `enable${entry.slice("disable".length)}`
+    : entry.startsWith("enable")
+      ? entry
+      : null;
+  if (name === null) return null;
+  const interaction = name.startsWith("enable") ? name.slice("enable".length) : name;
+  const lowered = interaction.charAt(0).toLowerCase() + interaction.slice(1);
+  return (FAKE_V4_INTERACTIONS as readonly string[]).includes(lowered) ? name : null;
 }
 
 /**
@@ -616,6 +674,8 @@ export function createFakeV4Harness(fake: FakeBMapV4 = createFakeBMapV4()): {
         };
       },
       viewWrites: () => countViewWrites(lastMap().callLog),
+      interactions: () => ({ ...lastMap().interactions }),
+      interactionWrites: () => countInteractionWrites(lastMap().callLog),
       simulateUserView: (next) => simulateUserView(lastMap(), fake, next),
       subscribedEvents: () => lastMap().getListenerTypes(),
       subscribedEventsOf: (mapIndex) =>

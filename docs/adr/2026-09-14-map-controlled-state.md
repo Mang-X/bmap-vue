@@ -3,6 +3,8 @@
 - 状态：已接受（Accepted）
 - 日期：2026-09-14
 - 计划键：`M4-STATE`（issue #27，追踪 #12，前置 #26）
+- 复审：issue **#137**（Map/model Vue-native 收口）—— 决策 6.1 / 6.2 小节是对决策 6 的
+  `defineModel` / `useModel` 对照取证与 `isControlled` 归属结论。**不取代任何决策**。
 - 取代（**只取代下列具体决策，不整份取代**）：
   - [ADR 2026-09-11 v4 Map Facet](./2026-09-11-jsapi-v4-map-facet.md)「迁移影响」表中
     `getHeading()` 行的处置「不要用 heading 做 round-trip 判断」——该条是当时「状态属 #28」的
@@ -178,6 +180,304 @@ composable 的唯一 barrel（`src/index.ts` → `composables/index.ts`，每个
 
 它只负责状态语义（`value` / `internal` / `isControlled` / `initial` / `syncExternal` / `commit`），
 **不碰 SDK**；写命令由组件在 watcher 里完成。
+
+#### 6.1 对照 `defineModel` / `useModel`：父↔子那一腿**已经是** Vue-native（#137）
+
+#137 的口径是「Vue owns Vue state; Core owns SDK state」，并问「内部是不是还在用 React 的
+controlled/uncontrolled 词汇与手写调度器」。逐条核过，结论分两半：
+
+**（一）父↔子那一腿已经是 Vue-native，没有第二套状态机。** `<Map>` 传的是
+`value: () => props.center` —— 这是**对 props 的 getter**，不是另存一份父级状态；写入侧是普通
+`emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，且与 `Marker`（`update:position`）/
+`InfoWindow` 全库统一。**全库没有任何组件使用 `defineModel`** —— 一致性本身就是当前约定。
+所以这条腿上「Vue 拥有」已经成立，没有可收口的对象。
+
+**（二）组件↔SDK 那一腿 `useModel` 表达不了。** Vue 3.5.42 的 `useModel(props, name)` 实现读过，
+并由**常驻用例** `useControllableState.vsUseModel.test.ts` 逐条实测（A1–A5）—— 它打的是本仓库
+已安装的 Vue，**无网络、无凭据、进 CI**。Vue 升级后若上游补上了这些能力，该用例会**变红**，
+本节随之必须重审。（本表即是那五条用例的结论摘要。）
+
+| `useControllableState` 的冻结能力 | `useModel` / `defineModel` 是否有 |
+| --- | --- |
+| 受控：prop 优先 / 非受控：本地为源 | ✅ 有，且语义一致 |
+| **受控 → 非受控保留最后一次外部值**（决策 4 §3） | ❌ **没有**（受控 prop 被摘掉时 `useModel` 读到 `undefined`）⇒ **需 bridge state**，见 §6.2 原型 |
+| `default*` 只在首次解析时读一次 | ❌ 没有 |
+| 读回容差相等（`centerEquals` / `anglesEqual` …） | ❌ 没有（`hasChanged` 是引用/原值比较） |
+| `copy` 防御性拷贝 + 首次快照 | ❌ 没有 |
+| `reset()` 归位 | ❌ 没有 |
+
+第一行是**语义缺口**：`useModel` **本身**不保存最后一次外部值——受控 prop 被摘掉时它读到
+`undefined`（那是它表达「现在没有受控值」的信号）。**要维持决策 4 §3，就必须额外补一段 bridge
+state**（记住最后外部值），这是 §6.2 原型里 `internal` 的由来。
+
+（2026-09-24 复审更正：本节早先写的是「不是加适配层能补的」，与本文件后面「最小桥接**能**逐项
+复现全部可观察行为」**自相矛盾**。正确说法是上面的两段——缺口真实存在，但**可由 bridge state
+补**；补的代价由 §6.2 的读数承担，而不是「补不上」。）
+
+**（三）`defineModel` 会改到冻结公共面；但 `useModel` 不会 —— 这条要分开说。**（2026-09-24 复审修正）
+
+`Map.vue` 用的是手写 `defineProps<MapProps>()` + `defineEmits`，而 `MapProps` 是**被消费端 fixture
+断言**的公共类型（`fixtures/consumer/src/index.ts`）。`defineModel` 宏会**自己生成** prop 与 emit，
+用它就得把 `MapProps` 里那四个字段搬进宏 —— 那确实改公共面。**但 `useModel` 不需要这样**：
+它接受现成的 `props` 对象，只替换读写通道，**`defineProps`/`defineEmits`/`MapProps` 全部原样保留**。
+（复审指出「defineModel 改公共面 ⇒ useModel 也改」是跳跃论证，本节按此更正。）
+
+所以否决 `useModel` 的理由**不能**是「它会改公共面」。真正的理由是 §6.2 的原型读数：
+按构造计数，Vue-native 路线并不更省（详见下）。而且**行为上它也不是干净的**——要靠桥接补上
+`useModel` 的三处限制（读、档位、reset 边界的 emit），补完之后 `useModel` 本身就不再承重
+（见 §6.2 末的反面读数）。
+
+⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 「简单数字模型不该
+为 React 受控/非受控术语付运行代价」这条要求，按**归属**而非按**词汇**满足：React 术语只留在
+这个**已发布的公共 composable** 的名字与文档里；`<Map>` 里的四个视野字段没有第二套状态机、没有
+额外的调度器、没有 per-field 的 React 概念开销 —— 它们就是「一个 getter + 一个 emit + 一次容差
+判等的 SDK 写入」。
+
+##### 6.1.1 `center: string | Point` 的非对称：核对结论是「不套通用模型」（#137 明示项）
+
+#137 特别要求核对「`center` 字符串入、用户交互回写 Point 出」这个非对称，并**不强行套通用模型**。
+核对结论：**当前实现已经是「按形态分别判等」，不是「套一个通用模型」**，且非对称被显式记录在案。
+
+| 环节 | 形态处理 | 位置 |
+| --- | --- | --- |
+| 相等判定 | `centerEquals` 里**字符串与点永不相等**（`aIsString \|\| bIsString` 时只比「都是字符串且整串相同」）；`centerKey` 同样分 `s:` / `p:` 两个命名空间 | `core/utils/equality.ts` |
+| 防御性拷贝 | `cloneCenter`：字符串是不可变值原样返回，**只拷点** | `components/map/Map.vue` |
+| SDK 写入 | `centerAndZoom` 收到字符串就**原样透传**给官方（由官方地理编码），收到点才 `toRawPoint` | `driver/jsapi-v4/map.ts` |
+| 读回 | `getCenter()` **只给点** —— 字符串形态没有可比的读回 | 官方 `getCenter(): Point` 签名（`@baidumap/jsapi-v4-types@4.0.4`） |
+
+**非对称的代价与现有处置**：字符串 center 因此**做不了读回判等**，每次字符串值变化都会下发一次
+`setCenter`（`map.md` 「受控 / 非受控视野」小节已写明这是「不假支持」——我们不知道官方会把它
+解析到哪）。这条代价值得记一笔：它**不是**通用模型套错的后果，而是「读回只有点」这一上游事实的
+直接结果。缓解手段是「与首次快照相同」这条短路（`convergeViewToState` 的初始快照判等），它让
+**没变过的字符串 center 在 ready 时一条额外命令都不发**。
+
+⇒ 两条行为级用例已钉住这个非对称：「受控字符串 center：ready 时每个字段至多写一条命令
+（加载期间没变过）」与「受控字符串 center：加载期间变化时恰好写一条命令（不重复）」
+（`v3-component-scenarios`）。**#137 不改这一段**：把它「统一」成点会破坏 v2 兼容的
+`center="北京市"` 用法（`MapProps.center` 是冻结公共类型），而强行让字符串参与容差判等会得到
+**假支持**（我们没有字符串的解析结果可比）。维持「点走容差、字符串走整串 + 首次快照」的分歧处理。
+
+#### 6.2 `isControlled` 为什么保留（零消费者，但属冻结公共面）
+
+#137 的审计发现 `isControlled` **没有任何生产消费者**（`<Map>` 判断档位用的是即时的
+`value() !== undefined`）。按 AGENTS.md「没有消费者的抽象一律删除」，它是删除候选。但它挂在
+`useControllableState` 的返回类型上，而这个 composable 已被决策 6 定为**公开 API**（决策 6 原文：
+「这是一步不可逆的承诺」），返回值形状是冻结面的一部分 —— 删掉它是破坏性变更，与 #137「不改动
+#135 已冻结的公共语义」的验收直接冲突。
+
+⇒ **保留并标注**（源码 JSDoc + `docs/zh-CN/hooks/useControllableState.md` 均已注明「库内无消费者、
+供公共契约」），避免下一个读者去找一个不存在的调用点。AGENTS.md 的零消费者规则针对**内部**面；
+冻结公共成员是例外，真要移除应另开破坏性变更票。
+
+**⚠️ 这个「例外」早先被用过了头，已更正（复审八轮 P1）。** 上面的推理只证明了**公共 API 必须保留
+该成员**（返回形状是冻结面），**没有**证明 **`<Map>` 必须为它实例化这份 runtime**。这两件事在
+早先版本里被当成了一件，于是「零消费者 ⇒ `<Map>` 照样为它付费」被写成了结论。
+
+原型给出的 B-direct 路线（把剩余的 `useModel` 写通道也换成直接 `emit`、再删掉 `useModel` 声明后
+**11 条行为用例仍全过**）说明：`<Map>` 真正需要的是 props/emit + 内部镜像 + 档位/告警 + SDK
+reconcile，**不需要**这个为兼容返回形状才存在的 computed。
+
+⇒ **处置：改成惰性创建**（复审采纳方案 1）。返回类型 `ControllableState.isControlled:
+ComputedRef<boolean>` **一字未改**，公共消费者照旧 `state.isControlled.value`；但它用 `get` 取用时
+才建，`<Map>`（零消费者）这条路径上**不分配**。未选方案 2/3（拆 internal core、或 `<Map>` 改走
+direct props/emit）：它们要动公开结构或接线，收益与惰性相同、风险更大。
+
+**这条处置本身也踩了同一个坑，所以用例必须能判别**：只断言「重复访问命中缓存」时，**eager 版照样
+全过** —— 缓存证明不了惰性。已改为直接数 `computed` 的分配次数（ESM 导出不可 spy，用 `vi.doMock`
+换掉被测模块看到的 `vue` 并保留真实实现）。实测：改回 eager ⇒ 变红（`expected +0 to be 1`）。
+
+**「付不必要 runtime」这条验收的诚实口径**（#137 验收第 2 条）。该条问「简单 number model 是否为
+React controlled/uncontrolled **术语**支付了不必要 runtime」。
+
+#137 复审要求先做**真实原型**再定论，而不是靠论证。原型**已提交进仓库**：
+`packages/bmap-vue/src/composables/mapModel.prototype.test.ts`（常驻 CI，Vue 升级后重跑同一组断言）。
+同一个 `zoom` 字段，三条线路都**手写 `defineProps`/`defineEmits`**（不碰 `MapProps`、不动公共面），
+props 形状完全一致（`zoom` + `defaultZoom`），差别只有模型层：
+
+- **A（现状）**：`useControllableState` + 与 `Map.vue:1225` 同形的 SDK 腿 watcher。
+- **B（Vue-native prototype）**：`useModel(props, "zoom")` + 最小桥接（`internal` / `effective`
+  + 兼任 watcher）+ **同一条** SDK 腿 watcher。**`useModel` 只承担受控档的写通道**：读与档位一律
+  取自外部 prop，非受控档的写**直接 `emit`**、完全不让 `useModel` 参与（理由见下）。
+- **B₀（对照下界）**：只 `useModel`，无桥接、无 SDK 腿。
+
+**SDK 腿两边都计入**：`Map.vue:1225` 那条 watcher 干的是 `driver.map.setZoom` —— **写 SDK 不是
+Vue 的职责**，`useModel` 也不会替你写。把它排除会凭空让 B 显得更省，那正是要避免的偏差。
+
+**「B 真的用了 `useModel`」是可复核的，不是声明**（复审 P1 指出过一个假阳性版本）：早先的 B
+虽然调了 `useModel`，但读取走 `effective`、父级变化走 `watch(props.zoom)`、写回直接 `emit` ——
+`model` **从未参与任何读写**，只是个被拿来计数的死对象。**删掉整行 `useModel`，当时四条行为
+断言仍然全部通过**（已实测）。修正后 B 让 `model` 承担写通道，**再删整行 `useModel` 会让两条行为
+用例都变红**（已实测）。⚠️ 但这条证据**只成立于补上 reset 边界的修复之前**：见本节末的反面
+读数——补完之后 `useModel` 在 B 里换不到任何可观察行为。
+
+##### 计数口径：唯一、且由 Vue 自己记账
+
+早先这里是一张**手数**的结构表（`customRef` 算 1、它内部的 effect 不算），口径不一致，结论不可
+复核。已改为：在组件 `setup()` 末尾读 `getCurrentScope().effects.length`，数**实际注册的
+`ReactiveEffect`**。`computed`（懒求值）与 `shallowRef`（只挂 dep）都**不挂 scope**，一律记 0；
+`watch` / `watchSyncEffect` 各记 1。
+
+这条口径还纠正了一个**实质漏项**：Vue 3.5.42 的 `useModel()`（`runtime-core.cjs.js`）在
+`customRef(...)` **内部**建了一个 `watchSyncEffect` 把 prop 同步进去。只数「`useModel` 算 1 个
+`customRef`」会漏掉它。按本口径它被计入，且与 A 侧 `defaultValue` 的 `watch` **同层**。
+（该内部 effect 是**无条件**创建的 —— `hasVModel` 只门控 `customRef` 的 **setter** 分支。原型里
+有一条断言专门钉住这个事实。）
+
+| 每个 number 字段实际注册的 `ReactiveEffect` | A：现状 | B₀：只 `useModel` | B：`useModel` + 桥接 |
+| --- | ---: | ---: | ---: |
+| SDK 腿 watcher（写 SDK，两边都有） | 1 | — | 与下一行**同一条** |
+| `default*` 告警 watcher（两边都有） | 1 | — | 1 |
+| 桥接 watcher（记最后外部值 / 档位告警 / 写 SDK） | — | — | 1（**就是上面那条 SDK 腿 watcher**） |
+| `useModel` 内部 `watchSyncEffect` | — | 1 | 1 |
+| **合计** | **2** | **1** | **3** |
+
+⚠️ 读这张表别把 B 的后两行当成两条 watcher：B 的桥接 watcher 与 SDK 腿 watcher 是**同一个**
+`watch(external, … syncSdk)`（复审六轮 P2 指出），代码里也只有这一条。列成两行会被读成 4。
+
+**读法与措辞纪律**：**在同等冻结契约下，B 反而多注册 1 个 effect（3 vs 2）**。B₀ 少 2，但代价是
+它既没有 SDK 腿（地图根本不会跟着 prop 变）也没有任何冻结语义，**不是可用方案**。
+所以结论只能说「**Vue-native 路线没有减少 effect**」。
+
+⚠️ **这行读数变了**（复审 P1 指出上一版是**拿不同契约作比较**）：早先 B **没有实现告警**，
+读数 2 vs 2 被用来论证「没有更省」。但本库冻结的契约里 **`default*` 后续写入告警一次**、
+**档位切换按规则告警一次**、**`reset()` 归位** —— **告警是可观察行为**（`devWarn` 有输出），
+不是可以省略的内部细节。A 的第二个 effect 正是 `defaultValue` 告警 watcher；B 不实现它，就等于
+拿一个**行为更少**的模型去比。补齐后：档位告警**并进**桥接 watcher（不新增 effect，因为档位由
+「上一次是否有受控值」判定，与 `hasVModel` 无关），`default*` 告警**必须单独一条**（它不经过
+`model.value`）—— 净多 1 个。
+
+**不能说「B runtime 更贵」**：`Set` / `computed` / `shallowRef` 等权记成「1」只能叫**结构数量**，
+推不出运行时成本大小（一个 `computed` 可能比一个 `watch` 贵也可能更便宜）。要下这个结论需要
+profile，本文件不提供，**也不该由结构数或 effect 数推断**。effect 数是**可数事实**，
+「更贵」是**成本判断**，两者不能混。（早先版本写的是「6 vs 5 ⇒ 更贵」，已删除该推论。）
+
+**行为侧同样有据**：原型用同一组断言跑 A 与 B 的可观察结果，**两边完全一致**：
+
+- 容差内抖动：不写 SDK、不通知父级。
+- 真实父级受控更新：恰好下发一次。
+- **用户交互闭环**：**0 次额外写入** —— 早先版本把这条**模拟错了**（复审 P1 指出）：`commit`
+  没有先改模拟 SDK，于是把「外部 prop 驱动」当成「用户交互」，读数变成 1 次（还把 SDK 从 9
+  覆盖回 3），而两条线路**一起模拟错**却仍然互相一致。现已拆成两条独立用例，并给 harness 一个
+  `simulateUserZoom(next)`（先改 `sdkValue` 再 `commit`），顺序不能反。
+- 纯父级受控更新后撤控：保留最后外部值。旧 B 在摘控时把自己的内部镜像清成 `undefined`，
+  回落到 `defaultZoom`（实测 A=8 / 旧 B=4），而旧用例因为**先调了 `commit(9)`** 恰好把 B 的内部
+  状态写成 9，把 bug 遮住了。现已加**全程不调 commit** 的独立用例。
+- `reset()`：交互到新值 → reset 回首次快照 → 再交互到**旧值**仍算真变化（A 的决策 5）。
+- **真实非受控用法：`zoom` key 完全省略**（复审 P1 指出）。`useModel` 的 `hasVModel` 判的是
+  **vnode raw props 上有没有这个 key**：key 省略 ⇒ `hasVModel = false` ⇒ `get()` 返回的
+  `localValue` 就是 **Vue 自己的局部状态**，写 `model.value` 改的是它。旧 B 把 `model.value`
+  当权威值，于是：① `reset()` 归位后仍读到交互值（实测 A 归位 4 / 旧 B 仍是 11）；② 档位切换
+  告警一次都不触发（实测 A 1 次 / 旧 B 0 次）。现 B 的**读与档位一律取自外部 prop**
+  （`external()`），`internal` 才是唯一事实源，`useModel` 只承担**写通道**。两条独立用例
+  （读/交互/归位/不 emit/再交互，和冲突受控值的告警）已钉住。
+- **写通道也被 `useModel` 污染**（复审六轮 P1）。`localValue` 只有两条变化途径：`useModel` 自己的
+  setter（`hasVModel=false` 时本地生效），以及它内部那条 `watchSyncEffect` 从 prop 同步。
+  `reset()` 只改 `internal`，**两条都不经过** ⇒ 写通道的输入态与 `internal` 永久分家。Vue 3.5.42
+  的 setter 第一段是**全局去重**（`runtime-core.cjs.js:4438`，`prevSetValue` 参与判断）：
+  `if (!hasChanged(emittedValue, localValue) && !(prevSetValue !== EMPTY_OBJ && hasChanged(value, prevSetValue))) return;`
+  reset 后再次交互到被 reset 掉的那个值时 `emittedValue === localValue === prevSetValue`，
+  **直接 return，不 emit**（实测 A emit 两次 / 旧 B 一次）。而这正是 `resetView()` 冻结语义要保的。
+  旧用例只断言 `commit` 的返回值（`toBe(true)`），**恰好漏掉**「bridge 认为变了、emit 通道却吞了」
+  —— 已改成断言 `emitted` 真的收到两次。**没有公开 API 能静默重置 `localValue`**，所以这条不是
+  「多写几行就补上」。
+
+- **一次性绕过不够，状态分叉才是问题**（复审七轮 P1）。上一版在 `reset()` 后置一个 flag 只绕开
+  **下一次**写 —— 那修的是特例。序列 `11 → reset → 10 → 11` 里，绕开的那次（10）同样不更新
+  `useModel` 内部状态，再回 11 时照样被吞（实测 A 三次 / 旧 B 两次）。只要非受控写回还经过
+  `useModel`，它的 `localValue` / `prevSetValue` 就与 `internal` 永久分叉，**后续任意**真实交互
+  都可能被去重吃掉。⇒ 现改为**整个非受控档直接 `emit`**，完全不让 `useModel` 参与写。
+
+⇒ **本次审计最有价值的一条负面读数**：改完之后，变异操作是——**把 B 剩余的 `useModel` 写通道也
+换成直接 `emit`，再删掉 `const model = useModel(childProps, "zoom");` 整行**（**不能只删那一行**：
+声明删了源码就跑不起来，那不是一次可复现的变异 —— 复审七轮 P2 指出）。这样改完，**11 条行为用例
+仍然全过**，只有 2 条 effect 计数变红（B 少 1 个 effect；B₀ 塌成 0）。也就是说 `useModel` 在这条
+线路上**换不到任何可观察行为**，只剩多注册的 effect。这与「3 vs 2」同向，且**独立地**否掉了迁移：
+**`useModel` 无法作为完整写通道复现冻结的 reset 语义，改完之后它也不再是承重构件。**
+
+⇒ **决策：保留 `useControllableState` 作为通用原语，`<Map>` 的接线不动。** 这条现在**不是**靠
+「React 术语不好听」这种口味判断，而是有**可重跑的原型读数**支撑：在本库的冻结规则下，
+Vue-native 那条路**没有更省**（3 vs 2），且 `useModel` 在 B 里换不到任何可观察行为。
+
+**⚠️ 但 effect 计数有盲区，不能拿它给验收第 2 条结清**（复审八轮 P1）。计数口径数的是
+`ReactiveEffect`；`computed` **懒求值、不挂 scope**，一律记 0。所以「A = 2」这个读数**看不见**
+「A 里还有一个零消费者的 computed」——删掉 `isControlled`（改成惰性后不分配）读数**仍是 2**。
+换句话说：**useModel 路线被证否，并不等于 A 自身没有可收的 runtime**；这两件事要分开结清。
+
+**处置（复审八轮）**：`isControlled` **改为惰性创建**（§6.2），公共返回形状一字未改，`<Map>` 这条
+零消费者路径上不再为它分配对象。
+
+**同口径继续扫出来的第二处（复审九轮 P1）**：`warned = new Set<string>()` 同样是无条件分配，
+而它的唯一作用是「某条告警真的发生之后记住 key」。正常生命周期里既没有档位冲突也没有 `default*`
+后续写入 ⇒ 这个 Set 从创建到销毁一次都不会被碰；`<Map>` 的四个视野字段等于**每次实例化白扔 4 个
+Set**。⇒ 也改为惰性创建（`warnOnce` 里 `??= new Set()`）。**告警行为是冻结的**（每种方向最多一次），
+**不等于去重容器必须在构造期分配** —— 与 `isControlled` 完全同一条推理。
+
+**第三处（复审十轮 P1）——比前两处更重**：`defaultValue` 的 dev 告警 watcher 是
+**无条件注册**的，而 `<Map>` 四个视野字段**始终**都传 `defaultValue` ⇒ 每次实例化**恒定 4 个
+`ReactiveEffect`**，唯一用途是将来 `default*` 变化时给一条 **dev warning**。两个条件下它永远不会
+产生任何可观察输出，却仍常驻：
+
+- `warn: false` —— 调用方已显式声明「永不 warning」；
+- production —— `devWarn` 早退。这正是原型 A=2 里的**第二个 effect**。
+
+⇒ 改为 `if (defaultValue && warn && isDev())`。`isDev()` 是从 logger 导出的**同源**判定
+（`devWarn` 内部也改用它），避免两边对「是不是开发环境」产生分歧；`warnOnce` 里的 `!isDev()`
+短路放在**分配 Set 之前**，否则 production 下模式切换仍会白做「分配 Set → 记 key → 调
+`devWarn` → 早退」三步。判定仍保留 `process.env.NODE_ENV` 标记交给消费方折叠，**没有**在发布
+构建里定死（IIFE 档仍由 `vite.config.global.ts` define，package verifier 的 marker 检查不受影响）。
+
+**实测影响**：非生产下 A=2 / B=3 不变；**production 下 `useControllableState` 自身注册的 effect
+恒为 0**（它内部只有这一个 watcher），A 只剩 `Map.vue` 侧那条 SDK 腿 watcher，而 B 仍多一个
+`useModel` 内部 effect —— **差异方向不变，绝对值变小**。
+
+⇒ #137 验收第 2 条在本票里因此有**四处真正的 runtime 收口**（`isControlled` 的 computed、
+`warned` 的 Set、`defaultValue` 的 watcher、告警档位 `mode`），都不是靠「删掉」，而是靠
+「不再为没人用的东西付费」。其中 `mode` 一项要**按条件存在 + 不维护**才算数（见下）。
+
+**第四处（复审十轮 P1）——把前三处认成同一条腿**：`mode`（`"controlled" | "uncontrolled"`）
+与上面三项看着无关，其实是**同一个用途**：它唯一的消费者就是「受控 ↔ 非受控」那条 dev warning，
+**不参与** `value` / `internal` / 容差相等 / `reset()` / SDK reconcile。而它是**无条件初始化、
+无条件维护**的（`let mode = value() === undefined ? …`，每次 `syncExternal()` 继续改写），
+所以 production 或 `warn:false` 下仍要付：构造期**额外读一次 `value()`**、常驻一个档位字符串、
+每次外部同步一次写入。这正是验收第 2 条原文要消除的「为 controlled/uncontrolled 术语付不必要
+runtime」的字面形态。
+
+⇒ 三个消费点（`defaultValue` watcher 的注册、`warnOnce` 的短路、`mode` 本身）**统一读一个
+`warningsEnabled = warn && isDev()`**，`mode` 的类型放宽成 `ControllableMode | undefined`：
+告警不启用时它连状态都不存在。`isDev()` 仍是 `devWarn` 的**同一份**判定，分歧风险不变。
+
+**⚠️ 只 gate 初始化是不够的（复审十二轮 P1）**：那样 production / `warn:false` 下第一次
+`syncExternal()` 就会把 `mode` 从 `undefined` 写成 `"uncontrolled"`，之后每次外部同步继续维护
+——只省掉构造期判档，**没省掉后续的 controlled/uncontrolled runtime maintenance**。
+⇒ `syncExternal()` 里的**两处读写也一并 gate**。这一改动的可观察后果不止「少一个字符串」：
+`mode === "uncontrolled" && !equals(next, internal.value)` 那个比较**只**服务于冲突告警，
+`mode` 不存在 ⇒ `&&` 短路 ⇒ **每次外部同步少做一次容差比较**（`<Map>` 四个视野字段各一次）。
+「构造期 `value()` 计数」那条 gate **抓不到**这一层（它只数构造期读取）：实测把维护 gate 去掉，
+当时全部用例**仍然全绿**。补的 gate 改数 **`equals` 调用次数**（production / `warn:false` 恒为
+0，development 为 1），序列须走满 `受控同步 → 非受控同步 → 受控同步` 三步才测得出差异
+（第一次同步只是把 `mode` 置 `uncontrolled`，第二次才走到那条比较）。变异验证：去掉维护 gate
+⇒ 2 failed / 27 passed；恢复 ⇒ 29 passed。
+
+**这一处踩的仍是同一类坑（已实测）**：behavior 断言与 effect 计数都**分辨不出**它——
+`mode` 既不是 effect，`value()` 多读一次也不改变任何可观察结果。gate 用的是
+**`value()` getter 的调用次数**（`model` 是 `computed`、懒求值，构造期不读；所以 1 次 = 只有
+`initial` 解析）：production / `warn:false` 构造应为 **1**，development + `warn:true` 为 **2**。
+把 `mode` 改回急切初始化 ⇒ 前两条用例翻红（实测 2 failed / 24 passed）。
+
+**另外三处也各自踩了「用错口径」的坑，用例都是数分配、不是数行为**（已实测）：
+- `isControlled`：只断言「重复访问命中缓存」时，**eager 版照样全过**；
+- `warned`：只断言「告警次数」时，eager 版次数**完全一样**。
+另外 `warned` 那条 gate 有个实现细节：`vi.spyOn(globalThis, 'Set')` 必须在**所有其它 spy
+之后**建立、再取基线——`vi.spyOn(console, 'warn')` 自身会分配 `Set`，否则测到的是 vitest。
+
+**⚠️ `isDev()` 判据本身踩过一次 P0（复审十轮）**：初版写 `process.env?.NODE_ENV`，
+`process.env?.NODE_ENV` 的 optional chaining **只保护 `env`，不保护裸标识符 `process`**；
+构建还会把 optional chaining 剥掉，产物里就是裸 `process.env.NODE_ENV`。浏览器里没有 `process`
+时 `ReferenceError` —— 而 `devWarn` 里的同类写法一直没炸，是因为它只在**真的告警**时才被调用，
+`isDev()` 却是 `useControllableState` **构造期**就调（四个视野字段 ⇒ 每个 `<Map>` 实例化必现，
+被 `smoke-v4-fixture` 抓到）。⇒ 补 `typeof process === "undefined" ||` 兜底，并用 `node:vm`
+空沙箱**实测**（`runInContext` 取出表达式求值）把这条钉成常驻用例。
+
 
 ### 7. 与官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的对照
 

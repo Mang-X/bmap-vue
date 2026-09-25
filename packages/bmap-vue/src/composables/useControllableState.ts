@@ -1,5 +1,47 @@
 /**
- * 通用受控 / 非受控状态（M4-STATE / issue #27）
+ * 通用受控 / 非受控状态（M4-STATE / issue #27、#137）
+ *
+ * ## 归属边界：Vue 拥有 Vue 的状态，本文件拥有 SDK 的状态
+ *
+ * #137 的口径是「Vue owns Vue state; Core owns SDK state」。这个 helper 恰好骑在两者的**缝**上，
+ * 所以先说清它到底拥有哪半：
+ *
+ * | 腿 | 谁拥有 | 这里的形态 |
+ * | --- | --- | --- |
+ * | 父组件 ↔ 组件（props / emits） | **Vue** | 调用方传 `value: () => props.center`——这是**对 props 的 getter**，不是另存一份；写入侧是 `emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，全库统一（`Map` / `Marker` / `InfoWindow` 都是「普通 prop + `update:*` emit」），**没有**第二个父↔子状态机需要收口。 |
+ * | 组件 ↔ SDK（读回 / 写回 / 归位） | **本文件** | `internal` 镜像是 SDK 侧事实源的本地投影，容差相等、`copy` 落库、`reset()` 归位都是 SDK 侧语义，Vue 不拥有、也无法替我们表达。 |
+ *
+ * **为什么不用 `defineModel` / `useModel`（#137 已做原型，不是「没试过」）**：Vue 3.5 的
+ * `useModel` 自带「受控：prop 优先 / 非受控：本地为源」，但它**自己不保存最后一次外部值**——
+ * 受控 prop 被摘掉时读到的是 `undefined`，而本文件冻结的契约是「内部状态接管，**保留最后一次
+ * 外部值**」。要维持这条语义，**必须额外补一段 bridge state**（记住最后外部值）。它同样没有
+ * `defaultValue` 只读一次、没有容差相等、没有 `copy`、没有首次快照。
+ *
+ * #137 复审要求先做**真实原型**再定论。原型**已提交进仓库**：
+ * `mapModel.prototype.test.ts`（两种接线都手写 `defineProps`/`defineEmits`，不动 `MapProps`，
+ * props 形状完全一致）。结论分三层，别混：
+ *
+ * - **语义缺口是真的，但可补**：补上一段「记住最后外部值」的 bridge state（原型里叫 `internal`
+ *   镜像）后原型**能**逐项复现现状的可观察结果
+ *   （容差抖动、真实变化、受控→非受控保留最后值、default 只读一次）。所以「做不到」是错的说法。
+ *   但补的位置有**三处**，不止「记住最后外部值」：真实非受控用法下 `useModel` 读到的
+ *   `localValue` 是 Vue 自己的局部状态（读与档位都判错），且 `reset()` 无法同步它 ⇒ setter 的
+ *   全局去重会吞掉 reset 后的下一次真实交互。**没有公开 API 能补**。
+ * - **代价上（实测，唯一口径）**：按「每个 number 字段实际注册的 `ReactiveEffect` 数」
+ *   （`getCurrentScope().effects.length`，由 Vue 自己记账）—— 现状 **2**，`useModel` + 桥接
+ *   是 **3**（含 `default*` 告警 watcher）。Vue-native **没有更省**。
+ * - **最强的反面读数**：三处补完之后，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它
+ *   的声明，11 条行为用例仍然全过**（只有 2 条 effect 计数变红）——它在这条线路上换不到任何可观察
+ *   行为，不再是承重构件。
+ * - **措辞纪律**：这**只能**说「没减少 effect」，**不能**说「runtime 更贵」——effect 数与结构数
+ *   都推不出成本大小，那需要 profile。
+ *
+ * `defineModel` 另有一层：它自己生成 prop/emit，会改到被 fixture 断言的冻结 `MapProps`；而
+ * `useModel` 不需要（它接受现成 `props`）。**但这不是否决 `useModel` 的理由** —— 真正的理由
+ * 是上面那句「没有更省」。⇒ 保留本 helper 作为通用原语，`<Map>` 的接线不动。详见 ADR
+ * `2026-09-14-map-controlled-state` §6.1 与 §6.2 的原型读数。
+ *
+ * ## 三种来源
  *
  * 一个字段有**三种来源**，优先级固定为：受控值 > 非受控初值 > 库默认值。
  *
@@ -37,7 +79,7 @@
  * （内部会注册一个 `defaultValue` 变化的告警 watcher，需要随作用域一起释放）。
  */
 import { computed, shallowRef, watch, type ComputedRef, type ShallowRef } from "vue";
-import { devWarn } from "../core/logger";
+import { devWarn, isDev } from "../core/logger";
 
 /** 相等判定。**必须容忍浮点抖动**（见 `core/utils/equality`），否则受控写入与 SDK 回写会形成往返。 */
 export type EqualFn<T> = (a: T, b: T) => boolean;
@@ -79,7 +121,21 @@ export interface ControllableState<T> {
   readonly value: ComputedRef<T>;
   /** 内部状态（非受控模式的事实源；受控模式是外部值的镜像）。 */
   readonly internal: ShallowRef<T>;
-  /** 当前是否受控（外部值存在）。 */
+  /**
+   * 当前是否受控（外部值存在）。
+   *
+   * ⚠️ **库内没有消费者**（#137 审计结论）：`<Map>` 判断档位用的是 `value() !== undefined` 的
+   * 即时读取，不是这个 computed。它留在返回类型上是因为 `useControllableState` 是**已发布的
+   * 公共 composable**（ADR `2026-09-14-map-controlled-state` 决策 6），返回值形状属于冻结契约 ——
+   * 删掉它是破坏性变更，不在 #137「不改动已冻结公共语义」的范围内。
+   *
+   * 所以：**别再去找它的库内调用点**。若将来确实要移除，走单独的破坏性变更票，并同步
+   * `docs/zh-CN/hooks/useControllableState.md`。
+   *
+   * **它被惰性创建**（#137 复审八轮 P1）：早先把「公共 API 保留该成员」当成「`<Map>` 必须为它
+   * 实例化这份 runtime」，是**两件被混成一件的事**。既然库内零消费者，就不必在每次
+   * `useControllableState()` 调用时都分配它——`get` 取用时才建，类型与消费方式都未变。
+   */
   readonly isControlled: ComputedRef<boolean>;
   /** 首次解析出的初值（初次视野 / 初始渲染用）。 */
   readonly initial: T;
@@ -124,36 +180,73 @@ export function useControllableState<T>(
   // 内部状态**再拷一份**：`initial` 会被调用方长期持有（例如组件的「首次视野快照」），
   // 两者共享同一对象会让其中一方的原地修改影响另一方。
   const internal = shallowRef(copy(initial)) as ShallowRef<T>;
-  const isControlled = computed(() => value() !== undefined);
   const model = computed<T>(() => value() ?? internal.value);
+  // `isControlled` **惰性创建**（#137 复审八轮 P1）：它挂在**已发布的公共返回形状**上不能删，
+  // 但**库内零消费者** —— `<Map>` 判断档位用的是即时的 `value() !== undefined`，从不读这个成员。
+  // 「公共 API 必须保留该成员」与「`<Map>` 必须为它实例化 runtime」是**两件事**（复审指出早先
+  // 把它们当成一件，见 §6.2）。这里用 getter + 缓存：返回类型 `ComputedRef<boolean>` 一字未改，
+  // 公共消费者照旧 `state.isControlled.value`；没人访问就**不分配**那个 computed。
+  //
+  // 惰性创建时若已脱离 `setup()` 的 effect scope，那个 computed 不会随作用域释放 —— 但它只由
+  // 公共消费者触发，而它们都在 `setup()` / `effectScope()` 内调用（见本文件底部的调用位置要求），
+  // 与原先的构造时机等价。
+  let isControlledRef: ComputedRef<boolean> | undefined;
 
-  let mode: ControllableMode = value() === undefined ? "uncontrolled" : "controlled";
-  const warned = new Set<string>();
+  // **「开发期告警是否启用」一次性判定**（#137 复审十轮 P1）。`defaultValue` watcher 的
+  // 注册、`warnOnce` 的短路、以及下面这个 `mode` 全部围绕它 —— 三者都是**同一条腿**。
+  const warningsEnabled = warn && isDev();
+  // `mode` 是**纯告警状态**：它唯一的消费者是「受控 ↔ 非受控」那条开发期告警，不参与
+  // `value` / `internal` / 容差相等 / `reset()` / SDK reconcile。因此告警不启用时**连它都不
+  // 存在**（`undefined`）**、也不再被维护**（`syncExternal` 里的读写一并 gate 掉），
+  // 顺带省掉构造期那一次多余的 `value()` 读取，以及每次外部同步里那个**只为告警而做**的
+  // 容差比较 —— 那正是「为 controlled/uncontrolled 术语付不必要 runtime」的字面形态。
+  let mode: ControllableMode | undefined = warningsEnabled
+    ? value() === undefined
+      ? "uncontrolled"
+      : "controlled"
+    : undefined;
+  // **告警去重集合惰性创建**（#137 复审九轮 P1）：它的唯一作用是「某条告警真的发生之后记住
+  // 对应 key」。正常生命周期里既没有档位冲突、也没有 `default*` 后续写入 ⇒ 这个 Set 从创建到
+  // 销毁一次都不会被碰。对 `<Map>` 的四个视野字段，就是每次实例化白扔 4 个 Set。
+  // 与 `isControlled` 同理：**告警行为是冻结的，不等于去重容器必须在构造期分配**。
+  let warned: Set<string> | undefined;
   const warnOnce = (key: string, message: string): void => {
-    if (!warn || warned.has(key)) return;
-    warned.add(key);
+    // ⚠️ 短路必须发生在**分配 Set 之前**（复审十轮 P1）：否则告警关闭时发生模式切换仍会
+    // 「分配 Set → 记 key → 调 devWarn → 在 devWarn 里 return」，白做三步。
+    // 判定统一读上面那个 `warningsEnabled`（`warn && isDev()` 的一次性结果）——它同时把
+    // `mode` 本身也一并消掉，所以这里连「哪个 mode」都不必问。
+    if (!warningsEnabled || warned?.has(key)) return;
+    (warned ??= new Set()).add(key);
     devWarn(message, { field: name });
   };
 
   function syncExternal(next: T | undefined): void {
     if (next === undefined) {
-      if (mode === "controlled") {
-        warnOnce(
-          "to-uncontrolled",
-          `${name} 由受控切换为非受控：内部状态接管，并保留最后一次外部值。受控与非受控请在组件生命周期内保持一致。`,
-        );
+      // ⚠️ 读写 `mode` 本身也要 gate（复审十二轮 P1）。只把**初始化**收进 `warningsEnabled`
+      // 是不够的：那样 production / `warn:false` 下第一次 `syncExternal` 就会把它从
+      // `undefined` 写成 `"uncontrolled"`，之后每次外部同步继续维护这个字符串 —— 省掉了
+      // 构造期判档，却没省掉后续的 controlled/uncontrolled runtime maintenance。
+      if (warningsEnabled) {
+        if (mode === "controlled") {
+          warnOnce(
+            "to-uncontrolled",
+            `${name} 由受控切换为非受控：内部状态接管，并保留最后一次外部值。受控与非受控请在组件生命周期内保持一致。`,
+          );
+        }
+        mode = "uncontrolled";
       }
-      mode = "uncontrolled";
       return;
     }
-    if (mode === "uncontrolled" && !equals(next, internal.value)) {
-      warnOnce(
-        "to-controlled",
-        `${name} 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。`,
-      );
+    if (warningsEnabled) {
+      if (mode === "uncontrolled" && !equals(next, internal.value)) {
+        warnOnce(
+          "to-controlled",
+          `${name} 由非受控切换为受控：当前内部状态与外部值不一致，之后以外部值（及其变化）为准。受控与非受控请在组件生命周期内保持一致。`,
+        );
+      }
+      mode = "controlled";
     }
     internal.value = copy(next);
-    mode = "controlled";
   }
 
   function commit(next: T): boolean {
@@ -176,7 +269,16 @@ export function useControllableState<T>(
     internal.value = copy(initial);
   }
 
-  if (defaultValue) {
+  // **只在「真的可能告警」时才注册这个 watcher**（#137 复审十轮 P1）。它的唯一用途是驱动
+  // `devWarn`，而两个条件任一不成立，它就永远不会产生任何可观察输出：
+  // - `warn: false` —— 调用方显式声明「永不 warning」，这个 effect 仍常驻就是纯浪费；
+  // - production —— `devWarn` 会早退，`<Map>` 四个视野字段就是**四个永远静音的常驻
+  //   `ReactiveEffect`**。这正是原型 A=2 里的第二个 effect，比前两轮收掉的对象更重。
+  //
+  // 判定统一用上面那个 `warningsEnabled`——它里面的 `isDev()` 与 `devWarn` **同源**，否则两边
+  // 会分歧（一边认为在生产、一边却注册了监听）。`isDev()` 保留 `process.env.NODE_ENV` 标记给
+  // 消费方折叠，不在发布构建里定死。
+  if (defaultValue && warningsEnabled) {
     watch(defaultValue, (next, previous) => {
       // 首次解析之后**任何** default 写入都不生效，都该告警一次：值改变、从无到有、从有到无。
       // 「两边都没给」与「值没变」不算写入——父级每次渲染传内联字面量时引用会变，但语义没变。
@@ -189,5 +291,17 @@ export function useControllableState<T>(
     });
   }
 
-  return { value: model, internal, isControlled, initial, syncExternal, commit, reset };
+  return {
+    value: model,
+    internal,
+    get isControlled(): ComputedRef<boolean> {
+      // 首次访问才建；之后同一个实例（`computed` 自带缓存，重建会丢缓存）。
+      isControlledRef ??= computed(() => value() !== undefined);
+      return isControlledRef;
+    },
+    initial,
+    syncExternal,
+    commit,
+    reset,
+  };
 }

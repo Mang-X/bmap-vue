@@ -5,7 +5,7 @@
  * 组件侧的接线（哪次变化写哪条 SDK 命令）由 `tests/behavior/map.test.ts` 覆盖。
  */
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import { effectScope, nextTick, ref, type EffectScope } from 'vue'
+import { effectScope, getCurrentScope, nextTick, ref, type EffectScope } from 'vue'
 import { useControllableState, type EqualFn, type UseControllableStateOptions } from './useControllableState'
 import { numbersEqual } from '../core/utils/equality'
 
@@ -281,5 +281,479 @@ describe('useControllableState', () => {
     await nextTick()
 
     expect(warnLines(warn).length).toBe(0)
+  })
+})
+
+describe('isControlled 的惰性创建（#137 复审八轮 P1）', () => {
+  /**
+   * 惰性与否的可观察口径是「**分配了几个 computed**」，而**不是** effect 数 ——
+   * `computed` 懒求值、不挂 scope，从来不计入 `getCurrentScope().effects.length`
+   * （ADR §6.2 记录的盲区：effect gate 看不见这一类对象）。
+   *
+   * ⚠️ 这也是本组用例存在的理由：**把实现改回 eager，这些用例必须变红**。已实测：
+   * 只断言「重复访问是同一实例」时，eager 版照样全过 —— 也就是说「缓存命中」证明不了
+   * 「惰性」。唯一能判别的办法是直接数分配。
+   */
+  it('构造时**不**分配 `isControlled` 的 computed；首次访问才分配且此后命中缓存', async () => {
+    // ESM 的导出不可 spy，所以用 `vi.doMock` 换掉本模块看到的 `vue`（保留真实实现，只数次数）。
+    const vue = await import('vue')
+    let computedCount = 0
+    vi.resetModules()
+    vi.doMock('vue', async () => {
+      const actual = await vi.importActual<typeof import('vue')>('vue')
+      return {
+        ...actual,
+        computed: ((...args: Parameters<typeof actual.computed>) => {
+          computedCount += 1
+          return actual.computed(...args)
+        }) as typeof actual.computed,
+      }
+    })
+    try {
+      // 重新加载，让被测模块拿到被计数的 `computed`。
+      const mod = await import('./useControllableState')
+      const external = ref<number | undefined>(undefined)
+      const state = inScope(() =>
+        mod.useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          fallback: 14,
+          equals: numbersEqual,
+        }),
+      )
+      // 此刻零消费者：`<Map>` 从不读它 ⇒ **不该**为它分配任何 computed。
+      const beforeAccess = computedCount
+
+      const first = state.isControlled
+      const afterFirstAccess = computedCount
+      const second = state.isControlled
+
+      expect(
+        afterFirstAccess - beforeAccess,
+        '首次访问 isControlled 才分配（构造时那次 eager 分配会让这个差为 0）',
+      ).toBe(1)
+      expect(computedCount, '重复访问不得再分配').toBe(afterFirstAccess)
+      expect(first, '重复访问必须命中缓存').toBe(second)
+      expect(first.value).toBe(false)
+      external.value = 7
+      expect(first.value, '受控后变 true').toBe(true)
+      void vue
+    } finally {
+      vi.doUnmock('vue')
+      vi.resetModules()
+    }
+  })
+
+  it('公共返回形状未变：isControlled 仍是可直接赋给 ComputedRef<boolean> 的成员', () => {
+    const state = numberState()
+    // 静态形状断言：把它删掉、或改成非 `ComputedRef`，这行都会编译失败。
+    const controlled: import('vue').ComputedRef<boolean> = state.isControlled
+    expect(controlled.value).toBe(false)
+  })
+})
+
+describe('告警去重集合的惰性创建（#137 复审九轮 P1）', () => {
+  /**
+   * 口径是「分配了几个 `Set`」。`Set` 是全局，可以直接 `vi.spyOn(globalThis, 'Set')` ——
+   * 不像 `computed` 那样受 ESM 导出不可 spy 的限制。
+   *
+   * ⚠️ 只断言「告警次数」证明不了惰性（eager 版次数完全一样），必须数分配。
+   */
+  function countingSets() {
+    const RealSet = globalThis.Set
+    let allocated = 0
+    // 用普通 function（箭头函数不可 new），并保留原型链与静态方法。
+    function CountingSet(this: unknown, ...args: unknown[]) {
+      allocated += 1
+      return new RealSet(...(args as []))
+    }
+    CountingSet.prototype = RealSet.prototype
+    Object.setPrototypeOf(CountingSet, RealSet)
+    const spy = vi
+      .spyOn(globalThis, 'Set')
+      .mockImplementation(CountingSet as unknown as SetConstructor)
+    // vitest / spy 自身也可能用 Set（`new Set(...)`、spy registry 等）——先测**基线**，
+    // 用增量而不是绝对值，否则测的是 vitest 而不是被测代码。
+    const baseline = allocated
+    return {
+      get baseline() {
+        return baseline
+      },
+      get allocated() {
+        return allocated
+      },
+      restore: () => spy.mockRestore(),
+    }
+  }
+
+  it('无告警的正常路径不分配 Set；首次真实告警才分配一次，之后复用同一个', async () => {
+    const warn = spyWarn()
+    const counter = countingSets()
+    try {
+      const external = ref<number | undefined>(12)
+      const fallbackDefault = ref<number | undefined>(8)
+      const state = inScope(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => fallbackDefault.value,
+          fallback: 14,
+          equals: numbersEqual,
+        }),
+      )
+      // 常规路径：受控值变化、提交、摘控**都不冲突** ⇒ 不该有任何告警。
+      external.value = 13
+      await nextTick()
+      state.syncExternal(13)
+      state.commit(15)
+      await nextTick()
+      expect(warnLines(warn).length, '这些操作本身不产生告警').toBe(0)
+      expect(
+        counter.allocated - counter.baseline,
+        '无告警路径不应分配去重 Set',
+      ).toBe(0)
+
+      // 第一次**真实**告警：受控 → 非受控。
+      state.syncExternal(undefined)
+      expect(warnLines(warn).length, '受控→非受控应告警一次').toBe(1)
+      expect(counter.allocated - counter.baseline, '首次告警才分配，且只分配一个').toBe(1)
+
+      // 后续同类告警复用同一个 Set，不再分配。
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      await nextTick()
+      expect(counter.allocated - counter.baseline, '复用同一个去重 Set，不再分配').toBe(1)
+      // 每种方向最多一次：受控→非受控 1 次；非受控→受控（值冲突）1 次。
+      expect(warnLines(warn).filter((l) => l.includes('由受控切换为非受控')).length).toBe(1)
+      expect(warnLines(warn).filter((l) => l.includes('由非受控切换为受控')).length).toBe(1)
+    } finally {
+      counter.restore()
+      warn.mockRestore()
+    }
+  })
+
+  it('warn: false 时即使触发模式/default 变化也永不分配 Set', async () => {
+    const warn = spyWarn()
+    const counter = countingSets()
+    try {
+      const external = ref<number | undefined>(12)
+      const fallbackDefault = ref<number | undefined>(8)
+      const state = inScope(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => fallbackDefault.value,
+          fallback: 14,
+          equals: numbersEqual,
+          warn: false,
+        }),
+      )
+      state.syncExternal(undefined)
+      fallbackDefault.value = 9
+      await nextTick()
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      await nextTick()
+
+      expect(warnLines(warn).length, 'warn:false 下静默').toBe(0)
+      expect(counter.allocated - counter.baseline, 'warn:false 下永不分配去重 Set').toBe(0)
+    } finally {
+      counter.restore()
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('defaultValue 告警 watcher 的注册条件（#137 复审十轮 P1）', () => {
+  /**
+   * 口径是「注册了几个 `ReactiveEffect`」——这正是原型 `mapModel.prototype.test.ts` 用的
+   * 同一套口径（`getCurrentScope().effects.length`，由 Vue 自己记账）。
+   *
+   * ⚠️ 只断言「有没有告警输出」证明不了注册与否：production 下 `devWarn` 早退，eager 版
+   * **一条也不会打印**，但那个 effect 照样常驻。必须数 effect。
+   */
+  function effectsWith(options: { warn?: boolean; withDefault?: boolean } = {}): number {
+    return effectScope().run(() => {
+      const external = ref<number | undefined>(12)
+      useControllableState<number>({
+        name: 'zoom',
+        value: () => external.value,
+        defaultValue: options.withDefault === false ? undefined : () => 8,
+        fallback: 14,
+        equals: numbersEqual,
+        warn: options.warn,
+      })
+      // `useControllableState` 只注册 defaultValue 告警 watcher，所以这个数就是它的个数。
+      return getCurrentScope()!.effects.length
+    })!
+  }
+
+  it('warn: false ⇒ 不注册 defaultValue 告警 watcher', () => {
+    expect(effectsWith({ warn: false }), 'warn:false 不该注册任何 effect').toBe(0)
+  })
+
+  it('development + warn:true ⇒ 注册（告警契约仍在）', async () => {
+    expect(effectsWith({ warn: true }), '开发期要注册').toBe(1)
+  })
+
+  it('development 下 default* 后续变化仍告警恰好一次', async () => {
+    const warn = spyWarn()
+    const fallbackDefault = ref<number | undefined>(8)
+    try {
+      const state = numberState({ defaultValue: () => fallbackDefault.value })
+      fallbackDefault.value = 9
+      await nextTick()
+      fallbackDefault.value = 10
+      await nextTick()
+      expect(warnLines(warn).filter((l) => l.includes('只在首次解析时生效')).length).toBe(1)
+      void state
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('production 下不为开发期提示付出 runtime（#137 复审十轮 P1）', () => {
+  /**
+   * `isDev()` 读 `process.env.NODE_ENV`，而判定**必须留在消费方**（见 logger 的注释）。
+   * 所以这里改的是**运行时的环境变量**，不是构建期替换 —— 与「库在发布构建里不该把它定死」
+   * 是同一件事的两面：这里模拟「消费方的 bundler 已折叠成 production」。
+   */
+  function withNodeEnv<T>(value: string | undefined, body: () => T): T {
+    const original = process.env.NODE_ENV
+    if (value === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = value
+    try {
+      return body()
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  function effectsInProduction(options: { warn?: boolean } = {}): number {
+    return withNodeEnv('production', () =>
+      effectScope().run(() => {
+        const external = ref<number | undefined>(12)
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => 8,
+          fallback: 14,
+          equals: numbersEqual,
+          warn: options.warn,
+        })
+        return getCurrentScope()!.effects.length
+      })!,
+    )
+  }
+
+  it('production：即使 warn 默认 true 也不注册 defaultValue 告警 watcher', () => {
+    expect(effectsInProduction(), 'production 下不该常驻开发期 watcher').toBe(0)
+  })
+
+  it('production：模式切换不分配 warned 去重 Set（short-circuit 在分配之前）', () => {
+    const RealSet = globalThis.Set
+    let allocated = 0
+    function CountingSet(this: unknown, ...args: unknown[]) {
+      allocated += 1
+      return new RealSet(...(args as []))
+    }
+    CountingSet.prototype = RealSet.prototype
+    Object.setPrototypeOf(CountingSet, RealSet)
+    const spy = vi
+      .spyOn(globalThis, 'Set')
+      .mockImplementation(CountingSet as unknown as SetConstructor)
+    const warn = spyWarn()
+    try {
+      const baseline = allocated
+      withNodeEnv('production', () => {
+        const external = ref<number | undefined>(12)
+        const state = effectScope().run(() =>
+          useControllableState<number>({
+            name: 'zoom',
+            value: () => external.value,
+            defaultValue: () => 8,
+            fallback: 14,
+            equals: numbersEqual,
+          }),
+        )!
+        // 受控 → 非受控：在 dev 下会告警一次并分配去重 Set；production 下应完全短路。
+        external.value = undefined
+        state.syncExternal(undefined)
+        state.syncExternal(20)
+        state.syncExternal(undefined)
+      })
+      expect(warnLines(warn).length, 'production 下不打印').toBe(0)
+      expect(allocated - baseline, 'production 下连去重 Set 都不该分配').toBe(0)
+    } finally {
+      spy.mockRestore()
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('mode 是纯告警状态，告警关闭时连它都不存在（#137 复审十轮 P1）', () => {
+  /**
+   * 口径是 **`value()` getter 的调用次数**，理由与前两轮一致：行为断言和 effect 计数都
+   * 分辨不出「惰性 / 急切」，必须直接数**分配 / 读取**。
+   *
+   * `mode` 的唯一消费者是「受控 ↔ 非受控」那条开发期告警——它不参与 `value` / `internal` /
+   * 容差相等 / `reset()` / SDK reconcile。所以 production 或 `warn:false` 下：
+   * - 构造期**不该**为它多读一次 `value()`（`model` 是 `computed`，懒求值，不读）；
+   * - `syncExternal()` **不该**继续维护它（写一个只在告警里读的状态）。
+   *
+   * 改回 eager 初始化（`let mode = value() === undefined ? …`）会让下面的计数 +1。
+   */
+  function valueReadsIn(options: { warn?: boolean } = {}): number {
+    const external = ref<number | undefined>(12)
+    let reads = 0
+    effectScope().run(() => {
+      useControllableState<number>({
+        name: 'zoom',
+        value: () => {
+          reads += 1
+          return external.value
+        },
+        defaultValue: () => 8,
+        fallback: 14,
+        equals: numbersEqual,
+        warn: options.warn,
+      })
+    })
+    return reads
+  }
+
+  function withNodeEnv<T>(value: string | undefined, body: () => T): T {
+    const original = process.env.NODE_ENV
+    if (value === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = value
+    try {
+      return body()
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  it('production：构造期只读一次 value()（仅为 initial 解析），不为 mode 再读一次', () => {
+    expect(
+      withNodeEnv('production', () => valueReadsIn()),
+      'production 下 mode 不存在，构造期不应多读一次 value()',
+    ).toBe(1)
+  })
+
+  it('warn: false：同样只读一次（显式声明「永不告警」时 mode 也没有消费者）', () => {
+    expect(valueReadsIn({ warn: false }), 'warn:false 下 mode 不存在').toBe(1)
+  })
+
+  it('development + warn:true：mode 存在，构造期读两次（initial 解析 + 档位判定）', () => {
+    expect(valueReadsIn(), '开发期要判定档位，mode 必须存在').toBe(2)
+  })
+
+  it('告警关闭时 syncExternal 不再维护 mode（无写入、无额外读取）', () => {
+    const warn = spyWarn()
+    try {
+      const external = ref<number | undefined>(12)
+      let reads = 0
+      const state = withNodeEnv('production', () =>
+        effectScope().run(() =>
+          useControllableState<number>({
+            name: 'zoom',
+            value: () => {
+              reads += 1
+              return external.value
+            },
+            defaultValue: () => 8,
+            fallback: 14,
+            equals: numbersEqual,
+          }),
+        ),
+      )!
+      const before = reads
+      external.value = undefined
+      state.syncExternal(undefined)
+      state.syncExternal(20)
+      state.syncExternal(undefined)
+      expect(reads, 'syncExternal 只吃 next，不再回头读 value() 判档位').toBe(before)
+      // 守卫生效性：档位判定的唯一读点在 mode 初始化处，这里若 mode 被急切初始化，
+      // 构造期计数就会是 2（见上面那条 development 用例）。
+      expect(warnLines(warn).length, 'production 下不打印').toBe(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('告警关闭时 mode 连「维护」也不发生（#137 复审十二轮 P1）', () => {
+  /**
+   * 上一轮只把 `mode` 的**初始化**收进 `warningsEnabled`，漏了后半句：**后续每次
+   * `syncExternal()` 仍在无条件读写它**。那样 production / `warn:false` 下第一次同步就把
+   * `mode` 从 `undefined` 写成 `"uncontrolled"`，之后继续维护 —— 只省掉了构造期判档。
+   *
+   * ⚠️ **为什么上一轮的 gate 抓不到**（这条是本组存在的理由）：上一轮数的是**构造期**
+   * `value()` 读取次数，而「维护」发生在运行期。实测把维护 gate 去掉，那 46 条用例**全绿**。
+   *
+   * 口径是 **`equals` 的调用次数**——它是 `mode` 唯一那条读路径的可观察后果：
+   * `syncExternal()` 里 `mode === "uncontrolled" && !equals(next, internal.value)` 这个比较
+   * **只**服务于「非受控 → 受控冲突」那条告警。`mode` 活着，比较就会做；`mode` 不存在，
+   * 整个 `&&` 短路，比较**根本不发生**。所以「每次外部同步少一次容差比较」既可测，
+   * 也正是运行时真正省掉的东西（不是省一个字符串，是省一次比较）。
+   *
+   * 序列固定为 `受控同步 → 非受控同步 → 受控同步`：第一次把 `mode` 置 `uncontrolled`
+   * （无 gate 时），第二次才会走到那条比较。少于三步测不出差异。
+   */
+  function equalsCallsWhileSyncing(options: { env?: string; warn?: boolean } = {}): number {
+    const original = process.env.NODE_ENV
+    if (options.env) process.env.NODE_ENV = options.env
+    try {
+      const external = ref<number | undefined>(12)
+      let calls = 0
+      const state = effectScope().run(() =>
+        useControllableState<number>({
+          name: 'zoom',
+          value: () => external.value,
+          defaultValue: () => 8,
+          fallback: 14,
+          equals: (a, b) => {
+            calls += 1
+            return numbersEqual(a, b)
+          },
+          warn: options.warn,
+        }),
+      )!
+      const before = calls
+      external.value = 20
+      state.syncExternal(external.value)
+      state.syncExternal(undefined)
+      state.syncExternal(30)
+      return calls - before
+    } finally {
+      if (original === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = original
+    }
+  }
+
+  it('production：外部同步不做任何只为告警而存在的容差比较', () => {
+    expect(
+      equalsCallsWhileSyncing({ env: 'production' }),
+      'production 下 mode 不存在 ⇒ 那个 && 左侧恒假，equals 不应被调用',
+    ).toBe(0)
+  })
+
+  it('warn: false：同样一次都不做', () => {
+    expect(
+      equalsCallsWhileSyncing({ warn: false }),
+      'warn:false 下 mode 不存在 ⇒ equals 不应被调用',
+    ).toBe(0)
+  })
+
+  it('development：告警契约仍在，那次比较必须发生（守卫 gate 本身不是恒真）', () => {
+    // 序列最后一步 `syncExternal(30)` 时 mode 已是 "uncontrolled"（无 gate）/ 在 development 下
+    // 被正常维护为 "uncontrolled" ⇒ 左边为真 ⇒ `equals` 必被调一次。
+    expect(
+      equalsCallsWhileSyncing({ env: 'development' }),
+      'development 下 mode 存在 ⇒ 那条冲突比较必须照常发生',
+    ).toBe(1)
   })
 })

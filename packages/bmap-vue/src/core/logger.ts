@@ -77,8 +77,38 @@ declare const process: { env?: Record<string, string | undefined> };
  * `default*` 被覆盖…），出现在最终用户的 console 里没有意义。
  */
 export function devWarn(message: string, context?: Record<string, unknown>): void {
-  if (process.env?.NODE_ENV === "production") return;
+  if (!isDev()) return;
   logger.warn(message, context);
+}
+
+/**
+ * 是否「非生产」环境 —— `devWarn` 的**同一个**判定，供调用方决定**要不要为开发期提示付出
+ * runtime**（#137 复审十轮 P1）。
+ *
+ * 存在的理由：`devWarn` 自己在 production 早退，但这只省掉了**输出**。若某个 watcher 的**唯一**
+ * 用途就是驱动 `devWarn`，它在 production 仍然会注册并常驻（`useControllableState` 的
+ * `defaultValue` 告警 watcher 就是这样：`<Map>` 四个视野字段各一个，共 4 个 `ReactiveEffect`，
+ * production 下永远静音）。**只判「会不会打印」不够，还要判「值不值得为它注册监听」。**
+ *
+ * ⚠️ 必须与 `devWarn` 用**同一份**判定，否则两边会对「现在是不是开发环境」产生分歧（例如
+ * `devWarn` 认为不是、watcher 却注册了）。同理**不要**在发布构建里把它定死——见上面
+ * `declare const process` 的注释：判定留给消费方折叠，ESM 档保留可折叠标记，IIFE 档由
+ * `vite.config.global.ts` define。
+ *
+ * ⚠️ **`typeof process` 这层保护不能省**（#137 复审十轮 P0）。`process.env?.NODE_ENV` 的
+ * optional chaining 只保护 `env`，**不保护裸标识符 `process`**：浏览器里没有 `process` 时，
+ * 读 `process.env` 之前就已经抛 `ReferenceError`。`devWarn` 里那个同类写法之所以一直没炸，
+ * 是因为它只在**真的告警时**才被调用；而 `isDev()` 是 `useControllableState` **构造期**就调用
+ * 的 —— 四个视野字段 ⇒ 每个 `<Map>` 实例化必现崩溃（`smoke-v4-fixture` 抓到）。
+ *
+ * 写成 `typeof process === "undefined" || …` 之后：
+ * - 裸 browser ESM：没有 `process` ⇒ 第一段为真 ⇒ 返回 dev（**不崩**，与告警是否真会出现无关）；
+ * - Node / SSR：`process` 存在 ⇒ 读真实环境变量；
+ * - 消费方 bundler：`typeof process` 通常被折叠掉，`process.env.NODE_ENV` 仍是可折叠标记；
+ * - IIFE 档：仍由 `vite.config.global.ts` define。
+ */
+export function isDev(): boolean {
+  return typeof process === "undefined" || process.env?.NODE_ENV !== "production";
 }
 
 /**

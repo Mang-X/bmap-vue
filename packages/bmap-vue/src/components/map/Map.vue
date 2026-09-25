@@ -249,6 +249,31 @@ function cloneCenter(value: MapCenter): MapCenter {
   return { lng: value.lng, lat: value.lat };
 }
 
+/**
+ * 四个视野字段的模型接线，**刻意不用 `defineModel` / `useModel`**（#137 已做原型并取实测，
+ * 理由见 `useControllableState` 文件头与 ADR `2026-09-14-map-controlled-state` §6.1 / §6.2）：
+ *
+ * - **父↔子这一腿已经是 Vue-native**：`value: () => props.center` 就是**对 props 的 getter**
+ *   （不另存一份），写入侧是普通 `emit('update:center', …)`。这正是 `v-model` 的展开形态，
+ *   与 `Marker`（`update:position`）/ `InfoWindow` 全库统一，**没有**第二个状态机要收口。
+ * - **组件↔SDK 这一腿 Vue 拥有不了**：容差相等（`centerEquals` / `numbersEqual` /
+ *   `anglesEqual` / `tiltEquals`）、`copy` 落库（`cloneCenter`）、`reset()` 归位都是 SDK 侧
+ *   语义。Vue 3.5 的 `useModel` **不保存最后一次外部值**（受控 prop 被摘掉时读到 `undefined`），
+ *   也没有 default 只读一次与容差相等 ⇒ 要维持冻结语义**必须补 bridge state**。
+ * - **没有更省**（别拿「会改公共面」搪塞——`useModel` 接受现成 `props`，不动 `MapProps`）：
+ *   原型实测，补上 bridge state（真实非受控用法下要补**三处**：`localValue` 不能当受控值读、
+ *   档位不能按它判、`reset()` 之后 setter 会吞掉下一次真实交互的 emit）后**能**复现全部可观察
+ *   行为，但每个 number 字段实际注册的 `ReactiveEffect` 数是 **3 vs 2**（口径：
+ *   `getCurrentScope().effects.length`；含 `default*` 告警、档位切换告警与 `reset()` 这套
+ *   **同等冻结契约**）—— Vue-native
+ *   没有更省。这**不等于**「更贵」：effect 数推不出成本大小。`defineModel` 才会改到被 fixture
+ *   断言的冻结 `MapProps`，那只是它**额外**的成本，不是不迁 `useModel` 的理由。
+ * - **最强的反面读数**：三处补完之后，**把剩下的 `useModel` 写通道也换成直接 `emit`、再删掉它的
+ *   声明，原型的 11 条行为用例仍全过**——它换不到任何可观察行为，只剩那 1 个多注册的 effect。
+ *   这与「3 vs 2」同向且更直接。
+ *
+ * ⇒ 保留 `useControllableState` 作为通用原语；下面四个调用点**不动逻辑**。
+ */
 const centerState = useControllableState<MapCenter>({
   name: "center",
   value: () => props.center,
