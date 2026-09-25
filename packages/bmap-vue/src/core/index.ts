@@ -27,8 +27,10 @@ export {
   reuseExistingJsapiV4,
 } from "./loader/providers/index";
 export type {
+  BaiduJsapiV4ProviderInternalOptions,
   BaiduJsapiV4ProviderOptions,
   CreateLoadedJsapiV4Input,
+  CustomScriptV4ProviderInternalOptions,
   CustomScriptV4ProviderOptions,
   JsapiV4Engine,
   JsapiV4LoadMetadata,
@@ -36,7 +38,7 @@ export type {
   JsapiV4Namespace,
   JsapiV4Provider,
   JsapiV4ProviderId,
-  JsapiV4ProviderOptions,
+  JsapiV4ProviderInternalOptions,
   JsapiV4ScriptMode,
   JsapiV4VersionSource,
   LoadJsapiV4ScriptInput,

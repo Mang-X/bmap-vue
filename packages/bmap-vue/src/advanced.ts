@@ -25,19 +25,53 @@ export { createBMapClient, jsapiV4DriverFactory } from "./client/createBMapClien
  * 与 `docs/zh-CN/expand/offline-map.md` 的自定义加载器示例、`fixtures/consumer` 的 tarball smoke），
  * 这四个名字因此并入 `./advanced` 这一处装配面，与 `normalizeProvider` / `createBMapClientDefinition` 同处。
  * 根入口仍**不**导出任何 Provider factory（#26 起，见 ADR 2026-09-14）。
+ *
+ * 三个工厂在这里是**窄一层的包装**：返回契约收成导出的 `JsapiV4Provider`，选项收成外部
+ * **能自己构造**的形状（`registry` / 自研 `ScriptLoader` 只留在内部与测试注入里）。
+ * 直接 re-export 内部工厂会把 `SdkRegistry` / `ScriptLoader` 这两个带私有成员的类型带进
+ * 公共签名：消费方赋不了值、API report 里也只剩一个名字 ⇒ 假支持（ADR 2026-09-25 决策 5）。
  */
-export {
-  baiduJsapiV4Provider,
-  customScriptV4Provider,
-  existingGlobalV4Provider,
-  createLoadedJsapiV4,
+import {
+  baiduJsapiV4Provider as createBaiduJsapiV4Provider,
+  customScriptV4Provider as createCustomScriptV4Provider,
+  existingGlobalV4Provider as createExistingGlobalV4Provider,
 } from "./core/loader/providers";
+import type {
+  BaiduJsapiV4ProviderOptions,
+  CustomScriptV4ProviderOptions,
+  JsapiV4Provider,
+} from "./core/loader/providers";
+
+/** 默认在线 Provider 工厂（官方 `@baidumap/jsapi-loader`）；AK 经 `load` 的 options 传入。 */
+export const baiduJsapiV4Provider: (options?: BaiduJsapiV4ProviderOptions) => JsapiV4Provider = (
+  options,
+) => createBaiduJsapiV4Provider(options);
+
+/** 企业自托管 / 私有入口 Provider 工厂。 */
+export const customScriptV4Provider: (
+  scriptSrc: string,
+  options?: CustomScriptV4ProviderOptions,
+) => JsapiV4Provider = (scriptSrc, options) =>
+  createCustomScriptV4Provider(scriptSrc, options);
+
+/** 复用宿主页面已存在的 JSAPI 4.0 全局的 Provider 工厂（没有可注入的加载配置）。 */
+export const existingGlobalV4Provider: () => JsapiV4Provider = () =>
+  createExistingGlobalV4Provider();
+
+export { createLoadedJsapiV4 } from "./core/loader/providers";
 export type {
   BaiduJsapiV4ProviderOptions,
   CustomScriptV4ProviderOptions,
-  JsapiV4ProviderOptions,
+  JsapiV4Provider,
+};
+// `OfficialJsapiLoader` / `OfficialJsapiLoadOptions` 是 `BaiduJsapiV4ProviderOptions.loader`
+// 的类型（外部真的能实现它）；`JsapiV4ScriptMode` 是 `CustomScriptV4ProviderOptions.mode` 的取值。
+export type {
   CreateLoadedJsapiV4Input,
+  JsapiV4ScriptMode,
   LoadedJsapiV4,
+  OfficialJsapiLoadOptions,
+  OfficialJsapiLoader,
 } from "./core/loader/providers";
 
 export type {

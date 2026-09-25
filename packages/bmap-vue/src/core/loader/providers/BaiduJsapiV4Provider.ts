@@ -46,7 +46,7 @@ import {
   type OfficialJsapiLoader,
 } from "./official";
 import type {
-  BaiduJsapiV4ProviderOptions,
+  BaiduJsapiV4ProviderInternalOptions,
   JsapiV4LoadMetadata,
   JsapiV4Provider,
   LoadedJsapiV4,
@@ -64,7 +64,7 @@ export class BaiduJsapiV4Provider implements JsapiV4Provider {
   private readonly loader: OfficialJsapiLoader;
   private readonly domain: SdkRegistry;
 
-  constructor(options: BaiduJsapiV4ProviderOptions = {}) {
+  constructor(options: BaiduJsapiV4ProviderInternalOptions = {}) {
     this.loader = options.loader ?? officialJsapiLoader;
     this.domain =
       options.registry ?? getProcessSdkRegistry(JSAPI_V4_DOMAIN);
@@ -185,7 +185,7 @@ function resolveLoadOutcome(
  * 解析到的那一个：内部真的调用官方 `@baidumap/jsapi-loader`，不是「装了依赖但继续自研 JSONP」。
  */
 export function baiduJsapiV4Provider(
-  options: BaiduJsapiV4ProviderOptions = {},
+  options: BaiduJsapiV4ProviderInternalOptions = {},
 ): BaiduJsapiV4Provider {
   return new BaiduJsapiV4Provider(options);
 }

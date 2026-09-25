@@ -102,6 +102,12 @@ function run(cmd: string, cwd: string, label: string) {
 
 function copyTree(src: string, dest: string) {
   for (const entry of readdirSync(src, { withFileTypes: true })) {
+    // 源 fixture 里可能残留**本地产物** `node_modules`（已 gitignore）。copyFileSync 会把
+    // 符号链接**解引用**成普通文件：`.bin/vue-tsc` 从 `-> ../vue-tsc/bin/vue-tsc.js` 变成
+    // 一份内容相同的拷贝，而 `require('../index.js')` 相对的是 `.bin/` 而不是包目录 ⇒
+    // `npx vue-tsc` 报 MODULE_NOT_FOUND。npm 看到依赖已就位只更新 tarball，不会重建 bin。
+    // fixture 源目录只放需要被复制的**输入**，依赖一律交给 npm 重新装。
+    if (entry.name === 'node_modules') continue
     const s = resolve(src, entry.name)
     const d = resolve(dest, entry.name)
     if (entry.isDirectory()) {

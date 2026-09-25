@@ -29,7 +29,7 @@ import {
 import { reuseExistingJsapiV4 } from "./reuse";
 import type {
   JsapiV4Provider,
-  JsapiV4ProviderOptions,
+  JsapiV4ProviderInternalOptions,
   JsapiV4ScriptMode,
   LoadedJsapiV4,
 } from "./types";
@@ -37,10 +37,18 @@ import type {
 /** 一次性全局回调名前缀（与 legacy `__bmap_offline_` 区分，便于排障）。 */
 const CALLBACK_PREFIX = "__bmap_v4_custom_";
 
-export interface CustomScriptV4ProviderOptions extends JsapiV4ProviderOptions {
+export interface CustomScriptV4ProviderOptions {
   /** 就绪信号；缺省 `load`。入口支持 `callback` 时必须显式传 `jsonp`。 */
   mode?: JsapiV4ScriptMode;
 }
+
+/**
+ * 内部选项：公共的 `mode` + 仅内部 / 测试的 transport 与冲突域注入（见
+ * `JsapiV4ProviderInternalOptions`）。`./advanced` 只承诺 `CustomScriptV4ProviderOptions`。
+ */
+export interface CustomScriptV4ProviderInternalOptions
+  extends CustomScriptV4ProviderOptions,
+    JsapiV4ProviderInternalOptions {}
 
 export class CustomScriptV4Provider implements JsapiV4Provider {
   readonly id = "custom-script-v4" as const;
@@ -49,7 +57,7 @@ export class CustomScriptV4Provider implements JsapiV4Provider {
   private readonly loader: ScriptLoader;
   private readonly domain: SdkRegistry;
 
-  constructor(scriptSrc: string, options: CustomScriptV4ProviderOptions = {}) {
+  constructor(scriptSrc: string, options: CustomScriptV4ProviderInternalOptions = {}) {
     if (!scriptSrc) {
       throw new BMapError(
         "BMAP_INVALID_ARGUMENT",
@@ -141,7 +149,7 @@ export class CustomScriptV4Provider implements JsapiV4Provider {
 /** 企业自托管 / 私有入口 Provider 工厂。 */
 export function customScriptV4Provider(
   scriptSrc: string,
-  options: CustomScriptV4ProviderOptions = {},
+  options: CustomScriptV4ProviderInternalOptions = {},
 ): CustomScriptV4Provider {
   return new CustomScriptV4Provider(scriptSrc, options);
 }

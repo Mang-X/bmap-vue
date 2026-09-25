@@ -311,31 +311,32 @@ describe("被判定 REMOVE / 内部化的名字不得出现在公共面（#104 �
   it("声明文本：剥注释后不得再出现（正证 + 反误报 + 未剥对照，同一条判定式）", () => {
     // 正证：判定式对一个**确实在**公共声明面里的名字必须命中。它同时挡住两种恒真：
     // 「判定式写歪」与「stripComments 把实现也剥掉了」—— 后者会让下面的负向断言永远通过。
-    // `SdkRegistryOptions` 现在落在 `dist/advanced.d.ts`：Provider 家族并入 `./advanced` 时，
-    // `SdkRegistry` 作为 `registry` 注入字段的类型被一并带进声明（它是**引用**，不是导出）。
+    // 样本挑「只被引用、没被导出」的名字：`BMapLoadOptions` 就落在 `dist/advanced.d.ts`
+    // （`JsapiV4Provider.getCacheKey/load` 的参数类型）。原先用的 `SdkRegistryOptions` 已随
+    // #159 收窄注入面（`registry?: SdkRegistry` 移出 `./advanced` 的公共选项）离开这份产物。
     const advancedDts = readFileSync(resolve(DIST, "advanced.d.ts"), "utf8");
-    expect(mentions(advancedDts, "SdkRegistryOptions"), "正证失败：判定式连在面上的名字都读不到").toBe(true);
+    expect(mentions(advancedDts, "BMapLoadOptions"), "正证失败：判定式连在面上的名字都读不到").toBe(true);
     expect(mentions(advancedDts, "baiduJsapiV4Provider"), "正证失败：判定式读不到值导出").toBe(true);
 
     // 反误报（三种注释形态，同一个判定式）：注释里的提及不得命中。
-    // 这段 JSDoc 的**真实样本**就在产物里（`SdkRegistry.ts` 讲「为什么删掉」的历史注记会随
-    // `SdkRegistryOptions` 的 JSDoc 进 `dist/advanced.d.ts`），下一段断言就是在真产物上比的。
     expect(mentions("// 曾经有 SdkConflictPolicy\n", "SdkConflictPolicy")).toBe(false);
     expect(mentions("/* useMapResource 已被取代 */\n", "useMapResource")).toBe(false);
     expect(mentions("const x = 1; // onConflict 见说明\n", "onConflict")).toBe(false);
 
     const raw = readDtsText();
-    // 真实产物上的「未剥 vs 剥后」对照：证明 stripComments 是 **load-bearing** 的，
-    // 而不是一层从没生效过的装饰。样本是 `dist/advanced.d.ts` 里 `SdkRegistry` 的历史 JSDoc
-    // （`conflictPolicy` / `onConflict` 就写在注释里）。若哪天那批历史注记被清掉，这条会红
-    // 并提示可以简化本用例。
-    const rawHits = REMOVED_TYPE_OR_FIELD_NAMES.filter((name) =>
-      new RegExp(`\\b${name}\\b`).test(raw),
-    );
+    // 真实产物上的「未剥 vs 剥后」对照：证明 stripComments 在**这份**产物上真的动了手，
+    // 而不是一层从没生效过的装饰。
+    //
+    // 原先的样本是 `dist/advanced.d.ts` 里 `SdkRegistryOptions` 的历史 JSDoc（`conflictPolicy` /
+    // `onConflict` 写在注释里）。#159 把 `registry` / 自研 `loader` 移出公共选项后，那个类型连同
+    // 注释一起离开产物 —— 于是按本用例原话（「若哪天那批历史注记被清掉，这条会红并提示可以简化」）
+    // 把判据换成不依赖任何具体历史注记的两条：产物里**有** JSDoc，且剥掉之后**真的变短**。
+    // 「注释里的名字不命中」由上面三条合成样本负责，「名字确实写在实现里」由下面的负向 + 正证负责。
+    expect(/\/\*\*[\s\S]*?\*\//.test(raw), "公共声明面里没有任何 JSDoc —— 剥注释没有作用对象").toBe(true);
     expect(
-      rawHits.length,
-      "产物里已经没有把这些名字写在 JSDoc 里的说明 —— stripComments 不再 load-bearing，本用例的反误报段可以简化",
-    ).toBeGreaterThan(0);
+      stripComments(raw).length,
+      "stripComments 对真实产物零作用 —— 下面的负向断言会恒真",
+    ).toBeLessThan(raw.length);
 
     // 负向：剥掉注释之后，真实产物里一个都不许有。
     const leaked = REMOVED_TYPE_OR_FIELD_NAMES.filter((name) => mentions(raw, name));

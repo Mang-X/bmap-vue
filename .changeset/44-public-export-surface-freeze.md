@@ -21,7 +21,8 @@ Runtime / Registry / Scope。issue 的决策门明确「禁止『先全导出以
 | 变更 | 之前 | 现在 |
 | --- | --- | --- |
 | `bmap-vue/core` 子入口 | 公开子路径（105 个值导出；#104 第三批之前是 113） | **取消**：`exports` / Vite 构建入口 / `verify:package` 必需子路径清单一并去掉，`dist/core.{mjs,d.ts}` 不再产出。仓库内部仍用 `src/core/index.ts`（测试按相对路径 import，内部化 ≠ 删除） |
-| v4 Provider 家族 4 个值 | `import { baiduJsapiV4Provider } from "bmap-vue/core"` | `from "bmap-vue/advanced"`：`baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider` / `createLoadedJsapiV4`（含它们的选项类型 `BaiduJsapiV4ProviderOptions` / `CustomScriptV4ProviderOptions` / `JsapiV4ProviderOptions` / `CreateLoadedJsapiV4Input`） |
+| v4 Provider 家族 4 个值 | `import { baiduJsapiV4Provider } from "bmap-vue/core"` | `from "bmap-vue/advanced"`：`baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider` / `createLoadedJsapiV4`（含它们的选项类型 `BaiduJsapiV4ProviderOptions` / `CustomScriptV4ProviderOptions` / `CreateLoadedJsapiV4Input`） |
+| `./advanced` 上三个 Provider 工厂的**签名** | 直接 re-export 内部工厂：返回未导出的具体类；`existingGlobalV4Provider(options?)` 收 `registry` / 自研 `loader` 注入 | 返回**导出的** `JsapiV4Provider`；`BaiduJsapiV4ProviderOptions` 只剩 `loader?: OfficialJsapiLoader`、`CustomScriptV4ProviderOptions` 只剩 `mode?: JsapiV4ScriptMode`、`existingGlobalV4Provider()` 不再收参数；两个外部**无法构造**的注入字段（`registry?: SdkRegistry`、`loader?: ScriptLoader`）从公共选项**移除**（内部以 `*InternalOptions` 保留，测试按相对路径注入不受影响）；类型 `JsapiV4ProviderOptions` 从 `./advanced` 移除；新增类型导出 `JsapiV4Provider` / `OfficialJsapiLoader` / `OfficialJsapiLoadOptions` / `JsapiV4ScriptMode` |
 | `LoadedSdk`（根入口与 `./advanced` 的类型别名） | `LoadedSdk = LoadedJsapiV4` 单成员别名 | **删除**，唯一名字是 `LoadedJsapiV4`。`assertLoadedSdk` / `isLoadedSdk`（`./advanced`）返回值也写成 `LoadedJsapiV4`。取代 ADR 2026-09-14 决策 2 的「保留为别名」 |
 | `MapRuntimeStatus`（根入口类型） | 含 `"loading"` 别名的状态类型 | **删除**，唯一名字是 `MapStatus`（运行期 #71 起已不写 `"loading"`，文档承诺已在 #104 修正） |
 | `MapRuntimeOptions.clientFactory` | 与 `clientContext` 二选一的第二条臂 | **删除**，只认 `clientContext`（`MapRuntimeOptions` 本身只在内部 barrel 上，随 `./core` 取消不再公开） |
@@ -49,19 +50,25 @@ Runtime / Registry / Scope。issue 的决策门明确「禁止『先全导出以
 - `pnpm check:api`（新）—— API Extractor 基线报告，`packages/bmap-vue/etc/<出口>/bmap-vue.api.md`，
   覆盖 `./advanced` `./composables` `./plugins` `./resolver` `./ui-kit`；改了公共类型面而没跑
   `pnpm generate:api` 就红。CI 在 `typecheck:*` → `build:package` 之后跑它（`dist` 是它的输入）。
-- 根入口与 `./components` **暂时进不了 API report**：Volar 生成的多声明 `var`（`__VLS_1` / `__VLS_3` /
+- `pnpm check:api` 同时钉住各出口 `ae-forgotten-export` 的**条数上限**（`FORGOTTEN_EXPORT_CEILING`，
+  只许减不许增）：`advanced` 27 / `composables` 41 / `plugins` 9 / `ui-kit` 21（`resolver` 0）。
+  这些类型在报告里只剩一个名字、结构漂移不改基线文本，条数是唯一可比的量。
+- 根入口与 `./components` **进不了 API report**：Volar 生成的多声明 `var`（`__VLS_1` / `__VLS_3` /
   `__VLS_5`）没被 `bundleTypes` 带进合并后的 d.ts，留下悬空引用，AE 抛
   `Symbol not found for identifier: __VLS_*`。这不是本票引入的（源与打包配置都没动），门禁对这两个
-  出口跑**探针**并断言失败模式仍是这一种——阻塞被修好或变质都会红。根入口的类型面此时由
-  `check:public-dts` + 上面的值集合测试 + `generate:api-diff:check` + `verify:package` 四道守。
+  出口跑**探针**并断言失败模式仍是这一种——阻塞被修好或变质都会红。
+  同时它们各有一份**类型级签名基线** `packages/bmap-vue/etc/<出口>/bmap-vue.dts.md`
+  （`dist/<出口>.d.ts` 经 TypeScript printer `removeComments` 规范化后的全文）：`MapProps`、
+  组件的 props / emits / slots / 暴露方法、根入口函数签名一改就红。AE 分析不了 ≠ 没有基线。
+  另有 `check:public-dts` + 上面的值集合测试 + `generate:api-diff:check` + `verify:package` 四道守。
 
 `UseSdkResourceOptions` 作为**未导出**的参数类型仍出现在 `dist/index.d.ts` 的 `useSdkResource`
-签名里（消费方无法为它命名），这条如实登记为欠账，不在本票顺手修——它进不了「声明文本里不得出现」
-的名单，否则必然误报。
+签名里：它进不了「声明文本里不得出现」的名单（那样必然误报），但**已经**被上面那份根入口签名基线
+钉住 —— 形状一改基线就漂移。它是登记在案的存量，不是无从钉起的欠账。
 
-同类一条：Provider 家族迁进 `./advanced` 后，其选项里的 `registry?: SdkRegistry`、
-`loader?: ScriptLoader` / `OfficialJsapiLoader` 引用的三个类型也**没有**被导出
-（`./advanced` 的 `ae-forgotten-export` warning 覆盖它们）。按「不把内部 registry / loader
-冻结成公共契约」的口径刻意不导出，代价是这两个注入点目前只能在仓库内部使用；真出现外部消费者时
-按「升成稳定类型」或「去掉字段」二选一处置，不静默留着。详见
-[ADR 2026-09-25 后果](../docs/adr/2026-09-25-public-export-surface-freeze.md)。
+Provider 家族迁进 `./advanced` 时留下的注入面欠账**已收口**（#159 评审 P1-2）：`registry?: SdkRegistry`
+与 `loader?: ScriptLoader` 引用的两个类型没有被导出，而它们又带私有成员、外部**无法构造** ——
+留在公共选项里就是「赋不了值、结构也不进报告」的假支持，因此从公共选项**移除**，只留在内部选项里。
+可构造的那部分反过来**补上了导出**：`OfficialJsapiLoader` / `OfficialJsapiLoadOptions` /
+`JsapiV4ScriptMode` / `JsapiV4Provider`。结构仍不可见的存量由条数上限兜底，逐条清理是后续票的事。
+详见 [ADR 2026-09-25 后果](../docs/adr/2026-09-25-public-export-surface-freeze.md)。

@@ -19,12 +19,11 @@ export interface AutocompleteOptions {
 }
 
 // @public
-export function baiduJsapiV4Provider(options?: BaiduJsapiV4ProviderOptions): BaiduJsapiV4Provider;
+export const baiduJsapiV4Provider: (options?: BaiduJsapiV4ProviderOptions) => JsapiV4Provider;
 
 // @public
 export interface BaiduJsapiV4ProviderOptions {
     loader?: OfficialJsapiLoader;
-    registry?: SdkRegistry;
 }
 
 // @public (undocumented)
@@ -319,10 +318,10 @@ export interface CustomOverlayOptions {
 }
 
 // @public
-export function customScriptV4Provider(scriptSrc: string, options?: CustomScriptV4ProviderOptions): CustomScriptV4Provider;
+export const customScriptV4Provider: (scriptSrc: string, options?: CustomScriptV4ProviderOptions) => JsapiV4Provider;
 
 // @public (undocumented)
-export interface CustomScriptV4ProviderOptions extends JsapiV4ProviderOptions {
+export interface CustomScriptV4ProviderOptions {
     mode?: JsapiV4ScriptMode;
 }
 
@@ -353,7 +352,7 @@ export interface EventDriver {
 }
 
 // @public
-export function existingGlobalV4Provider(options?: JsapiV4ProviderOptions): ExistingGlobalV4Provider;
+export const existingGlobalV4Provider: () => JsapiV4Provider;
 
 // @public (undocumented)
 export interface GeometryDriver {
@@ -431,10 +430,17 @@ export function isPointLike(value: unknown): value is Point;
 export const jsapiV4DriverFactory: BMapDriverFactory;
 
 // @public
-export interface JsapiV4ProviderOptions {
-    loader?: ScriptLoader;
-    registry?: SdkRegistry;
+export interface JsapiV4Provider {
+    // (undocumented)
+    getCacheKey(options: BMapLoadOptions): string;
+    // (undocumented)
+    readonly id: JsapiV4ProviderId;
+    // (undocumented)
+    load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
+
+// @public
+export type JsapiV4ScriptMode = "load" | "jsonp";
 
 // @public (undocumented)
 export type LabelHandle = SdkHandle<"overlay:label">;
@@ -624,6 +630,23 @@ export function normalizeMapMouseEvent(raw: unknown, geometry: GeometryDriver): 
 
 // @public (undocumented)
 export function normalizeProvider(provider: BMapProviderLike): NormalizedProvider;
+
+// @public
+export interface OfficialJsapiLoader {
+    // (undocumented)
+    load(options: OfficialJsapiLoadOptions): Promise<unknown>;
+}
+
+// @public
+export interface OfficialJsapiLoadOptions {
+    // (undocumented)
+    readonly ak?: string;
+    readonly serviceHost?: string;
+    // (undocumented)
+    readonly timeout: number;
+    // (undocumented)
+    readonly version: OfficialJsapiV4Version;
+}
 
 // @public (undocumented)
 export interface OverlayDriver {
