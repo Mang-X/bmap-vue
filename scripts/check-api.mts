@@ -47,7 +47,7 @@
  * 比对本身交给 API Extractor（`apiReportChanged`，按空白归一后逐字符比），本脚本不再字节比对。
  */
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -195,7 +195,18 @@ function updateMode(): void {
     // API Extractor **不会**自己建 reportFolder：目录不存在时它只报 ApiReportFolderMissing
     // 并放弃写入（见 Extractor._writeApiReport 的“target file does not exist”分支）。
     mkdirSync(dirname(target), { recursive: true });
+    const existedBefore = existsSync(target);
     const { result, summary } = runExtractor(entry, true);
+    // 分析报错时写出的基线不可信（AE 仍会落盘）。把它留着等于给「坏基线」开了个提交口子，
+    // 所以：报错就退出；文件是这次才被写出来的一并删掉，别留在工作区里待提交。
+    if (result.errorCount > 0) {
+      if (!existedBefore && existsSync(target)) rmSync(target, { force: true });
+      throw new Error(
+        `[check-api] ${entry}: --local 期间分析报错 ${result.errorCount} 个（${summary || "无摘要"}）——` +
+          `基线不可信${existedBefore ? "，旧基线未改动" : "，已回滚新写出的文件"}；` +
+          `先修分析错误再重跑（--verbose 看明细）`,
+      );
+    }
     if (!existsSync(target)) {
       throw new Error(`[check-api] ${entry}: --local 之后基线仍不存在: ${target}`);
     }

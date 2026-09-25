@@ -39,18 +39,36 @@
 
 ### 1. 彻底取消 `./core` 子入口，而不是收窄它
 
-issue 的 `./core` 决策门要求「禁止『先全导出以后再删』」。按门里的三档逐项盘完，结论是：
+issue 的 `./core` 决策门要求「禁止『先全导出以后再删』」，并要求把现有 consumer **分成两列**
+（有公开消费者 / 只有库内消费者）。按门逐项盘完，105 个值导出落在四档：
 
-| 档 | 判据 | 命中 |
+| 档 | 判据 | 命中（冻结点实测） |
 | --- | --- | --- |
-| 有真实第三方 / 公开扩展需求 → 迁到 `./advanced` | 被**仓库之外**的扩展路径按名字取用 | `baiduJsapiV4Provider` / `customScriptV4Provider` / `existingGlobalV4Provider` / `createLoadedJsapiV4` 四个 v4 Provider 值 |
-| 只有仓库内部 consumer → 不公开 | 本仓源码按相对路径引用 | 其余全部（`MapRuntime`、`SdkRegistry`、`ScriptLoader`、`optionKey`、`getProcessSdkRegistry`、`useSdkResource` 一族……） |
+| 已有别的公共出口 ⇒ `./core` 这份只是**重复出口** | 名字同时出现在根入口（16 个）或 `./advanced`（7 个）上 | **A 列，23 个**（逐项见下） |
+| 有真实第三方 / 公开扩展需求 → 迁到 `./advanced` | 被**仓库之外**的扩展路径按名字取用 | 4 个 v4 Provider 值（已含在 A 列那 7 个里） |
+| 只有仓库内部 consumer → 不公开 | 本仓源码按相对路径引用 | **B 列，82 个**（`MapRuntime`、`SdkRegistry`、`ScriptLoader`、`optionKey`、`getProcessSdkRegistry`……） |
 | 仅测试 / 历史迁移 consumer → 删除 | 无生产消费者 | 已在 #104 第三批删掉的 `useMapResource` / `conflictPolicy` / `resetProcessSdkRegistryForTests` 等 |
 
-**4 : 101 的比例不构成一个「收窄后的稳定出口」**——剩下的 101 个仍然是把内部 Runtime / Registry /
-Scope 整包暴露。因此落点是**删除子路径**：`package.json#exports` 去掉 `./core`、Vite 构建入口去掉
-`core`、`verify:package` 的必需子路径清单去掉 `./core`、消费方 fixture 从 `bmap-vue/core` 改成
-`bmap-vue/advanced`。
+A 列逐项（16 + 7 = 23）：
+
+- **16 个本来就从根入口导出**（取消 `./core` 对它们**没有任何影响**）：`OVERLAY_EVENT_MATRIX`、
+  `OVERLAY_KINDS_WITHOUT_EVENT_MATRIX`、`ResourceScope`、`bmapClientContextKey`、
+  `createClientContext`、`defaultClientDefinitionKey`、`dynamicEmit`、`overlayEventOf`、
+  `overlayEventsOf`、`overlayPointerFallback`、`targetContextKey`、`useOptionalClientContext`、
+  `useOverlaySpec`、`useParentOverlayHandle`、`useRequiredClientContext`、`useSdkResource`；
+- **7 个经 `./advanced` 拿到**：迁移过去的 `baiduJsapiV4Provider` / `customScriptV4Provider` /
+  `existingGlobalV4Provider` / `createLoadedJsapiV4`，加本来就在 `./advanced` 上的
+  `assertLoadedSdk` / `isLoadedSdk` / `isPointLike`；
+- **B 列 82 个不逐个抄表**：文档表格会漂移，所以这两列由
+  `tests/behavior/core-surface.test.ts` 的分栏用例**当场重算**——A 列钉成精确集合，
+  B 列由定义就是「不在任何公共出口上」（补集的**个数**刻意不钉，否则「新增一个内部实现」
+  这种合法改动也要改测试）。
+
+**23 : 82 同样不构成一个「收窄后的稳定出口」**——剩下的 82 个仍是把内部 Runtime / Registry /
+Scope 整包暴露；而那 23 个又各自已经有根入口 / `./advanced` 两个合法落点，留着 `./core` 只会
+再制造一处重复事实源。因此落点是**删除子路径**：`package.json#exports` 去掉 `./core`、
+Vite 构建入口去掉 `core`、`verify:package` 的必需子路径清单去掉 `./core`、消费方 fixture 从
+`bmap-vue/core` 改成 `bmap-vue/advanced`。
 
 `src/core/**` 这个**内部 barrel 保留不动**：仓库内的测试按相对路径 import 它，
 「内部化」不等于「删除」（与 #104 把 `resetProcessSdkRegistryForTests` 内部化是同一条口径）。
@@ -75,7 +93,11 @@ Scope 整包暴露。因此落点是**删除子路径**：`package.json#exports`
 `package.json#exports` 的每个键都有 `dist` 产物（`*.mjs` + `*.d.ts`）。
 增删任何导出都要改测试文件本身——「顺手加一个导出」从静默变成一次显式评审。
 
-### 3. #104 留下的 7 项，逐条结清（不留别名）
+### 3. #104 留下的 7 项 + 出口形状的 1 项，逐条结清（不留别名）
+
+前 7 项是 #104 2026-09-22 评论登记的「要连带改夹具或改公共命名约定」清单；第 8 项是
+[Ownership-first 审计表](../zh-CN/contributing/architecture-ownership-audit.md) 里同样挂在 #44
+名下的**出口形状收窄**，一并在这里结清（审计表处置列已同步）。
 
 | # | 项 | 处置 |
 | --- | --- | --- |
@@ -86,6 +108,7 @@ Scope 整包暴露。因此落点是**删除子路径**：`package.json#exports`
 | 5 | `optionKey()` 对 `stableKeyOf` 的一行转发 | **内部化**：随 `./core` 取消一并移出公共面，仓库内按相对路径使用 |
 | 6 | `useBMapServiceTask` 经 `export * from "./composables"` 从根入口外泄 | **#139 已内部化**：根入口与 `./composables` 都不再有它，且无公开签名引用它的类型 |
 | 7 | `UseSdkResourceOptions` / `UseSdkResourceResult as UseUnifiedSdkResourceResult` | **内部化**：`UseUnifiedSdkResourceResult` 这个别名已从内部 barrel 之外消失（文本门禁可钉）；`UseSdkResourceOptions` 仍作为**未导出**的参数类型出现在 `dist/index.d.ts` 的 `useSdkResource` 签名里，因此它**不能**进「声明文本里不得出现」的名单（那样必然误报），欠账如实登记 |
+| 8 | `getProcessSdkRegistry(domain, options)` 首参与 `options.domain` 语义重复（删掉冲突开关后 `SdkRegistryOptions` 只剩 `domain`，三个 Provider 曾写成 `getProcessSdkRegistry(JSAPI_V4_DOMAIN, { domain: JSAPI_V4_DOMAIN })`） | **收窄 + 内部化**：签名收成单参 `getProcessSdkRegistry(domain = DEFAULT_DOMAIN)`，且随 `./core` 取消只在内部 barrel 上（ADR 2026-09-10 已加后续注记） |
 
 判据是**一条**：冻结面里不留任何 deprecation alias / 单成员别名——「以后再删」在 1.0 之后成本更高。
 
@@ -135,17 +158,26 @@ Scope 整包暴露。因此落点是**删除子路径**：`package.json#exports`
   `./package.json`）、五份 API report、组件集合与 Manifest 的
   相等关系，三处都是一改就红。
 - `./advanced` 成为唯一的扩展契约入口，v4 Provider 家族只此一处（根入口反证也钉住）。
-- 105 个值导出里 101 个内部实现不再被冻结成 3.0 的契约。
+- `./core` 的 105 个值导出里，**82 个内部实现**不再被冻结成 3.0 的契约；另外 23 个本来就有
+  根入口 / `./advanced` 这两个落点，取消子路径不改变它们的公共身份。
 
 **负面 / 代价**
 
 - **破坏性变更**：`bmap-vue/core` 消费方必须改 import（迁移目标是 `bmap-vue/advanced`）；
   `LoadedSdk` → `LoadedJsapiV4`、`MapRuntimeStatus` → `MapStatus` 的改名要出 release note。
-  当前 `1.0.0-rc.0`，beta 阶段按 `minor` 发布，变更记在 changeset 里。
+  当前 `1.0.0-rc.0`，按 **`major`** 登记（`.changeset/44-public-export-surface-freeze.md`），
+  变更一并写在那份 changeset 里。
 - `dist/index.d.ts` / `dist/components.d.ts` 的 `__VLS_` 悬空引用**仍然**在（且会被
   `skipLibCheck` 掩盖），本决策只保证「有探针盯着它」，不修复它。
 - `UseSdkResourceOptions` 作为未导出参数类型留在声明里，形状上「引用了不能命名的类型」，
   属于如实登记的欠账而非可钉死的不变量。
+- **同类欠账（随 Provider 迁进 `./advanced` 而产生）**：选项里的 `registry?: SdkRegistry`、
+  `loader?: ScriptLoader` / `OfficialJsapiLoader` 引用的三个类型**没有**被导出
+  （`./advanced` 基线里 33 条 `ae-forgotten-export` 就包含它们）。按冻结范围 4
+  「不把内部 queue / registry / recovery 状态冻结成公共契约」，这里刻意**不**导出
+  `SdkRegistry` / `ScriptLoader`，代价是消费方**无法为它们命名** ⇒ 这两个注入点目前只对仓库
+  内部可用。真出现外部消费者时按二选一处置——把类型升成 `./advanced` 的稳定类型，或从公共
+  选项里去掉这两个字段——**不要**静默留着（假支持比缺支持更贵）。
 
 **回滚**
 
@@ -162,7 +194,9 @@ Scope 整包暴露。因此落点是**删除子路径**：`package.json#exports`
 - **不建** `@bmap/core` 包，也不为「未来可能的其它框架消费者」预建包。
 - **不补**能力矩阵：冻结标准是「边界清楚且有证据」，未知能力按 Capability Catalog 标
   `unsupported` / `experimental` 即可。
-- **不**把 `./core` 的 105 个值导出钉成精确集合——决策是取消它，而不是冻结它。
+- **不**把 `./core` 的 105 个值导出钉成精确集合——决策是取消它，而不是冻结它；
+  被钉住的只有「还能从公共出口拿到的那 23 个」，它证明的是**取消没有波及公共面**，
+  不是「内部 barrel 的形状从此不能变」。
 
 ## 参考
 

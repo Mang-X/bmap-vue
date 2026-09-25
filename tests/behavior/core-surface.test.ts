@@ -6,9 +6,10 @@
  * 可回归断言，形状照 `advanced-contract.test.ts`（同一批人维护、同样的口径）。
  *
  * 本文件**刻意只守「已被判定为 REMOVE / 内部化」的那些名字**：#44 最终不是「冻结 `./core` 的
- * 全量导出面」，而是**取消了 `./core` 子路径**（105 个值导出里只有 4 个 Provider 家族名字有真实
- * 公开消费者，见 ADR 2026-09-25）。于是这些名字从「不该被冻结」升级成「**任何公共出口都不许有**」，
- * 本文件与 `advanced-contract.test.ts` 一起把它钉成会真的变红的守卫。
+ * 全量导出面」，而是**取消了 `./core` 子路径**（105 个值导出里 23 个本来就有别的公共出口，
+ * 82 个只有仓库内部消费者，见 ADR 2026-09-25 与下面的分栏用例）。于是这些名字从「不该被冻结」
+ * 升级成「**任何公共出口都不许有**」，本文件与 `advanced-contract.test.ts` 一起把它钉成会真的
+ * 变红的守卫。
  *
  * 三层判定，各自的失效方式不同，因此各自的对照组也不同：
  *
@@ -136,6 +137,49 @@ const REMOVED_TYPE_OR_FIELD_NAMES = [
   "conflictPolicy",
   "onConflict",
   "resetProcessSdkRegistryForTests",
+];
+
+/**
+ * `./core` 消费者分栏的 **A 列**：内部 barrel `src/core` 的值导出里，**仍能从某个公共出口拿到**的那些。
+ *
+ * issue #44 的 `./core` 决策门要求「逐项列出现有 consumer，分成『有公开消费者』与『只有库内消费者』
+ * 两列」。写成文档表格会漂移，所以这两列在下面由测试**当场重算**，这里只钉 A 列的名字：
+ *
+ * - `CORE_VIA_ROOT`（16 个）：`./core` 上的这一份是**重复出口**，根入口本来就有它们 ⇒ 取消子路径
+ *   对根入口消费者没有任何影响；
+ * - `CORE_VIA_ADVANCED`（7 个）：经 `./advanced` 拿到 —— 4 个 v4 Provider 值（#44 迁过去的）
+ *   加上 `assertLoadedSdk` / `isLoadedSdk` / `isPointLike`（它们本来就在 `./advanced` 上）。
+ *
+ * **B 列**（其余 82 个，只有仓库内部按相对路径 import）刻意**不**钉个数：它的定义就是
+ * 「不在任何公共出口上」，把补集的大小写死会把「新增一个内部实现」这种合法改动也变成改测试。
+ */
+const CORE_VIA_ROOT = [
+  "OVERLAY_EVENT_MATRIX",
+  "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX",
+  "ResourceScope",
+  "bmapClientContextKey",
+  "createClientContext",
+  "defaultClientDefinitionKey",
+  "dynamicEmit",
+  "overlayEventOf",
+  "overlayEventsOf",
+  "overlayPointerFallback",
+  "targetContextKey",
+  "useOptionalClientContext",
+  "useOverlaySpec",
+  "useParentOverlayHandle",
+  "useRequiredClientContext",
+  "useSdkResource",
+];
+
+const CORE_VIA_ADVANCED = [
+  "assertLoadedSdk",
+  "baiduJsapiV4Provider",
+  "createLoadedJsapiV4",
+  "customScriptV4Provider",
+  "existingGlobalV4Provider",
+  "isLoadedSdk",
+  "isPointLike",
 ];
 
 /** 剥注释后文本里是否出现了某个**标识符**（带词边界，避免 `conflictPolicyX` 满足 `conflictPolicy`）。 */
@@ -319,5 +363,53 @@ describe("包级前提（避免上面几条对着一个被改坏的 exports 断�
     } finally {
       registryResetFromSource();
     }
+  });
+});
+
+describe("./core 消费者分栏（#44 决策门要求的两列，由测试当场重算）", () => {
+  const sorted = (names: readonly string[]): string[] => [...names].sort();
+
+  /** 集合差异 —— 失效消息里给出「多出 / 缺失」，比一个大 toEqual 更能定位。 */
+  function diff(actual: readonly string[], expected: readonly string[]): string {
+    const a = new Set(actual);
+    const e = new Set(expected);
+    const added = actual.filter((n) => !e.has(n));
+    const removed = expected.filter((n) => !a.has(n));
+    const parts: string[] = [];
+    if (added.length) parts.push(`多出: ${added.join(", ")}`);
+    if (removed.length) parts.push(`缺失: ${removed.join(", ")}`);
+    return parts.join("；") || "（集合相同）";
+  }
+
+  it("A 列 = 内部 barrel ∩ 六个可静态 import 的公共出口，逐个相等；且它确实只是补集的一部分", () => {
+    // `./ui-kit` 不在这张并集里：它无 DOM 环境 import 即失败（见 AGENTS.md 的 ui-kit 硬约束），
+    // 静态 import 会把本用例变成「测试本身崩」。它包的是官方 UI Kit 四个组件 + 桥 + 加载器，
+    // 与 `src/core` 无交集；真要守住这条，`check:public-dts` 与 ui-kit-entry 的清单在管。
+    const publicUnion = new Set(ENTRIES.flatMap(([, entry]) => Object.keys(entry)));
+    const coreNames = Object.keys(core);
+    const reachable = sorted(coreNames.filter((name) => publicUnion.has(name)));
+
+    const expected = sorted([...CORE_VIA_ROOT, ...CORE_VIA_ADVANCED]);
+    expect(reachable, `A 列漂移 —— ${diff(reachable, expected)}`).toEqual(expected);
+
+    // 分栏自证：A 列正好是「根入口 16 + ./advanced 7」，两段之间不重叠
+    // （重叠的名字会既算进 A 列总数、又让下面那条「7 个不在根入口」变红）。
+    expect(CORE_VIA_ROOT.length, "A 列·根入口列应为 16 个").toBe(16);
+    expect(CORE_VIA_ADVANCED.length, "A 列·./advanced 列应为 7 个").toBe(7);
+    expect(new Set([...CORE_VIA_ROOT, ...CORE_VIA_ADVANCED]).size).toBe(
+      CORE_VIA_ROOT.length + CORE_VIA_ADVANCED.length,
+    );
+    // 7 个经 `./advanced` 的名字**不在**根入口 —— 否则它们就属于「根入口重复出口」那一列，
+    // 上面的分栏会把同一名字记在两处而漏掉一个真正只在 `./advanced` 上的名字。
+    const rootNames = new Set(Object.keys(root));
+    expect(CORE_VIA_ADVANCED.filter((name) => rootNames.has(name))).toEqual([]);
+    // 而 16 个经根入口的名字必须**真的**在根入口上（正证：分栏不是把名字抄进数组就算数）。
+    expect(CORE_VIA_ROOT.filter((name) => !rootNames.has(name))).toEqual([]);
+
+    // B 列非空的正证：少了它，上面那条「A 列 = 全体 ∩ 公共出口」会退化成一句恒真陈述
+    // （A 列被钉死的同时也钉死了补集非空，但补集为空时判定同样通过 —— 所以这里显式断言）。
+    expect(coreNames.length, "内部 barrel 被削到与公共出口等大，B 列消失").toBeGreaterThan(
+      reachable.length,
+    );
   });
 });

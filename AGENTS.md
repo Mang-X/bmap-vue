@@ -97,6 +97,7 @@ raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**
 | `pnpm check:raw-sdk:tree` | 扫描整棵 `src`：非白名单路径跑全套边界规则，白名单路径只跑旧引擎残留规则（`BMapGL` / `"webgl-v1"` / `"jsapi-v3"`） |
 | `pnpm check:raw-sdk:declarations` | `dist/**/*.d.ts` 的旧引擎残留不变量（需先 `pnpm build:package`；`check:public-dts` 不管 engine 取值） |
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:package`） |
+| `pnpm check:api` | 5 份 API report 基线无漂移（`packages/bmap-vue/etc/<出口>/bmap-vue.api.md`，出口 = `advanced` / `composables` / `plugins` / `resolver` / `ui-kit`；需先 `pnpm build:package`）。`.` 与 `./components` 目前进不了报告（Volar `__VLS_` 悬空引用），按**探针**断言该阻塞仍在。改了公共类型面就跑 `pnpm generate:api` 并把基线一起提交 |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 | `pnpm generate:api-diff:check` | 公开 API 对照表（vs 官方 React 参考）无漂移 |
 | `pnpm generate:overlay-emits:check` | 覆盖物 `defineEmits` 静态契约（`core/overlays/overlayEventEmits.generated.ts`）无漂移 |

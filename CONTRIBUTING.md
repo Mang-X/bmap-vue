@@ -66,15 +66,17 @@ pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 sk
 pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
+pnpm check:api                  # 5 份 API report 基线无漂移（#44 冻结的公共类型面）
 pnpm test:unit
 ```
 
 顺序不是随意的：`typecheck:package` 会把声明 emit 到 `dist/`，所以它要排在 `build:package` **之前**
-（`build:package` 会先清空 `dist`）；而 `check:public-dts`、`check:raw-sdk:declarations` 与
-`test:unit` 依赖 `dist/` 产物，必须排在 `build:package` 之后。
+（`build:package` 会先清空 `dist`）；而 `check:public-dts`、`check:raw-sdk:declarations`、
+`check:api` 与 `test:unit` 依赖 `dist/` 产物，必须排在 `build:package` 之后。
 
 如果 `generate:*:check` 报漂移，而你**确实**是有意改的，用对应的生成命令（`pnpm generate:manifest`、
-`pnpm generate:capability-matrix`、`pnpm generate:api-diff`、`pnpm generate:overlay-emits`）重新生成并一起提交；生成物不要手改。
+`pnpm generate:capability-matrix`、`pnpm generate:api-diff`、`pnpm generate:overlay-emits`、
+`pnpm generate:api`）重新生成并一起提交；生成物不要手改。
 
 包出口相关改动还要验证 tarball 消费方：
 
