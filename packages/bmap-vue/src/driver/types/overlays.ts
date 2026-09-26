@@ -11,8 +11,8 @@
  *
  * 分类口径（依据官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
  * - `mutable`：实例上有可用的**值型 setter** 或**成对 enable/disable 开关**，就地更新即可；
- * - `recreate`：只有构造选项，或实例上的 setter 不可安全使用（例：`Marker#setAnchor` 要等异步
- *   标注模块加载后才挂在实例上），必须重建实例才生效；
+ * - `recreate`：只有构造选项，或实例上的 setter 不可安全使用（例：`Marker#setAnchor` ——
+ *   声明里有、运行时**不在原型上**，实测调用即抛，见下方 `anchor` 条目的完整依据），必须重建实例才生效；
  * - `unsupported`：本引擎连构造选项都没有（或语义不在覆盖物上），必须换用别的 API。
  */
 import type { Capability } from "../capability/catalog";
@@ -553,7 +553,12 @@ export const OVERLAY_DESCRIPTORS = {
         { ctorKey: "enableClicking" },
       ),
       anchor: recreate(
-        "官方说明：setAnchor 只在异步标注模块加载之后才挂到实例上，构造后立刻调用可能抛 TypeError，因此锚点固定为构造期选项（值为 BMAP_ANCHOR_* 常量，不是 Size）",
+        "**依据是运行时实测，不是类型声明**：`Marker#setAnchor` 在 4.0.5 的声明里**存在**，"
+          + "但真实 4.0 里它**不在 `BMap.Marker.prototype` 上**，构造后立刻调用抛 "
+          + "`B.ControlAnchor is not a constructor`（`scripts/probe-runtime-members.mts`，"
+          + "2026-09-26；读数见 `docs/zh-CN/contributing/165-runtime-verification.md`）。"
+          + "所以锚点固定为构造期选项（值为 BMAP_ANCHOR_* 常量，不是 Size）。"
+          + "⚠️ 不要因为「声明里明明有 setAnchor」就改回 `mutateBy`——那正是本条要防的误判。",
         { ctorKey: "anchor" },
       ),
     }),

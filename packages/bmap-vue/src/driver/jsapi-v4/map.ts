@@ -96,12 +96,22 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  */
 const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
   normal: ["NORMAL", "BMAP_NORMAL_MAP"],
-  satellite: ["SATELLITE", "BMAP_SATELLITE_MAP"],
+  satellite: ["SATELLITE", "BMAP_SATELLITE_MAP", "STREET", "B_STREET_MAP"],
   // 混合图（#165 Class 1）：此前 `hybrid` 根本不在语义类型里，`<Map mapType="BMAP_HYBRID_MAP">`
-  // 被静默降级成普通图。候选名取法与其余三项同构（运行时名优先、d.ts 名后备）——**未取证**：
-  // 真实 4.0 的 `BMap.MapTypeId` 是否有 `HYBRID` 需要一次 live 读数；取不到时
-  // `resolveMapTypeConstant` 抛 `BMAP_SDK_CALL_FAILED`（显式失败，不是静默换图）。
-  hybrid: ["HYBRID", "BMAP_HYBRID_MAP"],
+  // 被静默降级成普通图。
+  //
+  // ⚠️ **live 实测：4.0.5 声明里的 `hybrid` 在真实运行时不存在**
+  // （`scripts/probe-runtime-members.mts`，2026-09-26 两次独立读数一致）。`BMap.MapTypeId`
+  // 运行时**只有三个**成员，且它们的**字面量与声明名完全不同**：
+  //   `{ NORMAL: "B_NORMAL_MAP", EARTH: "B_EARTH_MAP", SATELLITE: "B_STREET_MAP" }`
+  // ——官方 `MapTypeId.d.ts` 声明的 `BMAP_HYBRID_MAP` / `BMAP_NONE_MAP` 在运行时同样不存在。
+  //
+  // 因此 hybrid 的候选名**目前无法给出可信值**：真实混合底图在 4.0 要么走
+  // `BMap.MapType` 构造（不是 `MapTypeId` 常量），要么经 `setMapStyle`。取不到时
+  // `resolveMapTypeConstant` 抛 `BMAP_SDK_CALL_FAILED`——**显式失败，不是静默换图**，
+  // 这正是实测坐实的正确行为（静默换图会让用户拿到普通图却毫无察觉）。
+  // 证据：`docs/zh-CN/contributing/165-runtime-verification.md`。
+  hybrid: ["HYBRID", "BMAP_HYBRID_MAP", "B_HYBRID_MAP"],
   earth: ["EARTH", "BMAP_EARTH_MAP"],
 };
 
