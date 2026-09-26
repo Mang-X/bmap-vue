@@ -19,6 +19,13 @@ export interface AutocompleteOptions {
 }
 
 // @public
+export interface AutocompleteUpdateOptions {
+    location?: unknown;
+    // (undocumented)
+    types?: string[];
+}
+
+// @public
 export const baiduJsapiV4Provider: (options?: BaiduJsapiV4ProviderOptions) => JsapiV4Provider;
 
 // @public
@@ -85,6 +92,97 @@ export interface BMapDriverInput {
 // @public (undocumented)
 export type BMapEngine = "jsapi-v4";
 
+// @public (undocumented)
+export class BMapError extends Error {
+    constructor(code: BMapErrorCode, message: string, options?: BMapErrorOptions);
+    // (undocumented)
+    readonly code: BMapErrorCode;
+    // (undocumented)
+    static readonly codes: {
+        SDK_LOAD_FAILED: "BMAP_SDK_LOAD_FAILED";
+        SDK_LOAD_TIMEOUT: "BMAP_SDK_LOAD_TIMEOUT";
+        SDK_CONFIG_CONFLICT: "BMAP_SDK_CONFIG_CONFLICT";
+        SDK_ENGINE_MISMATCH: "BMAP_SDK_ENGINE_MISMATCH";
+        PROVIDER_ABORTED: "BMAP_PROVIDER_ABORTED";
+        RUNTIME_DISPOSED: "BMAP_RUNTIME_DISPOSED";
+        RESOURCE_DISPOSED: "BMAP_RESOURCE_DISPOSED";
+        PARENT_CONTEXT_MISSING: "BMAP_PARENT_CONTEXT_MISSING";
+        RESOURCE_CREATE_FAILED: "BMAP_RESOURCE_CREATE_FAILED";
+        RESOURCE_UPDATE_FAILED: "BMAP_RESOURCE_UPDATE_FAILED";
+        PLUGIN_LOAD_FAILED: "BMAP_PLUGIN_LOAD_FAILED";
+        PLUGIN_UNKNOWN: "BMAP_PLUGIN_UNKNOWN";
+        CAPABILITY_UNSUPPORTED: "BMAP_CAPABILITY_UNSUPPORTED";
+        SDK_CALL_FAILED: "BMAP_SDK_CALL_FAILED";
+        SERVICE_FAILED: "BMAP_SERVICE_FAILED";
+        INVALID_ARGUMENT: "BMAP_INVALID_ARGUMENT";
+        INVALID_POINT: "BMAP_INVALID_POINT";
+        HANDLE_FOREIGN: "BMAP_HANDLE_FOREIGN";
+        DUPLICATE_ITEM_KEY: "BMAP_DUPLICATE_ITEM_KEY";
+        UI_KIT_UNAVAILABLE: "BMAP_UI_KIT_UNAVAILABLE";
+    };
+    // (undocumented)
+    readonly component?: string;
+    // (undocumented)
+    readonly mapId?: symbol | string;
+    // (undocumented)
+    readonly plugin?: string;
+    get retryable(): boolean;
+    toJSON(): {
+        name: string;
+        code: BMapErrorCode;
+        message: string;
+        cause: unknown;
+        mapId: string | undefined;
+        component: string | undefined;
+        plugin: string | undefined;
+    };
+}
+
+// @public
+export type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED"
+/**
+* 插件**名字**不在 Catalog 里（`plugins: ['Typo']`）。
+*
+* 与 `BMAP_PLUGIN_LOAD_FAILED`（名字认得、脚本/依赖加载失败）分开：前者是调用方的配置错误、
+* 重试没有意义；后者才可能因为 CDN 抖动而值得重试。合在一起会让 `retryable` 说谎。
+*/
+| "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY"
+/** `./ui-kit` 的官方 UI Kit 不可用：无 DOM 环境调用，或 optional peer 未安装 / 加载失败。 */
+| "BMAP_UI_KIT_UNAVAILABLE";
+
+// @public (undocumented)
+export interface BMapErrorOptions {
+    // (undocumented)
+    capability?: string;
+    // (undocumented)
+    cause?: unknown;
+    // (undocumented)
+    component?: string;
+    // (undocumented)
+    engine?: string;
+    // (undocumented)
+    mapId?: symbol | string;
+    // (undocumented)
+    plugin?: string;
+    // (undocumented)
+    version?: string;
+}
+
+// @public (undocumented)
+export type BMapLoadOptions = {
+    ak?: string;
+    apiUrl?: string;
+    version?: string;
+    language?: string;
+    timeout?: number;
+    serviceHost?: string;
+    nonce?: string;
+    integrity?: string;
+    crossOrigin?: CrossOriginValue;
+    referrerPolicy?: ReferrerPolicy;
+    callbackParam?: string;
+};
+
 // @public
 export interface BMapProviderLike {
     // (undocumented)
@@ -93,6 +191,17 @@ export interface BMapProviderLike {
     readonly id?: string;
     // (undocumented)
     load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
+}
+
+// @public
+export interface BoundaryRequest {
+    name: string;
+}
+
+// @public
+export interface BoundaryRings {
+    readonly raw: readonly string[];
+    readonly rings: readonly (readonly Point[])[];
 }
 
 // @public (undocumented)
@@ -225,6 +334,25 @@ export interface ControlOptions {
     offset?: Pixel;
 }
 
+// @public
+export type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
+
+// @public (undocumented)
+export interface ConvertorRequest {
+    // (undocumented)
+    from: CoordinateFromType;
+    // (undocumented)
+    points: readonly Point[];
+    // (undocumented)
+    to: CoordinateToType;
+}
+
+// @public
+export type CoordinateFromType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+// @public (undocumented)
+export type CoordinateToType = 3 | 5 | 6;
+
 // @public (undocumented)
 export interface CopyrightEntry {
     // (undocumented)
@@ -255,6 +383,20 @@ export interface CreateBMapClientOptions {
 
 // @public (undocumented)
 export function createCapabilityRegistry(options: CreateCapabilityRegistryOptions): CapabilityRegistry;
+
+// @public (undocumented)
+export interface CreateCapabilityRegistryOptions {
+    // (undocumented)
+    engine: BMapEngine;
+    // (undocumented)
+    overrides?: Partial<Record<Capability, boolean>>;
+    // (undocumented)
+    rawSdk: unknown;
+    // (undocumented)
+    unsupported?: UnsupportedBehavior;
+    // (undocumented)
+    version: string;
+}
 
 // @public
 export function createHandle<Kind extends string, Raw>(kind: Kind, raw: Raw): SdkHandle<Kind, Raw>;
@@ -294,6 +436,9 @@ export interface CreateLoadedJsapiV4Input {
     // (undocumented)
     readonly versionSource: JsapiV4VersionSource;
 }
+
+// @public (undocumented)
+export type CrossOriginValue = "anonymous" | "use-credentials";
 
 // @public
 export interface CustomOverlayOptions {
@@ -345,6 +490,47 @@ export interface DriverEvent {
     zoomLevel?: number;
 }
 
+// @public
+const DrivingPolicy_2: {
+    readonly DEFAULT: 0;
+    readonly LEAST_DISTANCE: 2;
+    readonly AVOID_HIGHWAYS: 3;
+    readonly FIRST_HIGHWAYS: 4;
+    readonly AVOID_CONGESTION: 5;
+    readonly AVOID_PAY: 6;
+    readonly HIGHWAYS_AVOID_CONGESTION: 7;
+    readonly AVOID_HIGHWAYS_CONGESTION: 8;
+    readonly AVOID_CONGESTION_PAY: 9;
+    readonly AVOID_HIGHWAYS_CONGESTION_PAY: 10;
+    readonly AVOID_HIGHWAYS_PAY: 11;
+    readonly DISTANCE_PRIORITY: 12;
+    readonly TIME_PRIORITY: 13;
+};
+
+// @public (undocumented)
+type DrivingPolicy_2 = (typeof DrivingPolicy_2)[keyof typeof DrivingPolicy_2];
+export { DrivingPolicy_2 as DrivingPolicy }
+
+// @public
+export type DrivingRouteEndpoint = Point | RouteEndpointPoi;
+
+// @public
+export interface DrivingRouteOptions extends RouteState {
+    policy?: DrivingPolicy_2;
+}
+
+// @public
+export interface DrivingRouteRequest {
+    // (undocumented)
+    end: DrivingRouteEndpoint;
+    // (undocumented)
+    start: DrivingRouteEndpoint;
+    waypoints?: readonly Point[];
+}
+
+// @public (undocumented)
+export type DrivingRouteResult = RouteResult<RoutePlan>;
+
 // @public (undocumented)
 export interface EventDriver {
     // (undocumented)
@@ -353,6 +539,78 @@ export interface EventDriver {
 
 // @public
 export const existingGlobalV4Provider: () => JsapiV4Provider;
+
+// @public (undocumented)
+export interface GeocodedAddress {
+    // (undocumented)
+    address: string;
+    addressComponents: GeocodedAddressComponents;
+    business: string | null;
+    poiCount: number;
+    // (undocumented)
+    point: Point | null;
+    surroundingPois: readonly LocalSearchPoi[];
+}
+
+// @public
+export interface GeocodedAddressComponents {
+    // (undocumented)
+    city: string | null;
+    // (undocumented)
+    district: string | null;
+    // (undocumented)
+    province: string | null;
+    // (undocumented)
+    street: string | null;
+    // (undocumented)
+    streetNumber: string | null;
+}
+
+// @public
+export interface GeocodeRequest {
+    // (undocumented)
+    address: string;
+    city?: string;
+}
+
+// @public
+export interface GeolocationAddressInfo {
+    // (undocumented)
+    city?: string;
+    // (undocumented)
+    cityCode?: string | number;
+    // (undocumented)
+    country?: string;
+    // (undocumented)
+    district?: string;
+    // (undocumented)
+    province?: string;
+    // (undocumented)
+    street?: string;
+    // (undocumented)
+    streetNumber?: string;
+}
+
+// @public (undocumented)
+export interface GeolocationFix {
+    accuracy: number | null;
+    // (undocumented)
+    address: GeolocationAddressInfo | null;
+    // (undocumented)
+    point: Point;
+}
+
+// @public (undocumented)
+export interface GeolocationOptions {
+    // (undocumented)
+    enableHighAccuracy?: boolean;
+    // (undocumented)
+    maximumAge?: number;
+    // (undocumented)
+    SDKLocation?: boolean;
+    // (undocumented)
+    timeout?: number;
+}
 
 // @public (undocumented)
 export interface GeometryDriver {
@@ -421,13 +679,68 @@ export interface InitialMapOptions {
 }
 
 // @public
+const IntercityPolicy_2: {
+    readonly LEAST_TIME: 0;
+    readonly EARLY_START: 1;
+    readonly CHEAP_PRICE: 2;
+};
+
+// @public (undocumented)
+type IntercityPolicy_2 = (typeof IntercityPolicy_2)[keyof typeof IntercityPolicy_2];
+export { IntercityPolicy_2 as IntercityPolicy }
+
+// @public
 export function isLoadedSdk(value: unknown): value is LoadedJsapiV4;
 
 // @public (undocumented)
 export function isPointLike(value: unknown): value is Point;
 
 // @public
+export interface JsapiV4Driver extends BMapDriver {
+    // (undocumented)
+    readonly nativeLayers: NativeLayerDriver;
+    // (undocumented)
+    readonly panorama: PanoramaViewerDriver;
+    // (undocumented)
+    readonly services: JsapiV4ServiceDriver;
+}
+
+// @public
 export const jsapiV4DriverFactory: BMapDriverFactory;
+
+// @public
+export type JsapiV4Engine = "jsapi-v4";
+
+// @public (undocumented)
+export interface JsapiV4LoadMetadata {
+    readonly akRef: string;
+    readonly apiUrl: string;
+    readonly domain: string;
+    readonly fingerprint: string;
+    // (undocumented)
+    readonly loadedAt: number;
+    // (undocumented)
+    readonly mode: JsapiV4LoadMode;
+    // (undocumented)
+    readonly providerId: JsapiV4ProviderId;
+    // (undocumented)
+    readonly versionSource: JsapiV4VersionSource;
+}
+
+// @public
+export type JsapiV4LoadMode = JsapiV4ScriptMode | "existing-global";
+
+// @public
+export interface JsapiV4Namespace {
+    // (undocumented)
+    readonly [member: string]: unknown;
+    // (undocumented)
+    readonly Map: unknown;
+    // (undocumented)
+    readonly Marker: unknown;
+    // (undocumented)
+    readonly Point: unknown;
+}
 
 // @public
 export interface JsapiV4Provider {
@@ -440,7 +753,20 @@ export interface JsapiV4Provider {
 }
 
 // @public
+export type JsapiV4ProviderId = "baidu-jsapi-v4" | "existing-global-v4" | "custom-script-v4";
+
+// @public
 export type JsapiV4ScriptMode = "load" | "jsonp";
+
+// @public
+export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
+    clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+    disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
+    disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+}
+
+// @public
+export type JsapiV4VersionSource = "url" | "global" | "declared";
 
 // @public (undocumented)
 export type LabelHandle = SdkHandle<"overlay:label">;
@@ -460,6 +786,21 @@ export interface LabelOptions {
     // (undocumented)
     zIndex?: number;
 }
+
+// @public
+export interface LayerCreateOptions extends Record<string, unknown> {
+    createDOM?: (properties: object, point: {
+        lng: number;
+        lat: number;
+    }) => HTMLElement;
+    layerName?: string;
+}
+
+// @public
+export type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
+
+// @public
+export type LayerData = object;
 
 // @public (undocumented)
 export interface LayerDriver {
@@ -497,6 +838,15 @@ export type LayerHandle = SdkHandle<"layer" | `layer:${string}`>;
 export type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
 
 // @public
+export type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
+
+// @public
+export interface LayerSurface {
+    readonly ctorSlots: readonly LayerCtorSlot[];
+    readonly operations: readonly LayerOperation[];
+}
+
+// @public
 export interface LoadedJsapiV4 {
     // (undocumented)
     readonly engine: JsapiV4Engine;
@@ -506,6 +856,107 @@ export interface LoadedJsapiV4 {
     readonly namespace: JsapiV4Namespace;
     // (undocumented)
     readonly version: string;
+}
+
+// @public
+export interface LocalCityFix {
+    center: Point | null;
+    // (undocumented)
+    level: number | null;
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type LocalSearchBounds = Bounds;
+
+// @public
+export interface LocalSearchInBoundsRequest {
+    // (undocumented)
+    bounds: LocalSearchBounds;
+    // (undocumented)
+    keyword: LocalSearchKeyword;
+}
+
+// @public
+export type LocalSearchKeyword = string | readonly string[];
+
+// @public
+export interface LocalSearchNearbyRequest {
+    center: string | Point;
+    // (undocumented)
+    keyword: LocalSearchKeyword;
+    radius: number;
+}
+
+// @public
+export interface LocalSearchOptions {
+    pageCapacity?: number;
+    pageNum?: number;
+    // (undocumented)
+    renderOptions?: LocalSearchRenderOptions;
+}
+
+// @public
+export interface LocalSearchPoi {
+    adcode: string | null;
+    // (undocumented)
+    address: string | null;
+    // (undocumented)
+    city: string | null;
+    detailUrl: string | null;
+    isAccurate: boolean | null;
+    // (undocumented)
+    phoneNumber: string | null;
+    point: Point | null;
+    // (undocumented)
+    postcode: string | null;
+    // (undocumented)
+    province: string | null;
+    tags: readonly string[];
+    title: string;
+    uid: string;
+    url: string | null;
+}
+
+// @public
+export interface LocalSearchRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    selectFirstResult?: boolean;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export interface LocalSearchResult {
+    bounds: LocalSearchBounds | null;
+    center: Point | null;
+    cities: readonly {
+        readonly name: string;
+        readonly count: number;
+    }[];
+    city: string;
+    keyword: string;
+    moreResultsUrl: string | null;
+    pageCount: number;
+    pageIndex: number;
+    pageSize: number;
+    pois: readonly LocalSearchPoi[];
+    // (undocumented)
+    province: string;
+    radius: number | null;
+    suggestions: readonly string[];
+    total: number;
+}
+
+// @public
+export interface LocalSearchSearchOption {
+    forceLocal?: boolean;
 }
 
 // @public (undocumented)
@@ -625,11 +1076,99 @@ export interface MarkerOptions {
     zIndex?: number;
 }
 
+// @public
+export type NativeLayerData = Record<string, unknown>;
+
+// @public (undocumented)
+export interface NativeLayerDriver {
+    add(target: OverlayTarget, layer: NativeLayerHandle): void;
+    // (undocumented)
+    clearData(layer: NativeLayerHandle): void;
+    // (undocumented)
+    clearState(layer: NativeLayerHandle): void;
+    // (undocumented)
+    create(kind: NativeLayerKind, options?: Record<string, unknown>): NativeLayerHandle;
+    getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
+    hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+    // (undocumented)
+    pause(layer: NativeLayerHandle): void;
+    // (undocumented)
+    remove(target: OverlayTarget, layer: NativeLayerHandle): void;
+    // (undocumented)
+    removeState(layer: NativeLayerHandle, keys: NativeLayerFeatureKeys): void;
+    replaceState(layer: NativeLayerHandle, inputs: NativeLayerFeatureStateMap): void;
+    // (undocumented)
+    resume(layer: NativeLayerHandle): void;
+    // (undocumented)
+    setData(layer: NativeLayerHandle, data: NativeLayerData): void;
+    setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
+    // (undocumented)
+    setOpacity(layer: NativeLayerHandle, opacity: number): void;
+    setProcess(layer: NativeLayerHandle, process: number): void;
+    setSpeed(layer: NativeLayerHandle, speed: number): void;
+    setStyle(layer: NativeLayerHandle, style: Record<string, unknown>): void;
+    // (undocumented)
+    setVisible(layer: NativeLayerHandle, visible: boolean): void;
+    setZIndex(layer: NativeLayerHandle, zIndex: number): void;
+    // (undocumented)
+    setZoomRange(layer: NativeLayerHandle, range: NativeLayerZoomRange): void;
+    start(layer: NativeLayerHandle): void;
+    // (undocumented)
+    stop(layer: NativeLayerHandle): void;
+    supports(kind: NativeLayerKind, operation: NativeLayerOperation): boolean;
+    updateState(layer: NativeLayerHandle, keys: NativeLayerFeatureKeys, state: NativeLayerFeatureState, append?: boolean): void;
+}
+
+// @public
+export type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
+
+// @public
+export type NativeLayerFeatureState = Record<string, unknown>;
+
+// @public
+export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+
+// @public
+export type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
+
+// @public
+export type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line";
+
+// @public
+export type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+
+// @public
+export interface NativeLayerPick {
+    dataIndex: number;
+    // (undocumented)
+    dataItem: unknown;
+}
+
+// @public
+export interface NativeLayerZoomRange {
+    // (undocumented)
+    max?: number;
+    // (undocumented)
+    min?: number;
+}
+
+// @public (undocumented)
+export interface NormalizedProvider {
+    getCacheKey(options: BMapLoadOptions): string;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
+}
+
 // @public (undocumented)
 export function normalizeMapMouseEvent(raw: unknown, geometry: GeometryDriver): MapMouseEvent;
 
 // @public (undocumented)
 export function normalizeProvider(provider: BMapProviderLike): NormalizedProvider;
+
+// @public
+export const OFFICIAL_V4_VERSION = "4.0";
 
 // @public
 export interface OfficialJsapiLoader {
@@ -647,6 +1186,9 @@ export interface OfficialJsapiLoadOptions {
     // (undocumented)
     readonly version: OfficialJsapiV4Version;
 }
+
+// @public (undocumented)
+export type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
 
 // @public (undocumented)
 export interface OverlayDriver {
@@ -730,9 +1272,120 @@ export interface OverlayTarget {
 }
 
 // @public
+export interface PanoramaDataInfo {
+    // (undocumented)
+    description: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    position: Point | null;
+}
+
+// @public
 export interface PanoramaDriver {
     // (undocumented)
     readonly supported: boolean;
+}
+
+// @public
+export type PanoramaHandle = SdkHandle<"panorama">;
+
+// @public
+export type PanoramaLabelHandle = SdkHandle<"panorama:label">;
+
+// @public
+export interface PanoramaLabelOptions {
+    altitude?: number;
+    displayDistance?: boolean;
+    // (undocumented)
+    position?: Point;
+}
+
+// @public
+export interface PanoramaOptions {
+    albumsControl?: boolean;
+    albumsControlOptions?: Record<string, unknown>;
+    indoorSceneSwitchControl?: boolean;
+    linksControl?: boolean;
+    navigationControl?: boolean;
+}
+
+// @public
+export type PanoramaPoiType = "hotel" | "catering" | "movie" | "transit" | "indoor_scene" | "none";
+
+// @public
+export interface PanoramaPov {
+    // (undocumented)
+    heading: number;
+    // (undocumented)
+    pitch?: number;
+}
+
+// @public
+export type PanoramaSceneType = "street" | "inter";
+
+// @public
+export type PanoramaServiceHandle = SdkHandle<"service:panorama">;
+
+// @public
+export interface PanoramaSwitchOptions {
+    // (undocumented)
+    animation?: boolean;
+    // (undocumented)
+    animationType?: string;
+    // (undocumented)
+    fisheye?: boolean;
+    // (undocumented)
+    pov?: Partial<PanoramaPov>;
+}
+
+// @public
+export interface PanoramaViewerDriver extends PanoramaDriver {
+    addLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+    create(container: string | HTMLElement, options?: PanoramaOptions): PanoramaHandle;
+    createLabel(content: string, options?: PanoramaLabelOptions): PanoramaLabelHandle;
+    // (undocumented)
+    createService(): PanoramaServiceHandle;
+    destroy(viewer: PanoramaHandle): void;
+    disableScrollWheelZoom(viewer: PanoramaHandle): void;
+    enableScrollWheelZoom(viewer: PanoramaHandle): void;
+    findById(service: PanoramaServiceHandle, id: string): ServiceCall<PanoramaDataInfo>;
+    findByLocation(service: PanoramaServiceHandle, position: Point, radius?: number): ServiceCall<PanoramaDataInfo>;
+    // (undocumented)
+    getId(viewer: PanoramaHandle): string | null;
+    getPosition(viewer: PanoramaHandle): Point | null;
+    // (undocumented)
+    getPov(viewer: PanoramaHandle): PanoramaPov | null;
+    // (undocumented)
+    getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
+    getVisible(viewer: PanoramaHandle): boolean;
+    // (undocumented)
+    getZoom(viewer: PanoramaHandle): number | null;
+    // (undocumented)
+    hide(viewer: PanoramaHandle): void;
+    on(target: PanoramaHandle | PanoramaLabelHandle, type: string, listener: (event: unknown) => void): () => void;
+    removeLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+    setId(viewer: PanoramaHandle, id: string, options?: PanoramaSwitchOptions): void;
+    // (undocumented)
+    setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
+    // (undocumented)
+    setLabelContent(label: PanoramaLabelHandle, content: string): void;
+    // (undocumented)
+    setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
+    setOptions(viewer: PanoramaHandle, options: PanoramaOptions): void;
+    setPanoramaPoiType(viewer: PanoramaHandle, poiType: PanoramaPoiType): void;
+    // (undocumented)
+    setPosition(viewer: PanoramaHandle, position: Point): void;
+    // (undocumented)
+    setPov(viewer: PanoramaHandle, pov: PanoramaPov, options?: {
+        animation?: boolean;
+    }): void;
+    // (undocumented)
+    setZoom(viewer: PanoramaHandle, zoom: number, options?: {
+        noAnimation?: boolean;
+    }): void;
+    // (undocumented)
+    show(viewer: PanoramaHandle): void;
 }
 
 // @public (undocumented)
@@ -786,6 +1439,140 @@ export type PolygonHandle = SdkHandle<"overlay:polygon">;
 // @public (undocumented)
 export type PolylineHandle = SdkHandle<"overlay:polyline">;
 
+// @public
+export interface ReverseGeocodeRequest {
+    numPois?: number;
+    // (undocumented)
+    point: Point;
+    poiRadius?: number;
+}
+
+// @public (undocumented)
+export type RidingRouteOptions = RouteRenderState;
+
+// @public (undocumented)
+export type RidingRouteResult = RouteResult<RoutePlan>;
+
+// @public
+export type RouteEndpoint = string | Point | RouteEndpointPoi;
+
+// @public
+export interface RouteEndpointInfo {
+    point: Point | null;
+    title: string;
+    uid: string;
+}
+
+// @public
+export interface RouteEndpointPoi {
+    name?: string;
+    point: Point;
+    uid: string;
+}
+
+// @public
+export interface RouteLeg {
+    distance: number | null;
+    distanceText: string | null;
+    index: number;
+    path: readonly Point[];
+    planIndex: number | null;
+    routeType: number | null;
+    steps: readonly RouteStep[];
+}
+
+// @public
+export interface RoutePlan {
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    dragPois: readonly RouteEndpointInfo[];
+    // (undocumented)
+    duration: number | null;
+    // (undocumented)
+    durationText: string | null;
+    index: number;
+    legs: readonly RouteLeg[];
+    taxiFare: RouteTaxiFare | null;
+    toll: number | null;
+    tollDistance: number | null;
+}
+
+// @public
+export interface RouteRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export interface RouteRenderState {
+    renderOptions?: RouteRenderOptions;
+}
+
+// @public
+export interface RouteRequest {
+    // (undocumented)
+    end: RouteEndpoint;
+    // (undocumented)
+    start: RouteEndpoint;
+}
+
+// @public
+export interface RouteResult<TPlan> {
+    // (undocumented)
+    end: RouteEndpointInfo | null;
+    // (undocumented)
+    plans: readonly TPlan[];
+    policy: number | null;
+    // (undocumented)
+    start: RouteEndpointInfo | null;
+    transitType: number | null;
+}
+
+// @public
+export type RouteServiceHandle = ServiceHandle<RouteServiceKind>;
+
+// @public
+export type RouteServiceKind = "service:driving-route" | "service:walking-route" | "service:riding-route" | "service:transit-route";
+
+// @public
+export interface RouteState extends RouteRenderState {
+    enableTraffic?: boolean;
+}
+
+// @public
+export interface RouteStep {
+    description: string | null;
+    distance: number | null;
+    distanceText: string | null;
+    index: number;
+    planIndex: number | null;
+    position: Point | null;
+    routeIndex: number | null;
+}
+
+// @public
+export interface RouteTaxiFare {
+    day: RouteTaxiFareDetail | null;
+    distance: number | null;
+    night: RouteTaxiFareDetail | null;
+    remark: string | null;
+}
+
+// @public
+export interface RouteTaxiFareDetail {
+    initialFare: number | null;
+    totalFare: number | null;
+    unitFare: number | null;
+}
+
 // @public (undocumented)
 export interface SdkHandle<Kind extends string, Raw = unknown> {
     // (undocumented)
@@ -793,6 +1580,16 @@ export interface SdkHandle<Kind extends string, Raw = unknown> {
     // (undocumented)
     readonly raw: Raw;
 }
+
+// @public (undocumented)
+export interface ServiceCall<T> {
+    // (undocumented)
+    cancel(): void;
+    readonly result: Promise<ServiceResult<T>>;
+}
+
+// @public
+export type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
 
 // @public (undocumented)
 export interface ServiceDriver {
@@ -821,7 +1618,43 @@ export interface ServiceDriver {
 }
 
 // @public (undocumented)
+export interface ServiceErrorInfo {
+    code: number | string | null;
+    // (undocumented)
+    message: string;
+}
+
+// @public (undocumented)
 export type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
+
+// @public
+export interface ServiceInvocationDriver {
+    clearRouteResults(handle: RouteServiceHandle): void;
+    convert(handle: ServiceHandle<"service:convertor">, request: ConvertorRequest): ServiceCall<Point[]>;
+    disposeRoute(handle: RouteServiceHandle): void;
+    geocode(handle: ServiceHandle<"service:geocoder">, request: GeocodeRequest): ServiceCall<Point>;
+    gotoPage(handle: ServiceHandle<"service:local-search">, page: number): ServiceCall<LocalSearchResult[]>;
+    locate(handle: ServiceHandle<"service:geolocation">, options?: GeolocationOptions): ServiceCall<GeolocationFix>;
+    locateCity(handle: ServiceHandle<"service:local-city">): ServiceCall<LocalCityFix>;
+    queryBoundary(handle: ServiceHandle<"service:boundary">, request: BoundaryRequest): ServiceCall<BoundaryRings>;
+    reverseGeocode(handle: ServiceHandle<"service:geocoder">, request: ReverseGeocodeRequest): ServiceCall<GeocodedAddress>;
+    search(handle: ServiceHandle<"service:local-search">, keyword: LocalSearchKeyword, option?: LocalSearchSearchOption): ServiceCall<LocalSearchResult[]>;
+    searchDrivingRoute(handle: ServiceHandle<"service:driving-route">, request: DrivingRouteRequest): ServiceCall<DrivingRouteResult>;
+    searchInBounds(handle: ServiceHandle<"service:local-search">, request: LocalSearchInBoundsRequest): ServiceCall<LocalSearchResult[]>;
+    searchNearby(handle: ServiceHandle<"service:local-search">, request: LocalSearchNearbyRequest): ServiceCall<LocalSearchResult[]>;
+    searchRidingRoute(handle: ServiceHandle<"service:riding-route">, request: RouteRequest): ServiceCall<RidingRouteResult>;
+    searchTransitRoute(handle: ServiceHandle<"service:transit-route">, request: TransitRouteRequest): ServiceCall<TransitRouteResult>;
+    searchWalkingRoute(handle: ServiceHandle<"service:walking-route">, request: RouteRequest): ServiceCall<WalkingRouteResult>;
+}
+
+// @public (undocumented)
+export interface ServiceResult<T> {
+    readonly data: T | null;
+    readonly error: ServiceErrorInfo | null;
+    readonly sdkStatus: number | null;
+    // (undocumented)
+    readonly status: ServiceCallStatus;
+}
 
 // @public (undocumented)
 export interface Size {
@@ -846,6 +1679,88 @@ export function toPlainPoints(raw: readonly {
 // @public (undocumented)
 export function toPoint(input: PointInput): Point;
 
+// @public
+export interface TransitLineSegment {
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    // (undocumented)
+    kind: "line";
+    lineType: number | null;
+    offStop: RouteEndpointInfo | null;
+    onStop: RouteEndpointInfo | null;
+    path: readonly Point[];
+    title: string;
+    viaStops: number | null;
+}
+
+// @public
+const TransitPolicy_2: {
+    readonly RECOMMEND: 0;
+    readonly LEAST_TRANSFER: 1;
+    readonly LEAST_WALKING: 2;
+    readonly AVOID_SUBWAYS: 3;
+    readonly LEAST_TIME: 4;
+    readonly FIRST_SUBWAYS: 5;
+};
+
+// @public (undocumented)
+type TransitPolicy_2 = (typeof TransitPolicy_2)[keyof typeof TransitPolicy_2];
+export { TransitPolicy_2 as TransitPolicy }
+
+// @public
+export interface TransitRouteOptions extends RouteState {
+    intercityPolicy?: IntercityPolicy_2;
+    pageCapacity?: number;
+    policy?: TransitPolicy_2;
+    transitTypePolicy?: TransitVehiclePolicy;
+}
+
+// @public
+export interface TransitRoutePlan {
+    description: string | null;
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    // (undocumented)
+    duration: number | null;
+    // (undocumented)
+    durationText: string | null;
+    index: number;
+    linesTitle: string | null;
+    segments: readonly TransitRouteSegment[];
+    walkDistance: string | null;
+}
+
+// @public
+export type TransitRouteRequest = RouteRequest;
+
+// @public (undocumented)
+export type TransitRouteResult = RouteResult<TransitRoutePlan>;
+
+// @public
+export type TransitRouteSegment = TransitLineSegment | TransitWalkSegment;
+
+// @public
+export const TransitVehiclePolicy: {
+    readonly TRAIN: 0;
+    readonly AIRPLANE: 1;
+    readonly COACH: 2;
+};
+
+// @public (undocumented)
+export type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
+
+// @public
+export interface TransitWalkSegment {
+    // (undocumented)
+    kind: "walk";
+    // (undocumented)
+    leg: RouteLeg;
+}
+
 // @public (undocumented)
 export type UnsupportedBehavior = "throw" | "warn" | "silent";
 
@@ -862,6 +1777,21 @@ export class UnsupportedCapabilityError extends BMapError {
 
 // @public
 export function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
+
+// @public
+export type ViewAnimationCancelOutcome =
+/** 已起播 ⇒ 本次就调用了 SDK 的取消并且没抛错；记录已结算。 */
+"canceled"
+/** 还没起播 ⇒ 只登记了取消请求，真正取消要等启动安全窗口（**这条不是「已停止」**）。 */
+| "deferred"
+/** 本 Driver 已没有该实例的记录：早已结算 / 从未由它起播 ⇒ 没有可取消的东西。 */
+| "already-settled";
+
+// @public
+export type WalkingRouteOptions = RouteRenderState;
+
+// @public (undocumented)
+export type WalkingRouteResult = RouteResult<RoutePlan>;
 
 // (No @packageDocumentation comment for this package)
 

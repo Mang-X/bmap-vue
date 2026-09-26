@@ -174,6 +174,10 @@ const CORE_VIA_ROOT = [
 
 const CORE_VIA_ADVANCED = [
   "assertLoadedSdk",
+  // issue #160：`<RoutePlan>` 的 `error` 载荷、装配面与插件面的失败路径都产出
+  // `BMapError` 的实例，`UnsupportedCapabilityError extends BMapError` 也在公共面上 ——
+  // 不导出它，消费方只能 `catch (e: unknown)`。它因此从「内部」升为装配面的一等公民。
+  "BMapError",
   "baiduJsapiV4Provider",
   "createLoadedJsapiV4",
   "customScriptV4Provider",
@@ -394,9 +398,10 @@ describe("./core 消费者分栏（#44 决策门要求的两列，由测试当�
     expect(reachable, `A 列漂移 —— ${diff(reachable, expected)}`).toEqual(expected);
 
     // 分栏自证：A 列正好是「根入口 16 + ./advanced 7」，两段之间不重叠
-    // （重叠的名字会既算进 A 列总数、又让下面那条「7 个不在根入口」变红）。
+    // （重叠的名字会既算进 A 列总数、又让下面那条「不在根入口」变红）。
+    // 7 → 8 是 issue #160 把 `BMapError` 升为装配面一等公民的结果。
     expect(CORE_VIA_ROOT.length, "A 列·根入口列应为 16 个").toBe(16);
-    expect(CORE_VIA_ADVANCED.length, "A 列·./advanced 列应为 7 个").toBe(7);
+    expect(CORE_VIA_ADVANCED.length, "A 列·./advanced 列应为 8 个").toBe(8);
     expect(new Set([...CORE_VIA_ROOT, ...CORE_VIA_ADVANCED]).size).toBe(
       CORE_VIA_ROOT.length + CORE_VIA_ADVANCED.length,
     );

@@ -14,7 +14,7 @@ import type {
   LocalSearchPoi,
   ServiceErrorInfo,
 } from "../driver/types/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf, runSequential, type BMapServiceStatus } from "../core/services";
 import type { GeoPoint } from "./useGeocoder";
@@ -74,7 +74,7 @@ function toDetail(address: GeocodedAddress, requested: GeoPoint): GeocodeDetailR
 }
 
 export function useGeocodeDetail(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     GeocodedAddress,

@@ -18,16 +18,16 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 372 |
-| 名称对齐（交集） | 110 |
-| 仅官方有 | 292 |
-| 仅本库有 | 262 |
-| `./ui-kit` 子路径导出 | 55 |
+| 本库根入口导出 | 408 |
+| 名称对齐（交集） | 115 |
+| 仅官方有 | 287 |
+| 仅本库有 | 293 |
+| `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
 ### 交集按面分布
 
-component 45 · hook 14 · type 51
+component 45 · hook 14 · type 56
 
 ## 名称对齐
 
@@ -94,6 +94,7 @@ component 45 · hook 14 · type 51
 | `useRidingRoute` | hook | ✓ | ✓ |
 | `useTransitRoute` | hook | ✓ | ✓ |
 | `useWalkingRoute` | hook | ✓ | ✓ |
+| `AutocompleteOptions` | type | ✓ | ✓ |
 | `BezierCurveProps` | type | ✓ | ✓ |
 | `BMapDriver` | type | ✓ | ✓ |
 | `BMapProviderProps` | type | ✓ | ✓ |
@@ -102,6 +103,7 @@ component 45 · hook 14 · type 51
 | `CircleProps` | type | ✓ | ✓ |
 | `ContextMenuProps` | type | ✓ | ✓ |
 | `ControlHandle` | type | ✓ | ✓ |
+| `CustomOverlayOptions` | type | ✓ | ✓ |
 | `CustomOverlayProps` | type | ✓ | ✓ |
 | `DrivingPolicy` | type | ✓ | ✓ |
 | `DrivingRouteOptions` | type | ✓ | ✓ |
@@ -109,7 +111,9 @@ component 45 · hook 14 · type 51
 | `FillLayerProps` | type | ✓ | ✓ |
 | `FillLayerStyle` | type | ✓ | ✓ |
 | `GroundOverlayProps` | type | ✓ | ✓ |
+| `InfoWindowOptions` | type | ✓ | ✓ |
 | `InfoWindowProps` | type | ✓ | ✓ |
+| `LabelOptions` | type | ✓ | ✓ |
 | `LabelProps` | type | ✓ | ✓ |
 | `LayerHandle` | type | ✓ | ✓ |
 | `LineLayerProps` | type | ✓ | ✓ |
@@ -119,6 +123,7 @@ component 45 · hook 14 · type 51
 | `MapHandle` | type | ✓ | ✓ |
 | `MapMouseEvent` | type | ✓ | ✓ |
 | `MapProps` | type | ✓ | ✓ |
+| `MarkerOptions` | type | ✓ | ✓ |
 | `MarkerProps` | type | ✓ | ✓ |
 | `MenuItemProps` | type | ✓ | ✓ |
 | `MVTLayerProps` | type | ✓ | ✓ |
@@ -298,7 +303,6 @@ component 45 · hook 14 · type 51
 | `AddressComponent` | type | — |
 | `Animation` | type | — |
 | `AutocompleteHookResult` | type | — |
-| `AutocompleteOptions` | type | — |
 | `AutocompleteResult` | type | — |
 | `AutocompleteResultPoi` | type | — |
 | `BaiduLayerOptions` | type | — |
@@ -329,7 +333,6 @@ component 45 · hook 14 · type 51
 | `CustomControlProps` | type | — |
 | `CustomLayerOptions` | type | — |
 | `CustomLayerProps` | type | — |
-| `CustomOverlayOptions` | type | — |
 | `DisplayOptions` | type | — |
 | `DistrictLayerOptions` | type | — |
 | `DistrictLayerProps` | type | — |
@@ -356,8 +359,6 @@ component 45 · hook 14 · type 51
 | `IconProps` | type | — |
 | `IconSequenceHandle` | type | — |
 | `IconSequenceProps` | type | — |
-| `InfoWindowOptions` | type | — |
-| `LabelOptions` | type | — |
 | `Language` | type | — |
 | `LengthUnit` | type | — |
 | `LineLayerOptions` | type | — |
@@ -390,7 +391,6 @@ component 45 · hook 14 · type 51
 | `MapZoomEvent` | type | — |
 | `Marker3DOptions` | type | — |
 | `Marker3DProps` | type | — |
-| `MarkerOptions` | type | — |
 | `MVTLayerOptions` | type | — |
 | `NavigationControl3DOptions` | type | — |
 | `NavigationControl3DProps` | type | — |
@@ -512,6 +512,7 @@ component 45 · hook 14 · type 51
 | `useSdkResource` | hook | — |
 | `useViewAnimation` | hook | — |
 | `BMAP_COMPONENT_EVENT_CATALOG` | constant | — |
+| `AutocompleteUpdateOptions` | type | — |
 | `BMapClientContext` | type | Client 注入上下文；官方无同名导出。保留 `BMap*` 前缀以区别于地图实例上下文。 |
 | `BMapDrivingRouteOptions` | type | 路线服务选项；官方 hook 选项形态不同，不镜像同名 type。 |
 | `BMapGeolocationOptions` | type | 定位选项；官方 hook 不导出同名 options。 |
@@ -520,6 +521,7 @@ component 45 · hook 14 · type 51
 | `BMapLocalSearchOptions` | type | 本地检索 options；本库 service 层独立状态机，官方无同名 type。 |
 | `BMapLocalSearchRenderOptions` | type | 本地检索绘制 options；同上。 |
 | `BMapRidingRouteOptions` | type | 骑行路线选项；同上。 |
+| `BMapRouteRenderOptions` | type | — |
 | `BMapServiceStatus` | type | 服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。 |
 | `BMapTransitRouteOptions` | type | 公交路线选项；同上。 |
 | `BMapWalkingRouteOptions` | type | 步行路线选项；同上。 |
@@ -527,11 +529,13 @@ component 45 · hook 14 · type 51
 | `CircleHandle` | type | — |
 | `ClientStatus` | type | — |
 | `ContextMenuSelectPayload` | type | — |
+| `ControlOptions` | type | — |
 | `ControlOptionStatus` | type | — |
 | `CreateBMapClientOptions` | type | `createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。 |
 | `CreateBMapPluginOptions` | type | `createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。 |
 | `createClientContext` | type | — |
 | `DataComponentProps` | type | — |
+| `DriverEvent` | type | — |
 | `FeatureStateUpdateOptions` | type | — |
 | `GeocodeDetailItemResult` | type | — |
 | `GeocodeDetailResult` | type | — |
@@ -540,6 +544,7 @@ component 45 · hook 14 · type 51
 | `InfoWindowHandle` | type | — |
 | `InitialMapOptions` | type | — |
 | `LabelHandle` | type | — |
+| `LayerCreateOptions` | type | — |
 | `LocalSearchResult` | type | — |
 | `MapContext` | type | — |
 | `MapEventPayload` | type | — |
@@ -566,19 +571,24 @@ component 45 · hook 14 · type 51
 | `OverlayPointerEvent` | type | — |
 | `PanoramaLabelHandle` | type | — |
 | `PanoramaLabelOptions` | type | — |
+| `PathOptions` | type | — |
 | `PointLayerProps` | type | — |
 | `PolygonHandle` | type | — |
 | `PolylineHandle` | type | — |
+| `PublicMapContext` | type | — |
 | `ResolvedMapEvent` | type | — |
+| `resolveInternalMapContext` | type | — |
 | `resolveMapContext` | type | — |
 | `ResourceScopeOptions` | type | — |
 | `RouteRenderOptions` | type | — |
 | `RouteResult` | type | — |
 | `RouteServiceHandle` | type | — |
+| `SdkHandle` | type | — |
 | `SdkResourceStatus` | type | — |
 | `ServiceCallStatus` | type | — |
 | `ServiceResult` | type | — |
 | `TargetContext` | type | — |
+| `toPublicMapContext` | type | — |
 | `TrackLineLayerProps` | type | — |
 | `UseControllableStateOptions` | type | — |
 | `UseMapEventOptions` | type | — |
@@ -598,13 +608,16 @@ component 45 · hook 14 · type 51
 | `BMapPluginConfig` | other | 插件配置；官方无同名导出。 |
 | `BMapProviderLike` | other | Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。 |
 | `BMapResolver` | other | — |
+| `BMapRouteLocation` | other | — |
 | `BoundaryRings` | other | — |
 | `BUILTIN_PLUGIN_CATALOG` | other | — |
 | `BUILTIN_PLUGIN_NAMES` | other | — |
 | `BUILTIN_PLUGIN_URLS` | other | — |
+| `BuiltinMarkerIconName` | other | — |
 | `CapabilityDescriptor` | other | — |
 | `CapabilityExplanation` | other | — |
 | `CapabilityFamily` | other | — |
+| `CapabilityReason` | other | — |
 | `CapabilityRegistry` | other | — |
 | `ClusterChange` | other | — |
 | `ClusterPick` | other | — |
@@ -616,6 +629,7 @@ component 45 · hook 14 · type 51
 | `ControllableState` | other | — |
 | `CoordinatesFromType` | other | — |
 | `CoordinatesToType` | other | — |
+| `CopyrightEntry` | other | — |
 | `createBMapClientDefinition` | other | — |
 | `createBMapPlugin` | other | — |
 | `defaultClientDefinitionKey` | other | — |
@@ -628,14 +642,17 @@ component 45 · hook 14 · type 51
 | `dynamicEmit` | other | — |
 | `EqualFn` | other | — |
 | `EventDriver` | other | — |
+| `EventSourceClient` | other | — |
 | `FeaturePick` | other | — |
 | `FeatureStateApi` | other | — |
 | `FeatureStateKeyDomain` | other | — |
 | `FeatureStateKeys` | other | — |
 | `FeatureStateKeysOf` | other | — |
+| `FrameScheduler` | other | — |
 | `GeocodedAddress` | other | — |
 | `GeocodedAddressComponents` | other | — |
 | `GeocodeDetailAddressComponents` | other | — |
+| `GeolocationAddressInfo` | other | — |
 | `GeometryDriver` | other | — |
 | `GeoPoint` | other | — |
 | `geoUtilsPlugin` | other | — |
@@ -644,7 +661,12 @@ component 45 · hook 14 · type 51
 | `IntercityPolicy` | other | — |
 | `JsapiV4Driver` | other | — |
 | `LabelStyle` | other | — |
+| `LayerCtorSlot` | other | — |
+| `LayerData` | other | — |
 | `LayerDriver` | other | — |
+| `LayerKind` | other | — |
+| `LayerOperation` | other | — |
+| `LayerSurface` | other | — |
 | `LoadedJsapiV4` | other | — |
 | `LocalSearchBounds` | other | — |
 | `LocalSearchInBoundsRequest` | other | — |
@@ -661,6 +683,7 @@ component 45 · hook 14 · type 51
 | `MapComponentEventName` | other | — |
 | `MapDriver` | other | — |
 | `MapEventDefinition` | other | — |
+| `MapEventEmits` | other | — |
 | `MapEventHandler` | other | — |
 | `MapEventMap` | other | — |
 | `MapEventName` | other | — |
@@ -682,12 +705,16 @@ component 45 · hook 14 · type 51
 | `MarkerClusterEngine` | other | — |
 | `MarkerCustomIcon` | other | — |
 | `MarkerIcon` | other | — |
+| `MarkerIconInput` | other | — |
 | `MarkerIconName` | other | — |
 | `mvtFeatureStateKey` | other | — |
 | `MVTLayerEntity` | other | — |
 | `MVTLayerStyle` | other | — |
 | `MVTLayerStyleEntry` | other | — |
 | `NativeLayerDriver` | other | — |
+| `NativeLayerFeatureKeys` | other | — |
+| `NativeLayerFeatureState` | other | — |
+| `NativeLayerFeatureStateMap` | other | — |
 | `NativeLayerKind` | other | — |
 | `NativeLayerOperation` | other | — |
 | `normalizeEventKey` | other | — |
@@ -707,7 +734,9 @@ component 45 · hook 14 · type 51
 | `OverlayKind` | other | — |
 | `overlayPointerFallback` | other | — |
 | `OverlayPositionModel` | other | — |
+| `OverlayPropertyPolicy` | other | — |
 | `OverlaySpec` | other | — |
+| `OverlayTarget` | other | — |
 | `PanoramaDataInfo` | other | — |
 | `PanoramaDriver` | other | — |
 | `PanoramaPoiType` | other | — |
@@ -717,6 +746,7 @@ component 45 · hook 14 · type 51
 | `PointInput` | other | — |
 | `PointLike` | other | — |
 | `PointPick` | other | — |
+| `PublicBMapClient` | other | — |
 | `resolveMapEventName` | other | — |
 | `resolvePluginDefinition` | other | — |
 | `ResourceScope` | other | — |
@@ -754,21 +784,27 @@ component 45 · hook 14 · type 51
 | `TransitWalkSegment` | other | — |
 | `urlPluginDefinition` | other | — |
 | `UseViewAnimationReturn` | other | — |
+| `ViewAnimationCancelOutcome` | other | — |
 | `XYLike` | other | — |
 
 ## `./ui-kit` 子路径
 
 根入口**不**重导出 UI（ADR Official-first）。下列名字只从 `bmap-vue/ui-kit` 解析：
 
+- `BMapError`
+- `BMapErrorCode`
+- `BMapErrorOptions`
 - `isUiKitLoaded`
 - `loadUiKit`
 - `PlaceAutocomplete`
 - `PlaceAutocompleteDisplayDTO`
+- `PlaceAutocompleteExpose`
 - `PlaceAutocompleteProps`
 - `PlaceBoundsDTO`
 - `PlaceDetail`
 - `PlaceDetailDisplayDTO`
 - `PlaceDetailDTO`
+- `PlaceDetailExpose`
 - `PlaceDetailPlaceInput`
 - `PlaceDetailPlaceObject`
 - `PlaceDetailProps`
@@ -778,6 +814,7 @@ component 45 · hook 14 · type 51
 - `PlacePointDTO`
 - `PlaceSearch`
 - `PlaceSearchDisplayDTO`
+- `PlaceSearchExpose`
 - `PlaceSearchProps`
 - `PlaceSuggestionDTO`
 - `RouteDriveSegmentDTO`
@@ -785,6 +822,7 @@ component 45 · hook 14 · type 51
 - `RoutePlanDrivingPolicy`
 - `RoutePlanDTO`
 - `RoutePlanEndpointInput`
+- `RoutePlanExpose`
 - `RoutePlanMode`
 - `RoutePlanNavClickDTO`
 - `RoutePlanPlanSelectDTO`

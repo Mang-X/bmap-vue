@@ -13,9 +13,9 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import dts from 'vite-plugin-dts'
-import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
 import { versionDefine } from '../../scripts/vite-version-define.mjs'
-import { resolve, join } from 'node:path'
+import { resolve, join, dirname, relative, sep } from 'node:path'
 
 const root = resolve(import.meta.dirname)
 
@@ -99,6 +99,139 @@ function isJsapiV4BoundaryFile(filePath: string): boolean {
   return filePath.replace(/\\/g, '/').includes('/driver/jsapi-v4/')
 }
 
+// ── 子入口的「引用自己」必须改写（issue #160） ───────────────────────────────────
+//
+// `unplugin-dts` 对「从入口 barrel 转出、且自身又不在本子目录内声明」的符号，会在
+// per-module 声明里写成 `import('..').X`。从 `dist/composables/useMap.d.ts` 看，
+// `..` 指向的正是 **`dist/composables.d.ts` 本身**——也就是本次 rollup 的入口文件。
+// 于是同一个 `MapContext` / `MapHandle` / `BMapClient` / `ServiceResult` 同时以
+// 「rollup 根」和「被引用的模块」两种身份进入 API Extractor，触发它的
+// `_makeUniqueNames()` 判重，把整张类型图**复制一遍**并加 `_2` 后缀：
+// `dist/composables.d.ts` 里 114 个类型各出现两次（逐字节相同），`../index.d.ts`
+// 里连导出的别名都变成 `export { MapType_2 as MapType }`。
+//
+// 后果不只是产物臃肿：`check:api` 的 `ae-forgotten-export` 因此把 `MapHandle_2` /
+// `BMapClient_2` / `MapContext_2` / `BMapServiceStatus_2` / `ServiceErrorInfo_2` /
+// `MapStatus_2` / `DrivingPolicy_2` / `TransitPolicy_2` / `IntercityPolicy_2` 当成
+// 「未导出的类型」——而它们在**源码里各只声明了一次**，误判的根因在这里，不在源码。
+//
+// 这里把每个 `import('..').X` 换成指向 X **真正声明处**的相对 specifier。改写后
+// 入口不再被自己引用，判重消失（实测 114 → 0），且不改变任何类型语义。
+export function rewriteEntrySelfReExports(
+  content: string,
+  filePath: string,
+  declarationDir: string,
+  nameToFile: ReadonlyMap<string, string>,
+): string | undefined {
+  // 只处理 dist/<子目录> 下的 .d.ts：那里才是 `..` 会指回入口的位置。
+  if (!filePath.startsWith(declarationDir) || !filePath.endsWith('.d.ts')) return undefined
+  const fromDeclarationDir = filePath.slice(declarationDir.length + 1)
+  if (!fromDeclarationDir.includes('/')) return undefined // 入口自身在 dist 顶层，不改
+  // 注意：这里用**无 g 标志**的副本做前置判断。带 /g 的正则 `.test()` 会推进
+  // `lastIndex`，先 `.test()` 再 `.replace()` 会漏掉交替出现的匹配（`replace` 会从
+  // lastIndex 续跑），表现为「改写看起来跑了、但结果没变干净」。
+  const hasSelfImport = /import\((['"])\.\.\1\)\.(\w+)/.test(content)
+  const hasStaticSelfImport = /^import \{[^}]*\} from ['"]\.\.['"];?$/m.test(content)
+  if (!hasSelfImport && !hasStaticSelfImport) return undefined
+  const selfImportRE = /import\((['"])\.\.\1\)\.(\w+)/g
+  const staticSelfImportRE = /^import \{([^}]*)\} from ['"]\.\.['"];?$/gm
+  let changed = false
+  // 形式一：`vue-tsc` emit 的内联 `import("..").X`（unplugin-dts 可能保留原样）。
+  let output = content.replace(selfImportRE, (all, _quote: string, name: string) => {
+    const spec = specifierFor(name, filePath, nameToFile)
+    if (!spec) return all
+    changed = true
+    return `import('${spec}').${name}`
+  })
+  // 形式二：`unplugin-dts` 的 `transformCode` 把上面那种内联导入**提升成一条静态导入**，
+  // 于是 `useMap.d.ts` 变成 `import { MapContext, MapStatus, ... } from '..';` —— `..` 就是
+  // `dist/composables.d.ts`（本子入口自己）。这条自指让同一批符号同时以「rollup 根」和
+  // 「被引用模块」两种身份进入 API Extractor，触发 `_makeUniqueNames()` 判重。
+  output = output.replace(staticSelfImportRE, (all, names: string) => {
+    const specifiers = names
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    const resolved = specifiers.map((name) => [name, specifierFor(name, filePath, nameToFile)] as const)
+    if (resolved.some(([, spec]) => !spec)) {
+      return all
+    }
+    changed = true
+    return resolved.map(([name, spec]) => `import type { ${name} } from '${spec}';`).join('\n')
+  })
+  return changed ? output : undefined
+}
+
+/**
+ * 名字 → 指向其**真正声明处**的相对 specifier（无 `.d.ts` 后缀）；解析不到返回 `undefined`。
+ *
+ * 解析不到时调用方**原样保留**该引用：宁可留下一个能被 `check:api` 看见的重复，也不
+ * 静默改错目标 —— 后者会变成一个指向不存在模块的悬空引用，错误现场离病因十万八千里。
+ */
+function specifierFor(
+  name: string,
+  filePath: string,
+  nameToFile: ReadonlyMap<string, string>,
+): string | undefined {
+  const target = nameToFile.get(name)
+  if (!target) return undefined
+  const spec = relative(dirname(filePath), target).replace(/\.d\.ts$/, '').split(sep).join('/')
+  return spec.startsWith('.') ? spec : `./${spec}`
+}
+
+const DIST_DIR = resolve(root, 'dist')
+const SRC_DIR = resolve(root, 'src')
+
+/**
+ * 声明名 → 声明所在文件的索引（供 `rewriteEntrySelfImports` 用）。
+ *
+ * 扫的是 **`src/` 源码**而不是 dist：改写发生在 per-module 声明写入**之前**，dist 里
+ * 此刻只有已写出的那几个文件，扫它会得到半截索引（第一版就踩了这个坑，见下面的缓存键）。
+ * 索引记的值是「该名字**将会**落到哪个 `dist/*.d.ts`」—— 源码与声明同构，一一对应。
+ *
+ * **先到先得**：同名符号取先扫到的那份。被自指的 `import('..')` 引用到的名字
+ * （`MapContext` / `MapHandle` / `ServiceResult` …）在 `src/` 里都只有**一份**声明，
+ * 因此先到先得足够；真有重名时改写也仍会指向一个真实存在的模块，不会产生悬空引用。
+ */
+let declIndex: Map<string, string> | undefined
+let declIndexSize = -1
+function declarationNameIndex(): ReadonlyMap<string, string> {
+  // 缓存键用**文件数**：真值是「src 变了」，而文件数是它的廉价代理。
+  // `beforeWriteFile` 会被调上千次、每次重建索引不现实，因此必须有缓存；一次构建里
+  // `src/` 是静态的（watch 模式下才会变），所以正常构建永远命中缓存，只在 watch 增删
+  // 文件时重建。代价：watch 中**只改内容、不增删文件**时不会重建索引 —— 那种情况下改写
+  // 仍然正确（specifier 只依赖「哪个文件声明了它」，不依赖内容），只是用旧的映射。
+  const current = collectSourceFiles(SRC_DIR).length
+  if (declIndex && declIndexSize === current) return declIndex
+  const index = new Map<string, string>()
+  for (const file of collectSourceFiles(SRC_DIR)) {
+    const content = readFileSync(file, 'utf8')
+    // 顶层声明：`declare interface` / `export interface` / `export type` / `declare const` …
+    // 名字后跟 `<`（泛型）、`(`、`=`、`;`、空格或换行。
+    for (const match of content.matchAll(
+      /^(?:export )?(?:declare )?(?:interface|type|const|class|function) (\w+)(?=[ <({=;\n])/gm,
+    )) {
+      const name = match[1]!
+      if (index.has(name)) continue
+      // 索引记的是**声明产物**的路径：dist/<相对 src 的路径>.d.ts（`.vue` 同名）。
+      index.set(name, join(DIST_DIR, relative(SRC_DIR, file).replace(/\.ts$|\.vue$/, '.d.ts')))
+    }
+  }
+  declIndex = index
+  declIndexSize = current
+  return index
+}
+
+/** src 下的源码文件（`.vue` 的声明会落到同名 `.d.ts`，故按 `.vue` 去掉扩展名处理）。 */
+function collectSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) collectSourceFiles(full, out)
+    else if (/\.(ts|vue)$/.test(full) && !full.endsWith('.test.ts')) out.push(full)
+  }
+  return out
+}
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -115,10 +248,22 @@ export default defineConfig({
       // 不生成多余 .test.d.ts。类型边界 augmentation 保留在编译输入中，
       // 仅在写入阶段移除：跳过其独立声明，并从被打包内联的公共声明里剔除。
       exclude: ['src/**/*.test.ts', 'src/**/__tests__/**'],
+      // `rewriteEntrySelfImports` 挂在这里是**唯一可行**的位置，值得记一笔：
+      // `import("..")` 由 `vue-tsc` 的声明 emit 写出，经 `unplugin-dts` 的
+      // `transformCode` 提升成静态导入后，**在本钩子被调用时就已经是那个形态**了
+      // （`from '..'` 而非 `import("..")`）。`afterBuild` 跑在 `bundleTypes` 的
+      // rollup **之后**（实测那时 dist 只剩 7 个打包好的入口文件），改写已经太晚。
       beforeWriteFile: (filePath, content) => {
         if (isJsapiV4BoundaryFile(filePath)) return false
         const stripped = stripDeclareGlobalBlocks(content, jsapiV4AugmentationBlocks)
         if (stripped !== undefined) return { content: stripped }
+        const rewritten = rewriteEntrySelfReExports(
+          stripped ?? content,
+          filePath,
+          DIST_DIR,
+          declarationNameIndex(),
+        )
+        if (rewritten !== undefined) return { content: rewritten }
       },
       // 保留声明与源码结构对应,便于调试
       copyDtsFiles: true,

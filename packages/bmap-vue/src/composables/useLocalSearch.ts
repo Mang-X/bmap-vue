@@ -35,7 +35,7 @@ import type {
   LocalSearchSearchOption,
 } from "../driver/types/services";
 import { BMapError } from "../core/errors/BMapError";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useExclusiveServiceTask, type ServiceInvokeContext } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 import type { GeoPoint } from "./useGeocoder";
@@ -125,7 +125,7 @@ function sameConstruction(a: ConstructionSnapshot, b: ConstructionSnapshot): boo
 }
 
 export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions> = {}) {
-  const ctx = resolveMapContext();
+  const ctx = resolveInternalMapContext();
 
   const readOptions = (): BMapLocalSearchOptions => toValue(options) ?? {};
 

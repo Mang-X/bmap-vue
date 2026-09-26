@@ -11,7 +11,7 @@
 import { computed, type ComputedRef } from "vue";
 import type { ServiceHandle } from "../driver/types/handles";
 import type { BoundaryRings } from "../driver/types/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 
@@ -19,7 +19,7 @@ import { jsapiV4ServicesOf } from "../core/services";
 export type AreaBoundary = string[];
 
 export function useAreaBoundary(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     BoundaryRings,

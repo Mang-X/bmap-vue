@@ -13,7 +13,7 @@
  * **不需要地图实例**，因此 Provider 子树内同样可用。
  */
 import type { ServiceHandle } from "../driver/types/handles";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf, runSequential, type BMapServiceStatus } from "../core/services";
 import type { ServiceErrorInfo } from "../driver/types/services";
@@ -33,7 +33,7 @@ export interface GeocodeItemResult {
 }
 
 export function useGeocoder(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     GeoPoint,

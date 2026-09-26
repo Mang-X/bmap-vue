@@ -14,7 +14,7 @@ export declare interface AutocompleteOptions {
     types?: string[];
     onSearchComplete?: (event: unknown) => void;
 }
-declare interface AutocompleteUpdateOptions {
+export declare interface AutocompleteUpdateOptions {
     location?: unknown;
     types?: string[];
 }
@@ -52,7 +52,7 @@ export declare interface BMapDriverInput {
     readonly capabilityOverrides?: Partial<Record<Capability, boolean>>;
 }
 export declare type BMapEngine = "jsapi-v4";
-declare class BMapError extends Error {
+export declare class BMapError extends Error {
     readonly code: BMapErrorCode;
     readonly mapId?: symbol | string;
     readonly component?: string;
@@ -91,8 +91,8 @@ declare class BMapError extends Error {
         UI_KIT_UNAVAILABLE: "BMAP_UI_KIT_UNAVAILABLE";
     };
 }
-declare type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED" | "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY" | "BMAP_UI_KIT_UNAVAILABLE";
-declare interface BMapErrorOptions {
+export declare type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED" | "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY" | "BMAP_UI_KIT_UNAVAILABLE";
+export declare interface BMapErrorOptions {
     cause?: unknown;
     mapId?: symbol | string;
     component?: string;
@@ -101,7 +101,7 @@ declare interface BMapErrorOptions {
     engine?: string;
     version?: string;
 }
-declare type BMapLoadOptions = {
+export declare type BMapLoadOptions = {
     ak?: string;
     apiUrl?: string;
     version?: string;
@@ -119,10 +119,10 @@ export declare interface BMapProviderLike {
     getCacheKey?(options: BMapLoadOptions): string;
     load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
-declare interface BoundaryRequest {
+export declare interface BoundaryRequest {
     name: string;
 }
-declare interface BoundaryRings {
+export declare interface BoundaryRings {
     readonly raw: readonly string[];
     readonly rings: readonly (readonly Point[])[];
 }
@@ -189,14 +189,14 @@ export declare interface ControlOptions {
     offset?: Pixel;
     [key: string]: unknown;
 }
-declare type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
-declare interface ConvertorRequest {
+export declare type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
+export declare interface ConvertorRequest {
     points: readonly Point[];
     from: CoordinateFromType;
     to: CoordinateToType;
 }
-declare type CoordinateFromType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-declare type CoordinateToType = 3 | 5 | 6;
+export declare type CoordinateFromType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export declare type CoordinateToType = 3 | 5 | 6;
 export declare interface CopyrightEntry {
     id: number;
     content: string;
@@ -212,7 +212,7 @@ export declare interface CreateBMapClientOptions {
     capabilityOverrides?: Partial<Record<Capability, boolean>>;
 }
 export declare function createCapabilityRegistry(options: CreateCapabilityRegistryOptions): CapabilityRegistry;
-declare interface CreateCapabilityRegistryOptions {
+export declare interface CreateCapabilityRegistryOptions {
     engine: BMapEngine;
     version: string;
     rawSdk: unknown;
@@ -239,7 +239,7 @@ export declare interface CreateLoadedJsapiV4Input {
     readonly apiUrl?: string;
     readonly loadedAt?: number;
 }
-declare type CrossOriginValue = "anonymous" | "use-credentials";
+export declare type CrossOriginValue = "anonymous" | "use-credentials";
 export declare interface CustomOverlayOptions {
     offset?: Pixel;
     anchor?: Pixel;
@@ -288,21 +288,22 @@ declare const DrivingPolicy_2: {
     readonly TIME_PRIORITY: 13;
 };
 declare type DrivingPolicy_2 = (typeof DrivingPolicy_2)[keyof typeof DrivingPolicy_2];
-declare type DrivingRouteEndpoint = Point | RouteEndpointPoi;
-declare interface DrivingRouteOptions extends RouteState {
+export { DrivingPolicy_2 as DrivingPolicy };
+export declare type DrivingRouteEndpoint = Point | RouteEndpointPoi;
+export declare interface DrivingRouteOptions extends RouteState {
     policy?: DrivingPolicy_2;
 }
-declare interface DrivingRouteRequest {
+export declare interface DrivingRouteRequest {
     start: DrivingRouteEndpoint;
     end: DrivingRouteEndpoint;
     waypoints?: readonly Point[];
 }
-declare type DrivingRouteResult = RouteResult<RoutePlan>;
+export declare type DrivingRouteResult = RouteResult<RoutePlan>;
 export declare interface EventDriver {
     on<TEvent = unknown>(target: SdkHandle<string>, type: string, listener: (event: TEvent) => void): () => void;
 }
 export declare const existingGlobalV4Provider: () => JsapiV4Provider;
-declare interface GeocodedAddress {
+export declare interface GeocodedAddress {
     address: string;
     point: Point | null;
     business: string | null;
@@ -310,18 +311,18 @@ declare interface GeocodedAddress {
     surroundingPois: readonly LocalSearchPoi[];
     poiCount: number;
 }
-declare interface GeocodedAddressComponents {
+export declare interface GeocodedAddressComponents {
     province: string | null;
     city: string | null;
     district: string | null;
     street: string | null;
     streetNumber: string | null;
 }
-declare interface GeocodeRequest {
+export declare interface GeocodeRequest {
     address: string;
     city?: string;
 }
-declare interface GeolocationAddressInfo {
+export declare interface GeolocationAddressInfo {
     country?: string;
     province?: string;
     city?: string;
@@ -330,12 +331,12 @@ declare interface GeolocationAddressInfo {
     street?: string;
     streetNumber?: string;
 }
-declare interface GeolocationFix {
+export declare interface GeolocationFix {
     point: Point;
     accuracy: number | null;
     address: GeolocationAddressInfo | null;
 }
-declare interface GeolocationOptions {
+export declare interface GeolocationOptions {
     enableHighAccuracy?: boolean;
     timeout?: number;
     maximumAge?: number;
@@ -379,16 +380,17 @@ declare const IntercityPolicy_2: {
     readonly CHEAP_PRICE: 2;
 };
 declare type IntercityPolicy_2 = (typeof IntercityPolicy_2)[keyof typeof IntercityPolicy_2];
+export { IntercityPolicy_2 as IntercityPolicy };
 export declare function isLoadedSdk(value: unknown): value is LoadedJsapiV4;
 export declare function isPointLike(value: unknown): value is Point;
-declare interface JsapiV4Driver extends BMapDriver {
+export declare interface JsapiV4Driver extends BMapDriver {
     readonly services: JsapiV4ServiceDriver;
     readonly panorama: PanoramaViewerDriver;
     readonly nativeLayers: NativeLayerDriver;
 }
 export declare const jsapiV4DriverFactory: BMapDriverFactory;
-declare type JsapiV4Engine = "jsapi-v4";
-declare interface JsapiV4LoadMetadata {
+export declare type JsapiV4Engine = "jsapi-v4";
+export declare interface JsapiV4LoadMetadata {
     readonly providerId: JsapiV4ProviderId;
     readonly domain: string;
     readonly mode: JsapiV4LoadMode;
@@ -398,8 +400,8 @@ declare interface JsapiV4LoadMetadata {
     readonly fingerprint: string;
     readonly loadedAt: number;
 }
-declare type JsapiV4LoadMode = JsapiV4ScriptMode | "existing-global";
-declare interface JsapiV4Namespace {
+export declare type JsapiV4LoadMode = JsapiV4ScriptMode | "existing-global";
+export declare interface JsapiV4Namespace {
     readonly Map: unknown;
     readonly Point: unknown;
     readonly Marker: unknown;
@@ -410,14 +412,14 @@ export declare interface JsapiV4Provider {
     getCacheKey(options: BMapLoadOptions): string;
     load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
-declare type JsapiV4ProviderId = "baidu-jsapi-v4" | "existing-global-v4" | "custom-script-v4";
+export declare type JsapiV4ProviderId = "baidu-jsapi-v4" | "existing-global-v4" | "custom-script-v4";
 export declare type JsapiV4ScriptMode = "load" | "jsonp";
-declare interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
+export declare interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
     clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
     disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 }
-declare type JsapiV4VersionSource = "url" | "global" | "declared";
+export declare type JsapiV4VersionSource = "url" | "global" | "declared";
 export declare type LabelHandle = SdkHandle<"overlay:label">;
 export declare interface LabelOptions {
     position?: Point;
@@ -427,15 +429,15 @@ export declare interface LabelOptions {
     enableMassClear?: boolean;
     [key: string]: unknown;
 }
-declare interface LayerCreateOptions extends Record<string, unknown> {
+export declare interface LayerCreateOptions extends Record<string, unknown> {
     layerName?: string;
     createDOM?: (properties: object, point: {
         lng: number;
         lat: number;
     }) => HTMLElement;
 }
-declare type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
-declare type LayerData = object;
+export declare type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
+export declare type LayerData = object;
 export declare interface LayerDriver {
     create(kind: LayerKind, options?: LayerCreateOptions): LayerHandle;
     add(target: OverlayTarget, layer: LayerHandle): void;
@@ -455,8 +457,8 @@ export declare interface LayerDriver {
 }
 export declare type LayerHandle = SdkHandle<"layer" | `layer:${string}`>;
 export declare type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
-declare type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
-declare interface LayerSurface {
+export declare type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
+export declare interface LayerSurface {
     readonly ctorSlots: readonly LayerCtorSlot[];
     readonly operations: readonly LayerOperation[];
 }
@@ -466,28 +468,28 @@ export declare interface LoadedJsapiV4 {
     readonly namespace: JsapiV4Namespace;
     readonly load: JsapiV4LoadMetadata;
 }
-declare interface LocalCityFix {
+export declare interface LocalCityFix {
     name: string;
     center: Point | null;
     level: number | null;
 }
-declare type LocalSearchBounds = Bounds;
-declare interface LocalSearchInBoundsRequest {
+export declare type LocalSearchBounds = Bounds;
+export declare interface LocalSearchInBoundsRequest {
     keyword: LocalSearchKeyword;
     bounds: LocalSearchBounds;
 }
-declare type LocalSearchKeyword = string | readonly string[];
-declare interface LocalSearchNearbyRequest {
+export declare type LocalSearchKeyword = string | readonly string[];
+export declare interface LocalSearchNearbyRequest {
     keyword: LocalSearchKeyword;
     center: string | Point;
     radius: number;
 }
-declare interface LocalSearchOptions {
+export declare interface LocalSearchOptions {
     renderOptions?: LocalSearchRenderOptions;
     pageCapacity?: number;
     pageNum?: number;
 }
-declare interface LocalSearchPoi {
+export declare interface LocalSearchPoi {
     title: string;
     uid: string;
     point: Point | null;
@@ -502,7 +504,7 @@ declare interface LocalSearchPoi {
     url: string | null;
     detailUrl: string | null;
 }
-declare interface LocalSearchRenderOptions {
+export declare interface LocalSearchRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
@@ -513,7 +515,7 @@ declare interface LocalSearchRenderOptions {
         zoomFactor?: number;
     };
 }
-declare interface LocalSearchResult {
+export declare interface LocalSearchResult {
     keyword: string;
     city: string;
     province: string;
@@ -532,7 +534,7 @@ declare interface LocalSearchResult {
     moreResultsUrl: string | null;
     suggestions: readonly string[];
 }
-declare interface LocalSearchSearchOption {
+export declare interface LocalSearchSearchOption {
     forceLocal?: boolean;
 }
 export declare interface MapDriver {
@@ -598,8 +600,8 @@ export declare interface MarkerOptions {
     enableDragging?: boolean;
     [key: string]: unknown;
 }
-declare type NativeLayerData = Record<string, unknown>;
-declare interface NativeLayerDriver {
+export declare type NativeLayerData = Record<string, unknown>;
+export declare interface NativeLayerDriver {
     create(kind: NativeLayerKind, options?: Record<string, unknown>): NativeLayerHandle;
     add(target: OverlayTarget, layer: NativeLayerHandle): void;
     remove(target: OverlayTarget, layer: NativeLayerHandle): void;
@@ -625,28 +627,28 @@ declare interface NativeLayerDriver {
     setSpeed(layer: NativeLayerHandle, speed: number): void;
     setProcess(layer: NativeLayerHandle, process: number): void;
 }
-declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
-declare type NativeLayerFeatureState = Record<string, unknown>;
-declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
-declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
-declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line";
-declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
-declare interface NativeLayerPick {
+export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
+export declare type NativeLayerFeatureState = Record<string, unknown>;
+export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+export declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
+export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line";
+export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+export declare interface NativeLayerPick {
     dataIndex: number;
     dataItem: unknown;
 }
-declare interface NativeLayerZoomRange {
+export declare interface NativeLayerZoomRange {
     min?: number;
     max?: number;
 }
-declare interface NormalizedProvider {
+export declare interface NormalizedProvider {
     readonly id: string;
     getCacheKey(options: BMapLoadOptions): string;
     load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
 }
 export declare function normalizeMapMouseEvent(raw: unknown, geometry: GeometryDriver): MapMouseEvent;
 export declare function normalizeProvider(provider: BMapProviderLike): NormalizedProvider;
-declare const OFFICIAL_V4_VERSION = "4.0";
+export declare const OFFICIAL_V4_VERSION = "4.0";
 export declare interface OfficialJsapiLoader {
     load(options: OfficialJsapiLoadOptions): Promise<unknown>;
 }
@@ -656,7 +658,7 @@ export declare interface OfficialJsapiLoadOptions {
     readonly timeout: number;
     readonly serviceHost?: string;
 }
-declare type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
+export declare type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
@@ -707,7 +709,7 @@ export declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";
     handle: SdkHandle<string>;
 }
-declare interface PanoramaDataInfo {
+export declare interface PanoramaDataInfo {
     id: string;
     description: string;
     position: Point | null;
@@ -715,34 +717,34 @@ declare interface PanoramaDataInfo {
 export declare interface PanoramaDriver {
     readonly supported: boolean;
 }
-declare type PanoramaHandle = SdkHandle<"panorama">;
-declare type PanoramaLabelHandle = SdkHandle<"panorama:label">;
-declare interface PanoramaLabelOptions {
+export declare type PanoramaHandle = SdkHandle<"panorama">;
+export declare type PanoramaLabelHandle = SdkHandle<"panorama:label">;
+export declare interface PanoramaLabelOptions {
     position?: Point;
     altitude?: number;
     displayDistance?: boolean;
 }
-declare interface PanoramaOptions {
+export declare interface PanoramaOptions {
     navigationControl?: boolean;
     linksControl?: boolean;
     indoorSceneSwitchControl?: boolean;
     albumsControl?: boolean;
     albumsControlOptions?: Record<string, unknown>;
 }
-declare type PanoramaPoiType = "hotel" | "catering" | "movie" | "transit" | "indoor_scene" | "none";
-declare interface PanoramaPov {
+export declare type PanoramaPoiType = "hotel" | "catering" | "movie" | "transit" | "indoor_scene" | "none";
+export declare interface PanoramaPov {
     heading: number;
     pitch?: number;
 }
-declare type PanoramaSceneType = "street" | "inter";
-declare type PanoramaServiceHandle = SdkHandle<"service:panorama">;
-declare interface PanoramaSwitchOptions {
+export declare type PanoramaSceneType = "street" | "inter";
+export declare type PanoramaServiceHandle = SdkHandle<"service:panorama">;
+export declare interface PanoramaSwitchOptions {
     animation?: boolean;
     fisheye?: boolean;
     animationType?: string;
     pov?: Partial<PanoramaPov>;
 }
-declare interface PanoramaViewerDriver extends PanoramaDriver {
+export declare interface PanoramaViewerDriver extends PanoramaDriver {
     create(container: string | HTMLElement, options?: PanoramaOptions): PanoramaHandle;
     destroy(viewer: PanoramaHandle): void;
     on(target: PanoramaHandle | PanoramaLabelHandle, type: string, listener: (event: unknown) => void): () => void;
@@ -803,25 +805,25 @@ export declare type PointInput = Point | readonly [
 ];
 export declare type PolygonHandle = SdkHandle<"overlay:polygon">;
 export declare type PolylineHandle = SdkHandle<"overlay:polyline">;
-declare interface ReverseGeocodeRequest {
+export declare interface ReverseGeocodeRequest {
     point: Point;
     poiRadius?: number;
     numPois?: number;
 }
-declare type RidingRouteOptions = RouteRenderState;
-declare type RidingRouteResult = RouteResult<RoutePlan>;
-declare type RouteEndpoint = string | Point | RouteEndpointPoi;
-declare interface RouteEndpointInfo {
+export declare type RidingRouteOptions = RouteRenderState;
+export declare type RidingRouteResult = RouteResult<RoutePlan>;
+export declare type RouteEndpoint = string | Point | RouteEndpointPoi;
+export declare interface RouteEndpointInfo {
     title: string;
     point: Point | null;
     uid: string;
 }
-declare interface RouteEndpointPoi {
+export declare interface RouteEndpointPoi {
     uid: string;
     point: Point;
     name?: string;
 }
-declare interface RouteLeg {
+export declare interface RouteLeg {
     index: number;
     planIndex: number | null;
     routeType: number | null;
@@ -830,7 +832,7 @@ declare interface RouteLeg {
     path: readonly Point[];
     steps: readonly RouteStep[];
 }
-declare interface RoutePlan {
+export declare interface RoutePlan {
     index: number;
     distance: number | null;
     distanceText: string | null;
@@ -842,7 +844,7 @@ declare interface RoutePlan {
     dragPois: readonly RouteEndpointInfo[];
     legs: readonly RouteLeg[];
 }
-declare interface RouteRenderOptions {
+export declare interface RouteRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
@@ -852,26 +854,26 @@ declare interface RouteRenderOptions {
         zoomFactor?: number;
     };
 }
-declare interface RouteRenderState {
+export declare interface RouteRenderState {
     renderOptions?: RouteRenderOptions;
 }
-declare interface RouteRequest {
+export declare interface RouteRequest {
     start: RouteEndpoint;
     end: RouteEndpoint;
 }
-declare interface RouteResult<TPlan> {
+export declare interface RouteResult<TPlan> {
     start: RouteEndpointInfo | null;
     end: RouteEndpointInfo | null;
     plans: readonly TPlan[];
     policy: number | null;
     transitType: number | null;
 }
-declare type RouteServiceHandle = ServiceHandle<RouteServiceKind>;
-declare type RouteServiceKind = "service:driving-route" | "service:walking-route" | "service:riding-route" | "service:transit-route";
-declare interface RouteState extends RouteRenderState {
+export declare type RouteServiceHandle = ServiceHandle<RouteServiceKind>;
+export declare type RouteServiceKind = "service:driving-route" | "service:walking-route" | "service:riding-route" | "service:transit-route";
+export declare interface RouteState extends RouteRenderState {
     enableTraffic?: boolean;
 }
-declare interface RouteStep {
+export declare interface RouteStep {
     index: number;
     position: Point | null;
     description: string | null;
@@ -880,13 +882,13 @@ declare interface RouteStep {
     routeIndex: number | null;
     planIndex: number | null;
 }
-declare interface RouteTaxiFare {
+export declare interface RouteTaxiFare {
     day: RouteTaxiFareDetail | null;
     night: RouteTaxiFareDetail | null;
     distance: number | null;
     remark: string | null;
 }
-declare interface RouteTaxiFareDetail {
+export declare interface RouteTaxiFareDetail {
     initialFare: number | null;
     unitFare: number | null;
     totalFare: number | null;
@@ -895,11 +897,11 @@ export declare interface SdkHandle<Kind extends string, Raw = unknown> {
     readonly [HANDLE_BRAND]: Kind;
     readonly raw: Raw;
 }
-declare interface ServiceCall<T> {
+export declare interface ServiceCall<T> {
     readonly result: Promise<ServiceResult<T>>;
     cancel(): void;
 }
-declare type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
+export declare type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
 export declare interface ServiceDriver {
     createGeocoder(): ServiceHandle<"service:geocoder">;
     createConvertor(): ServiceHandle<"service:convertor">;
@@ -916,12 +918,12 @@ export declare interface ServiceDriver {
     createViewAnimation(keyFrames: readonly Record<string, unknown>[], options?: Record<string, unknown>): ServiceHandle<"service:view-animation">;
     createTrackAnimation(map: MapHandle, path: readonly Point[], options?: Record<string, unknown>): ServiceHandle<"service:track-animation">;
 }
-declare interface ServiceErrorInfo {
+export declare interface ServiceErrorInfo {
     code: number | string | null;
     message: string;
 }
 export declare type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
-declare interface ServiceInvocationDriver {
+export declare interface ServiceInvocationDriver {
     geocode(handle: ServiceHandle<"service:geocoder">, request: GeocodeRequest): ServiceCall<Point>;
     reverseGeocode(handle: ServiceHandle<"service:geocoder">, request: ReverseGeocodeRequest): ServiceCall<GeocodedAddress>;
     convert(handle: ServiceHandle<"service:convertor">, request: ConvertorRequest): ServiceCall<Point[]>;
@@ -939,7 +941,7 @@ declare interface ServiceInvocationDriver {
     clearRouteResults(handle: RouteServiceHandle): void;
     disposeRoute(handle: RouteServiceHandle): void;
 }
-declare interface ServiceResult<T> {
+export declare interface ServiceResult<T> {
     readonly status: ServiceCallStatus;
     readonly data: T | null;
     readonly error: ServiceErrorInfo | null;
@@ -958,7 +960,7 @@ export declare function toPlainPoints(raw: readonly {
     lat: number;
 }[]): Point[];
 export declare function toPoint(input: PointInput): Point;
-declare interface TransitLineSegment {
+export declare interface TransitLineSegment {
     kind: "line";
     title: string;
     lineType: number | null;
@@ -978,13 +980,14 @@ declare const TransitPolicy_2: {
     readonly FIRST_SUBWAYS: 5;
 };
 declare type TransitPolicy_2 = (typeof TransitPolicy_2)[keyof typeof TransitPolicy_2];
-declare interface TransitRouteOptions extends RouteState {
+export { TransitPolicy_2 as TransitPolicy };
+export declare interface TransitRouteOptions extends RouteState {
     policy?: TransitPolicy_2;
     intercityPolicy?: IntercityPolicy_2;
     transitTypePolicy?: TransitVehiclePolicy;
     pageCapacity?: number;
 }
-declare interface TransitRoutePlan {
+export declare interface TransitRoutePlan {
     index: number;
     distance: number | null;
     distanceText: string | null;
@@ -995,16 +998,16 @@ declare interface TransitRoutePlan {
     walkDistance: string | null;
     segments: readonly TransitRouteSegment[];
 }
-declare type TransitRouteRequest = RouteRequest;
-declare type TransitRouteResult = RouteResult<TransitRoutePlan>;
-declare type TransitRouteSegment = TransitLineSegment | TransitWalkSegment;
-declare const TransitVehiclePolicy: {
+export declare type TransitRouteRequest = RouteRequest;
+export declare type TransitRouteResult = RouteResult<TransitRoutePlan>;
+export declare type TransitRouteSegment = TransitLineSegment | TransitWalkSegment;
+export declare const TransitVehiclePolicy: {
     readonly TRAIN: 0;
     readonly AIRPLANE: 1;
     readonly COACH: 2;
 };
-declare type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
-declare interface TransitWalkSegment {
+export declare type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
+export declare interface TransitWalkSegment {
     kind: "walk";
     leg: RouteLeg;
 }
@@ -1016,8 +1019,8 @@ export declare class UnsupportedCapabilityError extends BMapError {
     constructor(capability: Capability, engine: BMapEngine, version: string);
 }
 export declare function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
-declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
-declare type WalkingRouteOptions = RouteRenderState;
-declare type WalkingRouteResult = RouteResult<RoutePlan>;
+export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare type WalkingRouteOptions = RouteRenderState;
+export declare type WalkingRouteResult = RouteResult<RoutePlan>;
 export {};
 ```

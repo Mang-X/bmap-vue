@@ -9,7 +9,7 @@
  */
 import type { ServiceHandle } from "../driver/types/handles";
 import type { LocalCityFix } from "../driver/types/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 
@@ -28,7 +28,7 @@ export interface BMapIpLocationResult {
 }
 
 export function useIpLocation(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     LocalCityFix,

@@ -38,7 +38,7 @@ export const MARKER_ICON_SPRITE_SIZE = 300;
  * 内置图标在雪碧图上的原始位置：`name → [offsetX, offsetY, width, height]`（HD 图像素，
  * 使用时要除以 {@link MARKER_ICON_HD_SCALE}）。
  */
-const MARKER_ICON_SPRITES = {
+const MARKER_ICON_SPRITES: Record<BuiltinMarkerIconName, readonly [number, number, number, number]> = {
   simple_red: [454, 378, 42, 66],
   simple_blue: [454, 450, 42, 66],
   loc_red: [400, 378, 46, 70],
@@ -66,12 +66,49 @@ const MARKER_ICON_SPRITES = {
   blue8: [266, 38, 38, 38],
   blue9: [304, 38, 38, 38],
   blue10: [342, 38, 38, 38],
-} as const;
+};
+
+/**
+ * 内置图标名的取值域。
+ *
+ * 刻意写成**显式联合**而不是 `keyof typeof MARKER_ICON_SPRITES`：后者会让这张私有表
+ * 变成 `BuiltinMarkerIconName` 的声明依赖，于是它在打包声明里被内联进
+ * `dist/composables.d.ts` 的公共面 —— 一个**从不出现在 API report 里**的内部常量，
+ * 却以「未导出的类型」之名被 `check:api` 报出来（issue #160）。联合在这里是
+ * 雪碧图的**事实源**，`MARKER_ICON_SPRITES` 由它校验（少一个键即编译不过），
+ * 方向因此不会漂移。
+ */
+export type BuiltinMarkerIconName =
+  | "simple_red"
+  | "simple_blue"
+  | "loc_red"
+  | "loc_blue"
+  | "start"
+  | "end"
+  | "location"
+  | "red1"
+  | "red2"
+  | "red3"
+  | "red4"
+  | "red5"
+  | "red6"
+  | "red7"
+  | "red8"
+  | "red9"
+  | "red10"
+  | "blue1"
+  | "blue2"
+  | "blue3"
+  | "blue4"
+  | "blue5"
+  | "blue6"
+  | "blue7"
+  | "blue8"
+  | "blue9"
+  | "blue10";
 
 /** HD 雪碧图 → 逻辑像素的缩放（图是 2x）。 */
 export const MARKER_ICON_HD_SCALE = 2;
-
-export type BuiltinMarkerIconName = keyof typeof MARKER_ICON_SPRITES;
 
 /** 内置图标名清单（顺序与声明顺序一致，供 `useMarkerIcons` 与文档使用）。 */
 export const BUILTIN_MARKER_ICON_NAMES = Object.keys(

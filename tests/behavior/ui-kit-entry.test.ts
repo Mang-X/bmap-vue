@@ -202,6 +202,9 @@ describe("根入口与 UI 子路径的产物隔离", () => {
         "PlaceDetail",
         "PlaceSearch",
         "RoutePlan",
+        // 错误类按值导出（issue #160）：`<RoutePlan>` 的 error 事件载荷是它的实例，
+        // 消费方要能 catch / instanceof / 读 code，不能只拿到一个无法命名的类型。
+        "BMapError",
         "RoutePlanDrivingPolicy",
         "UI_KIT_PACKAGE",
         "UI_KIT_STYLE_PATH",

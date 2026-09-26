@@ -95,6 +95,8 @@ describe("无 DOM 环境下的 ./ui-kit", () => {
     `);
     expect(report.exportNames).toEqual(
       [
+        // issue #160：错误类按值导出（`<RoutePlan>` 的 `error` 载荷是它的实例）。
+        "BMapError",
         "PlaceAutocomplete",
         "PlaceDetail",
         "PlaceSearch",

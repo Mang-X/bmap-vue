@@ -5,7 +5,7 @@ import {
   jsapiV4PanoramaOf,
   panoramaContextKey,
 } from "../../core/panorama";
-import { resolveMapContext } from "../../composables/resolveMapContext";
+import { resolveInternalMapContext } from "../../composables/resolveMapContext";
 import type { Point } from "../../driver/types/geometry";
 import type {
   PanoramaHandle,
@@ -69,9 +69,9 @@ const emit = defineEmits<{
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
-// 全景只需要 Client：`resolveMapContext()` 在 `<Map>` 子树里给地图 context、在 `<BMapProvider>`
+// 全景只需要 Client：`resolveInternalMapContext()` 在 `<Map>` 子树里给地图 context、在 `<BMapProvider>`
 // 子树里给 client-only 适配器；两者都能满足 `whenReady()`（后者 `map` 为 null）。
-const context = createPanoramaContext({ mapContext: resolveMapContext() });
+const context = createPanoramaContext({ mapContext: resolveInternalMapContext() });
 provide(panoramaContextKey, context);
 
 /** 当前实例（Driver 已按 `jsapiV4PanoramaOf` 收窄过一次，调用点不再写 `!`）。 */

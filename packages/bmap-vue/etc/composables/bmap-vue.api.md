@@ -12,6 +12,67 @@ import { ShallowRef } from 'vue';
 // @public
 export type AreaBoundary = string[];
 
+// @public (undocumented)
+export interface AutocompleteOptions {
+    input: HTMLInputElement;
+    // (undocumented)
+    location?: unknown;
+    // (undocumented)
+    onSearchComplete?: (event: unknown) => void;
+    // (undocumented)
+    types?: string[];
+}
+
+// @public
+export interface AutocompleteUpdateOptions {
+    location?: unknown;
+    // (undocumented)
+    types?: string[];
+}
+
+// @public (undocumented)
+export interface BMapClient {
+    // (undocumented)
+    readonly capabilities: CapabilityRegistry;
+    // (undocumented)
+    readonly driver: BMapDriver;
+    // (undocumented)
+    readonly engine: BMapEngine;
+    // (undocumented)
+    readonly id: symbol;
+    readonly libraryVersion: string;
+    readonly rawSdk: unknown;
+    readonly sdkVersion: string;
+}
+
+// @public (undocumented)
+export interface BMapDriver {
+    // (undocumented)
+    readonly capabilities: CapabilityRegistry;
+    // (undocumented)
+    readonly controls: ControlDriver;
+    // (undocumented)
+    readonly engine: BMapEngine;
+    // (undocumented)
+    readonly events: EventDriver;
+    // (undocumented)
+    readonly geometry: GeometryDriver;
+    // (undocumented)
+    readonly layers: LayerDriver;
+    // (undocumented)
+    readonly map: MapDriver;
+    // (undocumented)
+    readonly overlays: OverlayDriver;
+    // (undocumented)
+    readonly panorama: PanoramaDriver;
+    // (undocumented)
+    readonly rawSdk: unknown;
+    // (undocumented)
+    readonly services: ServiceDriver;
+    // (undocumented)
+    readonly version: string;
+}
+
 // @public
 export interface BMapDrivingRouteOptions {
     enableTraffic?: MaybeRefOrGetter<boolean | undefined>;
@@ -19,6 +80,9 @@ export interface BMapDrivingRouteOptions {
     policy?: MaybeRefOrGetter<DrivingPolicy_2 | undefined>;
     renderOptions?: MaybeRefOrGetter<BMapRouteRenderOptions | undefined>;
 }
+
+// @public (undocumented)
+export type BMapEngine = "jsapi-v4";
 
 // @public (undocumented)
 export interface BMapGeolocationOptions {
@@ -108,6 +172,24 @@ export interface BMapRidingRouteOptions {
 }
 
 // @public
+export type BMapRouteLocation = string | GeoPoint | MapHandle;
+
+// @public
+export interface BMapRouteRenderOptions {
+    autoViewport?: boolean;
+    map?: MaybeRefOrGetter<MapHandle | null | undefined>;
+    panel?: string | HTMLElement;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export type BMapServiceStatus = "idle" | "loading" | ServiceCallStatus | "unsupported";
+
+// @public
 export interface BMapTransitRouteOptions {
     enableTraffic?: MaybeRefOrGetter<boolean | undefined>;
     intercityPolicy?: MaybeRefOrGetter<IntercityPolicy_2 | undefined>;
@@ -124,6 +206,117 @@ export interface BMapWalkingRouteOptions {
     renderOptions?: MaybeRefOrGetter<BMapRouteRenderOptions | undefined>;
 }
 
+// @public (undocumented)
+export interface Bounds {
+    // (undocumented)
+    northeast: Point;
+    // (undocumented)
+    southwest: Point;
+}
+
+// @public
+export type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
+
+// @public
+export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+
+// @public (undocumented)
+export interface CapabilityDescriptor {
+    description: string;
+    // (undocumented)
+    family: CapabilityFamily;
+    // (undocumented)
+    id: Capability;
+    rawMembers?: readonly string[];
+    runtimeOnly: boolean;
+    // (undocumented)
+    status: CapabilityStatus;
+}
+
+// @public (undocumented)
+export interface CapabilityExplanation {
+    // (undocumented)
+    engine: BMapEngine;
+    family?: CapabilityFamily;
+    // (undocumented)
+    id: Capability;
+    // (undocumented)
+    reason: CapabilityReason;
+    // (undocumented)
+    runtimeOnly: boolean;
+    // (undocumented)
+    status: CapabilityStatus;
+    // (undocumented)
+    supported: boolean;
+    // (undocumented)
+    version: string;
+}
+
+// @public (undocumented)
+export type CapabilityFamily = "map" | "overlay" | "layer" | "service" | "panorama";
+
+// @public (undocumented)
+export type CapabilityReason = "supported"
+/**
+* 目录**未收录**该 id（#126 取代 `engine-unsupported`：单引擎下「引擎不在白名单」不可达，
+* 原 reason 的唯一可达路径就是描述符缺失）。调用方带着外部字符串或 `as Capability` 探针进来时命中。
+*/
+| "unlisted-capability" | "raw-member-missing" | "status-unsupported" | "overridden";
+
+// @public (undocumented)
+export interface CapabilityRegistry {
+    descriptor(capability: Capability): CapabilityDescriptor | undefined;
+    // (undocumented)
+    explain(capability: Capability): CapabilityExplanation;
+    // (undocumented)
+    list(): readonly Capability[];
+    observeInstanceMembers(source: unknown): void;
+    // (undocumented)
+    require(capability: Capability): void;
+    // (undocumented)
+    supports(capability: Capability): boolean;
+}
+
+// @public (undocumented)
+export type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
+
+// @public (undocumented)
+export type CircleHandle = SdkHandle<"overlay:circle">;
+
+// @public (undocumented)
+export interface ControlDriver {
+    // (undocumented)
+    add(target: OverlayTarget, control: ControlHandle): void;
+    // (undocumented)
+    addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
+    // (undocumented)
+    create(kind: ControlKind, options?: ControlOptions): ControlHandle;
+    createCustomControl(options: {
+        anchor?: string;
+        offset?: Pixel;
+        render: (mapContainer: HTMLElement) => HTMLElement | null;
+    }): ControlHandle;
+    // (undocumented)
+    hide(control: ControlHandle): void;
+    // (undocumented)
+    listCopyrights(control: ControlHandle): CopyrightEntry[];
+    planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
+    // (undocumented)
+    remove(target: OverlayTarget, control: ControlHandle): void;
+    // (undocumented)
+    removeCopyright(control: ControlHandle, id: number): void;
+    // (undocumented)
+    setOptions(control: ControlHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    show(control: ControlHandle): void;
+}
+
+// @public
+export type ControlHandle = SdkHandle<"control" | `control:${string}`>;
+
+// @public (undocumented)
+export type ControlKind = "zoom" | "scale" | "navigation" | "navigation-3d" | "city-list" | "location" | "map-type" | "overview" | "panorama" | "copyright" | "custom";
+
 // @public
 export type ControllableMode = "controlled" | "uncontrolled";
 
@@ -137,6 +330,19 @@ export interface ControllableState<T> {
     syncExternal(next: T | undefined): void;
     readonly value: ComputedRef<T>;
 }
+
+// @public (undocumented)
+export interface ControlOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    anchor?: string;
+    // (undocumented)
+    offset?: Pixel;
+}
+
+// @public
+export type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
 
 // @public (undocumented)
 export enum CoordinatesFromType {
@@ -168,8 +374,121 @@ export enum CoordinatesToType {
     COORDINATES_GCJ02 = 3
 }
 
+// @public (undocumented)
+export interface CopyrightEntry {
+    // (undocumented)
+    bounds?: unknown;
+    // (undocumented)
+    content: string;
+    // (undocumented)
+    id: number;
+}
+
+// @public
+export interface CustomOverlayOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    anchor?: Pixel;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    maxZoom?: number;
+    // (undocumented)
+    minZoom?: number;
+    offset?: Pixel;
+    // (undocumented)
+    properties?: Record<string, unknown>;
+    // (undocumented)
+    rotation?: number;
+    // (undocumented)
+    visible?: boolean;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public (undocumented)
+export interface DriverEvent {
+    domEvent?: Event;
+    exMapType?: unknown;
+    mapType?: unknown;
+    pixel?: Pixel;
+    point?: Point;
+    // (undocumented)
+    preventDefault(): void;
+    raw: unknown;
+    size?: Size;
+    // (undocumented)
+    stopPropagation(): void;
+    targetZoom?: number;
+    trend?: boolean;
+    type?: string;
+    zoom?: number;
+    zoomLevel?: number;
+}
+
+// @public
+const DrivingPolicy_2: {
+    readonly DEFAULT: 0;
+    readonly LEAST_DISTANCE: 2;
+    readonly AVOID_HIGHWAYS: 3;
+    readonly FIRST_HIGHWAYS: 4;
+    readonly AVOID_CONGESTION: 5;
+    readonly AVOID_PAY: 6;
+    readonly HIGHWAYS_AVOID_CONGESTION: 7;
+    readonly AVOID_HIGHWAYS_CONGESTION: 8;
+    readonly AVOID_CONGESTION_PAY: 9;
+    readonly AVOID_HIGHWAYS_CONGESTION_PAY: 10;
+    readonly AVOID_HIGHWAYS_PAY: 11;
+    readonly DISTANCE_PRIORITY: 12;
+    readonly TIME_PRIORITY: 13;
+};
+
+// @public (undocumented)
+type DrivingPolicy_2 = (typeof DrivingPolicy_2)[keyof typeof DrivingPolicy_2];
+export { DrivingPolicy_2 as DrivingPolicy }
+
+// @public
+export type DrivingRouteEndpoint = Point | RouteEndpointPoi;
+
+// @public
+export interface DrivingRouteOptions extends RouteState {
+    policy?: DrivingPolicy_2;
+}
+
+// @public (undocumented)
+export type DrivingRouteResult = RouteResult<RoutePlan>;
+
 // @public
 export type EqualFn<T> = (a: T, b: T) => boolean;
+
+// @public (undocumented)
+export interface EventDriver {
+    // (undocumented)
+    on<TEvent = unknown>(target: SdkHandle<string>, type: string, listener: (event: TEvent) => void): () => void;
+}
+
+// @public
+export interface EventSourceClient {
+    // (undocumented)
+    readonly driver: {
+        readonly events: EventDriver;
+        readonly map: MapDriver;
+    };
+}
+
+// @public
+export interface FrameScheduler {
+    // (undocumented)
+    cancel(key: PropertyKey): void;
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    flush(): void;
+    pause(): void;
+    resume(): void;
+    // (undocumented)
+    schedule(key: PropertyKey, task: () => void): void;
+}
 
 // @public (undocumented)
 export interface GeocodeDetailAddressComponents {
@@ -190,11 +509,11 @@ export interface GeocodeDetailItemResult {
     // (undocumented)
     detail: GeocodeDetailResult | null;
     // (undocumented)
-    error: ServiceErrorInfo_2 | null;
+    error: ServiceErrorInfo | null;
     // (undocumented)
     point: GeoPoint;
     // (undocumented)
-    status: BMapServiceStatus_2;
+    status: BMapServiceStatus;
 }
 
 // @public (undocumented)
@@ -215,10 +534,52 @@ export interface GeocodeItemResult {
     // (undocumented)
     address: string;
     // (undocumented)
-    error: ServiceErrorInfo_2 | null;
+    error: ServiceErrorInfo | null;
     point: GeoPoint | null;
     // (undocumented)
-    status: BMapServiceStatus_2;
+    status: BMapServiceStatus;
+}
+
+// @public
+export interface GeolocationAddressInfo {
+    // (undocumented)
+    city?: string;
+    // (undocumented)
+    cityCode?: string | number;
+    // (undocumented)
+    country?: string;
+    // (undocumented)
+    district?: string;
+    // (undocumented)
+    province?: string;
+    // (undocumented)
+    street?: string;
+    // (undocumented)
+    streetNumber?: string;
+}
+
+// @public (undocumented)
+export interface GeometryDriver {
+    // (undocumented)
+    fromRawBounds(raw: unknown): Bounds;
+    // (undocumented)
+    fromRawPixel(raw: unknown): Pixel;
+    // (undocumented)
+    fromRawPoint(raw: unknown): Point;
+    // (undocumented)
+    fromRawPoints(raws: readonly unknown[]): Point[];
+    // (undocumented)
+    fromRawSize(raw: unknown): Size;
+    // (undocumented)
+    toRawBounds(bounds: Bounds): unknown;
+    // (undocumented)
+    toRawPixel(pixel: Pixel): unknown;
+    // (undocumented)
+    toRawPoint(point: Point): unknown;
+    // (undocumented)
+    toRawPoints(points: readonly Point[]): unknown[];
+    // (undocumented)
+    toRawSize(size: Size): unknown;
 }
 
 // @public (undocumented)
@@ -229,27 +590,751 @@ export interface GeoPoint {
     lng: number;
 }
 
+// @public (undocumented)
+export type InfoWindowHandle = SdkHandle<"overlay:info-window">;
+
+// @public (undocumented)
+export interface InfoWindowOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableAutoPan?: boolean;
+    // (undocumented)
+    enableCloseOnClick?: boolean;
+    // (undocumented)
+    enableMaximize?: boolean;
+    // (undocumented)
+    height?: number;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    title?: string;
+    // (undocumented)
+    width?: number;
+}
+
+// @public (undocumented)
+export interface InitialMapOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    backgroundColor?: number[];
+    // (undocumented)
+    displayOptions?: Record<string, unknown>;
+    // (undocumented)
+    maxZoom?: number;
+    // (undocumented)
+    minZoom?: number;
+    // (undocumented)
+    restrictCenter?: boolean;
+}
+
+// @public
+const IntercityPolicy_2: {
+    readonly LEAST_TIME: 0;
+    readonly EARLY_START: 1;
+    readonly CHEAP_PRICE: 2;
+};
+
+// @public (undocumented)
+type IntercityPolicy_2 = (typeof IntercityPolicy_2)[keyof typeof IntercityPolicy_2];
+export { IntercityPolicy_2 as IntercityPolicy }
+
+// @public (undocumented)
+export type LabelHandle = SdkHandle<"overlay:label">;
+
+// @public (undocumented)
+export interface LabelOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    position?: Point;
+    // (undocumented)
+    style?: Record<string, unknown>;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public
+export interface LayerCreateOptions extends Record<string, unknown> {
+    createDOM?: (properties: object, point: {
+        lng: number;
+        lat: number;
+    }) => HTMLElement;
+    layerName?: string;
+}
+
+// @public
+export type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
+
+// @public
+export type LayerData = object;
+
+// @public (undocumented)
+export interface LayerDriver {
+    // (undocumented)
+    add(target: OverlayTarget, layer: LayerHandle): void;
+    // (undocumented)
+    clearData(layer: LayerHandle): void;
+    // (undocumented)
+    clearState(layer: LayerHandle): void;
+    // (undocumented)
+    create(kind: LayerKind, options?: LayerCreateOptions): LayerHandle;
+    // (undocumented)
+    getState(layer: LayerHandle): NativeLayerFeatureStateMap;
+    isMutableOption(kind: LayerKind, key: string): boolean;
+    // (undocumented)
+    remove(target: OverlayTarget, layer: LayerHandle): void;
+    // (undocumented)
+    removeState(layer: LayerHandle, keys: NativeLayerFeatureKeys): void;
+    // (undocumented)
+    replaceState(layer: LayerHandle, inputs: NativeLayerFeatureStateMap): void;
+    // (undocumented)
+    setData(layer: LayerHandle, data: LayerData): void;
+    setOptions(layer: LayerHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    setZIndex(layer: LayerHandle, zIndex: number): void;
+    supports(kind: LayerKind, operation: LayerOperation): boolean;
+    surface(kind: LayerKind): LayerSurface;
+    updateState(layer: LayerHandle, keys: NativeLayerFeatureKeys, state: NativeLayerFeatureState, append?: boolean): void;
+}
+
+// @public (undocumented)
+export type LayerHandle = SdkHandle<"layer" | `layer:${string}`>;
+
+// @public
+export type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
+
+// @public
+export type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
+
+// @public
+export interface LayerSurface {
+    readonly ctorSlots: readonly LayerCtorSlot[];
+    readonly operations: readonly LayerOperation[];
+}
+
+// @public
+export type LocalSearchBounds = Bounds;
+
+// @public
+export interface LocalSearchInBoundsRequest {
+    // (undocumented)
+    bounds: LocalSearchBounds;
+    // (undocumented)
+    keyword: LocalSearchKeyword;
+}
+
+// @public
+export type LocalSearchKeyword = string | readonly string[];
+
 // @public
 export type LocalSearchLocation = string | GeoPoint | MapHandle;
+
+// @public
+export interface LocalSearchNearbyRequest {
+    center: string | Point;
+    // (undocumented)
+    keyword: LocalSearchKeyword;
+    radius: number;
+}
+
+// @public
+export interface LocalSearchOptions {
+    pageCapacity?: number;
+    pageNum?: number;
+    // (undocumented)
+    renderOptions?: LocalSearchRenderOptions;
+}
+
+// @public
+export interface LocalSearchPoi {
+    adcode: string | null;
+    // (undocumented)
+    address: string | null;
+    // (undocumented)
+    city: string | null;
+    detailUrl: string | null;
+    isAccurate: boolean | null;
+    // (undocumented)
+    phoneNumber: string | null;
+    point: Point | null;
+    // (undocumented)
+    postcode: string | null;
+    // (undocumented)
+    province: string | null;
+    tags: readonly string[];
+    title: string;
+    uid: string;
+    url: string | null;
+}
+
+// @public
+export interface LocalSearchRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    selectFirstResult?: boolean;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export interface LocalSearchResult {
+    bounds: LocalSearchBounds | null;
+    center: Point | null;
+    cities: readonly {
+        readonly name: string;
+        readonly count: number;
+    }[];
+    city: string;
+    keyword: string;
+    moreResultsUrl: string | null;
+    pageCount: number;
+    pageIndex: number;
+    pageSize: number;
+    pois: readonly LocalSearchPoi[];
+    // (undocumented)
+    province: string;
+    radius: number | null;
+    suggestions: readonly string[];
+    total: number;
+}
+
+// @public
+export interface LocalSearchSearchOption {
+    forceLocal?: boolean;
+}
+
+// @public
+export const MAP_EVENT_CATALOG: {
+    readonly load: {
+        readonly sdk: "load";
+        readonly declared: true;
+        readonly payload: "load";
+        readonly coalesce: false;
+        readonly description: "地图初始化完成（首次视野确定后派发一次；载荷另有 point / zoom）";
+    };
+    readonly click: {
+        readonly sdk: "click";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "左键单击地图";
+    };
+    readonly dblclick: {
+        readonly sdk: "dblclick";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "鼠标双击地图";
+    };
+    readonly rightclick: {
+        readonly sdk: "rightclick";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "右键单击地图";
+    };
+    readonly rightdblclick: {
+        readonly sdk: "rightdblclick";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "右键双击地图";
+    };
+    readonly mousemove: {
+        readonly sdk: "mousemove";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: true;
+        readonly description: "鼠标在地图区域内移动（高频，按帧合帧）";
+    };
+    readonly mousedown: {
+        readonly sdk: "mousedown";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "鼠标按下";
+    };
+    readonly mouseup: {
+        readonly sdk: "mouseup";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "鼠标松开";
+    };
+    readonly mouseover: {
+        readonly sdk: "mouseover";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "鼠标移入地图区域";
+    };
+    readonly mouseout: {
+        readonly sdk: "mouseout";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "鼠标移出地图区域";
+    };
+    readonly touchstart: {
+        readonly sdk: "touchstart";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "触摸开始";
+    };
+    readonly touchmove: {
+        readonly sdk: "touchmove";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: true;
+        readonly description: "触摸移动（高频，按帧合帧）";
+    };
+    readonly touchend: {
+        readonly sdk: "touchend";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "触摸结束";
+    };
+    readonly mousewheel: {
+        readonly sdk: "mousewheel";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "滚轮缩放（载荷另有 trend：true = 放大）";
+    };
+    readonly zoomexceeded: {
+        readonly sdk: "zoomexceeded";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "缩放试图超出允许范围（载荷另有 targetZoom）";
+    };
+    readonly dragstart: {
+        readonly sdk: "dragstart";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "开始拖拽地图";
+    };
+    readonly dragging: {
+        readonly sdk: "dragging";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: true;
+        readonly description: "拖拽中（高频，按帧合帧）";
+    };
+    readonly dragend: {
+        readonly sdk: "dragend";
+        readonly declared: true;
+        readonly payload: "pointer";
+        readonly coalesce: false;
+        readonly description: "结束拖拽";
+    };
+    readonly movestart: {
+        readonly sdk: "movestart";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "地图移动开始";
+    };
+    readonly moving: {
+        readonly sdk: "moving";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: true;
+        readonly description: "地图移动中（高频，按帧合帧）";
+    };
+    readonly moveend: {
+        readonly sdk: "moveend";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "地图移动结束";
+    };
+    readonly zoomstart: {
+        readonly sdk: "zoomstart";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "开始改变缩放级别";
+    };
+    readonly zooming: {
+        readonly sdk: "zooming";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: true;
+        readonly description: "缩放中（高频，按帧合帧）";
+    };
+    readonly zoomend: {
+        readonly sdk: "zoomend";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "缩放结束";
+    };
+    readonly beforeaddoverlay: {
+        readonly sdk: "beforeaddoverlay";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "覆盖物添加前";
+    };
+    readonly addoverlay: {
+        readonly sdk: "addoverlay";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "addOverlay() 之后";
+    };
+    readonly removeoverlay: {
+        readonly sdk: "removeoverlay";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "removeOverlay() 之后";
+    };
+    readonly clearoverlays: {
+        readonly sdk: "clearoverlays";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "clearOverlays() 之后";
+    };
+    readonly addcontrol: {
+        readonly sdk: "addcontrol";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "addControl() 之后";
+    };
+    readonly removecontrol: {
+        readonly sdk: "removecontrol";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "removeControl() 之后";
+    };
+    readonly addcontextmenu: {
+        readonly sdk: "addcontextmenu";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "addContextMenu() 之后";
+    };
+    readonly removecontextmenu: {
+        readonly sdk: "removecontextmenu";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "removeContextMenu() 之后";
+    };
+    readonly maptypechange: {
+        readonly sdk: "maptypechange";
+        readonly declared: true;
+        readonly payload: "maptypechange";
+        readonly coalesce: false;
+        readonly description: "地图类型变化（载荷另有 mapType / exMapType）";
+    };
+    readonly "style-willchange": {
+        readonly sdk: "style_willchange";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "个性化样式即将切换";
+    };
+    readonly "style-loaded": {
+        readonly sdk: "style_loaded";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "个性化样式加载完成";
+    };
+    readonly "style-loaded-error": {
+        readonly sdk: "style_loaded_error";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "个性化样式加载失败";
+    };
+    readonly "style-loaded-timeout": {
+        readonly sdk: "style_loaded_timeout";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "个性化样式加载超时";
+    };
+    readonly "language-change": {
+        readonly sdk: "language_change";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "地图显示语言变化";
+    };
+    readonly destroy: {
+        readonly sdk: "destroy";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "地图实例销毁";
+    };
+    readonly tilesloaded: {
+        readonly sdk: "tilesloaded";
+        readonly declared: true;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "瓦片加载完成";
+    };
+    readonly resize: {
+        readonly sdk: "resize";
+        readonly declared: true;
+        readonly payload: "resize";
+        readonly coalesce: false;
+        readonly description: "容器可视区域大小变化（载荷另有 size）";
+    };
+    readonly headingchange: {
+        readonly sdk: "headingchange";
+        readonly declared: false;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "旋转角变化（上游类型未声明，运行时可观察）";
+    };
+    readonly tiltchange: {
+        readonly sdk: "tiltchange";
+        readonly declared: false;
+        readonly payload: "base";
+        readonly coalesce: false;
+        readonly description: "倾斜角变化（上游类型未声明，运行时可观察）";
+    };
+};
+
+// @public (undocumented)
+export interface MapDriver {
+    cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
+    // (undocumented)
+    checkResize(map: MapHandle): void;
+    // (undocumented)
+    create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
+    destroy(map: MapHandle): void;
+    // (undocumented)
+    fitBounds(map: MapHandle, bounds: Bounds): void;
+    // (undocumented)
+    getBounds(map: MapHandle): Bounds;
+    // (undocumented)
+    getCenter(map: MapHandle): Point;
+    // (undocumented)
+    getHeading(map: MapHandle): number;
+    // (undocumented)
+    getSize(map: MapHandle): Size;
+    // (undocumented)
+    getTilt(map: MapHandle): number;
+    // (undocumented)
+    getZoom(map: MapHandle): number;
+    // (undocumented)
+    initializeView(map: MapHandle, view: MapView): void;
+    // (undocumented)
+    panBy(map: MapHandle, pixel: Pixel): void;
+    // (undocumented)
+    panTo(map: MapHandle, point: Point): void;
+    pixelToPoint(map: MapHandle, pixel: Pixel): Point;
+    pointToPixel(map: MapHandle, point: Point): Pixel;
+    // (undocumented)
+    setCenter(map: MapHandle, center: Point | string): void;
+    // (undocumented)
+    setHeading(map: MapHandle, heading: number): void;
+    // (undocumented)
+    setInteraction(map: MapHandle, name: MapInteraction, enabled: boolean): void;
+    // (undocumented)
+    setMapStyle(map: MapHandle, style: MapStyleInput): void;
+    // (undocumented)
+    setMapType(map: MapHandle, type: MapType_2): void;
+    // (undocumented)
+    setTilt(map: MapHandle, tilt: number): void;
+    // (undocumented)
+    setTraffic(map: MapHandle, enabled: boolean): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    // (undocumented)
+    setZoom(map: MapHandle, zoom: number): void;
+    // (undocumented)
+    startViewAnimation(map: MapHandle, animation: unknown): void;
+}
+
+// @public
+export interface MapEventEmits {
+    // (undocumented)
+    "language-change": [event: MapEventPayload];
+    // (undocumented)
+    "style-loaded": [event: MapEventPayload];
+    // (undocumented)
+    "style-loaded-error": [event: MapEventPayload];
+    // (undocumented)
+    "style-loaded-timeout": [event: MapEventPayload];
+    // (undocumented)
+    "style-willchange": [event: MapEventPayload];
+    // (undocumented)
+    addcontextmenu: [event: MapEventPayload];
+    // (undocumented)
+    addcontrol: [event: MapEventPayload];
+    // (undocumented)
+    addoverlay: [event: MapEventPayload];
+    // (undocumented)
+    beforeaddoverlay: [event: MapEventPayload];
+    // (undocumented)
+    clearoverlays: [event: MapEventPayload];
+    // (undocumented)
+    click: [event: MapPointerEvent];
+    // (undocumented)
+    dblclick: [event: MapPointerEvent];
+    // (undocumented)
+    destroy: [event: MapEventPayload];
+    // (undocumented)
+    dragend: [event: MapPointerEvent];
+    // (undocumented)
+    dragging: [event: MapPointerEvent];
+    // (undocumented)
+    dragstart: [event: MapPointerEvent];
+    // (undocumented)
+    headingchange: [event: MapEventPayload];
+    // (undocumented)
+    language_change: [event: MapEventPayload];
+    // (undocumented)
+    load: [event: MapLoadPayload];
+    // (undocumented)
+    maptypechange: [event: MapTypeChangePayload];
+    // (undocumented)
+    mousedown: [event: MapPointerEvent];
+    // (undocumented)
+    mousemove: [event: MapPointerEvent];
+    // (undocumented)
+    mouseout: [event: MapPointerEvent];
+    // (undocumented)
+    mouseover: [event: MapPointerEvent];
+    // (undocumented)
+    mouseup: [event: MapPointerEvent];
+    // (undocumented)
+    mousewheel: [event: MapPointerEvent];
+    // (undocumented)
+    moveend: [event: MapEventPayload];
+    // (undocumented)
+    movestart: [event: MapEventPayload];
+    // (undocumented)
+    moving: [event: MapEventPayload];
+    // (undocumented)
+    removecontextmenu: [event: MapEventPayload];
+    // (undocumented)
+    removecontrol: [event: MapEventPayload];
+    // (undocumented)
+    removeoverlay: [event: MapEventPayload];
+    // (undocumented)
+    resize: [event: MapResizePayload];
+    // (undocumented)
+    rightclick: [event: MapPointerEvent];
+    // (undocumented)
+    rightdblclick: [event: MapPointerEvent];
+    // (undocumented)
+    style_loaded: [event: MapEventPayload];
+    // (undocumented)
+    style_loaded_error: [event: MapEventPayload];
+    // (undocumented)
+    style_loaded_timeout: [event: MapEventPayload];
+    // (undocumented)
+    style_willchange: [event: MapEventPayload];
+    // (undocumented)
+    tilesloaded: [event: MapEventPayload];
+    // (undocumented)
+    tiltchange: [event: MapEventPayload];
+    // (undocumented)
+    touchend: [event: MapPointerEvent];
+    // (undocumented)
+    touchmove: [event: MapPointerEvent];
+    // (undocumented)
+    touchstart: [event: MapPointerEvent];
+    // (undocumented)
+    zoomend: [event: MapEventPayload];
+    // (undocumented)
+    zoomexceeded: [event: MapEventPayload];
+    // (undocumented)
+    zooming: [event: MapEventPayload];
+    // (undocumented)
+    zoomstart: [event: MapEventPayload];
+}
 
 // @public
 export type MapEventHandler<K extends string> = (event: MapEventPayloadForName<K>) => void;
 
 // @public
+export type MapEventMap = {
+    [K in MapEventName]: MapEventEmits[K][0];
+};
+
+// @public
+export type MapEventName = keyof typeof MAP_EVENT_CATALOG;
+
+// @public
+export type MapEventPayload = DriverEvent & {
+    type: string;
+};
+
+// @public
 export type MapEventPayloadForName<K extends string> = K extends MapEventName ? MapEventPayloadOf<K> : MapEventPayload;
 
 // @public
+export type MapEventPayloadOf<K extends MapEventName> = MapEventMap[K];
+
+// @public (undocumented)
 export interface MapEventSource {
-    client: MaybeRefOrGetter<BMapClient | null>;
+    client: MaybeRefOrGetter<EventSourceClient | null>;
     isTearingDown?: () => boolean;
     map: MaybeRefOrGetter<MapHandle | null>;
-    resources?: ResourceScope;
+    resources?: {
+        add(disposer: () => void): () => void;
+    };
     scheduler?: FrameScheduler;
     whenMapCreated?: (callback: (ready: MapReadyContext) => void) => () => void;
 }
 
 // @public (undocumented)
-export type MapEventSourceInput = MapContext | MapEventSource;
+export type MapEventSourceInput = PublicMapContext | MapEventSource;
+
+// @public (undocumented)
+export type MapHandle = SdkHandle<"map">;
+
+// @public (undocumented)
+export type MapInteraction = "dragging" | "scroll-zoom" | "inertial-dragging" | "pinch-zoom" | "keyboard" | "double-click-zoom" | "continuous-zoom" | "resize-on-center" | "rotate" | "rotate-gestures" | "tilt" | "tilt-gestures";
+
+// @public
+export interface MapLoadEvent extends DriverEvent {
+    // (undocumented)
+    point: Point;
+    // (undocumented)
+    zoom: number;
+}
+
+// @public
+export type MapLoadPayload = MapLoadEvent & {
+    type: string;
+};
+
+// @public (undocumented)
+export interface MapMouseEvent extends DriverEvent {
+    // (undocumented)
+    point: Point;
+}
+
+// @public
+export type MapPointerEvent = MapMouseEvent & {
+    type: string;
+};
 
 // @public (undocumented)
 export interface MapReadyContext {
@@ -258,6 +1343,20 @@ export interface MapReadyContext {
     // (undocumented)
     readonly map: MapHandle;
 }
+
+// @public
+export interface MapResizeEvent extends DriverEvent {
+    // (undocumented)
+    size: Size;
+}
+
+// @public
+export type MapResizePayload = MapResizeEvent & {
+    type: string;
+};
+
+// @public (undocumented)
+export type MapStatus = "idle" | "waiting-client" | "creating" | "initializing" | "ready" | "error" | "disposing" | "disposed";
 
 // @public
 export interface MapStatusRefs {
@@ -272,11 +1371,505 @@ export interface MapStatusRefs {
     readonly zooming: Readonly<ShallowRef<boolean>>;
 }
 
+// @public (undocumented)
+export type MapStyleInput = {
+    styleId: string;
+} | Record<string, unknown>;
+
+// @public (undocumented)
+type MapType_2 = "normal" | "satellite" | "earth";
+export { MapType_2 as MapType }
+
+// @public
+export interface MapTypeChangeEvent extends DriverEvent {
+    // (undocumented)
+    zoomLevel: number;
+}
+
+// @public
+export type MapTypeChangePayload = MapTypeChangeEvent & {
+    type: string;
+};
+
+// @public (undocumented)
+export interface MapView {
+    // (undocumented)
+    center: Point | string;
+    // (undocumented)
+    heading?: number;
+    // (undocumented)
+    tilt?: number;
+    // (undocumented)
+    zoom: number;
+}
+
+// @public (undocumented)
+export type MarkerHandle = SdkHandle<"overlay:marker">;
+
+// @public
+export type MarkerIconInput = string | {
+    imageUrl: string;
+    size: Size;
+    anchor?: Pixel;
+    imageOffset?: Pixel;
+    imageSize?: Size;
+    printImageUrl?: string;
+};
+
 // @public
 export type MarkerIconName = BuiltinMarkerIconName;
 
 // @public (undocumented)
-export function resolveMapContext(map?: unknown): MapContext;
+export interface MarkerOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableClicking?: boolean;
+    // (undocumented)
+    enableDragging?: boolean;
+    // (undocumented)
+    icon?: MarkerIconInput;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    rotation?: number;
+    // (undocumented)
+    title?: string;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public
+export type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
+
+// @public
+export type NativeLayerFeatureState = Record<string, unknown>;
+
+// @public
+export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+
+// @public (undocumented)
+export interface OverlayDriver {
+    // (undocumented)
+    add(target: OverlayTarget, overlay: OverlayHandle): void;
+    addContextMenuItem(menu: OverlayHandle, item: {
+        text: string;
+        callback: (point: unknown, pixel: unknown) => void;
+        disabled?: boolean;
+    } | "-", options?: {
+        width?: number;
+        id?: string;
+    }): void;
+    attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    buildIcon(icon: MarkerIconInput): unknown;
+    // (undocumented)
+    closeInfoWindow(overlay: InfoWindowHandle): void;
+    // (undocumented)
+    createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createCircle(center: Point, radius: number, options?: PathOptions): CircleHandle;
+    // (undocumented)
+    createContextMenu(options?: {
+        width?: number;
+    }): OverlayHandle;
+    createCustomOverlay(position: Point, render: () => HTMLElement, options?: CustomOverlayOptions): OverlayHandle;
+    // (undocumented)
+    createGroundOverlay(bounds: Bounds, options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createInfoWindow(content: HTMLElement, options?: InfoWindowOptions): InfoWindowHandle;
+    // (undocumented)
+    createLabel(content: string, options?: LabelOptions): LabelHandle;
+    // (undocumented)
+    createMapMask(path: readonly Point[], options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
+    // (undocumented)
+    createMarker3D(position: Point, height: number, options?: Record<string, unknown>): OverlayHandle;
+    createPolygon(path: readonly (Point | string)[], options?: PathOptions & {
+        isBoundary?: boolean;
+    }): PolygonHandle;
+    // (undocumented)
+    createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
+    createPrism(path: readonly (Point | string)[], altitude: number, options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createRectangle(bounds: Bounds, options?: PathOptions): OverlayHandle;
+    detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    // (undocumented)
+    hide(overlay: OverlayHandle): boolean;
+    isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
+    openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
+    // (undocumented)
+    redrawInfoWindow(overlay: InfoWindowHandle): void;
+    // (undocumented)
+    remove(target: OverlayTarget, overlay: OverlayHandle): void;
+    // (undocumented)
+    setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
+    // (undocumented)
+    setPosition(overlay: OverlayHandle, position: Point): void;
+    show(overlay: OverlayHandle): boolean;
+    updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
+}
+
+// @public (undocumented)
+export type OverlayHandle = SdkHandle<"overlay" | `overlay:${string}`>;
+
+// @public
+export type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupported";
+
+// @public (undocumented)
+export interface OverlayTarget {
+    // (undocumented)
+    handle: SdkHandle<string>;
+    // (undocumented)
+    kind: "map" | "marker" | "clusterer" | "overlay";
+}
+
+// @public
+export interface PanoramaDataInfo {
+    // (undocumented)
+    description: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    position: Point | null;
+}
+
+// @public
+export interface PanoramaDriver {
+    // (undocumented)
+    readonly supported: boolean;
+}
+
+// @public (undocumented)
+export interface PathOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableClicking?: boolean;
+    // (undocumented)
+    enableEditing?: boolean;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    fillColor?: string;
+    // (undocumented)
+    fillOpacity?: number;
+    // (undocumented)
+    strokeColor?: string;
+    // (undocumented)
+    strokeOpacity?: number;
+    // (undocumented)
+    strokeStyle?: "solid" | "dashed" | "dotted";
+    // (undocumented)
+    strokeWeight?: number;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public (undocumented)
+export interface Pixel {
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
+
+// @public
+export interface Point {
+    // (undocumented)
+    lat: number;
+    // (undocumented)
+    lng: number;
+}
+
+// @public (undocumented)
+export type PolygonHandle = SdkHandle<"overlay:polygon">;
+
+// @public (undocumented)
+export type PolylineHandle = SdkHandle<"overlay:polyline">;
+
+// @public
+export interface PublicBMapClient {
+    readonly capabilities: CapabilityRegistry;
+    readonly driver: {
+        readonly services: ServiceDriver;
+        readonly events: EventDriver;
+        readonly map: MapDriver;
+    };
+}
+
+// @public (undocumented)
+export interface PublicMapContext {
+    readonly client: ShallowRef<PublicBMapClient | null>;
+    readonly error: ShallowRef<unknown>;
+    readonly events: {
+        emit(type: string, payload: unknown): void;
+    };
+    readonly isTearingDown: () => boolean;
+    readonly map: ShallowRef<MapHandle | null>;
+    readonly status: ShallowRef<MapStatus>;
+    readonly whenReady: () => Promise<MapReadyContext>;
+}
+
+// @public (undocumented)
+export function resolveMapContext(map?: unknown): PublicMapContext;
+
+// @public (undocumented)
+export type RidingRouteOptions = RouteRenderState;
+
+// @public (undocumented)
+export type RidingRouteResult = RouteResult<RoutePlan>;
+
+// @public
+export type RouteEndpoint = string | Point | RouteEndpointPoi;
+
+// @public
+export interface RouteEndpointInfo {
+    point: Point | null;
+    title: string;
+    uid: string;
+}
+
+// @public
+export interface RouteEndpointPoi {
+    name?: string;
+    point: Point;
+    uid: string;
+}
+
+// @public
+export interface RouteLeg {
+    distance: number | null;
+    distanceText: string | null;
+    index: number;
+    path: readonly Point[];
+    planIndex: number | null;
+    routeType: number | null;
+    steps: readonly RouteStep[];
+}
+
+// @public
+export interface RoutePlan {
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    dragPois: readonly RouteEndpointInfo[];
+    // (undocumented)
+    duration: number | null;
+    // (undocumented)
+    durationText: string | null;
+    index: number;
+    legs: readonly RouteLeg[];
+    taxiFare: RouteTaxiFare | null;
+    toll: number | null;
+    tollDistance: number | null;
+}
+
+// @public
+export interface RouteRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export interface RouteRenderState {
+    renderOptions?: RouteRenderOptions;
+}
+
+// @public
+export interface RouteResult<TPlan> {
+    // (undocumented)
+    end: RouteEndpointInfo | null;
+    // (undocumented)
+    plans: readonly TPlan[];
+    policy: number | null;
+    // (undocumented)
+    start: RouteEndpointInfo | null;
+    transitType: number | null;
+}
+
+// @public
+export interface RouteState extends RouteRenderState {
+    enableTraffic?: boolean;
+}
+
+// @public
+export interface RouteStep {
+    description: string | null;
+    distance: number | null;
+    distanceText: string | null;
+    index: number;
+    planIndex: number | null;
+    position: Point | null;
+    routeIndex: number | null;
+}
+
+// @public
+export interface RouteTaxiFare {
+    day: RouteTaxiFareDetail | null;
+    distance: number | null;
+    night: RouteTaxiFareDetail | null;
+    remark: string | null;
+}
+
+// @public
+export interface RouteTaxiFareDetail {
+    initialFare: number | null;
+    totalFare: number | null;
+    unitFare: number | null;
+}
+
+// @public (undocumented)
+export interface SdkHandle<Kind extends string, Raw = unknown> {
+    // (undocumented)
+    readonly [HANDLE_BRAND]: Kind;
+    // (undocumented)
+    readonly raw: Raw;
+}
+
+// @public
+export type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
+
+// @public (undocumented)
+export interface ServiceDriver {
+    // (undocumented)
+    createAutocomplete(options: AutocompleteOptions): ServiceHandle<"service:autocomplete">;
+    // (undocumented)
+    createBoundary(): ServiceHandle<"service:boundary">;
+    // (undocumented)
+    createConvertor(): ServiceHandle<"service:convertor">;
+    createDrivingRoute(location: string | Point | MapHandle, options?: DrivingRouteOptions): ServiceHandle<"service:driving-route">;
+    // (undocumented)
+    createGeocoder(): ServiceHandle<"service:geocoder">;
+    // (undocumented)
+    createGeolocation(options?: Record<string, unknown>): ServiceHandle<"service:geolocation">;
+    // (undocumented)
+    createLocalCity(): ServiceHandle<"service:local-city">;
+    createLocalSearch(location: string | Point | MapHandle, options?: LocalSearchOptions): ServiceHandle<"service:local-search">;
+    createRidingRoute(location: string | Point | MapHandle, options?: RidingRouteOptions): ServiceHandle<"service:riding-route">;
+    // (undocumented)
+    createTrackAnimation(map: MapHandle, path: readonly Point[], options?: Record<string, unknown>): ServiceHandle<"service:track-animation">;
+    createTransitRoute(location: string | Point | MapHandle, options?: TransitRouteOptions): ServiceHandle<"service:transit-route">;
+    // (undocumented)
+    createViewAnimation(keyFrames: readonly Record<string, unknown>[], options?: Record<string, unknown>): ServiceHandle<"service:view-animation">;
+    createWalkingRoute(location: string | Point | MapHandle, options?: WalkingRouteOptions): ServiceHandle<"service:walking-route">;
+    setAutocompleteOptions(handle: ServiceHandle<"service:autocomplete">, options: AutocompleteUpdateOptions): void;
+}
+
+// @public (undocumented)
+export interface ServiceErrorInfo {
+    code: number | string | null;
+    // (undocumented)
+    message: string;
+}
+
+// @public (undocumented)
+export type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
+
+// @public (undocumented)
+export interface ServiceResult<T> {
+    readonly data: T | null;
+    readonly error: ServiceErrorInfo | null;
+    readonly sdkStatus: number | null;
+    // (undocumented)
+    readonly status: ServiceCallStatus;
+}
+
+// @public (undocumented)
+export interface Size {
+    // (undocumented)
+    height: number;
+    // (undocumented)
+    width: number;
+}
+
+// @public
+export interface TransitLineSegment {
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    // (undocumented)
+    kind: "line";
+    lineType: number | null;
+    offStop: RouteEndpointInfo | null;
+    onStop: RouteEndpointInfo | null;
+    path: readonly Point[];
+    title: string;
+    viaStops: number | null;
+}
+
+// @public
+const TransitPolicy_2: {
+    readonly RECOMMEND: 0;
+    readonly LEAST_TRANSFER: 1;
+    readonly LEAST_WALKING: 2;
+    readonly AVOID_SUBWAYS: 3;
+    readonly LEAST_TIME: 4;
+    readonly FIRST_SUBWAYS: 5;
+};
+
+// @public (undocumented)
+type TransitPolicy_2 = (typeof TransitPolicy_2)[keyof typeof TransitPolicy_2];
+export { TransitPolicy_2 as TransitPolicy }
+
+// @public
+export interface TransitRouteOptions extends RouteState {
+    intercityPolicy?: IntercityPolicy_2;
+    pageCapacity?: number;
+    policy?: TransitPolicy_2;
+    transitTypePolicy?: TransitVehiclePolicy;
+}
+
+// @public
+export interface TransitRoutePlan {
+    description: string | null;
+    // (undocumented)
+    distance: number | null;
+    // (undocumented)
+    distanceText: string | null;
+    // (undocumented)
+    duration: number | null;
+    // (undocumented)
+    durationText: string | null;
+    index: number;
+    linesTitle: string | null;
+    segments: readonly TransitRouteSegment[];
+    walkDistance: string | null;
+}
+
+// @public (undocumented)
+export type TransitRouteResult = RouteResult<TransitRoutePlan>;
+
+// @public
+export type TransitRouteSegment = TransitLineSegment | TransitWalkSegment;
+
+// @public
+export const TransitVehiclePolicy: {
+    readonly TRAIN: 0;
+    readonly AIRPLANE: 1;
+    readonly COACH: 2;
+};
+
+// @public (undocumented)
+export type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
+
+// @public
+export interface TransitWalkSegment {
+    // (undocumented)
+    kind: "walk";
+    // (undocumented)
+    leg: RouteLeg;
+}
 
 // @public (undocumented)
 export function useAreaBoundary(map?: unknown): {
@@ -347,10 +1940,10 @@ export function useDrivingRoute(options?: MaybeRefOrGetter<BMapDrivingRouteOptio
 export function useGeocodeDetail(map?: unknown): {
     data: Readonly< ShallowRef<GeocodeDetailResult | null>>;
     result: Readonly< ShallowRef<GeocodeDetailResult | null>>;
-    error: Readonly< ShallowRef<ServiceErrorInfo_2 | null>>;
+    error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
-    status: Readonly< ShallowRef<BMapServiceStatus_2>>;
+    status: Readonly< ShallowRef<BMapServiceStatus>>;
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
@@ -366,10 +1959,10 @@ export function useGeocoder(map?: unknown): {
     location: Readonly< ShallowRef<GeoPoint | null>>;
     point: Readonly< ShallowRef<GeoPoint | null>>;
     result: Readonly< ShallowRef<GeoPoint | null>>;
-    error: Readonly< ShallowRef<ServiceErrorInfo_2 | null>>;
+    error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
-    status: Readonly< ShallowRef<BMapServiceStatus_2>>;
+    status: Readonly< ShallowRef<BMapServiceStatus>>;
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
@@ -434,15 +2027,15 @@ export function useLocalSearch(options?: MaybeRefOrGetter<BMapLocalSearchOptions
 
 // @public (undocumented)
 export function useMap(): {
-    status: ShallowRef< MapStatus_2>;
-    map: ShallowRef< MapHandle_2 | null>;
-    client: ShallowRef< BMapClient_2 | null>;
+    status: ShallowRef< MapStatus>;
+    map: ShallowRef< MapHandle | null>;
+    client: ShallowRef< BMapClient | null>;
     error: ShallowRef<unknown>;
     whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
 };
 
-// @public (undocumented)
-export function useMapContext(): MapContext_2;
+// @public
+export function useMapContext(): PublicMapContext;
 
 // @public (undocumented)
 export function useMapEvent<K extends string>(name: MaybeRefOrGetter<K>, handler: MapEventHandler<K> | Ref<MapEventHandler<K>>, options?: UseMapEventOptions): () => void;
@@ -553,6 +2146,15 @@ export function useWalkingRoute(options?: MaybeRefOrGetter<BMapWalkingRouteOptio
 };
 
 // @public
+export type ViewAnimationCancelOutcome =
+/** 已起播 ⇒ 本次就调用了 SDK 的取消并且没抛错；记录已结算。 */
+"canceled"
+/** 还没起播 ⇒ 只登记了取消请求，真正取消要等启动安全窗口（**这条不是「已停止」**）。 */
+| "deferred"
+/** 本 Driver 已没有该实例的记录：早已结算 / 从未由它起播 ⇒ 没有可取消的东西。 */
+| "already-settled";
+
+// @public
 export interface ViewAnimationKeyFrames {
     // (undocumented)
     center: {
@@ -570,6 +2172,12 @@ export interface ViewAnimationKeyFrames {
 
 // @public
 export type ViewAnimationStatus = "idle" | "playing";
+
+// @public
+export type WalkingRouteOptions = RouteRenderState;
+
+// @public (undocumented)
+export type WalkingRouteResult = RouteResult<RoutePlan>;
 
 // (No @packageDocumentation comment for this package)
 

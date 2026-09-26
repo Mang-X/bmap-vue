@@ -152,8 +152,8 @@ Vite 构建入口去掉 `core`、`verify:package` 的必需子路径清单去掉
   二轮评审指出条数拦不住「同一次改动里删一个旧的 + 新增一个新的」与「先降到 26 下次再涨回
   27」，遂改成集合）。原因见「后果」：这类类型在报告里只剩一个名字、结构漂移不会改变基线
   文本，**名字**是唯一还能看见它们的量；新增与清理**两个方向**都要跑 `pnpm generate:api`
-  才变绿，于是每次消长都必须出现在评审 diff 里。存量清零之后这些文件就是 `[]` —— 门禁从
-  「存量清单」变成「零容忍」，机制本身要留着，它就是那道 freeze 门。它只管**名字**：同名结构
+  才变绿，于是每次消长都必须出现在评审 diff 里。**存量已由 #160 清零**：五份文件都是 `[]`，
+  门禁从「存量清单」变成**零容忍**，机制本身留着，它就是那道 freeze 门。它只管**名字**：同名结构
   的漂移由该出口的签名基线守（上一层），两层缺一不可 —— 集合不看结构，快照不看「这个名字该不该
   被导出」。
 
@@ -213,11 +213,17 @@ success 判定），`localBuild` 下即使分析报错也会覆盖既有基线�
   `JsapiV4Provider`（AE 报告**不渲染 `private` 成员** —— `ApiReportGenerator` 对
   `ModifierFlags.Private` 直接 `return false` —— 所以返回契约只含 `id` / `getCacheKey` / `load`，
   实现里的私有状态不会被冻结）。
-- **未导出类型的存量分两层守**：`etc/<出口>/forgotten-exports.json` 的**身份集合**（全等才通过）
-  守「名字有没有换」—— `advanced` 27 / `composables` 41 / `plugins` 9 / `ui-kit` 21
-  （`resolver` 已是 0）；同名**结构**的漂移由该出口的**签名基线**守，因为 report 对这类引用只写
-  `typeof getInputValue`，看不见结构（#159 三轮评审 P1）。逐条决定「导出还是收窄签名」是后续票
-  的事，这两条门保证它不会**静默变多**、不会**换个名字进来**、也不会**原地改形状**：只比条数时
+- **未导出类型分两层守，存量已清零**：`etc/<出口>/forgotten-exports.json` 的**身份集合**（全等才通过）
+  守「名字有没有换」—— **#160 之后五份全是 `[]`**（此前 `advanced` 27 / `composables` 41 /
+  `plugins` 9 / `ui-kit` 21，`resolver` 本就是 0）；同名**结构**的漂移由该出口的**签名基线**守，
+  因为 report 对这类引用只写 `typeof getInputValue`，看不见结构（#159 三轮评审 P1）。
+  #160 逐条走本 ADR 预留的二选一，处置分三类：① **升为公共导出** —— 出现在已导出签名里、
+  消费方因此无法命名的形状（options / result / policy 枚举 / 错误类）；② **让引用消失** ——
+  内部运行时（`MapContext` / `MapRuntimeShape` / `ResourceScope` / `MapEventBus`）改为对外只给
+  窄面（`PublicMapContext` / `PublicBMapClient` / `EventSourceClient`），见
+  `src/composables/internalMapContext.ts`；③ **让引用它的类型不再依赖它** ——
+  `BuiltinMarkerIconName` 从 `keyof typeof MARKER_ICON_SPRITES` 改成显式联合。
+  这两条门保证存量不会**静默变多**、不会**换个名字进来**、也不会**原地改形状**：只比条数时
   「同一次改动里删一个 + 新增一个」与「先降到 26、下次再涨回 27」都不改变读数（#159 二轮评审 P1
   举的两个漏法），集合基线两种都拦，两个方向都得经 `pnpm generate:api` 才能变绿。
 

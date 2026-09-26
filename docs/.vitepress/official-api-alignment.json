@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 372,
-  "uiKitCount": 55,
-  "matchedCount": 110,
-  "officialOnlyCount": 292,
-  "oursOnlyCount": 262,
+  "oursPublicCount": 408,
+  "uiKitCount": 62,
+  "matchedCount": 115,
+  "officialOnlyCount": 287,
+  "oursOnlyCount": 293,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -531,6 +531,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "AutocompleteOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "BezierCurveProps",
       "surface": "type",
       "oursEntry": "."
@@ -538,7 +543,7 @@
     {
       "name": "BMapDriver",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "BMapProviderProps",
@@ -548,12 +553,12 @@
     {
       "name": "Bounds",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "Capability",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "CircleProps",
@@ -568,7 +573,12 @@
     {
       "name": "ControlHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CustomOverlayOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "CustomOverlayProps",
@@ -578,17 +588,17 @@
     {
       "name": "DrivingPolicy",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "DrivingRouteOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "DrivingRouteResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "FillLayerProps",
@@ -606,9 +616,19 @@
       "oursEntry": "."
     },
     {
+      "name": "InfoWindowOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "InfoWindowProps",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "LabelOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "LabelProps",
@@ -618,7 +638,7 @@
     {
       "name": "LayerHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LineLayerProps",
@@ -633,27 +653,32 @@
     {
       "name": "LocalSearchOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchRenderOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapMouseEvent",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapProps",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "MarkerOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "MarkerProps",
@@ -673,7 +698,7 @@
     {
       "name": "OverlayHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "PanoramaOptions",
@@ -688,12 +713,12 @@
     {
       "name": "Pixel",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "Point",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "PointCollectionProps",
@@ -728,42 +753,42 @@
     {
       "name": "RidingRouteOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RidingRouteResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RoutePlan",
       "surface": "type",
-      "oursEntry": "./ui-kit"
+      "oursEntry": "./composables"
     },
     {
       "name": "ServiceHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "Size",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitPolicy",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitRouteOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitRouteResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "UnsupportedBehavior",
@@ -778,12 +803,12 @@
     {
       "name": "WalkingRouteOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "WalkingRouteResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     }
   ],
   "officialOnly": [
@@ -1204,10 +1229,6 @@
       "surface": "type"
     },
     {
-      "name": "AutocompleteOptions",
-      "surface": "type"
-    },
-    {
       "name": "AutocompleteResult",
       "surface": "type"
     },
@@ -1328,10 +1349,6 @@
       "surface": "type"
     },
     {
-      "name": "CustomOverlayOptions",
-      "surface": "type"
-    },
-    {
       "name": "DisplayOptions",
       "surface": "type"
     },
@@ -1433,14 +1450,6 @@
     },
     {
       "name": "IconSequenceProps",
-      "surface": "type"
-    },
-    {
-      "name": "InfoWindowOptions",
-      "surface": "type"
-    },
-    {
-      "name": "LabelOptions",
       "surface": "type"
     },
     {
@@ -1569,10 +1578,6 @@
     },
     {
       "name": "Marker3DProps",
-      "surface": "type"
-    },
-    {
-      "name": "MarkerOptions",
       "surface": "type"
     },
     {
@@ -2053,6 +2058,11 @@
       "oursEntry": "."
     },
     {
+      "name": "AutocompleteUpdateOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "BMapClientContext",
       "surface": "type",
       "oursEntry": "."
@@ -2093,9 +2103,14 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "BMapRouteRenderOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "BMapServiceStatus",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "BMapTransitRouteOptions",
@@ -2110,12 +2125,12 @@
     {
       "name": "CapabilityStatus",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "CircleHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ClientStatus",
@@ -2128,9 +2143,14 @@
       "oursEntry": "."
     },
     {
+      "name": "ControlOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "ControlOptionStatus",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "CreateBMapClientOptions",
@@ -2151,6 +2171,11 @@
       "name": "DataComponentProps",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "DriverEvent",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "FeatureStateUpdateOptions",
@@ -2180,22 +2205,27 @@
     {
       "name": "InfoWindowHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "InitialMapOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LabelHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LayerCreateOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapContext",
@@ -2205,22 +2235,22 @@
     {
       "name": "MapEventPayload",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapLoadEvent",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapLoadPayload",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapPointerEvent",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapReadyContext",
@@ -2230,27 +2260,27 @@
     {
       "name": "MapResizeEvent",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapResizePayload",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapStatus",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapTypeChangeEvent",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapTypeChangePayload",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MarkerClusterProps",
@@ -2260,7 +2290,7 @@
     {
       "name": "MarkerHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MarkerListProps",
@@ -2323,6 +2353,11 @@
       "oursEntry": "."
     },
     {
+      "name": "PathOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PointLayerProps",
       "surface": "type",
       "oursEntry": "."
@@ -2330,17 +2365,27 @@
     {
       "name": "PolygonHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "PolylineHandle",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "PublicMapContext",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "ResolvedMapEvent",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "resolveInternalMapContext",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "resolveMapContext",
@@ -2355,17 +2400,22 @@
     {
       "name": "RouteRenderOptions",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteServiceHandle",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "SdkHandle",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "SdkResourceStatus",
@@ -2375,17 +2425,22 @@
     {
       "name": "ServiceCallStatus",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ServiceResult",
       "surface": "type",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TargetContext",
       "surface": "type",
       "oursEntry": "."
+    },
+    {
+      "name": "toPublicMapContext",
+      "surface": "type",
+      "oursEntry": "./composables"
     },
     {
       "name": "TrackLineLayerProps",
@@ -2435,7 +2490,7 @@
     {
       "name": "BMapClient",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "bmapClientContextKey",
@@ -2460,7 +2515,7 @@
     {
       "name": "BMapEngine",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "BMapLocalSearchOperation",
@@ -2483,6 +2538,11 @@
       "oursEntry": "."
     },
     {
+      "name": "BMapRouteLocation",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "BoundaryRings",
       "surface": "other",
       "oursEntry": "."
@@ -2503,24 +2563,34 @@
       "oursEntry": "."
     },
     {
+      "name": "BuiltinMarkerIconName",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "CapabilityDescriptor",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "CapabilityExplanation",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "CapabilityFamily",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CapabilityReason",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "CapabilityRegistry",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ClusterChange",
@@ -2545,12 +2615,12 @@
     {
       "name": "ControlDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ControlKind",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ControllableMode",
@@ -2569,6 +2639,11 @@
     },
     {
       "name": "CoordinatesToType",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CopyrightEntry",
       "surface": "other",
       "oursEntry": "./composables"
     },
@@ -2610,7 +2685,7 @@
     {
       "name": "DrivingRouteEndpoint",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "DrivingRouteRequest",
@@ -2630,7 +2705,12 @@
     {
       "name": "EventDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "EventSourceClient",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "FeaturePick",
@@ -2658,6 +2738,11 @@
       "oursEntry": "."
     },
     {
+      "name": "FrameScheduler",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "GeocodedAddress",
       "surface": "other",
       "oursEntry": "."
@@ -2673,9 +2758,14 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "GeolocationAddressInfo",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "GeometryDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "GeoPoint",
@@ -2700,7 +2790,7 @@
     {
       "name": "IntercityPolicy",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "JsapiV4Driver",
@@ -2713,9 +2803,34 @@
       "oursEntry": "."
     },
     {
+      "name": "LayerCtorSlot",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LayerData",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "LayerDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LayerKind",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LayerOperation",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LayerSurface",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "LoadedJsapiV4",
@@ -2725,17 +2840,17 @@
     {
       "name": "LocalSearchBounds",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchInBoundsRequest",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchKeyword",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchLocation",
@@ -2745,22 +2860,22 @@
     {
       "name": "LocalSearchNearbyRequest",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchPoi",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "LocalSearchSearchOption",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MAP_EVENT_CATALOG",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MAP_EVENT_EMIT_ALIASES",
@@ -2790,12 +2905,17 @@
     {
       "name": "MapDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapEventDefinition",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "MapEventEmits",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "MapEventHandler",
@@ -2805,12 +2925,12 @@
     {
       "name": "MapEventMap",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapEventName",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapEventPayloadForName",
@@ -2825,7 +2945,7 @@
     {
       "name": "MapEventPayloadOf",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapEventSdkName",
@@ -2850,7 +2970,7 @@
     {
       "name": "MapInteraction",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapMaskShowRegion",
@@ -2865,7 +2985,7 @@
     {
       "name": "MapStyleInput",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MapSuspendReason",
@@ -2875,7 +2995,7 @@
     {
       "name": "MapType",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "mapVglPlugin",
@@ -2885,7 +3005,7 @@
     {
       "name": "MapView",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "MarkerClusterEngine",
@@ -2901,6 +3021,11 @@
       "name": "MarkerIcon",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "MarkerIconInput",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "MarkerIconName",
@@ -2933,6 +3058,21 @@
       "oursEntry": "."
     },
     {
+      "name": "NativeLayerFeatureKeys",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "NativeLayerFeatureState",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "NativeLayerFeatureStateMap",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "NativeLayerKind",
       "surface": "other",
       "oursEntry": "."
@@ -2960,7 +3100,7 @@
     {
       "name": "OverlayDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "OverlayEventDefinition",
@@ -3028,19 +3168,29 @@
       "oursEntry": "."
     },
     {
+      "name": "OverlayPropertyPolicy",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "OverlaySpec",
       "surface": "other",
       "oursEntry": "."
     },
     {
+      "name": "OverlayTarget",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PanoramaDataInfo",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "PanoramaDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "PanoramaPoiType",
@@ -3078,6 +3228,11 @@
       "oursEntry": "."
     },
     {
+      "name": "PublicBMapClient",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "resolveMapEventName",
       "surface": "other",
       "oursEntry": "."
@@ -3095,27 +3250,27 @@
     {
       "name": "RouteEndpoint",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteEndpointInfo",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteEndpointPoi",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteLeg",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteRenderState",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteRequest",
@@ -3130,22 +3285,22 @@
     {
       "name": "RouteState",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteStep",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteTaxiFare",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "RouteTaxiFareDetail",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "SdkResourceSpec",
@@ -3160,12 +3315,12 @@
     {
       "name": "ServiceDriver",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ServiceErrorInfo",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "ServiceInvocationDriver",
@@ -3225,12 +3380,12 @@
     {
       "name": "TransitLineSegment",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitRoutePlan",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitRouteRequest",
@@ -3240,17 +3395,17 @@
     {
       "name": "TransitRouteSegment",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitVehiclePolicy",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "TransitWalkSegment",
       "surface": "other",
-      "oursEntry": "."
+      "oursEntry": "./composables"
     },
     {
       "name": "urlPluginDefinition",
@@ -3263,21 +3418,31 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "ViewAnimationCancelOutcome",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "XYLike",
       "surface": "other",
       "oursEntry": "."
     }
   ],
   "uiKitOnly": [
+    "BMapError",
+    "BMapErrorCode",
+    "BMapErrorOptions",
     "isUiKitLoaded",
     "loadUiKit",
     "PlaceAutocomplete",
     "PlaceAutocompleteDisplayDTO",
+    "PlaceAutocompleteExpose",
     "PlaceAutocompleteProps",
     "PlaceBoundsDTO",
     "PlaceDetail",
     "PlaceDetailDisplayDTO",
     "PlaceDetailDTO",
+    "PlaceDetailExpose",
     "PlaceDetailPlaceInput",
     "PlaceDetailPlaceObject",
     "PlaceDetailProps",
@@ -3287,6 +3452,7 @@
     "PlacePointDTO",
     "PlaceSearch",
     "PlaceSearchDisplayDTO",
+    "PlaceSearchExpose",
     "PlaceSearchProps",
     "PlaceSuggestionDTO",
     "RouteDriveSegmentDTO",
@@ -3294,6 +3460,7 @@
     "RoutePlanDrivingPolicy",
     "RoutePlanDTO",
     "RoutePlanEndpointInput",
+    "RoutePlanExpose",
     "RoutePlanMode",
     "RoutePlanNavClickDTO",
     "RoutePlanPlanSelectDTO",

@@ -27,11 +27,25 @@ export { default as PlaceSearch } from "./components/PlaceSearch.vue";
 export { default as PlaceDetail } from "./components/PlaceDetail.vue";
 export { default as RoutePlan } from "./components/RoutePlan.vue";
 export type { PlaceAutocompleteProps } from "./components/PlaceAutocomplete.vue";
-export type { PlaceSearchProps, PlaceBoundsDTO } from "./components/PlaceSearch.vue";
+export type { PlaceSearchProps } from "./components/PlaceSearch.vue";
 export type { PlaceDetailProps } from "./components/PlaceDetail.vue";
 export type { RoutePlanProps } from "./components/RoutePlan.vue";
 
 export { loadUiKit, isUiKitLoaded, UI_KIT_PACKAGE, UI_KIT_STYLE_PATH } from "./loadUiKit";
+
+/**
+ * 错误类按**值**导出（issue #160）。
+ *
+ * `<RoutePlan>` 的 `error` 事件载荷与 `search()` 的拒绝都是这个类的实例，带稳定的
+ * `code` 联合（`BMapErrorCode`）——消费方要能 `catch` / `instanceof` / 读 `code`，
+ * 只暴露一个「无法命名」的类型等于让人只能 `unknown` 接。
+ *
+ * 它是**同一份**实现：`./advanced`（`UnsupportedCapabilityError extends BMapError`）、
+ * `./plugins` 与根入口导出的都是同一个类，因此跨入口 `instanceof` 成立
+ * （由 `ui-kit-entry.test.ts` 对产物闭包断言）。
+ */
+export { BMapError } from "../../core/errors/BMapError";
+export type { BMapErrorCode, BMapErrorOptions } from "../../core/errors/BMapError";
 export { useUiKitWidget } from "./useUiKitWidget";
 // 既是值也是类型：让调用方写 `policy: RoutePlanDrivingPolicy.AVOID_CONGESTION` 而不是魔法数字。
 // 值导出同时携带类型含义，因此它**不在**下面的 `export type` 列表里（重复导出会报错）。
@@ -45,7 +59,10 @@ export type {
 
 export type {
   PlaceAutocompleteDisplayDTO,
+  PlaceAutocompleteExpose,
+  PlaceBoundsDTO,
   PlaceDetailDTO,
+  PlaceDetailExpose,
   PlaceDetailDisplayDTO,
   PlaceDetailPlaceInput,
   PlaceDetailPlaceObject,
@@ -54,10 +71,12 @@ export type {
   PlacePointDTO,
   PlacePoiDTO,
   PlaceSearchDisplayDTO,
+  PlaceSearchExpose,
   PlaceSuggestionDTO,
   RouteDriveSegmentDTO,
   RoutePlanDTO,
   RoutePlanDrivingOptionsDTO,
+  RoutePlanExpose,
   RoutePlanEndpointInput,
   RoutePlanMode,
   RoutePlanNavClickDTO,

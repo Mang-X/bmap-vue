@@ -369,7 +369,16 @@ describe("UI 与 headless 分流（同一次界面操作只走一条路径）", 
     for (const file of files) {
       const code = stripComments(readFileSync(file, "utf8"));
       expect(code.length).toBeGreaterThan(100);
-      if (/jsapi-ui-kit|RoutePlan|integrations\/ui-kit/.test(code)) offenders.push(file);
+      // 判定的对象是「**引用** UI Kit 的路线面板」，不是「出现了 RoutePlan 这个词」。
+      // 两种真正的引用形态：bare import（`import ... from "./RoutePlan"`）与
+      // 带命名空间/路径的引用（`RoutePlan.vue` / `components/RoutePlan`）。
+      // `TransitRoutePlan` 这类 headless 结果类型只是词形相近，必须排除 —— 它属于
+      // `driver/types/services.ts`，由 `./composables` 正当地转出（issue #160）。
+      if (
+        /jsapi-ui-kit|integrations\/ui-kit|["'][^"'\n]*\bRoutePlan\b[^"'\n]*["']/.test(code)
+      ) {
+        offenders.push(file);
+      }
     }
     expect(offenders).toEqual([]);
   });

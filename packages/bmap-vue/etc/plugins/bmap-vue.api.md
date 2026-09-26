@@ -7,8 +7,176 @@
 import { App } from 'vue';
 import { InjectionKey } from 'vue';
 
+// @public (undocumented)
+export interface AutocompleteOptions {
+    input: HTMLInputElement;
+    // (undocumented)
+    location?: unknown;
+    // (undocumented)
+    onSearchComplete?: (event: unknown) => void;
+    // (undocumented)
+    types?: string[];
+}
+
+// @public
+export interface AutocompleteUpdateOptions {
+    location?: unknown;
+    // (undocumented)
+    types?: string[];
+}
+
+// @public (undocumented)
+export interface BMapClient {
+    // (undocumented)
+    readonly capabilities: CapabilityRegistry;
+    // (undocumented)
+    readonly driver: BMapDriver;
+    // (undocumented)
+    readonly engine: BMapEngine;
+    // (undocumented)
+    readonly id: symbol;
+    readonly libraryVersion: string;
+    readonly rawSdk: unknown;
+    readonly sdkVersion: string;
+}
+
 // @public
 export const bmapConfigKey: InjectionKey<BMapPluginConfig>;
+
+// @public (undocumented)
+export interface BMapDriver {
+    // (undocumented)
+    readonly capabilities: CapabilityRegistry;
+    // (undocumented)
+    readonly controls: ControlDriver;
+    // (undocumented)
+    readonly engine: BMapEngine;
+    // (undocumented)
+    readonly events: EventDriver;
+    // (undocumented)
+    readonly geometry: GeometryDriver;
+    // (undocumented)
+    readonly layers: LayerDriver;
+    // (undocumented)
+    readonly map: MapDriver;
+    // (undocumented)
+    readonly overlays: OverlayDriver;
+    // (undocumented)
+    readonly panorama: PanoramaDriver;
+    // (undocumented)
+    readonly rawSdk: unknown;
+    // (undocumented)
+    readonly services: ServiceDriver;
+    // (undocumented)
+    readonly version: string;
+}
+
+// @public
+export type BMapDriverFactory = (input: BMapDriverInput) => BMapDriver;
+
+// @public
+export interface BMapDriverInput {
+    // (undocumented)
+    readonly capabilityOverrides?: Partial<Record<Capability, boolean>>;
+    // (undocumented)
+    readonly loaded: LoadedJsapiV4;
+    // (undocumented)
+    readonly unsupported: UnsupportedBehavior;
+}
+
+// @public (undocumented)
+export type BMapEngine = "jsapi-v4";
+
+// @public (undocumented)
+export class BMapError extends Error {
+    constructor(code: BMapErrorCode, message: string, options?: BMapErrorOptions);
+    // (undocumented)
+    readonly code: BMapErrorCode;
+    // (undocumented)
+    static readonly codes: {
+        SDK_LOAD_FAILED: "BMAP_SDK_LOAD_FAILED";
+        SDK_LOAD_TIMEOUT: "BMAP_SDK_LOAD_TIMEOUT";
+        SDK_CONFIG_CONFLICT: "BMAP_SDK_CONFIG_CONFLICT";
+        SDK_ENGINE_MISMATCH: "BMAP_SDK_ENGINE_MISMATCH";
+        PROVIDER_ABORTED: "BMAP_PROVIDER_ABORTED";
+        RUNTIME_DISPOSED: "BMAP_RUNTIME_DISPOSED";
+        RESOURCE_DISPOSED: "BMAP_RESOURCE_DISPOSED";
+        PARENT_CONTEXT_MISSING: "BMAP_PARENT_CONTEXT_MISSING";
+        RESOURCE_CREATE_FAILED: "BMAP_RESOURCE_CREATE_FAILED";
+        RESOURCE_UPDATE_FAILED: "BMAP_RESOURCE_UPDATE_FAILED";
+        PLUGIN_LOAD_FAILED: "BMAP_PLUGIN_LOAD_FAILED";
+        PLUGIN_UNKNOWN: "BMAP_PLUGIN_UNKNOWN";
+        CAPABILITY_UNSUPPORTED: "BMAP_CAPABILITY_UNSUPPORTED";
+        SDK_CALL_FAILED: "BMAP_SDK_CALL_FAILED";
+        SERVICE_FAILED: "BMAP_SERVICE_FAILED";
+        INVALID_ARGUMENT: "BMAP_INVALID_ARGUMENT";
+        INVALID_POINT: "BMAP_INVALID_POINT";
+        HANDLE_FOREIGN: "BMAP_HANDLE_FOREIGN";
+        DUPLICATE_ITEM_KEY: "BMAP_DUPLICATE_ITEM_KEY";
+        UI_KIT_UNAVAILABLE: "BMAP_UI_KIT_UNAVAILABLE";
+    };
+    // (undocumented)
+    readonly component?: string;
+    // (undocumented)
+    readonly mapId?: symbol | string;
+    // (undocumented)
+    readonly plugin?: string;
+    get retryable(): boolean;
+    toJSON(): {
+        name: string;
+        code: BMapErrorCode;
+        message: string;
+        cause: unknown;
+        mapId: string | undefined;
+        component: string | undefined;
+        plugin: string | undefined;
+    };
+}
+
+// @public
+export type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED"
+/**
+* 插件**名字**不在 Catalog 里（`plugins: ['Typo']`）。
+*
+* 与 `BMAP_PLUGIN_LOAD_FAILED`（名字认得、脚本/依赖加载失败）分开：前者是调用方的配置错误、
+* 重试没有意义；后者才可能因为 CDN 抖动而值得重试。合在一起会让 `retryable` 说谎。
+*/
+| "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY"
+/** `./ui-kit` 的官方 UI Kit 不可用：无 DOM 环境调用，或 optional peer 未安装 / 加载失败。 */
+| "BMAP_UI_KIT_UNAVAILABLE";
+
+// @public (undocumented)
+export interface BMapErrorOptions {
+    // (undocumented)
+    capability?: string;
+    // (undocumented)
+    cause?: unknown;
+    // (undocumented)
+    component?: string;
+    // (undocumented)
+    engine?: string;
+    // (undocumented)
+    mapId?: symbol | string;
+    // (undocumented)
+    plugin?: string;
+    // (undocumented)
+    version?: string;
+}
+
+// @public (undocumented)
+export type BMapLoadOptions = {
+    ak?: string;
+    apiUrl?: string;
+    version?: string;
+    language?: string;
+    timeout?: number;
+    serviceHost?: string;
+    nonce?: string;
+    integrity?: string;
+    crossOrigin?: CrossOriginValue;
+    referrerPolicy?: ReferrerPolicy;
+    callbackParam?: string;
+};
 
 // @public (undocumented)
 export interface BMapPluginConfig {
@@ -36,6 +204,24 @@ export interface BMapPluginDefinition<Resource = unknown> {
 }
 
 // @public
+export interface BMapProviderLike {
+    // (undocumented)
+    getCacheKey?(options: BMapLoadOptions): string;
+    // (undocumented)
+    readonly id?: string;
+    // (undocumented)
+    load(options: BMapLoadOptions, signal?: AbortSignal): Promise<LoadedJsapiV4>;
+}
+
+// @public (undocumented)
+export interface Bounds {
+    // (undocumented)
+    northeast: Point;
+    // (undocumented)
+    southwest: Point;
+}
+
+// @public
 export const BUILTIN_PLUGIN_CATALOG: Readonly<Record<BuiltinPluginName, PluginCatalogEntry>>;
 
 // @public
@@ -51,6 +237,141 @@ export const BUILTIN_PLUGIN_URLS: {
 
 // @public
 export type BuiltinPluginName = "TrackAnimation" | "DrawingManager" | "GeoUtils" | "Mapvgl";
+
+// @public
+export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+
+// @public (undocumented)
+export interface CapabilityDescriptor {
+    description: string;
+    // (undocumented)
+    family: CapabilityFamily;
+    // (undocumented)
+    id: Capability;
+    rawMembers?: readonly string[];
+    runtimeOnly: boolean;
+    // (undocumented)
+    status: CapabilityStatus;
+}
+
+// @public (undocumented)
+export interface CapabilityExplanation {
+    // (undocumented)
+    engine: BMapEngine;
+    family?: CapabilityFamily;
+    // (undocumented)
+    id: Capability;
+    // (undocumented)
+    reason: CapabilityReason;
+    // (undocumented)
+    runtimeOnly: boolean;
+    // (undocumented)
+    status: CapabilityStatus;
+    // (undocumented)
+    supported: boolean;
+    // (undocumented)
+    version: string;
+}
+
+// @public (undocumented)
+export type CapabilityFamily = "map" | "overlay" | "layer" | "service" | "panorama";
+
+// @public (undocumented)
+export type CapabilityReason = "supported"
+/**
+* 目录**未收录**该 id（#126 取代 `engine-unsupported`：单引擎下「引擎不在白名单」不可达，
+* 原 reason 的唯一可达路径就是描述符缺失）。调用方带着外部字符串或 `as Capability` 探针进来时命中。
+*/
+| "unlisted-capability" | "raw-member-missing" | "status-unsupported" | "overridden";
+
+// @public (undocumented)
+export interface CapabilityRegistry {
+    descriptor(capability: Capability): CapabilityDescriptor | undefined;
+    // (undocumented)
+    explain(capability: Capability): CapabilityExplanation;
+    // (undocumented)
+    list(): readonly Capability[];
+    observeInstanceMembers(source: unknown): void;
+    // (undocumented)
+    require(capability: Capability): void;
+    // (undocumented)
+    supports(capability: Capability): boolean;
+}
+
+// @public (undocumented)
+export type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
+
+// @public (undocumented)
+export type CircleHandle = SdkHandle<"overlay:circle">;
+
+// @public (undocumented)
+export interface ControlDriver {
+    // (undocumented)
+    add(target: OverlayTarget, control: ControlHandle): void;
+    // (undocumented)
+    addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
+    // (undocumented)
+    create(kind: ControlKind, options?: ControlOptions): ControlHandle;
+    createCustomControl(options: {
+        anchor?: string;
+        offset?: Pixel;
+        render: (mapContainer: HTMLElement) => HTMLElement | null;
+    }): ControlHandle;
+    // (undocumented)
+    hide(control: ControlHandle): void;
+    // (undocumented)
+    listCopyrights(control: ControlHandle): CopyrightEntry[];
+    planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
+    // (undocumented)
+    remove(target: OverlayTarget, control: ControlHandle): void;
+    // (undocumented)
+    removeCopyright(control: ControlHandle, id: number): void;
+    // (undocumented)
+    setOptions(control: ControlHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    show(control: ControlHandle): void;
+}
+
+// @public
+export type ControlHandle = SdkHandle<"control" | `control:${string}`>;
+
+// @public (undocumented)
+export type ControlKind = "zoom" | "scale" | "navigation" | "navigation-3d" | "city-list" | "location" | "map-type" | "overview" | "panorama" | "copyright" | "custom";
+
+// @public (undocumented)
+export interface ControlOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    anchor?: string;
+    // (undocumented)
+    offset?: Pixel;
+}
+
+// @public
+export type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
+
+// @public (undocumented)
+export interface CopyrightEntry {
+    // (undocumented)
+    bounds?: unknown;
+    // (undocumented)
+    content: string;
+    // (undocumented)
+    id: number;
+}
+
+// @public (undocumented)
+export interface CreateBMapClientOptions {
+    // (undocumented)
+    capabilityOverrides?: Partial<Record<Capability, boolean>>;
+    driver?: BMapDriverFactory;
+    // (undocumented)
+    loadOptions: BMapLoadOptions;
+    provider: BMapProviderLike;
+    // (undocumented)
+    unsupported?: UnsupportedBehavior;
+}
 
 // @public (undocumented)
 export function createBMapPlugin(options?: CreateBMapPluginOptions): {
@@ -79,11 +400,95 @@ export interface CreateBMapPluginOptions {
 // @public (undocumented)
 export function createPluginHost(label?: string): PluginHost;
 
+// @public (undocumented)
+export type CrossOriginValue = "anonymous" | "use-credentials";
+
+// @public
+export interface CustomOverlayOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    anchor?: Pixel;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    maxZoom?: number;
+    // (undocumented)
+    minZoom?: number;
+    offset?: Pixel;
+    // (undocumented)
+    properties?: Record<string, unknown>;
+    // (undocumented)
+    rotation?: number;
+    // (undocumented)
+    visible?: boolean;
+    // (undocumented)
+    zIndex?: number;
+}
+
 // @public
 export function disposeDefaultPluginHost(): void;
 
+// @public (undocumented)
+export type Disposer = () => void;
+
 // @public
 export function drawingManagerPlugin(): BMapPluginDefinition<unknown>;
+
+// @public
+const DrivingPolicy_2: {
+    readonly DEFAULT: 0;
+    readonly LEAST_DISTANCE: 2;
+    readonly AVOID_HIGHWAYS: 3;
+    readonly FIRST_HIGHWAYS: 4;
+    readonly AVOID_CONGESTION: 5;
+    readonly AVOID_PAY: 6;
+    readonly HIGHWAYS_AVOID_CONGESTION: 7;
+    readonly AVOID_HIGHWAYS_CONGESTION: 8;
+    readonly AVOID_CONGESTION_PAY: 9;
+    readonly AVOID_HIGHWAYS_CONGESTION_PAY: 10;
+    readonly AVOID_HIGHWAYS_PAY: 11;
+    readonly DISTANCE_PRIORITY: 12;
+    readonly TIME_PRIORITY: 13;
+};
+
+// @public (undocumented)
+type DrivingPolicy_2 = (typeof DrivingPolicy_2)[keyof typeof DrivingPolicy_2];
+export { DrivingPolicy_2 as DrivingPolicy }
+
+// @public
+export interface DrivingRouteOptions extends RouteState {
+    policy?: DrivingPolicy_2;
+}
+
+// @public (undocumented)
+export interface EventDriver {
+    // (undocumented)
+    on<TEvent = unknown>(target: SdkHandle<string>, type: string, listener: (event: TEvent) => void): () => void;
+}
+
+// @public (undocumented)
+export interface GeometryDriver {
+    // (undocumented)
+    fromRawBounds(raw: unknown): Bounds;
+    // (undocumented)
+    fromRawPixel(raw: unknown): Pixel;
+    // (undocumented)
+    fromRawPoint(raw: unknown): Point;
+    // (undocumented)
+    fromRawPoints(raws: readonly unknown[]): Point[];
+    // (undocumented)
+    fromRawSize(raw: unknown): Size;
+    // (undocumented)
+    toRawBounds(bounds: Bounds): unknown;
+    // (undocumented)
+    toRawPixel(pixel: Pixel): unknown;
+    // (undocumented)
+    toRawPoint(point: Point): unknown;
+    // (undocumented)
+    toRawPoints(points: readonly Point[]): unknown[];
+    // (undocumented)
+    toRawSize(size: Size): unknown;
+}
 
 // @public
 export function geoUtilsPlugin(): BMapPluginDefinition<unknown>;
@@ -91,8 +496,450 @@ export function geoUtilsPlugin(): BMapPluginDefinition<unknown>;
 // @public (undocumented)
 export function getDefaultPluginHost(): PluginHost;
 
+// @public (undocumented)
+export type InfoWindowHandle = SdkHandle<"overlay:info-window">;
+
+// @public (undocumented)
+export interface InfoWindowOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableAutoPan?: boolean;
+    // (undocumented)
+    enableCloseOnClick?: boolean;
+    // (undocumented)
+    enableMaximize?: boolean;
+    // (undocumented)
+    height?: number;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    title?: string;
+    // (undocumented)
+    width?: number;
+}
+
+// @public (undocumented)
+export interface InitialMapOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    backgroundColor?: number[];
+    // (undocumented)
+    displayOptions?: Record<string, unknown>;
+    // (undocumented)
+    maxZoom?: number;
+    // (undocumented)
+    minZoom?: number;
+    // (undocumented)
+    restrictCenter?: boolean;
+}
+
+// @public
+const IntercityPolicy_2: {
+    readonly LEAST_TIME: 0;
+    readonly EARLY_START: 1;
+    readonly CHEAP_PRICE: 2;
+};
+
+// @public (undocumented)
+type IntercityPolicy_2 = (typeof IntercityPolicy_2)[keyof typeof IntercityPolicy_2];
+export { IntercityPolicy_2 as IntercityPolicy }
+
+// @public
+export type JsapiV4Engine = "jsapi-v4";
+
+// @public (undocumented)
+export interface JsapiV4LoadMetadata {
+    readonly akRef: string;
+    readonly apiUrl: string;
+    readonly domain: string;
+    readonly fingerprint: string;
+    // (undocumented)
+    readonly loadedAt: number;
+    // (undocumented)
+    readonly mode: JsapiV4LoadMode;
+    // (undocumented)
+    readonly providerId: JsapiV4ProviderId;
+    // (undocumented)
+    readonly versionSource: JsapiV4VersionSource;
+}
+
+// @public
+export type JsapiV4LoadMode = JsapiV4ScriptMode | "existing-global";
+
+// @public
+export interface JsapiV4Namespace {
+    // (undocumented)
+    readonly [member: string]: unknown;
+    // (undocumented)
+    readonly Map: unknown;
+    // (undocumented)
+    readonly Marker: unknown;
+    // (undocumented)
+    readonly Point: unknown;
+}
+
+// @public
+export type JsapiV4ProviderId = "baidu-jsapi-v4" | "existing-global-v4" | "custom-script-v4";
+
+// @public
+export type JsapiV4ScriptMode = "load" | "jsonp";
+
+// @public
+export type JsapiV4VersionSource = "url" | "global" | "declared";
+
+// @public (undocumented)
+export type LabelHandle = SdkHandle<"overlay:label">;
+
+// @public (undocumented)
+export interface LabelOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    position?: Point;
+    // (undocumented)
+    style?: Record<string, unknown>;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public
+export interface LayerCreateOptions extends Record<string, unknown> {
+    createDOM?: (properties: object, point: {
+        lng: number;
+        lat: number;
+    }) => HTMLElement;
+    layerName?: string;
+}
+
+// @public
+export type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
+
+// @public
+export type LayerData = object;
+
+// @public (undocumented)
+export interface LayerDriver {
+    // (undocumented)
+    add(target: OverlayTarget, layer: LayerHandle): void;
+    // (undocumented)
+    clearData(layer: LayerHandle): void;
+    // (undocumented)
+    clearState(layer: LayerHandle): void;
+    // (undocumented)
+    create(kind: LayerKind, options?: LayerCreateOptions): LayerHandle;
+    // (undocumented)
+    getState(layer: LayerHandle): NativeLayerFeatureStateMap;
+    isMutableOption(kind: LayerKind, key: string): boolean;
+    // (undocumented)
+    remove(target: OverlayTarget, layer: LayerHandle): void;
+    // (undocumented)
+    removeState(layer: LayerHandle, keys: NativeLayerFeatureKeys): void;
+    // (undocumented)
+    replaceState(layer: LayerHandle, inputs: NativeLayerFeatureStateMap): void;
+    // (undocumented)
+    setData(layer: LayerHandle, data: LayerData): void;
+    setOptions(layer: LayerHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    setZIndex(layer: LayerHandle, zIndex: number): void;
+    supports(kind: LayerKind, operation: LayerOperation): boolean;
+    surface(kind: LayerKind): LayerSurface;
+    updateState(layer: LayerHandle, keys: NativeLayerFeatureKeys, state: NativeLayerFeatureState, append?: boolean): void;
+}
+
+// @public (undocumented)
+export type LayerHandle = SdkHandle<"layer" | `layer:${string}`>;
+
+// @public
+export type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
+
+// @public
+export type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
+
+// @public
+export interface LayerSurface {
+    readonly ctorSlots: readonly LayerCtorSlot[];
+    readonly operations: readonly LayerOperation[];
+}
+
+// @public
+export interface LoadedJsapiV4 {
+    // (undocumented)
+    readonly engine: JsapiV4Engine;
+    // (undocumented)
+    readonly load: JsapiV4LoadMetadata;
+    // (undocumented)
+    readonly namespace: JsapiV4Namespace;
+    // (undocumented)
+    readonly version: string;
+}
+
+// @public
+export interface LocalSearchOptions {
+    pageCapacity?: number;
+    pageNum?: number;
+    // (undocumented)
+    renderOptions?: LocalSearchRenderOptions;
+}
+
+// @public
+export interface LocalSearchRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    selectFirstResult?: boolean;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public (undocumented)
+export interface MapDriver {
+    cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
+    // (undocumented)
+    checkResize(map: MapHandle): void;
+    // (undocumented)
+    create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
+    destroy(map: MapHandle): void;
+    // (undocumented)
+    fitBounds(map: MapHandle, bounds: Bounds): void;
+    // (undocumented)
+    getBounds(map: MapHandle): Bounds;
+    // (undocumented)
+    getCenter(map: MapHandle): Point;
+    // (undocumented)
+    getHeading(map: MapHandle): number;
+    // (undocumented)
+    getSize(map: MapHandle): Size;
+    // (undocumented)
+    getTilt(map: MapHandle): number;
+    // (undocumented)
+    getZoom(map: MapHandle): number;
+    // (undocumented)
+    initializeView(map: MapHandle, view: MapView): void;
+    // (undocumented)
+    panBy(map: MapHandle, pixel: Pixel): void;
+    // (undocumented)
+    panTo(map: MapHandle, point: Point): void;
+    pixelToPoint(map: MapHandle, pixel: Pixel): Point;
+    pointToPixel(map: MapHandle, point: Point): Pixel;
+    // (undocumented)
+    setCenter(map: MapHandle, center: Point | string): void;
+    // (undocumented)
+    setHeading(map: MapHandle, heading: number): void;
+    // (undocumented)
+    setInteraction(map: MapHandle, name: MapInteraction, enabled: boolean): void;
+    // (undocumented)
+    setMapStyle(map: MapHandle, style: MapStyleInput): void;
+    // (undocumented)
+    setMapType(map: MapHandle, type: MapType_2): void;
+    // (undocumented)
+    setTilt(map: MapHandle, tilt: number): void;
+    // (undocumented)
+    setTraffic(map: MapHandle, enabled: boolean): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    // (undocumented)
+    setZoom(map: MapHandle, zoom: number): void;
+    // (undocumented)
+    startViewAnimation(map: MapHandle, animation: unknown): void;
+}
+
+// @public (undocumented)
+export type MapHandle = SdkHandle<"map">;
+
+// @public (undocumented)
+export type MapInteraction = "dragging" | "scroll-zoom" | "inertial-dragging" | "pinch-zoom" | "keyboard" | "double-click-zoom" | "continuous-zoom" | "resize-on-center" | "rotate" | "rotate-gestures" | "tilt" | "tilt-gestures";
+
+// @public (undocumented)
+export type MapStyleInput = {
+    styleId: string;
+} | Record<string, unknown>;
+
+// @public (undocumented)
+type MapType_2 = "normal" | "satellite" | "earth";
+export { MapType_2 as MapType }
+
 // @public
 export function mapVglPlugin(): BMapPluginDefinition<unknown>;
+
+// @public (undocumented)
+export interface MapView {
+    // (undocumented)
+    center: Point | string;
+    // (undocumented)
+    heading?: number;
+    // (undocumented)
+    tilt?: number;
+    // (undocumented)
+    zoom: number;
+}
+
+// @public (undocumented)
+export type MarkerHandle = SdkHandle<"overlay:marker">;
+
+// @public
+export type MarkerIconInput = string | {
+    imageUrl: string;
+    size: Size;
+    anchor?: Pixel;
+    imageOffset?: Pixel;
+    imageSize?: Size;
+    printImageUrl?: string;
+};
+
+// @public (undocumented)
+export interface MarkerOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableClicking?: boolean;
+    // (undocumented)
+    enableDragging?: boolean;
+    // (undocumented)
+    icon?: MarkerIconInput;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    rotation?: number;
+    // (undocumented)
+    title?: string;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public
+export type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
+
+// @public
+export type NativeLayerFeatureState = Record<string, unknown>;
+
+// @public
+export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+
+// @public (undocumented)
+export interface OverlayDriver {
+    // (undocumented)
+    add(target: OverlayTarget, overlay: OverlayHandle): void;
+    addContextMenuItem(menu: OverlayHandle, item: {
+        text: string;
+        callback: (point: unknown, pixel: unknown) => void;
+        disabled?: boolean;
+    } | "-", options?: {
+        width?: number;
+        id?: string;
+    }): void;
+    attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    buildIcon(icon: MarkerIconInput): unknown;
+    // (undocumented)
+    closeInfoWindow(overlay: InfoWindowHandle): void;
+    // (undocumented)
+    createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createCircle(center: Point, radius: number, options?: PathOptions): CircleHandle;
+    // (undocumented)
+    createContextMenu(options?: {
+        width?: number;
+    }): OverlayHandle;
+    createCustomOverlay(position: Point, render: () => HTMLElement, options?: CustomOverlayOptions): OverlayHandle;
+    // (undocumented)
+    createGroundOverlay(bounds: Bounds, options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createInfoWindow(content: HTMLElement, options?: InfoWindowOptions): InfoWindowHandle;
+    // (undocumented)
+    createLabel(content: string, options?: LabelOptions): LabelHandle;
+    // (undocumented)
+    createMapMask(path: readonly Point[], options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
+    // (undocumented)
+    createMarker3D(position: Point, height: number, options?: Record<string, unknown>): OverlayHandle;
+    createPolygon(path: readonly (Point | string)[], options?: PathOptions & {
+        isBoundary?: boolean;
+    }): PolygonHandle;
+    // (undocumented)
+    createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
+    createPrism(path: readonly (Point | string)[], altitude: number, options?: Record<string, unknown>): OverlayHandle;
+    // (undocumented)
+    createRectangle(bounds: Bounds, options?: PathOptions): OverlayHandle;
+    detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    // (undocumented)
+    hide(overlay: OverlayHandle): boolean;
+    isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
+    openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
+    // (undocumented)
+    redrawInfoWindow(overlay: InfoWindowHandle): void;
+    // (undocumented)
+    remove(target: OverlayTarget, overlay: OverlayHandle): void;
+    // (undocumented)
+    setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+    // (undocumented)
+    setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
+    // (undocumented)
+    setPosition(overlay: OverlayHandle, position: Point): void;
+    show(overlay: OverlayHandle): boolean;
+    updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
+}
+
+// @public (undocumented)
+export type OverlayHandle = SdkHandle<"overlay" | `overlay:${string}`>;
+
+// @public
+export type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupported";
+
+// @public (undocumented)
+export interface OverlayTarget {
+    // (undocumented)
+    handle: SdkHandle<string>;
+    // (undocumented)
+    kind: "map" | "marker" | "clusterer" | "overlay";
+}
+
+// @public
+export interface PanoramaDriver {
+    // (undocumented)
+    readonly supported: boolean;
+}
+
+// @public (undocumented)
+export interface PathOptions {
+    // (undocumented)
+    [key: string]: unknown;
+    // (undocumented)
+    enableClicking?: boolean;
+    // (undocumented)
+    enableEditing?: boolean;
+    // (undocumented)
+    enableMassClear?: boolean;
+    // (undocumented)
+    fillColor?: string;
+    // (undocumented)
+    fillOpacity?: number;
+    // (undocumented)
+    strokeColor?: string;
+    // (undocumented)
+    strokeOpacity?: number;
+    // (undocumented)
+    strokeStyle?: "solid" | "dashed" | "dotted";
+    // (undocumented)
+    strokeWeight?: number;
+    // (undocumented)
+    zIndex?: number;
+}
+
+// @public (undocumented)
+export interface Pixel {
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
 
 // @public
 export const PLUGIN_COMPAT_BY_ID: Readonly<Record<BuiltinPluginName, PluginCompatEntry>>;
@@ -143,6 +990,16 @@ export interface PluginCompatEntry {
 }
 
 // @public
+export interface PluginContext {
+    // (undocumented)
+    readonly api: unknown;
+    // (undocumented)
+    readonly client: BMapClient | null;
+    // (undocumented)
+    readonly map: MapHandle | null;
+}
+
+// @public
 export type PluginEvidenceBasis =
 /** 对锁定 URL 的**真实发布产物**做静态抽取（`pnpm probe:plugin-compat`，可复现）。 */
 "artifact"
@@ -174,6 +1031,9 @@ export interface PluginHostEntryInspection {
 }
 
 // @public
+export type PluginHostEntryStatus = "loading" | "ready";
+
+// @public
 export interface PluginMigrationPath {
     readonly kind: "native" | "plugin" | "none";
     readonly nativeComponent?: string;
@@ -188,6 +1048,12 @@ export interface PluginRuntimeReading {
     readonly status: "verified" | "threw";
     readonly uncovered: readonly string[];
 }
+
+// @public
+export type PluginScope = "global" | "map";
+
+// @public
+export type PluginUrlKey = "trackAnimation" | "drawingManager" | "geoUtils" | "mapvgl";
 
 // @public
 export type PluginVerdict =
@@ -226,7 +1092,91 @@ export interface PluginVersionLock {
 }
 
 // @public
+export interface Point {
+    // (undocumented)
+    lat: number;
+    // (undocumented)
+    lng: number;
+}
+
+// @public (undocumented)
+export type PolygonHandle = SdkHandle<"overlay:polygon">;
+
+// @public (undocumented)
+export type PolylineHandle = SdkHandle<"overlay:polyline">;
+
+// @public
 export function resolvePluginDefinition(name: string): BMapPluginDefinition<unknown>;
+
+// @public (undocumented)
+export type RidingRouteOptions = RouteRenderState;
+
+// @public
+export interface RouteRenderOptions {
+    autoViewport?: boolean;
+    map?: MapHandle;
+    panel?: string | HTMLElement;
+    viewportOptions?: {
+        noAnimation?: boolean;
+        margins?: readonly number[];
+        zoomFactor?: number;
+    };
+}
+
+// @public
+export interface RouteRenderState {
+    renderOptions?: RouteRenderOptions;
+}
+
+// @public
+export interface RouteState extends RouteRenderState {
+    enableTraffic?: boolean;
+}
+
+// @public (undocumented)
+export interface SdkHandle<Kind extends string, Raw = unknown> {
+    // (undocumented)
+    readonly [HANDLE_BRAND]: Kind;
+    // (undocumented)
+    readonly raw: Raw;
+}
+
+// @public (undocumented)
+export interface ServiceDriver {
+    // (undocumented)
+    createAutocomplete(options: AutocompleteOptions): ServiceHandle<"service:autocomplete">;
+    // (undocumented)
+    createBoundary(): ServiceHandle<"service:boundary">;
+    // (undocumented)
+    createConvertor(): ServiceHandle<"service:convertor">;
+    createDrivingRoute(location: string | Point | MapHandle, options?: DrivingRouteOptions): ServiceHandle<"service:driving-route">;
+    // (undocumented)
+    createGeocoder(): ServiceHandle<"service:geocoder">;
+    // (undocumented)
+    createGeolocation(options?: Record<string, unknown>): ServiceHandle<"service:geolocation">;
+    // (undocumented)
+    createLocalCity(): ServiceHandle<"service:local-city">;
+    createLocalSearch(location: string | Point | MapHandle, options?: LocalSearchOptions): ServiceHandle<"service:local-search">;
+    createRidingRoute(location: string | Point | MapHandle, options?: RidingRouteOptions): ServiceHandle<"service:riding-route">;
+    // (undocumented)
+    createTrackAnimation(map: MapHandle, path: readonly Point[], options?: Record<string, unknown>): ServiceHandle<"service:track-animation">;
+    createTransitRoute(location: string | Point | MapHandle, options?: TransitRouteOptions): ServiceHandle<"service:transit-route">;
+    // (undocumented)
+    createViewAnimation(keyFrames: readonly Record<string, unknown>[], options?: Record<string, unknown>): ServiceHandle<"service:view-animation">;
+    createWalkingRoute(location: string | Point | MapHandle, options?: WalkingRouteOptions): ServiceHandle<"service:walking-route">;
+    setAutocompleteOptions(handle: ServiceHandle<"service:autocomplete">, options: AutocompleteUpdateOptions): void;
+}
+
+// @public (undocumented)
+export type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
+
+// @public (undocumented)
+export interface Size {
+    // (undocumented)
+    height: number;
+    // (undocumented)
+    width: number;
+}
 
 // @public
 export function stringToPluginDefinitions(names: readonly string[]): BMapPluginDefinition<unknown>[];
@@ -235,11 +1185,58 @@ export function stringToPluginDefinitions(names: readonly string[]): BMapPluginD
 export function trackAnimationPlugin(): BMapPluginDefinition<unknown>;
 
 // @public
+const TransitPolicy_2: {
+    readonly RECOMMEND: 0;
+    readonly LEAST_TRANSFER: 1;
+    readonly LEAST_WALKING: 2;
+    readonly AVOID_SUBWAYS: 3;
+    readonly LEAST_TIME: 4;
+    readonly FIRST_SUBWAYS: 5;
+};
+
+// @public (undocumented)
+type TransitPolicy_2 = (typeof TransitPolicy_2)[keyof typeof TransitPolicy_2];
+export { TransitPolicy_2 as TransitPolicy }
+
+// @public
+export interface TransitRouteOptions extends RouteState {
+    intercityPolicy?: IntercityPolicy_2;
+    pageCapacity?: number;
+    policy?: TransitPolicy_2;
+    transitTypePolicy?: TransitVehiclePolicy;
+}
+
+// @public
+export const TransitVehiclePolicy: {
+    readonly TRAIN: 0;
+    readonly AIRPLANE: 1;
+    readonly COACH: 2;
+};
+
+// @public (undocumented)
+export type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
+
+// @public (undocumented)
+export type UnsupportedBehavior = "throw" | "warn" | "silent";
+
+// @public
 export function urlPluginDefinition<T>(name: string, url: string, exportGetter: () => unknown, options?: {
     required?: boolean;
     scope?: "global" | "map";
     dependencies?: readonly string[];
 }): BMapPluginDefinition<T>;
+
+// @public
+export type ViewAnimationCancelOutcome =
+/** 已起播 ⇒ 本次就调用了 SDK 的取消并且没抛错；记录已结算。 */
+"canceled"
+/** 还没起播 ⇒ 只登记了取消请求，真正取消要等启动安全窗口（**这条不是「已停止」**）。 */
+| "deferred"
+/** 本 Driver 已没有该实例的记录：早已结算 / 从未由它起播 ⇒ 没有可取消的东西。 */
+| "already-settled";
+
+// @public
+export type WalkingRouteOptions = RouteRenderState;
 
 // (No @packageDocumentation comment for this package)
 

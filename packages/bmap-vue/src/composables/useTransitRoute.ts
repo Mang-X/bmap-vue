@@ -27,7 +27,7 @@ import type {
   TransitVehiclePolicy,
 } from "../driver/types/services";
 import { jsapiV4ServicesOf } from "../core/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import {
   buildRouteDriverOptions,
   createRouteTask,
@@ -64,7 +64,7 @@ export interface BMapTransitRouteOptions {
 type TransitSettings = Omit<TransitRouteOptions, "renderOptions">;
 
 export function useTransitRoute(options: MaybeRefOrGetter<BMapTransitRouteOptions> = {}) {
-  const ctx = resolveMapContext();
+  const ctx = resolveInternalMapContext();
   const read = (): BMapTransitRouteOptions => toValue(options) ?? {};
 
   const readState = (): RouteConstructionState<TransitSettings> => {

@@ -28,7 +28,7 @@ import type {
   DrivingRouteResult,
 } from "../driver/types/services";
 import { jsapiV4ServicesOf } from "../core/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import {
   buildRouteDriverOptions,
   createRouteTask,
@@ -60,7 +60,7 @@ export interface BMapDrivingRouteOptions {
 type DrivingSettings = Omit<DrivingRouteOptions, "renderOptions">;
 
 export function useDrivingRoute(options: MaybeRefOrGetter<BMapDrivingRouteOptions> = {}) {
-  const ctx = resolveMapContext();
+  const ctx = resolveInternalMapContext();
   const read = (): BMapDrivingRouteOptions => toValue(options) ?? {};
 
   /** 当前构造期状态（每次都从可能变化的 ref / getter 里读一遍）。 */
