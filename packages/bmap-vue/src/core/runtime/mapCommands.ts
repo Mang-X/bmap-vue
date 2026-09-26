@@ -69,7 +69,25 @@ export interface MapCommands {
   getScreenshot(): string | null;
 
   /* ---------------------------------------------------------------- 写（未就绪时空操作） */
-  setCenter(center: Point): void;
+  /**
+   * 设置中心点。`center` 对齐官方 `setCenter(center: Point | string, options?)` 的**两个分支**：
+   * 点，或城市名 / 地址字符串。
+   *
+   * #165 Class 2 / E：此前这一层写的是 `Point`，于是同一个组件上出现了**两张脸**——
+   * `<Map center>` prop 收字符串（v2 兼容），命令面却不收；而底下的
+   * `MapDriver.setCenter(map, Point | string)` 与 `toRawCenter` **本来就**处理字符串。
+   * 收窄只发生在最上面这一层，官方能力因此不可达。命令面与 prop 现在对齐。
+   *
+   * ⚠️ 字符串中心的**已知限制**（与 prop 侧同一条，不是新引入的）：字符串**无法**与受控
+   * 状态做等值比较（官方 React 参考 `Map.tsx:24-26` 据此在 prop 上直接拒收 string）。
+   * 本库在 prop 侧为 v2 兼容保留它，因此「受控 `center` 用字符串」只能当初值用——
+   * 用户交互后 `update:center` 回写的是具体坐标。命令面是「一次性跳转」，没有这个问题。
+   *
+   * live 实测（2026-09-27 真实 AK）：`setCenter('北京')` 会真的移动到北京；官方对**无法识别**
+   * 的地名也不抛错，而是回落到某处（实测 `'NotACityName-zzz'` 同样移动、不抛），
+   * 因此「字符串没生效」不能从「没报错」推断。
+   */
+  setCenter(center: Point | string): void;
   setZoom(zoom: number): void;
   setHeading(heading: number): void;
   setTilt(tilt: number): void;

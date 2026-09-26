@@ -357,3 +357,68 @@ export class FakeV4TrackLine extends FakeV4RuntimeLayer {
     this.process = process
   }
 }
+
+/* ------------------------------- 4.0.5 visualization/PolygonLayer / PolylineLayer（#166） */
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 的公共替身（issue #166）。
+ *
+ * **替身按 live 实测的运行时形状建模**（`scripts/probe-runtime-members.mts` case 3b，
+ * 2026-09-27），**不是**按声明建模——这两者的差正是本票要处理的东西：
+ *
+ * | 成员 | 官方声明 | 运行时实测 | 替身 |
+ * | --- | --- | --- | --- |
+ * | `setData` / `getData` / `clearData` | 有 | 有 | **有**（基类那份） |
+ * | `setOptions` | 有 | 有 | **有**（基类那份） |
+ * | `setEnablePicked` / `getEnablePicked` | 有 | 有 | **有**（本类新增） |
+ * | `setVisible` / `getVisible` / `setZIndex` / `getZIndex` | 有 | 有 | **有**（基类那份） |
+ * | `setOpacity` / `getOpacity` | ⚠️ **无** | 有 | **有**（基类那份） |
+ * | `hitTest` | ⚠️ **有**（`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`） | ⚠️ **无** | **刻意没有** |
+ * | `setStyle` / `setStyleOptions` / `setBaseOptions` | 无 | 无 | **没有**（基类也没有） |
+ * | `setMinZoom` / `setMaxZoom` | 无 | 无 | **没有** |
+ *
+ * 两处**故意不对称**，方向相反，理由也相反：
+ *
+ * - `hitTest` **声明有、运行时没有** ⇒ 替身**不提供**。一旦这里补上，Driver 那个
+ *   「按声明登记」的表会让一个真实运行时不存在的方法被 CI 测绿（#106 P1 的同一类坑，
+ *   同 `FakeV4NativeLayerBase` 刻意不提供 `clearData` 的理由）。
+ * - `setOpacity` **运行时有、声明没有** ⇒ 替身**照实提供**（替身不得比真实运行时窄），
+ *   但 Driver **不登记**这个操作（跟随 #165 对 `PointLayer` 的同一裁决）。因此它在这条
+ *   路径上永远不会被调用——它只保证「替身形状 == 运行时形状」这条不变式成立。
+ */
+export class FakeV4PolygonPolylineLayerBase extends FakeV4RuntimeLayer {
+  /**
+   * 初始值取**构造选项** `enablePicked`（官方 `PolygonLayer.d.ts:76` / `:105` @default false）。
+   *
+   * 为什么两族的替身要在这里特别处理：`FakeV4PointLayer` 的 `enablePicked` 是硬编码
+   * `false`（它同样有构造选项 `enablePicked`，但那份替身没读）。对这两族而言，构造期
+   * 读取是**可断言的**——`visualization/` 家族唯一的拾取开关入口就是它，而组件默认
+   * 传 `true`（与官方默认 false 刻意不同）。不读的话，「组件到底有没有把拾取打开」这条
+   * 退化成只能看 `options` 袋，而袋与实例行为是否一致就没人守了。
+   */
+  enablePicked: boolean
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    this.enablePicked = options.enablePicked === true
+  }
+
+  setEnablePicked(enabled: boolean): void {
+    this.callLog.push('setEnablePicked')
+    this.enablePicked = enabled
+  }
+
+  getEnablePicked(): boolean {
+    return this.enablePicked
+  }
+}
+
+/** `visualization/PolygonLayer` —— 官方指定的 `FillLayer` 替代（4.0.5 弃用 `FillLayer`）。 */
+export class FakeV4PolygonLayer extends FakeV4PolygonPolylineLayerBase {
+  readonly isPolygonLayer = true
+}
+
+/** `visualization/PolylineLayer` —— 官方指定的 `LineLayer` 替代（4.0.5 弃用 `LineLayer`）。 */
+export class FakeV4PolylineLayer extends FakeV4PolygonPolylineLayerBase {
+  readonly isPolylineLayer = true
+}

@@ -599,11 +599,41 @@ function syncEnableProps(ctx: MapReadyContext) {
   }
 }
 
+/**
+ * 个性化样式 props → `setMapStyle`（#165 Class 2 / H）。
+ *
+ * 官方 `setMapStyle(config: MapStyleConfig)` 的三个成员是 `styleId?: string` /
+ * `styleJson?: object[]` / `merge?: boolean`（`core/MapStyleConfig.d.ts`）。三处更正：
+ *
+ * 1. **形状**：`mapStyleJson` 此前是 `Record`（单数）且被**整份**当作整个 config 下发，
+ *    官方要的是 `{ styleJson: object[] }`。现在包进官方那个键里。
+ * 2. **互斥**：`mapStyleId` 与 `mapStyleJson` 都表示「一整套样式」，同时给没有可复现的
+ *    语义——live 实测（2026-09-27，真实 AK）把两种先后顺序都试了，结果取决于 SDK 内部的
+ *    合并顺序，不是本库能承诺的契约。旧代码是 `if / else if` **静默丢掉**其中一个
+ *    （AGENTS.md：「接收后忽略属于假支持」），现在**显式失败**。
+ * 3. **`merge` 不可达**：它是官方三成员之一，含义是「与当前样式合并」而不是「替换」。
+ *    本库只暴露两个互斥 prop，没有第三个键能表达「合并」——**刻意不造**：
+ *    官方 `merge` 的适用前提是「已经有一份样式在生效」，而本库这层没有可观察的
+ *    「当前样式」状态（样式可能已被 `applyStyleProps` 之外的路径改过）。
+ *    留待有可验证语义时再补，见 `docs/zh-CN/contributing/165-runtime-verification.md`。
+ */
 function applyStyleProps(ctx: MapReadyContext) {
-  if (props.mapStyleJson) {
-    ctx.client.driver.map.setMapStyle(ctx.map, props.mapStyleJson);
-  } else if (props.mapStyleId) {
-    ctx.client.driver.map.setMapStyle(ctx.map, { styleId: props.mapStyleId });
+  const id = props.mapStyleId;
+  const json = props.mapStyleJson;
+  if (id !== undefined && json !== undefined) {
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      "mapStyleId 与 mapStyleJson 不能同时给：两者都表示一整套个性化样式，" +
+        "同时给的合并顺序由 SDK 内部决定，不是本库能承诺的契约。请只给其中一个。",
+      { engine: "jsapi-v4" },
+    );
+  }
+  if (json !== undefined) {
+    ctx.client.driver.map.setMapStyle(ctx.map, { styleJson: json });
+    return;
+  }
+  if (id !== undefined) {
+    ctx.client.driver.map.setMapStyle(ctx.map, { styleId: id });
   }
 }
 

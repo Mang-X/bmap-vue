@@ -68,6 +68,18 @@ export interface VisualLayerPropsLike extends NativeLayerUnifiedFields {
   selectedColor?: string;
   /** 选中索引（官方 `selectedIndex`，`layer/LineLayer.d.ts:25` / `FillLayer.d.ts:30`）。 */
   selectedIndex?: number;
+  /**
+   * `visualization/` 两族的拾取细节（`visualization/PolygonLayer.d.ts:78-91`）。
+   *
+   * 刻意与上面那组**分开声明**并在 `ctorOptions` 里**按族分流**：`layer/` 家族有
+   * `crs` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` /
+   * `popEvent`，而 `visualization/` 的两族官方选项表里**一个都没有**。混进同一个袋子会让
+   * 后者收到上游没有的构造键，而构造期键是**静默丢弃**（连官方那句告警都没有）——
+   * AGENTS.md 禁止的「接收后忽略属于假支持」。
+   */
+  mouseStyleChange?: boolean;
+  pickTolerance?: number;
+  pickThrough?: boolean;
   /** 拾取事件是否冒泡（官方 `popEvent`，`LineLayer.d.ts:70` / `FillLayer.d.ts:75`）。 */
   popEvent?: boolean;
 }
@@ -115,6 +127,19 @@ export function pickEmitterFor(emitters: VisualLayerEmitters): PickEmitter {
 export interface UseVisualLayerOptions<Props extends VisualLayerPropsLike> {
   kind: NativeLayerKind;
   component: string;
+  /**
+   * 拾取细节用哪一套键（#166）。
+   *
+   * **默认 `"layer"`**（`crs` / `pickWidth` / `pickHeight` / `autoSelect` /
+   * `selectedColor` / `selectedIndex` / `popEvent`）。`visualization/` 的两族传
+   * `"visualization"`：官方选项表里只有 `mouseStyleChange` / `pickTolerance` /
+   * `pickThrough` 三项，`idKey` / `enablePicked` 两族共有因此始终下发。
+   *
+   * 不做成「全塞进去、让上游忽略」是因为**构造期键被忽略时不告警**（官方那句
+   * 「未知键忽略并告警一次」只挂在 `setOptions` 上，构造器没有这条）——静默丢弃
+   * 正是 AGENTS.md 点名的假支持。
+   */
+  pickOptionSet?: "layer" | "visualization";
   /** 额外的构造期选项（并进选项袋，因此自动参与重建指纹）。 */
   extraCtorOptions?(props: Readonly<Props>): Record<string, unknown>;
   /** 需要转发成同名领域事件的官方拾取事件；不给 = 该 kind 没有拾取面（不绑任何事件）。 */
@@ -146,18 +171,27 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
     // 归一化只做类型归一（非字符串 → 未声明），**不**收窄取值：空字符串也是合法字段名
     const idKey = normalizeIdField(p.idKey);
     if (idKey !== undefined) bag.idKey = idKey;
-    if (p.crs !== undefined) bag.crs = p.crs;
     if (p.enablePicked !== undefined) bag.enablePicked = p.enablePicked;
-    if (p.pickWidth !== undefined) bag.pickWidth = p.pickWidth;
-    if (p.pickHeight !== undefined) bag.pickHeight = p.pickHeight;
-    if (p.autoSelect !== undefined) bag.autoSelect = p.autoSelect;
-    if (p.selectedColor !== undefined) bag.selectedColor = p.selectedColor;
-    // #165 Class 3 / TASK 2：`selectedColor` 此前是**半接线**的——官方把「哪一条被选中」
-    // 交给 `selectedIndex`、把「选中长什么样」交给 `selectedColor`，此前只暴露了后者。
-    // 两者都是构造选项（官方只有整袋 `setBaseOptions`）⇒ 进选项袋，因此自动参与重建指纹。
-    if (p.selectedIndex !== undefined) bag.selectedIndex = p.selectedIndex;
-    // `popEvent` 控制拾取事件是否向上层冒泡；同样是构造选项。
-    if (p.popEvent !== undefined) bag.popEvent = p.popEvent;
+    if (options.pickOptionSet === "visualization") {
+      // #166：`visualization/` 两族只有这三项拾取细节（`PolygonLayer.d.ts:78-91` /
+      // `PolylineLayer.d.ts:110-121`）。**不**把 `layer/` 家族那七项塞进来——见
+      // `pickOptionSet` 的注释（构造期键被忽略时不告警，静默丢弃 = 假支持）。
+      if (p.mouseStyleChange !== undefined) bag.mouseStyleChange = p.mouseStyleChange;
+      if (p.pickTolerance !== undefined) bag.pickTolerance = p.pickTolerance;
+      if (p.pickThrough !== undefined) bag.pickThrough = p.pickThrough;
+    } else {
+      if (p.crs !== undefined) bag.crs = p.crs;
+      if (p.pickWidth !== undefined) bag.pickWidth = p.pickWidth;
+      if (p.pickHeight !== undefined) bag.pickHeight = p.pickHeight;
+      if (p.autoSelect !== undefined) bag.autoSelect = p.autoSelect;
+      if (p.selectedColor !== undefined) bag.selectedColor = p.selectedColor;
+      // #165 Class 3 / TASK 2：`selectedColor` 此前是**半接线**的——官方把「哪一条被选中」
+      // 交给 `selectedIndex`、把「选中长什么样」交给 `selectedColor`，此前只暴露了后者。
+      // 两者都是构造选项（官方只有整袋 `setBaseOptions`）⇒ 进选项袋，因此自动参与重建指纹。
+      if (p.selectedIndex !== undefined) bag.selectedIndex = p.selectedIndex;
+      // `popEvent` 控制拾取事件是否向上层冒泡；同样是构造选项。
+      if (p.popEvent !== undefined) bag.popEvent = p.popEvent;
+    }
     return { ...bag, ...(options.extraCtorOptions?.(p) ?? {}) };
   };
 

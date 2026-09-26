@@ -1,7 +1,7 @@
 /**
  * v4 NativeLayerDriver（M3A2-SERVICES-NATIVE / issue #23）
  *
- * 八个原生数据图层的**底层接口**：数据（`setData` / `clearData`）、样式、要素状态、
+ * 十个原生数据图层的**底层接口**：数据（`setData` / `clearData`）、样式、要素状态、
  * 显隐与层级、拾取，以及挂载记账。Vue 组件与数据适配层由 M6（#35 / #36）在它之上实现。
  *
  * 行为依据（官方 4.0 专页 + `@baidumap/jsapi-v4-types@4.0.5`，git `5ba67f4`）：
@@ -24,6 +24,11 @@
  *   `setRenderStage` / `setRefCenter` 这类「声明里没有或当前没有消费者」的仍然关闭。
  *   逐条依据见下面 kind 表的注释，逐条核对见 `native-layers.test.ts` 的
  *   「操作面与官方声明一致」。
+ * - **`visualization/` 的新两族**（`PolygonLayer` / `PolylineLayer`，#166）：4.0.5 新增，
+ *   是同时弃用的 `FillLayer` / `LineLayer` 的官方指定替代。样式走 `setOptions`（**不是**
+ *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单），
+ *   而「声明有运行时没有」与「运行时有声明里没有」两条都在 `hitTest` / `setOpacity` 上各撞一次
+ *   ——逐条依据见 kind 表注释与 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
  * - **不支持的操作显式失败**：`BMAP_CAPABILITY_UNSUPPORTED`，不静默 no-op。
  * - **层级方法要求先挂载**：官方明确「层级调整实现会访问已关联的 Map 与图层管理器」，
  *   所以调用顺序是 `create → add → setZIndex`；错误经 `sdkCall` 归一，不吞错。
@@ -155,6 +160,11 @@ const RUNTIME_INJECTED_LAYER_CTORS: ReadonlySet<string> = new Set([
   "ClusterLayer",
   "Heatmap",
   "TrackLine",
+  // ⚠️ `PolygonLayer` / `PolylineLayer` **刻意不在这里**（#166）。它们虽同属
+  // `visualization/` 命名空间，但 live 探针（`scripts/probe-runtime-members.mts` case 3b 的
+  // `injectionTiming`，2026-09-27）读到二者在 `BMap.Map` 刚就绪时就已是 `function`
+  // ⇒ 随主包注入，不进「运行时异步注入」这一份名单。把它们加进来会让缺构造器时报成
+  // `BMAP_CAPABILITY_UNSUPPORTED`（可重试）而实际是 `BMAP_SDK_CALL_FAILED`（不会变好）。
 ]);
 
 const NATIVE_LAYER_DESCRIPTORS = {
@@ -244,6 +254,45 @@ const NATIVE_LAYER_DESCRIPTORS = {
       "setZIndex",
     ],
   },
+  // #166：官方 4.0.5（git `5ba67f4`）新增 `visualization/PolygonLayer` / `PolylineLayer`，
+  // 作为 4.0.5 **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
+  //
+  // 三个判断各自独立，逐条依据如下（另见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）：
+  //
+  // - `declared: true` —— 两族在 4.0.5 有完整类声明（`visualization/PolygonLayer.d.ts:125`、
+  //   `visualization/PolylineLayer.d.ts:162`）。
+  // - `styleMember: "setOptions"` —— 官方声明的样式入口是 `setOptions`
+  //   （`PolygonLayer.d.ts:181` / `PolylineLayer.d.ts:213`），**不是** `setStyleOptions`；
+  //   且这一族**没有** `doOnceDraw`（live 探针实测 `protoHas` 全为 `false`）。
+  // - **不进 `RUNTIME_INJECTED_LAYER_CTORS`** —— live 探针
+  //   （`scripts/probe-runtime-members.mts` case 3b，`injectionTiming`，2026-09-27）读到
+  //   `B.PolygonLayer` / `B.PolylineLayer` 在 `BMap.Map` 刚就绪时**已经是 `function`**
+  //   ⇒ 随主包注入，不像扩展 API 那四类要等异步注入。因此它们缺构造器时报
+  //   `BMAP_SDK_CALL_FAILED`（官方声明过这个类）而不是 `BMAP_CAPABILITY_UNSUPPORTED`。
+  //
+  // 登记面里**刻意没有**的三条（逐条依据见上面那份审计）：
+  //
+  // - `hitTest`：官方**声明**有（`:201` / `:233`），live 探针读到运行时**没有** ⇒ 假支持。
+  // - `setOpacity`：live 探针读到运行时**有**，但官方**声明**里没有（两族的「显示属性」一组
+  //   只有 visible / zIndex / renderStage / refCenter）⇒ 跟随 #165 对 `PointLayer` 的同一裁决，
+  //   「不把未声明成员当契约」。⚠️ 代价：`PolylineLayerOptions.opacity`（`:131`）是**声明的**
+  //   选项，但只能经 `setOptions` 整袋下发（组件的 `style` prop），没有字段级 setter 入口。
+  // - `setZoomRange`：官方**没有** `setMinZoom` / `setMaxZoom`（`minZoom` / `maxZoom` 是
+  //   **构造选项**，`:108` / `:112`），live 探针实测两个方法在运行时也都是 `undefined`。
+  //
+  // 状态 API（`updateState` 一族）同样不登记：两族的声明里没有。
+  polygon: {
+    ctor: "PolygonLayer",
+    declared: true,
+    styleMember: "setOptions",
+    operations: ["setData", "clearData", "setStyle", "setVisible", "setZIndex", "setEnablePicked"],
+  },
+  polyline: {
+    ctor: "PolylineLayer",
+    declared: true,
+    styleMember: "setOptions",
+    operations: ["setData", "clearData", "setStyle", "setVisible", "setZIndex", "setEnablePicked"],
+  },
   // TrackLine 播放命令面（#110）。方法名经 live 探针（`scripts/probe-track-line.mts`，
   // 2026-09-23，exit 0）取证：`typeof layer.start === "function"` 等七条全部为真。
   // 4.0.5 补上了 TrackLine 类声明，且七个操作**逐一**都在声明里（`declared: true`）。
@@ -282,6 +331,8 @@ const NATIVE_LAYER_CAPABILITIES: Readonly<Record<NativeLayerKind, Capability>> =
   fill: "layer.fill",
   heatmap: "layer.heatmap",
   "track-line": "layer.track-line",
+  polygon: "layer.polygon",
+  polyline: "layer.polyline",
 };
 
 export interface CreateJsapiV4NativeLayerDriverInput {

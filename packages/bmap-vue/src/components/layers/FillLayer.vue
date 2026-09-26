@@ -11,11 +11,16 @@
  * **本组件的处置**（#165 决策，与 `LineLayer` / `PointIconLayer` 一致）：
  *
  * - **保留组件、保留行为**。本库是 1.0 清白面，但「官方弃用」不等于「本库可以删」——
- *   替代组件（`PolygonLayer`）**还不存在**（见 #166），删掉等于让现有用户无路可走。
+ *   官方自己**没有**删除 `FillLayer`（4.0.5 只是标了弃用并指名替代品）。
  * - **不改名、不留别名垫片**。#165 §3.6 禁止 compat shim，而「别名指向新名」正是那条要禁的
  *   东西：两个名字长一样、行为不同，只会让调用方更难判断自己拿到的是哪一套语义。
  * - **把弃用讲清楚**：开发期告警一次（`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放
  *   在模块级）+ 类型层 `@deprecated` + 文档。
+ *
+ * **#166 更新**：官方的指名替代品 `<PolygonLayer>` 现在**本库已提供**了。迁移时注意两者的
+ * `style` **不是同一套字段**（本组件是 `FillLayerStyle`：`patternUrl` / `borderWeight` /
+ * `borderCovered` 那一族；替代品是 `PolygonLayerStyle`：`fillTextureUrl` / `strokeWeight`
+ * 那一族）——**弃用替代不是字段改名**，样式要重写。
  *
  * 与 `LineLayer` 同构（同一份装配 `useVisualLayer`），差别只有三处：
  *
@@ -38,9 +43,9 @@ import type { FillLayerProps, FeaturePick } from "../../types/components";
 warnDeprecatedLayerOnce(
   "FillLayer:deprecated-class",
   "[FillLayer] 官方 `BMap.FillLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 @deprecated，" +
-    "官方建议改用 `BMap.PolygonLayer`（4.0.5 新增的 visualization 命名空间）。" +
-    "本组件继续可用、行为不变；替代组件 `PolygonLayer` 本库尚未提供（见 #166），" +
-    "在此之前若你依赖 `FillLayer` 的既有行为可以继续使用。" +
+    "官方建议改用 `BMap.PolygonLayer`（4.0.5 新增的 visualization 命名空间）——" +
+    "本库现已提供 `<PolygonLayer>`（#166）。本组件继续可用、行为不变；" +
+    "注意两者的 `style` **不是同一套字段**，迁移时样式要按 `PolygonLayerStyle` 重写。" +
     "详见 docs/zh-CN/components/layer/native-visual-layers.md",
 );
 

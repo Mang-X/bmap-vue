@@ -118,8 +118,23 @@ export interface MapProps {
    * 而不是悄悄画成普通图——「要混合图拿到普通图且无任何提示」曾经是一个静默错值 bug。
    */
   mapType?: MapTypeIdName;
+  /**
+   * 个性化样式 id（官方 `MapStyleConfig.styleId`，来自个性化编辑器）。
+   *
+   * 与 `mapStyleJson` **互斥**：官方 `setMapStyle` 的两个键都表示「一整套样式」，
+   * 同时给没有可复现的语义（live 实测的结果取决于 SDK 内部的合并顺序），
+   * 因此本库在组件层**显式失败**，不静默丢一个。
+   */
   mapStyleId?: string;
-  mapStyleJson?: Record<string, unknown>;
+  /**
+   * 个性化样式 json（官方 `MapStyleConfig.styleJson?: object[]`）。
+   *
+   * ⚠️ 官方形状是**数组**（个性化编辑器的导出就是一组样式片段）。#165 Class 2 之前
+   * 本库把它声明成 `Record<string, unknown>`（单数对象），且整份原样当作
+   * `setMapStyle(config)` 的**整个 config** 下发——于是 `styleId` 那一支永远走不到，
+   * 官方 `merge` 成员也没有任何通路。
+   */
+  mapStyleJson?: Record<string, unknown>[];
   displayOptions?: Record<string, unknown>;
   /**
    * 建图时保留绘图缓冲（官方 `getScreenshot` 的**前提**；该键不在官方 `MapOptions` 声明里，
@@ -621,7 +636,8 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
  *   （`LAYER_KIND = "point-shape"`）。**组件本身不删也不改名**——弃用是上游的决定，
  *   且 #165 §3.6 禁止为此加兼容别名；此处只如实登记，让编辑器在类型面上把弃用显示出来。
  *   可迁移的替代品是 `<PointLayer>` 的形状模式（本库已提供），但它的样式字段是**扁平**的
- *   （不是 `style` 袋），迁移不是改个名字。线 / 面两类的替代品见 #166。
+ *   （不是 `style` 袋），迁移不是改个名字。线 / 面两类的替代品（`<PolylineLayer>` /
+ *   `<PolygonLayer>`）已由 #166 提供，迁移同样**不是改个名字**（样式字段不同族）。
  */
 export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
   /**
@@ -941,8 +957,10 @@ export interface NativeLayerPickOptions {
  *
  * @deprecated 官方 `BMap.LineLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
  *   （建议改用 `visualization.PolylineLayer`）。`<LineLayer>` 组件**继续可用、行为不变**，
- *   但官方建议的替代组件 `PolylineLayer` 本库**尚未提供**（见 #166）——
- *   在它落地之前没有可迁移的去处，本标记只是如实告知，不是「请立即改用别的东西」。
+ *   而官方建议的替代品 `<PolylineLayer>` 本库**已提供**（#166）。
+ *   ⚠️ 迁移**不是改个名字**：两者的 `style` 不是同一套字段（这里是 `LineLayerStyle`，
+ *   替代品是 `PolylineLayerStyle`），样式要重写；数据模型也不同（官方那条走
+ *   `setOptions` 整袋替换）。本标记是如实告知官方弃用，不是「请立即改用别的东西」。
  *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
@@ -957,8 +975,11 @@ export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickO
  *
  * @deprecated 官方 `BMap.FillLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
  *   （建议改用 `visualization.PolygonLayer`）。`<FillLayer>` 组件**继续可用、行为不变**，
- *   但官方建议的替代组件 `PolygonLayer` 本库**尚未提供**（见 #166）——
- *   在它落地之前没有可迁移的去处，本标记只是如实告知，不是「请立即改用别的东西」。
+ *   而官方建议的替代品 `<PolygonLayer>` 本库**已提供**（#166）。
+ *   ⚠️ 迁移**不是改个名字**：两者的 `style` 不是同一套字段（这里是 `FillLayerStyle`，
+ *   替代品是 `PolygonLayerStyle`），样式要重写；官方 `PolygonLayer` 的描边默认
+ *   `strokeWeight: 0`（即**不描边**），而 `FillLayer` 默认 `border: true`。
+ *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
  *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
@@ -976,6 +997,233 @@ export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickO
    * 的转换，不给默认值会让每个不传 `border` 的用户都隐式地关掉描边。
    */
   border?: boolean;
+}
+
+/**
+ * `visualization/` 的**数据驱动样式表达式**（官方 `StyleValue<T>`，
+ * `visualization/common.d.ts:10`）。
+ *
+ * 官方原文：`T | ((properties: any, feature: any, index: number) => T)`。
+ *
+ * ⚠️ **刻意不复用 `StyleExpression`**（#166）。`StyleExpression` 的第一支是 `string`
+ * （`layer/` 家族的 `LineStyle` / `FillLayerStyle` 那些字段在官方口径下是宽字符串），
+ * 而 `visualization/` 的 `strokeLineCap` / `strokeLineJoin` / `strokeStyle` 是**字面量联合**
+ * （`'butt' | 'round' | 'square'` 等）。套上 `string` 那一支会把字面量联合**放宽成任意字符串**
+ * ——`strokeCap: "arrow"` 就会被类型接受，而官方运行时只认三个值。
+ *
+ * 回调经 `forwardCallback` 转发成**身份恒定**的包装（见 `core/layers/nativeLayerStyle.ts`）：
+ * 换实现后对**后续**求值生效，已经产生的画面不回溯。
+ */
+export type VisualizationStyleValue<T> =
+  | T
+  | ((properties: Record<string, unknown>, feature: unknown, index: number) => T);
+
+/**
+ * `PolygonLayer` 的样式（官方 `PolygonLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * ⚠️ **与 `<FillLayer>` 的 `style` 不是同一套字段**：本类型逐条对应
+ * `visualization/PolygonLayer.d.ts:29-63`，官方类声明里**没有** `patternUrl` / `borderWeight` /
+ * `borderCovered` 那一族（那是 `layer/FillLayer` 的 `FillLayerStyle`）。
+ * 两者的关系是**弃用替代**（官方把 `FillLayer` 标了 `@deprecated`、建议改用本类），
+ * **不是**字段改名——迁移时样式要按本类型重写。
+ *
+ * 这些字段经 `setOptions`（`:181`）**整袋替换**下发（不是 `layer/` 家族的 merge +
+ * `doOnceDraw`）：只写你要改的键，**没写的键会回到官方默认值**。
+ */
+export interface PolygonLayerStyle {
+  /** 填充色，css 字符串。默认 `'rgba(25, 25, 250, 0.6)'`。 */
+  fillColor?: VisualizationStyleValue<string>;
+  /** 填充透明度 [0,1]。默认 `1`。 */
+  fillOpacity?: VisualizationStyleValue<number>;
+  /** 描边色，css 字符串。默认 `'rgba(250, 250, 25, 1)'`。 */
+  strokeColor?: VisualizationStyleValue<string>;
+  /** 描边宽度（px），`0` 表示不描边。默认 `0`。⚠️ 官方默认是**不描边**。 */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 描边透明度 [0,1]。默认 `1`。 */
+  strokeOpacity?: number;
+  /** 纹理图片地址，**非空即启用平铺填充**。默认 `''`（即纯色填充）。 */
+  fillTextureUrl?: string;
+  /** 平铺时单张图在屏幕上的宽度（px）；不传取图片真实宽度。 */
+  fillTextureSize?: number;
+  /**
+   * `true` 只用纹理 alpha 做镂空、颜色取 `fillColor`；`false` 用纹理自身颜色。默认 `false`。
+   *
+   * 官方默认 `false`，而 Vue 对可选 `Boolean` prop 会转成 `false` ——**恰好一致**，
+   * 因此这里可以安全地让 Vue 的缺省转换生效（对比 `FillLayerProps.border` 那条注释）。
+   */
+  fillTextureAlphaOnly?: boolean;
+}
+
+/**
+ * `PolylineLayer` 的样式（官方 `PolylineLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * ⚠️ **与 `<LineLayer>` 的 `style` 不是同一套字段**：本类型逐条对应
+ * `visualization/PolylineLayer.d.ts:27-92`。迁移口径同 `PolygonLayerStyle` 的说明。
+ *
+ * 同样经 `setOptions`（`:213`）**整袋替换**下发。
+ */
+export interface PolylineLayerStyle {
+  /**
+   * 线颜色，css 字符串。默认 `'rgba(25, 25, 250, 1)'`。
+   *
+   * ⚠️ 官方注明：**虚线模式**（`strokeStyle` 为 `'dashed'` / `'dotted'`）下走 uniform 染色，
+   * **回调不生效**。
+   */
+  strokeColor?: VisualizationStyleValue<string>;
+  /**
+   * 线宽（屏幕 px，全宽）。默认 `4`。
+   *
+   * ⚠️ 官方注明：传回调时，**沿线长度换算**（虚线圆间距、纹理图案尺寸）仍按默认值 `4` 计算。
+   */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 线透明度 [0,1]，与线色 alpha、图层级 `opacity` **相乘**。默认 `1`。 */
+  strokeOpacity?: number;
+  /** 拐角连接样式。默认 `'round'`。⚠️ 官方注明：纹理 / 虚线**不建议**用 `'miter'`。 */
+  strokeLineJoin?: VisualizationStyleValue<"miter" | "bevel" | "round">;
+  /** 线端点样式。默认 `'round'`。 */
+  strokeLineCap?: VisualizationStyleValue<"butt" | "round" | "square">;
+  /** 线型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
+  strokeStyle?: "solid" | "dashed" | "dotted";
+  /** 实线段 / 间隙的屏幕像素长度（同 SVG `stroke-dasharray`；奇数个自动翻倍）。默认 `[8, 4]`。 */
+  dashArray?: number[];
+  /** 纹理图片地址，**必须是竖图**（x 跨线宽、y 沿线方向）。非空时优先级高于 `strokeStyle`。默认 `''`。 */
+  strokeTextureUrl?: string;
+  /** 原图宽（px），只参与沿线长度换算；不传取图片真实尺寸。 */
+  strokeTextureWidth?: number;
+  /** 原图高（px），同上。 */
+  strokeTextureHeight?: number;
+  /** `true` 按 `strokeTextureGap` 间隔平铺（箭头串）；`false` 沿线连续拉伸。默认 `false`。 */
+  strokeTextureSpaced?: boolean;
+  /** 相邻纹理间隔（px），仅 `strokeTextureSpaced` 为 `true` 时生效。默认 `16`。 */
+  strokeTextureGap?: number;
+  /** 纹理叠加色（rgb 相乘），仅配了 `strokeTextureUrl` 时生效。默认 `'rgba(255, 255, 255, 1)'`。 */
+  strokeTextureColor?: string;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 共用的**构造期**拾取选项（#166）。
+ *
+ * 与 `NativeLayerPickOptions`（`layer/` 家族的 `idKey` / `crs` / `enablePicked` /
+ * `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent`）
+ * **刻意不共用一个接口**：这两族的官方选项表里只有 `idKey` / `enablePicked` /
+ * `mouseStyleChange` / `pickTolerance` / `pickThrough` 五项（`PolygonLayer.d.ts:70-91`）。
+ * `pickWidth` / `pickHeight` / `crs` / `popEvent` / `selectedIndex` 官方**没有声明**
+ * （#165 的 H2 条已实测 `visualization/` 下 0 命中），共用一个接口等于把它们投影成
+ * 「接收后忽略」——AGENTS.md 明确禁止的假支持。
+ */
+export interface VisualizationPickOptions {
+  /**
+   * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`，默认 `'id'`。
+   *
+   * 它是拾取的**唯一身份口径**（本库不替官方猜默认值）：不设置时拾取会如实返回
+   * `id: null`。空字符串是合法字段名。
+   */
+  idKey?: string;
+  /**
+   * 是否开启鼠标交互（命中光标 + 事件派发）。官方默认 `false`，本组件默认 **`true`**。
+   *
+   * 与官方默认值**不同**，刻意如此：不给事件就别怪用户拿不到 `pick`。
+   */
+  enablePicked?: boolean;
+  /**
+   * 命中后是否更换鼠标光标。官方 `mouseStyleChange`，默认 `true`。
+   *
+   * ⚠️ 官方默认 `true` 而 Vue 缺省给 `false` ⇒ 在 `withDefaults` 里**必须**显式写
+   * `undefined`，否则每个不传它的用户都静默偏离官方（#165 结论六记录的同一类坑，
+   * 这是本票第四次踩到它）。
+   */
+  mouseStyleChange?: boolean;
+  /** 命中容差（css px）。官方默认 `4`。 */
+  pickTolerance?: number;
+  /**
+   * 命中后是否继续向下层派发。官方 `pickThrough`，默认 `false`。
+   *
+   * 官方默认 `false`，与 Vue 缺省一致，因此可以让 Vue 的转换生效。
+   */
+  pickThrough?: boolean;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 共用的**显隐 / 层级**槽位（#166）。
+ *
+ * ⚠️ **刻意不 extends `NativeLayerCommonProps`**：那一支还带 `opacity` / `minZoom` /
+ * `maxZoom`，而这两族的官方声明里**没有** `setOpacity`、**没有** `setMinZoom` / `setMaxZoom`
+ * （live 实测运行时的这四个方法也都不在）。沿用那一支会让 `useNativeLayerResource`
+ * 在运行时打出「该 kind 没有这个入口」的告警——**声明了却永远不生效 = 假支持**
+ * （AGENTS.md 明确禁止）。
+ *
+ * `minZoom` / `maxZoom` 因此**不进**这个接口，而是走下面的 `VisualizationZoomCtorOptions`
+ * （官方把它们声明成了**构造选项**，所以能投影成 prop，只是「改了要换实例」）。
+ */
+export interface VisualizationLayerCommonProps {
+  /** 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明），重新可见**不**换实例。 */
+  visible?: boolean;
+  /** 图层层级（挂载后写入；官方层级方法要求先挂到地图上）。默认 `1`。 */
+  zIndex?: number;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 的**缩放范围构造选项**。
+ *
+ * 官方把 `minZoom` / `maxZoom` 声明在选项表里（`PolygonLayer.d.ts:108` / `:112`，
+ * `PolylineLayer.d.ts:136` / `:145`，默认 `3` / `21`），但**没有**对应的字段级 setter
+ * ——live 探针读到两个类的 `setMinZoom` / `setMaxZoom` 在运行时也**不存在**。
+ *
+ * 因此它们进**构造期选项袋**：变化 ⇒ **换实例**（官方唯一能改的路径就是重建），
+ * 并且自动参与重建指纹。
+ */
+export interface VisualizationZoomCtorOptions {
+  /** 最小显示缩放等级（**构造选项**，官方默认 `3`）。变化会换实例。 */
+  minZoom?: number;
+  /** 最大显示缩放等级（**构造选项**，官方默认 `21`）。变化会换实例。 */
+  maxZoom?: number;
+}
+
+/**
+ * `PolygonLayer` 的 props（官方 `visualization.PolygonLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `Polygon` / `MultiPolygon`（含洞）；`strokeWeight > 0` 时内部用官方
+ * `PolylineLayer` 实现描边（`PolygonLayer.d.ts:123`）。
+ */
+export interface PolygonLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 面数据（`FeatureCollection` / `Feature` / `Feature[]` / 裸 Geometry，
+   * 官方 `setData` 的入参形状，`PolygonLayer.d.ts:160`）。
+   *
+   * `null` = 明确「没有数据」⇒ **换一个没有数据的实例**（与全部十种 kind 同一条口径，
+   * 理由见 `LineLayerProps.data`）；`undefined` = **不表态**（不产生任何 SDK 调用）。
+   */
+  data?: object | null;
+  /**
+   * 面样式（见 `PolygonLayerStyle`）。变化时经 `setOptions` **整袋替换**下发，不重建。
+   *
+   * ⚠️ 官方 `setOptions` 的注释写明「仅更新已声明的样式键」，而**未知键忽略并告警一次**
+   * ——因此只写你要改的键，**没写的键会回到官方默认值**（与 `layer/` 家族的 merge 语义相反）。
+   */
+  style?: PolygonLayerStyle;
+}
+
+/**
+ * `PolylineLayer` 的 props（官方 `visualization.PolylineLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `LineString` / `MultiLineString`；支持实线 / 虚线 / 纹理贴图三种渲染模式
+ * （`PolylineLayer.d.ts:159-160`）。
+ */
+export interface PolylineLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 线数据（入参形状同 `PolygonLayerProps.data`）。
+   *
+   * `null` / `undefined` 的口径与 `PolygonLayerProps.data` **完全一致**。
+   */
+  data?: object | null;
+  /** 线样式（见 `PolylineLayerStyle`）。同样经 `setOptions` 整袋替换。 */
+  style?: PolylineLayerStyle;
 }
 
 /**

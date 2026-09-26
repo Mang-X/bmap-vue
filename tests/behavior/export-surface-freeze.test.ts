@@ -87,7 +87,11 @@ const FROZEN_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   "PointIconLayer",
   "PointLayer",
   "Polygon",
+  // #166：官方 4.0.5 `visualization/PolygonLayer`（官方指定的 `FillLayer` 替代）。
+  "PolygonLayer",
   "Polyline",
+  // #166：官方 4.0.5 `visualization/PolylineLayer`（官方指定的 `LineLayer` 替代）。
+  "PolylineLayer",
   "Prism",
   "RasterTileLayer",
   "Rectangle",

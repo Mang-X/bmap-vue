@@ -129,8 +129,39 @@ AGENTS.md：「**接收后忽略属于假支持**」。处置：**实现它**或
 - **`visualization/` 的范围划出**：Catalog 没有任何 `rawMembers` 声称那 9 个未实现的类
   ⇒ #166 的边界干净。
 
-## 需要维护者裁决的三处
+## Class 2 逐条裁决（2026-09-27，第一段 A–I）
 
+「名字相同、行为不同」的一族。**存在性一律以 v4 声明为准**，行为差异以
+`scripts/probe-runtime-members.mts` 的 live 读数（2026-09-27，真实 AK）为准。
+
+| # | 条目 | 本库行为 | 官方 / 参考行为 | 裁决 | 决定性依据 |
+| --- | --- | --- | --- | --- | --- |
+| A | `useMap` / `useMapReady` / `useMapStatus` | 返回对象 / `ComputedRef<boolean>` / 8 个独立 ref | MapHandle 本身 / 收回调的哨兵 / 一个原子快照 | **不改（形状）+ 改（文档）** | 形态差异是**有意的 Vue 适配**（Class 4），不是缺陷：8 个独立 ref 能分别 watch，原子快照反而做不到。但「名称对齐 ✓」的对照表**只比名字**、因此会误导移植者，已在生成器里加「同名但不同形」一节 + 双向门禁 |
+| B | `get*` 的可空性 | 六个读命令返回 `\| null` | 官方全部非空 | **不改** | 官方非空是**声明**、不是「什么情况下都给得出值」的承诺；本库 `readLiveView` 的口径是「资源已销毁 / 该能力不可用 ⇒ 读不到」。收窄成非空会把「读不到」变成一个编出来的值。参考实现自己也全转 `\| null`（`useMapStatus.ts` 的 `safePoint` / `safeNum`） |
+| C | `panBy(pixel)` | 收一个 `Pixel` 对象 | 官方 `panBy(x: number, y: number, options?)` | **不改（Class 4 有意适配）** | Driver 已经把它拆成 `x, y` 两个数字下发（`driver/jsapi-v4/map.ts:859-864`），官方能力**没有缺口**；对象形态是本库全域统一的 `Point` / `Pixel` / `Size` 记法。已写进 `docs/zh-CN/components/map.md` 命令表注记 |
+| D | `resetView()` | 回到首次快照，**连 heading / tilt 一起** | 官方 `reset()` 声明只说「恢复地图初始化时的中心点和级别」 | **不改** | live 实测（`resetScope`）：官方 `reset()` 之后 center / zoom 回到初值，**heading 60 / tilt 30 原样不动**。即两者的**实测**行为一致（都不动 heading/tilt）；本库多动的那两个字段是**「归位到首次快照」**语义的一部分，与受控状态机（`centerState.reset()` 等）成套。改它会与 #29 冻结的 `resetView` 语义打架 |
+| E | `center` 的 string | prop 收 `\| string`，**命令不收** | 官方 `setCenter(center: Point \| string, options?)` | **改（命令面放宽）** | 三处证据同向：① 声明是 `Point \| string`；② `MapDriver.setCenter(map, Point \| string)` 与 `toRawCenter` **本来就**处理字符串；③ live 实测 `setCenter('北京')` 从上海真的移到北京。收窄只发生在命令面最上面一层。**注意 live 反直觉读数**：官方对无法识别的地名**不抛错**，也真的移动（`'NotACityName-zzz'` 同样移动）⇒「没报错」不能推断「生效了」 |
+| F | 命令丢 options | 五条命令全是 `(value)` | 官方五条都是 `(value, options?)` | **不改（本轮），已开票** | 缺口真实：`noAnimation` / `callback` / `setZoom` 的 `zoomCenter` 三者都不可达，没有回调就没有「命令完成」这个可观察事实。live 实测（`optionsCallback` / `optionsCallbackAnimated`）证明五条在 `noAnimation: true` 下 callback **恰好交付一次**（0–1ms）、动画档也交付（setZoom 526ms / panTo 32ms），即「传下去就真的会来」有取证。**但落地要改 `driver/types/map.ts` 的五条签名 + `driver/jsapi-v4/map.ts` 的实现 —— 超出本段工作范围**，见文末「需要 Driver 改动」 |
+| G | `panTo` 动画默认 | 不传 options，Driver 直接下发 | 官方 `noAnimation` 默认 `false`（=有动画） | **不改** | live 实测（`panToAnimationDefault`，`requestAnimationFrame` 逐帧 1.5s）：`distinctSampleCount = 1`、`midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位，没有中间态**。即实测行为与官方「默认无动画」**一致**，而官方声明写默认 `false`；本库不传 options 即沿用上游默认，**没有**额外的 prop/命令不一致可修 |
+| H | `mapStyleJson` 形状 + 静默优先 | `Record`（单数）；两个 prop 同时给走 `else if` **静默丢一个** | `styleJson?: object[]`；`styleId` / `styleJson` / `merge` 三成员 | **改** | ① 声明是 `object[]`；② 旧代码把整份 `Record` 当作**整个 config** 下发（`setMapStyle(config)`），于是 `styleId` 那一支**永远走不到** —— 不只是「丢一个」，是**结构性地走不到**；③ live 实测（`setMapStyleShapes`）两种先后顺序的胜者都不可控，因此不能在组件层猜赢家，只能**显式失败** |
+| I | `<Panorama>` 的 `capture` / `clearOverlays` | Driver 按「无消费者」不加 | 官方声明有；React 参考的 `PanoramaRef` 两个都暴露 | **不改（本轮），已开票** | live 实测（`panoramaInstance`，**实例读法**）坐实了上一轮「无法证伪」的结论：`capture` 与 `clearOverlays` `own: false` / `onProto: false`，但**`callable: true`**，且 `capture()` 真的返回了 1,639 字节的字符串、`clearOverlays()` 不抛。⇒ 成员**确实可达**，「上一轮探针全 false」是**原型读法失效**而不是成员不存在。补它们要动 `driver/types/panorama.ts` + `driver/jsapi-v4/panorama.ts` + `<Panorama>`，**超出本段范围** |
+
+### 需要 Driver 改动（超出本段范围，已停手并上报）
+
+三条裁决都指向 `src/driver/**`（AGENTS.md 的 raw SDK 白名单，另一个代理在改）：
+
+1. **F** —— `MapDriver` 的 `setCenter` / `setZoom` / `setHeading` / `setTilt` / `panTo`
+   五条要各加一个 `options?` 形参（`noAnimation` / `callback`，`setZoom` 再加 `zoomCenter`），
+   实现侧按 `toRawFlyToOptions` 的既有范式投影（全空时返回 `undefined`，不下发该参数），
+   然后 `MapCommands` 侧原样透传。**注意 `setZoom` 的 `zoomCenter` 是 `Point`**，
+   要经 `geometry.toRawPoint` 投影。
+2. **I** —— `PanoramaViewerDriver` 加 `capture` / `clearOverlays`，`<Panorama>` 给出口。
+3. **A（可选）** —— 若决定让 `useMap` 的返回形态向官方靠，需要一个**新**的
+   `useMapSnapshot()`，**不能**改现有 `useMapStatus` 的返回类型（那是破坏性变更）。
+
+---
+
+## 需要维护者裁决的三处
 1. **补 `zIndex` / 补 ref 命令面 / 补事件**，都属于**扩大公共面**。#165 §3.3 要求补，
    但这些是破坏性新增（会改动已冻结的出口基线）。是否本轮做、还是分票，由维护者定。
 2. **`<Panorama>` 的 `links`**：补 `getLinks` + 给 `linksChange` 加载荷，还是维持现状并

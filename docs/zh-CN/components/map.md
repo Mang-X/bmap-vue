@@ -24,7 +24,22 @@ map/multiInstance
 
 ## 个性化地图
 
-通过指定 `Map` 组件的 `mapStyleId` 或者 `mapStyleJson` 来展示个性化地图，如果同时指定，`mapStyleId` 会优先生效。
+通过指定 `Map` 组件的 `mapStyleId` 或者 `mapStyleJson` 来展示个性化地图。
+
+::: warning 两者互斥（#165 Class 2）
+
+`mapStyleId` 与 `mapStyleJson` 都表示「一整套个性化样式」，**不能同时给**。官方
+`setMapStyle` 的两个键同时出现时谁生效取决于 SDK 内部的合并顺序（2026-09-27 真实 AK
+实测：两种先后顺序都试了，结果都不受调用方控制），因此本库在组件层**显式报错**，
+而不是静默丢掉其中一个。
+:::
+
+::: tip 提示
+
+1. 如果个性化地图没有生效，请先检查 `mapStyleId` 或 `mapStyleJson` 是否正确。如果是通过 `mapStyleId` 实现，还需要检查是否与 `ak` 申请的账号一致
+2. 以下示例使用的 `mapStyleId` 均与 ak 和域名绑定，无法直接复制使用。可根据示例主题名字到[百度地图个性化编辑器](https://lbsyun.baidu.com/apiconsole/custommap)创建后使用
+3. `mapStyleJson` 的形状是**数组**（对齐官方 `MapStyleConfig.styleJson?: object[]`），不是一个对象
+:::
 
 ::: tip 提示
 
@@ -573,13 +588,13 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | 方法 | 说明 | 类型 |
 | --- | --- | --- |
 | `getCenter()` | 读当前中心点（读不到给 `null`） | `() => { lng, lat } \| null` |
-| `setCenter(center)` | 设置中心点（不含 zoom，不会重置级别） | `(center: { lng, lat }) => void` |
+| `setCenter(center)` | 设置中心点（不含 zoom，不会重置级别）。`center` 对齐官方 `setCenter(center: Point \| string, options?)` 的**两个分支**：点，或城市名 / 地址字符串 | `(center: { lng, lat } \| string) => void` |
 | `getZoom()` / `setZoom(zoom)` | 缩放级别读写 | `() => number \| null` / `(zoom: number) => void` |
 | `getHeading()` / `setHeading(heading)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number) => void` |
 | `getTilt()` / `setTilt(tilt)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
-| `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移 | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |
+| `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（#165 Class 2 判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |
 | `fitBounds(bounds)` | 按范围适配视野 | `(bounds: Bounds) => void` |
 | `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`；Map 作用域的能力要等地图建好之后才可靠 —— 需要确定性时先 `await whenReady()`） | `(capability: Capability) => boolean` |
 

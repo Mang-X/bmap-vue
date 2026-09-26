@@ -72,6 +72,16 @@ export type {
   TrackLineLayerProps,
   TrackLineObserved,
   TrackLineLayerExpose,
+  // #166：官方 4.0.5 `visualization/PolygonLayer` / `PolylineLayer`
+  // （官方指定的 `FillLayer` / `LineLayer` 替代）的公共类型。
+  PolygonLayerProps,
+  PolygonLayerStyle,
+  PolylineLayerProps,
+  PolylineLayerStyle,
+  VisualizationStyleValue,
+  VisualizationLayerCommonProps,
+  VisualizationPickOptions,
+  VisualizationZoomCtorOptions,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";

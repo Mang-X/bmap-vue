@@ -267,7 +267,7 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getSize(): Size_2 | null;
     getViewport(view: readonly Point[] | Bounds_2, options?: ViewportOptions_2): Viewport_2 | null;
     getScreenshot(): string | null;
-    setCenter(center: Point): void;
+    setCenter(center: Point | string): void;
     setZoom(zoom: number): void;
     setHeading(heading: number): void;
     setTilt(tilt: number): void;
@@ -735,7 +735,37 @@ declare const __VLS_component_42: DefineComponent<TrackLineLayerProps, {
     visible: boolean;
     pauseOnHidden: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_43: DefineComponent<PanoramaProps, {
+declare const __VLS_component_43: DefineComponent<PolygonLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    click: (pick: FeaturePick) => any;
+    dblclick: (pick: FeaturePick) => any;
+    mousemove: (pick: FeaturePick) => any;
+    rightclick: (pick: FeaturePick) => any;
+}, string, PublicProps, Readonly<PolygonLayerProps> & Readonly<{
+    onClick?: ((pick: FeaturePick) => any) | undefined;
+    onDblclick?: ((pick: FeaturePick) => any) | undefined;
+    onMousemove?: ((pick: FeaturePick) => any) | undefined;
+    onRightclick?: ((pick: FeaturePick) => any) | undefined;
+}>, {
+    visible: boolean;
+    enablePicked: boolean;
+    mouseStyleChange: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    click: (pick: FeaturePick) => any;
+    dblclick: (pick: FeaturePick) => any;
+    mousemove: (pick: FeaturePick) => any;
+    rightclick: (pick: FeaturePick) => any;
+}, string, PublicProps, Readonly<PolylineLayerProps> & Readonly<{
+    onClick?: ((pick: FeaturePick) => any) | undefined;
+    onDblclick?: ((pick: FeaturePick) => any) | undefined;
+    onMousemove?: ((pick: FeaturePick) => any) | undefined;
+    onRightclick?: ((pick: FeaturePick) => any) | undefined;
+}>, {
+    visible: boolean;
+    enablePicked: boolean;
+    mouseStyleChange: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_45: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
     getLinks: () => PanoramaLink[];
     viewer: Readonly<ShallowRef<PanoramaHandle | null>>;
@@ -1122,6 +1152,12 @@ declare type __VLS_Slots_42 = {} & {
 declare type __VLS_Slots_43 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
+declare type __VLS_Slots_44 = {} & {
+    default?: (props: typeof __VLS_1) => any;
+};
+declare type __VLS_Slots_45 = {} & {
+    default?: (props: typeof __VLS_1) => any;
+};
 declare type __VLS_Slots_5 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
@@ -1327,6 +1363,16 @@ declare type __VLS_WithSlots_43<T, S> = T & {
         $slots: S;
     };
 };
+declare type __VLS_WithSlots_44<T, S> = T & {
+    new (): {
+        $slots: S;
+    };
+};
+declare type __VLS_WithSlots_45<T, S> = T & {
+    new (): {
+        $slots: S;
+    };
+};
 declare type __VLS_WithSlots_5<T, S> = T & {
     new (): {
         $slots: S;
@@ -1515,8 +1561,8 @@ declare interface Bounds_2 {
     northeast: Point_2;
 }
 declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
-declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
-declare type Capability_2 = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+declare type Capability_2 = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 declare interface CapabilityDescriptor {
     id: Capability;
     family: CapabilityFamily;
@@ -2248,7 +2294,7 @@ declare interface MapProps {
     height?: string | number;
     mapType?: MapTypeIdName;
     mapStyleId?: string;
-    mapStyleJson?: Record<string, unknown>;
+    mapStyleJson?: Record<string, unknown>[];
     displayOptions?: Record<string, unknown>;
     preserveDrawingBuffer?: boolean;
     minZoom?: number;
@@ -2675,7 +2721,7 @@ declare interface OverviewMapControlProps {
     padding?: number;
     visible?: boolean;
 }
-export declare const Panorama: __VLS_WithSlots_43<typeof __VLS_component_43, __VLS_Slots_43>;
+export declare const Panorama: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
 export declare const PanoramaControl: __VLS_WithSlots_17<typeof __VLS_component_17, __VLS_Slots_17>;
 declare interface PanoramaControlProps {
     anchor?: string;
@@ -2950,6 +2996,21 @@ declare interface PointPick<Item> {
 }
 export declare const Polygon: __VLS_WithSlots_7<typeof __VLS_component_7, __VLS_Slots_7>;
 declare type PolygonHandle = SdkHandle<"overlay:polygon">;
+export declare const PolygonLayer: __VLS_WithSlots_43<typeof __VLS_component_43, __VLS_Slots_43>;
+declare interface PolygonLayerProps extends VisualizationLayerCommonProps, VisualizationZoomCtorOptions, VisualizationPickOptions {
+    data?: object | null;
+    style?: PolygonLayerStyle;
+}
+declare interface PolygonLayerStyle {
+    fillColor?: VisualizationStyleValue<string>;
+    fillOpacity?: VisualizationStyleValue<number>;
+    strokeColor?: VisualizationStyleValue<string>;
+    strokeWeight?: VisualizationStyleValue<number>;
+    strokeOpacity?: number;
+    fillTextureUrl?: string;
+    fillTextureSize?: number;
+    fillTextureAlphaOnly?: boolean;
+}
 declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
     points: ({
         lng: number;
@@ -2960,6 +3021,26 @@ declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShape
 }
 export declare const Polyline: __VLS_WithSlots_6<typeof __VLS_component_6, __VLS_Slots_6>;
 declare type PolylineHandle = SdkHandle<"overlay:polyline">;
+export declare const PolylineLayer: __VLS_WithSlots_44<typeof __VLS_component_44, __VLS_Slots_44>;
+declare interface PolylineLayerProps extends VisualizationLayerCommonProps, VisualizationZoomCtorOptions, VisualizationPickOptions {
+    data?: object | null;
+    style?: PolylineLayerStyle;
+}
+declare interface PolylineLayerStyle {
+    strokeColor?: VisualizationStyleValue<string>;
+    strokeWeight?: VisualizationStyleValue<number>;
+    strokeOpacity?: number;
+    strokeLineJoin?: VisualizationStyleValue<"miter" | "bevel" | "round">;
+    strokeLineCap?: VisualizationStyleValue<"butt" | "round" | "square">;
+    strokeStyle?: "solid" | "dashed" | "dotted";
+    dashArray?: number[];
+    strokeTextureUrl?: string;
+    strokeTextureWidth?: number;
+    strokeTextureHeight?: number;
+    strokeTextureSpaced?: boolean;
+    strokeTextureGap?: number;
+    strokeTextureColor?: string;
+}
 declare interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
     points: {
         lng: number;
@@ -3179,6 +3260,22 @@ declare interface ViewportOptions_2 {
     margins?: readonly number[];
     zoomFactor?: number;
     callback?: () => void;
+}
+declare interface VisualizationLayerCommonProps {
+    visible?: boolean;
+    zIndex?: number;
+}
+declare interface VisualizationPickOptions {
+    idKey?: string;
+    enablePicked?: boolean;
+    mouseStyleChange?: boolean;
+    pickTolerance?: number;
+    pickThrough?: boolean;
+}
+declare type VisualizationStyleValue<T> = T | ((properties: Record<string, unknown>, feature: unknown, index: number) => T);
+declare interface VisualizationZoomCtorOptions {
+    minZoom?: number;
+    maxZoom?: number;
 }
 declare type WalkingRouteOptions = RouteRenderState;
 export declare const WMSLayer: __VLS_WithSlots_35<typeof __VLS_component_35, __VLS_Slots_35>;

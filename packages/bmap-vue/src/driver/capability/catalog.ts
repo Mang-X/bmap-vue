@@ -74,6 +74,8 @@ export type Capability =
   | "layer.point"
   | "layer.heatmap"
   | "layer.track-line"
+  | "layer.polygon"
+  | "layer.polyline"
   // Service
   | "service.local-search"
   | "service.autocomplete"
@@ -455,23 +457,25 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // ⚠️ 官方 `@deprecated`（4.0.5 给 `layer/LineLayer.d.ts` 的类加的，建议改用
   // `visualization.PolylineLayer`）。`status` 保持 `experimental` **不动**——那一位的判据是
   // 「这一族新、接口面可能变」，与「官方标了弃用」是两件不同的事；官方弃用只落说明。
-  // 官方建议的替代组件 `PolylineLayer` 本库**尚未提供**（#166），组件继续可用。
+  // 官方建议的替代组件 `<PolylineLayer>` 本库**已提供**（#166），组件本身继续可用。
   "layer.line": {
     id: "layer.line",
     family: "layer",
     description:
-      "线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库尚未提供该组件，见 #166）",
+      "线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer" +
+      "（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族）",
     rawMembers: ["LineLayer"],
     status: "experimental",
     runtimeOnly: false,
   },
   // 同上：`FillLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PolygonLayer`），
-  // 替代组件同样见 #166。
+  // 替代组件同样已由 #166 提供。
   "layer.fill": {
     id: "layer.fill",
     family: "layer",
     description:
-      "面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库尚未提供该组件，见 #166）",
+      "面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer" +
+      "（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族）",
     rawMembers: ["FillLayer"],
     status: "experimental",
     runtimeOnly: false,
@@ -583,6 +587,45 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     rawMembers: ["TrackLine"],
     status: "experimental",
     runtimeOnly: true,
+  },
+
+  // #166：官方 4.0.5（git `5ba67f4`）新增的 `visualization/` 两族。它们是 4.0.5
+  // **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
+  //
+  // `status: "experimental"` 的判据与 `layer.line` / `layer.fill` 相同：「这一族新、
+  // 接口面可能变」——4.0.5 才第一次出现在类型包里，且官方文档仍在补（`PolygonLayer.d.ts:171`
+  // 的注释连「含内部描边」的实现细节都写进去了，说明还在演进）。**不是**因为官方标了弃用。
+  //
+  // `runtimeOnly: false`（与扩展 API 那四类相反）：live 探针
+  // （`scripts/probe-runtime-members.mts` case 3b 的 `injectionTiming`，2026-09-27）读到
+  // `B.PolygonLayer` / `B.PolylineLayer` 在 `BMap.Map` 刚就绪时**已经是 `function`**
+  // ⇒ 随主包注入，不存在「等异步注入」的时机问题。
+  "layer.polygon": {
+    id: "layer.polygon",
+    family: "layer",
+    description:
+      "批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
+      "由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
+      "setOpacity 运行时有但官方未声明 ⇒ 同样不开面。逐条依据见 " +
+      "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["PolygonLayer"],
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  "layer.polyline": {
+    id: "layer.polyline",
+    family: "layer",
+    description:
+      "批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
+      "由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
+      "setOpacity 运行时有但官方未声明 ⇒ 同样不开面（⚠️ 代价：声明的 opacity 选项" +
+      "只能经 setOptions 整袋下发）。逐条依据见 " +
+      "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["PolylineLayer"],
+    status: "experimental",
+    runtimeOnly: false,
   },
 
   // ------------------------------------------------------------ Service

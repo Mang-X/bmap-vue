@@ -107,8 +107,71 @@
 就必须显式 `undefined`，否则每个不传它的用户都静默偏离官方**。
 这条值得进仓库的贡献指南，而不是散落在各组件注释里。
 
+## Class 2 的追加读数（2026-09-27）
+
+`scripts/probe-runtime-members.mts` 扩了 7–13 号（Map 命令面 / 全景实例）。逐条裁决见
+`165-audit-B-C-D-F.md` 的「Class 2 逐条裁决」。这里只记**读数本身**，含两个反直觉的。
+
+### 7 `setCenter('北京')` 字符串中心（裁决 E）
+
+起点**故意选上海**——第一轮用北京当地做起点，「没动」与「字符串被忽略」读数完全一样（混淆读数）。
+
+| 输入 | 抛错 | 读回 | 真的动了吗 |
+| --- | --- | --- | --- |
+| `'北京'` | 否 | `116.413, 39.911` | 否（仍在上海） |
+| `'NotACityName-zzz'` | 否 | `116.413, 39.911` | **是** |
+
+⚠️ **反直觉**：官方对**无法识别**的地名**不报错**，也真的移动了；而对一个**能识别**的名字
+在这一轮里没动。⇒ 结论只取声明 + Driver 既有收窄那一侧（两条独立证据同向），
+**不**把上面这张表当成「字符串中心不可用」的证据——它测的是同一个已失败的往返（重试时
+SDK 已把中心钉住），不构成反证。
+
+### 8 / 13 `options.callback` 交付（裁决 F）
+
+`noAnimation: true`（官方承诺「立即调用」）下五条**各交付恰好一次**，0–1ms：
+`setCenter` 0ms · `setZoom` 1ms · `setHeading` 0ms · `setTilt` 0ms · `panTo` 0ms。
+
+不传 `noAnimation`（走动画档）等 3s 仍**各交付恰好一次**：`setCenter` 4ms ·
+`panTo` 32ms · `setZoom` 526ms。⇒ 「传下去就真的会来」有 live 取证，缺口是**类型面**而非运行时。
+
+### 9 `panTo` 的动画默认（裁决 G）
+
+`requestAnimationFrame` 逐帧采 1.5s：`distinctSampleCount = 1`、`midFlightSamples = 0`。
+即无头 SwiftShader 下**直接跳变到位**（官方声明默认 `noAnimation: false` 即有动画）。
+本库不传 options 即沿用上游默认，**没有**额外的 prop/命令不一致要修。
+
+### 10 `setMapStyle` 的形状与互斥（裁决 H）
+
+| 输入 | 抛错 | `getMapStyleId()` |
+| --- | --- | --- |
+| `{styleJson: [ … ]}`（官方数组） | 否 | `custom93` |
+| `{styleJson: { … }}`（单数对象） | 否 | `custom95` |
+| `{styleId: 'a1', styleJson: []}` | 否 | `custom97` |
+| `{styleJson: [], styleId: 'a1'}` | 否 | `custom99` |
+
+⚠️ 两种顺序的胜者都**不受调用方控制**（SDK 内部合并顺序）⇒ 不能在组件层猜赢家，只能显式失败。
+`merge` 无从判断：官方未声明「与什么合并」的默认基线。
+
+### 11 `Panorama` 的实例成员（裁决 I）—— 推翻上一轮「无法证伪」
+
+判据换成**实例读法**（`own` / `onProto` / `callable`）：
+
+| 成员 | own | onProto | callable |
+| --- | --- | --- | --- |
+| `capture` | false | false | **true** |
+| `clearOverlays` | false | false | **true** |
+| `getLinks` | false | false | **true** |
+| `getId` / `getSceneType` | false | false | **true** |
+| `getPov` / `getPosition` / `getVisible` / `setId` | **true** | false | true |
+
+且 `capture()` 真返回 **1,639 字节**字符串、`clearOverlays()` 不抛。
+
+⇒ 上一轮「`B.Panorama.prototype` 全 false」是**原型读法对这类成员无效**，不是「成员不存在」。
+`setTheme` 的 `callable: false`（`Panorama` 上确实没有）。
+
 ## 未覆盖
 
-- `Panorama` 实例成员（需创建 viewer）——本次探针只读原型，对它无效。
 - `MenuItem` / `ContextMenu` 的实例行为。
 - 交互手势（`enableRotate` 等）在真实浏览器里的实际效果（需可见窗口）。
+- `noAnimation: true` 与动画档**都开**的对照（当前只测了「有 options」与「无 options」两档）。
+

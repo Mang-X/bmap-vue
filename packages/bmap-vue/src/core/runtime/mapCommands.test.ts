@@ -170,6 +170,33 @@ describe("createMapCommands：有句柄时", () => {
   });
 });
 
+/**
+ * #165 Class 2 / E：`setCenter` 的入参在**两张脸上不一致**。
+ *
+ * `<Map center>` prop 接受 `{lng,lat} | string`（v2 兼容的城市名 / 地址），
+ * 官方 `setCenter(center: Point | string, options?)` 也**明确声明**接受 `string`，
+ * 而 `MapDriver.setCenter(map, center: Point | string)` 与 `toRawCenter` **已经**处理字符串。
+ * 只有命令面 `MapCommands.setCenter(center: Point)` 这一层把它收窄掉了。
+ *
+ * live 实测（2026-09-27，真实 AK）：`setCenter('北京')` 真的会让地图**动过去**（起点上海
+ * → 落点 116.413, 39.911），`setCenter('NotACityName-zzz')` 同样不抛错、也真的动了
+ * （官方对无法识别的地名**回落到某处**而不是拒绝）。因此「命令面不能收字符串」不只是
+ * 少一个类型：它让「prop 收、命令不收」这件事在同一个组件上自相矛盾。
+ */
+describe("createMapCommands：setCenter 接受官方声明的 string 中心（#165 Class 2 / E）", () => {
+  it("字符串中心按原样透传给 Driver（Driver 已有的 Point | string 收窄不被这里截断）", () => {
+    const { commands, mapDriver } = createFixture();
+    commands.setCenter("北京");
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), "北京");
+  });
+
+  it("点形态不受影响", () => {
+    const { commands, mapDriver } = createFixture();
+    commands.setCenter(POINT);
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT);
+  });
+});
+
 describe("createMapCommands：错误口径", () => {
   it("读：资源已销毁 / 能力不可用 ⇒ null（这两种「本来就读不到」）", () => {
     const { commands, mapDriver } = createFixture();

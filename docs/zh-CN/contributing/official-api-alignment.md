@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 420 |
+| 本库根入口导出 | 429 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 305 |
+| 仅本库有 | 314 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -32,6 +32,9 @@ component 45 · hook 14 · type 56
 ## 名称对齐
 
 两侧同名的导出（组件 / hooks / 类型 / 常量）。
+
+> ⚠️ **本表只比「名字」，不比「返回形态 / 签名」。** 同名**不**等于同行为——
+同名而行为不同的条目由下方「同名但不同形」一节逐条点名，不要从这张表推出行为一致。
 
 | 名称 | 面 | 本库 | 官方 React |
 | --- | --- | --- | --- |
@@ -150,6 +153,19 @@ component 45 · hook 14 · type 56
 | `ViewAnimationKeyFrames` | type | ✓ | ✓ |
 | `WalkingRouteOptions` | type | ✓ | ✓ |
 | `WalkingRouteResult` | type | ✓ | ✓ |
+
+### 同名但不同形
+
+下列条目**名字**与官方一致（因此出现在上表并标成「✓ ✓」），但**返回形态 / 签名不同**。
+从参考实现移植时按名字写会写错——这一节是那张表的必要注脚，不是另一张表。
+
+| 名称 | 本库 | 官方 React 参考 |
+| --- | --- | --- |
+| `useMap` | 返回**对象** `{ status, map, client, error, whenReady }` | 返回 **MapHandle 本身**（未就绪为 `null`） |
+| `useMapReady` | 返回 `ComputedRef<boolean>`（**读一个布尔**） | 接收**回调**的哨兵 composable `useMapReady(onReady)` |
+| `useMapStatus` | **8 个独立**的 readonly ref（可分别 watch） | **一个原子快照**对象（`useSyncExternalStore`，无撕裂读） |
+
+> 逐条依据与处置见 `docs/zh-CN/contributing/165-audit-B-C-D-F.md` 的 B-R 一节。
 
 ## 语义例外（手写）
 
@@ -499,6 +515,8 @@ component 45 · hook 14 · type 56
 | `MarkerList` | component | 官方没有 `MarkerList`；本库数据组件。 |
 | `MenuSeparator` | component | — |
 | `PointLayer` | component | — |
+| `PolygonLayer` | component | — |
+| `PolylineLayer` | component | — |
 | `TrackLineLayer` | component | — |
 | `useAreaBoundary` | hook | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `useControllableState` | hook | — |
@@ -577,6 +595,7 @@ component 45 · hook 14 · type 56
 | `PointLayerProps` | type | — |
 | `PolygonHandle` | type | — |
 | `PolylineHandle` | type | — |
+| `PolylineLayerProps` | type | — |
 | `PublicMapContext` | type | — |
 | `ResolvedMapEvent` | type | — |
 | `resolveInternalMapContext` | type | — |
@@ -599,6 +618,9 @@ component 45 · hook 14 · type 56
 | `UseOverlaySpecResult` | type | — |
 | `UseViewAnimationOptions` | type | — |
 | `ViewAnimationStatus` | type | — |
+| `VisualizationLayerCommonProps` | type | — |
+| `VisualizationPickOptions` | type | — |
+| `VisualizationZoomCtorOptions` | type | — |
 | `AreaBoundary` | other | — |
 | `BMapClient` | other | Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。 |
 | `bmapClientContextKey` | other | Client 上下文 InjectionKey；Vue DI 键，官方 React 无对应。 |
@@ -758,6 +780,8 @@ component 45 · hook 14 · type 56
 | `PointInput` | other | — |
 | `PointLike` | other | — |
 | `PointPick` | other | — |
+| `PolygonLayerStyle` | other | — |
+| `PolylineLayerStyle` | other | — |
 | `PublicBMapClient` | other | — |
 | `resolveMapEventName` | other | — |
 | `resolvePluginDefinition` | other | — |
@@ -797,6 +821,7 @@ component 45 · hook 14 · type 56
 | `urlPluginDefinition` | other | — |
 | `UseViewAnimationReturn` | other | — |
 | `ViewAnimationCancelOutcome` | other | — |
+| `VisualizationStyleValue` | other | — |
 | `XYLike` | other | — |
 
 ## `./ui-kit` 子路径

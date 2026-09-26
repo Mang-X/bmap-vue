@@ -306,6 +306,19 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/TrackLineLayer.vue",
   },
+  // #166：官方 4.0.5 `visualization/` 新增的两族，**替代**同版本弃用的 FillLayer / LineLayer。
+  {
+    name: "PolygonLayer",
+    exportName: "PolygonLayer",
+    category: "layer",
+    source: "./components/layers/PolygonLayer.vue",
+  },
+  {
+    name: "PolylineLayer",
+    exportName: "PolylineLayer",
+    category: "layer",
+    source: "./components/layers/PolylineLayer.vue",
+  },
   {
     name: "Panorama",
     exportName: "Panorama",

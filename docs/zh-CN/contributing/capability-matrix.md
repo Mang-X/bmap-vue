@@ -5,7 +5,7 @@
 > 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**63**
+能力总数：**65**
 
 ## 状态说明
 
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `native` | SDK 原生能力，直接映射官方 API | 47 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 1 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 13 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 15 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -22,7 +22,7 @@
 | --- | --- |
 | `map` | 14 |
 | `overlay` | 15 |
-| `layer` | 19 |
+| `layer` | 21 |
 | `service` | 12 |
 | `panorama` | 3 |
 
@@ -70,8 +70,8 @@
 | layer | `layer.point-shape` | native | — | PointShapeLayer | 点形状图层（PointShapeLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（形状模式） |
 | layer | `layer.district` | native | — | DistrictLayer | 行政区划图层（DistrictLayer） |
 | layer | `layer.panorama-coverage` | native | ✓ | PanoramaCoverageLayer | 全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型 |
-| layer | `layer.line` | experimental | — | LineLayer | 线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库尚未提供该组件，见 #166） |
-| layer | `layer.fill` | experimental | — | FillLayer | 面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库尚未提供该组件，见 #166） |
+| layer | `layer.line` | experimental | — | LineLayer | 线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族） |
+| layer | `layer.fill` | experimental | — | FillLayer | 面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族） |
 | layer | `layer.dom` | experimental | — | DOMLayer | DOM 图层（DOMLayer） |
 | layer | `layer.xyz` | experimental | — | XYZLayer | 第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务 |
 | layer | `layer.wms` | experimental | — | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |
@@ -82,6 +82,8 @@
 | layer | `layer.point` | experimental | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地。4.0.5 声明了显隐 / 层级 / 绘制阶段 / 参考中心点这一组显示属性（官方**没有** setOpacity）。 |
 | layer | `layer.heatmap` | experimental | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API。4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter 而不是摘挂实例。 |
 | layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter，重新可见**不**换实例（换实例会丢掉播放进度）。 |
+| layer | `layer.polygon` | experimental | — | PolygonLayer | 批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时有但官方未声明 ⇒ 同样不开面。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md |
+| layer | `layer.polyline` | experimental | — | PolylineLayer | 批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时有但官方未声明 ⇒ 同样不开面（⚠️ 代价：声明的 opacity 选项只能经 setOptions 整袋下发）。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md |
 | service | `service.local-search` | native | — | LocalSearch | 本地检索（LocalSearch） |
 | service | `service.autocomplete` | native | — | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
 | service | `service.driving-route` | native | — | DrivingRoute | 驾车路线规划（DrivingRoute） |

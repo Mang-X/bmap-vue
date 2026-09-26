@@ -161,6 +161,9 @@ export const NATIVE_LAYER_FACET_KINDS = [
   "fill",
   "heatmap",
   "track-line",
+  // #166：4.0.5 `visualization/PolygonLayer` / `PolylineLayer`
+  "polygon",
+  "polyline",
 ] as const satisfies readonly NativeLayerKind[];
 
 /** 全部归一化操作（同上：新增操作漏加进表会编译失败，而不是静默漏测）。 */

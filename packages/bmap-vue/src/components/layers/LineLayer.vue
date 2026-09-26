@@ -10,11 +10,15 @@
  *
  * **本组件的处置**（#165 决策，与 `FillLayer` / `PointIconLayer` 一致）：
  *
- * - **保留组件、保留行为**。替代组件（`PolylineLayer`）**还不存在**（见 #166），
- *   删掉等于让现有用户无路可走。
+ * - **保留组件、保留行为**。官方自己**没有**删除 `LineLayer`（4.0.5 只是标了弃用并指名替代品）。
  * - **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim；「别名指向新名」正是那条要禁的东西）。
  * - **把弃用讲清楚**：开发期告警一次（`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放
  *   在模块级）+ 类型层 `@deprecated` + 文档。
+ *
+ * **#166 更新**：官方的指名替代品 `<PolylineLayer>` 现在**本库已提供**了。迁移时注意两者的
+ * `style` **不是同一套字段**（本组件是 `LineLayerStyle`：`patternUrl` / `patternScale` /
+ * `borderWeight` 那一族；替代品是 `PolylineLayerStyle`：`strokeTextureUrl` /
+ * `strokeTextureSpaced` 那一族）——**弃用替代不是字段改名**，样式要重写。
  *
  * 官方声明（`@baidumap/jsapi-v4-types` 的 `LineLayer` / `LineLayerOptions` / `LineStyle`）
  * 给出了完整的方法面，本组件逐条对应：
@@ -47,9 +51,9 @@ import type { LineLayerProps, FeaturePick } from "../../types/components";
 warnDeprecatedLayerOnce(
   "LineLayer:deprecated-class",
   "[LineLayer] 官方 `BMap.LineLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 @deprecated，" +
-    "官方建议改用 `BMap.PolylineLayer`（4.0.5 新增的 visualization 命名空间）。" +
-    "本组件继续可用、行为不变；替代组件 `PolylineLayer` 本库尚未提供（见 #166），" +
-    "在此之前若你依赖 `LineLayer` 的既有行为可以继续使用。" +
+    "官方建议改用 `BMap.PolylineLayer`（4.0.5 新增的 visualization 命名空间）——" +
+    "本库现已提供 `<PolylineLayer>`（#166）。本组件继续可用、行为不变；" +
+    "注意两者的 `style` **不是同一套字段**，迁移时样式要按 `PolylineLayerStyle` 重写。" +
     "详见 docs/zh-CN/components/layer/native-visual-layers.md",
 );
 

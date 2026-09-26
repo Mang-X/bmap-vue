@@ -8,6 +8,19 @@ lang: zh-CN
 把地图的**外部状态**读成一组只读 refs：`center` / `zoom` / `bounds` / `size` / `heading` / `tilt` /
 `moving` / `zooming`。
 
+::: tip 与官方参考的形态差异（#165 Class 2）
+
+`useMapStatus` 名字与官方一致，但**返回形态不同**，这是**有意的 Vue 适配**：
+
+- 本库：返回 **8 个独立的 readonly ref**，可以分别 `watch`；
+- 官方 React 参考：返回**一个原子快照对象**（`useSyncExternalStore`），无撕裂读但只能整体 watch。
+
+同样地，`useMap()`（本库返回 `{ status, map, client, error, whenReady }` 对象，官方返回 MapHandle
+本身）与 `useMapReady()`（本库返回 `ComputedRef<boolean>`，官方是收回调的哨兵 composable）
+也都是**同名不同形**。从官方参考按名字移植会写错——完整的逐条对照见
+[公开 API 对照](../contributing/official-api-alignment.md) 的「同名但不同形」一节。
+:::
+
 ```vue
 <script setup lang="ts">
 import { useMapStatus } from 'bmap-vue'

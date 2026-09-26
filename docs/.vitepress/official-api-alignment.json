@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 420,
+  "oursPublicCount": 429,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 305,
+  "oursOnlyCount": 314,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -1993,6 +1993,16 @@
       "oursEntry": "./components"
     },
     {
+      "name": "PolygonLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PolylineLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
       "name": "TrackLineLayer",
       "surface": "component",
       "oursEntry": "./components"
@@ -2383,6 +2393,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "PolylineLayerProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
       "name": "PublicMapContext",
       "surface": "type",
       "oursEntry": "./composables"
@@ -2491,6 +2506,21 @@
       "name": "ViewAnimationStatus",
       "surface": "type",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "VisualizationLayerCommonProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "VisualizationPickOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "VisualizationZoomCtorOptions",
+      "surface": "type",
+      "oursEntry": "."
     },
     {
       "name": "AreaBoundary",
@@ -3288,6 +3318,16 @@
       "oursEntry": "."
     },
     {
+      "name": "PolygonLayerStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolylineLayerStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
       "name": "PublicBMapClient",
       "surface": "other",
       "oursEntry": "./composables"
@@ -3481,6 +3521,11 @@
       "name": "ViewAnimationCancelOutcome",
       "surface": "other",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "VisualizationStyleValue",
+      "surface": "other",
+      "oursEntry": "."
     },
     {
       "name": "XYLike",

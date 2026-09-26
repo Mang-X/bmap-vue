@@ -7,7 +7,7 @@
  * - 原生数据图层是**数据驱动**的：`setData` / 要素状态（feature state）/ 拾取事件是一等公民，
  *   显隐、透明度、层级、缩放范围都有字段级 setter。
  *
- * 八个 kind 的 SDK 方法面**并不一致**（官方专页的四类图层共享同一套方法；`PointLayer` /
+ * 十个 kind 的 SDK 方法面**并不一致**（官方专页的四类图层共享同一套方法；`PointLayer` /
  * `ClusterLayer` / `Heatmap` / `TrackLine` 属扩展 API，各自只公开自己那几个方法），因此这里
  * 不做「一个方法一套参数硬套八个 kind」：
  *
@@ -39,7 +39,12 @@ export type NativeLayerKind =
   | "line"
   | "fill"
   | "heatmap"
-  | "track-line";
+  | "track-line"
+  // #166：官方 4.0.5 `visualization/` 新增的两族，作为同时弃用的 `FillLayer` / `LineLayer`
+  // 的官方指定替代。**与扩展 API 那四类不同**：它们随主包注入，不进
+  // `RUNTIME_INJECTED_LAYER_CTORS`（live 探针 case 3b 的 `injectionTiming`）。
+  | "polygon"
+  | "polyline";
 
 /**
  * 归一化操作。

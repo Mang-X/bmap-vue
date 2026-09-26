@@ -95,6 +95,8 @@ import {
   FakeV4PointIconLayer,
   FakeV4PointLayer,
   FakeV4PointShapeLayer,
+  FakeV4PolygonLayer,
+  FakeV4PolylineLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
 import { FakeV4Panorama, FakeV4PanoramaLabel, FakeV4PanoramaService } from './panorama.ts'
@@ -202,6 +204,9 @@ export {
   FakeV4PointIconLayer,
   FakeV4PointLayer,
   FakeV4PointShapeLayer,
+  FakeV4PolygonLayer,
+  FakeV4PolygonPolylineLayerBase,
+  FakeV4PolylineLayer,
   FakeV4RuntimeLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
@@ -315,6 +320,9 @@ export interface FakeBMapV4Namespace {
   ClusterLayer: new (options?: Record<string, unknown>) => FakeV4ClusterLayer
   Heatmap: new (options?: Record<string, unknown>) => FakeV4Heatmap
   TrackLine: new (options?: Record<string, unknown>) => FakeV4TrackLine
+  /** #166：4.0.5 `visualization/` 新增，官方指定的 `FillLayer` / `LineLayer` 替代。 */
+  PolygonLayer: new (options?: Record<string, unknown>) => FakeV4PolygonLayer
+  PolylineLayer: new (options?: Record<string, unknown>) => FakeV4PolylineLayer
   /* -------------------------------------------------- 全景（#23） */
   Panorama: new (
     container: string | HTMLElement,
@@ -770,6 +778,18 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdNativeLayers.push(this)
     }
   }
+  class PolygonLayerClass extends FakeV4PolygonLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdNativeLayers.push(this)
+    }
+  }
+  class PolylineLayerClass extends FakeV4PolylineLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdNativeLayers.push(this)
+    }
+  }
 
   /* ---------------------------------------------------- 全景（#23） */
 
@@ -855,6 +875,8 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     ClusterLayer: ClusterLayerClass,
     Heatmap: HeatmapClass,
     TrackLine: TrackLineClass,
+    PolygonLayer: PolygonLayerClass,
+    PolylineLayer: PolylineLayerClass,
     Panorama: PanoramaClass,
     PanoramaService: PanoramaServiceClass,
     PanoramaLabel: PanoramaLabelClass,

@@ -311,6 +311,105 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
     );
   });
 
+  /* --- #166：官方 4.0.5 新增的 PolygonLayer / PolylineLayer（弃用 FillLayer / LineLayer 的替代） --- */
+
+  it("polygon / polyline：可创建，且样式落到 setOptions（不是 setStyleOptions）", () => {
+    for (const kind of ["polygon", "polyline"] as const) {
+      const layer = layers.create(kind);
+      const raw = layer.raw as unknown as { options: Record<string, unknown>; callLog: string[] };
+      layers.setStyle(layer, { strokeWeight: 3 });
+      // ⚠️ `visualization/` 家族声明的是 `setOptions`（整袋替换），**没有** `setStyleOptions`
+      // 与 `doOnceDraw`——跟着 `layer/` 家族的写法走会调到上游没有的成员。
+      expect(raw.callLog, `${kind} 应当走 setOptions`).toContain("setOptions");
+      expect(raw.callLog, `${kind} 不得调 setStyleOptions（这一族没有它）`).not.toContain(
+        "setStyleOptions",
+      );
+      expect(raw.options.strokeWeight).toBe(3);
+    }
+  });
+
+  it("polygon / polyline：hitTest **不登记**——官方声明里有，live 实测运行时没有", () => {
+    // `visualization/PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233` 声明了 `hitTest(x, y)`，
+    // 但 live 探针（`scripts/probe-runtime-members.mts` case 3b，2026-09-27）读
+    // `B.PolygonLayer.prototype.hitTest` / `B.PolylineLayer.prototype.hitTest` 均为 **false**。
+    // 与 `Heatmap` 的 `setGradient` / `setRadius` 同一处置：声明有、运行时没有 ⇒ 放开门面是假支持。
+    for (const kind of ["polygon", "polyline"] as const) {
+      expect(layers.supports(kind, "hitTest"), `${kind} 不得声称有 hitTest`).toBe(false);
+      const layer = layers.create(kind);
+      expect(() => layers.hitTest(layer, { x: 1, y: 2 })).toThrowError(
+        expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+      );
+    }
+  });
+
+  it("polygon / polyline：缩放范围不登记（官方**没有**字段级 setter，minZoom/maxZoom 是构造选项）", () => {
+    for (const kind of ["polygon", "polyline"] as const) {
+      expect(
+        layers.supports(kind, "setZoomRange"),
+        `${kind} 不得声称有 setZoomRange（live 实测 setMinZoom / setMaxZoom 均不在运行时）`,
+      ).toBe(false);
+      // 状态 API 同理：两族的声明里没有 updateState 一族
+      expect(layers.supports(kind, "updateState")).toBe(false);
+    }
+  });
+
+  it("polygon / polyline：setOpacity **不登记**（声明里没有；与 PointLayer 同一裁决）", () => {
+    // live 实测（case 3b，2026-09-27）：两个类的 `setOpacity` 在运行时都是 `function`。
+    // 但官方**声明**里没有它（`PolygonLayer.d.ts:203-218` / `PolylineLayer.d.ts:235-250`
+    // 的「显示属性」一组只有 visible / zIndex / renderStage / refCenter）。
+    //
+    // 跟随 #165 对**形状完全相同**的 `PointLayer` 做过的裁决（它的 `setOpacity` 同样是
+    // 「声明没有、运行时有」⇒ 不登记）：官方没承诺的成员不进门禁——否则一个版本的
+    // 运行时行为变化就会让本库的契约跟着漂。
+    //
+    // ⚠️ 代价要说准：`PolylineLayerOptions.opacity`（`:131` @default 1）是**声明的**选项，
+    // 但它只能经 `setOptions` 整袋下发（`style` prop），没有字段级 setter 的入口。
+    for (const kind of ["polygon", "polyline"] as const) {
+      expect(layers.supports(kind, "setOpacity"), `${kind} 不得登记 setOpacity`).toBe(false);
+    }
+  });
+
+  it("polygon / polyline：拾取开关落到 setEnablePicked（不是 setBaseOptions）", () => {
+    for (const kind of ["polygon", "polyline"] as const) {
+      const layer = layers.create(kind);
+      const raw = layer.raw as unknown as { enablePicked: boolean; callLog: string[] };
+      layers.setEnablePicked(layer, true);
+      expect(raw.enablePicked).toBe(true);
+      expect(raw.callLog).toContain("setEnablePicked");
+      expect(raw.callLog, "这一族没有 setBaseOptions").not.toContain("setBaseOptions");
+    }
+  });
+
+  it("polygon / polyline：clearData 登记在 Driver 上（官方逐条声明了它）", () => {
+    for (const kind of ["polygon", "polyline"] as const) {
+      expect(layers.supports(kind, "clearData"), `${kind} 声明里有 clearData`).toBe(true);
+      const layer = layers.create(kind);
+      const raw = layer.raw as unknown as { data: unknown; callLog: string[] };
+      layers.setData(layer, { type: "FeatureCollection", features: [] });
+      layers.clearData(layer);
+      expect(raw.callLog).toContain("clearData");
+      expect(raw.data).toBeNull();
+    }
+  });
+
+  it("polygon / polyline：不是 runtime-injected——命名空间缺构造器时按「已声明类」失败", () => {
+    // ⚠️ 与扩展 API 那四类**正交**的判断。live 探针 case 3b 的 `injectionTiming` 读到
+    // `B.PolygonLayer` / `B.PolylineLayer` 在 `BMap.Map` 刚就绪时就已经是 `function`
+    // ⇒ 随主包注入，不进 `RUNTIME_INJECTED_LAYER_CTORS`。因此它们缺构造器时报的是
+    // `BMAP_SDK_CALL_FAILED`（官方声明过这个类）而不是 `BMAP_CAPABILITY_UNSUPPORTED`。
+    const namespace = fake.namespace as unknown as Record<string, unknown>;
+    const original = namespace.PolygonLayer;
+    delete namespace.PolygonLayer;
+    try {
+      const lenient = buildDriver("warn");
+      expect(() => lenient.create("polygon")).toThrowError(
+        expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+      );
+    } finally {
+      namespace.PolygonLayer = original;
+    }
+  });
+
   it("全量替换走 replaceAllState：未覆盖到的 id 必须消失（不是合并）", () => {
     const layer = layers.create("fill");
     const raw = layer.raw as unknown as { state: Record<string, unknown>; callLog: string[] };
@@ -536,6 +635,14 @@ const OPERATION_MEMBERS_BY_KIND: Readonly<
   cluster: { setStyle: ["setOptions"] },
   heatmap: { setStyle: ["setOptions"] },
   "track-line": { setStyle: ["setOptions"] },
+  /**
+   * #166 的两族。`setEnablePicked` 是**声明**成员（`visualization/PolygonLayer.d.ts:192` /
+   * `PolylineLayer.d.ts:224`），因此要覆写掉默认表里 `layer/` 家族的 `setBaseOptions`。
+   * 样式落在 `setOptions`（`:181` / `:213`）——`visualization/` 家族**没有**
+   * `setStyleOptions` 与 `doOnceDraw`。
+   */
+  polygon: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
+  polyline: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
 };
 
 function operationMembersFor(
@@ -564,6 +671,9 @@ const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
   ["cluster", "ClusterLayer"],
   ["heatmap", "Heatmap"],
   ["track-line", "TrackLine"],
+  // #166：官方 4.0.5 新增的两个类，**替代**弃用的 `FillLayer` / `LineLayer`。
+  ["polygon", "PolygonLayer"],
+  ["polyline", "PolylineLayer"],
 ];
 
 /** `declaredMembersOf` 要读的子目录（4.0.5 把这两族分开放）。 */
@@ -572,6 +682,8 @@ const DECLARED_SUBDIR: Readonly<Partial<Record<NativeLayerKind, string>>> = {
   cluster: "visualization",
   heatmap: "visualization",
   "track-line": "visualization",
+  polygon: "visualization",
+  polyline: "visualization",
 };
 
 /**
@@ -607,6 +719,49 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
           ).toContain(member);
         }
       }
+    }
+  });
+
+  it("polygon / polyline：登记面里的每一条都**逐条**在官方声明里（含样式与拾取落点）", () => {
+    // 这条是 #166 的**核心**门禁：两个新 kind 的操作表**只能**引用官方声明过的成员。
+    // 特别地，它们**不得**登记 `setOpacity`——两族的「显示属性」一组里没有它
+    // （`PolygonLayer.d.ts:203-218` / `PolylineLayer.d.ts:235-250` 逐条列了
+    // visible / zIndex / renderStage / refCenter）。live 探针读到运行时**有**
+    // `setOpacity`（case 3b，2026-09-27），但仓库的口径是「不把**未声明**成员当契约」，
+    // #165 已经为**形状完全相同**的 `PointLayer` 做过这个裁决（它的 `setOpacity`
+    // 同样是「声明没有、运行时有」⇒ `supports()` 回答 `false`，见上面那条用例）。
+    // 跟随既有裁决，而不是给同一件事开两个例外。
+    for (const [kind, ctor] of [
+      ["polygon", "PolygonLayer"],
+      ["polyline", "PolylineLayer"],
+    ] as const) {
+      const declared = declaredMembersOf(ctor, "visualization");
+      expect(
+        layers.supports(kind, "setOpacity"),
+        `${kind}.setOpacity：声明里没有它，不当契约（与 point 一致）`,
+      ).toBe(false);
+      // 反向：本票**确实**登记的那几条，逐条要在声明里
+      for (const operation of OPERATIONS) {
+        if (!layers.supports(kind, operation)) continue;
+        for (const member of operationMembersFor(kind, operation)) {
+          expect(declared, `${kind}.${operation} → ${member}()`).toContain(member);
+        }
+      }
+    }
+  });
+
+  it("声明有、运行时实测没有的成员不登记（hitTest）", () => {
+    // 「操作面 ↔ 声明」门禁的**反方向**：只查「登记的都声明了」会漏掉「声明了却没登记」
+    // 这一半，而那一半正是假支持的来源。`hitTest` 两族的声明里都有
+    // （`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`），而 live 探针读
+    // `prototype.hitTest` 均为 `false` ⇒ 不登记（同 `Heatmap` 的 `setGradient` / `setRadius`）。
+    for (const [kind, ctor] of [
+      ["polygon", "PolygonLayer"],
+      ["polyline", "PolylineLayer"],
+    ] as const) {
+      const declared = declaredMembersOf(ctor, "visualization");
+      expect(declared, "官方声明里确实有 hitTest（下面的断言才有意义）").toContain("hitTest");
+      expect(layers.supports(kind, "hitTest"), `${kind} 不得登记 hitTest`).toBe(false);
     }
   });
 
