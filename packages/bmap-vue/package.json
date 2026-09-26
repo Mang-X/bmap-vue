@@ -70,7 +70,7 @@
   },
   "dependencies": {
     "@baidumap/jsapi-loader": "1.0.0",
-    "@vueuse/core": "14.4.0"
+    "@vueuse/core": "15.0.0"
   },
   "engines": {
     "node": ">=24"
