@@ -1,0 +1,74 @@
+---
+"bmap-vue": patch
+---
+
+Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全局状态清理——**无公开 API 变更**
+
+修的是一处**已确认的处理缺口**（不是已确认的 AK 泄漏）：`logger` 原先只对 `message` 调
+`redactAk`，第二个 console 参数 `context` **原样输出**——`context.error`、URL、options
+都可能绕过清洗。本票把它收成「message 与 context 两侧都过输出投影」。
+
+## 实际清洗了什么
+
+`context` 投影成**有限普通数据**（新对象；不修改入参、不把原始引用交给 console）：
+
+| 类别 | 处理 |
+| --- | --- |
+| 凭据类键名（`ak` / `auth` / `apiKey` / `token` / `secret` / `password` / `sign` / `credential`） | 整体输出 `[redacted]`，**键名保留**（「哪个字段被清掉」本身是定位信息） |
+| URL / 加载配置类键名（`url` / `apiUrl` / `serviceHost` / `src` / `options` / `params` / `query` / `script` / `baseUrl`） | 整体输出 `[redacted]`——内容是调用方自拼的字符串，凭据出现形式不受本库控制，逐个猜形状等于承认可能漏 |
+| `Error` / `BMapError` | 只取 `name` / `message` / `code` 与 `mapId` / `component` / `plugin` / `capability` / `engine` / `version`；文本过脱敏 + 截断 |
+| 数组 | 只留 `[N items]`，**不逐项**（不为日志深遍历） |
+| 其它未知对象 | 只留 `[object]`，**不展开**（不调用 `toJSON()`，不递归深拷贝） |
+| 有限普通值（`string` / `number` / `boolean` / `kind` / `code` / `component` / `error` / `field` …） | 原样保留，超长文本截断 |
+
+## 刻意丢弃了什么
+
+- **`cause`**：默认装上游 / 业务原始对象（可能含用户数据、加载 options、整条轨迹）。
+  调用方要带 cause 的信息，在**自己的边界**上投影成文本再传进来。
+- **带凭据的 `stack`**：文本里出现 `ak=<AK 量级的值>` 或 `https://user:pass@host` 时，
+  整个 `stack` 换成 `[omitted]`（截断成 200 字符仍可能留下半截 AK）。**不带**这两种
+  形状的 stack 正常保留并脱敏——否则会把绝大多数释放失败的定位信息删光。
+- **不写通用深拷贝 / 递归脱敏器**：判据是 Ownership-first——`projectValue` 没有任何分支
+  会返回入参本身，「原样透传」这条路根本不存在，因此不需要递归兜底。
+
+## 两处正则的判据（**不是**「能识别任意位置的未知密钥」）
+
+- 形状脱敏只认 `ak=` 这**一种**键名后面、且长度像 AK 的值。真实凭据若换键名或被拆开，
+  这里盖不住。
+- 精确脱敏仍由 `redactAk(input, ak)` 这条**纯函数**路径负责——loader 三处
+  （`official.ts` / `loaded.ts` / `SharedLoadTask`）与 `ui-kit/routePlan.ts` 本来就持有
+  具体 AK 值，它们的既有口径与阈值**一字未改**。
+
+## 全局 setter 的消费者结论
+
+`setAkForLogger` / 模块级 `akProvider` **已删除**。全仓检索（含 `packages/` / `tests/` /
+`scripts/` / `docs/` / `etc/` 基线）只命中它自己的定义与 `core/index.ts` 的转导出，
+**零生产消费者**；`core/index.ts` 这个 barrel 自 #44 取消 `./core` 后**不被任何出口引用**，
+因此删这条转导出**不改任何公共面**（`pnpm check:api` 三类基线无漂移、`check:public-dts`
+通过可证）。
+
+不补调用点来让死抽象继续存在，也不为假想的多 Client 用途建注册表：它的语义是「进程级记住
+最后一个 AK」，而多个 Client / 多个并发加载任务各持不同 AK 时，这个「最后一次写入」给不
+出正确答案。需要精确脱敏的边界本就知道自己的 AK，直接传 `redactAk(input, ak)`。
+
+## 输出路径简化
+
+`logger.warn/error/debug` 原先**每条**都 `makeLogger()` 重建 emit 闭包与方法对象；现改为三个
+方法直接调同一个 `emit`。`[bmap-vue]` 前缀、`warn`/`error`/`debug` 通道分流、`devWarn` 的
+生产静音、`isDev()` 的 `typeof process` 保护与可折叠标记、IIFE 档构建语义**全部不变**
+（静音路径仍在投影 / 格式化**之前**返回，不处理 `context`）。
+
+## 故障隔离
+
+输出与投影的异常在**日志边界**被吞掉：不抛回业务路径，也**不**用 logger 报告 logger 自身
+的失败（那会无限递归）。调用点多在 `catch` 块里（释放失败、SDK 调用失败），日志异常会
+**覆盖**原始业务错误——丢一条日志远好过吞掉一次故障。
+
+`ResourceScope` 随之**删掉**告警外层那圈 `try/catch`：隔离边界已内聚在 logger 内，继续在
+调用点重复同一防护只会让「谁负责吞日志异常」有两个答案。释放顺序、单个 disposer 抛错不
+连坐、幂等三条契约不变（各有回归用例钉住）。
+
+## 现状边界（不夸大）
+
+本票**没有**核实出真实生产调用能复现完整 AK 泄漏——修的是「context 未过清洗」这个处理缺口。
+`BMapError` 的公共契约、`Client`/`Driver` 结构、`ResourceScope` 生命周期协议均未改动。

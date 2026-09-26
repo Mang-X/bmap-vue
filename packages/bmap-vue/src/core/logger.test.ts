@@ -1,7 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { createContext, runInContext } from "node:vm";
 import { readFileSync } from "node:fs";
-import { devWarn, isDev, redactAk } from "./logger";
+import { BMapError } from "./errors/BMapError";
+import { devWarn, isDev, logger, redactAk } from "./logger";
+
+/** 形似真实 AK 的字母数字串（真实 AK 无连字符，`ak=` 模式才匹配得上）。 */
+const TEST_AK = "zk8Hq2LmVn4Rt6YwBd0XcFg3Pj5Sa1Nd7Ue9IhMoQ";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("redactAk", () => {
   it("redacts a known ak in a message", () => {
@@ -17,6 +25,249 @@ describe("redactAk", () => {
 
   it("leaves message unchanged when no ak present", () => {
     expect(redactAk("normal message")).toBe("normal message");
+  });
+});
+
+/**
+ * 上下文清洗（#163）
+ *
+ * 缺口形态：`logger` 只对 `message` 调 `redactAk`，第二个 console 参数 `context` 原样输出，
+ * 于是 `context.error`、URL、options 全部绕过清洗。这里把「context 也不得带出完整 AK」
+ * 与「context 只投影有限普通数据」两件事钉成可观察行为。
+ */
+describe("logger 上下文清洗（#163）", () => {
+  /** 收集一条日志的**所有** console 参数，压成一段文本——「有没有漏」只认这个口径。 */
+  function capturedText(args: unknown[]): string {
+    const safe = args.map((a) => {
+      if (typeof a === "string") return a;
+      if (a instanceof Error) return `${a.name}: ${a.message} ${a.stack ?? ""}`;
+      return safeStringify(a);
+    });
+    return safe.join(" | ");
+  }
+
+  function safeStringify(value: unknown): string {
+    const seen = new WeakSet<object>();
+    return JSON.stringify(value, (_k, v) => {
+      if (typeof v === "object" && v !== null) {
+        if (seen.has(v)) return "[Circular]";
+        seen.add(v);
+      }
+      return v;
+    });
+  }
+
+  it("context 里的 AK 字段不再原样输出（旧实现只清洗 message 的缺口）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    logger.warn("加载失败", { ak: TEST_AK, serviceHost: `https://x.example/?ak=${TEST_AK}` });
+
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text, "context 参数里也不得出现完整 AK").not.toContain(TEST_AK);
+    // 凭据字段**整体**不输出（`ak=` 参数、代理入口都可能整段带凭据，只做部分遮盖不够），
+    // 但**键名**要留下来——「哪个字段被清掉了」本身就是定位信息。
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.ak).toBe("[redacted]");
+    expect(output?.serviceHost).toBe("[redacted]");
+  });
+
+  it("context 里的错误信息（带 AK 的 message）同样过清洗，且保留错误码", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failure = new BMapError(
+      "BMAP_SDK_LOAD_FAILED",
+      `脚本加载失败: https://api.map.baidu.com/api?ak=${TEST_AK}&v=4.0`,
+    );
+
+    logger.warn("ResourceScope dispose failed (map-runtime)", { error: failure });
+
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text).not.toContain(TEST_AK);
+    // 错误码是**定位信息**的主要来源，必须保留。
+    expect(text, "错误码要留下来").toContain("BMAP_SDK_LOAD_FAILED");
+    expect(text, "脱敏后的错误文本要留下来").toContain("加载失败");
+    expect(text, "作用域名要留下来").toContain("map-runtime");
+  });
+
+  it("message 里的 `ak=` 仍按既有形状脱敏（不回归）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logger.warn(`冲突 ak=${TEST_AK}`);
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text).not.toContain(TEST_AK);
+    expect(text).toContain("ak=***");
+  });
+
+  it("原始 Error / cause / SDK-like 对象不被原样透传，也不被深遍历", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let toJSONCalls = 0;
+    const sdkLike = {
+      toJSON() {
+        toJSONCalls += 1;
+        return { leaked: "should-not-be-called" };
+      },
+      getZoom: () => 12,
+    };
+    const cause = new Error("原始 cause");
+    const error = new Error("外层", { cause });
+
+    logger.warn("销毁失败", { error, sdkLike });
+
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(toJSONCalls, "日志不得主动调用任意对象的 toJSON()").toBe(0);
+    expect(text, "原始 cause 不进日志").not.toContain("原始 cause");
+    expect(text, "不得原样带出 SDK-like 对象的自定义投影").not.toContain("should-not-be-called");
+    // 必要的定位字段仍在。
+    expect(text).toContain("外层");
+  });
+
+  it("带环对象 / 大数组：不崩溃、不原样透传、不为日志深遍历", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cyclic: Record<string, unknown> = { kind: "Marker" };
+    cyclic.self = cyclic;
+
+    // 代理记录「被枚举过几次」，用来证明我们没有整棵深遍历。
+    let enumerated = 0;
+    const huge = new Proxy(
+      {},
+      {
+        ownKeys() {
+          enumerated += 1;
+          throw new Error("不该被深遍历");
+        },
+      },
+    );
+
+    expect(() => logger.warn("释放失败", { cyclic, huge })).not.toThrow();
+    expect(enumerated, "不为日志深遍历未知对象").toBe(0);
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text).toContain("释放失败");
+  });
+
+  it("不修改传入对象，也不把原始引用交给 console", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const nested = { ak: TEST_AK, secret: "keep-me-in-place" };
+    const context = { error: nested, count: 3 };
+
+    logger.warn("失败", context);
+
+    expect(nested, "输入对象不被改写").toEqual({ ak: TEST_AK, secret: "keep-me-in-place" });
+    expect(context).toEqual({ error: nested, count: 3 });
+    const output = warn.mock.calls[0]?.[1];
+    expect(output, "交给 console 的不是原始 context 引用").not.toBe(context);
+    expect(output).not.toBe(nested);
+  });
+
+  it("未知嵌套对象退化为占位，不展开字段", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logger.warn("失败", { payload: { a: 1, b: 2, c: 3 } });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.payload, "未知对象只留占位").toBe("[object]");
+  });
+
+  it("大型数组不原样透传，也不为日志逐项深遍历", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ id: i, ak: `row-secret-${i}` }));
+
+    logger.warn("批量导入", { rows });
+
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.rows, "数组只留规模信息").toBe("[1000 items]");
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text).not.toContain("row-secret-");
+  });
+
+  it("两个操作各自持有不同 AK 时互不依赖（不靠最后一次全局 setter）", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { setAkForLogger } = (await import("./logger")) as unknown as Record<string, unknown>;
+    expect(
+      setAkForLogger,
+      "无消费者的全局 AK setter 已删除（不该再有调用点依赖它）",
+    ).toBeUndefined();
+
+    // 两次调用交错进行，两个不同的 AK 都要各自被清洗。
+    logger.warn("Client A 加载失败", { ak: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
+    logger.warn("Client B 加载失败", { ak: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" });
+    logger.warn("Client A 再次加载失败", { ak: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
+
+    for (const [call, ak] of [
+      [warn.mock.calls[0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      [warn.mock.calls[1], "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      [warn.mock.calls[2], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    ] as const) {
+      expect(capturedText(call ?? []), "每个 AK 都被独立清洗").not.toContain(ak);
+    }
+  });
+
+  it("凭据字段名按记号判定，不误伤含 ak/sign 的普通词", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // 子串匹配会命中 `make` / `break` / `brake`（含 `ak`）与 `design` / `assign`（含 `sign`）。
+    // 误伤比漏网更隐蔽：字段被静默打成 [redacted]，没人会怀疑是清洗规则干的。
+    logger.warn("释放失败", {
+      make: "左",
+      brake: "手刹",
+      design: "v2",
+      xApiKey: "should-be-dropped",
+      AK: TEST_AK,
+    });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.make).toBe("左");
+    expect(output?.brake).toBe("手刹");
+    expect(output?.design).toBe("v2");
+    // 驼峰 `xApiKey` 与大写 `AK` 仍被判为凭据
+    expect(output?.xApiKey).toBe("[redacted]");
+    expect(output?.AK).toBe("[redacted]");
+  });
+
+  it("有限普通数据原样保留（清洗不等于丢字段）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logger.warn("不支持的能力", { capability: "map.viewAnimation", engine: "jsapi-v4" });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output).toMatchObject({ capability: "map.viewAnimation", engine: "jsapi-v4" });
+  });
+});
+
+/** 输出路径：复用同一个函数，不再每条日志重建 Logger 对象与闭包（#163 目标 2.3）。 */
+describe("logger 输出路径（#163）", () => {
+  it("每条日志复用同一个 logger 对象（不重建 emit 闭包）", () => {
+    // 旧实现 `logger.warn` 每次都 `makeLogger()`；新实现的 Logger 身份必须稳定。
+    const before = logger.warn;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    logger.warn("a");
+    logger.warn("b");
+    expect(logger.warn, "logger 的方法身份在两次调用之间保持不变").toBe(before);
+  });
+
+  it("前缀与通道分流保持不变", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    logger.warn("w");
+    logger.error("e");
+    logger.debug("d");
+
+    expect(warn.mock.calls[0]?.[0]).toBe("[bmap-vue] w");
+    expect(error.mock.calls[0]?.[0]).toBe("[bmap-vue] e");
+    expect(debug.mock.calls[0]?.[0]).toBe("[bmap-vue] d");
+  });
+});
+
+/** 故障隔离：日志自身抛错不得中断业务（#163 目标 3）。 */
+describe("logger 故障隔离（#163）", () => {
+  it("console.warn 抛错时被吞掉，不把异常抛回业务路径", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("console 坏了");
+    });
+    expect(() => logger.warn("业务仍在跑")).not.toThrow();
+  });
+
+  it("日志自身失败不被递归报告（不无限递归输出）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("console 坏了");
+    });
+    // 若实现用 logger 报告 logger 失败，这里会栈溢出。
+    expect(() => logger.warn("一次")).not.toThrow();
+    expect(() => logger.error("两次")).not.toThrow();
+    expect(warn.mock.calls.length, "失败不产生额外的补偿输出").toBe(1);
   });
 });
 
@@ -47,6 +298,49 @@ describe("devWarn", () => {
     try {
       devWarn("hello");
       expect(warn).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+
+  /** 静音路径必须在**投影 / 格式化之前**返回（#163 目标 3）。 */
+  it("production 静音路径不处理 context（连投影都不做）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    let toJSONCalls = 0;
+    const hostile = {
+      get boom() {
+        throw new Error("静音路径不该碰我");
+      },
+      toJSON() {
+        toJSONCalls += 1;
+        return {};
+      },
+    };
+    try {
+      expect(() => devWarn("hello", { hostile })).not.toThrow();
+      expect(warn).not.toHaveBeenCalled();
+      expect(toJSONCalls, "静音路径不处理 context").toBe(0);
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+});
+
+/** 告警去重的 once 语义不退化（#163 验收表最后一行）。 */
+describe("createDevWarnOnce", () => {
+  it("同一 key 只报一次，幂等且不缓存无界增长", async () => {
+    const { createDevWarnOnce } = await import("./logger");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    try {
+      const warnOnce = createDevWarnOnce();
+      warnOnce("k1", "第一条");
+      warnOnce("k1", "第一条");
+      warnOnce("k2", "第二条");
+      expect(warn).toHaveBeenCalledTimes(2);
     } finally {
       process.env.NODE_ENV = original;
     }

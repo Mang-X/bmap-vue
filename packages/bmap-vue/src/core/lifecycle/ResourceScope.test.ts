@@ -88,6 +88,27 @@ describe("ResourceScope", () => {
     warn.mockRestore();
   });
 
+  it("记录本身失败也不得中断剩余 disposer（#163 故障隔离）", () => {
+    // 释放失败告警是**在业务错误之外**的额外动作：它自己坏掉（宿主 console 被 patch 成
+    // 抛错、代理环境里 console 不可用…）时，既不能连坐后续 disposer，也不能覆盖原始业务错误。
+    //
+    // ⚠️ 这里必须打**真实的 `console.warn`**，不能 `spyOn(logger, "warn")`：那会把隔离
+    // 边界整个 mock 掉，于是无论 `logger` 内部有没有防护用例都通过——钉不住任何东西。
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("console 坏了");
+    });
+    const scope = new ResourceScope({ label: "map-runtime" });
+    const order: string[] = [];
+    scope.add(() => order.push("first"));
+    scope.add(() => {
+      throw new Error("原始业务错误");
+    });
+    scope.add(() => order.push("last"));
+
+    expect(() => scope.dispose(), "日志异常不逸出 dispose").not.toThrow();
+    expect(order, "坏掉的 disposer 不连坐其余释放").toEqual(["last", "first"]);
+  });
+
   it("exposes label and size", () => {
     const scope = new ResourceScope({ label: "map-runtime" });
     expect(scope.label).toBe("map-runtime");

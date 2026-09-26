@@ -141,7 +141,7 @@ export function createLayerRegistry(): LayerRegistry {
           // 单个 scope 的释放错误不得挡住 SDK 摘除，但不能静默（与 MapRuntime 对
           // `map.destroy` 失败的口径一致：至少要让它可观测）。
           logger.warn(`LayerRegistry: 释放图层 child scope 失败（kind=${input.kind}）`, {
-            error: (error as Error)?.message ?? String(error),
+            error,
           });
         }
       };
@@ -168,7 +168,7 @@ export function createLayerRegistry(): LayerRegistry {
             // 账本**不**记录「挂载态」这种读数：真实挂载态是**消费方**的事实（`useNativeLayerResource`
             // 的三态 `mountState`、各引擎自己的标志），账本只知道「销账了没有」——两本账不要合并。
             logger.warn(`LayerRegistry: 摘除图层失败（kind=${input.kind}），SDK 资源可能仍在图上`, {
-              error: (error as Error)?.message ?? String(error),
+              error,
             });
           }
         },

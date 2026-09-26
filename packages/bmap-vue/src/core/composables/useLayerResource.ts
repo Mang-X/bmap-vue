@@ -266,7 +266,7 @@ export function useLayerResource<Props>(
     } catch (error) {
       logger.warn(
         `layer:${state.spec.kind} 销毁前的 clearData 失败（图层仍会被摘除，SDK 侧可能残留数据覆盖物）`,
-        { error: (error as Error)?.message ?? String(error) },
+        { error },
       );
     }
   };
