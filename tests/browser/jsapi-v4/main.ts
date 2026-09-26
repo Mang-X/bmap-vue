@@ -558,7 +558,7 @@ function mountTree(): Mounted {
     const nodes: VNode[] = [];
     if (flags.marker) nodes.push(h(Marker, { position: POINT, title: "smoke-marker" }));
     if (flags.polyline)
-      nodes.push(h(Polyline, { path: [CENTER, POINT], strokeColor: "#ff0000", strokeWeight: 3 }));
+      nodes.push(h(Polyline, { points: [CENTER, POINT], strokeColor: "#ff0000", strokeWeight: 3 }));
     // M5-VECTORS / #31：v4 新增的矩形（对角两点定义）。几何回读要读它的实例，因此范围刻意取
     // 一个与 marker/polyline 都不同的坐标。
     if (flags.rectangle)
