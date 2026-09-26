@@ -339,6 +339,36 @@ describe("logger 上下文清洗（#163）", () => {
     expect(String(out2?.error.mapId)).not.toContain(TEST_AK);
   });
 
+  it("query / fragment 里的 @ 不算 userinfo（#163 复审 P2）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // authority 在 `/` 以及 `?` / `#` 处结束。只把 `/` 当终止符时，下面这种**没有** userinfo
+    // 的正常 URL 会被从 host 一直吞到 `@`——host 一起丢掉，整条 URL 被毁。
+    logger.warn("回调配置", {
+      a: "https://api.example.com?email=user@example.org",
+      b: "https://api.example.com#contact=user@example.org",
+    });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.a, "query 里的 @ 原样保留").toBe("https://api.example.com?email=user@example.org");
+    expect(output?.b, "fragment 里的 @ 原样保留").toBe(
+      "https://api.example.com#contact=user@example.org",
+    );
+  });
+
+  it("query 里的 @ 不触发 stack 省略（#163 复审 P2）", () => {
+    // 上一条的错误会顺着 `isSensitiveText` 传下去：同样的 URL 出现在 stack 里，会被判成
+    // 「含凭据」而把**整个** stack 抹掉——一条正常 URL 毁掉整条定位信息。
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = new Error("boom");
+    error.stack = "Error: boom\n  at loader (https://api.example.com?email=user@example.org/x.js:1:1)";
+    logger.warn("释放失败", { error });
+    const output = warn.mock.calls[0]?.[1] as { error: Record<string, unknown> } | undefined;
+    expect(
+      String(output?.error.stack),
+      "正常 URL 不该让 stack 被整段省略",
+    ).not.toBe("[omitted: 形状含凭据]");
+    expect(String(output?.error.stack)).toContain("email=user@example.org");
+  });
+
   it("有限普通数据原样保留（清洗不等于丢字段）", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     logger.warn("不支持的能力", { capability: "map.viewAnimation", engine: "jsapi-v4" });

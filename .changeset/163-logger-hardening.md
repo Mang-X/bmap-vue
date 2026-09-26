@@ -27,8 +27,14 @@ Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全
 **值**上：靠猜键名防凭据本就是错方向（既猜不全，又会误伤 `params` / `query` 这类正常诊断键）。
 
 **userinfo 遮盖「整段」而非只遮 password 位**：`https://<token>:x@host` 与 `https://<token>@host`
-都是常见形状，只遮 `user:***@` 盖不住前者、后者因缺冒号压根不匹配。口径与
-`core/loader/url.ts` 的 `maskUserinfo`（`$1***@`）**一致**，不另立一套。
+都是常见形状，只遮 `user:***@` 盖不住前者、后者因缺冒号压根不匹配。
+
+**userinfo 只在 authority 内匹配**：authority 在 `/` **以及 `?` / `#`** 处结束。少了这两个
+终止符，`https://api.example.com?email=user@example.org` 会被**从 host 一路吞到 `@`**，
+整条 URL 变成 `https://***@example.org`（host 一起丢掉）；同样的 URL 出现在 `Error.stack`
+里还会被判成「含凭据」，把**整个 stack** 省略掉。`core/loader/url.ts` 的 `maskUserinfo`
+（4 个生产消费者：`SharedLoadTask` / `loaded` / `official` ×2）有同一个边界问题，**一并修复**
+——本票不另立一套口径，也不在已知有缺口的地方宣称「同口径」。
 
 **凭据键名按「先分隔符、再驼峰边界」切分**，且驼峰边界吞掉连续大写：`API_KEY` / `TOKEN` /
 `PASSWORD` / `CREDENTIALS` 这类全大写字段必须整段保留（否则被逐字母拆散而匹配不上），

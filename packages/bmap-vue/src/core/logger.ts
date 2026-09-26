@@ -53,13 +53,17 @@ const AK_PARAM_PATTERN = /ak=[A-Za-z0-9]{16,}/i;
  *
  * ⚠️ 遮盖**整段**而不是只遮 password 位（#163 复审 P1）。凭据放在 username 位是常见形状
  * ——`https://<token>:x@host` 与 `https://<token>@host` 都会把完整 token 带出去，只遮
- * `user:***@` 盖不住前者、后者因缺冒号压根不匹配。这与 `core/loader/url.ts` 的
- * `maskUserinfo`（`$1***@`，整段遮盖）**同口径**，不另立一套。
+ * `user:***@` 盖不住前者、后者因缺冒号压根不匹配。
+ *
+ * ⚠️ authority 在 `/` **以及 `?` / `#`** 处结束（#163 复审 P2）。只把 `/` 当终止符时，
+ * `https://api.example.com?email=user@example.org` 会被**从 host 一直吞到 `@`**——变成
+ * `https://***@example.org`，把正常的 query 判成凭据；同样的 URL 出现在 `Error.stack`
+ * 里还会被 `isSensitiveText` 判成「含凭据」而把**整个 stack** 省略掉。
  */
-const USERINFO_MASK_PATTERN = /(https?:\/\/)[^/@\s]+@/g;
+const USERINFO_MASK_PATTERN = /(https?:\/\/)[^/@?#\s]+@/g;
 
 /** userinfo 的**探测**形状（判定用，不带 `g` 以免 `test()` 的 `lastIndex` 有状态）。 */
-const USERINFO_PATTERN = /https?:\/\/[^/@\s]+@/;
+const USERINFO_PATTERN = /https?:\/\/[^/@?#\s]+@/;
 
 /**
  * 单条字符串的输出上限：日志是给人定位问题的，不是倾倒现场。
