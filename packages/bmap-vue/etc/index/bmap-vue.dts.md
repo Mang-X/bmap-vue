@@ -397,8 +397,8 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     height: string | number;
     minZoom: number;
     maxZoom: number;
-    mapType: string;
-    enableScrollWheelZoom: boolean;
+    mapType: MapTypeIdName;
+    enableWheelZoom: boolean;
     keepAliveBehavior: "suspend" | "dispose";
     noAnimation: boolean;
     enableAutoResize: boolean;
@@ -494,8 +494,8 @@ declare const __VLS_component_28: DefineComponent<DistrictLayerProps, {}, {}, {}
     fillColor: string;
     fillOpacity: number;
     visible: boolean;
-    viewport: boolean;
     kind: DistrictType_2;
+    autoViewport: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_29: DefineComponent<PanoramaCoverageLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaCoverageLayerProps> & Readonly<{}>, {
     visible: boolean;
@@ -1333,7 +1333,7 @@ export declare interface AutocompleteUpdateOptions {
 }
 export declare const BezierCurve: __VLS_WithSlots_14<typeof __VLS_component_14, __VLS_Slots_14>;
 export declare interface BezierCurveProps extends PathStrokeProps, PathShapeProps {
-    path: {
+    points: {
         lng: number;
         lat: number;
     }[];
@@ -1864,7 +1864,7 @@ declare interface DistrictLayerProps {
     strokeColor?: string;
     strokeWeight?: number;
     strokeOpacity?: number;
-    viewport?: boolean;
+    autoViewport?: boolean;
     adcode?: string;
 }
 export declare const DistrictType: {
@@ -3028,7 +3028,7 @@ export declare type MapLoadPayload = MapLoadEvent & {
 };
 export declare const MapMask: __VLS_WithSlots_15<typeof __VLS_component_15, __VLS_Slots_15>;
 declare interface MapMaskProps {
-    path: {
+    points: {
         lng: number;
         lat: number;
     }[];
@@ -3069,7 +3069,7 @@ export declare interface MapProps {
     defaultTilt?: number;
     width?: string | number;
     height?: string | number;
-    mapType?: string;
+    mapType?: MapTypeIdName;
     mapStyleId?: string;
     mapStyleJson?: Record<string, unknown>;
     displayOptions?: Record<string, unknown>;
@@ -3078,14 +3078,14 @@ export declare interface MapProps {
     maxZoom?: number;
     noAnimation?: boolean;
     enableDragging?: boolean;
-    enableScrollWheelZoom?: boolean;
+    enableWheelZoom?: boolean;
     enableInertialDragging?: boolean;
-    enablePinchToZoom?: boolean;
+    enablePinchZoom?: boolean;
     enableKeyboard?: boolean;
-    enableDoubleClickZoom?: boolean;
+    enableDblclickZoom?: boolean;
     enableContinuousZoom?: boolean;
     enableTraffic?: boolean;
-    enableResizeOnCenter?: boolean;
+    fixCenterWhenResize?: boolean;
     enableAutoResize?: boolean;
     loadingBgColor?: string;
     backgroundColor?: number[];
@@ -3136,7 +3136,7 @@ export declare type MapStyleInput = {
     styleId: string;
 } | Record<string, unknown>;
 export declare type MapSuspendReason = (typeof MAP_SUSPEND_REASONS)[keyof typeof MAP_SUSPEND_REASONS] | (string & {});
-declare type MapType_2 = "normal" | "satellite" | "earth";
+declare type MapType_2 = "normal" | "satellite" | "hybrid" | "earth";
 export { MapType_2 as MapType };
 export declare interface MapTypeChangeEvent extends DriverEvent {
     zoomLevel: number;
@@ -3156,6 +3156,7 @@ declare interface MapTypeControlProps {
     showStreetLayer?: boolean;
     visible?: boolean;
 }
+export declare type MapTypeIdName = "BMAP_NORMAL_MAP" | "BMAP_SATELLITE_MAP" | "BMAP_HYBRID_MAP" | "BMAP_EARTH_MAP" | "BMAP_NONE_MAP";
 export declare function mapVglPlugin(): BMapPluginDefinition<unknown>;
 export declare interface MapView {
     center: Point | string;
@@ -3784,7 +3785,7 @@ export declare const PointCollection: <Item>(__VLS_props: NonNullable<Awaited<ty
 };
 export declare interface PointCollectionProps<Item> extends DataComponentProps<Item> {
     properties?: (item: Item) => Record<string, unknown> | null | undefined;
-    shape?: number;
+    shapeType?: number;
     size?: number;
     color?: string;
     strokeColor?: string;
@@ -3900,7 +3901,7 @@ export declare interface PointPick<Item> {
 export declare const Polygon: __VLS_WithSlots_7<typeof __VLS_component_7, __VLS_Slots_7>;
 export declare type PolygonHandle = SdkHandle<"overlay:polygon">;
 export declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
-    path: ({
+    points: ({
         lng: number;
         lat: number;
     } | string)[];
@@ -3910,7 +3911,7 @@ export declare interface PolygonProps extends PathStrokeProps, PathFillProps, Pa
 export declare const Polyline: __VLS_WithSlots_6<typeof __VLS_component_6, __VLS_Slots_6>;
 export declare type PolylineHandle = SdkHandle<"overlay:polyline">;
 export declare interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
-    path: {
+    points: {
         lng: number;
         lat: number;
     }[];
@@ -3918,7 +3919,7 @@ export declare interface PolylineProps extends PathStrokeProps, PathShapeProps, 
 }
 export declare const Prism: __VLS_WithSlots_12<typeof __VLS_component_12, __VLS_Slots_12>;
 export declare interface PrismProps {
-    path: ({
+    points: ({
         lng: number;
         lat: number;
     } | string)[];

@@ -5,7 +5,7 @@
  *
  * | prop | 策略 | 落地 | 依据（`OVERLAY_DESCRIPTORS.prism`） |
  * | --- | --- | --- | --- |
- * | `path` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
+ * | `points` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
  * | `altitude` | `options` | `setAltitude` | `mutateBy("setAltitude", { ctorKey: null })` |
  * | `topFillColor` / `topFillOpacity` / `sideFillColor` / `sideFillOpacity` | `options` | 各自的 setter | 描述符逐个列出 |
  * | `enableMassClear` | `options` | 成对开关 | 描述符 |
@@ -23,9 +23,9 @@
  * 3. **不给字段级更新**：没有 `setIsBoundary` 之类入口，改变它只能重建——与迁移前「只有构造期
  *    生效」的实际行为一致。
  *
- * ## `path` 用内容指纹（而不是版本令牌）
+ * ## `points` 用内容指纹（而不是版本令牌）
  *
- * Prism 的 path 是**建筑底面轮廓**（几十个点），不是路线；组件也没有 `pathVersion` prop
+ * Prism 的 `points` 是**建筑底面轮廓**（几十个点），不是路线；组件也没有 `pathVersion` prop
  * （不新增公开面）。因此这里显式声明 `"fingerprint"`：既做了「父级传内联数组不产生多余命令」
  * 的判等，又不必为它引入第二个版本令牌。
  *
@@ -40,7 +40,7 @@ import type { PrismProps } from "../../types/components";
 import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
 export const PRISM_FIELDS: OverlayFieldMap<PrismProps> = {
-  path: "options",
+  points: "options",
   altitude: "options",
   topFillColor: "options",
   topFillOpacity: "options",
@@ -54,11 +54,11 @@ export const PRISM_FIELDS: OverlayFieldMap<PrismProps> = {
 
 export const PRISM_WATCH_SOURCES = {
   // 显式写出来（而不是依赖缺省）：这两条与「大数组用版本令牌」的规则不同，需要被评审看见
-  path: "fingerprint",
+  points: "fingerprint",
 } as const;
 
 export const PRISM_DESCRIPTOR_KEYS = {
-  path: "path",
+  points: "path",
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
@@ -70,10 +70,10 @@ export function createPrismSpec(): OverlaySpec<PrismProps, OverlayHandle> {
     descriptorKeys: PRISM_DESCRIPTOR_KEYS,
     watchSources: PRISM_WATCH_SOURCES,
     create: (context, p) => {
-      if (!p.path?.length) {
-        throw new Error("Prism path is required");
+      if (!p.points?.length) {
+        throw new Error("Prism points is required");
       }
-      return context.client.driver.overlays.createPrism(p.path, p.altitude, {
+      return context.client.driver.overlays.createPrism(p.points, p.altitude, {
         topFillColor: p.topFillColor,
         topFillOpacity: p.topFillOpacity,
         sideFillColor: p.sideFillColor,

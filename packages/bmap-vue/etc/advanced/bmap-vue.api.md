@@ -1028,8 +1028,8 @@ export type MapStyleInput = {
     styleId: string;
 } | Record<string, unknown>;
 
-// @public (undocumented)
-type MapType_2 = "normal" | "satellite" | "earth";
+// @public
+type MapType_2 = "normal" | "satellite" | "hybrid" | "earth";
 export { MapType_2 as MapType }
 
 // @public (undocumented)

@@ -7,7 +7,7 @@
     <div class="state" v-else-if="isEmpty">点击地图选择坐标点，或等待初始解析…</div>
     <Map
       v-bind="$attrs"
-      enableScrollWheelZoom
+      enableWheelZoom
       ref="map"
       :center="initialCenter"
       @ready="handleInitd"

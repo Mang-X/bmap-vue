@@ -2,7 +2,7 @@
 /**
  * Polyline —— 折线（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
- * 组件只做两件事：**声明 spec** + **渲染 slot**。字段级更新（`path` 走根引用 + `pathVersion`、
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。字段级更新（`points` 走根引用 + `pathVersion`、
  * 样式走各自的 setter、`enableEditing` 走成对开关）全部由 `polylineSpec` 声明、由
  * `useOverlaySpec` 落地——组件里不再有 8 个手写 watcher。
  *

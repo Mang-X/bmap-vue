@@ -2,7 +2,7 @@
   <Map v-bind="$attrs">
     <Polygon
       enableEditing
-      :path="[
+      :points="[
         { lng: 116.387112, lat: 39.920977 },
         { lng: 116.385243, lat: 39.913063 },
         { lng: 116.394226, lat: 39.917988 },

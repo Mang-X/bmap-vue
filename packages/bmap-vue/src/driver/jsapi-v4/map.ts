@@ -97,6 +97,11 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
 const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
   normal: ["NORMAL", "BMAP_NORMAL_MAP"],
   satellite: ["SATELLITE", "BMAP_SATELLITE_MAP"],
+  // 混合图（#165 Class 1）：此前 `hybrid` 根本不在语义类型里，`<Map mapType="BMAP_HYBRID_MAP">`
+  // 被静默降级成普通图。候选名取法与其余三项同构（运行时名优先、d.ts 名后备）——**未取证**：
+  // 真实 4.0 的 `BMap.MapTypeId` 是否有 `HYBRID` 需要一次 live 读数；取不到时
+  // `resolveMapTypeConstant` 抛 `BMAP_SDK_CALL_FAILED`（显式失败，不是静默换图）。
+  hybrid: ["HYBRID", "BMAP_HYBRID_MAP"],
   earth: ["EARTH", "BMAP_EARTH_MAP"],
 };
 

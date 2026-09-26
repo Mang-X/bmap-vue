@@ -127,7 +127,11 @@ const LAYER_DESCRIPTORS = {
     // 它也没有统一 opacitiy 槽位（只有 fillOpacity / strokeOpacity 两个专属项）。
     ctorSlots: [],
     ctorSlotKeys: {},
-    aliases: { viewport: "autoViewport" },
+    // #165 Class 1：公开 prop 已直接叫官方的 `autoViewport`，别名 `{ viewport: "autoViewport" }`
+    // 因此**删掉**（§3.6 不留兼容别名）。ADR `2026-09-11-jsapi-v4-control-layer-facets` §5 已经
+    // 判过：`viewport` 只是 4.0 运行时的**未声明**别名，官方 4.0 只声明 `autoViewport`，
+    // 「别名一旦在升级中消失，表现会是 view 静默不取景」——不把未声明的别名当契约。
+    aliases: {},
     mutable: {},
     bagSetters: {},
     operations: [],
@@ -337,7 +341,8 @@ export function createJsapiV4LayerDriver(input: CreateJsapiV4LayerDriverInput): 
    * 领域 options → 4.0 构造 options。
    *
    * 三条规则：
-   * 1. **改名**（`viewport` → `autoViewport`）：别名键与目标键同时出现时以显式写下的 v4 键
+   * 1. **改名**（`aliases` 表）：#165 Class 1 之后 `district` 那一项**已空**——公开 prop 直接
+   *    叫官方的 `autoViewport`，不再需要别名。别名键与目标键同时出现时以显式写下的 v4 键
    *    为准——判据是**目标键有没有有效取值**（`!== undefined`），不是「键在不在」；
    * 2. **统一槽位**按 `ctorSlots` 决定收或丢：不在该 kind 的槽位表里（例如 `district` 的
    *    `opacity`）时告警一次并**丢掉**——转发给 SDK 会被静默忽略，「传了不生效」正是本库

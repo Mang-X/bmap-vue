@@ -2,7 +2,7 @@
 /**
  * Polygon —— 多边形（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
- * 组件只做两件事：**声明 spec** + **渲染 slot**。`path`（根引用 + `pathVersion`）、填充/描边、
+ * 组件只做两件事：**声明 spec** + **渲染 slot**。`points`（根引用 + `pathVersion`）、填充/描边、
  * `isBoundary`（构造期 → 变化即重建）、`enableEditing`（成对开关）全部由 `polygonSpec` 声明。
  *
  * 事件面（17 个）与 Polyline 相同（上游同为 `GraphEventMap`）；`defineEmits` 与矩阵的一致性由

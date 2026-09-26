@@ -29,7 +29,7 @@ overlay/rectangle
 | visible         | 是否显示                                    | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
 
 > `bounds` 按**内容**判等：父级每次渲染传内联字面量不会产生多余的 SDK 命令。
-> 这与 `Polyline` / `Polygon` 的 `path`（根引用 + 版本 prop）不同——矩形只有四个数字。
+> 这与 `Polyline` / `Polygon` 的 `points`（根引用 + 版本 prop）不同——矩形只有四个数字。
 
 ## 更新方式
 

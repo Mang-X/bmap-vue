@@ -24,7 +24,7 @@ layer/districtLayer
 | strokeColor   | 描边线条颜色     | `string`                        | -      | `#231cf8`              |                                    |
 | strokeWeight  | 描边线条粗细     | `number`                        | -      | `1`                    | <Badge type="tip" text="^2.4.0" /> |
 | strokeOpacity | 描边线透明度     | `number`                        | -      | `1`                    | <Badge type="tip" text="^2.4.0" /> |
-| viewport      | 自动聚焦地图中心 | `boolean`                       | -      | `false`                |                                    |
+| autoViewport   | 是否自动调整视野以适应行政区边界范围（官方 `autoViewport`） | `boolean`                       | -      | `false`                |                                    |
 
 > 4.0 的 `DistrictLayer` **没有任何字段级 setter**：上面这些 Props 变化时会**重建图层**
 > （旧实例先摘掉、旧监听随它那一代释放）。1.0 只提供这一种行为，不提供「静默不生效」的旧行为。

@@ -436,7 +436,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
     // 回调、恰好一个写入，这是**正确**的批处理形状，不是 #124 `flush:"sync"` 那个「多字段逐个
     // mutate ⇒ 5 次 reconcile」的问题。详见 ADR `2026-09-24-scheduler-batching-hot-path`。
     const props = ref<Record<string, unknown>>(
-      controlledViewProps({ heading: 0, tilt: 0, enableDragging: true, enableScrollWheelZoom: true }),
+      controlledViewProps({ heading: 0, tilt: 0, enableDragging: true, enableWheelZoom: true }),
     );
     const { wrapper } = await mountControlledMap(() => props.value);
 
@@ -449,7 +449,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
       center: { lng: 121.5, lat: 31.2 },
       zoom: 15,
       enableDragging: false,
-      enableScrollWheelZoom: false,
+      enableWheelZoom: false,
     };
     await settleProps();
 
@@ -469,7 +469,12 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
     expect(harness.interactionWrites().enableDragging, "enableDragging 恰好一次").toBe(
       (interactionBefore.enableDragging ?? 0) + 1,
     );
-    expect(harness.interactionWrites().enableScrollWheelZoom, "enableScrollWheelZoom 恰好一次").toBe(
+    // ⚠️ `interactionWrites()` 的 key 是**官方实例方法名**（harness 按 callLog 归并
+    // `enableXxx` / `disableXxx`），不是 prop 名。#165 Class 1 改的是**构造期 prop**
+    // （`enableScrollWheelZoom` → 官方 `MapOptions.enableWheelZoom`），落地走的仍是官方
+    // **实例方法** `enableScrollWheelZoom()` / `disableScrollWheelZoom()`（`Map.d.ts:43,47`），
+    // 所以这个计数 key 保持 `enableScrollWheelZoom` 不变。
+    expect(harness.interactionWrites().enableScrollWheelZoom, "滚轮缩放开关恰好一次").toBe(
       (interactionBefore.enableScrollWheelZoom ?? 0) + 1,
     );
     expect(harness.interactions()).toMatchObject({ dragging: false, scrollWheelZoom: false });
@@ -482,7 +487,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
       center: { lng: 121.5, lat: 31.2 },
       zoom: 15,
       enableDragging: false,
-      enableScrollWheelZoom: false,
+      enableWheelZoom: false,
     };
     await settleProps();
     expect(harness.viewWrites(), "同值重提交不得重复下发").toEqual(viewSettled);

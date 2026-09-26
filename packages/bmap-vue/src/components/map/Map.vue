@@ -39,7 +39,7 @@ import {
 import { subscribeMapEvent } from "../../core/events/subscribeMapEvent";
 import { readLiveView } from "../../core/utils/liveView";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
-import type { MapProps } from "../../types/components";
+import type { MapProps, MapTypeIdName } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
@@ -65,7 +65,10 @@ const props = withDefaults(defineProps<MapProps>(), {
   maxZoom: 21,
   noAnimation: false,
   enableDragging: true,
-  enableScrollWheelZoom: false,
+  // ⚠️ 官方 `MapOptions.enableWheelZoom` 的默认是 **true**，本库默认**关闭**（避免页面滚动时
+  // 误缩放），并由 Driver 的 `LIBRARY_MAP_DEFAULTS` 显式写进构造 options 固定它。
+  // 这是有意决策，**不是**本次改名的一部分——改的只是 prop 名。
+  enableWheelZoom: false,
   loadingBgColor: "#f1f1f1",
   keepAliveBehavior: "suspend",
   // 容器尺寸变化时自动 `checkResize`（#29）：默认开启。`false` 时只更新读数，由调用方
@@ -516,14 +519,39 @@ function bindViewEvents(ctx: MapReadyContext): void {
   );
 }
 
-/** v2 风格地图类型字符串 → 语义 MapType */
-function toMapType(value: string | undefined): MapType {
-  const map: Record<string, MapType> = {
+/**
+ * 官方 `MapTypeId` 常量名 → 语义 `MapType`。
+ *
+ * 取值域是 `MapTypeIdName`（封闭联合，五个官方常量名）。此前这里只映射三个、其余
+ * **静默回退**成 `"normal"`——用户传 `BMAP_HYBRID_MAP` 拿到的是普通图且没有任何提示
+ * （#165 Class 1 修掉的静默错值）。
+ *
+ * 两种失败口径刻意不同：
+ *
+ * - **未知名字**：类型层已经封死（不是官方常量名就编译不过），运行期仍留一道显式错误，
+ *   因为 JS 消费方 / `as` 断言能绕过类型层——静默画错图比报错更难查。
+ * - **`BMAP_NONE_MAP`（无底图）**：官方 d.ts 声明了，但真实 4.0 运行时的 `BMap.MapTypeId`
+ *   没有对应成员，本库**没有**它的表示（编一个等于造一个上游不存在的语义）。因此同样
+ *   显式失败，而不是悄悄画成普通图。
+ */
+function toMapType(value: MapTypeIdName | undefined): MapType {
+  const map: Partial<Record<MapTypeIdName, MapType>> = {
     BMAP_NORMAL_MAP: "normal",
-    BMAP_EARTH_MAP: "earth",
     BMAP_SATELLITE_MAP: "satellite",
+    BMAP_HYBRID_MAP: "hybrid",
+    BMAP_EARTH_MAP: "earth",
   };
-  return map[value ?? "BMAP_NORMAL_MAP"] ?? "normal";
+  const resolved = map[value ?? "BMAP_NORMAL_MAP"];
+  if (!resolved) {
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      `mapType 不受支持: ${String(value)}。` +
+        `本库支持 BMAP_NORMAL_MAP / BMAP_SATELLITE_MAP / BMAP_HYBRID_MAP / BMAP_EARTH_MAP；` +
+        `BMAP_NONE_MAP（无底图）在官方 4.0 运行时的 BMap.MapTypeId 上没有对应常量，本库不猜它的表示。`,
+      { engine: "jsapi-v4" },
+    );
+  }
+  return resolved;
 }
 
 /** 将 mapType prop 同步为 SDK setMapType */
@@ -531,16 +559,26 @@ function applyMapType(ctx: MapReadyContext) {
   ctx.client.driver.map.setMapType(ctx.map, toMapType(props.mapType));
 }
 
-/** enableXxx 布尔开关 → 语义 interaction */
+/**
+ * 交互开关 prop → 语义 interaction。
+ *
+ * ⚠️ **左列是 prop 名、右列的 `INTERACTION_METHODS` 是官方实例方法名，两者不是同一套拼写**：
+ * 官方 `MapOptions` 的构造期键写 `enableDblclickZoom` / `enableWheelZoom` /
+ * `enablePinchZoom` / `fixCenterWhenResize`，而 `Map` 的**实例方法**写
+ * `enableDoubleClickZoom()` / `enableScrollWheelZoom()` / `enablePinchToZoom()` /
+ * `enableResizeOnCenter()`（见 `driver/jsapi-v4/map.ts`）。#165 Class 1 把**公开 prop**
+ * 收敛到官方构造期那一组；落地机制**不变**——仍是建图后按实例方法落一次
+ * （`setInteraction`），不改成构造选项。
+ */
 const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableDragging", "dragging"],
-  ["enableScrollWheelZoom", "scroll-zoom"],
+  ["enableWheelZoom", "scroll-zoom"],
   ["enableInertialDragging", "inertial-dragging"],
-  ["enablePinchToZoom", "pinch-zoom"],
+  ["enablePinchZoom", "pinch-zoom"],
   ["enableKeyboard", "keyboard"],
-  ["enableDoubleClickZoom", "double-click-zoom"],
+  ["enableDblclickZoom", "double-click-zoom"],
   ["enableContinuousZoom", "continuous-zoom"],
-  ["enableResizeOnCenter", "resize-on-center"],
+  ["fixCenterWhenResize", "resize-on-center"],
 ];
 
 /** 将 props 上的 enableXxx 布尔值同步到 SDK map 实例 */
@@ -1181,13 +1219,13 @@ onUnmounted(() => {
 watch(
   () => [
     props.enableDragging,
-    props.enableScrollWheelZoom,
+    props.enableWheelZoom,
     props.enableInertialDragging,
-    props.enablePinchToZoom,
+    props.enablePinchZoom,
     props.enableKeyboard,
-    props.enableDoubleClickZoom,
+    props.enableDblclickZoom,
     props.enableContinuousZoom,
-    props.enableResizeOnCenter,
+    props.fixCenterWhenResize,
     props.enableTraffic,
   ],
   () => {

@@ -5,7 +5,7 @@
  *
  * | prop | 策略 | 落地 | 依据（`OVERLAY_DESCRIPTORS["bezier-curve"]`） |
  * | --- | --- | --- | --- |
- * | `path` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
+ * | `points` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
  * | `controlPoints` | `options` | `setControlPoints`（`value: "point-groups"`） | `mutateBy("setControlPoints", …)` |
  * | `pathVersion` / `controlPointsVersion` | `version` | 两个大数组各自的版本令牌 | 不是 SDK 属性 |
  * | 描边 | `options` | 各自的 setter | 描述符逐个列出（BezierCurve **没有** `PATH_STYLE` 的编辑开关） |
@@ -25,7 +25,7 @@ import type { BezierCurveProps } from "../../types/components";
 import { PATH_STROKE_FIELDS, VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
 export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
-  path: "options",
+  points: "options",
   pathVersion: "version",
   controlPoints: "options",
   controlPointsVersion: "version",
@@ -35,12 +35,12 @@ export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
 };
 
 export const BEZIER_CURVE_WATCH_SOURCES = {
-  path: { source: "versioned", versionProp: "pathVersion" },
+  points: { source: "versioned", versionProp: "pathVersion" },
   controlPoints: { source: "versioned", versionProp: "controlPointsVersion" },
 } as const;
 
 export const BEZIER_CURVE_DESCRIPTOR_KEYS = {
-  path: "path",
+  points: "path",
   pathVersion: null,
   controlPoints: "controlPoints",
   controlPointsVersion: null,
@@ -55,7 +55,7 @@ export function createBezierCurveSpec(): OverlaySpec<BezierCurveProps, OverlayHa
     descriptorKeys: BEZIER_CURVE_DESCRIPTOR_KEYS,
     watchSources: BEZIER_CURVE_WATCH_SOURCES,
     create: (context, p) =>
-      context.client.driver.overlays.createBezierCurve(p.path, p.controlPoints, {
+      context.client.driver.overlays.createBezierCurve(p.points, p.controlPoints, {
         strokeColor: p.strokeColor,
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,

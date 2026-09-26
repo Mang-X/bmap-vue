@@ -211,7 +211,7 @@ const resource = useNativeLayerResource<PointCollectionProps<Item>>(props, {
 function styleValue(): Record<string, unknown> | undefined {
   return projectLayerStyle(() => {
     const style: Record<string, unknown> = {};
-    if (props.shape !== undefined) style.shapeType = props.shape;
+    if (props.shapeType !== undefined) style.shapeType = props.shapeType;
     if (props.size !== undefined) style.size = props.size;
     if (props.color !== undefined) style.color = props.color;
     if (props.strokeColor !== undefined) style.strokeColor = props.strokeColor;

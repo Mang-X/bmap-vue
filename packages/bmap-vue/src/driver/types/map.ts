@@ -7,7 +7,18 @@
 import type { MapHandle } from "./handles";
 import type { Bounds, Pixel, Point, Size } from "./geometry";
 
-export type MapType = "normal" | "satellite" | "earth";
+/**
+ * 语义地图类型。
+ *
+ * `hybrid` 对应官方 `BMAP_HYBRID_MAP`（卫星与路网混合）；它在 4.0 之前**没有**进入这张表，
+ * 于是 `<Map map-type>` 传混合图时被静默画成普通图（#165 Class 1 修掉的静默错值）。
+ *
+ * ⚠️ 官方 `MapTypeId` 还声明了 `BMAP_NONE_MAP`（无底图模式），但真实 4.0 运行时的
+ * `BMap.MapTypeId` 上**没有**对应成员（见 `driver/jsapi-v4/map.ts` 的
+ * `MAP_TYPE_CONSTANT_CANDIDATES` 与其注释）。本库**不**给它一个语义值——那样等于编一个上游
+ * 没有的表示。它因此走 `resolveMapTypeConstant` 的「缺常量」分支，**显式抛错**而不是回退。
+ */
+export type MapType = "normal" | "satellite" | "hybrid" | "earth";
 
 export type MapInteraction =
   | "dragging"

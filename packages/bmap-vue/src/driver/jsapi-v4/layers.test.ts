@@ -68,11 +68,11 @@ beforeEach(() => {
 /* -------------------------------------------------------------------------- */
 
 describe("图层创建与构造选项映射", () => {
-  it("district → BMap.DistrictLayer；viewport 显式改名为 4.0 的 autoViewport", () => {
+  it("district → BMap.DistrictLayer；autoViewport 原样落库（#165 Class 1 已删别名）", () => {
     const handle = ctx.layers.create("district", {
       name: "(北京市)",
       kind: 2,
-      viewport: true,
+      autoViewport: true,
       fillColor: "#5e8bff",
     });
     const raw = ctx.rawOf(handle);
@@ -87,11 +87,6 @@ describe("图层创建与构造选项映射", () => {
     // 历史名字不再透传：官方声明里只有 `autoViewport`，别名不是契约
     // （真实 4.0 运行时目前也接受 `viewport`，但那是未声明的行为，见 ADR 的 smoke 记录）
     expect(raw.options.viewport).toBeUndefined();
-  });
-
-  it("同时写下 v4 键与历史键时以 v4 键为准", () => {
-    const handle = ctx.layers.create("district", { viewport: true, autoViewport: false });
-    expect(ctx.rawOf(handle).options.autoViewport).toBe(false);
   });
 
   it("tile → BMap.TileLayer，选项原样透传（索引签名是 4.0 构造选项的逃生口）", () => {
@@ -363,31 +358,37 @@ describe("[P2] 挂载失败后记账必须回滚，否则重试会被静默跳�
   });
 });
 
-describe("[P2] viewport → autoViewport 的别名优先级要按「有效取值」判断", () => {
-  it("autoViewport: undefined 不遮蔽 viewport: true（两种书写顺序）", () => {
-    // 这类对象会来自可选配置字段或对象展开合并：键在、值为 undefined
-    const orders = [
-      { viewport: true, autoViewport: undefined },
-      { autoViewport: undefined, viewport: true },
-    ];
+describe("[P2] autoViewport 是 district 唯一落到 SDK 的键（#165 Class 1 删掉别名）", () => {
+  it("autoViewport 为 undefined 时不写入该键；历史名字 viewport 一律不再透传", () => {
+    // #165 Class 1 之前这里断言的是「别名优先级按有效取值判断」（`viewport` → `autoViewport`）。
+    // 公开 prop 现在直接叫 `autoViewport`，别名表已清空，因此**没有**别名可让位：
+    // `undefined` 就是「不表态」，历史名字 `viewport` 作为**未声明**的键被丢掉。
+    const orders = [{ autoViewport: undefined }, {}];
     for (const options of orders) {
       const handle = ctx.layers.create("district", options as Record<string, unknown>);
-      expect(ctx.rawOf(handle).options.autoViewport).toBe(true);
+      expect(ctx.rawOf(handle).options.autoViewport).toBeUndefined();
       expect(ctx.rawOf(handle).options.viewport).toBeUndefined();
     }
   });
 
-  it("显式 false / true 仍然优先于历史名字（只有 undefined 让位）", () => {
-    const explicitFalse = ctx.layers.create("district", {
-      viewport: true,
-      autoViewport: false,
-    });
+  it("传历史名字 viewport 不再被改写成 autoViewport（别名已删）", () => {
+    // ⚠️ 钉住的是「**本库不再把 `viewport` 翻译成 `autoViewport`**」：
+    // `viewport` 会**原样**落进构造选项——`declared: true` 的 kind 有一个「结构逃生口」，
+    // 未被描述符收下的键按官方 4.0 自身构造选项处理（见 `projectLayerOptions` 的规则 4）。
+    //
+    // 官方声明里只有 `autoViewport`；真实 4.0 运行时**目前也接受** `viewport`，但那是
+    // **未声明**的行为，ADR `2026-09-11-jsapi-v4-control-layer-facets` §5/§7 明确「不把未声明的
+    // 别名当契约」（别名一旦在升级中消失，表现会是 view 静默不取景）。因此本库不再**主动**改名，
+    // 但也不去**拦截**这个键——拦截等于在官方没有声明的地方立自己的契约。
+    const handle = ctx.layers.create("district", { viewport: true });
+    expect(ctx.rawOf(handle).options.autoViewport).toBeUndefined();
+  });
+
+  it("显式 false / true 原样落库（只有 undefined 才是不表态）", () => {
+    const explicitFalse = ctx.layers.create("district", { autoViewport: false });
     expect(ctx.rawOf(explicitFalse).options.autoViewport).toBe(false);
 
-    const explicitTrue = ctx.layers.create("district", {
-      viewport: false,
-      autoViewport: true,
-    });
+    const explicitTrue = ctx.layers.create("district", { autoViewport: true });
     expect(ctx.rawOf(explicitTrue).options.autoViewport).toBe(true);
   });
 });

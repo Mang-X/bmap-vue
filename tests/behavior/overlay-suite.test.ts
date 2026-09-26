@@ -216,7 +216,7 @@ const CASES: readonly OverlayCase[] = [
     component: Polyline,
     fields: POLYLINE_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -235,7 +235,7 @@ const CASES: readonly OverlayCase[] = [
     component: Polygon,
     fields: POLYGON_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -285,7 +285,7 @@ const CASES: readonly OverlayCase[] = [
     component: BezierCurve,
     fields: BEZIER_CURVE_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.6, lat: 40.1 },
       ],
@@ -306,7 +306,7 @@ const CASES: readonly OverlayCase[] = [
     component: Prism,
     fields: PRISM_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -885,7 +885,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(testCase.component as never, {
-              path: path.value,
+              points: path.value,
               pathVersion: version.value,
             } as never),
           ]);
@@ -942,7 +942,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(BezierCurve, {
-              path: path.value,
+              points: path.value,
               controlPoints: controlPoints.value,
               pathVersion: pathVersion.value,
               controlPointsVersion: controlPointsVersion.value,
@@ -973,15 +973,17 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
     harness.assertIdle("BezierCurve 两个版本令牌");
   });
 
-  it("声明面：versioned 的字段都配了版本令牌；Prism 的 path 明确不用（小数组）", () => {
-    expect(POLYLINE_WATCH_SOURCES.path).toEqual({ source: "versioned", versionProp: "pathVersion" });
+  it("声明面：versioned 的字段都配了版本令牌；Prism 的 points 明确不用（小数组）", () => {
+    // watch 源的键是 **prop 名**（#165 Class 1 之后是 `points`），值里的 `versionProp` 仍指向
+    // `pathVersion`——那个 prop 名官方没有对应概念，是本库自设计的失效令牌，**未改名**。
+    expect(POLYLINE_WATCH_SOURCES.points).toEqual({ source: "versioned", versionProp: "pathVersion" });
     expect(BEZIER_CURVE_WATCH_SOURCES).toEqual({
-      path: { source: "versioned", versionProp: "pathVersion" },
+      points: { source: "versioned", versionProp: "pathVersion" },
       controlPoints: { source: "versioned", versionProp: "controlPointsVersion" },
     });
     expect(Object.keys(GROUND_OVERLAY_WATCH_SOURCES)).toEqual(["url"]);
-    expect(PRISM_FIELDS.path).toBe("options");
-    expect(PRISM_DESCRIPTOR_KEYS.path).toBe("path");
+    expect(PRISM_FIELDS.points).toBe("options");
+    expect(PRISM_DESCRIPTOR_KEYS.points).toBe("path");
   });
 });
 
@@ -1016,7 +1018,7 @@ describe("#31 编辑能力边界与卸载路径", () => {
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(Polyline, {
-              path: [
+              points: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.5, lat: 40 },
               ],
@@ -1058,7 +1060,7 @@ describe("#31 内核的观察面：useOverlaySpec 报告的 events", () => {
 
   function probeHost(spec: OverlaySpec<Record<string, unknown>, unknown>) {
     const state = ref<Record<string, unknown>>({
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -1087,7 +1089,7 @@ describe("#31 内核的观察面：useOverlaySpec 报告的 events", () => {
     watchSources: { path: { source: "versioned", versionProp: "pathVersion" } },
     create: (context, p) =>
       context.client.driver.overlays.createPolygon(
-        p.path as { lng: number; lat: number }[],
+        p.points as { lng: number; lat: number }[],
         {},
       ),
   };
@@ -1132,11 +1134,11 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
     const spec: OverlaySpec<Record<string, unknown>, unknown> = {
       type: "probe-after-mount",
       kind: "polygon",
-      fields: { path: "options", visible: "visibility" },
-      descriptorKeys: { path: "path", visible: null },
+      fields: { points: "options", visible: "visibility" },
+      descriptorKeys: { points: "path", visible: null },
       create: async (context, p) => {
         await gate;
-        return context.client.driver.overlays.createPolygon(p.path as { lng: number; lat: number }[], {});
+        return context.client.driver.overlays.createPolygon(p.points as { lng: number; lat: number }[], {});
       },
       afterMount: () => {
         afterMountCalls.push(afterMountCalls.length);
@@ -1144,7 +1146,7 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
       },
     };
     const state = ref<Record<string, unknown>>({
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -1255,7 +1257,7 @@ describe("[评审 4] remove 事件的可观察时机（文档与用例一起对�
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(BezierCurve, {
-              path: [
+              points: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.6, lat: 40.1 },
               ],

@@ -36,6 +36,7 @@ export { BMapResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
   MapProps,
+  MapTypeIdName,
   MarkerProps,
   InfoWindowProps,
   CircleProps,

@@ -8,7 +8,7 @@ import { Prism } from 'bmap-vue'
 
 ## 示例
 
-:::demo 通过 [`useAreaBoundary`](../hooks/useAreaBoundary) 获取边界字符串，并传给 `Prism` 的 `path`，同时设置 `isBoundary` 为 `true`
+:::demo 通过 [`useAreaBoundary`](../hooks/useAreaBoundary) 获取边界字符串，并传给 `Prism` 的 `points`，同时设置 `isBoundary` 为 `true`
 overlay/prism
 :::
 
@@ -24,7 +24,7 @@ overlay/prism
 
 | 属性            | 说明                                        | 类型                            | 可选值 | 默认值     | 版本                               |
 | --------------- | ------------------------------------------- | ------------------------------- | ------ | ---------- | ---------------------------------- |
-| path            | 普通多边形使用点对象数组，行政边界使用边界字符串数组 | `{ lng: number, lat: number}[] \| string[]` | - | `required` | - |
+| points          | 普通多边形使用点对象数组，行政边界使用边界字符串数组 | `{ lng: number, lat: number}[] \| string[]` | - | `required` | - |
 | altitude        | 3d 棱柱高度                                 | `number`                        | -      | `required` | -                                  |
 | topFillColor    | 顶面填充颜色                                | `string `                       | -      | `#fff`     | -                                  |
 | topFillOpacity  | 顶面填充颜色透明度                          | `number`                        | `0-1`  | -          | -                                  |

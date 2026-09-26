@@ -1,5 +1,5 @@
 <template>
-  <Map v-bind="$attrs" enableScrollWheelZoom>
+  <Map v-bind="$attrs" enableWheelZoom>
     <PanoramaControl />
     <PanoramaCoverageLayer />
   </Map>

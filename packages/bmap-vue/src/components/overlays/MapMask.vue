@@ -9,10 +9,15 @@ import type { OverlayHandle } from "../../driver/types/handles";
 /**
  * MapMask 迁移(adapter 模式)
  *
- * path 视为不可变值,更新后替换根引用触发;支持 pathVersion 强制刷新。
+ * points 视为不可变值,更新后替换根引用触发;支持 pathVersion 强制刷新。
+ *
+ * 坐标数组叫 `points`（#165 Class 1）：官方类型包**没有** `MapMask` 的类声明（真实 4.0
+ * 运行时才有构造器，见 `createMapMask` 的注释），因此没有 d.ts 形参名可对；但它接收的是
+ * 与 `Polyline` / `Polygon` 同形的点数组，跟随那四个图形族覆盖物一起改成 `points`，
+ * 免得同一个概念在五个组件上有两个名字。
  */
 export interface MapMaskProps {
-  path: { lng: number; lat: number }[];
+  points: { lng: number; lat: number }[];
   pathVersion?: string | number;
   showRegion?: MapMaskShowRegion;
   isBuildingMask?: boolean;
@@ -43,8 +48,8 @@ const { resource, rebuild } = useOverlayResource<MapMaskProps, OverlayHandle>(
   props,
   {
     create: (ctx, p) => {
-      if (!p.path?.length) throw new Error("MapMask path is required");
-      return ctx.client.driver.overlays.createMapMask(p.path, {
+      if (!p.points?.length) throw new Error("MapMask points is required");
+      return ctx.client.driver.overlays.createMapMask(p.points, {
         showRegion: p.showRegion,
         isBuildingMask: p.isBuildingMask,
         isMapMask: p.isMapMask,
@@ -65,13 +70,13 @@ const { resource, rebuild } = useOverlayResource<MapMaskProps, OverlayHandle>(
       on("rightclick", (e) => emit("rightclick", e));
     },
     createWatchers(getCtx, getResource, p) {
-      // SDK MapMask 不可变(path 只能构造时传入)。path 更新由使用方
+      // SDK MapMask 不可变(points 只能构造时传入)。points 更新由使用方
       // 通过 pathVersion 变化触发重建(见下方)。
       // 注意:不能在此处用 watch 重建,否则初始挂载会重复创建。
       watch(
-        [() => p.path, () => p.pathVersion],
-        ([path]) => {
-          if (path?.length && !getResource()) void rebuild();
+        [() => p.points, () => p.pathVersion],
+        ([points]) => {
+          if (points?.length && !getResource()) void rebuild();
         },
         { flush: "sync" },
       );

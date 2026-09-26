@@ -25,6 +25,36 @@ export const DistrictType = {
 
 export type DistrictTypeValue = (typeof DistrictType)[keyof typeof DistrictType];
 
+/**
+ * 官方 `BMap.MapTypeId` 的内置地图类型常量名。
+ *
+ * **逐条来自 `@baidumap/jsapi-v4-types@4.0.5` 的 `map-type/MapTypeId.d.ts`**，该文件把这五个
+ * 名字逐个声明为 `MapTypeId` 的静态成员：
+ *
+ * | 常量 | 官方 d.ts 的静态成员声明 | 本库归一化后的语义类型 |
+ * | --- | --- | --- |
+ * | `BMAP_NORMAL_MAP` | `static BMAP_NORMAL_MAP: string`（普通街道视图） | `"normal"` |
+ * | `BMAP_SATELLITE_MAP` | `static BMAP_SATELLITE_MAP: string`（卫星地图） | `"satellite"` |
+ * | `BMAP_HYBRID_MAP` | `static BMAP_HYBRID_MAP: string`（卫星与路网混合地图） | `"hybrid"` |
+ * | `BMAP_EARTH_MAP` | `static BMAP_EARTH_MAP: string`（地球卫星视图） | `"earth"` |
+ * | `BMAP_NONE_MAP` | `static BMAP_NONE_MAP: string`（无底图模式） | — |
+ *
+ * 之前 `mapType` 是裸 `string`，运行时 `toMapType()` 只映射三个名字、其余（含
+ * `BMAP_HYBRID_MAP`）**静默回退**成 `normal`：用户要混合图拿到的是普通图，且没有任何错误。
+ * 收成封闭联合之后，拼错的名字在类型层就被拒，混合图走上真映射，无底图显式失败。
+ *
+ * `BMAP_NONE_MAP` 官方 d.ts **声明**了，但真实 4.0 运行时的 `BMap.MapTypeId` 上没有对应成员
+ * （与「`BMAP_*` 常量挂在全局而非 `MapTypeId`」是同一类上游出入，见
+ * `driver/jsapi-v4/map.ts` 的 `MAP_TYPE_CONSTANT_CANDIDATES`）。因此它在**类型层合法**（官方
+ * 确实声明了）、在**运行期显式失败**——本库不猜「无底图」该画成什么，也不静默替换。
+ */
+export type MapTypeIdName =
+  | "BMAP_NORMAL_MAP"
+  | "BMAP_SATELLITE_MAP"
+  | "BMAP_HYBRID_MAP"
+  | "BMAP_EARTH_MAP"
+  | "BMAP_NONE_MAP";
+
 export interface MapProps {
   ak?: string;
   apiUrl?: string;
@@ -78,7 +108,16 @@ export interface MapProps {
   defaultTilt?: number;
   width?: string | number;
   height?: string | number;
-  mapType?: string;
+  /**
+   * 地图类型：官方 `BMap.MapTypeId` 的**五个**内置常量名（`@baidumap/jsapi-v4-types@4.0.5`
+   * 的 `map-type/MapTypeId.d.ts` 逐个声明了静态成员）。
+   *
+   * 取值域是**封闭**的：拼错的名字在类型层就被拒，而不是运行时静默降级。四个取值能被直接
+   * 归一化（`normal` / `satellite` / `earth` / `hybrid`）；`BMAP_NONE_MAP`（无底图）官方
+   * 4.0 运行时的 `BMap.MapTypeId` 上**没有**对应成员，因此它**显式失败**（`BMAP_INVALID_ARGUMENT`）
+   * 而不是悄悄画成普通图——「要混合图拿到普通图且无任何提示」曾经是一个静默错值 bug。
+   */
+  mapType?: MapTypeIdName;
   mapStyleId?: string;
   mapStyleJson?: Record<string, unknown>;
   displayOptions?: Record<string, unknown>;
@@ -87,16 +126,42 @@ export interface MapProps {
   maxZoom?: number;
   noAnimation?: boolean;
   enableDragging?: boolean;
-  enableScrollWheelZoom?: boolean;
+  /**
+   * 是否允许鼠标滚轮 / 触摸板滑动缩放。
+   *
+   * 官方构造期键是 `enableWheelZoom`（`core/MapOptions.d.ts`）；官方**实例方法**才叫
+   * `enableScrollWheelZoom()`。本 prop 表达的是构造期语义，因此取前者。
+   *
+   * ⚠️ **默认值刻意不同于官方**：官方 d.ts 标 `@default`（即默认开启），本库默认**关闭**
+   *   （避免页面一滚就误缩放），并把 `enableWheelZoom: false` 写进构造 options 显式固定
+   *   （见 `driver/jsapi-v4/map.ts` 的 `LIBRARY_MAP_DEFAULTS`）。**这是有意决策，不在本次改名范围**。
+   */
+  enableWheelZoom?: boolean;
   enableInertialDragging?: boolean;
-  enablePinchToZoom?: boolean;
+  /**
+   * 是否允许手势缩放。官方构造期键是 `enablePinchZoom`；官方**实例方法**才叫 `enablePinchToZoom()`。
+   */
+  enablePinchZoom?: boolean;
   enableKeyboard?: boolean;
-  enableDoubleClickZoom?: boolean;
+  /**
+   * 是否启用双击缩放（左键双击放大、右键双击缩小）。
+   *
+   * 官方构造期键是 `enableDblclickZoom`（注意官方拼 **`Dbl`**，只有一个 `c`）；
+   * 官方**实例方法**才叫 `enableDoubleClickZoom()`。
+   */
+  enableDblclickZoom?: boolean;
   enableContinuousZoom?: boolean;
   /** 是否启用交通路况图层(v2 兼容) */
   enableTraffic?: boolean;
-  /** 开启图区 resize 中心点不变(v2 兼容) */
-  enableResizeOnCenter?: boolean;
+  /**
+   * 容器尺寸变化时是否保持地图中心点不变。
+   *
+   * 官方构造期键是 `fixCenterWhenResize`（`core/MapOptions.d.ts`；官方 d.ts 标 `@default false`）。
+   * `enableResizeOnCenter` 是 v2 时代的叫法——它其实是官方**实例方法**
+   * `enableResizeOnCenter()` / `disableResizeOnCenter()` 的名字，本库此前误把方法名当成了
+   * 构造期 prop 名。
+   */
+  fixCenterWhenResize?: boolean;
   /** 容器尺寸变化时自动重设尺寸(v2 兼容) */
   enableAutoResize?: boolean;
   loadingBgColor?: string;
@@ -311,17 +376,27 @@ export interface PathEditableProps {
 /**
  * 折线。
  *
- * `path` 与 `pathVersion` 是一对：`path` 按**根引用**比较（大数组不做内容指纹，见
+ * `points` 与 `pathVersion` 是一对：`points` 按**根引用**比较（大数组不做内容指纹，见
  * `OverlaySpec` 的 `watchSources`），原地修改数组时靠 `pathVersion` 递增触发更新。
+ *
+ * 坐标数组叫 `points`（不是 `path`）是**跟官方对齐**：官方
+ * `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/Polyline.d.ts:26` 写的是
+ * `constructor(points: Array<Point>, opts?)`。`pathVersion` 官方**没有**对应概念（它是本库为
+ * 「大数组原地变更」设计的响应式失效令牌），因此**保留原名**——改的只是坐标数组那一个名字。
  */
 export interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
-  path: { lng: number; lat: number }[];
+  points: { lng: number; lat: number }[];
   pathVersion?: string | number;
 }
 
-/** 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。 */
+/**
+ * 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。
+ *
+ * 坐标数组叫 `points`：官方 `overlay/Polygon.d.ts:30` 是
+ * `constructor(points: Array<Point> | Array<Array<Point>>, opts?)`。
+ */
 export interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
-  path: ({ lng: number; lat: number } | string)[];
+  points: ({ lng: number; lat: number } | string)[];
   pathVersion?: string | number;
   /** 构造期属性：路径按 SDK 原生边界名解析（如 `"北京市"`）。变化即重建。 */
   isBoundary?: boolean;
@@ -339,9 +414,15 @@ export interface CircleProps extends PathStrokeProps, PathFillProps, PathShapePr
   enableClicking?: boolean;
 }
 
-/** 贝塞尔曲线：`path` 与 `controlPoints` 各有一个版本令牌。 */
+/**
+ * 贝塞尔曲线：`points` 与 `controlPoints` 各有一个版本令牌。
+ *
+ * 坐标数组叫 `points`：官方 `overlay/BezierCurve.d.ts:21` 是
+ * `constructor(points: Array<Point>, controlPoints: Array<Array<Point>>, opts?)`——两个形参
+ * 官方都叫它该叫的名字，本库此前只有 `controlPoints` 是对的。
+ */
 export interface BezierCurveProps extends PathStrokeProps, PathShapeProps {
-  path: { lng: number; lat: number }[];
+  points: { lng: number; lat: number }[];
   controlPoints: { lng: number; lat: number }[][];
   pathVersion?: string | number;
   controlPointsVersion?: string | number;
@@ -363,12 +444,15 @@ export interface LabelProps {
 /**
  * 3D 棱柱。
  *
- * `isBoundary` / `autoCenter` 是**构造期透传**：`@baidumap/jsapi-v4-types@4.0.4` 的
+ * 坐标数组叫 `points`：官方 `overlay/Prism.d.ts:25` 是
+ * `constructor(points: Array<Point> | Array<Array<Point>>, altitude: number, opts?)`。
+ *
+ * `isBoundary` / `autoCenter` 是**构造期透传**：`@baidumap/jsapi-v4-types@4.0.5` 的
  * `PrismOptions` 里没有这两个键（4.0 运行时是否读取未取证），因此它们既不被当作字段级更新，
  * 也不被宣称支持——只在创建时原样交给 SDK（分类与理由见 `OVERLAY_DESCRIPTORS.prism`）。
  */
 export interface PrismProps {
-  path: ({ lng: number; lat: number } | string)[];
+  points: ({ lng: number; lat: number } | string)[];
   altitude: number;
   topFillColor?: string;
   topFillOpacity?: number;
@@ -492,8 +576,18 @@ export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
    * 同名字段被本库覆盖时会给出开发期告警。
    */
   properties?: (item: Item) => Record<string, unknown> | null | undefined;
-  /** 形状类型，取值见官方 `PointShapeLayer.ShapeType`（如 `0` 圆形 / `7` 五角星）。 */
-  shape?: number;
+  /**
+   * 图形类型，取值见官方 `PointShapeLayer.ShapeType`（如 `0` 圆形 / `7` 五角星）。
+   *
+   * 官方 `PointShapeStyle.shapeType`（`@baidumap/jsapi-v4-types@4.0.5`
+   * `layer/PointShapeLayer.d.ts:102`，`@default 2`）。#165 Class 1 之前本库的 prop 叫 `shape`，
+   * 组件里做一次改名才落到官方键上——那是已知的命名缺口，现已直接叫官方名，旧名**删除**
+   * （#165 §3.6 不留兼容别名）。
+   *
+   * ⚠️ 与 `<PointLayer>` 的 `shape` **不是同一个 prop**：那是 `BMap.PointLayer` 的
+   * `visualization/PointLayer.d.ts:73`，官方就写 `shape`，两个组件各按各自的官方类走。
+   */
+  shapeType?: number;
   /** 点的尺寸（像素）。 */
   size?: number;
   /** 填充颜色。 */

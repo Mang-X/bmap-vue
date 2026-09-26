@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 409 |
+| 本库根入口导出 | 410 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 294 |
+| 仅本库有 | 295 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -701,6 +701,7 @@ component 45 · hook 14 · type 56
 | `MapStyleInput` | other | — |
 | `MapSuspendReason` | other | — |
 | `MapType` | other | — |
+| `MapTypeIdName` | other | — |
 | `mapVglPlugin` | other | — |
 | `MapView` | other | — |
 | `MarkerClusterEngine` | other | — |

@@ -3,7 +3,7 @@
     v-bind="$attrs"
     :minZoom="3"
     :zoom="zoom"
-    enableScrollWheelZoom
+    enableWheelZoom
     ref="map"
     @ready="handleInitd"
   >
@@ -28,7 +28,7 @@
     <Polygon
       :key="area"
       isBoundary
-      :path="pathPoints"
+      :points="pathPoints"
       stroke-color="#000"
       fillColor="blue"
       :stroke-weight="1"

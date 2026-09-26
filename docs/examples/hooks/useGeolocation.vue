@@ -17,7 +17,7 @@
     <button v-if="!isLoading" class="myButton" @click="getCurrentPosition()">重新获取</button>
     <Map
       v-bind="$attrs"
-      enableScrollWheelZoom
+      enableWheelZoom
       ref="map"
       @ready="getCurrentPosition()"
       :center="data?.point || defaultCenter"

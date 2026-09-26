@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 409,
+  "oursPublicCount": 410,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 294,
+  "oursOnlyCount": 295,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -3001,6 +3001,11 @@
       "name": "MapType",
       "surface": "other",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "MapTypeIdName",
+      "surface": "other",
+      "oursEntry": "."
     },
     {
       "name": "mapVglPlugin",

@@ -25,7 +25,7 @@
 <template>
   <Map
     :center="{ lng: 106.53637853629937, lat: 29.464275891815767 }"
-    enableScrollWheelZoom
+    enableWheelZoom
     :provider="offlineProvider"
   >
     <Marker :position="{ lng: 121.56847909, lat: 29.8100979777 }"></Marker>

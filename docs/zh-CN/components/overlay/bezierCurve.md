@@ -20,7 +20,7 @@ overlay/bezierCurve
 
 | 属性            | 说明                                        | 类型                              | 可选值                    | 默认值     | 版本                               |
 | --------------- | ------------------------------------------- | --------------------------------- | ------------------------- | ---------- | ---------------------------------- |
-| path            | 贝塞尔曲线的坐标数组                        | `{ lng: number, lat: number}[]`   | -                         | `required` | -                                  |
+| points          | 贝塞尔曲线的坐标数组                        | `{ lng: number, lat: number}[]`   | -                         | `required` | -                                  |
 | controlPoints   | 贝塞尔曲线控制点的坐标数组                  | `{ lng: number, lat: number}[][]` | -                         | `required` | -                                  |
 | strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                          | -                         | `#000000`  | -                                  |
 | strokeWeight    | 描边的宽度，单位为像素                      | `string`                          | -                         | `2`        | -                                  |
@@ -29,7 +29,7 @@ overlay/bezierCurve
 | enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                         | -                         | `true `    | -                                  |
 | visible         | 是否显示                                    | `boolean`                         | -                         | `true`     | <Badge type="tip" text="^2.2.0" /> |
 
-> `path` / `controlPoints` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
+> `points` / `controlPoints` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
 > 原地修改数组时请递增配套的版本 prop（`pathVersion` / `controlPointsVersion`）触发一次更新。
 
 ## 组件事件

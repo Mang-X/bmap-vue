@@ -256,7 +256,7 @@ Marker 的代价」），不是自动降级。
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
   :properties="(s) => ({ name: s.name, level: s.level })"
-  :shape="0"
+  :shape-type="0"
   :size="18"
   color="#1677ff"
   @item-click="onItemClick"
@@ -267,7 +267,7 @@ Marker 的代价」），不是自动降级。
 | 属性 | 说明 | 默认值 |
 | --- | --- | --- |
 | `properties` | 写进每个要素 `properties` 的属性映射 | - |
-| `shape` / `size` / `color` / `strokeColor` / `strokeWeight` | 点样式（官方 `PointShapeStyle` 的子集） | SDK 默认 |
+| `shapeType` / `size` / `color` / `strokeColor` / `strokeWeight` | 点样式（官方 `PointShapeStyle` 的子集） | SDK 默认 |
 | `opacity` / `zIndex` / `minZoom` / `maxZoom` | 透明度 / 层级 / 缩放范围 | SDK 默认 |
 | `enablePicked` | 是否开启鼠标拾取 | **`true`**（官方默认 `false`，这里刻意不同） |
 | `pickWidth` / `pickHeight` | 点击拾取矩形尺寸（像素） | 官方默认（30） |

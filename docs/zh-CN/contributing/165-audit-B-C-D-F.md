@@ -216,6 +216,20 @@ zoom / targetZoom / trend / …`——**没有 `overlay` / `icon` / `poi`**。
   诚实：`enableTraffic` **明确告警并 no-op**（4.0 的路况是 `TrafficLayer`），
   没有假装生效。
 - `enableScrollWheelZoom` 默认 `false`（官方 `true`）是**有意为之且有注释论证**的差异。
+
+> **后续（Class 1 已落地，改的是名字不是判断）**：上两条提到的 `enableResizeOnCenter` 与
+> `enableScrollWheelZoom` 已在 #165 Class 1 中**改名**为官方 `MapOptions` 的构造期键
+> `fixCenterWhenResize` / `enableWheelZoom`（旧名**直接删除**、无兼容别名，见 §3.6）。
+> 上面这两条结论本身**不因此失效**：
+> - 改的只是 prop 名，**落地机制与默认值都不动**（仍按官方实例方法落一次；`enableWheelZoom`
+>   仍默认 `false` 并显式写进构造 options）；
+> - `enableTraffic` / `enableContinuousZoom` 两条**未改名**（前者的处置是 Class 5 的「静默丢弃」，
+>   另开票；后者官方构造期键同名，无需改）。
+>
+> 另一个由 Class 1 顺带修掉的**静默错值**（本审计当时未列为 HARD DEFECT）：
+> `mapType` 此前只映射 `BMAP_NORMAL_MAP` / `BMAP_SATELLITE_MAP` / `BMAP_EARTH_MAP`，
+> `BMAP_HYBRID_MAP` 被**静默降级**成 `normal`——要混合图拿到普通图且无任何提示。
+> 现在五个官方常量全部有明确落点，`BMAP_NONE_MAP` **显式失败**。
 - 未知/泄露检查：`./composables` 的 `forgotten-exports.json` 为 `[]`；
   `PublicMapContext` / `MapEventSource` 的窄面没有泄漏内部类型。
 - 4.0.5 对本工作包**零影响**：`core/MapEvent.d.ts` / `MapOptions.d.ts` **逐字节未变**，

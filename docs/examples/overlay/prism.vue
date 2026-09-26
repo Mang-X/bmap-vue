@@ -3,14 +3,14 @@
     v-bind="$attrs"
     :zoom="10"
     :tilt="50"
-    enableScrollWheelZoom
+    enableWheelZoom
     mapStyleId="980161f3645989feac25a0da15da4178"
     ref="map"
     @ready="handleInitd"
   >
     <Prism
       isBoundary
-      :path="pathPoints"
+      :points="pathPoints"
       :autoCenter="false"
       :topFillOpacity="topFillOpacity"
       :sideFillOpacity="0.9"

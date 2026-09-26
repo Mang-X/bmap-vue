@@ -48,7 +48,7 @@ function mountPolygon(
       setup() {
         return () =>
           h(Map, { provider: harness.provider() }, () => [
-            h(Polygon, { path: path.value, fillColor: '#00ff00', fillOpacity: 0.3 }),
+            h(Polygon, { points: path.value, fillColor: '#00ff00', fillOpacity: 0.3 }),
           ])
       },
     }),

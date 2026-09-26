@@ -5,8 +5,8 @@
  *
  * | prop | 策略 | 落地 | 依据（`OVERLAY_DESCRIPTORS.polygon`） |
  * | --- | --- | --- | --- |
- * | `path` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
- * | `pathVersion` | `version` | 版本令牌（`path` 的 watch 源之一） | 不是 SDK 属性 |
+ * | `points` | `options` | `setPath`（`value: "path"`） | `mutateBy("setPath", { ctorKey: null })` |
+ * | `pathVersion` | `version` | 版本令牌（`points` 的 watch 源之一） | 不是 SDK 属性 |
  * | `isBoundary` | `recreate` | 构造期选项（`"北京市"` 这类 SDK 原生边界名路径） | `recreate`：路径解析方式只在构造期读取 |
  * | 描边 / 填充 | `options` | 各自的 setter | `PATH_STYLE` + `FILL_STYLE` |
  * | `enableMassClear` / `enableEditing` | `options` | 成对开关 | `PATH_STYLE` |
@@ -27,7 +27,7 @@ import {
 } from "./overlayFields";
 
 export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
-  path: "options",
+  points: "options",
   pathVersion: "version",
   isBoundary: "recreate",
   ...PATH_STROKE_FIELDS,
@@ -37,11 +37,11 @@ export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
 };
 
 export const POLYGON_WATCH_SOURCES = {
-  path: { source: "versioned", versionProp: "pathVersion" },
+  points: { source: "versioned", versionProp: "pathVersion" },
 } as const;
 
 export const POLYGON_DESCRIPTOR_KEYS = {
-  path: "path",
+  points: "path",
   pathVersion: null,
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
@@ -54,7 +54,7 @@ export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
     descriptorKeys: POLYGON_DESCRIPTOR_KEYS,
     watchSources: POLYGON_WATCH_SOURCES,
     create: (context, p) =>
-      context.client.driver.overlays.createPolygon(p.path, {
+      context.client.driver.overlays.createPolygon(p.points, {
         strokeColor: p.strokeColor,
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,

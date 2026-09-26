@@ -187,14 +187,37 @@ map/theme2
 | enableTraffic          | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `TrafficLayer`，见「[图层总览](./layer/index.md)」）                                                                                                                                                           | `boolean`                             | `false`           | -                                  |
 | enableDragging         | 启用地图拖拽                                                                                                                                                                   | `boolean`                             | `true`            | -                                  |
 | enableInertialDragging | 启用地图惯性拖拽                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableScrollWheelZoom  | 允许地图可被鼠标滚轮缩放                                                                                                                                                       | `boolean`                             | `false`           | -                                  |
+| enableWheelZoom        | 允许地图可被鼠标滚轮缩放（官方 `MapOptions.enableWheelZoom`；官方默认 `true`，本库默认 `false` 是**有意**的——见下方注）                                                                    | `boolean`                             | `false`           | -                                  |
 | enableContinuousZoom   | 开启双击平滑缩放效果                                                                                                                                                           | `boolean`                             | `true`            | -                                  |
-| enableResizeOnCenter   | 开启图区 resize 中心点不变                                                                                                                                                     | `boolean`                             | `true`            | -                                  |
-| enableDoubleClickZoom  | 启用地图双击缩放，左键双击放大、右键双击缩小                                                                                                                                   | `boolean`                             | `false`           | -                                  |
+| fixCenterWhenResize    | 容器尺寸变化时保持地图中心点不变（官方 `MapOptions.fixCenterWhenResize`）                                                                                                       | `boolean`                             | `true`            | -                                  |
+| enableDblclickZoom     | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`）                                                                          | `boolean`                             | `false`           | -                                  |
 | enableKeyboard         | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean`                             | `true`            | -                                  |
-| enablePinchToZoom      | 启用双指缩放地图                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
+| enablePinchZoom        | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`）                                                                                                                            | `boolean`                             | `true`            | -                                  |
 | enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
 | loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
+
+::: tip 四个交互 prop 的名字为什么和官方「实例方法」不一样
+官方对**同一个概念给了两个名字**，这是上游事实而不是笔误：
+
+| 概念         | 官方**构造期**键（`MapOptions`） | 官方**实例方法**（`BMap.Map`）  |
+| ------------ | -------------------------------- | ------------------------------ |
+| 滚轮 / 触摸板缩放 | `enableWheelZoom`                 | `enableScrollWheelZoom()`      |
+| 双击缩放     | `enableDblclickZoom`             | `enableDoubleClickZoom()`      |
+| 手势缩放     | `enablePinchZoom`                | `enablePinchToZoom()`          |
+| resize 保持中心 | `fixCenterWhenResize`           | `enableResizeOnCenter()`       |
+
+`<Map>` 的这些 prop 表达的是**构造期**语义，因此取左列。#165 之前本库用的是右列那组
+**方法名**当 prop 名（`enableResizeOnCenter` 那一项还额外叠了一层 v2 沿用名），
+现已统一到官方的构造期拼写。**落地机制不变**：仍然是建图后按右列的实例方法落一次
+（`driver/jsapi-v4/map.ts` 的 `INTERACTION_METHODS`），不改成构造选项。
+:::
+
+::: warning `enableWheelZoom` 的默认值与官方不同
+官方 `MapOptions.enableWheelZoom` 隐式默认是 **`true`**，本库默认**关闭**，并把这个
+`false` **显式写进**构造 options 固定住（`driver/jsapi-v4/map.ts` 的 `LIBRARY_MAP_DEFAULTS`）——
+否则「同一个组件换引擎后行为会变」。这是**有意**的决策（避免页面滚动时误缩放），
+**不是**本次改名的一部分：改的只是 prop 名，语义与默认值都不动。
+:::
 
 ## 容器尺寸、自动重设与可见性策略
 
@@ -488,14 +511,32 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 
 ## 地图类型
 
-| 值                 | 描述         |
-| ------------------ | ------------ |
-| BMAP_NORMAL_MAP    | 标准地图     |
-| BMAP_EARTH_MAP     | 地球模式     |
-| BMAP_SATELLITE_MAP | 普通卫星地图 |
+`mapType` 接受官方 `BMap.MapTypeId` 的**五个**内置常量名（取值域在类型层是封闭联合，
+拼错的名字编译期就会被拒）。逐条依据见 `@baidumap/jsapi-v4-types@4.0.5` 的
+`map-type/MapTypeId.d.ts`。
+
+| 值                  | 描述               | 运行期                |
+| ------------------- | ------------------ | --------------------- |
+| BMAP_NORMAL_MAP     | 标准地图           | ✅                    |
+| BMAP_SATELLITE_MAP  | 普通卫星地图       | ✅                    |
+| BMAP_HYBRID_MAP     | 卫星与路网混合地图 | ✅                    |
+| BMAP_EARTH_MAP      | 地球模式           | ✅                    |
+| BMAP_NONE_MAP       | 无底图模式         | ⚠️ 显式失败（见下）    |
 
 ::: warning 注意
 地球模式 (BMAP_EARTH_MAP) 下能支持的地图交互操作有限，如您需要卫星地图支持和标准地图 (BMAP_NORMAL_MAP) 一致的交互体验，请使用普通卫星图模式 (BMAP_SATELLITE_MAP)
+:::
+
+::: danger BMAP_NONE_MAP 显式失败
+`BMAP_NONE_MAP`（无底图模式）在官方类型包里**声明**了，但真实 4.0 运行时的
+`BMap.MapTypeId` 上**没有**对应常量——与「`BMAP_*` 那组常量挂在全局而不是 `MapTypeId` 上」
+是同一类上游出入。本库**不猜**「无底图」该画成什么，因此传它会**显式报错**，
+而不是静默画成普通图。
+
+同一条口径也适用于拼错的常量名：TypeScript 消费方编译期就被拒；JS 消费方 / `as` 断言绕过
+类型层时会拿到 `BMAP_INVALID_ARGUMENT`——**显式失败，绝不静默降级**。#165 之前
+`BMAP_HYBRID_MAP` 会被静默降级成普通图（要混合图拿到普通图且无任何提示），那是已修掉的
+静默错值 bug。
 :::
 
 ## displayOptions

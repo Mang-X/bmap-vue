@@ -420,7 +420,7 @@ export declare type MapInteraction = "dragging" | "scroll-zoom" | "inertial-drag
 export declare type MapStyleInput = {
     styleId: string;
 } | Record<string, unknown>;
-declare type MapType_2 = "normal" | "satellite" | "earth";
+declare type MapType_2 = "normal" | "satellite" | "hybrid" | "earth";
 export { MapType_2 as MapType };
 export declare function mapVglPlugin(): BMapPluginDefinition<unknown>;
 export declare interface MapView {
