@@ -489,7 +489,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // 显式可选的 `markers` 引擎（网格聚合 + Marker）」，而**不是**「原生缺失时的 fallback」——
   // issue #35 的实测（`scripts/probe-native-point-cluster.mts`）证明原生可用，因此自动降级不成立；
   // `markers` 的增量是「簇内业务项」（官方没有公开的读回入口）。`runtimeOnly: true` 是因为
-  // `ClusterLayer` 没有类声明、可视化实现按需异步注入（存在性只能在调用时刻判断）。
+  // `ClusterLayer` 属可视化扩展 API：实现按需异步注入，**存在性只能在调用时刻判断**
+  // （4.0.5 给它补了类声明，但「类型里有形状」≠「运行时已加载」，因此 `runtimeOnly`
+  // 说的是注入时机，不是类型包有没有声明）。
   "layer.cluster": {
     id: "layer.cluster",
     family: "layer",
@@ -500,9 +502,10 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: true,
   },
   // M3A2-SERVICES-NATIVE（#23）补齐原生数据图层里缺少的三个能力槽位。
-  // 三者都是「4.0 运行时公开、4.0.4 类型包没有类声明」的扩展 API：`runtimeOnly: true`
-  // 表达「存在性只能在运行时按结构探测」，`experimental` 表达「接口面可能变」（官方把这
-  // 几个类归在「扩展 API」下，且可视化实现是**异步注入**的）。
+  // 三者都是官方归在「扩展 API」下的可视化图层，实现**异步注入**：`runtimeOnly: true` 表达
+  // 「存在性只能在运行时判断」，`experimental` 表达「接口面可能变」。
+  // 4.0.5（`5ba67f4`）已为它们补上类声明，因此 `rawMembers` 现在有官方出处；`runtimeOnly`
+  // 依然成立——它说的是**注入时机**，与类型包是否声明无关。
   "layer.point": {
     id: "layer.point",
     family: "layer",

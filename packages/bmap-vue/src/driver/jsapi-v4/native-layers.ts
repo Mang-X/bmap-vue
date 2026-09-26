@@ -4,18 +4,19 @@
  * 八个原生数据图层的**底层接口**：数据（`setData` / `clearData`）、样式、要素状态、
  * 显隐与层级、拾取，以及挂载记账。Vue 组件与数据适配层由 M6（#35 / #36）在它之上实现。
  *
- * 行为依据（官方 4.0 专页 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 专页 + `@baidumap/jsapi-v4-types@4.0.5`，git `5ba67f4`）：
  *
  * - **四类「专页」批量图层**（`PointIconLayer` / `PointShapeLayer` / `LineLayer` / `FillLayer`）
- *   在 4.0.4 有类声明，且共享同一套方法面：`setData`/`getData`、`updateState`/`removeState`/
+ *   在 4.0.5 有类声明，且共享同一套方法面：`setData`/`getData`、`updateState`/`removeState`/
  *   `clearState`/`replaceAllState`/`getAllState`、`setStyleOptions`（改完要 `doOnceDraw()`）、
  *   `setVisible`、`setOpacity`、`setZIndex`（及 `setMinZoom`/`setMaxZoom`）、`setBaseOptions`
  *   （`enablePicked` 在这里合并）、`getPickedItem`。它们的构造选项里 `enablePicked` 默认 false，
  *   因此**拾取是显式开关**。
  *   ⚠️ **这一族没有 `clearData`**（#106 评审修正，依据见 `DECLARED_LAYER_OPERATIONS` 的注释）：
  *   「清空数据」由实例生命周期表达，不靠一个不存在的入口。
- * - **四个扩展 API**（`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`）在 4.0 运行时
- *   公开但**没有类声明**，且官方明确「首次加载时可视化实现是异步注入的」。因此：
+ * - **四个扩展 API**（`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`）4.0.5 起**有了
+ *   类声明**（4.0.4 时没有），但官方明确「首次加载时可视化实现是异步注入的」——类型包里有
+ *   形状不代表运行时已加载。因此：
  *   构造器按结构探测，且**在 `create()` 调用时刻判断**——不在 Driver 构造期冻结结论，
  *   注入完成后重新 `create()` 就能成功（issue 风险条目「加载后就绪」）。它们各自只公开
  *   自己那几个方法（`setOptions` / `setEnablePicked` / `hitTest` / `redraw` / 播放控制…），
@@ -67,7 +68,7 @@ import type { JsapiV4HandleRegistry } from "./registry";
  *
  * ⚠️ **没有 `clearData`**（#106 评审修正）。两条一手来源都指向「这一族没有公开的清空入口」：
  *
- * - 上游声明 `@baidumap/jsapi-v4-types@4.0.4` 的 `PointIconLayer` / `PointShapeLayer` /
+ * - 上游声明 `@baidumap/jsapi-v4-types@4.0.5` 的 `PointIconLayer` / `PointShapeLayer` /
  *   `LineLayer` / `FillLayer` **只有** `setData(data)` 与 `getData()`（只有 `GeoJSONLayer` 有
  *   `clearData()`、`DOMLayer` 有 `removeAllOverlays()`）；
  * - 仓库内的官方参考 `.agents/skills/bmap-jsapi-v4/references/visualization-layers.md` 把这一族的
@@ -110,8 +111,22 @@ type DispatchedOperation = Exclude<
 interface NativeLayerDescriptor {
   /** 4.0 构造器名（文件末尾的断言把 `declared: true` 的那些钉在官方 `BMap` 命名空间上）。 */
   ctor: string;
-  /** `@baidumap/jsapi-v4-types@4.0.4` 是否声明了该类（决定「用哪个构造入口」与「支持面」）。 */
+  /**
+   * `@baidumap/jsapi-v4-types` 是否声明了该类（决定「用哪个构造入口」与「缺成员」时的错误码）。
+   *
+   * 4.0.5（`5ba67f4`）给 `PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine` 补上了类声明，
+   * 因此这四类从「运行时扩展 API」升为 `true`——**只有 `setStyleOptions` 那几个仍为 `false`**，
+   * 因为 4.0.5 声明的样式入口是 `setOptions`。「类被声明」与「用哪个成员改样式」因此是两个
+   * 独立判断，把它们绑在一起会让一次单纯的上游声明升级把已在跑的调用打偏。
+   */
   declared: boolean;
+  /**
+   * `setStyle` 落到哪个成员：`setStyleOptions`（merge + 需显式 `doOnceDraw()`）还是 `setOptions`
+   * （整袋替换）。**逐 kind 记录**，因为 4.0.5 里两类并存：老专页图层
+   * （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）声明 `setStyleOptions`，
+   * 新 `visualization/` 图层声明 `setOptions`。
+   */
+  styleMember: "setStyleOptions" | "setOptions";
   /** 该 kind 真正有的归一化操作。 */
   operations: readonly NativeLayerOperation[];
 }
@@ -123,19 +138,47 @@ interface NativeLayerDescriptor {
  * 字段级 setter 族（`setVisible` / `setOpacity` / 状态 API 都是声明成员）、以及
  * 「缺成员」时的错误码（`BMAP_SDK_CALL_FAILED` vs `BMAP_CAPABILITY_UNSUPPORTED`）。
  */
+
+/**
+ * 运行时注入的图层构造器名单。
+ *
+ * 与 `declared` **正交**：4.0.5 给 `PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`
+ * 补上了类声明（`declared: true`），但它们在真实运行时仍要等扩展 API 注入才能用。名字对
+ * 声明、但「没注入就当普通成员缺失」会报出 `BMAP_SDK_CALL_FAILED`，而正确结论是
+ * `BMAP_CAPABILITY_UNSUPPORTED`（能力不可用，注入后可创建）——两者对调用方的处置完全不同。
+ */
+const RUNTIME_INJECTED_LAYER_CTORS: ReadonlySet<string> = new Set([
+  "PointLayer",
+  "ClusterLayer",
+  "Heatmap",
+  "TrackLine",
+]);
+
 const NATIVE_LAYER_DESCRIPTORS = {
   "point-icon": {
     ctor: "PointIconLayer",
     declared: true,
+    styleMember: "setStyleOptions",
     operations: DECLARED_LAYER_OPERATIONS,
   },
   "point-shape": {
     ctor: "PointShapeLayer",
     declared: true,
+    styleMember: "setStyleOptions",
     operations: DECLARED_LAYER_OPERATIONS,
   },
-  line: { ctor: "LineLayer", declared: true, operations: DECLARED_LAYER_OPERATIONS },
-  fill: { ctor: "FillLayer", declared: true, operations: DECLARED_LAYER_OPERATIONS },
+  line: {
+    ctor: "LineLayer",
+    declared: true,
+    styleMember: "setStyleOptions",
+    operations: DECLARED_LAYER_OPERATIONS,
+  },
+  fill: {
+    ctor: "FillLayer",
+    declared: true,
+    styleMember: "setStyleOptions",
+    operations: DECLARED_LAYER_OPERATIONS,
+  },
   // 扩展 API：官方只公开「数据 + 通用 options + 拾取」，没有状态 / 层级方法面。
   //
   // 真实 4.0 的实测（ADR 的 smoke 记录，`直接调用` 一栏）显示这四个类**从共享基类继承了**
@@ -150,21 +193,29 @@ const NATIVE_LAYER_DESCRIPTORS = {
   // `2026-09-19-native-point-layers-and-cluster`；其它继承成员仍然关闭（没有消费者，也没有取证）。
   point: {
     ctor: "PointLayer",
-    declared: false,
+    declared: true,
+    styleMember: "setOptions",
     operations: ["setData", "clearData", "setStyle", "setVisible", "setEnablePicked", "hitTest"],
   },
   cluster: {
     ctor: "ClusterLayer",
-    declared: false,
+    declared: true,
+    styleMember: "setOptions",
     operations: ["setData", "clearData", "setStyle", "setVisible"],
   },
-  heatmap: { ctor: "Heatmap", declared: false, operations: ["setData", "clearData", "setStyle"] },
+  heatmap: {
+    ctor: "Heatmap",
+    declared: true,
+    styleMember: "setOptions",
+    operations: ["setData", "clearData", "setStyle"],
+  },
   // TrackLine 播放命令面（#110）。方法名经 live 探针（`scripts/probe-track-line.mts`，
   // 2026-09-23，exit 0）取证：`typeof layer.start === "function"` 等七条全部为真。
-  // 官方类型包没有 TrackLine 类声明（`declared: false`），因此这里只登记运行时已验证的入口。
+  // 4.0.5 补上了 TrackLine 类声明，且七个操作**逐一**都在声明里（`declared: true`）。
   "track-line": {
     ctor: "TrackLine",
-    declared: false,
+    declared: true,
+    styleMember: "setOptions",
     operations: [
       "setData",
       "start",
@@ -244,7 +295,10 @@ export function createJsapiV4NativeLayerDriver(
         callRequired(raw, "clearData");
         return;
       case "setStyle":
-        if (descriptor.declared) {
+        // 走哪个成员**逐 kind** 决定（`descriptor.styleMember`），不跟 `declared` 绑：4.0.5 里
+        // 两类并存——老专页图层声明 `setStyleOptions`（merge + 需显式重绘），新 `visualization/`
+        // 图层声明 `setOptions`（整袋替换），而后者在 4.0.5 里**没有** `doOnceDraw`。
+        if (descriptor.styleMember === "setStyleOptions") {
           callRequired(raw, "setStyleOptions", payload);
           // 官方：专页图层更新样式后不会自动重绘，需要显式 doOnceDraw()
           const draw = readNamespaceMember(raw, "doOnceDraw");
@@ -288,8 +342,11 @@ export function createJsapiV4NativeLayerDriver(
         callRequired(raw, "replaceAllState", payload);
         return;
       case "setEnablePicked":
-        if (descriptor.declared) {
-          // 声明的成员里没有 setEnablePicked：官方把拾取开关放在基础配置项里
+        // 只有**老专页图层**（`setStyleOptions` 那一族）把拾取开关放在 `setBaseOptions` 里；
+        // 4.0.5 的 `PointLayer` 直接声明了 `setEnablePicked`。因此这里同样按 kind 判，不跟
+        // `declared` 绑——4.0.5 升级后 `PointLayer` 也变成 `declared`，跟着它走会调到
+        // 上游没承诺的 `setBaseOptions`。
+        if (descriptor.styleMember === "setStyleOptions") {
           callRequired(raw, "setBaseOptions", { enablePicked: payload });
           return;
         }
@@ -355,7 +412,14 @@ export function createJsapiV4NativeLayerDriver(
   };
 
   const ctorFor = (kind: NativeLayerKind, descriptor: NativeLayerDescriptor): JsapiV4Ctor => {
-    if (descriptor.declared) return namespaceCtor(namespace, descriptor.ctor);
+    // 走哪条解析**看「是不是运行时注入」，不看「类型包有没有声明」**。
+    // 4.0.5（`5ba67f4`）给这四个类补上了类声明，但它们在真实运行时仍然要等扩展 API 注入：
+    // 类型包里有声明只说明形状已知，不说明已加载。按 `declared` 判会让 4.0.5 升级把
+    // 「运行时还没注入」误报成普通成员缺失（`BMAP_SDK_CALL_FAILED`），而它其实是
+    // 能力不可用（`BMAP_CAPABILITY_UNSUPPORTED`）——两者对调用方的处置完全不同。
+    if (!RUNTIME_INJECTED_LAYER_CTORS.has(descriptor.ctor)) {
+      return namespaceCtor(namespace, descriptor.ctor);
+    }
     return requireRuntimeCtor(namespace, descriptor.ctor, (message) =>
       warnOnce(
         `${kind}:no-runtime-entry`,

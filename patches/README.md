@@ -14,47 +14,14 @@ pnpm patch-commit node_modules/.pnpm_patches/<pkg>@<version>
 
 ## 清单
 
-### `@baidumap__jsapi-v4-types@4.0.4.patch`
+### （无在用补丁）
 
-| 项 | 值 |
-| --- | --- |
-| 上游包 | `@baidumap/jsapi-v4-types@4.0.4` |
-| 上游仓库 | <https://github.com/baidu-maps/jsapi-v4-types> |
-| 修补文件 | `index.d.ts`（入口，全文 192 行均为 `/// <reference path>`） |
-| 改动 | `/// <reference path="core/displayOptions.d.ts" />` → `core/DisplayOptions.d.ts` |
-| 触发问题 | issue #50（发现于 #15 / PR #49 的 CI 首轮） |
-| 决策记录 | [`docs/adr/2026-09-13-upstream-types-case-patch.md`](../docs/adr/2026-09-13-upstream-types-case-patch.md) |
-| 门禁 | `tests/behavior/upstream-types-case-patch.test.ts`、`pnpm typecheck:package` |
+原 `@baidumap__jsapi-v4-types@4.0.4.patch`（修 `core/displayOptions.d.ts` 的大小写引用）**已删除**。
 
-**为什么需要它**：发布产物中实际文件名是 `core/DisplayOptions.d.ts`，而入口引用写成了小写。
-macOS（APFS 默认大小写不敏感）能解析到真实文件，Linux / 任何大小写敏感的卷上
-`pnpm typecheck:package`（`skipLibCheck: false`）直接失败：
+**删除依据**（即该补丁自己写明的 deletionCondition）：上游 `4.0.5`
+（`baidu-maps/jsapi-v4-types@5ba67f4dda11b0a4b54fc631278d3e39e11667c3`）自己修正了大小写，
+`index.d.ts` 现在写的是 `core/DisplayOptions.d.ts`。依赖因此从 npm 的 `4.0.4` 换成**钉住 commit**
+的 git 依赖——4.0.5 至今**未发布到 npm**（`npm view` 的 `latest` 仍是 4.0.4）。
 
-```text
-error TS6053: File '.../core/displayOptions.d.ts' not found.
-error TS2552: Cannot find name 'DisplayOptions'.   // core/Map.d.ts / core/MapOptions.d.ts
-```
-
-包内 193 个 `.d.ts`、192 条三斜线引用，按文件名大小写逐条比对**只有这一处不匹配**
-（复核脚本见门禁用例：用 `readdirSync` 的精确名字比对，不依赖平台的大小写敏感性）。
-
-**删除条件**：上游发布修正大小写的版本后 ——
-
-1. 把 `packages/bmap-vue/package.json` 的 `@baidumap/jsapi-v4-types` 升到该精确版本；
-2. 删除本补丁文件与 `pnpm-workspace.yaml` 里的 `patchedDependencies` 条目；
-3. 重跑 `pnpm install`、`pnpm typecheck:package` 与 `pnpm test:unit`
-   （`upstream-types-case-patch.test.ts` 会核对补丁已声明且已生效；删除补丁时需同步删掉该用例
-   的补丁断言，保留「无大小写不匹配引用」那条扫描断言 —— 上游修好之后它仍应通过）。
-
-这一步不会悄悄漏掉：`patchedDependencies` 的键是 `包名@精确版本`，只升级依赖而留下旧键时
-`pnpm install` 直接失败（实测 2026-09-13）：
-
-```text
-ERR_PNPM_UNUSED_PATCH  The following patches were not used: @baidumap/jsapi-v4-types@4.0.3
-help: Either remove them from "patchedDependencies" or update them to match packages in your dependencies.
-```
-
-**回滚方式**：删除补丁与 `patchedDependencies` 条目 → 恢复 `pnpm install` →
-`pnpm typecheck:package` 会重新在 Linux 上失败，此时必须同时把该 step 从
-`.github/workflows/quality.yml` 摘掉，并更新 `CONTRIBUTING.md` 与
-`docs/zh-CN/contributing/ai-development.md` 的验证口径。
+大小写回归本身由 `tests/behavior/upstream-types-reference-case.test.ts` 继续守着
+（原 `upstream-types-case-patch.test.ts` 反转成回归门禁，见该文件头）。

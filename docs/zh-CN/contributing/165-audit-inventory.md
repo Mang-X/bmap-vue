@@ -4,8 +4,28 @@
 > Provider/Map（B）、覆盖物/控件/全景组件（C）、图层/数据组件（D）、UI Kit/插件/Resolver（F）
 > **尚未审计**——不得据此认为 #165 已完成。
 
-依据：官方 `@baidumap/jsapi-v4-types@4.0.4` 声明（存在性判据的唯一事实源）+
-`@baidumap/react-bmap@2.0.6`（命名与使用心智参考）。**两者冲突时以 v4 声明为准。**
+依据：官方 `@baidumap/jsapi-v4-types@4.0.5` 声明（git `5ba67f4dda11b0a4b54fc631278d3e39e11667c3`；
+**4.0.5 至今未发布到 npm**，依赖钉的是这个 commit）+ `@baidumap/react-bmap@2.0.6`
+（命名与使用心智参考）。**两者冲突时以 v4 声明为准。**
+
+## 4.0.5 相对 4.0.4 的变化（2026-09-24，commit `5ba67f4`）
+
+| 变化 | 对本票的影响 |
+| --- | --- |
+| 新增 `visualization/` 命名空间，**13 个类**（`PointLayer` / `PolylineLayer` / `PolygonLayer` / `TextLayer` / `BarLayer` / `Heatmap` / `FlyLineLayer` / `ClusterLayer` / `TrackLine` / `WebGLCustomLayer` / `ThreejsLayer` / `DeckglLayer` / `GeoJSONSource`），并被 `Map#addLayer` / `removeLayer` 接受 | **不在本票**——这是新增产品功能（#165 §2.3「新增产品功能」须单独明确纳入或延期），已另开子票 |
+| `FillLayer` / `LineLayer` / `PointIconLayer` / `PointShapeLayer` 全部标记 `@deprecated`，建议改用 `visualization/` 的 `PolygonLayer` / `PolylineLayer` / `PointLayer` | **本票范围内**：本库已封装的 4 个图层，其官方对应项**已被官方弃用**。现有封装保留（不制造破坏），但要在文档与对齐表里登记 |
+| `PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine` 补上了**类声明**（4.0.4 没有） | 本库这 4 个 kind 的 `declared` 由 `false` 升 `true`；⚠️ 见下方「三类判断必须分开」 |
+| 路线服务 `setPolylineStyle` 的参数类型由**从未声明**的 `RoutePolylineStyle` 改为 `PolylineOptions` | 原「上游缺陷、不猜」的裁决**可以撤掉**：类型现在真实存在 |
+| `index.d.ts` 的 `core/displayOptions.d.ts` 引用大小写已修正 | 上游自己修好了 ⇒ `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 及其 deletionCondition 达成，**补丁删除**；大小写回归改由 `upstream-types-reference-case.test.ts` 守着 |
+
+### ⚠️ 「类是否声明」与「是不是运行时注入」是两个维度
+
+4.0.5 之后 `PointLayer` 等既有类声明、**又是**运行时异步注入的成员。把它当成两回事会让两处
+真实行为退化：样式更新打到上游没承诺的 `setStyleOptions`、拾取开关打到 `setBaseOptions`、
+以及「运行时未注入」被误报成普通成员缺失（`BMAP_SDK_CALL_FAILED` 而非
+`BMAP_CAPABILITY_UNSUPPORTED`）。因此 Driver 里的 `declared`、`styleMember` 与
+`RUNTIME_INJECTED_LAYER_CTORS` 三者**各判各的**，不再由一个 `declared` 一把带过。
+
 
 ## 已确认的 DEFECT（类型/行为与官方不符，优先于「缺口」处理）
 

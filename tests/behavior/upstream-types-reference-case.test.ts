@@ -1,5 +1,5 @@
 /**
- * 上游类型包大小写引用补丁门禁（M3A0-BOUNDARY 衍生 / issue #50）
+ * 上游类型包三斜线引用的大小写回归门禁（issue #50 的**长期**形态）
  *
  * 背景：`@baidumap/jsapi-v4-types@4.0.4` 的 `index.d.ts` 用 `core/displayOptions.d.ts`
  * 引用了一个发布产物中实际名为 `core/DisplayOptions.d.ts` 的文件。macOS（APFS 默认
@@ -10,8 +10,14 @@
  * error TS2552: Cannot find name 'DisplayOptions'.   // core/Map.d.ts / core/MapOptions.d.ts
  * ```
  *
- * 本仓库的处置是 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`（上游产物的最小修补）。
- * 本文件把「补丁已生效」变成可执行断言。
+ * 当时的处置是 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`（上游产物的最小修补）。
+ * **上游在 4.0.5（`baidu-maps/jsapi-v4-types@5ba67f4`）自己修正了大小写**，因此按补丁自己
+ * 写明的 deletionCondition：删除补丁、删除 `patchedDependencies` 条目，并把依赖从 npm 的
+ * `4.0.4` 换到**钉住 commit** 的 git 依赖（4.0.5 至今**未发布到 npm**，`npm view` 的
+ * `latest` 仍是 4.0.4，所以只能从 git 取）。
+ *
+ * 门禁**没有跟着删掉，而是反转成回归断言**：缺陷的本体是「上游声明内部的自引用大小写
+ * 不一致」，它与用不用补丁无关——换依赖、重新 vendored 之后仍然要成立。
  *
  * 判定方式与平台无关：三斜线引用用 TypeScript 自己的 `preProcessFile` 解析（引号、属性
  * 顺序、空格都不影响），目标路径用「递归枚举出的真实相对路径集合」做**精确大小写**比对。
@@ -20,12 +26,10 @@
  * 一变就静默放行（门禁空转）。
  *
  * @upstream @baidumap/jsapi-v4-types
- * @upstreamVersion 4.0.4
+ * @upstreamVersion 4.0.5 (git 5ba67f4dda11b0a4b54fc631278d3e39e11667c3)
  * @runtimeBasis 纯 .d.ts 包，缺陷只在 `skipLibCheck: false` 的类型解析阶段暴露
- * @deletionCondition 上游发布修正大小写的版本后：升级 `@baidumap/jsapi-v4-types`
- *   （精确版本）→ 删除 `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 与
- *   `pnpm-workspace.yaml` 的 `patchedDependencies` 条目 → 同步删除本用例的补丁断言
- *   （上游已修复时「大小写不匹配」扫描用例仍然应当通过）→ 重跑 `pnpm typecheck:package`。
+ * @deletionCondition 上游把这个检查移交给自己的 CI（我们改为跟随其 commit 钉依赖）；
+ *   本用例的断言届时若恒真再删——在那之前它是唯一一处能在 Linux 上把大小写回归挡住的地方。
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
@@ -40,7 +44,6 @@ const libManifest = JSON.parse(readFileSync(LIB_PACKAGE_JSON, "utf8")) as {
   devDependencies?: Record<string, string>;
 };
 const pinnedVersion = libManifest.devDependencies?.["@baidumap/jsapi-v4-types"];
-const PATCH_FILE = resolve(REPO_ROOT, `patches/@baidumap__jsapi-v4-types@${pinnedVersion}.patch`);
 
 /**
  * 定位**类型检查实际解析到的那份**上游类型包：优先包级 `node_modules`
@@ -95,13 +98,50 @@ function scanReferences(): { mismatches: string[]; scanned: number } {
 }
 
 describe("上游类型包大小写引用补丁（issue #50）", () => {
-  it("依赖以精确版本锁定（补丁按版本生效的前提）", () => {
-    expect(pinnedVersion, "packages/bmap-vue/package.json 应精确锁定版本").toMatch(
-      /^\d+\.\d+\.\d+$/,
-    );
+  it("依赖钉死到具体来源（npm 精确版本或 git commit，二者必居其一）", () => {
+    expect(pinnedVersion, "packages/bmap-vue/package.json 应锁定上游类型包").toBeTruthy();
+    const installedVersion = (
+      JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as { version: string }
+    ).version;
+
+    // 上游 4.0.5 未发布到 npm，因此现在走 git；仍接受 npm 精确版本，便于上游补发后切回。
+    if (/^github:baidu-maps\/jsapi-v4-types#[0-9a-f]{40}$/.test(pinnedVersion!)) {
+      // git 路径断言的是「装到磁盘上的就是那个 commit 的产物」——版本号可能仍是 4.0.4，
+      // 真正的区分是**产物内容**（4.0.5 才有 `visualization/`），由下面那条用例把关。
+      expect(installedVersion, "git 依赖应已安装").toBeTruthy();
+    } else {
+      expect(
+        pinnedVersion,
+        "npm 依赖应精确锁定版本（不允许 ^ / ~ 等范围）",
+      ).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(installedVersion, "安装到磁盘的版本必须与 package.json 的锁定一致").toBe(
+        pinnedVersion,
+      );
+    }
+  });
+
+  it("装到磁盘的是 4.0.5 产物（含 4.0.5 才有的 visualization/ 命名空间）", () => {
+    // 版本号本身不足以区分 4.0.4 / 4.0.5（npm 上的 4.0.4 与 git 上的 4.0.5 版本号不同，但
+    // 依赖声明指向 git 时不能靠版本号判断装对了没有）。用 4.0.5 **独有**的产物做证据。
     expect(
-      JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")).version,
-    ).toBe(pinnedVersion);
+      existsSync(join(packageDir, "visualization", "PointLayer.d.ts")),
+      [
+        "安装到的上游类型包没有 visualization/ ——这不是 4.0.5 产物。",
+        "确认 package.json 的 git 依赖与 pnpm-lock 一致，并重跑 `pnpm install`。",
+      ].join("\n"),
+    ).toBe(true);
+  });
+
+  it("仓库里不再残留已删除补丁的引用（4.0.5 已修好大小写）", () => {
+    const workspace = readFileSync(WORKSPACE_YAML, "utf8");
+    expect(
+      workspace,
+      [
+        "pnpm-workspace.yaml 仍声明 patchedDependencies：4.0.5 起上游自己修好了大小写，",
+        "按 patches/@baidumap__jsapi-v4-types@4.0.4.patch 自带的 deletionCondition，",
+        "补丁与该条目都应删除（补丁留着会在 pnpm install 时失配）。",
+      ].join("\n"),
+    ).not.toContain("jsapi-v4-types");
   });
 
   it("已安装的上游声明文件不存在大小写不匹配的三斜线引用", () => {
@@ -116,46 +156,9 @@ describe("上游类型包大小写引用补丁（issue #50）", () => {
         "上游类型包存在大小写不匹配的三斜线引用，Linux 上 `pnpm typecheck:package` 会失败：",
         ...mismatches.map((m) => `  - ${m}`),
         "",
-        `补丁文件：${relative(REPO_ROOT, PATCH_FILE)}`,
-        "若 pnpm 没有应用补丁，重跑 `pnpm install`；",
-        "若上游已修复大小写，请按 deletionCondition 删除补丁与下面那条用例。",
+        "重新 `pnpm install` 后仍不匹配，说明解析到的不是钉住的上游产物——",
+        "检查 package.json 的 git 依赖与 pnpm-lock 是否同步。",
       ].join("\n"),
     ).toEqual([]);
-  });
-
-  it("补丁已声明且内容针对同一处缺陷", () => {
-    expect(
-      existsSync(PATCH_FILE),
-      [
-        `补丁文件缺失：${relative(REPO_ROOT, PATCH_FILE)}`,
-        "若 pnpm 没有应用补丁，重跑 `pnpm install`；",
-        "若上游已发布修正大小写的版本并据此删除了补丁，请同步删除本条用例。",
-      ].join("\n"),
-    ).toBe(true);
-
-    // 补丁键 = `包名@精确版本`：键必须与 package.json 的锁定版本一致，否则
-    // pnpm install 会以 ERR_PNPM_UNUSED_PATCH 失败（见 patches/README.md，2026-09-13 实测）。
-    // pnpm 会把键写成 `'pkg@version': patches/...`，比对前先去掉引号。
-    const workspacePlain = readFileSync(WORKSPACE_YAML, "utf8").replace(/['"]/g, "");
-    expect(workspacePlain, "pnpm-workspace.yaml 应声明 patchedDependencies").toContain(
-      "patchedDependencies:",
-    );
-    expect(workspacePlain).toContain(
-      `@baidumap/jsapi-v4-types@${pinnedVersion}: patches/`,
-    );
-
-    const patch = readFileSync(PATCH_FILE, "utf8");
-    expect(patch).toContain('-/// <reference path="core/displayOptions.d.ts" />');
-    expect(patch).toContain('+/// <reference path="core/DisplayOptions.d.ts" />');
-  });
-
-  it("补丁文件在任何平台都按 LF 检出（CRLF 会让 `pnpm patch` 失配）", () => {
-    // Windows 上 core.autocrlf=true 会把文本文件按 CRLF 检出，.patch 的上下文行带上 \r 后应用会
-    // 失配（2026-09-13 实测：不加这行时 .patch 首行为 `b'diff --git a/x b/x\r'`）。用 .gitattributes
-    // 把补丁钉成 LF，这条断言防止它被悄悄删掉。
-    const attributes = readFileSync(resolve(REPO_ROOT, ".gitattributes"), "utf8");
-    expect(attributes, ".gitattributes 应把 patches/*.patch 固定为 LF 检出").toMatch(
-      /^patches\/\*\.patch\s+text\s+eol=lf\s*$/m,
-    );
   });
 });

@@ -155,8 +155,8 @@ export function requireRuntimeCtor(
   const ctor = readNamespaceMember(namespace, name);
   if (typeof ctor === "function") return ctor as JsapiV4Ctor;
   onMissing(
-    `当前 SDK 运行时没有提供 ${name}（@baidumap/jsapi-v4-types@4.0.4 也没有它的类声明），` +
-      "该能力无法创建",
+    `当前 SDK 运行时没有提供 ${name}（该构造器属于运行时注入的扩展 API 成员，` +
+      "类型包里有类声明也不代表它已加载），该能力无法创建",
   );
   throw new BMapError(
     "BMAP_CAPABILITY_UNSUPPORTED",
