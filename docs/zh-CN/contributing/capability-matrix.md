@@ -5,13 +5,13 @@
 > 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**61**
+能力总数：**63**
 
 ## 状态说明
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 45 |
+| `native` | SDK 原生能力，直接映射官方 API | 47 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 1 |
 | `experimental` | 实验性能力，API 可能变更或移除 | 13 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
@@ -20,7 +20,7 @@
 
 | 家族 | 能力数 |
 | --- | --- |
-| `map` | 12 |
+| `map` | 14 |
 | `overlay` | 15 |
 | `layer` | 19 |
 | `service` | 12 |
@@ -38,10 +38,12 @@
 | map | `map.zoom` | native | ✓ | getZoom, setZoom | 缩放级别读写（getZoom / setZoom） |
 | map | `map.center-and-zoom` | native | ✓ | centerAndZoom | 一次调用同时设置中心与缩放（centerAndZoom） |
 | map | `map.bounds` | native | ✓ | getBounds, setBounds | 可视范围读写（getBounds / setBounds） |
-| map | `map.viewport` | native | ✓ | setViewport | 视口写入（setViewport）；官方另有 getViewport，本库**没有**对应命令面 |
+| map | `map.viewport` | native | ✓ | getViewport, setViewport | 视口读写（getViewport 只读最佳视野 / setViewport 施加视野） |
 | map | `map.heading` | native | ✓ | setHeading | 地图旋转角（setHeading） |
 | map | `map.tilt` | native | ✓ | setTilt | 地图倾斜角（setTilt） |
 | map | `map.animate` | native | ✓ | startViewAnimation, cancelViewAnimation | 视角关键帧动画（startViewAnimation / cancelViewAnimation） |
+| map | `map.fly-to` | native | ✓ | flyTo | 平滑飞行到目标中心与级别（flyTo） |
+| map | `map.screenshot` | native | ✓ | getScreenshot | 取当前画布截图（getScreenshot；官方限制：地球模式不支持，且需建图时带 preserveDrawingBuffer: true） |
 | map | `map.check-resize` | native | ✓ | checkResize | 容器尺寸变化后重算视图（checkResize） |
 | map | `map.pixel-conversion` | native | ✓ | pointToPixel, pixelToPoint | 经纬度与像素互转（pointToPixel / pixelToPoint） |
 | map | `map.style` | native | ✓ | setMapStyle | 个性化地图样式（setMapStyle） |

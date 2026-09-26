@@ -120,6 +120,11 @@ export type {
   InitialMapOptions,
   MapView,
   MapDriver,
+  // #165：`MapDriver.getViewport` 的返回类型与 `MapDriver.flyTo` 的选项投影出现在本出口
+  // 公开的 `MapDriver` 签名里 ⇒ 必须与它的兄弟类型一起可命名（ADR 2026-09-25 §5 的零容忍：
+  // 未导出类型要么导出、要么消掉，不留「反正用不上」的欠账）
+  Viewport,
+  FlyToOptions,
 } from "./driver/types/map";
 export type {
   OverlayKind,

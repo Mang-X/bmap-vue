@@ -34,12 +34,12 @@ const BOUNDS = { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, 
  * `PathShapeProps` 一次覆盖图形六件套（Polyline / Polygon / Rectangle / Circle /
  * BezierCurve + 内联的 Prism / GroundOverlay），`LabelProps` / `MarkerProps` 各自早就有。
  */
-const _polyline: PolylineProps = { path: PATH, zIndex: 1 };
-const _polygon: PolygonProps = { path: PATH, zIndex: 1 };
+const _polyline: PolylineProps = { points: PATH, zIndex: 1 };
+const _polygon: PolygonProps = { points: PATH, zIndex: 1 };
 const _rectangle: RectangleProps = { bounds: BOUNDS, zIndex: 1 };
 const _circle: CircleProps = { center: P, radius: 100, zIndex: 1 };
-const _bezier: BezierCurveProps = { path: PATH, controlPoints: [[P]], zIndex: 1 };
-const _prism: PrismProps = { path: PATH, altitude: 100, zIndex: 1 };
+const _bezier: BezierCurveProps = { points: PATH, controlPoints: [[P]], zIndex: 1 };
+const _prism: PrismProps = { points: PATH, altitude: 100, zIndex: 1 };
 const _ground: GroundOverlayProps = { type: "image", url: "a.png", bounds: BOUNDS, zIndex: 1 };
 const _marker: MarkerProps = { position: P, zIndex: 1 };
 const _label: LabelProps = { content: "x", position: P, zIndex: 1 };

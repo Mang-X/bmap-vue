@@ -9,10 +9,11 @@
  * - 投影：`pointToPixel` / `pixelToPoint`（不传 options 时按当前地图状态换算）；
  * - 资源释放：`destroy()` —— 清空 Map 自身监听器，但管不到子对象。
  *
- * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` / `setBounds`
- * 属后者：
- * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位）。其余官方成员等真正有
- * Facet 或组件需要时再补，避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
+ * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` /
+ * `setViewport` / `setBounds` / `flyTo` / `getScreenshot` 属后两类：
+ * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位，`map.fly-to` 与
+ * `map.screenshot` 各自探测一个成员）。其余官方成员等真正有 Facet 或组件需要时再补，
+ * 避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
  * 的形状整体给出（不是按类型声明，见其定义处的说明）。
  *
  * 与 `fake-bmapgl` 一致，**刻意不复刻** SDK 的数值归一化（heading 归一、tilt 截断）：
@@ -100,6 +101,24 @@ export class FakeV4Map extends FakeV4EventTarget {
   canceledAnimation: unknown = null
   /** `centerAndZoom` / `setHeading` / `setTilt` 最近一次传入的 options。 */
   lastViewOptions: Record<string, unknown> | null = null
+  /** `getViewport` / `setViewport` 最近一次传入的 `view`（点数组或 `Bounds` 实例）。 */
+  lastViewportView: unknown = null
+  /** 视口类调用最近一次传入的 options（未传时为 `null`）。 */
+  lastViewportOptions: unknown = null
+  /** `flyTo` 最近一次传入的 raw Point。 */
+  lastFlyToPoint: FakeV4Point | null = null
+  /** `flyTo` 最近一次传入的 zoom。 */
+  lastFlyToZoom: number | null = null
+  /** `flyTo` 最近一次传入的 options（没传时为 `null`）。 */
+  lastFlyToOptions: unknown = null
+  /**
+   * `getScreenshot()` 的返回值（官方返回的是数据 URL 字符串）。
+   *
+   * ⚠️ 官方要求建图时带 `preserveDrawingBuffer: true`，否则是全黑图。本替身**不**复刻
+   * 那条黑屏行为（它是 WebGL 画布的实现细节，且无头环境没有真实画布）——测试要覆盖的是
+   * 「Driver 把 SDK 返回的字符串原样交给业务」与「非字符串时报错」，不是黑屏本身。
+   */
+  readonly screenshotDataUrl = 'data:image/png;base64,ZmFrZS12NC1zY3JlZW5zaG90'
   resizeCalls = 0
   destroyed = false
   /** `load` 是否已经派发过（官方只在首次 `centerAndZoom` 后派发一次）。 */
@@ -683,6 +702,8 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   setViewport(view: FakeV4Point[] | FakeV4Point | { center?: FakeV4Point; zoom?: number }, options?: unknown): void {
     this.callLog.push('setViewport')
+    this.lastViewportView = view
+    this.lastViewportOptions = options ?? null
     void options
     if (Array.isArray(view) && view.length > 0) {
       const lngs = view.map((point) => point.lng)
@@ -699,8 +720,13 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (typeof viewport.zoom === 'number') this.zoom = viewport.zoom
   }
 
-  getViewport(view: FakeV4Point[] | FakeV4Bounds): { center: FakeV4Point; zoom: number } {
+  getViewport(
+    view: FakeV4Point[] | FakeV4Bounds,
+    options?: unknown,
+  ): { center: FakeV4Point; zoom: number } {
     this.callLog.push('getViewport')
+    this.lastViewportView = view
+    this.lastViewportOptions = options ?? null
     if (Array.isArray(view) && view.length > 0) {
       const lngs = view.map((point) => point.lng)
       const lats = view.map((point) => point.lat)
@@ -714,6 +740,31 @@ export class FakeV4Map extends FakeV4EventTarget {
     }
     const bounds = view as FakeV4Bounds
     return { center: bounds.getCenter() ?? new FakeV4Point(0, 0), zoom: 12 }
+  }
+
+  /**
+   * 官方 `Map#flyTo(center, zoom, options?)`。
+   *
+   * **刻意不与 `panTo` 合并**：两者是官方两个不同成员（飞行带动画、`panTo` 是瞬移），
+   * Capability Catalog 早期把 `panTo` 当作 `map.fly-to` 的探测依据，正是这条区分的反例。
+   * 替身同样**不**建模飞行动画（时长 / 插值）——那属于真实渲染行为，由浏览器 smoke 覆盖。
+   */
+  flyTo(center: FakeV4Point, zoom?: number, options?: Record<string, unknown>): void {
+    this.callLog.push('flyTo')
+    this.lastFlyToPoint = center
+    this.lastFlyToZoom = zoom ?? null
+    // Driver 只传官方声明的成员；没传 options 时递的是 `undefined` 而**不是** `{}`，
+    // 所以这里能分辨「没给」与「给了内容」
+    this.lastFlyToOptions = options ?? null
+    this.center = center
+    if (typeof zoom === 'number') this.zoom = zoom
+    if (options) this.lastViewOptions = options
+  }
+
+  /** 官方 `Map#getScreenshot()`：返回当前画布截图的数据 URL 字符串。 */
+  getScreenshot(): string {
+    this.callLog.push('getScreenshot')
+    return this.screenshotDataUrl
   }
 
   panTo(point: FakeV4Point, options?: Record<string, unknown>): void {

@@ -220,33 +220,69 @@ describe("Capability override / supports / require / unsupported 策略", () => 
   });
 });
 
-describe("#165 Class 5：目录不再承诺本库没有的能力", () => {
+/**
+ * #165 回填：三条目录条目恢复为**如实状态**。
+ *
+ * 此前这一组断言的是相反的事实（`map.screenshot` / `map.fly-to` 整条不存在、
+ * `map.viewport` 只探测 `setViewport`），依据是「`MapDriver` 没实现 ⇒ 能力不存在」。
+ * live AK 探针（`scripts/probe-runtime-members.mts`，读数见
+ * `docs/zh-CN/contributing/165-runtime-verification.md` 结论四）证明那三个官方成员
+ * **运行时全部在位**——被删的是**实现缺口**，不是上游缺口。#165 §3.3「不得无理由裁剪能力」
+ * 要求的处置是补实现，因此 `MapDriver` 现在有 `getViewport` / `flyTo` / `getScreenshot`，
+ * 目录相应恢复。
+ */
+describe("#165 回填：目录如实描述官方运行时确实有的能力", () => {
   /**
    * `supports()` 是 `<Map ref>` 公开命令面的一部分，返回 `true` 就是一个**兑现得了的承诺**。
-   * 下面三条逐一钉住这个关系：`rawMembers` 里的成员必须**真的被本库调用过**。
+   * 这一组现在钉的是**两个方向**同时成立：目录收录的 `rawMembers` 真的被 Driver 调用过，
+   * 且它们在官方运行时确实存在（不是「我们希望它存在」）。
    */
-  it("map.screenshot / map.fly-to 整条移除（驱动面没有对应命令）", () => {
-    expect(CAPABILITY_CATALOG["map.screenshot" as Capability]).toBeUndefined();
-    expect(CAPABILITY_CATALOG["map.fly-to" as Capability]).toBeUndefined();
-    expect(CAPABILITY_IDS).not.toContain("map.screenshot" as Capability);
-    expect(CAPABILITY_IDS).not.toContain("map.fly-to" as Capability);
-    // 走注册表对外口径：不再是「已收录能力」，而是目录未收录
+  it("map.screenshot / map.fly-to 恢复收录，且探测的是官方成员本身", () => {
+    expect(CAPABILITY_IDS).toContain("map.screenshot");
+    expect(CAPABILITY_IDS).toContain("map.fly-to");
+    expect(CAPABILITY_CATALOG["map.screenshot"].rawMembers).toEqual(["getScreenshot"]);
+    // 关键回归：原先写的是 `panTo`——那是**另一个成员**（瞬移，无飞行动画），属于张冠李戴
+    expect(CAPABILITY_CATALOG["map.fly-to"].rawMembers).toEqual(["flyTo"]);
+    expect(CAPABILITY_CATALOG["map.fly-to"].rawMembers).not.toContain("panTo");
+  });
+
+  it("三条恢复的条目状态是 native（对官方成员的直接投影，本库没加项目语义）", () => {
+    for (const id of ["map.viewport", "map.fly-to", "map.screenshot"] as const) {
+      expect(CAPABILITY_CATALOG[id].status, `${id} 应为 native`).toBe("native");
+      // Map 原型方法只能运行时探测 ⇒ runtimeOnly
+      expect(CAPABILITY_CATALOG[id].runtimeOnly, `${id} 应标 runtimeOnly`).toBe(true);
+    }
+  });
+
+  it("走注册表对外口径：三条都从 unlisted-capability 变成「按成员探测」", () => {
+    // FULL_SDK.Map 是空类替身，三个成员都不在 ⇒ supported 与否取决于探测，如实断言
+    // 「不再是 unlisted-capability」这一点（已收录但缺成员是另一回事）
     const registry = baseRegistry();
-    expect(registry.explain("map.screenshot" as Capability).reason).toBe(
-      "unlisted-capability",
-    );
-    expect(registry.explain("map.fly-to" as Capability).reason).toBe("unlisted-capability");
+    for (const id of ["map.screenshot", "map.fly-to"] as const) {
+      expect(registry.explain(id).reason, `${id} 应已收录`).not.toBe("unlisted-capability");
+    }
+    // 真实形状的 Fake 上三条都受支持
+    const fake = createFakeBMapV4();
+    const fakeRegistry = createCapabilityRegistry({
+      engine: "jsapi-v4",
+      version: "4.0",
+      rawSdk: fake.namespace,
+      unsupported: "silent",
+    });
+    for (const id of ["map.viewport", "map.fly-to", "map.screenshot"] as const) {
+      expect(fakeRegistry.explain(id).reason, `${id} 在 Fake 命名空间上应受支持`).toBe("supported");
+    }
   });
 
-  it("map.viewport 只探测真正被调用的 setViewport", () => {
+  it("map.viewport 的读写两个成员都探测（getViewport 已回到读取面）", () => {
     const descriptor = CAPABILITY_CATALOG["map.viewport"];
-    expect(descriptor.rawMembers).toEqual(["setViewport"]);
-    // 本库从不调用 getViewport，把它列进探测表会在「没有该成员」的 SDK 上假阴性
-    expect(descriptor.rawMembers).not.toContain("getViewport");
+    expect(descriptor.rawMembers).toEqual(["getViewport", "setViewport"]);
   });
 
-  it("map.viewport 在缺 getViewport 的 SDK 上仍然可用（不再连坐假阴性）", () => {
-    // Fake 撤掉 getViewport 后，只探测 setViewport 的目录必须仍然支持该能力。
+  it("map.viewport 是**并**关系：缺任一成员即报 raw-member-missing（读侧确实被调用）", () => {
+    // 恢复 getViewport 之后，两侧共享一条能力记录是**如实**的：Driver 的读写命令都挂在
+    // 同一个 requires("map.viewport") 闸门上，此前那个「连坐假阴性」的前提已不成立
+    // （它成立的前提是 Driver 只写不读）。
     const fake = createFakeBMapV4();
     const proto = FakeV4Map.prototype as unknown as Record<string, unknown>;
     const original = proto.getViewport;
@@ -258,24 +294,38 @@ describe("#165 Class 5：目录不再承诺本库没有的能力", () => {
         rawSdk: fake.namespace,
         unsupported: "silent",
       });
-      expect(registry.supports("map.viewport")).toBe(true);
+      expect(registry.explain("map.viewport").reason).toBe("raw-member-missing");
+      expect(registry.supports("map.viewport")).toBe(false);
     } finally {
       proto.getViewport = original;
     }
   });
 
-  it("map.viewport 探测的成员真的出现在 Driver 的实现里（防止再列入从不被调用的成员）", () => {
-    // 只约束本票改过的那一条：`rawMembers` 的口径是「本库真的调用过的成员」。
+  it("三条恢复的成员真的出现在 Driver 的实现里（防止再列入从不被调用的成员）", () => {
+    // 只约束本票改过的那几条：`rawMembers` 的口径是「本库真的调用过的成员」。
     // （不能推广成「所有 map 条目的成员都是 MapDriver 的方法名」——`centerAndZoom` 这类成员是
     //  Driver **内部**调用的 SDK 成员，不是 MapDriver 上的命令面。）
     const driverSource = readFileSync(
       resolve(ROOT, "packages/bmap-vue/src/driver/jsapi-v4/map.ts"),
       "utf8",
     );
-    for (const member of CAPABILITY_CATALOG["map.viewport"].rawMembers ?? []) {
+    const commandsSource = readFileSync(
+      resolve(ROOT, "packages/bmap-vue/src/core/runtime/mapCommands.ts"),
+      "utf8",
+    );
+    for (const id of ["map.viewport", "map.fly-to", "map.screenshot"] as const) {
+      for (const member of CAPABILITY_CATALOG[id].rawMembers ?? []) {
+        expect(
+          driverSource.includes(`"${member}"`),
+          `${id} 探测了 ${member}，但 Driver 实现里没有任何地方引用它`,
+        ).toBe(true);
+      }
+    }
+    // 目录的承诺最终要落在 `<Map ref>` 的命令面上：这三条都必须可从 `MapCommands` 调到
+    for (const command of ["getViewport", "getScreenshot", "flyTo"]) {
       expect(
-        driverSource.includes(`"${member}"`),
-        `map.viewport 探测了 ${member}，但 Driver 实现里没有任何地方引用它`,
+        commandsSource.includes(command),
+        `MapCommands 缺少 ${command}，目录条目就成了兑现不了的承诺`,
       ).toBe(true);
     }
   });

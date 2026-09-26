@@ -13,7 +13,17 @@ export type { CreateJsapiV4DriverInput } from "./createJsapiV4Driver";
 
 export * from "./types/handles";
 export * from "./types/geometry";
-export type { MapType, MapInteraction, MapStyleInput, InitialMapOptions, MapView, MapDriver } from "./types/map";
+export type {
+  MapType,
+  MapInteraction,
+  MapStyleInput,
+  InitialMapOptions,
+  MapView,
+  MapDriver,
+  // #165 回填：`getViewport` 的返回类型与 `flyTo` 的官方选项投影
+  Viewport,
+  FlyToOptions,
+} from "./types/map";
 export type {
   OverlayKind,
   MarkerIconInput,

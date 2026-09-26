@@ -186,6 +186,9 @@ describe("创建与销毁", () => {
           northeast: { lng: 116.6, lat: 40.1 },
         })],
       ["setViewport", () => map.setViewport(handle, [{ lng: 116.4, lat: 39.9 }])],
+      ["getViewport", () => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])],
+      ["flyTo", () => map.flyTo(handle, { lng: 116.4, lat: 39.9 }, 12)],
+      ["getScreenshot", () => map.getScreenshot(handle)],
       ["checkResize", () => map.checkResize(handle)],
       ["setMapType", () => map.setMapType(handle, "normal")],
       ["setMapStyle", () => map.setMapStyle(handle, { styleId: "s" })],
@@ -301,6 +304,103 @@ describe("视野 round-trip", () => {
     expect(fake.createdMaps[0].callLog).toContain("panTo");
     expect(fake.createdMaps[0].callLog).toContain("panBy:100,-50");
     expect(fake.createdMaps[0].callLog.filter((call) => call === "setViewport")).toHaveLength(2);
+  });
+
+  // #165 回填：官方 `core/Map.d.ts:508` 声明 `getViewport(view, viewportOptions?)`，
+  // live AK 实测运行时在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四）。
+  // 官方声明的两个 `view` 分支（`Array<Point>` 与 `Bounds`）都要能走，返回领域 `Viewport`。
+  it("getViewport 走「点数组」分支：原样把点转成 raw Point，返回领域 Viewport", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    const viewport = map.getViewport(handle, [
+      { lng: 116.3, lat: 39.8 },
+      { lng: 116.5, lat: 40.0 },
+    ]);
+
+    expect(fake.createdMaps[0].callLog).toContain("getViewport");
+    // 传给 SDK 的是 raw Point 实例，不是领域纯数据
+    const passed = fake.createdMaps[0].lastViewportView as Array<{ lng: number; lat: number }>;
+    expect(passed).toHaveLength(2);
+    expect(passed[0]).toBeInstanceOf(fake.namespace.Point);
+    expect({ lng: passed[0]!.lng, lat: passed[0]!.lat }).toEqual({ lng: 116.3, lat: 39.8 });
+    // 返回值是纯数据（官方 Viewport 的 center 是 BMap.Point，这里必须投影掉）
+    expect(viewport).toEqual({ center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    expect(viewport.center).not.toBeInstanceOf(fake.namespace.Point);
+  });
+
+  it("getViewport 走「Bounds」分支：转成 raw Bounds，不当成点数组", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    map.getViewport(handle, {
+      southwest: { lng: 116.2, lat: 39.7 },
+      northeast: { lng: 116.6, lat: 40.1 },
+    });
+
+    expect(fake.createdMaps[0].callLog).toContain("getViewport");
+    expect(fake.createdMaps[0].lastViewportView).toBeInstanceOf(fake.namespace.Bounds);
+    expect(Array.isArray(fake.createdMaps[0].lastViewportView)).toBe(false);
+  });
+
+  it("getViewport 按引用透传 ViewportOptions 的四个官方成员，声明之外的键不递", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const callback = (): void => {};
+
+    map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }], {
+      enableAnimation: false,
+      margins: [10, 20, 30, 40],
+      zoomFactor: -1,
+      callback,
+    });
+
+    expect(fake.createdMaps[0].lastViewportOptions).toEqual({
+      enableAnimation: false,
+      margins: [10, 20, 30, 40],
+      zoomFactor: -1,
+      callback,
+    });
+  });
+
+  it("getViewport 不改地图当前视野（官方语义：只返回最佳视野，不施加）", () => {
+    const { map, container } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+
+    map.getViewport(handle, [
+      { lng: 100, lat: 20 },
+      { lng: 120, lat: 45 },
+    ]);
+
+    expect(map.getCenter(handle)).toEqual({ lng: 116.4, lat: 39.9 });
+    expect(map.getZoom(handle)).toBe(12);
+  });
+
+  it("getViewport 缺成员时按「必需成员」显式失败，不返回半成品", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    // 成员在**原型**上，实例上赋 undefined 才会遮蔽它（`delete` 对原型成员无效）
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getViewport = undefined;
+
+    expect(() => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("SDK 返回的 Viewport 缺 center / zoom 时报结构化错误，不把半成品递给业务", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const raw = fake.createdMaps[0] as unknown as Record<string, unknown>;
+    raw.getViewport = (): unknown => ({ center: null });
+
+    expect(() => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
   });
 
   it("getBounds / getSize 返回归一化后的纯数据", () => {
@@ -1079,5 +1179,117 @@ describe("销毁的部分失败（PR #60 评审 P2）", () => {
     // 清理完成后的第三次调用才是真正的幂等 no-op
     expect(() => map.destroy(handle)).not.toThrow();
     expect(fake.createdMaps[0].callLog.filter((call) => call === "destroy")).toHaveLength(1);
+  });
+});
+
+/**
+ * #165 回填：官方 `Map#flyTo`（`core/Map.d.ts:634`）与 `Map#getScreenshot`
+ * （`core/Map.d.ts:1024`）。两者在 live AK 下实测运行时在位
+ * （`docs/zh-CN/contributing/165-runtime-verification.md` 结论四），
+ * 此前被 #165 Class 5 以「本库没有实现」为由从 Capability Catalog 删除 —— 那条推理已被证伪。
+ */
+describe("#165 回填：flyTo / getScreenshot", () => {
+  it("flyTo 调的是 flyTo 本身，不是 panTo（平滑飞行 ≠ 瞬移，两者不是同一个成员）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    expect(fake.createdMaps[0].callLog).toContain("flyTo");
+    // 关键回归：早期目录条目 `map.fly-to` 探测的是 `panTo`，等于张冠李戴
+    expect(fake.createdMaps[0].callLog).not.toContain("panTo");
+  });
+
+  it("flyTo 的中心点转成 raw Point，级别原样透传", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    const point = fake.createdMaps[0].lastFlyToPoint as { lng: number; lat: number };
+    expect({ lng: point.lng, lat: point.lat }).toEqual({ lng: 121.5, lat: 31.2 });
+    expect(fake.createdMaps[0].lastFlyToZoom).toBe(15);
+  });
+
+  it("flyTo 转发官方 options（noAnimation / callback），声明之外的键不递", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const callback = (): void => {};
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15, { noAnimation: true, callback });
+
+    expect(fake.createdMaps[0].lastFlyToOptions).toEqual({ noAnimation: true, callback });
+  });
+
+  it("flyTo 不传 options 时不下发「空对象」这种上游没声明的形状", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    expect(fake.createdMaps[0].lastFlyToOptions).toBeNull();
+  });
+
+  it("flyTo 缺成员时显式失败，不静默退化成「什么都没发生」", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).flyTo = undefined;
+
+    expect(() => map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("getScreenshot 返回 SDK 给的字符串原样交给业务", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    const shot = map.getScreenshot(handle);
+
+    expect(fake.createdMaps[0].callLog).toContain("getScreenshot");
+    expect(shot).toBe(fake.createdMaps[0].screenshotDataUrl);
+  });
+
+  it("getScreenshot 在 SDK 返回非字符串时报结构化错误，不把 undefined 递出去", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getScreenshot = (): unknown =>
+      undefined;
+
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("getScreenshot 缺成员时显式失败（不是「返回一张空图」那种静默降级）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getScreenshot = undefined;
+
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("三个新成员都在 destroy 之后按 BMAP_RESOURCE_DISPOSED 拒绝，且不触碰 SDK 对象", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.destroy(handle);
+    const callsAfterDestroy = fake.createdMaps[0].callLog.length;
+
+    expect(() => map.getViewport(handle, [{ lng: 1, lat: 1 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(() => map.flyTo(handle, { lng: 1, lat: 1 }, 3)).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(fake.createdMaps[0].callLog.length).toBe(callsAfterDestroy);
   });
 });

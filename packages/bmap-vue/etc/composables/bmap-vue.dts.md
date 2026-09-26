@@ -131,7 +131,7 @@ export declare interface Bounds {
     northeast: Point;
 }
 export declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare interface CapabilityDescriptor {
     id: Capability;
     family: CapabilityFamily;
@@ -292,6 +292,10 @@ export declare interface EventSourceClient {
         readonly events: EventDriver;
         readonly map: MapDriver;
     };
+}
+export declare interface FlyToOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
 }
 export declare interface FrameScheduler {
     schedule(key: PropertyKey, task: () => void): void;
@@ -826,7 +830,10 @@ export declare interface MapDriver {
     panTo(map: MapHandle, point: Point): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
-    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
+    getViewport(map: MapHandle, view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport;
+    flyTo(map: MapHandle, center: Point, zoom: number, options?: FlyToOptions): void;
+    getScreenshot(map: MapHandle): string;
     checkResize(map: MapHandle): void;
     setMapType(map: MapHandle, type: MapType_2): void;
     setMapStyle(map: MapHandle, style: MapStyleInput): void;
@@ -1617,6 +1624,10 @@ export declare interface ViewAnimationKeyFrames {
     percentage: number;
 }
 export declare type ViewAnimationStatus = "idle" | "playing";
+export declare interface Viewport {
+    center: Point;
+    zoom: number;
+}
 export declare interface ViewportOptions {
     enableAnimation?: boolean;
     margins?: readonly number[];

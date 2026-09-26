@@ -95,7 +95,16 @@ export type {
 } from "../driver/types/handles";
 export type { Bounds, Pixel, Point, Size } from "../driver/types/geometry";
 export type { ControlKind, ControlOptions, ControlOptionStatus, CopyrightEntry } from "../driver/types/controls";
-export type { InitialMapOptions, MapInteraction, MapStyleInput, MapType, MapView } from "../driver/types/map";
+export type {
+  InitialMapOptions,
+  MapInteraction,
+  MapStyleInput,
+  MapType,
+  MapView,
+  // 同上：`BMapDriver` → `MapDriver` 的公开签名里出现了这两个类型
+  Viewport,
+  FlyToOptions,
+} from "../driver/types/map";
 export type {
   CustomOverlayOptions,
   InfoWindowOptions,

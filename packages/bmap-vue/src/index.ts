@@ -292,6 +292,10 @@ export type {
   InitialMapOptions,
   MapView,
   MapDriver,
+  // #165 回填：`getViewport` 的返回类型与 `flyTo` 的官方选项投影（`Viewport` 同时是
+  // `MapCommands.getViewport()` 的返回类型，必须可从根入口取到）
+  Viewport,
+  FlyToOptions,
   GeometryDriver,
   OverlayDriver,
   ControlDriver,

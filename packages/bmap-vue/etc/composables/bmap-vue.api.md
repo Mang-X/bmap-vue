@@ -204,7 +204,7 @@ export interface Bounds {
 export type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
 
 // @public
-export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 
 // @public (undocumented)
 export interface CapabilityDescriptor {
@@ -485,6 +485,12 @@ export interface EventSourceClient {
         readonly events: EventDriver;
         readonly map: MapDriver;
     };
+}
+
+// @public
+export interface FlyToOptions {
+    callback?: () => void;
+    noAnimation?: boolean;
 }
 
 // @public
@@ -1171,16 +1177,19 @@ export interface MapDriver {
     destroy(map: MapHandle): void;
     // (undocumented)
     fitBounds(map: MapHandle, bounds: Bounds): void;
+    flyTo(map: MapHandle, center: Point, zoom: number, options?: FlyToOptions): void;
     // (undocumented)
     getBounds(map: MapHandle): Bounds;
     // (undocumented)
     getCenter(map: MapHandle): Point;
     // (undocumented)
     getHeading(map: MapHandle): number;
+    getScreenshot(map: MapHandle): string;
     // (undocumented)
     getSize(map: MapHandle): Size;
     // (undocumented)
     getTilt(map: MapHandle): number;
+    getViewport(map: MapHandle, view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport;
     // (undocumented)
     getZoom(map: MapHandle): number;
     // (undocumented)
@@ -1205,7 +1214,7 @@ export interface MapDriver {
     setTilt(map: MapHandle, tilt: number): void;
     // (undocumented)
     setTraffic(map: MapHandle, enabled: boolean): void;
-    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
     // (undocumented)
     setZoom(map: MapHandle, zoom: number): void;
     // (undocumented)
@@ -2280,6 +2289,12 @@ export interface ViewAnimationKeyFrames {
 
 // @public
 export type ViewAnimationStatus = "idle" | "playing";
+
+// @public
+export interface Viewport {
+    center: Point;
+    zoom: number;
+}
 
 // @public
 export interface ViewportOptions {

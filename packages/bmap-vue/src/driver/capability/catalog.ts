@@ -28,6 +28,8 @@ export type Capability =
   | "map.center-and-zoom"
   | "map.bounds"
   | "map.viewport"
+  | "map.fly-to"
+  | "map.screenshot"
   | "map.heading"
   | "map.tilt"
   | "map.animate"
@@ -154,11 +156,12 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "map.viewport": {
     id: "map.viewport",
     family: "map",
-    description: "视口写入（setViewport）；官方另有 getViewport，本库**没有**对应命令面",
-    // #165 Class 5：只探测真正被调用的 `setViewport`。原先把 `getViewport` 也列进来，
-    // 而 `MapDriver` 从不调用它 —— 于是在**没有**该成员的 SDK 上 `supports("map.viewport")`
-    // 会假阴性，把一个可用的写命令连坐成「不支持」。
-    rawMembers: ["setViewport"],
+    description: "视口读写（getViewport 只读最佳视野 / setViewport 施加视野）",
+    // #165 回填：`getViewport` 回到探测表。此前 Class 5 把它摘掉的理由是「`MapDriver`
+    // 从不调用它」——那是**用实现缺失去论证能力不存在**，与 #165 §3.3「不得无理由裁剪
+    // 能力」相悖。live AK 实测两个成员运行时都在位（`165-runtime-verification.md`
+    // 结论四），且 `MapDriver.getViewport` 现在真的调用它。
+    rawMembers: ["getViewport", "setViewport"],
     status: "native",
     runtimeOnly: true,
   },
@@ -186,16 +189,39 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
-  // #165 Class 5 删除了两条「描述了本库没有的能力」的条目：
+  // #165 回填：`map.screenshot` / `map.fly-to` 两条**恢复**收录。
   //
-  // - `map.screenshot`（`getScreenshot`）：官方 `core/Map.d.ts:1024` 确实声明了它，但
-  //   `MapDriver` **没有** `getScreenshot` 命令面，`supports("map.screenshot")` 却返回 true ——
-  //   一个兑现不了的承诺。`getScreenshot` 至今没有组件消费方，实现它属 #167 的范围，
-  //   由那张票负责按「先有消费者再进目录」的口径加回来。
-  // - `map.fly-to`：官方 `core/Map.d.ts:634` 有 `flyTo`，本库**没有** flyTo 命令；原先探测的
-  //   `panTo` 是**另一个成员**（瞬移，不是平滑飞行），拿它当「飞行定位已支持」的依据是张冠李戴。
-  //   `panTo` 本身不是一条独立能力（它是 `panTo` / `panBy` 移动族的一员，本库有命令面但没有
-  //   对应的目录条目 —— 按「没有消费者 / 判据退化成常量的一律不建」的口径，此处不补）。
+  // 它们此前被 Class 5 删除，理由是「`MapDriver` 没有对应命令面，而 `supports()` 却返回
+  // true —— 一个兑现不了的承诺」。那条推理的前提（成员在运行时不存在）**是错的**：
+  // live AK 实测 `BMap.Map.prototype` 上 `getScreenshot` / `flyTo` / `getViewport` / `setViewport`
+  // 全部在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四，取证探针
+  // `scripts/probe-runtime-members.mts`）。**用「我们还没接线」论证「能力不存在」，
+  // 等于把「实现缺口」记成「上游缺口」**—— #165 §3.3 要求能力不得无理由裁剪，
+  // 正确的处置是补实现，而不是删条目。两条现已由 `MapDriver.getScreenshot` /
+  // `MapDriver.flyTo` 兑现。
+  //
+  // 两条的状态取 `native` 而非 `experimental`/`extended`：它们是对官方成员的直接投影，
+  // 本库没有加任何项目语义。`map.screenshot` 的官方限制（地球模式不支持、需
+  // `preserveDrawingBuffer: true` 否则黑屏）写在 `MapDriver.getScreenshot` 的文档注释上——
+  // 那是**使用前提**，不是「本库把它做得半成品」，因此不构成降级状态。
+  "map.fly-to": {
+    id: "map.fly-to",
+    family: "map",
+    description: "平滑飞行到目标中心与级别（flyTo）",
+    // 探测 `flyTo` **本身**。此前这条 rawMembers 写的是 `panTo` —— 那是**另一个成员**
+    // （瞬移，没有飞行动画），拿它当「飞行定位已支持」的依据属于张冠李戴。
+    rawMembers: ["flyTo"],
+    status: "native",
+    runtimeOnly: true,
+  },
+  "map.screenshot": {
+    id: "map.screenshot",
+    family: "map",
+    description: "取当前画布截图（getScreenshot；官方限制：地球模式不支持，且需建图时带 preserveDrawingBuffer: true）",
+    rawMembers: ["getScreenshot"],
+    status: "native",
+    runtimeOnly: true,
+  },
   "map.check-resize": {
     id: "map.check-resize",
     family: "map",

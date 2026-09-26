@@ -132,7 +132,18 @@ export type { ControlKind, ControlOptions, ControlOptionStatus, CopyrightEntry }
 export type { DriverEvent, EventDriver, MapLoadEvent, MapMouseEvent, MapResizeEvent, MapTypeChangeEvent } from "../driver/types/events";
 export type { LayerDriver, LayerKind, LayerOperation, LayerData, LayerSurface, LayerCreateOptions, LayerCtorSlot } from "../driver/types/layers";
 export type { NativeLayerFeatureKeys, NativeLayerFeatureState, NativeLayerFeatureStateMap } from "../driver/types/native-layers";
-export type { MapDriver, MapInteraction, MapStyleInput, MapType, MapView, InitialMapOptions } from "../driver/types/map";
+export type {
+  MapDriver,
+  MapInteraction,
+  MapStyleInput,
+  MapType,
+  MapView,
+  InitialMapOptions,
+  // 同上：`MapCommands.getViewport` / `MapDriver.getViewport` 的返回类型与 `flyTo` 的
+  // 选项投影出现在本出口可达的公开签名里（`Viewport` 同时是 `MapCommands` 的返回类型）
+  Viewport,
+  FlyToOptions,
+} from "../driver/types/map";
 // `CircleReadBackApi` / `MarkerReadBackApi` / `InfoWindowReadBackApi` / `PathReadBackApi` /
 // `ContextMenuCommandApi` / `MenuItemView` 是 issue #165 Class 3 的命令面类型：
 // `OverlayDriver` 的方法签名**逐个**引用它们，不导出会被 `ae-forgotten-export` 点名

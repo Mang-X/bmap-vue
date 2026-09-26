@@ -29,6 +29,8 @@ import type { BMapClient } from "../../client/types";
 import type { Capability } from "../../driver/capability";
 import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
+import type { FlyToOptions, Viewport } from "../../driver/types/map";
+import type { ViewportOptions } from "../../driver/types/services";
 import { readLiveView } from "../utils/liveView";
 
 /**
@@ -45,6 +47,21 @@ export interface MapCommands {
   getTilt(): number | null;
   getBounds(): Bounds | null;
   getSize(): Size | null;
+  /**
+   * 读出「若把这些点/范围装进视野，应该是什么中心与级别」（只读，不改当前视野）。
+   *
+   * `view` 对齐官方的两个分支：点数组或 `Bounds`。返回 `null` = 这次读不到
+   * （没句柄 / 资源已销毁 / 该能力在本引擎不可用），口径与本面其余读命令一致。
+   */
+  getViewport(view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport | null;
+  /**
+   * 取当前画布截图（数据 URL 字符串）。
+   *
+   * ⚠️ 官方的两条限制本库不隐瞒：**地球模式不支持**；建图时**必须**带
+   * `preserveDrawingBuffer: true`，否则拿到的是**全黑图**。本库不默认开启该选项
+   * （会给每张地图常驻一块额外画布内存），请在建图选项里显式传入。
+   */
+  getScreenshot(): string | null;
 
   /* ---------------------------------------------------------------- 写（未就绪时空操作） */
   setCenter(center: Point): void;
@@ -56,6 +73,13 @@ export interface MapCommands {
   panTo(point: Point): void;
   panBy(pixel: Pixel): void;
   fitBounds(bounds: Bounds): void;
+  /**
+   * 平滑**飞行**到目标中心与级别（官方 `Map#flyTo`）。
+   *
+   * 与 `panTo`（瞬移）是**两个不同的成员**：`flyTo` 带一段飞行动画，适合「从全国飞到某地」
+   * 这类定位；`panTo` 只挪动中心点、不动级别。
+   */
+  flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
 
   /* ---------------------------------------------------------------- 能力查询 */
   /**
@@ -117,6 +141,9 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     getTilt: () => read((client, map) => client.driver.map.getTilt(map)),
     getBounds: () => read((client, map) => client.driver.map.getBounds(map)),
     getSize: () => read((client, map) => client.driver.map.getSize(map)),
+    getViewport: (view, options) =>
+      read((client, map) => client.driver.map.getViewport(map, view, options)),
+    getScreenshot: () => read((client, map) => client.driver.map.getScreenshot(map)),
 
     setCenter: (center) => write((client, map) => client.driver.map.setCenter(map, center)),
     setZoom: (zoom) => write((client, map) => client.driver.map.setZoom(map, zoom)),
@@ -126,6 +153,8 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     panTo: (point) => write((client, map) => client.driver.map.panTo(map, point)),
     panBy: (pixel) => write((client, map) => client.driver.map.panBy(map, pixel)),
     fitBounds: (bounds) => write((client, map) => client.driver.map.fitBounds(map, bounds)),
+    flyTo: (center, zoom, options) =>
+      write((client, map) => client.driver.map.flyTo(map, center, zoom, options)),
 
     supports: (capability) => source.client()?.capabilities.supports(capability) ?? false,
   };

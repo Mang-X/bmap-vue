@@ -130,7 +130,7 @@ export declare interface Bounds {
     southwest: Point;
     northeast: Point;
 }
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor>;
 export declare const CAPABILITY_FAMILIES: readonly CapabilityFamily[];
 export declare const CAPABILITY_IDS: readonly Capability[];
@@ -319,6 +319,10 @@ export declare interface EventDriver {
     on<TEvent = unknown>(target: SdkHandle<string>, type: string, listener: (event: TEvent) => void): () => void;
 }
 export declare const existingGlobalV4Provider: () => JsapiV4Provider;
+export declare interface FlyToOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 export declare interface GeocodedAddress {
     address: string;
     point: Point | null;
@@ -589,7 +593,10 @@ export declare interface MapDriver {
     panTo(map: MapHandle, point: Point): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
-    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
+    getViewport(map: MapHandle, view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport;
+    flyTo(map: MapHandle, center: Point, zoom: number, options?: FlyToOptions): void;
+    getScreenshot(map: MapHandle): string;
     checkResize(map: MapHandle): void;
     setMapType(map: MapHandle, type: MapType_2): void;
     setMapStyle(map: MapHandle, style: MapStyleInput): void;
@@ -1103,6 +1110,10 @@ export declare class UnsupportedCapabilityError extends BMapError {
 }
 export declare function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare interface Viewport {
+    center: Point;
+    zoom: number;
+}
 declare interface ViewportOptions {
     enableAnimation?: boolean;
     margins?: readonly number[];

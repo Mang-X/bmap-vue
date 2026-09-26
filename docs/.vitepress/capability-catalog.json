@@ -64,9 +64,10 @@
       "status": "native",
       "runtimeOnly": true,
       "rawMembers": [
+        "getViewport",
         "setViewport"
       ],
-      "description": "视口写入（setViewport）；官方另有 getViewport，本库**没有**对应命令面"
+      "description": "视口读写（getViewport 只读最佳视野 / setViewport 施加视野）"
     },
     {
       "id": "map.heading",
@@ -98,6 +99,26 @@
         "cancelViewAnimation"
       ],
       "description": "视角关键帧动画（startViewAnimation / cancelViewAnimation）"
+    },
+    {
+      "id": "map.fly-to",
+      "family": "map",
+      "status": "native",
+      "runtimeOnly": true,
+      "rawMembers": [
+        "flyTo"
+      ],
+      "description": "平滑飞行到目标中心与级别（flyTo）"
+    },
+    {
+      "id": "map.screenshot",
+      "family": "map",
+      "status": "native",
+      "runtimeOnly": true,
+      "rawMembers": [
+        "getScreenshot"
+      ],
+      "description": "取当前画布截图（getScreenshot；官方限制：地球模式不支持，且需建图时带 preserveDrawingBuffer: true）"
     },
     {
       "id": "map.check-resize",

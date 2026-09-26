@@ -29,12 +29,15 @@ import type { CapabilityRegistry } from "../capability/registry";
 import type { Bounds, GeometryDriver, Pixel, Point } from "../types/geometry";
 import { HANDLE_BRAND, type MapHandle, type SdkHandle } from "../types/handles";
 import type {
+  FlyToOptions,
   InitialMapOptions,
   MapDriver,
   MapInteraction,
   MapType,
   MapView,
+  Viewport,
 } from "../types/map";
+import type { ViewportOptions } from "../types/services";
 import type { JsapiV4EventDriver } from "./events";
 import {
   assertJsapiV4Namespace,
@@ -184,6 +187,55 @@ function numberOf(label: string, value: unknown): number {
     });
   }
   return value;
+}
+
+/**
+ * 领域 `ViewportOptions` → 官方同名对象，**只投影官方声明的四个成员**。
+ *
+ * 声明之外的键不递（#165 §3.8「接收后忽略」是假支持）。全空时返回 `undefined`，
+ * 于是「调用方没传」与「调用方传了空对象」在上游看到的是同一种形状 —— 官方对空对象
+ * 的处理没有公开契约，**不**凭空造一个它没声明的入参。
+ */
+function toRawViewportOptions(options?: ViewportOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.enableAnimation === "boolean") out.enableAnimation = options.enableAnimation;
+  if (Array.isArray(options.margins)) out.margins = [...options.margins];
+  if (typeof options.zoomFactor === "number") out.zoomFactor = options.zoomFactor;
+  // 视野调整结束后的回调：按引用原样透传（官方只承诺「结束时调用」，Driver 不包装）
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** 领域 `FlyToOptions` → 官方同名对象；全空时返回 `undefined`（不下发该参数）。 */
+function toRawFlyToOptions(options?: FlyToOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 官方 `Viewport`（`core/Viewport.d.ts`：`{ center: Point; zoom: number }`）→ 领域 `Viewport`。
+ *
+ * 官方声明这两个成员**都非空**，但回包形状由上游决定，因此逐字段校验、缺一个就报
+ * `BMAP_SDK_CALL_FAILED`：把半成品递给业务会让调用方在**很远**的地方才发现看错了。
+ * `center` 经 `geometry.fromRawPoint` 投影掉 `BMap.Point` 实例。
+ */
+function projectViewport(raw: unknown, geometry: GeometryDriver): Viewport {
+  const record = isObjectLike(raw) ? (raw as Record<string, unknown>) : {};
+  if (record.center == null || record.zoom == null) {
+    throw new BMapError(
+      "BMAP_SDK_CALL_FAILED",
+      "map.getViewport 返回的对象缺少 center / zoom（官方 Viewport 声明这两个成员都非空）",
+      { engine: "jsapi-v4" },
+    );
+  }
+  return {
+    center: geometry.fromRawPoint(record.center),
+    zoom: numberOf("map.getViewport", record.zoom),
+  };
 }
 
 /**
@@ -819,10 +871,54 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       ]);
     },
 
-    setViewport(map, points: readonly Point[], options?: Record<string, unknown>) {
+    setViewport(map, points: readonly Point[], options?: ViewportOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.viewport");
-      callOptional(raw, "setViewport", points.map((point) => geometry.toRawPoint(point)), options ?? {});
+      callRequired(
+        raw,
+        "setViewport",
+        points.map((point) => geometry.toRawPoint(point)),
+        toRawViewportOptions(options),
+      );
+    },
+
+    getViewport(map, view: readonly Point[] | Bounds, options?: ViewportOptions) {
+      const raw = resolveLive(map);
+      capabilities.require("map.viewport");
+      // 官方 `view` 有两个分支：点数组与 Bounds。判据是**数组还是对象**（官方只有这两种），
+      // 不是「像不像 Bounds」——后者会把缺角点的对象静默归到数组分支。
+      const rawView = Array.isArray(view)
+        ? geometry.toRawPoints(view)
+        : geometry.toRawBounds(view as Bounds);
+      const result = callRequired(
+        raw,
+        "getViewport",
+        rawView,
+        toRawViewportOptions(options),
+      );
+      return projectViewport(result, geometry);
+    },
+
+    flyTo(map, center, zoom, options?: FlyToOptions) {
+      const raw = resolveLive(map);
+      capabilities.require("map.fly-to");
+      // options 一律经 `toRawFlyToOptions` 投影：没传时是 `undefined` 而**不是** `{}` ——
+      // 官方没有声明「空对象」这个形状，凭空造一个等于依赖 SDK 对它的隐式处理。
+      callRequired(raw, "flyTo", geometry.toRawPoint(center), zoom, toRawFlyToOptions(options));
+    },
+
+    getScreenshot(map) {
+      const raw = resolveLive(map);
+      capabilities.require("map.screenshot");
+      const value = callRequired(raw, "getScreenshot");
+      if (typeof value !== "string") {
+        throw new BMapError(
+          "BMAP_SDK_CALL_FAILED",
+          `map.getScreenshot 返回了非字符串: ${String(value)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      return value;
     },
 
     checkResize(map) {

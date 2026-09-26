@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BMapClient } from "../../client/types";
 import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
+import type { Viewport } from "../../driver/types/map";
 import { BMapError } from "../errors/BMapError";
 import { createMapCommands } from "./mapCommands";
 
@@ -18,6 +19,8 @@ const POINT: Point = { lng: 116.404, lat: 39.915 };
 const PIXEL: Pixel = { x: 12, y: -8 };
 const BOUNDS: Bounds = { southwest: { lng: 116, lat: 39 }, northeast: { lng: 117, lat: 40 } };
 const SIZE = { width: 320, height: 240 };
+const VIEWPORT: Viewport = { center: POINT, zoom: 12 };
+const SCREENSHOT = "data:image/png;base64,iVBORw0KGgo=";
 
 function createFixture() {
   const mapDriver = {
@@ -34,6 +37,9 @@ function createFixture() {
     panTo: vi.fn(),
     panBy: vi.fn(),
     fitBounds: vi.fn(),
+    getViewport: vi.fn(() => VIEWPORT),
+    getScreenshot: vi.fn(() => SCREENSHOT),
+    flyTo: vi.fn(),
   };
   const supports = vi.fn((capability: string) => capability === "map.zoom");
   const client = {
@@ -71,6 +77,9 @@ describe("createMapCommands：没有句柄时", () => {
     expect(commands.getTilt()).toBeNull();
     expect(commands.getBounds()).toBeNull();
     expect(commands.getSize()).toBeNull();
+    expect(commands.getViewport([POINT])).toBeNull();
+    expect(commands.getViewport(BOUNDS)).toBeNull();
+    expect(commands.getScreenshot()).toBeNull();
     expect(commands.supports("map.zoom"), "「还不知道」与「不支持」在调用方视角合并成 false").toBe(
       false,
     );
@@ -82,6 +91,7 @@ describe("createMapCommands：没有句柄时", () => {
     commands.panTo(POINT);
     commands.panBy(PIXEL);
     commands.fitBounds(BOUNDS);
+    commands.flyTo(POINT, 15);
     expect(mapDriver.setCenter).not.toHaveBeenCalled();
     expect(mapDriver.setZoom).not.toHaveBeenCalled();
     expect(mapDriver.setHeading).not.toHaveBeenCalled();
@@ -89,6 +99,9 @@ describe("createMapCommands：没有句柄时", () => {
     expect(mapDriver.panTo).not.toHaveBeenCalled();
     expect(mapDriver.panBy).not.toHaveBeenCalled();
     expect(mapDriver.fitBounds).not.toHaveBeenCalled();
+    expect(mapDriver.getViewport).not.toHaveBeenCalled();
+    expect(mapDriver.getScreenshot).not.toHaveBeenCalled();
+    expect(mapDriver.flyTo).not.toHaveBeenCalled();
     expect(supports).not.toHaveBeenCalled();
   });
 });
@@ -103,6 +116,31 @@ describe("createMapCommands：有句柄时", () => {
     expect(commands.getBounds()).toEqual(BOUNDS);
     expect(commands.getSize()).toEqual(SIZE);
     expect(mapDriver.getCenter).toHaveBeenCalledTimes(1);
+  });
+
+  // #165 回填：`getViewport` / `getScreenshot` / `flyTo` 三条命令透传不做二次加工。
+  it("getViewport 两种 view 形态与 options 都按参数原样透传给 Driver", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { margins: [10, 20, 30, 40] };
+
+    expect(commands.getViewport([POINT])).toEqual(VIEWPORT);
+    expect(mapDriver.getViewport).toHaveBeenNthCalledWith(1, expect.anything(), [POINT], undefined);
+
+    expect(commands.getViewport(BOUNDS, options)).toEqual(VIEWPORT);
+    expect(mapDriver.getViewport).toHaveBeenNthCalledWith(2, expect.anything(), BOUNDS, options);
+  });
+
+  it("getScreenshot 透传 Driver 的返回值（业务自己拿到的就是 SDK 那一串）", () => {
+    const { commands, mapDriver } = createFixture();
+    expect(commands.getScreenshot()).toBe(SCREENSHOT);
+    expect(mapDriver.getScreenshot).toHaveBeenCalledWith(expect.anything());
+  });
+
+  it("flyTo 按参数原样透传（center / zoom / options 一次到位）", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { noAnimation: true };
+    commands.flyTo(POINT, 15, options);
+    expect(mapDriver.flyTo).toHaveBeenCalledWith(expect.anything(), POINT, 15, options);
   });
 
   it("写命令按参数原样透传（每个方法一次）", () => {
@@ -164,5 +202,38 @@ describe("createMapCommands：错误口径", () => {
       throw new BMapError("BMAP_INVALID_ARGUMENT", "zoom out of range");
     });
     expect(() => commands.setZoom(99)).toThrowError(/zoom out of range/);
+  });
+
+  // #165 回填：三个新成员沿用**同一条**错误口径，不因为「是新加的」就另立一套。
+  it("读：getViewport / getScreenshot 在资源已销毁或能力不可用时给 null", () => {
+    const { commands, mapDriver } = createFixture();
+    mapDriver.getViewport.mockImplementation(() => {
+      throw new BMapError("BMAP_RESOURCE_DISPOSED", "disposed");
+    });
+    mapDriver.getScreenshot.mockImplementation(() => {
+      throw new BMapError("BMAP_CAPABILITY_UNSUPPORTED", "no capability");
+    });
+    expect(commands.getViewport([POINT])).toBeNull();
+    expect(commands.getScreenshot()).toBeNull();
+  });
+
+  it("读：getViewport / getScreenshot 的其余错误一律上抛", () => {
+    const { commands, mapDriver } = createFixture();
+    mapDriver.getViewport.mockImplementation(() => {
+      throw new BMapError("BMAP_INVALID_POINT", "bad point");
+    });
+    mapDriver.getScreenshot.mockImplementation(() => {
+      throw new BMapError("BMAP_SDK_CALL_FAILED", "screenshot boom");
+    });
+    expect(() => commands.getViewport([POINT])).toThrowError(/bad point/);
+    expect(() => commands.getScreenshot()).toThrowError(/screenshot boom/);
+  });
+
+  it("写：flyTo 的 SDK 错误如实上抛，不吞成「飞过了」", () => {
+    const { commands, mapDriver } = createFixture();
+    mapDriver.flyTo.mockImplementation(() => {
+      throw new BMapError("BMAP_RESOURCE_DISPOSED", "disposed");
+    });
+    expect(() => commands.flyTo(POINT, 15)).toThrowError(/disposed/);
   });
 });
