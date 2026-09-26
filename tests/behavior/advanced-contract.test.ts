@@ -66,6 +66,14 @@ const FROZEN_ADVANCED_EXPORTS = [
   "toPlainPoints",
   "toPoint",
   "unwrapRaw",
+  // issue #160：错误类按值导出（消费方要 catch / instanceof / 读 code），
+  // 路线策略常量同理（装配面要能直接收下这些值，不必绕根入口）。
+  "BMapError",
+  "DrivingPolicy",
+  "IntercityPolicy",
+  "OFFICIAL_V4_VERSION",
+  "TransitPolicy",
+  "TransitVehiclePolicy",
 ].sort();
 
 /**
@@ -92,11 +100,16 @@ const INTERNAL_ONLY_EXPORTS = [
   "createLayerRegistry",
   "createOverlayRegistry",
   "DataLayerManager",
-  "BMapError",
   // `resetProcessSdkRegistryForTests` 曾在这张表里（当时它从 `./core` 出口可达）。
   // `#104` 第三批把它从 `./core` 摘掉、`#44` 又取消了 `./core` 子路径之后，
   // 「它必须能在 `./core` 找到」这条正证不再成立，
   // 因此改为由 `core-surface.test.ts` 的负向清单守着 —— 那里断言它**不在**任何公共出口上。
+  //
+  // `BMapError` 曾在这张表里，issue #160 起**移出**：它是**错误模型本身**，不是可替换的
+  // 内部实现 —— `UnsupportedCapabilityError extends BMapError` 已经把它带进公共面，
+  // 而 `<RoutePlan>` 的 `error` 事件载荷、四个出口的失败路径都产出它的实例。消费方要能
+  // `catch (e) { if (e instanceof BMapError) … }` / 读稳定的 `code` 联合 / 看 `retryable`。
+  // 不导出它，这些都只能退化成 `unknown`。判定与处置见 ADR 2026-09-25 决策 5 与 #160。
 ];
 
 /** 组件名：它们属于根入口 / `./components`，不许出现在扩展契约里。 */

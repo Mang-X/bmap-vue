@@ -25,10 +25,18 @@ import { ResourceScope } from "../../core/lifecycle/ResourceScope";
 import { unwrapRaw } from "../../driver/types/handles";
 import { loadUiKit } from "./loadUiKit";
 import { canonicalKey } from "./points";
-import type { PlacePointDTO, UiKitModule, UiKitWidgetHandle, UiKitWidgetOptions } from "./types";
+import type {
+  PlacePointDTO,
+  UiKitModule,
+  UiKitWidgetHandle,
+  UiKitWidgetOptions,
+  UiKitWidgetStatus,
+} from "./types";
 
-/** 桥的状态机；`disposed` 只有在组件卸载后才会出现。 */
-export type UiKitWidgetStatus = "idle" | "loading" | "ready" | "error" | "disposed";
+// 状态口径的**声明**在 types.ts（`./ui-kit` 的公共类型自持，见该文件文件头）；
+// 这里转出去是为了让既有的 `useUiKitWidget` 导入点不必改。
+export type { UiKitWidgetStatus };
+
 
 /** 一条已登记的事件订阅，释放时按登记顺序 `off`。 */
 export interface UiKitSubscription {

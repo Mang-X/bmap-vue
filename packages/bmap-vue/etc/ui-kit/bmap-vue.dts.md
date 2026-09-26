@@ -13,7 +13,7 @@ import { DefineComponent } from "vue";
 import { PublicProps } from "vue";
 import { Ref } from "vue";
 import { ShallowRef } from "vue";
-declare class BMapError extends Error {
+export declare class BMapError extends Error {
     readonly code: BMapErrorCode;
     readonly mapId?: symbol | string;
     readonly component?: string;
@@ -52,8 +52,8 @@ declare class BMapError extends Error {
         UI_KIT_UNAVAILABLE: "BMAP_UI_KIT_UNAVAILABLE";
     };
 }
-declare type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED" | "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY" | "BMAP_UI_KIT_UNAVAILABLE";
-declare interface BMapErrorOptions {
+export declare type BMapErrorCode = "BMAP_SDK_LOAD_FAILED" | "BMAP_SDK_LOAD_TIMEOUT" | "BMAP_SDK_CONFIG_CONFLICT" | "BMAP_SDK_ENGINE_MISMATCH" | "BMAP_PROVIDER_ABORTED" | "BMAP_RUNTIME_DISPOSED" | "BMAP_RESOURCE_DISPOSED" | "BMAP_PARENT_CONTEXT_MISSING" | "BMAP_RESOURCE_CREATE_FAILED" | "BMAP_RESOURCE_UPDATE_FAILED" | "BMAP_PLUGIN_LOAD_FAILED" | "BMAP_PLUGIN_UNKNOWN" | "BMAP_CAPABILITY_UNSUPPORTED" | "BMAP_SDK_CALL_FAILED" | "BMAP_SERVICE_FAILED" | "BMAP_INVALID_ARGUMENT" | "BMAP_INVALID_POINT" | "BMAP_HANDLE_FOREIGN" | "BMAP_DUPLICATE_ITEM_KEY" | "BMAP_UI_KIT_UNAVAILABLE";
+export declare interface BMapErrorOptions {
     cause?: unknown;
     mapId?: symbol | string;
     component?: string;
@@ -62,26 +62,18 @@ declare interface BMapErrorOptions {
     engine?: string;
     version?: string;
 }
-declare function clear(): Promise<void>;
-declare function clear_2(): Promise<void>;
-declare function getCurrentType(): Promise<RoutePlanMode>;
-declare function getInputValue(): Promise<string>;
-declare function getLastResult(): Promise<RoutePlanResultDTO | null>;
-declare function goToPage(page: number): Promise<void>;
-declare function hide(): Promise<void>;
 export declare function isUiKitLoaded(): boolean;
 export declare function loadUiKit(): Promise<UiKitModule>;
-declare function nextPage(): Promise<void>;
 export declare const PlaceAutocomplete: DefineComponent<PlaceAutocompleteProps, {
     status: UiKitWidgetStatus;
-    search: typeof search;
-    setInputValue: typeof setInputValue;
-    getInputValue: typeof getInputValue;
-    setLocation: typeof setLocation;
-    setCitylimit: typeof setCitylimit;
-    setTypes: typeof setTypes;
-    show: typeof show;
-    hide: typeof hide;
+    search(keyword: string): Promise<void>;
+    setInputValue(value: string): Promise<void>;
+    getInputValue(): Promise<string>;
+    setLocation(location: string): Promise<void>;
+    setCitylimit(citylimit: boolean): Promise<void>;
+    setTypes(types: "all" | "city"): Promise<void>;
+    show(): Promise<void>;
+    hide(): Promise<void>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     select: (suggestion: PlaceSuggestionDTO) => any;
     highlight: (change: PlaceHighlightChangeDTO) => any;
@@ -98,6 +90,17 @@ export declare interface PlaceAutocompleteDisplayDTO {
     address?: boolean;
     district?: boolean;
     tag?: boolean;
+}
+export declare interface PlaceAutocompleteExpose {
+    readonly status: UiKitWidgetStatus;
+    search(keyword: string): Promise<void>;
+    setInputValue(value: string): Promise<void>;
+    getInputValue(): Promise<string>;
+    setLocation(location: string): Promise<void>;
+    setCitylimit(citylimit: boolean): Promise<void>;
+    setTypes(types: "all" | "city"): Promise<void>;
+    show(): Promise<void>;
+    hide(): Promise<void>;
 }
 export declare interface PlaceAutocompleteProps {
     placeholder?: string;
@@ -116,8 +119,8 @@ export declare interface PlaceBoundsDTO {
 }
 export declare const PlaceDetail: DefineComponent<PlaceDetailProps, {
     status: UiKitWidgetStatus;
-    setPlace: typeof setPlace;
-    clear: typeof clear;
+    setPlace(uidOrPoi: PlaceDetailPlaceInput): Promise<void>;
+    clear(): Promise<void>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     load: (detail: PlaceDetailDTO) => any;
 }, string, PublicProps, Readonly<PlaceDetailProps> & Readonly<{
@@ -143,6 +146,11 @@ export declare interface PlaceDetailDTO {
     uid?: string;
     point?: PlacePointDTO;
     tel?: string;
+}
+export declare interface PlaceDetailExpose {
+    readonly status: UiKitWidgetStatus;
+    setPlace(uidOrPoi: PlaceDetailPlaceInput): Promise<void>;
+    clear(): Promise<void>;
 }
 export declare type PlaceDetailPlaceInput = string | PlaceDetailPlaceObject;
 export declare type PlaceDetailPlaceObject = object;
@@ -171,12 +179,14 @@ export declare interface PlacePointDTO {
 }
 export declare const PlaceSearch: DefineComponent<PlaceSearchProps, {
     status: UiKitWidgetStatus;
-    search: typeof search_2;
-    searchNearby: typeof searchNearby;
-    searchInBounds: typeof searchInBounds;
-    prevPage: typeof prevPage;
-    nextPage: typeof nextPage;
-    goToPage: typeof goToPage;
+    search(keyword: string, option?: {
+        city?: string;
+    }): Promise<void>;
+    searchNearby(keyword: string, center: PlacePointDTO, radius?: number): Promise<void>;
+    searchInBounds(keyword: string, bounds: PlaceBoundsDTO): Promise<void>;
+    prevPage(): Promise<void>;
+    nextPage(): Promise<void>;
+    goToPage(page: number): Promise<void>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     load: (pois: PlacePoiDTO[]) => any;
     select: (poi: PlacePoiDTO) => any;
@@ -197,6 +207,17 @@ export declare interface PlaceSearchDisplayDTO {
     rank?: boolean;
     tag?: boolean;
 }
+export declare interface PlaceSearchExpose {
+    readonly status: UiKitWidgetStatus;
+    search(keyword: string, option?: {
+        city?: string;
+    }): Promise<void>;
+    searchNearby(keyword: string, center: PlacePointDTO, radius?: number): Promise<void>;
+    searchInBounds(keyword: string, bounds: PlaceBoundsDTO): Promise<void>;
+    prevPage(): Promise<void>;
+    nextPage(): Promise<void>;
+    goToPage(page: number): Promise<void>;
+}
 export declare interface PlaceSearchProps {
     pageCapacity?: number;
     pageNum?: number;
@@ -213,7 +234,6 @@ export declare interface PlaceSuggestionDTO {
     uid?: string;
     point?: PlacePointDTO;
 }
-declare function prevPage(): Promise<void>;
 export declare interface RouteDriveSegmentDTO extends RouteSegmentBaseDTO {
     type: "drive";
     description: string;
@@ -222,10 +242,10 @@ export declare interface RouteDriveSegmentDTO extends RouteSegmentBaseDTO {
 }
 export declare const RoutePlan: DefineComponent<RoutePlanProps, {
     status: UiKitWidgetStatus;
-    search: typeof search_3;
-    clear: typeof clear_2;
-    getCurrentType: typeof getCurrentType;
-    getLastResult: typeof getLastResult;
+    search(options: RoutePlanSearchOptionsDTO): Promise<RoutePlanResultDTO>;
+    clear(): Promise<void>;
+    getCurrentType(): Promise<RoutePlanMode>;
+    getLastResult(): Promise<RoutePlanResultDTO | null>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     error: (error: BMapError) => any;
     clear: () => any;
@@ -275,6 +295,13 @@ export declare interface RoutePlanDTO {
     path?: PlacePointDTO[];
 }
 export declare type RoutePlanEndpointInput = PlacePointDTO | string;
+export declare interface RoutePlanExpose {
+    readonly status: UiKitWidgetStatus;
+    search(options: RoutePlanSearchOptionsDTO): Promise<RoutePlanResultDTO>;
+    clear(): Promise<void>;
+    getCurrentType(): Promise<RoutePlanMode>;
+    getLastResult(): Promise<RoutePlanResultDTO | null>;
+}
 export declare type RoutePlanMode = "driving" | "transit" | "riding" | "walking";
 export declare interface RoutePlanNavClickDTO {
     type: RoutePlanMode;
@@ -339,19 +366,6 @@ export declare type RouteTransitSubType = "bus" | "subway" | "ferry" | "train" |
 export declare interface RouteWalkSegmentDTO extends RouteSegmentBaseDTO {
     type: "walk";
 }
-declare function search(keyword: string): Promise<void>;
-declare function search_2(keyword: string, option?: {
-    city?: string;
-}): Promise<void>;
-declare function search_3(options: RoutePlanSearchOptionsDTO): Promise<RoutePlanResultDTO>;
-declare function searchInBounds(keyword: string, bounds: PlaceBoundsDTO): Promise<void>;
-declare function searchNearby(keyword: string, center: PlacePointDTO, radius?: number): Promise<void>;
-declare function setCitylimit(citylimit: boolean): Promise<void>;
-declare function setInputValue(value: string): Promise<void>;
-declare function setLocation(location: string): Promise<void>;
-declare function setPlace(uidOrPoi: PlaceDetailPlaceInput): Promise<void>;
-declare function setTypes(types: "all" | "city"): Promise<void>;
-declare function show(): Promise<void>;
 export declare const UI_KIT_PACKAGE = "@baidumap/jsapi-ui-kit";
 export declare const UI_KIT_STYLE_PATH = "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 export declare interface UiKitAutocompleteWidget extends UiKitWidgetHandle {

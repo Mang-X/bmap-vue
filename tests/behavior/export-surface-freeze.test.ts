@@ -176,6 +176,15 @@ const FROZEN_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   "useTransitRoute",
   "useViewAnimation",
   "useWalkingRoute",
+  // issue #160：路线策略常量此前只在根入口有值；`./composables` 的导出面把它们一并
+  // 转出，调用方不必为了 `DrivingPolicy.AVOID_CONGESTION` 改从根入口 import。
+  // `MAP_EVENT_CATALOG` 同理：`MapEventName = keyof typeof MAP_EVENT_CATALOG` 需要它
+  // 以**值**的形式可达，而写成 `export type` 会产生运行时为 undefined 的幽灵导出。
+  "MAP_EVENT_CATALOG",
+  "DrivingPolicy",
+  "IntercityPolicy",
+  "TransitPolicy",
+  "TransitVehiclePolicy",
   ],
   "./plugins": [
   "BUILTIN_PLUGIN_CATALOG",
@@ -193,6 +202,12 @@ const FROZEN_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   "drawingManagerPlugin",
   "geoUtilsPlugin",
   "getDefaultPluginHost",
+  // issue #160：错误类与路线策略常量按值导出。
+  "BMapError",
+  "DrivingPolicy",
+  "IntercityPolicy",
+  "TransitPolicy",
+  "TransitVehiclePolicy",
   "mapVglPlugin",
   "resolvePluginDefinition",
   "stringToPluginDefinitions",

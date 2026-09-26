@@ -31,7 +31,7 @@
  * #104 的第二批里删除（官方 4.0 只有按实例的取消入口，它零生产消费者）。
  */
 import { onUnmounted, shallowRef, toRaw, type ShallowRef } from "vue";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { BMapError } from "../core/errors/BMapError";
 import { logger } from "../core/logger";
 import type { MapReadyContext } from "../core/context/types";
@@ -94,8 +94,12 @@ export interface UseViewAnimationReturn {
    * 因此关键帧改了不必重建 composable。
    *
    * 接管**可能失败**：取消上一段的命令真的打到 SDK 却失败时（例如它的延迟取消刚刚失败过），
-   * 本方法直接 reject —— 上一段仍是当前观察对象、继续被观察，稍后重试 {@link start} 或
-   * {@link cancel} 即可；本次新建实例的订阅在失败路径里已经下线，不会留下第二次尝试的残留。
+   * 本方法直接 reject —— 上一段仍是当前观察对象、继续被观察，稍后重试返回值的 `start` 或
+   * `cancel` 即可；本次新建实例的订阅在失败路径里已经下线，不会留下第二次尝试的残留。
+   *
+   * （这两个名字写在代码里而不是 `{@link …}`：`check:api` 的 `ae-unresolved-link` 会把
+   * `@link` 解析成**出口导出**，而 `start` / `cancel` 是 `ViewAnimation` 的成员、不是导出 ——
+   * 链接会永远解析不到。这条链接从 #160 起改为普通文字。）
    * 上一段只是**还没进启动安全窗口**（Driver 报 `deferred`）不算失败：那次取消会被登记下来，
    * 新段照常起播，旧段仍留在本 hooks 的重试入口里直到交付终态。
    */
@@ -120,7 +124,7 @@ export function useViewAnimation(
   options: UseViewAnimationOptions = {},
   map?: unknown,
 ): UseViewAnimationReturn {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
   const status = shallowRef<ViewAnimationStatus>("idle");
   let readyPromise: Promise<MapReadyContext> | null = null;
   const getReady = () => (readyPromise ??= ctx.whenReady());

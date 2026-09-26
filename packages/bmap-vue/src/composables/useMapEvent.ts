@@ -64,9 +64,14 @@ import {
   type MapEventPayloadOf,
 } from "../core/events/eventCatalog";
 import { subscribeMapEvent } from "../core/events/subscribeMapEvent";
-import type { BMapClient } from "../client/types";
+
 import type { MapHandle } from "../driver/types/handles";
-import { readEventSource, resolveMapEventSource, type MapEventSourceInput } from "./mapEventSource";
+import {
+  readEventSource,
+  resolveMapEventSource,
+  type EventSourceClient,
+  type MapEventSourceInput,
+} from "./mapEventSource";
 
 /**
  * 事件载荷类型：表内事件取逐事件的精确载荷，表外（raw 逃生口）退化为公共底座。
@@ -137,7 +142,7 @@ export function useMapEvent<K extends string>(
   };
 
   /** 建立/替换订阅：同一个「句柄 + SDK 名 + 合帧口径」上是幂等的。 */
-  const ensure = (map: MapHandle | null, client: BMapClient | null): void => {
+  const ensure = (map: MapHandle | null, client: EventSourceClient | null): void => {
     const rawName = String(toValue(name) ?? "");
     const entry = resolveMapEventName(rawName);
     // 表外名字原样订阅（raw 逃生口）；表内名字用 Catalog 的 SDK 拼写

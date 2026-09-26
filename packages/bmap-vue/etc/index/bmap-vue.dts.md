@@ -1311,7 +1311,7 @@ export declare const Autocomplete: DefineComponent<AutocompleteProps, {}, {}, {}
     onHighlight?: ((e: unknown) => any) | undefined;
     onConfirm?: ((e: unknown) => any) | undefined;
 }>, {}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare interface AutocompleteOptions {
+export declare interface AutocompleteOptions {
     input: HTMLInputElement;
     location?: unknown;
     types?: string[];
@@ -1327,7 +1327,7 @@ declare interface AutocompleteProps {
     onHighlight?: (e: unknown) => void;
     onConfirm?: (e: unknown) => void;
 }
-declare interface AutocompleteUpdateOptions {
+export declare interface AutocompleteUpdateOptions {
     location?: unknown;
     types?: string[];
 }
@@ -1567,8 +1567,8 @@ export declare interface BMapRidingRouteOptions {
     location?: MaybeRefOrGetter<BMapRouteLocation | undefined>;
     renderOptions?: MaybeRefOrGetter<BMapRouteRenderOptions | undefined>;
 }
-declare type BMapRouteLocation = string | GeoPoint | MapHandle;
-declare interface BMapRouteRenderOptions {
+export declare type BMapRouteLocation = string | GeoPoint | MapHandle;
+export declare interface BMapRouteRenderOptions {
     map?: MaybeRefOrGetter<MapHandle | null | undefined>;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
@@ -1611,7 +1611,7 @@ export declare const BUILTIN_PLUGIN_URLS: {
     readonly geoUtils: "https://mapopen.bj.bcebos.com/github/BMapGLLib/GeoUtils/src/GeoUtils.min.js";
     readonly mapvgl: "https://unpkg.com/mapvgl@1.0.0-beta.188/dist/mapvgl.min.js";
 };
-declare type BuiltinMarkerIconName = keyof typeof MARKER_ICON_SPRITES;
+export declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
 declare type BuiltinPluginName = "TrackAnimation" | "DrawingManager" | "GeoUtils" | "Mapvgl";
 export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare interface CapabilityDescriptor {
@@ -1633,7 +1633,7 @@ export declare interface CapabilityExplanation {
     runtimeOnly: boolean;
 }
 export declare type CapabilityFamily = "map" | "overlay" | "layer" | "service" | "panorama";
-declare type CapabilityReason = "supported" | "unlisted-capability" | "raw-member-missing" | "status-unsupported" | "overridden";
+export declare type CapabilityReason = "supported" | "unlisted-capability" | "raw-member-missing" | "status-unsupported" | "overridden";
 export declare interface CapabilityRegistry {
     supports(capability: Capability): boolean;
     require(capability: Capability): void;
@@ -1738,7 +1738,7 @@ export declare interface ControllableState<T> {
     commit(next: T): boolean;
     reset(): void;
 }
-declare interface ControlOptions {
+export declare interface ControlOptions {
     anchor?: string;
     offset?: Pixel;
     [key: string]: unknown;
@@ -1775,7 +1775,7 @@ declare interface CopyrightControlProps {
     };
     visible?: boolean;
 }
-declare interface CopyrightEntry {
+export declare interface CopyrightEntry {
     id: number;
     content: string;
     bounds?: unknown;
@@ -1818,7 +1818,7 @@ declare interface CustomControlProps {
     visible?: boolean;
 }
 export declare const CustomOverlay: __VLS_WithSlots_11<typeof __VLS_component_11, __VLS_Slots_11>;
-declare interface CustomOverlayOptions {
+export declare interface CustomOverlayOptions {
     offset?: Pixel;
     anchor?: Pixel;
     rotation?: number;
@@ -1904,7 +1904,7 @@ declare interface DOMLayerProps {
     enableDraggingMap?: boolean;
 }
 export declare function drawingManagerPlugin(): BMapPluginDefinition<unknown>;
-declare interface DriverEvent {
+export declare interface DriverEvent {
     type?: string;
     point?: Point;
     pixel?: Pixel;
@@ -1963,6 +1963,12 @@ export declare interface EventDriver {
 }
 declare type EventHandlerList<T = unknown> = Array<Handler<T>>;
 declare type EventHandlerMap<Events extends Record<EventType, unknown>> = Map<keyof Events | "*", EventHandlerList<Events[keyof Events]> | WildCardEventHandlerList<Events>>;
+export declare interface EventSourceClient {
+    readonly driver: {
+        readonly events: EventDriver;
+        readonly map: MapDriver;
+    };
+}
 declare type EventType = string | symbol;
 export declare type FeaturePick = PointPick<Record<string, unknown>>;
 export declare interface FeatureStateApi<KeyDomain extends FeatureStateKeyDomain = "default"> {
@@ -2011,7 +2017,7 @@ export declare interface FillLayerStyle {
     dashArray?: number[] | StyleExpression;
     height?: number | StyleExpression;
 }
-declare interface FrameScheduler {
+export declare interface FrameScheduler {
     schedule(key: PropertyKey, task: () => void): void;
     cancel(key: PropertyKey): void;
     flush(): void;
@@ -2077,7 +2083,7 @@ declare interface GeoJSONLayerProps {
     polygonStyle?: unknown;
     level?: number;
 }
-declare interface GeolocationAddressInfo {
+export declare interface GeolocationAddressInfo {
     country?: string;
     province?: string;
     city?: string;
@@ -2153,7 +2159,7 @@ declare interface InfoWindowManager {
     readonly size: number;
     dispose(): void;
 }
-declare interface InfoWindowOptions {
+export declare interface InfoWindowOptions {
     width?: number;
     height?: number;
     title?: string;
@@ -2255,7 +2261,7 @@ declare interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationD
 declare type JsapiV4VersionSource = "url" | "global" | "declared";
 export declare const Label: __VLS_WithSlots_9<typeof __VLS_component_9, __VLS_Slots_9>;
 export declare type LabelHandle = SdkHandle<"overlay:label">;
-declare interface LabelOptions {
+export declare interface LabelOptions {
     position?: Point;
     offset?: Pixel;
     zIndex?: number;
@@ -2279,15 +2285,15 @@ export declare interface LabelProps {
     visible?: boolean;
 }
 export declare type LabelStyle = Record<string, unknown>;
-declare interface LayerCreateOptions extends Record<string, unknown> {
+export declare interface LayerCreateOptions extends Record<string, unknown> {
     layerName?: string;
     createDOM?: (properties: object, point: {
         lng: number;
         lat: number;
     }) => HTMLElement;
 }
-declare type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
-declare type LayerData = object;
+export declare type LayerCtorSlot = "opacity" | "minZoom" | "maxZoom" | "zIndex" | "data";
+export declare type LayerData = object;
 export declare interface LayerDriver {
     create(kind: LayerKind, options?: LayerCreateOptions): LayerHandle;
     add(target: OverlayTarget, layer: LayerHandle): void;
@@ -2306,10 +2312,10 @@ export declare interface LayerDriver {
     getState(layer: LayerHandle): NativeLayerFeatureStateMap;
 }
 export declare type LayerHandle = SdkHandle<"layer" | `layer:${string}`>;
-declare type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
+export declare type LayerKind = "district" | "panorama-coverage" | "tile" | "traffic" | "geojson" | "dom" | "xyz" | "wms" | "wmts" | "raster" | "mvt";
 declare type LayerLedgerHandle = LayerHandle | NativeLayerHandle;
 declare type LayerLedgerKind = LayerKind | NativeLayerKind;
-declare type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
+export declare type LayerOperation = "setZIndex" | "setData" | "clearData" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState";
 declare interface LayerRecord {
     readonly id: symbol;
     readonly kind: LayerLedgerKind;
@@ -2331,7 +2337,7 @@ declare interface LayerRegistryInput {
     readonly remove: () => void;
     readonly quiesce?: (active: boolean) => void;
 }
-declare interface LayerSurface {
+export declare interface LayerSurface {
     readonly ctorSlots: readonly LayerCtorSlot[];
     readonly operations: readonly LayerOperation[];
 }
@@ -2833,7 +2839,7 @@ export declare interface MapEventDefinition {
     readonly coalesce: boolean;
     readonly description: string;
 }
-declare interface MapEventEmits {
+export declare interface MapEventEmits {
     load: [
         event: MapLoadPayload
     ];
@@ -2993,13 +2999,15 @@ export declare type MapEventPayloadOf<K extends MapEventName> = MapEventMap[K];
 export declare type MapEventSdkName = (typeof MAP_EVENT_CATALOG)[MapEventName]["sdk"];
 export declare interface MapEventSource {
     map: MaybeRefOrGetter<MapHandle | null>;
-    client: MaybeRefOrGetter<BMapClient | null>;
+    client: MaybeRefOrGetter<EventSourceClient | null>;
     scheduler?: FrameScheduler;
     whenMapCreated?: (callback: (ready: MapReadyContext) => void) => () => void;
     isTearingDown?: () => boolean;
-    resources?: ResourceScope;
+    resources?: {
+        add(disposer: () => void): () => void;
+    };
 }
-export declare type MapEventSourceInput = MapContext | MapEventSource;
+export declare type MapEventSourceInput = PublicMapContext | MapEventSource;
 export declare interface MapExpose extends MapCommands {
     getContainer(): HTMLElement | null;
     isContainerReady(): boolean;
@@ -3196,170 +3204,6 @@ declare interface Marker3DProps {
     visible?: boolean;
 }
 declare type Marker3dShape = "BMAP_SHAPE_CIRCLE" | "BMAP_SHAPE_RECT";
-declare const MARKER_ICON_SPRITES: {
-    readonly simple_red: readonly [
-        454,
-        378,
-        42,
-        66
-    ];
-    readonly simple_blue: readonly [
-        454,
-        450,
-        42,
-        66
-    ];
-    readonly loc_red: readonly [
-        400,
-        378,
-        46,
-        70
-    ];
-    readonly loc_blue: readonly [
-        400,
-        450,
-        46,
-        70
-    ];
-    readonly start: readonly [
-        298,
-        450,
-        46,
-        70
-    ];
-    readonly end: readonly [
-        298,
-        378,
-        46,
-        70
-    ];
-    readonly location: readonly [
-        400,
-        378,
-        46,
-        70
-    ];
-    readonly red1: readonly [
-        0,
-        0,
-        38,
-        38
-    ];
-    readonly red2: readonly [
-        38,
-        0,
-        38,
-        38
-    ];
-    readonly red3: readonly [
-        76,
-        0,
-        38,
-        38
-    ];
-    readonly red4: readonly [
-        114,
-        0,
-        38,
-        38
-    ];
-    readonly red5: readonly [
-        152,
-        0,
-        38,
-        38
-    ];
-    readonly red6: readonly [
-        190,
-        0,
-        38,
-        38
-    ];
-    readonly red7: readonly [
-        228,
-        0,
-        38,
-        38
-    ];
-    readonly red8: readonly [
-        266,
-        0,
-        38,
-        38
-    ];
-    readonly red9: readonly [
-        304,
-        0,
-        38,
-        38
-    ];
-    readonly red10: readonly [
-        342,
-        0,
-        38,
-        38
-    ];
-    readonly blue1: readonly [
-        0,
-        38,
-        38,
-        38
-    ];
-    readonly blue2: readonly [
-        38,
-        38,
-        38,
-        38
-    ];
-    readonly blue3: readonly [
-        76,
-        38,
-        38,
-        38
-    ];
-    readonly blue4: readonly [
-        114,
-        38,
-        38,
-        38
-    ];
-    readonly blue5: readonly [
-        152,
-        38,
-        38,
-        38
-    ];
-    readonly blue6: readonly [
-        190,
-        38,
-        38,
-        38
-    ];
-    readonly blue7: readonly [
-        228,
-        38,
-        38,
-        38
-    ];
-    readonly blue8: readonly [
-        266,
-        38,
-        38,
-        38
-    ];
-    readonly blue9: readonly [
-        304,
-        38,
-        38,
-        38
-    ];
-    readonly blue10: readonly [
-        342,
-        38,
-        38,
-        38
-    ];
-};
 export declare const MarkerCluster: <Item>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal_5<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_expose?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: __VLS_PrettifyLocal_5<Pick<Partial<{}> & Omit<{
         readonly "onItem-click"?: ((item: Item) => any) | undefined;
@@ -3415,7 +3259,7 @@ export declare interface MarkerCustomIcon {
 }
 export declare type MarkerHandle = SdkHandle<"overlay:marker">;
 export declare type MarkerIcon = MarkerIconName | MarkerCustomIcon;
-declare type MarkerIconInput = string | {
+export declare type MarkerIconInput = string | {
     imageUrl: string;
     size: Size;
     anchor?: Pixel;
@@ -3439,7 +3283,7 @@ export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof 
 };
 export declare interface MarkerListProps<Item> extends DataComponentProps<Item> {
 }
-declare interface MarkerOptions {
+export declare interface MarkerOptions {
     offset?: Pixel;
     title?: string;
     icon?: MarkerIconInput;
@@ -3568,9 +3412,9 @@ export declare interface NativeLayerDriver {
     setSpeed(layer: NativeLayerHandle, speed: number): void;
     setProcess(layer: NativeLayerHandle, process: number): void;
 }
-declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
-declare type NativeLayerFeatureState = Record<string, unknown>;
-declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
+export declare type NativeLayerFeatureState = Record<string, unknown>;
+export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
 declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
 export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line";
 export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
@@ -3721,7 +3565,7 @@ export declare interface OverlayPositionModel {
     applyFromProps(next: Point | undefined): void;
     observeFromSdk(next: Point): boolean;
 }
-declare type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupported";
+export declare type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupported";
 declare interface OverlayRecord<Resource = unknown> {
     readonly id: symbol;
     readonly type: string;
@@ -3748,7 +3592,7 @@ export declare interface OverlaySpec<Props extends object, Resource> {
     create(context: MapReadyContext, props: Readonly<Props>): Resource | Promise<Resource>;
     readonly events?: readonly OverlayEventSpec[];
 }
-declare interface OverlayTarget {
+export declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";
     handle: SdkHandle<string>;
 }
@@ -3889,7 +3733,7 @@ declare interface PathFillProps {
     fillColor?: string;
     fillOpacity?: number;
 }
-declare interface PathOptions {
+export declare interface PathOptions {
     strokeColor?: string;
     strokeWeight?: number;
     strokeOpacity?: number;
@@ -4096,6 +3940,25 @@ export declare interface PrismProps {
     enableMassClear?: boolean;
     visible?: boolean;
 }
+export declare interface PublicBMapClient {
+    readonly capabilities: CapabilityRegistry;
+    readonly driver: {
+        readonly services: ServiceDriver;
+        readonly events: EventDriver;
+        readonly map: MapDriver;
+    };
+}
+export declare interface PublicMapContext {
+    readonly isTearingDown: () => boolean;
+    readonly whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
+    readonly client: Readonly<ShallowRef<PublicBMapClient | null>>;
+    readonly map: Readonly<ShallowRef<MapHandle | null>>;
+    readonly status: Readonly<ShallowRef<MapStatus>>;
+    readonly error: Readonly<ShallowRef<unknown>>;
+    readonly events: {
+        emit(type: string, payload: unknown): void;
+    };
+}
 export declare const RasterTileLayer: __VLS_WithSlots_37<typeof __VLS_component_37, __VLS_Slots_37>;
 declare interface RasterTileLayerProps {
     visible?: boolean;
@@ -4139,7 +4002,7 @@ export declare interface ResolvedMapEvent {
     readonly coalesce: boolean;
     readonly declared: boolean;
 }
-export declare function resolveMapContext(map?: unknown): MapContext;
+export declare function resolveMapContext(map?: unknown): PublicMapContext;
 export declare function resolveMapEventName(name: string): ResolvedMapEvent | undefined;
 export declare function resolvePluginDefinition(name: string): BMapPluginDefinition<unknown>;
 declare interface ResourceRegistration<Resource = unknown> {
@@ -4632,7 +4495,7 @@ export declare function useMap(): {
     error: ShallowRef<unknown>;
     whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
 };
-export declare function useMapContext(): MapContext;
+export declare function useMapContext(): PublicMapContext;
 export declare function useMapEvent<K extends string>(name: MaybeRefOrGetter<K>, handler: MapEventHandler<K> | Ref<MapEventHandler<K>>, options?: UseMapEventOptions): () => void;
 export declare interface UseMapEventOptions {
     source?: MapEventSourceInput;
@@ -4743,7 +4606,7 @@ export declare function useWalkingRoute(options?: MaybeRefOrGetter<BMapWalkingRo
     cancel: () => void;
     reset: () => void;
 };
-declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
 export declare interface ViewAnimationKeyFrames {
     center: {
         lng: number;

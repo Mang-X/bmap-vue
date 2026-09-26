@@ -22,7 +22,7 @@ import type {
   WalkingRouteResult,
 } from "../driver/types/services";
 import { jsapiV4ServicesOf } from "../core/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import {
   buildRouteDriverOptions,
   createRouteTask,
@@ -49,7 +49,7 @@ export interface BMapWalkingRouteOptions {
 type WalkingSettings = Omit<WalkingRouteOptions, "renderOptions">;
 
 export function useWalkingRoute(options: MaybeRefOrGetter<BMapWalkingRouteOptions> = {}) {
-  const ctx = resolveMapContext();
+  const ctx = resolveInternalMapContext();
   const read = (): BMapWalkingRouteOptions => toValue(options) ?? {};
 
   const readState = (): RouteConstructionState<WalkingSettings> => {

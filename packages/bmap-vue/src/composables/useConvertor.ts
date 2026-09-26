@@ -11,7 +11,7 @@
  * 数值本身由官方定义，本库不另立取值域。
  */
 import type { ServiceHandle } from "../driver/types/handles";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 import { jsapiV4ServicesOf } from "../core/services";
 import type { CoordinateFromType, CoordinateToType } from "../driver/types/services";
@@ -37,7 +37,7 @@ export enum CoordinatesToType {
 export type { GeoPoint };
 
 export function useConvertor(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     GeoPoint[],

@@ -51,10 +51,11 @@ Runtime / Registry / Scope。issue 的决策门明确「禁止『先全导出以
   覆盖 `./advanced` `./composables` `./plugins` `./resolver` `./ui-kit`；改了公共类型面而没跑
   `pnpm generate:api` 就红。CI 在 `typecheck:*` → `build:package` 之后跑它（`dist` 是它的输入）。
 - `pnpm check:api` 同时钉住各出口 `ae-forgotten-export` 的**身份集合**
-  （`etc/<出口>/forgotten-exports.json`，全等才通过）：`advanced` 27 / `composables` 41 /
-  `plugins` 9 / `ui-kit` 21（`resolver` 0）。这些类型在报告里只剩一个名字、结构漂移不改基线
-  文本，**名字集合**是唯一还能看见它们的量；比条数会漏掉「删一个 + 新增一个」与「先降后涨回」
-  （#159 二轮评审 P1），所以新增与清理都得经 `pnpm generate:api` 在 diff 里留痕。
+  （`etc/<出口>/forgotten-exports.json`，全等才通过）。**五份基线已全部清零（issue #160）**，
+  门禁从「已知的存量清单」变成**零容忍**：任何一个名字重新出现在公共声明里、而没有被对应出口
+  导出，门禁立刻红。文件与比对逻辑**保留** —— 它就是这道 freeze 门本身。
+  比条数会漏掉「删一个 + 新增一个」与「先降后涨回」（#159 二轮评审 P1），所以判据是**名字集合**、
+  新增与清理都得经 `pnpm generate:api` 在 diff 里留痕。
 - **每个出口都有一份类型级签名基线** `packages/bmap-vue/etc/<出口>/bmap-vue.dts.md`
   （`dist/<出口>.d.ts` 经 TypeScript printer `removeComments` 规范化后的全文）：`MapProps`、
   组件的 props / emits / slots / 暴露方法、根入口函数签名、以及**未导出类型的结构**一改就红。
@@ -76,5 +77,10 @@ Provider 家族迁进 `./advanced` 时留下的注入面欠账**已收口**（#1
 与 `loader?: ScriptLoader` 引用的两个类型没有被导出，而它们又带私有成员、外部**无法构造** ——
 留在公共选项里就是「赋不了值、结构也不进报告」的假支持，因此从公共选项**移除**，只留在内部选项里。
 可构造的那部分反过来**补上了导出**：`OfficialJsapiLoader` / `OfficialJsapiLoadOptions` /
-`JsapiV4ScriptMode` / `JsapiV4Provider`。未导出类型的存量由**身份集合**（守名字）与**签名基线**（守结构）两层兜底，逐条清理是后续票的事。
+`JsapiV4ScriptMode` / `JsapiV4Provider`。未导出类型的存量**已由 #160 全部结清**（五份集合基线均为
+`[]`）：处置逐条走 ADR 2026-09-25 的二选一 —— 签名暴露出来的形状升为公共导出，内部运行时
+（`MapContext` / `MapRuntimeShape` / `ResourceScope` / `MapEventBus` / `MapRuntime` …）
+改为**让引用消失**（对外只给窄面 `PublicMapContext` / `PublicBMapClient` / `EventSourceClient`），
+私有数据表（`MARKER_ICON_SPRITES`）改为**让引用它的类型不再依赖它**。`ae-unresolved-link` 两条
+（`useViewAnimation` 里指向非导出成员的 `{@link start}` / `{@link cancel}`）同票结清。
 详见 [ADR 2026-09-25 后果](../docs/adr/2026-09-25-public-export-surface-freeze.md)。

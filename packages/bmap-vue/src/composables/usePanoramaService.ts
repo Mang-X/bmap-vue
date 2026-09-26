@@ -20,7 +20,7 @@
 import type { PanoramaDataInfo, PanoramaServiceHandle } from "../driver/types/panorama";
 import type { Point } from "../driver/types/geometry";
 import { jsapiV4PanoramaOf } from "../core/panorama";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import { useSimpleServiceTask } from "./serviceTask";
 
 /** 一次检索请求（内部判别式联合：两种检索只差参数形状，共用同一份状态）。 */
@@ -29,7 +29,7 @@ type PanoramaSearchRequest =
   | { readonly mode: "location"; readonly position: Point; readonly radius?: number };
 
 export function usePanoramaService(map?: unknown) {
-  const ctx = resolveMapContext(map);
+  const ctx = resolveInternalMapContext(map);
 
   const task = useSimpleServiceTask<
     PanoramaDataInfo,

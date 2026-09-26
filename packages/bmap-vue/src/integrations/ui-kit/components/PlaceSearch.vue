@@ -21,7 +21,14 @@
 import { ref } from "vue";
 import { useUiKitWidget } from "../useUiKitWidget";
 import { toPoiDTO, toPoiList } from "../points";
-import type { PlacePointDTO, PlacePoiDTO, PlaceSearchDisplayDTO, UiKitSearchWidget } from "../types";
+import type {
+  PlaceBoundsDTO,
+  PlacePointDTO,
+  PlaceSearchExpose,
+  PlacePoiDTO,
+  PlaceSearchDisplayDTO,
+  UiKitSearchWidget,
+} from "../types";
 
 export interface PlaceSearchProps {
   /** 每页结果条数，默认由上游决定（10）。构造期选项，变更会重建 widget。 */
@@ -40,12 +47,6 @@ const emit = defineEmits<{
   /** 用户点选某条结果 */
   select: [poi: PlacePoiDTO];
 }>();
-
-/** 检索范围：西南角 / 东北角。 */
-export interface PlaceBoundsDTO {
-  sw: PlacePointDTO;
-  ne: PlacePointDTO;
-}
 
 const hostRef = ref<HTMLElement | null>(null);
 
@@ -123,23 +124,29 @@ function goToPage(page: number): Promise<void> {
   return withWidget((widget) => widget.goToPage(page));
 }
 
-defineExpose({
-  /**
-   * 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。
-   *
-   * 用取值 getter 而不是直接 expose 这个 ref：`defineExpose` 会被 Vue 的 `proxyRefs` 解包，
-   * runtime 读到的本来就是取值；写成 ref 会让声明与 runtime 不一致（评审 #73 第 2 项）。
-   */
-  get status() {
-    return status.value;
-  },
-  search,
-  searchNearby,
-  searchInBounds,
-  prevPage,
-  nextPage,
-  goToPage,
-});
+/**
+ * 组件对外的命令面：具名接口 + 显式标注（issue #160）。
+ *
+ * 返回类型标注后，`defineExpose()` 推导出的实例类型就是 `PlaceSearchExpose`；写成内联
+ * 对象字面量时 `vue-tsc` 会把每个方法提升成顶层 `declare function`，在公共声明里留下
+ * 「只有名字、消费方无法命名」的符号。`status` 用取值 getter（`defineExpose` 会被
+ * `proxyRefs` 解包，runtime 读到的本来就是取值）。
+ */
+function createExpose(): PlaceSearchExpose {
+  return {
+    get status() {
+      return status.value;
+    },
+    search,
+    searchNearby,
+    searchInBounds,
+    prevPage,
+    nextPage,
+    goToPage,
+  };
+}
+
+defineExpose(createExpose());
 
 defineOptions({ name: "PlaceSearch" });
 </script>
@@ -148,3 +155,6 @@ defineOptions({ name: "PlaceSearch" });
   <!-- host 只提供挂载点：结果列表的 DOM 全部由官方 UI Kit 渲染（翻页按钮需自行渲染并调动作）。 -->
   <div ref="hostRef" class="b-place-search"></div>
 </template>
+
+// `PlaceBoundsDTO` 的声明在 `../types`（公共类型自持）；这里转出去保持既有的导入路径。
+export type { PlaceBoundsDTO };

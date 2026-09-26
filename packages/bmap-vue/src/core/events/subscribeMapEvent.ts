@@ -17,7 +17,7 @@
  * 只对应**一个** raw 监听器（`driver/jsapi-v4/events.ts`）。
  */
 import { createFrameScheduler, type FrameScheduler } from "../scheduler/FrameScheduler";
-import type { BMapClient } from "../../client/types";
+import type { EventDriver } from "../../driver/types/events";
 import type { MapHandle } from "../../driver/types/handles";
 
 export interface SubscribeMapEventOptions {
@@ -33,7 +33,7 @@ export interface SubscribeMapEventOptions {
  * @returns 幂等 disposer：解绑订阅、丢弃未投递的合帧任务；自建合帧器时同时释放它。
  */
 export function subscribeMapEvent(
-  client: BMapClient | null,
+  client: { driver: { events: EventDriver } } | null,
   map: MapHandle | null,
   sdkEventName: string,
   listener: (event: unknown) => void,

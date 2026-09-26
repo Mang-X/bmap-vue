@@ -68,7 +68,6 @@ export type {
 // 的类型（外部真的能实现它）；`JsapiV4ScriptMode` 是 `CustomScriptV4ProviderOptions.mode` 的取值。
 export type {
   CreateLoadedJsapiV4Input,
-  JsapiV4ScriptMode,
   LoadedJsapiV4,
   OfficialJsapiLoadOptions,
   OfficialJsapiLoader,
@@ -140,3 +139,158 @@ export type { AutocompleteOptions, ServiceDriver } from "./driver/types/services
 export type { PanoramaDriver } from "./driver/types/panorama";
 export type { MapMouseEvent, DriverEvent, EventDriver } from "./driver/types/events";
 export { normalizeMapMouseEvent, toPoint, isPointLike, toPlainPoint, toPlainPoints } from "./driver/normalize";
+
+/* ==================================================================== *
+ * 已导出装配面 API 的**公共类型面**（issue #160）
+ *
+ * 这里的每个名字此前都出现在**已导出**的签名里（`createJsapiV4Driver()` 返回
+ * `JsapiV4Driver`、`normalizeProvider()` 返回 `NormalizedProvider`、
+ * `CapabilityRegistry.planOptions()` 返回 `Record<string, ControlOptionStatus>`、
+ * `ServiceDriver.createLocalSearch()` 的参数是 `LocalSearchOptions` …），却没有被导出 ——
+ * 消费方能拿到值、却没法为它**命名**。判据是「消费方能不能命名它」（ADR 2026-09-25）。
+ *
+ * 每一组都属于下列之一：
+ * - **装配面的正主**（Provider 家族 / Driver / Layer / Service 的 options 与 result）：
+ *   外部真的能构造、有稳定语义 ⇒ 升为导出；
+ * - **随签名必须可命名的结果形状**（`ControlOptionStatus` / `ViewAnimationCancelOutcome` …）。
+ *
+ * 刻意**不**导出的是 `MapRuntime` / `SdkRegistry` / `ScriptLoader` / `PluginRegistry`
+ * 这类带私有成员的内部实现（`JsapiV4ProviderInternalOptions` 已经把它们挡在公共
+ * 选项之外，见 `core/loader/providers/types.ts`）。
+ * ==================================================================== */
+
+// —— Provider 家族（`JsapiV4Provider` 的字段类型；`LoadedJsapiV4` 的成员类型）
+export type {
+  JsapiV4Engine,
+  JsapiV4LoadMetadata,
+  JsapiV4LoadMode,
+  JsapiV4Namespace,
+  JsapiV4ProviderId,
+  JsapiV4ScriptMode,
+  JsapiV4VersionSource,
+} from "./core/loader/providers/types";
+
+// —— 加载配置：`JsapiV4Provider.getCacheKey/load` 与 `LoadedJsapiV4` 都直接暴露它
+export type { BMapLoadOptions, CrossOriginValue } from "./core/loader/url";
+
+// —— 官方 Loader 锁定的基线版本（`LoadedJsapiV4.version` 的取值域）
+export type { OfficialJsapiV4Version } from "./core/loader/providers/official";
+
+// —— 归一化结果：`normalizeProvider()` 的返回值（消费方要拿它当 Config 传给组件）
+export type { NormalizedProvider } from "./client/createBMapClient";
+
+// —— Capability 工厂的选项
+export type { CreateCapabilityRegistryOptions } from "./driver/capability/registry";
+// —— `CapabilityRegistry.planOptions()` 的结果元素
+export type { ControlOptionStatus } from "./driver/types/controls";
+
+// —— Driver 工厂的返回值（raw SDK 边界的正主）
+export type { JsapiV4Driver } from "./driver/types/bmap";
+
+// —— 图层 Driver 的参数 / 结果
+export type {
+  LayerCreateOptions,
+  LayerCtorSlot,
+  LayerData,
+  LayerOperation,
+  LayerSurface,
+} from "./driver/types/layers";
+export type {
+  NativeLayerData,
+  NativeLayerDriver,
+  NativeLayerFeatureKeys,
+  NativeLayerFeatureState,
+  NativeLayerFeatureStateMap,
+  NativeLayerHandle,
+  NativeLayerKind,
+  NativeLayerOperation,
+  NativeLayerPick,
+  NativeLayerZoomRange,
+} from "./driver/types/native-layers";
+
+// —— 服务 Driver 的构造选项（`createLocalSearch` / 四条路线 / Autocomplete）
+export type {
+  AutocompleteUpdateOptions,
+  DrivingRouteOptions,
+  JsapiV4ServiceDriver,
+  BoundaryRequest,
+  CoordinateFromType,
+  CoordinateToType,
+  DrivingRouteEndpoint,
+  BoundaryRings,
+  ConvertorRequest,
+  DrivingRouteRequest,
+  DrivingRouteResult,
+  GeocodeRequest,
+  GeocodedAddress,
+  GeocodedAddressComponents,
+  GeolocationAddressInfo,
+  GeolocationFix,
+  GeolocationOptions,
+  LocalCityFix,
+  LocalSearchBounds,
+  LocalSearchPoi,
+  LocalSearchInBoundsRequest,
+  LocalSearchKeyword,
+  LocalSearchNearbyRequest,
+  LocalSearchResult,
+  LocalSearchSearchOption,
+  ReverseGeocodeRequest,
+  RidingRouteResult,
+  RouteRequest,
+  RouteEndpoint,
+  RoutePlan,
+  RouteResult,
+  RouteEndpointInfo,
+  RouteEndpointPoi,
+  RouteLeg,
+  RouteServiceHandle,
+  RouteStep,
+  RouteTaxiFare,
+  RouteTaxiFareDetail,
+  RouteServiceKind,
+  ServiceCall,
+  ServiceCallStatus,
+  ServiceErrorInfo,
+  ServiceInvocationDriver,
+  ServiceResult,
+  TransitRouteRequest,
+  TransitRoutePlan,
+  TransitRouteResult,
+  TransitLineSegment,
+  TransitRouteSegment,
+  TransitWalkSegment,
+  WalkingRouteResult,
+  LocalSearchOptions,
+  LocalSearchRenderOptions,
+  RidingRouteOptions,
+  RouteRenderOptions,
+  RouteRenderState,
+  RouteState,
+  TransitRouteOptions,
+  WalkingRouteOptions,
+} from "./driver/types/services";
+
+// —— `MapDriver.cancelViewAnimation()` 的结果（视角动画没有公开取消接口，见 ADR 决策）
+export type { ViewAnimationCancelOutcome } from "./driver/types/map";
+export type {
+  PanoramaDataInfo,
+  PanoramaHandle,
+  PanoramaLabelHandle,
+  PanoramaLabelOptions,
+  PanoramaOptions,
+  PanoramaPoiType,
+  PanoramaPov,
+  PanoramaSceneType,
+  PanoramaServiceHandle,
+  PanoramaSwitchOptions,
+  PanoramaViewerDriver,
+} from "./driver/types/panorama";
+// 官方锁定的基线版本常量（`LoadedJsapiV4.version` 的取值域就是它的字面量类型）
+export { OFFICIAL_V4_VERSION } from "./core/loader/providers/official";
+// 路线策略常量（值与类型同名）：装配面要能收下这些值而不必去根入口拿。
+export { DrivingPolicy, IntercityPolicy, TransitPolicy, TransitVehiclePolicy } from "./driver/types/services";
+
+// —— 错误类按值导出：`UnsupportedCapabilityError extends BMapError`，消费方要能 catch。
+export { BMapError } from "./core/errors/BMapError";
+export type { BMapErrorCode, BMapErrorOptions } from "./core/errors/BMapError";

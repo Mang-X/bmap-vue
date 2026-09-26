@@ -75,6 +75,12 @@ export interface PlaceAutocompleteDisplayDTO {
   tag?: boolean;
 }
 
+/** 检索范围：西南角 / 东北角。 */
+export interface PlaceBoundsDTO {
+  sw: PlacePointDTO;
+  ne: PlacePointDTO;
+}
+
 /** 检索结果列表字段显隐（构造期选项）。 */
 export interface PlaceSearchDisplayDTO {
   image?: boolean;
@@ -450,4 +456,93 @@ export interface UiKitModule {
   RoutePlan: new (container: string | HTMLElement, options: UiKitWidgetOptions) => UiKitRoutePlanWidget;
   /** 上游的其余导出（主题等）经这里保持可达。 */
   [exportedName: string]: unknown;
+}
+
+/** 桥的状态机；`disposed` 只有在组件卸载后才会出现。 */
+export type UiKitWidgetStatus = "idle" | "loading" | "ready" | "error" | "disposed";
+
+/* ==================================================================== *
+ * 四个组件的 **expose 面**（`<PlaceSearch ref>` 等拿到的形状）
+ *
+ * 为什么是具名接口而不是就地 `defineExpose({ search, nextPage, ... })`（issue #160）：
+ * 内联对象里的每个箭头函数会被 `vue-tsc` 提升成**顶层** `declare function search()`，
+ * `DefineComponent` 再以 `typeof search` 引用它 —— 于是每一个公开方法名都变成
+ * 「出现在公共声明里、却没有被导出」的符号（`ae-forgotten-export`），消费方能调用却
+ * 无法为它命名。改成**显式标注**的具名接口后，声明就地内联方法签名，那 21 个
+ * `declare function` 全部消失。这与 `<Map>` 的 `MapExpose`（`src/types/mapExpose.ts`）
+ * 是同一个模式，`<Map>` 一直是这么做的。
+ *
+ * 约定（四个组件共用）：
+ * - `status` 是**取值**而不是 ref：`defineExpose` 会被 Vue 的 `proxyRefs` 解包，
+ *   runtime 读到的本来就是取值；声明成 ref 会让类型与 runtime 不一致（评审 #73 第 2 项）。
+ * - 公开动作都是 Promise，语义见各方法注释（构造是异步的，动作**等待就绪**而不是静默 no-op）。
+ * ==================================================================== */
+
+/** `PlaceAutocomplete` 的 expose 面。 */
+export interface PlaceAutocompleteExpose {
+  /** 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。 */
+  readonly status: UiKitWidgetStatus;
+  /** 程序化检索。 */
+  search(keyword: string): Promise<void>;
+  /** 写入输入框（不触发检索）。 */
+  setInputValue(value: string): Promise<void>;
+  /** 读取输入框当前值。 */
+  getInputValue(): Promise<string>;
+  /** 运行时改写检索城市。 */
+  setLocation(location: string): Promise<void>;
+  /** 运行时改写城市严格限定。 */
+  setCitylimit(citylimit: boolean): Promise<void>;
+  /** 运行时改写结果类型过滤。 */
+  setTypes(types: "all" | "city"): Promise<void>;
+  /** 展开建议下拉。 */
+  show(): Promise<void>;
+  /** 收起建议下拉。 */
+  hide(): Promise<void>;
+}
+
+/** `PlaceSearch` 的 expose 面。 */
+export interface PlaceSearchExpose {
+  /** 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。 */
+  readonly status: UiKitWidgetStatus;
+  /** 关键字检索；`city` 可限定城市。 */
+  search(keyword: string, option?: { city?: string }): Promise<void>;
+  /** 周边检索。坐标经 Driver 转 raw Point 后再交给上游。 */
+  searchNearby(keyword: string, center: PlacePointDTO, radius?: number): Promise<void>;
+  /** 范围检索（矩形西南 / 东北角）。 */
+  searchInBounds(keyword: string, bounds: PlaceBoundsDTO): Promise<void>;
+  /** 上一页。 */
+  prevPage(): Promise<void>;
+  /** 下一页（沿用上次检索条件）。 */
+  nextPage(): Promise<void>;
+  /** 跳转到指定页（从 1 开始）。 */
+  goToPage(page: number): Promise<void>;
+}
+
+/** `PlaceDetail` 的 expose 面。 */
+export interface PlaceDetailExpose {
+  /** 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。 */
+  readonly status: UiKitWidgetStatus;
+  /** 设置当前展示的地点：uid，或上游能渲染的 POI 对象（原样转发）。 */
+  setPlace(uidOrPoi: PlaceDetailPlaceInput): Promise<void>;
+  /** 清空详情区域，恢复空状态占位。 */
+  clear(): Promise<void>;
+}
+
+/** `RoutePlan` 的 expose 面。 */
+export interface RoutePlanExpose {
+  /** 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。 */
+  readonly status: UiKitWidgetStatus;
+  /**
+   * 搜索路线。
+   *
+   * 起点 / 终点支持纯数据坐标（经 Driver 转成引擎原生点）或地点名 / uid 字符串。
+   * Promise 是本次搜索的结算，`result` / `error` 事件是同一件事的推送面。
+   */
+  search(options: RoutePlanSearchOptionsDTO): Promise<RoutePlanResultDTO>;
+  /** 清空结果（同时触发上游的 `clear` 事件）。 */
+  clear(): Promise<void>;
+  /** 当前规划类型（锁定版本恒为 `driving`）。 */
+  getCurrentType(): Promise<RoutePlanMode>;
+  /** 上次搜索结果；没有搜索过（或被清空）时为 `null`。 */
+  getLastResult(): Promise<RoutePlanResultDTO | null>;
 }

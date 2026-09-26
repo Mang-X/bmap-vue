@@ -30,6 +30,7 @@ import { useUiKitWidget } from "../useUiKitWidget";
 import { toPlaceDetailDTO } from "../points";
 import type {
   PlaceDetailDTO,
+  PlaceDetailExpose,
   PlaceDetailDisplayDTO,
   PlaceDetailPlaceInput,
   UiKitPlaceDetailWidget,
@@ -133,19 +134,24 @@ function clear(): Promise<void> {
   return withWidget((instance) => instance.clear());
 }
 
-defineExpose({
-  /**
-   * 桥的状态：`idle` / `loading` / `ready` / `error` / `disposed`。
-   *
-   * 用取值 getter 而不是直接 expose 这个 ref：`defineExpose` 会被 Vue 的 `proxyRefs` 解包，
-   * runtime 读到的本来就是取值；写成 ref 会让声明与 runtime 不一致（评审 #73 第 2 项）。
-   */
-  get status() {
-    return status.value;
-  },
-  setPlace,
-  clear,
-});
+/**
+ * 组件对外的命令面：具名接口 + 显式标注（issue #160）。
+ *
+ * 返回类型标注后，`defineExpose()` 推导出的实例类型就是 `PlaceDetailExpose`；写成内联对象字面量时
+ * `vue-tsc` 会把每个方法提升成顶层 `declare function`，在公共声明里留下「只有名字、
+ * 消费方无法命名」的符号。`status` 用取值 getter（`defineExpose` 会被 `proxyRefs` 解包）。
+ */
+function createExpose(): PlaceDetailExpose {
+  return {
+    get status() {
+      return status.value;
+    },
+    setPlace,
+    clear,
+  };
+}
+
+defineExpose(createExpose());
 
 defineOptions({ name: "PlaceDetail" });
 </script>

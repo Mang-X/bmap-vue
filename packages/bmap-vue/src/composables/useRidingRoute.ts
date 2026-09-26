@@ -19,7 +19,7 @@ import type {
   RouteRequest,
 } from "../driver/types/services";
 import { jsapiV4ServicesOf } from "../core/services";
-import { resolveMapContext } from "./resolveMapContext";
+import { resolveInternalMapContext } from "./resolveMapContext";
 import {
   buildRouteDriverOptions,
   createRouteTask,
@@ -46,7 +46,7 @@ export interface BMapRidingRouteOptions {
 type RidingSettings = Omit<RidingRouteOptions, "renderOptions">;
 
 export function useRidingRoute(options: MaybeRefOrGetter<BMapRidingRouteOptions> = {}) {
-  const ctx = resolveMapContext();
+  const ctx = resolveInternalMapContext();
   const read = (): BMapRidingRouteOptions => toValue(options) ?? {};
 
   const readState = (): RouteConstructionState<RidingSettings> => {
