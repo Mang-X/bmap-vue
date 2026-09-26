@@ -6,6 +6,11 @@
 - 取代：无
 - 相关：[`2026-09-11-jsapi-v4-map-facet`](./2026-09-11-jsapi-v4-map-facet.md)、[`2026-09-11-jsapi-v4-overlay-facet`](./2026-09-11-jsapi-v4-overlay-facet.md)、[`2026-09-11-jsapi-v4-driver-foundation`](./2026-09-11-jsapi-v4-driver-foundation.md)、[`2026-09-10-bmap-raw-sdk-boundary`](./2026-09-10-bmap-raw-sdk-boundary.md)
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本 ADR 的决策**全部保持原样**，但 §背景第 6 条
+> 关于 `PanoramaCoverageLayer` 的事实陈述**仍然为真**（4.0.5 全包无该类声明），因此「按结构探测」
+> 的口径不变。同一条里「`layer.panorama-coverage` 能力不在 Catalog」那一半在 #126
+> （ADR `2026-09-24-single-engine-capability-catalog`）已经收口，本 ADR 的 `V4_ONLY` 措辞已过时。
+
 ## 背景
 
 `#19` 交付 v4 Driver 底座、`#20` 交付 Map Facet、`#21` 交付 Overlay Facet；`createJsapiV4Driver`

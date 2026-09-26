@@ -45,5 +45,5 @@ layer/trafficLayer
 
 ## 参考
 
-- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.4` 的类声明。
+- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.5` 的类声明。
 - 排障（CORS / 坐标系 / 占位符）见「[图层总览](./index.md)」。

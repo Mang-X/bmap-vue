@@ -19,11 +19,13 @@ title: 数据组件
 | 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
 > 三个点图层组件落在**官方原生批量点图层**上：前两个（`PointShapeLayer` / `PointIconLayer`）在
-> `@baidumap/jsapi-v4-types@4.0.4` 里有完整类声明；`PointLayer` 用的 `BMap.PointLayer` 属官方
-> **扩展 API**（运行时存在、类型包没有类声明、可视化实现按需异步注入），因此它被标为
+> `@baidumap/jsapi-v4-types` 里有完整类声明，但 4.0.5 起**已被官方标记 `@deprecated`**（官方建议
+> 分别改用 `PointLayer` 的形状模式 / 图标模式）；`PointLayer` 用的 `BMap.PointLayer` 属官方
+> **扩展 API**——4.0.5 的 `visualization/PointLayer.d.ts` **已经补上了类声明**，但可视化实现仍是
+> 按需异步注入的（「类型包里有类声明」≠「运行时已加载」），因此它被标为
 > `experimental`：能力就绪之前创建会**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`，经 `resource:error`
 > 交出），**不会**自动改用另外两个类 —— 它们是不同的 SDK 能力，偷偷换等于改掉你的意图。
-> v3 时代那个 `BMap.PointCollection` 类在 4.0 的**类型包里没有声明**（运行时仍然存在，本库探针实测
+> v3 时代那个 `BMap.PointCollection` 类在 4.0.5 的**类型包里仍然没有声明**（运行时仍然存在，本库探针实测
 > `typeof BMap.PointCollection === "function"`），本库按 official-first 只使用**两处都声明**的等价 API。
 
 所有数据组件的**取数面完全一致**，业务数据可以在它们之间平移：

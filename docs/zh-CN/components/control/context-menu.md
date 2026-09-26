@@ -98,7 +98,7 @@ context-menu/index
 | 直接写在 `<Map>` 下 | 地图     | `Map#addContextMenu(menu)`（官方 4.0 有声明）         |
 | 写在 `<Marker>` 里  | 那个标注 | `Marker#addContextMenu(menu)`（**运行时扩展成员**）   |
 
-> `Marker#addContextMenu` / `#removeContextMenu` 在官方 4.0.4 的**类型包里没有声明**（只声明在 `Map` 上），
+> `Marker#addContextMenu` / `#removeContextMenu` 在官方 4.0.5 的**类型包里没有声明**（只声明在 `Map` 上），
 > 但真实 4.0 运行时存在且可用：挂上之后右键该标注会派发菜单的 `open`，`removeContextMenu` 之后同样的
 > 右键不再 `open`。本库据此支持 marker 目标，读数与依据见
 > [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)。

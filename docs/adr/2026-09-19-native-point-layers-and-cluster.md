@@ -20,6 +20,21 @@
      回答不支持」→ 本 ADR 决策 6 **只对 `setVisible` 放开**（取过证），其余继承成员仍然关闭。
   旧 ADR 正文保持原样（它们是冻结文件），只在对应条目上加指针。
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本 ADR 的决策**全部保持原样**，但 §背景
+> 「三个来源」表格第一行已经变了，正文原样保留作为历史记录：
+> `@baidumap/jsapi-v4-types@4.0.5` **声明了 `PointLayer` 与 `ClusterLayer`**
+> （新增的 `visualization/PointLayer.d.ts` / `visualization/ClusterLayer.d.ts`），
+> 「声明面缺」这一条不再成立。
+>
+> **取证与决策仍然成立**：这两个类在真实运行时**仍要等可视化扩展异步注入**——
+> 「有声明」说的是形状，「已注入」说的是可用性，两件事各判各的。Driver 里的
+> `RUNTIME_INJECTED_LAYER_CTORS` 就是为此与 `declared` 正交地单列；决策 6 只对 `setVisible`
+> 放开的**探针取证**（#35，`scripts/probe-native-point-cluster.mts`）也没有被推翻。
+>
+> 另一处变化：`PointIconLayer` / `PointShapeLayer` 在 4.0.5 起被官方标 `@deprecated`
+> （`layer/PointIconLayer.d.ts:132` / `layer/PointShapeLayer.d.ts:152`，建议改用 `PointLayer`
+> 的图标模式 / 形状模式）。本 ADR 的组件名与 SDK 类映射不变。
+
 ## 背景
 
 issue #35 的目标是「实现原生 Point / PointIcon / PointShape / Cluster 图层」，但票面在

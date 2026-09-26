@@ -8,18 +8,23 @@
 import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 ```
 
-## 先选对组件（差别来自**官方有没有声明**）
+## 先选对组件（差别来自**官方声明了什么**）
 
 | 组件 | 官方类 | 能力面 | 适合 |
 | --- | --- | --- | --- |
-| `LineLayer` | `LineLayer`（4.0.4 有声明） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
-| `FillLayer` | `FillLayer`（有声明） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
-| `HeatmapLayer` | `Heatmap`（**无声明**，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
-| `TrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
+| `LineLayer` | `LineLayer`（有声明；4.0.5 起官方标 `@deprecated`，建议改用 `PolylineLayer`） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
+| `FillLayer` | `FillLayer`（同上；官方建议改用 `PolygonLayer`） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
+| `HeatmapLayer` | `Heatmap`（4.0.5 补上类声明，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
+| `TrackLineLayer` | `TrackLine`（4.0.5 补上类声明，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
 
-「官方有没有声明」不是细节：**没有声明**的类只能按「运行时按需注入」处理，本库因此只暴露驱动已
-登记、且逐条核对过的入口。所以后两个组件**没有** `opacity` / `zIndex` / `minZoom` / `maxZoom`——
-官方不公开对应 setter，声明了也只是静默忽略（假支持）。
+**「类型包里有没有类声明」不是能力面的依据**。这四个类在 4.0.5 之后**全部有**类声明
+（`Heatmap` / `TrackLine` 是 4.0.5 才补上的，`LineLayer` / `FillLayer` 更早就有），
+但它们在浏览器里仍要等**可视化扩展异步注入**才能用——「有声明」说的是形状，
+「已注入」说的是可用性，两件事各判各的。所以后两个组件**没有** `opacity` / `zIndex` /
+`minZoom` / `maxZoom`：这些是**本库登记过的入口**，官方 4.0.5 声明里虽出现了
+`setOpacity` / `setZIndex`，但官方扩展 API 专页没有把它们列为这两类的契约
+（见 `driver/jsapi-v4/native-layers.ts` 里「不把未取证成员当契约」的口径），
+声明了也只是静默忽略（假支持）。
 
 ## 统一语义：同名的 prop，四条写入路径
 
@@ -28,11 +33,20 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 | 变化 | 路径 | 是否重建 |
 | --- | --- | --- |
 | `data`（有值） | `setData()` | 否 |
-| `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例**（这一族没有公开的清空入口） | **是** |
+| `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例** | **是** |
 | `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时会把上一代的数据补齐到新实例** | 否 |
-| `style` | `setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」） | 否 |
+| `style` | `LineLayer` / `FillLayer`：`setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」）；`HeatmapLayer` / `TrackLineLayer`：`setOptions()`（4.0.5 声明的新入口） | 否 |
 | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
 | `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
+
+`data: null` 走「换实例」而不是调 `clearData()`：这是本库自己的取舍
+（ADR `2026-09-19-native-data-layer-components` 决策 8 / #106 评审 P1）——这一族的实例本就随摘除
+被丢弃，摘除前多打一次可能失败的调用没有收益。
+
+> 该取舍最初的理由是「这一族没有公开的清空入口」。4.0.5 之后这条**只对一半成立**：官方
+> `visualization/{PointLayer,ClusterLayer,Heatmap,TrackLine}.d.ts` 都声明了 `clearData()`，
+> `layer/{LineLayer,FillLayer}.d.ts` 仍然没有（`layer/` 里只有 `GeoJSONLayer` 声明了它）。
+> **行为不变**（四个组件仍然换实例），改变的只是这条说明的准确性。
 
 两条容易踩的语义：
 
@@ -45,11 +59,18 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 
 | kind | 隐藏的语义 |
 | --- | --- |
-| `LineLayer` / `FillLayer`（有 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
-| `HeatmapLayer` / `TrackLineLayer`（没有 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
+| `LineLayer` / `FillLayer`（本库登记了 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
+| `HeatmapLayer` / `TrackLineLayer`（本库**没有**登记 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
 
 后者的行为来自实测：`removeLayer` 之后的实例再也渲染不了（重挂不会让内容回来），所以本库不去猜
 「复用可行」。文档只承诺能做到的事。
+
+> 「本库没有登记」与「官方没声明」不是一回事。4.0.5 的
+> `visualization/Heatmap.d.ts` / `visualization/TrackLine.d.ts` **都声明了 `setVisible` /
+> `getVisible` / `setOpacity` / `setZIndex` / `setRenderStage` / `setRefCenter`**。本库仍然不暴露它们：
+> 理由是 live 探针只对 `PointLayer` / `ClusterLayer` 的 `setVisible` 做过往返取证，
+> 其余继承成员没有取证（见 `driver/jsapi-v4/native-layers.ts` 的 `RUNTIME_INJECTED_LAYER_CTORS`
+> 与 kind 表）。**这是本库的判断，不是上游声明的缺口。**
 
 ## 拾取事件
 

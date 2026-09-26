@@ -7,6 +7,23 @@
   其余决策不变；见下方 §11 的取代注记）
 - 相关：[`2026-09-11-jsapi-v4-driver-foundation`](./2026-09-11-jsapi-v4-driver-foundation.md)、[`2026-09-11-jsapi-v4-map-facet`](./2026-09-11-jsapi-v4-map-facet.md)、[`2026-09-11-jsapi-v4-overlay-facet`](./2026-09-11-jsapi-v4-overlay-facet.md)、[`2026-09-11-jsapi-v4-control-layer-facets`](./2026-09-11-jsapi-v4-control-layer-facets.md)、[`2026-09-10-bmap-raw-sdk-boundary`](./2026-09-10-bmap-raw-sdk-boundary.md)
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本 ADR 的决策**全部保持原样**，但两处
+> **事实陈述**已经变化，正文原样保留作为历史记录：
+>
+> 1. §背景第 4 条的「`@baidumap/jsapi-v4-types@4.0.4` 没有这四个类的类声明」不再成立——
+>    4.0.5 新增 `visualization/{PointLayer,ClusterLayer,Heatmap,TrackLine}.d.ts` 并由
+>    `index.d.ts:193-206` 引用，四个类都有了类声明。
+>    **但同一条决策的前提「能力探测不能在 Driver 构造期冻结结论」依然成立**：4.0.5 的声明里
+>    保留了「首次加载时可视化实现是异步注入的」这句，「有声明」≠「运行时已加载」。
+>    Driver 因此把 `declared` 与 `RUNTIME_INJECTED_LAYER_CTORS` 拆开各判各的
+>    （见 `driver/jsapi-v4/native-layers.ts`）。
+> 2. 非目标里「不为扩展 API 的四个类写 augmentation：官方 4.0.4 没有类声明」这条，
+>    **前提已消失**（4.0.5 提供了声明），但**结论未被采纳**：本库仍不写 augmentation，
+>    理由从「没有声明可补」变成「官方已提供，本库不重复镜像」
+>    （Official-first，`2026-09-13-official-first-loader-and-ui-kit`）。
+>
+> 另：`PanoramaCoverageLayer` 口径**未变**——4.0.5 全包仍无该类的声明。
+
 ## 背景
 
 `#19`~`#22` 交付了 v4 Driver 底座与 Map / Overlay / Control / Layer 四个 Facet，
