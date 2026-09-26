@@ -94,13 +94,18 @@ function adapt(): AdaptedPoints<Item> {
 
 /* ------------------------------------------------------------------ 装配 */
 
-/** 构造期选项袋（官方构造参数里**不能就地更新**的那些）。 */
+/**
+ * 构造期选项袋（官方构造参数里**不能就地更新**的那些）。
+ *
+ * ⚠️ 这里**没有** `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方 `PointLayerOptions` 上
+ * 没有这两个成员 —— 它们只在 `LineLayer` / `PointIconLayer` / `FillLayer` / `PointShapeLayer`
+ * 上声明。原先无条件透传的结果是「构造器静默忽略两个不认识的键」，即收下用不了的 prop。
+ * 正确成员是 `pickTolerance` / `pickThrough` / `mouseStyleChange`（由 #169 接入）。
+ */
 function ctorOptions(p: Readonly<PointLayerProps<Item>>): Record<string, unknown> {
   return {
     idKey: resolveIdField(p.itemKey),
     enablePicked: p.enablePicked,
-    ...(p.pickWidth === undefined ? {} : { pickWidth: p.pickWidth }),
-    ...(p.pickHeight === undefined ? {} : { pickHeight: p.pickHeight }),
   };
 }
 

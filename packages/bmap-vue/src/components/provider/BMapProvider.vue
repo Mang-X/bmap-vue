@@ -31,17 +31,10 @@ export interface BMapProviderProps {
   provider?: BMapProviderLike;
   loadOptions?: BMapLoadOptions;
   autoLoad?: boolean;
-  suspense?: boolean;
-}
-
-export interface ProviderErrorSlotProps {
-  error: BMapError;
-  retry: () => Promise<void>;
 }
 
 const props = withDefaults(defineProps<BMapProviderProps>(), {
   autoLoad: true,
-  suspense: false,
 });
 
 const emit = defineEmits<{

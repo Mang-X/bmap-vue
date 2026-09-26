@@ -22,6 +22,7 @@ import {
   UnsupportedCapabilityError,
   type Capability,
 } from "../../packages/bmap-vue/src/driver/capability";
+import { createFakeBMapV4, FakeV4Map } from "../../packages/test-utils";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const MATRIX_MD = resolve(ROOT, "docs/zh-CN/contributing/capability-matrix.md");
@@ -216,6 +217,67 @@ describe("Capability override / supports / require / unsupported 策略", () => 
     expect(listed).not.toContain("service.track-animation");
     expect(listed.every((id) => CAPABILITY_IDS.includes(id))).toBe(true);
     expect(listed.length).toBeLessThan(CAPABILITY_IDS.length);
+  });
+});
+
+describe("#165 Class 5：目录不再承诺本库没有的能力", () => {
+  /**
+   * `supports()` 是 `<Map ref>` 公开命令面的一部分，返回 `true` 就是一个**兑现得了的承诺**。
+   * 下面三条逐一钉住这个关系：`rawMembers` 里的成员必须**真的被本库调用过**。
+   */
+  it("map.screenshot / map.fly-to 整条移除（驱动面没有对应命令）", () => {
+    expect(CAPABILITY_CATALOG["map.screenshot" as Capability]).toBeUndefined();
+    expect(CAPABILITY_CATALOG["map.fly-to" as Capability]).toBeUndefined();
+    expect(CAPABILITY_IDS).not.toContain("map.screenshot" as Capability);
+    expect(CAPABILITY_IDS).not.toContain("map.fly-to" as Capability);
+    // 走注册表对外口径：不再是「已收录能力」，而是目录未收录
+    const registry = baseRegistry();
+    expect(registry.explain("map.screenshot" as Capability).reason).toBe(
+      "unlisted-capability",
+    );
+    expect(registry.explain("map.fly-to" as Capability).reason).toBe("unlisted-capability");
+  });
+
+  it("map.viewport 只探测真正被调用的 setViewport", () => {
+    const descriptor = CAPABILITY_CATALOG["map.viewport"];
+    expect(descriptor.rawMembers).toEqual(["setViewport"]);
+    // 本库从不调用 getViewport，把它列进探测表会在「没有该成员」的 SDK 上假阴性
+    expect(descriptor.rawMembers).not.toContain("getViewport");
+  });
+
+  it("map.viewport 在缺 getViewport 的 SDK 上仍然可用（不再连坐假阴性）", () => {
+    // Fake 撤掉 getViewport 后，只探测 setViewport 的目录必须仍然支持该能力。
+    const fake = createFakeBMapV4();
+    const proto = FakeV4Map.prototype as unknown as Record<string, unknown>;
+    const original = proto.getViewport;
+    delete proto.getViewport;
+    try {
+      const registry = createCapabilityRegistry({
+        engine: "jsapi-v4",
+        version: "4.0",
+        rawSdk: fake.namespace,
+        unsupported: "silent",
+      });
+      expect(registry.supports("map.viewport")).toBe(true);
+    } finally {
+      proto.getViewport = original;
+    }
+  });
+
+  it("map.viewport 探测的成员真的出现在 Driver 的实现里（防止再列入从不被调用的成员）", () => {
+    // 只约束本票改过的那一条：`rawMembers` 的口径是「本库真的调用过的成员」。
+    // （不能推广成「所有 map 条目的成员都是 MapDriver 的方法名」——`centerAndZoom` 这类成员是
+    //  Driver **内部**调用的 SDK 成员，不是 MapDriver 上的命令面。）
+    const driverSource = readFileSync(
+      resolve(ROOT, "packages/bmap-vue/src/driver/jsapi-v4/map.ts"),
+      "utf8",
+    );
+    for (const member of CAPABILITY_CATALOG["map.viewport"].rawMembers ?? []) {
+      expect(
+        driverSource.includes(`"${member}"`),
+        `map.viewport 探测了 ${member}，但 Driver 实现里没有任何地方引用它`,
+      ).toBe(true);
+    }
   });
 });
 

@@ -61,9 +61,10 @@ const props = withDefaults(defineProps<MapProps>(), {
   width: "100%",
   height: "550px",
   mapType: "BMAP_NORMAL_MAP",
-  minZoom: 0,
+  // 官方 `MapOptions.minZoom` 声明「取值范围 [3, 21]」——原默认 0 **在声明的合法范围之外**，
+  // 会被原样送进 SDK 构造器（#165 Class 5）。默认取合法下界 3，越界值由 `assertZoomRange` 显式报错。
+  minZoom: 3,
   maxZoom: 21,
-  noAnimation: false,
   enableDragging: true,
   // ⚠️ 官方 `MapOptions.enableWheelZoom` 的默认是 **true**，本库默认**关闭**（避免页面滚动时
   // 误缩放），并由 Driver 的 `LIBRARY_MAP_DEFAULTS` 显式写进构造 options 固定它。
@@ -304,7 +305,7 @@ const headingState = useControllableState<number>({
   equals: anglesEqual,
 });
 
-/** tilt 是 0..90 的倾斜角（**无**环绕语义），容差与角度同级但用线性判等。 */
+/** tilt 是 0..73 的倾斜角（**无**环绕语义，官方 `MapOptions.tilt` 声明「取值范围 [0, 73]」），容差与角度同级但用线性判等。 */
 function tiltEquals(a: number, b: number): boolean {
   return numbersEqual(a, b, ANGLE_EPSILON);
 }
@@ -609,9 +610,7 @@ const currentRuntime = new MapRuntime({
   mapOptions: {
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
-    restrictCenter: props.restrictCenter,
     displayOptions: props.displayOptions,
-    backgroundColor: props.backgroundColor,
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。

@@ -30,9 +30,7 @@ export type Capability =
   | "map.viewport"
   | "map.heading"
   | "map.tilt"
-  | "map.fly-to"
   | "map.animate"
-  | "map.screenshot"
   | "map.check-resize"
   | "map.pixel-conversion"
   | "map.style"
@@ -156,8 +154,11 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "map.viewport": {
     id: "map.viewport",
     family: "map",
-    description: "视口（中心 + 缩放 + 旋转 + 倾斜）读写（getViewport / setViewport）",
-    rawMembers: ["getViewport", "setViewport"],
+    description: "视口写入（setViewport）；官方另有 getViewport，本库**没有**对应命令面",
+    // #165 Class 5：只探测真正被调用的 `setViewport`。原先把 `getViewport` 也列进来，
+    // 而 `MapDriver` 从不调用它 —— 于是在**没有**该成员的 SDK 上 `supports("map.viewport")`
+    // 会假阴性，把一个可用的写命令连坐成「不支持」。
+    rawMembers: ["setViewport"],
     status: "native",
     runtimeOnly: true,
   },
@@ -177,14 +178,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
-  "map.fly-to": {
-    id: "map.fly-to",
-    family: "map",
-    description: "平滑飞行定位（v4 原生 flyTo；探测成员 panTo）",
-    rawMembers: ["panTo"],
-    status: "extended",
-    runtimeOnly: true,
-  },
   "map.animate": {
     id: "map.animate",
     family: "map",
@@ -193,14 +186,16 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
-  "map.screenshot": {
-    id: "map.screenshot",
-    family: "map",
-    description: "地图截图（getScreenshot）",
-    rawMembers: ["getScreenshot"],
-    status: "native",
-    runtimeOnly: true,
-  },
+  // #165 Class 5 删除了两条「描述了本库没有的能力」的条目：
+  //
+  // - `map.screenshot`（`getScreenshot`）：官方 `core/Map.d.ts:1024` 确实声明了它，但
+  //   `MapDriver` **没有** `getScreenshot` 命令面，`supports("map.screenshot")` 却返回 true ——
+  //   一个兑现不了的承诺。`getScreenshot` 至今没有组件消费方，实现它属 #167 的范围，
+  //   由那张票负责按「先有消费者再进目录」的口径加回来。
+  // - `map.fly-to`：官方 `core/Map.d.ts:634` 有 `flyTo`，本库**没有** flyTo 命令；原先探测的
+  //   `panTo` 是**另一个成员**（瞬移，不是平滑飞行），拿它当「飞行定位已支持」的依据是张冠李戴。
+  //   `panTo` 本身不是一条独立能力（它是 `panTo` / `panBy` 移动族的一员，本库有命令面但没有
+  //   对应的目录条目 —— 按「没有消费者 / 判据退化成常量的一律不建」的口径，此处不补）。
   "map.check-resize": {
     id: "map.check-resize",
     family: "map",

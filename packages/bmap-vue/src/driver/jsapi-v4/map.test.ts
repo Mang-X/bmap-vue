@@ -116,6 +116,19 @@ describe("创建与销毁", () => {
     warn.mockRestore();
   });
 
+  // #165 Class 5 F：官方 `core/MapOptions.d.ts` 对 minZoom / maxZoom 都声明「取值范围 [3, 21]」。
+  // 越界值原样递进去、指望 SDK clamp 属于静默劣化（上游没有公开的归一化契约），因此显式报错。
+  it("minZoom / maxZoom 越出官方声明的 [3, 21] 时显式报错，不把非法值交给 SDK", () => {
+    const { map, container, fake } = setup();
+
+    expect(() => map.create(container, { minZoom: 0 })).toThrow(/\[3, 21\]/);
+    expect(() => map.create(container, { maxZoom: 22 })).toThrow(/\[3, 21\]/);
+    // 合法值（含两端）照常建图
+    const handle = map.create(container, { minZoom: 3, maxZoom: 21 });
+    expect(handle).toBeTruthy();
+    expect(fake.createdMaps.at(-1)?.options.minZoom).toBe(3);
+  });
+
   it("零尺寸容器可以创建、读取尺寸，容器变大后 checkResize 得到新尺寸", () => {
     const { map, container, fake } = setup({ width: "0px", height: "0px" });
     const handle = map.create(container);

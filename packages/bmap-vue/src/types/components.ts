@@ -121,10 +121,15 @@ export interface MapProps {
   mapStyleId?: string;
   mapStyleJson?: Record<string, unknown>;
   displayOptions?: Record<string, unknown>;
-  restrictCenter?: boolean;
+  /**
+   * 地图允许展示的**最小**缩放级别。官方 `MapOptions.minZoom` 声明「取值范围 [3, 21]」。
+   *
+   * 库默认 `3`（合法下界）。传值越界**显式报错**（`BMAP_INVALID_ARGUMENT`）而不是把非法值
+   * 原样交给 SDK：上游没有公开的归一化契约，静默接受等于把一个「文档说无效」的值当它有效。
+   * 见 #165 Class 5。
+   */
   minZoom?: number;
   maxZoom?: number;
-  noAnimation?: boolean;
   enableDragging?: boolean;
   /**
    * 是否允许鼠标滚轮 / 触摸板滑动缩放。
@@ -165,8 +170,6 @@ export interface MapProps {
   /** 容器尺寸变化时自动重设尺寸(v2 兼容) */
   enableAutoResize?: boolean;
   loadingBgColor?: string;
-  /** 背景色(透明度数组,如 [r,g,b,a]) */
-  backgroundColor?: number[];
   plugins?: string[];
 }
 
@@ -1097,10 +1100,14 @@ export interface PointLayerProps<Item> extends DataComponentProps<Item> {
    * `unsupported`（`setVisible` 是唯一的例外，它取过证）。收下一个用不了的 prop 属于假支持。
    */
   enablePicked?: boolean;
-  /** 点击拾取矩形宽（像素）。构造期选项。 */
-  pickWidth?: number;
-  /** 点击拾取矩形高（像素）。构造期选项。 */
-  pickHeight?: number;
+  /**
+   * ⚠️ 这里**刻意不**有 `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方只在
+   * `layer/LineLayer.d.ts` / `layer/PointIconLayer.d.ts` / `layer/FillLayer.d.ts` /
+   * `layer/PointShapeLayer.d.ts` 上声明这两个成员；`PointLayer` 的拾取面是 `pickTolerance`
+   * （默认 4）/ `pickThrough` / `mouseStyleChange`。同名成员在 layer 家族上**仍然合法**
+   * （见 `PointIconLayerProps` / `NativeLayerPickOptions`），删除是 **kind 特定**的。
+   * 正确的拾取成员由 #169 补进来。
+   */
 }
 
 /**

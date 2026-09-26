@@ -29,7 +29,7 @@ const { center, zoom, moving } = useMapStatus()
 | `bounds`  | `Readonly<ShallowRef<Bounds \| null>>` | 可视范围（`{ southwest, northeast }`）          |
 | `size`    | `Readonly<ShallowRef<Size \| null>>` | 容器尺寸                                          |
 | `heading` | `Readonly<ShallowRef<number \| null>>` | 旋转角（度；v4 读回可能为负，`-90 ≡ 270`）      |
-| `tilt`    | `Readonly<ShallowRef<number \| null>>` | 倾斜角（度，0..90）                             |
+| `tilt`    | `Readonly<ShallowRef<number \| null>>` | 倾斜角（度，0..73）                             |
 | `moving`  | `Readonly<ShallowRef<boolean>>`     | 是否正在移动（`movestart` 起、`moveend` 止）      |
 | `zooming` | `Readonly<ShallowRef<boolean>>`     | 是否正在缩放（`zoomstart` 起、`zoomend` 止）      |
 | `dispose` | `() => void`                        | 释放订阅（幂等）；组件 / `effectScope` 内自动释放 |

@@ -126,8 +126,36 @@ const LIBRARY_MAP_DEFAULTS: Record<string, unknown> = {
   enableWheelZoom: false,
 };
 
-/** 项目已声明但 v4 `MapOptions` 无对应项、且无法无损翻译的键。 */
+/**
+ * 项目已声明但 v4 `MapOptions` 无对应项、且无法无损翻译的键。
+ *
+ * ⚠️ 这两个键在 `<Map>` 的**组件 prop** 层面已于 #165 Class 5 删除（声明了却读也不读 = 假支持）。
+ * 这里仍然保留，是因为 `InitialMapOptions` 本身是**导出的公共类型**（`advanced` / `plugins` /
+ * 根入口都重导出），`driver.map.create(container, { restrictCenter: true })` 仍是可达路径 ——
+ * 删掉丢弃表会让它们经索引签名**原样透传**给 SDK，恰好落进本文件上方注释批评的那一档
+ * （依赖 SDK 静默忽略不认识的键）。要连带删掉得先改公共类型面，那是独立的票。
+ */
 const UNSUPPORTED_OPTION_KEYS = new Set(["backgroundColor", "restrictCenter"]);
+
+/**
+ * 官方 `MapOptions.minZoom` / `maxZoom` 声明的合法取值范围（`core/MapOptions.d.ts`：
+ * 「地图允许展示的最小/最大级别。取值范围 [3, 21]」）。
+ *
+ * 越界值**显式报错**而不是交给 SDK：上游没有公开的归一化契约，把一个「文档说无效」的值原样
+ * 递进去、然后靠它被 clamp 或被渲染成怪东西，属于静默劣化（#165 Class 5）。
+ */
+const ZOOM_RANGE = { min: 3, max: 21 } as const;
+
+function assertZoomInRange(key: "minZoom" | "maxZoom", value: unknown): void {
+  if (typeof value !== "number" || !Number.isFinite(value)) return;
+  if (value >= ZOOM_RANGE.min && value <= ZOOM_RANGE.max) return;
+  throw new BMapError(
+    "BMAP_INVALID_ARGUMENT",
+    `${key} 必须是 [${ZOOM_RANGE.min}, ${ZOOM_RANGE.max}] 内的数值（官方 MapOptions 声明的取值范围）` +
+      `，收到 ${value}`,
+    { engine: "jsapi-v4", component: "MapDriver", [key]: value },
+  );
+}
 
 export interface CreateJsapiV4MapDriverInput {
   /** v4 全局命名空间（`globalThis.BMap`）；raw SDK 只允许在 Driver/Client 边界读取。 */
@@ -568,6 +596,9 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     for (const [key, value] of Object.entries(options ?? {})) {
       if (value === undefined) continue;
       if ((PASSTHROUGH_OPTION_KEYS as readonly string[]).includes(key)) {
+        if (key === "minZoom" || key === "maxZoom") {
+          assertZoomInRange(key, value);
+        }
         mapped[key] = value;
         continue;
       }

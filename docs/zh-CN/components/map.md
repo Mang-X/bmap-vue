@@ -140,11 +140,21 @@ map/theme2
 | client            | 已创建好的 `BMapClient`（最高优先级）            | `BMapClient`                                                            | -      | -                      | -                                  |
 | definition        | 完整 Client 定义（覆盖 provider/ak 解析）        | `CreateBMapClientOptions`                                               | -      | -                      | -                                  |
 | keepAliveBehavior | KeepAlive 下的行为：`suspend` 不销毁地图（激活后自动 `checkResize`），`dispose` 则销毁 | `'suspend' \| 'dispose'` | - | `'suspend'` | - |
-| minZoom           | 地图允许展示的最小级别                           | `number`                                                                | `0-21` | `0`                    | -                                  |
-| maxZoom           | 地图允许展示的最大级别                           | `number`                                                                | `0-21` | `21`                   | -                                  |
-| backgroundColor   | 地图背景颜色, rgba 数组                          | ` number[]`                                                             | -      | `[245, 245, 245, 100]` | <Badge type="tip" text="^2.1.0" /> |
-| restrictCenter    | 是否限制中心                                     | `boolean`                                                               | -      | `true`                 | <Badge type="tip" text="^1.1.3" /> |
+| minZoom           | 地图允许展示的最小级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `3` | - |
+| maxZoom           | 地图允许展示的最大级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `21` | - |
 | plugins           | 需要注册的插件（内置：`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，一律 optional；未知名字发 `plugin-error`） | `string[]` | - | - | - |
+
+::: warning 已删除的 props（#165 Class 5）
+`backgroundColor` / `restrictCenter` / `noAnimation` 三个 prop 已**删除**（此前是「声明了却读也不读」
+的假支持——官方 `MapOptions` 没有对应构造项）。替代路径：
+
+- **地图背景**：改用**容器样式**（`background-color`）或官方 `displayOptions`；
+- **限制中心 / 范围限制**：官方能力是 `restrictBounds(bounds)`（收 `Bounds`，不是布尔）。
+  ⚠️ 它**没有撤销入口**（上游没有 `unrestrictBounds` 之类的方法）—— 一旦设了就只能销毁重建地图；
+- **`noAnimation`**：官方只有 `setCenter` / `setZoom` 等**单次调用**的选项
+  （`centerAndZoom({ noAnimation: true })` 那种形状），**没有** `MapOptions.noAnimation`。
+  本库的首次视野**恒为** `noAnimation: true`，与该 prop 无关。
+:::
 
 ::: warning 默认路径的入口与插件
 默认路径由官方 `@baidumap/jsapi-loader` 决定，因此：
@@ -442,7 +452,7 @@ const tilt = ref(0)
 | `center` | 逐坐标容差比较（字符串按整串比较，跨形态永不相等） | `1e-7` 度 |
 | `zoom` | 数值容差比较 | `1e-6` |
 | `heading` | **按 360 环绕**取最小差（`-90` ≡ `270`） | `0.01` 度 |
-| `tilt` | 数值容差比较（0..90 无环绕语义） | `0.01` 度 |
+| `tilt` | 数值容差比较（0..73 无环绕语义） | `0.01` 度 |
 
 `heading` 的环绕判定不是可选优化：JSAPI 4.0 的 `setHeading(270)` 之后 `getHeading()` 返回
 `-90`，线性判等会让每次自身写入都产生一条假的 `update:heading`。
@@ -566,7 +576,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `setCenter(center)` | 设置中心点（不含 zoom，不会重置级别） | `(center: { lng, lat }) => void` |
 | `getZoom()` / `setZoom(zoom)` | 缩放级别读写 | `() => number \| null` / `(zoom: number) => void` |
 | `getHeading()` / `setHeading(heading)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number) => void` |
-| `getTilt()` / `setTilt(tilt)` | 倾斜角读写（0..90） | `() => number \| null` / `(tilt: number) => void` |
+| `getTilt()` / `setTilt(tilt)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
 | `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移 | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |

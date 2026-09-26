@@ -386,6 +386,13 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 `setZIndex` / …，而官方扩展专页没有把这一族列为 `PointLayer` 的方法面（`setVisible` 是唯一取过证
 的一位）。传了会**告警**，不会静默收下。
 
+::: warning `pickWidth` / `pickHeight` 已删除（#165 Class 5）
+这两个 prop 原先无条件透传给构造器，而官方**只在** `LineLayer` / `PointIconLayer` / `FillLayer` /
+`PointShapeLayer` 上声明它们（所以在 `BPointShapeLayer` / `PointIconLayer` 上它们**仍然合法**）。
+`PointLayer` 的拾取面是 **`pickTolerance`（默认 4）/ `pickThrough` / `mouseStyleChange`** ——
+这三个正确成员尚未接入，见 #169。
+:::
+
 ## 资源释放
 
 所有数据组件都随组件卸载释放全部资源（Marker 摘除 + 监听解绑）；四个落在原生图层上的组件

@@ -35,7 +35,6 @@ declare const __VLS_component: DefineComponent<BMapProviderProps, {
     onReady?: ((client: BMapClient) => any) | undefined;
 }>, {
     autoLoad: boolean;
-    suspense: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_10: DefineComponent<ContextMenuProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     select: (event: ContextMenuSelectPayload) => any;
@@ -400,7 +399,6 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     mapType: MapTypeIdName;
     enableWheelZoom: boolean;
     keepAliveBehavior: "suspend" | "dispose";
-    noAnimation: boolean;
     enableAutoResize: boolean;
     loadingBgColor: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
@@ -1555,7 +1553,6 @@ export declare interface BMapProviderProps {
     provider?: BMapProviderLike;
     loadOptions?: BMapLoadOptions;
     autoLoad?: boolean;
-    suspense?: boolean;
 }
 export declare function BMapResolver(): ComponentResolverLike;
 export declare interface BMapRidingRouteOptions {
@@ -1604,7 +1601,7 @@ export declare const BUILTIN_PLUGIN_URLS: {
 };
 export declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
 declare type BuiltinPluginName = "TrackAnimation" | "DrawingManager" | "GeoUtils" | "Mapvgl";
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare interface CapabilityDescriptor {
     id: Capability;
     family: CapabilityFamily;
@@ -1789,7 +1786,6 @@ export declare interface CreateBMapPluginOptions {
     ak?: string;
     apiUrl?: string;
     version?: string;
-    plugins?: string[];
     defaults?: Partial<BMapLoadOptions>;
     client?: CreateBMapClientOptions;
 }
@@ -3073,10 +3069,8 @@ export declare interface MapProps {
     mapStyleId?: string;
     mapStyleJson?: Record<string, unknown>;
     displayOptions?: Record<string, unknown>;
-    restrictCenter?: boolean;
     minZoom?: number;
     maxZoom?: number;
-    noAnimation?: boolean;
     enableDragging?: boolean;
     enableWheelZoom?: boolean;
     enableInertialDragging?: boolean;
@@ -3088,7 +3082,6 @@ export declare interface MapProps {
     fixCenterWhenResize?: boolean;
     enableAutoResize?: boolean;
     loadingBgColor?: string;
-    backgroundColor?: number[];
     plugins?: string[];
 }
 export declare interface MapReadyContext {
@@ -3877,8 +3870,6 @@ export declare interface PointLayerProps<Item> extends DataComponentProps<Item> 
     ];
     anchor?: string;
     enablePicked?: boolean;
-    pickWidth?: number;
-    pickHeight?: number;
 }
 export declare interface PointLike {
     lng: number;

@@ -64,10 +64,9 @@
       "status": "native",
       "runtimeOnly": true,
       "rawMembers": [
-        "getViewport",
         "setViewport"
       ],
-      "description": "视口（中心 + 缩放 + 旋转 + 倾斜）读写（getViewport / setViewport）"
+      "description": "视口写入（setViewport）；官方另有 getViewport，本库**没有**对应命令面"
     },
     {
       "id": "map.heading",
@@ -90,16 +89,6 @@
       "description": "地图倾斜角（setTilt）"
     },
     {
-      "id": "map.fly-to",
-      "family": "map",
-      "status": "extended",
-      "runtimeOnly": true,
-      "rawMembers": [
-        "panTo"
-      ],
-      "description": "平滑飞行定位（v4 原生 flyTo；探测成员 panTo）"
-    },
-    {
       "id": "map.animate",
       "family": "map",
       "status": "native",
@@ -109,16 +98,6 @@
         "cancelViewAnimation"
       ],
       "description": "视角关键帧动画（startViewAnimation / cancelViewAnimation）"
-    },
-    {
-      "id": "map.screenshot",
-      "family": "map",
-      "status": "native",
-      "runtimeOnly": true,
-      "rawMembers": [
-        "getScreenshot"
-      ],
-      "description": "地图截图（getScreenshot）"
     },
     {
       "id": "map.check-resize",
