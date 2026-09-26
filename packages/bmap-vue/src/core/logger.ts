@@ -7,12 +7,14 @@
  *
  * 1. `redactAk` —— **纯函数**，供 loader / ui-kit 等**已知具体 AK 值**的调用边界使用
  *    （`redactAk(input, ak)`）。它的公开契约被 loader 三处与既有单测钉住，本票不动。
- * 2. 通用输出路径（本文件其余部分）—— 把 `context` **投影成有限普通数据**。它不认识
- *    「本次操作的 AK 是多少」，因此走**形状**脱敏（`ak=` 参数、userinfo、AK 类字段名）。
+ * 2. 通用输出路径（本文件其余部分）—— 把 `message` 与 `context` **投影成有限普通数据**。
+ *    它不认识「本次操作的 AK 是多少」，因此走**形状**脱敏：`ak=` 参数、userinfo，以及
+ *    凭据类**键名**。这是**全部** context 字符串无条件过的，不是按键名挑着过。
  *
- * 为什么不再有进程级 AK 集合：多个 Client / 多个并发加载任务各持不同 AK 时，「最后一次
- * 写入的全局 AK」给不出正确答案（#163 已核实 `setAkForLogger` 零生产消费者并删除）。
- * 需要精确脱敏的边界本就知道自己的 AK，直接传 `redactAk(input, ak)`。
+ * 为什么没有任何「本次操作已知 AK」的通道：#163 逐个核过全库 `logger.*` 调用点，
+ * **没有一个**传 `ak`（`setAkForLogger` 同样零消费者，一并删除）。留一条没人走的通道
+ * 就是 AGENTS.md 点名的「没有消费者…一律删除」。需要**精确**脱敏的边界（loader 三处、
+ * `ui-kit/routePlan`）本就知道自己的 AK 值，直接调 `redactAk(input, ak)`。
  */
 
 /** 将字符串中的疑似 AK 脱敏为后四位 */
@@ -54,15 +56,25 @@ const USERINFO_MASK_PATTERN = /(https?:\/\/)([^/\s:@]+):([^/\s@]*)@/g;
 /** userinfo 的**探测**形状（判定用，不带 `g` 以免 `test()` 的 `lastIndex` 有状态）。 */
 const USERINFO_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]*@/;
 
-/** 单条字符串的输出上限：日志是给人定位问题的，不是倾倒现场。 */
-const MAX_TEXT = 200;
+/**
+ * 单条字符串的输出上限：日志是给人定位问题的，不是倾倒现场。
+ *
+ * `message` 与 `context` 的字符串值**共用**这一个上限（#163 评审：两个阈值没有依据，
+ * 且两处 `length > N ? slice : x` 是同一个形状）。定 300 而不是 200/120 的理由：一条
+ * 脱敏后的入口 URL（含 `ak=***1234`）约 60–80 字符、一条 stack 前两行约 200——300 足够
+ * 放行常见的定位信息，同时仍把「整条轨迹倾倒进 console」挡住。
+ */
+const MAX_TEXT = 300;
 
 /** 未知对象在日志里的占位：只说明「有个对象」，不展开它的字段。 */
-const OMITTED = "[object]";
+const OMITTED_OBJECT = "[object]";
+
+/** 带凭据的 stack 的占位：说清「这里本该有 stack」以及它为什么没了。 */
+const OMITTED_STACK = "[omitted: 形状含凭据]";
 
 /** 脱敏 + 截断：所有**进入**日志的文本都走这一个出口。 */
-function logSafeText(input: string, ak?: string | null): string {
-  const masked = redactAk(input, ak).replace(USERINFO_MASK_PATTERN, `$1$2:***@`);
+function logSafeText(input: string): string {
+  const masked = redactAk(input).replace(USERINFO_MASK_PATTERN, `$1$2:***@`);
   return masked.length > MAX_TEXT ? `${masked.slice(0, MAX_TEXT)}…` : masked;
 }
 
@@ -82,10 +94,10 @@ function isSensitiveText(text: string): boolean {
 }
 
 /** 从 `BMapError` / `Error` 身上只取定位必需的字段；`cause` / stack 默认不输出。 */
-function projectError(error: Error, ak: string | null | undefined): Record<string, unknown> {
+function projectError(error: Error): Record<string, unknown> {
   const projected: Record<string, unknown> = {
     name: error.name,
-    message: logSafeText(error.message, ak),
+    message: logSafeText(error.message),
   };
   // `BMapError` 在 `Error` 之上挂的定位字段。逐个具名读，**不用**索引签名去遍历未知属性
   // （`cause` 就在那儿，`for...in` 会把它连同用户数据一起带出来）。
@@ -102,20 +114,17 @@ function projectError(error: Error, ak: string | null | undefined): Record<strin
   if (typeof located.code === "string") projected.code = located.code;
   for (const key of ["mapId", "component", "plugin", "capability", "engine", "version"] as const) {
     const value = located[key];
-    if (typeof value === "string" && value) projected[key] = logSafeText(value, ak);
+    if (typeof value === "string" && value) projected[key] = logSafeText(value);
   }
   // stack **有条件**保留：只在确认不带凭据时给，且过一遍脱敏 + 截断。
-  // 带凭据的 stack 整体省略——日志是要发出去的文本，截断成 200 字符仍可能留下半截 AK。
+  // 带凭据的 stack 整体省略——日志是要发出去的文本，截断仍可能留下半截 AK。
   if (error.stack) {
-    projected.stack = isSensitiveText(error.stack) ? "[omitted]" : logSafeText(error.stack, ak);
+    projected.stack = isSensitiveText(error.stack) ? OMITTED_STACK : logSafeText(error.stack);
   }
   // `cause` 刻意不投影：它默认装上游 / 业务原始对象（可能含用户数据、加载 options、
   // 整条轨迹）。调用方若要带 cause 的信息，在**自己的边界**上投影成文本再传进来。
   return projected;
 }
-
-/** 有限普通数据原样保留；超过这个长度的文本不值得原样带出去。 */
-const MAX_PLAIN_TEXT = 120;
 
 /**
  * AK / 凭据类字段名：值**整体**不输出。
@@ -166,18 +175,23 @@ function isAkFieldName(key: string): boolean {
  * 单个 context 值的投影。
  *
  * 刻意**不**写通用深拷贝 / 递归脱敏器（#163 目标 1.5）：
- *   - 未知嵌套对象 ⇒ `OMITTED`，不展开（展开了就得遍历，而遍历大数组 / 带 getter 的对象
- *     既慢又可能触发调用方副作用）；
+ *   - 未知嵌套对象 ⇒ `OMITTED_OBJECT`，不展开（展开了就得遍历，而遍历大数组 / 带 getter
+ *     的对象既慢又可能触发调用方副作用）；
  *   - 数组 ⇒ 只留 `长度`，不逐项；
  *   - 不调用 `toJSON()`（那是**数据序列化**的钩子，日志主动调它等于替调用方做决定，
  *     而且它的返回值会绕过这里所有脱敏）。
+ *
+ * 注意这里**没有**「凭据类字段名」分支——`projectContext` 在读值**之前**就按键名拒识了，
+ * 因此 `projectValue` 拿到的永远是「非凭据键的值」。
  */
-function projectValue(key: string, value: unknown, ak: string | null | undefined): unknown {
-  // AK 类字段先判：它可能不是字符串（URL 对象、Buffer…），形状上就不该输出。
-  if (isAkFieldName(key)) return "[redacted]";
+function projectValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "string") {
-    return value.length > MAX_PLAIN_TEXT ? `${value.slice(0, MAX_PLAIN_TEXT)}…` : value;
+    // ⚠️ 字符串**必须**过 `logSafeText`，不能只截断（#163 评审抓到的漏网）：
+    // `detail` / `note` / `href` 这类键名不带凭据字样，但值完全可能就是一整条带 `ak=` 的
+    // 入口 URL。`emit` 只对 `message` 调 `redactAk`，context 的字符串曾只被截断就原样
+    // 输出——而一条典型入口 URL 只有 77 字符，截断根本不会触发，AK 原样泄漏。
+    return logSafeText(value);
   }
   if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
   if (typeof value === "boolean") return value;
@@ -186,56 +200,35 @@ function projectValue(key: string, value: unknown, ak: string | null | undefined
   if (typeof value === "function") return "[function]";
   if (Array.isArray(value)) return `[${value.length} items]`;
   // Error 在 Object 判定**之前**：它也是对象，但有可投影的定位字段。
-  if (value instanceof Error) return projectError(value, ak);
-  return OMITTED;
+  if (value instanceof Error) return projectError(value);
+  return OMITTED_OBJECT;
 }
-
-/**
- * 明确**不输出**的 context 键 —— 「已知带凭据 / 是加载配置」的字段名。
- *
- * ⚠️ 这是一份**拒识**清单，不是放行清单（放行清单会随调用点增长而慢慢把诊断信息删光，
- * 而每一处删掉都要有人拍板）。凭据类键名由 `isAkFieldName` 的**记号**判定覆盖，这里
- * 补的是它按设计**不**认的那一类：**承载 URL / 加载配置整体**的键。
- *
- * 为什么 `url` / `options` 这类键要整体丢、而不是交给形状脱敏：它们的内容是**调用方自己
- * 拼的字符串**，里面出现凭据的形式不受本库控制（`ak=` 参数、userinfo、回调名…）。逐个
- * 猜形状等于承认「可能漏」，而漏的那一条没人会发现。宁可整段丢——反正定位靠的是
- * `kind` / `component` / `code`，不是 URL。
- *
- * 清单之外的键走 `projectValue` 的**形状**投影：普通值留、未知对象留占位、数组只留长度。
- * 也就是说「原样透传」这条路根本不存在——`projectValue` 没有任何分支会返回入参本身。
- */
-const OMITTED_KEYS = new Set([
-  // 加载配置 / 出口地址：`BMapLoadOptions` 与各种 `*Url` / `*Src` 字段
-  "apiUrl",
-  "baseUrl",
-  "options",
-  "params",
-  "query",
-  "script",
-  "serviceHost",
-  "src",
-  "url",
-]);
 
 /**
  * context 投影成**新对象**（不修改入参、不把原始引用交给 console）。
  *
  * 投影失败时返回 `undefined` —— 宁可这次没有 context 参数，**也不能退回原样输出**。
+ *
+ * ⚠️ 这里**没有**「URL / 加载配置键名」拒识清单（`url` / `options` / `params` …）：#163 评审
+ * 逐个核过，全库 `logger.*` 调用点**没有一个**传这些键，凭空列出就是 AGENTS.md 点名的
+ * 「没有消费者…一律删除，不留以后可能有用的扩展面」。凭据防护由两道**与键名无关**的机制
+ * 承担，且两道都真的作用在**值**上：① 凭据类**键名**（`isAkFieldName`，有调用点会命中）；
+ * ② **所有** context 字符串无条件过 `logSafeText`——`ak=` 参数与 userinfo 无论装在
+ * `detail` 还是 `url` 里都盖得住。靠猜键名来防凭据本来就是错的方向（猜不全且误伤：
+ * `params` / `query` 本就是常见的正常诊断键）。
  */
 function projectContext(
   context: Record<string, unknown> | undefined,
-  ak: string | null | undefined,
 ): Record<string, unknown> | undefined {
   if (!context) return undefined;
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(context)) {
-    // 先读原值、再决定去留：拒识清单里的键**连值都不碰**（它的 getter 可能有副作用）。
-    if (OMITTED_KEYS.has(key) || isAkFieldName(key)) {
+    // 先判键名再读值：凭据类键**连值都不碰**（它的 getter 可能有副作用，且本来就不输出）。
+    if (isAkFieldName(key)) {
       out[key] = "[redacted]";
       continue;
     }
-    out[key] = projectValue(key, context[key], ak);
+    out[key] = projectValue(context[key]);
   }
   return out;
 }
@@ -255,12 +248,12 @@ type LoggerLevel = "debug" | "warn" | "error";
  * 对象；这里改成三个方法直接调同一个 `emit`，`logger` 的方法身份在多次调用之间稳定。
  */
 function emit(level: LoggerLevel, message: string, context?: Record<string, unknown>): void {
-  // 「已知 AK」由**调用边界**在调用时给出（那条边界本来就持有它），不再走全局 setter——
-  // 多个 Client / 多个并发的加载任务各持不同 AK 时，进程级「最后一次写入」无法给出正确答案。
-  const ak = (context?.ak as string | undefined) ?? null;
+  // 整个函数体在 `try` 内：读 `context` 的属性、`projectContext` 投影、以及 console 输出
+  // 三段都可能抛（调用方传带抛错 getter 的 context、宿主 console 被 patch、投影逻辑自身
+  // 的疏漏）。任何一段抛出来都**不得**顺着业务路径逸出。
   try {
-    const line = `[bmap-vue] ${logSafeText(message, ak)}`;
-    const projected = projectContext(context, ak);
+    const line = `[bmap-vue] ${logSafeText(message)}`;
+    const projected = projectContext(context);
     if (level === "error") console.error(line, projected ?? "");
     else if (level === "warn") console.warn(line, projected ?? "");
     else console.debug(line, projected ?? "");

@@ -64,11 +64,12 @@ describe("logger 上下文清洗（#163）", () => {
 
     const text = capturedText(warn.mock.calls[0] ?? []);
     expect(text, "context 参数里也不得出现完整 AK").not.toContain(TEST_AK);
-    // 凭据字段**整体**不输出（`ak=` 参数、代理入口都可能整段带凭据，只做部分遮盖不够），
-    // 但**键名**要留下来——「哪个字段被清掉了」本身就是定位信息。
     const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    // 凭据**键名**（`ak`）整体不输出——但键名本身要留下来（「哪个字段被清掉」是定位信息）。
     expect(output?.ak).toBe("[redacted]");
-    expect(output?.serviceHost).toBe("[redacted]");
+    // `serviceHost` 不在拒识清单里（#163 评审核过：零调用点传它），它靠**值**的形状脱敏：
+    // URL 的非凭据部分（`https://x.example/?`）照常可读，`ak=` 参数被打码。
+    expect(output?.serviceHost).toBe("https://x.example/?ak=***hMoQ");
   });
 
   it("context 里的错误信息（带 AK 的 message）同样过清洗，且保留错误码", () => {
@@ -175,6 +176,21 @@ describe("logger 上下文清洗（#163）", () => {
     expect(text).not.toContain("row-secret-");
   });
 
+  it("键名不带凭据字样的普通字段，值里的 AK 仍要清洗（评审抓到的漏网）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // `detail` / `note` / `href` 这类键名不带 ak/auth/token，但值完全可能就是整条入口 URL。
+    // 旧实现只截断 120 字符就原样输出——而一条典型入口 URL 只有 77 字符，截断压根不触发。
+    const detail = `https://api.map.baidu.com/api?v=4.0&ak=${TEST_AK}`;
+    expect(detail.length, "这条串比截断阈值短 ⇒ 截断救不了它").toBeLessThan(120);
+
+    logger.warn("加载失败", { detail, note: `ak=${TEST_AK}` });
+
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text, "context 普通字段里的 AK 同样不得原样输出").not.toContain(TEST_AK);
+    // 定位信息仍在：URL 的非凭据部分照常可读。
+    expect(text).toContain("api.map.baidu.com");
+  });
+
   it("两个操作各自持有不同 AK 时互不依赖（不靠最后一次全局 setter）", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { setAkForLogger } = (await import("./logger")) as unknown as Record<string, unknown>;
@@ -183,18 +199,34 @@ describe("logger 上下文清洗（#163）", () => {
       "无消费者的全局 AK setter 已删除（不该再有调用点依赖它）",
     ).toBeUndefined();
 
-    // 两次调用交错进行，两个不同的 AK 都要各自被清洗。
-    logger.warn("Client A 加载失败", { ak: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
-    logger.warn("Client B 加载失败", { ak: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" });
-    logger.warn("Client A 再次加载失败", { ak: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
+    // AK 走**不带凭据字样的键名**（`detail`）⇒ 这里考的是「每个操作各自清洗自己的 AK」，
+    // 而不是「`ak` 这个键名会被整体拒识」——后者让断言恒真，证明不了任何事。
+    const akA = "akAaaaaaaaaaaaaaaaaaaaaaaa";
+    const akB = "akBbbbbbbbbbbbbbbbbbbbbbbbbb";
+    logger.warn("Client A 加载失败", { detail: `https://x.example/?ak=${akA}` });
+    logger.warn("Client B 加载失败", { detail: `https://y.example/?ak=${akB}` });
+    logger.warn("Client A 再次加载失败", { detail: `https://x.example/?ak=${akA}` });
 
-    for (const [call, ak] of [
-      [warn.mock.calls[0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      [warn.mock.calls[1], "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
-      [warn.mock.calls[2], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-    ] as const) {
-      expect(capturedText(call ?? []), "每个 AK 都被独立清洗").not.toContain(ak);
-    }
+    // 交错进行 ⇒ 若是「最后一次写入的全局 AK」语义，B 会用 A 的值去清洗而漏掉自己。
+    expect(capturedText(warn.mock.calls[0] ?? []), "A 独立清洗").not.toContain(akA);
+    expect(capturedText(warn.mock.calls[1] ?? []), "B 独立清洗").not.toContain(akB);
+    expect(capturedText(warn.mock.calls[2] ?? []), "A 再次独立清洗").not.toContain(akA);
+    // 三条 URL 各自的非凭据部分都还在（清洗没有把整条记录抹掉）。
+    const bContext = warn.mock.calls[1]?.[1] as Record<string, unknown> | undefined;
+    expect(bContext?.detail).toContain("y.example");
+  });
+
+  it("context 带抛错 getter 时异常仍被隔离在日志边界内", () => {
+    // `ak` 是一次普通属性访问：调用方传带 getter 的对象时，它必须在 `try` 之内，
+    // 否则异常会顺着业务路径逸出——恰好是「日志不得中断业务」要防的那件事。
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const hostile = {
+      get ak(): string {
+        throw new Error("getter 炸了");
+      },
+    };
+    expect(() => logger.warn("释放失败", hostile)).not.toThrow();
+    expect(() => logger.warn("释放失败", { error: hostile })).not.toThrow();
   });
 
   it("凭据字段名按记号判定，不误伤含 ak/sign 的普通词", () => {
@@ -330,7 +362,9 @@ describe("devWarn", () => {
 
 /** 告警去重的 once 语义不退化（#163 验收表最后一行）。 */
 describe("createDevWarnOnce", () => {
-  it("同一 key 只报一次，幂等且不缓存无界增长", async () => {
+  // 这条是**不退化**的护栏，不是 #163 新增的能力：`createDevWarnOnce` 的实现本票没动，
+  // 但它经过同一条 `emit` 输出路径（投影 + 隔离），所以要钉住 once 语义没被改坏。
+  it("同一 key 只报一次，不同 key 各报一次（once 语义不退化）", async () => {
     const { createDevWarnOnce } = await import("./logger");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const original = process.env.NODE_ENV;

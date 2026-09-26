@@ -14,19 +14,24 @@ Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全
 
 | 类别 | 处理 |
 | --- | --- |
-| 凭据类键名（`ak` / `auth` / `apiKey` / `token` / `secret` / `password` / `sign` / `credential`） | 整体输出 `[redacted]`，**键名保留**（「哪个字段被清掉」本身是定位信息） |
-| URL / 加载配置类键名（`url` / `apiUrl` / `serviceHost` / `src` / `options` / `params` / `query` / `script` / `baseUrl`） | 整体输出 `[redacted]`——内容是调用方自拼的字符串，凭据出现形式不受本库控制，逐个猜形状等于承认可能漏 |
+| 凭据类**键名**（`ak` / `auth` / `apiKey` / `token` / `secret` / `password` / `sign` / `credential`） | 整体输出 `[redacted]`，**键名保留**（「哪个字段被清掉」本身是定位信息） |
+| **所有** context 字符串值（**无论键名**） | 无条件过 `logSafeText`：`ak=` 参数与 userinfo 一律打码。这条是**主防线**——`detail` / `note` / `serviceHost` 这类不带凭据字样的键，装的完全可能就是整条带 AK 的入口 URL |
 | `Error` / `BMapError` | 只取 `name` / `message` / `code` 与 `mapId` / `component` / `plugin` / `capability` / `engine` / `version`；文本过脱敏 + 截断 |
 | 数组 | 只留 `[N items]`，**不逐项**（不为日志深遍历） |
 | 其它未知对象 | 只留 `[object]`，**不展开**（不调用 `toJSON()`，不递归深拷贝） |
-| 有限普通值（`string` / `number` / `boolean` / `kind` / `code` / `component` / `error` / `field` …） | 原样保留，超长文本截断 |
+| 有限普通值（`number` / `boolean` / `kind` / `code` / `component` / `error` / `field` …） | 原样保留；文本统一截断到 300 字符（`message` 与 context 共用同一上限） |
+
+**为什么没有「URL / 加载配置键名」拒识清单**：逐个核过全库 `logger.*` 调用点，**没有一个**传
+`url` / `options` / `params` / `serviceHost` / `src`——凭空列 9 个键就是 AGENTS.md 点名的
+「没有消费者…一律删除」。凭据防护交给上表第二行那道**与键名无关**的形状脱敏，它真的作用在
+**值**上：靠猜键名防凭据本就是错方向（既猜不全，又会误伤 `params` / `query` 这类正常诊断键）。
 
 ## 刻意丢弃了什么
 
 - **`cause`**：默认装上游 / 业务原始对象（可能含用户数据、加载 options、整条轨迹）。
   调用方要带 cause 的信息，在**自己的边界**上投影成文本再传进来。
-- **带凭据的 `stack`**：文本里出现 `ak=<AK 量级的值>` 或 `https://user:pass@host` 时，
-  整个 `stack` 换成 `[omitted]`（截断成 200 字符仍可能留下半截 AK）。**不带**这两种
+- **带凭据形状的 `stack`**：文本里出现 `ak=<AK 量级的值>` 或 `https://user:pass@host` 时，
+  整个 `stack` 换成 `[omitted: 形状含凭据]`（截断仍可能留下半截 AK）。**不带**这两种
   形状的 stack 正常保留并脱敏——否则会把绝大多数释放失败的定位信息删光。
 - **不写通用深拷贝 / 递归脱敏器**：判据是 Ownership-first——`projectValue` 没有任何分支
   会返回入参本身，「原样透传」这条路根本不存在，因此不需要递归兜底。
@@ -60,13 +65,16 @@ Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全
 
 ## 故障隔离
 
-输出与投影的异常在**日志边界**被吞掉：不抛回业务路径，也**不**用 logger 报告 logger 自身
-的失败（那会无限递归）。调用点多在 `catch` 块里（释放失败、SDK 调用失败），日志异常会
-**覆盖**原始业务错误——丢一条日志远好过吞掉一次故障。
+`emit` 的**整个函数体**在 `try` 内——读 `context` 属性、投影、console 输出三段都可能抛
+（调用方传带抛错 getter 的 context、宿主 console 被 patch、投影逻辑自身的疏漏）。任何一段
+抛出来都**不得**顺着业务路径逸出，也**不**用 logger 报告 logger 自身的失败（那会无限递归）。
+调用点多在 `catch` 块里（释放失败、SDK 调用失败），日志异常会**覆盖**原始业务错误——丢一条
+日志远好过吞掉一次故障。
 
 `ResourceScope` 随之**删掉**告警外层那圈 `try/catch`：隔离边界已内聚在 logger 内，继续在
 调用点重复同一防护只会让「谁负责吞日志异常」有两个答案。释放顺序、单个 disposer 抛错不
-连坐、幂等三条契约不变（各有回归用例钉住）。
+连坐、幂等三条契约不变（各有回归用例钉住，其中一条**真的打 `console.warn` 抛错**验证
+dispose 不被日志异常中断）。
 
 ## 现状边界（不夸大）
 
