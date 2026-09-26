@@ -3,35 +3,35 @@
     <div class="state" v-if="!isLoading && !isError">
       <h5>定位:</h5>
       <span>
-        城市 - {{ location?.address?.province }}-{{ location?.address?.city }}-{{
-          location?.address?.district
-        }}-{{ location?.address?.street }}
+        城市 - {{ data?.address?.province }}-{{ data?.address?.city }}-{{
+          data?.address?.district
+        }}-{{ data?.address?.street }}
       </span>
-      <span>纬度 - {{ location?.point?.lat }}</span>
-      <span>经度 - {{ location?.point?.lng }}</span>
+      <span>纬度 - {{ data?.point?.lat }}</span>
+      <span>经度 - {{ data?.point?.lng }}</span>
       <br />
-      <span>定位精度 - {{ location?.accuracy }}m</span>
+      <span>定位精度 - {{ data?.accuracy }}m</span>
     </div>
     <div class="state" v-else-if="isError">出错了，{{ status }}</div>
     <div class="state" v-else>定位中...</div>
-    <button v-if="!isLoading" class="myButton" @click="get">重新获取</button>
+    <button v-if="!isLoading" class="myButton" @click="getCurrentPosition()">重新获取</button>
     <Map
       v-bind="$attrs"
       enableScrollWheelZoom
       ref="map"
-      @ready="get"
-      :center="location?.point || defaultCenter"
+      @ready="getCurrentPosition()"
+      :center="data?.point || defaultCenter"
     >
-      <template v-if="location?.point && location?.accuracy != null">
-        <Marker :position="location.point"></Marker>
+      <template v-if="data?.point && data?.accuracy != null">
+        <Marker :position="data.point"></Marker>
         <Circle
           strokeStyle="solid"
           strokeColor="#0099ff"
           :strokeOpacity="0.8"
           fillColor="#0099ff"
           :fillOpacity="0.5"
-          :center="location.point"
-          :radius="location.accuracy"
+          :center="data.point"
+          :radius="data.accuracy"
         />
       </template>
     </Map>
@@ -43,7 +43,7 @@ import { ref } from "vue";
 import { useGeolocation } from "bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
-const { get, location, isLoading, isError, status } = useGeolocation({}, map);
+const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation({}, map);
 </script>
 
 <style>

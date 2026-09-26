@@ -403,11 +403,89 @@ describe("v4 Service Facet：Geolocation / LocalCity", () => {
       point: { lng: 116.404, lat: 39.915 },
       accuracy: 30,
       address: { city: "北京市", district: "东城区" },
+      // Fake 的默认回包不带这些官方字段，一律归一成 null（不编造 0，也不编造时间）
+      timestamp: null,
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      speed: null,
     });
     expect(result.sdkStatus).toBe(0);
     expect(fake.createdGeolocations[0].callLog[1]).toBe(
       'getCurrentPosition:{"enableHighAccuracy":true}',
     );
+  });
+
+  it("定位地址：官方回包是 snake_case，投影成 camelCase 领域字段", async () => {
+    // 官方 `GeolocationAddress` 发的是 `city_code` / `street_number`（见官方
+    // `GeolocationResult.d.ts`）。Fake 的默认回包**没有**这两个键，所以这条用例自己喂
+    // 真实形状的载荷：没有显式映射时 `address.cityCode` 恒为 `undefined`，
+    // 类型承诺了一个运行时永远不存在的字段。
+    const handle = services.createGeolocation();
+    fake.createdGeolocations[0].result = {
+      point: { lng: 116.404, lat: 39.915 },
+      accuracy: 30,
+      address: {
+        country: "中国",
+        province: "北京市",
+        city: "北京市",
+        city_code: "110000",
+        district: "东城区",
+        street: "东长安街",
+        street_number: "1号",
+      },
+    };
+
+    const result = await services.locate(handle).result;
+    expect(result.status).toBe("success");
+    expect(result.data?.address).toEqual({
+      country: "中国",
+      province: "北京市",
+      city: "北京市",
+      cityCode: "110000",
+      district: "东城区",
+      street: "东长安街",
+      streetNumber: "1号",
+    });
+  });
+
+  it("定位回包：timestamp / altitude / heading / speed 原样带上，缺失的为 null", async () => {
+    const handle = services.createGeolocation();
+    fake.createdGeolocations[0].result = {
+      point: { lng: 116.404, lat: 39.915 },
+      accuracy: 30,
+      address: { city: "北京市" },
+      timestamp: 1735689600000,
+      altitude: 43.5,
+      altitudeAccuracy: 8,
+      heading: 90,
+      speed: 1.5,
+    };
+
+    const result = await services.locate(handle).result;
+    expect(result.data?.timestamp).toBe(1735689600000);
+    expect(result.data?.altitude).toBe(43.5);
+    expect(result.data?.altitudeAccuracy).toBe(8);
+    expect(result.data?.heading).toBe(90);
+    expect(result.data?.speed).toBe(1.5);
+
+    // 设备不支持时官方明确发 `null`；回包整段缺失同样归一为 `null`，不编造 0。
+    fake.createdGeolocations[0].result = {
+      point: { lng: 116.404, lat: 39.915 },
+      accuracy: 30,
+      address: { city: "北京市" },
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      speed: null,
+    };
+    const sparse = await services.locate(handle).result;
+    expect(sparse.data?.altitude).toBeNull();
+    expect(sparse.data?.altitudeAccuracy).toBeNull();
+    expect(sparse.data?.heading).toBeNull();
+    expect(sparse.data?.speed).toBeNull();
+    // SDK 没给定位时刻时**不编造** `Date.now()`。
+    expect(sparse.data?.timestamp).toBeNull();
   });
 
   it("定位失败：getStatus 的 BMAP_STATUS_* 变成可读原因", async () => {
@@ -1181,5 +1259,81 @@ describe("v4 Service Facet：LocalSearch 归属与释放（PR #89 评审复现�
     raw.queue.flush();
     expect((await a.result).status).toBe("success");
     services.disposeLocalSearch(handle);
+  });
+});
+
+/**
+ * `viewportOptions` 对齐官方 `BMap.ViewportOptions`（#165）
+ *
+ * 官方 4.0.4 只声明四个成员：`enableAnimation`（默认 true）/ `margins`（上右下左）/
+ * `zoomFactor`（默认 0）/ `callback`（视野调整结束后的回调）。此前本库把 `noAnimation`
+ * （**官方没有的成员**）当成第三个成员原样透传，而真实的 `enableAnimation` 与 `callback`
+ * 在公共面上**没有任何路径**可以到达。
+ */
+describe("v4 Service Facet：viewportOptions 对齐官方 ViewportOptions（#165）", () => {
+  /** 落到 SDK 的 `renderOptions.viewportOptions`（LocalSearch 创建面）。 */
+  function localSearchViewportOptions(
+    viewportOptions: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    const before = fake.createdLocalSearches.length;
+    const handle = services.createLocalSearch("北京市", {
+      renderOptions: { viewportOptions },
+    });
+    const received = fake.createdLocalSearches[before]!.options.renderOptions as
+      | { viewportOptions?: Record<string, unknown> }
+      | undefined;
+    services.disposeLocalSearch(handle);
+    return received?.viewportOptions;
+  }
+
+  it("四个官方成员全部透传：enableAnimation / margins / zoomFactor / callback", () => {
+    const callback = (): void => {};
+    const received = localSearchViewportOptions({
+      enableAnimation: true,
+      margins: [30, 20, 0, 20],
+      zoomFactor: -1,
+      callback,
+    });
+
+    expect(received).toEqual({
+      enableAnimation: true,
+      margins: [30, 20, 0, 20],
+      zoomFactor: -1,
+      callback,
+    });
+    // `callback` 按引用透传：Driver 不包装、不改 this（官方只承诺「调整结束后调用」）
+    expect(received!.callback).toBe(callback);
+  });
+
+  it("margins 拷成新数组：SDK 拿到的是副本，不与调用方的数组共引用", () => {
+    const margins = [10, 20, 30, 40];
+    const received = localSearchViewportOptions({ margins });
+
+    expect(received!.margins).toEqual(margins);
+    expect(received!.margins).not.toBe(margins);
+  });
+
+  it("非官方成员 noAnimation 不再被转发（此前的自造成员属假支持）", () => {
+    expect(localSearchViewportOptions({ noAnimation: true })).toBeUndefined();
+    expect(localSearchViewportOptions({ noAnimation: true, zoomFactor: 2 })).toEqual({
+      zoomFactor: 2,
+    });
+  });
+
+  it("形状不对的成员被结构化丢弃：非 boolean 的 enableAnimation / 非函数的 callback", () => {
+    expect(localSearchViewportOptions({ enableAnimation: "yes", callback: 42 })).toBeUndefined();
+  });
+
+  it("路线服务走同一份归一化：LocalSearch 的口径对路线服务同样成立", () => {
+    const callback = (): void => {};
+    const handle = services.createDrivingRoute("北京市", {
+      renderOptions: { viewportOptions: { enableAnimation: false, callback, zoomFactor: 1 } },
+    });
+    const options = fake.rawRoutes.DrivingRoute[0]!.options.renderOptions as
+      | { viewportOptions?: Record<string, unknown> }
+      | undefined;
+
+    expect(options?.viewportOptions).toEqual({ enableAnimation: false, zoomFactor: 1, callback });
+    services.disposeRoute(handle);
   });
 });

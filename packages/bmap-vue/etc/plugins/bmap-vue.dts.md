@@ -385,11 +385,7 @@ export declare interface LocalSearchRenderOptions {
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
@@ -605,11 +601,7 @@ export declare interface RouteRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface RouteRenderState {
     renderOptions?: RouteRenderOptions;
@@ -673,6 +665,12 @@ export declare function urlPluginDefinition<T>(name: string, url: string, export
     dependencies?: readonly string[];
 }): BMapPluginDefinition<T>;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+declare interface ViewportOptions {
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+    callback?: () => void;
+}
 export declare type WalkingRouteOptions = RouteRenderState;
 export {};
 ```

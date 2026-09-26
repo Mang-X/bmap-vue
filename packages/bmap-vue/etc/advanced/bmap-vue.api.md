@@ -596,8 +596,13 @@ export interface GeolocationFix {
     accuracy: number | null;
     // (undocumented)
     address: GeolocationAddressInfo | null;
+    altitude: number | null;
+    altitudeAccuracy: number | null;
+    heading: number | null;
     // (undocumented)
     point: Point;
+    speed: number | null;
+    timestamp: number | null;
 }
 
 // @public (undocumented)
@@ -925,11 +930,7 @@ export interface LocalSearchRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -1504,11 +1505,7 @@ export interface RouteRenderOptions {
     autoViewport?: boolean;
     map?: MapHandle;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public

@@ -2098,11 +2098,11 @@ const CHECKS: Record<string, CheckImpl> = {
   "service-geocode": {
     async run() {
       const geocoder = (
-        globalThis as { __smokeGeocoder?: { get: (a: string, c: string) => Promise<unknown> } }
+        globalThis as { __smokeGeocoder?: { getPoint: (a: string, c: string) => Promise<unknown> } }
       ).__smokeGeocoder;
       assertSmoke(geocoder, "HARNESS_NO_GEOCODER", "geocode 探针没有拿到 useGeocoder 实例");
       const point = await withBlockedTimeout(
-        geocoder!.get("北京市海淀区中关村", CITY),
+        geocoder!.getPoint("北京市海淀区中关村", CITY),
         SERVICE_MS,
         "Geocoder.getPoint",
         "SERVICE_GEOCODE_TIMEOUT",

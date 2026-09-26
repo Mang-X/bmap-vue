@@ -335,6 +335,11 @@ export declare interface GeolocationFix {
     point: Point;
     accuracy: number | null;
     address: GeolocationAddressInfo | null;
+    timestamp: number | null;
+    altitude: number | null;
+    altitudeAccuracy: number | null;
+    heading: number | null;
+    speed: number | null;
 }
 export declare interface GeolocationOptions {
     enableHighAccuracy?: boolean;
@@ -509,11 +514,7 @@ export declare interface LocalSearchRenderOptions {
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface LocalSearchResult {
     keyword: string;
@@ -848,11 +849,7 @@ export declare interface RouteRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface RouteRenderState {
     renderOptions?: RouteRenderOptions;
@@ -1020,6 +1017,12 @@ export declare class UnsupportedCapabilityError extends BMapError {
 }
 export declare function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+declare interface ViewportOptions {
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+    callback?: () => void;
+}
 export declare type WalkingRouteOptions = RouteRenderState;
 export declare type WalkingRouteResult = RouteResult<RoutePlan>;
 export {};

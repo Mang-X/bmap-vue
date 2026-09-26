@@ -283,7 +283,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
         onMounted(async () => {
           try {
             // #38 起动作恒 resolve 成 ServiceResult：不 reject，「有没有结果」看 status/data
-            const result = await geocoder.get("北京", "北京市");
+            const result = await geocoder.getPoint("北京", "北京市");
             outcome.status = "resolved";
             outcome.finite =
               result.status === "success" &&

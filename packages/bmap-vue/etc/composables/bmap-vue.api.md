@@ -84,16 +84,8 @@ export interface BMapDrivingRouteOptions {
 // @public (undocumented)
 export type BMapEngine = "jsapi-v4";
 
-// @public (undocumented)
-export interface BMapGeolocationOptions {
-    // (undocumented)
-    enableHighAccuracy?: boolean;
-    enableSDKLocation?: boolean;
-    // (undocumented)
-    maximumAge?: number;
-    // (undocumented)
-    timeout?: number;
-}
+// @public
+export type BMapGeolocationOptions = GeolocationOptions;
 
 // @public (undocumented)
 export interface BMapGeoResult {
@@ -101,6 +93,9 @@ export interface BMapGeoResult {
     accuracy: number | null;
     // (undocumented)
     address: GeolocationAddressInfo | null;
+    altitude: number | null;
+    altitudeAccuracy: number | null;
+    heading: number | null;
     // (undocumented)
     point: {
         lng: number;
@@ -108,9 +103,9 @@ export interface BMapGeoResult {
     };
     // (undocumented)
     source: "baidu-sdk";
+    speed: number | null;
     status: "BMAP_STATUS_SUCCESS";
-    // (undocumented)
-    timestamp: number;
+    timestamp: number | null;
 }
 
 // @public (undocumented)
@@ -157,12 +152,7 @@ export interface BMapLocalSearchRenderOptions {
     panel?: string | HTMLElement;
     // (undocumented)
     selectFirstResult?: boolean;
-    // (undocumented)
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -179,11 +169,7 @@ export interface BMapRouteRenderOptions {
     autoViewport?: boolean;
     map?: MaybeRefOrGetter<MapHandle | null | undefined>;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -559,6 +545,18 @@ export interface GeolocationAddressInfo {
 }
 
 // @public (undocumented)
+export interface GeolocationOptions {
+    // (undocumented)
+    enableHighAccuracy?: boolean;
+    // (undocumented)
+    maximumAge?: number;
+    // (undocumented)
+    SDKLocation?: boolean;
+    // (undocumented)
+    timeout?: number;
+}
+
+// @public (undocumented)
 export interface GeometryDriver {
     // (undocumented)
     fromRawBounds(raw: unknown): Bounds;
@@ -779,11 +777,7 @@ export interface LocalSearchRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -1673,11 +1667,7 @@ export interface RouteRenderOptions {
     autoViewport?: boolean;
     map?: MapHandle;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -1939,7 +1929,6 @@ export function useDrivingRoute(options?: MaybeRefOrGetter<BMapDrivingRouteOptio
 // @public (undocumented)
 export function useGeocodeDetail(map?: unknown): {
     data: Readonly< ShallowRef<GeocodeDetailResult | null>>;
-    result: Readonly< ShallowRef<GeocodeDetailResult | null>>;
     error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1947,7 +1936,7 @@ export function useGeocodeDetail(map?: unknown): {
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    get: (point: GeoPoint) => Promise< ServiceResult<GeocodeDetailResult>>;
+    getLocation: (point: GeoPoint) => Promise< ServiceResult<GeocodeDetailResult>>;
     getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>;
     cancel: () => void;
     reset: () => void;
@@ -1956,9 +1945,6 @@ export function useGeocodeDetail(map?: unknown): {
 // @public (undocumented)
 export function useGeocoder(map?: unknown): {
     data: Readonly< ShallowRef<GeoPoint | null>>;
-    location: Readonly< ShallowRef<GeoPoint | null>>;
-    point: Readonly< ShallowRef<GeoPoint | null>>;
-    result: Readonly< ShallowRef<GeoPoint | null>>;
     error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1966,7 +1952,7 @@ export function useGeocoder(map?: unknown): {
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    get: (address: string, city?: string) => Promise< ServiceResult<GeoPoint>>;
+    getPoint: (address: string, city?: string) => Promise< ServiceResult<GeoPoint>>;
     getBatch: (addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>;
     cancel: () => void;
     reset: () => void;
@@ -1975,7 +1961,6 @@ export function useGeocoder(map?: unknown): {
 // @public (undocumented)
 export function useGeolocation(options?: BMapGeolocationOptions, map?: unknown): {
     data: Readonly< ShallowRef<BMapGeoResult | null>>;
-    location: Readonly< ShallowRef<BMapGeoResult | null>>;
     error: Readonly< ShallowRef< ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1983,8 +1968,7 @@ export function useGeolocation(options?: BMapGeolocationOptions, map?: unknown):
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    locate: () => Promise< ServiceResult<BMapGeoResult>>;
-    get: () => Promise< ServiceResult<BMapGeoResult>>;
+    getCurrentPosition: (args_0?: GeolocationOptions | undefined) => Promise< ServiceResult<BMapGeoResult>>;
     cancel: () => void;
     reset: () => void;
 };
@@ -2172,6 +2156,14 @@ export interface ViewAnimationKeyFrames {
 
 // @public
 export type ViewAnimationStatus = "idle" | "playing";
+
+// @public
+export interface ViewportOptions {
+    callback?: () => void;
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+}
 
 // @public
 export type WalkingRouteOptions = RouteRenderState;

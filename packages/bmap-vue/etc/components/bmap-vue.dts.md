@@ -395,8 +395,8 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     maxZoom: number;
     mapType: string;
     enableScrollWheelZoom: boolean;
-    noAnimation: boolean;
     keepAliveBehavior: "suspend" | "dispose";
+    noAnimation: boolean;
     enableAutoResize: boolean;
     loadingBgColor: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
@@ -2005,11 +2005,7 @@ declare interface LocalSearchRenderOptions {
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare const LocationControl: __VLS_WithSlots_25<typeof __VLS_component_25, __VLS_Slots_25>;
 declare interface LocationControlProps {
@@ -2810,11 +2806,7 @@ declare interface RouteRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 declare interface RouteRenderState {
     renderOptions?: RouteRenderOptions;
@@ -2945,6 +2937,12 @@ declare const TransitVehiclePolicy: {
 declare type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
 declare type UnsupportedBehavior = "throw" | "warn" | "silent";
 declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+declare interface ViewportOptions {
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+    callback?: () => void;
+}
 declare type WalkingRouteOptions = RouteRenderState;
 export declare const WMSLayer: __VLS_WithSlots_35<typeof __VLS_component_35, __VLS_Slots_35>;
 declare interface WMSLayerProps {

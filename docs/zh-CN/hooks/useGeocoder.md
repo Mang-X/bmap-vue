@@ -8,34 +8,36 @@ import { useGeocoder } from 'bmap-vue'
 
 ## 单个地址解析
 
-使用地址字符串作为 `get` 方法参数解析单个地址
+使用地址字符串作为 `getPoint` 方法参数解析单个地址
 :::demo 通过下拉框切换地址解析坐标点
 hooks/useGeocoder/index
 :::
 
 :::tip
-在 Ts 中使用单个解析地址时，使用泛型 `Point` 内部可推断 `point` 为可推断为 `Point`，从而避免读取值时 ts 的报错。
+在 Ts 中读取结果时，`data` 内部可推断为 `Point | null`，配合可选链即可避免 ts 报错。
 
 ```ts
 import type { Point } from 'bmap-vue'
-const { point } = useGeocoder(map)
+const { data } = useGeocoder(map)
+const point: Point | null = data.value
 ```
 
 :::
 
 ## 批量解析地址
 
-使用地址字符串数组作为 `get` 方法参数批量解析地址
+使用地址字符串数组作为 `getBatch` 方法参数批量解析地址
 :::demo
 hooks/useGeocoder/batch
 :::
 
 :::tip
-在 Ts 中使用批量解析地址时，使用泛型 `Point[]` 内部可推断 `point` 为可推断为 `Point[]`，从而避免遍历时 ts 的报错。
+`getBatch` 的返回类型是 `GeocodeItemResult[]`，每项的 `point` 已经是 `Point | null`，遍历时无需再断言。
 
 ```ts
 import type { Point } from 'bmap-vue'
 const { getBatch } = useGeocoder(map)
+const points: (Point | null)[] = (await getBatch(['北京', '上海'])).map((item) => item.point)
 ```
 
 :::
@@ -43,8 +45,19 @@ const { getBatch } = useGeocoder(map)
 ## 用法
 
 ```ts
-const { get, getBatch, point, isLoading, isEmpty } = useGeocoder(map)
+const { getPoint, getBatch, data, isLoading, isEmpty } = useGeocoder(map)
 ```
+
+::: warning 命名对齐官方 `BMap.Geocoder`（#165）
+
+- 动作名是 `getPoint`（官方 `Geocoder#getPoint`），**不是** `get`；
+- 逆地址解析在 [`useGeocodeDetail`](./useGeocodeDetail) 的 `getLocation`（官方
+  `Geocoder#getLocation`）——官方的 `Geocoder` 只有这两个成员，本库按方向拆成两个 hook，
+  成员名保持一致；
+- 结果**只有** `data` 一个读取口。此前的 `point` / `location` / `result` 别名已删除：
+  它们与 `data` 是同一个 ref，且 `location` 装的还是坐标点（与官方 `getLocation` 产出的
+  地址相反），照官方命名去取会拿到语义相反的值。
+:::
 
 :::tip
 该 hooks 只需要 **Client 上下文**（`<Map>` 或 `<BMapProvider>` 子树内），**不需要地图实例**；
@@ -80,8 +93,7 @@ const { get, getBatch, point, isLoading, isEmpty } = useGeocoder(map)
 
 | 返回值    | 描述                                                                                        | 类型                                                              |
 | --------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| data      | 解析结果（`point`/`location`/`result` 均为其别名）                                            | `Readonly<ShallowRef<GeoPoint \| null>>`                          |
-| point     | 地址解析出来的坐标点                                                                         | `Readonly<ShallowRef<GeoPoint \| null>>`                          |
+| data      | 正地址解析的结果坐标（唯一读取口）                                                          | `Readonly<ShallowRef<GeoPoint \| null>>`                          |
 | error     | 有公开原因时的错误信息（`{ code, message }`）                                                | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                  |
 | sdkStatus | SDK 公开状态码；本服务没有公开错误码入口，**恒为 `null`**                                      | `Readonly<ShallowRef<number \| null>>`                            |
 | isError   | 是否出错（`status === 'failed'`）                                                            | `boolean`                                                         |
@@ -89,7 +101,7 @@ const { get, getBatch, point, isLoading, isEmpty } = useGeocoder(map)
 | isLoading | 是否在获取中                                                                                | `boolean`                                                         |
 | supported | 当前引擎是否支持地理编码（Client 就绪后立即判定；在此之前是乐观初值 `true` = 尚未判定）                                             | `boolean`                                                         |
 | status    | 任务状态（见上）                                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                          |
-| get       | 地址 → 坐标点；`city` **可省略**（省略即不做城市限定）                                        | `(address: string, city?: string) => Promise<ServiceResult<GeoPoint>>` |
+| getPoint  | 地址 → 坐标点（官方 `Geocoder#getPoint`）；`city` **可省略**（省略即不做城市限定）             | `(address: string, city?: string) => Promise<ServiceResult<GeoPoint>>` |
 | getBatch  | 批量解析，逐项返回 `{ address, point, status, error }`（**部分成功**：单项失败不影响其它项）   | `(addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>` |
 | cancel    | 逻辑取消在飞请求（SDK 侧请求收不回，只承诺「放弃结果」）                                        | `() => void`                                                      |
 | reset     | 取消 + 清空 data/error/status                                                                | `() => void`                                                      |
@@ -117,10 +129,8 @@ export interface GeocodeItemResult {
  * 由地址解析坐标点
  */
 export declare function useGeocoder(map?: unknown): {
+  /** 正地址解析的唯一结果读取口（坐标点 `{ lng, lat }`） */
   data: Readonly<ShallowRef<GeoPoint | null>>
-  location: Readonly<ShallowRef<GeoPoint | null>>
-  point: Readonly<ShallowRef<GeoPoint | null>>
-  result: Readonly<ShallowRef<GeoPoint | null>>
   error: Readonly<ShallowRef<ServiceErrorInfo | null>>
   sdkStatus: Readonly<ShallowRef<number | null>>
   isError: ComputedRef<boolean>
@@ -128,7 +138,8 @@ export declare function useGeocoder(map?: unknown): {
   status: Readonly<ShallowRef<BMapServiceStatus>>
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
-  get: (address: string, city?: string) => Promise<ServiceResult<GeoPoint>>
+  /** 单个地址解析（官方 `Geocoder#getPoint`）。`city` 省略时由服务自行判定城市。 */
+  getPoint: (address: string, city?: string) => Promise<ServiceResult<GeoPoint>>
   getBatch: (addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>
   cancel: () => void
   reset: () => void

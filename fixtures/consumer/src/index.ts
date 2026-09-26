@@ -237,7 +237,7 @@ const gotoPageOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.got
 const clearOnce: void = searchHook.clear()
 const taskStatus: BMapServiceStatus = searchHook.status.value
 const taskSupported: boolean = searchHook.supported.value
-const geocodeOnce: ReturnType<typeof geocoderHook.get> = geocoderHook.get('北京市', '北京市')
+const geocodeOnce: ReturnType<typeof geocoderHook.getPoint> = geocoderHook.getPoint('北京市', '北京市')
 
 export const serviceComposableSmoke = {
   searchOnce,

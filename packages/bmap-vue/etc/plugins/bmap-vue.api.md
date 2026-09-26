@@ -693,11 +693,7 @@ export interface LocalSearchRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public (undocumented)
@@ -1116,11 +1112,7 @@ export interface RouteRenderOptions {
     autoViewport?: boolean;
     map?: MapHandle;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public

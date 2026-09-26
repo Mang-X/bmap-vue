@@ -68,6 +68,9 @@ export type {
   LocalSearchOptions,
   LocalSearchPoi,
   LocalSearchRenderOptions,
+  // 官方 `ViewportOptions` 的领域投影：`LocalSearchRenderOptions` / `RouteRenderOptions` 的
+  // `viewportOptions` 都是这个类型，消费方要给自己的视野选项命名就得能 import（#160 口径）。
+  ViewportOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
   RidingRouteOptions,
@@ -98,7 +101,9 @@ export type {
 } from "../driver/types/services";
 
 // —— 地理编码 / 定位
-export type { GeolocationAddressInfo } from "../driver/types/services";
+// `GeolocationOptions` 是 `BMapGeolocationOptions`（= 官方 `PositionOptions`）指向的**同一个类型**，
+// 而 `useGeolocation` 的入参签名在公开面上：消费方要为自己那次定位的选项**命名**就得能 import 它。
+export type { GeolocationAddressInfo, GeolocationOptions } from "../driver/types/services";
 
 // —— 策略常量（值与类型同名）：`import { DrivingPolicy } from "bmap-vue/composables"`
 export { DrivingPolicy, IntercityPolicy, TransitPolicy, TransitVehiclePolicy } from "../driver/types/services";
