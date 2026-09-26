@@ -474,7 +474,14 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
  * `PointCollection` 的 props。
  *
  * 取数面与 `MarkerList` 一致；样式面只暴露 v4 原生点图层**真的支持**的那几个字段
- * （`PointShapeStyle` 的子集，逐条核对 `@baidumap/jsapi-v4-types@4.0.4`）。
+ * （`PointShapeStyle` 的子集，逐条核对 `@baidumap/jsapi-v4-types@4.0.5`）。
+ *
+ * @deprecated 官方 `@baidumap/jsapi-v4-types@4.0.5` 已把底层 `BMap.PointShapeLayer` 标为
+ *   `@deprecated`（建议改用 `BMap.PointLayer` 的形状模式），而本组件正落在该类上
+ *   （`LAYER_KIND = "point-shape"`）。**组件本身不删也不改名**——弃用是上游的决定，
+ *   且 #165 §3.6 禁止为此加兼容别名；此处只如实登记，让编辑器在类型面上把弃用显示出来。
+ *   可迁移的替代品是 `<PointLayer>` 的形状模式（本库已提供），但它的样式字段是**扁平**的
+ *   （不是 `style` 袋），迁移不是改个名字。线 / 面两类的替代品见 #166。
  */
 export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
   /**
@@ -761,6 +768,12 @@ export interface NativeLayerPickOptions {
  *   `setData`/`getData`），因此本库换一个**没有数据的实例**来表达它（代价是一次重建，见 ADR 的
  *   已知限制）；
  * - **`undefined`** ⇒ 不表态：不产生任何 SDK 调用，已画出来的数据保持不变。
+ *
+ * @deprecated 官方 `BMap.LineLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
+ *   （建议改用 `visualization.PolylineLayer`）。`<LineLayer>` 组件**继续可用、行为不变**，
+ *   但官方建议的替代组件 `PolylineLayer` 本库**尚未提供**（见 #166）——
+ *   在它落地之前没有可迁移的去处，本标记只是如实告知，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
@@ -769,7 +782,15 @@ export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickO
   style?: LineLayerStyle;
 }
 
-/** `FillLayer` 的 props。 */
+/**
+ * `FillLayer` 的 props。
+ *
+ * @deprecated 官方 `BMap.FillLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
+ *   （建议改用 `visualization.PolygonLayer`）。`<FillLayer>` 组件**继续可用、行为不变**，
+ *   但官方建议的替代组件 `PolygonLayer` 本库**尚未提供**（见 #166）——
+ *   在它落地之前没有可迁移的去处，本标记只是如实告知，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
+ */
 export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /**
    * GeoJSON 数据；有值时走 `setData()`（不重建），`null` = 没有数据（换一个空实例）、
@@ -891,6 +912,14 @@ export interface TrackLineLayerExpose {
  *
  * 样式字段是官方 `PointIconStyle` 的子集；`isFlat` / `isFixed` 是**构造期**选项
  * （它们决定渲染通道，官方写在 `PointIconLayerOptions` 上而不是 style 里）。
+ *
+ * @deprecated 官方 `BMap.PointIconLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记
+ *   `@deprecated`（建议改用 `visualization.PointLayer` 的图标模式）。与线 / 面两个不同，
+ *   官方建议的替代品本库**已经提供**：迁移目标是 `PointLayerProps`（组件 `<PointLayer>`）。
+ *   但那不是改个名字的事——`<PointLayer>` 属扩展 API、标 `experimental`（可视化实现按需
+ *   异步注入），且样式字段是**扁平**的（`icon` / `width` / `height` 直接是 prop，没有 `style` 袋）。
+ *   `<PointIconLayer>` 本身继续可用、行为不变。
+ *   详见 `docs/zh-CN/components/data.md`。
  */
 export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   /** 属性映射：写进每个要素的 `properties`（口径同 `BPointShapeLayerProps.properties`）。 */

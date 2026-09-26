@@ -384,18 +384,33 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
+  // ⚠️ 官方 `@deprecated`（4.0.5 给 `layer/PointIconLayer.d.ts` 的类加的，建议改用
+  // `visualization.PointLayer` 的图标模式）。这里**保持 `status: "native"`**：
+  // `status` 的词表只有 native / extended / experimental / unsupported，四个值的判据是
+  // 「能力从哪来」，**没有一档表示「官方把它标记为弃用」**。为它新造一个 `deprecated`
+  // 状态会让 `supports()` / `require()` / 能力矩阵全线跟着改语义（`native` 能力突然不再被列出），
+  // 那是用一个展示层的事实去改一个判定层的契约。
+  //
+  // 因此弃用只落在**说明**上：组件继续可用（Development 期告警一次 + 类型层 `@deprecated`
+  // + 文档），真正的替代品（`<PointLayer>`）本库已提供。详见 #165 与
+  // `docs/zh-CN/components/data.md`。
   "layer.point-icon": {
     id: "layer.point-icon",
     family: "layer",
-    description: "点图标图层（PointIconLayer）",
+    description:
+      "点图标图层（PointIconLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（图标模式）",
     rawMembers: ["PointIconLayer"],
     status: "native",
     runtimeOnly: false,
   },
+  // 同上：`PointShapeLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PointLayer`
+  // 的形状模式），本库同样只登记、不改 `status`。⚠️ 本库**没有** `<PointShapeLayer>` 组件：
+  // 形状点走 `<PointCollection>`（`BMap.PointCollection`，4.0 类型包里无声明，见 data.md）。
   "layer.point-shape": {
     id: "layer.point-shape",
     family: "layer",
-    description: "点形状图层（PointShapeLayer）",
+    description:
+      "点形状图层（PointShapeLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（形状模式）",
     rawMembers: ["PointShapeLayer"],
     status: "native",
     runtimeOnly: false,
@@ -416,18 +431,26 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
+  // ⚠️ 官方 `@deprecated`（4.0.5 给 `layer/LineLayer.d.ts` 的类加的，建议改用
+  // `visualization.PolylineLayer`）。`status` 保持 `experimental` **不动**——那一位的判据是
+  // 「这一族新、接口面可能变」，与「官方标了弃用」是两件不同的事；官方弃用只落说明。
+  // 官方建议的替代组件 `PolylineLayer` 本库**尚未提供**（#166），组件继续可用。
   "layer.line": {
     id: "layer.line",
     family: "layer",
-    description: "线图层（LineLayer）",
+    description:
+      "线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库尚未提供该组件，见 #166）",
     rawMembers: ["LineLayer"],
     status: "experimental",
     runtimeOnly: false,
   },
+  // 同上：`FillLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PolygonLayer`），
+  // 替代组件同样见 #166。
   "layer.fill": {
     id: "layer.fill",
     family: "layer",
-    description: "面图层（FillLayer）",
+    description:
+      "面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库尚未提供该组件，见 #166）",
     rawMembers: ["FillLayer"],
     status: "experimental",
     runtimeOnly: false,

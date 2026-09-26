@@ -348,7 +348,7 @@
       "rawMembers": [
         "PointIconLayer"
       ],
-      "description": "点图标图层（PointIconLayer）"
+      "description": "点图标图层（PointIconLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（图标模式）"
     },
     {
       "id": "layer.point-shape",
@@ -358,7 +358,7 @@
       "rawMembers": [
         "PointShapeLayer"
       ],
-      "description": "点形状图层（PointShapeLayer）"
+      "description": "点形状图层（PointShapeLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（形状模式）"
     },
     {
       "id": "layer.district",
@@ -388,7 +388,7 @@
       "rawMembers": [
         "LineLayer"
       ],
-      "description": "线图层（LineLayer）"
+      "description": "线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库尚未提供该组件，见 #166）"
     },
     {
       "id": "layer.fill",
@@ -398,7 +398,7 @@
       "rawMembers": [
         "FillLayer"
       ],
-      "description": "面图层（FillLayer）"
+      "description": "面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库尚未提供该组件，见 #166）"
     },
     {
       "id": "layer.dom",

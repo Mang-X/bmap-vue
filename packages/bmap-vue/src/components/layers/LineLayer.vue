@@ -2,7 +2,21 @@
 /**
  * LineLayer —— 原生批量线图层（官方 `BMap.LineLayer`，4.0）
  *
- * 官方声明（`@baidumap/jsapi-v4-types@4.0.4` 的 `LineLayer` / `LineLayerOptions` / `LineStyle`）
+ * ## ⚠️ 官方已在 4.0.5 弃用 `BMap.LineLayer`
+ *
+ * `@baidumap/jsapi-v4-types@4.0.5` 给 `LineLayer` 这个类加了一条
+ * `@deprecated 已废弃，建议使用 {@link PolylineLayer} 替代`，替代品在 4.0.5 新增的
+ * `visualization/` 命名空间里。
+ *
+ * **本组件的处置**（#165 决策，与 `FillLayer` / `PointIconLayer` 一致）：
+ *
+ * - **保留组件、保留行为**。替代组件（`PolylineLayer`）**还不存在**（见 #166），
+ *   删掉等于让现有用户无路可走。
+ * - **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim；「别名指向新名」正是那条要禁的东西）。
+ * - **把弃用讲清楚**：开发期告警一次（`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放
+ *   在模块级）+ 类型层 `@deprecated` + 文档。
+ *
+ * 官方声明（`@baidumap/jsapi-v4-types` 的 `LineLayer` / `LineLayerOptions` / `LineStyle`）
  * 给出了完整的方法面，本组件逐条对应：
  *
  * | prop 变化 | 路径 | 依据 |
@@ -26,7 +40,18 @@
  * 而放它过去就等于悄悄依赖 SDK 的默认 `idKey`（与拾取如实给 `id: null` 是同一条口径）。
  */
 import { NATIVE_LAYER_PICK_EVENTS, pickEmitterFor, useVisualLayer } from "./useVisualLayer";
+import { warnDeprecatedLayerOnce } from "../../core/layers/deprecatedLayerWarning";
 import type { LineLayerProps, FeaturePick } from "../../types/components";
+
+/** 组件**创建**时（不是模块 import 时）报一次官方弃用；生产环境静默。 */
+warnDeprecatedLayerOnce(
+  "LineLayer:deprecated-class",
+  "[LineLayer] 官方 `BMap.LineLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 @deprecated，" +
+    "官方建议改用 `BMap.PolylineLayer`（4.0.5 新增的 visualization 命名空间）。" +
+    "本组件继续可用、行为不变；替代组件 `PolylineLayer` 本库尚未提供（见 #166），" +
+    "在此之前若你依赖 `LineLayer` 的既有行为可以继续使用。" +
+    "详见 docs/zh-CN/components/layer/native-visual-layers.md",
+);
 
 const props = withDefaults(defineProps<LineLayerProps>(), {
   // 布尔 prop 必须给显式默认值：Vue 对 `Boolean` 有「缺省即 false」的转换。

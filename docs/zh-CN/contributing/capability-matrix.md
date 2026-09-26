@@ -66,12 +66,12 @@
 | layer | `layer.tile` | native | — | TileLayer | 瓦片图层（TileLayer） |
 | layer | `layer.traffic` | native | — | TrafficLayer | 实时路况图层（TrafficLayer） |
 | layer | `layer.geojson` | native | — | GeoJSONLayer | GeoJSON 图层（GeoJSONLayer） |
-| layer | `layer.point-icon` | native | — | PointIconLayer | 点图标图层（PointIconLayer） |
-| layer | `layer.point-shape` | native | — | PointShapeLayer | 点形状图层（PointShapeLayer） |
+| layer | `layer.point-icon` | native | — | PointIconLayer | 点图标图层（PointIconLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（图标模式） |
+| layer | `layer.point-shape` | native | — | PointShapeLayer | 点形状图层（PointShapeLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（形状模式） |
 | layer | `layer.district` | native | — | DistrictLayer | 行政区划图层（DistrictLayer） |
 | layer | `layer.panorama-coverage` | native | ✓ | PanoramaCoverageLayer | 全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型 |
-| layer | `layer.line` | experimental | — | LineLayer | 线图层（LineLayer） |
-| layer | `layer.fill` | experimental | — | FillLayer | 面图层（FillLayer） |
+| layer | `layer.line` | experimental | — | LineLayer | 线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer（本库尚未提供该组件，见 #166） |
+| layer | `layer.fill` | experimental | — | FillLayer | 面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer（本库尚未提供该组件，见 #166） |
 | layer | `layer.dom` | experimental | — | DOMLayer | DOM 图层（DOMLayer） |
 | layer | `layer.xyz` | experimental | — | XYZLayer | 第三方标准瓦片图层（XYZLayer）；内置 EPSG:3857 → BD09MC 转换，可加载 XYZ/TMS 服务 |
 | layer | `layer.wms` | experimental | — | WMSLayer | WMS 瓦片服务图层（WMSLayer）；按 BBOX/WIDTH/HEIGHT 驱动瓦片请求 |

@@ -14,13 +14,14 @@ title: 数据组件
 | 中小规模、需要逐点交互 | `MarkerList` | **每项一个 Marker** |
 | 空间上邻近的点需要聚合 | `MarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
 | 同上，但**事件里要有簇内业务项** | `MarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
-| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`） |
-| 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`） |
+| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`，官方已弃用，见下） |
+| 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`，官方已弃用，见下） |
 | 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
 > 三个点图层组件落在**官方原生批量点图层**上：前两个（`PointShapeLayer` / `PointIconLayer`）在
-> `@baidumap/jsapi-v4-types` 里有完整类声明，但 4.0.5 起**已被官方标记 `@deprecated`**（官方建议
-> 分别改用 `PointLayer` 的形状模式 / 图标模式）；`PointLayer` 用的 `BMap.PointLayer` 属官方
+> `@baidumap/jsapi-v4-types` 里有完整类声明，但 4.0.5 起**两个都被官方标记 `@deprecated`**
+> （建议分别改用 `PointLayer` 的形状模式 / 图标模式；本库保留了封装，见各组件小节与
+> [PointIconLayer](#pointiconlayer) 的提示框）；`PointLayer` 用的 `BMap.PointLayer` 属官方
 > **扩展 API**——4.0.5 的 `visualization/PointLayer.d.ts` **已经补上了类声明**，但可视化实现仍是
 > 按需异步注入的（「类型包里有类声明」≠「运行时已加载」），因此它被标为
 > `experimental`：能力就绪之前创建会**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`，经 `resource:error`
@@ -310,6 +311,22 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 业务项。
 
 ## `PointIconLayer`
+
+::: warning 官方已在 4.0.5 弃用 `BMap.PointIconLayer`
+`@baidumap/jsapi-v4-types@4.0.5` 给 `BMap.PointIconLayer` 加了一条 `@deprecated`，官方建议改用
+同一批新增的 `visualization.PointLayer`（图标模式）。
+
+**组件继续可用、行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。与线 / 面两个图层
+不同，官方建议的替代品本库**已经提供**（[`PointLayer`](#pointlayerexperimental扩展-api)，见下），
+所以这里**是可以迁移的**——但不是改个名字：`<PointLayer>` 属扩展 API、标 `experimental`（可视化
+实现按需异步注入，就绪前创建会经 `resource:error` 交出 `BMAP_CAPABILITY_UNSUPPORTED`），且它的
+样式字段是**扁平**的（`icon` / `width` / `height` / `anchors` 直接是 prop，没有 `style` 袋）。
+需要「最稳、官方两处都声明、样式是袋」的那一套，就继续用 `<PointIconLayer>`。
+
+官方同一批还弃用了 `BMap.PointShapeLayer`（建议 `PointLayer` 形状模式）；本库**没有**对应的
+`PointShapeLayer` 组件——形状点走 [`BPointShapeLayer`](#bpointshapelayer)。线 / 面两个图层的弃用
+见[原生批量可视化图层](../layer/native-visual-layers)。
+:::
 
 ```vue
 <PointIconLayer

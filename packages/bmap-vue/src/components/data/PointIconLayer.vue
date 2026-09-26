@@ -2,6 +2,20 @@
 /**
  * PointIconLayer —— 批量图标点（**单个** SDK 资源，M6-POINT-CLUSTER / issue #35）
  *
+ * ## ⚠️ 官方已在 4.0.5 弃用 `BMap.PointIconLayer`
+ *
+ * `@baidumap/jsapi-v4-types@4.0.5` 给 `PointIconLayer` 这个类加了一条
+ * `@deprecated 已废弃，建议使用 {@link PointLayer}（图标模式）替代`。
+ *
+ * **本组件的处置**（#165 决策，与 `LineLayer` / `FillLayer` 一致）：保留组件、保留行为，
+ * **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim），把弃用讲清楚：开发期告警一次
+ * （`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放在模块级）+ 类型层 `@deprecated` + 文档。
+ *
+ * ⚠️ 与线 / 面两个不同：官方建议的替代品（`PointLayer`）本库**已经提供**，所以这一条
+ * **现在就可以迁移**（另两个的替代组件见 #166）。但 `<PointLayer>` 属**扩展 API**、被标为
+ * `experimental`（可视化实现按需异步注入），且它的样式字段是**扁平**的（`icon` / `width` /
+ * `height` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
+ *
  * 落在官方 `BMap.PointIconLayer`（**两处都声明**：类型包有完整类声明，官方 React 参考实现也有同名组件）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
  * `useNativeLayerResource`（#36 抽出的共享内核，五个原生数据图层共用一份实现）：
  * 本组件只声明「构造期选项 / 样式袋 / 数据载荷 / 事件」四件事，不再自持第二套状态机。
@@ -17,6 +31,7 @@ import { onUnmounted } from "vue";
 import { createDevWarnOnce, devWarn } from "../../core/logger";
 import { useNativeLayerResource } from "../../core/composables/useNativeLayerResource";
 import { layerDataIdentity, stableLayerValue } from "../../core/layers/LayerSpec";
+import { warnDeprecatedLayerOnce } from "../../core/layers/deprecatedLayerWarning";
 import { resolveFeaturePick } from "../../core/layers/nativeLayerPick";
 import { projectLayerStyle } from "../../core/layers/nativeLayerStyle";
 import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data/geojsonAdapter";
@@ -26,8 +41,19 @@ import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
 import type { PointPick, PointIconLayerProps } from "../../types/components";
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
+/** 组件**创建**时（不是模块 import 时）报一次官方弃用；生产环境静默。 */
+warnDeprecatedLayerOnce(
+  "PointIconLayer:deprecated-class",
+  "[PointIconLayer] 官方 `BMap.PointIconLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 @deprecated，" +
+    "官方建议改用 `BMap.PointLayer`（图标模式，4.0.5 新增的 visualization 命名空间）。" +
+    "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**（同一批里唯一的" +
+    "「官方推荐的替代品已经存在」的情形），迁移时注意它的样式字段是扁平的而不是 style 袋。" +
+    "详见 docs/zh-CN/components/data.md",
+);
+
 /** 本组件落地的原生图层种类。 */
 const LAYER_KIND: NativeLayerKind = "point-icon";
+/** 组件标签名（告警前缀 / 资源账本标签）。 */
 const LABEL = "PointIconLayer";
 
 const props = withDefaults(defineProps<PointIconLayerProps<Item>>(), {

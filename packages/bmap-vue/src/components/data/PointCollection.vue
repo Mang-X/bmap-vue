@@ -51,11 +51,28 @@ import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data
 import { itemKeyReader } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
 import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
+import { warnDeprecatedLayerOnce } from "../../core/layers/deprecatedLayerWarning";
 import type { PointPick, PointCollectionProps } from "../../types/components";
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
 /** 本组件落地的原生图层种类（v4 的「几何点」批量图层）。 */
 const LAYER_KIND: NativeLayerKind = "point-shape";
+
+/**
+ * ⚠️ 官方 `@baidumap/jsapi-v4-types@4.0.5` 已把 `BMap.PointShapeLayer` 标为 `@deprecated`
+ * （建议改用 `BMap.PointLayer` 的形状模式），本组件正落在该类上。
+ *
+ * 处置与 `LineLayer` / `FillLayer` / `PointIconLayer` 一致：组件保留、行为不变、不改名、
+ * 不加兼容别名（#165 §3.6）。替代品 `<PointLayer>` 本库**已提供**，但它的样式字段是**扁平**的
+ * （`shape` / `size` / `fillColor` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
+ */
+warnDeprecatedLayerOnce(
+  "PointCollection:deprecated-class",
+  "[PointCollection] 官方 `BMap.PointShapeLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 " +
+    "@deprecated，官方建议改用 `BMap.PointLayer`（形状模式，4.0.5 新增的 visualization 命名空间）。" +
+    "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**，但其样式字段是扁平的、" +
+    "不是 `style` 袋，迁移不是改个名字。详见 docs/zh-CN/components/data.md",
+);
 
 const props = withDefaults(defineProps<PointCollectionProps<Item>>(), {
   // 布尔 prop 必须给显式默认值：Vue 对 `Boolean` 有「缺省即 false」的转换。

@@ -8,12 +8,26 @@
 import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 ```
 
-## 先选对组件（差别来自**官方声明了什么**）
+## 先选对组件（差别来自**官方声明了什么**、**弃用了什么**）
+
+::: warning `LineLayer` / `FillLayer`：官方已在 4.0.5 弃用底层的类
+`@baidumap/jsapi-v4-types@4.0.5` 给 `BMap.LineLayer` 与 `BMap.FillLayer` 各加了一条
+`@deprecated`，官方建议改用 4.0.5 新增的 `visualization` 命名空间里的 `PolylineLayer` /
+`PolygonLayer`。
+
+**两个组件继续可用，行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。但官方建议的
+替代组件 **`<PolylineLayer>` / `<PolygonLayer>` 本库目前还没有提供**（见 issue #166）——所以现在
+**没有可迁移的去处**，这不是一个「请立即改用别的东西」的提示。需要这层语义的可以继续用
+`LineLayer` / `FillLayer`；`HeatmapLayer` / `TrackLineLayer` 不在官方弃用名单内。
+
+[`PointIconLayer`](../data#pointiconlayer) 同属这一批，但它的官方替代品 `<PointLayer>` 本库
+**已经提供**，那条见[数据组件](../data)。
+:::
 
 | 组件 | 官方类 | 能力面 | 适合 |
 | --- | --- | --- | --- |
-| `LineLayer` | `LineLayer`（有声明；4.0.5 起官方标 `@deprecated`，建议改用 `PolylineLayer`） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
-| `FillLayer` | `FillLayer`（同上；官方建议改用 `PolygonLayer`） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
+| `LineLayer` | `LineLayer`（有声明；4.0.5 起官方标 `@deprecated`，建议 `PolylineLayer`） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
+| `FillLayer` | `FillLayer`（同上；官方建议 `PolygonLayer`） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
 | `HeatmapLayer` | `Heatmap`（4.0.5 补上类声明，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
 | `TrackLineLayer` | `TrackLine`（4.0.5 补上类声明，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
 
@@ -25,6 +39,11 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 `setOpacity` / `setZIndex`，但官方扩展 API 专页没有把它们列为这两类的契约
 （见 `driver/jsapi-v4/native-layers.ts` 里「不把未取证成员当契约」的口径），
 声明了也只是静默忽略（假支持）。
+
+「官方有没有弃用」也不改变这张表：能力矩阵里 `layer.line` / `layer.fill` 的 `status` 仍是
+`experimental`、`layer.point-icon` 仍是 `native`。`status` 的四个取值表达的是**能力从哪来**，
+没有一档表示「官方标了弃用」——为它新造一个状态会让 `supports()` / 能力矩阵全线改语义。弃用只记在
+[能力矩阵](../../contributing/capability-matrix)的说明列与上面那个提示框里。
 
 ## 统一语义：同名的 prop，四条写入路径
 
@@ -255,4 +274,8 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
 - **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
+- **`LineLayer` / `FillLayer` 底层的官方类已被弃用，替代组件还没有**（官方 4.0.5，建议
+  `PolylineLayer` / `PolygonLayer`，见本文开头的提示框与 #166）。本库不提供指向新名字的别名垫片
+  （两个名字行为并不相同，别名只会让人更难判断自己拿到的是哪一套语义），所以在那之前这两个组件
+  就是这两个组件。
 - **`MVTLayer`**（#109）：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[MVTLayer](./mvt-layer.md)」。
