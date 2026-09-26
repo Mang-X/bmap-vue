@@ -21,7 +21,7 @@
       "ours": "useMapContext",
       "official": "useBMapContext",
       "kind": "renamed",
-      "note": "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->"
+      "note": "官方仍保留 `useBMapContext`；本库 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->"
     },
     {
       "ours": "useAreaBoundary",
@@ -87,7 +87,7 @@
       "ours": "BMapClient",
       "official": null,
       "kind": "ours-only",
-      "note": "Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。"
+      "note": "Client 句柄类型；官方无同名导出。组件 / hook / 基础类型名对齐，不镜像本库 Client 面。"
     },
     {
       "ours": "BMapClientContext",
@@ -99,7 +99,7 @@
       "ours": "BMapDriverFactory",
       "official": null,
       "kind": "ours-only",
-      "note": "Driver 工厂类型；#135 不把 raw-SDK 边界类型改名（会与 `BMapDriver` 断开）。"
+      "note": "Driver 工厂类型；raw-SDK 边界类型不改名（会与 `BMapDriver` 断开）。"
     },
     {
       "ours": "BMapDriverInput",
@@ -171,13 +171,13 @@
       "ours": "BMapLocalSearchOperation",
       "official": null,
       "kind": "ours-only",
-      "note": "本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。"
+      "note": "本地检索在飞操作标识；请求归属模型的一部分，官方无对应。"
     },
     {
       "ours": "BMapServiceStatus",
       "official": null,
       "kind": "ours-only",
-      "note": "服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。"
+      "note": "服务状态口径（`idle`/`loading`/…）；单一事实源，不改名以免与 `ServiceCallStatus` 混淆。"
     },
     {
       "ours": "BMapPluginConfig",
@@ -195,13 +195,13 @@
       "ours": "CreateBMapClientOptions",
       "official": null,
       "kind": "ours-only",
-      "note": "`createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。"
+      "note": "`createBMapClient` 入参；Client 装配面不在组件 / hook 对齐范围。"
     },
     {
       "ours": "CreateBMapPluginOptions",
       "official": null,
       "kind": "ours-only",
-      "note": "`createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。"
+      "note": "`createBMapPlugin` 入参；插件装配面不在组件 / hook 对齐范围。"
     },
     {
       "ours": "bmapClientContextKey",

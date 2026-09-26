@@ -1,4 +1,4 @@
-# PanoramaControl 全景控件 <Badge type="tip" text="^0.0.31" />
+# PanoramaControl 全景控件
 
 全景地图服务，360° 全景地图刻画真实世界，将街道场景带入到地图产品中，用户可以拖拽地图从不同的角度浏览真实的街景效果
 
@@ -27,9 +27,9 @@ control/panoramaControl
 
 ## 动态组件 Props
 
-| 属性    | 说明     | 类型      | 可选值 | 默认值 | 版本                               |
-| ------- | -------- | --------- | ------ | ------ | ---------------------------------- |
-| visible | 是否显示 | `boolean` | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| ------- | -------- | --------- | ------ | ------ |
+| visible | 是否显示 | `boolean` | - | `true` |
 
 `anchor` / `offset` 同样可以**动态更新**：属性变化时会即时下发 `setAnchor()` / `setOffset()`，
 不需要重建控件（M7-CONTROL-PANORAMA / #41 之前它们只在构造期生效）。

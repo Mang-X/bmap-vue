@@ -1,4 +1,4 @@
-# MVTLayer 矢量瓦片图层 <Badge type="tip" text="^1.0.0" />
+# MVTLayer 矢量瓦片图层
 
 MVT 矢量瓦片（官方 `BMap.MVTLayer`，4.0）：按**源图层名**过滤要素、按源图层名套样式，
 并提供要素状态（feature-state）命令面。

@@ -331,7 +331,7 @@ describe("文档口径与脚本常量一致（评审第 3 轮：旧口径会误�
   const scriptText = readFileSync(resolve(repoRoot, scriptPath), "utf8");
   const DOCS = [
     "docs/adr/2026-09-21-performance-baseline-and-worker-decision.md",
-    "docs/zh-CN/contributing/performance-baseline.md",
+    "docs/internal/performance-baseline.md",
   ];
   const docText = (doc: string): string => readFileSync(resolve(repoRoot, doc), "utf8");
 

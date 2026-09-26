@@ -435,14 +435,6 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "官方包发布契约（Loader / UI Kit）",
           link: "official-packages",
         },
-        {
-          text: "v4 浏览器 smoke（默认链路 / 组件 / UI Kit）",
-          link: "v4-browser-smoke",
-        },
-        {
-          text: "性能基准与预算",
-          link: "performance-baseline",
-        },
       ],
     },
   ],

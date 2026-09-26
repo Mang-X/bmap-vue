@@ -1,4 +1,4 @@
-# GeoJSONLayer GeoJSON 图层 <Badge type="tip" text="^1.0.0" />
+# GeoJSONLayer GeoJSON 图层
 
 用一份 GeoJSON 数据渲染点 / 线 / 面覆盖物。数据变化时只调 `setData()`，不重建图层。
 

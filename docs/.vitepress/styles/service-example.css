@@ -1,0 +1,167 @@
+/**
+ * 服务类示例的表单控件样式。
+ *
+ * ## 为什么需要它
+ *
+ * VitePress 主题对 `input` / `button` / `select` 做了 reset（`border: 0; padding: 0;
+ * appearance: none` 之类），示例里**裸写**的表单控件因此全部塌成无边框、无内边距的样子。
+ * 服务类 composable（`useLocalSearch` 与四个路线）都要一个「关键字输入 + 按钮」的交互，
+ * 正好是唯一一组裸写表单控件的示例，所以只有它们看起来是坏的。
+ *
+ * 组件类示例（`docs/examples/control/**`）不踩这个坑——它们把按钮包在 `CustomControl`
+ * 自己的 `<style scoped>` 里。
+ *
+ * ## 为什么是**非 scoped** 的全局样式
+ *
+ * 这五个示例的 `<style>` 都是非 scoped 的（沿用既有写法），而 `scoped` 只会加
+ * `data-v-` 属性选择器。这里统一改成带类名前缀的 `.bmap-example-*` 规则：
+ * 命名空间已经足够隔离（`bmap-example-` 前缀在全站唯一），不需要 scoped 也能保证
+ * 不外溢，并且**能覆盖主题的 reset**——reset 来自主题的类选择器，
+ * 而我们的规则同样是非 scoped 的普通类选择器，后加载者胜。
+ *
+ * 新增服务类示例时复用同一组类名即可，不要各写一套。
+ */
+
+/* 输入框 */
+.bmap-example-input {
+  appearance: none;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  line-height: 20px;
+  padding: 5px 10px;
+  width: 100%;
+  max-width: 220px;
+  transition: border-color 0.2s;
+}
+
+.bmap-example-input:focus {
+  border-color: var(--vp-c-brand-1);
+  outline: none;
+}
+
+.bmap-example-input::placeholder {
+  color: var(--vp-c-text-2);
+}
+
+/* 按钮 */
+.bmap-example-button {
+  appearance: none;
+  border: 1px solid var(--vp-c-brand-1);
+  border-radius: 6px;
+  background-color: var(--vp-c-brand-1);
+  color: var(--vp-c-bg);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 5px 14px;
+  transition:
+    opacity 0.2s,
+    background-color 0.2s;
+  white-space: nowrap;
+}
+
+.bmap-example-button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.bmap-example-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 次要按钮（清空 / 翻页） */
+.bmap-example-button.is-secondary {
+  background-color: transparent;
+  border-color: var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+}
+
+.bmap-example-button.is-secondary:hover:not(:disabled) {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+  opacity: 1;
+}
+
+/* 下拉框（类型切换 / 出行策略） */
+.bmap-example-select {
+  appearance: none;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 5px 10px;
+}
+
+.bmap-example-select:focus {
+  border-color: var(--vp-c-brand-1);
+  outline: none;
+}
+
+/* 工具条与结果列表的排版 */
+.bmap-example-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.bmap-example-results {
+  margin: 8px 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.bmap-example-results li {
+  cursor: pointer;
+}
+
+.bmap-example-results small {
+  color: var(--vp-c-text-2);
+}
+
+.bmap-example-status {
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+}
+
+.bmap-example-pager {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/*
+ * 解析结果面板。
+ *
+ * 长地址**不要**塞进 `<Label>`：Label 是地图上的气泡，宽高由内容撑开，
+ * 一段长地址在窄气泡里会被压成「一行一个字」的竖排。这块面板给它正常换行的容器。
+ */
+.bmap-example-detail {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background-color: var(--vp-c-bg-soft);
+  margin-bottom: 8px;
+  padding: 8px 10px;
+}
+
+.bmap-example-detail-row {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.bmap-example-detail-key {
+  color: var(--vp-c-text-2);
+  flex: 0 0 auto;
+}

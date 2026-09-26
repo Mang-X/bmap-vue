@@ -1,8 +1,10 @@
 <template>
   <div>
-    <div class="toolbar">
-      <button :disabled="isLoading" @click="run">规划公交路线</button>
-      <button :disabled="isEmpty" @click="clear">清空</button>
+    <div class="bmap-example-toolbar">
+      <button class="bmap-example-button" :disabled="isLoading" @click="run">规划公交路线</button>
+      <button class="bmap-example-button is-secondary" :disabled="isEmpty" @click="clear">
+        清空
+      </button>
       <span v-if="isLoading">规划中…</span>
       <span v-else-if="status === 'empty'">没有可用方案或服务当前不可用</span>
       <span v-else-if="status === 'failed'">规划失败（状态码 {{ sdkStatus ?? "-" }}）</span>
@@ -52,26 +54,17 @@ function run() {
 </script>
 
 <style>
-.toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
 .plans {
   margin: 8px 0;
   padding-left: 18px;
 }
-.plans strong {
-  color: #d4380d;
-}
 .muted {
-  color: #888;
-  font-size: 12px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
 }
 .segment {
   margin: 2px 0 0;
-  color: #555;
-  font-size: 12px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
 }
 </style>

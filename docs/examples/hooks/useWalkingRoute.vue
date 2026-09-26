@@ -1,10 +1,22 @@
 <template>
   <div>
-    <div class="toolbar">
-      <input v-model="start" placeholder="起点，如“天安门”" @keyup.enter="run" />
-      <input v-model="end" placeholder="终点，如“王府井”" @keyup.enter="run" />
-      <button :disabled="isLoading" @click="run">规划步行路线</button>
-      <button :disabled="isEmpty" @click="clear">清空</button>
+    <div class="bmap-example-toolbar">
+      <input
+        class="bmap-example-input"
+        v-model="start"
+        placeholder="起点，如“天安门”"
+        @keyup.enter="run"
+      />
+      <input
+        class="bmap-example-input"
+        v-model="end"
+        placeholder="终点，如“王府井”"
+        @keyup.enter="run"
+      />
+      <button class="bmap-example-button" :disabled="isLoading" @click="run">规划步行路线</button>
+      <button class="bmap-example-button is-secondary" :disabled="isEmpty" @click="clear">
+        清空
+      </button>
     </div>
 
     <p v-if="isLoading">规划中…</p>
@@ -38,10 +50,12 @@ function run() {
 </script>
 
 <style>
-.toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
+.plans {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.muted {
+  color: var(--vp-c-text-2);
+  font-size: 13px;
 }
 </style>

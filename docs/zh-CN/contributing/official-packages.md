@@ -1,18 +1,17 @@
 # 官方包发布契约（Loader / UI Kit）
 
 本页是 `@baidumap/jsapi-loader` 与 `@baidumap/jsapi-ui-kit` 的**发布契约单一事实源**：
-版本、入口形状、运行时行为、不支持项与验证方式。决策依据见
-[ADR 2026-09-13：Official-first](/adr/2026-09-13-official-first-loader-and-ui-kit)。
+版本、入口形状、运行时行为、不支持项与验证方式。
 
 > 结论一律以**发布产物 + 真实运行**为准，不以官方文档、示例或 Skill 的转述为准。
 > 上游改版时，`tests/behavior/official-packages-*.test.ts` 会先红——先回来更新本页，再改实现。
 
 ## 锁定版本与来源
 
-| 包 | 版本 | 发布时间 | 许可 | 用途 | 依赖策略 |
-| --- | --- | --- | --- | --- | --- |
-| `@baidumap/jsapi-loader` | `1.0.0` | 2026-07-17 | MIT | 默认在线加载 JSAPI 4.0 | 运行时依赖（精确锁定，无 `^` / `~`） |
-| `@baidumap/jsapi-ui-kit` | `1.1.2` | 2026-03-23 | MIT | 标准 UI（建议 / 检索 / 详情 / 路线） | optional peer + 开发期精确锁定 |
+| 包 | 发布时间 | 许可 | 用途 | 依赖策略 |
+| --- | --- | --- | --- | --- |
+| `@baidumap/jsapi-loader` | 2026-07-17 | MIT | 默认在线加载 JSAPI 4.0 | 运行时依赖（精确锁定，无 `^` / `~`） |
+| `@baidumap/jsapi-ui-kit` | 2026-03-23 | MIT | 标准 UI（建议 / 检索 / 详情 / 路线） | optional peer + 开发期精确锁定 |
 
 出处核对方式（发布产物，不是仓库源码）：
 
@@ -21,8 +20,7 @@ curl -s "https://registry.npmjs.org/@baidumap%2Fjsapi-loader" | jq '.versions["1
 curl -s "https://registry.npmjs.org/@baidumap%2Fjsapi-ui-kit" | jq '.versions["1.1.2"].dist.integrity'
 ```
 
-**包名核对（#70 实施步骤 6）**：issue 正文里写的 `@baumap/jsapi-loader` / `@baumap/jsapi-ui-kit`
-在 npm 上**不存在**（`scope:baumap` 检索结果为 0，两个包名都是 404）——正确 scope 是 `@baidumap`。
+**包名核对**：注意 scope 是 `@baidumap`（`@baumap` 这个 scope 在 npm 上不存在）。
 本仓库实际安装与锁定的就是 `@baidumap/*`。组件库发布包名是 `bmap-vue`，源码路径是
 `packages/bmap-vue/src`。
 
@@ -78,7 +76,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 2. **CDP 会话一定有截止时间**。单条命令超时、全局截止、socket 断开三者任一先到都会拒绝并结束，
    `finally` 因此必然执行（关 Chromium / Vite / WebSocket）。否则浏览器一断连，探针就会挂死。
 
-最近一次运行（2026-09-13，macOS，node 24.21.0，headless Chromium 149 / SwiftShader，真实 AK，对照组回包正常，退出码 `0`，浏览器 UA `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36`）：
+在 macOS + node 24 + headless Chromium + 真实 AK（对照组回包正常、退出码 `0`）的一次完整运行中，
 **31 个探针全部 pass，四个 widget 结论分别为 pass / pass / pass / pass。**
 
 ## Loader 契约（`1.0.0`）
@@ -130,7 +128,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 
 **RoutePlan 的模式口径**：`1.1.2` 里 `enabledTypes` 硬编码 `["driving"]`、`showTabs: false`。
 `switchType("walking" | "riding" | "transit")` 实测为 **no-op + `console.warn('路径规划类型 X 未启用')`**，
-类型不会被改写。→ Vue 封装只开放驾车；headless 的四类路线（issue #39）不受此限制。
+类型不会被改写。→ Vue 封装只开放驾车；headless 的四类路线不受此限制。
 
 **「`options.map` 必传」不等于「必须有可用地图」**：四个 widget 的前置校验都是 `if (!options.map) throw`，
 但 `PlaceDetail` / `RoutePlan` 在后续调用里并不读它。因此 Vue 层仍需满足「构造前 Map ready」这一硬前提，
@@ -154,7 +152,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | `PlaceDetail` 的请求失败与「uid 找不到」 | **没有事件出口** | `fetchDetailByUid()` 无 `catch`（Promise 被丢弃），`!n` 分支直接 `return` 不发 `load`。本库**不合成** `error` 事件，如实记录为已知限制 |
 | `RoutePlan` 的 `typechange` | **锁定版本不可达** | `enabledTypes` 硬编码 `["driving"]`，且本库不暴露 `switchType()`；事件照常转发（不丢上游信息） |
 
-## 默认路径的配置面（R25-B / issue #71）
+## 默认路径的配置面
 
 默认在线路径（`baiduJsapiV4Provider()`）**逐项**按上表处置 `BMapLoadOptions`：
 
@@ -162,7 +160,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 | --- | --- | --- |
 | `ak` / `version` / `timeout` | 映射给官方 `load()`；`version` **只接受 `'4.0'`**（官方版本表里唯一的 v4 值），`timeout: 0` 原样传递 | 契约表「load(options) 参数」 |
 | `serviceHost` | 映射给官方 `load()`（代理模式，与 `ak` 二选一）；末尾斜杠按官方行为规范化（官方会 warn 后补 `/`），故 `/svc` 与 `/svc/` 是同一份配置。**参与指纹但只出现哈希**（`host:${hash(...)}`）——指纹会进 `BMAP_SDK_CONFIG_CONFLICT` 的消息，代理地址可能含内部域名 / userinfo / token；入口 metadata 记 `<serviceHost>/api?v=4.0` 且**不带 `ak`**，`akRef` 记 `none`。代理入口的 userinfo 在三处出口都被抹掉（`message` / `cause` / 指纹按哈希） | 同上；官方 React 封装 `react-bmap` 的 `<BMapProvider serviceHost>` 与 `stableHash` 的 load key 也是这个口径 |
-| `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引「外部预加载 + `existingGlobalV4Provider()`」 | 上游没有入口（ADR 决策 7） |
+| `nonce` / `integrity` / `crossOrigin` / `referrerPolicy` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引「外部预加载 + `existingGlobalV4Provider()`」 | 上游没有入口 |
 | `apiUrl` / `callbackParam` / `language` | 加载前抛 `BMAP_INVALID_ARGUMENT`，指引 `customScriptV4Provider()` | 入口 URL / 回调名 / 语言都不由本库决定 |
 
 清单的单一事实源是 `src/core/loader/providers/official.ts` 的 `OFFICIAL_LOADER_UNSUPPORTED_KEYS`：
@@ -171,29 +169,16 @@ BAIDU_MAP_AK=<你的 ak> pnpm probe:official -- --out=/tmp/official-probe.json
 （`default-loader-boundary.test.ts`）锁住默认 Provider 里不再出现自建 transport 的痕迹。
 **改这张表就必须同步改代码**（反之亦然）。
 
-默认路径**不**自己判定「是否已有全局」「是否要插 script」——那是官方 Loader 的状态机（ADR 决策 2）；
+默认路径**不**自己判定「是否已有全局」「是否要插 script」——那是官方 Loader 的状态机；
 本库只在官方结算后校验命名空间可用性、组装 `LoadedJsapiV4` 并脱敏 metadata。
 
 **「已有全局」这一支的版本口径**：真实 4.0 的 `BMap.version` 是构建标记 `"gl"`（上表实测），
 因此版本探测只接受**形如版本号**的取值（`4.0` / `4.0.4`）；`"gl"` 一律按「探测不到」处理并标
 `versionSource: "declared"`。否则「宿主预加载 / 同页复用」会被误判成「不是 JSAPI 4.0」。
 
-## 与本轮拆分任务的对应
+## 本库侧落地
 
-| 任务 | 本页提供的输入 |
-| --- | --- |
-| #71 / R25-B（默认 Provider 委托官方 Loader） | Loader 契约表全部；单例 / 冲突 / 重试 / reset / script 记账的**实测**行为；`nonce` / SRI / timeout 的处置口径；默认路径配置面（上一节） |
-| #72 / R25-C（删私有嗅探、真实可用性门禁） | 「本库不得访问 `_rd` / `qt=` / 私有签名」的边界；release 口径「按来源归因，不数净增」。落地决策见 ADR [2026-09-13 删除 SDK 私有面嗅探](../../adr/2026-09-13-private-sdk-surface-removal.md) |
-| #73 / R25-D（`./ui-kit` 与两个薄封装） | UI Kit 契约表；四个 widget 的构造前提与真实地图使用面；AK 前置、CSS、SSR、`destroy` 口径。**已落地**：见下节 |
-| #74 / R25-E（同一候选提交重新验收） | 「已验证 vs 未验证」列表；探针命令与退出码语义；四 widget 结论 |
-| #75 / UIKIT-02（`PlaceDetail` / `RoutePlan` 薄封装与四组件收口） | UI Kit 契约表；两个 widget 的构造前提、公开面、事件载荷形状；`layout` 纸面支持与「uid 找不到不发事件」两条边界。**已落地**：见下节与 ADR [详情与路线封装](../../adr/2026-09-13-ui-kit-detail-route-wrappers) |
-
-## 本库侧落地（R25-D / #73 与 UIKIT-02 / #75）
-
-`./ui-kit` 子入口与四个薄封装的实现边界见
-ADR [2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-13-ui-kit-subpath-and-type-boundary)
-与 ADR [2026-09-13：详情 / 路线 Vue 封装](/adr/2026-09-13-ui-kit-detail-route-wrappers)，
-使用方式见[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)。本页只登记「上游契约 → 本库行为」的对应：
+`./ui-kit` 子入口与四个薄封装的使用方式见[官方 UI Kit（`./ui-kit`）](/zh-CN/guide/ui-kit)。本页只登记「上游契约 → 本库行为」的对应：
 
 | 上游契约（本页上文） | 本库的处置 | 可复现证据 |
 | --- | --- | --- |
@@ -203,7 +188,7 @@ ADR [2026-09-13：`./ui-kit` 子路径、宿主桥与类型边界](/adr/2026-09-
 | `destroy()` 撤除自身 DOM、归还自己挂的 `document` 监听 | 组件释放顺序为「先 `off` 我们注册的事件，再 `destroy()`」 | `tests/behavior/ui-kit-lifecycle.test.ts` |
 | **事件载荷形状**：`highlight` 是 `{ from: HighlightItem \| null, to: HighlightItem }` 变更对；`suggest` 是 `toEventSuggestion()` 生成的数组；`load` 是 POI 数组、`select` 是单条 POI（可能为 `undefined`） | 公共事件按同一形状投影（`PlaceHighlightChangeDTO { from, to }`，不压平）；POI/建议字段逐项对齐（`street` 等 deprecated 别名不转发） | `tests/behavior/ui-kit-widget-contract.test.ts`（**发布产物形状锁**）、`ui-kit-events.test.ts` |
 | 检索走 `api.map.baidu.com` 私有 JSONP（不经 `BMapGL.LocalSearch`） | 本库不触碰 `qt=` / `_rd` / `getSeckeyAndSign`；一次交互只走 UI Kit 一条通道 | `tests/behavior/ui-kit-events.test.ts`（`driver.services` 从未被读取） |
-| `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless（#39） | `tests/behavior/ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
+| `RoutePlan` 只开放驾车 | 不暴露 `switchType()`；`typechange` 转发但不可达；四类路线走 headless | `tests/behavior/ui-kit-route-plan.test.ts`（公开面不含 `switchType`，含正证守卫）、`ui-kit-widget-contract.test.ts`（`enabledTypes` 硬编码 `["driving"]` 的产物形状锁） |
 | `PlaceDetailOptions.layout` 纸面支持；`setPlace(uid)` 找不到时不发事件；详情请求失败无出口 | 不暴露 `layout`；不合成 `error`/空 `load`；文档写明「`setPlace` 是发起而不是完成」 | `ui-kit-place-detail.test.ts`、`ui-kit-widget-contract.test.ts`（`layout` 在产物里 0 命中、`!n` 分支先于 `emit("load")` 的形状锁） |
 | `RoutePlan` 的事件用 `type`、`search()` 返回值用 `routeType`；`search()` 先 emit `error` 再抛 | 统一成 `type`；`WeakMap` 按上游错误身份缓存，保证「事件载荷 === 动作拒绝」；`cause` 只挂过 `redactAk` 的副本 | `ui-kit-route-plan.test.ts`（同一条错误、脱敏三处出口） |
 | 上游 `types` 入口带 `bmapgl-browser` 类型引用，本仓库 `skipLibCheck: false` 下不可消费 | 公共类型自持（纯数据 DTO）；构建期把该 specifier 映射到占位文件；用编译器 API 对着官方 `.d.ts` 做逐成员契约校验 | `tests/behavior/ui-kit-widget-contract.test.ts`、`packages/bmap-vue/types/ui-kit/upstream.d.ts` |

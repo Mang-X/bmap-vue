@@ -1,4 +1,4 @@
-# 原生批量可视化图层 <Badge type="tip" text="^1.0.0" />
+# 原生批量可视化图层
 
 四个 JSAPI 4.0 **原生批量图层**：`LineLayer`（线）/ `FillLayer`（面）/ `HeatmapLayer`（热力）/
 `TrackLineLayer`（轨迹线）。它们与[图层组件](./index)的区别是：**数据是一等公民**（`setData` /

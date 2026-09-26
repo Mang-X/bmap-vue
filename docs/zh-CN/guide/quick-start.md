@@ -42,7 +42,7 @@ const app = createApp(App)
 app.use(createBMapPlugin({ ak: '百度地图ak' }))
 ```
 
-#### Volar 支持 <Badge type="tip" text="^0.0.21" />
+#### Volar 支持
 
 如果你在使用 `Volar`，那么可以在 `tsconfig.json` 中配置 `compilerOptions.types` 来指定全局组件类型，从而获得更好的类型提示。如下图：
 

@@ -16,6 +16,10 @@
               <span>纬度 - {{ item.lat }}</span>
               <span>经度 - {{ item.lng }}</span>
             </div>
+            <!-- 长地址放列表里，不塞进 <Label>：Label 是地图气泡，会一行一个字竖着排。 -->
+            <div class="addr" v-if="result?.[index]?.detail">
+              {{ result[index]!.detail.address || "无地址" }}
+            </div>
           </li>
         </ul>
       </CustomControl>
@@ -23,13 +27,6 @@
         <template v-for="(item, index) in result">
           <template v-if="item.detail">
             <Marker :position="item.detail.point"></Marker>
-            <Label
-              :style="{ color: '#333', fontSize: '9px' }"
-              :position="item.detail.point"
-              :content="`${index}. 地址: ${item.detail.address} 所属商圈:${item.detail.business} 最匹配地点: ${
-                item.detail.surroundingPois[0]?.title || '无'
-              }`"
-            ></Label>
           </template>
         </template>
       </template>
@@ -84,5 +81,14 @@ function handleInitd() {
 }
 .point-list span {
   margin-right: 15px;
+}
+.point-list .addr {
+  margin: 2px 0 6px;
+  max-width: 220px;
+  /* 关键：不换行会被容器压成竖排；给出宽度上限 + 正常换行。 */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+  color: #666;
 }
 </style>

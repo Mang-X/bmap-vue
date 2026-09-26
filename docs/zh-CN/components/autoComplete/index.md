@@ -1,4 +1,4 @@
-# Autocomplete 自动填充 <Badge type="tip" text="^2.1.3" />
+# Autocomplete 自动填充
 
 地址检索关键词提示
 

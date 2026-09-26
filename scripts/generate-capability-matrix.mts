@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * M3A0-06: 由 Capability Catalog 数据生成能力矩阵
+ * 由 Capability Catalog 数据生成能力矩阵
  *
  * 生成（单一事实源：packages/bmap-vue/src/driver/capability/catalog.ts）：
  * - docs/zh-CN/contributing/capability-matrix.md
@@ -96,7 +96,7 @@ function renderMarkdown(): string {
   )
   lines.push('')
   lines.push(
-    '单引擎基线（#26 删除 `webgl-v1` / `jsapi-v3`，#126 结算退化维度）：能力目录**不再**按引擎区分，' +
+    '单引擎基线（旧引擎 `webgl-v1` / `jsapi-v3` 已删除）：能力目录**不再**按引擎区分，' +
       '因此没有引擎列——所有条目都面向当前唯一引擎 `jsapi-v4`。',
   )
   lines.push('')

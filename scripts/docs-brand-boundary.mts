@@ -315,15 +315,32 @@ export const DOCS_SCAN_PHASES: readonly DocsScanPhase[] = [
 export const DOCS_EXTRA_READMES = ["packages/bmap-vue/README.md", "NOTICE.md"] as const;
 
 /** 扫描面内按**路径**排除的目录 / 后缀（`isExcludedDocPath` 的依据）。 */
-export const EXCLUDED_DOC_PATH_PREFIXES = ["docs/adr/", "docs/.vitepress/cache/"] as const;
+export const EXCLUDED_DOC_PATH_PREFIXES = [
+  "docs/adr/",
+  // 上游 `vue3-baidu-map-gl` 的原始变更记录，**逐字**保留作为来源记录。
+  // 它的正文按定义就要写出旧包名与去前缀前的组件名——那是这份文件存在的意义，
+  // 和 `docs/adr/**` 属于同一类「按路径排除」的材料，不能靠逐行豁免（900 行里会有几百行命中）。
+  "docs/changelog/",
+  // **不属于产品文档**的内部记录：性能基准读数与浏览器 smoke 步骤。它们写成排障日志的样子
+  // （引用 issue 与内部路径），对读者没有价值；已在 `config.mts` 的 `srcExclude` 里不参与构建，
+  // 这里同样不扫——一道门禁不该要求读者看得见它才通过。
+  "docs/internal/",
+  "docs/.vitepress/cache/",
+] as const;
 export const EXCLUDED_DOC_SUFFIXES = [".json", ".map"] as const;
 
-/** 判断一个**仓库相对**路径是否落在扫描面的排除区里。 */
+/**
+ * 判断一个路径是否落在扫描面的排除区里。
+ *
+ * 两个调用方给的路径基准不同：品牌门禁给**仓库相对**（`docs/adr/x.md`），
+ * 内链门禁给**docs 根相对**（`adr/x.md`）。所以这里两种都认——
+ * 否则同一份排除清单会有一道门禁形同虚设（`docs/internal/` 判不到 `internal/`）。
+ */
 export function isExcludedDocPath(relativePath: string): boolean {
   const path = relativePath.replace(/\\/g, "/").replace(/^\.\//, "");
-  if (EXCLUDED_DOC_PATH_PREFIXES.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix))) {
-    return true;
-  }
+  const inside = (prefix: string): boolean =>
+    path === prefix.slice(0, -1) || path.startsWith(prefix) || path.startsWith(prefix.slice(5));
+  if (EXCLUDED_DOC_PATH_PREFIXES.some(inside)) return true;
   return EXCLUDED_DOC_SUFFIXES.some((suffix) => path.endsWith(suffix));
 }
 

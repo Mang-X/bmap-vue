@@ -111,8 +111,8 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | `clear()` | 释放当前实例（→ 公开的 `clearResults()`）+ 清空本地状态；下一次 `search()` 用新实例 |
 | 直接调 Driver（不经本 hooks）时并发 | Driver 以 `failed(BMAP_SERVICE_FAILED)` 拒绝，并提示 `disposeLocalSearch()` 后重建实例 |
 
-代价：取代 / 取消 / 超时之后的重查会**多建一个 SDK 实例**（换来归属可判定）。这一点与「每次请求一个
-独立实例」的取舍写在 ADR [2026-09-14](../../adr/2026-09-14-service-lifecycle-and-local-search.md) 决策 4。
+代价：取代 / 取消 / 超时之后的重查会**多建一个 SDK 实例**（换来归属可判定）。这是与「每次请求
+一个独立实例」相比的有意取舍：多一次构造，换来「回包属于哪次调用」可判定。
 
 ### 与官方 UI Kit 的分流
 

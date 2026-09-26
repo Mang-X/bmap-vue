@@ -30,7 +30,7 @@
 
 「运行时探测」表示该能力只能通过实例/原型成员在运行时探测（官方类型包无对应静态声明）。
 
-单引擎基线（#26 删除 `webgl-v1` / `jsapi-v3`，#126 结算退化维度）：能力目录**不再**按引擎区分，因此没有引擎列——所有条目都面向当前唯一引擎 `jsapi-v4`。
+单引擎基线（旧引擎 `webgl-v1` / `jsapi-v3` 已删除）：能力目录**不再**按引擎区分，因此没有引擎列——所有条目都面向当前唯一引擎 `jsapi-v4`。
 
 | 家族 | 能力 | 状态 | 运行时探测 | raw members | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +62,7 @@
 | overlay | `overlay.prism` | experimental | — | Prism | 3D 棱柱（Prism） |
 | overlay | `overlay.bezier-curve` | experimental | — | BezierCurve | 贝塞尔曲线（BezierCurve） |
 | overlay | `overlay.marker-3d` | experimental | ✓ | Marker3D | 3D 标记（Marker3D）；官方 4.0.4 文档引用但未声明类型 |
-| overlay | `overlay.mapvgl` | unsupported | ✓ | — | MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**（结论 `incompatible`，无迁移路径）：脚本的 JSONP 传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。依据与复现见 plugin-compat-inventory（#25 / #43） |
+| overlay | `overlay.mapvgl` | unsupported | ✓ | — | MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**（结论 `incompatible`，无迁移路径）：脚本的 JSONP 传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。依据与复现见 plugin-compat-inventory |
 | layer | `layer.tile` | native | — | TileLayer | 瓦片图层（TileLayer） |
 | layer | `layer.traffic` | native | — | TrafficLayer | 实时路况图层（TrafficLayer） |
 | layer | `layer.geojson` | native | — | GeoJSONLayer | GeoJSON 图层（GeoJSONLayer） |
@@ -78,12 +78,12 @@
 | layer | `layer.wmts` | experimental | — | WMTSLayer | WMTS 标准瓦片服务图层（WMTSLayer）；按 TileMatrixSet 拼接请求 |
 | layer | `layer.raster` | experimental | — | RasterTileLayer | 栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪 |
 | layer | `layer.mvt` | native | — | MVTLayer | MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id |
-| layer | `layer.cluster` | extended | ✓ | — | 聚合图层（ClusterLayer）；MarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19 |
+| layer | `layer.cluster` | extended | ✓ | — | 聚合图层（ClusterLayer）；MarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。 |
 | layer | `layer.point` | experimental | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地 |
 | layer | `layer.heatmap` | experimental | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |
-| layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。 |
+| layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证。 |
 | service | `service.local-search` | native | — | LocalSearch | 本地检索（LocalSearch） |
-| service | `service.autocomplete` | native | — | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
+| service | `service.autocomplete` | native | — | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
 | service | `service.driving-route` | native | — | DrivingRoute | 驾车路线规划（DrivingRoute） |
 | service | `service.walking-route` | native | — | WalkingRoute | 步行路线规划（WalkingRoute） |
 | service | `service.riding-route` | native | — | RidingRoute | 骑行路线规划（RidingRoute） |
@@ -93,7 +93,7 @@
 | service | `service.local-city` | native | — | LocalCity | IP 定位城市（LocalCity） |
 | service | `service.boundary` | native | — | Boundary | 行政区边界（Boundary） |
 | service | `service.convertor` | native | — | Convertor | 坐标转换（Convertor） |
-| service | `service.track-animation` | unsupported | ✓ | — | 轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已由 #110 落地在 `<TrackLineLayer>` 的 `playback` expose 上。脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；依据与复现见 plugin-compat-inventory（#25 / #43） |
+| service | `service.track-animation` | unsupported | ✓ | — | 轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已落地在 `<TrackLineLayer>` 的 `playback` expose 上。脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；依据与复现见 plugin-compat-inventory |
 | panorama | `panorama.viewer` | native | — | Panorama | 全景查看器（Panorama） |
 | panorama | `panorama.service` | native | — | PanoramaService | 全景服务（PanoramaService） |
-| panorama | `panorama.label` | native | — | PanoramaLabel | 全景标注（PanoramaLabel）。#41 起由 `<PanoramaLabel>` 消费，因此状态由 experimental 提升为 native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表） |
+| panorama | `panorama.label` | native | — | PanoramaLabel | 全景标注（PanoramaLabel）。由 `<PanoramaLabel>` 消费，因此状态由 experimental 提升为 native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表） |

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * #135: 生成「本库公开 API × 官方 React 参考」对照表
+ * 生成「本库公开 API × 官方 React 参考」对照表
  *
  * 对照物（维护者改口后的单一参考，不是开发中的 @baidumap/vue-bmap）：
  * - `scripts/api-diff/official-react-bmap-2.0.6.json` —— `@baidumap/react-bmap@2.0.6` 的导出清单
@@ -137,7 +137,7 @@ const oursPublic = new Set<string>([
   ...oursComponents,
   ...oursComposables,
 ]);
-// ui-kit 是独立子路径，单独一栏；不并进根入口（ADR：根不重导出 UI）。
+// ui-kit 是独立子路径，单独一栏；不并进根入口（根不重导出 UI：它是 optional peer）。
 
 // ─── 分类 ────────────────────────────────────────────────────────────────────
 
@@ -218,7 +218,7 @@ const EXCEPTIONS: Exception[] = [
     kind: "renamed",
     // 品牌门禁（`check:docs-brand`）的逐行豁免**必须由生成器写进 note**：本文件是生成物，
     // 手写在 .md 上的豁免会在下一次 `pnpm generate:api-diff` 时被覆盖掉，两道门禁就会互相打架。
-    note: "官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->",
+    note: "官方仍保留 `useBMapContext`；本库 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 -->",
   },
   {
     ours: "useAreaBoundary",
@@ -280,12 +280,12 @@ const EXCEPTIONS: Exception[] = [
     kind: "ours-only",
     note: "标准 UI 在 `./ui-kit` 子路径；官方 React 根清单未导出同名组件（它用 `RoutePlan` 类型名占位）。",
   },
-  // ── 残留 `BMap*` 类型 / 注入键：#135 清的是组件与 hook 名，不是 Driver/Client 领域类型 ──
+  // ── 残留 `BMap*` 类型 / 注入键：对齐的是组件与 hook 名，不是 Driver/Client 领域类型 ──
   {
     ours: "BMapClient",
     official: null,
     kind: "ours-only",
-    note: "Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。",
+    note: "Client 句柄类型；官方无同名导出。组件 / hook / 基础类型名对齐，不镜像本库 Client 面。",
   },
   {
     ours: "BMapClientContext",
@@ -297,7 +297,7 @@ const EXCEPTIONS: Exception[] = [
     ours: "BMapDriverFactory",
     official: null,
     kind: "ours-only",
-    note: "Driver 工厂类型；#135 不把 raw-SDK 边界类型改名（会与 `BMapDriver` 断开）。",
+    note: "Driver 工厂类型；raw-SDK 边界类型不改名（会与 `BMapDriver` 断开）。",
   },
   {
     ours: "BMapDriverInput",
@@ -369,13 +369,13 @@ const EXCEPTIONS: Exception[] = [
     ours: "BMapLocalSearchOperation",
     official: null,
     kind: "ours-only",
-    note: "本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。",
+    note: "本地检索在飞操作标识；请求归属模型的一部分，官方无对应。",
   },
   {
     ours: "BMapServiceStatus",
     official: null,
     kind: "ours-only",
-    note: "服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。",
+    note: "服务状态口径（`idle`/`loading`/…）；单一事实源，不改名以免与 `ServiceCallStatus` 混淆。",
   },
   {
     ours: "BMapPluginConfig",
@@ -393,13 +393,13 @@ const EXCEPTIONS: Exception[] = [
     ours: "CreateBMapClientOptions",
     official: null,
     kind: "ours-only",
-    note: "`createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。",
+    note: "`createBMapClient` 入参；Client 装配面不在组件 / hook 对齐范围。",
   },
   {
     ours: "CreateBMapPluginOptions",
     official: null,
     kind: "ours-only",
-    note: "`createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。",
+    note: "`createBMapPlugin` 入参；插件装配面不在组件 / hook 对齐范围。",
   },
   {
     ours: "bmapClientContextKey",
@@ -580,8 +580,8 @@ md.push("## 口径");
 md.push("");
 md.push("- **本库**：根入口（\`bmap-vue\`）公开导出 = \`componentManifest\` ∪ \`src/index.ts\` ∪ \`composables/index\`；\`./ui-kit\` 子路径单独计数。");
 md.push("- **官方**：\`src/index.ts\` 上的重导出（与官方 barrel 同一口径）。");
-md.push("- **不含** deprecation 别名（#136 清理前本就不提供旧 `B*` 名）。");
-md.push("- 历史 ADR / migration 文档中的旧名**不**参与本表。");
+md.push("- **不含** deprecation 别名（本库从 1.0 起不提供旧 `B*` 名）。");
+md.push("- 迁移文档中记述的旧名**不**参与本表。");
 md.push("");
 md.push("## 汇总");
 md.push("");
@@ -629,7 +629,7 @@ md.push(mdTable(oursOnly, ["name", "surface", "note"]));
 md.push("");
 md.push("## \`./ui-kit\` 子路径");
 md.push("");
-md.push("根入口**不**重导出 UI（ADR Official-first）。下列名字只从 `bmap-vue/ui-kit` 解析：");
+md.push("根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `bmap-vue/ui-kit` 解析：");
 md.push("");
 if (uiKitOnly.length > 0) {
   for (const n of uiKitOnly) md.push(`- \`${n}\``);

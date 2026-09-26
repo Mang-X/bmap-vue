@@ -132,19 +132,19 @@ map/theme2
 
 ## 静态组件 props
 
-| 属性              | 说明                                             | 类型                                                                    | 可选值 | 默认值                 | 版本                               |
-| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------- | ------ | ---------------------- | ---------------------------------- |
-| ak                | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string`                                                                | -      | -                      | -                                  |
-| apiUrl            | 自建地图 api 资源地址（默认路径会显式报 `BMAP_INVALID_ARGUMENT`，见下方说明；请改用 `customScriptV4Provider`） | `string` | - | - | <Badge type="tip" text="^2.3.0" /> |
-| provider          | 自定义 SDK 加载器；不传时走 `app.use` 的默认定义（`baiduJsapiV4Provider()` → 官方 `@baidumap/jsapi-loader`） | `BMapProviderLike` | - | - | - |
-| client            | 已创建好的 `BMapClient`（最高优先级）            | `BMapClient`                                                            | -      | -                      | -                                  |
-| definition        | 完整 Client 定义（覆盖 provider/ak 解析）        | `CreateBMapClientOptions`                                               | -      | -                      | -                                  |
-| keepAliveBehavior | KeepAlive 下的行为：`suspend` 不销毁地图（激活后自动 `checkResize`），`dispose` 则销毁 | `'suspend' \| 'dispose'` | - | `'suspend'` | - |
-| minZoom           | 地图允许展示的最小级别                           | `number`                                                                | `0-21` | `0`                    | -                                  |
-| maxZoom           | 地图允许展示的最大级别                           | `number`                                                                | `0-21` | `21`                   | -                                  |
-| backgroundColor   | 地图背景颜色, rgba 数组                          | ` number[]`                                                             | -      | `[245, 245, 245, 100]` | <Badge type="tip" text="^2.1.0" /> |
-| restrictCenter    | 是否限制中心                                     | `boolean`                                                               | -      | `true`                 | <Badge type="tip" text="^1.1.3" /> |
-| plugins           | 需要注册的插件（内置：`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，一律 optional；未知名字发 `plugin-error`） | `string[]` | - | - | - |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------- | ------ | ---------------------- |
+| ak | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string` | - | - |
+| apiUrl | 自建地图 api 资源地址（默认路径会显式报 `BMAP_INVALID_ARGUMENT`，见下方说明；请改用 `customScriptV4Provider`） | `string` | - | - |
+| provider | 自定义 SDK 加载器；不传时走 `app.use` 的默认定义（`baiduJsapiV4Provider()` → 官方 `@baidumap/jsapi-loader`） | `BMapProviderLike` | - | - |
+| client | 已创建好的 `BMapClient`（最高优先级） | `BMapClient` | - | - |
+| definition | 完整 Client 定义（覆盖 provider/ak 解析） | `CreateBMapClientOptions` | - | - |
+| keepAliveBehavior | KeepAlive 下的行为：`suspend` 不销毁地图（激活后自动 `checkResize`），`dispose` 则销毁 | `'suspend' \| 'dispose'` | - | `'suspend'` |
+| minZoom | 地图允许展示的最小级别 | `number` | `0-21` | `0` |
+| maxZoom | 地图允许展示的最大级别 | `number` | `0-21` | `21` |
+| backgroundColor | 地图背景颜色, rgba 数组 | ` number[]` | - | `[245, 245, 245, 100]` |
+| restrictCenter | 是否限制中心 | `boolean` | - | `true` |
+| plugins | 需要注册的插件（内置：`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，一律 optional；未知名字发 `plugin-error`） | `string[]` | - | - |
 
 ::: warning 默认路径的入口与插件
 默认路径由官方 `@baidumap/jsapi-loader` 决定，因此：
@@ -167,33 +167,33 @@ map/theme2
 
 ## 动态组件 Props
 
-| 属性                   | 说明                                                                                                                                                                           | 类型                                  | 默认值            | 版本                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ----------------- | ---------------------------------- |
-| width                  | 地图显示宽度                                                                                                                                                                   | `string / number`                     | `100%`            | <Badge type="tip" text="^1.0.1" /> |
-| height                 | 地图显示高度                                                                                                                                                                   | `string / number`                     | `550px`           | <Badge type="tip" text="^1.0.1" /> |
-| center                 | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） | - |
-| defaultCenter          | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - | <Badge type="tip" text="^1.0.0" /> |
-| heading                | 地图旋转角度（**受控**，环绕角） | `number`                              | -（缺省时用 `0`）     | - |
-| defaultHeading         | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| tilt                   | 地图倾斜角度（**受控**） | `number`                              | -（缺省时用 `0`） | - |
-| defaultTilt            | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| mapType                | 地图类型 [mapType](#地图类型)                                                                                                                                                  | `string`                              | `BMAP_NORMAL_MAP` | -                                  |
-| zoom                   | 地图缩放级别（**受控**） | `number`                              | -（缺省时用 `14`） | - |
-| defaultZoom            | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| displayOptions         | 自定义地图属性 [详见](#displayoptions)                                                                                                                                         | -                                     | -                 | -                                  |
-| mapStyleId             | 个性化地图样式 ID [详见](#个性化地图)                                                                                                                                          | `string`                              | -                 | -                                  |
-| mapStyleJson           | 个性化地图样式 Json [详见](#个性化地图)                                                                                                                                        | `{featureType: string...}[]`          | -                 | -                                  |
-| enableTraffic          | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `TrafficLayer`，见「[图层总览](./layer/index.md)」）                                                                                                                                                           | `boolean`                             | `false`           | -                                  |
-| enableDragging         | 启用地图拖拽                                                                                                                                                                   | `boolean`                             | `true`            | -                                  |
-| enableInertialDragging | 启用地图惯性拖拽                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableScrollWheelZoom  | 允许地图可被鼠标滚轮缩放                                                                                                                                                       | `boolean`                             | `false`           | -                                  |
-| enableContinuousZoom   | 开启双击平滑缩放效果                                                                                                                                                           | `boolean`                             | `true`            | -                                  |
-| enableResizeOnCenter   | 开启图区 resize 中心点不变                                                                                                                                                     | `boolean`                             | `true`            | -                                  |
-| enableDoubleClickZoom  | 启用地图双击缩放，左键双击放大、右键双击缩小                                                                                                                                   | `boolean`                             | `false`           | -                                  |
-| enableKeyboard         | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean`                             | `true`            | -                                  |
-| enablePinchToZoom      | 启用双指缩放地图                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
-| loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
+| 属性 | 说明 | 类型 | 默认值 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ----------------- |
+| width | 地图显示宽度 | `string / number` | `100%` |
+| height | 地图显示高度 | `string / number` | `550px` |
+| center | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） |
+| defaultCenter | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - |
+| heading | 地图旋转角度（**受控**，环绕角） | `number` | -（缺省时用 `0`） |
+| defaultHeading | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - |
+| tilt | 地图倾斜角度（**受控**） | `number` | -（缺省时用 `0`） |
+| defaultTilt | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - |
+| mapType | 地图类型 [mapType](#地图类型) | `string` | `BMAP_NORMAL_MAP` |
+| zoom | 地图缩放级别（**受控**） | `number` | -（缺省时用 `14`） |
+| defaultZoom | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - |
+| displayOptions | 自定义地图属性 [详见](#displayoptions) | - | - |
+| mapStyleId | 个性化地图样式 ID [详见](#个性化地图) | `string` | - |
+| mapStyleJson | 个性化地图样式 Json [详见](#个性化地图) | `{featureType: string...}[]` | - |
+| enableTraffic | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `TrafficLayer`，见「[图层总览](./layer/index.md)」） | `boolean` | `false` |
+| enableDragging | 启用地图拖拽 | `boolean` | `true` |
+| enableInertialDragging | 启用地图惯性拖拽 | `boolean` | `true` |
+| enableScrollWheelZoom | 允许地图可被鼠标滚轮缩放 | `boolean` | `false` |
+| enableContinuousZoom | 开启双击平滑缩放效果 | `boolean` | `true` |
+| enableResizeOnCenter | 开启图区 resize 中心点不变 | `boolean` | `true` |
+| enableDoubleClickZoom | 启用地图双击缩放，左键双击放大、右键双击缩小 | `boolean` | `false` |
+| enableKeyboard | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean` | `true` |
+| enablePinchToZoom | 启用双指缩放地图 | `boolean` | `true` |
+| enableAutoResize | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` |
+| loadingBgColor | 加载背景图颜色 | `string` | `#f1f1f1` |
 
 ## 容器尺寸、自动重设与可见性策略
 

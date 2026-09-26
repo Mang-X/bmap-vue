@@ -1,4 +1,4 @@
-# DOMLayer DOM 图层 <Badge type="tip" text="^1.0.0" />
+# DOMLayer DOM 图层
 
 用回调创建自定义 DOM 覆盖物。`createDom` 对应官方构造签名的第一个参数 `createDOM`。
 

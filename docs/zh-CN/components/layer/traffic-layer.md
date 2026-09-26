@@ -1,4 +1,4 @@
-# TrafficLayer 路况图层 <Badge type="tip" text="^1.0.0" />
+# TrafficLayer 路况图层
 
 实时路况图层。官方把它定义为「预配置的 `TileLayer`」，因此构造选项与 `TileLayer` 一致。
 

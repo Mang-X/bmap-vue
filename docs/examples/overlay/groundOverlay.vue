@@ -1,11 +1,13 @@
 <template>
   <div>
-    地面叠加层类型：
-    <select class="mySelect" name="" id="" v-model="activeKey">
-      <option value="image">image 图片叠加层</option>
-      <option value="video">video 视频叠加层</option>
-      <option value="canvas">canvas 画布叠加层</option>
-    </select>
+    <div class="bmap-example-toolbar">
+      <span>地面叠加层类型：</span>
+      <select class="bmap-example-select" v-model="activeKey">
+        <option value="image">image 图片叠加层</option>
+        <option value="video">video 视频叠加层</option>
+        <option value="canvas">canvas 画布叠加层</option>
+      </select>
+    </div>
     <Map
       v-bind="$attrs"
       enableScrollWheelZoom
@@ -15,18 +17,17 @@
         poiIcon: false, // 隐藏poi图标
         building: false, // 隐藏楼块
       }"
-      :tilt="groundOverlay.tilt"
-      :zoom="groundOverlay.zoom"
+      :tilt="current.tilt"
+      :zoom="current.zoom"
     >
-      <Marker :position="groundOverlay.startPoint" icon="start" :offset="{ x: 0, y: -16 }" />
-      <Marker :position="groundOverlay.endPoint" icon="end" :offset="{ x: 0, y: -16 }" />
+      <Marker :position="current.bounds.southwest" icon="start" :offset="{ x: 0, y: -16 }" />
+      <Marker :position="current.bounds.northeast" icon="end" :offset="{ x: 0, y: -16 }" />
       <GroundOverlay
         autoCenter
         :type="activeKey"
-        :startPoint="groundOverlay.startPoint"
-        :endPoint="groundOverlay.endPoint"
-        :url="groundOverlay.url"
-        :opacity="groundOverlay.opacity"
+        :bounds="current.bounds"
+        :url="current.url"
+        :opacity="current.opacity"
       />
       <Label
         v-if="activeKey === 'canvas'"
@@ -49,20 +50,39 @@
 
 <script lang="ts" setup>
 import { ref, computed } from "vue";
+import type { GroundOverlayType, Point } from "bmap-vue";
 
-const activeKey = ref<"image" | "canvas" | "video">("canvas");
+const activeKey = ref<GroundOverlayType>("canvas");
 
-const groundOverlays = ref({
+/**
+ * `<GroundOverlay>` 的几何入口**只有** `bounds`（西南 / 东北两个角点）。
+ *
+ * 早期这个示例传的是 `startPoint` / `endPoint`——那两个不是本组件的 prop，
+ * 传了不报错也不生效，叠加层会按上一次的值留在原处，切换类型时看起来像「组件坏了」。
+ * 见 `GroundOverlayProps`：缺失 `bounds` 在构造期即抛错，所以它是必填的。
+ */
+const groundOverlays: Record<
+  GroundOverlayType,
+  {
+    tilt: number;
+    zoom: number;
+    opacity: number;
+    bounds: { southwest: Point; northeast: Point };
+    url: unknown;
+  }
+> = {
   canvas: {
     tilt: 0,
     zoom: 17,
     opacity: 1,
-    startPoint: { lng: 116.447717, lat: 39.919173 },
-    endPoint: { lng: 116.453125, lat: 39.923475 },
+    bounds: {
+      southwest: { lng: 116.447717, lat: 39.919173 },
+      northeast: { lng: 116.453125, lat: 39.923475 },
+    },
     url: () => {
-      var textureCanvas = document.createElement("canvas");
+      const textureCanvas = document.createElement("canvas");
       textureCanvas.width = textureCanvas.height = 200;
-      var ctx = textureCanvas.getContext("2d")!;
+      const ctx = textureCanvas.getContext("2d")!;
       ctx.fillStyle = "#79a913";
       ctx.strokeStyle = "white";
       ctx.lineWidth = 6;
@@ -81,21 +101,23 @@ const groundOverlays = ref({
     tilt: 45,
     zoom: 18,
     opacity: 1,
-    startPoint: { lng: 117.19635, lat: 36.24093 },
-    endPoint: { lng: 117.2035, lat: 36.24764 },
+    bounds: {
+      southwest: { lng: 117.19635, lat: 36.24093 },
+      northeast: { lng: 117.2035, lat: 36.24764 },
+    },
     url: "/bmap-vue/shouhuimap.png",
   },
   video: {
     tilt: 0,
     zoom: 4,
     opacity: 0.5,
-    startPoint: { lng: 94.582033, lat: -7.989754 },
-    endPoint: { lng: 145.358572, lat: 30.813867 },
+    bounds: {
+      southwest: { lng: 94.582033, lat: -7.989754 },
+      northeast: { lng: 145.358572, lat: 30.813867 },
+    },
     url: "/bmap-vue/cloud.mov",
   },
-});
+};
 
-const groundOverlay = computed(() => {
-  return groundOverlays.value[activeKey.value];
-});
+const current = computed(() => groundOverlays[activeKey.value]);
 </script>
