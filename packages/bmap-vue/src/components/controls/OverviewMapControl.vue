@@ -27,7 +27,10 @@ export interface OverviewMapControlProps {
  */
 const props = withDefaults(defineProps<OverviewMapControlProps>(), {
   anchor: "BMAP_ANCHOR_BOTTOM_RIGHT",
-  offset: () => ({ x: 0, y: 0 }),
+  // 此前是 `{ x: 0, y: 0 }`：鹰眼面板宽高由 `size` 决定（示例里 180×180），
+  // 贴着 `BOTTOM_RIGHT` 锚点落下来就**紧贴容器右缘与下缘**（实测 gap = 0/0），
+  // 视觉上像被裁掉一截。给它与其它 `BOTTOM_RIGHT` 控件一致的留白。
+  offset: () => ({ x: 10, y: 10 }),
   // 官方声明的默认值（`@default false`）：显式写出，避免 Vue 的布尔转换让「用户显式传
   // false」与「用户没传」不可区分（见 `MapTypeControl` 的同一条注释）。
   isOpen: false,

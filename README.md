@@ -19,6 +19,10 @@
 
 面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JSAPI 4.0。
 
+<div align="center">
+  <img src="./docs/public/screenshots/site-home.jpg" alt="bmap-vue 文档站首页" width="880" />
+</div>
+
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star
 
 如果喜欢这个项目，右上角给我们点个星星吧，这对我们意义非凡！

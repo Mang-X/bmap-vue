@@ -7,6 +7,10 @@ lang: zh-CN
 
 52 个组件，按「它解决什么问题」分组。先在下面找到你那一类，再点进具体页面。
 
+<div align="center">
+  <img src="/screenshots/components-marker.jpg" alt="Marker 与 InfoWindow 的实际效果" width="760" />
+</div>
+
 ```ts
 import { Map, Marker, NavigationControl } from 'bmap-vue'
 ```
