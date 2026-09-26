@@ -7,6 +7,7 @@
   >
     <Marker
       v-for="(item, index) in markers"
+      :key="index"
       :position="item.position"
       :icon="`blue${(index + 1) as 1 | 2}`"
       @click="() => handleClick(item)"

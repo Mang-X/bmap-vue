@@ -1,7 +1,7 @@
 <template>
   <Map v-bind="$attrs" ref="map" @ready="handleInitd" :center="googlePoint">
     <template v-if="!isLoading && !isError">
-      <template v-for="point in result">
+      <template v-for="(point, index) in result" :key="index">
         <Marker :position="point"></Marker>
         <Label
           :position="point"

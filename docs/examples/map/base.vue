@@ -36,8 +36,8 @@
     </label>
     <br />
     <label>
-      <input type="checkbox" v-model="mapSetting.enableTraffic" />
-      显示交通路况
+      <input type="checkbox" v-model="showTraffic" />
+      显示交通路况（4.0 里路况是 <code>TrafficLayer</code>，不是 <code>&lt;Map&gt;</code> 的开关）
     </label>
     <br />
     <br />
@@ -67,15 +67,21 @@
       :enableDoubleClickZoom="mapSetting.enableDoubleClickZoom"
       :enableKeyboard="mapSetting.enableKeyboard"
       :enablePinchToZoom="mapSetting.enablePinchToZoom"
-      :enableTraffic="mapSetting.enableTraffic"
-    />
+    >
+      <!--
+        JSAPI 4.0 没有 `<Map enableTraffic>`：路况收敛成 TrafficLayer。
+        所以这里按图层的方式挂，而不是给 Map 传一个不会生效的开关。
+      -->
+      <TrafficLayer v-if="showTraffic" :visible="true" />
+    </Map>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { MapProps } from "bmap-vue";
+import { MapProps, TrafficLayer } from "bmap-vue";
 const type = ref<string>("BMAP_NORMAL_MAP");
+const showTraffic = ref(false);
 const mapSetting = ref<MapProps>({
   enableDragging: true,
   enableInertialDragging: true,
@@ -86,6 +92,5 @@ const mapSetting = ref<MapProps>({
   enableKeyboard: true,
   enablePinchToZoom: true,
   enableAutoResize: true,
-  enableTraffic: false,
 });
 </script>

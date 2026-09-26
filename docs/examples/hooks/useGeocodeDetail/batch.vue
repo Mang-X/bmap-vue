@@ -24,7 +24,7 @@
         </ul>
       </CustomControl>
       <template v-if="!isLoading">
-        <template v-for="(item, index) in result">
+        <template v-for="(item, index) in result" :key="index">
           <template v-if="item.detail">
             <Marker :position="item.detail.point"></Marker>
           </template>

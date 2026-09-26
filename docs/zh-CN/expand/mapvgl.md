@@ -57,30 +57,23 @@ app.use(baiduMap, {
 MapVGL 使用 UMD 格式打包，通过插件形式加载可以避免手动管理脚本资源。
 :::
 
-## 示例
+## 可运行的替代方案
 
-> 以下示例均来自 MapVGL 官方文档：https://mapv.baidu.com/gl/docs/index.html
+本章**不提供可运行示例**：`MapVGL` 插件在 JSAPI 4.0 上不兼容（见上方说明），
+任何基于它的示例在默认路径上都会在 `new mapVGL.View(...)` 处抛错。
+放三个必然失败的示例在页面上，只会让读者以为是自己配错了。
 
-### PointLayer 基础点层图
+要达到同样的效果，请用 4.0 的**原生图层**——它们是本库一等公民，并且有可运行示例：
 
-> https://mapv.baidu.com/gl/docs/PointLayer.html
+| 你想做的 | 用这个 | 可运行示例 |
+| --- | --- | --- |
+| 大批量点 | [`PointCollection`](/zh-CN/components/data)、[`MarkerCluster`](/zh-CN/components/data) | [数据组件](/zh-CN/components/data) |
+| 折线 / 多边形 | [`LineLayer`](/zh-CN/components/layer/native-visual-layers)、[`FillLayer`](/zh-CN/components/layer/native-visual-layers) | [原生批量可视化](/zh-CN/components/layer/native-visual-layers) |
+| 热力 / 密度 | [`HeatmapLayer`](/zh-CN/components/layer/native-visual-layers) | [原生批量可视化](/zh-CN/components/layer/native-visual-layers) |
+| 轨迹动画 | [`TrackLineLayer`](/zh-CN/components/layer/native-visual-layers) | [原生批量可视化](/zh-CN/components/layer/native-visual-layers) |
+| 要素状态 / 拾取 | 上述四个图层都支持 | [原生批量可视化](/zh-CN/components/layer/native-visual-layers) |
 
-:::demo
-expand/mapvgl/pointLayer
-:::
-
-### HeatGridLayer 柱状热力图
-
-> https://mapv.baidu.com/gl/docs/HeatGridLayer.html
-
-:::demo
-expand/mapvgl/heatGridLayer
-:::
-
-### LineLayer 动画线图层
-
-> https://mapv.baidu.com/gl/docs/LineLayer.html
-
-:::demo MapVGL 动画线图层
-expand/mapvgl/lineLayer
+::: tip 仍然要用 MapVGL？
+可以，但需要你自行确认它在你自己的宿主环境下可用（自建 SDK 入口、补丁过的适配层等），
+并且**绕过**本库的插件通道。本库不对该组合提供支持，也不会为它做兼容处理。
 :::

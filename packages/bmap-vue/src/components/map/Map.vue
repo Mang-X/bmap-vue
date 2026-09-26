@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  getCurrentInstance,
   inject,
   onActivated,
   onBeforeUnmount,
@@ -57,6 +58,24 @@ export type { MapProps };
 /** `center` 的两种输入形态：点，或 v2 兼容的城市名 / 地址字符串（由 `MapProps` 派生，单一来源）。 */
 type MapCenter = NonNullable<MapProps["center"]>;
 
+/**
+ * 记录调用方**显式绑定**的 prop 名。
+ *
+ * Vue 对 `Boolean` 类型的 prop 有「缺失即 `false`」的强制转换：未传的
+ * `enableTraffic` / `restrictCenter` 在 `props` 上是 `false` 而不是 `undefined`，
+ * 所以 `props.x !== undefined` 无法区分「显式传了 false」与「没传」。
+ * 判据必须落在 vnode 的原始 props 上（那里没有类型转换）。
+ */
+const explicitProps = new Set<string>();
+for (const key of Object.keys(getCurrentInstance()?.vnode.props ?? {})) {
+  explicitProps.add(key.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()));
+}
+
+/** 调用方是否**显式绑定**了某个 prop。 */
+function isPropExplicitlyBound(name: string): boolean {
+  return explicitProps.has(name);
+}
+
 const props = withDefaults(defineProps<MapProps>(), {
   width: "100%",
   height: "550px",
@@ -76,6 +95,7 @@ const props = withDefaults(defineProps<MapProps>(), {
   // 与「父级没传」。库默认视野移到 DEFAULT_VIEW，作为「缺省」档的兜底参与首次解析，
   // 因此「什么都不传」的行为与旧版默认值完全一致。
 });
+
 
 export interface MapReadyPayload extends MapReadyContext {
   container: HTMLElement;
@@ -543,6 +563,15 @@ const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableResizeOnCenter", "resize-on-center"],
 ];
 
+/**
+ * 判断调用方是否**显式绑定**了某个 prop。
+ *
+ * Vue 对 `Boolean` 类型的 prop 有「缺失即 `false`」的强制转换：未传的
+ * `enableTraffic` 在 `props` 上是 `false` 而不是 `undefined`，所以
+ * `props.x !== undefined` 无法区分「显式传了 false」与「没传」。
+ * 判据必须落在 vnode 的原始 props 上（那里没有类型转换）。
+ */
+
 /** 将 props 上的 enableXxx 布尔值同步到 SDK map 实例 */
 function syncEnableProps(ctx: MapReadyContext) {
   for (const [prop, interaction] of INTERACTION_PROPS) {
@@ -550,7 +579,12 @@ function syncEnableProps(ctx: MapReadyContext) {
     if (value === undefined) continue;
     ctx.client.driver.map.setInteraction(ctx.map, interaction, Boolean(value));
   }
-  if (props.enableTraffic !== undefined) {
+  // `enableTraffic` 与上面的交互项不同：它**没有默认值**，而 Vue 会把
+  // `Boolean` 类型的 prop 在未传时强制转换成 `false`（不是 `undefined`）。
+  // 所以判据不能是 `!== undefined`——那会让**每张地图**都调一次 `setTraffic`，
+  // 从而在每个页面的控制台留下一条「本次调用被忽略」的告警。
+  // 真正的判据是「用户是否显式传了这个 prop」，用 `getCurrentInstance().vnode.props` 看原始 attrs。
+  if (isPropExplicitlyBound("enableTraffic")) {
     ctx.client.driver.map.setTraffic(ctx.map, props.enableTraffic);
   }
 }
@@ -571,9 +605,13 @@ const currentRuntime = new MapRuntime({
   mapOptions: {
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
-    restrictCenter: props.restrictCenter,
     displayOptions: props.displayOptions,
-    backgroundColor: props.backgroundColor,
+    // `restrictCenter` / `backgroundColor` 在 JSAPI 4.0 没有对应构造项，Driver 会丢弃
+    // 并告警。Vue 的 Boolean 强制转换让未传的 `restrictCenter` 变成 `false` 而不是
+    // `undefined`，直接传进去会让**每张地图**都触发一次「已丢弃」告警。
+    // 所以只在调用方**显式绑定**了它们时才放进 mapOptions。
+    ...(isPropExplicitlyBound("restrictCenter") ? { restrictCenter: props.restrictCenter } : {}),
+    ...(isPropExplicitlyBound("backgroundColor") ? { backgroundColor: props.backgroundColor } : {}),
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。
