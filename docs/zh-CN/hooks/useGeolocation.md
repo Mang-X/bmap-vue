@@ -1,4 +1,4 @@
-# useGeolocation <Badge type="tip" text="^0.0.33" />
+# useGeolocation
 
 用于通过百度地图 SDK 获取用户所在的位置信息，相比 [IP 定位](./useIpLocation)获取的信息更丰富，但稳定性受浏览器权限和网络环境影响。
 

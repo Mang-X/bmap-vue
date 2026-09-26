@@ -23,16 +23,32 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "config",
         },
         {
-          text: "官方 UI Kit（./ui-kit）",
+          text: "官方 UI Kit 集成",
           link: "ui-kit",
         },
         {
-          text: "扩展契约（./advanced 与 ./core）",
+          text: "扩展契约（./advanced）",
           link: "advanced",
         },
         {
-          text: "全局组件事件",
+          text: "组件事件",
           link: "com-events",
+        },
+        {
+          text: "错误码与排障",
+          link: "errors",
+        },
+        {
+          text: "Vue 模式",
+          link: "vue-patterns",
+        },
+        {
+          text: "服务端渲染与生命周期",
+          link: "ssr",
+        },
+        {
+          text: "与官方库的关系",
+          link: "comparison",
         },
         {
           text: "FAQ",
@@ -41,9 +57,13 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       ],
     },
     {
-      text: "基础组件",
+      text: "地图与上下文",
       collapsed: false,
       items: [
+        {
+          text: "组件总览",
+          link: "/zh-CN/components/index",
+        },
         {
           text: "Map 地图",
           link: "/zh-CN/components/map",
@@ -183,7 +203,7 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       ],
     },
     {
-      text: "原生批量可视化图层",
+      text: "原生批量可视化",
       collapsed: false,
       base: "/zh-CN/components/layer/",
       items: [
@@ -280,10 +300,6 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
       base: "/zh-CN/hooks/",
       items: [
         {
-          text: "usePoint 地图实例点（v2 已移除，仅留迁移说明）",
-          link: "usePoint",
-        },
-        {
           text: "useMarkerIcons 图标",
           link: "useMarkerIcons",
         },
@@ -370,6 +386,24 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "bmap-draw 鼠标测量与绘制",
           link: "bmap-draw",
         },
+        {
+          text: "插件",
+          link: "plugins",
+        },
+        {
+          text: "Resolver（自动导入）",
+          link: "resolver",
+        },
+      ],
+    },
+    {
+      text: "关于",
+      collapsed: false,
+      items: [
+        {
+          text: "项目来源与致谢",
+          link: "/zh-CN/about",
+        },
       ],
     },
     {
@@ -400,14 +434,6 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "官方包发布契约（Loader / UI Kit）",
           link: "official-packages",
-        },
-        {
-          text: "v4 浏览器 smoke（默认链路 / 组件 / UI Kit）",
-          link: "v4-browser-smoke",
-        },
-        {
-          text: "性能基准与预算",
-          link: "performance-baseline",
         },
       ],
     },

@@ -10,8 +10,8 @@
 
 - **本库**：根入口（`bmap-vue`）公开导出 = `componentManifest` ∪ `src/index.ts` ∪ `composables/index`；`./ui-kit` 子路径单独计数。
 - **官方**：`src/index.ts` 上的重导出（与官方 barrel 同一口径）。
-- **不含** deprecation 别名（#136 清理前本就不提供旧 `B*` 名）。
-- 历史 ADR / migration 文档中的旧名**不**参与本表。
+- **不含** deprecation 别名（本库从 1.0 起不提供旧 `B*` 名）。
+- 迁移文档中记述的旧名**不**参与本表。
 
 ## 汇总
 
@@ -156,7 +156,7 @@ component 45 · hook 14 · type 56
 | 本库 | 官方 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | `MapExpose` | `MapRef` | renamed | 官方叫 `MapRef`；本库 expose 面是 `createExpose()` 拼出的只读命令集，命名对齐组件而非 ref 类型别名。 |
-| `useMapContext` | `useBMapContext` | renamed | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 |
+| `useMapContext` | `useBMapContext` | renamed | 官方仍保留 `useBMapContext`；本库 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 --> |
 | `useAreaBoundary` | `useBoundary` | renamed | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `Autocomplete` | — | ours-only | 官方只有 `useAutocomplete` hook，没有同名组件；本库有声明式 `<Autocomplete>` 薄封装。 |
 | `MarkerCluster` | — | ours-only | 官方 React 封装没有聚合组件（参考清单 0 命中）。 |
@@ -167,9 +167,9 @@ component 45 · hook 14 · type 56
 | — | `BMapErrorBoundary` | official-only | React error boundary 形态；Vue 对应物是插件级错误上报，不提供同名组件。 |
 | — | `PlaceDetail` | official-only | 官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。 |
 | `PlaceSearch` | — | ours-only | 标准 UI 在 `./ui-kit` 子路径；官方 React 根清单未导出同名组件（它用 `RoutePlan` 类型名占位）。 |
-| `BMapClient` | — | ours-only | Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。 |
+| `BMapClient` | — | ours-only | Client 句柄类型；官方无同名导出。组件 / hook / 基础类型名对齐，不镜像本库 Client 面。 |
 | `BMapClientContext` | — | ours-only | Client 注入上下文；官方无同名导出。保留 `BMap*` 前缀以区别于地图实例上下文。 |
-| `BMapDriverFactory` | — | ours-only | Driver 工厂类型；#135 不把 raw-SDK 边界类型改名（会与 `BMapDriver` 断开）。 |
+| `BMapDriverFactory` | — | ours-only | Driver 工厂类型；raw-SDK 边界类型不改名（会与 `BMapDriver` 断开）。 |
 | `BMapDriverInput` | — | ours-only | Driver 构造入参；同上，raw-SDK 边界类型保留 `BMap*`。 |
 | `BMapEngine` | — | ours-only | 引擎 id 判别类型（`"jsapi-v4"`）；官方无对应导出。 |
 | `BMapDrivingRouteOptions` | — | ours-only | 路线服务选项；官方 hook 选项形态不同，不镜像同名 type。 |
@@ -181,12 +181,12 @@ component 45 · hook 14 · type 56
 | `BMapIpLocationResult` | — | ours-only | IP 定位结果 DTO；官方无同名 type。 |
 | `BMapLocalSearchOptions` | — | ours-only | 本地检索 options；本库 service 层独立状态机，官方无同名 type。 |
 | `BMapLocalSearchRenderOptions` | — | ours-only | 本地检索绘制 options；同上。 |
-| `BMapLocalSearchOperation` | — | ours-only | 本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。 |
-| `BMapServiceStatus` | — | ours-only | 服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。 |
+| `BMapLocalSearchOperation` | — | ours-only | 本地检索在飞操作标识；请求归属模型的一部分，官方无对应。 |
+| `BMapServiceStatus` | — | ours-only | 服务状态口径（`idle`/`loading`/…）；单一事实源，不改名以免与 `ServiceCallStatus` 混淆。 |
 | `BMapPluginConfig` | — | ours-only | 插件配置；官方无同名导出。 |
 | `BMapProviderLike` | — | ours-only | Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。 |
-| `CreateBMapClientOptions` | — | ours-only | `createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。 |
-| `CreateBMapPluginOptions` | — | ours-only | `createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。 |
+| `CreateBMapClientOptions` | — | ours-only | `createBMapClient` 入参；Client 装配面不在组件 / hook 对齐范围。 |
+| `CreateBMapPluginOptions` | — | ours-only | `createBMapPlugin` 入参；插件装配面不在组件 / hook 对齐范围。 |
 | `bmapClientContextKey` | — | ours-only | Client 上下文 InjectionKey；Vue DI 键，官方 React 无对应。 |
 | `bmapConfigKey` | — | ours-only | 插件配置 InjectionKey；同上。 |
 | — | `BMapContextValue` | official-only | 官方 React context value 类型；Vue 对应是 `useMapContext` 返回面 / `MapContext*`。 |
@@ -221,7 +221,7 @@ component 45 · hook 14 · type 56
 | `Symbol` | component | — |
 | `ThreeLayer` | component | — |
 | `useAutocomplete` | hook | — |
-| `useBMapContext` | hook | 官方仍保留 `useBMapContext`；#135 将 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 |
+| `useBMapContext` | hook | 官方仍保留 `useBMapContext`；本库 hooks 统一去 `BMap` 前缀，与 `useMap` / `Map` 组件一致。 <!-- brand-gate:allow 对照表必须引用官方 React 的现行名，这一列就是被对照的一方 --> |
 | `useBoundary` | hook | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `useBusLineSearch` | hook | — |
 | `useCapabilities` | hook | 官方 capability 读取 hook；本库能力目录在 `CAPABILITY_*` / `advanced` 入口，不镜像该 hook。 |
@@ -522,7 +522,7 @@ component 45 · hook 14 · type 56
 | `BMapLocalSearchRenderOptions` | type | 本地检索绘制 options；同上。 |
 | `BMapRidingRouteOptions` | type | 骑行路线选项；同上。 |
 | `BMapRouteRenderOptions` | type | — |
-| `BMapServiceStatus` | type | 服务状态口径（`idle`/`loading`/…）；ADR 2026-09-14 单一事实源，不改名以免与 `ServiceCallStatus` 混淆。 |
+| `BMapServiceStatus` | type | 服务状态口径（`idle`/`loading`/…）；单一事实源，不改名以免与 `ServiceCallStatus` 混淆。 |
 | `BMapTransitRouteOptions` | type | 公交路线选项；同上。 |
 | `BMapWalkingRouteOptions` | type | 步行路线选项；同上。 |
 | `CapabilityStatus` | type | — |
@@ -531,8 +531,8 @@ component 45 · hook 14 · type 56
 | `ContextMenuSelectPayload` | type | — |
 | `ControlOptions` | type | — |
 | `ControlOptionStatus` | type | — |
-| `CreateBMapClientOptions` | type | `createBMapClient` 入参；Client 装配面不在 #135 组件 / hook 对齐范围。 |
-| `CreateBMapPluginOptions` | type | `createBMapPlugin` 入参；插件装配面不在 #135 组件 / hook 对齐范围。 |
+| `CreateBMapClientOptions` | type | `createBMapClient` 入参；Client 装配面不在组件 / hook 对齐范围。 |
+| `CreateBMapPluginOptions` | type | `createBMapPlugin` 入参；插件装配面不在组件 / hook 对齐范围。 |
 | `createClientContext` | type | — |
 | `DataComponentProps` | type | — |
 | `DriverEvent` | type | — |
@@ -598,13 +598,13 @@ component 45 · hook 14 · type 56
 | `UseViewAnimationOptions` | type | — |
 | `ViewAnimationStatus` | type | — |
 | `AreaBoundary` | other | — |
-| `BMapClient` | other | Client 句柄类型；官方无同名导出。#135 只对齐组件 / hook / 基础类型名，不镜像本库 Client 面。 |
+| `BMapClient` | other | Client 句柄类型；官方无同名导出。组件 / hook / 基础类型名对齐，不镜像本库 Client 面。 |
 | `bmapClientContextKey` | other | Client 上下文 InjectionKey；Vue DI 键，官方 React 无对应。 |
 | `bmapConfigKey` | other | 插件配置 InjectionKey；同上。 |
-| `BMapDriverFactory` | other | Driver 工厂类型；#135 不把 raw-SDK 边界类型改名（会与 `BMapDriver` 断开）。 |
+| `BMapDriverFactory` | other | Driver 工厂类型；raw-SDK 边界类型不改名（会与 `BMapDriver` 断开）。 |
 | `BMapDriverInput` | other | Driver 构造入参；同上，raw-SDK 边界类型保留 `BMap*`。 |
 | `BMapEngine` | other | 引擎 id 判别类型（`"jsapi-v4"`）；官方无对应导出。 |
-| `BMapLocalSearchOperation` | other | 本地检索在飞操作标识；#104 归属模型的一部分，官方无对应。 |
+| `BMapLocalSearchOperation` | other | 本地检索在飞操作标识；请求归属模型的一部分，官方无对应。 |
 | `BMapPluginConfig` | other | 插件配置；官方无同名导出。 |
 | `BMapProviderLike` | other | Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。 |
 | `BMapResolver` | other | — |
@@ -789,7 +789,7 @@ component 45 · hook 14 · type 56
 
 ## `./ui-kit` 子路径
 
-根入口**不**重导出 UI（ADR Official-first）。下列名字只从 `bmap-vue/ui-kit` 解析：
+根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `bmap-vue/ui-kit` 解析：
 
 - `BMapError`
 - `BMapErrorCode`

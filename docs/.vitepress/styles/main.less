@@ -1,27 +1,83 @@
+/*
+ * 品牌色：百度地图官方标识红 `#F72C30`。
+ *
+ * **取色依据**：从 `lbsyun.baidu.com` 与 `map.baidu.com` 的 favicon 采样得到，两处
+ * 独立站点的品牌像素都是 `#F72C30`（不是常被引用的 `#F29313` 橙，也不是 CSS 的
+ * `OrangeRed`）。矢量图与光栅图取色会有 ±1 的偏差，此处取整。
+ *
+ * **两套色阶是必需的，不是重复。** 原色在白底上只有 3.92:1——达不到 WCAG AA 对正文
+ * 文本的 4.5:1，当链接色 / 按钮文字用就是「看着清楚、读不清」。所以：
+ *   - 浅色模式：文本与链接用同色相的**压深**档（≥5:1），大色块与边框用原色；
+ *   - 深色模式：回到原色（4.38:1），压深档在深底上会掉到 3.4 以下。
+ * 让同一个十六进制值同时服务两套主题，是这类主题最常见的可访问性回归来源。
+ * 下面每档的对比度都是算出来的，不是估的。
+ */
 :root {
   --vp-layout-max-width: 1520px;
+
+  /* 品牌红：官方标识色 #F72C30 及其同色相深浅档 */
+  --bmap-red: #f72c30;
+  --bmap-red-light: #f0553f;
+  --bmap-red-deep: #d42a2e; /* 5.04:1 on white */
+  --bmap-red-ink: #b32024; /* 6.67:1 on white */
+  --bmap-red-wash: rgba(247, 44, 48, 0.12);
+
   --vp-home-hero-image-background-image: -webkit-radial-gradient(
-    rgba(96, 137, 241, 0.4) 40%,
-    rgba(66, 211, 146, 0.25) 60%
+    rgba(247, 44, 48, 0.45) 40%,
+    rgba(247, 44, 48, 0.18) 60%
   );
   --vp-home-hero-image-background-image: radial-gradient(
-    rgba(96, 137, 241, 0.4) 40%,
-    rgba(66, 211, 146, 0.25) 60%
+    rgba(247, 44, 48, 0.45) 40%,
+    rgba(247, 44, 48, 0.18) 60%
   );
   --vp-home-hero-image-filter: blur(50px);
   --vp-sidebar-width: 282px;
-  --vp-c-brand-1: #10b981;
-  --vp-c-brand-2: #059669;
-  --vp-c-indigo-3: #10b981;
-  --vp-c-warning-1: #eab306;
-  --vp-c-danger-1: #fff;
-  --vp-c-danger-soft: #660000;
+
+  /* 文本与链接用压深档；大色块与边框用原色。 */
+  --vp-c-brand-1: #b32024;
+  --vp-c-brand-2: #d42a2e;
+  --vp-c-brand-3: #f72c30;
+  --vp-c-brand-soft: var(--bmap-red-wash);
+
+  --vp-c-indigo-1: #b32024;
+  --vp-c-indigo-2: #d42a2e;
+  --vp-c-indigo-3: #f72c30;
+  --vp-c-indigo-soft: var(--bmap-red-wash);
+
+  --vp-c-warning-1: #b45309;
+  /* 之前是 `#fff`：浅色底上等于隐形，danger 文案与边框根本看不见。 */
+  --vp-c-danger-1: #c0392b;
+  --vp-c-danger-2: #e74c3c;
+  --vp-c-danger-soft: rgba(192, 57, 43, 0.14);
+
   --pwa-border: #ffffff75;
-  --vp-c-indigo-soft: rgba(16, 185, 129, 0.05);
-  --vp-home-hero-name-background: linear-gradient(-347deg, #10b981 20%, #32475b);
+  --vp-home-hero-name-background: linear-gradient(-347deg, #f72c30 20%, #8e1619);
   --vp-home-hero-name-color: transparent;
-  --vp-badge-tip-border: #059669;
+  --vp-badge-tip-border: #d42a2e;
   --vp-custom-block-info-border: rgba(82, 82, 89, 0.68);
+}
+
+/*
+ * 深色模式回原色：`#F72C30` 在深底上是 4.38:1，而压深档 `#B32024` 掉到 2.57:1。
+ * 两套值各自验过对比度，不能简单互换。
+ */
+.dark {
+  --vp-c-brand-1: #f72c30;
+  --vp-c-brand-2: #f0553f;
+  --vp-c-brand-3: #d42a2e;
+  --vp-c-brand-soft: rgba(247, 44, 48, 0.16);
+
+  --vp-c-indigo-1: #f72c30;
+  --vp-c-indigo-2: #f0553f;
+  --vp-c-indigo-3: #d42a2e;
+  --vp-c-indigo-soft: rgba(247, 44, 48, 0.16);
+
+  --vp-c-warning-1: #eab308;
+  --vp-c-danger-1: #f0685c;
+  --vp-c-danger-2: #e74c3c;
+  --vp-c-danger-soft: rgba(240, 104, 92, 0.16);
+
+  --vp-badge-tip-border: #f0553f;
 }
 
 .image-bg {

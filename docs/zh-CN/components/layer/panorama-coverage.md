@@ -1,4 +1,4 @@
-# PanoramaCoverageLayer 全景图层 <Badge type="tip" text="^0.0.31" />
+# PanoramaCoverageLayer 全景图层
 
 全景地图服务，360° 全景地图刻画真实世界，将街道场景带入到地图产品中，用户可以拖拽地图从不同的角度浏览真实的街景效果
 
@@ -20,9 +20,9 @@ layer/panoramaCoverage
 
 ## 组件 Props
 
-| 属性    | 说明         | 类型      | 默认值 | 版本                               |
-| ------- | ------------ | --------- | ------ | ---------------------------------- |
-| visible | 是否挂在地图上 | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
+| 属性 | 说明 | 类型 | 默认值 |
+| ------- | ------------ | --------- | ------ |
+| visible | 是否挂在地图上 | `boolean` | `true` |
 
 `visible` 的语义是「挂上 / 摘掉」（`addLayer` / `removeLayer`）。
 

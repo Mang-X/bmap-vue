@@ -10,7 +10,7 @@
     :zoom="18"
     @ready="handleInitd"
     enable-scroll-wheel-zoom
-    :backgroundColor="[192, 214, 213, 100]"
+    :style="{ background: 'rgb(192, 214, 213)' }"
   >
     <Marker :position="center"></Marker>
     <MapMask :path="path" :show-region="showRegion" isPoiMask isBuildingMask isMapMask></MapMask>

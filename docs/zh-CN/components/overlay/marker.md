@@ -28,15 +28,15 @@ overlay/dyynmicMaker
 
 ## 动态组件 Props
 
-| 属性            | 说明                                                        | 类型                          | 可选值                        | 默认值     | 版本                                |
-| --------------- | ----------------------------------------------------------- | ----------------------------- | ----------------------------- | ---------- | ----------------------------------- |
-| zIndex          | 显示层级                                                    | `number`                      | -                             | -          | <Badge type="tip" text="^0.0.35" /> |
-| position        | 标注点的坐标                                                | `{ lng: number, lat: number}` | -                             | `required` | -                                   |
-| offset          | 标注点的像素偏移                                            | ` {x: number, y: number }`    | -                             |            | -                                   |
-| icon            | 标注点的图标。可使用默认图标，也可[自定义图标](#自定义图标) | `string `                     | `simple_red / simple_blue...` | -          | -                                   |
-| rotation        | 旋转角度                                                    | `number `                     | -                             |            | -                                   |
-| enableDragging  | 是否启用拖拽                                                | `boolean `                    | -                             | ` false`   | -                                   |
-| visible         | 是否显示                                                    | `boolean`                     | -                             | `true`     | <Badge type="tip" text="^2.2.0" />  |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| --------------- | ----------------------------------------------------------- | ----------------------------- | ----------------------------- | ---------- |
+| zIndex | 显示层级 | `number` | - | - |
+| position | 标注点的坐标 | `{ lng: number, lat: number}` | - | `required` |
+| offset | 标注点的像素偏移 | ` {x: number, y: number }` | - |  |
+| icon | 标注点的图标。可使用默认图标，也可[自定义图标](#自定义图标) | `string ` | `simple_red / simple_blue...` | - |
+| rotation | 旋转角度 | `number ` | - |  |
+| enableDragging | 是否启用拖拽 | `boolean ` | - | ` false` |
+| visible | 是否显示 | `boolean` | - | `true` |
 
 ## 默认图标可选值
 
@@ -55,14 +55,14 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## 自定义图标
 
-| 属性          | 说明                                                                                                                                                                        | 类型                                | 默认值     | 版本                               |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------- | ---------------------------------- |
-| anchor        | 图标的定位点相对于图标左上角的偏移值                                                                                                                                        | `{ x: number, y: number }`          | -          | -                                  |
-| imageOffset   | 图标所用的图片相对于可视区域的偏移值，此功能的作用等同于 CSS 中的 background-position 属性                                                                                  | `{ x: number, y: number }`          | -          | -                                  |
-| size          | 图标可视区域的大小                                                                                                                                                          | `{ width: number, height: number }` | `required` | <Badge type="tip" text="^2.3.3" /> |
-| imageSize     | 图标所用的图片的大小，此功能的作用等同于 CSS 中的 background-size 属性。可用于实现高清屏的高清效果                                                                          | `{ width: number, height: number }` | -          | -                                  |
-| imageUrl      | 图标所用图像资源的位置                                                                                                                                                      | `string`                            | `required` | -                                  |
-| printImageUrl | 设置 icon 打印图片的 url，该打印图片只针对 IE6 有效，解决 IE6 使用 PNG 滤镜导致的错位问题。如果您的 icon 没有使用 PNG 格式图片或者没有使用 CSS Sprites 技术，则可忽略此配置 | `string `                           | -          | -                                  |
+| 属性 | 说明 | 类型 | 默认值 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------- |
+| anchor | 图标的定位点相对于图标左上角的偏移值 | `{ x: number, y: number }` | - |
+| imageOffset | 图标所用的图片相对于可视区域的偏移值，此功能的作用等同于 CSS 中的 background-position 属性 | `{ x: number, y: number }` | - |
+| size | 图标可视区域的大小 | `{ width: number, height: number }` | `required` |
+| imageSize | 图标所用的图片的大小，此功能的作用等同于 CSS 中的 background-size 属性。可用于实现高清屏的高清效果 | `{ width: number, height: number }` | - |
+| imageUrl | 图标所用图像资源的位置 | `string` | `required` |
+| printImageUrl | 设置 icon 打印图片的 url，该打印图片只针对 IE6 有效，解决 IE6 使用 PNG 滤镜导致的错位问题。如果您的 icon 没有使用 PNG 格式图片或者没有使用 CSS Sprites 技术，则可忽略此配置 | `string ` | - |
 
 ## 组件事件
 
@@ -73,8 +73,7 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## 生命周期与更新行为
 
-`Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动（M5-SPEC-MARKER /
-issue #30），组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
+`Marker` 的创建 / 挂载 / 就地更新 / 重建 / 卸载由声明式 `OverlaySpec` 驱动，组件里没有生命周期代码，也不再各自手写 watcher。每个公开属性的更新策略是**声明**的，
 并由用例与 Driver 的属性描述符逐条交叉核对：
 
 | 属性 | 更新策略 | 落地 |
@@ -106,8 +105,6 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 ```
 
 两条方向都有回环抑制：父级把刚上报的位置写回时不会重复下发 `setPosition`，SDK 重复派发同一位置
-也不会产生第二条 `update:position`。取舍（为什么这里用「最后一次同步值」而不是像 `<Map>` 那样
-读回 SDK 现值）见 ADR [2026-09-17 声明式 OverlaySpec、Marker 状态模型与图标缓存](/adr/2026-09-17-overlay-spec-and-marker)
-的决策 4 与已知限制 1。
+也不会产生第二条 `update:position`。取舍：这里用「最后一次同步值」而不是像 `<Map>` 那样读回 SDK 现值。
 
 支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend` 和 `remove`。

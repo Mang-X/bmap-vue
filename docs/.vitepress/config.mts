@@ -11,6 +11,11 @@ export default withPwa(
     lastUpdated: true,
     base: "/bmap-vue/",
     cleanUrls: true,
+    // `docs/internal/**` 与 `docs/adr/**` 是**内部记录**，不是产品文档：
+    // 前者（性能基准读数、浏览器 smoke 步骤）引用 issue 与内部路径、写成排障日志的样子，
+    // 后者是已接受即冻结的决策史。两者都不该出现在读者面前，编译掉比「移到别处」更彻底
+    // ——移出去仍然是仓库里的一个可被发现的页面，而 build 产物里根本不会有它。
+    srcExclude: ["internal/**", "adr/**", "changelog/**"],
     head,
     markdown: {
       config: (md) => mdPlugin(md),
@@ -21,7 +26,6 @@ export default withPwa(
     //   items: [{ text: '简体中文', link: '/zh-CN/' }]
     // },
     themeConfig: {
-      i18nRouting: true,
       returnToTopLabel: "top",
       logo: "/logo.svg",
       nav,

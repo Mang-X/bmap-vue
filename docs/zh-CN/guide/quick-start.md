@@ -5,9 +5,29 @@ lang: zh-CN
 
 # 快速开始
 
-本节将介绍如何在项目中使用 Vue3 BaiduMap GL。
+本节带你从零跑通第一张地图。
 
 ## 用法
+
+```vue
+<template>
+  <Map :ak="ak" v-model:center="center" :zoom="12">
+    <Marker :position="center" />
+    <NavigationControl anchor="BMAP_ANCHOR_TOP_RIGHT" />
+  </Map>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { Map, Marker, NavigationControl } from 'bmap-vue'
+import type { Point } from 'bmap-vue'
+
+const ak = '百度地图ak'
+const center = ref<Point>({ lng: 116.404, lat: 39.915 })
+</script>
+```
+
+地图 SDK 由本库默认通过官方 `@baidumap/jsapi-loader` 加载，不需要手动引脚本。
 
 ### 完整引入
 
@@ -22,7 +42,7 @@ const app = createApp(App)
 app.use(createBMapPlugin({ ak: '百度地图ak' }))
 ```
 
-#### Volar 支持 <Badge type="tip" text="^0.0.21" />
+#### Volar 支持
 
 如果你在使用 `Volar`，那么可以在 `tsconfig.json` 中配置 `compilerOptions.types` 来指定全局组件类型，从而获得更好的类型提示。如下图：
 
@@ -38,7 +58,7 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 
 ### 按需导入 <Badge type="tip" text="推荐" />
 
-Vue3 BaiduMap GL 提供了基于 ES Module 开箱即用的 Tree Shaking 功能。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
+bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
 
 <!-- prettier-ignore -->
 ```vue

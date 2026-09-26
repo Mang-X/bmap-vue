@@ -200,7 +200,7 @@
 
 | Vue 名 | SDK 名 | 载荷 | 说明 |
 | --- | --- | --- | --- |
-| `click` | `click` | 坐标可缺 | 点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标） |
+| `click` | `click` | 坐标可缺 | 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） |
 | `dblclick` | `dblclick` | 坐标可缺 | 双击覆盖物时触发（同上） |
 | `rightclick` | `rightclick` | 坐标可缺 | 右键点击覆盖物时触发 |
 | `rightdblclick` | `rightdblclick` | 坐标可缺 | 右键双击覆盖物时触发 |

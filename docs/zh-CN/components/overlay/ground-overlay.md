@@ -1,4 +1,4 @@
-# GroundOverlay 地面叠加层 <Badge type="tip" text="^0.0.32" />
+# GroundOverlay 地面叠加层
 
 在地图底面上叠加覆盖物，覆盖物可以是图片、自定义 Canvas、视频。
 
@@ -14,14 +14,14 @@ overlay/groundOverlay
 
 ## 动态组件 Props
 
-| 属性       | 说明                                                 | 类型                                     | 默认值     | 版本                               |
-| ---------- | ---------------------------------------------------- | ---------------------------------------- | ---------- | ---------------------------------- |
-| type       | 地面叠加物类型                                       | `video \| canvas \| image`               | `required` | -                                  |
-| url        | 叠加物 image url、video url 或者自定义的 canvas 对象 | [`GroundOverlayUrl` ](#GroundOverlayUrl) | `required` | -                                  |
-| bounds     | 显示区域（西南 / 东北两个角点），见[图示](#bounds-图示) | `{ southwest: Point, northeast: Point }` | `required` | <Badge type="tip" text="^1.0.0" /> |
-| autoCenter | 是否自动根据地面叠加物显示区域居中地图               | `boolean `                               | `true`     | -                                  |
-| opacity    | 透明度，范围 0-1                                     | `number`                                 |            | -                                  |
-| visible    | 是否显示                                             | `boolean`                                | `true`     | <Badge type="tip" text="^2.2.0" /> |
+| 属性 | 说明 | 类型 | 默认值 |
+| ---------- | ---------------------------------------------------- | ---------------------------------------- | ---------- |
+| type | 地面叠加物类型 | `video \| canvas \| image` | `required` |
+| url | 叠加物 image url、video url 或者自定义的 canvas 对象 | [`GroundOverlayUrl` ](#GroundOverlayUrl) | `required` |
+| bounds | 显示区域（西南 / 东北两个角点），见[图示](#bounds-图示) | `{ southwest: Point, northeast: Point }` | `required` |
+| autoCenter | 是否自动根据地面叠加物显示区域居中地图 | `boolean ` | `true` |
+| opacity | 透明度，范围 0-1 | `number` |  |
+| visible | 是否显示 | `boolean` | `true` |
 
 ```vue
 <GroundOverlay type="image" url="a.png" :bounds="{ southwest: sw, northeast: ne }" />

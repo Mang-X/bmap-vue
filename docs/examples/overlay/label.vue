@@ -19,5 +19,5 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-const content = ref<string>("欢迎使用百度地图GL版Vue3组件库");
+const content = ref<string>("bmap-vue · 百度地图 JSAPI 4.0");
 </script>

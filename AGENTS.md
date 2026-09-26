@@ -97,6 +97,9 @@ raw SDK 白名单（相对 `packages/bmap-vue/src`）：`driver/**`、`client/**
 | `pnpm check:raw-sdk:tree` | 扫描整棵 `src`：非白名单路径跑全套边界规则，白名单路径只跑旧引擎残留规则（`BMapGL` / `"webgl-v1"` / `"jsapi-v3"`） |
 | `pnpm check:raw-sdk:declarations` | `dist/**/*.d.ts` 的旧引擎残留不变量（需先 `pnpm build:package`；`check:public-dts` 不管 engine 取值） |
 | `pnpm check:public-dts` | `dist/**/*.d.ts` 不得泄漏 `BMap.*` / `BMapGL` / 官方类型包引用（需先 `pnpm build:package`） |
+| `pnpm check:docs-brand` | 已退役的发布身份不得回到**已发布**文档面（README / `docs/**/*.md` / `docs/.vitepress` / `docs/examples`）。刻意排除 `docs/adr/**`（冻结的决策史）、`CHANGELOG.md`（上游继承史）、生成的 `.json`、`verify-package.mts`（它把旧名当拒绝表）。合法的上游引用不误伤：官方 loader 的 `version: '3.0'`、`BMap.*` 命名空间、`BMapGLLib`、活的 CDN 全局 `BMapVue`、yue1123 署名 |
+| `pnpm check:docs-links` | 文档**锚点**与**导航覆盖**。页面级死链由 `vitepress build` 负责（刻意不重复，两道门禁管同一事实会漂移） |
+| `pnpm check:snippet-consistency` | README / npm 包 / 文档站三处的 **API 示例**一致（需先 `pnpm build:package`）。判据是「示例里的标识符必须真的在 `dist/*.d.ts` 里 + 三处形状一致」，**不是**「三处文本相等」——后者没有区分力（三处都写错照样绿） |
 | `pnpm check:api` | **三类基线**无漂移（需先 `pnpm build:package`）：① 5 份 API report（`packages/bmap-vue/etc/<出口>/bmap-vue.api.md`，出口 = `advanced` / `composables` / `plugins` / `resolver` / `ui-kit`）；② 5 份**未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`，`ae-forgotten-export` 的符号名**全等**比对——新增与清理两个方向都红，只比条数会漏掉 1-for-1 替换与跨提交回弹）；③ 7 份**类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，`dist` 声明经 TS printer `removeComments` 规范化——第 2 层只守名字，未导出类型的**结构**靠这一层）。`.` 与 `./components` 进不了 API report（Volar `__VLS_` 悬空引用），按**探针**断言该阻塞仍在。改了公共类型面就跑 `pnpm generate:api` 并把基线一起提交 |
 | `pnpm generate:capability-matrix:check` | Capability Catalog 能力矩阵无漂移 |
 | `pnpm generate:api-diff:check` | 公开 API 对照表（vs 官方 React 参考）无漂移 |

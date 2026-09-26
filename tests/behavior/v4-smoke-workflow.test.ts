@@ -160,7 +160,7 @@ describe("#74 npm scripts：两条命令都在，且都指向同一个 orchestra
 
   it("文档里承诺的命令名与脚本存在性一致（文档不能写一条跑不起来的命令）", () => {
     const doc = readFileSync(
-      resolve(import.meta.dirname, "../../docs/zh-CN/contributing/v4-browser-smoke.md"),
+      resolve(import.meta.dirname, "../../docs/internal/v4-browser-smoke.md"),
       "utf8",
     );
     for (const command of doc.matchAll(/pnpm (smoke:v4(?::fixture)?)/g)) {

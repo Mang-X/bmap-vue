@@ -48,8 +48,7 @@ interface BMapErrorLike {
 **排查**:
 - 检查网络能否访问 `api.map.baidu.com/api`。
 - 检查 CSP `script-src` 是否放行。
-- 检查 AK 是否有效。实测（真实 AK 档，见 [ADR 2026-09-13 v4 required smoke](/adr/2026-09-13-v4-required-smoke)
-  的「已知限制」）：**无效 AK 仍会注入脚本并挂上命名空间**，但地图对象是半初始化的，这类失败表现为 Driver
+- 检查 AK 是否有效。真实 AK 下的实测结论是：**无效 AK 仍会注入脚本并挂上命名空间**，但地图对象是半初始化的，这类失败表现为 Driver
   在读 SDK 时抛 `TypeError`，**不是**本错误码 —— 也就是说它无法与实现回归区分，当前按保守的 `fail` 处理。
 **解决**:使用自定义 Provider(自托管脚本),见[配置指南](./config.md#client-查找顺序)。
 
@@ -109,7 +108,7 @@ interface BMapErrorLike {
 - `Convertor#translate` 的回包 `status ≠ 0`（如坐标超出范围）；
 - `... timed out after 15000ms`：服务端 15s 内没有回包，检查网络后重试。
 
-**关于「配额用尽 / Referer 白名单拦截」**：百度 JSAPI 在这类失败时只回**空结果**，官方没有公开的错误码入口（错误码在它的私有回调表里，本库**不**去嗅探——见 [ADR 2026-09-13](../../adr/2026-09-13-private-sdk-surface-removal.md)）。因此：
+**关于「配额用尽 / Referer 白名单拦截」**：百度 JSAPI 在这类失败时只回**空结果**，官方没有公开的错误码入口（错误码在它的私有回调表里，本库**不**去嗅探）。因此：
 
 - `useGeocoder` / `useGeocodeDetail` 等服务在服务端失败时**不会报错**，而是以 `status === 'empty'` 结算（`data` 为 `null`、`error` 也是 `null`）——它与「真的查无结果」在公开面上**不可区分**；
 - 「动作恒 resolve」：所有服务动作返回 `Promise<ServiceResult<T>>`、不 reject，失败/超时/取消都在返回值里（`status` 是 `failed` / `timeout` / `canceled`）；

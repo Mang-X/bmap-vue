@@ -65,6 +65,9 @@ pnpm generate:overlay-emits:check  # 覆盖物 defineEmits 静态契约无漂移
 pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
 pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
+pnpm check:docs-brand          # 发布文档面不得出现已退役的品牌串
+pnpm check:docs-links          # 文档锚点与导航覆盖
+pnpm check:snippet-consistency  # 三处 API 示例一致(需先 build:package)
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
 pnpm check:api                  # API report + 未导出类型身份集合 + 签名基线三类基线无漂移（#44）
 pnpm test:unit

@@ -5,6 +5,24 @@
       解析失败：{{ errorMessage }}（请检查 AK 域名白名单与网络）
     </div>
     <div class="state" v-else-if="isEmpty">点击地图选择坐标点，或等待初始解析…</div>
+    <!--
+      解析结果放在地图上方的面板里，**不要**塞进 `<Label>`：
+      Label 是地图上的气泡，宽高由内容撑开，长地址在窄气泡里会一行一个字竖着排。
+    -->
+    <div class="bmap-example-detail" v-if="!isLoading && !isEmpty && result">
+      <p class="bmap-example-detail-row">
+        <span class="bmap-example-detail-key">地址</span>
+        <span>{{ result.address || "无" }}</span>
+      </p>
+      <p class="bmap-example-detail-row">
+        <span class="bmap-example-detail-key">商圈</span>
+        <span>{{ result.business || "无" }}</span>
+      </p>
+      <p class="bmap-example-detail-row">
+        <span class="bmap-example-detail-key">最匹配地点</span>
+        <span>{{ result.surroundingPois?.[0]?.title || "无" }}</span>
+      </p>
+    </div>
     <Map
       v-bind="$attrs"
       enableScrollWheelZoom
@@ -15,13 +33,6 @@
     >
       <template v-if="!isLoading && !isEmpty">
         <Marker :position="point"></Marker>
-        <Label
-          :style="{ color: '#333', fontSize: '9px' }"
-          :position="result?.point"
-          :content="`地址: ${result?.address} 所属商圈:${result?.business} 最匹配地点: ${
-            result?.surroundingPois[0]?.title || '无'
-          }`"
-        />
       </template>
     </Map>
   </div>

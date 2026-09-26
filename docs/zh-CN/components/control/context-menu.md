@@ -1,4 +1,4 @@
-# ContextMenu 上下文菜单 <Badge type="tip" text="^0.0.29" />
+# ContextMenu 上下文菜单
 
 在地图或标注上添加自定义内容的右键菜单。
 
@@ -32,11 +32,11 @@ context-menu/index
 
 ## 组件 Props
 
-| 属性        | 说明                                                       | 类型                                                | 默认值 | 版本                               |
-| ----------- | ---------------------------------------------------------- | --------------------------------------------------- | ------ | ---------------------------------- |
-| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | <Badge type="tip" text="^1.0.0" /> |
+| 属性 | 说明 | 类型 | 默认值 |
+| ----------- | ---------------------------------------------------------- | --------------------------------------------------- | ------ |
+| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | |
 | width       | 菜单宽度（单位 px）                                        | `number`                                            | `100`  | -                                  |
-| visible     | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节）  | `boolean`                                           | `true` | <Badge type="tip" text="^2.2.0" /> |
+| visible     | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节）  | `boolean`                                           | `true` | |
 
 ## ContextMenuItem
 
@@ -100,8 +100,7 @@ context-menu/index
 
 > `Marker#addContextMenu` / `#removeContextMenu` 在官方 4.0.4 的**类型包里没有声明**（只声明在 `Map` 上），
 > 但真实 4.0 运行时存在且可用：挂上之后右键该标注会派发菜单的 `open`，`removeContextMenu` 之后同样的
-> 右键不再 `open`。本库据此支持 marker 目标，读数与依据见
-> [ADR 2026-09-19](/adr/2026-09-19-custom-overlay-and-context-menu)。
+> 右键不再 `open`。本库据此支持 marker 目标。
 
 **没有入口证据的目标会显式报错**（`BMAP_CAPABILITY_UNSUPPORTED`），而**不会**回退挂到地图上——
 例如写在 `<Polyline>` 这类覆盖物里时，最近的挂载目标 `kind` 是 `overlay`，菜单没有可挂的地方。

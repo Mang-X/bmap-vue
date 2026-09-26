@@ -1,4 +1,4 @@
-# WMSLayer WMS 图层 <Badge type="tip" text="^1.0.0" />
+# WMSLayer WMS 图层
 
 加载瓦片式 WMS 服务：官方内部拼接 `SERVICE` / `REQUEST` / `VERSION` / `FORMAT` / `CRS` 等参数，并用 `BBOX` / `WIDTH` / `HEIGHT` 驱动瓦片请求。
 

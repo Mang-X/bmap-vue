@@ -274,7 +274,7 @@ export interface BezierCurveEmits {
 
 /** `ground-overlay` 覆盖物的事件面：11 个 SDK 事件（共 11 个），供 `GroundOverlay.vue` 的 `defineEmits` 使用。 */
 export interface GroundOverlayEmits {
-  /** 点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标） */
+  /** 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） */
   click: [event: OverlayPartialPointerEvent];
   /** 双击覆盖物时触发（同上） */
   dblclick: [event: OverlayPartialPointerEvent];

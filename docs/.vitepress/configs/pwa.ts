@@ -6,11 +6,11 @@ export const pwa: Partial<PwaOptions> = {
   includeManifestIcons: false,
   manifest: {
     id: "/bmap-vue/",
-    name: "Vue3 BaiduMap GL",
-    short_name: "Vue3-BaiduMap-GL",
+    name: "bmap-vue",
+    short_name: "bmap-vue",
     description:
-      "基于百度地图 JavaScript GL 版（使用了 WebGL 对地图、覆盖物等进行渲染，支持 3D 视角展示地图） API 封装设计的 Vue3 组件/hooks 库。",
-    theme_color: "#ffffff",
+      "面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JavaScript API 4.0（WebGL 渲染，支持 3D 视角）。",
+    theme_color: "#F72C30",
     start_url: "/bmap-vue/",
     lang: "zh-CN",
     dir: "ltr",
@@ -39,10 +39,19 @@ export const pwa: Partial<PwaOptions> = {
     ],
     screenshots: [
       {
-        src: "screenshots/home.jpg",
+        // 之前指向 `home.jpg` 却声明 `1200x630`，而那张图实际是 1920×1920——
+        // manifest 里的 `sizes` 必须与真实像素一致，否则安装横幅会拿到错误尺寸的资源。
+        src: "screenshots/og-cover.jpg",
         sizes: "1200x630",
         type: "image/jpg",
-        label: "基于百度地图 JavaScript GL 版 API 封装设计的 Vue3 组件/hooks 库。",
+        label: "面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JavaScript API 4.0。",
+        form_factor: "wide",
+      },
+      {
+        src: "screenshots/site-home.jpg",
+        sizes: "1600x1000",
+        type: "image/jpg",
+        label: "bmap-vue 文档站首页。",
       },
     ],
     handle_links: "preferred",

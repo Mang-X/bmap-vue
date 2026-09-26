@@ -9,13 +9,11 @@
 | 维度 | 含义 | 当前取值 |
 | --- | --- | --- |
 | 组件库版本 | `bmap-vue` 包版本 | `1.0.0-rc.x` |
-| SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 `#26` 删除） |
+| SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已删除） |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
 | 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.4`（精确锁定） |
 | 官方加载器版本 | `@baidumap/jsapi-loader` | `1.0.0`（精确锁定，默认在线加载） |
 | 官方 UI Kit 版本 | `@baidumap/jsapi-ui-kit` | `1.1.2`（精确锁定，optional peer） |
-
-决策依据见 [ADR 2026-09-10：冻结 JSAPI 4.0 单引擎基线](/adr/2026-09-10-jsapi-v4-only-baseline)。
 
 ## 官方包：Loader 与 UI Kit
 
@@ -25,8 +23,7 @@
 - `@baidumap/jsapi-ui-kit` 是**标准 UI 的唯一实现**（optional peer + 开发期精确锁定）。「optional」只表示不使用 UI 的消费者可以不安装，不表示可以改走自研实现。
 
 两者的发布契约、`nonce` / SRI 等不支持项、SSR 与 CSS 口径、四个 widget 的真实 v4 结论，
-以及可复现的验证命令都收在 [官方包发布契约](/zh-CN/contributing/official-packages)；
-决策与边界见 [ADR 2026-09-13：Official-first](/adr/2026-09-13-official-first-loader-and-ui-kit)。
+以及可复现的验证命令都收在[官方包发布契约](./official-packages)。
 **不要**按文档或示例转述推断这两个包的行为——上游改版时先更新契约表，再改实现。
 
 ## 官方 Skill：`bmap-jsapi-v4`
@@ -85,7 +82,7 @@ npx skills update bmap-jsapi-v4
 - 入口文件 `src/driver/jsapi-v4/types-reference.d.ts` 只用三斜线引用官方类型与 augmentation 目录，本身不再内联声明。
 - 保持 `skipLibCheck: false`。升级类型包后必须重新核对 augmentation，官方补齐的声明要删除。
 
-### 已知问题：官方 `4.0.4` 的大小写引用缺陷（已处置）
+### 已知问题：官方 `4.0.4` 的大小写引用缺陷（已修正）
 
 `@baidumap/jsapi-v4-types@4.0.4/index.d.ts:67` 写的是 `/// <reference path="core/displayOptions.d.ts" />`，
 而发布产物中的真实文件名是 `core/DisplayOptions.d.ts`。在 macOS（默认大小写不敏感）上解析正常，
@@ -96,9 +93,8 @@ error TS6053: File '.../core/displayOptions.d.ts' not found.
 error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ```
 
-处置（issue #50，决策见 [ADR 2026-09-13](../../adr/2026-09-13-upstream-types-case-patch.md)）：仓库用
-`patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行，因此
-`pnpm typecheck:package` 在任何平台都成立，并已重新纳入 `.github/workflows/quality.yml`。
+仓库用 `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行，因此
+`pnpm typecheck:package` 在任何平台都成立，该 step 也已在 `.github/workflows/quality.yml` 中。
 
 - 补丁只改文件名大小写、不改声明内容；清单、生成方式与删除条件见仓库根目录的
   `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。
@@ -107,8 +103,6 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
   因此 macOS 与 Linux 结论一致。
 - 删除条件：上游发布修正大小写的版本后，升级精确版本并删除补丁与 `pnpm-workspace.yaml` 的
   `patchedDependencies` 条目。
-- 回滚：删除补丁后 `pnpm typecheck:package` 会在 Linux 上重新失败，回滚必须同时把该 step 从 CI 摘掉，
-  并更新本页与 `CONTRIBUTING.md`。
 
 ## SDK 边界：raw SDK 与公共声明
 
@@ -122,7 +116,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | --- | --- |
 | `driver/**` | v4 Driver 实现与 `driver/jsapi-v4/**` 类型边界 |
 | `client/**` | `createBMapClient` 聚合层 |
-| `core/loader/**` | Loader / Provider / SdkRegistry。全局探测只允许在这一层：`providers/namespace.ts`（`readJsapiV4Global()`）是 JSAPI 4.0 的**唯一**合法入口；v4 Provider 家族见该目录 `providers/`。旧引擎的 `Provider.ts`（`readGlobalSdk()` / `hasExistingGlobalSdk()`）已随 `#26` 删除 |
+| `core/loader/**` | Loader / Provider / SdkRegistry。全局探测只允许在这一层：`providers/namespace.ts`（`readJsapiV4Global()`）是 JSAPI 4.0 的**唯一**合法入口；v4 Provider 家族见该目录 `providers/`。旧引擎的 `Provider.ts`（`readGlobalSdk()` / `hasExistingGlobalSdk()`）已删除 |
 | `plugins/**` | 插件适配与 CDN 定义 |
 | `packages/test-utils` | Fake SDK（独立测试边界，不在扫描范围内） |
 
@@ -157,13 +151,15 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:raw-sdk` | 扫描禁区目录（`components` / `composables` / `core/runtime`） |
 | `pnpm check:raw-sdk:tree` | 以白名单扫描整棵 `src`，白名单外的任何 raw SDK 引用都会失败 |
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
+| `pnpm check:docs-brand` | 已退役的发布身份（包名 / 产品名 / 去前缀前的组件名 / 库版本措辞 `3.0`）不得回到发布文档面。判据按**结构**而非名单：`3.0` 按引号分档（带引号是官方 loader 的 `version` 取值）、`<BMap` 按位置（后面是空白/斜杠/尖括号才算 Vue 标签）、MIT 署名用 lookbehind 排除。逐行豁免（见脚本的 `ESCAPE_TOKEN`，写作 `brand-gate` + `:allow` + 理由），理由必填、只豁免本行、有预算上限 |
+| `pnpm check:docs-links` | 文档锚点与导航覆盖（页面级死链归 `vitepress build`） |
 | `pnpm check:raw-sdk:declarations` | 旧引擎残留在**公共声明**上的不变量：`dist/**/*.d.ts` 不得再出现 `BMapGL` 或已删除的 engine 取值。`check:public-dts` 只禁 `BMap.*` / `BMapGL` / 官方类型包，**不**禁 engine 取值字面量，所以发布产物上这条覆盖是独立的一步。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分） |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
 | `pnpm probe:plugin-load-channel` | 量**插件脚本加载通道自身**的边界行为（**需要 AK + 浏览器**，要真的等一个超时窗口）：把插件 URL 指到永不响应的地址，核对「地图照常 ready / 超时后如实失败且不残留脚本 / 列表里后面的插件不被永久阻塞」，以及取消语义的三条（`map` 作用域 abort 摘脚本、共享宿主里取消只解绑自己、宿主 `dispose()` 让在飞加载 abort）。`0` 契约成立 / `1` 契约不成立（含「永久挂起」）/ `3` 无法判定 / `2` 脚手架失败 |
 
-`pnpm check:public-dts` 与 `pnpm check:raw-sdk:declarations` 都需在 `pnpm build:package` 之后运行；CI 的两个 job 都会在构建后执行。运行时源码侧的旧引擎残留由 `pnpm check:raw-sdk:tree` 承担——它对被 raw SDK 白名单放行的 `driver` / `client` / `core/loader` / `plugins` 也跑这条规则，因为 `BMapGL` 与白名单无关。扫描范围刻意不含 `node_modules`、`docs/**` 与 `tests/**`（官方 runtime 自己就挂 `BMapGL` 别名、ADR 要能写出旧名字、Fake v4 按真实形状镜像那个别名）；官方插件命名空间 `BMapGLLib` 与注释里的提及按 AST 判定天然不命中。
+`pnpm check:public-dts` 与 `pnpm check:raw-sdk:declarations` 都需在 `pnpm build:package` 之后运行；CI 的两个 job 都会在构建后执行。运行时源码侧的旧引擎残留由 `pnpm check:raw-sdk:tree` 承担——它对被 raw SDK 白名单放行的 `driver` / `client` / `core/loader` / `plugins` 也跑这条规则，因为 `BMapGL` 与白名单无关。扫描范围刻意不含 `node_modules`、`docs/**` 与 `tests/**`（官方 runtime 自己就挂 `BMapGL` 别名、内部决策记录要能写出旧名字、Fake v4 按真实形状镜像那个别名）；官方插件命名空间 `BMapGLLib` 与注释里的提及按 AST 判定天然不命中。
 
 ## Capability Catalog
 
@@ -206,11 +202,14 @@ pnpm check:raw-sdk:tree    # 整棵 src 按白名单校验(含旧引擎残留)
 pnpm check:public-dts      # 公共声明无 BMap.* 泄漏(需先 build:package)
 pnpm check:raw-sdk:declarations # 公共声明无旧引擎残留(需先 build:package)
 pnpm generate:capability-matrix:check
+pnpm check:docs-brand      # 发布文档面无退役品牌串
+pnpm check:docs-links      # 文档锚点与导航覆盖
+pnpm check:snippet-consistency # 三处 API 示例一致(需先 build:package)
 pnpm docs:build            # 涉及文档时
 ```
 
 涉及 SDK 行为的改动，在 PR 描述中说明：
 
-- SDK 依据（`v=4.0`/`BMap` 还是迁移期 `webgl-v1`）；
+- SDK 依据（`v=4.0` / 全局 `BMap`）；
 - 生命周期检查（监听器/覆盖物/控件/图层/异步/动画的释放路径）；
-- 迁移影响（是否改变公共 API、是否影响 2.x/3.x 支持政策）。
+- 兼容影响（是否改变公共 API）。

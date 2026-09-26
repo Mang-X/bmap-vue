@@ -1,4 +1,4 @@
-# XYZLayer 标准瓦片图层 <Badge type="tip" text="^1.0.0" />
+# XYZLayer 标准瓦片图层
 
 第三方标准瓦片服务（XYZ / WMTS / WMS / TMS）：内置 **EPSG:3857 → BD09MC** 转换。
 

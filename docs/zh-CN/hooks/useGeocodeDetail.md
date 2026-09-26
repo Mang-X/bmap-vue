@@ -1,4 +1,4 @@
-# useGeocodeDetail <Badge type="tip" text="^0.0.39" />
+# useGeocodeDetail
 
 由坐标点解析地址信息
 

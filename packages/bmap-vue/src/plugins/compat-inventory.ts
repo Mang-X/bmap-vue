@@ -1,9 +1,9 @@
 /**
- * 插件兼容 inventory（M3A3-07 / issue #25；结论定型于 M8-ADAPTERS-ADVANCED / issue #43）
+ * 插件兼容 inventory
  *
- * 这份清单回答一个 #25 验收里长期没有答案的问题：**四个内置插件脚本在 JSAPI 4.0 上到底
- * 是什么状态**。此前 Capability Catalog 里 `overlay.mapvgl` / `service.track-animation`
- * 的说明是「迁移结论待定（M8）」——那不是结论，读者既不知道已经查过什么，也不知道还差什么。
+ * 这份清单回答一个问题：**四个内置插件脚本在 JSAPI 4.0 上到底是什么状态**。Capability Catalog
+ * 里 `overlay.mapvgl` / `service.track-animation` 这类条目必须有一句「支持」或「不支持」，
+ * 而「不支持」这句话本身要有依据——否则读者既不知道已经查过什么，也不知道还差什么。
  *
  * 三条约定（都由 `plugin-compat-inventory.test.ts` 钉住，且配了反证）：
  *
@@ -12,22 +12,21 @@
  *    `@baidumap/jsapi-v4-types@4.0.4` 的**逐成员核对**（`declaration`）、哪些是真实运行时
  *    观察（`runtime`，需 AK + WebGL，命令 `pnpm probe:plugin-runtime`）。没跑过的档位**不写进依据**。
  * 2. **必需功能不得依赖任何插件脚本**。内置插件一律 `required: false`：插件脚本的失败只
- *    发 `plugin:error` 事件，不得让地图本身失败（隔离口径，见 ADR
- *    `2026-09-13-plugin-compat-inventory`）。历史上 `TrackAnimation` 被标成 `required: true`，
- *    那意味着一个 legacy-only 插件的 CDN 抖动就能让整张地图挂掉。
+ *    发 `plugin:error` 事件，不得让地图本身失败（隔离口径）。历史上 `TrackAnimation` 被标成
+ *    `required: true`，那意味着一个 legacy-only 插件的 CDN 抖动就能让整张地图挂掉。
  * 3. **能力与清单互锁**。Catalog 里被标为 `unsupported` 的插件类能力，必须在这里有对应条目
  *    （否则「不支持」是一句没有依据的话）；反过来，条目声明的能力必须真实存在于 Catalog。
  *
- * ## #43：从「三值 + 未定项」收敛成五值结论 + 迁移路径
+ * ## 五值结论 + 迁移路径
  *
- * #25 那版的词汇是 `incompatible` / `no-declaration-gap` / `undetermined`。后者诚实地表达了
- * 「还没查完」，但它不是一个**结论**，读者仍然不知道该怎么办。`#43` 把词汇换成
- * `native` / `compatible` / `adapter` / `incompatible` / `unverified`（见 `PLUGIN_VERDICT_MEANING`），
- * 并给每条补 `migrationPath`：**结论要落到「那我现在该用什么」上**。
+ * 结论词汇是 `native` / `compatible` / `adapter` / `incompatible` / `unverified`
+ * （见 `PLUGIN_VERDICT_MEANING`），并给每条补 `migrationPath`：**结论要落到「那我现在该用什么」上**。
+ * 「查过但依据不足以支持更强的话」是**结论**而不是缺口——`unverified` 就该是终态，不要为了
+ * 「功能完整」把它强行实现成 `adapter`。
  *
- * 同一轮把运行时档从「构造 + 一次真实调用」扩到各自的最小功能链路（TrackAnimation 的
- * `pause` / `continue` / 播放到结尾、DrawingManager 的**真的画出一个多边形**、MapVGL 的抛错根因），
- * 并把**覆盖到哪几步**写进 `runtime.covered` / `runtime.uncovered` ——「已验证」不是一个布尔值，
+ * 运行时档覆盖到各自的最小功能链路（TrackAnimation 的 `pause` / `continue` / 播放到结尾、
+ * DrawingManager 的**真的画出一个多边形**、MapVGL 的抛错根因），并把**覆盖到哪几步**写进
+ * `runtime.covered` / `runtime.uncovered` ——「已验证」不是一个布尔值，
  * 它有一个明确的范围；没覆盖的部分写出来，而不是留白让读者以为全都验过了。
  *
  * 本文件是**单一事实源**：`pnpm generate:plugin-inventory` 由它生成
@@ -63,19 +62,19 @@ export type PluginEvidenceBasis =
   /**
    * 与官方 `@baidumap/jsapi-v4-types` 的声明核对。**自动部分只覆盖命名空间级成员**
    * （`BMapGL.<Member>` 是否存在）；`Owner#member` 形态的**实例成员**没有被自动校验，
-   * 由人工逐条对照声明，写在每条目的 `manualInstanceChecks` 里（评审 #85 P2-1）。
+   * 由人工逐条对照声明，写在每条目的 `manualInstanceChecks` 里。
    */
   | "declaration"
   /** 真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`：需 AK + 浏览器；不进 PR 门禁）。 */
   | "runtime";
 
 /**
- * 脚本的兼容结论（#43 冻结的五值词汇）。
+ * 脚本的兼容结论（五值词汇）。
  *
  * 五个取值各自都能**单独作为最终结论**——`unverified` 也是结论（「查过、但依据不足以支持
- * 一个更强的话」），不要为了「功能完整」把它实现成 `adapter`。这条来自 #43 的开工前范围纠正
- * （Evidence-before-abstraction）：**先判定，再适配；只有结论明确是 `adapter` 且存在真实
- * 消费者时才写 adapter 代码**。
+ * 一个更强的话」），不要为了「功能完整」把它实现成 `adapter`。
+ * **先判定，再适配**：只有结论明确是 `adapter` 且存在真实
+ * 消费者时才写 adapter 代码。
  */
 export type PluginVerdict =
   /** 上游 4.0 已有**原生替代**：迁移到原生能力，不要再依赖该脚本（见 `migrationPath`）。 */
@@ -90,7 +89,7 @@ export type PluginVerdict =
   /**
    * 需要本库写适配层才能用。
    *
-   * ⚠️ **当前没有任何条目取这个值，这是刻意的**：按 #43 的口径，只有「结论明确是 adapter
+   * ⚠️ **当前没有任何条目取这个值，这是刻意的**：只有「结论明确是 adapter
    * **且**存在真实消费者」时才写 adapter 代码；四个内置插件都不满足该条件。要新增一条
    * `adapter` 条目，必须同时给出消费者与迁移落点，并删掉 `plugin-compat-inventory.test.ts`
    * 里那条「当前无 adapter 条目」的门禁。
@@ -107,8 +106,8 @@ export type PluginVerdict =
   | "unverified";
 
 /**
- * 迁移路径：**结论要落到「那我现在该用什么」上**（#43 的验收项「每个旧插件有版本、依据、
- * 兼容结果及迁移路径」）。
+ * 迁移路径：**结论要落到「那我现在该用什么」上**（每个条目都要有版本、依据、
+ * 兼容结果与迁移路径）。
  */
 export interface PluginMigrationPath {
   /**
@@ -132,7 +131,7 @@ export interface PluginMigrationPath {
   readonly note: string;
 }
 
-/** 脚本的版本锁定情况（#43 实施步骤 4：「插件 URL 固定可追踪版本 / 受控资产」）。 */
+/** 脚本的版本锁定情况（「插件 URL 固定可追踪版本 / 受控资产」）。 */
 export interface PluginVersionLock {
   /**
    * 上游资产是否**自带版本号**。
@@ -229,7 +228,7 @@ export interface PluginCompatEntry {
   /** 关联的 Capability（存在时双向互锁，见文件头约定 3）。 */
   readonly capability?: Capability;
   readonly verdict: PluginVerdict;
-  /** 迁移路径（#43 的验收项之一）。 */
+  /** 迁移路径。 */
   readonly migrationPath: PluginMigrationPath;
   readonly basis: readonly PluginEvidenceBasis[];
   /**
@@ -264,7 +263,7 @@ export const PLUGIN_VERDICT_MEANING: Record<PluginVerdict, string> = {
   native: "上游 4.0 已有原生替代 ⇒ 迁移到原生能力，不再依赖该脚本（见「迁移路径」列）",
   compatible:
     "脚本在 4.0 上可直接使用，且最小功能链路有运行时证据。边界：本库只负责按需加载脚本，不承诺插件的内部实现与它自行注入的其它脚本",
-  adapter: "需要本库写适配层才能用（**当前无条目**：按 #43 口径，只有存在真实消费者时才写 adapter）",
+  adapter: "需要本库写适配层才能用（**当前无条目**：只有存在真实消费者时才写 adapter）",
   incompatible: "有决定性依据说明它在 4.0 上不可用",
   unverified:
     "依据不足以支持更强的结论 —— **这本身可以是最终结论**：不为了「功能完整」把它强行实现成 adapter",
@@ -316,9 +315,9 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
       target: "layer.track-line",
       nativeComponent: "TrackLineLayer",
       note:
-        "改用原生轨迹线图层 `<TrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。" +
+        "改用原生轨迹线图层 `<TrackLineLayer>`（官方 4.0 扩展 API `TrackLine`）。" +
         "**播放命令面**（start / pause / resume / stop / setSpeed / setProcess）与页面可见性" +
-        "（`pauseOnHidden`）已由 #110 落地（方法名经 live 探针取证）；本票的结论与去向不变：" +
+        "（`pauseOnHidden`）已在 `<TrackLineLayer>` 上落地（方法名经 live 探针取证）。" +
         "不要为 TrackAnimation 再写组件或 hook。",
     },
     basis: ["artifact", "declaration", "runtime"],
@@ -352,8 +351,8 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
         "`_beginTime` 与 `setBeginTime` / `setDuration`）：4.0 上实测可用，但私有面随时可能消失 ⇒ " +
         "本库不提供它，也不承诺它。",
       "`Polyline#_config.linkRight` 是实例私有字段，用于判断折线是否跨 180° 经线。",
-      "播放命令面的原生对应物已由 **#110** 落地在 `TrackLineLayer` 的 `playback` expose 上" +
-        "（方法名经 live 探针取证，2026-09-23）。",
+      "播放命令面的原生对应物已落在 `TrackLineLayer` 的 `playback` expose 上" +
+        "（方法名经 live 探针取证）。",
     ],
   },
   {
@@ -515,7 +514,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     residualRisks: [
       "**本仓库自持的 legacy 声明曾经与真实脚本不一致**：那份声明把 `BMapGLLib.GeoUtils` 写成 " +
         "`new GeoUtils(map, options)` 的类，而真实脚本暴露的是**静态谓词命名空间**（没有可用的实例 API）。" +
-        "记录这条是因为它解释了「为什么不能拿 legacy 类型当依据」——该声明目录已在 `#26` 删除，" +
+        "记录这条是因为它解释了「为什么不能拿 legacy 类型当依据」——该声明目录已删除，" +
         "现在类型面只剩官方 `@baidumap/jsapi-v4-types` 与最小 augmentation。",
       "各静态谓词的签名语义未逐个核对（只证了不抛错 + `getDistance` 数值正确）；" +
         "`isPointInRect` 的三参形态语义未确认。",
@@ -548,7 +547,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
       target: "（无）",
       note:
         "没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。" +
-        "改用官方 4.0 原生图层（`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / " +
+        "改用官方 4.0 原生图层（`PointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / " +
         "`LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。",
     },
     basis: ["artifact", "declaration", "runtime"],
@@ -572,7 +571,7 @@ export const PLUGIN_COMPAT_INVENTORY: readonly PluginCompatEntry[] = [
     },
     summary:
       "**硬不兼容**，两条独立依据：①它的 JSONP 传输层直接拿 SDK 的私有回调表（成员名 `_rd`）当注册处" +
-      "——这正是 #72（ADR `2026-09-13-private-sdk-surface-removal`）明令本库不得访问的私有面，也不在官方声明里；" +
+      "——这正是本库明令不得访问的私有面，也不在官方声明里；" +
       "②它的 bmap 适配层要往 `map.getPanes().mapPane` 上挂视图容器，而 4.0 的 panes 里没有 `mapPane`。" +
       "**结论是「没有迁移路径」**：改用 4.0 的原生图层。",
     residualRisks: [

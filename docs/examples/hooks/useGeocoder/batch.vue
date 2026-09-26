@@ -7,7 +7,7 @@
         </ul>
       </CustomControl>
       <template v-if="points.length">
-        <template v-for="(item, index) in points">
+        <template v-for="(item, index) in points" :key="index">
           <Marker :position="item"></Marker>
           <Label
             :style="{ color: '#333', fontSize: '9px' }"

@@ -1,4 +1,4 @@
-# useIpLocation <Badge type="tip" text="^0.0.33" />
+# useIpLocation
 
 用于获取用户所在的城市位置信息。(根据用户 IP 自动定位到城市)
 
