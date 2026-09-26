@@ -1006,7 +1006,7 @@ export type PluginEvidenceBasis =
 /**
 * 与官方 `@baidumap/jsapi-v4-types` 的声明核对。**自动部分只覆盖命名空间级成员**
 * （`BMapGL.<Member>` 是否存在）；`Owner#member` 形态的**实例成员**没有被自动校验，
-* 由人工逐条对照声明，写在每条目的 `manualInstanceChecks` 里（评审 #85 P2-1）。
+* 由人工逐条对照声明，写在每条目的 `manualInstanceChecks` 里。
 */
 | "declaration"
 /** 真实 JSAPI 4.0 运行时观察（`pnpm probe:plugin-runtime`：需 AK + 浏览器；不进 PR 门禁）。 */
@@ -1069,7 +1069,7 @@ export type PluginVerdict =
 /**
 * 需要本库写适配层才能用。
 *
-* ⚠️ **当前没有任何条目取这个值，这是刻意的**：按 #43 的口径，只有「结论明确是 adapter
+* ⚠️ **当前没有任何条目取这个值，这是刻意的**：只有「结论明确是 adapter
 * **且**存在真实消费者」时才写 adapter 代码；四个内置插件都不满足该条件。要新增一条
 * `adapter` 条目，必须同时给出消费者与迁移落点，并删掉 `plugin-compat-inventory.test.ts`
 * 里那条「当前无 adapter 条目」的门禁。
