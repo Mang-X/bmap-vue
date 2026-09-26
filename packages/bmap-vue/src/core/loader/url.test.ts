@@ -108,6 +108,19 @@ describe("fingerprintConfig", () => {
     );
     // 形状之外的形态（百分比编码等）按已知值兜底。
     expect(maskUserinfo("alice%3As3cret appears here", "alice%3As3cret")).toBe("*** appears here");
+    // authority 在 `/` 以及 `?` / `#` 处结束（#163 复审 P2）：query / fragment 里的 `@`
+    // **不是** userinfo。以前只把 `/` 当终止符，`…?email=user@example.org` 会被从 host
+    // 一路吞到 `@`，整条 URL 变成 `https://***@example.org`——host 一起丢掉。
+    expect(maskUserinfo("https://api.example.com?email=user@example.org")).toBe(
+      "https://api.example.com?email=user@example.org",
+    );
+    expect(maskUserinfo("https://api.example.com#contact=user@example.org")).toBe(
+      "https://api.example.com#contact=user@example.org",
+    );
+    // 反向对照：真的是 userinfo 时仍然照遮（`?` / `#` 不能把防护放掉）。
+    expect(maskUserinfo("https://user:pass@api.example.com?email=user@example.org")).toBe(
+      "https://***@api.example.com?email=user@example.org",
+    );
   });
 
   it("非法 URL 也不得泄漏凭据：整串哈希成不透明标识", () => {

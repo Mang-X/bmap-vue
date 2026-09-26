@@ -152,7 +152,10 @@ export function readUrlUserinfo(url: string | undefined | null): string | null {
  * 凭据漏一次不行。
  */
 export function maskUserinfo(text: string, known?: string | null): string {
-  let out = text.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@\s]+@/g, "$1***@");
+  // ⚠️ authority 在 `/` **以及 `?` / `#`** 处结束（#163 复审 P2）。只把 `/` 当终止符时，
+  // `https://api.example.com?email=user@example.org` 会被从 host 一直吞到 `@`，
+  // 正常的 query 被判成凭据、连 host 一起丢掉。
+  let out = text.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@?#\s]+@/g, "$1***@");
   if (known) out = out.split(known).join("***");
   return out;
 }

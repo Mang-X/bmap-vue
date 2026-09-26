@@ -129,13 +129,12 @@ export class ResourceScope {
       } catch (error) {
         // 销毁错误不可静默丢失：**不中断**后续 disposer（释放顺序是行为契约），
         // 但必须留下可观察信号 —— 否则「某个 disposer 坏了」会退化成难查的资源泄漏。
-        try {
-          logger.warn(`ResourceScope dispose failed${this.label ? ` (${this.label})` : ""}`, {
-            error: (error as Error)?.message ?? String(error),
-          });
-        } catch {
-          /* 记录本身失败也不得中断释放 */
-        }
+        //
+        // 这里**不**再套 try/catch：`logger.warn` 自身在输出边界隔离失败（#163），
+        // 不会把异常抛回这里。日志是旁路——它自己坏掉时，丢一条日志远好过连坐剩余释放。
+        logger.warn(`ResourceScope dispose failed${this.label ? ` (${this.label})` : ""}`, {
+          error,
+        });
       }
     }
     this.disposers.clear();
