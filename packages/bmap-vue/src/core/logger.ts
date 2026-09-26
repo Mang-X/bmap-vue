@@ -44,17 +44,22 @@ export function redactAk(input: string, ak?: string | null): string {
 const AK_PARAM_PATTERN = /ak=[A-Za-z0-9]{16,}/i;
 
 /**
- * URL userinfo 的**遮盖**形状（`https://user:pass@host`）——与 AK 同类的凭据。
+ * URL userinfo 的**遮盖**形状（`https://<userinfo>@host`）——与 AK 同类的凭据。
  *
  * ⚠️ 必须要求 `//` 前缀。曾经写成 `(\w+):([^@/]*)@` 这样的裸形状，结果把消息里的普通文本
  * 也当成凭据盖掉了——例如 `LayerDriver:…@baidumap/jsapi-v4-types@4.0.4` 变成
  * `LayerDriver:***@baidumap/…`，诊断信息（包名、版本）被日志自己毁掉。userinfo 的定义
- * 就是「`//` 之后的 authority 段里的 `user:pass@`」，带上 `//` 才是它的形状。
+ * 就是「`//` 之后的 authority 段里、`@` 之前的整段」，带上 `//` 才是它的形状。
+ *
+ * ⚠️ 遮盖**整段**而不是只遮 password 位（#163 复审 P1）。凭据放在 username 位是常见形状
+ * ——`https://<token>:x@host` 与 `https://<token>@host` 都会把完整 token 带出去，只遮
+ * `user:***@` 盖不住前者、后者因缺冒号压根不匹配。这与 `core/loader/url.ts` 的
+ * `maskUserinfo`（`$1***@`，整段遮盖）**同口径**，不另立一套。
  */
-const USERINFO_MASK_PATTERN = /(https?:\/\/)([^/\s:@]+):([^/\s@]*)@/g;
+const USERINFO_MASK_PATTERN = /(https?:\/\/)[^/@\s]+@/g;
 
 /** userinfo 的**探测**形状（判定用，不带 `g` 以免 `test()` 的 `lastIndex` 有状态）。 */
-const USERINFO_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]*@/;
+const USERINFO_PATTERN = /https?:\/\/[^/@\s]+@/;
 
 /**
  * 单条字符串的输出上限：日志是给人定位问题的，不是倾倒现场。
@@ -74,7 +79,7 @@ const OMITTED_STACK = "[omitted: 形状含凭据]";
 
 /** 脱敏 + 截断：所有**进入**日志的文本都走这一个出口。 */
 function logSafeText(input: string): string {
-  const masked = redactAk(input).replace(USERINFO_MASK_PATTERN, `$1$2:***@`);
+  const masked = redactAk(input).replace(USERINFO_MASK_PATTERN, `$1***@`);
   return masked.length > MAX_TEXT ? `${masked.slice(0, MAX_TEXT)}…` : masked;
 }
 
@@ -95,8 +100,11 @@ function isSensitiveText(text: string): boolean {
 
 /** 从 `BMapError` / `Error` 身上只取定位必需的字段；`cause` / stack 默认不输出。 */
 function projectError(error: Error): Record<string, unknown> {
+  // ⚠️ `name` 也要过 `logSafeText`（#163 复审 P1）。`name` 看着是「一个类名」，但自定义 /
+  // SDK 的 Error 完全可能把凭据塞进去；同一个函数里 `message` 清洗而 `name` 不清洗，
+  // 恰好是最容易被漏掉、也最容易被自查误认为「已经清过了」的那种不一致。
   const projected: Record<string, unknown> = {
-    name: error.name,
+    name: logSafeText(error.name),
     message: logSafeText(error.message),
   };
   // `BMapError` 在 `Error` 之上挂的定位字段。逐个具名读，**不用**索引签名去遍历未知属性
@@ -111,10 +119,18 @@ function projectError(error: Error): Record<string, unknown> {
     version?: unknown;
   };
   // `code` 是**定位信息的主要来源**（BMapError 的稳定契约），必须留下。
-  if (typeof located.code === "string") projected.code = located.code;
-  for (const key of ["mapId", "component", "plugin", "capability", "engine", "version"] as const) {
+  if (typeof located.code === "string") projected.code = logSafeText(located.code);
+  for (const key of ["component", "plugin", "capability", "engine", "version"] as const) {
     const value = located[key];
     if (typeof value === "string" && value) projected[key] = logSafeText(value);
+  }
+  // `BMapErrorOptions.mapId` 是 `symbol | string`（#163 复审 P2）：只留 `string` 分支会让
+  // symbol mapId 在投影后**整个消失**，而它正是「哪张图」的定位信息——按票面「保留必要
+  // 定位信息」不该丢。symbol 一律走 `String(sym)`（读 `description` 即可，不触发别的副作用）。
+  if (typeof located.mapId === "string" && located.mapId) {
+    projected.mapId = logSafeText(located.mapId);
+  } else if (typeof located.mapId === "symbol") {
+    projected.mapId = logSafeText(located.mapId.toString());
   }
   // stack **有条件**保留：只在确认不带凭据时给，且过一遍脱敏 + 截断。
   // 带凭据的 stack 整体省略——日志是要发出去的文本，截断仍可能留下半截 AK。
@@ -158,12 +174,31 @@ const CREDENTIAL_TOKENS = new Set([
   "token",
 ]);
 
+/**
+ * 字段名 → 记号序列。
+ *
+ * ⚠️ **不能**用 `split(/[_\-.\s]+|(?=[A-Z])/)`（#163 复审 P1）：`(?=[A-Z])` 这个前瞻会把
+ * **全大写词逐字母拆开**——`API_KEY` → `A`/`P`/`I`/`K`/`E`/`Y`、`TOKEN` → `T`/`O`/`K`/`E`/`N`、
+ * `PASSWORD` → 8 个单字母。常见凭据字段于是全部匹配不上，裸 AK（不带 `ak=` 前缀，
+ * `logSafeText` 也不命中）就原样进了 console。
+ *
+ * 正确顺序是「**先按分隔符切，再做驼峰边界**」，且驼峰边界必须**吞掉连续大写**：
+ * ① `API_KEY` / `api.key` / `api-key` ⇒ 整段（不拆）；
+ * ② `xApiKey` ⇒ `x` / `ApiKey`（`Api` 与 `Key` 同属驼峰簇，不能拆）；
+ * ③ 全小写 `apikey` ⇒ 整段。
+ */
+function keyTokens(key: string): string[] {
+  return key
+    .split(/[_\-.\s]+/)
+    .filter(Boolean)
+    .flatMap((segment) => segment.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[A-Z]+|./g) ?? []);
+}
+
 function isAkFieldName(key: string): boolean {
-  const tokens = key.split(/[_\-.\s]+|(?=[A-Z])/).filter(Boolean);
+  const tokens = keyTokens(key);
   for (let i = 0; i < tokens.length; i += 1) {
     if (CREDENTIAL_TOKENS.has(tokens[i].toLowerCase())) return true;
-    // 相邻两段拼起来也要认：驼峰切分把 `xApiKey` 拆成 `x` / `Api` / `Key`，凭据词
-    // `apikey` 横跨后两段；`AK` 更极端——切分成 `A` / `K`，只有拼起来才是 `ak`。
+    // 相邻两段拼起来也要认：`xApiKey` 切成 `x` / `ApiKey`，凭据词 `apikey` 只在拼起来时命中。
     if (i + 1 < tokens.length && CREDENTIAL_TOKENS.has(`${tokens[i]}${tokens[i + 1]}`.toLowerCase())) {
       return true;
     }

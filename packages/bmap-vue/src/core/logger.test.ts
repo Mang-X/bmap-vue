@@ -237,6 +237,11 @@ describe("logger 上下文清洗（#163）", () => {
       make: "左",
       brake: "手刹",
       design: "v2",
+      mapId: "map-a",
+      kind: "Marker",
+      itemKey: "k1",
+      layerKind: "vector",
+      BMAP_SERVICE_FAILED: "BMAP_SERVICE_FAILED",
       xApiKey: "should-be-dropped",
       AK: TEST_AK,
     });
@@ -244,9 +249,94 @@ describe("logger 上下文清洗（#163）", () => {
     expect(output?.make).toBe("左");
     expect(output?.brake).toBe("手刹");
     expect(output?.design).toBe("v2");
+    expect(output?.mapId).toBe("map-a");
+    expect(output?.kind).toBe("Marker");
+    expect(output?.itemKey).toBe("k1");
+    expect(output?.layerKind).toBe("vector");
+    expect(output?.BMAP_SERVICE_FAILED).toBe("BMAP_SERVICE_FAILED");
     // 驼峰 `xApiKey` 与大写 `AK` 仍被判为凭据
     expect(output?.xApiKey).toBe("[redacted]");
     expect(output?.AK).toBe("[redacted]");
+  });
+
+  it("全大写凭据字段不再被驼峰切分拆散（#163 复审 P1）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // `(?=[A-Z])` 前瞻会把 `API_KEY` 拆成 `A`/`P`/`I`/`K`/`E`/`Y` —— 常见凭据字段于是
+    // 全部匹配不上。值是**裸 AK**（不带 `ak=` 前缀），`logSafeText` 也不命中，直接原样进 console。
+    logger.warn("鉴权失败", {
+      API_KEY: TEST_AK,
+      TOKEN: TEST_AK,
+      PASSWORD: TEST_AK,
+      SECRET: TEST_AK,
+      CREDENTIALS: TEST_AK,
+      accessToken: TEST_AK,
+      clientSecret: TEST_AK,
+    });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    for (const key of [
+      "API_KEY",
+      "TOKEN",
+      "PASSWORD",
+      "SECRET",
+      "CREDENTIALS",
+      "accessToken",
+      "clientSecret",
+    ]) {
+      expect(output?.[key], `${key} 必须被判为凭据字段`).toBe("[redacted]");
+    }
+    expect(capturedText(warn.mock.calls[0] ?? []), "任何参数都不得带出裸 AK").not.toContain(TEST_AK);
+  });
+
+  it("Error 的 name / code 同样过清洗（#163 复审 P1）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // `name` 看着只是类名，但自定义 / SDK 的 Error 可能把凭据塞进去。同一个函数里
+    // `message` 清洗而 `name` 不清洗，是最容易被漏、也最容易被自查误认为「已清过」的不一致。
+    const hostile = new Error("boom");
+    hostile.name = `ak=${TEST_AK}`;
+    (hostile as { code?: unknown }).code = "https://user:pass@host";
+
+    logger.warn("释放失败", { error: hostile });
+
+    const text = capturedText(warn.mock.calls[0] ?? []);
+    expect(text, "name 里的 AK 不得原样输出").not.toContain(TEST_AK);
+    expect(text, "code 里的 userinfo 不得原样输出").not.toContain("user:pass@");
+    const output = warn.mock.calls[0]?.[1] as { error: Record<string, unknown> } | undefined;
+    expect(output?.error.name).toContain("ak=***");
+    expect(output?.error.code).toBe("https://***@host");
+  });
+
+  it("userinfo 整段打码：token 在 username 位与无冒号形状都盖住（#163 复审 P1）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // 只遮 `user:***@` 盖不住 `https://<token>:x@host`，而无冒号的 `https://<token>@host`
+    // 压根不匹配 —— 与 `core/loader/url.ts` 的 `maskUserinfo`（整段遮盖）同口径。
+    logger.warn("代理入口", {
+      a: `https://${TEST_AK}@host/path`,
+      b: `https://user:${TEST_AK}@host`,
+    });
+    const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(output?.a).toBe("https://***@host/path");
+    expect(output?.b).toBe("https://***@host");
+    expect(capturedText(warn.mock.calls[0] ?? [])).not.toContain(TEST_AK);
+    // 兜底：不含凭据的 URL 一律不动（否则就成了「见 URL 就打码」的假防护）
+    logger.warn("正常", { c: "https://api.map.baidu.com/api?v=4.0" });
+    const ok = warn.mock.calls[1]?.[1] as Record<string, unknown> | undefined;
+    expect(ok?.c).toBe("https://api.map.baidu.com/api?v=4.0");
+  });
+
+  it("symbol mapId 不在投影中丢失（#163 复审 P2）", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // `BMapErrorOptions.mapId` 是 `symbol | string`。只留 string 分支会让 symbol mapId
+    // 整个消失 —— 而它正是「哪张图」的定位信息。
+    const error = new BMapError("BMAP_SDK_LOAD_FAILED", "失败", { mapId: Symbol("map-a") });
+    logger.warn("释放失败", { error });
+    const output = warn.mock.calls[0]?.[1] as { error: Record<string, unknown> } | undefined;
+    expect(output?.error.mapId, "symbol mapId 要留下").toBe("Symbol(map-a)");
+
+    // string mapId 走清洗路径（含 AK 时被打码）
+    const withAk = new BMapError("BMAP_SDK_LOAD_FAILED", "失败", { mapId: `ak=${TEST_AK}` });
+    logger.warn("释放失败", { error: withAk });
+    const out2 = warn.mock.calls[1]?.[1] as { error: Record<string, unknown> } | undefined;
+    expect(String(out2?.error.mapId)).not.toContain(TEST_AK);
   });
 
   it("有限普通数据原样保留（清洗不等于丢字段）", () => {

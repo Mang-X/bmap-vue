@@ -14,9 +14,9 @@ Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全
 
 | 类别 | 处理 |
 | --- | --- |
-| 凭据类**键名**（`ak` / `auth` / `apiKey` / `token` / `secret` / `password` / `sign` / `credential`） | 整体输出 `[redacted]`，**键名保留**（「哪个字段被清掉」本身是定位信息） |
+| 凭据类**键名**（记号判定：`ak` / `auth` / `apiKey` / `token` / `secret` / `password` / `sign` / `credential(s)`） | 整体输出 `[redacted]`，**键名保留**（「哪个字段被清掉」本身是定位信息） |
 | **所有** context 字符串值（**无论键名**） | 无条件过 `logSafeText`：`ak=` 参数与 userinfo 一律打码。这条是**主防线**——`detail` / `note` / `serviceHost` 这类不带凭据字样的键，装的完全可能就是整条带 AK 的入口 URL |
-| `Error` / `BMapError` | 只取 `name` / `message` / `code` 与 `mapId` / `component` / `plugin` / `capability` / `engine` / `version`；文本过脱敏 + 截断 |
+| `Error` / `BMapError` | 只取 `name` / `message` / `code` 与 `mapId`（含 `symbol`）/ `component` / `plugin` / `capability` / `engine` / `version`；**每个字符串都过脱敏**（含 `name` 与 `code`） |
 | 数组 | 只留 `[N items]`，**不逐项**（不为日志深遍历） |
 | 其它未知对象 | 只留 `[object]`，**不展开**（不调用 `toJSON()`，不递归深拷贝） |
 | 有限普通值（`number` / `boolean` / `kind` / `code` / `component` / `error` / `field` …） | 原样保留；文本统一截断到 300 字符（`message` 与 context 共用同一上限） |
@@ -26,11 +26,19 @@ Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全
 「没有消费者…一律删除」。凭据防护交给上表第二行那道**与键名无关**的形状脱敏，它真的作用在
 **值**上：靠猜键名防凭据本就是错方向（既猜不全，又会误伤 `params` / `query` 这类正常诊断键）。
 
+**userinfo 遮盖「整段」而非只遮 password 位**：`https://<token>:x@host` 与 `https://<token>@host`
+都是常见形状，只遮 `user:***@` 盖不住前者、后者因缺冒号压根不匹配。口径与
+`core/loader/url.ts` 的 `maskUserinfo`（`$1***@`）**一致**，不另立一套。
+
+**凭据键名按「先分隔符、再驼峰边界」切分**，且驼峰边界吞掉连续大写：`API_KEY` / `TOKEN` /
+`PASSWORD` / `CREDENTIALS` 这类全大写字段必须整段保留（否则被逐字母拆散而匹配不上），
+同时 `xApiKey` 仍切成 `x` / `ApiKey`、`make` / `break` / `design` / `itemKey` 等普通词不被误伤。
+
 ## 刻意丢弃了什么
 
 - **`cause`**：默认装上游 / 业务原始对象（可能含用户数据、加载 options、整条轨迹）。
   调用方要带 cause 的信息，在**自己的边界**上投影成文本再传进来。
-- **带凭据形状的 `stack`**：文本里出现 `ak=<AK 量级的值>` 或 `https://user:pass@host` 时，
+- **带凭据形状的 `stack`**：文本里出现 `ak=<AK 量级的值>` 或 `https://<userinfo>@` 时，
   整个 `stack` 换成 `[omitted: 形状含凭据]`（截断仍可能留下半截 AK）。**不带**这两种
   形状的 stack 正常保留并脱敏——否则会把绝大多数释放失败的定位信息删光。
 - **不写通用深拷贝 / 递归脱敏器**：判据是 Ownership-first——`projectValue` 没有任何分支
