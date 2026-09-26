@@ -27,6 +27,7 @@ overlay/bezierCurve
 | strokeOpacity   | 描边的透明度，范围 `0-1`                    | ` number`                         | -                         | ` 1`       | -                                  |
 | strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `string`                          | `solid / dashed / dotted` | -          | -                                  |
 | enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                         | -                         | `true `    | -                                  |
+| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
 | visible         | 是否显示                                    | `boolean`                         | -                         | `true`     | <Badge type="tip" text="^2.2.0" /> |
 
 > `points` / `controlPoints` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；

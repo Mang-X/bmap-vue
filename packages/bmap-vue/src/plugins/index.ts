@@ -73,7 +73,7 @@ export type { GeometryDriver } from "../driver/types/geometry";
 export type { LayerDriver } from "../driver/types/layers";
 export type { MapDriver } from "../driver/types/map";
 export type { OverlayDriver } from "../driver/types/overlays";
-export type { PanoramaDriver } from "../driver/types/panorama";
+export type { PanoramaDriver, PanoramaLink } from "../driver/types/panorama";
 export type { ServiceDriver } from "../driver/types/services";
 export type { UnsupportedBehavior } from "../driver/capability";
 export type { LoadedJsapiV4 } from "../core/loader/providers/types";
@@ -105,6 +105,13 @@ export type {
   OverlayPropertyPolicy,
   OverlayTarget,
   PathOptions,
+  // issue #165 Class 3 的命令面类型：`OverlayDriver` 的方法签名逐个引用它们
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  PathReadBackApi,
+  MenuItemView,
 } from "../driver/types/overlays";
 export type {
   LayerCreateOptions,

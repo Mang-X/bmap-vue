@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 410 |
+| 本库根入口导出 | 419 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 295 |
+| 仅本库有 | 304 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -620,8 +620,11 @@ component 45 · hook 14 · type 56
 | `CapabilityFamily` | other | — |
 | `CapabilityReason` | other | — |
 | `CapabilityRegistry` | other | — |
+| `CircleReadBackApi` | other | — |
 | `ClusterChange` | other | — |
 | `ClusterPick` | other | — |
+| `ContextMenuCommandApi` | other | — |
+| `ContextMenuExpose` | other | — |
 | `ContextMenuItem` | other | — |
 | `ContextMenuSeparator` | other | — |
 | `ControlDriver` | other | — |
@@ -659,6 +662,7 @@ component 45 · hook 14 · type 56
 | `geoUtilsPlugin` | other | — |
 | `GroundOverlayType` | other | — |
 | `GroundOverlayUrl` | other | — |
+| `InfoWindowReadBackApi` | other | — |
 | `IntercityPolicy` | other | — |
 | `JsapiV4Driver` | other | — |
 | `LabelStyle` | other | — |
@@ -709,6 +713,8 @@ component 45 · hook 14 · type 56
 | `MarkerIcon` | other | — |
 | `MarkerIconInput` | other | — |
 | `MarkerIconName` | other | — |
+| `MarkerReadBackApi` | other | — |
+| `MenuItemView` | other | — |
 | `mvtFeatureStateKey` | other | — |
 | `MVTLayerEntity` | other | — |
 | `MVTLayerStyle` | other | — |
@@ -722,6 +728,7 @@ component 45 · hook 14 · type 56
 | `normalizeEventKey` | other | — |
 | `OVERLAY_EVENT_MATRIX` | other | — |
 | `OVERLAY_KINDS_WITHOUT_EVENT_MATRIX` | other | — |
+| `OverlayCommandTypes` | other | — |
 | `OverlayDriver` | other | — |
 | `OverlayEventDefinition` | other | — |
 | `OverlayEventMatrixEntry` | other | — |
@@ -741,9 +748,11 @@ component 45 · hook 14 · type 56
 | `OverlayTarget` | other | — |
 | `PanoramaDataInfo` | other | — |
 | `PanoramaDriver` | other | — |
+| `PanoramaLink` | other | — |
 | `PanoramaPoiType` | other | — |
 | `PanoramaSceneType` | other | — |
 | `PanoramaViewerDriver` | other | — |
+| `PathReadBackApi` | other | — |
 | `PluginCatalogEntry` | other | — |
 | `PointInput` | other | — |
 | `PointLike` | other | — |

@@ -109,7 +109,8 @@ export type { GeolocationAddressInfo, GeolocationOptions } from "../driver/types
 export { DrivingPolicy, IntercityPolicy, TransitPolicy, TransitVehiclePolicy } from "../driver/types/services";
 
 // —— 全景
-export type { PanoramaDataInfo, PanoramaDriver } from "../driver/types/panorama";
+// `PanoramaLink` 是 `linksChange` 的载荷 / `getLinks()` 的返回类型（issue #165 Class 3 / TASK 5）
+export type { PanoramaDataInfo, PanoramaDriver, PanoramaLink } from "../driver/types/panorama";
 
 // —— 坐标与句柄
 export type { Bounds, GeometryDriver, Pixel, Point, Size } from "../driver/types/geometry";
@@ -132,7 +133,27 @@ export type { DriverEvent, EventDriver, MapLoadEvent, MapMouseEvent, MapResizeEv
 export type { LayerDriver, LayerKind, LayerOperation, LayerData, LayerSurface, LayerCreateOptions, LayerCtorSlot } from "../driver/types/layers";
 export type { NativeLayerFeatureKeys, NativeLayerFeatureState, NativeLayerFeatureStateMap } from "../driver/types/native-layers";
 export type { MapDriver, MapInteraction, MapStyleInput, MapType, MapView, InitialMapOptions } from "../driver/types/map";
-export type { OverlayDriver, OverlayTarget, OverlayPropertyPolicy, MarkerIconInput, MarkerOptions, PathOptions, InfoWindowOptions, CustomOverlayOptions, LabelOptions } from "../driver/types/overlays";
+// `CircleReadBackApi` / `MarkerReadBackApi` / `InfoWindowReadBackApi` / `PathReadBackApi` /
+// `ContextMenuCommandApi` / `MenuItemView` 是 issue #165 Class 3 的命令面类型：
+// `OverlayDriver` 的方法签名**逐个**引用它们，不导出会被 `ae-forgotten-export` 点名
+// （它们是消费方标注 handler 参数时需要的类型，不是内部实现细节）。
+export type {
+  OverlayDriver,
+  OverlayTarget,
+  OverlayPropertyPolicy,
+  MarkerIconInput,
+  MarkerOptions,
+  PathOptions,
+  InfoWindowOptions,
+  CustomOverlayOptions,
+  LabelOptions,
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  MenuItemView,
+  PathReadBackApi,
+} from "../driver/types/overlays";
 export type { ServiceDriver } from "../driver/types/services";
 export type { ViewAnimationCancelOutcome } from "../driver/types/map";
 

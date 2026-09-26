@@ -67,7 +67,7 @@ const emit = defineEmits<ContextMenuEmits>();
 const emitDynamic = dynamicEmit(emit);
 const ctx = useRequiredMapContext();
 
-const { itemsHost } = useContextMenu(props, {
+const { itemsHost, commands } = useContextMenu(props, {
   emit: emitDynamic,
   /** 失败统一走组件既有的 `resource:error` 诊断通道（与其它覆盖物一致）。 */
   reportError: (error: BMapError) => {
@@ -80,6 +80,24 @@ const { itemsHost } = useContextMenu(props, {
 });
 
 defineOptions({ name: "ContextMenu" });
+
+/**
+ * 逐条命令面（#165 Class 3 / TASK 2d/2e）。
+ *
+ * - `getItem(index)` / `removeItem(index)` / `removeSeparator(index)` / `getDom()` /
+ *   `show()` / `hide()`：官方 `context-menu/ContextMenu.d.ts` 的六个成员；
+ * - `setItemText` / `setItemEnabled`：官方 `MenuItem#setText` / `#enable` / `#disable`，
+ *   经菜单 + 序号下发（官方 `ContextMenu` **没有**「拿到第 i 条再改」的入口，而它的
+ *   `getItem` 返回 raw 对象，组件面不得持有）。
+ *
+ * **刻意不交出 raw `MenuItem`**：AGENTS.md 的 raw SDK 白名单不含组件与 `core`，
+ * 且官方 `MenuItem` 上**没有任何 getter**（只有 `setText` / `enable` / `disable`）——
+ * 交出去对调用方是全盲的。出入参一律按**序号** + 本库条目模型。
+ *
+ * 释放 / 未就绪时**显式抛 `BMAP_RESOURCE_DISPOSED`**（逐条依据见
+ * `core/composables/useContextMenu.ts` 的 `requireMenu`）。
+ */
+defineExpose(commands);
 </script>
 
 <template>

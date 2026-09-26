@@ -314,6 +314,9 @@ export type {
   PanoramaDataInfo,
   PanoramaLabelHandle,
   PanoramaLabelOptions,
+  // `PanoramaLink` 是 `linksChange` 的载荷类型 + `getLinks()` 的返回类型
+  // （issue #165 Class 3 / TASK 5）⇒ 必须从根入口可取，否则消费方拿不到自己的 handler 参数类型。
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,
@@ -334,6 +337,13 @@ export type {
   MenuItemProps,
   CustomOverlayProps,
 } from "./types/components";
+
+// 覆盖物 / 控件的**命令面**类型（issue #165 Class 3 / TASK 2）。
+//
+// 这些是 `defineExpose` 推导出的实例类型的成员，父组件写 `ref` 时要用它们标注
+// （`InstanceType<typeof Marker>` 也能拿，但手写 handler 参数时前者更直接）。
+export type { OverlayCommandTypes } from "./core/overlays/overlayCommands";
+export type { ContextMenuExpose } from "./core/overlays/ContextMenuSpec";
 // MVTLayer 公开类型（#109：事件按官方 `MVTLayerEventMap` 分层 + feature-state 键域收窄）
 export type {
   MVTLayerProps,

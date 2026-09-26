@@ -21,6 +21,8 @@
 import type { OverlaySpec, OverlayFieldMap } from "../../core/overlays/OverlaySpec";
 import type { OverlayPositionModel } from "../../core/composables/useOverlaySpec";
 import type { MarkerHandle } from "../../driver/types/handles";
+import { createMarkerCommands } from "../../core/overlays/overlayCommands";
+import type { OverlayCommandContext } from "../../core/overlays/overlayCommands";
 import type { MarkerProps } from "../../types/components";
 
 /**
@@ -107,6 +109,32 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
         zIndex: p.zIndex,
         icon: p.icon,
       }),
+
+    /**
+     * 命令面（#165 Class 3 / TASK 2a）。
+     *
+     * 逐条依据（`@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/Marker.d.ts`）：
+     *
+     * | 暴露 | 官方声明 | 为什么不能走 prop |
+     * | --- | --- | --- |
+     * | `getRank()` | `getRank(): number` | **读回**：组件永远不会替调用方读 |
+     * | `setRank(n)` | `setRank(rank: number): void` | 无对应 prop（它是「避让权重」，不是几何 / 样式） |
+     * | `setRotationOrigin(a)` | `setRotationOrigin(angle: number): void` | 同上；`rotation` 是**图形本身**的转角，原点是**锚点** |
+     * | `getTitle()` | `getTitle(): string` | 读回（`title` prop 是写入口） |
+     * | `getOffset()` | `getOffset(): Size` | 读回；**返回领域 Pixel**（`{x, y}`），不是 raw `BMap.Size` |
+     * | `getRotation()` | `getRotation(): number` | 读回（`rotation` prop 是写入口） |
+     * | `getPosition()` | `getPosition(): Point` | 读回（`position` prop 是**受控**入口，用户拖动后的真值只能这样取） |
+     * | `closePlaceDetail()` | `closePlaceDetail(): void` | 动作，无参数、无对应 prop |
+     *
+     * **刻意不暴露**的两条（逐条依据见 `driver/types/overlays.ts` 的 `MarkerReadBackApi`）：
+     * - `openPlaceDetail(placeDetail)`：入参是 raw `BMap.PlaceDetail`，本库**没有**这个
+     *   Driver 资源（它只在 `./ui-kit` 子入口，而那一族不能进根模块图）；
+     * - `setLabel(label)` / `getLabel()`：入参 / 返回值都是 raw `BMap.Label`。本库的 `<Label>`
+     *   是**独立组件**（自带 own scope / Registry 记账），把一个 `BMap.Label` 实例从外部塞进来
+     *   会绕开那套归属——要么交出 raw 对象（违反边界），要么造第二个「可以脱离组件存在的
+     *   Label」（无归属、无释放路径）。因此给 `any` 形参被明确拒绝。
+     */
+    expose: (exposeCtx) => createMarkerCommands(exposeCtx),
     events: [
       {
         sdk: "dragend",

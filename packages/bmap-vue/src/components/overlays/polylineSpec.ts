@@ -26,10 +26,15 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { PolylineHandle } from "../../driver/types/handles";
+import {
+  createPathCommands,
+  createPathReadBacks,
+} from "../../core/overlays/overlayCommands";
 import type { PolylineProps } from "../../types/components";
 import {
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
+  PATH_ZINDEX_FIELD,
   VISIBILITY_DESCRIPTOR_KEY,
   VISIBILITY_FIELD,
 } from "./overlayFields";
@@ -39,6 +44,7 @@ export const POLYLINE_FIELDS: OverlayFieldMap<PolylineProps> = {
   pathVersion: "version",
   ...PATH_STROKE_FIELDS,
   ...PATH_TOGGLE_FIELDS,
+  ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -68,8 +74,26 @@ export function createPolylineSpec(): OverlaySpec<PolylineProps, PolylineHandle>
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,
         strokeStyle: p.strokeStyle,
+        zIndex: p.zIndex,
         enableMassClear: p.enableMassClear,
         enableEditing: p.enableEditing,
       }),
+    /**
+     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
+     *
+     * 写这一侧（`setPath` / 描边填充 setter / `setZIndex`）已由 `path` / 样式 / `zIndex`
+     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
+     *
+     * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。
+     *
+     * 另外给 `setPositionAt`（官方 `Polyline.d.ts`：`setPositionAt(index: number, point: Point): void`）
+     * ——它**没有**对应 prop：`path` 只能整体替换，而「只动第 i 个顶点」是官方独有的粒度。
+     * 注意它**不**写回 `props.path`（详见 `core/overlays/overlayCommands.ts` 的 `PathCommandApi`）。
+     */
+    expose: (exposeCtx) => ({
+      ...createPathReadBacks(exposeCtx, { fill: false }),
+      ...createPathCommands(exposeCtx),
+    }),
   };
 }

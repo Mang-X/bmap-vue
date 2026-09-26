@@ -132,11 +132,17 @@ export type {
   OverlayTarget,
   OverlayDriver,
   OverlayPropertyPolicy,
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  MenuItemView,
+  PathReadBackApi,
 } from "./driver/types/overlays";
 export type { ControlKind, ControlOptions, CopyrightEntry, ControlDriver } from "./driver/types/controls";
 export type { LayerKind, LayerDriver } from "./driver/types/layers";
 export type { AutocompleteOptions, ServiceDriver } from "./driver/types/services";
-export type { PanoramaDriver } from "./driver/types/panorama";
+export type { PanoramaDriver, PanoramaLink } from "./driver/types/panorama";
 export type { MapMouseEvent, DriverEvent, EventDriver } from "./driver/types/events";
 export { normalizeMapMouseEvent, toPoint, isPointLike, toPlainPoint, toPlainPoints } from "./driver/normalize";
 

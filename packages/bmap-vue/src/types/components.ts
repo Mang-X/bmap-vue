@@ -359,8 +359,34 @@ export interface PathFillProps {
   fillOpacity?: number;
 }
 
-/** 图形类覆盖物共有的开关与显隐（**不含** `enableEditing`：Prism / BezierCurve 上游没有编辑能力）。 */
+/**
+ * 图形类覆盖物共有的层叠顺序、开关与显隐（**不含** `enableEditing`：Prism / BezierCurve
+ * 上游没有编辑能力）。
+ *
+ * ## `zIndex` 为什么在这一层（issue #165 Class 3 / TASK 0）
+ *
+ * Driver 的 `PATH_STYLE` 早就把 `zIndex` 登记成 `mutateBy("setZIndex")`（官方 4.0.4 在
+ * `Polyline` / `Polygon` / `Rectangle` / `Circle` / `BezierCurve` / `Prism` 六个类上都有
+ * `setZIndex(zIndex: number): void` 声明），而**组件面没有出口**——分类层准备好了、字段没暴露，
+ * 整族覆盖物的层级更新一次都没被走到过。
+ *
+ * 放在这一层而不是 `PathStrokeProps` / `PathFillProps`：层级**不是描边也不是填充**，它与
+ * `enableMassClear` / `visible` 同属「覆盖物自身的一档属性」，而这六个图形类恰好全部
+ * extends `PathShapeProps`（`PrismProps` / `GroundOverlayProps` 各自内联同名键，见下）。
+ *
+ * ⚠️ **没有**放进这一层的是 `CustomOverlay`：官方 `CustomOverlay.d.ts` 里**没有** `setZIndex`
+ * （只有 `setPoint` / `setRotation` / `setRotationOrigin` / `setProperties` + 三个 getter），
+ * 因此它的 `zIndex` 是**构造期**属性（描述符 `recreate`），`CustomOverlayProps` 单独声明并注明。
+ * 「分类表里有这个键」与「实例上有这个 setter」是两件事——后者才是 `mutable` 的依据。
+ */
 export interface PathShapeProps {
+  /**
+   * 层叠顺序。**就地更新**（官方 `setZIndex`）。
+   *
+   * 撤回（`42 → undefined`）会**重建**实例：8 个官方覆盖物类上有 `setZIndex`、
+   * **0 个**有 `getZIndex`（只有 `layer/*` 有），因此没有 baseline 可恢复。
+   */
+  zIndex?: number;
   enableMassClear?: boolean;
   visible?: boolean;
 }
@@ -461,6 +487,13 @@ export interface PrismProps {
   topFillOpacity?: number;
   sideFillColor?: string;
   sideFillOpacity?: number;
+  /**
+   * 层叠顺序。**就地更新**（官方 `Prism#setZIndex(zIndex: number): void`）。
+   *
+   * 与图形族的 `PathShapeProps.zIndex` 是同一条路径；`PrismProps` 不 extends 那一组
+   * （它有独立的立体面样式），因此内联同一个键。撤回即重建（官方没有 `getZIndex`）。
+   */
+  zIndex?: number;
   isBoundary?: boolean;
   autoCenter?: boolean;
   enableMassClear?: boolean;
@@ -493,6 +526,13 @@ export interface GroundOverlayProps {
   type: GroundOverlayType;
   url: GroundOverlayUrl;
   opacity?: number;
+  /**
+   * 层叠顺序。**就地更新**（官方 `GroundOverlay#setZIndex(zIndex: number): void`）。
+   *
+   * 与图形族的 `PathShapeProps.zIndex` 是同一条路径；`GroundOverlayProps` 不 extends 那一组，
+   * 因此内联同一个键。撤回即重建（官方没有 `getZIndex`）。
+   */
+  zIndex?: number;
   /** 创建后按显示区域居中地图（组件侧行为，不是 SDK 选项）。 */
   autoCenter?: boolean;
   visible?: boolean;

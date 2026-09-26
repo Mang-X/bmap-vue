@@ -128,7 +128,48 @@ watch(
 
 defineOptions({ name: "PanoramaLabel" });
 
-defineExpose({ label });
+/**
+ * 命令面（#165 Class 3 / TASK 2h）：官方 `panorama/PanoramaLabel.d.ts` 的 `show(): void` /
+ * `hide(): void`。
+ *
+ * **此前没有任何调用路径**：一个全景标注只能靠卸载组件消失，而卸载会连实例一起摘掉
+ * （`Panorama#removeOverlay`）——「临时藏起一个标签」这条最常见的诉求无处落地。
+ *
+ * ## 三条口径
+ *
+ * 1. **与「组件卸载」是两种语义**：命令只改 SDK 当前态，标注仍在查看器里、仍占一个实例；
+ *    卸载则走 `removeLabel` 摘除。刻意**不**把它们合成一个 `setVisible`。
+ * 2. **不镜像成组件状态、不做命令 ⇄ props 同步**：`visible` 不是 `PanoramaLabelProps` 的
+ *    字段（官方 `PanoramaLabelOptions` 也没有），加上它就是自研一个官方没有的 prop。
+ *    命令改完，下一次 `displayDistance` 触发重建时按 props 重新建（因而恢复可见）——
+ *    这与「props 是主模型」一致。
+ * 3. **没有 `isVisible()` 可暴露**：官方 `PanoramaLabel` **没有**这个成员
+ *    （声明里只有 `setPosition` / `getPosition` / `getPov` / `setContent` / `getContent` /
+ *    `show` / `hide` / `setAltitude` / `getAltitude`）。造一个恒 `false` 的「读回」等于
+ *    给调用方一个编出来的答案——AGENTS.md 明确禁止「镜像读不回的 SDK 内部状态」。
+ *
+ * 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**（与覆盖物命令面同一条口径）。
+ */
+defineExpose({
+  label,
+  show(): void {
+    const current = label.value;
+    if (!current || !driver) throw panoramaLabelDisposed("show");
+    driver.showLabel(current);
+  },
+  hide(): void {
+    const current = label.value;
+    if (!current || !driver) throw panoramaLabelDisposed("hide");
+    driver.hideLabel(current);
+  },
+});
+
+function panoramaLabelDisposed(command: string): Error {
+  return new Error(
+    `<PanoramaLabel>.${command}(): 标注未就绪、正在重建或已经释放，本次调用被拒绝` +
+      "（不静默 no-op）。请在挂载完成后调用。",
+  );
+}
 </script>
 
 <template>

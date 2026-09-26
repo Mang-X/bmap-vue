@@ -9,6 +9,7 @@ import { resolveInternalMapContext } from "../../composables/resolveMapContext";
 import type { Point } from "../../driver/types/geometry";
 import type {
   PanoramaHandle,
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,
@@ -65,7 +66,20 @@ const emit = defineEmits<{
   zoomChange: [zoom: number | null];
   idChange: [id: string | null];
   sceneTypeChange: [sceneType: PanoramaSceneType | null];
-  linksChange: [];
+  /**
+   * 相邻链接变化（官方 `links_changed`）。
+   *
+   * **载荷是 `PanoramaLink[]`**——官方 `links_changed` 不带值，载荷由组件回读
+   * `getLinks()` 补齐（与 `positionChange` / `povChange` 同一手法）。
+   *
+   * 此前这一条是**空载荷**：Driver 的注释说「`links` 没有消费者所以不透出」，
+   * 但消费者（这个事件本身）**早就存在**，缺的只是数据路径——issue #165 Class 3 /
+   * TASK 5 补上。官方 React 参考实现同样暴露 `getLinks()`。
+   *
+   * 逐条投影依据见 `driver/types/panorama.ts` 的 `PanoramaLink`：八个成员全是可选的，
+   * **不补默认值**（`heading ?? 0` 会把「没给方位」与「正北」混成同一个数）。
+   */
+  linksChange: [links: PanoramaLink[]];
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -151,7 +165,8 @@ function subscribe(target: ActiveViewer): void {
   scope.add(driver.on(viewer, "zoom_changed", () => emit("zoomChange", driver.getZoom(viewer))));
   scope.add(driver.on(viewer, "id_changed", () => emit("idChange", driver.getId(viewer))));
   scope.add(driver.on(viewer, "scene_type_changed", () => emit("sceneTypeChange", driver.getSceneType(viewer))));
-  scope.add(driver.on(viewer, "links_changed", () => emit("linksChange")));
+  // `links_changed` 不带值 ⇒ 回读 `getLinks()` 补载荷（与上面五个 `*_changed` 同一手法）
+  scope.add(driver.on(viewer, "links_changed", () => emit("linksChange", driver.getLinks(viewer))));
   scope.add(driver.on(viewer, "dataload", (event: unknown) => emit("load", event)));
   scope.add(driver.on(viewer, "pano_error", (event: unknown) => emit("error", event)));
 }
@@ -255,6 +270,24 @@ defineOptions({ name: "Panorama" });
 defineExpose({
   /** 查看器就绪（含 Client）；供业务做命令式操作或判定加载结果 */
   whenReady: (signal?: AbortSignal) => context.whenReady(signal),
+  /**
+   * 当前场景的相邻链接（官方 `Panorama#getLinks(): PanoramaLink[]`）。
+   *
+   * 官方 React 参考实现同样暴露它；此前本库**没有**这条读取路径。
+   * 未就绪时给**空数组**（理由见 `driver/types/panorama.ts` 的 `getLinks`），
+   * 不抛错、不给 `undefined`——`linksChange` 的初始载荷也因此是 `[]` 而不是「未定义」。
+   */
+  getLinks: (): PanoramaLink[] => {
+    const current = active;
+    if (!current) return [];
+    try {
+      return current.driver.getLinks(current.viewer);
+    } catch {
+      // 官方 `getLinks` 的成员缺失 / 形状不符已被 Driver 归一成空数组；
+      // 这里的 catch 只覆盖「查看器已在 dispose 与本调用之间被换掉」那一瞬的 SDK 抛错。
+      return [];
+    }
+  },
   /** 当前查看器句柄（未就绪为 `null`） */
   viewer: context.viewer,
   /** 实例状态（`idle` / `waiting-client` / `creating` / `ready` / `error` / `disposing` / `disposed`） */

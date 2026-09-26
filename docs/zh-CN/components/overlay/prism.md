@@ -31,6 +31,7 @@ overlay/prism
 | sideFillColor   | 侧面填充颜色                                | `string`                        | -      |            | -                                  |
 | sideFillOpacity | 侧面填充颜色透明度                          | `number`                        | `0-1`  | `#fff`     | -                                  |
 | enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                       | -      | ` true`    | -                                  |
+| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
 | visible         | 是否显示                                    | `boolean`                       | -      | `true`     | <Badge type="tip" text="^2.2.0" /> |
 
 ## 组件事件

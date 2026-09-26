@@ -19,12 +19,14 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
+import { createPathReadBacks } from "../../core/overlays/overlayCommands";
 import type { RectangleProps } from "../../types/components";
 import {
   PATH_CLICKING_FIELD,
   PATH_FILL_FIELDS,
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
+  PATH_ZINDEX_FIELD,
   VISIBILITY_DESCRIPTOR_KEY,
   VISIBILITY_FIELD,
 } from "./overlayFields";
@@ -34,6 +36,7 @@ export const RECTANGLE_FIELDS: OverlayFieldMap<RectangleProps> = {
   ...PATH_STROKE_FIELDS,
   ...PATH_FILL_FIELDS,
   ...PATH_TOGGLE_FIELDS,
+  ...PATH_ZINDEX_FIELD,
   ...PATH_CLICKING_FIELD,
   ...VISIBILITY_FIELD,
 };
@@ -55,11 +58,27 @@ export function createRectangleSpec(): OverlaySpec<RectangleProps, OverlayHandle
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,
         strokeStyle: p.strokeStyle,
+        zIndex: p.zIndex,
         fillColor: p.fillColor,
         fillOpacity: p.fillOpacity,
         enableMassClear: p.enableMassClear,
         enableEditing: p.enableEditing,
         enableClicking: p.enableClicking,
       }),
+    /**
+     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
+     *
+     * 写这一侧（`setBounds` / 描边填充 setter / `setZIndex`）已由 `bounds` / 样式 / `zIndex`
+     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
+     *
+     * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。
+     *
+     *
+     * **刻意不给** `setPositionAt`：官方 `Rectangle.d.ts` 没有这个方法（矩形的几何是
+     * `setBounds(bounds)`，而 `bounds` 已是受控 prop）。给它一个「四个顶点逐个改」的
+     * 等价物会是**自研**语义——`getBounds()` 的四个角点顺序官方没有承诺。
+     */
+    expose: (exposeCtx) => createPathReadBacks(exposeCtx, { fill: true }),
   };
 }

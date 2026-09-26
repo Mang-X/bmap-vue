@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 410,
+  "oursPublicCount": 419,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 295,
+  "oursOnlyCount": 304,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2598,12 +2598,27 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "CircleReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "ClusterChange",
       "surface": "other",
       "oursEntry": "."
     },
     {
       "name": "ClusterPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ContextMenuCommandApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ContextMenuExpose",
       "surface": "other",
       "oursEntry": "."
     },
@@ -2791,6 +2806,11 @@
       "name": "GroundOverlayUrl",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "InfoWindowReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "IntercityPolicy",
@@ -3043,6 +3063,16 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "MarkerReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MenuItemView",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "mvtFeatureStateKey",
       "surface": "other",
       "oursEntry": "."
@@ -3104,6 +3134,11 @@
     },
     {
       "name": "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayCommandTypes",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3203,6 +3238,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "PanoramaLink",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PanoramaPoiType",
       "surface": "other",
       "oursEntry": "."
@@ -3216,6 +3256,11 @@
       "name": "PanoramaViewerDriver",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "PathReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "PluginCatalogEntry",

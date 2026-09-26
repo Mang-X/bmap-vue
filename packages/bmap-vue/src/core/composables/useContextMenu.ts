@@ -54,8 +54,10 @@ import {
   contextMenuEntriesFingerprint,
   contextMenuEntryFromData,
   type ContextMenuEntry,
+  type ContextMenuExpose,
 } from "../overlays/ContextMenuSpec";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
+import type { ContextMenuCommandApi } from "../../driver/types/overlays";
 import type { OverlayTarget } from "../../driver/types/overlays";
 import type { ContextMenuProps, ContextMenuSelectPayload } from "../../types/components";
 import type { Pixel, Point } from "../../driver/types/geometry";
@@ -66,6 +68,11 @@ export interface UseContextMenuOptions {
   /** 失败统一走组件既有的 `resource:error` 诊断通道。 */
   readonly reportError: (error: BMapError) => void;
 }
+
+export type { ContextMenuExpose };
+
+/** 组件名（诊断用）。本层固定是 `<ContextMenu>`。 */
+const CONTEXT_MENU_COMPONENT = "ContextMenu";
 
 export interface UseContextMenuResult {
   /**
@@ -78,6 +85,11 @@ export interface UseContextMenuResult {
    * 经 `resource:error` 与 props 观察——**没有消费者的返回值不加**。
    */
   readonly itemsHost: Readonly<ShallowRef<HTMLElement | null>>;
+  /**
+   * 逐条命令面（#165 Class 3 / TASK 2d）：官方 `ContextMenu` 的六个成员 + 两条补齐的
+   * 「逐条改」入口。释放 / 未就绪时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
+   */
+  readonly commands: ContextMenuExpose;
 }
 
 /** 已经挂上去的那一份（身份记账：`null` = 当前没挂）。 */
@@ -428,8 +440,9 @@ export function useContextMenu(
     }
   }
 
-  // 返回值刻意**不接**：本层只用它的生命周期与释放路径，观察面由组件经 props / `resource:error` 走
-  useSdkResource<Record<string, unknown>, OverlayHandle, MapReadyContext>({
+  // 观察面（`resource` / `status`）刻意**不接**：由组件经 props / `resource:error` 走。
+  // 这里只取 `resource`——命令面需要「当前存活实例」的读取器（#165 Class 3 / TASK 2d）。
+  const { resource: sdkResource } = useSdkResource<Record<string, unknown>, OverlayHandle, MapReadyContext>({
     props: rawProps,
     label: "overlay:context-menu",
     resolveContext: async (signal) => {
@@ -538,11 +551,121 @@ export function useContextMenu(
     },
   });
 
+  /** 组件级终态：scope 释放后一切输入丢弃（命令面因此**显式失败**而不是静默 no-op）。 */
+  let disposed = false;
+
   onScopeDispose(() => {
+    disposed = true;
     attached = null;
     itemsHost.value = null;
     readyCtx = null;
   });
 
-  return { itemsHost: itemsHost as Readonly<ShallowRef<HTMLElement | null>> };
+  /* ------------------------------------------------------------------ 命令面（#165） */
+
+  /**
+   * 菜单的逐条命令面（#165 Class 3 / TASK 2d）。
+   *
+   * 官方 `context-menu/ContextMenu.d.ts` 声明了六个成员，而组件侧此前只做「整菜单重建」，
+   * 因此它们**没有调用路径**。本层给出其中四个（`getItem` / `removeItem` /
+   * `removeSeparator` / `getDom`）+ `setItemText` / `setItemEnabled`（走菜单 → 第 i 条项）。
+   *
+   * ## 两处刻意偏离官方，理由逐条写在这里
+   *
+   * 1. **`getItem(index)` 返回本库条目模型、不返回 raw `MenuItem`**，
+   *    `removeItem(index)` 收**序号**而不是 raw 实例：
+   *    `AGENTS.md` 的 raw SDK 白名单只有 `driver/**` / `client/**` / `core/loader/**` /
+   *    `plugins/**`，组件与 `core` 都在禁区；而且官方 `MenuItem` 上**没有任何 getter**
+   *    （只有 `setText` / `enable` / `disable`），交出去对调用方是全盲的。
+   * 2. **`show()` / `hide()` 是官方语义的弹层开关，刻意与 `visible` 分开**：
+   *    官方 `ContextMenu#show()` 是「在上一次右键的位置把弹层显示出来」，
+   *    没有右键过就会弹在 (0,0)（真实 v4 实测：不抛错、直接派发 `open`）。
+   *    那是**另一种语义**、也不是组件 `visible` 的意思（后者是「菜单是否挂到目标上」），
+   *    因此这里给的是单独的方法名，不挂成 `setVisible`。
+   *
+   * ## 与重建路径的关系（`#33` 那条「整菜单重建」不撤）
+   *
+   * 重建仍然保留：**`items` 变更是数据结构级的**（增删改一条 = 换整张表），
+   * 官方也没有「按 id 找一条再改」这种粒度的可靠入口。命令面是**重建之外**的一条
+   * 「立刻改 SDK 当前态」的路，它**不**回写 props——因此下一次条目重建仍按 props 重来
+   * （要持久生效就改 props；命令面刻意不做「命令回写 props」的状态同步）。
+   */
+  const commands: ContextMenuExpose = {
+    getItem(index) {
+      return requireMenu("getItem").getItem(index);
+    },
+    removeItem(index) {
+      const ok = requireMenu("removeItem").removeItem(index);
+      // 删完之后本库侧条目表变了：`latestEntries` 必须跟着变，否则下一次
+      // `syncEntries()` 会把「已经删掉的那条」重新加回去（指纹也会回到删除前的样子）。
+      if (ok) syncEntries();
+      return ok;
+    },
+    removeSeparator(index) {
+      const ok = requireMenu("removeSeparator").removeSeparator(index);
+      if (ok) syncEntries();
+      return ok;
+    },
+    getDom() {
+      return requireMenu("getDom").getDom();
+    },
+    show() {
+      requireMenu("show").show();
+    },
+    hide() {
+      requireMenu("hide").hide();
+    },
+    setItemText(index, text) {
+      const menu = requireMenu("setItemText");
+      const item = menu.getItem(index);
+      if (!item) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `<${CONTEXT_MENU_COMPONENT}>.setItemText(${index}): 该序号没有菜单项（或越界）`,
+          { component: CONTEXT_MENU_COMPONENT },
+        );
+      }
+      menu.setItemText(index, text);
+      // 同步本库条目（回调不进指纹，但文字进——见 `contextMenuEntriesFingerprint`）
+      const entries = resolveEntries();
+      if (index < entries.length && entries[index]) {
+        latestEntries = entries.map((entry, at) =>
+          at === index ? { ...entry, text } : entry,
+        );
+      }
+    },
+    setItemEnabled(index, enabled) {
+      const menu = requireMenu("setItemEnabled");
+      if (!menu.getItem(index)) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `<${CONTEXT_MENU_COMPONENT}>.setItemEnabled(${index}): 该序号没有菜单项（或越界）`,
+          { component: CONTEXT_MENU_COMPONENT },
+        );
+      }
+      menu.setItemEnabled(index, enabled);
+      // ⚠️ **刻意不同步 `latestEntries` 的 `disabled`**：`disabled` **进**指纹
+      // （`ContextMenuSpec` 的注释说明了原因——官方 `disable()` 之后没有读回，
+      // 重建是「保证最终状态正确」的唯一路径）。因此命令解禁之后，只要调用方**没改**
+      // `props`，下一次重建就会按 props 把它重新禁用。这是刻意的：`props` 是主模型，
+      // 命令只改 SDK 当前态；要持久解禁请把 `disabled` prop 改成 `false`。
+    },
+  };
+
+  /** 取当前菜单的命令面；**取不到即显式失败**（与 `overlayCommands.require` 同一条口径）。 */
+  function requireMenu(command: string): ContextMenuCommandApi {
+    const context = readyCtx;
+    const resource = sdkResource.value;
+    if (disposed || !context || !resource) {
+      throw new BMapError(
+        "BMAP_RESOURCE_DISPOSED",
+        `<${CONTEXT_MENU_COMPONENT}>.${command}(): 菜单未就绪、正在重建或已经释放，本次调用被拒绝` +
+          "（不静默 no-op——读回会拿到 null、删除会静默失败）",
+        { component: CONTEXT_MENU_COMPONENT },
+      );
+    }
+    return context.client.driver.overlays.contextMenuCommands(resource);
+  }
+
+  return { itemsHost: itemsHost as Readonly<ShallowRef<HTMLElement | null>>, commands };
 }

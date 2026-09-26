@@ -27,6 +27,7 @@ import type {
   PanoramaHandle,
   PanoramaLabelHandle,
   PanoramaLabelOptions,
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,
@@ -37,6 +38,7 @@ import type {
 } from "../types/panorama";
 import {
   assertJsapiV4Namespace,
+  callOptional,
   callRequired,
   namespaceCtor,
   readNamespaceMember,
@@ -62,7 +64,14 @@ const PANORAMA_CAPABILITIES = {
   service: "panorama.service",
 } as const satisfies Record<string, Capability>;
 
-/** 官方 `PanoramaData` → 领域投影（`tiles` / `links` 是渲染细节，不透出）。 */
+/**
+ * 官方 `PanoramaData` → 领域投影。
+ *
+ * ⚠️ **`tiles` 与 `links` 的处置不同**（issue #165 Class 3 / TASK 5 更正了旧注释）：
+ * `tiles`（官方 `PanoramaTileData`）**真的**是渲染内部，不透出；
+ * `links` 透出——`<Panorama>` 早就声明并派发了 `linksChange`，消费者**存在**，
+ * 缺的只是数据路径。官方 React 参考实现同样暴露 `getLinks()`。
+ */
 function toDataInfo(raw: unknown): PanoramaDataInfo | null {
   if (!raw || typeof raw !== "object") return null;
   const data = raw as {
@@ -76,6 +85,48 @@ function toDataInfo(raw: unknown): PanoramaDataInfo | null {
     description: typeof data.description === "string" ? data.description : "",
     position: data.position ? toPlainPoint(data.position) : null,
   };
+}
+
+/**
+ * 官方 `PanoramaLink` → 领域投影（issue #165 Class 3 / TASK 5）。
+ *
+ * 八个成员**逐字段按类型收窄，取不到就留在 `undefined`**。
+ *
+ * **刻意不补默认值**：`heading ?? 0` 会把「上游没给方位」与「正北（0°）」混成同一个数，
+ * 而调用方正是靠这个区别决定要不要画一个指向标；`x ?? 0` / `y ?? 0` 同理会把
+ * 「不在屏幕上」与「贴在左上角」混起来。**不认识的键也不带**——`PanoramaLink` 的形状
+ * 随版本增减，本库不维护一份「透传所有」的逃生口（那会让投影退化成 `as`）。
+ */
+function toLink(raw: unknown): PanoramaLink | null {
+  if (!raw || typeof raw !== "object") return null;
+  const link = raw as Record<string, unknown>;
+  const projected: PanoramaLink = {};
+  for (const key of LINK_TEXT_KEYS) {
+    if (typeof link[key] === "string") projected[key] = link[key] as string;
+  }
+  for (const key of LINK_NUMBER_KEYS) {
+    if (typeof link[key] === "number" && Number.isFinite(link[key])) {
+      projected[key] = link[key] as number;
+    }
+  }
+  return projected;
+}
+
+/** 官方 `PanoramaLink` 的字符串成员。 */
+const LINK_TEXT_KEYS = ["description", "id"] as const;
+/** 官方 `PanoramaLink` 的数值成员。 */
+const LINK_NUMBER_KEYS = ["heading", "dir", "refinedDir", "x", "y", "roadWidth"] as const;
+
+/** 官方 `Panorama#getLinks()` → 领域投影。拿不到时给空数组（理由见接口注释）。 */
+function readLinks(raw: unknown): PanoramaLink[] {
+  const list = callOptional(raw, "getLinks");
+  if (!Array.isArray(list)) return [];
+  const links: PanoramaLink[] = [];
+  for (const entry of list) {
+    const projected = toLink(entry);
+    if (projected) links.push(projected);
+  }
+  return links;
 }
 
 /** 全景场景类型（官方是 `'street' | 'inter'` 两个字符串字面量）。 */
@@ -298,6 +349,10 @@ export function createJsapiV4PanoramaDriver(
       return typeof id === "string" && id.length > 0 ? id : null;
     },
 
+    getLinks(viewer) {
+      return readLinks(viewerOf(viewer));
+    },
+
     getSceneType(viewer) {
       return toSceneType(callRequired(viewerOf(viewer), "getSceneType"));
     },
@@ -389,6 +444,14 @@ export function createJsapiV4PanoramaDriver(
 
     setLabelAltitude(label, altitude: number) {
       callRequired(labelOf(label), "setAltitude", altitude);
+    },
+
+    showLabel(label) {
+      callRequired(labelOf(label), "show");
+    },
+
+    hideLabel(label) {
+      callRequired(labelOf(label), "hide");
     },
 
     createService() {

@@ -26,7 +26,11 @@
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
 import type { GroundOverlayProps } from "../../types/components";
-import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
+import {
+  PATH_ZINDEX_FIELD,
+  VISIBILITY_DESCRIPTOR_KEY,
+  VISIBILITY_FIELD,
+} from "./overlayFields";
 
 export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<GroundOverlayProps> = {
   bounds: "options",
@@ -34,6 +38,7 @@ export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<GroundOverlayProps> = {
   url: "options",
   opacity: "options",
   autoCenter: "recreate",
+  ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -77,6 +82,7 @@ export function createGroundOverlaySpec(): OverlaySpec<GroundOverlayProps, Overl
       }
       return context.client.driver.overlays.createGroundOverlay(p.bounds, {
         opacity: p.opacity,
+        zIndex: p.zIndex,
         type: p.type,
         url,
       });

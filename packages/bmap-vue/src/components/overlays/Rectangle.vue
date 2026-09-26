@@ -37,7 +37,20 @@ const emitDynamic = dynamicEmit(emit);
 
 defineOptions({ name: "Rectangle" });
 
-useOverlaySpec(props, createRectangleSpec(), { emit: emitDynamic });
+const { commands } = useOverlaySpec(props, createRectangleSpec(), { emit: emitDynamic });
+/**
+ * 命令面（#165 Class 3 / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
+ *
+ * 直接展开 `commands`（而不是挂成 `commands.xxx`）：调用方拿到的就是官方同名方法本身
+ * （`polyline.setPositionAt(i, pt)` / `circle.getRadius()`），与官方参考实现的形状一致。
+ * 逐条依据与「刻意不做」的清单见 `core/overlays/OverlaySpec.ts` 的 `expose` 与
+ * `core/overlays/overlayCommands.ts`。
+ *
+ * `commands` 为 `null` 时（该组件没有命令面）`defineExpose(undefined)` 等价于不 expose，
+ * 因此**不要**为此写分支。
+ */
+defineExpose(commands ?? undefined);
+
 </script>
 
 <template>

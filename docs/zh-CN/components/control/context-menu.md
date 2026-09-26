@@ -118,3 +118,50 @@ context-menu/index
   也不会重复下发同一条挂载命令。
 - `items` / `width` 变化时**原子重建**菜单（旧实例连同它的监听一起释放）。
 - 组件卸载时会从当前目标摘除菜单。
+
+## 命令面（`defineExpose`，#165）
+
+官方 `ContextMenu` 声明了 `getItem` / `removeItem` / `removeSeparator` / `getDom` / `show` /
+`hide` 六个成员，而组件侧此前只做「整菜单重建」，因此它们**没有调用路径**。
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import ContextMenu, { type ContextMenuExpose } from 'bmap-vue'
+
+const menu = ref<ContextMenuExpose>()
+</script>
+
+<template>
+  <ContextMenu ref="menu" :items="items" />
+</template>
+```
+
+| 方法                        | 官方声明                                       | 说明 |
+| --------------------------- | ---------------------------------------------- | ---- |
+| `getItem(index)`            | `getItem(index: number): MenuItem`             | 返回**本库条目模型**（`{index, text, disabled, width?, id?}`），不是 raw `MenuItem` |
+| `removeItem(index)`         | `removeItem(item: MenuItem): void`             | 按**序号**删；不成立返回 `false` |
+| `removeSeparator(index)`    | `removeSeparator(index: number): void`         | 删第 `index` 条分隔线；不成立返回 `false` |
+| `setItemText(index, text)`  | `MenuItem#setText(text: string): void`         | 官方 `ContextMenu` **没有**这条，经菜单 + 序号下发 |
+| `setItemEnabled(index, on)` | `MenuItem#enable()` / `#disable()`             | 同上；这条修的是「`enable()` 永久不可达」 |
+| `getDom()`                  | `getDom(): HTMLElement`                        | 菜单根 DOM（菜单 DOM 由 SDK 自己渲染） |
+| `show()` / `hide()`         | `show(): void` / `hide(): void`                | **弹层**语义（在上一次右键的位置弹出 / 收回） |
+
+### 两条刻意偏离
+
+1. **不出入 raw `MenuItem`**。AGENTS.md 的 raw SDK 白名单只有 `driver/**` / `client/**` /
+   `core/loader/**` / `plugins/**`，组件与 `core` 都在禁区。而且官方 `MenuItem` 上**没有任何
+   getter**（只有 `setText` / `enable` / `disable`），交出去对调用方是全盲的——「读回」只可能
+   来自本库模型。
+2. **`show()` / `hide()` 不是 `visible` 的反面**。官方 `ContextMenu#show()` 是「在上一次右键的
+   位置把弹层显示出来」，没右键过会弹在 (0,0)；`visible` 表达的是「菜单是否挂到目标上」，走
+   attach/detach。两者是不同语义，因此给的是单独的方法名。
+
+### `enable()` 此前永久不可达
+
+`<MenuItem disabled>` 此前只能靠「整菜单重建」改，而重建按 **props** 建——于是没有任何路径能
+**不重建**地把一条项解禁。`setItemEnabled(index, true)` 提供了那条路。它**不回写**
+`props`（`disabled` 进菜单指纹，因为官方 `disable()` 之后没有读回）：要持久解禁请把
+`disabled` 改成 `false`。
+
+未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**。

@@ -17,11 +17,16 @@
  */
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { PolygonHandle } from "../../driver/types/handles";
+import {
+  createPathCommands,
+  createPathReadBacks,
+} from "../../core/overlays/overlayCommands";
 import type { PolygonProps } from "../../types/components";
 import {
   PATH_FILL_FIELDS,
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
+  PATH_ZINDEX_FIELD,
   VISIBILITY_DESCRIPTOR_KEY,
   VISIBILITY_FIELD,
 } from "./overlayFields";
@@ -33,6 +38,7 @@ export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
   ...PATH_STROKE_FIELDS,
   ...PATH_FILL_FIELDS,
   ...PATH_TOGGLE_FIELDS,
+  ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -59,11 +65,29 @@ export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,
         strokeStyle: p.strokeStyle,
+        zIndex: p.zIndex,
         fillColor: p.fillColor,
         fillOpacity: p.fillOpacity,
         isBoundary: p.isBoundary,
         enableMassClear: p.enableMassClear,
         enableEditing: p.enableEditing,
       }),
+    /**
+     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
+     *
+     * 写这一侧（`setPath` / 描边填充 setter / `setZIndex`）已由 `path` / 样式 / `zIndex`
+     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
+     *
+     * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。
+     *
+     * 另外给 `setPositionAt`（官方 `Polygon.d.ts`：`setPositionAt(index: number, point: Point, deep?: number): void`）——
+     * `deep` **只属于 Polygon**（多环路径的层数），非 polygon 传它会显式抛
+     * `BMAP_INVALID_ARGUMENT`（官方签名只有两个参数，第三个会被静默忽略）。
+     */
+    expose: (exposeCtx) => ({
+      ...createPathReadBacks(exposeCtx, { fill: true }),
+      ...createPathCommands(exposeCtx),
+    }),
   };
 }

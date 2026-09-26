@@ -37,6 +37,15 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   sceneType: 'street' | 'inter' = 'street'
   poiType: string | null = null
   scrollWheelZoom = false
+  /**
+   * 当前场景的相邻链接（官方 `Panorama#getLinks(): PanoramaLink[]`）。
+   *
+   * 建模它是因为 `<Panorama>` 的 `linksChange` 需要一条**真的**数据路径
+   * （issue #165 Class 3 / TASK 5：此前 `linksChange` 是**空载荷**）。
+   * `undefined` 建模「上游给的不是数组」那条路径（官方 `getLinks` 的成员缺失 /
+   * 返回值形状不符时 Driver 应给空数组，不抛错）。
+   */
+  links: Array<Record<string, unknown>> | undefined = []
   destroyCalls = 0
   overlays: unknown[] = []
   /**
@@ -79,6 +88,12 @@ export class FakeV4Panorama extends FakeV4EventTarget {
 
   getId(): string | null {
     return this.id
+  }
+
+  /** 官方 `Panorama#getLinks(): PanoramaLink[]`（issue #165 Class 3 / TASK 5）。 */
+  getLinks(): Array<Record<string, unknown>> | undefined {
+    this.callLog.push('getLinks')
+    return this.links
   }
 
   getSceneType(): 'street' | 'inter' {

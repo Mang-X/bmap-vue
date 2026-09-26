@@ -269,6 +269,31 @@ export type CapabilityStatus = "native" | "extended" | "experimental" | "unsuppo
 // @public (undocumented)
 export type CircleHandle = SdkHandle<"overlay:circle">;
 
+// @public
+export interface CircleReadBackApi extends PathReadBackApi {
+    // (undocumented)
+    getCenter(): Point;
+    // (undocumented)
+    getFillColor(): string;
+    // (undocumented)
+    getFillOpacity(): number;
+    // (undocumented)
+    getRadius(): number;
+}
+
+// @public (undocumented)
+export interface ContextMenuCommandApi {
+    getDom(): HTMLElement;
+    getItem(index: number): MenuItemView | null;
+    // (undocumented)
+    hide(): void;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemEnabled(index: number, enabled: boolean): void;
+    setItemText(index: number, text: string): void;
+    show(): void;
+}
+
 // @public (undocumented)
 export interface ControlDriver {
     // (undocumented)
@@ -595,20 +620,44 @@ export type InfoWindowHandle = SdkHandle<"overlay:info-window">;
 export interface InfoWindowOptions {
     // (undocumented)
     [key: string]: unknown;
+    collisions?: number[];
     // (undocumented)
     enableAutoPan?: boolean;
     // (undocumented)
     enableCloseOnClick?: boolean;
+    enableContentScroll?: boolean;
     // (undocumented)
     enableMaximize?: boolean;
+    enableSearchTool?: boolean;
+    headerContent?: string;
     // (undocumented)
     height?: number;
+    margin?: number[];
+    maxContent?: string;
+    maxWidth?: number;
     // (undocumented)
     offset?: Pixel;
+    onClosing?: () => void;
     // (undocumented)
     title?: string;
     // (undocumented)
     width?: number;
+}
+
+// @public
+export interface InfoWindowReadBackApi {
+    // (undocumented)
+    getContent(): string | HTMLElement;
+    // (undocumented)
+    getOffset(): Pixel;
+    // (undocumented)
+    getTitle(): string;
+    // (undocumented)
+    isOpen(): boolean;
+    // (undocumented)
+    maximize(): void;
+    // (undocumented)
+    restore(): void;
 }
 
 // @public (undocumented)
@@ -1434,6 +1483,38 @@ export interface MarkerOptions {
 }
 
 // @public
+export interface MarkerReadBackApi {
+    closePlaceDetail(): void;
+    // (undocumented)
+    getOffset(): Pixel;
+    // (undocumented)
+    getPosition(): Point;
+    // (undocumented)
+    getRank(): number;
+    // (undocumented)
+    getRotation(): number;
+    // (undocumented)
+    getTitle(): string;
+    // (undocumented)
+    setRank(rank: number): void;
+    // (undocumented)
+    setRotationOrigin(angle: number): void;
+}
+
+// @public
+export interface MenuItemView {
+    // (undocumented)
+    readonly disabled: boolean;
+    // (undocumented)
+    readonly id?: string;
+    readonly index: number;
+    // (undocumented)
+    readonly text: string;
+    // (undocumented)
+    readonly width?: number;
+}
+
+// @public
 export type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
 
 // @public
@@ -1456,8 +1537,10 @@ export interface OverlayDriver {
     }): void;
     attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     buildIcon(icon: MarkerIconInput): unknown;
+    circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
     // (undocumented)
     closeInfoWindow(overlay: InfoWindowHandle): void;
+    contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
     // (undocumented)
     createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
     // (undocumented)
@@ -1490,8 +1573,20 @@ export interface OverlayDriver {
     detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     // (undocumented)
     hide(overlay: OverlayHandle): boolean;
+    infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
     isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
+    markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+    menuItemCommands(item: OverlayHandle): {
+        setText(text: string): void;
+        enable(): void;
+        disable(): void;
+    };
     openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
+    pathFillReadBacks(overlay: OverlayHandle): {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
     // (undocumented)
     redrawInfoWindow(overlay: InfoWindowHandle): void;
     // (undocumented)
@@ -1502,6 +1597,9 @@ export interface OverlayDriver {
     setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
     // (undocumented)
     setPosition(overlay: OverlayHandle, position: Point): void;
+    setPositionAt(overlay: OverlayHandle, index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
     show(overlay: OverlayHandle): boolean;
     updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
 }
@@ -1536,6 +1634,18 @@ export interface PanoramaDriver {
     readonly supported: boolean;
 }
 
+// @public
+export interface PanoramaLink {
+    description?: string;
+    dir?: number;
+    heading?: number;
+    id?: string;
+    refinedDir?: number;
+    roadWidth?: number;
+    x?: number;
+    y?: number;
+}
+
 // @public (undocumented)
 export interface PathOptions {
     // (undocumented)
@@ -1560,6 +1670,20 @@ export interface PathOptions {
     strokeWeight?: number;
     // (undocumented)
     zIndex?: number;
+}
+
+// @public
+export interface PathReadBackApi {
+    // (undocumented)
+    getBounds(): Bounds;
+    // (undocumented)
+    getStrokeColor(): string;
+    // (undocumented)
+    getStrokeOpacity(): number;
+    // (undocumented)
+    getStrokeStyle(): "solid" | "dashed" | "dotted";
+    // (undocumented)
+    getStrokeWeight(): number;
 }
 
 // @public (undocumented)

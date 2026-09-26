@@ -22,7 +22,12 @@
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
 import type { BezierCurveProps } from "../../types/components";
-import { PATH_STROKE_FIELDS, VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
+import {
+  PATH_STROKE_FIELDS,
+  PATH_ZINDEX_FIELD,
+  VISIBILITY_DESCRIPTOR_KEY,
+  VISIBILITY_FIELD,
+} from "./overlayFields";
 
 export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
   points: "options",
@@ -31,6 +36,7 @@ export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
   controlPointsVersion: "version",
   ...PATH_STROKE_FIELDS,
   enableMassClear: "options",
+  ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -60,6 +66,7 @@ export function createBezierCurveSpec(): OverlaySpec<BezierCurveProps, OverlayHa
         strokeWeight: p.strokeWeight,
         strokeOpacity: p.strokeOpacity,
         strokeStyle: p.strokeStyle,
+        zIndex: p.zIndex,
         enableMassClear: p.enableMassClear,
       }),
   };

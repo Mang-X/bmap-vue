@@ -31,6 +31,28 @@ export const PATH_TOGGLE_FIELDS = {
 } as const satisfies Record<string, OverlayFieldUpdate>;
 
 /**
+ * `zIndex`：**就地更新**（issue #165 Class 3 / TASK 0）。
+ *
+ * 官方 4.0.4 在六个图形类上都有 `setZIndex(zIndex: number): void`（`Polyline` / `Polygon` /
+ * `Rectangle` / `Circle` / `BezierCurve` / `Prism`），描述符里也已经登记成
+ * `mutateBy("setZIndex")`——此前缺的是**组件面**（`types/components.ts` 的 `PathShapeProps`
+ * 没有这个键），于是整族的层级更新一次都没被走到过。
+ *
+ * 单独一张表而不是并进 `PATH_STROKE_FIELDS`：层级既不是描边也不是填充，它与
+ * `enableMassClear` / `visible` 同属「覆盖物自身的一档属性」，而六个图形类全部 extends
+ * `PathShapeProps`。`Prism` / `GroundOverlay` 的 props 不 extends 那一组（它们有各自独立的
+ * 样式面），因此各自内联同一个键——「同一个键、同一条更新路径」由
+ * `tests/behavior/overlay-zindex.test.ts` 逐个组件钉住。
+ *
+ * ⚠️ **`CustomOverlay` 不在此列**：官方 `CustomOverlay` 没有 `setZIndex`，它的 `zIndex` 是
+ * 构造期属性（描述符 `recreate`）。别把「分类表里有这个键」读成「实例上有这个 setter」。
+ */
+export const PATH_ZINDEX_FIELD = { zIndex: "options" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
  * `enableClicking`：**构造期属性**（官方 4.0 的图形族只有构造选项，没有成对开关）。
  *
  * 单独一张表而不是并进 `PATH_TOGGLE_FIELDS`：它走的是 `recreate` 这条完全不同的路径，

@@ -174,6 +174,22 @@ export declare interface CapabilityRegistry {
 }
 export declare type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
 export declare type CircleHandle = SdkHandle<"overlay:circle">;
+export declare interface CircleReadBackApi extends PathReadBackApi {
+    getCenter(): Point;
+    getRadius(): number;
+    getFillColor(): string;
+    getFillOpacity(): number;
+}
+export declare interface ContextMenuCommandApi {
+    getItem(index: number): MenuItemView | null;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemText(index: number, text: string): void;
+    setItemEnabled(index: number, enabled: boolean): void;
+    getDom(): HTMLElement;
+    show(): void;
+    hide(): void;
+}
 export declare interface ControlDriver {
     create(kind: ControlKind, options?: ControlOptions): ControlHandle;
     createCustomControl(options: {
@@ -288,7 +304,23 @@ export declare interface InfoWindowOptions {
     enableMaximize?: boolean;
     enableAutoPan?: boolean;
     enableCloseOnClick?: boolean;
+    maxWidth?: number;
+    maxContent?: string;
+    margin?: number[];
+    collisions?: number[];
+    onClosing?: () => void;
+    enableSearchTool?: boolean;
+    headerContent?: string;
+    enableContentScroll?: boolean;
     [key: string]: unknown;
+}
+export declare interface InfoWindowReadBackApi {
+    getTitle(): string;
+    getContent(): string | HTMLElement;
+    isOpen(): boolean;
+    getOffset(): Pixel;
+    maximize(): void;
+    restore(): void;
 }
 export declare interface InitialMapOptions {
     minZoom?: number;
@@ -447,6 +479,23 @@ export declare interface MarkerOptions {
     enableDragging?: boolean;
     [key: string]: unknown;
 }
+export declare interface MarkerReadBackApi {
+    getRank(): number;
+    setRank(rank: number): void;
+    setRotationOrigin(angle: number): void;
+    getTitle(): string;
+    getOffset(): Pixel;
+    getRotation(): number;
+    getPosition(): Point;
+    closePlaceDetail(): void;
+}
+export declare interface MenuItemView {
+    readonly index: number;
+    readonly text: string;
+    readonly disabled: boolean;
+    readonly width?: number;
+    readonly id?: string;
+}
 export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<string | number>;
 export declare type NativeLayerFeatureState = Record<string, unknown>;
 export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
@@ -483,9 +532,26 @@ export declare interface OverlayDriver {
     hide(overlay: OverlayHandle): boolean;
     attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
+    menuItemCommands(item: OverlayHandle): {
+        setText(text: string): void;
+        enable(): void;
+        disable(): void;
+    };
     setPosition(overlay: OverlayHandle, position: Point): void;
     setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
     setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+    infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
+    pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
+    circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
+    pathFillReadBacks(overlay: OverlayHandle): {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+    setPositionAt(overlay: OverlayHandle, index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
     updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
     openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
     closeInfoWindow(overlay: InfoWindowHandle): void;
@@ -502,6 +568,16 @@ export declare interface OverlayTarget {
 export declare interface PanoramaDriver {
     readonly supported: boolean;
 }
+export declare interface PanoramaLink {
+    description?: string;
+    heading?: number;
+    id?: string;
+    dir?: number;
+    refinedDir?: number;
+    x?: number;
+    y?: number;
+    roadWidth?: number;
+}
 export declare interface PathOptions {
     strokeColor?: string;
     strokeWeight?: number;
@@ -514,6 +590,13 @@ export declare interface PathOptions {
     enableClicking?: boolean;
     zIndex?: number;
     [key: string]: unknown;
+}
+export declare interface PathReadBackApi {
+    getBounds(): Bounds;
+    getStrokeColor(): string;
+    getStrokeOpacity(): number;
+    getStrokeWeight(): number;
+    getStrokeStyle(): "solid" | "dashed" | "dotted";
 }
 export declare interface Pixel {
     x: number;

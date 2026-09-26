@@ -104,3 +104,26 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
   「先给 `point` / `id`、再销毁」；真的没有场景时销毁失败只告警，本库自己的资源照常释放。
 - `capture()`（截图）与 `clearOverlays()` 是官方成员，但当前没有组件消费它们，因此本库**不暴露** ——
   需要时用 `advanced` 的 raw 逃生口。
+
+## `linksChange` 的载荷（#165 更正）
+
+`<Panorama>` 此前派发 `linksChange` 时**不带载荷**。而官方 `Panorama#getLinks(): PanoramaLink[]`
+是存在的，官方 React 参考实现同样暴露它——**消费者早就存在，缺的只是数据路径**。
+
+现在 `linksChange` 带 `PanoramaLink[]`：
+
+```ts
+import type { PanoramaLink } from 'bmap-vue'
+
+function onLinks(links: PanoramaLink[]) {
+  // links: [{ id, description?, heading?, dir?, refinedDir?, x?, y?, roadWidth? }, ...]
+}
+```
+
+`view.getLinks()` 也可以按需读回（未就绪时给**空数组**）。
+
+官方 `PanoramaLink` 的八个成员**全是可选的**，投影**不补默认值**——`heading ?? 0` 会把
+「上游没给方位」与「正北」混成同一个数，而调用方正是靠这个区别决定要不要画指向标。
+
+⚠️ `tiles` 仍**不透出**：官方 `PanoramaTileData` 是瓦片贴图，属渲染内部，没有业务消费者。
+`links` 与 `tiles` 的处置不同，这一点由 `driver/jsapi-v4/panorama.ts` 的注释记录。

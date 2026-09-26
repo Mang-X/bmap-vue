@@ -49,6 +49,54 @@ export interface InfoWindowProps {
   enableAutoPan?: boolean;
   /** 是否开启点击地图关闭信息窗。 */
   enableCloseOnClick?: boolean;
+  /**
+   * 最大宽度（像素）。**可就地更新**（官方 `InfoWindow#setMaxWidth(width: number): void`）。
+   *
+   * 此前它**已经**被 Driver 分类成 `mutable`，而组件面没有出口——分类层准备好了、
+   * 组件没暴露（与 #165 TASK 0 的 `zIndex` 同一形状）。撤回会**重建**（无 `getMaxWidth`）。
+   */
+  maxWidth?: number;
+  /**
+   * 最大化时显示的内容（官方 `InfoWindowOptions.maxContent`）。
+   *
+   * **可就地更新**（官方 `setMaxContent(content: string): void`）。撤回会**重建**：
+   * `getContent()` 返回的是**普通**内容而不是最大化内容，因此「最大化时显示什么」
+   * 没有公开读回、没有 baseline 可恢复。
+   */
+  maxContent?: string;
+  /**
+   * 气泡与地图四边的最小间距，**像素数组**按 `[上, 右, 下, 左]`（官方
+   * `InfoWindowOptions.margin?: number[]`）。**构造期**：官方 4.0.4 的 `InfoWindow` 上
+   * 既没有 `setMargin` 也没有读回。
+   */
+  margin?: number[];
+  /**
+   * 碰撞检测的边距，**像素数组**按 `[上, 右, 下, 左]`（官方
+   * `InfoWindowOptions.collisions?: number[]`）。**构造期**：官方没有 `setCollisions`。
+   */
+  collisions?: number[];
+  /**
+   * 关闭前的回调（官方 `InfoWindowOptions.onClosing?: () => void`）。**构造期**：
+   * 官方没有 `setOnClosing`，而回调要跟随最新闭包就必须重建。
+   */
+  onClosing?: () => void;
+  /**
+   * 是否显示搜索工具（官方 `InfoWindowOptions.enableSearchTool?: boolean`）。**构造期**：
+   * 它决定是否多渲染一个工具条（渲染通道），官方没有对应的成对开关。
+   */
+  enableSearchTool?: boolean;
+  /**
+   * 自定义标题栏内容（官方 `InfoWindowOptions.headerContent?: string`，支持 HTML）。
+   *
+   * **构造期**：官方没有 `setHeaderContent`。⚠️ 官方没有说明它与 `title` 同时给时谁优先，
+   * 因此本库**不表态**——两个都原样传下去，由 SDK 决定。
+   */
+  headerContent?: string;
+  /**
+   * 内容超出时是否可滚动（官方 `InfoWindowOptions.enableContentScroll?: boolean`）。
+   * **构造期**：官方没有 `setEnableContentScroll`。
+   */
+  enableContentScroll?: boolean;
 }
 
 /**
@@ -85,6 +133,16 @@ export type InfoWindowDescriptorKeys<Props> = Partial<
  */
 export const INFO_WINDOW_FIELDS: InfoWindowFieldMap<InfoWindowProps> = {
   position: "state",
+  // ↓ issue #165 Class 3 / TASK 3 补的 8 个官方构造选项。
+  // 逐条依据见 `OVERLAY_DESCRIPTORS["info-window"]` 的同名条目与 `InfoWindowProps` 的逐条注释。
+  maxWidth: "options",
+  maxContent: "options",
+  margin: "recreate",
+  collisions: "recreate",
+  onClosing: "recreate",
+  enableSearchTool: "recreate",
+  headerContent: "recreate",
+  enableContentScroll: "recreate",
   title: "options",
   width: "options",
   height: "options",

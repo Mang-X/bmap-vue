@@ -52,7 +52,43 @@ export interface PanoramaPov {
   pitch?: number;
 }
 
-/** 全景数据（官方 `PanoramaData` 的领域投影；`tiles` / `links` 属渲染细节，不透出）。 */
+/**
+ * 全景的一条链接（官方 `panorama/PanoramaLink.d.ts` 的领域投影）。
+ *
+ * 官方八个成员**全是可选的**，因此这里也**全部可选**。投影按类型逐字段收窄，
+ * 取不到就**留在 `undefined`**——**不编默认值**：`heading ?? 0` 会把「上游没给方位」
+ * 与「正北」混成同一个数，而调用方正是靠这个区别决定要不要画一个指向标。
+ *
+ * 逐条（`description` / `heading` / `id` / `dir` / `refinedDir` / `x` / `y` / `roadWidth`）见
+ * `driver/jsapi-v4/panorama.ts` 的 `toLinks`。
+ */
+export interface PanoramaLink {
+  /** 目的地名称（如「天安门广场」）。 */
+  description?: string;
+  /** 相对于当前朝向的方位角（度）。 */
+  heading?: number;
+  /** 目的地全景 id。 */
+  id?: string;
+  /** 道路指示的方位角（度）。 */
+  dir?: number;
+  /** 官方修正后的方位角（`dir` 的细化值）。 */
+  refinedDir?: number;
+  /** 屏幕横坐标（像素）。 */
+  x?: number;
+  /** 屏幕纵坐标（像素）。 */
+  y?: number;
+  /** 道路宽度（米）。 */
+  roadWidth?: number;
+}
+
+/**
+ * 全景数据（官方 `PanoramaData` 的领域投影）。
+ *
+ * `tiles` **真的**不透出（官方 `PanoramaTileData` 是瓦片贴图，属渲染内部，没有业务消费者）；
+ * `links` **是**透出的——旧注释把两者并列成「渲染细节 / 没有消费者」，但那个判据对 `links`
+ * **不成立**：`<Panorama>` 早就声明并派发了 `linksChange`，消费者是**存在**的，
+ * 缺的只是数据路径（issue #165 Class 3 / TASK 5）。官方 React 参考实现也暴露了 `getLinks()`。
+ */
 export interface PanoramaDataInfo {
   id: string;
   description: string;
@@ -139,6 +175,15 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
   getZoom(viewer: PanoramaHandle): number | null;
   getId(viewer: PanoramaHandle): string | null;
   getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
+  /**
+   * 当前场景的相邻链接（官方 `Panorama#getLinks(): PanoramaLink[]`）。
+   *
+   * 拿不到（实例没有该成员 / 返回的不是数组）时给**空数组**，不抛错、不给 `undefined`：
+   * 「没有链接」与「拿不到链接」在上游没有可区分的证据，而这两者对调用方是同一件事
+   * （没有可画的道路指示）。**与 `getPosition()` 的 `null` 不同**——那里「还没加载」
+   * 是调用方要区分的已知状态，而链接列表的空与非空不承载这种语义。
+   */
+  getLinks(viewer: PanoramaHandle): PanoramaLink[];
   /** 当前是否可见；实例缺该方法时由 SDK 边界归一为错误（不猜） */
   getVisible(viewer: PanoramaHandle): boolean;
 
@@ -175,6 +220,26 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
   setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
   setLabelContent(label: PanoramaLabelHandle, content: string): void;
   setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
+  /**
+   * 标注显隐（官方 `PanoramaLabel#show(): void` / `#hide(): void`）。
+   *
+   * 此前**没有调用路径**——一个全景标注只能靠「卸载组件」消失，而卸载会连实例一起摘掉
+   * （`Panorama#removeOverlay`），因此「临时藏起一个标签」这条最常见的诉求无处落地
+   * （issue #165 Class 3 / TASK 2h）。
+   *
+   * ⚠️ **与「组件卸载」是两种语义**：命令只改 SDK 当前态，标注仍在查看器里、
+   * 仍占一个实例；组件卸载则走 `removeLabel` 摘除。刻意不做「命令 ⇄ props 同步」——
+   * `visible` 不是 `PanoramaLabelProps` 的字段（官方 `PanoramaLabelOptions` 也没有），
+   * 加上它就是自研一个官方没有的 prop。
+   */
+  showLabel(label: PanoramaLabelHandle): void;
+  hideLabel(label: PanoramaLabelHandle): void;
+  // ⚠️ **刻意没有** `isLabelVisible`：官方 `PanoramaLabel` 声明的是
+  // `setPosition` / `getPosition` / `getPov` / `setContent` / `getContent` / `show` / `hide` /
+  // `setAltitude` / `getAltitude`——**没有** `isVisible()` / `getVisible()`。
+  // 造一个恒返回 `false` 的「读回」会让调用方拿到一个编出来的答案
+  // （AGENTS.md 明确禁止「镜像读不回的 SDK 内部状态」）。要确认显隐是否生效，
+  // 请在调用侧记账，或观察画面。
 
   // ------------------------------------------------------------------ 检索
   createService(): PanoramaServiceHandle;

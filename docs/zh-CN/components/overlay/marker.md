@@ -111,3 +111,48 @@ issue #30），组件里没有生命周期代码，也不再各自手写 watcher
 的决策 4 与已知限制 1。
 
 支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend` 和 `remove`。
+
+## 命令面（`defineExpose`，#165）
+
+本组件的 `ref` 上有官方同名方法。写入口已有 prop 的（`setPosition` / `setZIndex` / …）**不**在这里
+重复列出——#165 的判据是「能改 prop」**不算**实现同名方法；这里只给没有 prop 能替代的那两类。
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import Marker, { type MarkerReadBackApi } from 'bmap-vue'
+
+const marker = ref<MarkerReadBackApi & { setRank(r: number): void }>()
+</script>
+
+<template>
+  <Marker ref="marker" :position="{ lng: 116.4, lat: 39.9 }" />
+</template>
+```
+
+| 方法                     | 官方声明                                        | 为什么不能走 prop |
+| ------------------------ | ----------------------------------------------- | ---------------- |
+| `getRank()`              | `getRank(): number`                             | 读回：组件不会替调用方读 |
+| `setRank(n)`             | `setRank(rank: number): void`                   | 无对应 prop（避让权重，不是几何/样式） |
+| `setRotationOrigin(deg)` | `setRotationOrigin(angle: number): void`        | `rotation` 是图形转角，原点是锚点 |
+| `getTitle()`             | `getTitle(): string`                            | 读回 |
+| `getOffset()`            | `getOffset(): Size`                             | 读回；返回领域 `Pixel`（`{x, y}`） |
+| `getRotation()`          | `getRotation(): number`                         | 读回 |
+| `getPosition()`          | `getPosition(): Point`                          | 读回（用户拖动后的真值） |
+| `closePlaceDetail()`     | `closePlaceDetail(): void`                      | 动作，无参数 |
+
+读回**不镜像成组件状态**：`props` 才是主模型，官方 getter 返回的是**当前值**而不是 SDK 默认值。
+
+### 刻意不暴露的两条
+
+- **`openPlaceDetail(placeDetail)`**：官方入参是 raw `BMap.PlaceDetail`，而本库**没有**这个
+  Driver 资源（它只在 `./ui-kit` 子入口，那一族不能进根模块图）。要打开地点详情窗请走
+  `<UiKitPlaceDetailWidget>`，或经 `./advanced` 的 `unwrapRaw()` —— 后者是明确的逃生口。
+  给一个 `any` 形参等于「收下但没人读」，是本库明确禁止的**假支持**。
+- **`setLabel(label)` / `getLabel()`**：出入参都是 raw `BMap.Label`。本库的 `<Label>` 是**独立
+  组件**（自带归属与释放路径），把一个外部 `BMap.Label` 塞进来会绕开那套归属。
+
+### 已释放时
+
+未就绪、重建中或已释放时，命令**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op——静默会让
+调用方把「资源已释放」误判成「SDK 说没有」。

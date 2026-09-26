@@ -36,7 +36,16 @@ declare const __VLS_component: DefineComponent<BMapProviderProps, {
 }>, {
     autoLoad: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_10: DefineComponent<ContextMenuProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_10: DefineComponent<ContextMenuProps, {
+    getItem(index: number): MenuItemView | null;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemText(index: number, text: string): void;
+    setItemEnabled(index: number, enabled: boolean): void;
+    getDom(): HTMLElement;
+    show(): void;
+    hide(): void;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     select: (event: ContextMenuSelectPayload) => any;
     close: (event: OverlayPartialPointerEvent) => any;
     open: (event: OverlayPartialPointerEvent) => any;
@@ -421,7 +430,19 @@ declare const __VLS_component_21: DefineComponent<MapTypeControlProps, {}, {}, {
     visible: boolean;
     showStreetLayer: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_22: DefineComponent<OverviewMapControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<OverviewMapControlProps> & Readonly<{}>, {
+declare const __VLS_component_22: DefineComponent<OverviewMapControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    resize: (event: unknown) => any;
+    viewchanged: (event: {
+        isOpen: boolean;
+    } | null) => any;
+    viewchanging: (event: unknown) => any;
+}, string, PublicProps, Readonly<OverviewMapControlProps> & Readonly<{
+    onResize?: ((event: unknown) => any) | undefined;
+    onViewchanged?: ((event: {
+        isOpen: boolean;
+    } | null) => any) | undefined;
+    onViewchanging?: ((event: unknown) => any) | undefined;
+}>, {
     offset: {
         x: number;
         y: number;
@@ -438,7 +459,19 @@ declare const __VLS_component_23: DefineComponent<ScaleControlProps, {}, {}, {},
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_24: DefineComponent<CityListControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<CityListControlProps> & Readonly<{}>, {
+declare const __VLS_component_24: DefineComponent<CityListControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    close: () => any;
+    open: () => any;
+    changeBefore: () => any;
+    changeAfter: () => any;
+    changeSuccess: (result: CityListChangeResult | null) => any;
+}, string, PublicProps, Readonly<CityListControlProps> & Readonly<{
+    onClose?: (() => any) | undefined;
+    onOpen?: (() => any) | undefined;
+    onChangeBefore?: (() => any) | undefined;
+    onChangeAfter?: (() => any) | undefined;
+    onChangeSuccess?: ((result: CityListChangeResult | null) => any) | undefined;
+}>, {
     offset: {
         x: number;
         y: number;
@@ -448,11 +481,11 @@ declare const __VLS_component_24: DefineComponent<CityListControlProps, {}, {}, 
     expand: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_25: DefineComponent<LocationControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
-    locationSuccess: (e: unknown) => any;
-    locationError: (e: unknown) => any;
+    locationSuccess: (e: LocationSuccessEvent | null) => any;
+    locationError: (e: LocationErrorEvent | null) => any;
 }, string, PublicProps, Readonly<LocationControlProps> & Readonly<{
-    onLocationSuccess?: ((e: unknown) => any) | undefined;
-    onLocationError?: ((e: unknown) => any) | undefined;
+    onLocationSuccess?: ((e: LocationSuccessEvent | null) => any) | undefined;
+    onLocationError?: ((e: LocationErrorEvent | null) => any) | undefined;
 }>, {
     offset: {
         x: number;
@@ -498,7 +531,9 @@ declare const __VLS_component_28: DefineComponent<DistrictLayerProps, {}, {}, {}
 declare const __VLS_component_29: DefineComponent<PanoramaCoverageLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaCoverageLayerProps> & Readonly<{}>, {
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_3: DefineComponent<MarkerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_3: DefineComponent<MarkerProps, {
+    [x: string]: unknown;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: OverlayPointerEvent) => any;
     dblclick: (event: OverlayPointerEvent) => any;
     dragend: (event: OverlayPointerEvent) => any;
@@ -631,7 +666,14 @@ declare const __VLS_component_39: DefineComponent<LineLayerProps, {
     enablePicked: boolean;
     popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_4: DefineComponent<InfoWindowProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_4: DefineComponent<InfoWindowProps, {
+    getTitle(): string;
+    getContent(): string | HTMLElement;
+    isOpen(): boolean;
+    getOffset(): Pixel;
+    maximize(): void;
+    restore(): void;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     close: () => any;
     destroy: (event: number) => any;
     rebuild: (event: number) => any;
@@ -695,6 +737,7 @@ declare const __VLS_component_42: DefineComponent<TrackLineLayerProps, {
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_43: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
+    getLinks: () => PanoramaLink[];
     viewer: Readonly<ShallowRef<PanoramaHandle | null>>;
     status: Readonly<ShallowRef<PanoramaStatus>>;
     error: Readonly<ShallowRef<BMapError | null>>;
@@ -706,7 +749,7 @@ declare const __VLS_component_43: DefineComponent<PanoramaProps, {
     zoomChange: (zoom: number | null) => any;
     idChange: (id: string | null) => any;
     sceneTypeChange: (sceneType: PanoramaSceneType | null) => any;
-    linksChange: () => any;
+    linksChange: (links: PanoramaLink[]) => any;
 }, string, PublicProps, Readonly<PanoramaProps> & Readonly<{
     onError?: ((event: unknown) => any) | undefined;
     onLoad?: ((event: unknown) => any) | undefined;
@@ -715,11 +758,13 @@ declare const __VLS_component_43: DefineComponent<PanoramaProps, {
     onZoomChange?: ((zoom: number | null) => any) | undefined;
     onIdChange?: ((id: string | null) => any) | undefined;
     onSceneTypeChange?: ((sceneType: PanoramaSceneType | null) => any) | undefined;
-    onLinksChange?: (() => any) | undefined;
+    onLinksChange?: ((links: PanoramaLink[]) => any) | undefined;
 }>, {
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_5: DefineComponent<CircleProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_5: DefineComponent<CircleProps, {
+    [x: string]: unknown;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: OverlayPointerEvent) => any;
     dblclick: (event: OverlayPointerEvent) => any;
     mousedown: (event: OverlayPointerEvent) => any;
@@ -767,7 +812,9 @@ declare const __VLS_component_5: DefineComponent<CircleProps, {}, {}, {}, {}, Co
     enableEditing: boolean;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_6: DefineComponent<PolylineProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_6: DefineComponent<PolylineProps, {
+    [x: string]: unknown;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: OverlayPointerEvent) => any;
     dblclick: (event: OverlayPointerEvent) => any;
     mousedown: (event: OverlayPointerEvent) => any;
@@ -812,7 +859,9 @@ declare const __VLS_component_6: DefineComponent<PolylineProps, {}, {}, {}, {}, 
     enableEditing: boolean;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_7: DefineComponent<PolygonProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_7: DefineComponent<PolygonProps, {
+    [x: string]: unknown;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: OverlayPointerEvent) => any;
     dblclick: (event: OverlayPointerEvent) => any;
     mousedown: (event: OverlayPointerEvent) => any;
@@ -860,7 +909,9 @@ declare const __VLS_component_7: DefineComponent<PolygonProps, {}, {}, {}, {}, C
     visible: boolean;
     isBoundary: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_8: DefineComponent<RectangleProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_8: DefineComponent<RectangleProps, {
+    [x: string]: unknown;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: OverlayPointerEvent) => any;
     dblclick: (event: OverlayPointerEvent) => any;
     mousedown: (event: OverlayPointerEvent) => any;
@@ -1301,6 +1352,13 @@ declare type __VLS_WithSlots_9<T, S> = T & {
         $slots: S;
     };
 };
+declare interface AddressComponents {
+    streetNumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    province?: string;
+}
 export declare type AreaBoundary = string[];
 export declare const Autocomplete: DefineComponent<AutocompleteProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     searchComplete: (e: unknown) => any;
@@ -1643,6 +1701,20 @@ export declare interface CircleProps extends PathStrokeProps, PathFillProps, Pat
     radius: number;
     enableClicking?: boolean;
 }
+export declare interface CircleReadBackApi extends PathReadBackApi {
+    getCenter(): Point;
+    getRadius(): number;
+    getFillColor(): string;
+    getFillOpacity(): number;
+}
+declare interface CityListChangeResult {
+    city: string;
+    code: string | number;
+    title?: string;
+    uid?: string;
+    point?: Point | "";
+    level?: number;
+}
 export declare const CityListControl: __VLS_WithSlots_24<typeof __VLS_component_24, __VLS_Slots_24>;
 declare interface CityListControlProps {
     anchor?: string;
@@ -1678,6 +1750,26 @@ declare interface ComponentResolverLike {
     } | undefined | void;
 }
 export declare const ContextMenu: __VLS_WithSlots_10<typeof __VLS_component_10, __VLS_Slots_10>;
+export declare interface ContextMenuCommandApi {
+    getItem(index: number): MenuItemView | null;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemText(index: number, text: string): void;
+    setItemEnabled(index: number, enabled: boolean): void;
+    getDom(): HTMLElement;
+    show(): void;
+    hide(): void;
+}
+export declare interface ContextMenuExpose {
+    getItem(index: number): MenuItemView | null;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemText(index: number, text: string): void;
+    setItemEnabled(index: number, enabled: boolean): void;
+    getDom(): HTMLElement;
+    show(): void;
+    hide(): void;
+}
 export declare interface ContextMenuItem {
     text: string;
     callback?: (payload: ContextMenuSelectPayload) => void;
@@ -2130,6 +2222,7 @@ export declare interface GroundOverlayProps {
     type: GroundOverlayType;
     url: GroundOverlayUrl;
     opacity?: number;
+    zIndex?: number;
     autoCenter?: boolean;
     visible?: boolean;
 }
@@ -2162,6 +2255,14 @@ export declare interface InfoWindowOptions {
     enableMaximize?: boolean;
     enableAutoPan?: boolean;
     enableCloseOnClick?: boolean;
+    maxWidth?: number;
+    maxContent?: string;
+    margin?: number[];
+    collisions?: number[];
+    onClosing?: () => void;
+    enableSearchTool?: boolean;
+    headerContent?: string;
+    enableContentScroll?: boolean;
     [key: string]: unknown;
 }
 export declare interface InfoWindowProps extends InfoWindowProps_2 {
@@ -2176,6 +2277,22 @@ declare interface InfoWindowProps_2 {
     enableMaximize?: boolean;
     enableAutoPan?: boolean;
     enableCloseOnClick?: boolean;
+    maxWidth?: number;
+    maxContent?: string;
+    margin?: number[];
+    collisions?: number[];
+    onClosing?: () => void;
+    enableSearchTool?: boolean;
+    headerContent?: string;
+    enableContentScroll?: boolean;
+}
+export declare interface InfoWindowReadBackApi {
+    getTitle(): string;
+    getContent(): string | HTMLElement;
+    isOpen(): boolean;
+    getOffset(): Pixel;
+    maximize(): void;
+    restore(): void;
 }
 declare interface InfoWindowRegistration {
     readonly id: symbol;
@@ -2450,6 +2567,21 @@ declare interface LocationControlProps {
         y: number;
     };
     visible?: boolean;
+    showAddressBar?: boolean;
+    enableAutoLocation?: boolean;
+    locationIcon?: MarkerIcon;
+    watchPosition?: boolean;
+    useCompass?: boolean;
+    autoZoom?: boolean;
+    autoViewport?: boolean;
+    onLocationStart?: (onSuccess: (position: unknown) => void, onFail: () => void) => boolean | void;
+}
+declare interface LocationErrorEvent {
+    code: number;
+}
+declare interface LocationSuccessEvent {
+    point: Point;
+    addressComponent: AddressComponents | null;
 }
 declare const Map_2: __VLS_WithSlots_2<typeof __VLS_component_2, __VLS_Slots_2>;
 export { Map_2 as Map };
@@ -3299,6 +3431,16 @@ export declare interface MarkerProps {
     rotation?: number;
     icon?: MarkerIcon;
 }
+export declare interface MarkerReadBackApi {
+    getRank(): number;
+    setRank(rank: number): void;
+    setRotationOrigin(angle: number): void;
+    getTitle(): string;
+    getOffset(): Pixel;
+    getRotation(): number;
+    getPosition(): Point;
+    closePlaceDetail(): void;
+}
 export declare const MenuItem: DefineComponent<MenuItemProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     select: (payload: ContextMenuSelectPayload) => any;
 }, string, PublicProps, Readonly<MenuItemProps> & Readonly<{
@@ -3309,6 +3451,13 @@ export declare interface MenuItemProps {
     disabled?: boolean;
     width?: number;
     id?: string;
+}
+export declare interface MenuItemView {
+    readonly index: number;
+    readonly text: string;
+    readonly disabled: boolean;
+    readonly width?: number;
+    readonly id?: string;
 }
 export declare const MenuSeparator: DefineComponent<{}, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, ComponentProvideOptions, true, {}, any>;
 export declare function mvtFeatureStateKey(layerName: string, id: string | number): string;
@@ -3466,6 +3615,23 @@ export declare const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX: {
     readonly "map-mask": "\u63A9\u819C\uFF1A4.0.4 \u6CA1\u6709 MapMaskEventMap\uFF08MapMask \u672C\u8EAB\u4E0D\u5728\u7C7B\u578B\u5305\u7684\u7C7B\u58F0\u660E\u91CC\uFF09";
     readonly marker3d: string;
 };
+export declare interface OverlayCommandTypes {
+    Marker: MarkerReadBackApi;
+    Circle: CircleReadBackApi;
+    Polygon: PathReadBackApi & {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    } & PathCommandApi;
+    Rectangle: PathReadBackApi & {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    Polyline: PathReadBackApi & {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    } & PathCommandApi;
+    InfoWindow: InfoWindowReadBackApi;
+}
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
@@ -3499,9 +3665,26 @@ export declare interface OverlayDriver {
     hide(overlay: OverlayHandle): boolean;
     attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
+    menuItemCommands(item: OverlayHandle): {
+        setText(text: string): void;
+        enable(): void;
+        disable(): void;
+    };
     setPosition(overlay: OverlayHandle, position: Point): void;
     setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
     setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+    infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
+    pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
+    circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
+    pathFillReadBacks(overlay: OverlayHandle): {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+    setPositionAt(overlay: OverlayHandle, index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
     updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
     openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
     closeInfoWindow(overlay: InfoWindowHandle): void;
@@ -3534,6 +3717,14 @@ export declare type OverlayEventSpec = {
     readonly sdk: string;
     readonly handle: (event: unknown) => void;
 };
+declare interface OverlayExposeContext {
+    session(): {
+        driver: OverlayDriver;
+        handle: OverlayHandle;
+    } | null;
+    readonly component: string;
+}
+declare type OverlayExposeShape = object;
 export declare type OverlayFieldMap<Props> = {
     readonly [K in keyof Props]-?: OverlayFieldUpdate;
 };
@@ -3571,7 +3762,7 @@ declare interface OverlayRegistry {
     dispose(): void;
     get size(): number;
 }
-export declare interface OverlaySpec<Props extends object, Resource> {
+export declare interface OverlaySpec<Props extends object, Resource, Expose = OverlayExposeShape> {
     readonly type: string;
     readonly kind?: OverlayKind;
     readonly fields: OverlayFieldMap<Props>;
@@ -3581,6 +3772,7 @@ export declare interface OverlaySpec<Props extends object, Resource> {
     readonly afterMount?: (context: MapReadyContext, resource: Resource, props: Readonly<Props>) => void;
     readonly targetKind?: TargetKind;
     create(context: MapReadyContext, props: Readonly<Props>): Resource | Promise<Resource>;
+    readonly expose?: (context: OverlayExposeContext) => Expose;
     readonly events?: readonly OverlayEventSpec[];
 }
 export declare interface OverlayTarget {
@@ -3628,6 +3820,8 @@ export declare interface PanoramaDriver {
 declare type PanoramaHandle = SdkHandle<"panorama">;
 export declare const PanoramaLabel: DefineComponent<PanoramaLabelProps, {
     label: ShallowRef<PanoramaLabelHandle | null, PanoramaLabelHandle | null>;
+    show(): void;
+    hide(): void;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (event: unknown) => any;
 }, string, PublicProps, Readonly<PanoramaLabelProps> & Readonly<{
@@ -3647,6 +3841,16 @@ declare interface PanoramaLabelProps {
     position?: Point;
     altitude?: number;
     displayDistance?: boolean;
+}
+export declare interface PanoramaLink {
+    description?: string;
+    heading?: number;
+    id?: string;
+    dir?: number;
+    refinedDir?: number;
+    x?: number;
+    y?: number;
+    roadWidth?: number;
 }
 export declare interface PanoramaOptions {
     navigationControl?: boolean;
@@ -3692,6 +3896,7 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     getZoom(viewer: PanoramaHandle): number | null;
     getId(viewer: PanoramaHandle): string | null;
     getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
+    getLinks(viewer: PanoramaHandle): PanoramaLink[];
     getVisible(viewer: PanoramaHandle): boolean;
     setId(viewer: PanoramaHandle, id: string, options?: PanoramaSwitchOptions): void;
     setPosition(viewer: PanoramaHandle, position: Point): void;
@@ -3713,9 +3918,16 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
     setLabelContent(label: PanoramaLabelHandle, content: string): void;
     setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
+    showLabel(label: PanoramaLabelHandle): void;
+    hideLabel(label: PanoramaLabelHandle): void;
     createService(): PanoramaServiceHandle;
     findById(service: PanoramaServiceHandle, id: string): ServiceCall<PanoramaDataInfo>;
     findByLocation(service: PanoramaServiceHandle, position: Point, radius?: number): ServiceCall<PanoramaDataInfo>;
+}
+declare interface PathCommandApi {
+    setPositionAt(index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
 }
 declare interface PathEditableProps {
     enableEditing?: boolean;
@@ -3737,7 +3949,15 @@ export declare interface PathOptions {
     zIndex?: number;
     [key: string]: unknown;
 }
+export declare interface PathReadBackApi {
+    getBounds(): Bounds;
+    getStrokeColor(): string;
+    getStrokeOpacity(): number;
+    getStrokeWeight(): number;
+    getStrokeStyle(): "solid" | "dashed" | "dotted";
+}
 declare interface PathShapeProps {
+    zIndex?: number;
     enableMassClear?: boolean;
     visible?: boolean;
 }
@@ -3947,6 +4167,7 @@ export declare interface PrismProps {
     topFillOpacity?: number;
     sideFillColor?: string;
     sideFillOpacity?: number;
+    zIndex?: number;
     isBoundary?: boolean;
     autoCenter?: boolean;
     enableMassClear?: boolean;
@@ -4139,7 +4360,9 @@ declare interface ScaleControlProps {
         y: number;
     };
     visible?: boolean;
+    unit?: ScaleControlUnit;
 }
+declare type ScaleControlUnit = "metric" | "us";
 export declare interface SdkHandle<Kind extends string, Raw = unknown> {
     readonly [HANDLE_BRAND]: Kind;
     readonly raw: Raw;
@@ -4520,6 +4743,7 @@ export declare interface UseOverlaySpecResult<Resource> {
     readonly error: Readonly<ShallowRef<BMapError | null>>;
     readonly position: OverlayPositionModel | null;
     readonly events: readonly string[];
+    readonly commands: Record<string, unknown> | null;
 }
 export declare function usePanoramaService(map?: unknown): {
     data: Readonly<ShallowRef<PanoramaDataInfo | null>>;

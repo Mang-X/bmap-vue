@@ -91,6 +91,65 @@ export interface InfoWindowOptions {
   enableMaximize?: boolean;
   enableAutoPan?: boolean;
   enableCloseOnClick?: boolean;
+  /* --- issue #165 Class 3 / TASK 3：InfoWindow 缺的 8 个官方构造选项 ---
+   *
+   * 逐条来自 `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/InfoWindowOptions.d.ts`：
+   * 本接口此前只收了 7 个键中的 6 个（`offset` 之外），
+   * 而 `InfoWindowOptions` 官方一共 15 个键 ⇒ 8 个没有出口。
+   *
+   * 分类依据（`mutable` / `recreate` / `unsupported`）逐条写在
+   * `OVERLAY_DESCRIPTORS["info-window"]` 的对应条目上。
+   */
+  /** 最大宽度（像素）。**可就地更新**（官方 `InfoWindow#setMaxWidth(width: number): void`）。 */
+  maxWidth?: number;
+  /**
+   * 最大化时显示的内容（官方 `InfoWindowOptions.maxContent?: string`）。
+   *
+   * **不就地更新**：官方声明了 `InfoWindow#setMaxContent(content: string): void`
+   * （见下一键），但**读回** `getContent()` 返回的是**普通内容**而不是最大化内容，
+   * 因此「最大化时显示什么」没有公开读回 ⇒ 撤回只能重建（`OverlayPropertyRevert` 的
+   * 判据之一）。更新本身走 `setMaxContent`（`mutable`）。
+   */
+  maxContent?: string;
+  /**
+   * 气泡与地图四边的最小间距（像素数组，官方 `margin?: number[]`，按 `[上, 右, 下, 左]`）。
+   *
+   * **构造期**：官方 `InfoWindow` 上**没有** `setMargin`，也没有读回。
+   */
+  margin?: number[];
+  /**
+   * 碰撞检测的边距（像素数组，官方 `collisions?: number[]`，同样按 `[上, 右, 下, 左]`）。
+   *
+   * **构造期**：官方 `InfoWindow` 上没有 `setCollisions`，也没有读回。
+   */
+  collisions?: number[];
+  /**
+   * 关闭前的回调（官方 `onClosing?: () => void`）。
+   *
+   * **构造期**：官方没有 `setOnClosing`。且它是**回调**——组件侧要跟随最新闭包就必须
+   * 重建（与 `ControlSpec.options` 的同款理由，见 `core/controls/spec.ts` 的注释）。
+   */
+  onClosing?: () => void;
+  /**
+   * 是否显示搜索工具（官方 `enableSearchTool?: boolean`）。
+   *
+   * **构造期**：官方 `InfoWindow` 上没有对应的 setter。它是**渲染通道**（多一个工具条），
+   * 与 `enableMaximize` 不同——后者有 `enableMaximize()` / `disableMaximize()` 成对开关。
+   */
+  enableSearchTool?: boolean;
+  /**
+   * 自定义标题栏内容（官方 `headerContent?: string`，支持 HTML）。
+   *
+   * **构造期**：官方没有 `setHeaderContent`，也没有读回。⚠️ 官方没有说明它与 `title`
+   * 同时给时谁优先，因此本库**不表态**（两个都原样传下去，由 SDK 决定）。
+   */
+  headerContent?: string;
+  /**
+   * 内容超出时是否可滚动（官方 `enableContentScroll?: boolean`）。
+   *
+   * **构造期**：官方 `InfoWindow` 上没有 `setEnableContentScroll`，也没有读回。
+   */
+  enableContentScroll?: boolean;
   [key: string]: unknown;
 }
 
@@ -127,6 +186,152 @@ export interface CustomOverlayOptions {
 export interface OverlayTarget {
   kind: "map" | "marker" | "clusterer" | "overlay";
   handle: SdkHandle<string>;
+}
+
+/* ------------------------------------------------------------ 读回 / 命令面（#165 Class 3）
+ *
+ * `setOptions` 只能**写**。官方在图形族与 Marker 上声明了一整族**无参读回**
+ * （`getBounds` / `getCenter` / `getRadius` / `getStrokeColor` / `getRank` / …）以及几个
+ * 「没有对应 prop 的动作」（`setPositionAt` / `setRotationOrigin` / `setRank` /
+ * `InfoWindow#maximize` / `ContextMenu#removeItem`）。#165 之前它们**没有任何调用路径**：
+ * 组件面 27 个 `defineExpose` 一个都没有，而「改 prop」并不等于「调同名方法」（读回类
+ * 方法组件永远不会替你调，动作类方法根本没有对应 prop）。
+ *
+ * 归一化到 Driver 而不是让组件直接摸 raw：官方读回返回的是 raw `BMap.Point` / `BMap.Bounds` /
+ * `BMap.Size` / `BMap.MenuItem`，按 AGENTS.md 组件面**不得**直接接触 raw SDK 对象。
+ * 下面的返回值全部是项目领域值（`Point` / `Bounds` / `Pixel` / 标量）。
+ */
+
+/** `InfoWindow` 的读回与动作面（官方 `overlay/InfoWindow.d.ts`）。 */
+export interface InfoWindowReadBackApi {
+  getTitle(): string;
+  getContent(): string | HTMLElement;
+  isOpen(): boolean;
+  getOffset(): Pixel;
+  maximize(): void;
+  restore(): void;
+}
+
+/** 图形族（`Circle` / `Polygon` / `Rectangle` / `Polyline`）的读回面。 */
+export interface PathReadBackApi {
+  getBounds(): Bounds;
+  getStrokeColor(): string;
+  getStrokeOpacity(): number;
+  getStrokeWeight(): number;
+  getStrokeStyle(): "solid" | "dashed" | "dotted";
+}
+
+/** `Circle` 独有：圆心 / 半径 / 填充（官方 `Circle.d.ts`）。 */
+export interface CircleReadBackApi extends PathReadBackApi {
+  getCenter(): Point;
+  getRadius(): number;
+  getFillColor(): string;
+  getFillOpacity(): number;
+}
+
+/** `Polygon` 独有：填充两件套（`Rectangle` 也有，合并进 `PathReadBackApi` 之外单列）。 */
+export interface PolygonReadBackApi extends PathReadBackApi {
+  getFillColor(): string;
+  getFillOpacity(): number;
+}
+
+/** `Marker` 的读回与动作面（官方 `overlay/Marker.d.ts`）。 */
+export interface MarkerReadBackApi {
+  getRank(): number;
+  setRank(rank: number): void;
+  setRotationOrigin(angle: number): void;
+  getTitle(): string;
+  getOffset(): Pixel;
+  getRotation(): number;
+  getPosition(): Point;
+  /**
+   * 打开地点详情窗（官方 `Marker#openPlaceDetail(placeDetail: PlaceDetail): void`）。
+   *
+   * ## 为什么这一条**不**在 expose 面里
+   *
+   * 官方的入参是 raw `BMap.PlaceDetail` 实例，而**本库没有 `PlaceDetail` 这个 Driver 资源**：
+   * 它只出现在 `./ui-kit` 子入口（`UiKitPlaceDetailWidget`，#70），而那一族受 ADR
+   * `2026-09-13-ui-kit-subpath-and-type-boundary` 约束（「`./ui-kit` 与其 Vue 封装只能
+   * 动态 import，不得进入根入口或任何 SSR 可达的模块图」）。要让 `<Marker>` 能接收
+   * `PlaceDetail`，根入口就必须知道它的类型——那会**把 ui-kit 拖进根模块图**。
+   *
+   * 因此本库不提供 `openPlaceDetail` 的命令面：**要打开地点详情窗，走 `./ui-kit` 的
+   * `<UiKitPlaceDetailWidget>`**（它自己管理 DOM 宿主与渲染），或者经 `./advanced` 的
+   * `unwrapRaw()` 拿 raw Marker 自己调——后者是明确的逃生口，不是组件面。
+   * 「给 `openPlaceDetail` 留一个 `any` 形参」被明确拒绝：那正是 AGENTS.md 说的
+   * **收下但没人读的假支持**。
+   *
+   * 它的兄弟 `closePlaceDetail(): void` **没有**这个障碍（无参、不需要任何 SDK 对象），
+   * 因此它**在**命令面里。
+   */
+  closePlaceDetail(): void;
+}
+
+
+
+/**
+ * `ContextMenu` 的命令面（issue #165 Class 3 / TASK 2d/2e）。
+ *
+ * ## **不**沿用官方的 raw `MenuItem` 出入参（逐条依据）
+ *
+ * 官方 `context-menu/ContextMenu.d.ts` 声明：
+ * `getItem(index: number): MenuItem` / `removeItem(item: MenuItem): void`。
+ * 那两个 `MenuItem` 是 **raw SDK 对象**——AGENTS.md 的 raw SDK 边界只覆盖
+ * `driver/**` / `client/**` / `core/loader/**` / `plugins/**`，`components` 与 `core`
+ * 都在**禁区**。因此本库的公共命令面：
+ *
+ * | 官方 | 本库 | 为什么 |
+ * | --- | --- | --- |
+ * | `getItem(index): MenuItem` | `getItem(index): MenuItemView` | 返回**本库条目模型**（序号 / 文字 / 禁用态 / 宽度 / id），不是 raw 实例 |
+ * | `removeItem(item: MenuItem)` | `removeItem(index: number)` | 收**序号**而不是 raw 实例 |
+ *
+ * 改按序号还有一个独立理由：**官方 `MenuItem` 上没有任何 getter**
+ * （`context-menu/MenuItem.d.ts` 只有 `setText` / `enable` / `disable`）——把 raw 实例
+ * 交出去，调用方拿到的就是一个「什么也读不到」的对象。「读回」只可能来自本库模型。
+ */
+export interface MenuItemView {
+  /** 当前序号（`-1` = 不在菜单里）。 */
+  readonly index: number;
+  readonly text: string;
+  readonly disabled: boolean;
+  readonly width?: number;
+  readonly id?: string;
+}
+
+export interface ContextMenuCommandApi {
+  /** 读回一条菜单项（本库模型，见 `MenuItemView` 的理由）。 */
+  getItem(index: number): MenuItemView | null;
+  /** 删掉一条菜单项（按序号）。`false` = 该序号不存在。 */
+  removeItem(index: number): boolean;
+  /** 删掉第 `index` 条**分隔线**；该位置不是分隔线时 `false`。 */
+  removeSeparator(index: number): boolean;
+  /**
+   * 改第 `index` 条项的文字（官方 `MenuItem#setText(text: string): void`）。
+   *
+   * 官方 `ContextMenu` **没有**「拿到第 i 条 `MenuItem` 再改它」的整袋入口
+   * （`getItem` 返回 raw 对象而组件面不得持有它），因此这一条经菜单 + 序号下发。
+   * 同步更新本库条目表，因此之后的 `getItem(index).text` 读得到新值。
+   */
+  setItemText(index: number, text: string): void;
+  /**
+   * 启用 / 禁用第 `index` 条项（官方 `MenuItem#enable()` / `#disable()`）。
+   *
+   * ## 这条修的是「`enable()` 永久不可达」那个洞（#165 TASK 2e）
+   *
+   * 此前 `<MenuItem disabled>` 只能靠「整菜单重建」改，而重建是按 **props** 建的——
+   * 于是没有任何路径能在**不重建**的前提下把一条项解禁。本方法提供了那条路。
+   *
+   * ⚠️ **不回写本库条目表的 `disabled`**：`disabled` 进菜单指纹
+   * （`core/overlays/ContextMenuSpec.ts` 的注释说明了原因——官方 `disable()` 之后没有读回），
+   * 而 props 才是主模型。因此「命令解禁」只改 SDK 当前态；调用方若要持久解禁，
+   * 必须把 `disabled` prop 改成 `false`。这与「命令不镜像成组件状态」是同一条口径。
+   */
+  setItemEnabled(index: number, enabled: boolean): void;
+  /** 菜单根 DOM（官方 `getDom()`；菜单 DOM 由 SDK 自己渲染，本库不产出菜单 DOM）。 */
+  getDom(): HTMLElement;
+  /** 在上一次右键的位置弹出（官方 `show()`）。 */
+  show(): void;
+  hide(): void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -388,6 +593,33 @@ export const OVERLAY_DESCRIPTORS = {
       height: mutateBy("setHeight", { ctorKey: "height" }),
       maxWidth: mutateBy("setMaxWidth", { ctorKey: "maxWidth" }),
       maxContent: mutateBy("setMaxContent", { ctorKey: "maxContent" }),
+      // ↓ 以下 6 条是 issue #165 Class 3 / TASK 3 补的（官方 InfoWindowOptions 的其余构造选项）。
+      // 逐条依据见 `InfoWindowOptions` 的同款注释；**全部构造期**（官方 `InfoWindow`
+      // 上没有对应的 setter，也没有读回）。
+      margin: recreate(
+        "InfoWindowOptions.margin 是四个边距（[上, 右, 下, 左]）；官方 4.0.4 的 InfoWindow 上既没有 setMargin 也没有读回，构造期给定",
+        { ctorKey: "margin", value: "raw" },
+      ),
+      collisions: recreate(
+        "InfoWindowOptions.collisions 是碰撞检测的四个边距；官方 4.0.4 的 InfoWindow 上既没有 setCollisions 也没有读回，构造期给定",
+        { ctorKey: "collisions", value: "raw" },
+      ),
+      onClosing: recreate(
+        "InfoWindowOptions.onClosing 是**回调**：官方没有 setOnClosing，而回调要跟随最新闭包就必须重建（与 ControlSpec.options 的同款理由）",
+        { ctorKey: "onClosing", value: "raw" },
+      ),
+      enableSearchTool: recreate(
+        "InfoWindowOptions.enableSearchTool 决定是否多渲染一个工具条（渲染通道）；官方 4.0.4 的 InfoWindow 上没有对应的成对开关，也无读回",
+        { ctorKey: "enableSearchTool", value: "raw" },
+      ),
+      headerContent: recreate(
+        "InfoWindowOptions.headerContent 是自定义标题栏 HTML；官方 4.0.4 的 InfoWindow 上没有 setHeaderContent，也无读回。⚠️ 官方没有说明它与 title 同时给时谁优先，本库**不表态**（两个都原样传下去）",
+        { ctorKey: "headerContent", value: "raw" },
+      ),
+      enableContentScroll: recreate(
+        "InfoWindowOptions.enableContentScroll 决定内容溢出时是否可滚；官方 4.0.4 的 InfoWindow 上没有 setEnableContentScroll，也无读回",
+        { ctorKey: "enableContentScroll", value: "raw" },
+      ),
       title: mutateBy("setTitle", { ctorKey: "title" }),
       redraw: mutateBy("redraw", { ctorKey: null }),
       enableMaximize: toggleBy(["enableMaximize", "disableMaximize"], { ctorKey: "enableMaximize" }),
@@ -742,8 +974,23 @@ export const OVERLAY_REVERT_RATIONALE = {
   fillOpacity: "图形族有 getFillOpacity，但返回当前值而非 SDK 默认填充透明度 ⇒ 重建",
   width: "InfoWindow 的 width 只有构造选项；4.0.4 无 setWidth 也无 getWidth ⇒ 重建",
   height: "InfoWindow 的 height 只有构造选项；4.0.4 无 setHeight 也无 getHeight ⇒ 重建",
-  maxWidth: "InfoWindow 的 maxWidth 只有构造选项；4.0.4 无对应读回 ⇒ 重建",
-  maxContent: "InfoWindow 的 maxContent 只有构造选项；4.0.4 无对应读回 ⇒ 重建",
+  maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.4 **无** getMaxWidth ⇒ 撤回只能重建",
+  maxContent:
+    "InfoWindow 的 maxContent 有 setMaxContent（policy 是 mutable），但 4.0.4 **无**读回" +
+    "（getContent() 返回的是普通内容，不是最大化内容）⇒ 撤回只能重建",
+  margin: "InfoWindow 的 margin（[上,右,下,左]）只有构造选项；4.0.4 无 setMargin 也无读回 ⇒ 重建",
+  collisions: "InfoWindow 的 collisions 只有构造选项；4.0.4 无 setCollisions 也无读回 ⇒ 重建",
+  onClosing:
+    "InfoWindow 的 onClosing 是**回调**且只有构造选项；4.0.4 无 setOnClosing。回调要跟随" +
+    "最新闭包必须重建（与 ControlSpec.options 的同款理由）⇒ 重建",
+  enableSearchTool:
+    "InfoWindow 的 enableSearchTool 决定是否渲染一个工具条；4.0.4 无对应的成对开关也无读回" +
+    "（与 enableMaximize 不同——后者有 enable/disableMaximize）⇒ 重建",
+  headerContent:
+    "InfoWindow 的 headerContent 只有构造选项；4.0.4 无 setHeaderContent 也无读回。" +
+    "⚠️ 官方没有说明它与 title 同时给时谁优先，因此**不**把 title 的撤回借给它 ⇒ 重建",
+  enableContentScroll:
+    "InfoWindow 的 enableContentScroll 只有构造选项；4.0.4 无 setEnableContentScroll 也无读回 ⇒ 重建",
   // ——— 必填构造参数（与 position / content 同理）———
   bounds:
     "Rectangle 的 bounds 是**必填**构造参数（`new Rectangle(bounds, opts)`）；" +
@@ -864,9 +1111,76 @@ export interface OverlayDriver {
   /** 摘除右键菜单。目标约束与 `attachContextMenu` 相同；摘除后 SDK 不再派发该菜单的 `open`。 */
   detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
 
+  /**
+   * 菜单的**逐条**命令面（#165 Class 3 / TASK 2d）。
+   *
+   * 官方 `ContextMenu` 提供了 `getItem` / `removeItem` / `removeSeparator` / `getDom` /
+   * `show` / `hide` 六个成员，而组件侧此前只做「整菜单重建」，因此它们**没有调用路径**。
+   *
+   * `show()` / `hide()` 在这里的语义是官方的：「在上一次右键的位置弹出 / 收回弹层」——
+   * **不是**组件的 `visible`（后者是「菜单是否挂到目标上」，走 attach/detach，
+   * 理由见 `CONTEXT_MENU_FIELDS` 的注释）。
+   */
+  contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
+
+  /**
+   * 一条 `MenuItem` 的逐条命令面（#165 Class 3 / TASK 2e）。
+   *
+   * 官方 `MenuItem#setText(text)` / `#enable()` / `#disable()` 三个成员。
+   *
+   * ## `enable()` 此前**永久不可达**，本方法是那条路的修复
+   *
+   * `<MenuItem disabled>` 走的是「`disabled: false` ⇒ **整菜单重建**」
+   * （`CONTEXT_MENU_FIELDS.items = "rebuild"` + `ContextMenuSpec` 的指纹含 `disabled`）。
+   * 于是：一个 `MenuItem` 实例从生到死只会处于「启用」或「永久禁用」两种状态——
+   * **没有任何路径**能在不重建菜单的前提下把一条项解禁。
+   *
+   * 这条命令把那个洞补上，且**不动**「props 是主模型」的口径：命令改的是 SDK 当前态，
+   * 它**不**回写 `props.disabled`，因此下一次条目重建仍然会按 props 重来
+   * （调用方若想要持久生效，应当改 `disabled` prop——命令面刻意不做「命令回写 props」
+   * 那种状态同步，那会让 props 与 SDK 当前值变成两个都能改的主模型）。
+   */
+  menuItemCommands(
+    item: OverlayHandle,
+  ): { setText(text: string): void; enable(): void; disable(): void };
+
   setPosition(overlay: OverlayHandle, position: Point): void;
   setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
   setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+
+  /* ------------------------------------------------ 读回 / 命令面（#165 Class 3）
+   *
+   * 与 `setOptions` 分开而不是混进去：读回**没有入参**、不产生命令日志、`setOptions` 的
+   * `value === undefined` 跳过语义对它毫无意义，而命令（`maximize` / `setPositionAt`）
+   * 的入参形状与「一个 options 键」不同。收在同一处会让 `setOptions` 的契约开始泄漏。
+   *
+   * 全部**返回领域值**：raw `BMap.Point` / `BMap.Bounds` / `BMap.Size` 一律在 Driver 内
+   * 投影掉——组件面不得接触 raw SDK 对象（`AGENTS.md` 的边界规则）。释放 / 未就绪的
+   * 处置**不在这里**：句柄的归属由组件的实例 scope 管，Driver 只负责「拿这个句柄调 SDK」。
+   */
+  /** `InfoWindow` 的六个官方读回 / 动作（见 `InfoWindowReadBackApi`）。 */
+  infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
+  /** 图形族的描边 / 范围读回（`Circle` / `Polygon` / `Rectangle` / `Polyline` 共用部分）。 */
+  pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
+  /** `Circle` 的圆心 / 半径 / 填充读回。 */
+  circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
+  /** `Polygon` / `Rectangle` 的填充读回。 */
+  pathFillReadBacks(overlay: OverlayHandle): { getFillColor(): string; getFillOpacity(): number };
+  /** `Marker` 的读回与动作（见 `MarkerReadBackApi`）。 */
+  markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+  /**
+   * 逐点移动路径顶点（官方 `Polyline#setPositionAt(index, point)` /
+   * `Polygon#setPositionAt(index, point, deep?)`）。
+   *
+   * `deep` **只对 `polygon` 有效**（多环路径的层数）：其它 kind 传了它**显式失败**
+   * （`BMAP_INVALID_ARGUMENT`），而不是让官方把它当第三个参数默默吞掉。
+   */
+  setPositionAt(
+    overlay: OverlayHandle,
+    index: number,
+    point: Point,
+    options?: { deep?: number },
+  ): void;
 
   /**
    * 属性更新策略查询：`mutable` 就地更新、`recreate` 必须重建实例、`unsupported` 换 API。

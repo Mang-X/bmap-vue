@@ -68,6 +68,7 @@ export type {
   PanoramaHandle,
   PanoramaLabelHandle,
   PanoramaLabelOptions,
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,

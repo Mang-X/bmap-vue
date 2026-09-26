@@ -37,7 +37,7 @@
 import type { OverlayFieldMap, OverlaySpec } from "../../core/overlays/OverlaySpec";
 import type { OverlayHandle } from "../../driver/types/handles";
 import type { PrismProps } from "../../types/components";
-import { VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
+import { PATH_ZINDEX_FIELD, VISIBILITY_DESCRIPTOR_KEY, VISIBILITY_FIELD } from "./overlayFields";
 
 export const PRISM_FIELDS: OverlayFieldMap<PrismProps> = {
   points: "options",
@@ -49,6 +49,7 @@ export const PRISM_FIELDS: OverlayFieldMap<PrismProps> = {
   isBoundary: "recreate",
   autoCenter: "recreate",
   enableMassClear: "options",
+  ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -78,6 +79,7 @@ export function createPrismSpec(): OverlaySpec<PrismProps, OverlayHandle> {
         topFillOpacity: p.topFillOpacity,
         sideFillColor: p.sideFillColor,
         sideFillOpacity: p.sideFillOpacity,
+        zIndex: p.zIndex,
         isBoundary: p.isBoundary,
         autoCenter: p.autoCenter,
         enableMassClear: p.enableMassClear,
