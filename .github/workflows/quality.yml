@@ -80,12 +80,6 @@ jobs:
       - name: Check docs links
         run: node --experimental-strip-types scripts/check-docs-links.mts
 
-      # README / npm 包 / 文档站三处的 API 示例一致。判据是「示例里用到的每个标识符都必须
-      # 真的在 dist/*.d.ts 里，且三处形状一致」——不是「三处文本相等」：后者没有区分力
-      # （三处都写错照样绿），还会因为文案风格差异逼人锁死措辞。需先 build:package。
-      - name: Check API snippet consistency
-        run: node --experimental-strip-types scripts/check-snippet-consistency.mts
-
       # 覆盖物 defineEmits 静态契约无漂移（#138）。
       # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
       # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。
@@ -144,6 +138,16 @@ jobs:
       # `check-public-dts` 只禁 `BMap.*`，**不**禁已删除的 engine 取值字面量——那要靠这一步。
       - name: Check no legacy engine ids in public declarations
         run: pnpm check:raw-sdk:declarations
+
+      # README / npm 包 / 文档站三处的 API 示例一致。判据是「示例里用到的每个标识符都必须
+      # 真的在 dist/*.d.ts 里，且三处形状一致」——不是「三处文本相等」：后者没有区分力
+      # （三处都写错照样绿），还会因为文案风格差异逼人锁死措辞。
+      #
+      # **必须排在 `build:package` 之后**：判据读的就是发布声明面，读不到时脚本 fail-closed
+      # （「没有判据就不能放行」）。曾经挂在前面、跑在 build 之前，于是 CI 直接红——
+      # 那是这条守卫按设计生效，不是误报。
+      - name: Check API snippet consistency
+        run: node --experimental-strip-types scripts/check-snippet-consistency.mts
 
       # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
       # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。
