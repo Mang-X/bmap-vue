@@ -207,6 +207,36 @@ issue 原文推断 `_2`（`MapHandle_2` / `BMapClient_2` / `MapContext_2` …）
 | `setTypes` | 让引用消失 | 同上 |
 | `show` | 让引用消失 | 同上 |
 
+## 评审修掉的三个问题
+
+`PublicMapContext` 与构建层改写的自指判定各有硬伤，均已修掉并补了会红的门禁：
+
+1. **`whenReady` 丢了 `signal?: AbortSignal`**（P1）。窄化内部 runtime 面时把一个**仍然保留**
+   的公共方法参数削掉了：TS 消费方报错，JS / `any` 调用方传进来的 signal 还会被静默丢弃。
+   与 `MapExpose.whenReady` 同契约（「只取消本次等待」）恢复为 `(signal?: AbortSignal) => …`，
+   投影时转发 `context.whenReady(signal)`。不增加任何内部类型暴露。
+2. **可写 ref 泄漏**（P1）。`toPublicMapContext()` 直接把内部的 `ShallowRef<BMapClient>` 交出去，
+   外部可以合法写 `ctx.client.value = {…}` —— 对象满足 `PublicBMapClient` 但不满足真实
+   `BMapClient`（缺 `id` / `engine` / `driver.overlays` …），而库内仍按 `ShallowRef<BMapClient>`
+   读同一个 ref：类型窄化变成运行时破坏。只在属性上标 `readonly` **不**阻止 `.value =`，
+   因此四个 ref 改为 `Readonly<ShallowRef<…>>`；引用保持同一（不另建 ref / computed，
+   否则会出现「状态变了但窄面没变」的第二份真相）。
+3. **Windows 上整段改写静默失效**（P2）。判「是否在 dist 子目录」原写成
+   `filePath.slice(dir.length + 1).includes('/')`，而 Node 在 Windows 上给出的 `filePath` 用
+   **反斜杠** —— 那一步恒为 false，也就是本票最关键的修正在 Windows 构建上等于没做，CI
+   （Linux）全绿覆盖不到。改为平台无关的 `isInsideSubdirectory()`（两边归一成 `/` 再逐段
+   比较，**不用** `path.relative` / `path.sep`，那两个是平台相关的）。
+
+补的门禁：
+
+- `tests/type-contracts/public-map-context-projection.type-test.ts` —— 用 `@ts-expect-error`
+  钉住「公共投影不可写回内部 ref」与「`whenReady` 的 signal 可传」。**双向判别力实测过**：
+  分别回退两处修复，对应断言立刻翻红（`TS2578 unused` / `TS2554 Expected 0 arguments`），
+  恢复后归零。放在 `tests/type-contracts/` 是因为 `src/` 下的 `*.test.ts` 不在任何 typecheck
+  的编译范围里，写在那里的 `@ts-expect-error` 是恒真的。
+- `tests/behavior/dts-entry-self-import.test.ts` —— 显式喂 Windows 风格路径覆盖 P2 那一支，
+  外加「解析不到声明位置时原样保留」「入口自身不改写」两条。
+
 ## 顺带结清
 
 `./composables` 的 2 条 `ae-unresolved-link`（`useViewAnimation` 里指向**非导出成员**的

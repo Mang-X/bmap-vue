@@ -1602,15 +1602,15 @@ export interface PublicBMapClient {
 
 // @public (undocumented)
 export interface PublicMapContext {
-    readonly client: ShallowRef<PublicBMapClient | null>;
-    readonly error: ShallowRef<unknown>;
+    readonly client: Readonly<ShallowRef<PublicBMapClient | null>>;
+    readonly error: Readonly<ShallowRef<unknown>>;
     readonly events: {
         emit(type: string, payload: unknown): void;
     };
     readonly isTearingDown: () => boolean;
-    readonly map: ShallowRef<MapHandle | null>;
-    readonly status: ShallowRef<MapStatus>;
-    readonly whenReady: () => Promise<MapReadyContext>;
+    readonly map: Readonly<ShallowRef<MapHandle | null>>;
+    readonly status: Readonly<ShallowRef<MapStatus>>;
+    readonly whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
 }
 
 // @public (undocumented)

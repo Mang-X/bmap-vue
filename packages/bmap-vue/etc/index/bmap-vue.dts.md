@@ -3950,11 +3950,11 @@ export declare interface PublicBMapClient {
 }
 export declare interface PublicMapContext {
     readonly isTearingDown: () => boolean;
-    readonly whenReady: () => Promise<MapReadyContext>;
-    readonly client: ShallowRef<PublicBMapClient | null>;
-    readonly map: ShallowRef<MapHandle | null>;
-    readonly status: ShallowRef<MapStatus>;
-    readonly error: ShallowRef<unknown>;
+    readonly whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
+    readonly client: Readonly<ShallowRef<PublicBMapClient | null>>;
+    readonly map: Readonly<ShallowRef<MapHandle | null>>;
+    readonly status: Readonly<ShallowRef<MapStatus>>;
+    readonly error: Readonly<ShallowRef<unknown>>;
     readonly events: {
         emit(type: string, payload: unknown): void;
     };

@@ -123,10 +123,9 @@ export function rewriteEntrySelfReExports(
   declarationDir: string,
   nameToFile: ReadonlyMap<string, string>,
 ): string | undefined {
+  if (!filePath.endsWith('.d.ts')) return undefined
   // 只处理 dist/<子目录> 下的 .d.ts：那里才是 `..` 会指回入口的位置。
-  if (!filePath.startsWith(declarationDir) || !filePath.endsWith('.d.ts')) return undefined
-  const fromDeclarationDir = filePath.slice(declarationDir.length + 1)
-  if (!fromDeclarationDir.includes('/')) return undefined // 入口自身在 dist 顶层，不改
+  if (!isInsideSubdirectory(declarationDir, filePath)) return undefined
   // 注意：这里用**无 g 标志**的副本做前置判断。带 /g 的正则 `.test()` 会推进
   // `lastIndex`，先 `.test()` 再 `.replace()` 会漏掉交替出现的匹配（`replace` 会从
   // lastIndex 续跑），表现为「改写看起来跑了、但结果没变干净」。
@@ -163,7 +162,34 @@ export function rewriteEntrySelfReExports(
 }
 
 /**
- * 名字 → 指向其**真正声明处**的相对 specifier（无 `.d.ts` 后缀）；解析不到返回 `undefined`。
+/**
+ * `filePath` 是否位于 `declarationDir` 的**子目录**里（入口自身不算）。
+ *
+ * **必须平台无关**（#160 评审 P2）。Node 在 Windows 上给出的 `filePath` 用反斜杠：
+ * 先前那版 `filePath.slice(dir.length + 1).includes('/')` 在 Windows 下恒为 false ——
+ * 整段自指改写静默不生效，而它正是消掉那 114 个重复声明的唯一手段。CI 是 Linux，
+ * 全绿覆盖不到这一支。
+ *
+ * 做法：两边都归一成 `/` 再逐段比较，**不**用 `path.relative`（它是平台相关的，在 POSIX
+ * 上处理不了反斜杠路径）。`file.length !== dir.length + 1` 一并挡掉「入口自身在 dist
+ * 顶层」与「根本不在 dist 下」两种情况。
+ */
+export function isInsideSubdirectory(declarationDir: string, filePath: string): boolean {
+  const toPosix = (input: string): string => input.replace(/\\/g, '/')
+  const dir = toPosix(declarationDir).split('/').filter(Boolean)
+  const file = toPosix(filePath).split('/').filter(Boolean)
+  // 至少要比 dist 深**一层**，且 dir 是 file 的前缀。深度不限：
+  // `integrations/ui-kit/index.d.ts` 与 `composables/useMap.d.ts` 都在范围内。
+  if (file.length <= dir.length) return false
+  if (!dir.every((segment, index) => file[index] === segment)) return false
+  // dist **顶层**的 `.d.ts` 是七个入口自己（`composables.d.ts` / `index.d.ts` …），
+  // 正是这次 rollup 的根 —— 它们不能被改写（自指就是它们引起的）。判据是「中间层
+  // 不存在」：文件名的父目录段数与 dist 相同 ⇒ 它就直接躺在 dist 下。
+  const segmentsBelow = file.length - dir.length - 1
+  return segmentsBelow >= 1
+}
+
+/** 名字 → 指向其**真正声明处**的相对 specifier（无 `.d.ts` 后缀）；解析不到返回 `undefined`。
  *
  * 解析不到时调用方**原样保留**该引用：宁可留下一个能被 `check:api` 看见的重复，也不
  * 静默改错目标 —— 后者会变成一个指向不存在模块的悬空引用，错误现场离病因十万八千里。
@@ -175,7 +201,10 @@ function specifierFor(
 ): string | undefined {
   const target = nameToFile.get(name)
   if (!target) return undefined
-  const spec = relative(dirname(filePath), target).replace(/\.d\.ts$/, '').split(sep).join('/')
+  const spec = relative(dirname(filePath), target)
+    .replace(/\.d\.ts$/, '')
+    .split(sep)
+    .join('/')
   return spec.startsWith('.') ? spec : `./${spec}`
 }
 

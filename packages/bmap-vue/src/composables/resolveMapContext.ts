@@ -74,8 +74,15 @@ export interface PublicBMapClient {
 export interface PublicMapContext {
   /** 地图是否已经开始拆除（早于子树卸载）。 */
   readonly isTearingDown: () => boolean;
-  /** 地图就绪（resolve 的是**这一次** ready；重复调用返回同一个 Promise）。 */
-  readonly whenReady: () => Promise<MapReadyContext>;
+  /**
+   * 地图就绪（resolve 的是**这一次** ready；重复调用返回同一个 Promise）。
+   *
+   * `signal` 与内部 `MapContext.whenReady` / `MapExpose.whenReady` **同契约**：只取消
+   * **本次等待**，不动 SDK 加载、不动地图（#160 评审 P1）。隐藏内部 runtime 面不该顺带
+   * 削掉一个仍然保留的公共方法参数 —— 少收 `signal` 会让 JS / `any` 调用方传进来的
+   * 信号被静默丢弃。
+   */
+  readonly whenReady: (signal?: AbortSignal) => Promise<MapReadyContext>;
   /**
    * 本图持有的 Client（未就绪时 `null`）。
    *
@@ -90,13 +97,13 @@ export interface PublicMapContext {
    * `ae-forgotten-export` 逐个点名（issue #160），而业务侧写服务 composable 时
    * 一个都用不到。需要完整 Client 的场景请显式传 `useMarkerIcons` 之类的 API。
    */
-  readonly client: ShallowRef<PublicBMapClient | null>;
+  readonly client: Readonly<ShallowRef<PublicBMapClient | null>>;
   /** SDK 地图句柄（未就绪时 `null`）。 */
-  readonly map: ShallowRef<MapHandle | null>;
+  readonly map: Readonly<ShallowRef<MapHandle | null>>;
   /** 地图状态。 */
-  readonly status: ShallowRef<MapStatus>;
+  readonly status: Readonly<ShallowRef<MapStatus>>;
   /** 最近的错误（未就绪 / 从未出错时为 `null`）。 */
-  readonly error: ShallowRef<unknown>;
+  readonly error: Readonly<ShallowRef<unknown>>;
   /**
    * 事件总线 —— 只暴露 `emit`：`resource:error` 等**本库自造**事件的出口。
    *
@@ -120,7 +127,12 @@ export interface PublicMapContext {
 export function toPublicMapContext(context: InternalMapContext): PublicMapContext {
   return {
     isTearingDown: context.isTearingDown ?? (() => false),
-    whenReady: () => context.whenReady(),
+    whenReady: (signal?: AbortSignal) => context.whenReady(signal),
+    // `readonly`（而不是新 ref / computed）：这些是内部 runtime 持有的**同一对象**，
+    // 投影必须保持引用同一，否则「状态变了但窄面没变」会引入第二份真相。`Readonly<…>`
+    // 去掉 `.value` 的可写性 —— 只在属性上标 `readonly` 是**不够**的，那不阻止
+    // `ctx.client.value = …`，而写入一个只满足 `PublicBMapClient` 的对象会让库内按
+    // `ShallowRef<BMapClient>` 读它时炸掉（#160 评审 P1：类型窄化变成运行时破坏）。
     client: context.client,
     map: context.map,
     status: context.status,
