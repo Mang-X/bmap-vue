@@ -66,6 +66,10 @@ export interface VisualLayerPropsLike extends NativeLayerUnifiedFields {
   pickHeight?: number;
   autoSelect?: boolean;
   selectedColor?: string;
+  /** 选中索引（官方 `selectedIndex`，`layer/LineLayer.d.ts:25` / `FillLayer.d.ts:30`）。 */
+  selectedIndex?: number;
+  /** 拾取事件是否冒泡（官方 `popEvent`，`LineLayer.d.ts:70` / `FillLayer.d.ts:75`）。 */
+  popEvent?: boolean;
 }
 
 /** 领域事件派发器（组件把 `defineEmits` 的 emit 包一层传进来：事件名来自白名单）。 */
@@ -148,6 +152,12 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
     if (p.pickHeight !== undefined) bag.pickHeight = p.pickHeight;
     if (p.autoSelect !== undefined) bag.autoSelect = p.autoSelect;
     if (p.selectedColor !== undefined) bag.selectedColor = p.selectedColor;
+    // #165 Class 3 / TASK 2：`selectedColor` 此前是**半接线**的——官方把「哪一条被选中」
+    // 交给 `selectedIndex`、把「选中长什么样」交给 `selectedColor`，此前只暴露了后者。
+    // 两者都是构造选项（官方只有整袋 `setBaseOptions`）⇒ 进选项袋，因此自动参与重建指纹。
+    if (p.selectedIndex !== undefined) bag.selectedIndex = p.selectedIndex;
+    // `popEvent` 控制拾取事件是否向上层冒泡；同样是构造选项。
+    if (p.popEvent !== undefined) bag.popEvent = p.popEvent;
     return { ...bag, ...(options.extraCtorOptions?.(p) ?? {}) };
   };
 

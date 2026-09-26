@@ -8,7 +8,7 @@
  *   显隐、透明度、层级、缩放范围都有字段级 setter。
  *
  * 八个 kind 的 SDK 方法面**并不一致**（官方专页的四类图层共享同一套方法；`PointLayer` /
- * `ClusterLayer` / `Heatmap` / `TrackLine` 属扩展 API，各只公开自己那几个方法），因此这里
+ * `ClusterLayer` / `Heatmap` / `TrackLine` 属扩展 API，各自只公开自己那几个方法），因此这里
  * 不做「一个方法一套参数硬套八个 kind」：
  *
  * - 归一化操作集合 `NativeLayerOperation` 是**领域面**；
@@ -16,6 +16,9 @@
  *   `NATIVE_LAYER_DESCRIPTORS`）；
  * - 调用一个该 kind 没有入口的操作**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`），
  *   不静默 no-op——「看起来调成功了但什么都没发生」是数据图层最难排查的一类问题。
+ *
+ * 扩展 API 四类的成员面**按 4.0.5 的声明登记**（不是「运行时继承到就当契约」也不是
+ * 「专页没列就当没有」）——见 Driver 的 kind 表注释。
  */
 import type { Pixel } from "./geometry";
 import type { SdkHandle } from "./handles";
@@ -25,8 +28,8 @@ import type { OverlayTarget } from "./overlays";
  * 原生数据图层种类（issue #23 的「Native Layer Facet」清单）。
  *
  * `point` / `cluster` / `heatmap` / `track-line` 只能按结构探测：它们在 4.0 运行时公开，
- * 但 `@baidumap/jsapi-v4-types@4.0.4` 没有类声明，且**可视化实现是异步注入的**——因此
- * 存在性必须在调用时刻判断（见 Driver 的 `create`）。
+ * `visualization/` 的类声明是 `@baidumap/jsapi-v4-types@4.0.5` 才补上的，且**可视化实现是
+ * 异步注入的**——因此存在性必须在调用时刻判断（见 Driver 的 `create`）。
  */
 export type NativeLayerKind =
   | "point"

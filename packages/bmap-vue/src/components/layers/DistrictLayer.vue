@@ -18,7 +18,7 @@
  * 无关的破坏性变更（依据与取舍见 ADR「已知限制」）。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
 import type { DistrictTypeValue } from "../../types/components";
 
 export type DistrictType = DistrictTypeValue;
@@ -46,6 +46,16 @@ export interface DistrictLayerProps {
   autoViewport?: boolean;
   /** 掩膜内的行政区代码（4.0 构造选项 `adcode`）。 */
   adcode?: string;
+  /**
+   * 行政区边界数据请求完成并绘制到地图后的回调
+   * （官方 `DistrictLayerOptions.onComplete`，`layer/DistrictLayer.d.ts:180`）。
+   *
+   * 4.0 的 `DistrictLayer` **没有** `dataparsed` 事件面（这批图层的事件只有 `click` /
+   * `mouseover` / `mouseout`），官方给的就只有这个构造选项回调——「边界什么时候画完」在本组件里
+   * 唯一的官方入口是它。经 `forwardCallback` 包一层：SDK 手上的函数转发到**当前** prop，
+   * 因此改这个回调不会重建图层。
+   */
+  onComplete?: () => void;
 }
 
 const props = withDefaults(defineProps<DistrictLayerProps>(), {
@@ -78,6 +88,12 @@ useLayerResource<DistrictLayerProps>(props, {
       // strokeOpacity），因此这里只表态 `visible`。
       options: {
         name: `(${p.name})`,
+        // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
+        // 因此换回调不重建图层（口径同 XYZLayer / WMTSLayer 的 `xTemplate` 等）。
+        // `undefined` 时**不放这个键**——给 SDK 一个 `undefined` 回调与「没传」不等价。
+        ...(p.onComplete === undefined
+          ? {}
+          : { onComplete: forwardCallback(() => p.onComplete) }),
         ...pickLayerOptions(p, [
           "kind",
           "fillColor",

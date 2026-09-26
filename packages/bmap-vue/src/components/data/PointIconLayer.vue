@@ -62,6 +62,12 @@ const props = withDefaults(defineProps<PointIconLayerProps<Item>>(), {
   // 与官方默认值（false）**不同**，刻意如此：本组件的核心交互是 `item-click`，
   // 默认关掉拾取等于「给了事件但点不出来」。要省开销时显式传 `false`。
   enablePicked: true,
+  // ⚠️ 下面两个**刻意写 `undefined`**（口径同 `FillLayerProps.border`）：官方默认值分别是
+  // `userSizes: true` 与 `visibility: true`，而 Vue 对缺省的 `Boolean` 会转成 `false`——
+  // 写 `false` 默认值会让每个不传它们的用户都隐式偏离官方默认（`userSizes` 会从「用 sizes」
+  // 翻成「用 width/height」而覆盖掉 `sizes`；`visibility` 会把所有图标都关掉）。
+  userSizes: undefined,
+  visibility: undefined,
 });
 
 const emit = defineEmits<{
@@ -147,6 +153,15 @@ function styleValue(): Record<string, unknown> | undefined {
     if (props.offset !== undefined) style.offset = props.offset;
     if (props.scale !== undefined) style.scale = props.scale;
     if (props.rotation !== undefined) style.rotation = props.rotation;
+    // #165 Class 3 / TASK 2：官方 `PointIconStyle` 有 12 个字段，此前只暴露了 7 个。
+    // 缺的这 5 个（`layer/PointIconLayer.d.ts:101` iconObj / `:105` visibility /
+    // `:108` sizes / `:117` userSizes / `:127` opacity）全部是**样式字段** ⇒ 就地更新。
+    if (props.iconObj !== undefined) style.iconObj = props.iconObj;
+    if (props.visibility !== undefined) style.visibility = props.visibility;
+    if (props.sizes !== undefined) style.sizes = props.sizes;
+    if (props.userSizes !== undefined) style.userSizes = props.userSizes;
+    // 逐要素 opacity（与图层级那个 `opacity` 走不同入口：那个进 `setOpacity`）
+    if (props.featureOpacity !== undefined) style.opacity = props.featureOpacity;
     return Object.keys(style).length > 0 ? style : undefined;
   });
 }

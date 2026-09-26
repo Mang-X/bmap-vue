@@ -18,9 +18,12 @@
  *   类声明**（4.0.4 时没有），但官方明确「首次加载时可视化实现是异步注入的」——类型包里有
  *   形状不代表运行时已加载。因此：
  *   构造器按结构探测，且**在 `create()` 调用时刻判断**——不在 Driver 构造期冻结结论，
- *   注入完成后重新 `create()` 就能成功（issue 风险条目「加载后就绪」）。它们各自只公开
- *   自己那几个方法（`setOptions` / `setEnablePicked` / `hitTest` / `redraw` / 播放控制…），
- *   所以 `supports()` 会如实地对多数操作回答 `false`。
+ *   注入完成后重新 `create()` 就能成功（issue 风险条目「加载后就绪」）。它们的**成员面按声明**
+ *   登记（#165 Class 3：显隐 / 透明度 / 层级这一组在 4.0.5 的 `visualization/*.d.ts` 里逐条
+ *   声明，因此本库不再凭「运行时继承到、但专页没列」来猜），而状态 API / 缩放范围 /
+ *   `setRenderStage` / `setRefCenter` 这类「声明里没有或当前没有消费者」的仍然关闭。
+ *   逐条依据见下面 kind 表的注释，逐条核对见 `native-layers.test.ts` 的
+ *   「操作面与官方声明一致」。
  * - **不支持的操作显式失败**：`BMAP_CAPABILITY_UNSUPPORTED`，不静默 no-op。
  * - **层级方法要求先挂载**：官方明确「层级调整实现会访问已关联的 Map 与图层管理器」，
  *   所以调用顺序是 `create → add → setZIndex`；错误经 `sdkCall` 归一，不吞错。
@@ -179,45 +182,86 @@ const NATIVE_LAYER_DESCRIPTORS = {
     styleMember: "setStyleOptions",
     operations: DECLARED_LAYER_OPERATIONS,
   },
-  // 扩展 API：官方只公开「数据 + 通用 options + 拾取」，没有状态 / 层级方法面。
+  // 扩展 API 的四个类：`@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`）给
+  // `visualization/` 补上了类声明，**逐条**声明了显示属性那一组。4.0.4 时没有声明，本仓库据
+  // 「不把未声明成员当契约」的口径只凭 #35 的 live 取证放开了 `setVisible`（`setOpacity` /
+  // `setZIndex` / `setRenderStage` / `setRefCenter` 当时全部关闭）。那个前提已失效，下面
+  // 按**声明**登记，不再按「运行时继承到、但没列进方法面」推测。
   //
-  // 真实 4.0 的实测（ADR 的 smoke 记录，`直接调用` 一栏）显示这四个类**从共享基类继承了**
-  // `setVisible` / `setOpacity` / `setZIndex`，调用不抛错。本表对 `setOpacity` / `setZIndex` /
-  // 状态 API 仍然回答「不支持」：官方扩展 API 专页没有把它们列为这些类的方法面，而「不把未声明
-  // 成员当契约」是本仓库对 SDK 边界的一贯口径（同 #22 的 `viewport → autoViewport`）。
+  // 声明行（`visualization/*.d.ts`，`@group 显示属性` 那一组）：
   //
-  // `setVisible` 是**唯一的例外**，理由是 #35 的**实测取证**（`scripts/probe-native-point-cluster.mts`，
-  // 2026-09-19）：`PointLayer` / `ClusterLayer` 上 `setVisible(false)` 之后 `getVisible() === false`、
-  // 再 `setVisible(true)` 能恢复 —— 而这三类数据组件共享 `DataComponentProps.visible`，
-  // 「隐藏」是它们共同的最小契约的一部分。取证与取代关系见 ADR
-  // `2026-09-19-native-point-layers-and-cluster`；其它继承成员仍然关闭（没有消费者，也没有取证）。
+  // | kind | setVisible | setOpacity | setZIndex | setRenderStage | setRefCenter |
+  // | --- | --- | --- | --- | --- | --- |
+  // | point | :324 | **无** | :328 | :332 | :336 |
+  // | cluster | :260 | :264 | :268 | :272 | :276 |
+  // | heatmap | :153 | :157 | :161 | :165 | :169 |
+  // | track-line | :457 | :461 | :465 | :469 | :473 |
+  //
+  // `PointLayer` **没有** `setOpacity`（三个兄弟都有）——因此它不登记，登记了就是拿未声明的
+  // 成员当契约。它同样没有 `setEnablePicked` 之外的拾取面以外的成员。
+  //
+  // 状态 API（`updateState` 一族）、`setZoomRange`（`setMinZoom` / `setMaxZoom`）、
+  // `setRenderStage` / `setRefCenter` 仍然**不登记**：前两者官方声明里确实没有（`minZoom` /
+  // `maxZoom` 是**构造选项**，不是字段级 setter），后两者本库当前没有组件消费者——
+  // 放开门面而没有消费者等于凭空扩面（#104 的「没有消费者的扩展面一律不加」）。
   point: {
     ctor: "PointLayer",
     declared: true,
     styleMember: "setOptions",
-    operations: ["setData", "clearData", "setStyle", "setVisible", "setEnablePicked", "hitTest"],
+    operations: [
+      "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setZIndex",
+      "setEnablePicked",
+      "hitTest",
+    ],
   },
   cluster: {
     ctor: "ClusterLayer",
     declared: true,
     styleMember: "setOptions",
-    operations: ["setData", "clearData", "setStyle", "setVisible"],
+    operations: [
+      "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setOpacity",
+      "setZIndex",
+    ],
   },
   heatmap: {
     ctor: "Heatmap",
     declared: true,
     styleMember: "setOptions",
-    operations: ["setData", "clearData", "setStyle"],
+    operations: [
+      "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setOpacity",
+      "setZIndex",
+    ],
   },
   // TrackLine 播放命令面（#110）。方法名经 live 探针（`scripts/probe-track-line.mts`，
   // 2026-09-23，exit 0）取证：`typeof layer.start === "function"` 等七条全部为真。
   // 4.0.5 补上了 TrackLine 类声明，且七个操作**逐一**都在声明里（`declared: true`）。
+  //
+  // `clearData`（`TrackLine.d.ts:358`）此前漏登记：它同属声明的数据面，被
+  // 「这一族没有清空入口」的旧结论连坐了。`TrackLineLayer` 组件仍**不调用**它
+  // （`data: null` 走换实例，见组件注释），但 Driver 面的声明一致性要求登记。
   "track-line": {
     ctor: "TrackLine",
     declared: true,
     styleMember: "setOptions",
     operations: [
       "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setOpacity",
+      "setZIndex",
       "start",
       "pause",
       "resume",
@@ -275,6 +319,44 @@ export function createJsapiV4NativeLayerDriver(
   };
 
   /**
+   * `referCenter`：组件层的纯数据 `{ lng, lat }` → 官方 `BMap.Point`。
+   *
+   * 官方 `PointLayerOptions.referCenter`（`visualization/PointLayer.d.ts:191`）的类型是
+   * `BMap.Point`，而组件层收的是全库统一的 Geometry 纯数据。**换算只发生在 Driver 边界**
+   * （组件 / composable 不构造 SDK 构造器——仓库对 raw SDK 边界的一贯口径）。
+   *
+   * 已经是 `BMap.Point` 的（有人直接经 `advanced` 逃生口传了）原样放过：只认「带 `lng`/`lat`
+   * 两个有限数字的纯对象」才换算，避免把真 `Point` 再包一层。
+   */
+  const toRawPoint = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") return value;
+    const candidate = value as { lng?: unknown; lat?: unknown };
+    // 官方 `Point` 实例也带 `lng` / `lat`，但它的原型是 SDK 的类而不是 `Object.prototype`。
+    // 因此判据是「**是不是纯数据**」而不是「有没有 lng/lat」：只对原型是 `Object.prototype`
+    // （或 `null`）的对象换算，别去动已经构造好的真实例。
+    const proto = Object.getPrototypeOf(candidate);
+    if (proto !== Object.prototype && proto !== null) return value;
+    const lng = Number(candidate.lng);
+    const lat = Number(candidate.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return value;
+    return new (namespaceCtor(namespace, "Point"))(lng, lat);
+  };
+
+  /**
+   * 扩展 API 的整袋 `setOptions` 入参归一化。
+   *
+   * 只做一件官方签名要求、而组件层给不出的事：把 `referCenter` 换算成 `BMap.Point`。
+   * **不是白名单过滤**——袋里其余键原样透传（官方 `setOptions` 自己会忽略未声明的键并告警一次，
+   * 见 `PointLayer.d.ts:298`；在这里替上游过滤会吞掉那条告警）。
+   */
+  const normalizeOptionsBag = (payload: unknown): unknown => {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+    const bag = payload as Record<string, unknown>;
+    if (!("referCenter" in bag)) return payload;
+    return { ...bag, referCenter: toRawPoint(bag.referCenter) };
+  };
+
+  /**
    * 归一化操作 → SDK 调用。
    *
    * 只在 `assertSupported()` 之后调用；因此这里按 `descriptor.declared` 分流是安全的
@@ -314,7 +396,7 @@ export function createJsapiV4NativeLayerDriver(
           return;
         }
         // 扩展 API 只有整袋 setOptions（官方文档把它们列为 setOptions）
-        callRequired(raw, "setOptions", payload);
+        callRequired(raw, "setOptions", normalizeOptionsBag(payload));
         return;
       case "setVisible":
         callRequired(raw, "setVisible", payload);

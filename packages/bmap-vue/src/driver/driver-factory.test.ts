@@ -72,7 +72,14 @@ describe("createJsapiV4Driver（#23 装配）", () => {
     const driver = createJsapiV4Driver({ rawSdk: namespace, version: "4.0", unsupported: "warn" });
 
     expect(driver.nativeLayers.supports("line", "setVisible")).toBe(true);
-    expect(driver.nativeLayers.supports("heatmap", "setVisible")).toBe(false);
+    // 4.0.5 给 `visualization/Heatmap.d.ts:153` 补上了 `setVisible` 声明，登记面随之放开
+    // （此前 `heatmap` 的显隐走摘挂，重新显示要换实例）。见 #165 Class 3 / TASK 1。
+    expect(driver.nativeLayers.supports("heatmap", "setVisible")).toBe(true);
+    // 仍然关闭的：官方 `PointLayer` 的声明里**没有** `setOpacity`（`ClusterLayer` /
+    // `Heatmap` / `TrackLine` 都有）——不把未声明的成员当契约。
+    expect(driver.nativeLayers.supports("point", "setOpacity")).toBe(false);
+    // 状态 API 官方一个都没声明，仍然关闭。
+    expect(driver.nativeLayers.supports("heatmap", "updateState")).toBe(false);
     expect(driver.panorama.supported).toBe(true);
     expect(driver.services.createGeocoder().raw).toBeTruthy();
   });

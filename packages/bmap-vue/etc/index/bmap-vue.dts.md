@@ -629,6 +629,7 @@ declare const __VLS_component_39: DefineComponent<LineLayerProps, {
 }>, {
     visible: boolean;
     enablePicked: boolean;
+    popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_4: DefineComponent<InfoWindowProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     close: () => any;
@@ -674,6 +675,7 @@ declare const __VLS_component_40: DefineComponent<FillLayerProps, {
     visible: boolean;
     border: boolean;
     enablePicked: boolean;
+    popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_41: DefineComponent<HeatmapLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<HeatmapLayerProps> & Readonly<{}>, {
     visible: boolean;
@@ -1862,6 +1864,7 @@ declare interface DistrictLayerProps {
     strokeOpacity?: number;
     autoViewport?: boolean;
     adcode?: string;
+    onComplete?: () => void;
 }
 export declare const DistrictType: {
     readonly PROVINCE: 0;
@@ -3416,6 +3419,8 @@ export declare interface NativeLayerPickOptions {
     pickHeight?: number;
     autoSelect?: boolean;
     selectedColor?: string;
+    selectedIndex?: number;
+    popEvent?: boolean;
 }
 declare interface NativeLayerZoomRange {
     min?: number;
@@ -3823,6 +3828,17 @@ export declare interface PointIconLayerProps<Item> extends DataComponentProps<It
     ];
     scale?: number;
     rotation?: number;
+    featureOpacity?: number;
+    visibility?: boolean;
+    sizes?: [
+        number,
+        number
+    ];
+    userSizes?: boolean;
+    iconObj?: (style: object, properties: object) => {
+        id?: number;
+        canvas: HTMLCanvasElement;
+    };
     isFlat?: boolean;
     isFixed?: boolean;
     opacity?: number;
@@ -3869,6 +3885,18 @@ export declare interface PointLayerProps<Item> extends DataComponentProps<Item> 
         number
     ];
     anchor?: string;
+    iconSize?: [
+        number,
+        number
+    ] | number;
+    mouseStyleChange?: boolean;
+    pickTolerance?: number;
+    pickThrough?: boolean;
+    referCenter?: {
+        lng: number;
+        lat: number;
+    };
+    renderStage?: "building" | "poi" | null;
     enablePicked?: boolean;
 }
 export declare interface PointLike {

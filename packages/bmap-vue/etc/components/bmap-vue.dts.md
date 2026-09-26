@@ -625,6 +625,7 @@ declare const __VLS_component_39: DefineComponent<LineLayerProps, {
 }>, {
     visible: boolean;
     enablePicked: boolean;
+    popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_4: DefineComponent<InfoWindowProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     close: () => any;
@@ -670,6 +671,7 @@ declare const __VLS_component_40: DefineComponent<FillLayerProps, {
     visible: boolean;
     border: boolean;
     enablePicked: boolean;
+    popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_41: DefineComponent<HeatmapLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<HeatmapLayerProps> & Readonly<{}>, {
     visible: boolean;
@@ -1668,6 +1670,7 @@ declare interface DistrictLayerProps {
     strokeOpacity?: number;
     autoViewport?: boolean;
     adcode?: string;
+    onComplete?: () => void;
 }
 declare type DistrictType = DistrictTypeValue;
 declare const DistrictType_2: {
@@ -2395,6 +2398,8 @@ declare interface NativeLayerPickOptions {
     pickHeight?: number;
     autoSelect?: boolean;
     selectedColor?: string;
+    selectedIndex?: number;
+    popEvent?: boolean;
 }
 export declare const NavigationControl: __VLS_WithSlots_20<typeof __VLS_component_20, __VLS_Slots_20>;
 export declare const NavigationControl3D: __VLS_WithSlots_26<typeof __VLS_component_26, __VLS_Slots_26>;
@@ -2663,6 +2668,17 @@ declare interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
     ];
     scale?: number;
     rotation?: number;
+    featureOpacity?: number;
+    visibility?: boolean;
+    sizes?: [
+        number,
+        number
+    ];
+    userSizes?: boolean;
+    iconObj?: (style: object, properties: object) => {
+        id?: number;
+        canvas: HTMLCanvasElement;
+    };
     isFlat?: boolean;
     isFixed?: boolean;
     opacity?: number;
@@ -2705,6 +2721,18 @@ declare interface PointLayerProps<Item> extends DataComponentProps<Item> {
         number
     ];
     anchor?: string;
+    iconSize?: [
+        number,
+        number
+    ] | number;
+    mouseStyleChange?: boolean;
+    pickTolerance?: number;
+    pickThrough?: boolean;
+    referCenter?: {
+        lng: number;
+        lat: number;
+    };
+    renderStage?: "building" | "poi" | null;
     enablePicked?: boolean;
 }
 declare interface PointPick<Item> {

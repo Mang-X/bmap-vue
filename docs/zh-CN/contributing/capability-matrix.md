@@ -77,9 +77,9 @@
 | layer | `layer.raster` | experimental | — | RasterTileLayer | 栅格瓦片图层（RasterTileLayer）；支持子域轮询、TMS 翻转与四至裁剪 |
 | layer | `layer.mvt` | native | — | MVTLayer | MVT 矢量瓦片图层（MVTLayer）；按源图层名过滤与样式，要素状态键为 layerName_id |
 | layer | `layer.cluster` | extended | ✓ | — | 聚合图层（ClusterLayer）；MarkerCluster 的默认路径；另有显式可选的 markers 引擎（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19 |
-| layer | `layer.point` | experimental | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地 |
-| layer | `layer.heatmap` | experimental | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API |
-| layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。 |
+| layer | `layer.point` | experimental | ✓ | PointLayer | 原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地。4.0.5 声明了显隐 / 层级 / 绘制阶段 / 参考中心点这一组显示属性（官方**没有** setOpacity）。 |
+| layer | `layer.heatmap` | experimental | ✓ | Heatmap | 热力图（Heatmap）；按权重渲染点密度，属扩展 API。4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter 而不是摘挂实例。 |
+| layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter，重新可见**不**换实例（换实例会丢掉播放进度）。 |
 | service | `service.local-search` | native | — | LocalSearch | 本地检索（LocalSearch） |
 | service | `service.autocomplete` | native | — | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
 | service | `service.driving-route` | native | — | DrivingRoute | 驾车路线规划（DrivingRoute） |

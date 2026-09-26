@@ -276,6 +276,44 @@ describe("[#40] §2 构造期选项变化：URL 变化重建与旧请求过期",
     await unmountAndSettle(wrapper);
     harness.assertIdle("district 重建");
   });
+
+  /**
+   * #165 Class 3 / TASK 2：`onComplete`（官方 `DistrictLayerOptions.onComplete`，
+   * `layer/DistrictLayer.d.ts:180`）。
+   *
+   * 这是 4.0 的 `DistrictLayer` 给「边界什么时候画完」的**唯一**官方入口——这批图层没有
+   * `dataparsed` 事件面。回调型 option 经 `forwardCallback` 转发，因此**换回调不重建**。
+   */
+  it("district：onComplete 进构造选项，且换实现不重建（forwardCallback 转发）", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { wrapper, setProp } = await mountOneLayer(0, { onComplete: first });
+    expect(createdSince()).toBe(1);
+    const handed = harness.layerOptions(-1).onComplete;
+    expect(typeof handed, "SDK 手上拿到的是一个函数").toBe("function");
+
+    // SDK 侧真的回调 ⇒ 打到的是**当前** prop（第一次）
+    handed();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    // 换实现不重建：函数被 forwardCallback 包一层，读的是 prop 当前值
+    await setProp({ onComplete: second });
+    expect(createdSince(), "回调型 option 不参与重建指纹").toBe(1);
+    harness.layerOptions(-1).onComplete();
+    expect(second, "换实现后打到新的那个").toHaveBeenCalledTimes(1);
+    expect(first, "旧实现不再被调用").toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("district onComplete");
+  });
+
+  it("district：没传 onComplete 时该键不进选项袋（不替上游表态）", async () => {
+    const { wrapper } = await mountOneLayer(0, {});
+    expect(harness.layerOptions(-1), "没传就不该有这个键").not.toHaveProperty("onComplete");
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("district onComplete 缺省");
+  });
 });
 
 /* -------------------------------------------------------------------------- */

@@ -58,6 +58,10 @@ const props = withDefaults(defineProps<LineLayerProps>(), {
   visible: true,
   // 与官方默认值（false）**不同**，刻意如此：不给事件就别怪用户拿不到 `pick`。
   enablePicked: true,
+  // ⚠️ 刻意写 `undefined`（口径同 `FillLayerProps.border` / `PointIconLayer.userSizes`）：
+  // 官方 `popEvent` 默认 `true`，而 Vue 对缺省 `Boolean` 会转成 `false`——不显式关掉这个转换，
+  // 每个不传 `popEvent` 的用户都会被静默改成「事件不冒泡」。
+  popEvent: undefined,
 });
 
 const emit = defineEmits<{

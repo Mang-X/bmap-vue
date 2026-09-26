@@ -810,8 +810,11 @@ export interface FillLayerStyle {
  * visible/opacity/zoom/zIndex」）。
  *
  * 四个槽位各自有没有落地方式**取决于该 kind 的官方方法面**（由 Driver 的 `supports()` 回答）：
- * 例如 `Heatmap` / `TrackLine` 没有 `setVisible` / `setOpacity` / 缩放范围 setter，因此对应组件
- * **不声明**这些 prop（声明了却忽略 = 假支持）。`visible` 在那种 kind 上表达为「挂上 / 摘掉」。
+ * 缩放范围（`minZoom` / `maxZoom`）对全部八类都是**构造选项**而非字段级 setter，因此没有任何
+ * 组件在这里声明它们（声明了却忽略 = 假支持）。
+ *
+ * `visible` 例外：4.0.5 之后八个 kind **都**有 `setVisible`，因此它一律走 setter、
+ * **不**用「挂上 / 摘掉」表达显隐——重新可见不换实例。
  */
 export interface NativeLayerCommonProps {
   /** 是否显示。默认 `true`。 */
@@ -853,6 +856,23 @@ export interface NativeLayerPickOptions {
   autoSelect?: boolean;
   /** 选中数据颜色（官方 `selectedColor`，默认 `'rgba(20, 20, 200, 1.0)'`）。 */
   selectedColor?: string;
+  /**
+   * 选中数据的**索引**（官方 `selectedIndex`，`layer/LineLayer.d.ts:25` / `FillLayer.d.ts:30`，
+   * 官方默认 `-1` 即不选中）。
+   *
+   * 与 `selectedColor` 是一对：`selectedColor` 定「选中长什么样」，本项定「哪一条被选中」——
+   * 此前只暴露了前者（半接线）。**索引指的是数据顺序的序号，不是业务 id**；要按业务 id 选，
+   * 用 Feature State 命令面（组件 expose 的 `featureState`），那才是按 id 定位的口径。
+   */
+  selectedIndex?: number;
+  /**
+   * 拾取事件是否向上层冒泡（官方 `popEvent`，`layer/LineLayer.d.ts:70` / `FillLayer.d.ts:75`，
+   * 官方默认 `true`）。
+   *
+   * `false` = 本层命中后**不再**往更上层的图层/覆盖物派发。多个可拾取图层上下叠放时用它控制
+   * 「谁先吃掉这次点击」。
+   */
+  popEvent?: boolean;
 }
 
 /**
@@ -908,10 +928,11 @@ export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickO
 /**
  * `HeatmapLayer` 的 props。
  *
- * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` 没有类声明，可视化实现是
+ * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.5` 才补上类声明，可视化实现是
  * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `setStyle`；驱动也登记了
  * `clearData`，但本组件不调用它——见下），因此**没有** `opacity` / `zIndex` / `minZoom` /
- * `maxZoom`：官方这些图层不公开对应 setter，声明了也只是静默忽略。
+ * `maxZoom`：前两个虽然 4.0.5 声明了（`visualization/Heatmap.d.ts:157`/`:161`）但本组件刻意
+ * 不开面（`style` 已是官方的整袋透传口），后两个官方**没有**字段级 setter。
  */
 export interface HeatmapLayerProps {
   /**
@@ -927,7 +948,7 @@ export interface HeatmapLayerProps {
    * 因此这里是**原样透传**的键值袋而不是逐个字段的强类型：本库不复刻一份没有依据的字段表。
    */
   style?: Record<string, unknown>;
-  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达（重新可见时换实例）。 */
+  /** 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明），重新可见**不**换实例。 */
   visible?: boolean;
 }
 
@@ -950,7 +971,13 @@ export interface TrackLineLayerProps {
    * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。
    */
   data?: object | null;
-  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达。 */
+  /**
+   * 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明，`visualization/TrackLine.d.ts:457`）。
+   *
+   * ⚠️ 因此**重新可见不换实例**——这一点对本组件是行为保证：换实例会把播放进度与播放状态
+   * 一起丢掉（播放到一半隐藏再显示会从头播）。此前该 kind 没有登记 `setVisible`、
+   * 显隐走挂上 / 摘掉，正是那时的行为。
+   */
   visible?: boolean;
   /**
    * 页面 hidden 时是否**自动 pause**（shown 恢复 resume）。默认 `false`。
@@ -1035,6 +1062,39 @@ export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   scale?: number;
   /** 旋转角度（度）。 */
   rotation?: number;
+  /**
+   * **逐要素**透明度 `0`-`1`（官方 `PointIconStyle.opacity`，`layer/PointIconLayer.d.ts:127`）。
+   *
+   * ⚠️ 与下面的图层级 `opacity` 是**两个不同的官方字段**：本项进样式袋（逐要素，官方允许
+   * `number | StyleExpress` 逐点取值），图层级那个走 `setOpacity` 写入图层级。两者相乘。
+   * 本组件只收**静态**数值——逐要素差异化请走 Feature State（expose 的 `featureState`）。
+   */
+  featureOpacity?: number;
+  /**
+   * 逐要素是否显示（官方 `PointIconStyle.visibility`，`:105`，官方默认 `true`）。
+   *
+   * 与图层级 `visible` 不同：这是**样式袋字段**⇒ 就地更新（不换实例）。
+   */
+  visibility?: boolean;
+  /**
+   * 点尺寸 `[宽, 高]`（官方 `PointIconStyle.sizes`，`:108`）；只在 `userSizes` 为 `true` 时生效。
+   */
+  sizes?: [number, number];
+  /**
+   * 是否使用 `sizes` 的宽高而非 `width` / `height`（官方 `userSizes`，`:117`，官方默认 `true`）。
+   *
+   * ⚠️ 不给默认值（同 `FillLayerProps.border` 的理由）：Vue 对 `Boolean` 有「缺省即 `false`」
+   * 的转换，写 `false` 会让每个不传它的用户都隐式切到 `width` / `height` 通道、覆盖掉 `sizes`。
+   * 「没传」= 不表态 = 官方默认 `true`。
+   */
+  userSizes?: boolean;
+  /**
+   * 逐要素图标源：`(style, properties) => { id?, canvas }`（官方 `PointIconStyle.iconObj`，`:101`）。
+   *
+   * 按要素算出图标（典型是用 canvas 画文字 / 数字 / 业务徽标）。`id` 用于图集去重。
+   * 与静态 `icon`（URL）是二选一。
+   */
+  iconObj?: (style: object, properties: object) => { id?: number; canvas: HTMLCanvasElement };
   /** 是否贴地（构造期，官方默认 `true`）。 */
   isFlat?: boolean;
   /** 是否跟随缩放保持尺寸（构造期，官方默认 `true`）。 */
@@ -1091,13 +1151,54 @@ export interface PointLayerProps<Item> extends DataComponentProps<Item> {
   /** 锚点。 */
   anchor?: string;
   /**
+   * 图标显示尺寸 `[宽, 高]` 或 number（px）；不设则用图片 / canvas 自身尺寸
+   * （官方 `PointLayerOptions.iconSize`，`visualization/PointLayer.d.ts:135`）。
+   *
+   * 只在**图标模式**（配了 `icon`）下有效，与 `shape` 互斥——这是官方分形状模式 / 图标模式的
+   * 那条互斥关系，本库不另造第三个模式。
+   */
+  iconSize?: [number, number] | number;
+  /**
+   * 命中后是否更换鼠标光标（官方 `mouseStyleChange`，`:153`，默认 `true`）。
+   *
+   * 只在开启拾取（`enablePicked`）时才有意义：关掉拾取就没有「命中」这回事。
+   */
+  mouseStyleChange?: boolean;
+  /**
+   * 命中容差（css px，官方 `pickTolerance`，`:158`，默认 `4`）。
+   *
+   * 这是**本组件真正的拾取调优入口**：`PointLayer` 官方声明里没有 `pickWidth` / `pickHeight`
+   * （那是 `layer/` 下那四类专页图层的构造选项），它给的是「命中点周围多大范围算命中」的容差。
+   */
+  pickTolerance?: number;
+  /**
+   * 命中后是否继续向下层派发（官方 `pickThrough`，`:163`，默认 `false`）。
+   *
+   * `true` = 本层命中**不**吞掉事件，下面的图层仍能收到；重���点、上下叠放的图层常用。
+   */
+  pickThrough?: boolean;
+  /**
+   * 图层参考中心点（官方 `referCenter`，`:191`），规避大坐标浮点抖动。
+   *
+   * 官方类型是 `BMap.Point`；本组件收**纯数据** `{ lng, lat }`（与全库 Geometry 口径一致），
+   * 由 Driver 侧负责换算——组件层不直接构造 SDK 构造器。
+   */
+  referCenter?: { lng: number; lat: number };
+  /**
+   * 绘制阶段（官方 `renderStage`，`:196`）：`'building'` / `'poi'` / `null`。
+   *
+   * 图层绘制在该阶段之后（叠在其上）；`null` = 官方默认落点（覆盖物之后、3D 楼块之前）。
+   */
+  renderStage?: "building" | "poi" | null;
+  /**
    * 是否开启鼠标拾取，默认 `true`。构造期选项（官方另有 `setEnablePicked`，本库统一走构造期，
    * 三个点图层组件的这条语义因此一致）。
    *
-   * ⚠️ 图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露：它们走的是
-   * `setOpacity` / `setZIndex` / `setMinZoom` / `setMaxZoom`，而官方扩展专页没有把这一族列为
-   * `PointLayer` 的方法面 —— 按本库「不把未声明的继承成员当契约」的口径，Driver 对它们回答
-   * `unsupported`（`setVisible` 是唯一的例外，它取过证）。收下一个用不了的 prop 属于假支持。
+   * ⚠️ 图层级的 `opacity` **没有**暴露：4.0.5 的 `PointLayer` 声明里**没有** `setOpacity`
+   * （`ClusterLayer` / `Heatmap` / `TrackLine` 都有）——按本库「不把未声明成员当契约」的口径，
+   * Driver 对它回答 `unsupported`。收下一个用不了的 prop 属于假支持。
+   * `zIndex` 相反：4.0.5 声明了 `setZIndex`（`:328`），但它当前没有组件消费者（组件未声明该
+   * prop），因此也不在这里开面。
    */
   enablePicked?: boolean;
   /**

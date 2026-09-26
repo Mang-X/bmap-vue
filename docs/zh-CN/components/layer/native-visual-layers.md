@@ -56,7 +56,17 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 | `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时会把上一代的数据补齐到新实例** | 否 |
 | `style` | `LineLayer` / `FillLayer`：`setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」）；`HeatmapLayer` / `TrackLineLayer`：`setOptions()`（4.0.5 声明的新入口） | 否 |
 | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
-| `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
+| `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
+
+其中 `selectedIndex` / `popEvent` 是 #165 Class 3 补齐的（官方 `layer/LineLayer.d.ts:25` / `:70`、
+`FillLayer.d.ts:30` / `:75`）：此前 `selectedColor` 单独暴露而「哪一条被选中」没有入口，
+是一对**半接线**的选项；`popEvent` 控制拾取事件是否向上层冒泡。两者都是构造选项、官方没有
+就地改的入口，所以变化时换实例。
+
+> ⚠️ `popEvent` 的官方默认是 `true`，而 Vue 对缺省的 `Boolean` prop 会转成 `false`。
+> 组件因此显式写 `popEvent: undefined`，让「没传」真的是「没传」——否则每个不传它的用户
+> 都会被静默改成「事件不冒泡」。`FillLayer` 的 `border`、`PointIconLayer` 的 `userSizes` /
+> `visibility`、`PointLayer` 的 `mouseStyleChange` / `pickThrough` 是同一条理由。
 
 `data: null` 走「换实例」而不是调 `clearData()`：这是本库自己的取舍
 （ADR `2026-09-19-native-data-layer-components` 决策 8 / #106 评审 P1）——这一族的实例本就随摘除
@@ -74,22 +84,28 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 - **原地修改同一份 `data` 不会被感知**（数据按引用比较，与图层组件同一条口径）。请换引用，或换
   一份新的 `FeatureCollection`。
 
-## `visible` 有两种落地
+## `visible` 的落地
 
 | kind | 隐藏的语义 |
 | --- | --- |
-| `LineLayer` / `FillLayer`（本库登记了 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
-| `HeatmapLayer` / `TrackLineLayer`（本库**没有**登记 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
+| 全部八类（含 `HeatmapLayer` / `TrackLineLayer`） | `setVisible(false)`：**数据与实例都留着**，重新显示是同一个实例的 `setVisible(true)` |
 
-后者的行为来自实测：`removeLayer` 之后的实例再也渲染不了（重挂不会让内容回来），所以本库不去猜
-「复用可行」。文档只承诺能做到的事。
+⚠️ 4.0.5（git `5ba67f4`）给 `visualization/` 的 `PointLayer` / `ClusterLayer` / `Heatmap` /
+`TrackLine` 补上了类声明，**四个类都逐条声明了 `setVisible` / `getVisible`**。在此之前本库按
+「4.0.4 没有类声明 ⇒ 不把成员当契约」只凭 live 取证放开了 `PointLayer` / `ClusterLayer` 的
+`setVisible`，`HeatmapLayer` / `TrackLineLayer` 因此走**摘挂**：隐藏 = `removeLayer`，
+重新显示 = 换一个新实例并重新下发数据。
 
-> 「本库没有登记」与「官方没声明」不是一回事。4.0.5 的
-> `visualization/Heatmap.d.ts` / `visualization/TrackLine.d.ts` **都声明了 `setVisible` /
-> `getVisible` / `setOpacity` / `setZIndex` / `setRenderStage` / `setRefCenter`**。本库仍然不暴露它们：
-> 理由是 live 探针只对 `PointLayer` / `ClusterLayer` 的 `setVisible` 做过往返取证，
-> 其余继承成员没有取证（见 `driver/jsapi-v4/native-layers.ts` 的 `RUNTIME_INJECTED_LAYER_CTORS`
-> 与 kind 表）。**这是本库的判断，不是上游声明的缺口。**
+那个前提已经失效，显隐因此统一走 setter。对 `TrackLineLayer` 这一处的行为差别尤其明显：
+摘挂会**换实例**，而换实例会把播放进度与播放状态一起丢掉——「播放到一半切到后台再回来」会从头播。
+现在 `visible` 翻转不再换实例，播放位置扛得过隐藏往返。
+
+> 仍然**不**登记的成员（4.0.5 的声明里也确实没有，或没有消费者）：
+> 状态 API（`updateState` 一族）、缩放范围（`minZoom` / `maxZoom` 是**构造选项**而非字段级
+> setter）、`setRenderStage` / `setRefCenter`。`PointLayer` 另外**没有** `setOpacity`
+> （`ClusterLayer` / `Heatmap` / `TrackLine` 都有）。逐条依据见
+> `driver/jsapi-v4/native-layers.ts` 的 kind 表注释与
+> `native-layers.test.ts` 的「操作面与官方声明一致」。
 
 ## 拾取事件
 
@@ -255,8 +271,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | 场景 | 会发生什么 |
 | --- | --- |
 | 组件卸载 / 地图销毁 | 解绑监听 → `removeLayer()`；实例随摘除被丢弃（SDK 侧的数据也随之成为垃圾） |
-| `visible=false`（有四类专页声明的 kind） | 只调 `setVisible(false)`：数据与实例都留着 |
-| `visible=false`（扩展 API 的 kind） | 摘掉图层（重新可见时换新实例） |
+| `visible=false` | 只调 `setVisible(false)`：数据与实例都留着，**不摘图层**（八个 kind 一致，见上文） |
 
 > **这一族没有 `clearData`，所以「清空」不走清空入口。** 官方专页四类
 > （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）的公开方法里只有

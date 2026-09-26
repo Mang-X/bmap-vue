@@ -32,6 +32,8 @@ import LineLayer from "../../packages/bmap-vue/src/components/layers/LineLayer.v
 import FillLayer from "../../packages/bmap-vue/src/components/layers/FillLayer.vue";
 import HeatmapLayer from "../../packages/bmap-vue/src/components/layers/HeatmapLayer.vue";
 import TrackLineLayer from "../../packages/bmap-vue/src/components/layers/TrackLineLayer.vue";
+import PointLayer from "../../packages/bmap-vue/src/components/data/PointLayer.vue";
+import PointIconLayer from "../../packages/bmap-vue/src/components/data/PointIconLayer.vue";
 import type { FeatureStateApi } from "../../packages/bmap-vue/src/core/data/featureState";
 
 const { harness, fake } = createFakeV4Harness();
@@ -98,6 +100,8 @@ interface RawLayerView {
   state?: Record<string, unknown>;
   styleOptions?: Record<string, unknown>;
   clearData?: () => void;
+  /** 构造期选项袋（`new Ctor(options)` 收到的那一份）。 */
+  options?: Record<string, unknown>;
 }
 
 /**
@@ -597,7 +601,7 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
   });
 
   describe("§5 逐 kind 的能力面：不假支持", () => {
-    it("热力图只声明 data / style / visible（不产生不支持的字段调用）", async () => {
+    it("热力图只声明 data / style / visible（不产生未登记的字段调用）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, style: { radius: 30 } });
       const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
@@ -606,15 +610,21 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       const calls = harness.nativeLayerCalls();
       expect(calls, "数据走 setData").toContain("setData");
       expect(calls, "样式走扩展 API 的整袋 setOptions").toContain("setOptions");
-      for (const unsupported of ["setVisible", "setOpacity", "setZIndex", "setMinZoom", "setMaxZoom"]) {
-        expect(calls, `热力图没有 ${unsupported}：不该产生这个调用`).not.toContain(unsupported);
+      // `setVisible` 出现在这里是对的：`visible` 默认 true，内核在挂载后写一次。
+      // 4.0.5 声明了它（`Heatmap.d.ts:153`），因此**不再是**「不该产生」的调用。
+      // ⚠️ 组件**没有** `opacity` / `zIndex` / 缩放范围 prop（那是 #165 TASK 2 之外的独立决定），
+      // 所以这三个调用仍然不该出现——组件没声明的 prop，内核不会去写。
+      for (const notDeclared of ["setOpacity", "setZIndex", "setMinZoom", "setMaxZoom"]) {
+        expect(calls, `热力图组件没有 ${notDeclared} 这个 prop：不该产生这个调用`).not.toContain(
+          notDeclared,
+        );
       }
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("HeatmapLayer");
     });
 
-    it("不表态期间「隐藏 → 显示」同样要继承数据（扩展 API 图层的强制重建路径）", async () => {
+    it("不表态期间「隐藏 → 显示」不丢数据（4.0.5 声明了 setVisible ⇒ 不换实例）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
       const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
@@ -624,19 +634,20 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       await settle();
       expect(harness.nativeLayerData(), "前置：旧实例仍有数据").toEqual(POLYGONS);
 
-      // 没有 setVisible 的 kind：隐藏是摘掉、显示必须换实例 —— 这条路径不能把数据丢掉
+      // 有 setVisible 的 kind：隐藏是**同一个实例**的 setVisible(false)，
+      // 重新显示是 setVisible(true) —— 两种情况都不该换实例，数据也就没有「继承」问题
       props.value = { ...props.value, visible: false };
       await settle();
       props.value = { ...props.value, visible: true };
       await settle();
-      expect(createdSince(), "重新可见换了实例").toBe(created + 1);
-      expect(harness.nativeLayerData(), "新实例继承数据").toEqual(POLYGONS);
+      expect(createdSince(), "重新可见不换实例").toBe(created);
+      expect(harness.nativeLayerData(), "同一实例的数据仍在").toEqual(POLYGONS);
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("不表态 + 隐藏往返");
     });
 
-    it("热力图的 visible 用挂上-摘掉表达；重新可见换实例（摘掉的实例渲染不了）", async () => {
+    it("热力图：visible 走 setVisible，重新显示**不重建**（#165 TASK 1 的行为后果）", async () => {
       const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
       const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
       await settle();
@@ -644,15 +655,42 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
 
       props.value = { ...props.value, visible: false };
       await settle();
-      expect(harness.attached("layer"), "没有 setVisible ⇒ 摘掉").toBe(0);
+      // 判据是**实例身份**：仍在图上 + 同一代实例，而不是「调过 setVisible」
+      expect(harness.attached("layer"), "有 setVisible ⇒ 实例始终挂在图上").toBe(1);
+      expect(harness.nativeLayerVisible(), "setVisible(false) 真的写到了实例").toBe(false);
+      expect(createdSince(), "隐藏不重建").toBe(created);
 
       props.value = { ...props.value, visible: true };
       await settle();
-      expect(harness.attached("layer"), "重新可见").toBe(1);
-      expect(createdSince(), "重新可见必须换实例（#98 live 实测）").toBe(created + 1);
+      expect(harness.nativeLayerVisible(), "setVisible(true) 恢复").toBe(true);
+      expect(
+        createdSince(),
+        "**重新显示不重建**——4.0.5 的 Heatmap 声明了 setVisible（Heatmap.d.ts:153）",
+      ).toBe(created);
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("HeatmapLayer 显隐");
+    });
+
+    it("热力图：组件没有 opacity / zIndex prop，隐藏走 setVisible（不摘挂）", async () => {
+      // 4.0.5 的 `Heatmap` 声明了 `setOpacity`（:157）/ `setZIndex`（:161），Driver 因此登记
+      // （登记面本身由 `driver/jsapi-v4/native-layers.test.ts` 逐条对声明核对）。
+      // ⚠️ **组件不因此新增 prop**：`<HeatmapLayer>` 的 props 面不在本票范围内。
+      const props = ref<Record<string, unknown>>({ data: POLYGONS, visible: true });
+      const wrapper = mountLayerTree(() => h(HeatmapLayer, props.value));
+      await settle();
+
+      const calls = harness.nativeLayerCalls();
+      expect(calls, "组件没声明的 prop 不会被内核写入").not.toContain("setOpacity");
+      expect(calls, "组件没声明的 prop 不会被内核写入").not.toContain("setZIndex");
+      expect(calls, "visible 默认 true ⇒ 挂载后写一次 setVisible").toContain("setVisible");
+
+      props.value = { ...props.value, visible: false };
+      await settle();
+      expect(harness.attached("layer"), "有 setVisible ⇒ 隐藏也是挂在图上的").toBe(1);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("HeatmapLayer 驱动面");
     });
 
     it("轨迹线：data → null 真的清掉旧轨迹（不再有「仍在画上一条轨迹」的状态）", async () => {
@@ -684,27 +722,63 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.assertIdle("轨迹线 data 往返");
     });
 
-    it("轨迹线基线：只下发数据，没有其它能力调用；显隐同样用挂上-摘掉", async () => {
+    it("轨迹线基线：只下发数据，没有其它能力调用；显隐走 setVisible", async () => {
       const props = ref<Record<string, unknown>>({ data: TRACK, visible: true });
       const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
       await settle();
 
       expect(createdSince()).toBe(1);
       expect(harness.nativeLayerData()).toEqual(TRACK);
-      expect(harness.nativeLayerCalls(), "除 setData 之外不该有别的调用").toEqual(["setData"]);
+      // `setVisible` 是内核在挂载后写的一次（`visible` 默认 true，4.0.5 声明了它），
+      // 不是「多出来的能力调用」——它取代的正是原来的摘挂路径。
+      expect(harness.nativeLayerCalls(), "除 setData / setVisible 之外不该有别的调用").toEqual([
+        "setVisible",
+        "setData",
+      ]);
 
       const created = createdSince();
       props.value = { ...props.value, visible: false };
       await settle();
-      expect(harness.attached("layer"), "没有 setVisible ⇒ 摘掉").toBe(0);
+      expect(harness.attached("layer"), "有 setVisible ⇒ 实例仍在图上").toBe(1);
+      expect(harness.nativeLayerVisible(), "setVisible(false) 写到了实例").toBe(false);
 
       props.value = { ...props.value, visible: true };
       await settle();
-      expect(harness.attached("layer"), "重新可见").toBe(1);
-      expect(createdSince(), "重新可见必须换实例（与热力图同一条证据）").toBe(created + 1);
+      expect(harness.nativeLayerVisible(), "setVisible(true) 恢复").toBe(true);
+      expect(createdSince(), "重新显示不重建（TrackLine.d.ts:457）").toBe(created);
 
       await unmountAndSettle(wrapper);
       harness.assertIdle("TrackLineLayer");
+    });
+
+    it("轨迹线：隐藏再显示**不丢播放进度**（4.0.5 声明了 setVisible 之前的真实回归）", async () => {
+      const props = ref<Record<string, unknown>>({ data: TRACK, visible: true });
+      const wrapper = mountLayerTree(() => h(TrackLineLayer, props.value));
+      await settle();
+      const layerVm = wrapper.findComponent(TrackLineLayer);
+      const created = createdSince();
+
+      // 播到一半
+      (layerVm.vm as unknown as { playback: { setProcess(p: number): void } }).playback.setProcess(0.4);
+      await settle();
+      const first = fake.createdNativeLayers[fake.createdNativeLayers.length - 1]!;
+      expect((first as unknown as { process: number }).process).toBe(0.4);
+
+      props.value = { ...props.value, visible: false };
+      await settle();
+      props.value = { ...props.value, visible: true };
+      await settle();
+
+      const last = fake.createdNativeLayers[fake.createdNativeLayers.length - 1]!;
+      expect(last, "仍是**同一个**实例").toBe(first);
+      expect(
+        (last as unknown as { process: number }).process,
+        "播放位置扛过了隐藏往返——重建会把进度与播放状态一起丢掉",
+      ).toBe(0.4);
+      expect(createdSince(), "整条路径不重建").toBe(created);
+
+      await unmountAndSettle(wrapper);
+      harness.assertIdle("轨迹线进度往返");
     });
 
     it("播放命令面：六条命令转发到实例；observed 由 progress / statuschange 事件派生", async () => {
@@ -774,10 +848,10 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       harness.emitNativeLayerEvent(-1, "statuschange", { status: 1, statusName: "playing" });
       expect(exposed.observed).toMatchObject({ process: 0.3, status: 1, statusName: "playing" });
 
-      // 换代（TrackLine 无 setVisible ⇒ 重新可见必须换一代）
-      props.value = { ...props.value, visible: false };
-      await settle();
-      props.value = { ...props.value, visible: true };
+      // 换代。⚠️ **不能再用 `visible` 触发**：4.0.5 声明了 `TrackLine.setVisible`（`:457`），
+      // 重新可见因此走同一个实例的 setter、不换代（见上面「显隐不重建」那条）。仍然会换代的
+      // 路径是 `data: null`（换一个没有轨迹的实例）。
+      props.value = { ...props.value, data: null };
       await settle();
       // 重建期间不清空：立刻置 null 会让「隐藏再显示」闪一下（注释约定）
       expect(exposed.observed, "重建期间保留上一代读数（不闪 null）").toMatchObject({
@@ -893,11 +967,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       expect(rawA.playing, "opt-in 下 hidden 触发 pause").toBe(false);
       const createdBeforeRebuild = createdSince();
 
-      // 仍 hidden 时换实例：TrackLine 没有 setVisible ⇒ 重新可见必须换一代（#98 实测口径）
-      props.value = { ...props.value, visible: false };
-      await settle();
-      expect(harness.attached("layer"), "hidden 期间先摘掉").toBe(0);
-      props.value = { ...props.value, visible: true };
+      // 仍 hidden 时换实例。⚠️ 换代不再走 `visible`：4.0.5 声明了 `setVisible`（`TrackLine.d.ts:457`），
+      // 隐藏只是同一个实例的 setter 翻转。仍会换代的路径是 `data: null`（换一个没有轨迹的实例）。
+      props.value = { ...props.value, data: null };
       await settle();
       expect(createdSince(), "hidden 期间确实发生了重建").toBe(createdBeforeRebuild + 1);
 
@@ -1011,10 +1083,9 @@ describe("原生批量可视化图层（M6 / issue #36）", () => {
       const rawA = lastRawTrackLine();
       expect(rawA.playing).toBe(true);
 
-      // 仍 visible 时换代（TrackLine 无 setVisible ⇒ 重新可见必须换一代）
-      props.value = { ...props.value, visible: false };
-      await settle();
-      props.value = { ...props.value, visible: true };
+      // 仍 visible 时换代。⚠️ 换代不再走 `visible`（4.0.5 声明了 `setVisible`，隐藏不换实例）；
+      // 走 `data: null`（换一个没有轨迹的实例）这一条仍会换代的路径。
+      props.value = { ...props.value, data: null };
       await settle();
       const rawB = lastRawTrackLine();
       expect(rawB, "重建到新一代").not.toBe(rawA);
@@ -1290,5 +1361,199 @@ describe("§8 换实例的失败语义（严格 detach / unknown）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("unknown 优先");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* #165 Class 3 / TASK 2：补齐缺失的构造期选项（每个成员对着官方 .d.ts 的声明行）      */
+/* -------------------------------------------------------------------------- */
+
+describe("#165 TASK 2：LineLayer / FillLayer 的 selectedIndex 与 popEvent", () => {
+  for (const spec of VISUAL_LAYER_CASES) {
+    describe(spec.name, () => {
+      it("selectedIndex / popEvent 进构造期选项袋，变化时换实例（官方只有整袋 setBaseOptions）", async () => {
+        const props = ref<Record<string, unknown>>({
+          ...spec.props,
+          selectedIndex: 2,
+          popEvent: false,
+        });
+        const wrapper = mountLayerTree(() => h(spec.component, props.value));
+        await settle();
+
+        const created = createdSince();
+        const bag = lastRawLayer().options ?? {};
+        expect(bag.selectedIndex, "官方 layer/LineLayer.d.ts:25 / FillLayer.d.ts:30").toBe(2);
+        expect(bag.popEvent, "官方 layer/LineLayer.d.ts:70 / FillLayer.d.ts:75").toBe(false);
+        expect(createdSince()).toBe(1);
+
+        // 构造选项 ⇒ 变化换实例（官方没有「就地改选中索引」的入口）
+        props.value = { ...props.value, selectedIndex: 3 };
+        await settle();
+        expect(createdSince(), "构造期项变化 ⇒ 换实例").toBe(created + 1);
+        expect(lastRawLayer().options?.selectedIndex).toBe(3);
+
+        props.value = { ...props.value, popEvent: true };
+        await settle();
+        expect(createdSince(), "popEvent 也是构造期项").toBe(created + 2);
+        expect(lastRawLayer().options?.popEvent).toBe(true);
+
+        await unmountAndSettle(wrapper);
+        harness.assertIdle(`${spec.name} TASK2`);
+      });
+
+      it("不传时两个键都不进选项袋（不替上游表态默认选中索引）", async () => {
+        const props = ref<Record<string, unknown>>({ ...spec.props });
+        const wrapper = mountLayerTree(() => h(spec.component, props.value));
+        await settle();
+
+        const bag = lastRawLayer().options ?? {};
+        expect(bag, "没传 selectedIndex 就不该出现这个键（官方默认 -1）").not.toHaveProperty(
+          "selectedIndex",
+        );
+        expect(bag, "没传 popEvent 就不该出现这个键（官方默认 true）").not.toHaveProperty("popEvent");
+
+        await unmountAndSettle(wrapper);
+        harness.assertIdle(`${spec.name} TASK2 缺省`);
+      });
+    });
+  }
+});
+
+describe("#165 TASK 2：PointLayer 的拾取与绘制选项", () => {
+  const POINTS = [
+    { id: "p-1", position: [116.404, 39.915] },
+    { id: "p-2", position: [116.42, 39.93] },
+  ];
+  const base = {
+    data: POINTS,
+    itemKey: "id",
+    getPosition: (item: { position: [number, number] }) => item.position,
+  };
+
+  it("iconSize / mouseStyleChange / pickTolerance / pickThrough / renderStage 进样式袋且不换实例", async () => {
+    const props = ref<Record<string, unknown>>({ ...base });
+    const wrapper = mountLayerTree(() => h(PointLayer, props.value));
+    await settle();
+    const created = createdSince();
+
+    props.value = {
+      ...props.value,
+      iconSize: [24, 32],
+      mouseStyleChange: false,
+      pickTolerance: 8,
+      pickThrough: true,
+      renderStage: "poi",
+    };
+    await settle();
+
+    const bag = harness.nativeLayerOptions();
+    expect(bag.iconSize, "官方 visualization/PointLayer.d.ts:135").toEqual([24, 32]);
+    expect(bag.mouseStyleChange, "…:153").toBe(false);
+    expect(bag.pickTolerance, "…:158 —— 官方没给 pickWidth/pickHeight，容差才是它的拾取入口").toBe(8);
+    expect(bag.pickThrough, "…:163").toBe(true);
+    expect(bag.renderStage, "…:196").toBe("poi");
+    expect(createdSince(), "样式袋变化不换实例").toBe(created);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointLayer TASK2");
+  });
+
+  it("mouseStyleChange / pickThrough 不传时不会变成 Vue 的缺省 false（官方默认 true / false）", async () => {
+    const wrapper = mountLayerTree(() => h(PointLayer, { ...base }));
+    await settle();
+
+    const bag = harness.nativeLayerOptions();
+    expect(bag, "没传 mouseStyleChange 就不该有（缺省 false 会静默关掉「命中换光标」）").not.toHaveProperty(
+      "mouseStyleChange",
+    );
+    expect(bag, "pickThrough 同理").not.toHaveProperty("pickThrough");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointLayer 布尔缺省");
+  });
+
+  it("referCenter：纯数据 {lng,lat} 由 Driver 换算成官方 BMap.Point", async () => {
+    const wrapper = mountLayerTree(() => h(PointLayer, {
+      ...base,
+      referCenter: { lng: 116.404, lat: 39.915 },
+    }));
+    await settle();
+
+    const raw = harness.nativeLayerOptions().referCenter as
+      | { lng?: unknown; lat?: unknown }
+      | undefined;
+    expect(raw, "referCenter 必须真的送到 SDK（visualization/PointLayer.d.ts:191）").toBeTruthy();
+    expect(raw.lng).toBeCloseTo(116.404);
+    expect(raw.lat).toBeCloseTo(39.915);
+    // 换算后不能还是纯对象 —— 那样只是「原样透传了组件层的数据」
+    expect(
+      Object.getPrototypeOf(raw),
+      "换算后应当是官方 Point 实例而不是纯对象",
+    ).not.toBe(Object.prototype);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointLayer referCenter");
+  });
+});
+
+describe("#165 TASK 2：PointIconLayer 缺失的 PointIconStyle 字段", () => {
+  const POINTS = [{ id: "p-1", position: [116.404, 39.915] }];
+  const base = {
+    data: POINTS,
+    itemKey: "id",
+    getPosition: (item: { position: [number, number] }) => item.position,
+  };
+
+  it("iconObj / visibility / sizes / userSizes / 逐要素 opacity 五个都进样式袋", async () => {
+    const props = ref<Record<string, unknown>>({ ...base });
+    const wrapper = mountLayerTree(() => h(PointIconLayer, props.value));
+    await settle();
+    const created = createdSince();
+
+    const iconObj = (): { id: number; canvas: HTMLCanvasElement } => ({
+      id: 7,
+      canvas: document.createElement("canvas"),
+    });
+    props.value = {
+      ...props.value,
+      iconObj,
+      visibility: true,
+      sizes: [16, 16] as [number, number],
+      userSizes: true,
+      featureOpacity: 0.5,
+    };
+    await settle();
+
+    const style = harness.nativeLayerStyle();
+    // ⚠️ **不是** `toBe(iconObj)`：样式袋里的函数会被 `projectLayerStyle` 包成身份恒定的
+    // `forwardCallback`（内联箭头每次渲染都是新函数，不包的话每次渲染都会重写样式）。
+    // 因此这里断言「SDK 调得到、且调到的是**当前**实现」，而不是函数身份。
+    expect(typeof style.iconObj, "官方 layer/PointIconLayer.d.ts:101 —— SDK 拿到的是函数").toBe(
+      "function",
+    );
+    const handed = style.iconObj as () => { id: number; canvas: HTMLCanvasElement };
+    expect(handed(), "包装函数转发到当前 prop").toEqual({ id: 7, canvas: expect.anything() });
+    expect(style.visibility, "…:105").toBe(true);
+    expect(style.sizes, "…:108").toEqual([16, 16]);
+    expect(style.userSizes, "…:117").toBe(true);
+    expect(style.opacity, "…:127 —— 逐要素 opacity 落在样式袋的 opacity 键").toBe(0.5);
+    expect(createdSince(), "样式袋变化不换实例").toBe(created);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointIconLayer TASK2");
+  });
+
+  it("visibility / userSizes 不传时不会落到 Vue 的缺省 false（官方默认都是 true）", async () => {
+    const wrapper = mountLayerTree(() => h(PointIconLayer, { ...base }));
+    await settle();
+
+    const style = harness.nativeLayerStyle();
+    expect(style, "没传 visibility 就不该有（缺省 false 会把所有图标关掉）").not.toHaveProperty(
+      "visibility",
+    );
+    expect(style, "没传 userSizes 就不该有（缺省 false 会覆盖掉 sizes）").not.toHaveProperty("userSizes");
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointIconLayer 布尔缺省");
   });
 });

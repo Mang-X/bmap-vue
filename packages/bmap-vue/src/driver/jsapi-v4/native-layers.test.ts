@@ -257,6 +257,53 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
     expect(raw.state).toEqual({});
   });
 
+  /* --- #165 Class 3 / TASK 1：4.0.5 给这四个类补了类声明，成员面随之可登记 --- */
+
+  it("显隐 / 透明度 / 层级：三个扩展 API 图层都登记了（4.0.5 声明了 setVisible）", () => {
+    // #165 的起点是「4.0.4 没有类声明 ⇒ 不把成员当契约」。4.0.5（`5ba67f4`）把
+    // `visualization/PointLayer.d.ts:324` `setVisible`、`:328` `setZIndex`、`:332`
+    // `setRenderStage`、`:336` `setRefCenter` 逐条声明了出来——那个前提已经失效。
+    // 组件侧的可见性落地是按 `supports()` 选的（见 `useNativeLayerResource.hidesBySetter`），
+    // 少登记一条 `setVisible` 的**可观察后果**就是「隐藏 = 摘实例，重新显示 = 换实例」。
+    for (const kind of ["point", "cluster", "heatmap", "track-line"] as const) {
+      expect(layers.supports(kind, "setVisible"), `${kind}.setVisible`).toBe(true);
+    }
+    // `setOpacity` 只有官方真的声明了的三个 kind 有：PointLayer 的声明里**没有**它
+    // （`visualization/PointLayer.d.ts` 的「显示属性」一组只有 visible / zIndex /
+    // renderStage / refCenter）。
+    expect(layers.supports("cluster", "setOpacity")).toBe(true);
+    expect(layers.supports("heatmap", "setOpacity")).toBe(true);
+    expect(layers.supports("track-line", "setOpacity")).toBe(true);
+    expect(
+      layers.supports("point", "setOpacity"),
+      "PointLayer 官方没有声明 setOpacity：不把未声明成员当契约",
+    ).toBe(false);
+  });
+
+  it("setZIndex 在四个扩展 API 图层上都可用（4.0.5 逐条声明）", () => {
+    for (const kind of ["point", "cluster", "heatmap", "track-line"] as const) {
+      const layer = layers.create(kind);
+      layers.setZIndex(layer, 7);
+      expect(
+        (layer.raw as unknown as { zIndex: number }).zIndex,
+        `${kind}.setZIndex 应当真的落到实例上`,
+      ).toBe(7);
+    }
+  });
+
+  it("热力图：setVisible / setOpacity / setZIndex 都落到实例（4.0.5 声明面）", () => {
+    const layer = layers.create("heatmap");
+    layers.setVisible(layer, false);
+    layers.setOpacity(layer, 0.25);
+    layers.setZIndex(layer, 3);
+
+    const raw = layer.raw as unknown as { visible: boolean; opacity: number; zIndex: number };
+    expect(raw.visible).toBe(false);
+    expect(raw.opacity).toBeCloseTo(0.25);
+    expect(raw.zIndex).toBe(3);
+    expect(raw.callLog).toContain("setVisible");
+  });
+
   it("要素状态在扩展 API 图层上显式失败（它们没有状态入口）", () => {
     const layer = layers.create("cluster");
     expect(() => layers.clearState(layer)).toThrowError(
@@ -446,6 +493,16 @@ describe("v4 Native Layer Facet：supports() 与实现一致", () => {
 const OPERATION_MEMBERS: Readonly<Record<NativeLayerOperation, readonly string[]>> = {
   setData: ["setData"],
   clearData: ["clearData"],
+  /**
+   * `setStyle` 落到哪个成员**逐 kind** 决定（与 Driver 的 `descriptor.styleMember` 同一条依据）：
+   *
+   * - `layer/` 下那四类专页图层声明 `setStyleOptions` + `doOnceDraw`（改完样式要显式重绘）；
+   * - `visualization/` 下那四类声明 `setOptions`，且**没有** `doOnceDraw`——4.0.5 的声明里
+   *   找不到它，因此这条不能对它们断言。
+   *
+   * 一张表写死会逼着其中一族去断言一个它没有的成员（这正是 #165 把这四个类加进
+   * `DECLARED_CTORS` 时暴露出来的那类漂移）。
+   */
   setStyle: ["setStyleOptions", "doOnceDraw"],
   setVisible: ["setVisible"],
   setOpacity: ["setOpacity"],
@@ -467,13 +524,55 @@ const OPERATION_MEMBERS: Readonly<Record<NativeLayerOperation, readonly string[]
   setProcess: ["setProcess"],
 };
 
-/** 四类「有类声明」的 kind（扩展 API 没有声明，由官方扩展参考的表钉住，不在这条检查里）。 */
+/**
+ * 逐 kind 覆写 `OPERATION_MEMBERS`（4.0.5 里两类图层的样式入口不同，见上面 `setStyle` 的注释）。
+ *
+ * 只覆写**真的不同**的那几条：其余操作逐 kind 一致，留在主表里。
+ */
+const OPERATION_MEMBERS_BY_KIND: Readonly<
+  Partial<Record<NativeLayerKind, Partial<Record<NativeLayerOperation, readonly string[]>>>>
+> = {
+  point: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
+  cluster: { setStyle: ["setOptions"] },
+  heatmap: { setStyle: ["setOptions"] },
+  "track-line": { setStyle: ["setOptions"] },
+};
+
+function operationMembersFor(
+  kind: NativeLayerKind,
+  operation: NativeLayerOperation,
+): readonly string[] {
+  return OPERATION_MEMBERS_BY_KIND[kind]?.[operation] ?? OPERATION_MEMBERS[operation];
+}
+
+/**
+ * 「有类声明」的 kind → 官方类名。
+ *
+ * ⚠️ 4.0.5（git `5ba67f4`）给 `visualization/` 的 `PointLayer` / `ClusterLayer` / `Heatmap` /
+ * `TrackLine` 补上了类声明，此前这张表只有 `layer/` 下那四个类。**它们现在也在检查范围内**：
+ * 只查 `layer/` 会让「扩展 API 的操作面比声明窄」这类漂移永远不被这条用例看见。
+ *
+ * 类名的目录（`layer/` 还是 `visualization/`）由 `declaredMembersOf` 的子目录参数决定——
+ * 四个可视化类的声明在 `visualization/` 下，与 `layer/` 同名文件是两回事。
+ */
 const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
   ["point-icon", "PointIconLayer"],
   ["point-shape", "PointShapeLayer"],
   ["line", "LineLayer"],
   ["fill", "FillLayer"],
+  ["point", "PointLayer"],
+  ["cluster", "ClusterLayer"],
+  ["heatmap", "Heatmap"],
+  ["track-line", "TrackLine"],
 ];
+
+/** `declaredMembersOf` 要读的子目录（4.0.5 把这两族分开放）。 */
+const DECLARED_SUBDIR: Readonly<Partial<Record<NativeLayerKind, string>>> = {
+  point: "visualization",
+  cluster: "visualization",
+  heatmap: "visualization",
+  "track-line": "visualization",
+};
 
 /**
  * 读出某个官方类在 `.d.ts` 里**声明过的成员名**。
@@ -483,9 +582,9 @@ const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
  * （`addEventListener<K extends …>(…)`）必须也能被解析出来，否则「扫不到」会被误判成「官方没有」
  * （这是本仓库踩过的坑）。
  */
-function declaredMembersOf(ctor: string): string[] {
+function declaredMembersOf(ctor: string, subdir = "layer"): string[] {
   const require = createRequire(import.meta.url);
-  const path = require.resolve(`@baidumap/jsapi-v4-types/layer/${ctor}.d.ts`);
+  const path = require.resolve(`@baidumap/jsapi-v4-types/${subdir}/${ctor}.d.ts`);
   const source = readFileSync(path, "utf8");
   const start = source.indexOf(`class ${ctor} {`);
   expect(start, `${ctor}.d.ts 里应当有 class ${ctor} 声明`).toBeGreaterThan(-1);
@@ -496,12 +595,12 @@ function declaredMembersOf(ctor: string): string[] {
 }
 
 describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
-  it("四类专页图层支持的每个操作，都能映射到官方 .d.ts 里声明过的成员", () => {
+  it("每一类「有类声明」的图层，支持的每个操作都能映射到官方 .d.ts 里声明过的成员", () => {
     for (const [kind, ctor] of DECLARED_CTORS) {
-      const declared = declaredMembersOf(ctor);
+      const declared = declaredMembersOf(ctor, DECLARED_SUBDIR[kind] ?? "layer");
       for (const operation of OPERATIONS) {
         if (!layers.supports(kind, operation)) continue;
-        for (const member of OPERATION_MEMBERS[operation]) {
+        for (const member of operationMembersFor(kind, operation)) {
           expect(
             declared,
             `${kind}(${ctor}).${operation} 落在 ${member}() 上，而官方声明里没有它`,
@@ -520,9 +619,32 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
     expect(declared, "同文件里 XxxOptions 的字段不得混进来").not.toContain("idKey");
   });
 
+  it("解析器也读得到 visualization/ 下的声明（四个扩展 API 类）", () => {
+    // 这条是为了让「读不到 `visualization/`」这种假绿在别的用例出错之前就暴露出来：
+    // 上一条只证明了解析器在 `layer/` 下工作。
+    const declared = declaredMembersOf("PointLayer", "visualization");
+    expect(declared, "泛型 addEventListener").toContain("addEventListener");
+    expect(declared, "显示属性").toContain("setVisible");
+    expect(declared, "同文件的 PointLayerOptions 字段不得混进来").not.toContain("idKey");
+  });
+
   it("四类专页图层的操作表里没有 clearData（这一族的「清空」靠实例生命周期表达）", () => {
+    // ⚠️ 只对 `layer/` 下那四类成立。4.0.5 的 `visualization/` 四类**确实声明**了
+    // `clearData`（`visualization/PointLayer.d.ts:294` 等），把它们一并断言 false 就是
+    // 拿「四类专页」这条结论错误地扩到另一族身上。
     for (const [kind] of DECLARED_CTORS) {
+      if (DECLARED_SUBDIR[kind]) continue;
       expect(layers.supports(kind, "clearData"), `${kind} 不该声称有 clearData`).toBe(false);
+    }
+  });
+
+  it("visualization 四类：官方声明了 clearData，登记面因此保留它", () => {
+    for (const [kind, ctor] of DECLARED_CTORS) {
+      const subdir = DECLARED_SUBDIR[kind];
+      if (!subdir) continue;
+      const declared = declaredMembersOf(ctor, subdir);
+      expect(declared, `${ctor} 声明里没有 clearData，下面的断言就要改`).toContain("clearData");
+      expect(layers.supports(kind, "clearData"), `${kind} 应当保留 clearData`).toBe(true);
     }
   });
 });

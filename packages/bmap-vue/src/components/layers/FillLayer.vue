@@ -52,6 +52,8 @@ const props = withDefaults(defineProps<FillLayerProps>(), {
   // 上游默认值是 `true`，但本库**不替上游表态**：显式写 `undefined` 关闭 Vue 对可选布尔属性的
   // 「缺省即 false」转换，让「没传」真的等于「没传」（见文件头）。
   border: undefined,
+  // 同理（#165 TASK 2）：官方 `popEvent` 默认 `true`，Vue 的缺省 `false` 会静默关掉事件冒泡。
+  popEvent: undefined,
 });
 
 const emit = defineEmits<{

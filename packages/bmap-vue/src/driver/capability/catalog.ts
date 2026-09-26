@@ -527,7 +527,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.point": {
     id: "layer.point",
     family: "layer",
-    description: "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地",
+    description:
+      "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地。" +
+      "4.0.5 声明了显隐 / 层级 / 绘制阶段 / 参考中心点这一组显示属性（官方**没有** setOpacity）。",
     rawMembers: ["PointLayer"],
     status: "experimental",
     runtimeOnly: true,
@@ -535,7 +537,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.heatmap": {
     id: "layer.heatmap",
     family: "layer",
-    description: "热力图（Heatmap）；按权重渲染点密度，属扩展 API",
+    description:
+      "热力图（Heatmap）；按权重渲染点密度，属扩展 API。" +
+      "4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter 而不是摘挂实例。",
     rawMembers: ["Heatmap"],
     status: "experimental",
     runtimeOnly: true,
@@ -547,7 +551,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）" +
       "属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。" +
       "**它是 legacy 插件 `service.track-animation` 的迁移目标**" +
-      "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。",
+      "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。" +
+      "4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter，" +
+      "重新可见**不**换实例（换实例会丢掉播放进度）。",
     rawMembers: ["TrackLine"],
     status: "experimental",
     runtimeOnly: true,

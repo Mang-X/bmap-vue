@@ -346,10 +346,21 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 | --- | --- | --- |
 | `properties` | 写进每个要素 `properties` 的属性映射 | - |
 | `icon` / `width` / `height` / `anchors` / `offset` / `scale` / `rotation` | 图标样式（官方 `PointIconStyle` 的子集） | SDK 默认 |
+| `iconObj` | 逐要素图标源：`(style, properties) => { id?, canvas }`（官方 `:101`）。按要素算出图标，典型是用 canvas 画文字 / 数字 | - |
+| `visibility` | 逐要素是否显示（官方 `:105`） | 官方默认（`true`） |
+| `sizes` / `userSizes` | 点尺寸 `[宽, 高]` / 是否优先用 `sizes` 而非 `width`+`height`（官方 `:108` / `:117`） | 官方默认（`userSizes` 为 `true`） |
+| `featureOpacity` | **逐要素**透明度（官方 `PointIconStyle.opacity`，`:127`）。与下面的图层级 `opacity` 是两个不同的官方字段（这个进样式袋，那个走 `setOpacity`） | SDK 默认 |
 | `isFlat` / `isFixed` | 是否贴地 / 是否跟随缩放保持尺寸（**构造期**选项） | 官方默认（均为 `true`） |
-| `opacity` / `zIndex` / `minZoom` / `maxZoom` | 透明度 / 层级 / 缩放范围 | SDK 默认 |
+| `opacity` / `zIndex` / `minZoom` / `maxZoom` | 图层透明度 / 层级 / 缩放范围 | SDK 默认 |
 | `enablePicked` | 是否开启鼠标拾取 | **`true`**（官方默认 `false`，这里刻意不同） |
 | `pickWidth` / `pickHeight` | 点击拾取矩形尺寸（像素） | 官方默认（30） |
+
+上表新增的五个样式字段（#165 Class 3）把官方 `PointIconStyle` 的 12 个字段补齐了，全部**就地更新**、
+不重建实例。
+
+> ⚠️ `visibility` / `userSizes` 的官方默认都是 `true`，而 Vue 对缺省的 `Boolean` prop 会转成
+> `false`。组件因此显式写 `undefined`，让「没传」真的是「没传」——否则每个不传 `userSizes` 的用户
+> 都会被静默切到 `width` / `height` 通道、覆盖掉 `sizes`。
 
 事件与 `BPointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。
 注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
@@ -373,6 +384,25 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 `strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `BPointShapeLayer` 的样式字段名
 **不同**（那里是官方的 `PointShapeStyle`）。未配置 `icon` 时按 `shape` 画几何图元，配置了就走图标模式。
 
+图标模式与拾取调优的入口（#165 Class 3 补齐，逐条对着 `visualization/PointLayer.d.ts`）：
+
+| prop | 官方字段 | 说明 |
+| --- | --- | --- |
+| `iconSize` | `iconSize`（`:135`） | 图标显示尺寸 `[宽, 高]` 或 number（px）；不设则用图片自身尺寸 |
+| `pickTolerance` | `pickTolerance`（`:158`） | 命中容差（css px，默认 4）——**本组件真正的拾取调优入口** |
+| `pickThrough` | `pickThrough`（`:163`） | 命中后是否继续向下层派发（默认 `false`） |
+| `mouseStyleChange` | `mouseStyleChange`（`:153`） | 命中后是否换鼠标光标（默认 `true`） |
+| `referCenter` | `referCenter`（`:191`） | 图层参考中心点，规避大坐标浮点抖动。收**纯数据** `{ lng, lat }`，由 Driver 换算成官方 `BMap.Point` |
+| `renderStage` | `renderStage`（`:196`） | 绘制阶段 `'building'` / `'poi'` / `null`（默认落点） |
+
+这些都进**样式袋**（官方 `setOptions` 会把 `renderStage` / `referCenter` 转发到对应 setter），
+因此变化时**就地更新、不重建**。
+
+> 官方 `PointLayer` **没有** `pickWidth` / `pickHeight`（那是 `layer/` 下那四类专页图层的
+> 构造选项），它给的是「命中点周围多大范围算命中」的 `pickTolerance`。
+> 组件上仍保留 `pickWidth` / `pickHeight` 两个 prop 是历史遗留（透传给构造器、官方不读），
+> **新代码请用 `pickTolerance`**。
+
 三处要提前知道的事：
 
 1. **可视化实现是按需异步注入的**：就绪之前创建会经 `resource:error` 交出
@@ -382,9 +412,10 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
    `value.properties[idKey]` / `value.id` 上。因此 `click.dataIndex` 恒为 `-1`（载荷里那个
    `index` 字段的语义没有取证，本库不读它），`click.hit` 的判据是「能不能解析出业务身份」。
 
-图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露：它们走 `setOpacity` /
-`setZIndex` / …，而官方扩展专页没有把这一族列为 `PointLayer` 的方法面（`setVisible` 是唯一取过证
-的一位）。传了会**告警**，不会静默收下。
+图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露为 prop：其中 `opacity` 在 4.0.5
+的 `PointLayer` 声明里**确实没有** `setOpacity`（`ClusterLayer` / `Heatmap` / `TrackLine` 都有），
+按「不把未声明成员当契约」的口径不收下；`minZoom` / `maxZoom` 是**构造选项**而非字段级 setter。
+传了会**告警**，不会静默收下。
 
 ::: warning `pickWidth` / `pickHeight` 已删除（#165 Class 5）
 这两个 prop 原先无条件透传给构造器，而官方**只在** `LineLayer` / `PointIconLayer` / `FillLayer` /
