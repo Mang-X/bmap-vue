@@ -1,6 +1,7 @@
 # #165 成员级审计：B / C / D / F（2026-09-26）
 
 > 工作包 E（composables）见 `165-audit-inventory.md`。本文是 B/C/D/F 的成员级走查结论。
+> （B / Provider·Map 部分的结论见文末「工作包 B」一节。）
 > 依据：官方 `@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`）声明 + `@baidumap/react-bmap@2.0.6`
 > （命名参考）+ `@baidumap/vue-bmap`（Vue 侧先例）。**存在性以 v4 声明为准。**
 > 本文只记录结论与**处置判据**；逐条表格在各代理报告中，此处不复制。
@@ -136,3 +137,87 @@ AGENTS.md：「**接收后忽略属于假支持**」。处置：**实现它**或
    撤掉那个事件？两者都比「发了事件但没数据」好。
 3. **H1 的二选一**：`CreateBMapPluginOptions.plugins` 是**实现**还是**删除**？实现会新增行为，
    删除是破坏性变更。#165 §3.6 不允许用兼容层绕过，所以必须明确选一个。
+
+---
+
+## 工作包 B：Provider / Map
+
+### B-H1. 四个 `<Map>` / `<BMapProvider>` prop 接受后被静默丢弃
+
+| prop | 事实 | 依据 |
+| --- | --- | --- |
+| `noAnimation` | **全库无人读**（`grep "props.noAnimation"` = 0 命中），`withDefaults` 设了默认值却无消费者。官方的 `noAnimation` 只作为 `setCenter` / `setZoom` 等**逐调用**选项存在，**没有** `MapOptions.noAnimation` | `Map.vue:66`；`Map.d.ts:660,698,129,163` |
+| `restrictCenter` | 被读入 `mapOptions` 后由 Driver **显式丢弃**并告警。官方对应能力是 `restrictBounds(bounds: Bounds)`——收的是 `Bounds` 不是布尔 | `Map.vue:574`；`driver/jsapi-v4/map.ts:125`；`Map.d.ts:361` |
+| `backgroundColor` | 同上，4.0 的 `MapOptions` 无此键 | `Map.vue:576`；`driver/jsapi-v4/map.ts:125` |
+| `suspense`（Provider） | 声明并设默认 `false`，**全库无人读**（`grep "props.suspense"` 只命中声明与默认两处） | `BMapProvider.vue:34,44` |
+
+四个都被 `docs/zh-CN/components/map.md:145-146` 记成「可用」。这与 H1/H2 同型：
+**「接收后忽略属于假支持」**。
+
+### B-H2. 默认值落在官方有效范围之外
+
+| prop | 本库默认 | 官方声明 | 依据 |
+| --- | --- | --- | --- |
+| `minZoom` | **`0`** | 「取值范围 **[3, 21]**」 | `Map.vue:64`；`MapOptions.d.ts:2-5` |
+| `tilt` | （无默认） | 「取值范围 **[0, 73]**」——但本库两处注释写成 `0..90` | `MapOptions.d.ts`；`Map.vue:304`、`useMapStatus.ts:41` |
+
+`minZoom` 经 `PASSTHROUGH_OPTION_KEYS` **原样透传给 SDK 构造器**，即我们交给 SDK 一个
+它自己声明为非法的值，且无校验、无报错。`tilt` 的两处注释则是会误导后来者的错误范围。
+
+### B-H3. `<Map @click>` 载荷丢 `overlay` / `icon` / `poi`
+
+官方 `MapMouseEvent`：`{ point; pixel; overlay: Overlay | null; icon?; poi? }`。
+本库 `DriverEvent`（`driver/types/events.ts:19-31`）只有 `type / point / pixel / size /
+zoom / targetZoom / trend / …`——**没有 `overlay` / `icon` / `poi`**。
+
+后果：**「用户点到了哪个 marker」这一最常见的地图事件用例，只能经未类型的 `.raw` 逃生口**。
+`pixel` 也从官方的**必填**降级为可选。事件**名字**是 41/41 精确匹配（集合运算可证），
+缺口全在载荷保真度上。
+
+### B-H4. 能力目录承诺了 Driver 没实现的成员
+
+| catalog 条目 | 声明 | 实际 |
+| --- | --- | --- |
+| `map.screenshot` | `status: "native"`，`rawMembers: ["getScreenshot"]` | `MapDriver` **无** `getScreenshot` |
+| `map.viewport` | `rawMembers` 含 `getViewport` | `MapDriver` **只实现** `setViewport` |
+| `map.fly-to` | `status: "extended"`，`rawMembers: ["panTo"]` | 探测的是**另一个成员**（`panTo`），无 `flyTo` 命令 |
+
+`supports("map.screenshot")` 返回 `true` 是一个**兑现不了的承诺**——这比「不提供」更糟。
+
+### B-M. 11 个官方 `MapOptions` 字段无 prop（4 个 Driver 已支持）
+
+`enableRotate` / `enableRotateGestures` / `enableTilt` / `enableTiltGestures`（这四个已在
+`MapInteraction` 与 `INTERACTION_METHODS` 里，**只差一个 prop**）、`fixCenterWhenPinch` /
+`fixCenterWhenResize` / `zoomCenter` / `enableIconInfoWindow` / `enableIconHighlight` /
+`enableMapClick`（4.0 默认改成了 `false`，是所有底图 POI 交互的总闸）/ `overlayTop` /
+`enableAdaptiveMinZoom`。
+
+另：`toMapType()` 只映射 `MapTypeId` 声明的 5 个常量中的 3 个，`BMAP_HYBRID_MAP` 与
+`BMAP_NONE_MAP` **静默回落成 normal**；叠加没有 `getMapType()` ⇒ **当前地图类型完全读不到**。
+
+### B-R. 同名不同形（会被 `official-api-alignment.md` 的「名称对齐 ✓」误导）
+
+| 名称 | 本库 | React / vue-bmap 参考 |
+| --- | --- | --- |
+| `useMap` | 返回**对象** `{status,map,client,error,whenReady}` | 返回 **MapHandle 本身**（或 `ComputedRef<MapHandle\|null>`） |
+| `useMapReady` | 返回 `ComputedRef<boolean>` | 接收**回调**的哨兵 composable |
+| `useMapStatus` | 8 个**独立** readonly ref | 一个**原子快照**对象（`useSyncExternalStore`），无撕裂读 |
+
+三者名字与两个参考完全一致，**返回形态都不同**。那份对照表只比名字，
+把三个都记成「名称对齐 ✓」，会误导从参考实现移植的人。
+
+### B-A. 判定为对齐（不应无谓改动）
+
+- **事件名 41/41 精确匹配**（集合对称差为 ∅；两个额外的 `headingchange` / `tiltchange`
+  是有据的 `declared:false` 运行时事件）。
+- `heading` 的**环绕比较器**（`setHeading(270) → getHeading() === -90`）与官方文档一致。
+- `load` 事件「仅在首次 `centerAndZoom` 后派发一次」的时序问题解决得干净。
+- `enableContinuousZoom` / `enableTraffic` / `enableResizeOnCenter` 等 v2 兼容 prop 的处置
+  诚实：`enableTraffic` **明确告警并 no-op**（4.0 的路况是 `TrafficLayer`），
+  没有假装生效。
+- `enableScrollWheelZoom` 默认 `false`（官方 `true`）是**有意为之且有注释论证**的差异。
+- 未知/泄露检查：`./composables` 的 `forgotten-exports.json` 为 `[]`；
+  `PublicMapContext` / `MapEventSource` 的窄面没有泄漏内部类型。
+- 4.0.5 对本工作包**零影响**：`core/MapEvent.d.ts` / `MapOptions.d.ts` **逐字节未变**，
+  `core/Map.d.ts` 只是给 `addLayer`/`removeLayer` 加了 12 个 visualization 类名。
+  本节的 `4.0.4` 注释**结论仍然成立**，只是版本号过时。
