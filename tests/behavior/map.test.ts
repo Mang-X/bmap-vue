@@ -128,3 +128,55 @@ describe('Map runtime', () => {
     wrapper.unmount()
   })
 })
+
+describe("Map：preserveDrawingBuffer 显式 opt-in（#165）", () => {
+  // 官方 `Map#getScreenshot` 的前提条件在 `core/Map.d.ts:1022` 的**散文**里（`MapOptions`
+  // 声明里没有这个键）。2026-09-26 live 实测：同一张图，不带该选项时 `getScreenshot()`
+  // 返回 3,830 字节**空画布**，带上则 119,074 字节真实内容——见
+  // `docs/zh-CN/contributing/165-runtime-verification.md`。
+  //
+  // 因此它必须能通过组件传下去；但**默认不开启**（常驻一块画布内存是库不该替用户做的
+  // 取舍，官方 React 参考的惯例同样是「能力进目录 + 显式 opt-in」）。
+
+  afterEach(() => harness.reset());
+
+  const mountMap = async (props: Record<string, unknown>) => {
+    const host = harness.container();
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(Map, { provider: harness.provider(), ...props }),
+      }),
+      { attachTo: host },
+    );
+    await flushPromises();
+    return wrapper;
+  };
+
+  it("默认不传该键（不替使用者常驻画布内存）", async () => {
+    const wrapper = await mountMap({});
+    expect(fake.createdMaps).toHaveLength(1);
+    expect(
+      Object.prototype.hasOwnProperty.call(fake.createdMaps[0]!.options, "preserveDrawingBuffer"),
+      "默认不该把 preserveDrawingBuffer 塞进建图选项（实况：" + JSON.stringify(fake.createdMaps[0]!.options) + "）",
+    ).toBe(false);
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("显式开启时透传到建图选项", async () => {
+    const wrapper = await mountMap({ preserveDrawingBuffer: true });
+    expect(fake.createdMaps).toHaveLength(1);
+    expect(fake.createdMaps[0]!.options.preserveDrawingBuffer).toBe(true);
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("显式关闭与不传是两回事：关闭会真的把 false 递下去", async () => {
+    // Vue 对缺省 `Boolean` 有「转成 false」的陷阱，因此这里用显式 `undefined` 语义
+    // 区分「不表态」与「表态为 false」——见 Map.vue 的条件展开。
+    const wrapper = await mountMap({ preserveDrawingBuffer: false });
+    expect(fake.createdMaps[0]!.options.preserveDrawingBuffer).toBe(false);
+    wrapper.unmount();
+    await nextTick();
+  });
+});

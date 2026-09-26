@@ -70,6 +70,11 @@ const props = withDefaults(defineProps<MapProps>(), {
   // 误缩放），并由 Driver 的 `LIBRARY_MAP_DEFAULTS` 显式写进构造 options 固定它。
   // 这是有意决策，**不是**本次改名的一部分——改的只是 prop 名。
   enableWheelZoom: false,
+  // ⚠️ 刻意写 `undefined`（口径同 `LineLayer.popEvent` / `PointIconLayer.userSizes`）：
+  // Vue 对缺省 `Boolean` 会转成 `false`，不显式关掉这个转换，「不传」与「传 false」就分不开，
+  // 而本库要表达的恰恰是**默认不表态**——由使用者显式 opt-in 才把键递下去
+  // （不递 = `getScreenshot()` 拿到空画布；递了 = 常驻一块画布内存）。
+  preserveDrawingBuffer: undefined,
   loadingBgColor: "#f1f1f1",
   keepAliveBehavior: "suspend",
   // 容器尺寸变化时自动 `checkResize`（#29）：默认开启。`false` 时只更新读数，由调用方
@@ -611,6 +616,12 @@ const currentRuntime = new MapRuntime({
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
     displayOptions: props.displayOptions,
+    // 显式 opt-in：默认不传（不替使用者常驻一块画布内存）。该键不在官方 `MapOptions`
+    // 声明里，走 `InitialMapOptions` 的索引签名原样透传；`getScreenshot()` 没有它就返回
+    // 空画布（live 实测 3,830 vs 119,074 字节）。见 MapProps.preserveDrawingBuffer。
+    ...(props.preserveDrawingBuffer !== undefined
+      ? { preserveDrawingBuffer: props.preserveDrawingBuffer }
+      : {}),
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。

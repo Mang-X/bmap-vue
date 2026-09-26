@@ -122,6 +122,19 @@ export interface MapProps {
   mapStyleJson?: Record<string, unknown>;
   displayOptions?: Record<string, unknown>;
   /**
+   * 建图时保留绘图缓冲（官方 `getScreenshot` 的**前提**；该键不在官方 `MapOptions` 声明里，
+   * 只出现在 `Map#getScreenshot` 的文档注释中，2026-09-26 live 实测确认运行时承认它）。
+   *
+   * **默认 `false`，刻意不替使用者开启**——官方 React 参考的惯例是「能力进目录 +
+   * 显式 opt-in」，而常驻一块额外画布内存是库不该替用户做的取舍。参照实测：同一张图
+   * 不带该选项时 `getScreenshot()` 返回 3,830 字节的**空画布**（即「黑屏」），带上则
+   * 119,074 字节的真实内容。
+   *
+   * ⚠️ 它是**建图期**选项，事后无法补上：想用 `mapRef.getScreenshot()` 就必须**一开始**
+   * 就开着。详见 `docs/zh-CN/contributing/165-runtime-verification.md`。
+   */
+  preserveDrawingBuffer?: boolean;
+  /**
    * 地图允许展示的**最小**缩放级别。官方 `MapOptions.minZoom` 声明「取值范围 [3, 21]」。
    *
    * 库默认 `3`（合法下界）。传值越界**显式报错**（`BMAP_INVALID_ARGUMENT`）而不是把非法值

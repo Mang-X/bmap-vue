@@ -407,6 +407,7 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     mapType: MapTypeIdName;
     enableWheelZoom: boolean;
     keepAliveBehavior: "suspend" | "dispose";
+    preserveDrawingBuffer: boolean;
     enableAutoResize: boolean;
     loadingBgColor: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
@@ -2249,6 +2250,7 @@ declare interface MapProps {
     mapStyleId?: string;
     mapStyleJson?: Record<string, unknown>;
     displayOptions?: Record<string, unknown>;
+    preserveDrawingBuffer?: boolean;
     minZoom?: number;
     maxZoom?: number;
     enableDragging?: boolean;

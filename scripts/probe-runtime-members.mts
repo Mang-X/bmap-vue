@@ -144,7 +144,34 @@ function pageScript(ak: string): string {
     hasZoomIn: protoHas(B.Map, "zoomIn"),
     hasZoomOut: protoHas(B.Map, "zoomOut"),
     hasCenterAndZoom: protoHas(B.Map, "centerAndZoom"),
+    hasIsSupportEarth: protoHas(B.Map, "isSupportEarth"),
   };
+  // preserveDrawingBuffer 是否真被官方运行时承认：建一张开了该选项的图，看随后
+  // getScreenshot() 返回的是不是全黑（无法直接读像素，只能比较「字符串长度是否非零」
+  // 以及未开该选项时是否明显更短/为空）。这是**读数**，不是 pass/fail 判定。
+  R.readings.preserveDrawingBuffer = await (async () => {
+    const grab = async (opts) => {
+      const div = document.createElement("div");
+      div.style.cssText = "width:320px;height:240px;position:absolute;top:0;left:0";
+      document.body.appendChild(div);
+      // 必须给容器尺寸，否则官方内部拿不到绘制目标（实测报
+      // "Cannot read properties of undefined (reading '_painter')"）
+      const mk = new B.Map(div, opts);
+      mk.centerAndZoom(new B.Point(116.404, 39.915), 12);
+      // 等首帧真正画完，否则截图拿到的是空画布
+      return new Promise((res) => setTimeout(() => {
+      let out = null;
+      try { out = mk.getScreenshot(); } catch (e) { out = "THREW:" + String(e && e.message || e); }
+      res({ type: typeof out, length: typeof out === "string" ? out.length : null,
+            head: typeof out === "string" ? out.slice(0, 200) : null });
+      }, 2500));
+    };
+    try {
+      // grab 是 async：必须 await，否则两个 Promise 会被 JSON 序列化成 {}（读数全丢）
+      return { without: await grab({}), withBuffer: await grab({ preserveDrawingBuffer: true }),
+               optionAcceptedByRuntime: true };
+    } catch (e) { return { optionAcceptedByRuntime: false, error: String(e && e.message || e) }; }
+  })();
   R.phase = "done";
   return publish(R);
 })()

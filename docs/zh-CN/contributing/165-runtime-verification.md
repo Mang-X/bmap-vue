@@ -71,6 +71,42 @@
 4. **`MapTypeOptions` 的本地 augmentation 仍需保留**（运行时 `undefined`，声明引用它 ⇒
    `skipLibCheck:false` 下会失败）；`Projection` 两者都有，可考虑并入。
 
+## 结论五：`preserveDrawingBuffer` **确实被官方运行时承认**（截图黑屏的根因坐实）
+
+`MapOptions` 声明里**没有** `preserveDrawingBuffer`（只出现在 `getScreenshot` 的散文注释里），
+所以此前不敢把它做成类型面。**live 实测给出了明确答案**——同一张图、同一时刻，两种建图选项：
+
+| 建图选项 | `getScreenshot()` 返回 | 判定 |
+| --- | --- | --- |
+| 不带 | `data:image/png;base64,…`，长度 **3,830** | **空画布**（就是「黑屏」） |
+| `{ preserveDrawingBuffer: true }` | 同前缀，长度 **119,074** | **真实内容**（约 31 倍） |
+
+⇒ ① 该键**被官方运行时承认**（不是声明笔误，也不是"上游根本没这个"）；
+② 「不带就黑屏」的说法**实测成立**；③ 它是**建图期**选项，事后无法补上。
+
+**由此确定处置**（维护者裁决「按照封装的惯例，参照官方行为」）：
+官方 React 参考的惯例是 **能力进目录 + 显式 opt-in**，不是替使用者做默认值取舍
+（见其 `capabilityMatrix.ts` 把 `Map.getScreenshot` 列为能力、`v4Driver.ts` 直接调）。
+本库照此：给 `<Map>` 一个**显式 opt-in 的 prop**（默认**不开启**——默认开启会让每张地图
+常驻一块额外画布内存，这是库不该替用户做的取舍），并在 `getScreenshot()` 的文档上
+写明「不带这个 prop 就会拿到空画布」。
+
+## 结论六：Vue 的 `Boolean` 缺省陷阱在 `preserveDrawingBuffer` 上**又中了一次**
+
+给它加 prop 时先写了 `...(props.preserveDrawingBuffer !== undefined ? {...} : {})`，
+以为「不传就不表态」。测试直接把这个假设打掉——实况是建图选项里**带着
+`preserveDrawingBuffer: false`**：Vue 对**缺省 `Boolean` prop 会转成 `false`**，
+所以 `!== undefined` 永远成立，条件展开等于没写。
+
+修法是仓库既有的那一条（`LineLayer.popEvent` / `FillLayer.border` /
+`PointIconLayer.userSizes` 都用它）：在 `withDefaults` 里**显式写 `undefined`**。
+
+⚠️ 这是本票**第三次**踩同一个坑（前两次：Class 3 补 `popEvent`/`userSizes`/`visibility`/
+`mouseStyleChange`，Class 1 补 `showSuggestion`）。四次的共同形状都是
+「官方默认 `true`，而 Vue 缺省给 `false`」——**只要新加的 prop 官方默认是 `true`，
+就必须显式 `undefined`，否则每个不传它的用户都静默偏离官方**。
+这条值得进仓库的贡献指南，而不是散落在各组件注释里。
+
 ## 未覆盖
 
 - `Panorama` 实例成员（需创建 viewer）——本次探针只读原型，对它无效。
