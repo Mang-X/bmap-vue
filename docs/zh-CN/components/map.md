@@ -588,18 +588,62 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | 方法 | 说明 | 类型 |
 | --- | --- | --- |
 | `getCenter()` | 读当前中心点（读不到给 `null`） | `() => { lng, lat } \| null` |
-| `setCenter(center)` | 设置中心点（不含 zoom，不会重置级别）。`center` 对齐官方 `setCenter(center: Point \| string, options?)` 的**两个分支**：点，或城市名 / 地址字符串 | `(center: { lng, lat } \| string) => void` |
-| `getZoom()` / `setZoom(zoom)` | 缩放级别读写 | `() => number \| null` / `(zoom: number) => void` |
-| `getHeading()` / `setHeading(heading)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number) => void` |
-| `getTilt()` / `setTilt(tilt)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number) => void` |
+| `setCenter(center, options?)` | 设置中心点（不含 zoom，不会重置级别）。`center` 对齐官方 `setCenter(center: Point \| string, options?)` 的**两个分支**：点，或城市名 / 地址字符串 | `(center: { lng, lat } \| string, options?: ViewCommandOptions) => void` |
+| `getZoom()` / `setZoom(zoom, options?)` | 缩放级别读写。`options` 额外收 `zoomCenter`（缩放中心点，领域 `{ lng, lat }`；不传 = 地图中心点） | `() => number \| null` / `(zoom: number, options?: SetZoomOptions) => void` |
+| `getHeading()` / `setHeading(heading, options?)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number, options?: ViewCommandOptions) => void` |
+| `getTilt()` / `setTilt(tilt, options?)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number, options?: ViewCommandOptions) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
-| `panTo(point)` / `panBy(pixel)` | 平移到点 / 按像素平移。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（#165 Class 2 判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }) => void` / `(pixel: { x, y }) => void` |
+| `panTo(point, options?)` / `panBy(pixel)` | 平移到点 / 按像素平移。`panTo` 的 `options` 额外收 `duration`（动画时长，毫秒）。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（#165 Class 2 判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }, options?: PanToOptions) => void` / `(pixel: { x, y }) => void` |
 | `fitBounds(bounds)` | 按范围适配视野 | `(bounds: Bounds) => void` |
 | `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`；Map 作用域的能力要等地图建好之后才可靠 —— 需要确定性时先 `await whenReady()`） | `(capability: Capability) => boolean` |
 
 **未就绪时的契约**：读命令给 `null`、写命令是**空操作**（不排队、也不会在就绪后重放）。
 需要确定性时先 `await whenReady()`。SDK 调用失败会照常抛出（不降级成 `null`）。
+
+### 视野命令的 `options`：等一条命令真正落定
+
+`setCenter` / `setZoom` / `setHeading` / `setTilt` / `panTo` 五条都收官方的第二个参数。
+最实用的成员是 **`callback`** —— 没有它，「这条命令什么时候完成」是**不可观察**的：
+
+```ts
+const map = ref<MapExpose>()
+
+map.value.setZoom(14, {
+  zoomCenter: { lng: 121.5, lat: 31.2 },
+  noAnimation: true,
+  callback: () => console.log('已经缩放到 14 级'),
+})
+```
+
+三个类型的成员集是**逐条对齐官方**的（依据 `@baidumap/jsapi-v4-types@4.0.4` 的
+`core/Map.d.ts`，行号见下表）：
+
+| 类型 | 用于 | 官方声明 | 成员 |
+| --- | --- | --- | --- |
+| `ViewCommandOptions` | `setCenter` / `setHeading` / `setTilt` | `:660` / `:129` / `:163` | `noAnimation?`、`callback?` |
+| `SetZoomOptions` | `setZoom` | `:698` | 上面两个 + `zoomCenter?: { lng, lat }` |
+| `PanToOptions` | `panTo` | `:591` | 上面第一个 + `duration?: number`（毫秒）+ `callback?` |
+
+几点要知道的：
+
+- **`options` 是逐调用的，不是 prop。** 官方**没有** `MapOptions.noAnimation`——它只作为
+  逐调用选项存在（1.0 起 `<Map>` 上就没有 `noAnimation` prop）。
+- **默认值逐条不同，本库不统一。** 官方在 `setCenter` 上标 `@default true`、在 `panTo` 上标
+  `@default false`，另两条没标。不传 `options` 时整个参数是 `undefined`，由上游按各自的默认
+  处理；库不替它定一个（那会覆盖上游自己的声明，在 `setCenter` 上还会正好相反）。
+- **`callback` 按引用透传**，不包装、不加 `try`——它抛出的异常会如实上抛。真实 SDK 在动画档
+  是**异步**调它，那时的异常会变成 `unhandled`（官方没有回调错误通道）。
+- **不传 = 不下发。** 空对象与「没传」在上游看到的是同一种形状（`undefined`），本库不把
+  `{}` 递给 SDK；`callback: undefined` 也不会变成「有一个 undefined 的回调」。
+- **`zoomCenter` 是领域 `{ lng, lat }`**，不是城市名字符串。官方 `@default 地图中心点` 由上游自己
+  取，本库不会去读一次当前中心再填进去。
+
+> ⚠️ **`panTo` 的动画默认：声明与实测不一致。** 官方声明 `noAnimation` 默认 `false`（=有动画），
+> 但 2026-09-26 live 实测（`requestAnimationFrame` 逐帧采 1.5s）读数是
+> `distinctSampleCount = 1`、`midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位**。
+> 本库不传 `options` 即沿用上游默认，**没有**额外的 prop / 命令不一致要修
+> （`docs/zh-CN/contributing/165-audit-B-C-D-F.md` 裁决 G）。
 
 ### 容器 / 生命周期 / 暂停
 

@@ -1197,13 +1197,13 @@ export interface MapDriver {
     // (undocumented)
     panBy(map: MapHandle, pixel: Pixel): void;
     // (undocumented)
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     // (undocumented)
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setInteraction(map: MapHandle, name: MapInteraction, enabled: boolean): void;
     // (undocumented)
@@ -1211,12 +1211,12 @@ export interface MapDriver {
     // (undocumented)
     setMapType(map: MapHandle, type: MapType_2): void;
     // (undocumented)
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setTraffic(map: MapHandle, enabled: boolean): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
     // (undocumented)
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     // (undocumented)
     startViewAnimation(map: MapHandle, animation: unknown): void;
 }
@@ -1655,6 +1655,11 @@ export interface PanoramaLink {
     y?: number;
 }
 
+// @public
+export interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
+}
+
 // @public (undocumented)
 export interface PathOptions {
     // (undocumented)
@@ -1905,6 +1910,11 @@ export interface ServiceResult<T> {
     readonly sdkStatus: number | null;
     // (undocumented)
     readonly status: ServiceCallStatus;
+}
+
+// @public
+export interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
 }
 
 // @public (undocumented)
@@ -2289,6 +2299,12 @@ export interface ViewAnimationKeyFrames {
 
 // @public
 export type ViewAnimationStatus = "idle" | "playing";
+
+// @public
+export interface ViewCommandOptions {
+    callback?: () => void;
+    noAnimation?: boolean;
+}
 
 // @public
 export interface Viewport {

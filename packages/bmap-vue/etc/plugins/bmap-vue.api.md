@@ -779,13 +779,13 @@ export interface MapDriver {
     // (undocumented)
     panBy(map: MapHandle, pixel: Pixel): void;
     // (undocumented)
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     // (undocumented)
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setInteraction(map: MapHandle, name: MapInteraction, enabled: boolean): void;
     // (undocumented)
@@ -793,12 +793,12 @@ export interface MapDriver {
     // (undocumented)
     setMapType(map: MapHandle, type: MapType_2): void;
     // (undocumented)
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setTraffic(map: MapHandle, enabled: boolean): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
     // (undocumented)
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     // (undocumented)
     startViewAnimation(map: MapHandle, animation: unknown): void;
 }
@@ -1018,6 +1018,11 @@ export interface PanoramaLink {
     roadWidth?: number;
     x?: number;
     y?: number;
+}
+
+// @public
+export interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
 }
 
 // @public (undocumented)
@@ -1293,6 +1298,11 @@ export interface ServiceDriver {
 // @public (undocumented)
 export type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
 
+// @public
+export interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
+
 // @public (undocumented)
 export interface Size {
     // (undocumented)
@@ -1357,6 +1367,12 @@ export type ViewAnimationCancelOutcome =
 | "deferred"
 /** 本 Driver 已没有该实例的记录：早已结算 / 从未由它起播 ⇒ 没有可取消的东西。 */
 | "already-settled";
+
+// @public
+export interface ViewCommandOptions {
+    callback?: () => void;
+    noAnimation?: boolean;
+}
 
 // @public
 export interface Viewport {

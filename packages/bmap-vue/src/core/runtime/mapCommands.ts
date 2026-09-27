@@ -29,7 +29,13 @@ import type { BMapClient } from "../../client/types";
 import type { Capability } from "../../driver/capability";
 import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
-import type { FlyToOptions, Viewport } from "../../driver/types/map";
+import type {
+  FlyToOptions,
+  PanToOptions,
+  SetZoomOptions,
+  ViewCommandOptions,
+  Viewport,
+} from "../../driver/types/map";
 import type { ViewportOptions } from "../../driver/types/services";
 import { readLiveView } from "../utils/liveView";
 
@@ -70,6 +76,20 @@ export interface MapCommands {
 
   /* ---------------------------------------------------------------- 写（未就绪时空操作） */
   /**
+   * 写命令的 `options` 是什么、什么时候该传、什么时候**不该**有（#171 / #165 裁决 F）。
+   *
+   * 五条视野命令的 `options` 是**逐调用**的官方能力：`noAnimation` 管这一次要不要动画，
+   * `callback` 让「这条命令完成了」变成**可观察的事实**——此前调用方永远无法知道一条
+   * 视野命令什么时候真正落定。本库把它原样递下去（按引用透传，不包装、不加 `try`）。
+   *
+   * ⚠️ **`options` 不等于「没传」**：空对象与不传在 SDK 看到的是同一种形状（`undefined`），
+   * 所以「我没给 options」与「我给了但里面是空的」不能靠上游分辨——本库也不假装能。
+   *
+   * ⚠️ **不是 `<Map>` 的 prop**：官方没有 `MapOptions.noAnimation`（#165 Class 5 据此删掉了
+   * `MapProps.noAnimation`），它**只**作为逐调用选项存在。做成 prop 会让一个开关决定之后
+   * 所有命令的动画，那正是被删掉的那条。
+   */
+  /**
    * 设置中心点。`center` 对齐官方 `setCenter(center: Point | string, options?)` 的**两个分支**：
    * 点，或城市名 / 地址字符串。
    *
@@ -87,13 +107,21 @@ export interface MapCommands {
    * 的地名也不抛错，而是回落到某处（实测 `'NotACityName-zzz'` 同样移动、不抛），
    * 因此「字符串没生效」不能从「没报错」推断。
    */
-  setCenter(center: Point | string): void;
-  setZoom(zoom: number): void;
-  setHeading(heading: number): void;
-  setTilt(tilt: number): void;
+  setCenter(center: Point | string, options?: ViewCommandOptions): void;
+  setZoom(zoom: number, options?: SetZoomOptions): void;
+  setHeading(heading: number, options?: ViewCommandOptions): void;
+  setTilt(tilt: number, options?: ViewCommandOptions): void;
 
   /* ---------------------------------------------------------------- 平移 / 适配 */
-  panTo(point: Point): void;
+  /**
+   * 平移到目标中心点（官方 `Map#panTo`）。
+   *
+   * ⚠️ 官方声明 `noAnimation` 默认 `false`（=有动画），但 2026-09-26 live 实测
+   * （`requestAnimationFrame` 逐帧采 1.5s）读数是 `distinctSampleCount = 1`、
+   * `midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位**。声明与实测不一致，
+   * 本库**不**改这个默认、也不加 prop 去「修正」它（见 `165-audit-B-C-D-F.md` 裁决 G）。
+   */
+  panTo(point: Point, options?: PanToOptions): void;
   panBy(pixel: Pixel): void;
   fitBounds(bounds: Bounds): void;
   /**
@@ -168,12 +196,17 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
       read((client, map) => client.driver.map.getViewport(map, view, options)),
     getScreenshot: () => read((client, map) => client.driver.map.getScreenshot(map)),
 
-    setCenter: (center) => write((client, map) => client.driver.map.setCenter(map, center)),
-    setZoom: (zoom) => write((client, map) => client.driver.map.setZoom(map, zoom)),
-    setHeading: (heading) => write((client, map) => client.driver.map.setHeading(map, heading)),
-    setTilt: (tilt) => write((client, map) => client.driver.map.setTilt(map, tilt)),
+    // options 一律**原样透传**（#171 / #165 裁决 F）：命令面不判空、不填默认、不包装
+    // callback。投影与「空对象不下发」全部由 Driver 的 `toRaw*Options` 一处负责，
+    // 命令面再实现一份就会与它漂移。
+    setCenter: (center, options) =>
+      write((client, map) => client.driver.map.setCenter(map, center, options)),
+    setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
+    setHeading: (heading, options) =>
+      write((client, map) => client.driver.map.setHeading(map, heading, options)),
+    setTilt: (tilt, options) => write((client, map) => client.driver.map.setTilt(map, tilt, options)),
 
-    panTo: (point) => write((client, map) => client.driver.map.panTo(map, point)),
+    panTo: (point, options) => write((client, map) => client.driver.map.panTo(map, point, options)),
     panBy: (pixel) => write((client, map) => client.driver.map.panBy(map, pixel)),
     fitBounds: (bounds) => write((client, map) => client.driver.map.fitBounds(map, bounds)),
     flyTo: (center, zoom, options) =>

@@ -578,19 +578,19 @@ export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
     destroy(map: MapHandle): void;
     initializeView(map: MapHandle, view: MapView): void;
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     getCenter(map: MapHandle): Point;
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
@@ -783,6 +783,10 @@ export declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";
     handle: SdkHandle<string>;
 }
+export declare interface PanoramaCaptureOptions {
+    quality?: number;
+    type?: string;
+}
 export declare interface PanoramaDataInfo {
     id: string;
     description: string;
@@ -839,6 +843,7 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
     getLinks(viewer: PanoramaHandle): PanoramaLink[];
     getVisible(viewer: PanoramaHandle): boolean;
+    capture(viewer: PanoramaHandle, options?: PanoramaCaptureOptions): string | null;
     setId(viewer: PanoramaHandle, id: string, options?: PanoramaSwitchOptions): void;
     setPosition(viewer: PanoramaHandle, position: Point): void;
     setPov(viewer: PanoramaHandle, pov: PanoramaPov, options?: {
@@ -856,6 +861,7 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     createLabel(content: string, options?: PanoramaLabelOptions): PanoramaLabelHandle;
     addLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
     removeLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+    clearOverlays(viewer: PanoramaHandle): void;
     setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
     setLabelContent(label: PanoramaLabelHandle, content: string): void;
     setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
@@ -864,6 +870,9 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     createService(): PanoramaServiceHandle;
     findById(service: PanoramaServiceHandle, id: string): ServiceCall<PanoramaDataInfo>;
     findByLocation(service: PanoramaServiceHandle, position: Point, radius?: number): ServiceCall<PanoramaDataInfo>;
+}
+export declare interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
 }
 export declare interface PathOptions {
     strokeColor?: string;
@@ -1037,6 +1046,9 @@ export declare interface ServiceResult<T> {
     readonly error: ServiceErrorInfo | null;
     readonly sdkStatus: number | null;
 }
+export declare interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
 export declare interface Size {
     width: number;
     height: number;
@@ -1110,6 +1122,10 @@ export declare class UnsupportedCapabilityError extends BMapError {
 }
 export declare function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare interface ViewCommandOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 export declare interface Viewport {
     center: Point;
     zoom: number;

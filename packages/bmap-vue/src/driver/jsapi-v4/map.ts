@@ -35,6 +35,9 @@ import type {
   MapInteraction,
   MapType,
   MapView,
+  PanToOptions,
+  SetZoomOptions,
+  ViewCommandOptions,
   Viewport,
 } from "../types/map";
 import type { ViewportOptions } from "../types/services";
@@ -213,6 +216,61 @@ function toRawFlyToOptions(options?: FlyToOptions): Record<string, unknown> | un
   const out: Record<string, unknown> = {};
   if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
   if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `ViewCommandOptions` → 官方同名对象（`setCenter` / `setHeading` / `setTilt` / `panTo` 共用）。
+ *
+ * 形状与 `toRawFlyToOptions` **逐字相同**（官方那四条与 `flyTo` 声明的就是同一个 options 形状），
+ * 但保持两个函数而不是合一个：合并后「`flyTo` 的投影」会变成五条命令共用的那一个，
+ * 将来官方给其中一条加成员时，合并版会静默把成员递给**不该递**的那几条。
+ *
+ * 「全空 → `undefined`」的理由同 `toRawFlyToOptions`：官方没有声明「空对象」这个形状，
+ * 凭空造一个等于依赖 SDK 对它的隐式处理。同理 `callback: undefined` 键不递 ——
+ * 递一个 `undefined` 的回调不是「没给」，而是「给了一个不是函数的东西」。
+ */
+function toRawViewCommandOptions(options?: ViewCommandOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `PanToOptions` → 官方 `panTo` 的 options（`core/Map.d.ts:591`）：上面那个再加 `duration`。
+ *
+ * `duration` 只在 `panTo` 上存在（`setCenter` 等没有），因此它**不在** `toRawViewCommandOptions`
+ * 里——共享函数里加它会让另外四条也开始递一个官方没声明的键。
+ */
+function toRawPanToOptions(options?: PanToOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  if (typeof options.duration === "number") out.duration = options.duration;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `SetZoomOptions` → 官方 `setZoom` 的 options（`core/Map.d.ts:698`）。
+ *
+ * 唯一的额外成员 `zoomCenter` 是**领域 `Point`**，必须经 `geometry.toRawPoint` 投影 ——
+ * 直接递下去就是把纯数据对象漏给 SDK，与本 Facet 其它几何入参同一口径。
+ *
+ * 不传 `zoomCenter` 时**不递该键**（官方 `@default 地图中心点` 由上游自己取）；本库不去读一次
+ * 当前中心再填进去，那会把「不传」与「显式传当前中心」变成两种不同的调用。
+ */
+function toRawSetZoomOptions(
+  options: SetZoomOptions | undefined,
+  geometry: GeometryDriver,
+): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  if (options.zoomCenter) out.zoomCenter = geometry.toRawPoint(options.zoomCenter);
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -785,16 +843,26 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       if (applyTilt) callOptional(raw, "setTilt", view.tilt, options);
     },
 
-    setCenter(map, center) {
-      callRequired(resolveLive(map), "setCenter", toRawCenter(center));
+    setCenter(map, center, options?: ViewCommandOptions) {
+      callRequired(
+        resolveLive(map),
+        "setCenter",
+        toRawCenter(center),
+        toRawViewCommandOptions(options),
+      );
     },
 
     getCenter(map) {
       return geometry.fromRawPoint(callRequired(resolveLive(map), "getCenter"));
     },
 
-    setZoom(map, zoom) {
-      callRequired(resolveLive(map), "setZoom", zoom);
+    setZoom(map, zoom, options?: SetZoomOptions) {
+      callRequired(
+        resolveLive(map),
+        "setZoom",
+        zoom,
+        toRawSetZoomOptions(options, geometry),
+      );
     },
 
     getZoom(map) {
@@ -802,10 +870,10 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       return numberOf("map.getZoom", callRequired(raw, "getZoom"));
     },
 
-    setHeading(map, heading) {
+    setHeading(map, heading, options?: ViewCommandOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.heading");
-      callOptional(raw, "setHeading", heading);
+      callOptional(raw, "setHeading", heading, toRawViewCommandOptions(options));
     },
 
     getHeading(map) {
@@ -814,10 +882,10 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       return numberOf("map.getHeading", callOptional(raw, "getHeading"));
     },
 
-    setTilt(map, tilt) {
+    setTilt(map, tilt, options?: ViewCommandOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.tilt");
-      callOptional(raw, "setTilt", tilt);
+      callOptional(raw, "setTilt", tilt, toRawViewCommandOptions(options));
     },
 
     getTilt(map) {
@@ -852,8 +920,13 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       );
     },
 
-    panTo(map, point) {
-      callOptional(resolveLive(map), "panTo", geometry.toRawPoint(point));
+    panTo(map, point, options?: PanToOptions) {
+      callOptional(
+        resolveLive(map),
+        "panTo",
+        geometry.toRawPoint(point),
+        toRawPanToOptions(options),
+      );
     },
 
     panBy(map, pixel) {

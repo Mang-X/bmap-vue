@@ -23,6 +23,10 @@ export type {
   // #165 回填：`getViewport` 的返回类型与 `flyTo` 的官方选项投影
   Viewport,
   FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
 } from "./types/map";
 export type {
   OverlayKind,

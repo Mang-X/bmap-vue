@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 429,
+  "oursPublicCount": 431,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 314,
+  "oursOnlyCount": 316,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2373,6 +2373,11 @@
       "oursEntry": "."
     },
     {
+      "name": "PanToOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PathOptions",
       "surface": "type",
       "oursEntry": "./composables"
@@ -2454,6 +2459,11 @@
     },
     {
       "name": "ServiceResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "SetZoomOptions",
       "surface": "type",
       "oursEntry": "./composables"
     },

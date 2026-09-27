@@ -271,11 +271,11 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getSize(): Size | null;
     getViewport(view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport | null;
     getScreenshot(): string | null;
-    setCenter(center: Point | string): void;
-    setZoom(zoom: number): void;
-    setHeading(heading: number): void;
-    setTilt(tilt: number): void;
-    panTo(point: Point): void;
+    setCenter(center: Point | string, options?: ViewCommandOptions): void;
+    setZoom(zoom: number, options?: SetZoomOptions): void;
+    setHeading(heading: number, options?: ViewCommandOptions): void;
+    setTilt(tilt: number, options?: ViewCommandOptions): void;
+    panTo(point: Point, options?: PanToOptions): void;
     panBy(pixel: Pixel): void;
     fitBounds(bounds: Bounds): void;
     flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
@@ -772,6 +772,8 @@ declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}
 declare const __VLS_component_45: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
     getLinks: () => PanoramaLink[];
+    capture: (options?: PanoramaCaptureOptions) => string | null;
+    clearOverlays: () => void;
     viewer: Readonly<ShallowRef<PanoramaHandle | null>>;
     status: Readonly<ShallowRef<PanoramaStatus>>;
     error: Readonly<ShallowRef<BMapError | null>>;
@@ -2960,11 +2962,11 @@ export declare interface MapCommands {
     getSize(): Size | null;
     getViewport(view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport | null;
     getScreenshot(): string | null;
-    setCenter(center: Point | string): void;
-    setZoom(zoom: number): void;
-    setHeading(heading: number): void;
-    setTilt(tilt: number): void;
-    panTo(point: Point): void;
+    setCenter(center: Point | string, options?: ViewCommandOptions): void;
+    setZoom(zoom: number, options?: SetZoomOptions): void;
+    setHeading(heading: number, options?: ViewCommandOptions): void;
+    setTilt(tilt: number, options?: ViewCommandOptions): void;
+    panTo(point: Point, options?: PanToOptions): void;
     panBy(pixel: Pixel): void;
     fitBounds(bounds: Bounds): void;
     flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
@@ -2982,19 +2984,19 @@ export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
     destroy(map: MapHandle): void;
     initializeView(map: MapHandle, view: MapView): void;
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     getCenter(map: MapHandle): Point;
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
@@ -3857,6 +3859,10 @@ declare interface OverviewMapControlProps {
     visible?: boolean;
 }
 export declare const Panorama: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
+export declare interface PanoramaCaptureOptions {
+    quality?: number;
+    type?: string;
+}
 export declare const PanoramaControl: __VLS_WithSlots_17<typeof __VLS_component_17, __VLS_Slots_17>;
 declare interface PanoramaControlProps {
     anchor?: string;
@@ -3959,6 +3965,7 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
     getLinks(viewer: PanoramaHandle): PanoramaLink[];
     getVisible(viewer: PanoramaHandle): boolean;
+    capture(viewer: PanoramaHandle, options?: PanoramaCaptureOptions): string | null;
     setId(viewer: PanoramaHandle, id: string, options?: PanoramaSwitchOptions): void;
     setPosition(viewer: PanoramaHandle, position: Point): void;
     setPov(viewer: PanoramaHandle, pov: PanoramaPov, options?: {
@@ -3976,6 +3983,7 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     createLabel(content: string, options?: PanoramaLabelOptions): PanoramaLabelHandle;
     addLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
     removeLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+    clearOverlays(viewer: PanoramaHandle): void;
     setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
     setLabelContent(label: PanoramaLabelHandle, content: string): void;
     setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
@@ -3984,6 +3992,9 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     createService(): PanoramaServiceHandle;
     findById(service: PanoramaServiceHandle, id: string): ServiceCall<PanoramaDataInfo>;
     findByLocation(service: PanoramaServiceHandle, position: Point, radius?: number): ServiceCall<PanoramaDataInfo>;
+}
+export declare interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
 }
 declare interface PathCommandApi {
     setPositionAt(index: number, point: Point, options?: {
@@ -4542,6 +4553,9 @@ export declare interface ServiceResult<T> {
     readonly error: ServiceErrorInfo | null;
     readonly sdkStatus: number | null;
 }
+export declare interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
 export declare interface Size {
     width: number;
     height: number;
@@ -4940,6 +4954,10 @@ export declare interface ViewAnimationKeyFrames {
     percentage: number;
 }
 export declare type ViewAnimationStatus = "idle" | "playing";
+export declare interface ViewCommandOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 export declare interface Viewport {
     center: Point;
     zoom: number;

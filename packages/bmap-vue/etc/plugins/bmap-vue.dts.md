@@ -426,19 +426,19 @@ export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
     destroy(map: MapHandle): void;
     initializeView(map: MapHandle, view: MapView): void;
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     getCenter(map: MapHandle): Point;
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
@@ -585,6 +585,9 @@ export declare interface PanoramaLink {
     y?: number;
     roadWidth?: number;
 }
+export declare interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
+}
 export declare interface PathOptions {
     strokeColor?: string;
     strokeWeight?: number;
@@ -719,6 +722,9 @@ export declare interface ServiceDriver {
     createTrackAnimation(map: MapHandle, path: readonly Point[], options?: Record<string, unknown>): ServiceHandle<"service:track-animation">;
 }
 export declare type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
+export declare interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
 export declare interface Size {
     width: number;
     height: number;
@@ -754,6 +760,10 @@ export declare function urlPluginDefinition<T>(name: string, url: string, export
     dependencies?: readonly string[];
 }): BMapPluginDefinition<T>;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare interface ViewCommandOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 export declare interface Viewport {
     center: Point;
     zoom: number;

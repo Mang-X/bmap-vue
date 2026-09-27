@@ -306,6 +306,11 @@ export type {
   // `MapCommands.getViewport()` 的返回类型，必须可从根入口取到）
   Viewport,
   FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影。它们出现在**已导出**的
+  // `MapCommands` / `MapDriver` 签名里 ⇒ 消费方要构造就得能命名（ADR 2026-09-25 的处置类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
   GeometryDriver,
   OverlayDriver,
   ControlDriver,

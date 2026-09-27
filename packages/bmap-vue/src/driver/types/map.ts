@@ -81,6 +81,64 @@ export interface FlyToOptions {
   callback?: () => void;
 }
 
+/**
+ * 五条视野命令里**除 `setZoom` 之外**四条共用的选项形状
+ * （`setCenter` `core/Map.d.ts:660`、`setHeading` `:129`、`setTilt` `:163`、`panTo` `:591`）。
+ *
+ * ## 为什么不把它做成四个独立类型
+ *
+ * 因为官方就是**同一个形状**逐条重复声明的（四处的成员集与注释逐字相同），本库若拆成四个类型，
+ * 就是凭空制造「它们其实有区别」的暗示。`PanToOptions` 单独一个（多了 `duration`）、
+ * `SetZoomOptions` 单独一个（多了 `zoomCenter`）——这两处差别是官方声明里**真实存在**的。
+ *
+ * ## `noAnimation` 的默认值逐条不同，本库不设默认
+ *
+ * 官方在 `setCenter` 上写 `@default true`（`:657`）、在 `panTo` 上写 `@default false`（`:594`），
+ * 另两条连 `@default` 都没写。**本库不统一**：不传 `options` 时整个参数是 `undefined`，由上游按
+ * 各自的默认处理——替它定一个就等于覆盖了上游自己的声明（且在 `setCenter` 上会正好相反）。
+ *
+ * ## 它是**逐调用**选项，不是 `<Map>` 的 prop
+ *
+ * 官方**没有** `MapOptions.noAnimation`（#165 Class 5 据此删掉了 `MapProps.noAnimation`）。
+ * 「这条命令要不要动画」天然是每条命令自己的事；做成组件级 prop 会让一个 prop 决定之后**所有**
+ * 命令的动画——那正是被删掉的那条。
+ */
+export interface ViewCommandOptions {
+  /** 是否禁用动画效果（各命令默认值不同，见上方说明；不传 = 沿用上游各自的默认） */
+  noAnimation?: boolean;
+  /** 动画结束后的回调（按引用原样透传，Driver 不包装） */
+  callback?: () => void;
+}
+
+/**
+ * `panTo` 的官方选项（`core/Map.d.ts:591`）：`ViewCommandOptions` 加上**它独有**的 `duration`。
+ *
+ * 官方注释只写「动画持续时间，单位ms」，既无 `@default` 也无取值范围 ⇒ 本库不设默认、不校验区间
+ * （凭空设上限就是替上游发明约束）。
+ *
+ * ⚠️ 官方声明 `noAnimation` 默认 `false`（=默认有动画），但 2026-09-26 live 实测
+ * （`requestAnimationFrame` 逐帧采 1.5s）读数是 `distinctSampleCount = 1`、
+ * `midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位**，与「实测行为 = 无动画」一致。
+ * 声明与实测不一致这件事**如实记在这里**，不改默认值、不加 prop（见 `165-audit-B-C-D-F.md` 裁决 G）。
+ */
+export interface PanToOptions extends ViewCommandOptions {
+  /** 动画持续时间，单位ms（官方无默认值声明，本库不设默认） */
+  duration?: number;
+}
+
+/**
+ * `setZoom` 的官方选项（`core/Map.d.ts:698`）：`ViewCommandOptions` 加上**它独有**的 `zoomCenter`。
+ *
+ * `zoomCenter` 是**领域 `Point`**（不是 `BMap.Point`）：Driver 侧用 `geometry.toRawPoint` 投影，
+ * 与本 Facet 其它几何入参同一口径。官方注释标注 `@default 地图中心点` —— 不传即由上游取当前中心，
+ * 本库**不**去读一次当前中心再填进去（那会把「不传」与「显式传当前中心」变成两种不同的调用，
+ * 而官方把它们当同一种）。
+ */
+export interface SetZoomOptions extends ViewCommandOptions {
+  /** 缩放中心点（领域 `Point`；不传 = 地图中心点） */
+  zoomCenter?: Point;
+}
+
 export interface MapDriver {
   create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
   /**
@@ -97,16 +155,16 @@ export interface MapDriver {
 
   initializeView(map: MapHandle, view: MapView): void;
 
-  setCenter(map: MapHandle, center: Point | string): void;
+  setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
   getCenter(map: MapHandle): Point;
 
-  setZoom(map: MapHandle, zoom: number): void;
+  setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
   getZoom(map: MapHandle): number;
 
-  setHeading(map: MapHandle, heading: number): void;
+  setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
   getHeading(map: MapHandle): number;
 
-  setTilt(map: MapHandle, tilt: number): void;
+  setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
   getTilt(map: MapHandle): number;
 
   getBounds(map: MapHandle): Bounds;
@@ -117,7 +175,7 @@ export interface MapDriver {
   /** 屏幕像素 → 经纬度（v4 `pixelToPoint`；不传 options，按当前地图状态换算） */
   pixelToPoint(map: MapHandle, pixel: Pixel): Point;
 
-  panTo(map: MapHandle, point: Point): void;
+  panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
   panBy(map: MapHandle, pixel: Pixel): void;
   fitBounds(map: MapHandle, bounds: Bounds): void;
   /** 按若干点设置视口（getViewport/setViewport；缺失时退化为中心点 centerAndZoom） */

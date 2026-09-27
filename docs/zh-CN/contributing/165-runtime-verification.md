@@ -169,6 +169,25 @@ SDK 已把中心钉住），不构成反证。
 ⇒ 上一轮「`B.Panorama.prototype` 全 false」是**原型读法对这类成员无效**，不是「成员不存在」。
 `setTheme` 的 `callable: false`（`Panorama` 上确实没有）。
 
+## 结论七：`panTo` 的 `noAnimation` 默认值，**声明与运行时不一致**（再次实测复现）
+
+官方 `core/Map.d.ts` 的 `panTo(options)` 对 `noAnimation` 标 **`@default false`**（按字面即
+「默认**带**动画」），而本轮 rAF 逐帧采样 1.5s 的读数是：
+
+    { distinctSampleCount: 1, midFlightSamples: 0, animatedByDefault: false, finalIsTarget: true }
+
+即**直接跳到目标、中间没有中间帧**。两次独立实测一致。
+
+这不是本库的 bug——我们**不传任何 options**，因此继承的是上游实际行为。
+因此**不改默认值**（没有可改的：默认在我们的控制之外），但：
+
+- 官方声明与实际行为**不一致**这件事必须留在类型注释 / 命令面注释 / 文档 / changeset 里，
+  否则使用者会以为「不传 options 就有动画」而看不到中间过程；
+- 想拿到确定时长的调用方可以显式传 `duration`（`panTo` 的官方 options 里确有该成员）。
+
+⚠️ 同类提醒：`animatedByDefault: false` 说的是**本环境读数**，不同渲染模式/性能下
+可能不同；因此文档里按「实测」而非「官方保证」措辞。
+
 ## 未覆盖
 
 - `MenuItem` / `ContextMenu` 的实例行为。

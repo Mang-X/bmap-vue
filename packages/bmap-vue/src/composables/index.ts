@@ -143,6 +143,10 @@ export type {
   // 选项投影出现在本出口可达的公开签名里（`Viewport` 同时是 `MapCommands` 的返回类型）
   Viewport,
   FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
 } from "../driver/types/map";
 // `CircleReadBackApi` / `MarkerReadBackApi` / `InfoWindowReadBackApi` / `PathReadBackApi` /
 // `ContextMenuCommandApi` / `MenuItemView` 是 issue #165 Class 3 的命令面类型：

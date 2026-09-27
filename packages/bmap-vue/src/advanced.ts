@@ -125,6 +125,10 @@ export type {
   // 未导出类型要么导出、要么消掉，不留「反正用不上」的欠账）
   Viewport,
   FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
 } from "./driver/types/map";
 export type {
   OverlayKind,

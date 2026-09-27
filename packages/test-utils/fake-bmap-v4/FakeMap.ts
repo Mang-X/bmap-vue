@@ -101,6 +101,19 @@ export class FakeV4Map extends FakeV4EventTarget {
   canceledAnimation: unknown = null
   /** `centerAndZoom` / `setHeading` / `setTilt` 最近一次传入的 options。 */
   lastViewOptions: Record<string, unknown> | null = null
+  /**
+   * 逐命令的 `options` 读数（`setCenter` / `setZoom` / `setHeading` / `setTilt` / `panTo`）。
+   *
+   * 刻意与 `lastViewOptions` **分开**：`lastViewOptions` 是「建图 / 旋转 / 倾斜共用的历史读数」，
+   * 其中 `setHeading` / `setTilt` 还会在建图路径上被 `centerAndZoom` 的兄弟调用写一次，
+   * 分开之后「某一条命令到底收到了什么」才是可以单独断言的（#171 / #165 裁决 F）。
+   *
+   * 键是**官方成员名**，值为「最近一次传入的 options；没传时为 `null`」——
+   * 于是「没给」与「给了空对象 `{}`」在读数上可区分（后者记 `{}`）。
+   */
+  readonly lastCommandOptions: Record<string, Record<string, unknown> | null> = {}
+  /** 已交付的 `options.callback` 次数（按官方成员名分账；用于「恰好一次」这类断言）。 */
+  readonly callbackDeliveries: Record<string, number> = {}
   /** `getViewport` / `setViewport` 最近一次传入的 `view`（点数组或 `Bounds` 实例）。 */
   lastViewportView: unknown = null
   /** 视口类调用最近一次传入的 options（未传时为 `null`）。 */
@@ -625,6 +638,38 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.resizeCalls++
   }
 
+  /**
+   * 记下某条命令收到的 `options`，并**交付其中的 `callback` 恰好一次**。
+   *
+   * ## 为什么替身要真的调 callback（#171 / #165 裁决 F）
+   *
+   * 官方对五条视野命令的 `options.callback` 承诺的是「结束时调用」（`setCenter` / `setZoom`
+   * 的声明更明确：「没有动画则立即调用」）。2026-09-26 live 实测：五条在 `noAnimation: true`
+   * 下**各交付恰好一次**（0–1ms），动画档也各恰好一次（`setZoom` 526ms / `panTo` 32ms）——
+   * 见 `docs/zh-CN/contributing/165-runtime-verification.md` §8。
+   *
+   * 替身因此在**同步**交付：这是官方「无动画则立即调用」那一条的可测形状，也是本库单测里
+   * 唯一不依赖真实时间轴的读法。⚠️ 替身**不**建模动画时长（那是渲染行为，由浏览器 smoke 覆盖），
+   * 所以「动画档下也会交付」这条只能靠 live 取证，单测锁的是「传下去 ⇒ 交付恰好一次」。
+   *
+   * 交付的时序与官方的**形状**一致：状态**先**落定（中心点 / 级别 / 角度已在上面写好），callback
+   * **后**被调——所以回调里读 `getCenter()` 拿到的是新值，不会看到半截状态。
+   *
+   * ⚠️ **只交付一次**是被显式建模的契约：真实 SDK 若（按 bug 那样）多次调用，用例会红。
+   * 替身不复刻上游的缺陷，契约以 live 取证的读数为准。
+   */
+  private recordCommandOptions(method: string, options?: Record<string, unknown>): void {
+    // 「没传」记 null、「传了空对象」记 {}——两者在读数上可区分，这条差异是可断言的
+    this.lastCommandOptions[method] = options ?? null
+    if (!options) return
+    // 历史读数沿用原口径（建图 / 旋转 / 倾斜共用一条），逐命令读数在 `lastCommandOptions`
+    this.lastViewOptions = options
+    const callback = options.callback
+    if (typeof callback !== 'function') return
+    this.callbackDeliveries[method] = (this.callbackDeliveries[method] ?? 0) + 1
+    ;(callback as () => void)()
+  }
+
   /* ------------------------------------------------------------------ 视野 */
 
   centerAndZoom(
@@ -652,7 +697,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setCenter(point: FakeV4Point | string, options?: Record<string, unknown>): void {
     this.callLog.push('setCenter')
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setCenter', options)
   }
 
   getCenter(): FakeV4Point | null {
@@ -662,7 +707,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setZoom(zoom: number, options?: Record<string, unknown>): void {
     this.callLog.push('setZoom')
     this.zoom = zoom
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setZoom', options)
   }
 
   getZoom(): number | null {
@@ -770,7 +815,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   panTo(point: FakeV4Point, options?: Record<string, unknown>): void {
     this.callLog.push('panTo')
     this.center = point
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('panTo', options)
   }
 
   panBy(x: number, y: number, options?: Record<string, unknown>): void {
@@ -786,7 +831,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setHeading(heading: number, options?: Record<string, unknown>): void {
     this.callLog.push('setHeading')
     this.heading = heading
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setHeading', options)
   }
 
   getHeading(): number {
@@ -796,7 +841,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setTilt(tilt: number, options?: Record<string, unknown>): void {
     this.callLog.push('setTilt')
     this.tilt = tilt
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setTilt', options)
   }
 
   getTilt(): number {

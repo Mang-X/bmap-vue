@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 429 |
+| 本库根入口导出 | 431 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 314 |
+| 仅本库有 | 316 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -591,6 +591,7 @@ component 45 · hook 14 · type 56
 | `OverlayPointerEvent` | type | — |
 | `PanoramaLabelHandle` | type | — |
 | `PanoramaLabelOptions` | type | — |
+| `PanToOptions` | type | — |
 | `PathOptions` | type | — |
 | `PointLayerProps` | type | — |
 | `PolygonHandle` | type | — |
@@ -608,6 +609,7 @@ component 45 · hook 14 · type 56
 | `SdkResourceStatus` | type | — |
 | `ServiceCallStatus` | type | — |
 | `ServiceResult` | type | — |
+| `SetZoomOptions` | type | — |
 | `TargetContext` | type | — |
 | `toPublicMapContext` | type | — |
 | `TrackLineLayerProps` | type | — |

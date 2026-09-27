@@ -153,11 +153,13 @@ describe("createMapCommands：有句柄时", () => {
     commands.panBy(PIXEL);
     commands.fitBounds(BOUNDS);
 
-    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT);
-    expect(mapDriver.setZoom).toHaveBeenCalledWith(expect.anything(), 15);
-    expect(mapDriver.setHeading).toHaveBeenCalledWith(expect.anything(), 90);
-    expect(mapDriver.setTilt).toHaveBeenCalledWith(expect.anything(), 20);
-    expect(mapDriver.panTo).toHaveBeenCalledWith(expect.anything(), POINT);
+    // 五条视野命令多出的第三个参数是官方的 `options`（#171）：不传时是 `undefined`，
+    // 命令面**不**把它换成 `{}`（判空与投影是 Driver 的职责，命令面再实现一份就会漂移）
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT, undefined);
+    expect(mapDriver.setZoom).toHaveBeenCalledWith(expect.anything(), 15, undefined);
+    expect(mapDriver.setHeading).toHaveBeenCalledWith(expect.anything(), 90, undefined);
+    expect(mapDriver.setTilt).toHaveBeenCalledWith(expect.anything(), 20, undefined);
+    expect(mapDriver.panTo).toHaveBeenCalledWith(expect.anything(), POINT, undefined);
     expect(mapDriver.panBy).toHaveBeenCalledWith(expect.anything(), PIXEL);
     expect(mapDriver.fitBounds).toHaveBeenCalledWith(expect.anything(), BOUNDS);
   });
@@ -187,13 +189,15 @@ describe("createMapCommands：setCenter 接受官方声明的 string 中心（#1
   it("字符串中心按原样透传给 Driver（Driver 已有的 Point | string 收窄不被这里截断）", () => {
     const { commands, mapDriver } = createFixture();
     commands.setCenter("北京");
-    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), "北京");
+    // 第三个参数是 options（#171 补齐的官方第二个参数）：不传时是 `undefined`，
+    // 命令面**不**把它换成 `{}`——判空与投影都是 Driver 的职责
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), "北京", undefined);
   });
 
   it("点形态不受影响", () => {
     const { commands, mapDriver } = createFixture();
     commands.setCenter(POINT);
-    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT);
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT, undefined);
   });
 });
 
@@ -262,5 +266,78 @@ describe("createMapCommands：错误口径", () => {
       throw new BMapError("BMAP_RESOURCE_DISPOSED", "disposed");
     });
     expect(() => commands.flyTo(POINT, 15)).toThrowError(/disposed/);
+  });
+});
+
+/**
+ * 视野命令的 `options` 透传（#171 / #165 裁决 F）。
+ *
+ * 这一层只锁**接线**：`options` 原样到达 Driver。判空（空对象不下发）、`zoomCenter` 的几何
+ * 投影、callback 的交付都在 Driver 那一层验（`driver/jsapi-v4/map.test.ts`）。
+ *
+ * 「原样」是刻意的：命令面不判空、不填默认、不包装 callback —— 它再实现一份就会与 Driver 的
+ * `toRaw*Options` 漂移，而漂移的表现是「空对象被递给 SDK」这类只在真实引擎上才看得出来的偏差。
+ */
+describe("createMapCommands：options 原样透传给 Driver（#171）", () => {
+  it("五条命令都把 options 按引用递下去（不复制、不补默认）", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { noAnimation: true, callback: (): void => {} };
+
+    commands.setCenter(POINT, options);
+    commands.setZoom(15, options);
+    commands.setHeading(90, options);
+    commands.setTilt(20, options);
+    commands.panTo(POINT, options);
+
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT, options);
+    expect(mapDriver.setZoom).toHaveBeenCalledWith(expect.anything(), 15, options);
+    expect(mapDriver.setHeading).toHaveBeenCalledWith(expect.anything(), 90, options);
+    expect(mapDriver.setTilt).toHaveBeenCalledWith(expect.anything(), 20, options);
+    expect(mapDriver.panTo).toHaveBeenCalledWith(expect.anything(), POINT, options);
+    // 「按引用」是契约的一部分：包装 callback 就等于改变了上游对它的调用方式
+    expect(mapDriver.setCenter.mock.calls[0]![2]).toBe(options);
+  });
+
+  it("传空对象时也原样递 `{}`（判空是 Driver 的职责，不在命令面）", () => {
+    const { commands, mapDriver } = createFixture();
+    const empty = {};
+
+    commands.setCenter(POINT, empty);
+
+    expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), POINT, empty);
+  });
+
+  it("setZoom 的 zoomCenter 走 SetZoomOptions，不被命令面拆开", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { zoomCenter: POINT, noAnimation: true };
+
+    commands.setZoom(15, options);
+
+    expect(mapDriver.setZoom).toHaveBeenCalledWith(expect.anything(), 15, options);
+  });
+
+  it("panTo 的 duration 走 PanToOptions", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { duration: 300, noAnimation: false };
+
+    commands.panTo(POINT, options);
+
+    expect(mapDriver.panTo).toHaveBeenCalledWith(expect.anything(), POINT, options);
+  });
+
+  it("没有句柄时 options 里的 callback 不会被调用（空操作是真的什么都不做）", () => {
+    const { commands, mapDriver, detach } = createFixture();
+    let calls = 0;
+    detach();
+
+    commands.setCenter(POINT, {
+      noAnimation: true,
+      callback: () => {
+        calls++;
+      },
+    });
+
+    expect(calls).toBe(0);
+    expect(mapDriver.setCenter).not.toHaveBeenCalled();
   });
 });

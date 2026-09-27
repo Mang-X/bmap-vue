@@ -267,11 +267,11 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getSize(): Size_2 | null;
     getViewport(view: readonly Point[] | Bounds_2, options?: ViewportOptions_2): Viewport_2 | null;
     getScreenshot(): string | null;
-    setCenter(center: Point | string): void;
-    setZoom(zoom: number): void;
-    setHeading(heading: number): void;
-    setTilt(tilt: number): void;
-    panTo(point: Point): void;
+    setCenter(center: Point | string, options?: ViewCommandOptions_2): void;
+    setZoom(zoom: number, options?: SetZoomOptions_2): void;
+    setHeading(heading: number, options?: ViewCommandOptions_2): void;
+    setTilt(tilt: number, options?: ViewCommandOptions_2): void;
+    panTo(point: Point, options?: PanToOptions_2): void;
     panBy(pixel: Pixel_2): void;
     fitBounds(bounds: Bounds_2): void;
     flyTo(center: Point, zoom: number, options?: FlyToOptions_2): void;
@@ -768,6 +768,8 @@ declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}
 declare const __VLS_component_45: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
     getLinks: () => PanoramaLink[];
+    capture: (options?: PanoramaCaptureOptions) => string | null;
+    clearOverlays: () => void;
     viewer: Readonly<ShallowRef<PanoramaHandle | null>>;
     status: Readonly<ShallowRef<PanoramaStatus>>;
     error: Readonly<ShallowRef<BMapError | null>>;
@@ -2209,19 +2211,19 @@ declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
     destroy(map: MapHandle): void;
     initializeView(map: MapHandle, view: MapView): void;
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     getCenter(map: MapHandle): Point;
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
     setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
@@ -2722,6 +2724,10 @@ declare interface OverviewMapControlProps {
     visible?: boolean;
 }
 export declare const Panorama: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
+declare interface PanoramaCaptureOptions {
+    quality?: number;
+    type?: string;
+}
 export declare const PanoramaControl: __VLS_WithSlots_17<typeof __VLS_component_17, __VLS_Slots_17>;
 declare interface PanoramaControlProps {
     anchor?: string;
@@ -2796,6 +2802,12 @@ declare interface PanoramaReadyContext {
 }
 declare type PanoramaSceneType = "street" | "inter";
 declare type PanoramaStatus = "idle" | "waiting-client" | "creating" | "ready" | "error" | "disposing" | "disposed";
+declare interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
+}
+declare interface PanToOptions_2 extends ViewCommandOptions_2 {
+    duration?: number;
+}
 declare interface PathEditableProps {
     enableEditing?: boolean;
 }
@@ -3152,6 +3164,12 @@ declare interface ServiceDriver {
     createTrackAnimation(map: MapHandle, path: readonly Point[], options?: Record<string, unknown>): ServiceHandle<"service:track-animation">;
 }
 declare type ServiceHandle<Kind extends string = "service"> = SdkHandle<Kind>;
+declare interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
+declare interface SetZoomOptions_2 extends ViewCommandOptions_2 {
+    zoomCenter?: Point_2;
+}
 declare interface Size {
     width: number;
     height: number;
@@ -3241,6 +3259,14 @@ declare const TransitVehiclePolicy: {
 declare type TransitVehiclePolicy = (typeof TransitVehiclePolicy)[keyof typeof TransitVehiclePolicy];
 declare type UnsupportedBehavior = "throw" | "warn" | "silent";
 declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+declare interface ViewCommandOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
+declare interface ViewCommandOptions_2 {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 declare interface Viewport {
     center: Point;
     zoom: number;
