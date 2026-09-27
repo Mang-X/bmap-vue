@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 431 |
+| 本库根入口导出 | 435 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 316 |
+| 仅本库有 | 320 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -646,12 +646,14 @@ component 45 · hook 14 · type 56
 | `CapabilityReason` | other | — |
 | `CapabilityRegistry` | other | — |
 | `CircleReadBackApi` | other | — |
+| `CityListCommandApi` | other | — |
 | `ClusterChange` | other | — |
 | `ClusterPick` | other | — |
 | `ContextMenuCommandApi` | other | — |
 | `ContextMenuExpose` | other | — |
 | `ContextMenuItem` | other | — |
 | `ContextMenuSeparator` | other | — |
+| `ControlCommandTypes` | other | — |
 | `ControlDriver` | other | — |
 | `ControlKind` | other | — |
 | `ControllableMode` | other | — |
@@ -705,6 +707,8 @@ component 45 · hook 14 · type 56
 | `LocalSearchNearbyRequest` | other | — |
 | `LocalSearchPoi` | other | — |
 | `LocalSearchSearchOption` | other | — |
+| `LocationAddressComponents` | other | — |
+| `LocationCommandApi` | other | — |
 | `MAP_EVENT_CATALOG` | other | — |
 | `MAP_EVENT_EMIT_ALIASES` | other | — |
 | `MAP_EVENT_NAMES` | other | — |

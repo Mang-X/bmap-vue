@@ -40,6 +40,13 @@ export const MARKER_FIELDS: OverlayFieldMap<MarkerProps> = {
   rotation: "options",
   enableDragging: "options",
   enableClicking: "recreate",
+  // issue #168 item 2：官方 MarkerOptions 里此前未收的四个构造选项。
+  // 四个全部 `recreate`（官方 Marker 实例上没有对应 setter），逐条依据见
+  // `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS.marker`。
+  raiseOnDrag: "recreate",
+  draggingCursor: "recreate",
+  isTop: "recreate",
+  restrictDraggingArea: "recreate",
   visible: "visibility",
 };
 
@@ -108,6 +115,12 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
         rotation: p.rotation,
         zIndex: p.zIndex,
         icon: p.icon,
+        // 四个构造期选项（#168 item 2）：`undefined` 的键由 Driver 的 `projectOptions`
+        // 跳过，因此未给时**不会**出现在交给 SDK 的选项里（不会把 `false` 冒充「用户显式设了 false」）。
+        raiseOnDrag: p.raiseOnDrag,
+        draggingCursor: p.draggingCursor,
+        isTop: p.isTop,
+        restrictDraggingArea: p.restrictDraggingArea,
       }),
 
     /**

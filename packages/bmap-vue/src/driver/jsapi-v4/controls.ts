@@ -29,11 +29,14 @@
  */
 import { BMapError } from "../../core/errors/BMapError";
 import type {
+  CityListCommandApi,
   ControlDriver,
   ControlKind,
   ControlOptionStatus,
   ControlOptions,
   CopyrightEntry,
+  LocationAddressComponents,
+  LocationCommandApi,
 } from "../types/controls";
 import type { Pixel } from "../types/geometry";
 import { HANDLE_BRAND, type ControlHandle } from "../types/handles";
@@ -590,8 +593,96 @@ export function createJsapiV4ControlDriver(
         return item;
       });
     },
+
+    /**
+     * 定位控件的命令面（issue #168 item 1）。
+     *
+     * **kind 必须对上**：`registry.resolve` 只保证句柄有效，而「把 `toggle()` 打到
+     * `GeolocationControl` 上」在运行时是一个静默的无操作（方法不存在 ⇒ `callControl`
+     * 告警一次后返回 false）。组件层永远传自己 kind 的句柄，但 Driver 仍是最终把关的一层：
+     * 显式失败比「告警一次然后什么都没发生」好定位得多。
+     */
+    locationCommands(control): LocationCommandApi {
+      const raw = requireKind(control, "location", "locationCommands");
+      return {
+        location: () => {
+          callControl(raw, "location");
+        },
+        // 官方声明是 `startLocation()`；`startLocationTrace()` 不在 d.ts 里，live 读数
+        // `callable: false`。逐条依据见 `driver/types/controls.ts` 的 `LocationCommandApi`。
+        startLocation: () => {
+          callControl(raw, "startLocation");
+        },
+        stopLocationTrace: () => {
+          callControl(raw, "stopLocationTrace");
+        },
+        getAddressComponent: () => toAddressComponents(callRequired(raw, "getAddressComponent")),
+      };
+    },
+
+    cityListCommands(control): CityListCommandApi {
+      const raw = requireKind(control, "city-list", "cityListCommands");
+      return {
+        toggle: () => {
+          callControl(raw, "toggle");
+        },
+        getCityName: () => String(callRequired(raw, "getCityName") ?? ""),
+      };
+    },
   };
+
+  /**
+   * 命令面取到**另一种** kind 的句柄时显式失败。
+   *
+   * 判据用句柄品牌（`kindOfControl`）而不是让调用方保证——命令面是「用户拿着组件 ref 调」的那一层，
+   * 传错 kind 的代价是「方法不存在 ⇒ 告警一次 ⇒ 静默无操作」，那正是 AGENTS.md 说的假支持。
+   */
+  function requireKind(
+    control: ControlHandle,
+    expected: ControlKind,
+    command: string,
+  ): Record<string, unknown> {
+    const actual = kindOfControl(control);
+    if (actual !== expected) {
+      throw new BMapError(
+        "BMAP_INVALID_ARGUMENT",
+        `ControlDriver.${command}: 句柄的种类是 ${String(actual)}，该命令面只服务 ${expected} 控件`,
+        { engine: "jsapi-v4" },
+      );
+    }
+    return registry.resolve<Record<string, unknown>>(control);
+  }
 }
+
+/**
+ * 官方 `AddressComponent` → 领域 `LocationAddressComponents`。
+ *
+ * 官方五个成员**全是可选的**，因此逐字段按类型收窄、取不到就**留在 undefined**——
+ * **不补默认值**：`city ?? ""` 会把「上游没给」与「空」混成同一个串，而调用方正是靠这个区别
+ * 判断「这一段地址上游到底有没有给」。
+ *
+ * 非字符串成员**不投影**（例如 `district` 可能是数字）：照抄进 `string` 字段是断言，不是投影。
+ * 整体不是对象时给 `null`——官方声明就是 `AddressComponent | null`，编一个 `{}` 会让
+ * 「还没定位到」被误判成「定位到了一个空地址」。
+ */
+function toAddressComponents(value: unknown): LocationAddressComponents | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const result: LocationAddressComponents = {};
+  for (const key of ADDRESS_TEXT_KEYS) {
+    if (typeof raw[key] === "string") result[key] = raw[key] as string;
+  }
+  return result;
+}
+
+/** 官方 `AddressComponent` 的五个字符串成员。 */
+const ADDRESS_TEXT_KEYS = [
+  "streetNumber",
+  "street",
+  "district",
+  "city",
+  "province",
+] as const satisfies readonly (keyof LocationAddressComponents)[];
 
 /* -------------------------------------------------------------------------- */
 /* 常量与构造器的类型层一致性（零运行时开销）                                     */

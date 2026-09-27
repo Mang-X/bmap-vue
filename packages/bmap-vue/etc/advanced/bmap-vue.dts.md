@@ -171,6 +171,10 @@ export declare interface CircleReadBackApi extends PathReadBackApi {
     getFillColor(): string;
     getFillOpacity(): number;
 }
+export declare interface CityListCommandApi {
+    toggle(): void;
+    getCityName(): string;
+}
 export declare interface ContextMenuCommandApi {
     getItem(index: number): MenuItemView | null;
     removeItem(index: number): boolean;
@@ -197,6 +201,8 @@ export declare interface ControlDriver {
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
     removeCopyright(control: ControlHandle, id: number): void;
     listCopyrights(control: ControlHandle): CopyrightEntry[];
+    locationCommands(control: ControlHandle): LocationCommandApi;
+    cityListCommands(control: ControlHandle): CityListCommandApi;
 }
 export declare type ControlHandle = SdkHandle<"control" | `control:${string}`>;
 export declare type ControlKind = "zoom" | "scale" | "navigation" | "navigation-3d" | "city-list" | "location" | "map-type" | "overview" | "panorama" | "copyright" | "custom";
@@ -573,6 +579,19 @@ export declare interface LocalSearchResult {
 }
 export declare interface LocalSearchSearchOption {
     forceLocal?: boolean;
+}
+export declare interface LocationAddressComponents {
+    streetNumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    province?: string;
+}
+export declare interface LocationCommandApi {
+    location(): void;
+    startLocation(): void;
+    stopLocationTrace(): void;
+    getAddressComponent(): LocationAddressComponents | null;
 }
 export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;

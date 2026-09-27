@@ -302,6 +302,12 @@ export interface CircleReadBackApi extends PathReadBackApi {
     getRadius(): number;
 }
 
+// @public
+export interface CityListCommandApi {
+    getCityName(): string;
+    toggle(): void;
+}
+
 // @public (undocumented)
 export interface ContextMenuCommandApi {
     getDom(): HTMLElement;
@@ -322,6 +328,8 @@ export interface ControlDriver {
     // (undocumented)
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
     // (undocumented)
+    cityListCommands(control: ControlHandle): CityListCommandApi;
+    // (undocumented)
     create(kind: ControlKind, options?: ControlOptions): ControlHandle;
     createCustomControl(options: {
         anchor?: string;
@@ -332,6 +340,7 @@ export interface ControlDriver {
     hide(control: ControlHandle): void;
     // (undocumented)
     listCopyrights(control: ControlHandle): CopyrightEntry[];
+    locationCommands(control: ControlHandle): LocationCommandApi;
     planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
     // (undocumented)
     remove(target: OverlayTarget, control: ControlHandle): void;
@@ -1013,6 +1022,28 @@ export interface LocalSearchResult {
 // @public
 export interface LocalSearchSearchOption {
     forceLocal?: boolean;
+}
+
+// @public
+export interface LocationAddressComponents {
+    // (undocumented)
+    city?: string;
+    // (undocumented)
+    district?: string;
+    // (undocumented)
+    province?: string;
+    // (undocumented)
+    street?: string;
+    // (undocumented)
+    streetNumber?: string;
+}
+
+// @public
+export interface LocationCommandApi {
+    getAddressComponent(): LocationAddressComponents | null;
+    location(): void;
+    startLocation(): void;
+    stopLocationTrace(): void;
 }
 
 // @public (undocumented)

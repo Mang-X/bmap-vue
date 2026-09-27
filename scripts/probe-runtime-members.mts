@@ -22,6 +22,7 @@
  * | 11 | `Panorama` 的 `capture` / `clearOverlays` 在**实例**上真在吗？ | **Class 2 / I**：上一轮探 `B.Panorama.prototype` 全 false，但那是**原型**读法，对挂在实例上的成员无效 |
  * | 12 | 官方 `reset()` 到底重置哪些字段？ | **Class 2 / D**：声明只说「恢复地图初始化时的中心点和级别」，**没提** heading/tilt；本库 `resetView()` 连 heading/tilt 一起重置，这是行为差 |
  * | 13 | 走**动画档**（不传 `noAnimation`）时 `options.callback` 还会不会调？ | **Class 2 / F**：`noAnimation:true` 下 callback「立即调用」不代表动画档也会交付 |
+ * | 14 | `GeolocationControl` / `CityListControl` 的命令面成员在**实例**上真在吗？特别是 `startLocation` vs `startLocationTrace` | #168 item 1：issue 点名的 `startLocationTrace()` **不在** `control/GeolocationControl.d.ts` 里（声明是 `startLocation()` / `stopLocationTrace()`）。控制类成员常挂实例而非原型（#165 probe 11 已踩过），因此必须 live 读 |
  *
  * ## 判定与退出码
  *
@@ -430,6 +431,44 @@ function pageScript(ak: string): string {
     } catch (e) { rec.threw = String(e && e.message || e); }
     return rec;
   })();
+
+  // 14. GeolocationControl / CityListControl 的**命令面成员**在实例上真在吗？（#168 item 1）
+  //
+  // 为什么要 live：类型声明说 GeolocationControl 有 startLocation() / stopLocationTrace()，
+  // 而 issue 文本把命令写成 startLocationTrace()。**两者不是同一个名字**，且控制类实例上的成员
+  // 常常挂在实例而非原型（#165 probe 11 已经踩过这个坑：prototype 读法全 false）。因此这里
+  // 逐个按「own / 原型链 / 可调用」三档读，并对 startLocationTrace 单独给一条读数——
+  // 它是「声明里没有、但 issue 点名」的那个名字。
+  R.readings.controlCommands = (() => {
+    const rec = { geolocation: null, cityList: null };
+    const probe = (ctor, names) => {
+      try {
+        const inst = new ctor({});
+        const out = {};
+        for (const n of names) {
+          out[n] = {
+            own: own(inst, n),
+            onProto: protoHas(Object.getPrototypeOf(inst), n),
+            callable: typeof inst[n] === "function",
+          };
+        }
+        return out;
+      } catch (e) { return { threw: String((e && e.message) || e) }; }
+    };
+    if (typeof B.GeolocationControl === "function") {
+      rec.geolocation = probe(B.GeolocationControl, [
+        "location", "startLocation", "startLocationTrace",
+        "stopLocationTrace", "getAddressComponent", "setOptions",
+      ]);
+    }
+    if (typeof B.CityListControl === "function") {
+      rec.cityList = probe(B.CityListControl, [
+        "open", "close", "toggle", "getTriggerDom", "getCityName",
+      ]);
+    }
+    return rec;
+  })();
+
   R.phase = "done";
   return publish(R);
 })()

@@ -552,6 +552,32 @@ export const OVERLAY_DESCRIPTORS = {
         "4.0 的 Marker 只有构造选项 enableClicking，没有 setEnableClicking；运行时另有 clickable 字段，但它只影响指针样式、不影响点击事件派发",
         { ctorKey: "enableClicking" },
       ),
+      // ---- issue #168 item 2：官方 MarkerOptions 里此前未收的四个构造选项 ----
+      // 四个**全部**是 `recreate`：逐个核对 `overlay/Marker.d.ts` 的实例成员表
+      // （`setIcon` / `setPosition` / `setOffset` / `setTitle` / `setLabel` /
+      //  `enable|disableDragging` / `enable|disableMassClear` / `setZIndex` / `setAnchor` /
+      //  `setRotation` / `setRotationOrigin` / `setRank` / `setOptions`），
+      // **一个都没有**这四个的 setter ⇒ 认成 `mutable` 会让更新落到 `set<Key>` 逃生口上，
+      // 静默变成「改了没反应」。
+      raiseOnDrag: recreate(
+        "官方 MarkerOptions 的 raiseOnDrag（@default false，「拖拽时标注是否离开地图表面」）；4.0 的 Marker 实例上没有 setRaiseOnDrag",
+        { ctorKey: "raiseOnDrag" },
+      ),
+      // ⚠️ `draggingCursor` 的官方类型是**普通 `string`**（原文：「需遵循 CSS cursor 属性规范」），
+      // 没有任何候选值清单 ⇒ 领域侧也按 `string` 建模，**不**自造枚举联合
+      // （CSS cursor 的合法值是开放集合：关键词 + 任何 `url(…)`，联合一定会漏）。
+      draggingCursor: recreate(
+        "官方 MarkerOptions 的 draggingCursor（CSS cursor 字符串）；4.0 的 Marker 实例上没有 setDraggingCursor",
+        { ctorKey: "draggingCursor" },
+      ),
+      isTop: recreate(
+        "官方 MarkerOptions 的 isTop（@default false，「是否将标注置于其它标注之上」）；4.0 的 Marker 实例上没有 setIsTop",
+        { ctorKey: "isTop" },
+      ),
+      restrictDraggingArea: recreate(
+        "官方 MarkerOptions 的 restrictDraggingArea（@default false，「是否限制拖拽区域」）；4.0 的 Marker 实例上没有 setRestrictDraggingArea",
+        { ctorKey: "restrictDraggingArea" },
+      ),
       anchor: recreate(
         "**依据是运行时实测，不是类型声明**：`Marker#setAnchor` 在 4.0.5 的声明里**存在**，"
           + "但真实 4.0 里它**不在 `BMap.Marker.prototype` 上**，构造后立刻调用抛 "
@@ -713,6 +739,19 @@ export const OVERLAY_DESCRIPTORS = {
       enableClicking: recreate(
         "4.0 的 GroundOverlay 只有构造选项 enableClicking，实例上没有对应的成对开关",
         { ctorKey: "enableClicking" },
+      ),
+      // ---- issue #168 item 2：`top`（官方 @default false，「是否在普通覆盖物之上绘制」）----
+      // 逐条核对 `overlay/GroundOverlay.d.ts` 的实例成员表（`setBounds` / `getBounds` /
+      // `setOpacity` / `getOpacity` / `setImage` / `setImageURL` / `getImageURL` /
+      // `setDisplayOnMinLevel` / `getDisplayOnMinLevel` / `setDisplayOnMaxLevel` /
+      // `getDisplayOnMaxLevel` / `setZIndex` / `getMap`）——**没有 `setTop`** ⇒ 只能构造期生效。
+      //
+      // ⚠️ 与 `zIndex`（同为层叠语义）落地方式**不同**：后者有 `setZIndex` 所以是 `mutable`。
+      // 两者都在描述符里，别把 `top` 顺手改成 `mutateBy("setZIndex")`——那会让它
+      // 静默落到一个语义不同的 setter 上。
+      top: recreate(
+        "官方 GroundOverlayOptions 的 top（@default false，「是否在普通覆盖物之上绘制」）；4.0 的 GroundOverlay **没有 setTop**（它有 setZIndex，但那是层叠顺序值，语义不同）",
+        { ctorKey: "top" },
       ),
       // M5-VECTORS / #31：组件的两个组件侧行为/构造期选项显式分类（此前落在「未知键」分支）
       type: recreate(
@@ -971,6 +1010,24 @@ export const OVERLAY_REVERT_RATIONALE = {
   style: "Label#setStyles 有 getter 但返回当前值；默认样式由 SDK 内部决定、无从构造 ⇒ 重建",
   opacity: "Label#setOpacity 在 4.0.4 **没有**公开读回 ⇒ 重建",
   anchor: "Marker#anchor 只有构造选项（上游要等异步标注模块加载才挂 setter，不安全）⇒ 重建",
+  // ——— issue #168 item 2 补的构造选项：全部「无 setter 也无读回」⇒ 重建 ———
+  raiseOnDrag:
+    "官方 MarkerOptions 的 raiseOnDrag（@default false）；4.0 的 Marker 实例上" +
+    "**既没有 setRaiseOnDrag 也没有任何读回** ⇒ 连「值变回 undefined」都没有落点，只能重建",
+  draggingCursor:
+    "官方 MarkerOptions 的 draggingCursor（CSS cursor 字符串）；4.0 的 Marker 实例上" +
+    "**既没有 setDraggingCursor 也没有任何读回** ⇒ 重建",
+  isTop:
+    "官方 MarkerOptions 的 isTop（@default false）；4.0 的 Marker 实例上" +
+    "**既没有 setIsTop 也没有任何读回**（注意：与它语义相近的 setZIndex 是**另一个**成员，" +
+    "不能借用——那会让「布尔置顶」被当成「层叠顺序值」撤回）⇒ 重建",
+  restrictDraggingArea:
+    "官方 MarkerOptions 的 restrictDraggingArea（@default false）；4.0 的 Marker 实例上" +
+    "**既没有 setRestrictDraggingArea 也没有任何读回** ⇒ 重建",
+  top:
+    "官方 GroundOverlayOptions 的 top（@default false，「是否在普通覆盖物之上绘制」）；" +
+    "4.0 的 GroundOverlay **没有 setTop**（它有 setZIndex，但那是层叠顺序值、语义不同，" +
+    "借用它撤回会写错语义）也没有读回 ⇒ 重建",
   strokeColor: "图形族有 getStrokeColor，但返回当前值而非 SDK 默认色 ⇒ 重建",
   strokeWeight: "图形族有 getStrokeWeight，但返回当前值而非 SDK 默认线宽 ⇒ 重建",
   strokeOpacity: "图形族有 getStrokeOpacity，但返回当前值而非 SDK 默认透明度 ⇒ 重建",

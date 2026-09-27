@@ -77,7 +77,7 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 | zoomChange        | 当前缩放级别变化后触发（官方 `zoom_changed`）            | `number \| null`            |
 | idChange          | 当前全景 id 变化后触发（官方 `id_changed`）              | `string \| null`            |
 | sceneTypeChange   | 场景类型变化后触发（官方 `scene_type_changed`）          | `'street' \| 'inter' \| null` |
-| linksChange       | 相邻道路数据变化后触发（官方 `links_changed`）           | 无                          |
+| linksChange       | 相邻道路数据变化后触发（官方 `links_changed`）           | `PanoramaLink[]`            |
 | load              | 全景数据加载完成后触发（官方 `dataload`）                | 官方事件对象                |
 | error             | 全景数据加载失败时触发（官方 `pano_error`）              | 官方事件对象                |
 
@@ -85,6 +85,61 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 官方的 `position_changed` / `pov_changed` / `zoom_changed` / `scene_type_changed` 事件对象里**只有**
 `{type, target, currentTarget}`，没有值。本组件在回调里回读对应的 getter 再作为载荷发出，因此你拿到的是
 「事件发生后的当前值」，不需要自己去调 SDK。
+:::
+
+### 画面交互与生命周期事件（#168 新增）
+
+官方 `PanoramaEventMap` 共 **23** 个事件。#168 补了其中 13 条，**不加 2 条**，
+另有 1 条**官方不存在**（见下）。逐条裁决见
+[contributing/168-remaining-surface](../../contributing/168-remaining-surface.md)。
+
+| 事件                  | 官方事件名                | 载荷                          |
+| --------------------- | ------------------------- | ----------------------------- |
+| click / dblclick      | 同名                      | `{ type: string }`            |
+| touchstart / touchend | 同名                      | `{ type: string }`            |
+| clickonroad           | `clickonroad`             | `{ type: string }`            |
+| linkClick             | `link_click`              | `{ id?: string }`             |
+| povChangedEnd         | `pov_changed_end`         | `PanoramaPov \| null`         |
+| sceneChangeEnd        | `scene_change_end`        | `PanoramaSceneType \| null`   |
+| sizeChanged           | `size_changed`            | 无                            |
+| overlayAdd            | `overlay_add`             | 无                            |
+| overlayRemove         | `overlay_remove`          | 无                            |
+| overlaysClear         | `overlays_clear`          | 无                            |
+| visiblePoiTypeChanged | `visible_poi_type_changed`| `PanoramaPoiType \| null`     |
+
+::: warning 载荷是**收窄投影**，不是官方事件对象
+官方把指针事件的载荷声明成 `MouseEvent | TouchEvent`——**原生 DOM 事件对象**，其
+`target` 是 raw `BMap.Panorama`。原样转发会把 SDK 内部结构变成公共契约，因此本库**只保留
+`type`**。同理，`clientX` / `clientY`（屏幕像素偏移）**不**投影：它与本库的 `{lng, lat}`
+领域坐标不是一回事，也没有官方读回入口能换算——编一个「看起来像坐标」的数比不给更糟。
+:::
+
+::: tip 为什么 `povChangedEnd` / `sceneChangeEnd` 的载荷是回读出来的
+与上面 6 条 `*_changed` 同一手法：官方事件对象不带值，组件在回调里回读 getter。
+它们的价值在于「动画**停了**」——`povChange` 在动画期间会连续触发很多次，
+业务要的是「现在可以拿最终视角去做点什么」的那一刻。
+:::
+
+### 刻意不暴露的两条（逐条有依据，不是遗漏）
+
+- **`destroy`**：官方有声明，但本库 `dispose()` 的顺序是「**先解绑业务监听、再
+  `driver.destroy()`**」——SDK 在 destroy 期间**同步**派发事件时，业务回调**不得**打到已拆解的
+  状态上（ADR 2026-09-11 §6）。要听见 `destroy` 就得把顺序倒过来，那是拿一个**真实存在的
+  正确性风险**换一句收尾信号。清理用 `onUnmounted`（Vue 的正确出口）。
+- **`linksVisibleChanged`**：由**官方自带**的道路指示控件（`linksControl`）的显隐驱动，
+  而本库不镜像那个控件的内部 UI 状态（官方**没有给读回入口**）⇒ 加了就是「声明了却几乎
+  永不触发」。
+
+### ⚠️ 没有 `touchmove`
+
+官方 `PanoramaEventMap` 里**没有** `touchmove`（只有 `touchstart` / `touchend`），
+因此不暴露。
+
+::: warning 命名：camelCase（与全库的 kebab-case 规则不同，这是**已存在**的偏差）
+全库规则 `toVueEventName` 把 `_` 换成 `-`，地图事件与覆盖物事件都走它。但 `<Panorama>`
+**早已发布的 8 条**是 camelCase（`positionChange` / `linksChange` / …）。
+#168 新增的事件**沿用 camelCase** ——在同一个组件里混两套命名是最坏的一种分叉，
+而改那 8 条是**破坏性变更**。若要在 1.0 统一，那 8 条要走 breaking-changes。
 :::
 
 ## 命令式接口

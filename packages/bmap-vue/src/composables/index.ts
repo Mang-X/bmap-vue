@@ -128,6 +128,12 @@ export type {
   CapabilityStatus,
 } from "../driver/capability/catalog";
 export type { ControlDriver } from "../driver/types/controls";
+// 控件命令面（issue #168 item 1）：ControlDriver 的公开成员，见 advanced.ts 的同款说明。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "../driver/types/controls";
 export type { ControlKind, ControlOptions, ControlOptionStatus, CopyrightEntry } from "../driver/types/controls";
 export type { DriverEvent, EventDriver, MapLoadEvent, MapMouseEvent, MapResizeEvent, MapTypeChangeEvent } from "../driver/types/events";
 export type { LayerDriver, LayerKind, LayerOperation, LayerData, LayerSurface, LayerCreateOptions, LayerCtorSlot } from "../driver/types/layers";

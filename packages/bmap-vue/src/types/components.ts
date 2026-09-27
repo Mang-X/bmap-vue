@@ -232,6 +232,44 @@ export interface MarkerProps {
   rotation?: number;
   /** 图标:内置名称或自定义 Icon 描述 */
   icon?: MarkerIcon;
+
+  /* --- issue #168 item 2：官方 `MarkerOptions` 里此前未收的四个构造选项 ---
+   *
+   * 四个**全部是构造期**（`recreate`）：逐个核对 `overlay/Marker.d.ts` 的实例成员表，
+   * 没有任何一个对应的 setter。逐条依据见 `driver/types/overlays.ts` 的
+   * `OVERLAY_DESCRIPTORS.marker`。
+   *
+   * ⚠️ 三项的官方默认是 `false`（`raiseOnDrag` / `isTop` / `restrictDraggingArea`），
+   * `draggingCursor` 无默认（`undefined`）——**四项都不在 `withDefaults` 里补值**，
+   * 因为默认 `false` 与「未给」在 SDK 侧等价（`undefined` 就是不传该键）。
+   */
+  /**
+   * 拖拽标注时，标注是否开启离开地图表面效果（官方 `raiseOnDrag`，`@default false`）。
+   *
+   * 官方原文：「拖拽标注时，标注是否开启离开地图表面效果」。无 setter ⇒ 改它会重建实例。
+   */
+  raiseOnDrag?: boolean;
+  /**
+   * 拖拽标注时的鼠标指针样式（官方 `draggingCursor`）。
+   *
+   * ⚠️ **收普通 `string`，不是枚举联合**。官方声明就是
+   * `draggingCursor?: string`（原文：「需遵循 CSS cursor 属性规范」），
+   * **没有任何候选值清单**。CSS cursor 的合法值是**开放集合**（`grabbing` / `move` /
+   * `crosshair` / … 以及任意 `url(…)`），自造一个联合一定会漏掉合法值。
+   *
+   * 无 setter ⇒ 改它会重建实例。
+   */
+  draggingCursor?: string;
+  /**
+   * 是否将标注置于其他标注之上（官方 `isTop`，`@default false`）。
+   *
+   * 官方原文：「是否将标注置于其他标注之上。默认情况下纬度低的标注会盖住纬度高的标注」。
+   * ⚠️ 与 `zIndex`（层叠顺序**值**，`mutable`）**不是同一件事**：这个是**布尔**的置顶开关。
+   * 无 setter ⇒ 改它会重建实例。
+   */
+  isTop?: boolean;
+  /** 是否限制拖拽区域（官方 `restrictDraggingArea`，`@default false`）。无 setter ⇒ 改它会重建实例。 */
+  restrictDraggingArea?: boolean;
 }
 
 /**
@@ -564,6 +602,31 @@ export interface GroundOverlayProps {
   /** 创建后按显示区域居中地图（组件侧行为，不是 SDK 选项）。 */
   autoCenter?: boolean;
   visible?: boolean;
+
+  /* --- issue #168 item 2：官方 `GroundOverlayOptions` 里此前未收的三个选项 ---
+   *
+   * 逐条依据见 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS["ground-overlay"]`。
+   *
+   * ⚠️ **前两项的官方默认是 `true`**（`enableMassClear` / `enableClicking`），而 Vue 的
+   * `Boolean` 类型 prop 有「absent 即转 `false`」的陷阱——**在 `withDefaults` 里给它们写
+   * `undefined`**（而不是 `true`），否则「用户没给」会变成「显式关闭」。这一条在 #168 里
+   * 已经踩过三次（`GroundOverlay` / `CustomOverlay` / `Panorama` 各一次），因此在这里显式留痕。
+   */
+  /**
+   * 是否允许在调用 `map.clearOverlays()` 时清除此覆盖物（官方 `enableMassClear`，
+   * `@default true`）。**就地更新**（官方有 `enableMassClear` / `disableMassClear` 一对开关）。
+   */
+  enableMassClear?: boolean;
+  /** 是否响应鼠标事件（官方 `enableClicking`，`@default true`）。无成对开关 ⇒ 改它会重建实例。 */
+  enableClicking?: boolean;
+  /**
+   * 是否在普通覆盖物之上绘制（官方 `top`，`@default false`）。
+   *
+   * ⚠️ **与 `zIndex` 不是同一件事**：`zIndex` 是层叠顺序**值**（有 `setZIndex`，`options`），
+   * `top` 是**布尔**的「压在普通覆盖物之上」开关。官方 `GroundOverlay` **没有 `setTop`**
+   * （它有 `setZIndex`，但语义不同）⇒ `top` 只能构造期生效，改它会重建实例。
+   */
+  top?: boolean;
 }
 
 /* ------------------------------------------------------------------ 数据组件（M6 / #34）

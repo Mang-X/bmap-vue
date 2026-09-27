@@ -26,6 +26,18 @@ const props = withDefaults(defineProps<GroundOverlayProps>(), {
   opacity: 1,
   autoCenter: true,
   visible: true,
+  // ⚠️ **Vue Boolean-absent 陷阱**（#168 item 2）：下面两项的**官方默认是 `true`**
+  // （官方 `GroundOverlayOptions` 的 `@default true`）。`Boolean` 类型的 prop 在**未给**时
+  // 会被转成 `false`，于是「用户没给」与「用户显式关掉」变得不可区分——而 SDK 侧的
+  // 默认是 `true`，两者语义相反。因此这里必须显式写 `undefined`（**不是** `true`）：
+  // `undefined` 让该键不进入构造选项，SDK 沿用它自己的 `true` 默认。
+  //
+  // `top` 的官方默认是 `false`。它同样要显式写 `undefined`：Vue 的 `Boolean` prop 在未给时
+  // 是 `false`，而 `top` 是 `recreate` 类——「未给」若有两个表示（`false` 与 `undefined`），
+  // 父级一次 `:top="undefined"` 就会触发一次内容没变的重建。钉成 `undefined` 让「没给」唯一。
+  top: undefined,
+  enableMassClear: undefined,
+  enableClicking: undefined,
 });
 
 const emit = defineEmits<GroundOverlayEmits>();

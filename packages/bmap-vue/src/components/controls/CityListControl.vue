@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useControlResource, type ControlSpec } from "../../core/controls";
+import { createCityListCommands } from "../../core/controls/controlCommands";
 import type { Point } from "../../driver/types/geometry";
+import type { CityListCommandApi } from "../../driver/types/controls";
 
 /**
  * 城市切换的结果（官方 `CityListControlChangeResult` 的领域投影）。
@@ -120,7 +122,7 @@ function readChangeResult(event: unknown): CityListChangeResult | null {
   return result;
 }
 
-const spec: ControlSpec<CityListControlProps> = {
+const spec: ControlSpec<CityListControlProps, CityListCommandApi> = {
   kind: "city-list",
   options: (p) => ({ anchor: p.anchor, offset: p.offset, expand: p.expand }),
   events: () => [
@@ -130,9 +132,23 @@ const spec: ControlSpec<CityListControlProps> = {
     ["open", () => emit("open")],
     ["close", () => emit("close")],
   ],
+  // 命令面（#168 item 1）：`toggle()`（动作）与 `getCityName()`（读回）。
+  // ⚠️ **刻意没有** `getTriggerDom()`：官方声明了它，但返回的是 raw `HTMLElement`，
+  // 收窄投影不成立（逐条依据见 `driver/types/controls.ts` 的 `CityListCommandApi`）。
+  expose: (exposeCtx) => createCityListCommands(exposeCtx),
 };
 
-useControlResource(props, spec);
+const { commands, status } = useControlResource(props, spec);
+
+defineExpose({
+  ...(commands ?? {}),
+  /**
+   * 实例状态（`idle` / `creating` / `ready` / `error` / `disposing` / `disposed`）。
+   *
+   * 命令面在未就绪 / 已释放时抛 `BMAP_RESOURCE_DISPOSED`，因此必须有一个能先看状态的出口。
+   */
+  status,
+});
 
 defineOptions({ name: "CityListControl" });
 </script>

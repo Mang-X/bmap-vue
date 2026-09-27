@@ -82,7 +82,132 @@ const emit = defineEmits<{
    * **不补默认值**（`heading ?? 0` 会把「没给方位」与「正北」混成同一个数）。
    */
   linksChange: [links: PanoramaLink[]];
+
+  /* --- issue #168 item 3：官方 `PanoramaEventMap` 的 23 条里，此处新增 13 条 ---
+   *
+   * 逐条裁决（**加 / 不加** 与理由）见 `docs/zh-CN/contributing/168-remaining-surface.md`
+   * 与 `tests/behavior/panorama-events.test.ts` 的文件头总表；这里只记**载荷形状**的依据。
+   *
+   * ⚠️ **命名偏差（已存在，非本次引入）**：全库规则 `toVueEventName` 产出 kebab-case，
+   * 而本组件早已发布的 8 条是 camelCase。新增事件**沿用 camelCase** 以免同一组件内
+   * 混两套命名；改名那 8 条是破坏性变更，属父决策。
+   */
+
+  /**
+   * 画面交互事件（官方 `click` / `dblclick` / `touchstart` / `touchend`）。
+   *
+   * **载荷是收窄投影，不是官方 `MouseEvent` / `TouchEvent`**：那两个是 DOM 原生事件对象，
+   * 原样转发会把 SDK 内部的 DOM 结构与 `target` 变成公共契约（`target` 还是 raw
+   * `Panorama`）。因此只保留一个**领域**字段 `type`（官方 `type` 是事件名本身）。
+   *
+   * 刻意**不**投影 `clientX` / `clientY`：那是**屏幕像素偏移**，与本库的 `{lng, lat}`
+   * 领域坐标不是一回事，也没有官方读回入口把它换算成经纬度——编一个「看起来像坐标」的数
+   * 比不给更糟（调用方会拿它去 `setPov` 或算方位）。
+   */
+  click: [e: PanoramaInteractionEvent];
+  dblclick: [e: PanoramaInteractionEvent];
+  touchstart: [e: PanoramaInteractionEvent];
+  touchend: [e: PanoramaInteractionEvent];
+  /**
+   * 单击道路链接（官方 `link_click: PanoramaBaseEvent & { id: string }`）。
+   *
+   * 载荷只保留官方那个**唯一有业务含义**的字段 `id`——它就是相邻全景的 id，
+   * 正好是 `setId(id)` 的入参，于是「点一下导航过去」是纯声明式的。`target` /
+   * `currentTarget` 是 raw `Panorama`，不投影。
+   *
+   * 上游没给 `id` 时 `id` 留在 `undefined`（不补 `""`）：空串是一个**合法**的全景 id 形状，
+   * 补上去会让「上游没给」与「导航到空 id」在调用方那里长得一样。
+   */
+  linkClick: [e: PanoramaLinkClickEvent];
+  /**
+   * 单击道路（官方 `clickonroad: PanoramaBaseEvent`）。
+   *
+   * 官方只声明了底座字段（`type` / `target` / `currentTarget`），**没有**道路 id 之类的
+   * 业务字段 ⇒ 载荷只保留 `type`。这仍然值得暴露：它是「用户点了地面道路」的唯一通知，
+   * 而全景**没有**别的表达方式（不像地图可以用别的组件代表一次点击）。
+   */
+  clickonroad: [e: PanoramaInteractionEvent];
+  /**
+   * 拖拽视角后的惯性运动结束（官方 `pov_changed_end`）。
+   *
+   * 官方 `*_end` 事件不带值，载荷按**本组件既有的回读手法**补齐（与 `positionChange` /
+   * `povChange` / `linksChange` 同一手法）：回调里回读 `getPov()`。
+   * 它的价值在于「动画**停了**」——`povChange` 在动画期间会连续触发很多次，
+   * 业务要的是「现在可以拿最终视角去做点什么」的那一刻。
+   */
+  povChangedEnd: [pov: PanoramaPov | null];
+  /**
+   * 场景切换动画结束（官方 `scene_change_end`）。
+   *
+   * 同上：回读 `getSceneType()` 补载荷。它是「切完了」的信号——室内/室外场景的控件
+   * 布局在切换动画结束后才稳定。
+   */
+  sceneChangeEnd: [sceneType: PanoramaSceneType | null];
+  /**
+   * 全景容器尺寸变化（官方 `size_changed`）。
+   *
+   * **无载荷**：官方 `PanoramaBaseEvent` 里没有尺寸字段，SDK 也没有
+   * `getSize()` / `getContainerSize()` 之类的读回入口。编一个 `{width: 0, height: 0}`
+   * 会把「上游没给尺寸」变成「尺寸是零」——那会让调用方按零尺寸重排布局。
+   * 本事件只回答「变了」这一个可证伪的问题；真要尺寸，自己量容器 DOM
+   * （`ResizeObserver` 属于业务侧的事，本库不代劳）。
+   */
+  sizeChanged: [];
+  /**
+   * 添加 / 移除 / 清空全景覆盖物（官方 `overlay_add` / `overlay_remove` / `overlays_clear`）。
+   *
+   * 官方这三个事件的载荷分别是 raw `PanoramaLabel`（前两个）与 `PanoramaBaseEvent`（最后一个）。
+   * **一律不投影 raw 标注实例**：那会把 SDK 内部对象交出边界。因此：
+   * - `overlayAdd` / `overlayRemove`：载荷 `null`（「有一个标注挂上了」这一事实本身即全部信息；
+   *   标注的业务内容由拥有它的 `<PanoramaLabel>` 组件自己记账）；
+   * - `overlaysClear`：`null`。
+   *
+   * 之所以值得暴露：`<PanoramaLabel>` 由子组件管理，**父级没有别的观察面**知道
+   * 标注什么时候真的挂上了（挂载是异步的：等 Client → 建查看器 → 等场景加载）。
+   */
+  overlayAdd: [];
+  overlayRemove: [];
+  overlaysClear: [];
+  /**
+   * 可见 POI 类型变化（官方 `visible_poi_type_changed: { visiblePOIType }`）。
+   *
+   * 载荷投影成本库既有的 `PanoramaPoiType`（`"hotel" | … | "none"` 的字面量联合），
+   * 而不是官方那个 POI 常量对象——后者是 raw SDK 成员。
+   * 上游给了不认识的取值时给 `null`（不塞一个联合之外的字符串，那会让类型说谎）。
+   *
+   * 它的价值是**闭环**：`setPanoramaPoiType()` 是本库已暴露的写入口，
+   * 有了这条事件才能确认「写下去生效了」。
+   */
+  visiblePoiTypeChanged: [poiType: PanoramaPoiType | null];
+  /**
+   * ⚠️ **刻意没有** `destroy` 事件（官方 `PanoramaEventMap` 声明了它）。
+   *
+   * 要让业务听见它，本库的释放顺序就得倒过来：现在
+   * `core/panorama/index.ts` 的 `dispose()` 是「**先解绑业务监听、再 `driver.destroy()`**」
+   * （ADR 2026-09-11 §6 的「先解绑、后摘除」——SDK 在 `destroy` 期间**同步**派发事件时，
+   * 这个顺序保证回调不会打到已拆解的状态上）。
+   *
+   * 倒过来的代价是拿一个**真实存在的正确性风险**换一句「实例收尾了」的信号：业务回调会在
+   * 组件已经进入卸载流程时执行，而 Vue 组件此时的状态是未定义的。
+   * 「组件要结束时清理自己的东西」用 `onUnmounted` 就够，且那本来就是 Vue 的正确出口——
+   * 为它绕开一条已定的安全属性不划算。
+   *
+   * 因此本库不声明这条事件。裁决与取舍的完整记录见
+   * `docs/zh-CN/contributing/168-remaining-surface.md`。
+   */
 }>();
+
+/** 画面交互事件载荷（官方 `MouseEvent | TouchEvent` 的收窄投影，只留 `type`）。 */
+export interface PanoramaInteractionEvent {
+  /** 官方事件名（`click` / `dblclick` / `touchstart` / `touchend` / `clickonroad`）。 */
+  type: string;
+}
+
+/** `linkClick` 的载荷（官方 `link_click` 里唯一有业务含义的字段）。 */
+export interface PanoramaLinkClickEvent {
+  /** 相邻全景 id（`setId(id)` 的入参）；上游没给时留在 `undefined`。 */
+  id?: string;
+}
 
 const containerRef = ref<HTMLElement | null>(null);
 // 全景只需要 Client：`resolveInternalMapContext()` 在 `<Map>` 子树里给地图 context、在 `<BMapProvider>`
@@ -171,7 +296,114 @@ function subscribe(target: ActiveViewer): void {
   scope.add(driver.on(viewer, "links_changed", () => emit("linksChange", driver.getLinks(viewer))));
   scope.add(driver.on(viewer, "dataload", (event: unknown) => emit("load", event)));
   scope.add(driver.on(viewer, "pano_error", (event: unknown) => emit("error", event)));
+  // ---- issue #168 item 3：其余 13 条官方事件的订阅 ----
+  //
+  // 全部经 `driver.on` 的**原样**通道（与上面 8 条同一路径），差别只在**载荷怎么投影**：
+  // 「回读 getter 补值」的三条（`pov_changed_end` / `scene_change_end`）与纯转发/收窄的其余条。
+  //
+  // ⚠️ `destroy` 的订阅**在 scope 里**：scope 在 `context.dispose()` 时释放，而事件由
+  // `driver.destroy()` 派发——两者都在 `onUnmounted` 里，因此业务回调仍能收到它
+  // （`tests/behavior/panorama-events.test.ts` 的「销毁时派发一次」就是这条的断言）。
+  // 五个画面交互事件的**订阅名与 emit 名逐字相同**（上游事件名本来就没有分隔符），
+  // 因此一张表同时给出「订阅什么」与「emit 什么」。逐条展开而不是在循环里 `emit(name)`：
+  // `defineEmits` 的重载要求实参是**字面量键**，循环里的联合类型过不了这一关
+  // ——把展开写死，也让「哪五条是这一族」在源码里一眼可见。
+  scope.add(driver.on(viewer, "click", (e: unknown) => emit("click", projectInteraction(e, "click"))));
+  scope.add(
+    driver.on(viewer, "dblclick", (e: unknown) => emit("dblclick", projectInteraction(e, "dblclick"))),
+  );
+  scope.add(
+    driver.on(viewer, "touchstart", (e: unknown) =>
+      emit("touchstart", projectInteraction(e, "touchstart")),
+    ),
+  );
+  scope.add(
+    driver.on(viewer, "touchend", (e: unknown) => emit("touchend", projectInteraction(e, "touchend"))),
+  );
+  scope.add(
+    driver.on(viewer, "clickonroad", (e: unknown) =>
+      emit("clickonroad", projectInteraction(e, "clickonroad")),
+    ),
+  );
+  scope.add(
+    driver.on(viewer, "link_click", (event: unknown) => emit("linkClick", projectLinkClick(event))),
+  );
+  scope.add(
+    driver.on(viewer, "pov_changed_end", () => emit("povChangedEnd", driver.getPov(viewer))),
+  );
+  scope.add(
+    driver.on(viewer, "scene_change_end", () =>
+      emit("sceneChangeEnd", driver.getSceneType(viewer)),
+    ),
+  );
+  // `size_changed`：只报「变了」。官方没有尺寸字段、SDK 也没有读回入口 ⇒ 载荷为空
+  scope.add(driver.on(viewer, "size_changed", () => emit("sizeChanged")));
+  // 覆盖物三兄弟：官方载荷是 raw `PanoramaLabel` / `PanoramaBaseEvent`，一律不投影
+  scope.add(driver.on(viewer, "overlay_add", () => emit("overlayAdd")));
+  scope.add(driver.on(viewer, "overlay_remove", () => emit("overlayRemove")));
+  scope.add(driver.on(viewer, "overlays_clear", () => emit("overlaysClear")));
+  scope.add(
+    driver.on(viewer, "visible_poi_type_changed", (event: unknown) =>
+      emit("visiblePoiTypeChanged", projectPoiType(event)),
+    ),
+  );
+  // ⚠️ 官方还有 `destroy`，**刻意不订阅**（释放顺序与 ADR 2026-09-11 §6 冲突，
+  // 逐条取舍见上面 `defineEmits` 里那条注释）。
 }
+
+/**
+ * 画面交互事件（官方 `MouseEvent | TouchEvent`）→ 领域载荷。
+ *
+ * **只保留 `type`**，理由逐条写在 `defineEmits` 的 `click` 一组上：`target` / `currentTarget`
+ * 是 raw `Panorama`，`clientX` / `clientY` 是屏幕像素偏移（与本库的 `{lng, lat}` 不是一回事，
+ * 也没有官方读回入口能换算）。编一个「看起来像坐标」的数比不给更糟。
+ *
+ * 事件对象整体取不到时给**空对象**而不是 `null`：这条事件的全部信息就是「它发生了」，
+ * 载荷形状不符不该让调用方以为「事件没派发」。
+ */
+function projectInteraction(event: unknown, fallbackType: string): PanoramaInteractionEvent {
+  const raw = (event as { type?: unknown } | null)?.type;
+  return { type: typeof raw === "string" ? raw : fallbackType };
+}
+
+/**
+ * `link_click` → 领域载荷：只投影官方那个 `id`。
+ *
+ * 上游没给 `id` 时**留在 `undefined`**（不补空串）：空串是**合法**的全景 id 形状，
+ * 补上去会让「上游没给」与「导航到一个空 id」在调用方那里长得一样。
+ */
+function projectLinkClick(event: unknown): PanoramaLinkClickEvent {
+  const raw = (event as { id?: unknown } | null)?.id;
+  return typeof raw === "string" && raw.length > 0 ? { id: raw } : {};
+}
+
+/**
+ * `visible_poi_type_changed` → 本库的 `PanoramaPoiType` 字面量。
+ *
+ * 官方声明的载荷是 `{ visiblePOIType: PanoramaPOIType }`——**字段**才是那个 POI 类型，
+ * 事件对象本身是底座形状（`type` / `target` / `currentTarget`）。因此先取字段。
+ *
+ * ⚠️ 兼容一个**形状退化**的读法：若上游把值直接挂在事件对象上（没有 `visiblePOIType`
+ * 这层包装），也接受它。两处都取不到时给 `null`——塞一个联合外的字符串会让类型说谎
+ * （调用方会以为它一定是那六个之一）。
+ */
+function projectPoiType(event: unknown): PanoramaPoiType | null {
+  const record = event as { visiblePOIType?: unknown } | null;
+  const raw = record?.visiblePOIType ?? event;
+  return typeof raw === "string" && (PANORAMA_POI_TYPES as readonly string[]).includes(raw)
+    ? (raw as PanoramaPoiType)
+    : null;
+}
+
+/** 官方 `PanoramaPOIType` 的取值集合（与 `driver/types/panorama.ts` 的 `PanoramaPoiType` 同一份）。 */
+const PANORAMA_POI_TYPES: readonly PanoramaPoiType[] = [
+  "hotel",
+  "catering",
+  "movie",
+  "transit",
+  "indoor_scene",
+  "none",
+];
 
 onMounted(async () => {
   const container = containerRef.value;

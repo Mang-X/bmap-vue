@@ -138,8 +138,11 @@ declare const __VLS_component_13: DefineComponent<GroundOverlayProps, {}, {}, {}
     onRightdblclick?: ((event: OverlayPartialPointerEvent) => any) | undefined;
     onLineupdate?: ((event: OverlayEventPayload) => any) | undefined;
 }>, {
+    enableClicking: boolean;
+    enableMassClear: boolean;
     visible: boolean;
     opacity: number;
+    top: boolean;
     autoCenter: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_14: DefineComponent<BezierCurveProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
@@ -463,7 +466,9 @@ declare const __VLS_component_23: DefineComponent<ScaleControlProps, {}, {}, {},
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_24: DefineComponent<CityListControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_24: DefineComponent<CityListControlProps, {
+    status: Readonly<ShallowRef<SdkResourceStatus>>;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     close: () => any;
     open: () => any;
     changeBefore: () => any;
@@ -484,7 +489,9 @@ declare const __VLS_component_24: DefineComponent<CityListControlProps, {}, {}, 
     visible: boolean;
     expand: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_25: DefineComponent<LocationControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_25: DefineComponent<LocationControlProps, {
+    status: Readonly<ShallowRef<SdkResourceStatus>>;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     locationSuccess: (e: LocationSuccessEvent | null) => any;
     locationError: (e: LocationErrorEvent | null) => any;
 }, string, PublicProps, Readonly<LocationControlProps> & Readonly<{
@@ -572,6 +579,9 @@ declare const __VLS_component_3: DefineComponent<MarkerProps, {
     enableClicking: boolean;
     enableDragging: boolean;
     visible: boolean;
+    raiseOnDrag: boolean;
+    isTop: boolean;
+    restrictDraggingArea: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_30: DefineComponent<TileLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<TileLayerProps> & Readonly<{}>, {
     visible: boolean;
@@ -780,21 +790,47 @@ declare const __VLS_component_45: DefineComponent<PanoramaProps, {
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     error: (event: unknown) => any;
     load: (event: unknown) => any;
+    click: (e: PanoramaInteractionEvent) => any;
+    dblclick: (e: PanoramaInteractionEvent) => any;
+    touchend: (e: PanoramaInteractionEvent) => any;
+    touchstart: (e: PanoramaInteractionEvent) => any;
     positionChange: (position: Point | null) => any;
     povChange: (pov: PanoramaPov | null) => any;
     zoomChange: (zoom: number | null) => any;
     idChange: (id: string | null) => any;
     sceneTypeChange: (sceneType: PanoramaSceneType | null) => any;
     linksChange: (links: PanoramaLink[]) => any;
+    linkClick: (e: PanoramaLinkClickEvent) => any;
+    clickonroad: (e: PanoramaInteractionEvent) => any;
+    povChangedEnd: (pov: PanoramaPov | null) => any;
+    sceneChangeEnd: (sceneType: PanoramaSceneType | null) => any;
+    sizeChanged: () => any;
+    overlayAdd: () => any;
+    overlayRemove: () => any;
+    overlaysClear: () => any;
+    visiblePoiTypeChanged: (poiType: PanoramaPoiType | null) => any;
 }, string, PublicProps, Readonly<PanoramaProps> & Readonly<{
     onError?: ((event: unknown) => any) | undefined;
     onLoad?: ((event: unknown) => any) | undefined;
+    onClick?: ((e: PanoramaInteractionEvent) => any) | undefined;
+    onDblclick?: ((e: PanoramaInteractionEvent) => any) | undefined;
+    onTouchend?: ((e: PanoramaInteractionEvent) => any) | undefined;
+    onTouchstart?: ((e: PanoramaInteractionEvent) => any) | undefined;
     onPositionChange?: ((position: Point | null) => any) | undefined;
     onPovChange?: ((pov: PanoramaPov | null) => any) | undefined;
     onZoomChange?: ((zoom: number | null) => any) | undefined;
     onIdChange?: ((id: string | null) => any) | undefined;
     onSceneTypeChange?: ((sceneType: PanoramaSceneType | null) => any) | undefined;
     onLinksChange?: ((links: PanoramaLink[]) => any) | undefined;
+    onLinkClick?: ((e: PanoramaLinkClickEvent) => any) | undefined;
+    onClickonroad?: ((e: PanoramaInteractionEvent) => any) | undefined;
+    onPovChangedEnd?: ((pov: PanoramaPov | null) => any) | undefined;
+    onSceneChangeEnd?: ((sceneType: PanoramaSceneType | null) => any) | undefined;
+    onSizeChanged?: (() => any) | undefined;
+    onOverlayAdd?: (() => any) | undefined;
+    onOverlayRemove?: (() => any) | undefined;
+    onOverlaysClear?: (() => any) | undefined;
+    onVisiblePoiTypeChanged?: ((poiType: PanoramaPoiType | null) => any) | undefined;
 }>, {
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
@@ -1404,13 +1440,7 @@ declare type __VLS_WithSlots_9<T, S> = T & {
         $slots: S;
     };
 };
-declare interface AddressComponents {
-    streetNumber?: string;
-    street?: string;
-    district?: string;
-    city?: string;
-    province?: string;
-}
+declare type AddressComponents = LocationAddressComponents;
 export declare type AreaBoundary = string[];
 export declare const Autocomplete: DefineComponent<AutocompleteProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     searchComplete: (e: unknown) => any;
@@ -1767,6 +1797,10 @@ declare interface CityListChangeResult {
     point?: Point | "";
     level?: number;
 }
+export declare interface CityListCommandApi {
+    toggle(): void;
+    getCityName(): string;
+}
 export declare const CityListControl: __VLS_WithSlots_24<typeof __VLS_component_24, __VLS_Slots_24>;
 declare interface CityListControlProps {
     anchor?: string;
@@ -1843,6 +1877,10 @@ export declare interface ContextMenuSelectPayload {
     target: SdkHandle<string> | null;
 }
 export declare type ContextMenuSeparator = "-";
+export declare interface ControlCommandTypes {
+    LocationControl: LocationCommandApi;
+    CityListControl: CityListCommandApi;
+}
 export declare interface ControlDriver {
     create(kind: ControlKind, options?: ControlOptions): ControlHandle;
     createCustomControl(options: {
@@ -1859,6 +1897,8 @@ export declare interface ControlDriver {
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
     removeCopyright(control: ControlHandle, id: number): void;
     listCopyrights(control: ControlHandle): CopyrightEntry[];
+    locationCommands(control: ControlHandle): LocationCommandApi;
+    cityListCommands(control: ControlHandle): CityListCommandApi;
 }
 export declare type ControlHandle = SdkHandle<"control" | `control:${string}`>;
 export declare type ControlKind = "zoom" | "scale" | "navigation" | "navigation-3d" | "city-list" | "location" | "map-type" | "overview" | "panorama" | "copyright" | "custom";
@@ -2281,6 +2321,9 @@ export declare interface GroundOverlayProps {
     zIndex?: number;
     autoCenter?: boolean;
     visible?: boolean;
+    enableMassClear?: boolean;
+    enableClicking?: boolean;
+    top?: boolean;
 }
 export declare type GroundOverlayType = "image" | "video" | "canvas";
 export declare type GroundOverlayUrl = string | HTMLCanvasElement | (() => string | HTMLCanvasElement);
@@ -2614,6 +2657,19 @@ export declare interface LocalSearchResult {
 }
 export declare interface LocalSearchSearchOption {
     forceLocal?: boolean;
+}
+export declare interface LocationAddressComponents {
+    streetNumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    province?: string;
+}
+export declare interface LocationCommandApi {
+    location(): void;
+    startLocation(): void;
+    stopLocationTrace(): void;
+    getAddressComponent(): LocationAddressComponents | null;
 }
 export declare const LocationControl: __VLS_WithSlots_25<typeof __VLS_component_25, __VLS_Slots_25>;
 declare interface LocationControlProps {
@@ -3493,6 +3549,10 @@ export declare interface MarkerProps {
     enableClicking?: boolean;
     rotation?: number;
     icon?: MarkerIcon;
+    raiseOnDrag?: boolean;
+    draggingCursor?: string;
+    isTop?: boolean;
+    restrictDraggingArea?: boolean;
 }
 export declare interface MarkerReadBackApi {
     getRank(): number;
@@ -3885,6 +3945,9 @@ export declare interface PanoramaDriver {
     readonly supported: boolean;
 }
 declare type PanoramaHandle = SdkHandle<"panorama">;
+declare interface PanoramaInteractionEvent {
+    type: string;
+}
 export declare const PanoramaLabel: DefineComponent<PanoramaLabelProps, {
     label: ShallowRef<PanoramaLabelHandle | null, PanoramaLabelHandle | null>;
     show(): void;
@@ -3918,6 +3981,9 @@ export declare interface PanoramaLink {
     x?: number;
     y?: number;
     roadWidth?: number;
+}
+declare interface PanoramaLinkClickEvent {
+    id?: string;
 }
 export declare interface PanoramaOptions {
     navigationControl?: boolean;

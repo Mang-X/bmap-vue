@@ -32,6 +32,21 @@ const props = withDefaults(defineProps<MarkerProps>(), {
   title: "",
   enableClicking: true,
   enableDragging: false,
+  // ⚠️ **Vue Boolean-absent 陷阱**（#168 item 2）。
+  //
+  // `Boolean` 类型的 prop 在**未给**时，编译产物里的运行时值是 `false`（不是 `undefined`）。
+  // 下面三项的官方默认**恰好都是 `false`**（官方 `MarkerOptions` 的
+  // `@default false`），所以「未给 ⇒ `false`」与「官方默认 `false`」在**值**上一致——
+  // 但一致的是**结果**，不是**来源**：这个 `false` 是 Vue 编出来的，不是 SDK 的默认。
+  //
+  // 为什么仍然显式写 `undefined`：`recreate` 类选项的判据是「变化即重建」。若某次渲染里
+  // 这个键因为别的原因从 `false` 变成 `undefined`（例如父级显式传 `:raise-on-drag="undefined"`），
+  // 就会触发一次**内容完全没变**的重建。把缺省钉成 `undefined`，「没给」就只有一个表示。
+  //
+  // `draggingCursor` 是 `string`（不是 Boolean）⇒ 没有这个陷阱，**不**在此声明。
+  raiseOnDrag: undefined,
+  isTop: undefined,
+  restrictDraggingArea: undefined,
 });
 
 const emit = defineEmits<MarkerEmits>();

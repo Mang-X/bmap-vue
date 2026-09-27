@@ -286,10 +286,15 @@ export function createJsapiV4PanoramaDriver(
 
       const failures: unknown[] = [];
       try {
-        // 顺序与 Map Facet 一致：**先解绑 Driver 侧的业务事件，再销毁 SDK 对象**。
-        // EventDriver 的 groups 是强引用（Map<rawTarget, …>），不主动 release 就会长期持有
-        // 已销毁的 raw 对象与业务回调；解绑失败**不阻断** SDK 销毁（`events.release` 的契约
-        // 是「其余项已尽力释放」），但两者都要汇总抛出，由调用方决定是否重试。
+        // 顺序与 Map Facet 一致：**先解绑 Driver 侧的业务事件，再销毁 SDK 对象**
+        // （ADR 2026-09-11 §6 的「先解绑、后摘除」在 SDK **同步**派发时是安全属性：
+        // 业务回调不会在组件已经拆解时打到已释放的状态上）。
+        //
+        // ⚠️ 代价（已知并接受，#168 item 3 裁决）：官方 `PanoramaEventMap` 的 `destroy`
+        // 事件因此**收不到**。要让业务听见它就得把顺序倒过来，而那会让「SDK 在 destroy
+        // 期间同步派发事件」打到已拆解的回调上——用一个真实存在的正确性风险换一个
+        // 「实例收尾通知」的信号。裁决：不加这条事件。依据见
+        // `docs/zh-CN/contributing/168-remaining-surface.md`。
         //
         // 每次尝试都释放（不记账「曾经释放过」）：上一次尝试可能只失败在 SDK 销毁那一步，
         // 而期间业务可能又订阅了；`release()` 无分组时是 no-op，重复调用没有代价。

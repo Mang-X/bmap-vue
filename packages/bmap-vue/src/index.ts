@@ -365,6 +365,19 @@ export type {
 // 这些是 `defineExpose` 推导出的实例类型的成员，父组件写 `ref` 时要用它们标注
 // （`InstanceType<typeof Marker>` 也能拿，但手写 handler 参数时前者更直接）。
 export type { OverlayCommandTypes } from "./core/overlays/overlayCommands";
+// 控件的命令面（issue #168 item 1）。与 `OverlayCommandTypes` 同一理由：
+// `ControlDriver.locationCommands()` / `cityListCommands()` 是**公共 Facet 面**上的方法，
+// 它的返回类型因此出现在公共声明里——不显式导出就成了「未导出类型」
+// （`ae-forgotten-export`，见 ADR 2026-09-25）。
+//
+// `ControlCommandTypes` 是**按组件名**的索引（键是 `LocationControl` / `CityListControl`），
+// 与 `OverlayCommandTypes` 同一手法：调用方看到的是 `<LocationControl ref>`，不是 kind。
+export type { ControlCommandTypes } from "./core/controls/controlCommands";
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "./driver/types/controls";
 export type { ContextMenuExpose } from "./core/overlays/ContextMenuSpec";
 // MVTLayer 公开类型（#109：事件按官方 `MVTLayerEventMap` 分层 + feature-state 键域收窄）
 export type {

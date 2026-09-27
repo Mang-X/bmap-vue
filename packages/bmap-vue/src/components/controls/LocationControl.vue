@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useControlResource, type ControlSpec } from "../../core/controls";
+import { createLocationCommands } from "../../core/controls/controlCommands";
 import type { Point } from "../../driver/types/geometry";
+import type { LocationAddressComponents, LocationCommandApi } from "../../driver/types/controls";
 import type { MarkerIcon } from "../../types/components";
 
 /**
@@ -9,14 +11,13 @@ import type { MarkerIcon } from "../../types/components";
  * 逐字段取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `service/AddressComponent.d.ts`：
  * `streetNumber?` / `street?` / `district?` / `city?` / `province?`——**五个全是可选的**，
  * 因此这里也全部可选，且**不补默认值**（`city ?? ""` 会把「上游没给」与「空」混起来）。
+ *
+ * 这是 `driver/types/controls.ts` 的 `LocationAddressComponents` 的**别名**，不是第二份形状：
+ * 组件的 SFC 不能被 `.ts` 引用它的类型，而命令面必须引用领域类型——因此形状自持在
+ * `driver/types/`（raw 边界内），组件侧只做别名。两处手抄同一组五个可选字符串字段，
+ * 迟早会分叉（曾经就分叉过：`getAddressComponent()` 的投影与 `locationSuccess` 的投影各写一份）。
  */
-export interface AddressComponents {
-  streetNumber?: string;
-  street?: string;
-  district?: string;
-  city?: string;
-  province?: string;
-}
+export type AddressComponents = LocationAddressComponents;
 
 /** `locationSuccess` 的载荷（官方 `GeolocationControlSuccessEvent`）。 */
 export interface LocationSuccessEvent {
@@ -181,7 +182,7 @@ function readLocationError(event: unknown): LocationErrorEvent | null {
   return { code: record.code };
 }
 
-const spec: ControlSpec<LocationControlProps> = {
+const spec: ControlSpec<LocationControlProps, LocationCommandApi> = {
   kind: "location",
   // ⚠️ 回调**不进** `options`：`ControlSpec.options` 的契约要求「同 props 得同结果」，
   // 而内联箭头每次渲染都是新引用——放进变化键会让控件**每次渲染都重建**。
@@ -201,9 +202,23 @@ const spec: ControlSpec<LocationControlProps> = {
     ["locationSuccess", (event: unknown) => emit("locationSuccess", readLocationSuccess(event))],
     ["locationError", (event: unknown) => emit("locationError", readLocationError(event))],
   ],
+  // 命令面（#168 item 1）。逐条依据见 `core/controls/controlCommands.ts` 的
+  // `createLocationCommands` 注释与 `driver/types/controls.ts` 的 `LocationCommandApi`。
+  expose: (exposeCtx) => createLocationCommands(exposeCtx),
 };
 
-useControlResource(props, spec);
+const { commands, status } = useControlResource(props, spec);
+
+defineExpose({
+  ...(commands ?? {}),
+  /**
+   * 实例状态（`idle` / `creating` / `ready` / `error` / `disposing` / `disposed`）。
+   *
+   * 命令面在未就绪 / 已释放时抛 `BMAP_RESOURCE_DISPOSED`，因此**必须**有一个能先看状态的出口——
+   * 否则调用方只能靠 try/catch 区分「还没好」与「已经没了」，而这两者的处置完全不同。
+   */
+  status,
+});
 
 defineOptions({ name: "LocationControl" });
 </script>

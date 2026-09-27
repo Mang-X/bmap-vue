@@ -149,6 +149,14 @@ export type {
   PathReadBackApi,
 } from "./driver/types/overlays";
 export type { ControlKind, ControlOptions, CopyrightEntry, ControlDriver } from "./driver/types/controls";
+// 控件命令面（issue #168 item 1）：`ControlDriver.locationCommands()` / `cityListCommands()`
+// 是这个出口上 `ControlDriver` 的公开成员，其返回类型因此必须一并导出，
+// 否则就是 `ae-forgotten-export`（ADR 2026-09-25）。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "./driver/types/controls";
 export type { LayerKind, LayerDriver } from "./driver/types/layers";
 export type { AutocompleteOptions, ServiceDriver } from "./driver/types/services";
 export type { PanoramaDriver, PanoramaLink } from "./driver/types/panorama";

@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 431,
+  "oursPublicCount": 435,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 316,
+  "oursOnlyCount": 320,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2648,6 +2648,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "CityListCommandApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "ClusterChange",
       "surface": "other",
       "oursEntry": "."
@@ -2674,6 +2679,11 @@
     },
     {
       "name": "ContextMenuSeparator",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlCommandTypes",
       "surface": "other",
       "oursEntry": "."
     },
@@ -2939,6 +2949,16 @@
     },
     {
       "name": "LocalSearchSearchOption",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LocationAddressComponents",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LocationCommandApi",
       "surface": "other",
       "oursEntry": "./composables"
     },

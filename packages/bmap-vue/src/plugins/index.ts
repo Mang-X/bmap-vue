@@ -68,6 +68,12 @@ export type { Capability, CapabilityFamily, CapabilityStatus } from "../driver/c
 export type { CapabilityExplanation, CapabilityReason, CapabilityRegistry } from "../driver/capability/registry";
 export type { CapabilityDescriptor } from "../driver/capability";
 export type { ControlDriver } from "../driver/types/controls";
+// 控件命令面（issue #168 item 1）：ControlDriver 的公开成员，见 advanced.ts 的同款说明。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "../driver/types/controls";
 export type { EventDriver } from "../driver/types/events";
 export type { GeometryDriver } from "../driver/types/geometry";
 export type { LayerDriver } from "../driver/types/layers";

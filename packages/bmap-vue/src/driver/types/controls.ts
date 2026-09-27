@@ -100,4 +100,92 @@ export interface ControlDriver {
   addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
   removeCopyright(control: ControlHandle, id: number): void;
   listCopyrights(control: ControlHandle): CopyrightEntry[];
+
+  /**
+   * 控件的**命令面**（issue #168 item 1）。
+   *
+   * 与 `OverlayDriver.markerCommands()` / `infoWindowCommands()` 同一手法：一个 kind 一个
+   * 归一化入口，raw 成员的调用与返回值投影全部收在 Driver 内，组件层不接触 raw SDK。
+   *
+   * 判据与 `OverlaySpec.expose` 一致：只服务**无对应 prop 的动作**与**读回**两类。
+   * 受控写入仍由 `setOptions` / `setVisible` 承担，因此**不**在这里重复暴露。
+   *
+   * 按 kind 分方法而不是一个 `command(kind, name, args)`：成员集是**封闭**的
+   * （官方每个控件类的公开成员有限且已定），一个 kind 一个接口让「这个控件有哪些命令」
+   * 成为类型层可查的事实，调用方拼错名字会编译失败。
+   */
+  locationCommands(control: ControlHandle): LocationCommandApi;
+  cityListCommands(control: ControlHandle): CityListCommandApi;
+}
+
+/**
+ * 定位控件的**地址组成部分**（官方 `service/AddressComponent` 的领域投影）。
+ *
+ * 五个成员**全部可选**，与 `control/GeolocationControlSuccessEvent.addressComponent`
+ * 的投影口径一致（`components/controls/LocationControl.vue` 的 `AddressComponents`）。
+ * 这里是**同一份形状的第二个声明点**而不是 re-export：控件组件那个 interface 住在 `.vue` 里
+ * （SFC 的 `<script setup>` 不能被 `.ts` import 它的类型），因此领域类型必须自持在
+ * `driver/types/`，由组件侧 import 过来——**一处形状、两处引用**，不允许各自手抄。
+ */
+export interface LocationAddressComponents {
+  streetNumber?: string;
+  street?: string;
+  district?: string;
+  city?: string;
+  province?: string;
+}
+
+/** 定位控件的命令面（官方 `control/GeolocationControl.d.ts`）。 */
+export interface LocationCommandApi {
+  /** 开始进行定位（官方 `location(): void`）。 */
+  location(): void;
+  /**
+   * 开始执行定位（官方 `startLocation(): void`）。
+   *
+   * ⚠️ **名字不对称是上游的形状**：官方只声明 `startLocation()`（开始定位）与
+   * `stopLocationTrace()`（停止跟踪），**没有** `startLocationTrace()`。issue #168 的
+   * 描述把命令写成 `startLocationTrace()`，那是把兄弟成员的名字带过来了——按
+   * 「d.ts 定存在与否」的口径暴露 `startLocation`。
+   *
+   * live AK 读数确认（`scripts/probe-runtime-members.mts` probe 14）：
+   * `startLocation` `callable: true`，`startLocationTrace` `callable: false`。
+   * 两者**都不能**互相顶替，因此 `startLocation` 是唯一有依据的那一个。
+   */
+  startLocation(): void;
+  /** 停止跟踪用户位置（官方 `stopLocationTrace(): void`）。 */
+  stopLocationTrace(): void;
+  /**
+   * 当前定位地址信息（官方 `getAddressComponent(): AddressComponent | null`）。
+   *
+   * 尚未定位时是 `null` 而**不是**空对象——官方声明就是可空，编一个 `{}` 会让调用方
+   * 把「没定位到」误判成「定位到了一个空地址」。
+   */
+  getAddressComponent(): LocationAddressComponents | null;
+}
+
+/** 城市列表控件的命令面（官方 `control/CityListControl.d.ts`）。 */
+export interface CityListCommandApi {
+  /**
+   * 切换城市列表面板的展开状态（官方 `toggle(): void`）。
+   *
+   * 与 `expand` prop 的关系：`expand` 是**受控**入口（变化即下发 `open` / `close`），
+   * `toggle` 是**动作**（切一次，不镜像回 prop）。官方没有「面板被别人打开过」的可观察值
+   * 之外的可观察值可供同步，因此刻意不做命令 ⇄ prop 双向绑定——与
+   * `PanoramaLabel#show/hide` 同一取舍。
+   */
+  toggle(): void;
+  /** 当前城市名称（官方 `getCityName(): string`）。 */
+  getCityName(): string;
+  /**
+   * ⚠️ **刻意没有** `getTriggerDom(): HTMLElement | undefined`（官方有声明）。
+   *
+   * 返回值是**原生 DOM 元素**：交出去就把 SDK 内部渲染结构（按钮 class、子节点、
+   * 事件绑定）变成公共契约——调用方一 `appendChild` / `addEventListener` 就会与 SDK 的
+   * 事件系统打架，而本库既无法约束这种用法，也无法在控件重建时替它善后。
+   * AGENTS.md 的 raw SDK 边界不覆盖控件组件（禁区）。
+   *
+   * 「收窄成领域投影」在这里**不成立**：一个 `HTMLElement` 没有任何可投影的领域值，
+   * 它的全部意义就是那个节点本身。需要该节点的用户走 `./advanced` 的 `unwrapRaw()`
+   * （明确的 raw 逃生口，不是组件面）。
+   */
 }

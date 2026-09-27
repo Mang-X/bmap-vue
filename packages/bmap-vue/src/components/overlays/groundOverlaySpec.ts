@@ -38,6 +38,12 @@ export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<GroundOverlayProps> = {
   url: "options",
   opacity: "options",
   autoCenter: "recreate",
+  // issue #168 item 2：官方 GroundOverlayOptions 里此前未收的三个。
+  // `enableMassClear` 有成对开关 ⇒ 就地；`enableClicking` 与 `top` 官方都没有 setter ⇒ 重建。
+  // 逐条依据见 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS["ground-overlay"]`。
+  enableMassClear: "options",
+  enableClicking: "recreate",
+  top: "recreate",
   ...PATH_ZINDEX_FIELD,
   ...VISIBILITY_FIELD,
 };
@@ -85,6 +91,11 @@ export function createGroundOverlaySpec(): OverlaySpec<GroundOverlayProps, Overl
         zIndex: p.zIndex,
         type: p.type,
         url,
+        // 三个构造选项（#168 item 2）。`undefined` 的键由 Driver 的选项投影跳过，
+        // 因此未给时不会出现在交给 SDK 的选项里（不把 `false` 冒充「显式关掉了」）。
+        enableMassClear: p.enableMassClear,
+        enableClicking: p.enableClicking,
+        top: p.top,
       });
     },
     afterMount: (context, _resource, p) => {
