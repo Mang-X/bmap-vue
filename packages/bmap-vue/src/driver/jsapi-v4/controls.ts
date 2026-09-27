@@ -5,7 +5,7 @@
  * 只把 `ControlHandle` 的品牌补成 `control:<kind>`（与 Overlay / Layer 句柄同形，
  * `setOptions` 因此能按种类给出正确的更新口径）。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4` + 官方 Skill
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5` + 官方 Skill
  * `references/controls-and-context-menu.md`）：
  * - 控件统一经 `map.addControl/removeControl` 管理；**一个实例只添加一次**，因此 Driver
  *   自己记账重复 `add`（SDK 不保证去重，官方「常见错误」里就有「同一控件实例重复添加」）；
@@ -131,7 +131,7 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   navigation: {
     type: { policy: "mutable", setter: "setType" },
-    // 官方 4.0.4 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
+    // 官方 4.0.5 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
     showZoomInfo: { policy: "recreate", reason: "4.0 的 NavigationControl 没有级别提示的 setter" },
     enableGeolocation: {
       policy: "recreate",
@@ -154,7 +154,7 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   location: {},
   "map-type": {
-    // `showStreetLayer(isShow)` 是官方 4.0.4 上 `MapTypeControl` **唯一**的字段级 setter
+    // `showStreetLayer(isShow)` 是官方 4.0.5 上 `MapTypeControl` **唯一**的字段级 setter
     // （路网层显隐），成员名不是 `set<Key>` 形状——所以它必须进分类表，否则会落到下面
     // 的「未知键 + `set<Key>` 结构逃生口」里被判成 unsupported（值被静默丢弃）。
     showStreetLayer: { policy: "mutable", setter: "showStreetLayer" },

@@ -3816,7 +3816,7 @@ export declare const OVERLAY_EVENT_MATRIX: {
     readonly "context-menu": OverlayEventMatrixEntry;
 };
 export declare const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX: {
-    readonly "map-mask": "\u63A9\u819C\uFF1A4.0.4 \u6CA1\u6709 MapMaskEventMap\uFF08MapMask \u672C\u8EAB\u4E0D\u5728\u7C7B\u578B\u5305\u7684\u7C7B\u58F0\u660E\u91CC\uFF09";
+    readonly "map-mask": "\u63A9\u819C\uFF1A4.0.5 \u6CA1\u6709 MapMaskEventMap\uFF08MapMask \u672C\u8EAB\u4E0D\u5728\u7C7B\u578B\u5305\u7684\u7C7B\u58F0\u660E\u91CC\uFF09";
     readonly marker3d: string;
 };
 export declare interface OverlayCommandTypes {

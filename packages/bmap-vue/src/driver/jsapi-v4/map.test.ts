@@ -42,7 +42,7 @@ const INTERACTION_STATE_KEYS: Record<MapInteraction, string> = {
 
 /**
  * v4 的成对方法里，`tilt-gestures` 的存在性在官方来源之间有分歧：
- * 官方 4.0 API 参考与 4.0.4 类型包未声明 `enableTiltGestures()`，
+ * 官方 4.0 API 参考与 4.0.5 类型包未声明 `enableTiltGestures()`，
  * 而公开的 React 参考实现（`huiyan-fe/react-bmap`）直接调用它。
  * 因此实现不预判，改为「有就调、没有就告警一次」——两条来源都不会让它静默失效。
  */

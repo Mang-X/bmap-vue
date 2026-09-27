@@ -66,7 +66,7 @@ export interface InfoWindowProps {
   maxContent?: string;
   /**
    * 气泡与地图四边的最小间距，**像素数组**按 `[上, 右, 下, 左]`（官方
-   * `InfoWindowOptions.margin?: number[]`）。**构造期**：官方 4.0.4 的 `InfoWindow` 上
+   * `InfoWindowOptions.margin?: number[]`）。**构造期**：官方 4.0.5 的 `InfoWindow` 上
    * 既没有 `setMargin` 也没有读回。
    */
   margin?: number[];

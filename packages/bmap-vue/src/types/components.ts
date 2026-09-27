@@ -448,7 +448,7 @@ export interface PathFillProps {
  *
  * ## `zIndex` 为什么在这一层（issue #165 Class 3 / TASK 0）
  *
- * Driver 的 `PATH_STYLE` 早就把 `zIndex` 登记成 `mutateBy("setZIndex")`（官方 4.0.4 在
+ * Driver 的 `PATH_STYLE` 早就把 `zIndex` 登记成 `mutateBy("setZIndex")`（官方 4.0.5 在
  * `Polyline` / `Polygon` / `Rectangle` / `Circle` / `BezierCurve` / `Prism` 六个类上都有
  * `setZIndex(zIndex: number): void` 声明），而**组件面没有出口**——分类层准备好了、字段没暴露，
  * 整族覆盖物的层级更新一次都没被走到过。
@@ -1036,7 +1036,7 @@ export type StyleExpression =
 /**
  * `LineLayer` 的样式（官方 `LineStyle` 的**逐字段**投影）。
  *
- * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.4` 的 `LineStyle` 为准；这里只做类型搬运，
+ * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.5` 的 `LineStyle` 为准；这里只做类型搬运，
  * 不重新解释语义（默认值写在文档里，实现不补默认值——`undefined` = 不表态，由 SDK 决定）。
  *
  * ⚠️ 样式是**逐字段 merge**（官方 `setStyleOptions`）：把某个字段改成 `undefined` 时，SDK 侧仍
@@ -1427,10 +1427,26 @@ export interface VisualizationPickOptions {
  * `PolygonLayer` / `PolylineLayer` 共用的**显隐 / 层级**槽位（#166）。
  *
  * ⚠️ **刻意不 extends `NativeLayerCommonProps`**：那一支还带 `opacity` / `minZoom` /
- * `maxZoom`，而这两族的官方声明里**没有** `setOpacity`、**没有** `setMinZoom` / `setMaxZoom`
- * （live 实测运行时的这四个方法也都不在）。沿用那一支会让 `useNativeLayerResource`
- * 在运行时打出「该 kind 没有这个入口」的告警——**声明了却永远不生效 = 假支持**
- * （AGENTS.md 明确禁止）。
+ * `maxZoom`，而这两族的官方声明里**没有** `setOpacity`、**没有** `setMinZoom` / `setMaxZoom`。
+ * 沿用那一支会让 `useNativeLayerResource` 在运行时打出「该 kind 没有这个入口」的告警——
+ * **声明了却永远不生效 = 假支持**（AGENTS.md 明确禁止）。
+ *
+ * ⚠️ **更正（#165 收口，2026-09-27）**：这段原先还写着「live 实测运行时的这四个方法也都不在」——
+ * 关于 `setMinZoom` / `setMaxZoom` 那半句成立（实测确实都是 `undefined`），但**关于
+ * `setOpacity` 的那半句是错的**：它在运行时**在位**（`proto` / `inst` 都 true），
+ * `setOpacity(0.25)` → `getOpacity() === 0.25`。真正让两族都**不能**用 `opacity` prop
+ * 的是另一件事，且两族的答案**相反**（判据是**可观测地生效**，不是「在不在」）：
+ *
+ * - `PolygonLayer`：**不生效**——像素读数在 `setOpacity` 1→0→1、`setOptions({opacity})`、
+ *   构造期 `opacity: 0` 这**五态**上全部同值（148243），而同一次运行里
+ *   `setVisible(false)` / `fillOpacity: 0` 都能让画布归零 ⇒ 测量通道是活的。
+ *   它的选项表里也**根本没有** `opacity` 这一项。
+ * - `PolylineLayer`：**生效**——哨兵像素 `4229 → 0 → 4229 → 0 → 4229`（可逆、重复一致），
+ *   Driver 因此**登记**了 `setOpacity`（走豁免表，见 `native-layers.test.ts`）。
+ *
+ * ⇒ 本接口仍然**不**带 `opacity`：`PolygonLayer` 无入口；`PolylineLayer` 是**范围选择**
+ * （「要不要把一条已验证生效、但官方未声明的入口开成 prop」需要维护者裁决），
+ * 详见 `165-runtime-audit-2026-09-27.md` 的「留待裁决」一节。**不是**因为它没有这个方法。
  *
  * `minZoom` / `maxZoom` 因此**不进**这个接口，而是走下面的 `VisualizationZoomCtorOptions`
  * （官方把它们声明成了**构造选项**，所以能投影成 prop，只是「改了要换实例」）。
@@ -1626,8 +1642,10 @@ export interface TextLayerPick {
  * 而不是逐个 `Label` 覆盖物。
  *
  * 与 `PolygonLayerProps` / `PolylineLayerProps` 的**唯一结构差别**是本接口多带
- * `opacity`（官方**声明**了 `setOpacity`）——那两族没有，因此刻意不共用一个 props 基类
- * （沿用前两族那条「不把未声明成员投影成 prop = 假支持」的裁决）。
+ * `opacity`（官方**声明**了 `setOpacity`，`:296`）——`PolygonLayer` 那条
+ * `setOpacity` 实测**不驱动渲染**，`PolylineLayer` 那条虽实测生效但**未声明**、
+ * 尚未开成 prop（见 `VisualizationPolygonPolylineDisplayProps` 上那段更正）。
+ * 因此刻意不共用一个 props 基类。
  */
 export interface TextLayerProps
   extends VisualizationLayerCommonProps,
@@ -1646,7 +1664,8 @@ export interface TextLayerProps
    * 图层级透明度 `[0,1]`，与逐条 `fillOpacity` 相乘。默认 `1`。
    *
    * 走官方**声明**的字段级 setter `setOpacity`（`:296`）⇒ 单独改它**不换实例**。
-   * （`PolygonLayer` / `PolylineLayer` 没有这个 prop：官方未声明 `setOpacity`。）
+   * （`PolygonLayer` / `PolylineLayer` 没有这个 prop，理由与 4.0.5 声明**无关**——
+   *  见 `VisualizationPolygonPolylineDisplayProps` 上那段更正。）
    */
   opacity?: number;
 }
@@ -2045,7 +2064,7 @@ export interface MVTLayerBaseEvent {
 /**
  * `MVTLayer` 的公开属性（issue #109 基线）。
  *
- * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.4` + live 探针）；
+ * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.5` + live 探针）；
  * 未列出的字段经下方逃生口字段透传。**不声明** `opacity` / `setVisible` / `setData` 等
  * 官方没有的入口（探针与 d.ts 双向确认）：
  *

@@ -1265,7 +1265,7 @@ describe("v4 Service Facet：LocalSearch 归属与释放（PR #89 评审复现�
 /**
  * `viewportOptions` 对齐官方 `BMap.ViewportOptions`（#165）
  *
- * 官方 4.0.4 只声明四个成员：`enableAnimation`（默认 true）/ `margins`（上右下左）/
+ * 官方 4.0.5 只声明四个成员：`enableAnimation`（默认 true）/ `margins`（上右下左）/
  * `zoomFactor`（默认 0）/ `callback`（视野调整结束后的回调）。此前本库把 `noAnimation`
  * （**官方没有的成员**）当成第三个成员原样透传，而真实的 `enableAnimation` 与 `callback`
  * 在公共面上**没有任何路径**可以到达。

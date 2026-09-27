@@ -4,13 +4,13 @@
  * 把 JSAPI 4.0 的图层收敛成项目领域映射（`LayerDriver`）；公共 API 不新增 raw 成员，
  * 只把 `LayerHandle` 已有的品牌口径（`layer:<kind>`）落实到十一种图层上。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4` + 官方 Skill
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5` + 官方 Skill
  * `references/tile-and-service-layers.md` / `administrative-district.md` / `mvt-layer.md`）：
  *
  * - 4.0 用**统一**入口 `map.addLayer/removeLayer` 管理所有图层，按图层原型的家族标志位
  *   （`isDistrictLayer` / `isTileLayer` / `isGeoJSONLayer` / `isCustomHtmlLayer`）内部分发；
  *   `addDistrictLayer` / `addTileLayer` 已标记 `@deprecated`，因此这里一律走统一入口；
- * - 十一种 kind 的构造器**都在 4.0.4 的类型声明里**，例外只有 `PanoramaCoverageLayer`
+ * - 十一种 kind 的构造器**都在 4.0.5 的类型声明里**，例外只有 `PanoramaCoverageLayer`
  *   （官方 4.0 公开它，但类型包没有类声明）——`declared: false` 的那一种只能按结构探测；
  * - 构造签名的三种形态由 `signature` 表达：`options`（大多数）、`layerName-options`
  *   （`GeoJSONLayer`）、`createDOM-options`（`DOMLayer`）。**这两个首参不是选项**，
@@ -73,7 +73,7 @@ type CtorSignature = "options" | "layerName-options" | "createDOM-options";
  *
  * 七件事写在**同一条**记录里，是为了让它们不能互相漂移：
  * - `ctor`：4.0 构造器名（文件末尾的断言把它钉在官方 `BMap` 命名空间上）；
- * - `declared`：`@baidumap/jsapi-v4-types@4.0.4` 是否声明了该类。`false` 的 kind 只能按结构
+ * - `declared`：`@baidumap/jsapi-v4-types@4.0.5` 是否声明了该类。`false` 的 kind 只能按结构
  *   探测构造器（缺成员时报 `BMAP_CAPABILITY_UNSUPPORTED`），**且**它的 option 没有可核对的
  *   声明，未命中键走结构逃生口而不是「构造期」告警；
  * - `signature`：构造首参形态；
@@ -695,7 +695,7 @@ type ExpectTrue<T extends true> = T;
  * 改成 `true`（或反过来）都会连同运行时策略一起生效。
  *
  * `PanoramaCoverageLayer` 之所以 `declared: false`：它不在
- * `@baidumap/jsapi-v4-types@4.0.4` 的声明里（官方 Skill 明确它是 4.0 公开图层，属运行时能力），
+ * `@baidumap/jsapi-v4-types@4.0.5` 的声明里（官方 Skill 明确它是 4.0 公开图层，属运行时能力），
  * 存在性只能由 `requireRuntimeCtor` 在运行时按结构判断；上游补齐声明后把 `declared` 改成
  * `true`，这条断言会立刻校验它的构造器名。
  */

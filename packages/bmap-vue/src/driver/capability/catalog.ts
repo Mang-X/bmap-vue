@@ -17,7 +17,7 @@
  * - `runtimeOnly`：只能通过实例/原型成员在运行时探测，官方类型包无对应静态声明
  *   （例如 `Map` 原型方法、`PointCollection`、`Marker3D`，或只有文档没有类型声明的构造器）。
  *
- * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 为基准核对：
+ * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.5` 为基准核对：
  * `core/Map.d.ts` 的 Map 原型方法与各子目录 `declare namespace BMap` 类声明。
  */
 
@@ -334,7 +334,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "overlay.point-collection": {
     id: "overlay.point-collection",
     family: "overlay",
-    description: "海量点（PointCollection）；官方 4.0.4 文档引用但未声明类型",
+    description: "海量点（PointCollection）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["PointCollection"],
     status: "native",
     runtimeOnly: true,
@@ -366,7 +366,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "overlay.marker-3d": {
     id: "overlay.marker-3d",
     family: "overlay",
-    description: "3D 标记（Marker3D）；官方 4.0.4 文档引用但未声明类型",
+    description: "3D 标记（Marker3D）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["Marker3D"],
     status: "experimental",
     runtimeOnly: true,
@@ -450,7 +450,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.panorama-coverage": {
     id: "layer.panorama-coverage",
     family: "layer",
-    description: "全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型",
+    description: "全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["PanoramaCoverageLayer"],
     status: "native",
     runtimeOnly: true,
@@ -525,7 +525,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: false,
   },
   // #109：MVT 矢量瓦片。挂载（直接 `addLayer`）、`layers` 字符串数组、状态键 `layerName_id`
-  // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.4 有完整声明。
+  // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.5 有完整声明。
   "layer.mvt": {
     id: "layer.mvt",
     family: "layer",
@@ -608,7 +608,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。" +
       "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
       "由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
-      "setOpacity 运行时有但官方未声明 ⇒ 同样不开面。逐条依据见 " +
+      "setOpacity 运行时在位且 getOpacity 读得回，但像素读数证明**它不驱动渲染**" +
+      "（五态全同值，而同一次运行里 fillOpacity / setVisible 都能归零）⇒ 不开面。" +
+      "本族的选项表里也**没有** opacity 这一项。逐条依据见 " +
       "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
     rawMembers: ["PolygonLayer"],
     status: "experimental",
@@ -621,9 +623,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。" +
       "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
       "由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
-      "setOpacity 运行时有但官方未声明 ⇒ 同样不开面（⚠️ 代价：声明的 opacity 选项" +
-      "只能经 setOptions 整袋下发）。逐条依据见 " +
-      "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+      "setOpacity 虽未被官方声明，但 live 像素读数证明**它可观测地生效**" +
+      "（4229 ⇄ 0，可逆且重复一致）⇒ 开面，与同族的 PolygonLayer 处置相反。" +
+      "逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md",
     rawMembers: ["PolylineLayer"],
     status: "experimental",
     runtimeOnly: false,
@@ -647,7 +649,8 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "批量文字标注图层（TextLayer，官方 4.0.5 新增）；geometry 支持 Point / MultiPoint。" +
       "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 TextLayer 组件落地。" +
       "它是 visualization 家族里唯一声明与运行时完全对齐的类：hitTest 与 setOpacity 都在" +
-      "（PolygonLayer / PolylineLayer 恰好各缺一个，方向相反）。" +
+      "（PolygonLayer 声明有 hitTest 运行时无、setOpacity 运行时在不渲染；" +
+      "PolylineLayer 则与它相反）。" +
       "逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md",
     rawMembers: ["TextLayer"],
     status: "experimental",
@@ -755,7 +758,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**" +
       "（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已由 #110 落地在" +
       " `<TrackLineLayer>` 的 `playback` expose 上。" +
-      "脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**" +
+      "脚本自身引用面在 4.0.5 声明里没有缺口，且**最小运行时路径已验证**" +
       "（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；" +
       "依据与复现见 plugin-compat-inventory（#25 / #43）",
     status: "unsupported",

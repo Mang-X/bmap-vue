@@ -13,7 +13,7 @@
  *   由 Driver 别名改名才落到官方键上；现在公开面就是官方名，别名已删）；
  * - 显隐走挂载状态（`addLayer` / `removeLayer`）。
  *
- * 事件（`click` / `mouseover` / `mouseout`）**保留**：4.0.4 的 `DistrictLayer` 声明里没有
+ * 事件（`click` / `mouseover` / `mouseout`）**保留**：4.0.5 的 `DistrictLayer` 声明里没有
  * `addEventListener`，但既有实现、文档与官方 demo 都依赖这三个事件，删除它们是与本 issue
  * 无关的破坏性变更（依据与取舍见 ADR「已知限制」）。
  */

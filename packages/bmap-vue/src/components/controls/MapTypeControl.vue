@@ -18,7 +18,7 @@ export interface MapTypeControlProps {
  *
  * M7-CONTROL-PANORAMA / issue #41。
  *
- * 三个选项的落地方式刻意分两档，依据是官方 4.0.4 声明的实例方法表：
+ * 三个选项的落地方式刻意分两档，依据是官方 4.0.5 声明的实例方法表：
  * - `showStreetLayer` → `showStreetLayer(isShow)`：**唯一**的字段级 setter，就地更新
  *   （它的成员名不是 `set<Key>` 形状，因此必须显式登记进 Driver 的分类表，否则会被结构
  *   逃生口判成「没有入口」而静默丢弃）；

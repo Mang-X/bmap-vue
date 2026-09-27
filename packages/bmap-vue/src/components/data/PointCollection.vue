@@ -12,7 +12,7 @@
  *
  * ## 名字的来历（`PointCollection` 在 4.0 的真实状态）
  *
- * v3 的 `BMap.PointCollection` 类在 4.0 的**类型包**（`@baidumap/jsapi-v4-types@4.0.4`）里
+ * v3 的 `BMap.PointCollection` 类在 4.0 的**类型包**（`@baidumap/jsapi-v4-types@4.0.5`）里
  * **没有声明**；官方 React 组件库 `huiyan-fe/react-bmap` 把它标成「整体 @removed 4.0，仅 v3 可用」。
  * 但**运行时它仍然存在**：本库的探针（`scripts/probe-point-pick.mts`，真实 AK + headless Chrome）
  * 实测 `typeof BMap.PointCollection === "function"`（与 `Marker3D` / `MapMask` 同属「运行时存在但

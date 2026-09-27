@@ -7,7 +7,7 @@
  * - 4.0 的**统一**入口 `map.addLayer/removeLayer`（不是 deprecated 的 addDistrictLayer/addTileLayer）；
  * - `viewport` → `autoViewport` 的显式改名；
  * - option 分类：`TileLayer.zIndex` 就地更新，`DistrictLayer` 的构造期项告警且不动；
- * - 4.0.4 类型包没有类声明的 `PanoramaCoverageLayer` 按结构探测，缺成员显式失败；
+ * - 4.0.5 类型包没有类声明的 `PanoramaCoverageLayer` 按结构探测，缺成员显式失败；
  * - 能力守卫先于构造（不支持时不产生「创建好但没人用」的实例）；
  * - Target：Map 目标原子加/摘，非 Map 目标显式失败。
  */
@@ -724,7 +724,7 @@ describe("[#40] 归一化操作：就地更新与显式拒绝", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("[#40] 与官方类型包的构造器清单一致", () => {
-  it("十种 kind 的构造器名与 4.0.4 声明逐条对应（新增 kind 漏配会在类型层失败，这里锁运行时读数）", () => {
+  it("十种 kind 的构造器名与 4.0.5 声明逐条对应（新增 kind 漏配会在类型层失败，这里锁运行时读数）", () => {
     const expected: Record<LayerKind, string> = {
       district: "DistrictLayer",
       "panorama-coverage": "PanoramaCoverageLayer",

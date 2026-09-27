@@ -24,7 +24,7 @@ export interface PanoramaLabelProps {
  * 因此**不复用** `OverlayTarget` 那套注册表——所有权由「谁创建谁摘除」表达：本组件在自己的
  * 作用域里摘除，父组件随后才销毁查看器（父的 `onUnmounted` 晚于子树）。
  *
- * 选项的落地方式按官方 4.0.4 的成员表分两档：
+ * 选项的落地方式按官方 4.0.5 的成员表分两档：
  * - `content` → `setContent()`、`position` → `setPosition()`、`altitude` → `setAltitude()`：
  *   有 setter，就地更新；
  * - `displayDistance` → **只有构造期**（官方没有 `setDisplayDistance`）：变化时重建标注。

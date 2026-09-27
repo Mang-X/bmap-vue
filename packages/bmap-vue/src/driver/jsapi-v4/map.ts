@@ -3,7 +3,7 @@
  *
  * 把 JSAPI 4.0 的 `BMap.Map` 收敛成项目领域映射（`MapDriver`），公共 API 零新增。
  *
- * 行为依据（官方 4.0 文档 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 文档 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - 构造：`new BMap.Map(idOrElement, options)`，`MapOptions` 支持 `center` / `zoom` /
  *   `heading` / `tilt` / `minZoom` / `maxZoom` / `displayOptions` 与一组 `enable*` 开关；
  * - 视野：`centerAndZoom` 一次设定（v4 **没有** `setView`），后续受控更新走
@@ -58,7 +58,7 @@ import type { JsapiV4HandleRegistry } from "./registry";
  * 语义交互名 → 官方成对方法名（与 4.0 API 参考逐一对应）。
  *
  * **`tilt-gestures` 的成员存在性有分歧，因此这里不预判**：官方 4.0 API 参考的 `BMap.Map`
- * 方法表与 `@baidumap/jsapi-v4-types@4.0.4` 的 `core/Map.d.ts` 都**没有实例方法**
+ * 方法表与 `@baidumap/jsapi-v4-types@4.0.5` 的 `core/Map.d.ts` 都**没有实例方法**
  * `enableTiltGestures()` / `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的）。
  * ⚠️ 「没有」只限于**实例方法**：`MapOptions.d.ts:80` 确实声明了 `enableTiltGestures` 这个
  * **构造选项**（无同名的 `disable*`），即「建图时开手势倾斜」有声明、运行时开关没有。
@@ -92,7 +92,7 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  *
  * **顺序由真实运行决定，不由类型声明决定**（R25-E / issue #74 的 required smoke 实测）：
  *
- * - 上游 `@baidumap/jsapi-v4-types@4.0.4` 的 `map-type/MapTypeId.d.ts` 声明的是
+ * - 上游 `@baidumap/jsapi-v4-types@4.0.5` 的 `map-type/MapTypeId.d.ts` 声明的是
  *   `BMAP_NORMAL_MAP` 这类成员名；
  * - 真实 `v=4.0` 运行时的 `BMap.MapTypeId` 实际只有 `{ NORMAL, EARTH, SATELLITE }`；
  *   带 `BMAP_` 前缀的那组常量挂在**全局**（`globalThis.BMAP_NORMAL_MAP`），

@@ -4,7 +4,7 @@
  * 把 JSAPI 4.0 的覆盖物收敛成项目领域映射（`OverlayDriver`）；公共 API 只新增
  * 「Rectangle / CustomOverlay 两个构造入口」与「属性分类查询 `updatePolicy`」。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - 覆盖物统一经 `map.addOverlay/removeOverlay` 管理，显隐是继承来的 `show/hide/isVisible`；
  * - `InfoWindow` **不是**普通 Overlay：`map.openInfoWindow(infoWnd, point)` 必须带位置，
  *   关闭是地图级的 `map.closeInfoWindow()`（无参数），状态查询走公开的 `isOpen()` /
@@ -12,7 +12,7 @@
  * - `Rectangle` 收 Bounds；`CustomOverlay` 由 DOM 工厂 + 构造选项创建，4.0 缺 point 直接拒绝，
  *   因此项目签名把位置提为必填位置参数；
  * - `ContextMenu` 经 `map.addContextMenu/removeContextMenu` 挂在 Map 上（4.0 没有 Marker 级挂载）；
- * - `Marker3D` / `MapMask` 在 4.0.4**类型包**里都**没有类声明**（`MapMask` 全包 0 命中；
+ * - `Marker3D` / `MapMask` 在 4.0.5**类型包**里都**没有类声明**（`MapMask` 全包 0 命中；
  *   `Marker3D` 只在 `const/Marker3DShapeType.d.ts` 的文档注释里出现，类本身缺席；4.0.5 同）——而官方
  *   React 参考实现 `huiyan-fe/react-bmap`（master 与 v2.0.6 都有 `Overlay/Marker3D.tsx` /
  *   `MapMask.tsx`，driver 侧有 `createMarker3D` 工厂与 `new BMap.MapMask` 调用）**两者都包了**。
@@ -207,10 +207,10 @@ export function createJsapiV4OverlayDriver(
       );
     }
     if (typeof icon !== "string" && icon?.printImageUrl) {
-      // 4.0.4 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
+      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃",
       );
     }
   };
@@ -439,8 +439,8 @@ export function createJsapiV4OverlayDriver(
    *
    * | 目标 | SDK 入口 | 依据 |
    * | --- | --- | --- |
-   * | `map` | `Map#addContextMenu(menu)` / `#removeContextMenu(menu)` | 官方 4.0.4 的 `core/Map.d.ts` 里有声明（**一个** 参数，没有目标参数） |
-   * | `marker` | `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)` | **运行时扩展**：`@baidumap/jsapi-v4-types@4.0.4` 只在 `Map` 上声明，但真实 4.0 的 `Marker.prototype` 上有这两个成员且可用（真实 AK 实测，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`） |
+   * | `map` | `Map#addContextMenu(menu)` / `#removeContextMenu(menu)` | 官方 4.0.5 的 `core/Map.d.ts` 里有声明（**一个** 参数，没有目标参数） |
+   * | `marker` | `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)` | **运行时扩展**：`@baidumap/jsapi-v4-types@4.0.5` 只在 `Map` 上声明，但真实 4.0 的 `Marker.prototype` 上有这两个成员且可用（真实 AK 实测，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`） |
    *
    * 其余 kind（`overlay` / `clusterer`）**没有任何入口证据**，显式拒绝——本库不把「挂到地图」
    * 当成回退（那是另一种语义，会让菜单在整张地图上冒出来），也不静默忽略。
@@ -507,7 +507,7 @@ export function createJsapiV4OverlayDriver(
    * 收敛在 `internal.requireRuntimeCtor`，Overlay / Layer Facet 共用同一份口径。
    *
    * 真实 AK smoke（ADR「真实 AK smoke 记录」一节）确认：`Marker3D` / `MapMask` 在 4.0 运行时
-   * **都存在**，只是 `@baidumap/jsapi-v4-types@4.0.4` 没有类声明——所以这条路在真实 SDK 上会
+   * **都存在**，只是 `@baidumap/jsapi-v4-types@4.0.5` 没有类声明——所以这条路在真实 SDK 上会
    * 直接创建成功；失败分支只在「运行时确实没提供」时触发（Fake v4 故意不提供，用来覆盖它）。
    */
   const requireRuntimeCtor = (kind: OverlayKind, hint: string): JsapiV4Ctor => {
@@ -653,7 +653,7 @@ export function createJsapiV4OverlayDriver(
       }
       const width = options?.width ?? menuWidths.get(raw);
       const MenuItem = namespaceCtor(namespace, "MenuItem");
-      // `MenuItemOptions` 只有这两个键（4.0.4 的 `context-menu/MenuItemOptions.d.ts`）：`width` 与 `id`。
+      // `MenuItemOptions` 只有这两个键（4.0.5 的 `context-menu/MenuItemOptions.d.ts`）：`width` 与 `id`。
       // 两者都是**构造期**输入，实例上没有对应 setter ⇒ 调用方改了它们只能重建菜单（组件侧就是这么做的）。
       const menuItemOptions: Record<string, unknown> = {};
       if (width != null) menuItemOptions.width = width;
@@ -915,7 +915,7 @@ export function createJsapiV4OverlayDriver(
       if (kind === "polyline") {
         throw new BMapError(
           "BMAP_CAPABILITY_UNSUPPORTED",
-          "Polyline 没有填充：官方 4.0.4 的 Polyline 只声明描边 getter，没有 getFillColor/getFillOpacity",
+          "Polyline 没有填充：官方 4.0.5 的 Polyline 只声明描边 getter，没有 getFillColor/getFillOpacity",
           { engine: "jsapi-v4" },
         );
       }
@@ -1121,7 +1121,7 @@ type ExpectTrue<T extends true> = T;
 /**
  * 覆盖物构造器名必须与官方 `BMap` 命名空间一致。
  *
- * `marker3d` / `map-mask` 被**显式排除**：它们的构造器在 `@baidumap/jsapi-v4-types@4.0.4`
+ * `marker3d` / `map-mask` 被**显式排除**：它们的构造器在 `@baidumap/jsapi-v4-types@4.0.5`
  * 里不存在（仓库内官方参考 `.agents/skills/bmap-jsapi-v4/references/` 也没有对应章节——它们只在
  * `runtime-extended-apis.md` 的「其他扩展名称」名单里被列举，没有独立接口说明；这与**官方 React
  * 参考实现** `huiyan-fe/react-bmap` 恰好相反，它为两者都提供了组件与 driver 工厂），属于运行时扩展，

@@ -9,7 +9,7 @@
  *
  * 两处口径：
  * - **官方只有两个检索入口**（`getPanoramaById` / `getPanoramaByLocation`）。参考实现
- *   `huiyan-fe/react-bmap` 额外暴露了 `getPanoramaByPOIId`，但 `@baidumap/jsapi-v4-types@4.0.4`
+ *   `huiyan-fe/react-bmap` 额外暴露了 `getPanoramaByPOIId`，但 `@baidumap/jsapi-v4-types@4.0.5`
  *   里**没有**这个成员——按仓库既有口径（不为上游没有的成员建模）**不暴露**。
  * - 「查不到全景」是 `empty` 而不是 `failed`：官方在查不到时回调参数是 `null`（不是错误），
  *   `empty` 与 `failed` 的区别正是调用方能不能重试。

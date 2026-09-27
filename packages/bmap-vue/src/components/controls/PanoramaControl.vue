@@ -12,7 +12,7 @@ export interface PanoramaControlProps {
  *
  * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。
  *
- * 显隐走 SDK 基类的 `show()` / `hide()`；官方 4.0.4 里 `PanoramaControl extends Control`，
+ * 显隐走 SDK 基类的 `show()` / `hide()`；官方 4.0.5 里 `PanoramaControl extends Control`，
  * 因此这两个成员存在。Driver 仍按**结构性调用**处理（缺成员时告警一次而不是假装成功）——
  * 官方文档对 PanoramaControl 的描述是「由全景模块提供」，个别运行时版本未必带齐基类成员。
  */

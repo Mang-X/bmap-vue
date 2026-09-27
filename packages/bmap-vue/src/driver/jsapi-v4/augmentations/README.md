@@ -4,7 +4,7 @@
 它属于源码侧的**声明边界**，不进入发布产物，消费者无需安装官方类型包。
 
 - 计划键：`M3A0-BOUNDARY`（issue #15，追踪 #12）
-- 上游类型包与精确版本见 `packages/bmap-vue/package.json`（当前 `4.0.4`）
+- 上游类型包与精确版本见 `packages/bmap-vue/package.json`（当前 `4.0.5`）
 - 接入位置：`packages/bmap-vue/tsconfig.build.json` 的 `compilerOptions.types`
 - 目录入口：`../types-reference.d.ts`（三斜线引用本目录下的 `.d.ts`）
 

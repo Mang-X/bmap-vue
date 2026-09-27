@@ -2,7 +2,7 @@
  * useWalkingRoute —— 步行路线规划（headless，M7-ROUTES / issue #39）
  *
  * 官方 `BMap.WalkingRoute` 的 headless 封装。与 `useDrivingRoute` 的**公开签名差异**（逐个核对
- * 官方 4.0.4 声明得出，不用一个最宽模型套四个服务）：
+ * 官方 4.0.5 声明得出，不用一个最宽模型套四个服务）：
  *
  * - 起终点接受 `string | Point | LocalResultPoi` ⇒ 本库对应「地名 / 坐标 / POI 引用」，**支持关键字检索**；
  * - **没有** `waypoints`（官方 `WalkingRoute#search` 是两参数签名）；

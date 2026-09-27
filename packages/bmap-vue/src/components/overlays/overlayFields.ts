@@ -33,7 +33,7 @@ export const PATH_TOGGLE_FIELDS = {
 /**
  * `zIndex`：**就地更新**（issue #165 Class 3 / TASK 0）。
  *
- * 官方 4.0.4 在六个图形类上都有 `setZIndex(zIndex: number): void`（`Polyline` / `Polygon` /
+ * 官方 4.0.5 在六个图形类上都有 `setZIndex(zIndex: number): void`（`Polyline` / `Polygon` /
  * `Rectangle` / `Circle` / `BezierCurve` / `Prism`），描述符里也已经登记成
  * `mutateBy("setZIndex")`——此前缺的是**组件面**（`types/components.ts` 的 `PathShapeProps`
  * 没有这个键），于是整族的层级更新一次都没被走到过。

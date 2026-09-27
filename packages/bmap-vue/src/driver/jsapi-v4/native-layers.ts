@@ -26,9 +26,11 @@
  *   「操作面与官方声明一致」。
  * - **`visualization/` 的新两族**（`PolygonLayer` / `PolylineLayer`，#166）：4.0.5 新增，
  *   是同时弃用的 `FillLayer` / `LineLayer` 的官方指定替代。样式走 `setOptions`（**不是**
- *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单），
- *   而「声明有运行时没有」与「运行时有声明里没有」两条都在 `hitTest` / `setOpacity` 上各撞一次
- *   ——逐条依据见 kind 表注释与 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
+ *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单）。
+ *   「声明与运行时不一致」在这两族上撞了**三次**，而**处置各不相同**——
+ *   逐条依据见 kind 表注释与 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`：
+ *   `hitTest` 声明有而运行时**无**（不登记）；`setOpacity` 运行时**有**而声明无，
+ *   但两族的「可观测地生效」**读数相反**（折线**生效** ⇒ 登记；面**不生效** ⇒ 不登记）。
  * - **不支持的操作显式失败**：`BMAP_CAPABILITY_UNSUPPORTED`，不静默 no-op。
  * - **层级方法要求先挂载**：官方明确「层级调整实现会访问已关联的 Map 与图层管理器」，
  *   所以调用顺序是 `create → add → setZIndex`；错误经 `sdkCall` 归一，不吞错。
@@ -274,25 +276,90 @@ const NATIVE_LAYER_DESCRIPTORS = {
   // 登记面里**刻意没有**的三条（逐条依据见上面那份审计）：
   //
   // - `hitTest`：官方**声明**有（`:201` / `:233`），live 探针读到运行时**没有** ⇒ 假支持。
-  // - `setOpacity`：live 探针读到运行时**有**，但官方**声明**里没有（两族的「显示属性」一组
-  //   只有 visible / zIndex / renderStage / refCenter）⇒ 跟随 #165 对 `PointLayer` 的同一裁决，
-  //   「不把未声明成员当契约」。⚠️ 代价：`PolylineLayerOptions.opacity`（`:131`）是**声明的**
-  //   选项，但只能经 `setOptions` 整袋下发（组件的 `style` prop），没有字段级 setter 入口。
   // - `setZoomRange`：官方**没有** `setMinZoom` / `setMaxZoom`（`minZoom` / `maxZoom` 是
   //   **构造选项**，`:108` / `:112`），live 探针实测两个方法在运行时也都是 `undefined`。
   //
   // 状态 API（`updateState` 一族）同样不登记：两族的声明里没有。
+  //
+  // ⚠️ **`setOpacity` 两族的处置不同，因此它们各有自己的 operations 数组**——见下面各自
+  // 那段注释。原先这里是**一份共用数组**，注释写着「两族都运行时有、声明都没有 ⇒ 同处置」，
+  // 那个前提经 2026-09-27 的 live 复跑**部分被推翻**：运行时有是对的，但「可观测地生效」
+  // 只在折线族上成立（面族不成立）。判据是**可观测地生效**，不是「成员在不在」。
   polygon: {
     ctor: "PolygonLayer",
     declared: true,
     styleMember: "setOptions",
+    // ⚠️ **不**含 `setOpacity`——理由与折线族**不同**，别照抄那条。
+    //
+    // 三种形状必须分开（#165 收口时的教训）：
+    //
+    // | 形状 | 例子 | 处置 |
+    // | --- | --- | --- |
+    // | 声明有、运行时**无** | `PolygonLayer#hitTest` | 不登记（放开门面 = 假支持） |
+    // | **运行时**有、声明无 | `PolygonLayer#setOpacity`（本条） | 判「可观测地生效」 |
+    // | 运行时在、但**不生效** | `setStrokeLineCap` | 不登记（见上） |
+    //
+    // live 复跑（`/tmp/probe-opacity`，2026-09-27，AK 见 `docs/.vitepress/theme/index.ts`，
+    // 两次独立运行读数一致）逐条：
+    //
+    // - **在位**：`setOpacity` / `getOpacity` 两个的 `proto` 与 `inst` 都是 `true`
+    //   （原型链 5 层，`own` 全为 `false` ⇒ 继承来的，不是实例自有）。
+    // - **读回是活的**：`setOpacity(0.25)` → `getOpacity() === 0.25`；越界 `5` 被夹到 `1`。
+    //   ⚠️ 但 `getOpacity` 读的是**自己那份状态**——「写得进去、读得回来」**不等于**驱动渲染。
+    // - **像素判决（关键）**：铺一个盖满可视范围的纯蓝面（`rgb(0,0,255)`，`strokeWeight: 0`），
+    //   `preserveDrawingBuffer: true` + `readPixels` 数哨兵色像素。`setOpacity` 走
+    //   `1 → 0 → 1`、`setOptions({opacity})` 走 `1 → 0 → 1`、构造期 `opacity: 0`，
+    //   **五态全部 148243**（= 画布非空像素的 86%，一遍不多一遍不少）。
+    // - **测量通道是活的**（否则同值读数作废）：同一条面上
+    //   `setVisible(false)` → **0**、`setOptions({fillOpacity: 0})` → **0**、
+    //   `setOptions({fillOpacity: 1})` → **148243**；换色到画布上不可能存在的品红 → **0**。
+    //   换一个小面（7942 像素）重复 `1 → 0 → 1` 仍然全同值。
+    // - ⇒ **判定：`PolygonLayer#setOpacity` 是「present-but-ineffective」**。
+    //   `getOpacity()` 会把值读回来，但那只是 setter 与 getter 共用的那份状态，
+    //   **没有任何一条路径把它接到渲染上**。登记它等于开一个「调用成功但画面不变」的面。
+    //
+    // 另外 `PolygonLayerOptions` **根本没有** `opacity` 这一项（逐条读过选项表：
+    // fillColor / fillOpacity / strokeColor / strokeWeight / strokeOpacity / fillTextureUrl /
+    // fillTextureSize / fillTextureAlphaOnly / data / idKey / enablePicked / mouseStyleChange /
+    // pickTolerance / pickThrough / visible / zIndex / minZoom / maxZoom / referCenter /
+    // renderStage）——所以面族连「声明的入口」都没有，与折线族不同。
     operations: ["setData", "clearData", "setStyle", "setVisible", "setZIndex", "setEnablePicked"],
   },
   polyline: {
     ctor: "PolylineLayer",
     declared: true,
     styleMember: "setOptions",
-    operations: ["setData", "clearData", "setStyle", "setVisible", "setZIndex", "setEnablePicked"],
+    // ✅ **含** `setOpacity`——它是本族唯一一条「运行时依据」的登记项，但这一次
+    // 「可观测地生效」这条**独立判据也成立**，不是靠声明兜底。
+    //
+    // 同一份 live 复跑（两次运行读数一致）读到的：
+    //
+    // - 在位性同面族：`setOpacity` / `getOpacity` 的 `proto` 与 `inst` 都是 `true`。
+    // - 读回同面族：`setOpacity(0.25)` → `0.25`（越界夹到 `1`）。
+    // - **像素判决（与面族相反）**：一条 `strokeWeight: 20` 的纯蓝折线，哨兵像素计数
+    //   `setOpacity` 走 `1 → 0 → 1 → 0 → 1` = **4229 → 0 → 4229 → 0 → 4229**，
+    //   `setOptions({opacity})` 走 `0 → 1` = **0 → 4229**。可逆、重复一致。
+    // - 测量通道活性由**同一次运行里的面族**提供（`fillOpacity: 0` → 0 /
+    //   `setVisible(false)` → 0 / 换色 → 0 / 复原 → 148243）——不是另开一次探针。
+    // - ⇒ **判定：`PolylineLayer#setOpacity` 是「可观测地生效」**，因此登记。
+    //
+    // 为什么面族不登记、这一族登记：**同族不等于同面**。两者的「在位性」读数完全一样
+    // （`proto`/`inst` 都 true），差别只在「有没有接到渲染上」，而那一条**只能靠像素读**——
+    // 任何只看成员表的门禁（包括本文件的 `supports()`）都给不出这个区别。
+    //
+    // ⚠️ 代价因此也要改：原先写的「`PolylineLayerOptions.opacity`（`:131`）只能经 `setOptions`
+    // 整袋下发」**是错的**——两条路都实测生效（像素各 0 与 4229）。代价换成：
+    // **`PolygonLayer` 那一族没有图层级 `opacity`**（选项表里根本没有这一项，
+    // 唯一可用的透明度是逐要素的 `fillOpacity`），所以 `<PolygonLayer>` 仍不提供图层级入口。
+    operations: [
+      "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setOpacity",
+      "setZIndex",
+      "setEnablePicked",
+    ],
   },
   // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
   //

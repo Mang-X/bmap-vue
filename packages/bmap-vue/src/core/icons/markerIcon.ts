@@ -16,7 +16,7 @@
  *
  * **不用它**，理由是它在本引擎没有声明的运行时入口：
  *
- * - `@baidumap/jsapi-v4-types@4.0.4` 里**没有** `Icons` 这个成员（`overlay/` 目录只有
+ * - `@baidumap/jsapi-v4-types@4.0.5` 里**没有** `Icons` 这个成员（`overlay/` 目录只有
  *   `Icon.d.ts` / `IconOptions.d.ts` 与 `IconSequence.d.ts`，`index.d.ts` 的三斜线引用里也没有它）；
  * - 官方 JSAPI 4.0 API 参考的覆盖物章节里同样没有它（`BMap.Icon` 有独立页面）。
  *

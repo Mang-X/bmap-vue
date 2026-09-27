@@ -31,7 +31,7 @@
  * `getBounds` / `getCenter` / `getRadius` / `getStrokeColor` / …，它们**返回当前值**——
  * 与本库「props 是主模型」的口径一致（`OVERLAY_REVERT_RATIONALE` 逐条说明了「getter 给的是
  * 当前值而不是 SDK 默认值」）。因此这些读回**不镜像成组件状态**，只作为命令面按需取。
- * `BezierCurve` / `Prism` / `Label` / `GroundOverlay` **不**在这族里：官方 4.0.4 没有为它们
+ * `BezierCurve` / `Prism` / `Label` / `GroundOverlay` **不**在这族里：官方 4.0.5 没有为它们
  * 声明对应 getter（`GroundOverlay` 有 `getBounds` / `getOpacity` / `getImageURL`，
  * 但那是**地面叠加**的独立一族；本期不铺开，理由与逐条依据见
  * `tests/behavior/overlay-expose.test.ts` 的「刻意不做」一组）。
@@ -146,7 +146,7 @@ function readBackUnsupported(
 ): never {
   throw new BMapError(
     "BMAP_CAPABILITY_UNSUPPORTED",
-    `${input.component}.${command}(): ${kind} 没有这个读回入口——官方 4.0.4 没有声明该 getter` +
+    `${input.component}.${command}(): ${kind} 没有这个读回入口——官方 4.0.5 没有声明该 getter` +
       "（Polyline 只有描边 getter，没有 getFillColor/getFillOpacity）",
     { component: input.component },
   );

@@ -20,7 +20,7 @@
  *
  * ## 名字从哪来（上游权威清单）
  *
- * `@baidumap/jsapi-v4-types@4.0.4` 把每个覆盖物的事件映射表声明在**它自己那一类**的 `.d.ts` 里
+ * `@baidumap/jsapi-v4-types@4.0.5` 把每个覆盖物的事件映射表声明在**它自己那一类**的 `.d.ts` 里
  * （`overlay/OverlayEvent.d.ts` 只装其中一部分）：
  *
  * | kind | 上游声明 | 声明所在文件 |
@@ -122,7 +122,7 @@ function editing(description: string): OverlayEventInput {
 
 /** 一类覆盖物的事件表 + 它的上游依据（`null` = 上游没有为这一类声明事件表）。 */
 export interface OverlayEventMatrixEntry {
-  /** 上游事件映射表名（`@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts`）。 */
+  /** 上游事件映射表名（`@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/OverlayEvent.d.ts`）。 */
   readonly upstream: string;
   /** 事件表：键 = 规范 Vue 名。 */
   readonly events: Readonly<Record<string, OverlayEventDefinition>>;
@@ -305,9 +305,9 @@ export type OverlayEventMatrixKey = keyof typeof OVERLAY_EVENT_MATRIX;
  * 会**编译失败**（见文末的类型门禁），因此「新加了一类覆盖物却忘了事件面」不可能悄悄通过。
  */
 export const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX = {
-  "map-mask": "掩膜：4.0.4 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）",
+  "map-mask": "掩膜：4.0.5 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）",
   marker3d:
-    "3D 标注：构造器 Marker3D 不在 4.0.4 的类声明里，因此也没有事件表；" +
+    "3D 标注：构造器 Marker3D 不在 4.0.5 的类声明里，因此也没有事件表；" +
     "事件面要等运行时取证（与 TrafficLayer / 图层事件同一路径）",
 } as const satisfies Record<string, string>;
 

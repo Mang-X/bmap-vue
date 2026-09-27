@@ -4,7 +4,7 @@ import { useControlResource, type ControlSpec } from "../../core/controls";
 /**
  * 比例尺的单位（官方 `LengthUnit`）。
  *
- * 取值域**逐字**取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `const/LengthUnit.d.ts`：
+ * 取值域**逐字**取自 `@baidumap/jsapi-v4-types@4.0.5` 的 `const/LengthUnit.d.ts`：
  * `type LengthUnit = 'metric' | 'us'`（官方常量 `BMAP_UNIT_METRIC` / `BMAP_UNIT_IMPERIAL`）。
  *
  * 刻意**不**复刻成自己的枚举对象：那会让「官方加一个新单位」变成一次库内改���，

@@ -48,7 +48,10 @@ export type NativeLayerKind =
   // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
   // 与前两族同为随主包注入（live 探针 2026-09-27：`TextLayerAtMapReady === "function"`），
   // 但它是这一族里**唯一声明与运行时完全对齐**的类——`hitTest` 与 `setOpacity` 都在
-  // （前两族恰好各缺一个，方向相反），因此登记面比它们宽。
+  // （前两族各缺一个，**方向相反**：`PolygonLayer` 缺 `hitTest`——声明有而运行时**无**——
+  //  且它的 `setOpacity` 在位却不驱动渲染；`PolylineLayer` 缺的则是 `setOpacity` 的**声明**，
+  //  运行时有且**生效**，因此登记面比面族宽。#165 收口的 live 像素复跑更正了原先
+  // 「两族同处置」的那句。），因此登记面比它们宽。
   | "text";
 
 /**

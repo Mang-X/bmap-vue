@@ -686,7 +686,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   /* ------------------------------------------------------------------ 命令面（#165） */
 
   /**
-   * 六个官方成员的命令面，逐条依据（`@baidumap/jsapi-v4-types@4.0.4` 的
+   * 六个官方成员的命令面，逐条依据（`@baidumap/jsapi-v4-types@4.0.5` 的
    * `overlay/InfoWindow.d.ts`）：
    *
    * | 暴露 | 官方声明 | 为什么不能走 prop |

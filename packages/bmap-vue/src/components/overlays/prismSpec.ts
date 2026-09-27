@@ -9,12 +9,12 @@
  * | `altitude` | `options` | `setAltitude` | `mutateBy("setAltitude", { ctorKey: null })` |
  * | `topFillColor` / `topFillOpacity` / `sideFillColor` / `sideFillOpacity` | `options` | 各自的 setter | 描述符逐个列出 |
  * | `enableMassClear` | `options` | 成对开关 | 描述符 |
- * | `isBoundary` / `autoCenter` | `recreate` | 构造期透传 | **未取证**：`PrismOptions`（4.0.4）里没有这两个键 |
+ * | `isBoundary` / `autoCenter` | `recreate` | 构造期透传 | **未取证**：`PrismOptions`（4.0.5）里没有这两个键 |
  * | `visible` | `visibility` | `show`/`hide` | 不是描述符键 |
  *
  * ## 两个「未取证」的构造期 prop 为什么不删也不假装支持
  *
- * 它们是 v2 就有的公开 prop，迁移前原样进构造选项。4.0.4 的 `PrismOptions` 里没有它们，
+ * 它们是 v2 就有的公开 prop，迁移前原样进构造选项。4.0.5 的 `PrismOptions` 里没有它们，
  * 而本库没有运行时证据说 SDK 会读（也没有证据说不读）。处置是三条一起：
  *
  * 1. **不删**（删掉会让已发布的用法静默失效，且删除本身也没有运行时依据）；

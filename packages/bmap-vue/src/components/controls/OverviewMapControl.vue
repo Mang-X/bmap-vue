@@ -42,7 +42,7 @@ const props = withDefaults(defineProps<OverviewMapControlProps>(), {
  * （Driver 归类 `recreate`，理由是官方只有 `changeView()` 的**切换**语义、没有幂等
  * `setOpen`）。也就是说此前「鹰眼被用户点开了」这个事实在本库**完全不可观测**。
  *
- * 逐条依据（`@baidumap/jsapi-v4-types@4.0.4` 的 `control/OverviewMapControl.d.ts`）：
+ * 逐条依据（`@baidumap/jsapi-v4-types@4.0.5` 的 `control/OverviewMapControl.d.ts`）：
  * - `viewchanged: { type: string; target: OverviewMapControl; isOpen: boolean }`
  * - `viewchanging: { type: string; target: OverviewMapControl }`
  * - `resize: { type: string; target: OverviewMapControl }`

@@ -372,7 +372,7 @@ export class FakeV4TrackLine extends FakeV4RuntimeLayer {
  * | `setOptions` | 有 | 有 | **有**（基类那份） |
  * | `setEnablePicked` / `getEnablePicked` | 有 | 有 | **有**（本类新增） |
  * | `setVisible` / `getVisible` / `setZIndex` / `getZIndex` | 有 | 有 | **有**（基类那份） |
- * | `setOpacity` / `getOpacity` | ⚠️ **无** | 有 | **有**（基类那份） |
+ * | `setOpacity` / `getOpacity` | ⚠️ **无** | 有（在位，**面族不生效**） | **有**（基类那份） |
  * | `hitTest` | ⚠️ **有**（`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`） | ⚠️ **无** | **刻意没有** |
  * | `setStyle` / `setStyleOptions` / `setBaseOptions` | 无 | 无 | **没有**（基类也没有） |
  * | `setMinZoom` / `setMaxZoom` | 无 | 无 | **没有** |
@@ -382,9 +382,10 @@ export class FakeV4TrackLine extends FakeV4RuntimeLayer {
  * - `hitTest` **声明有、运行时没有** ⇒ 替身**不提供**。一旦这里补上，Driver 那个
  *   「按声明登记」的表会让一个真实运行时不存在的方法被 CI 测绿（#106 P1 的同一类坑，
  *   同 `FakeV4NativeLayerBase` 刻意不提供 `clearData` 的理由）。
- * - `setOpacity` **运行时有、声明没有** ⇒ 替身**照实提供**（替身不得比真实运行时窄），
- *   但 Driver **不登记**这个操作（跟随 #165 对 `PointLayer` 的同一裁决）。因此它在这条
- *   路径上永远不会被调用——它只保证「替身形状 == 运行时形状」这条不变式成立。
+ * - `setOpacity` / `getOpacity` **运行时有、声明没有** ⇒ 替身**照实提供**（替身不得比真实
+ *   运行时窄）。它在**折线**族上还被 Driver 登记了（#165 收口：像素读数证明它生效），
+ *   在**面**族上不登记（实测在位但**不驱动渲染**）——替身对两族是**同一份**形状，因为
+ *   「在不在」这一层运行时**确实一致**；驱动与否不在替身的职责里。
  */
 export class FakeV4PolygonPolylineLayerBase extends FakeV4RuntimeLayer {
   /**

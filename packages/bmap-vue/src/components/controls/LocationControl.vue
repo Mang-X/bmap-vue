@@ -8,7 +8,7 @@ import type { MarkerIcon } from "../../types/components";
 /**
  * 定位成功的地址组成部分（官方 `BMap.AddressComponent` 的领域投影）。
  *
- * 逐字段取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `service/AddressComponent.d.ts`：
+ * 逐字段取自 `@baidumap/jsapi-v4-types@4.0.5` 的 `service/AddressComponent.d.ts`：
  * `streetNumber?` / `street?` / `district?` / `city?` / `province?`——**五个全是可选的**，
  * 因此这里也全部可选，且**不补默认值**（`city ?? ""` 会把「上游没给」与「空」混起来）。
  *
@@ -40,7 +40,7 @@ export interface LocationControlProps {
 
   /* --- issue #165 Class 3 / TASK 3：官方 `GeolocationControlOptions` 的 8 个选项 ---
    *
-   * 逐条取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `control/GeolocationControlOptions.d.ts`
+   * 逐条取自 `@baidumap/jsapi-v4-types@4.0.5` 的 `control/GeolocationControlOptions.d.ts`
    * （该接口共 9 个键，本库此前只收了 `anchor` / `offset` 两个）。
    *
    * **全部构造期**：`GeolocationControl` 对这一族只给了**一个整袋入口**

@@ -9,7 +9,7 @@
  *    `ServiceCall<ServiceResult<T>>`（`../normalize/serviceCall`），业务不再需要自己写
  *    「超时 / 空结果 / 迟到回调」三件套。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - `Geocoder#getPoint/getLocation`、`Convertor#translate`、`Boundary#get`、`LocalCity#get`、
  *   `Geolocation#getCurrentPosition` + `getStatus`、`Autocomplete#search` /
  *   `AutocompleteOptions.onSearchComplete`、`LocalSearch#search/searchNearby/searchInBounds/
@@ -661,7 +661,7 @@ export function readRoutePlan(value: unknown, index: number): RoutePlan | null {
     distanceText: distance.text,
     duration: duration.value,
     durationText: duration.text,
-    // `getToll()` / `getTollDistance()` 只在官方 `DrivingRoutePlan` 接口里声明（4.0.4 的
+    // `getToll()` / `getTollDistance()` 只在官方 `DrivingRoutePlan` 接口里声明（4.0.5 的
     // `DrivingRouteResult#getPlan` 返回类型写的是 `RoutePlan`）⇒ **可选读取**：拿不到就是 `null`，
     // 不 augmentation、不告警——「这次没拿到」本身就是如实的表达。
     toll: readOptionalFiniteNumber(readOptionalMember(value, "getToll")),
@@ -942,7 +942,7 @@ export function createJsapiV4ServiceDriver(
    * 释放一个「以**公开 `clearResults()`** 为唯一清理入口」的服务实例
    * （`LocalSearch` 与四类路线服务共用，#39 把它从 `disposeLocalSearch` 里提出来）。
    *
-   * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.4 声明里只有
+   * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.5 声明里只有
    * `clearResults` / `getResults` / `getStatus` …），但它**交付出去的结果集**不随实例被 GC
    * ——地图上的折线与标注、写进 `panel` 的 DOM 都由调用方交给 SDK 的地图持有。因此：
    *
@@ -1719,7 +1719,7 @@ export function createJsapiV4ServiceDriver(
     },
 
     /**
-     * 更新已创建实例的检索区域 / 数据类型（官方 4.0.4 声明的 `Autocomplete#setLocation` /
+     * 更新已创建实例的检索区域 / 数据类型（官方 4.0.5 声明的 `Autocomplete#setLocation` /
      * `#setTypes`）。
      *
      * 为什么收在 Driver（R25-C / #72 的「组件 raw setter 回到集成边界」）：组件侧的
@@ -1750,7 +1750,7 @@ export function createJsapiV4ServiceDriver(
         if (typeof fn !== "function") {
           warnOnce(
             `autocomplete:${key}-missing`,
-            `ServiceDriver.setAutocompleteOptions: 当前 Autocomplete 实例没有 ${key}()（4.0.4 的 ` +
+            `ServiceDriver.setAutocompleteOptions: 当前 Autocomplete 实例没有 ${key}()（4.0.5 的 ` +
               `Autocomplete 声明里存在该成员），本次更新被忽略`,
           );
           return;
@@ -1769,7 +1769,7 @@ export function createJsapiV4ServiceDriver(
     /* ---------------------------------------------------- 路线规划（#39） */
 
     createDrivingRoute(location, options: DrivingRouteOptions = {}) {
-      // `renderOptions.panel` 在 4.0.4 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
+      // `renderOptions.panel` 在 4.0.5 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
       // 而 `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
       // **真实 AK 实测驾车有效**（容器 DOM 0 → 2417 字符、`clearResults()` 后回 0）⇒ 那句注释是过时的。
       // 处置：原样转发、不告警，也不替 SDK 承诺有效或无效（上游自述仍矛盾）——见 ADR 决策 7。

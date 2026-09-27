@@ -9,7 +9,7 @@
  * `mutable` / `recreate` / `unsupported` 的更新策略。组件因此不必再自己探测 raw SDK
  * 成员形状（例如「有没有 setIcon」），只要问 `OverlayDriver.updatePolicy()`。
  *
- * 分类口径（依据官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 分类口径（依据官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - `mutable`：实例上有可用的**值型 setter** 或**成对 enable/disable 开关**，就地更新即可；
  * - `recreate`：只有构造选项，或实例上的 setter 不可安全使用（例：`Marker#setAnchor` ——
  *   声明里有、运行时**不在原型上**，实测调用即抛，见下方 `anchor` 条目的完整依据），必须重建实例才生效；
@@ -113,7 +113,7 @@ export interface InfoWindowOptions {
   enableCloseOnClick?: boolean;
   /* --- issue #165 Class 3 / TASK 3：InfoWindow 缺的 8 个官方构造选项 ---
    *
-   * 逐条来自 `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/InfoWindowOptions.d.ts`：
+   * 逐条来自 `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/InfoWindowOptions.d.ts`：
    * 本接口此前只收了 7 个键中的 6 个（`offset` 之外），
    * 而 `InfoWindowOptions` 官方一共 15 个键 ⇒ 8 个没有出口。
    *
@@ -386,7 +386,7 @@ export type OverlayPropertyValueKind =
  * 5→7 完全可就地写。
  *
  * 唯一可选值是 `rebuild`（重建 ⇒ 构造期不传该键 ⇒ SDK 用自己的默认值）。这是**取证**后的
- * 结论，不是省事：逐字段核对 `@baidumap/jsapi-v4-types@4.0.4` 后，**没有**任何一种更省的落点：
+ * 结论，不是省事：逐字段核对 `@baidumap/jsapi-v4-types@4.0.5` 后，**没有**任何一种更省的落点：
  *
  * | 候选落点 | 为什么不可用 |
  * | --- | --- |
@@ -480,7 +480,7 @@ export interface OverlayDescriptor {
    * `(typeof OVERLAY_DESCRIPTORS)[kind]["ctor"] extends keyof typeof BMap` 做官方类型一致性断言。
    * 两处漂移由 `src/driver/jsapi-v4/overlays.test.ts` 的同源断言守住。
    *
-   * `marker3d` / `map-mask` 指向的构造器**不在** `@baidumap/jsapi-v4-types@4.0.4` 的类声明里
+   * `marker3d` / `map-mask` 指向的构造器**不在** `@baidumap/jsapi-v4-types@4.0.5` 的类声明里
    * （`Marker3D` 只在 `const/Marker3DShapeType.d.ts` 的文档注释里出现过），属于运行时扩展；
    * 这类条目由 `driver/jsapi-v4/overlays.ts` 的类型断言显式排除，并且创建时走
    * 「结构性查找 + 缺失即显式失败」而不是静默降级。
@@ -769,11 +769,11 @@ export const OVERLAY_DESCRIPTORS = {
       // 逐条依据见 `InfoWindowOptions` 的同款注释；**全部构造期**（官方 `InfoWindow`
       // 上没有对应的 setter，也没有读回）。
       margin: recreate(
-        "InfoWindowOptions.margin 是四个边距（[上, 右, 下, 左]）；官方 4.0.4 的 InfoWindow 上既没有 setMargin 也没有读回，构造期给定",
+        "InfoWindowOptions.margin 是四个边距（[上, 右, 下, 左]）；官方 4.0.5 的 InfoWindow 上既没有 setMargin 也没有读回，构造期给定",
         { ctorKey: "margin", value: "raw" },
       ),
       collisions: recreate(
-        "InfoWindowOptions.collisions 是碰撞检测的四个边距；官方 4.0.4 的 InfoWindow 上既没有 setCollisions 也没有读回，构造期给定",
+        "InfoWindowOptions.collisions 是碰撞检测的四个边距；官方 4.0.5 的 InfoWindow 上既没有 setCollisions 也没有读回，构造期给定",
         { ctorKey: "collisions", value: "raw" },
       ),
       onClosing: recreate(
@@ -781,15 +781,15 @@ export const OVERLAY_DESCRIPTORS = {
         { ctorKey: "onClosing", value: "raw" },
       ),
       enableSearchTool: recreate(
-        "InfoWindowOptions.enableSearchTool 决定是否多渲染一个工具条（渲染通道）；官方 4.0.4 的 InfoWindow 上没有对应的成对开关，也无读回",
+        "InfoWindowOptions.enableSearchTool 决定是否多渲染一个工具条（渲染通道）；官方 4.0.5 的 InfoWindow 上没有对应的成对开关，也无读回",
         { ctorKey: "enableSearchTool", value: "raw" },
       ),
       headerContent: recreate(
-        "InfoWindowOptions.headerContent 是自定义标题栏 HTML；官方 4.0.4 的 InfoWindow 上没有 setHeaderContent，也无读回。⚠️ 官方没有说明它与 title 同时给时谁优先，本库**不表态**（两个都原样传下去）",
+        "InfoWindowOptions.headerContent 是自定义标题栏 HTML；官方 4.0.5 的 InfoWindow 上没有 setHeaderContent，也无读回。⚠️ 官方没有说明它与 title 同时给时谁优先，本库**不表态**（两个都原样传下去）",
         { ctorKey: "headerContent", value: "raw" },
       ),
       enableContentScroll: recreate(
-        "InfoWindowOptions.enableContentScroll 决定内容溢出时是否可滚；官方 4.0.4 的 InfoWindow 上没有 setEnableContentScroll，也无读回",
+        "InfoWindowOptions.enableContentScroll 决定内容溢出时是否可滚；官方 4.0.5 的 InfoWindow 上没有 setEnableContentScroll，也无读回",
         { ctorKey: "enableContentScroll", value: "raw" },
       ),
       title: mutateBy("setTitle", { ctorKey: "title" }),
@@ -801,7 +801,7 @@ export const OVERLAY_DESCRIPTORS = {
         { ctorKey: "enableCloseOnClick" },
       ),
       offset: recreate(
-        "InfoWindow 只有 getOffset()：官方 4.0 参考与 4.0.4 类型包都没有 setOffset，像素偏移只能在构造期给定",
+        "InfoWindow 只有 getOffset()：官方 4.0 参考与 4.0.5 类型包都没有 setOffset，像素偏移只能在构造期给定",
         { ctorKey: "offset", value: "size" },
       ),
       position: unsupported(
@@ -970,16 +970,16 @@ export const OVERLAY_DESCRIPTORS = {
         "4.0 的 Prism 只有构造选项 enableClicking；官方参考同时说明 Prism 不实现编辑能力",
         { ctorKey: "enableClicking" },
       ),
-      // M5-VECTORS / #31：这两个键**不在** `@baidumap/jsapi-v4-types@4.0.4` 的 `PrismOptions` 里。
+      // M5-VECTORS / #31：这两个键**不在** `@baidumap/jsapi-v4-types@4.0.5` 的 `PrismOptions` 里。
       // 组件的 v2 兼容 prop 仍然原样交给构造期（迁移前的行为），但分类必须是 `recreate` 而不是
       // `mutable`：既没有字段级 setter，也没有证据表明运行时读取它——因此这里如实记下「未取证」，
       // 而不是把它写成「支持」（不静默伪造能力）。
       isBoundary: recreate(
-        "**未取证**：PrismOptions（4.0.4）里没有 isBoundary，4.0 运行时是否读取它没有证据；组件保留 v2 的构造期透传，但不声明字段级更新",
+        "**未取证**：PrismOptions（4.0.5）里没有 isBoundary，4.0 运行时是否读取它没有证据；组件保留 v2 的构造期透传，但不声明字段级更新",
         { ctorKey: "isBoundary" },
       ),
       autoCenter: recreate(
-        "**未取证**：PrismOptions（4.0.4）里没有 autoCenter；理由同 isBoundary（构造期透传）",
+        "**未取证**：PrismOptions（4.0.5）里没有 autoCenter；理由同 isBoundary（构造期透传）",
         { ctorKey: "autoCenter" },
       ),
     }),
@@ -1174,13 +1174,13 @@ export function overlayPropertyRevert(
 export const OVERLAY_REVERT_RATIONALE = {
   // ——— 没有公开读回 ———
   zIndex:
-    "4.0.4 的 8 个覆盖物类上都有 setZIndex，但**没有一个**有 getZIndex（只有 layer/* 有）" +
+    "4.0.5 的 8 个覆盖物类上都有 setZIndex，但**没有一个**有 getZIndex（只有 layer/* 有）" +
     "⇒ 无从读回，也没有 baseline 可恢复 ⇒ 重建",
-  enableDragging: "enableDragging / disableDragging 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
-  enableMassClear: "enableMassClear / disableMassClear 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
-  enableEditing: "enableEditing / disableEditing 成对开关，4.0.4 **没有**公开读回 ⇒ 重建",
+  enableDragging: "enableDragging / disableDragging 成对开关，4.0.5 **没有**公开读回 ⇒ 重建",
+  enableMassClear: "enableMassClear / disableMassClear 成对开关，4.0.5 **没有**公开读回 ⇒ 重建",
+  enableEditing: "enableEditing / disableEditing 成对开关，4.0.5 **没有**公开读回 ⇒ 重建",
   enableClicking:
-    "只有构造选项 enableClicking（4.0.4 在 Marker 与图形族上都没有 setEnableClicking/disableClicking）" +
+    "只有构造选项 enableClicking（4.0.5 在 Marker 与图形族上都没有 setEnableClicking/disableClicking）" +
     "⇒ policy 已是 recreate，撤回同样是重建",
   enableMaximize: "InfoWindow 的 enableMaximize 只有构造选项，实例上无 setter 也无读回 ⇒ 重建",
   enableAutoPan: "InfoWindow 的 enableAutoPan 只有构造选项，实例上无 setter 也无读回 ⇒ 重建",
@@ -1213,7 +1213,7 @@ export const OVERLAY_REVERT_RATIONALE = {
     "Marker#getIcon 返回**当前值**而非默认图标（默认图标是 SDK 内置的 unnamed icon，无从构造）" +
     "⇒ 重建",
   style: "Label#setStyles 有 getter 但返回当前值；默认样式由 SDK 内部决定、无从构造 ⇒ 重建",
-  opacity: "Label#setOpacity 在 4.0.4 **没有**公开读回 ⇒ 重建",
+  opacity: "Label#setOpacity 在 4.0.5 **没有**公开读回 ⇒ 重建",
   // ⚠️ 依据是 **live 读数**，不是「官方说明」——`setAnchor` **在** 4.0.5 的 `Marker` 实例上
   // （`inst: true`，`getAnchor()` 读回 `Point`，构造后真调一次也不抛），
   // 因此「等异步标注模块加载才挂上」那个说法是**错的**，不要照抄。
@@ -1285,25 +1285,25 @@ export const OVERLAY_REVERT_RATIONALE = {
   strokeTexture:
     "官方 4.0.5 的 Polyline 上**既没有** setStrokeTexture 也无读回；它是**线纹理**（沿折线重复绘制图片）" +
     "且官方注明仅 WebGL 渲染模式支持 ⇒ 重建",
-  width: "InfoWindow 的 width 只有构造选项；4.0.4 无 setWidth 也无 getWidth ⇒ 重建",
-  height: "InfoWindow 的 height 只有构造选项；4.0.4 无 setHeight 也无 getHeight ⇒ 重建",
-  maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.4 **无** getMaxWidth ⇒ 撤回只能重建",
+  width: "InfoWindow 的 width 只有构造选项；4.0.5 无 setWidth 也无 getWidth ⇒ 重建",
+  height: "InfoWindow 的 height 只有构造选项；4.0.5 无 setHeight 也无 getHeight ⇒ 重建",
+  maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.5 **无** getMaxWidth ⇒ 撤回只能重建",
   maxContent:
-    "InfoWindow 的 maxContent 有 setMaxContent（policy 是 mutable），但 4.0.4 **无**读回" +
+    "InfoWindow 的 maxContent 有 setMaxContent（policy 是 mutable），但 4.0.5 **无**读回" +
     "（getContent() 返回的是普通内容，不是最大化内容）⇒ 撤回只能重建",
-  margin: "InfoWindow 的 margin（[上,右,下,左]）只有构造选项；4.0.4 无 setMargin 也无读回 ⇒ 重建",
-  collisions: "InfoWindow 的 collisions 只有构造选项；4.0.4 无 setCollisions 也无读回 ⇒ 重建",
+  margin: "InfoWindow 的 margin（[上,右,下,左]）只有构造选项；4.0.5 无 setMargin 也无读回 ⇒ 重建",
+  collisions: "InfoWindow 的 collisions 只有构造选项；4.0.5 无 setCollisions 也无读回 ⇒ 重建",
   onClosing:
-    "InfoWindow 的 onClosing 是**回调**且只有构造选项；4.0.4 无 setOnClosing。回调要跟随" +
+    "InfoWindow 的 onClosing 是**回调**且只有构造选项；4.0.5 无 setOnClosing。回调要跟随" +
     "最新闭包必须重建（与 ControlSpec.options 的同款理由）⇒ 重建",
   enableSearchTool:
-    "InfoWindow 的 enableSearchTool 决定是否渲染一个工具条；4.0.4 无对应的成对开关也无读回" +
+    "InfoWindow 的 enableSearchTool 决定是否渲染一个工具条；4.0.5 无对应的成对开关也无读回" +
     "（与 enableMaximize 不同——后者有 enable/disableMaximize）⇒ 重建",
   headerContent:
-    "InfoWindow 的 headerContent 只有构造选项；4.0.4 无 setHeaderContent 也无读回。" +
+    "InfoWindow 的 headerContent 只有构造选项；4.0.5 无 setHeaderContent 也无读回。" +
     "⚠️ 官方没有说明它与 title 同时给时谁优先，因此**不**把 title 的撤回借给它 ⇒ 重建",
   enableContentScroll:
-    "InfoWindow 的 enableContentScroll 只有构造选项；4.0.4 无 setEnableContentScroll 也无读回 ⇒ 重建",
+    "InfoWindow 的 enableContentScroll 只有构造选项；4.0.5 无 setEnableContentScroll 也无读回 ⇒ 重建",
   // ——— 必填构造参数（与 position / content 同理）———
   bounds:
     "Rectangle 的 bounds 是**必填**构造参数（`new Rectangle(bounds, opts)`）；" +
@@ -1323,9 +1323,9 @@ export const OVERLAY_REVERT_RATIONALE = {
     "GroundOverlay 的 type（图片 / 视频 / canvas 渲染类型）只有构造选项，决定内容如何被解释，" +
     "实例上无 setter ⇒ 重建",
   displayOnMinLevel:
-    "GroundOverlay 的 displayOnMinLevel 只有构造选项（4.0.4 无对应 setter / getter）⇒ 重建",
+    "GroundOverlay 的 displayOnMinLevel 只有构造选项（4.0.5 无对应 setter / getter）⇒ 重建",
   displayOnMaxLevel:
-    "GroundOverlay 的 displayOnMaxLevel 只有构造选项（4.0.4 无对应 setter / getter）⇒ 重建",
+    "GroundOverlay 的 displayOnMaxLevel 只有构造选项（4.0.5 无对应 setter / getter）⇒ 重建",
   autoCenter:
     "**不是 SDK 属性**：GroundOverlay.autoCenter 是本库的组件侧语义（按显示区域居中地图），" +
     "走 afterMount 里的 map.setViewport ⇒ 不存在「值消失」，落点无意义",
@@ -1338,7 +1338,7 @@ export const OVERLAY_REVERT_RATIONALE = {
     "SDK 默认是「空内容」，无从构造一个「默认 url」⇒ 重建",
   properties:
     "CustomOverlay 的 properties 是传给业务渲染的开放字典；默认是「空字典」，" +
-    "实例上无 getter（4.0.4 只在 CustomOverlay 上声明了带 point/pixel 的事件，没有读回）⇒ 重建",
+    "实例上无 getter（4.0.5 只在 CustomOverlay 上声明了带 point/pixel 的事件，没有读回）⇒ 重建",
   topFillColor:
     "Prism 的 topFillColor 有 getTopFillColor，但返回当前值而非 SDK 默认色 ⇒ 重建",
   topFillOpacity:
@@ -1389,7 +1389,7 @@ export interface OverlayDriver {
   /**
    * 追加一条菜单项（`"-"` = 分隔线）。
    *
-   * `options` 对应官方 `MenuItemOptions`（`@baidumap/jsapi-v4-types@4.0.4` 的
+   * `options` 对应官方 `MenuItemOptions`（`@baidumap/jsapi-v4-types@4.0.5` 的
    * `context-menu/MenuItemOptions.d.ts`）：只有 `width` 与 `id` 两个键，两者都**只在构造期**生效
    * （`MenuItem` 实例上没有 `setWidth` / `setId`）。因此调用方要么在构造时给全，要么重建菜单。
    */
@@ -1410,7 +1410,7 @@ export interface OverlayDriver {
    * 把右键菜单挂到目标上。
    *
    * **目标只支持 `map` 与 `marker`**（M5-CUSTOM-MENU / issue #33）：
-   * - `map` ⇒ `map.addContextMenu(menu)`：官方 4.0.4 的 `core/Map.d.ts` 有声明（签名只有一个
+   * - `map` ⇒ `map.addContextMenu(menu)`：官方 4.0.5 的 `core/Map.d.ts` 有声明（签名只有一个
    *   参数，**没有**目标参数），右键地图时打开；
    * - `marker` ⇒ `marker.addContextMenu(menu)`：**运行时扩展**（类型包只在 `Map` 上声明，
    *   真实 4.0 的 `Marker` 上有且可用，实测读数见 ADR `2026-09-19-custom-overlay-and-context-menu`），

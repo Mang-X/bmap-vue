@@ -9,7 +9,7 @@
  *
  * ## 名字从哪来
  *
- * **上游权威清单**：`@baidumap/jsapi-v4-types@4.0.4` 的 `core/MapEvent.d.ts` 声明了
+ * **上游权威清单**：`@baidumap/jsapi-v4-types@4.0.5` 的 `core/MapEvent.d.ts` 声明了
  * 「地图事件名称到事件对象类型的完整映射表」（41 个键），`core/Map.d.ts` 的
  * `addEventListener<K extends keyof MapEventMap>` 直接消费它。本表 `declared: true` 的条目
  * 与那份清单**逐键相等**，由 `map-event-catalog.test.ts` 直接解析上游 `.d.ts` 文本比对

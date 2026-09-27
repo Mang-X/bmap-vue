@@ -7,7 +7,7 @@ import type { CityListCommandApi } from "../../driver/types/controls";
 /**
  * 城市切换的结果（官方 `CityListControlChangeResult` 的领域投影）。
  *
- * 逐字段取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `control/CityListControlOptions.d.ts`：
+ * 逐字段取自 `@baidumap/jsapi-v4-types@4.0.5` 的 `control/CityListControlOptions.d.ts`：
  * `city: string` / `code: string | number` / `title?: string` / `uid?: string` /
  * `point?: Point | ''` / `level?: number`。
  *

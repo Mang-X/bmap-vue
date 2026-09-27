@@ -353,20 +353,72 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
     }
   });
 
-  it("polygon / polyline：setOpacity **不登记**（声明里没有；与 PointLayer 同一裁决）", () => {
-    // live 实测（case 3b，2026-09-27）：两个类的 `setOpacity` 在运行时都是 `function`。
-    // 但官方**声明**里没有它（`PolygonLayer.d.ts:203-218` / `PolylineLayer.d.ts:235-250`
-    // 的「显示属性」一组只有 visible / zIndex / renderStage / refCenter）。
+  it("polyline：setOpacity **登记**（声明里没有，但 live 像素读数证明它可观测地生效）", () => {
+    // 官方**声明**里没有它（`PolylineLayer.d.ts:235-250` 的「显示属性」一组只有
+    // visible / zIndex / renderStage / refCenter）——所以这一条是**运行时依据**的登记，
+    // 与 `cluster` / `heatmap` / `track-line` 那几条「按 4.0.5 声明登记」不同类。
     //
-    // 跟随 #165 对**形状完全相同**的 `PointLayer` 做过的裁决（它的 `setOpacity` 同样是
-    // 「声明没有、运行时有」⇒ 不登记）：官方没承诺的成员不进门禁——否则一个版本的
-    // 运行时行为变化就会让本库的契约跟着漂。
+    // 那它凭什么进登记面？判据是**可观测地生效**，而「生效」是**实测**出来的
+    // （2026-09-27 两次独立 live 复跑，读数一致）：一条 `strokeWeight: 20` 的纯蓝折线，
+    // `preserveDrawingBuffer` + `readPixels` 数哨兵色像素——
+    // `setOpacity` 走 1→0→1→0→1 得 **4229 → 0 → 4229 → 0 → 4229**，
+    // `setOptions({opacity})` 走 0→1 得 **0 → 4229**。可逆、重复一致。
     //
-    // ⚠️ 代价要说准：`PolylineLayerOptions.opacity`（`:131` @default 1）是**声明的**选项，
-    // 但它只能经 `setOptions` 整袋下发（`style` prop），没有字段级 setter 的入口。
-    for (const kind of ["polygon", "polyline"] as const) {
-      expect(layers.supports(kind, "setOpacity"), `${kind} 不得登记 setOpacity`).toBe(false);
-    }
+    // ⚠️ 本条**只**对折线族成立。它原先与 `polygon` 共用一条「两族同处置」的注释，
+    // 那个前提被同一次复跑推翻（见下面那条）——**同族不等于同面**。
+    expect(layers.supports("polyline", "setOpacity"), "polyline 登记 setOpacity").toBe(true);
+
+    const layer = layers.create("polyline");
+    layers.setOpacity(layer, 0.4);
+    const raw = layer.raw as unknown as { opacity: number; callLog: string[] };
+    expect(raw.callLog, "应当真的调到 setOpacity").toContain("setOpacity");
+    expect(raw.opacity).toBeCloseTo(0.4);
+    // 越界夹到 [0,1]（live 实测 `setOpacity(5)` → `getOpacity() === 1`）
+    layers.setOpacity(layer, 5);
+    expect(raw.opacity).toBe(1);
+    layers.setOpacity(layer, -1);
+    expect(raw.opacity).toBe(0);
+  });
+
+  it("polygon：setOpacity **不登记**——在位、读回也活，但**对渲染不生效**", () => {
+    // 与折线族**形状完全相同**（声明没有、运行时 `proto` 与 `inst` 都为 `true`、
+    // `setOpacity(0.25)` → `getOpacity() === 0.25`），处置却**相反**——差别只在
+    // 「有没有接到渲染上」，而那一条**只能靠像素读**：
+    //
+    // 盖满可视范围的纯蓝面，哨兵像素计数在
+    //   `setOpacity` 1→0→1、`setOptions({opacity})` 1→0→1、构造期 `opacity: 0`
+    // 这**五态**上全部是 **148243**（一遍不多一遍不少）。
+    // 测量通道是活的（同一次运行里 `setVisible(false)` → 0、`fillOpacity: 0` → 0、
+    // 换色 → 0），所以同值**不是**「量不出来」。
+    //
+    // ⇒ 它是「present-but-ineffective」那一类：`getOpacity()` 读得回来只说明 setter 与
+    // getter 共用同一份状态，**没有任何一条路径把它接到渲染上**。登记它等于开一个
+    // 「调用成功但画面不变」的面——比假支持更难排查，因为它不报错。
+    expect(
+      layers.supports("polygon", "setOpacity"),
+      "PolygonLayer 的 setOpacity 可读回但不渲染，不得登记",
+    ).toBe(false);
+    const layer = layers.create("polygon");
+    expect(() => layers.setOpacity(layer, 0.4)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
+  });
+
+  it("polygon 的选项表**没有** `opacity` 这一项（与 polyline 不同族的地方之一）", () => {
+    // 这条独立于上面那条：即使面族的 `setOpacity` 生效，`<PolygonLayer>` 也没有图层级
+    // 透明度的**声明入口**。逐条读过 `visualization/PolygonLayer.d.ts` 的选项表：
+    // fillColor / fillOpacity / strokeColor / strokeWeight / strokeOpacity / fillTextureUrl /
+    // fillTextureSize / fillTextureAlphaOnly / data / idKey / enablePicked / mouseStyleChange /
+    // pickTolerance / pickThrough / visible / zIndex / minZoom / maxZoom / referCenter /
+    // renderStage——**没有 `opacity`**（`PolylineLayer.d.ts:131` / `TextLayer.d.ts:179` 有）。
+    // 替身按声明建模，因此替身经 `setOptions` 收到的 `opacity` 不会进 options 袋。
+    const layer = layers.create("polygon");
+    layers.setStyle(layer, { opacity: 0.5 });
+    const raw = layer.raw as unknown as { options: Record<string, unknown> };
+    // 替身是**整袋透传**（不替上游过滤，见 `normalizeOptionsBag` 的注释），所以这条断言
+    // 断言的是「Driver 不会因为这一条而给 `<PolygonLayer>` 开一个图层级入口」，
+    // 而不是「袋里会被过滤掉」——后者是上游 `setOptions` 自己的事。
+    expect(raw.options).toHaveProperty("opacity");
   });
 
   it("polygon / polyline：拾取开关落到 setEnablePicked（不是 setBaseOptions）", () => {
@@ -706,11 +758,61 @@ const OPERATION_MEMBERS_BY_KIND: Readonly<
   text: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
 };
 
+/**
+ * 「运行时有、声明没有」的**登记豁免**——`操作面 ↔ 声明` 门禁的**唯一**例外表。
+ *
+ * #165 收口时确立的口径（取代原先「未声明成员一律不登记」）：
+ *
+ * > 判据是**可观测地生效**，不是「成员在不在」，也不是「声明有没有写」。
+ *
+ * 三种形状必须分开处置——把它们混成一条正是本门禁原先写错的地方：
+ *
+ * | 形状 | 例子 | 处置 |
+ * | --- | --- | --- |
+ * | 声明有、运行时**无** | `PolygonLayer#hitTest` | 不登记（放开门面 = 假支持） |
+ * | 运行时在、但**不生效** | `PolygonLayer#setOpacity` | 不登记（见下） |
+ * | 运行时有、**且生效** | `PolylineLayer#setOpacity` | **登记**（本表） |
+ *
+ * ⚠️ 入表条件是**三条全中**，缺一条都不许加：
+ *
+ * 1. 官方 `.d.ts` 里确实**没有**这个名字（由本门禁本身反证）；
+ * 2. live 读数证明它**可观测地生效**（改调用之后画布像素真的会变），
+ *    而不是仅「`getOpacity()` 读得回来」——setter 与 getter 共用状态时读回是**必然**的，
+ *    零信息量；
+ * 3. live 读数**可复现**（本表每条至少两次独立运行读数一致）。
+ *
+ * 每条都必须写清证据。没有证据支撑的「运行时在」是本轮审计推翻过的那类结论。
+ */
+const RUNTIME_ONLY_REGISTERED: Readonly<
+  Partial<Record<NativeLayerKind, readonly (readonly [string, string])[]>>
+> = {
+  // `PolylineLayer`：`strokeWeight: 20` 的纯蓝折线，`preserveDrawingBuffer` + `readPixels`
+  // 数哨兵像素。`setOpacity` 1→0→1→0→1 = 4229 → 0 → 4229 → 0 → 4229；
+  // `setOptions({opacity})` 0→1 = 0 → 4229。可逆、重复一致（2026-09-27 两次独立复跑）。
+  //
+  // 对照组：同一次运行里面族的同一成员**五态全同值** ⇒ 面族不豁免。这两族**同族不同面**，
+  // 所以它们不能共用一条处置（原先正是共用的，那条注释的前提已被推翻）。
+  polyline: [["setOpacity", "setOpacity"]],
+};
+
 function operationMembersFor(
   kind: NativeLayerKind,
   operation: NativeLayerOperation,
 ): readonly string[] {
   return OPERATION_MEMBERS_BY_KIND[kind]?.[operation] ?? OPERATION_MEMBERS[operation];
+}
+
+/** `(kind, operation)` → 落在哪些 SDK 成员上；豁免表把「声明里没有」的那几条**排除**掉。 */
+function enforcedMembersFor(
+  kind: NativeLayerKind,
+  operation: NativeLayerOperation,
+): readonly string[] {
+  const all = operationMembersFor(kind, operation);
+  const waived = (RUNTIME_ONLY_REGISTERED[kind] ?? [])
+    .filter(([op]) => op === operation)
+    .map(([, member]) => member);
+  if (waived.length === 0) return all;
+  return all.filter((member) => !waived.includes(member));
 }
 
 /**
@@ -776,39 +878,101 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
       const declared = declaredMembersOf(ctor, DECLARED_SUBDIR[kind] ?? "layer");
       for (const operation of OPERATIONS) {
         if (!layers.supports(kind, operation)) continue;
-        for (const member of operationMembersFor(kind, operation)) {
+        for (const member of enforcedMembersFor(kind, operation)) {
           expect(
             declared,
-            `${kind}(${ctor}).${operation} 落在 ${member}() 上，而官方声明里没有它`,
+            `${kind}(${ctor}).${operation} 落在 ${member}() 上，而官方声明里没有它` +
+              `（若它确实运行时有且生效，须显式登记进 RUNTIME_ONLY_REGISTERED 并附证据）`,
           ).toContain(member);
         }
       }
     }
   });
 
-  it("polygon / polyline：登记面里的每一条都**逐条**在官方声明里（含样式与拾取落点）", () => {
-    // 这条是 #166 的**核心**门禁：两个新 kind 的操作表**只能**引用官方声明过的成员。
-    // 特别地，它们**不得**登记 `setOpacity`——两族的「显示属性」一组里没有它
-    // （`PolygonLayer.d.ts:203-218` / `PolylineLayer.d.ts:235-250` 逐条列了
-    // visible / zIndex / renderStage / refCenter）。live 探针读到运行时**有**
-    // `setOpacity`（case 3b，2026-09-27），但仓库的口径是「不把**未声明**成员当契约」，
-    // #165 已经为**形状完全相同**的 `PointLayer` 做过这个裁决（它的 `setOpacity`
-    // 同样是「声明没有、运行时有」⇒ `supports()` 回答 `false`，见上面那条用例）。
-    // 跟随既有裁决，而不是给同一件事开两个例外。
+  it("polygon / polyline：登记面里的每一条都在官方声明里，**例外逐条列在豁免表上**", () => {
+    // 这条是 #166 的**核心**门禁：两个新 kind 的操作表**默认**只能引用官方声明过的成员。
+    //
+    // ⚠️ **`setOpacity` 的处置是「按族不同」的**（2026-09-27 收口更正）。原先这里断言
+    // 「两族都不得登记」，依据是「未声明成员一律不当契约」+「跟随 PointLayer 的同一裁决」。
+    // 那条推理的前提经 live 复跑**推翻**：判据不是「声明有没有写」，是**可观测地生效**。
+    //
+    // - `PolylineLayer#setOpacity`：声明没有，但像素读数证明它生效（4229 ⇄ 0，可逆重复一致）
+    //   ⇒ **登记**，走 `RUNTIME_ONLY_REGISTERED` 这条**唯一**的豁免通道。
+    // - `PolygonLayer#setOpacity`：声明没有，**且不生效**（五态全同值，而同一次运行里
+    //   `fillOpacity: 0` / `setVisible(false)` 都能归零 ⇒ 测量通道是活的）⇒ 不登记。
+    // - `PointLayer#setOpacity`：声明没有，本库**无**生效取证 ⇒ 仍然不登记。
+    //
+    // 三者的**在位性读数完全一样**（`proto` / `inst` 都 true）。所以这一条**必须**断言
+    // 三者被分成三类——只断言「不登记」会把这个区别重新抹掉，而那正是本轮的错误。
     for (const [kind, ctor] of [
       ["polygon", "PolygonLayer"],
       ["polyline", "PolylineLayer"],
     ] as const) {
       const declared = declaredMembersOf(ctor, "visualization");
       expect(
-        layers.supports(kind, "setOpacity"),
-        `${kind}.setOpacity：声明里没有它，不当契约（与 point 一致）`,
-      ).toBe(false);
-      // 反向：本票**确实**登记的那几条，逐条要在声明里
+        declared,
+        `${ctor} 的声明里确实**没有** setOpacity（豁免的前提，#165 收口时复核过）`,
+      ).not.toContain("setOpacity");
+      // 反向：本票登记的那几条，逐条要在声明里（豁免表里那些除外）
+      for (const operation of OPERATIONS) {
+        if (!layers.supports(kind, operation)) continue;
+        for (const member of enforcedMembersFor(kind, operation)) {
+          expect(declared, `${kind}.${operation} → ${member}()`).toContain(member);
+        }
+      }
+    }
+
+    // 三类的划分本身要钉住——这三条是本轮结论的**全部**内容
+    expect(
+      layers.supports("polygon", "setOpacity"),
+      "面族：声明无 + 实测不生效 ⇒ 不登记",
+    ).toBe(false);
+    expect(
+      layers.supports("polyline", "setOpacity"),
+      "折线族：声明无 + 实测生效 ⇒ 登记（豁免表）",
+    ).toBe(true);
+    expect(
+      layers.supports("point", "setOpacity"),
+      "PointLayer：声明无 + 本库无生效取证 ⇒ 仍不登记",
+    ).toBe(false);
+  });
+
+  it("豁免表本身是白名单：入表的必须**确实没登记、且确实没声明**", () => {
+    // 反向门禁（免得豁免表变成一潭死水）。表里每一条都必须**同时**满足两个方向：
+    //
+    // 1. 对应的操作**真的登记了**——否则有人移出豁免表却忘了改 descriptor，这条要红；
+    // 2. 落点成员**真的没在声明里**——给一个已声明的成员开豁免是**零效果的死条目**，
+    //    而它会让上面那道门禁**真的漏掉**一次「操作表引用了未声明成员」而不报。
+    //    （这一条是被变异验证逼出来的：往表里塞一条 `["setVisible", "setVisible"]`
+    //     在补上它之前**全绿通过**——`setVisible` 声明里有、也登记着，两道门禁都看不见它。）
+    for (const [kind, entries] of Object.entries(RUNTIME_ONLY_REGISTERED)) {
+      for (const [operation, member] of entries) {
+        expect(
+          layers.supports(kind as NativeLayerKind, operation as NativeLayerOperation),
+          `${kind}.${operation} 在豁免表里，但 descriptor 没有登记它——豁免表该删掉这一条`,
+        ).toBe(true);
+        const ctor = DECLARED_CTORS.find(([k]) => k === kind)?.[1];
+        expect(ctor, `豁免表里的 ${kind} 应当是个有类声明的 kind`).toBeDefined();
+        expect(
+          declaredMembersOf(ctor!, DECLARED_SUBDIR[kind as NativeLayerKind] ?? "layer"),
+          `${kind}.${operation} → ${member}() 官方**声明里有**它，豁免是死条目，删掉`,
+        ).not.toContain(member);
+      }
+    }
+    // 反过来：声明里**没有**的成员若被登记，要么在豁免表里，要么这道门禁就该红。
+    for (const [kind, ctor] of DECLARED_CTORS) {
+      const declared = declaredMembersOf(ctor, DECLARED_SUBDIR[kind] ?? "layer");
+      const waived = new Set(
+        (RUNTIME_ONLY_REGISTERED[kind] ?? []).map(([, member]) => member as string),
+      );
       for (const operation of OPERATIONS) {
         if (!layers.supports(kind, operation)) continue;
         for (const member of operationMembersFor(kind, operation)) {
-          expect(declared, `${kind}.${operation} → ${member}()`).toContain(member);
+          if (declared.includes(member)) continue;
+          expect(
+            waived.has(member),
+            `${kind}(${ctor}).${operation} → ${member}() 声明里没有，却既不在豁免表里、也没被上面的门禁拦住`,
+          ).toBe(true);
         }
       }
     }

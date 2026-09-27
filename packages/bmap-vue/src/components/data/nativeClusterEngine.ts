@@ -1,7 +1,7 @@
 /**
  * `native` 聚合引擎（M6-POINT-CLUSTER / issue #35）—— `MarkerCluster` 的**默认**路径
  *
- * 落地在官方扩展 API `BMap.ClusterLayer`（运行时存在、`@baidumap/jsapi-v4-types@4.0.4` 无类声明、
+ * 落地在官方扩展 API `BMap.ClusterLayer`（运行时存在、`@baidumap/jsapi-v4-types@4.0.5` 无类声明、
  * 可视化实现按需异步注入）。它是本票「原生层是默认路径」的落点。
  *
  * ## 实测依据（`scripts/probe-native-point-cluster.mts`，真实 AK + headless Chrome）

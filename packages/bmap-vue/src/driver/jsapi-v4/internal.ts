@@ -252,7 +252,7 @@ export function createMapTargetResolver(options: {
 type ExpectTrue<T extends true> = T;
 
 /**
- * `@baidumap/jsapi-v4-types@4.0.4` 的全局 `BMap` 必须提供 Driver 的全部必需成员。
+ * `@baidumap/jsapi-v4-types@4.0.5` 的全局 `BMap` 必须提供 Driver 的全部必需成员。
  *
  * 上游类型包移除或改名这些成员时，`pnpm typecheck:package`（`skipLibCheck: false`）会在
  * **编译期**失败，而不是等到运行时才发现 `BMap.Size is not available`。

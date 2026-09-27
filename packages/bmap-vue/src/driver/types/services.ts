@@ -30,7 +30,7 @@ export interface AutocompleteOptions {
 /**
  * 已创建 Autocomplete 实例的可更新选项。
  *
- * `undefined` = **不改这一项**（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.4
+ * `undefined` = **不改这一项**（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.5
  * 声明里都不接受 `null`，用 `null` 只会得到一个 SDK 侧的类型错误）。
  *
  * 注意「恢复默认」是**调用方**的语义，不是本接口的：`<Autocomplete>` 会把 prop 变回 `undefined`
@@ -569,7 +569,7 @@ export interface RouteTaxiFare {
  * 一条驾车 / 步行 / 骑行方案（官方 `RoutePlan` 的领域投影）。
  *
  * `toll` / `tollDistance` 取自官方那句**只在 `DrivingRoutePlan` 接口里声明**的
- * `getToll()` / `getTollDistance()`：4.0.4 的 `DrivingRouteResult#getPlan()` 返回类型写的是
+ * `getToll()` / `getTollDistance()`：4.0.5 的 `DrivingRouteResult#getPlan()` 返回类型写的是
  * `RoutePlan`（不含这两个成员），但 `DrivingRoutePlan` 接口确实在同一个类型包里声明了它们。
  * 因此这里**可选读取**（成员缺失 ⇒ `null`），不 augmentation、不告警——如实表达「这次没拿到」。
  */
@@ -678,7 +678,7 @@ export type TransitRouteResult = RouteResult<TransitRoutePlan>;
  * 驾车策略（官方 `BMAP_DRIVING_POLICY_*`）。
  *
  * **既是类型也是值**，与 TS 枚举同形：调用方不必写魔法数字，也不必去读全局常量。
- * 与官方 4.0.4 声明的逐成员对齐由 `driver/jsapi-v4/routes.test.ts` 从上游 `.d.ts` 解析成员后
+ * 与官方 4.0.5 声明的逐成员对齐由 `driver/jsapi-v4/routes.test.ts` 从上游 `.d.ts` 解析成员后
  * 逐项断言（名字配错数字是类型层拦不住的，只有这条断言能拦）。
  */
 export const DrivingPolicy = {
@@ -836,7 +836,7 @@ export interface RouteRenderOptions {
   /**
    * 结果列表容器（元素或 id）。
    *
-   * 4.0.4 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
+   * 4.0.5 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
    * `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
    * **真实 AK 实测驾车有效**（容器 DOM `0 → 2417` 字符，`clearResults()` 后回 `0`）⇒ 那句
    * 「驾车无效」是过时描述。本库因此**原样转发**：不告警，也不替 SDK 承诺有效或无效
@@ -1090,7 +1090,7 @@ export interface ServiceInvocationDriver {
    * 在飞调用显式失败；② 解绑 Driver 侧订阅；③ 走**公开的** `clearResults()` 收回已画出的路线与标注
    * ——这一步**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
    *
-   * 官方四个路线服务都**没有** `dispose()`（4.0.4 声明里是 `clearResults` / `setPolylineStyle` /
+   * 官方四个路线服务都**没有** `dispose()`（4.0.5 声明里是 `clearResults` / `setPolylineStyle` /
    * `getStatus` …），所以「有没有释放入口」这件事与 `LocalSearch` 同档：实例本身随 GC，真正的资源
    * 是它**交付出去的结果**（地图上的折线与标注、写进 `panel` 的 DOM），由 `clearResults()` 销账。
    */
@@ -1134,7 +1134,7 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
    * 释放本地检索实例（幂等）。
    *
    * ① 停止接受该实例的业务调用并**把在飞调用显式失败**；② 解绑 Driver 侧资源（EventDriver 订阅）；
-   * ③ **清掉 SDK 侧已画出的结果**——官方 `LocalSearch` **没有** `dispose()`（`4.0.4` 的声明里只有
+   * ③ **清掉 SDK 侧已画出的结果**——官方 `LocalSearch` **没有** `dispose()`（`4.0.5` 的声明里只有
    * `clearResults` / `clearSelected` / `setSearchCompleteCallback` / `getStatus` …），因此这一步走
    * 公开的 `clearResults()`：它同时清掉地图上的标注与结果面板。这一步**只有成功才记账**，抛错时
    * 调用方收到错误，句柄仍保持不可用，再次调用会**重试**未完成的清理。

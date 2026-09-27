@@ -126,7 +126,7 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
     /**
      * 命令面（#165 Class 3 / TASK 2a）。
      *
-     * 逐条依据（`@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/Marker.d.ts`）：
+     * 逐条依据（`@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/Marker.d.ts`）：
      *
      * | 暴露 | 官方声明 | 为什么不能走 prop |
      * | --- | --- | --- |
