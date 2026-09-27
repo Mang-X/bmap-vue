@@ -5,6 +5,7 @@ import {
   jsapiV4PanoramaOf,
   panoramaContextKey,
 } from "../../core/panorama";
+import { PANORAMA_EVENT_EMIT_ALIASES } from "../../core/panorama/panoramaEventCatalog";
 import { BMapError } from "../../core/errors/BMapError";
 import { resolveInternalMapContext } from "../../composables/resolveMapContext";
 import type { Point } from "../../driver/types/geometry";
@@ -82,6 +83,24 @@ const emit = defineEmits<{
    * **不补默认值**（`heading ?? 0` 会把「没给方位」与「正北」混成同一个数）。
    */
   linksChange: [links: PanoramaLink[]];
+  /**
+   * 道路链接**显隐状态**变化（官方 `links_visible_changed: { value: boolean }`）。
+   *
+   * **载荷是裸 `boolean`**，不是官方那个 `{ value }` 包装——与 `visiblePoiTypeChanged`
+   * 投影成裸字面量同一手法：官方包装对象是 SDK 的形状，不是本库的领域形状。
+   *
+   * ⚠️ **与 `linksChange` 是两件事，名字相近但语义不同**：
+   * - `linksChange`（官方 `links_changed`）= **列表**变了，载荷是回读 `getLinks()` 补的
+   *   `PanoramaLink[]`；
+   * - 本条 = **显隐**变了，载荷是官方自己声明的 `{ value: boolean }`。
+   *
+   * 此前本库把官方这条判为「不加」，理由是「它由官方自带控件（`linksControl`）的显隐驱动，
+   * 而本库没有读回入口」。该理由**不成立**：载荷 `{ value: boolean }` 是官方**声明过的**、
+   * **自足**的（不需要回读任何 getter），因此它与同族另外两条一样有一条**可核对**的
+   * 消费路径——「道路指示现在是不是亮着」。`linksControl` 本身仍是本库已暴露的构造选项，
+   * 业务可以用它把控件关掉，但**关掉之后控件不再自己管显隐**这条信息正是本事件的内容。
+   */
+  linksVisibleChanged: [visible: boolean];
 
   /* --- issue #168 item 3：官方 `PanoramaEventMap` 的 23 条里，此处新增 13 条 ---
    *
@@ -197,6 +216,36 @@ const emit = defineEmits<{
    * 因此本库不声明这条事件。裁决与取舍的完整记录见
    * `docs/zh-CN/contributing/168-remaining-surface.md`。
    */
+
+  /* --- issue #165 TASK 6：SDK 拼写的**兼容别名**（`PANORAMA_EVENT_EMIT_ALIASES`）---
+   *
+   * 用户拿到事件名的来源有**两份且拼写不同**：JSAPI 声明的 `PanoramaEventMap` 键是
+   * snake_case（`link_click`），官方 React 参考的 `on*` props 是 camelCase（`onLinkClick`）。
+   * 两种拼写都必须能绑上——与 `<Map>` 的 `MAP_EVENT_EMIT_ALIASES` 同一口径。
+   *
+   * ⚠️ **别名必须在这里声明**（与 `MapEventEmits` 的同一条硬约束）：Vue 只把**已声明**的
+   * 事件名交给 `emit()` 匹配，未声明的名字会落到 `attrs`，`emit()` 唤不醒它（**静默失败**——
+   * 监听写对了却什么都不发生）。因此这些键与它们的规范名成对出现，载荷完全相同。
+   *
+   * 载荷类型逐字复用对应规范名的类型（不是另写一份），因此「别名与规范名载荷不一致」
+   * 在类型上就不可能发生。哪些算别名、哪些是**改名**（`load` / `error`）不进这张表，
+   * 理由见 `core/panorama/panoramaEventCatalog.ts` 的文件头。
+   */
+  position_changed: [position: Point | null];
+  pov_changed: [pov: PanoramaPov | null];
+  zoom_changed: [zoom: number | null];
+  id_changed: [id: string | null];
+  scene_type_changed: [sceneType: PanoramaSceneType | null];
+  links_changed: [links: PanoramaLink[]];
+  links_visible_changed: [visible: boolean];
+  link_click: [e: PanoramaLinkClickEvent];
+  pov_changed_end: [pov: PanoramaPov | null];
+  scene_change_end: [sceneType: PanoramaSceneType | null];
+  size_changed: [];
+  overlay_add: [];
+  overlay_remove: [];
+  overlays_clear: [];
+  visible_poi_type_changed: [poiType: PanoramaPoiType | null];
 }>();
 
 /** 画面交互事件载荷（官方 `MouseEvent | TouchEvent` 的收窄投影，只留 `type`）。 */
@@ -212,6 +261,30 @@ export interface PanoramaLinkClickEvent {
 }
 
 const containerRef = ref<HTMLElement | null>(null);
+
+/**
+ * 动态事件名的 `emit`（issue #165 TASK 6）。
+ *
+ * `emit` 的键是静态类型，别名要从 `PANORAMA_EVENT_EMIT_ALIASES` 里**按数据**取，
+ * 因此动态事件名在这里集中收窄一次（不让 `as` 扩散到其余代码）——与 `<Map>` 的
+ * `emitDynamic` 同一手法。
+ */
+const emitDynamic = emit as unknown as (name: string, ...args: unknown[]) => void;
+
+/**
+ * 发一个事件：**先发对外名，再发它的 SDK 拼写别名**（别名为空时只发一次）。
+ *
+ * 与 `<Map>` 的 `forwardMapEvent()` 同一形状：组件里没有第二份兼容代码。
+ *
+ * 实参用 rest 转发而不是「永远带一个 payload」：`sizeChanged` / `overlayAdd` 等是**无载荷**
+ * 事件，`emit("sizeChanged", undefined)` 会让监听回调收到一个 `undefined` 实参——
+ * 与 `emit("sizeChanged")` 对回调而言不等价。
+ */
+function forward(name: string, ...args: unknown[]): void {
+  emitDynamic(name, ...args);
+  for (const alias of PANORAMA_EVENT_EMIT_ALIASES[name] ?? []) emitDynamic(alias, ...args);
+}
+
 // 全景只需要 Client：`resolveInternalMapContext()` 在 `<Map>` 子树里给地图 context、在 `<BMapProvider>`
 // 子树里给 client-only 适配器；两者都能满足 `whenReady()`（后者 `map` 为 null）。
 const context = createPanoramaContext({ mapContext: resolveInternalMapContext() });
@@ -285,17 +358,38 @@ function applyControlled(target: ActiveViewer): void {
 /**
  * 事件订阅：官方 `*_changed` 事件不带值，载荷由回读 getter 补上；
  * 订阅走 Facet 自己的**原样**通道（`driver.on`），不经过 Map 事件的归一化。
+ *
+ * 全部 emit 经 `forward()`：它发规范名 + SDK 拼写别名（issue #165 TASK 6）。
+ * 别名表里没有的（`load` / `error` / 五个逐字相同的交互事件）只发一次。
  */
 function subscribe(target: ActiveViewer): void {
   const { driver, viewer } = target;
   const scope = context.resources;
-  scope.add(driver.on(viewer, "position_changed", () => emit("positionChange", driver.getPosition(viewer))));
-  scope.add(driver.on(viewer, "pov_changed", () => emit("povChange", driver.getPov(viewer))));
-  scope.add(driver.on(viewer, "zoom_changed", () => emit("zoomChange", driver.getZoom(viewer))));
-  scope.add(driver.on(viewer, "id_changed", () => emit("idChange", driver.getId(viewer))));
-  scope.add(driver.on(viewer, "scene_type_changed", () => emit("sceneTypeChange", driver.getSceneType(viewer))));
+  scope.add(
+    driver.on(viewer, "position_changed", () =>
+      forward("positionChange", driver.getPosition(viewer)),
+    ),
+  );
+  scope.add(driver.on(viewer, "pov_changed", () => forward("povChange", driver.getPov(viewer))));
+  scope.add(driver.on(viewer, "zoom_changed", () => forward("zoomChange", driver.getZoom(viewer))));
+  scope.add(driver.on(viewer, "id_changed", () => forward("idChange", driver.getId(viewer))));
+  scope.add(
+    driver.on(viewer, "scene_type_changed", () =>
+      forward("sceneTypeChange", driver.getSceneType(viewer)),
+    ),
+  );
   // `links_changed` 不带值 ⇒ 回读 `getLinks()` 补载荷（与上面五个 `*_changed` 同一手法）
-  scope.add(driver.on(viewer, "links_changed", () => emit("linksChange", driver.getLinks(viewer))));
+  scope.add(
+    driver.on(viewer, "links_changed", () => forward("linksChange", driver.getLinks(viewer))),
+  );
+  // `links_visible_changed` 的载荷 `{ value: boolean }` 是官方**声明过且自足**的 ⇒ 不回读
+  scope.add(
+    driver.on(viewer, "links_visible_changed", (event: unknown) =>
+      forward("linksVisibleChanged", projectLinksVisible(event)),
+    ),
+  );
+  // ⚠️ 这两条是**改名**不是拼写别名（`dataload → load` / `pano_error → error`），
+  // 因此直接 `emit`、不走 `forward`。理由见 `PANORAMA_EVENT_RENAMED`。
   scope.add(driver.on(viewer, "dataload", (event: unknown) => emit("load", event)));
   scope.add(driver.on(viewer, "pano_error", (event: unknown) => emit("error", event)));
   // ---- issue #168 item 3：其余 13 条官方事件的订阅 ----
@@ -303,50 +397,55 @@ function subscribe(target: ActiveViewer): void {
   // 全部经 `driver.on` 的**原样**通道（与上面 8 条同一路径），差别只在**载荷怎么投影**：
   // 「回读 getter 补值」的三条（`pov_changed_end` / `scene_change_end`）与纯转发/收窄的其余条。
   //
-  // ⚠️ `destroy` 的订阅**在 scope 里**：scope 在 `context.dispose()` 时释放，而事件由
-  // `driver.destroy()` 派发——两者都在 `onUnmounted` 里，因此业务回调仍能收到它
-  // （`tests/behavior/panorama-events.test.ts` 的「销毁时派发一次」就是这条的断言）。
-  // 五个画面交互事件的**订阅名与 emit 名逐字相同**（上游事件名本来就没有分隔符），
-  // 因此一张表同时给出「订阅什么」与「emit 什么」。逐条展开而不是在循环里 `emit(name)`：
-  // `defineEmits` 的重载要求实参是**字面量键**，循环里的联合类型过不了这一关
-  // ——把展开写死，也让「哪五条是这一族」在源码里一眼可见。
-  scope.add(driver.on(viewer, "click", (e: unknown) => emit("click", projectInteraction(e, "click"))));
+  // 五个画面交互事件（`click` / `dblclick` / `touchstart` / `touchend` / `clickonroad`）
+  // 的**订阅名与对外名逐字相同**（上游事件名本来就没有分隔符）⇒ 别名表里没有它们，
+  // `forward()` 对它们只发一次。仍走 `forward` 而不是裸 `emit` 是为了「组件里没有第二份
+  // 兼容代码」这条不变量成立：将来某个交互事件上游加了分隔符，改的是**表**，不是这里。
   scope.add(
-    driver.on(viewer, "dblclick", (e: unknown) => emit("dblclick", projectInteraction(e, "dblclick"))),
+    driver.on(viewer, "click", (e: unknown) => forward("click", projectInteraction(e, "click"))),
+  );
+  scope.add(
+    driver.on(viewer, "dblclick", (e: unknown) =>
+      forward("dblclick", projectInteraction(e, "dblclick")),
+    ),
   );
   scope.add(
     driver.on(viewer, "touchstart", (e: unknown) =>
-      emit("touchstart", projectInteraction(e, "touchstart")),
+      forward("touchstart", projectInteraction(e, "touchstart")),
     ),
   );
   scope.add(
-    driver.on(viewer, "touchend", (e: unknown) => emit("touchend", projectInteraction(e, "touchend"))),
+    driver.on(viewer, "touchend", (e: unknown) =>
+      forward("touchend", projectInteraction(e, "touchend")),
+    ),
   );
   scope.add(
     driver.on(viewer, "clickonroad", (e: unknown) =>
-      emit("clickonroad", projectInteraction(e, "clickonroad")),
+      forward("clickonroad", projectInteraction(e, "clickonroad")),
     ),
   );
   scope.add(
-    driver.on(viewer, "link_click", (event: unknown) => emit("linkClick", projectLinkClick(event))),
+    driver.on(viewer, "link_click", (event: unknown) =>
+      forward("linkClick", projectLinkClick(event)),
+    ),
   );
   scope.add(
-    driver.on(viewer, "pov_changed_end", () => emit("povChangedEnd", driver.getPov(viewer))),
+    driver.on(viewer, "pov_changed_end", () => forward("povChangedEnd", driver.getPov(viewer))),
   );
   scope.add(
     driver.on(viewer, "scene_change_end", () =>
-      emit("sceneChangeEnd", driver.getSceneType(viewer)),
+      forward("sceneChangeEnd", driver.getSceneType(viewer)),
     ),
   );
   // `size_changed`：只报「变了」。官方没有尺寸字段、SDK 也没有读回入口 ⇒ 载荷为空
-  scope.add(driver.on(viewer, "size_changed", () => emit("sizeChanged")));
+  scope.add(driver.on(viewer, "size_changed", () => forward("sizeChanged")));
   // 覆盖物三兄弟：官方载荷是 raw `PanoramaLabel` / `PanoramaBaseEvent`，一律不投影
-  scope.add(driver.on(viewer, "overlay_add", () => emit("overlayAdd")));
-  scope.add(driver.on(viewer, "overlay_remove", () => emit("overlayRemove")));
-  scope.add(driver.on(viewer, "overlays_clear", () => emit("overlaysClear")));
+  scope.add(driver.on(viewer, "overlay_add", () => forward("overlayAdd")));
+  scope.add(driver.on(viewer, "overlay_remove", () => forward("overlayRemove")));
+  scope.add(driver.on(viewer, "overlays_clear", () => forward("overlaysClear")));
   scope.add(
     driver.on(viewer, "visible_poi_type_changed", (event: unknown) =>
-      emit("visiblePoiTypeChanged", projectPoiType(event)),
+      forward("visiblePoiTypeChanged", projectPoiType(event)),
     ),
   );
   // ⚠️ 官方还有 `destroy`，**刻意不订阅**（释放顺序与 ADR 2026-09-11 §6 冲突，
@@ -377,6 +476,23 @@ function projectInteraction(event: unknown, fallbackType: string): PanoramaInter
 function projectLinkClick(event: unknown): PanoramaLinkClickEvent {
   const raw = (event as { id?: unknown } | null)?.id;
   return typeof raw === "string" && raw.length > 0 ? { id: raw } : {};
+}
+
+/**
+ * `links_visible_changed` → 裸 `boolean`。
+ *
+ * 官方声明的载荷是 `{ value: boolean }`——**字段**才是那个布尔，事件对象本身没有别的内容。
+ * 与 `visiblePoiTypeChanged` 投影成裸字面量同一手法：不交出官方包装对象。
+ *
+ * ⚠️ **上游没给 `value` / 给了非 boolean 时归成 `false`，而不是 `undefined`**：
+ * 载荷类型是 `boolean`（非可空），塞 `undefined` 会让类型对调用方说谎；而这条事件的
+ * 全部语义就是「亮着 / 没亮着」这一个二值判断，「没给」与「false」在**没有读回入口**
+ * 的前提下只能落成同一个答案（这与 `getLinks()` 的空数组同源取舍，理由见
+ * `driver/types/panorama.ts` 的 `getLinks`）。
+ */
+function projectLinksVisible(event: unknown): boolean {
+  const raw = (event as { value?: unknown } | null)?.value;
+  return raw === true;
 }
 
 /**

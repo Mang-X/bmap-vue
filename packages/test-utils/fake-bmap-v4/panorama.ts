@@ -47,6 +47,15 @@ export class FakeV4Panorama extends FakeV4EventTarget {
    */
   links: Array<Record<string, unknown>> | undefined = []
   /**
+   * 道路链接**显隐**状态（官方 `links_visible_changed: { value: boolean }` 的那条事实）。
+   *
+   * 与上面的 `links` 分开建模，因为它们是**两件事**：`links` 是列表内容，本字段是
+   * 「这个列表现在亮不亮」。官方驱动它的是自带的道路指示控件（`linksControl`）——本库不镜像
+   * 那个控件的内部 UI，但**声明**了 `linksVisibleChanged` 事件（issue #165 TASK 7），
+   * 因此替身必须能真的把这条事件驱动出来（`setLinksVisible()`）。
+   */
+  linksVisible = true
+  /**
    * `capture()` 的回包（官方返回的 data URL 字符串）。
    *
    * `undefined` 建模官方那条「当前渲染器不支持截图时返回 undefined」——它**不是**异常，
@@ -105,6 +114,24 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     return this.links
   }
 
+  /**
+   * 测试驱动：切换道路链接的**显隐**状态（issue #165 TASK 7）。
+   *
+   * 官方这条事件的载荷是 `{ value: boolean }`——**自足**，不需要回读任何 getter
+   * （与 `links_changed` / `position_changed` 那一族「不带值、要回读」不同）。
+   * 这正是本库声明 `linksVisibleChanged` 的依据，因此替身必须能**真的**驱动它，
+   * 而不是让用例去手动 `emit('links_visible_changed', {...})` 绕过「谁触发它」这个问题。
+   *
+   * 值不变时**不派发**（与官方那条事件「状态变化后触发」一致）：让「值没变却收到事件」
+   * 这条假绿路径在替身层面就不存在。
+   */
+  setLinksVisible(visible: boolean): void {
+    this.callLog.push(`setLinksVisible:${visible}`)
+    if (this.linksVisible === visible) return
+    this.linksVisible = visible
+    this.emit('links_visible_changed', { value: visible })
+  }
+
   getSceneType(): 'street' | 'inter' {
     return this.sceneType
   }
@@ -140,12 +167,17 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.callLog.push(`setId:${id}`)
     this.id = id
     void options
-    // 官方在切换 id 后会派发 `id_changed`，且它的载荷**是一个字符串**（见
-    // `src/driver/types/panorama.ts` 的注释），而本替身的 `emit` 只建模对象载荷
-    // （对象会被展开成事件字段）。这里按现状转发并显式标注这个**建模缺口**：
-    // 现无消费方读取该载荷（`BPanorama` 的回调是 `() => emit("idChange", getId(viewer))`），
-    // 因此不去猜真实形状——要动它先取证，登记为已知缺口。
-    this.emit('id_changed', id as unknown as Record<string, unknown>)
+    // 官方在切换 id 后会派发 `id_changed`，且它的载荷**是一个字符串**（不是底座事件对象），
+    // 见 `driver/types/panorama.ts` 的 `on()` 注释。
+    //
+    // 本替身的 `emit()` 只建模**对象**载荷（`{type, ...payload}`），裸字符串进去会被展开成
+    // 一个空事件对象。真实形状在这里无关紧要——`<Panorama>` 的 `idChange` 回调是
+    // `() => forward("idChange", driver.getId(viewer))`，**回读 getter 而不读事件载荷**
+    // （官方声明的裸字符串与本库的读取面口径不同，见那条方法上的注释）。因此这里发一个
+    // **空**事件对象并把真实值留在 `this.id` 上：任何人若改成读事件载荷，替身会立刻暴露它
+    // （读到 `undefined` 而不是那个 id），这比用 `as unknown as Record` 硬塞一个形状不对的
+    // 载荷更安全——后者会让「读错了但看起来对」变成可能。
+    this.emit('id_changed')
   }
 
   setPosition(position: { lng: number; lat: number }): void {

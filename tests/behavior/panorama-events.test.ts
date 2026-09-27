@@ -24,9 +24,22 @@
  * | `size_changed` | **加** | 同上，回读 `getVisible()` 之外的容器尺寸不可得，但**事件本身是「容器变了」的唯一通知** ⇒ 投影成 `null` 载荷（不编尺寸） |
  * | `overlay_add` `overlay_remove` `overlays_clear` | **加** | 这是「`<PanoramaLabel>` 什么时候真的挂上/摘掉了」的**唯一**通知；本库的标注由子组件管理，没有别的观察面 |
  * | `destroy` | **不加** | 官方有声明，但本库 `dispose()` 的顺序是「**先解绑业务监听、再 `driver.destroy()`**」（ADR 2026-09-11 §6：SDK 在 destroy 期间**同步**派发时，回调不得打到已拆解状态上）。要听见它就得倒顺序 ⇒ 拿一个真实正确性风险换一句收尾信号，不划算。清理用 `onUnmounted` |
- * | `links_visible_changed` | **不加** | 载荷 `{value: boolean}` 看似可消费，但它由**官方自带**的道路指示控件（`linksControl`）的显隐驱动，而本库不镜像那个控件的内部 UI 状态（官方没有给读回入口）⇒ 加了就是「声明了却几乎永不触发」 |
+ * | `links_visible_changed` | **加**（#165 TASK 7 更正）| 载荷 `{value: boolean}` 是官方**声明过且自足**的（不需要回读 getter）⇒ 「道路指示现在亮不亮」是可核对的一条消费路径。原判「不加」，理由见文末「两处更正」 |
  * | `visible_poi_type_changed` | **加** | 载荷 `{visiblePOIType}` 可消费，且 `setPanoramaPoiType()` 是本库已暴露的写入口 ⇒ 写完能确认落没落 |
  * | `touchmove` | **不存在** | issue 点名了它，但**官方 `PanoramaEventMap` 里没有**（只有 `touchstart` / `touchend`）。按「d.ts 定存在与否」不暴露 |
+ *
+ * ## 两处本表已被 #165 后续更正
+ *
+ * 1. **`links_visible_changed` 由「不加」改为「加」**（TASK 7 → `linksVisibleChanged`）。
+ *    原判理由是「由官方自带控件（`linksControl`）的显隐驱动，而本库不镜像那个控件的内部
+ *    UI 状态（官方没有给读回入口）」——**「没有读回入口」与「该不该暴露」无关**：
+ *    官方载荷 `{ value: boolean }` 是**自足**的（不需要回读任何 getter），这与同族另外
+ *    两条「不带值、要回读」的事件判据完全相反。原判把「本库不镜像它」当成了「它没有可消费
+ *    的内容」，那是两件事。
+ * 2. **对外事件名有了 SDK 拼写别名**（TASK 6）。本文件此前只订阅 camelCase；现在
+ *    `link_click` / `links_changed` / … 这些官方键**同样能绑上**。判据与逐条理由见
+ *    `core/panorama/panoramaEventCatalog.ts`，门禁用例在
+ *    `tests/behavior/panorama-event-aliases.test.ts`。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -361,21 +374,9 @@ describe("Panorama 刻意不暴露的 destroy（官方有声明）", () => {
   });
 });
 
-/* ---------------------------------------------------------- 刻意不暴露的两条 */
+/* ---------------------------------------------------------- 刻意不暴露的事件 */
 
 describe("Panorama 刻意不暴露的事件", () => {
-  it("links_visible_changed：载荷由官方自带控件驱动，本库无读回入口 ⇒ 不声明", async () => {
-    const { wrapper, seen } = await mountPanorama();
-    const viewer = lastViewer();
-
-    viewer.emit("links_visible_changed", { value: true });
-    await settle();
-
-    expect(seen.some((entry) => entry.name === "links-visible-changed")).toBe(false);
-    wrapper.unmount();
-    await settle();
-  });
-
   it("touchmove：官方 PanoramaEventMap 里**没有**这个事件 ⇒ 不声明", async () => {
     const { wrapper, seen } = await mountPanorama();
     const viewer = lastViewer();
@@ -461,8 +462,12 @@ describe("Panorama 事件命名与既有事件不回归", () => {
   it("卸载后监听全部归零（新增的 13 条不得留下在飞的监听）", async () => {
     const { wrapper } = await mountPanorama();
     const viewer = lastViewer();
-    // 8 条既有 + 13 条新增 + 0（destroy 刻意不订阅）= 21
-    expect(viewer.getListenerCount(), "挂载后 21 条订阅都在").toBe(21);
+    // 8 条既有 + 13 条 #168 新增 + 1 条 `links_visible_changed`（#165 TASK 7）
+    // + 0（destroy 刻意不订阅）= 22
+    //
+    // ⚠️ **订阅条数不因别名而变**：#165 TASK 6 的别名是「同一个 SDK 订阅发两个名字」，
+    // 不是加一条订阅。因此这里仍是 22 而不是 44——双发发生在 emit 侧。
+    expect(viewer.getListenerCount(), "挂载后 22 条订阅都在").toBe(22);
 
     wrapper.unmount();
     await settle();
