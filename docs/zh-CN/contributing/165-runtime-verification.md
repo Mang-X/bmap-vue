@@ -188,6 +188,44 @@ SDK 已把中心钉住），不构成反证。
 ⚠️ 同类提醒：`animatedByDefault: false` 说的是**本环境读数**，不同渲染模式/性能下
 可能不同；因此文档里按「实测」而非「官方保证」措辞。
 
+## 更正三：官方 `Panorama` 事件名是 **snake_case**，本库是 camelCase
+
+官方 `panorama/PanoramaEvent.d.ts` 的 `PanoramaEventMap` 键**一律 snake_case**：
+
+    link_click / links_changed / links_visible_changed / pov_changed_end / scene_change_end
+    scene_type_changed / size_changed / visible_poi_type_changed / overlay_add /
+    overlay_remove / overlays_clear / clickonroad / position_changed / currentTarget / data…
+
+本库 `<Panorama>` 发的是 **camelCase**（`linkClick` / `povChangedEnd` / `linksChange` …）。
+这**不是**「库内既有不一致」，而是**与官方不一致**：事件名直接对应 SDK 的
+`addEventListener` 键，改成 camelCase 就失去与官方事件名的一一对应——照官方文档抄
+事件名的使用者会找不到。全仓 `toVueEventName` 的 kebab 转换对 `link_click` 产出
+`link-click`，与 camelCase 同样对不上。
+
+⇒ 应按官方 snake_case 对齐（破坏性变更，21 个事件名，须走 1.0 决策）。
+
+## 更正四：`links_visible_changed` 的载荷是**自足**的，未加的理由不成立
+
+官方声明：`links_visible_changed: { value: boolean }`（注释「道路链接显隐状态变化后触发」）。
+它**自带 `value`**，不需要任何 getter 读回。先前「官方控件内部状态无读回路径」那条理由
+只适用于 `getVisible` 那一类 **getter**，不适用于这个**事件**。
+
+⇒ 应加：与已实现的 `getLinks()` / `linksChange` 同族，缺它是真实的不一致。
+
+## 更正五：`huiyan-fe/vue-bmap` **没有 `Panorama` 组件**
+
+按 URL 核对（2026-09-27）：
+
+- `https://mapopen.bj.bcebos.com/vue-bmap/docs/#/component/panorama` → **HTTP 404**，
+  该锚点不存在；
+- 仓库 `@baidumap/vue-bmap@1.0.1`（`git clone`，HEAD `ffc6dad`）的
+  `src/components/` 只有 `Control` / `Layer` / `Map` / `Overlay` **四个目录**，
+  全仓 `grep -rn "Panorama" src` 命中的是 `PanoramaControl`（控件）、`PanoramaService`
+  的**类型**、以及能力清单里的 `Map.setPanorama` / `Map.getPanorama`——**没有任何全景组件**。
+
+⇒ 全景组件的官方参照**只有 JSAPI 声明本身**，`vue-bmap` 与 `react-bmap` 都不提供
+`Panorama` 组件面。这反而说明**更应以官方声明为准**，而不是找一个不存在的参考。
+
 ## 未覆盖
 
 - `MenuItem` / `ContextMenu` 的实例行为。
