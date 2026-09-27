@@ -55,6 +55,12 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectCdpSession, readProbeReport, sleep } from "./official-probe/cdp.mts";
+import {
+  MEMBER_SURFACE_PAGE_SOURCE,
+  normalizeReport,
+  verdictsOf,
+  type MemberSurfaceSpec,
+} from "./official-probe/member-surface.mts";
 
 const argv = process.argv.slice(2);
 const outIndex = argv.indexOf("--out");
@@ -72,6 +78,8 @@ const AK = (process.env.BAIDU_MAP_AK ?? "").trim();
  * 的读数并退出（本轮真的踩过一次）。半成品不发布 ⇒ 读到的一定是终态。
  */
 const PAGE_JS = `
+__MEMBER_SURFACE_SOURCE__
+var MEMBER_SURFACE_SPECS = __MEMBER_SURFACE_SPECS__;
 (async () => {
   var report = { timeline: [], windowBefore: null, windowAfter: null, stable: {}, phase: "running" };
   function names(Ctor) { return Ctor && Ctor.prototype ? Object.getOwnPropertyNames(Ctor.prototype).slice().sort() : null; }
@@ -153,14 +161,20 @@ const PAGE_JS = `
   report.windowBefore.cityListProto = names(B.CityListControl);
   report.windowBefore.copyrightProto = names(B.CopyrightControl);
 
-  // —— 等补齐（每 25ms 采样；settleMs 就是**可达窗口**的宽度）——
-  var t0 = performance.now();
-  for (var i = 0; i < 600; i++) {
-    if ((names(B.CityListControl) || []).length > 10 && (names(B.CopyrightControl) || []).length > 10) break;
-    await new Promise(function (r) { setTimeout(r, 25); });
-  }
+  // —— 等补齐 —— 共享判定层（scripts/official-probe/member-surface.mts），不再手写循环。
+  //
+  // 原审计的错误就发生在这一步：原实现是一句「成员数 > 10」的内联循环，它**不产出**任何
+  // 「等到了没有」的信息，因此 §④ 的稳定态读数与「窗口内的读数」在报告里**长得一样**。
+  // 现在：等待结果落进 report.memberSurface（settled / timedOut / settledAfterMs /
+  // 逐次 timeline / 终态每类成员数），Node 侧再用 verdictsOf() 出三态读数——
+  // **没等到就不给 absent，只给 unsettled**。
+  report.memberSurface = await window.__BMAP_MEMBER_SURFACE__.awaitSettled(MEMBER_SURFACE_SPECS, {
+    intervalMs: 25,
+    timeoutMs: 20000,
+  });
+  // 相对于官方 callback 的偏移（awaitSettled 只知道自己等了多久）
   report.settleMsAfterCallback = Math.round(performance.now() - report.callbackAt);
-  snap("D:命令面补齐");
+  snap(report.memberSurface.settled ? "D:命令面补齐" : "D:补齐**未等到**（超时）");
 
   // —— 窗口「后」：**同一个实例**（原型被补 ⇒ 实例追溯获得成员）——
   report.windowAfter = {
@@ -203,6 +217,50 @@ const PAGE_JS = `
   window.__PROBE_165C__ = report;
 })();
 `;
+
+/**
+ * 要判「补齐了没有」的类（喂给共享判定层的 `awaitSettled`）。
+ *
+ * `settleWhenPresent` 是**具名**成员而不是「成员数 > N」：数量门槛在成员增删时会误判
+ * （live 读到 26 个成员时数量早就过线，但 `toggle` 未必已到）。
+ * `minProtoMembers` 只作**附加**下限（防某次抽样整体异常偏低）。
+ */
+export const MEMBER_SURFACE_SPECS: readonly MemberSurfaceSpec[] = [
+  {
+    ctor: "CityListControl",
+    settleWhenPresent: ["toggle", "getCityName"],
+    // ⚠️ `observe` 必须**独立列出**要下结论的成员：页面侧只采 `settleWhenPresent` 的话，
+    // `open` / `close` / `getTriggerDom` 根本没被读过，却会被判成 `absent`
+    // （本轮 live 实跑真的这么错判过一次，§④ 明写 `open proto=true` 而三态段印 `absent`）。
+    observe: ["open", "close", "toggle", "getTriggerDom", "getCityName"],
+    minProtoMembers: 10,
+  },
+  {
+    ctor: "CopyrightControl",
+    settleWhenPresent: ["removeCopyright"],
+    observe: ["addCopyright", "removeCopyright", "getCopyright", "getCopyrightCollection"],
+    minProtoMembers: 10,
+  },
+];
+
+/** 每个要问的成员（喂给 Node 侧的 `verdictsOf()` 出三态）。 */
+export const SURFACE_MEMBERS: Record<string, readonly string[]> = {
+  CityListControl: ["open", "close", "toggle", "getTriggerDom", "getCityName"],
+  CopyrightControl: ["addCopyright", "removeCopyright", "getCopyright", "getCopyrightCollection"],
+};
+
+/**
+ * 组装最终页面脚本。三个占位符**各自**替换一次。
+ *
+ * ⚠️ 刻意**不用**全局正则替换：上一步刚注入的内容会被再套一层
+ * （`window.__window.__MEMBER_SURFACE_SPECS____`，本轮真的撞到过一次），
+ * 而那种损坏在 `new Function` 的语法检查下**看不出来**——它仍是合法 JS，只是名字错了。
+ */
+function buildPageScript(ak: string): string {
+  return PAGE_JS.replace("__AK_LITERAL__", JSON.stringify(ak))
+    .replace("__MEMBER_SURFACE_SPECS__", JSON.stringify(MEMBER_SURFACE_SPECS))
+    .replace("__MEMBER_SURFACE_SOURCE__", MEMBER_SURFACE_PAGE_SOURCE);
+}
 
 /* -------------------------------------------------------------------- 打印 */
 
@@ -266,7 +324,8 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const pageScript = PAGE_JS.replace("__AK_LITERAL__", JSON.stringify(AK));
+  // 共享判定层以源码字符串注入（页面里不能 import）。
+  const pageScript = buildPageScript(AK);
   try {
     // eslint-disable-next-line no-new-func
     new Function(pageScript);
@@ -366,6 +425,29 @@ async function main(): Promise<number> {
     }
     console.log(`  补齐发生在官方 callback 之后 ${String(report.settleMsAfterCallback)}ms`);
 
+    // —— 等待是否可观测 —— 原审计缺的正是这一段。
+    //
+    // 没有它，§④ 的读数与「窗口内提前取的读数」在报告里**长得一样**，
+    // 于是「读到 false」被当成了「不存在」。现在等待结果单独成段，且 `settled:false`
+    // 会让下面 §④ 附表里的每个 `absent` 变成 `unsettled`（未判定）。
+    const surface = normalizeReport(report.memberSurface);
+    console.log("-- ①b 等待是否真的等到补齐（判 absent 的前置条件）--");
+    console.log(
+      `  settled=${surface.settled}  timedOut=${surface.timedOut}  ` +
+        `settledAfterMs=${String(surface.settledAfterMs)}  采样 ${surface.attempts} 次`,
+    );
+    if (!surface.settled) {
+      console.log("  ⚠️ **没等到补齐** ⇒ 下面所有「不存在」都是**未判定**，不得当证据引用。");
+    }
+    for (const spec of MEMBER_SURFACE_SPECS) {
+      const final = surface.final[spec.ctor];
+      console.log(
+        `  ${spec.ctor}：终态原型成员数=${String(final?.protoMemberCount)}  ` +
+          `settleWhenPresent=[${spec.settleWhenPresent.join(", ")}] 在位=[${(final?.present ?? []).join(", ")}]`,
+      );
+    }
+    const surfaceVerdicts = verdictsOf(MEMBER_SURFACE_SPECS, SURFACE_MEMBERS, surface);
+
     console.log("-- ② 窗口「前」：真走一遍 mount→unmount --");
     const before = report.windowBefore ?? {};
     printPlain("  官方 callback 之后 ", String(before.msAfterCallback) + "ms 处\n");
@@ -392,6 +474,19 @@ async function main(): Promise<number> {
       if (!reading || typeof reading !== "object") continue;
       console.log(`  [${name}]`);
       printMembers(reading, "  ");
+    }
+
+    // —— 三态读数（共享判定层）——
+    // `absent` **只在 settled 之后**可能出现；没等到补齐时一律 `unsettled`（未判定）。
+    // 这一段是本探针与原审计的**唯一**实质差别：原脚本在同样早的时机取样，
+    // 却在报告里呈现为「成员不存在」。
+    console.log("-- ⑤ 三态读数：present / absent / unsettled（未判定）--");
+    for (const [ctor, members] of Object.entries(surfaceVerdicts)) {
+      console.log(`  [${ctor}]`);
+      for (const [member, presence] of Object.entries(members)) {
+        const suffix = presence === "unsettled" ? "  ← 不可当「不存在」的证据" : "";
+        console.log(`    ${member.padEnd(24)} ${presence}${suffix}`);
+      }
     }
 
     if (OUT) {

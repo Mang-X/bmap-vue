@@ -3112,6 +3112,7 @@ declare interface PointLayerProps<Item> extends DataComponentProps<Item> {
     };
     renderStage?: "building" | "poi" | null;
     enablePicked?: boolean;
+    isFlat?: boolean;
 }
 declare interface PointPick<Item> {
     hit: boolean;

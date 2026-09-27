@@ -3348,6 +3348,53 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     harness.assertIdle("PointLayer 卸载");
   });
 
+  it("PointLayer：isFlat 是构造期选项 —— 不表态不进选项袋，表态后换实例（#165 家族对齐）", async () => {
+    // 与 PointCollection（:4042）/ PointIconLayer（:3294）同一条口径的第三条。
+    // 该 prop 曾经**整个缺失**：`PointLayerOptions` 声明了它（`visualization/PointLayer.d.ts:123`），
+    // 两个兄弟都投影了它，只有 `<PointLayer>` 收下即丢弃，且没有任何写下的理由。
+    const isFlat = ref<boolean | undefined>(undefined);
+    const wrapper = await mountMapTree(() => [
+      h(PointLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        isFlat: isFlat.value,
+      }),
+    ]);
+
+    // 不表态：**键整个不存在**（不是 `isFlat: undefined`）。
+    // 官方三处的 `@default` 互相矛盾（visualization 族写 `false`、layer 族写 `true`），
+    // 而 `PointLayer.d.ts:298` 明说 `setOptions` 会忽略未声明的键并告警一次 ⇒ 发一个
+    // 「键在、值 undefined」的成员既可能被上游的告警分支扫到，也可能被某个默认分支
+    // 当成「显式 undefined」写进样式。省略整个键是唯一无歧义的表达。
+    expect(
+      Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(), "isFlat"),
+      "不表态时构造选项袋里**不得**出现 isFlat 这个键（也不能是 isFlat: undefined）",
+    ).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(-1), "isFlat"),
+      "首次构造的那一份同样没有这个键",
+    ).toBe(false);
+
+    const created = harness.nativeLayersCreated();
+    isFlat.value = false;
+    await settleProps();
+
+    expect(harness.nativeLayerOptions(), "表态后下发给构造器").toMatchObject({ isFlat: false });
+    expect(harness.nativeLayersCreated(), "构造期项 ⇒ 换实例").toBe(created + 1);
+    expect(harness.attached("layer"), "同一时刻只有一个实例").toBe(1);
+
+    // 改回 true：又一次换实例，且两次都不是「只写样式袋」
+    isFlat.value = true;
+    await settleProps();
+    expect(harness.nativeLayerOptions(), "第二个取值也走构造器").toMatchObject({ isFlat: true });
+    expect(harness.nativeLayersCreated()).toBe(created + 2);
+    expect(harness.attached("layer"), "旧实例被摘掉").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointLayer isFlat");
+  });
+
   it("PointLayer：扩展 API 没有入口的字段显式告警，不静默收下", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = await mountMapTree(() => [

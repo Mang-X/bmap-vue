@@ -113,6 +113,15 @@ function ctorOptions(p: Readonly<PointLayerProps<Item>>): Record<string, unknown
   return {
     idKey: resolveIdField(p.itemKey),
     enablePicked: p.enablePicked,
+    // #165：`isFlat` 曾**整个缺失**（官方 `visualization/PointLayer.d.ts:123` 声明了它，
+    // 而 `PointCollection` / `PointIconLayer` 两个兄弟都投影了它）⇒ 组件收下即丢弃。
+    // 官方把它写在构造参数 `PointLayerOptions` 上、没有 `setIsFlat` ⇒ 构造期项，
+    // 进了本函数就自动进了重建指纹（`rebuildKey` 派生自 `ctorOptions`）。
+    //
+    // ⚠️ 与兄弟逐条同形：没表态时**整个键不存在**（不是 `isFlat: undefined`）。
+    // 官方三处的 `@default` 互相矛盾（见 `PointLayerProps.isFlat` 的注释表），
+    // 「没传 = 不表态 = SDK 自己的默认」是三族一致的处置。
+    ...(p.isFlat === undefined ? {} : { isFlat: p.isFlat }),
   };
 }
 

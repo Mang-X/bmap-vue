@@ -1717,6 +1717,27 @@ export interface PointLayerProps<Item> extends DataComponentProps<Item> {
    */
   enablePicked?: boolean;
   /**
+   * 是否贴地渲染（官方 `PointLayerOptions.isFlat`，`visualization/PointLayer.d.ts:123`）。
+   * `true` 贴地（大小随缩放变化）；`false` 屏幕固定像素大小。
+   *
+   * **构造期**选项（官方把它写在构造参数 `PointLayerOptions` 上，**没有** `setIsFlat` 这样的
+   * 字段级 setter）⇒ 改动会**重建实例**，与 `enablePicked` 同一档。口径同
+   * `PointCollectionProps.isFlat` / `PointIconLayerProps.isFixed` 那一族。
+   *
+   * ⚠️ 官方三处的默认值**互相矛盾**，因此本库刻意**不给**默认值、也**不在**此断言是哪一个：
+   *
+   * | 声明处 | `@default` |
+   * | --- | --- |
+   * | `visualization/PointLayer.d.ts:121`（本项） | `false` |
+   * | `visualization/TextLayer.d.ts:117` | `false` |
+   * | `layer/PointIconLayer.d.ts:15` / `layer/PointShapeLayer.d.ts:15` | `true` |
+   *
+   * 「没传 = 不表态 = SDK 自己的默认」是三个点图层组件一致的处置，也让我们不必在上游
+   * 自相矛盾时替它选一个——选了就是把注释变成契约，而注释**可能**就是写错的那一个。
+   * （#165：本项曾**整个缺失**，两个兄弟都投影了它，文件里没有写下的理由。）
+   */
+  isFlat?: boolean;
+  /**
    * ⚠️ 这里**刻意不**有 `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方只在
    * `layer/LineLayer.d.ts` / `layer/PointIconLayer.d.ts` / `layer/FillLayer.d.ts` /
    * `layer/PointShapeLayer.d.ts` 上声明这两个成员；`PointLayer` 的拾取面是 `pickTolerance`

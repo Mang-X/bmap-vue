@@ -169,8 +169,7 @@ live 读数（4 次独立复跑，窗口 126–167ms）：
 
 ## 本轮新发现（非运行时）
 
-- `<PointLayer>` 丢了官方声明的 `isFlat` 构造选项，而**它的两个兄弟组件都投影了它**
-  （`PointCollection.vue:162`、`PointIconLayer.vue:134`）——family 内部不一致，文件里没解释。
+- ~~`<PointLayer>` 丢了官方声明的 `isFlat` 构造选项~~ → **已补齐**（见下节「本轮落地」第 1 条）。
 - `GeoJSONLayer` 的 `setLevel` 官方声明里有、descriptor 里**没有条目**（无文档说明为何不做）。
 - `Marker` 缺 4 个官方选项：`anchor` / `enableMassClear` / `autoFollowHeadingChanged` / `startAnimation`。
 - `Polyline#getPointAt` / `getLength` 运行时**存在**但官方没声明，我们也没暴露。
@@ -179,6 +178,76 @@ live 读数（4 次独立复跑，窗口 126–167ms）：
   （与先前 3,830 / 119,074 方向一致、绝对值随环境变化——已加脚注提醒复现者）。
 - `resetHeading` 是**实例成员**（`proto=false, own=true`）——任何未来实现都必须读实例，
   这正是 `Panorama` 探针踩过的坑。
+
+## 本轮落地（2026-09-27 收口）
+
+### 1. `<PointLayer>.isFlat` 补齐（家族内一致性）
+
+`PointLayerProps` 补上 `isFlat` 并按**与两个兄弟逐字同形**的口径转发
+（`...(p.isFlat === undefined ? {} : { isFlat: p.isFlat })`）：**没表态时整个键不存在**，
+不是 `isFlat: undefined`——官方 `setOptions` 自己会忽略未声明的键并告警一次
+（`PointLayer.d.ts:298`），发一个「键在、值 undefined」的成员既可能被那条告警扫到，
+也可能被某个默认分支当成「显式 undefined」写进样式。省略整个键是唯一无歧义的表达。
+契约由 `tests/type-contracts/point-layer-is-flat.type-test.ts` +
+`component-scenarios.test.ts` 的「不表态不进选项袋、表态后换实例」两条钉住。
+
+**顺带更正一条会误导人的注释**：`PointLayerProps.isFlat` 的官方默认值与两个兄弟**不同**。
+重新克隆 `github.com/baidu-maps/jsapi-v4-types` @ `5ba67f4`（`update 4.0.5`）逐条读：
+
+| 声明处 | `@default` |
+| --- | --- |
+| `visualization/PointLayer.d.ts:121` | **`false`** |
+| `visualization/TextLayer.d.ts:117` | `false` |
+| `layer/PointIconLayer.d.ts:15` / `layer/PointShapeLayer.d.ts:15` | `true` |
+
+⇒ 本库**不给** `isFlat` 默认值、也**不**替官方选一个（三族都如此）：选了就是把注释变成
+契约，而注释**可能**就是写错的那一个。「没传 = 不表态 = SDK 自己的默认」保持不变。
+
+### 2. 「等成员面补齐再判成员存在」从注释变成判定层
+
+本文开头那条教训此前只落在两处：审计文档的正文，和 Fake 的
+`packages/test-utils/fake-bmap-v4/runtime-member-shape.ts`（**能表达**那个窗口）。
+**探针本身**仍然可以在窗口里取样——`probe-165c-surface.mts` 原先就是一句
+「成员数 > 10」的内联循环，它**不产出**任何「等到了没有」的信息，于是 §④ 的稳定态读数
+与窗口内的读数在报告里**长得一样**。
+
+新增 `scripts/official-probe/member-surface.mts`（共享判定层），并把 `probe-165c-surface.mts`
+的等待改成走它。三条不变式：
+
+1. `absent` **只在 settled 之后**可能出现；补齐之前一律 `unsettled`（未判定）。
+2. 等待**可观测**：`settled` / `timedOut` / `settledAfterMs` / 逐次 `timeline` / 终态每类成员数
+   单独成段，读者能分辨「稳定态读数」与「提前读数」。
+3. 等待**超时**是正常结果（网络慢、窗口比预期宽），而超时后的 `absent` 正是要根除的那个
+   假阴性 ⇒ 判定层收的是**报告**的 `settled` 标志，不让调用点自己判断「我等到没有」。
+
+⚠️ **判定层写完第一版后，live 复跑立刻抓到第二个假阴性**（同一类错误，方向相反）：
+页面侧只采 `settleWhenPresent` 里的成员，于是 `open` / `close` / `getTriggerDom`
+**根本没被读过**，却在稳定态被判成 `absent`——§④ 明写 `open proto=true`，三态段印 `absent`。
+修法是 spec 增加**独立**的 `observe` 集合（判就绪的成员 ≠ 要下结论的成员）。
+这一条比窗口那条**更难发现**：它出现在 settled **之后**，报告看起来完全正常。
+现在 live 复跑九个成员全 `present`，与 §④ 一致。
+
+回归守卫在 `tests/behavior/probe-member-surface.test.ts`（17 条）：假 SDK 编排那个窗口，
+**页面侧那份源码也用 `new Function` 真跑一遍**（等待逻辑本身是被测到的，不只是「写了注释」）。
+两次变异验证过它确实承重：把 `verdictsOf` 改成恒 `settled` ⇒ 4 条红；
+把页面侧循环改成不等待 ⇒ 1 条红；把 `observe` 改回只用 `settleWhenPresent` ⇒ 1 条红。
+
+## 留待维护者裁决的四处（**本轮只记录，不实现**）
+
+四条都重新取过一手证据：重新克隆 `https://github.com/baidu-maps/jsapi-v4-types`，
+checkout `5ba67f4dda11b0a4b54fc631278d3e39e11667c3`（commit `update 4.0.5`，2026-09-24），
+**逐文件读完**（不是 grep 到一个名字就下结论）：
+
+| 项 | 一手证据 | 定性 |
+| --- | --- | --- |
+| `<GeoJSONLayer>.setLevel` | `layer/GeoJSONLayer.d.ts:136` 声明 `setLevel(z: number): void`（`:133` 有 `geoJSONLayer.setLevel(-50)` 的用例注释）。本库 descriptor 里**没有条目**，也无写下的理由 | **范围选择**，不是缺陷：成员在官方声明上、只是本库没开面。但「没写理由」和第 1 条同病，建议一并补注释 |
+| `Marker` 缺 4 个官方选项 | `overlay/MarkerOptions.d.ts` 四个都在：`:18 anchor?: ControlAnchor` / `:23 enableMassClear?: boolean` / `:74 autoFollowHeadingChanged?: boolean` / `:78 startAnimation?: string` | **范围选择**。⚠️ 注意 `anchor` 与 `startAnimation` 各带一条**语义前提**，不能照抄成 prop：`anchor` 按 `recreate` 处理的真正理由是 `getAnchor()` 返回当前值（未设时 `null` = SDK 内置默认锚点，无从构造出来再传回去）；`startAnimation` 的类型是 `string`（不是布尔），语义未取证 |
+| `Polyline#getPointAt` / `getLength` | 重新克隆后**全仓**（`overlay/` + `layer/` + `core/` + `visualization/`）grep：两个名字**零命中** | **范围选择**，且是本库一贯口径：「不把未声明成员当契约」。运行时存在反而**不能**据此开面——那正是本文件开头被推翻的那类推理 |
+| `FeatureLayer` 处置 | 官方类型仓**零命中**（`NormalLayer` 在 `layer/NormalLayer.d.ts`，是另一回事）。三方不一致 | **范围选择**：SDK 声明里没有的东西按声明走。⚠️ 若将来要接，**必须**先按本文开头的纪律取运行时读数 |
+
+**判定摘要：四条都是范围选择，没有一条是缺陷。** 其中只有「`GeoJSONLayer.setLevel`
+缺写下的理由」与本次修掉的 `isFlat` 属同一类（已有但缺失 / 无解释），
+其余三条都需要维护者先给出「要不要开面」的决策，不是实现问题。
 
 ## 复现
 
@@ -207,7 +276,7 @@ live 读数（4 次独立复跑，窗口 126–167ms）：
 
 ### 但换出了一个**真实的**缺陷
 
-**loader 判就绪比命令面补齐早约 2.4 秒**，而本库的正常路径正好落在这个窗口里。
+**loader 判就绪比命令面补齐早一段窗口**（实测两次落点不同：约 150ms 与约 2.4s，窗口宽度随环境变化），而本库的正常路径正好落在这个窗口里。
 窗口内 `addCopyright`（先到的一批）已可用、`removeCopyright`（后补的一批）还没有
 ⇒ **挂载成功、卸载抛错**，`removeCopyrightControlIfEmpty` 永不执行 ⇒ 共享控件永不摘除、
 位置缓存条目永不淘汰。
@@ -221,3 +290,23 @@ live 读数（4 次独立复跑，窗口 126–167ms）：
 之后可摘），而不是静默跳过（那会让条目**永久**留在 SDK 上）。
 顺带修掉一个真实顺序 bug：`removeCopyrightControlIfEmpty` 判断空时必须
 **排除调用方自己那条**「即将被摘」的条目，否则它会把控件永久钉在地图上。
+
+
+## 纪律已写成**类型**（`scripts/official-probe/member-surface.mts`）
+
+后续一轮把这个教训固化成了可执行门禁，而不是留在文档里：
+
+1. **`absent` 只在 `settled` 之后才可能出现**——用三态 `present | absent | unsettled` 把这条
+   写成类型，**补齐之前判 `absent` 是写不出来的代码**；判定层与等待层**分离**，所以
+   等待**超时**（正常结果）时 `verdict()` 仍然拒绝输出 `absent`——那正是要根除的假阴性。
+2. **等待是可观测的**：`settled` / `timedOut` / `settledAfterMs` / 每类原型成员数 / 采样时间轴。
+3. **settle 判据是具名成员**，不是「成员数 > N」这种阈值。
+
+`probe-165c-surface.mts` 已重构为使用它（该 bug 的产地）。守卫测试 17 条，
+页面侧代码用 `new Function` 对着假 `window` **真实执行**，所以等待循环本身被测到。
+三处变异校验证明它有分量：恒 `settled` → 4 红；去掉等待循环 → 1 红；`observe` 集合还原 → 1 红。
+
+**它在第一次 live 跑就抓到第二个假阴性**（同类、方向相反）：页面侧只采样
+`settleWhenPresent`，于是 `open`/`close`/`getTriggerDom` 从未被读却被印成 `absent`，
+而同一份报告的 §④ 明明写着 `open proto=true`。**这一条比窗口那个更难发现**——它出现在
+settle **之后**，报告看起来完全正常。修法是给「用于判定的成员」和「被观察的成员」两套独立集合。

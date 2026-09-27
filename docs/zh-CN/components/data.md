@@ -398,10 +398,21 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 这些都进**样式袋**（官方 `setOptions` 会把 `renderStage` / `referCenter` 转发到对应 setter），
 因此变化时**就地更新、不重建**。
 
+`isFlat`（#165 补齐）是**唯一走构造期**的那个，与 `BPointShapeLayer` / `PointIconLayer` 同名同档：
+
+| prop | 官方字段 | 说明 |
+| --- | --- | --- |
+| `isFlat` | `isFlat`（`visualization/PointLayer.d.ts:123`） | `true` 贴地（大小随缩放变化）/ `false` 屏幕固定像素大小。**构造期**选项 ⇒ 变化时**重建实例** |
+
+> ⚠️ 官方三处的默认值**互相矛盾**，所以本库**不给** `isFlat` 默认值、也**不**替官方选一个：
+> `visualization/PointLayer.d.ts:121` 与 `visualization/TextLayer.d.ts:117` 写 `false`，
+> 而 `layer/PointIconLayer.d.ts:15` / `layer/PointShapeLayer.d.ts:15` 写 `true`。
+> 「没传 = 不表态 = SDK 自己的默认」是三个点图层组件一致的处置。
+
 > 官方 `PointLayer` **没有** `pickWidth` / `pickHeight`（那是 `layer/` 下那四类专页图层的
 > 构造选项），它给的是「命中点周围多大范围算命中」的 `pickTolerance`。
-> 组件上仍保留 `pickWidth` / `pickHeight` 两个 prop 是历史遗留（透传给构造器、官方不读），
-> **新代码请用 `pickTolerance`**。
+> 那两个 prop 已随 #165 Class 5 从本组件**删除**（原先无条件透传 = 构造器静默忽略两个
+> 不认识的键，即收下用不了的 prop），**新代码请用 `pickTolerance`**。
 
 三处要提前知道的事：
 
