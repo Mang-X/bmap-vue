@@ -12,7 +12,11 @@
  * - `Rectangle` 收 Bounds；`CustomOverlay` 由 DOM 工厂 + 构造选项创建，4.0 缺 point 直接拒绝，
  *   因此项目签名把位置提为必填位置参数；
  * - `ContextMenu` 经 `map.addContextMenu/removeContextMenu` 挂在 Map 上（4.0 没有 Marker 级挂载）；
- * - `Marker3D` / `MapMask` 在 4.0.4 类型包与官方参考里都**没有声明**，只能按命名空间结构性探测：
+ * - `Marker3D` / `MapMask` 在 4.0.4**类型包**里都**没有类声明**（`MapMask` 全包 0 命中；
+ *   `Marker3D` 只在 `const/Marker3DShapeType.d.ts` 的文档注释里出现，类本身缺席；4.0.5 同）——而官方
+ *   React 参考实现 `huiyan-fe/react-bmap`（master 与 v2.0.6 都有 `Overlay/Marker3D.tsx` /
+ *   `MapMask.tsx`，driver 侧有 `createMarker3D` 工厂与 `new BMap.MapMask` 调用）**两者都包了**。
+ *   即缺口在「类型声明」而非「官方参考没有这个能力」，所以只能按命名空间结构性探测：
  *   有就按结构创建，没有就显式失败（不是静默降级）。
  *
  * 属性更新一律走 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS`：`mutable` 调字段级 setter /
@@ -1118,7 +1122,10 @@ type ExpectTrue<T extends true> = T;
  * 覆盖物构造器名必须与官方 `BMap` 命名空间一致。
  *
  * `marker3d` / `map-mask` 被**显式排除**：它们的构造器在 `@baidumap/jsapi-v4-types@4.0.4`
- * 里不存在（官方参考也没有对应章节），属于运行时扩展，因此不能进「官方声明一致性」断言——
+ * 里不存在（仓库内官方参考 `.agents/skills/bmap-jsapi-v4/references/` 也没有对应章节——它们只在
+ * `runtime-extended-apis.md` 的「其他扩展名称」名单里被列举，没有独立接口说明；这与**官方 React
+ * 参考实现** `huiyan-fe/react-bmap` 恰好相反，它为两者都提供了组件与 driver 工厂），属于运行时扩展，
+ * 因此不能进「官方声明一致性」断言——
  * 它们的存在性只能由 `requireRuntimeCtor` 在运行时按结构判断。上游一旦补齐声明，这条断言会失败，
  * 提醒把结构性查找收回 `namespaceCtor`。
  */

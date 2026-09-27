@@ -58,8 +58,11 @@ import type { JsapiV4HandleRegistry } from "./registry";
  * 语义交互名 → 官方成对方法名（与 4.0 API 参考逐一对应）。
  *
  * **`tilt-gestures` 的成员存在性有分歧，因此这里不预判**：官方 4.0 API 参考的 `BMap.Map`
- * 方法表与 `@baidumap/jsapi-v4-types@4.0.4` 都没有 `enableTiltGestures()` / `disableTiltGestures()`
- * （对比 `enableRotateGestures()` 是有的），而公开的 React 参考实现 `huiyan-fe/react-bmap`
+ * 方法表与 `@baidumap/jsapi-v4-types@4.0.4` 的 `core/Map.d.ts` 都**没有实例方法**
+ * `enableTiltGestures()` / `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的）。
+ * ⚠️ 「没有」只限于**实例方法**：`MapOptions.d.ts:80` 确实声明了 `enableTiltGestures` 这个
+ * **构造选项**（无同名的 `disable*`），即「建图时开手势倾斜」有声明、运行时开关没有。
+ * 而公开的 React 参考实现 `huiyan-fe/react-bmap`
  * 直接调用它们并用 try/catch 吞掉失败。本 Facet 既不臆造声明、也不靠异常控制流：
  * `setInteraction` 先做**结构性存在判断**，有就调用、没有就告警一次（见实现）。
  *

@@ -228,14 +228,20 @@ zoom / targetZoom / trend / …`——**没有 `overlay` / `icon` / `poi`**。
 
 ### B-R. 同名不同形（会被 `official-api-alignment.md` 的「名称对齐 ✓」误导）
 
-| 名称 | 本库 | React / vue-bmap 参考 |
+| 名称 | 本库 | 官方 React 参考（`huiyan-fe/react-bmap`） |
 | --- | --- | --- |
-| `useMap` | 返回**对象** `{status,map,client,error,whenReady}` | 返回 **MapHandle 本身**（或 `ComputedRef<MapHandle\|null>`） |
-| `useMapReady` | 返回 `ComputedRef<boolean>` | 接收**回调**的哨兵 composable |
-| `useMapStatus` | 8 个**独立** readonly ref | 一个**原子快照**对象（`useSyncExternalStore`），无撕裂读 |
+| `useMap` | 返回**对象** `{status,map,client,error,whenReady}` | 返回 **MapHandle 本身**（未就绪为 `null`） |
+| `useMapReady` | 返回 `ComputedRef<boolean>` | 接收**回调**的哨兵 hook `useMapReady(onReady)`；其 docstring 自述为 `<Map onReady>` 的**等价物**（效果等价，二者任选其一） |
+| `useMapStatus` | 8 个**独立** readonly ref | 一个**原子快照**对象（`useSyncExternalStore`，无撕裂读） |
 
-三者名字与两个参考完全一致，**返回形态都不同**。那份对照表只比名字，
+三者名字与该参考完全一致，**返回形态都不同**。那份对照表只比名字，
 把三个都记成「名称对齐 ✓」，会误导从参考实现移植的人。
+
+> **对照物说明**：这一族是 **react-bmap 单边**比对。`@baidumap/vue-bmap` 虽也导出
+> `useMap`（`ComputedRef<MapHandle\|null>`）与 `useMapReady`（同款回调哨兵，docstring 亦自述
+> 与 `<Map @ready>` 等价），但**没有** `useMapStatus`——`src/index.ts` 与 `src/composables/index.ts`
+> 均无该导出（只在 `DESIGN.md` 与 examples 的 `apiData.ts` 里被提及，尚无实现）。
+> 因此 `useMapStatus` 一行**只有 react-bmap 一个对照**，`useMap` / `useMapReady` 两行两个参考形态一致。
 
 ### B-A. 判定为对齐（不应无谓改动）
 

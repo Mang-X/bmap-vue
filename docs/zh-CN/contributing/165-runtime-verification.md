@@ -85,11 +85,16 @@
 ② 「不带就黑屏」的说法**实测成立**；③ 它是**建图期**选项，事后无法补上。
 
 **由此确定处置**（维护者裁决「按照封装的惯例，参照官方行为」）：
-官方 React 参考的惯例是 **能力进目录 + 显式 opt-in**，不是替使用者做默认值取舍
-（见其 `capabilityMatrix.ts` 把 `Map.getScreenshot` 列为能力、`v4Driver.ts` 直接调）。
-本库照此：给 `<Map>` 一个**显式 opt-in 的 prop**（默认**不开启**——默认开启会让每张地图
+本库给 `<Map>` 一个**显式 opt-in 的 prop**（默认**不开启**——默认开启会让每张地图
 常驻一块额外画布内存，这是库不该替用户做的取舍），并在 `getScreenshot()` 的文档上
 写明「不带这个 prop 就会拿到空画布」。
+
+⚠️ **口径更正**：「能力进目录 + 显式 opt-in」这个惯例是**本库自己**定的，**不是**官方 React
+参考的惯例——`huiyan-fe/react-bmap` 全仓库（含 `src/`、tests、examples、README）
+**没有出现过** `preserveDrawingBuffer` 这个键：它既没有该 prop，也没有把它列为能力目录条目
+（其 `capabilityMatrix.ts` 只把 `Map.getScreenshot` 列为能力，`v4Driver.ts:718` 直接调
+`getScreenshot?.()`）。因此不能把默认关闭说成「沿用官方惯例」；它依据的是**本库的取舍**
+（常驻画布内存的成本应由使用方决定）**加上上面那张实测读数**。
 
 ## 结论六：Vue 的 `Boolean` 缺省陷阱在 `preserveDrawingBuffer` 上**又中了一次**
 

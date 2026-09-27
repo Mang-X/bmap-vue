@@ -140,8 +140,10 @@ export interface MapProps {
    * 建图时保留绘图缓冲（官方 `getScreenshot` 的**前提**；该键不在官方 `MapOptions` 声明里，
    * 只出现在 `Map#getScreenshot` 的文档注释中，2026-09-26 live 实测确认运行时承认它）。
    *
-   * **默认 `false`，刻意不替使用者开启**——官方 React 参考的惯例是「能力进目录 +
-   * 显式 opt-in」，而常驻一块额外画布内存是库不该替用户做的取舍。参照实测：同一张图
+   * **默认 `false`，刻意不替使用者开启**——常驻一块额外画布内存是库不该替用户做的取舍，
+   * 因此做成显式 opt-in。（这个「显式 opt-in」的惯例是**本库自己**定的，官方 React 参考
+   * `huiyan-fe/react-bmap` 全仓库**没有出现过** `preserveDrawingBuffer` 这个键——既无该 prop、
+   * 也无对应能力目录条目，因此不能把它说成「沿用官方惯例」。）参照实测：同一张图
    * 不带该选项时 `getScreenshot()` 返回 3,830 字节的**空画布**（即「黑屏」），带上则
    * 119,074 字节的真实内容。
    *
@@ -1168,8 +1170,12 @@ export interface PolylineLayerStyle {
  *
  * 与 `NativeLayerPickOptions`（`layer/` 家族的 `idKey` / `crs` / `enablePicked` /
  * `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent`）
- * **刻意不共用一个接口**：这两族的官方选项表里只有 `idKey` / `enablePicked` /
- * `mouseStyleChange` / `pickTolerance` / `pickThrough` 五项（`PolygonLayer.d.ts:70-91`）。
+ * **刻意不共用一个接口**：官方 `PolygonLayerOptions`（20 项）与 `PolylineLayerOptions`（26 项）
+ * 各自都远不止拾取项，本接口只投影其中的**拾取/交互子块**——`idKey` / `enablePicked` /
+ * `mouseStyleChange` / `pickTolerance` / `pickThrough`
+ * （`visualization/PolygonLayer.d.ts:71-91`、`PolylineLayer.d.ts:100-120`）。
+ * 其余 15 / 21 项（`visible` / `zIndex` / `minZoom` / `maxZoom` / `renderStage` / `referCenter` /
+ * `data` 与两族各自的描边·填充·纹理键）不属本接口职责，由各层自己的 props 承载。
  * `pickWidth` / `pickHeight` / `crs` / `popEvent` / `selectedIndex` 官方**没有声明**
  * （#165 的 H2 条已实测 `visualization/` 下 0 命中），共用一个接口等于把它们投影成
  * 「接收后忽略」——AGENTS.md 明确禁止的假支持。
