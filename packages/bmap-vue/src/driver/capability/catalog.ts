@@ -76,6 +76,7 @@ export type Capability =
   | "layer.track-line"
   | "layer.polygon"
   | "layer.polyline"
+  | "layer.text"
   // Service
   | "service.local-search"
   | "service.autocomplete"
@@ -624,6 +625,31 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "只能经 setOptions 整袋下发）。逐条依据见 " +
       "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
     rawMembers: ["PolylineLayer"],
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  // #166 第二刀：`visualization/TextLayer`（4.0.5 新增的批量文字标注）。
+  //
+  // `status: "experimental"` 与 `layer.polygon` / `layer.polyline` 同判据：「4.0.5 才第一次
+  // 出现在类型包里、接口面可能变」。
+  // `runtimeOnly: false`：live 探针 case 3e 的 `injectionTiming` 读到
+  // `TextLayerAtMapReady === "function"` ⇒ 随主包注入，与扩展 API 那四类相反。
+  //
+  // ⚠️ **本票的另一半发现**：`BarLayer` / `FlyLineLayer` / `GeoJSONSource` 在这份产物里
+  // **完全不存在**（探针 case 15/16：8s 与再 25s 两次复读都是 `undefined`，且扫遍
+  // `BMap` 全部 294 个自有属性也没有任何别名）。它们因此**不建能力槽位**——
+  // 官方声明了、运行时没发，登记进去只会让 `supports()` 对一个永远不会来的能力说真话。
+  // 依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
+  "layer.text": {
+    id: "layer.text",
+    family: "layer",
+    description:
+      "批量文字标注图层（TextLayer，官方 4.0.5 新增）；geometry 支持 Point / MultiPoint。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 TextLayer 组件落地。" +
+      "它是 visualization 家族里唯一声明与运行时完全对齐的类：hitTest 与 setOpacity 都在" +
+      "（PolygonLayer / PolylineLayer 恰好各缺一个，方向相反）。" +
+      "逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["TextLayer"],
     status: "experimental",
     runtimeOnly: false,
   },

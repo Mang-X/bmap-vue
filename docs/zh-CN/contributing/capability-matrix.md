@@ -5,7 +5,7 @@
 > 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**65**
+能力总数：**66**
 
 ## 状态说明
 
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `native` | SDK 原生能力，直接映射官方 API | 47 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 1 |
-| `experimental` | 实验性能力，API 可能变更或移除 | 15 |
+| `experimental` | 实验性能力，API 可能变更或移除 | 16 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
 
 ## 家族分布
@@ -22,7 +22,7 @@
 | --- | --- |
 | `map` | 14 |
 | `overlay` | 15 |
-| `layer` | 21 |
+| `layer` | 22 |
 | `service` | 12 |
 | `panorama` | 3 |
 
@@ -84,6 +84,7 @@
 | layer | `layer.track-line` | experimental | ✓ | TrackLine | 轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。**它是 legacy 插件 `service.track-animation` 的迁移目标**（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter，重新可见**不**换实例（换实例会丢掉播放进度）。 |
 | layer | `layer.polygon` | experimental | — | PolygonLayer | 批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时有但官方未声明 ⇒ 同样不开面。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md |
 | layer | `layer.polyline` | experimental | — | PolylineLayer | 批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时有但官方未声明 ⇒ 同样不开面（⚠️ 代价：声明的 opacity 选项只能经 setOptions 整袋下发）。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md |
+| layer | `layer.text` | experimental | — | TextLayer | 批量文字标注图层（TextLayer，官方 4.0.5 新增）；geometry 支持 Point / MultiPoint。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 TextLayer 组件落地。它是 visualization 家族里唯一声明与运行时完全对齐的类：hitTest 与 setOpacity 都在（PolygonLayer / PolylineLayer 恰好各缺一个，方向相反）。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md |
 | service | `service.local-search` | native | — | LocalSearch | 本地检索（LocalSearch） |
 | service | `service.autocomplete` | native | — | Autocomplete | 输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit） |
 | service | `service.driving-route` | native | — | DrivingRoute | 驾车路线规划（DrivingRoute） |

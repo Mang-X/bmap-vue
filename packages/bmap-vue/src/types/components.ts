@@ -1290,6 +1290,151 @@ export interface PolylineLayerProps
 }
 
 /**
+ * 官方 `TextLayer` 的锚点位置（`visualization/TextLayer.d.ts:5-14`）。
+ *
+ * 官方把它表达成 `StyleValue<TextAnchor>`（可按要素逐个求值），并另有一个**静态**枚举
+ * `TextLayer.Anchor` 用 `[-1, 1]` 区间向量表达同一组取值（`:232-242`；live 探针
+ * 2026-09-27 读到 `staticAnchor` 九项全在，值与声明逐条一致）。
+ *
+ * 本库**只**投影字符串那一支：官方静态枚举是给「自己算向量」的场景用的，而本库的
+ * `style` 袋原样透传给官方 `setOptions`，使用者写 `topLeft` 就够了——投影成向量反而
+ * 丢掉官方在 `setOptions` 里接受的字符串形式。
+ */
+export type TextLayerAnchor =
+  | "center"
+  | "topLeft"
+  | "topCenter"
+  | "topRight"
+  | "rightCenter"
+  | "bottomRight"
+  | "bottomCenter"
+  | "bottomLeft"
+  | "leftCenter";
+
+/**
+ * `TextLayer` 的样式（官方 `TextLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * 逐条对应 `visualization/TextLayer.d.ts:43-140`（不含 `:142` 之后的 `data` / `idKey` /
+ * 拾取与显示那些——它们是各自的 prop）。经 `setOptions`（`:269`）**整袋替换**下发。
+ *
+ * ⚠️ 官方 `setOptions` 的注释写明「仅更新已声明的样式键，未知键忽略并告警一次」⇒
+ * **没写的键回到官方默认值**（与 `layer/` 家族的 merge 语义相反）。
+ */
+export interface TextLayerStyle {
+  /** 文案，不设则读要素的 `properties.text`（`:43`）。 */
+  text?: VisualizationStyleValue<string>;
+  /** 字号（px）。默认 `14`。 */
+  fontSize?: VisualizationStyleValue<number>;
+  /** 字体。默认 `'微软雅黑'`。 */
+  fontFamily?: VisualizationStyleValue<string>;
+  /** 字重。默认 `'normal'`。 */
+  fontWeight?: VisualizationStyleValue<string | number>;
+  /** 文字颜色，css 字符串。默认 `'#333'`。 */
+  color?: VisualizationStyleValue<string>;
+  /** 描边色，css 字符串。默认 `'rgba(255, 255, 255, 1)'`。 */
+  strokeColor?: VisualizationStyleValue<string>;
+  /** 描边宽度（px），`0` 表示不描边。默认 `0`。 */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 超过该宽度（px）换行，`0` 表示不换行。默认 `0`。 */
+  textMaxWidth?: number;
+  /** 行高（px）。默认 `20`。 */
+  lineHeight?: number;
+  /** 多行时的对齐方式。默认 `'center'`。 */
+  textAlign?: "center" | "left" | "right";
+  /** 像素偏移 `[x, y]`。默认 `[0, 0]`。 */
+  offset?: VisualizationStyleValue<[number, number]>;
+  /** 锚点，决定坐标点落在文字的哪个位置。默认 `'center'`。 */
+  anchor?: VisualizationStyleValue<TextLayerAnchor>;
+  /** 旋转角度（度）。默认 `0`。 */
+  rotation?: VisualizationStyleValue<number>;
+  /** 缩放比例。默认 `1`。 */
+  scale?: VisualizationStyleValue<number>;
+  /** **逐条**透明度 `[0,1]`，与图层级 `opacity` **相乘**。默认 `1`。 */
+  fillOpacity?: VisualizationStyleValue<number>;
+  /** `true` 贴地（大小随缩放变化）；`false` 屏幕固定像素大小。默认 `false`。 */
+  isFlat?: boolean;
+  /** 是否开启碰撞剔除（密集时自动隐藏互相压盖的文字）。默认 `true`。 */
+  collides?: boolean;
+  /** 碰撞剔除的节流间隔（ms）。默认 `200`。 */
+  waitTime?: number;
+  /** 图集槽位内边距 `[x, y]`。默认 `[2, 2]`。 */
+  padding?: [number, number];
+  /** 碰撞盒外扩 `[x, y]`，控制文字之间的最小间距。默认 `[0, 0]`。 */
+  margin?: [number, number];
+  /**
+   * 图层级透明度 `[0,1]`（官方 `TextLayerOptions.opacity`，`:179`），与逐条 `fillOpacity` 相乘。
+   *
+   * ⚠️ **刻意不作为独立 prop**，而是留在样式袋里：官方为它声明了字段级 setter
+   * `setOpacity`（`:296`，live 实测运行时也有），本库**两个入口都给**——`opacity` prop
+   * 走 setter（无需重建、可单独更新），`style.opacity` 走整袋。两者都合法：官方
+   * `setOptions` 的注释自己就说 `opacity` 会被「转发到对应 setter」。
+   */
+  opacity?: number;
+  /** 绘制阶段，`null` / `'building'` / `'poi'`（官方 `renderStage`，`:198`）。 */
+  renderStage?: "building" | "poi" | null;
+}
+
+/**
+ * `TextLayer` 的 `hitTest` 命中项（官方 `TextLayerItem`，`TextLayer.d.ts:19-32`）。
+ *
+ * 与 `FeaturePick`（拾取**事件**的载荷）是**两件事**：事件走官方统一的事件调度，回包形状是
+ * `VisualPickEvent`；而 `hitTest` 是**主动**调用，回包就是这段文字本身。两者因此不共用一个类型。
+ *
+ * 逐字段如实投影官方声明的六项：
+ *
+ * - **没有 `dataIndex`** —— 官方回包里没有它，本库也不从 `id` 反推下标（`id` 缺省时是要素
+ *   序号，但那是 SDK 内部口径，不是有依据的公开身份）；
+ * - 四个 `null` 槽位表示「回包里读不到这个值」，与 `FeaturePick.id` 的 `null` 同一条口径
+ *   （认不出就如实说认不出，不拿 `0` / `""` 冒充——`0` 宽度与「没给宽度」在业务上不是一回事）。
+ */
+export interface TextLayerPick {
+  /** 命中点经纬度（bd09ll），本库用纯数据 `{ lng, lat }` 表达（组件层不构造 SDK 构造器）。 */
+  point: { lng: number; lat: number } | null;
+  /** 文案。 */
+  text: string | null;
+  /** 文字显示宽度（px）。 */
+  width: number | null;
+  /** 文字显示高度（px）。 */
+  height: number | null;
+  /** 要素 id（取自 `idKey` 字段，缺省用序号）。 */
+  id: string | number | null;
+  /** 要素的 properties。 */
+  properties: unknown;
+}
+
+/**
+ * `TextLayer` 的 props（官方 `visualization.TextLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `Point` / `MultiPoint`（`TextLayer.d.ts:203`）。文字量较大时官方建议用它
+ * 而不是逐个 `Label` 覆盖物。
+ *
+ * 与 `PolygonLayerProps` / `PolylineLayerProps` 的**唯一结构差别**是本接口多带
+ * `opacity`（官方**声明**了 `setOpacity`）——那两族没有，因此刻意不共用一个 props 基类
+ * （沿用前两族那条「不把未声明成员投影成 prop = 假支持」的裁决）。
+ */
+export interface TextLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 点数据（入参形状同 `PolygonLayerProps.data`）。
+   *
+   * `null` = 明确「没有数据」⇒ **换一个没有数据的实例**（与全部 kind 同一条口径）；
+   * `undefined` = **不表态**（不产生任何 SDK 调用）。
+   */
+  data?: object | null;
+  /** 文字样式（见 `TextLayerStyle`）。变化时经 `setOptions` **整袋替换**下发，不重建。 */
+  style?: TextLayerStyle;
+  /**
+   * 图层级透明度 `[0,1]`，与逐条 `fillOpacity` 相乘。默认 `1`。
+   *
+   * 走官方**声明**的字段级 setter `setOpacity`（`:296`）⇒ 单独改它**不换实例**。
+   * （`PolygonLayer` / `PolylineLayer` 没有这个 prop：官方未声明 `setOpacity`。）
+   */
+  opacity?: number;
+}
+
+/**
  * `HeatmapLayer` 的 props。
  *
  * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.5` 才补上类声明，可视化实现是

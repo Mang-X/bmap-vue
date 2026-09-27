@@ -228,6 +228,10 @@ export type {
   NativeLayerKind,
   NativeLayerOperation,
   NativeLayerPick,
+  // #166 第二刀：`TextLayer` 的命中回包（官方 `TextLayerItem`）。与 `NativeLayerPick` 是
+  // **两种**形状（没有 `dataIndex`，多了 `text` / `width` / `height` / 显式 `point`），
+  // 因此是单独一个类型而不是前者的分支。
+  NativeLayerTextPick,
   NativeLayerZoomRange,
 } from "./driver/types/native-layers";
 

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0-rc.0",
-  "generatedAt": "2026-09-27T05:23:30.531Z",
+  "generatedAt": "2026-09-27T06:28:41.774Z",
   "components": [
     "BMapProvider",
     "Map",
@@ -54,6 +54,7 @@
     "TrackLineLayer",
     "PolygonLayer",
     "PolylineLayer",
+    "TextLayer",
     "Panorama",
     "PanoramaLabel"
   ]

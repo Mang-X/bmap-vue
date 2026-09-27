@@ -195,6 +195,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "PolygonLayer / PolylineLayer（4.0.5 替代品）",
           link: "visualization-layers",
         },
+        {
+          text: "TextLayer（批量文字标注）",
+          link: "text-layer",
+        },
       ],
     },
     {

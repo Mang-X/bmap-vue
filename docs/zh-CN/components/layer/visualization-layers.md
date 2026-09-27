@@ -74,8 +74,15 @@ import { PolygonLayer, PolylineLayer } from 'bmap-vue'
 
 - **`WebGLCustomLayer` / `ThreejsLayer` / `DeckglLayer`**：自绘容器（要把 WebGL / three.js /
   deck.gl 的渲染循环接进地图生命周期），成本与风险比「包一层官方类」高一个量级；
-- **`TextLayer` / `BarLayer` / `FlyLineLayer`**：官方专页导向的图表类图层，本库尚无对应数据模型；
-- **`GeoJSONSource`**：不是图层而是**数据源**抽象，与本库的 `data` prop 模型不冲突也未建模。
+  （`WebGLCustomLayer` 运行时**确实在位**，`ThreejsLayer` / `DeckglLayer` 实测尚未随主包发出。）
+- **`BarLayer` / `FlyLineLayer` / `GeoJSONSource`**：官方 4.0.5 的**类型包声明**了它们，但
+  **live 探针实测这份产物里根本没有**（`BMap` 上是 `undefined`，8 秒后与再 25 秒后两次复读都
+  一样，扫遍 `BMap` 全部 294 个自有属性也没有任何别名）。这不是「本库还没包」，而是**上游声明了、
+  运行时没发**——因此本库不建它们的能力槽位：登记进去只会让 `supports()` 对一个永远不会来的
+  能力说真话。逐条读数见[对齐审计](../../contributing/166-visualization-alignment-audit)。
+
+[`TextLayer`](./text-layer) 已在 #166 第二刀落地——它是这一族里**唯一声明与运行时完全对齐**的类
+（`hitTest` 与 `setOpacity` 都在，而前两族恰好各缺一个、方向相反）。
 
 它们在能力清单（`driver/capability/catalog.ts`）里**没有**任何 `rawMembers` 声称——
 「没封装」这件事在能力矩阵上是查得出来的。

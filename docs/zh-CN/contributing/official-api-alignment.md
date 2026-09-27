@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 435 |
+| 本库根入口导出 | 439 |
 | 名称对齐（交集） | 115 |
 | 仅官方有 | 287 |
-| 仅本库有 | 320 |
+| 仅本库有 | 324 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -517,6 +517,7 @@ component 45 · hook 14 · type 56
 | `PointLayer` | component | — |
 | `PolygonLayer` | component | — |
 | `PolylineLayer` | component | — |
+| `TextLayer` | component | — |
 | `TrackLineLayer` | component | — |
 | `useAreaBoundary` | hook | 官方叫 `useBoundary`；本库语义是「行政区域边界」（AreaBoundary），与 `BoundaryResult` 成对。 |
 | `useControllableState` | hook | — |
@@ -813,6 +814,9 @@ component 45 · hook 14 · type 56
 | `StyleExpression` | other | — |
 | `targetContextKey` | other | — |
 | `TargetKind` | other | — |
+| `TextLayerAnchor` | other | — |
+| `TextLayerPick` | other | — |
+| `TextLayerStyle` | other | — |
 | `toSdkEventName` | other | — |
 | `toVueEventName` | other | — |
 | `trackAnimationPlugin` | other | — |

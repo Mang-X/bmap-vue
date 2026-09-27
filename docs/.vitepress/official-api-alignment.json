@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 435,
+  "oursPublicCount": 439,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 320,
+  "oursOnlyCount": 324,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2003,6 +2003,11 @@
       "oursEntry": "./components"
     },
     {
+      "name": "TextLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
       "name": "TrackLineLayer",
       "surface": "component",
       "oursEntry": "./components"
@@ -3479,6 +3484,21 @@
     },
     {
       "name": "TargetKind",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TextLayerAnchor",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TextLayerPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TextLayerStyle",
       "surface": "other",
       "oursEntry": "."
     },

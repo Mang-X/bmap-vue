@@ -519,6 +519,16 @@
       "description": "批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时有但官方未声明 ⇒ 同样不开面（⚠️ 代价：声明的 opacity 选项只能经 setOptions 整袋下发）。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md"
     },
     {
+      "id": "layer.text",
+      "family": "layer",
+      "status": "experimental",
+      "runtimeOnly": false,
+      "rawMembers": [
+        "TextLayer"
+      ],
+      "description": "批量文字标注图层（TextLayer，官方 4.0.5 新增）；geometry 支持 Point / MultiPoint。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 TextLayer 组件落地。它是 visualization 家族里唯一声明与运行时完全对齐的类：hitTest 与 setOpacity 都在（PolygonLayer / PolylineLayer 恰好各缺一个，方向相反）。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md"
+    },
+    {
       "id": "service.local-search",
       "family": "service",
       "status": "native",

@@ -54,6 +54,7 @@ import type {
   NativeLayerKind,
   NativeLayerOperation,
   NativeLayerPick,
+  NativeLayerTextPick,
   NativeLayerZoomRange,
 } from "../types/native-layers";
 import {
@@ -113,7 +114,7 @@ const DECLARED_LAYER_OPERATIONS = [
  */
 type DispatchedOperation = Exclude<
   NativeLayerOperation,
-  "updateState" | "getState" | "hitTest"
+  "updateState" | "getState" | "hitTest" | "hitTestText"
 >;
 
 interface NativeLayerDescriptor {
@@ -293,6 +294,58 @@ const NATIVE_LAYER_DESCRIPTORS = {
     styleMember: "setOptions",
     operations: ["setData", "clearData", "setStyle", "setVisible", "setZIndex", "setEnablePicked"],
   },
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
+  //
+  // 四个判断各自独立，逐条依据如下（live 读数见 `scripts/probe-runtime-members.mts`
+  // case 3e / 3f / 15 / 16，2026-09-27，`lateVisualizationV3.TextLayer`）：
+  //
+  // - `declared: true` —— 4.0.5 有完整类声明（`visualization/TextLayer.d.ts:205`）。
+  // - `styleMember: "setOptions"` —— 官方声明的样式入口是 `setOptions`（`:269`），
+  //   **不是** `setStyleOptions`；这一族**没有** `doOnceDraw`（探针 `protoHas` 全 false）。
+  // - **不进 `RUNTIME_INJECTED_LAYER_CTORS`** —— 探针 `injectionTiming.TextLayerAtMapReady`
+  //   读到 `"function"`（在 `BMap.Map` 刚就绪时）⇒ 随主包注入，与 `PolygonLayer` /
+  //   `PolylineLayer` 同族，不是扩展 API 那四类。
+  // - 登记面比前两族**宽两条**（`setOpacity` 与 `hitTest`），因为这一族的声明与运行时
+  //   在这两条上**一致**，而前两族恰好各缺一个（详见下面两条注释）。
+  //
+  // 逐条成员依据：
+  //
+  // | 操作 | 声明 | 运行时 | 登记 | 说明 |
+  // | --- | --- | --- | --- | --- |
+  // | `setData` / `clearData` | `:252` / `:262` | 有 | **登记** | 与前两族同 |
+  // | `setStyle` → `setOptions` | `:269` | 有 | **登记** | 整袋替换 |
+  // | `setVisible` | `:292` | 有 | **登记** | 显隐不换实例 |
+  // | `setOpacity` | `:296` | **有** | **登记** | ⚠️ 与前两族相反：前两族官方**没声明** |
+  // | `setZIndex` | `:300` | 有 | **登记** | |
+  // | `setEnablePicked` | `:280` | 有 | **登记** | 声明成员（不是 `setBaseOptions`） |
+  // | `hitTest` | `:289` | **有** | **登记** | ⚠️ 与前两族相反：前两族声明有而运行时**无** |
+  //
+  // 仍然**不登记**的三条（逐条理由）：
+  //
+  // - `setZoomRange`：官方**没有** `setMinZoom` / `setMaxZoom`（`minZoom` / `maxZoom` 是
+  //   **构造选项**，`:190` / `:195`），探针 `protoHas` 读到的两个方法均为 `false`。
+  // - `setRenderStage` / `setRefCenter`：声明（`:304` / `:308`）与运行时都有，但**无组件
+  //   消费者**（同 `PolygonLayer` / `PolylineLayer` 的裁决，见 #104「没有消费者的扩展面
+  //   一律不加」）。它们经 `setOptions` 的整袋也能下发，不另开字段级入口。
+  // - 状态 API（`updateState` 一族）：声明里没有。
+  text: {
+    ctor: "TextLayer",
+    declared: true,
+    styleMember: "setOptions",
+    operations: [
+      "setData",
+      "clearData",
+      "setStyle",
+      "setVisible",
+      "setOpacity",
+      "setZIndex",
+      "setEnablePicked",
+      // ⚠️ 登记的是 `hitTestText` 而**不是** `hitTest`——官方两族的回包形状不同，
+      // 归一化成同一份会让 `TextLayer` 拿到一个本库编出来的 `dataIndex`。见
+      // `NativeLayerOperation` 里那一条注释。
+      "hitTestText",
+    ],
+  },
   // TrackLine 播放命令面（#110）。方法名经 live 探针（`scripts/probe-track-line.mts`，
   // 2026-09-23，exit 0）取证：`typeof layer.start === "function"` 等七条全部为真。
   // 4.0.5 补上了 TrackLine 类声明，且七个操作**逐一**都在声明里（`declared: true`）。
@@ -333,6 +386,7 @@ const NATIVE_LAYER_CAPABILITIES: Readonly<Record<NativeLayerKind, Capability>> =
   "track-line": "layer.track-line",
   polygon: "layer.polygon",
   polyline: "layer.polyline",
+  text: "layer.text",
 };
 
 export interface CreateJsapiV4NativeLayerDriverInput {
@@ -697,6 +751,36 @@ export function createJsapiV4NativeLayerDriver(
       return {
         dataIndex: Number.isFinite(dataIndex) ? dataIndex : -1,
         dataItem: result.dataItem,
+      };
+    },
+
+    hitTestText(layer, pixel: Pixel): NativeLayerTextPick | null {
+      // 官方回包是 `TextLayerItem | null`（`visualization/TextLayer.d.ts:289`），形状与
+      // `hitTest` 那条的 `{ dataIndex, dataItem }` **不同**：没有 `dataIndex`，多了
+      // `text` / `width` / `height` / 显式 `point`。逐字段如实投影，不补下标（见
+      // `NativeLayerTextPick` 的注释）。
+      const { raw } = open(layer, "hitTestText");
+      const result = sdkCall("NativeLayer.hitTestText", () =>
+        callRequired(raw, "hitTest", pixel.x, pixel.y),
+      ) as Record<string, unknown> | null | undefined;
+      if (!result || typeof result !== "object") return null;
+      // `point` 是官方 `BMap.Point`；换算成纯数据只在**原型是 Object.prototype** 时做
+      // （与 `toRawPoint` 同一判据的镜像：那边是纯数据 → 构造器，这边是构造器 → 纯数据）。
+      const rawPoint = result.point as { lng?: unknown; lat?: unknown } | undefined;
+      const lng = Number(rawPoint?.lng);
+      const lat = Number(rawPoint?.lat);
+      const point =
+        rawPoint && Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : null;
+      const id = result.id;
+      return {
+        point,
+        // 官方声明 `text: string` / `width: number` / `height: number`；回包里读不到时
+        // 如实给 `null` 而不是 `""` / `0`——`0` 宽度与「没给宽度」在业务上不是一回事。
+        text: typeof result.text === "string" ? result.text : null,
+        width: typeof result.width === "number" ? result.width : null,
+        height: typeof result.height === "number" ? result.height : null,
+        id: typeof id === "string" || typeof id === "number" ? id : null,
+        properties: result.properties,
       };
     },
 

@@ -23,6 +23,8 @@
  * | 12 | 官方 `reset()` 到底重置哪些字段？ | **Class 2 / D**：声明只说「恢复地图初始化时的中心点和级别」，**没提** heading/tilt；本库 `resetView()` 连 heading/tilt 一起重置，这是行为差 |
  * | 13 | 走**动画档**（不传 `noAnimation`）时 `options.callback` 还会不会调？ | **Class 2 / F**：`noAnimation:true` 下 callback「立即调用」不代表动画档也会交付 |
  * | 14 | `GeolocationControl` / `CityListControl` 的命令面成员在**实例**上真在吗？特别是 `startLocation` vs `startLocationTrace` | #168 item 1：issue 点名的 `startLocationTrace()` **不在** `control/GeolocationControl.d.ts` 里（声明是 `startLocation()` / `stopLocationTrace()`）。控制类成员常挂实例而非原型（#165 probe 11 已踩过），因此必须 live 读 |
+ * | 15 | `TextLayer` / `BarLayer` / `FlyLineLayer` 的成员面真在吗？随主包注入吗？ | #166 第二刀：三者与已取证的 `PolygonLayer` / `PolylineLayer` 同族（4.0.5 新增、样式走 `setOptions`），但**拾取面各不相同**——只有 `TextLayer` 声明了拾取，`BarLayer` / `FlyLineLayer` 连声明都没有。同族不等于同面，必须逐条读 |
+ * | 16 | `GeoJSONSource` 的静态成员真在吗？归一化输出什么形状？ | #166 第二刀：`GeoJSONSource` **不是图层、不是数据源**，是一组静态纯函数（`normalize` / `extractPoints` / `toLineStrings` / `toPolygons`）。本票要判断它到底该不该成为组件 / prop / Driver 能力，判据是「它在运行时是什么」 |
  *
  * ## 判定与退出码
  *
@@ -85,6 +87,12 @@ function pageScript(ak: string): string {
     PolylineLayerAtMapReady: typeof B.PolylineLayer,
     PointLayerAtMapReady: typeof B.PointLayer,
     HeatmapAtMapReady: typeof B.Heatmap,
+    // #166 第二刀：TextLayer / BarLayer / FlyLineLayer / GeoJSONSource 同样要判「是不是随主包注入」。
+    // 判据与上面四个相同——在 BMap.Map 刚可用的那一刻读 typeof。
+    TextLayerAtMapReady: typeof B.TextLayer,
+    BarLayerAtMapReady: typeof B.BarLayer,
+    FlyLineLayerAtMapReady: typeof B.FlyLineLayer,
+    GeoJSONSourceAtMapReady: typeof B.GeoJSONSource,
   };
 
   const own = (o, k) => { try { return o != null && Object.prototype.hasOwnProperty.call(o, k); } catch { return false; } };
@@ -190,6 +198,115 @@ function pageScript(ak: string): string {
       } catch (e) { return { ctorThrew: true, message: String(e && e.message || e) }; }
     })();
   }
+
+  // 3e. #166 第二刀：visualization/TextLayer / BarLayer / FlyLineLayer。
+  // 三者与 case 3b 的 PolygonLayer / PolylineLayer 是**同一族**（4.0.5 新增、随主包注入、
+  // 样式走 setOptions、没有 doOnceDraw），但**成员面各不相同**：
+  // TextLayer 是三族里唯一有拾取面（setEnablePicked / getEnablePicked / hitTest +
+  // 六个事件）的，BarLayer 与 FlyLineLayer **连拾取面都没有**（声明里就没有）。
+  // 因此这里把三者的成员表都**逐条**列出，包含它们**没有**的那些候选名——
+  // 「声明里没有」与「运行时没有」必须分别读，不能从前者推断后者。
+  const VIS3 = {
+    TextLayer: ["setData","getData","clearData","setOptions","getOptions","setEnablePicked","getEnablePicked","hitTest","setVisible","getVisible","setOpacity","getOpacity","setZIndex","getZIndex","setRenderStage","getRenderStage","setRefCenter","getRefCenter","addEventListener","removeEventListener","setStyle","setStyleOptions","setBaseOptions","setMinZoom","setMaxZoom","setGradient","setRadius"],
+    BarLayer: ["setData","getData","clearData","setOptions","getOptions","setEnablePicked","getEnablePicked","hitTest","setVisible","getVisible","setOpacity","getOpacity","setZIndex","getZIndex","setRenderStage","getRenderStage","setRefCenter","getRefCenter","addEventListener","removeEventListener","setStyle","setStyleOptions","setBaseOptions","setMinZoom","setMaxZoom"],
+    FlyLineLayer: ["setData","getData","clearData","setOptions","getOptions","setEnablePicked","getEnablePicked","hitTest","setVisible","getVisible","setOpacity","getOpacity","setZIndex","getZIndex","setRenderStage","getRenderStage","setRefCenter","getRefCenter","addEventListener","removeEventListener","setStyle","setStyleOptions","setBaseOptions","setMinZoom","setMaxZoom"],
+  };
+  R.readings.visualizationV3 = {};
+  for (const [name, members] of Object.entries(VIS3)) {
+    const ctor = B[name];
+    R.readings.visualizationV3[name] = {
+      ctorPresent: typeof ctor === "function",
+      // ⚠️ Anchor 是**静态**枚举（TextLayer.d.ts:232），不在原型上，单独读
+      staticAnchor: name === "TextLayer" && typeof ctor === "function" ? ctor.Anchor ?? null : undefined,
+      members: Object.fromEntries(members.map(m => [m, protoHas(ctor, m)])),
+    };
+  }
+
+  // 3f. 3e 三族「能不能**真的**构造 + 交付数据 + 被 Map 接受」。
+  // 存在构造器 ≠ 构造成功；addLayer 是 overloaded，只有真挂过才算数。
+  // 几何类型是官方**逐族限定**的（TextLayer/BarLayer 收 Point/MultiPoint，FlyLineLayer 收
+  // LineString/MultiLineString），因此每个族喂**它自己那一种**几何——喂错几何会得到一个
+  // 看似成功实则空层的假绿。
+  const VIS3_DATA = {
+    TextLayer: { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "Point", coordinates: [116.404, 39.915] }, properties: { id: "t1", text: "北京" } }] },
+    BarLayer: { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "Point", coordinates: [116.404, 39.915] }, properties: { id: "b1", value: [3, 5, 2] } }] },
+    FlyLineLayer: { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: [[116.404, 39.915], [117.2, 39.13]] }, properties: { id: "f1" } }] },
+  };
+  R.readings.visualizationV3Construct = {};
+  for (const name of ["TextLayer", "BarLayer", "FlyLineLayer"]) {
+    R.readings.visualizationV3Construct[name] = (() => {
+      try {
+        // enablePicked: true 让 TextLayer 的拾取面真的打开（官方默认 false），
+        // 否则 hitTest / getEnablePicked 读到的会是「关着」而不是「不存在」。
+        const L = new B[name]({ enablePicked: true });
+        const out = { ctorThrew: false, setDataThrew: null, dataBack: null, getDataShape: null, optionsThrew: null, enablePickedReadBack: null, hitTestAt: null, opacityReadBack: null, zIndexReadBack: null };
+        try { L.setData(VIS3_DATA[name]); } catch (e) { out.setDataThrew = String(e && e.message || e); }
+        try { out.getDataShape = typeof L.getData(); } catch (e) { out.getDataShape = "THREW:" + String(e && e.message || e); }
+        try { L.setOptions({}); } catch (e) { out.optionsThrew = String(e && e.message || e); }
+        try { out.enablePickedReadBack = L.getEnablePicked ? L.getEnablePicked() : "(no member)"; } catch (e) { out.enablePickedReadBack = "THREW:" + String(e && e.message || e); }
+        try { out.hitTestAt = L.hitTest ? ("returned " + String(L.hitTest(10, 10))) : "(no member)"; } catch (e) { out.hitTestAt = "THREW:" + String(e && e.message || e); }
+        try { L.setOpacity(0.5); out.opacityReadBack = L.getOpacity ? L.getOpacity() : "(no getOpacity)"; } catch (e) { out.opacityReadBack = "THREW:" + String(e && e.message || e); }
+        try { L.setZIndex(3); out.zIndexReadBack = L.getZIndex ? L.getZIndex() : "(no getZIndex)"; } catch (e) { out.zIndexReadBack = "THREW:" + String(e && e.message || e); }
+        out.mapAccepts = (() => {
+          try {
+            const div = document.createElement("div");
+            div.style.cssText = "width:200px;height:200px;position:absolute;top:0;left:0";
+            document.body.appendChild(div);
+            const m = new B.Map(div);
+            m.centerAndZoom(new B.Point(116.404, 39.915), 11);
+            m.addLayer(L);
+            const attached = true;
+            // setZIndex 的官方要求是「先挂到 Map 上」——正好在这里验这条前提
+            let zIndexThrew = null;
+            try { L.setZIndex(3); } catch (e) { zIndexThrew = String(e && e.message || e); }
+            m.removeLayer(L);
+            let secondRemoveThrew = null;
+            try { m.removeLayer(L); } catch (e) { secondRemoveThrew = String(e && e.message || e); }
+            m.destroy();
+            div.remove();
+            return { attached, zIndexThrew, secondRemoveThrew };
+          } catch (e) { return { threw: String(e && e.message || e) }; }
+        })();
+        return out;
+      } catch (e) { return { ctorThrew: true, message: String(e && e.message || e) }; }
+    })();
+  }
+
+  // 3g. GeoJSONSource —— 它**不是**图层，是一组**静态**纯函数（GeoJSONSource.d.ts:40-65）。
+  // 要回答的是：(a) 静态成员在不在；(b) 归一化真的可用吗；(c) 归一化出来的 id / properties
+  // 形状是什么（这决定本库若要投影它，公共面上得写什么）。
+  R.readings.geoJSONSource = (() => {
+    const G = B.GeoJSONSource;
+    if (typeof G !== "function") return { ctorPresent: false };
+    const out = {
+      ctorPresent: true,
+      isStaticOnly: Object.getOwnPropertyNames(G).filter(n => n !== "length" && n !== "name" && n !== "prototype"),
+      normalizeShape: null,
+      normalizeThrew: null,
+      extractPointsShape: null,
+      toLineStringsShape: null,
+      toPolygonsShape: null,
+    };
+    const input = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [116.404, 39.915] }, properties: { id: "p1", count: 7 } },
+        { type: "Feature", geometry: { type: "LineString", coordinates: [[116.4, 39.9], [116.5, 39.95]] }, properties: { id: "l1" } },
+        { type: "Feature", geometry: { type: "Polygon", coordinates: [[[116.3, 39.9], [116.4, 39.9], [116.4, 39.95], [116.3, 39.9]]] }, properties: { id: "a1" } },
+        { type: "Feature", geometry: { type: "MultiPoint", coordinates: [[116.1, 39.1], [116.2, 39.2]] }, properties: { name: "无 id" } },
+      ],
+    };
+    let features = null;
+    try { features = G.normalize(input, "id"); out.normalizeShape = Array.isArray(features) ? { isArray: true, length: features.length, first: features[0] ?? null, last: features[features.length - 1] ?? null } : { isArray: false, type: typeof features }; }
+    catch (e) { out.normalizeThrew = String(e && e.message || e); }
+    try { out.extractPointsShape = (() => { const r = G.extractPoints(features ?? [], "count"); return { pointsLen: r.points.length, weightsLen: r.weights.length, firstPoint: r.points[0] ?? null, firstWeight: r.weights[0] ?? null }; })(); }
+    catch (e) { out.extractPointsShape = "THREW:" + String(e && e.message || e); }
+    try { out.toLineStringsShape = (() => { const l = (features ?? []).find(f => f.type === "LineString"); const p = (features ?? []).find(f => f.type === "Polygon"); return { line: G.toLineStrings(l), polygon: G.toLineStrings(p) }; })(); }
+    catch (e) { out.toLineStringsShape = "THREW:" + String(e && e.message || e); }
+    try { out.toPolygonsShape = (() => { const p = (features ?? []).find(f => f.type === "Polygon"); return { polygons: G.toPolygons(p) }; })(); }
+    catch (e) { out.toPolygonsShape = "THREW:" + String(e && e.message || e); }
+    return out;
+  })();
 
   // 4. MapTypeOptions / Projection 运行时是否存在（决定本地 augmentation 还要不要留）
   R.readings.mapTypeOptionsCtor = typeof B.MapTypeOptions;
@@ -468,6 +585,122 @@ function pageScript(ak: string): string {
     }
     return rec;
   })();
+
+  // 15. 延迟复读：3e 实测 BarLayer / FlyLineLayer / GeoJSONSource 在 BMap.Map 刚就绪时
+  // **是 undefined**。但「此刻不在」有两种截然不同的成因，而它们对 Driver 的处置完全相反：
+  //
+  // (a) **异步注入、只是还没到**（扩展 API 那一族的形状）⇒ 必须进 RUNTIME_INJECTED_LAYER_CTORS，
+  //     缺构造器时报 BMAP_CAPABILITY_UNSUPPORTED（可重试），注入完成后 create() 就能成功；
+  // (b) **这个产物里根本没有**（类型包声明了、运行时没发）⇒ 进那份名单会把「永远不会好」的
+  //     缺失报成「可重试」，而正确结论是「不可用」。
+  //
+  // 判据只有一个：**在页面已经跑完前面全部读数（数秒后）再读一次**。若那时变成 function
+  // ⇒ (a)；仍是 undefined ⇒ (b)。不能靠「文档说它会注入」推断。
+  await new Promise((r) => setTimeout(r, 8000));
+  R.readings.lateInjectionTiming = {
+    BarLayer: typeof B.BarLayer,
+    FlyLineLayer: typeof B.FlyLineLayer,
+    GeoJSONSource: typeof B.GeoJSONSource,
+    TextLayer: typeof B.TextLayer,
+    PolygonLayer: typeof B.PolygonLayer,
+    PointLayer: typeof B.PointLayer,
+  };
+  // 若 (a) 成立，紧接着把三者的成员面按**延迟后**的构造器再读一遍——「注入完成后长什么样」
+  // 才是要登记的形状（第一遍读到 undefined 时成员表全是 false，没有判别力）。
+  R.readings.lateVisualizationV3 = {};
+  for (const name of ["TextLayer", "BarLayer", "FlyLineLayer"]) {
+    const ctor = B[name];
+    if (typeof ctor !== "function") { R.readings.lateVisualizationV3[name] = { ctorPresent: false }; continue; }
+    R.readings.lateVisualizationV3[name] = {
+      ctorPresent: true,
+      members: Object.fromEntries((VIS3[name] || []).map(m => [m, protoHas(ctor, m)])),
+    };
+  }
+  // GeoJSONSource 的静态面也要在延迟后读（它同样在第一遍是 undefined）。
+  R.readings.lateGeoJSONSource = (() => {
+    const G = B.GeoJSONSource;
+    if (typeof G !== "function") return { ctorPresent: false };
+    const out = {
+      ctorPresent: true,
+      ownStatics: Object.getOwnPropertyNames(G).filter(n => n !== "length" && n !== "name" && n !== "prototype"),
+      protoMembers: Object.getOwnPropertyNames(G.prototype || {}),
+    };
+    const input = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [116.404, 39.915] }, properties: { id: "p1", count: 7 } },
+        { type: "Feature", geometry: { type: "LineString", coordinates: [[116.4, 39.9], [116.5, 39.95]] }, properties: { id: "l1" } },
+        { type: "Feature", geometry: { type: "Polygon", coordinates: [[[116.3, 39.9], [116.4, 39.9], [116.4, 39.95], [116.3, 39.9]]] }, properties: { id: "a1" } },
+        { type: "Feature", geometry: { type: "MultiPoint", coordinates: [[116.1, 39.1], [116.2, 39.2]] }, properties: { name: "无 id" } },
+      ],
+    };
+    let features = null;
+    try { features = G.normalize(input, "id"); out.normalizeShape = Array.isArray(features) ? { isArray: true, length: features.length, first: features[0] ?? null, last: features[features.length - 1] ?? null } : { isArray: false, type: typeof features }; }
+    catch (e) { out.normalizeThrew = String(e && e.message || e); }
+    try { out.extractPointsShape = (() => { const r = G.extractPoints(features || [], "count"); return { pointsLen: r.points.length, weightsLen: r.weights.length, firstPoint: r.points[0] ?? null, firstWeight: r.weights[0] ?? null }; })(); }
+    catch (e) { out.extractPointsShape = "THREW:" + String(e && e.message || e); }
+    try { out.toLineStringsShape = (() => { const l = (features || []).find(f => f.type === "LineString"); const p = (features || []).find(f => f.type === "Polygon"); return { line: G.toLineStrings(l), polygonRings: G.toLineStrings(p) }; })(); }
+    catch (e) { out.toLineStringsShape = "THREW:" + String(e && e.message || e); }
+    try { out.toPolygonsShape = (() => { const p = (features || []).find(f => f.type === "Polygon"); return { polygons: G.toPolygons(p) }; })(); }
+    catch (e) { out.toPolygonsShape = "THREW:" + String(e && e.message || e); }
+    return out;
+  })();
+  // 三者延迟后若到位，把「构造 + 交付数据 + 被 Map 接受」也补测一遍（第一遍是 not a constructor）。
+  R.readings.lateVisualizationV3Construct = {};
+  for (const name of ["BarLayer", "FlyLineLayer"]) {
+    if (typeof B[name] !== "function") { R.readings.lateVisualizationV3Construct[name] = { ctorPresent: false }; continue; }
+    R.readings.lateVisualizationV3Construct[name] = (() => {
+      try {
+        const L = new B[name]({});
+        const out = { ctorThrew: false, setDataThrew: null, getDataShape: null, optionsThrew: null, enablePickedReadBack: null, opacityReadBack: null, zIndexReadBack: null };
+        try { L.setData(VIS3_DATA[name]); } catch (e) { out.setDataThrew = String(e && e.message || e); }
+        try { out.getDataShape = typeof L.getData(); } catch (e) { out.getDataShape = "THREW:" + String(e && e.message || e); }
+        try { L.setOptions({}); } catch (e) { out.optionsThrew = String(e && e.message || e); }
+        try { out.enablePickedReadBack = L.getEnablePicked ? L.getEnablePicked() : "(no member)"; } catch (e) { out.enablePickedReadBack = "THREW:" + String(e && e.message || e); }
+        try { L.setOpacity(0.5); out.opacityReadBack = L.getOpacity ? L.getOpacity() : "(no getOpacity)"; } catch (e) { out.opacityReadBack = "THREW:" + String(e && e.message || e); }
+        try { L.setZIndex(3); out.zIndexReadBack = L.getZIndex ? L.getZIndex() : "(no getZIndex)"; } catch (e) { out.zIndexReadBack = "THREW:" + String(e && e.message || e); }
+        out.mapAccepts = (() => {
+          try {
+            const div = document.createElement("div");
+            div.style.cssText = "width:200px;height:200px;position:absolute;top:0;left:0";
+            document.body.appendChild(div);
+            const m = new B.Map(div);
+            m.centerAndZoom(new B.Point(116.404, 39.915), 11);
+            m.addLayer(L);
+            let zIndexThrew = null;
+            try { L.setZIndex(3); } catch (e) { zIndexThrew = String(e && e.message || e); }
+            m.removeLayer(L);
+            let secondRemoveThrew = null;
+            try { m.removeLayer(L); } catch (e) { secondRemoveThrew = String(e && e.message || e); }
+            m.destroy();
+            div.remove();
+            return { attached: true, zIndexThrew, secondRemoveThrew };
+          } catch (e) { return { threw: String(e && e.message || e) }; }
+        })();
+        return out;
+      } catch (e) { return { ctorThrew: true, message: String(e && e.message || e) }; }
+    })();
+  }
+
+  // 16. 第二次延迟复读（再等 25s）+ 全命名空间扫描。
+  // 上一条 8s 的复读已判定 BarLayer / FlyLineLayer / GeoJSONSource **不是**「稍后才注入」。
+  // 这里再排除一个更隐蔽的可能：**它们挂在别的名字下**（例如只以某个内部别名暴露），
+  // 因此扫一遍 BMap 的全部自有属性，把所有含 Layer / Source / Bar / Fly / Text / Chart
+  // 关键字的名字列出来。若列表里仍然没有 Bar / Fly，那么结论是「这份产物确实不发它们」，
+  // 而**不是**「探针没找对名字」。
+  await new Promise((r) => setTimeout(r, 25000));
+  R.readings.veryLateTiming = {
+    BarLayer: typeof B.BarLayer,
+    FlyLineLayer: typeof B.FlyLineLayer,
+    GeoJSONSource: typeof B.GeoJSONSource,
+    WebGLCustomLayer: typeof B.WebGLCustomLayer,
+    ThreejsLayer: typeof B.ThreejsLayer,
+    DeckglLayer: typeof B.DeckglLayer,
+  };
+  R.readings.namespaceScan = {
+    ownCount: Object.getOwnPropertyNames(B).length,
+    matching: Object.getOwnPropertyNames(B).filter(n => /Layer|Source|Bar|Fly|Text|Chart/i.test(n)).sort(),
+  };
 
   R.phase = "done";
   return publish(R);

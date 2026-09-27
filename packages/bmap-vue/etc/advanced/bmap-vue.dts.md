@@ -130,7 +130,7 @@ export declare interface Bounds {
     southwest: Point;
     northeast: Point;
 }
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor>;
 export declare const CAPABILITY_FAMILIES: readonly CapabilityFamily[];
 export declare const CAPABILITY_IDS: readonly Capability[];
@@ -696,6 +696,7 @@ export declare interface NativeLayerDriver {
     getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
     setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
     hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+    hitTestText(layer: NativeLayerHandle, pixel: Pixel): NativeLayerTextPick | null;
     start(layer: NativeLayerHandle): void;
     pause(layer: NativeLayerHandle): void;
     resume(layer: NativeLayerHandle): void;
@@ -707,11 +708,22 @@ export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<str
 export declare type NativeLayerFeatureState = Record<string, unknown>;
 export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
 export declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
-export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline";
-export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline" | "text";
+export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "hitTestText" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
 export declare interface NativeLayerPick {
     dataIndex: number;
     dataItem: unknown;
+}
+export declare interface NativeLayerTextPick {
+    point: {
+        lng: number;
+        lat: number;
+    } | null;
+    text: string | null;
+    width: number | null;
+    height: number | null;
+    id: string | number | null;
+    properties: unknown;
 }
 export declare interface NativeLayerZoomRange {
     min?: number;

@@ -97,6 +97,8 @@ const FROZEN_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   "Rectangle",
   "ResourceScope",
   "ScaleControl",
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
+  "TextLayer",
   "TileLayer",
   "TrackLineLayer",
   "TrafficLayer",

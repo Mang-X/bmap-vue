@@ -97,6 +97,7 @@ import {
   FakeV4PointShapeLayer,
   FakeV4PolygonLayer,
   FakeV4PolylineLayer,
+  FakeV4TextLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
 import { FakeV4Panorama, FakeV4PanoramaLabel, FakeV4PanoramaService } from './panorama.ts'
@@ -208,6 +209,7 @@ export {
   FakeV4PolygonPolylineLayerBase,
   FakeV4PolylineLayer,
   FakeV4RuntimeLayer,
+  FakeV4TextLayer,
   FakeV4TrackLine,
 } from './native-layers.ts'
 export { FakeV4Panorama, FakeV4PanoramaLabel, FakeV4PanoramaService } from './panorama.ts'
@@ -323,6 +325,7 @@ export interface FakeBMapV4Namespace {
   /** #166：4.0.5 `visualization/` 新增，官方指定的 `FillLayer` / `LineLayer` 替代。 */
   PolygonLayer: new (options?: Record<string, unknown>) => FakeV4PolygonLayer
   PolylineLayer: new (options?: Record<string, unknown>) => FakeV4PolylineLayer
+  TextLayer: new (options?: Record<string, unknown>) => FakeV4TextLayer
   /* -------------------------------------------------- 全景（#23） */
   Panorama: new (
     container: string | HTMLElement,
@@ -790,6 +793,12 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
       createdNativeLayers.push(this)
     }
   }
+  class TextLayerClass extends FakeV4TextLayer {
+    constructor(options?: Record<string, unknown>) {
+      super(options ?? {}, stats)
+      createdNativeLayers.push(this)
+    }
+  }
 
   /* ---------------------------------------------------- 全景（#23） */
 
@@ -877,6 +886,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     TrackLine: TrackLineClass,
     PolygonLayer: PolygonLayerClass,
     PolylineLayer: PolylineLayerClass,
+    TextLayer: TextLayerClass,
     Panorama: PanoramaClass,
     PanoramaService: PanoramaServiceClass,
     PanoramaLabel: PanoramaLabelClass,

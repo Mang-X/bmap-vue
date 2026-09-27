@@ -82,6 +82,11 @@ export type {
   VisualizationLayerCommonProps,
   VisualizationPickOptions,
   VisualizationZoomCtorOptions,
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）的公共类型。
+  TextLayerProps,
+  TextLayerStyle,
+  TextLayerPick,
+  TextLayerAnchor,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";

@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
-import type { FakeV4LineLayer, FakeV4PointLayer } from "../../../../test-utils";
+import type { FakeV4LineLayer, FakeV4PointLayer, FakeV4TextLayer } from "../../../../test-utils";
 import {
   callNativeLayerOperation,
   NATIVE_LAYER_FACET_KINDS as KINDS,
@@ -485,6 +485,55 @@ describe("v4 Native Layer Facet：拾取", () => {
       expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
     );
   });
+
+  it("TextLayer：hitTestText 逐字段如实投影官方 TextLayerItem，**不补 dataIndex**", () => {
+    // 官方回包（`visualization/TextLayer.d.ts:19-32`）：`{ point, text, width, height, id, properties }`。
+    // 归一化后的形状必须与那**六项**一一对应，且**没有** `dataIndex`——官方没这一项，
+    // 而本库不从 `id` 反推下标（那是 SDK 内部口径）。
+    const layer = layers.create("text");
+    const raw = layer.raw as FakeV4TextLayer;
+    const pick = layers.hitTestText(layer, { x: 40, y: 60 });
+    expect(raw.callLog).toContain("hitTest:40,60");
+    expect(pick).toEqual({
+      point: { lng: 116.404, lat: 39.915 },
+      text: "北京",
+      width: 28,
+      height: 20,
+      id: "t-1",
+      properties: { id: "t-1" },
+    });
+    expect(pick, "不得凭空多出 dataIndex").not.toHaveProperty("dataIndex");
+  });
+
+  it("TextLayer：hitTestText 未命中回 null；回包读不到的字段给 null 而不是 0 / \"\"", () => {
+    const layer = layers.create("text");
+    const raw = layer.raw as FakeV4TextLayer;
+    raw.hitResult = null;
+    expect(layers.hitTestText(layer, { x: 0, y: 0 })).toBeNull();
+
+    // 官方声明 text/width/height 必有值，但回包里读不到时**如实为 null**：
+    // `0` 宽度与「没给宽度」在业务上不是一回事。
+    raw.hitResult = { point: { lng: 1, lat: 2 } } as unknown as FakeV4TextLayer["hitResult"];
+    const pick = layers.hitTestText(layer, { x: 1, y: 1 });
+    expect(pick).toEqual({
+      point: { lng: 1, lat: 2 },
+      text: null,
+      width: null,
+      height: null,
+      id: null,
+      properties: undefined,
+    });
+  });
+
+  it("hitTestText 只在 text 上有入口；其余 kind 显式失败", () => {
+    for (const kind of ["point", "cluster", "line", "polygon", "polyline"] as const) {
+      expect(layers.supports(kind, "hitTestText"), `${kind} 不该支持 hitTestText`).toBe(false);
+      const layer = layers.create(kind);
+      expect(() => layers.hitTestText(layer, { x: 1, y: 1 })).toThrowError(
+        expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+      );
+    }
+  });
 });
 
 describe("v4 Native Layer Facet：TrackLine 播放命令（#110）", () => {
@@ -614,6 +663,12 @@ const OPERATION_MEMBERS: Readonly<Record<NativeLayerOperation, readonly string[]
   getState: ["getAllState"],
   setEnablePicked: ["setBaseOptions"],
   hitTest: ["hitTest"],
+  /**
+   * #166 第二刀：`TextLayer` 的命中测试。**成员名与 `hitTest` 相同**（官方就只有一个
+   * `hitTest`），但归一化成**另一种回包形状**（`TextLayerItem`，没有 `dataIndex`），
+   * 因此在领域面是**两条**操作而不是一条。
+   */
+  hitTestText: ["hitTest"],
   // TrackLine 播放：成员名与方法同名（live 探针逐一验证 `typeof === "function"`）
   start: ["start"],
   pause: ["pause"],
@@ -643,6 +698,12 @@ const OPERATION_MEMBERS_BY_KIND: Readonly<
    */
   polygon: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
   polyline: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
+  /**
+   * #166 第二刀。`hitTestText` 落在官方同一个 `hitTest` 成员上，但**不是** `hitTest` 那条
+   * 操作——官方 `TextLayer.hitTest` 的回包是 `TextLayerItem`（`:289`），没有 `dataIndex`。
+   * 把它归一成 `hitTest` 那份 `{ dataIndex, dataItem }` 会逼本库编造一个下标。
+   */
+  text: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
 };
 
 function operationMembersFor(
@@ -674,6 +735,8 @@ const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
   // #166：官方 4.0.5 新增的两个类，**替代**弃用的 `FillLayer` / `LineLayer`。
   ["polygon", "PolygonLayer"],
   ["polyline", "PolylineLayer"],
+  // #166 第二刀：批量文字标注。它是这一族里唯一**声明与运行时完全对齐**的类。
+  ["text", "TextLayer"],
 ];
 
 /** `declaredMembersOf` 要读的子目录（4.0.5 把这两族分开放）。 */
@@ -684,6 +747,7 @@ const DECLARED_SUBDIR: Readonly<Partial<Record<NativeLayerKind, string>>> = {
   "track-line": "visualization",
   polygon: "visualization",
   polyline: "visualization",
+  text: "visualization",
 };
 
 /**
@@ -755,6 +819,11 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
     // 这一半，而那一半正是假支持的来源。`hitTest` 两族的声明里都有
     // （`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`），而 live 探针读
     // `prototype.hitTest` 均为 `false` ⇒ 不登记（同 `Heatmap` 的 `setGradient` / `setRadius`）。
+    //
+    // ⚠️ 名单**只含 polygon / polyline**：`text` 族声明与运行时**都有** `hitTest`
+    // （live 探针 case 3e：`prototype.hitTest === true`；case 3f 实际调用返回 `null`），
+    // 因此它登记的是 `hitTestText`——把这条结论按「visualization 家族」扩到它身上
+    // 就是拿前两族的 live 读数去否定一个**不同**的读数。
     for (const [kind, ctor] of [
       ["polygon", "PolygonLayer"],
       ["polyline", "PolylineLayer"],
@@ -763,6 +832,38 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
       expect(declared, "官方声明里确实有 hitTest（下面的断言才有意义）").toContain("hitTest");
       expect(layers.supports(kind, "hitTest"), `${kind} 不得登记 hitTest`).toBe(false);
     }
+  });
+
+  it("text：hitTest 与 setOpacity 都登记（声明与运行时**一致**，与前两族相反）", () => {
+    // 这一族是 `visualization/` 里第一个「声明与运行时完全对齐」的类，三条 live 读数
+    // （`scripts/probe-runtime-members.mts` case 3e/3f，2026-09-27）：
+    //   - `prototype.hitTest === true`，实际调用返回 `null`（当时容器上没有文字）
+    //     ⇒ 方法**在且可调用**（`PolygonLayer` / `PolylineLayer` 的 `hitTest` 是 `false`）；
+    //   - `prototype.setOpacity === true`，`setOpacity(0.5)` 后 `getOpacity()` 读回 `0.5`
+    //     ⇒ 声明了（`TextLayer.d.ts:296`）且运行时在位（前两族**没声明**，按 #165 裁决不登记）。
+    //
+    // 因此它登记 `hitTestText`（不是 `hitTest`，见 `OPERATION_MEMBERS_BY_KIND`）与 `setOpacity`。
+    expect(layers.supports("text", "hitTestText"), "hitTest 声明与运行时都在 ⇒ 登记").toBe(true);
+    expect(layers.supports("text", "setOpacity"), "官方声明了 setOpacity ⇒ 登记").toBe(true);
+  });
+
+  it("text：**不**登记 hitTest 那一条（回包形状不同，不是同一个归一化）", () => {
+    // 官方 `TextLayer.hitTest` 返回 `TextLayerItem`（`:289`：有 `text` / `width` / `height`
+    // / 显式 `point`，**没有** `dataIndex`），而 `hitTest` 那条归一化成 `{ dataIndex, dataItem }`。
+    // 归到同一条会让 `TextLayer` 拿到一个本库编出来的下标——回包形状错是最难被发现的一类 bug。
+    expect(layers.supports("text", "hitTest"), "text 的回包形状不同，不得归到 hitTest").toBe(false);
+  });
+
+  it("text：不登记 setZoomRange / 状态 API（官方没有这些成员）", () => {
+    // `minZoom` / `maxZoom` 是**构造选项**（`TextLayer.d.ts:190` / `:195`），官方**没有**
+    // `setMinZoom` / `setMaxZoom`（live 探针 `protoHas` 两条均为 `false`）⇒ 不登记。
+    const declared = declaredMembersOf("TextLayer", "visualization");
+    expect(declared, "官方确实没有这两个 setter").not.toContain("setMinZoom");
+    expect(declared, "官方确实没有这两个 setter").not.toContain("setMaxZoom");
+    expect(declared, "官方确实没有 setRenderStage 的对外 setter 之外的更新状态").not.toContain("setZoomRange");
+    expect(layers.supports("text", "setZoomRange")).toBe(false);
+    expect(layers.supports("text", "updateState")).toBe(false);
+    expect(layers.supports("text", "getState")).toBe(false);
   });
 
   it("解析器本身不能恒真：泛型成员要读得到、未声明的成员必须读不到", () => {

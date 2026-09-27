@@ -422,3 +422,75 @@ export class FakeV4PolygonLayer extends FakeV4PolygonPolylineLayerBase {
 export class FakeV4PolylineLayer extends FakeV4PolygonPolylineLayerBase {
   readonly isPolylineLayer = true
 }
+
+/* ------------------------------ 4.0.5 visualization/TextLayer（#166 第二刀） */
+
+/**
+ * `visualization/TextLayer` 的替身（issue #166 第二刀）。
+ *
+ * **它是 `visualization/` 里第一个「声明与运行时完全对齐」的类**，与前两族的三处差别正是
+ * 本票要处理的判据（live 探针 `scripts/probe-runtime-members.mts` case 3e/3f，2026-09-27，
+ * `lateVisualizationV3.TextLayer`，全部 21 个候选成员逐条读出）：
+ *
+ * | 成员 | 官方声明 | 运行时实测 | 本替身 |
+ * | --- | --- | --- | --- |
+ * | `setData` / `getData` / `clearData` | 有 | 有 | **有**（基类那份） |
+ * | `setOptions` / `getOptions` | 有 | 有 | **有**（`setOptions` 是基类的） |
+ * | `setEnablePicked` / `getEnablePicked` | 有 | 有 | **有** |
+ * | **`hitTest`** | 有（`TextLayer.d.ts:289`） | **有**（探针 `hitTestAt: "returned null"`） | **有** |
+ * | **`setOpacity` / `getOpacity`** | 有（`:296` / `:298`） | **有** | **有**（基类那份） |
+ * | `setVisible` / `setZIndex` | 有 | 有 | **有**（基类那份） |
+ * | `setRenderStage` / `setRefCenter` | 有 | 有 | **没有**（无消费者，见 kind 表注释） |
+ * | `addEventListener` / `removeEventListener` | 有 | 有 | **有**（基类 `FakeV4Layer` 那份） |
+ * | `setStyle` / `setStyleOptions` / `setBaseOptions` | 无 | 无 | **没有** |
+ * | `setMinZoom` / `setMaxZoom` | 无 | 无 | **没有** |
+ *
+ * 三处「刻意不给」的理由各不相同，逐条见上面的表与 kind 表注释——**替身不得比真实契约宽容**，
+ * 否则 Driver 多登记一个不存在的 capability 会被 CI 测绿（#106 评审 P1 的同一类坑）。
+ */
+export class FakeV4TextLayer extends FakeV4RuntimeLayer {
+  /** 构造期读取（官方 `TextLayerOptions.enablePicked`，`:150` @default false）。 */
+  enablePicked: boolean
+
+  /**
+   * `hitTest` 的回包（官方返回 `TextLayerItem | null`，`TextLayer.d.ts:289`）。
+   *
+   * 默认给一个**有内容**的命中而不是 `null`：探针在真实运行时读到的是 `null`（当时容器
+   * 上没有文字），而替身若恒为 `null` 就无法区分「方法在、返回未命中」与「方法不存在」。
+   * 测试需要「未命中」时把它显式置 `null`。
+   */
+  hitResult: {
+    point: unknown
+    text: string
+    width: number
+    height: number
+    id: string | number
+    properties: unknown
+  } | null = {
+    point: { lng: 116.404, lat: 39.915 },
+    text: "北京",
+    width: 28,
+    height: 20,
+    id: "t-1",
+    properties: { id: "t-1" },
+  }
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    this.enablePicked = options.enablePicked === true
+  }
+
+  setEnablePicked(enabled: boolean): void {
+    this.callLog.push('setEnablePicked')
+    this.enablePicked = enabled
+  }
+
+  getEnablePicked(): boolean {
+    return this.enablePicked
+  }
+
+  hitTest(x: number, y: number): FakeV4TextLayer["hitResult"] {
+    this.callLog.push(`hitTest:${x},${y}`)
+    return this.hitResult
+  }
+}

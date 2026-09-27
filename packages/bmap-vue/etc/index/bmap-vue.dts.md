@@ -779,7 +779,24 @@ declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}
     enablePicked: boolean;
     mouseStyleChange: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_45: DefineComponent<PanoramaProps, {
+declare const __VLS_component_45: DefineComponent<TextLayerProps, {
+    hitTest: typeof hitTest;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    click: (pick: FeaturePick) => any;
+    dblclick: (pick: FeaturePick) => any;
+    mousemove: (pick: FeaturePick) => any;
+    rightclick: (pick: FeaturePick) => any;
+}, string, PublicProps, Readonly<TextLayerProps> & Readonly<{
+    onClick?: ((pick: FeaturePick) => any) | undefined;
+    onDblclick?: ((pick: FeaturePick) => any) | undefined;
+    onMousemove?: ((pick: FeaturePick) => any) | undefined;
+    onRightclick?: ((pick: FeaturePick) => any) | undefined;
+}>, {
+    visible: boolean;
+    enablePicked: boolean;
+    mouseStyleChange: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_46: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
     getLinks: () => PanoramaLink[];
     capture: (options?: PanoramaCaptureOptions) => string | null;
@@ -1232,6 +1249,9 @@ declare type __VLS_Slots_44 = {} & {
 declare type __VLS_Slots_45 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
+declare type __VLS_Slots_46 = {} & {
+    default?: (props: typeof __VLS_1) => any;
+};
 declare type __VLS_Slots_5 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
@@ -1443,6 +1463,11 @@ declare type __VLS_WithSlots_44<T, S> = T & {
     };
 };
 declare type __VLS_WithSlots_45<T, S> = T & {
+    new (): {
+        $slots: S;
+    };
+};
+declare type __VLS_WithSlots_46<T, S> = T & {
     new (): {
         $slots: S;
     };
@@ -1775,7 +1800,7 @@ export declare const BUILTIN_PLUGIN_URLS: {
 };
 export declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
 declare type BuiltinPluginName = "TrackAnimation" | "DrawingManager" | "GeoUtils" | "Mapvgl";
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare interface CapabilityDescriptor {
     id: Capability;
     family: CapabilityFamily;
@@ -2367,6 +2392,7 @@ export declare interface HeatmapLayerProps {
     style?: Record<string, unknown>;
     visible?: boolean;
 }
+declare function hitTest(x: number, y: number): TextLayerPick | null;
 export declare const InfoWindow: __VLS_WithSlots_4<typeof __VLS_component_4, __VLS_Slots_4>;
 export declare type InfoWindowHandle = SdkHandle<"overlay:info-window">;
 declare interface InfoWindowManager {
@@ -3698,6 +3724,7 @@ export declare interface NativeLayerDriver {
     getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
     setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
     hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+    hitTestText(layer: NativeLayerHandle, pixel: Pixel): NativeLayerTextPick | null;
     start(layer: NativeLayerHandle): void;
     pause(layer: NativeLayerHandle): void;
     resume(layer: NativeLayerHandle): void;
@@ -3709,8 +3736,8 @@ export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<str
 export declare type NativeLayerFeatureState = Record<string, unknown>;
 export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
 declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
-export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline";
-export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline" | "text";
+export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "hitTestText" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
 declare interface NativeLayerPick {
     dataIndex: number;
     dataItem: unknown;
@@ -3725,6 +3752,17 @@ export declare interface NativeLayerPickOptions {
     selectedColor?: string;
     selectedIndex?: number;
     popEvent?: boolean;
+}
+declare interface NativeLayerTextPick {
+    point: {
+        lng: number;
+        lat: number;
+    } | null;
+    text: string | null;
+    width: number | null;
+    height: number | null;
+    id: string | number | null;
+    properties: unknown;
 }
 declare interface NativeLayerZoomRange {
     min?: number;
@@ -3950,7 +3988,7 @@ declare interface OverviewMapControlProps {
     padding?: number;
     visible?: boolean;
 }
-export declare const Panorama: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
+export declare const Panorama: __VLS_WithSlots_46<typeof __VLS_component_46, __VLS_Slots_46>;
 export declare interface PanoramaCaptureOptions {
     quality?: number;
     type?: string;
@@ -4672,6 +4710,57 @@ export declare interface TargetContext {
 }
 export declare const targetContextKey: InjectionKey<TargetContext>;
 export declare type TargetKind = "map" | "marker" | "overlay" | "clusterer" | "layer";
+export declare const TextLayer: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
+export declare type TextLayerAnchor = "center" | "topLeft" | "topCenter" | "topRight" | "rightCenter" | "bottomRight" | "bottomCenter" | "bottomLeft" | "leftCenter";
+export declare interface TextLayerPick {
+    point: {
+        lng: number;
+        lat: number;
+    } | null;
+    text: string | null;
+    width: number | null;
+    height: number | null;
+    id: string | number | null;
+    properties: unknown;
+}
+export declare interface TextLayerProps extends VisualizationLayerCommonProps, VisualizationZoomCtorOptions, VisualizationPickOptions {
+    data?: object | null;
+    style?: TextLayerStyle;
+    opacity?: number;
+}
+export declare interface TextLayerStyle {
+    text?: VisualizationStyleValue<string>;
+    fontSize?: VisualizationStyleValue<number>;
+    fontFamily?: VisualizationStyleValue<string>;
+    fontWeight?: VisualizationStyleValue<string | number>;
+    color?: VisualizationStyleValue<string>;
+    strokeColor?: VisualizationStyleValue<string>;
+    strokeWeight?: VisualizationStyleValue<number>;
+    textMaxWidth?: number;
+    lineHeight?: number;
+    textAlign?: "center" | "left" | "right";
+    offset?: VisualizationStyleValue<[
+        number,
+        number
+    ]>;
+    anchor?: VisualizationStyleValue<TextLayerAnchor>;
+    rotation?: VisualizationStyleValue<number>;
+    scale?: VisualizationStyleValue<number>;
+    fillOpacity?: VisualizationStyleValue<number>;
+    isFlat?: boolean;
+    collides?: boolean;
+    waitTime?: number;
+    padding?: [
+        number,
+        number
+    ];
+    margin?: [
+        number,
+        number
+    ];
+    opacity?: number;
+    renderStage?: "building" | "poi" | null;
+}
 export declare const TileLayer: __VLS_WithSlots_30<typeof __VLS_component_30, __VLS_Slots_30>;
 declare interface TileLayerProps {
     visible?: boolean;

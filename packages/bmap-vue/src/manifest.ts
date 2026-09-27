@@ -319,6 +319,14 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/PolylineLayer.vue",
   },
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。它是这一族里唯一
+  // 声明与运行时完全对齐的类（`hitTest` 与 `setOpacity` 都在），因此拾取面比前两族宽。
+  {
+    name: "TextLayer",
+    exportName: "TextLayer",
+    category: "layer",
+    source: "./components/layers/TextLayer.vue",
+  },
   {
     name: "Panorama",
     exportName: "Panorama",

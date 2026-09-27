@@ -213,7 +213,7 @@ export interface Bounds {
 }
 
 // @public
-export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 
 // @public
 export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor>;
@@ -1212,6 +1212,7 @@ export interface NativeLayerDriver {
     create(kind: NativeLayerKind, options?: Record<string, unknown>): NativeLayerHandle;
     getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
     hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+    hitTestText(layer: NativeLayerHandle, pixel: Pixel): NativeLayerTextPick | null;
     // (undocumented)
     pause(layer: NativeLayerHandle): void;
     // (undocumented)
@@ -1254,16 +1255,40 @@ export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>
 export type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
 
 // @public
-export type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline";
+export type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline" | "text";
 
 // @public
-export type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+export type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest"
+/**
+* `TextLayer` 的命中测试（#166 第二刀）。
+*
+* **为什么与 `hitTest` 分成两条**：官方 `TextLayer.hitTest` 返回的是 `TextLayerItem`
+* （`visualization/TextLayer.d.ts:289`：`{ point, text, width, height, id, properties }`），
+* 而 `hitTest` 那一条的归一化目标是 `{ dataIndex, dataItem }`——**形状不同**：
+* 文字图层的回包里没有 `dataIndex`，本库无法（也不该）替它编一个下标出来。
+* 把两者塞进同一个 `switch` 分支会让其中一族拿到形状不对的回包，而回包形状错是最难
+* 被使用者发现的一类 bug（字段都在、值都是 `undefined` / `-1`）。
+*/
+| "hitTestText" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
 
 // @public
 export interface NativeLayerPick {
     dataIndex: number;
     // (undocumented)
     dataItem: unknown;
+}
+
+// @public
+export interface NativeLayerTextPick {
+    height: number | null;
+    id: string | number | null;
+    point: {
+        lng: number;
+        lat: number;
+    } | null;
+    properties: unknown;
+    text: string | null;
+    width: number | null;
 }
 
 // @public

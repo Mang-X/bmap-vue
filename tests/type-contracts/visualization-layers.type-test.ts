@@ -21,6 +21,10 @@ import type {
   PolygonLayerStyle,
   PolylineLayerProps,
   PolylineLayerStyle,
+  TextLayerAnchor,
+  TextLayerPick,
+  TextLayerProps,
+  TextLayerStyle,
   VisualizationPickOptions,
 } from "../../packages/bmap-vue/src/types/components";
 
@@ -139,3 +143,94 @@ declare const legacyFill: FillLayerProps;
 declare const legacyLineProps: LineLayerProps;
 const _legacyStillWorks: FillLayerProps = { data: null, border: true };
 const _legacyStillWorks2: LineLayerProps = { data: undefined, idKey: "id" };
+
+/* ================================================================================
+ * `<TextLayer>`（#166 第二刀）
+ *
+ * 与前两族**方向相反**的两条，是本节断言的全部意义所在：官方 `TextLayer` 声明与运行时
+ * **完全对齐**，因此
+ *   - 它**有** `opacity` prop（前两族官方未声明 `setOpacity` ⇒ 不给，见上面 §56 那条）；
+ *   - 它**有** `hitTest`（前两族声明有而运行时无 ⇒ 不开面）。
+ * 把前两族的结论按「visualization 家族」扩到它身上，就等于拿一条**不同的** live 读数
+ * （探针 case 3e/3f，2026-09-27）去否定本票自己的裁决。
+ * ============================================================================= */
+
+declare const text: TextLayerProps;
+declare const textPick: TextLayerPick;
+declare const textStyle: TextLayerStyle;
+
+const _okTextData = text.data;
+const _okTextVisible = text.visible;
+const _okTextZIndex = text.zIndex;
+const _okTextMinZoom = text.minZoom;
+const _okTextIdKey = text.idKey;
+const _okTextStyle = text.style;
+
+/* ------------------------------------------- 官方**声明**了 setOpacity ⇒ 有 prop */
+
+const _okTextOpacity: TextLayerProps["opacity"] = 0.5;
+// `setOpacity` / `setVisible` / `setZIndex` 三个字段级 setter 官方都逐条声明了
+// （`visualization/TextLayer.d.ts:296` / `:292` / `:300`）⇒ 三个 prop 都在。
+const _okTextAllSetters: TextLayerProps = { visible: true, opacity: 1, zIndex: 2 };
+
+/* ------------------------------------------------ 数据驱动样式（官方 StyleValue<T>） */
+
+const _okTextDataDriven: TextLayerStyle = {
+  text: (properties) => String(properties.name),
+  color: (properties) => (properties.dark ? "#fff" : "#333"),
+  fontSize: (properties, feature, index) => (index === 0 ? 16 : 12),
+};
+
+/* ------------------------------- 锚点是**字面量联合**，不是 string（不得被放宽） */
+
+// @ts-expect-error 官方 `TextAnchor` 只收那九个值（`visualization/TextLayer.d.ts:5-14`）
+textStyle.anchor = "middle";
+
+// @ts-expect-error 同上：大小写与拼写都必须是官方那几个
+textStyle.anchor = "topleft";
+
+const _okAnchor: TextLayerAnchor = "bottomRight";
+textStyle.anchor = _okAnchor;
+
+/* ------------------------------------------- 线型 / 对齐 / 绘制阶段：字面量联合 */
+
+// @ts-expect-error 官方 `textAlign` 只收 center / left / right（`:89`）
+textStyle.textAlign = "justify";
+// @ts-expect-error 官方 `renderStage` 只收 building / poi / null（`:198`）
+textStyle.renderStage = "sky";
+
+// 两族的 style **整袋可互赋**（都是全可选接口，TS 的可选属性兼容规则）——
+// 因此判据**不能**用整袋互赋（同上面 LineLayerStyle 那条的说明），只能逐字段：
+// `PolygonLayerStyle.fillColor` 在 `TextLayerStyle` 里**不存在**，
+// 而 `TextLayerStyle` 的 `strokeColor` 是官方 `StyleValue<string>`，`PolygonLayerStyle` 的
+// 同名字段类型相同——真正的分界在**互不存在的那些键**上。
+// @ts-expect-error `TextLayerStyle` 没有 `fillColor`（那是 `PolygonLayerOptions` 的字段）
+textStyle.fillColor = "red";
+declare const polyStyle2: PolygonLayerStyle;
+// @ts-expect-error 反向：`PolygonLayerStyle` 没有 `fontSize`（那是 `TextLayerOptions` 的字段）
+polyStyle2.fontSize = 14;
+// @ts-expect-error `TextLayerStyle` 没有 `strokeStyle`（`PolylineLayer` 那一族的字段）
+textStyle.strokeStyle = "dashed";
+
+/* ------------------------------------------------ 拾取：仍是那五项，不多不少 */
+
+// @ts-expect-error `TextLayer` 的选项表（`TextLayer.d.ts:145-168`）里同样没有 `layer/` 家族那七项
+text.crs = "BD09MC";
+// @ts-expect-error 没有 `popEvent`（由构造选项 `pickThrough` 控制）
+text.popEvent = false;
+// @ts-expect-error 没有 `selectedIndex`（这一族**没有**要素状态 API）
+text.selectedIndex = 3;
+
+/* ------------------------------------ `hitTest` 的回包：六个字段，**没有** dataIndex */
+
+const _okPickText: string | null = textPick.text;
+const _okPickWidth: number | null = textPick.width;
+const _okPickId: string | number | null = textPick.id;
+const _okPickPoint: { lng: number; lat: number } | null = textPick.point;
+
+// @ts-expect-error 官方 `TextLayerItem`（`:19-32`）**没有** `dataIndex`；本库不从 `id` 反推下标
+// （那是 SDK 内部口径，不是有依据的公开身份）。归一化出这一项就是编造数据。
+textPick.dataIndex;
+
+// @ts-expect-error 回包里读不到的字段给 `null`，不是 `""` / `0`——所以这几个字段不是非空 string/number
+const _notEmptyString: string = textPick.text;
