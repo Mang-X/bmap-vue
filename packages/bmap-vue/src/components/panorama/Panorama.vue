@@ -5,9 +5,11 @@ import {
   jsapiV4PanoramaOf,
   panoramaContextKey,
 } from "../../core/panorama";
+import { BMapError } from "../../core/errors/BMapError";
 import { resolveInternalMapContext } from "../../composables/resolveMapContext";
 import type { Point } from "../../driver/types/geometry";
 import type {
+  PanoramaCaptureOptions,
   PanoramaHandle,
   PanoramaLink,
   PanoramaOptions,
@@ -267,6 +269,24 @@ watch(
 
 defineOptions({ name: "Panorama" });
 
+/**
+ * 组件命令面在「未就绪 / 正在重建 / 已释放」时的**显式失败**（issue #171 item I）。
+ *
+ * 与 `core/overlays/overlayCommands.ts` 的 `disposed()`、`<PanoramaLabel>` 的命令面同一口径，
+ * 也与 ADR 2026-09-11 的「destroy 之后命令必须失败」一致。命令面里**没有**「静默返回」这一档：
+ * 静默会让调用方把「资源已释放」误判成「SDK 说没有」。`capture` / `clearOverlays` 都在这条
+ * 口径下（`getLinks` 是唯一例外，它的空与非空不承载语义——理由写在那条方法上）。
+ */
+function panoramaDisposed(command: string): BMapError {
+  return new BMapError(
+    "BMAP_RESOURCE_DISPOSED",
+    `<Panorama>.${command}(): 查看器未就绪、正在重建或已经释放，本次调用被拒绝` +
+      "（不静默 no-op——读会拿到编出来的值、写会悄无声息地丢掉）。" +
+      "请在就绪后调用（先 await whenReady()，或看组件 ref 上的 status）。",
+    { component: "Panorama" },
+  );
+}
+
 defineExpose({
   /** 查看器就绪（含 Client）；供业务做命令式操作或判定加载结果 */
   whenReady: (signal?: AbortSignal) => context.whenReady(signal),
@@ -287,6 +307,37 @@ defineExpose({
       // 这里的 catch 只覆盖「查看器已在 dispose 与本调用之间被换掉」那一瞬的 SDK 抛错。
       return [];
     }
+  },
+  /**
+   * 取当前全景画面为 Data URL（官方 `Panorama#capture`，issue #171 item I）。
+   *
+   * **返回 `string | null`，但「未就绪」不是 `null`**：
+   * - `null` = 官方那条承诺的「当前渲染器不支持截图」（原声明是 `undefined`，Driver 归一）；
+   *   拿到它意味着「换一条取画面的路」（例如 `<Map>` 的 `getScreenshot()`）；
+   * - 未就绪 / 已释放 / 重建窗口内 → **抛 `BMAP_RESOURCE_DISPOSED`**，绝不静默给 `null`。
+   *
+   * 为什么不把「未就绪」也降级成 `null`（`getLinks` 那条是这么做的）：`getLinks` 的空与非空
+   * **不承载语义**（没有链接 ≡ 拿不到链接，对调用方是同一件事）；而 `capture` 的 `null`
+   * 是**一条有后果的判断**——调用方据此决定换路。把它和「组件已卸载」混在一起，会让一个
+   * 已经卸载的组件被读成「这个环境截不了图」，从而走进一条永远拿不到画面的分支。
+   * 覆盖面内的**其余**失败（SDK 抛错、成员缺失）照常上抛，不进 `null`。
+   */
+  capture: (options?: PanoramaCaptureOptions): string | null => {
+    const current = active;
+    if (!current) throw panoramaDisposed("capture");
+    return current.driver.capture(current.viewer, options);
+  },
+  /**
+   * 清空查看器里的**全部**覆盖物（官方 `Panorama#clearOverlays`，issue #171 item I）。
+   *
+   * 与逐个 `removeLabel()` 是两条路：`<PanoramaLabel>` 的释放路径是各自的摘除，而业务
+   * 「把这一屏标注撤掉重画」时手上未必有那些句柄。未就绪 / 已释放**显式抛**
+   * `BMAP_RESOURCE_DISPOSED`（不静默 no-op——清不掉却报告成功会让标注静默叠加）。
+   */
+  clearOverlays: (): void => {
+    const current = active;
+    if (!current) throw panoramaDisposed("clearOverlays");
+    current.driver.clearOverlays(current.viewer);
   },
   /** 当前查看器句柄（未就绪为 `null`） */
   viewer: context.viewer,

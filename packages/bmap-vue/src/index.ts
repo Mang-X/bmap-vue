@@ -325,6 +325,9 @@ export type {
 // 全景的领域类型（M7-CONTROL-PANORAMA / #41）：`<Panorama>` 的 props 与
 // `usePanoramaService` 的返回值用到它们，因此必须从根入口可取。
 export type {
+  // `PanoramaCaptureOptions` 是 `capture()` 的形参类型（issue #171 item I）
+  // ⇒ 必须从根入口可取，否则消费方写不出自己的 `capture` 包装函数。
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaLabelHandle,
   PanoramaLabelOptions,

@@ -285,6 +285,7 @@ export type {
 // —— `MapDriver.cancelViewAnimation()` 的结果（视角动画没有公开取消接口，见 ADR 决策）
 export type { ViewAnimationCancelOutcome } from "./driver/types/map";
 export type {
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaHandle,
   PanoramaLabelHandle,

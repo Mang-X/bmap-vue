@@ -73,6 +73,7 @@ export type {
   ServiceResult,
 } from "./types/services";
 export type {
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaDriver,
   PanoramaHandle,

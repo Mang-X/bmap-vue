@@ -12,12 +12,18 @@
  *
  * 两条口径值得写在类型上：
  *
- * 1. **只暴露有消费者的成员**。`capture()` / `clearOverlays()` 同样是官方成员，但当前没有任何
- *    组件或 composable 会调用它们（覆盖物由 `PanoramaLabel` 各自在实例 scope 里摘除），
- *    因此**不加**——「声明了但没人读」与「假支持」是同一类问题（#42 的教训）。
+ * 1. **只暴露有消费者的成员**。「声明了但没人读」与「假支持」是同一类问题（#42 的教训），
+ *    因此判据是**消费者**而不是「官方有没有」。`capture()` / `clearOverlays()` 曾按此判据被
+ *    列为**不加**（覆盖物由 `PanoramaLabel` 各自在实例 scope 里摘除）——该结论在
+ *    **issue #171 item I** 被推翻：`clearOverlays` 补的正是「逐个摘除」做不到的那条路
+ *    （`<PanoramaLabel>` 的归属是「谁挂谁摘」，业务想「一次清掉全部」时没有别的地方可去），
+ *    `capture()` 则是官方 React 参考实现（`PanoramaRef`）两条都暴露、且 live probe 确认运行时
+ *    **真的可调用**（返回了 1,639 字节的 data URL）。`getLinks` 是同一条判据的另一个例子
+ *    （见 `PanoramaLink` 的注释）。
  * 2. **读取面是可空的**：官方把 `getPosition()` / `getId()` / `getSceneType()` 声明成非空，
  *    但场景尚未加载时运行时给不出值。这里按可空建模，让「还没加载」与「值就是空」在类型上
- *    就不混。
+ *    就不混。`capture()` 同理——官方声明的是 `string | undefined`（「当前渲染器不支持截图时
+ *    返回 undefined」），本库按读取面统一成 `string | null`。
  */
 import type { Point } from "./geometry";
 import type { SdkHandle } from "./handles";
@@ -123,6 +129,23 @@ export interface PanoramaSwitchOptions {
   pov?: Partial<PanoramaPov>;
 }
 
+/**
+ * `capture()` 的截图选项（官方 `Panorama#capture` 的参数，**自持**投影）。
+ *
+ * 官方原样是内联的 `{ quality?: number; type?: string }`（`: @param options 图片质量和
+ * MIME 类型`），上游没有为它命名一个类型。这里同样**不引上游类型包**（公共声明面不得依赖
+ * devDependency，见 `PanoramaOptions` 的注释），字段逐个照抄官方声明。
+ *
+ * `quality` / `type` 都是**可选**且官方没给默认值，因此不给就是「让 SDK 用它自己的默认」——
+ * 本库不编默认值（那会让「调用方要 PNG」与「调用方没表态」在运行时不可区分）。
+ */
+export interface PanoramaCaptureOptions {
+  /** 图片质量（官方未声明取值范围与默认值；透传给 SDK） */
+  quality?: number;
+  /** 输出 MIME 类型（如 `image/png` / `image/jpeg`；官方未声明默认值） */
+  type?: string;
+}
+
 /** 全景标注的构造选项（官方 `PanoramaLabelOptions`）。 */
 export interface PanoramaLabelOptions {
   position?: Point;
@@ -162,6 +185,27 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
     listener: (event: unknown) => void,
   ): () => void;
 
+  // ⚠️ **刻意不覆盖官方的全部 24 个事件**（issue #171 item I 的范围判断）。
+  //
+  // 官方 `PanoramaEventMap` 声明了 24 个事件，`<Panorama>` 只订阅其中 **8** 个
+  // （`position_changed` / `pov_changed` / `zoom_changed` / `id_changed` /
+  // `scene_type_changed` / `links_changed` / `dataload` / `pano_error`）。剩下 16 个**不加**，
+  // 判据不是「官方有」而是「有可核对的消费者与载荷语义」：
+  //
+  // - 纯鼠标/触摸转发（`touchstart` / `touchend` / `click` / `dblclick` / `clickonroad`）在
+  //   Vue 里有原生事件的写法，透一层 SDK 事件对象只增加一层归一，没有消费方因此受益；
+  // - **带真值载荷**的那几个（`link_click: {id}` / `overlay_add` / `overlay_remove` /
+  //   `links_visible_changed: {value}` / `visible_poi_type_changed: {visiblePOIType}`）
+  //   **值得后续单独开一票**：它们各自能驱动一段真实的 UI 状态（点了哪条路、加/摘了哪个标注），
+  //   载荷是官方声明过的、不是编的。本票不加是因为**没有现成的组件消费者**——加了却没人
+  //   emit，等于把「官方成员表」抄一遍，正是本文件头那条判据反对的。
+  // - `destroy` / `overlays_clear` / `size_changed` / `scene_change_end` / `pov_changed_end`
+  //   属于 SDK 生命周期与渲染收敛，组件自己已经在记同一份事实（`status` / 卸载路径），
+  //   再透一层就是**第二份真相**。
+  //
+  // 判断「某个事件值不值得加」的判据因此是可核对的：**它的载荷能不能落成一个本库还没有的
+  // 组件状态**。落不成（渲染内部 / 与已有状态重复 / 原生事件已覆盖）就不加。
+
   // ---------------------------------------------------------------- 读取面
   /**
    * 当前位置；场景未加载时为 `null`。
@@ -186,6 +230,19 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
   getLinks(viewer: PanoramaHandle): PanoramaLink[];
   /** 当前是否可见；实例缺该方法时由 SDK 边界归一为错误（不猜） */
   getVisible(viewer: PanoramaHandle): boolean;
+  /**
+   * 把当前全景画面导出为 Data URL（官方 `Panorama#capture`，issue #171 item I）。
+   *
+   * **读命令，不是写命令**：它不改任何 SDK 状态，因此失败一律上抛、不静默——
+   * 归一成 `null` 的只有官方承诺的那一条（「当前渲染器不支持截图时返回 undefined」），
+   * 调用方拿到 `null` 能据此决定「换一条取画面的路」（例如 `<Map>` 的 `getScreenshot()`），
+   * 而这正是官方 `undefined` 的语义。
+   *
+   * ⚠️ `null` 只表示**读不到**，不表示「组件没就绪」：未就绪 / 已释放由**组件命令面**抛
+   * `BMAP_RESOURCE_DISPOSED`（见 `components/panorama/Panorama.vue`）——静默给 `null` 会让调用方
+   * 把「组件已卸载」误判成「渲染器不支持截图」，而这两件事要采取的行动完全不同。
+   */
+  capture(viewer: PanoramaHandle, options?: PanoramaCaptureOptions): string | null;
 
   // ---------------------------------------------------------------- 写入面
   /**
@@ -217,6 +274,19 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
   addLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
   /** 从查看器摘除（官方 `Panorama#removeOverlay`） */
   removeLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+  /**
+   * 清空查看器里的**全部**覆盖物（官方 `Panorama#clearOverlays`，issue #171 item I）。
+   *
+   * **与逐个 `removeLabel()` 是两条不同的路，不是别名**：`<PanoramaLabel>` 的归属是
+   * 「谁挂谁摘」，而业务手上未必有那些句柄（「把这一屏标注全部撤掉重画」）。官方那条批量入口
+   * 补的正是这一格——本库没有第二条路能清掉「本库不知道句柄的那些标注」。
+   *
+   * ⚠️ **它不代替逐个摘除的记账**：`removeLabel()` 是本库 `PanoramaLabel` 的**释放路径**
+   * （诊断按挂载类逐次销账），`clearOverlays()` 是给业务的批量入口——组件卸载仍然走各自的
+   * `removeLabel()`，两条不混（否则同一个标注会被销账两次）。官方 `clearOverlays` 之后
+   * 画面对应的 `overlays_clear` 事件**本库不订阅**（见 issue #171 的事件面判断）。
+   */
+  clearOverlays(viewer: PanoramaHandle): void;
   setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
   setLabelContent(label: PanoramaLabelHandle, content: string): void;
   setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;

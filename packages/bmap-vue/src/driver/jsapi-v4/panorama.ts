@@ -23,6 +23,7 @@ import { createServiceCall } from "../normalize/serviceCall";
 import { toPlainPoint } from "../normalize/results";
 import type { GeometryDriver, Point } from "../types/geometry";
 import type {
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaHandle,
   PanoramaLabelHandle,
@@ -413,6 +414,32 @@ export function createJsapiV4PanoramaDriver(
       return Boolean(callRequired(viewerOf(viewer), "getVisible"));
     },
 
+    /**
+     * 截图（官方 `Panorama#capture`；issue #171 item I）。
+     *
+     * 官方签名是 `capture(options?: { quality?: number; type?: string }): string | undefined`，
+     * 文档原文「当前渲染器不支持截图时返回 undefined」。因此：
+     *
+     * - `options` 省略时走**单参**调用——官方参数是可选的，传 `undefined` 与不传在这个
+     *   签名下等价，但按 `getPanoramaByLocation`（半径）/ `setId`（options）同一条规矩，
+     *   可选参数不给就省略，不靠 `undefined` 占位；
+     * - 官方唯一的「没有值」出口是 `undefined`，归一成 `null`（读取面统一口径）；
+     * - **其余一切失败照常上抛**（`callRequired` 的语义）：`capture` 是读命令，缺成员
+     *   说明运行时与本库的假设不符，降级成 `null` 会把「SDK 缺成员」伪装成「渲染器不支持截图」
+     *   ——那是两种要采取不同行动的事实（见 `internal.ts` 对 `callRequired` / `callOptional`
+     *   分工的说明）。
+     *
+     * 2026-09 live 实测：真实 4.0 上返回了 1,639 字节的 data URL（可调用，非纸面能力）。
+     */
+    capture(viewer, options?: PanoramaCaptureOptions) {
+      const raw = viewerOf(viewer);
+      // 官方 `capture` 的 options 是**可选**的；不给就不传（不塞 undefined 占位）
+      const shot = options
+        ? callRequired(raw, "capture", options)
+        : callRequired(raw, "capture");
+      return typeof shot === "string" ? shot : null;
+    },
+
     // ----------------------------------------------------------- 标注覆盖物
     //
     // 标注**不是** Control / Overlay 家族的成员：它只存在于某个查看器内部
@@ -432,6 +459,17 @@ export function createJsapiV4PanoramaDriver(
 
     removeLabel(viewer, label) {
       callRequired(viewerOf(viewer), "removeOverlay", labelOf(label));
+    },
+
+    /**
+     * 清空全部覆盖物（官方 `Panorama#clearOverlays`；issue #171 item I）。
+     *
+     * `callRequired`：这是**业务命令**而不是可选成员探测，缺了就该显式失败（静默清不掉
+     * 会让「重画一屏标注」静默叠加在旧标注上）。它**不销账**——本库 `PanoramaLabel` 的
+     * 释放路径是各自的 `removeLabel()`，批量入口不代替那条路径（见接口注释）。
+     */
+    clearOverlays(viewer) {
+      callRequired(viewerOf(viewer), "clearOverlays");
     },
 
     setLabelPosition(label, position: Point) {

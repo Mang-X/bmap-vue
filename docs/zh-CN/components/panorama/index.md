@@ -94,6 +94,9 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 | 成员        | 说明                                                       |
 | ----------- | ---------------------------------------------------------- |
 | `whenReady()` | 查看器就绪（含 Client）；可用于判定加载结果              |
+| `getLinks()` | 当前场景的相邻链接（未就绪时给**空数组**，见下）           |
+| `capture(options?)` | 导出当前画面为 Data URL 字符串（`string \| null`）  |
+| `clearOverlays()` | 清空查看器里的**全部**覆盖物                        |
 | `viewer`    | 当前查看器句柄（未就绪为 `null`）                          |
 | `status`    | 实例状态（`idle` / `waiting-client` / `creating` / `ready` / `error` / `disposing` / `disposed`） |
 | `error`     | 最近一次失败（`status === 'error'` 时有值）                |
@@ -102,8 +105,41 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 
 - 官方的 `Panorama#destroy()` 在**未加载任何场景**的实例上会抛错（真实 4.0 的实测行为）。组件路径的正确姿势是
   「先给 `point` / `id`、再销毁」；真的没有场景时销毁失败只告警，本库自己的资源照常释放。
-- `capture()`（截图）与 `clearOverlays()` 是官方成员，但当前没有组件消费它们，因此本库**不暴露** ——
-  需要时用 `advanced` 的 raw 逃生口。
+
+## `capture()` 与 `clearOverlays()`（#171 补齐）
+
+此前这两条按「没有组件消费」被**刻意不加**。该结论现在不成立：官方 React 参考实现的
+`PanoramaRef` 两条都暴露，live probe 也确认**运行时真的可调用**（`capture()` 返回了 1,639 字节
+的 data URL）；而 `clearOverlays` 补的是一条本库**造不出来**的路——`<PanoramaLabel>` 的归属是
+「谁挂谁摘」，业务想「把这一屏标注撤掉重画」时手上未必有那些句柄。
+
+```ts
+import type { PanoramaCaptureOptions } from 'bmap-vue'
+
+const dataUrl = panoramaRef.capture()                                   // string | null
+const jpeg = panoramaRef.capture({ quality: 0.8, type: 'image/jpeg' })  // string | null
+panoramaRef.clearOverlays()
+```
+
+### 三条口径
+
+1. **`capture()` 是读命令**。官方签名是 `capture(options?): string | undefined`，文档写「当前
+   渲染器不支持截图时返回 undefined」——Driver 把它归一成 **`null`**，与本库读取面其它成员
+   （`getPosition` / `getPov` / `getId` …）同口径。拿到 `null` 意味着「换一条取画面的路」，
+   例如 `<Map>` 的 `getScreenshot()`。
+2. **未就绪 / 已释放时显式抛 `BMAP_RESOURCE_DISPOSED`，不返回 `null`**。这是它与 `getLinks()`
+   的唯一分歧：`getLinks` 的空与非空**不承载语义**（没有链接 ≡ 拿不到链接），所以给空数组；
+   而 `capture` 的 `null` 是**一条有后果的判断**——静默降级会让一个已卸载的组件被读成
+   「这个环境截不了图」，走进一条永远拿不到画面的分支。
+3. **`clearOverlays()` 是写命令，未就绪时同样显式抛**。清不掉却报告成功，会让「重画一屏标注」
+   静默叠加在旧标注上。
+
+覆盖面内**其余**的失败（SDK 抛错、成员缺失）一律照常上抛，不进 `null`。
+
+### `clearOverlays()` 不代替摘除路径
+
+组件卸载时每个 `<PanoramaLabel>` 仍然走**自己的** `removeLabel()`。`clearOverlays()` 是给业务的
+批量入口，不销账、不替代释放路径（否则同一个标注会被销账两次）。
 
 ## `linksChange` 的载荷（#165 更正）
 
