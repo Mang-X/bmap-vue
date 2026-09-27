@@ -17,13 +17,31 @@
  *
  * 逐条依据（声明行号 / live 实测）见 `PolygonLayer.vue` 的文件头与
  * `docs/zh-CN/contributing/166-visualization-alignment-audit.md`；两者的差异只有四处：
- * kind、样式类型、以及 `PolylineLayerOptions` 特有的纹理一族。
+ * kind、样式类型、`PolylineLayerOptions` 特有的纹理一族，以及
+ * **图层级 `opacity`（本族有、且实测生效；`PolygonLayer` 连选项表里都没有这一项）**。
+ * ⚠️ 「同族」**不等于**「同面」：两族 `setOpacity` 的在位性读数完全一样，差别只在
+ * 有没有接到渲染上，而那一条只能靠像素读，任何只看成员表的门禁都给不出。
  *
- * ⚠️ **一个本票特有的代价**：`PolylineLayerOptions.opacity`（`:131` @default 1）是官方
- * **声明的**选项（图层级透明度），而官方**没有** `setOpacity` 的**声明**（live 实测运行时有，
- * 但本库不把未声明成员当契约）⇒ 它只能经 `style` 袋经 `setOptions` 整袋下发，
- * **没有字段级 setter 的入口**。`PolygonLayerOptions` 根本没有 `opacity` 这一项，
- * 因此不存在这条不对称。
+ * ⚠️ **图层级 `opacity` 为什么不作 prop**——这一条的理由**换过两次**，且每次都因为
+ *   判据用错了：
+ *   - ❌ 旧：「官方**没有** `setOpacity` 的声明 ⇒ 不把未声明成员当契约 ⇒ 只能经 `style` 袋
+ *     经 `setOptions` 整袋下发，**没有字段级 setter 的入口**」。**两半都是错的**：
+ *     「没有字段级入口」在声明层面就不成立（`setOptions` 的文档自己写了转发，见下），
+ *     而「不把未声明成员当契约」是**成员面**的口径，被误套到了**组件 prop** 上。
+ *   - ❌ 中：「live 探针读到运行时有，但未声明 ⇒ 仍然只走 `style` 袋」。**前提被推翻**。
+ *   - ✅ 现在：**声明 + 运行时 + 像素，三条都指向它是契约成员**——
+ *     声明侧 `PolylineLayerOptions.opacity`（`:131` @default 1）**有**这一项，且
+ *     `setOptions` 的注释（`:209`）明写「`opacity` / `visible` / `zIndex` / `renderStage` /
+ *     `referCenter` / `enablePicked` **转发到对应 setter**」⇒ 官方**承诺**了字段级入口；
+ *     运行时 `setOpacity` / `getOpacity` 在位且调得动；像素判决**可观测地生效**
+ *     （哨兵像素 `1 → 0 → 1 → 0 → 1` = **4229 → 0 → 4229 → 0 → 4229**，可逆且重复一致）。
+ *     ⇒ **Driver 登记了 `setOpacity`**（走 `RUNTIME_ONLY_REGISTERED` 豁免表：
+ *     「声明没有的成员要登记，必须同时满足真在位、真生效、真没声明」）。
+ *   ⇒ 所以 `<PolylineLayer>` **仍不**提供 `opacity` prop**不再是声明口径的必然**，
+ *     而是一条**范围决策**：Driver 侧已登记的操作暂时**没有组件消费者**，
+ *     与 #104「没有消费者的扩展面一律不加」存在张力。是否补 prop 留给后续裁决。
+ *     （对照：`<PolygonLayer>` 那一族**没有** `opacity` 这一项，两者的不对称在这里是**事实**。）
+ *   逐条依据见 `docs/zh-CN/contributing/165-runtime-audit-2026-09-27.md`「第三轮」。
  *
  * ## 为什么**没有** `defineExpose`
  *

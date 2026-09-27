@@ -96,12 +96,21 @@ AGENTS.md：「**接收后忽略属于假支持**」。处置：**实现它**或
 `PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine` 在 4.0.5 有了**类声明**，
 于是「以无声明为依据」的那个门禁前提失效：
 
-| 类 | 4.0.5 声明、本库 `supports()` 未登记 |
+| 类 | 4.0.5 声明、本库 `supports()` 未登记（**落地时的状态**） |
 | --- | --- |
 | `PointLayer` | `setZIndex` / `getZIndex` / `setRenderStage` / `setRefCenter` |
 | `ClusterLayer` | `setOpacity` / `getOpacity` / `setZIndex` / `getZIndex` / `setRenderStage` / `setRefCenter` |
 | `Heatmap` | 上述 + `setGradient` / `setRadius` |
 | `TrackLine` | `setOpacity` / `getOpacity` / `setZIndex` / `getZIndex` / `setRenderStage` / `setRefCenter` |
+
+> ⚠️ **本表是「落地前」的缺口快照，已被后续切片改写，不要当现状读。**
+> 现状（`driver/jsapi-v4/native-layers.ts` 的 kind 表）：`ClusterLayer` / `Heatmap` /
+> `TrackLine` 现在**都**登记了 `setOpacity`（按 4.0.5 声明），`setZIndex` 三者也都已登记；
+> 仍不登记的只有 `getX` 读回一族、`setRenderStage` / `setRefCenter`（**无组件消费者**），
+> 以及 `PointLayer` 的 `setOpacity`（**声明里确实没有**——三个兄弟都有，它没有）。
+> 「登记」也不等于「有组件消费者」：#165 收口时新登记的 `PolylineLayer#setOpacity`
+> 就**暂时没有**消费者。逐条依据见
+> [`165-runtime-audit-2026-09-27`](./165-runtime-audit-2026-09-27)。
 
 **可观察的行为后果**（不只是文档错）：`HeatmapLayer` 的 `visible` 因为走挂上/摘掉，
 重新显示会**销毁并重建实例**；`TrackLineLayer` 重建后**播放从头开始、`observed` 进度丢失**。

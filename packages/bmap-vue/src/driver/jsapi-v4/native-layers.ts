@@ -29,8 +29,12 @@
  *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单）。
  *   「声明与运行时不一致」在这两族上撞了**三次**，而**处置各不相同**——
  *   逐条依据见 kind 表注释与 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`：
- *   `hitTest` 声明有而运行时**无**（不登记）；`setOpacity` 运行时**有**而声明无，
- *   但两族的「可观测地生效」**读数相反**（折线**生效** ⇒ 登记；面**不生效** ⇒ 不登记）。
+ *   `hitTest` 声明有而运行时**无**（不登记）；`setOpacity` 声明无而运行时**有**，但
+ *   **判据不是「在位」而是「可观测地生效」**，两族读数**相反**——
+ *   折线**生效** ⇒ 登记（走运行时豁免表）；面**不生效** ⇒ 不登记。
+ *   ⚠️ 声明侧的不对称在 `PolylineLayer.d.ts`：`:131` 有 `opacity?`、且 `:209` 的
+ *   `setOptions` 文档明写 `opacity` 转发给对应 setter ⇒ 那是**契约成员**；
+ *   `PolygonLayer` 对 `opacity` **零命中**。同族**不等于**同面。
  * - **不支持的操作显式失败**：`BMAP_CAPABILITY_UNSUPPORTED`，不静默 no-op。
  * - **层级方法要求先挂载**：官方明确「层级调整实现会访问已关联的 Map 与图层管理器」，
  *   所以调用顺序是 `create → add → setZIndex`；错误经 `sdkCall` 归一，不吞错。

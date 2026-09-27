@@ -20,11 +20,36 @@
  *    （官方声明 `visualization/PolygonLayer.d.ts:181`）。官方注释写明「仅更新已声明的
  *    样式键，未知键忽略并告警一次」⇒ **没写的键回到官方默认值**（不是 merge）。
  * 2. **显隐 / 层级**走 `setVisible`（`:204`）/ `setZIndex`（`:208`），因此**重新可见不换实例**。
- * 3. **没有** `opacity` prop：官方**声明**里没有 `setOpacity`（live 实测运行时有——
- *    但本库的口径是「不把未声明成员当契约」，与 #165 对 `PointLayer` 的同一裁决）。
- *    需要整层透明度请经 `style` 袋下发 `fillOpacity` / `strokeOpacity`。
+ * 3. **没有** `opacity` prop——⚠️ 这一条的**理由**被 2026-09-27 的像素级复跑换掉了，
+ *    旧理由（「官方声明里没有 `setOpacity`，所以不把未声明成员当契约」）**已作废**。
+ *    现在摆着的是**两件互不相同的事**：
+ *    - `setOpacity` / `getOpacity` **运行时在位且调得动**，`setOpacity(0.25)` 读回 `0.25`
+ *      （越界 `5` 被夹到 `1`）——但这**零信息量**：setter 与 getter 共用同一份状态。
+ *    - 像素判决才是判据：`preserveDrawingBuffer: true` + `readPixels` 数哨兵色像素，
+ *      `setOpacity` 走 `1 → 0 → 1`、`setOptions({opacity})` 走 `1 → 0 → 1`、构造期
+ *      `opacity: 0`，**五态全部同值**；而同一次运行里 `setVisible(false)` /
+ *      `setOptions({fillOpacity: 0})` 都能归零 ⇒ 不是「测不出来」，是**真·在位但不生效**
+ *      （present-but-ineffective）。⇒ Driver **刻意不登记**它：登记等于开一个
+ *      「调用成功但画面不变」的面，比假支持更难排查。
+ *    根因在声明侧也成立：`PolygonLayerOptions` 逐条读过**根本没有 `opacity` 这一项**
+ *    （`PolylineLayer.d.ts:131` 有），所以面族连**声明的入口**都没有。
+ *    需要逐要素透明度请经 `style` 袋下发 `fillOpacity` / `strokeOpacity`（**这两条实测生效**）。
  * 4. **缩放范围是构造选项**（`minZoom` / `maxZoom`，`:108` / `:112`）：官方**没有**
  *    `setMinZoom` / `setMaxZoom`（live 实测运行时的这两个方法也不存在）⇒ 变化**换实例**。
+ *
+ * ### 「在位 / 声明 / 生效」是**三条**判据，不可互换
+ *
+ * 本票三处「不一致」恰好各占一个方向，别互相照抄理由：
+ *
+ * | 形状 | 例子 | 处置 |
+ * | --- | --- | --- |
+ * | 声明有、运行时**无** | `PolygonLayer#hitTest` | 不登记（假支持） |
+ * | 声明有、运行时在、**不生效** | `PolygonLayer#setOpacity`（本条） | 不登记 |
+ * | 声明**无**、运行时在、**生效** | `PolylineLayer#setOpacity` | 登记（`RUNTIME_ONLY_REGISTERED` 豁免） |
+ *
+ * 另有 `Marker#setAnchor`（声明有、settle **之后**实测在位且生效——未 settle 的取样会误判
+ * 为「不在原型上」）与 `strokeLineCap`（运行时在、**不生效**）。判据永远是
+ * 「**可观测地生效**」，而「生效」只能看画布，成员表与 `getX` 读回都给不出。
  *
  * ## 刻意不开的面（逐条依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）
  *

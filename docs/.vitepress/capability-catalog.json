@@ -506,7 +506,7 @@
       "rawMembers": [
         "PolygonLayer"
       ],
-      "description": "批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 运行时在位且 getOpacity 读得回，但像素读数证明**它不驱动渲染**（五态全同值，而同一次运行里 fillOpacity / setVisible 都能归零）⇒ 不开面。本族的选项表里也**没有** opacity 这一项。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md"
+      "description": "批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；setOpacity 虽运行时在位且 getOpacity 读得回（零信息量：setter 与 getter 共用状态），但像素读数证明**它不驱动渲染**（五态全同值，而同一次运行里 fillOpacity / setVisible 都能归零）⇒ **刻意不登记**；对照同族的 PolylineLayer，setOpacity 在那里是经运行时豁免登记的，本族没有——同族不同面。本族的选项表里也**没有** opacity 这一项。逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md"
     },
     {
       "id": "layer.polyline",

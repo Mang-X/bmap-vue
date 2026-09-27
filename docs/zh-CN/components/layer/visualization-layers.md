@@ -60,10 +60,22 @@ import { PolygonLayer, PolylineLayer } from 'bmap-vue'
 
 - **`hitTest`**：官方**声明**了（`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`），
   但 **live 探针实测运行时没有**（`prototype.hitTest` 为 `false`）。放开门面就是假支持。
-- **`setOpacity`**：反过来——**live 实测运行时**有，官方**声明**里没有。本库的口径是
-  「不把官方没承诺的成员当契约」，与 #165 对 `PointLayer` 的裁决一致。
-  ⚠️ 因此 `PolylineLayerOptions.opacity`（官方默认 `1`）只能经 `style` 袋经 `setOptions`
-  整袋下发，**没有** `opacity` prop。`PolygonLayerOptions` 根本没有 `opacity` 这一项。
+- **`setOpacity`**：**两族处置相反**——这是本库「在位 / 声明 / 生效三条判据不可互换」的样板：
+  - `PolylineLayer` **登记**。`PolylineLayerOptions.opacity`（`:131` @default 1）是官方
+    **声明的**选项，且 `setOptions` 的注释（`:209`）明写 `opacity` / `visible` / `zIndex` /
+    `renderStage` / `referCenter` / `enablePicked` **转发到对应 setter** ⇒ 官方**承诺**了
+    字段级入口；运行时 `setOpacity` 在位；live **像素读数**证明它**可观测地生效**
+    （哨兵像素 `1 → 0 → 1 → 0 → 1` = 4229 → 0 → 4229 → 0 → 4229，可逆且重复一致）。
+    走「运行时依据」的显式豁免表登记（要求：真在位、真生效、真没声明）。
+  - `PolygonLayer` **不登记**。它同样在位、`getOpacity` 也读得回（但**零信息量**：setter 与
+    getter 共用同一份状态），可**像素读数证明它不驱动渲染**——`setOpacity` 走 `1 → 0 → 1`、
+    `setOptions({opacity})` 走 `1 → 0 → 1`、构造期 `opacity: 0`，**五态全部同值**；而同一次
+    运行里 `setVisible(false)` / `setOptions({fillOpacity: 0})` 都能归零 ⇒ 不是「测不出来」，
+    是**真·在位但不生效**。登记它等于开一个「调用成功但画面不变」的面。
+  ⚠️ 组件行为**未变**：两个组件都**不**暴露 `opacity` prop。`<PolygonLayer>` 是因为选项表里
+  根本没有 `opacity` 这一项（只能经 `style` 袋下发 `fillOpacity` / `strokeOpacity`）；
+  `<PolylineLayer>` 则是一条**范围决策**（Driver 侧已登记的操作暂时没有组件消费者）。
+  逐条读数见[运行时审计](../../contributing/165-runtime-audit-2026-09-27)「第三轮」。
 - **`setRenderStage` / `setRefCenter` 与七条 `getX` 读回**：官方有、运行时也有，但**没有组件
   消费者**——本库不给「没有消费者」的扩展开口子。
 - **要素状态（Feature State）**：这两族**没有**状态 API（官方声明里没有 `updateState` 一族），

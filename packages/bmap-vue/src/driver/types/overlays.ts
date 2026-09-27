@@ -12,7 +12,8 @@
  * 分类口径（依据官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - `mutable`：实例上有可用的**值型 setter** 或**成对 enable/disable 开关**，就地更新即可；
  * - `recreate`：只有构造选项，或实例上的 setter 不可安全使用（例：`Marker#setAnchor` ——
- *   声明里有、运行时**不在原型上**，实测调用即抛，见下方 `anchor` 条目的完整依据），必须重建实例才生效；
+ *   声明里有、settle **之后**实测也在**实例**上且调得动，但 `getAnchor()` 返回的是**当前值**、
+ *   撤回没有落点，见下方 `anchor` 条目的完整依据），必须重建实例才生效；
  * - `unsupported`：本引擎连构造选项都没有（或语义不在覆盖物上），必须换用别的 API。
  */
 import type { Capability } from "../capability/catalog";
@@ -650,7 +651,9 @@ const FILL_STYLE: Record<string, SpecInput> = {
  *    只看 layer 0 会把「38 个成员的那层」整个漏掉，于是「存在」被误判成「不存在」。
  * 2. **`typeof` 在位 ≠ 有效**：`setStrokeLineCap` 在原型链上、调得动不抛，但**调完没有
  *    任何可观察的变化**。判据必须是「**可观察地生效**」，不是「成员在不在」——
- *    这与 `Marker#setAnchor`（「声明里有、运行时不在原型上」）是同一类问题的两个方向。
+ *    这与 `Marker#setAnchor` 是同一类问题的两个方向：那条是**未 settle 的取样**把
+ *    「在位」读成了「不在」（settle 之后它在位且生效），本条是 settle 之后仍然
+ *    **在位但不生效**。**取样时机**与**是否接到渲染上**是两条独立的坑。
  * 3. **「等补齐」不能只看静态成员**：`member-surface` 的读法 `Ctor[name]` 会命中**静态**
  *    成员，于是用图形类做 `settleWhenPresent` 判据时会 `attempts=1 / afterMs=0` **假 settled**。
  *
@@ -802,11 +805,16 @@ export const OVERLAY_DESCRIPTORS = {
       ),
       anchor: recreate(
         "**依据是运行时实测，不是类型声明**：`Marker#setAnchor` 在 4.0.5 的声明里**存在**，"
-          + "但真实 4.0 里它**不在 `BMap.Marker.prototype` 上**，构造后立刻调用抛 "
-          + "`B.ControlAnchor is not a constructor`（`scripts/probe-runtime-members.mts`，"
-          + "2026-09-26；读数见 `docs/zh-CN/contributing/165-runtime-verification.md`）。"
-          + "所以锚点固定为构造期选项（值为 BMAP_ANCHOR_* 常量，不是 Size）。"
-          + "⚠️ 不要因为「声明里明明有 setAnchor」就改回 `mutateBy`——那正是本条要防的误判。",
+          + "settle **之后**实测也在**实例**上（`inst: true`）、`getAnchor()` 读回 `Point`、"
+          + "构造后真调一次**不抛**（复核见 `docs/zh-CN/contributing/165-runtime-audit-2026-09-27.md`"
+          + "「官方 4.0.5 声明里有、运行时没有的成员」一节，该节**明确推翻了**更早的否定读数）。"
+          + "⚠️ 别照抄 `docs/zh-CN/contributing/165-runtime-verification.md` 结论二：它那条"
+          + "「不在原型上 / 调用抛 `B.ControlAnchor is not a constructor`」是**未 settle** 的取样"
+          + "（本轮复跑 `probe-runtime-members.mts` case 2 仍复现它——**它复现的是那条假象**，"
+          + "不是 settle 之后的读数）。同样也别据声明改回 `mutateBy`。"
+          + "锚点之所以固定为构造期选项，理由是**撤回没有落点**：`getAnchor()` 返回当前值"
+          + "（未设时 `null` = SDK 内置默认锚点，那个值无从构造出来再传回去）"
+          + "（值为 BMAP_ANCHOR_* 常量，不是 Size）。",
         { ctorKey: "anchor" },
       ),
       // ---- issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个 ----
@@ -1436,11 +1444,15 @@ export const OVERLAY_REVERT_RATIONALE = {
   strokeTexture:
     "官方 4.0.5 的 Polyline 上**既没有** setStrokeTexture 也无读回；它是**线纹理**（沿折线重复绘制图片）" +
     "且官方注明仅 WebGL 渲染模式支持 ⇒ 重建",
-  height: "InfoWindow 的 height 只有构造选项；4.0.5 无 setHeight 也无 getHeight ⇒ 重建",
+  height:
+    "InfoWindow 的 height 就地更新（官方 `InfoWindow#setHeight(height: number): void`，`overlay/InfoWindow.d.ts:38`，" +
+    "@example 就是 `infoWindow.setHeight(200)`）。4.0.5 **无** `getHeight` ⇒ 撤回只能重建",
   maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.5 **无** getMaxWidth ⇒ 撤回只能重建",
   width:
     "本表的键是**属性名**（跨 kind 共享同一份依据），因此这一条要同时覆盖两个 `width`：" +
-    "(a) **InfoWindow 的** `width` 只有构造选项，4.0.4 无 `setWidth` 也无 `getWidth`；" +
+    "(a) **InfoWindow 的** `width` 就地更新（官方 `InfoWindow#setWidth(width: number): void`，" +
+    "`overlay/InfoWindow.d.ts:29`——**4.0.4 与 4.0.5 都有**，早先「4.0.4 无 `setWidth`」" +
+    "那句是照抄错的一侧，**从未复核**）；" +
     "(b) **Label 的** `width`（issue #165 第三批补上，`@default 0` = 按内容自适应）" +
     "**有**构造项但同样**没有**字段级入口——4.0.5 的 `Label.d.ts` 成员表里既没有 `setWidth` " +
     "也没有 `getWidth`，live 读数确认 `setWidth` 不在 `BMap.Label.prototype` 的任何一层" +

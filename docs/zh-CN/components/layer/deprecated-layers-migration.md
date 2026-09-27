@@ -82,7 +82,7 @@
 | — | `style.strokeTextureSpaced` / `strokeTextureGap` / `strokeTextureColor` | **新增**：平铺 / 间隔 / 叠加色 |
 | `data` | `data` | 同名（两族都是 GeoJSON） |
 | `visible` / `zIndex` | `visible` / `zIndex` | 同名 |
-| `opacity` | `style.strokeOpacity` | **重写**：新家族**没有**图层级 `opacity` 入口（官方未声明 `setOpacity`），只能经 `style` 袋经 `setOptions` 整袋下发 |
+| `opacity` | `style.strokeOpacity` | **重写**：`<PolylineLayer>` 官方**声明了**图层级 `opacity`（`PolylineLayerOptions.opacity` @default 1，`setOptions` 注释也写明转发给对应 setter）且**实测生效**，但本组件**未暴露**该 prop ⇒ 只能经 `style` 袋经 `setOptions` 整袋下发，或用 `style.strokeOpacity`。`<PolygonLayer>` 另见下行 |
 | `minZoom` / `maxZoom` | `minZoom` / `maxZoom` | 同名（都是**构造选项**，变化换实例） |
 | `idKey` / `enablePicked` | `idKey` / `enablePicked` | 同名（⚠️ 默认值都被本库改成 `true`） |
 | `crs` | — | **无对应**（新家族没有坐标系选项） |

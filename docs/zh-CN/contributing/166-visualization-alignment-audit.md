@@ -14,6 +14,7 @@
 | `Map#addLayer` / `removeLayer` 真接受 | **实测接受**（挂上 → `setZIndex(3)` 不抛 → 读回 `3` → 重复 `removeLayer` 不抛） | 同左 |
 | 声明里有、**运行时没有**的成员 | `hitTest` | `hitTest` |
 | 样式入口 | `setOptions`（`:181`），**没有** `setStyleOptions` / `doOnceDraw` | `setOptions`（`:213`），同 |
+| `setOpacity`（图层级） | 运行时在位但**像素读数证明不生效** ⇒ **不登记**（选项表亦无 `opacity`） | 声明 `:131` + `setOptions` 转发 `:209` + 像素**生效** ⇒ **登记**（豁免表） |
 | 与已封装的旧类 | 弃用 `FillLayer` 的**官方指定替代** | 弃用 `LineLayer` 的**官方指定替代** |
 
 ⚠️ **注入时机与扩展 API 那四类不同**：`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`
@@ -53,19 +54,61 @@
 | 成员 / 选项 | 声明 | 实测 | 说明 |
 | --- | --- | --- | --- |
 | `hitTest` | `:233` | ⚠️ **无** | 同 `PolygonLayer` |
-| `opacity`（**图层级**透明度） | `:131` @default 1 | `setOpacity` **有**（实测） | ⚠️ `PolygonLayer` 的选项表**没有** `opacity`，而它同样有 `setOpacity` 方法。声明的「显示属性」一组里两族都**没有** `setOpacity`，但运行时**都**有 ⇒ 登记依据是**运行时实测**，与同族其它成员不同（见下） |
+| `opacity`（**图层级**透明度） | `:131` @default 1，且 `setOptions`（`:209`）文档明写转发给对应 setter ⇒ **契约成员** | `setOpacity` **有**（实测）且**像素读数证明生效** ⇒ **登记** | ⚠️ `PolygonLayer` 的选项表**没有** `opacity`，它同样有 `setOpacity` 方法但**不生效** ⇒ **不登记**。两族**同族不同面**，见 §三 |
 | `strokeOpacity`（线透明度） | `:39` @default 1 | — | 走 `setOptions` 整袋；与 `opacity` **相乘** |
 | `dashArray` / `strokeStyle` / `strokeTexture*` / `strokeLineJoin` / `strokeLineCap` | `:47`–`:92` | — | 全部走 `setOptions` 整袋 |
 
-## 三、`setOpacity` 是本次唯一的「运行时依据」登记项
+## 三、`setOpacity`：❌ 本节原有结论已被第三轮推翻（登记依据是「生效」，不是「在位」）
 
-两族的 `setOpacity` 都是**声明里没有、运行时有**（`protoHas` 为 `true`）。
-仓库的口径是「不把**未声明**成员当契约」——但那条口径的对象是**官方没有承诺**的成员；
-这里官方运行时**确实提供了**方法，且 `ClusterLayer` / `Heatmap` / `TrackLine` 早在 #165
-Class 3 就按 4.0.5 声明登记了 `setOpacity`（它们的声明**有**）。本库对「声明与运行时不一致」
-的一贯处置是**两边都记下**并在注释里写清依据，本项按「运行时实测在位」登记，同时在
-`native-layers.test.ts` 的 `OPERATION_MEMBERS_BY_KIND` 显式覆写（否则默认表会拿
-`layer/` 家族的 `setStyleOptions` 去断言它）。
+> **本节原文（保留）**：「两族的 `setOpacity` 都是**声明里没有、运行时有**（`protoHas` 为
+> `true`）……本项按『运行时实测在位』登记。」——**「登记依据是在位」这一句是错的**，
+> 它只对 `PolylineLayer` 碰巧成立，对 `PolygonLayer` 直接导致错误的登记。
+
+**声明侧复核**（重克隆 `github.com/baidu-maps/jsapi-v4-types`，`main` 分支，
+HEAD `5ba67f4dda11b0a4b54fc631278d3e39e11667c3` = "update 4.0.5"，2026-09-24；
+**逐文件读完**而非 grep 到名字就下结论）：
+
+| 文件 | `setOpacity` | `getOpacity` | 选项表有 `opacity`？ |
+| --- | --- | --- | --- |
+| `visualization/PolygonLayer.d.ts` | **0 命中** | **0 命中** | **没有**（19 个字段逐条读过） |
+| `visualization/PolylineLayer.d.ts` | **0 命中** | **0 命中** | **有**：`:131` @default 1 |
+| `visualization/TextLayer.d.ts` | `:296` | `:298` | 有（`:179`） |
+
+⇒ 「两族都未声明 `setOpacity`」**是真的**，但**它解释不了处置的不对称**。真正的根因在
+`PolylineLayer.d.ts:209` 的 `setOptions` 文档：明写 `opacity` / `visible` / `zIndex` /
+`renderStage` / `referCenter` / `enablePicked` **转发到对应 setter** ⇒ `opacity` 是**契约成员**；
+`PolygonLayer` 对 `opacity` **零命中**，连声明的入口都没有。
+
+**运行时侧**：`getOpacity` 与 `setOpacity` **同时**在位 ⇒ 「调用成功」与「画面变了」可分。
+`getOpacity` 读得回**零信息量**（setter 与 getter 共用同一份状态）。判据只能是像素：
+`preserveDrawingBuffer: true` + `readPixels` 数哨兵色像素。
+
+| 类 | `setOpacity` 序列 | 判定 |
+| --- | --- | --- |
+| `PolygonLayer` | 五态（`1→0→1` / `setOptions` / 构造期）**全部同值** | **present-but-ineffective** ⇒ **不登记** |
+| `PolylineLayer` | 4229 → **0** → 4229 → **0** → 4229 | **可观测地生效** ⇒ **登记**（运行时豁免表） |
+
+同批读数里的**阳性/阴性对照**证明测量通道是活的（面族同一次运行：`setVisible(false)` → 0、
+`setOptions({fillOpacity: 0})` → 0、复原 → 148243、换色到画布不可能存在的品红 → 0），
+所以面族那组同值**不是**「量不出来」。
+
+**⇒ 修正后的口径**：判据是「**可观测地生效**」，既不是「成员在不在」，也不是「声明有没有写」。
+本票三处「声明 / 运行时不一致」各占一个方向，**不可互相照抄**：
+
+| 形状 | 例子 | 处置 |
+| --- | --- | --- |
+| 声明有、运行时**无** | 两族的 `hitTest` | 不登记（假支持） |
+| 运行时在、**不生效** | `PolygonLayer#setOpacity` | 不登记（比假支持更难排查） |
+| 声明无、运行时在、**生效** | `PolylineLayer#setOpacity` | 登记（`RUNTIME_ONLY_REGISTERED` 豁免） |
+| （本票之外）声明有、未 settle 时读成不在 | `Marker#setAnchor` | 判「在位」必须 **settle 之后**取样 |
+
+**残留代价**（本轮未裁决，是**范围选择**不是缺陷）：`PolylineLayer` 现在 Driver 登记了
+`setOpacity` 却**没有组件消费者**——与 #104「没有消费者的扩展面一律不加」存在张力。
+是否给 `<PolylineLayer>` 开 `opacity` prop 留给后续。两组件**都未暴露**该 prop，
+所以组件行为未变，只有**理由**换了。
+
+逐条读数与踩坑见
+[`165-runtime-audit-2026-09-27`](./165-runtime-audit-2026-09-27)「第三轮」。
 
 ## 四、`clearData` 的口径：登记但组件不调用
 
@@ -113,7 +156,8 @@ Class 3 就按 4.0.5 声明登记了 `setOpacity`（它们的声明**有**）。
 | `clearData()` | 无（`data: null` 换实例） | **不** expose（理由见 §四） |
 | `setOptions(options)` | 有（`style` prop，受控） | **不**重复 expose |
 | `getOptions()` / `getData()` / `getEnablePicked()` / `getVisible()` / `getZIndex()` / `getRenderStage()` / `getRefCenter()` | — | **不** expose：全部是**读回**，无消费者（#104） |
-| `setVisible` / `setOpacity` / `setZIndex` | 有 | **不**重复 expose |
+| `setVisible` / `setZIndex` | 有 | **不**重复 expose |
+| `setOpacity` | 无（两族都不暴露 `opacity` prop） | **不** expose；⚠️ 理由**按族不同**：`PolylineLayer` 是**范围决策**（已登记但暂无组件消费者），`PolygonLayer` 是**选项表里根本没有** `opacity`。见 §三 |
 | `hitTest(x, y)` | — | **不** expose：运行时没有（§二） |
 | 要素状态五件套（`updateState` / …） | `featureState`（`LineLayer` / `FillLayer` / `PointCollection` 已有） | **不** expose：两族**没有**状态 API（声明里没有） |
 
@@ -132,3 +176,6 @@ Class 3 就按 4.0.5 声明登记了 `setOpacity`（它们的声明**有**）。
    `setZoomRange`（官方无字段级 setter）。
 6. **不删除** `<FillLayer>` / `<LineLayer>`：弃用是上游的事，#165 §3.6 禁止 compat shim；
    本票只是让「官方建议的替代品」**真的存在**。
+7. ⚠️ **两族都不暴露 `opacity` prop**——但这**不是** §三 早期那条「未声明所以不开面」的
+   结论（那条已被推翻）。`PolygonLayer` 因选项表无此项而**不可能**有；`PolylineLayer` 是
+   **范围决策**（Driver 已登记、暂无组件消费者），留给后续裁决。
