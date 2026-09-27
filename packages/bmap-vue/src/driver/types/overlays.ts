@@ -80,6 +80,26 @@ export interface PathOptions {
   enableEditing?: boolean;
   enableClicking?: boolean;
   zIndex?: number;
+  /* --- issue #165 图形族补齐：官方在 4.0.5 的 `*Options` 里已声明、此前没有出口的构造期选项。
+   *
+   * 逐条依据与「哪些类有该项」的对照见本文件 `PATH_CTOR_*` 四张表的注释。
+   *
+   * ⚠️ 它们全部**没有**实例 setter（逐个核对 `overlay/<Class>.d.ts` 的成员表），
+   * 因此分类一律是 `recreate`——改 prop 会**重建实例**。这不是本库的取舍，是上游的形状。
+   *
+   * 保留索引签名（`[key: string]: unknown`）不变：它是项目 option 接口的官方逃生口，
+   * 去掉它会让「描述符里没有的构造选项」无法透传（`GroundOverlay.type` / `Prism.autoCenter` 走的就是它）。
+   */
+  /** 描边线端头（官方 `@default 'round'`）。构造期。 */
+  strokeLineCap?: "round" | "butt" | "square";
+  /** 描边线连接处（官方 `@default 'round'`）。构造期。 */
+  strokeLineJoin?: "round" | "miter" | "bevel";
+  /** 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）。构造期。 */
+  coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+  /** 跨 180 度经线时是否按最短路径绘制（官方 `@default false`）。构造期。 */
+  linkRight?: boolean;
+  /** 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）。构造期。 */
+  dashArray?: number[];
   [key: string]: unknown;
 }
 
@@ -522,6 +542,127 @@ const FILL_STYLE: Record<string, SpecInput> = {
   fillOpacity: mutateBy("setFillOpacity", { ctorKey: "fillOpacity" }),
 };
 
+/* ------------------------------------------- issue #165 图形族补齐：构造期选项（21 个）
+ *
+ * 全部是 `recreate`。**判据不是「官方只在 options 里声明了它」**，而是**逐条核对
+ * `overlay/<Class>.d.ts` 的实例成员表 + live 读数**之后确认「**没有可观察地生效的更新入口**」。
+ *
+ * | 键 | 官方 `@default` | 判据 |
+ * | --- | --- | --- |
+ * | `strokeLineCap` | `'round'` | ⚠️ **唯一一条「声明与运行时不一致」**：官方类型声明里没有，但**运行时原型链 layer 2 上有**、调得动不抛——**调完 `getStrokeStyle()` 不变**且官方无读回 ⇒ 可观察地**不生效** ⇒ 仍是构造期 |
+ * | `strokeLineJoin` | `'round'` | 同上 |
+ * | `dashArray` | 实线与间隙均为线宽 2 倍 | 无 `setDashArray`，也**无 `setDash`**（live 读数：整条原型链 layer = -1） |
+ * | `coordType` | 未设置时用全局 `BMap.coordType` | 无 `setCoordType`（layer = -1）；它决定**输入点按哪种坐标系解读**，构造之后改它没有意义 |
+ * | `geodesic` | `false` | 无 `setGeodesic`（layer = -1）；且它决定**两点之间怎么连**（路径本身），不是样式 |
+ * | `linkRight` | `false` | 无 `setLinkRight`（layer = -1） |
+ * | `clip` | `true` | 无 `setClip`（layer = -1）；官方原文「绘制跨经度 180 度的折线时可设置为 false 以优化效果」 |
+ * | `icons` | 无 | 无 `setIcons`（layer = -1）；且官方 `IconSequence` **已 `@deprecated`**（4.0 起改用 `strokeTexture`）——见该键的独立注释 |
+ * | `strokeTexture` | 无 | 无 `setStrokeTexture`（layer = -1）；官方注明「仅 WebGL 渲染模式支持」 |
+ *
+ * `enableClicking` 不在这里：它早已在 `PATH_STYLE` 里登记为 `recreate`，
+ * 缺的是 `<Polyline>` / `<Polygon>` 的**组件面**出口（描述符有键、组件没暴露）。
+ *
+ * ## ⚠️ live 取证的三个方法论教训（都踩过）
+ *
+ * 1. **别只读 `getOwnPropertyNames(Ctor.prototype)`**：`Polyline` 的原型链有 **7 层**
+ *    （自有成员数 8 / 9 / 38 / 27 / 11 / 12 / 12），样式 setter 全在 **layer 2**。
+ *    只看 layer 0 会把「38 个成员的那层」整个漏掉，于是「存在」被误判成「不存在」。
+ * 2. **`typeof` 在位 ≠ 有效**：`setStrokeLineCap` 在原型链上、调得动不抛，但**调完没有
+ *    任何可观察的变化**。判据必须是「**可观察地生效**」，不是「成员在不在」——
+ *    这与 `Marker#setAnchor`（「声明里有、运行时不在原型上」）是同一类问题的两个方向。
+ * 3. **「等补齐」不能只看静态成员**：`member-surface` 的读法 `Ctor[name]` 会命中**静态**
+ *    成员，于是用图形类做 `settleWhenPresent` 判据时会 `attempts=1 / afterMs=0` **假 settled**。
+ *
+ * ⚠️ **不要把这些键顺手改成 `mutateBy("set<Key>")`**：认成 `mutable` 会让更新落到
+ * 「按名字推导的逃生口」上，而那些方法要么不存在、要么**调了不生效**
+ * ⇒ 静默变成「改了没反应」或「调用成功但画面不变」。
+ * `tests/behavior/overlay-update-policy.test.ts` 与
+ * `tests/behavior/vector-overlay-options.test.ts` 双向钉住这一条
+ * （后者还带一条**对照守卫**：同在 layer 2 的 `setStrokeColor` 仍然走 `options`）。
+ */
+
+/** 四类图形（Polyline / Polygon / Circle / Rectangle / BezierCurve 中**有**该项的）共用。 */
+const PATH_CTOR_DASH: Record<string, SpecInput> = {
+  dashArray: recreate(
+    "官方 4.0.5 的 Polyline/Polygon/Rectangle/Circle/BezierCurve 上**都没有** setDashArray，" +
+      "也**没有** setDash（对照：同名有 setter 的是官方 `DashStyle` 那条线，不在这些类上）",
+    { ctorKey: "dashArray", value: "raw" },
+  ),
+};
+
+/** `coordType`：官方在 Polyline / Polygon / Rectangle / Circle 四类上声明（**BezierCurve 没有**）。 */
+const PATH_CTOR_COORD: Record<string, SpecInput> = {
+  coordType: recreate(
+    "官方 4.0.5 的 Polyline/Polygon/Rectangle/Circle 上**没有** setCoordType；" +
+      "它决定**输入点按哪种坐标系解读**（未设置时用全局 `BMap.coordType`），构造之后改它没有意义",
+    { ctorKey: "coordType" },
+  ),
+};
+
+/**
+ * `strokeLineCap` / `strokeLineJoin`：官方在 Polyline / Polygon 两类上声明（Circle / Rectangle /
+ * BezierCurve 没有）。
+ *
+ * ## ⚠️ **这两项的依据是运行时实测，而且结论与「声明里没有」不同**
+ *
+ * 官方 4.0.5 的 `overlay/Polyline.d.ts` / `Polygon.d.ts` 的**类型声明里没有**这两个方法——
+ * 但**运行时原型链上确实有**，且**真调一次不抛**。live 读数（headless Chrome + live AK，
+ * 2026-09-27，脚本 `/tmp/probe-mini.mts`，报告 `/tmp/mini.json`）：
+ *
+ * | 成员 | 原型链归属 | 真调一次 |
+ * | --- | --- | --- |
+ * | `setStrokeLineCap` | layer 2（**图形族共享**那层，与 `setStrokeColor` / `setStrokeWeight` / `setStrokeStyle` **同一层**） | 不抛，返回 `undefined` |
+ * | `setStrokeLineJoin` | layer 2（同上） | 不抛，返回 `undefined` |
+ * | `setLineCap` / `setLineJoin` | **-1（整条链都没有）** | — |
+ * | `setStrokeColor` / `setStrokeWeight` / `setStrokeStyle` | layer 2（对照项） | — |
+ * | `setZIndex` | layer 3 | — |
+ * | `setPath` | layer 0（自有） | — |
+ *
+ * `Polyline.prototype` 整条链是 7 层（自有 8 / 9 / 38 / 27 / 11 / 12 / 12 个成员），
+ * 样式 setter 挂在 layer 2 —— 这也解释了为什么**只读 `getOwnPropertyNames` 会误判**：
+ * 它只看 layer 0，于是「38 个成员的那层」整个被漏掉。
+ *
+ * ## 那为什么仍然是 `recreate`，而不是 `mutateBy("setStrokeLineCap")`
+ *
+ * **因为「在位且调得动」不等于「有效」**：live 实测调完
+ * `setStrokeLineCap("square")` + `setStrokeLineJoin("bevel")` 之后，
+ * `getStrokeStyle()` 仍然读回 `"solid"`（调用前也是 `"solid"`）——**没有任何可观察的变化**。
+ *
+ * 认成 `mutable` 会怎样：更新会「成功」（不抛、进了 `callLog`）但**画面不变**，
+ * 也就是**静默假支持**——比 `recreate` 的「改它就重建」糟糕得多。
+ * 官方**既没有**在类型声明里承诺它，**也没有**任何 getter 能证明它生效了
+ * ⇒ 与 AGENTS.md「官方已经提供的能力不自研 / 不把未取证的东西说成支持」同口径：
+ * **只按构造选项透传，字段级更新一律重建**。
+ *
+ * ⚠️ **不要因为「live 读数说有」就改成 `mutateBy`**——那正是本条要防的误判。
+ * 判据是「可观察地生效」，而 live 读数恰恰否定了这一点。
+ */
+const PATH_CTOR_LINE_JOINT: Record<string, SpecInput> = {
+  strokeLineCap: recreate(
+    "**依据是 live 读数（2026-09-27，/tmp/probe-mini.mts）**：运行时原型链 layer 2 上确实有 " +
+      "setStrokeLineCap（与 setStrokeColor / setStrokeWeight / setStrokeStyle 同一层），真调一次**不抛**；" +
+      "但**官方 4.0.5 的类型声明里没有**它，且调完之后 getStrokeStyle() 读回仍是 'solid'——" +
+      "**没有任何可观察的变化** ⇒ 认成 mutable 会变成「调用成功但画面不变」的静默假支持，" +
+      "比 recreate 糟得多 ⇒ 固定按构造期透传，改它就重建。" +
+      "⚠️ 官方也**没有** getLineCap / getStrokeLineCap 之类的读回，无从验证生效",
+    { ctorKey: "strokeLineCap" },
+  ),
+  strokeLineJoin: recreate(
+    "同 strokeLineCap 的 live 读数与结论：原型链 layer 2 有 setStrokeLineJoin、调得动不抛、" +
+      "但类型声明没有、且调完 getStrokeStyle() 不变 ⇒ 构造期，recreate",
+    { ctorKey: "strokeLineJoin" },
+  ),
+};
+
+/** `linkRight`：官方在 Polyline / Polygon / Rectangle 三类上声明。 */
+const PATH_CTOR_LINK_RIGHT: Record<string, SpecInput> = {
+  linkRight: recreate(
+    "官方 4.0.5 的 Polyline/Polygon/Rectangle 上**没有** setLinkRight；它决定「跨 180 度经线时" +
+      "是否按最短路径绘制」，是**绘制算法**的输入，构造后无从更改",
+    { ctorKey: "linkRight" },
+  ),
+};
+
 /**
  * 覆盖物属性元数据（单一事实源）。
  *
@@ -685,6 +826,39 @@ export const OVERLAY_DESCRIPTORS = {
       ...PATH_STYLE,
       fillColor: unsupported("Polyline 没有填充：4.0 的 Polyline 只有描边 setter，没有 setFillColor"),
       fillOpacity: unsupported("Polyline 没有填充：4.0 的 Polyline 只有描边 setter，没有 setFillOpacity"),
+      // ↓ issue #165 图形族补齐：Polyline **独有**的四个构造期选项（其余四类没有）。
+      ...PATH_CTOR_DASH,
+      ...PATH_CTOR_COORD,
+      ...PATH_CTOR_LINE_JOINT,
+      ...PATH_CTOR_LINK_RIGHT,
+      geodesic: recreate(
+        "官方 4.0.5 的 Polyline 上**没有** setGeodesic；它决定**两点之间怎么连**（大地线还是直线段），" +
+          "属于路径本身而非样式，构造之后改它就是换一条不同的线",
+        { ctorKey: "geodesic" },
+      ),
+      clip: recreate(
+        "官方 4.0.5 的 Polyline 上**没有** setClip；官方原文「是否进行跨经度 180 度裁剪，" +
+          "绘制跨经度 180 度的折线时可设置为 false 以优化效果」——这是渲染期裁剪，不是几何",
+        { ctorKey: "clip" },
+      ),
+      /**
+       * ⚠️ **官方已 `@deprecated`**：`IconSequence` 在 4.0.5 的 `overlay/IconSequence.d.ts`
+       * 上明确标了 `@deprecated 4.0 已废弃，请使用 {@link PolylineOptions#strokeTexture} 配置项代替`。
+       *
+       * 本库**仍然收**它，理由是两条：① 官方参考实现与既有代码可能仍在用，而「收下就静默忽略」
+       * 比「不收」更难排查；② 描述符如实记下它只是构造期，调用方能自己判断该不该用新的那条路。
+       * 但**不**把它写进 `PathStrokeProps`（它只属于 Polyline），也**不**在文档里推荐它。
+       */
+      icons: recreate(
+        "官方 4.0.5 的 Polyline 上**没有** setIcons；且官方 `IconSequence` 类本身已 @deprecated" +
+          "（4.0 起请用 `strokeTexture`）——保留本键只为如实透传，不推荐新代码使用",
+        { ctorKey: "icons", value: "raw" },
+      ),
+      strokeTexture: recreate(
+        "官方 4.0.5 的 Polyline 上**没有** setStrokeTexture；它是**线纹理**（沿折线重复绘制图片，" +
+          "如方向箭头），官方注明**仅 WebGL 渲染模式支持**——渲染通道而非几何，构造期给定",
+        { ctorKey: "strokeTexture", value: "raw" },
+      ),
     }),
   },
 
@@ -698,6 +872,11 @@ export const OVERLAY_DESCRIPTORS = {
       isBoundary: recreate("isBoundary 只在构造期生效；路径本身用 setPath 更新", { ctorKey: "isBoundary" }),
       ...PATH_STYLE,
       ...FILL_STYLE,
+      // ↓ issue #165 图形族补齐。
+      ...PATH_CTOR_DASH,
+      ...PATH_CTOR_COORD,
+      ...PATH_CTOR_LINE_JOINT,
+      ...PATH_CTOR_LINK_RIGHT,
     }),
   },
 
@@ -709,6 +888,11 @@ export const OVERLAY_DESCRIPTORS = {
       bounds: mutateBy("setBounds", { ctorKey: null, value: "bounds" }),
       ...PATH_STYLE,
       ...FILL_STYLE,
+      // ⚠️ **官方 `Rectangle` 也有 `linkRight` / `coordType` / `dashArray`**，此前同样没有出口。
+      // 本次一并补齐（`strokeLineCap` / `strokeLineJoin` **不在** `RectangleOptions` 里，别误加）。
+      ...PATH_CTOR_DASH,
+      ...PATH_CTOR_COORD,
+      ...PATH_CTOR_LINK_RIGHT,
     }),
   },
 
@@ -721,6 +905,10 @@ export const OVERLAY_DESCRIPTORS = {
       radius: mutateBy("setRadius", { ctorKey: null }),
       ...PATH_STYLE,
       ...FILL_STYLE,
+      // ↓ issue #165 图形族补齐。CircleOptions **没有** `strokeLineCap` / `strokeLineJoin` /
+      // `linkRight` / `geodesic` / `clip` —— 加了就是自造官方没有的选项。
+      ...PATH_CTOR_DASH,
+      ...PATH_CTOR_COORD,
     }),
   },
 
@@ -814,6 +1002,9 @@ export const OVERLAY_DESCRIPTORS = {
         "4.0 的 BezierCurve 只有构造选项 enableClicking，实例上没有对应的成对开关",
         { ctorKey: "enableClicking" },
       ),
+      // ↓ issue #165 图形族补齐。BezierCurveOptions **只有** `dashArray` 是此前缺的
+      // （**没有** `coordType` / `strokeLineCap` / `strokeLineJoin` / `linkRight` —— 别误加）。
+      ...PATH_CTOR_DASH,
     }),
   },
 
@@ -1058,6 +1249,42 @@ export const OVERLAY_REVERT_RATIONALE = {
   strokeStyle: "图形族有 getStrokeStyle，但返回当前值而非 SDK 默认线型 ⇒ 重建",
   fillColor: "图形族有 getFillColor，但返回当前值而非 SDK 默认填充色 ⇒ 重建",
   fillOpacity: "图形族有 getFillOpacity，但返回当前值而非 SDK 默认填充透明度 ⇒ 重建",
+  // ——— issue #165 图形族补齐的九个构造期选项：全部「无 setter 也无读回」⇒ 重建 ——
+  //
+  // 这一组与上面 `strokeColor` 那一族**判据不同**，因此分开写：
+  // 上面是「**有** getter，但返回当前值」；这里是「**连 getter 都没有**」——
+  // 官方 4.0.5 的 `overlay/<Class>.d.ts` 实例成员表里**一个都没有**这些名字，
+  // 因此「值变回 undefined」连落点都不存在。
+  strokeLineCap:
+    "官方 4.0.5 的类型声明里**既没有** setStrokeLineCap 也没有 getStrokeLineCap。" +
+    "⚠️ live 读数（2026-09-27）显示运行时原型链 layer 2 上**有** setStrokeLineCap、调得动不抛，" +
+    "但调完 getStrokeStyle() 不变（无可观察效果）且官方没有任何读回能验证它生效 ⇒ 无法确认写入" +
+    "是否落到了真实的渲染状态，因此撤回只能重建（重建至少保证「回到官方默认」）",
+  strokeLineJoin:
+    "同 strokeLineCap：官方类型声明里没有 getStrokeLineJoin；live 读数里原型链 layer 2 的 " +
+      "setStrokeLineJoin 调得动但无可观察效果 ⇒ 无从验证生效 ⇒ 重建",
+  geodesic:
+    "官方 4.0.5 的 Polyline 上**既没有** setGeodesic 也无读回；且它决定**路径本身**（两点怎么连），" +
+    "不是样式 ⇒ 撤回只能重建出一条不同的线 ⇒ 重建",
+  linkRight:
+    "官方 4.0.5 的 Polyline/Polygon/Rectangle 上**既没有** setLinkRight 也无读回；" +
+    "它是绘制算法的输入（同一条线的形状会不同）⇒ 重建",
+  clip:
+    "官方 4.0.5 的 Polyline 上**既没有** setClip 也无读回；官方原文「是否进行跨经度 180 度裁剪」" +
+    "——渲染期裁剪而非几何，官方没有任何读回能告诉我们当前裁没裁 ⇒ 重建",
+  coordType:
+    "官方 4.0.5 的 Polyline/Polygon/Rectangle/Circle 上**既没有** setCoordType 也无读回；" +
+    "它决定**输入点按哪种坐标系解读**，而坐标一旦被解读就不可逆（「改回去」需要重新解读原始点，" +
+    "而那些原始点组件侧不保留）⇒ 重建",
+  dashArray:
+    "官方 4.0.5 的五个图形类上**既没有** setDashArray 也**没有** setDash，更无读回；" +
+    "官方默认值是「按线宽推导的 2 倍」，而线宽可被 setStrokeWeight 单独改 ⇒ 没有可恢复的 baseline ⇒ 重建",
+  icons:
+    "官方 4.0.5 的 Polyline 上**既没有** setIcons 也无读回；且官方 `IconSequence` 类本身已 @deprecated" +
+    "（4.0 起改用 strokeTexture）⇒ 重建",
+  strokeTexture:
+    "官方 4.0.5 的 Polyline 上**既没有** setStrokeTexture 也无读回；它是**线纹理**（沿折线重复绘制图片）" +
+    "且官方注明仅 WebGL 渲染模式支持 ⇒ 重建",
   width: "InfoWindow 的 width 只有构造选项；4.0.4 无 setWidth 也无 getWidth ⇒ 重建",
   height: "InfoWindow 的 height 只有构造选项；4.0.4 无 setHeight 也无 getHeight ⇒ 重建",
   maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.4 **无** getMaxWidth ⇒ 撤回只能重建",

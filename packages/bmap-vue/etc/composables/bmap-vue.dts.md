@@ -1221,6 +1221,11 @@ export declare interface PathOptions {
     enableEditing?: boolean;
     enableClicking?: boolean;
     zIndex?: number;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
+    coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+    linkRight?: boolean;
+    dashArray?: number[];
     [key: string]: unknown;
 }
 export declare interface PathReadBackApi {

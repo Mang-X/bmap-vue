@@ -12,7 +12,26 @@ import { Rectangle } from 'bmap-vue'
 overlay/rectangle
 :::
 
-## 动态组件 Props
+## 构造期 Props（`recreate`）
+
+官方 4.0.5 的 `overlay/Rectangle.d.ts` 实例成员表上**没有**这些项的 setter
+（`enableClicking` 没有成对开关；`coordType` / `linkRight` / `dashArray` 既无 setter 也无读回）
+⇒ **改动其中任何一项都会重建实例**。
+
+| 属性            | 说明                                                   | 类型                                            | 官方默认                |
+| --------------- | ------------------------------------------------------ | ----------------------------------------------- | ----------------------- |
+| enableClicking  | 是否响应点击事件                                       | `boolean`                                       | `true`                  |
+| coordType       | 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）   | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | 用全局值 |
+| linkRight       | 跨 180 度经线时是否按最短路径绘制                      | `boolean`                                       | `false`                 |
+| dashArray       | 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）           | `number[]`                                      | 实线与间隙均为线宽的 2 倍 |
+
+::: warning `<Rectangle>` **没有** `strokeLineCap` / `strokeLineJoin`
+
+官方 `RectangleOptions` 的 15 个键里**没有**这两项——只有 `<Polyline>` 与 `<Polygon>` 有。
+
+:::
+
+## 就地更新 Props（`options`）
 
 | 属性            | 说明                                        | 类型                                     | 可选值                    | 默认值                | 版本                               |
 | --------------- | ------------------------------------------- | ---------------------------------------- | ------------------------- | --------------------- | ---------------------------------- |
@@ -20,14 +39,13 @@ overlay/rectangle
 | strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                                 | -                         | `#000000`             | <Badge type="tip" text="^1.0.0" /> |
 | strokeWeight    | 描边的宽度，单位为像素                      | `number`                                 | -                         | `2`                   | <Badge type="tip" text="^1.0.0" /> |
 | strokeOpacity   | 描边的透明度，范围 0-1                      | `number`                                 | -                         | `0.9`                 | <Badge type="tip" text="^1.0.0" /> |
-| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `string`                                 | `solid / dashed / dotted` | `solid`               | <Badge type="tip" text="^1.0.0" /> |
+| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `'solid' \| 'dashed' \| 'dotted'`         | -                         | `solid`               | <Badge type="tip" text="^1.0.0" /> |
 | fillColor       | 面填充颜色，同 CSS 颜色                     | `string`                                 | -                         | `#000000`             | <Badge type="tip" text="^1.0.0" /> |
 | fillOpacity     | 面填充的透明度，范围 0-1                    | `number`                                 | -                         | `0.5`                 | <Badge type="tip" text="^1.0.0" /> |
 | enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
 | enableEditing   | 是否启用线编辑                              | `boolean`                                | -                         | `false`               | <Badge type="tip" text="^1.0.0" /> |
-| enableClicking  | 是否响应点击事件                            | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
-| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
-| visible         | 是否显示                                    | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
+| zIndex          | 层叠顺序（**就地更新**，官方 `setZIndex`）  | `number`                                 | -                         | -                     | `1.0.0`（#165）                   |
+| visible         | 是否显示（走 `show` / `hide`）              | `boolean`                                | -                         | `true`                | <Badge type="tip" text="^1.0.0" /> |
 
 > `bounds` 按**内容**判等：父级每次渲染传内联字面量不会产生多余的 SDK 命令。
 > 这与 `Polyline` / `Polygon` 的 `points`（根引用 + 版本 prop）不同——矩形只有四个数字。
@@ -38,9 +56,9 @@ overlay/rectangle
 
 | 属性                       | 变化时发生什么                                       |
 | -------------------------- | ---------------------------------------------------- |
-| `bounds` / 描边 / 填充     | 就地更新（各自的 SDK setter，**不重建实例**）        |
+| `bounds` / 描边 / 填充 / `zIndex` | 就地更新（各自的 SDK setter，**不重建实例**）  |
 | `enableEditing` / `enableMassClear` | 成对开关（`enableEditing()` / `disableEditing()`） |
-| `enableClicking`           | 官方 4.0 只有构造选项 ⇒ **重建实例**（内部状态重置） |
+| `enableClicking` / `coordType` / `linkRight` / `dashArray` | 官方只有构造选项 ⇒ **重建实例**（内部状态重置） |
 | `visible`                  | `show()` / `hide()`：实例留在图上，只是不可见        |
 
 ## 组件事件

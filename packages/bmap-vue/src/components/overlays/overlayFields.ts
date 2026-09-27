@@ -63,6 +63,61 @@ export const PATH_CLICKING_FIELD = { enableClicking: "recreate" } as const satis
   OverlayFieldUpdate
 >;
 
+/* ------------------------------------- issue #165 图形族补齐：构造期选项的字段表
+ *
+ * 四张表，**按「哪些类官方声明了它」分**，而不是「整族一起加」。逐条依据见
+ * `driver/types/overlays.ts` 的同款 `PATH_CTOR_*` 表。
+ */
+
+/** `coordType`：官方在 Polyline / Polygon / Rectangle / Circle 四类上声明。 */
+export const PATH_COORD_TYPE_FIELD = { coordType: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/** `dashArray`：官方在 Polyline / Polygon / Rectangle / Circle / BezierCurve **五个**类上都声明。 */
+export const PATH_DASH_ARRAY_FIELD = { dashArray: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
+ * `linkRight`：官方在 Polyline / Polygon / Rectangle **三个**类上声明。
+ *
+ * ⚠️ **没有** Circle 与 BezierCurve——`CircleOptions` / `BezierCurveOptions` 里
+ * 一个 `linkRight` 都没有（圆形没有「跨经度的路径」，贝塞尔曲线的跨经度行为由控制点决定）。
+ */
+export const PATH_LINK_RIGHT_FIELD = { linkRight: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
+ * `strokeLineCap` / `strokeLineJoin`：官方**只在** Polyline / Polygon 两类上声明。
+ *
+ * 为什么不并进 `PATH_STROKE_FIELDS`：那张表是「四类共有的**就地更新**描边四件套」，
+ * 而这两项是**构造期**（官方没有 `setLineCap` / `setLineJoin`）**且只有两类有**——
+ * 两个维度都不同，并进去会让「同表即同策略」这条性质失效。
+ */
+export const PATH_LINE_JOINT_FIELDS = {
+  strokeLineCap: "recreate",
+  strokeLineJoin: "recreate",
+} as const satisfies Record<string, OverlayFieldUpdate>;
+
+/**
+ * `geodesic` / `clip` / `icons` / `strokeTexture`：**Polyline 独有**的四个构造期选项。
+ *
+ * 官方 `PolylineOptions` 独有（其余四类的 options 里都没有），因此**没有**抽成共享表——
+ * 一张只被一个 spec 展开的「共享表」正是 `overlayFields.ts` 文件头禁止的那种
+ * （「只有在**多个** kind 真的同形时才放进本文件」）。
+ */
+export const POLYLINE_ONLY_CTOR_FIELDS = {
+  geodesic: "recreate",
+  clip: "recreate",
+  icons: "recreate",
+  strokeTexture: "recreate",
+} as const satisfies Record<string, OverlayFieldUpdate>;
+
 /**
  * 显隐字段。
  *

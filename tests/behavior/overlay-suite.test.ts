@@ -221,13 +221,31 @@ const CASES: readonly OverlayCase[] = [
         { lng: 116.5, lat: 40 },
       ],
       strokeColor: "#123456",
+      // ↓ issue #165 图形族补齐：逐个 `recreate` 策略都在这里有**至少一个**行为用例。
+      // 逐条「为什么没有 setter」的依据见 `vector-overlay-options.test.ts` 的表；
+      // 这里只负责让「每个字段都被行为覆盖」这条门禁看到它们。
+      dashArray: [8, 4],
+      coordType: "BMAP_COORD_GCJ02",
+      strokeLineCap: "butt",
+      linkRight: true,
     },
     mutable: [
       { prop: "strokeColor", next: "#654321", setter: "setStrokeColor" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [],
-    ctorExpect: { strokeColor: "#123456" },
+    recreate: [
+      { prop: "dashArray", next: [2, 2] },
+      { prop: "enableClicking", next: true },
+      { prop: "geodesic", next: true },
+      { prop: "clip", next: false },
+    ],
+    ctorExpect: {
+      strokeColor: "#123456",
+      dashArray: [8, 4],
+      coordType: "BMAP_COORD_GCJ02",
+      strokeLineCap: "butt",
+      linkRight: true,
+    },
   },
   {
     name: "Polygon",
@@ -240,13 +258,19 @@ const CASES: readonly OverlayCase[] = [
         { lng: 116.5, lat: 40 },
       ],
       fillColor: "#00ff00",
+      dashArray: [6, 2],
+      strokeLineJoin: "bevel",
     },
     mutable: [
       { prop: "fillColor", next: "#ff0000", setter: "setFillColor" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [{ prop: "isBoundary", next: true }],
-    ctorExpect: { fillColor: "#00ff00" },
+    recreate: [
+      { prop: "isBoundary", next: true },
+      { prop: "enableClicking", next: true },
+      { prop: "strokeLineCap", next: "square" },
+    ],
+    ctorExpect: { fillColor: "#00ff00", dashArray: [6, 2], strokeLineJoin: "bevel" },
   },
   {
     name: "Rectangle",
@@ -256,27 +280,35 @@ const CASES: readonly OverlayCase[] = [
     props: {
       bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
       strokeWeight: 3,
+      linkRight: true,
     },
     mutable: [
       { prop: "strokeWeight", next: 5, setter: "setStrokeWeight" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
-    ctorExpect: { strokeWeight: 3, enableClicking: true },
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "coordType", next: "BMAP_COORD_WGS84" },
+    ],
+    ctorExpect: { strokeWeight: 3, enableClicking: true, linkRight: true },
   },
   {
     name: "Circle",
     kind: "circle",
     component: Circle,
     fields: CIRCLE_FIELDS,
-    props: { center: POINT, radius: 100, fillOpacity: 0.3 },
+    props: { center: POINT, radius: 100, fillOpacity: 0.3, dashArray: [4, 4] },
     mutable: [
       { prop: "radius", next: 200, setter: "setRadius" },
       { prop: "fillOpacity", next: 0.8, setter: "setFillOpacity" },
       // 圆心是位置字段：`setPosition` 由 Driver 按 `POSITION_KEY.circle` 映射到 `setCenter`
       { prop: "center", next: { lng: 117, lat: 40 }, setter: "setCenter" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "dashArray", next: [2, 2] },
+    ],
+    ctorExpect: { dashArray: [4, 4] },
     stateExpect: { radius: 100 },
   },
   {
@@ -296,9 +328,15 @@ const CASES: readonly OverlayCase[] = [
         ],
       ],
       strokeOpacity: 0.4,
+      // ↓ issue #165 图形族补齐：`BezierCurveOptions` 此前只缺 `enableClicking` / `dashArray`。
+      dashArray: [3, 3],
     },
     mutable: [{ prop: "strokeOpacity", next: 0.9, setter: "setStrokeOpacity" }],
-    recreate: [],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "dashArray", next: [6, 6] },
+    ],
+    ctorExpect: { dashArray: [3, 3] },
   },
   {
     name: "Prism",

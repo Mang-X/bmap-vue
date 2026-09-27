@@ -1695,6 +1695,8 @@ export interface PanToOptions extends ViewCommandOptions {
 export interface PathOptions {
     // (undocumented)
     [key: string]: unknown;
+    coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+    dashArray?: number[];
     // (undocumented)
     enableClicking?: boolean;
     // (undocumented)
@@ -1705,8 +1707,11 @@ export interface PathOptions {
     fillColor?: string;
     // (undocumented)
     fillOpacity?: number;
+    linkRight?: boolean;
     // (undocumented)
     strokeColor?: string;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
     // (undocumented)
     strokeOpacity?: number;
     // (undocumented)

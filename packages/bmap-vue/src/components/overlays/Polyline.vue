@@ -25,6 +25,24 @@ const props = withDefaults(defineProps<PolylineProps>(), {
   enableMassClear: true,
   enableEditing: false,
   visible: true,
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）。
+  //
+  // 下面两项的**官方默认是 `true`**（官方 `PolylineOptions` 的 `@default true`：
+  // `enableClicking`「是否响应点击事件」、`clip`「是否进行跨经度 180 度裁剪」）。
+  // `Boolean` 类型的 prop 在**未给**时，编译产物里的运行时值是 `false`——与官方默认
+  // **相反**。因此这里必须显式写 `undefined`（**不是** `true`）：`undefined` 让该键
+  // **不进入**构造选项，SDK 沿用它自己的 `true`。
+  //
+  // `linkRight` / `geodesic` 的官方默认是 `false`，与 Vue 的未给值**值上一致**，
+  // 但仍显式钉成 `undefined`：让「没给」只有**一个**表示，否则父级某次传
+  // `:link-right="undefined"` 会触发一次**内容完全没变**的重建（这三项都是 `recreate`）。
+  //
+  // `strokeLineCap` / `strokeLineJoin` / `coordType` / `dashArray` / `icons` /
+  // `strokeTexture` **不是** `Boolean` ⇒ 没有这个陷阱，**不**在此声明。
+  enableClicking: undefined,
+  clip: undefined,
+  linkRight: undefined,
+  geodesic: undefined,
 });
 
 const emit = defineEmits<PolylineEmits>();

@@ -10,6 +10,16 @@
  * | `strokeColor` / `strokeWeight` / `strokeOpacity` / `strokeStyle` | `options` | 各自的 setter | `PATH_STYLE` |
  * | `enableMassClear` / `enableEditing` | `options` | 成对开关 | `PATH_STYLE` |
  * | `visible` | `visibility` | `show`/`hide` | 不是描述符键 |
+ * | ↓ **issue #165 补的十个，全部 `recreate`**（官方没有对应 setter，改 prop 即重建） |||
+ * | `enableClicking` | `recreate` | 构造期选项 | 官方无 `enableClicking()` / `disableClicking()` 成对开关 |
+ * | `strokeLineCap` / `strokeLineJoin` | `recreate` | 构造期选项 | ⚠️ **live 读数**：原型链 layer 2 上有同名 setter、调得动，但**调完 `getStrokeStyle()` 不变**且官方无读回 ⇒ 可观察地**不生效** ⇒ 仍是构造期（`mutateBy` = 静默假支持） |
+ * | `geodesic` | `recreate` | 构造期选项 | 无 `setGeodesic`；它决定**路径本身**（两点怎么连） |
+ * | `linkRight` | `recreate` | 构造期选项 | 无 `setLinkRight`；是绘制算法的输入 |
+ * | `clip` | `recreate` | 构造期选项 | 无 `setClip`；是**渲染期裁剪**，不是几何 |
+ * | `coordType` | `recreate` | 构造期选项 | 无 `setCoordType`；决定**输入点怎么解读**，构造后无从改 |
+ * | `dashArray` | `recreate` | 构造期选项 | 无 `setDashArray`，也**无** `setDash` |
+ * | `icons` | `recreate` | 构造期选项 | 无 `setIcons`；⚠️ 官方 `IconSequence` **已 `@deprecated`**（4.0 起改用 `strokeTexture`） |
+ * | `strokeTexture` | `recreate` | 构造期选项 | 无 `setStrokeTexture`；官方注明**仅 WebGL 渲染模式支持** |
  *
  * ## `points` 为什么不是内容指纹
  *
@@ -32,9 +42,15 @@ import {
 } from "../../core/overlays/overlayCommands";
 import type { PolylineProps } from "../../types/components";
 import {
+  PATH_CLICKING_FIELD,
+  PATH_COORD_TYPE_FIELD,
+  PATH_DASH_ARRAY_FIELD,
+  PATH_LINE_JOINT_FIELDS,
+  PATH_LINK_RIGHT_FIELD,
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
   PATH_ZINDEX_FIELD,
+  POLYLINE_ONLY_CTOR_FIELDS,
   VISIBILITY_DESCRIPTOR_KEY,
   VISIBILITY_FIELD,
 } from "./overlayFields";
@@ -45,6 +61,14 @@ export const POLYLINE_FIELDS: OverlayFieldMap<PolylineProps> = {
   ...PATH_STROKE_FIELDS,
   ...PATH_TOGGLE_FIELDS,
   ...PATH_ZINDEX_FIELD,
+  // ↓ issue #165 图形族补齐：Polyline 一次补上**十个**官方选项（4.0.5 的 PolylineOptions 共 17 个，
+  // 此前覆盖 7 个）。逐条分类依据见文件头的表与 `driver/types/overlays.ts` 的 `PATH_CTOR_*`。
+  ...PATH_CLICKING_FIELD,
+  ...PATH_COORD_TYPE_FIELD,
+  ...PATH_DASH_ARRAY_FIELD,
+  ...PATH_LINE_JOINT_FIELDS,
+  ...PATH_LINK_RIGHT_FIELD,
+  ...POLYLINE_ONLY_CTOR_FIELDS,
   ...VISIBILITY_FIELD,
 };
 
@@ -61,6 +85,49 @@ export const POLYLINE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
+/**
+ * 构造期选项的袋（issue #165 图形族补齐）。
+ *
+ * ## 为什么这十项要走条件展开而不是直接写 `{ enableClicking: p.enableClicking }`
+ *
+ * `Polyline` 的 `points`（以及 `dashArray` / `icons` / `strokeTexture`）是**数组 / 对象**，
+ * 而 `enableClicking` / `geodesic` / `linkRight` / `clip` / `strokeLineCap` / `strokeLineJoin` /
+ * `coordType` 是标量。**两类都要「未给即键不存在」**，理由各不同：
+ *
+ * - **数组类**：Driver 的 `projectOptions` 按**键**投影并跳过 `undefined` 值，
+ *   但一个 `undefined` 的数组在 `dashArray` 上会走 `value: "raw"` 的原样透传——
+ *   跳过与否取决于值而不是键，写不写条件展开**结果一样**，写出来只是为了与
+ *   `PointCollection.vue` / `PointLayer.vue` 的既有写法**同形**（可读性，不是行为）。
+ * - **标量类**：`clip` / `linkRight` / `enableClicking` 的**官方默认是 `true`**。
+ *   Vue 的 `Boolean` prop 未给时运行时是 `false`——若写 `{ clip: p.clip }` 而 SFC 的
+ *   `withDefaults` 忘了钉 `undefined`，这里就会把 `false` 真真切切送进 SDK，
+ *   **与官方默认相反**。条件展开 + SFC 的 `withDefaults` 双重保证「没表态 ⇒ 键不存在」，
+ *   让 SDK 沿用它自己的 `true`。
+ *
+ * 逐条分类依据见 `driver/types/overlays.ts` 的 `PATH_CTOR_*` 与 `OVERLAY_DESCRIPTORS.polyline`。
+ */
+function ctorOptions(p: Readonly<PolylineProps>): Record<string, unknown> {
+  return {
+    strokeColor: p.strokeColor,
+    strokeWeight: p.strokeWeight,
+    strokeOpacity: p.strokeOpacity,
+    strokeStyle: p.strokeStyle,
+    zIndex: p.zIndex,
+    enableMassClear: p.enableMassClear,
+    enableEditing: p.enableEditing,
+    ...(p.enableClicking === undefined ? {} : { enableClicking: p.enableClicking }),
+    ...(p.strokeLineCap === undefined ? {} : { strokeLineCap: p.strokeLineCap }),
+    ...(p.strokeLineJoin === undefined ? {} : { strokeLineJoin: p.strokeLineJoin }),
+    ...(p.geodesic === undefined ? {} : { geodesic: p.geodesic }),
+    ...(p.linkRight === undefined ? {} : { linkRight: p.linkRight }),
+    ...(p.clip === undefined ? {} : { clip: p.clip }),
+    ...(p.coordType === undefined ? {} : { coordType: p.coordType }),
+    ...(p.dashArray === undefined ? {} : { dashArray: p.dashArray }),
+    ...(p.icons === undefined ? {} : { icons: p.icons }),
+    ...(p.strokeTexture === undefined ? {} : { strokeTexture: p.strokeTexture }),
+  };
+}
+
 export function createPolylineSpec(): OverlaySpec<PolylineProps, PolylineHandle> {
   return {
     type: "polyline",
@@ -68,16 +135,7 @@ export function createPolylineSpec(): OverlaySpec<PolylineProps, PolylineHandle>
     fields: POLYLINE_FIELDS,
     descriptorKeys: POLYLINE_DESCRIPTOR_KEYS,
     watchSources: POLYLINE_WATCH_SOURCES,
-    create: (context, p) =>
-      context.client.driver.overlays.createPolyline(p.points, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        zIndex: p.zIndex,
-        enableMassClear: p.enableMassClear,
-        enableEditing: p.enableEditing,
-      }),
+    create: (context, p) => context.client.driver.overlays.createPolyline(p.points, ctorOptions(p)),
     /**
      * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
      *

@@ -12,31 +12,76 @@ import { Polyline } from 'bmap-vue'
 overlay/polyline
 :::
 
-## 静态组件 Props
+## 构造期 Props（`recreate`）
 
-| 属性           | 说明                                                     | 类型      | 可选值 | 默认值  | 版本                               |
-| -------------- | -------------------------------------------------------- | --------- | ------ | ------- | ---------------------------------- |
-| enableClicking | 是否响应点击事件                                         | `boolean` | -      | `true`  |                                    |
-| geodesic       | 是否开启大地线模式，true 时，两点连线将以大地线的形式。  | `boolean` | -      | `false` |                                    |
-| clip           | 是否进行跨经度 180 度裁剪，绘制跨精度 180 时为了优化效果 | `boolean` | -      | `true`  |                                    |
-| linkRight      | 连接右线，配合`clip`解决跨 ±180 度经线绘制问题           | `boolean` | -      | `true`  | <Badge type="tip" text="^2.1.0" /> |
+**这一组的每一项都是构造期属性**——官方 4.0.5 的 `overlay/Polyline.d.ts` 实例成员表上
+**没有**对应的 setter。**改动其中任何一项都会重建实例**（旧实例连同其事件绑定一起释放），
+因此它们不适合放在高频变化的场景里。
 
-## 动态组件 Props
+官方逐类核对只做了这一遍：`geodesic` / `linkRight` 决定**路径本身的形状**；
+`clip` 是渲染期裁剪；`coordType` 决定**输入点按哪种坐标系解读**（解读不可逆）；`dashArray` /
+`icons` / `strokeTexture` 在实例上既无 setter 也无读回（live 读数：整条原型链上都没有）。
 
-| 属性            | 说明                                        | 类型                            | 可选值                    | 默认值     | 版本                               |
-| --------------- | ------------------------------------------- | ------------------------------- | ------------------------- | ---------- | ---------------------------------- |
-| points          | 多边形的坐标数组                            | `{ lng: number, lat: number}[]` | -                         | `required` | -                                  |
-| strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                        | -                         | `#000000`  | -                                  |
-| strokeWeight    | 描边的宽度，单位为像素                      | `string`                        | -                         | `2`        | -                                  |
-| strokeOpacity   | 描边的透明度，范围 `0-1`                    | ` number`                       | -                         | ` 1`       | -                                  |
-| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `string`                        | `solid / dashed / dotted` | -          | -                                  |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                       | -                         | `true `    | -                                  |
-| enableEditing   | 开启可编辑模式                              | `boolean`                       | -                         | `false `   | -                                  |
-| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
-| visible         | 是否显示                                    | `boolean`                       |                           | `true`     | <Badge type="tip" text="^2.2.0" /> |
+::: warning `strokeLineCap` / `strokeLineJoin` 有一条**反直觉**的 live 读数
 
-> `points` / `controlPoints` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
-> 原地修改数组时请递增配套的版本 prop（`pathVersion` / `controlPointsVersion`）触发一次更新。
+这两个的官方**类型声明里没有** setter，但**运行时原型链上确实有**（与 `setStrokeColor` /
+`setStrokeWeight` / `setStrokeStyle` 同一层），而且**真调一次不抛**。
+
+之所以仍然按**构造期**处理，是因为 live 实测调完
+`setStrokeLineCap("square")` + `setStrokeLineJoin("bevel")` 之后，
+`getStrokeStyle()` 读回**仍然是 `"solid"`**——**没有任何可观察的变化**。
+把它当可就地更新会得到「调用成功但画面不变」的静默假支持，比重建糟糕得多。
+
+:::
+
+| 属性            | 说明                                                          | 类型                                            | 可选值                                | 官方默认                |
+| --------------- | ------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------- | ----------------------- |
+| enableClicking  | 是否响应点击事件                                              | `boolean`                                       | -                                     | `true`                  |
+| strokeLineCap   | 描边线端头类型                                                | `'round' \| 'butt' \| 'square'`                 | -                                     | `'round'`               |
+| strokeLineJoin  | 描边线连接处类型                                              | `'round' \| 'miter' \| 'bevel'`                 | -                                     | `'round'`               |
+| geodesic        | 是否开启大地线模式（两点连线以大地线形式呈现）                | `boolean`                                       | -                                     | `false`                 |
+| linkRight       | 跨 180 度经线时是否按最短路径绘制                            | `boolean`                                       | -                                     | `false`                 |
+| clip            | 是否进行跨经度 180 度裁剪（跨经度折线可设 `false` 以优化效果） | `boolean`                                      | -                                     | `true`                  |
+| coordType       | 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）        | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | -        | 用全局值                |
+| dashArray       | 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）                  | `number[]`                                      | -                                     | 实线与间隙均为线宽的 2 倍 |
+| icons           | 贴合折线的图标                                                | `unknown`                                       | -                                     | -                       |
+| strokeTexture   | 线纹理配置（沿折线重复绘制图片，如方向箭头）**仅 WebGL 渲染模式支持** | `{ url: string, width?: number, height?: number }` | -             | -                       |
+
+::: warning `icons` 官方已废弃
+
+`BMap.IconSequence` 在官方 4.0.5 的 `overlay/IconSequence.d.ts` 上标了
+`@deprecated 4.0 已废弃，请使用 strokeTexture 配置项代替`。
+本库仍然如实透传它（收下就静默忽略比不收更难排查），**但新代码请用 `strokeTexture`**。
+
+:::
+
+::: warning 「未给」与「关掉」是两件事
+
+`enableClicking` / `clip` / `linkRight` 的**官方默认是 `true`**。Vue 的 `Boolean` prop
+未给时会变成 `false`——与官方默认**相反**。本库在 `withDefaults` 里给它们写的是
+`undefined` 而不是 `true`，因此**未给时该键根本不进构造选项**，由 SDK 沿用自己的默认。
+
+这三条都是 `recreate`，所以「未给」必须只有**一个**表示：否则父级某次传
+`:clip="undefined"` 会触发一次**内容完全没变**的重建。
+
+:::
+
+## 就地更新 Props（`options`）
+
+| 属性            | 说明                                        | 类型                            | 可选值                    | 默认值     | 版本                            |
+| --------------- | ------------------------------------------- | ------------------------------- | ------------------------- | ---------- | ------------------------------- |
+| points          | 折线的坐标数组                              | `{ lng: number, lat: number}[]` | -                         | `required` | -                               |
+| strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                        | -                         | `#000000`  | -                               |
+| strokeWeight    | 描边的宽度，单位为像素                      | `number`                        | -                         | `2`        | -                               |
+| strokeOpacity   | 描边的透明度，范围 `0-1`                    | `number`                        | -                         | `0.9`      | -                               |
+| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `'solid' \| 'dashed' \| 'dotted'` | -                      | `solid`    | -                               |
+| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                       | -                         | `true`     | -                               |
+| enableEditing   | 开启可编辑模式                              | `boolean`                       | -                         | `false`    | -                               |
+| zIndex          | 层叠顺序（**就地更新**，官方 `setZIndex`）  | `number`                        | -                         | -          | `1.0.0`（#165）                 |
+| visible         | 是否显示（走 `show` / `hide`）              | `boolean`                       | -                         | `true`     | `1.0.0`                         |
+
+> `points` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
+> 原地修改数组时请递增配套的版本 prop（`pathVersion`）触发一次更新。
 
 ## 组件事件
 

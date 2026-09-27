@@ -18,34 +18,58 @@ overlay/polygon/index
 overlay/polygon/boundaries
 :::
 
-## 静态组件 Props
+## 构造期 Props（`recreate`）
 
-| 属性           | 说明                                                       | 类型       | 默认值   |
-| -------------- | ---------------------------------------------------------- | ---------- | -------- |
-| clip           | 是否进行跨经度 180 度裁剪，绘制跨精度 180 时为了优化效果， | `boolean ` | `true `  |
-| geodesic       | 是否开启大地线模式，true 时，两点连线将以大地线的形式。    | `boolean ` | `false ` |
-| isBoundary     | 是否是行政区域的边界多边形                                 | `boolean ` | `false ` |
-| autoCenter     | 是否自动根据多边形居中地图                                 | `boolean ` | `true`   |
-| enableClicking | 是否响应点击事件                                           | `boolean ` | `true `  |
+官方 4.0.5 的 `overlay/Polygon.d.ts` 实例成员表上**没有**这些项的 setter ⇒
+**改动其中任何一项都会重建实例**（旧实例连同其事件绑定一起释放）。
 
-## 动态组件 Props
+::: warning `strokeLineCap` / `strokeLineJoin` 有一条**反直觉**的 live 读数
+
+这两个的官方**类型声明里没有** setter，但**运行时原型链上确实有**（与 `setStrokeColor` /
+`setStrokeWeight` / `setStrokeStyle` 同一层），而且**真调一次不抛**。
+
+之所以仍然按**构造期**处理，是因为 live 实测调完之后 `getStrokeStyle()` 读回**没有变化**——
+**没有任何可观察的效果**。把它当可就地更新会得到「调用成功但画面不变」的静默假支持，
+比重建糟糕得多。（`<Polyline>` 上的同类读数与结论完全一致。）
+
+:::
+
+| 属性            | 说明                                                       | 类型                                            | 官方默认                |
+| --------------- | ---------------------------------------------------------- | ----------------------------------------------- | ----------------------- |
+| isBoundary      | 是否是行政区域的边界多边形（路径按 SDK 原生边界名解析）     | `boolean`                                       | `false`                 |
+| enableClicking  | 是否响应点击事件                                           | `boolean`                                       | `true`                  |
+| strokeLineCap   | 描边线端头类型                                             | `'round' \| 'butt' \| 'square'`                 | `'round'`               |
+| strokeLineJoin  | 描边线连接处类型                                           | `'round' \| 'miter' \| 'bevel'`                 | `'round'`               |
+| linkRight       | 跨 180 度经线时是否按最短路径绘制                         | `boolean`                                       | `false`                 |
+| coordType       | 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）      | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | 用全局值 |
+| dashArray       | 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）                | `number[]`                                      | 实线与间隙均为线宽的 2 倍 |
+
+::: warning `<Polygon>` **没有** `clip` / `geodesic` / `autoCenter`
+
+官方 `PolygonOptions` 的 15 个键里**没有** `clip` 与 `geodesic`（只有 `PolylineOptions` 有），
+也**没有** `autoCenter`——「创建后按显示区域居中地图」是 `<Prism>` / `<GroundOverlay>` 的
+组件侧行为，`<Polygon>` 没有这个 prop。需要居中请用 `map.setViewport(bounds)`。
+
+:::
+
+## 就地更新 Props（`options`）
 
 | 属性            | 说明                                        | 类型                             | 可选值                    | 默认值     | 版本                               |
 | --------------- | ------------------------------------------- | -------------------------------- | ------------------------- | ---------- | ---------------------------------- |
 | points          | 多边形的坐标数组                            | ` { lng: number, lat: number}[]` | -                         | `required` | -                                  |
 | strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                         | -                         | `#000000`  | -                                  |
-| strokeWeight    | 描边的宽度，单位为像素                      | `string `                        | -                         | `2 `       | -                                  |
-| strokeOpacity   | 描边的透明度，范围 0-1                      | `number `                        | -                         | `1 `       | -                                  |
-| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `string `                        | `solid / dashed / dotted` | -          | -                                  |
-| fillColor       | 面填充颜色，同 CSS 颜色                     | `string `                        | -                         | `#fff`     | -                                  |
-| fillOpacity     | 面填充的透明度，范围 0-1                    | `number `                        | `0-1`                     | `0.3 `     | -                                  |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                        | -                         | ` true`    | -                                  |
-| enableEditing   | 开启可编辑模式                              | `boolean `                       | -                         | `false `   | -                                  |
-| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
-| visible         | 是否显示                                    | `boolean`                        | -                         | `true`     | <Badge type="tip" text="^2.2.0" /> |
+| strokeWeight    | 描边的宽度，单位为像素                      | `number`                         | -                         | `2 `       | -                                  |
+| strokeOpacity   | 描边的透明度，范围 0-1                      | `number`                         | -                         | `0.9`      | -                                  |
+| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `'solid' \| 'dashed' \| 'dotted'` | -                       | `solid`    | -                                  |
+| fillColor       | 面填充颜色，同 CSS 颜色                     | `string`                         | -                         | `#000000`  | -                                  |
+| fillOpacity     | 面填充的透明度，范围 0-1                    | `number`                         | `0-1`                     | `0.5`      | -                                  |
+| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                        | -                         | `true`     | -                                  |
+| enableEditing   | 开启可编辑模式                              | `boolean`                        | -                         | `false`    | -                                  |
+| zIndex          | 层叠顺序（**就地更新**，官方 `setZIndex`）  | `number`                         | -                         | -          | `1.0.0`（#165）                   |
+| visible         | 是否显示（走 `show` / `hide`）              | `boolean`                        | -                         | `true`     | `1.0.0`                            |
 
-> `points` / `controlPoints` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
-> 原地修改数组时请递增配套的版本 prop（`pathVersion` / `controlPointsVersion`）触发一次更新。
+> `points` 这类**大数组**按**根引用**比较（不做内容指纹）：换引用即更新；
+> 原地修改数组时请递增配套的版本 prop（`pathVersion`）触发一次更新。
 
 ## 组件事件
 

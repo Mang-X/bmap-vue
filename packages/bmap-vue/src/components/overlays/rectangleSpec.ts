@@ -23,7 +23,10 @@ import { createPathReadBacks } from "../../core/overlays/overlayCommands";
 import type { RectangleProps } from "../../types/components";
 import {
   PATH_CLICKING_FIELD,
+  PATH_COORD_TYPE_FIELD,
+  PATH_DASH_ARRAY_FIELD,
   PATH_FILL_FIELDS,
+  PATH_LINK_RIGHT_FIELD,
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
   PATH_ZINDEX_FIELD,
@@ -38,6 +41,12 @@ export const RECTANGLE_FIELDS: OverlayFieldMap<RectangleProps> = {
   ...PATH_TOGGLE_FIELDS,
   ...PATH_ZINDEX_FIELD,
   ...PATH_CLICKING_FIELD,
+  // ↓ issue #165 图形族补齐：`RectangleOptions` 还有三项此前没有出口。
+  // ⚠️ **刻意不加** `strokeLineCap` / `strokeLineJoin`——官方 `RectangleOptions` 里**没有**这两项
+  // （只有 `PolylineOptions` / `PolygonOptions` 有）。
+  ...PATH_COORD_TYPE_FIELD,
+  ...PATH_DASH_ARRAY_FIELD,
+  ...PATH_LINK_RIGHT_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -46,25 +55,38 @@ export const RECTANGLE_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
+/**
+ * 构造期选项的袋（issue #165 图形族补齐）。
+ *
+ * `linkRight` 的官方 `@default` 是 `false`，与 Vue 的 `Boolean` 未给值**值上一致**，
+ * 但仍走条件展开：让「没给」只有**一个**表示（`undefined`），
+ * 否则父级某次传 `:link-right="undefined"` 会触发一次**内容完全没变**的重建。
+ */
+function ctorOptions(p: Readonly<RectangleProps>): Record<string, unknown> {
+  return {
+    strokeColor: p.strokeColor,
+    strokeWeight: p.strokeWeight,
+    strokeOpacity: p.strokeOpacity,
+    strokeStyle: p.strokeStyle,
+    zIndex: p.zIndex,
+    fillColor: p.fillColor,
+    fillOpacity: p.fillOpacity,
+    enableMassClear: p.enableMassClear,
+    enableEditing: p.enableEditing,
+    ...(p.enableClicking === undefined ? {} : { enableClicking: p.enableClicking }),
+    ...(p.coordType === undefined ? {} : { coordType: p.coordType }),
+    ...(p.dashArray === undefined ? {} : { dashArray: p.dashArray }),
+    ...(p.linkRight === undefined ? {} : { linkRight: p.linkRight }),
+  };
+}
+
 export function createRectangleSpec(): OverlaySpec<RectangleProps, OverlayHandle> {
   return {
     type: "rectangle",
     kind: "rectangle",
     fields: RECTANGLE_FIELDS,
     descriptorKeys: RECTANGLE_DESCRIPTOR_KEYS,
-    create: (context, p) =>
-      context.client.driver.overlays.createRectangle(p.bounds, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        zIndex: p.zIndex,
-        fillColor: p.fillColor,
-        fillOpacity: p.fillOpacity,
-        enableMassClear: p.enableMassClear,
-        enableEditing: p.enableEditing,
-        enableClicking: p.enableClicking,
-      }),
+    create: (context, p) => context.client.driver.overlays.createRectangle(p.bounds, ctorOptions(p)),
     /**
      * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
      *

@@ -11,6 +11,12 @@
  * | 描边 / 填充 | `options` | 各自的 setter | `PATH_STYLE` + `FILL_STYLE` |
  * | `enableMassClear` / `enableEditing` | `options` | 成对开关 | `PATH_STYLE` |
  * | `visible` | `visibility` | `show`/`hide` | 不是描述符键 |
+ * | ↓ **issue #165 补的六个，全部 `recreate`** |||
+ * | `enableClicking` | `recreate` | 构造期选项 | 官方无 `enableClicking()` / `disableClicking()` 成对开关 |
+ * | `strokeLineCap` / `strokeLineJoin` | `recreate` | 构造期选项 | ⚠️ **live 读数**：原型链 layer 2 上有同名 setter、调得动，但**调完 `getStrokeStyle()` 不变**且官方无读回 ⇒ 可观察地**不生效** ⇒ 仍是构造期 |
+ * | `linkRight` | `recreate` | 构造期选项 | 无 `setLinkRight`；是绘制算法的输入 |
+ * | `coordType` | `recreate` | 构造期选项 | 无 `setCoordType`；决定**输入点怎么解读** |
+ * | `dashArray` | `recreate` | 构造期选项 | 无 `setDashArray`，也**无** `setDash` |
  *
  * 与 Polyline 的两处差异：多边形有**填充**（Polyline 上游没有 `setFillColor`），
  * 且多一个构造期的 `isBoundary`。
@@ -23,7 +29,12 @@ import {
 } from "../../core/overlays/overlayCommands";
 import type { PolygonProps } from "../../types/components";
 import {
+  PATH_CLICKING_FIELD,
+  PATH_COORD_TYPE_FIELD,
+  PATH_DASH_ARRAY_FIELD,
   PATH_FILL_FIELDS,
+  PATH_LINE_JOINT_FIELDS,
+  PATH_LINK_RIGHT_FIELD,
   PATH_STROKE_FIELDS,
   PATH_TOGGLE_FIELDS,
   PATH_ZINDEX_FIELD,
@@ -39,6 +50,13 @@ export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
   ...PATH_FILL_FIELDS,
   ...PATH_TOGGLE_FIELDS,
   ...PATH_ZINDEX_FIELD,
+  // ↓ issue #165 图形族补齐：六个官方选项，**全部** `recreate`（官方没有对应 setter）。
+  // 逐条依据见 `driver/types/overlays.ts` 的 `PATH_CTOR_*` 四张表。
+  ...PATH_CLICKING_FIELD,
+  ...PATH_COORD_TYPE_FIELD,
+  ...PATH_DASH_ARRAY_FIELD,
+  ...PATH_LINE_JOINT_FIELDS,
+  ...PATH_LINK_RIGHT_FIELD,
   ...VISIBILITY_FIELD,
 };
 
@@ -52,6 +70,34 @@ export const POLYGON_DESCRIPTOR_KEYS = {
   ...VISIBILITY_DESCRIPTOR_KEY,
 } as const;
 
+/**
+ * 构造期选项的袋（issue #165 图形族补齐）。
+ *
+ * 条件展开的理由与 `polylineSpec.ts` 的同名函数**逐条同形**：官方 `@default` 是 `true` 的
+ * `enableClicking` / `linkRight` 若被 Vue 的 `Boolean` 转换补成 `false`，语义与官方**相反**；
+ * `undefined` 让该键**不进入**构造选项，SDK 沿用它自己的 `true`。
+ */
+function ctorOptions(p: Readonly<PolygonProps>): Record<string, unknown> {
+  return {
+    strokeColor: p.strokeColor,
+    strokeWeight: p.strokeWeight,
+    strokeOpacity: p.strokeOpacity,
+    strokeStyle: p.strokeStyle,
+    zIndex: p.zIndex,
+    fillColor: p.fillColor,
+    fillOpacity: p.fillOpacity,
+    isBoundary: p.isBoundary,
+    enableMassClear: p.enableMassClear,
+    enableEditing: p.enableEditing,
+    ...(p.enableClicking === undefined ? {} : { enableClicking: p.enableClicking }),
+    ...(p.strokeLineCap === undefined ? {} : { strokeLineCap: p.strokeLineCap }),
+    ...(p.strokeLineJoin === undefined ? {} : { strokeLineJoin: p.strokeLineJoin }),
+    ...(p.linkRight === undefined ? {} : { linkRight: p.linkRight }),
+    ...(p.coordType === undefined ? {} : { coordType: p.coordType }),
+    ...(p.dashArray === undefined ? {} : { dashArray: p.dashArray }),
+  };
+}
+
 export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
   return {
     type: "polygon",
@@ -59,19 +105,7 @@ export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
     fields: POLYGON_FIELDS,
     descriptorKeys: POLYGON_DESCRIPTOR_KEYS,
     watchSources: POLYGON_WATCH_SOURCES,
-    create: (context, p) =>
-      context.client.driver.overlays.createPolygon(p.points, {
-        strokeColor: p.strokeColor,
-        strokeWeight: p.strokeWeight,
-        strokeOpacity: p.strokeOpacity,
-        strokeStyle: p.strokeStyle,
-        zIndex: p.zIndex,
-        fillColor: p.fillColor,
-        fillOpacity: p.fillOpacity,
-        isBoundary: p.isBoundary,
-        enableMassClear: p.enableMassClear,
-        enableEditing: p.enableEditing,
-      }),
+    create: (context, p) => context.client.driver.overlays.createPolygon(p.points, ctorOptions(p)),
     /**
      * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
      *

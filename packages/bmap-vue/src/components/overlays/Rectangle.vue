@@ -29,6 +29,14 @@ const props = withDefaults(defineProps<RectangleProps>(), {
   // 上游 `enableClicking` 默认 `true`：不显式给默认值会被 Vue 的布尔转换写成 `false`
   enableClicking: true,
   visible: true,
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）：`linkRight` 的官方 `@default`
+  // 是 `false`，与 Vue 的 `Boolean` 未给值**值上一致**，但仍钉成 `undefined`——
+  // 让「没给」只有**一个**表示，否则父级传 `:link-right="undefined"` 会触发一次
+  // **内容完全没变**的重建（`recreate` 类）。
+  // ⚠️ 这里**刻意没有** `strokeLineCap` / `strokeLineJoin`：官方 `RectangleOptions` 里没有这两项
+  // （只有 `PolylineOptions` / `PolygonOptions` 有）。`coordType` / `dashArray` 非 `Boolean`，
+  // 无 absent 陷阱，**不**在此声明。
+  linkRight: undefined,
 });
 
 const emit = defineEmits<RectangleEmits>();

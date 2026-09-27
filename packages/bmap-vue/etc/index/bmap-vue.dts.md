@@ -170,6 +170,7 @@ declare const __VLS_component_14: DefineComponent<BezierCurveProps, {}, {}, {}, 
     onRightdblclick?: ((event: OverlayPointerEvent) => any) | undefined;
     onLineupdate?: ((event: OverlayEventPayload) => any) | undefined;
 }>, {
+    enableClicking: boolean;
     strokeColor: string;
     strokeWeight: number;
     strokeOpacity: number;
@@ -972,13 +973,17 @@ declare const __VLS_component_6: DefineComponent<PolylineProps, {
     onLinevertexdragend?: ((event: OverlayEventPayload) => any) | undefined;
     onLinevertexdel?: ((event: OverlayEventPayload) => any) | undefined;
 }>, {
+    enableClicking: boolean;
     strokeColor: string;
     strokeWeight: number;
     strokeOpacity: number;
     strokeStyle: "solid" | "dashed" | "dotted";
     enableMassClear: boolean;
     enableEditing: boolean;
+    linkRight: boolean;
     visible: boolean;
+    geodesic: boolean;
+    clip: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_7: DefineComponent<PolygonProps, {
     [x: string]: unknown;
@@ -1019,6 +1024,7 @@ declare const __VLS_component_7: DefineComponent<PolygonProps, {
     onLinevertexdragend?: ((event: OverlayEventPayload) => any) | undefined;
     onLinevertexdel?: ((event: OverlayEventPayload) => any) | undefined;
 }>, {
+    enableClicking: boolean;
     strokeColor: string;
     strokeWeight: number;
     strokeOpacity: number;
@@ -1027,6 +1033,7 @@ declare const __VLS_component_7: DefineComponent<PolygonProps, {
     fillOpacity: number;
     enableMassClear: boolean;
     enableEditing: boolean;
+    linkRight: boolean;
     visible: boolean;
     isBoundary: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
@@ -1078,6 +1085,7 @@ declare const __VLS_component_8: DefineComponent<RectangleProps, {
     fillOpacity: number;
     enableMassClear: boolean;
     enableEditing: boolean;
+    linkRight: boolean;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_9: DefineComponent<LabelProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
@@ -1540,6 +1548,8 @@ export declare interface BezierCurveProps extends PathStrokeProps, PathShapeProp
     }[][];
     pathVersion?: string | number;
     controlPointsVersion?: string | number;
+    dashArray?: number[];
+    enableClicking?: boolean;
 }
 export declare const BMAP_COMPONENT_EVENT_CATALOG: {
     readonly ready: {
@@ -1832,7 +1842,7 @@ export declare interface CapabilityRegistry {
 export declare type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
 export declare const Circle: __VLS_WithSlots_5<typeof __VLS_component_5, __VLS_Slots_5>;
 export declare type CircleHandle = SdkHandle<"overlay:circle">;
-export declare interface CircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export declare interface CircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps, PathCtorCommonProps {
     center: {
         lng: number;
         lat: number;
@@ -3826,6 +3836,7 @@ export declare interface OverlayCommandTypes {
     } & PathCommandApi;
     InfoWindow: InfoWindowReadBackApi;
 }
+declare type OverlayCoordType = "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
@@ -4138,12 +4149,19 @@ declare interface PathCommandApi {
         deep?: number;
     }): void;
 }
+declare interface PathCtorCommonProps {
+    coordType?: OverlayCoordType;
+    dashArray?: number[];
+}
 declare interface PathEditableProps {
     enableEditing?: boolean;
 }
 declare interface PathFillProps {
     fillColor?: string;
     fillOpacity?: number;
+}
+declare interface PathLinkRightProps {
+    linkRight?: boolean;
 }
 export declare interface PathOptions {
     strokeColor?: string;
@@ -4156,6 +4174,11 @@ export declare interface PathOptions {
     enableEditing?: boolean;
     enableClicking?: boolean;
     zIndex?: number;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
+    coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+    linkRight?: boolean;
+    dashArray?: number[];
     [key: string]: unknown;
 }
 export declare interface PathReadBackApi {
@@ -4364,13 +4387,16 @@ export declare interface PolygonLayerStyle {
     fillTextureSize?: number;
     fillTextureAlphaOnly?: boolean;
 }
-export declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps, PathCtorCommonProps, PathLinkRightProps {
     points: ({
         lng: number;
         lat: number;
     } | string)[];
     pathVersion?: string | number;
     isBoundary?: boolean;
+    enableClicking?: boolean;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
 }
 export declare const Polyline: __VLS_WithSlots_6<typeof __VLS_component_6, __VLS_Slots_6>;
 export declare type PolylineHandle = SdkHandle<"overlay:polyline">;
@@ -4394,12 +4420,23 @@ export declare interface PolylineLayerStyle {
     strokeTextureGap?: number;
     strokeTextureColor?: string;
 }
-export declare interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
+export declare interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps, PathCtorCommonProps, PathLinkRightProps {
     points: {
         lng: number;
         lat: number;
     }[];
     pathVersion?: string | number;
+    enableClicking?: boolean;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
+    geodesic?: boolean;
+    clip?: boolean;
+    icons?: unknown;
+    strokeTexture?: {
+        url: string;
+        width?: number;
+        height?: number;
+    };
 }
 export declare const Prism: __VLS_WithSlots_12<typeof __VLS_component_12, __VLS_Slots_12>;
 export declare interface PrismProps {
@@ -4461,7 +4498,7 @@ declare interface RasterTileLayerProps {
     tileLoadObserver?: TileLoadObserver;
 }
 export declare const Rectangle: __VLS_WithSlots_8<typeof __VLS_component_8, __VLS_Slots_8>;
-export declare interface RectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export declare interface RectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps, PathCtorCommonProps, PathLinkRightProps {
     bounds: {
         southwest: {
             lng: number;

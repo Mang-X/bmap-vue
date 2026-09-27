@@ -12,30 +12,41 @@ import { Circle } from 'bmap-vue'
 overlay/circle
 :::
 
-## 静态组件 Props
+## 构造期 Props（`recreate`）
 
-| 属性           | 说明                                                     | 类型      | 默认值  |
-| -------------- | -------------------------------------------------------- | --------- | ------- |
-| enableClicking | 是否响应点击事件                                         | `boolean` | `true ` |
-| geodesic       | 是否开启大地线模式，true 时，两点连线将以大地线的形式    | `boolean` | `false` |
-| clip           | 是否进行跨经度 180 度裁剪，绘制跨精度 180 时为了优化效果 | `boolean` | `true ` |
+**这一组的每一项都是构造期属性**——官方 4.0.5 的 `overlay/Circle.d.ts` 实例成员表上
+**没有**对应的 setter。**改动其中任何一项都会重建实例**（旧实例连同其事件绑定一起释放）。
 
-## 动态组件 Props
+| 属性           | 说明                                                   | 类型                                            | 官方默认                |
+| -------------- | ------------------------------------------------------ | ----------------------------------------------- | ----------------------- |
+| enableClicking | 是否响应点击事件                                       | `boolean`                                       | `true`                  |
+| coordType      | 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）   | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | 用全局值 |
+| dashArray      | 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）           | `number[]`                                      | 实线与间隙均为线宽的 2 倍 |
 
-| 属性            | 说明                                        | 类型                          | 可选值                    | 默认值     | 版本                               |
-| --------------- | ------------------------------------------- | ----------------------------- | ------------------------- | ---------- | ---------------------------------- |
-| center          | 圆形中心点经纬度                            | `{ lng: number, lat: number}` | -                         | `required` | -                                  |
-| radius          | 圆形的半径，单位为米                        | `number`                      | -                         | `required` | -                                  |
-| strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                      | -                         | `#000`     | -                                  |
-| strokeOpacity   | 描边的透明度，范围 0-1                      | `number`                      | `0-1 `                    | 1          | -                                  |
-| fillColor       | 面填充颜色，同 CSS 颜色                     | `string`                      | -                         | `#fff`     | -                                  |
-| fillOpacity     | 面填充的透明度，范围 0-1                    | `number`                      | `0-1 `                    | `0.3 `     | -                                  |
-| strokeWeight    | 描边的宽度，单位为像素                      | `number`                      | -                         | `2 `       | -                                  |
-| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `string`                      | `solid / dashed / dotted` | `solid `   | -                                  |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                     | -                         | `true `    | -                                  |
-| enableEditing   | 是否启用线编辑                              | `boolean`                     | -                         | `false `   | -                                  |
-| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
-| visible         | 是否显示                                    | `boolean`                     | -                         | `true`     | <Badge type="tip" text="^2.2.0" /> |
+::: warning `<Circle>` **没有** `geodesic` / `clip` / `linkRight` / `strokeLineCap`
+
+官方 `CircleOptions` 一共 12 个键，上面三个之外**一个都没有**那几项——圆形的几何是
+「圆心 + 半径」，没有「跨经度的路径」，也没有「两点之间怎么连」的问题。传了会被 SDK 忽略。
+只有 `<Polyline>` 与 `<Polygon>` 支持 `strokeLineCap` / `strokeLineJoin`。
+
+:::
+
+## 就地更新 Props（`options`）
+
+| 属性            | 说明                                        | 类型                          | 可选值                    | 默认值     | 版本                            |
+| --------------- | ------------------------------------------- | ----------------------------- | ------------------------- | ---------- | ------------------------------- |
+| center          | 圆形中心点经纬度                            | `{ lng: number, lat: number}` | -                         | `required` | -                               |
+| radius          | 圆形的半径，单位为米                        | `number`                      | -                         | `required` | -                               |
+| strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                      | -                         | `#000000`  | -                               |
+| strokeOpacity   | 描边的透明度，范围 0-1                      | `number`                      | `0-1`                     | `0.9`      | -                               |
+| fillColor       | 面填充颜色，同 CSS 颜色                     | `string`                      | -                         | `#000000`  | -                               |
+| fillOpacity     | 面填充的透明度，范围 0-1                    | `number`                      | `0-1`                     | `0.5`      | -                               |
+| strokeWeight    | 描边的宽度，单位为像素                      | `number`                      | -                         | `2`        | -                               |
+| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `'solid' \| 'dashed' \| 'dotted'` | -                      | `solid`    | -                               |
+| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                     | -                         | `true`     | -                               |
+| enableEditing   | 是否启用线编辑                              | `boolean`                     | -                         | `false`    | -                               |
+| zIndex          | 层叠顺序（**就地更新**，官方 `setZIndex`）  | `number`                      | -                         | -          | `1.0.0`（#165）                |
+| visible         | 是否显示（走 `show` / `hide`）              | `boolean`                     | -                         | `true`     | `1.0.0`                        |
 
 ## 组件事件
 

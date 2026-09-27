@@ -27,6 +27,17 @@ const props = withDefaults(defineProps<PolygonProps>(), {
   enableMassClear: true,
   enableEditing: false,
   visible: true,
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）。
+  //
+  // `enableClicking` / `linkRight` 的**官方默认是 `true`**（官方 `PolygonOptions` 的
+  // `@default true`：`enableClicking`「是否响应点击事件」）。`Boolean` 类型的 prop 在**未给**时，
+  // 编译产物里的运行时值是 `false`——与官方默认**相反**。因此显式写 `undefined`
+  // （**不是** `true`）：`undefined` 让该键**不进入**构造选项，SDK 沿用它自己的 `true`。
+  //
+  // `strokeLineCap` / `strokeLineJoin` / `coordType` / `dashArray` **不是** `Boolean`
+  // ⇒ 没有这个陷阱，**不**在此声明。
+  enableClicking: undefined,
+  linkRight: undefined,
 });
 
 const emit = defineEmits<PolygonEmits>();

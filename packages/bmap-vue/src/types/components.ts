@@ -410,6 +410,21 @@ export interface MenuItemProps {
 }
 
 /**
+ * 输入坐标的坐标类型（issue #165 图形族补齐）。
+ *
+ * 官方 `coord/CoordType.d.ts` 的字面量联合，**只取图形类 options 真正声明的那三个**：
+ * 官方 `const/CoordType.d.ts` 另有 `BMAP_COORD_MERCATOR` / `BMAP_COORD_GCJ02MERCATOR` /
+ * `BMAP_COORD_EPSG3857` 三个墨卡托变体，但 `PolylineOptions.coordType` /
+ * `PolygonOptions.coordType` / `RectangleOptions.coordType` / `CircleOptions.coordType`
+ * **四个声明都只列了** `BMAP_COORD_BD09 | BMAP_COORD_GCJ02 | BMAP_COORD_WGS84`。
+ *
+ * **刻意不收全 `CoordType`**：这三个墨卡托变体是给**地图全局** `BMap.coordType` 用的
+ * （「设置地图全局坐标系或覆盖物坐标系」），官方在**图形类的 options 里没列**——
+ * 收下就是「本库声称支持、官方没承诺」的假支持。
+ */
+export type OverlayCoordType = "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+
+/**
  * 描边样式：Polyline / Polygon / Rectangle / Circle 共享（M5-VECTORS / #31）。
  *
  * 与 Driver 描述符的 `PATH_STYLE` 逐键对应，由 `overlay-suite.test.ts` 交叉锁定。
@@ -471,6 +486,81 @@ export interface PathEditableProps {
 }
 
 /**
+ * 图形类共有的**构造期**选项（issue #165 图形族补齐）。
+ *
+ * ## 为什么单独一层而不是并进 `PathShapeProps`
+ *
+ * 两条理由，缺一不可：
+ *
+ * 1. **`PathShapeProps` 里的每一项都是 `options`（就地更新）**：`zIndex` 有 `setZIndex`、
+ *    `enableMassClear` 有成对开关、`visible` 走 `show`/`hide`。本层的四项**全部**是
+ *    `recreate`（改它即重建实例）——混进去会让「这一层是就地更新」这条性质失效，
+ *    而那正是把属性放这儿的理由。
+ * 2. **`PrismProps` / `GroundOverlayProps` 都 extends 这类共享底座**（`zIndex` 那一层），
+ *    但官方**没有**给它们 `coordType` / `linkRight` / `dashArray` / `strokeLineCap` ——
+ *    放进共享层等于给 Prism 凭空加出四个官方没有的选项。`Prism` / `GroundOverlay` 各自
+ *    内联 `zIndex` 而**不** extends 本库任何 Path 底座，正是这个原因。
+ *
+ * ## 三个键的官方覆盖范围**不**一样，逐个列出来是为了防止「整族一起加」
+ *
+ * | 键 | Polyline | Polygon | Rectangle | Circle | BezierCurve |
+ * | --- | --- | --- | --- | --- | --- |
+ * | `coordType` | ✅ | ✅ | ✅ | ✅ | ❌（官方 `BezierCurveOptions` 没有） |
+ * | `dashArray` | ✅ | ✅ | ✅ | ✅ | ✅（BezierCurve **只有**这一项） |
+ * | `strokeLineCap` / `strokeLineJoin` | ✅ | ✅ | ❌ | ❌ | ❌ |
+ *
+ * `dashArray` 官方在**五个**类上都声明，但 `BezierCurve` **只**多它一个（另外四项都没有）
+ * ⇒ `BezierCurveProps` **不** extends 本层，而是内联唯一一个键（否则会凭空多出 `coordType`）。
+ * `strokeLineCap` / `strokeLineJoin` 只由 `PolylineProps` / `PolygonProps` 各自内联。
+ *
+ * `linkRight` 在**另外一层**（`PathLinkRightProps`），见那条的说明。
+ */
+export interface PathCtorCommonProps {
+  /**
+   * 输入坐标的坐标类型。**构造期**（官方没有 `setCoordType`）。
+   *
+   * 未设置时用全局 `BMap.coordType`——本库**不**代管那个全局（它属于 `<Map>` 的领域，
+   * 且改它会静默改变所有未指定 `coordType` 的覆盖物的读法）。
+   */
+  coordType?: OverlayCoordType;
+  /**
+   * 虚线样式，如 `[8, 4]` 表示实线部分长 8 像素、间隙部分长 4 像素。**构造期**。
+   *
+   * 官方 `@default` 是「实线和空隙的长度均为线宽的 2 倍」——本库**不**把这个推导写进
+   * 默认值：它依赖 `strokeWeight`，而 `strokeWeight` 可以在构造后被 `setStrokeWeight` 改，
+   * 推导值会与实际渲染脱节。让 SDK 自己取它的默认更准。
+   */
+  dashArray?: number[];
+}
+
+/**
+ * `linkRight`：官方在 **Polyline / Polygon / Rectangle 三个**类上声明
+ * （`CircleOptions` / `BezierCurveOptions` 里**没有**）。
+ *
+ * ## 为什么单独一层而不是并进 `PathCtorCommonProps`
+ *
+ * 因为 `Circle` **没有**它。圆形没有「跨 180 度经线的路径」——它的几何是「圆心 + 半径」，
+ * 官方 `CircleOptions` 因此只声明了 12 个键，里面**没有** `linkRight`。
+ * 放进 `PathCtorCommonProps`（`CircleProps` extends 它）等于给 `<Circle>` 凭空加出一个
+ * 官方没有的选项——**假支持**。分层的判据就是「官方逐类声明了什么」。
+ *
+ * ## ⚠️ Vue Boolean-absent 陷阱：`linkRight` 的官方默认是 `false`
+ *
+ * `Boolean` prop 未给时运行时是 `false`——与官方默认**值上一致**但**来源不同**。
+ * 显式钉成 `undefined`（见各 SFC 的 `withDefaults`）让「没给」只有**一个**表示：
+ * 否则父级某次传 `:link-right="undefined"` 会触发一次**内容完全没变**的重建（三项都是 `recreate`）。
+ * `coordType` / `dashArray` / `strokeLineCap` / `strokeLineJoin` **不是** `Boolean`，没有这个陷阱。
+ */
+export interface PathLinkRightProps {
+  /**
+   * 跨 180 度经线时是否按最短路径绘制（官方 `@default false`）。**构造期**。
+   *
+   * 它是**绘制算法**的输入（同一条线的形状会不同），不是样式 ⇒ 官方没有 `setLinkRight`。
+   */
+  linkRight?: boolean;
+}
+
+/**
  * 折线。
  *
  * `points` 与 `pathVersion` 是一对：`points` 按**根引用**比较（大数组不做内容指纹，见
@@ -481,9 +571,76 @@ export interface PathEditableProps {
  * `constructor(points: Array<Point>, opts?)`。`pathVersion` 官方**没有**对应概念（它是本库为
  * 「大数组原地变更」设计的响应式失效令牌），因此**保留原名**——改的只是坐标数组那一个名字。
  */
-export interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
+export interface PolylineProps
+  extends PathStrokeProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
   points: { lng: number; lat: number }[];
   pathVersion?: string | number;
+  /**
+   * 是否响应点击事件（官方 `@default true`）。**构造期**。
+   *
+   * 与 `<Rectangle>` / `<Circle>` / `<Marker>` / `<GroundOverlay>` 的同名 prop 同一口径：
+   * 官方图形族只有构造选项 `enableClicking`，**没有** `enableClicking()` /
+   * `disableClicking()` 成对开关 ⇒ 改它会重建实例。
+   *
+   * ⚠️ 官方默认是 `true` 而 Vue 的 `Boolean` prop 未给时是 `false`——`withDefaults` 里
+   * 必须显式写 `enableClicking: undefined`（**不是** `true`）。
+   */
+  enableClicking?: boolean;
+  /* ↓ issue #165 图形族补齐：`PolylineOptions` 独有的四项（其余四类都没有）。
+   *
+   * 逐条依据见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT` 与
+   * `OVERLAY_DESCRIPTORS.polyline` 的 `geodesic` / `clip` / `icons` / `strokeTexture` 条目。
+   */
+
+  /**
+   * 描边线端头类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ **依据是 live 读数**：官方 4.0.5 的**类型声明里没有** `setStrokeLineCap`，
+   * 但运行时原型链上**确实有**（图形族共享那一层，与 `setStrokeColor` 同一层）且**调得动不抛**——
+   * **只是调完之后没有任何可观察的变化**（`getStrokeStyle()` 读回不变）。因此认成
+   * `options` 会变成「调用成功但画面不变」的**静默假支持**，比重建糟得多 ⇒ 固定按构造期透传。
+   * 完整读数表见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT`。
+   */
+  strokeLineCap?: "round" | "butt" | "square";
+  /**
+   * 描边线连接处类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ 同 `strokeLineCap`：live 读数里 `setStrokeLineJoin` 在原型链上且调得动，
+   * 但**无可观察效果**、官方也没有读回 ⇒ 构造期。
+   */
+  strokeLineJoin?: "round" | "miter" | "bevel";
+  /**
+   * 是否开启大地线模式（官方 `@default false`）：为 `true` 时两点连线以大地线形式呈现。
+   * **构造期**——它决定路径**本身**，不是样式。
+   */
+  geodesic?: boolean;
+  /**
+   * 是否进行跨经度 180 度裁剪（官方 `@default true`）。**构造期**。
+   *
+   * 官方原文：「绘制跨经度 180 度的折线时可设置为 `false` 以优化效果」。
+   * ⚠️ 官方默认 `true` ⇒ `withDefaults` 里显式写 `undefined`。
+   */
+  clip?: boolean;
+  /**
+   * 配置贴合折线的图标。**构造期**。
+   *
+   * ⚠️ **官方已废弃**：`overlay/IconSequence.d.ts` 的类声明标了
+   * `@deprecated 4.0 已废弃，请使用 {@link PolylineOptions#strokeTexture} 配置项代替`。
+   * 本库收它只为**如实透传**（收下就静默忽略比不收更难排查），**不**推荐新代码使用。
+   * 类型是 `unknown` 而不是 `IconSequence[]`：官方类型要求 `BMap.IconSequence` 实例，
+   * 而本库**不**构造 SDK 对象（raw SDK 边界规则）——调用方若要用只能经 `advanced/` 的
+   * 逃生口自行创建，因此这里只承诺「原样传下去」。
+   */
+  icons?: unknown;
+  /**
+   * 线纹理配置（官方 `{ url, width?, height? }`），沿折线重复绘制图片（如方向箭头）。
+   * **构造期**；官方注明**仅 WebGL 渲染模式支持**。
+   */
+  strokeTexture?: { url: string; width?: number; height?: number };
 }
 
 /**
@@ -492,20 +649,56 @@ export interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEdit
  * 坐标数组叫 `points`：官方 `overlay/Polygon.d.ts:30` 是
  * `constructor(points: Array<Point> | Array<Array<Point>>, opts?)`。
  */
-export interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface PolygonProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
   points: ({ lng: number; lat: number } | string)[];
   pathVersion?: string | number;
   /** 构造期属性：路径按 SDK 原生边界名解析（如 `"北京市"`）。变化即重建。 */
   isBoundary?: boolean;
+  /** 是否响应点击事件（官方 `@default true`）。**构造期**（无成对开关）。 */
+  enableClicking?: boolean;
+  /**
+   * 描边线端头类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ **依据是 live 读数**：官方 4.0.5 的**类型声明里没有** `setStrokeLineCap`，
+   * 但运行时原型链上**确实有**（图形族共享那一层，与 `setStrokeColor` 同一层）且**调得动不抛**——
+   * **只是调完之后没有任何可观察的变化**（`getStrokeStyle()` 读回不变）。因此认成
+   * `options` 会变成「调用成功但画面不变」的**静默假支持**，比重建糟得多 ⇒ 固定按构造期透传。
+   * 完整读数表见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT`。
+   */
+  strokeLineCap?: "round" | "butt" | "square";
+  /**
+   * 描边线连接处类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ 同 `strokeLineCap`：live 读数里 `setStrokeLineJoin` 在原型链上且调得动，
+   * 但**无可观察效果**、官方也没有读回 ⇒ 构造期。
+   */
+  strokeLineJoin?: "round" | "miter" | "bevel";
 }
 
 /** 矩形（v4 起提供；由对角两点构成的 `bounds` 定义）。 */
-export interface RectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface RectangleProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
   bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   enableClicking?: boolean;
 }
 
-export interface CircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface CircleProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps {
   center: { lng: number; lat: number };
   radius: number;
   enableClicking?: boolean;
@@ -517,12 +710,30 @@ export interface CircleProps extends PathStrokeProps, PathFillProps, PathShapePr
  * 坐标数组叫 `points`：官方 `overlay/BezierCurve.d.ts:21` 是
  * `constructor(points: Array<Point>, controlPoints: Array<Array<Point>>, opts?)`——两个形参
  * 官方都叫它该叫的名字，本库此前只有 `controlPoints` 是对的。
+ *
+ * ⚠️ **只 extends `PathCtorCommonProps` 的 `dashArray` 那部分**——官方
+ * `BezierCurveOptions` **没有** `coordType`（见下），因此本接口**不** extends 那一层，
+ * 而是内联唯一一个官方声明了的键。理由与取舍见 `dashArray` 的注释。
  */
 export interface BezierCurveProps extends PathStrokeProps, PathShapeProps {
   points: { lng: number; lat: number }[];
   controlPoints: { lng: number; lat: number }[][];
   pathVersion?: string | number;
   controlPointsVersion?: string | number;
+  /**
+   * 虚线样式，如 `[8, 4]`。**构造期**（官方没有 `setDashArray` / `setDash`）。
+   *
+   * 官方 `BezierCurveOptions` **只**多这一个键（`coordType` / `strokeLineCap` /
+   * `strokeLineJoin` / `linkRight` 官方都没声明）——因此本接口**不** extends
+   * `PathCtorCommonProps`（那会把另外三个键凭空加进来），只内联这一个。
+   */
+  dashArray?: number[];
+  /**
+   * 是否响应点击事件（官方 `@default true`）。**构造期**（无成对开关）。
+   *
+   * ⚠️ 官方默认 `true` ⇒ `withDefaults` 里显式写 `undefined`。
+   */
+  enableClicking?: boolean;
 }
 
 /** 文本标注的样式对象（驼峰 CSS 属性）。 */
