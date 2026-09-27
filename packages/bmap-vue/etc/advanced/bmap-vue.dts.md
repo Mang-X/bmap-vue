@@ -200,6 +200,7 @@ export declare interface ControlDriver {
     planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
     removeCopyright(control: ControlHandle, id: number): void;
+    canRemoveCopyright(control: ControlHandle): boolean;
     listCopyrights(control: ControlHandle): CopyrightEntry[];
     locationCommands(control: ControlHandle): LocationCommandApi;
     cityListCommands(control: ControlHandle): CityListCommandApi;

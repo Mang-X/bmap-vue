@@ -341,6 +341,7 @@ export interface ControlDriver {
     add(target: OverlayTarget, control: ControlHandle): void;
     // (undocumented)
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
+    canRemoveCopyright(control: ControlHandle): boolean;
     // (undocumented)
     cityListCommands(control: ControlHandle): CityListCommandApi;
     // (undocumented)
@@ -358,7 +359,6 @@ export interface ControlDriver {
     planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
     // (undocumented)
     remove(target: OverlayTarget, control: ControlHandle): void;
-    // (undocumented)
     removeCopyright(control: ControlHandle, id: number): void;
     // (undocumented)
     setOptions(control: ControlHandle, options: Record<string, unknown>): void;

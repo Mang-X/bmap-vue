@@ -98,7 +98,27 @@ export interface ControlDriver {
   ): Record<string, ControlOptionStatus>;
 
   addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
+  /**
+   * 摘掉一条版权项。
+   *
+   * ⚠️ **可能在运行时抛 `BMAP_SDK_CALL_FAILED`**，且这是**可预期**的：官方 4.0 的控件成员面在
+   * loader 判就绪之后约 150ms 才补齐，`removeCopyright` 属于**后补**的那一批（`addCopyright` /
+   * `getCopyright` / `getCopyrightCollection` 属于先到的那批，窗口内就可用）。
+   * live 读数见 `scripts/probe-165c-surface.mts`。调用方**必须**先问
+   * `canRemoveCopyright()`，而不是靠 catch 兜底（见方法注释）。
+   */
   removeCopyright(control: ControlHandle, id: number): void;
+  /**
+   * 该实例的 `removeCopyright` **是否已就绪**（结构性判据，不吃异常、不产生任何 SDK 调用）。
+   *
+   * 存在的理由：`removeCopyright` 缺失**不是**「本引擎没有这个能力」，而是「**还没到**」——
+   * 而这两种在处置上完全不同：前者只能放弃，后者**等一会就回来了**（补齐是**追溯**的，
+   * 因为被补的是原型，已存在的实例自动获得成员）。把两者混为一谈会让「稍后可用」被
+   * 当成「永远不可用」⇒ 版权项永久残留在 SDK 上。
+   *
+   * 组件层因此靠它决定「同步摘」还是「延后摘」，**不在组件里摸 raw 实例**。
+   */
+  canRemoveCopyright(control: ControlHandle): boolean;
   listCopyrights(control: ControlHandle): CopyrightEntry[];
 
   /**

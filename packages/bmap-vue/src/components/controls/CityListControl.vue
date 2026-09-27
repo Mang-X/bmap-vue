@@ -33,9 +33,15 @@ export interface CityListControlProps {
 /**
  * CityListControl —— 城市列表控件
  *
- * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。`expand` 是**可就地更新**的选项
- * （官方只有成对的 `open()` / `close()`，Driver 的分类表把它映射成 `choice`），因此改它
- * 不会重建控件、控件内部的展开动画与高亮状态都保留。
+ * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。`expand` 走官方成对的 `open()` / `close()`
+ * （Driver 的分类表把它映射成 `choice`），因此改它不会重建控件。
+ *
+ * ⚠️ **`open()` / `close()` 的实际效果本轮未能判定**（`scripts/probe-165c-surface.mts`）：
+ * 两者在稳定态**在位且不抛**，但 headless 环境下该控件**始终不渲染面板 DOM**
+ * （`getTriggerDom()` 恒为 `undefined`，构造期 `expand: true` 也不出面板），
+ * 因此「调用前后 DOM 无变化」**不能**当「它们是空操作」的证据——面板压根不存在。
+ * 按 #165 的硬证据规则（取不到只能记「无法验证」），`choice` 分类**暂按官方声明保留**，
+ * 但「它真的能展开面板」**尚未被任何读数证实**。证伪/证实之前不要把它改成 `recreate`。
  */
 const props = withDefaults(defineProps<CityListControlProps>(), {
   anchor: "BMAP_ANCHOR_TOP_LEFT",
@@ -133,6 +139,16 @@ const spec: ControlSpec<CityListControlProps, CityListCommandApi> = {
     ["close", () => emit("close")],
   ],
   // 命令面（#168 item 1）：`toggle()`（动作）与 `getCityName()`（读回）。
+  //
+  // ⚠️ 这两个成员**不是**「上一轮当缺口补上去的必然失败 API」（#165 审计最初这么记，并建议删除）——
+  // live 复核否掉了那个前提：稳定态 `toggle` / `getCityName` **在原型与实例上都在、真调得动**
+  // （`getCityName()` 读回 `"中国"`）。见 `scripts/probe-165c-surface.mts` §④。
+  //
+  // ⚠️ 但它们落在官方控件成员面的**后补批次**里：在 loader 判就绪之后约 150ms 内，
+  // 实例上还没有它们（此时调用会得到 `BMAP_SDK_CALL_FAILED`）。命令面经
+  // `useControlResource` 的 session 取句柄，因此**组件就绪并不蕴含成员面已就绪**——
+  // 这一点与 `CopyrightControl` 的延后摘除是同一个成因。
+  //
   // ⚠️ **刻意没有** `getTriggerDom()`：官方声明了它，但返回的是 raw `HTMLElement`，
   // 收窄投影不成立（逐条依据见 `driver/types/controls.ts` 的 `CityListCommandApi`）。
   expose: (exposeCtx) => createCityListCommands(exposeCtx),

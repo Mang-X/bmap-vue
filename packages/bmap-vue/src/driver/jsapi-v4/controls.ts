@@ -579,6 +579,26 @@ export function createJsapiV4ControlDriver(
       sdkCall("CopyrightControl.removeCopyright", () => callRequired(raw, "removeCopyright", id));
     },
 
+    /**
+     * `removeCopyright` 在**实例**上是否已就绪（#165c 复核）。
+     *
+     * 为什么这条查询值得单列一个方法：`removeCopyright` 属于官方控件成员面里**后补**的那一批
+     * ——loader 判就绪（`__bmapJSApiOnLoad_N` callback）时它还不存在，约 150ms 后才挂上原型
+     * （live 读数：`scripts/probe-165c-surface.mts`；窗口 126–167ms）。而 `addCopyright` /
+     * `getCopyright` / `getCopyrightCollection` 属于**先到**的那批，窗口内就可用。
+     *
+     * 因此「`removeCopyright` 抛 `BMAP_SDK_CALL_FAILED`」是**可预期**的常态窗口，不是引擎缺陷；
+     * 组件层要在摘除**之前**问一次，才能决定「同步摘」还是「延后摘」。用 catch 兜底做不到：
+     * 那既把「还没到」和「永远没有」混成同一个诊断，也让调用方失去重试的判据。
+     *
+     * 读法取**实例**而不是原型：补齐是**追溯**的（被补的是原型，已存在的实例自动获得成员），
+     * 所以「这个实例现在能不能调」才是唯一有决策价值的问题。
+     */
+    canRemoveCopyright(control) {
+      const raw = registry.resolve<Record<string, unknown>>(control);
+      return typeof readNamespaceMember(raw, "removeCopyright") === "function";
+    },
+
     listCopyrights(control): CopyrightEntry[] {
       const raw = registry.resolve<Record<string, unknown>>(control);
       const entries = callRequired(raw, "getCopyrightCollection") as

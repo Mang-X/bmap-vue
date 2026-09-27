@@ -838,10 +838,24 @@ export const OVERLAY_DESCRIPTORS = {
         "offsetX / offsetY 是构造选项，实例上没有 setOffset",
         { ctorKey: null },
       ),
-      minZoom: recreate("minZoom 是构造选项，实例上没有 setMinZoom", { ctorKey: "minZoom" }),
-      maxZoom: recreate("maxZoom 是构造选项，实例上没有 setMaxZoom", { ctorKey: "maxZoom" }),
+      // 下面四条 `recreate` 的理由（实例上**没有**对应 setter）经 live 复核**成立**：
+      // `scripts/probe-165c-surface.mts` §④ customOverlay 读到
+      // `setZIndex` / `setMinZoom` / `setMaxZoom` / `setOptions` 四者
+      // `proto:false, inst:false`（`CustomOverlay.prototype` 共 18 个成员，其中确实没有它们），
+      // 而 `setPoint` / `setRotation` / `setProperties` / `show` / `hide` 在位且调得动。
+      // 官方 `CustomOverlay.d.ts` 也没声明这四个（`Overlay` 基类只有 initialize/isVisible/
+      // draw/show/hide/getMap/dispose），所以这里是「声明与运行时一致地没有」，
+      // 与 `Marker#setAnchor` 那种「声明有、运行时也有」的情况不同。
+      minZoom: recreate(
+        "minZoom 是构造选项（CustomOverlayOptions.minZoom），实例上没有 setMinZoom（live 复核：proto/inst 均 false）",
+        { ctorKey: "minZoom" },
+      ),
+      maxZoom: recreate(
+        "maxZoom 是构造选项（CustomOverlayOptions.maxZoom），实例上没有 setMaxZoom（live 复核：proto/inst 均 false）",
+        { ctorKey: "maxZoom" },
+      ),
       zIndex: recreate(
-        "4.0 的 CustomOverlayOptions 有 zIndex，但实例上没有 setZIndex，层级只能在构造期确定",
+        "4.0 的 CustomOverlayOptions 有 zIndex，但实例上没有 setZIndex（live 复核：proto/inst 均 false），层级只能在构造期确定",
         { ctorKey: "zIndex" },
       ),
       enableMassClear: recreate(
@@ -1009,7 +1023,17 @@ export const OVERLAY_REVERT_RATIONALE = {
     "⇒ 重建",
   style: "Label#setStyles 有 getter 但返回当前值；默认样式由 SDK 内部决定、无从构造 ⇒ 重建",
   opacity: "Label#setOpacity 在 4.0.4 **没有**公开读回 ⇒ 重建",
-  anchor: "Marker#anchor 只有构造选项（上游要等异步标注模块加载才挂 setter，不安全）⇒ 重建",
+  // ⚠️ 依据是 **live 读数**，不是「官方说明」——`setAnchor` **在** 4.0.5 的 `Marker` 实例上
+  // （`inst: true`，`getAnchor()` 读回 `Point`，构造后真调一次也不抛），
+  // 因此「等异步标注模块加载才挂上」那个说法是**错的**，不要照抄。
+  // 真正让 `anchor` 只能走 `recreate` 的是**撤回落点**：`getAnchor()` 返回的是**当前值**
+  // （`null` = 用的是 SDK 内置默认锚点，那个值无从构造出来再传回去），
+  // 与上面 `rotation` / `icon` / `title` / `offset` 那一族「返回当前值而非默认值 ⇒ 重建」同源。
+  // live 读数见 `scripts/probe-165c-surface.mts`（§④ marker）与本文件顶部的 probe 清单。
+  anchor:
+    "Marker#anchor 只能重建：getAnchor() 返回的是**当前值**（未设时是 null，即 SDK 内置默认锚点，" +
+    "那个值无从构造出来再传回去），因此「值变回 undefined」没有落点 ⇒ 重建" +
+    "（⚠️ **不是**因为 setAnchor 不存在——live 实测它在实例上且调得动）",
   // ——— issue #168 item 2 补的构造选项：全部「无 setter 也无读回」⇒ 重建 ———
   raiseOnDrag:
     "官方 MarkerOptions 的 raiseOnDrag（@default false）；4.0 的 Marker 实例上" +
