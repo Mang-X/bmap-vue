@@ -135,11 +135,27 @@ M7（#41）把「常用控件」与「全景」拆成两条发布范围，避免
 官方 `PanoramaEventMap` 里**没有** `touchmove`（只有 `touchstart` / `touchend`），
 因此不暴露。
 
-::: warning 命名：camelCase（与全库的 kebab-case 规则不同，这是**已存在**的偏差）
-全库规则 `toVueEventName` 把 `_` 换成 `-`，地图事件与覆盖物事件都走它。但 `<Panorama>`
-**早已发布的 8 条**是 camelCase（`positionChange` / `linksChange` / …）。
-#168 新增的事件**沿用 camelCase** ——在同一个组件里混两套命名是最坏的一种分叉，
-而改那 8 条是**破坏性变更**。若要在 1.0 统一，那 8 条要走 breaking-changes。
+::: tip 命名：对外名是 camelCase（**与官方 React 封装一致**，这是有意的，不是偏差）
+本组件的对外事件名是 **camelCase**。这一条**不是**待清理的历史偏差，而是对齐了官方
+React 封装 `huiyan-fe/react-bmap@2.0.6`（`master`，`src/components/Panorama/index.tsx:46-66`）的
+**公共事件面**——它的 `on*` props 是 camelCase（`onLinkClick` / `onLinksChange` / `onIdChange` / …），
+内部才订阅 SDK 的 snake_case 事件名。#165 的对齐规则是「同一能力优先同名，**参照官方封装**」，
+参照对象是这份封装而不是 JSAPI 声明。
+
+官方**声明**（`panorama/PanoramaEvent.d.ts`）的键当然是 snake_case；照官方文档抄 SDK 事件名的
+使用者，用本库组件时应当用 camelCase 名。SDK 拼写作为**一一对应的别名**同时发出，
+与 map 事件复用同一套机制（`core/events/eventCatalog.ts` 的 `MAP_EVENT_EMIT_ALIASES`）。
+
+⚠️ 别把 `linksChange` 与 `linksVisibleChanged` 当成一条：前者对应 SDK `links_changed`，
+后者对应 **`links_visible_changed`**（载荷 `{ value: boolean }` 自带值），是**另一条**事件。
+:::
+
+::: warning 与全库 kebab 规则的表面差异
+全库规则 `toVueEventName` 把 `_` 换成 `-`（地图事件与覆盖物事件都走它）。`<Panorama>` 的事件名
+**不由 `toVueEventName` 派生**，因此与该规则的产出不同——这与上面的对齐理由不冲突：
+派生规则服务于「与 SDK 名可推导」，而本组件的公共面以官方封装为准。
+另注：`<Panorama>` 的事件名里**不得含下划线**（`tests/behavior/panorama-events.test.ts` 有断言钉住），
+因为 SDK 的 snake_case 拼写已作为**别名**提供，不再是主名。
 :::
 
 ## 命令式接口

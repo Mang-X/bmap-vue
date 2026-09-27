@@ -88,9 +88,11 @@ const emit = defineEmits<{
    * 逐条裁决（**加 / 不加** 与理由）见 `docs/zh-CN/contributing/168-remaining-surface.md`
    * 与 `tests/behavior/panorama-events.test.ts` 的文件头总表；这里只记**载荷形状**的依据。
    *
-   * ⚠️ **命名偏差（已存在，非本次引入）**：全库规则 `toVueEventName` 产出 kebab-case，
-   * 而本组件早已发布的 8 条是 camelCase。新增事件**沿用 camelCase** 以免同一组件内
-   * 混两套命名；改名那 8 条是破坏性变更，属父决策。
+   * 对外名一律 **camelCase**，这不是待清理的偏差：官方 React 封装
+   * `huiyan-fe/react-bmap@2.0.6`（`master`，`src/components/Panorama/index.tsx:46-66`）的
+   * 公共事件面就是 camelCase `on*` props，#165 的对齐规则「参照官方封装」指的是它，
+   * 不是 SDK 声明的 snake_case。SDK 拼写作为一一对应的别名发出，形状复用 map 事件的
+   * `MAP_EVENT_EMIT_ALIASES`（`core/events/eventCatalog.ts`）。
    */
 
   /**

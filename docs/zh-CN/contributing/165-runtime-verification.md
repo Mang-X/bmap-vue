@@ -188,21 +188,40 @@ SDK 已把中心钉住），不构成反证。
 ⚠️ 同类提醒：`animatedByDefault: false` 说的是**本环境读数**，不同渲染模式/性能下
 可能不同；因此文档里按「实测」而非「官方保证」措辞。
 
-## 更正三：官方 `Panorama` 事件名是 **snake_case**，本库是 camelCase
+## ~~更正三~~（已再次撤回，见下）：`Panorama` 事件名的「改名」结论
 
-官方 `panorama/PanoramaEvent.d.ts` 的 `PanoramaEventMap` 键**一律 snake_case**：
+> ⚠️ **本节原结论（「官方事件名是 snake_case ⇒ 应按官方 snake_case 对齐（改名）」）已撤回。**
+> 撤回理由见紧随其后的「更正三·重定」。保留标题与痕迹，是为了让下一次审计知道这条结论
+> **曾经存在过、并且被证据推翻过**，不要按字面把它捡回来。
 
-    link_click / links_changed / links_visible_changed / pov_changed_end / scene_change_end
-    scene_type_changed / size_changed / visible_poi_type_changed / overlay_add /
-    overlay_remove / overlays_clear / clickonroad / position_changed / currentTarget / data…
+## 更正三·重定：`Panorama` 事件名的正确处置是 **camelCase + snake_case 别名**，不是改名
 
-本库 `<Panorama>` 发的是 **camelCase**（`linkClick` / `povChangedEnd` / `linksChange` …）。
-这**不是**「库内既有不一致」，而是**与官方不一致**：事件名直接对应 SDK 的
-`addEventListener` 键，改成 camelCase 就失去与官方事件名的一一对应——照官方文档抄
-事件名的使用者会找不到。全仓 `toVueEventName` 的 kebab 转换对 `link_click` 产出
-`link-click`，与 camelCase 同样对不上。
+被撤回的那条结论推理时**只看了两个来源中的一个**，把「JSAPI 声明」当成了「官方封装」。实际有**两个**
+来源，二者命名不同，必须分别代表：
 
-⇒ 应按官方 snake_case 对齐（破坏性变更，21 个事件名，须走 1.0 决策）。
+| 来源 | 命名 | 证据 |
+| --- | --- | --- |
+| JSAPI **声明**（`panorama/PanoramaEvent.d.ts` 的 `PanoramaEventMap` 键，23 条） | **snake_case** | `position_changed` / `links_changed` / `links_visible_changed` / `pov_changed_end` / `scene_change_end` / `scene_type_changed` / `size_changed` / `visible_poi_type_changed` / `overlay_add` / `overlay_remove` / `overlays_clear` / `link_click` / `clickonroad` / `id_changed` / `zoom_changed` / `pov_changed` / `dataload` / `pano_error` / `destroy` / `touchstart` / `touchend` / `click` / `dblclick` |
+| 官方 **React 参考实现**（`@baidumap/react-bmap@2.0.6`，`master` 分支，`src/components/Panorama/index.tsx`）的**公共事件面** | **camelCase `on*` props** | `onClick` / `onDblClick` / `onLinkClick` / `onLinksChange` / `onIdChange` / `onSceneTypeChange` / `onPositionChange` / `onPovChange` / `onZoomChange` / `onError` / `onDataLoad`（`index.tsx:46-66` 声明，`:86-117` 绑定；文件头 `:7` 的清单同此） |
+
+**#165 的对齐规则是「同一能力优先同名，参照官方封装」。** 本条讲的是**事件面**，而参考实现的
+公共面是 camelCase —— 因此把本库改成 snake_case 是**朝参考封装的反方向走**，恰好违反规则本身。
+上一节的推理把规则里的「同名」当成了「与 JSAPI 声明同名」，这一步没有依据。
+
+**正确处置（不是改名）**：camelCase 保持为**对外事件名**，把 SDK 的 snake_case 键加成
+**一一对应的别名**同时发出——这正是本库对 map 事件已有的机制：`core/events/eventCatalog.ts`
+的 `MAP_EVENT_EMIT_ALIASES`（规范名与 SDK 拼写**并存**，`<Map>` 的 `forwardMapEvent()`
+先发规范名再发别名，组件里没有第二份兼容代码；见该文件文件头「SDK → Vue 的名字映射」）。
+Panorama 事件按同一形状复用该机制即可。
+
+⚠️ 两条不要混淆的**不同事件**：
+
+- 参考实现的 `onLinksChange()` **不带任何值**，它对应 SDK 的 `links_changed`；
+- `links_visible_changed` 是**另一条**事件，载荷 `{ value: boolean }` 自带值。
+  本库**尚未**实现它（按上表规则应对外叫 `linksVisibleChanged`），正在补——补的时候
+  **不要**把它当成 `linksChange` 的别名。
+
+把两者当成一条，就会得出「`linksChange` 已经覆盖了道路链接显隐」的错误结论。见下节「更正四」。
 
 ## 更正四：`links_visible_changed` 的载荷是**自足**的，未加的理由不成立
 
@@ -212,19 +231,52 @@ SDK 已把中心钉住），不构成反证。
 
 ⇒ 应加：与已实现的 `getLinks()` / `linksChange` 同族，缺它是真实的不一致。
 
-## 更正五：`huiyan-fe/vue-bmap` **没有 `Panorama` 组件**
+## 更正五：`vue-bmap` **未实现** `Panorama`，但**已规划**；`react-bmap` **已实现**
 
-按 URL 核对（2026-09-27）：
+（2026-09-27 重新克隆两个仓库逐条核对，**替换**本节此前基于错误前提的两句话。）
 
-- `https://mapopen.bj.bcebos.com/vue-bmap/docs/#/component/panorama` → **HTTP 404**，
-  该锚点不存在；
-- 仓库 `@baidumap/vue-bmap@1.0.1`（`git clone`，HEAD `ffc6dad`）的
-  `src/components/` 只有 `Control` / `Layer` / `Map` / `Overlay` **四个目录**，
-  全仓 `grep -rn "Panorama" src` 命中的是 `PanoramaControl`（控件）、`PanoramaService`
-  的**类型**、以及能力清单里的 `Map.setPanorama` / `Map.getPanorama`——**没有任何全景组件**。
+### 结论
 
-⇒ 全景组件的官方参照**只有 JSAPI 声明本身**，`vue-bmap` 与 `react-bmap` 都不提供
-`Panorama` 组件面。这反而说明**更应以官方声明为准**，而不是找一个不存在的参考。
+| 仓库 | 读取的分支 / 提交 | `Panorama` 组件面 |
+| --- | --- | --- |
+| `huiyan-fe/react-bmap`（`@baidumap/react-bmap@2.0.6`） | **`master`**，`fde5bbd` | **已实现**：`src/components/Panorama/`（`PanoramaRef.ts` + `index.tsx`），并由 `src/index.ts:167-168` 对外导出 `Panorama` / `PanoramaLabel` 及 `PanoramaProps` / `PanoramaRef` 等类型 |
+| `huiyan-fe/vue-bmap`（`@baidumap/vue-bmap@1.0.1`） | **`master`**，`ffc6dad` | **未实现**：无 `src/components/Panorama/`。但**已在 `DESIGN.md` 里规划**（见下） |
+
+⇒ 全景组件的官方参照**不止 JSAPI 声明**：`react-bmap` 的 `src/components/Panorama/` 是一份
+**真实存在的官方参考实现**。这也是「更正三·重定」把公共事件名判为 camelCase 的直接依据。
+
+### `vue-bmap`：未实现 ≠ 从没有过
+
+- `src/components/` 实测只有 **`Control` / `Layer` / `Map` / `Overlay`** 四个目录，
+  无 `Panorama`（注意**没有** `Menu` 目录；`Menu` 只是 `DESIGN.md` 规划中的项）；
+- 全仓 `grep -rn "Panorama" src`（47 处）命中的是 `PanoramaControl`（控件）、
+  `PanoramaCoverageLayer`、`PanoramaService`、driver 层的 `createPanorama` /
+  `createPanoramaLabel` / `destroyPanorama`、以及 `capabilityMatrix.ts:145` 里
+  **已经把 `'Panorama'` / `'PanoramaLabel'` 列为能力项**——即**能力清单里有、组件面还没做**。
+- 但 `DESIGN.md` **三处**把它列进了计划，`grep -n "Panorama" DESIGN.md` 实测：
+  - `:31` 目录树：`components/    Map / Overlay / Control / Layer / Menu / Panorama`
+  - `:159` 迁移对照：`│   ├── components/  Map / Overlay / Control / Layer / Menu / Panorama  ← 重写`
+  - `:193` 阶段 **P4「补齐长尾组件」**：`剩余覆盖物/控件/图层（…等）、**Panorama**、Menu、ThreeLayer、RawOverlay/RawControl、错误处理（onErrorCaptured）`
+
+⇒ 准确表述是「**`Panorama` 未实现**（组件目录只有 4 个），**但已在 `DESIGN.md` 里规划**
+（架构图 `:31` + 迁移对照 `:159` 列出它，阶段 P4 `:193` 也点了它）」。
+先前那句「**从没有过**」把「未实现」讲成了「不存在」，据此推出「找不到参考、只能以声明为准」
+的结论也一并作废。
+
+### 此前为什么会看错（两处独立的取证缺陷）
+
+1. **`react-bmap` 一侧不是「只克隆了 tag、tag 上没有」**——实测 `v2.0.6` **标签上就有**
+   `src/components/Panorama/`，且两个文件与 `master` **逐字节相同**
+   （`shasum` 均为 `de541f4a05f0feca1fc167aceef0870745e76704` / `08050d7eb1e7cf9739cd9dd89b32bd0a9c18d77b`，
+   `git diff --stat v2.0.6 master -- src/components/Panorama/` 为空）。该目录由
+   `23b1a6e feat(Panorama): 补齐全景命令式句柄、控件开关、常量与全套事件`（2026-09-15）引入，
+   `git tag --contains 23b1a6e` → `v2.0.2 v2.0.3 v2.0.4 v2.0.5 v2.0.6`，即**早于** `v2.0.6`。
+   **所以先前那句「标签与默认分支内容不同」本身就是错的**——差异不在 tag 与 master 之间，
+   而在于**该目录此前从未被打开过**（`ls` / `git ls-tree` 都没查）。
+2. **`vue-bmap` 一侧的 404 是真的、但它证明的事被读大了**：
+   `https://mapopen.bj.bcebos.com/vue-bmap/docs/#/component/panorama` 确实 **HTTP 404**
+   （`curl -o /dev/null -w "%{http_code}"`；注意**站点根路径 `…/vue-bmap/docs/` 本身也是 404**，
+   因此这条 URL 只能证明「该文档站当前不可达」，不能证明「文档里没有 panorama 这一节」）。
 
 ## 未覆盖
 

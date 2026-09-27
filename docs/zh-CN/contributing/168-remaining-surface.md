@@ -152,7 +152,16 @@ SFC 的 `<script setup>` 不能被 `.ts` 引用它的类型，而命令面必须
   是**父决策**，不是本 ticket 能单方面做的。
 
 因此本库**如实记录偏差**，并用一条断言钉住「本组件内部不得含下划线」。
-**建议**：在 1.0 定版前决定是否统一；若统一，这 8 条要走 breaking-changes。
+
+> ⚠️ **本节的措辞已被后续核实推翻（#165）**：这里把它写成「既有的库内命名偏差、建议在 1.0
+> 前决定是否统一」。核实结果是——**官方 React 参考实现本身就是 camelCase**
+> （`src/components/Panorama/index.tsx` 的 `onLinkClick` / `onLinksChange` / `onPovChange` …），
+> 而官方 **JSAPI 声明**（`PanoramaEventMap` 的键）才是 snake_case。
+> 按 #165「同一能力优先同名、**参照官方封装**」的判据，**camelCase 才是对齐的那个**，
+> snake_case 是 SDK 事件键。因此**不统一、不改名**；正确处置是
+> **保留 camelCase 作为对外事件名，并把 SDK 的 snake_case 键加成一一对应的别名**
+> （复用 `MAP_EVENT_EMIT_ALIASES` 机制）——照 SDK 文档抄事件名的使用者同样能命中。
+> 详见 `165-runtime-verification.md` 的「更正三·重定」。
 
 ### Panorama 为什么**不进**覆盖物事件矩阵
 
