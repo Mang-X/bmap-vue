@@ -17,9 +17,12 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 
 **两个组件继续可用，行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。官方建议的
 替代品 **`<PolylineLayer>` / `<PolygonLayer>` 本库现已提供**（#166）——但
-**弃用替代不是改名**：两者的 `style` 字段族不同、样式更新语义不同（见
+**弃用替代不是改名**：两者的 `style` 字段族不同、样式更新入口不同（见
 [PolygonLayer / PolylineLayer](./visualization-layers)）。需要这层语义的可以继续用
 `LineLayer` / `FillLayer`；`HeatmapLayer` / `TrackLineLayer` 不在官方弃用名单内。
+
+逐字段迁移表、七个无对应的旧选项、以及「什么时候该留下」的判断，见
+[弃用图层的迁移指引](./deprecated-layers-migration)。
 
 [`PointIconLayer`](../data#pointiconlayer) 同属这一批，但它的官方替代品 `<PointLayer>` 本库
 **已经提供**，那条见[数据组件](../data)。
@@ -34,12 +37,11 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 
 **「类型包里有没有类声明」不是能力面的依据**。这四个类在 4.0.5 之后**全部有**类声明
 （`Heatmap` / `TrackLine` 是 4.0.5 才补上的，`LineLayer` / `FillLayer` 更早就有），
-但它们在浏览器里仍要等**可视化扩展异步注入**才能用——「有声明」说的是形状，
-「已注入」说的是可用性，两件事各判各的。所以后两个组件**没有** `opacity` / `zIndex` /
-`minZoom` / `maxZoom`：这些是**本库登记过的入口**，官方 4.0.5 声明里虽出现了
-`setOpacity` / `setZIndex`，但官方扩展 API 专页没有把它们列为这两类的契约
-（见 `driver/jsapi-v4/native-layers.ts` 里「不把未取证成员当契约」的口径），
-声明了也只是静默忽略（假支持）。
+但后两个（`HeatmapLayer` / `TrackLineLayer`）在浏览器里仍要等**可视化扩展异步注入**才能用——
+「有声明」说的是形状，「已注入」说的是可用性，两件事各判各的。live 探针实测
+`Heatmap` / `TrackLine` 属这一族，而 `LineLayer` / `FillLayer` / `PointIconLayer` /
+`PointShapeLayer` 的构造器与全套成员在 `BMap.Map` 就绪时**已经齐备**（settle `0ms`），
+即**随主包注入**、不等异步注入。
 
 「官方有没有弃用」也不改变这张表：能力矩阵里 `layer.line` / `layer.fill` 的 `status` 仍是
 `experimental`、`layer.point-icon` 仍是 `native`。`status` 的四个取值表达的是**能力从哪来**，

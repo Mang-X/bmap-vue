@@ -199,6 +199,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "TextLayer（批量文字标注）",
           link: "text-layer",
         },
+        {
+          text: "弃用图层的迁移指引",
+          link: "deprecated-layers-migration",
+        },
       ],
     },
     {

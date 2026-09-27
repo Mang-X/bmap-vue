@@ -65,13 +65,20 @@ const LAYER_KIND: NativeLayerKind = "point-shape";
  * 处置与 `LineLayer` / `FillLayer` / `PointIconLayer` 一致：组件保留、行为不变、不改名、
  * 不加兼容别名（#165 §3.6）。替代品 `<PointLayer>` 本库**已提供**，但它的样式字段是**扁平**的
  * （`shape` / `size` / `fillColor` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
+ *
+ * 迁移最容易静默出错的两处：`shapeType` 是**数字枚举**而 `shape` 是**字符串枚举**
+ * （`0` 圆形 ↔ `'circle'`，数字一一对应但类型不同）；`isFlat` 的官方默认值与本组件**相反**
+ * （旧 `true` / 新 `false`）。另有 Feature State 在替代品上**无对应**（`visualization/` 家族
+ * 没有该 API）——依赖它的用法**继续用本组件**。逐字段迁移表见
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  */
 warnDeprecatedLayerOnce(
   "PointCollection:deprecated-class",
   "[PointCollection] 官方 `BMap.PointShapeLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 " +
     "@deprecated，官方建议改用 `BMap.PointLayer`（形状模式，4.0.5 新增的 visualization 命名空间）。" +
     "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**，但其样式字段是扁平的、" +
-    "不是 `style` 袋，迁移不是改个名字。详见 docs/zh-CN/components/data.md",
+    "不是 `style` 袋，迁移不是改个名字（shapeType 数字枚举要改写成 shape 字符串枚举）。" +
+    "逐字段迁移表见 docs/zh-CN/components/layer/deprecated-layers-migration.md",
 );
 
 const props = withDefaults(defineProps<PointCollectionProps<Item>>(), {

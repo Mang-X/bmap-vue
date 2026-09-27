@@ -16,6 +16,14 @@
  * `experimental`（可视化实现按需异步注入），且它的样式字段是**扁平**的（`icon` / `width` /
  * `height` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
  *
+ * **不是所有用法都该迁**：`visualization/` 家族**没有** Feature State（要素状态）API
+ * （`visualization/*.d.ts` 逐文件 0 命中；live 实测 `PointLayer` 上那五个成员也全部缺席），
+ * 而本组件 expose 的 `featureState` 是官方声明、live 实测在位的。⇒ 依赖要素状态的用法
+ * **继续用 `<PointIconLayer>`**。另有 `isFixed` / `visibility` / `iconObj` / `userSizes` /
+ * `sizes` 在替代品上**无对应**，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` / 新 `false`）。
+ * 逐字段迁移表与取舍见
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
+ *
  * 落在官方 `BMap.PointIconLayer`（**两处都声明**：类型包有完整类声明，官方 React 参考实现也有同名组件）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
  * `useNativeLayerResource`（#36 抽出的共享内核，五个原生数据图层共用一份实现）：
  * 本组件只声明「构造期选项 / 样式袋 / 数据载荷 / 事件」四件事，不再自持第二套状态机。
@@ -48,7 +56,7 @@ warnDeprecatedLayerOnce(
     "官方建议改用 `BMap.PointLayer`（图标模式，4.0.5 新增的 visualization 命名空间）。" +
     "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**（同一批里唯一的" +
     "「官方推荐的替代品已经存在」的情形），迁移时注意它的样式字段是扁平的而不是 style 袋。" +
-    "详见 docs/zh-CN/components/data.md",
+    "逐字段迁移表见 docs/zh-CN/components/layer/deprecated-layers-migration.md",
 );
 
 /** 本组件落地的原生图层种类。 */

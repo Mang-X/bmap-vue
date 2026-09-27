@@ -16,9 +16,16 @@
  *   在模块级）+ 类型层 `@deprecated` + 文档。
  *
  * **#166 更新**：官方的指名替代品 `<PolylineLayer>` 现在**本库已提供**了。迁移时注意两者的
- * `style` **不是同一套字段**（本组件是 `LineLayerStyle`：`patternUrl` / `patternScale` /
- * `borderWeight` 那一族；替代品是 `PolylineLayerStyle`：`strokeTextureUrl` /
+ * `style` **不是同一套字段**（本组件是 `LineLayerStyle`：`borderWeight` / `borderCovered` /
+ * `borderMask` 那一族；替代品是 `PolylineLayerStyle`：`strokeTextureUrl` /
  * `strokeTextureSpaced` 那一族）——**弃用替代不是字段改名**，样式要重写。
+ *
+ * ⚠️ **不是所有用法都该迁**：`visualization/` 家族**没有** Feature State（要素状态）API
+ * （`visualization/*.d.ts` 对 `updateState` / `removeState` / `clearState` / `replaceAllState` /
+ * `getAllState` 逐文件 0 命中；live 实测替代类上这五个成员也全部缺席），而本组件 expose 的
+ * `featureState` 命令面是**官方声明、live 实测在位**的。⇒ **依赖要素状态的用法迁移即丢能力**，
+ * 这种情况**继续用 `<LineLayer>`**。逐字段迁移表与取舍见
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  *
  * 官方声明（`@baidumap/jsapi-v4-types` 的 `LineLayer` / `LineLayerOptions` / `LineStyle`）
  * 给出了完整的方法面，本组件逐条对应：
@@ -54,7 +61,7 @@ warnDeprecatedLayerOnce(
     "官方建议改用 `BMap.PolylineLayer`（4.0.5 新增的 visualization 命名空间）——" +
     "本库现已提供 `<PolylineLayer>`（#166）。本组件继续可用、行为不变；" +
     "注意两者的 `style` **不是同一套字段**，迁移时样式要按 `PolylineLayerStyle` 重写。" +
-    "详见 docs/zh-CN/components/layer/native-visual-layers.md",
+    "逐字段迁移表见 docs/zh-CN/components/layer/deprecated-layers-migration.md",
 );
 
 const props = withDefaults(defineProps<LineLayerProps>(), {

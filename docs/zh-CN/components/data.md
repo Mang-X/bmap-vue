@@ -250,6 +250,17 @@ Marker 的代价」），不是自动降级。
 
 ## `BPointShapeLayer`
 
+::: warning 底层类官方已在 4.0.5 弃用
+本组件落在 `BMap.PointShapeLayer` 上，该类被官方标记 `@deprecated`（建议改用 `PointLayer` 的
+形状模式）。**组件继续可用、行为不变**（开发期告警一次，props 类型上带 `@deprecated`）。
+迁移**不是改个名字**：`shapeType` 是**数字枚举**而替代品的 `shape` 是**字符串枚举**
+（`0` 圆形 ↔ `'circle'`，数字一一对应但类型不同），`color` 要改写成 `fillColor`，图层级
+`opacity` 要改写成逐点 `fillOpacity`，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` /
+新 `false`）。**需要留下**的情况：依赖要素状态（替代品**没有**该 API）、或要 `zIndex` /
+`minZoom` / `maxZoom`（替代品上本库未开这三个面）。
+逐字段迁移表见[弃用图层的迁移指引](../layer/deprecated-layers-migration)。
+:::
+
 ```vue
 <BPointShapeLayer
   :data="stations"
@@ -321,11 +332,18 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 所以这里**是可以迁移的**——但不是改个名字：`<PointLayer>` 属扩展 API、标 `experimental`（可视化
 实现按需异步注入，就绪前创建会经 `resource:error` 交出 `BMAP_CAPABILITY_UNSUPPORTED`），且它的
 样式字段是**扁平**的（`icon` / `width` / `height` / `anchors` 直接是 prop，没有 `style` 袋）。
+
+**需要留下**的几种情况：`visualization/` 家族**没有**要素状态（Feature State）API，依赖它的用法
+迁移即丢能力；`isFixed` / `visibility` / `iconObj` / `userSizes` / `sizes` 在替代品上**无对应**；
+`isFlat` 的官方默认值与本组件**相反**（旧 `true` 贴地 / 新 `false` 屏幕固定），迁移时**显式传值**。
 需要「最稳、官方两处都声明、样式是袋」的那一套，就继续用 `<PointIconLayer>`。
 
 官方同一批还弃用了 `BMap.PointShapeLayer`（建议 `PointLayer` 形状模式）；本库**没有**对应的
 `PointShapeLayer` 组件——形状点走 [`BPointShapeLayer`](#bpointshapelayer)。线 / 面两个图层的弃用
 见[原生批量可视化图层](../layer/native-visual-layers)。
+
+逐字段迁移表、七个无对应的旧选项与「该留下还是该迁走」的判断，见
+[弃用图层的迁移指引](../layer/deprecated-layers-migration)。
 :::
 
 ```vue

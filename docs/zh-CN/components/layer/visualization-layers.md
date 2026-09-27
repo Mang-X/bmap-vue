@@ -18,14 +18,24 @@ import { PolygonLayer, PolylineLayer } from 'bmap-vue'
 | | 旧组件 | 新组件 |
 | --- | --- | --- |
 | 线的颜色 / 宽度 | `LineLayerStyle.strokeColor` / `strokeWeight` | `PolylineLayerStyle.strokeColor` / `strokeWeight`（同名） |
-| 线的纹理 | `LineLayerStyle.patternUrl` / `patternScale` / `patternOffset` | `PolylineLayerStyle.strokeTextureUrl` / `strokeTextureSpaced` / `strokeTextureGap` |
-| 面的填充纹理 | `FillLayerStyle.patternUrl` / `patternMapping` / `patternScale` | `PolygonLayerStyle.fillTextureUrl` / `fillTextureSize` / `fillTextureAlphaOnly` |
-| 面的描边 | `FillLayerStyle.borderWeight` / `borderCovered` / `borderMask` | `PolygonLayerStyle.strokeWeight` / `strokeColor` / `strokeOpacity` |
+| 线的描边 | `LineLayerStyle.borderWeight` / `borderColor` / `borderCovered` / `borderMask` | 并入 `strokeWeight` / `strokeColor`（`borderCovered` / `borderMask` **无对应**） |
+| 线的纹理 | `LineLayerStyle.strokeTextureUrl` / `strokeTextureWidth` / `strokeTextureHeight` | 同名，另有 `strokeTextureSpaced` / `strokeTextureGap` / `strokeTextureColor` |
+| 面的填充纹理 | `FillLayerStyle.patternUrl` / `patternMapping` / `patternScale` / `patternOffset` | `PolygonLayerStyle.fillTextureUrl` / `fillTextureSize` / `fillTextureAlphaOnly`（雪碧图裁剪与 UV 偏移**无对应**） |
+| 面的描边 | `FillLayerStyle.borderWeight` / `borderColor` | `PolygonLayerStyle.strokeWeight` / `strokeColor` / `strokeOpacity` |
 | 默认描边 | `border` 默认 `true`（有描边） | `strokeWeight` 默认 `0`（**不描边**） |
 
-样式更新语义也不同：旧组件走 `setStyleOptions`（**merge**）并显式 `doOnceDraw()`；新组件走
-`setOptions`（**只更新你写到的键**，其余保持原值）。两个组件因此**不**能混用在同一张图上做同一次
-样式更新。
+> ⚠️ `patternUrl` / `patternScale` 是 **`FillLayerStyle`** 的字段，**不是** `LineLayerStyle` 的
+> ——官方 `LineStyle` 里没有这一族。
+
+样式更新入口也不同：旧组件走 `setStyleOptions`（**merge**）并显式 `doOnceDraw()`；新组件走
+`setOptions`，**没有** `doOnceDraw`（官方注释：「仅更新已声明的样式键，未知键忽略并告警一次」）。
+两个组件因此**不**能混用在同一张图上做同一次样式更新。
+
+⚠️ **「没写到的键会不会回到默认值」官方没有明说**（注释只说「仅更新已声明的样式键」，
+字面上是保持原值，但没有排除被重置）。实际影响：不要依赖「只改一个键、其余自动回默认」，
+显式写全你要的键即可。详见[迁移指引](./deprecated-layers-migration)。
+
+逐字段迁移表与「什么时候该留下」的判断，见[弃用图层的迁移指引](./deprecated-layers-migration)。
 
 ## 能力面
 
