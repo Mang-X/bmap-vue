@@ -8,7 +8,13 @@
  * 行为依据（`GeoJSONLayer` / `GeoJSONLayerOptions` / `GeoJSONLayerEventMap`）：
  * - `data` 是一等公民：变化时调 `setData()` **不重建图层**（重建会把所有要素覆盖物拆掉重做）；
  *   `data: null` 走 `clearData()`；
- * - `minZoom` / `maxZoom` / `level` 只有构造期生效（官方没有对应 setter）⇒ 变化时重建；
+ * - `minZoom` / `maxZoom` 只有构造期生效（运行时**没有** `setMinZoom` / `setMaxZoom`）
+ *   ⇒ 变化时重建；
+ * - `level` **就地更新**（#165 收口）：变化时调 `setLevel()`，**不重建**。依据是 live 读数
+ *   （`scripts/probe-165-level-effect.mts`，4.0.5）——`setLevel(-50)` 之后 `getLevel()` 读回
+ *   `-50`，且 `getData()` 里**每一个**要素的 `zIndex` 都从 `-99` 变成 `-50`：它逐个透传给解析
+ *   出的覆盖物，不是只改图层自己的内部字段。官方注释的「负数越大层级越高」是**语义**描述
+ *   而非取值约束（实测 `0` / `2000` / `1.5` 都照收），因此本组件不做任何范围校验。
  * - 事件按官方声明绑定（`click` / `mousemove` / `mouseout`），回调参数就是 SDK 的事件对象
  *   （`click` 的载荷带 `features`）；
  * - **不支持** `opacity` / `zIndex`：官方 `GeoJSONLayer` 没有它们（层级是语义不同的 `level`），
@@ -36,7 +42,12 @@ export interface GeoJSONLayerProps {
   polylineStyle?: unknown;
   /** 面要素样式（或按属性计算的函数）。 */
   polygonStyle?: unknown;
-  /** 显示层级（负数越大层级越高，官方默认 -99）。 */
+  /**
+   * 显示层级（官方默认 -99）。
+   *
+   * 变化时**就地更新**（官方 `setLevel`，逐个透传给解析出的每个要素的 `zIndex`），**不重建**。
+   * 取值不做校验：官方的「负数越大层级越高」是语义描述，实测正数与小数同样被接受。
+   */
   level?: number;
 }
 

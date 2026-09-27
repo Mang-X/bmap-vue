@@ -179,3 +179,91 @@ HEAD `5ba67f4dda11b0a4b54fc631278d3e39e11667c3` = "update 4.0.5"，2026-09-24；
 7. ⚠️ **两族都不暴露 `opacity` prop**——但这**不是** §三 早期那条「未声明所以不开面」的
    结论（那条已被推翻）。`PolygonLayer` 因选项表无此项而**不可能**有；`PolylineLayer` 是
    **范围决策**（Driver 已登记、暂无组件消费者），留给后续裁决。
+
+## 八、#165 收口的两条范围问题（`FeatureLayer` 与 `<GeoJSONLayer>.setLevel`）
+
+这一节记录两条**裁决为「不做 / 改口径」**的问题。两条都不是实现缺陷，但都属于
+「不写下来就会被下一个读者当成遗漏」的那一类，所以连同读数一起固定在这里。
+
+### 8.1 `FeatureLayer`：参考实现有、官方类型零命中、运行时**不存在** ⇒ 不封装
+
+**逐源读数**（live AK / headless Chrome，`scripts/probe-165-feature-layer.mts`；
+`BMap.version === "gl"`，SDK 4.0.5；补齐等待 `settled=true`、`settledAfterMs=0` 后取样）：
+
+| 来源 | 分支 / 版本 | 说法 |
+| --- | --- | --- |
+| `@baidumap/jsapi-v4-types` | `5ba67f4`（4.0.5），207 个 `.d.ts` | **零命中**（`grep -rc` 整包） |
+| 官方 React 参考 `huiyan-fe/react-bmap` | master `fde5bbd` | 有 `src/components/Layer/FeatureLayer.tsx`、`createFeatureLayer` 工厂（`v4Driver.ts:1396`） |
+| 官方 Vue 参考 `huiyan-fe/vue-bmap` | master `ffc6dad` | **没有** `FeatureLayer` 组件（`src/components/Layer/` 下只有 `index.ts`） |
+| 运行时 | 4.0.5 | `typeof BMap.FeatureLayer === "undefined"`；`BMap` 上不是自有属性；`new BMap.FeatureLayer({})` 抛 `B.FeatureLayer is not a constructor` |
+
+**与 `NormalLayer` 的关系：没有关系。** 实测 `BMap.NormalLayer` 是 `function`，
+原型 39 个成员（`isNormalLayer` / `setOpacity` / `setZIndex` / `setMinZoom` / `setMaxZoom` /
+`getOpacity` / `pick` / `onAdd` / `onDestroy` / `render` / …），构造器名 `dr`；
+`FeatureLayer === NormalLayer` 为 `false`（前者 `undefined`，比较不成立），
+`NormalLayer.prototype` 上也没有任何 `FeatureLayer` 痕迹。
+官方 React 参考的组件文件头写着「手写组件，**继承 NormalLayer**」——
+那只是一句注释，**运行时无从印证**，不构成证据。
+
+**为什么参考实现不可信（这是本条真正的依据，不是「参考不算证据」这句原则）：**
+
+1. 参考实现**自己的**能力矩阵 `src/drivers/capabilityMatrix.ts` 的 `V4_LAYER_CLASS`
+   （逐条读过）**没有** `FeatureLayer`；
+2. 而 `createLayerFactory` 的第一行是
+   `if (!capabilities.has(cap)) { reportUnsupported(cap, version, behavior); return null; }`
+   ⇒ **`createFeatureLayer` 在参考实现内部是不可达的死代码**，任何调用都返回 `null`；
+3. 它的选项类型是 `createFeatureLayer(options?: unknown)`——这一段里**唯一**用 `unknown` 的，
+   邻居（`createRasterTileLayer` / `createMVTLayer` / `createFillLayer` …）都有具名 options 接口，
+   它的 `FeatureLayerOptions` 是 `extends NormalLayerOptions` 的**自造**类型；
+4. 官方 **Vue** 参考**根本没有**这个组件。两个官方参考自己就不一致。
+
+**裁决：不封装、不登记能力项。** 理由是「登记一个恒为 false 的能力，比没有更坏」：
+`supports("layer.feature")` 会开始回答一个常量，能力矩阵多一行要长期维护的假事实。
+固定位置：`src/driver/capability/catalog.ts` 的 `layer.geojson` 上方注释。
+
+**顺带修正一条会被误用的口径**：`BMap.NormalLayer` 在运行时**存在**，但官方类型包里
+**也没有 `class NormalLayer`**（`layer/NormalLayer.d.ts` 只有 `NormalLayerEventMap` /
+`NormalLayerPickEvent` / `StyleExpress` 等接口）。⇒ **「类型包没有」不等于「运行时没有」**，
+反向也不成立。本票的两条裁决方向恰好相反，理由是**各自**的运行时读数，不是同一条规则。
+
+### 8.2 `<GeoJSONLayer>.setLevel`：可观测地生效 ⇒ 从「构造期重建」改为「就地更新」
+
+`layer/GeoJSONLayer.d.ts:136` 声明 `setLevel(z: number): void`（`:133` 带用例注释），
+而本库 descriptor 的 `geojson.mutable` 此前是**空的**，且**没有写下任何理由**
+——按本票判据，「没有写理由」是**缺席**的签名，不是决策。
+
+**读数**（`scripts/probe-165-level-effect.mts`，4.0.5，中心 116.404,39.915 / zoom 14，
+三个要素：两块面 + 一条线；判定标准是**每个要素的 `zIndex`** 而不是图层自己的字段）：
+
+| 调用 | `getLevel()` | 每个要素的 `zIndex` |
+| --- | --- | --- |
+| 构造 `{ level: -77 }` | `-77` | `-77` |
+| 基线（不给 `level`） | `-99` | `-99` |
+| `setLevel(-50)` | `-99 → -50` | `-99 → -50`（**三个要素全部**） |
+| `setLevel(-99)` | `-50 → -99` | `-50 → -99` |
+| `setLevel(0)` / `setLevel(2000)` / `setLevel(1.5)` | 各自取值 | 各自取值 |
+
+⇒ **可观测地生效**：它不是只改图层自己的内部字段，而是**逐个透传给解析出的覆盖物的
+`setZIndex`**（与官方 skill `references/data-layers.md`「层级值原样透传给每个解析出的
+覆盖物的 `setZIndex`，未设置时默认 `-99`」逐字吻合）。
+取值域**未观察到裁剪**（0 / 2000 / 1.5 都照收）；官方注释的「负数越大层级越高」是
+**语义描述**、不是取值约束，因此实现侧不做任何范围校验。
+
+**处置**：`mutable: { level: "setLevel" }` ⇒ `isMutableOption("geojson", "level")` 为真，
+`level` prop 变化走**就地更新**、**不重建**。此前重建的代价与 `setData` 同量级
+（把所有已画好的要素拆掉重做），却换不来任何额外效果。
+
+**对照（同一次读数）**：`minZoom` / `maxZoom` **仍留在构造期**——
+运行时**根本没有** `setMinZoom` / `setMaxZoom`（实测 `hasSetMinZoom=false`、
+`hasSetMaxZoom=false`），与 `level` 相反。
+
+**其余被漏掉的 `GeoJSONLayer` 成员**（官方声明全表逐条核对，补齐等待 `settled=true` 后
+`observe` 集合 12 个成员**全部 `present`**，无 `absent`）：
+
+| 成员 | 运行时 | 本库处置 |
+| --- | --- | --- |
+| `resetStyle()` | `present`，调得动 | **不开面**：`polygonStyle` 已经是受控 prop，官方没有字段级样式 setter，reset 只会把样式退回构造值——与「换数据」无法区分，且无消费者 |
+| `setVisible(v)` / `getVisible()` | `present` | **不开面**：显隐在本库统一表达为「挂上 / 摘掉」（`visible` prop ⇒ `addLayer`/`removeLayer`），与 `ADR 2026-09-11-jsapi-v4-control-layer-facets` 决策 7 一致 |
+| `pickOverlays(e)` | `present` | **不开面**：无消费者（#104「没有消费者的扩展面一律不加」） |
+| `getData()` / `getLevel()` / `getVisible()` / `destroy()` | `present` | **不开面**：前三个是**读回**，无消费者；`destroy` 归统一释放路径（`useLayerResource` 的 scope），不作为 prop |
+| `addEventListener` / `removeEventListener` | `present` | **已对齐**（组件只绑 `click` / `mousemove` / `mouseout` 三个，与 `GeoJSONLayerEventMap` 逐条一致） |

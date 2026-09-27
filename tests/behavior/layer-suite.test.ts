@@ -457,6 +457,30 @@ describe("[#40] §4 GeoJSON / DOM 的响应式更新（就地 setData，不重�
     harness.assertIdle("geojson 清空");
   });
 
+  /**
+   * `level` 变化 → 就地 `setLevel`（#165 收口），**不重建**。
+   *
+   * 依据是 live 读数而不是对称性：`scripts/probe-165-level-effect.mts` 在 4.0.5 上读到
+   * `setLevel(-50)` 之后 `getLevel()` 读回 `-50`，且 `getData()` 里**每一个**要素的
+   * `zIndex` 都从 `-99` 变成 `-50`——它真的驱动了渲染，不是只改图层自己的内部字段。
+   * 此前 descriptor 把它归在构造期，于是这一条 prop 变化会重建整个图层（把已画好的要素
+   * 全部拆掉重做），代价与 `setData` 那条同量级，却换不来任何额外效果。
+   */
+  it("geojson：level 变化 → setLevel 就地更新，不重建", async () => {
+    const { wrapper, setProp } = await mountOneLayer(4);
+    await setProp({ level: -50 });
+    expect(createdSince(), "level 变化不该重建图层").toBe(1);
+    expect(harness.layerCalls(-1)).toContain("setLevel");
+
+    // 回到默认值同样走同一条入口（不是「构造期」）
+    await setProp({ level: -99 });
+    expect(createdSince()).toBe(1);
+    expect(harness.layerCalls(-1).filter((c) => c === "setLevel")).toHaveLength(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("geojson level 更新");
+  });
+
   it("dom：data 变化 → setData；null → removeAllOverlays（权威入口），都不重建", async () => {
     const { wrapper, setProp } = await mountOneLayer(5);
     await setProp({ data: { type: "FeatureCollection", features: [] } });

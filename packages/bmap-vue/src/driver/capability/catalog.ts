@@ -400,6 +400,41 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
+  // ⚠️ **不要**在这里为 `FeatureLayer` 增加能力项（#165 收口，实测裁决：不加）。
+  //
+  // 三方分歧与逐条读数（live AK / headless Chrome，`scripts/probe-165-feature-layer.mts`，
+  // `BMap.version === "gl"`，SDK 4.0.5；补齐等待 `settled=true`、0ms 后取样）：
+  //
+  // | 来源 | 说法 |
+  // | --- | --- |
+  // | `@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`，207 个 `.d.ts`） | **零命中** |
+  // | 官方 React 参考 `react-bmap` master `fde5bbd` | 有 `src/components/Layer/FeatureLayer.tsx` + `createFeatureLayer` 工厂 |
+  // | 官方 Vue 参考 `vue-bmap` master `ffc6dad` | **没有** `FeatureLayer` 组件（`src/components/Layer/` 下只有 `index.ts`） |
+  // | 运行时 | `typeof BMap.FeatureLayer === "undefined"`；`BMap` 上不是自有属性；`new BMap.FeatureLayer({})` 抛 `is not a constructor` |
+  //
+  // ⇒ **不封装**。理由不是「参考实现不算证据」这句原则本身，而是三条**可复核**的读数：
+  //
+  // 1. 运行时根本没有这个构造器（补齐之后仍然没有，不是取样错位——同一轮等待
+  //    `GeoJSONLayer` / `NormalLayer` 都判定为 settled，所以「缺席」有资格成立）；
+  // 2. 它与 `BMap.NormalLayer` **没有任何关系**：`FeatureLayer === NormalLayer` 为 false，
+  //    两者都不可用/可用分别成立，`NormalLayer.prototype` 的 39 个成员里没有 `FeatureLayer`
+  //    的痕迹（官方 React 参考的组件文件头「继承 NormalLayer」只是一句注释，运行时无从印证）；
+  // 3. 参考实现自己的**能力矩阵**里就没有 `FeatureLayer`
+  //    （`src/drivers/capabilityMatrix.ts` 的 `V4_LAYER_CLASS` 逐条读过，零命中），
+  //    而 `createLayerFactory` 第一行就是 `if (!capabilities.has(cap)) return null`
+  //    ⇒ `createFeatureLayer` 在参考实现内部是**不可达的死代码**，永远返回 `null`。
+  //    它的选项类型也是这一段里**唯一**写成 `unknown` 的（邻居都有具名 options 接口）。
+  //
+  // 为一条永远为 false 的能力登记条目，比不登记更坏：`supports("layer.feature")` 会开始
+  // 回答一个恒定的值，能力矩阵里多一行需要长期维护的假事实。因此**只留注释**。
+  //
+  // 顺带一条**范围更大的**事实（同样实测）：`BMap.NormalLayer` 在运行时**存在**
+  // （原型 39 个成员，含 `isNormalLayer` / `setOpacity` / `setZIndex` / `pick` / `onAdd`），
+  // 但官方类型包里**也没有 `class NormalLayer`**（`layer/NormalLayer.d.ts` 只有
+  // `NormalLayerEventMap` / `NormalLayerPickEvent` 等接口）。⇒「类型包没有」**不等于**
+  // 「运行时没有」；反过来「运行时没有」也不能反推类型包。本库不因此新增 `layer.normal`
+  // （没有组件消费它，且 `NormalLayer` 是**要自己继承实现**的基类，不是一个可直接实例化的
+  // 数据图层），这一条同样只作为口径记录在此。
   "layer.geojson": {
     id: "layer.geojson",
     family: "layer",

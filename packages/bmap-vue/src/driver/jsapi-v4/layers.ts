@@ -180,7 +180,19 @@ const LAYER_DESCRIPTORS = {
     ctorSlots: ["minZoom", "maxZoom", "data"],
     ctorSlotKeys: { data: "dataSource" },
     aliases: {},
-    mutable: {},
+    // `level` 是**就地更新**（#165 收口）。它此前是「没有写理由的缺席」：`setLevel` 在官方
+    // 声明上（`layer/GeoJSONLayer.d.ts`），而这里的 `mutable` 是空的，于是 prop 变化一律
+    // 走重建。live 读数（`scripts/probe-165-level-effect.mts`，4.0.5，headless Chrome）证明
+    // 它**可观测地生效**——`setLevel(-50)` 之后 `getLevel()` 读回 `-50`，且 `getData()` 里
+    // **每一个**要素的 `zIndex` 都从 `-99` 变成 `-50`（两块面 + 一条线，构造器名 `lp` / `b4`）。
+    // 即它不是只改图层自己的内部字段，而是逐个透传给解析出的覆盖物，与官方 skill
+    // `references/data-layers.md`「层级值原样透传给每个解析出的覆盖物的 setZIndex」一致。
+    // 取值域**未观察到裁剪**（0 / 2000 / 1.5 都照收），官方注释的「负数越大层级越高」是语义
+    // 描述而非取值约束，因此这里不做任何范围校验。
+    //
+    // 对照：`minZoom` / `maxZoom` **仍然**留在 `ctorSlots`（重建）——同一支探针读到
+    // `hasSetMinZoom=false` / `hasSetMaxZoom=false`，运行时根本没有这两个 setter。
+    mutable: { level: "setLevel" },
     bagSetters: {},
     clearEntry: "clearData",
     operations: ["setData", "clearData"],
