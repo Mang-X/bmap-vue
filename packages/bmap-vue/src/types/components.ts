@@ -223,6 +223,33 @@ export interface MarkerCustomIcon {
 
 export type MarkerIcon = MarkerIconName | MarkerCustomIcon
 
+/**
+ * 锚点：官方 `const/Anchor.d.ts` 的九个 `BMAP_ANCHOR_*` 常量，**按名字**表达。
+ *
+ * **单一事实源是 `driver/types/overlays.ts` 的 `OverlayAnchorName`**（本文件只做别名，
+ * 不重复声明那份九元联合）——两张手写名单一旦漂移，`<Label>` 与 `<ZoomControl>` 会在同一个
+ * 锚点名上落到不同的角。「为什么是常量名而不是 `0`–`8` 的裸数字」与 live 读数见那里。
+ *
+ * ⚠️ 与 `CustomOverlay.anchor` **不是同一件事**：那个是「左上角 `(0,0)`、右下角 `(1,1)`」
+ * 的**归一化比例**（官方 `anchors: [x, y]`），和九个枚举锚点没有换算关系。名字撞了而已。
+ */
+export type { OverlayAnchorName as OverlayAnchor } from "../driver/types/overlays";
+/** 同上的**本文件内**别名（`export … from` 不把名字带进本模块作用域）。 */
+type OverlayAnchor = import("../driver/types/overlays").OverlayAnchorName;
+
+/**
+ * `<Marker label>` 收的**本库领域形状**的文本标注（issue #165 第三批）。
+ *
+ * **单一事实源是 `driver/types/overlays.ts` 的 `MarkerLabelInput`**（本文件只做别名）。
+ * 官方 `MarkerOptions.label` 的类型是 `BMap.Label`（raw SDK 对象），而本库组件面
+ * **不构造** SDK 对象（AGENTS.md 的 raw SDK 边界），因此这里只声明**本库这一侧需要的字段**，
+ * Driver 在边界内 `new BMap.Label(content, opts)` 造出 SDK 对象再 `setLabel` 下去。
+ * 释放路径、以及为什么**不**复用 `LabelProps` 本身，逐条见 `MarkerLabelInput` 的注释。
+ */
+export type { MarkerLabelInput as MarkerLabelSpec } from "../driver/types/overlays";
+/** 同上的**本文件内**别名（`export … from` 不把名字带进本模块作用域）。 */
+type MarkerLabelSpec = import("../driver/types/overlays").MarkerLabelInput;
+
 export interface MarkerProps {
   position: { lng: number; lat: number };
   offset?: { x: number; y: number };
@@ -272,6 +299,54 @@ export interface MarkerProps {
   isTop?: boolean;
   /** 是否限制拖拽区域（官方 `restrictDraggingArea`，`@default false`）。无 setter ⇒ 改它会重建实例。 */
   restrictDraggingArea?: boolean;
+
+  /* --- issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个没有出口的 ---
+   *
+   * 逐条对应 `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/MarkerOptions.d.ts`：
+   * 补完这三个，官方 16 个键**全部**有了出口（`anchor` 早就在描述符里，但组件面一直没有 prop，
+   * 见下面的 `LabelProps.anchor` 一节——同一个洞的两处）。
+   *
+   * ⚠️ 三个**不是**同一个分类，这是本节最要紧的一条：
+   * `label` 有成对的 `setLabel` / `getLabel`（`overlay/Marker.d.ts:110` / `:115`）⇒
+   * **`mutable`**；另两个在 `Marker.d.ts` 的成员表与整条运行时原型链上都**没有**任何入口
+   * ⇒ **`recreate`**。逐条 live 读数见
+   * `tests/behavior/marker-label-cluster-options.test.ts` 的文件头表格。
+   */
+
+  /**
+   * 标注自带的文本标注（官方 `label`）。**可就地更新**。
+   *
+   * 官方 `MarkerOptions.label` 的类型是 `BMap.Label`（一个 raw SDK 对象），
+   * 而本库**不构造 SDK 对象**（raw SDK 边界规则）——因此这里收的是**本库领域形状**
+   * （与 `<Label>` 的 props 同构：`content` / `position` / `offset` / `style` / `zIndex` /
+   * `enableMassClear`），Driver 在边界内把它变成 SDK 的 `BMap.Label` 并调 `setLabel`。
+   *
+   * ## 为什么不用 `setLabel` 的命令面表达
+   *
+   * `markerSpec.ts` 的命令面注释里写明「`setLabel(label)` / `getLabel()` **刻意不暴露**」，
+   * 那条理由是**入参 / 返回值都是 raw `BMap.Label`**。prop 走的是另一条路：入参是本库
+   * 领域形状（不越界），返回值不需要（`setLabel` 是**写**，`getLabel` 是读回，组件永不替
+   * 调用方读）。因此本 prop **不是**对那条裁决的反例——它没有把 raw 对象交给调用方。
+   */
+  label?: MarkerLabelSpec;
+  /**
+   * 是否自动跟随地图旋转角度联动（官方 `autoFollowHeadingChanged`，`@default false`）。**构造期**。
+   *
+   * 官方 `Marker.d.ts` 的成员表里**没有** `setAutoFollowHeadingChanged`；live 读数（settle 之后）
+   * 它也**不在** `BMap.Marker.prototype` 的任何一层（layer = -1）⇒ 改它会重建实例。
+   *
+   * ⚠️ 官方默认 `false`，`Boolean` prop 未给时 Vue 会编出 `false`——值一致但**来源不同**，
+   * 因此 `withDefaults` 里必须写显式 `undefined`（否则传 `:auto-follow-heading-changed="undefined"`
+   * 会触发一次内容完全没变的重建）。
+   */
+  autoFollowHeadingChanged?: boolean;
+  /**
+   * 图标的入场动画名称（官方 `startAnimation`）。**构造期**。
+   *
+   * 官方没有声明任何候选动画名，`Marker.d.ts` 上也没有 `setStartAnimation`
+   * （live：整条原型链 layer = -1）⇒ 收**普通 `string`**（不臆造枚举）+ 改它会重建实例。
+   */
+  startAnimation?: string;
 }
 
 /**
@@ -747,6 +822,43 @@ export interface LabelProps {
   style?: LabelStyle;
   enableMassClear?: boolean;
   visible?: boolean;
+  /* --- issue #165 第三批：官方 `LabelOptions` 7 个键里最后两个没有出口的 ---
+   *
+   * ⚠️ **`anchor` 是遗漏，不是收窄**：Driver 的 `OVERLAY_DESCRIPTORS.label` **早就**登记了
+   * `anchor: mutateBy("setAnchor", { ctorKey: "anchor" })`——但 `LabelProps` 里从来没有这个键，
+   * `labelSpec.ts` 的 `LABEL_FIELDS` 也没有。描述符说有、组件从不暴露 ⇒ 那条更新路径
+   * **一次都没被触发过**。这正是「描述符 ≠ 公共出口」必须被用例盯住的原因
+   * （`overlay-suite.test.ts` 的键集交叉校验覆盖的是「已声明的键」，管不到「描述符有、
+   * 组件没有」这个方向——本条是它的一个真实漏网案例）。
+   */
+
+  /**
+   * 文本标注的锚点（官方 `LabelOptions.anchor`，`@default BMAP_ANCHOR_TOP_LEFT`）。**可就地更新**。
+   *
+   * 官方 `Label.d.ts` 声明了 `setAnchor(anchor: ControlAnchor): void` / `getAnchor()`；
+   * live 读数（2026-09-27，settle 之后）判它是**可观察地生效**：同一经纬度上默认 /
+   * `BMAP_ANCHOR_BOTTOM_CENTER` / `BMAP_ANCHOR_BOTTOM_LEFT` 三个 Label 的 DOM 位置分别是
+   * `(top 90, left 263)` / `(69, 217)` / `(69, 263)`（锚点决定标注相对地理点的角点），
+   * 对第二个调 `setAnchor(BMAP_ANCHOR_TOP_LEFT)` 之后**移回 `(90, 263)`**
+   * ⇒ 判 `mutable` 成立，改它**不换实例**。
+   *
+   * 取值是**官方常量名**（见 `OverlayAnchor` 的理由；控件那一族早就是这个口径）。
+   */
+  anchor?: OverlayAnchor;
+  /**
+   * 文本标注的宽度（像素，官方 `LabelOptions.width`，`@default 0` = 按内容自适应）。**构造期**。
+   *
+   * 官方 `Label.d.ts` 的成员表里**没有** `setWidth` / `getWidth`；live 读数（settle 之后）
+   * 确认它**不在** `BMap.Label.prototype` 的任何一层（layer = -1，真调一次抛
+   * `setWidth is not a function`）⇒ 改它会重建实例。
+   *
+   * 构造期它**确实生效**（live：不给时 DOM `width: 14px` 按内容自适应，给 `77` 时 `77px`）
+   * ——所以这是「构造期可用」，不是「不可实现」。
+   *
+   * ⚠️ 不给 `withDefaults` 缺省：官方默认 `0`，而「未给」与「显式 0」在 SDK 侧等价，
+   * 补 `0` 只会让「用户没表态」与「用户要求自适应」在构造 options 里分不开。
+   */
+  width?: number;
 }
 
 /**
@@ -2187,7 +2299,97 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
    * 因此这里如实收成开放记录，而不是本库臆造一套字段名。
    */
   singleStyle?: Record<string, unknown>;
+
+  /* --- issue #165 第三批：官方 `ClusterLayerOptions` 里另外六个聚合/交互选项 ---
+   *
+   * 这六个此前**没有**任何书面理由被省略，而它们同族的另外六个（上面那批）就在同一个
+   * props 接口里——「同族的一半有一半没有」本身就是遗漏的形状，因此本批补齐。
+   * 逐条对应官方 4.0.5 的 `visualization/ClusterLayer.d.ts` 的 `ClusterLayerOptions`。
+   *
+   * ## ⚠️ 六个**全部**是**构造期**（`recreate`），尽管官方有公开的 `setOptions`
+   *
+   * live 读数（真实 AK + headless Chrome，2026-09-27）显示 `setOptions({ clusterRadius:
+   * 20 → 300 })` 之后同一实例的 `change` 事件簇数**确实**从 3 变 1，**不必**再 `redraw()`。
+   * 看着够格叫 `mutable`，但本库不这么判，三条理由：
+   *
+   * 1. `setOptions` 是**整袋**入口，官方对它的描述是「批量更新配置/样式」——
+   *    它不是为「只改其中一个键」设计的公开逐字段通道；
+   * 2. **它顺带覆盖样式**：本库的 `setStyle` 也落到 `setOptions`
+   *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 是整袋替换。
+   *    两条通道共用一个成员，认成 `mutable` 会让「聚合参数」与「样式」互相踩。
+   * 3. 与本票已落地的 21 个图形族构造期选项**同一口径**（`driver/types/overlays.ts` 的
+   *    `PATH_CTOR_*`）：判据是「有没有**公开的逐字段更新入口**」，`setOptions` 不满足。
+   *
+   * ⇒ 结果与同族既有六项一致（「一致」本身就是判据：一个族里出现两种策略、而差异只源于
+   * 「本库碰巧有个同名 prop」，那才是需要解释的异常）。
+   *
+   * ## 刻意**不加**的（各带理由，`tests/behavior/marker-label-cluster-options.test.ts` 有门禁）
+   *
+   * - `minZoom` / `maxZoom`：官方 `ClusterLayerOptions` **确实**声明了它们，但官方
+   *   `ClusterLayer` 上**没有** `setZoomRange` / `setMinZoom` / `setMaxZoom`
+   *   （live：整条原型链 layer = -1）⇒ 收下就是「改 prop 悄悄不生效」。与 `<PointLayer>` /
+   *   `<HeatmapLayer>` 早已有的同一裁决一致。
+   * - `enablePicked` / `mouseStyleChange` / `pickTolerance`：拾取面是 native 引擎的**内部
+   *   决策**（`enablePicked: true` 硬编码，理由见 `components/data/nativeClusterEngine.ts`
+   *   文件头）。官方确实**有** `setEnablePicked`（live：原型链 layer 0），但本库**没有**
+   *   「关掉拾取」的消费者——那会让 `cluster-click` 永远不触发（自断交互），
+   *   按 #104「没有消费者的扩展面一律不加」否决。
+   */
+
+  /**
+   * 瓦片尺寸，**参与半径归一化**（官方 `tileSize`，`@default 256`）。只在 `engine: "native"` 下生效。
+   *
+   * live 读数（2026-09-27）：它**确实生效**——同样 `clusterRadius: 300`、只把 `tileSize`
+   * 从 256 改成 1024，三团近点的簇数从 **1 变 2**（官方原文「参与半径归一化」）。
+   * 但没有逐字段 setter（`setZoomRange` / `setMinZoom` / `setMaxZoom` 整条链 layer = -1）⇒ 构造期。
+   */
+  tileSize?: number;
+  /**
+   * 调整视野的边距 `[上, 右, 下, 左]`（官方 `fitViewMargin`，`@default [12,12,12,12]`）。
+   *
+   * 只在 `fitViewOnClick` 为真（官方默认）时才有意义。构造期。
+   */
+  fitViewMargin?: [number, number, number, number];
+  /**
+   * 拖动 / 缩放过程中是否**实时刷新**（官方 `updateRealTime`，`@default false`）。构造期。
+   *
+   * ⚠️ 官方默认 `false` 而 Vue 的 `Boolean` prop 未给时是 `false`——值一致但**来源不同**。
+   * `withDefaults` 里必须写显式 `undefined`，否则传 `:update-real-time="undefined"`
+   * 会触发一次内容完全没变的重建（本 ticket 已踩三次这个陷阱）。
+   */
+  updateRealTime?: boolean;
+  /**
+   * 实时刷新的节流间隔（毫秒，官方 `waitTime`，`@default 300`）。只在 `updateRealTime`
+   * 为真时有意义。构造期。
+   */
+  waitTime?: number;
+  /**
+   * 聚合点图标：`(properties) => 图标源`（官方 `clusterIcon`）。不设时用内置气泡
+   * （按占比着色 + 数字）。构造期。
+   *
+   * 图标源按官方 `PointLayer`'s `PointIconSource` 建模：`string`（URL）/
+   * `HTMLCanvasElement` / `{ canvas, id? }`。官方那一侧的声明是 `PointIconSource`
+   * （`visualization/PointLayer.d.ts:33`），本库**不构造** `HTMLCanvasElement` 之外的 SDK 对象，
+   * 因此类型如实跟随。
+   */
+  clusterIcon?: (properties: Record<string, unknown>) => ClusterPointIconSource;
+  /**
+   * 聚合点图标尺寸：`(properties) => [w, h] | number`（官方 `clusterIconSize`）。构造期。
+   *
+   * live 读数确认 SDK **真的留着**这个回调（构造传入后
+   * `getOptions().clusterIconSize({})` 返回闭包里的值）——不是被收下就静默忽略。
+   */
+  clusterIconSize?: (properties: Record<string, unknown>) => [number, number] | number;
 }
+
+/**
+ * 聚合点图标的来源（官方 `PointIconSource`，`visualization/PointLayer.d.ts:33`）。
+ *
+ * 官方那一侧的声明是 `string | HTMLCanvasElement | { canvas: HTMLCanvasElement; id?: … }`。
+ * 本库**原样**跟随——`HTMLCanvasElement` 是**平台类型**（不是 `BMap.*`），不构成 raw SDK
+ * 越界，`{ canvas }` 那个变体也仍然是普通 JS 对象。
+ */
+export type ClusterPointIconSource = string | HTMLCanvasElement | { canvas: HTMLCanvasElement; id?: string | number };
 
 /**
  * 簇点击载荷（`MarkerCluster` 的 `cluster-click`）。

@@ -49,7 +49,9 @@ import type {
   InfoWindowOptions,
   LabelOptions,
   MarkerIconInput,
+  MarkerLabelInput,
   MarkerOptions,
+  OverlayAnchorName,
   OverlayDescriptor,
   OverlayDriver,
   OverlayKind,
@@ -58,6 +60,7 @@ import type {
   OverlayTarget,
   PathOptions,
 } from "../types/overlays";
+import { ANCHOR_VALUES } from "./controls";
 import {
   OVERLAY_DESCRIPTORS,
   mutableSetter,
@@ -267,6 +270,67 @@ export function createJsapiV4OverlayDriver(
     return iconCache.get(descriptor, () => constructIcon(descriptor));
   };
 
+  /**
+   * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（issue #165 第三批）。
+   *
+   * ## 为什么必须在这一层构造
+   *
+   * 官方 `MarkerOptions.label` / `Marker#setLabel(label: Label)` 的类型是 `BMap.Label`
+   * ——一个 raw SDK 对象。组件面**不构造** SDK 对象（AGENTS.md 的 raw SDK 边界），
+   * 因此这个 `new BMap.Label(...)` 只能发生在 Driver 边界内；组件传领域形状（`MarkerLabelInput`）。
+   * 若把领域对象原样递下去（`value: "raw"` 的后果），官方读到的是普通 JS 对象，
+   * 标注**不显示且不报错**——那是最难排查的一类静默失败。
+   *
+   * ## 释放路径：为什么这个 Label **不**登记进 Registry
+   *
+   * 从属 Label 随 Marker 一起被 `map.removeOverlay(marker)` 释放（官方语义：Label 挂在
+   * Marker 上时不需要独立 `addOverlay`），因此**不另建** registration——那会造出第四种
+   * 「谁负责摘它」的答案（Marker 摘 / 用户摘 / Registry 摘 / 谁都不摘）。
+   * 换 Marker 实例时旧 Label 随旧 Marker 一起消失，与 `Marker#icon` 的处理同一条口径。
+   *
+   * ## 没有缓存（与 `iconFor` 相反）
+   *
+   * `Icon` 是**纯值对象**、可安全共享；`Label` 有可变面（`setContent` / `setPosition` …）
+   * 且**一个 Label 只属于一个 Marker**——共享实例会让「改了 A 的标注，B 的也跟着变」。
+   * 因此每次都新建。这也意味着 `projectOptions` 每次调用会产生新实例：官方只在**构造时**
+   * 读一次 `label`，不会反复调，所以不构成问题（与 `GroundOverlay.url` 的投影同一注意事项）。
+   */
+  const markerLabelFor = (spec: MarkerLabelInput): unknown => {
+    const Label = namespaceCtor(namespace, "Label");
+    const opts: Record<string, unknown> = {};
+    if (spec.position !== undefined) opts.position = geometry.toRawPoint(spec.position);
+    if (spec.offset !== undefined) opts.offset = rawSize(spec.offset);
+    if (spec.style !== undefined) opts.styles = spec.style;
+    return new Label(spec.content, opts);
+  };
+
+  /**
+   * 锚点的**官方常量名** → 官方数值（issue #165 第三批）。
+   *
+   * 复用控件那一族的**同一张** `ANCHOR_VALUES`（`driver/jsapi-v4/controls.ts` 把它导出在这里
+   * 共享，见该常量旁的注释）。刻意**不**另抄一份：两张表一旦漂移，同一个 `anchor` 名在
+   * `<ZoomControl>` 与 `<Label>` 上会落到不同的角——那是肉眼几乎发现不了的 bug。
+   *
+   * ⚠️ 与控件的 `resolveAnchor` 有一处**故意的**差别：控件只接受四角（官方 4.0 的控件会
+   * 把 `TOP_CENTER` 之类**静默回落**到默认落点），因此它对非四角会告警；覆盖物的
+   * `setAnchor` / `LabelOptions.anchor` 接受**全部九个**（官方 `ControlAnchor` 就是九元联合，
+   * `Label` 的 `setAnchor` 文档示例正是 `BMAP_ANCHOR_BOTTOM_CENTER`），所以这里**不**告警。
+   * 真正无法换算的（不认识的名字）两条路径同样处理：告警一次 + **不透传**。
+   */
+  const anchorFor = (anchor: OverlayAnchorName): unknown => {
+    const value = ANCHOR_VALUES[anchor];
+    if (value === undefined) {
+      warnOnce(
+        `anchor:unknown:${anchor}`,
+        `OverlayDriver: 不认识的锚点 "${anchor}"；JSAPI 4.0 的锚点是官方常量名（` +
+          "BMAP_ANCHOR_TOP_LEFT / TOP_CENTER / CENTER / BOTTOM_CENTER …），本次取值已忽略，" +
+          "该属性沿用 SDK 自身默认锚点",
+      );
+      return undefined;
+    }
+    return value;
+  };
+
   /** 领域值 → v4 构造参数 / setter 入参。 */
   const normalize = (spec: OverlayPropertySpec, value: unknown): unknown => {
     switch (spec.value) {
@@ -288,6 +352,10 @@ export function createJsapiV4OverlayDriver(
         return rawSize(value as Pixel);
       case "icon":
         return iconFor(value as MarkerIconInput);
+      case "marker-label":
+        return markerLabelFor(value as MarkerLabelInput);
+      case "anchor":
+        return anchorFor(value as OverlayAnchorName);
       default:
         return value;
     }
@@ -324,7 +392,13 @@ export function createJsapiV4OverlayDriver(
         continue;
       }
       if (spec.ctorKey == null) continue;
-      projected[spec.ctorKey] = normalize(spec, value);
+      const normalized = normalize(spec, value);
+      // ⚠️ **归一化可能「拒绝」这个值**（`anchorFor` 对不认识的常量名告警并给 `undefined`）。
+      // 拒绝的键**必须整个不出现**——把 `anchor: undefined` 塞进构造 options 与「键不存在」
+      // 在 SDK 侧不是一回事：前者会让官方读到「用户显式要求了一个无意义的值」。
+      // 与控件 Driver 的 `if (anchor !== undefined)` 同款守卫（同一条 `ANCHOR_VALUES`）。
+      if (normalized === undefined) continue;
+      projected[spec.ctorKey] = normalized;
     }
     return projected;
   };
@@ -365,8 +439,16 @@ export function createJsapiV4OverlayDriver(
         { engine: "jsapi-v4" },
       );
     }
-    const args = [normalize(spec, value), ...(spec.valueArgs ?? [])];
-    sdkCall(setter, () => callRequired(raw, setter, ...args));
+    // ⚠️ 归一化「拒绝」这个值时**不调 setter**（同 `projectOptions` 的守卫与理由：
+    // `anchorFor` 对不认识的常量名告警并给 `undefined`；调 `setAnchor(undefined)` 是
+    // 「把一个无意义的值写进 SDK」，而不是「沿用默认」——与控件 Driver 的
+    // `if (anchor !== undefined)` 同款）。
+    //
+    // 判据是**归一化后**的入参而不是原值：`normalize` 只可能因为「拒绝」才返回 `undefined`
+    //（`raw` 一路原样返回，调用方传进来什么就是什么），因此这一条只会在拒绝发生时命中。
+    const normalized = normalize(spec, value);
+    if (normalized === undefined) return;
+    sdkCall(setter, () => callRequired(raw, setter, normalized, ...(spec.valueArgs ?? [])));
   };
 
   /** 位置类更新用的语义键：圆是 `center`（setCenter），其余是 `position`。 */

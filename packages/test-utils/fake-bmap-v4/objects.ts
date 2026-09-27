@@ -497,6 +497,29 @@ export class FakeV4Marker extends FakeV4Overlay {
   }
 
   /**
+   * 官方 `Marker#setLabel(label: Label): void` / `#getLabel(): Label`（#165 第三批）。
+   *
+   * 此前替身**没有**这两个成员，于是 `<Marker label>` 的 `mutable` 路径在本库里**测不到**：
+   * `OverlayDriver.setOptions` 撞到「声明为 mutable 但当前实例没有该方法」只会告警一次
+   * 然后忽略（见 `driver/jsapi-v4/overlays.ts`）——那是一条**静默**路径，而替身比真实窄
+   * 就会把「它真的生效」变成「没人验证过」。
+   *
+   * `label` 存的是**入参原样**（真实 SDK 收到的是 Driver 在边界内造的 `BMap.Label`），
+   * 断言因此可以读 `label` 的内容来确认「换的是新值」，与真实链路上 `getLabel()` 的
+   * 可观察效果同构。
+   */
+  label: unknown = null
+
+  setLabel(label: unknown): void {
+    this.callLog.push('setLabel')
+    this.label = label
+  }
+
+  getLabel(): unknown {
+    return this.label
+  }
+
+  /**
    * 官方 `Marker#closePlaceDetail(): void`。
    *
    * 配套的 `openPlaceDetail(placeDetail)` **刻意不建模**：它的入参是 raw

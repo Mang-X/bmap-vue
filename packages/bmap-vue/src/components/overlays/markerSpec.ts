@@ -47,6 +47,13 @@ export const MARKER_FIELDS: OverlayFieldMap<MarkerProps> = {
   draggingCursor: "recreate",
   isTop: "recreate",
   restrictDraggingArea: "recreate",
+  // issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个。
+  // ⚠️ 三个**不是**同一个分类：`label` 有成对的 `setLabel` / `getLabel`
+  // （`overlay/Marker.d.ts:110` / `:115`，live 实测可观察地生效）⇒ `options`（就地换标注）；
+  // 另两个在成员表与整条运行时原型链上都没有任何入口 ⇒ `recreate`。
+  label: "options",
+  autoFollowHeadingChanged: "recreate",
+  startAnimation: "recreate",
   visible: "visibility",
 };
 
@@ -121,6 +128,11 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
         draggingCursor: p.draggingCursor,
         isTop: p.isTop,
         restrictDraggingArea: p.restrictDraggingArea,
+        // `label` 是**领域形状**，Driver 在边界内造 `BMap.Label`（组件面不构造 SDK 对象）。
+        // `autoFollowHeadingChanged` / `startAnimation` 是构造期选项，同样原样透传。
+        label: p.label,
+        autoFollowHeadingChanged: p.autoFollowHeadingChanged,
+        startAnimation: p.startAnimation,
       }),
 
     /**

@@ -287,8 +287,15 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 - **`data = null` 的代价是一次重建**：官方专页这一族没有公开的清空入口（见「释放策略」的注），
   因此「没有数据」只能用「换一个没有数据的实例」表达。它是离散动作、代价可控，但**不是零成本**；
   需要「临时不显示」的用 `visible`（不要用 `data = null`）。
-- **`HeatmapLayer` 的 `style` 是原样透传的键值袋**：官方扩展 API 只公开整袋 `setOptions`，没有可
-  核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `LineLayer` / `FillLayer`。
+- **`HeatmapLayer` 的 `style` 是原样透传的键值袋，组件面刻意只暴露 `data` / `style` / `visible`**：
+  官方 `HeatmapOptions` 确实声明了 `gradient` / `size` / `unit` / `max` / `min` /
+  `weightField` 等一批构造选项（4.0.5 已补上类声明），但它们**没有逐字段的更新入口**：
+  官方 `Heatmap` 的成员表只为其中**两个**声明了字段级 setter —— `setGradient(gradient)` 与
+  **`setRadius(radius)`**（注意 setter 名是 `setRadius`、构造键名却是 `size`，按名字推导的
+  更新通道会直接打空）；`size` / `unit` / `min` / `max` / `weightField` 五个在真实运行时的
+  原型链上**任何一层都没有**对应方法（live 读数，2026-09-27，settle 之后）。而 `style` 这个
+  整袋口（官方 `setOptions`）**已经能到达全部六个**——再开六个逐项 prop 等于给同一个值开两条
+  通道，其中一条还没有独立的存在理由。需要强类型样式请用 `LineLayer` / `FillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
 - **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）已由 #110 落地，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。

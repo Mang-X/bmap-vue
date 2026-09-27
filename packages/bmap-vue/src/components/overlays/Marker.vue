@@ -47,6 +47,11 @@ const props = withDefaults(defineProps<MarkerProps>(), {
   raiseOnDrag: undefined,
   isTop: undefined,
   restrictDraggingArea: undefined,
+  // issue #165 第三批补的第四个「官方默认恰好是 false」的 `Boolean`：
+  // `MarkerOptions.autoFollowHeadingChanged`（`@default false`，`overlay/MarkerOptions.d.ts:88`）。
+  // 上面那段关于「值一致但来源不同」「显式 `undefined` 让『没给』只有一个表示」的推理逐字适用，
+  // 因此不重复一遍。`startAnimation` / `label` **不是** `Boolean` ⇒ 没有这个陷阱。
+  autoFollowHeadingChanged: undefined,
 });
 
 const emit = defineEmits<MarkerEmits>();

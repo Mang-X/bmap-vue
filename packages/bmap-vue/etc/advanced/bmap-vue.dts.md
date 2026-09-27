@@ -475,6 +475,8 @@ export declare interface LabelOptions {
     zIndex?: number;
     style?: Record<string, unknown>;
     enableMassClear?: boolean;
+    anchor?: OverlayAnchorName;
+    width?: number;
     [key: string]: unknown;
 }
 export declare interface LayerCreateOptions extends Record<string, unknown> {
@@ -650,6 +652,12 @@ export declare type MarkerIconInput = string | {
     imageSize?: Size;
     printImageUrl?: string;
 };
+declare interface MarkerLabelInput {
+    content: string;
+    position?: Point;
+    offset?: Pixel;
+    style?: Record<string, unknown>;
+}
 export declare interface MarkerOptions {
     offset?: Pixel;
     title?: string;
@@ -658,6 +666,9 @@ export declare interface MarkerOptions {
     rotation?: number;
     enableClicking?: boolean;
     enableDragging?: boolean;
+    label?: MarkerLabelInput;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
     [key: string]: unknown;
 }
 export declare interface MarkerReadBackApi {
@@ -748,6 +759,7 @@ export declare interface OfficialJsapiLoadOptions {
     readonly serviceHost?: string;
 }
 export declare type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
+declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;

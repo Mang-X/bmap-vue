@@ -66,7 +66,37 @@ export interface MarkerOptions {
   rotation?: number;
   enableClicking?: boolean;
   enableDragging?: boolean;
+  /* --- issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个（此前没有出口）---
+   *
+   * `label` 收的是**本库领域形状**而不是 raw `BMap.Label`：组件面**不构造 SDK 对象**
+   * （AGENTS.md 的 raw SDK 边界），Driver 在边界内把它变成 `BMap.Label` 再交给构造器 /
+   * `setLabel`。三个键的分类逐条依据见 `OVERLAY_DESCRIPTORS.marker`。
+   */
+  /** 标注自带的文本标注（**领域形状**；Driver 负责造 `BMap.Label`）。可**就地更新**。 */
+  label?: MarkerLabelInput;
+  /** 是否自动跟随地图旋转角度联动（`@default false`）。**构造期**。 */
+  autoFollowHeadingChanged?: boolean;
+  /** 图标的入场动画名称（官方未声明候选值，收普通 `string`）。**构造期**。 */
+  startAnimation?: string;
   [key: string]: unknown;
+}
+
+/**
+ * `<Marker label>` 在 Driver 边界上的**领域形状**（issue #165 第三批）。
+ *
+ * 与 `types/components.ts` 的 `MarkerLabelSpec` 同形，两处分开放是因为这里要额外声明
+ * `value` 归一化所需的几何类型（`Point` / `Pixel`）——组件层用 `{ lng, lat }` / `{ x, y }`。
+ *
+ * ⚠️ 它**不是** `LabelHandle` 也不是 raw `BMap.Label`：Driver 会为它建一个**从属**的
+ * SDK `BMap.Label`，随 Marker 一起被 `removeOverlay` 释放（`BMap.Label` 挂在 Marker 上时
+ * 不需要独立 `addOverlay`）——因此本库**不**为它建 Registry 记账，那会造出一个
+ * 「谁负责摘它」的第四种答案。
+ */
+export interface MarkerLabelInput {
+  content: string;
+  position?: Point;
+  offset?: Pixel;
+  style?: Record<string, unknown>;
 }
 
 export interface PathOptions {
@@ -179,8 +209,42 @@ export interface LabelOptions {
   zIndex?: number;
   style?: Record<string, unknown>;
   enableMassClear?: boolean;
+  /* --- issue #165 第三批：官方 `LabelOptions` 7 个键里最后两个（此前没有出口）---
+   *
+   * ⚠️ `anchor` 此前**已经在** `OVERLAY_DESCRIPTORS.label` 里登记为
+   * `mutateBy("setAnchor", …)`，但 `LabelOptions` 没有对应字段、组件面也没有 prop ⇒
+   * 那条更新路径**一次都没被触发过**。这里补的是**类型**与**组件出口**，不是新能力。
+   * live 读数（2026-09-27，settle 之后）判 `setAnchor` **可观察地生效**（DOM 角点随锚点移动）
+   * ⇒ `mutable` 成立。
+   */
+  /** 锚点，**官方常量名**（`BMAP_ANCHOR_*` 九选一；Driver 内换成官方数值）。可**就地更新**。 */
+  anchor?: OverlayAnchorName;
+  /** 文本宽度（像素，`@default 0` = 按内容自适应）。**构造期**（官方无 `setWidth`）。 */
+  width?: number;
   [key: string]: unknown;
 }
+
+/**
+ * 锚点的**官方常量名**（`const/Anchor.d.ts` 的九个 `BMAP_ANCHOR_*`）。
+ *
+ * 收**名字**而不是数值：九个数里 `0`（`TOP_LEFT`）/ `6`（`CENTER`）/ `8`（`BOTTOM_CENTER`）
+ * 在业务上完全不同，而官方 `ControlAnchor` 就是那九个 `declare const` 的字面量联合。
+ * 换算复用控件那一族的**同一张** `ANCHOR_VALUES` 表（`driver/jsapi-v4/controls.ts` 导出它、
+ * `driver/jsapi-v4/overlays.ts` 的 `anchorFor` 消费它）——两张表一旦漂移，同一个锚点名在
+ * `<ZoomControl>` 与 `<Label>` 上会落到不同的角，那是肉眼几乎发现不了的 bug。
+ *
+ * live 读数（2026-09-27）确认九个数在 `window` 与 `BMap` 命名空间上同值。
+ */
+export type OverlayAnchorName =
+  | "BMAP_ANCHOR_TOP_LEFT"
+  | "BMAP_ANCHOR_TOP_RIGHT"
+  | "BMAP_ANCHOR_BOTTOM_LEFT"
+  | "BMAP_ANCHOR_BOTTOM_RIGHT"
+  | "BMAP_ANCHOR_TOP_CENTER"
+  | "BMAP_ANCHOR_MIDDLE_LEFT"
+  | "BMAP_ANCHOR_CENTER"
+  | "BMAP_ANCHOR_MIDDLE_RIGHT"
+  | "BMAP_ANCHOR_BOTTOM_CENTER";
 
 /**
  * 自定义 DOM 覆盖物（`CustomOverlay`）的领域选项。
@@ -375,7 +439,24 @@ export type OverlayPropertyValueKind =
   | "point-groups"
   | "bounds"
   | "size"
-  | "icon";
+  | "icon"
+  /**
+   * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（issue #165 第三批）。
+   *
+   * 单独一种归一化而不是塞进 `raw`，是因为 `MarkerOptions.label` 的官方类型是
+   * `BMap.Label`——一个 raw SDK 对象。组件面**不构造** SDK 对象（AGENTS.md 的边界规则），
+   * 因此这个构造必须发生在 Driver 边界内，而 `raw` 会把领域对象原样递给 SDK ⇒ 官方读到
+   * 的是一个普通 JS 对象而不是 Label ⇒ 标注不显示（且**不报错**）。
+   */
+  | "marker-label"
+  /**
+   * 锚点的**官方常量名** → 官方数值（issue #165 第三批）。
+   *
+   * 官方 `ControlAnchor` 是九个 `declare const` 的字面量联合，调用方在 JS 里写的只能是数值。
+   * 收名字（`"BMAP_ANCHOR_BOTTOM_CENTER"`）是为了让「8」在源码里可读——与控件那一族
+   * （`<ZoomControl>` 等）**同一张换算表**、同一口径。
+   */
+  | "anchor";
 
 /**
  * 「撤回」（有值 → 未表态）后回到 SDK 自身默认的**落点**（issue #138）。
@@ -728,6 +809,32 @@ export const OVERLAY_DESCRIPTORS = {
           + "⚠️ 不要因为「声明里明明有 setAnchor」就改回 `mutateBy`——那正是本条要防的误判。",
         { ctorKey: "anchor" },
       ),
+      // ---- issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个 ----
+      //
+      // ⚠️ 三个**不是**同一个分类。`label` 是 `mutable`（官方 `Marker.d.ts:110` / `:115`
+      // 声明了成对的 `setLabel` / `getLabel`），另两个是 `recreate`——判据逐条见下。
+      //
+      // live 读数（2026-09-27，settle 之后；`marker-label-cluster-options.test.ts` 有门禁）：
+      //   `setLabel` / `getLabel` 都在 `BMap.Marker.prototype` 的 **layer 1**，真调不抛，
+      //   且 `getLabel().getContent()` 从构造时的文案变成新文案 ⇒ **可观察地生效** ⇒ `mutable`。
+      //
+      // `value` 用默认的 `"raw"`：`label` 收的是**本库领域形状**（`MarkerLabelInput`），
+      // Driver 在 `projectOptions` / `applyFieldUpdate` 的归一化层把它变成 raw `BMap.Label`
+      // （见 `driver/jsapi-v4/overlays.ts` 的 `markerLabelFor`）——组件面不构造 SDK 对象。
+      label: mutateBy("setLabel", { ctorKey: "label" }),
+      autoFollowHeadingChanged: recreate(
+        "官方 MarkerOptions 的 autoFollowHeadingChanged（@default false，"
+          + "「是否自动跟随地图旋转角度联动」）；4.0.5 的 Marker.d.ts 成员表里**没有**它，"
+          + "live 读数也确认 setAutoFollowHeadingChanged **不在 BMap.Marker.prototype 的任何一层**"
+          + "（layer = -1、实例 typeof = undefined）⇒ 没有可观察地生效的更新入口，只能重建",
+        { ctorKey: "autoFollowHeadingChanged" },
+      ),
+      startAnimation: recreate(
+        "官方 MarkerOptions 的 startAnimation（「图标的入场动画名称」），官方**没有**声明任何"
+          + "候选动画名、也**没有** setStartAnimation（live：整条原型链 layer = -1）"
+          + "⇒ 收普通 string、构造期透传，改它就重建",
+        { ctorKey: "startAnimation" },
+      ),
     }),
   },
 
@@ -745,7 +852,33 @@ export const OVERLAY_DESCRIPTORS = {
       opacity: mutateBy("setOpacity", { ctorKey: null }),
       zIndex: mutateBy("setZIndex", { ctorKey: null }),
       title: mutateBy("setTitle", { ctorKey: "title" }),
-      anchor: mutateBy("setAnchor", { ctorKey: "anchor" }),
+      // ---- issue #165 第三批：`anchor` 此前登记了但**组件面从不暴露** ⇒ 更新路径一次都没被触发
+      //
+      // live 读数（2026-09-27，settle 之后）判它是 `mutable` 且**可观察地生效**：
+      // `setAnchor` / `getAnchor` 都在 `BMap.Label.prototype` 的 **layer 1**、真调不抛；
+      // 同一经纬度上默认 / `anchor:8` / `anchor:2` 三个 Label 的 DOM 位置分别是
+      // `(top 90, left 263)` / `(69, 217)` / `(69, 263)`（锚点决定标注相对地理点的角点），
+      // 对第二个调 `setAnchor(0)` 之后**移回 `(90, 263)`**。
+      //
+      // ⚠️ 与 `OVERLAY_DESCRIPTORS.marker.anchor` **判据相反**（那条是 `recreate`）：
+      // Marker 那条的 `setAnchor` 在**未 settle** 的取样里是 layer = -1，据此判「不存在」——
+      // 而 settle 之后它**也在** layer 1 且可调（`getAnchor()` 读回 8）。两条依据见各自注释。
+      // 本条（Label）的依据是 settle 之后的可观察效果，不受那条的取样时机影响。
+      anchor: mutateBy("setAnchor", { ctorKey: "anchor", value: "anchor" }),
+      // ---- issue #165 第三批：`width` 此前完全没有登记（官方 `LabelOptions` 7 个键之一）----
+      //
+      // 官方 `overlay/Label.d.ts` 的成员表里**没有** `setWidth` / `getWidth`；live 读数
+      // （settle 之后）确认 `setWidth` **不在 `BMap.Label.prototype` 的任何一层**（layer = -1），
+      // 真调一次抛 `setWidth is not a function`。
+      //
+      // 构造期它**确实生效**（live：不给时 DOM `width: 14px` 按内容自适应，给 `77` 时 `77px`）
+      // ⇒ 这是「构造期可用」，不是「不可实现」。改它会重建实例。
+      width: recreate(
+        "官方 LabelOptions 的 width（@default 0，「0 表示按内容自适应」）；4.0.5 的 Label.d.ts "
+          + "成员表里没有 setWidth，live 读数也确认 setWidth **不在 BMap.Label.prototype 的任何一层**"
+          + "（layer = -1、真调抛 setWidth is not a function）⇒ 只能构造期透传，改它就重建",
+        { ctorKey: "width" },
+      ),
       enableMassClear: toggleBy(["enableMassClear", "disableMassClear"], { ctorKey: "enableMassClear" }),
       enableClicking: recreate(
         "4.0 的 Label 只有构造选项 enableClicking，实例上没有对应的成对开关",
@@ -1239,6 +1372,24 @@ export const OVERLAY_REVERT_RATIONALE = {
   restrictDraggingArea:
     "官方 MarkerOptions 的 restrictDraggingArea（@default false）；4.0 的 Marker 实例上" +
     "**既没有 setRestrictDraggingArea 也没有任何读回** ⇒ 重建",
+  // ——— issue #165 第三批：Marker 的 `label` / `autoFollowHeadingChanged` / `startAnimation` ———
+  //
+  // `label` 与上面 `rotation` / `icon` / `title` / `offset` 那一族**判据相同**（有 getter，
+  // 但返回的是**当前值**而不是 SDK 默认的「没有 label」），因此分开写在这里而不是并进那一族。
+  label:
+    "Marker#label 有 setLabel（policy 是 mutable），但 getLabel() 返回的是**当前值**；" +
+    "而「没有 label」这个 baseline **无从构造**（官方默认的 Marker 不带 Label 实例，" +
+    "本库也没有一个「空 Label」可以造出来写回去）⇒ 「值变回 undefined」没有落点，只能重建" +
+    "（⚠️ **不是**因为 setLabel 不存在——官方 Marker.d.ts:110 声明了它，live 实测也在位且生效）",
+  autoFollowHeadingChanged:
+    "官方 MarkerOptions 的 autoFollowHeadingChanged（@default false）；4.0.5 的 Marker.d.ts 成员表里" +
+    "没有 setAutoFollowHeadingChanged，live 读数也确认它**不在 BMap.Marker.prototype 的任何一层**" +
+    "（layer = -1）⇒ 既无写入口也无读回，连「值变回 undefined」都不成立，只能重建",
+  startAnimation:
+    "官方 MarkerOptions 的 startAnimation（官方未声明任何候选动画名）；4.0.5 的 Marker.d.ts " +
+    "成员表里没有 setStartAnimation，live 读数确认整条原型链 layer = -1 ⇒ 只能重建",
+  // ⚠️ `width` **不是**单 kind 的：InfoWindow 与 Label（本票新增）各有构造项 `width`，
+  // 而两者的官方成员表里都没有 `setWidth` / `getWidth` ⇒ 依据合并写在下面那条。
   top:
     "官方 GroundOverlayOptions 的 top（@default false，「是否在普通覆盖物之上绘制」）；" +
     "4.0 的 GroundOverlay **没有 setTop**（它有 setZIndex，但那是层叠顺序值、语义不同，" +
@@ -1285,9 +1436,16 @@ export const OVERLAY_REVERT_RATIONALE = {
   strokeTexture:
     "官方 4.0.5 的 Polyline 上**既没有** setStrokeTexture 也无读回；它是**线纹理**（沿折线重复绘制图片）" +
     "且官方注明仅 WebGL 渲染模式支持 ⇒ 重建",
-  width: "InfoWindow 的 width 只有构造选项；4.0.5 无 setWidth 也无 getWidth ⇒ 重建",
   height: "InfoWindow 的 height 只有构造选项；4.0.5 无 setHeight 也无 getHeight ⇒ 重建",
   maxWidth: "InfoWindow 的 maxWidth 有 setMaxWidth（policy 是 mutable），但 4.0.5 **无** getMaxWidth ⇒ 撤回只能重建",
+  width:
+    "本表的键是**属性名**（跨 kind 共享同一份依据），因此这一条要同时覆盖两个 `width`：" +
+    "(a) **InfoWindow 的** `width` 只有构造选项，4.0.4 无 `setWidth` 也无 `getWidth`；" +
+    "(b) **Label 的** `width`（issue #165 第三批补上，`@default 0` = 按内容自适应）" +
+    "**有**构造项但同样**没有**字段级入口——4.0.5 的 `Label.d.ts` 成员表里既没有 `setWidth` " +
+    "也没有 `getWidth`，live 读数确认 `setWidth` 不在 `BMap.Label.prototype` 的任何一层" +
+    "（layer = -1、真调抛 `setWidth is not a function`）" +
+    "⇒ 两者都是「无写入口也无 baseline」⇒ 重建",
   maxContent:
     "InfoWindow 的 maxContent 有 setMaxContent（policy 是 mutable），但 4.0.5 **无**读回" +
     "（getContent() 返回的是普通内容，不是最大化内容）⇒ 撤回只能重建",

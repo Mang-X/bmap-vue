@@ -226,6 +226,18 @@ Marker 的代价」），不是自动降级。
 | `clusterMinZoom` / `clusterMaxZoom` | 聚合生效的 zoom 范围（官方同名选项） | 同上（实测 `3` / `16`） |
 | `fitViewOnClick` | 点击簇时缩放到该簇 | 同上 —— ⚠️ **官方默认是 `true`**（点簇会缩放地图）；不想缩放就显式传 `false` |
 | `singleStyle` | 未参与聚合的单点样式（官方同名选项，**扁平**键名：`shape` / `size` / `fillColor` …） | 同上 |
+| `tileSize` | 瓦片尺寸，**参与半径归一化**（官方 `tileSize`） | 同上（实测 `256`）—— 实测把同样 `clusterRadius: 300` 的三团近点从 1 簇变成 2 簇，所以它**确实生效** |
+| `fitViewMargin` | 点击簇自动缩放时的边距 `[上, 右, 下, 左]`（官方同名） | 同上（实测 `[12, 12, 12, 12]`）。只在 `fitViewOnClick` 为真时有意义 |
+| `updateRealTime` | 拖动 / 缩放过程中是否**实时刷新**（按 `waitTime` 节流） | 同上 —— ⚠️ **官方默认是 `false`**（只在地图静止后刷新）。要在拖动时实时跟随聚合，显式传 `true` |
+| `waitTime` | 实时刷新的节流间隔（毫秒，官方同名） | 同上（实测 `300`）。只在 `updateRealTime` 为真时有意义 |
+| `clusterIcon` | 聚合点图标：`(properties) => 图标源`（URL / `HTMLCanvasElement` / `{ canvas, id? }`） | 同上 —— 不设时用内置气泡（按占比着色 + 数字） |
+| `clusterIconSize` | 聚合点图标尺寸：`(properties) => [w, h] \| number` | 同上 —— 不设时与内置气泡一致 |
+
+::: warning 回调型两个选项请传**稳定引用**
+`clusterIcon` / `clusterIconSize` 按**身份**参与构造期指纹（函数没有「内容」可以按值比）。
+在模板里写内联箭头函数（`() => ...`）会让**每次父级渲染都换一次实例**。需要按要素动态取值时，
+把函数体放进稳定的 `computed` / `setup` 返回值。
+:::
 
 | 属性（`engine: "markers"`） | 说明 | 默认值 |
 | --- | --- | --- |
@@ -234,7 +246,7 @@ Marker 的代价」），不是自动降级。
 | `zoom` | 聚合使用的 zoom；未提供时**在每次聚合计算时**读一次地图当前 zoom（读不到时用 `8`，并告警一次）。地图缩放变化**不会**自动重算聚合 | - |
 
 ⚠️ 与当前 `engine` 不匹配的选项会**告警一次**（不静默）：`gridSize` / `minClusterSize` / `zoom`
-只对 `markers` 生效，`clusterRadius` 等只对 `native` 生效。换 `engine` 等于换资源形态，因此整层重建。
+只对 `markers` 生效，上表那 11 项只对 `native` 生效。换 `engine` 等于换资源形态，因此整层重建。
 
 | 事件 | 说明 | 参数 |
 | --- | --- | --- |
@@ -245,8 +257,20 @@ Marker 的代价」），不是自动降级。
 `items` 只在 `engine="markers"` 下是业务项数组，`native` 下是 `null` —— 用 `null` 而不是空数组，
 是为了让「这一层拿不到」与「这一簇确实是空的」在类型上就分得开。
 
-聚合参数（`clusterRadius` 等）是**构造期**选项：改变 ⇒ 重建实例（不重建就没法保证生效：
-官方同时列了 `setOptions` 与 `redraw`，但本库没有取证「改了再 `redraw()` 会重新聚簇」）。
+聚合参数（`clusterRadius` / `tileSize` / `updateRealTime` …）是**构造期**选项：改变 ⇒ 重建实例。
+判据是「官方**没有**公开的**逐字段**更新入口」，与图形族的构造期选项同一口径：
+
+- 官方 `ClusterLayer` 上**没有** `setZoomRange` / `setMinZoom` / `setMaxZoom`（因此
+  `minZoom` / `maxZoom` 这两个官方**声明了**的构造项本库也**不开面**——收下就是「改 prop
+  悄悄不生效」）；
+- 官方虽然有公开的 `setOptions`，且实测改聚合参数**确实**会重算（`clusterRadius` 20 → 300
+  后 `change` 事件的簇数从 3 变 1，不必再 `redraw()`），但那是**整袋**入口，
+  **不是**逐字段通道；更关键的是本库的 `setStyle` **也**落到 `setOptions`（整袋替换），
+  两条通道共用一个成员 ⇒ 认成「可就地更新」会让聚合参数与样式互相踩。
+
+拾取面（`enablePicked` / `mouseStyleChange` / `pickTolerance`）**刻意不暴露**：
+`cluster-click` / `item-click` 是本组件的核心交互，本库没有「关掉拾取」的消费者
+（关掉等于 `cluster-click` 永远不触发，那是自断交互不是能力）。`enablePicked` 因此固定为 `true`。
 
 ## `BPointShapeLayer`
 

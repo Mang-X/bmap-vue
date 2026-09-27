@@ -37,7 +37,11 @@
  *   不读任何 props 决定「要不要调某个 setter」——那正是点图层内核需要 `supports()` 的原因。
  */
 import { nativeLayersOf } from "../../core/layers/nativeLayerAccess";
-import { layerInputFingerprint, stableLayerValue } from "../../core/layers/LayerSpec";
+import {
+  layerDataIdentity,
+  layerInputFingerprint,
+  stableLayerValue,
+} from "../../core/layers/LayerSpec";
 import { ResourceScope } from "../../core/lifecycle/ResourceScope";
 import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data/geojsonAdapter";
 import { itemKeyReader } from "../../core/data/itemScan";
@@ -47,7 +51,10 @@ import { readPickValue } from "../../core/layers/nativeLayerPick";
 import { readPayloadPointLike } from "../../core/data/points";
 import { devWarn } from "../../core/logger";
 import type { ClusterEngine, ClusterEngineInput } from "./clusterEngine";
-import type { MarkerClusterEngine } from "../../types/components";
+import type {
+  ClusterPointIconSource,
+  MarkerClusterEngine,
+} from "../../types/components";
 import type { LayerRecord, LayerRegistry } from "../../core/layers/LayerRegistry";
 import type { MapReadyContext } from "../../core/context/types";
 import type { NativeLayerHandle } from "../../driver/types/native-layers";
@@ -66,6 +73,24 @@ export interface NativeClusterEngineProps<Item> {
   readonly clusterMaxZoom?: number;
   readonly fitViewOnClick?: boolean;
   readonly singleStyle?: Record<string, unknown>;
+  /* --- issue #165 第三批：官方 `ClusterLayerOptions` 里另外六个此前没有出口的选项 ---
+   *
+   * 这六个此前**没有**任何书面理由被省略，而同族的另外六个就在上面 ⇒ 遗漏，不是收窄。
+   * 六个**全部**是**构造期**（`recreate`）：官方 `ClusterLayer` 的成员表里没有它们的
+   * 字段级 setter，而 `setOptions` 是**整袋**入口（且本库的 `setStyle` 也落到它），
+   * 因此「有 `setOptions`」不构成逐字段更新入口。三条完整理由见
+   * `types/components.ts` 的 `MarkerClusterProps` 同款注释。
+   *
+   * ⚠️ 官方**确实**声明了 `minZoom` / `maxZoom`，但官方 `ClusterLayer` 上**没有**
+   * `setZoomRange` / `setMinZoom` / `setMaxZoom`（live 读数：整条原型链 layer = -1）
+   * ⇒ **刻意不加**（收下就是「改 prop 悄悄不生效」）。
+   */
+  readonly tileSize?: number;
+  readonly fitViewMargin?: [number, number, number, number];
+  readonly updateRealTime?: boolean;
+  readonly waitTime?: number;
+  readonly clusterIcon?: (properties: Record<string, unknown>) => ClusterPointIconSource;
+  readonly clusterIconSize?: (properties: Record<string, unknown>) => [number, number] | number;
 }
 
 export interface NativeClusterEngineInput<Item> extends ClusterEngineInput<Item> {
@@ -134,6 +159,18 @@ export function createNativeClusterEngine<Item>(
       props.clusterMaxZoom,
       props.fitViewOnClick,
       stableLayerValue(props.singleStyle),
+      // ↓ issue #165 第三批补的六个：与上面同族的六项**同一条**判据（构造期 ⇒ 换实例）。
+      props.tileSize,
+      stableLayerValue(props.fitViewMargin),
+      props.updateRealTime,
+      props.waitTime,
+      // 两个回调型 option：按**身份**比较（`layerDataIdentity` 的口径，与 `LayerSpec`
+      // 的 `IDENTITY_SENSITIVE_OPTION_KEYS` 同源）。`stableLayerValue` 会把函数折叠成常量
+      // `"fn"` ⇒ 换实现会彻底不可见；而这两个是「SDK 渲染每个簇时才求值」的回调
+      // （`clusterIcon(properties) => 图标源`），传了新函数却换不了图层就等于「改了没反应」。
+      // 代价是内联箭头函数会导致每次渲染都重建——这条代价写在 `LayerSpec` 的同款注释里。
+      layerDataIdentity(props.clusterIcon),
+      layerDataIdentity(props.clusterIconSize),
     ].join("|");
   }
 
@@ -152,6 +189,13 @@ export function createNativeClusterEngine<Item>(
     if (props.clusterMaxZoom !== undefined) options.clusterMaxZoom = props.clusterMaxZoom;
     if (props.fitViewOnClick !== undefined) options.fitViewOnClick = props.fitViewOnClick;
     if (props.singleStyle !== undefined) options.singleStyle = props.singleStyle;
+    // ---- issue #165 第三批补的六个（同样是「只写用户表过态的键」，理由见文件头第 2 条）----
+    if (props.tileSize !== undefined) options.tileSize = props.tileSize;
+    if (props.fitViewMargin !== undefined) options.fitViewMargin = props.fitViewMargin;
+    if (props.updateRealTime !== undefined) options.updateRealTime = props.updateRealTime;
+    if (props.waitTime !== undefined) options.waitTime = props.waitTime;
+    if (props.clusterIcon !== undefined) options.clusterIcon = props.clusterIcon;
+    if (props.clusterIconSize !== undefined) options.clusterIconSize = props.clusterIconSize;
     return options;
   }
 

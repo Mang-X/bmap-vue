@@ -87,6 +87,19 @@ export type {
   TextLayerStyle,
   TextLayerPick,
   TextLayerAnchor,
+  /* --- issue #165 第三批：`Marker.label` / `Label.anchor` / 聚合图标来源的公共类型。
+   *
+   * 这三个**必须**是公共导出而不是 `ae-forgotten-export`：它们出现在已导出的
+   * `MarkerProps.label` / `LabelProps.anchor` / `MarkerClusterProps.clusterIcon` 的签名里，
+   * 消费方因此**无法命名**它们（`import type { … }` 取不到）——按 ADR
+   * `2026-09-25-public-export-surface-freeze` 的二选一走**第一条**（升为公共导出）。
+   *
+   * 与 `MarkerIcon` / `LabelStyle` 同一层理由：它们是 props 上**公开可传**的形状，
+   * 调用方组装 props 时要的就是这个类型。
+   */
+  MarkerLabelSpec,
+  OverlayAnchor,
+  ClusterPointIconSource,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";

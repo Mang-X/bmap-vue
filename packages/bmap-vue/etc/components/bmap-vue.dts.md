@@ -575,6 +575,7 @@ declare const __VLS_component_3: DefineComponent<MarkerProps, {
     };
     enableClicking: boolean;
     enableDragging: boolean;
+    autoFollowHeadingChanged: boolean;
     visible: boolean;
     raiseOnDrag: boolean;
     isTop: boolean;
@@ -1746,6 +1747,10 @@ declare interface ClusterPick<Item> {
     };
     items: Item[] | null;
 }
+declare type ClusterPointIconSource = string | HTMLCanvasElement | {
+    canvas: HTMLCanvasElement;
+    id?: string | number;
+};
 export declare const ContextMenu: __VLS_WithSlots_10<typeof __VLS_component_10, __VLS_Slots_10>;
 declare interface ContextMenuCommandApi {
     getItem(index: number): MenuItemView | null;
@@ -2179,6 +2184,8 @@ declare interface LabelOptions {
     zIndex?: number;
     style?: Record<string, unknown>;
     enableMassClear?: boolean;
+    anchor?: OverlayAnchorName;
+    width?: number;
     [key: string]: unknown;
 }
 declare interface LabelProps {
@@ -2195,6 +2202,8 @@ declare interface LabelProps {
     style?: LabelStyle;
     enableMassClear?: boolean;
     visible?: boolean;
+    anchor?: OverlayAnchor;
+    width?: number;
 }
 declare type LabelStyle = Record<string, unknown>;
 declare interface LayerCreateOptions extends Record<string, unknown> {
@@ -2543,6 +2552,20 @@ declare interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
     clusterMaxZoom?: number;
     fitViewOnClick?: boolean;
     singleStyle?: Record<string, unknown>;
+    tileSize?: number;
+    fitViewMargin?: [
+        number,
+        number,
+        number,
+        number
+    ];
+    updateRealTime?: boolean;
+    waitTime?: number;
+    clusterIcon?: (properties: Record<string, unknown>) => ClusterPointIconSource;
+    clusterIconSize?: (properties: Record<string, unknown>) => [
+        number,
+        number
+    ] | number;
 }
 declare interface MarkerCustomIcon {
     imageUrl: string;
@@ -2575,6 +2598,13 @@ declare type MarkerIconInput = string | {
     printImageUrl?: string;
 };
 declare type MarkerIconName = BuiltinMarkerIconName;
+declare interface MarkerLabelInput {
+    content: string;
+    position?: Point;
+    offset?: Pixel;
+    style?: Record<string, unknown>;
+}
+declare type MarkerLabelSpec = MarkerLabelInput;
 export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_expose?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: __VLS_PrettifyLocal<Pick<Partial<{}> & Omit<{
         readonly "onItem-click"?: ((item: Item) => any) | undefined;
@@ -2598,6 +2628,9 @@ declare interface MarkerOptions {
     rotation?: number;
     enableClicking?: boolean;
     enableDragging?: boolean;
+    label?: MarkerLabelInput;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
     [key: string]: unknown;
 }
 declare interface MarkerProps {
@@ -2620,6 +2653,9 @@ declare interface MarkerProps {
     draggingCursor?: string;
     isTop?: boolean;
     restrictDraggingArea?: boolean;
+    label?: MarkerLabelSpec;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
 }
 declare interface MarkerReadBackApi {
     getRank(): number;
@@ -2757,6 +2793,8 @@ declare interface NavigationControlProps {
     enableGeolocation?: boolean;
     visible?: boolean;
 }
+declare type OverlayAnchor = OverlayAnchorName;
+declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
 declare type OverlayCoordType = "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
 declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;

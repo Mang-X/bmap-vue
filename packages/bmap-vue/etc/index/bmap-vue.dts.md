@@ -579,6 +579,7 @@ declare const __VLS_component_3: DefineComponent<MarkerProps, {
     };
     enableClicking: boolean;
     enableDragging: boolean;
+    autoFollowHeadingChanged: boolean;
     visible: boolean;
     raiseOnDrag: boolean;
     isTop: boolean;
@@ -1895,6 +1896,10 @@ export declare interface ClusterPick<Item> {
     };
     items: Item[] | null;
 }
+export declare type ClusterPointIconSource = string | HTMLCanvasElement | {
+    canvas: HTMLCanvasElement;
+    id?: string | number;
+};
 declare interface ComponentResolverLike {
     type?: "component" | "directive";
     resolve: (name: string) => {
@@ -2547,6 +2552,8 @@ export declare interface LabelOptions {
     zIndex?: number;
     style?: Record<string, unknown>;
     enableMassClear?: boolean;
+    anchor?: OverlayAnchor;
+    width?: number;
     [key: string]: unknown;
 }
 export declare interface LabelProps {
@@ -2563,6 +2570,8 @@ export declare interface LabelProps {
     style?: LabelStyle;
     enableMassClear?: boolean;
     visible?: boolean;
+    anchor?: OverlayAnchor_2;
+    width?: number;
 }
 export declare type LabelStyle = Record<string, unknown>;
 export declare interface LayerCreateOptions extends Record<string, unknown> {
@@ -3545,6 +3554,20 @@ export declare interface MarkerClusterProps<Item> extends DataComponentProps<Ite
     clusterMaxZoom?: number;
     fitViewOnClick?: boolean;
     singleStyle?: Record<string, unknown>;
+    tileSize?: number;
+    fitViewMargin?: [
+        number,
+        number,
+        number,
+        number
+    ];
+    updateRealTime?: boolean;
+    waitTime?: number;
+    clusterIcon?: (properties: Record<string, unknown>) => ClusterPointIconSource;
+    clusterIconSize?: (properties: Record<string, unknown>) => [
+        number,
+        number
+    ] | number;
 }
 export declare interface MarkerCustomIcon {
     imageUrl: string;
@@ -3577,6 +3600,13 @@ export declare type MarkerIconInput = string | {
     printImageUrl?: string;
 };
 export declare type MarkerIconName = BuiltinMarkerIconName;
+export declare interface MarkerLabelSpec {
+    content: string;
+    position?: Point;
+    offset?: Pixel;
+    style?: Record<string, unknown>;
+}
+declare type MarkerLabelSpec_2 = MarkerLabelSpec;
 export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_expose?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: __VLS_PrettifyLocal<Pick<Partial<{}> & Omit<{
         readonly "onItem-click"?: ((item: Item) => any) | undefined;
@@ -3600,6 +3630,9 @@ export declare interface MarkerOptions {
     rotation?: number;
     enableClicking?: boolean;
     enableDragging?: boolean;
+    label?: MarkerLabelSpec;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
     [key: string]: unknown;
 }
 export declare interface MarkerProps {
@@ -3622,6 +3655,9 @@ export declare interface MarkerProps {
     draggingCursor?: string;
     isTop?: boolean;
     restrictDraggingArea?: boolean;
+    label?: MarkerLabelSpec_2;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
 }
 export declare interface MarkerReadBackApi {
     getRank(): number;
@@ -3819,6 +3855,8 @@ export declare const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX: {
     readonly "map-mask": "\u63A9\u819C\uFF1A4.0.5 \u6CA1\u6709 MapMaskEventMap\uFF08MapMask \u672C\u8EAB\u4E0D\u5728\u7C7B\u578B\u5305\u7684\u7C7B\u58F0\u660E\u91CC\uFF09";
     readonly marker3d: string;
 };
+export declare type OverlayAnchor = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
+declare type OverlayAnchor_2 = OverlayAnchor;
 export declare interface OverlayCommandTypes {
     Marker: MarkerReadBackApi;
     Circle: CircleReadBackApi;

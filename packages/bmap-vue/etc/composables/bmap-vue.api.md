@@ -709,6 +709,7 @@ export type LabelHandle = SdkHandle<"overlay:label">;
 export interface LabelOptions {
     // (undocumented)
     [key: string]: unknown;
+    anchor?: OverlayAnchorName;
     // (undocumented)
     enableMassClear?: boolean;
     // (undocumented)
@@ -717,6 +718,7 @@ export interface LabelOptions {
     position?: Point;
     // (undocumented)
     style?: Record<string, unknown>;
+    width?: number;
     // (undocumented)
     zIndex?: number;
 }
@@ -1506,16 +1508,19 @@ export type MarkerIconName = BuiltinMarkerIconName;
 export interface MarkerOptions {
     // (undocumented)
     [key: string]: unknown;
+    autoFollowHeadingChanged?: boolean;
     // (undocumented)
     enableClicking?: boolean;
     // (undocumented)
     enableDragging?: boolean;
     // (undocumented)
     icon?: MarkerIconInput;
+    label?: MarkerLabelInput;
     // (undocumented)
     offset?: Pixel;
     // (undocumented)
     rotation?: number;
+    startAnimation?: string;
     // (undocumented)
     title?: string;
     // (undocumented)

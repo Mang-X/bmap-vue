@@ -77,13 +77,18 @@ const CONTROL_CTORS = {
 } as const satisfies Record<Exclude<ControlKind, "custom">, string>;
 
 /**
- * 停靠位置常量表：官方 `const/Anchor.d.ts` 的**声明值**。
+ * 锚点常量表：官方 `const/Anchor.d.ts` 的**声明值**。
  *
  * 刻意不从 `window.BMAP_ANCHOR_*` 读：Driver 边界只认 `rawSdk` 传入的命名空间，
  * 不读未经 Provider 校验的全局值（同 ADR 2026-09-11-jsapi-v4-map-facet §9）。
  * 表本身被类型层钉在官方声明上（见文件末尾的锚点断言），上游改值会直接编译失败。
+ *
+ * ⚠️ **覆盖物也复用这一张**（issue #165 第三批：`Marker.label` 之外的 `Marker.anchor` 与
+ * `Label.anchor`，见 `overlays.ts` 的 `anchorFor`）。两张表一旦漂移，同一个锚点名在
+ * `<ZoomControl>` 与 `<Label>` 上会落到不同的角——那是肉眼几乎发现不了的 bug。
+ * live 读数（2026-09-27）也确认九个数在 `window` 与 `BMap` 命名空间上同值。
  */
-const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | OfficialCenterAnchor>> = {
+export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | OfficialCenterAnchor>> = {
   BMAP_ANCHOR_TOP_LEFT: 0,
   BMAP_ANCHOR_TOP_RIGHT: 1,
   BMAP_ANCHOR_BOTTOM_LEFT: 2,

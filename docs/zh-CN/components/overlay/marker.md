@@ -37,6 +37,24 @@ overlay/dyynmicMaker
 | rotation        | 旋转角度                                                    | `number `                     | -                             |            | -                                   |
 | enableDragging  | 是否启用拖拽                                                | `boolean `                    | -                             | ` false`   | -                                   |
 | visible         | 是否显示                                                    | `boolean`                     | -                             | `true`     | <Badge type="tip" text="^2.2.0" />  |
+| label           | 标注自带的文本标注。**就地更新**，改它不换 Marker | `MarkerLabelSpec`（`{ content, position?, offset?, style? }`） | -        | -          | -                                   |
+| autoFollowHeadingChanged | 是否随地图旋转角度联动。**构造期属性**，变化时重建 | `boolean`                      | -          | `false`（沿用 SDK 默认） | -           |
+| startAnimation  | 图标的入场动画名称（官方未声明候选值，原样透传）。**构造期属性** | `string`                | -          | -          | -                                   |
+
+::: tip `label` 收的是**本库领域形状**，不是 SDK 的 `BMap.Label`
+官方 `MarkerOptions.label` 的类型是 raw `BMap.Label` 对象；本库组件面不构造 SDK 对象
+（raw SDK 边界规则），因此这里传 `{ content, position, offset, style }` 这样的普通数据，
+由 Driver 在边界内造出 SDK 的 Label 再 `setLabel` 下去。
+
+`label` 走官方声明的 `setLabel` / `getLabel`（**就地更新**，不换实例）。从属的 Label 随 Marker
+一起被释放——它不独立挂图，也不需要你单独回收。
+:::
+
+::: warning `autoFollowHeadingChanged` 传 `false` 与不传**不是一回事**
+官方默认就是 `false`（实测），而 Vue 对缺省的 `Boolean` prop 会编出 `false`；本库把缺省
+显式钉成 `undefined`，让「没给」只有**一个**表示 —— 否则父级某次传
+`:auto-follow-heading-changed="undefined"` 会触发一次**内容完全没变**的重建。
+:::
 
 ## 默认图标可选值
 

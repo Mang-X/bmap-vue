@@ -172,8 +172,20 @@ const CASES: readonly OverlayCase[] = [
       { prop: "title", next: "改过的标题", setter: "setTitle" },
       { prop: "rotation", next: 60, setter: "setRotation" },
       { prop: "position", next: { lng: 117, lat: 40 }, setter: "setPosition" },
+      // ↓ issue #165 第三批：`label` 补上后**必须**留在 `mutable`——官方
+      // `Marker.d.ts:110` / `:115` 声明了成对的 `setLabel` / `getLabel`，live 读数
+      // （settle 之后）确认二者在原型链 layer 1、真调不抛、`getLabel().getContent()`
+      // 读回改后的文案 ⇒ 可观察地生效。认成 `recreate` 会让每次换文案都换掉整个 Marker。
+      { prop: "label", next: { content: "第二段", position: POINT }, setter: "setLabel" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      // ↓ issue #165 第三批补的两个构造期项：官方 `Marker.d.ts` 成员表里没有
+      // `setAutoFollowHeadingChanged` / `setStartAnimation`，live 读数确认两者整条原型链
+      // layer = -1（见 `marker-label-cluster-options.test.ts` 的文件头表格）。
+      { prop: "autoFollowHeadingChanged", next: true },
+      { prop: "startAnimation", next: "grow" },
+    ],
     ctorExpect: {
       // `position` 是构造期**第一个位置参数**（描述符 `ctorKey: null`），因此不在 ctor options 里；
       // 它由下面的 stateExpect 覆盖（Fake 把位置参数落进实例字段）
@@ -194,6 +206,7 @@ const CASES: readonly OverlayCase[] = [
       style: { color: "#fff" },
       offset: { x: 1, y: 2 },
       zIndex: 3,
+      width: 77,
     },
     mutable: [
       { prop: "content", next: "改过的文本", setter: "setContent" },
@@ -201,12 +214,20 @@ const CASES: readonly OverlayCase[] = [
       { prop: "style", next: { color: "#f00" }, setter: "setStyles" },
       // 位置字段走 `setPosition` 专用入口（描述符的语义键），不是普通 setOptions
       { prop: "position", next: { lng: 117, lat: 40 }, setter: "setPosition" },
+      // ↓ issue #165 第三批：`anchor` 在**描述符里早就**登记为 `mutateBy("setAnchor")`，
+      // 但 `LabelProps` / `LABEL_FIELDS` 里从来没有它 ⇒ 那条更新路径一次都没被触发过。
+      // live 读数（settle 之后）判它可观察地生效（DOM 角点随锚点移动）⇒ `mutable` 成立。
+      { prop: "anchor", next: "BMAP_ANCHOR_BOTTOM_CENTER", setter: "setAnchor" },
     ],
-    recreate: [],
+    // ↓ issue #165 第三批：`width` 是官方 `LabelOptions` 7 个键之一，官方 `Label` 上
+    // **没有** `setWidth`（live：整条原型链 layer = -1、真调抛）⇒ 构造期。
+    recreate: [{ prop: "width", next: 120 }],
     ctorExpect: {
       position: { lng: 116.4, lat: 39.9 },
       styles: { color: "#fff" },
       offset: { width: 1, height: 2 },
+      // 构造期项也进 ctor options（初值 77 ⇒ 之后那一步把它改成 120 并重建）
+      width: 77,
     },
     stateExpect: { content: "文本" },
   },
