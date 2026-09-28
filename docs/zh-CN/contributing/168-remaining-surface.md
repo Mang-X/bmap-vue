@@ -8,7 +8,7 @@
 
 | 依据 | 用途 |
 | --- | --- |
-| `@baidumap/jsapi-v4-types@4.0.4` 的 d.ts | **存在与否与真实签名**（本库的口径是「d.ts 定存在与否」） |
+| `@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`）的 d.ts | **存在与否与真实签名**（本库的口径是「d.ts 定存在与否」）。⚠️ 版本已由 4.0.4 升到 4.0.5：4.0.5 补上了 13 个 `visualization/` 类声明、改了 `setPolylineStyle` 的参数类型、修正了大小写引用；**「声明有」不等于「运行时可用」**，仍须探针 |
 | `scripts/probe-runtime-members.mts` probe 14 | 控制类成员在**实例**上的真实在位情况（控制类的成员常挂实例而非原型，见下） |
 | 实例成员表逐条核对 | 「有没有 setter / 有没有读回」——决定 `mutable` / `recreate` 与「能否就地撤回」 |
 

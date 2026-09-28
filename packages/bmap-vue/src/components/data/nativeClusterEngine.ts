@@ -1,8 +1,10 @@
 /**
  * `native` 聚合引擎（M6-POINT-CLUSTER / issue #35）—— `MarkerCluster` 的**默认**路径
  *
- * 落地在官方扩展 API `BMap.ClusterLayer`（运行时存在、`@baidumap/jsapi-v4-types@4.0.5` 无类声明、
- * 可视化实现按需异步注入）。它是本票「原生层是默认路径」的落点。
+ * 落地在官方扩展 API `BMap.ClusterLayer`（运行时存在、可视化实现按需异步注入）。
+ * ⚠️ **`@baidumap/jsapi-v4-types` 4.0.5（git `5ba67f4`）已经补上了 `ClusterLayer` 的类声明**，
+ * Driver 的 `cluster` kind 已按该声明登记为 `declared: true`（原文写的「无类声明」是 4.0.4 时期的事实）。
+ * 它是本票「原生层是默认路径」的落点。
  *
  * ## 实测依据（`scripts/probe-native-point-cluster.mts`，真实 AK + headless Chrome）
  *
@@ -23,8 +25,14 @@
  *    本库**不补一个数字**——官方默认值由 SDK 自己决定，本库不认识它们（同 #34 决策 6 与
  *    `pointLayerSpec.ts` 的口径）。探针实测「什么都不传也能聚簇」，因此这条不做任何事。
  *    代价：组件文档不能承诺「默认 60 像素」，只能说「未提供时由 SDK 决定」。
- * 3. **聚合参数是构造期选项 ⇒ 变化重建实例**：官方扩展专页同时列了 `setOptions` 与 `redraw`，
- *    但**没有取证**「改了参数再 `redraw()` 真的会重新聚簇」⇒ 本库不赌它。
+ * 3. **聚合参数是构造期选项 ⇒ 变化重建实例**：官方扩展专页同时列了 `setOptions` 与 `redraw`。
+ *    ⚠️ 原文此处写「没有取证『改了参数再 `redraw()` 真的会重新聚簇』，本库不赌它」——
+ *    **该结论已按后续 live 读数更正**：实测 `setOptions({clusterRadius: 20→300})` **会直接重聚簇**
+ *    （change 事件 3 簇 → 1 簇，无需 `redraw()`），见
+ *    `.changeset/165-marker-label-cluster-options.md` 记录的读数。
+ *    即 `setOptions` 在这一族**确实生效**。仍判为构造期，理由是**通道**而非「不生效」：
+ *    本库的 `setStyle` 也落到 `setOptions`，两条通道共用一个成员，认成「可就地更新」会让
+ *    聚合参数与样式互相踩——与本票已落地的 21 个图形族构造期选项同一口径。
  * 4. **`visible` 走 `setVisible`**（不是摘掉图层）：#35 专门取证的，也是 Driver 对 `cluster`
  *    唯一放开的继承成员。
  *

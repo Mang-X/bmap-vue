@@ -15,7 +15,8 @@
 
 ## 处置：**保留、不改名、不加兼容层**
 
-- **不删组件**：`PolylineLayer` / `PolygonLayer` 本库**还没有**（见 #166）。删掉等于让线/面
+- **不删组件**：`PolylineLayer` / `PolygonLayer` **本库现已提供**（初版本条写的是「还没有」，
+  见后文「已更正」一节）。删掉等于让线/面
   两类用户无路可走。
 - **不改名、不加 deprecated 别名 / 迁移 shim**：#165 §3.6 明确禁止。「别名指向新名」正是那条
   要禁的东西——它会留下一套要维护的第二入口。
@@ -41,10 +42,18 @@
 
 ⚠️ 但**迁移不是改个名字**：`LineLayer` / `FillLayer` 的样式字段族与替代品不同
 （`patternUrl` / `borderWeight` 一族 vs `fillTextureUrl` / `strokeTextureUrl` 一族），
-`<PointLayer>` 的样式字段是**扁平**的（`icon` / `shape` / `size` 直接是 prop，不是 `style` 袋），
-而 **`visualization/` 家族没有 Feature State API** —— 依赖要素状态、或要
-`zIndex`/`minZoom`/`maxZoom` 的用法**没有等价替代**，应继续用旧组件。
-逐字段迁移表见 `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
+`<PointLayer>` 的样式字段是**扁平**的（`icon` / `shape` / `size` 直接是 prop，不是 `style` 袋）。
+
+**能力差异按族精确列出**（据最终公共面，非笼统的「没有等价替代」）：
+
+| 能力 | `<PolylineLayer>` / `<PolygonLayer>` | `<PointLayer>` |
+| --- | --- | --- |
+| `zIndex` / `minZoom` / `maxZoom` | ✅ **有**（`VisualizationLayerCommonProps`） | ❌ 无 |
+| Feature State（`updateState` / `removeState` / `clearState` / `replaceAllState` / `getAllState`） | ❌ 无 | ❌ 无 |
+
+⇒ **三族共同缺失的只有 Feature State**：依赖要素状态的用法**迁移即丢能力**，应继续用旧组件。
+线/面两族**不丢** `zIndex` / 缩放范围。逐字段迁移表见
+`docs/zh-CN/components/layer/deprecated-layers-migration.md`。
 
 ## 一处容易漏掉的地方
 
