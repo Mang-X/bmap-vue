@@ -66,6 +66,8 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   failNextCapture: Error | null = null
   destroyCalls = 0
   overlays: unknown[] = []
+  /** 测试故障注入：让**下一次** `addOverlay` 抛错（#174 P1-2，重新挂回失败的分支）。 */
+  failNextAddOverlay: Error | null = null
   /**
    * 测试故障注入：让**下一次** `destroy` 抛错。
    *
@@ -231,6 +233,14 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   // ---------------------------------------------------------- 标注覆盖物
   addOverlay(overlay: unknown): void {
     this.callLog.push('addOverlay')
+    // 测试故障注入（#174 P1-2）：让**下一次** `addOverlay` 抛错。用来覆盖
+    // 「`clearOverlays` 之后把本库标注挂回去」这条路径的失败分支——静默吞掉会让那些标注
+    // 停在「组件认为挂着、画面上不存在」，正是这条路径要消灭的分叉。
+    if (this.failNextAddOverlay) {
+      const error = this.failNextAddOverlay
+      this.failNextAddOverlay = null
+      throw error
+    }
     // **不做去重**：诊断把 `panoramaLabel` 归为「挂载类」（按次数销账），前提正是
     // 「SDK 不会替调用方去重、挂两次就要摘两次」。在这里去重会让计数与释放路径脱钩
     // （销账入口是 `removeOverlay`，见 diagnostics 的记账方式表）。

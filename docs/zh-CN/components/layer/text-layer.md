@@ -61,6 +61,25 @@ const points = ref({
 因此改这两个 prop 会**换实例**。默认 `3` / `21`。
 :::
 
+::: warning `opacity` 只有一个入口（#174）
+官方 `setOptions` 的注释明写：袋里的 `opacity` / `visible` / `zIndex` / … 会「**转发到对应
+setter**」（`visualization/TextLayer.d.ts:265-268`）。而顶层 `opacity` prop 走的正是那个
+`setOpacity` ⇒ `style.opacity` 与 `opacity` prop 写的是**同一份 SDK 状态**，两个入口并存的
+后果是**最终值取决于谁最后被改**。
+
+因此顶层 `opacity` prop 是**唯一入口**。把 `opacity` 放进 `style` 会被忽略并**告警一次**
+（不静默接收后丢弃）。`TextLayerStyle.opacity` 这个字段在类型里标记为 `@deprecated`：
+它**是**官方选项表里的一项（删掉就查不到「官方有这个字段」），但**不生效**。
+:::
+
+::: tip 顺带更正：`setOptions` 是 **merge**，不是「整袋替换」
+本组件的文档此前把样式下发记成「整袋替换 … 没写的键回到官方默认值」，那是把它引用的官方那句
+「**仅更新已声明的样式键**」读反了——那句话的意思是「只写你给的那几个键，没给的**保持原值**」，
+与 `layer/` 家族的 `setStyleOptions`（「合并到现有样式」）是**同一种**语义。live 读数
+（`scripts/probe-style-opacity.mts`）逐 kind 证实两个家族都是 merge。
+**但那个更正没有取消上面的缺陷**：争的是同一份状态，与 merge 还是替换无关。
+:::
+
 ## 拾取与 `hitTest`
 
 四个拾取事件（`click` / `dblclick` / `rightclick` / `mousemove`）无条件订阅，载荷与

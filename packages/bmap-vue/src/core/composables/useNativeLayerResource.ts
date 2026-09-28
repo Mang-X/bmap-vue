@@ -67,6 +67,7 @@ import { createDevWarnOnce } from "../logger";
 import { createLayerRegistry, type LayerRecord, type LayerRegistry } from "../layers/LayerRegistry";
 import { nativeLayersOf } from "../layers/nativeLayerAccess";
 import { stableLayerValue } from "../layers/LayerSpec";
+import { stripContendedStyleKeys } from "../layers/nativeLayerStyleOwnership";
 import { ResourceScope } from "../lifecycle/ResourceScope";
 import type {
   NativeLayerDriver,
@@ -526,7 +527,26 @@ export function useNativeLayerResource<Props>(
 
   /* ------------------------------------------------------------ 实例生命周期 */
 
-  const styleOf = (): Record<string, unknown> | undefined => hooks.style(props);
+  /**
+   * 样式袋取值：**先**摘掉归顶层受控 prop 所有的键（`#174` P1-1），再交出去。
+   *
+   * 为什么摘在这里而不是在组件的 `style()` hook 里：争用判据是**逐 kind** 的
+   * （`visualization/` 家族转发 `opacity` 到 `setOpacity`，`layer/` 家族不转发——见
+   * `core/layers/nativeLayerStyleOwnership.ts` 的 live 读数表），而组件的 `style()` hook
+   * 是**纯投影**、不该带告警副作用。内核是唯一同时知道「kind」与「统一字段」的地方。
+   *
+   * 摘掉之后**告警一次**（稳定 key）：静默接收后丢弃会让使用者以为 `style.opacity` 生效了。
+   * 这条告警走 `warnOnce`，与本文件其余告警共用同一个 key 空间。
+   */
+  const styleOf = (): Record<string, unknown> | undefined =>
+    stripContendedStyleKeys(hooks.kind, hooks.style(props), (key) => {
+      warn(
+        `style.${key}:owned-by-prop`,
+        `[${hooks.component}] style 袋里的 "${key}" 与顶层 ${key} prop 写**同一份** SDK 状态` +
+          `（官方 ${hooks.kind} 的样式入口会把它转发到对应 setter），本次被忽略` +
+          `——图层级 ${key} 请用顶层 prop，只留一个入口，最终值才与改动顺序无关`,
+      );
+    });
 
   const reportError = (error: unknown): void => {
     const wrapped =

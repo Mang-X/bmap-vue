@@ -1660,10 +1660,19 @@ export type TextLayerAnchor =
  * `TextLayer` 的样式（官方 `TextLayerOptions` 里属于样式的那几项，逐字段投影）。
  *
  * 逐条对应 `visualization/TextLayer.d.ts:43-140`（不含 `:142` 之后的 `data` / `idKey` /
- * 拾取与显示那些——它们是各自的 prop）。经 `setOptions`（`:269`）**整袋替换**下发。
+ * 拾取与显示那些——它们是各自的 prop）。经 `setOptions`（`:269`）下发。
  *
- * ⚠️ 官方 `setOptions` 的注释写明「仅更新已声明的样式键，未知键忽略并告警一次」⇒
- * **没写的键回到官方默认值**（与 `layer/` 家族的 merge 语义相反）。
+ * ⚠️ 官方 `setOptions` 的注释（`:265-268`）写的是「**仅更新已声明的样式键**；`opacity` /
+ * `visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` **转发到对应 setter**，
+ * 其余未知键忽略并告警一次」⇒ 语义是 **merge**（只写你给的那几个键，没给的保持原值），
+ * 与 `layer/` 家族的 `setStyleOptions`（`layer/LineLayer.d.ts:336`「合并到现有样式」）**同一种**。
+ *
+ * ⚠️ **更正（#174 P1-1）**：本段原先写着「**整袋替换** … **没写的键回到官方默认值**」，
+ * 那是把它引用的那句官方原文读反了。live 读数（`scripts/probe-style-opacity.mts`，
+ * 2026-09-28）逐 kind 证实两个家族都是 merge。**但那个更正没有取消缺陷**：官方明写
+ * 袋里的 `opacity` 会被**转发到 `setOpacity`**，因此 `style.opacity` 与顶层 `opacity` prop
+ * 写的是**同一份**状态 ⇒ 由「最后改的那个赢」。修法与逐条依据见
+ * `core/layers/nativeLayerStyleOwnership.ts`。
  */
 export interface TextLayerStyle {
   /** 文案，不设则读要素的 `properties.text`（`:43`）。 */
@@ -1709,10 +1718,15 @@ export interface TextLayerStyle {
   /**
    * 图层级透明度 `[0,1]`（官方 `TextLayerOptions.opacity`，`:179`），与逐条 `fillOpacity` 相乘。
    *
-   * ⚠️ **刻意不作为独立 prop**，而是留在样式袋里：官方为它声明了字段级 setter
-   * `setOpacity`（`:296`，live 实测运行时也有），本库**两个入口都给**——`opacity` prop
-   * 走 setter（无需重建、可单独更新），`style.opacity` 走整袋。两者都合法：官方
-   * `setOptions` 的注释自己就说 `opacity` 会被「转发到对应 setter」。
+   * ⚠️ **本库不在这里收这个键**（#174 P1-1）：官方 `setOptions` 会把它**转发到 `setOpacity`**
+   * （`:265-268`），而本库的 `opacity` prop 走的正是同一个 `setOpacity`（`:296`）⇒ 两者是
+   * **同一个 SDK 状态**的两个入口，最终值会取决于「谁最后被改」。因此**顶层 `opacity` prop
+   * 是唯一入口**，把 `opacity` 放进样式袋会被忽略并**告警一次**。
+   *
+   * 声明保留在这里（它**是**官方选项表里的一项，删掉会让「这个字段官方存在」这件事查不到），
+   * 但它**不生效**。逐条依据与读数见 `core/layers/nativeLayerStyleOwnership.ts`。
+   *
+   * @deprecated 图层级透明度请用顶层 `opacity` prop。
    */
   opacity?: number;
   /** 绘制阶段，`null` / `'building'` / `'poi'`（官方 `renderStage`，`:198`）。 */
@@ -1775,9 +1789,12 @@ export interface TextLayerProps
   /**
    * 图层级透明度 `[0,1]`，与逐条 `fillOpacity` 相乘。默认 `1`。
    *
+   * **图层级透明度的唯一入口**：官方 `setOptions` 会把样式袋里的 `opacity` 转发到同一个
+   * `setOpacity`（`TextLayer.d.ts:265-268`），两个入口并存会让最终值取决于改动顺序，
+   * 因此样式袋里那个键被忽略并告警一次（#174 P1-1，逐条依据见
+   * `core/layers/nativeLayerStyleOwnership.ts`）。
+   *
    * 走官方**声明**的字段级 setter `setOpacity`（`:296`）⇒ 单独改它**不换实例**。
-   * （`PolygonLayer` / `PolylineLayer` 没有这个 prop，理由与 4.0.5 声明**无关**——
-   *  见 `VisualizationPolygonPolylineDisplayProps` 上那段更正。）
    */
   opacity?: number;
 }

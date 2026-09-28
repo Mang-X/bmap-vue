@@ -167,7 +167,7 @@ React 封装 `huiyan-fe/react-bmap@2.0.6`（`master`，`src/components/Panorama/
 | `whenReady()` | 查看器就绪（含 Client）；可用于判定加载结果              |
 | `getLinks()` | 当前场景的相邻链接（未就绪时给**空数组**，见下）           |
 | `capture(options?)` | 导出当前画面为 Data URL 字符串（`string \| null`）  |
-| `clearOverlays()` | 清空查看器里的**全部**覆盖物                        |
+| `clearOverlays()` | 清空查看器里**本库不管理**的覆盖物（`<PanoramaLabel>` 会被保留，见下） |
 | `viewer`    | 当前查看器句柄（未就绪为 `null`）                          |
 | `status`    | 实例状态（`idle` / `waiting-client` / `creating` / `ready` / `error` / `disposing` / `disposed`） |
 | `error`     | 最近一次失败（`status === 'error'` 时有值）                |
@@ -211,6 +211,35 @@ panoramaRef.clearOverlays()
 
 组件卸载时每个 `<PanoramaLabel>` 仍然走**自己的** `removeLabel()`。`clearOverlays()` 是给业务的
 批量入口，不销账、不替代释放路径（否则同一个标注会被销账两次）。
+
+### `clearOverlays()` 保留 `<PanoramaLabel>`（#174）
+
+官方那条 `clearOverlays()` 清的是**全部**覆盖物。官方**没有**枚举接口——`Panorama` 的覆盖物面
+只有 `addOverlay` / `removeOverlay` / `clearOverlays` 三个方法（`panorama/Panorama.d.ts:87` /
+`:92` / `:115`）——所以「跳过本库管理的、只清其余的」在官方面上**写不出来**：判不出哪个是
+其余的。
+
+`<Panorama>` 因此维护一份**标注名册**（`<PanoramaLabel>` 挂上来时登记、摘掉时销账），
+`clearOverlays()` 清完之后把名册里的标注**按同一个句柄重新挂回去**。
+
+**对调用方的语义：**
+
+| 覆盖物 | `clearOverlays()` 之后 |
+| --- | --- |
+| 业务自己挂上去的（经 `advanced` 逃生口或直接用 SDK） | **被清掉** |
+| `<PanoramaLabel>` 管理的 | **保留**，且是当前的（重新挂回的是同一个句柄，后续 prop 变化照常生效） |
+
+要连 `<PanoramaLabel>` 一起清掉，正确做法是**卸载那些组件**——它们的释放路径是各自的
+`removeLabel()`，这也是「谁创建谁摘除」这条所有权不变式的落点。
+
+::: warning 为什么不是「让 `clearOverlays` 碰不到本库管理的」
+那要么是**不调用**官方那条命令（业务要的「把这一屏标注撤掉重画」就没了，而那正是 #171 补这条
+命令的唯一理由），要么是**自己枚举后逐个 remove**（没有枚举接口，只能去摸 SDK 内部状态）。
+协调是唯一有依据的第三条路。
+:::
+
+重新挂回**失败**时会抛出 `BMAP_SDK_CALL_FAILED` 并在消息里说清「有几个没挂回去」——静默吞掉
+会让那些标注停在「组件认为挂着、画面上不存在」。
 
 ## `linksChange` 的载荷（#165 更正）
 

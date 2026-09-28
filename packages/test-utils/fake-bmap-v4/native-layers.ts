@@ -230,9 +230,36 @@ export class FakeV4RuntimeLayer extends FakeV4Layer {
     this.data = null
   }
 
+  /**
+   * 官方 `visualization/*` 那一族的整袋样式入口。
+   *
+   * 官方声明把「转发」写进了注释本身，逐字三条一族：
+   * `TextLayer.d.ts:265-268` / `PolylineLayer.d.ts:209-212` / `PointLayer.d.ts:297-300`
+   * ——「批量更新样式。**仅更新已声明的样式键**；`opacity` / `visible` / `zIndex` /
+   * `renderStage` / `referCenter` / `enablePicked` **转发到对应 setter**，其余未知键忽略并告警一次」。
+   *
+   * 两句话各自建模，缺一不可：
+   *
+   * 1. **merge**（不是整袋替换）——「仅更新已声明的样式键」= 只写你给的那几个键。
+   *    ⚠️ 仓库此前把这一族记成「整袋替换」，那是**误读**官方那句「仅更新…」。
+   * 2. **转发**——`opacity` / `visible` / `zIndex` 不是三个独立的样式键，它们**就是**那几个
+   *    setter 所写的状态。少了这一条，替身会把「袋里的 opacity」与「`setOpacity` 写的 opacity」
+   *    变成两份互不相干的状态，于是「两个入口争同一个 SDK 状态」这条缺陷在替身上
+   *    **完全不可见**（#174 P1-1 的成因：缺陷在真机上成立、在替身上永远绿）。
+   *
+   * 转发**直接写状态**而不走 `setOpacity()` / `setVisible()` / `setZIndex()`：那三个方法会往
+   * `callLog` 追加条目，而本库现有用例有若干条按**精确序列**断言调用日记。转发是官方
+   * `setOptions` 的**内部**行为，调用方看不见多出来的那三个方法调用——不该让它们进日记。
+   */
   setOptions(options: Record<string, unknown>): void {
     this.callLog.push('setOptions')
     this.options = { ...this.options, ...options }
+    // 直接写状态（不调 `setOpacity()` 等）——那几个方法会往 callLog 追加条目，
+    // 而现有用例有若干条按**精确序列**断言调用日记。转发是官方 setOptions 的**内部**行为，
+    // 调用方看不见多出来的那三个方法调用，因此不该让它们进日记。
+    if (typeof options.opacity === 'number') this.opacity = Math.min(1, Math.max(0, options.opacity))
+    if (typeof options.visible === 'boolean') this.visible = options.visible
+    if (typeof options.zIndex === 'number') this.zIndex = options.zIndex
   }
 
   /** 注入一次 `setVisible` 失败（**写之前**抛，状态不变）；口径同基类那一份。 */

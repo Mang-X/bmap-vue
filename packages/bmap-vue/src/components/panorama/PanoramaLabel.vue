@@ -69,6 +69,11 @@ async function createLabel(): Promise<void> {
     // （`ResourceScope.dispose()` 是终态，复用会让新注册的 disposer 立即执行）
     const localScope = new ResourceScope({ label: "panorama-label" });
     labelScope = localScope;
+    // 登记进查看器的**标注名册**（#174 P1-2）：父级的 `clearOverlays()` 会把全部覆盖物清掉，
+    // 官方**没有**枚举接口可用来「只清管不到的」，因此清完之后由父级按这份名册把它们挂回去。
+    // 不登记的后果不是「清空时少了一条标注」，而是子组件**仍然认为**自己挂着、后续 prop
+    // 变化全部打进一个已经不在画面上的句柄 ⇒ 「声明存在、画面不存在」。
+    context.registerLabel(created);
     localScope.add(() => viewerDriver.removeLabel(ready.viewer, created));
     localScope.add(viewerDriver.on(created, "click", (event: unknown) => emit("click", event)));
     driver = viewerDriver;
@@ -81,6 +86,11 @@ async function createLabel(): Promise<void> {
 
 function destroyLabel(): void {
   generation += 1;
+  // ⚠️ **先销账、再摘除**：名册是「这个标注还归本库管」的凭据，而 `clearOverlays` 靠它决定
+  // 要把谁挂回去。反过来（先摘后销）的话，一次失败的摘除会让名册与画面**永久分叉**——
+  // 名册里已经没有它、画面上还挂着；而它被重新挂回时又会变成两条。
+  const current = label.value;
+  if (current) context.unregisterLabel(current);
   try {
     labelScope?.dispose("panorama-label-removed");
   } catch {

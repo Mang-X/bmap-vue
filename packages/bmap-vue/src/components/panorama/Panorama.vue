@@ -678,16 +678,60 @@ defineExpose({
     return current.driver.capture(current.viewer, options);
   },
   /**
-   * 清空查看器里的**全部**覆盖物（官方 `Panorama#clearOverlays`，issue #171 item I）。
+   * 清空查看器里**本库不管理的**覆盖物（官方 `Panorama#clearOverlays`，issue #171 item I）。
    *
-   * 与逐个 `removeLabel()` 是两条路：`<PanoramaLabel>` 的释放路径是各自的摘除，而业务
-   * 「把这一屏标注撤掉重画」时手上未必有那些句柄。未就绪 / 已释放**显式抛**
-   * `BMAP_RESOURCE_DISPOSED`（不静默 no-op——清不掉却报告成功会让标注静默叠加）。
+   * ## 对调用方的语义（**这条是契约**）
+   *
+   * 官方 `clearOverlays()` 清的是**全部**覆盖物。官方**没有**枚举接口——`Panorama` 的覆盖物面
+   * 只有 `addOverlay` / `removeOverlay` / `clearOverlays` 三个方法
+   * （`panorama/Panorama.d.ts:87` / `:92` / `:115`）——所以「跳过本库管理的、只清其余的」
+   * 在官方面上**写不出来**：判不出哪个是其余的。可写的只有一条：清完之后把**当前挂载着的
+   * `<PanoramaLabel>`** 按名册**重新挂回去**。
+   *
+   * ⇒ 调用方看到的效果是：**业务自己挂上去的覆盖物（经 `advanced` 逃生口或直接用 SDK）被清掉，
+   * `<PanoramaLabel>` 管理的标注保留且是当前的**。重新挂回的是**同一个句柄**，因此标注的
+   * 业务内容不变，后续 prop 变化照常落到画面上。
+   *
+   * 要连 `<PanoramaLabel>` 一起清掉，正确做法是**卸载那些组件**——它们的释放路径是各自的
+   * `removeLabel()`，这也是「谁创建谁摘除」这条所有权不变式的落点。
+   *
+   * ## 为什么不是「限制 clearOverlays 让它碰不到本库管理的」
+   *
+   * 那要么是**不调用**官方那条命令（业务要的「把这一屏标注撤掉重画」就没了，而那正是
+   * #171 补这条命令的唯一理由），要么是**自己枚举后逐个 remove**（没有枚举接口，只能去摸
+   * SDK 内部状态——AGENTS.md 禁止「镜像读不回的内部状态」）。协调是唯一有依据的第三条路。
+   *
+   * 未就绪 / 已释放**显式抛** `BMAP_RESOURCE_DISPOSED`（不静默 no-op——清不掉却报告成功会让
+   * 标注静默叠加）。
+   *
+   * 重新挂回**失败**时：逐个继续、最后抛出一次汇总错误。静默吞掉会让那些标注停在
+   * 「组件认为挂着、画面上不存在」——正是本函数要消灭的那一类分叉。
    */
   clearOverlays: (): void => {
     const current = active;
     if (!current) throw panoramaDisposed("clearOverlays");
     current.driver.clearOverlays(current.viewer);
+    // 名册取**一次**快照：清空与重新挂回之间是同步的，但把快照固定下来能让错误消息里的
+    // 分母与实际尝试过的数量是同一个值（重新求值名册理论上仍会一致，写死是为了让
+    // 「报出去的数字」与「真的做了什么」不可能分叉）。
+    const labels = context.managedLabels();
+    const failures: unknown[] = [];
+    for (const label of labels) {
+      try {
+        current.driver.addLabel(current.viewer, label);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new BMapError(
+        "BMAP_SDK_CALL_FAILED",
+        `<Panorama>.clearOverlays(): ${labels.length - failures.length} / ${labels.length} ` +
+          "个本库标注已重新挂回，其余失败——" +
+          "这些标注此刻**不在画面上**（它们的组件仍认为已挂载），请重新挂载对应组件",
+        { component: "Panorama", cause: failures[0] },
+      );
+    }
   },
   /** 当前查看器句柄（未就绪为 `null`） */
   viewer: context.viewer,

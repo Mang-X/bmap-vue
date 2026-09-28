@@ -263,7 +263,7 @@ describe("Panorama.capture()：读命令，未就绪显式失败", () => {
 });
 
 describe("Panorama.clearOverlays()：写命令，未就绪显式失败", () => {
-  it("打到官方入口，并让标注的挂载账归零", async () => {
+  it("打到官方入口，并让标注的挂载账仍然平衡", async () => {
     const wrapper = await mountPanorama({}, () => [
       h(PanoramaLabel, { content: "A", position: POINT }),
       h(PanoramaLabel, { content: "B", position: POINT }),
@@ -275,8 +275,14 @@ describe("Panorama.clearOverlays()：写命令，未就绪显式失败", () => {
     (wrapper.findComponent(Panorama).vm as unknown as AnyRecord).clearOverlays();
 
     expect(viewer.callLog).toContain("clearOverlays");
-    expect(viewer.overlays).toEqual([]);
-    expect(lastLabelCount()).toBe(0);
+    // ⚠️ **不再是** `[]`（#174 P1-2）：官方那条命令清掉的是**全部**覆盖物，而官方没有枚举接口，
+    // 所以本库管理的标注由 `clearOverlays` **按名册重新挂回**——挂的是**同一个句柄**，
+    // 因此标注的归属不与画面分叉（清掉之后子组件仍「以为」自己挂着，后续 prop 变化就会
+    // 打进一个不在画面上的句柄）。逐条取舍与对外语义见
+    // `panorama-clear-overlays-labels.test.ts` 的文件头。
+    expect(viewer.overlays, "本库管理的标注被重新挂回").toHaveLength(2);
+    // 挂载账是**按次数**销的：清一次销两个、挂回两次又记两个 ⇒ 净账不变。
+    expect(lastLabelCount(), "重新挂回之后挂载账仍然平衡").toBe(2);
 
     wrapper.unmount();
     await settle();
