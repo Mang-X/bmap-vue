@@ -102,7 +102,7 @@ SFC 的 `<script setup>` 不能被 `.ts` 引用它的类型，而命令面必须
 | `size_changed` | **加** | **无载荷**（见下） |
 | `overlay_add` `overlay_remove` `overlays_clear` | **加** | `<PanoramaLabel>` 由子组件管理，父级**没有别的观察面**知道标注何时真的挂上 |
 | `visible_poi_type_changed` | **加** | 载荷可消费，且 `setPanoramaPoiType()` 是本库已暴露的写入口 ⇒ 写完能确认落没落 |
-| `links_visible_changed` | **不加** | 由**官方自带**的道路指示控件（`linksControl`）的显隐驱动，而本库不镜像那个控件的内部 UI 状态（官方**没有给读回入口**）⇒ 加了就是「声明了却几乎永不触发」 |
+| `links_visible_changed` | **加**（复审后更正） | 官方载荷是 `{ value: boolean }`，**自带值**、不需要任何读回入口——原裁决「官方没给读回入口 ⇒ 加了也几乎不触发」把**事件**误当成了 **getter** 类成员。已实现：`linksVisibleChanged`（并含 snake_case 别名），载荷取裸 `boolean` |
 | `destroy` | **不加** | 见下（与释放顺序冲突） |
 | `touchmove` | **不存在** | issue 点名了它，但**官方 `PanoramaEventMap` 里没有**（只有 `touchstart` / `touchend`） |
 
