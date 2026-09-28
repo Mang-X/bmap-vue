@@ -1,12 +1,5 @@
 <template>
-  <Map
-    v-bind="$attrs"
-    :minZoom="3"
-    :zoom="zoom"
-    enableWheelZoom
-    ref="map"
-    @ready="handleInitd"
-  >
+  <Map v-bind="$attrs" :minZoom="3" :zoom="zoom" enableWheelZoom ref="map" @ready="handleInitd">
     <CustomControl
       style="
         border-radius: 4px;

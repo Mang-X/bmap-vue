@@ -4,16 +4,15 @@
     <option value="outside">局部隐藏</option>
     <option value="inside">局部显示</option>
   </select>
-  <Map
-    v-bind="$attrs"
-    :center="center"
-    :zoom="18"
-    @ready="handleInitd"
-    enable-wheel-zoom
-    :backgroundColor="[192, 214, 213, 100]"
-  >
+  <Map v-bind="$attrs" :center="center" :zoom="18" @ready="handleInitd" enable-wheel-zoom>
     <Marker :position="center"></Marker>
-    <MapMask :points="points" :show-region="showRegion" isPoiMask isBuildingMask isMapMask></MapMask>
+    <MapMask
+      :points="points"
+      :show-region="showRegion"
+      isPoiMask
+      isBuildingMask
+      isMapMask
+    ></MapMask>
   </Map>
 </template>
 
