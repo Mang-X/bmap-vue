@@ -147,7 +147,7 @@ void [_labelBadAnchor, _labelBadAnchorName, _labelNoHeight, _labelNoOpacity];
  * 逐条分类**全部是 `recreate`**（构造期），依据是 live 读数（2026-09-27，真实 AK + headless
  * Chrome，见行为测试文件头的读数表）：官方 `ClusterLayer` 的成员表里**没有**这六个的
  * 任何字段级 setter。`setOptions` 虽是公开成员，但那是**整袋**入口，**不是**逐字段 setter：
- * 官方专页自己也写「聚合参数变更会重算索引」，本库不把整袋替换当成字段级 `mutable`
+ * 官方专页自己也写「聚合参数变更会重算索引」，本库不把整袋入口当成字段级 `mutable`
  * （与 `PathCtorCommonProps` 整族 `recreate` 同一口径：没有**公开的逐字段入口**就是构造期）。
  */
 interface Item {

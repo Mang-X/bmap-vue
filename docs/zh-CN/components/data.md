@@ -265,7 +265,7 @@ Marker 的代价」），不是自动降级。
   悄悄不生效」）；
 - 官方虽然有公开的 `setOptions`，且实测改聚合参数**确实**会重算（`clusterRadius` 20 → 300
   后 `change` 事件的簇数从 3 变 1，不必再 `redraw()`），但那是**整袋**入口，
-  **不是**逐字段通道；更关键的是本库的 `setStyle` **也**落到 `setOptions`（整袋替换），
+  **不是**逐字段通道；更关键的是本库的 `setStyle` **也**落到 `setOptions`，
   两条通道共用一个成员 ⇒ 认成「可就地更新」会让聚合参数与样式互相踩。
 
 拾取面（`enablePicked` / `mouseStyleChange` / `pickTolerance`）**刻意不暴露**：

@@ -192,7 +192,7 @@ describe("visualization/PolygonLayer / PolylineLayer（issue #166）", () => {
       },
     );
 
-    it("样式落到 setOptions（整袋），**不是** setStyleOptions + doOnceDraw", async () => {
+    it("样式落到 setOptions（merge），**不是** setStyleOptions + doOnceDraw", async () => {
       // `layer/` 家族是 `setStyleOptions` + `doOnceDraw`；`visualization/` 两族是 `setOptions`
       // 且**没有** `doOnceDraw`（`PolygonLayer.d.ts:181` / `PolylineLayer.d.ts:213`）。
       // 跟着旧族写会调到上游没有的成员——本条把这条判据钉成可观察行为。

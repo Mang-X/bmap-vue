@@ -77,7 +77,8 @@ export interface NativeClusterEngineProps<Item> {
    *
    * 这六个此前**没有**任何书面理由被省略，而同族的另外六个就在上面 ⇒ 遗漏，不是收窄。
    * 六个**全部**是**构造期**（`recreate`）：官方 `ClusterLayer` 的成员表里没有它们的
-   * 字段级 setter，而 `setOptions` 是**整袋**入口（且本库的 `setStyle` 也落到它），
+   * 字段级 setter，而 `setOptions` 是**整袋**入口（官方「批量更新配置/样式」，
+   * 且本库的 `setStyle` 也落到它），
    * 因此「有 `setOptions`」不构成逐字段更新入口。三条完整理由见
    * `types/components.ts` 的 `MarkerClusterProps` 同款注释。
    *

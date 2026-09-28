@@ -110,7 +110,7 @@ describe("visualization/TextLayer（issue #166 第二刀）", () => {
       harness.assertIdle();
     });
 
-    it("样式落到 setOptions（整袋），不是 setStyleOptions + doOnceDraw", async () => {
+    it("样式落到 setOptions（merge），不是 setStyleOptions + doOnceDraw", async () => {
       const { wrapper, setProp } = await mountTextLayer({ style: { fontSize: 20 } });
       const calls = harness.nativeLayerCalls();
       expect(calls, "样式走 setOptions").toContain("setOptions");
@@ -120,7 +120,7 @@ describe("visualization/TextLayer（issue #166 第二刀）", () => {
       await setProp({ style: { fontSize: 28 } });
       expect(
         harness.nativeLayerCalls().filter((call) => call === "setOptions").length,
-        "整袋替换不重建",
+        "样式写不重建（只写这次给的键）",
       ).toBeGreaterThan(1);
 
       await unmountAndSettle(wrapper);

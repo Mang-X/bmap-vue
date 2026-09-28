@@ -318,7 +318,7 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
       const layer = layers.create(kind);
       const raw = layer.raw as unknown as { options: Record<string, unknown>; callLog: string[] };
       layers.setStyle(layer, { strokeWeight: 3 });
-      // ⚠️ `visualization/` 家族声明的是 `setOptions`（整袋替换），**没有** `setStyleOptions`
+      // ⚠️ `visualization/` 家族声明的是 `setOptions`（同样是 merge），**没有** `setStyleOptions`
       // 与 `doOnceDraw`——跟着 `layer/` 家族的写法走会调到上游没有的成员。
       expect(raw.callLog, `${kind} 应当走 setOptions`).toContain("setOptions");
       expect(raw.callLog, `${kind} 不得调 setStyleOptions（这一族没有它）`).not.toContain(

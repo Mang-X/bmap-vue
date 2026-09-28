@@ -47,10 +47,10 @@
  * live 实测：`setOptions({ clusterRadius: 20 → 300 })` 之后，同一实例的 `change` 事件簇数
  * 从 3 变成 1，**不必**再调 `redraw()`。看起来够格叫 `mutable`，但本库**不**这么判，三条理由：
  *
- * 1. `setOptions` 是**整袋**入口，官方专页对它的描述是「批量更新配置/样式」——
- *    它**不是**为「只改其中一个键」设计的公开逐字段通道；
+ * 1. `setOptions` 是**整袋**入口，官方专页对它的描述是「批量更新配置/样式」
+ *    （`ClusterLayer.d.ts:225`）——它**不是**为「只改其中一个键」设计的公开逐字段通道；
  * 2. 更关键：它**顺带覆盖样式**。本库的 `setStyle` 落到 `setOptions`
- *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 是**整袋替换**
+ *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 走的是 **merge**
  *    ——两者共用一个成员，认成 `mutable` 会让「聚合参数」与「样式」两条通道互相踩。
  * 3. 与本票已落地的 21 个图形族构造期选项**同一口径**（`PATH_CTOR_*`）：判据是
  *    「有没有**公开的逐字段更新入口**」，`setOptions` 不满足。
@@ -503,7 +503,8 @@ describe("<MarkerCluster> 的 tileSize / fitViewMargin / updateRealTime / waitTi
    * 官方 `ClusterLayer` 有公开的 `setOptions`，live 实测改聚合参数**确实**会重算
    * （`clusterRadius` 20 → 300 后 `change` 事件的簇数 3 → 1，不必再 `redraw()`）。
    * 若把某一项改成「就地更新」，更新会落到 `setOptions` 上——而 `setStyle` **也**落到
-   * `setOptions`（整袋替换），两条通道会互相踩。
+   * `setOptions`（同一批 `setOptions` 调用既可能被样式写触发、也可能被聚合参数写触发），
+   * 两条通道会互相踩。
    *
    * 判据在此写成**可观察的**而不是读源码：认成 `mutable` 时旧实例的 `callLog` 里会多出
    * `setOptions`；留在 `recreate` 时它必须只被摘掉、一次 SDK 写入都不该有。

@@ -28,12 +28,17 @@ import { PolygonLayer, PolylineLayer } from 'bmap-vue'
 > ——官方 `LineStyle` 里没有这一族。
 
 样式更新入口也不同：旧组件走 `setStyleOptions`（**merge**）并显式 `doOnceDraw()`；新组件走
-`setOptions`，**没有** `doOnceDraw`（官方注释：「仅更新已声明的样式键，未知键忽略并告警一次」）。
-两个组件因此**不**能混用在同一张图上做同一次样式更新。
+`setOptions`（**同样是 merge**：官方注释「仅更新已声明的样式键，未知键忽略并告警一次」的意思是
+「只写你给的键，没给的保持原值」），但**没有** `doOnceDraw`。两个组件因此**不**能混用在同一张图上
+做同一次样式更新。
 
-⚠️ **「没写到的键会不会回到默认值」官方没有明说**（注释只说「仅更新已声明的样式键」，
-字面上是保持原值，但没有排除被重置）。实际影响：不要依赖「只改一个键、其余自动回默认」，
-显式写全你要的键即可。详见[迁移指引](./deprecated-layers-migration)。
+::: tip 两族的更新语义都是 merge（#174 P1-1 更正）
+本项目此前把 `visualization/` 家族记成「整袋替换、没写的键回到官方默认值」，那是把上面那句
+官方注释**读反了**。live 读数（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实：
+`text` / `polyline` / `line` / `point-shape` 四种 kind 上，「先 `setOpacity(0.25)`、再做一次
+不含 `opacity` 的样式写」之后 `getOpacity()` 全部仍是 `0.25`。⇒ 迁移时**只写你要改的键**即可，
+没写的键沿用旧实例当前值。详见[迁移指引](./deprecated-layers-migration)。
+:::
 
 逐字段迁移表与「什么时候该留下」的判断，见[弃用图层的迁移指引](./deprecated-layers-migration)。
 

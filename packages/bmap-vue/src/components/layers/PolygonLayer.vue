@@ -16,9 +16,12 @@
  *
  * ## 与其它可视化图层的四处差异（与 `<HeatmapLayer>` / `<TrackLineLayer>` 同装配）
  *
- * 1. **样式走 `setOptions`（整袋替换），不是 `setStyleOptions` + `doOnceDraw`**
+ * 1. **样式走 `setOptions`（merge），不是 `setStyleOptions` + `doOnceDraw`**
  *    （官方声明 `visualization/PolygonLayer.d.ts:181`）。官方注释写明「仅更新已声明的
- *    样式键，未知键忽略并告警一次」⇒ **没写的键回到官方默认值**（不是 merge）。
+ *    样式键，未知键忽略并告警一次」⇒ **只写你给的键，没写的保持原值**（与 `layer/`
+ *    家族的 `setStyleOptions` 同一语义，见
+ *    `core/layers/nativeLayerStyleOwnership.ts` 的文件头）。两族**真正**不同的只有
+ *    重绘：`layer/` 家族要显式 `doOnceDraw()`，本族没有这个成员。
  * 2. **显隐 / 层级**走 `setVisible`（`:204`）/ `setZIndex`（`:208`），因此**重新可见不换实例**。
  * 3. **没有** `opacity` prop——⚠️ 这一条的**理由**被 2026-09-27 的像素级复跑换掉了，
  *    旧理由（「官方声明里没有 `setOpacity`，所以不把未声明成员当契约」）**已作废**。

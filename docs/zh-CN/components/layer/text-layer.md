@@ -76,7 +76,7 @@ setter**」（`visualization/TextLayer.d.ts:265-268`）。而顶层 `opacity` pr
 本组件的文档此前把样式下发记成「整袋替换 … 没写的键回到官方默认值」，那是把它引用的官方那句
 「**仅更新已声明的样式键**」读反了——那句话的意思是「只写你给的那几个键，没给的**保持原值**」，
 与 `layer/` 家族的 `setStyleOptions`（「合并到现有样式」）是**同一种**语义。live 读数
-（`scripts/probe-style-opacity.mts`）逐 kind 证实两个家族都是 merge。
+（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实两个家族都是 merge。
 **但那个更正没有取消上面的缺陷**：争的是同一份状态，与 merge 还是替换无关。
 :::
 
@@ -127,7 +127,7 @@ function probe() {
 
 - **`setRenderStage` / `setRefCenter` 与七条 `getX` 读回**：官方有、运行时也有，但**没有组件
   消费者**——本库不给「没有消费者」的扩展开口子。需要绘制阶段时经 `style` 袋的 `renderStage`
-  走 `setOptions` 整袋下发（官方注释明说 `setOptions` 会把它转发到对应 setter）。
+  走 `setOptions` 下发（官方注释明说 `setOptions` 会把它转发到对应 setter）。
 - **`mouseover` / `mouseout` 事件**：官方声明了（`TextLayer.d.ts:336-337`），但它们是**成对**的
   进入 / 离开语义，与本库现有组件的领域事件面不同构且无消费者，因此不派发（与前两族同一裁决）。
 - **要素状态（Feature State）**：官方声明里**没有** `updateState` 一族，因此组件**不** expose

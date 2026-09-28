@@ -82,7 +82,7 @@
 | — | `style.strokeTextureSpaced` / `strokeTextureGap` / `strokeTextureColor` | **新增**：平铺 / 间隔 / 叠加色 |
 | `data` | `data` | 同名（两族都是 GeoJSON） |
 | `visible` / `zIndex` | `visible` / `zIndex` | 同名 |
-| `opacity` | `style.strokeOpacity` | **重写**：`<PolylineLayer>` 官方**声明了**图层级 `opacity`（`PolylineLayerOptions.opacity` @default 1，`setOptions` 注释也写明转发给对应 setter）且**实测生效**，但本组件**未暴露**该 prop ⇒ 只能经 `style` 袋经 `setOptions` 整袋下发，或用 `style.strokeOpacity`。`<PolygonLayer>` 另见下行 |
+| `opacity` | `style.strokeOpacity` | **重写**：`<PolylineLayer>` 官方**声明了**图层级 `opacity`（`PolylineLayerOptions.opacity` @default 1，`setOptions` 注释也写明转发给对应 setter）且**实测生效**，但本组件**未暴露**该 prop ⇒ 只能经 `style` 袋经 `setOptions` 下发，或用 `style.strokeOpacity`。`<PolygonLayer>` 另见下行 |
 | `minZoom` / `maxZoom` | `minZoom` / `maxZoom` | 同名（都是**构造选项**，变化换实例） |
 | `idKey` / `enablePicked` | `idKey` / `enablePicked` | 同名（⚠️ 默认值都被本库改成 `true`） |
 | `crs` | — | **无对应**（新家族没有坐标系选项） |
@@ -202,13 +202,17 @@
 `visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` 转发到对应 setter，
 **其余未知键忽略并告警一次**」。
 
-::: warning 「没写的键会不会回到默认值」——官方注释**没有**明确说
-「仅更新已声明的样式键」这句在字面上是**按你写到的键更新**，因此**没写到的键保持原值**；
-但它**没有**明说未提供的键是否被重置。两种读法对「只写一个键时其余键怎么办」给出的答案不同，
-而官方没有可判定的运行时候选页或类型面能定这件事。⇒ **无法判定**：本库
-`<PolygonLayer>` / `<PolylineLayer>` 的源码注释按「整袋替换、没写的键回到官方默认值」记录，
-本页不推翻它，也不替它背书。**实际影响**：不要依赖「只改一个键、其余自动回默认」——
-显式写全你要的键，两种读法下行为都正确。
+::: tip 「没写的键保持原值」——两族的更新语义**都是 merge**（#174 P1-1 更正）
+「仅更新已声明的样式键」这句的意思是「**只写你给的那几个键，没给的保持原值**」，与 `layer/`
+家族的 `setStyleOptions`（「合并到现有样式」，`layer/LineLayer.d.ts:336`）是**同一种**语义。
+本库此前把 `visualization/` 家族记成「整袋替换、没写的键回到官方默认值」，那是**误读**。
+live 读数（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实：先 `setOpacity(0.25)`，
+再做一次**不含** `opacity` 的样式写，`getOpacity()` 在 `text` / `polyline` / `line` /
+`point-shape` 四种 kind 上**全部**仍是 `0.25`。逐条依据见
+`packages/bmap-vue/src/core/layers/nativeLayerStyleOwnership.ts` 的文件头。
+
+⇒ 两族真正不同的只有**重绘**：`layer/` 家族改完要显式 `doOnceDraw()`，`visualization/` 家族
+没有这个成员。**实际影响**：迁移时只写你要改的键即可，没写的键沿用旧实例当前值。
 :::
 
 ### 3. 七个旧选项在新家族无对应

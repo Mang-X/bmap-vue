@@ -22,7 +22,8 @@
  *   `distance` / `point` / `angle` + `status` / `statusName`）。只读事件，不做推断；
  * - **没有** style / opacity / zIndex / 缩放范围 prop：4.0.5 声明了 `setOpacity` / `setZIndex`
  *   （`visualization/TrackLine.d.ts:461`/`:465`）但本组件**刻意不开面**（没有消费者）；
- *   缩放范围官方**没有**字段级 setter。轨迹线的样式经 `setOptions` 整袋下发，不走 `style` prop。
+ *   缩放范围官方**没有**字段级 setter。轨迹线的样式经 `setOptions` 整袋下发，不走 `style` prop
+ *   （`TrackLine.d.ts:360` 对它的描述是「批量更新配置/样式」，没有「仅更新已声明的键」那句）。
  *
  * ## 页面可见性策略（#110）
  *

@@ -1347,8 +1347,10 @@ export interface NativeLayerPickOptions {
  *   （建议改用 `visualization.PolylineLayer`）。`<LineLayer>` 组件**继续可用、行为不变**，
  *   而官方建议的替代品 `<PolylineLayer>` 本库**已提供**（#166）。
  *   ⚠️ 迁移**不是改个名字**：两者的 `style` 不是同一套字段（这里是 `LineLayerStyle`，
- *   替代品是 `PolylineLayerStyle`），样式要重写；数据模型也不同（官方那条走
- *   `setOptions` 整袋替换）。本标记是如实告知官方弃用，不是「请立即改用别的东西」。
+ *   替代品是 `PolylineLayerStyle`），样式要重写；数据模型也不同（这一族的样式更新走
+ *   `setStyleOptions`，替代品走 `setOptions`，两者的更新语义都是 merge、但后者没有
+ *   `doOnceDraw` 重绘——逐条见 `PolygonLayerStyle`）。
+ *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
  *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
@@ -1415,8 +1417,14 @@ export type VisualizationStyleValue<T> =
  * 两者的关系是**弃用替代**（官方把 `FillLayer` 标了 `@deprecated`、建议改用本类），
  * **不是**字段改名——迁移时样式要按本类型重写。
  *
- * 这些字段经 `setOptions`（`:181`）**整袋替换**下发（不是 `layer/` 家族的 merge +
- * `doOnceDraw`）：只写你要改的键，**没写的键会回到官方默认值**。
+ * 这些字段经 `setOptions`（`:181`）下发，语义是 **merge**：官方注释逐字是「仅更新已声明的
+ * 样式键；`visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` 转发到对应
+ * setter，其余未知键忽略并告警一次」⇒ **只写你要改的键，没写的键保持原值**，与 `layer/`
+ * 家族的 `setStyleOptions`（「合并到现有样式」，`layer/LineLayer.d.ts:336`）**同一种**。
+ *
+ * ⚠️ 与 `layer/` 家族真正不同的一条只有**重绘**：`layer/` 家族改完样式要显式 `doOnceDraw()`，
+ * 本族**没有**这个成员（改了即生效）。live 读数见
+ * `core/layers/nativeLayerStyleOwnership.ts` 的文件头（#174 P1-1 更正）。
  */
 export interface PolygonLayerStyle {
   /** 填充色，css 字符串。默认 `'rgba(25, 25, 250, 0.6)'`。 */
@@ -1448,7 +1456,9 @@ export interface PolygonLayerStyle {
  * ⚠️ **与 `<LineLayer>` 的 `style` 不是同一套字段**：本类型逐条对应
  * `visualization/PolylineLayer.d.ts:27-92`。迁移口径同 `PolygonLayerStyle` 的说明。
  *
- * 同样经 `setOptions`（`:213`）**整袋替换**下发。
+ * 同样经 `setOptions`（`:213`）以 **merge** 语义下发（口径与依据同 `PolygonLayerStyle`）。
+ * ⚠️ 本族的 `setOptions` 比面族**多转发一个键**：`opacity` 也会转到 `setOpacity`
+ * （`PolylineLayer.d.ts:209`），面族那一版没有这一项。
  */
 export interface PolylineLayerStyle {
   /**
@@ -1606,10 +1616,12 @@ export interface PolygonLayerProps
    */
   data?: object | null;
   /**
-   * 面样式（见 `PolygonLayerStyle`）。变化时经 `setOptions` **整袋替换**下发，不重建。
+   * 面样式（见 `PolygonLayerStyle`）。变化时经 `setOptions` 以 **merge** 语义下发，不重建。
    *
    * ⚠️ 官方 `setOptions` 的注释写明「仅更新已声明的样式键」，而**未知键忽略并告警一次**
-   * ——因此只写你要改的键，**没写的键会回到官方默认值**（与 `layer/` 家族的 merge 语义相反）。
+   * ——因此只写你要改的键，**没写的键保持原值**（与 `layer/` 家族的 merge 语义**相同**，
+   * 本族与之不同的只有「没有 `doOnceDraw`」）。live 读数见
+   * `core/layers/nativeLayerStyleOwnership.ts` 的文件头。
    */
   style?: PolygonLayerStyle;
 }
@@ -1630,7 +1642,7 @@ export interface PolylineLayerProps
    * `null` / `undefined` 的口径与 `PolygonLayerProps.data` **完全一致**。
    */
   data?: object | null;
-  /** 线样式（见 `PolylineLayerStyle`）。同样经 `setOptions` 整袋替换。 */
+  /** 线样式（见 `PolylineLayerStyle`）。同样经 `setOptions` 以 **merge** 语义下发。 */
   style?: PolylineLayerStyle;
 }
 
@@ -1777,7 +1789,7 @@ export interface TextLayerProps
    * `undefined` = **不表态**（不产生任何 SDK 调用）。
    */
   data?: object | null;
-  /** 文字样式（见 `TextLayerStyle`）。变化时经 `setOptions` **整袋替换**下发，不重建。 */
+  /** 文字样式（见 `TextLayerStyle`）。变化时经 `setOptions` 以 **merge** 语义下发，不重建。 */
   style?: TextLayerStyle;
   /**
    * 图层级透明度 `[0,1]`，与逐条 `fillOpacity` 相乘。默认 `1`。
@@ -2322,11 +2334,11 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
    * 20 → 300 })` 之后同一实例的 `change` 事件簇数**确实**从 3 变 1，**不必**再 `redraw()`。
    * 看着够格叫 `mutable`，但本库不这么判，三条理由：
    *
-   * 1. `setOptions` 是**整袋**入口，官方对它的描述是「批量更新配置/样式」——
-   *    它不是为「只改其中一个键」设计的公开逐字段通道；
+   * 1. `setOptions` 是**整袋**入口（官方对它的描述是「批量更新配置/样式」，
+   *    `ClusterLayer.d.ts:225`）——它不是为「只改其中一个键」设计的公开逐字段通道；
    * 2. **它顺带覆盖样式**：本库的 `setStyle` 也落到 `setOptions`
-   *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 是整袋替换。
-   *    两条通道共用一个成员，认成 `mutable` 会让「聚合参数」与「样式」互相踩。
+   *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 走的是
+   *    **merge** 语义。两条通道共用一个成员，认成 `mutable` 会让「聚合参数」与「样式」互相踩。
    * 3. 与本票已落地的 21 个图形族构造期选项**同一口径**（`driver/types/overlays.ts` 的
    *    `PATH_CTOR_*`）：判据是「有没有**公开的逐字段更新入口**」，`setOptions` 不满足。
    *

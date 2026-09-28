@@ -43,7 +43,7 @@ const _okMinZoom = polygon.minZoom;
 const _okIdKey = polygon.idKey;
 const _okStyle = polygon.style;
 
-// `setOptions` 整袋语义：只写要改的键，其余键可省
+// `setOptions` 是 merge：只写要改的键，没写的保持原值
 const _okPartialStyle: PolygonLayerStyle = { strokeWeight: 2 };
 const _okPartialLine: PolylineLayerStyle = { strokeStyle: "dashed", dashArray: [8, 4] };
 // 数据驱动样式（官方 `StyleValue<T>`，`visualization/common.d.ts:10`）
@@ -64,7 +64,7 @@ polygon.data = "not-geojson";
 // 声明成 prop 会让组件每次都走「该 kind 没有这个入口」的告警分支。
 polygon.opacity = 0.5;
 
-// @ts-expect-error 同上，`PolylineLayerOptions.opacity` 只能经 `style` 袋经 `setOptions` 整袋下发
+// @ts-expect-error 同上，`PolylineLayerOptions.opacity` 只能经 `style` 袋经 `setOptions` 下发
 polyline.opacity = 0.5;
 
 /* ---------------------------- 拾取：两族官方选项表里**没有**的那七项（`layer/` 家族才有） */

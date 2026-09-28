@@ -137,9 +137,14 @@ interface NativeLayerDescriptor {
   declared: boolean;
   /**
    * `setStyle` 落到哪个成员：`setStyleOptions`（merge + 需显式 `doOnceDraw()`）还是 `setOptions`
-   * （整袋替换）。**逐 kind 记录**，因为 4.0.5 里两类并存：老专页图层
+   * （merge，**没有** `doOnceDraw`）。**逐 kind 记录**，因为 4.0.5 里两类并存：老专页图层
    * （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）声明 `setStyleOptions`，
    * 新 `visualization/` 图层声明 `setOptions`。
+   *
+   * ⚠️ 两个成员**都是 merge**（官方那句「仅更新已声明的样式键」= 只写你给的键，没给的保持原值），
+   * 本库此前把 `setOptions` 记成「整袋替换」是**误读**，逐条依据与 live 读数见
+   * `core/layers/nativeLayerStyleOwnership.ts` 的文件头（#174 P1-1）。这一条**只**影响
+   * 「改完要不要显式重绘」，不影响「只写一部分会不会清掉其余」。
    */
   styleMember: "setStyleOptions" | "setOptions";
   /** 该 kind 真正有的归一化操作。 */
@@ -384,7 +389,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
   // | 操作 | 声明 | 运行时 | 登记 | 说明 |
   // | --- | --- | --- | --- | --- |
   // | `setData` / `clearData` | `:252` / `:262` | 有 | **登记** | 与前两族同 |
-  // | `setStyle` → `setOptions` | `:269` | 有 | **登记** | 整袋替换 |
+  // | `setStyle` → `setOptions` | `:269` | 有 | **登记** | merge（与 `setStyleOptions` 同一种），但本族无 `doOnceDraw` |
   // | `setVisible` | `:292` | 有 | **登记** | 显隐不换实例 |
   // | `setOpacity` | `:296` | **有** | **登记** | ⚠️ 与前两族相反：前两族官方**没声明** |
   // | `setZIndex` | `:300` | 有 | **登记** | |
@@ -555,7 +560,7 @@ export function createJsapiV4NativeLayerDriver(
       case "setStyle":
         // 走哪个成员**逐 kind** 决定（`descriptor.styleMember`），不跟 `declared` 绑：4.0.5 里
         // 两类并存——老专页图层声明 `setStyleOptions`（merge + 需显式重绘），新 `visualization/`
-        // 图层声明 `setOptions`（整袋替换），而后者在 4.0.5 里**没有** `doOnceDraw`。
+        // 图层声明 `setOptions`（同样是 merge），而后者在 4.0.5 里**没有** `doOnceDraw`。
         if (descriptor.styleMember === "setStyleOptions") {
           callRequired(raw, "setStyleOptions", payload);
           // 官方：专页图层更新样式后不会自动重绘，需要显式 doOnceDraw()
