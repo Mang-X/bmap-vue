@@ -236,7 +236,6 @@ Panorama 事件按同一形状复用该机制即可。
 
 ⇒ 应加：与已实现的 `getLinks()` / `linksChange` 同族，缺它是真实的不一致。
 
-<<<<<<< ours
 ## 更正五：`huiyan-fe/vue-bmap` 的 `src/` 下**没有 `Panorama` 组件**（`react-bmap` **有**）
 
 原判断的两条依据都不成立，逐条更正（2026-09-27 复核，两个仓库均**重新 clone**）：
@@ -267,7 +266,6 @@ Panorama 事件按同一形状复用该机制即可。
 ⇒ 更正后的口径：全景组件的官方参照是 **`react-bmap`（`master` 与 `v2.0.6` 都有）**
 + JSAPI 声明本身；`vue-bmap` 只是**尚未实现**（有 API 表、无组件导出），不是「不提供」。
 两边的对照价值都在，但**参照对象是 `react-bmap`**，不是 `vue-bmap`。
->>>>>>> theirs
 
 ## 未覆盖
 

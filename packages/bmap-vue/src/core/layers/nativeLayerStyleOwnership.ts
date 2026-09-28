@@ -74,7 +74,17 @@ import type { NativeLayerKind } from "../../driver/types/native-layers";
  */
 const STYLE_BAG_CONTENDS_OPACITY: ReadonlySet<NativeLayerKind> = new Set<NativeLayerKind>(["text"]);
 
-/** 与顶层 `opacity` prop 争同一个 SDK 状态的样式袋键。 */
+/**
+ * 与顶层 `opacity` prop 争同一个 SDK 状态的样式袋键。
+ *
+ * ⚠️ 该键**已从 `TextLayerStyle` 的公开类型里删除**（#174 复审 P1-1）：保留一个
+ * 「类型允许、运行时被 strip + 告警」的字段就是**「接收后忽略」**，正是本票判定为
+ * 假支持并要求删除的那一档。类型层现在是**唯一入口**：顶层 `opacity` prop。
+ *
+ * 本函数**仍保留**，因为它守的是**另一条通路**：JS 调用方（无类型检查）、
+ * `as never` 断言、以及任何 `Record<string, unknown>` 形状的 props 都能塞进这个键。
+ * 摘掉它 + 告警一次，比让它沉到 SDK 再被别的入口覆盖要诚实。
+ */
 export const CONTENDED_OPACITY_STYLE_KEY = "opacity";
 
 /**

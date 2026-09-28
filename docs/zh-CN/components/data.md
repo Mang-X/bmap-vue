@@ -282,7 +282,7 @@ Marker 的代价」），不是自动降级。
 `opacity` 要改写成逐点 `fillOpacity`，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` /
 新 `false`）。**需要留下**的情况：依赖要素状态（替代品**没有**该 API）、或要 `zIndex` /
 `minZoom` / `maxZoom`（替代品上本库未开这三个面）。
-逐字段迁移表见[弃用图层的迁移指引](../layer/deprecated-layers-migration)。
+逐字段迁移表见[弃用图层的迁移指引](./layer/deprecated-layers-migration)。
 :::
 
 ```vue
@@ -364,10 +364,10 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 
 官方同一批还弃用了 `BMap.PointShapeLayer`（建议 `PointLayer` 形状模式）；本库**没有**对应的
 `PointShapeLayer` 组件——形状点走 [`BPointShapeLayer`](#bpointshapelayer)。线 / 面两个图层的弃用
-见[原生批量可视化图层](../layer/native-visual-layers)。
+见[原生批量可视化图层](./layer/native-visual-layers)。
 
 逐字段迁移表、七个无对应的旧选项与「该留下还是该迁走」的判断，见
-[弃用图层的迁移指引](../layer/deprecated-layers-migration)。
+[弃用图层的迁移指引](./layer/deprecated-layers-migration)。
 :::
 
 ```vue

@@ -1715,20 +1715,13 @@ export interface TextLayerStyle {
   padding?: [number, number];
   /** 碰撞盒外扩 `[x, y]`，控制文字之间的最小间距。默认 `[0, 0]`。 */
   margin?: [number, number];
-  /**
-   * 图层级透明度 `[0,1]`（官方 `TextLayerOptions.opacity`，`:179`），与逐条 `fillOpacity` 相乘。
-   *
-   * ⚠️ **本库不在这里收这个键**（#174 P1-1）：官方 `setOptions` 会把它**转发到 `setOpacity`**
-   * （`:265-268`），而本库的 `opacity` prop 走的正是同一个 `setOpacity`（`:296`）⇒ 两者是
-   * **同一个 SDK 状态**的两个入口，最终值会取决于「谁最后被改」。因此**顶层 `opacity` prop
-   * 是唯一入口**，把 `opacity` 放进样式袋会被忽略并**告警一次**。
-   *
-   * 声明保留在这里（它**是**官方选项表里的一项，删掉会让「这个字段官方存在」这件事查不到），
-   * 但它**不生效**。逐条依据与读数见 `core/layers/nativeLayerStyleOwnership.ts`。
-   *
-   * @deprecated 图层级透明度请用顶层 `opacity` prop。
-   */
-  opacity?: number;
+  // ⚠️ 官方 `TextLayerOptions.opacity`（`:179`）**刻意不在这里**（#174 P1-1 复审）：官方
+  // `setOptions` 会把它**转发到 `setOpacity`**（`:265-268`），而本库顶层 `opacity` prop 走的
+  // 正是同一个 `setOpacity` ⇒ 两者是**同一份 SDK 状态**的两个入口，最终值取决于「谁最后被改」。
+  // 保留一个「类型允许、运行时被 strip + 告警」的字段就是**「接收后忽略」**——正是本票反复
+  // 判定为假支持并要求删除的那一档。**图层级透明度只有一个入口：顶层 `opacity` prop。**
+  // 逐要素透明度是 `fillOpacity`（在上），官方明写两者**相乘**，不是一回事。
+  // 依据与 live 读数见 `core/layers/nativeLayerStyleOwnership.ts`。
   /** 绘制阶段，`null` / `'building'` / `'poi'`（官方 `renderStage`，`:198`）。 */
   renderStage?: "building" | "poi" | null;
 }

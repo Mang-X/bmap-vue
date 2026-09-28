@@ -4835,7 +4835,6 @@ export declare interface TextLayerStyle {
         number,
         number
     ];
-    opacity?: number;
     renderStage?: "building" | "poi" | null;
 }
 export declare const TileLayer: __VLS_WithSlots_30<typeof __VLS_component_30, __VLS_Slots_30>;
