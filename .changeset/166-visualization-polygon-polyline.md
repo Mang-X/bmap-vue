@@ -31,8 +31,8 @@
 clean-slate，#165 §3.6 禁止 compat shim，因此**不**加指向新名字的别名垫片。
 
 ⚠️ **迁移不是改名**：两族的 `style` 字段族不同（`patternUrl` / `borderWeight` 一族 vs
-`fillTextureUrl` / `strokeTextureUrl` 一族），样式更新语义也不同（`setStyleOptions` + merge +
-`doOnceDraw` vs `setOptions` 整袋替换），且 `PolygonLayer` 的 `strokeWeight` 默认 `0`
+`fillTextureUrl` / `strokeTextureUrl` 一族），样式更新的重绘行为也不同（`setStyleOptions` 需要
+跟着调 `doOnceDraw` 才可见；`setOptions` 本身即生效），且 `PolygonLayer` 的 `strokeWeight` 默认 `0`
 （**不描边**）而 `FillLayer.border` 默认 `true`。旧组件的开发期告警文案与 `@deprecated`
 JSDoc 已同步更新为「替代品已提供 + 迁移口径」。
 
@@ -43,8 +43,12 @@ JSDoc 已同步更新为「替代品已提供 + 迁移口径」。
 
 - **`hitTest` 不开面**：官方**声明**了，**live 实测运行时没有**（`prototype.hitTest` 为 `false`）。
   放开门面就是假支持。
-- **`setOpacity` 不开面**：反过来——**运行时**有，官方**声明**里没有。跟随 #165 对
-  `PointLayer` 的同一裁决「不把未声明成员当契约」。代价：`PolylineLayerOptions.opacity`
-  只能经 `style` 袋整袋下发。
+- **`setOpacity` 按「可观测地生效」逐族裁决**（复审后更正，**不是**「按是否声明」）：
+  `PolylineLayer` **登记**（像素读数：一条 `strokeWeight: 20` 的纯蓝折线，
+  `setOpacity` 使哨兵像素 `4229 → 0 → 4229` 可逆切换；`setOptions({opacity})` 亦然，
+  两条路都生效）；`PolygonLayer` **不登记**（同样的成员表读数，但**接不到渲染**——
+  该族选项表里根本没有图层级 `opacity`，唯一可用的是逐要素 `fillOpacity`）。
+  ⚠️ 两族的**在位性读数完全相同**（`proto`/`inst` 都 true），差别只在像素，
+  任何只看成员表的门禁都给不出这个区别。
 - **注入时机**：这两族**随主包注入**（`BMap.Map` 就绪时构造器已在位），与扩展 API 那四类不同，
   因此不进「运行时注入」名单。

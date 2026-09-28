@@ -35,11 +35,16 @@
 
 ## 告警文案不承诺没有的东西
 
-`LineLayer` / `FillLayer` 的替代组件**还不存在**，因此文案明确写「本库尚未提供（见 #166）」，
-**现在没有可迁移的去处**——而不是丢一个 `PolylineLayer` 类名让人去找。
-`PointIconLayer` 与 `PointCollection` 的替代品 `<PointLayer>` 本库**已提供**，文案如实说
-「可迁移」，同时点明它的样式字段是**扁平**的（`icon` / `shape` / `size` 直接是 prop，不是
-`style` 袋）——迁移不是改个名字。
+四条告警最初写「本库尚未提供（见 #166）」——那时替代组件确实还不存在。**现在四个替代品
+全部已提供**（`<PolylineLayer>` / `<PolygonLayer>` / `<PointLayer>` 图标模式 /
+`<PointLayer>` 形状模式），文案已同步改为「替代品已提供 + 迁移口径」。
+
+⚠️ 但**迁移不是改个名字**：`LineLayer` / `FillLayer` 的样式字段族与替代品不同
+（`patternUrl` / `borderWeight` 一族 vs `fillTextureUrl` / `strokeTextureUrl` 一族），
+`<PointLayer>` 的样式字段是**扁平**的（`icon` / `shape` / `size` 直接是 prop，不是 `style` 袋），
+而 **`visualization/` 家族没有 Feature State API** —— 依赖要素状态、或要
+`zIndex`/`minZoom`/`maxZoom` 的用法**没有等价替代**，应继续用旧组件。
+逐字段迁移表见 `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
 
 ## 一处容易漏掉的地方
 
