@@ -5,13 +5,13 @@
 > 由 `packages/bmap-vue/src/driver/capability/catalog.ts` 生成，请勿手工编辑。
 > 更新 Catalog 后运行 `pnpm generate:capability-matrix`，CI 用 `--check` 校验无漂移。
 
-能力总数：**66**
+能力总数：**67**
 
 ## 状态说明
 
 | 状态 | 含义 | 数量 |
 | --- | --- | --- |
-| `native` | SDK 原生能力，直接映射官方 API | 47 |
+| `native` | SDK 原生能力，直接映射官方 API | 48 |
 | `extended` | 项目在 SDK 之上的扩展能力（需要额外实现或组合） | 1 |
 | `experimental` | 实验性能力，API 可能变更或移除 | 16 |
 | `unsupported` | 明确不支持；`supports()` 恒为 false（用户 override 除外） | 2 |
@@ -21,7 +21,7 @@
 | 家族 | 能力数 |
 | --- | --- |
 | `map` | 14 |
-| `overlay` | 15 |
+| `overlay` | 16 |
 | `layer` | 22 |
 | `service` | 12 |
 | `panorama` | 3 |
@@ -57,6 +57,7 @@
 | overlay | `overlay.rectangle` | native | — | Rectangle | 矩形（Rectangle） |
 | overlay | `overlay.custom-dom` | native | — | CustomOverlay | 自定义 DOM 覆盖物（CustomOverlay） |
 | overlay | `overlay.ground` | native | — | GroundOverlay | 地面叠加层（GroundOverlay） |
+| overlay | `overlay.ground-point` | native | — | GroundPoint | 贴地点覆盖物（GroundPoint，继承 GroundOverlay） |
 | overlay | `overlay.point-collection` | native | ✓ | PointCollection | 海量点（PointCollection）；官方 4.0.5 文档引用但未声明类型 |
 | overlay | `overlay.context-menu` | native | — | ContextMenu, MenuItem | 右键菜单（ContextMenu / MenuItem） |
 | overlay | `overlay.prism` | experimental | — | Prism | 3D 棱柱（Prism） |

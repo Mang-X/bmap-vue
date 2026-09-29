@@ -179,6 +179,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "ground-overlay",
         },
         {
+          text: "GroundPoint 贴地点",
+          link: "ground-point",
+        },
+        {
           text: "CustomOverlay 自定义 DOM 覆盖物",
           link: "custom-overlay",
         },

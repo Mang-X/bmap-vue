@@ -59,6 +59,7 @@ import {
   FakeV4ContextMenu,
   FakeV4CustomOverlay,
   FakeV4GroundOverlay,
+  FakeV4GroundPoint,
   FakeV4Icon,
   FakeV4InfoWindow,
   FakeV4Label,
@@ -153,6 +154,7 @@ export {
   FakeV4ContextMenu,
   FakeV4CustomOverlay,
   FakeV4GroundOverlay,
+  FakeV4GroundPoint,
   FakeV4Icon,
   FakeV4InfoWindow,
   FakeV4Label,
@@ -228,6 +230,7 @@ export interface FakeBMapV4Namespace {
   Label: new (content: string, options?: Record<string, unknown>) => FakeV4Label
   InfoWindow: new (content: string | HTMLElement, options?: Record<string, unknown>) => FakeV4InfoWindow
   GroundOverlay: new (bounds: FakeV4Bounds, options?: Record<string, unknown>) => FakeV4GroundOverlay
+  GroundPoint: new (point: FakeV4Point, options?: Record<string, unknown>) => FakeV4GroundPoint
   Prism: new (
     path: FakeV4Point[],
     altitude: number,
@@ -484,6 +487,12 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
   class GroundOverlayClass extends FakeV4GroundOverlay {
     constructor(bounds: FakeV4Bounds, options?: Record<string, unknown>) {
       super(bounds, options ?? {}, stats)
+      createdOverlays.push(this)
+    }
+  }
+  class GroundPointClass extends FakeV4GroundPoint {
+    constructor(point: FakeV4Point, options?: Record<string, unknown>) {
+      super(point, options ?? {}, stats)
       createdOverlays.push(this)
     }
   }
@@ -835,6 +844,7 @@ export function createFakeBMapV4(version = '4.0'): FakeBMapV4 {
     Label: LabelClass,
     InfoWindow: InfoWindowClass,
     GroundOverlay: GroundOverlayClass,
+    GroundPoint: GroundPointClass,
     Prism: PrismClass,
     BezierCurve: BezierCurveClass,
     CustomOverlay: CustomOverlayClass,

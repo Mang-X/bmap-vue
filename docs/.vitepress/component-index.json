@@ -1,6 +1,6 @@
 {
   "version": "1.0.0-rc.0",
-  "generatedAt": "2026-09-27T16:09:43.483Z",
+  "generatedAt": "2026-09-29T06:08:34.575Z",
   "components": [
     "BMapProvider",
     "Map",
@@ -20,6 +20,7 @@
     "BezierCurve",
     "MapMask",
     "Marker3D",
+    "GroundPoint",
     "Autocomplete",
     "PanoramaControl",
     "CustomControl",

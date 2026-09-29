@@ -18,16 +18,16 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 439 |
-| 名称对齐（交集） | 115 |
-| 仅官方有 | 287 |
+| 本库根入口导出 | 440 |
+| 名称对齐（交集） | 116 |
+| 仅官方有 | 286 |
 | 仅本库有 | 324 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
 ### 交集按面分布
 
-component 45 · hook 14 · type 56
+component 46 · hook 14 · type 56
 
 ## 名称对齐
 
@@ -51,6 +51,7 @@ component 45 · hook 14 · type 56
 | `FillLayer` | component | ✓ | ✓ |
 | `GeoJSONLayer` | component | ✓ | ✓ |
 | `GroundOverlay` | component | ✓ | ✓ |
+| `GroundPoint` | component | ✓ | ✓ |
 | `InfoWindow` | component | ✓ | ✓ |
 | `Label` | component | ✓ | ✓ |
 | `LineLayer` | component | ✓ | ✓ |
@@ -221,7 +222,6 @@ component 45 · hook 14 · type 56
 | `CustomLayer` | component | — |
 | `FeatureLayer` | component | — |
 | `GeolocationControl` | component | — |
-| `GroundPoint` | component | — |
 | `Hotspot` | component | — |
 | `Icon` | component | — |
 | `IconSequence` | component | — |

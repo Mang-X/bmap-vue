@@ -287,6 +287,16 @@ export const OVERLAY_EVENT_MATRIX = {
     upstream: "GroundOverlayEventMap",
     events: GROUND_OVERLAY_EVENTS,
   }),
+  // ---- issue #178：GroundPoint 继承 GroundOverlay，因此**沿用同一张事件表** ----
+  // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
+  // 而 `GroundOverlay.addEventListener<K extends keyof GroundOverlayEventMap>`（`GroundOverlay.d.ts:122`）
+  // 是它继承到的**唯一**事件入口——SDK **没有**为 GroundPoint 单独声明 `GroundPointEventMap`
+  // （官方 React 参考实现自己也注明「SDK 未定义 GroundPointEventMap，类继承 GroundOverlay，
+  // 事件沿用了同一套」）。因此这里引用同一张表，而不是新造一张名义上相同的。
+  "ground-point": matrix({
+    upstream: "GroundOverlayEventMap（GroundPoint 继承 GroundOverlay，SDK 无独立的 GroundPointEventMap）",
+    events: GROUND_OVERLAY_EVENTS,
+  }),
   "info-window": matrix({ upstream: "InfoWindowEventMap", events: INFO_WINDOW_EVENTS }),
   "custom-overlay": matrix({
     upstream: "CustomOverlayEventMap",

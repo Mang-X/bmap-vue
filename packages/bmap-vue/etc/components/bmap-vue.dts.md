@@ -223,7 +223,37 @@ declare const __VLS_component_16: DefineComponent<Marker3DProps, {}, {}, {}, {},
     size: number;
     shape: Marker3dShape;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_17: DefineComponent<PanoramaControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaControlProps> & Readonly<{}>, {
+declare const __VLS_component_17: DefineComponent<GroundPointProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    click: (event: OverlayPartialPointerEvent) => any;
+    dblclick: (event: OverlayPartialPointerEvent) => any;
+    mousedown: (event: OverlayPartialPointerEvent) => any;
+    mousemove: (event: OverlayPartialPointerEvent) => any;
+    mouseout: (event: OverlayPartialPointerEvent) => any;
+    mouseover: (event: OverlayPartialPointerEvent) => any;
+    mouseup: (event: OverlayPartialPointerEvent) => any;
+    remove: (event: OverlayEventPayload) => any;
+    rightclick: (event: OverlayPartialPointerEvent) => any;
+    rightdblclick: (event: OverlayPartialPointerEvent) => any;
+    lineupdate: (event: OverlayEventPayload) => any;
+}, string, PublicProps, Readonly<GroundPointProps> & Readonly<{
+    onClick?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onDblclick?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onMousedown?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onMousemove?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onMouseout?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onMouseover?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onMouseup?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onRemove?: ((event: OverlayEventPayload) => any) | undefined;
+    onRightclick?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onRightdblclick?: ((event: OverlayPartialPointerEvent) => any) | undefined;
+    onLineupdate?: ((event: OverlayEventPayload) => any) | undefined;
+}>, {
+    enableClicking: boolean;
+    enableMassClear: boolean;
+    visible: boolean;
+    top: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_18: DefineComponent<PanoramaControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -231,15 +261,7 @@ declare const __VLS_component_17: DefineComponent<PanoramaControlProps, {}, {}, 
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_18: DefineComponent<CustomControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<CustomControlProps> & Readonly<{}>, {
-    offset: {
-        x: number;
-        y: number;
-    };
-    anchor: string;
-    visible: boolean;
-}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_19: DefineComponent<ZoomControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<ZoomControlProps> & Readonly<{}>, {
+declare const __VLS_component_19: DefineComponent<CustomControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<CustomControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -421,7 +443,15 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     enableAutoResize: boolean;
     loadingBgColor: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_20: DefineComponent<NavigationControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<NavigationControlProps> & Readonly<{}>, {
+declare const __VLS_component_20: DefineComponent<ZoomControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<ZoomControlProps> & Readonly<{}>, {
+    offset: {
+        x: number;
+        y: number;
+    };
+    anchor: string;
+    visible: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_21: DefineComponent<NavigationControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<NavigationControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -431,7 +461,7 @@ declare const __VLS_component_20: DefineComponent<NavigationControlProps, {}, {}
     showZoomInfo: boolean;
     enableGeolocation: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_21: DefineComponent<MapTypeControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<MapTypeControlProps> & Readonly<{}>, {
+declare const __VLS_component_22: DefineComponent<MapTypeControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<MapTypeControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -440,7 +470,7 @@ declare const __VLS_component_21: DefineComponent<MapTypeControlProps, {}, {}, {
     visible: boolean;
     showStreetLayer: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_22: DefineComponent<OverviewMapControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_23: DefineComponent<OverviewMapControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     resize: (event: unknown) => any;
     viewchanged: (event: {
         isOpen: boolean;
@@ -461,7 +491,7 @@ declare const __VLS_component_22: DefineComponent<OverviewMapControlProps, {}, {
     visible: boolean;
     isOpen: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_23: DefineComponent<ScaleControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<ScaleControlProps> & Readonly<{}>, {
+declare const __VLS_component_24: DefineComponent<ScaleControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<ScaleControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -469,7 +499,7 @@ declare const __VLS_component_23: DefineComponent<ScaleControlProps, {}, {}, {},
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_24: DefineComponent<CityListControlProps, {
+declare const __VLS_component_25: DefineComponent<CityListControlProps, {
     status: Readonly<ShallowRef<SdkResourceStatus>>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     close: () => any;
@@ -492,7 +522,7 @@ declare const __VLS_component_24: DefineComponent<CityListControlProps, {
     visible: boolean;
     expand: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_25: DefineComponent<LocationControlProps, {
+declare const __VLS_component_26: DefineComponent<LocationControlProps, {
     status: Readonly<ShallowRef<SdkResourceStatus>>;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     locationSuccess: (e: LocationSuccessEvent | null) => any;
@@ -508,7 +538,7 @@ declare const __VLS_component_25: DefineComponent<LocationControlProps, {
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_26: DefineComponent<NavigationControl3DProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<NavigationControl3DProps> & Readonly<{}>, {
+declare const __VLS_component_27: DefineComponent<NavigationControl3DProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<NavigationControl3DProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -516,7 +546,7 @@ declare const __VLS_component_26: DefineComponent<NavigationControl3DProps, {}, 
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_27: DefineComponent<CopyrightControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<CopyrightControlProps> & Readonly<{}>, {
+declare const __VLS_component_28: DefineComponent<CopyrightControlProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<CopyrightControlProps> & Readonly<{}>, {
     offset: {
         x: number;
         y: number;
@@ -524,7 +554,7 @@ declare const __VLS_component_27: DefineComponent<CopyrightControlProps, {}, {},
     anchor: string;
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_28: DefineComponent<DistrictLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_29: DefineComponent<DistrictLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (e: unknown) => any;
     mouseout: (e: unknown) => any;
     mouseover: (e: unknown) => any;
@@ -541,9 +571,6 @@ declare const __VLS_component_28: DefineComponent<DistrictLayerProps, {}, {}, {}
     visible: boolean;
     kind: DistrictType;
     autoViewport: boolean;
-}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_29: DefineComponent<PanoramaCoverageLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaCoverageLayerProps> & Readonly<{}>, {
-    visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_3: DefineComponent<MarkerProps, {
     [x: string]: unknown;
@@ -587,17 +614,20 @@ declare const __VLS_component_3: DefineComponent<MarkerProps, {
     isTop: boolean;
     restrictDraggingArea: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_30: DefineComponent<TileLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<TileLayerProps> & Readonly<{}>, {
+declare const __VLS_component_30: DefineComponent<PanoramaCoverageLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<PanoramaCoverageLayerProps> & Readonly<{}>, {
+    visible: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_31: DefineComponent<TileLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<TileLayerProps> & Readonly<{}>, {
     visible: boolean;
     retry: boolean;
     transparentPng: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_31: DefineComponent<TrafficLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<TrafficLayerProps> & Readonly<{}>, {
+declare const __VLS_component_32: DefineComponent<TrafficLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<TrafficLayerProps> & Readonly<{}>, {
     visible: boolean;
     edge: boolean;
     autoRefresh: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_32: DefineComponent<GeoJSONLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_33: DefineComponent<GeoJSONLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (e: unknown) => any;
     mousemove: (e: unknown) => any;
     mouseout: (e: unknown) => any;
@@ -609,17 +639,17 @@ declare const __VLS_component_32: DefineComponent<GeoJSONLayerProps, {}, {}, {},
     visible: boolean;
     layerName: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_33: DefineComponent<DOMLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<DOMLayerProps> & Readonly<{}>, {
+declare const __VLS_component_34: DefineComponent<DOMLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<DOMLayerProps> & Readonly<{}>, {
     visible: boolean;
     enableDraggingMap: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_34: DefineComponent<XYZLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<XYZLayerProps> & Readonly<{}>, {
+declare const __VLS_component_35: DefineComponent<XYZLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<XYZLayerProps> & Readonly<{}>, {
     visible: boolean;
     extentCRSIsWGS84: boolean;
     useThumbData: boolean;
     tms: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_35: DefineComponent<WMSLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<WMSLayerProps> & Readonly<{}>, {
+declare const __VLS_component_36: DefineComponent<WMSLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<WMSLayerProps> & Readonly<{}>, {
     visible: boolean;
     retry: boolean;
     extentCRSIsWGS84: boolean;
@@ -627,7 +657,7 @@ declare const __VLS_component_35: DefineComponent<WMSLayerProps, {}, {}, {}, {},
     reproject: boolean;
     png8: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_36: DefineComponent<WMTSLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<WMTSLayerProps> & Readonly<{}>, {
+declare const __VLS_component_37: DefineComponent<WMTSLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<WMTSLayerProps> & Readonly<{}>, {
     visible: boolean;
     retry: boolean;
     extentCRSIsWGS84: boolean;
@@ -635,13 +665,13 @@ declare const __VLS_component_36: DefineComponent<WMTSLayerProps, {}, {}, {}, {}
     reproject: boolean;
     png8: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_37: DefineComponent<RasterTileLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<RasterTileLayerProps> & Readonly<{}>, {
+declare const __VLS_component_38: DefineComponent<RasterTileLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<RasterTileLayerProps> & Readonly<{}>, {
     visible: boolean;
     retry: boolean;
     useThumbData: boolean;
     boundsInWGS84: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_38: DefineComponent<MVTLayerProps, {
+declare const __VLS_component_39: DefineComponent<MVTLayerProps, {
     featureState: FeatureStateApi<"string">;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (e: MVTLayerPickEvent) => any;
@@ -666,23 +696,6 @@ declare const __VLS_component_38: DefineComponent<MVTLayerProps, {
     ondblclick: (e: MVTLayerPickEvent) => void;
     onmousemove: (e: MVTLayerMouseMoveEvent) => void;
     onmouseout: (e: MVTLayerMouseEvent) => void;
-}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_39: DefineComponent<LineLayerProps, {
-    featureState: FeatureStateApi<"default">;
-}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
-    click: (pick: FeaturePick) => any;
-    dblclick: (pick: FeaturePick) => any;
-    mousemove: (pick: FeaturePick) => any;
-    rightclick: (pick: FeaturePick) => any;
-}, string, PublicProps, Readonly<LineLayerProps> & Readonly<{
-    onClick?: ((pick: FeaturePick) => any) | undefined;
-    onDblclick?: ((pick: FeaturePick) => any) | undefined;
-    onMousemove?: ((pick: FeaturePick) => any) | undefined;
-    onRightclick?: ((pick: FeaturePick) => any) | undefined;
-}>, {
-    visible: boolean;
-    enablePicked: boolean;
-    popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
 declare const __VLS_component_4: DefineComponent<InfoWindowProps, {
     getTitle(): string;
@@ -719,7 +732,24 @@ declare const __VLS_component_4: DefineComponent<InfoWindowProps, {
     enableCloseOnClick: boolean;
     open: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_40: DefineComponent<FillLayerProps, {
+declare const __VLS_component_40: DefineComponent<LineLayerProps, {
+    featureState: FeatureStateApi<"default">;
+}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+    click: (pick: FeaturePick) => any;
+    dblclick: (pick: FeaturePick) => any;
+    mousemove: (pick: FeaturePick) => any;
+    rightclick: (pick: FeaturePick) => any;
+}, string, PublicProps, Readonly<LineLayerProps> & Readonly<{
+    onClick?: ((pick: FeaturePick) => any) | undefined;
+    onDblclick?: ((pick: FeaturePick) => any) | undefined;
+    onMousemove?: ((pick: FeaturePick) => any) | undefined;
+    onRightclick?: ((pick: FeaturePick) => any) | undefined;
+}>, {
+    visible: boolean;
+    enablePicked: boolean;
+    popEvent: boolean;
+}, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
+declare const __VLS_component_41: DefineComponent<FillLayerProps, {
     featureState: FeatureStateApi<"default">;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (pick: FeaturePick) => any;
@@ -737,10 +767,10 @@ declare const __VLS_component_40: DefineComponent<FillLayerProps, {
     enablePicked: boolean;
     popEvent: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_41: DefineComponent<HeatmapLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<HeatmapLayerProps> & Readonly<{}>, {
+declare const __VLS_component_42: DefineComponent<HeatmapLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<HeatmapLayerProps> & Readonly<{}>, {
     visible: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_42: DefineComponent<TrackLineLayerProps, {
+declare const __VLS_component_43: DefineComponent<TrackLineLayerProps, {
     playback: TrackLinePlaybackApi;
     observed: TrackLineObserved | null;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
@@ -753,7 +783,7 @@ declare const __VLS_component_42: DefineComponent<TrackLineLayerProps, {
     visible: boolean;
     pauseOnHidden: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_43: DefineComponent<PolygonLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_44: DefineComponent<PolygonLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (pick: FeaturePick) => any;
     dblclick: (pick: FeaturePick) => any;
     mousemove: (pick: FeaturePick) => any;
@@ -768,7 +798,7 @@ declare const __VLS_component_43: DefineComponent<PolygonLayerProps, {}, {}, {},
     enablePicked: boolean;
     mouseStyleChange: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
+declare const __VLS_component_45: DefineComponent<PolylineLayerProps, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (pick: FeaturePick) => any;
     dblclick: (pick: FeaturePick) => any;
     mousemove: (pick: FeaturePick) => any;
@@ -783,7 +813,7 @@ declare const __VLS_component_44: DefineComponent<PolylineLayerProps, {}, {}, {}
     enablePicked: boolean;
     mouseStyleChange: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_45: DefineComponent<TextLayerProps, {
+declare const __VLS_component_46: DefineComponent<TextLayerProps, {
     hitTest: typeof hitTest;
 }, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {
     click: (pick: FeaturePick) => any;
@@ -800,7 +830,7 @@ declare const __VLS_component_45: DefineComponent<TextLayerProps, {
     enablePicked: boolean;
     mouseStyleChange: boolean;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;
-declare const __VLS_component_46: DefineComponent<PanoramaProps, {
+declare const __VLS_component_47: DefineComponent<PanoramaProps, {
     whenReady: (signal?: AbortSignal) => Promise<PanoramaReadyContext>;
     getLinks: () => PanoramaLink[];
     capture: (options?: PanoramaCaptureOptions) => string | null;
@@ -1263,6 +1293,9 @@ declare type __VLS_Slots_45 = {} & {
 declare type __VLS_Slots_46 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
+declare type __VLS_Slots_47 = {} & {
+    default?: (props: typeof __VLS_1) => any;
+};
 declare type __VLS_Slots_5 = {} & {
     default?: (props: typeof __VLS_1) => any;
 };
@@ -1483,6 +1516,11 @@ declare type __VLS_WithSlots_46<T, S> = T & {
         $slots: S;
     };
 };
+declare type __VLS_WithSlots_47<T, S> = T & {
+    new (): {
+        $slots: S;
+    };
+};
 declare type __VLS_WithSlots_5<T, S> = T & {
     new (): {
         $slots: S;
@@ -1667,8 +1705,8 @@ declare interface Bounds_2 {
     northeast: Point_2;
 }
 declare type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
-declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
-declare type Capability_2 = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.ground-point" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+declare type Capability_2 = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.ground-point" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 declare interface CapabilityDescriptor {
     id: Capability;
     family: CapabilityFamily;
@@ -1726,7 +1764,7 @@ declare interface CityListCommandApi {
     toggle(): void;
     getCityName(): string;
 }
-export declare const CityListControl: __VLS_WithSlots_24<typeof __VLS_component_24, __VLS_Slots_24>;
+export declare const CityListControl: __VLS_WithSlots_25<typeof __VLS_component_25, __VLS_Slots_25>;
 declare interface CityListControlProps {
     anchor?: string;
     offset?: {
@@ -1832,7 +1870,7 @@ declare interface ControlOptions {
     [key: string]: unknown;
 }
 declare type ControlOptionStatus = "mutable" | "recreate" | "unsupported";
-export declare const CopyrightControl: __VLS_WithSlots_27<typeof __VLS_component_27, __VLS_Slots_27>;
+export declare const CopyrightControl: __VLS_WithSlots_28<typeof __VLS_component_28, __VLS_Slots_28>;
 declare interface CopyrightControlProps {
     anchor?: string;
     offset?: {
@@ -1854,7 +1892,7 @@ declare interface CreateBMapClientOptions {
     capabilityOverrides?: Partial<Record<Capability, boolean>>;
 }
 declare type CrossOriginValue = "anonymous" | "use-credentials";
-export declare const CustomControl: __VLS_WithSlots_18<typeof __VLS_component_18, __VLS_Slots_18>;
+export declare const CustomControl: __VLS_WithSlots_19<typeof __VLS_component_19, __VLS_Slots_19>;
 declare interface CustomControlProps {
     anchor?: string;
     offset?: {
@@ -1907,7 +1945,7 @@ declare interface DataComponentProps<Item> {
     dataVersion?: PropertyKey;
     visible?: boolean;
 }
-export declare const DistrictLayer: __VLS_WithSlots_28<typeof __VLS_component_28, __VLS_Slots_28>;
+export declare const DistrictLayer: __VLS_WithSlots_29<typeof __VLS_component_29, __VLS_Slots_29>;
 declare interface DistrictLayerProps {
     visible?: boolean;
     name: string;
@@ -1928,7 +1966,7 @@ declare const DistrictType_2: {
     readonly AREA: 2;
 };
 declare type DistrictTypeValue = (typeof DistrictType_2)[keyof typeof DistrictType_2];
-export declare const DOMLayer: __VLS_WithSlots_33<typeof __VLS_component_33, __VLS_Slots_33>;
+export declare const DOMLayer: __VLS_WithSlots_34<typeof __VLS_component_34, __VLS_Slots_34>;
 declare interface DOMLayerProps {
     visible?: boolean;
     data?: object | null;
@@ -1999,7 +2037,7 @@ declare type FeatureStateKeysOf<KeyDomain extends FeatureStateKeyDomain = "defau
 declare interface FeatureStateUpdateOptions {
     readonly append?: boolean;
 }
-export declare const FillLayer: __VLS_WithSlots_40<typeof __VLS_component_40, __VLS_Slots_40>;
+export declare const FillLayer: __VLS_WithSlots_41<typeof __VLS_component_41, __VLS_Slots_41>;
 declare interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
     data?: object | null;
     style?: FillLayerStyle;
@@ -2040,7 +2078,7 @@ declare interface FlyToOptions_2 {
     noAnimation?: boolean;
     callback?: () => void;
 }
-export declare const GeoJSONLayer: __VLS_WithSlots_32<typeof __VLS_component_32, __VLS_Slots_32>;
+export declare const GeoJSONLayer: __VLS_WithSlots_33<typeof __VLS_component_33, __VLS_Slots_33>;
 declare interface GeoJSONLayerProps {
     visible?: boolean;
     data?: object | null;
@@ -2089,9 +2127,35 @@ declare interface GroundOverlayProps {
 }
 declare type GroundOverlayType = "image" | "video" | "canvas";
 declare type GroundOverlayUrl = string | HTMLCanvasElement | (() => string | HTMLCanvasElement);
+export declare const GroundPoint: __VLS_WithSlots_17<typeof __VLS_component_17, __VLS_Slots_17>;
+declare interface GroundPointProps {
+    point: {
+        lng: number;
+        lat: number;
+    };
+    url?: string;
+    size?: GroundPointSize;
+    anchor?: GroundPointSize;
+    scale?: number;
+    rotation?: number;
+    offset?: GroundPointSize;
+    level?: number;
+    opacity?: number;
+    displayOnMinLevel?: number;
+    displayOnMaxLevel?: number;
+    zIndex?: number;
+    enableMassClear?: boolean;
+    enableClicking?: boolean;
+    top?: boolean;
+    visible?: boolean;
+}
+declare interface GroundPointSize {
+    width: number;
+    height: number;
+}
 declare const HANDLE_BRAND: unique symbol;
 declare const HANDLE_BRAND_2: unique symbol;
-export declare const HeatmapLayer: __VLS_WithSlots_41<typeof __VLS_component_41, __VLS_Slots_41>;
+export declare const HeatmapLayer: __VLS_WithSlots_42<typeof __VLS_component_42, __VLS_Slots_42>;
 declare interface HeatmapLayerProps {
     data?: object | null;
     style?: Record<string, unknown>;
@@ -2245,7 +2309,7 @@ declare interface LayerSurface {
     readonly ctorSlots: readonly LayerCtorSlot[];
     readonly operations: readonly LayerOperation[];
 }
-export declare const LineLayer: __VLS_WithSlots_39<typeof __VLS_component_39, __VLS_Slots_39>;
+export declare const LineLayer: __VLS_WithSlots_40<typeof __VLS_component_40, __VLS_Slots_40>;
 declare interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
     data?: object | null;
     style?: LineLayerStyle;
@@ -2310,7 +2374,7 @@ declare interface LocationCommandApi {
     stopLocationTrace(): void;
     getAddressComponent(): LocationAddressComponents | null;
 }
-export declare const LocationControl: __VLS_WithSlots_25<typeof __VLS_component_25, __VLS_Slots_25>;
+export declare const LocationControl: __VLS_WithSlots_26<typeof __VLS_component_26, __VLS_Slots_26>;
 declare interface LocationControlProps {
     anchor?: string;
     offset?: {
@@ -2474,7 +2538,7 @@ declare interface MapTypeChangeEvent extends DriverEvent {
 declare type MapTypeChangePayload = MapTypeChangeEvent & {
     type: string;
 };
-export declare const MapTypeControl: __VLS_WithSlots_21<typeof __VLS_component_21, __VLS_Slots_21>;
+export declare const MapTypeControl: __VLS_WithSlots_22<typeof __VLS_component_22, __VLS_Slots_22>;
 declare interface MapTypeControlProps {
     anchor?: string;
     offset?: {
@@ -2699,7 +2763,7 @@ declare interface MenuItemView_2 {
     readonly id?: string;
 }
 export declare const MenuSeparator: DefineComponent<{}, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, ComponentProvideOptions, true, {}, any>;
-export declare const MVTLayer: __VLS_WithSlots_38<typeof __VLS_component_38, __VLS_Slots_38>;
+export declare const MVTLayer: __VLS_WithSlots_39<typeof __VLS_component_39, __VLS_Slots_39>;
 declare interface MVTLayerBaseEvent {
     type?: string;
     [key: string]: unknown;
@@ -2778,8 +2842,8 @@ declare interface NativeLayerPickOptions {
     selectedIndex?: number;
     popEvent?: boolean;
 }
-export declare const NavigationControl: __VLS_WithSlots_20<typeof __VLS_component_20, __VLS_Slots_20>;
-export declare const NavigationControl3D: __VLS_WithSlots_26<typeof __VLS_component_26, __VLS_Slots_26>;
+export declare const NavigationControl: __VLS_WithSlots_21<typeof __VLS_component_21, __VLS_Slots_21>;
+export declare const NavigationControl3D: __VLS_WithSlots_27<typeof __VLS_component_27, __VLS_Slots_27>;
 declare interface NavigationControl3DProps {
     anchor?: string;
     offset?: {
@@ -2817,6 +2881,7 @@ declare interface OverlayDriver {
     createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
     createMapMask(path: readonly Point[], options?: Record<string, unknown>): OverlayHandle;
     createGroundOverlay(bounds: Bounds, options?: Record<string, unknown>): OverlayHandle;
+    createGroundPoint(position: Point, options?: Record<string, unknown>): OverlayHandle;
     createCustomOverlay(position: Point, render: () => HTMLElement, options?: CustomOverlayOptions): OverlayHandle;
     createContextMenu(options?: {
         width?: number;
@@ -2877,7 +2942,7 @@ declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";
     handle: SdkHandle<string>;
 }
-export declare const OverviewMapControl: __VLS_WithSlots_22<typeof __VLS_component_22, __VLS_Slots_22>;
+export declare const OverviewMapControl: __VLS_WithSlots_23<typeof __VLS_component_23, __VLS_Slots_23>;
 declare interface OverviewMapControlProps {
     anchor?: string;
     offset?: {
@@ -2893,12 +2958,12 @@ declare interface OverviewMapControlProps {
     padding?: number;
     visible?: boolean;
 }
-export declare const Panorama: __VLS_WithSlots_46<typeof __VLS_component_46, __VLS_Slots_46>;
+export declare const Panorama: __VLS_WithSlots_47<typeof __VLS_component_47, __VLS_Slots_47>;
 declare interface PanoramaCaptureOptions {
     quality?: number;
     type?: string;
 }
-export declare const PanoramaControl: __VLS_WithSlots_17<typeof __VLS_component_17, __VLS_Slots_17>;
+export declare const PanoramaControl: __VLS_WithSlots_18<typeof __VLS_component_18, __VLS_Slots_18>;
 declare interface PanoramaControlProps {
     anchor?: string;
     offset?: {
@@ -2907,7 +2972,7 @@ declare interface PanoramaControlProps {
     };
     visible?: boolean;
 }
-export declare const PanoramaCoverageLayer: __VLS_WithSlots_29<typeof __VLS_component_29, __VLS_Slots_29>;
+export declare const PanoramaCoverageLayer: __VLS_WithSlots_30<typeof __VLS_component_30, __VLS_Slots_30>;
 declare interface PanoramaCoverageLayerProps {
     visible?: boolean;
 }
@@ -3197,7 +3262,7 @@ declare interface PointPick<Item> {
 }
 export declare const Polygon: __VLS_WithSlots_7<typeof __VLS_component_7, __VLS_Slots_7>;
 declare type PolygonHandle = SdkHandle<"overlay:polygon">;
-export declare const PolygonLayer: __VLS_WithSlots_43<typeof __VLS_component_43, __VLS_Slots_43>;
+export declare const PolygonLayer: __VLS_WithSlots_44<typeof __VLS_component_44, __VLS_Slots_44>;
 declare interface PolygonLayerProps extends VisualizationLayerCommonProps, VisualizationZoomCtorOptions, VisualizationPickOptions {
     data?: object | null;
     style?: PolygonLayerStyle;
@@ -3225,7 +3290,7 @@ declare interface PolygonProps extends PathStrokeProps, PathFillProps, PathShape
 }
 export declare const Polyline: __VLS_WithSlots_6<typeof __VLS_component_6, __VLS_Slots_6>;
 declare type PolylineHandle = SdkHandle<"overlay:polyline">;
-export declare const PolylineLayer: __VLS_WithSlots_44<typeof __VLS_component_44, __VLS_Slots_44>;
+export declare const PolylineLayer: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
 declare interface PolylineLayerProps extends VisualizationLayerCommonProps, VisualizationZoomCtorOptions, VisualizationPickOptions {
     data?: object | null;
     style?: PolylineLayerStyle;
@@ -3280,7 +3345,7 @@ declare interface PrismProps {
     enableMassClear?: boolean;
     visible?: boolean;
 }
-export declare const RasterTileLayer: __VLS_WithSlots_37<typeof __VLS_component_37, __VLS_Slots_37>;
+export declare const RasterTileLayer: __VLS_WithSlots_38<typeof __VLS_component_38, __VLS_Slots_38>;
 declare interface RasterTileLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3331,7 +3396,7 @@ declare interface RouteRenderState {
 declare interface RouteState extends RouteRenderState {
     enableTraffic?: boolean;
 }
-export declare const ScaleControl: __VLS_WithSlots_23<typeof __VLS_component_23, __VLS_Slots_23>;
+export declare const ScaleControl: __VLS_WithSlots_24<typeof __VLS_component_24, __VLS_Slots_24>;
 declare interface ScaleControlProps {
     anchor?: string;
     offset?: {
@@ -3383,7 +3448,7 @@ declare interface Size_2 {
     height: number;
 }
 declare type StyleExpression = string | Record<string, unknown> | ((properties: Record<string, unknown>) => unknown);
-export declare const TextLayer: __VLS_WithSlots_45<typeof __VLS_component_45, __VLS_Slots_45>;
+export declare const TextLayer: __VLS_WithSlots_46<typeof __VLS_component_46, __VLS_Slots_46>;
 declare type TextLayerAnchor = "center" | "topLeft" | "topCenter" | "topRight" | "rightCenter" | "bottomRight" | "bottomCenter" | "bottomLeft" | "leftCenter";
 declare interface TextLayerPick {
     point: {
@@ -3433,7 +3498,7 @@ declare interface TextLayerStyle {
     ];
     renderStage?: "building" | "poi" | null;
 }
-export declare const TileLayer: __VLS_WithSlots_30<typeof __VLS_component_30, __VLS_Slots_30>;
+export declare const TileLayer: __VLS_WithSlots_31<typeof __VLS_component_31, __VLS_Slots_31>;
 declare interface TileLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3457,7 +3522,7 @@ declare interface TileLoadObserver {
     onLoaded?(info: TileLoadInfo): void;
     onError?(info: TileLoadInfo): void;
 }
-export declare const TrackLineLayer: __VLS_WithSlots_42<typeof __VLS_component_42, __VLS_Slots_42>;
+export declare const TrackLineLayer: __VLS_WithSlots_43<typeof __VLS_component_43, __VLS_Slots_43>;
 declare interface TrackLineLayerProps {
     data?: object | null;
     visible?: boolean;
@@ -3480,7 +3545,7 @@ declare interface TrackLinePlaybackApi {
     setSpeed(speed: number): void;
     setProcess(process: number): void;
 }
-export declare const TrafficLayer: __VLS_WithSlots_31<typeof __VLS_component_31, __VLS_Slots_31>;
+export declare const TrafficLayer: __VLS_WithSlots_32<typeof __VLS_component_32, __VLS_Slots_32>;
 declare interface TrafficLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3558,7 +3623,7 @@ declare interface VisualizationZoomCtorOptions {
     maxZoom?: number;
 }
 declare type WalkingRouteOptions = RouteRenderState;
-export declare const WMSLayer: __VLS_WithSlots_35<typeof __VLS_component_35, __VLS_Slots_35>;
+export declare const WMSLayer: __VLS_WithSlots_36<typeof __VLS_component_36, __VLS_Slots_36>;
 declare interface WMSLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3587,7 +3652,7 @@ declare interface WMSLayerProps {
     tileLoadFunction?: (tile: HTMLImageElement, url: string) => void;
     tileLoadObserver?: TileLoadObserver;
 }
-export declare const WMTSLayer: __VLS_WithSlots_36<typeof __VLS_component_36, __VLS_Slots_36>;
+export declare const WMTSLayer: __VLS_WithSlots_37<typeof __VLS_component_37, __VLS_Slots_37>;
 declare interface WMTSLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3621,7 +3686,7 @@ declare interface WMTSLayerProps {
     tileLoadFunction?: (tile: HTMLImageElement, url: string) => void;
     tileLoadObserver?: TileLoadObserver;
 }
-export declare const XYZLayer: __VLS_WithSlots_34<typeof __VLS_component_34, __VLS_Slots_34>;
+export declare const XYZLayer: __VLS_WithSlots_35<typeof __VLS_component_35, __VLS_Slots_35>;
 declare interface XYZLayerProps {
     visible?: boolean;
     opacity?: number;
@@ -3639,7 +3704,7 @@ declare interface XYZLayerProps {
     useThumbData?: boolean;
     tms?: boolean;
 }
-export declare const ZoomControl: __VLS_WithSlots_19<typeof __VLS_component_19, __VLS_Slots_19>;
+export declare const ZoomControl: __VLS_WithSlots_20<typeof __VLS_component_20, __VLS_Slots_20>;
 declare interface ZoomControlProps {
     anchor?: string;
     offset?: {

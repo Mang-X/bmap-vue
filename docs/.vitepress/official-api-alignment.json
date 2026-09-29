@@ -5,10 +5,10 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 439,
+  "oursPublicCount": 440,
   "uiKitCount": 62,
-  "matchedCount": 115,
-  "officialOnlyCount": 287,
+  "matchedCount": 116,
+  "officialOnlyCount": 286,
   "oursOnlyCount": 324,
   "exceptions": [
     {
@@ -297,6 +297,11 @@
     },
     {
       "name": "GroundOverlay",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "GroundPoint",
       "surface": "component",
       "oursEntry": "./components"
     },
@@ -834,10 +839,6 @@
     },
     {
       "name": "GeolocationControl",
-      "surface": "component"
-    },
-    {
-      "name": "GroundPoint",
       "surface": "component"
     },
     {

@@ -27,6 +27,7 @@ import {
 } from "../../packages/test-utils";
 import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
+import GroundPoint from "../../packages/bmap-vue/src/components/overlays/GroundPoint.vue";
 import InfoWindow from "../../packages/bmap-vue/src/components/overlays/InfoWindow.vue";
 import CustomControl from "../../packages/bmap-vue/src/components/controls/CustomControl.vue";
 import DistrictLayer from "../../packages/bmap-vue/src/components/layers/DistrictLayer.vue";
@@ -305,6 +306,37 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
 
     await unmountAndSettle(wrapper);
     harness.assertIdle("地址解析");
+  });
+
+  // ---- issue #178：GroundPoint（贴地点覆盖物）----
+  it("GroundPoint：与其它覆盖物同图共存；显隐走挂载口径，卸载后无残留", async () => {
+    const visible = ref(true);
+    const wrapper = await mountMapTree(() => [
+      h(Marker, { position: POSITION }),
+      h(GroundPoint, {
+        point: POSITION,
+        url: "https://example.com/car.png",
+        size: { width: 30, height: 60 },
+        visible: visible.value,
+      }),
+    ]);
+    expect(harness.attached("overlay")).toBe(2);
+
+    // `visible` 走 `visibility` 策略（SDK 的 show/hide）——它与「摘下覆盖物」是两件事，
+    // 因此这里用 `attached` 读**挂载**数，隐藏时应当仍然挂着。
+    visible.value = false;
+    await nextTick();
+    await flushPromises();
+    expect(harness.attached("overlay"), "隐藏不等于摘除").toBe(2);
+
+    visible.value = true;
+    await nextTick();
+    await flushPromises();
+    expect(harness.attached("overlay")).toBe(2);
+
+    await unmountAndSettle(wrapper);
+    expect(harness.attached("overlay")).toBe(0);
+    harness.assertIdle("GroundPoint 与其它覆盖物同图共存");
   });
 });
 

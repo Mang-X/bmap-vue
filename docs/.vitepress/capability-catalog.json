@@ -252,6 +252,16 @@
       "description": "地面叠加层（GroundOverlay）"
     },
     {
+      "id": "overlay.ground-point",
+      "family": "overlay",
+      "status": "native",
+      "runtimeOnly": false,
+      "rawMembers": [
+        "GroundPoint"
+      ],
+      "description": "贴地点覆盖物（GroundPoint，继承 GroundOverlay）"
+    },
+    {
       "id": "overlay.point-collection",
       "family": "overlay",
       "status": "native",

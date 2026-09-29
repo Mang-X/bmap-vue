@@ -54,6 +54,8 @@ const FROZEN_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   "FillLayer",
   "GeoJSONLayer",
   "GroundOverlay",
+  // issue #178：贴地点覆盖物（官方 `GroundPoint extends GroundOverlay`）
+  "GroundPoint",
   "HeatmapLayer",
   "InfoWindow",
   "IntercityPolicy",

@@ -47,6 +47,7 @@ export type Capability =
   | "overlay.rectangle"
   | "overlay.custom-dom"
   | "overlay.ground"
+  | "overlay.ground-point"
   | "overlay.point-collection"
   | "overlay.context-menu"
   | "overlay.prism"
@@ -328,6 +329,18 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "overlay",
     description: "地面叠加层（GroundOverlay）",
     rawMembers: ["GroundOverlay"],
+    status: "native",
+    runtimeOnly: false,
+  },
+  // ---- issue #178：`GroundPoint`（贴地点覆盖物）----
+  // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
+  // **有完整类声明**（不是 `Marker3D` / `MapMask` 那种「只在文档里出现、类型包无声明」的情况）
+  // ⇒ `runtimeOnly: false`，`status: "native"`（对官方成员的直接投影，与 `overlay.ground` 同判据）。
+  "overlay.ground-point": {
+    id: "overlay.ground-point",
+    family: "overlay",
+    description: "贴地点覆盖物（GroundPoint，继承 GroundOverlay）",
+    rawMembers: ["GroundPoint"],
     status: "native",
     runtimeOnly: false,
   },

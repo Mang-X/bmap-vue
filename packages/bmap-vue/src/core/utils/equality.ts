@@ -27,7 +27,7 @@
  * 非数值（`NaN` / `±Infinity`）**不参与容差比较**：只有严格相等才算等。否则
  * `numbersEqual(NaN, NaN)` 会返回 true，把「引擎读不出值」伪装成「值一致」。
  */
-import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
+import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
 
 /** 经纬度容差（度）：约 1.1cm。 */
 export const POINT_EPSILON = 1e-7
@@ -126,8 +126,13 @@ export function centerKey(value: CenterLike | null | undefined): string {
  * （上游 `MarkerOptions.offset` 确实吃 `Size` 对象，本库对外用 Pixel 这一约定保持历史面）。
  * 因此 `size` 档的实际键是 `px:` —— 组件侧的 `{x,y}` 与 `Size` 的 `{width,height}` 必须不同键，
  * 否则一次真实变更会被判成「没变」（`setOffset` 用例一度因此空跑）。
- * 顺带一条结论：**没有** `sizeKey` —— `Size` 形态在本库没有对外字段，留着就是
- * 「以后可能有用」的扩展面（与 `2026-09-14-service-lifecycle-and-local-search` 的判据一致）。
+ *
+ * **`sizeKey` 的来历（issue #178）**：此前这里断言「`Size` 形态在本库没有对外字段，因此没有
+ * `sizeKey`」。`GroundPoint` 推翻了它——官方 `GroundPointOptions` 的 `size` / `anchor` / `offset`
+ * 三个键声明的就是 `Size`（`size?: Size`），本库如实收 `{width, height}`（不强行折成 Pixel：
+ * 那会让「官方声明的形状」与「本库对外的形状」之间多一层需要文档解释的转换）。因此描述符新增
+ * `size-shape` 档（归一化与 `size` 相同，**组件侧形状也是 Size**），键是 `sz:`。
+ * 三个前缀 `px:` / `sz:` 必须互不相同，理由同上（防形态撞键）。
  * -------------------------------------------------------------------------------- */
 
 /** `Point` 的标量键（经纬度）。 */
@@ -140,6 +145,12 @@ export function pointKey(value: Point | null | undefined): string {
 export function pixelKey(value: Pixel | null | undefined): string {
   if (value == null) return ''
   return `px:${value.x},${value.y}`
+}
+
+/** `Size`（`{width, height}`）的标量键。与 `pixelKey` 的 `px:` 必须是不同的前缀。 */
+export function sizeKey(value: Size | null | undefined): string {
+  if (value == null) return ''
+  return `sz:${value.width},${value.height}`
 }
 
 /** `Bounds`（`{southwest, northeast}`）的标量键：两个点摊平成四个标量。 */
