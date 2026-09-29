@@ -3,7 +3,7 @@
 > 这份表是**覆盖物事件面的单一事实源**（`packages/bmap-vue/src/core/overlays/overlayEventCatalog.ts`）
 > 的镜像：组件的 `defineEmits`、内核的 SDK 订阅、载荷类型三处都从它出发。
 > `tests/behavior/overlay-event-matrix.test.ts` 直接解析上游
-> `@baidumap/jsapi-v4-types@4.0.4` 的 `overlay/OverlayEvent.d.ts` 做**双向比对**，因此这份表与上游
+> `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/OverlayEvent.d.ts` 做**双向比对**，因此这份表与上游
 > 不可能悄悄漂移（多一个、少一个都红）。
 
 ## 名字规范
@@ -249,6 +249,6 @@
 
 ## 上游没有事件表的种类
 
-- `map-mask`：掩膜：4.0.4 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）
-- `marker3d`：3D 标注：构造器 Marker3D 不在 4.0.4 的类声明里，因此也没有事件表；事件面要等运行时取证（与 TrafficLayer / 图层事件同一路径）
+- `map-mask`：掩膜：4.0.5 没有 MapMaskEventMap（MapMask 本身不在类型包的类声明里）
+- `marker3d`：3D 标注：构造器 Marker3D 不在 4.0.5 的类声明里，因此也没有事件表；事件面要等运行时取证（与 TrafficLayer / 图层事件同一路径）
 

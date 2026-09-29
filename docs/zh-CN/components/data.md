@@ -14,16 +14,19 @@ title: 数据组件
 | 中小规模、需要逐点交互 | `MarkerList` | **每项一个 Marker** |
 | 空间上邻近的点需要聚合 | `MarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
 | 同上，但**事件里要有簇内业务项** | `MarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
-| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`） |
-| 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`） |
+| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`，官方已弃用，见下） |
+| 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`，官方已弃用，见下） |
 | 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
 > 三个点图层组件落在**官方原生批量点图层**上：前两个（`PointShapeLayer` / `PointIconLayer`）在
-> `@baidumap/jsapi-v4-types@4.0.4` 里有完整类声明；`PointLayer` 用的 `BMap.PointLayer` 属官方
-> **扩展 API**（运行时存在、类型包没有类声明、可视化实现按需异步注入），因此它被标为
+> `@baidumap/jsapi-v4-types` 里有完整类声明，但 4.0.5 起**两个都被官方标记 `@deprecated`**
+> （建议分别改用 `PointLayer` 的形状模式 / 图标模式；本库保留了封装，见各组件小节与
+> [PointIconLayer](#pointiconlayer) 的提示框）；`PointLayer` 用的 `BMap.PointLayer` 属官方
+> **扩展 API**——4.0.5 的 `visualization/PointLayer.d.ts` **已经补上了类声明**，但可视化实现仍是
+> 按需异步注入的（「类型包里有类声明」≠「运行时已加载」），因此它被标为
 > `experimental`：能力就绪之前创建会**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`，经 `resource:error`
 > 交出），**不会**自动改用另外两个类 —— 它们是不同的 SDK 能力，偷偷换等于改掉你的意图。
-> v3 时代那个 `BMap.PointCollection` 类在 4.0 的**类型包里没有声明**（运行时仍然存在，本库探针实测
+> v3 时代那个 `BMap.PointCollection` 类在 4.0.5 的**类型包里仍然没有声明**（运行时仍然存在，本库探针实测
 > `typeof BMap.PointCollection === "function"`），本库按 official-first 只使用**两处都声明**的等价 API。
 
 所有数据组件的**取数面完全一致**，业务数据可以在它们之间平移：
@@ -223,6 +226,18 @@ Marker 的代价」），不是自动降级。
 | `clusterMinZoom` / `clusterMaxZoom` | 聚合生效的 zoom 范围（官方同名选项） | 同上（实测 `3` / `16`） |
 | `fitViewOnClick` | 点击簇时缩放到该簇 | 同上 —— ⚠️ **官方默认是 `true`**（点簇会缩放地图）；不想缩放就显式传 `false` |
 | `singleStyle` | 未参与聚合的单点样式（官方同名选项，**扁平**键名：`shape` / `size` / `fillColor` …） | 同上 |
+| `tileSize` | 瓦片尺寸，**参与半径归一化**（官方 `tileSize`） | 同上（实测 `256`）—— 实测把同样 `clusterRadius: 300` 的三团近点从 1 簇变成 2 簇，所以它**确实生效** |
+| `fitViewMargin` | 点击簇自动缩放时的边距 `[上, 右, 下, 左]`（官方同名） | 同上（实测 `[12, 12, 12, 12]`）。只在 `fitViewOnClick` 为真时有意义 |
+| `updateRealTime` | 拖动 / 缩放过程中是否**实时刷新**（按 `waitTime` 节流） | 同上 —— ⚠️ **官方默认是 `false`**（只在地图静止后刷新）。要在拖动时实时跟随聚合，显式传 `true` |
+| `waitTime` | 实时刷新的节流间隔（毫秒，官方同名） | 同上（实测 `300`）。只在 `updateRealTime` 为真时有意义 |
+| `clusterIcon` | 聚合点图标：`(properties) => 图标源`（URL / `HTMLCanvasElement` / `{ canvas, id? }`） | 同上 —— 不设时用内置气泡（按占比着色 + 数字） |
+| `clusterIconSize` | 聚合点图标尺寸：`(properties) => [w, h] \| number` | 同上 —— 不设时与内置气泡一致 |
+
+::: warning 回调型两个选项请传**稳定引用**
+`clusterIcon` / `clusterIconSize` 按**身份**参与构造期指纹（函数没有「内容」可以按值比）。
+在模板里写内联箭头函数（`() => ...`）会让**每次父级渲染都换一次实例**。需要按要素动态取值时，
+把函数体放进稳定的 `computed` / `setup` 返回值。
+:::
 
 | 属性（`engine: "markers"`） | 说明 | 默认值 |
 | --- | --- | --- |
@@ -231,7 +246,7 @@ Marker 的代价」），不是自动降级。
 | `zoom` | 聚合使用的 zoom；未提供时**在每次聚合计算时**读一次地图当前 zoom（读不到时用 `8`，并告警一次）。地图缩放变化**不会**自动重算聚合 | - |
 
 ⚠️ 与当前 `engine` 不匹配的选项会**告警一次**（不静默）：`gridSize` / `minClusterSize` / `zoom`
-只对 `markers` 生效，`clusterRadius` 等只对 `native` 生效。换 `engine` 等于换资源形态，因此整层重建。
+只对 `markers` 生效，上表那 11 项只对 `native` 生效。换 `engine` 等于换资源形态，因此整层重建。
 
 | 事件 | 说明 | 参数 |
 | --- | --- | --- |
@@ -242,10 +257,33 @@ Marker 的代价」），不是自动降级。
 `items` 只在 `engine="markers"` 下是业务项数组，`native` 下是 `null` —— 用 `null` 而不是空数组，
 是为了让「这一层拿不到」与「这一簇确实是空的」在类型上就分得开。
 
-聚合参数（`clusterRadius` 等）是**构造期**选项：改变 ⇒ 重建实例（不重建就没法保证生效：
-官方同时列了 `setOptions` 与 `redraw`，但本库没有取证「改了再 `redraw()` 会重新聚簇」）。
+聚合参数（`clusterRadius` / `tileSize` / `updateRealTime` …）是**构造期**选项：改变 ⇒ 重建实例。
+判据是「官方**没有**公开的**逐字段**更新入口」，与图形族的构造期选项同一口径：
+
+- 官方 `ClusterLayer` 上**没有** `setZoomRange` / `setMinZoom` / `setMaxZoom`（因此
+  `minZoom` / `maxZoom` 这两个官方**声明了**的构造项本库也**不开面**——收下就是「改 prop
+  悄悄不生效」）；
+- 官方虽然有公开的 `setOptions`，且实测改聚合参数**确实**会重算（`clusterRadius` 20 → 300
+  后 `change` 事件的簇数从 3 变 1，不必再 `redraw()`），但那是**整袋**入口，
+  **不是**逐字段通道；更关键的是本库的 `setStyle` **也**落到 `setOptions`，
+  两条通道共用一个成员 ⇒ 认成「可就地更新」会让聚合参数与样式互相踩。
+
+拾取面（`enablePicked` / `mouseStyleChange` / `pickTolerance`）**刻意不暴露**：
+`cluster-click` / `item-click` 是本组件的核心交互，本库没有「关掉拾取」的消费者
+（关掉等于 `cluster-click` 永远不触发，那是自断交互不是能力）。`enablePicked` 因此固定为 `true`。
 
 ## `BPointShapeLayer`
+
+::: warning 底层类官方已在 4.0.5 弃用
+本组件落在 `BMap.PointShapeLayer` 上，该类被官方标记 `@deprecated`（建议改用 `PointLayer` 的
+形状模式）。**组件继续可用、行为不变**（开发期告警一次，props 类型上带 `@deprecated`）。
+迁移**不是改个名字**：`shapeType` 是**数字枚举**而替代品的 `shape` 是**字符串枚举**
+（`0` 圆形 ↔ `'circle'`，数字一一对应但类型不同），`color` 要改写成 `fillColor`，图层级
+`opacity` 要改写成逐点 `fillOpacity`，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` /
+新 `false`）。**需要留下**的情况：依赖要素状态（替代品**没有**该 API）、或要 `zIndex` /
+`minZoom` / `maxZoom`（替代品上本库未开这三个面）。
+逐字段迁移表见[弃用图层的迁移指引](./layer/deprecated-layers-migration)。
+:::
 
 ```vue
 <BPointShapeLayer
@@ -253,7 +291,7 @@ Marker 的代价」），不是自动降级。
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
   :properties="(s) => ({ name: s.name, level: s.level })"
-  :shape="0"
+  :shape-type="0"
   :size="18"
   color="#1677ff"
   @item-click="onItemClick"
@@ -264,7 +302,7 @@ Marker 的代价」），不是自动降级。
 | 属性 | 说明 | 默认值 |
 | --- | --- | --- |
 | `properties` | 写进每个要素 `properties` 的属性映射 | - |
-| `shape` / `size` / `color` / `strokeColor` / `strokeWeight` | 点样式（官方 `PointShapeStyle` 的子集） | SDK 默认 |
+| `shapeType` / `size` / `color` / `strokeColor` / `strokeWeight` | 点样式（官方 `PointShapeStyle` 的子集） | SDK 默认 |
 | `opacity` / `zIndex` / `minZoom` / `maxZoom` | 透明度 / 层级 / 缩放范围 | SDK 默认 |
 | `enablePicked` | 是否开启鼠标拾取 | **`true`**（官方默认 `false`，这里刻意不同） |
 | `pickWidth` / `pickHeight` | 点击拾取矩形尺寸（像素） | 官方默认（30） |
@@ -309,6 +347,29 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 
 ## `PointIconLayer`
 
+::: warning 官方已在 4.0.5 弃用 `BMap.PointIconLayer`
+`@baidumap/jsapi-v4-types@4.0.5` 给 `BMap.PointIconLayer` 加了一条 `@deprecated`，官方建议改用
+同一批新增的 `visualization.PointLayer`（图标模式）。
+
+**组件继续可用、行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。与线 / 面两个图层
+不同，官方建议的替代品本库**已经提供**（[`PointLayer`](#pointlayerexperimental扩展-api)，见下），
+所以这里**是可以迁移的**——但不是改个名字：`<PointLayer>` 属扩展 API、标 `experimental`（可视化
+实现按需异步注入，就绪前创建会经 `resource:error` 交出 `BMAP_CAPABILITY_UNSUPPORTED`），且它的
+样式字段是**扁平**的（`icon` / `width` / `height` / `anchors` 直接是 prop，没有 `style` 袋）。
+
+**需要留下**的几种情况：`visualization/` 家族**没有**要素状态（Feature State）API，依赖它的用法
+迁移即丢能力；`isFixed` / `visibility` / `iconObj` / `userSizes` / `sizes` 在替代品上**无对应**；
+`isFlat` 的官方默认值与本组件**相反**（旧 `true` 贴地 / 新 `false` 屏幕固定），迁移时**显式传值**。
+需要「最稳、官方两处都声明、样式是袋」的那一套，就继续用 `<PointIconLayer>`。
+
+官方同一批还弃用了 `BMap.PointShapeLayer`（建议 `PointLayer` 形状模式）；本库**没有**对应的
+`PointShapeLayer` 组件——形状点走 [`BPointShapeLayer`](#bpointshapelayer)。线 / 面两个图层的弃用
+见[原生批量可视化图层](./layer/native-visual-layers)。
+
+逐字段迁移表、七个无对应的旧选项与「该留下还是该迁走」的判断，见
+[弃用图层的迁移指引](./layer/deprecated-layers-migration)。
+:::
+
 ```vue
 <PointIconLayer
   :data="stations"
@@ -327,10 +388,21 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 | --- | --- | --- |
 | `properties` | 写进每个要素 `properties` 的属性映射 | - |
 | `icon` / `width` / `height` / `anchors` / `offset` / `scale` / `rotation` | 图标样式（官方 `PointIconStyle` 的子集） | SDK 默认 |
+| `iconObj` | 逐要素图标源：`(style, properties) => { id?, canvas }`（官方 `:101`）。按要素算出图标，典型是用 canvas 画文字 / 数字 | - |
+| `visibility` | 逐要素是否显示（官方 `:105`） | 官方默认（`true`） |
+| `sizes` / `userSizes` | 点尺寸 `[宽, 高]` / 是否优先用 `sizes` 而非 `width`+`height`（官方 `:108` / `:117`） | 官方默认（`userSizes` 为 `true`） |
+| `featureOpacity` | **逐要素**透明度（官方 `PointIconStyle.opacity`，`:127`）。与下面的图层级 `opacity` 是两个不同的官方字段（这个进样式袋，那个走 `setOpacity`） | SDK 默认 |
 | `isFlat` / `isFixed` | 是否贴地 / 是否跟随缩放保持尺寸（**构造期**选项） | 官方默认（均为 `true`） |
-| `opacity` / `zIndex` / `minZoom` / `maxZoom` | 透明度 / 层级 / 缩放范围 | SDK 默认 |
+| `opacity` / `zIndex` / `minZoom` / `maxZoom` | 图层透明度 / 层级 / 缩放范围 | SDK 默认 |
 | `enablePicked` | 是否开启鼠标拾取 | **`true`**（官方默认 `false`，这里刻意不同） |
 | `pickWidth` / `pickHeight` | 点击拾取矩形尺寸（像素） | 官方默认（30） |
+
+上表新增的五个样式字段（#165 Class 3）把官方 `PointIconStyle` 的 12 个字段补齐了，全部**就地更新**、
+不重建实例。
+
+> ⚠️ `visibility` / `userSizes` 的官方默认都是 `true`，而 Vue 对缺省的 `Boolean` prop 会转成
+> `false`。组件因此显式写 `undefined`，让「没传」真的是「没传」——否则每个不传 `userSizes` 的用户
+> 都会被静默切到 `width` / `height` 通道、覆盖掉 `sizes`。
 
 事件与 `BPointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。
 注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
@@ -354,6 +426,36 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 `strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `BPointShapeLayer` 的样式字段名
 **不同**（那里是官方的 `PointShapeStyle`）。未配置 `icon` 时按 `shape` 画几何图元，配置了就走图标模式。
 
+图标模式与拾取调优的入口（#165 Class 3 补齐，逐条对着 `visualization/PointLayer.d.ts`）：
+
+| prop | 官方字段 | 说明 |
+| --- | --- | --- |
+| `iconSize` | `iconSize`（`:135`） | 图标显示尺寸 `[宽, 高]` 或 number（px）；不设则用图片自身尺寸 |
+| `pickTolerance` | `pickTolerance`（`:158`） | 命中容差（css px，默认 4）——**本组件真正的拾取调优入口** |
+| `pickThrough` | `pickThrough`（`:163`） | 命中后是否继续向下层派发（默认 `false`） |
+| `mouseStyleChange` | `mouseStyleChange`（`:153`） | 命中后是否换鼠标光标（默认 `true`） |
+| `referCenter` | `referCenter`（`:191`） | 图层参考中心点，规避大坐标浮点抖动。收**纯数据** `{ lng, lat }`，由 Driver 换算成官方 `BMap.Point` |
+| `renderStage` | `renderStage`（`:196`） | 绘制阶段 `'building'` / `'poi'` / `null`（默认落点） |
+
+这些都进**样式袋**（官方 `setOptions` 会把 `renderStage` / `referCenter` 转发到对应 setter），
+因此变化时**就地更新、不重建**。
+
+`isFlat`（#165 补齐）是**唯一走构造期**的那个，与 `BPointShapeLayer` / `PointIconLayer` 同名同档：
+
+| prop | 官方字段 | 说明 |
+| --- | --- | --- |
+| `isFlat` | `isFlat`（`visualization/PointLayer.d.ts:123`） | `true` 贴地（大小随缩放变化）/ `false` 屏幕固定像素大小。**构造期**选项 ⇒ 变化时**重建实例** |
+
+> ⚠️ 官方三处的默认值**互相矛盾**，所以本库**不给** `isFlat` 默认值、也**不**替官方选一个：
+> `visualization/PointLayer.d.ts:121` 与 `visualization/TextLayer.d.ts:117` 写 `false`，
+> 而 `layer/PointIconLayer.d.ts:15` / `layer/PointShapeLayer.d.ts:15` 写 `true`。
+> 「没传 = 不表态 = SDK 自己的默认」是三个点图层组件一致的处置。
+
+> 官方 `PointLayer` **没有** `pickWidth` / `pickHeight`（那是 `layer/` 下那四类专页图层的
+> 构造选项），它给的是「命中点周围多大范围算命中」的 `pickTolerance`。
+> 那两个 prop 已随 #165 Class 5 从本组件**删除**（原先无条件透传 = 构造器静默忽略两个
+> 不认识的键，即收下用不了的 prop），**新代码请用 `pickTolerance`**。
+
 三处要提前知道的事：
 
 1. **可视化实现是按需异步注入的**：就绪之前创建会经 `resource:error` 交出
@@ -363,9 +465,17 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
    `value.properties[idKey]` / `value.id` 上。因此 `click.dataIndex` 恒为 `-1`（载荷里那个
    `index` 字段的语义没有取证，本库不读它），`click.hit` 的判据是「能不能解析出业务身份」。
 
-图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露：它们走 `setOpacity` /
-`setZIndex` / …，而官方扩展专页没有把这一族列为 `PointLayer` 的方法面（`setVisible` 是唯一取过证
-的一位）。传了会**告警**，不会静默收下。
+图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露为 prop：其中 `opacity` 在 4.0.5
+的 `PointLayer` 声明里**确实没有** `setOpacity`（`ClusterLayer` / `Heatmap` / `TrackLine` 都有），
+按「不把未声明成员当契约」的口径不收下；`minZoom` / `maxZoom` 是**构造选项**而非字段级 setter。
+传了会**告警**，不会静默收下。
+
+::: warning `pickWidth` / `pickHeight` 已删除（#165 Class 5）
+这两个 prop 原先无条件透传给构造器，而官方**只在** `LineLayer` / `PointIconLayer` / `FillLayer` /
+`PointShapeLayer` 上声明它们（所以在 `BPointShapeLayer` / `PointIconLayer` 上它们**仍然合法**）。
+`PointLayer` 的拾取面是 **`pickTolerance`（默认 4）/ `pickThrough` / `mouseStyleChange`** ——
+这三个正确成员尚未接入，见 #169。
+:::
 
 ## 资源释放
 

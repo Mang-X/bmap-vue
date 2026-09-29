@@ -107,7 +107,7 @@ BAIDU_MAP_AK=<你的 ak> pnpm smoke:v4
   或「容器 DOM 变了」强得多（第 1 轮评审：只断言能力表 + 无 `console.error` 时，图层静默 no-op
   仍会 PASS；实测把 `<DistrictLayer>` 的挂载改成 no-op 后，该断言现在会红）；
 - **它的边界同样要说清**：拦截只能证明调用发生了，**不能证明 SDK 采纳了它**。要证明采纳需要 SDK
-  提供读数接口，上游 4.0.4 没有。拦截器必须在 `finally` 里还原，否则会影响后续检查。
+  提供读数接口，上游 4.0.5 没有。拦截器必须在 `finally` 里还原，否则会影响后续检查。
 - 能力表断言只在 Catalog 里**真有**该 id 时才做（`layer.district` 有，控件没有对应 id，因此控件
   不做能力断言——拿一个不存在的 id 去 `supports()` 会得到 `false` 而假红）。
 
@@ -168,7 +168,7 @@ loadErrors=["BMapError: BMap.MapTypeId.BMAP_NORMAL_MAP is not available"]
 diagnostics: {"mapTypeId":{"keys":["NORMAL","EARTH","SATELLITE"]}}
 ```
 
-- 上游 `@baidumap/jsapi-v4-types@4.0.4` 声明的是 `MapTypeId.BMAP_*_MAP`，
+- 上游 `@baidumap/jsapi-v4-types@4.0.5` 声明的是 `MapTypeId.BMAP_*_MAP`，
   真实运行时只有 `{ NORMAL, EARTH, SATELLITE }`（带前缀的那组挂在全局）；
 - 按声明名实现 ⇒ `applyMapType` 抛错 ⇒ `boot()` 落到 `catch` ⇒ **`ready` 永不触发**，
   整张地图不可用；

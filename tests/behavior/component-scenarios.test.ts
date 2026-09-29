@@ -283,7 +283,7 @@ describe("组件领域行为（jsapi-v4 / Fake v4）", () => {
         onMounted(async () => {
           try {
             // #38 起动作恒 resolve 成 ServiceResult：不 reject，「有没有结果」看 status/data
-            const result = await geocoder.get("北京", "北京市");
+            const result = await geocoder.getPoint("北京", "北京市");
             outcome.status = "resolved";
             outcome.finite =
               result.status === "success" &&
@@ -436,7 +436,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
     // 回调、恰好一个写入，这是**正确**的批处理形状，不是 #124 `flush:"sync"` 那个「多字段逐个
     // mutate ⇒ 5 次 reconcile」的问题。详见 ADR `2026-09-24-scheduler-batching-hot-path`。
     const props = ref<Record<string, unknown>>(
-      controlledViewProps({ heading: 0, tilt: 0, enableDragging: true, enableScrollWheelZoom: true }),
+      controlledViewProps({ heading: 0, tilt: 0, enableDragging: true, enableWheelZoom: true }),
     );
     const { wrapper } = await mountControlledMap(() => props.value);
 
@@ -449,7 +449,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
       center: { lng: 121.5, lat: 31.2 },
       zoom: 15,
       enableDragging: false,
-      enableScrollWheelZoom: false,
+      enableWheelZoom: false,
     };
     await settleProps();
 
@@ -469,7 +469,12 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
     expect(harness.interactionWrites().enableDragging, "enableDragging 恰好一次").toBe(
       (interactionBefore.enableDragging ?? 0) + 1,
     );
-    expect(harness.interactionWrites().enableScrollWheelZoom, "enableScrollWheelZoom 恰好一次").toBe(
+    // ⚠️ `interactionWrites()` 的 key 是**官方实例方法名**（harness 按 callLog 归并
+    // `enableXxx` / `disableXxx`），不是 prop 名。#165 Class 1 改的是**构造期 prop**
+    // （`enableScrollWheelZoom` → 官方 `MapOptions.enableWheelZoom`），落地走的仍是官方
+    // **实例方法** `enableScrollWheelZoom()` / `disableScrollWheelZoom()`（`Map.d.ts:43,47`），
+    // 所以这个计数 key 保持 `enableScrollWheelZoom` 不变。
+    expect(harness.interactionWrites().enableScrollWheelZoom, "滚轮缩放开关恰好一次").toBe(
       (interactionBefore.enableScrollWheelZoom ?? 0) + 1,
     );
     expect(harness.interactions()).toMatchObject({ dragging: false, scrollWheelZoom: false });
@@ -482,7 +487,7 @@ describe("Map 视野的受控 / 非受控（M4-STATE / #27）", () => {
       center: { lng: 121.5, lat: 31.2 },
       zoom: 15,
       enableDragging: false,
-      enableScrollWheelZoom: false,
+      enableWheelZoom: false,
     };
     await settleProps();
     expect(harness.viewWrites(), "同值重提交不得重复下发").toEqual(viewSettled);
@@ -3341,6 +3346,53 @@ describe("数据组件：评审 #102 的语义修正（组件级）", () => {
     await unmountAndSettle(wrapper);
     expect(harness.attached("layer")).toBe(0);
     harness.assertIdle("PointLayer 卸载");
+  });
+
+  it("PointLayer：isFlat 是构造期选项 —— 不表态不进选项袋，表态后换实例（#165 家族对齐）", async () => {
+    // 与 PointCollection（:4042）/ PointIconLayer（:3294）同一条口径的第三条。
+    // 该 prop 曾经**整个缺失**：`PointLayerOptions` 声明了它（`visualization/PointLayer.d.ts:123`），
+    // 两个兄弟都投影了它，只有 `<PointLayer>` 收下即丢弃，且没有任何写下的理由。
+    const isFlat = ref<boolean | undefined>(undefined);
+    const wrapper = await mountMapTree(() => [
+      h(PointLayer, {
+        data: STATIONS,
+        itemKey: "id",
+        getPosition: stationPosition,
+        isFlat: isFlat.value,
+      }),
+    ]);
+
+    // 不表态：**键整个不存在**（不是 `isFlat: undefined`）。
+    // 官方三处的 `@default` 互相矛盾（visualization 族写 `false`、layer 族写 `true`），
+    // 而 `PointLayer.d.ts:298` 明说 `setOptions` 会忽略未声明的键并告警一次 ⇒ 发一个
+    // 「键在、值 undefined」的成员既可能被上游的告警分支扫到，也可能被某个默认分支
+    // 当成「显式 undefined」写进样式。省略整个键是唯一无歧义的表达。
+    expect(
+      Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(), "isFlat"),
+      "不表态时构造选项袋里**不得**出现 isFlat 这个键（也不能是 isFlat: undefined）",
+    ).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(harness.nativeLayerOptions(-1), "isFlat"),
+      "首次构造的那一份同样没有这个键",
+    ).toBe(false);
+
+    const created = harness.nativeLayersCreated();
+    isFlat.value = false;
+    await settleProps();
+
+    expect(harness.nativeLayerOptions(), "表态后下发给构造器").toMatchObject({ isFlat: false });
+    expect(harness.nativeLayersCreated(), "构造期项 ⇒ 换实例").toBe(created + 1);
+    expect(harness.attached("layer"), "同一时刻只有一个实例").toBe(1);
+
+    // 改回 true：又一次换实例，且两次都不是「只写样式袋」
+    isFlat.value = true;
+    await settleProps();
+    expect(harness.nativeLayerOptions(), "第二个取值也走构造器").toMatchObject({ isFlat: true });
+    expect(harness.nativeLayersCreated()).toBe(created + 2);
+    expect(harness.attached("layer"), "旧实例被摘掉").toBe(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("PointLayer isFlat");
   });
 
   it("PointLayer：扩展 API 没有入口的字段显式告警，不静默收下", async () => {

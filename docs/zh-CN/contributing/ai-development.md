@@ -11,7 +11,7 @@
 | 组件库版本 | `bmap-vue` 包版本 | `1.0.0-rc.x` |
 | SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已在 `#26` 删除） |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
-| 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.4`（精确锁定） |
+| 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.5`（git `5ba67f4`，**钉住 commit**——4.0.5 未发布到 npm） |
 | 官方加载器版本 | `@baidumap/jsapi-loader` | `1.0.0`（精确锁定，默认在线加载） |
 | 官方 UI Kit 版本 | `@baidumap/jsapi-ui-kit` | `1.1.2`（精确锁定，optional peer） |
 
@@ -85,7 +85,7 @@ npx skills update bmap-jsapi-v4
 - 入口文件 `src/driver/jsapi-v4/types-reference.d.ts` 只用三斜线引用官方类型与 augmentation 目录，本身不再内联声明。
 - 保持 `skipLibCheck: false`。升级类型包后必须重新核对 augmentation，官方补齐的声明要删除。
 
-### 已知问题：官方 `4.0.4` 的大小写引用缺陷（已处置）
+### 已知问题：官方 `4.0.4` 的大小写引用缺陷（**上游已自行修复**）
 
 `@baidumap/jsapi-v4-types@4.0.4/index.d.ts:67` 写的是 `/// <reference path="core/displayOptions.d.ts" />`，
 而发布产物中的真实文件名是 `core/DisplayOptions.d.ts`。在 macOS（默认大小写不敏感）上解析正常，
@@ -96,19 +96,18 @@ error TS6053: File '.../core/displayOptions.d.ts' not found.
 error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 ```
 
-处置（issue #50，决策见 [ADR 2026-09-13](../../adr/2026-09-13-upstream-types-case-patch.md)）：仓库用
-`patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行，因此
-`pnpm typecheck:package` 在任何平台都成立，并已重新纳入 `.github/workflows/quality.yml`。
+处置（issue #50，决策见 [ADR 2026-09-13](../../adr/2026-09-13-upstream-types-case-patch.md)）曾用
+`patches/@baidumap__jsapi-v4-types@4.0.4.patch` 在 `pnpm install` 阶段修正这一行。
+
+> **已随 4.0.5 变化**：上游 4.0.5（`5ba67f4`）自己把这一行改成了 `core/DisplayOptions.d.ts`，
+> 达成了该补丁自带的 deletionCondition ⇒ **补丁与其 `patchedDependencies` 条目已删除**。
+> 依赖因此从 npm 的 `4.0.4` 换成**钉住 commit 的 git 依赖**（4.0.5 至今未发布到 npm）。
+> 大小写回归**没有跟着删**，改由 `tests/behavior/upstream-types-reference-case.test.ts` 把关：
+> 它用 `readdirSync` 的精确名字比对核对已安装上游声明的全部三斜线引用
+> （`existsSync` 在大小写不敏感卷上会误判），因此 macOS 与 Linux 结论一致。
 
 - 补丁只改文件名大小写、不改声明内容；清单、生成方式与删除条件见仓库根目录的
-  `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。
-- 「补丁已生效」由 `tests/behavior/upstream-types-case-patch.test.ts` 把关：它用 `readdirSync`
-  的精确名字比对核对已安装上游声明的全部三斜线引用（`existsSync` 在大小写不敏感卷上会误判），
-  因此 macOS 与 Linux 结论一致。
-- 删除条件：上游发布修正大小写的版本后，升级精确版本并删除补丁与 `pnpm-workspace.yaml` 的
-  `patchedDependencies` 条目。
-- 回滚：删除补丁后 `pnpm typecheck:package` 会在 Linux 上重新失败，回滚必须同时把该 step 从 CI 摘掉，
-  并更新本页与 `CONTRIBUTING.md`。
+  `patches/README.md`（`pnpm patch` / `pnpm patch-commit`）。当前该目录**没有在用补丁**。
 
 ## SDK 边界：raw SDK 与公共声明
 
@@ -173,7 +172,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
   [Capability Catalog 能力矩阵](./capability-matrix) 与 `docs/.vitepress/capability-catalog.json`，
   CI 用 `pnpm generate:capability-matrix:check` 校验无漂移。
 - `status: "unsupported"` 的条目 `supports()` 恒为 `false`（用户 override 除外），保留槽位使错误信息、文档与能力矩阵保持一致。
-- `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 声明为基准核对（`core/Map.d.ts` 与各子目录的 `declare namespace BMap`）。
+- `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types` 声明为基准核对（`core/Map.d.ts` 与各子目录的 `declare namespace BMap`）。
 
 ## 插件兼容 inventory
 

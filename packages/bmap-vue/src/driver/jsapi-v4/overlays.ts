@@ -4,7 +4,7 @@
  * 把 JSAPI 4.0 的覆盖物收敛成项目领域映射（`OverlayDriver`）；公共 API 只新增
  * 「Rectangle / CustomOverlay 两个构造入口」与「属性分类查询 `updatePolicy`」。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - 覆盖物统一经 `map.addOverlay/removeOverlay` 管理，显隐是继承来的 `show/hide/isVisible`；
  * - `InfoWindow` **不是**普通 Overlay：`map.openInfoWindow(infoWnd, point)` 必须带位置，
  *   关闭是地图级的 `map.closeInfoWindow()`（无参数），状态查询走公开的 `isOpen()` /
@@ -12,7 +12,11 @@
  * - `Rectangle` 收 Bounds；`CustomOverlay` 由 DOM 工厂 + 构造选项创建，4.0 缺 point 直接拒绝，
  *   因此项目签名把位置提为必填位置参数；
  * - `ContextMenu` 经 `map.addContextMenu/removeContextMenu` 挂在 Map 上（4.0 没有 Marker 级挂载）；
- * - `Marker3D` / `MapMask` 在 4.0.4 类型包与官方参考里都**没有声明**，只能按命名空间结构性探测：
+ * - `Marker3D` / `MapMask` 在 4.0.5**类型包**里都**没有类声明**（`MapMask` 全包 0 命中；
+ *   `Marker3D` 只在 `const/Marker3DShapeType.d.ts` 的文档注释里出现，类本身缺席；4.0.5 同）——而官方
+ *   React 参考实现 `huiyan-fe/react-bmap`（master 与 v2.0.6 都有 `Overlay/Marker3D.tsx` /
+ *   `MapMask.tsx`，driver 侧有 `createMarker3D` 工厂与 `new BMap.MapMask` 调用）**两者都包了**。
+ *   即缺口在「类型声明」而非「官方参考没有这个能力」，所以只能按命名空间结构性探测：
  *   有就按结构创建，没有就显式失败（不是静默降级）。
  *
  * 属性更新一律走 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS`：`mutable` 调字段级 setter /
@@ -45,14 +49,18 @@ import type {
   InfoWindowOptions,
   LabelOptions,
   MarkerIconInput,
+  MarkerLabelInput,
   MarkerOptions,
+  OverlayAnchorName,
   OverlayDescriptor,
   OverlayDriver,
   OverlayKind,
   OverlayPropertySpec,
+  MenuItemView,
   OverlayTarget,
   PathOptions,
 } from "../types/overlays";
+import { ANCHOR_VALUES } from "./controls";
 import {
   OVERLAY_DESCRIPTORS,
   mutableSetter,
@@ -134,6 +142,37 @@ export function createJsapiV4OverlayDriver(
   /** `createContextMenu({ width })` → `MenuItem` 的默认宽度。 */
   const menuWidths = new WeakMap<object, number>();
 
+  /**
+   * 菜单 raw → **本库侧的条目表**（#165 Class 3 / TASK 2d/2e）。
+   *
+   * 为什么需要它：官方的 `ContextMenu#getItem(index): MenuItem` 返回 raw `MenuItem`，
+   * 而 `MenuItem` 上**没有任何 getter**（`context-menu/MenuItem.d.ts` 只有
+   * `setText` / `enable` / `disable`）。因此「读回一条菜单项」**只能**来自本库在
+   * `addContextMenuItem` 时记下的结构——否则交出去的 raw 实例对调用方是**全盲**的
+   * （它拿得到对象、读不到任何字段）。这正是本库把 `getItem` 改成返回 `MenuItemView`
+   * 而不是 raw 实例的**直接后果**，不是妥协。
+   *
+   * 表与 SDK 侧**同序**且**同步维护**：`addContextMenuItem` 追加，`removeItem` /
+   * `removeSeparator` 同步 `splice`。菜单重建时整张表换新（新的 `ContextMenu` raw 拿到
+   * 一张新表），因此它不会跨代残留。
+   */
+  const contextMenuItems = new WeakMap<
+    object,
+    Array<{ kind: "item" | "separator"; model: Omit<MenuItemView, "index">; instance?: object }>
+  >();
+
+  /**
+   * `MenuItem` raw → 它所属的那张条目表与它在表里的位置。
+   *
+   * `setText` 要能同时改 SDK **和**本库这份读回模型，否则「`getItem(i).text` 读到旧值」
+   * 就是一处必然出现的分叉（正是这张表存在要消灭的东西）。`WeakMap` 随 `MenuItem`
+   * 实例一起回收，不需要显式清理。
+   */
+  const contextMenuItemOwners = new WeakMap<
+    object,
+    { entries: Array<{ kind: "item" | "separator"; model: Omit<MenuItemView, "index">; instance?: object }> }
+  >();
+
   const warnOnce = (key: string, message: string): void => {
     if (warned.has(key)) return;
     warned.add(key);
@@ -171,10 +210,10 @@ export function createJsapiV4OverlayDriver(
       );
     }
     if (typeof icon !== "string" && icon?.printImageUrl) {
-      // 4.0.4 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
+      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.4 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃",
       );
     }
   };
@@ -231,6 +270,67 @@ export function createJsapiV4OverlayDriver(
     return iconCache.get(descriptor, () => constructIcon(descriptor));
   };
 
+  /**
+   * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（issue #165 第三批）。
+   *
+   * ## 为什么必须在这一层构造
+   *
+   * 官方 `MarkerOptions.label` / `Marker#setLabel(label: Label)` 的类型是 `BMap.Label`
+   * ——一个 raw SDK 对象。组件面**不构造** SDK 对象（AGENTS.md 的 raw SDK 边界），
+   * 因此这个 `new BMap.Label(...)` 只能发生在 Driver 边界内；组件传领域形状（`MarkerLabelInput`）。
+   * 若把领域对象原样递下去（`value: "raw"` 的后果），官方读到的是普通 JS 对象，
+   * 标注**不显示且不报错**——那是最难排查的一类静默失败。
+   *
+   * ## 释放路径：为什么这个 Label **不**登记进 Registry
+   *
+   * 从属 Label 随 Marker 一起被 `map.removeOverlay(marker)` 释放（官方语义：Label 挂在
+   * Marker 上时不需要独立 `addOverlay`），因此**不另建** registration——那会造出第四种
+   * 「谁负责摘它」的答案（Marker 摘 / 用户摘 / Registry 摘 / 谁都不摘）。
+   * 换 Marker 实例时旧 Label 随旧 Marker 一起消失，与 `Marker#icon` 的处理同一条口径。
+   *
+   * ## 没有缓存（与 `iconFor` 相反）
+   *
+   * `Icon` 是**纯值对象**、可安全共享；`Label` 有可变面（`setContent` / `setPosition` …）
+   * 且**一个 Label 只属于一个 Marker**——共享实例会让「改了 A 的标注，B 的也跟着变」。
+   * 因此每次都新建。这也意味着 `projectOptions` 每次调用会产生新实例：官方只在**构造时**
+   * 读一次 `label`，不会反复调，所以不构成问题（与 `GroundOverlay.url` 的投影同一注意事项）。
+   */
+  const markerLabelFor = (spec: MarkerLabelInput): unknown => {
+    const Label = namespaceCtor(namespace, "Label");
+    const opts: Record<string, unknown> = {};
+    if (spec.position !== undefined) opts.position = geometry.toRawPoint(spec.position);
+    if (spec.offset !== undefined) opts.offset = rawSize(spec.offset);
+    if (spec.style !== undefined) opts.styles = spec.style;
+    return new Label(spec.content, opts);
+  };
+
+  /**
+   * 锚点的**官方常量名** → 官方数值（issue #165 第三批）。
+   *
+   * 复用控件那一族的**同一张** `ANCHOR_VALUES`（`driver/jsapi-v4/controls.ts` 把它导出在这里
+   * 共享，见该常量旁的注释）。刻意**不**另抄一份：两张表一旦漂移，同一个 `anchor` 名在
+   * `<ZoomControl>` 与 `<Label>` 上会落到不同的角——那是肉眼几乎发现不了的 bug。
+   *
+   * ⚠️ 与控件的 `resolveAnchor` 有一处**故意的**差别：控件只接受四角（官方 4.0 的控件会
+   * 把 `TOP_CENTER` 之类**静默回落**到默认落点），因此它对非四角会告警；覆盖物的
+   * `setAnchor` / `LabelOptions.anchor` 接受**全部九个**（官方 `ControlAnchor` 就是九元联合，
+   * `Label` 的 `setAnchor` 文档示例正是 `BMAP_ANCHOR_BOTTOM_CENTER`），所以这里**不**告警。
+   * 真正无法换算的（不认识的名字）两条路径同样处理：告警一次 + **不透传**。
+   */
+  const anchorFor = (anchor: OverlayAnchorName): unknown => {
+    const value = ANCHOR_VALUES[anchor];
+    if (value === undefined) {
+      warnOnce(
+        `anchor:unknown:${anchor}`,
+        `OverlayDriver: 不认识的锚点 "${anchor}"；JSAPI 4.0 的锚点是官方常量名（` +
+          "BMAP_ANCHOR_TOP_LEFT / TOP_CENTER / CENTER / BOTTOM_CENTER …），本次取值已忽略，" +
+          "该属性沿用 SDK 自身默认锚点",
+      );
+      return undefined;
+    }
+    return value;
+  };
+
   /** 领域值 → v4 构造参数 / setter 入参。 */
   const normalize = (spec: OverlayPropertySpec, value: unknown): unknown => {
     switch (spec.value) {
@@ -252,6 +352,10 @@ export function createJsapiV4OverlayDriver(
         return rawSize(value as Pixel);
       case "icon":
         return iconFor(value as MarkerIconInput);
+      case "marker-label":
+        return markerLabelFor(value as MarkerLabelInput);
+      case "anchor":
+        return anchorFor(value as OverlayAnchorName);
       default:
         return value;
     }
@@ -288,7 +392,13 @@ export function createJsapiV4OverlayDriver(
         continue;
       }
       if (spec.ctorKey == null) continue;
-      projected[spec.ctorKey] = normalize(spec, value);
+      const normalized = normalize(spec, value);
+      // ⚠️ **归一化可能「拒绝」这个值**（`anchorFor` 对不认识的常量名告警并给 `undefined`）。
+      // 拒绝的键**必须整个不出现**——把 `anchor: undefined` 塞进构造 options 与「键不存在」
+      // 在 SDK 侧不是一回事：前者会让官方读到「用户显式要求了一个无意义的值」。
+      // 与控件 Driver 的 `if (anchor !== undefined)` 同款守卫（同一条 `ANCHOR_VALUES`）。
+      if (normalized === undefined) continue;
+      projected[spec.ctorKey] = normalized;
     }
     return projected;
   };
@@ -329,12 +439,63 @@ export function createJsapiV4OverlayDriver(
         { engine: "jsapi-v4" },
       );
     }
-    const args = [normalize(spec, value), ...(spec.valueArgs ?? [])];
-    sdkCall(setter, () => callRequired(raw, setter, ...args));
+    // ⚠️ 归一化「拒绝」这个值时**不调 setter**（同 `projectOptions` 的守卫与理由：
+    // `anchorFor` 对不认识的常量名告警并给 `undefined`；调 `setAnchor(undefined)` 是
+    // 「把一个无意义的值写进 SDK」，而不是「沿用默认」——与控件 Driver 的
+    // `if (anchor !== undefined)` 同款）。
+    //
+    // 判据是**归一化后**的入参而不是原值：`normalize` 只可能因为「拒绝」才返回 `undefined`
+    //（`raw` 一路原样返回，调用方传进来什么就是什么），因此这一条只会在拒绝发生时命中。
+    const normalized = normalize(spec, value);
+    if (normalized === undefined) return;
+    sdkCall(setter, () => callRequired(raw, setter, normalized, ...(spec.valueArgs ?? [])));
   };
 
   /** 位置类更新用的语义键：圆是 `center`（setCenter），其余是 `position`。 */
   const POSITION_KEY: Partial<Record<OverlayKind, string>> = { circle: "center" };
+
+  /* ------------------------------------------------- 读回 / 命令面（#165 Class 3）
+   *
+   * 官方读回返回的是 raw `BMap.Point` / `BMap.Bounds` / `BMap.Size` / `BMap.MenuItem`；
+   * 组件面**不得**接触 raw SDK 对象（AGENTS.md 的边界规则），因此投影全部收在这一处，
+   * 公共调用面只给领域值。
+   *
+   * 几何投影**复用 `GeometryDriver` 的 `fromRawPoint` / `fromRawBounds`**（不另抄一份）：
+   * 那一族已经在 `driver/jsapi-v4/geometry.ts` 里处理了「空 Bounds 返回 null」这类上游怪癖，
+   * 两处各写一遍必然在某个边角上分叉。`Size` → `Pixel` 的换算也走 `geometry`（组件侧的
+   * `offset` 一直是 Pixel，见 `useOverlaySpec` 的 `fixedShapeKeyOf` 注释）。
+   *
+   * **两条与 `setOptions` 不同的口径**：
+   * 1. 读回用 `callRequired`（成员缺失 ⇒ 显式失败），不像 `setOptions` 那样对 `mutable`
+   *    声明但实例缺成员只告警一次——读回没有「忽略」这个选项，调用方要的是一个值。
+   * 2. 几何**形状不符**如实报错（由 `geometry` 一族抛），不编一个默认值：那会让
+   *    「上游形状变了」变成一次静默的坐标错误。
+   */
+
+  /** 读回一个无参的字符串 / 数值 / 枚举（`callRequired` ⇒ 成员缺失即失败）。 */
+  const readScalar = <T>(raw: object, method: string): T =>
+    sdkCall(method, () => callRequired(raw, method)) as T;
+
+  /** raw `BMap.Size`（`{width, height}`）→ 领域 `Pixel`（`{x, y}`）。 */
+  const fromRawSizeToPixel = (raw: unknown): Pixel => {
+    const size = geometry.fromRawSize(raw);
+    return { x: size.width, y: size.height };
+  };
+
+  /** 读回一族无参成员（官方：`Circle.d.ts` / `Rectangle.d.ts` / `Polygon.d.ts` / `Polyline.d.ts`）。 */
+  const createPathReadBackApi = (raw: object) => ({
+    getBounds: () =>
+      geometry.fromRawBounds(sdkCall("getBounds", () => callRequired(raw, "getBounds"))),
+    getStrokeColor: () => readScalar<string>(raw, "getStrokeColor"),
+    getStrokeOpacity: () => readScalar<number>(raw, "getStrokeOpacity"),
+    getStrokeWeight: () => readScalar<number>(raw, "getStrokeWeight"),
+    getStrokeStyle: () => readScalar<"solid" | "dashed" | "dotted">(raw, "getStrokeStyle"),
+  });
+
+  const createPathFillReadBackApi = (raw: object) => ({
+    getFillColor: () => readScalar<string>(raw, "getFillColor"),
+    getFillOpacity: () => readScalar<number>(raw, "getFillOpacity"),
+  });
 
   /** 覆盖物只能挂到 Map；其它 target 在本引擎没有运行时入口，必须显式失败。 */
   const requireMapTarget = (target: OverlayTarget, operation: string): object => {
@@ -360,8 +521,8 @@ export function createJsapiV4OverlayDriver(
    *
    * | 目标 | SDK 入口 | 依据 |
    * | --- | --- | --- |
-   * | `map` | `Map#addContextMenu(menu)` / `#removeContextMenu(menu)` | 官方 4.0.4 的 `core/Map.d.ts` 里有声明（**一个** 参数，没有目标参数） |
-   * | `marker` | `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)` | **运行时扩展**：`@baidumap/jsapi-v4-types@4.0.4` 只在 `Map` 上声明，但真实 4.0 的 `Marker.prototype` 上有这两个成员且可用（真实 AK 实测，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`） |
+   * | `map` | `Map#addContextMenu(menu)` / `#removeContextMenu(menu)` | 官方 4.0.5 的 `core/Map.d.ts` 里有声明（**一个** 参数，没有目标参数） |
+   * | `marker` | `Marker#addContextMenu(menu)` / `#removeContextMenu(menu)` | **运行时扩展**：`@baidumap/jsapi-v4-types@4.0.5` 只在 `Map` 上声明，但真实 4.0 的 `Marker.prototype` 上有这两个成员且可用（真实 AK 实测，读数见 ADR `2026-09-19-custom-overlay-and-context-menu`） |
    *
    * 其余 kind（`overlay` / `clusterer`）**没有任何入口证据**，显式拒绝——本库不把「挂到地图」
    * 当成回退（那是另一种语义，会让菜单在整张地图上冒出来），也不静默忽略。
@@ -428,7 +589,7 @@ export function createJsapiV4OverlayDriver(
    * 收敛在 `internal.requireRuntimeCtor`，Overlay / Layer Facet 共用同一份口径。
    *
    * 真实 AK smoke（ADR「真实 AK smoke 记录」一节）确认：`Marker3D` / `MapMask` 在 4.0 运行时
-   * **都存在**，只是 `@baidumap/jsapi-v4-types@4.0.4` 没有类声明——所以这条路在真实 SDK 上会
+   * **都存在**，只是 `@baidumap/jsapi-v4-types@4.0.5` 没有类声明——所以这条路在真实 SDK 上会
    * 直接创建成功；失败分支只在「运行时确实没提供」时触发（Fake v4 故意不提供，用来覆盖它）。
    */
   const requireRuntimeCtor = (kind: OverlayKind, hint: string): JsapiV4Ctor => {
@@ -565,13 +726,16 @@ export function createJsapiV4OverlayDriver(
 
     addContextMenuItem(menu, item, options) {
       const raw = registry.resolve<object>(menu);
+      const entries = contextMenuItems.get(raw) ?? [];
+      contextMenuItems.set(raw, entries);
       if (item === "-") {
         sdkCall("ContextMenu.addSeparator", () => callRequired(raw, "addSeparator"));
+        entries.push({ kind: "separator", model: { text: "", disabled: false } });
         return;
       }
       const width = options?.width ?? menuWidths.get(raw);
       const MenuItem = namespaceCtor(namespace, "MenuItem");
-      // `MenuItemOptions` 只有这两个键（4.0.4 的 `context-menu/MenuItemOptions.d.ts`）：`width` 与 `id`。
+      // `MenuItemOptions` 只有这两个键（4.0.5 的 `context-menu/MenuItemOptions.d.ts`）：`width` 与 `id`。
       // 两者都是**构造期**输入，实例上没有对应 setter ⇒ 调用方改了它们只能重建菜单（组件侧就是这么做的）。
       const menuItemOptions: Record<string, unknown> = {};
       if (width != null) menuItemOptions.width = width;
@@ -582,6 +746,143 @@ export function createJsapiV4OverlayDriver(
       );
       if (item.disabled) callOptional(menuItem, "disable");
       sdkCall("ContextMenu.addItem", () => callRequired(raw, "addItem", menuItem));
+      // 记进本库侧条目表（读回的唯一来源，理由见 `contextMenuItems` 的注释）
+      const model: Omit<MenuItemView, "index"> = {
+        text: item.text,
+        disabled: item.disabled === true,
+        ...(width != null ? { width } : {}),
+        ...(options?.id != null ? { id: options.id } : {}),
+      };
+      entries.push({ kind: "item", model, instance: menuItem as unknown as object });
+      contextMenuItemOwners.set(menuItem as unknown as object, { entries });
+    },
+
+    /**
+     * 菜单的逐条命令面（#165 Class 3 / TASK 2d）。
+     *
+     * **`getItem` 的返回值经本库条目模型投影**：官方 `ContextMenu#getItem(index): MenuItem`
+     * 返回 raw 实例，而 `MenuItem` 上**没有任何 getter**（`context-menu/MenuItem.d.ts` 只有
+     * `setText` / `enable` / `disable`）——把它交出去等于发一个「调用方什么也读不到」的对象。
+     * 因此读回的内容（文字 / 禁用态）来自**本库维护的条目表**（`contextMenuItems`），
+     * 那是菜单真正建成时的**结构**；SDK 侧的结构由 `getItem` 的存在性校验。
+     */
+    contextMenuCommands(menu) {
+      const raw = registry.resolve<object>(menu);
+      // 本库侧的条目表（与 SDK 侧同序）：`addContextMenuItem` 每建一条就在这里记一份。
+      const items = contextMenuItems.get(raw);
+      if (!items) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          "ContextMenu.handle：菜单不是由本 Driver 的 addContextMenuItem 建的" +
+            "（条目表里没有它）——读回无从谈起，如实失败而不是编一个空表",
+          { engine: "jsapi-v4" },
+        );
+      }
+      return {
+        getItem(index: number): MenuItemView | null {
+          if (!Number.isInteger(index) || index < 0) {
+            throw new BMapError(
+              "BMAP_INVALID_ARGUMENT",
+              `getItem 的 index 必须是非负整数，实际是 ${String(index)}`,
+              { engine: "jsapi-v4" },
+            );
+          }
+          const entry = items[index];
+          if (!entry) return null;
+          // 分隔线没有「菜单项」可言 ⇒ 先判，再问 SDK：官方 `getItem` 落在分隔线上
+          // 本身就是一次没有意义的调用（真实 v4 上返回 `undefined`，替身上会抛）。
+          if (entry.kind === "separator") return null;
+          // 存在性由 SDK 侧确认（官方 `getItem` 越界会抛），本库这一侧只投影结构。
+          sdkCall("ContextMenu.getItem", () => callRequired(raw, "getItem", index));
+          return { ...entry.model, index };
+        },
+        removeItem(index: number): boolean {
+          const entry = items[index];
+          if (!entry || entry.kind === "separator") return false;
+          const item = sdkCall("ContextMenu.getItem", () => callRequired(raw, "getItem", index));
+          sdkCall("ContextMenu.removeItem", () => callRequired(raw, "removeItem", item));
+          items.splice(index, 1);
+          return true;
+        },
+        removeSeparator(index: number): boolean {
+          const entry = items[index];
+          if (!entry || entry.kind !== "separator") return false;
+          sdkCall("ContextMenu.removeSeparator", () => callRequired(raw, "removeSeparator", index));
+          items.splice(index, 1);
+          return true;
+        },
+        setItemText(index: number, text: string): void {
+          if (typeof text !== "string") {
+            throw new BMapError(
+              "BMAP_INVALID_ARGUMENT",
+              `setItemText 的入参必须是字符串，实际是 ${typeof text}`,
+              { engine: "jsapi-v4" },
+            );
+          }
+          const entry = items[index];
+          if (!entry || entry.kind === "separator" || !entry.instance) {
+            throw new BMapError(
+              "BMAP_INVALID_ARGUMENT",
+              `setItemText(${index}): 该序号没有菜单项（或越界）`,
+              { engine: "jsapi-v4" },
+            );
+          }
+          sdkCall("MenuItem.setText", () => callRequired(entry.instance!, "setText", text));
+          // 同步本库读回模型，否则 `getItem(index).text` 与 SDK 会立刻分叉
+          entry.model = { ...entry.model, text };
+        },
+        setItemEnabled(index: number, enabled: boolean): void {
+          const entry = items[index];
+          if (!entry || entry.kind === "separator" || !entry.instance) {
+            throw new BMapError(
+              "BMAP_INVALID_ARGUMENT",
+              `setItemEnabled(${index}): 该序号没有菜单项（或越界）`,
+              { engine: "jsapi-v4" },
+            );
+          }
+          const method = enabled ? "enable" : "disable";
+          sdkCall(`MenuItem.${method}`, () => callRequired(entry.instance!, method));
+          // ⚠️ 刻意**不**改 `entry.model.disabled`：见接口注释「不回写本库条目表的 disabled」。
+        },
+        getDom: () => sdkCall("ContextMenu.getDom", () => callRequired(raw, "getDom")) as HTMLElement,
+        show: () => sdkCall("ContextMenu.show", () => callRequired(raw, "show")),
+        hide: () => sdkCall("ContextMenu.hide", () => callRequired(raw, "hide")),
+      };
+    },
+
+    /**
+     * 一条 `MenuItem` 的命令面（#165 Class 3 / TASK 2e）。
+     *
+     * `MenuItem` **没有句柄品牌**（它不是 `Overlay`，SDK 也没有把它 adopt 进来），因此
+     * 这里收的是**本库记下的那条**（`addContextMenuItem` 建的 `MenuItem` 实例），
+     * 而不是 `OverlayHandle`。`getItem` 返回的 `MenuItemView` 里也**不**含这个引用——
+     * 要逐条改就经 `<ContextMenu>` 的命令面（`setItemText` / `setItemEnabled`）。
+     */
+    menuItemCommands(item) {
+      const raw = item.raw as object;
+      return {
+        setText: (text: string) => {
+          if (typeof text !== "string") {
+            throw new BMapError(
+              "BMAP_INVALID_ARGUMENT",
+              `MenuItem.setText 的入参必须是字符串，实际是 ${typeof text}`,
+              { engine: "jsapi-v4" },
+            );
+          }
+          sdkCall("MenuItem.setText", () => callRequired(raw, "setText", text));
+          const owner = contextMenuItemOwners.get(raw);
+          if (owner) {
+            const entry = owner.entries.find((candidate) => candidate.instance === raw);
+            if (entry) entry.model = { ...entry.model, text };
+          }
+        },
+        enable: () => {
+          sdkCall("MenuItem.enable", () => callRequired(raw, "enable"));
+        },
+        disable: () => {
+          sdkCall("MenuItem.disable", () => callRequired(raw, "disable"));
+        },
+      };
     },
 
     add(target, overlay) {
@@ -646,6 +947,128 @@ export function createJsapiV4OverlayDriver(
       const kind = kindOfHandle(overlay);
       const raw = registry.resolve<Record<string, unknown>>(overlay);
       applyFieldUpdate(raw, kind, "path", path);
+    },
+
+    /* ------------------------------------------------ 读回 / 命令面（#165 Class 3） */
+
+    infoWindowCommands(overlay) {
+      const raw = registry.resolve<Record<string, unknown>>(overlay);
+      return {
+        getTitle: () => readScalar<string>(raw, "getTitle"),
+        getContent: () => readScalar<string | HTMLElement>(raw, "getContent"),
+        isOpen: () => readScalar<boolean>(raw, "isOpen"),
+        getOffset: () => fromRawSizeToPixel(sdkCall("getOffset", () => callRequired(raw, "getOffset"))),
+        maximize: () => sdkCall("maximize", () => callRequired(raw, "maximize")),
+        restore: () => sdkCall("restore", () => callRequired(raw, "restore")),
+      };
+    },
+
+    pathReadBacks(overlay) {
+      kindOfHandle(overlay);
+      return createPathReadBackApi(registry.resolve<Record<string, unknown>>(overlay));
+    },
+
+    circleReadBacks(overlay) {
+      const kind = kindOfHandle(overlay);
+      const raw = registry.resolve<Record<string, unknown>>(overlay);
+      if (kind !== "circle") {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `circleReadBacks 只对 circle 生效，收到的是 ${kind}（圆的 getCenter/getRadius 在别的类上不存在）`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      return {
+        ...createPathReadBackApi(raw),
+        getCenter: () =>
+          geometry.fromRawPoint(sdkCall("getCenter", () => callRequired(raw, "getCenter"))),
+        getRadius: () => readScalar<number>(raw, "getRadius"),
+        getFillColor: () => readScalar<string>(raw, "getFillColor"),
+        getFillOpacity: () => readScalar<number>(raw, "getFillOpacity"),
+      };
+    },
+
+    pathFillReadBacks(overlay) {
+      const kind = kindOfHandle(overlay);
+      const raw = registry.resolve<Record<string, unknown>>(overlay);
+      // `Polyline` 没有填充：官方 `Polyline.d.ts` 只声明描边 getter，**没有** getFillColor/getFillOpacity。
+      // 把它也算进来会让「读回一个不存在的能力」变成 `BMAP_SDK_CALL_FAILED`（一个运行时炸点），
+      // 因此在 kind 层就拒绝——`unsupported` 是编译期就能看出的事实。
+      if (kind === "polyline") {
+        throw new BMapError(
+          "BMAP_CAPABILITY_UNSUPPORTED",
+          "Polyline 没有填充：官方 4.0.5 的 Polyline 只声明描边 getter，没有 getFillColor/getFillOpacity",
+          { engine: "jsapi-v4" },
+        );
+      }
+      return createPathFillReadBackApi(raw);
+    },
+
+    markerCommands(overlay) {
+      const kind = kindOfHandle(overlay);
+      const raw = registry.resolve<Record<string, unknown>>(overlay);
+      if (kind !== "marker") {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `markerCommands 只对 marker 生效，收到的是 ${kind}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      return {
+        getRank: () => readScalar<number>(raw, "getRank"),
+        setRank: (rank) => {
+          sdkCall("setRank", () => callRequired(raw, "setRank", rank));
+        },
+        setRotationOrigin: (angle) => {
+          sdkCall("setRotationOrigin", () => callRequired(raw, "setRotationOrigin", angle));
+        },
+        getTitle: () => readScalar<string>(raw, "getTitle"),
+        getOffset: () => fromRawSizeToPixel(sdkCall("getOffset", () => callRequired(raw, "getOffset"))),
+        getRotation: () => readScalar<number>(raw, "getRotation"),
+        getPosition: () =>
+          geometry.fromRawPoint(sdkCall("getPosition", () => callRequired(raw, "getPosition"))),
+        closePlaceDetail: () => {
+          sdkCall("closePlaceDetail", () => callRequired(raw, "closePlaceDetail"));
+        },
+      };
+    },
+
+    setPositionAt(overlay, index, point, options) {
+      const kind = kindOfHandle(overlay);
+      const raw = registry.resolve<Record<string, unknown>>(overlay);
+      if (!Number.isInteger(index) || index < 0) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `setPositionAt 的 index 必须是非负整数，实际是 ${String(index)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      if (
+        !point ||
+        !Number.isFinite(point.lng) ||
+        !Number.isFinite(point.lat)
+      ) {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `setPositionAt 的 point 必须是有限坐标，实际是 ${JSON.stringify(point)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      // `deep` 只属于 Polygon（多环路径的层数）：官方 `Polygon.d.ts` 是
+      // `setPositionAt(index, point, deep?)`，而 `Polyline.d.ts` 是 `setPositionAt(index, point)`。
+      // 把它传给 polyline 会被官方默默吞掉 ⇒ 在这里显式拒绝（静默丢参数比报错难查得多）。
+      const deep = options?.deep;
+      if (deep !== undefined && kind !== "polygon") {
+        throw new BMapError(
+          "BMAP_INVALID_ARGUMENT",
+          `setPositionAt 的 deep 参数只对 polygon 有效（多环路径的层数）：官方 ${kind}` +
+            ".setPositionAt(index, point) 只有两个参数，第三个会被静默忽略。",
+          { engine: "jsapi-v4" },
+        );
+      }
+      const rawPoint = geometry.toRawPoint(point);
+      const args: unknown[] = deep === undefined ? [index, rawPoint] : [index, rawPoint, deep];
+      sdkCall("setPositionAt", () => callRequired(raw, "setPositionAt", ...args));
     },
 
     setOptions(overlay, options) {
@@ -780,8 +1203,11 @@ type ExpectTrue<T extends true> = T;
 /**
  * 覆盖物构造器名必须与官方 `BMap` 命名空间一致。
  *
- * `marker3d` / `map-mask` 被**显式排除**：它们的构造器在 `@baidumap/jsapi-v4-types@4.0.4`
- * 里不存在（官方参考也没有对应章节），属于运行时扩展，因此不能进「官方声明一致性」断言——
+ * `marker3d` / `map-mask` 被**显式排除**：它们的构造器在 `@baidumap/jsapi-v4-types@4.0.5`
+ * 里不存在（仓库内官方参考 `.agents/skills/bmap-jsapi-v4/references/` 也没有对应章节——它们只在
+ * `runtime-extended-apis.md` 的「其他扩展名称」名单里被列举，没有独立接口说明；这与**官方 React
+ * 参考实现** `huiyan-fe/react-bmap` 恰好相反，它为两者都提供了组件与 driver 工厂），属于运行时扩展，
+ * 因此不能进「官方声明一致性」断言——
  * 它们的存在性只能由 `requireRuntimeCtor` 在运行时按结构判断。上游一旦补齐声明，这条断言会失败，
  * 提醒把结构性查找收回 `namespaceCtor`。
  */

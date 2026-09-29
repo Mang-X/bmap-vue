@@ -6,6 +6,20 @@
 - 取代：无
 - 相关：`packages/baidu-map-gl-vue/src/driver/types/bmap.ts`
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本文的决策**全部保持原样**，但几处事实性的
+> 当前取值已经变化，正文原样保留作为历史记录：
+>
+> - **精确锁定版本**（决策 3、版本模型表、「官方类型接入细则」三处）现在是 **`4.0.5`**，且因为
+>   4.0.5 未发布到 npm，实际锁定形式是 **git 依赖钉住 commit `5ba67f4`**。决策「不加 `^`/`~`、
+>   精确锁定」的**口径不变**（git commit 引用同样不是范围）。
+> - **决策 5 列的三处声明缺口少了一处**：`RoutePolylineStyle` 原本「只被 `setPolylineStyle`
+>   引用、从未声明」，4.0.5 把四个路线类的该参数改成了真实存在的 `PolylineOptions`
+>   （`service/{Driving,Transit,Walking,Riding}Route.d.ts`），全包 `RoutePolylineStyle` 零命中。
+>   `MapTypeOptions` / `Projection` 两处**仍然缺**（4.0.5 里仍只被 `MapType` 引用、未声明），
+>   `augmentations/bmap-4.0.4-gaps.d.ts` 里那一项 augmentation 应当删除（属本票未收的清理）。
+> - 「平台前提」那条更正所描述的大小写缺陷，上游 4.0.5 **已自行修复**，补丁随之删除 ⇒
+>   见 [ADR 2026-09-13](./2026-09-13-upstream-types-case-patch.md) 的注记。
+
 ## 背景
 
 组件库 v2/v3 beta 的运行时长期建立在百度地图 JavaScript API **GL 版**（`type=webgl&v=1.0`，全局 `BMapGL`）之上。v3 已经把 raw SDK 调用收敛到 `src/driver`、`src/client` 与 Loader/Provider 边界，但尚未正式冻结「Stable 只支持哪个 SDK」。

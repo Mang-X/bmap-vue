@@ -1,10 +1,5 @@
 <template>
-  <Map
-    enableScrollWheelZoom
-    v-bind="$attrs"
-    :center="{ lat: 39.915185, lng: 116.400901 }"
-    :zoom="16"
-  >
+  <Map enableWheelZoom v-bind="$attrs" :center="{ lat: 39.915185, lng: 116.400901 }" :zoom="16">
     <Marker
       v-for="(item, index) in markers"
       :position="item.position"

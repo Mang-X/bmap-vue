@@ -130,7 +130,7 @@ export declare interface Bounds {
     southwest: Point;
     northeast: Point;
 }
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor>;
 export declare const CAPABILITY_FAMILIES: readonly CapabilityFamily[];
 export declare const CAPABILITY_IDS: readonly Capability[];
@@ -165,6 +165,26 @@ export declare interface CapabilityRegistry {
 }
 export declare type CapabilityStatus = "native" | "extended" | "experimental" | "unsupported";
 export declare type CircleHandle = SdkHandle<"overlay:circle">;
+export declare interface CircleReadBackApi extends PathReadBackApi {
+    getCenter(): Point;
+    getRadius(): number;
+    getFillColor(): string;
+    getFillOpacity(): number;
+}
+export declare interface CityListCommandApi {
+    toggle(): void;
+    getCityName(): string;
+}
+export declare interface ContextMenuCommandApi {
+    getItem(index: number): MenuItemView | null;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemText(index: number, text: string): void;
+    setItemEnabled(index: number, enabled: boolean): void;
+    getDom(): HTMLElement;
+    show(): void;
+    hide(): void;
+}
 export declare interface ControlDriver {
     create(kind: ControlKind, options?: ControlOptions): ControlHandle;
     createCustomControl(options: {
@@ -180,7 +200,10 @@ export declare interface ControlDriver {
     planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
     removeCopyright(control: ControlHandle, id: number): void;
+    canRemoveCopyright(control: ControlHandle): boolean;
     listCopyrights(control: ControlHandle): CopyrightEntry[];
+    locationCommands(control: ControlHandle): LocationCommandApi;
+    cityListCommands(control: ControlHandle): CityListCommandApi;
 }
 export declare type ControlHandle = SdkHandle<"control" | `control:${string}`>;
 export declare type ControlKind = "zoom" | "scale" | "navigation" | "navigation-3d" | "city-list" | "location" | "map-type" | "overview" | "panorama" | "copyright" | "custom";
@@ -303,6 +326,10 @@ export declare interface EventDriver {
     on<TEvent = unknown>(target: SdkHandle<string>, type: string, listener: (event: TEvent) => void): () => void;
 }
 export declare const existingGlobalV4Provider: () => JsapiV4Provider;
+export declare interface FlyToOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
 export declare interface GeocodedAddress {
     address: string;
     point: Point | null;
@@ -335,6 +362,11 @@ export declare interface GeolocationFix {
     point: Point;
     accuracy: number | null;
     address: GeolocationAddressInfo | null;
+    timestamp: number | null;
+    altitude: number | null;
+    altitudeAccuracy: number | null;
+    heading: number | null;
+    speed: number | null;
 }
 export declare interface GeolocationOptions {
     enableHighAccuracy?: boolean;
@@ -364,7 +396,23 @@ export declare interface InfoWindowOptions {
     enableMaximize?: boolean;
     enableAutoPan?: boolean;
     enableCloseOnClick?: boolean;
+    maxWidth?: number;
+    maxContent?: string;
+    margin?: number[];
+    collisions?: number[];
+    onClosing?: () => void;
+    enableSearchTool?: boolean;
+    headerContent?: string;
+    enableContentScroll?: boolean;
     [key: string]: unknown;
+}
+export declare interface InfoWindowReadBackApi {
+    getTitle(): string;
+    getContent(): string | HTMLElement;
+    isOpen(): boolean;
+    getOffset(): Pixel;
+    maximize(): void;
+    restore(): void;
 }
 export declare interface InitialMapOptions {
     minZoom?: number;
@@ -427,6 +475,8 @@ export declare interface LabelOptions {
     zIndex?: number;
     style?: Record<string, unknown>;
     enableMassClear?: boolean;
+    anchor?: OverlayAnchorName;
+    width?: number;
     [key: string]: unknown;
 }
 export declare interface LayerCreateOptions extends Record<string, unknown> {
@@ -509,11 +559,7 @@ export declare interface LocalSearchRenderOptions {
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface LocalSearchResult {
     keyword: string;
@@ -537,26 +583,42 @@ export declare interface LocalSearchResult {
 export declare interface LocalSearchSearchOption {
     forceLocal?: boolean;
 }
+export declare interface LocationAddressComponents {
+    streetNumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    province?: string;
+}
+export declare interface LocationCommandApi {
+    location(): void;
+    startLocation(): void;
+    stopLocationTrace(): void;
+    getAddressComponent(): LocationAddressComponents | null;
+}
 export declare interface MapDriver {
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;
     destroy(map: MapHandle): void;
     initializeView(map: MapHandle, view: MapView): void;
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     getCenter(map: MapHandle): Point;
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     panBy(map: MapHandle, pixel: Pixel): void;
     fitBounds(map: MapHandle, bounds: Bounds): void;
-    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
+    getViewport(map: MapHandle, view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport;
+    flyTo(map: MapHandle, center: Point, zoom: number, options?: FlyToOptions): void;
+    getScreenshot(map: MapHandle): string;
     checkResize(map: MapHandle): void;
     setMapType(map: MapHandle, type: MapType_2): void;
     setMapStyle(map: MapHandle, style: MapStyleInput): void;
@@ -573,7 +635,7 @@ export declare interface MapMouseEvent extends DriverEvent {
 export declare type MapStyleInput = {
     styleId: string;
 } | Record<string, unknown>;
-declare type MapType_2 = "normal" | "satellite" | "earth";
+declare type MapType_2 = "normal" | "satellite" | "hybrid" | "earth";
 export { MapType_2 as MapType };
 export declare interface MapView {
     center: Point | string;
@@ -590,6 +652,12 @@ export declare type MarkerIconInput = string | {
     imageSize?: Size;
     printImageUrl?: string;
 };
+declare interface MarkerLabelInput {
+    content: string;
+    position?: Point;
+    offset?: Pixel;
+    style?: Record<string, unknown>;
+}
 export declare interface MarkerOptions {
     offset?: Pixel;
     title?: string;
@@ -598,7 +666,27 @@ export declare interface MarkerOptions {
     rotation?: number;
     enableClicking?: boolean;
     enableDragging?: boolean;
+    label?: MarkerLabelInput;
+    autoFollowHeadingChanged?: boolean;
+    startAnimation?: string;
     [key: string]: unknown;
+}
+export declare interface MarkerReadBackApi {
+    getRank(): number;
+    setRank(rank: number): void;
+    setRotationOrigin(angle: number): void;
+    getTitle(): string;
+    getOffset(): Pixel;
+    getRotation(): number;
+    getPosition(): Point;
+    closePlaceDetail(): void;
+}
+export declare interface MenuItemView {
+    readonly index: number;
+    readonly text: string;
+    readonly disabled: boolean;
+    readonly width?: number;
+    readonly id?: string;
 }
 export declare type NativeLayerData = Record<string, unknown>;
 export declare interface NativeLayerDriver {
@@ -620,6 +708,7 @@ export declare interface NativeLayerDriver {
     getState(layer: NativeLayerHandle): NativeLayerFeatureStateMap;
     setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
     hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+    hitTestText(layer: NativeLayerHandle, pixel: Pixel): NativeLayerTextPick | null;
     start(layer: NativeLayerHandle): void;
     pause(layer: NativeLayerHandle): void;
     resume(layer: NativeLayerHandle): void;
@@ -631,11 +720,22 @@ export declare type NativeLayerFeatureKeys = string | number | ReadonlyArray<str
 export declare type NativeLayerFeatureState = Record<string, unknown>;
 export declare type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
 export declare type NativeLayerHandle = SdkHandle<"native-layer" | `native-layer:${string}`>;
-export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line";
-export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
+export declare type NativeLayerKind = "point" | "cluster" | "point-icon" | "point-shape" | "line" | "fill" | "heatmap" | "track-line" | "polygon" | "polyline" | "text";
+export declare type NativeLayerOperation = "setData" | "clearData" | "setStyle" | "setVisible" | "setOpacity" | "setZIndex" | "setZoomRange" | "updateState" | "removeState" | "clearState" | "replaceState" | "getState" | "setEnablePicked" | "hitTest" | "hitTestText" | "start" | "pause" | "resume" | "stop" | "setSpeed" | "setProcess";
 export declare interface NativeLayerPick {
     dataIndex: number;
     dataItem: unknown;
+}
+export declare interface NativeLayerTextPick {
+    point: {
+        lng: number;
+        lat: number;
+    } | null;
+    text: string | null;
+    width: number | null;
+    height: number | null;
+    id: string | number | null;
+    properties: unknown;
 }
 export declare interface NativeLayerZoomRange {
     min?: number;
@@ -659,6 +759,7 @@ export declare interface OfficialJsapiLoadOptions {
     readonly serviceHost?: string;
 }
 export declare type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
+declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
@@ -692,9 +793,26 @@ export declare interface OverlayDriver {
     hide(overlay: OverlayHandle): boolean;
     attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
+    contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
+    menuItemCommands(item: OverlayHandle): {
+        setText(text: string): void;
+        enable(): void;
+        disable(): void;
+    };
     setPosition(overlay: OverlayHandle, position: Point): void;
     setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
     setOptions(overlay: OverlayHandle, options: Record<string, unknown>): void;
+    infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
+    pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
+    circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
+    pathFillReadBacks(overlay: OverlayHandle): {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+    setPositionAt(overlay: OverlayHandle, index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
     updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
     openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
     closeInfoWindow(overlay: InfoWindowHandle): void;
@@ -708,6 +826,10 @@ export declare type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupporte
 export declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";
     handle: SdkHandle<string>;
+}
+export declare interface PanoramaCaptureOptions {
+    quality?: number;
+    type?: string;
 }
 export declare interface PanoramaDataInfo {
     id: string;
@@ -723,6 +845,16 @@ export declare interface PanoramaLabelOptions {
     position?: Point;
     altitude?: number;
     displayDistance?: boolean;
+}
+export declare interface PanoramaLink {
+    description?: string;
+    heading?: number;
+    id?: string;
+    dir?: number;
+    refinedDir?: number;
+    x?: number;
+    y?: number;
+    roadWidth?: number;
 }
 export declare interface PanoramaOptions {
     navigationControl?: boolean;
@@ -753,7 +885,9 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     getZoom(viewer: PanoramaHandle): number | null;
     getId(viewer: PanoramaHandle): string | null;
     getSceneType(viewer: PanoramaHandle): PanoramaSceneType | null;
+    getLinks(viewer: PanoramaHandle): PanoramaLink[];
     getVisible(viewer: PanoramaHandle): boolean;
+    capture(viewer: PanoramaHandle, options?: PanoramaCaptureOptions): string | null;
     setId(viewer: PanoramaHandle, id: string, options?: PanoramaSwitchOptions): void;
     setPosition(viewer: PanoramaHandle, position: Point): void;
     setPov(viewer: PanoramaHandle, pov: PanoramaPov, options?: {
@@ -771,12 +905,18 @@ export declare interface PanoramaViewerDriver extends PanoramaDriver {
     createLabel(content: string, options?: PanoramaLabelOptions): PanoramaLabelHandle;
     addLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
     removeLabel(viewer: PanoramaHandle, label: PanoramaLabelHandle): void;
+    clearOverlays(viewer: PanoramaHandle): void;
     setLabelPosition(label: PanoramaLabelHandle, position: Point): void;
     setLabelContent(label: PanoramaLabelHandle, content: string): void;
     setLabelAltitude(label: PanoramaLabelHandle, altitude: number): void;
+    showLabel(label: PanoramaLabelHandle): void;
+    hideLabel(label: PanoramaLabelHandle): void;
     createService(): PanoramaServiceHandle;
     findById(service: PanoramaServiceHandle, id: string): ServiceCall<PanoramaDataInfo>;
     findByLocation(service: PanoramaServiceHandle, position: Point, radius?: number): ServiceCall<PanoramaDataInfo>;
+}
+export declare interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
 }
 export declare interface PathOptions {
     strokeColor?: string;
@@ -789,7 +929,19 @@ export declare interface PathOptions {
     enableEditing?: boolean;
     enableClicking?: boolean;
     zIndex?: number;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
+    coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+    linkRight?: boolean;
+    dashArray?: number[];
     [key: string]: unknown;
+}
+export declare interface PathReadBackApi {
+    getBounds(): Bounds;
+    getStrokeColor(): string;
+    getStrokeOpacity(): number;
+    getStrokeWeight(): number;
+    getStrokeStyle(): "solid" | "dashed" | "dotted";
 }
 export declare interface Pixel {
     x: number;
@@ -848,11 +1000,7 @@ export declare interface RouteRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     autoViewport?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 export declare interface RouteRenderState {
     renderOptions?: RouteRenderOptions;
@@ -947,6 +1095,9 @@ export declare interface ServiceResult<T> {
     readonly error: ServiceErrorInfo | null;
     readonly sdkStatus: number | null;
 }
+export declare interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
+}
 export declare interface Size {
     width: number;
     height: number;
@@ -1020,6 +1171,20 @@ export declare class UnsupportedCapabilityError extends BMapError {
 }
 export declare function unwrapRaw<T = unknown>(handle: SdkHandle<string>): T;
 export declare type ViewAnimationCancelOutcome = "canceled" | "deferred" | "already-settled";
+export declare interface ViewCommandOptions {
+    noAnimation?: boolean;
+    callback?: () => void;
+}
+export declare interface Viewport {
+    center: Point;
+    zoom: number;
+}
+declare interface ViewportOptions {
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+    callback?: () => void;
+}
 export declare type WalkingRouteOptions = RouteRenderState;
 export declare type WalkingRouteResult = RouteResult<RoutePlan>;
 export {};

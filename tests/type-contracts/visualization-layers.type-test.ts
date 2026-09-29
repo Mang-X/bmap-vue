@@ -1,0 +1,236 @@
+/**
+ * `<PolygonLayer>` / `<PolylineLayer>` 的**类型面**契约（issue #166）
+ *
+ * ## 为什么落在 `tests/type-contracts/` 而不是 `*.test.ts`
+ *
+ * 这些断言里有 `@ts-expect-error`。放进普通 `.test.ts` 时它在 **`vitest` 运行期
+ * 完全不生效**（类型被擦除），只有 `vue-tsc` 才看得见——而 `tsconfig.build.json`
+ * 排除了 `src/` 下的 `*.test.ts`，于是那份断言变成**恒真**的装饰。
+ * `tsconfig.type-contracts.json` 专门收这类文件（理由见
+ * `geocoder-surface.type-test.ts` 的同款说明）。
+ *
+ * **判别力是双向的**：错误消失时 `@ts-expect-error` 变成 TS2578（unused）而翻红；
+ * 末尾的正控保证断言不是「类型退化成什么都能收」的前提下恒绿。
+ */
+import type {
+  FillLayerProps,
+  FillLayerStyle,
+  LineLayerProps,
+  LineLayerStyle,
+  PolygonLayerProps,
+  PolygonLayerStyle,
+  PolylineLayerProps,
+  PolylineLayerStyle,
+  TextLayerAnchor,
+  TextLayerPick,
+  TextLayerProps,
+  TextLayerStyle,
+  VisualizationPickOptions,
+} from "../../packages/bmap-vue/src/types/components";
+
+declare const polygon: PolygonLayerProps;
+declare const polyline: PolylineLayerProps;
+declare const polygonStyle: PolygonLayerStyle;
+declare const polylineStyle: PolylineLayerStyle;
+declare const pick: VisualizationPickOptions;
+
+/* ---------------------------------------------- 正控：合法用法必须被接受（不是恒真） */
+
+const _okData = polygon.data;
+const _okVisible = polygon.visible;
+const _okZIndex = polygon.zIndex;
+const _okMinZoom = polygon.minZoom;
+const _okIdKey = polygon.idKey;
+const _okStyle = polygon.style;
+
+// `setOptions` 是 merge：只写要改的键，没写的保持原值
+const _okPartialStyle: PolygonLayerStyle = { strokeWeight: 2 };
+const _okPartialLine: PolylineLayerStyle = { strokeStyle: "dashed", dashArray: [8, 4] };
+// 数据驱动样式（官方 `StyleValue<T>`，`visualization/common.d.ts:10`）
+const _okDataDriven: PolygonLayerStyle = { fillColor: (properties) => String(properties.name) };
+
+/* ------------------------------------------------ `data` 三态：`null` ≠ `undefined` */
+
+const _okDataNull: PolygonLayerProps["data"] = null;
+const _okDataAbsent: PolygonLayerProps["data"] = undefined;
+
+// @ts-expect-error `data` 只收对象 / `null` / `undefined`；字符串不是合法 GeoJSON 载荷
+polygon.data = "not-geojson";
+
+/* ------------------------------------------------ 不声明的能力：官方没有就是没有 */
+
+// @ts-expect-error 官方**声明**里没有 `setOpacity`（live 实测运行时有，但本库不把未声明
+// 成员当契约，见 docs/zh-CN/contributing/166-visualization-alignment-audit.md §三）。
+// 声明成 prop 会让组件每次都走「该 kind 没有这个入口」的告警分支。
+polygon.opacity = 0.5;
+
+// @ts-expect-error 同上，`PolylineLayerOptions.opacity` 只能经 `style` 袋经 `setOptions` 下发
+polyline.opacity = 0.5;
+
+/* ---------------------------- 拾取：两族官方选项表里**没有**的那七项（`layer/` 家族才有） */
+
+// @ts-expect-error `visualization/PolygonLayerOptions` 没有 `crs`（`layer/` 家族的 `LineLayerOptions` 才有）
+polygon.crs = "BD09MC";
+// @ts-expect-error 没有 `pickWidth`（等价物是 `pickTolerance`，官方默认 4）
+polygon.pickWidth = 30;
+// @ts-expect-error 没有 `pickHeight`
+polygon.pickHeight = 30;
+// @ts-expect-error 没有 `autoSelect`
+polygon.autoSelect = true;
+// @ts-expect-error 没有 `selectedColor` / `selectedIndex`（这两族**没有要素状态 API**）
+polygon.selectedColor = "#fff";
+// @ts-expect-error 没有 `popEvent`（拾取是否向下层派发由构造选项 `pickThrough` 控制）
+polygon.popEvent = false;
+
+/* ------------------------------------------------ 样式：只投影官方声明过的键 */
+
+// @ts-expect-error `FillLayerStyle` 的 `patternUrl` 在 `visualization/PolygonLayerOptions`
+// 里**不存在**（官方那一族叫 `fillTextureUrl`）。弃用替代**不是字段改名**。
+polygonStyle.patternUrl = "/texture.png";
+// @ts-expect-error 同上：`borderWeight` / `borderCovered` 属 `layer/FillLayer` 的 `FillLayerStyle`
+polygonStyle.borderWeight = 2;
+// @ts-expect-error `LineLayerStyle` 的字段在 `PolylineLayerStyle` 里同样不存在
+polylineStyle.patternUrl = "/texture.png";
+// @ts-expect-error 官方 `PolygonLayerOptions` 没有 `patternMask`
+polygonStyle.patternMask = true;
+
+/* ---------------------------------- 线型 / 线帽 / 线接：官方是**字面量联合**，不是 string */
+
+// @ts-expect-error 官方 `strokeStyle` 只收这三个（`visualization/PolylineLayer.d.ts:58`）
+polylineStyle.strokeStyle = "wavy";
+// @ts-expect-error 官方 `strokeLineCap` 只收 `butt` / `round` / `square`（`:52`）
+polylineStyle.strokeLineCap = "arrow";
+// @ts-expect-error 官方 `strokeLineJoin` 只收 `miter` / `bevel` / `round`（`:47`）
+polylineStyle.strokeLineJoin = "sharp";
+
+/* -------------------------------------------- 缩放范围：官方默认 3 / 21（构造选项） */
+
+const _okMin: PolylineLayerProps["minZoom"] = 3;
+const _okMax: PolylineLayerProps["maxZoom"] = 21;
+
+/* ------------------------------------------------ 拾取选项：官方只有那五项 */
+
+const _okPick: VisualizationPickOptions = {
+  idKey: "id",
+  enablePicked: true,
+  mouseStyleChange: false,
+  pickTolerance: 4,
+  pickThrough: false,
+};
+
+// @ts-expect-error `VisualizationPickOptions` 只收上面那五项（`VisualLayerPropsLike` 的并集
+// 是内核内部用的，**不**等于公共面——否则 `layer/` 家族那七项会泄漏到两族的类型上）
+pick.pickWidth = 30;
+
+/* ------------------------------ 弃用替代：两套 style **不兼容**（不能整袋互赋） */
+
+// 判据用**整袋互赋**，而不是「逐字段断言」——两套 style 都是全可选接口，空袋之间**本可以**
+// 互赋（TS 的可选属性兼容规则），而它们**不可**互赋恰恰是「弃用替代不是改名」的类型层证据：
+// `LineLayerStyle` 的 `strokeColor` 是 `string | StyleExpression`（`StyleExpression` 还含
+// `Record<string, unknown>`），而 `PolylineLayerStyle.strokeColor` 是官方 `StyleValue<string>`
+// ——官方**不**接受任意对象当线色（`visualization/common.d.ts:10`）。
+// @ts-expect-error 正向不成立：`LineLayerStyle` 的取值域比官方 `StyleValue<string>` 宽
+const _noCompat: PolylineLayerStyle = {} as LineLayerStyle;
+// @ts-expect-error 反向同样不成立
+const _noCompat2: LineLayerStyle = {} as PolylineLayerStyle;
+// @ts-expect-error `FillLayerStyle.patternUrl` 在 `PolygonLayerStyle` 里不存在（字段族不同）——
+// 「弃用替代不是改名」的类型层证据
+const _noCompat3: PolygonLayerStyle = { patternUrl: "/t.png" } as FillLayerStyle;
+
+/* --------------------------------------------------------------- 旧组件仍在（#165 §3.6） */
+
+declare const legacyFill: FillLayerProps;
+declare const legacyLineProps: LineLayerProps;
+const _legacyStillWorks: FillLayerProps = { data: null, border: true };
+const _legacyStillWorks2: LineLayerProps = { data: undefined, idKey: "id" };
+
+/* ================================================================================
+ * `<TextLayer>`（#166 第二刀）
+ *
+ * 与前两族**方向相反**的两条，是本节断言的全部意义所在：官方 `TextLayer` 声明与运行时
+ * **完全对齐**，因此
+ *   - 它**有** `opacity` prop（前两族官方未声明 `setOpacity` ⇒ 不给，见上面 §56 那条）；
+ *   - 它**有** `hitTest`（前两族声明有而运行时无 ⇒ 不开面）。
+ * 把前两族的结论按「visualization 家族」扩到它身上，就等于拿一条**不同的** live 读数
+ * （探针 case 3e/3f，2026-09-27）去否定本票自己的裁决。
+ * ============================================================================= */
+
+declare const text: TextLayerProps;
+declare const textPick: TextLayerPick;
+declare const textStyle: TextLayerStyle;
+
+const _okTextData = text.data;
+const _okTextVisible = text.visible;
+const _okTextZIndex = text.zIndex;
+const _okTextMinZoom = text.minZoom;
+const _okTextIdKey = text.idKey;
+const _okTextStyle = text.style;
+
+/* ------------------------------------------- 官方**声明**了 setOpacity ⇒ 有 prop */
+
+const _okTextOpacity: TextLayerProps["opacity"] = 0.5;
+// `setOpacity` / `setVisible` / `setZIndex` 三个字段级 setter 官方都逐条声明了
+// （`visualization/TextLayer.d.ts:296` / `:292` / `:300`）⇒ 三个 prop 都在。
+const _okTextAllSetters: TextLayerProps = { visible: true, opacity: 1, zIndex: 2 };
+
+/* ------------------------------------------------ 数据驱动样式（官方 StyleValue<T>） */
+
+const _okTextDataDriven: TextLayerStyle = {
+  text: (properties) => String(properties.name),
+  color: (properties) => (properties.dark ? "#fff" : "#333"),
+  fontSize: (properties, feature, index) => (index === 0 ? 16 : 12),
+};
+
+/* ------------------------------- 锚点是**字面量联合**，不是 string（不得被放宽） */
+
+// @ts-expect-error 官方 `TextAnchor` 只收那九个值（`visualization/TextLayer.d.ts:5-14`）
+textStyle.anchor = "middle";
+
+// @ts-expect-error 同上：大小写与拼写都必须是官方那几个
+textStyle.anchor = "topleft";
+
+const _okAnchor: TextLayerAnchor = "bottomRight";
+textStyle.anchor = _okAnchor;
+
+/* ------------------------------------------- 线型 / 对齐 / 绘制阶段：字面量联合 */
+
+// @ts-expect-error 官方 `textAlign` 只收 center / left / right（`:89`）
+textStyle.textAlign = "justify";
+// @ts-expect-error 官方 `renderStage` 只收 building / poi / null（`:198`）
+textStyle.renderStage = "sky";
+
+// 两族的 style **整袋可互赋**（都是全可选接口，TS 的可选属性兼容规则）——
+// 因此判据**不能**用整袋互赋（同上面 LineLayerStyle 那条的说明），只能逐字段：
+// `PolygonLayerStyle.fillColor` 在 `TextLayerStyle` 里**不存在**，
+// 而 `TextLayerStyle` 的 `strokeColor` 是官方 `StyleValue<string>`，`PolygonLayerStyle` 的
+// 同名字段类型相同——真正的分界在**互不存在的那些键**上。
+// @ts-expect-error `TextLayerStyle` 没有 `fillColor`（那是 `PolygonLayerOptions` 的字段）
+textStyle.fillColor = "red";
+declare const polyStyle2: PolygonLayerStyle;
+// @ts-expect-error 反向：`PolygonLayerStyle` 没有 `fontSize`（那是 `TextLayerOptions` 的字段）
+polyStyle2.fontSize = 14;
+// @ts-expect-error `TextLayerStyle` 没有 `strokeStyle`（`PolylineLayer` 那一族的字段）
+textStyle.strokeStyle = "dashed";
+
+/* ------------------------------------------------ 拾取：仍是那五项，不多不少 */
+
+// @ts-expect-error `TextLayer` 的选项表（`TextLayer.d.ts:145-168`）里同样没有 `layer/` 家族那七项
+text.crs = "BD09MC";
+// @ts-expect-error 没有 `popEvent`（由构造选项 `pickThrough` 控制）
+text.popEvent = false;
+// @ts-expect-error 没有 `selectedIndex`（这一族**没有**要素状态 API）
+text.selectedIndex = 3;
+
+/* ------------------------------------ `hitTest` 的回包：六个字段，**没有** dataIndex */
+
+const _okPickText: string | null = textPick.text;
+const _okPickWidth: number | null = textPick.width;
+const _okPickId: string | number | null = textPick.id;
+const _okPickPoint: { lng: number; lat: number } | null = textPick.point;
+
+// @ts-expect-error 官方 `TextLayerItem`（`:19-32`）**没有** `dataIndex`；本库不从 `id` 反推下标
+// （那是 SDK 内部口径，不是有依据的公开身份）。归一化出这一项就是编造数据。
+textPick.dataIndex;
+
+// @ts-expect-error 回包里读不到的字段给 `null`，不是 `""` / `0`——所以这几个字段不是非空 string/number
+const _notEmptyString: string = textPick.text;

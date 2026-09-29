@@ -37,8 +37,37 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   sceneType: 'street' | 'inter' = 'street'
   poiType: string | null = null
   scrollWheelZoom = false
+  /**
+   * 当前场景的相邻链接（官方 `Panorama#getLinks(): PanoramaLink[]`）。
+   *
+   * 建模它是因为 `<Panorama>` 的 `linksChange` 需要一条**真的**数据路径
+   * （issue #165 Class 3 / TASK 5：此前 `linksChange` 是**空载荷**）。
+   * `undefined` 建模「上游给的不是数组」那条路径（官方 `getLinks` 的成员缺失 /
+   * 返回值形状不符时 Driver 应给空数组，不抛错）。
+   */
+  links: Array<Record<string, unknown>> | undefined = []
+  /**
+   * 道路链接**显隐**状态（官方 `links_visible_changed: { value: boolean }` 的那条事实）。
+   *
+   * 与上面的 `links` 分开建模，因为它们是**两件事**：`links` 是列表内容，本字段是
+   * 「这个列表现在亮不亮」。官方驱动它的是自带的道路指示控件（`linksControl`）——本库不镜像
+   * 那个控件的内部 UI，但**声明**了 `linksVisibleChanged` 事件（issue #165 TASK 7），
+   * 因此替身必须能真的把这条事件驱动出来（`setLinksVisible()`）。
+   */
+  linksVisible = true
+  /**
+   * `capture()` 的回包（官方返回的 data URL 字符串）。
+   *
+   * `undefined` 建模官方那条「当前渲染器不支持截图时返回 undefined」——它**不是**异常，
+   * 也不是「空字符串」，Driver 必须归一成 `null`（issue #171 item I）。
+   */
+  screenshot: string | undefined = 'data:image/png;base64,AAAA'
+  /** 测试故障注入：让**下一次** `capture` 抛错（读命令的失败必须上抛，不能降级成 `null`）。 */
+  failNextCapture: Error | null = null
   destroyCalls = 0
   overlays: unknown[] = []
+  /** 测试故障注入：让**下一次** `addOverlay` 抛错（#174 P1-2，重新挂回失败的分支）。 */
+  failNextAddOverlay: Error | null = null
   /**
    * 测试故障注入：让**下一次** `destroy` 抛错。
    *
@@ -81,6 +110,30 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     return this.id
   }
 
+  /** 官方 `Panorama#getLinks(): PanoramaLink[]`（issue #165 Class 3 / TASK 5）。 */
+  getLinks(): Array<Record<string, unknown>> | undefined {
+    this.callLog.push('getLinks')
+    return this.links
+  }
+
+  /**
+   * 测试驱动：切换道路链接的**显隐**状态（issue #165 TASK 7）。
+   *
+   * 官方这条事件的载荷是 `{ value: boolean }`——**自足**，不需要回读任何 getter
+   * （与 `links_changed` / `position_changed` 那一族「不带值、要回读」不同）。
+   * 这正是本库声明 `linksVisibleChanged` 的依据，因此替身必须能**真的**驱动它，
+   * 而不是让用例去手动 `emit('links_visible_changed', {...})` 绕过「谁触发它」这个问题。
+   *
+   * 值不变时**不派发**（与官方那条事件「状态变化后触发」一致）：让「值没变却收到事件」
+   * 这条假绿路径在替身层面就不存在。
+   */
+  setLinksVisible(visible: boolean): void {
+    this.callLog.push(`setLinksVisible:${visible}`)
+    if (this.linksVisible === visible) return
+    this.linksVisible = visible
+    this.emit('links_visible_changed', { value: visible })
+  }
+
   getSceneType(): 'street' | 'inter' {
     return this.sceneType
   }
@@ -89,17 +142,44 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     return this.visible
   }
 
+  /**
+   * 官方 `Panorama#capture(options?): string | undefined`（issue #171 item I）。
+   *
+   * 建模官方那条**唯一**的「没有值」出口：`screenshot` 为 `undefined` 时返回 `undefined`
+   * ——官方文档写的是「当前渲染器不支持截图时返回 undefined」，Driver 把它归一成 `null`。
+   * 记实参个数（`capture:args=0` / `args=1`）是为了让「不传 options」与「传了 options」在测试里
+   * 长得不一样——官方参数可选，而 `PanoramaDriver` 同样按可选建模（不塞 `undefined` 占位）。
+   */
+  capture(options?: { quality?: number; type?: string }): string | undefined {
+    this.callLog.push(
+      options
+        ? `capture:args=1:quality=${String(options.quality)},type=${String(options.type)}`
+        : 'capture:args=0',
+    )
+    if (this.failNextCapture) {
+      const error = this.failNextCapture
+      this.failNextCapture = null
+      throw error
+    }
+    return this.screenshot
+  }
+
   // -------------------------------------------------------------- 写入面
   setId(id: string, options?: unknown): void {
     this.callLog.push(`setId:${id}`)
     this.id = id
     void options
-    // 官方在切换 id 后会派发 `id_changed`，且它的载荷**是一个字符串**（见
-    // `src/driver/types/panorama.ts` 的注释），而本替身的 `emit` 只建模对象载荷
-    // （对象会被展开成事件字段）。这里按现状转发并显式标注这个**建模缺口**：
-    // 现无消费方读取该载荷（`BPanorama` 的回调是 `() => emit("idChange", getId(viewer))`），
-    // 因此不去猜真实形状——要动它先取证，登记为已知缺口。
-    this.emit('id_changed', id as unknown as Record<string, unknown>)
+    // 官方在切换 id 后会派发 `id_changed`，且它的载荷**是一个字符串**（不是底座事件对象），
+    // 见 `driver/types/panorama.ts` 的 `on()` 注释。
+    //
+    // 本替身的 `emit()` 只建模**对象**载荷（`{type, ...payload}`），裸字符串进去会被展开成
+    // 一个空事件对象。真实形状在这里无关紧要——`<Panorama>` 的 `idChange` 回调是
+    // `() => forward("idChange", driver.getId(viewer))`，**回读 getter 而不读事件载荷**
+    // （官方声明的裸字符串与本库的读取面口径不同，见那条方法上的注释）。因此这里发一个
+    // **空**事件对象并把真实值留在 `this.id` 上：任何人若改成读事件载荷，替身会立刻暴露它
+    // （读到 `undefined` 而不是那个 id），这比用 `as unknown as Record` 硬塞一个形状不对的
+    // 载荷更安全——后者会让「读错了但看起来对」变成可能。
+    this.emit('id_changed')
   }
 
   setPosition(position: { lng: number; lat: number }): void {
@@ -153,6 +233,14 @@ export class FakeV4Panorama extends FakeV4EventTarget {
   // ---------------------------------------------------------- 标注覆盖物
   addOverlay(overlay: unknown): void {
     this.callLog.push('addOverlay')
+    // 测试故障注入（#174 P1-2）：让**下一次** `addOverlay` 抛错。用来覆盖
+    // 「`clearOverlays` 之后把本库标注挂回去」这条路径的失败分支——静默吞掉会让那些标注
+    // 停在「组件认为挂着、画面上不存在」，正是这条路径要消灭的分叉。
+    if (this.failNextAddOverlay) {
+      const error = this.failNextAddOverlay
+      this.failNextAddOverlay = null
+      throw error
+    }
     // **不做去重**：诊断把 `panoramaLabel` 归为「挂载类」（按次数销账），前提正是
     // 「SDK 不会替调用方去重、挂两次就要摘两次」。在这里去重会让计数与释放路径脱钩
     // （销账入口是 `removeOverlay`，见 diagnostics 的记账方式表）。
@@ -168,6 +256,12 @@ export class FakeV4Panorama extends FakeV4EventTarget {
     this.stats.resourceReleased('panoramaLabel')
   }
 
+  /**
+   * 官方 `Panorama#clearOverlays(): void`（#41 已建；issue #171 item I 让它有消费方）。
+   *
+   * **按次数销账**（与 `addOverlay` / `removeOverlay` 同一记账方式）：官方不去重，
+   * 挂两次就要销两次。因此清空时**逐个**销，不按 `overlays.length` 一次性减。
+   */
   clearOverlays(): void {
     this.callLog.push('clearOverlays')
     for (let index = this.overlays.length - 1; index >= 0; index -= 1) {
@@ -264,16 +358,26 @@ export class FakeV4PanoramaLabel extends FakeV4EventTarget {
 export class FakeV4PanoramaService {
   readonly callLog: string[] = []
   readonly queue: FakeV4CallbackQueue
-  /** `getPanoramaById` 的回包；`null` = 查不到 */
+  /**
+   * `getPanoramaById` 的回包；`null` = 查不到。
+   *
+   * **带 `links`（issue #171 item I 补齐此前开着的保真缺口）**：官方
+   * `panorama/PanoramaData.d.ts` 把 `links: PanoramaLink[]` 声明成**非可选**，而本替身的回包
+   * 此前只给 `id` / `description` / `position`——那条「Driver 丢弃 `links`」的断言因此是
+   * **在一条本来就没有该字段的回包上通过的**，判别力为零。补上之后，`PanoramaDataInfo` 刻意
+   * **不透出** `links`（只有 `tiles` 才是真的渲染内部）这条决定才有可核对的证据。
+   */
   byId: Record<string, unknown> | null = {
     id: 'pano-1',
     description: '天安门全景',
+    links: [{ id: 'pano-2', heading: 45, description: '天安门广场' }],
     position: { lng: 116.404, lat: 39.915 },
   }
-  /** `getPanoramaByLocation` 的回包；`null` = 查不到 */
+  /** `getPanoramaByLocation` 的回包；`null` = 查不到（同样带 `links`，理由同 `byId`） */
   byLocation: Record<string, unknown> | null = {
     id: 'pano-2',
     description: '附近全景',
+    links: [{ id: 'pano-1', heading: 225, description: '天安门全景' }],
     position: { lng: 116.41, lat: 39.92 },
   }
 

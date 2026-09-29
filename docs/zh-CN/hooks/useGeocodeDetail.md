@@ -8,24 +8,24 @@ import { useGeocodeDetail } from 'bmap-vue'
 
 ## 单个坐标点解析
 
-使用坐标点对象作为 `get` 方法参数解析单个坐标点
+使用坐标点对象作为 `getLocation` 方法参数解析单个坐标点
 :::demo 鼠标点击地图选择坐标点解析
 hooks/useGeocodeDetail/index
 :::
 
 :::tip
-`result` 为 `Ref<GeocodeDetailResult | null>`，可直接解构使用：
+`data` 为 `Readonly<ShallowRef<GeocodeDetailResult | null>>`，可直接解构使用：
 
 ```ts
 import { useGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
-const { result } = useGeocodeDetail(map)
+const { data } = useGeocodeDetail(map)
 ```
 
 :::
 
 ## 批量解析坐标点
 
-使用坐标点对象数组作为 `get` 方法参数批量解析坐标点
+使用坐标点对象数组作为 `getBatch` 方法参数批量解析坐标点
 :::demo
 hooks/useGeocodeDetail/batch
 :::
@@ -43,8 +43,17 @@ const { getBatch } = useGeocodeDetail(map)
 ## 用法
 
 ```ts
-const { get, getBatch, result, isLoading, isEmpty } = useGeocodeDetail(map)
+const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map)
 ```
+
+::: warning 命名对齐官方 `BMap.Geocoder`（#165）
+
+- 动作名是 `getLocation`（官方 `Geocoder#getLocation`），**不是** `get`；
+- 正地址解析在 [`useGeocoder`](./useGeocoder) 的 `getPoint`（官方 `Geocoder#getPoint`）
+  ——官方的 `Geocoder` 只有这两个成员，本库按方向拆成两个 hook，成员名保持一致；
+- 结果**只有** `data` 一个读取口；此前的 `result` 别名已删除（与 `useGeocoder` 同口径，
+  也不与官方成员名相撞）。
+:::
 
 :::tip
 该 hooks 需要地图 ready 后才能执行解析；在 `<Map>` 子树内调用时可省略 `map` 参数
@@ -79,8 +88,7 @@ const { get, getBatch, result, isLoading, isEmpty } = useGeocodeDetail(map)
 
 | 返回值    | 描述                                                                        | 类型                                                                   |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| data      | 解析结果（`result` 为其别名）                                                | `Readonly<ShallowRef<GeocodeDetailResult \| null>>`                     |
-| result    | 坐标点解析结果                                                               | `Readonly<ShallowRef<GeocodeDetailResult \| null>>`                     |
+| data      | 逆地址解析的结果（唯一读取口）                                              | `Readonly<ShallowRef<GeocodeDetailResult \| null>>`                     |
 | error     | 有公开原因时的错误信息（`{ code, message }`）                                | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                        |
 | sdkStatus | SDK 公开状态码；本服务没有公开错误码入口，**恒为 `null`**                      | `Readonly<ShallowRef<number \| null>>`                                  |
 | isError   | 是否出错（`status === 'failed'`）                                            | `boolean`                                                               |
@@ -88,7 +96,7 @@ const { get, getBatch, result, isLoading, isEmpty } = useGeocodeDetail(map)
 | isLoading | 是否在获取中                                                                | `boolean`                                                               |
 | supported | 当前引擎是否支持逆地理编码（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                               |
 | status    | 任务状态（见上）                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                                |
-| get       | 坐标 → 地址详情；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算        | `(point: Point) => Promise<ServiceResult<GeocodeDetailResult>>`          |
+| getLocation | 坐标 → 地址详情（官方 `Geocoder#getLocation`）；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(point: Point) => Promise<ServiceResult<GeocodeDetailResult>>` |
 | getBatch  | 批量反查，逐项返回 `{ point, detail, status, error }`（**部分成功**）          | `(points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>`        |
 | cancel    | 逻辑取消在飞请求                                                             | `() => void`                                                             |
 | reset     | 取消 + 清空 data/error/status                                                | `() => void`                                                             |
@@ -168,8 +176,8 @@ export interface GeocodeDetailItemResult {
  * 由坐标点反查地址详情
  */
 export declare function useGeocodeDetail(map?: unknown): {
+  /** 逆地址解析的唯一结果读取口（地址详情） */
   data: Readonly<ShallowRef<GeocodeDetailResult | null>>
-  result: Readonly<ShallowRef<GeocodeDetailResult | null>>
   error: Readonly<ShallowRef<ServiceErrorInfo | null>>
   sdkStatus: Readonly<ShallowRef<number | null>>
   isError: ComputedRef<boolean>
@@ -177,7 +185,8 @@ export declare function useGeocodeDetail(map?: unknown): {
   status: Readonly<ShallowRef<BMapServiceStatus>>
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
-  get: (point: Point) => Promise<ServiceResult<GeocodeDetailResult>>
+  /** 坐标 → 地址详情（官方 `Geocoder#getLocation`）。 */
+  getLocation: (point: Point) => Promise<ServiceResult<GeocodeDetailResult>>
   getBatch: (points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>
   cancel: () => void
   reset: () => void

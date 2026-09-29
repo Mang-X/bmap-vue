@@ -65,8 +65,11 @@
 
 ### 4. 交互开关用官方成对 `enable*` / `disable*` 方法，**不用** `setOptions`
 
-- 官方 4.0 API 参考的 `BMap.Map` 方法表与 `@baidumap/jsapi-v4-types@4.0.4` 都**没有** `Map#setOptions`
-  （`setOptions` 只出现在 Panorama / Marker / Control 上）；仓库内的官方参考（Skill
+- 官方 4.0 API 参考的 `BMap.Map` 方法表与 `@baidumap/jsapi-v4-types` 都**没有** `Map#setOptions`
+  （`setOptions` 声明在 `Panorama` / `Marker` / `GeolocationControl` 上，以及 4.0.5 才出现的
+  `visualization/` 下的 **9 个图层**：`PolygonLayer` / `PolylineLayer` / `PointLayer` /
+  `ClusterLayer` / `TextLayer` / `Heatmap` / `BarLayer` / `FlyLineLayer` / `TrackLine`；
+  `Map` 确实一个都没有）；仓库内的官方参考（Skill
   `map-core.md`）虽然提到「运行期间统一用 `setOptions()` 修改」，但它是文档描述，不是可核对的声明。
 - augmentation 治理规则只允许补「有运行时依据」的缺口（`@runtimeBasis` 必须可核对），因此**不新增**
   `Map#setOptions` 声明；改用官方参考与类型包**都**公开列出的成对方法。

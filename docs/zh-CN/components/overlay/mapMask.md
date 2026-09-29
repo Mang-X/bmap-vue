@@ -25,7 +25,7 @@ overlay/mapMask
 
 | 属性           | 说明                      | 类型                                      | 可选值 | 默认值     | 版本                               |
 | -------------- | ------------------------- | ----------------------------------------- | ------ | ---------- | ---------------------------------- |
-| path           | 掩膜区域路径点串          | `{ lng: number, lat: number}[]`           | -      | `required` | -                                  |
+| points         | 掩膜区域路径点串          | `{ lng: number, lat: number}[]`           | -      | `required` | -                                  |
 | showRegion     | 展示区域内部还是外部      | [`MapMaskShowRegion`](#mapmaskshowregion) | -      | `inside`   | -                                  |
 | isBuildingMask | 楼块是否参与掩膜          | `boolean`                                 | -      | `false`    | -                                  |
 | isMapMask      | 底图是否参与掩膜          | `boolean`                                 | -      | `false`    | -                                  |

@@ -7,6 +7,23 @@
 - 相关：ADR [2026-09-10 冻结 JSAPI 4.0 单引擎基线](./2026-09-10-jsapi-v4-only-baseline.md)；
   `patches/@baidumap__jsapi-v4-types@4.0.4.patch`；`patches/README.md`
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本文的决策与结论**保持原样**，但它记录的那个
+> 缺陷**已不复存在**，决策 5（删除条件）已经达成：
+>
+> - 上游 4.0.5（`baidu-maps/jsapi-v4-types@5ba67f4`）自己把 `index.d.ts:67` 改成了
+>   `/// <reference path="core/DisplayOptions.d.ts" />`（4.0.5 的 `index.d.ts:60`）；
+> - `patches/@baidumap__jsapi-v4-types@4.0.4.patch` 与 `pnpm-workspace.yaml` 的
+>   `patchedDependencies` 条目**已删除**，`patches/` 目录现在没有在用补丁；
+> - 依赖从 npm 的 `4.0.4` 换成**钉住 commit 的 git 依赖**（4.0.5 至今未发布到 npm，
+>   `npm view` 的 `latest` 仍是 4.0.4）；
+> - 决策 4 的门禁**没有跟着删**：`tests/behavior/v3-upstream-types-case-patch.test.ts`
+>   反转重写为 `tests/behavior/upstream-types-reference-case.test.ts`，守的仍是「上游声明内部
+>   三斜线引用的大小写必须与磁盘上的文件名精确一致」——缺陷本体与用不用补丁无关，换依赖、
+>   重新 vendored 之后仍要成立。
+>
+> 也就是说：本文描述的**机制**（精确版本 + 补丁 + 门禁）已不再使用，但**要守的不变量**由
+> `upstream-types-reference-case.test.ts` 继续承担。
+
 ## 背景
 
 ADR 2026-09-10 把 `skipLibCheck: false` 定为本仓库最严格的一道类型门禁：官方类型包

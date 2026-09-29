@@ -25,7 +25,7 @@ function mountPrism(altitude = ref(100)) {
         return () =>
           h(Map, { provider: provider() }, () => [
             h(Prism, {
-              path: [{ lng: 116.4, lat: 39.9 }, { lng: 116.5, lat: 39.9 }],
+              points: [{ lng: 116.4, lat: 39.9 }, { lng: 116.5, lat: 39.9 }],
               altitude: altitude.value,
               topFillColor: '#ff0000',
             }),

@@ -44,7 +44,7 @@ describe('useGeocodeDetail', () => {
     let result: any = null
     const { wrapper } = mountWithChild(async (geo) => {
       // #38 起动作恒 resolve 成 ServiceResult
-      result = await geo.get({ lng: 116.404, lat: 39.915 })
+      result = await geo.getLocation({ lng: 116.404, lat: 39.915 })
     })
     await flushPromises()
     await nextTick()
@@ -52,6 +52,24 @@ describe('useGeocodeDetail', () => {
     // Fake v4 Geocoder.getLocation 的默认回包地址
     expect(result.data?.address).toBe('北京市东城区天安门')
     expect(result.data?.point).toEqual({ lng: 116.404, lat: 39.915 })
+    wrapper.unmount()
+    await nextTick()
+  })
+
+  it('data is the single result accessor and the action is named getLocation', async () => {
+    let outcome: { address: string | undefined; keys: string[] } | null = null
+    const { wrapper } = mountWithChild(async (geo) => {
+      await geo.getLocation({ lng: 116.404, lat: 39.915 })
+      await nextTick()
+      outcome = { address: geo.data.value?.address, keys: Object.keys(geo).sort() }
+    })
+    await flushPromises()
+    await nextTick()
+    expect(outcome!.address).toBe('北京市东城区天安门')
+    // 与 useGeocoder 同口径：结果只有 `data`（旧的 `result` 别名已删），动作名对齐官方
+    expect(outcome!.keys).not.toContain('result')
+    expect(outcome!.keys).toContain('getLocation')
+    expect(outcome!.keys).not.toContain('get')
     wrapper.unmount()
     await nextTick()
   })
@@ -75,7 +93,7 @@ describe('useGeocodeDetail', () => {
 
   it('exposes error ref (not throw) on invalid input', async () => {
     const { wrapper } = mountWithChild(async (geo) => {
-      const result = await geo.get({ lng: 'x', lat: 1 } as any)
+      const result = await geo.getLocation({ lng: 'x', lat: 1 } as any)
       expect(result.status).toBe('failed')
       expect(geo.status.value).toBe('failed')
       // Driver 的归一化调用面用 BMAP_INVALID_ARGUMENT 表达「参数非法」（不抛错）

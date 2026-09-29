@@ -481,6 +481,67 @@ describe("useLocalSearch：与地图 / 上下文的边界", () => {
     wrapper.unmount();
     await flushPromises();
   });
+
+  it("viewportOptions 走官方四个成员：enableAnimation / margins / zoomFactor / callback", async () => {
+    let fired = 0;
+    const callback = (): void => {
+      fired += 1;
+    };
+    const { wrapper, hook } = mountInProvider({
+      location: "北京市",
+      renderOptions: {
+        autoViewport: true,
+        viewportOptions: {
+          enableAnimation: true,
+          margins: [30, 20, 0, 20],
+          zoomFactor: -1,
+          callback,
+        },
+      },
+    });
+    await flushPromises();
+
+    const result = await hook()!.search("餐厅");
+    expect(result.status).toBe("success");
+    const viewport = (fake.createdLocalSearches[0]!.options.renderOptions as {
+      viewportOptions: Record<string, unknown>;
+    }).viewportOptions;
+    expect(viewport).toEqual({
+      enableAnimation: true,
+      margins: [30, 20, 0, 20],
+      zoomFactor: -1,
+      callback,
+    });
+    // 「视野调整结束后的回调」是真会触发的语义，不是收下就算的装饰
+    expect(fired).toBe(1);
+
+    wrapper.unmount();
+    await flushPromises();
+    harness.assertIdle("viewportOptions");
+  });
+
+  it("非官方成员 noAnimation 不再出现在公共面上（JS 调用方硬塞也不转发）", async () => {
+    const { wrapper, hook } = mountInProvider({
+      location: "北京市",
+      renderOptions: {
+        autoViewport: true,
+        // 官方 `ViewportOptions` 没有 `noAnimation`：伪造一个成员塞进来，Driver 必须丢掉
+        viewportOptions: { noAnimation: true, zoomFactor: 2 } as never,
+      },
+    });
+    await flushPromises();
+
+    const result = await hook()!.search("餐厅");
+    expect(result.status).toBe("success");
+    const viewport = (fake.createdLocalSearches[0]!.options.renderOptions as {
+      viewportOptions: Record<string, unknown>;
+    }).viewportOptions;
+    expect(viewport).toEqual({ zoomFactor: 2 });
+
+    wrapper.unmount();
+    await flushPromises();
+    harness.assertIdle("noAnimation 被丢弃");
+  });
 });
 
 describe("useLocalSearch：构造字段变化才重建", () => {

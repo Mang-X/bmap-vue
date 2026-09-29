@@ -136,16 +136,22 @@ async function mountMarker(
 
 describe("OverlaySpec 声明面与 Driver 描述符一致", () => {
   it("fields 恰好覆盖 MarkerProps 的全部键", () => {
-    // 类型层：漏一个 prop 时 `OverlayFieldMap` 就赋不上值（编译期），这里再逐项点名一次
+    // 类型层：漏一个 prop 时 `OverlayFieldMap` 就赋不上值（编译期），这里再逐项点名一次。
+    // 16 项 = 原有 9 项 + issue #168 item 2 补的四个构造选项
+    // （`raiseOnDrag` / `draggingCursor` / `isTop` / `restrictDraggingArea`）
+    // + issue #165 第三批补的三个（`label` / `autoFollowHeadingChanged` / `startAnimation`）
+    // ⇒ 官方 `MarkerOptions` 的 **16 个键全部**有了出口。
     expect(Object.keys(MARKER_FIELDS).sort()).toEqual(
       [
         "position", "offset", "zIndex", "visible", "title",
         "enableDragging", "enableClicking", "rotation", "icon",
+        "raiseOnDrag", "draggingCursor", "isTop", "restrictDraggingArea",
+        "label", "autoFollowHeadingChanged", "startAnimation",
       ].sort(),
     );
     // 反向：声明里不能有 props 上不存在的键
     const declared = Object.keys(MARKER_FIELDS) as Array<keyof MarkerProps>;
-    expect(declared).toHaveLength(9);
+    expect(declared).toHaveLength(16);
   });
 
   it("声明为 options / recreate / position 的字段与描述符分类逐项一致", () => {

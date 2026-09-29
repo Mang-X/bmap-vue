@@ -4,7 +4,7 @@
     :zoom="15"
     :center="{ lat: 39.915185, lng: 116.403901 }"
     :displayOptions="{ indoor: false, poi: true }"
-    enableScrollWheelZoom
+    enableWheelZoom
     :plugins="['Mapvgl']"
     ref="bmapRef"
     @plugin-ready="handlePluginReady"

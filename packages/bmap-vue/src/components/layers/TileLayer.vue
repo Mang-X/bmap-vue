@@ -5,7 +5,7 @@
  * 加载**百度坐标系（BD09MC）**的自有瓦片：数据已经是 BD09MC 时用它；第三方标准瓦片服务
  * （XYZ / WMTS / WMS / TMS）请用 `XYZLayer`（内置 EPSG:3857 → BD09MC 转换）。
  *
- * 行为依据（`@baidumap/jsapi-v4-types@4.0.4` 的 `TileLayer` / `TileLayerOptions`）：
+ * 行为依据（`@baidumap/jsapi-v4-types@4.0.5` 的 `TileLayer` / `TileLayerOptions`）：
  * - 构造选项里只有 `zIndex` 有字段级 setter（`setZIndex`），其余（`tileUrlTemplate` /
  *   `opacity` / `boundary` / …）**只有构造期生效**——改变它们会重建图层（旧实例先摘掉，
  *   因此不会有旧瓦片请求的影响残留）；

@@ -23,25 +23,25 @@ hooks/useGeolocation
 ## 用法
 
 ```ts
-const { locate, location, isLoading, isError, status } = useGeolocation(options, map)
+const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation(options, map)
 ```
 
 :::tip
-该 hooks 需要地图 ready 后才能执行定位；在 `<Map>` 子树内调用时可省略 `map` 参数；`locate` 与 `get` 为同一方法
+该 hooks 需要地图 ready 后才能执行定位；在 `<Map>` 子树内调用时可省略 `map` 参数
 :::
 
 ### 参数
 
 | 参数    | 描述                 | 类型                                                      | 默认值 |
 | ------- | -------------------- | --------------------------------------------------------- | ------ |
-| options | 浏览器定位配置项     | [`UseBrowserLocationOptions`](#usebrowserlocationoptions) | -      |
+| options | 定位配置项（官方 `BMap.PositionOptions`） | [`GeolocationOptions`](#geolocationoptions) | -      |
 | map     | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | - |
 
-#### UseBrowserLocationOptions
+#### GeolocationOptions
 
 | 属性               | 描述                                                                                                                                                     | 类型      | 默认值    |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------- |
-| enableSDKLocation  | 是否启用安卓定位 SDK 辅助定位，适用于安卓 WebView 页面，[详见](https://lbsyun.baidu.com/index.php?title=android-locsdk/guide/addition-func/assistant-h5) | `boolean` | `false`   |
+| SDKLocation        | 是否启用安卓定位 SDK 辅助定位，适用于安卓 WebView 页面，[详见](https://lbsyun.baidu.com/index.php?title=android-locsdk/guide/addition-func/assistant-h5) | `boolean` | `false`   |
 | enableHighAccuracy | 是否要求浏览器获取最佳效果，同[浏览器定位](https://developer.mozilla.org/zh-CN-CN/docs/Web/API/Geolocation/getCurrentPosition)接口参数                   | `boolean` | `false`   |
 | timeout            | 超时时间                                                                                                                                                 | `number`  | `10000`   |
 | maximumAge         | 允许返回指定事件内的缓存结果，单位为毫秒。如果为`0`，则每次请求都获取最新的定位结果。默认为`10`分钟                                                      | `number`  | `600,000` |
@@ -74,33 +74,41 @@ const { locate, location, isLoading, isError, status } = useGeolocation(options,
 | isLoading | 是否在获取中                                                             | `boolean`                                                |
 | supported | 当前引擎是否支持定位（Client 就绪前是乐观初值 `true` = 尚未判定）                                                     | `boolean`                                                |
 | status    | 任务状态（见上）                                                         | `Readonly<ShallowRef<BMapServiceStatus>>`                 |
-| locate    | 获取定位；**需要 Client 上下文**（`<Map>` 或 `<BMapProvider>` 子树内）    | `() => Promise<ServiceResult<BMapGeoResult>>`             |
-| get       | `locate` 别名                                                            | 同上                                                     |
+| getCurrentPosition | 获取定位（官方 `Geolocation#getCurrentPosition`）；**需要 Client 上下文**（`<Map>` 或 `<BMapProvider>` 子树内）。可传 `PositionOptions` 逐次覆盖构造期取值 | `(override?: GeolocationOptions) => Promise<ServiceResult<BMapGeoResult>>` |
 | cancel    | 逻辑取消在飞请求                                                         | `() => void`                                             |
 | reset     | 取消 + 清空 data/error/status                                            | `() => void`                                             |
 
 #### Location
 
-| 属性      | 描述       | 类型                          |
-| --------- | ---------- | ----------------------------- |
-| accuracy  | 定位精度（SDK 未给出时为 `null`） | `number \| null`        |
-| point     | 经纬度点   | `{ lng: number; lat: number }` |
-| address   | 定位地址   | [`Address`](#address)         |
-| status    | SDK 状态（成功恒为 `BMAP_STATUS_SUCCESS`） | `'BMAP_STATUS_SUCCESS'` |
-| source    | 数据来源（固定 `baidu-sdk`） | `string`                |
-| timestamp | 定位时间戳 | `number`                      |
+| 属性             | 描述       | 类型                          |
+| ---------------- | ---------- | ----------------------------- |
+| accuracy         | 定位精度（SDK 未给出时为 `null`） | `number \| null`        |
+| point            | 经纬度点   | `{ lng: number; lat: number }` |
+| address          | 定位地址   | [`Address`](#address)         |
+| status           | SDK 状态（成功恒为 `BMAP_STATUS_SUCCESS`） | `'BMAP_STATUS_SUCCESS'` |
+| source           | 数据来源（固定 `baidu-sdk`） | `string`                |
+| timestamp        | **设备定位时刻**（官方 `GeolocationResult.timestamp`；回包没带时为 `null`，不是收到结果的时刻） | `number \| null` |
+| altitude         | 海拔（米），设备不支持时 `null` | `number \| null` |
+| altitudeAccuracy | 海拔精度（米），设备不支持时 `null` | `number \| null` |
+| heading          | 设备朝向（正北顺时针角度），设备不支持时 `null` | `number \| null` |
+| speed            | 移动速度（米/秒），设备不支持时 `null` | `number \| null` |
+
+:::tip 字段名做了投影
+官方回包里 `city_code` / `street_number` 是 snake_case（上游自身不一致），本库在 Driver 里
+统一映射成 camelCase 的 `cityCode` / `streetNumber`——下表是**运行时真正读得到**的形状。
+:::
 
 #### Address
 
-| 属性          | 描述      | 类型     |
-| ------------- | --------- | -------- |
-| country       | 国家      | `string` |
-| city          | 城市      | `string` |
-| city_code     | 城市 code | `string` |
-| district      | 行政区    | `string` |
-| province      | 省份      | `string` |
-| street        | 街道      | `string` |
-| street_number | 城市 code | `string` |
+| 属性          | 描述      | 类型                  |
+| ------------- | --------- | --------------------- |
+| country       | 国家      | `string`              |
+| province      | 省份      | `string`              |
+| city          | 城市      | `string`              |
+| cityCode      | 城市 code（官方 `city_code`） | `string \| number` |
+| district      | 行政区    | `string`              |
+| street        | 街道      | `string`              |
+| streetNumber  | 门牌号（官方 `street_number`） | `string` |
 
 ## TS 类型定义参考
 
@@ -108,11 +116,12 @@ const { locate, location, isLoading, isError, status } = useGeolocation(options,
 import type { ComputedRef, ShallowRef } from 'vue'
 import type { BMapServiceStatus, Point, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
 
-interface UseBrowserLocationOptions {
+/** 官方 `BMap.PositionOptions` 的逐个投影——成员名与官方完全一致 */
+interface GeolocationOptions {
   /**
    * 是否开启SDK辅助定位，仅当使用环境为移动web混合开发，且开启了定位sdk辅助定位功能后生效
    */
-  enableSDKLocation?: boolean
+  SDKLocation?: boolean
   /**
    * 是否要求浏览器获取最佳效果，同浏览器定位接口参数。默认为false
    */
@@ -125,10 +134,6 @@ interface UseBrowserLocationOptions {
    * 允许返回指定事件内的缓存结果，单位为毫秒。如果为0，则每次请求都获取最新的定位结果。默认为10分钟
    */
   maximumAge?: number
-  /**
-   * 是否开启SDK辅助定位
-   */
-  SDKLocation?: boolean
 }
 interface Location {
   point: Point
@@ -137,14 +142,18 @@ interface Location {
   /** 成功时恒为 `BMAP_STATUS_SUCCESS` */
   status: 'BMAP_STATUS_SUCCESS'
   source: 'baidu-sdk'
-  timestamp: number
+  /** 设备定位时刻；官方回包没带时为 null */
+  timestamp: number | null
+  altitude: number | null
+  altitudeAccuracy: number | null
+  heading: number | null
+  speed: number | null
 }
 export declare function useGeolocation(
-  options?: UseBrowserLocationOptions,
+  options?: GeolocationOptions,
   map?: unknown
 ): {
   data: Readonly<ShallowRef<Location | null>>
-  location: Readonly<ShallowRef<Location | null>>
   error: Readonly<ShallowRef<ServiceErrorInfo | null>>
   sdkStatus: Readonly<ShallowRef<number | null>>
   isError: ComputedRef<boolean>
@@ -152,8 +161,7 @@ export declare function useGeolocation(
   status: Readonly<ShallowRef<BMapServiceStatus>>
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
-  locate: () => Promise<ServiceResult<Location>>
-  get: () => Promise<ServiceResult<Location>>
+  getCurrentPosition: (override?: GeolocationOptions) => Promise<ServiceResult<Location>>
   cancel: () => void
   reset: () => void
 }

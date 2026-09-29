@@ -38,7 +38,7 @@ export interface MapStatusRefs {
   readonly size: Readonly<ShallowRef<Size | null>>;
   /** 旋转角（度；v4 读回可能为负，`-90 ≡ 270`）。 */
   readonly heading: Readonly<ShallowRef<number | null>>;
-  /** 倾斜角（度，0..90）。 */
+  /** 倾斜角（度，0..73）。 */
   readonly tilt: Readonly<ShallowRef<number | null>>;
   /** 是否正在移动（`movestart` / `moving` 起，`moveend` 止）。 */
   readonly moving: Readonly<ShallowRef<boolean>>;

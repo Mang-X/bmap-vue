@@ -15,7 +15,11 @@
  *   一并删除。默认 definition 直接交给 `createBMapClient`（缺省注入 jsapi-v4 Driver 工厂），
  *   需要复用宿主已加载的 SDK 时显式传 `existingGlobalV4Provider()`；
  * - 旧 `globalProperties` 映射随 #136 删除：它绕过 Provider/Client 边界让组件直接读全局配置，
- *   配置一律经 `<BMapProvider>` 或 `createBMapPlugin({ ak })` 的默认 Client definition。
+ *   配置一律经 `<BMapProvider>` 或 `createBMapPlugin({ ak })` 的默认 Client definition；
+ * - #165 Class 5 删除 `options.plugins`：它声明了却**没有任何读者**（app 级配置
+ *   `BMapPluginConfig` 只有 `{ provider, defaults }`），于是 `createBMapPlugin({ plugins })`
+ *   静默无效。要在 app 级声明插件请用 `<Map plugins>` 那个**组件 prop**（两者不是同一件事）——
+ *   「本想提供 app 级插件声明」若要复活，应作为**功能票**按插件 Catalog 的作用域重做。
  */
 import type { App, Component } from "vue";
 import { baiduJsapiV4Provider } from "../core/loader/providers/index";
@@ -37,7 +41,6 @@ export interface CreateBMapPluginOptions {
   ak?: string;
   apiUrl?: string;
   version?: string;
-  plugins?: string[];
   defaults?: Partial<BMapLoadOptions>;
   client?: CreateBMapClientOptions;
 }

@@ -52,14 +52,28 @@ export function setCopyrightControl(
   bucket(client, true)!.set(anchor, control);
 }
 
-/** 已经没有任何版权项时把共享控件摘掉并出桶（还有兄弟组件在用就保留挂载）。 */
+/**
+ * 已经没有任何版权项时把共享控件摘掉并出桶（还有兄弟组件在用就保留挂载）。
+ *
+ * @param exceptId 本组件自己的版权项 id。若它的摘除**被延后**（官方控件成员面窗口，见
+ *   `CopyrightControl.vue` 的 `deferCopyrightRemoval`），SDK 侧那条记录**此刻还在**——
+ *   但它属于一个**已经卸载**的组件，不能因此把共享控件留在图上（那正是 #165 记的泄漏：
+ *   控件永远不摘、缓存条目永不淘汰）。因此本组件自己那条记录在计数时**必须排除**。
+ *
+ * 为什么是「排除自己」而不是「先摘再判」：摘除被延后时**摘不掉**，而顺序颠倒
+ * （先判空再摘）会让「控件是否该摘」这个决定依赖一个**当前为真、稍后为假**的读数。
+ * 排除自己之后，判据回到「**还有没有别人的版权项**」——这才是这个函数真正要回答的问题，
+ * 且它与「我的那条是否已经摘掉」无关。
+ */
 export function removeCopyrightControlIfEmpty(
   anchor: string,
   control: ControlHandle,
   ctx: MapReadyContext,
+  exceptId?: number,
 ) {
   const entries = ctx.client.driver.controls.listCopyrights(control);
-  if (entries.length > 0) return;
+  const remaining = exceptId === undefined ? entries : entries.filter((entry) => entry.id !== exceptId);
+  if (remaining.length > 0) return;
   ctx.client.driver.controls.remove({ kind: "map", handle: ctx.map }, control);
   // **按身份出桶**：只有这个桶确实指向本实例时才删。调用方可能带着过期的 anchor 到来
   // （例如实例已被移动到别处、而调用方手里还是旧键），无条件 `delete` 会把**别人**刚登记

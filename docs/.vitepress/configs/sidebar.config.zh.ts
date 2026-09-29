@@ -191,6 +191,18 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "线 / 面 / 热力 / 轨迹线（+ 要素状态）",
           link: "native-visual-layers",
         },
+        {
+          text: "PolygonLayer / PolylineLayer（4.0.5 替代品）",
+          link: "visualization-layers",
+        },
+        {
+          text: "TextLayer（批量文字标注）",
+          link: "text-layer",
+        },
+        {
+          text: "弃用图层的迁移指引",
+          link: "deprecated-layers-migration",
+        },
       ],
     },
     {

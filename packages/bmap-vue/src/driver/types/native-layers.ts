@@ -7,8 +7,8 @@
  * - 原生数据图层是**数据驱动**的：`setData` / 要素状态（feature state）/ 拾取事件是一等公民，
  *   显隐、透明度、层级、缩放范围都有字段级 setter。
  *
- * 八个 kind 的 SDK 方法面**并不一致**（官方专页的四类图层共享同一套方法；`PointLayer` /
- * `ClusterLayer` / `Heatmap` / `TrackLine` 属扩展 API，各只公开自己那几个方法），因此这里
+ * 十个 kind 的 SDK 方法面**并不一致**（官方专页的四类图层共享同一套方法；`PointLayer` /
+ * `ClusterLayer` / `Heatmap` / `TrackLine` 属扩展 API，各自只公开自己那几个方法），因此这里
  * 不做「一个方法一套参数硬套八个 kind」：
  *
  * - 归一化操作集合 `NativeLayerOperation` 是**领域面**；
@@ -16,6 +16,9 @@
  *   `NATIVE_LAYER_DESCRIPTORS`）；
  * - 调用一个该 kind 没有入口的操作**显式失败**（`BMAP_CAPABILITY_UNSUPPORTED`），
  *   不静默 no-op——「看起来调成功了但什么都没发生」是数据图层最难排查的一类问题。
+ *
+ * 扩展 API 四类的成员面**按 4.0.5 的声明登记**（不是「运行时继承到就当契约」也不是
+ * 「专页没列就当没有」）——见 Driver 的 kind 表注释。
  */
 import type { Pixel } from "./geometry";
 import type { SdkHandle } from "./handles";
@@ -25,8 +28,8 @@ import type { OverlayTarget } from "./overlays";
  * 原生数据图层种类（issue #23 的「Native Layer Facet」清单）。
  *
  * `point` / `cluster` / `heatmap` / `track-line` 只能按结构探测：它们在 4.0 运行时公开，
- * 但 `@baidumap/jsapi-v4-types@4.0.4` 没有类声明，且**可视化实现是异步注入的**——因此
- * 存在性必须在调用时刻判断（见 Driver 的 `create`）。
+ * `visualization/` 的类声明是 `@baidumap/jsapi-v4-types@4.0.5` 才补上的，且**可视化实现是
+ * 异步注入的**——因此存在性必须在调用时刻判断（见 Driver 的 `create`）。
  */
 export type NativeLayerKind =
   | "point"
@@ -36,7 +39,20 @@ export type NativeLayerKind =
   | "line"
   | "fill"
   | "heatmap"
-  | "track-line";
+  | "track-line"
+  // #166：官方 4.0.5 `visualization/` 新增的两族，作为同时弃用的 `FillLayer` / `LineLayer`
+  // 的官方指定替代。**与扩展 API 那四类不同**：它们随主包注入，不进
+  // `RUNTIME_INJECTED_LAYER_CTORS`（live 探针 case 3b 的 `injectionTiming`）。
+  | "polygon"
+  | "polyline"
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
+  // 与前两族同为随主包注入（live 探针 2026-09-27：`TextLayerAtMapReady === "function"`），
+  // 但它是这一族里**唯一声明与运行时完全对齐**的类——`hitTest` 与 `setOpacity` 都在
+  // （前两族各缺一个，**方向相反**：`PolygonLayer` 缺 `hitTest`——声明有而运行时**无**——
+  //  且它的 `setOpacity` 在位却不驱动渲染；`PolylineLayer` 缺的则是 `setOpacity` 的**声明**，
+  //  运行时有且**生效**，因此登记面比面族宽。#165 收口的 live 像素复跑更正了原先
+  // 「两族同处置」的那句。），因此登记面比它们宽。
+  | "text";
 
 /**
  * 归一化操作。
@@ -58,6 +74,17 @@ export type NativeLayerOperation =
   | "getState"
   | "setEnablePicked"
   | "hitTest"
+  /**
+   * `TextLayer` 的命中测试（#166 第二刀）。
+   *
+   * **为什么与 `hitTest` 分成两条**：官方 `TextLayer.hitTest` 返回的是 `TextLayerItem`
+   * （`visualization/TextLayer.d.ts:289`：`{ point, text, width, height, id, properties }`），
+   * 而 `hitTest` 那一条的归一化目标是 `{ dataIndex, dataItem }`——**形状不同**：
+   * 文字图层的回包里没有 `dataIndex`，本库无法（也不该）替它编一个下标出来。
+   * 把两者塞进同一个 `switch` 分支会让其中一族拿到形状不对的回包，而回包形状错是最难
+   * 被使用者发现的一类 bug（字段都在、值都是 `undefined` / `-1`）。
+   */
+  | "hitTestText"
   // TrackLine 播放命令面（#110）：七条方法名均经 live 探针取证（`scripts/probe-track-line.mts`，
   // 2026-09-23，exit 0），不是从类型包猜的。`setSpeed` / `setProcess` 带参数，其余无参。
   | "start"
@@ -103,6 +130,33 @@ export interface NativeLayerPick {
   /** 要素索引；**未命中是 -1**（官方口径：未命中也派发事件，值本身是真值） */
   dataIndex: number;
   dataItem: unknown;
+}
+
+/**
+ * `TextLayer.hitTest()` 的主动命中结果（官方 `TextLayerItem`，
+ * `visualization/TextLayer.d.ts:19-32`）。
+ *
+ * 逐字段**如实投影**官方声明的六项，不加不减：
+ *
+ * - 不补 `dataIndex` —— 官方回包里**没有**这一项，而本库无法从 `id` 稳定反推下标
+ *   （`id` 缺省时是要素序号，但那是 SDK 内部口径，不是有依据的公开身份）；
+ * - `id` 收窄成 `string | number | null` —— 与 `PointPick.id` 同一条口径：官方声明是
+ *   `string | number`，而回包在**认不出业务身份**时（`idKey` 没声明或字段值不在该域）
+ *   如实给 `null`，不替官方猜。
+ */
+export interface NativeLayerTextPick {
+  /** 命中点经纬度（bd09ll），本库用纯数据表达（组件层不构造 SDK 构造器）。 */
+  point: { lng: number; lat: number } | null;
+  /** 文案。 */
+  text: string | null;
+  /** 文字显示宽度（px）。 */
+  width: number | null;
+  /** 文字显示高度（px）。 */
+  height: number | null;
+  /** 要素 id（取自 `idKey` 字段，缺省用序号）。 */
+  id: string | number | null;
+  /** 要素的 properties。 */
+  properties: unknown;
 }
 
 /** `setZoomRange` 的入参（两端都可选，只改给到的那一端）。 */
@@ -174,6 +228,14 @@ export interface NativeLayerDriver {
   setEnablePicked(layer: NativeLayerHandle, enabled: boolean): void;
   /** 主动命中测试（像素 → 要素）；只有声明该入口的 kind 有实现 */
   hitTest(layer: NativeLayerHandle, pixel: Pixel): NativeLayerPick | null;
+  /**
+   * `TextLayer` 的主动命中测试（像素 → 命中的一段文字），未命中返回 `null`。
+   *
+   * 与 `hitTest` **分开**的原因见 `NativeLayerOperation` 里那一条：官方回包形状不同
+   * （`TextLayerItem` 没有 `dataIndex`），归一化成同一份 `{ dataIndex, dataItem }` 会
+   * 逼本库编造一个下标——那正是「回包形状错」这类最难排查的 bug。
+   */
+  hitTestText(layer: NativeLayerHandle, pixel: Pixel): NativeLayerTextPick | null;
 
   /**
    * TrackLine 播放命令（#110；方法名均经 live 探针取证，不是从类型包猜的）。

@@ -50,7 +50,7 @@ const steps = (plan: RoutePlan) => plan.legs.reduce((total, leg) => total + leg.
 const firstSteps = (plan: RoutePlan) => plan.legs[0]?.steps.slice(0, 3) ?? [];
 
 // 驾车端点必须是坐标或 POI 引用（官方签名里没有字符串）。
-// 要按地址出发，先用 `useGeocoder().get('天安门')` 取到坐标再传进来。
+// 要按地址出发，先用 `useGeocoder().getPoint('天安门')` 取到坐标再传进来。
 function run() {
   void search(from, to);
 }

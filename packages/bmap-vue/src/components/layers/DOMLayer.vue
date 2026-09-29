@@ -14,7 +14,7 @@
  * - 官方用整袋 `setStyleOptions(partial)` 更新构造项（`minZoom` / `maxZoom` / `zIndex` /
  *   `offsetX` / `offsetY` / `anchors` / `coordinate` / `enableDraggingMap`），因此这些 prop
  *   变化时**就地更新**，不重建；
- * - **不提供交互事件**（本组件刻意没有 `@click` 一类 emit）：官方 4.0.4 的 `DOMLayer` 只声明了
+ * - **不提供交互事件**（本组件刻意没有 `@click` 一类 emit）：官方 4.0.5 的 `DOMLayer` 只声明了
  *   `addEventListener`、**没有** `removeEventListener`（逐成员核对 `layer/DOMLayer.d.ts`），
  *   而本库的 `EventDriver.on()` 要求两者同时存在才订阅（缺一个就告警 + no-op）。也就是说这类
  *   订阅**绑上就解不掉**，仓库的官方技能文档 `references/data-layers.md` 把它列为常见错误：

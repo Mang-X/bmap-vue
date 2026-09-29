@@ -51,3 +51,20 @@ control/scale
 
 该组件没有对外事件。
 
+
+## `unit`：比例尺单位（#165）
+
+`unit` 是**可就地更新**的选项（官方 `ScaleControl#setUnit(unit: LengthUnit): void`）。此前 Driver
+的分类表里已经登记成 `mutable` + `setUnit`，而组件**没有**这个 prop——分类层准备好了、出口没有。
+
+| 属性 | 说明                                   | 类型                       | 可选值             | 默认值 | 版本          |
+| ---- | -------------------------------------- | -------------------------- | ------------------ | ------ | ------------- |
+| unit | 比例尺单位（公制 / 英制）              | `"metric" \| "us"`        | `metric` / `us`    | -      | `1.0.0`（#165） |
+
+取值域**逐字**取自 `@baidumap/jsapi-v4-types@4.0.4` 的 `const/LengthUnit.d.ts`
+（`type LengthUnit = 'metric' | 'us'`，对应官方常量 `BMAP_UNIT_METRIC` / `BMAP_UNIT_IMPERIAL`）。
+
+不给默认值：`undefined` = 不表态。官方 `ScaleControlOptions` 里**没有** `unit`，默认由 SDK 自己决定，
+本库不猜。
+
+改动**不重建**控件——控件内部的交互状态与 DOM 都保留。

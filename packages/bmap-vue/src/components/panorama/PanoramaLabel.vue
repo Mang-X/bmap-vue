@@ -24,7 +24,7 @@ export interface PanoramaLabelProps {
  * 因此**不复用** `OverlayTarget` 那套注册表——所有权由「谁创建谁摘除」表达：本组件在自己的
  * 作用域里摘除，父组件随后才销毁查看器（父的 `onUnmounted` 晚于子树）。
  *
- * 选项的落地方式按官方 4.0.4 的成员表分两档：
+ * 选项的落地方式按官方 4.0.5 的成员表分两档：
  * - `content` → `setContent()`、`position` → `setPosition()`、`altitude` → `setAltitude()`：
  *   有 setter，就地更新；
  * - `displayDistance` → **只有构造期**（官方没有 `setDisplayDistance`）：变化时重建标注。
@@ -69,6 +69,11 @@ async function createLabel(): Promise<void> {
     // （`ResourceScope.dispose()` 是终态，复用会让新注册的 disposer 立即执行）
     const localScope = new ResourceScope({ label: "panorama-label" });
     labelScope = localScope;
+    // 登记进查看器的**标注名册**（#174 P1-2）：父级的 `clearOverlays()` 会把全部覆盖物清掉，
+    // 官方**没有**枚举接口可用来「只清管不到的」，因此清完之后由父级按这份名册把它们挂回去。
+    // 不登记的后果不是「清空时少了一条标注」，而是子组件**仍然认为**自己挂着、后续 prop
+    // 变化全部打进一个已经不在画面上的句柄 ⇒ 「声明存在、画面不存在」。
+    context.registerLabel(created);
     localScope.add(() => viewerDriver.removeLabel(ready.viewer, created));
     localScope.add(viewerDriver.on(created, "click", (event: unknown) => emit("click", event)));
     driver = viewerDriver;
@@ -81,6 +86,11 @@ async function createLabel(): Promise<void> {
 
 function destroyLabel(): void {
   generation += 1;
+  // ⚠️ **先销账、再摘除**：名册是「这个标注还归本库管」的凭据，而 `clearOverlays` 靠它决定
+  // 要把谁挂回去。反过来（先摘后销）的话，一次失败的摘除会让名册与画面**永久分叉**——
+  // 名册里已经没有它、画面上还挂着；而它被重新挂回时又会变成两条。
+  const current = label.value;
+  if (current) context.unregisterLabel(current);
   try {
     labelScope?.dispose("panorama-label-removed");
   } catch {
@@ -128,7 +138,48 @@ watch(
 
 defineOptions({ name: "PanoramaLabel" });
 
-defineExpose({ label });
+/**
+ * 命令面（#165 Class 3 / TASK 2h）：官方 `panorama/PanoramaLabel.d.ts` 的 `show(): void` /
+ * `hide(): void`。
+ *
+ * **此前没有任何调用路径**：一个全景标注只能靠卸载组件消失，而卸载会连实例一起摘掉
+ * （`Panorama#removeOverlay`）——「临时藏起一个标签」这条最常见的诉求无处落地。
+ *
+ * ## 三条口径
+ *
+ * 1. **与「组件卸载」是两种语义**：命令只改 SDK 当前态，标注仍在查看器里、仍占一个实例；
+ *    卸载则走 `removeLabel` 摘除。刻意**不**把它们合成一个 `setVisible`。
+ * 2. **不镜像成组件状态、不做命令 ⇄ props 同步**：`visible` 不是 `PanoramaLabelProps` 的
+ *    字段（官方 `PanoramaLabelOptions` 也没有），加上它就是自研一个官方没有的 prop。
+ *    命令改完，下一次 `displayDistance` 触发重建时按 props 重新建（因而恢复可见）——
+ *    这与「props 是主模型」一致。
+ * 3. **没有 `isVisible()` 可暴露**：官方 `PanoramaLabel` **没有**这个成员
+ *    （声明里只有 `setPosition` / `getPosition` / `getPov` / `setContent` / `getContent` /
+ *    `show` / `hide` / `setAltitude` / `getAltitude`）。造一个恒 `false` 的「读回」等于
+ *    给调用方一个编出来的答案——AGENTS.md 明确禁止「镜像读不回的 SDK 内部状态」。
+ *
+ * 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**（与覆盖物命令面同一条口径）。
+ */
+defineExpose({
+  label,
+  show(): void {
+    const current = label.value;
+    if (!current || !driver) throw panoramaLabelDisposed("show");
+    driver.showLabel(current);
+  },
+  hide(): void {
+    const current = label.value;
+    if (!current || !driver) throw panoramaLabelDisposed("hide");
+    driver.hideLabel(current);
+  },
+});
+
+function panoramaLabelDisposed(command: string): Error {
+  return new Error(
+    `<PanoramaLabel>.${command}(): 标注未就绪、正在重建或已经释放，本次调用被拒绝` +
+      "（不静默 no-op）。请在挂载完成后调用。",
+  );
+}
 </script>
 
 <template>

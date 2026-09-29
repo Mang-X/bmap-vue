@@ -72,6 +72,18 @@ const props = withDefaults(defineProps<MarkerClusterProps<Item>>(), {
   clusterMinZoom: undefined,
   clusterMaxZoom: undefined,
   singleStyle: undefined,
+  // ---- issue #165 第三批：官方 `ClusterLayerOptions` 里另外六个（此前没有出口）----
+  //
+  // ⚠️ `updateRealTime` 是**本文件里唯一一个官方默认 `false` 的 `Boolean`**，而 Vue 对
+  // `Boolean` prop「未给」时会编出 `false`——值一致但**来源不同**（Vue 编的 vs SDK 的默认）。
+  // 显式钉成 `undefined` 的理由同 `Marker.vue` 顶部那段：让「没给」只有一个表示，
+  // 否则父级传 `:update-real-time="undefined"` 会触发一次**内容完全没变**的换实例。
+  updateRealTime: undefined,
+  tileSize: undefined,
+  fitViewMargin: undefined,
+  waitTime: undefined,
+  clusterIcon: undefined,
+  clusterIconSize: undefined,
 });
 
 const emit = defineEmits<{
@@ -114,6 +126,13 @@ function warnOptionMismatch(): void {
           ["clusterMaxZoom", props.clusterMaxZoom],
           ["fitViewOnClick", props.fitViewOnClick],
           ["singleStyle", props.singleStyle],
+          // issue #165 第三批补的六个，**同样**只对 native 生效。
+          ["tileSize", props.tileSize],
+          ["fitViewMargin", props.fitViewMargin],
+          ["updateRealTime", props.updateRealTime],
+          ["waitTime", props.waitTime],
+          ["clusterIcon", props.clusterIcon],
+          ["clusterIconSize", props.clusterIconSize],
         ];
   for (const [name, value] of mismatched) {
     if (value === undefined || warnedOptions.has(String(name))) continue;
@@ -215,6 +234,14 @@ watch(
     props.clusterMaxZoom,
     props.fitViewOnClick,
     props.singleStyle,
+    // issue #165 第三批补的六个：与上面同族的六项**同一处置**（构造期 ⇒ 变化触发
+    // `instanceFingerprint()` 改变 ⇒ 引擎换实例）。
+    props.tileSize,
+    props.fitViewMargin,
+    props.updateRealTime,
+    props.waitTime,
+    props.clusterIcon,
+    props.clusterIconSize,
   ],
   () => sync(),
   { deep: false, flush: "sync" },

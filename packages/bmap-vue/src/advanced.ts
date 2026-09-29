@@ -120,6 +120,15 @@ export type {
   InitialMapOptions,
   MapView,
   MapDriver,
+  // #165：`MapDriver.getViewport` 的返回类型与 `MapDriver.flyTo` 的选项投影出现在本出口
+  // 公开的 `MapDriver` 签名里 ⇒ 必须与它的兄弟类型一起可命名（ADR 2026-09-25 §5 的零容忍：
+  // 未导出类型要么导出、要么消掉，不留「反正用不上」的欠账）
+  Viewport,
+  FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
 } from "./driver/types/map";
 export type {
   OverlayKind,
@@ -132,11 +141,25 @@ export type {
   OverlayTarget,
   OverlayDriver,
   OverlayPropertyPolicy,
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  MenuItemView,
+  PathReadBackApi,
 } from "./driver/types/overlays";
 export type { ControlKind, ControlOptions, CopyrightEntry, ControlDriver } from "./driver/types/controls";
+// 控件命令面（issue #168 item 1）：`ControlDriver.locationCommands()` / `cityListCommands()`
+// 是这个出口上 `ControlDriver` 的公开成员，其返回类型因此必须一并导出，
+// 否则就是 `ae-forgotten-export`（ADR 2026-09-25）。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "./driver/types/controls";
 export type { LayerKind, LayerDriver } from "./driver/types/layers";
 export type { AutocompleteOptions, ServiceDriver } from "./driver/types/services";
-export type { PanoramaDriver } from "./driver/types/panorama";
+export type { PanoramaDriver, PanoramaLink } from "./driver/types/panorama";
 export type { MapMouseEvent, DriverEvent, EventDriver } from "./driver/types/events";
 export { normalizeMapMouseEvent, toPoint, isPointLike, toPlainPoint, toPlainPoints } from "./driver/normalize";
 
@@ -205,6 +228,10 @@ export type {
   NativeLayerKind,
   NativeLayerOperation,
   NativeLayerPick,
+  // #166 第二刀：`TextLayer` 的命中回包（官方 `TextLayerItem`）。与 `NativeLayerPick` 是
+  // **两种**形状（没有 `dataIndex`，多了 `text` / `width` / `height` / 显式 `point`），
+  // 因此是单独一个类型而不是前者的分支。
+  NativeLayerTextPick,
   NativeLayerZoomRange,
 } from "./driver/types/native-layers";
 
@@ -274,6 +301,7 @@ export type {
 // —— `MapDriver.cancelViewAnimation()` 的结果（视角动画没有公开取消接口，见 ADR 决策）
 export type { ViewAnimationCancelOutcome } from "./driver/types/map";
 export type {
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaHandle,
   PanoramaLabelHandle,

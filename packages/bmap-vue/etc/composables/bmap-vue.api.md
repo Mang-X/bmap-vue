@@ -84,16 +84,8 @@ export interface BMapDrivingRouteOptions {
 // @public (undocumented)
 export type BMapEngine = "jsapi-v4";
 
-// @public (undocumented)
-export interface BMapGeolocationOptions {
-    // (undocumented)
-    enableHighAccuracy?: boolean;
-    enableSDKLocation?: boolean;
-    // (undocumented)
-    maximumAge?: number;
-    // (undocumented)
-    timeout?: number;
-}
+// @public
+export type BMapGeolocationOptions = GeolocationOptions;
 
 // @public (undocumented)
 export interface BMapGeoResult {
@@ -101,6 +93,9 @@ export interface BMapGeoResult {
     accuracy: number | null;
     // (undocumented)
     address: GeolocationAddressInfo | null;
+    altitude: number | null;
+    altitudeAccuracy: number | null;
+    heading: number | null;
     // (undocumented)
     point: {
         lng: number;
@@ -108,9 +103,9 @@ export interface BMapGeoResult {
     };
     // (undocumented)
     source: "baidu-sdk";
+    speed: number | null;
     status: "BMAP_STATUS_SUCCESS";
-    // (undocumented)
-    timestamp: number;
+    timestamp: number | null;
 }
 
 // @public (undocumented)
@@ -157,12 +152,7 @@ export interface BMapLocalSearchRenderOptions {
     panel?: string | HTMLElement;
     // (undocumented)
     selectFirstResult?: boolean;
-    // (undocumented)
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -179,11 +169,7 @@ export interface BMapRouteRenderOptions {
     autoViewport?: boolean;
     map?: MaybeRefOrGetter<MapHandle | null | undefined>;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -218,7 +204,7 @@ export interface Bounds {
 export type BuiltinMarkerIconName = "simple_red" | "simple_blue" | "loc_red" | "loc_blue" | "start" | "end" | "location" | "red1" | "red2" | "red3" | "red4" | "red5" | "red6" | "red7" | "red8" | "red9" | "red10" | "blue1" | "blue2" | "blue3" | "blue4" | "blue5" | "blue6" | "blue7" | "blue8" | "blue9" | "blue10";
 
 // @public
-export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.heading" | "map.tilt" | "map.fly-to" | "map.animate" | "map.screenshot" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 
 // @public (undocumented)
 export interface CapabilityDescriptor {
@@ -283,12 +269,46 @@ export type CapabilityStatus = "native" | "extended" | "experimental" | "unsuppo
 // @public (undocumented)
 export type CircleHandle = SdkHandle<"overlay:circle">;
 
+// @public
+export interface CircleReadBackApi extends PathReadBackApi {
+    // (undocumented)
+    getCenter(): Point;
+    // (undocumented)
+    getFillColor(): string;
+    // (undocumented)
+    getFillOpacity(): number;
+    // (undocumented)
+    getRadius(): number;
+}
+
+// @public
+export interface CityListCommandApi {
+    getCityName(): string;
+    toggle(): void;
+}
+
+// @public (undocumented)
+export interface ContextMenuCommandApi {
+    getDom(): HTMLElement;
+    getItem(index: number): MenuItemView | null;
+    // (undocumented)
+    hide(): void;
+    removeItem(index: number): boolean;
+    removeSeparator(index: number): boolean;
+    setItemEnabled(index: number, enabled: boolean): void;
+    setItemText(index: number, text: string): void;
+    show(): void;
+}
+
 // @public (undocumented)
 export interface ControlDriver {
     // (undocumented)
     add(target: OverlayTarget, control: ControlHandle): void;
     // (undocumented)
     addCopyright(control: ControlHandle, copyright: CopyrightEntry): void;
+    canRemoveCopyright(control: ControlHandle): boolean;
+    // (undocumented)
+    cityListCommands(control: ControlHandle): CityListCommandApi;
     // (undocumented)
     create(kind: ControlKind, options?: ControlOptions): ControlHandle;
     createCustomControl(options: {
@@ -300,10 +320,10 @@ export interface ControlDriver {
     hide(control: ControlHandle): void;
     // (undocumented)
     listCopyrights(control: ControlHandle): CopyrightEntry[];
+    locationCommands(control: ControlHandle): LocationCommandApi;
     planOptions(control: ControlHandle, keys: readonly string[]): Record<string, ControlOptionStatus>;
     // (undocumented)
     remove(target: OverlayTarget, control: ControlHandle): void;
-    // (undocumented)
     removeCopyright(control: ControlHandle, id: number): void;
     // (undocumented)
     setOptions(control: ControlHandle, options: Record<string, unknown>): void;
@@ -477,6 +497,12 @@ export interface EventSourceClient {
 }
 
 // @public
+export interface FlyToOptions {
+    callback?: () => void;
+    noAnimation?: boolean;
+}
+
+// @public
 export interface FrameScheduler {
     // (undocumented)
     cancel(key: PropertyKey): void;
@@ -559,6 +585,18 @@ export interface GeolocationAddressInfo {
 }
 
 // @public (undocumented)
+export interface GeolocationOptions {
+    // (undocumented)
+    enableHighAccuracy?: boolean;
+    // (undocumented)
+    maximumAge?: number;
+    // (undocumented)
+    SDKLocation?: boolean;
+    // (undocumented)
+    timeout?: number;
+}
+
+// @public (undocumented)
 export interface GeometryDriver {
     // (undocumented)
     fromRawBounds(raw: unknown): Bounds;
@@ -597,20 +635,44 @@ export type InfoWindowHandle = SdkHandle<"overlay:info-window">;
 export interface InfoWindowOptions {
     // (undocumented)
     [key: string]: unknown;
+    collisions?: number[];
     // (undocumented)
     enableAutoPan?: boolean;
     // (undocumented)
     enableCloseOnClick?: boolean;
+    enableContentScroll?: boolean;
     // (undocumented)
     enableMaximize?: boolean;
+    enableSearchTool?: boolean;
+    headerContent?: string;
     // (undocumented)
     height?: number;
+    margin?: number[];
+    maxContent?: string;
+    maxWidth?: number;
     // (undocumented)
     offset?: Pixel;
+    onClosing?: () => void;
     // (undocumented)
     title?: string;
     // (undocumented)
     width?: number;
+}
+
+// @public
+export interface InfoWindowReadBackApi {
+    // (undocumented)
+    getContent(): string | HTMLElement;
+    // (undocumented)
+    getOffset(): Pixel;
+    // (undocumented)
+    getTitle(): string;
+    // (undocumented)
+    isOpen(): boolean;
+    // (undocumented)
+    maximize(): void;
+    // (undocumented)
+    restore(): void;
 }
 
 // @public (undocumented)
@@ -647,6 +709,7 @@ export type LabelHandle = SdkHandle<"overlay:label">;
 export interface LabelOptions {
     // (undocumented)
     [key: string]: unknown;
+    anchor?: OverlayAnchorName;
     // (undocumented)
     enableMassClear?: boolean;
     // (undocumented)
@@ -655,6 +718,7 @@ export interface LabelOptions {
     position?: Point;
     // (undocumented)
     style?: Record<string, unknown>;
+    width?: number;
     // (undocumented)
     zIndex?: number;
 }
@@ -779,11 +843,7 @@ export interface LocalSearchRenderOptions {
     map?: MapHandle;
     panel?: string | HTMLElement;
     selectFirstResult?: boolean;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -811,6 +871,28 @@ export interface LocalSearchResult {
 // @public
 export interface LocalSearchSearchOption {
     forceLocal?: boolean;
+}
+
+// @public
+export interface LocationAddressComponents {
+    // (undocumented)
+    city?: string;
+    // (undocumented)
+    district?: string;
+    // (undocumented)
+    province?: string;
+    // (undocumented)
+    street?: string;
+    // (undocumented)
+    streetNumber?: string;
+}
+
+// @public
+export interface LocationCommandApi {
+    getAddressComponent(): LocationAddressComponents | null;
+    location(): void;
+    startLocation(): void;
+    stopLocationTrace(): void;
 }
 
 // @public
@@ -1128,16 +1210,19 @@ export interface MapDriver {
     destroy(map: MapHandle): void;
     // (undocumented)
     fitBounds(map: MapHandle, bounds: Bounds): void;
+    flyTo(map: MapHandle, center: Point, zoom: number, options?: FlyToOptions): void;
     // (undocumented)
     getBounds(map: MapHandle): Bounds;
     // (undocumented)
     getCenter(map: MapHandle): Point;
     // (undocumented)
     getHeading(map: MapHandle): number;
+    getScreenshot(map: MapHandle): string;
     // (undocumented)
     getSize(map: MapHandle): Size;
     // (undocumented)
     getTilt(map: MapHandle): number;
+    getViewport(map: MapHandle, view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport;
     // (undocumented)
     getZoom(map: MapHandle): number;
     // (undocumented)
@@ -1145,13 +1230,13 @@ export interface MapDriver {
     // (undocumented)
     panBy(map: MapHandle, pixel: Pixel): void;
     // (undocumented)
-    panTo(map: MapHandle, point: Point): void;
+    panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     // (undocumented)
-    setCenter(map: MapHandle, center: Point | string): void;
+    setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)
-    setHeading(map: MapHandle, heading: number): void;
+    setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setInteraction(map: MapHandle, name: MapInteraction, enabled: boolean): void;
     // (undocumented)
@@ -1159,12 +1244,12 @@ export interface MapDriver {
     // (undocumented)
     setMapType(map: MapHandle, type: MapType_2): void;
     // (undocumented)
-    setTilt(map: MapHandle, tilt: number): void;
+    setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     // (undocumented)
     setTraffic(map: MapHandle, enabled: boolean): void;
-    setViewport(map: MapHandle, points: readonly Point[], options?: Record<string, unknown>): void;
+    setViewport(map: MapHandle, points: readonly Point[], options?: ViewportOptions): void;
     // (undocumented)
-    setZoom(map: MapHandle, zoom: number): void;
+    setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     // (undocumented)
     startViewAnimation(map: MapHandle, animation: unknown): void;
 }
@@ -1376,8 +1461,8 @@ export type MapStyleInput = {
     styleId: string;
 } | Record<string, unknown>;
 
-// @public (undocumented)
-type MapType_2 = "normal" | "satellite" | "earth";
+// @public
+type MapType_2 = "normal" | "satellite" | "hybrid" | "earth";
 export { MapType_2 as MapType }
 
 // @public
@@ -1423,20 +1508,55 @@ export type MarkerIconName = BuiltinMarkerIconName;
 export interface MarkerOptions {
     // (undocumented)
     [key: string]: unknown;
+    autoFollowHeadingChanged?: boolean;
     // (undocumented)
     enableClicking?: boolean;
     // (undocumented)
     enableDragging?: boolean;
     // (undocumented)
     icon?: MarkerIconInput;
+    label?: MarkerLabelInput;
     // (undocumented)
     offset?: Pixel;
     // (undocumented)
     rotation?: number;
+    startAnimation?: string;
     // (undocumented)
     title?: string;
     // (undocumented)
     zIndex?: number;
+}
+
+// @public
+export interface MarkerReadBackApi {
+    closePlaceDetail(): void;
+    // (undocumented)
+    getOffset(): Pixel;
+    // (undocumented)
+    getPosition(): Point;
+    // (undocumented)
+    getRank(): number;
+    // (undocumented)
+    getRotation(): number;
+    // (undocumented)
+    getTitle(): string;
+    // (undocumented)
+    setRank(rank: number): void;
+    // (undocumented)
+    setRotationOrigin(angle: number): void;
+}
+
+// @public
+export interface MenuItemView {
+    // (undocumented)
+    readonly disabled: boolean;
+    // (undocumented)
+    readonly id?: string;
+    readonly index: number;
+    // (undocumented)
+    readonly text: string;
+    // (undocumented)
+    readonly width?: number;
 }
 
 // @public
@@ -1462,8 +1582,10 @@ export interface OverlayDriver {
     }): void;
     attachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     buildIcon(icon: MarkerIconInput): unknown;
+    circleReadBacks(overlay: OverlayHandle): CircleReadBackApi;
     // (undocumented)
     closeInfoWindow(overlay: InfoWindowHandle): void;
+    contextMenuCommands(menu: OverlayHandle): ContextMenuCommandApi;
     // (undocumented)
     createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
     // (undocumented)
@@ -1496,8 +1618,20 @@ export interface OverlayDriver {
     detachContextMenu(target: OverlayTarget, menu: OverlayHandle): void;
     // (undocumented)
     hide(overlay: OverlayHandle): boolean;
+    infoWindowCommands(overlay: InfoWindowHandle): InfoWindowReadBackApi;
     isCurrentInfoWindow(map: MapHandle, overlay: InfoWindowHandle): boolean;
+    markerCommands(overlay: MarkerHandle): MarkerReadBackApi;
+    menuItemCommands(item: OverlayHandle): {
+        setText(text: string): void;
+        enable(): void;
+        disable(): void;
+    };
     openInfoWindow(map: MapHandle, overlay: InfoWindowHandle, position: Point): void;
+    pathFillReadBacks(overlay: OverlayHandle): {
+        getFillColor(): string;
+        getFillOpacity(): number;
+    };
+    pathReadBacks(overlay: OverlayHandle): PathReadBackApi;
     // (undocumented)
     redrawInfoWindow(overlay: InfoWindowHandle): void;
     // (undocumented)
@@ -1508,6 +1642,9 @@ export interface OverlayDriver {
     setPath(overlay: OverlayHandle, path: readonly (Point | string)[]): void;
     // (undocumented)
     setPosition(overlay: OverlayHandle, position: Point): void;
+    setPositionAt(overlay: OverlayHandle, index: number, point: Point, options?: {
+        deep?: number;
+    }): void;
     show(overlay: OverlayHandle): boolean;
     updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undefined;
 }
@@ -1542,10 +1679,29 @@ export interface PanoramaDriver {
     readonly supported: boolean;
 }
 
+// @public
+export interface PanoramaLink {
+    description?: string;
+    dir?: number;
+    heading?: number;
+    id?: string;
+    refinedDir?: number;
+    roadWidth?: number;
+    x?: number;
+    y?: number;
+}
+
+// @public
+export interface PanToOptions extends ViewCommandOptions {
+    duration?: number;
+}
+
 // @public (undocumented)
 export interface PathOptions {
     // (undocumented)
     [key: string]: unknown;
+    coordType?: "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+    dashArray?: number[];
     // (undocumented)
     enableClicking?: boolean;
     // (undocumented)
@@ -1556,8 +1712,11 @@ export interface PathOptions {
     fillColor?: string;
     // (undocumented)
     fillOpacity?: number;
+    linkRight?: boolean;
     // (undocumented)
     strokeColor?: string;
+    strokeLineCap?: "round" | "butt" | "square";
+    strokeLineJoin?: "round" | "miter" | "bevel";
     // (undocumented)
     strokeOpacity?: number;
     // (undocumented)
@@ -1566,6 +1725,20 @@ export interface PathOptions {
     strokeWeight?: number;
     // (undocumented)
     zIndex?: number;
+}
+
+// @public
+export interface PathReadBackApi {
+    // (undocumented)
+    getBounds(): Bounds;
+    // (undocumented)
+    getStrokeColor(): string;
+    // (undocumented)
+    getStrokeOpacity(): number;
+    // (undocumented)
+    getStrokeStyle(): "solid" | "dashed" | "dotted";
+    // (undocumented)
+    getStrokeWeight(): number;
 }
 
 // @public (undocumented)
@@ -1673,11 +1846,7 @@ export interface RouteRenderOptions {
     autoViewport?: boolean;
     map?: MapHandle;
     panel?: string | HTMLElement;
-    viewportOptions?: {
-        noAnimation?: boolean;
-        margins?: readonly number[];
-        zoomFactor?: number;
-    };
+    viewportOptions?: ViewportOptions;
 }
 
 // @public
@@ -1782,6 +1951,11 @@ export interface ServiceResult<T> {
     readonly sdkStatus: number | null;
     // (undocumented)
     readonly status: ServiceCallStatus;
+}
+
+// @public
+export interface SetZoomOptions extends ViewCommandOptions {
+    zoomCenter?: Point;
 }
 
 // @public (undocumented)
@@ -1939,7 +2113,6 @@ export function useDrivingRoute(options?: MaybeRefOrGetter<BMapDrivingRouteOptio
 // @public (undocumented)
 export function useGeocodeDetail(map?: unknown): {
     data: Readonly< ShallowRef<GeocodeDetailResult | null>>;
-    result: Readonly< ShallowRef<GeocodeDetailResult | null>>;
     error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1947,7 +2120,7 @@ export function useGeocodeDetail(map?: unknown): {
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    get: (point: GeoPoint) => Promise< ServiceResult<GeocodeDetailResult>>;
+    getLocation: (point: GeoPoint) => Promise< ServiceResult<GeocodeDetailResult>>;
     getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>;
     cancel: () => void;
     reset: () => void;
@@ -1956,9 +2129,6 @@ export function useGeocodeDetail(map?: unknown): {
 // @public (undocumented)
 export function useGeocoder(map?: unknown): {
     data: Readonly< ShallowRef<GeoPoint | null>>;
-    location: Readonly< ShallowRef<GeoPoint | null>>;
-    point: Readonly< ShallowRef<GeoPoint | null>>;
-    result: Readonly< ShallowRef<GeoPoint | null>>;
     error: Readonly< ShallowRef<ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1966,7 +2136,7 @@ export function useGeocoder(map?: unknown): {
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    get: (address: string, city?: string) => Promise< ServiceResult<GeoPoint>>;
+    getPoint: (address: string, city?: string) => Promise< ServiceResult<GeoPoint>>;
     getBatch: (addresses: readonly string[], city?: string) => Promise<GeocodeItemResult[]>;
     cancel: () => void;
     reset: () => void;
@@ -1975,7 +2145,6 @@ export function useGeocoder(map?: unknown): {
 // @public (undocumented)
 export function useGeolocation(options?: BMapGeolocationOptions, map?: unknown): {
     data: Readonly< ShallowRef<BMapGeoResult | null>>;
-    location: Readonly< ShallowRef<BMapGeoResult | null>>;
     error: Readonly< ShallowRef< ServiceErrorInfo | null>>;
     isError: ComputedRef<boolean>;
     isEmpty: ComputedRef<boolean>;
@@ -1983,8 +2152,7 @@ export function useGeolocation(options?: BMapGeolocationOptions, map?: unknown):
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    locate: () => Promise< ServiceResult<BMapGeoResult>>;
-    get: () => Promise< ServiceResult<BMapGeoResult>>;
+    getCurrentPosition: (args_0?: GeolocationOptions | undefined) => Promise< ServiceResult<BMapGeoResult>>;
     cancel: () => void;
     reset: () => void;
 };
@@ -2172,6 +2340,26 @@ export interface ViewAnimationKeyFrames {
 
 // @public
 export type ViewAnimationStatus = "idle" | "playing";
+
+// @public
+export interface ViewCommandOptions {
+    callback?: () => void;
+    noAnimation?: boolean;
+}
+
+// @public
+export interface Viewport {
+    center: Point;
+    zoom: number;
+}
+
+// @public
+export interface ViewportOptions {
+    callback?: () => void;
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
+}
 
 // @public
 export type WalkingRouteOptions = RouteRenderState;

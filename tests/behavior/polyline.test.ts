@@ -44,10 +44,11 @@ function mountPolyline(pathRef = ref([{ lng: 116.4, lat: 39.9 }, { lng: 116.5, l
     defineComponent({
       components: { Map, Polyline },
       setup() {
-        const path = pathRef
         return () =>
           h(Map, { provider: harness.provider() }, () => [
-            h(Polyline, { path: path.value, strokeColor: '#00ff00', strokeWeight: 3 }),
+            // 公开 prop 是 `points`（#165 Class 1，对齐官方 `Polyline` ctor 的形参名）；
+            // 落进 Fake 之后 SDK 实例上的字段仍叫 `path`——那不是我们的公开面。
+            h(Polyline, { points: pathRef.value, strokeColor: '#00ff00', strokeWeight: 3 }),
           ])
       },
     }),

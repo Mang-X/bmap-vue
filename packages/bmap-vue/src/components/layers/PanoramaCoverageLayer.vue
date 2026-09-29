@@ -2,7 +2,7 @@
 /**
  * PanoramaCoverageLayer —— 全景覆盖图层（官方 `BMap.PanoramaCoverageLayer`，4.0）
  *
- * 4.0.4 的类型包**没有** `PanoramaCoverageLayer` 的类声明（官方 Skill 明确它是 4.0 公开
+ * 4.0.5 的类型包**没有** `PanoramaCoverageLayer` 的类声明（官方 Skill 明确它是 4.0 公开
  * 图层），因此 Driver 按结构探测构造器：运行时没有它时报 `BMAP_CAPABILITY_UNSUPPORTED`
  * 并告警一次，而不是静默降级成一个空图层。
  *

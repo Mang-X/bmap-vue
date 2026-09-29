@@ -39,7 +39,7 @@ layer/domLayer
 
 ## 关于交互事件（本组件刻意不提供）
 
-官方 4.0.4 的 `DOMLayer` 只声明了 `addEventListener`、**没有** `removeEventListener`，而本库的
+官方 4.0.5 的 `DOMLayer` 只声明了 `addEventListener`、**没有** `removeEventListener`，而本库的
 事件订阅要求两者同时存在才生效（缺一个就告警 + no-op）—— 也就是说这类订阅**绑上就解不掉**。
 官方技能文档把「在短生命周期组件注册 DOMLayer 事件」列为常见错误。因此 `DOMLayer` **没有**
 `@click` / `@mouseover` / `@mouseout`：与其公开一个真实契约下收不到的事件，不如不提供。
@@ -64,5 +64,5 @@ layer/domLayer
 
 ## 参考
 
-- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.4` 的类声明。
+- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.5` 的类声明。
 - 排障（CORS / 坐标系 / 占位符）见「[图层总览](./index.md)」。

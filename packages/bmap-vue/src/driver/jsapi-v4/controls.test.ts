@@ -563,7 +563,10 @@ describe("planOptions：三档口径与官方声明的完整性", () => {
       join(PACKAGE_ROOT, `src/components/${directory}/${fileName}`),
       "utf8",
     );
-    const start = source.indexOf("export interface ");
+    // 必须按 `…Props` 定位，不能用 `indexOf("export interface ")`：同一个 SFC 里还可能有
+    // 别的导出接口（例：`CityListControl.vue` 的 `CityListChangeResult`），先出现的是它，
+    // 于是下面切出来的窗口根本不是 props——断言会「解析成功但读错对象」而失去意义。
+    const start = source.search(/^export interface \w+Props \{/m);
     expect(start, `${fileName} 里找不到 props 接口`).toBeGreaterThan(-1);
     const body = source.slice(start, source.indexOf("\n}", start));
     return [...body.matchAll(/^\s{2}(\w+)\??:/gm)].map((match) => match[1]!);

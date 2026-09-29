@@ -18,7 +18,7 @@
  *    `setVisible` 都有可用默认；只有语义真的不同的控件才覆盖（见各钩子注释里的实例）。
  */
 import type { ControlHandle } from "../../driver/types/handles";
-import type { ControlKind, ControlOptions } from "../../driver/types/controls";
+import type { ControlDriver, ControlKind, ControlOptions } from "../../driver/types/controls";
 import type { Pixel } from "../../driver/types/geometry";
 import type { MapReadyContext } from "../context/types";
 import type { ResourceScope } from "../lifecycle/ResourceScope";
@@ -58,7 +58,7 @@ export interface ControlVisibleInput<Props> {
   readonly visible: boolean;
 }
 
-export interface ControlSpec<Props extends ControlBaseProps> {
+export interface ControlSpec<Props extends ControlBaseProps, Expose = ControlExposeShape> {
   /** 领域种类（`ControlKind`）。`custom` 需要同时提供 `render`。 */
   readonly kind: ControlKind;
 
@@ -134,4 +134,56 @@ export interface ControlSpec<Props extends ControlBaseProps> {
    * 所以「不可见」落到「本组件那一条版权项不登记」。
    */
   setVisible?(input: ControlVisibleInput<Props>): void;
+
+  /**
+   * `defineExpose` 的**命令面**（issue #168 item 1）。
+   *
+   * ## 判据：与 `OverlaySpec.expose` 同一条
+   *
+   * 官方的公开方法分三类，本钩子只服务**前两类**：
+   *
+   * | 类 | 控件例子 | 为什么必须走命令面 |
+   * | --- | --- | --- |
+   * | **无对应 prop 的动作** | `GeolocationControl#location()` / `CityListControl#toggle()` | 没有 prop 可表达，只能调方法 |
+   * | **读回** | `CityListControl#getCityName()` | 组件**永远不会**替调用方读一次 |
+   * | **受控写入** | `GeolocationControl#setOptions()` | **已**由 `setVisible` / `setOptions` 承担 ⇒ 不重复暴露 |
+   *
+   * ## 两条实现约束
+   *
+   * 1. **不得返回 raw SDK 对象**：官方 `CityListControl#getTriggerDom(): HTMLElement`
+   *    这类返回值一律不暴露（收窄投影不成立，理由见 `driver/types/controls.ts`）。
+   * 2. **释放 / 未就绪必须显式失败**：经 `requireSession()` 取会话，取不到即抛
+   *    `BMAP_RESOURCE_DISPOSED`，**绝不**静默 no-op（静默会让调用方把「已释放」误判成
+   *    「SDK 说没有」）。
+   */
+  readonly expose?: (context: ControlExposeContext) => Expose;
+}
+
+/**
+ * 命令面工厂的第二个类型参数。
+ *
+ * 与 `OverlayExposeShape` 同一手法：它让 `expose` 的返回值被**逐成员检查**——
+ * `Record<string, unknown>` 会把「四个成员全在」与「一个成员都没有」判成同一种类型。
+ * 缺省成 `object` 以免**没有**命令面的 spec（多数控件）被迫写第二个实参。
+ */
+export type ControlExposeShape = object;
+
+/**
+ * `ControlSpec.expose` 的输入：取「当前会话」的唯一入口（每条命令现取）。
+ *
+ * 刻意与 `OverlayExposeContext` 同形（不同文件、不同类型，但同一套口径）——
+ * 两条命令面共享「现取会话 + 释放显式失败 + 不交出 raw」这三条，不写第二遍判据。
+ */
+export interface ControlExposeContext {
+  /**
+   * 当前存活实例 + 它的 Driver；未就绪、重建窗口内或已释放时为 `null`。
+   *
+   * **每次调用都现取**：控件会因 `recreate` 类 option 变化而换实例，闭包里存死句柄会让
+   * 命令打进一个已经不在地图上的控件上。`resource` 为 `null` 覆盖了「未就绪 / 重建窗口 /
+   * 已释放」三种情形——`useSdkResource` 在 `replace()` 与 `dispose()` 里都会把它置空，
+   * 因此**不需要**另外维护一个「已释放」标记。
+   */
+  session(): { driver: ControlDriver; handle: ControlHandle } | null;
+  /** 组件名（诊断用）。 */
+  readonly component: string;
 }

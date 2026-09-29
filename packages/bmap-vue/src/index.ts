@@ -36,6 +36,7 @@ export { BMapResolver } from "./resolver/index";
 // 公开类型(与组件 props 对齐,单一来源 src/types/components.ts)
 export type {
   MapProps,
+  MapTypeIdName,
   MarkerProps,
   InfoWindowProps,
   CircleProps,
@@ -71,6 +72,34 @@ export type {
   TrackLineLayerProps,
   TrackLineObserved,
   TrackLineLayerExpose,
+  // #166：官方 4.0.5 `visualization/PolygonLayer` / `PolylineLayer`
+  // （官方指定的 `FillLayer` / `LineLayer` 替代）的公共类型。
+  PolygonLayerProps,
+  PolygonLayerStyle,
+  PolylineLayerProps,
+  PolylineLayerStyle,
+  VisualizationStyleValue,
+  VisualizationLayerCommonProps,
+  VisualizationPickOptions,
+  VisualizationZoomCtorOptions,
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）的公共类型。
+  TextLayerProps,
+  TextLayerStyle,
+  TextLayerPick,
+  TextLayerAnchor,
+  /* --- issue #165 第三批：`Marker.label` / `Label.anchor` / 聚合图标来源的公共类型。
+   *
+   * 这三个**必须**是公共导出而不是 `ae-forgotten-export`：它们出现在已导出的
+   * `MarkerProps.label` / `LabelProps.anchor` / `MarkerClusterProps.clusterIcon` 的签名里，
+   * 消费方因此**无法命名**它们（`import type { … }` 取不到）——按 ADR
+   * `2026-09-25-public-export-surface-freeze` 的二选一走**第一条**（升为公共导出）。
+   *
+   * 与 `MarkerIcon` / `LabelStyle` 同一层理由：它们是 props 上**公开可传**的形状，
+   * 调用方组装 props 时要的就是这个类型。
+   */
+  MarkerLabelSpec,
+  OverlayAnchor,
+  ClusterPointIconSource,
 } from "./types/components";
 // core 领域类型(供业务使用)
 export type { MapContext, MapReadyContext, MapStatus } from "./core/context/types";
@@ -291,6 +320,15 @@ export type {
   InitialMapOptions,
   MapView,
   MapDriver,
+  // #165 回填：`getViewport` 的返回类型与 `flyTo` 的官方选项投影（`Viewport` 同时是
+  // `MapCommands.getViewport()` 的返回类型，必须可从根入口取到）
+  Viewport,
+  FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影。它们出现在**已导出**的
+  // `MapCommands` / `MapDriver` 签名里 ⇒ 消费方要构造就得能命名（ADR 2026-09-25 的处置类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
   GeometryDriver,
   OverlayDriver,
   ControlDriver,
@@ -310,9 +348,15 @@ export type {
 // 全景的领域类型（M7-CONTROL-PANORAMA / #41）：`<Panorama>` 的 props 与
 // `usePanoramaService` 的返回值用到它们，因此必须从根入口可取。
 export type {
+  // `PanoramaCaptureOptions` 是 `capture()` 的形参类型（issue #171 item I）
+  // ⇒ 必须从根入口可取，否则消费方写不出自己的 `capture` 包装函数。
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaLabelHandle,
   PanoramaLabelOptions,
+  // `PanoramaLink` 是 `linksChange` 的载荷类型 + `getLinks()` 的返回类型
+  // （issue #165 Class 3 / TASK 5）⇒ 必须从根入口可取，否则消费方拿不到自己的 handler 参数类型。
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,
@@ -333,6 +377,26 @@ export type {
   MenuItemProps,
   CustomOverlayProps,
 } from "./types/components";
+
+// 覆盖物 / 控件的**命令面**类型（issue #165 Class 3 / TASK 2）。
+//
+// 这些是 `defineExpose` 推导出的实例类型的成员，父组件写 `ref` 时要用它们标注
+// （`InstanceType<typeof Marker>` 也能拿，但手写 handler 参数时前者更直接）。
+export type { OverlayCommandTypes } from "./core/overlays/overlayCommands";
+// 控件的命令面（issue #168 item 1）。与 `OverlayCommandTypes` 同一理由：
+// `ControlDriver.locationCommands()` / `cityListCommands()` 是**公共 Facet 面**上的方法，
+// 它的返回类型因此出现在公共声明里——不显式导出就成了「未导出类型」
+// （`ae-forgotten-export`，见 ADR 2026-09-25）。
+//
+// `ControlCommandTypes` 是**按组件名**的索引（键是 `LocationControl` / `CityListControl`），
+// 与 `OverlayCommandTypes` 同一手法：调用方看到的是 `<LocationControl ref>`，不是 kind。
+export type { ControlCommandTypes } from "./core/controls/controlCommands";
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "./driver/types/controls";
+export type { ContextMenuExpose } from "./core/overlays/ContextMenuSpec";
 // MVTLayer 公开类型（#109：事件按官方 `MVTLayerEventMap` 分层 + feature-state 键域收窄）
 export type {
   MVTLayerProps,

@@ -139,7 +139,7 @@ describe("useGeocodeDetail", () => {
     });
     let result: { data: { address: string; business: string } | null } | null = null;
     const wrapper = mountWithHook(ctx, async (hook) => {
-      result = await hook.get({ lng: 116.4, lat: 39.9 });
+      result = await hook.getLocation({ lng: 116.4, lat: 39.9 });
     });
     await flushPromises();
 
@@ -153,7 +153,7 @@ describe("useGeocodeDetail", () => {
     let hookRef: ReturnType<typeof useGeocodeDetail> | null = null;
     const wrapper = mountWithHook(ctx, async (hook) => {
       hookRef = hook;
-      await hook.get({ lng: 0, lat: 0 });
+      await hook.getLocation({ lng: 0, lat: 0 });
     });
     await flushPromises();
 
@@ -172,7 +172,7 @@ describe("useGeocodeDetail", () => {
     let hookRef: ReturnType<typeof useGeocodeDetail> | null = null;
     const wrapper = mountWithHook(ctx, async (hook) => {
       hookRef = hook;
-      await hook.get({ lng: Number.NaN, lat: 1 });
+      await hook.getLocation({ lng: Number.NaN, lat: 1 });
     });
     await flushPromises();
 
@@ -188,7 +188,7 @@ describe("useGeocodeDetail", () => {
       let hookRef: ReturnType<typeof useGeocodeDetail> | null = null;
       const wrapper = mountWithHook(ctx, (hook) => {
         hookRef = hook;
-        void hook.get({ lng: 1, lat: 2 }).catch(() => {});
+        void hook.getLocation({ lng: 1, lat: 2 }).catch(() => {});
       });
       await flushPromises();
       expect(hookRef!.isLoading.value).toBe(true);
@@ -264,7 +264,7 @@ describe("useGeocodeDetail", () => {
     (ctx.client.value as unknown as { rawSdk: unknown }).rawSdk = { _rd: rd };
 
     const wrapper = mountWithHook(ctx, async (hook) => {
-      await hook.get({ lng: 1, lat: 2 });
+      await hook.getLocation({ lng: 1, lat: 2 });
     });
     await flushPromises();
 
@@ -307,9 +307,9 @@ describe("useGeocodeDetail", () => {
     });
     const wrapper = mountWithHook(ctx, async (hook) => {
       hookRef = hook;
-      const first = hook.get({ lng: 1, lat: 1 });
+      const first = hook.getLocation({ lng: 1, lat: 1 });
       await flushPromises(); // 第一次真的发起（已登记 pending）
-      const second = hook.get({ lng: 2, lat: 2 });
+      const second = hook.getLocation({ lng: 2, lat: 2 });
       await flushPromises(); // 第二次真的发起，并逻辑取消第一次
 
       // 第一次的迟到回包先到：它已被取代，不得覆盖结果
@@ -354,7 +354,7 @@ describe("useGeocodeDetail", () => {
     let hookRef: ReturnType<typeof useGeocodeDetail> | null = null;
     const wrapper = mountWithHook(ctx, (hook) => {
       hookRef = hook;
-      void hook.get({ lng: 1, lat: 1 }).catch(() => {});
+      void hook.getLocation({ lng: 1, lat: 1 }).catch(() => {});
     });
     await flushPromises();
     wrapper.unmount();
@@ -377,7 +377,7 @@ describe("useGeocodeDetail", () => {
     let hookRef: ReturnType<typeof useGeocodeDetail> | null = null;
     const wrapper = mountWithHook(ctx, async (hook) => {
       hookRef = hook;
-      await hook.get({ lng: 1, lat: 1 });
+      await hook.getLocation({ lng: 1, lat: 1 });
     });
     await flushPromises();
 

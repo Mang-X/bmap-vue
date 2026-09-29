@@ -549,7 +549,7 @@ describe("右键菜单", () => {
   /**
    * Marker 目标（M5-CUSTOM-MENU / #33）。
    *
-   * `Marker#addContextMenu` / `#removeContextMenu` 是**运行时扩展**：官方 4.0.4 的类型包只在
+   * `Marker#addContextMenu` / `#removeContextMenu` 是**运行时扩展**：官方 4.0.5 的类型包只在
    * `Map` 上声明它们，真实 4.0 的 `Marker` 上却有且可用（真实 AK 实测）。这几条把 Driver 侧
    * 的两件事钉住：① 结构性调用真的落到目标实例上；② 目标成员缺失时**显式失败**而不是静默。
    */
@@ -585,7 +585,7 @@ describe("右键菜单", () => {
   });
 
   it("目标实例缺少 addContextMenu 时显式失败（不静默 no-op）", () => {
-    // 官方 4.0.4 的类型包里**没有**声明 Marker 上的这两个成员，因此这里模拟「运行时也没有」
+    // 官方 4.0.5 的类型包里**没有**声明 Marker 上的这两个成员，因此这里模拟「运行时也没有」
     // 的形态：目标实例被换成一个没有该成员的对象。
     const bare = ctx.registry.adopt("marker", {}) as OverlayHandle;
     const menu = ctx.overlays.createContextMenu();
@@ -613,7 +613,7 @@ describe("右键菜单", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("运行时扩展成员", () => {
-  it("createMarker3D / createMapMask 显式失败（4.0.4 与官方参考都没有该声明）", () => {
+  it("createMarker3D / createMapMask 显式失败（4.0.5 与官方参考都没有该声明）", () => {
     expect(() => ctx.overlays.createMarker3D({ lng: 0, lat: 0 }, 100)).toThrowError(
       expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
     );

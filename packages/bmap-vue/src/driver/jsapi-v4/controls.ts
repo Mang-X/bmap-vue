@@ -5,7 +5,7 @@
  * 只把 `ControlHandle` 的品牌补成 `control:<kind>`（与 Overlay / Layer 句柄同形，
  * `setOptions` 因此能按种类给出正确的更新口径）。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4` + 官方 Skill
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5` + 官方 Skill
  * `references/controls-and-context-menu.md`）：
  * - 控件统一经 `map.addControl/removeControl` 管理；**一个实例只添加一次**，因此 Driver
  *   自己记账重复 `add`（SDK 不保证去重，官方「常见错误」里就有「同一控件实例重复添加」）；
@@ -29,11 +29,14 @@
  */
 import { BMapError } from "../../core/errors/BMapError";
 import type {
+  CityListCommandApi,
   ControlDriver,
   ControlKind,
   ControlOptionStatus,
   ControlOptions,
   CopyrightEntry,
+  LocationAddressComponents,
+  LocationCommandApi,
 } from "../types/controls";
 import type { Pixel } from "../types/geometry";
 import { HANDLE_BRAND, type ControlHandle } from "../types/handles";
@@ -74,13 +77,18 @@ const CONTROL_CTORS = {
 } as const satisfies Record<Exclude<ControlKind, "custom">, string>;
 
 /**
- * 停靠位置常量表：官方 `const/Anchor.d.ts` 的**声明值**。
+ * 锚点常量表：官方 `const/Anchor.d.ts` 的**声明值**。
  *
  * 刻意不从 `window.BMAP_ANCHOR_*` 读：Driver 边界只认 `rawSdk` 传入的命名空间，
  * 不读未经 Provider 校验的全局值（同 ADR 2026-09-11-jsapi-v4-map-facet §9）。
  * 表本身被类型层钉在官方声明上（见文件末尾的锚点断言），上游改值会直接编译失败。
+ *
+ * ⚠️ **覆盖物也复用这一张**（issue #165 第三批：`Marker.label` 之外的 `Marker.anchor` 与
+ * `Label.anchor`，见 `overlays.ts` 的 `anchorFor`）。两张表一旦漂移，同一个锚点名在
+ * `<ZoomControl>` 与 `<Label>` 上会落到不同的角——那是肉眼几乎发现不了的 bug。
+ * live 读数（2026-09-27）也确认九个数在 `window` 与 `BMap` 命名空间上同值。
  */
-const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | OfficialCenterAnchor>> = {
+export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | OfficialCenterAnchor>> = {
   BMAP_ANCHOR_TOP_LEFT: 0,
   BMAP_ANCHOR_TOP_RIGHT: 1,
   BMAP_ANCHOR_BOTTOM_LEFT: 2,
@@ -128,7 +136,7 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   navigation: {
     type: { policy: "mutable", setter: "setType" },
-    // 官方 4.0.4 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
+    // 官方 4.0.5 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
     showZoomInfo: { policy: "recreate", reason: "4.0 的 NavigationControl 没有级别提示的 setter" },
     enableGeolocation: {
       policy: "recreate",
@@ -151,7 +159,7 @@ const CONTROL_OPTION_SPECS: Readonly<
   },
   location: {},
   "map-type": {
-    // `showStreetLayer(isShow)` 是官方 4.0.4 上 `MapTypeControl` **唯一**的字段级 setter
+    // `showStreetLayer(isShow)` 是官方 4.0.5 上 `MapTypeControl` **唯一**的字段级 setter
     // （路网层显隐），成员名不是 `set<Key>` 形状——所以它必须进分类表，否则会落到下面
     // 的「未知键 + `set<Key>` 结构逃生口」里被判成 unsupported（值被静默丢弃）。
     showStreetLayer: { policy: "mutable", setter: "showStreetLayer" },
@@ -576,6 +584,26 @@ export function createJsapiV4ControlDriver(
       sdkCall("CopyrightControl.removeCopyright", () => callRequired(raw, "removeCopyright", id));
     },
 
+    /**
+     * `removeCopyright` 在**实例**上是否已就绪（#165c 复核）。
+     *
+     * 为什么这条查询值得单列一个方法：`removeCopyright` 属于官方控件成员面里**后补**的那一批
+     * ——loader 判就绪（`__bmapJSApiOnLoad_N` callback）时它还不存在，约 150ms 后才挂上原型
+     * （live 读数：`scripts/probe-165c-surface.mts`；窗口 126–167ms）。而 `addCopyright` /
+     * `getCopyright` / `getCopyrightCollection` 属于**先到**的那批，窗口内就可用。
+     *
+     * 因此「`removeCopyright` 抛 `BMAP_SDK_CALL_FAILED`」是**可预期**的常态窗口，不是引擎缺陷；
+     * 组件层要在摘除**之前**问一次，才能决定「同步摘」还是「延后摘」。用 catch 兜底做不到：
+     * 那既把「还没到」和「永远没有」混成同一个诊断，也让调用方失去重试的判据。
+     *
+     * 读法取**实例**而不是原型：补齐是**追溯**的（被补的是原型，已存在的实例自动获得成员），
+     * 所以「这个实例现在能不能调」才是唯一有决策价值的问题。
+     */
+    canRemoveCopyright(control) {
+      const raw = registry.resolve<Record<string, unknown>>(control);
+      return typeof readNamespaceMember(raw, "removeCopyright") === "function";
+    },
+
     listCopyrights(control): CopyrightEntry[] {
       const raw = registry.resolve<Record<string, unknown>>(control);
       const entries = callRequired(raw, "getCopyrightCollection") as
@@ -590,8 +618,96 @@ export function createJsapiV4ControlDriver(
         return item;
       });
     },
+
+    /**
+     * 定位控件的命令面（issue #168 item 1）。
+     *
+     * **kind 必须对上**：`registry.resolve` 只保证句柄有效，而「把 `toggle()` 打到
+     * `GeolocationControl` 上」在运行时是一个静默的无操作（方法不存在 ⇒ `callControl`
+     * 告警一次后返回 false）。组件层永远传自己 kind 的句柄，但 Driver 仍是最终把关的一层：
+     * 显式失败比「告警一次然后什么都没发生」好定位得多。
+     */
+    locationCommands(control): LocationCommandApi {
+      const raw = requireKind(control, "location", "locationCommands");
+      return {
+        location: () => {
+          callControl(raw, "location");
+        },
+        // 官方声明是 `startLocation()`；`startLocationTrace()` 不在 d.ts 里，live 读数
+        // `callable: false`。逐条依据见 `driver/types/controls.ts` 的 `LocationCommandApi`。
+        startLocation: () => {
+          callControl(raw, "startLocation");
+        },
+        stopLocationTrace: () => {
+          callControl(raw, "stopLocationTrace");
+        },
+        getAddressComponent: () => toAddressComponents(callRequired(raw, "getAddressComponent")),
+      };
+    },
+
+    cityListCommands(control): CityListCommandApi {
+      const raw = requireKind(control, "city-list", "cityListCommands");
+      return {
+        toggle: () => {
+          callControl(raw, "toggle");
+        },
+        getCityName: () => String(callRequired(raw, "getCityName") ?? ""),
+      };
+    },
   };
+
+  /**
+   * 命令面取到**另一种** kind 的句柄时显式失败。
+   *
+   * 判据用句柄品牌（`kindOfControl`）而不是让调用方保证——命令面是「用户拿着组件 ref 调」的那一层，
+   * 传错 kind 的代价是「方法不存在 ⇒ 告警一次 ⇒ 静默无操作」，那正是 AGENTS.md 说的假支持。
+   */
+  function requireKind(
+    control: ControlHandle,
+    expected: ControlKind,
+    command: string,
+  ): Record<string, unknown> {
+    const actual = kindOfControl(control);
+    if (actual !== expected) {
+      throw new BMapError(
+        "BMAP_INVALID_ARGUMENT",
+        `ControlDriver.${command}: 句柄的种类是 ${String(actual)}，该命令面只服务 ${expected} 控件`,
+        { engine: "jsapi-v4" },
+      );
+    }
+    return registry.resolve<Record<string, unknown>>(control);
+  }
 }
+
+/**
+ * 官方 `AddressComponent` → 领域 `LocationAddressComponents`。
+ *
+ * 官方五个成员**全是可选的**，因此逐字段按类型收窄、取不到就**留在 undefined**——
+ * **不补默认值**：`city ?? ""` 会把「上游没给」与「空」混成同一个串，而调用方正是靠这个区别
+ * 判断「这一段地址上游到底有没有给」。
+ *
+ * 非字符串成员**不投影**（例如 `district` 可能是数字）：照抄进 `string` 字段是断言，不是投影。
+ * 整体不是对象时给 `null`——官方声明就是 `AddressComponent | null`，编一个 `{}` 会让
+ * 「还没定位到」被误判成「定位到了一个空地址」。
+ */
+function toAddressComponents(value: unknown): LocationAddressComponents | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const result: LocationAddressComponents = {};
+  for (const key of ADDRESS_TEXT_KEYS) {
+    if (typeof raw[key] === "string") result[key] = raw[key] as string;
+  }
+  return result;
+}
+
+/** 官方 `AddressComponent` 的五个字符串成员。 */
+const ADDRESS_TEXT_KEYS = [
+  "streetNumber",
+  "street",
+  "district",
+  "city",
+  "province",
+] as const satisfies readonly (keyof LocationAddressComponents)[];
 
 /* -------------------------------------------------------------------------- */
 /* 常量与构造器的类型层一致性（零运行时开销）                                     */

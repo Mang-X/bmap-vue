@@ -44,7 +44,7 @@ describe('useGeocoder', () => {
   it('geocodes a single address to point', async () => {
     const { wrapper, collect } = mountWithChild(async (geo) => {
       // #38 起动作恒 resolve 成 ServiceResult（失败/超时/取消都在返回值里）
-      const result = await geo.get('北京', '北京市')
+      const result = await geo.getPoint('北京', '北京市')
       collect.value = result
     })
     await flushPromises()
@@ -53,6 +53,30 @@ describe('useGeocoder', () => {
     expect(collect.value?.status).toBe('success')
     expect(collect.value?.data?.lng).toBe(116.404)
     expect(fake.createdGeocoders.length).toBeGreaterThan(0)
+    wrapper.unmount()
+    await nextTick()
+  })
+
+  it('data is the single result accessor (no point/location/result aliases)', async () => {
+    const { wrapper, collect } = mountWithChild(async (geo) => {
+      await geo.getPoint('北京', '北京市')
+      await nextTick()
+      collect.value = {
+        data: geo.data.value,
+        // 曾经存在的三个别名（同一个 ref 的副本）必须**不再出现**——#165 §3.6 清除旧 API 包袱，
+        // 其中 `location` 尤其危险：官方 `getLocation` 产出地址，而我们这个装的是坐标点。
+        keys: Object.keys(geo).sort(),
+      }
+    })
+    await flushPromises()
+    await nextTick()
+    expect(collect.value?.data?.lng).toBe(116.404)
+    expect(collect.value?.keys).not.toContain('point')
+    expect(collect.value?.keys).not.toContain('location')
+    expect(collect.value?.keys).not.toContain('result')
+    // 动作名与官方 Geocoder#getPoint 一致，旧名 `get` 不再是返回面的成员
+    expect(collect.value?.keys).toContain('getPoint')
+    expect(collect.value?.keys).not.toContain('get')
     wrapper.unmount()
     await nextTick()
   })

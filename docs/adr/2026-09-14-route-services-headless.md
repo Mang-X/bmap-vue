@@ -7,6 +7,20 @@
 - 参考：[ADR 2026-09-13：Official-first 与 UI Kit](./2026-09-13-official-first-loader-and-ui-kit.md)、
   [ADR 2026-09-13：详情与路线封装](./2026-09-13-ui-kit-detail-route-wrappers.md)
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本 ADR 的决策**全部保持原样**，但 §契约表
+> `polylineStyle` 一行的**前提已经消失**，正文原样保留作为历史记录：
+>
+> - 4.0.4 的 `setPolylineStyle(style: RoutePolylineStyle)` 引用了一个**从未声明**的类型
+>   （全包 `grep -rn RoutePolylineStyle` 在 4.0.5 上零命中）——当时正是这个自相矛盾让本 ADR
+>   按「无法在不猜的前提下给出可信的公共形状」把它挂成欠账。
+> - 4.0.5 把四个路线类的该参数改成了**真实存在**的 `PolylineOptions`
+>   （`service/{Driving,Transit,Walking,Riding}Route.d.ts`）。裁决前提消失，
+>   **「上游缺陷、不猜」这条裁决可以撤掉**；实现另票（本轮只解除裁决并记录依据）。
+> - 「上游声明与类文档自相矛盾（扁平 `PolylineOptions` vs `highlight`/`transit`/`walking`/
+>   `decorate`）」这半句**仍需注意**：`PolylineOptions` 是声明了，但官方类文档里那套具名分桶
+>   与它仍不一致，重新设计公共形状时该矛盾仍要正面处理。
+> - 非目标里的 `TruckRoute` 一条**仍然成立**（4.0.5 全包无 `TruckRoute` 声明）。
+
 ## 背景
 
 M7 要把 JSAPI 4.0 的四个路线规划服务（`BMap.DrivingRoute` / `WalkingRoute` / `RidingRoute` /

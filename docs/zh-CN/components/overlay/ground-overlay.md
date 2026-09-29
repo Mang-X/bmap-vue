@@ -21,6 +21,7 @@ overlay/groundOverlay
 | bounds     | 显示区域（西南 / 东北两个角点），见[图示](#bounds-图示) | `{ southwest: Point, northeast: Point }` | `required` | <Badge type="tip" text="^1.0.0" /> |
 | autoCenter | 是否自动根据地面叠加物显示区域居中地图               | `boolean `                               | `true`     | -                                  |
 | opacity    | 透明度，范围 0-1                                     | `number`                                 |            | -                                  |
+| zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    |
 | visible    | 是否显示                                             | `boolean`                                | `true`     | <Badge type="tip" text="^2.2.0" /> |
 
 ```vue

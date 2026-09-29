@@ -11,7 +11,7 @@
       skyColors: ['rgba(5, 5, 30, 0.01)', 'rgba(5, 5, 30, 1.0)'],
     }"
     mapStyleId="980161f3645989feac25a0da15da4178"
-    enableScrollWheelZoom
+    enableWheelZoom
     :plugins="['Mapvgl']"
     ref="bmapRef"
     @plugin-ready="handlePluginReady"

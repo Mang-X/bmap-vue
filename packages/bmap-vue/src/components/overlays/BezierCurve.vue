@@ -24,6 +24,18 @@ const props = withDefaults(defineProps<BezierCurveProps>(), {
   strokeStyle: "solid",
   enableMassClear: true,
   visible: true,
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）。
+  //
+  // 官方 `BezierCurveOptions.enableClicking` 的 `@default` 是 `true`，而 `Boolean` 类型的 prop
+  // 在**未给**时编译产物里的运行时值是 `false`——与官方默认**相反**。因此必须显式写
+  // `undefined`（**不是** `true`）：`undefined` 让该键**不进入**构造选项，SDK 沿用它自己的 `true`。
+  //
+  // ⚠️ 这与 `<Circle>` / `<Rectangle>` 写 `enableClicking: true` **不同**：那两处是**既有行为**
+  // （值与官方默认一致，本次不改）；这里此前**根本没有**这个 prop，官方默认与 Vue 转换**相反**，
+  // 属新增，必须按 `#GroundOverlay` / `#CustomOverlay` 的同款处置写 `undefined`。
+  //
+  // `dashArray` 不是 `Boolean` ⇒ 无 absent 陷阱，**不**在此声明。
+  enableClicking: undefined,
 });
 
 const emit = defineEmits<BezierCurveEmits>();

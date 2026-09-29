@@ -10,7 +10,7 @@
       skyColors: ['rgba(5, 5, 30, 0.01)', 'rgba(5, 5, 30, 1.0)'],
     }"
     mapStyleId="91c53039a0b7f75e3dd8ddcdd932243b"
-    enableScrollWheelZoom
+    enableWheelZoom
     ref="bmapRef"
     @plugin-ready="handlePluginReady"
   />

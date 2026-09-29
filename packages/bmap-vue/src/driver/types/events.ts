@@ -88,7 +88,7 @@ export interface MapTypeChangeEvent extends DriverEvent {
 /* ------------------------------------------------------------------ 覆盖物事件载荷
  *
  * M5-VECTORS / issue #31：覆盖物事件的公共载荷按**上游声明的必填程度**分三档，而不是
- * 「一律给一份形状相同的对象」。判据全部来自 `@baidumap/jsapi-v4-types@4.0.4` 的
+ * 「一律给一份形状相同的对象」。判据全部来自 `@baidumap/jsapi-v4-types@4.0.5` 的
  * `overlay/OverlayEvent.d.ts`：
  *
  * | 上游声明 | 本库载荷 | 归一化 |

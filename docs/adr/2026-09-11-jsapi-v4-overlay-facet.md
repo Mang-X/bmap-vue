@@ -23,7 +23,8 @@
    `map.closeInfoWindow()`），不能 `map.addOverlay`；状态查询只能走公开的 `isOpen()` /
    `map.getInfoWindow()`，不能读私有字段；
 4. **Target 与「本引擎没有运行时入口」的成员**：v4 只能把覆盖物挂到 Map；
-   `Marker3D` / `MapMask` 在 4.0.4 类型包与官方参考里都没有声明。
+   `Marker3D` / `MapMask` 在 4.0.4 **类型包**里都没有类声明（官方 React 参考实现
+   `huiyan-fe/react-bmap` 反而为两者都提供了组件与 driver 工厂）。
 
 ## 决策
 
@@ -143,9 +144,14 @@ updatePolicy(overlay: OverlayHandle, key: string): OverlayPropertyPolicy | undef
 
 ### 7. 「类型包没有声明」的成员：结构性探测 + 缺失才失败
 
-`Marker3D` / `MapMask` 在 `@baidumap/jsapi-v4-types@4.0.4` 里都没有**类声明**，官方参考
+`Marker3D` / `MapMask` 在 `@baidumap/jsapi-v4-types@4.0.4` 里都没有**类声明**，仓库内官方参考
 `references/*` 也没有对应章节（`Marker3D` 只出现在 `const/Marker3DShapeType.d.ts` 的文档注释里，
 那条注释描述了 `new BMap.Marker3D(point, 100, { shape })` 的用法，但类型包里没有类本身）。
+
+⚠️ **「类型包没声明」≠「官方参考没有这个能力」**：官方 React 参考实现 `huiyan-fe/react-bmap`
+为**两者都做了封装**（master 与 v2.0.6 均含 `src/components/Overlay/Marker3D.tsx` 与
+`MapMask.tsx`，driver 侧有 `createMarker3D` 工厂与 `new BMap.MapMask(...)` 调用）。它与本 ADR
+的处置并不冲突——本 Facet 同样按结构创建这两个构造器，缺口只在「可核对的类型声明」这一层。
 
 **真实 AK smoke 实测（见「真实 AK smoke 记录」）**：这两个构造器在 4.0 运行时**都存在**，
 用本 Facet 能正常创建、挂载、摘除。因此处置是：

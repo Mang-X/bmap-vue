@@ -5,7 +5,7 @@
  * 数据检索（`BMap.PanoramaService`）的 callback → `ServiceCall` 归一。标签、相册、POI 类型
  * 这些声明式能力属 M7（#41）。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - `supported` 是**每次读取都重新探测**的 getter，而不是构造期定死的布尔：4.0 的可视化实现
  *   存在异步注入的窗口（issue 风险条目「加载后就绪」），把结论冻结在构造期会让「先建 Driver、
  *   后注入实现」这条正常顺序失败；
@@ -23,10 +23,12 @@ import { createServiceCall } from "../normalize/serviceCall";
 import { toPlainPoint } from "../normalize/results";
 import type { GeometryDriver, Point } from "../types/geometry";
 import type {
+  PanoramaCaptureOptions,
   PanoramaDataInfo,
   PanoramaHandle,
   PanoramaLabelHandle,
   PanoramaLabelOptions,
+  PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
   PanoramaPov,
@@ -37,6 +39,7 @@ import type {
 } from "../types/panorama";
 import {
   assertJsapiV4Namespace,
+  callOptional,
   callRequired,
   namespaceCtor,
   readNamespaceMember,
@@ -62,7 +65,14 @@ const PANORAMA_CAPABILITIES = {
   service: "panorama.service",
 } as const satisfies Record<string, Capability>;
 
-/** 官方 `PanoramaData` → 领域投影（`tiles` / `links` 是渲染细节，不透出）。 */
+/**
+ * 官方 `PanoramaData` → 领域投影。
+ *
+ * ⚠️ **`tiles` 与 `links` 的处置不同**（issue #165 Class 3 / TASK 5 更正了旧注释）：
+ * `tiles`（官方 `PanoramaTileData`）**真的**是渲染内部，不透出；
+ * `links` 透出——`<Panorama>` 早就声明并派发了 `linksChange`，消费者**存在**，
+ * 缺的只是数据路径。官方 React 参考实现同样暴露 `getLinks()`。
+ */
 function toDataInfo(raw: unknown): PanoramaDataInfo | null {
   if (!raw || typeof raw !== "object") return null;
   const data = raw as {
@@ -76,6 +86,48 @@ function toDataInfo(raw: unknown): PanoramaDataInfo | null {
     description: typeof data.description === "string" ? data.description : "",
     position: data.position ? toPlainPoint(data.position) : null,
   };
+}
+
+/**
+ * 官方 `PanoramaLink` → 领域投影（issue #165 Class 3 / TASK 5）。
+ *
+ * 八个成员**逐字段按类型收窄，取不到就留在 `undefined`**。
+ *
+ * **刻意不补默认值**：`heading ?? 0` 会把「上游没给方位」与「正北（0°）」混成同一个数，
+ * 而调用方正是靠这个区别决定要不要画一个指向标；`x ?? 0` / `y ?? 0` 同理会把
+ * 「不在屏幕上」与「贴在左上角」混起来。**不认识的键也不带**——`PanoramaLink` 的形状
+ * 随版本增减，本库不维护一份「透传所有」的逃生口（那会让投影退化成 `as`）。
+ */
+function toLink(raw: unknown): PanoramaLink | null {
+  if (!raw || typeof raw !== "object") return null;
+  const link = raw as Record<string, unknown>;
+  const projected: PanoramaLink = {};
+  for (const key of LINK_TEXT_KEYS) {
+    if (typeof link[key] === "string") projected[key] = link[key] as string;
+  }
+  for (const key of LINK_NUMBER_KEYS) {
+    if (typeof link[key] === "number" && Number.isFinite(link[key])) {
+      projected[key] = link[key] as number;
+    }
+  }
+  return projected;
+}
+
+/** 官方 `PanoramaLink` 的字符串成员。 */
+const LINK_TEXT_KEYS = ["description", "id"] as const;
+/** 官方 `PanoramaLink` 的数值成员。 */
+const LINK_NUMBER_KEYS = ["heading", "dir", "refinedDir", "x", "y", "roadWidth"] as const;
+
+/** 官方 `Panorama#getLinks()` → 领域投影。拿不到时给空数组（理由见接口注释）。 */
+function readLinks(raw: unknown): PanoramaLink[] {
+  const list = callOptional(raw, "getLinks");
+  if (!Array.isArray(list)) return [];
+  const links: PanoramaLink[] = [];
+  for (const entry of list) {
+    const projected = toLink(entry);
+    if (projected) links.push(projected);
+  }
+  return links;
 }
 
 /** 全景场景类型（官方是 `'street' | 'inter'` 两个字符串字面量）。 */
@@ -234,10 +286,15 @@ export function createJsapiV4PanoramaDriver(
 
       const failures: unknown[] = [];
       try {
-        // 顺序与 Map Facet 一致：**先解绑 Driver 侧的业务事件，再销毁 SDK 对象**。
-        // EventDriver 的 groups 是强引用（Map<rawTarget, …>），不主动 release 就会长期持有
-        // 已销毁的 raw 对象与业务回调；解绑失败**不阻断** SDK 销毁（`events.release` 的契约
-        // 是「其余项已尽力释放」），但两者都要汇总抛出，由调用方决定是否重试。
+        // 顺序与 Map Facet 一致：**先解绑 Driver 侧的业务事件，再销毁 SDK 对象**
+        // （ADR 2026-09-11 §6 的「先解绑、后摘除」在 SDK **同步**派发时是安全属性：
+        // 业务回调不会在组件已经拆解时打到已释放的状态上）。
+        //
+        // ⚠️ 代价（已知并接受，#168 item 3 裁决）：官方 `PanoramaEventMap` 的 `destroy`
+        // 事件因此**收不到**。要让业务听见它就得把顺序倒过来，而那会让「SDK 在 destroy
+        // 期间同步派发事件」打到已拆解的回调上——用一个真实存在的正确性风险换一个
+        // 「实例收尾通知」的信号。裁决：不加这条事件。依据见
+        // `docs/zh-CN/contributing/168-remaining-surface.md`。
         //
         // 每次尝试都释放（不记账「曾经释放过」）：上一次尝试可能只失败在 SDK 销毁那一步，
         // 而期间业务可能又订阅了；`release()` 无分组时是 no-op，重复调用没有代价。
@@ -296,6 +353,10 @@ export function createJsapiV4PanoramaDriver(
     getId(viewer) {
       const id = callRequired(viewerOf(viewer), "getId");
       return typeof id === "string" && id.length > 0 ? id : null;
+    },
+
+    getLinks(viewer) {
+      return readLinks(viewerOf(viewer));
     },
 
     getSceneType(viewer) {
@@ -358,6 +419,32 @@ export function createJsapiV4PanoramaDriver(
       return Boolean(callRequired(viewerOf(viewer), "getVisible"));
     },
 
+    /**
+     * 截图（官方 `Panorama#capture`；issue #171 item I）。
+     *
+     * 官方签名是 `capture(options?: { quality?: number; type?: string }): string | undefined`，
+     * 文档原文「当前渲染器不支持截图时返回 undefined」。因此：
+     *
+     * - `options` 省略时走**单参**调用——官方参数是可选的，传 `undefined` 与不传在这个
+     *   签名下等价，但按 `getPanoramaByLocation`（半径）/ `setId`（options）同一条规矩，
+     *   可选参数不给就省略，不靠 `undefined` 占位；
+     * - 官方唯一的「没有值」出口是 `undefined`，归一成 `null`（读取面统一口径）；
+     * - **其余一切失败照常上抛**（`callRequired` 的语义）：`capture` 是读命令，缺成员
+     *   说明运行时与本库的假设不符，降级成 `null` 会把「SDK 缺成员」伪装成「渲染器不支持截图」
+     *   ——那是两种要采取不同行动的事实（见 `internal.ts` 对 `callRequired` / `callOptional`
+     *   分工的说明）。
+     *
+     * 2026-09 live 实测：真实 4.0 上返回了 1,639 字节的 data URL（可调用，非纸面能力）。
+     */
+    capture(viewer, options?: PanoramaCaptureOptions) {
+      const raw = viewerOf(viewer);
+      // 官方 `capture` 的 options 是**可选**的；不给就不传（不塞 undefined 占位）
+      const shot = options
+        ? callRequired(raw, "capture", options)
+        : callRequired(raw, "capture");
+      return typeof shot === "string" ? shot : null;
+    },
+
     // ----------------------------------------------------------- 标注覆盖物
     //
     // 标注**不是** Control / Overlay 家族的成员：它只存在于某个查看器内部
@@ -379,6 +466,17 @@ export function createJsapiV4PanoramaDriver(
       callRequired(viewerOf(viewer), "removeOverlay", labelOf(label));
     },
 
+    /**
+     * 清空全部覆盖物（官方 `Panorama#clearOverlays`；issue #171 item I）。
+     *
+     * `callRequired`：这是**业务命令**而不是可选成员探测，缺了就该显式失败（静默清不掉
+     * 会让「重画一屏标注」静默叠加在旧标注上）。它**不销账**——本库 `PanoramaLabel` 的
+     * 释放路径是各自的 `removeLabel()`，批量入口不代替那条路径（见接口注释）。
+     */
+    clearOverlays(viewer) {
+      callRequired(viewerOf(viewer), "clearOverlays");
+    },
+
     setLabelPosition(label, position: Point) {
       callRequired(labelOf(label), "setPosition", geometry.toRawPoint(position));
     },
@@ -389,6 +487,14 @@ export function createJsapiV4PanoramaDriver(
 
     setLabelAltitude(label, altitude: number) {
       callRequired(labelOf(label), "setAltitude", altitude);
+    },
+
+    showLabel(label) {
+      callRequired(labelOf(label), "show");
+    },
+
+    hideLabel(label) {
+      callRequired(labelOf(label), "hide");
     },
 
     createService() {

@@ -15,8 +15,9 @@
  *
  * ## 冻结面
  *
- * 这里列出的成员就是**发布的接口**：`MapCommands` 的 14 条常用命令 + 组件级命令。
- * 增删成员都要走 ADR（`2026-09-14-map-handle-container-and-visibility` 冻结了这版）。
+ * 这里列出的成员就是**发布的接口**：`MapCommands` 的常用命令 + 组件级命令。
+ * 增删成员都要走 ADR（`2026-09-14-map-handle-container-and-visibility` 冻结了 #29 那版；
+ * #165 按 live 探针证据回填了 `getViewport` / `getScreenshot` / `flyTo` 三条）。
  * 明确**不属于**这一层的：raw SDK 对象（`./advanced` 的逃生口）、完整 `BMap.Map` 方法表
  * （issue #29 非目标）、内部 Runtime（业务不需要监听它就知道加载 / 错误状态 —— 那是
  * `#loading` / `#error` 插槽与 `retry()` 的职责）。

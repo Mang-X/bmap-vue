@@ -4,12 +4,15 @@
  *
  * ## 能力面
  *
- * `TrackLine` 属官方**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` **没有**类声明，官方明确
- * 「首次加载时可视化实现是异步注入的」。驱动登记面（#110 之后）包含数据 + **六条播放命令**：
+ * `TrackLine` 属官方**扩展 API**：`@baidumap/jsapi-v4-types@4.0.5` 才补上类声明（4.0.4 没有），
+ * 官方明确「首次加载时可视化实现是异步注入的」。驱动登记面（#110 之后）包含数据 + **六条播放命令**，
+ * #165 Class 3 之后另有 4.0.5 声明的显示属性：
  *
  * - `data`：官方 `TrackLine` 只接收**单条 `LineString` Feature**（形状由调用方保证；本库不做
  *   GeoJSON 校验）。**`null` = 没有轨迹**（换一个没有轨迹的实例）、`undefined` = 不表态；
- * - `visible`：用**挂上 / 摘掉**表达（没有 `setVisible`），重新可见时会换实例；
+ * - `visible`：走 `setVisible`（4.0.5 声明，`visualization/TrackLine.d.ts:457`），因此
+ *   **重新可见不换实例**。此前走挂上 / 摘掉、重新显示换实例，而**换实例会把播放进度与播放
+ *   状态一起丢掉**（播放到一半隐藏再显示会从头播）——这正是本组件最该避免的一类状态丢失；
  * - **播放命令面**（expose）：`playback.start / pause / resume / stop / setSpeed / setProcess`
  *   ——方法名均经 live 探针取证（`scripts/probe-track-line.mts`，2026-09-23，exit 0），不是从
  *   类型包猜的。`stop()` 停播放推进但**不**归零 `process`（夹具 `cmd.stop.observed`）。命令是
@@ -17,7 +20,10 @@
  *   本组件**不建**内部播放状态机去镜像 SDK；
  * - **`observed`**（expose，只读 `shallowRef`）：事件派生的进度读数（`process` / `elapsed` /
  *   `distance` / `point` / `angle` + `status` / `statusName`）。只读事件，不做推断；
- * - **没有** style / opacity / zIndex / 缩放范围：驱动登记面里没有这些入口。
+ * - **没有** style / opacity / zIndex / 缩放范围 prop：4.0.5 声明了 `setOpacity` / `setZIndex`
+ *   （`visualization/TrackLine.d.ts:461`/`:465`）但本组件**刻意不开面**（没有消费者）；
+ *   缩放范围官方**没有**字段级 setter。轨迹线的样式经 `setOptions` 整袋下发，不走 `style` prop
+ *   （`TrackLine.d.ts:360` 对它的描述是「批量更新配置/样式」，没有「仅更新已声明的键」那句）。
  *
  * ## 页面可见性策略（#110）
  *

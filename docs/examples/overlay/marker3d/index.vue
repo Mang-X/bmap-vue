@@ -1,5 +1,5 @@
 <template>
-  <Map v-bind="$attrs" :zoom="16" :heading="64.5" :tilt="73" enableScrollWheelZoom>
+  <Map v-bind="$attrs" :zoom="16" :heading="64.5" :tilt="73" enableWheelZoom>
     <Marker3D
       :position="point1"
       :height="1200"

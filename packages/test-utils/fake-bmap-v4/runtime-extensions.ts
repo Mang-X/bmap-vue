@@ -2,21 +2,23 @@
  * Fake v4 运行时注入的可控开关（M3A3-FAKE-DUAL / issue #24 实施步骤 3）
  *
  * 官方 4.0 有一批成员是**运行时注入**的：扩展 API 的 `PointLayer` / `ClusterLayer` /
- * `Heatmap` / `TrackLine`，以及 `PanoramaCoverageLayer`。它们在
- * `@baidumap/jsapi-v4-types@4.0.4` 里没有类声明（见 #23 ADR 的决策 4），因此能力探测
- * **不能在 Driver 构造期冻结结论**——「注入前失败、注入后同一个 Driver 可创建」是一条
- * 真实存在的运行时语义，需要能被测试主动摆出来。
+ * `Heatmap` / `TrackLine`，以及 `PanoramaCoverageLayer`。
  *
- * 在此之前，各测试都是自己 `delete fake.namespace.PointLayer` 手改命名空间：问题是
- * ① 忘记恢复就污染后续用例（`try/finally` 全凭自觉）；② 「注入前 / 注入后」两个时机在
- * 不同文件里写法不一致。这里把「卸下 / 装回」变成有名有姓、可枚举、可整体恢复的入口。
- *
- * 官方语义与 Fake 建模的界线：**成员的名单**是官方事实（运行时提供、类型包没有）；
- * 「怎么卸、怎么装」是 Fake 特有的测试手段。
+ * **「运行时注入」与「官方有没有类声明」是两个维度**（4.0.5 之后尤其要分开看）：
+ * 这四个类在 `@baidumap/jsapi-v4-types@4.0.4` 里没有类声明（#23 ADR 决策 4 据此定下
+ * 「能力探测不能在 Driver 构造期冻结结论」），而 4.0.5（`5ba67f4`）**补上了类声明**。
+ * 但它们仍然是**运行时注入**的成员——真实浏览器里这批类要等扩展 API 注入了才能用，类型包里
+ * 有声明只说明「形状已知」，不说明「加载即在」。所以这份名单按**注入时机**划分，不随
+ * 类型包版本增删：`PanoramaCoverageLayer` 至今仍无声明，四个 visualization 类已有声明，
+ * 但两者在这里的地位完全一样。
  */
 import type { FakeBMapV4Namespace } from './index.ts'
 
-/** 运行时注入的成员名单（4.0.4 类型包未声明、4.0 运行时公开）。 */
+/**
+ * 运行时注入的成员名单（**运行时**提供，与类型包是否已声明无关）。
+ *
+ * 4.0.5 起前四个在类型包里有了类声明，但注入时机没变——所以这份名单不因上游补声明而增删。
+ */
 export const FAKE_V4_RUNTIME_INJECTED_MEMBERS = [
   'PointLayer',
   'ClusterLayer',

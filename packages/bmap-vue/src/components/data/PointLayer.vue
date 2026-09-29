@@ -36,6 +36,13 @@ const props = withDefaults(defineProps<PointLayerProps<Item>>(), {
   // 与官方默认值（false）**不同**，刻意如此：本组件的核心交互是 `item-click`，
   // 默认关掉拾取等于「给了事件但点不出来」。要省开销时显式传 `false`。
   enablePicked: true,
+  // ⚠️ 下面两个**刻意写 `undefined`**（口径同 `FillLayerProps.border` / PointIconLayer 的
+  // `userSizes`）：官方默认值分别是 `mouseStyleChange: true` 与 `pickThrough: false`。
+  // `mouseStyleChange` 尤其不能落到 Vue 的缺省 `false`——那会让「命中后换光标」对所有
+  // 不传它的用户静默失效。`pickThrough` 落到 `false` 恰好等于官方默认，写不写都一样，
+  // 但显式列出才让「没传 = 不表态」这条口径在代码里看得见。
+  mouseStyleChange: undefined,
+  pickThrough: undefined,
 });
 
 const emit = defineEmits<{
@@ -94,13 +101,27 @@ function adapt(): AdaptedPoints<Item> {
 
 /* ------------------------------------------------------------------ 装配 */
 
-/** 构造期选项袋（官方构造参数里**不能就地更新**的那些）。 */
+/**
+ * 构造期选项袋（官方构造参数里**不能就地更新**的那些）。
+ *
+ * ⚠️ 这里**没有** `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方 `PointLayerOptions` 上
+ * 没有这两个成员 —— 它们只在 `LineLayer` / `PointIconLayer` / `FillLayer` / `PointShapeLayer`
+ * 上声明。原先无条件透传的结果是「构造器静默忽略两个不认识的键」，即收下用不了的 prop。
+ * 正确成员是 `pickTolerance` / `pickThrough` / `mouseStyleChange`（由 #169 接入）。
+ */
 function ctorOptions(p: Readonly<PointLayerProps<Item>>): Record<string, unknown> {
   return {
     idKey: resolveIdField(p.itemKey),
     enablePicked: p.enablePicked,
-    ...(p.pickWidth === undefined ? {} : { pickWidth: p.pickWidth }),
-    ...(p.pickHeight === undefined ? {} : { pickHeight: p.pickHeight }),
+    // #165：`isFlat` 曾**整个缺失**（官方 `visualization/PointLayer.d.ts:123` 声明了它，
+    // 而 `PointCollection` / `PointIconLayer` 两个兄弟都投影了它）⇒ 组件收下即丢弃。
+    // 官方把它写在构造参数 `PointLayerOptions` 上、没有 `setIsFlat` ⇒ 构造期项，
+    // 进了本函数就自动进了重建指纹（`rebuildKey` 派生自 `ctorOptions`）。
+    //
+    // ⚠️ 与兄弟逐条同形：没表态时**整个键不存在**（不是 `isFlat: undefined`）。
+    // 官方三处的 `@default` 互相矛盾（见 `PointLayerProps.isFlat` 的注释表），
+    // 「没传 = 不表态 = SDK 自己的默认」是三族一致的处置。
+    ...(p.isFlat === undefined ? {} : { isFlat: p.isFlat }),
   };
 }
 
@@ -123,6 +144,17 @@ function styleValue(): Record<string, unknown> | undefined {
     if (props.rotation !== undefined) style.rotation = props.rotation;
     if (props.offset !== undefined) style.offset = props.offset;
     if (props.anchor !== undefined) style.anchor = props.anchor;
+    // #165 Class 3 / TASK 2：4.0.5 的 `PointLayerOptions` 里补齐的这一组。全部进**样式袋**
+    // （官方 `PointLayer.d.ts:298` 明说 `setOptions` 会把 `renderStage` / `referCenter` 转发到
+    // 对应 setter，其余样式键合并），因此都走就地更新、不换实例。
+    if (props.iconSize !== undefined) style.iconSize = props.iconSize;
+    if (props.mouseStyleChange !== undefined) style.mouseStyleChange = props.mouseStyleChange;
+    if (props.pickTolerance !== undefined) style.pickTolerance = props.pickTolerance;
+    if (props.pickThrough !== undefined) style.pickThrough = props.pickThrough;
+    if (props.renderStage !== undefined) style.renderStage = props.renderStage;
+    // ⚠️ `referCenter` 官方类型是 `BMap.Point`，而样式袋是**原样透传**的纯数据袋。
+    // 本组件收 `{ lng, lat }`，必须由 Driver 侧换算成 `BMap.Point`——组件层不构造 SDK 构造器。
+    if (props.referCenter !== undefined) style.referCenter = props.referCenter;
     return Object.keys(style).length > 0 ? style : undefined;
   });
 }

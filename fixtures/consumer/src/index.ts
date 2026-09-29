@@ -237,7 +237,7 @@ const gotoPageOnce: Promise<ServiceResult<LocalSearchResult[]>> = searchHook.got
 const clearOnce: void = searchHook.clear()
 const taskStatus: BMapServiceStatus = searchHook.status.value
 const taskSupported: boolean = searchHook.supported.value
-const geocodeOnce: ReturnType<typeof geocoderHook.get> = geocoderHook.get('北京市', '北京市')
+const geocodeOnce: ReturnType<typeof geocoderHook.getPoint> = geocoderHook.getPoint('北京市', '北京市')
 
 export const serviceComposableSmoke = {
   searchOnce,
@@ -375,8 +375,9 @@ const badCenter: string = bmapApi.getCenter()
 // ③ 能力查询也不是 any。
 // @ts-expect-error `supports()` 返回 boolean
 const badCapability: string = bmapApi.supports('map.zoom')
-// ④ 写命令的参数类型没有被放宽：字符串地名不是 `Point`（字符串兼容只在 props 上）。
-// @ts-expect-error `setCenter` 只接受点对象
+// ④ 写命令现在与官方一致地接受字符串地名：官方 `setCenter(center: Point | string, options?)`
+//    本库已对齐（#165）。字符串**逐次调用**在官方侧同样合法——`noAnimation` / `callback`
+//    是 options 的成员，不是 prop。
 bmapApi.setCenter('北京市')
 // ② 废弃别名已移除。若 `resetCenter` 重新出现，下面这条指令会变成「未使用的 @ts-expect-error」。
 // @ts-expect-error `resetCenter` 已从 MapExpose 移除（改用 resetView）
@@ -488,14 +489,14 @@ const canonicalGroundOverlayProps: GroundOverlayProps = {
 //    - `mouseout`（图形族 partial-pointer）：`point` 可缺——上游 `GraphMouseOutEvent` 就是这么声明的，
 //      本库**不**用 `(0,0)` 兜底，因此调用方必须自己判空。
 const polygonClick = h(Polygon, {
-  path: [{ lng: 116.4, lat: 39.9 }],
+  points: [{ lng: 116.4, lat: 39.9 }],
   onClick: (event: OverlayPointerEvent) => {
     const lng: number = event.point.lng
     void lng
   },
 })
 const polygonMouseout = h(Polygon, {
-  path: [{ lng: 116.4, lat: 39.9 }],
+  points: [{ lng: 116.4, lat: 39.9 }],
   onMouseout: (event: OverlayPartialPointerEvent) => {
     const lng: number | undefined = event.point?.lng
     void lng
@@ -514,7 +515,7 @@ const overlayKinds: OverlayKind[] = ['marker', 'label', 'polyline', 'polygon', '
 
 // 5) 字段策略与 watch 源是公开类型（自定义覆盖物的声明面）
 const customPolygonFields: OverlayFieldMap<PolygonProps> = {
-  path: 'options',
+  points: 'options',
   pathVersion: 'version',
   isBoundary: 'recreate',
   strokeColor: 'options',
@@ -526,6 +527,14 @@ const customPolygonFields: OverlayFieldMap<PolygonProps> = {
   enableMassClear: 'options',
   enableEditing: 'options',
   visible: 'visibility',
+  zIndex: 'options',
+  // #165 图形族补齐的六个官方选项：官方**没有**对应 setter ⇒ 全部只能走构造期。
+  enableClicking: 'recreate',
+  coordType: 'recreate',
+  dashArray: 'recreate',
+  strokeLineCap: 'recreate',
+  strokeLineJoin: 'recreate',
+  linkRight: 'recreate',
 }
 const customWatchSource: OverlayFieldWatch = { source: 'versioned', versionProp: 'pathVersion' }
 
@@ -594,10 +603,11 @@ const collectionProps: PointCollectionProps<Station> = {
   data: stations,
   itemKey: 'id',
   getPosition: (item) => ({ lng: item.lng, lat: item.lat }),
-  shape: 7,
+  // #165 Class 1：`PointShapeLayer` 的官方键是 `shapeType`，本库随之改名（原 `shape`）。
+  shapeType: 7,
 }
-// @ts-expect-error `shape` 是官方 `PointShapeLayer.ShapeType` 的数字取值
-const badShape: PointCollectionProps<Station> = { ...collectionProps, shape: 'circle' }
+// @ts-expect-error `shapeType` 是官方 `PointShapeLayer.ShapeType` 的数字取值
+const badShape: PointCollectionProps<Station> = { ...collectionProps, shapeType: 'circle' }
 
 // 图标层：样式字段名与形状层**不同**（官方 `PointIconStyle`），`isFlat` / `isFixed` 是构造期项。
 const iconProps: PointIconLayerProps<Station> = {
@@ -610,6 +620,7 @@ const iconProps: PointIconLayerProps<Station> = {
   isFlat: true,
 }
 // @ts-expect-error 图标层的样式里没有 `shape`（那是形状层的字段）
+// ⚠️ 形状层那个字段现在叫 `shapeType`（Class 1 改名），`shape` 仍归扩展 API 的扁平选项。
 const badIcon: PointIconLayerProps<Station> = { ...iconProps, shape: 0 }
 
 // 扩展 API 点层：选项是**扁平**的（`fillColor` 而不是 `color`）。

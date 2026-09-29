@@ -105,9 +105,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@baidumap/jsapi-v4-types@4.0.4': 45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8
-
 importers:
 
   .:
@@ -264,8 +261,8 @@ importers:
         version: 3.5.42(typescript@5.9.3)
     devDependencies:
       '@baidumap/jsapi-v4-types':
-        specifier: 4.0.4
-        version: 4.0.4(patch_hash=45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8)
+        specifier: github:baidu-maps/jsapi-v4-types#5ba67f4dda11b0a4b54fc631278d3e39e11667c3
+        version: https://codeload.github.com/baidu-maps/jsapi-v4-types/tar.gz/5ba67f4dda11b0a4b54fc631278d3e39e11667c3
       '@microsoft/api-extractor':
         specifier: ^7.52.0
         version: 7.59.0(@types/node@26.4.1)
@@ -817,8 +814,9 @@ packages:
   '@baidumap/jsapi-ui-kit@1.1.2':
     resolution: {integrity: sha512-VYiipooQSuhDUKHhVA8/n3wkHmNAXKL959/jZVoiy6WliP43BJe77U9rHTW1Qj0sety/5Yf3yi9K8ieH0ghNcg==}
 
-  '@baidumap/jsapi-v4-types@4.0.4':
-    resolution: {integrity: sha512-zE4IDAzHK5MQJ17GIyu/m004cqWm843enqpP7xd5lkQwMsuNqrvgBxv+JbviQHJZOpp4T4mqQkabd5p/DLEkMA==}
+  '@baidumap/jsapi-v4-types@https://codeload.github.com/baidu-maps/jsapi-v4-types/tar.gz/5ba67f4dda11b0a4b54fc631278d3e39e11667c3':
+    resolution: {gitHosted: true, integrity: sha512-9J4qI4r+F5PTahPQKOiyb352JmQYTir0tRtDLyQKGGAk2yg1z9BneeBBJzN7dxaRWptoEzovsEJ3jR1c0G31Lg==, tarball: https://codeload.github.com/baidu-maps/jsapi-v4-types/tar.gz/5ba67f4dda11b0a4b54fc631278d3e39e11667c3}
+    version: 4.0.5
 
   '@blazediff/core@1.9.1':
     resolution: {integrity: sha512-ehg3jIkYKulZh+8om/O25vkvSsXXwC+skXmyA87FFx6A/45eqOkZsBltMw/TVteb0mloiGT8oGRTcjRAz66zaA==}
@@ -5175,7 +5173,7 @@ snapshots:
 
   '@baidumap/jsapi-ui-kit@1.1.2': {}
 
-  '@baidumap/jsapi-v4-types@4.0.4(patch_hash=45f28a2b79c06b3f00634eafb6c534e34dc4034ffafbdddb4086b41d6bc76ed8)': {}
+  '@baidumap/jsapi-v4-types@https://codeload.github.com/baidu-maps/jsapi-v4-types/tar.gz/5ba67f4dda11b0a4b54fc631278d3e39e11667c3': {}
 
   '@blazediff/core@1.9.1': {}
 

@@ -2,7 +2,7 @@
   <div>
     <Map
       v-bind="$attrs"
-      enableScrollWheelZoom
+      enableWheelZoom
       :zoom="13"
       :center="{ lng: 116.328749, lat: 40.026922 }"
       ref="map"

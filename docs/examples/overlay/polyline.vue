@@ -1,7 +1,7 @@
 <template>
   <Map v-bind="$attrs" :zoom="16">
     <Polyline
-      :path="[
+      :points="[
         { lng: 116.404, lat: 39.915 },
         { lng: 116.404, lat: 39.92 },
         { lng: 116.41, lat: 39.92 },

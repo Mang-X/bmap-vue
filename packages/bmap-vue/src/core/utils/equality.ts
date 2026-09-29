@@ -160,7 +160,7 @@ export function normalizeAngle(degrees: number): number {
 /**
  * 角度相等（默认容差 `ANGLE_EPSILON`）：按 **360 环绕**取最小差。
  *
- * 这是 heading 的判等入口。**不适用于 tilt**：倾斜角合法范围是 0..90，没有环绕语义，
+ * 这是 heading 的判等入口。**不适用于 tilt**：倾斜角合法范围是 0..73，没有环绕语义，
  * 用环绕判等会把 `tilt: 0` 与 `tilt: 90`（俯仰到地平线）之外的取值关系算错。
  */
 export function anglesEqual(a: number, b: number, epsilon: number = ANGLE_EPSILON): boolean {

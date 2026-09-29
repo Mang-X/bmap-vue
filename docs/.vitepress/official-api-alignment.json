@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 408,
+  "oursPublicCount": 439,
   "uiKitCount": 62,
   "matchedCount": 115,
   "officialOnlyCount": 287,
-  "oursOnlyCount": 293,
+  "oursOnlyCount": 324,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -1993,6 +1993,21 @@
       "oursEntry": "./components"
     },
     {
+      "name": "PolygonLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "PolylineLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
+      "name": "TextLayer",
+      "surface": "component",
+      "oursEntry": "./components"
+    },
+    {
       "name": "TrackLineLayer",
       "surface": "component",
       "oursEntry": "./components"
@@ -2183,6 +2198,11 @@
       "oursEntry": "."
     },
     {
+      "name": "FlyToOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "GeocodeDetailItemResult",
       "surface": "type",
       "oursEntry": "./composables"
@@ -2194,6 +2214,11 @@
     },
     {
       "name": "GeocodeItemResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "GeolocationOptions",
       "surface": "type",
       "oursEntry": "./composables"
     },
@@ -2353,6 +2378,11 @@
       "oursEntry": "."
     },
     {
+      "name": "PanToOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PathOptions",
       "surface": "type",
       "oursEntry": "./composables"
@@ -2371,6 +2401,11 @@
       "name": "PolylineHandle",
       "surface": "type",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "PolylineLayerProps",
+      "surface": "type",
+      "oursEntry": "."
     },
     {
       "name": "PublicMapContext",
@@ -2433,6 +2468,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "SetZoomOptions",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "TargetContext",
       "surface": "type",
       "oursEntry": "."
@@ -2481,6 +2521,21 @@
       "name": "ViewAnimationStatus",
       "surface": "type",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "VisualizationLayerCommonProps",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "VisualizationPickOptions",
+      "surface": "type",
+      "oursEntry": "."
+    },
+    {
+      "name": "VisualizationZoomCtorOptions",
+      "surface": "type",
+      "oursEntry": "."
     },
     {
       "name": "AreaBoundary",
@@ -2593,6 +2648,16 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "CircleReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "CityListCommandApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "ClusterChange",
       "surface": "other",
       "oursEntry": "."
@@ -2603,12 +2668,27 @@
       "oursEntry": "."
     },
     {
+      "name": "ContextMenuCommandApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "ContextMenuExpose",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
       "name": "ContextMenuItem",
       "surface": "other",
       "oursEntry": "."
     },
     {
       "name": "ContextMenuSeparator",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "ControlCommandTypes",
       "surface": "other",
       "oursEntry": "."
     },
@@ -2788,6 +2868,11 @@
       "oursEntry": "."
     },
     {
+      "name": "InfoWindowReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "IntercityPolicy",
       "surface": "other",
       "oursEntry": "./composables"
@@ -2869,6 +2954,16 @@
     },
     {
       "name": "LocalSearchSearchOption",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LocationAddressComponents",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "LocationCommandApi",
       "surface": "other",
       "oursEntry": "./composables"
     },
@@ -2998,6 +3093,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "MapTypeIdName",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
       "name": "mapVglPlugin",
       "surface": "other",
       "oursEntry": "."
@@ -3029,6 +3129,16 @@
     },
     {
       "name": "MarkerIconName",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MarkerReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "MenuItemView",
       "surface": "other",
       "oursEntry": "./composables"
     },
@@ -3094,6 +3204,11 @@
     },
     {
       "name": "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "OverlayCommandTypes",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3193,6 +3308,11 @@
       "oursEntry": "./composables"
     },
     {
+      "name": "PanoramaLink",
+      "surface": "other",
+      "oursEntry": "./composables"
+    },
+    {
       "name": "PanoramaPoiType",
       "surface": "other",
       "oursEntry": "."
@@ -3206,6 +3326,11 @@
       "name": "PanoramaViewerDriver",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "PathReadBackApi",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "PluginCatalogEntry",
@@ -3224,6 +3349,16 @@
     },
     {
       "name": "PointPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolygonLayerStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "PolylineLayerStyle",
       "surface": "other",
       "oursEntry": "."
     },
@@ -3353,6 +3488,21 @@
       "oursEntry": "."
     },
     {
+      "name": "TextLayerAnchor",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TextLayerPick",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
+      "name": "TextLayerStyle",
+      "surface": "other",
+      "oursEntry": "."
+    },
+    {
       "name": "toSdkEventName",
       "surface": "other",
       "oursEntry": "."
@@ -3421,6 +3571,11 @@
       "name": "ViewAnimationCancelOutcome",
       "surface": "other",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "VisualizationStyleValue",
+      "surface": "other",
+      "oursEntry": "."
     },
     {
       "name": "XYLike",

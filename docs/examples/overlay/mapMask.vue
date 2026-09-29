@@ -4,28 +4,27 @@
     <option value="outside">局部隐藏</option>
     <option value="inside">局部显示</option>
   </select>
-  <Map
-    v-bind="$attrs"
-    :center="center"
-    :zoom="18"
-    @ready="handleInitd"
-    enable-scroll-wheel-zoom
-    :backgroundColor="[192, 214, 213, 100]"
-  >
+  <Map v-bind="$attrs" :center="center" :zoom="18" @ready="handleInitd" enable-wheel-zoom>
     <Marker :position="center"></Marker>
-    <MapMask :path="path" :show-region="showRegion" isPoiMask isBuildingMask isMapMask></MapMask>
+    <MapMask
+      :points="points"
+      :show-region="showRegion"
+      isPoiMask
+      isBuildingMask
+      isMapMask
+    ></MapMask>
   </Map>
 </template>
 
 <script setup lang="ts">
 import { ref, shallowRef, triggerRef } from "vue";
 import { Map, Marker, MapMask, PointLike, type MapMaskShowRegion } from "bmap-vue";
-const path = shallowRef<PointLike[]>([]);
+const points = shallowRef<PointLike[]>([]);
 const center = ref<PointLike>({ lng: 0, lat: 0 });
 const showRegion = ref<MapMaskShowRegion>("outside");
 function handleInitd() {
   center.value = { lng: 116.31951444701689, lat: 40.03514188328609 };
-  path.value = [
+  points.value = [
     { lng: 116.31951444701689, lat: 40.03514188328609 },
     { lng: 116.31914525270483, lat: 40.03627653457813 },
     { lng: 116.31887119442595, lat: 40.03712933826661 },
@@ -45,6 +44,6 @@ function handleInitd() {
     { lng: 116.31817328272946, lat: 40.03584288930924 },
     { lng: 116.31924096994166, lat: 40.03521921152976 },
   ];
-  triggerRef(path);
+  triggerRef(points);
 }
 </script>

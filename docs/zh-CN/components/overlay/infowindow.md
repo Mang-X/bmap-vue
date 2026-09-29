@@ -157,3 +157,56 @@ slot 内容尺寸变化（文本更新、图片异步加载、字体变化…）
 
 气泡内容依赖客户端的宿主节点，因此**服务端渲染的 HTML 里不含气泡内容**（`<InfoWindow>` 在
 SSR 期不渲染 slot、不创建宿主）。这与地图本身只在客户端可用是一致的。
+
+## 命令面（`defineExpose`，#165）
+
+本组件的 `ref` 上有官方同名方法。前四个是**读回**（`open` prop 表达的是意图，官方只有实例上的
+`isOpen()` 才回答「现在真的开着吗」），后两个是**动作**——`enableMaximize` 只是「允许最大化」，
+不触发它。
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import InfoWindow from 'bmap-vue'
+import type { InfoWindowReadBackApi } from 'bmap-vue'
+
+const infoWindow = ref<InfoWindowReadBackApi>()
+</script>
+
+<template>
+  <InfoWindow ref="infoWindow" :position="{ lng: 116.4, lat: 39.9 }" :enable-maximize="true" :open="true">
+    内容
+  </InfoWindow>
+</template>
+```
+
+| 方法            | 官方声明                                     | 说明 |
+| --------------- | -------------------------------------------- | ---- |
+| `getTitle()`    | `getTitle(): string \| HTMLElement`           | 读回 |
+| `getContent()`  | `getContent(): string \| HTMLElement`         | 读回（本库内容是 Vue slot，读回拿到的是 host 元素） |
+| `isOpen()`      | `isOpen(): boolean`                           | 读回 |
+| `getOffset()`   | `getOffset(): Size`                           | 读回；返回领域 `Pixel`（`{x, y}`） |
+| `maximize()`    | `maximize(): void`                            | 动作 |
+| `restore()`     | `restore(): void`                             | 动作 |
+
+`maximize()` / `restore()` 刻意**不**回写 `v-model:open`：官方的 `maximize` / `restore` 事件已经
+作为组件事件转发，命令与事件各走各的路——把命令也做成受控写入就要猜「这次事件对应哪次命令」，
+而官方没有给这件事任何身份。
+
+未就绪、正在重建、**已被同图另一个气泡顶掉**或已释放时，命令**显式抛 `BMAP_RESOURCE_DISPOSED`**。
+「被顶掉」也要失败：`getTitle` 这类读回对那个气泡仍然成立，但 `maximize()` 会打到**别的**气泡上。
+
+## 构造选项（#165 补齐的 8 个）
+
+| prop                  | 官方键                    | 更新口径 | 依据 |
+| --------------------- | ------------------------- | -------- | ---- |
+| `maxWidth`            | `maxWidth?: number`       | **就地** `setMaxWidth` | 官方有 setter；撤回时重建（无 `getMaxWidth`） |
+| `maxContent`          | `maxContent?: string`     | **就地** `setMaxContent` | 官方有 setter；撤回时重建（`getContent()` 返回的不是最大化内容） |
+| `margin`              | `margin?: number[]`       | 构造期 | 官方没有 `setMargin`，也没有读回 |
+| `collisions`          | `collisions?: number[]`   | 构造期 | 官方没有 `setCollisions`，也没有读回 |
+| `onClosing`           | `onClosing?: () => void`  | 构造期 | 官方没有 `setOnClosing`；回调要跟随最新闭包必须重建 |
+| `enableSearchTool`    | `enableSearchTool?: boolean` | 构造期 | 它决定是否多渲染一个工具条（渲染通道），官方没有成对开关 |
+| `headerContent`       | `headerContent?: string`  | 构造期 | 官方没有 `setHeaderContent`。⚠️ 官方没说明它与 `title` 同时给时谁优先，本库**不表态** |
+| `enableContentScroll` | `enableContentScroll?: boolean` | 构造期 | 官方没有 `setEnableContentScroll` |
+
+`margin` / `collisions` 都是四元素数组，按 `[上, 右, 下, 左]`。

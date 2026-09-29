@@ -3,7 +3,7 @@
  *
  * 把 JSAPI 4.0 的 `BMap.Map` 收敛成项目领域映射（`MapDriver`），公共 API 零新增。
  *
- * 行为依据（官方 4.0 文档 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 文档 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - 构造：`new BMap.Map(idOrElement, options)`，`MapOptions` 支持 `center` / `zoom` /
  *   `heading` / `tilt` / `minZoom` / `maxZoom` / `displayOptions` 与一组 `enable*` 开关；
  * - 视野：`centerAndZoom` 一次设定（v4 **没有** `setView`），后续受控更新走
@@ -29,12 +29,18 @@ import type { CapabilityRegistry } from "../capability/registry";
 import type { Bounds, GeometryDriver, Pixel, Point } from "../types/geometry";
 import { HANDLE_BRAND, type MapHandle, type SdkHandle } from "../types/handles";
 import type {
+  FlyToOptions,
   InitialMapOptions,
   MapDriver,
   MapInteraction,
   MapType,
   MapView,
+  PanToOptions,
+  SetZoomOptions,
+  ViewCommandOptions,
+  Viewport,
 } from "../types/map";
+import type { ViewportOptions } from "../types/services";
 import type { JsapiV4EventDriver } from "./events";
 import {
   assertJsapiV4Namespace,
@@ -52,8 +58,11 @@ import type { JsapiV4HandleRegistry } from "./registry";
  * 语义交互名 → 官方成对方法名（与 4.0 API 参考逐一对应）。
  *
  * **`tilt-gestures` 的成员存在性有分歧，因此这里不预判**：官方 4.0 API 参考的 `BMap.Map`
- * 方法表与 `@baidumap/jsapi-v4-types@4.0.4` 都没有 `enableTiltGestures()` / `disableTiltGestures()`
- * （对比 `enableRotateGestures()` 是有的），而公开的 React 参考实现 `huiyan-fe/react-bmap`
+ * 方法表与 `@baidumap/jsapi-v4-types@4.0.5` 的 `core/Map.d.ts` 都**没有实例方法**
+ * `enableTiltGestures()` / `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的）。
+ * ⚠️ 「没有」只限于**实例方法**：`MapOptions.d.ts:80` 确实声明了 `enableTiltGestures` 这个
+ * **构造选项**（无同名的 `disable*`），即「建图时开手势倾斜」有声明、运行时开关没有。
+ * 而公开的 React 参考实现 `huiyan-fe/react-bmap`
  * 直接调用它们并用 try/catch 吞掉失败。本 Facet 既不臆造声明、也不靠异常控制流：
  * `setInteraction` 先做**结构性存在判断**，有就调用、没有就告警一次（见实现）。
  *
@@ -83,7 +92,7 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  *
  * **顺序由真实运行决定，不由类型声明决定**（R25-E / issue #74 的 required smoke 实测）：
  *
- * - 上游 `@baidumap/jsapi-v4-types@4.0.4` 的 `map-type/MapTypeId.d.ts` 声明的是
+ * - 上游 `@baidumap/jsapi-v4-types@4.0.5` 的 `map-type/MapTypeId.d.ts` 声明的是
  *   `BMAP_NORMAL_MAP` 这类成员名；
  * - 真实 `v=4.0` 运行时的 `BMap.MapTypeId` 实际只有 `{ NORMAL, EARTH, SATELLITE }`；
  *   带 `BMAP_` 前缀的那组常量挂在**全局**（`globalThis.BMAP_NORMAL_MAP`），
@@ -96,7 +105,22 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  */
 const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
   normal: ["NORMAL", "BMAP_NORMAL_MAP"],
-  satellite: ["SATELLITE", "BMAP_SATELLITE_MAP"],
+  satellite: ["SATELLITE", "BMAP_SATELLITE_MAP", "STREET", "B_STREET_MAP"],
+  // 混合图（#165 Class 1）：此前 `hybrid` 根本不在语义类型里，`<Map mapType="BMAP_HYBRID_MAP">`
+  // 被静默降级成普通图。
+  //
+  // ⚠️ **live 实测：4.0.5 声明里的 `hybrid` 在真实运行时不存在**
+  // （`scripts/probe-runtime-members.mts`，2026-09-26 两次独立读数一致）。`BMap.MapTypeId`
+  // 运行时**只有三个**成员，且它们的**字面量与声明名完全不同**：
+  //   `{ NORMAL: "B_NORMAL_MAP", EARTH: "B_EARTH_MAP", SATELLITE: "B_STREET_MAP" }`
+  // ——官方 `MapTypeId.d.ts` 声明的 `BMAP_HYBRID_MAP` / `BMAP_NONE_MAP` 在运行时同样不存在。
+  //
+  // 因此 hybrid 的候选名**目前无法给出可信值**：真实混合底图在 4.0 要么走
+  // `BMap.MapType` 构造（不是 `MapTypeId` 常量），要么经 `setMapStyle`。取不到时
+  // `resolveMapTypeConstant` 抛 `BMAP_SDK_CALL_FAILED`——**显式失败，不是静默换图**，
+  // 这正是实测坐实的正确行为（静默换图会让用户拿到普通图却毫无察觉）。
+  // 证据：`docs/zh-CN/contributing/165-runtime-verification.md`。
+  hybrid: ["HYBRID", "BMAP_HYBRID_MAP", "B_HYBRID_MAP"],
   earth: ["EARTH", "BMAP_EARTH_MAP"],
 };
 
@@ -121,8 +145,36 @@ const LIBRARY_MAP_DEFAULTS: Record<string, unknown> = {
   enableWheelZoom: false,
 };
 
-/** 项目已声明但 v4 `MapOptions` 无对应项、且无法无损翻译的键。 */
+/**
+ * 项目已声明但 v4 `MapOptions` 无对应项、且无法无损翻译的键。
+ *
+ * ⚠️ 这两个键在 `<Map>` 的**组件 prop** 层面已于 #165 Class 5 删除（声明了却读也不读 = 假支持）。
+ * 这里仍然保留，是因为 `InitialMapOptions` 本身是**导出的公共类型**（`advanced` / `plugins` /
+ * 根入口都重导出），`driver.map.create(container, { restrictCenter: true })` 仍是可达路径 ——
+ * 删掉丢弃表会让它们经索引签名**原样透传**给 SDK，恰好落进本文件上方注释批评的那一档
+ * （依赖 SDK 静默忽略不认识的键）。要连带删掉得先改公共类型面，那是独立的票。
+ */
 const UNSUPPORTED_OPTION_KEYS = new Set(["backgroundColor", "restrictCenter"]);
+
+/**
+ * 官方 `MapOptions.minZoom` / `maxZoom` 声明的合法取值范围（`core/MapOptions.d.ts`：
+ * 「地图允许展示的最小/最大级别。取值范围 [3, 21]」）。
+ *
+ * 越界值**显式报错**而不是交给 SDK：上游没有公开的归一化契约，把一个「文档说无效」的值原样
+ * 递进去、然后靠它被 clamp 或被渲染成怪东西，属于静默劣化（#165 Class 5）。
+ */
+const ZOOM_RANGE = { min: 3, max: 21 } as const;
+
+function assertZoomInRange(key: "minZoom" | "maxZoom", value: unknown): void {
+  if (typeof value !== "number" || !Number.isFinite(value)) return;
+  if (value >= ZOOM_RANGE.min && value <= ZOOM_RANGE.max) return;
+  throw new BMapError(
+    "BMAP_INVALID_ARGUMENT",
+    `${key} 必须是 [${ZOOM_RANGE.min}, ${ZOOM_RANGE.max}] 内的数值（官方 MapOptions 声明的取值范围）` +
+      `，收到 ${value}`,
+    { engine: "jsapi-v4", component: "MapDriver", [key]: value },
+  );
+}
 
 export interface CreateJsapiV4MapDriverInput {
   /** v4 全局命名空间（`globalThis.BMap`）；raw SDK 只允许在 Driver/Client 边界读取。 */
@@ -141,6 +193,110 @@ function numberOf(label: string, value: unknown): number {
     });
   }
   return value;
+}
+
+/**
+ * 领域 `ViewportOptions` → 官方同名对象，**只投影官方声明的四个成员**。
+ *
+ * 声明之外的键不递（#165 §3.8「接收后忽略」是假支持）。全空时返回 `undefined`，
+ * 于是「调用方没传」与「调用方传了空对象」在上游看到的是同一种形状 —— 官方对空对象
+ * 的处理没有公开契约，**不**凭空造一个它没声明的入参。
+ */
+function toRawViewportOptions(options?: ViewportOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.enableAnimation === "boolean") out.enableAnimation = options.enableAnimation;
+  if (Array.isArray(options.margins)) out.margins = [...options.margins];
+  if (typeof options.zoomFactor === "number") out.zoomFactor = options.zoomFactor;
+  // 视野调整结束后的回调：按引用原样透传（官方只承诺「结束时调用」，Driver 不包装）
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** 领域 `FlyToOptions` → 官方同名对象；全空时返回 `undefined`（不下发该参数）。 */
+function toRawFlyToOptions(options?: FlyToOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `ViewCommandOptions` → 官方同名对象（`setCenter` / `setHeading` / `setTilt` / `panTo` 共用）。
+ *
+ * 形状与 `toRawFlyToOptions` **逐字相同**（官方那四条与 `flyTo` 声明的就是同一个 options 形状），
+ * 但保持两个函数而不是合一个：合并后「`flyTo` 的投影」会变成五条命令共用的那一个，
+ * 将来官方给其中一条加成员时，合并版会静默把成员递给**不该递**的那几条。
+ *
+ * 「全空 → `undefined`」的理由同 `toRawFlyToOptions`：官方没有声明「空对象」这个形状，
+ * 凭空造一个等于依赖 SDK 对它的隐式处理。同理 `callback: undefined` 键不递 ——
+ * 递一个 `undefined` 的回调不是「没给」，而是「给了一个不是函数的东西」。
+ */
+function toRawViewCommandOptions(options?: ViewCommandOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `PanToOptions` → 官方 `panTo` 的 options（`core/Map.d.ts:591`）：上面那个再加 `duration`。
+ *
+ * `duration` 只在 `panTo` 上存在（`setCenter` 等没有），因此它**不在** `toRawViewCommandOptions`
+ * 里——共享函数里加它会让另外四条也开始递一个官方没声明的键。
+ */
+function toRawPanToOptions(options?: PanToOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  if (typeof options.duration === "number") out.duration = options.duration;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 领域 `SetZoomOptions` → 官方 `setZoom` 的 options（`core/Map.d.ts:698`）。
+ *
+ * 唯一的额外成员 `zoomCenter` 是**领域 `Point`**，必须经 `geometry.toRawPoint` 投影 ——
+ * 直接递下去就是把纯数据对象漏给 SDK，与本 Facet 其它几何入参同一口径。
+ *
+ * 不传 `zoomCenter` 时**不递该键**（官方 `@default 地图中心点` 由上游自己取）；本库不去读一次
+ * 当前中心再填进去，那会把「不传」与「显式传当前中心」变成两种不同的调用。
+ */
+function toRawSetZoomOptions(
+  options: SetZoomOptions | undefined,
+  geometry: GeometryDriver,
+): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const out: Record<string, unknown> = {};
+  if (typeof options.noAnimation === "boolean") out.noAnimation = options.noAnimation;
+  if (typeof options.callback === "function") out.callback = options.callback;
+  if (options.zoomCenter) out.zoomCenter = geometry.toRawPoint(options.zoomCenter);
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 官方 `Viewport`（`core/Viewport.d.ts`：`{ center: Point; zoom: number }`）→ 领域 `Viewport`。
+ *
+ * 官方声明这两个成员**都非空**，但回包形状由上游决定，因此逐字段校验、缺一个就报
+ * `BMAP_SDK_CALL_FAILED`：把半成品递给业务会让调用方在**很远**的地方才发现看错了。
+ * `center` 经 `geometry.fromRawPoint` 投影掉 `BMap.Point` 实例。
+ */
+function projectViewport(raw: unknown, geometry: GeometryDriver): Viewport {
+  const record = isObjectLike(raw) ? (raw as Record<string, unknown>) : {};
+  if (record.center == null || record.zoom == null) {
+    throw new BMapError(
+      "BMAP_SDK_CALL_FAILED",
+      "map.getViewport 返回的对象缺少 center / zoom（官方 Viewport 声明这两个成员都非空）",
+      { engine: "jsapi-v4" },
+    );
+  }
+  return {
+    center: geometry.fromRawPoint(record.center),
+    zoom: numberOf("map.getViewport", record.zoom),
+  };
 }
 
 /**
@@ -563,6 +719,9 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     for (const [key, value] of Object.entries(options ?? {})) {
       if (value === undefined) continue;
       if ((PASSTHROUGH_OPTION_KEYS as readonly string[]).includes(key)) {
+        if (key === "minZoom" || key === "maxZoom") {
+          assertZoomInRange(key, value);
+        }
         mapped[key] = value;
         continue;
       }
@@ -687,16 +846,26 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       if (applyTilt) callOptional(raw, "setTilt", view.tilt, options);
     },
 
-    setCenter(map, center) {
-      callRequired(resolveLive(map), "setCenter", toRawCenter(center));
+    setCenter(map, center, options?: ViewCommandOptions) {
+      callRequired(
+        resolveLive(map),
+        "setCenter",
+        toRawCenter(center),
+        toRawViewCommandOptions(options),
+      );
     },
 
     getCenter(map) {
       return geometry.fromRawPoint(callRequired(resolveLive(map), "getCenter"));
     },
 
-    setZoom(map, zoom) {
-      callRequired(resolveLive(map), "setZoom", zoom);
+    setZoom(map, zoom, options?: SetZoomOptions) {
+      callRequired(
+        resolveLive(map),
+        "setZoom",
+        zoom,
+        toRawSetZoomOptions(options, geometry),
+      );
     },
 
     getZoom(map) {
@@ -704,10 +873,10 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       return numberOf("map.getZoom", callRequired(raw, "getZoom"));
     },
 
-    setHeading(map, heading) {
+    setHeading(map, heading, options?: ViewCommandOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.heading");
-      callOptional(raw, "setHeading", heading);
+      callOptional(raw, "setHeading", heading, toRawViewCommandOptions(options));
     },
 
     getHeading(map) {
@@ -716,10 +885,10 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       return numberOf("map.getHeading", callOptional(raw, "getHeading"));
     },
 
-    setTilt(map, tilt) {
+    setTilt(map, tilt, options?: ViewCommandOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.tilt");
-      callOptional(raw, "setTilt", tilt);
+      callOptional(raw, "setTilt", tilt, toRawViewCommandOptions(options));
     },
 
     getTilt(map) {
@@ -754,8 +923,13 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       );
     },
 
-    panTo(map, point) {
-      callOptional(resolveLive(map), "panTo", geometry.toRawPoint(point));
+    panTo(map, point, options?: PanToOptions) {
+      callOptional(
+        resolveLive(map),
+        "panTo",
+        geometry.toRawPoint(point),
+        toRawPanToOptions(options),
+      );
     },
 
     panBy(map, pixel) {
@@ -773,10 +947,54 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       ]);
     },
 
-    setViewport(map, points: readonly Point[], options?: Record<string, unknown>) {
+    setViewport(map, points: readonly Point[], options?: ViewportOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.viewport");
-      callOptional(raw, "setViewport", points.map((point) => geometry.toRawPoint(point)), options ?? {});
+      callRequired(
+        raw,
+        "setViewport",
+        points.map((point) => geometry.toRawPoint(point)),
+        toRawViewportOptions(options),
+      );
+    },
+
+    getViewport(map, view: readonly Point[] | Bounds, options?: ViewportOptions) {
+      const raw = resolveLive(map);
+      capabilities.require("map.viewport");
+      // 官方 `view` 有两个分支：点数组与 Bounds。判据是**数组还是对象**（官方只有这两种），
+      // 不是「像不像 Bounds」——后者会把缺角点的对象静默归到数组分支。
+      const rawView = Array.isArray(view)
+        ? geometry.toRawPoints(view)
+        : geometry.toRawBounds(view as Bounds);
+      const result = callRequired(
+        raw,
+        "getViewport",
+        rawView,
+        toRawViewportOptions(options),
+      );
+      return projectViewport(result, geometry);
+    },
+
+    flyTo(map, center, zoom, options?: FlyToOptions) {
+      const raw = resolveLive(map);
+      capabilities.require("map.fly-to");
+      // options 一律经 `toRawFlyToOptions` 投影：没传时是 `undefined` 而**不是** `{}` ——
+      // 官方没有声明「空对象」这个形状，凭空造一个等于依赖 SDK 对它的隐式处理。
+      callRequired(raw, "flyTo", geometry.toRawPoint(center), zoom, toRawFlyToOptions(options));
+    },
+
+    getScreenshot(map) {
+      const raw = resolveLive(map);
+      capabilities.require("map.screenshot");
+      const value = callRequired(raw, "getScreenshot");
+      if (typeof value !== "string") {
+        throw new BMapError(
+          "BMAP_SDK_CALL_FAILED",
+          `map.getScreenshot 返回了非字符串: ${String(value)}`,
+          { engine: "jsapi-v4" },
+        );
+      }
+      return value;
     },
 
     checkResize(map) {

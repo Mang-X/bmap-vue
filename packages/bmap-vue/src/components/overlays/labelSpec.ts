@@ -36,6 +36,15 @@ export const LABEL_FIELDS: OverlayFieldMap<LabelProps> = {
   style: "options",
   zIndex: "options",
   enableMassClear: "options",
+  // issue #165 第三批：官方 `LabelOptions` 7 个键里最后两个。
+  //
+  // ⚠️ `anchor` **此前不在这个表里**，而 `OVERLAY_DESCRIPTORS.label` 却**早就**登记了
+  // `mutateBy("setAnchor", …)` —— 描述符有、组件不暴露 ⇒ 那条更新路径一次都没被触发过。
+  // live 读数（2026-09-27，settle 之后）判 `setAnchor` 可观察地生效（DOM 角点随锚点移动）
+  // ⇒ `options`。`width` 相反：官方 `Label` 上**没有** `setWidth`（整条原型链 layer = -1）
+  // ⇒ `recreate`。
+  anchor: "options",
+  width: "recreate",
   ...VISIBILITY_FIELD,
 };
 
@@ -58,6 +67,10 @@ export function createLabelSpec(): OverlaySpec<LabelProps, LabelHandle> {
         style: p.style,
         zIndex: p.zIndex,
         enableMassClear: p.enableMassClear,
+        // `anchor` 是官方常量名、Driver 边界内换成数值；`width` 是构造期项
+        // （官方没有 `setWidth`）。未给时是 `undefined`，`projectOptions` 会跳过该键。
+        anchor: p.anchor,
+        width: p.width,
       }),
   };
 }
