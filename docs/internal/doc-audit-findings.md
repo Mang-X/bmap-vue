@@ -215,9 +215,9 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 
 | 官方组件 | 上游 4.0.5 有声明？ | 本库为什么不提供 |
 | --- | --- | --- |
-| `GroundPoint`（地面点 3D） | ✅ `overlay/GroundPoint.d.ts` | **未实现**——真缺口，值得排期 |
-| `Symbol`（符号） | ✅ `overlay/Symbol.d.ts` | **未实现**——真缺口 |
-| `IconSequence`（图标序列） | ✅ `overlay/IconSequence.d.ts` | **未实现**——真缺口 |
+| `GroundPoint`（地面点 3D） | ✅ `overlay/GroundPoint.d.ts` | **已实现**（issue #178）——`<GroundPoint>` 已进组件面 |
+| `Symbol`（符号） | ✅ `overlay/Symbol.d.ts` | ⚠️ 原判「真缺口」有误：`class Symbol`（`Symbol.d.ts:13`）**不继承 `BMap.Overlay`**，是矢量图标**值对象**（官方注明可用作 Marker 的 icon 参数），没有 `addOverlay` 入口 ⇒ **做不成组件**；其 9 个成员在本库**尚无落地路径** |
+| `IconSequence`（图标序列） | ✅ `overlay/IconSequence.d.ts` | ⚠️ 原判「真缺口」有误：类声明已标 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`，且**只有构造函数、无实例方法**。本库已在 `<Polyline :icons>` 上如实透传 |
 | `Icon` | ✅ `overlay/Icon.d.ts` | 官方把它当**独立组件**列出；本库走 `Marker.icon` 传字符串或图标对象，功能等价，只是形态不同 |
 | `PlaceDetail` | ✅ `service/PlaceDetailRenderOptions.d.ts` | 本库的 `PlaceDetail` 在**官方 UI Kit**（`bmap-vue/ui-kit`），不在组件面 |
 | `SimpleInfoWindow` | ❌ 上游类型包无 | 官方 React 库自有封装，非 SDK 能力 |
@@ -225,9 +225,11 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 | `ThreeLayer` | ❌ 上游类型包无 | three.js 宿主集成，且本库已有原生 `TextLayer` / `PolygonLayer` / `PolylineLayer` 覆盖多数场景 |
 | `React-BMap` | — | 根包本身，不是组件 |
 
-**结论**：真缺口 3 个——`GroundPoint` / `Symbol` / `IconSequence`，都是 4.0 官方已声明、
-能力面里能查到的 overlay 类。其余 7 个是**形态差异**而非能力缺失（组件 vs prop、官方 UI Kit、
-逃生舱、three.js 宿主集成）。
+**结论（已按 issue #178 更正）**：原判「真缺口 3 个」**不成立**——判据只看了「上游有类声明」，
+没看**它是不是 `Overlay` 子类**、**官方有没有标 `@deprecated`**。逐条复核后：`GroundPoint`
+已实现；`Symbol` 是非覆盖物的值对象（做不成组件）；`IconSequence` 官方已废弃。真正待排期的
+只有 `PlaceDetail`（要在组件面暴露需另开接口面）。其余 7 个是**形态差异**而非能力缺失
+（组件 vs prop、官方 UI Kit、逃生舱、three.js 宿主集成）。
 
 ---
 

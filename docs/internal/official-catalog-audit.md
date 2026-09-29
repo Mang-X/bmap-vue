@@ -21,17 +21,22 @@
 
 | 官方组件 | 分类 | 依据 |
 | --- | --- | --- |
-| `GroundPoint` | **真实缺口** | 上游 `overlay/GroundPoint.d.ts` 有完整声明（27 个 prop），本库未实现 |
-| `Symbol` | **真实缺口** | 上游 `overlay/Symbol.d.ts` 有声明（9 个 prop） |
-| `IconSequence` | **真实缺口** | 上游 `overlay/IconSequence.d.ts` 有声明（4 个 prop） |
+| `GroundPoint` | **已补齐**（#178） | 上游 `overlay/GroundPoint.d.ts:5` `class GroundPoint extends GroundOverlay`，完整类声明。本库已实现 `<GroundPoint>`，见 [组件页](/zh-CN/components/overlay/ground-point) |
+| `Symbol` | **不补** | ⚠️ 此前误记为「真实缺口」。`overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——是矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），没有 `addOverlay` 入口，因此**做不成组件**。其 9 个成员在本库**尚无落地路径**（需经 `./advanced` 的 `unwrapRaw()` 自行创建） |
+| `IconSequence` | **不补** | ⚠️ 此前误记为「真实缺口」。`overlay/IconSequence.d.ts:4` 的类声明已标 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`，且该类**只有构造函数、无实例方法**。本库已在 `<Polyline :icons>` 上如实透传 |
 | `PlaceDetail` | **真实缺口** | 本库的 `PlaceDetail` 在**官方 UI Kit**（`bmap-vue/ui-kit`），不在组件面 |
 | `Icon` | 形态差异 | 官方列为独立组件；本库走 `<Marker :icon>`，功能等价 |
 | `SimpleInfoWindow` | 官方 React 自有 | 上游 SDK 无此类 |
 | `RawOverlay` / `RawControl` | 官方 React 自有 | 上游无；本库用 `./advanced` 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
 | `ThreeLayer` | 官方 React 自有 | 上游无；three.js 宿主集成，且本库已有原生 `TextLayer` / `PolygonLayer` / `PolylineLayer` |
 
-**真缺口 4 个**（`GroundPoint` / `Symbol` / `IconSequence` / 组件面的 `PlaceDetail`），
-前三个建议排期。
+**真缺口 1 个**（组件面的 `PlaceDetail`）——即本库在 `bmap-vue/ui-kit` 里的
+`<PlaceDetail>`，若要提到组件面需要另排期。
+
+> **更正（issue #178）**：本节此前把 `GroundPoint` / `Symbol` / `IconSequence` 三条都记为
+> 「真实缺口」，那是**误判**——判据只看了「上游有类声明」，没看**它是不是 `Overlay` 子类**、
+> **官方有没有标 `@deprecated`**。逐条复核后：`GroundPoint` 已实现；`Symbol` 是非覆盖物的
+> 值对象（做不成组件，其能力本库尚未暴露）；`IconSequence` 官方已废弃。
 
 ## 二、prop 面
 

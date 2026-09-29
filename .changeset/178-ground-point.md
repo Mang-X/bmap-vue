@@ -10,11 +10,12 @@
 | 官方组件 | 结论 | 依据 |
 | --- | --- | --- |
 | `GroundPoint` | **已实现** | `overlay/GroundPoint.d.ts:5` `class GroundPoint extends GroundOverlay`，完整类声明 + 构造选项 |
-| `Symbol` | **不是覆盖物** | `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——是矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），`addOverlay` 挂不上去。做成组件只会得到「传了不生效」的假支持 |
-| `IconSequence` | **官方已废弃且 4.0 不渲染** | `overlay/IconSequence.d.ts:4` 标了 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`；官方文档页进一步注明「纯 GL 下不渲染（SDK `_drawIcons` 会抛错）」 |
+| `Symbol` | **不是覆盖物，且本库尚未暴露该能力** | `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——是矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），没有 `addOverlay` 入口，做成组件挂不上去。其 9 个成员（`setPath` / `setFillColor` / …）在本库**没有任何落地路径**；需要时只能经 `./advanced` 的 `unwrapRaw()` 自行创建 |
+| `IconSequence` | **官方已废弃** | `overlay/IconSequence.d.ts:4` 的类声明标了 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`（该类只有构造函数、无实例方法） |
 
-`Symbol` 的能力落在既有的 `useMarkerIcons` 图标入口；`IconSequence` 已在
-`<Polyline :icons>` 上如实透传（收下就静默忽略比不收更难排查），新代码请用 `strokeTexture`。
+`IconSequence` 已在 `<Polyline :icons>` 上如实透传（收下就静默忽略比不收更难排查），
+新代码请用 `strokeTexture`；`Symbol` 的能力**本票不提供**——它需要一个接收矢量图标的
+prop（如 `<Marker :icon>` 支持 `BMap.Symbol`），那是独立于本票的接口面变更。
 
 ## `<GroundPoint>` 的选项分类（逐条对官方实例方法表）
 

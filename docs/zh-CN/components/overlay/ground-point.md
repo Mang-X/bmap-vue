@@ -52,8 +52,8 @@ overlay/groundPoint
 | offset | 偏移量（`setOffset`） | `{ width: number; height: number }` | `new BMap.Size(0, 0)` |
 | url | 图标地址（继承自 `GroundOverlay`，落地是 `setImage`）。**只接受图片地址**，不接受 canvas | `string` | - |
 | opacity | 图层透明度，取值范围 0 - 1（`setOpacity`） | `number` | `1` |
-| displayOnMinLevel | 图层显示的最小缩放级别（`setDisplayOnMinLevel`） | `number` | - |
-| displayOnMaxLevel | 图层显示的最大缩放级别（`setDisplayOnMaxLevel`） | `number` | - |
+| displayOnMinLevel | 图层显示的最小缩放级别（`setDisplayOnMinLevel`） | `number` | `3` |
+| displayOnMaxLevel | 图层显示的最大缩放级别（`setDisplayOnMaxLevel`） | `number` | `21` |
 | zIndex | 覆盖物的层叠顺序值（`setZIndex`） | `number` | - |
 | enableMassClear | 是否允许在 `map.clearOverlays()` 时清除此覆盖物（成对开关 `enableMassClear` / `disableMassClear`） | `boolean` | `true` |
 | visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |

@@ -143,11 +143,14 @@ import { Map, Marker, NavigationControl } from 'bmap-vue'
 | `RawOverlay` / `RawControl` | 官方 React 的「逃生舱」：挂任意原生 SDK 对象。本库用 [`bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
 | `SimpleInfoWindow` | 官方 React 库自有封装，上游 SDK 没有这个类 |
 | `ThreeLayer` | three.js 宿主集成（需自备 three.js）。本库用原生 [`TextLayer`](/zh-CN/components/layer/text-layer) / [`PolygonLayer`](/zh-CN/components/layer/visualization-layers) 覆盖多数场景 |
-| `Symbol`（符号） | **不是覆盖物**：官方 `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——它是一个矢量图标**值对象**（官方参考自己注明「可用作 Marker 的 icon 参数」），不能 `addOverlay`。本库把它的能力并进 [`useMarkerIcons`](/zh-CN/hooks/useMarkerIcons) 那一族图标入口，而不是做成一个挂不上去的组件 |
-| `IconSequence`（图标序列） | **官方已废弃且在 4.0 不渲染**：`overlay/IconSequence.d.ts:4` 标了 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`；官方文档页进一步注明「纯 GL 下不渲染（SDK `_drawIcons` 会抛错）」。本库已在 [`<Polyline :icons>`](/zh-CN/components/overlay/polyline) 上**如实透传**它（收下就静默忽略比不收更难排查），新代码请用 `strokeTexture` |
+| `Symbol`（符号） | **本库尚未暴露该能力**，且**做不成组件**：官方 `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——它是一个矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），没有 `addOverlay` 入口，因此无法做成一个「挂到地图上」的组件。官方 `Symbol` 的 9 个成员（`setPath` / `setFillColor` / `setStrokeColor` / …）在本库**没有任何落地路径**；需要矢量图标时目前只能经 [`bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` 自行创建 |
+| `IconSequence`（图标序列） | **官方已废弃**：`overlay/IconSequence.d.ts:4` 的类声明标了 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`（该类只有构造函数，没有实例方法）。本库已在 [`<Polyline :icons>`](/zh-CN/components/overlay/polyline) 上**如实透传**它（收下就静默忽略比不收更难排查），新代码请用 `strokeTexture` |
 
-::: tip 曾经的三条「真实能力缺口」已经补齐
+::: tip 曾经列的三条「真实能力缺口」，逐条复核后只有一条成立
 `GroundPoint` 于 issue #178 补齐，见 [GroundPoint 贴地点](/zh-CN/components/overlay/ground-point)。
-另外两条经核对**不是缺口**：`Symbol` 是非覆盖物的值对象，`IconSequence` 官方已废弃且在 4.0
-不渲染——把它们做成组件只会得到「挂不上去」或「传了不生效」的假支持。
+
+另外两条经对着 `@baidumap/jsapi-v4-types@4.0.5` 复核，**结论是「不补」**：
+`Symbol` 是**不继承 `Overlay` 的值对象**（做成组件挂不上去），其能力在本库**尚无落地**；
+`IconSequence` 官方**已 `@deprecated`** 且指向 `strokeTexture`。两条的共同点是：硬做成
+组件只会得到「挂不上去」或「传了不生效」的假支持。
 :::
