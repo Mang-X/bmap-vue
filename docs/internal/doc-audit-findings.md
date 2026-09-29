@@ -217,3 +217,28 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 **结论**：真缺口 3 个——`GroundPoint` / `Symbol` / `IconSequence`，都是 4.0 官方已声明、
 能力面里能查到的 overlay 类。其余 7 个是**形态差异**而非能力缺失（组件 vs prop、官方 UI Kit、
 逃生舱、three.js 宿主集成）。
+
+---
+
+## 17.【严重】`<LocationControl>.onLocationStart` 声明了但从未接线
+
+`LocationControl.vue:82` 声明了这个 prop，`:189` 的注释写着
+「`onLocationStart` 走 `create` 覆盖（见下），它每次（重）创建时现读，因此闭包总是最新的」——
+**但这个 `create` 钩子不存在**（全文 grep `create(` 零命中），而 `options()`
+（`:190-201`）也没带上这个键。
+
+于是它**类型检查通过、Vue 正常接收、然后被静默丢弃**。注释还反过来暗示它是刻意设计的
+「闭包最新」行为——读代码的人会以为它能用。文档已改成「不要用它」，但这仍是**运行时缺陷**：
+要么接上（需要 `create` 覆盖能力），要么把这个 prop 删掉。
+
+## 18.【中】`<MapTypeControl>.mapTypes` 类型与官方相反
+
+`MapTypeControl.vue:10` 声明 `mapTypes?: readonly number[]`，而上游
+`const/MapType.d.ts` 是 `declare const BMAP_NORMAL_MAP: string` —— **官方是字符串**。
+类型在这里主动误导使用者。文档已改成字符串并列出取值表，但**类型本身是错的**。
+
+## 19.【中】控件页上的 React `children` 不是缺口
+
+对照器把 `CustomControl.children` / `CopyrightControl.children` 报成真缺口。
+实际上官方用 `children` 表达「挂任意 React 内容」，本库对应**默认插槽**。
+已在对照器口径里归入「React 渲染面」一类（见 official-catalog-audit.md §2.1）。
