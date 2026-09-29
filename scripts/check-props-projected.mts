@@ -46,8 +46,20 @@
  * `options()` 是一个返回普通对象的纯函数，可以直接调用；但 props 成员里有
  * 泛型与交叉类型，运行时读不到「`*Props` 声明了哪些键」。两侧都必须从
  * **AST** 取：props 侧取接口成员声明，`options()` 侧取对象字面量的属性名。
- * 两侧共用 `scripts/source-scan.mts` 的 SFC 解析层，避免第二份 `.vue` 提取实现
- * 与第一份漂移。
+ *
+ * ### 为什么**不**复用 `scripts/source-scan.mts`
+ *
+ * 那个模块的 SFC 层（`scanSourceFile`）是给 AST 门禁准备的**回调式**收集器：
+ * 一次只喂一个文件，违规推进数组。它解决的是「扫很多文件找违规」，
+ * 本判据要的是「拿回每个文件的接口成员集与读取点**做跨文件对照**」
+ * （`*Props` 大量声明在 `types/components.ts`、基接口在 `core/` 下），
+ * 回调式收集器给不了「返回结构」这个形状。
+ *
+ * 因此这里按文件调 `parseSfc` + `ts.createSourceFile` 自己走一遍。
+ * 代价是**多了一份 SFC 提取调用**，但只有一行（`parseSfc(...).descriptor.scriptSetup`），
+ * 而 raw SDK 门禁那边要把 script 与 scriptSetup **两个块**都交给规则引擎——
+ * 本判据只看 `scriptSetup`（`defineProps` / `options` 都在那儿），形状本就不同。
+ * 换句话说这不是「第二份提取实现」，是一次性的解析调用。
  *
  * ## 不做什么
  *
@@ -55,7 +67,7 @@
  * 属于另一条已有门禁。本门禁只回答「这个 prop 有没有人读」。
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import * as ts from "typescript";
 import { parse as parseSfc } from "vue/compiler-sfc";
 
@@ -183,7 +195,24 @@ function readBasePropsKeys(): Set<string> {
 }
 
 /** `spec.options` 箭头函数的**参数名**（组件侧习惯写 `p`）。 */
-function readOptionsParam(source: ts.SourceFile): ts.Identifier | null {
+/**
+ * `const spec = { ... }` 里某个键的初始化表达式。
+ *
+ * 抽出来是因为 `options` 的**参数**与它的**返回体**各自在做同一趟遍历——
+ * 写成两份意味着「spec 变量改名 / 改成解构赋值」要改两处，漏一处的后果是某个判据
+ * 静默失效（读不到就被读成「没人投影」）。
+ *
+ * 返回 `undefined` 表示没找到（不是 `null`）：两种「没有」在调用方是同一件事。
+ *
+ * ⚠️ 刻意**不**泛化成「取任意变量的任意属性」：`readComponentName` 找的是
+ * `defineOptions(...)` 这个**调用表达式**里的属性，根就不是 `const spec = …`，
+ * 硬套进来会造出一个到处都要判别「根是什么」的抽象（AGENTS.md：判据退化成常量
+ * 或没有消费者的抽象一律删除）。
+ */
+function findSpecPropertyInitializer(
+  source: ts.SourceFile,
+  key: string,
+): ts.Expression | undefined {
   for (const statement of source.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
@@ -191,13 +220,18 @@ function readOptionsParam(source: ts.SourceFile): ts.Identifier | null {
       if (!declaration.initializer || !ts.isObjectLiteralExpression(declaration.initializer)) continue;
       for (const property of declaration.initializer.properties) {
         if (!ts.isPropertyAssignment(property)) continue;
-        if (property.name.getText(source) !== "options") continue;
-        const arrow = property.initializer;
-        return ts.isArrowFunction(arrow) ? arrow.parameters[0]?.name as ts.Identifier : null;
+        if (property.name.getText(source) === key) return property.initializer;
       }
     }
   }
-  return null;
+  return undefined;
+}
+
+function readOptionsParam(source: ts.SourceFile): ts.Identifier | null {
+  const initializer = findSpecPropertyInitializer(source, "options");
+  return initializer && ts.isArrowFunction(initializer)
+    ? (initializer.parameters[0]?.name as ts.Identifier | undefined) ?? null
+    : null;
 }
 
 /**
@@ -241,18 +275,8 @@ function readProjectedKeys(source: ts.SourceFile, param: ts.Identifier): Set<str
   };
   // 只扫 `options` 那个属性的初始化表达式，不扫整个文件——
   // 否则 `create` / `mount` / `events` 钩子里读的 `p.*` 会污染判据。
-  for (const statement of source.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "spec") continue;
-      if (!declaration.initializer || !ts.isObjectLiteralExpression(declaration.initializer)) continue;
-      for (const property of declaration.initializer.properties) {
-        if (!ts.isPropertyAssignment(property)) continue;
-        if (property.name.getText(source) !== "options") continue;
-        visit(property.initializer);
-      }
-    }
-  }
+  const initializer = findSpecPropertyInitializer(source, "options");
+  if (initializer) visit(initializer);
   return out;
 }
 
@@ -331,10 +355,6 @@ function readComponentName(source: ts.SourceFile, fallback: string): string {
     }
   }
   return fallback;
-}
-
-function probeFile(file: string, baseProps: Set<string>): UnreadProp[] | { error: string } {
-  return probeText(file.replace(`${ROOT}/`, ""), readFileSync(file, "utf8"), baseProps);
 }
 
 /** 判据本体：只吃源码文本，不碰文件系统（因此可被自测用合成源码驱动）。 */
@@ -442,9 +462,9 @@ function listVue(dir: string, acc: string[] = []): string[] {
 /**
  * 判据本体：**纯函数**，输入是一组「文件名 → 源码」与基接口成员集。
  *
- * 做成纯函数是为了让自测能直接喂**合成源码**（`--self-test` 模式），
- * 而不是去改磁盘上的真组件——改真文件会让并行的其它测试文件读到半个组件，
- * 实测确实把 `controls.test.ts` 的一条「控件总数」断言带崩了。
+ * 做成纯函数（并且导出）是为了让自测能直接喂**合成源码**（`tests/behavior/props-projected-gate.test.ts`
+ * 的两条反例就是这么跑的），而不是去改磁盘上的真组件——改真文件会让并行的其它测试
+ * 文件读到半个组件，实测确实把 `controls.test.ts` 的一条「控件总数」断言带崩了。
  */
 export function auditSources(
   sources: ReadonlyArray<{ readonly rel: string; readonly text: string }>,
@@ -475,7 +495,9 @@ function main(): number {
     return 1;
   }
   const { unread, problems } = auditSources(
-    files.map((file) => ({ rel: file, text: readFileSync(file, "utf8") })),
+    // `UnreadProp.file` 的契约是**相对仓库根**（报告里要能直接点开），
+    // 而 `listVue` 给的是绝对路径——不在这里转换，输出就会是 `/private/tmp/…`。
+    files.map((file) => ({ rel: relative(ROOT, file), text: readFileSync(file, "utf8") })),
     baseProps,
   );
 

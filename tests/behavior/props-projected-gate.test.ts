@@ -56,6 +56,35 @@ describe("check-props-projected · 判据有区分力", () => {
   });
 
   /**
+   * 报告里的路径必须是**仓库相对**的，不能是 `/private/tmp/…`。
+   *
+   * 这条锁的是 `UnreadProp.file` 的契约本身：实现曾经把 `listVue` 的绝对路径
+   * 直接塞进去，类型上写着「相对仓库根」，实际输出却是绝对路径——报告里的路径
+   * 没法直接点开，而**类型与实现不符**正是本门禁要消灭的那类漂移。
+   *
+   * ⚠️ 关键：路径**只在失败时才被打印**。只跑「真实扫描面」（它是绿的）永远看不到
+   * 这个契约——那样这条断言恒成立、等于没写（第一版就栽在这里：把实现改回绝对路径，
+   * 用例照样全绿）。因此这里**临时改坏一个真组件**制造一次失败，再读它的输出。
+   */
+  it("file 契约是仓库相对路径（类型与实现一致）", () => {
+    const file = join(ROOT, "packages/bmap-vue/src/components/controls/MapTypeControl.vue");
+    const original = readFileSync(file, "utf8");
+    const { writeFileSync } = require("node:fs") as typeof import("node:fs");
+    let output = "";
+    try {
+      writeFileSync(file, original.replace("    mapTypes: p.mapTypes,\n", ""));
+      const r = runGate();
+      expect(r.code, `门禁本该红：${r.output}`).toBe(1);
+      output = r.output;
+    } finally {
+      writeFileSync(file, original);
+    }
+    // 失败输出里点名的是仓库相对路径，且**不含**仓库根的绝对路径前缀。
+    expect(output).toContain("packages/bmap-vue/src/components/controls/MapTypeControl.vue");
+    expect(output).not.toContain(ROOT);
+  });
+
+  /**
    * 反证：合成一个「声明了 `mapTypes` 但 `options()` 没投影它」的控件，判据必须点名它。
    *
    * 只跑真实扫描面不足以证明判据有区分力——一个「恒返回通过」的抽取器同样能让上一条绿。

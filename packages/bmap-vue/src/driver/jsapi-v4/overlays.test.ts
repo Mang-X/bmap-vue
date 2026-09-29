@@ -11,6 +11,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import * as ts from "typescript";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
 import { CAPABILITY_CATALOG } from "../capability/catalog";
@@ -906,18 +907,64 @@ describe("图标类型面：printImageUrl 不得回到声明里", () => {
     },
   ];
 
+  /**
+   * 逐个 `type` / `interface` 字面量取**成员名**，再断言里面没有 `printImageUrl`。
+   *
+   * 刻意用 AST 而不是正则：正则版（`/^\s*printImageUrl\??\s*:/gm`）只认「行首 + 冒号」，
+   * 把它挪进单行内联对象类型（`export type MarkerIconInput = { printImageUrl?: string }`）
+   * 匹配数就变 0 —— 假支持回来了，测试照样绿。这道守卫是「声明面回潮」的唯一拦截，
+   * 判据必须对**排版**免疫。
+   *
+   * 遍历 `ts.TypeLiteralNode` 的成员，因此以下写法全部会被抓到：`interface X { printImageUrl?: string }`、
+   * `type X = { ... }`、`type X = A & { printImageUrl?: string }` 的内联部分。
+   * 注释在词法层就被丢弃，**结构上不可能**把它误判成声明。
+   */
+  function typeLiteralMemberNames(source: string): string[] {
+    const file = ts.createSourceFile(
+      "probe.ts",
+      source,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ false,
+      ts.ScriptKind.TS,
+    );
+    const found: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeLiteralNode(node)) {
+        for (const member of node.members) {
+          const name = member.name;
+          if (name && (ts.isIdentifier(name) || ts.isStringLiteral(name))) {
+            found.push(name.text);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    return found;
+  }
+
   it.each(DECLARATION_SITES)("$note 里不再声明 printImageUrl", ({ file }) => {
     const path = resolve(import.meta.dirname, file);
-    const source = readFileSync(path, "utf8");
-    // 只看**类型声明**里的键（`printImageUrl?: string;` / `printImageUrl: string;`），
-    // 注释与 Driver 的告警文案里仍然合法地提到这个名字——那是本组的说明文字。
-    const declarations = [
-      ...source.matchAll(/^\s*printImageUrl\??\s*:/gm),
-    ];
+    const members = typeLiteralMemberNames(readFileSync(path, "utf8"));
+    // 解析守卫：解析器失效时必须红，而不是让「空数组里没有 printImageUrl」通过。
+    expect(members.length, `${file} 解析到 0 个类型字面量成员，解析方式可能已失效`).toBeGreaterThan(10);
     expect(
-      declarations.length,
+      members.filter((name) => name === "printImageUrl"),
       `${file} 又声明了 printImageUrl（issue #177：上游 IconOptions 没有这个键）`,
-    ).toBe(0);
+    ).toEqual([]);
+  });
+
+  /**
+   * 反证：把 `printImageUrl` 塞进**单行内联对象类型**，上面的 AST 守卫仍必须抓到。
+   *
+   * 这条锁的是「判据对排版免疫」：正则版在这里会静默通过（`{ printImageUrl?: string }`
+   * 不在行首），AST 版必须仍然报出来。判据自身没有被证明有效，就等于没有守卫。
+   */
+  it("反证：单行内联对象类型里的 printImageUrl 同样被抓到（判据对排版免疫）", () => {
+    const members = typeLiteralMemberNames(
+      "export type MarkerIconInput = { imageUrl: string; printImageUrl?: string };\n",
+    );
+    expect(members).toContain("printImageUrl");
   });
 
   it("Driver 侧的 warn-once 文案仍在（类型面之外的真实运行仍需要诊断）", () => {

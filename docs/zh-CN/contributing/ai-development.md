@@ -154,6 +154,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:docs-links` | 文档锚点与导航覆盖（页面级死链归 `vitepress build`） |
 | `pnpm check:doc-props` | 文档 / 示例 / README 里**写出的 prop 名** vs 真实声明面（`dist/*.d.ts`）。抓的是 `docs:typecheck` 抓不到的一类：不存在的 kebab prop 落进 `$attrs`，Vue 既不报错也不生效。只扫**模板**——正文与表格里的 `<Map onReady>` 是散文，拿去比会误报 |
 | `pnpm check:interaction-props` | `<Map>` 交互开关 prop 的**「未传」可达性**（#179）：`INTERACTION_PROPS` 的每一项都必须在 `withDefaults` 里显式出现。Vue 把缺省 `Boolean` prop 的「没传」强转成 `false`，而 `syncEnableProps` 靠 `!== undefined` 表达「不表态」——不在 `withDefaults` 里出现，官方 `@default true` 的双指 / 双击缩放会在每次建图时被静默 `disable*()`。判据只管**存在性**不管值，且 fail-closed |
+| `pnpm check:props-projected` | **`*Props` 声明了却没有读者**的 prop 必须为空（#177）。已有的声明面门禁全都只覆盖一个方向，因此 `<LocationControl>.onLocationStart` 声明了、Vue 正常接收、然后被静默丢弃，长期无人拦截。按架构分三档：控件查 `options()` 的投影；走 `useOverlaySpec` 的**不查**（`OverlayFieldMap` 是 mapped type，漏键 `vue-tsc` 就红）；走 `useOverlayResource` 的手写 `create(ctx, p)` 才是主要增量。唯一例外是 `ControlBaseProps` 的成员（`visible` 走 `applyVisible` 自己的通道） |
 | `pnpm check:raw-sdk:declarations` | 旧引擎残留在**公共声明**上的不变量：`dist/**/*.d.ts` 不得再出现 `BMapGL` 或已删除的 engine 取值。`check:public-dts` 只禁 `BMap.*` / `BMapGL` / 官方类型包，**不**禁 engine 取值字面量，所以发布产物上这条覆盖是独立的一步。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分） |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
@@ -207,6 +208,7 @@ pnpm check:docs-brand      # 发布文档面无退役品牌串
 pnpm check:docs-links      # 文档锚点与导航覆盖
 pnpm check:doc-props       # 文档/示例里的 prop 名 vs 真实声明面
 pnpm check:interaction-props # <Map> 交互开关 prop 的「未传」可达性
+pnpm check:props-projected # *Props 声明了却没有读者的 prop 必须为空（反向门禁）
 pnpm check:snippet-consistency # 三处 API 示例一致(需先 build:package)
 pnpm docs:build            # 涉及文档时
 ```
