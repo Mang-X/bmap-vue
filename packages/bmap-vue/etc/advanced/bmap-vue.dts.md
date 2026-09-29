@@ -650,7 +650,6 @@ export declare type MarkerIconInput = string | {
     anchor?: Pixel;
     imageOffset?: Pixel;
     imageSize?: Size;
-    printImageUrl?: string;
 };
 declare interface MarkerLabelInput {
     content: string;

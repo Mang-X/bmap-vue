@@ -212,13 +212,20 @@ export interface MapProps {
  */
 export type MarkerIconName = import("../core/icons/markerIcon").BuiltinMarkerIconName;
 
+/**
+ * 自定义图标描述（`<Marker icon>` / `<LocationControl location-icon>` / `<Marker3D icon>` 共用）。
+ *
+ * ⚠️ **没有** `printImageUrl`（issue #177）：上游 `IconOptions`（4.0.5）只声明 `anchor` /
+ * `imageOffset` / `imageSize` 三个键。它此前挂在类型面上、Driver 每次都丢弃并告警——
+ * 「类型检查通过、Vue 正常接收、然后被静默丢弃」，正是本库拒绝的假支持。JS / `any`
+ * 调用方仍传它时 Driver 会 warn-once，但类型面不再承诺这个键。
+ */
 export interface MarkerCustomIcon {
   imageUrl: string;
   size: { width: number; height: number };
   anchor?: { x: number; y: number };
   imageOffset?: { x: number; y: number };
   imageSize?: { width: number; height: number };
-  printImageUrl?: string;
 }
 
 export type MarkerIcon = MarkerIconName | MarkerCustomIcon

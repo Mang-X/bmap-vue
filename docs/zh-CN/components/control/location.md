@@ -46,8 +46,18 @@ control/location
 | autoViewport | 定位成功后是否自动调整视野 | `boolean` | `true` |
 
 上游 4.0 的 `GeolocationControlOptions` 还有第八个键 `onLocationStart`——一个「在定位开始前接管定位流程」
-的构造回调。**不要用它**：本组件虽然把这个名字收进了 prop 的类型里，但它目前**不会**被转发给 SDK，
-你传什么都不发生。
+的构造回调，本组件作为 `on-location-start` prop 暴露。
+
+| 属性 | 说明 | 类型 |
+| --- | --- | --- |
+| onLocationStart | 定位开始前接管流程：官方把 `onSuccess` / `onFail` 两个回调交给你，返回 `false` 则官方**不再**执行定位 | `(onSuccess: (position: unknown) => void, onFail: () => void) => boolean \| void` |
+
+`onSuccess` / `onFail` 是**官方自己**的回调，本库**原样转交**、不替你转调 `locationSuccess` /
+`locationError` 事件（那需要猜「这次定位属于哪次命令」，而官方没有给这件事任何身份）。
+
+换成新的闭包**不会重建控件**：交给 SDK 的是一个稳定引用，每次被调用时现读当前 prop，
+因此模板里的内联箭头是常规写法。唯一会触发重建的是「补上 / 删掉」这个 prop 本身
+（存在性确实变了，而这与该回调的构造期语义一致）。
 
 `locationIcon` 收的是**图标描述**（与 `<Marker icon>` 同构：内置图标名或 `{ imageUrl, size, anchor, … }`）
 而不是官方类型声明里的 `BMap.Icon` 实例——组件面不接触 SDK 对象。
@@ -122,7 +132,7 @@ control/location
 
 - **内置图标名**（字符串），例如 `"simple_red"` / `"start"` / `"red1"` … `"red10"` /
   `"blue1"` … `"blue10"` / `"loc_red"` / `"loc_blue"` / `"location"` / `"end"`；
-- **自定义图标描述** `{ imageUrl, size, anchor?, imageOffset?, imageSize?, printImageUrl? }`，
+- **自定义图标描述** `{ imageUrl, size, anchor?, imageOffset?, imageSize? }`，
   其中 `size` 是 `{ width, height }`。
 
 完整取值与字段说明见 [Marker 的「自定义图标」](../overlay/marker.md#自定义图标)。

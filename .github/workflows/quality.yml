@@ -161,6 +161,12 @@ jobs:
       - name: Check interaction prop defaults
         run: node --experimental-strip-types scripts/check-interaction-props.mts
 
+      # 反向门禁：`*Props` 里声明了却没有读者的 prop（#177）。已有的声明面门禁全部只覆盖
+      # 一个方向，因此 `<LocationControl>.onLocationStart` 声明了、被 Vue 接收、然后被静默丢弃，
+      # 没有任何一道门禁会红。这条要求每个声明 prop 都真的有读者。
+      - name: Check declared props are projected
+        run: node --experimental-strip-types scripts/check-props-projected.mts
+
       # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
       # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。
       # 根入口 / ./components 暂时进不了报告（Volar __VLS_ 悬空引用），脚本对它们跑探针：

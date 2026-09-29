@@ -3575,7 +3575,6 @@ declare interface Marker3dCustomIcon {
         height: number;
     };
     imageUrl: string;
-    printImageUrl?: string;
 }
 declare interface Marker3DProps {
     position: {
@@ -3657,7 +3656,6 @@ export declare interface MarkerCustomIcon {
         width: number;
         height: number;
     };
-    printImageUrl?: string;
 }
 export declare type MarkerHandle = SdkHandle<"overlay:marker">;
 export declare type MarkerIcon = MarkerIconName | MarkerCustomIcon;
@@ -3667,7 +3665,6 @@ export declare type MarkerIconInput = string | {
     anchor?: Pixel;
     imageOffset?: Pixel;
     imageSize?: Size;
-    printImageUrl?: string;
 };
 export declare type MarkerIconName = BuiltinMarkerIconName;
 export declare interface MarkerLabelSpec {

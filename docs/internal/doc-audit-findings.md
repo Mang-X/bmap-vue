@@ -233,7 +233,7 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 
 ---
 
-## 17.【严重】`<LocationControl>.onLocationStart` 声明了但从未接线
+## 17.【严重·已修 #177】`<LocationControl>.onLocationStart` 声明了但从未接线
 
 `LocationControl.vue:82` 声明了这个 prop，`:189` 的注释写着
 「`onLocationStart` 走 `create` 覆盖（见下），它每次（重）创建时现读，因此闭包总是最新的」——
@@ -241,10 +241,22 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 （`:190-201`）也没带上这个键。
 
 于是它**类型检查通过、Vue 正常接收、然后被静默丢弃**。注释还反过来暗示它是刻意设计的
-「闭包最新」行为——读代码的人会以为它能用。文档已改成「不要用它」，但这仍是**运行时缺陷**：
-要么接上（需要 `create` 覆盖能力），要么把这个 prop 删掉。
+「闭包最新」行为——读代码的人会以为它能用。
+
+**处置（#177）：接线，不删 prop。** 交给 SDK 的是一个模块级**稳定转发器**，它在被调用时
+现读 `props.onLocationStart`。这同时满足两件本来互相冲突的事：变化键对函数值按**存在性**
+比较（内联箭头换引用不算变化，否则控件每次渲染都重建），而「换闭包要拿到最新那个」靠转发器
+兑现。键的**存在性**仍然跟着用户走——没传时该键为 `undefined`，Driver 的 `projectOptions`
+跳过它，SDK 侧不会凭空注册一个官方声明里不存在的回调。
+
+顺带补上反向门禁 `scripts/check-props-projected.mts`：`*Props` 声明了却没有读者的键必须为空
+（见第 20 条末尾的门禁一节）。
 
 ## 18.【中】`<MapTypeControl>.mapTypes` 类型与官方相反
+
+> **未在 #177 处理**：与 #175 是同一根因（issue 原文也写了「可合并处理」），
+> 而 #175 在另一条工作树上并行实施。此处刻意**不动** `mapTypes` 的类型，
+> 避免两条分支对同一个冻结面各改一半。
 
 `MapTypeControl.vue:10` 声明 `mapTypes?: readonly number[]`，而上游
 `const/MapType.d.ts` 是 `declare const BMAP_NORMAL_MAP: string` —— **官方是字符串**。
@@ -279,11 +291,35 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 
 修法机械：把键加进对应 `*Props` 即可，描述符与实例侧的方法都已经在。**未改，待授权。**
 
-## 21.【中】`Marker3D` 的 `icon.printImageUrl` 是类型面上的死字段
+### 门禁（#177 已补，方向一）
 
-声明在 `Marker3D.vue:18` 与 `types/components.ts:221`，但 Driver 每次都**丢弃并告警**
-（`driver/jsapi-v4/overlays.ts:212-218`）——上游 `IconOptions`（4.0.5）只有
-`anchor` / `imageOffset` / `imageSize` 三个键。文档原先把它当可用字段，已改。
+补了 `scripts/check-props-projected.mts`（`pnpm check:props-projected`，已进 quality job）：
+**`*Props` 声明了却没有读者的键必须为空。**
+
+⚠️ 它管的是与上表**相反**的方向——上表是「描述符有、出口无」，这条是「出口有、没人读」。
+两条都要有：前者防「能力没出口」，后者防「出口是空壳」。第 17 条的 `onLocationStart`
+正是后者漏掉的样本（`*Props` 声明、`options()` 没带、SDK 从没见过）。
+
+**它没有、也不打算覆盖上表那三个键**（`Marker.enableMassClear` / `Label.enableClicking` /
+`Prism.enableClicking`）：那三个是**描述符**里有、**`options()` 路径**上不存在——
+覆盖物不走 `ControlSpec.options()`，因此不在本门禁的判据范围内。加 prop 仍需单独裁决。
+
+## 21.【中·已修 #177】`Marker3D` 的 `icon.printImageUrl` 是类型面上的死字段
+
+声明在 `Marker3D.vue:18` 与 `types/components.ts:221`，上游 `IconOptions`（4.0.5）只有
+`anchor` / `imageOffset` / `imageSize` 三个键。
+
+**处置（#177）：从类型面删除，三处一起删**——`Marker3dCustomIcon`（`Marker3D.vue`）、
+`MarkerCustomIcon`（`types/components.ts`）、`MarkerIconInput`（`driver/types/overlays.ts`）。
+同一键曾在三个文件里各写一份，删一处漏两处同样成立，因此用一条逐点名的用例锁住。
+
+⚠️ **原描述需要修正一处**：issue 说「Driver 每次都丢弃并告警」，那只对 **`<Marker>`** 成立。
+`<Marker3D>` 的描述符里**没有** `icon` 条目，因此 `projectOptions` 走「未命中描述符 → 原样透传」，
+**整对象**（含 `printImageUrl`）原封不动交给 `new BMap.Marker3D(...)`，既不归一化也不告警。
+实测（`createMarker3D` + 注入的 Runtime 构造器）确认 `options.icon` 是原样的领域对象。
+也就是说它此前是**双重缺陷**：类型面承诺了一个上游不认的键，而运行期既没警告也没归一。
+`Marker3D` 的完整处置（是否该把 `icon` 补进描述符走 `setIcon` / 归一化）**不在 #177 范围内**，
+需要单开——本条只保证类型面不再承诺这个键。
 
 ## 22.【工具自身】对照器读的是**类**文件而不是 `*Options.d.ts`
 

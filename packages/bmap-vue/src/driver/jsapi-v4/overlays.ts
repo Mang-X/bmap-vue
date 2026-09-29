@@ -209,11 +209,15 @@ export function createJsapiV4OverlayDriver(
           "内置名清单见 core/icons/markerIcon 的 BUILTIN_MARKER_ICON_NAMES",
       );
     }
-    if (typeof icon !== "string" && icon?.printImageUrl) {
-      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
+    if (typeof icon !== "string" && (icon as { printImageUrl?: unknown } | null)?.printImageUrl) {
+      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口。
+      //
+      // ⚠️ `printImageUrl` 已从 `MarkerIconInput` 的**类型面**删除（issue #177），因此 TypeScript
+      // 不会让任何合法调用方走到这里——只有 JS / `any` 调用方仍能传进来。告警**保留**：
+      // 类型面之外的真实运行仍然可能带着这个键，诊断丢掉它就退化成静默丢弃。
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: 图标描述里的 printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃；该字段已从 bmap-vue 的图标类型中移除",
       );
     }
   };

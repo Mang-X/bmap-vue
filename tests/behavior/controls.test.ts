@@ -263,6 +263,98 @@ describe("Map 卸载时控件被清理", () => {
   });
 });
 
+describe("#177：声明了却不生效的 prop（onLocationStart）", () => {
+  beforeEach(() => harness.reset());
+
+  /**
+   * 这条是 issue #177 的本体回归：`onLocationStart` 此前在 `LocationControlProps` 里声明了、
+   * 类型检查通过、Vue 正常接收，而 `options()` **根本没带这个键**——于是它被静默丢弃。
+   * 注释还写着「走 `create` 覆盖」，而那个钩子不存在。
+   */
+  it("构造期真的被 SDK 收到（此前 options() 漏了这个键，SDK 从没见过它）", async () => {
+    const onLocationStart = vi.fn();
+    const { wrapper } = mountControl(LocationControl, { onLocationStart });
+    await flushPromises();
+    expect(typeof lastCreatedControl().options.onLocationStart).toBe("function");
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  it("官方调用它时，用户回调真的被调到（转发器原样转交 onSuccess / onFail）", async () => {
+    const seen: string[] = [];
+    const { wrapper } = mountControl(LocationControl, {
+      onLocationStart: (onSuccess: (p: unknown) => void) => {
+        seen.push("called");
+        onSuccess({ lng: 1, lat: 2 });
+      },
+    });
+    await flushPromises();
+    const passed = lastCreatedControl().options.onLocationStart as (
+      ok: unknown,
+      fail: unknown,
+    ) => void;
+
+    const onSuccess = vi.fn();
+    passed(onSuccess, vi.fn());
+    expect(seen).toEqual(["called"]);
+    expect(onSuccess).toHaveBeenCalledWith({ lng: 1, lat: 2 });
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  /**
+   * 换闭包**不重建**——这是选「稳定转发器」而不是「把回调塞进 `options()`」的理由。
+   *
+   * 变化键对函数值按**存在性**比较（`core/controls/optionKey.ts` 的刻意取舍），
+   * 所以若直接把用户的内联箭头交给 SDK，换闭包不会被下发；转发器每次现读 `props` 才补上这一环。
+   */
+  it("换闭包不重建，且 SDK 拿到的是**最新**那个闭包", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { wrapper, setProps } = mountControl(LocationControl, {
+      onLocationStart: first,
+    });
+    await flushPromises();
+    const created = fake.createdControls.length;
+
+    await setProps({ onLocationStart: second });
+    await flushPromises();
+    expect(fake.createdControls.length, "换闭包不得重建控件").toBe(created);
+
+    const passed = lastCreatedControl().options.onLocationStart as (
+      ok: unknown,
+      fail: unknown,
+    ) => void;
+    passed(vi.fn(), vi.fn());
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+    await nextTick();
+  });
+
+  /**
+   * 删掉这个 prop ⇒ **重建一次**（不是静默留着旧回调）。
+   *
+   * 官方对这一族只给整袋入口 `setOptions`，回调没有 setter，删掉它只能靠重建回到
+   * 「官方声明里没有这个回调」的状态。存在性确实变了，这与该回调的构造期语义一致。
+   */
+  it("补上 / 删掉这个 prop ⇒ 各触发一次重建（存在性变了）", async () => {
+    const { wrapper, setProps } = mountControl(LocationControl, {
+      onLocationStart: vi.fn(),
+    });
+    await flushPromises();
+    const created = fake.createdControls.length;
+
+    await setProps({ onLocationStart: undefined });
+    await flushPromises();
+    expect(fake.createdControls.length).toBe(created + 1);
+    // 键必须整个消失，而不是变成 `undefined`（那会让 SDK 读到「用户显式要求了一个空回调」）
+    expect("onLocationStart" in lastCreatedControl().options).toBe(false);
+    wrapper.unmount();
+    await nextTick();
+  });
+});
+
 describe("选项更新：live 就地写、recreate 重建", () => {
   beforeEach(() => harness.reset());
 

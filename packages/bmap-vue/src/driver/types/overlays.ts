@@ -48,7 +48,16 @@ export type OverlayKind =
   | "ground-point"
   | "context-menu";
 
-/** Marker 图标：内置名称或自定义图标描述 */
+/**
+ * Marker 图标：内置名称或自定义图标描述。
+ *
+ * ⚠️ **没有** `printImageUrl`（issue #177）：上游 `IconOptions`（4.0.5）只声明
+ * `anchor` / `imageOffset` / `imageSize` 三个键，实例 `BMap.Icon` 上也没有对应成员
+ * （`overlay/Icon.d.ts` 只有 `setImageUrl` / `setSize` / `setImageSize` / `setAnchor` /
+ * `setImageOffset`）。它此前挂在类型面上、Driver 每次都丢弃并告警——正是本库拒绝的「假支持」。
+ * JS / `any` 调用方仍然传了它时，Driver 侧保留 warn-once 诊断（见 `jsapi-v4/overlays.ts`
+ * 的 `warnUnknownIconName`），但**类型面不再承诺**这个键。
+ */
 export type MarkerIconInput =
   | string
   | {
@@ -57,7 +66,6 @@ export type MarkerIconInput =
       anchor?: Pixel;
       imageOffset?: Pixel;
       imageSize?: Size;
-      printImageUrl?: string;
     };
 
 export interface MarkerOptions {

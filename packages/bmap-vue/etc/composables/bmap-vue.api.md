@@ -1498,7 +1498,6 @@ export type MarkerIconInput = string | {
     anchor?: Pixel;
     imageOffset?: Pixel;
     imageSize?: Size;
-    printImageUrl?: string;
 };
 
 // @public

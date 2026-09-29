@@ -53,9 +53,10 @@ overlay/marker3d/withImg
 | imageOffset | 贴图所用的图片相对于可视区域的偏移值，等同于 CSS `background-position` | `{ x: number, y: number }` | - |
 
 ::: warning 贴图**没有** `printImageUrl`
-`<Marker>` 的自定义图标里有一个 `printImageUrl` 字段，但它在 JSAPI 4.0 **没有对应项**——
-`IconOptions` 只声明了 `anchor` / `imageOffset` / `imageSize` 三个键。传了会被**丢弃**并告警一次，
-不会生效。`<Marker3D>` 的贴图因此不提供这个字段。
+`printImageUrl` 在 JSAPI 4.0 **没有对应项**——`IconOptions` 只声明了
+`anchor` / `imageOffset` / `imageSize` 三个键。因此它**不再出现在** `<Marker3D>` 贴图、
+`<Marker icon>` 与 `<LocationControl location-icon>` 的类型里（issue #177：它此前声明了却永远
+被丢弃）。JS 代码若仍传它，会被丢弃并告警一次。
 :::
 
 ::: tip 官方文档站还列了 `enableClicking`，但官方 4.0.5 声明里**没有**

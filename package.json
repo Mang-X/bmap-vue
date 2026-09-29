@@ -15,6 +15,7 @@
     "check:snippet-consistency": "node --experimental-strip-types scripts/check-snippet-consistency.mts",
     "check:doc-props": "node --experimental-strip-types scripts/check-doc-props.mts",
     "check:interaction-props": "node --experimental-strip-types scripts/check-interaction-props.mts",
+    "check:props-projected": "node --experimental-strip-types scripts/check-props-projected.mts",
     "check:public-dts": "node --experimental-strip-types scripts/check-public-dts.mts",
     "check:api": "node --experimental-strip-types scripts/check-api.mts",
     "verify:package": "node --experimental-strip-types scripts/verify-package.mts",
