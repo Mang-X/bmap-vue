@@ -1129,7 +1129,7 @@ export const OVERLAY_DESCRIPTORS = {
       // `GroundPointOptions` 的 7 个键里，**这 6 个有对应 setter** ⇒ `mutable`。
       // 位置入口是 `setPoint`（**不是** `setPosition`）：`GroundPoint.d.ts:29`
       // 声明的是 `setPoint(point: Point, update?: boolean): this`。
-      // 对比 `Marker`（`setPosition`）与 `marker3d`（同样走 `setPoint`，见上方条目）——
+      // 对比 `Marker`（`setPosition`）与 `marker3d`（同样走 `setPoint`，见**下方**条目）——
       // 方法名不能照抄同类，必须按各自声明取。
       point: mutateBy("setPoint", { ctorKey: null, value: "point" }),
       // `GroundPoint.d.ts:39`：`setScale(scale: number, update?: boolean): this`
