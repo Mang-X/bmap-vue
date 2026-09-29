@@ -191,3 +191,29 @@ type NavigationControlType = 0 | 1 | 2 | 3;
 而官方同时把图标级 `IconOptions.anchor` 标为 `@deprecated 4.0 起请改用
 MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**，用户被夹在
 「用被弃用的路径」与「没有路径」之间。已在文档写明这一矛盾。
+
+---
+
+## 16. 官方 React 文档站的组件目录 vs 本库覆盖面
+
+官方目录 `https://lbs.baidu.com/jsapi/react/docs/`（hash 路由，`#/component/<slug>`）列出
+**48 个**组件/入口。本库导出 **55 个**——多出来的是 4.0.5 新增的 `PolygonLayer` /
+`PolylineLayer` / `TextLayer` 与数据组件 `MarkerList` / `PointLayer` / `MarkerCluster` / `LineLayer` 等。
+
+官方有、**本库没有**的 10 个，逐个核过上游 4.0.5 类型声明：
+
+| 官方组件 | 上游 4.0.5 有声明？ | 本库为什么不提供 |
+| --- | --- | --- |
+| `GroundPoint`（地面点 3D） | ✅ `overlay/GroundPoint.d.ts` | **未实现**——真缺口，值得排期 |
+| `Symbol`（符号） | ✅ `overlay/Symbol.d.ts` | **未实现**——真缺口 |
+| `IconSequence`（图标序列） | ✅ `overlay/IconSequence.d.ts` | **未实现**——真缺口 |
+| `Icon` | ✅ `overlay/Icon.d.ts` | 官方把它当**独立组件**列出；本库走 `Marker.icon` 传字符串或图标对象，功能等价，只是形态不同 |
+| `PlaceDetail` | ✅ `service/PlaceDetailRenderOptions.d.ts` | 本库的 `PlaceDetail` 在**官方 UI Kit**（`bmap-vue/ui-kit`），不在组件面 |
+| `SimpleInfoWindow` | ❌ 上游类型包无 | 官方 React 库自有封装，非 SDK 能力 |
+| `RawOverlay` / `RawControl` | ❌ 上游类型包无 | 官方 React 库的「逃生舱」，本库用 `./advanced` 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
+| `ThreeLayer` | ❌ 上游类型包无 | three.js 宿主集成，且本库已有原生 `TextLayer` / `PolygonLayer` / `PolylineLayer` 覆盖多数场景 |
+| `React-BMap` | — | 根包本身，不是组件 |
+
+**结论**：真缺口 3 个——`GroundPoint` / `Symbol` / `IconSequence`，都是 4.0 官方已声明、
+能力面里能查到的 overlay 类。其余 7 个是**形态差异**而非能力缺失（组件 vs prop、官方 UI Kit、
+逃生舱、three.js 宿主集成）。
