@@ -52,9 +52,18 @@ export function extractSnippet(markdown: string): ExtractedSnippet {
 
   for (const block of markdown.matchAll(/```([\w-]*)\n([\s\S]*?)```/g)) {
     if (!CODE_LANGS_OF_INTEREST.test(block[1]!)) continue;
-    // 先掐掉行注释与块注释：示例注释里常提到「可由 <BMapProvider> 提供」这类
-    // 旁白，那是**散文**不是用法，拿它当 API 面会把判据变成噪音。
-    const code = block[2]!.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    // 先掐掉注释：示例注释里常提到「可由 <BMapProvider> 提供」这类旁白，
+    // 那是**散文**不是用法，拿它当 API 面会把判据变成噪音。
+    //
+    // 三种都要剥，缺一不可（第一版只剥了前两种，HTML 注释里的 `<Marker>`
+    // 被当成了真实用法——负向用例直接把它抓了出来）：
+    //   ① JS 块注释 `/* … */`
+    //   ② 整行 JS 行注释 `// …`
+    //   ③ **Vue / HTML 模板注释** `<!-- … -->`（`<script setup>` 之外的模板区常用）
+    const code = block[2]!
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/<!--[\s\S]*?-->/g, "");
     // import { a, b as c } from 'bmap-vue' / 'bmap-vue/advanced' / 'bmap-vue/ui-kit'
     for (const match of code.matchAll(
       /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]bmap-vue(?:\/[\w-]+)?['"]/g,
@@ -72,8 +81,16 @@ export function extractSnippet(markdown: string): ExtractedSnippet {
   return { imports, tags };
 }
 
+/**
+ * 读一个示例面文件。`base` 缺省是仓库根——`--dir` 模式换成夹具目录。
+ *
+ * 用 `resolve` 而非 `join`：后者遇到绝对路径会**丢弃**前缀，拼出
+ * `<ROOT>/<夹具绝对路径>` 这种把工作目录和临时目录接在一起的诡异路径，
+ * 症状是 ENOENT，排查很费时间。
+ */
+let readBase = ROOT;
 function read(name: string): string {
-  return readFileSync(join(ROOT, name), "utf8");
+  return readFileSync(resolve(readBase, name), "utf8");
 }
 
 /** 发布声明面里出现过的全部标识符（组件 / 函数 / 类型 / 常量）。 */
@@ -105,7 +122,24 @@ function publicSurfaceIdentifiers(): Set<string> {
   return out;
 }
 
+/**
+ * `--dir <path>`：把三处示例面换成一个目录下的同名文件。
+ *
+ * **为什么要有**：这道门禁的失效方式是**恒绿**——抽取逻辑写坏（抓不到任何名字）
+ * 时真实树照样通过（真实三处的形状恰好完全相等，弱化判据不会被发现）。
+ * 没有入口就注入不了合成输入，也就永远做不了变异测试。
+ *
+ * 注意它换的**不只是路径**：读取基准 `readBase` 也要跟着换，否则 `read()` 仍会
+ * 拿 `ROOT` 去拼夹具里的相对路径（踩过，报错是一串拼接出来的怪异 ENOENT 路径）。
+ */
 function main(): number {
+  const dirFlag = process.argv.indexOf("--dir");
+  const root = dirFlag >= 0 ? process.argv[dirFlag + 1] : undefined;
+  if (dirFlag >= 0 && !root) {
+    console.error("--dir 需要一个路径参数");
+    return 2;
+  }
+
   const surface = publicSurfaceIdentifiers();
   if (surface.size === 0) {
     console.error(
@@ -115,9 +149,13 @@ function main(): number {
     return 1;
   }
 
-  const perSurface: { id: string; file: string; snippet: ExtractedSnippet }[] = SNIPPET_SURFACES.map(
-    ({ id, file }) => ({ id, file, snippet: extractSnippet(read(file)) }),
-  );
+  if (root) readBase = resolve(root);
+  const perSurface: { id: string; file: string; snippet: ExtractedSnippet }[] =
+    SNIPPET_SURFACES.map(({ id, file }) => ({
+      id,
+      file: resolve(readBase, file),
+      snippet: extractSnippet(read(file)),
+    }));
 
   const unknown: string[] = [];
   for (const { id, file, snippet } of perSurface) {

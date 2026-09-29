@@ -75,6 +75,22 @@ bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接
 </script>
 ```
 
+想让一张子树的组件与服务 composable 共用同一份 Client 定义时，用 `<BMapProvider>` 包住它：
+
+```vue
+<template>
+  <BMapProvider>
+    <Map :zoom="12">
+      <ZoomControl />
+    </Map>
+  </BMapProvider>
+</template>
+
+<script setup lang="ts">
+  import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
+</script>
+```
+
 ::: tip Client 查找顺序
 `<Map>` 按以下顺序解析 SDK Client：显式 `client` prop > 显式 `definition` > 显式 `provider/ak` > 最近的 `<BMapProvider>` > `app.use(createBMapPlugin(...))` 默认定义。无任何定义时将报错，请至少提供一种。
 :::
