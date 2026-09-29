@@ -38,14 +38,32 @@ control/scale
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
 
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
+
 ## unit
 
-比例尺的长度单位，取值与官方 `BMap` 的 `BMAP_UNIT_*` 常量**同名**（常量本身就是这两个字符串）：
+比例尺的长度单位。**直接写字符串字面量**——官方那两个常量本身就是这两个字符串，
+常量名 `BMAP_UNIT_METRIC` / `BMAP_UNIT_IMPERIAL` **不是**要传的值：
 
-| 值       | 说明     | 对应官方常量       |
-| -------- | -------- | ------------------ |
-| `metric` | 公尺     | `BMAP_UNIT_METRIC` |
-| `us`     | 英尺     | `BMAP_UNIT_IMPERIAL` |
+| 值 | 说明 | 官方等价常量 | 官方实际值 |
+| --- | --- | --- | --- |
+| `metric` | 公制（米 / 千米） | `BMAP_UNIT_METRIC` | `"metric"` |
+| `us` | 英制（英里 / 英尺） | `BMAP_UNIT_IMPERIAL` | `"us"` |
+
+```vue
+<ScaleControl unit="us" />
+```
+
+::: warning 不要传常量名
+官方文档示例里写的是 `setUnit(BMAP_UNIT_IMPERIAL)`，而 `BMAP_UNIT_IMPERIAL` 求值就是字符串 `"us"`。
+本组件的 `unit` prop 收的就是 `"us"` / `"metric"` 这两个**字面量**；
+传 `"BMAP_UNIT_IMPERIAL"` 不会被换算，SDK 不认这个值。
+:::
 
 ## 选项的更新方式
 

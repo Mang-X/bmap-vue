@@ -40,6 +40,13 @@ control/overview
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
 
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
+
 ## 选项的更新方式
 
 - `size` → 官方 `setSize()`，**就地更新**（领域口径的 `{x, y}` 会换算成官方的 `Size`）；

@@ -18,7 +18,7 @@ control/navigation
 | ----------------- | ----------------------------------------------- | ------------------------- | ------------------------------- | ------------------------- |
 | anchor            | 控件的停靠位置                                  | `string`                  | [anchor](#anchor)               | `BMAP_ANCHOR_TOP_LEFT`    |
 | offset            | 控件的偏移值                                    | `{x: number, y: number }` | -                               | `{ x: 30, y: 10 }`        |
-| type              | 控件类型（可就地更新，走官方 `setType()`）      | `string`                  | [type](#type)                   | 官方默认 `LARGE`          |
+| type              | 控件类型（可就地更新，走官方 `setType()`）      | `string`                  | [type](#type)                   | 不传＝官方默认的「大型」控件 |
 | showZoomInfo      | 是否显示级别提示信息（只有构造期生效）          | `boolean`                 | -                               | `true`                    |
 | enableGeolocation | 是否集成定位功能（只有构造期生效）              | `boolean`                 | -                               | `false`                   |
 
@@ -39,14 +39,33 @@ control/navigation
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
 
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
+
 ## type
 
-| 值                          | 说明                       |
-| --------------------------- | -------------------------- |
-| BMAP_NAVIGATION_CONTROL_LARGE | 平移按钮 + 缩放按钮 + 滑块 |
-| BMAP_NAVIGATION_CONTROL_SMALL | 平移按钮 + 缩放按钮        |
-| BMAP_NAVIGATION_CONTROL_PAN   | 仅平移按钮                 |
-| BMAP_NAVIGATION_CONTROL_ZOOM  | 仅缩放按钮                 |
+**类型是 `string`**，取值为下列四个常量名：
+
+| 值 | 官方等价常量 | 官方数值 | 说明 |
+| --- | --- | --- | --- |
+| `BMAP_NAVIGATION_CONTROL_LARGE` | `BMAP_NAVIGATION_CONTROL_LARGE` | `0` | 平移按钮 + 缩放按钮 + 滑块 |
+| `BMAP_NAVIGATION_CONTROL_SMALL` | `BMAP_NAVIGATION_CONTROL_SMALL` | `1` | 平移按钮 + 缩放按钮 |
+| `BMAP_NAVIGATION_CONTROL_PAN` | `BMAP_NAVIGATION_CONTROL_PAN` | `2` | 仅平移按钮 |
+| `BMAP_NAVIGATION_CONTROL_ZOOM` | `BMAP_NAVIGATION_CONTROL_ZOOM` | `3` | 仅缩放按钮 |
+
+::: warning `type` 收字符串，不收数值
+上游 4.0 的 `NavigationControl#setType(type: NavigationControlType)` 收的是**数值** `0 | 1 | 2 | 3`，
+而本组件的 `type` prop 声明为 `string`，取值原样（**不做**名字→数值的换算）下发。
+
+这与 `anchor` 不同：`anchor` 在控件边界有一张名字→数值的换算表，传 `BMAP_ANCHOR_TOP_LEFT` 会被换成
+`0`；`type` 没有这张表。因此上面这一列要填**字符串**而不是 `0`。
+
+传数字会走到官方控件的未知类型分支；传不存在的名字同样不会被换算。
+:::
 
 ## 选项的更新方式
 

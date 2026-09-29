@@ -25,6 +25,13 @@ https://lbs.baidu.com/jsdemo.htm#cCityList
 | offset | 控件的偏移值     | `{x: number, y: number }` | -                 | `{ x: 18, y: 18 }`        |
 | expand | 默认列表是否展开 | `boolean`                 | -                 | `false`                   |
 
+上游 4.0 的 `CityListControlOptions` 还有两个构造项，本组件**没有暴露**：
+
+- `trigger` —— 替代默认按钮的自定义 DOM 触发元素。它要求组件面交出一个原生 `HTMLElement`，
+  而这会把 SDK 内部的渲染结构（按钮 class、子节点、事件绑定）变成公共契约。需要它请走
+  `./advanced` 的 `unwrapRaw()` 拿到底层控件自己接。
+- `canCheckSize` —— 容器过小时是否不展示控件。官方只在构造期读它，本库没有暴露入口。
+
 ## 动态组件 Props
 
 | 属性 | 说明 | 类型 | 可选值 | 默认值 |
@@ -42,6 +49,13 @@ https://lbs.baidu.com/jsdemo.htm#cCityList
 | BMAP_ANCHOR_TOP_RIGHT    | 右上 |
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
 
 ## 选项的更新方式
 

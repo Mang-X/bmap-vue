@@ -44,14 +44,17 @@ control/location
 | useCompass | 是否使用设备指南针定向（仅 iOS 生效） | `boolean` | `false` |
 | autoZoom | 定位成功后是否自动调整级别 | `boolean` | `true` |
 | autoViewport | 定位成功后是否自动调整视野 | `boolean` | `true` |
-| onLocationStart | 接管定位流程的回调 | `(onSuccess, onFail) => boolean \| void` | - |
+
+上游 4.0 的 `GeolocationControlOptions` 还有第八个键 `onLocationStart`——一个「在定位开始前接管定位流程」
+的构造回调。**不要用它**：本组件虽然把这个名字收进了 prop 的类型里，但它目前**不会**被转发给 SDK，
+你传什么都不发生。
 
 `locationIcon` 收的是**图标描述**（与 `<Marker icon>` 同构：内置图标名或 `{ imageUrl, size, anchor, … }`）
 而不是官方类型声明里的 `BMap.Icon` 实例——组件面不接触 SDK 对象。
 
-`onLocationStart` 返回 `false` 时**不再执行定位**。本库**不**替你把它的 `onSuccess` / `onFail`
-转调成 `locationSuccess` / `locationError` 事件：官方没有给「这次定位属于哪次命令」任何身份，
-转调只能靠猜。
+需要「定位开始前先做点什么」时，用控件的 [`locationSuccess` / `locationError`](#组件事件) 事件
+或命令面表达；官方也没有给「这次定位属于哪次命令」任何身份，所以本库不替你把任何回调
+转调成这两个事件。
 
 ::: warning `watchPosition` 与「卸载」不是同一件事
 `watchPosition: true` 是**持续跟踪**（官方 `stopLocationTrace()` 可以停），
@@ -66,6 +69,13 @@ control/location
 | BMAP_ANCHOR_TOP_RIGHT    | 右上 |
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
 
 ## 组件事件
 

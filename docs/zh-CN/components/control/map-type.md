@@ -18,8 +18,8 @@ control/mapType
 | ---------------- | ----------------------------------------- | ------------------------- | ------------------------------- | ------------------------- |
 | anchor           | 控件的停靠位置                            | `string`                  | [anchor](#anchor)               | `BMAP_ANCHOR_TOP_RIGHT`   |
 | offset           | 控件的偏移值                              | `{x: number, y: number }` | -                               | `{ x: 10, y: 10 }`        |
-| type             | 控件样式（只有构造期生效）                | `string`                  | [type](#type)                   | 官方默认 `MAP`            |
-| mapTypes         | 展示的地图类型列表（只有构造期生效）      | `readonly number[]`       | -                               | 官方默认 `[普通, 卫星, 混合]` |
+| type             | 控件样式（只有构造期生效）                | `string`                  | [type](#type)                   | 不传＝官方默认的图标形式 |
+| mapTypes         | 展示的地图类型列表（只有构造期生效）      | `string[]`                | [mapTypes](#maptypes)          | 不传＝官方默认的普通 / 卫星 / 混合 |
 | showStreetLayer  | 是否显示路网层（可就地更新）              | `boolean`                 | -                               | `true`                    |
 
 ## 动态组件 Props
@@ -39,13 +39,54 @@ control/mapType
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
 
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
+
 ## type
 
-| 值                            | 说明             |
-| ----------------------------- | ---------------- |
-| BMAP_MAPTYPE_CONTROL_MAP      | 地图预览按钮样式 |
-| BMAP_MAPTYPE_CONTROL_DROPDOWN | 按钮 + 下拉列表  |
-| BMAP_MAPTYPE_CONTROL_HORIZONTAL | 横向列表样式   |
+**类型是 `string`**，取值为下列三个常量名：
+
+| 值 | 官方等价常量 | 官方数值 | 说明 |
+| --- | --- | --- | --- |
+| `BMAP_MAPTYPE_CONTROL_HORIZONTAL` | `BMAP_MAPTYPE_CONTROL_HORIZONTAL` | `0` | 横向排列的按钮 |
+| `BMAP_MAPTYPE_CONTROL_DROPDOWN` | `BMAP_MAPTYPE_CONTROL_DROPDOWN` | `1` | 按钮 + 下拉列表 |
+| `BMAP_MAPTYPE_CONTROL_MAP` | `BMAP_MAPTYPE_CONTROL_MAP` | `2` | 图标形式的地图预览按钮 |
+
+::: warning `type` 收字符串，不收数值
+上游 4.0 的 `MapTypeControlOptions.type` 声明为 `MapTypeControlType`（**数值** `0 | 1 | 2`），
+而本组件的 `type` prop 声明为 `string`，取值原样（**不做**名字→数值的换算）下发。
+
+这与 `anchor` 不同：`anchor` 在控件边界有一张名字→数值的换算表；`type` 没有这张表。
+因此上面这一列要填**字符串**而不是 `0`。
+:::
+
+## mapTypes
+
+上游 4.0 声明 `mapTypes?: MapType[]`，而 `MapType` 是一组**字符串**常量：
+
+| 常量名 | 说明 |
+| --- | --- |
+| `BMAP_NORMAL_MAP` | 普通街道地图 |
+| `BMAP_SATELLITE_MAP` | 卫星地图 |
+| `BMAP_HYBRID_MAP` | 卫星与路网混合地图 |
+| `BMAP_EARTH_MAP` | 地球卫星视图 |
+| `BMAP_NONE_MAP` | 无底图模式 |
+
+不传时由 SDK 决定，官方默认是普通 / 卫星 / 混合三张图。
+
+::: warning `mapTypes` 收的是字符串，不是数值
+这些常量在 4.0 里本身就是**字符串**（`BMAP_NORMAL_MAP` 等），因此 `mapTypes` 要传**字符串数组**：
+
+```vue
+<MapTypeControl :map-types="['BMAP_NORMAL_MAP', 'BMAP_SATELLITE_MAP']" />
+```
+
+传数字不会被换算成任何一张图——4.0 的 `MapType` 本身就是这些字符串。
+:::
 
 ## 选项的更新方式
 
