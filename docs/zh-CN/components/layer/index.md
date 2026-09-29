@@ -36,6 +36,26 @@ import {
 > 要素状态与拾取是一等公民，`visible` 走官方 `setVisible`（隐藏 ≠ 释放数据，重新显示不换实例）。
 > 两种取舍见[原生批量可视化图层](./native-visual-layers)。
 
+## 与官方文档的组件对照
+
+官方 React 文档站按组件分页，本库的命名与之**大部分一致**，少数是形态或归类不同。这张表只说
+**不一致的那些**——一致的直接按名字找即可：
+
+| 官方页 | 本库 | 差异 |
+| --- | --- | --- |
+| `geojson-layer` | [`GeoJSONLayer`](./geojson-layer) | 一致。官方多一个构造期 `dataSource`，本库只走 `data` / `setData()` 一条路径。 |
+| `district-layer` | [`DistrictLayer`](./district-layer) | 一致。本库 `name` 是必填 prop，官方页标「与 `adcode` 二选一」。 |
+| `dom-layer` | [`DOMLayer`](./dom-layer) | 官方 `createDOM` 在本库叫 **`createDom`**（kebab-case 可达）。官方页另列一个 `nextTick`，上游类型包未声明，本库不提供。 |
+| `line-layer` / `fill-layer` | [`LineLayer` / `FillLayer`](./native-visual-layers) | 一致。官方页多列三个键（`enableChangeSelectIndexByPick` / `setDataParams` / `onReady`），上游类型包**均未声明**，本库不提供。 |
+| `point-shape-layer` / `point-icon-layer` / `point-collection` | [`PointCollection` / `PointIconLayer`](../data) | **形态不同**：官方讲图层 API 与 v3 的覆盖物，本库走**取数面**（业务数组 + `itemKey` / `getPosition`）+ 扁平样式 prop。逐项差异见[数据组件](../data#官方有本库未暴露三个点图层)。 |
+| `traffic-layer` | `TrafficLayer` | 四个 4.0+ 键（`autoRefresh` / `refreshInterval` / `colors` / `edge`）**同名同义**覆盖。官方页另有 `predictDate` 并标为 v3 遗留项，本库**不提供**（4.0 的路况图层没有「预测日期」这个概念）。 |
+| `fill-layer` 的样式表达式 | [`LineLayerStyle` / `FillLayerStyle`](./native-visual-layers#linelayerstyle) | 一致：官方样式支持的数据驱动表达式本库**如实透传**，不复刻其结构。 |
+
+官方页面的 API 表**不等于**上游 SDK 声明：个别页列了类型包里查无此成员的键（上面三处已点名）。
+本库不照抄这类键——收下一个传了也不生效的 prop 就是假支持。判据是
+**官方文档 ∩ 上游 4.0.5 类型声明 ∩ 本库 prop 面**三者求交，逐条依据写在各组件页的
+「官方有、本库未暴露」一节里。
+
 ## 统一槽位与更新口径
 
 | 槽位 | 语义 | 落地方式 |

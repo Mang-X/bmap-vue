@@ -404,6 +404,31 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 事件与 `PointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
 `dataparsed` 不代表图标已经可见。
 
+## 官方有、本库未暴露（三个点图层）
+
+官方 React 文档为点图层列了三个页面：`point-shape-layer` / `point-icon-layer` / `point-collection`。
+前两个讲的是**图层**形态（`BMap.PointShapeLayer` / `BMap.PointIconLayer`），第三个讲的是 v3
+时代那个**覆盖物** `BMap.PointCollection`（4.0.5 的类型包里**没有**它的类声明）。本库的对应关系与
+逐项差异：
+
+| 官方页 | 本库对应 | 差异 |
+| --- | --- | --- |
+| `point-shape-layer` | [`PointCollection`](#pointcollection) | **形态差异**：官方讲图层 API（`data` / `idKey` / `crs` / `style` …），本库的 `PointCollection` 走**取数面**（`data` 是业务数组 + `itemKey` + `getPosition`），样式是**扁平 prop**（`shapeType` / `size` / `color` …）而不是 `style` 袋。 |
+| `point-icon-layer` | [`PointIconLayer`](#pointiconlayer) | 同上：官方页的图层成员，本库是**取数面 + 扁平样式 prop**。 |
+| `point-collection` | [`PointCollection`](#pointcollection) | **底层类不同**：官方页讲 `BMap.PointCollection` 这个 v3 覆盖物（4.0.5 的类型包里**没有**它的类声明）；本库的 `PointCollection` 落在 `BMap.PointShapeLayer` 上。官方页那一组键**不可照抄**：`points` 是覆盖物的坐标数组（本库用 `data` + `getPosition` 取数）、`shape` / `color` / `size` 三个的取值域是 v3 的常量枚举（本库用 `shapeType` 数字枚举，见上文迁移提示框）、`enableMassClear` 是覆盖物的方法而非构造选项、`onClick` 一族是 React 事件回调。 |
+
+前两页的 API 表与本库 prop 面的逐项对照（**同名同义**的不再重复列出）：
+
+| 官方键 | 本库的情况 |
+| --- | --- |
+| `style` | **拆成扁平 prop**：`PointCollection` 给 `shapeType` / `size` / `color` / `strokeColor` / `strokeWeight`；`PointIconLayer` 给 `icon` / `width` / `height` / `anchors` / `offset` / `scale` / `rotation` / `featureOpacity` / `visibility` / `sizes` / `userSizes` / `iconObj`。逐要素透明度要写 `featureOpacity`（`PointIconLayer`）而不是 `opacity`——后者是**图层级**的那把乘数，两者是两个官方字段。 |
+| `data` | **`data` 是业务数组**，由 `itemKey` + `getPosition` 适配成 GeoJSON 后经 `setData()` 下发。 |
+| `idKey` | **`itemKey`**。函数式 key 落保留字段 `__id`，因此 `itemKey` 恒能推出身份字段，`PointCollection` 的要素状态命令面不会遇到「未声明 `idKey` ⇒ 命令被拒绝」那条路径。 |
+| `crs` / `selectedIndex` / `selectedColor` / `autoSelect` / `popEvent` | **未暴露**：这五个在 4.0.5 的 `PointShapeLayerOptions` / `PointIconLayerOptions` 上确有声明，但两个组件**都不投影**它们。选中态请走[要素状态](#要素状态feature-state)命令面（按业务 id 定位，比按 `dataIndex` 序号更可靠），悬浮高亮与事件冒泡目前没有等价入口。 |
+| `enablePicked` / `pickWidth` / `pickHeight` | 同名覆盖，且 `enablePicked` 默认**刻意不同于官方**（官方 `false`，本库 `true`）。 |
+| `isFlat` | 同名覆盖。`PointIconLayer` 另有官方同名的 `isFixed`。⚠️ 官方三处的 `@default` 自相矛盾（`layer/` 两处写 `true`、`visualization/PointLayer` 写 `false`），因此两个组件都**不给默认值**——「没传 = 不表态 = SDK 自己的默认」，迁移时**显式传值**。 |
+| `onClick` / `onDblClick` / `onRightClick` / `onMouseMove` | **只投影 `click`**。四个名字在官方 4.0.5 声明的 `NormalLayerEventMap` 上确实存在（`dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`），但两个点图层组件只订阅 `click`、只 `defineEmits` `item-click` + `click` 两个事件。需要其余事件请另用[`LineLayer` / `FillLayer`](./layer/native-visual-layers)（它们投影了 `NATIVE_LAYER_PICK_EVENTS` 全部四个）。 |
+
 ## `PointLayer`（`experimental`，扩展 API）
 
 ```vue

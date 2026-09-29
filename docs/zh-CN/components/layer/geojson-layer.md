@@ -44,6 +44,18 @@ layer/geojsonLayer
 | mousemove | 鼠标在要素上移动时触发 | `(e: unknown) => void` |
 | mouseout | 鼠标移出要素时触发 | `(e: unknown) => void` |
 
+## 官方有、本库未暴露
+
+官方 React 文档的 `GeoJSONLayer` API 表列了 9 个属性，本组件**同名同义**地覆盖了其中 8 个
+（`reference` / `markerStyle` / `polylineStyle` / `polygonStyle` / `level` / `minZoom` /
+`maxZoom` / `visible`）。剩下的一项：
+
+| 官方键 | 本库的等价写法 |
+| --- | --- |
+| `dataSource` | **`data`**。官方把它同时写进构造选项（`GeoJSONLayerOptions.dataSource`）并另给一个 `setData()` 方法；本库只保留**方法那条路径**：`data` 的每次变化都经 `setData()` 落到同一张图层上——这已经覆盖 `dataSource` 能表达的全部语义（初始数据 = 挂载后的第一次 `setData`），而多一个「构造期数据源」prop 只会让「数据从哪来」有两个入口，初始那一帧与后续 `setData` 走两套时机。 |
+
+官方这一页的 API 表**没有**列出任何「上游类型包未声明」的键，因此上表就是全部差异。
+
 ## 注意
 
 - 事件回调收到的是**归一化事件**；要素集合在 `e.raw.features`（`e.raw` 是官方事件对象）。

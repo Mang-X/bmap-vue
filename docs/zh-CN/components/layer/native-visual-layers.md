@@ -200,6 +200,25 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 - **原地修改同一份 `data` 不会被感知**（数据按引用比较，与图层组件同一条口径）。请换引用，或换
   一份新的 `FeatureCollection`。
 
+## 官方有、本库未暴露
+
+官方 React 文档为 `LineLayer` / `FillLayer` 各列了一张 API 表。两张表里**同名同义**的键
+（`style` / `data` / `idKey` / `crs` / `selectedIndex` / `selectedColor` / `visible` /
+`opacity` / `minZoom` / `maxZoom` / `zIndex` / `enablePicked` / `autoSelect` / `popEvent` /
+`pickWidth` / `pickHeight`，`FillLayer` 另有 `border`）本组件**全部覆盖**——见上面的
+「组件 Props」表。逐条对下来，官方页**多列**的只有三个键，而这三个在官方 4.0.5 的
+`LineLayerOptions` / `FillLayerOptions` 声明里**都查无此成员**：
+
+| 官方键 | 判定 |
+| --- | --- |
+| `enableChangeSelectIndexByPick` | **不提供**：上游 4.0.5 的 `layer/` 声明里没有这个成员（`LineLayer.d.ts` / `FillLayer.d.ts` 逐成员核对，`layer/` 与 `visualization/` 全目录 grep 也无）。本库不做「拾取时自动切换 `selectedIndex`」——它与「自己用要素状态控制高亮」是两条互斥的路线，后者才是官方声明里可验证的那条（`updateState` / `clearState` / `replaceAllState`），见下节。 |
+| `setDataParams` | **不提供**：官方 `setData(data: object)` 只有**一个**参数（`LineLayer.d.ts` / `FillLayer.d.ts` 的 `setData` 签名均如此），没有「第二参 `{ changeCenter: true }` 自动定位」的声明。需要数据驱动时让 `data` 引用变化即可，那已经是就地 `setData()`，不重建。 |
+| `onReady` | **不提供**：官方这两个类**没有**「挂载后把原生实例交给你」的构造选项。需要命令式操作请走[要素状态](#要素状态feature-state)（`update` / `remove` / `clear` / `replace` / `get`）与[播放命令面](#播放控制与进度观察tracklinelayer)——它们已经是官方入口的原样投影，不需要自己持有原生实例。 |
+
+官方表里的 `onClick` / `onDblClick` / `onRightClick` / `onMouseMove` 是 **React 事件回调**，
+在本库对应 `defineEmits` 的事件名（**无** `on` 前缀），不是 prop：见[拾取事件](#拾取事件)。
+官方**不派发** `mouseover` / `mouseout`，本库也不声明。
+
 ## `visible` 的落地
 
 | kind | 隐藏的语义 |

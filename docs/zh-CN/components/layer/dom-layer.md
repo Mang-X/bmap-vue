@@ -40,6 +40,16 @@ layer/domLayer
 这一组**全部是就地更新**（官方用整袋 `setStyleOptions(partial)` 更新它们，没有逐字段 setter），
 因此改动都**不重建图层**。
 
+## 官方有、本库未暴露
+
+官方 React 文档的 `DOMLayer` API 表列了 12 个属性，逐条对下来：
+
+| 官方键 | 本库的情况 |
+| --- | --- |
+| `createDOM` | **改名**为 `createDom`。官方它是**构造首参**（`new BMap.DOMLayer(createDOM, options)`）；Vue 把模板里的 `create-dom` 归一成 `createDom`，而 `createDOM` 在 kebab-case 下**不可达**（`create-dom` ≠ `createDOM`），只能写 `:createDOM="..."`。本库选模板友好的一侧，映射在组件内部完成。见下方「注意」。 |
+| `data` / `offsetX` / `offsetY` / `anchors` / `coordinate` / `enableDraggingMap` / `minZoom` / `maxZoom` / `zIndex` / `visible` | **同名同义**全部覆盖（见上两节表格）。 |
+| `nextTick` | **不提供**。官方 4.0.5 的 `DOMLayerOptions` 声明里**没有**这个成员（`layer/DOMLayer.d.ts` 逐成员核对），官方类也没有对应方法。官方文档列了它、上游类型包没有——照抄进来就是一个**传了也不生效**的 prop，因此本库不声明。需要消除首帧抖动时在 `createDom` 里自己处理（元素创建后自行排一次布局）。 |
+
 ## 关于交互事件（本组件刻意不提供）
 
 官方 4.0.5 的 `DOMLayer` 只声明了 `addEventListener`、**没有** `removeEventListener`，而本库的
