@@ -6,8 +6,13 @@
  * `#23` 留下的这条欠账收口）。
  *
  * 统一状态（所有服务类 composable 一致）：`data` / `error` / `status` / `sdkStatus` /
- * `isLoading` / `supported`，全部是只读 shallow refs；`get` / `getBatch` 的参数与结果强类型，
+ * `isLoading` / `supported`，全部是只读 shallow refs；`getPoint` / `getBatch` 的参数与结果强类型，
  * `cancel()` 是**逻辑取消**（SDK 侧请求收不回，见 Driver 的 `ServiceCall.cancel`）。
+ *
+ * 命名对齐官方 `BMap.Geocoder`（#165）：动作叫 `getPoint`（不是 `get`），结果**只有** `data`
+ * 一个读取口。此前的 `location` / `point` / `result` 是同一个 ref 的三个别名，已删除——其中
+ * `location` 尤其危险：官方 `getLocation` 产出的是**地址**，而我们这个 `location` 装的是坐标点，
+ * 留着会让「照 SDK 命名找成员」的调用方拿到语义相反的东西（逆解析在 `useGeocodeDetail`）。
  *
  * 需要 Map 上下文：`<Map>` 子树，或（client-only 服务）`<BMapProvider>` 子树——本服务
  * **不需要地图实例**，因此 Provider 子树内同样可用。
@@ -51,8 +56,8 @@ export function useGeocoder(map?: unknown) {
       ),
   });
 
-  /** 单个地址解析。`city` 省略时由服务自行判定城市。 */
-  const get = (address: string, city?: string) => task.execute(address, city);
+  /** 单个地址解析（官方 `Geocoder#getPoint`）。`city` 省略时由服务自行判定城市。 */
+  const getPoint = (address: string, city?: string) => task.execute(address, city);
 
   /**
    * 批量解析：**顺序执行、逐项保留结果**——单项失败不会丢掉其它项，也不会把整批变成失败。
@@ -61,7 +66,7 @@ export function useGeocoder(map?: unknown) {
    */
   function getBatch(addresses: readonly string[], city?: string): Promise<GeocodeItemResult[]> {
     return runSequential(addresses, async (address) => {
-      const result = await get(address, city);
+      const result = await getPoint(address, city);
       return {
         address,
         point: result.data,
@@ -74,12 +79,8 @@ export function useGeocoder(map?: unknown) {
   }
 
   return {
+    /** 正地址解析的唯一结果读取口（坐标点 `{ lng, lat }`） */
     data: task.data,
-    /** 定位结果别名(v2 习惯) */
-    location: task.data,
-    /** 点结果别名(模板 point?.lat 习惯) */
-    point: task.data,
-    result: task.data,
     error: task.error,
     isError: task.isError,
     isEmpty: task.isEmpty,
@@ -88,7 +89,7 @@ export function useGeocoder(map?: unknown) {
     sdkStatus: task.sdkStatus,
     isLoading: task.isLoading,
     supported: task.supported,
-    get,
+    getPoint,
     getBatch,
     cancel: task.cancel,
     reset: task.reset,

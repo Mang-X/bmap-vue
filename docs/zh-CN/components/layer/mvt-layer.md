@@ -103,11 +103,11 @@ layerRef.value?.featureState.clear()        // clearState
 
 ## 稳定性
 
-官方 4.0 的 `MVTLayer`（探针 + 4.0.4 类声明双向取证）；本库在能力清单中以 `native` 收录
+官方 4.0 的 `MVTLayer`（探针 + 4.0.5 类声明双向取证）；本库在能力清单中以 `native` 收录
 （`layer.mvt`）。未声明成员一律不提供——声明了再忽略属于假支持。
 
 ## 参考
 
 - live 探针读数：`.agents/skills/bmap-jsapi-v4/references/mvt-layer.md`「live 探针读数」。
-- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.4` 的类声明。
+- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.5` 的类声明。
 - 图层总览见「[图层总览](./index.md)」。

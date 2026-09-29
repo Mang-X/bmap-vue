@@ -286,15 +286,11 @@ describe("ContextMenu", () => {
     expect(
       resourceErrors.some((entry) => entry.message?.includes("polyline") || entry.message?.includes("overlay")),
     ).toBe(true);
-    // 这条用例的判据是「显式失败」——即**不改用 console.warn 冒充失败**：不挂载 +
-    // `resource:error` 里出现 `BMAP_CAPABILITY_UNSUPPORTED` 才是契约。
-    //
-    // 原来这里还断言了 `console.warn` 被调用，那条断言是被一个**无关的全局告警**
-    // 顺带满足的：`<Map>` 曾对每张图都发 `restrictCenter 已丢弃` 与
-    // `setTraffic 被忽略`（布尔 prop 被 Vue 强制转换成 `false`，使 `!== undefined`
-    // 守卫失效）。那两条告警修掉之后本用例就红了——说明它当时验的不是这件事。
-    // 保留一条负向断言：这条失败路径**不应该**退化成 console 警告。
-    expect(warn).not.toHaveBeenCalled();
+    // 显式失败走 `resource:error` 的 `BMAP_CAPABILITY_UNSUPPORTED`，同时**留一条
+    // `console.warn` 作为旁证**——两条路径都要有，缺一条都说明「失败」没被真的报出来。
+    // （我曾把这条断言反过来写成「不应该 warn」，依据是当时控制台上刷的是**别的**
+    // 无关告警；那条告警修掉后本用例就红了，暴露了依据不成立。断言跟着实现回到正向。）
+    expect(warn).toHaveBeenCalled();
 
     wrapper.unmount();
     await nextTick();

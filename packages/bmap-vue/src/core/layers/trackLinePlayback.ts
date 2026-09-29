@@ -16,7 +16,9 @@
  *
  * ## 依据：live 探针，不是类型包
  *
- * `@baidumap/jsapi-v4-types@4.0.4` **没有** `TrackLine` 类声明。六条方法名与
+ * `@baidumap/jsapi-v4-types@4.0.4` **没有** `TrackLine` 类声明（4.0.5 已补上，
+ * `visualization/TrackLine.d.ts`，本节其余依据仍以 live 探针为准——类声明给了形状，
+ * 不给「这几个方法真的调得动」）。六条方法名与
  * 合法入参的**可调用性**均经 live 探针取证（`scripts/probe-track-line.mts`，2026-09-23，
  * exit 0；夹具 `tests/behavior/fixtures/probe-track-line.live.json`）。在拿到读数之前不猜
  * 方法名——这是 #110 的硬门。**参数边界**（`setProcess ∈ [0,1]`、`setSpeed > 0`）来自官方

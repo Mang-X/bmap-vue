@@ -23,6 +23,7 @@ import type { Capability } from "../driver/capability/catalog";
 import type { MapHandle, ServiceHandle } from "../driver/types/handles";
 import type {
   RouteRenderOptions,
+  ViewportOptions,
   ServiceCall,
   ServiceErrorInfo,
   ServiceResult,
@@ -70,12 +71,8 @@ export interface BMapRouteRenderOptions {
   panel?: string | HTMLElement;
   /** 检索结束后是否自动调整地图视野 */
   autoViewport?: boolean;
-  /** 自动调整视野时的计算选项 */
-  viewportOptions?: {
-    noAnimation?: boolean;
-    margins?: readonly number[];
-    zoomFactor?: number;
-  };
+  /** 视野计算选项（与 LocalSearch 共用官方 `ViewportOptions` 的同一份投影） */
+  viewportOptions?: ViewportOptions;
 }
 
 /**
@@ -88,8 +85,10 @@ export interface RouteRenderSnapshot {
   map: MapHandle | null | undefined;
   panel: string | HTMLElement | undefined;
   autoViewport: boolean | undefined;
-  noAnimation: boolean | undefined;
+  enableAnimation: boolean | undefined;
   zoomFactor: number | undefined;
+  /** `callback` 走**身份**比较：它只有构造期一条路（官方无对应 setter），换函数就得重建实例。 */
+  callback: (() => void) | undefined;
   /** `margins` 的**内容键**（数组按内容比较，不能用引用比较） */
   marginsKey: string;
   /** `margins` 的原始值（还原成 SDK 选项时用它，不做序列化往返） */
@@ -106,8 +105,9 @@ export function snapshotRouteRender(
     map: toValue(render.map),
     panel: render.panel,
     autoViewport: render.autoViewport,
-    noAnimation: render.viewportOptions?.noAnimation,
+    enableAnimation: render.viewportOptions?.enableAnimation,
     zoomFactor: render.viewportOptions?.zoomFactor,
+    callback: render.viewportOptions?.callback,
     marginsKey: JSON.stringify(margins ?? []),
     margins,
   };
@@ -122,7 +122,8 @@ export function sameRouteRender(
     a.map === b.map &&
     a.panel === b.panel &&
     a.autoViewport === b.autoViewport &&
-    a.noAnimation === b.noAnimation &&
+    a.enableAnimation === b.enableAnimation &&
+    a.callback === b.callback &&
     a.zoomFactor === b.zoomFactor &&
     a.marginsKey === b.marginsKey
   );
@@ -133,10 +134,12 @@ export function toRouteRenderOptions(
   snapshot: RouteRenderSnapshot | null,
 ): RouteRenderOptions | undefined {
   if (!snapshot) return undefined;
-  const viewport: { noAnimation?: boolean; margins?: readonly number[]; zoomFactor?: number } = {};
-  if (snapshot.noAnimation !== undefined) viewport.noAnimation = snapshot.noAnimation;
+  // 逐字段「undefined = 不给」：Driver 侧按字段判定转发，因此不传的项不会退化成 SDK 默认值。
+  const viewport: ViewportOptions = {};
+  if (snapshot.enableAnimation !== undefined) viewport.enableAnimation = snapshot.enableAnimation;
   if (snapshot.margins !== undefined) viewport.margins = snapshot.margins;
   if (snapshot.zoomFactor !== undefined) viewport.zoomFactor = snapshot.zoomFactor;
+  if (snapshot.callback !== undefined) viewport.callback = snapshot.callback;
 
   return {
     // 不传 `map` 就是纯 headless；传了必须是 MapHandle（Driver 会再校验一次）

@@ -68,12 +68,18 @@ export type { Capability, CapabilityFamily, CapabilityStatus } from "../driver/c
 export type { CapabilityExplanation, CapabilityReason, CapabilityRegistry } from "../driver/capability/registry";
 export type { CapabilityDescriptor } from "../driver/capability";
 export type { ControlDriver } from "../driver/types/controls";
+// 控件命令面（issue #168 item 1）：ControlDriver 的公开成员，见 advanced.ts 的同款说明。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "../driver/types/controls";
 export type { EventDriver } from "../driver/types/events";
 export type { GeometryDriver } from "../driver/types/geometry";
 export type { LayerDriver } from "../driver/types/layers";
 export type { MapDriver } from "../driver/types/map";
 export type { OverlayDriver } from "../driver/types/overlays";
-export type { PanoramaDriver } from "../driver/types/panorama";
+export type { PanoramaDriver, PanoramaLink } from "../driver/types/panorama";
 export type { ServiceDriver } from "../driver/types/services";
 export type { UnsupportedBehavior } from "../driver/capability";
 export type { LoadedJsapiV4 } from "../core/loader/providers/types";
@@ -95,7 +101,20 @@ export type {
 } from "../driver/types/handles";
 export type { Bounds, Pixel, Point, Size } from "../driver/types/geometry";
 export type { ControlKind, ControlOptions, ControlOptionStatus, CopyrightEntry } from "../driver/types/controls";
-export type { InitialMapOptions, MapInteraction, MapStyleInput, MapType, MapView } from "../driver/types/map";
+export type {
+  InitialMapOptions,
+  MapInteraction,
+  MapStyleInput,
+  MapType,
+  MapView,
+  // 同上：`BMapDriver` → `MapDriver` 的公开签名里出现了这两个类型
+  Viewport,
+  FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
+} from "../driver/types/map";
 export type {
   CustomOverlayOptions,
   InfoWindowOptions,
@@ -105,6 +124,13 @@ export type {
   OverlayPropertyPolicy,
   OverlayTarget,
   PathOptions,
+  // issue #165 Class 3 的命令面类型：`OverlayDriver` 的方法签名逐个引用它们
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  PathReadBackApi,
+  MenuItemView,
 } from "../driver/types/overlays";
 export type {
   LayerCreateOptions,

@@ -46,7 +46,8 @@
  * 参考实现是「该有的接口面」的证据，但**不是照抄对象**：它手抄的两张数组正是本库用描述符取代
  * 的东西；它的 `stableStringify` 依赖链也是本库用 `watchSources` 取代的东西。
  */
-import type { OverlayKind } from "../../driver/types/overlays";
+import type { OverlayHandle } from "../../driver/types/handles";
+import type { OverlayDriver, OverlayKind } from "../../driver/types/overlays";
 import type { TargetKind } from "../context/target";
 import type { MapReadyContext } from "../context/types";
 
@@ -123,7 +124,7 @@ export type OverlayEventSpec =
   | { readonly sdk: string; readonly emit: string }
   | { readonly sdk: string; readonly handle: (event: unknown) => void };
 
-export interface OverlaySpec<Props extends object, Resource> {
+export interface OverlaySpec<Props extends object, Resource, Expose = OverlayExposeShape> {
   /**
    * Registry 记账用的类型名（`OverlayRegistry.registerResource({ type })`）。
    *
@@ -200,8 +201,65 @@ export interface OverlaySpec<Props extends object, Resource> {
   /** 创建 SDK 实例（**只读 props**；构造期属性一律取自这里）。 */
   create(context: MapReadyContext, props: Readonly<Props>): Resource | Promise<Resource>;
 
+  /**
+   * `defineExpose` 的**命令面**（issue #165 Class 3 / TASK 2）。
+   *
+   * ## 判据：#165 §5-C「改 prop 不算实现同名方法」
+   *
+   * 官方的公开方法分三类，本钩子只服务**前两类**：
+   *
+   * | 类 | 官方例子 | 为什么必须走命令面 |
+   * | --- | --- | --- |
+   * | **无对应 prop 的动作** | `InfoWindow#maximize()` / `ContextMenu#removeItem(item)` | 没有 prop 可表达，只能调方法 |
+   * | **读回** | `Marker#getRank()` / `Circle#getRadius()` | 组件**永远不会**替调用方读一次；主模型是 props，不是 SDK 当前值 |
+   * | **受控写入** | `Marker#setPosition(point)` | **已**由 `position` 字段（`"position"` 策略）实现 ⇒ 不重复暴露 |
+   *
+   * ## 三条实现约束
+   *
+   * 1. **不得返回 raw SDK 对象**：官方 `ContextMenu#getItem(): MenuItem` 这类返回值一律
+   *    在 Driver 内投影成领域值（`core/overlays/overlayCommands.ts` 的文件头逐条记录了
+   *    「为什么官方 `MenuItem` 上没有任何 getter，所以读回只能来自本库模型」）。
+   * 2. **释放 / 未就绪必须显式失败**：命令面经 `requireSession()` 取会话，取不到即抛
+   *    `BMAP_RESOURCE_DISPOSED`，**绝不**静默 no-op（静默会让调用方把「已释放」误判成
+   *    「SDK 说没有」）。与 `core/layers/trackLinePlayback.ts` 的「告警一次并跳过」
+   *    **刻意不同**：那边是播放意图（漏一帧下轮补上），这边是「明确要一个结果」。
+   * 3. **不镜像成组件状态**：官方没有「顶点被改了」这类事件，读回只是**按需取**，
+   *    不写进任何 ref。写进去就等于把 SDK 的当前值升级成第二主模型。
+   */
+  readonly expose?: (context: OverlayExposeContext) => Expose;
+
   /** SDK 事件的**覆盖项**（其余事件由 kind 的事件矩阵派生）。绑定进实例 scope。 */
   readonly events?: readonly OverlayEventSpec[];
+}
+
+/**
+ * 命令面工厂的第三个类型参数。
+ *
+ * 它存在只是为了**让 `expose` 的返回值被逐成员检查**：`Record<string, unknown>` 会把
+ * 「九个成员全在」与「一个成员都没有」判成同一种类型，而 #165 要的恰恰是逐个点名。
+ * 缺省成 `Record<string, unknown>` 以免**没有**命令面的 spec（绝大多数）被迫写第三个实参。
+ */
+export type OverlayExposeShape = object;
+
+/**
+ * `OverlaySpec.expose` 的输入：取「当前会话」的唯一入口（每条命令现取）。
+ *
+ * `handle` 收成 `OverlayHandle`（而不是 spec 的 `Resource`）：**所有**命令面最终都经
+ * `OverlayDriver` 的归一化入口，而那些入口的入参就是 `OverlayHandle`——`Resource` 是
+ * `MarkerHandle` / `CircleHandle` 这类**更窄**的句柄，把窄类型暴露给命令面只会逼每个
+ * 工厂写一次断言，而断言处正是最不该出现「类型说了不算」的地方。
+ * 窄化由 `driver` 在解析句柄品牌时自己完成（`kindOfHandle`，认不出就显式失败）。
+ */
+export interface OverlayExposeContext {
+  /**
+   * 当前存活实例 + 它的 Driver；未就绪、重建窗口内或已释放时为 `null`。
+   *
+   * **每次调用都现取**：覆盖物会因构造期属性变化而换实例，闭包里存死句柄会让命令
+   * 打进一个已经不在地图上的覆盖物上。
+   */
+  session(): { driver: OverlayDriver; handle: OverlayHandle } | null;
+  /** 组件名（诊断用）。 */
+  readonly component: string;
 }
 
 /**

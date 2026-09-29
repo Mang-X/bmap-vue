@@ -34,7 +34,7 @@ layer/geojsonLayer
 | markerStyle | 点要素样式（或按属性计算的函数） | `object \| Function` | - |
 | polylineStyle | 线要素样式 | `object \| Function` | - |
 | polygonStyle | 面要素样式 | `object \| Function` | - |
-| level | 显示层级（官方默认 `-99`） | `number` | SDK 默认 |
+| level | 显示层级（官方默认 `-99`）；变化时**就地更新**，不重建 | `number` | SDK 默认 |
 
 ## 组件事件
 
@@ -49,6 +49,14 @@ layer/geojsonLayer
 - 事件回调收到的是**归一化事件**；要素集合在 `e.raw.features`（`e.raw` 是官方事件对象）。
 - 本组件**不提供** `opacity` / `zIndex`：官方 `GeoJSONLayer` 没有这两个语义（层级是语义不同的
   `level`），声明了再静默忽略属于假支持。
+- `level` 变化走官方 `setLevel()` **就地更新**，**不重建图层**。依据是 live 读数而不是对称性：
+  `setLevel(-50)` 之后 `getLevel()` 读回 `-50`，且解析出的**每一个**要素的 `zIndex` 都从 `-99`
+  变成 `-50`（`scripts/probe-165-level-effect.mts`，4.0.5）。重建的代价与 `data` 变化同量级
+  ——把所有已画好的要素拆掉重做——却换不来任何额外效果。
+  取值域**不做校验**：官方注释说「负数越大层级越高」，但那是**语义**描述，实测 `0` / `2000` /
+  `1.5` 都被照收。
+- `minZoom` / `maxZoom`（若由调用方经 `options` 逃生口传入）**仍走重建**：运行时**没有**
+  `setMinZoom` / `setMaxZoom`（同一支探针读数），与 `level` 相反。
 
 ## 关于函数型样式
 
@@ -63,5 +71,5 @@ layer/geojsonLayer
 
 ## 参考
 
-- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.4` 的类声明。
+- 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.5` 的类声明。
 - 排障（CORS / 坐标系 / 占位符）见「[图层总览](./index.md)」。

@@ -8,6 +8,24 @@
   的决策 7（八个 kind 的操作表）**只做增补**：新增两个状态操作（`replaceState` / `getState`），
   原有 12 个操作的登记与「不支持显式失败」的口径不变。
 
+> **已随 4.0.5 变化（2026-09-24，issue #165）**：本 ADR 的决策**全部保持原样**，但 §背景
+> 三件事实的第 1 件已经变了，正文原样保留作为历史记录：
+> `@baidumap/jsapi-v4-types@4.0.5` 给 `Heatmap` / `TrackLine` / `PointLayer` / `ClusterLayer`
+> **补上了类声明**（新增的 `visualization/{PointLayer,ClusterLayer,Heatmap,TrackLine}.d.ts`，
+> 均被 `index.d.ts:193-206` 引用）。因此「这四个 kind 属扩展 API、官方没有类声明」不再是
+> 4.0.5 下的事实。
+>
+> **决策仍然有效的原因**：本 ADR 依赖的不是「有没有声明」，而是**异步注入**——4.0.5 的
+> `Heatmap.d.ts` / `TrackLine.d.ts` 里那句「首次加载时可视化实现是异步注入的」原样保留，
+> 而「有声明」≠「运行时已加载」。Driver 因此把 `declared` / `styleMember` /
+> `RUNTIME_INJECTED_LAYER_CTORS` 拆成三个各判各的判断（`declared: true` 仍然成立，
+> 样式入口从 `setStyleOptions` 改为逐 kind 的 `setOptions`，构造器缺失按
+> `BMAP_CAPABILITY_UNSUPPORTED` 而非 `BMAP_SDK_CALL_FAILED` 报错）。
+>
+> 另一处变化：`LineLayer` / `FillLayer` 在 4.0.5 起被官方标 `@deprecated`
+> （`layer/LineLayer.d.ts:189` / `layer/FillLayer.d.ts:213`，建议改用 `PolylineLayer` /
+> `PolygonLayer`）。本 ADR 保留这两个组件、不改名（弃用是上游的事）。
+
 ## 背景
 
 #23 落了 `NativeLayerDriver`（八个原生数据 kind 的底层接口），#34 在其上落了第一个 Vue 组件

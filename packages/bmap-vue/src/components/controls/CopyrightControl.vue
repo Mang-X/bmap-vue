@@ -2,12 +2,24 @@
 import { getCurrentInstance, onUpdated, ref } from "vue";
 import { useControlResource, type ControlSpec } from "../../core/controls";
 import type { MapReadyContext } from "../../core/context/types";
+import { logger } from "../../core/logger";
 import type { ControlHandle } from "../../driver/types/handles";
 import {
   getCopyrightControl,
   removeCopyrightControlIfEmpty,
   setCopyrightControl,
 } from "./copyrightControlPosCache";
+
+/**
+ * 延后摘除的重试节奏与次数（见 `deferCopyrightRemoval`）。
+ *
+ * live 读数的窗口是 126–167ms（`scripts/probe-165c-surface.mts`），因此一次 50ms 的等待
+ * 就足以覆盖绝大多数情况；给 4 次 / 50ms（合计 200ms）是「窗口比读数更宽」时的余量，
+ * **不**做成无界重试——无界重试在「成员面真的永远不来」时是一条永久在飞的定时器，
+ * 而本仓库的泄漏门禁只认「能归零的资源」。
+ */
+const REMOVAL_RETRY_INTERVAL_MS = 50;
+const REMOVAL_RETRY_ATTEMPTS = 4;
 
 export interface CopyrightControlProps {
   anchor?: string;
@@ -87,12 +99,22 @@ const spec: ControlSpec<CopyrightControlProps> = {
   },
 
   unmount({ context, resource }) {
-    context.client.driver.controls.removeCopyright(resource, id);
+    // 摘除**可能延后**（见 `deferCopyrightRemoval`：官方控件成员面在 loader 判就绪之后
+    // 约 150ms 才补齐，`removeCopyright` 属于后补的那一批）。
+    //
+    // 两条路径都必须走完「退出共享组 + 摘控件」，所以这两件事**不**放进延后闭包里——
+    // 控件是**按 (Client, anchor) 共享**的：若窗口内把它留在图上，后续同 anchor 的组件会
+    // 共用一个已经残留的实例，而它的缓存条目也没人淘汰（#95 评审 P1 的第一种症状）。
+    // 真正需要延后的只有**版权项本身**那一条 SDK 记录。
+    deferCopyrightRemoval(context, resource, id);
     registered = false;
     // 用**创建时**的 anchor 退出共享组（`props.anchor` 可能已经是新值，见 `createdAnchor`）
     const anchor = createdAnchor ?? anchorOf(props);
     createdAnchor = null;
-    removeCopyrightControlIfEmpty(anchor, resource, context);
+    // `id` 作为 `exceptId`：本组件自己那条在窗口内**摘不掉**（它此刻还在 SDK 上），
+    // 但它属于一个**已经卸载**的组件，不能因此把共享控件留在图上（`removeCopyrightControlIfEmpty`
+    // 的注释展开了这条）。
+    removeCopyrightControlIfEmpty(anchor, resource, context, id);
     if (control === resource) control = null;
     readyContext = null;
   },
@@ -102,7 +124,7 @@ const spec: ControlSpec<CopyrightControlProps> = {
       registerCopyright();
       return;
     }
-    context.client.driver.controls.removeCopyright(resource, id);
+    deferCopyrightRemoval(context, resource, id);
     registered = false;
   },
 };
@@ -145,6 +167,94 @@ onUpdated(() => {
     bounds: current.bounds,
   });
 });
+
+/**
+ * 摘掉一条版权项；**成员面尚未补齐**时延后到补齐之后再摘。
+ *
+ * ## 为什么需要延后，而不是「调用失败就跳过」
+ *
+ * #165 审计的结论是「`removeCopyright` 运行时不存在，卸载必抛 ⇒ 控件永远不摘、缓存永不淘汰」。
+ * 复核（`scripts/probe-165c-surface.mts`，live AK）否掉了「不存在」这个前提：稳定态
+ * `removeCopyright` **在位且调得动**。但复核取到一条**真的**，而且形状几乎一样：
+ *
+ * > **官方 loader 判「已加载」的那一下（`__bmapJSApiOnLoad_N` callback），早于控件成员面
+ * > 补齐约 150ms。**窗口内 `addCopyright` / `getCopyright` / `getCopyrightCollection`
+ * > **已经可用**（属于先到的 8 成员那批），而 `removeCopyright` **还不在**（后补的那批）。
+ *
+ * 本库从 loader 判就绪就开始建图、建控件，因此**窗口是可达的**：控件挂上了、版权项登记了，
+ * 紧接着卸载时 `removeCopyright` 不存在 ⇒ `callRequired` 抛 `BMAP_SDK_CALL_FAILED` ⇒
+ * 后面退出共享组与摘控件的代码整段被跳过（本组件的 `unmount`、以及
+ * `removeCopyrightControlIfEmpty`）。
+ *
+ * 三条可选处置与各自的代价：
+ *
+ * | 处置 | 后果 |
+ * | --- | --- |
+ * | 静默跳过（`callControl` 的 warn-and-ignore） | **版权项永久留在 SDK 上**——它已经 add 成功了，没人再摘它。控件被摘下后这条内容可能仍以 SDK 内部缓存的形式存在 |
+ * | 只做「摘控件 / 出缓存」 | 同上的尾巴，且没有补做的那一步 |
+ * | **延后到成员补齐之后再摘**（本函数） | 版权项在 SDK 上多留 ≤ 一个窗口（~150ms），之后被真的摘掉；期间组件已卸载、控件已摘下，用户不可见 |
+ *
+ * 选第三条的依据是「**补齐是追溯的**」：live 实测「窗口里 add 的那条，窗口之后能 remove 掉」——
+ * 因为被补的是**原型**，已存在的实例自动获得成员。因此延后不是「赌一次重试」，而是确定会生效。
+ *
+ * ## 为什么延后只覆盖**摘除**，不覆盖**登记**
+ *
+ * `addCopyright` 属于先到的那批（窗口内可调，live 实测 `collectionAfterAdd: array(1)`），
+ * 所以 `registerCopyright` 不用改。反过来若哪天 `addCopyright` 也落到后补那一批，
+ * 窗口内挂载会先失败——那是**另一个**问题（控件建起来却没有版权项），不该由本函数顺带掩盖。
+ *
+ * ## 定时器归属
+ *
+ * 延后用 `window.setTimeout` 而**不**登记进 `useControlResource` 的实例 scope：scope 在卸载时
+ * 就 dispose 了，把补做挂上去等于让它**永远不执行**（那正是本函数要避免的静默失败）。
+ * 代价是这个定时器不在组件的释放路径上——因此它做的是**幂等且可空**的补做
+ * （摘一条已经登记的版权项），且必须告警（见下）。
+ */
+function deferCopyrightRemoval(
+  context: MapReadyContext,
+  resource: ControlHandle,
+  copyrightId: number,
+): void {
+  const controls = context.client.driver.controls;
+  if (!controls.canRemoveCopyright(resource)) {
+    // 成员不在 = 落在运行时成员面窗口内。补做一次；失败则**说出来**（不静默）。
+    logger.warn(
+      "CopyrightControl: 当前 CopyrightControl 实例还没有 removeCopyright()（官方 4.0 的控件" +
+        "成员面在 loader 判就绪之后约 150ms 才补齐），已把本次摘除延后；补做失败时该版权项会" +
+        "残留在 SDK 上——这不是静默 no-op，请留意这条告警",
+    );
+    scheduleRemovalRetry(context, resource, copyrightId);
+    return;
+  }
+  // 稳定态：直接摘。延后路径是**例外**处置，不是常态——正常路径不建任何定时器。
+  controls.removeCopyright(resource, copyrightId);
+}
+
+/** 补做一次摘除；成员仍未就绪则有限次重试。 */
+function scheduleRemovalRetry(
+  context: MapReadyContext,
+  resource: ControlHandle,
+  copyrightId: number,
+): void {
+  const attempt = (remaining: number) => {
+    window.setTimeout(() => {
+      const controls = context.client.driver.controls;
+      if (controls.canRemoveCopyright(resource)) {
+        controls.removeCopyright(resource, copyrightId);
+        return;
+      }
+      if (remaining > 0) {
+        attempt(remaining - 1);
+        return;
+      }
+      logger.warn(
+        `CopyrightControl: 延后摘除版权项 ${String(copyrightId)} 仍未成功（成员面一直没有就绪），` +
+          "该版权项残留在 SDK 上",
+      );
+    }, REMOVAL_RETRY_INTERVAL_MS);
+  };
+  attempt(REMOVAL_RETRY_ATTEMPTS);
+}
 
 defineOptions({ name: "CopyrightControl", inheritAttrs: false });
 </script>

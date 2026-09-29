@@ -433,6 +433,39 @@ const EXCEPTIONS: Exception[] = [
   },
 ];
 
+/**
+ * 「同名但不同形」（#165 Class 2）。
+ *
+ * 上面的「名称对齐」表**只比名字**。这一族条目两侧名字完全一致，因此会出现在那张表里并
+ * 标成「✓ ✓」——但它们的**返回形态 / 签名不同**，直接照名字从参考实现移植会写错。
+ *
+ * 这里是手写的（生成器只渲染）：判据是「同名」+「形态可被类型层面指认」，因此每一行
+ * 都能被逐条核对。依据见 `docs/zh-CN/contributing/165-audit-B-C-D-F.md` 与各成员 ADR。
+ */
+interface ShapeDivergence {
+  name: string;
+  ours: string;
+  official: string;
+}
+
+const SHAPE_DIVERGENCES: ShapeDivergence[] = [
+  {
+    name: "useMap",
+    ours: "返回**对象** `{ status, map, client, error, whenReady }`",
+    official: "返回 **MapHandle 本身**（未就绪为 `null`）",
+  },
+  {
+    name: "useMapReady",
+    ours: "返回 `ComputedRef<boolean>`（**读一个布尔**）",
+    official: "接收**回调**的哨兵 composable `useMapReady(onReady)`",
+  },
+  {
+    name: "useMapStatus",
+    ours: "**8 个独立**的 readonly ref（可分别 watch）",
+    official: "**一个原子快照**对象（`useSyncExternalStore`，无撕裂读）",
+  },
+];
+
 const officialNames = [...officialPublic.keys()].sort((a, b) => a.localeCompare(b));
 const oursNames = [...oursPublic].sort((a, b) => a.localeCompare(b));
 const uiKitOnly = [...oursUiKit].filter((n) => !oursPublic.has(n)).sort((a, b) => a.localeCompare(b));
@@ -446,6 +479,21 @@ const uiKitOnly = [...oursUiKit].filter((n) => !oursPublic.has(n)).sort((a, b) =
   }
   if (stale.length > 0) {
     console.error("[generate-api-diff] stale EXCEPTIONS (name not in public surface):");
+    for (const s of stale) console.error(`  ${s}`);
+    process.exit(1);
+  }
+}
+
+// SHAPE_DIVERGENCES 过期检查：每个名字必须**真的是交集里的一条**（否则这一节就在撒谎：
+// 它声称「上表标成 ✓ ✓」，而名字不在上表时那句话不成立）。
+{
+  const stale = SHAPE_DIVERGENCES.filter(
+    (d) => !oursPublic.has(d.name) || !officialPublic.has(d.name),
+  ).map((d) => d.name);
+  if (stale.length > 0) {
+    console.error(
+      "[generate-api-diff] stale SHAPE_DIVERGENCES (name not in BOTH public surfaces):",
+    );
     for (const s of stale) console.error(`  ${s}`);
     process.exit(1);
   }
@@ -603,7 +651,29 @@ md.push("## 名称对齐");
 md.push("");
 md.push("两侧同名的导出（组件 / hooks / 类型 / 常量）。");
 md.push("");
+md.push(
+  "> ⚠️ **本表只比「名字」，不比「返回形态 / 签名」。** 同名**不**等于同行为——",
+  "同名而行为不同的条目由下方「同名但不同形」一节逐条点名，不要从这张表推出行为一致。",
+  "",
+);
 md.push(mdTable(both, ["name", "surface", "ours", "official"]));
+md.push("");
+md.push("### 同名但不同形");
+md.push("");
+md.push(
+  "下列条目**名字**与官方一致（因此出现在上表并标成「✓ ✓」），但**返回形态 / 签名不同**。",
+  "从参考实现移植时按名字写会写错——这一节是那张表的必要注脚，不是另一张表。",
+);
+md.push("");
+md.push("| 名称 | 本库 | 官方 React 参考 |");
+md.push("| --- | --- | --- |");
+for (const d of SHAPE_DIVERGENCES) {
+  md.push(`| \`${d.name}\` | ${d.ours} | ${d.official} |`);
+}
+md.push("");
+md.push(
+  "> 逐条依据与处置见 `docs/zh-CN/contributing/165-audit-B-C-D-F.md` 的 B-R 一节。",
+);
 md.push("");
 md.push("## 语义例外（手写）");
 md.push("");

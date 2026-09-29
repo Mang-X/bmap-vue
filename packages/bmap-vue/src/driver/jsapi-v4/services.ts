@@ -9,7 +9,7 @@
  *    `ServiceCall<ServiceResult<T>>`（`../normalize/serviceCall`），业务不再需要自己写
  *    「超时 / 空结果 / 迟到回调」三件套。
  *
- * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.4`）：
+ * 行为依据（官方 4.0 API 参考 + `@baidumap/jsapi-v4-types@4.0.5`）：
  * - `Geocoder#getPoint/getLocation`、`Convertor#translate`、`Boundary#get`、`LocalCity#get`、
  *   `Geolocation#getCurrentPosition` + `getStatus`、`Autocomplete#search` /
  *   `AutocompleteOptions.onSearchComplete`、`LocalSearch#search/searchNearby/searchInBounds/
@@ -133,10 +133,53 @@ interface RawBoundaryPayload {
   boundaries?: unknown;
 }
 
+/**
+ * `Geolocation#getCurrentPosition` 的原始回包地址（官方 `GeolocationAddress`）。
+ *
+ * 按**上游真实形状**声明：`city_code` / `street_number` 是 snake_case（官方
+ * `GeolocationResult.d.ts`），这里必须原样。把它声明成 `GeolocationAddressInfo`（camelCase）
+ * 就等于宣称「回包已经是领域形状」，于是没有任何东西负责改名——调用方读 `address.cityCode`
+ * 恒为 `undefined`，而类型说它有。原始形状与领域形状要分开声明，
+ * `projectGeolocationAddress` 才是那个改名的地方。
+ *
+ * `latitude` / `longitude` 刻意不投影：`point` 已经是同一份经纬度，官方两者同时给，
+ * 保留两份就成了「同一个值有两个真源」。
+ */
+interface RawGeolocationAddress {
+  country?: string;
+  province?: string;
+  city?: string;
+  city_code?: string | number;
+  district?: string;
+  street?: string;
+  street_number?: string;
+}
+
 interface RawGeolocationPayload {
   point?: RawPoint;
   accuracy?: number;
-  address?: GeolocationAddressInfo;
+  address?: RawGeolocationAddress;
+  timestamp?: number;
+  altitude?: number | null;
+  altitudeAccuracy?: number | null;
+  heading?: number | null;
+  speed?: number | null;
+}
+
+/** 官方回包 → 领域地址形状；缺失的键不补空串（`undefined` 表达「官方没给」）。 */
+function projectGeolocationAddress(
+  address: RawGeolocationAddress | undefined,
+): GeolocationAddressInfo | null {
+  if (!address) return null;
+  const projected: GeolocationAddressInfo = {};
+  if (address.country !== undefined) projected.country = address.country;
+  if (address.province !== undefined) projected.province = address.province;
+  if (address.city !== undefined) projected.city = address.city;
+  if (address.city_code !== undefined) projected.cityCode = address.city_code;
+  if (address.district !== undefined) projected.district = address.district;
+  if (address.street !== undefined) projected.street = address.street;
+  if (address.street_number !== undefined) projected.streetNumber = address.street_number;
+  return projected;
 }
 
 interface RawLocalCityPayload {
@@ -618,7 +661,7 @@ export function readRoutePlan(value: unknown, index: number): RoutePlan | null {
     distanceText: distance.text,
     duration: duration.value,
     durationText: duration.text,
-    // `getToll()` / `getTollDistance()` 只在官方 `DrivingRoutePlan` 接口里声明（4.0.4 的
+    // `getToll()` / `getTollDistance()` 只在官方 `DrivingRoutePlan` 接口里声明（4.0.5 的
     // `DrivingRouteResult#getPlan` 返回类型写的是 `RoutePlan`）⇒ **可选读取**：拿不到就是 `null`，
     // 不 augmentation、不告警——「这次没拿到」本身就是如实的表达。
     toll: readOptionalFiniteNumber(readOptionalMember(value, "getToll")),
@@ -899,7 +942,7 @@ export function createJsapiV4ServiceDriver(
    * 释放一个「以**公开 `clearResults()`** 为唯一清理入口」的服务实例
    * （`LocalSearch` 与四类路线服务共用，#39 把它从 `disposeLocalSearch` 里提出来）。
    *
-   * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.4 声明里只有
+   * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.5 声明里只有
    * `clearResults` / `getResults` / `getStatus` …），但它**交付出去的结果集**不随实例被 GC
    * ——地图上的折线与标注、写进 `panel` 的 DOM 都由调用方交给 SDK 的地图持有。因此：
    *
@@ -1291,14 +1334,18 @@ export function createJsapiV4ServiceDriver(
     if (typeof value.autoViewport === "boolean") out.autoViewport = value.autoViewport;
     if (value.viewportOptions) {
       const viewport: Record<string, unknown> = {};
-      if (typeof value.viewportOptions.noAnimation === "boolean") {
-        viewport.noAnimation = value.viewportOptions.noAnimation;
+      if (typeof value.viewportOptions.enableAnimation === "boolean") {
+        viewport.enableAnimation = value.viewportOptions.enableAnimation;
       }
       if (Array.isArray(value.viewportOptions.margins)) {
         viewport.margins = [...value.viewportOptions.margins];
       }
       if (typeof value.viewportOptions.zoomFactor === "number") {
         viewport.zoomFactor = value.viewportOptions.zoomFactor;
+      }
+      // 视野调整结束后的回调：按引用原样透传（官方只承诺「结束时调用」，Driver 不包装）
+      if (typeof value.viewportOptions.callback === "function") {
+        viewport.callback = value.viewportOptions.callback;
       }
       if (Object.keys(viewport).length > 0) out.viewportOptions = viewport;
     }
@@ -1672,7 +1719,7 @@ export function createJsapiV4ServiceDriver(
     },
 
     /**
-     * 更新已创建实例的检索区域 / 数据类型（官方 4.0.4 声明的 `Autocomplete#setLocation` /
+     * 更新已创建实例的检索区域 / 数据类型（官方 4.0.5 声明的 `Autocomplete#setLocation` /
      * `#setTypes`）。
      *
      * 为什么收在 Driver（R25-C / #72 的「组件 raw setter 回到集成边界」）：组件侧的
@@ -1703,7 +1750,7 @@ export function createJsapiV4ServiceDriver(
         if (typeof fn !== "function") {
           warnOnce(
             `autocomplete:${key}-missing`,
-            `ServiceDriver.setAutocompleteOptions: 当前 Autocomplete 实例没有 ${key}()（4.0.4 的 ` +
+            `ServiceDriver.setAutocompleteOptions: 当前 Autocomplete 实例没有 ${key}()（4.0.5 的 ` +
               `Autocomplete 声明里存在该成员），本次更新被忽略`,
           );
           return;
@@ -1722,7 +1769,7 @@ export function createJsapiV4ServiceDriver(
     /* ---------------------------------------------------- 路线规划（#39） */
 
     createDrivingRoute(location, options: DrivingRouteOptions = {}) {
-      // `renderOptions.panel` 在 4.0.4 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
+      // `renderOptions.panel` 在 4.0.5 里**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，
       // 而 `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
       // **真实 AK 实测驾车有效**（容器 DOM 0 → 2417 字符、`clearResults()` 后回 0）⇒ 那句注释是过时的。
       // 处置：原样转发、不告警，也不替 SDK 承诺有效或无效（上游自述仍矛盾）——见 ADR 决策 7。
@@ -2040,7 +2087,12 @@ export function createJsapiV4ServiceDriver(
                 {
                   point: toPlainPoint(point),
                   accuracy: typeof result.accuracy === "number" ? result.accuracy : null,
-                  address: result.address ?? null,
+                  address: projectGeolocationAddress(result.address),
+                  timestamp: readOptionalFiniteNumber(result.timestamp),
+                  altitude: readOptionalFiniteNumber(result.altitude),
+                  altitudeAccuracy: readOptionalFiniteNumber(result.altitudeAccuracy),
+                  heading: readOptionalFiniteNumber(result.heading),
+                  speed: readOptionalFiniteNumber(result.speed),
                 },
                 status,
               );

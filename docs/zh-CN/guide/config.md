@@ -97,7 +97,6 @@ definition 现在原样交给 Client。
 | apiUrl             | 自建地图 api 资源地址（默认路径已不表达，见上方提示；请改用 `customScriptV4Provider`） | `string` | - |
 | version            | SDK 版本                                         | `string`           | `4.0`  |
 | provider           | 自定义加载器（默认 `baiduJsapiV4Provider()`，内部委托官方 Loader；类型 `BMapProviderLike`） | `BMapProviderLike` | - |
-| plugins            | 需要注册的插件                                   | `string[]`         | -      |
 | defaults           | 透传的加载选项（`BMapLoadOptions`，如 `timeout` / `serviceHost`） | `BMapLoadOptions` | - |
 | client             | 完整自定义 Client 定义（覆盖以上组装）           | `CreateBMapClientOptions` | - |
 
@@ -111,9 +110,19 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 app.mount('#app')
 ```
 
-`plugins` 是可选的，且**内置插件一律 optional**：插件脚本加载失败只发 `plugin-error`，
-不会让地图失败。要真的用某个插件，先确认它在 JSAPI 4.0 上的状态，见
+::: warning `plugins` 选项已删除（#165 Class 5）
+`createBMapPlugin({ plugins })` 此前声明了却**没有任何读者**——app 级配置只有
+`{ provider, defaults }`，插件注册读的是 **`<Map plugins>` 组件 prop**（两者不是同一件事），
+所以 app 级 `plugins` 一直**静默无效**。要注册插件请用 `<Map :plugins="[...]">`：
+
+```vue
+<Map :plugins="['GeoUtils']" />
+```
+
+内置插件一律 optional：插件脚本加载失败只发 `plugin-error`，不会让地图失败。要真的用某个插件，
+先确认它在 JSAPI 4.0 上的状态，见
 [插件兼容 inventory](../contributing/plugin-compat-inventory)。
+:::
 
 ### 2。用 `<BMapProvider>` 覆盖子树默认
 

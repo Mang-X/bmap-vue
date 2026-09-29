@@ -16,7 +16,7 @@
     </label>
     <br />
     <br />
-    <Map v-bind="$attrs" enableScrollWheelZoom>
+    <Map v-bind="$attrs" enableWheelZoom>
       <InfoWindow
         v-model:open="show"
         enableMaximize

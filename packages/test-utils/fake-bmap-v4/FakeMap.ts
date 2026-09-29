@@ -9,10 +9,11 @@
  * - 投影：`pointToPixel` / `pixelToPoint`（不传 options 时按当前地图状态换算）；
  * - 资源释放：`destroy()` —— 清空 Map 自身监听器，但管不到子对象。
  *
- * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` / `setBounds`
- * 属后者：
- * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位）。其余官方成员等真正有
- * Facet 或组件需要时再补，避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
+ * 覆盖面刻意只到「Map Facet 会调用 + Capability Registry 会探测」的成员（`getViewport` /
+ * `setViewport` / `setBounds` / `flyTo` / `getScreenshot` 属后两类：
+ * `map.viewport` 能力要求 `getViewport` 与 `setViewport` 同时在位，`map.fly-to` 与
+ * `map.screenshot` 各自探测一个成员）。其余官方成员等真正有 Facet 或组件需要时再补，
+ * 避免 Fake 先于实现膨胀；`FakeV4MapTypeId` 是例外——按**真实运行时**
  * 的形状整体给出（不是按类型声明，见其定义处的说明）。
  *
  * 与 `fake-bmapgl` 一致，**刻意不复刻** SDK 的数值归一化（heading 归一、tilt 截断）：
@@ -100,6 +101,37 @@ export class FakeV4Map extends FakeV4EventTarget {
   canceledAnimation: unknown = null
   /** `centerAndZoom` / `setHeading` / `setTilt` 最近一次传入的 options。 */
   lastViewOptions: Record<string, unknown> | null = null
+  /**
+   * 逐命令的 `options` 读数（`setCenter` / `setZoom` / `setHeading` / `setTilt` / `panTo`）。
+   *
+   * 刻意与 `lastViewOptions` **分开**：`lastViewOptions` 是「建图 / 旋转 / 倾斜共用的历史读数」，
+   * 其中 `setHeading` / `setTilt` 还会在建图路径上被 `centerAndZoom` 的兄弟调用写一次，
+   * 分开之后「某一条命令到底收到了什么」才是可以单独断言的（#171 / #165 裁决 F）。
+   *
+   * 键是**官方成员名**，值为「最近一次传入的 options；没传时为 `null`」——
+   * 于是「没给」与「给了空对象 `{}`」在读数上可区分（后者记 `{}`）。
+   */
+  readonly lastCommandOptions: Record<string, Record<string, unknown> | null> = {}
+  /** 已交付的 `options.callback` 次数（按官方成员名分账；用于「恰好一次」这类断言）。 */
+  readonly callbackDeliveries: Record<string, number> = {}
+  /** `getViewport` / `setViewport` 最近一次传入的 `view`（点数组或 `Bounds` 实例）。 */
+  lastViewportView: unknown = null
+  /** 视口类调用最近一次传入的 options（未传时为 `null`）。 */
+  lastViewportOptions: unknown = null
+  /** `flyTo` 最近一次传入的 raw Point。 */
+  lastFlyToPoint: FakeV4Point | null = null
+  /** `flyTo` 最近一次传入的 zoom。 */
+  lastFlyToZoom: number | null = null
+  /** `flyTo` 最近一次传入的 options（没传时为 `null`）。 */
+  lastFlyToOptions: unknown = null
+  /**
+   * `getScreenshot()` 的返回值（官方返回的是数据 URL 字符串）。
+   *
+   * ⚠️ 官方要求建图时带 `preserveDrawingBuffer: true`，否则是全黑图。本替身**不**复刻
+   * 那条黑屏行为（它是 WebGL 画布的实现细节，且无头环境没有真实画布）——测试要覆盖的是
+   * 「Driver 把 SDK 返回的字符串原样交给业务」与「非字符串时报错」，不是黑屏本身。
+   */
+  readonly screenshotDataUrl = 'data:image/png;base64,ZmFrZS12NC1zY3JlZW5zaG90'
   resizeCalls = 0
   destroyed = false
   /** `load` 是否已经派发过（官方只在首次 `centerAndZoom` 后派发一次）。 */
@@ -606,6 +638,38 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.resizeCalls++
   }
 
+  /**
+   * 记下某条命令收到的 `options`，并**交付其中的 `callback` 恰好一次**。
+   *
+   * ## 为什么替身要真的调 callback（#171 / #165 裁决 F）
+   *
+   * 官方对五条视野命令的 `options.callback` 承诺的是「结束时调用」（`setCenter` / `setZoom`
+   * 的声明更明确：「没有动画则立即调用」）。2026-09-26 live 实测：五条在 `noAnimation: true`
+   * 下**各交付恰好一次**（0–1ms），动画档也各恰好一次（`setZoom` 526ms / `panTo` 32ms）——
+   * 见 `docs/zh-CN/contributing/165-runtime-verification.md` §8。
+   *
+   * 替身因此在**同步**交付：这是官方「无动画则立即调用」那一条的可测形状，也是本库单测里
+   * 唯一不依赖真实时间轴的读法。⚠️ 替身**不**建模动画时长（那是渲染行为，由浏览器 smoke 覆盖），
+   * 所以「动画档下也会交付」这条只能靠 live 取证，单测锁的是「传下去 ⇒ 交付恰好一次」。
+   *
+   * 交付的时序与官方的**形状**一致：状态**先**落定（中心点 / 级别 / 角度已在上面写好），callback
+   * **后**被调——所以回调里读 `getCenter()` 拿到的是新值，不会看到半截状态。
+   *
+   * ⚠️ **只交付一次**是被显式建模的契约：真实 SDK 若（按 bug 那样）多次调用，用例会红。
+   * 替身不复刻上游的缺陷，契约以 live 取证的读数为准。
+   */
+  private recordCommandOptions(method: string, options?: Record<string, unknown>): void {
+    // 「没传」记 null、「传了空对象」记 {}——两者在读数上可区分，这条差异是可断言的
+    this.lastCommandOptions[method] = options ?? null
+    if (!options) return
+    // 历史读数沿用原口径（建图 / 旋转 / 倾斜共用一条），逐命令读数在 `lastCommandOptions`
+    this.lastViewOptions = options
+    const callback = options.callback
+    if (typeof callback !== 'function') return
+    this.callbackDeliveries[method] = (this.callbackDeliveries[method] ?? 0) + 1
+    ;(callback as () => void)()
+  }
+
   /* ------------------------------------------------------------------ 视野 */
 
   centerAndZoom(
@@ -633,7 +697,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setCenter(point: FakeV4Point | string, options?: Record<string, unknown>): void {
     this.callLog.push('setCenter')
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setCenter', options)
   }
 
   getCenter(): FakeV4Point | null {
@@ -643,7 +707,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setZoom(zoom: number, options?: Record<string, unknown>): void {
     this.callLog.push('setZoom')
     this.zoom = zoom
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setZoom', options)
   }
 
   getZoom(): number | null {
@@ -683,6 +747,8 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   setViewport(view: FakeV4Point[] | FakeV4Point | { center?: FakeV4Point; zoom?: number }, options?: unknown): void {
     this.callLog.push('setViewport')
+    this.lastViewportView = view
+    this.lastViewportOptions = options ?? null
     void options
     if (Array.isArray(view) && view.length > 0) {
       const lngs = view.map((point) => point.lng)
@@ -699,8 +765,13 @@ export class FakeV4Map extends FakeV4EventTarget {
     if (typeof viewport.zoom === 'number') this.zoom = viewport.zoom
   }
 
-  getViewport(view: FakeV4Point[] | FakeV4Bounds): { center: FakeV4Point; zoom: number } {
+  getViewport(
+    view: FakeV4Point[] | FakeV4Bounds,
+    options?: unknown,
+  ): { center: FakeV4Point; zoom: number } {
     this.callLog.push('getViewport')
+    this.lastViewportView = view
+    this.lastViewportOptions = options ?? null
     if (Array.isArray(view) && view.length > 0) {
       const lngs = view.map((point) => point.lng)
       const lats = view.map((point) => point.lat)
@@ -716,10 +787,35 @@ export class FakeV4Map extends FakeV4EventTarget {
     return { center: bounds.getCenter() ?? new FakeV4Point(0, 0), zoom: 12 }
   }
 
+  /**
+   * 官方 `Map#flyTo(center, zoom, options?)`。
+   *
+   * **刻意不与 `panTo` 合并**：两者是官方两个不同成员（飞行带动画、`panTo` 是瞬移），
+   * Capability Catalog 早期把 `panTo` 当作 `map.fly-to` 的探测依据，正是这条区分的反例。
+   * 替身同样**不**建模飞行动画（时长 / 插值）——那属于真实渲染行为，由浏览器 smoke 覆盖。
+   */
+  flyTo(center: FakeV4Point, zoom?: number, options?: Record<string, unknown>): void {
+    this.callLog.push('flyTo')
+    this.lastFlyToPoint = center
+    this.lastFlyToZoom = zoom ?? null
+    // Driver 只传官方声明的成员；没传 options 时递的是 `undefined` 而**不是** `{}`，
+    // 所以这里能分辨「没给」与「给了内容」
+    this.lastFlyToOptions = options ?? null
+    this.center = center
+    if (typeof zoom === 'number') this.zoom = zoom
+    if (options) this.lastViewOptions = options
+  }
+
+  /** 官方 `Map#getScreenshot()`：返回当前画布截图的数据 URL 字符串。 */
+  getScreenshot(): string {
+    this.callLog.push('getScreenshot')
+    return this.screenshotDataUrl
+  }
+
   panTo(point: FakeV4Point, options?: Record<string, unknown>): void {
     this.callLog.push('panTo')
     this.center = point
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('panTo', options)
   }
 
   panBy(x: number, y: number, options?: Record<string, unknown>): void {
@@ -735,7 +831,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setHeading(heading: number, options?: Record<string, unknown>): void {
     this.callLog.push('setHeading')
     this.heading = heading
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setHeading', options)
   }
 
   getHeading(): number {
@@ -745,7 +841,7 @@ export class FakeV4Map extends FakeV4EventTarget {
   setTilt(tilt: number, options?: Record<string, unknown>): void {
     this.callLog.push('setTilt')
     this.tilt = tilt
-    if (options) this.lastViewOptions = options
+    this.recordCommandOptions('setTilt', options)
   }
 
   getTilt(): number {

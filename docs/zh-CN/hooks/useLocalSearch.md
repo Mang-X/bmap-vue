@@ -58,7 +58,7 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | panel             | 结果列表容器（元素或 id）                                     | `string \| HTMLElement`                       | -       |
 | selectFirstResult | 是否自动选中第一个结果                                        | `boolean`                                     | `false` |
 | autoViewport      | 检索结束后是否自动调整地图视野                                | `boolean`                                     | `false` |
-| viewportOptions   | 视野计算选项（`noAnimation` / `margins` / `zoomFactor`）       | `object`                                      | -       |
+| viewportOptions   | 视野计算选项（`enableAnimation` / `margins` / `zoomFactor` / `callback`） | `object`                                      | -       |
 
 ### 返回值
 
@@ -138,7 +138,12 @@ export interface BMapLocalSearchRenderOptions {
   panel?: string | HTMLElement
   selectFirstResult?: boolean
   autoViewport?: boolean
-  viewportOptions?: { noAnimation?: boolean; margins?: readonly number[]; zoomFactor?: number }
+  viewportOptions?: {
+    enableAnimation?: boolean
+    margins?: readonly number[]
+    zoomFactor?: number
+    callback?: () => void
+  }
 }
 
 export interface BMapLocalSearchOptions {

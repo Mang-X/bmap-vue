@@ -235,7 +235,7 @@ describe("v4 路线服务：创建面", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       services.createDrivingRoute(point(), { renderOptions: { panel: "route-panel" } });
-      // 4.0.4 内部冲突：`RenderOptions.panel` 注释说驾车无效，`DrivingRoute.d.ts` 的示例却传了 panel
+      // 4.0.5 内部冲突：`RenderOptions.panel` 注释说驾车无效，`DrivingRoute.d.ts` 的示例却传了 panel
       // 并说「结果面板已展示」。本库不替 SDK 下结论 ⇒ 不发确定性告警，但配置**确实**被转发。
       const raw = fake.rawRoutes.DrivingRoute[0]!;
       expect((raw.options.renderOptions as Record<string, unknown>).panel).toBe("route-panel");

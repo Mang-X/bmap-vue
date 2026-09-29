@@ -29,6 +29,14 @@ import type { BMapClient } from "../../client/types";
 import type { Capability } from "../../driver/capability";
 import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
+import type {
+  FlyToOptions,
+  PanToOptions,
+  SetZoomOptions,
+  ViewCommandOptions,
+  Viewport,
+} from "../../driver/types/map";
+import type { ViewportOptions } from "../../driver/types/services";
 import { readLiveView } from "../utils/liveView";
 
 /**
@@ -45,17 +53,84 @@ export interface MapCommands {
   getTilt(): number | null;
   getBounds(): Bounds | null;
   getSize(): Size | null;
+  /**
+   * 读出「若把这些点/范围装进视野，应该是什么中心与级别」（只读，不改当前视野）。
+   *
+   * `view` 对齐官方的两个分支：点数组或 `Bounds`。返回 `null` = 这次读不到
+   * （没句柄 / 资源已销毁 / 该能力在本引擎不可用），口径与本面其余读命令一致。
+   */
+  getViewport(view: readonly Point[] | Bounds, options?: ViewportOptions): Viewport | null;
+  /**
+   * 取当前画布截图（数据 URL 字符串）。
+   *
+   * ⚠️ 官方的两条限制本库不隐瞒：**地球模式不支持**；建图时**必须**带
+   * `preserveDrawingBuffer: true`，否则拿到的是**空画布**（官方称「黑屏」）。
+   *
+   * **要拿到真实画面，必须在建图时开启**：`<Map :preserve-drawing-buffer="true">`
+   * （该 prop 默认**不开启**——常驻一块画布内存是库不该替使用者做的取舍，官方 React 参考
+   * 的惯例同样是「能力进目录 + 显式 opt-in」）。它是**建图期**选项，事后补不上。
+   * 2026-09-26 live 实测：同一张图不带该选项返回 3,830 字节空画布、带上则 119,074 字节
+   * 真实内容（读数见 `docs/zh-CN/contributing/165-runtime-verification.md`）。
+   */
+  getScreenshot(): string | null;
 
   /* ---------------------------------------------------------------- 写（未就绪时空操作） */
-  setCenter(center: Point): void;
-  setZoom(zoom: number): void;
-  setHeading(heading: number): void;
-  setTilt(tilt: number): void;
+  /**
+   * 写命令的 `options` 是什么、什么时候该传、什么时候**不该**有（#171 / #165 裁决 F）。
+   *
+   * 五条视野命令的 `options` 是**逐调用**的官方能力：`noAnimation` 管这一次要不要动画，
+   * `callback` 让「这条命令完成了」变成**可观察的事实**——此前调用方永远无法知道一条
+   * 视野命令什么时候真正落定。本库把它原样递下去（按引用透传，不包装、不加 `try`）。
+   *
+   * ⚠️ **`options` 不等于「没传」**：空对象与不传在 SDK 看到的是同一种形状（`undefined`），
+   * 所以「我没给 options」与「我给了但里面是空的」不能靠上游分辨——本库也不假装能。
+   *
+   * ⚠️ **不是 `<Map>` 的 prop**：官方没有 `MapOptions.noAnimation`（#165 Class 5 据此删掉了
+   * `MapProps.noAnimation`），它**只**作为逐调用选项存在。做成 prop 会让一个开关决定之后
+   * 所有命令的动画，那正是被删掉的那条。
+   */
+  /**
+   * 设置中心点。`center` 对齐官方 `setCenter(center: Point | string, options?)` 的**两个分支**：
+   * 点，或城市名 / 地址字符串。
+   *
+   * #165 Class 2 / E：此前这一层写的是 `Point`，于是同一个组件上出现了**两张脸**——
+   * `<Map center>` prop 收字符串（v2 兼容），命令面却不收；而底下的
+   * `MapDriver.setCenter(map, Point | string)` 与 `toRawCenter` **本来就**处理字符串。
+   * 收窄只发生在最上面这一层，官方能力因此不可达。命令面与 prop 现在对齐。
+   *
+   * ⚠️ 字符串中心的**已知限制**（与 prop 侧同一条，不是新引入的）：字符串**无法**与受控
+   * 状态做等值比较（官方 React 参考 `Map.tsx:24-26` 据此在 prop 上直接拒收 string）。
+   * 本库在 prop 侧为 v2 兼容保留它，因此「受控 `center` 用字符串」只能当初值用——
+   * 用户交互后 `update:center` 回写的是具体坐标。命令面是「一次性跳转」，没有这个问题。
+   *
+   * live 实测（2026-09-27 真实 AK）：`setCenter('北京')` 会真的移动到北京；官方对**无法识别**
+   * 的地名也不抛错，而是回落到某处（实测 `'NotACityName-zzz'` 同样移动、不抛），
+   * 因此「字符串没生效」不能从「没报错」推断。
+   */
+  setCenter(center: Point | string, options?: ViewCommandOptions): void;
+  setZoom(zoom: number, options?: SetZoomOptions): void;
+  setHeading(heading: number, options?: ViewCommandOptions): void;
+  setTilt(tilt: number, options?: ViewCommandOptions): void;
 
   /* ---------------------------------------------------------------- 平移 / 适配 */
-  panTo(point: Point): void;
+  /**
+   * 平移到目标中心点（官方 `Map#panTo`）。
+   *
+   * ⚠️ 官方声明 `noAnimation` 默认 `false`（=有动画），但 2026-09-26 live 实测
+   * （`requestAnimationFrame` 逐帧采 1.5s）读数是 `distinctSampleCount = 1`、
+   * `midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位**。声明与实测不一致，
+   * 本库**不**改这个默认、也不加 prop 去「修正」它（见 `165-audit-B-C-D-F.md` 裁决 G）。
+   */
+  panTo(point: Point, options?: PanToOptions): void;
   panBy(pixel: Pixel): void;
   fitBounds(bounds: Bounds): void;
+  /**
+   * 平滑**飞行**到目标中心与级别（官方 `Map#flyTo`）。
+   *
+   * 与 `panTo`（瞬移）是**两个不同的成员**：`flyTo` 带一段飞行动画，适合「从全国飞到某地」
+   * 这类定位；`panTo` 只挪动中心点、不动级别。
+   */
+  flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
 
   /* ---------------------------------------------------------------- 能力查询 */
   /**
@@ -117,15 +192,25 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     getTilt: () => read((client, map) => client.driver.map.getTilt(map)),
     getBounds: () => read((client, map) => client.driver.map.getBounds(map)),
     getSize: () => read((client, map) => client.driver.map.getSize(map)),
+    getViewport: (view, options) =>
+      read((client, map) => client.driver.map.getViewport(map, view, options)),
+    getScreenshot: () => read((client, map) => client.driver.map.getScreenshot(map)),
 
-    setCenter: (center) => write((client, map) => client.driver.map.setCenter(map, center)),
-    setZoom: (zoom) => write((client, map) => client.driver.map.setZoom(map, zoom)),
-    setHeading: (heading) => write((client, map) => client.driver.map.setHeading(map, heading)),
-    setTilt: (tilt) => write((client, map) => client.driver.map.setTilt(map, tilt)),
+    // options 一律**原样透传**（#171 / #165 裁决 F）：命令面不判空、不填默认、不包装
+    // callback。投影与「空对象不下发」全部由 Driver 的 `toRaw*Options` 一处负责，
+    // 命令面再实现一份就会与它漂移。
+    setCenter: (center, options) =>
+      write((client, map) => client.driver.map.setCenter(map, center, options)),
+    setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
+    setHeading: (heading, options) =>
+      write((client, map) => client.driver.map.setHeading(map, heading, options)),
+    setTilt: (tilt, options) => write((client, map) => client.driver.map.setTilt(map, tilt, options)),
 
-    panTo: (point) => write((client, map) => client.driver.map.panTo(map, point)),
+    panTo: (point, options) => write((client, map) => client.driver.map.panTo(map, point, options)),
     panBy: (pixel) => write((client, map) => client.driver.map.panBy(map, pixel)),
     fitBounds: (bounds) => write((client, map) => client.driver.map.fitBounds(map, bounds)),
+    flyTo: (center, zoom, options) =>
+      write((client, map) => client.driver.map.flyTo(map, center, zoom, options)),
 
     supports: (capability) => source.client()?.capabilities.supports(capability) ?? false,
   };

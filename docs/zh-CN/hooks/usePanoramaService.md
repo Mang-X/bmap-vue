@@ -57,6 +57,6 @@ findByLocation({ lng: 116.404, lat: 39.915 }, 200)
 
 ## 与官方成员的对齐
 
-官方 4.0.4 只声明了两个检索入口：`getPanoramaById` 与 `getPanoramaByLocation`（含带半径重载）。
+官方 4.0.5 只声明了两个检索入口：`getPanoramaById` 与 `getPanoramaByLocation`（含带半径重载）。
 参考实现 `huiyan-fe/react-bmap` 额外暴露了 `getPanoramaByPOIId`，但上游类型包里**没有**这个成员，
 因此本库不暴露它（不为上游没有的成员建模）。

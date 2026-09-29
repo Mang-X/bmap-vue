@@ -12,7 +12,7 @@
  *
  * ## 名字的来历（`PointCollection` 在 4.0 的真实状态）
  *
- * v3 的 `BMap.PointCollection` 类在 4.0 的**类型包**（`@baidumap/jsapi-v4-types@4.0.4`）里
+ * v3 的 `BMap.PointCollection` 类在 4.0 的**类型包**（`@baidumap/jsapi-v4-types@4.0.5`）里
  * **没有声明**；官方 React 组件库 `huiyan-fe/react-bmap` 把它标成「整体 @removed 4.0，仅 v3 可用」。
  * 但**运行时它仍然存在**：本库的探针（`scripts/probe-point-pick.mts`，真实 AK + headless Chrome）
  * 实测 `typeof BMap.PointCollection === "function"`（与 `Marker3D` / `MapMask` 同属「运行时存在但
@@ -51,11 +51,35 @@ import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data
 import { itemKeyReader } from "../../core/data/itemScan";
 import { createProblemReporter } from "../../core/data/problems";
 import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
+import { warnDeprecatedLayerOnce } from "../../core/layers/deprecatedLayerWarning";
 import type { PointPick, PointCollectionProps } from "../../types/components";
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
 /** 本组件落地的原生图层种类（v4 的「几何点」批量图层）。 */
 const LAYER_KIND: NativeLayerKind = "point-shape";
+
+/**
+ * ⚠️ 官方 `@baidumap/jsapi-v4-types@4.0.5` 已把 `BMap.PointShapeLayer` 标为 `@deprecated`
+ * （建议改用 `BMap.PointLayer` 的形状模式），本组件正落在该类上。
+ *
+ * 处置与 `LineLayer` / `FillLayer` / `PointIconLayer` 一致：组件保留、行为不变、不改名、
+ * 不加兼容别名（#165 §3.6）。替代品 `<PointLayer>` 本库**已提供**，但它的样式字段是**扁平**的
+ * （`shape` / `size` / `fillColor` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
+ *
+ * 迁移最容易静默出错的两处：`shapeType` 是**数字枚举**而 `shape` 是**字符串枚举**
+ * （`0` 圆形 ↔ `'circle'`，数字一一对应但类型不同）；`isFlat` 的官方默认值与本组件**相反**
+ * （旧 `true` / 新 `false`）。另有 Feature State 在替代品上**无对应**（`visualization/` 家族
+ * 没有该 API）——依赖它的用法**继续用本组件**。逐字段迁移表见
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
+ */
+warnDeprecatedLayerOnce(
+  "PointCollection:deprecated-class",
+  "[PointCollection] 官方 `BMap.PointShapeLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 " +
+    "@deprecated，官方建议改用 `BMap.PointLayer`（形状模式，4.0.5 新增的 visualization 命名空间）。" +
+    "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**，但其样式字段是扁平的、" +
+    "不是 `style` 袋，迁移不是改个名字（shapeType 数字枚举要改写成 shape 字符串枚举）。" +
+    "逐字段迁移表见 docs/zh-CN/components/layer/deprecated-layers-migration.md",
+);
 
 const props = withDefaults(defineProps<PointCollectionProps<Item>>(), {
   // 布尔 prop 必须给显式默认值：Vue 对 `Boolean` 有「缺省即 false」的转换。
@@ -194,7 +218,7 @@ const resource = useNativeLayerResource<PointCollectionProps<Item>>(props, {
 function styleValue(): Record<string, unknown> | undefined {
   return projectLayerStyle(() => {
     const style: Record<string, unknown> = {};
-    if (props.shape !== undefined) style.shapeType = props.shape;
+    if (props.shapeType !== undefined) style.shapeType = props.shapeType;
     if (props.size !== undefined) style.size = props.size;
     if (props.color !== undefined) style.color = props.color;
     if (props.strokeColor !== undefined) style.strokeColor = props.strokeColor;

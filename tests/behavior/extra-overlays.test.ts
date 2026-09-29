@@ -96,7 +96,7 @@ describe('Map extra overlays/controls', () => {
     const path = ref([{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }])
     const cps = ref([[{ lng: 1.5, lat: 1.2 }], [{ lng: 2.5, lat: 2.2 }]])
     const wrapper = mountInMap(() => [
-      h(BezierCurve, { path: path.value, controlPoints: cps.value, strokeColor: '#112233' }),
+      h(BezierCurve, { points: path.value, controlPoints: cps.value, strokeColor: '#112233' }),
     ])
     await flushPromises()
     const map = currentMap()
@@ -118,7 +118,7 @@ describe('Map extra overlays/controls', () => {
   it('BezierCurve releases listeners on unmount', async () => {
     const wrapper = mountInMap(() => [
       h(BezierCurve, {
-        path: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }],
+        points: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }],
         controlPoints: [[{ lng: 1.5, lat: 1.2 }]],
       }),
     ])
@@ -133,7 +133,7 @@ describe('Map extra overlays/controls', () => {
   it('MapMask 在 v4 上是显式失败（Fake v4 的命名空间没有 MapMask）', async () => {
     const { errors, Probe } = errorProbe()
     const wrapper = mountInMap(() => [
-      h(MapMask, { path: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }, { lng: 3, lat: 3 }], showRegion: 'outside' }),
+      h(MapMask, { points: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }, { lng: 3, lat: 3 }], showRegion: 'outside' }),
       h(Probe),
     ])
     await flushPromises()

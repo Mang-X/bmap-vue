@@ -30,7 +30,7 @@ export interface AutocompleteOptions {
 /**
  * 已创建 Autocomplete 实例的可更新选项。
  *
- * `undefined` = **不改这一项**（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.4
+ * `undefined` = **不改这一项**（刻意不用 `null` 表达「清空」：`setLocation` / `setTypes` 在官方 4.0.5
  * 声明里都不接受 `null`，用 `null` 只会得到一个 SDK 侧的类型错误）。
  *
  * 注意「恢复默认」是**调用方**的语义，不是本接口的：`<Autocomplete>` 会把 prop 变回 `undefined`
@@ -289,6 +289,27 @@ export type LocalSearchKeyword = string | readonly string[];
  */
 export type LocalSearchBounds = Bounds;
 
+/**
+ * 视野计算选项（官方 `BMap.ViewportOptions` 的领域投影）。
+ *
+ * **官方恰好只声明这四个成员**（`enableAnimation` / `margins` / `zoomFactor` / `callback`），
+ * 本库**不接收**声明之外的成员——「接收后忽略」是假支持（#165 §3.8）。#165 之前这里声明的是
+ * 官方**不存在**的 `noAnimation`，并把它原样转发给 SDK，等于凭空造一个无效键。
+ *
+ * LocalSearch 与四类路线服务共用这一份：官方 `ViewportOptions` 是一个声明，两边的
+ * `renderOptions.viewportOptions` 是同一个形状。
+ */
+export interface ViewportOptions {
+  /** 是否启用动画效果移动地图（官方默认 `true`） */
+  enableAnimation?: boolean;
+  /** 视野调整的预留边距，依次为上、右、下、左 */
+  margins?: readonly number[];
+  /** 地图级别的偏移量（官方默认 `0`） */
+  zoomFactor?: number;
+  /** 视野调整结束后的回调（按引用原样透传，Driver 不包装） */
+  callback?: () => void;
+}
+
 /** 结果绘制选项（官方 `RenderOptions`）。 */
 export interface LocalSearchRenderOptions {
   /**
@@ -305,16 +326,12 @@ export interface LocalSearchRenderOptions {
   /** 检索结束后是否自动调整地图视野 */
   autoViewport?: boolean;
   /**
-   * `autoViewport` 的视野计算选项。
+   * `autoViewport` 的视野计算选项（官方 `BMap.ViewportOptions` 的领域投影）。
    *
-   * 官方只声明了 `margins` / `zoomFactor` / `noAnimation` 三个成员；本库**不接收**声明之外的
-   * 成员（接收后忽略 = 假支持）。
+   * 与 `RouteRenderOptions.viewportOptions` 共用**同一个类型**——官方 `ViewportOptions` 就是
+   * 一个声明，复制成两份内联形状只会让「改一个成员要记得改两处」成为默认。
    */
-  viewportOptions?: {
-    noAnimation?: boolean;
-    margins?: readonly number[];
-    zoomFactor?: number;
-  };
+  viewportOptions?: ViewportOptions;
 }
 
 /** 本地检索**构造期**选项（只有这些字段变化才需要重建实例，见 `#38`）。 */
@@ -552,7 +569,7 @@ export interface RouteTaxiFare {
  * 一条驾车 / 步行 / 骑行方案（官方 `RoutePlan` 的领域投影）。
  *
  * `toll` / `tollDistance` 取自官方那句**只在 `DrivingRoutePlan` 接口里声明**的
- * `getToll()` / `getTollDistance()`：4.0.4 的 `DrivingRouteResult#getPlan()` 返回类型写的是
+ * `getToll()` / `getTollDistance()`：4.0.5 的 `DrivingRouteResult#getPlan()` 返回类型写的是
  * `RoutePlan`（不含这两个成员），但 `DrivingRoutePlan` 接口确实在同一个类型包里声明了它们。
  * 因此这里**可选读取**（成员缺失 ⇒ `null`），不 augmentation、不告警——如实表达「这次没拿到」。
  */
@@ -661,7 +678,7 @@ export type TransitRouteResult = RouteResult<TransitRoutePlan>;
  * 驾车策略（官方 `BMAP_DRIVING_POLICY_*`）。
  *
  * **既是类型也是值**，与 TS 枚举同形：调用方不必写魔法数字，也不必去读全局常量。
- * 与官方 4.0.4 声明的逐成员对齐由 `driver/jsapi-v4/routes.test.ts` 从上游 `.d.ts` 解析成员后
+ * 与官方 4.0.5 声明的逐成员对齐由 `driver/jsapi-v4/routes.test.ts` 从上游 `.d.ts` 解析成员后
  * 逐项断言（名字配错数字是类型层拦不住的，只有这条断言能拦）。
  */
 export const DrivingPolicy = {
@@ -819,7 +836,7 @@ export interface RouteRenderOptions {
   /**
    * 结果列表容器（元素或 id）。
    *
-   * 4.0.4 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
+   * 4.0.5 对它的描述**自相矛盾**：`RenderOptions.panel` 的注释写「驾车路线规划无效」，而
    * `DrivingRoute.d.ts` 的官方示例又传 `panel: 'route-panel'` 并描述「结果面板已展示」。
    * **真实 AK 实测驾车有效**（容器 DOM `0 → 2417` 字符，`clearResults()` 后回 `0`）⇒ 那句
    * 「驾车无效」是过时描述。本库因此**原样转发**：不告警，也不替 SDK 承诺有效或无效
@@ -828,12 +845,8 @@ export interface RouteRenderOptions {
   panel?: string | HTMLElement;
   /** 检索结束后是否自动调整地图视野 */
   autoViewport?: boolean;
-  /** 自动调整视野时的计算选项（与 `LocalSearch` 同形，官方只声明这三个成员） */
-  viewportOptions?: {
-    noAnimation?: boolean;
-    margins?: readonly number[];
-    zoomFactor?: number;
-  };
+  /** 自动调整视野时的计算选项（与 `LocalSearch` 共用官方 `ViewportOptions` 的同一份投影） */
+  viewportOptions?: ViewportOptions;
 }
 
 /* --------------------------------------------------------------- 路线请求 */
@@ -883,7 +896,13 @@ export interface GeolocationOptions {
   SDKLocation?: boolean;
 }
 
-/** 定位结果的地址信息（官方 `GeolocationAddress` 的领域投影）。 */
+/**
+ * 定位结果的地址信息（官方 `GeolocationAddress` 的领域投影）。
+ *
+ * 官方回包里是 `city_code` / `street_number`（snake_case，其余字段却是 camelCase——上游自身的
+ * 不一致），本库统一投影成 camelCase 的领域字段，**映射发生在 Driver**（`locate()`），不是
+ * 这里被动改名：`GeolocationAddressInfo` 是调用方能真正读到值的形状。
+ */
 export interface GeolocationAddressInfo {
   country?: string;
   province?: string;
@@ -899,6 +918,22 @@ export interface GeolocationFix {
   /** 精度（米）；SDK 未给出时为 `null` */
   accuracy: number | null;
   address: GeolocationAddressInfo | null;
+  /**
+   * 设备定位时刻（官方 `GeolocationResult.timestamp`）。
+   *
+   * 官方没有承诺它一定给（`timestamp?`），所以缺失时是 `null`——**不在投影时用 `Date.now()`
+   * 兜底**：那是 composable 拿到结果的时刻，不是定位发生的时刻，混同会让调用方拿一个
+   * 编造的时间当定位时间。
+   */
+  timestamp: number | null;
+  /** 海拔（米）；设备不支持时官方发 `null`，未给时同样归一为 `null` */
+  altitude: number | null;
+  /** 海拔精度（米）；同 `altitude` 的 `null` 语义 */
+  altitudeAccuracy: number | null;
+  /** 设备朝向（正北顺时针角度）；同 `altitude` 的 `null` 语义 */
+  heading: number | null;
+  /** 移动速度（米/秒）；同 `altitude` 的 `null` 语义 */
+  speed: number | null;
 }
 
 /** IP 定位结果（`LocalCity#get`）。 */
@@ -1055,7 +1090,7 @@ export interface ServiceInvocationDriver {
    * 在飞调用显式失败；② 解绑 Driver 侧订阅；③ 走**公开的** `clearResults()` 收回已画出的路线与标注
    * ——这一步**只有成功才记账**，抛错时句柄保持不可用、再次调用会重试。
    *
-   * 官方四个路线服务都**没有** `dispose()`（4.0.4 声明里是 `clearResults` / `setPolylineStyle` /
+   * 官方四个路线服务都**没有** `dispose()`（4.0.5 声明里是 `clearResults` / `setPolylineStyle` /
    * `getStatus` …），所以「有没有释放入口」这件事与 `LocalSearch` 同档：实例本身随 GC，真正的资源
    * 是它**交付出去的结果**（地图上的折线与标注、写进 `panel` 的 DOM），由 `clearResults()` 销账。
    */
@@ -1099,7 +1134,7 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
    * 释放本地检索实例（幂等）。
    *
    * ① 停止接受该实例的业务调用并**把在飞调用显式失败**；② 解绑 Driver 侧资源（EventDriver 订阅）；
-   * ③ **清掉 SDK 侧已画出的结果**——官方 `LocalSearch` **没有** `dispose()`（`4.0.4` 的声明里只有
+   * ③ **清掉 SDK 侧已画出的结果**——官方 `LocalSearch` **没有** `dispose()`（`4.0.5` 的声明里只有
    * `clearResults` / `clearSelected` / `setSearchCompleteCallback` / `getStatus` …），因此这一步走
    * 公开的 `clearResults()`：它同时清掉地图上的标注与结果面板。这一步**只有成功才记账**，抛错时
    * 调用方收到错误，句柄仍保持不可用，再次调用会**重试**未完成的清理。

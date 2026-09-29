@@ -43,6 +43,7 @@ import {
   type InfoWindowManager,
 } from "../overlays/InfoWindowManager";
 import type { InfoWindowHandle } from "../../driver/types/handles";
+import type { InfoWindowReadBackApi } from "../../driver/types/overlays";
 import type { ResourceRegistration } from "../overlays/OverlayRegistry";
 import { readElementSize } from "../runtime/elementSize";
 import { stableKeyOf } from "../utils/stableKey";
@@ -79,6 +80,14 @@ export interface UseInfoWindowOptions {
 export interface UseInfoWindowResult {
   /** detached host：`<Teleport :to="host">` 的目标（实例未就绪时为 `null`）。 */
   readonly host: Readonly<ShallowRef<HTMLElement | null>>;
+  /**
+   * 命令面（#165 Class 3 / TASK 2c）：官方**没有对应 prop** 的动作 + 读回族。
+   *
+   * 与 `useOverlaySpec` 的 `commands` 同一口径（见 `core/overlays/OverlaySpec.ts` 的
+   * `expose`）。**不**在气泡刚建好时就造这个对象——命令面每次调用现取会话
+   * （`activeInstance` + `readyCtx`），因此它与「实例是否已就绪」无关。
+   */
+  readonly commands: InfoWindowReadBackApi;
 }
 
 /** 当前存活实例的簿记（重建即换一份）。 */
@@ -431,6 +440,20 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           enableAutoPan: props.enableAutoPan,
           enableCloseOnClick: props.enableCloseOnClick,
           offset: props.offset,
+          // ↓ issue #165 Class 3 / TASK 3：官方 `InfoWindowOptions` 的其余构造选项。
+          // 逐条依据见 `core/overlays/InfoWindowSpec.ts` 的 `InfoWindowProps` 注释。
+          // ⚠️ `onClosing` 是**回调**：它只在这里读一次，因此「父级换了一个新闭包但没改
+          // 别的构造期字段」不会被检测到——要跟着走就改 `recreate` 字段里的任意一个
+          // （`INFO_WINDOW_FIELDS` 把 `onClosing` 归为 `recreate` 正是为此：
+          // 声明上它是构造期，行为上它需要一个「逼自己重建」的信号）。
+          maxWidth: props.maxWidth,
+          maxContent: props.maxContent,
+          margin: props.margin,
+          collisions: props.collisions,
+          onClosing: props.onClosing,
+          enableSearchTool: props.enableSearchTool,
+          headerContent: props.headerContent,
+          enableContentScroll: props.enableContentScroll,
         });
         const created: ActiveInstance = {
           generation,
@@ -660,5 +683,56 @@ export function useInfoWindow<Props extends InfoWindowProps>(
     };
   }
 
-  return { host };
+  /* ------------------------------------------------------------------ 命令面（#165） */
+
+  /**
+   * 六个官方成员的命令面，逐条依据（`@baidumap/jsapi-v4-types@4.0.5` 的
+   * `overlay/InfoWindow.d.ts`）：
+   *
+   * | 暴露 | 官方声明 | 为什么不能走 prop |
+   * | --- | --- | --- |
+   * | `getTitle()` | `getTitle(): string \| HTMLElement` | **读回** |
+   * | `getContent()` | `getContent(): string \| HTMLElement` | **读回**（本库的内容是 Vue slot，读回拿到的是 host 元素） |
+   * | `isOpen()` | `isOpen(): boolean` | **读回**；`open` prop 是意图，官方只有实例上的 `isOpen()` 才回答「现在真的开着吗」 |
+   * | `getOffset()` | `getOffset(): Size` | **读回**；`offset` 是构造期属性（官方无 `setOffset`），运行期真值只能读 |
+   * | `maximize()` | `maximize(): void` | **动作**，`enableMaximize` 只是「允许」最大化，不触发它 |
+   * | `restore()` | `restore(): void` | **动作**，同上 |
+   *
+   * `maximize()` / `restore()` 刻意**不**经事件回写 `v-model`：官方 `maximize` / `restore`
+   * 事件已经在 `FORWARDED_SDK_EVENTS` 里转发，命令与事件各走各的路——把命令也做成受控写入
+   * 就要猜「这次事件对应哪次命令」，而官方没有给这件事任何身份（与 `ContextMenu` 的 `open`
+   * 不做受控是同一条理由，见 ADR `2026-09-19-custom-overlay-and-context-menu`）。
+   */
+  const commands: InfoWindowReadBackApi = {
+    getTitle: () => requireInfoWindow("getTitle").getTitle(),
+    getContent: () => requireInfoWindow("getContent").getContent(),
+    isOpen: () => requireInfoWindow("isOpen").isOpen(),
+    getOffset: () => requireInfoWindow("getOffset").getOffset(),
+    maximize: () => requireInfoWindow("maximize").maximize(),
+    restore: () => requireInfoWindow("restore").restore(),
+  };
+
+  /**
+   * 取当前会话的命令面；**取不到即显式失败**（与 `overlayCommands.require` 同一条口径）。
+   *
+   * 失败集合比覆盖物那侧多一个 `suppressed`：被同图另一个气泡顶掉的那一个**仍然是活着的**
+   * （它只是不再争夺「当前气泡」），因此对 `getTitle` 这类读回来说它依然可读，但
+   * `maximize()` / `restore()` 会打到**别的**气泡上——那是错的。因此 `suppressed` 的实例
+   * **不**给出命令面。
+   */
+  function requireInfoWindow(command: string): InfoWindowReadBackApi {
+    const instance = activeInstance;
+    const context = readyCtx;
+    if (disposed || !instance || !instance.alive || !context || instance.suppressed) {
+      throw new BMapError(
+        "BMAP_RESOURCE_DISPOSED",
+        `<${component}>.${command}(): 气泡未就绪、正在重建、已被同图另一个气泡顶掉，或已经释放，` +
+          "本次调用被拒绝（不静默 no-op——读回会拿到 undefined、动作会打到别的气泡上）",
+        { component },
+      );
+    }
+    return context.client.driver.overlays.infoWindowCommands(instance.handle);
+  }
+
+  return { host, commands };
 }

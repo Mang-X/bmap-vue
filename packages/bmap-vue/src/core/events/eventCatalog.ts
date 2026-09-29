@@ -9,7 +9,7 @@
  *
  * ## 名字从哪来
  *
- * **上游权威清单**：`@baidumap/jsapi-v4-types@4.0.4` 的 `core/MapEvent.d.ts` 声明了
+ * **上游权威清单**：`@baidumap/jsapi-v4-types@4.0.5` 的 `core/MapEvent.d.ts` 声明了
  * 「地图事件名称到事件对象类型的完整映射表」（41 个键），`core/Map.d.ts` 的
  * `addEventListener<K extends keyof MapEventMap>` 直接消费它。本表 `declared: true` 的条目
  * 与那份清单**逐键相等**，由 `map-event-catalog.test.ts` 直接解析上游 `.d.ts` 文本比对
@@ -32,8 +32,10 @@
  *   `language_change` 带 `_`，它们正是 kebab 化的对象；
  * - `maptypechange` / `tilesloaded` / `zoomexceeded` 这类**没有官方词边界**，不替上游拆词
  *   （拆出来的 `map-type-change` 只能靠猜，官方文档里查不到这个名字）。官方 React 封装
- *   `huiyan-fe/react-bmap@2.0.1` 的 `EVENT_MAP`（`src/components/Map/Map.tsx`）同样原样使用
- *   `maptypechange` / `tilesloaded` / `rightdblclick`。
+ *   `huiyan-fe/react-bmap` 的 `EVENT_MAP`（`src/components/Map/Map.tsx`）同样原样使用
+ *   `maptypechange` / `tilesloaded`（该表 24 条，v2.0.1 / v2.0.6 / master 三版逐条相同，
+ *   且**不含** `rightdblclick`——`rightdblclick` 只出现在**覆盖物**事件表
+ *   `src/components/Overlay/index.tsx` 里，不在 Map 的事件表）。
  *
  * SDK 拼写永远仍可用：`resolveMapEventName()` 把 `-` / `_` / 大小写差异归一后再查索引，
  * 因此 `@style-loaded`、`@style_loaded`、`@styleLoaded` 都命中同一条目；`<Map>` 对

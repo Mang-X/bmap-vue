@@ -25,6 +25,36 @@ export const DistrictType = {
 
 export type DistrictTypeValue = (typeof DistrictType)[keyof typeof DistrictType];
 
+/**
+ * 官方 `BMap.MapTypeId` 的内置地图类型常量名。
+ *
+ * **逐条来自 `@baidumap/jsapi-v4-types@4.0.5` 的 `map-type/MapTypeId.d.ts`**，该文件把这五个
+ * 名字逐个声明为 `MapTypeId` 的静态成员：
+ *
+ * | 常量 | 官方 d.ts 的静态成员声明 | 本库归一化后的语义类型 |
+ * | --- | --- | --- |
+ * | `BMAP_NORMAL_MAP` | `static BMAP_NORMAL_MAP: string`（普通街道视图） | `"normal"` |
+ * | `BMAP_SATELLITE_MAP` | `static BMAP_SATELLITE_MAP: string`（卫星地图） | `"satellite"` |
+ * | `BMAP_HYBRID_MAP` | `static BMAP_HYBRID_MAP: string`（卫星与路网混合地图） | `"hybrid"` |
+ * | `BMAP_EARTH_MAP` | `static BMAP_EARTH_MAP: string`（地球卫星视图） | `"earth"` |
+ * | `BMAP_NONE_MAP` | `static BMAP_NONE_MAP: string`（无底图模式） | — |
+ *
+ * 之前 `mapType` 是裸 `string`，运行时 `toMapType()` 只映射三个名字、其余（含
+ * `BMAP_HYBRID_MAP`）**静默回退**成 `normal`：用户要混合图拿到的是普通图，且没有任何错误。
+ * 收成封闭联合之后，拼错的名字在类型层就被拒，混合图走上真映射，无底图显式失败。
+ *
+ * `BMAP_NONE_MAP` 官方 d.ts **声明**了，但真实 4.0 运行时的 `BMap.MapTypeId` 上没有对应成员
+ * （与「`BMAP_*` 常量挂在全局而非 `MapTypeId`」是同一类上游出入，见
+ * `driver/jsapi-v4/map.ts` 的 `MAP_TYPE_CONSTANT_CANDIDATES`）。因此它在**类型层合法**（官方
+ * 确实声明了）、在**运行期显式失败**——本库不猜「无底图」该画成什么，也不静默替换。
+ */
+export type MapTypeIdName =
+  | "BMAP_NORMAL_MAP"
+  | "BMAP_SATELLITE_MAP"
+  | "BMAP_HYBRID_MAP"
+  | "BMAP_EARTH_MAP"
+  | "BMAP_NONE_MAP";
+
 export interface MapProps {
   ak?: string;
   apiUrl?: string;
@@ -78,30 +108,98 @@ export interface MapProps {
   defaultTilt?: number;
   width?: string | number;
   height?: string | number;
-  mapType?: string;
+  /**
+   * 地图类型：官方 `BMap.MapTypeId` 的**五个**内置常量名（`@baidumap/jsapi-v4-types@4.0.5`
+   * 的 `map-type/MapTypeId.d.ts` 逐个声明了静态成员）。
+   *
+   * 取值域是**封闭**的：拼错的名字在类型层就被拒，而不是运行时静默降级。四个取值能被直接
+   * 归一化（`normal` / `satellite` / `earth` / `hybrid`）；`BMAP_NONE_MAP`（无底图）官方
+   * 4.0 运行时的 `BMap.MapTypeId` 上**没有**对应成员，因此它**显式失败**（`BMAP_INVALID_ARGUMENT`）
+   * 而不是悄悄画成普通图——「要混合图拿到普通图且无任何提示」曾经是一个静默错值 bug。
+   */
+  mapType?: MapTypeIdName;
+  /**
+   * 个性化样式 id（官方 `MapStyleConfig.styleId`，来自个性化编辑器）。
+   *
+   * 与 `mapStyleJson` **互斥**：官方 `setMapStyle` 的两个键都表示「一整套样式」，
+   * 同时给没有可复现的语义（live 实测的结果取决于 SDK 内部的合并顺序），
+   * 因此本库在组件层**显式失败**，不静默丢一个。
+   */
   mapStyleId?: string;
-  mapStyleJson?: Record<string, unknown>;
+  /**
+   * 个性化样式 json（官方 `MapStyleConfig.styleJson?: object[]`）。
+   *
+   * ⚠️ 官方形状是**数组**（个性化编辑器的导出就是一组样式片段）。#165 Class 2 之前
+   * 本库把它声明成 `Record<string, unknown>`（单数对象），且整份原样当作
+   * `setMapStyle(config)` 的**整个 config** 下发——于是 `styleId` 那一支永远走不到，
+   * 官方 `merge` 成员也没有任何通路。
+   */
+  mapStyleJson?: Record<string, unknown>[];
   displayOptions?: Record<string, unknown>;
-  restrictCenter?: boolean;
+  /**
+   * 建图时保留绘图缓冲（官方 `getScreenshot` 的**前提**；该键不在官方 `MapOptions` 声明里，
+   * 只出现在 `Map#getScreenshot` 的文档注释中，2026-09-26 live 实测确认运行时承认它）。
+   *
+   * **默认 `false`，刻意不替使用者开启**——常驻一块额外画布内存是库不该替用户做的取舍，
+   * 因此做成显式 opt-in。（这个「显式 opt-in」的惯例是**本库自己**定的，官方 React 参考
+   * `huiyan-fe/react-bmap` 全仓库**没有出现过** `preserveDrawingBuffer` 这个键——既无该 prop、
+   * 也无对应能力目录条目，因此不能把它说成「沿用官方惯例」。）参照实测：同一张图
+   * 不带该选项时 `getScreenshot()` 返回 3,830 字节的**空画布**（即「黑屏」），带上则
+   * 119,074 字节的真实内容。
+   *
+   * ⚠️ 它是**建图期**选项，事后无法补上：想用 `mapRef.getScreenshot()` 就必须**一开始**
+   * 就开着。详见 `docs/zh-CN/contributing/165-runtime-verification.md`。
+   */
+  preserveDrawingBuffer?: boolean;
+  /**
+   * 地图允许展示的**最小**缩放级别。官方 `MapOptions.minZoom` 声明「取值范围 [3, 21]」。
+   *
+   * 库默认 `3`（合法下界）。传值越界**显式报错**（`BMAP_INVALID_ARGUMENT`）而不是把非法值
+   * 原样交给 SDK：上游没有公开的归一化契约，静默接受等于把一个「文档说无效」的值当它有效。
+   * 见 #165 Class 5。
+   */
   minZoom?: number;
   maxZoom?: number;
-  noAnimation?: boolean;
   enableDragging?: boolean;
-  enableScrollWheelZoom?: boolean;
+  /**
+   * 是否允许鼠标滚轮 / 触摸板滑动缩放。
+   *
+   * 官方构造期键是 `enableWheelZoom`（`core/MapOptions.d.ts`）；官方**实例方法**才叫
+   * `enableScrollWheelZoom()`。本 prop 表达的是构造期语义，因此取前者。
+   *
+   * ⚠️ **默认值刻意不同于官方**：官方 d.ts 标 `@default`（即默认开启），本库默认**关闭**
+   *   （避免页面一滚就误缩放），并把 `enableWheelZoom: false` 写进构造 options 显式固定
+   *   （见 `driver/jsapi-v4/map.ts` 的 `LIBRARY_MAP_DEFAULTS`）。**这是有意决策，不在本次改名范围**。
+   */
+  enableWheelZoom?: boolean;
   enableInertialDragging?: boolean;
-  enablePinchToZoom?: boolean;
+  /**
+   * 是否允许手势缩放。官方构造期键是 `enablePinchZoom`；官方**实例方法**才叫 `enablePinchToZoom()`。
+   */
+  enablePinchZoom?: boolean;
   enableKeyboard?: boolean;
-  enableDoubleClickZoom?: boolean;
+  /**
+   * 是否启用双击缩放（左键双击放大、右键双击缩小）。
+   *
+   * 官方构造期键是 `enableDblclickZoom`（注意官方拼 **`Dbl`**，只有一个 `c`）；
+   * 官方**实例方法**才叫 `enableDoubleClickZoom()`。
+   */
+  enableDblclickZoom?: boolean;
   enableContinuousZoom?: boolean;
   /** 是否启用交通路况图层(v2 兼容) */
   enableTraffic?: boolean;
-  /** 开启图区 resize 中心点不变(v2 兼容) */
-  enableResizeOnCenter?: boolean;
+  /**
+   * 容器尺寸变化时是否保持地图中心点不变。
+   *
+   * 官方构造期键是 `fixCenterWhenResize`（`core/MapOptions.d.ts`；官方 d.ts 标 `@default false`）。
+   * `enableResizeOnCenter` 是 v2 时代的叫法——它其实是官方**实例方法**
+   * `enableResizeOnCenter()` / `disableResizeOnCenter()` 的名字，本库此前误把方法名当成了
+   * 构造期 prop 名。
+   */
+  fixCenterWhenResize?: boolean;
   /** 容器尺寸变化时自动重设尺寸(v2 兼容) */
   enableAutoResize?: boolean;
   loadingBgColor?: string;
-  /** 背景色(透明度数组,如 [r,g,b,a]) */
-  backgroundColor?: number[];
   plugins?: string[];
 }
 
@@ -125,6 +223,33 @@ export interface MarkerCustomIcon {
 
 export type MarkerIcon = MarkerIconName | MarkerCustomIcon
 
+/**
+ * 锚点：官方 `const/Anchor.d.ts` 的九个 `BMAP_ANCHOR_*` 常量，**按名字**表达。
+ *
+ * **单一事实源是 `driver/types/overlays.ts` 的 `OverlayAnchorName`**（本文件只做别名，
+ * 不重复声明那份九元联合）——两张手写名单一旦漂移，`<Label>` 与 `<ZoomControl>` 会在同一个
+ * 锚点名上落到不同的角。「为什么是常量名而不是 `0`–`8` 的裸数字」与 live 读数见那里。
+ *
+ * ⚠️ 与 `CustomOverlay.anchor` **不是同一件事**：那个是「左上角 `(0,0)`、右下角 `(1,1)`」
+ * 的**归一化比例**（官方 `anchors: [x, y]`），和九个枚举锚点没有换算关系。名字撞了而已。
+ */
+export type { OverlayAnchorName as OverlayAnchor } from "../driver/types/overlays";
+/** 同上的**本文件内**别名（`export … from` 不把名字带进本模块作用域）。 */
+type OverlayAnchor = import("../driver/types/overlays").OverlayAnchorName;
+
+/**
+ * `<Marker label>` 收的**本库领域形状**的文本标注（issue #165 第三批）。
+ *
+ * **单一事实源是 `driver/types/overlays.ts` 的 `MarkerLabelInput`**（本文件只做别名）。
+ * 官方 `MarkerOptions.label` 的类型是 `BMap.Label`（raw SDK 对象），而本库组件面
+ * **不构造** SDK 对象（AGENTS.md 的 raw SDK 边界），因此这里只声明**本库这一侧需要的字段**，
+ * Driver 在边界内 `new BMap.Label(content, opts)` 造出 SDK 对象再 `setLabel` 下去。
+ * 释放路径、以及为什么**不**复用 `LabelProps` 本身，逐条见 `MarkerLabelInput` 的注释。
+ */
+export type { MarkerLabelInput as MarkerLabelSpec } from "../driver/types/overlays";
+/** 同上的**本文件内**别名（`export … from` 不把名字带进本模块作用域）。 */
+type MarkerLabelSpec = import("../driver/types/overlays").MarkerLabelInput;
+
 export interface MarkerProps {
   position: { lng: number; lat: number };
   offset?: { x: number; y: number };
@@ -136,6 +261,92 @@ export interface MarkerProps {
   rotation?: number;
   /** 图标:内置名称或自定义 Icon 描述 */
   icon?: MarkerIcon;
+
+  /* --- issue #168 item 2：官方 `MarkerOptions` 里此前未收的四个构造选项 ---
+   *
+   * 四个**全部是构造期**（`recreate`）：逐个核对 `overlay/Marker.d.ts` 的实例成员表，
+   * 没有任何一个对应的 setter。逐条依据见 `driver/types/overlays.ts` 的
+   * `OVERLAY_DESCRIPTORS.marker`。
+   *
+   * ⚠️ 三项的官方默认是 `false`（`raiseOnDrag` / `isTop` / `restrictDraggingArea`），
+   * `draggingCursor` 无默认（`undefined`）——**四项都不在 `withDefaults` 里补值**，
+   * 因为默认 `false` 与「未给」在 SDK 侧等价（`undefined` 就是不传该键）。
+   */
+  /**
+   * 拖拽标注时，标注是否开启离开地图表面效果（官方 `raiseOnDrag`，`@default false`）。
+   *
+   * 官方原文：「拖拽标注时，标注是否开启离开地图表面效果」。无 setter ⇒ 改它会重建实例。
+   */
+  raiseOnDrag?: boolean;
+  /**
+   * 拖拽标注时的鼠标指针样式（官方 `draggingCursor`）。
+   *
+   * ⚠️ **收普通 `string`，不是枚举联合**。官方声明就是
+   * `draggingCursor?: string`（原文：「需遵循 CSS cursor 属性规范」），
+   * **没有任何候选值清单**。CSS cursor 的合法值是**开放集合**（`grabbing` / `move` /
+   * `crosshair` / … 以及任意 `url(…)`），自造一个联合一定会漏掉合法值。
+   *
+   * 无 setter ⇒ 改它会重建实例。
+   */
+  draggingCursor?: string;
+  /**
+   * 是否将标注置于其他标注之上（官方 `isTop`，`@default false`）。
+   *
+   * 官方原文：「是否将标注置于其他标注之上。默认情况下纬度低的标注会盖住纬度高的标注」。
+   * ⚠️ 与 `zIndex`（层叠顺序**值**，`mutable`）**不是同一件事**：这个是**布尔**的置顶开关。
+   * 无 setter ⇒ 改它会重建实例。
+   */
+  isTop?: boolean;
+  /** 是否限制拖拽区域（官方 `restrictDraggingArea`，`@default false`）。无 setter ⇒ 改它会重建实例。 */
+  restrictDraggingArea?: boolean;
+
+  /* --- issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个没有出口的 ---
+   *
+   * 逐条对应 `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/MarkerOptions.d.ts`：
+   * 补完这三个，官方 16 个键**全部**有了出口（`anchor` 早就在描述符里，但组件面一直没有 prop，
+   * 见下面的 `LabelProps.anchor` 一节——同一个洞的两处）。
+   *
+   * ⚠️ 三个**不是**同一个分类，这是本节最要紧的一条：
+   * `label` 有成对的 `setLabel` / `getLabel`（`overlay/Marker.d.ts:110` / `:115`）⇒
+   * **`mutable`**；另两个在 `Marker.d.ts` 的成员表与整条运行时原型链上都**没有**任何入口
+   * ⇒ **`recreate`**。逐条 live 读数见
+   * `tests/behavior/marker-label-cluster-options.test.ts` 的文件头表格。
+   */
+
+  /**
+   * 标注自带的文本标注（官方 `label`）。**可就地更新**。
+   *
+   * 官方 `MarkerOptions.label` 的类型是 `BMap.Label`（一个 raw SDK 对象），
+   * 而本库**不构造 SDK 对象**（raw SDK 边界规则）——因此这里收的是**本库领域形状**
+   * （与 `<Label>` 的 props 同构：`content` / `position` / `offset` / `style` / `zIndex` /
+   * `enableMassClear`），Driver 在边界内把它变成 SDK 的 `BMap.Label` 并调 `setLabel`。
+   *
+   * ## 为什么不用 `setLabel` 的命令面表达
+   *
+   * `markerSpec.ts` 的命令面注释里写明「`setLabel(label)` / `getLabel()` **刻意不暴露**」，
+   * 那条理由是**入参 / 返回值都是 raw `BMap.Label`**。prop 走的是另一条路：入参是本库
+   * 领域形状（不越界），返回值不需要（`setLabel` 是**写**，`getLabel` 是读回，组件永不替
+   * 调用方读）。因此本 prop **不是**对那条裁决的反例——它没有把 raw 对象交给调用方。
+   */
+  label?: MarkerLabelSpec;
+  /**
+   * 是否自动跟随地图旋转角度联动（官方 `autoFollowHeadingChanged`，`@default false`）。**构造期**。
+   *
+   * 官方 `Marker.d.ts` 的成员表里**没有** `setAutoFollowHeadingChanged`；live 读数（settle 之后）
+   * 它也**不在** `BMap.Marker.prototype` 的任何一层（layer = -1）⇒ 改它会重建实例。
+   *
+   * ⚠️ 官方默认 `false`，`Boolean` prop 未给时 Vue 会编出 `false`——值一致但**来源不同**，
+   * 因此 `withDefaults` 里必须写显式 `undefined`（否则传 `:auto-follow-heading-changed="undefined"`
+   * 会触发一次内容完全没变的重建）。
+   */
+  autoFollowHeadingChanged?: boolean;
+  /**
+   * 图标的入场动画名称（官方 `startAnimation`）。**构造期**。
+   *
+   * 官方没有声明任何候选动画名，`Marker.d.ts` 上也没有 `setStartAnimation`
+   * （live：整条原型链 layer = -1）⇒ 收**普通 `string`**（不臆造枚举）+ 改它会重建实例。
+   */
+  startAnimation?: string;
 }
 
 /**
@@ -274,6 +485,21 @@ export interface MenuItemProps {
 }
 
 /**
+ * 输入坐标的坐标类型（issue #165 图形族补齐）。
+ *
+ * 官方 `coord/CoordType.d.ts` 的字面量联合，**只取图形类 options 真正声明的那三个**：
+ * 官方 `const/CoordType.d.ts` 另有 `BMAP_COORD_MERCATOR` / `BMAP_COORD_GCJ02MERCATOR` /
+ * `BMAP_COORD_EPSG3857` 三个墨卡托变体，但 `PolylineOptions.coordType` /
+ * `PolygonOptions.coordType` / `RectangleOptions.coordType` / `CircleOptions.coordType`
+ * **四个声明都只列了** `BMAP_COORD_BD09 | BMAP_COORD_GCJ02 | BMAP_COORD_WGS84`。
+ *
+ * **刻意不收全 `CoordType`**：这三个墨卡托变体是给**地图全局** `BMap.coordType` 用的
+ * （「设置地图全局坐标系或覆盖物坐标系」），官方在**图形类的 options 里没列**——
+ * 收下就是「本库声称支持、官方没承诺」的假支持。
+ */
+export type OverlayCoordType = "BMAP_COORD_BD09" | "BMAP_COORD_GCJ02" | "BMAP_COORD_WGS84";
+
+/**
  * 描边样式：Polyline / Polygon / Rectangle / Circle 共享（M5-VECTORS / #31）。
  *
  * 与 Driver 描述符的 `PATH_STYLE` 逐键对应，由 `overlay-suite.test.ts` 交叉锁定。
@@ -291,8 +517,34 @@ export interface PathFillProps {
   fillOpacity?: number;
 }
 
-/** 图形类覆盖物共有的开关与显隐（**不含** `enableEditing`：Prism / BezierCurve 上游没有编辑能力）。 */
+/**
+ * 图形类覆盖物共有的层叠顺序、开关与显隐（**不含** `enableEditing`：Prism / BezierCurve
+ * 上游没有编辑能力）。
+ *
+ * ## `zIndex` 为什么在这一层（issue #165 Class 3 / TASK 0）
+ *
+ * Driver 的 `PATH_STYLE` 早就把 `zIndex` 登记成 `mutateBy("setZIndex")`（官方 4.0.5 在
+ * `Polyline` / `Polygon` / `Rectangle` / `Circle` / `BezierCurve` / `Prism` 六个类上都有
+ * `setZIndex(zIndex: number): void` 声明），而**组件面没有出口**——分类层准备好了、字段没暴露，
+ * 整族覆盖物的层级更新一次都没被走到过。
+ *
+ * 放在这一层而不是 `PathStrokeProps` / `PathFillProps`：层级**不是描边也不是填充**，它与
+ * `enableMassClear` / `visible` 同属「覆盖物自身的一档属性」，而这六个图形类恰好全部
+ * extends `PathShapeProps`（`PrismProps` / `GroundOverlayProps` 各自内联同名键，见下）。
+ *
+ * ⚠️ **没有**放进这一层的是 `CustomOverlay`：官方 `CustomOverlay.d.ts` 里**没有** `setZIndex`
+ * （只有 `setPoint` / `setRotation` / `setRotationOrigin` / `setProperties` + 三个 getter），
+ * 因此它的 `zIndex` 是**构造期**属性（描述符 `recreate`），`CustomOverlayProps` 单独声明并注明。
+ * 「分类表里有这个键」与「实例上有这个 setter」是两件事——后者才是 `mutable` 的依据。
+ */
 export interface PathShapeProps {
+  /**
+   * 层叠顺序。**就地更新**（官方 `setZIndex`）。
+   *
+   * 撤回（`42 → undefined`）会**重建**实例：8 个官方覆盖物类上有 `setZIndex`、
+   * **0 个**有 `getZIndex`（只有 `layer/*` 有），因此没有 baseline 可恢复。
+   */
+  zIndex?: number;
   enableMassClear?: boolean;
   visible?: boolean;
 }
@@ -309,42 +561,254 @@ export interface PathEditableProps {
 }
 
 /**
- * 折线。
+ * 图形类共有的**构造期**选项（issue #165 图形族补齐）。
  *
- * `path` 与 `pathVersion` 是一对：`path` 按**根引用**比较（大数组不做内容指纹，见
- * `OverlaySpec` 的 `watchSources`），原地修改数组时靠 `pathVersion` 递增触发更新。
+ * ## 为什么单独一层而不是并进 `PathShapeProps`
+ *
+ * 两条理由，缺一不可：
+ *
+ * 1. **`PathShapeProps` 里的每一项都是 `options`（就地更新）**：`zIndex` 有 `setZIndex`、
+ *    `enableMassClear` 有成对开关、`visible` 走 `show`/`hide`。本层的四项**全部**是
+ *    `recreate`（改它即重建实例）——混进去会让「这一层是就地更新」这条性质失效，
+ *    而那正是把属性放这儿的理由。
+ * 2. **`PrismProps` / `GroundOverlayProps` 都 extends 这类共享底座**（`zIndex` 那一层），
+ *    但官方**没有**给它们 `coordType` / `linkRight` / `dashArray` / `strokeLineCap` ——
+ *    放进共享层等于给 Prism 凭空加出四个官方没有的选项。`Prism` / `GroundOverlay` 各自
+ *    内联 `zIndex` 而**不** extends 本库任何 Path 底座，正是这个原因。
+ *
+ * ## 三个键的官方覆盖范围**不**一样，逐个列出来是为了防止「整族一起加」
+ *
+ * | 键 | Polyline | Polygon | Rectangle | Circle | BezierCurve |
+ * | --- | --- | --- | --- | --- | --- |
+ * | `coordType` | ✅ | ✅ | ✅ | ✅ | ❌（官方 `BezierCurveOptions` 没有） |
+ * | `dashArray` | ✅ | ✅ | ✅ | ✅ | ✅（BezierCurve **只有**这一项） |
+ * | `strokeLineCap` / `strokeLineJoin` | ✅ | ✅ | ❌ | ❌ | ❌ |
+ *
+ * `dashArray` 官方在**五个**类上都声明，但 `BezierCurve` **只**多它一个（另外四项都没有）
+ * ⇒ `BezierCurveProps` **不** extends 本层，而是内联唯一一个键（否则会凭空多出 `coordType`）。
+ * `strokeLineCap` / `strokeLineJoin` 只由 `PolylineProps` / `PolygonProps` 各自内联。
+ *
+ * `linkRight` 在**另外一层**（`PathLinkRightProps`），见那条的说明。
  */
-export interface PolylineProps extends PathStrokeProps, PathShapeProps, PathEditableProps {
-  path: { lng: number; lat: number }[];
-  pathVersion?: string | number;
+export interface PathCtorCommonProps {
+  /**
+   * 输入坐标的坐标类型。**构造期**（官方没有 `setCoordType`）。
+   *
+   * 未设置时用全局 `BMap.coordType`——本库**不**代管那个全局（它属于 `<Map>` 的领域，
+   * 且改它会静默改变所有未指定 `coordType` 的覆盖物的读法）。
+   */
+  coordType?: OverlayCoordType;
+  /**
+   * 虚线样式，如 `[8, 4]` 表示实线部分长 8 像素、间隙部分长 4 像素。**构造期**。
+   *
+   * 官方 `@default` 是「实线和空隙的长度均为线宽的 2 倍」——本库**不**把这个推导写进
+   * 默认值：它依赖 `strokeWeight`，而 `strokeWeight` 可以在构造后被 `setStrokeWeight` 改，
+   * 推导值会与实际渲染脱节。让 SDK 自己取它的默认更准。
+   */
+  dashArray?: number[];
 }
 
-/** 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。 */
-export interface PolygonProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
-  path: ({ lng: number; lat: number } | string)[];
+/**
+ * `linkRight`：官方在 **Polyline / Polygon / Rectangle 三个**类上声明
+ * （`CircleOptions` / `BezierCurveOptions` 里**没有**）。
+ *
+ * ## 为什么单独一层而不是并进 `PathCtorCommonProps`
+ *
+ * 因为 `Circle` **没有**它。圆形没有「跨 180 度经线的路径」——它的几何是「圆心 + 半径」，
+ * 官方 `CircleOptions` 因此只声明了 12 个键，里面**没有** `linkRight`。
+ * 放进 `PathCtorCommonProps`（`CircleProps` extends 它）等于给 `<Circle>` 凭空加出一个
+ * 官方没有的选项——**假支持**。分层的判据就是「官方逐类声明了什么」。
+ *
+ * ## ⚠️ Vue Boolean-absent 陷阱：`linkRight` 的官方默认是 `false`
+ *
+ * `Boolean` prop 未给时运行时是 `false`——与官方默认**值上一致**但**来源不同**。
+ * 显式钉成 `undefined`（见各 SFC 的 `withDefaults`）让「没给」只有**一个**表示：
+ * 否则父级某次传 `:link-right="undefined"` 会触发一次**内容完全没变**的重建（三项都是 `recreate`）。
+ * `coordType` / `dashArray` / `strokeLineCap` / `strokeLineJoin` **不是** `Boolean`，没有这个陷阱。
+ */
+export interface PathLinkRightProps {
+  /**
+   * 跨 180 度经线时是否按最短路径绘制（官方 `@default false`）。**构造期**。
+   *
+   * 它是**绘制算法**的输入（同一条线的形状会不同），不是样式 ⇒ 官方没有 `setLinkRight`。
+   */
+  linkRight?: boolean;
+}
+
+/**
+ * 折线。
+ *
+ * `points` 与 `pathVersion` 是一对：`points` 按**根引用**比较（大数组不做内容指纹，见
+ * `OverlaySpec` 的 `watchSources`），原地修改数组时靠 `pathVersion` 递增触发更新。
+ *
+ * 坐标数组叫 `points`（不是 `path`）是**跟官方对齐**：官方
+ * `@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/Polyline.d.ts:26` 写的是
+ * `constructor(points: Array<Point>, opts?)`。`pathVersion` 官方**没有**对应概念（它是本库为
+ * 「大数组原地变更」设计的响应式失效令牌），因此**保留原名**——改的只是坐标数组那一个名字。
+ */
+export interface PolylineProps
+  extends PathStrokeProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
+  points: { lng: number; lat: number }[];
+  pathVersion?: string | number;
+  /**
+   * 是否响应点击事件（官方 `@default true`）。**构造期**。
+   *
+   * 与 `<Rectangle>` / `<Circle>` / `<Marker>` / `<GroundOverlay>` 的同名 prop 同一口径：
+   * 官方图形族只有构造选项 `enableClicking`，**没有** `enableClicking()` /
+   * `disableClicking()` 成对开关 ⇒ 改它会重建实例。
+   *
+   * ⚠️ 官方默认是 `true` 而 Vue 的 `Boolean` prop 未给时是 `false`——`withDefaults` 里
+   * 必须显式写 `enableClicking: undefined`（**不是** `true`）。
+   */
+  enableClicking?: boolean;
+  /* ↓ issue #165 图形族补齐：`PolylineOptions` 独有的四项（其余四类都没有）。
+   *
+   * 逐条依据见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT` 与
+   * `OVERLAY_DESCRIPTORS.polyline` 的 `geodesic` / `clip` / `icons` / `strokeTexture` 条目。
+   */
+
+  /**
+   * 描边线端头类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ **依据是 live 读数**：官方 4.0.5 的**类型声明里没有** `setStrokeLineCap`，
+   * 但运行时原型链上**确实有**（图形族共享那一层，与 `setStrokeColor` 同一层）且**调得动不抛**——
+   * **只是调完之后没有任何可观察的变化**（`getStrokeStyle()` 读回不变）。因此认成
+   * `options` 会变成「调用成功但画面不变」的**静默假支持**，比重建糟得多 ⇒ 固定按构造期透传。
+   * 完整读数表见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT`。
+   */
+  strokeLineCap?: "round" | "butt" | "square";
+  /**
+   * 描边线连接处类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ 同 `strokeLineCap`：live 读数里 `setStrokeLineJoin` 在原型链上且调得动，
+   * 但**无可观察效果**、官方也没有读回 ⇒ 构造期。
+   */
+  strokeLineJoin?: "round" | "miter" | "bevel";
+  /**
+   * 是否开启大地线模式（官方 `@default false`）：为 `true` 时两点连线以大地线形式呈现。
+   * **构造期**——它决定路径**本身**，不是样式。
+   */
+  geodesic?: boolean;
+  /**
+   * 是否进行跨经度 180 度裁剪（官方 `@default true`）。**构造期**。
+   *
+   * 官方原文：「绘制跨经度 180 度的折线时可设置为 `false` 以优化效果」。
+   * ⚠️ 官方默认 `true` ⇒ `withDefaults` 里显式写 `undefined`。
+   */
+  clip?: boolean;
+  /**
+   * 配置贴合折线的图标。**构造期**。
+   *
+   * ⚠️ **官方已废弃**：`overlay/IconSequence.d.ts` 的类声明标了
+   * `@deprecated 4.0 已废弃，请使用 {@link PolylineOptions#strokeTexture} 配置项代替`。
+   * 本库收它只为**如实透传**（收下就静默忽略比不收更难排查），**不**推荐新代码使用。
+   * 类型是 `unknown` 而不是 `IconSequence[]`：官方类型要求 `BMap.IconSequence` 实例，
+   * 而本库**不**构造 SDK 对象（raw SDK 边界规则）——调用方若要用只能经 `advanced/` 的
+   * 逃生口自行创建，因此这里只承诺「原样传下去」。
+   */
+  icons?: unknown;
+  /**
+   * 线纹理配置（官方 `{ url, width?, height? }`），沿折线重复绘制图片（如方向箭头）。
+   * **构造期**；官方注明**仅 WebGL 渲染模式支持**。
+   */
+  strokeTexture?: { url: string; width?: number; height?: number };
+}
+
+/**
+ * 多边形（`isBoundary` 时允许 SDK 原生字符串路径）。
+ *
+ * 坐标数组叫 `points`：官方 `overlay/Polygon.d.ts:30` 是
+ * `constructor(points: Array<Point> | Array<Array<Point>>, opts?)`。
+ */
+export interface PolygonProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
+  points: ({ lng: number; lat: number } | string)[];
   pathVersion?: string | number;
   /** 构造期属性：路径按 SDK 原生边界名解析（如 `"北京市"`）。变化即重建。 */
   isBoundary?: boolean;
+  /** 是否响应点击事件（官方 `@default true`）。**构造期**（无成对开关）。 */
+  enableClicking?: boolean;
+  /**
+   * 描边线端头类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ **依据是 live 读数**：官方 4.0.5 的**类型声明里没有** `setStrokeLineCap`，
+   * 但运行时原型链上**确实有**（图形族共享那一层，与 `setStrokeColor` 同一层）且**调得动不抛**——
+   * **只是调完之后没有任何可观察的变化**（`getStrokeStyle()` 读回不变）。因此认成
+   * `options` 会变成「调用成功但画面不变」的**静默假支持**，比重建糟得多 ⇒ 固定按构造期透传。
+   * 完整读数表见 `driver/types/overlays.ts` 的 `PATH_CTOR_LINE_JOINT`。
+   */
+  strokeLineCap?: "round" | "butt" | "square";
+  /**
+   * 描边线连接处类型（官方 `@default 'round'`）。**构造期**。
+   *
+   * ⚠️ 同 `strokeLineCap`：live 读数里 `setStrokeLineJoin` 在原型链上且调得动，
+   * 但**无可观察效果**、官方也没有读回 ⇒ 构造期。
+   */
+  strokeLineJoin?: "round" | "miter" | "bevel";
 }
 
 /** 矩形（v4 起提供；由对角两点构成的 `bounds` 定义）。 */
-export interface RectangleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface RectangleProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps,
+    PathLinkRightProps {
   bounds: { southwest: { lng: number; lat: number }; northeast: { lng: number; lat: number } };
   enableClicking?: boolean;
 }
 
-export interface CircleProps extends PathStrokeProps, PathFillProps, PathShapeProps, PathEditableProps {
+export interface CircleProps
+  extends PathStrokeProps,
+    PathFillProps,
+    PathShapeProps,
+    PathEditableProps,
+    PathCtorCommonProps {
   center: { lng: number; lat: number };
   radius: number;
   enableClicking?: boolean;
 }
 
-/** 贝塞尔曲线：`path` 与 `controlPoints` 各有一个版本令牌。 */
+/**
+ * 贝塞尔曲线：`points` 与 `controlPoints` 各有一个版本令牌。
+ *
+ * 坐标数组叫 `points`：官方 `overlay/BezierCurve.d.ts:21` 是
+ * `constructor(points: Array<Point>, controlPoints: Array<Array<Point>>, opts?)`——两个形参
+ * 官方都叫它该叫的名字，本库此前只有 `controlPoints` 是对的。
+ *
+ * ⚠️ **只 extends `PathCtorCommonProps` 的 `dashArray` 那部分**——官方
+ * `BezierCurveOptions` **没有** `coordType`（见下），因此本接口**不** extends 那一层，
+ * 而是内联唯一一个官方声明了的键。理由与取舍见 `dashArray` 的注释。
+ */
 export interface BezierCurveProps extends PathStrokeProps, PathShapeProps {
-  path: { lng: number; lat: number }[];
+  points: { lng: number; lat: number }[];
   controlPoints: { lng: number; lat: number }[][];
   pathVersion?: string | number;
   controlPointsVersion?: string | number;
+  /**
+   * 虚线样式，如 `[8, 4]`。**构造期**（官方没有 `setDashArray` / `setDash`）。
+   *
+   * 官方 `BezierCurveOptions` **只**多这一个键（`coordType` / `strokeLineCap` /
+   * `strokeLineJoin` / `linkRight` 官方都没声明）——因此本接口**不** extends
+   * `PathCtorCommonProps`（那会把另外三个键凭空加进来），只内联这一个。
+   */
+  dashArray?: number[];
+  /**
+   * 是否响应点击事件（官方 `@default true`）。**构造期**（无成对开关）。
+   *
+   * ⚠️ 官方默认 `true` ⇒ `withDefaults` 里显式写 `undefined`。
+   */
+  enableClicking?: boolean;
 }
 
 /** 文本标注的样式对象（驼峰 CSS 属性）。 */
@@ -358,22 +822,69 @@ export interface LabelProps {
   style?: LabelStyle;
   enableMassClear?: boolean;
   visible?: boolean;
+  /* --- issue #165 第三批：官方 `LabelOptions` 7 个键里最后两个没有出口的 ---
+   *
+   * ⚠️ **`anchor` 是遗漏，不是收窄**：Driver 的 `OVERLAY_DESCRIPTORS.label` **早就**登记了
+   * `anchor: mutateBy("setAnchor", { ctorKey: "anchor" })`——但 `LabelProps` 里从来没有这个键，
+   * `labelSpec.ts` 的 `LABEL_FIELDS` 也没有。描述符说有、组件从不暴露 ⇒ 那条更新路径
+   * **一次都没被触发过**。这正是「描述符 ≠ 公共出口」必须被用例盯住的原因
+   * （`overlay-suite.test.ts` 的键集交叉校验覆盖的是「已声明的键」，管不到「描述符有、
+   * 组件没有」这个方向——本条是它的一个真实漏网案例）。
+   */
+
+  /**
+   * 文本标注的锚点（官方 `LabelOptions.anchor`，`@default BMAP_ANCHOR_TOP_LEFT`）。**可就地更新**。
+   *
+   * 官方 `Label.d.ts` 声明了 `setAnchor(anchor: ControlAnchor): void` / `getAnchor()`；
+   * live 读数（2026-09-27，settle 之后）判它是**可观察地生效**：同一经纬度上默认 /
+   * `BMAP_ANCHOR_BOTTOM_CENTER` / `BMAP_ANCHOR_BOTTOM_LEFT` 三个 Label 的 DOM 位置分别是
+   * `(top 90, left 263)` / `(69, 217)` / `(69, 263)`（锚点决定标注相对地理点的角点），
+   * 对第二个调 `setAnchor(BMAP_ANCHOR_TOP_LEFT)` 之后**移回 `(90, 263)`**
+   * ⇒ 判 `mutable` 成立，改它**不换实例**。
+   *
+   * 取值是**官方常量名**（见 `OverlayAnchor` 的理由；控件那一族早就是这个口径）。
+   */
+  anchor?: OverlayAnchor;
+  /**
+   * 文本标注的宽度（像素，官方 `LabelOptions.width`，`@default 0` = 按内容自适应）。**构造期**。
+   *
+   * 官方 `Label.d.ts` 的成员表里**没有** `setWidth` / `getWidth`；live 读数（settle 之后）
+   * 确认它**不在** `BMap.Label.prototype` 的任何一层（layer = -1，真调一次抛
+   * `setWidth is not a function`）⇒ 改它会重建实例。
+   *
+   * 构造期它**确实生效**（live：不给时 DOM `width: 14px` 按内容自适应，给 `77` 时 `77px`）
+   * ——所以这是「构造期可用」，不是「不可实现」。
+   *
+   * ⚠️ 不给 `withDefaults` 缺省：官方默认 `0`，而「未给」与「显式 0」在 SDK 侧等价，
+   * 补 `0` 只会让「用户没表态」与「用户要求自适应」在构造 options 里分不开。
+   */
+  width?: number;
 }
 
 /**
  * 3D 棱柱。
  *
- * `isBoundary` / `autoCenter` 是**构造期透传**：`@baidumap/jsapi-v4-types@4.0.4` 的
+ * 坐标数组叫 `points`：官方 `overlay/Prism.d.ts:25` 是
+ * `constructor(points: Array<Point> | Array<Array<Point>>, altitude: number, opts?)`。
+ *
+ * `isBoundary` / `autoCenter` 是**构造期透传**：`@baidumap/jsapi-v4-types@4.0.5` 的
  * `PrismOptions` 里没有这两个键（4.0 运行时是否读取未取证），因此它们既不被当作字段级更新，
  * 也不被宣称支持——只在创建时原样交给 SDK（分类与理由见 `OVERLAY_DESCRIPTORS.prism`）。
  */
 export interface PrismProps {
-  path: ({ lng: number; lat: number } | string)[];
+  points: ({ lng: number; lat: number } | string)[];
   altitude: number;
   topFillColor?: string;
   topFillOpacity?: number;
   sideFillColor?: string;
   sideFillOpacity?: number;
+  /**
+   * 层叠顺序。**就地更新**（官方 `Prism#setZIndex(zIndex: number): void`）。
+   *
+   * 与图形族的 `PathShapeProps.zIndex` 是同一条路径；`PrismProps` 不 extends 那一组
+   * （它有独立的立体面样式），因此内联同一个键。撤回即重建（官方没有 `getZIndex`）。
+   */
+  zIndex?: number;
   isBoundary?: boolean;
   autoCenter?: boolean;
   enableMassClear?: boolean;
@@ -406,9 +917,41 @@ export interface GroundOverlayProps {
   type: GroundOverlayType;
   url: GroundOverlayUrl;
   opacity?: number;
+  /**
+   * 层叠顺序。**就地更新**（官方 `GroundOverlay#setZIndex(zIndex: number): void`）。
+   *
+   * 与图形族的 `PathShapeProps.zIndex` 是同一条路径；`GroundOverlayProps` 不 extends 那一组，
+   * 因此内联同一个键。撤回即重建（官方没有 `getZIndex`）。
+   */
+  zIndex?: number;
   /** 创建后按显示区域居中地图（组件侧行为，不是 SDK 选项）。 */
   autoCenter?: boolean;
   visible?: boolean;
+
+  /* --- issue #168 item 2：官方 `GroundOverlayOptions` 里此前未收的三个选项 ---
+   *
+   * 逐条依据见 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS["ground-overlay"]`。
+   *
+   * ⚠️ **前两项的官方默认是 `true`**（`enableMassClear` / `enableClicking`），而 Vue 的
+   * `Boolean` 类型 prop 有「absent 即转 `false`」的陷阱——**在 `withDefaults` 里给它们写
+   * `undefined`**（而不是 `true`），否则「用户没给」会变成「显式关闭」。这一条在 #168 里
+   * 已经踩过三次（`GroundOverlay` / `CustomOverlay` / `Panorama` 各一次），因此在这里显式留痕。
+   */
+  /**
+   * 是否允许在调用 `map.clearOverlays()` 时清除此覆盖物（官方 `enableMassClear`，
+   * `@default true`）。**就地更新**（官方有 `enableMassClear` / `disableMassClear` 一对开关）。
+   */
+  enableMassClear?: boolean;
+  /** 是否响应鼠标事件（官方 `enableClicking`，`@default true`）。无成对开关 ⇒ 改它会重建实例。 */
+  enableClicking?: boolean;
+  /**
+   * 是否在普通覆盖物之上绘制（官方 `top`，`@default false`）。
+   *
+   * ⚠️ **与 `zIndex` 不是同一件事**：`zIndex` 是层叠顺序**值**（有 `setZIndex`，`options`），
+   * `top` 是**布尔**的「压在普通覆盖物之上」开关。官方 `GroundOverlay` **没有 `setTop`**
+   * （它有 `setZIndex`，但语义不同）⇒ `top` 只能构造期生效，改它会重建实例。
+   */
+  top?: boolean;
 }
 
 /* ------------------------------------------------------------------ 数据组件（M6 / #34）
@@ -474,7 +1017,15 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
  * `PointCollection` 的 props。
  *
  * 取数面与 `MarkerList` 一致；样式面只暴露 v4 原生点图层**真的支持**的那几个字段
- * （`PointShapeStyle` 的子集，逐条核对 `@baidumap/jsapi-v4-types@4.0.4`）。
+ * （`PointShapeStyle` 的子集，逐条核对 `@baidumap/jsapi-v4-types@4.0.5`）。
+ *
+ * @deprecated 官方 `@baidumap/jsapi-v4-types@4.0.5` 已把底层 `BMap.PointShapeLayer` 标为
+ *   `@deprecated`（建议改用 `BMap.PointLayer` 的形状模式），而本组件正落在该类上
+ *   （`LAYER_KIND = "point-shape"`）。**组件本身不删也不改名**——弃用是上游的决定，
+ *   且 #165 §3.6 禁止为此加兼容别名；此处只如实登记，让编辑器在类型面上把弃用显示出来。
+ *   可迁移的替代品是 `<PointLayer>` 的形状模式（本库已提供），但它的样式字段是**扁平**的
+ *   （不是 `style` 袋），迁移不是改个名字。线 / 面两类的替代品（`<PolylineLayer>` /
+ *   `<PolygonLayer>`）已由 #166 提供，迁移同样**不是改个名字**（样式字段不同族）。
  */
 export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
   /**
@@ -485,8 +1036,18 @@ export interface PointCollectionProps<Item> extends DataComponentProps<Item> {
    * 同名字段被本库覆盖时会给出开发期告警。
    */
   properties?: (item: Item) => Record<string, unknown> | null | undefined;
-  /** 形状类型，取值见官方 `PointShapeLayer.ShapeType`（如 `0` 圆形 / `7` 五角星）。 */
-  shape?: number;
+  /**
+   * 图形类型，取值见官方 `PointShapeLayer.ShapeType`（如 `0` 圆形 / `7` 五角星）。
+   *
+   * 官方 `PointShapeStyle.shapeType`（`@baidumap/jsapi-v4-types@4.0.5`
+   * `layer/PointShapeLayer.d.ts:102`，`@default 2`）。#165 Class 1 之前本库的 prop 叫 `shape`，
+   * 组件里做一次改名才落到官方键上——那是已知的命名缺口，现已直接叫官方名，旧名**删除**
+   * （#165 §3.6 不留兼容别名）。
+   *
+   * ⚠️ 与 `<PointLayer>` 的 `shape` **不是同一个 prop**：那是 `BMap.PointLayer` 的
+   * `visualization/PointLayer.d.ts:73`，官方就写 `shape`，两个组件各按各自的官方类走。
+   */
+  shapeType?: number;
   /** 点的尺寸（像素）。 */
   size?: number;
   /** 填充颜色。 */
@@ -587,7 +1148,7 @@ export type StyleExpression =
 /**
  * `LineLayer` 的样式（官方 `LineStyle` 的**逐字段**投影）。
  *
- * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.4` 的 `LineStyle` 为准；这里只做类型搬运，
+ * 字段名与默认值以 `@baidumap/jsapi-v4-types@4.0.5` 的 `LineStyle` 为准；这里只做类型搬运，
  * 不重新解释语义（默认值写在文档里，实现不补默认值——`undefined` = 不表态，由 SDK 决定）。
  *
  * ⚠️ 样式是**逐字段 merge**（官方 `setStyleOptions`）：把某个字段改成 `undefined` 时，SDK 侧仍
@@ -706,8 +1267,11 @@ export interface FillLayerStyle {
  * visible/opacity/zoom/zIndex」）。
  *
  * 四个槽位各自有没有落地方式**取决于该 kind 的官方方法面**（由 Driver 的 `supports()` 回答）：
- * 例如 `Heatmap` / `TrackLine` 没有 `setVisible` / `setOpacity` / 缩放范围 setter，因此对应组件
- * **不声明**这些 prop（声明了却忽略 = 假支持）。`visible` 在那种 kind 上表达为「挂上 / 摘掉」。
+ * 缩放范围（`minZoom` / `maxZoom`）对全部八类都是**构造选项**而非字段级 setter，因此没有任何
+ * 组件在这里声明它们（声明了却忽略 = 假支持）。
+ *
+ * `visible` 例外：4.0.5 之后八个 kind **都**有 `setVisible`，因此它一律走 setter、
+ * **不**用「挂上 / 摘掉」表达显隐——重新可见不换实例。
  */
 export interface NativeLayerCommonProps {
   /** 是否显示。默认 `true`。 */
@@ -749,6 +1313,23 @@ export interface NativeLayerPickOptions {
   autoSelect?: boolean;
   /** 选中数据颜色（官方 `selectedColor`，默认 `'rgba(20, 20, 200, 1.0)'`）。 */
   selectedColor?: string;
+  /**
+   * 选中数据的**索引**（官方 `selectedIndex`，`layer/LineLayer.d.ts:25` / `FillLayer.d.ts:30`，
+   * 官方默认 `-1` 即不选中）。
+   *
+   * 与 `selectedColor` 是一对：`selectedColor` 定「选中长什么样」，本项定「哪一条被选中」——
+   * 此前只暴露了前者（半接线）。**索引指的是数据顺序的序号，不是业务 id**；要按业务 id 选，
+   * 用 Feature State 命令面（组件 expose 的 `featureState`），那才是按 id 定位的口径。
+   */
+  selectedIndex?: number;
+  /**
+   * 拾取事件是否向上层冒泡（官方 `popEvent`，`layer/LineLayer.d.ts:70` / `FillLayer.d.ts:75`，
+   * 官方默认 `true`）。
+   *
+   * `false` = 本层命中后**不再**往更上层的图层/覆盖物派发。多个可拾取图层上下叠放时用它控制
+   * 「谁先吃掉这次点击」。
+   */
+  popEvent?: boolean;
 }
 
 /**
@@ -761,6 +1342,16 @@ export interface NativeLayerPickOptions {
  *   `setData`/`getData`），因此本库换一个**没有数据的实例**来表达它（代价是一次重建，见 ADR 的
  *   已知限制）；
  * - **`undefined`** ⇒ 不表态：不产生任何 SDK 调用，已画出来的数据保持不变。
+ *
+ * @deprecated 官方 `BMap.LineLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
+ *   （建议改用 `visualization.PolylineLayer`）。`<LineLayer>` 组件**继续可用、行为不变**，
+ *   而官方建议的替代品 `<PolylineLayer>` 本库**已提供**（#166）。
+ *   ⚠️ 迁移**不是改个名字**：两者的 `style` 不是同一套字段（这里是 `LineLayerStyle`，
+ *   替代品是 `PolylineLayerStyle`），样式要重写；数据模型也不同（这一族的样式更新走
+ *   `setStyleOptions`，替代品走 `setOptions`，两者的更新语义都是 merge、但后者没有
+ *   `doOnceDraw` 重绘——逐条见 `PolygonLayerStyle`）。
+ *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
@@ -769,7 +1360,18 @@ export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickO
   style?: LineLayerStyle;
 }
 
-/** `FillLayer` 的 props。 */
+/**
+ * `FillLayer` 的 props。
+ *
+ * @deprecated 官方 `BMap.FillLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记 `@deprecated`
+ *   （建议改用 `visualization.PolygonLayer`）。`<FillLayer>` 组件**继续可用、行为不变**，
+ *   而官方建议的替代品 `<PolygonLayer>` 本库**已提供**（#166）。
+ *   ⚠️ 迁移**不是改个名字**：两者的 `style` 不是同一套字段（这里是 `FillLayerStyle`，
+ *   替代品是 `PolygonLayerStyle`），样式要重写；官方 `PolygonLayer` 的描边默认
+ *   `strokeWeight: 0`（即**不描边**），而 `FillLayer` 默认 `border: true`。
+ *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
+ */
 export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /**
    * GeoJSON 数据；有值时走 `setData()`（不重建），`null` = 没有数据（换一个空实例）、
@@ -788,12 +1390,428 @@ export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickO
 }
 
 /**
+ * `visualization/` 的**数据驱动样式表达式**（官方 `StyleValue<T>`，
+ * `visualization/common.d.ts:10`）。
+ *
+ * 官方原文：`T | ((properties: any, feature: any, index: number) => T)`。
+ *
+ * ⚠️ **刻意不复用 `StyleExpression`**（#166）。`StyleExpression` 的第一支是 `string`
+ * （`layer/` 家族的 `LineStyle` / `FillLayerStyle` 那些字段在官方口径下是宽字符串），
+ * 而 `visualization/` 的 `strokeLineCap` / `strokeLineJoin` / `strokeStyle` 是**字面量联合**
+ * （`'butt' | 'round' | 'square'` 等）。套上 `string` 那一支会把字面量联合**放宽成任意字符串**
+ * ——`strokeCap: "arrow"` 就会被类型接受，而官方运行时只认三个值。
+ *
+ * 回调经 `forwardCallback` 转发成**身份恒定**的包装（见 `core/layers/nativeLayerStyle.ts`）：
+ * 换实现后对**后续**求值生效，已经产生的画面不回溯。
+ */
+export type VisualizationStyleValue<T> =
+  | T
+  | ((properties: Record<string, unknown>, feature: unknown, index: number) => T);
+
+/**
+ * `PolygonLayer` 的样式（官方 `PolygonLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * ⚠️ **与 `<FillLayer>` 的 `style` 不是同一套字段**：本类型逐条对应
+ * `visualization/PolygonLayer.d.ts:29-63`，官方类声明里**没有** `patternUrl` / `borderWeight` /
+ * `borderCovered` 那一族（那是 `layer/FillLayer` 的 `FillLayerStyle`）。
+ * 两者的关系是**弃用替代**（官方把 `FillLayer` 标了 `@deprecated`、建议改用本类），
+ * **不是**字段改名——迁移时样式要按本类型重写。
+ *
+ * 这些字段经 `setOptions`（`:181`）下发，语义是 **merge**：官方注释逐字是「仅更新已声明的
+ * 样式键；`visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` 转发到对应
+ * setter，其余未知键忽略并告警一次」⇒ **只写你要改的键，没写的键保持原值**，与 `layer/`
+ * 家族的 `setStyleOptions`（「合并到现有样式」，`layer/LineLayer.d.ts:336`）**同一种**。
+ *
+ * ⚠️ 与 `layer/` 家族真正不同的一条只有**重绘**：`layer/` 家族改完样式要显式 `doOnceDraw()`，
+ * 本族**没有**这个成员（改了即生效）。live 读数见
+ * `core/layers/nativeLayerStyleOwnership.ts` 的文件头（#174 P1-1 更正）。
+ */
+export interface PolygonLayerStyle {
+  /** 填充色，css 字符串。默认 `'rgba(25, 25, 250, 0.6)'`。 */
+  fillColor?: VisualizationStyleValue<string>;
+  /** 填充透明度 [0,1]。默认 `1`。 */
+  fillOpacity?: VisualizationStyleValue<number>;
+  /** 描边色，css 字符串。默认 `'rgba(250, 250, 25, 1)'`。 */
+  strokeColor?: VisualizationStyleValue<string>;
+  /** 描边宽度（px），`0` 表示不描边。默认 `0`。⚠️ 官方默认是**不描边**。 */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 描边透明度 [0,1]。默认 `1`。 */
+  strokeOpacity?: number;
+  /** 纹理图片地址，**非空即启用平铺填充**。默认 `''`（即纯色填充）。 */
+  fillTextureUrl?: string;
+  /** 平铺时单张图在屏幕上的宽度（px）；不传取图片真实宽度。 */
+  fillTextureSize?: number;
+  /**
+   * `true` 只用纹理 alpha 做镂空、颜色取 `fillColor`；`false` 用纹理自身颜色。默认 `false`。
+   *
+   * 官方默认 `false`，而 Vue 对可选 `Boolean` prop 会转成 `false` ——**恰好一致**，
+   * 因此这里可以安全地让 Vue 的缺省转换生效（对比 `FillLayerProps.border` 那条注释）。
+   */
+  fillTextureAlphaOnly?: boolean;
+}
+
+/**
+ * `PolylineLayer` 的样式（官方 `PolylineLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * ⚠️ **与 `<LineLayer>` 的 `style` 不是同一套字段**：本类型逐条对应
+ * `visualization/PolylineLayer.d.ts:27-92`。迁移口径同 `PolygonLayerStyle` 的说明。
+ *
+ * 同样经 `setOptions`（`:213`）以 **merge** 语义下发（口径与依据同 `PolygonLayerStyle`）。
+ * ⚠️ 本族的 `setOptions` 比面族**多转发一个键**：`opacity` 也会转到 `setOpacity`
+ * （`PolylineLayer.d.ts:209`），面族那一版没有这一项。
+ */
+export interface PolylineLayerStyle {
+  /**
+   * 线颜色，css 字符串。默认 `'rgba(25, 25, 250, 1)'`。
+   *
+   * ⚠️ 官方注明：**虚线模式**（`strokeStyle` 为 `'dashed'` / `'dotted'`）下走 uniform 染色，
+   * **回调不生效**。
+   */
+  strokeColor?: VisualizationStyleValue<string>;
+  /**
+   * 线宽（屏幕 px，全宽）。默认 `4`。
+   *
+   * ⚠️ 官方注明：传回调时，**沿线长度换算**（虚线圆间距、纹理图案尺寸）仍按默认值 `4` 计算。
+   */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 线透明度 [0,1]，与线色 alpha、图层级 `opacity` **相乘**。默认 `1`。 */
+  strokeOpacity?: number;
+  /** 拐角连接样式。默认 `'round'`。⚠️ 官方注明：纹理 / 虚线**不建议**用 `'miter'`。 */
+  strokeLineJoin?: VisualizationStyleValue<"miter" | "bevel" | "round">;
+  /** 线端点样式。默认 `'round'`。 */
+  strokeLineCap?: VisualizationStyleValue<"butt" | "round" | "square">;
+  /** 线型：`'solid'` / `'dashed'` / `'dotted'`。默认 `'solid'`。 */
+  strokeStyle?: "solid" | "dashed" | "dotted";
+  /** 实线段 / 间隙的屏幕像素长度（同 SVG `stroke-dasharray`；奇数个自动翻倍）。默认 `[8, 4]`。 */
+  dashArray?: number[];
+  /** 纹理图片地址，**必须是竖图**（x 跨线宽、y 沿线方向）。非空时优先级高于 `strokeStyle`。默认 `''`。 */
+  strokeTextureUrl?: string;
+  /** 原图宽（px），只参与沿线长度换算；不传取图片真实尺寸。 */
+  strokeTextureWidth?: number;
+  /** 原图高（px），同上。 */
+  strokeTextureHeight?: number;
+  /** `true` 按 `strokeTextureGap` 间隔平铺（箭头串）；`false` 沿线连续拉伸。默认 `false`。 */
+  strokeTextureSpaced?: boolean;
+  /** 相邻纹理间隔（px），仅 `strokeTextureSpaced` 为 `true` 时生效。默认 `16`。 */
+  strokeTextureGap?: number;
+  /** 纹理叠加色（rgb 相乘），仅配了 `strokeTextureUrl` 时生效。默认 `'rgba(255, 255, 255, 1)'`。 */
+  strokeTextureColor?: string;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 共用的**构造期**拾取选项（#166）。
+ *
+ * 与 `NativeLayerPickOptions`（`layer/` 家族的 `idKey` / `crs` / `enablePicked` /
+ * `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent`）
+ * **刻意不共用一个接口**：官方 `PolygonLayerOptions`（20 项）与 `PolylineLayerOptions`（26 项）
+ * 各自都远不止拾取项，本接口只投影其中的**拾取/交互子块**——`idKey` / `enablePicked` /
+ * `mouseStyleChange` / `pickTolerance` / `pickThrough`
+ * （`visualization/PolygonLayer.d.ts:71-91`、`PolylineLayer.d.ts:100-120`）。
+ * 其余 15 / 21 项（`visible` / `zIndex` / `minZoom` / `maxZoom` / `renderStage` / `referCenter` /
+ * `data` 与两族各自的描边·填充·纹理键）不属本接口职责，由各层自己的 props 承载。
+ * `pickWidth` / `pickHeight` / `crs` / `popEvent` / `selectedIndex` 官方**没有声明**
+ * （#165 的 H2 条已实测 `visualization/` 下 0 命中），共用一个接口等于把它们投影成
+ * 「接收后忽略」——AGENTS.md 明确禁止的假支持。
+ */
+export interface VisualizationPickOptions {
+  /**
+   * 数据项属性 key（= 业务身份字段）。官方构造选项 `idKey`，默认 `'id'`。
+   *
+   * 它是拾取的**唯一身份口径**（本库不替官方猜默认值）：不设置时拾取会如实返回
+   * `id: null`。空字符串是合法字段名。
+   */
+  idKey?: string;
+  /**
+   * 是否开启鼠标交互（命中光标 + 事件派发）。官方默认 `false`，本组件默认 **`true`**。
+   *
+   * 与官方默认值**不同**，刻意如此：不给事件就别怪用户拿不到 `pick`。
+   */
+  enablePicked?: boolean;
+  /**
+   * 命中后是否更换鼠标光标。官方 `mouseStyleChange`，默认 `true`。
+   *
+   * ⚠️ 官方默认 `true` 而 Vue 缺省给 `false` ⇒ 在 `withDefaults` 里**必须**显式写
+   * `undefined`，否则每个不传它的用户都静默偏离官方（#165 结论六记录的同一类坑，
+   * 这是本票第四次踩到它）。
+   */
+  mouseStyleChange?: boolean;
+  /** 命中容差（css px）。官方默认 `4`。 */
+  pickTolerance?: number;
+  /**
+   * 命中后是否继续向下层派发。官方 `pickThrough`，默认 `false`。
+   *
+   * 官方默认 `false`，与 Vue 缺省一致，因此可以让 Vue 的转换生效。
+   */
+  pickThrough?: boolean;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 共用的**显隐 / 层级**槽位（#166）。
+ *
+ * ⚠️ **刻意不 extends `NativeLayerCommonProps`**：那一支还带 `opacity` / `minZoom` /
+ * `maxZoom`，而这两族的官方声明里**没有** `setOpacity`、**没有** `setMinZoom` / `setMaxZoom`。
+ * 沿用那一支会让 `useNativeLayerResource` 在运行时打出「该 kind 没有这个入口」的告警——
+ * **声明了却永远不生效 = 假支持**（AGENTS.md 明确禁止）。
+ *
+ * ⚠️ **更正（#165 收口，2026-09-27）**：这段原先还写着「live 实测运行时的这四个方法也都不在」——
+ * 关于 `setMinZoom` / `setMaxZoom` 那半句成立（实测确实都是 `undefined`），但**关于
+ * `setOpacity` 的那半句是错的**：它在运行时**在位**（`proto` / `inst` 都 true），
+ * `setOpacity(0.25)` → `getOpacity() === 0.25`。真正让两族都**不能**用 `opacity` prop
+ * 的是另一件事，且两族的答案**相反**（判据是**可观测地生效**，不是「在不在」）：
+ *
+ * - `PolygonLayer`：**不生效**——像素读数在 `setOpacity` 1→0→1、`setOptions({opacity})`、
+ *   构造期 `opacity: 0` 这**五态**上全部同值（148243），而同一次运行里
+ *   `setVisible(false)` / `fillOpacity: 0` 都能让画布归零 ⇒ 测量通道是活的。
+ *   它的选项表里也**根本没有** `opacity` 这一项。
+ * - `PolylineLayer`：**生效**——哨兵像素 `4229 → 0 → 4229 → 0 → 4229`（可逆、重复一致），
+ *   Driver 因此**登记**了 `setOpacity`（走豁免表，见 `native-layers.test.ts`）。
+ *
+ * ⇒ 本接口仍然**不**带 `opacity`：`PolygonLayer` 无入口；`PolylineLayer` 是**范围选择**
+ * （「要不要把一条已验证生效、但官方未声明的入口开成 prop」需要维护者裁决），
+ * 详见 `165-runtime-audit-2026-09-27.md` 的「留待裁决」一节。**不是**因为它没有这个方法。
+ *
+ * `minZoom` / `maxZoom` 因此**不进**这个接口，而是走下面的 `VisualizationZoomCtorOptions`
+ * （官方把它们声明成了**构造选项**，所以能投影成 prop，只是「改了要换实例」）。
+ */
+export interface VisualizationLayerCommonProps {
+  /** 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明），重新可见**不**换实例。 */
+  visible?: boolean;
+  /** 图层层级（挂载后写入；官方层级方法要求先挂到地图上）。默认 `1`。 */
+  zIndex?: number;
+}
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 的**缩放范围构造选项**。
+ *
+ * 官方把 `minZoom` / `maxZoom` 声明在选项表里（`PolygonLayer.d.ts:108` / `:112`，
+ * `PolylineLayer.d.ts:136` / `:145`，默认 `3` / `21`），但**没有**对应的字段级 setter
+ * ——live 探针读到两个类的 `setMinZoom` / `setMaxZoom` 在运行时也**不存在**。
+ *
+ * 因此它们进**构造期选项袋**：变化 ⇒ **换实例**（官方唯一能改的路径就是重建），
+ * 并且自动参与重建指纹。
+ */
+export interface VisualizationZoomCtorOptions {
+  /** 最小显示缩放等级（**构造选项**，官方默认 `3`）。变化会换实例。 */
+  minZoom?: number;
+  /** 最大显示缩放等级（**构造选项**，官方默认 `21`）。变化会换实例。 */
+  maxZoom?: number;
+}
+
+/**
+ * `PolygonLayer` 的 props（官方 `visualization.PolygonLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `Polygon` / `MultiPolygon`（含洞）；`strokeWeight > 0` 时内部用官方
+ * `PolylineLayer` 实现描边（`PolygonLayer.d.ts:123`）。
+ */
+export interface PolygonLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 面数据（`FeatureCollection` / `Feature` / `Feature[]` / 裸 Geometry，
+   * 官方 `setData` 的入参形状，`PolygonLayer.d.ts:160`）。
+   *
+   * `null` = 明确「没有数据」⇒ **换一个没有数据的实例**（与全部十种 kind 同一条口径，
+   * 理由见 `LineLayerProps.data`）；`undefined` = **不表态**（不产生任何 SDK 调用）。
+   */
+  data?: object | null;
+  /**
+   * 面样式（见 `PolygonLayerStyle`）。变化时经 `setOptions` 以 **merge** 语义下发，不重建。
+   *
+   * ⚠️ 官方 `setOptions` 的注释写明「仅更新已声明的样式键」，而**未知键忽略并告警一次**
+   * ——因此只写你要改的键，**没写的键保持原值**（与 `layer/` 家族的 merge 语义**相同**，
+   * 本族与之不同的只有「没有 `doOnceDraw`」）。live 读数见
+   * `core/layers/nativeLayerStyleOwnership.ts` 的文件头。
+   */
+  style?: PolygonLayerStyle;
+}
+
+/**
+ * `PolylineLayer` 的 props（官方 `visualization.PolylineLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `LineString` / `MultiLineString`；支持实线 / 虚线 / 纹理贴图三种渲染模式
+ * （`PolylineLayer.d.ts:159-160`）。
+ */
+export interface PolylineLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 线数据（入参形状同 `PolygonLayerProps.data`）。
+   *
+   * `null` / `undefined` 的口径与 `PolygonLayerProps.data` **完全一致**。
+   */
+  data?: object | null;
+  /** 线样式（见 `PolylineLayerStyle`）。同样经 `setOptions` 以 **merge** 语义下发。 */
+  style?: PolylineLayerStyle;
+}
+
+/**
+ * 官方 `TextLayer` 的锚点位置（`visualization/TextLayer.d.ts:5-14`）。
+ *
+ * 官方把它表达成 `StyleValue<TextAnchor>`（可按要素逐个求值），并另有一个**静态**枚举
+ * `TextLayer.Anchor` 用 `[-1, 1]` 区间向量表达同一组取值（`:232-242`；live 探针
+ * 2026-09-27 读到 `staticAnchor` 九项全在，值与声明逐条一致）。
+ *
+ * 本库**只**投影字符串那一支：官方静态枚举是给「自己算向量」的场景用的，而本库的
+ * `style` 袋原样透传给官方 `setOptions`，使用者写 `topLeft` 就够了——投影成向量反而
+ * 丢掉官方在 `setOptions` 里接受的字符串形式。
+ */
+export type TextLayerAnchor =
+  | "center"
+  | "topLeft"
+  | "topCenter"
+  | "topRight"
+  | "rightCenter"
+  | "bottomRight"
+  | "bottomCenter"
+  | "bottomLeft"
+  | "leftCenter";
+
+/**
+ * `TextLayer` 的样式（官方 `TextLayerOptions` 里属于样式的那几项，逐字段投影）。
+ *
+ * 逐条对应 `visualization/TextLayer.d.ts:43-140`（不含 `:142` 之后的 `data` / `idKey` /
+ * 拾取与显示那些——它们是各自的 prop）。经 `setOptions`（`:269`）下发。
+ *
+ * ⚠️ 官方 `setOptions` 的注释（`:265-268`）写的是「**仅更新已声明的样式键**；`opacity` /
+ * `visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` **转发到对应 setter**，
+ * 其余未知键忽略并告警一次」⇒ 语义是 **merge**（只写你给的那几个键，没给的保持原值），
+ * 与 `layer/` 家族的 `setStyleOptions`（`layer/LineLayer.d.ts:336`「合并到现有样式」）**同一种**。
+ *
+ * ⚠️ **更正（#174 P1-1）**：本段原先写着「**整袋替换** … **没写的键回到官方默认值**」，
+ * 那是把它引用的那句官方原文读反了。live 读数（`scripts/probe-style-opacity.mts`，
+ * 2026-09-28）逐 kind 证实两个家族都是 merge。**但那个更正没有取消缺陷**：官方明写
+ * 袋里的 `opacity` 会被**转发到 `setOpacity`**，因此 `style.opacity` 与顶层 `opacity` prop
+ * 写的是**同一份**状态 ⇒ 由「最后改的那个赢」。修法与逐条依据见
+ * `core/layers/nativeLayerStyleOwnership.ts`。
+ */
+export interface TextLayerStyle {
+  /** 文案，不设则读要素的 `properties.text`（`:43`）。 */
+  text?: VisualizationStyleValue<string>;
+  /** 字号（px）。默认 `14`。 */
+  fontSize?: VisualizationStyleValue<number>;
+  /** 字体。默认 `'微软雅黑'`。 */
+  fontFamily?: VisualizationStyleValue<string>;
+  /** 字重。默认 `'normal'`。 */
+  fontWeight?: VisualizationStyleValue<string | number>;
+  /** 文字颜色，css 字符串。默认 `'#333'`。 */
+  color?: VisualizationStyleValue<string>;
+  /** 描边色，css 字符串。默认 `'rgba(255, 255, 255, 1)'`。 */
+  strokeColor?: VisualizationStyleValue<string>;
+  /** 描边宽度（px），`0` 表示不描边。默认 `0`。 */
+  strokeWeight?: VisualizationStyleValue<number>;
+  /** 超过该宽度（px）换行，`0` 表示不换行。默认 `0`。 */
+  textMaxWidth?: number;
+  /** 行高（px）。默认 `20`。 */
+  lineHeight?: number;
+  /** 多行时的对齐方式。默认 `'center'`。 */
+  textAlign?: "center" | "left" | "right";
+  /** 像素偏移 `[x, y]`。默认 `[0, 0]`。 */
+  offset?: VisualizationStyleValue<[number, number]>;
+  /** 锚点，决定坐标点落在文字的哪个位置。默认 `'center'`。 */
+  anchor?: VisualizationStyleValue<TextLayerAnchor>;
+  /** 旋转角度（度）。默认 `0`。 */
+  rotation?: VisualizationStyleValue<number>;
+  /** 缩放比例。默认 `1`。 */
+  scale?: VisualizationStyleValue<number>;
+  /** **逐条**透明度 `[0,1]`，与图层级 `opacity` **相乘**。默认 `1`。 */
+  fillOpacity?: VisualizationStyleValue<number>;
+  /** `true` 贴地（大小随缩放变化）；`false` 屏幕固定像素大小。默认 `false`。 */
+  isFlat?: boolean;
+  /** 是否开启碰撞剔除（密集时自动隐藏互相压盖的文字）。默认 `true`。 */
+  collides?: boolean;
+  /** 碰撞剔除的节流间隔（ms）。默认 `200`。 */
+  waitTime?: number;
+  /** 图集槽位内边距 `[x, y]`。默认 `[2, 2]`。 */
+  padding?: [number, number];
+  /** 碰撞盒外扩 `[x, y]`，控制文字之间的最小间距。默认 `[0, 0]`。 */
+  margin?: [number, number];
+  // ⚠️ 官方 `TextLayerOptions.opacity`（`:179`）**刻意不在这里**（#174 P1-1 复审）：官方
+  // `setOptions` 会把它**转发到 `setOpacity`**（`:265-268`），而本库顶层 `opacity` prop 走的
+  // 正是同一个 `setOpacity` ⇒ 两者是**同一份 SDK 状态**的两个入口，最终值取决于「谁最后被改」。
+  // 保留一个「类型允许、运行时被 strip + 告警」的字段就是**「接收后忽略」**——正是本票反复
+  // 判定为假支持并要求删除的那一档。**图层级透明度只有一个入口：顶层 `opacity` prop。**
+  // 逐要素透明度是 `fillOpacity`（在上），官方明写两者**相乘**，不是一回事。
+  // 依据与 live 读数见 `core/layers/nativeLayerStyleOwnership.ts`。
+  /** 绘制阶段，`null` / `'building'` / `'poi'`（官方 `renderStage`，`:198`）。 */
+  renderStage?: "building" | "poi" | null;
+}
+
+/**
+ * `TextLayer` 的 `hitTest` 命中项（官方 `TextLayerItem`，`TextLayer.d.ts:19-32`）。
+ *
+ * 与 `FeaturePick`（拾取**事件**的载荷）是**两件事**：事件走官方统一的事件调度，回包形状是
+ * `VisualPickEvent`；而 `hitTest` 是**主动**调用，回包就是这段文字本身。两者因此不共用一个类型。
+ *
+ * 逐字段如实投影官方声明的六项：
+ *
+ * - **没有 `dataIndex`** —— 官方回包里没有它，本库也不从 `id` 反推下标（`id` 缺省时是要素
+ *   序号，但那是 SDK 内部口径，不是有依据的公开身份）；
+ * - 四个 `null` 槽位表示「回包里读不到这个值」，与 `FeaturePick.id` 的 `null` 同一条口径
+ *   （认不出就如实说认不出，不拿 `0` / `""` 冒充——`0` 宽度与「没给宽度」在业务上不是一回事）。
+ */
+export interface TextLayerPick {
+  /** 命中点经纬度（bd09ll），本库用纯数据 `{ lng, lat }` 表达（组件层不构造 SDK 构造器）。 */
+  point: { lng: number; lat: number } | null;
+  /** 文案。 */
+  text: string | null;
+  /** 文字显示宽度（px）。 */
+  width: number | null;
+  /** 文字显示高度（px）。 */
+  height: number | null;
+  /** 要素 id（取自 `idKey` 字段，缺省用序号）。 */
+  id: string | number | null;
+  /** 要素的 properties。 */
+  properties: unknown;
+}
+
+/**
+ * `TextLayer` 的 props（官方 `visualization.TextLayer`，4.0.5 新增）。
+ *
+ * 几何支持 `Point` / `MultiPoint`（`TextLayer.d.ts:203`）。文字量较大时官方建议用它
+ * 而不是逐个 `Label` 覆盖物。
+ *
+ * 与 `PolygonLayerProps` / `PolylineLayerProps` 的**唯一结构差别**是本接口多带
+ * `opacity`（官方**声明**了 `setOpacity`，`:296`）——`PolygonLayer` 那条
+ * `setOpacity` 实测**不驱动渲染**，`PolylineLayer` 那条虽实测生效但**未声明**、
+ * 尚未开成 prop（见 `VisualizationPolygonPolylineDisplayProps` 上那段更正）。
+ * 因此刻意不共用一个 props 基类。
+ */
+export interface TextLayerProps
+  extends VisualizationLayerCommonProps,
+    VisualizationZoomCtorOptions,
+    VisualizationPickOptions {
+  /**
+   * GeoJSON 点数据（入参形状同 `PolygonLayerProps.data`）。
+   *
+   * `null` = 明确「没有数据」⇒ **换一个没有数据的实例**（与全部 kind 同一条口径）；
+   * `undefined` = **不表态**（不产生任何 SDK 调用）。
+   */
+  data?: object | null;
+  /** 文字样式（见 `TextLayerStyle`）。变化时经 `setOptions` 以 **merge** 语义下发，不重建。 */
+  style?: TextLayerStyle;
+  /**
+   * 图层级透明度 `[0,1]`，与逐条 `fillOpacity` 相乘。默认 `1`。
+   *
+   * **图层级透明度的唯一入口**：官方 `setOptions` 会把样式袋里的 `opacity` 转发到同一个
+   * `setOpacity`（`TextLayer.d.ts:265-268`），两个入口并存会让最终值取决于改动顺序，
+   * 因此样式袋里那个键被忽略并告警一次（#174 P1-1，逐条依据见
+   * `core/layers/nativeLayerStyleOwnership.ts`）。
+   *
+   * 走官方**声明**的字段级 setter `setOpacity`（`:296`）⇒ 单独改它**不换实例**。
+   */
+  opacity?: number;
+}
+
+/**
  * `HeatmapLayer` 的 props。
  *
- * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.4` 没有类声明，可视化实现是
+ * 官方 `Heatmap` 属**扩展 API**：`@baidumap/jsapi-v4-types@4.0.5` 才补上类声明，可视化实现是
  * 「首次加载时异步注入」的。本库只暴露驱动已登记的入口（`setData` / `setStyle`；驱动也登记了
  * `clearData`，但本组件不调用它——见下），因此**没有** `opacity` / `zIndex` / `minZoom` /
- * `maxZoom`：官方这些图层不公开对应 setter，声明了也只是静默忽略。
+ * `maxZoom`：前两个虽然 4.0.5 声明了（`visualization/Heatmap.d.ts:157`/`:161`）但本组件刻意
+ * 不开面（`style` 已是官方的整袋透传口），后两个官方**没有**字段级 setter。
  */
 export interface HeatmapLayerProps {
   /**
@@ -809,7 +1827,7 @@ export interface HeatmapLayerProps {
    * 因此这里是**原样透传**的键值袋而不是逐个字段的强类型：本库不复刻一份没有依据的字段表。
    */
   style?: Record<string, unknown>;
-  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达（重新可见时换实例）。 */
+  /** 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明），重新可见**不**换实例。 */
   visible?: boolean;
 }
 
@@ -832,7 +1850,13 @@ export interface TrackLineLayerProps {
    * `null` = **没有轨迹**（换一个空实例，因此不再显示上一条轨迹）、`undefined` = 不表态。
    */
   data?: object | null;
-  /** 是否显示。默认 `true`；该 kind 没有 `setVisible` ⇒ 用挂上 / 摘掉表达。 */
+  /**
+   * 是否显示。默认 `true`；走 `setVisible`（4.0.5 声明，`visualization/TrackLine.d.ts:457`）。
+   *
+   * ⚠️ 因此**重新可见不换实例**——这一点对本组件是行为保证：换实例会把播放进度与播放状态
+   * 一起丢掉（播放到一半隐藏再显示会从头播）。此前该 kind 没有登记 `setVisible`、
+   * 显隐走挂上 / 摘掉，正是那时的行为。
+   */
   visible?: boolean;
   /**
    * 页面 hidden 时是否**自动 pause**（shown 恢复 resume）。默认 `false`。
@@ -891,6 +1915,14 @@ export interface TrackLineLayerExpose {
  *
  * 样式字段是官方 `PointIconStyle` 的子集；`isFlat` / `isFixed` 是**构造期**选项
  * （它们决定渲染通道，官方写在 `PointIconLayerOptions` 上而不是 style 里）。
+ *
+ * @deprecated 官方 `BMap.PointIconLayer` 已在 `@baidumap/jsapi-v4-types@4.0.5` 标记
+ *   `@deprecated`（建议改用 `visualization.PointLayer` 的图标模式）。与线 / 面两个不同，
+ *   官方建议的替代品本库**已经提供**：迁移目标是 `PointLayerProps`（组件 `<PointLayer>`）。
+ *   但那不是改个名字的事——`<PointLayer>` 属扩展 API、标 `experimental`（可视化实现按需
+ *   异步注入），且样式字段是**扁平**的（`icon` / `width` / `height` 直接是 prop，没有 `style` 袋）。
+ *   `<PointIconLayer>` 本身继续可用、行为不变。
+ *   详见 `docs/zh-CN/components/data.md`。
  */
 export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   /** 属性映射：写进每个要素的 `properties`（口径同 `BPointShapeLayerProps.properties`）。 */
@@ -909,6 +1941,39 @@ export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   scale?: number;
   /** 旋转角度（度）。 */
   rotation?: number;
+  /**
+   * **逐要素**透明度 `0`-`1`（官方 `PointIconStyle.opacity`，`layer/PointIconLayer.d.ts:127`）。
+   *
+   * ⚠️ 与下面的图层级 `opacity` 是**两个不同的官方字段**：本项进样式袋（逐要素，官方允许
+   * `number | StyleExpress` 逐点取值），图层级那个走 `setOpacity` 写入图层级。两者相乘。
+   * 本组件只收**静态**数值——逐要素差异化请走 Feature State（expose 的 `featureState`）。
+   */
+  featureOpacity?: number;
+  /**
+   * 逐要素是否显示（官方 `PointIconStyle.visibility`，`:105`，官方默认 `true`）。
+   *
+   * 与图层级 `visible` 不同：这是**样式袋字段**⇒ 就地更新（不换实例）。
+   */
+  visibility?: boolean;
+  /**
+   * 点尺寸 `[宽, 高]`（官方 `PointIconStyle.sizes`，`:108`）；只在 `userSizes` 为 `true` 时生效。
+   */
+  sizes?: [number, number];
+  /**
+   * 是否使用 `sizes` 的宽高而非 `width` / `height`（官方 `userSizes`，`:117`，官方默认 `true`）。
+   *
+   * ⚠️ 不给默认值（同 `FillLayerProps.border` 的理由）：Vue 对 `Boolean` 有「缺省即 `false`」
+   * 的转换，写 `false` 会让每个不传它的用户都隐式切到 `width` / `height` 通道、覆盖掉 `sizes`。
+   * 「没传」= 不表态 = 官方默认 `true`。
+   */
+  userSizes?: boolean;
+  /**
+   * 逐要素图标源：`(style, properties) => { id?, canvas }`（官方 `PointIconStyle.iconObj`，`:101`）。
+   *
+   * 按要素算出图标（典型是用 canvas 画文字 / 数字 / 业务徽标）。`id` 用于图集去重。
+   * 与静态 `icon`（URL）是二选一。
+   */
+  iconObj?: (style: object, properties: object) => { id?: number; canvas: HTMLCanvasElement };
   /** 是否贴地（构造期，官方默认 `true`）。 */
   isFlat?: boolean;
   /** 是否跟随缩放保持尺寸（构造期，官方默认 `true`）。 */
@@ -965,19 +2030,85 @@ export interface PointLayerProps<Item> extends DataComponentProps<Item> {
   /** 锚点。 */
   anchor?: string;
   /**
+   * 图标显示尺寸 `[宽, 高]` 或 number（px）；不设则用图片 / canvas 自身尺寸
+   * （官方 `PointLayerOptions.iconSize`，`visualization/PointLayer.d.ts:135`）。
+   *
+   * 只在**图标模式**（配了 `icon`）下有效，与 `shape` 互斥——这是官方分形状模式 / 图标模式的
+   * 那条互斥关系，本库不另造第三个模式。
+   */
+  iconSize?: [number, number] | number;
+  /**
+   * 命中后是否更换鼠标光标（官方 `mouseStyleChange`，`:153`，默认 `true`）。
+   *
+   * 只在开启拾取（`enablePicked`）时才有意义：关掉拾取就没有「命中」这回事。
+   */
+  mouseStyleChange?: boolean;
+  /**
+   * 命中容差（css px，官方 `pickTolerance`，`:158`，默认 `4`）。
+   *
+   * 这是**本组件真正的拾取调优入口**：`PointLayer` 官方声明里没有 `pickWidth` / `pickHeight`
+   * （那是 `layer/` 下那四类专页图层的构造选项），它给的是「命中点周围多大范围算命中」的容差。
+   */
+  pickTolerance?: number;
+  /**
+   * 命中后是否继续向下层派发（官方 `pickThrough`，`:163`，默认 `false`）。
+   *
+   * `true` = 本层命中**不**吞掉事件，下面的图层仍能收到；重���点、上下叠放的图层常用。
+   */
+  pickThrough?: boolean;
+  /**
+   * 图层参考中心点（官方 `referCenter`，`:191`），规避大坐标浮点抖动。
+   *
+   * 官方类型是 `BMap.Point`；本组件收**纯数据** `{ lng, lat }`（与全库 Geometry 口径一致），
+   * 由 Driver 侧负责换算——组件层不直接构造 SDK 构造器。
+   */
+  referCenter?: { lng: number; lat: number };
+  /**
+   * 绘制阶段（官方 `renderStage`，`:196`）：`'building'` / `'poi'` / `null`。
+   *
+   * 图层绘制在该阶段之后（叠在其上）；`null` = 官方默认落点（覆盖物之后、3D 楼块之前）。
+   */
+  renderStage?: "building" | "poi" | null;
+  /**
    * 是否开启鼠标拾取，默认 `true`。构造期选项（官方另有 `setEnablePicked`，本库统一走构造期，
    * 三个点图层组件的这条语义因此一致）。
    *
-   * ⚠️ 图层级的 `opacity` / `zIndex` / `minZoom` / `maxZoom` **没有**暴露：它们走的是
-   * `setOpacity` / `setZIndex` / `setMinZoom` / `setMaxZoom`，而官方扩展专页没有把这一族列为
-   * `PointLayer` 的方法面 —— 按本库「不把未声明的继承成员当契约」的口径，Driver 对它们回答
-   * `unsupported`（`setVisible` 是唯一的例外，它取过证）。收下一个用不了的 prop 属于假支持。
+   * ⚠️ 图层级的 `opacity` **没有**暴露：4.0.5 的 `PointLayer` 声明里**没有** `setOpacity`
+   * （`ClusterLayer` / `Heatmap` / `TrackLine` 都有）——按本库「不把未声明成员当契约」的口径，
+   * Driver 对它回答 `unsupported`。收下一个用不了的 prop 属于假支持。
+   * `zIndex` 相反：4.0.5 声明了 `setZIndex`（`:328`），但它当前没有组件消费者（组件未声明该
+   * prop），因此也不在这里开面。
    */
   enablePicked?: boolean;
-  /** 点击拾取矩形宽（像素）。构造期选项。 */
-  pickWidth?: number;
-  /** 点击拾取矩形高（像素）。构造期选项。 */
-  pickHeight?: number;
+  /**
+   * 是否贴地渲染（官方 `PointLayerOptions.isFlat`，`visualization/PointLayer.d.ts:123`）。
+   * `true` 贴地（大小随缩放变化）；`false` 屏幕固定像素大小。
+   *
+   * **构造期**选项（官方把它写在构造参数 `PointLayerOptions` 上，**没有** `setIsFlat` 这样的
+   * 字段级 setter）⇒ 改动会**重建实例**，与 `enablePicked` 同一档。口径同
+   * `PointCollectionProps.isFlat` / `PointIconLayerProps.isFixed` 那一族。
+   *
+   * ⚠️ 官方三处的默认值**互相矛盾**，因此本库刻意**不给**默认值、也**不在**此断言是哪一个：
+   *
+   * | 声明处 | `@default` |
+   * | --- | --- |
+   * | `visualization/PointLayer.d.ts:121`（本项） | `false` |
+   * | `visualization/TextLayer.d.ts:117` | `false` |
+   * | `layer/PointIconLayer.d.ts:15` / `layer/PointShapeLayer.d.ts:15` | `true` |
+   *
+   * 「没传 = 不表态 = SDK 自己的默认」是三个点图层组件一致的处置，也让我们不必在上游
+   * 自相矛盾时替它选一个——选了就是把注释变成契约，而注释**可能**就是写错的那一个。
+   * （#165：本项曾**整个缺失**，两个兄弟都投影了它，文件里没有写下的理由。）
+   */
+  isFlat?: boolean;
+  /**
+   * ⚠️ 这里**刻意不**有 `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方只在
+   * `layer/LineLayer.d.ts` / `layer/PointIconLayer.d.ts` / `layer/FillLayer.d.ts` /
+   * `layer/PointShapeLayer.d.ts` 上声明这两个成员；`PointLayer` 的拾取面是 `pickTolerance`
+   * （默认 4）/ `pickThrough` / `mouseStyleChange`。同名成员在 layer 家族上**仍然合法**
+   * （见 `PointIconLayerProps` / `NativeLayerPickOptions`），删除是 **kind 特定**的。
+   * 正确的拾取成员由 #169 补进来。
+   */
 }
 
 /**
@@ -1067,7 +2198,7 @@ export interface MVTLayerBaseEvent {
 /**
  * `MVTLayer` 的公开属性（issue #109 基线）。
  *
- * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.4` + live 探针）；
+ * 覆盖 `MVTLayerOptions` 中本库收下的字段（`@baidumap/jsapi-v4-types@4.0.5` + live 探针）；
  * 未列出的字段经下方逃生口字段透传。**不声明** `opacity` / `setVisible` / `setData` 等
  * 官方没有的入口（探针与 d.ts 双向确认）：
  *
@@ -1190,7 +2321,97 @@ export interface MarkerClusterProps<Item> extends DataComponentProps<Item> {
    * 因此这里如实收成开放记录，而不是本库臆造一套字段名。
    */
   singleStyle?: Record<string, unknown>;
+
+  /* --- issue #165 第三批：官方 `ClusterLayerOptions` 里另外六个聚合/交互选项 ---
+   *
+   * 这六个此前**没有**任何书面理由被省略，而它们同族的另外六个（上面那批）就在同一个
+   * props 接口里——「同族的一半有一半没有」本身就是遗漏的形状，因此本批补齐。
+   * 逐条对应官方 4.0.5 的 `visualization/ClusterLayer.d.ts` 的 `ClusterLayerOptions`。
+   *
+   * ## ⚠️ 六个**全部**是**构造期**（`recreate`），尽管官方有公开的 `setOptions`
+   *
+   * live 读数（真实 AK + headless Chrome，2026-09-27）显示 `setOptions({ clusterRadius:
+   * 20 → 300 })` 之后同一实例的 `change` 事件簇数**确实**从 3 变 1，**不必**再 `redraw()`。
+   * 看着够格叫 `mutable`，但本库不这么判，三条理由：
+   *
+   * 1. `setOptions` 是**整袋**入口（官方对它的描述是「批量更新配置/样式」，
+   *    `ClusterLayer.d.ts:225`）——它不是为「只改其中一个键」设计的公开逐字段通道；
+   * 2. **它顺带覆盖样式**：本库的 `setStyle` 也落到 `setOptions`
+   *    （`driver/jsapi-v4/native-layers.ts` 的 `styleMember`），而 `setStyle` 走的是
+   *    **merge** 语义。两条通道共用一个成员，认成 `mutable` 会让「聚合参数」与「样式」互相踩。
+   * 3. 与本票已落地的 21 个图形族构造期选项**同一口径**（`driver/types/overlays.ts` 的
+   *    `PATH_CTOR_*`）：判据是「有没有**公开的逐字段更新入口**」，`setOptions` 不满足。
+   *
+   * ⇒ 结果与同族既有六项一致（「一致」本身就是判据：一个族里出现两种策略、而差异只源于
+   * 「本库碰巧有个同名 prop」，那才是需要解释的异常）。
+   *
+   * ## 刻意**不加**的（各带理由，`tests/behavior/marker-label-cluster-options.test.ts` 有门禁）
+   *
+   * - `minZoom` / `maxZoom`：官方 `ClusterLayerOptions` **确实**声明了它们，但官方
+   *   `ClusterLayer` 上**没有** `setZoomRange` / `setMinZoom` / `setMaxZoom`
+   *   （live：整条原型链 layer = -1）⇒ 收下就是「改 prop 悄悄不生效」。与 `<PointLayer>` /
+   *   `<HeatmapLayer>` 早已有的同一裁决一致。
+   * - `enablePicked` / `mouseStyleChange` / `pickTolerance`：拾取面是 native 引擎的**内部
+   *   决策**（`enablePicked: true` 硬编码，理由见 `components/data/nativeClusterEngine.ts`
+   *   文件头）。官方确实**有** `setEnablePicked`（live：原型链 layer 0），但本库**没有**
+   *   「关掉拾取」的消费者——那会让 `cluster-click` 永远不触发（自断交互），
+   *   按 #104「没有消费者的扩展面一律不加」否决。
+   */
+
+  /**
+   * 瓦片尺寸，**参与半径归一化**（官方 `tileSize`，`@default 256`）。只在 `engine: "native"` 下生效。
+   *
+   * live 读数（2026-09-27）：它**确实生效**——同样 `clusterRadius: 300`、只把 `tileSize`
+   * 从 256 改成 1024，三团近点的簇数从 **1 变 2**（官方原文「参与半径归一化」）。
+   * 但没有逐字段 setter（`setZoomRange` / `setMinZoom` / `setMaxZoom` 整条链 layer = -1）⇒ 构造期。
+   */
+  tileSize?: number;
+  /**
+   * 调整视野的边距 `[上, 右, 下, 左]`（官方 `fitViewMargin`，`@default [12,12,12,12]`）。
+   *
+   * 只在 `fitViewOnClick` 为真（官方默认）时才有意义。构造期。
+   */
+  fitViewMargin?: [number, number, number, number];
+  /**
+   * 拖动 / 缩放过程中是否**实时刷新**（官方 `updateRealTime`，`@default false`）。构造期。
+   *
+   * ⚠️ 官方默认 `false` 而 Vue 的 `Boolean` prop 未给时是 `false`——值一致但**来源不同**。
+   * `withDefaults` 里必须写显式 `undefined`，否则传 `:update-real-time="undefined"`
+   * 会触发一次内容完全没变的重建（本 ticket 已踩三次这个陷阱）。
+   */
+  updateRealTime?: boolean;
+  /**
+   * 实时刷新的节流间隔（毫秒，官方 `waitTime`，`@default 300`）。只在 `updateRealTime`
+   * 为真时有意义。构造期。
+   */
+  waitTime?: number;
+  /**
+   * 聚合点图标：`(properties) => 图标源`（官方 `clusterIcon`）。不设时用内置气泡
+   * （按占比着色 + 数字）。构造期。
+   *
+   * 图标源按官方 `PointLayer`'s `PointIconSource` 建模：`string`（URL）/
+   * `HTMLCanvasElement` / `{ canvas, id? }`。官方那一侧的声明是 `PointIconSource`
+   * （`visualization/PointLayer.d.ts:33`），本库**不构造** `HTMLCanvasElement` 之外的 SDK 对象，
+   * 因此类型如实跟随。
+   */
+  clusterIcon?: (properties: Record<string, unknown>) => ClusterPointIconSource;
+  /**
+   * 聚合点图标尺寸：`(properties) => [w, h] | number`（官方 `clusterIconSize`）。构造期。
+   *
+   * live 读数确认 SDK **真的留着**这个回调（构造传入后
+   * `getOptions().clusterIconSize({})` 返回闭包里的值）——不是被收下就静默忽略。
+   */
+  clusterIconSize?: (properties: Record<string, unknown>) => [number, number] | number;
 }
+
+/**
+ * 聚合点图标的来源（官方 `PointIconSource`，`visualization/PointLayer.d.ts:33`）。
+ *
+ * 官方那一侧的声明是 `string | HTMLCanvasElement | { canvas: HTMLCanvasElement; id?: … }`。
+ * 本库**原样**跟随——`HTMLCanvasElement` 是**平台类型**（不是 `BMap.*`），不构成 raw SDK
+ * 越界，`{ canvas }` 那个变体也仍然是普通 JS 对象。
+ */
+export type ClusterPointIconSource = string | HTMLCanvasElement | { canvas: HTMLCanvasElement; id?: string | number };
 
 /**
  * 簇点击载荷（`MarkerCluster` 的 `cluster-click`）。

@@ -8,7 +8,7 @@ import { Prism } from 'bmap-vue'
 
 ## 示例
 
-:::demo 通过 [`useAreaBoundary`](../hooks/useAreaBoundary) 获取边界字符串，并传给 `Prism` 的 `path`，同时设置 `isBoundary` 为 `true`
+:::demo 通过 [`useAreaBoundary`](../hooks/useAreaBoundary) 获取边界字符串，并传给 `Prism` 的 `points`，同时设置 `isBoundary` 为 `true`
 overlay/prism
 :::
 
@@ -22,17 +22,7 @@ overlay/prism
 
 ## 动态组件 Props
 
-| 属性 | 说明 | 类型 | 可选值 | 默认值 |
-| --------------- | ------------------------------------------- | ------------------------------- | ------ | ---------- |
-| path | 普通多边形使用点对象数组，行政边界使用边界字符串数组 | `{ lng: number, lat: number}[] \| string[]` | - | `required` |
-| altitude | 3d 棱柱高度 | `number` | - | `required` |
-| topFillColor | 顶面填充颜色 | `string ` | - | `#fff` |
-| topFillOpacity | 顶面填充颜色透明度 | `number` | `0-1` | - |
-| sideFillColor | 侧面填充颜色 | `string` | - |  |
-| sideFillOpacity | 侧面填充颜色透明度 | `number` | `0-1` | `#fff` |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean` | - | ` true` |
-| visible | 是否显示 | `boolean` | - | `true` |
-
+|  | 属性 | 说明 | 类型 | 可选值 | 默认值 |  || --------------- | ------------------------------------------- | ------------------------------- | ------ | ---------- | ---------------------------------- || points          | 普通多边形使用点对象数组，行政边界使用边界字符串数组 | `{ lng: number, lat: number}[] \| string[]` | - | `required` | - || altitude        | 3d 棱柱高度                                 | `number`                        | -      | `required` | -                                  || topFillColor    | 顶面填充颜色                                | `string `                       | -      | `#fff`     | -                                  || topFillOpacity  | 顶面填充颜色透明度                          | `number`                        | `0-1`  | -          | -                                  || sideFillColor   | 侧面填充颜色                                | `string`                        | -      |            | -                                  || sideFillOpacity | 侧面填充颜色透明度                          | `number`                        | `0-1`  | `#fff`     | -                                  || enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                       | -      | ` true`    | -                                  || zIndex           | 层叠顺序（**就地更新**）                      | `number`                      | -                         | -          | `1.0.0`（#165）    || visible         | 是否显示                                    | `boolean`                       | -      | `true`     | <Badge type="tip" text="^2.2.0" /> |
 ## 组件事件
 
 本组件的事件面由**覆盖物事件矩阵**给出：`prism` 共 11 个事件，事件名（Vue 名 / SDK 名）、

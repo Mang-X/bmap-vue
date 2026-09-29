@@ -1370,6 +1370,17 @@ describe('属性面与 Driver 描述符一致', () => {
         'enableMaximize',
         'enableAutoPan',
         'enableCloseOnClick',
+        // ↓ issue #165 Class 3 / TASK 3：官方 `InfoWindowOptions` 的其余构造选项。
+        // 逐条依据见 `core/overlays/InfoWindowSpec.ts` 的 `InfoWindowProps` 注释与
+        // `OVERLAY_DESCRIPTORS["info-window"]` 的同名条目。
+        'maxWidth',
+        'maxContent',
+        'margin',
+        'collisions',
+        'onClosing',
+        'enableSearchTool',
+        'headerContent',
+        'enableContentScroll',
       ].sort(),
     )
     // 反向（不能有 props 上不存在的键）由上面那条「与手写清单逐项相等」隐含；

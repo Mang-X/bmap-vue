@@ -22,7 +22,7 @@ export const JSAPI_V4_REQUIRED_MEMBERS = ["Map", "Point", "Marker"] as const;
 /**
  * 全局对象上的版本探测键。
  *
- * 官方 `@baidumap/jsapi-v4-types@4.0.4` 未声明版本常量，因此这里是**尽力探测**：
+ * 官方 `@baidumap/jsapi-v4-types@4.0.5` 未声明版本常量，因此这里是**尽力探测**：
  * 探测不到时回退到基线声明值，并由 `versionSource: "declared"` 如实标注。
  *
  * `version` 也列在候选里，但它**只在整个取值确实形如版本号时才作数**：真实 4.0 的
@@ -33,7 +33,7 @@ export const JSAPI_V4_REQUIRED_MEMBERS = ["Map", "Point", "Marker"] as const;
 export const JSAPI_V4_VERSION_PROBE_KEYS = ["VERSION", "version"] as const;
 
 /**
- * 形如版本号的探测值（`4.0` / `4.0.4`）。
+ * 形如版本号的探测值（`4.0` / `4.0.5`）。
  *
  * 只有这种取值才参与「是不是 4.x」的判定：`"gl"` 这类构建标记、以及任何非纯数字串都
  * 只说明「探测不到版本」，而不是「版本不对」。

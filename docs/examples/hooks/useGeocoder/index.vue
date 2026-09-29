@@ -8,15 +8,15 @@
     </select>
     <div class="state" v-if="!isLoading && !isEmpty">
       <h5>解析结果:</h5>
-      <span>纬度 - {{ point?.lat }}</span>
-      <span>经度 - {{ point?.lng }}</span>
+      <span>纬度 - {{ data?.lat }}</span>
+      <span>经度 - {{ data?.lng }}</span>
     </div>
     <div class="state" v-else-if="isEmpty">没有解析到结果 ！</div>
     <div class="state" v-else>解析中...</div>
     <br />
-    <Map v-bind="$attrs" ref="map" :center="point || defaultCenter" @ready="handleInitd">
+    <Map v-bind="$attrs" ref="map" :center="data || defaultCenter" @ready="handleInitd">
       <template v-if="!isLoading && !isEmpty">
-        <Marker :position="point"></Marker>
+        <Marker :position="data"></Marker>
       </template>
     </Map>
   </div>
@@ -46,16 +46,16 @@ const currentAddress = ref(addressList.value[0]);
 watch(
   currentAddress,
   (n) => {
-    get(n.address, n.city);
+    getPoint(n.address, n.city);
   },
   {
     deep: true,
   },
 );
-const { get, point, isLoading, isEmpty } = useGeocoder(map);
+const { getPoint, data, isLoading, isEmpty } = useGeocoder(map);
 
 function handleInitd() {
-  get(currentAddress.value.address, currentAddress.value.city);
+  getPoint(currentAddress.value.address, currentAddress.value.city);
 }
 </script>
 

@@ -27,6 +27,7 @@ import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
 import type {
   PanoramaHandle,
+  PanoramaLabelHandle,
   PanoramaOptions,
   PanoramaViewerDriver,
 } from "../../driver/types/panorama";
@@ -55,6 +56,24 @@ export interface PanoramaContext {
    * `dispose()` 会先释放它、再销毁查看器。
    */
   readonly resources: ResourceScope;
+
+  /**
+   * **本库管理的**标注名册（`<PanoramaLabel>` 挂上来时登记、摘掉时销账）。
+   *
+   * 它存在的唯一理由是官方 `Panorama#clearOverlays()`（`panorama/Panorama.d.ts:115`）——
+   * 那条命令会把**全部**覆盖物清掉，而官方**没有**任何枚举接口（只有 `addOverlay` /
+   * `removeOverlay` / `clearOverlays` 三个方法），所以「只清本库管不到的」在官方面上
+   * **写不出来**。能写的只有一条：清完把名册里的标注**重新挂回去**（`clearOverlays` 的实现
+   * 见 `<Panorama>` 的 expose 面）。逐条取舍见该组件上 `clearOverlays` 的注释。
+   *
+   * 名册只存**句柄**、不存回调：重新挂回走的是 `PanoramaViewerDriver.addLabel`，
+   * 与首次挂载是**同一条**路径，因此标注那一侧的组件状态（「我还挂着」）不会与画面分叉。
+   */
+  registerLabel(label: PanoramaLabelHandle): void;
+  /** 销账（`<PanoramaLabel>` 释放时调用）。重复销账是 no-op。 */
+  unregisterLabel(label: PanoramaLabelHandle): void;
+  /** 当前名册的快照（按登记顺序）。`clearOverlays` 重新挂回时按这个顺序遍历。 */
+  managedLabels(): readonly PanoramaLabelHandle[];
 
   /** 在容器里创建（或复用）查看器；幂等，并发调用共享同一次创建。 */
   mount(container: HTMLElement, options?: PanoramaOptions): Promise<PanoramaReadyContext>;
@@ -112,6 +131,15 @@ export function createPanoramaContext(input: { mapContext: MapContext }): Panora
   let ready: PanoramaReadyContext | null = null;
   let mountTask: Promise<PanoramaReadyContext> | null = null;
   let disposed = false;
+  /**
+   * 本库管理的标注（`<PanoramaLabel>`）——见 `PanoramaContext.managedLabels` 的注释。
+   *
+   * 用 `Set` 而不是数组：销账要**幂等**（`<PanoramaLabel>` 的释放路径可能被走到两次：
+   * `onScopeDispose` 与 `destroyLabel()` 都碰得到），而数组的 `indexOf/splice` 在
+   * 「同一个句柄登记两次」时会留下重复项，重新挂回就会把同一个标注挂两遍。
+   * 登记顺序由 `managedLabels()` 单独保（`Set` 在 JS 里保持插入序）。
+   */
+  const managedLabels = new Set<PanoramaLabelHandle>();
   /** 等待者（`MapRuntime` 的同一套：signal 只取消**本次等待**，不影响本次创建）。 */
   let waiters: Array<{
     resolve: (value: PanoramaReadyContext) => void;
@@ -227,6 +255,9 @@ export function createPanoramaContext(input: { mapContext: MapContext }): Panora
     if (disposed) return;
     disposed = true;
     status.value = "disposing";
+    // 名册**先**清空：查看器马上就要被销毁，之后不会有任何 `clearOverlays` 来重新挂回它们。
+    // 不清的话，一次「销毁后仍有人调 clearOverlays」会把已经销毁的标注重新挂到一个死查看器上。
+    managedLabels.clear();
     // 先释放业务监听（SDK 在 destroy 期间派发的事件不得打到已拆解的回调上），再销毁查看器
     try {
       resources.dispose("panorama-context-disposed");
@@ -260,6 +291,13 @@ export function createPanoramaContext(input: { mapContext: MapContext }): Panora
     viewer: viewer as Readonly<ShallowRef<PanoramaHandle | null>>,
     error: error as Readonly<ShallowRef<BMapError | null>>,
     resources,
+    registerLabel: (label: PanoramaLabelHandle): void => {
+      managedLabels.add(label);
+    },
+    unregisterLabel: (label: PanoramaLabelHandle): void => {
+      managedLabels.delete(label);
+    },
+    managedLabels: (): readonly PanoramaLabelHandle[] => [...managedLabels],
     mount,
     whenReady,
     dispose,

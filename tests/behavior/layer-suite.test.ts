@@ -276,6 +276,44 @@ describe("[#40] §2 构造期选项变化：URL 变化重建与旧请求过期",
     await unmountAndSettle(wrapper);
     harness.assertIdle("district 重建");
   });
+
+  /**
+   * #165 Class 3 / TASK 2：`onComplete`（官方 `DistrictLayerOptions.onComplete`，
+   * `layer/DistrictLayer.d.ts:180`）。
+   *
+   * 这是 4.0 的 `DistrictLayer` 给「边界什么时候画完」的**唯一**官方入口——这批图层没有
+   * `dataparsed` 事件面。回调型 option 经 `forwardCallback` 转发，因此**换回调不重建**。
+   */
+  it("district：onComplete 进构造选项，且换实现不重建（forwardCallback 转发）", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { wrapper, setProp } = await mountOneLayer(0, { onComplete: first });
+    expect(createdSince()).toBe(1);
+    const handed = harness.layerOptions(-1).onComplete;
+    expect(typeof handed, "SDK 手上拿到的是一个函数").toBe("function");
+
+    // SDK 侧真的回调 ⇒ 打到的是**当前** prop（第一次）
+    handed();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    // 换实现不重建：函数被 forwardCallback 包一层，读的是 prop 当前值
+    await setProp({ onComplete: second });
+    expect(createdSince(), "回调型 option 不参与重建指纹").toBe(1);
+    harness.layerOptions(-1).onComplete();
+    expect(second, "换实现后打到新的那个").toHaveBeenCalledTimes(1);
+    expect(first, "旧实现不再被调用").toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("district onComplete");
+  });
+
+  it("district：没传 onComplete 时该键不进选项袋（不替上游表态）", async () => {
+    const { wrapper } = await mountOneLayer(0, {});
+    expect(harness.layerOptions(-1), "没传就不该有这个键").not.toHaveProperty("onComplete");
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("district onComplete 缺省");
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -417,6 +455,30 @@ describe("[#40] §4 GeoJSON / DOM 的响应式更新（就地 setData，不重�
     expect(createdSince()).toBe(1);
     await unmountAndSettle(wrapper);
     harness.assertIdle("geojson 清空");
+  });
+
+  /**
+   * `level` 变化 → 就地 `setLevel`（#165 收口），**不重建**。
+   *
+   * 依据是 live 读数而不是对称性：`scripts/probe-165-level-effect.mts` 在 4.0.5 上读到
+   * `setLevel(-50)` 之后 `getLevel()` 读回 `-50`，且 `getData()` 里**每一个**要素的
+   * `zIndex` 都从 `-99` 变成 `-50`——它真的驱动了渲染，不是只改图层自己的内部字段。
+   * 此前 descriptor 把它归在构造期，于是这一条 prop 变化会重建整个图层（把已画好的要素
+   * 全部拆掉重做），代价与 `setData` 那条同量级，却换不来任何额外效果。
+   */
+  it("geojson：level 变化 → setLevel 就地更新，不重建", async () => {
+    const { wrapper, setProp } = await mountOneLayer(4);
+    await setProp({ level: -50 });
+    expect(createdSince(), "level 变化不该重建图层").toBe(1);
+    expect(harness.layerCalls(-1)).toContain("setLevel");
+
+    // 回到默认值同样走同一条入口（不是「构造期」）
+    await setProp({ level: -99 });
+    expect(createdSince()).toBe(1);
+    expect(harness.layerCalls(-1).filter((c) => c === "setLevel")).toHaveLength(2);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("geojson level 更新");
   });
 
   it("dom：data 变化 → setData；null → removeAllOverlays（权威入口），都不重建", async () => {

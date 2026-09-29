@@ -1,12 +1,5 @@
 <template>
-  <Map
-    v-bind="$attrs"
-    :minZoom="3"
-    :zoom="zoom"
-    enableScrollWheelZoom
-    ref="map"
-    @ready="handleInitd"
-  >
+  <Map v-bind="$attrs" :minZoom="3" :zoom="zoom" enableWheelZoom ref="map" @ready="handleInitd">
     <CustomControl
       style="
         border-radius: 4px;
@@ -28,7 +21,7 @@
     <Polygon
       :key="area"
       isBoundary
-      :path="pathPoints"
+      :points="pathPoints"
       stroke-color="#000"
       fillColor="blue"
       :stroke-weight="1"

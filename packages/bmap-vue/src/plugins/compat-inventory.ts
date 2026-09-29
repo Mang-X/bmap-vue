@@ -9,7 +9,7 @@
  *
  * 1. **依据分级，不混着写**。每条结论必须标出 `basis`：哪些是**对锁定 URL 的真实发布产物**
  *    的观察（`artifact`，命令 `pnpm probe:plugin-compat`）、哪些是与官方
- *    `@baidumap/jsapi-v4-types@4.0.4` 的**逐成员核对**（`declaration`）、哪些是真实运行时
+ *    `@baidumap/jsapi-v4-types@4.0.5` 的**逐成员核对**（`declaration`）、哪些是真实运行时
  *    观察（`runtime`，需 AK + WebGL，命令 `pnpm probe:plugin-runtime`）。没跑过的档位**不写进依据**。
  * 2. **必需功能不得依赖任何插件脚本**。内置插件一律 `required: false`：插件脚本的失败只
  *    发 `plugin:error` 事件，不得让地图本身失败（隔离口径）。历史上 `TrackAnimation` 被标成

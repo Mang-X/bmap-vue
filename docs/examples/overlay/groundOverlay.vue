@@ -10,7 +10,7 @@
     </div>
     <Map
       v-bind="$attrs"
-      enableScrollWheelZoom
+      enableWheelZoom
       noAnimation
       :displayOptions="{
         poiText: false, // 隐藏poi标注

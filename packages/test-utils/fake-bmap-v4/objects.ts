@@ -92,6 +92,26 @@ class FakeV4Shape extends FakeV4Overlay {
   editing = false
   massClear = true
 
+  /**
+   * 构造选项落进实例字段（与 `FakeV4Marker` 同一手法，见文件头）。
+   *
+   * 没有它，**读回**（#165 Class 3 的 `getStrokeColor()` / `getFillColor()` …）会永远返回
+   * 字段初值而不是「用户传进来的那个值」——于是「组件把 prop 交给了 SDK」与「SDK 读回了
+   * 用户给的值」这两件事在替身上会分叉。夹具比真实宽容就会掩盖缺陷。
+   */
+  constructor(options: Record<string, unknown>, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    if (typeof options.strokeColor === 'string') this.strokeColor = options.strokeColor
+    if (typeof options.strokeWeight === 'number') this.strokeWeight = options.strokeWeight
+    if (typeof options.strokeOpacity === 'number') this.strokeOpacity = options.strokeOpacity
+    if (typeof options.strokeStyle === 'string') this.strokeStyle = options.strokeStyle
+    if (typeof options.fillColor === 'string') this.fillColor = options.fillColor
+    if (typeof options.fillOpacity === 'number') this.fillOpacity = options.fillOpacity
+    if (typeof options.zIndex === 'number') this.zIndex = options.zIndex
+    if (options.enableEditing === true) this.editing = true
+    if (options.enableMassClear === false) this.massClear = false
+  }
+
   setStrokeColor(color: string): void {
     this.callLog.push('setStrokeColor')
     this.strokeColor = color
@@ -125,6 +145,31 @@ class FakeV4Shape extends FakeV4Overlay {
   setZIndex(zIndex: number): void {
     this.callLog.push('setZIndex')
     this.zIndex = zIndex
+  }
+
+  /** 官方图形族的描边 / 填充读回（`Circle` / `Rectangle` / `Polygon` / `Polyline` 各自声明了其中几个）。 */
+  getStrokeColor(): string {
+    return this.strokeColor
+  }
+
+  getStrokeWeight(): number {
+    return this.strokeWeight
+  }
+
+  getStrokeOpacity(): number {
+    return this.strokeOpacity
+  }
+
+  getStrokeStyle(): string {
+    return this.strokeStyle
+  }
+
+  getFillColor(): string {
+    return this.fillColor
+  }
+
+  getFillOpacity(): number {
+    return this.fillOpacity
   }
 
   enableEditing(): void {
@@ -161,9 +206,51 @@ export class FakeV4Polyline extends FakeV4Shape {
     this.callLog.push('setPath')
     this.path = path
   }
+
+  /**
+   * 官方 `Polyline#setPositionAt(index: number, point: Point): void`。
+   *
+   * 刻意**只**记两个参数：官方 `Polygon` 的同名方法是**三个**（多一个 `deep`），
+   * 两者由 `FakeV4Polygon` 各自建模——`deep` 的第三个参数要能被断言（见下面那条）。
+   */
+  setPositionAt(index: number, point: FakeV4Point): void {
+    this.callLog.push('setPositionAt')
+    this.positionAtArgs = [index, point]
+    const current = this.path[index]
+    if (current) {
+      this.path[index] = point
+    } else {
+      this.path.push(point)
+    }
+  }
+
+  /** 最近一次 `setPositionAt` 的参数（**按实参数**记录，`deep` 有没有被传一眼可见）。 */
+  positionAtArgs: unknown[] = []
+
+  getPath(): FakeV4Point[] {
+    return this.path
+  }
 }
 
-export class FakeV4Polygon extends FakeV4Polyline {}
+export class FakeV4Polygon extends FakeV4Polyline {
+  /**
+   * 官方 `Polygon#setPositionAt(index: number, point: Point, deep?: number): void`。
+   *
+   * `Polygon` 的路径是**多环**（`Array<Point> | Array<Array<Point>>`），`deep` 指定第几层环。
+   * 本 Fake 按**单环**建模（`FakeV4Polygon` 直接继承 `FakeV4Polyline` 的 `path`），
+   * 但**照样把 `deep` 记进 `positionAtArgs`**——要断言的正是「第三个参数被原样传下去了」。
+   */
+  override setPositionAt(index: number, point: FakeV4Point, deep?: number): void {
+    this.callLog.push('setPositionAt')
+    this.positionAtArgs = deep === undefined ? [index, point] : [index, point, deep]
+    const current = this.path[index]
+    if (current) {
+      this.path[index] = point
+    } else {
+      this.path.push(point)
+    }
+  }
+}
 
 export class FakeV4Rectangle extends FakeV4Shape {
   bounds: FakeV4Bounds
@@ -213,6 +300,29 @@ export class FakeV4Circle extends FakeV4Shape {
   setRadius(radius: number): void {
     this.callLog.push('setRadius')
     this.radius = radius
+  }
+
+  /** 官方 `Circle#getCenter()` / `#getRadius()`。 */
+  getCenter(): FakeV4Point {
+    return this.center
+  }
+
+  getRadius(): number {
+    return this.radius
+  }
+
+  /**
+   * 官方 `Circle#getBounds()`。
+   *
+   * 模型取**轴对齐外接矩形**（center ± radius 经度、± radius/cos(lat) 纬度会引入纬度相关的
+   * 坐标系换算，而替身不做坐标系回转——`objects.ts` 文件头的口径）。这里取经纬度各 ± radius
+   * 的简单方框，足够让「返回的是 Bounds 而不是 Point」这条断言有判别力。
+   */
+  getBounds(): FakeV4Bounds {
+    return new FakeV4Bounds(
+      new FakeV4Point(this.center.lng - this.radius, this.center.lat - this.radius),
+      new FakeV4Point(this.center.lng + this.radius, this.center.lat + this.radius),
+    )
   }
 }
 
@@ -342,10 +452,82 @@ export class FakeV4Marker extends FakeV4Overlay {
     this.rotation = rotation
   }
 
-  /** 官方 `Marker#setRank`：用于验证「描述符里没有的键走 set<Key> 逃生口」。 */
+  /**
+   * 官方 `Marker#setRank(rank: number): void` / `Marker#getRank(): number`（#165 Class 3）。
+   *
+   * 此前它只记 `options`、**没有可读回的状态**——那条路径本是给「描述符里没有的键走
+   * `set<Key>` 逃生口」做验证的。命令面（`markerCommands()`）落地后 `getRank` 成为真实
+   * 消费者，因此 `rank` 落进实例字段（与 `rotation` / `zIndex` 同一手法）。
+   */
+  rank = 0
+
+  /** 官方 `Marker#setRotationOrigin(angle: number): void`（正北方向顺时针角度，0–360）。 */
+  rotationOrigin: number | null = null
+
   setRank(rank: number): void {
     this.callLog.push('setRank')
+    this.rank = rank
     this.options = { ...this.options, rank }
+  }
+
+  getRank(): number {
+    return this.rank
+  }
+
+  setRotationOrigin(angle: number): void {
+    this.callLog.push('setRotationOrigin')
+    this.rotationOrigin = angle
+  }
+
+  /** 官方 `Marker#getTitle()` / `#getOffset()` / `#getRotation()` / `#getPosition()`。 */
+  getTitle(): string {
+    return this.title
+  }
+
+  getOffset(): FakeV4Size {
+    return this.offset ?? new FakeV4Size(0, 0)
+  }
+
+  getRotation(): number {
+    return this.rotation ?? 0
+  }
+
+  getPosition(): FakeV4Point {
+    return this.position
+  }
+
+  /**
+   * 官方 `Marker#setLabel(label: Label): void` / `#getLabel(): Label`（#165 第三批）。
+   *
+   * 此前替身**没有**这两个成员，于是 `<Marker label>` 的 `mutable` 路径在本库里**测不到**：
+   * `OverlayDriver.setOptions` 撞到「声明为 mutable 但当前实例没有该方法」只会告警一次
+   * 然后忽略（见 `driver/jsapi-v4/overlays.ts`）——那是一条**静默**路径，而替身比真实窄
+   * 就会把「它真的生效」变成「没人验证过」。
+   *
+   * `label` 存的是**入参原样**（真实 SDK 收到的是 Driver 在边界内造的 `BMap.Label`），
+   * 断言因此可以读 `label` 的内容来确认「换的是新值」，与真实链路上 `getLabel()` 的
+   * 可观察效果同构。
+   */
+  label: unknown = null
+
+  setLabel(label: unknown): void {
+    this.callLog.push('setLabel')
+    this.label = label
+  }
+
+  getLabel(): unknown {
+    return this.label
+  }
+
+  /**
+   * 官方 `Marker#closePlaceDetail(): void`。
+   *
+   * 配套的 `openPlaceDetail(placeDetail)` **刻意不建模**：它的入参是 raw
+   * `BMap.PlaceDetail`，而本库没有这个 Driver 资源（见 `driver/types/overlays.ts` 的
+   * `MarkerReadBackApi.openPlaceDetail` 注释）。替身也不该有一个业务面永远用不到的成员。
+   */
+  closePlaceDetail(): void {
+    this.callLog.push('closePlaceDetail')
   }
 
   enableDragging(): void {
@@ -424,6 +606,7 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
   ) {
     super(options, stats)
     this.content = content
+    if (options.offset) this.offset = options.offset as FakeV4Size
   }
 
   setContent(content: string | HTMLElement): void {
@@ -490,6 +673,44 @@ export class FakeV4InfoWindow extends FakeV4Overlay {
   /** 官方公开的状态查询入口；Driver 不得用私有字段判断打开状态。 */
   isOpen(): boolean {
     return this.open
+  }
+
+  /* ---- 读回 / 动作（#165 Class 3 / TASK 2c；官方 `overlay/InfoWindow.d.ts`） ---- */
+
+  /** 官方 `InfoWindow#getTitle(): string | HTMLElement`。 */
+  getTitle(): string | HTMLElement {
+    return (this.options.title as string | HTMLElement) ?? ''
+  }
+
+  /** 官方 `InfoWindow#getContent(): string | HTMLElement`。 */
+  getContent(): string | HTMLElement {
+    return this.content
+  }
+
+  /**
+   * 官方 `InfoWindow#getOffset(): Size`。
+   *
+   * 模型取**构造期**的 `offset`：`InfoWindow` 官方只有 `getOffset()` 没有 `setOffset`
+   * （见 `OVERLAY_DESCRIPTORS["info-window"].offset` 的 `recreate` 分类），所以偏移一旦
+   * 构造完就固定了——替身只读构造值，不实现运行期改写。
+   */
+  offset: FakeV4Size | null = null
+
+  getOffset(): FakeV4Size {
+    return this.offset ?? new FakeV4Size(0, 0)
+  }
+
+  /** 官方 `InfoWindow#maximize()` / `#restore()`（`enableMaximize` 打开后才有效果）。 */
+  maximized = false
+
+  maximize(): void {
+    this.callLog.push('maximize')
+    this.maximized = true
+  }
+
+  restore(): void {
+    this.callLog.push('restore')
+    this.maximized = false
   }
 
   /**
@@ -698,9 +919,38 @@ export class FakeV4MenuItem {
     this.options = options
   }
 
-  /** 官方 `MenuItem#disable`，由 `addContextMenuItem({ disabled: true })` 调用。 */
+  /** 官方 `MenuItem#disable()`，由 `addContextMenuItem({ disabled: true })` 调用。 */
   disable(): void {
     this.disabled = true
+  }
+
+  /**
+   * 官方 `MenuItem#enable()`（`context-menu/MenuItem.d.ts`）。
+   *
+   * #165 Class 3 / TASK 2e：此前 `enable()` **不可达**——`<MenuItem disabled>` 走的是
+   * 「`disabled: false` ⇒ 整菜单重建」，因此一个 `MenuItem` 实例从生到死只会是「启用」
+   * 或「永久禁用」两种状态。命令面让「运行时把一条项解禁」成为一条真实的 SDK 调用。
+   */
+  enable(): void {
+    this.enabled = true
+    // 官方 `MenuItem#enable()` 的语义就是「解除禁用」⇒ `disabled` 必须一起回落。
+    // 只记一个 `enabled` 标记会让「解禁了但 `disabled` 仍为 true」在替身上恒成立，
+    // 于是这条命令路径的用例根本测不出它有没有真的解禁。
+    this.disabled = false
+  }
+
+  /** `enable()` 有没有被调过（`disabled` 的初始值由构造参数决定，因此要单独记）。 */
+  enabled = false
+
+  /**
+   * 官方 `MenuItem#setText(text: string): void`。
+   *
+   * 官方 `MenuItem` 上**没有任何 getter**（只有 `setText` / `enable` / `disable`）——
+   * 这正是本库的菜单命令面改成「按序号 + 本库条目模型」的原因（见
+   * `core/overlays/ContextMenuSpec.ts` 的说明）：读回只可能来自本库模型。
+   */
+  setText(text: string): void {
+    this.text = text
   }
 }
 
@@ -721,6 +971,61 @@ export class FakeV4ContextMenu extends FakeV4Overlay {
     this.callLog.push('addSeparator')
     if (typeof insertIndex === 'number') this.items.splice(insertIndex, 0, '-')
     else this.items.push('-')
+  }
+
+  /**
+   * 官方 `ContextMenu#getItem(index: number): MenuItem`。
+   *
+   * 建模它是因为**逐条删改**（#165 Class 3 / TASK 2d）需要「拿到第 i 条」的入口。
+   * ⚠️ 官方签名返回 raw `MenuItem`；本库的**公共命令面不交出它**，改按序号返回本库的
+   * 条目模型（见 `core/overlays/ContextMenuSpec.ts`）——`MenuItem` 上没有任何 getter，
+   * 把它交出去等于把一个「调用方读不到任何东西」的对象发到用户手里。
+   */
+  getItem(index: number): FakeV4MenuItem {
+    const item = this.items[index]
+    if (!(item instanceof FakeV4MenuItem)) {
+      throw new Error(`getItem(${index}): 越界或该位置是分隔线`)
+    }
+    return item
+  }
+
+  /**
+   * 官方 `ContextMenu#removeItem(item: MenuItem): void`。
+   *
+   * 官方按**实例**删（不是按序号）：它的入参就是那个 `MenuItem` 对象。替身按身份删
+   * （`indexOf`），与官方语义一致——这也让「传错实例」在替身上立刻可见。
+   */
+  removeItem(item: FakeV4MenuItem): void {
+    this.callLog.push('removeItem')
+    const index = this.items.indexOf(item)
+    if (index >= 0) this.items.splice(index, 1)
+  }
+
+  /** 官方 `ContextMenu#removeSeparator(index: number): void`。 */
+  removeSeparator(index: number): void {
+    this.callLog.push('removeSeparator')
+    if (this.items[index] === '-') this.items.splice(index, 1)
+  }
+
+  /**
+   * 官方 `ContextMenu#getDom(): HTMLElement`（菜单的根 DOM）。
+   *
+   * 建模它是因为 `ContextMenu` 的 DOM **由 SDK 自己渲染**（`.BMap_cmItem`）——本库
+   * 没有任何 Vue 渲染的菜单 DOM，因此「拿 DOM」只能从 SDK 要。
+   */
+  dom: HTMLElement | null = null
+
+  getDom(): HTMLElement {
+    if (!this.dom) this.dom = document.createElement('div')
+    return this.dom
+  }
+
+  /** 官方 `ContextMenu#setCursor(cursor: string): void`（鼠标悬停时的光标）。 */
+  cursor: string | null = null
+
+  setCursor(cursor: string): void {
+    this.callLog.push('setCursor')
+    this.cursor = cursor
   }
 }
 

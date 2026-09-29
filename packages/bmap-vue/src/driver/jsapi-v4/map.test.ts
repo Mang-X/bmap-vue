@@ -42,7 +42,7 @@ const INTERACTION_STATE_KEYS: Record<MapInteraction, string> = {
 
 /**
  * v4 的成对方法里，`tilt-gestures` 的存在性在官方来源之间有分歧：
- * 官方 4.0 API 参考与 4.0.4 类型包未声明 `enableTiltGestures()`，
+ * 官方 4.0 API 参考与 4.0.5 类型包未声明 `enableTiltGestures()`，
  * 而公开的 React 参考实现（`huiyan-fe/react-bmap`）直接调用它。
  * 因此实现不预判，改为「有就调、没有就告警一次」——两条来源都不会让它静默失效。
  */
@@ -116,6 +116,19 @@ describe("创建与销毁", () => {
     warn.mockRestore();
   });
 
+  // #165 Class 5 F：官方 `core/MapOptions.d.ts` 对 minZoom / maxZoom 都声明「取值范围 [3, 21]」。
+  // 越界值原样递进去、指望 SDK clamp 属于静默劣化（上游没有公开的归一化契约），因此显式报错。
+  it("minZoom / maxZoom 越出官方声明的 [3, 21] 时显式报错，不把非法值交给 SDK", () => {
+    const { map, container, fake } = setup();
+
+    expect(() => map.create(container, { minZoom: 0 })).toThrow(/\[3, 21\]/);
+    expect(() => map.create(container, { maxZoom: 22 })).toThrow(/\[3, 21\]/);
+    // 合法值（含两端）照常建图
+    const handle = map.create(container, { minZoom: 3, maxZoom: 21 });
+    expect(handle).toBeTruthy();
+    expect(fake.createdMaps.at(-1)?.options.minZoom).toBe(3);
+  });
+
   it("零尺寸容器可以创建、读取尺寸，容器变大后 checkResize 得到新尺寸", () => {
     const { map, container, fake } = setup({ width: "0px", height: "0px" });
     const handle = map.create(container);
@@ -173,6 +186,9 @@ describe("创建与销毁", () => {
           northeast: { lng: 116.6, lat: 40.1 },
         })],
       ["setViewport", () => map.setViewport(handle, [{ lng: 116.4, lat: 39.9 }])],
+      ["getViewport", () => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])],
+      ["flyTo", () => map.flyTo(handle, { lng: 116.4, lat: 39.9 }, 12)],
+      ["getScreenshot", () => map.getScreenshot(handle)],
       ["checkResize", () => map.checkResize(handle)],
       ["setMapType", () => map.setMapType(handle, "normal")],
       ["setMapStyle", () => map.setMapStyle(handle, { styleId: "s" })],
@@ -288,6 +304,103 @@ describe("视野 round-trip", () => {
     expect(fake.createdMaps[0].callLog).toContain("panTo");
     expect(fake.createdMaps[0].callLog).toContain("panBy:100,-50");
     expect(fake.createdMaps[0].callLog.filter((call) => call === "setViewport")).toHaveLength(2);
+  });
+
+  // #165 回填：官方 `core/Map.d.ts:508` 声明 `getViewport(view, viewportOptions?)`，
+  // live AK 实测运行时在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四）。
+  // 官方声明的两个 `view` 分支（`Array<Point>` 与 `Bounds`）都要能走，返回领域 `Viewport`。
+  it("getViewport 走「点数组」分支：原样把点转成 raw Point，返回领域 Viewport", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    const viewport = map.getViewport(handle, [
+      { lng: 116.3, lat: 39.8 },
+      { lng: 116.5, lat: 40.0 },
+    ]);
+
+    expect(fake.createdMaps[0].callLog).toContain("getViewport");
+    // 传给 SDK 的是 raw Point 实例，不是领域纯数据
+    const passed = fake.createdMaps[0].lastViewportView as Array<{ lng: number; lat: number }>;
+    expect(passed).toHaveLength(2);
+    expect(passed[0]).toBeInstanceOf(fake.namespace.Point);
+    expect({ lng: passed[0]!.lng, lat: passed[0]!.lat }).toEqual({ lng: 116.3, lat: 39.8 });
+    // 返回值是纯数据（官方 Viewport 的 center 是 BMap.Point，这里必须投影掉）
+    expect(viewport).toEqual({ center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    expect(viewport.center).not.toBeInstanceOf(fake.namespace.Point);
+  });
+
+  it("getViewport 走「Bounds」分支：转成 raw Bounds，不当成点数组", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    map.getViewport(handle, {
+      southwest: { lng: 116.2, lat: 39.7 },
+      northeast: { lng: 116.6, lat: 40.1 },
+    });
+
+    expect(fake.createdMaps[0].callLog).toContain("getViewport");
+    expect(fake.createdMaps[0].lastViewportView).toBeInstanceOf(fake.namespace.Bounds);
+    expect(Array.isArray(fake.createdMaps[0].lastViewportView)).toBe(false);
+  });
+
+  it("getViewport 按引用透传 ViewportOptions 的四个官方成员，声明之外的键不递", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const callback = (): void => {};
+
+    map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }], {
+      enableAnimation: false,
+      margins: [10, 20, 30, 40],
+      zoomFactor: -1,
+      callback,
+    });
+
+    expect(fake.createdMaps[0].lastViewportOptions).toEqual({
+      enableAnimation: false,
+      margins: [10, 20, 30, 40],
+      zoomFactor: -1,
+      callback,
+    });
+  });
+
+  it("getViewport 不改地图当前视野（官方语义：只返回最佳视野，不施加）", () => {
+    const { map, container } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+
+    map.getViewport(handle, [
+      { lng: 100, lat: 20 },
+      { lng: 120, lat: 45 },
+    ]);
+
+    expect(map.getCenter(handle)).toEqual({ lng: 116.4, lat: 39.9 });
+    expect(map.getZoom(handle)).toBe(12);
+  });
+
+  it("getViewport 缺成员时按「必需成员」显式失败，不返回半成品", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    // 成员在**原型**上，实例上赋 undefined 才会遮蔽它（`delete` 对原型成员无效）
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getViewport = undefined;
+
+    expect(() => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("SDK 返回的 Viewport 缺 center / zoom 时报结构化错误，不把半成品递给业务", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const raw = fake.createdMaps[0] as unknown as Record<string, unknown>;
+    raw.getViewport = (): unknown => ({ center: null });
+
+    expect(() => map.getViewport(handle, [{ lng: 116.4, lat: 39.9 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
   });
 
   it("getBounds / getSize 返回归一化后的纯数据", () => {
@@ -1066,5 +1179,411 @@ describe("销毁的部分失败（PR #60 评审 P2）", () => {
     // 清理完成后的第三次调用才是真正的幂等 no-op
     expect(() => map.destroy(handle)).not.toThrow();
     expect(fake.createdMaps[0].callLog.filter((call) => call === "destroy")).toHaveLength(1);
+  });
+});
+
+/**
+ * #165 回填：官方 `Map#flyTo`（`core/Map.d.ts:634`）与 `Map#getScreenshot`
+ * （`core/Map.d.ts:1024`）。两者在 live AK 下实测运行时在位
+ * （`docs/zh-CN/contributing/165-runtime-verification.md` 结论四），
+ * 此前被 #165 Class 5 以「本库没有实现」为由从 Capability Catalog 删除 —— 那条推理已被证伪。
+ */
+describe("#165 回填：flyTo / getScreenshot", () => {
+  it("flyTo 调的是 flyTo 本身，不是 panTo（平滑飞行 ≠ 瞬移，两者不是同一个成员）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    expect(fake.createdMaps[0].callLog).toContain("flyTo");
+    // 关键回归：早期目录条目 `map.fly-to` 探测的是 `panTo`，等于张冠李戴
+    expect(fake.createdMaps[0].callLog).not.toContain("panTo");
+  });
+
+  it("flyTo 的中心点转成 raw Point，级别原样透传", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    const point = fake.createdMaps[0].lastFlyToPoint as { lng: number; lat: number };
+    expect({ lng: point.lng, lat: point.lat }).toEqual({ lng: 121.5, lat: 31.2 });
+    expect(fake.createdMaps[0].lastFlyToZoom).toBe(15);
+  });
+
+  it("flyTo 转发官方 options（noAnimation / callback），声明之外的键不递", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    const callback = (): void => {};
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15, { noAnimation: true, callback });
+
+    expect(fake.createdMaps[0].lastFlyToOptions).toEqual({ noAnimation: true, callback });
+  });
+
+  it("flyTo 不传 options 时不下发「空对象」这种上游没声明的形状", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15);
+
+    expect(fake.createdMaps[0].lastFlyToOptions).toBeNull();
+  });
+
+  it("flyTo 缺成员时显式失败，不静默退化成「什么都没发生」", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).flyTo = undefined;
+
+    expect(() => map.flyTo(handle, { lng: 121.5, lat: 31.2 }, 15)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("getScreenshot 返回 SDK 给的字符串原样交给业务", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.initializeView(handle, { center: { lng: 116.4, lat: 39.9 }, zoom: 12 });
+    fake.createdMaps[0].callLog.length = 0;
+
+    const shot = map.getScreenshot(handle);
+
+    expect(fake.createdMaps[0].callLog).toContain("getScreenshot");
+    expect(shot).toBe(fake.createdMaps[0].screenshotDataUrl);
+  });
+
+  it("getScreenshot 在 SDK 返回非字符串时报结构化错误，不把 undefined 递出去", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getScreenshot = (): unknown =>
+      undefined;
+
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("getScreenshot 缺成员时显式失败（不是「返回一张空图」那种静默降级）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    (fake.createdMaps[0] as unknown as Record<string, unknown>).getScreenshot = undefined;
+
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+    );
+  });
+
+  it("三个新成员都在 destroy 之后按 BMAP_RESOURCE_DISPOSED 拒绝，且不触碰 SDK 对象", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+    map.destroy(handle);
+    const callsAfterDestroy = fake.createdMaps[0].callLog.length;
+
+    expect(() => map.getViewport(handle, [{ lng: 1, lat: 1 }])).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(() => map.flyTo(handle, { lng: 1, lat: 1 }, 3)).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(() => map.getScreenshot(handle)).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    expect(fake.createdMaps[0].callLog.length).toBe(callsAfterDestroy);
+  });
+});
+
+/* ==================================================================== #171 / #165 裁决 F */
+
+/**
+ * 五条视野命令的调用入口表（官方成员名 → 领域侧调用）。
+ *
+ * 独立于实现手写——它就是「官方成员名 ↔ 本库命令」的期望值，从被测实现里导出的话，
+ * 测试只是在复述实现。
+ *
+ * - `required`：该命令**既有的**调用等级（`callRequired` 缺成员抛错 / `callOptional` 缺成员
+ *   静默）。加 options **不改变**这个分级，这本身就是一条要锁住的不变式。
+ * - `declared`：本命令官方**声明了**、因此**应该**被递下去的额外成员（`panTo` 的 `duration` /
+ *   `setZoom` 的 `zoomCenter`，其余四条为空）。
+ * - `undeclared`：本命令官方**没有**声明、因此**不该**被递下去的成员（用来证明投影是逐字段
+ *   白名单，而不是整包透传）。
+ */
+const VIEW_COMMANDS = [
+  {
+    method: "setCenter",
+    required: true,
+    declared: {} as Record<string, unknown>,
+    undeclared: { duration: 300 },
+    call: (m: MapDriver, h: ReturnType<MapDriver["create"]>, o?: object) =>
+      m.setCenter(h, { lng: 1, lat: 1 }, o as never),
+  },
+  {
+    method: "setZoom",
+    required: true,
+    declared: {} as Record<string, unknown>,
+    undeclared: { duration: 300 },
+    call: (m: MapDriver, h: ReturnType<MapDriver["create"]>, o?: object) => m.setZoom(h, 3, o as never),
+  },
+  {
+    method: "setHeading",
+    required: false,
+    declared: {} as Record<string, unknown>,
+    undeclared: { duration: 300 },
+    call: (m: MapDriver, h: ReturnType<MapDriver["create"]>, o?: object) =>
+      m.setHeading(h, 45, o as never),
+  },
+  {
+    method: "setTilt",
+    required: false,
+    declared: {} as Record<string, unknown>,
+    undeclared: { duration: 300 },
+    call: (m: MapDriver, h: ReturnType<MapDriver["create"]>, o?: object) => m.setTilt(h, 30, o as never),
+  },
+  {
+    method: "panTo",
+    required: false,
+    /** ⚠️ `panTo` **有** `duration`（`core/Map.d.ts:591`）——它比另外四条多一个成员。 */
+    declared: { duration: 300 } as Record<string, unknown>,
+    undeclared: { zoomCenter: { lng: 9, lat: 9 } },
+    call: (m: MapDriver, h: ReturnType<MapDriver["create"]>, o?: object) =>
+      m.panTo(h, { lng: 1, lat: 1 }, o as never),
+  },
+] as const;
+
+/**
+ * 缺口是**类型面 + 接线**，不是运行时：live 实测（2026-09-26，真实 AK）证明五条在
+ * `noAnimation: true` 下 `callback` **恰好交付一次**（`setCenter` 0ms · `setZoom` 1ms ·
+ * `setHeading` 0ms · `setTilt` 0ms · `panTo` 0ms），动画档也交付（`setZoom` 526ms / `panTo` 32ms），
+ * 见 `docs/zh-CN/contributing/165-runtime-verification.md` §8。因此本组断言的是
+ * **本库这一侧**：投影、传递，以及「空形状不递」这条与「callback 真的会来」同等重要的边界。
+ */
+describe("视野命令的 options 投影（#171 / #165 裁决 F）", () => {
+  for (const { method, call, required, declared, undeclared } of VIEW_COMMANDS) {
+    it(`${method} 转发 noAnimation / callback / 本命令独有的成员，声明之外的键不递`, () => {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+      const callback = (): void => {};
+
+      // 一次塞进：共有的两个键 + 本命令该有的额外键 + **别的**命令才有的键 + 完全不存在的键。
+      // 最后两项是「投影是逐字段白名单」的唯一证据——整包透传的实现会在这里现形。
+      call(map, handle, { noAnimation: true, callback, ...declared, ...undeclared, bogus: 1 });
+
+      const expected: Record<string, unknown> = { noAnimation: true, callback, ...declared };
+      const received = fake.createdMaps[0]!.lastCommandOptions[method]!;
+      expect(received).toEqual(expected);
+      // 按引用原样透传，Driver 不包装
+      expect(received.callback).toBe(callback);
+    });
+
+    it(`${method} 不传 options 时不下发「空对象」这种上游没声明的形状`, () => {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+
+      call(map, handle);
+
+      expect(fake.createdMaps[0]!.lastCommandOptions[method]).toBeNull();
+    });
+
+    it(`${method} 传空对象时同样不下发（与「没传」同一种形状）`, () => {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+
+      call(map, handle, {});
+
+      expect(fake.createdMaps[0]!.lastCommandOptions[method]).toBeNull();
+    });
+
+    it(`${method} 只给了一个 undefined 成员时不下发该键`, () => {
+      // `callback: undefined` **不是**「没给 callback」，而是「给了一个不是函数的东西」。
+      // 递下去等于把 `undefined` 交给上游去解释——官方没有为这种输入声明任何行为。
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+
+      call(map, handle, { noAnimation: undefined, callback: undefined });
+
+      expect(fake.createdMaps[0]!.lastCommandOptions[method]).toBeNull();
+    });
+
+    it(`${method} 缺成员时的调用等级与加 options 之前一致`, () => {
+      // 加 options **不**改变「缺成员该抛还是该静默」这个分级——这条把「没有顺手把
+      // callOptional 升级成 callRequired（或反过来）」钉住。
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+      (fake.createdMaps[0] as unknown as Record<string, unknown>)[method] = undefined;
+
+      if (required) {
+        expect(() => call(map, handle, { noAnimation: true })).toThrowError(
+          expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED" }),
+        );
+      } else {
+        expect(() => call(map, handle, { noAnimation: true })).not.toThrowError();
+      }
+    });
+
+    it(`${method} 在 destroy 之后按 BMAP_RESOURCE_DISPOSED 拒绝（options 档同样）`, () => {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+      map.destroy(handle);
+      const callsAfterDestroy = fake.createdMaps[0]!.callLog.length;
+
+      expect(() => call(map, handle, { noAnimation: true })).toThrowError(
+        expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+      );
+      // 拒绝时**不**下发 SDK 调用（含不递 options）
+      expect(fake.createdMaps[0]!.callLog.length).toBe(callsAfterDestroy);
+    });
+  }
+
+  it("setZoom 的 zoomCenter 经 geometry 投影成 raw Point，Driver 不把领域对象递下去", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.setZoom(handle, 12, { zoomCenter: { lng: 121.5, lat: 31.2 } });
+
+    const options = fake.createdMaps[0]!.lastCommandOptions.setZoom!;
+    const raw = options.zoomCenter as { lng: number; lat: number };
+    expect({ lng: raw.lng, lat: raw.lat }).toEqual({ lng: 121.5, lat: 31.2 });
+    // 必须是 BMap.Point 实例，而不是普通字面量对象
+    expect(raw).toBeInstanceOf(fake.namespace.Point);
+  });
+
+  it("setZoom 不给 zoomCenter 时不下发 undefined 键（官方默认是地图中心点，由上游自己取）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.setZoom(handle, 12, { noAnimation: false });
+
+    const options = fake.createdMaps[0]!.lastCommandOptions.setZoom!;
+    expect(Object.prototype.hasOwnProperty.call(options, "zoomCenter")).toBe(false);
+    expect(Object.keys(options)).toEqual(["noAnimation"]);
+  });
+
+  it("setZoom 只给 zoomCenter 时不带上 noAnimation / callback 键", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.setZoom(handle, 12, { zoomCenter: { lng: 1, lat: 1 } });
+
+    expect(Object.keys(fake.createdMaps[0]!.lastCommandOptions.setZoom!)).toEqual(["zoomCenter"]);
+  });
+
+  it("setZoom 独有的 zoomCenter 不会被 panTo 收下（逐条命令的选项集是各自的）", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    map.panTo(handle, { lng: 1, lat: 1 }, { zoomCenter: { lng: 9, lat: 9 } } as never);
+
+    expect(fake.createdMaps[0]!.lastCommandOptions.panTo).toBeNull();
+  });
+
+  it("panTo 独有的 duration 只递到 panTo，不牵动另外四条", () => {
+    const { map, container, fake } = setup();
+    const handle = map.create(container);
+
+    // 只有 duration、没有共有的两个键时也不能退化成空对象
+    map.panTo(handle, { lng: 1, lat: 1 }, { duration: 300 });
+    expect(fake.createdMaps[0]!.lastCommandOptions.panTo).toEqual({ duration: 300 });
+
+    for (const { method, call } of VIEW_COMMANDS) {
+      if (method === "panTo") continue;
+      call(map, handle, { duration: 300 });
+      expect({ method, options: fake.createdMaps[0]!.lastCommandOptions[method] }).toEqual({
+        method,
+        options: null,
+      });
+    }
+  });
+});
+
+/**
+ * 「命令完成」是可观察的事实——这是本项存在的**全部理由**（#171 / #165 裁决 F）。
+ *
+ * 没有 `options.callback`，调用方永远无法知道一条视野命令什么时候真正落定；而这正是官方 4.0
+ * 已经提供、而本库一直没递下去的那一个成员。
+ *
+ * 替身把交付建模成**同步**（官方「无动画则立即调用」那一条的可测形状，也是单测里唯一不依赖
+ * 真实时间轴的读法），因此本组用例可以断言「恰好一次」。真实动画档的时长由 live 取证覆盖
+ * （`setZoom` 526ms / `panTo` 32ms，见 `165-runtime-verification.md` §8），替身不建模。
+ */
+describe("options.callback 交付（#171 / #165 裁决 F）", () => {
+  it("五条命令的 callback 各交付恰好一次，交付的就是调用方给的那一个", () => {
+    for (const { method, call } of VIEW_COMMANDS) {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+      const received: string[] = [];
+
+      call(map, handle, {
+        noAnimation: true,
+        callback: () => {
+          received.push(method);
+        },
+      });
+
+      expect({ method, received }).toEqual({ method, received: [method] });
+      expect(fake.createdMaps[0]!.callbackDeliveries[method]).toBe(1);
+    }
+  });
+
+  it("callback 在状态落定**之后**才被调（回调里读到的是新值）", () => {
+    // 官方对 callback 的承诺是「动画结束后」/「没有动画则立即调用」，两种读法都要求
+    // 回调里 `getCenter()` 拿到的是新值——读到旧中心点才是违约。
+    const { map, container } = setup();
+    const handle = map.create(container);
+    const observed: Array<{ lng: number; lat: number }> = [];
+
+    map.setCenter(handle, { lng: 30, lat: 40 }, {
+      noAnimation: true,
+      callback: () => {
+        observed.push(map.getCenter(handle));
+      },
+    });
+
+    expect(observed).toEqual([{ lng: 30, lat: 40 }]);
+  });
+
+  it("没有 callback 时 Driver 不自己造一个（不引入上游没有的调用）", () => {
+    for (const { method, call } of VIEW_COMMANDS) {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+
+      call(map, handle, { noAnimation: true });
+
+      expect(fake.createdMaps[0]!.callbackDeliveries[method]).toBeUndefined();
+      const options = fake.createdMaps[0]!.lastCommandOptions[method]!;
+      expect(Object.prototype.hasOwnProperty.call(options, "callback")).toBe(false);
+    }
+  });
+
+  it("callback 抛错时错误不会被 Driver 吞掉（经 sdkCall 包成 BMAP_SDK_CALL_FAILED 上抛）", () => {
+    // Driver 按引用透传 callback，**不包装**它：`callRequired` / `callOptional` 外面那层
+    // `sdkCall` 会把同步抛出的错包成 `BMAP_SDK_CALL_FAILED`（`cause` 指向原错误）。
+    // 替身同步交付 ⇒ 这里能直接断言；真实 SDK 在动画档是异步的（错误会变成 unhandled），
+    // 两种时序下 Driver 的行为一致：**不介入**。
+    const { map, container } = setup();
+    const handle = map.create(container);
+    const boom = new Error("callback boom");
+
+    expect(() =>
+      map.setZoom(handle, 3, {
+        noAnimation: true,
+        callback: () => {
+          throw boom;
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "BMAP_SDK_CALL_FAILED", cause: boom }),
+    );
+  });
+
+  it("不传 options 时不会凭空多出一次 callback（Driver 不在无回调时自己造回调）", () => {
+    for (const { method, call } of VIEW_COMMANDS) {
+      const { map, container, fake } = setup();
+      const handle = map.create(container);
+
+      call(map, handle);
+
+      expect(fake.createdMaps[0]!.callbackDeliveries[method]).toBeUndefined();
+    }
   });
 });

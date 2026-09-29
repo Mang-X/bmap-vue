@@ -5,6 +5,9 @@
  * 结果里 **`addressComponents` 与 `surroundingPois` 都是真的投影过的字段**——`#38` 之前 Driver
  * 的 DTO 只暴露了 `poiCount`，结构化的地址与 POI 列表被静默丢弃。
  *
+ * 命名对齐官方 `BMap.Geocoder`（#165）：动作叫 `getLocation`，结果**只有** `data` 一个读取口
+ * （原 `result` 别名已删）。逆解析的官方成员名就是这个——正解析在 `useGeocoder().getPoint`。
+ *
  * 需要 Map 上下文；本服务只需要 Client（`<BMapProvider>` 子树亦可）。
  */
 import type { ServiceHandle } from "../driver/types/handles";
@@ -90,18 +93,21 @@ export function useGeocodeDetail(map?: unknown) {
   });
 
   /**
-   * 坐标 → 地址详情。
+   * 坐标 → 地址详情（官方 `Geocoder#getLocation`）。
    *
    * **恒 resolve 成 `ServiceResult`**（与其它服务的动作一致）：失败/超时/取消都在返回值里，
    * 不 reject；`point` 非法时是 `failed(BMAP_INVALID_ARGUMENT)`，同样不抛错。
+   *
+   * 命名对齐官方（#165）：正解析在 `useGeocoder().getPoint`，逆解析在这里的 `getLocation`
+   * ——官方 `Geocoder` 的两个成员各有一个同名入口，调用方不必记「哪个 hook 叫什么」。
    */
-  const get = (point: GeoPoint) => task.execute(point);
+  const getLocation = (point: GeoPoint) => task.execute(point);
 
   /**
    * 批量反查：顺序执行、逐项保留结果与终态。
    *
-   * 与 `get()` 的区别是**不吞掉失败**——单项失败时 `detail` 为 `null`，调用方从 `status` /
-   * `error` 知道原因（「部分成功」的表达方式）。
+   * 与 `getLocation()` 的区别是**不吞掉失败**——单项失败时 `detail` 为 `null`，调用方从
+   * `status` / `error` 知道原因（「部分成功」的表达方式）。
    */
   function getBatch(points: readonly GeoPoint[]): Promise<GeocodeDetailItemResult[]> {
     return runSequential(points, async (point) => {
@@ -117,9 +123,8 @@ export function useGeocodeDetail(map?: unknown) {
   }
 
   return {
+    /** 逆地址解析的唯一结果读取口（地址详情） */
     data: task.data,
-    /** 结果别名(v2 result 习惯) */
-    result: task.data,
     error: task.error,
     isError: task.isError,
     isEmpty: task.isEmpty,
@@ -128,7 +133,7 @@ export function useGeocodeDetail(map?: unknown) {
     sdkStatus: task.sdkStatus,
     isLoading: task.isLoading,
     supported: task.supported,
-    get,
+    getLocation,
     getBatch,
     cancel: task.cancel,
     reset: task.reset,

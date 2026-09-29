@@ -306,6 +306,30 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/TrackLineLayer.vue",
   },
+  // #166：官方 4.0.5 `visualization/` 新增的两族，**替代**同版本弃用的 FillLayer / LineLayer。
+  {
+    name: "PolygonLayer",
+    exportName: "PolygonLayer",
+    category: "layer",
+    source: "./components/layers/PolygonLayer.vue",
+  },
+  {
+    name: "PolylineLayer",
+    exportName: "PolylineLayer",
+    category: "layer",
+    source: "./components/layers/PolylineLayer.vue",
+  },
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。它是这一族里唯一
+  // 声明与运行时完全对齐的类（`hitTest` 与 `setOpacity` 都在），因此拾取面比前两族宽。
+  // ⚠️ 「前两族各缺一个」这句已按 #165 收口的 live 复跑更正：两族的缺口**方向相反**——
+  // `PolygonLayer` 缺 `hitTest`（声明有运行时无）而 `setOpacity` 在位但**不渲染**；
+  // `PolylineLayer` 缺的是 `setOpacity` 的**声明**（运行时有**且生效**）。
+  {
+    name: "TextLayer",
+    exportName: "TextLayer",
+    category: "layer",
+    source: "./components/layers/TextLayer.vue",
+  },
   {
     name: "Panorama",
     exportName: "Panorama",

@@ -3,7 +3,7 @@
     <DistrictLayer
       @mouseover="handleMouseover"
       @mouseout="handleMouseout"
-      viewport
+      autoViewport
       :kind="DistrictType['AREA']"
       name="北京市"
     />

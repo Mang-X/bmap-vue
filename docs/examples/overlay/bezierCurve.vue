@@ -1,7 +1,7 @@
 <template>
   <Map v-bind="$attrs" :center="{ lng: 113.399, lat: 39.91 }" :zoom="8">
     <BezierCurve
-      :path="[
+      :points="[
         { lng: 116.399, lat: 39.911 },
         { lng: 113.399, lat: 39.91 },
         { lng: 110.399, lat: 39.91 },

@@ -23,15 +23,7 @@ overlay/mapMask
 
 ## 动态组件 Props
 
-| 属性 | 说明 | 类型 | 可选值 | 默认值 |
-| -------------- | ------------------------- | ----------------------------------------- | ------ | ---------- |
-| path | 掩膜区域路径点串 | `{ lng: number, lat: number}[]` | - | `required` |
-| showRegion | 展示区域内部还是外部 | [`MapMaskShowRegion`](#mapmaskshowregion) | - | `inside` |
-| isBuildingMask | 楼块是否参与掩膜 | `boolean` | - | `false` |
-| isMapMask | 底图是否参与掩膜 | `boolean` | - | `false` |
-| isPoiMask | 底图上的 Poi 是否参与掩膜 | `boolean` | - | `false` |
-| visible | 是否显示 | `boolean` | - | `true` |
-
+|  | 属性 | 说明 | 类型 | 可选值 | 默认值 |  || -------------- | ------------------------- | ----------------------------------------- | ------ | ---------- | ---------------------------------- || points         | 掩膜区域路径点串          | `{ lng: number, lat: number}[]`           | -      | `required` | -                                  || showRegion     | 展示区域内部还是外部      | [`MapMaskShowRegion`](#mapmaskshowregion) | -      | `inside`   | -                                  || isBuildingMask | 楼块是否参与掩膜          | `boolean`                                 | -      | `false`    | -                                  || isMapMask      | 底图是否参与掩膜          | `boolean`                                 | -      | `false`    | -                                  || isPoiMask      | 底图上的 Poi 是否参与掩膜 | `boolean`                                 | -      | `false`    | -                                  || visible        | 是否显示                  | `boolean`                                 | -      | `true`     | <Badge type="tip" text="^2.2.0" /> |
 ### MapMaskShowRegion
 
 | 值      | 描述                                                                                                   |

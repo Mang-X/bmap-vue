@@ -172,8 +172,20 @@ const CASES: readonly OverlayCase[] = [
       { prop: "title", next: "改过的标题", setter: "setTitle" },
       { prop: "rotation", next: 60, setter: "setRotation" },
       { prop: "position", next: { lng: 117, lat: 40 }, setter: "setPosition" },
+      // ↓ issue #165 第三批：`label` 补上后**必须**留在 `mutable`——官方
+      // `Marker.d.ts:110` / `:115` 声明了成对的 `setLabel` / `getLabel`，live 读数
+      // （settle 之后）确认二者在原型链 layer 1、真调不抛、`getLabel().getContent()`
+      // 读回改后的文案 ⇒ 可观察地生效。认成 `recreate` 会让每次换文案都换掉整个 Marker。
+      { prop: "label", next: { content: "第二段", position: POINT }, setter: "setLabel" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      // ↓ issue #165 第三批补的两个构造期项：官方 `Marker.d.ts` 成员表里没有
+      // `setAutoFollowHeadingChanged` / `setStartAnimation`，live 读数确认两者整条原型链
+      // layer = -1（见 `marker-label-cluster-options.test.ts` 的文件头表格）。
+      { prop: "autoFollowHeadingChanged", next: true },
+      { prop: "startAnimation", next: "grow" },
+    ],
     ctorExpect: {
       // `position` 是构造期**第一个位置参数**（描述符 `ctorKey: null`），因此不在 ctor options 里；
       // 它由下面的 stateExpect 覆盖（Fake 把位置参数落进实例字段）
@@ -194,6 +206,7 @@ const CASES: readonly OverlayCase[] = [
       style: { color: "#fff" },
       offset: { x: 1, y: 2 },
       zIndex: 3,
+      width: 77,
     },
     mutable: [
       { prop: "content", next: "改过的文本", setter: "setContent" },
@@ -201,12 +214,20 @@ const CASES: readonly OverlayCase[] = [
       { prop: "style", next: { color: "#f00" }, setter: "setStyles" },
       // 位置字段走 `setPosition` 专用入口（描述符的语义键），不是普通 setOptions
       { prop: "position", next: { lng: 117, lat: 40 }, setter: "setPosition" },
+      // ↓ issue #165 第三批：`anchor` 在**描述符里早就**登记为 `mutateBy("setAnchor")`，
+      // 但 `LabelProps` / `LABEL_FIELDS` 里从来没有它 ⇒ 那条更新路径一次都没被触发过。
+      // live 读数（settle 之后）判它可观察地生效（DOM 角点随锚点移动）⇒ `mutable` 成立。
+      { prop: "anchor", next: "BMAP_ANCHOR_BOTTOM_CENTER", setter: "setAnchor" },
     ],
-    recreate: [],
+    // ↓ issue #165 第三批：`width` 是官方 `LabelOptions` 7 个键之一，官方 `Label` 上
+    // **没有** `setWidth`（live：整条原型链 layer = -1、真调抛）⇒ 构造期。
+    recreate: [{ prop: "width", next: 120 }],
     ctorExpect: {
       position: { lng: 116.4, lat: 39.9 },
       styles: { color: "#fff" },
       offset: { width: 1, height: 2 },
+      // 构造期项也进 ctor options（初值 77 ⇒ 之后那一步把它改成 120 并重建）
+      width: 77,
     },
     stateExpect: { content: "文本" },
   },
@@ -216,18 +237,36 @@ const CASES: readonly OverlayCase[] = [
     component: Polyline,
     fields: POLYLINE_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
       strokeColor: "#123456",
+      // ↓ issue #165 图形族补齐：逐个 `recreate` 策略都在这里有**至少一个**行为用例。
+      // 逐条「为什么没有 setter」的依据见 `vector-overlay-options.test.ts` 的表；
+      // 这里只负责让「每个字段都被行为覆盖」这条门禁看到它们。
+      dashArray: [8, 4],
+      coordType: "BMAP_COORD_GCJ02",
+      strokeLineCap: "butt",
+      linkRight: true,
     },
     mutable: [
       { prop: "strokeColor", next: "#654321", setter: "setStrokeColor" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [],
-    ctorExpect: { strokeColor: "#123456" },
+    recreate: [
+      { prop: "dashArray", next: [2, 2] },
+      { prop: "enableClicking", next: true },
+      { prop: "geodesic", next: true },
+      { prop: "clip", next: false },
+    ],
+    ctorExpect: {
+      strokeColor: "#123456",
+      dashArray: [8, 4],
+      coordType: "BMAP_COORD_GCJ02",
+      strokeLineCap: "butt",
+      linkRight: true,
+    },
   },
   {
     name: "Polygon",
@@ -235,18 +274,24 @@ const CASES: readonly OverlayCase[] = [
     component: Polygon,
     fields: POLYGON_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
       fillColor: "#00ff00",
+      dashArray: [6, 2],
+      strokeLineJoin: "bevel",
     },
     mutable: [
       { prop: "fillColor", next: "#ff0000", setter: "setFillColor" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [{ prop: "isBoundary", next: true }],
-    ctorExpect: { fillColor: "#00ff00" },
+    recreate: [
+      { prop: "isBoundary", next: true },
+      { prop: "enableClicking", next: true },
+      { prop: "strokeLineCap", next: "square" },
+    ],
+    ctorExpect: { fillColor: "#00ff00", dashArray: [6, 2], strokeLineJoin: "bevel" },
   },
   {
     name: "Rectangle",
@@ -256,27 +301,35 @@ const CASES: readonly OverlayCase[] = [
     props: {
       bounds: { southwest: { lng: 116.3, lat: 39.8 }, northeast: { lng: 116.5, lat: 40 } },
       strokeWeight: 3,
+      linkRight: true,
     },
     mutable: [
       { prop: "strokeWeight", next: 5, setter: "setStrokeWeight" },
       { prop: "enableEditing", next: true, setter: "enableEditing" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
-    ctorExpect: { strokeWeight: 3, enableClicking: true },
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "coordType", next: "BMAP_COORD_WGS84" },
+    ],
+    ctorExpect: { strokeWeight: 3, enableClicking: true, linkRight: true },
   },
   {
     name: "Circle",
     kind: "circle",
     component: Circle,
     fields: CIRCLE_FIELDS,
-    props: { center: POINT, radius: 100, fillOpacity: 0.3 },
+    props: { center: POINT, radius: 100, fillOpacity: 0.3, dashArray: [4, 4] },
     mutable: [
       { prop: "radius", next: 200, setter: "setRadius" },
       { prop: "fillOpacity", next: 0.8, setter: "setFillOpacity" },
       // 圆心是位置字段：`setPosition` 由 Driver 按 `POSITION_KEY.circle` 映射到 `setCenter`
       { prop: "center", next: { lng: 117, lat: 40 }, setter: "setCenter" },
     ],
-    recreate: [{ prop: "enableClicking", next: false }],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "dashArray", next: [2, 2] },
+    ],
+    ctorExpect: { dashArray: [4, 4] },
     stateExpect: { radius: 100 },
   },
   {
@@ -285,7 +338,7 @@ const CASES: readonly OverlayCase[] = [
     component: BezierCurve,
     fields: BEZIER_CURVE_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.6, lat: 40.1 },
       ],
@@ -296,9 +349,15 @@ const CASES: readonly OverlayCase[] = [
         ],
       ],
       strokeOpacity: 0.4,
+      // ↓ issue #165 图形族补齐：`BezierCurveOptions` 此前只缺 `enableClicking` / `dashArray`。
+      dashArray: [3, 3],
     },
     mutable: [{ prop: "strokeOpacity", next: 0.9, setter: "setStrokeOpacity" }],
-    recreate: [],
+    recreate: [
+      { prop: "enableClicking", next: false },
+      { prop: "dashArray", next: [6, 6] },
+    ],
+    ctorExpect: { dashArray: [3, 3] },
   },
   {
     name: "Prism",
@@ -306,7 +365,7 @@ const CASES: readonly OverlayCase[] = [
     component: Prism,
     fields: PRISM_FIELDS,
     props: {
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -885,7 +944,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(testCase.component as never, {
-              path: path.value,
+              points: path.value,
               pathVersion: version.value,
             } as never),
           ]);
@@ -942,7 +1001,7 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(BezierCurve, {
-              path: path.value,
+              points: path.value,
               controlPoints: controlPoints.value,
               pathVersion: pathVersion.value,
               controlPointsVersion: controlPointsVersion.value,
@@ -973,15 +1032,17 @@ describe("#31 path 大数组：根引用 + 版本令牌（不做内容指纹）"
     harness.assertIdle("BezierCurve 两个版本令牌");
   });
 
-  it("声明面：versioned 的字段都配了版本令牌；Prism 的 path 明确不用（小数组）", () => {
-    expect(POLYLINE_WATCH_SOURCES.path).toEqual({ source: "versioned", versionProp: "pathVersion" });
+  it("声明面：versioned 的字段都配了版本令牌；Prism 的 points 明确不用（小数组）", () => {
+    // watch 源的键是 **prop 名**（#165 Class 1 之后是 `points`），值里的 `versionProp` 仍指向
+    // `pathVersion`——那个 prop 名官方没有对应概念，是本库自设计的失效令牌，**未改名**。
+    expect(POLYLINE_WATCH_SOURCES.points).toEqual({ source: "versioned", versionProp: "pathVersion" });
     expect(BEZIER_CURVE_WATCH_SOURCES).toEqual({
-      path: { source: "versioned", versionProp: "pathVersion" },
+      points: { source: "versioned", versionProp: "pathVersion" },
       controlPoints: { source: "versioned", versionProp: "controlPointsVersion" },
     });
     expect(Object.keys(GROUND_OVERLAY_WATCH_SOURCES)).toEqual(["url"]);
-    expect(PRISM_FIELDS.path).toBe("options");
-    expect(PRISM_DESCRIPTOR_KEYS.path).toBe("path");
+    expect(PRISM_FIELDS.points).toBe("options");
+    expect(PRISM_DESCRIPTOR_KEYS.points).toBe("path");
   });
 });
 
@@ -1016,7 +1077,7 @@ describe("#31 编辑能力边界与卸载路径", () => {
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(Polyline, {
-              path: [
+              points: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.5, lat: 40 },
               ],
@@ -1058,7 +1119,7 @@ describe("#31 内核的观察面：useOverlaySpec 报告的 events", () => {
 
   function probeHost(spec: OverlaySpec<Record<string, unknown>, unknown>) {
     const state = ref<Record<string, unknown>>({
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -1087,7 +1148,7 @@ describe("#31 内核的观察面：useOverlaySpec 报告的 events", () => {
     watchSources: { path: { source: "versioned", versionProp: "pathVersion" } },
     create: (context, p) =>
       context.client.driver.overlays.createPolygon(
-        p.path as { lng: number; lat: number }[],
+        p.points as { lng: number; lat: number }[],
         {},
       ),
   };
@@ -1132,11 +1193,11 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
     const spec: OverlaySpec<Record<string, unknown>, unknown> = {
       type: "probe-after-mount",
       kind: "polygon",
-      fields: { path: "options", visible: "visibility" },
-      descriptorKeys: { path: "path", visible: null },
+      fields: { points: "options", visible: "visibility" },
+      descriptorKeys: { points: "path", visible: null },
       create: async (context, p) => {
         await gate;
-        return context.client.driver.overlays.createPolygon(p.path as { lng: number; lat: number }[], {});
+        return context.client.driver.overlays.createPolygon(p.points as { lng: number; lat: number }[], {});
       },
       afterMount: () => {
         afterMountCalls.push(afterMountCalls.length);
@@ -1144,7 +1205,7 @@ describe("[评审 1] afterMount 的时序与回滚", () => {
       },
     };
     const state = ref<Record<string, unknown>>({
-      path: [
+      points: [
         { lng: 116.4, lat: 39.9 },
         { lng: 116.5, lat: 40 },
       ],
@@ -1255,7 +1316,7 @@ describe("[评审 4] remove 事件的可观察时机（文档与用例一起对�
         return () =>
           h(MapComponent, { provider: harness.provider() }, () => [
             h(BezierCurve, {
-              path: [
+              points: [
                 { lng: 116.4, lat: 39.9 },
                 { lng: 116.6, lat: 40.1 },
               ],

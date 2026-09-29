@@ -17,7 +17,7 @@
  * - `runtimeOnly`：只能通过实例/原型成员在运行时探测，官方类型包无对应静态声明
  *   （例如 `Map` 原型方法、`PointCollection`、`Marker3D`，或只有文档没有类型声明的构造器）。
  *
- * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.4` 为基准核对：
+ * `rawMembers` 名称以官方 `@baidumap/jsapi-v4-types@4.0.5` 为基准核对：
  * `core/Map.d.ts` 的 Map 原型方法与各子目录 `declare namespace BMap` 类声明。
  */
 
@@ -28,11 +28,11 @@ export type Capability =
   | "map.center-and-zoom"
   | "map.bounds"
   | "map.viewport"
+  | "map.fly-to"
+  | "map.screenshot"
   | "map.heading"
   | "map.tilt"
-  | "map.fly-to"
   | "map.animate"
-  | "map.screenshot"
   | "map.check-resize"
   | "map.pixel-conversion"
   | "map.style"
@@ -74,6 +74,9 @@ export type Capability =
   | "layer.point"
   | "layer.heatmap"
   | "layer.track-line"
+  | "layer.polygon"
+  | "layer.polyline"
+  | "layer.text"
   // Service
   | "service.local-search"
   | "service.autocomplete"
@@ -156,7 +159,11 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "map.viewport": {
     id: "map.viewport",
     family: "map",
-    description: "视口（中心 + 缩放 + 旋转 + 倾斜）读写（getViewport / setViewport）",
+    description: "视口读写（getViewport 只读最佳视野 / setViewport 施加视野）",
+    // #165 回填：`getViewport` 回到探测表。此前 Class 5 把它摘掉的理由是「`MapDriver`
+    // 从不调用它」——那是**用实现缺失去论证能力不存在**，与 #165 §3.3「不得无理由裁剪
+    // 能力」相悖。live AK 实测两个成员运行时都在位（`165-runtime-verification.md`
+    // 结论四），且 `MapDriver.getViewport` 现在真的调用它。
     rawMembers: ["getViewport", "setViewport"],
     status: "native",
     runtimeOnly: true,
@@ -177,14 +184,6 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
-  "map.fly-to": {
-    id: "map.fly-to",
-    family: "map",
-    description: "平滑飞行定位（v4 原生 flyTo；探测成员 panTo）",
-    rawMembers: ["panTo"],
-    status: "extended",
-    runtimeOnly: true,
-  },
   "map.animate": {
     id: "map.animate",
     family: "map",
@@ -193,10 +192,35 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
+  // #165 回填：`map.screenshot` / `map.fly-to` 两条**恢复**收录。
+  //
+  // 它们此前被 Class 5 删除，理由是「`MapDriver` 没有对应命令面，而 `supports()` 却返回
+  // true —— 一个兑现不了的承诺」。那条推理的前提（成员在运行时不存在）**是错的**：
+  // live AK 实测 `BMap.Map.prototype` 上 `getScreenshot` / `flyTo` / `getViewport` / `setViewport`
+  // 全部在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四，取证探针
+  // `scripts/probe-runtime-members.mts`）。**用「我们还没接线」论证「能力不存在」，
+  // 等于把「实现缺口」记成「上游缺口」**—— #165 §3.3 要求能力不得无理由裁剪，
+  // 正确的处置是补实现，而不是删条目。两条现已由 `MapDriver.getScreenshot` /
+  // `MapDriver.flyTo` 兑现。
+  //
+  // 两条的状态取 `native` 而非 `experimental`/`extended`：它们是对官方成员的直接投影，
+  // 本库没有加任何项目语义。`map.screenshot` 的官方限制（地球模式不支持、需
+  // `preserveDrawingBuffer: true` 否则黑屏）写在 `MapDriver.getScreenshot` 的文档注释上——
+  // 那是**使用前提**，不是「本库把它做得半成品」，因此不构成降级状态。
+  "map.fly-to": {
+    id: "map.fly-to",
+    family: "map",
+    description: "平滑飞行到目标中心与级别（flyTo）",
+    // 探测 `flyTo` **本身**。此前这条 rawMembers 写的是 `panTo` —— 那是**另一个成员**
+    // （瞬移，没有飞行动画），拿它当「飞行定位已支持」的依据属于张冠李戴。
+    rawMembers: ["flyTo"],
+    status: "native",
+    runtimeOnly: true,
+  },
   "map.screenshot": {
     id: "map.screenshot",
     family: "map",
-    description: "地图截图（getScreenshot）",
+    description: "取当前画布截图（getScreenshot；官方限制：地球模式不支持，且需建图时带 preserveDrawingBuffer: true）",
     rawMembers: ["getScreenshot"],
     status: "native",
     runtimeOnly: true,
@@ -310,7 +334,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "overlay.point-collection": {
     id: "overlay.point-collection",
     family: "overlay",
-    description: "海量点（PointCollection）；官方 4.0.4 文档引用但未声明类型",
+    description: "海量点（PointCollection）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["PointCollection"],
     status: "native",
     runtimeOnly: true,
@@ -342,7 +366,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "overlay.marker-3d": {
     id: "overlay.marker-3d",
     family: "overlay",
-    description: "3D 标记（Marker3D）；官方 4.0.4 文档引用但未声明类型",
+    description: "3D 标记（Marker3D）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["Marker3D"],
     status: "experimental",
     runtimeOnly: true,
@@ -376,6 +400,41 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
+  // ⚠️ **不要**在这里为 `FeatureLayer` 增加能力项（#165 收口，实测裁决：不加）。
+  //
+  // 三方分歧与逐条读数（live AK / headless Chrome，`scripts/probe-165-feature-layer.mts`，
+  // `BMap.version === "gl"`，SDK 4.0.5；补齐等待 `settled=true`、0ms 后取样）：
+  //
+  // | 来源 | 说法 |
+  // | --- | --- |
+  // | `@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`，207 个 `.d.ts`） | **零命中** |
+  // | 官方 React 参考 `react-bmap` master `fde5bbd` | 有 `src/components/Layer/FeatureLayer.tsx` + `createFeatureLayer` 工厂 |
+  // | 官方 Vue 参考 `vue-bmap` master `ffc6dad` | **没有** `FeatureLayer` 组件（`src/components/Layer/` 下只有 `index.ts`） |
+  // | 运行时 | `typeof BMap.FeatureLayer === "undefined"`；`BMap` 上不是自有属性；`new BMap.FeatureLayer({})` 抛 `is not a constructor` |
+  //
+  // ⇒ **不封装**。理由不是「参考实现不算证据」这句原则本身，而是三条**可复核**的读数：
+  //
+  // 1. 运行时根本没有这个构造器（补齐之后仍然没有，不是取样错位——同一轮等待
+  //    `GeoJSONLayer` / `NormalLayer` 都判定为 settled，所以「缺席」有资格成立）；
+  // 2. 它与 `BMap.NormalLayer` **没有任何关系**：`FeatureLayer === NormalLayer` 为 false，
+  //    两者都不可用/可用分别成立，`NormalLayer.prototype` 的 39 个成员里没有 `FeatureLayer`
+  //    的痕迹（官方 React 参考的组件文件头「继承 NormalLayer」只是一句注释，运行时无从印证）；
+  // 3. 参考实现自己的**能力矩阵**里就没有 `FeatureLayer`
+  //    （`src/drivers/capabilityMatrix.ts` 的 `V4_LAYER_CLASS` 逐条读过，零命中），
+  //    而 `createLayerFactory` 第一行就是 `if (!capabilities.has(cap)) return null`
+  //    ⇒ `createFeatureLayer` 在参考实现内部是**不可达的死代码**，永远返回 `null`。
+  //    它的选项类型也是这一段里**唯一**写成 `unknown` 的（邻居都有具名 options 接口）。
+  //
+  // 为一条永远为 false 的能力登记条目，比不登记更坏：`supports("layer.feature")` 会开始
+  // 回答一个恒定的值，能力矩阵里多一行需要长期维护的假事实。因此**只留注释**。
+  //
+  // 顺带一条**范围更大的**事实（同样实测）：`BMap.NormalLayer` 在运行时**存在**
+  // （原型 39 个成员，含 `isNormalLayer` / `setOpacity` / `setZIndex` / `pick` / `onAdd`），
+  // 但官方类型包里**也没有 `class NormalLayer`**（`layer/NormalLayer.d.ts` 只有
+  // `NormalLayerEventMap` / `NormalLayerPickEvent` 等接口）。⇒「类型包没有」**不等于**
+  // 「运行时没有」；反过来「运行时没有」也不能反推类型包。本库不因此新增 `layer.normal`
+  // （没有组件消费它，且 `NormalLayer` 是**要自己继承实现**的基类，不是一个可直接实例化的
+  // 数据图层），这一条同样只作为口径记录在此。
   "layer.geojson": {
     id: "layer.geojson",
     family: "layer",
@@ -384,18 +443,33 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
+  // ⚠️ 官方 `@deprecated`（4.0.5 给 `layer/PointIconLayer.d.ts` 的类加的，建议改用
+  // `visualization.PointLayer` 的图标模式）。这里**保持 `status: "native"`**：
+  // `status` 的词表只有 native / extended / experimental / unsupported，四个值的判据是
+  // 「能力从哪来」，**没有一档表示「官方把它标记为弃用」**。为它新造一个 `deprecated`
+  // 状态会让 `supports()` / `require()` / 能力矩阵全线跟着改语义（`native` 能力突然不再被列出），
+  // 那是用一个展示层的事实去改一个判定层的契约。
+  //
+  // 因此弃用只落在**说明**上：组件继续可用（Development 期告警一次 + 类型层 `@deprecated`
+  // + 文档），真正的替代品（`<PointLayer>`）本库已提供。详见 #165 与
+  // `docs/zh-CN/components/data.md`。
   "layer.point-icon": {
     id: "layer.point-icon",
     family: "layer",
-    description: "点图标图层（PointIconLayer）",
+    description:
+      "点图标图层（PointIconLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（图标模式）",
     rawMembers: ["PointIconLayer"],
     status: "native",
     runtimeOnly: false,
   },
+  // 同上：`PointShapeLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PointLayer`
+  // 的形状模式），本库同样只登记、不改 `status`。⚠️ 本库**没有** `<PointShapeLayer>` 组件：
+  // 形状点走 `<PointCollection>`（`BMap.PointCollection`，4.0 类型包里无声明，见 data.md）。
   "layer.point-shape": {
     id: "layer.point-shape",
     family: "layer",
-    description: "点形状图层（PointShapeLayer）",
+    description:
+      "点形状图层（PointShapeLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PointLayer（形状模式）",
     rawMembers: ["PointShapeLayer"],
     status: "native",
     runtimeOnly: false,
@@ -411,23 +485,33 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.panorama-coverage": {
     id: "layer.panorama-coverage",
     family: "layer",
-    description: "全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.4 文档引用但未声明类型",
+    description: "全景覆盖图层（PanoramaCoverageLayer）；官方 4.0.5 文档引用但未声明类型",
     rawMembers: ["PanoramaCoverageLayer"],
     status: "native",
     runtimeOnly: true,
   },
+  // ⚠️ 官方 `@deprecated`（4.0.5 给 `layer/LineLayer.d.ts` 的类加的，建议改用
+  // `visualization.PolylineLayer`）。`status` 保持 `experimental` **不动**——那一位的判据是
+  // 「这一族新、接口面可能变」，与「官方标了弃用」是两件不同的事；官方弃用只落说明。
+  // 官方建议的替代组件 `<PolylineLayer>` 本库**已提供**（#166），组件本身继续可用。
   "layer.line": {
     id: "layer.line",
     family: "layer",
-    description: "线图层（LineLayer）",
+    description:
+      "线图层（LineLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolylineLayer" +
+      "（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族）",
     rawMembers: ["LineLayer"],
     status: "experimental",
     runtimeOnly: false,
   },
+  // 同上：`FillLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PolygonLayer`），
+  // 替代组件同样已由 #166 提供。
   "layer.fill": {
     id: "layer.fill",
     family: "layer",
-    description: "面图层（FillLayer）",
+    description:
+      "面图层（FillLayer）；⚠️ 官方 4.0.5 已标 @deprecated，建议改用 visualization.PolygonLayer" +
+      "（本库已提供该组件，见 #166；迁移不是改个名字——两者 style 字段不同族）",
     rawMembers: ["FillLayer"],
     status: "experimental",
     runtimeOnly: false,
@@ -476,7 +560,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: false,
   },
   // #109：MVT 矢量瓦片。挂载（直接 `addLayer`）、`layers` 字符串数组、状态键 `layerName_id`
-  // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.4 有完整声明。
+  // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.5 有完整声明。
   "layer.mvt": {
     id: "layer.mvt",
     family: "layer",
@@ -489,7 +573,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // 显式可选的 `markers` 引擎（网格聚合 + Marker）」，而**不是**「原生缺失时的 fallback」——
   // issue #35 的实测（`scripts/probe-native-point-cluster.mts`）证明原生可用，因此自动降级不成立；
   // `markers` 的增量是「簇内业务项」（官方没有公开的读回入口）。`runtimeOnly: true` 是因为
-  // `ClusterLayer` 没有类声明、可视化实现按需异步注入（存在性只能在调用时刻判断）。
+  // `ClusterLayer` 属可视化扩展 API：实现按需异步注入，**存在性只能在调用时刻判断**
+  // （4.0.5 给它补了类声明，但「类型里有形状」≠「运行时已加载」，因此 `runtimeOnly`
+  // 说的是注入时机，不是类型包有没有声明）。
   "layer.cluster": {
     id: "layer.cluster",
     family: "layer",
@@ -500,13 +586,16 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: true,
   },
   // M3A2-SERVICES-NATIVE（#23）补齐原生数据图层里缺少的三个能力槽位。
-  // 三者都是「4.0 运行时公开、4.0.4 类型包没有类声明」的扩展 API：`runtimeOnly: true`
-  // 表达「存在性只能在运行时按结构探测」，`experimental` 表达「接口面可能变」（官方把这
-  // 几个类归在「扩展 API」下，且可视化实现是**异步注入**的）。
+  // 三者都是官方归在「扩展 API」下的可视化图层，实现**异步注入**：`runtimeOnly: true` 表达
+  // 「存在性只能在运行时判断」，`experimental` 表达「接口面可能变」。
+  // 4.0.5（`5ba67f4`）已为它们补上类声明，因此 `rawMembers` 现在有官方出处；`runtimeOnly`
+  // 依然成立——它说的是**注入时机**，与类型包是否声明无关。
   "layer.point": {
     id: "layer.point",
     family: "layer",
-    description: "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地",
+    description:
+      "原生点图层（PointLayer）；支持形状或图标，属扩展 API，由 PointLayer 落地。" +
+      "4.0.5 声明了显隐 / 层级 / 绘制阶段 / 参考中心点这一组显示属性（官方**没有** setOpacity）。",
     rawMembers: ["PointLayer"],
     status: "experimental",
     runtimeOnly: true,
@@ -514,7 +603,9 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   "layer.heatmap": {
     id: "layer.heatmap",
     family: "layer",
-    description: "热力图（Heatmap）；按权重渲染点密度，属扩展 API",
+    description:
+      "热力图（Heatmap）；按权重渲染点密度，属扩展 API。" +
+      "4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter 而不是摘挂实例。",
     rawMembers: ["Heatmap"],
     status: "experimental",
     runtimeOnly: true,
@@ -526,10 +617,81 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "轨迹线（TrackLine）；数据绘制 + 播放命令面（start/pause/resume/stop/setSpeed/setProcess）" +
       "属扩展 API，由 TrackLineLayer 落地（playback expose + observed 事件观察 + pauseOnHidden）。" +
       "**它是 legacy 插件 `service.track-animation` 的迁移目标**" +
-      "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证。",
+      "（结论见 plugin-compat-inventory）；播放命令的方法名经 live 探针取证（#110，2026-09-23）。" +
+      "4.0.5 声明了显隐 / 透明度 / 层级这一组显示属性——显隐因此走 setter，" +
+      "重新可见**不**换实例（换实例会丢掉播放进度）。",
     rawMembers: ["TrackLine"],
     status: "experimental",
     runtimeOnly: true,
+  },
+
+  // #166：官方 4.0.5（git `5ba67f4`）新增的 `visualization/` 两族。它们是 4.0.5
+  // **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
+  //
+  // `status: "experimental"` 的判据与 `layer.line` / `layer.fill` 相同：「这一族新、
+  // 接口面可能变」——4.0.5 才第一次出现在类型包里，且官方文档仍在补（`PolygonLayer.d.ts:171`
+  // 的注释连「含内部描边」的实现细节都写进去了，说明还在演进）。**不是**因为官方标了弃用。
+  //
+  // `runtimeOnly: false`（与扩展 API 那四类相反）：live 探针
+  // （`scripts/probe-runtime-members.mts` case 3b 的 `injectionTiming`，2026-09-27）读到
+  // `B.PolygonLayer` / `B.PolylineLayer` 在 `BMap.Map` 刚就绪时**已经是 `function`**
+  // ⇒ 随主包注入，不存在「等异步注入」的时机问题。
+  "layer.polygon": {
+    id: "layer.polygon",
+    family: "layer",
+    description:
+      "批量面图层（PolygonLayer，官方 4.0.5 新增）；官方指定的 FillLayer 替代。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
+      "由 PolygonLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
+      "setOpacity 虽运行时在位且 getOpacity 读得回（零信息量：setter 与 getter 共用状态），" +
+      "但像素读数证明**它不驱动渲染**（五态全同值，而同一次运行里 fillOpacity / setVisible " +
+      "都能归零）⇒ **刻意不登记**；对照同族的 PolylineLayer，setOpacity 在那里是经" +
+      "运行时豁免登记的，本族没有——同族不同面。" +
+      "本族的选项表里也**没有** opacity 这一项。逐条依据见 " +
+      "docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["PolygonLayer"],
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  "layer.polyline": {
+    id: "layer.polyline",
+    family: "layer",
+    description:
+      "批量折线图层（PolylineLayer，官方 4.0.5 新增）；官方指定的 LineLayer 替代。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。" +
+      "由 PolylineLayer 组件落地。官方声明了 hitTest 但 live 实测运行时没有 ⇒ 不开面；" +
+      "setOpacity 虽未被官方声明，但 live 像素读数证明**它可观测地生效**" +
+      "（4229 ⇄ 0，可逆且重复一致）⇒ 开面，与同族的 PolygonLayer 处置相反。" +
+      "逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["PolylineLayer"],
+    status: "experimental",
+    runtimeOnly: false,
+  },
+  // #166 第二刀：`visualization/TextLayer`（4.0.5 新增的批量文字标注）。
+  //
+  // `status: "experimental"` 与 `layer.polygon` / `layer.polyline` 同判据：「4.0.5 才第一次
+  // 出现在类型包里、接口面可能变」。
+  // `runtimeOnly: false`：live 探针 case 3e 的 `injectionTiming` 读到
+  // `TextLayerAtMapReady === "function"` ⇒ 随主包注入，与扩展 API 那四类相反。
+  //
+  // ⚠️ **本票的另一半发现**：`BarLayer` / `FlyLineLayer` / `GeoJSONSource` 在这份产物里
+  // **完全不存在**（探针 case 15/16：8s 与再 25s 两次复读都是 `undefined`，且扫遍
+  // `BMap` 全部 294 个自有属性也没有任何别名）。它们因此**不建能力槽位**——
+  // 官方声明了、运行时没发，登记进去只会让 `supports()` 对一个永远不会来的能力说真话。
+  // 依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
+  "layer.text": {
+    id: "layer.text",
+    family: "layer",
+    description:
+      "批量文字标注图层（TextLayer，官方 4.0.5 新增）；geometry 支持 Point / MultiPoint。" +
+      "样式走整袋 setOptions（不是 setStyleOptions），无 doOnceDraw。由 TextLayer 组件落地。" +
+      "它是 visualization 家族里唯一声明与运行时完全对齐的类：hitTest 与 setOpacity 都在" +
+      "（PolygonLayer 声明有 hitTest 运行时无、setOpacity 运行时在不渲染；" +
+      "PolylineLayer 则与它相反）。" +
+      "逐条依据见 docs/zh-CN/contributing/166-visualization-alignment-audit.md",
+    rawMembers: ["TextLayer"],
+    status: "experimental",
+    runtimeOnly: false,
   },
 
   // ------------------------------------------------------------ Service
@@ -633,7 +795,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**" +
       "（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已落地在" +
       " `<TrackLineLayer>` 的 `playback` expose 上。" +
-      "脚本自身引用面在 4.0.4 声明里没有缺口，且**最小运行时路径已验证**" +
+      "脚本自身引用面在 4.0.5 声明里没有缺口，且**最小运行时路径已验证**" +
       "（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；" +
       "依据与复现见 plugin-compat-inventory",
     status: "unsupported",

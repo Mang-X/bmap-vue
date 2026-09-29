@@ -704,7 +704,28 @@ export class FakeV4LocalSearch {
     const onSearchComplete = this.options.onSearchComplete as
       | ((value: FakeV4LocalResult | FakeV4LocalResult[] | null) => void)
       | undefined
-    this.queue.dispatch(() => onSearchComplete?.(outgoing))
+    this.queue.dispatch(() => {
+      onSearchComplete?.(outgoing)
+      this.notifyViewportCallback()
+    })
+  }
+
+  /**
+   * 官方语义：`autoViewport` 为真时，标注画完后调整地图视野，**调整结束后**调用
+   * `renderOptions.viewportOptions.callback`。
+   *
+   * Fake 只建模「回调在结果交付之后被调用一次」这一条可观察事实（与官方注释一致），
+   * 不真的挪地图：`viewportOptions` 是**构造选项**，没有公开的 setter，用例靠它断言
+   * Driver 把哪些成员透传到位。
+   */
+  private notifyViewportCallback(): void {
+    const render = this.options.renderOptions
+    if (!render || typeof render !== 'object') return
+    if ((render as { autoViewport?: unknown }).autoViewport !== true) return
+    const viewport = (render as { viewportOptions?: unknown }).viewportOptions
+    if (!viewport || typeof viewport !== 'object') return
+    const callback = (viewport as { callback?: unknown }).callback
+    if (typeof callback === 'function') (callback as () => void)()
   }
 }
 
@@ -1013,14 +1034,23 @@ export class FakeV4RouteResult<TPlan> {
 
 /** 官方 `TransitRouteResult`：多一个 `getTransitType()`。 */
 export class FakeV4TransitRouteResult extends FakeV4RouteResult<FakeV4TransitRoutePlan> {
+  /** 官方 `TransitRouteResult.intercityPolicy?`（字段，跨城才有） */
+  intercityPolicy?: number
+  /** 官方 `TransitRouteResult.transitTypePolicy?`（字段，跨城才有） */
+  transitTypePolicy?: number
+
   constructor(
     start: FakeV4RoutePoi,
     end: FakeV4RoutePoi,
     plans: FakeV4TransitRoutePlan[],
     policy: number,
     private readonly transitType: number,
+    intercityPolicy?: number,
+    transitTypePolicy?: number,
   ) {
     super(start, end, plans, policy)
+    if (intercityPolicy !== undefined) this.intercityPolicy = intercityPolicy
+    if (transitTypePolicy !== undefined) this.transitTypePolicy = transitTypePolicy
   }
 
   getTransitType(): number {
@@ -1218,8 +1248,6 @@ export class FakeV4RidingRoute extends FakeV4RouteService {
 
 /** 官方 `TransitRoute`（`search(start, end)`；方案是「步行段 + 乘车段」序列）。 */
 export class FakeV4TransitRoute extends FakeV4RouteService {
-  /** 测试辅助：回包里跨城方案的交通方式策略 */
-  transitTypePolicy: number | undefined
   /** 测试辅助：`getTransitType()` 的取值（0 市内 / 1 跨城） */
   transitType = 0
 
@@ -1241,12 +1269,20 @@ export class FakeV4TransitRoute extends FakeV4RouteService {
       )
     })
     const policy = typeof this.options.policy === 'number' ? this.options.policy : 0
+    // 跨城策略从**构造选项**回显到官方 `TransitRouteResult` 的那两个**可选字段**
+    // （`intercityPolicy?` / `transitTypePolicy?`）——它们只在跨城检索时有值。
+    const intercityPolicy =
+      typeof this.options.intercityPolicy === 'number' ? this.options.intercityPolicy : undefined
+    const transitTypePolicy =
+      typeof this.options.transitTypePolicy === 'number' ? this.options.transitTypePolicy : undefined
     return new FakeV4TransitRouteResult(
       this.echoEndpoint(start, '起点'),
       this.echoEndpoint(end, '终点'),
       plans,
       policy,
       this.transitType,
+      intercityPolicy,
+      transitTypePolicy,
     )
   }
 }

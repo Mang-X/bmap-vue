@@ -8,10 +8,11 @@
  *   `getAllState`）、字段级 setter 族与 `setBaseOptions`；官方把拾取开关放在基础配置项里
  *   （`enablePicked`），因此这一族**没有** `setEnablePicked` / `hitTest`——Driver 的
  *   `supports()` 正是据此回答 `false`。
- * - **扩展 API 的点/聚合/热力**（`PointLayer` / `ClusterLayer` / `Heatmap`）：只有
- *   `setData` / `clearData` / `setOptions`（`PointLayer` 另有 `setEnablePicked` / `hitTest`），
- *   外加**从共享基类继承**的 `setVisible` / `getVisible`。
- * - **TrackLine**：只有 `setData` 与播放控制。
+ * - **扩展 API 的点/聚合/热力**（`PointLayer` / `ClusterLayer` / `Heatmap`）：`setData` /
+ *   `clearData` / `setOptions`（`PointLayer` 另有 `setEnablePicked` / `hitTest`），外加 4.0.5
+ *   声明的显示属性（`setVisible` / `setZIndex`，`ClusterLayer` 与 `Heatmap` 另有 `setOpacity`；
+ *   `Heatmap` 另有 `setGradient` / `setRadius`）。
+ * - **TrackLine**：`setData` / `clearData`、显示属性与播放控制。
  *
  * ⚠️ 关于 `setVisible` 的一次更正（issue #35，2026-09-19）：本文件此前写着「刻意不提供
  * `setVisible`，因为扩展 API 其实没有这个方法」——**那句话是错的**。真实 4.0 的 `PointLayer` /
@@ -21,9 +22,13 @@
  * 夹具比真实更窄会**掩盖** Driver 的 `supports()` 说假话（这里恰好相反：是 `supports()`
  * 太保守，而夹具让「放开」这条改动无法被验证）。因此这一对成员现在如实建模。
  *
- * 仍然刻意不提供的（`supports()` 也回答不支持）：`setOpacity` / `setZIndex` / `setMinZoom` /
- * `setMaxZoom` / 状态 API —— 它们在真实运行时同样继承自基类，但本库按官方专页口径不把它们
- * 当契约，且当前没有消费者。**要放开必须像 `setVisible` 一样先取证**，不能只因为运行时存在。
+ * #165 Class 3：4.0.5 给 `visualization/` 补了类声明之后，`setOpacity` / `setZIndex` 也**按声明**
+ * 建模了（`ClusterLayer.d.ts:264`/`:268`、`Heatmap.d.ts:157`/`:161`、`TrackLine.d.ts:461`/`:465`），
+ * 不再靠「运行时继承到、专页没列」的推测。
+ *
+ * 仍然刻意不提供的（`supports()` 也回答不支持）：`setMinZoom` / `setMaxZoom` / 状态 API ——
+ * 官方这四个类的声明里确实没有（`minZoom` / `maxZoom` 是**构造选项**，不是字段级 setter），
+ * 替身比声明宽就会让 Driver 多登记一个不存在的 capability。**替身不得比真实契约宽容**。
  *
  * 所有替身都继承 `FakeV4Layer`：`FakeV4Map.addLayer/removeLayer` 的容器只认它，
  * 这也让「先摘子资源再 destroy 地图」的不变式在原生图层上同样可断言。
@@ -192,11 +197,20 @@ export class FakeV4FillLayer extends FakeV4NativeLayerBase {
 
 /* ------------------------------------------------- 扩展 API（未声明的运行时类） */
 
-/** 扩展 API 的公共部分：只有 `setOptions` 一族 + 数据 + 继承来的 `setVisible`。 */
+/** 扩展 API 的公共部分：只有 `setOptions` 一族 + 数据 + 声明的显示属性。 */
 export class FakeV4RuntimeLayer extends FakeV4Layer {
   data: unknown = null
-  /** 继承自共享基类（真实 4.0 实测可读写，见文件头）：Driver 对 `point` / `cluster` 已放开 `setVisible`。 */
+  /**
+   * 显隐 / 层级（4.0.5 的 `visualization/` 四类**逐条声明**了它们，见
+   * `visualization/PointLayer.d.ts:324/328`、`ClusterLayer.d.ts:260/268`、
+   * `Heatmap.d.ts:153/161`、`TrackLine.d.ts:457/465`）。
+   *
+   * 此前这里只有 `setVisible`（#35 的 live 取证），其余三个 kind 在 Driver 上是关着的。
+   * 4.0.5 把声明补齐了，Driver 与替身一起放开——**声明是依据，不再依赖「运行时继承到」的推测**。
+   */
   visible = true
+  opacity = 1
+  zIndex = 0
 
   constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
     super(options, stats)
@@ -216,9 +230,36 @@ export class FakeV4RuntimeLayer extends FakeV4Layer {
     this.data = null
   }
 
+  /**
+   * 官方 `visualization/*` 那一族的整袋样式入口。
+   *
+   * 官方声明把「转发」写进了注释本身，逐字三条一族：
+   * `TextLayer.d.ts:265-268` / `PolylineLayer.d.ts:209-212` / `PointLayer.d.ts:297-300`
+   * ——「批量更新样式。**仅更新已声明的样式键**；`opacity` / `visible` / `zIndex` /
+   * `renderStage` / `referCenter` / `enablePicked` **转发到对应 setter**，其余未知键忽略并告警一次」。
+   *
+   * 两句话各自建模，缺一不可：
+   *
+   * 1. **merge**（不是整袋替换）——「仅更新已声明的样式键」= 只写你给的那几个键。
+   *    ⚠️ 仓库此前把这一族记成「整袋替换」，那是**误读**官方那句「仅更新…」。
+   * 2. **转发**——`opacity` / `visible` / `zIndex` 不是三个独立的样式键，它们**就是**那几个
+   *    setter 所写的状态。少了这一条，替身会把「袋里的 opacity」与「`setOpacity` 写的 opacity」
+   *    变成两份互不相干的状态，于是「两个入口争同一个 SDK 状态」这条缺陷在替身上
+   *    **完全不可见**（#174 P1-1 的成因：缺陷在真机上成立、在替身上永远绿）。
+   *
+   * 转发**直接写状态**而不走 `setOpacity()` / `setVisible()` / `setZIndex()`：那三个方法会往
+   * `callLog` 追加条目，而本库现有用例有若干条按**精确序列**断言调用日记。转发是官方
+   * `setOptions` 的**内部**行为，调用方看不见多出来的那三个方法调用——不该让它们进日记。
+   */
   setOptions(options: Record<string, unknown>): void {
     this.callLog.push('setOptions')
     this.options = { ...this.options, ...options }
+    // 直接写状态（不调 `setOpacity()` 等）——那几个方法会往 callLog 追加条目，
+    // 而现有用例有若干条按**精确序列**断言调用日记。转发是官方 setOptions 的**内部**行为，
+    // 调用方看不见多出来的那三个方法调用，因此不该让它们进日记。
+    if (typeof options.opacity === 'number') this.opacity = Math.min(1, Math.max(0, options.opacity))
+    if (typeof options.visible === 'boolean') this.visible = options.visible
+    if (typeof options.zIndex === 'number') this.zIndex = options.zIndex
   }
 
   /** 注入一次 `setVisible` 失败（**写之前**抛，状态不变）；口径同基类那一份。 */
@@ -237,10 +278,32 @@ export class FakeV4RuntimeLayer extends FakeV4Layer {
   getVisible(): boolean {
     return this.visible
   }
+
+  setOpacity(opacity: number): void {
+    this.callLog.push('setOpacity')
+    this.opacity = Math.min(1, Math.max(0, opacity))
+  }
+
+  getOpacity(): number {
+    return this.opacity
+  }
+
+  setZIndex(zIndex: number): void {
+    this.callLog.push('setZIndex')
+    this.zIndex = zIndex
+  }
+
+  getZIndex(): number {
+    return this.zIndex
+  }
 }
 
 export class FakeV4PointLayer extends FakeV4RuntimeLayer {
   enablePicked = false
+  // ⚠️ 刻意**不**有 `setOpacity`：4.0.5 的 `visualization/PointLayer.d.ts` 的「显示属性」
+  // 一组只有 `setVisible` / `setZIndex` / `setRenderStage` / `setRefCenter`——它没有声明
+  // `setOpacity`（`ClusterLayer` / `Heatmap` / `TrackLine` 都声明了，见各自的 :264 / :157 / :461）。
+  // 替身比声明宽就会让 Driver 多登记一个不存在的 capability（#106 P1 的同一类坑）。
   /** `hitTest` 的回包；`null` = 未命中 */
   hitResult: { dataIndex: number; dataItem: unknown } | null = {
     dataIndex: 0,
@@ -260,7 +323,21 @@ export class FakeV4PointLayer extends FakeV4RuntimeLayer {
 
 export class FakeV4ClusterLayer extends FakeV4RuntimeLayer {}
 
-export class FakeV4Heatmap extends FakeV4RuntimeLayer {}
+export class FakeV4Heatmap extends FakeV4RuntimeLayer {
+  /** 渐变色与半径是 4.0.5 为 `Heatmap` 单独声明的两个样式入口（`Heatmap.d.ts:145` / `:150`）。 */
+  gradient: Record<number, string> = {}
+  radius = 0
+
+  setGradient(gradient: Record<number, string>): void {
+    this.callLog.push('setGradient')
+    this.gradient = { ...gradient }
+  }
+
+  setRadius(radius: number): void {
+    this.callLog.push('setRadius')
+    this.radius = radius
+  }
+}
 
 export class FakeV4TrackLine extends FakeV4RuntimeLayer {
   /**
@@ -305,5 +382,143 @@ export class FakeV4TrackLine extends FakeV4RuntimeLayer {
   setProcess(process: number): void {
     this.callLog.push('setProcess')
     this.process = process
+  }
+}
+
+/* ------------------------------- 4.0.5 visualization/PolygonLayer / PolylineLayer（#166） */
+
+/**
+ * `PolygonLayer` / `PolylineLayer` 的公共替身（issue #166）。
+ *
+ * **替身按 live 实测的运行时形状建模**（`scripts/probe-runtime-members.mts` case 3b，
+ * 2026-09-27），**不是**按声明建模——这两者的差正是本票要处理的东西：
+ *
+ * | 成员 | 官方声明 | 运行时实测 | 替身 |
+ * | --- | --- | --- | --- |
+ * | `setData` / `getData` / `clearData` | 有 | 有 | **有**（基类那份） |
+ * | `setOptions` | 有 | 有 | **有**（基类那份） |
+ * | `setEnablePicked` / `getEnablePicked` | 有 | 有 | **有**（本类新增） |
+ * | `setVisible` / `getVisible` / `setZIndex` / `getZIndex` | 有 | 有 | **有**（基类那份） |
+ * | `setOpacity` / `getOpacity` | ⚠️ **无** | 有（在位，**面族不生效**） | **有**（基类那份） |
+ * | `hitTest` | ⚠️ **有**（`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`） | ⚠️ **无** | **刻意没有** |
+ * | `setStyle` / `setStyleOptions` / `setBaseOptions` | 无 | 无 | **没有**（基类也没有） |
+ * | `setMinZoom` / `setMaxZoom` | 无 | 无 | **没有** |
+ *
+ * 两处**故意不对称**，方向相反，理由也相反：
+ *
+ * - `hitTest` **声明有、运行时没有** ⇒ 替身**不提供**。一旦这里补上，Driver 那个
+ *   「按声明登记」的表会让一个真实运行时不存在的方法被 CI 测绿（#106 P1 的同一类坑，
+ *   同 `FakeV4NativeLayerBase` 刻意不提供 `clearData` 的理由）。
+ * - `setOpacity` / `getOpacity` **运行时有、声明没有** ⇒ 替身**照实提供**（替身不得比真实
+ *   运行时窄）。它在**折线**族上还被 Driver 登记了（#165 收口：像素读数证明它生效），
+ *   在**面**族上不登记（实测在位但**不驱动渲染**）——替身对两族是**同一份**形状，因为
+ *   「在不在」这一层运行时**确实一致**；驱动与否不在替身的职责里。
+ */
+export class FakeV4PolygonPolylineLayerBase extends FakeV4RuntimeLayer {
+  /**
+   * 初始值取**构造选项** `enablePicked`（官方 `PolygonLayer.d.ts:76` / `:105` @default false）。
+   *
+   * 为什么两族的替身要在这里特别处理：`FakeV4PointLayer` 的 `enablePicked` 是硬编码
+   * `false`（它同样有构造选项 `enablePicked`，但那份替身没读）。对这两族而言，构造期
+   * 读取是**可断言的**——`visualization/` 家族唯一的拾取开关入口就是它，而组件默认
+   * 传 `true`（与官方默认 false 刻意不同）。不读的话，「组件到底有没有把拾取打开」这条
+   * 退化成只能看 `options` 袋，而袋与实例行为是否一致就没人守了。
+   */
+  enablePicked: boolean
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    this.enablePicked = options.enablePicked === true
+  }
+
+  setEnablePicked(enabled: boolean): void {
+    this.callLog.push('setEnablePicked')
+    this.enablePicked = enabled
+  }
+
+  getEnablePicked(): boolean {
+    return this.enablePicked
+  }
+}
+
+/** `visualization/PolygonLayer` —— 官方指定的 `FillLayer` 替代（4.0.5 弃用 `FillLayer`）。 */
+export class FakeV4PolygonLayer extends FakeV4PolygonPolylineLayerBase {
+  readonly isPolygonLayer = true
+}
+
+/** `visualization/PolylineLayer` —— 官方指定的 `LineLayer` 替代（4.0.5 弃用 `LineLayer`）。 */
+export class FakeV4PolylineLayer extends FakeV4PolygonPolylineLayerBase {
+  readonly isPolylineLayer = true
+}
+
+/* ------------------------------ 4.0.5 visualization/TextLayer（#166 第二刀） */
+
+/**
+ * `visualization/TextLayer` 的替身（issue #166 第二刀）。
+ *
+ * **它是 `visualization/` 里第一个「声明与运行时完全对齐」的类**，与前两族的三处差别正是
+ * 本票要处理的判据（live 探针 `scripts/probe-runtime-members.mts` case 3e/3f，2026-09-27，
+ * `lateVisualizationV3.TextLayer`，全部 21 个候选成员逐条读出）：
+ *
+ * | 成员 | 官方声明 | 运行时实测 | 本替身 |
+ * | --- | --- | --- | --- |
+ * | `setData` / `getData` / `clearData` | 有 | 有 | **有**（基类那份） |
+ * | `setOptions` / `getOptions` | 有 | 有 | **有**（`setOptions` 是基类的） |
+ * | `setEnablePicked` / `getEnablePicked` | 有 | 有 | **有** |
+ * | **`hitTest`** | 有（`TextLayer.d.ts:289`） | **有**（探针 `hitTestAt: "returned null"`） | **有** |
+ * | **`setOpacity` / `getOpacity`** | 有（`:296` / `:298`） | **有** | **有**（基类那份） |
+ * | `setVisible` / `setZIndex` | 有 | 有 | **有**（基类那份） |
+ * | `setRenderStage` / `setRefCenter` | 有 | 有 | **没有**（无消费者，见 kind 表注释） |
+ * | `addEventListener` / `removeEventListener` | 有 | 有 | **有**（基类 `FakeV4Layer` 那份） |
+ * | `setStyle` / `setStyleOptions` / `setBaseOptions` | 无 | 无 | **没有** |
+ * | `setMinZoom` / `setMaxZoom` | 无 | 无 | **没有** |
+ *
+ * 三处「刻意不给」的理由各不相同，逐条见上面的表与 kind 表注释——**替身不得比真实契约宽容**，
+ * 否则 Driver 多登记一个不存在的 capability 会被 CI 测绿（#106 评审 P1 的同一类坑）。
+ */
+export class FakeV4TextLayer extends FakeV4RuntimeLayer {
+  /** 构造期读取（官方 `TextLayerOptions.enablePicked`，`:150` @default false）。 */
+  enablePicked: boolean
+
+  /**
+   * `hitTest` 的回包（官方返回 `TextLayerItem | null`，`TextLayer.d.ts:289`）。
+   *
+   * 默认给一个**有内容**的命中而不是 `null`：探针在真实运行时读到的是 `null`（当时容器
+   * 上没有文字），而替身若恒为 `null` 就无法区分「方法在、返回未命中」与「方法不存在」。
+   * 测试需要「未命中」时把它显式置 `null`。
+   */
+  hitResult: {
+    point: unknown
+    text: string
+    width: number
+    height: number
+    id: string | number
+    properties: unknown
+  } | null = {
+    point: { lng: 116.404, lat: 39.915 },
+    text: "北京",
+    width: 28,
+    height: 20,
+    id: "t-1",
+    properties: { id: "t-1" },
+  }
+
+  constructor(options: Record<string, unknown> = {}, stats: FakeV4Diagnostics) {
+    super(options, stats)
+    this.enablePicked = options.enablePicked === true
+  }
+
+  setEnablePicked(enabled: boolean): void {
+    this.callLog.push('setEnablePicked')
+    this.enablePicked = enabled
+  }
+
+  getEnablePicked(): boolean {
+    return this.enablePicked
+  }
+
+  hitTest(x: number, y: number): FakeV4TextLayer["hitResult"] {
+    this.callLog.push(`hitTest:${x},${y}`)
+    return this.hitResult
   }
 }

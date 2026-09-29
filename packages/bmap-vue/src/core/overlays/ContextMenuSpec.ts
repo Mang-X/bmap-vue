@@ -34,6 +34,7 @@
  * 「没有右键过就直接弹在 (0,0)」成为可能（真实 v4 实测：`show()` 在未右键过时不抛错、直接派发
  * `open`），那是另一种语义、也不是调用方想要的。偏离记在 ADR 的已知限制里。
  */
+import type { MenuItemView } from "../../driver/types/overlays";
 import type { ContextMenuItem, ContextMenuSelectPayload } from "../../types/components";
 import { stableKeyOf } from "../utils/stableKey";
 
@@ -93,6 +94,66 @@ export function contextMenuEntriesFingerprint(entries: readonly ContextMenuEntry
       id: entry.id ?? null,
     })),
   );
+}
+
+/**
+ * `<ContextMenu>` 的**命令面**（issue #165 Class 3 / TASK 2d）。
+ *
+ * 官方 `context-menu/ContextMenu.d.ts` 声明了 `getItem` / `removeItem` / `removeSeparator` /
+ * `getDom` / `show` / `hide` 六个成员，而组件侧此前只做「整菜单重建」，它们**没有调用路径**。
+ *
+ * ## 两条刻意偏离（理由见每一项的注释与 `useContextMenu` 的命令面注释）
+ *
+ * 1. **出入参都按序号、不碰 raw `MenuItem`**（`getItem` 返回本库条目模型、
+ *    `removeItem` 收 `index`）：`AGENTS.md` 的 raw SDK 白名单不含组件与 `core`；
+ *    而且官方 `MenuItem` 上**没有任何 getter**，交出去对调用方是全盲的。
+ * 2. **`setItemText` / `setItemEnabled` 不是官方 `ContextMenu` 的成员**：
+ *    官方只给了 `getItem`（返回 raw 对象）。本库把「逐条改」经菜单 + 序号补上，
+ *    因为**没有**它的话 `MenuItem#setText` / `#enable` 仍然是不可达的。
+ */
+export interface ContextMenuExpose {
+  /**
+   * 读回第 `index` 条菜单项（**本库条目模型**，不是 raw `MenuItem`）。
+   *
+   * 该序号是**分隔线**或越界时返回 `null`（官方 `getItem` 在这两种情况下也没有可返回的对象）。
+   */
+  getItem(index: number): MenuItemView | null;
+  /**
+   * 删掉第 `index` 条菜单项（官方 `removeItem`，本库按**序号**而不是 raw 实例）。
+   *
+   * 该序号不存在 / 是分隔线时返回 `false`（**不**抛错：这是一个「有没有这条」的查询，
+   * 与「资源已释放」是两件事——后者才抛 `BMAP_RESOURCE_DISPOSED`）。
+   */
+  removeItem(index: number): boolean;
+  /** 删掉第 `index` 条**分隔线**（官方 `removeSeparator(index)`）。不成立时 `false`。 */
+  removeSeparator(index: number): boolean;
+  /**
+   * 改第 `index` 条项的文字（官方 `MenuItem#setText`）。
+   *
+   * ⚠️ **不回写 `props.items` / `props.width` 等**：命令改的是 SDK 当前态，props 才是主模型。
+   * 要持久生效请改数据 API 的那条目（那会走重建）。命令面刻意不做「命令回写 props」——
+   * 那会让 props 与 SDK 当前值变成两个都能改的主模型。
+   */
+  setItemText(index: number, text: string): void;
+  /**
+   * 启用 / 禁用第 `index` 条项（官方 `MenuItem#enable()` / `#disable()`）。
+   *
+   * **这条修的是「`enable()` 永久不可达」**：此前只有「整菜单重建」能改 `disabled`，
+   * 而重建按 props 建 ⇒ 没有任何路径能**不重建**就解禁。要持久解禁请把 `disabled` 改成 `false`。
+   */
+  setItemEnabled(index: number, enabled: boolean): void;
+  /** 菜单根 DOM（官方 `getDom()`；菜单 DOM 由 SDK 自己渲染，本库不产出菜单 DOM）。 */
+  getDom(): HTMLElement;
+  /**
+   * 在上一次右键的位置弹出（官方 `show()`）。
+   *
+   * ⚠️ **不是**组件 `visible` 的反面：官方 `show()` 在没右键过时会弹在 (0,0)
+   * （真实 v4 实测：不抛错、直接派发 `open`）。`visible` 表达的是「菜单是否挂到目标上」，
+   * 走 attach/detach。两者是不同语义，因此这里给的是单独的方法名。
+   */
+  show(): void;
+  /** 收回弹层（官方 `hide()`）。同样是弹层语义，不是 `visible`。 */
+  hide(): void;
 }
 
 /** prop → 落地方式的完整映射。 */

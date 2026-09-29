@@ -33,6 +33,7 @@ import type {
   LocalSearchOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
+  ViewportOptions,
 } from "../driver/types/services";
 import { BMapError } from "../core/errors/BMapError";
 import { resolveInternalMapContext } from "./resolveMapContext";
@@ -54,11 +55,8 @@ export interface BMapLocalSearchRenderOptions {
   panel?: string | HTMLElement;
   selectFirstResult?: boolean;
   autoViewport?: boolean;
-  viewportOptions?: {
-    noAnimation?: boolean;
-    margins?: readonly number[];
-    zoomFactor?: number;
-  };
+  /** 视野计算选项（与路线服务共用官方 `ViewportOptions` 的同一份投影） */
+  viewportOptions?: ViewportOptions;
 }
 
 /**
@@ -98,7 +96,9 @@ interface ConstructionSnapshot {
     autoViewport: boolean | undefined;
     margins: string;
     zoomFactor: number | undefined;
-    noAnimation: boolean | undefined;
+    enableAnimation: boolean | undefined;
+    /** `callback` 走**身份**比较：它只有构造期一条路（官方无对应 setter），换函数就得重建实例。 */
+    callback: (() => void) | undefined;
   } | null;
 }
 
@@ -120,7 +120,8 @@ function sameConstruction(a: ConstructionSnapshot, b: ConstructionSnapshot): boo
     a.render.autoViewport === b.render.autoViewport &&
     a.render.margins === b.render.margins &&
     a.render.zoomFactor === b.render.zoomFactor &&
-    a.render.noAnimation === b.render.noAnimation
+    a.render.enableAnimation === b.render.enableAnimation &&
+    a.render.callback === b.render.callback
   );
 }
 
@@ -145,7 +146,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
             autoViewport: render.autoViewport,
             margins: JSON.stringify(toValue(render.viewportOptions?.margins) ?? []),
             zoomFactor: render.viewportOptions?.zoomFactor,
-            noAnimation: render.viewportOptions?.noAnimation,
+            enableAnimation: render.viewportOptions?.enableAnimation,
+            callback: render.viewportOptions?.callback,
           }
         : null,
     };

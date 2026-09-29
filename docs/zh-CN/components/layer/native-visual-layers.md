@@ -8,18 +8,45 @@
 import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 ```
 
-## 先选对组件（差别来自**官方有没有声明**）
+## 先选对组件（差别来自**官方声明了什么**、**弃用了什么**）
+
+::: warning `LineLayer` / `FillLayer`：官方已在 4.0.5 弃用底层的类
+`@baidumap/jsapi-v4-types@4.0.5` 给 `BMap.LineLayer` 与 `BMap.FillLayer` 各加了一条
+`@deprecated`，官方建议改用 4.0.5 新增的 `visualization` 命名空间里的 `PolylineLayer` /
+`PolygonLayer`。
+
+**两个组件继续可用，行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。官方建议的
+替代品 **`<PolylineLayer>` / `<PolygonLayer>` 本库现已提供**（#166）——但
+**弃用替代不是改名**：两者的 `style` 字段族不同、样式更新入口不同（见
+[PolygonLayer / PolylineLayer](./visualization-layers)）。需要这层语义的可以继续用
+`LineLayer` / `FillLayer`；`HeatmapLayer` / `TrackLineLayer` 不在官方弃用名单内。
+
+逐字段迁移表、七个无对应的旧选项、以及「什么时候该留下」的判断，见
+[弃用图层的迁移指引](./deprecated-layers-migration)。
+
+[`PointIconLayer`](../data#pointiconlayer) 同属这一批，但它的官方替代品 `<PointLayer>` 本库
+**已经提供**，那条见[数据组件](../data)。
+:::
 
 | 组件 | 官方类 | 能力面 | 适合 |
 | --- | --- | --- | --- |
-| `LineLayer` | `LineLayer`（4.0.4 有声明） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / 要素状态 | 轨迹、路网、连线 |
-| `FillLayer` | `FillLayer`（有声明） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色 |
-| `HeatmapLayer` | `Heatmap`（**无声明**，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
-| `TrackLineLayer` | `TrackLine`（**无声明**，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
+| `LineLayer` | `LineLayer`（有声明；4.0.5 起官方标 `@deprecated`，建议 `PolylineLayer`） | 数据 / 强类型样式 / 显隐 / 透明度 / 层级 / 缩放范围 / 拾取 / **要素状态** | 轨迹、路网、连线（**需要要素状态**时用它——新的 `PolylineLayer` 没有） |
+| `FillLayer` | `FillLayer`（同上；官方建议 `PolygonLayer`） | 同上（样式是 `FillLayerStyle`） | 面状统计、区域着色（同上） |
+| `HeatmapLayer` | `Heatmap`（4.0.5 补上类声明，扩展 API） | 数据 / 样式袋 / 显隐 | 点密度热力 |
+| `TrackLineLayer` | `TrackLine`（4.0.5 补上类声明，扩展 API） | 数据 / 显隐 / **播放命令面** / **进度观察** | 轨迹线（播放控制见文末） |
 
-「官方有没有声明」不是细节：**没有声明**的类只能按「运行时按需注入」处理，本库因此只暴露驱动已
-登记、且逐条核对过的入口。所以后两个组件**没有** `opacity` / `zIndex` / `minZoom` / `maxZoom`——
-官方不公开对应 setter，声明了也只是静默忽略（假支持）。
+**「类型包里有没有类声明」不是能力面的依据**。这四个类在 4.0.5 之后**全部有**类声明
+（`Heatmap` / `TrackLine` 是 4.0.5 才补上的，`LineLayer` / `FillLayer` 更早就有），
+但后两个（`HeatmapLayer` / `TrackLineLayer`）在浏览器里仍要等**可视化扩展异步注入**才能用——
+「有声明」说的是形状，「已注入」说的是可用性，两件事各判各的。live 探针实测
+`Heatmap` / `TrackLine` 属这一族，而 `LineLayer` / `FillLayer` / `PointIconLayer` /
+`PointShapeLayer` 的构造器与全套成员在 `BMap.Map` 就绪时**已经齐备**（settle `0ms`），
+即**随主包注入**、不等异步注入。
+
+「官方有没有弃用」也不改变这张表：能力矩阵里 `layer.line` / `layer.fill` 的 `status` 仍是
+`experimental`、`layer.point-icon` 仍是 `native`。`status` 的四个取值表达的是**能力从哪来**，
+没有一档表示「官方标了弃用」——为它新造一个状态会让 `supports()` / 能力矩阵全线改语义。弃用只记在
+[能力矩阵](../../contributing/capability-matrix)的说明列与上面那个提示框里。
 
 ## 统一语义：同名的 prop，四条写入路径
 
@@ -28,11 +55,30 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 | 变化 | 路径 | 是否重建 |
 | --- | --- | --- |
 | `data`（有值） | `setData()` | 否 |
-| `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例**（这一族没有公开的清空入口） | **是** |
+| `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例** | **是** |
 | `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时会把上一代的数据补齐到新实例** | 否 |
-| `style` | `setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」） | 否 |
+| `style` | `LineLayer` / `FillLayer`：`setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」）；`HeatmapLayer` / `TrackLineLayer`：`setOptions()`（4.0.5 声明的新入口） | 否 |
 | `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
-| `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
+| `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
+
+其中 `selectedIndex` / `popEvent` 是 #165 Class 3 补齐的（官方 `layer/LineLayer.d.ts:25` / `:70`、
+`FillLayer.d.ts:30` / `:75`）：此前 `selectedColor` 单独暴露而「哪一条被选中」没有入口，
+是一对**半接线**的选项；`popEvent` 控制拾取事件是否向上层冒泡。两者都是构造选项、官方没有
+就地改的入口，所以变化时换实例。
+
+> ⚠️ `popEvent` 的官方默认是 `true`，而 Vue 对缺省的 `Boolean` prop 会转成 `false`。
+> 组件因此显式写 `popEvent: undefined`，让「没传」真的是「没传」——否则每个不传它的用户
+> 都会被静默改成「事件不冒泡」。`FillLayer` 的 `border`、`PointIconLayer` 的 `userSizes` /
+> `visibility`、`PointLayer` 的 `mouseStyleChange` / `pickThrough` 是同一条理由。
+
+`data: null` 走「换实例」而不是调 `clearData()`：这是本库自己的取舍
+（ADR `2026-09-19-native-data-layer-components` 决策 8 / #106 评审 P1）——这一族的实例本就随摘除
+被丢弃，摘除前多打一次可能失败的调用没有收益。
+
+> 该取舍最初的理由是「这一族没有公开的清空入口」。4.0.5 之后这条**只对一半成立**：官方
+> `visualization/{PointLayer,ClusterLayer,Heatmap,TrackLine}.d.ts` 都声明了 `clearData()`，
+> `layer/{LineLayer,FillLayer}.d.ts` 仍然没有（`layer/` 里只有 `GeoJSONLayer` 声明了它）。
+> **行为不变**（四个组件仍然换实例），改变的只是这条说明的准确性。
 
 两条容易踩的语义：
 
@@ -41,15 +87,28 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 - **原地修改同一份 `data` 不会被感知**（数据按引用比较，与图层组件同一条口径）。请换引用，或换
   一份新的 `FeatureCollection`。
 
-## `visible` 有两种落地
+## `visible` 的落地
 
 | kind | 隐藏的语义 |
 | --- | --- |
-| `LineLayer` / `FillLayer`（有 `setVisible`） | `setVisible(false)`：**数据与实例都留着**，显示时不再下发数据 |
-| `HeatmapLayer` / `TrackLineLayer`（没有 `setVisible`） | **摘掉图层**；重新显示时**换一个新实例**并重新下发数据 |
+| 全部八类（含 `HeatmapLayer` / `TrackLineLayer`） | `setVisible(false)`：**数据与实例都留着**，重新显示是同一个实例的 `setVisible(true)` |
 
-后者的行为来自实测：`removeLayer` 之后的实例再也渲染不了（重挂不会让内容回来），所以本库不去猜
-「复用可行」。文档只承诺能做到的事。
+⚠️ 4.0.5（git `5ba67f4`）给 `visualization/` 的 `PointLayer` / `ClusterLayer` / `Heatmap` /
+`TrackLine` 补上了类声明，**四个类都逐条声明了 `setVisible` / `getVisible`**。在此之前本库按
+「4.0.4 没有类声明 ⇒ 不把成员当契约」只凭 live 取证放开了 `PointLayer` / `ClusterLayer` 的
+`setVisible`，`HeatmapLayer` / `TrackLineLayer` 因此走**摘挂**：隐藏 = `removeLayer`，
+重新显示 = 换一个新实例并重新下发数据。
+
+那个前提已经失效，显隐因此统一走 setter。对 `TrackLineLayer` 这一处的行为差别尤其明显：
+摘挂会**换实例**，而换实例会把播放进度与播放状态一起丢掉——「播放到一半切到后台再回来」会从头播。
+现在 `visible` 翻转不再换实例，播放位置扛得过隐藏往返。
+
+> 仍然**不**登记的成员（4.0.5 的声明里也确实没有，或没有消费者）：
+> 状态 API（`updateState` 一族）、缩放范围（`minZoom` / `maxZoom` 是**构造选项**而非字段级
+> setter）、`setRenderStage` / `setRefCenter`。`PointLayer` 另外**没有** `setOpacity`
+> （`ClusterLayer` / `Heatmap` / `TrackLine` 都有）。逐条依据见
+> `driver/jsapi-v4/native-layers.ts` 的 kind 表注释与
+> `native-layers.test.ts` 的「操作面与官方声明一致」。
 
 ## 拾取事件
 
@@ -215,8 +274,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | 场景 | 会发生什么 |
 | --- | --- |
 | 组件卸载 / 地图销毁 | 解绑监听 → `removeLayer()`；实例随摘除被丢弃（SDK 侧的数据也随之成为垃圾） |
-| `visible=false`（有四类专页声明的 kind） | 只调 `setVisible(false)`：数据与实例都留着 |
-| `visible=false`（扩展 API 的 kind） | 摘掉图层（重新可见时换新实例） |
+| `visible=false` | 只调 `setVisible(false)`：数据与实例都留着，**不摘图层**（八个 kind 一致，见上文） |
 
 > **这一族没有 `clearData`，所以「清空」不走清空入口。** 官方专页四类
 > （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）的公开方法里只有
@@ -229,9 +287,22 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 - **`data = null` 的代价是一次重建**：官方专页这一族没有公开的清空入口（见「释放策略」的注），
   因此「没有数据」只能用「换一个没有数据的实例」表达。它是离散动作、代价可控，但**不是零成本**；
   需要「临时不显示」的用 `visible`（不要用 `data = null`）。
-- **`HeatmapLayer` 的 `style` 是原样透传的键值袋**：官方扩展 API 只公开整袋 `setOptions`，没有可
-  核对的声明，本库不复刻一份没有依据的字段表。需要强类型样式请用 `LineLayer` / `FillLayer`。
+- **`HeatmapLayer` 的 `style` 是原样透传的键值袋，组件面刻意只暴露 `data` / `style` / `visible`**：
+  官方 `HeatmapOptions` 确实声明了 `gradient` / `size` / `unit` / `max` / `min` /
+  `weightField` 等一批构造选项（4.0.5 已补上类声明），但它们**没有逐字段的更新入口**：
+  官方 `Heatmap` 的成员表只为其中**两个**声明了字段级 setter —— `setGradient(gradient)` 与
+  **`setRadius(radius)`**（注意 setter 名是 `setRadius`、构造键名却是 `size`，按名字推导的
+  更新通道会直接打空）；`size` / `unit` / `min` / `max` / `weightField` 五个在真实运行时的
+  原型链上**任何一层都没有**对应方法（live 读数，2026-09-27，settle 之后）。而 `style` 这个
+  整袋口（官方 `setOptions`）**已经能到达全部六个**——再开六个逐项 prop 等于给同一个值开两条
+  通道，其中一条还没有独立的存在理由。需要强类型样式请用 `LineLayer` / `FillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
 - **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）均由原生图层提供，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
+- **`LineLayer` / `FillLayer` 底层的官方类已被弃用**（官方 4.0.5，建议 `PolylineLayer` /
+  `PolygonLayer`）。替代组件本库**已提供**（见
+  [PolygonLayer / PolylineLayer](./visualization-layers)），但本库**不提供指向新名字的别名垫片**
+  ——两个名字的 `style` 字段族与更新语义都不同，别名只会让人更难判断自己拿到的是哪一套语义。
+  **一个实质差异**：旧的这两个组件有**要素状态**命令面，新的两个**没有**（官方在
+  `PolygonLayer` / `PolylineLayer` 上没有声明状态 API），依赖要素状态的用法**留在旧组件**。
 - **`MVTLayer`**：MVT 矢量瓦片图层，能力面 `layer.mvt`；见「[MVTLayer](./mvt-layer.md)」。

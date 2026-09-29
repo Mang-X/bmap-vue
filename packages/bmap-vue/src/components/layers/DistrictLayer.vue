@@ -9,15 +9,16 @@
  * 行为依据（`DistrictLayer` / `DistrictLayerOptions`）：
  * - 4.0 的 `DistrictLayer` **没有任何字段级 setter**（`strokeColor` / `fillColor` / `kind` 全是
  *   构造选项）⇒ 这些 props 变化时会**重建图层**（此前是静默不生效，见 PR 的迁移影响表）；
- * - `viewport` 在 4.0 的官方声明里叫 `autoViewport`，Driver 做显式改名（不依赖未声明的别名）；
+ * - `autoViewport` 直接用官方的构造选项名（#165 Class 1 之前本库的 prop 叫 `viewport`、
+ *   由 Driver 别名改名才落到官方键上；现在公开面就是官方名，别名已删）；
  * - 显隐走挂载状态（`addLayer` / `removeLayer`）。
  *
- * 事件（`click` / `mouseover` / `mouseout`）**保留**：4.0.4 的 `DistrictLayer` 声明里没有
+ * 事件（`click` / `mouseover` / `mouseout`）**保留**：4.0.5 的 `DistrictLayer` 声明里没有
  * `addEventListener`，但既有实现、文档与官方 demo 都依赖这三个事件，删除它们是与本 issue
  * 无关的破坏性变更（依据与取舍见 ADR「已知限制」）。
  */
 import { useLayerResource } from "../../core/composables/useLayerResource";
-import { pickLayerOptions } from "../../core/layers/LayerSpec";
+import { forwardCallback, pickLayerOptions } from "../../core/layers/LayerSpec";
 import type { DistrictTypeValue } from "../../types/components";
 
 export type DistrictType = DistrictTypeValue;
@@ -34,10 +35,27 @@ export interface DistrictLayerProps {
   strokeColor?: string;
   strokeWeight?: number;
   strokeOpacity?: number;
-  /** 是否自动聚焦地图中心到该行政区。 */
-  viewport?: boolean;
+  /**
+   * 是否自动调整视野以适应行政区边界范围（官方 `DistrictLayerOptions.autoViewport`，
+   * 官方 d.ts 标 `@default false`）。
+   *
+   * #165 Class 1 之前这里叫 `viewport`，由 Driver 做别名改名（`aliases: { viewport:
+   * "autoViewport" }`）才落到官方键上——那是**已知的命名缺口**，不是有意的概念区分。
+   * 现在公开 prop 直接叫官方名，别名**一并删除**（#165 §3.6 不留兼容别名）。
+   */
+  autoViewport?: boolean;
   /** 掩膜内的行政区代码（4.0 构造选项 `adcode`）。 */
   adcode?: string;
+  /**
+   * 行政区边界数据请求完成并绘制到地图后的回调
+   * （官方 `DistrictLayerOptions.onComplete`，`layer/DistrictLayer.d.ts:180`）。
+   *
+   * 4.0 的 `DistrictLayer` **没有** `dataparsed` 事件面（这批图层的事件只有 `click` /
+   * `mouseover` / `mouseout`），官方给的就只有这个构造选项回调——「边界什么时候画完」在本组件里
+   * 唯一的官方入口是它。经 `forwardCallback` 包一层：SDK 手上的函数转发到**当前** prop，
+   * 因此改这个回调不会重建图层。
+   */
+  onComplete?: () => void;
 }
 
 const props = withDefaults(defineProps<DistrictLayerProps>(), {
@@ -48,7 +66,7 @@ const props = withDefaults(defineProps<DistrictLayerProps>(), {
   strokeWeight: 1,
   strokeOpacity: 1,
   strokeColor: "#231cf8",
-  viewport: false,
+  autoViewport: false,
 });
 
 const emit = defineEmits<{
@@ -70,6 +88,12 @@ useLayerResource<DistrictLayerProps>(props, {
       // strokeOpacity），因此这里只表态 `visible`。
       options: {
         name: `(${p.name})`,
+        // 回调型 option 经 `forwardCallback` 包一层：SDK 手上的函数**转发到当前 prop**，
+        // 因此换回调不重建图层（口径同 XYZLayer / WMTSLayer 的 `xTemplate` 等）。
+        // `undefined` 时**不放这个键**——给 SDK 一个 `undefined` 回调与「没传」不等价。
+        ...(p.onComplete === undefined
+          ? {}
+          : { onComplete: forwardCallback(() => p.onComplete) }),
         ...pickLayerOptions(p, [
           "kind",
           "fillColor",
@@ -77,7 +101,7 @@ useLayerResource<DistrictLayerProps>(props, {
           "strokeColor",
           "strokeWeight",
           "strokeOpacity",
-          "viewport",
+          "autoViewport",
           "adcode",
         ]),
       },

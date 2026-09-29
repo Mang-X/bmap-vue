@@ -22,7 +22,7 @@
  */
 import { watch, type ShallowRef } from "vue";
 import type { ControlHandle } from "../../driver/types/handles";
-import type { ControlOptions } from "../../driver/types/controls";
+import type { ControlDriver, ControlOptions } from "../../driver/types/controls";
 import type { OverlayTarget } from "../../driver/types/overlays";
 import { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
@@ -34,13 +34,20 @@ import {
   type SdkResourceStatus,
 } from "../composables/useSdkResource";
 import { changedOptionKeys, optionKey, optionSnapshot, type OptionSnapshot } from "./optionKey";
-import type { ControlBaseProps, ControlSpec } from "./spec";
+import type { ControlBaseProps, ControlExposeShape, ControlSpec } from "./spec";
 
 export interface UseControlResourceResult {
   /** 当前控件句柄（未创建 / 已重建窗口内为 `null`）。 */
   readonly resource: Readonly<ShallowRef<ControlHandle | null>>;
   /** 实例状态（`idle` / `creating` / `ready` / `error` / `disposing` / `disposed`）。 */
   readonly status: Readonly<ShallowRef<SdkResourceStatus>>;
+  /**
+   * 声明了 `spec.expose` 时的**命令面**；未声明时为 `null`（issue #168 item 1）。
+   *
+   * 为 `null` 而不是空对象：命令面是「有这个能力才有」，凭空给一个空对象会让
+   * 「组件有 ref」看起来像「它有命令」。逐条口径见 `core/controls/controlCommands.ts`。
+   */
+  readonly commands: Record<string, unknown> | null;
 }
 
 const mapTarget = (context: MapReadyContext): OverlayTarget => ({
@@ -53,7 +60,7 @@ const mapTarget = (context: MapReadyContext): OverlayTarget => ({
  * `createCustomControl`（它要的是 DOM 工厂，不是构造选项）。
  */
 function createDefault<Props extends ControlBaseProps>(
-  spec: ControlSpec<Props>,
+  spec: ControlSpec<Props, unknown>,
   context: MapReadyContext,
   props: Readonly<Props>,
 ): ControlHandle {
@@ -76,9 +83,9 @@ function createDefault<Props extends ControlBaseProps>(
   return controls.create(spec.kind, options);
 }
 
-export function useControlResource<Props extends ControlBaseProps>(
+export function useControlResource<Props extends ControlBaseProps, Expose = ControlExposeShape>(
   props: Readonly<Props>,
-  controlSpec: ControlSpec<Props>,
+  controlSpec: ControlSpec<Props, Expose>,
 ): UseControlResourceResult {
   const ctx = useRequiredMapContext();
   /**
@@ -98,6 +105,14 @@ export function useControlResource<Props extends ControlBaseProps>(
   const warnedUnsupported = new Set<string>();
   /** `useSdkResource` 的 `replace`；声明在 spec 之前，供 `mount` 的收敛路径使用。 */
   let replaceRef: (() => Promise<void>) | null = null;
+  /**
+   * **当前** client 的 `controls` Facet（命令面用）。
+   *
+   * 在 `mount` 里现取而不是在 `create` 时抓一次：Client 本身也可能被换（Provider 重试 /
+   * 重连），而 `replace()` 会重新走 `mount` —— 因此每次 `mount` 覆盖它，句柄与 driver 就永远同代。
+   * 命令面是**同步**的，不能 await `ctx.whenReady()`（那会把每条命令变成一个 Promise）。
+   */
+  let liveDriver: ControlDriver | undefined;
 
   const spec: SdkResourceSpec<Props, ControlHandle, MapReadyContext> = {
     type: `control:${controlSpec.kind}`,
@@ -105,7 +120,7 @@ export function useControlResource<Props extends ControlBaseProps>(
     create({ context, props: current, scope }) {
       const handle =
         controlSpec.create?.({ context, props: current, scope }) ??
-        createDefault(controlSpec, context, current);
+        createDefault(controlSpec as ControlSpec<Props, unknown>, context, current);
       createdWith = optionSnapshot(controlSpec.options(current));
       return handle;
     },
@@ -115,6 +130,8 @@ export function useControlResource<Props extends ControlBaseProps>(
       // 用户改过的 props 必须在这里被补写，否则它永远不会再被 diff 检测到。
       applied = createdWith ?? optionSnapshot(controlSpec.options(current));
       createdWith = null;
+      // 命令面的 driver 在此现取（每次 mount 覆盖 ⇒ 与句柄同代），见 `liveDriver` 的注释。
+      liveDriver = context.client.driver.controls;
 
       if (controlSpec.mount) controlSpec.mount({ context, resource, props: current, scope });
       else context.client.driver.controls.add(mapTarget(context), resource);
@@ -315,5 +332,31 @@ export function useControlResource<Props extends ControlBaseProps>(
   return {
     resource,
     status,
+    // 命令面（issue #168 item 1）。不声明 `expose` 的 spec 得到 `null` 而不是空对象——
+    // 理由见 `ControlExposeShape` 与 `core/controls/controlCommands.ts` 的文件头。
+    commands:
+      (controlSpec.expose?.({
+        session() {
+          const handle = resource.value;
+          // `resource.value` 由 `useSdkResource` 在「未创建 / 重建窗口 / 已释放」三种情形下
+          // 置 `null`（`replace()` 与 `dispose()` 都会），因此这一处 null 检查就是全部判据——
+          // 不需要另维护一个「已释放」标记，也就不会与真正的生命周期分叉。
+          if (!handle) return null;
+          // driver 在 `mount` 里现取：命令面是**同步**的，不能 await `ctx.whenReady()`
+          // （那会把每次命令变成一次 Promise）。`driver` 存的是**当前** client 的 Facet，
+          // 与 `handle` 一起在会话里求值——重建时两者同代，不存在「driver 是新的、句柄是旧的」。
+          // `handle` 非空 ⟹ 已经 mount 过 ⟹ `liveDriver` 一定已赋值；取不到即属不变式破损，
+          // 因此**显式失败**而不是给一个 `undefined` driver 让下游崩在一个无关的位置。
+          if (!liveDriver) {
+            throw new BMapError(
+              "BMAP_RESOURCE_DISPOSED",
+              `control:${controlSpec.kind}：控件句柄存在但 driver 尚未就绪，命令面本次被拒绝`,
+              { component: `control:${controlSpec.kind}` },
+            );
+          }
+          return { driver: liveDriver, handle };
+        },
+        component: `control:${controlSpec.kind}`,
+      }) as Record<string, unknown> | undefined) ?? null,
   };
 }

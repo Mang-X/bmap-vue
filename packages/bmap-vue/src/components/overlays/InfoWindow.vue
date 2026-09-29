@@ -42,7 +42,7 @@ const emit = defineEmits<InfoWindowEmits>();
 const emitDynamic = emit as unknown as (name: string, payload?: unknown) => void;
 const ctx = useRequiredMapContext();
 
-const { host } = useInfoWindow(props, {
+const { host, commands } = useInfoWindow(props, {
   emit: emitDynamic,
   component: "InfoWindow",
   /** 失败统一走组件既有的 `resource:error` 诊断通道（与其它覆盖物一致）。 */
@@ -54,6 +54,18 @@ const { host } = useInfoWindow(props, {
     }
   },
 });
+
+/**
+ * 命令面（#165 Class 3 / TASK 2c）：`getTitle` / `getContent` / `isOpen` / `getOffset` /
+ * `maximize` / `restore`。
+ *
+ * 前四个是**读回**（`open` prop 表达的是意图，官方只有实例上的 `isOpen()` 才回答
+ * 「现在真的开着吗」）；后两个是**动作**——`enableMaximize` 只是「允许最大化」，不触发它。
+ *
+ * 释放 / 未就绪 / 已被同图另一个气泡顶掉时**显式抛 `BMAP_RESOURCE_DISPOSED`**（见
+ * `useInfoWindow.requireInfoWindow` 的逐条依据），绝不静默 no-op。
+ */
+defineExpose(commands);
 </script>
 
 <template>

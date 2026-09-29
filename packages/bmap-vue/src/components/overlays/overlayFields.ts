@@ -31,6 +31,28 @@ export const PATH_TOGGLE_FIELDS = {
 } as const satisfies Record<string, OverlayFieldUpdate>;
 
 /**
+ * `zIndex`：**就地更新**（issue #165 Class 3 / TASK 0）。
+ *
+ * 官方 4.0.5 在六个图形类上都有 `setZIndex(zIndex: number): void`（`Polyline` / `Polygon` /
+ * `Rectangle` / `Circle` / `BezierCurve` / `Prism`），描述符里也已经登记成
+ * `mutateBy("setZIndex")`——此前缺的是**组件面**（`types/components.ts` 的 `PathShapeProps`
+ * 没有这个键），于是整族的层级更新一次都没被走到过。
+ *
+ * 单独一张表而不是并进 `PATH_STROKE_FIELDS`：层级既不是描边也不是填充，它与
+ * `enableMassClear` / `visible` 同属「覆盖物自身的一档属性」，而六个图形类全部 extends
+ * `PathShapeProps`。`Prism` / `GroundOverlay` 的 props 不 extends 那一组（它们有各自独立的
+ * 样式面），因此各自内联同一个键——「同一个键、同一条更新路径」由
+ * `tests/behavior/overlay-zindex.test.ts` 逐个组件钉住。
+ *
+ * ⚠️ **`CustomOverlay` 不在此列**：官方 `CustomOverlay` 没有 `setZIndex`，它的 `zIndex` 是
+ * 构造期属性（描述符 `recreate`）。别把「分类表里有这个键」读成「实例上有这个 setter」。
+ */
+export const PATH_ZINDEX_FIELD = { zIndex: "options" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
  * `enableClicking`：**构造期属性**（官方 4.0 的图形族只有构造选项，没有成对开关）。
  *
  * 单独一张表而不是并进 `PATH_TOGGLE_FIELDS`：它走的是 `recreate` 这条完全不同的路径，
@@ -40,6 +62,61 @@ export const PATH_CLICKING_FIELD = { enableClicking: "recreate" } as const satis
   string,
   OverlayFieldUpdate
 >;
+
+/* ------------------------------------- issue #165 图形族补齐：构造期选项的字段表
+ *
+ * 四张表，**按「哪些类官方声明了它」分**，而不是「整族一起加」。逐条依据见
+ * `driver/types/overlays.ts` 的同款 `PATH_CTOR_*` 表。
+ */
+
+/** `coordType`：官方在 Polyline / Polygon / Rectangle / Circle 四类上声明。 */
+export const PATH_COORD_TYPE_FIELD = { coordType: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/** `dashArray`：官方在 Polyline / Polygon / Rectangle / Circle / BezierCurve **五个**类上都声明。 */
+export const PATH_DASH_ARRAY_FIELD = { dashArray: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
+ * `linkRight`：官方在 Polyline / Polygon / Rectangle **三个**类上声明。
+ *
+ * ⚠️ **没有** Circle 与 BezierCurve——`CircleOptions` / `BezierCurveOptions` 里
+ * 一个 `linkRight` 都没有（圆形没有「跨经度的路径」，贝塞尔曲线的跨经度行为由控制点决定）。
+ */
+export const PATH_LINK_RIGHT_FIELD = { linkRight: "recreate" } as const satisfies Record<
+  string,
+  OverlayFieldUpdate
+>;
+
+/**
+ * `strokeLineCap` / `strokeLineJoin`：官方**只在** Polyline / Polygon 两类上声明。
+ *
+ * 为什么不并进 `PATH_STROKE_FIELDS`：那张表是「四类共有的**就地更新**描边四件套」，
+ * 而这两项是**构造期**（官方没有 `setLineCap` / `setLineJoin`）**且只有两类有**——
+ * 两个维度都不同，并进去会让「同表即同策略」这条性质失效。
+ */
+export const PATH_LINE_JOINT_FIELDS = {
+  strokeLineCap: "recreate",
+  strokeLineJoin: "recreate",
+} as const satisfies Record<string, OverlayFieldUpdate>;
+
+/**
+ * `geodesic` / `clip` / `icons` / `strokeTexture`：**Polyline 独有**的四个构造期选项。
+ *
+ * 官方 `PolylineOptions` 独有（其余四类的 options 里都没有），因此**没有**抽成共享表——
+ * 一张只被一个 spec 展开的「共享表」正是 `overlayFields.ts` 文件头禁止的那种
+ * （「只有在**多个** kind 真的同形时才放进本文件」）。
+ */
+export const POLYLINE_ONLY_CTOR_FIELDS = {
+  geodesic: "recreate",
+  clip: "recreate",
+  icons: "recreate",
+  strokeTexture: "recreate",
+} as const satisfies Record<string, OverlayFieldUpdate>;
 
 /**
  * 显隐字段。

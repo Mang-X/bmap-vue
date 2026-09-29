@@ -33,7 +33,7 @@ import type {
  * - `geojson` / `dom`：数据驱动图层（`setData` 是一等公民）；
  * - `mvt`：MVT 矢量瓦片（官方 `MVTLayer`，tile 家族 + 要素状态五操作，见 `LayerOperation`）。
  *
- * `district` / `tile` / `traffic` / `geojson` / `mvt` 在 `@baidumap/jsapi-v4-types@4.0.4`
+ * `district` / `tile` / `traffic` / `geojson` / `mvt` 在 `@baidumap/jsapi-v4-types@4.0.5`
  * 里**有**类声明；`panorama-coverage` **没有**（只能按结构探测，见 Driver 的 `declared` 口径）。
  */
 export type LayerKind =
@@ -84,7 +84,7 @@ export const LAYER_CTOR_SLOTS = [
  * 或整袋 setter（`DOMLayer` 的 `setStyleOptions({ zIndex })`）——后两种都由 Driver 的
  * `setOptions` 吸收，上层只写「更新这个槽位」。
  *
- * 这些操作是**逐成员核对** `@baidumap/jsapi-v4-types@4.0.4` 的相关图层类之后剩下的
+ * 这些操作是**逐成员核对** `@baidumap/jsapi-v4-types@4.0.5` 的相关图层类之后剩下的
  * 大部分：官方在这批图层上**没有**公开 `setOpacity` / `setMinZoom` / `setMaxZoom`，
  * 因此统一槽位里的 `opacity` / `minZoom` / `maxZoom` 变更在本库一律走
  * **重建**，而不是发明一个「设置生效了」的假象。

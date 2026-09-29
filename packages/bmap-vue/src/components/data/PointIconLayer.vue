@@ -2,6 +2,28 @@
 /**
  * PointIconLayer —— 批量图标点（**单个** SDK 资源，M6-POINT-CLUSTER / issue #35）
  *
+ * ## ⚠️ 官方已在 4.0.5 弃用 `BMap.PointIconLayer`
+ *
+ * `@baidumap/jsapi-v4-types@4.0.5` 给 `PointIconLayer` 这个类加了一条
+ * `@deprecated 已废弃，建议使用 {@link PointLayer}（图标模式）替代`。
+ *
+ * **本组件的处置**（#165 决策，与 `LineLayer` / `FillLayer` 一致）：保留组件、保留行为，
+ * **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim），把弃用讲清楚：开发期告警一次
+ * （`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放在模块级）+ 类型层 `@deprecated` + 文档。
+ *
+ * ⚠️ 与线 / 面两个不同：官方建议的替代品（`PointLayer`）本库**已经提供**，所以这一条
+ * **现在就可以迁移**（另两个的替代组件见 #166）。但 `<PointLayer>` 属**扩展 API**、被标为
+ * `experimental`（可视化实现按需异步注入），且它的样式字段是**扁平**的（`icon` / `width` /
+ * `height` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
+ *
+ * **不是所有用法都该迁**：`visualization/` 家族**没有** Feature State（要素状态）API
+ * （`visualization/*.d.ts` 逐文件 0 命中；live 实测 `PointLayer` 上那五个成员也全部缺席），
+ * 而本组件 expose 的 `featureState` 是官方声明、live 实测在位的。⇒ 依赖要素状态的用法
+ * **继续用 `<PointIconLayer>`**。另有 `isFixed` / `visibility` / `iconObj` / `userSizes` /
+ * `sizes` 在替代品上**无对应**，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` / 新 `false`）。
+ * 逐字段迁移表与取舍见
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
+ *
  * 落在官方 `BMap.PointIconLayer`（**两处都声明**：类型包有完整类声明，官方 React 参考实现也有同名组件）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
  * `useNativeLayerResource`（#36 抽出的共享内核，五个原生数据图层共用一份实现）：
  * 本组件只声明「构造期选项 / 样式袋 / 数据载荷 / 事件」四件事，不再自持第二套状态机。
@@ -17,6 +39,7 @@ import { onUnmounted } from "vue";
 import { createDevWarnOnce, devWarn } from "../../core/logger";
 import { useNativeLayerResource } from "../../core/composables/useNativeLayerResource";
 import { layerDataIdentity, stableLayerValue } from "../../core/layers/LayerSpec";
+import { warnDeprecatedLayerOnce } from "../../core/layers/deprecatedLayerWarning";
 import { resolveFeaturePick } from "../../core/layers/nativeLayerPick";
 import { projectLayerStyle } from "../../core/layers/nativeLayerStyle";
 import { adaptPoints, resolveIdField, type AdaptedPoints } from "../../core/data/geojsonAdapter";
@@ -26,8 +49,19 @@ import { createItemIndex, type ItemIndex } from "../../core/data/itemIndex";
 import type { PointPick, PointIconLayerProps } from "../../types/components";
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
+/** 组件**创建**时（不是模块 import 时）报一次官方弃用；生产环境静默。 */
+warnDeprecatedLayerOnce(
+  "PointIconLayer:deprecated-class",
+  "[PointIconLayer] 官方 `BMap.PointIconLayer` 已在 @baidumap/jsapi-v4-types@4.0.5 标记 @deprecated，" +
+    "官方建议改用 `BMap.PointLayer`（图标模式，4.0.5 新增的 visualization 命名空间）。" +
+    "本组件继续可用、行为不变；替代组件 `<PointLayer>` 本库**已提供**（同一批里唯一的" +
+    "「官方推荐的替代品已经存在」的情形），迁移时注意它的样式字段是扁平的而不是 style 袋。" +
+    "逐字段迁移表见 docs/zh-CN/components/layer/deprecated-layers-migration.md",
+);
+
 /** 本组件落地的原生图层种类。 */
 const LAYER_KIND: NativeLayerKind = "point-icon";
+/** 组件标签名（告警前缀 / 资源账本标签）。 */
 const LABEL = "PointIconLayer";
 
 const props = withDefaults(defineProps<PointIconLayerProps<Item>>(), {
@@ -36,6 +70,12 @@ const props = withDefaults(defineProps<PointIconLayerProps<Item>>(), {
   // 与官方默认值（false）**不同**，刻意如此：本组件的核心交互是 `item-click`，
   // 默认关掉拾取等于「给了事件但点不出来」。要省开销时显式传 `false`。
   enablePicked: true,
+  // ⚠️ 下面两个**刻意写 `undefined`**（口径同 `FillLayerProps.border`）：官方默认值分别是
+  // `userSizes: true` 与 `visibility: true`，而 Vue 对缺省的 `Boolean` 会转成 `false`——
+  // 写 `false` 默认值会让每个不传它们的用户都隐式偏离官方默认（`userSizes` 会从「用 sizes」
+  // 翻成「用 width/height」而覆盖掉 `sizes`；`visibility` 会把所有图标都关掉）。
+  userSizes: undefined,
+  visibility: undefined,
 });
 
 const emit = defineEmits<{
@@ -121,6 +161,15 @@ function styleValue(): Record<string, unknown> | undefined {
     if (props.offset !== undefined) style.offset = props.offset;
     if (props.scale !== undefined) style.scale = props.scale;
     if (props.rotation !== undefined) style.rotation = props.rotation;
+    // #165 Class 3 / TASK 2：官方 `PointIconStyle` 有 12 个字段，此前只暴露了 7 个。
+    // 缺的这 5 个（`layer/PointIconLayer.d.ts:101` iconObj / `:105` visibility /
+    // `:108` sizes / `:117` userSizes / `:127` opacity）全部是**样式字段** ⇒ 就地更新。
+    if (props.iconObj !== undefined) style.iconObj = props.iconObj;
+    if (props.visibility !== undefined) style.visibility = props.visibility;
+    if (props.sizes !== undefined) style.sizes = props.sizes;
+    if (props.userSizes !== undefined) style.userSizes = props.userSizes;
+    // 逐要素 opacity（与图层级那个 `opacity` 走不同入口：那个进 `setOpacity`）
+    if (props.featureOpacity !== undefined) style.opacity = props.featureOpacity;
     return Object.keys(style).length > 0 ? style : undefined;
   });
 }

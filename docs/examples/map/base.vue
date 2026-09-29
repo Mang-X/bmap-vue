@@ -1,7 +1,7 @@
 <template>
   <div>
     <label>
-      <input type="checkbox" v-model="mapSetting.enableScrollWheelZoom" />
+      <input type="checkbox" v-model="mapSetting.enableWheelZoom" />
       鼠标缩放
     </label>
     <br />
@@ -16,7 +16,7 @@
     </label>
     <br />
     <label>
-      <input type="checkbox" v-model="mapSetting.enablePinchToZoom" />
+      <input type="checkbox" v-model="mapSetting.enablePinchZoom" />
       双指缩放地图
     </label>
     <br />
@@ -26,7 +26,7 @@
     </label>
     <br />
     <label>
-      <input type="checkbox" v-model="mapSetting.enableDoubleClickZoom" />
+      <input type="checkbox" v-model="mapSetting.enableDblclickZoom" />
       双击缩放，左键双击放大、右键双击缩小
     </label>
     <br />
@@ -45,7 +45,9 @@
     <select class="mySelect" name="" id="" v-model="type">
       <option value="BMAP_NORMAL_MAP">常规地图 BMAP_NORMAL_MAP</option>
       <option value="BMAP_EARTH_MAP">地球模式 BMAP_EARTH_MAP</option>
-      <option value="BMAP_SATELLITE_MAP">卫星图 BMAP_EARTH_MAP</option>
+      <option value="BMAP_SATELLITE_MAP">卫星图 BMAP_SATELLITE_MAP</option>
+      <!-- #165 Class 1：混合图此前被静默降级成普通图，现在走上真映射 -->
+      <option value="BMAP_HYBRID_MAP">混合图（卫星 + 路网）BMAP_HYBRID_MAP</option>
     </select>
     <br />
     <br />
@@ -62,11 +64,11 @@
       :mapType="type"
       :enableDragging="mapSetting.enableDragging"
       :enableInertialDragging="mapSetting.enableInertialDragging"
-      :enableScrollWheelZoom="mapSetting.enableScrollWheelZoom"
+      :enableWheelZoom="mapSetting.enableWheelZoom"
       :enableContinuousZoom="mapSetting.enableContinuousZoom"
-      :enableDoubleClickZoom="mapSetting.enableDoubleClickZoom"
+      :enableDblclickZoom="mapSetting.enableDblclickZoom"
       :enableKeyboard="mapSetting.enableKeyboard"
-      :enablePinchToZoom="mapSetting.enablePinchToZoom"
+      :enablePinchZoom="mapSetting.enablePinchZoom"
     >
       <!--
         JSAPI 4.0 没有 `<Map enableTraffic>`：路况收敛成 TrafficLayer。
@@ -85,12 +87,12 @@ const showTraffic = ref(false);
 const mapSetting = ref<MapProps>({
   enableDragging: true,
   enableInertialDragging: true,
-  enableScrollWheelZoom: false,
+  enableWheelZoom: false,
   enableContinuousZoom: true,
-  enableResizeOnCenter: true,
-  enableDoubleClickZoom: false,
+  fixCenterWhenResize: true,
+  enableDblclickZoom: false,
   enableKeyboard: true,
-  enablePinchToZoom: true,
+  enablePinchZoom: true,
   enableAutoResize: true,
 });
 </script>

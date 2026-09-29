@@ -68,6 +68,9 @@ export type {
   LocalSearchOptions,
   LocalSearchPoi,
   LocalSearchRenderOptions,
+  // 官方 `ViewportOptions` 的领域投影：`LocalSearchRenderOptions` / `RouteRenderOptions` 的
+  // `viewportOptions` 都是这个类型，消费方要给自己的视野选项命名就得能 import（#160 口径）。
+  ViewportOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
   RidingRouteOptions,
@@ -98,13 +101,16 @@ export type {
 } from "../driver/types/services";
 
 // —— 地理编码 / 定位
-export type { GeolocationAddressInfo } from "../driver/types/services";
+// `GeolocationOptions` 是 `BMapGeolocationOptions`（= 官方 `PositionOptions`）指向的**同一个类型**，
+// 而 `useGeolocation` 的入参签名在公开面上：消费方要为自己那次定位的选项**命名**就得能 import 它。
+export type { GeolocationAddressInfo, GeolocationOptions } from "../driver/types/services";
 
 // —— 策略常量（值与类型同名）：`import { DrivingPolicy } from "bmap-vue/composables"`
 export { DrivingPolicy, IntercityPolicy, TransitPolicy, TransitVehiclePolicy } from "../driver/types/services";
 
 // —— 全景
-export type { PanoramaDataInfo, PanoramaDriver } from "../driver/types/panorama";
+// `PanoramaLink` 是 `linksChange` 的载荷 / `getLinks()` 的返回类型（issue #165 Class 3 / TASK 5）
+export type { PanoramaDataInfo, PanoramaDriver, PanoramaLink } from "../driver/types/panorama";
 
 // —— 坐标与句柄
 export type { Bounds, GeometryDriver, Pixel, Point, Size } from "../driver/types/geometry";
@@ -122,12 +128,53 @@ export type {
   CapabilityStatus,
 } from "../driver/capability/catalog";
 export type { ControlDriver } from "../driver/types/controls";
+// 控件命令面（issue #168 item 1）：ControlDriver 的公开成员，见 advanced.ts 的同款说明。
+export type {
+  CityListCommandApi,
+  LocationAddressComponents,
+  LocationCommandApi,
+} from "../driver/types/controls";
 export type { ControlKind, ControlOptions, ControlOptionStatus, CopyrightEntry } from "../driver/types/controls";
 export type { DriverEvent, EventDriver, MapLoadEvent, MapMouseEvent, MapResizeEvent, MapTypeChangeEvent } from "../driver/types/events";
 export type { LayerDriver, LayerKind, LayerOperation, LayerData, LayerSurface, LayerCreateOptions, LayerCtorSlot } from "../driver/types/layers";
 export type { NativeLayerFeatureKeys, NativeLayerFeatureState, NativeLayerFeatureStateMap } from "../driver/types/native-layers";
-export type { MapDriver, MapInteraction, MapStyleInput, MapType, MapView, InitialMapOptions } from "../driver/types/map";
-export type { OverlayDriver, OverlayTarget, OverlayPropertyPolicy, MarkerIconInput, MarkerOptions, PathOptions, InfoWindowOptions, CustomOverlayOptions, LabelOptions } from "../driver/types/overlays";
+export type {
+  MapDriver,
+  MapInteraction,
+  MapStyleInput,
+  MapType,
+  MapView,
+  InitialMapOptions,
+  // 同上：`MapCommands.getViewport` / `MapDriver.getViewport` 的返回类型与 `flyTo` 的
+  // 选项投影出现在本出口可达的公开签名里（`Viewport` 同时是 `MapCommands` 的返回类型）
+  Viewport,
+  FlyToOptions,
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
+  ViewCommandOptions,
+  SetZoomOptions,
+  PanToOptions,
+} from "../driver/types/map";
+// `CircleReadBackApi` / `MarkerReadBackApi` / `InfoWindowReadBackApi` / `PathReadBackApi` /
+// `ContextMenuCommandApi` / `MenuItemView` 是 issue #165 Class 3 的命令面类型：
+// `OverlayDriver` 的方法签名**逐个**引用它们，不导出会被 `ae-forgotten-export` 点名
+// （它们是消费方标注 handler 参数时需要的类型，不是内部实现细节）。
+export type {
+  OverlayDriver,
+  OverlayTarget,
+  OverlayPropertyPolicy,
+  MarkerIconInput,
+  MarkerOptions,
+  PathOptions,
+  InfoWindowOptions,
+  CustomOverlayOptions,
+  LabelOptions,
+  CircleReadBackApi,
+  ContextMenuCommandApi,
+  InfoWindowReadBackApi,
+  MarkerReadBackApi,
+  MenuItemView,
+  PathReadBackApi,
+} from "../driver/types/overlays";
 export type { ServiceDriver } from "../driver/types/services";
 export type { ViewAnimationCancelOutcome } from "../driver/types/map";
 

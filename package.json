@@ -34,6 +34,8 @@
     "probe:plugin-runtime": "node --experimental-strip-types scripts/probe-plugin-runtime.mts",
     "probe:plugin-load-channel": "node --experimental-strip-types scripts/probe-plugin-load-channel.mts",
     "probe:layer-events": "node --experimental-strip-types scripts/probe-layer-events.mts",
+    "probe:165-feature-layer": "node --experimental-strip-types scripts/probe-165-feature-layer.mts",
+    "probe:165-level-effect": "node --experimental-strip-types scripts/probe-165-level-effect.mts",
     "probe:layer-detached": "node --experimental-strip-types scripts/probe-layer-detached.mts",
     "build:package": "node --experimental-strip-types scripts/build-package.mts",
     "typecheck:package": "pnpm exec vue-tsc -p packages/bmap-vue/tsconfig.build.json",

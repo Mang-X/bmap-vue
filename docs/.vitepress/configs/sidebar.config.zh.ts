@@ -211,6 +211,18 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           text: "线 / 面 / 热力 / 轨迹线（+ 要素状态）",
           link: "native-visual-layers",
         },
+        {
+          text: "PolygonLayer / PolylineLayer（4.0.5 替代品）",
+          link: "visualization-layers",
+        },
+        {
+          text: "TextLayer（批量文字标注）",
+          link: "text-layer",
+        },
+        {
+          text: "弃用图层的迁移指引",
+          link: "deprecated-layers-migration",
+        },
       ],
     },
     {
@@ -434,6 +446,34 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
         {
           text: "官方包发布契约（Loader / UI Kit）",
           link: "official-packages",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：成员级审计",
+          link: "165-audit-inventory",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：B/C/D/F 成员审计",
+          link: "165-audit-B-C-D-F",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：运行时取证",
+          link: "165-runtime-verification",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：运行时审计",
+          link: "165-runtime-audit-2026-09-27",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：可视化图层",
+          link: "166-visualization-alignment-audit",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：五类处置口径",
+          link: "165-disposition-rules",
+        },
+        {
+          text: "JSAPI 4.0.5 对齐：剩余面裁决",
+          link: "168-remaining-surface",
         },
       ],
     },

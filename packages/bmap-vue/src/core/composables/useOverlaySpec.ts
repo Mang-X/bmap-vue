@@ -127,6 +127,13 @@ export interface UseOverlaySpecResult<Resource> {
    * 组件用例据此断言「事件面来自矩阵」而不必逐个 `emit` 试；也写进 ADR 的对照表。
    */
   readonly events: readonly string[];
+  /**
+   * 命令面（`spec.expose` 的返回值）；未声明 `expose` 时为 `null`。
+   *
+   * 组件把它整个交给 `defineExpose()`（官方同名方法没有对应 prop 的动作 + 读回族，
+   * 见 `OverlaySpec.expose` 的三类判据）。
+   */
+  readonly commands: Record<string, unknown> | null;
 }
 
 /** 领域点 → 防御性拷贝（两条方向都不与调用方共享引用）。 */
@@ -848,11 +855,47 @@ export function useOverlaySpec<Props extends object, Resource>(
     readyCtx = null;
   });
 
+  /**
+   * `defineExpose` 的命令面（#165 Class 3 / TASK 2）。
+   *
+   * 三条口径（逐条依据见 `core/overlays/overlayCommands.ts` 的文件头与 `OverlaySpec.expose`）：
+   * 1. **不声明 `expose` 的 spec 返回 `null`**——命令面是「有这个能力才有」，
+   *    凭空造一个空对象只会让「组件有 ref」看起来像「它有命令」；
+   * 2. **每次调用现取会话**：重建后 `sdk.resource.value` 指向新实例，命令因此自动跟着换；
+   * 3. **释放 / 未就绪抛 `BMAP_RESOURCE_DISPOSED`**（由 `overlayCommands` 的 `require` 负责），
+   *    绝不静默 no-op。
+   */
+  const commands: Record<string, unknown> | null =
+    (spec.expose?.({
+      session() {
+        const resource = sdk.resource.value;
+        const context = readyCtx;
+        // `detachedResources` 是**身份**判断而不是布尔标记：重建窗口里两个实例可能先后都
+        // 执行过 mount，因此「有没有被摘过」必须按实例查，否则刚挂上的新实例会被旧实例的
+        // 标记连坐（那会让命令面在重建后立刻报「已释放」）。
+        if (!resource || !context || detachedResources.has(resource as unknown as object)) {
+          return null;
+        }
+        // `kind` **不**在这里给：它由 Driver 从句柄品牌解析（`kindOfHandle`），是判据的
+        // 唯一来源。第二处从 `spec.kind` 传进来会在「无 kind 的第三方覆盖物」上分叉
+        // （`kind ?? "custom-overlay"` 就是编一个值）。
+        return {
+          driver: context.client.driver.overlays,
+          // 断言到 `OverlayHandle`：所有命令面最终都经 Driver 的归一化入口，而那些入口的
+          // 入参就是 `OverlayHandle`。窄化（`MarkerHandle` → `overlay:marker`）由 Driver 自己
+          // 按句柄品牌完成（`kindOfHandle`）——那一处认不出品牌就显式失败。
+          handle: resource as unknown as OverlayHandle,
+        };
+      },
+      component: spec.type,
+    }) as Record<string, unknown> | undefined) ?? null;
+
   return {
     resource: sdk.resource,
     status: sdk.status,
     error: sdk.error,
     position: positionModel,
     events: resolvedEvents.map((event) => event.sdk),
+    commands,
   };
 }

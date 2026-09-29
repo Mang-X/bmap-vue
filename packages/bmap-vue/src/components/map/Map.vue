@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   computed,
-  getCurrentInstance,
   inject,
   onActivated,
   onBeforeUnmount,
@@ -40,7 +39,7 @@ import {
 import { subscribeMapEvent } from "../../core/events/subscribeMapEvent";
 import { readLiveView } from "../../core/utils/liveView";
 import { bmapConfigKey, type BMapPluginConfig } from "../../core/context/pluginConfig";
-import type { MapProps } from "../../types/components";
+import type { MapProps, MapTypeIdName } from "../../types/components";
 import type { MapInteraction, MapType } from "../../driver/types/map";
 import type { Point } from "../../driver/types/geometry";
 import type { MapHandle } from "../../driver/types/handles";
@@ -58,33 +57,24 @@ export type { MapProps };
 /** `center` 的两种输入形态：点，或 v2 兼容的城市名 / 地址字符串（由 `MapProps` 派生，单一来源）。 */
 type MapCenter = NonNullable<MapProps["center"]>;
 
-/**
- * 记录调用方**显式绑定**的 prop 名。
- *
- * Vue 对 `Boolean` 类型的 prop 有「缺失即 `false`」的强制转换：未传的
- * `enableTraffic` / `restrictCenter` 在 `props` 上是 `false` 而不是 `undefined`，
- * 所以 `props.x !== undefined` 无法区分「显式传了 false」与「没传」。
- * 判据必须落在 vnode 的原始 props 上（那里没有类型转换）。
- */
-const explicitProps = new Set<string>();
-for (const key of Object.keys(getCurrentInstance()?.vnode.props ?? {})) {
-  explicitProps.add(key.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()));
-}
-
-/** 调用方是否**显式绑定**了某个 prop。 */
-function isPropExplicitlyBound(name: string): boolean {
-  return explicitProps.has(name);
-}
-
 const props = withDefaults(defineProps<MapProps>(), {
   width: "100%",
   height: "550px",
   mapType: "BMAP_NORMAL_MAP",
-  minZoom: 0,
+  // 官方 `MapOptions.minZoom` 声明「取值范围 [3, 21]」——原默认 0 **在声明的合法范围之外**，
+  // 会被原样送进 SDK 构造器（#165 Class 5）。默认取合法下界 3，越界值由 `assertZoomRange` 显式报错。
+  minZoom: 3,
   maxZoom: 21,
-  noAnimation: false,
   enableDragging: true,
-  enableScrollWheelZoom: false,
+  // ⚠️ 官方 `MapOptions.enableWheelZoom` 的默认是 **true**，本库默认**关闭**（避免页面滚动时
+  // 误缩放），并由 Driver 的 `LIBRARY_MAP_DEFAULTS` 显式写进构造 options 固定它。
+  // 这是有意决策，**不是**本次改名的一部分——改的只是 prop 名。
+  enableWheelZoom: false,
+  // ⚠️ 刻意写 `undefined`（口径同 `LineLayer.popEvent` / `PointIconLayer.userSizes`）：
+  // Vue 对缺省 `Boolean` 会转成 `false`，不显式关掉这个转换，「不传」与「传 false」就分不开，
+  // 而本库要表达的恰恰是**默认不表态**——由使用者显式 opt-in 才把键递下去
+  // （不递 = `getScreenshot()` 拿到空画布；递了 = 常驻一块画布内存）。
+  preserveDrawingBuffer: undefined,
   loadingBgColor: "#f1f1f1",
   keepAliveBehavior: "suspend",
   // 容器尺寸变化时自动 `checkResize`（#29）：默认开启。`false` 时只更新读数，由调用方
@@ -321,7 +311,7 @@ const headingState = useControllableState<number>({
   equals: anglesEqual,
 });
 
-/** tilt 是 0..90 的倾斜角（**无**环绕语义），容差与角度同级但用线性判等。 */
+/** tilt 是 0..73 的倾斜角（**无**环绕语义，官方 `MapOptions.tilt` 声明「取值范围 [0, 73]」），容差与角度同级但用线性判等。 */
 function tiltEquals(a: number, b: number): boolean {
   return numbersEqual(a, b, ANGLE_EPSILON);
 }
@@ -536,14 +526,39 @@ function bindViewEvents(ctx: MapReadyContext): void {
   );
 }
 
-/** v2 风格地图类型字符串 → 语义 MapType */
-function toMapType(value: string | undefined): MapType {
-  const map: Record<string, MapType> = {
+/**
+ * 官方 `MapTypeId` 常量名 → 语义 `MapType`。
+ *
+ * 取值域是 `MapTypeIdName`（封闭联合，五个官方常量名）。此前这里只映射三个、其余
+ * **静默回退**成 `"normal"`——用户传 `BMAP_HYBRID_MAP` 拿到的是普通图且没有任何提示
+ * （#165 Class 1 修掉的静默错值）。
+ *
+ * 两种失败口径刻意不同：
+ *
+ * - **未知名字**：类型层已经封死（不是官方常量名就编译不过），运行期仍留一道显式错误，
+ *   因为 JS 消费方 / `as` 断言能绕过类型层——静默画错图比报错更难查。
+ * - **`BMAP_NONE_MAP`（无底图）**：官方 d.ts 声明了，但真实 4.0 运行时的 `BMap.MapTypeId`
+ *   没有对应成员，本库**没有**它的表示（编一个等于造一个上游不存在的语义）。因此同样
+ *   显式失败，而不是悄悄画成普通图。
+ */
+function toMapType(value: MapTypeIdName | undefined): MapType {
+  const map: Partial<Record<MapTypeIdName, MapType>> = {
     BMAP_NORMAL_MAP: "normal",
-    BMAP_EARTH_MAP: "earth",
     BMAP_SATELLITE_MAP: "satellite",
+    BMAP_HYBRID_MAP: "hybrid",
+    BMAP_EARTH_MAP: "earth",
   };
-  return map[value ?? "BMAP_NORMAL_MAP"] ?? "normal";
+  const resolved = map[value ?? "BMAP_NORMAL_MAP"];
+  if (!resolved) {
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      `mapType 不受支持: ${String(value)}。` +
+        `本库支持 BMAP_NORMAL_MAP / BMAP_SATELLITE_MAP / BMAP_HYBRID_MAP / BMAP_EARTH_MAP；` +
+        `BMAP_NONE_MAP（无底图）在官方 4.0 运行时的 BMap.MapTypeId 上没有对应常量，本库不猜它的表示。`,
+      { engine: "jsapi-v4" },
+    );
+  }
+  return resolved;
 }
 
 /** 将 mapType prop 同步为 SDK setMapType */
@@ -551,26 +566,27 @@ function applyMapType(ctx: MapReadyContext) {
   ctx.client.driver.map.setMapType(ctx.map, toMapType(props.mapType));
 }
 
-/** enableXxx 布尔开关 → 语义 interaction */
+/**
+ * 交互开关 prop → 语义 interaction。
+ *
+ * ⚠️ **左列是 prop 名、右列的 `INTERACTION_METHODS` 是官方实例方法名，两者不是同一套拼写**：
+ * 官方 `MapOptions` 的构造期键写 `enableDblclickZoom` / `enableWheelZoom` /
+ * `enablePinchZoom` / `fixCenterWhenResize`，而 `Map` 的**实例方法**写
+ * `enableDoubleClickZoom()` / `enableScrollWheelZoom()` / `enablePinchToZoom()` /
+ * `enableResizeOnCenter()`（见 `driver/jsapi-v4/map.ts`）。#165 Class 1 把**公开 prop**
+ * 收敛到官方构造期那一组；落地机制**不变**——仍是建图后按实例方法落一次
+ * （`setInteraction`），不改成构造选项。
+ */
 const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableDragging", "dragging"],
-  ["enableScrollWheelZoom", "scroll-zoom"],
+  ["enableWheelZoom", "scroll-zoom"],
   ["enableInertialDragging", "inertial-dragging"],
-  ["enablePinchToZoom", "pinch-zoom"],
+  ["enablePinchZoom", "pinch-zoom"],
   ["enableKeyboard", "keyboard"],
-  ["enableDoubleClickZoom", "double-click-zoom"],
+  ["enableDblclickZoom", "double-click-zoom"],
   ["enableContinuousZoom", "continuous-zoom"],
-  ["enableResizeOnCenter", "resize-on-center"],
+  ["fixCenterWhenResize", "resize-on-center"],
 ];
-
-/**
- * 判断调用方是否**显式绑定**了某个 prop。
- *
- * Vue 对 `Boolean` 类型的 prop 有「缺失即 `false`」的强制转换：未传的
- * `enableTraffic` 在 `props` 上是 `false` 而不是 `undefined`，所以
- * `props.x !== undefined` 无法区分「显式传了 false」与「没传」。
- * 判据必须落在 vnode 的原始 props 上（那里没有类型转换）。
- */
 
 /** 将 props 上的 enableXxx 布尔值同步到 SDK map 实例 */
 function syncEnableProps(ctx: MapReadyContext) {
@@ -579,21 +595,43 @@ function syncEnableProps(ctx: MapReadyContext) {
     if (value === undefined) continue;
     ctx.client.driver.map.setInteraction(ctx.map, interaction, Boolean(value));
   }
-  // `enableTraffic` 与上面的交互项不同：它**没有默认值**，而 Vue 会把
-  // `Boolean` 类型的 prop 在未传时强制转换成 `false`（不是 `undefined`）。
-  // 所以判据不能是 `!== undefined`——那会让**每张地图**都调一次 `setTraffic`，
-  // 从而在每个页面的控制台留下一条「本次调用被忽略」的告警。
-  // 真正的判据是「用户是否显式传了这个 prop」，用 `getCurrentInstance().vnode.props` 看原始 attrs。
-  if (isPropExplicitlyBound("enableTraffic")) {
-    ctx.client.driver.map.setTraffic(ctx.map, props.enableTraffic);
-  }
 }
 
+/**
+ * 个性化样式 props → `setMapStyle`（#165 Class 2 / H）。
+ *
+ * 官方 `setMapStyle(config: MapStyleConfig)` 的三个成员是 `styleId?: string` /
+ * `styleJson?: object[]` / `merge?: boolean`（`core/MapStyleConfig.d.ts`）。三处更正：
+ *
+ * 1. **形状**：`mapStyleJson` 此前是 `Record`（单数）且被**整份**当作整个 config 下发，
+ *    官方要的是 `{ styleJson: object[] }`。现在包进官方那个键里。
+ * 2. **互斥**：`mapStyleId` 与 `mapStyleJson` 都表示「一整套样式」，同时给没有可复现的
+ *    语义——live 实测（2026-09-27，真实 AK）把两种先后顺序都试了，结果取决于 SDK 内部的
+ *    合并顺序，不是本库能承诺的契约。旧代码是 `if / else if` **静默丢掉**其中一个
+ *    （AGENTS.md：「接收后忽略属于假支持」），现在**显式失败**。
+ * 3. **`merge` 不可达**：它是官方三成员之一，含义是「与当前样式合并」而不是「替换」。
+ *    本库只暴露两个互斥 prop，没有第三个键能表达「合并」——**刻意不造**：
+ *    官方 `merge` 的适用前提是「已经有一份样式在生效」，而本库这层没有可观察的
+ *    「当前样式」状态（样式可能已被 `applyStyleProps` 之外的路径改过）。
+ *    留待有可验证语义时再补，见 `docs/zh-CN/contributing/165-runtime-verification.md`。
+ */
 function applyStyleProps(ctx: MapReadyContext) {
-  if (props.mapStyleJson) {
-    ctx.client.driver.map.setMapStyle(ctx.map, props.mapStyleJson);
-  } else if (props.mapStyleId) {
-    ctx.client.driver.map.setMapStyle(ctx.map, { styleId: props.mapStyleId });
+  const id = props.mapStyleId;
+  const json = props.mapStyleJson;
+  if (id !== undefined && json !== undefined) {
+    throw new BMapError(
+      "BMAP_INVALID_ARGUMENT",
+      "mapStyleId 与 mapStyleJson 不能同时给：两者都表示一整套个性化样式，" +
+        "同时给的合并顺序由 SDK 内部决定，不是本库能承诺的契约。请只给其中一个。",
+      { engine: "jsapi-v4" },
+    );
+  }
+  if (json !== undefined) {
+    ctx.client.driver.map.setMapStyle(ctx.map, { styleJson: json });
+    return;
+  }
+  if (id !== undefined) {
+    ctx.client.driver.map.setMapStyle(ctx.map, { styleId: id });
   }
 }
 
@@ -606,12 +644,12 @@ const currentRuntime = new MapRuntime({
     minZoom: props.minZoom,
     maxZoom: props.maxZoom,
     displayOptions: props.displayOptions,
-    // `restrictCenter` / `backgroundColor` 在 JSAPI 4.0 没有对应构造项，Driver 会丢弃
-    // 并告警。Vue 的 Boolean 强制转换让未传的 `restrictCenter` 变成 `false` 而不是
-    // `undefined`，直接传进去会让**每张地图**都触发一次「已丢弃」告警。
-    // 所以只在调用方**显式绑定**了它们时才放进 mapOptions。
-    ...(isPropExplicitlyBound("restrictCenter") ? { restrictCenter: props.restrictCenter } : {}),
-    ...(isPropExplicitlyBound("backgroundColor") ? { backgroundColor: props.backgroundColor } : {}),
+    // 显式 opt-in：默认不传（不替使用者常驻一块画布内存）。该键不在官方 `MapOptions`
+    // 声明里，走 `InitialMapOptions` 的索引签名原样透传；`getScreenshot()` 没有它就返回
+    // 空画布（live 实测 3,830 vs 119,074 字节）。见 MapProps.preserveDrawingBuffer。
+    ...(props.preserveDrawingBuffer !== undefined
+      ? { preserveDrawingBuffer: props.preserveDrawingBuffer }
+      : {}),
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。
@@ -1219,13 +1257,13 @@ onUnmounted(() => {
 watch(
   () => [
     props.enableDragging,
-    props.enableScrollWheelZoom,
+    props.enableWheelZoom,
     props.enableInertialDragging,
-    props.enablePinchToZoom,
+    props.enablePinchZoom,
     props.enableKeyboard,
-    props.enableDoubleClickZoom,
+    props.enableDblclickZoom,
     props.enableContinuousZoom,
-    props.enableResizeOnCenter,
+    props.fixCenterWhenResize,
     props.enableTraffic,
   ],
   () => {

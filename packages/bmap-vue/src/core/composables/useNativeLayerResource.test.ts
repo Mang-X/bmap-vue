@@ -90,7 +90,19 @@ describe("useNativeLayerResource：unknown 期间不写 [#113]", () => {
       component: "HeatmapLayer",
       kind: "heatmap",
       ctorOptions: () => ({}),
-      rebuildKey: () => "heatmap",
+      /**
+       * ⚠️ 重建指纹刻意跟随 `dataVersion`。
+       *
+       * 4.0.5 之前这条用例是靠 `visible: false` 触发摘除的（`heatmap` 当时没有 `setVisible`，
+       * 隐藏走 detach）。4.0.5 声明了 `Heatmap.setVisible`（`visualization/Heatmap.d.ts:153`），
+       * `visible` 改走同实例的 setter、**不再摘除**——于是「摘除失败 → unknown」这条路径
+       * 用 `visible` 触发不到。指纹是**唯一**能让内核走「先摘后建」判据的入口
+       * （`sync` 里先看 `mountState === "unknown"` / `rebuildKey` / `needsRemountRebuild`），
+       * 因此这里让它跟着一个构造期字段变，用它来触发摘除。本用例要验的
+       * **不是**「什么触发重建」，而是「摘除失败进入 unknown 后那次收敛一个字都不写」——
+       * 触发方式换成哪条重建路径都不影响结论。
+       */
+      rebuildKey: (p) => `heatmap|${String(p.dataVersion)}`,
       style: (p) => p.style,
       data: {
         key: (p) => String(p.dataVersion),
@@ -133,10 +145,10 @@ describe("useNativeLayerResource：unknown 期间不写 [#113]", () => {
     rawMap.failNextRemoveLayer = new Error("removeLayer boom");
     const frozen = [...layer.callLog];
     frame.value = {
-      visible: false, // heatmap 无 setVisible ⇒ 走 detach
+      visible: true,
       style: { radius: 5 },
       data: FEATURES_NEXT,
-      dataVersion: 2,
+      dataVersion: 2, // ← 重建指纹变了 ⇒ 走 recreate ⇒ 先摘（这次摘除会失败）
     };
 
     expect(
