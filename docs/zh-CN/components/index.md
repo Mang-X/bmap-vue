@@ -130,3 +130,21 @@ import { Map, Marker, NavigationControl } from 'bmap-vue'
 搜索结果列表、分页与详情面板这类**标准 UI** 由官方
 [@baidumap/jsapi-ui-kit](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 提供，
 本库不复制官方 UI——见[官方 UI Kit 集成](/zh-CN/guide/ui-kit)。
+
+## 官方目录里我们没有的
+
+对照官方 React 文档站的目录（<https://lbs.baidu.com/jsapi/react/docs/>，47 个组件），
+下面这些**本库没有**。逐个说明了原因，避免「官方有所以应该有」的误读：
+
+| 官方组件 | 为什么这里没有 |
+| --- | --- |
+| `GroundPoint`（地面点 3D） | **尚未实现**——上游 4.0 有完整声明 |
+| `Symbol`（符号） | **尚未实现**——上游 4.0 有完整声明 |
+| `IconSequence`（图标序列） | **尚未实现**——上游 4.0 有完整声明 |
+| `Icon`（图标） | 不是独立组件：走 `<Marker :icon>`，接受预设名或自定义图标配置 |
+| `PlaceDetail`（地点详情） | 在**官方 UI Kit** 里（`bmap-vue/ui-kit` 的 `<PlaceDetail>`），不在组件面 |
+| `RawOverlay` / `RawControl` | 官方 React 的「逃生舱」：挂任意原生 SDK 对象。本库用 [`bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
+| `SimpleInfoWindow` | 官方 React 库自有封装，上游 SDK 没有这个类 |
+| `ThreeLayer` | three.js 宿主集成（需自备 three.js）。本库用原生 [`TextLayer`](/zh-CN/components/layer/text-layer) / [`PolygonLayer`](/zh-CN/components/layer/visualization-layers) 覆盖多数场景 |
+
+前三条是**真实能力缺口**，其余是形态差异。
