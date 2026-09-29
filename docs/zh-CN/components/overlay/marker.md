@@ -19,16 +19,55 @@ overlay/marker
 overlay/dyynmicMaker
 :::
 
-## 静态组件 Props
+## 构造期 Props（`recreate`）
 
-| 属性           | 说明                         | 类型      | 默认值 |
-| -------------- | ---------------------------- | --------- | ------ |
-| title          | 鼠标移到 marker 上的显示内容 | `string`  | -      |
-| enableClicking | 是否响应点击事件（构造期属性，变化时重建） | `boolean` | `true` |
+**这一组的每一项都是构造期属性**——官方 `Marker` 的实例成员表上**没有**对应的 setter，
+**改动其中任何一项都会重建实例**（旧实例连同它的事件绑定一起释放）。
 
-## 动态组件 Props
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| enableClicking | 是否响应点击事件。官方**没有**成对的 `enableClicking()` / `disableClicking()` | `boolean` | `true` |
+| raiseOnDrag | 拖拽标注时，标注是否开启离开地图表面的效果 | `boolean` | `false` |
+| draggingCursor | 拖拽标注时的鼠标指针样式，**需遵循 CSS `cursor` 属性规范** | `string` | - |
+| isTop | 是否将标注置于其他标注之上（默认纬度低的标注会盖住纬度高的标注） | `boolean` | `false` |
+| restrictDraggingArea | 是否限制拖拽区域 | `boolean` | `false` |
+| autoFollowHeadingChanged | 是否自动跟随地图旋转角度联动 | `boolean` | `false` |
+| startAnimation | 图标的入场动画名称。官方**没有**声明任何候选动画名，因此收普通 `string` 并原样透传 | `string` | - |
 
-|  | 属性 | 说明 | 类型 | 可选值 | 默认值 |  || --------------- | ----------------------------------------------------------- | ----------------------------- | ----------------------------- | ---------- | ----------------------------------- || zIndex          | 显示层级                                                    | `number`                      | -                             | -          | <Badge type="tip" text="^0.0.35" /> || position        | 标注点的坐标                                                | `{ lng: number, lat: number}` | -                             | `required` | -                                   || offset          | 标注点的像素偏移                                            | ` {x: number, y: number }`    | -                             |            | -                                   || icon            | 标注点的图标。可使用默认图标，也可[自定义图标](#自定义图标) | `string `                     | `simple_red / simple_blue...` | -          | -                                   || rotation        | 旋转角度                                                    | `number `                     | -                             |            | -                                   || enableDragging  | 是否启用拖拽                                                | `boolean `                    | -                             | ` false`   | -                                   || visible         | 是否显示                                                    | `boolean`                     | -                             | `true`     | <Badge type="tip" text="^2.2.0" />  || label           | 标注自带的文本标注。**就地更新**，改它不换 Marker | `MarkerLabelSpec`（`{ content, position?, offset?, style? }`） | -        | -          | -                                   || autoFollowHeadingChanged | 是否随地图旋转角度联动。**构造期属性**，变化时重建 | `boolean`                      | -          | `false`（沿用 SDK 默认） | -           || startAnimation  | 图标的入场动画名称（官方未声明候选值，原样透传）。**构造期属性** | `string`                | -          | -          | -                                   |::: tip `label` 收的是**本库领域形状**，不是 SDK 的 `BMap.Label`官方 `MarkerOptions.label` 的类型是 raw `BMap.Label` 对象；本库组件面不构造 SDK 对象（raw SDK 边界规则），因此这里传 `{ content, position, offset, style }` 这样的普通数据，由 Driver 在边界内造出 SDK 的 Label 再 `setLabel` 下去。`label` 走官方声明的 `setLabel` / `getLabel`（**就地更新**，不换实例）。从属的 Label 随 Marker一起被释放——它不独立挂图，也不需要你单独回收。:::::: warning `autoFollowHeadingChanged` 传 `false` 与不传**不是一回事**官方默认就是 `false`（实测），而 Vue 对缺省的 `Boolean` prop 会编出 `false`；本库把缺省显式钉成 `undefined`，让「没给」只有**一个**表示 —— 否则父级某次传`:auto-follow-heading-changed="undefined"` 会触发一次**内容完全没变**的重建。:::
+::: warning 「未给」与「关掉」是两件事
+`raiseOnDrag` / `isTop` / `restrictDraggingArea` / `autoFollowHeadingChanged` 四项的**官方默认都是
+`false`**，而 Vue 的 `Boolean` prop 未给时会被编成 `false`——值一致但**来源不同**。本库把这四项的
+缺省显式钉成 `undefined`，让「没给」只有**一个**表示：否则父级某次传
+`:auto-follow-heading-changed="undefined"` 会触发一次**内容完全没变**的重建。
+:::
+
+::: warning `<Marker>` **没有** `anchor` 这个 prop
+官方 `MarkerOptions.anchor`（`@default BMAP_ANCHOR_CENTER`）是「标注锚点位置，设置后覆盖图标自身的
+锚点」，但官方**没有**为它声明读回：未设置时 `getAnchor()` 返回 SDK 自身的默认锚点，那个值无从再
+构造出来传回去，因此它没有可观察的更新入口。要改锚点请用「自定义图标」一节里的图标 `anchor`——
+那是**图标自身的锚点**，与官方那个标注级 `anchor` 是两个不同的东西。
+:::
+
+## 就地更新 Props（`options`）
+
+| 属性 | 说明 | 类型 | 默认值 |
+| --- | --- | --- | --- |
+| position | 标注点的坐标 | `{ lng: number, lat: number }` | `required` |
+| offset | 标注点的像素偏移 | `{ x: number, y: number }` | `{ x: 0, y: 0 }` |
+| icon | 标注点的图标。可使用[内置图标](#默认图标可选值)，也可[自定义图标](#自定义图标) | `MarkerIcon` | - |
+| title | 鼠标移到标注上时显示的标题文字 | `string` | `''` |
+| zIndex | 标注的层叠顺序值 | `number` | - |
+| rotation | 旋转角度，单位度 | `number` | - |
+| enableDragging | 是否启用拖拽（成对开关 `enableDragging()` / `disableDragging()`） | `boolean` | `false` |
+| label | 标注自带的文本标注。走官方声明的 `setLabel`，**改它不换 Marker** | `MarkerLabelSpec` | - |
+| visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |
+
+::: tip `label` 收的是**本库领域形状**，不是 SDK 的 `BMap.Label`
+官方 `MarkerOptions.label` 的类型是 raw `BMap.Label` 对象；本库组件面不构造 SDK 对象，
+因此这里传 `{ content, position, offset, style }` 这样的普通数据，由 Driver 在边界内造出 SDK 的
+Label 再 `setLabel` 下去。从属的 Label 随 Marker 一起被释放——它不独立挂图，也不需要你单独回收。
+:::
+
 ## 默认图标可选值
 
 simple_red , simple_blue , loc_red , loc_blue , start , end , location
@@ -46,19 +85,27 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 
 ## 自定义图标
 
+`icon` 除了内置名字，还可以传一个**自定义图标描述对象**（结构与官方 `BMap.Icon` 的构造参数同形）：
+
 | 属性 | 说明 | 类型 | 默认值 |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------- |
-| anchor | 图标的定位点相对于图标左上角的偏移值 | `{ x: number, y: number }` | - |
-| imageOffset | 图标所用的图片相对于可视区域的偏移值，此功能的作用等同于 CSS 中的 background-position 属性 | `{ x: number, y: number }` | - |
-| size | 图标可视区域的大小 | `{ width: number, height: number }` | `required` |
-| imageSize | 图标所用的图片的大小，此功能的作用等同于 CSS 中的 background-size 属性。可用于实现高清屏的高清效果 | `{ width: number, height: number }` | - |
+| --- | --- | --- | --- |
 | imageUrl | 图标所用图像资源的位置 | `string` | `required` |
-| printImageUrl | 设置 icon 打印图片的 url，该打印图片只针对 IE6 有效，解决 IE6 使用 PNG 滤镜导致的错位问题。如果您的 icon 没有使用 PNG 格式图片或者没有使用 CSS Sprites 技术，则可忽略此配置 | `string ` | - |
+| size | 图标可视区域的大小 | `{ width: number, height: number }` | `required` |
+| anchor | 图标的定位锚点，相对于图标左上角的偏移值（例如尺寸 `30×30` 时给 `{ x: 15, y: 30 }` 表示以底边中心为锚点） | `{ x: number, y: number }` | 图标宽高的中间值 |
+| imageOffset | 图片相对于可视区域的偏移值，等同于 CSS `background-position`；配合 `imageSize` 可实现 CSS Sprites 切图 | `{ x: number, y: number }` | - |
+| imageSize | 图标所用图片的大小，等同于 CSS `background-size`；用于设置图片的逻辑大小（可配合 `imageOffset` 做 Sprites 切图），也可用于高清屏适配 | `{ width: number, height: number }` | - |
+
+::: warning 官方 4.0 已不建议 `anchor`
+官方在图标级的 `anchor` 上标了「4.0 起不再建议使用，请改用标注级 `anchor` 配置项」。本库的
+`<Marker>` **没有**暴露标注级 `anchor` prop（见上文），因此在标注这一层仍只能通过图标 `anchor`
+定位——这是当前可用的路径，而不是推荐写法。
+:::
 
 ## 组件事件
 
 本组件的事件面由**覆盖物事件矩阵**给出：`marker` 共 11 个事件，事件名（Vue 名 / SDK 名）、
 载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
+其中 `dragstart` / `dragging` / `dragend` 三个**需要先开 `enableDragging`**。
 
 详见 [覆盖物事件矩阵](./events)。
 
@@ -70,8 +117,9 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 | 属性 | 更新策略 | 落地 |
 | --- | --- | --- |
 | `position` | 位置字段 | `setPosition`，并支持 `v-model:position` |
-| `offset` / `title` / `icon` / `zIndex` / `rotation` / `enableDragging` | 就地更新 | `setOptions` → 对应 setter（`enableDragging` 是成对开关） |
-| `enableClicking` | 构造期属性 | 变化时重建 Marker |
+| `offset` / `title` / `icon` / `zIndex` / `rotation` / `label` | 就地更新 | `setOptions` → 对应 setter |
+| `enableDragging` | 就地更新 | 成对开关 `enableDragging()` / `disableDragging()` |
+| `enableClicking` / `raiseOnDrag` / `draggingCursor` / `isTop` / `restrictDraggingArea` / `autoFollowHeadingChanged` / `startAnimation` | 构造期属性 | 变化时重建 Marker |
 | `visible` | 显隐 | `show()` / `hide()`；SDK 没有这两个成员时退回 `addOverlay` / `removeOverlay` |
 
 - `visible=false` 时，Marker 创建后**不会**先添加到地图再等待 watcher，而是从创建开始就不挂载；
@@ -98,19 +146,18 @@ simple_red , simple_blue , loc_red , loc_blue , start , end , location
 两条方向都有回环抑制：父级把刚上报的位置写回时不会重复下发 `setPosition`，SDK 重复派发同一位置
 也不会产生第二条 `update:position`。取舍：这里用「最后一次同步值」而不是像 `<Map>` 那样读回 SDK 现值。
 
-支持的主要事件包括：`click`、`dblclick`、`rightclick`、`mousedown`、`mouseup`、`mouseover`、`mouseout`、`dragstart`、`dragging`、`dragend` 和 `remove`。
-
-## 命令面（`defineExpose`，#165）
+## 命令面（`defineExpose`）
 
 本组件的 `ref` 上有官方同名方法。写入口已有 prop 的（`setPosition` / `setZIndex` / …）**不**在这里
-重复列出——#165 的判据是「能改 prop」**不算**实现同名方法；这里只给没有 prop 能替代的那两类。
+重复列出——判据是「能改 prop」**不算**实现同名方法；这里只给没有 prop 能替代的那两类：**读回**
+与**动作**。
 
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
 import Marker, { type MarkerReadBackApi } from 'bmap-vue'
 
-const marker = ref<MarkerReadBackApi & { setRank(r: number): void }>()
+const marker = ref<MarkerReadBackApi>()
 </script>
 
 <template>

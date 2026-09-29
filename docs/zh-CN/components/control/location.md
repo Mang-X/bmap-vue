@@ -130,23 +130,33 @@ control/location
 | `startLocation()` | `startLocation(): void` | 开始执行定位 |
 | `stopLocationTrace()` | `stopLocationTrace(): void` | 停止跟踪用户位置 |
 | `getAddressComponent()` | `getAddressComponent(): AddressComponent \| null` | 当前定位地址信息（[见上](#locationaddresscomponents)） |
-| `status` | — | 实例状态（见下） |
+| `status` | — | 实例状态：`idle` / `creating` / `ready` / `error` / `disposing` / `disposed` |
 
 ```vue
 <script setup lang="ts">
 import { ref } from "vue";
-import LocationControl from "bmap-vue";
+import { LocationControl } from "bmap-vue";
+import type { ControlCommandTypes } from "bmap-vue";
 
-const loc = ref<InstanceType<typeof LocationControl>>();
+const loc = ref<ControlCommandTypes["LocationControl"]>();
 
 function start() {
-  if (loc.value?.status !== "ready") return; // 未就绪 / 已释放时不调
-  loc.value.location();
-  const address = loc.value.getAddressComponent();
+  try {
+    // 未就绪 / 已释放时这里会抛 BMAP_RESOURCE_DISPOSED，不会静默 no-op
+    loc.value?.location();
+  } catch {
+    return; // 控件还没就绪，忽略这一次点击
+  }
+  const address = loc.value?.getAddressComponent();
   // address 为 null 表示**尚未定位**（官方声明即可空）
 }
 </script>
 ```
+
+::: tip 想先看状态再调
+组件还 expose 了一个 `status`（`idle` / `creating` / `ready` / `error` / `disposing` / `disposed`），
+可以先判 `status === "ready"` 再调，避免依赖 catch。
+:::
 
 ### ⚠️ 没有 `startLocationTrace()`
 
@@ -157,7 +167,7 @@ function start() {
 ### 释放后显式失败
 
 未就绪、重建窗口内或已释放时，命令抛 `BMAP_RESOURCE_DISPOSED`——
-**不**静默返回 `undefined`。因此调用前应先看 `status`。
+**不**静默返回 `undefined`。因此调用前应先看 `status`（`ready` 之外的状态都调不了命令）。
 
 ### 载荷投影
 

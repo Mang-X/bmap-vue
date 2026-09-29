@@ -26,7 +26,7 @@ import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 </template>
 ```
 
-::: warning 占位符与 `layers` 形状（live 探针 2026-09-23）
+::: warning 占位符与 `layers` 形状
 - URL 占位符是 **`[z]` / `[x]` / `[y]`**；`{z}` 不会被解析。
 - `layers` 必须是**源图层名字符串数组**（如 `["lines", "pts"]`）。官方 d.ts 的 `MVTLayerConfig[]`
   对象数组会让 worker 的 `layers.indexOf(name)` 恒为 `-1`，整层渲染为空。
@@ -45,8 +45,9 @@ import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 | maxZoom | 最大显示层级 | `number` | SDK 默认 | 变化时**重建** |
 | zIndex | 图层层叠顺序 | `number` | SDK 默认 | **就地** `setZIndex()` |
 
-**不声明** `opacity` / `setVisible` / `setMinZoom` / `setMaxZoom` / `setData`：官方 `MVTLayer`
-没有这些入口（探针与 d.ts 双向确认）。
+**不声明** `opacity`、也不把 `visible` 做成 setter 语义：官方 `MVTLayer` 的声明与运行时都没有
+`setOpacity` / `setVisible` / `setData`，`minZoom` / `maxZoom` 也没有对应 setter（所以变化时
+**重建**）。因此 `visible` 表达为「挂上 / 摘掉」，而 `zIndex` 走官方声明的 `setZIndex()` **就地**更新。
 
 ## 图层专属选项
 
@@ -57,8 +58,9 @@ import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 | idProperty | 要素身份字段（拾取与 feature-state 的唯一口径） | `string` | - | **重建** |
 | style | 源图层样式映射（见下） | `MVTLayerStyle` | - | **就地** `setStyle()`（整袋） |
 
-其余 `MVTLayerOptions`（`transform` / `gridModel` / `spanLevel` / `onclick` / `ondblclick` /
-`onmousemove` / `onmouseout` / …）经逃生口原样透传。
+其余 `MVTLayerOptions` 逃生口（`transform` / `gridModel` / `spanLevel` / `noCollision` /
+`useThumb` / `encrypt` / `onclick` / `ondblclick` / `onmousemove` / `onmouseout`）原样透传，
+不做逐项重命名。
 
 ### 样式形状
 
@@ -73,12 +75,15 @@ import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 
 ## 事件与拾取
 
-六个事件名全部由 live 探针确认可绑，与官方 `MVTLayerEventMap` 一致：
+六个事件名与官方 `MVTLayerEventMap` 一致：
 
 `click` / `dblclick` / `mousemove` / `mouseout` / `tilesloadstart` / `tilesloadend`
 
-拾取走事件的 `value`（`Entity[]`）；官方 `pickFeatures(x, y)` 探针返回空，本库**不**包装它。
+拾取走事件的 `value`（`Entity[]`）；官方 `pickFeatures(x, y)` 真实运行时返回空，本库**不**包装它。
 `idProperty` 决定 `value[].id` 是业务值还是 feature number 的字符串形式。
+
+`mousemove` 的 `value` **必有**（官方 `MVTLayerMouseMoveEvent` 的声明如此），而 `click` / `dblclick`
+的 `value` **可选**——未命中时 SDK 可能不带。两者不能互相顶替，类型上因此不是同一个别名。
 
 ## Feature State（要素状态）
 
@@ -93,21 +98,20 @@ const layerRef = ref<InstanceType<typeof MVTLayer> | null>(null)
 layerRef.value?.featureState.update(mvtFeatureStateKey('lines', 'road-1'), { selected: true })
 layerRef.value?.featureState.get()          // getAllState
 layerRef.value?.featureState.remove('lines_road-1')
-layerRef.value?.featureState.replace({ lines_road-1: { hovered: true } }) // replaceAllState
+layerRef.value?.featureState.replace({ 'lines_road-1': { hovered: true } }) // replaceAllState
 layerRef.value?.featureState.clear()        // clearState
 ```
 
 - **键域是 string-only**：数字键在任何 SDK 调用之前被拒绝。
 - **身份前置**：`idProperty` 未声明时五个命令一律拒绝（告警一次）。
-- **样式前置**：样式里必须先含 `feature-state` 表达式，写入才有可见效果（探针条件）。
+- **样式前置**：样式里必须先含 `feature-state` 表达式，写入才有可见效果。
 
 ## 稳定性
 
-官方 4.0 的 `MVTLayer`（探针 + 4.0.5 类声明双向取证）；本库在能力清单中以 `native` 收录
+官方 4.0 的 `MVTLayer`（真实运行时与 4.0.5 类声明双向取证）；本库在能力清单中以 `native` 收录
 （`layer.mvt`）。未声明成员一律不提供——声明了再忽略属于假支持。
 
 ## 参考
 
-- live 探针读数：`.agents/skills/bmap-jsapi-v4/references/mvt-layer.md`「live 探针读数」。
 - 官方 4.0 API 参考与 `@baidumap/jsapi-v4-types@4.0.5` 的类声明。
 - 图层总览见「[图层总览](./index.md)」。

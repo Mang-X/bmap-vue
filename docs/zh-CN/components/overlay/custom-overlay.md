@@ -12,22 +12,49 @@ import { CustomOverlay } from 'bmap-vue'
 overlay/customOverlay
 :::
 
-## 动态组件 Props
+## 构造期 Props（`recreate`）
+
+**这一组的每一项都是构造期属性**——官方 `CustomOverlay` 的实例成员表上**没有**对应的 setter
+（只有 `setPoint` / `setRotation` / `setRotationOrigin` / `setProperties` 四个写入口）。
+**改动其中任何一项都会重建实例**（旧实例连同它的监听一起释放）。
+
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| offset | 相对锚点的像素偏移 | `{ x: number, y: number }` | `{ x: 0, y: 0 }` |
+| anchor | 锚点，左上角为 `(0, 0)`、右下角为 `(1, 1)`，取值范围 `[0, 1]` | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` |
+| zIndex | 层叠顺序 | `number` | `0` |
+| minZoom | 显示的最小缩放级别 | `number` | - |
+| maxZoom | 显示的最大缩放级别 | `number` | - |
+| enableMassClear | 是否在 `map.clearOverlays()` 时被清除。⚠️ 官方说明该开关**当前不生效**，因此本库不做就地开关 | `boolean` | `true` |
+
+## 就地更新 Props（`options`）
 
 | 属性 | 说明 | 类型 | 默认值 |
-| ----------------- | ----------------------------------------------- | ------------------------- | ---------- |
-| position | 覆盖物的地理坐标点 | `Point` | `required` |
-| offset | 相对锚点的像素偏移（**构造期**） | `{ x: number, y: number }` | `{ x: 0, y: 0 }` |
-| anchor | 锚点，左上角 `(0, 0)`、右下角 `(1, 1)`（**构造期**） | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` |
-| rotation | 旋转角度（度） | `number` | `0` |
-| zIndex | 层叠顺序（**构造期**） | `number` | `0` |
-| minZoom / maxZoom | 显示的最小 / 最大缩放级别（**构造期**） | `number` | - |
+| --- | --- | --- | --- |
+| position | 覆盖物的地理坐标点 | `{ lng: number, lat: number }` | `required` |
+| rotation | 旋转角度，单位度 | `number` | `0` |
 | properties | 自定义业务属性，随实例携带 | `Record<string, unknown>` | - |
-| visible | 是否显示 | `boolean` | `true` |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean` | `true` |
+| visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |
 
-> 「构造期」= 官方只有构造选项、实例上没有对应 setter ⇒ 变化时**重建实例**（旧实例连同它的监听一起释放）。
+> 「构造期」= 官方只有构造选项、实例上没有对应 setter ⇒ 变化时**重建实例**。
 > 其余属性走字段级 setter，就地更新、不重建。
+
+## 官方有、本库暂未暴露的选项
+
+下面几项官方 `CustomOverlayOptions` 有声明，但**本组件目前没有对应 prop**，传了不会生效：
+
+| 官方键 | 说明 | 官方默认 |
+| --- | --- | --- |
+| `rotationFlip` | 旋转角度超过 90 度且小于 270 度时是否翻转，避免内容倒置 | `false` |
+| `fixBottom` | 是否将 DOM 固定在底部 | `false` |
+| `useTranslate` | 是否使用 `translate3d` 进行性能优化 | `false` |
+| `autoFollowHeadingChanged` | 是否随地图旋转 | `false` |
+| `enableDraggingMap` | 覆盖物上是否允许拖拽地图 | `false` |
+| `nextTick` | 是否延迟一帧再显示，用于解决 DOM 自适应宽度问题 | `false` |
+| `synUpdate` | 是否与地图同步更新（跟随地图每次重绘同步刷新位置）；开启后覆盖物位置更新不再走默认的坐标转换逻辑 | `false` |
+
+其中 `synUpdate` 值得单独一提：开启后本组件的 `position` 更新策略会与官方默认**不同**，
+而官方没有为它声明读回，本库目前没有稳定的事件口径，因此没有提供入口。
 
 ## 宿主与 slot 的所有权
 

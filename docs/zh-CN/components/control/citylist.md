@@ -93,7 +93,7 @@ https://lbs.baidu.com/jsdemo.htm#cCityList
 | --- | --- | --- |
 | `toggle()` | `toggle(): void` | 切换城市列表面板的展开状态 |
 | `getCityName()` | `getCityName(): string` | 当前城市名称 |
-| `status` | — | 实例状态 |
+| `status` | — | 实例状态：`idle` / `creating` / `ready` / `error` / `disposing` / `disposed` |
 
 `toggle()` 与 `expand` prop 是**两条路径**：`expand` 是**受控**入口（变化即下发 `open` /
 `close`），`toggle()` 是**动作**（切一次，不镜像回 prop）。官方没有可观察的「面板被别人
@@ -114,3 +114,7 @@ https://lbs.baidu.com/jsdemo.htm#cCityList
 ### 释放后显式失败
 
 未就绪、重建窗口内或已释放时，命令抛 `BMAP_RESOURCE_DISPOSED`，不静默返回 `undefined`。
+命令面只有 `toggle()` 与 `getCityName()` 两个成员，可以直接用组件 `ref` 拿到（见本页顶部示例）。
+
+想先看状态再调，可以读组件 expose 的 `status`（`idle` / `creating` / `ready` / `error` /
+`disposing` / `disposed`）——`ready` 之外的状态都调不了命令。

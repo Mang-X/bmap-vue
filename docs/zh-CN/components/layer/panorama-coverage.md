@@ -28,6 +28,5 @@ layer/panoramaCoverage
 
 ## 稳定性
 
-4.0.5 的类型包**仍然没有** `PanoramaCoverageLayer` 的类声明（全包 `grep -rn PanoramaCoverageLayer`
-零命中；官方 Skill 明确它是 4.0 公开图层），
+4.0.5 的类型包**仍然没有** `PanoramaCoverageLayer` 的类声明（官方文档明确它是 4.0 公开图层），
 因此本库按结构探测构造器：当前运行时没有它时会**显式失败**并告警一次，而不是静默降级。

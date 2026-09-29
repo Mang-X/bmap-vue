@@ -36,14 +36,17 @@ layer/xyzLayer
 | zTemplate | 计算 `[z]` 的取值 | `(x, y, z) => number \| string` | - |
 | bTemplate | 计算 `[b]` 的取值（默认四至坐标串） | `(x, y, z) => string` | - |
 | extent | 加载范围（EPSG:3857 的 `[minX,minY,maxX,maxY]`） | `number[]` | - |
-| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | `false` |
+| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | 官方默认 `false` |
 | boundary | 掩膜（行政区坐标数据） | `string[]` | - |
-| useThumbData | 缩放时用跨图层瓦片平滑切换 | `boolean` | `false` |
-| tms | `[y]` 是否为 TMS 形式（y 轴翻转） | `boolean` | `false` |
+| useThumbData | 缩放时用跨图层瓦片平滑切换 | `boolean` | 官方默认 `false` |
+| tms | `[y]` 是否为 TMS 形式（y 轴翻转） | `boolean` | 官方默认 `false` |
 
 ## 稳定性
 
 官方 4.0 新增的独立构造器（只有类声明，没有官方专页），接口面可能变化；本库在能力清单中把它标为 `experimental`。
+
+它**没有** `tileLoadFunction` / `tileLoadObserver`：官方 `XYZLayer` 的构造选项里没有这两个，
+因此也没有观察面（加载结果只能由你从自己的网络面板观察）。
 
 ## 参考
 

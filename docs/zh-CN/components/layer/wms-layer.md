@@ -1,6 +1,7 @@
 # WMSLayer WMS 图层
 
-加载瓦片式 WMS 服务：官方内部拼接 `SERVICE` / `REQUEST` / `VERSION` / `FORMAT` / `CRS` 等参数，并用 `BBOX` / `WIDTH` / `HEIGHT` 驱动瓦片请求。
+加载瓦片式 WMS 服务：官方内部拼接 `SERVICE` / `REQUEST` / `VERSION` / `FORMAT` / `CRS` 等参数，
+并用 `BBOX` / `WIDTH` / `HEIGHT` 驱动瓦片请求。
 
 ```ts
 import { WMSLayer } from 'bmap-vue'
@@ -35,16 +36,17 @@ layer/wmsLayer
 | projection | 请求使用的投影 | `string` | - |
 | tileSize | 瓦片边长（像素） | `number` | SDK 默认 |
 | extent | 数据四至范围 | `number[]` | - |
-| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | `false` |
+| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | 官方默认 `false` |
 | reproject | 是否在客户端做投影变换 | `boolean` | SDK 默认 |
 | reprojectSourceCRS | `reproject` 时源数据的坐标系 | `string` | - |
-| png8 | 是否请求 8 位 PNG | `boolean` | SDK 默认 |
+| png8 | 是否请求 8 位 PNG | `boolean` | 官方默认 `false` |
 | dataType | 返回数据格式 | `string` | SDK 默认 |
 | boundary | 掩膜（行政区列表） | `string[]` | - |
 | height / spanLevel / useThumbData | 图层高度 / 缩略层级跨度 / 跨级平滑切换 | `number \| boolean` | SDK 默认 |
 | retry / retryTime / cacheSize | 重试与缓存 | `boolean \| number` | SDK 默认 |
 | thumbParentDepth / thumbChildDepth | 缩略图深度 | `number` | SDK 默认 |
 | tileLoadFunction | 自定义瓦片加载函数 | `(tile, url) => void` | - |
+| tileLoadObserver | 瓦片加载观察面（见[图层总览的「加载诊断」](./index#加载诊断观察瓦片什么时候加载什么时候失败)） | `TileLoadObserver` | - |
 
 ## 稳定性
 
@@ -52,7 +54,10 @@ layer/wmsLayer
 
 ## 注意
 
-`params` 的键名遵循 **WMS 标准**（`LAYERS` / `STYLES` / `VERSION`，全大写）；不写 `VERSION` 时按服务端默认版本解析。`reproject` 没开时服务返回的坐标系必须与地图一致，否则表现是瓦片错位而不是报错。
+- `params` 的键名遵循 **WMS 标准**（`LAYERS` / `STYLES` / `VERSION`，全大写）；不写 `VERSION` 时按服务端默认版本解析。
+- `reproject` 没开时服务返回的坐标系必须与地图一致，否则表现是**瓦片错位而不是报错**。
+- `tileLoadFunction` 是**接管式**的：设了它，SDK 就不再自己加载，函数必须自己完成加载，否则
+  **瓦片不会出现**。只想在旁边观察请用 `tileLoadObserver`。
 
 ## 参考
 

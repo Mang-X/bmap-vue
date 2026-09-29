@@ -12,11 +12,46 @@ import { Label } from 'bmap-vue'
 overlay/label
 :::
 
-## 动态组件 Props
+## 构造期 Props（`recreate`）
 
-|  | 属性 | 说明 | 类型 | 默认值 |  || --------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------- | ---------- | ---------------------------------- || content         | 设置文本标注的内容                        | `string `                                                                                     | `required` | -                                  || offset          | 文本标注的像素偏移                        | `{x: number, y: number } `                                                                    | -          | -                                  || enableMassClear | 是否在调用 map.clearOverlays 清除此覆盖物 | `boolean `                                                                                    | `true `    | -                                  || style           | 设置文本标注的样式                        | [`CSSStyleDeclaration`](https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleDeclaration) | -          | -                                  || position        | 文本标注的坐标                            | `{ lng: number, lat: number} `                                                                | `required` | -                                  || zIndex          | 显示层级                                  | `number`                                                                                      | -          | <Badge type="tip" text="^2.2.0" /> || visible         | 是否显示                                  | `boolean`                                                                                     | `true`     | <Badge type="tip" text="^2.2.0" /> || anchor          | 文本标注的锚点（官方常量名，九选一）。**就地更新**，改它不换实例 | `OverlayAnchor`                                                                              | -（沿用 SDK 自身的默认锚点） | - || width           | 文本标注的宽度（像素，`0` 表示按内容自适应）。**构造期属性**，变化时重建 | `number`                                                                                      | -（沿用 SDK 默认的自适应）  | - |::: warning `anchor` 取**官方常量名**，不是 `0`–`8` 的裸数字合法值是 `BMAP_ANCHOR_TOP_LEFT` / `TOP_RIGHT` / `BOTTOM_LEFT` / `BOTTOM_RIGHT` /`TOP_CENTER` / `MIDDLE_LEFT` / `CENTER` / `MIDDLE_RIGHT` / `BOTTOM_CENTER`（与 `<ZoomControl>` 等控件的 `anchor` 同一张官方常量表，换算在 Driver 边界内完成）。用裸数字 `8` 编译不过 —— 九个值在业务上完全不同，猜错的代价是标注被画到别处而**不报错**。:::::: warning `width` 变化会**重建**标注官方 `Label` 上**没有** `setWidth`（4.0.5 的成员表里没有，真实 4.0 的运行时原型链上也没有，调用会直接抛 `setWidth is not a function`）⇒ 本库按**构造期**属性处理。若需要频繁改宽度，本库**没有**可用的就地更新路径。:::
-::: tip 提示
-style 可以是任何符合规范的 css 样式，样式属性需使用驼峰命名法
+**这一组的每一项都是构造期属性**——官方 `Label` 的实例成员表上**没有** `setWidth` / `getWidth`，
+**改动它会重建实例**。
+
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| width | 文本标注的宽度（像素），`0` 表示按内容自适应 | `number` | `0` |
+
+::: warning `width` 变化会**重建**标注
+官方 `Label` 上没有 `setWidth`，真实 4.0 的运行时原型链上也没有（调用会直接抛
+`setWidth is not a function`）⇒ 本库按构造期属性处理。若需要频繁改宽度，本库**没有**可用的
+就地更新路径。
+:::
+
+## 就地更新 Props（`options`）
+
+| 属性 | 说明 | 类型 | 默认值 |
+| --- | --- | --- | --- |
+| content | 设置文本标注的内容 | `string` | `required` |
+| position | 文本标注的坐标 | `{ lng: number, lat: number }` | `required` |
+| offset | 文本标注的像素偏移 | `{ x: number, y: number }` | `{ x: 0, y: 0 }` |
+| style | 设置文本标注的样式，**样式属性需使用驼峰命名法** | `Record<string, unknown>` | - |
+| anchor | 文本标注的锚点，取**官方常量名**（九选一，见下） | `OverlayAnchor` | `BMAP_ANCHOR_TOP_LEFT` |
+| zIndex | 标注的层叠顺序值 | `number` | - |
+| enableMassClear | 是否在调用 `map.clearOverlays()` 时清除此覆盖物（成对开关） | `boolean` | `true` |
+| visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |
+
+::: warning `anchor` 取**官方常量名**，不是 `0`–`8` 的裸数字
+合法值是 `BMAP_ANCHOR_TOP_LEFT` / `BMAP_ANCHOR_TOP_RIGHT` / `BMAP_ANCHOR_BOTTOM_LEFT` /
+`BMAP_ANCHOR_BOTTOM_RIGHT` / `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_MIDDLE_LEFT` /
+`BMAP_ANCHOR_CENTER` / `BMAP_ANCHOR_MIDDLE_RIGHT` / `BMAP_ANCHOR_BOTTOM_CENTER`
+（与 `<ZoomControl>` 等控件的 `anchor` 是同一张官方常量表）。用裸数字 `8` 编译不过——九个值在
+业务上完全不同，猜错的代价是标注被画到别处而**不报错**。
+:::
+
+::: tip `style` 是普通对象
+官方 `LabelOptions.styles` 的类型是 `object`（键值对形式，如 `{ color: '#f00', fontSize: '14px' }`）。
+本库把它收成 `Record<string, unknown>`，**属性名用驼峰**（`backgroundColor` 而不是
+`background-color`），因为它被原样交给官方的样式入口。
 :::
 
 ## 组件事件

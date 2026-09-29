@@ -118,7 +118,7 @@ import { PolygonLayer, PolylineLayer } from 'bmap-vue'
 这些是**官方声明里有、但本库不投影**的成员：
 
 - **`hitTest`**：官方**声明**了（`PolygonLayer.d.ts:201` / `PolylineLayer.d.ts:233`），
-  但 **live 探针实测运行时没有**（`prototype.hitTest` 为 `false`）。放开门面就是假支持。
+  但**真实运行时没有**（`prototype.hitTest` 为 `false`）。放开门面就是假支持。
 - **`setOpacity`**：**两族处置相反**——这是本库「在位 / 声明 / 生效三条判据不可互换」的样板：
   - `PolylineLayer` **登记**。`PolylineLayerOptions.opacity`（`:131` @default 1）是官方
     **声明的**选项，且 `setOptions` 的注释（`:209`）明写 `opacity` / `visible` / `zIndex` /

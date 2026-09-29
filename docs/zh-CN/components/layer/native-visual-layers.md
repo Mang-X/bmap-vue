@@ -324,7 +324,7 @@ function highlight(id: string) {
 | `start()` | `start()` | 起播（从当前 `process` 继续） |
 | `pause()` | `pause()` | 暂停 |
 | `resume()` | `resume()` | 从暂停处继续 |
-| `stop()` | `stop()` | 停止播放（**不**归零 `process`：live 探针 `cmd.stop.observed` 保持原值） |
+| `stop()` | `stop()` | 停止播放（**不**归零 `process`——实测 `process` 停在原值） |
 | `setSpeed(n)` | `setSpeed(n)` | 播放倍速（正有限数；`BMAP_INVALID_ARGUMENT`） |
 | `setProcess(p)` | `setProcess(p)` | 跳到进度 `0–1`（越界同样 `BMAP_INVALID_ARGUMENT`） |
 
@@ -369,7 +369,7 @@ function onProgress(o: TrackLineObserved) {
 
 ### 页面可见性策略（`pauseOnHidden`）
 
-live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 继续推进）。因此：
+真实运行时上 **SDK 不会**在页面 hidden 时自动暂停（`progress` 继续推进）。因此：
 
 | 策略 | 行为 |
 | --- | --- |

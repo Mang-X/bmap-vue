@@ -68,3 +68,58 @@
   `BMapProvider` 只接受 `client` / `definition` / `provider` / `loadOptions` / `autoLoad`。
 - `enable-scroll-wheel-zoom`（9 处）—— #165 已改名为 `enable-wheel-zoom`，
   写错的 prop 落进 `$attrs`，**不报错也不生效**。
+
+---
+
+## 6.【严重·运行时缺陷】未传的交互 prop 被 Vue 强制转换成 `false`，等于把官方的「默认开」关掉
+
+`Map.vue:592` 的 `syncEnableProps`：
+
+```ts
+for (const [prop, interaction] of INTERACTION_PROPS) {
+  const value = props[prop];
+  if (value === undefined) continue;          // ← 永不成立
+  ctx.client.driver.map.setInteraction(ctx.map, interaction, Boolean(value));
+}
+```
+
+`INTERACTION_PROPS` 有 8 项，但 `withDefaults` 只显式声明了 `enableDragging: true`、
+`enableWheelZoom: false`、`enableAutoResize: true` 三项。其余五项
+（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
+`enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom`）是**缺省 `Boolean` prop**，
+Vue 会把「没传」转成 `false`——于是 `value === undefined` 的守卫**永不命中**，
+逐个把官方实例方法调成 `disable*()`。
+
+而官方 `core/MapOptions.d.ts` 里：
+
+| 键 | 官方 `@default` | 本库实际（不传时） |
+| --- | --- | --- |
+| `enableDblclickZoom` | **true** | `false`（→ `disableDoubleClickZoom()`） |
+| `enablePinchZoom` | **true** | `false`（→ `disablePinchToZoom()`） |
+| `enableKeyboard` | 未标注 | `false` |
+
+**后果**：用户什么都不写，**双指缩放与双击缩放就被静默关掉了**——而这正是
+官方默认打开的行为。文档原来写「默认 true」描述的是本应有的行为；
+现在表里改成了实测值并加了告警框，但**运行时的错值没有修**。
+
+修法（改 `src/**`，需你授权）：给这 6 个 prop 在 `withDefaults` 里显式钉上
+`undefined`，让「没传」真的是「没传」，`syncEnableProps` 的守卫才会短路——
+与 `OverviewMapControl` 现有的 `isOpen: false` 注释里写的正是同一个理由。
+
+## 7.【中】`BMAP_HYBRID_MAP` 声明存在但运行期必失败
+
+`driver/jsapi-v4/map.ts:130-140` 附近的注释写着「4.0.5 声明里的 hybrid 在真实运行时
+不存在」，`resolveMapTypeConstant` 因此会显式抛错（`BMAP_SDK_CALL_FAILED`）。
+文档原先把它标成 ✅ 可用，会让人以为传了就能出混合图。
+已改为明确标注「不可用，要混合底图请用 `mapStyleId` / `mapStyleJson`」。
+
+## 8.【中】`MapTypeId` 候选表的自相矛盾注释
+
+`MAP_TYPE_CONSTANT_CANDIDATES` 写 `normal: ["NORMAL", "BMAP_NORMAL_MAP"]`，
+注释说运行时三个成员字面量是 `{NORMAL, EARTH, SATELLITE}`，却又说 `BMAP_*` 那组
+在运行时不存在。两条注释对同一事实给出相反表述，建议实机复核一次。
+
+## 9.【低】`enableTraffic` 留在 `MapProps` 上但零效果
+
+不在 `INTERACTION_PROPS` 里，因此既不报错也不生效；`Map.vue` 还在 watch 它。
+要么删（与 #165「删掉静默丢弃的 prop」的做法一致），要么接上 `TrafficLayer`。

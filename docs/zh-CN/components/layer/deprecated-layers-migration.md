@@ -144,7 +144,7 @@
 | `zIndex` / `minZoom` / `maxZoom` | — | **无对应**：本库**不**在 `<PointLayer>` 上开这三个（`zIndex` 官方声明了 `setZIndex` 但无组件消费者；`opacity` 官方未声明） |
 | `opacity` | — | **无对应**（官方 `PointLayer` 声明里没有 `setOpacity`） |
 | `enablePicked` | `enablePicked` | 同名 |
-| `pickWidth` / `pickHeight` | `pickTolerance` | **重写**：本库 #165 已从 `<PointLayer>` **删除** `pickWidth` / `pickHeight` |
+| `pickWidth` / `pickHeight` | `pickTolerance` | **重写**：`<PointLayer>` 上**没有** `pickWidth` / `pickHeight`（官方那一族用 `pickTolerance`） |
 | — | `pickThrough` / `mouseStyleChange` / `iconSize` | **新增** |
 | （ref 上的 `featureState` 命令面） | — | **无对应** |
 
@@ -156,10 +156,10 @@
 
 | 旧 prop | 新 prop | 处置 |
 | --- | --- | --- |
-| `shapeType`（数字枚举） | `shape` | **重写**：`0` 圆形 → `'circle'`、`1` → `'square'`、`2` → `'triangle'`、`3` → `'diamond'`、`4` → `'cross'`、`5` → `'arrow'`、`6` → `'arrowTail'`、`7` → `'star'`、`9` → `'waterdrop'`（数字**一一对应**，但类型从 `number` 变成字面量联合） |
-| `color` | `fillColor` | **重写**（⚠️ 官方默认 `#eaf1ff` → `rgba(50, 50, 255, 1)`） |
+| `shapeType`（官方 `PointShapeLayer.ShapeType` 数字枚举） | `shape`（官方 `PointShape` 字符串枚举） | **重写**：数字**一一对应**——`0` → `'circle'`、`1` → `'square'`、`2` → `'triangle'`、`3` → `'diamond'`、`4` → `'cross'`、`5` → `'arrow'`、`6` → `'arrowTail'`、`7` → `'star'`、`9` → `'waterdrop'`（注意官方枚举**跳过 `8`**），但类型从 `number` 变成字面量联合 |
+| `color` | `fillColor` | **重写**（⚠️ 官方默认 `#eaf1ff` → `rgba(50, 50, 255, 1)`；注意新家族另有 `strokeColor`，默认 `#1677ff`） |
 | `size` | `size` | 同名（⚠️ 官方默认 `32` → `20`） |
-| `strokeColor` / `strokeWeight` | `strokeColor` / `strokeWeight` | 同名（⚠️ 官方默认描边宽 `0`，新家族默认也是 `0`） |
+| `strokeColor` / `strokeWeight` | `strokeColor` / `strokeWeight` | 同名（⚠️ 官方默认描边宽 `0`，新家族默认也是 `0`；旧家族默认描边色 `#1677ff`） |
 | （无 prop） | `anchor` | **新增**：字符串枚举 |
 | （无 prop） | `scale` / `rotation` / `offset` | **新增**（旧家族有这三个样式字段，本库**未**暴露） |
 | `opacity` | `fillOpacity` | **重写**：图层级 `opacity` → 逐点 `fillOpacity`（官方未声明 `PointLayer#setOpacity`） |
@@ -175,9 +175,9 @@
 
 ### 1. Feature State：新家族**完全没有**（`stay` 的主要理由）
 
-`layer/` 家族四个类**都**有全套要素状态命令面（live 实测 `updateState` / `removeState` /
-`clearState` / `replaceAllState` / `getAllState` **五个全部在位**）；`visualization/` 家族的**每一个
-类都没有**——声明里 0 命中，运行时也实测缺席。
+`layer/` 家族四个类**都**有全套要素状态命令面（`updateState` / `removeState` / `clearState` /
+`replaceAllState` / `getAllState` **五个全部在位**）；`visualization/` 家族的**每一个类都没有**
+——声明里 0 命中，运行时也实测缺席。
 
 | 旧命令（`layer/` 家族，实测在位） | `visualization/` 家族 |
 | --- | --- |
@@ -195,21 +195,18 @@
 ### 2. 样式字段族不同 + 更新入口不同
 
 `layer/` 家族走 `setStyleOptions()`（**逐字段 merge**）并需要显式 `doOnceDraw()` 才重绘；
-`visualization/` 家族走 `setOptions()`，**没有** `doOnceDraw`（live 实测三个替代类上
+`visualization/` 家族走 `setOptions()`，**没有** `doOnceDraw`（三个替代类上
 `doOnceDraw` / `setStyleOptions` / `setBaseOptions` 全部缺席）。
 
 `setOptions` 的官方注释（`PolygonLayer.d.ts:176-180`）逐字是：「**仅更新已声明的样式键**；
 `visible` / `zIndex` / `renderStage` / `referCenter` / `enablePicked` 转发到对应 setter，
 **其余未知键忽略并告警一次**」。
 
-::: tip 「没写的键保持原值」——两族的更新语义**都是 merge**（#174 P1-1 更正）
+::: tip 「没写的键保持原值」——两族的更新语义**都是 merge**
 「仅更新已声明的样式键」这句的意思是「**只写你给的那几个键，没给的保持原值**」，与 `layer/`
 家族的 `setStyleOptions`（「合并到现有样式」，`layer/LineLayer.d.ts:336`）是**同一种**语义。
-本库此前把 `visualization/` 家族记成「整袋替换、没写的键回到官方默认值」，那是**误读**。
-live 读数（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实：先 `setOpacity(0.25)`，
-再做一次**不含** `opacity` 的样式写，`getOpacity()` 在 `text` / `polyline` / `line` /
-`point-shape` 四种 kind 上**全部**仍是 `0.25`。逐条依据见
-`packages/bmap-vue/src/core/layers/nativeLayerStyleOwnership.ts` 的文件头。
+真实运行时上逐 kind 验证过：先 `setOpacity(0.25)`，再做一次**不含** `opacity` 的样式写，
+`getOpacity()` 在 `text` / `polyline` / `line` / `point-shape` 四种 kind 上**全部**仍是 `0.25`。
 
 ⇒ 两族真正不同的只有**重绘**：`layer/` 家族改完要显式 `doOnceDraw()`，`visualization/` 家族
 没有这个成员。**实际影响**：迁移时只写你要改的键即可，没写的键沿用旧实例当前值。
@@ -218,7 +215,7 @@ live 读数（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实�
 ### 3. 七个旧选项在新家族无对应
 
 `crs` / `popEvent` / `selectedIndex` / `selectedColor` / `autoSelect` 在 `visualization/` 的声明里
-**0 命中**（live 实测同样没有）。`pickWidth` / `pickHeight` 在新家族是 `pickTolerance`
+**0 命中**（真实运行时同样没有）。`pickWidth` / `pickHeight` 在新家族是 `pickTolerance`
 （**命中容差**，不是像素框）——语义近似但**不是等价**。照字段表机械改名，这七项会**静默不生效**。
 
 ## 该留下还是该迁走
@@ -241,9 +238,9 @@ live 读数（`scripts/probe-style-opacity.mts`，2026-09-28）逐 kind 证实�
 
 - **声明**：`@baidumap/jsapi-v4-types@4.0.5`（git `5ba67f4`）的 `layer/*.d.ts` 与
   `visualization/*.d.ts`，逐行读出；
-- **运行时**：live 探针（真实 AK + headless Chrome，2026-09-27）逐类读 `prototype` 与**实例**两处
-  成员，并对四个旧类做 **settle 等待**（`absent` 只在成员面补齐后才允许出现）——读数显示四个旧类
-  与三个替代类在 `BMap.Map` 就绪时**成员面已齐**（settle `0ms`）。
+- **运行时**：在真实 AK + 无头浏览器上逐类读 `prototype` 与**实例**两处成员，并对四个旧类做
+  **settle 等待**（`absent` 只在成员面补齐后才允许出现）——读数显示四个旧类与三个替代类在
+  地图就绪时**成员面已齐**（settle `0ms`）。
 
 ::: warning 官方 `isFlat` 的默认值自相矛盾
 `visualization/PointLayer.d.ts:121` 标 `@default false`，而 `layer/PointIconLayer.d.ts:15` /

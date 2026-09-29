@@ -50,6 +50,13 @@ overlay/dynmicInfoWindow
 | `enableAutoPan`      | 是否开启打开时地图自动平移                                               | `boolean`                 | `true`          |
 | `enableCloseOnClick` | 是否开启点击地图关闭                                                     | `boolean`                 | `false`         |
 
+::: tip `enableCloseOnClick` 的默认值与官方**相反**
+官方 `InfoWindowOptions.enableCloseOnClick` 的 `@default` 是 `true`，本库的缺省是 `false`——
+这是**本库有意**的选择（点地图就关掉气泡容易让用户误操作丢失阅读位置）。
+要跟官方一致请显式传 `:enable-close-on-click="true"`。
+`enableAutoPan` 则是官方默认 `true`、本库默认 `true`，两者一致。
+:::
+
 ::: warning `offset` 是构造期属性
 官方 4.0 的 `InfoWindow` 只有 `getOffset()`，**没有** `setOffset`，因此 `offset` 变化会**重建实例**
 （`update:position` 那类「就地移动」对它不适用）。重建会释放旧实例、创建新实例，随后按当前期望
@@ -69,6 +76,13 @@ overlay/dynmicInfoWindow
 | `update:open`  | 受控状态回写：**只表达状态变化**（用户点关闭按钮 / 被同图另一个气泡顶掉各回写一次） | `boolean`                |
 | `rebuild`      | 实例被重建（构造期属性变化）。**首次创建不发**，载荷是新的实例代次 | `number`                 |
 | `destroy`      | 实例被释放，载荷是旧的实例代次                             | `number`                 |
+
+::: tip 官方声明了 `resize`，但本组件**不**派发它
+官方 `InfoWindowEventMap` 里有 `resize`，但气泡尺寸在本库由 `width` / `height` / `maxWidth` 经
+内容重绘驱动，官方的 `resize` 在本库只被观察、不驱动任何状态——因此没有派发点，也就不在
+`defineEmits` 里。想知道尺寸请用 `defineExpose` 之外的布局测量，或在 slot 内容变化时自行
+`ResizeObserver`。
+:::
 
 `update:open` **不回声**父级驱动的变化：给 `open` 赋值 `false` 时组件不会回写一次 `false`
 （受控组件的常规语义）。想知道「气泡真的开了 / 关了」，用 `open` / `close` 事件。
@@ -158,7 +172,7 @@ slot 内容尺寸变化（文本更新、图片异步加载、字体变化…）
 气泡内容依赖客户端的宿主节点，因此**服务端渲染的 HTML 里不含气泡内容**（`<InfoWindow>` 在
 SSR 期不渲染 slot、不创建宿主）。这与地图本身只在客户端可用是一致的。
 
-## 命令面（`defineExpose`，#165）
+## 命令面（`defineExpose`）
 
 本组件的 `ref` 上有官方同名方法。前四个是**读回**（`open` prop 表达的是意图，官方只有实例上的
 `isOpen()` 才回答「现在真的开着吗」），后两个是**动作**——`enableMaximize` 只是「允许最大化」，
@@ -196,17 +210,26 @@ const infoWindow = ref<InfoWindowReadBackApi>()
 未就绪、正在重建、**已被同图另一个气泡顶掉**或已释放时，命令**显式抛 `BMAP_RESOURCE_DISPOSED`**。
 「被顶掉」也要失败：`getTitle` 这类读回对那个气泡仍然成立，但 `maximize()` 会打到**别的**气泡上。
 
-## 构造选项（#165 补齐的 8 个）
+## 其余官方构造选项
 
-| prop                  | 官方键                    | 更新口径 | 依据 |
-| --------------------- | ------------------------- | -------- | ---- |
-| `maxWidth`            | `maxWidth?: number`       | **就地** `setMaxWidth` | 官方有 setter；撤回时重建（无 `getMaxWidth`） |
-| `maxContent`          | `maxContent?: string`     | **就地** `setMaxContent` | 官方有 setter；撤回时重建（`getContent()` 返回的不是最大化内容） |
-| `margin`              | `margin?: number[]`       | 构造期 | 官方没有 `setMargin`，也没有读回 |
-| `collisions`          | `collisions?: number[]`   | 构造期 | 官方没有 `setCollisions`，也没有读回 |
-| `onClosing`           | `onClosing?: () => void`  | 构造期 | 官方没有 `setOnClosing`；回调要跟随最新闭包必须重建 |
-| `enableSearchTool`    | `enableSearchTool?: boolean` | 构造期 | 它决定是否多渲染一个工具条（渲染通道），官方没有成对开关 |
-| `headerContent`       | `headerContent?: string`  | 构造期 | 官方没有 `setHeaderContent`。⚠️ 官方没说明它与 `title` 同时给时谁优先，本库**不表态** |
-| `enableContentScroll` | `enableContentScroll?: boolean` | 构造期 | 官方没有 `setEnableContentScroll` |
+官方 `InfoWindowOptions` 一共 15 个键，除上面「组件 Props」里的 7 个之外还有这 8 个：
+
+| prop | 官方键 | 类型 | 更新口径 | 依据 |
+| --- | --- | --- | --- | --- |
+| `maxWidth` | `maxWidth?: number`（`@default 730`） | `number` | **就地** `setMaxWidth` | 官方有 setter；撤回时重建（无 `getMaxWidth`，没有 baseline 可恢复） |
+| `maxContent` | `maxContent?: string` | `string` | **就地** `setMaxContent` | 官方有 setter；撤回时重建（`getContent()` 返回的不是最大化内容） |
+| `margin` | `margin?: number[]` | `number[]` | 构造期 | 官方没有 `setMargin`，也没有读回。信息窗相对于地图容器 top / right / bottom / left 四个方向的边距 |
+| `collisions` | `collisions?: number[]` | `number[]` | 构造期 | 官方没有 `setCollisions`，也没有读回。相对于地图左上 / 右上 / 右下 / 左下四个方向的避让区域 |
+| `onClosing` | `onClosing?: () => void` | `() => void` | 构造期 | 官方没有 `setOnClosing`；回调要跟随最新闭包必须重建 |
+| `enableSearchTool` | `enableSearchTool?: boolean` | `boolean` | 构造期 | 它决定是否多渲染一个工具条（渲染通道），官方没有成对开关 |
+| `headerContent` | `headerContent?: string` | `string` | 构造期 | 官方没有 `setHeaderContent`。支持 HTML。⚠️ 官方没说明它与 `title` 同时给时谁优先，本库**不表态**——两个都原样传下去 |
+| `enableContentScroll` | `enableContentScroll?: boolean` | `boolean` | 构造期 | 官方没有 `setEnableContentScroll` |
 
 `margin` / `collisions` 都是四元素数组，按 `[上, 右, 下, 左]`。
+
+::: tip `onClosing` 与组件的关闭不是一回事
+`onClosing` 是官方在**关闭之前**触发的回调（官方没有公开的读回，也没有取消关闭的入口）。
+本库的「是否打开」由 `open` prop 表达、由 `close` 事件回写——两者是**并行的两条路**：
+`onClosing` 只作为官方回调原样透传，**不会**替你把 `open` 置 `false`。
+需要「关掉时更新状态」请监听组件的 `close` 事件。
+:::
