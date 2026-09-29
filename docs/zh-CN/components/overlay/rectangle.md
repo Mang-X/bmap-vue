@@ -80,3 +80,17 @@ overlay/rectangle
 而 `getBounds()` 的四个角点顺序官方没有承诺——造一个「四顶点逐个改」的等价物是自研语义。
 
 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
+
+## 官方有、本库未暴露
+
+**没有缺口。** 官方 `RectangleOptions` 的 13 个键全部有出口：四个构造期（`enableClicking` /
+`coordType` / `linkRight` / `dashArray`）在上表，其余九个在「就地更新 Props」表里。
+
+::: tip 官方文档站的 `path` / `node` / `nodeT` 不在官方 4.0.5 声明里
+官方 React 文档的 API 表比 SDK 本身宽：`path`（本库改名 `bounds`，见上文「就地更新 Props」表）、
+`node` / `nodeT` 在上游 `RectangleOptions` 的声明中查无此成员。`node` / `nodeT` 是 React 的
+渲染插槽，不是构造选项。
+
+另外官方**没有**给 `Rectangle` 声明 `strokeLineCap` / `strokeLineJoin`（只有 `Polyline` /
+`Polygon` 有），本库因此不提供——传了不会被 SDK 识别。
+:::

@@ -41,20 +41,27 @@ overlay/customOverlay
 
 ## 官方有、本库暂未暴露的选项
 
-下面几项官方 `CustomOverlayOptions` 有声明，但**本组件目前没有对应 prop**，传了不会生效：
+官方 `CustomOverlayOptions` 一共 18 个键。上表的 Props 已给出 10 个（`offset` / `anchor` 由官方
+的 `offsetX` / `offsetY` / `anchors` 合并而来，`position` 由 `point` 改名，`rotation` 由
+`rotationInit` 改名——**这四个是改名或合并，不是缺口**），下面 8 个是真正的缺口：
 
-| 官方键 | 说明 | 官方默认 |
-| --- | --- | --- |
-| `rotationFlip` | 旋转角度超过 90 度且小于 270 度时是否翻转，避免内容倒置 | `false` |
-| `fixBottom` | 是否将 DOM 固定在底部 | `false` |
-| `useTranslate` | 是否使用 `translate3d` 进行性能优化 | `false` |
-| `autoFollowHeadingChanged` | 是否随地图旋转 | `false` |
-| `enableDraggingMap` | 覆盖物上是否允许拖拽地图 | `false` |
-| `nextTick` | 是否延迟一帧再显示，用于解决 DOM 自适应宽度问题 | `false` |
-| `synUpdate` | 是否与地图同步更新（跟随地图每次重绘同步刷新位置）；开启后覆盖物位置更新不再走默认的坐标转换逻辑 | `false` |
+| 官方键 | 说明 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- | --- |
+| `rotationFlip` | 旋转角度超过 90 度且小于 270 度时是否翻转，避免内容倒置 | `false` | 本库没接线 |
+| `fixBottom` | 是否将 DOM 固定在底部 | `false` | 本库没接线；DOM 的定位由 SDK 负责 |
+| `useTranslate` | 是否使用 `translate3d` 进行性能优化 | `false` | 本库没接线。⚠️ 这一项**开错方向的代价高**——它改变的是 SDK 搬运宿主时的定位实现，官方没给读回，无法验证是否真的生效 |
+| `autoFollowHeadingChanged` | 是否随地图旋转 | `false` | 本库没接线；宿主是 Vue 渲染的子树，跟随旋转要连内容一起变换，超出本库的 DOM 托管边界 |
+| `enableDraggingMap` | 覆盖物上是否允许拖拽地图 | `false` | 本库没接线。⚠️ 这一项会改变**地图**的交互（而不是覆盖物的），而本库的覆盖物事件面不承担地图手势仲裁 |
+| `nextTick` | 是否延迟一帧再显示，用于解决 DOM 自适应宽度问题 | `false` | 与本库的挂载时序冲突：组件在创建后立即按 `visible` 挂图，延迟一帧会与重建收敛抢同一个时机 |
+| `synUpdate` | 是否与地图同步更新（跟随地图每次重绘同步刷新位置）；开启后覆盖物位置更新不再走默认的坐标转换逻辑 | `false` | 见下 |
 
 其中 `synUpdate` 值得单独一提：开启后本组件的 `position` 更新策略会与官方默认**不同**，
 而官方没有为它声明读回，本库目前没有稳定的事件口径，因此没有提供入口。
+
+::: tip 官方 API 表里的 `children` 不是一个构造选项
+官方 React 文档表里出现的 `children` 是 React 的**渲染插槽**（等价于本组件的默认 slot 内容），
+不是一个 SDK 构造选项——传 prop 无意义。本组件的内容一律写在默认 slot 里。
+:::
 
 ## 宿主与 slot 的所有权
 

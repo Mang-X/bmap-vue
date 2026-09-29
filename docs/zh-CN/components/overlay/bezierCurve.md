@@ -57,3 +57,17 @@ overlay/bezierCurve
 载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
 
 详见 [覆盖物事件矩阵](./events)。
+
+## 官方有、本库未暴露
+
+**没有缺口。** 官方 `BezierCurveOptions` 的 8 个键全部有出口：两个构造期（`enableClicking` /
+`dashArray`）在上表，其余六个在「就地更新 Props」表里。
+
+::: tip 官方文档站的 `path` / `node` / `nodeT` 不在官方 4.0.5 声明里
+官方 React 文档的 API 表比 SDK 本身宽：`path`（本库改名 `points`，与图形族对齐）、`node` /
+`nodeT` 在上游 `BezierCurveOptions` 的声明中查无此成员。`node` / `nodeT` 是 React 的渲染插槽，
+不是构造选项。
+
+`controlPoints` 是本库的**几何必填项**（官方 `BezierCurve` 构造函数的第二个位置参数，
+`Array<Array<Point>>`），官方 API 表把它列成了独立的一行——在本库它是 prop 而不是构造选项。
+:::

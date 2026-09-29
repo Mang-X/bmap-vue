@@ -86,3 +86,14 @@ overlay/circle
 （官方 `Polyline.d.ts` 只声明描边 getter，没有填充）。
 
 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
+
+## 官方有、本库未暴露
+
+**没有缺口。** 官方 `CircleOptions` 的 12 个键全部有出口：三个构造期（`enableClicking` /
+`coordType` / `dashArray`）在上面的「构造期 Props」表里，其余九个在「就地更新 Props」表里。
+
+::: tip 官方文档站的 `path` / `node` / `nodeT` 不在官方 4.0.5 声明里
+官方 React 文档的 API 表比 SDK 本身宽：`path`（本库改名 `points`，与图形族对齐）、`node` /
+`nodeT` 在上游 `CircleOptions` 的声明中查无此成员。`node` / `nodeT` 是 React 的渲染插槽
+（等价于本库不需要的渲染数据），不是构造选项。
+:::

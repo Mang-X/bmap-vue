@@ -43,10 +43,39 @@ overlay/dyynmicMaker
 
 ::: warning `<Marker>` **没有** `anchor` 这个 prop
 官方 `MarkerOptions.anchor`（`@default BMAP_ANCHOR_CENTER`）是「标注锚点位置，设置后覆盖图标自身的
-锚点」，但官方**没有**为它声明读回：未设置时 `getAnchor()` 返回 SDK 自身的默认锚点，那个值无从再
-构造出来传回去，因此它没有可观察的更新入口。要改锚点请用「自定义图标」一节里的图标 `anchor`——
-那是**图标自身的锚点**，与官方那个标注级 `anchor` 是两个不同的东西。
+锚点」。实例上**确实**有 `setAnchor(anchor: ControlAnchor): void`，但**撤回**（改回「不设」）没有
+落点：未设置时 `getAnchor()` 返回的是 SDK 自身的默认锚点，那个值无从再构造出来传回去。本库据此
+把它钉在构造期，而构造期属性要有入口就必须有 prop——于是它成了「官方声明有、组件面完全没有」的一项。
+
+要改锚点请用「自定义图标」一节里的图标 `anchor`：那是**图标自身的锚点**，与官方那个标注级
+`anchor` 是两个不同的东西。官方正因此把图标级 `anchor` 标成了不建议使用、改推标注级——
+而那条推荐路径在本库**不可达**（见下文）。
 :::
+
+## 官方有、本库未暴露
+
+| 官方键 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- |
+| `enableMassClear` | `true` | 官方 `Marker` 实例上确实有成对开关 `enableMassClear()` / `disableMassClear()`，但本库没有把它接成 prop。**结果**：本库的标注一律参与 `map.clearOverlays()`，你无法关掉这一项 |
+| `anchor` | `BMAP_ANCHOR_CENTER` | 见上文：官方推荐的标注级锚点入口在本库**不可达** |
+
+两项都不是「上游没有这个能力」，而是**本库没接线**。`enableMassClear` 尤其反直觉：同一族的
+`<Label>` / `<Polyline>` / `<Circle>` 等都能关，唯独 `<Marker>` 不行——本库的标注一律参与
+`map.clearOverlays()`。
+
+### 官方文档站列了、但官方 4.0.5 类型声明里**没有**的键
+
+官方 React 文档的 `<Marker>` API 表比 SDK 本身宽。下面这些键在官方表里，**上游 `MarkerOptions`
+的声明里查无此成员**：它们不是本库漏收，而是**照抄过来会变成「传了也不生效」的假支持**——
+本库一律不提供。
+
+`opacity`、`color`、`rank`、`rotationOrigin`、`shadow`、`baseZIndex`、
+`enableCollisionDetection`、`enableDraggingMap`
+
+其中 `rank` / `rotationOrigin` 值得单说：官方 `Marker` 实例上**确实**有
+`setRank(rank)` / `setRotationOrigin(angle)`，本库把它们放在[命令面](#命令面defineexpose)而不是
+prop 上——`rank` 是「避让权重」而不是几何 / 样式，`rotationOrigin` 的原点在锚点上而不是标注中心，
+与 `rotation` 的语义不同，两者都不适合用一个「改了就能就地更新」的 prop 表达。
 
 ## 就地更新 Props（`options`）
 

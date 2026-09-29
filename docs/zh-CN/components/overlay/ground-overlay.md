@@ -78,16 +78,22 @@ export type GroundOverlayUrl =
 
 下面几项官方 `GroundOverlayOptions` 有声明，但**本组件目前没有对应 prop**，传了不会生效：
 
-| 官方键 | 说明 | 官方默认 |
-| --- | --- | --- |
-| `displayOnMinLevel` | 图层显示的最小缩放级别 | 3 |
-| `displayOnMaxLevel` | 图层显示的最大缩放级别 | 21 |
-| `isReDraw` | 是否开启循环重绘（`type` 为 `canvas` 时生效）。开启后每帧渲染前都会调用 `drawHook` 并重新采集 canvas 内容，用于雷达扫描、水波动画这类动态效果 | `false` |
-| `drawHook` | 自定义绘制回调，`type` 为 `canvas` 且开启 `isReDraw` 时每帧渲染前调用 | - |
-| `imageURL` | 官方已标注 `@deprecated 4.0 请使用 url 代替` | - |
+| 官方键 | 说明 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- | --- |
+| `displayOnMinLevel` | 图层显示的最小缩放级别 | 3 | 本库没有接线；需要按级别控制显示区域时直接改 `bounds` |
+| `displayOnMaxLevel` | 图层显示的最大缩放级别 | 21 | 同上 |
+| `isReDraw` | 是否开启循环重绘（`type` 为 `canvas` 时生效）。开启后每帧渲染前都会调用 `drawHook` 并重新采集 canvas 内容，用于雷达扫描、水波动画这类动态效果 | `false` | 涉及**逐帧回调**——本库目前没有可稳定释放的帧循环归属，给一个 `drawHook` prop 等于收下一条不受管理的重绘链 |
+| `drawHook` | 自定义绘制回调，`type` 为 `canvas` 且开启 `isReDraw` 时每帧渲染前调用 | - | 同上 |
+| `imageURL` | 官方已标注 `@deprecated 4.0 请使用 url 代替` | - | 官方自己建议改用 `url`；本库的 `url` 已经覆盖这个用途，再加一个别名只是多一条会漂移的路 |
 
-需要这几项时的替代做法是用 `bounds` 直接圈定想显示的区域；`isReDraw` / `drawHook` 涉及逐帧回调，
-在拿到稳定的事件口径之前本库不提供入口。
+前两项的替代做法是用 `bounds` 直接圈定想显示的区域；`isReDraw` / `drawHook` 在拿到稳定的
+帧循环归属之前本库不提供入口。
+
+::: tip 官方文档站还列了 `stretch`，但官方 4.0.5 声明里**没有**
+官方 React 文档的 API 表比 SDK 本身宽：`stretch` 在上游 `GroundOverlayOptions` 的声明中查无此成员。
+本库不提供它——照抄会变成「传了也不生效」的假支持。要按比例拉伸图像，请在你的图片里预先处理好，
+或改用 `bounds` 直接圈定范围。
+:::
 
 ## 组件事件
 

@@ -55,3 +55,18 @@ overlay/mapMask
 | `mouseout` | 鼠标指针移出该覆盖物事件的回调函数 | `(e: unknown) => void` |
 | `mouseover` | 鼠标指针移入该覆盖物事件的回调函数 | `(e: unknown) => void` |
 | `rightclick` | 鼠标右键单击事件的回调函数 | `(e: unknown) => void` |
+
+## 官方有、本库未暴露
+
+**没有缺口。** `MapMask` 的构造器同样**不在**官方 4.0.5 的类型声明里（只在运行时提供），
+因此没有可比对的 `MapMaskOptions`。上表列出的六个 prop 就是本库的全部面。
+
+官方文档站那一行的 `bounds` 在上游没有对应声明——本库的显示区域一律用 `points`
+（与 `<Polyline>` / `<Polygon>` 同一形状的坐标数组）。
+
+::: tip 本组件的事件面标着「未取证」
+`MapMask` 走**运行时实测**而非类型声明。上游**没有** `MapMaskEventMap`，因此它不在
+[覆盖物事件矩阵](./events)里——本页的事件表是组件 `defineEmits` 的实际形状，两者不等同。
+本组件的 `path` 更新走重建（运行时提供 `setPoints` / `setPathIn`，但**没有** `setPath`，
+因此不映射成就地更新）。
+:::

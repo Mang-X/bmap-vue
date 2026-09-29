@@ -54,6 +54,28 @@ overlay/label
 `background-color`），因为它被原样交给官方的样式入口。
 :::
 
+## 官方有、本库未暴露
+
+| 官方键 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- |
+| `enableClicking` | `true` | 官方 `LabelOptions` 有这个构造选项，但本库**没有**把它接成 prop。**结果**：`<Label>` 一律响应点击，你无法关掉 |
+
+这一项与 `<Marker>` 的 `enableMassClear` 是同一类问题：**官方声明有、实例上的分类也在，本库只是
+没接线**。同一个 `Label` 实例上没有 `enableClicking` / `disableClicking` 成对开关，因此真要按官方
+默认值关掉它只能重建实例——本库目前不提供那条路。
+
+::: tip `styles` 的 prop 名为什么是 `style`（单数）
+官方构造选项叫 `styles`（复数），本库 prop 叫 `style`。这是**故意**的：官方 `Label` 实例上的
+setter 也叫复数的 `setStyles()`，而 `<Label>` 的 prop 面一律用单数的 `style`（与本库其它组件的
+样式 prop 同名同形）。传 `style` 即可，**不要**写 `styles`——那会落进 `$attrs` 且不生效。
+:::
+
+::: tip 官方文档站还列了 `title` / `opacity`，但官方 4.0.5 声明里**没有**
+`LabelOptions` 一共 7 个键（上表之外没有别的）。官方 React 文档表里多出来的 `title` / `opacity`
+在上游 `LabelOptions` 的声明中查无此成员——本库不提供它们，因为照抄会变成「传了也不生效」的
+假支持。（`Label` 实例上倒是有 `setTitle` / `setOpacity`，但它们不在构造选项里。）
+:::
+
 ## 组件事件
 
 本组件的事件面由**覆盖物事件矩阵**给出：`label` 共 8 个事件，事件名（Vue 名 / SDK 名）、

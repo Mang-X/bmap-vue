@@ -110,3 +110,15 @@ overlay/polygon/boundaries
 （官方 `Polyline.d.ts` 只声明描边 getter）。
 
 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
+
+## 官方有、本库未暴露
+
+**没有缺口。** 官方 `PolygonOptions` 的 15 个键全部有出口：七个构造期（`isBoundary` /
+`enableClicking` / `strokeLineCap` / `strokeLineJoin` / `linkRight` / `coordType` / `dashArray`）
+在上表，其余八个在「就地更新 Props」表里。
+
+::: tip 官方文档站的 `path` / `node` / `nodeT` 不在官方 4.0.5 声明里
+官方 React 文档的 API 表比 SDK 本身宽：`path`（本库改名 `points`，与图形族对齐）、`node` /
+`nodeT` 在上游 `PolygonOptions` 的声明中查无此成员。`node` / `nodeT` 是 React 的渲染插槽，
+不是构造选项。
+:::

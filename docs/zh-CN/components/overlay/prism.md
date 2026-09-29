@@ -44,6 +44,19 @@ overlay/prism
 侧面 `0.8`）。想跟随主题色请直接给 `''` 之外的空值或不传后自行接管。
 :::
 
+## 官方有、本库未暴露
+
+| 官方键 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- |
+| `enableClicking` | `true` | 官方 `PrismOptions` 有这个构造选项，但本库**没有**把它接成 prop。**结果**：`<Prism>` 一律响应点击，你无法关掉 |
+
+与 `<Marker>` 的 `enableMassClear`、`<Label>` 的 `enableClicking` 是同一类问题：官方声明有，
+本库没接线。`Prism` 实例上没有 `enableClicking` / `disableClicking` 成对开关，真要关掉只能重建
+实例——本库目前不提供那条路。
+
+其余六个官方键（`topFillColor` / `topFillOpacity` / `sideFillColor` / `sideFillOpacity` /
+`enableMassClear` / `zIndex`）在上表的 Props 表里都已给出，没有缺口。
+
 ## 组件事件
 
 本组件的事件面由**覆盖物事件矩阵**给出：`prism` 共 11 个事件，事件名（Vue 名 / SDK 名）、

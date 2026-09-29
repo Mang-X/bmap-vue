@@ -233,3 +233,17 @@ const infoWindow = ref<InfoWindowReadBackApi>()
 `onClosing` 只作为官方回调原样透传，**不会**替你把 `open` 置 `false`。
 需要「关掉时更新状态」请监听组件的 `close` 事件。
 :::
+
+## 官方有、本库未暴露
+
+**没有缺口**：官方 `InfoWindowOptions` 的 15 个键全部有出口——7 个在上面的「组件 Props」表里，
+另外 8 个在「其余官方构造选项」表里，逐条给了更新口径与依据。
+
+::: tip 官方文档站还列了 `enableMessage` / `message`，但官方 4.0.5 声明里**没有**
+官方 React 文档的 API 表比 SDK 本身宽：这两个键在上游 `InfoWindowOptions` 的声明中查无此成员。
+本库不提供它们——照抄会变成「传了也不生效」的假支持。气泡内容一律走默认 slot。
+
+另外，官方表里的 `onOpen` / `onClose` / `onClickClose` / `onMaximize` / `onRestore` / `onResize`
+是 **React 的事件回调**，不是构造选项。在本库它们对应的是 `defineEmits` 的事件名（**不带** `on`
+前缀），见上面的「组件事件」表；`resize` 官方声明了但本组件不派发（理由见该表的 tip）。
+:::
