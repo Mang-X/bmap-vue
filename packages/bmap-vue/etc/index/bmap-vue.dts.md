@@ -413,9 +413,15 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     minZoom: number;
     maxZoom: number;
     mapType: MapTypeIdName;
+    enableInertialDragging: boolean;
+    enableKeyboard: boolean;
+    enableContinuousZoom: boolean;
     enableWheelZoom: boolean;
     keepAliveBehavior: "suspend" | "dispose";
     preserveDrawingBuffer: boolean;
+    enablePinchZoom: boolean;
+    enableDblclickZoom: boolean;
+    fixCenterWhenResize: boolean;
     enableAutoResize: boolean;
     loadingBgColor: string;
 }, {}, {}, {}, string, ComponentProvideOptions, false, {}, any>;

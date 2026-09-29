@@ -209,13 +209,13 @@ map/theme2
 | 就地更新 | mapStyleJson | 个性化地图样式 Json（**数组**，对齐官方 `styleJson?: object[]`）[详见](#个性化地图) | `Record<string, unknown>[]` | - | `setMapStyle` |
 | 构造期 | preserveDrawingBuffer | 建图时保留绘图缓冲。它是 `getScreenshot()` 能拿到真实画面的**前提**，且**只在建图期生效、事后补不上**。默认**不开启**（常驻一块画布内存是库不该替使用者做的取舍）。⚠️ 地球模式不支持截图 | `boolean` | -（默认不传该键） | 建图选项（经索引签名原样下发） |
 | 构造期 | enableDragging | 启用地图拖拽 | `boolean` | `true` | 建图后经 `enableDragging()` / `disableDragging()` |
-| 构造期 | enableInertialDragging | 启用地图惯性拖拽（官方实例方法名同名） | `boolean` | `false` | 建图后经 `enableInertialDragging()` / `disableInertialDragging()` |
+| 构造期 | enableInertialDragging | 启用地图惯性拖拽（官方实例方法名同名） | `boolean` | -（默认不传，交给 SDK 自己的默认） | 建图后经 `enableInertialDragging()` / `disableInertialDragging()` |
 | 构造期 | enableWheelZoom | 允许地图可被鼠标滚轮缩放（官方 `MapOptions.enableWheelZoom`；官方默认 `true`，本库默认 `false` 是**有意**的——见下方注） | `boolean` | `false` | 建图后经 `enableScrollWheelZoom()` / `disableScrollWheelZoom()` |
-| 构造期 | enableContinuousZoom | 开启双击平滑缩放效果（官方只有同名**实例方法**，没有 `MapOptions` 构造键） | `boolean` | `false` | 建图后经 `enableContinuousZoom()` / `disableContinuousZoom()` |
-| 构造期 | fixCenterWhenResize | 容器尺寸变化时保持地图中心点不变（官方 `MapOptions.fixCenterWhenResize`，官方默认 `false`） | `boolean` | `false` | 建图后经 `enableResizeOnCenter()` / `disableResizeOnCenter()` |
-| 构造期 | enableDblclickZoom | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`） | `boolean` | `false` | 建图后经 `enableDoubleClickZoom()` / `disableDoubleClickZoom()` |
-| 构造期 | enableKeyboard | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean` | `false` | 建图后经 `enableKeyboard()` / `disableKeyboard()` |
-| 构造期 | enablePinchZoom | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`） | `boolean` | `false` | 建图后经 `enablePinchToZoom()` / `disablePinchToZoom()` |
+| 构造期 | enableContinuousZoom | 开启双击平滑缩放效果（官方只有同名**实例方法**，没有 `MapOptions` 构造键） | `boolean` | -（默认不传，交给 SDK 自己的默认） | 建图后经 `enableContinuousZoom()` / `disableContinuousZoom()` |
+| 构造期 | fixCenterWhenResize | 容器尺寸变化时保持地图中心点不变（官方 `MapOptions.fixCenterWhenResize`，官方默认 `false`） | `boolean` | -（不传 = 官方默认 `false`） | 建图后经 `enableResizeOnCenter()` / `disableResizeOnCenter()` |
+| 构造期 | enableDblclickZoom | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableDoubleClickZoom()` / `disableDoubleClickZoom()` |
+| 构造期 | enableKeyboard | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean` | -（不传 = 官方默认 `false`） | 建图后经 `enableKeyboard()` / `disableKeyboard()` |
+| 构造期 | enablePinchZoom | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enablePinchToZoom()` / `disablePinchToZoom()` |
 | 就地更新 | enableAutoResize | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | 库内尺寸观察器 → `checkResize()` |
 | 废弃（无效果） | enableTraffic | **不生效**。4.0 的路况收敛成独立图层，`<Map>` 自身没有这个开关——留着它只是为了让旧代码不报类型错。路况请用 `<TrafficLayer>`，见[图层总览](./layer/index.md) | `boolean` | `false` | 无（静默空操作） |
 ::: tip 四个交互 prop 的名字为什么和官方「实例方法」不一样
@@ -236,15 +236,32 @@ map/theme2
 `enableInertialDragging`（惯性拖拽）与 `enableContinuousZoom`（双击平滑缩放）。
 :::
 
-::: warning 交互类 prop 的默认是「关」，且不能靠「不传」拿到官方默认
-八个交互 prop 里只有 `enableDragging` 与 `enableWheelZoom` 在本库**显式**声明了默认值
-（`true` / `false`）。其余六个（`enableInertialDragging` / `enableContinuousZoom` /
-`fixCenterWhenResize` / `enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom`）
-**默认全部是 `false`**：Vue 对缺省 `Boolean` prop 会转成 `false`，于是「不传」与
-「传 `false」在这里分不开，组件会显式把官方实例方法调成 `disable*()`。
+::: tip 六个交互 prop「不传」= 不表态，用官方自己的默认
+八个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
+`enableWheelZoom: false`（滚轮那条见下方单独的告警框）。
 
-因此**要官方默认（多数是 `true`）必须显式写 `true`**。`enableKeyboard` 尤其要注意：
-官方 `MapOptions.enableKeyboard` 的 `@default` 本身就是 `false`，这一项与官方一致。
+其余**六个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
+`enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom`）在 `withDefaults` 里**显式钉成
+`undefined`**——这不是偷懒，而是必需的：Vue 会把缺省 `Boolean` prop 的「没传」强转成
+`false`，若不显式钉住，「不传」与「传 `false`」就分不开，组件会在**每次建图**时把这六项
+逐个调成 `disable*()`，于是官方 `@default true` 的**双指缩放与双击缩放被静默关掉**
+（这是修复前的真实行为，见 issue #179）。
+
+钉成 `undefined` 之后，「没传」真的等于「没传」，组件**不下发任何调用**，最终生效的是
+官方 `core/MapOptions.d.ts` 自己声明的 `@default`：
+
+| prop | 官方 `@default` | 不传时的实际效果 |
+| --- | --- | --- |
+| `enableDblclickZoom` | `true` | 双击缩放**开** |
+| `enablePinchZoom` | `true` | 双指缩放**开** |
+| `enableKeyboard` | `false` | 键盘操作关 |
+| `fixCenterWhenResize` | `false` | resize 不保持中心 |
+| `enableInertialDragging` | 未标注 | 按 SDK 默认 |
+| `enableContinuousZoom` | 官方无构造键 | 按 SDK 默认 |
+
+⚠️ **行为变更（1.0.0-rc 期间）**：修复之前这六项**不传时一律是关**。升级之后
+`enableDblclickZoom` 与 `enablePinchZoom` 会**变回开**。依赖旧行为请显式写
+`:enable-dblclick-zoom="false"` / `:enable-pinch-zoom="false"`。
 :::
 
 ::: warning `enableWheelZoom` 的默认值与官方不同

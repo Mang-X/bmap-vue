@@ -70,6 +70,28 @@ const props = withDefaults(defineProps<MapProps>(), {
   // 误缩放），并由 Driver 的 `LIBRARY_MAP_DEFAULTS` 显式写进构造 options 固定它。
   // 这是有意决策，**不是**本次改名的一部分——改的只是 prop 名。
   enableWheelZoom: false,
+  // ⚠️ 其余六个交互开关**刻意写 `undefined`**（#179）。口径与 `preserveDrawingBuffer` 相同：
+  // Vue 对缺省 `Boolean` prop 会把「没传」强转成 `false`，于是 `syncEnableProps` 里的
+  // `if (value === undefined) continue` **永不命中**，每个未传的开关都被逐个调成
+  // `disable*()`——把官方声明为 `@default true` 的 `enableDblclickZoom` / `enablePinchZoom`
+  // 静默关掉（用户什么都不写，双指/双击缩放就没了）。
+  //
+  // 写 `undefined` 之后 `hasDefault` 为真，Vue 的「缺失即 false」转换不再触发，
+  // 「没传」真的等于「没传」⇒ 交给 SDK 用**它自己声明的默认值**
+  // （`core/MapOptions.d.ts`：`enableDblclickZoom` / `enablePinchZoom` 是 `true`，
+  // `enableKeyboard` / `fixCenterWhenResize` 是 `false`，另两项官方没标）。
+  //
+  // ⚠️ 这是**行为变更**（见 `.changeset/`），不是纯内部重构：
+  // 什么都不传的地图，修复后双指缩放与双击缩放会**变回开**。
+  //
+  // 这六项必须在 `INTERACTION_PROPS` 覆盖的范围内**逐个显式出现**——少一个，
+  // 它的「未传」就又变成 `false`。门禁：`scripts/check-interaction-props.mts`。
+  enableInertialDragging: undefined,
+  enableContinuousZoom: undefined,
+  fixCenterWhenResize: undefined,
+  enableDblclickZoom: undefined,
+  enableKeyboard: undefined,
+  enablePinchZoom: undefined,
   // ⚠️ 刻意写 `undefined`（口径同 `LineLayer.popEvent` / `PointIconLayer.userSizes`）：
   // Vue 对缺省 `Boolean` 会转成 `false`，不显式关掉这个转换，「不传」与「传 false」就分不开，
   // 而本库要表达的恰恰是**默认不表态**——由使用者显式 opt-in 才把键递下去
@@ -576,6 +598,13 @@ function applyMapType(ctx: MapReadyContext) {
  * `enableResizeOnCenter()`（见 `driver/jsapi-v4/map.ts`）。#165 Class 1 把**公开 prop**
  * 收敛到官方构造期那一组；落地机制**不变**——仍是建图后按实例方法落一次
  * （`setInteraction`），不改成构造选项。
+ *
+ * ⚠️ **这张表的每一项都必须在 `withDefaults` 里显式出现**（#179）。理由：本表的消费方
+ * `syncEnableProps` 靠 `!== undefined` 区分「不表态」，而 Vue 会把缺省 `Boolean` prop 的
+ * 「没传」强转成 `false`——不在 `withDefaults` 里钉 `undefined`，该项就会在**每一次**建图时
+ * 被逐个 `disable*()`，把官方的 `@default true` 静默关掉。**新增一项交互 prop 时必须同时
+ * 加进 `withDefaults`**（值写实际默认，或写 `undefined` 表示「交给 SDK 默认」）；
+ * `scripts/check-interaction-props.mts` 是这条不变量的门禁。
  */
 const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableDragging", "dragging"],

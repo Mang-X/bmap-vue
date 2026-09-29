@@ -154,6 +154,13 @@ jobs:
       - name: Check doc prop names
         run: node --experimental-strip-types scripts/check-doc-props.mts
 
+      # `<Map>` 交互开关 prop 的「未传」可达性（#179）。判据：INTERACTION_PROPS 覆盖的
+      # 每一个 prop 都必须在 Map.vue 的 withDefaults 里显式出现 —— 否则 Vue 把缺省 Boolean
+      # 的「没传」强转成 false，syncEnableProps 的 `!== undefined` 守卫对它永不命中，
+      # 官方 `@default true` 的双指/双击缩放被静默 disable*()。不依赖 dist，可以放 build 之前。
+      - name: Check interaction prop defaults
+        run: node --experimental-strip-types scripts/check-interaction-props.mts
+
       # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
       # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。
       # 根入口 / ./components 暂时进不了报告（Volar __VLS_ 悬空引用），脚本对它们跑探针：

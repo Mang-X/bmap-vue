@@ -287,3 +287,92 @@ describe("Map：五条视野命令的 options 从 expose 透到 SDK（#171 / #16
     await settle();
   });
 });
+
+describe("Map：交互开关的「未传」不表态（#179）", () => {
+  // `syncEnableProps` 用 `!== undefined` 表达「不表态，交给 SDK 用它自己声明的默认值」。
+  // 但 Vue 会把**缺省 `Boolean` prop** 的「没传」强转成 `false`——没在 `withDefaults` 里
+  // 显式钉 `undefined`，守卫就永不命中，每个未传的开关都被逐个 `disable*()`。
+  // 官方 `core/MapOptions.d.ts` 声明 `@default true` 的 `enableDblclickZoom` /
+  // `enablePinchZoom` 因此被静默关掉：用户什么都不写，双指缩放与双击缩放就没了。
+  //
+  // 这一层断言**领域读数**（开关现在是什么状态 / 下发了多少次调用），不碰字段名以外的东西。
+  afterEach(() => harness.reset());
+
+  const mountMap = async (props: Record<string, unknown>) => {
+    const host = harness.container();
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(Map, { provider: harness.provider(), ...props }),
+      }),
+      { attachTo: host },
+    );
+    await settle();
+    return wrapper;
+  };
+
+  /** 当前地图的交互开关状态（领域读数）。 */
+  const interactions = (): Record<string, boolean> =>
+    Object.assign({}, fake.createdMaps[fake.createdMaps.length - 1]!.interactions);
+
+  it("什么都不传：八个交互开关一个都不被 disable*()（正证守卫）", async () => {
+    // 正证守卫：`enableDragging` / `enableWheelZoom` 有**显式**默认值（true / false），
+    // 必然各被下发一次。所以「调用日志里有交互写入」这件事本身不是本用例的结论，
+    // 结论是**另外六项一次都没被写**。
+    const wrapper = await mountMap({});
+    expect(fake.createdMaps).toHaveLength(1);
+
+    const state = interactions();
+    expect(
+      state,
+      "未传的交互开关不应被逐个 disable*()（实况：" + JSON.stringify(state) + "）",
+    ).not.toHaveProperty("doubleClickZoom", false);
+    expect(state).not.toHaveProperty("pinchToZoom", false);
+    expect(state).not.toHaveProperty("keyboard", false);
+
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("显式传 false 仍会被 disable*()——「没传」与「传 false」现在分得开了", async () => {
+    const wrapper = await mountMap({ enableDblclickZoom: false, enablePinchZoom: false });
+    expect(interactions()).toMatchObject({ doubleClickZoom: false, pinchToZoom: false });
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("显式传 true 会真的 enable*()（正证：链路确实接上了，不是「什么都没发生」）", async () => {
+    const wrapper = await mountMap({ enableDblclickZoom: true, enablePinchZoom: true });
+    expect(interactions()).toMatchObject({ doubleClickZoom: true, pinchToZoom: true });
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("六项「未传」与「传 false」的下发次数不同：未传一次都不写", async () => {
+    // 上一条只断言最终**状态**，这一条断言**次数**：未传 ⇒ 调用日志里压根不该出现对应的
+    // `disable*()`；传 false ⇒ 必须出现。
+    //
+    // 只盯这六项的官方实例方法名：`enableWheelZoom` 的 `disableScrollWheelZoom` 是
+    // **有意**的库默认（见 `withDefaults` 的注释），它出现是正常的，混进来断言会让
+    // 「未传不写」这条结论被另一个决策顶红。
+    const NO_OPINION = [
+      "disableDoubleClickZoom",
+      "disablePinchToZoom",
+      "disableKeyboard",
+      "disableInertialDragging",
+      "disableContinuousZoom",
+      "disableResizeOnCenter",
+    ] as const;
+    const callLog = (): readonly string[] => fake.createdMaps[fake.createdMaps.length - 1]!.callLog;
+
+    const skipped = await mountMap({});
+    expect(callLog().filter((e) => NO_OPINION.includes(e as never))).toEqual([]);
+    skipped.unmount();
+    await settle();
+    harness.reset();
+
+    const disabled = await mountMap({ enablePinchZoom: false });
+    expect(callLog()).toContain("disablePinchToZoom");
+    disabled.unmount();
+    await settle();
+  });
+});
