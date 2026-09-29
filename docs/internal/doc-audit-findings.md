@@ -155,9 +155,13 @@ type NavigationControlType = 0 | 1 | 2 | 3;
 | A. 库加映射 | 与 `anchor` 同一套做法，加 `TYPE_VALUES` 名字→数字表；改动 `src/**`，公共 API 形状不变 |
 | B. 文档收窄 | 文档改成字面量联合 `"0" | "1" | "2" | "3"`，明确「这是本库约定，与官方数字常量不同名」 |
 
-**已按 A 修（#175）**：`driver/jsapi-v4/controls.ts` 新增 `TYPE_VALUES`（两张枚举的合集，
-类型层被 `_AssertNavigationControlType` 钉在官方 `const` 声明上），`ControlOptionSpec` 新增
-`value: "control-type"` 标记，`normalizeValue` 统一走 `resolveType`。公共 prop 仍是
+**已按 A 修（#175）**：`driver/jsapi-v4/controls.ts` 新增 `NAVIGATION_TYPE_VALUES` /
+`MAPTYPE_TYPE_VALUES` **两张按族分开的表**（不是一张平表——两族的数值撞：
+`BMAP_NAVIGATION_CONTROL_PAN` 与 `BMAP_MAPTYPE_CONTROL_MAP` 都是 `2`，合成一张会让跨族传值
+静默生效、渲染出别的控件的样式）。`ControlOptionSpec` 的 `value` 标记相应分成
+`"navigation-type"` / `"map-type-style"`，`normalizeValue` 按标记各查本族、`resolveType`
+统一告警口径。取值被**逐名**等值断言钉在官方 `const` 声明上（并集 `extends` 是恒真重言式，
+只能挡「上游新增成员」、挡不住「改值」——改值才是这张表最需要防的回归）。公共 prop 仍是
 `string`（不改调用方）。B 被否的原因是：文档与示例一直用常量名，收窄成字面量联合是纯破坏面。
 
 `tests/behavior/controls.test.ts` 那条固化「字符串原样进去」的断言同时改为断言换算后的数值。

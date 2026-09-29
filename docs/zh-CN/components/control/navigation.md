@@ -68,6 +68,13 @@ control/navigation
 填不存在的名字会**先告警一次再忽略**，控件沿用自身默认样式（不会静默换成某个未知样式）。
 :::
 
+::: warning 换算表**按控件族分开**
+`<NavigationControl>` 只接受上表的四个 `BMAP_NAVIGATION_CONTROL_*`。传 `<MapTypeControl>`
+的 `BMAP_MAPTYPE_CONTROL_*` 会**告警并忽略**，不会静默生效——两族的数值还撞
+（`BMAP_NAVIGATION_CONTROL_PAN` 与 `BMAP_MAPTYPE_CONTROL_MAP` 都是 `2`），误接受会让控件
+渲染出**另一种样式**且控制台里什么都没有。
+:::
+
 ## 选项的更新方式
 
 `type` 走官方 `setType()` **就地更新**（控件不会重建、交互状态不丢）；`showZoomInfo` / `enableGeolocation` 在官方

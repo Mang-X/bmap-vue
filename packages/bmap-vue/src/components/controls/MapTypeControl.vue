@@ -8,8 +8,11 @@ export interface MapTypeControlProps {
    * 控件样式，官方 `BMAP_MAPTYPE_CONTROL_*`（MAP / DROPDOWN / HORIZONTAL，只有构造期生效）。
    *
    * 填**常量名**（`"BMAP_MAPTYPE_CONTROL_DROPDOWN"` …），控件边界有一张名字→数值表
-   * （`TYPE_VALUES`）换算成官方的 `0 | 1 | 2`——上游 `MapTypeControlOptions.type`
+   * （`MAPTYPE_TYPE_VALUES`）换算成官方的 `0 | 1 | 2`——上游 `MapTypeControlOptions.type`
    * 收的是**数字**（issue #175）。
+   *
+   * 表**按族分开**，因此 `BMAP_NAVIGATION_CONTROL_*`（`<NavigationControl>` 的取值）会告警并
+   * 被忽略——两族的数值还撞（`MAP` 与 `PAN` 都是 `2`），误接受会静默换出别的控件的样式。
    */
   type?: string;
   /**

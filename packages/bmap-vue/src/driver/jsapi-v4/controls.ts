@@ -19,9 +19,10 @@
  *   是该控件唯一的运行期配置入口，所以它的 option 走「options 袋」整体写回；
  * - `CopyrightControl#addCopyright` 接收**对象字面量**（官方 `@example` 即如此；类型包把
  *   参数写成结构等价的 `Copyright`，两处不冲突）。
- * - 控件 `type`（`navigation` / `map-type`）在项目侧是**常量名**（`string`），官方收的是
+ * - 控件 `type`（`navigation` / `map-type`）在项目侧是**本族常量名**（`string`），官方收的是
  *   **数值**枚举（`NavigationControlType` = `0|1|2|3`，`MapTypeControlType` = `0|1|2`）。
- *   `TYPE_VALUES` 负责换算，与 `anchor` 的 `ANCHOR_VALUES` 同一套做法（issue #175）。
+ *   `NAVIGATION_TYPE_VALUES` / `MAPTYPE_TYPE_VALUES` 负责换算（**按族分表**，跨族名字被拒），
+ *   与 `anchor` 的 `ANCHOR_VALUES` 同一套做法（issue #175）。
  * - `create("custom")` 显式失败并指向 `createCustomControl()`：自定义控件要的是 DOM 工厂，
  *   走通用构造器只会拿到一个没有 `initialize` 的空控件。
  *
@@ -104,35 +105,45 @@ export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | Offic
 };
 
 /**
- * 控件 `type` 常量表：官方 `const/NavigationControlType.d.ts` 与
- * `const/MapTypeControlType.d.ts` 的**声明值**。
+ * 控件 `type` 常量表：官方 `const/NavigationControlType.d.ts`（`0|1|2|3`）与
+ * `const/MapTypeControlType.d.ts`（`0|1|2`）的**声明值**，**按族分表**。
  *
  * 公共 prop 收**字符串**（`NavigationControlProps.type` / `MapTypeControlProps.type` 都是
  * `string`），但上游 `NavigationControlOptions.type?: NavigationControlType` 与
- * `MapTypeControlOptions.type?: MapTypeControlType` 都是**数值**联合
- * （`0 | 1 | 2 | 3` / `0 | 1 | 2`）。此前 Driver 走 `projectOptions` 的原样透传分支，把
- * `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进只认数字的构造器——类型在**主动误导**使用者
- * （issue #175 / `docs/internal/doc-audit-findings.md` 第 10 条）。
+ * `MapTypeControlOptions.type?: MapTypeControlType` 都是**数值**联合。此前 Driver 走
+ * `projectOptions` 的原样透传分支，把 `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进只认数字的
+ * 构造器——类型在**主动误导**使用者（issue #175 / `doc-audit-findings.md` 第 10 条）。
  *
- * 处置是**补这张表**而不是把 prop 收窄成字面量联合：文档与示例一直用常量名，收窄会破坏
+ * 处置是**补这两张表**而不是把 prop 收窄成字面量联合：文档与示例一直用常量名，收窄会破坏
  * 现有调用方，而公共 API 形状（仍是 `string`）保持不变——这与 `anchor` 是同一套做法。
- * 表同样被类型层钉在官方声明上（见文件末尾的 `type` 断言），上游改值会直接编译失败。
  *
- * ⚠️ 与 `ANCHOR_VALUES` 的分工不同：这里**没有**跨控件复用——两个控件族的常量名前缀
- * （`BMAP_NAVIGATION_CONTROL_*` / `BMAP_MAPTYPE_CONTROL_*`）互不重叠，也不该重叠
- * （官方是两套独立的枚举）。放进同一张表是为了让「名字→数字」只有一处事实源。
+ * **为什么分表而不是一张平表**：官方是**两套独立的枚举**，控件族与常量前缀一一对应。
+ * 合成一张 `Record<string, …>` 会让两族共用一个键空间，于是
+ * `<NavigationControl type="BMAP_MAPTYPE_CONTROL_MAP">` 会被静默接受成 `2`——
+ * 官方会照着这个数渲染出**地图类型控件的样式**，而使用者的本意是导航控件。
+ * 数值上 `BMAP_MAPTYPE_CONTROL_MAP`(2) 与 `BMAP_NAVIGATION_CONTROL_PAN`(2) 还撞值，
+ * 连「看起来不对」都看不出来。按族分表让 `resolveType` 只查本族，跨族名字落到
+ * 「不认识」分支——告警 + 忽略（与 `resolveAnchor` 同一口径）。
+ *
+ * 键类型用官方常量名的字面量联合而非 `string`：新增/改名官方常量会直接编译失败（必须同步
+ * 这张表），跨族名字则连键位都不存在。表里写**字面量数字**（与 `ANCHOR_VALUES` 同一手法，
+ * 不读未经 Provider 校验的全局常量），取值由文件末尾的 `type` 断言逐名钉在官方 `const`
+ * 声明上——上游改值会直接编译失败（issue #175）。
  */
-export const TYPE_VALUES: Readonly<Record<string, OfficialControlType>> = {
+export const NAVIGATION_TYPE_VALUES = {
   // `const/NavigationControlType.d.ts`：LARGE=0 / SMALL=1 / PAN=2 / ZOOM=3
   BMAP_NAVIGATION_CONTROL_LARGE: 0,
   BMAP_NAVIGATION_CONTROL_SMALL: 1,
   BMAP_NAVIGATION_CONTROL_PAN: 2,
   BMAP_NAVIGATION_CONTROL_ZOOM: 3,
+} as const satisfies Readonly<Record<OfficialNavigationTypeName, NavigationControlType>>;
+
+export const MAPTYPE_TYPE_VALUES = {
   // `const/MapTypeControlType.d.ts`：HORIZONTAL=0 / DROPDOWN=1 / MAP=2
   BMAP_MAPTYPE_CONTROL_HORIZONTAL: 0,
   BMAP_MAPTYPE_CONTROL_DROPDOWN: 1,
   BMAP_MAPTYPE_CONTROL_MAP: 2,
-};
+} as const satisfies Readonly<Record<OfficialMapTypeControlName, MapTypeControlType>>;
 
 /** 4.0 控件真正接受的落点：四角。其它常量会被 SDK 静默回落。 */
 const CORNER_ANCHORS: ReadonlySet<string> = new Set([
@@ -152,19 +163,22 @@ const CORNER_ANCHORS: ReadonlySet<string> = new Set([
  *   把「重建」的决定交给调用方。
  *
  * `value` 是**取值形状**，两个 policy 都有：`"size"` 是 Pixel → `Size`，
- * `"control-type"` 是常量名（string）→ 数值枚举（`resolveType`）。它只作用在**构造期**
- * （`projectOptions`）与 `mutable` 的 setter 写入——`recreate` 上的 `value` 表示
- * 「重建时这次构造要用哪个换算」，不表示它可以就地写（issue #175）。
+ * `"navigation-type"` / `"map-type-style"` 是**各族的**常量名（string）→ 数值枚举
+ * （`resolveType`）。两种 `type` 标记**必须分开**而不是合用一个 `"control-type"`：
+ * 合一时两张表会共用一个键空间，跨族名字被静默接受（见 `NAVIGATION_TYPE_VALUES` 的注释）。
+ * `value` 只作用在**构造期**（`projectOptions`）与 `mutable` 的 setter 写入——`recreate`
+ * 上的 `value` 表示「重建时这次构造要用哪个换算」，不表示它可以就地写（issue #175）。
  *
  * `anchor` / `offset` 是全部控件的公共可更新项（基类 `setAnchor` / `setOffset`），
  * 因此在 `setOptions` 里单独处理，不重复出现在本表。
  *
  * 表用 `Record<ControlKind, …>` 而非 `Partial`：新增一个控件种类却忘记写分类会直接编译失败。
  */
+type ControlOptionValue = "size" | "navigation-type" | "map-type-style";
 type ControlOptionSpec =
-  | { policy: "mutable"; setter: string; value?: "size" | "control-type" }
+  | { policy: "mutable"; setter: string; value?: ControlOptionValue }
   | { policy: "mutable"; choice: readonly [string, string] }
-  | { policy: "recreate"; reason: string; value?: "size" | "control-type" };
+  | { policy: "recreate"; reason: string; value?: ControlOptionValue };
 
 const CONTROL_OPTION_SPECS: Readonly<
   Record<ControlKind, Readonly<Record<string, ControlOptionSpec>>>
@@ -174,11 +188,11 @@ const CONTROL_OPTION_SPECS: Readonly<
     unit: { policy: "mutable", setter: "setUnit" },
   },
   navigation: {
-    // `value: "control-type"`：`type` 在项目侧是常量名（`string`），官方
+    // `value: "navigation-type"`：`type` 在项目侧是常量名（`string`），官方
     // `setType(type: NavigationControlType)` 要**数字**（issue #175）。没有这个标记时
     // `normalizeValue` 会把它原样透传，等于把 `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进
     // 数值枚举的位置。
-    type: { policy: "mutable", setter: "setType", value: "control-type" },
+    type: { policy: "mutable", setter: "setType", value: "navigation-type" },
     // 官方 4.0.5 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
     showZoomInfo: { policy: "recreate", reason: "4.0 的 NavigationControl 没有级别提示的 setter" },
     enableGeolocation: {
@@ -211,7 +225,8 @@ const CONTROL_OPTION_SPECS: Readonly<
       reason: "4.0 的 MapTypeControl 只公开 showStreetLayer(isShow)，控件样式没有 setter",
       // 同样是「项目侧常量名 → 官方数值」：`recreate` 说的是**不能就地改**，
       // 不是「不能构造」——`projectOptions` 仍会经过 `normalizeValue`（issue #175）。
-      value: "control-type",
+      // 与 `navigation` 分成两个标记：两族是**独立**的枚举，跨族名字必须落到「不认识」。
+      value: "map-type-style",
     },
     mapTypes: { policy: "recreate", reason: "地图类型列表只在构造期读取" },
   },
@@ -323,37 +338,48 @@ export function createJsapiV4ControlDriver(
    * 把一个官方不认的字符串塞进数值枚举的位置只会被 SDK 静默吃掉，而丢弃至少让控件
    * 落到**自身默认样式**并留下可诊断的控制台告警（与 `resolveAnchor` 同一口径）。
    *
+   * **只查本族**（`values` 由调用方按 `value` 标记传入）：跨族名字落到「不认识」分支，
+   * 因此 `<NavigationControl type="BMAP_MAPTYPE_CONTROL_MAP">` 会被告警并忽略，而不是
+   * 静默渲染成地图类型控件的样式（两族还撞值：`MAP` 与 `PAN` 都是 `2`）。
+   *
    * 非字符串（已经传了数字）原样放行：`ControlOptions` 的索引签名本就是「4.0 自身构造选项」
    * 的逃生口，不在这里替调用方做二次判断。
    */
-  const resolveType = (type: unknown): unknown => {
+  const resolveType = (values: Readonly<Record<string, number>>, accepted: string, type: unknown): unknown => {
     if (typeof type !== "string") return type;
-    const value = TYPE_VALUES[type];
+    const value = values[type];
     if (value === undefined) {
       warnOnce(
         `type:unknown:${type}`,
-        `ControlDriver: 不认识的控件类型 "${type}"；JSAPI 4.0 的控件类型是官方常量名（` +
-          "BMAP_NAVIGATION_CONTROL_LARGE / SMALL / PAN / ZOOM，" +
-          "BMAP_MAPTYPE_CONTROL_HORIZONTAL / DROPDOWN / MAP），本次取值已忽略，" +
-          "控件沿用自身默认样式",
+        `ControlDriver: <${accepted}> 不认识的控件类型 "${type}"；JSAPI 4.0 的该控件只接受本族的官方常量名（` +
+          `${accepted} 的取值范围，不接受另一控件族的同名空间），本次取值已忽略，控件沿用自身默认样式`,
       );
       return undefined;
     }
     return value;
   };
 
+  /** `value` 标记 → 该族的名字→数值表。跨族不在此表内。 */
+  const CONTROL_TYPE_TABLES = {
+    "navigation-type": NAVIGATION_TYPE_VALUES,
+    "map-type-style": MAPTYPE_TYPE_VALUES,
+  } as const satisfies Readonly<
+    Record<Exclude<ControlOptionValue, "size">, Readonly<Record<string, number>>>
+  >;
+
   /**
    * 领域值 → 4.0 取值。
    *
    * - `value: "size"` 的 option（`overview.size`）与 `offset` 同形：项目侧是 Pixel，4.0 是 `Size`；
-   * - `value: "control-type"` 的 option（`navigation.type` / `map-type.type`）：项目侧是常量名
-   *   字符串，4.0 是数值枚举（`resolveType`）。
+   * - `value: "navigation-type"` / `"map-type-style"` 的 option（`navigation.type` /
+   *   `map-type.type`）：项目侧是**本族**常量名字符串，4.0 是数值枚举（`resolveType`）。
    *
    * 构造与更新两条路径共用这里，避免「同一次更新」在两条入口上语义不同。
    */
   const normalizeValue = (spec: ControlOptionSpec | undefined, value: unknown): unknown => {
-    if (!spec || !("value" in spec)) return value;
-    return spec.value === "size" ? toRawSize(value) : resolveType(value);
+    if (!spec || !("value" in spec) || !spec.value) return value;
+    if (spec.value === "size") return toRawSize(value);
+    return resolveType(CONTROL_TYPE_TABLES[spec.value], spec.value, value);
   };
 
   /**
@@ -821,23 +847,92 @@ type OfficialCenterAnchor =
 
 /**
  * 官方控件 `type` 的两套数值枚举（`const/NavigationControlType.d.ts` 的
- * `0|1|2|3` 与 `const/MapTypeControlType.d.ts` 的 `0|1|2`）。
+ * `0|1|2|3` 与 `const/MapTypeControlType.d.ts` 的 `0|1|2`），以及**它们各自的常量名**。
  *
- * 与锚点断言同一手法：`TYPE_VALUES` 的取值域被钉在官方 `const` 声明上，上游改值
- * （或加一个新枚举成员）会直接编译失败，而不是等到运行时塞进一个官方不认的数
- * （issue #175）。
+ * 常量名是手写的字面量联合而不是 `keyof typeof`：官方把它们声明成
+ * `declare const BMAP_NAVIGATION_CONTROL_LARGE: 0`——**只有类型、没有值**，运行时
+ * 也不保证挂出来（`map.ts` 的 `MAP_TYPE_CONSTANT_CANDIDATES` 就是因为这一点才要去
+ * 命名空间里试多个候选名）。所以「键名」只能是本库自己声明的字面量。
+ *
+ * 名字并集**逐项**对应两个 `const/*.d.ts`：`type NavigationControlType` 由 LARGE / SMALL /
+ * PAN / ZOOM 四个 `typeof` 组成，`type MapTypeControlType` 由 HORIZONTAL / DROPDOWN / MAP
+ * 三个 `typeof` 组成。
+ *
+ * 刻意**不**定义 `NavigationControlType | MapTypeControlType` 的并集别名：两族分表后
+ * 没有任何消费方需要它，而下面两条断言各自针对**一族**——并集只能表达「两族都不溢出」，
+ * 表达不了「每族的每个名字都对」，那正是恒真重言式栽跟头的地方。
  */
-type OfficialControlType = NavigationControlType | MapTypeControlType;
-type _AssertNavigationControlType = ExpectTrue<
-  OfficialControlType extends
-    | typeof BMAP_NAVIGATION_CONTROL_LARGE
-    | typeof BMAP_NAVIGATION_CONTROL_SMALL
-    | typeof BMAP_NAVIGATION_CONTROL_PAN
-    | typeof BMAP_NAVIGATION_CONTROL_ZOOM
-    | typeof BMAP_MAPTYPE_CONTROL_HORIZONTAL
-    | typeof BMAP_MAPTYPE_CONTROL_DROPDOWN
-    | typeof BMAP_MAPTYPE_CONTROL_MAP
-    ? true
+type OfficialNavigationTypeName =
+  | "BMAP_NAVIGATION_CONTROL_LARGE"
+  | "BMAP_NAVIGATION_CONTROL_SMALL"
+  | "BMAP_NAVIGATION_CONTROL_PAN"
+  | "BMAP_NAVIGATION_CONTROL_ZOOM";
+type OfficialMapTypeControlName =
+  | "BMAP_MAPTYPE_CONTROL_HORIZONTAL"
+  | "BMAP_MAPTYPE_CONTROL_DROPDOWN"
+  | "BMAP_MAPTYPE_CONTROL_MAP";
+
+/** 精确相等（`extends` 对联合会做子类型放宽，`never` 这类需要严格等值）。 */
+type Equals<X, Y> =
+  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
+
+/**
+ * 两族**常量名**互不重叠：`Exclude` 一个都没删掉（两边的结果都等于自己）。
+ *
+ * 这条是「按族分表」的类型层依据：名字空间分离，跨族名字在结构上就不属于本族，
+ * 官方哪天让两族共用一个常量名（或改名撞车）会直接红。
+ */
+type _AssertTypeNamesDisjoint = ExpectTrue<
+  Equals<Exclude<OfficialNavigationTypeName, OfficialMapTypeControlName>, OfficialNavigationTypeName> extends true
+    ? Equals<Exclude<OfficialMapTypeControlName, OfficialNavigationTypeName>, OfficialMapTypeControlName> extends true
+      ? true
+      : false
+    : false
+>;
+
+/**
+ * ⚠️ 但两族的**数值**是重叠的（`MapTypeControlType` 的 `0|1|2` ⊂ `NavigationControlType`
+ * 的 `0|1|2|3`）——这正是不能合成一张平表的原因：跨族接受在数值上**看不出来**
+ * （`<NavigationControl type="BMAP_MAPTYPE_CONTROL_MAP">` 在平表下会拿到 `2`，与本族合法的
+ * `BMAP_NAVIGATION_CONTROL_PAN: 2` 完全同值），使用者与审查者都发现不了控件样式错了。
+ * 断言成「重叠」而不是「不相交」：官方哪天把两套枚举改成不重叠的值域，这条会红，
+ * 提示重新评估分表的必要性（那时跨族接受才不再静默）。
+ */
+type _AssertTypeValuesOverlap = ExpectTrue<
+  Equals<Exclude<NavigationControlType, MapTypeControlType>, never> extends true ? false : true
+>;
+
+/**
+ * **逐名**对应：`NAVIGATION_TYPE_VALUES` 的每个值必须**正好**等于官方那个名字的
+ * `NavigationControlType` 成员。
+ *
+ * ⚠️ 这里**不能**写成 `NavigationControlType extends (typeof BMAP_NAVIGATION_CONTROL_LARGE | …)`
+ * 那种并集 `extends` —— 那是**恒真重言式**：右侧由上游联合自己的成员拼出来，让上游联合
+ * extends 它永远成立。它能挡住的只有「上游新增成员」，**挡不住改值**——而改值恰恰是这张表
+ * 最需要防的回归（把 `LARGE: 0` 改成 `LARGE: 3` 会让全库的导航控件类型整体错位，
+ * 且没有任何编译期信号）。
+ * 逐名等值才能真正承重：任何一个值被改错（哪怕仍在 `0|1|2|3` 范围内）都会红。
+ */
+type AssertNavigationTypeValues = ExpectTrue<
+  typeof NAVIGATION_TYPE_VALUES["BMAP_NAVIGATION_CONTROL_LARGE"] extends typeof BMAP_NAVIGATION_CONTROL_LARGE
+    ? typeof NAVIGATION_TYPE_VALUES["BMAP_NAVIGATION_CONTROL_SMALL"] extends typeof BMAP_NAVIGATION_CONTROL_SMALL
+      ? typeof NAVIGATION_TYPE_VALUES["BMAP_NAVIGATION_CONTROL_PAN"] extends typeof BMAP_NAVIGATION_CONTROL_PAN
+        ? typeof NAVIGATION_TYPE_VALUES["BMAP_NAVIGATION_CONTROL_ZOOM"] extends typeof BMAP_NAVIGATION_CONTROL_ZOOM
+          ? true
+          : false
+        : false
+      : false
+    : false
+>;
+
+/** 同上，逐名钉 `MAPTYPE_TYPE_VALUES`（`HORIZONTAL=0` / `DROPDOWN=1` / `MAP=2`）。 */
+type AssertMapTypeControlValues = ExpectTrue<
+  typeof MAPTYPE_TYPE_VALUES["BMAP_MAPTYPE_CONTROL_HORIZONTAL"] extends typeof BMAP_MAPTYPE_CONTROL_HORIZONTAL
+    ? typeof MAPTYPE_TYPE_VALUES["BMAP_MAPTYPE_CONTROL_DROPDOWN"] extends typeof BMAP_MAPTYPE_CONTROL_DROPDOWN
+      ? typeof MAPTYPE_TYPE_VALUES["BMAP_MAPTYPE_CONTROL_MAP"] extends typeof BMAP_MAPTYPE_CONTROL_MAP
+        ? true
+        : false
+      : false
     : false
 >;
 

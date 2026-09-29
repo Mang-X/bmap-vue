@@ -243,8 +243,8 @@ describe("setOptions 的动态 / 构造期分类", () => {
     //
     // ⚠️ 断言的是**换算后的数值** `1` 而不是传进去的字符串（issue #175）：官方
     // `setType(type: NavigationControlType)` 收的是 `0 | 1 | 2 | 3`，Driver 有名字→数值表
-    // （`TYPE_VALUES`）。此前这条断言写的是「字符串原样进去」，把**类型与上游相反**的行为
-    // 固化了下来——它正是 issue 报的缺陷本身，不是护栏。
+    // （`NAVIGATION_TYPE_VALUES`）。此前这条断言写的是「字符串原样进去」，把**类型与上游
+    // 相反**的行为固化了下来——它正是 issue 报的缺陷本身，不是护栏。
     const navigation = ctx.controls.create("navigation");
     ctx.controls.add(ctx.mapTarget(), navigation);
     ctx.controls.setOptions(navigation, { type: "BMAP_NAVIGATION_CONTROL_SMALL" });
@@ -256,30 +256,48 @@ describe("setOptions 的动态 / 构造期分类", () => {
   });
 
   it("控件 type 的名字→数值换算覆盖两个控件族的全部常量（issue #175）", () => {
-    // 逐条对应上游 `@baidumap/jsapi-v4-types@4.0.5`：
-    //   `const/NavigationControlType.d.ts` LARGE=0 / SMALL=1 / PAN=2 / ZOOM=3
-    //   `const/MapTypeControlType.d.ts`  HORIZONTAL=0 / DROPDOWN=1 / MAP=2
-    const expected: ReadonlyArray<readonly [string, number]> = [
-      ["BMAP_NAVIGATION_CONTROL_LARGE", 0],
-      ["BMAP_NAVIGATION_CONTROL_SMALL", 1],
-      ["BMAP_NAVIGATION_CONTROL_PAN", 2],
-      ["BMAP_NAVIGATION_CONTROL_ZOOM", 3],
-      ["BMAP_MAPTYPE_CONTROL_HORIZONTAL", 0],
-      ["BMAP_MAPTYPE_CONTROL_DROPDOWN", 1],
-      ["BMAP_MAPTYPE_CONTROL_MAP", 2],
+    // 逐条对应上游 `@baidumap/jsapi-v4-types` 的 `const/NavigationControlType.d.ts`
+    // （LARGE=0 / SMALL=1 / PAN=2 / ZOOM=3）与 `const/MapTypeControlType.d.ts`
+    // （HORIZONTAL=0 / DROPDOWN=1 / MAP=2）。
+    // 键按族写死，**不是**靠前缀从一张平表里推——分表后「哪一族」是结构决定的。
+    const expected: ReadonlyArray<readonly ["navigation" | "map-type", string, number]> = [
+      ["navigation", "BMAP_NAVIGATION_CONTROL_LARGE", 0],
+      ["navigation", "BMAP_NAVIGATION_CONTROL_SMALL", 1],
+      ["navigation", "BMAP_NAVIGATION_CONTROL_PAN", 2],
+      ["navigation", "BMAP_NAVIGATION_CONTROL_ZOOM", 3],
+      ["map-type", "BMAP_MAPTYPE_CONTROL_HORIZONTAL", 0],
+      ["map-type", "BMAP_MAPTYPE_CONTROL_DROPDOWN", 1],
+      ["map-type", "BMAP_MAPTYPE_CONTROL_MAP", 2],
     ];
     // 走**构造期**（`projectOptions`）：这是两条路径共同的换算入口——
     // `setType` 走的是 `normalizeValue`，构造走的是 `projectOptions` 里的同一个函数。
-    for (const [name, value] of expected) {
-      const kind = name.startsWith("BMAP_NAVIGATION_CONTROL_") ? "navigation" : "map-type";
+    for (const [kind, name, value] of expected) {
       const handle = ctx.controls.create(kind, { type: name });
       expect(ctx.rawOf(handle).options.type, `${name} 应换算成 ${value}`).toBe(value);
     }
   });
 
+  it("跨族常量名被拒：告警并忽略，不静默接受（issue #175）", () => {
+    // 官方是**两套独立枚举**，而两族的**数值还撞**（`BMAP_MAPTYPE_CONTROL_MAP` = 2 与
+    // `BMAP_NAVIGATION_CONTROL_PAN` = 2 同值）——所以合成一张平表时，跨族传值会得到一个
+    // 合法数字，官方照着它渲染**别的控件的样式**，使用者与审查者都看不出来。
+    // 分表后跨族落到「不认识」分支。
+    warn.mockClear();
+    for (const [kind, name] of [
+      ["navigation", "BMAP_MAPTYPE_CONTROL_DROPDOWN"],
+      ["map-type", "BMAP_NAVIGATION_CONTROL_PAN"],
+    ] as const) {
+      const handle = ctx.controls.create(kind, { type: name });
+      expect(ctx.rawOf(handle).options.type, `${kind} 不该接受 ${name}`).toBeUndefined();
+    }
+    const messages = warn.mock.calls.map((c) => String(c[0]));
+    expect(messages.filter((m) => m.includes("不认识的控件类型")).length).toBe(2);
+  });
+
   it("不认识的 type 名：告警一次并丢弃，不原样透传（issue #175）", () => {
     warn.mockClear();
-    // 不在两族里（也刻意用**锚点**常量名：它的值确实是 0，混进表里会静默生效）
+    // 根本不在任一族里。也用了一个**值域内**的名字（锚点常量值确实是 0），
+    // 这样「表外」这件事不能靠「值不在枚举里」侥幸蒙对——靠的是键查不到。
     const handle = ctx.controls.create("navigation", { type: "BMAP_ANCHOR_TOP_LEFT" });
     // 键**不出现**（不是 `type: undefined`）⇒ 构造期沿用 SDK 默认样式
     expect(ctx.rawOf(handle).options.type).toBeUndefined();
@@ -297,6 +315,12 @@ describe("setOptions 的动态 / 构造期分类", () => {
     // 名字写错：告警，但**不动**实例（把 undefined 交给 setType 只会换成一个未知样式）
     ctx.controls.setOptions(navigation, { type: "NOT_A_CONTROL_TYPE" });
     expect(ctx.rawOf(navigation).type).toBe(1);
+    // 跨族同理：PAN=2 与 MAPTYPE_MAP=2 同值，误接受会静默换样式
+    ctx.controls.setOptions(navigation, { type: "BMAP_MAPTYPE_CONTROL_MAP" });
+    expect(ctx.rawOf(navigation).type).toBe(1);
+    // 修好之后仍然能正常写下去（丢弃不是「把控件卡死」）
+    ctx.controls.setOptions(navigation, { type: "BMAP_NAVIGATION_CONTROL_PAN" });
+    expect(ctx.rawOf(navigation).type).toBe(2);
   });
 
   it("kind 专属 setter 在未挂载时抛错：Surface 成 BMapError 而不是被静默吞掉", () => {

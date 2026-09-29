@@ -66,6 +66,13 @@ control/mapType
 填不存在的名字会**先告警一次再忽略**，控件沿用自身默认样式。
 :::
 
+::: warning 换算表**按控件族分开**
+`<MapTypeControl>` 只接受上表的三个 `BMAP_MAPTYPE_CONTROL_*`。传 `<NavigationControl>` 的
+`BMAP_NAVIGATION_CONTROL_*` 会**告警并忽略**，不会静默生效——两族的数值还撞
+（`BMAP_MAPTYPE_CONTROL_MAP` 与 `BMAP_NAVIGATION_CONTROL_PAN` 都是 `2`），误接受会让控件
+渲染出**另一种样式**且控制台里什么都没有。
+:::
+
 ## mapTypes
 
 上游 4.0 声明 `mapTypes?: MapType[]`，而 `MapType` 是一组**字符串**常量：

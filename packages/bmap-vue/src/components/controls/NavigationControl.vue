@@ -8,9 +8,12 @@ export interface NavigationControlProps {
    * 控件类型，官方 `BMAP_NAVIGATION_CONTROL_*`（LARGE / SMALL / PAN / ZOOM）。
    *
    * 填**常量名**（`"BMAP_NAVIGATION_CONTROL_LARGE"` …），控件边界有一张名字→数值表
-   * （`TYPE_VALUES`）换算成官方的 `0 | 1 | 2 | 3`——上游 `NavigationControlOptions.type`
-   * 收的是**数字**，填数字不会命中换算表（会原样透传，但那不是官方枚举的语义）。
-   * 与 `anchor` 同一套做法（issue #175）。
+   * （`NAVIGATION_TYPE_VALUES`）换算成官方的 `0 | 1 | 2 | 3`——上游
+   * `NavigationControlOptions.type` 收的是**数字**，填数字不会命中换算表（会原样透传，
+   * 但那不是官方枚举的语义）。与 `anchor` 同一套做法（issue #175）。
+   *
+   * 表**按族分开**，因此 `BMAP_MAPTYPE_CONTROL_*`（`<MapTypeControl>` 的取值）会告警并被忽略——
+   * 两族的数值还撞（`PAN` 与 `MAP` 都是 `2`），误接受会静默换出别的控件的样式。
    */
   type?: string;
   /** 是否显示级别提示信息（官方 `showZoomInfo`，只有构造期生效） */
