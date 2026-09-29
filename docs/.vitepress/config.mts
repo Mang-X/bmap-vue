@@ -27,7 +27,7 @@ export default withPwa(
     // },
     themeConfig: {
       returnToTopLabel: "top",
-      logo: "/logo.svg",
+      logo: "/brand/bmap-vue-icon-square.svg",
       nav,
       outlineTitle: "目录",
       outline: [2, 5],

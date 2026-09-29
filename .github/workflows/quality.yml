@@ -80,6 +80,13 @@ jobs:
       - name: Check docs links
         run: node --experimental-strip-types scripts/check-docs-links.mts
 
+      # docs/public/icons/** 是品牌矢量资产的渲染产物（pnpm generate:brand-icons）。
+      # 判据是「重新渲染到临时目录后逐字节比对」：改了 docs/public/brand/** 却忘了重渲染，
+      # 导航栏是新标志、PWA 图标还是旧的——这类漂移不产生任何测试失败。
+      # 渲染要 Chrome；runner 自带 /usr/bin/google-chrome（见下方注释）。
+      - name: Check brand icons in sync with vector source
+        run: node --experimental-strip-types scripts/check-brand-icons.mts
+
       # 覆盖物 defineEmits 静态契约无漂移（#138）。
       # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
       # 事实源是事件矩阵 + 弃用别名表 + 生成脚本内的非 SDK 事件表。

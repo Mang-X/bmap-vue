@@ -1,10 +1,10 @@
 <p align="center">
   <a href="https://Mang-X.github.io/bmap-vue/zh-CN" target="_blank" rel="noopener noreferrer">
-  <img src='https://github.com/Mang-X/bmap-vue/blob/main/docs/public/logo.svg' crossorigin="anonymous" style="overflow:hidden; width:180px;height:180px;border-radius:48px;">
+  <img src="./docs/public/brand/bmap-vue-icon-square.svg" width="180" height="180" alt="bmap-vue" />
   </a>
 </p>
 
-<h1 align="center"><img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" />&nbsp;bmap-vue&nbsp;<img src="https://user-images.githubusercontent.com/74038190/213844263-a8897a51-32f4-4b3b-b5c2-e1528b89f6f3.png" width="50px" /></h1>
+<h1 align="center"><img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" />&nbsp;bmap-vue&nbsp;<img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" /></h1>
 
 <p align="center">易用 & 完整 & 高性能</p>
 <p align="center">
@@ -20,7 +20,7 @@
 面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JSAPI 4.0。
 
 <div align="center">
-  <img src="./docs/public/screenshots/site-home.jpg" alt="bmap-vue 文档站首页" width="880" />
+  <img src="./docs/public/brand/bmap-vue-banner.svg" alt="bmap-vue — 基于百度地图的 Vue 组件库" width="880" />
 </div>
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star

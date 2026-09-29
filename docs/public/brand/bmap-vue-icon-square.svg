@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="699" height="699" viewBox="277.00 150.00 699.00 699.00" role="img" aria-labelledby="logo-title logo-desc">
+<title id="logo-title">bmap-vue — 独立图标（正方形构图，导航栏与 favicon 用）</title>
+<desc id="logo-desc">Vector reconstruction of the approved bmap-vue brand mark. Red-orange location pin above a folded map. All lettering is outlined; no embedded images or external fonts.</desc>
+<defs>
+  <linearGradient id="pin-orange" x1="725" y1="180" x2="640" y2="640" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FF9658"/><stop offset=".53" stop-color="#FF7847"/><stop offset="1" stop-color="#FF4C30"/>
+  </linearGradient>
+  <linearGradient id="pin-red" x1="484" y1="197" x2="666" y2="564" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FF6234"/><stop offset=".46" stop-color="#FF302B"/><stop offset="1" stop-color="#FF3528"/>
+  </linearGradient>
+  <linearGradient id="map-base" x1="620" y1="541" x2="620" y2="833" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#E2E4EB"/><stop offset="1" stop-color="#F5F6F9"/>
+  </linearGradient>
+  <linearGradient id="map-left" x1="404" y1="574" x2="414" y2="713" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#E4E6EC"/><stop offset="1" stop-color="#F1F2F5"/>
+  </linearGradient>
+  <linearGradient id="map-bottom" x1="486" y1="660" x2="574" y2="811" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#DADCE4"/><stop offset="1" stop-color="#F2F3F6"/>
+  </linearGradient>
+  <linearGradient id="map-right" x1="748" y1="555" x2="790" y2="824" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#E9EAF0"/><stop offset=".55" stop-color="#E1E3EA"/><stop offset="1" stop-color="#F1F2F5"/>
+  </linearGradient>
+  <linearGradient id="map-accent" x1="836" y1="587" x2="909" y2="697" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FF553D"/><stop offset="1" stop-color="#FF8B75"/>
+  </linearGradient>
+  <radialGradient id="pin-reflection"><stop stop-color="#FF7056" stop-opacity=".14"/><stop offset="1" stop-color="#FF7056" stop-opacity="0"/></radialGradient>
+  <linearGradient id="wordmark-charcoal" x1="0" y1="10" x2="0" y2="190" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#272A2D"/><stop offset="1" stop-color="#232629"/>
+  </linearGradient>
+  <linearGradient id="wordmark-red" x1="800" y1="50" x2="1080" y2="170" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FF382C"/><stop offset="1" stop-color="#FF3028"/>
+  </linearGradient>
+  <clipPath id="map-clip"><path d="M292 613 L442 545 C463 536 482 538 501 547 L626 617 L746 547 C766 537 784 536 805 545 L967 621 C999 636 1000 655 972 673 L685 814 C649 833 612 836 574 818 L286 677 C252 661 253 638 278 621 Z"/></clipPath>
+  <clipPath id="pin-clip"><path d="M620.09,629.25 C588.63,576.39 550.83,526.34 502.47,473.50 C476.64,445.27 468.71,434.65 458.45,414.45 C447.14,392.19 442.67,372.85 442.64,346.00 C442.62,320.49 446.76,300.65 456.84,278.07 C478.34,229.88 519.98,192.24 570.79,175.05 C592.42,167.74 600.17,166.58 628.00,166.54 C651.16,166.50 653.24,166.66 665.99,169.34 C699.38,176.36 724.95,188.42 748.68,208.33 C778.46,233.33 800.03,270.60 808.19,311.17 C810.11,320.73 810.46,325.63 810.45,342.50 C810.44,365.76 809.07,375.07 802.97,393.32 C794.62,418.32 782.89,438.25 761.38,464.00 C723.58,509.25 687.10,555.48 664.32,587.00 C653.49,601.99 633.34,631.02 630.14,636.25 C628.87,638.31 627.53,640.00 627.17,640.00 C626.80,640.00 623.61,635.16 620.09,629.25 Z M640.50,422.50 C644.35,421.70 651.10,419.25 655.50,417.07 C685.67,402.10 701.44,367.92 693.07,335.65 C686.85,311.67 666.36,290.83 643.77,285.51 C635.85,283.64 621.49,283.61 612.84,285.45 C588.97,290.50 568.22,309.48 560.29,333.48 C558.03,340.35 557.64,343.29 557.57,354.00 C557.51,364.44 557.89,367.73 559.84,374.00 C563.82,386.75 568.57,394.62 578.01,404.12 C591.40,417.59 605.91,423.76 624.50,423.90 C629.45,423.94 636.65,423.31 640.50,422.50 Z" clip-rule="evenodd"/></clipPath>
+</defs>
+
+<g id="symbol"><g id="map-tile" clip-path="url(#map-clip)">
+  <path d="M292 613 L442 545 C463 536 482 538 501 547 L626 617 L746 547 C766 537 784 536 805 545 L967 621 C999 636 1000 655 972 673 L685 814 C649 833 612 836 574 818 L286 677 C252 661 253 638 278 621 Z" fill="url(#map-base)"/>
+  <path d="M251 628 L380 573 C473 580 527 596 577 624 L551 640 L364 718 L280 677 Z" fill="url(#map-left)"/>
+  <path d="M364 718 L551 640 C587 664 634 691 658 712 C684 734 681 746 653 765 L562 819 L374 740 Z" fill="url(#map-bottom)"/>
+  <path d="M626 617 L748 548 C770 537 786 538 806 546 L858 569 L711 640 L918 704 L685 820 L644 831 C708 790 751 744 698 703 Z" fill="url(#map-right)"/>
+  <path d="M877 578 L973 623 C1000 637 999 656 974 672 L922 701 L746 641 Z" fill="url(#map-accent)"/>
+  <path d="M710 641 L856 569 L877 578 L746 641 L922 701 L902 711 Z" fill="#FFFFFF"/>
+  <path d="M357 585 L380 573 C477 580 529 595 577 624 L669 680 C703 700 722 724 717 751 C713 780 686 805 647 830 C619 833 589 829 562 817 C596 798 633 776 655 756 C676 737 680 726 654 708 L552 644 C494 606 438 594 357 585 Z" fill="#FFFFFF"/>
+  <ellipse cx="626" cy="636" rx="118" ry="51" fill="url(#pin-reflection)"/>
+</g><g id="location-marker" clip-path="url(#pin-clip)">
+  <path d="M620.09,629.25 C588.63,576.39 550.83,526.34 502.47,473.50 C476.64,445.27 468.71,434.65 458.45,414.45 C447.14,392.19 442.67,372.85 442.64,346.00 C442.62,320.49 446.76,300.65 456.84,278.07 C478.34,229.88 519.98,192.24 570.79,175.05 C592.42,167.74 600.17,166.58 628.00,166.54 C651.16,166.50 653.24,166.66 665.99,169.34 C699.38,176.36 724.95,188.42 748.68,208.33 C778.46,233.33 800.03,270.60 808.19,311.17 C810.11,320.73 810.46,325.63 810.45,342.50 C810.44,365.76 809.07,375.07 802.97,393.32 C794.62,418.32 782.89,438.25 761.38,464.00 C723.58,509.25 687.10,555.48 664.32,587.00 C653.49,601.99 633.34,631.02 630.14,636.25 C628.87,638.31 627.53,640.00 627.17,640.00 C626.80,640.00 623.61,635.16 620.09,629.25 Z M640.50,422.50 C644.35,421.70 651.10,419.25 655.50,417.07 C685.67,402.10 701.44,367.92 693.07,335.65 C686.85,311.67 666.36,290.83 643.77,285.51 C635.85,283.64 621.49,283.61 612.84,285.45 C588.97,290.50 568.22,309.48 560.29,333.48 C558.03,340.35 557.64,343.29 557.57,354.00 C557.51,364.44 557.89,367.73 559.84,374.00 C563.82,386.75 568.57,394.62 578.01,404.12 C591.40,417.59 605.91,423.76 624.50,423.90 C629.45,423.94 636.65,423.31 640.50,422.50 Z" fill="url(#pin-orange)" fill-rule="evenodd"/>
+  <path d="M392 110 H625 C680 145 724 201 726 283 C728 375 692 476 602 600 L625 640 L422 665 Z" fill="url(#pin-red)"/>
+</g></g>
+</svg>

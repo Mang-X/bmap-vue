@@ -6,13 +6,12 @@ export const head: HeadConfig[] = [
     "link",
     {
       rel: "icon",
-      type: "image/png",
-      sizes: "16x16",
-      href: `/bmap-vue/logo.svg`,
+      type: "image/svg+xml",
+      href: `/bmap-vue/brand/bmap-vue-icon-square.svg`,
     },
   ],
-  ["meta", { name: "msapplication-TileColor", content: "#F72C30" }],
-  ["meta", { name: "theme-color", content: "#F72C30" }],
+  ["meta", { name: "msapplication-TileColor", content: "#FF3028" }],
+  ["meta", { name: "theme-color", content: "#FF3028" }],
   [
     "meta",
     {

@@ -10,7 +10,7 @@ export const pwa: Partial<PwaOptions> = {
     short_name: "bmap-vue",
     description:
       "面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JavaScript API 4.0（WebGL 渲染，支持 3D 视角）。",
-    theme_color: "#F72C30",
+    theme_color: "#FF3028",
     start_url: "/bmap-vue/",
     lang: "zh-CN",
     dir: "ltr",
@@ -31,7 +31,7 @@ export const pwa: Partial<PwaOptions> = {
         purpose: "any",
       },
       {
-        src: "maskable-icon-512x512.png",
+        src: "icons/maskable-icon-512x512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
