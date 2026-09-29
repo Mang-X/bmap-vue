@@ -11,13 +11,7 @@
         位置固定在地面（墨卡托坐标系下的实际大小），屏幕大小随地图缩放级别变化。
       </span>
     </div>
-    <Map
-      v-bind="$attrs"
-      :zoom="18"
-      :tilt="45"
-      enableWheelZoom
-      @ready="handleReady"
-    >
+    <Map v-bind="$attrs" :zoom="18" :tilt="45" enableWheelZoom @ready="handleReady">
       <GroundPoint
         :point="point"
         url="https://jsapi-demo.bj.bcebos.com/images/markers/car.png"
