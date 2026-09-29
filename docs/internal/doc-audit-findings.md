@@ -123,3 +123,71 @@ Vue 会把「没传」转成 `false`——于是 `value === undefined` 的守卫
 
 不在 `INTERACTION_PROPS` 里，因此既不报错也不生效；`Map.vue` 还在 watch 它。
 要么删（与 #165「删掉静默丢弃的 prop」的做法一致），要么接上 `TrafficLayer`。
+
+---
+
+## 10.【严重】控件 `type` 传字符串，官方要数字 —— 三方对不上
+
+上游 `const/NavigationControlType.d.ts`：
+
+```ts
+declare const BMAP_NAVIGATION_CONTROL_LARGE: 0;   // 数字
+type NavigationControlType = 0 | 1 | 2 | 3;
+```
+
+`const/MapTypeControlType.d.ts` 同理（`0 | 1 | 2`）。
+
+本库这边：`NavigationControlProps` / `MapTypeControlProps` 的 `type` 声明为
+`type?: string`（`types/components.ts:2135 / 2169 / 2194`），Driver 走
+`projectOptions` 的**原样透传**分支（`driver/jsapi-v4/controls.ts:137-138`
+把它归为 `mutable` + `setType`），于是把 `"BMAP_NAVIGATION_CONTROL_LARGE"` 这个
+**字符串**塞进官方构造器。`anchor` 有名字→数字映射（`controls.ts:91-101`），
+`type` **没有**。
+
+三方对不上：文档按常量名写、库按字符串透传、官方只认数字。
+`tests/behavior/controls.test.ts:246` 断言的正是「字符串原样进去」——
+也就是说现有测试把这个行为**固化**了。
+
+两种处置，需要你选：
+
+| 方案 | 说明 |
+| --- | --- |
+| A. 库加映射 | 与 `anchor` 同一套做法，加 `TYPE_VALUES` 名字→数字表；改动 `src/**`，公共 API 形状不变 |
+| B. 文档收窄 | 文档改成字面量联合 `"0" | "1" | "2" | "3"`，明确「这是本库约定，与官方数字常量不同名」 |
+
+## 11.【中】`defineExpose` 与公开命令面类型不一致
+
+`<CityListControl>` 在 `defineExpose` 里暴露了 `status`，但
+`ControlCommandTypes["CityListControl"]`（`driver/types/controls.ts`）只有
+`toggle` / `getCityName`——消费方按公开类型拿 ref 时看不到 `status`。
+`<LocationControl>` 同构问题。文档已改成「读 expose 的 `status`」+ 兜底措辞，
+**类型面**确实漏了。
+
+## 12.【中】`TileLoadObserver` / `CityListChangeResult` 等公开 prop 类型没从根入口导出
+
+它们出现在 `dist/index.d.ts` 的 declare 区（是 `TileLayer` / `RasterTileLayer` /
+`WMSLayer` / `WMTSLayer` / `CityListControl` 的**公开 prop / 事件载荷类型**），
+但 `src/index.ts` 没有 `export`。消费方 `import type { TileLoadObserver } from 'bmap-vue'`
+会拿到 TS2459。文档只能在示例里写内联结构绕开。
+
+## 13.【中】`<Prism>` `enableClicking`、`<GroundOverlay>` `displayOnMin/MaxLevel` 描述符有、公共出口没有
+
+`OVERLAY_DESCRIPTORS.prism`（`driver/types/overlays.ts:1104`）注册了 `enableClicking`，
+`PrismProps` 里却没有——文档原本宣传了这个 prop。
+`GroundOverlayProps` 同样缺 `displayOnMinLevel` / `displayOnMaxLevel`，而描述符
+（`overlays.ts:1064-1065`）为它们声明了 `mutateBy(...)`：
+**这条更新路径永远不会被触发**，且分类与同文件 `:1495-1498` 的
+「只有构造选项 ⇒ 重建」自相矛盾。
+
+## 14.【中】`<InfoWindow>` `enableCloseOnClick` 默认与官方相反
+
+官方 `@default true`，`InfoWindow.vue:20-27` 给 `false`。可能是有意的产品决策，
+但**文档从未说明**，用户无从得知自己偏离了官方。已在文档加 tip 标注
+（不改运行时）。
+
+## 15.【中】`<Marker>` `anchor` 不可达
+
+`MarkerOptions.anchor`（官方默认 `BMAP_ANCHOR_CENTER`）有描述符条目却无 prop；
+而官方同时把图标级 `IconOptions.anchor` 标为 `@deprecated 4.0 起请改用
+MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**，用户被夹在
+「用被弃用的路径」与「没有路径」之间。已在文档写明这一矛盾。

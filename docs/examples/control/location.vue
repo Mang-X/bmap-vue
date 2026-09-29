@@ -19,7 +19,9 @@
       </template>
       <template v-else>点地图上的定位按钮试试。</template>
     </p>
-    <p v-if="errorCode !== null" class="bmap-example-status">定位失败，官方错误码：{{ errorCode }}</p>
+    <p v-if="errorCode !== null" class="bmap-example-status">
+      定位失败，官方错误码：{{ errorCode }}
+    </p>
   </div>
 </template>
 

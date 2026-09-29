@@ -27,10 +27,6 @@ const map = ref();
 const { convert, data, isLoading, isError } = useConvertor(map);
 const googlePoint = { lng: 116.32715863448607, lat: 39.990912172420714 };
 function handleInitd() {
-  convert(
-    [googlePoint],
-    CoordinatesFromType.COORDINATES_GCJ02,
-    CoordinatesToType.COORDINATES_BD09,
-  );
+  convert([googlePoint], CoordinatesFromType.COORDINATES_GCJ02, CoordinatesToType.COORDINATES_BD09);
 }
 </script>

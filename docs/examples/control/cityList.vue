@@ -9,7 +9,8 @@
       />
     </Map>
     <p class="bmap-example-status">
-      当前城市：<b>{{ currentCity || "（读不到）" }}</b>，面板{{ open ? "已展开" : "已收起" }}
+      当前城市：<b>{{ currentCity || "（读不到）" }}</b
+      >，面板{{ open ? "已展开" : "已收起" }}
     </p>
     <button class="myButton no-m-b" @click="toggle">切换面板</button>
   </div>

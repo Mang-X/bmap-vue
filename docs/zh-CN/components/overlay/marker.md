@@ -70,14 +70,18 @@ Label 再 `setLabel` 下去。从属的 Label 随 Marker 一起被释放——�
 
 ## 默认图标可选值
 
-simple_red , simple_blue , loc_red , loc_blue , start , end , location
-
-红色图标：red1，red2，red3，red4，red5，red6，red7，red8，red9，red10
-
-蓝色图标：blue1，blue2，blue3，blue4，blue5，blue6，blue7，blue8，blue9，blue10
+| 组 | 图标名 |
+| --- | --- |
+| 基础 | `simple_red`、`simple_blue`、`loc_red`、`loc_blue`、`location` |
+| 起终点 | `start`、`end` |
+| 红色 | `red1`、`red2`、`red3`、`red4`、`red5`、`red6`、`red7`、`red8`、`red9`、`red10` |
+| 蓝色 | `blue1`、`blue2`、`blue3`、`blue4`、`blue5`、`blue6`、`blue7`、`blue8`、`blue9`、`blue10` |
 
 以上 27 个名字都解析到雪碧图上各自的格子（`start` / `end` 使用内联 SVG，与
 `useMarkerIcons()` 返回的雪碧图版本刻意不同）。未知名字按 `simple_red` 渲染并告警一次。
+
+`icon` 收的是**内置名字**（`string`）或[自定义图标对象](#自定义图标)，类型是
+`MarkerIcon = MarkerIconName | MarkerCustomIcon`。
 
 其余图标可根据下图自行定位裁切：
 
