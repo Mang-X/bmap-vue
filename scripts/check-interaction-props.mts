@@ -57,35 +57,46 @@ import { scanSourceFile, type ScannableViolation, type SourceVisitor } from "./s
 const ROOT = resolve(import.meta.dirname, "..");
 const DEFAULT_TARGET = join(ROOT, "packages/bmap-vue/src/components/map/Map.vue");
 
-/** 门禁规则名（与 `raw-sdk-detector` 的 `rule` 字段同形，便于共用报告格式）。 */
-export const RULE = "interaction-prop-missing-default";
-
-/** 本门禁从一份源码里抽出的两份名单。 */
-export interface InteractionDefaults {
+/**
+ * 本门禁从一份源码里抽出的两份名单。
+ *
+ * 字段**刻意不 readonly**：`Map.vue` 有 `<script>` 与 `<script setup>` 两个区块，
+ * `scanSourceFile` 会各调一次 visitor，结果要**累积**进同一份结构。
+ */
+interface InteractionDefaults {
   /** `INTERACTION_PROPS` 里逐项的 prop 名（按出现顺序）。 */
-  readonly interactionProps: string[];
+  interactionProps: string[];
   /** `withDefaults` 的 defaults 对象里出现过的属性名。 */
-  readonly defaultKeys: Set<string>;
+  defaultKeys: Set<string>;
   /** 是否真的找到了 `INTERACTION_PROPS` 这个声明。 */
-  readonly sawTable: boolean;
+  sawTable: boolean;
   /** 是否真的找到了 `withDefaults(defineProps(...), <第二个实参>)`。 */
-  readonly sawDefaults: boolean;
+  sawDefaults: boolean;
+}
+
+/** 新建一份空的采集结果。 */
+function emptyFindings(): InteractionDefaults {
+  return { interactionProps: [], defaultKeys: new Set<string>(), sawTable: false, sawDefaults: false };
+}
+
+/** 把一次区块解析的结果并进累积结构。 */
+function mergeFindings(into: InteractionDefaults, part: InteractionDefaults): void {
+  into.interactionProps.push(...part.interactionProps);
+  for (const key of part.defaultKeys) into.defaultKeys.add(key);
+  into.sawTable ||= part.sawTable;
+  into.sawDefaults ||= part.sawDefaults;
 }
 
 /**
  * 从一段 TS 源码里抽出本门禁要的两份名单。
  *
- * 导出是因为门禁自测要**直接**验抽取器（漏抽 / 多抽都会让整道门禁恒绿或恒红），
- * 与 `check-docs-links` 导出 `slugify` / `check-doc-props` 导出 `camel` 是同一条理由。
+ * **刻意不导出**：抽取器靠 `tests/behavior/interaction-props-gate.test.ts` 的**正反例**
+ * 覆盖（少一项就红、改名就 fail-closed、真实面必须扫到 8 项），不是靠外部直接调它——
+ * 没有第二个消费者就不留导出面（`check-docs-links` 的 `slugify` 有自测直接调用才导出）。
  */
-export function collectInteractionDefaults(astText: string, kind: ts.ScriptKind): InteractionDefaults {
+function collectInteractionDefaults(astText: string, kind: ts.ScriptKind): InteractionDefaults {
   const source = ts.createSourceFile("map.vue.ts", astText, ts.ScriptTarget.Latest, true, kind);
-  const found: InteractionDefaults = {
-    interactionProps: [],
-    defaultKeys: new Set<string>(),
-    sawTable: false,
-    sawDefaults: false,
-  };
+  const found = emptyFindings();
 
   const visit = (node: ts.Node): void => {
     // `withDefaults(defineProps<...>(), { ... })` —— 第二个实参才是 defaults。
@@ -134,7 +145,7 @@ export function collectInteractionDefaults(astText: string, kind: ts.ScriptKind)
 }
 
 /** 一个漏声明的交互 prop，以及它在 `withDefaults` 块里的定位。 */
-export interface MissingDefault {
+interface MissingDefault {
   readonly prop: string;
   /** 1 基行号：`withDefaults(` 那一行（props 已在那里时取 props 自己的行号）。 */
   readonly line: number;
@@ -148,26 +159,19 @@ function relOf(file: string): string {
 /** 跑一个相位，返回退出码。 */
 function runPhase(file: string): number {
   const rel = relOf(file);
-  const violations: ScannableViolation[] = [];
+  // 只借 `scanSourceFile` 的 **SFC 提取层**（`.vue` 要先用 `vue/compiler-sfc` 抽出脚本区块
+  // ——与 `check-raw-sdk` 同一个解析器，第二份实现迟早与它漂移）。
+  // 刻意**不消费**它的 `violations` 输出：本门禁的产物是「一份缺失 prop 名单」，
+  // 不是可按 rule 聚合的违规表，硬套那套字段只会造出一个写了从不读的空数组。
+  // 解析失败经 `failures` 带回（必须当失败，绝不静默放行）。
   const failures: string[] = [];
-  const found: InteractionDefaults = {
-    interactionProps: [],
-    defaultKeys: new Set<string>(),
-    sawTable: false,
-    sawDefaults: false,
+  const found = emptyFindings();
+
+  const visitor: SourceVisitor<ScannableViolation> = (_f, astText, _locationText, _offset, _out, kind) => {
+    mergeFindings(found, collectInteractionDefaults(astText, kind));
   };
 
-  // 复用 `source-scan` 的 SFC 提取层（`.vue` 要先用 `vue/compiler-sfc` 抽出脚本区块），
-  // 与 `check-raw-sdk` 走同一个解析器——第二份 SFC 提取实现迟早与它漂移。
-  const visitor: SourceVisitor<ScannableViolation> = (_f, astText, _loc, _off, _out, kind) => {
-    const part = collectInteractionDefaults(astText, kind);
-    found.interactionProps.push(...part.interactionProps);
-    for (const key of part.defaultKeys) found.defaultKeys.add(key);
-    found.sawTable ||= part.sawTable;
-    found.sawDefaults ||= part.sawDefaults;
-  };
-
-  scanSourceFile(rel, readFileSync(file, "utf8"), violations, failures, visitor);
+  scanSourceFile(rel, readFileSync(file, "utf8"), [], failures, visitor);
 
   // ---- fail-closed：判据本身必须真的取到了东西 ----
   if (failures.length > 0) {

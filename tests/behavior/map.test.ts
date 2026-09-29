@@ -310,69 +310,47 @@ describe("Map：交互开关的「未传」不表态（#179）", () => {
     return wrapper;
   };
 
-  /** 当前地图的交互开关状态（领域读数）。 */
-  const interactions = (): Record<string, boolean> =>
-    Object.assign({}, fake.createdMaps[fake.createdMaps.length - 1]!.interactions);
-
-  it("什么都不传：八个交互开关一个都不被 disable*()（正证守卫）", async () => {
-    // 正证守卫：`enableDragging` / `enableWheelZoom` 有**显式**默认值（true / false），
-    // 必然各被下发一次。所以「调用日志里有交互写入」这件事本身不是本用例的结论，
-    // 结论是**另外六项一次都没被写**。
+  it("什么都不传：只有两个显式库默认被下发，其余六项一次都没写", async () => {
+    // 结论直接落在 harness 的领域读数上，**不**手列任何 SDK 方法名：
+    // `interactionWrites()` 的键由 `FAKE_V4_INTERACTIONS` 那份**封闭**词表归并而来
+    // （见 harness 的 `interactionNameOf`），所以「不传」时出现的键**必然且仅**是
+    // `withDefaults` 里显式给了默认值的那两项。新增第 7 项交互 prop 时这个断言自动跟上，
+    // 不需要在这里重抄第三遍名单。
     const wrapper = await mountMap({});
-    expect(fake.createdMaps).toHaveLength(1);
+    expect(harness.interactionWrites()).toEqual({
+      // `enableDragging: true` / `enableWheelZoom: false` 是**有意**的库默认决策。
+      // ⚠️ 键是官方**实例方法名**，不是 prop 名（#165 Class 1 改的是构造期 prop，
+      // 落地走的仍是 `enableScrollWheelZoom()`）——见本文件上方那条既有注释。
+      enableDragging: 1,
+      enableScrollWheelZoom: 1,
+    });
+    wrapper.unmount();
+    await settle();
+  });
 
-    const state = interactions();
-    expect(
-      state,
-      "未传的交互开关不应被逐个 disable*()（实况：" + JSON.stringify(state) + "）",
-    ).not.toHaveProperty("doubleClickZoom", false);
-    expect(state).not.toHaveProperty("pinchToZoom", false);
-    expect(state).not.toHaveProperty("keyboard", false);
-
+  it("「没传」时开关状态保持 SDK 自己的默认（不被逐个 disable*()）", async () => {
+    // 与上一条分工：那条数**次数**，这条读**状态**——两者一起才能区分
+    // 「没下发」与「下发了但值恰好一样」。
+    const wrapper = await mountMap({});
+    // 正证守卫：`dragging` / `scrollWheelZoom` 有显式默认值，必然在状态里出现。
+    expect(harness.interactions()).toEqual({ dragging: true, scrollWheelZoom: false });
     wrapper.unmount();
     await settle();
   });
 
   it("显式传 false 仍会被 disable*()——「没传」与「传 false」现在分得开了", async () => {
     const wrapper = await mountMap({ enableDblclickZoom: false, enablePinchZoom: false });
-    expect(interactions()).toMatchObject({ doubleClickZoom: false, pinchToZoom: false });
+    expect(harness.interactions()).toMatchObject({ doubleClickZoom: false, pinchToZoom: false });
+    expect(harness.interactionWrites().enableDoubleClickZoom).toBe(1);
     wrapper.unmount();
     await settle();
   });
 
   it("显式传 true 会真的 enable*()（正证：链路确实接上了，不是「什么都没发生」）", async () => {
     const wrapper = await mountMap({ enableDblclickZoom: true, enablePinchZoom: true });
-    expect(interactions()).toMatchObject({ doubleClickZoom: true, pinchToZoom: true });
+    expect(harness.interactions()).toMatchObject({ doubleClickZoom: true, pinchToZoom: true });
+    expect(harness.interactionWrites()).toMatchObject({ enableDoubleClickZoom: 1, enablePinchToZoom: 1 });
     wrapper.unmount();
-    await settle();
-  });
-
-  it("六项「未传」与「传 false」的下发次数不同：未传一次都不写", async () => {
-    // 上一条只断言最终**状态**，这一条断言**次数**：未传 ⇒ 调用日志里压根不该出现对应的
-    // `disable*()`；传 false ⇒ 必须出现。
-    //
-    // 只盯这六项的官方实例方法名：`enableWheelZoom` 的 `disableScrollWheelZoom` 是
-    // **有意**的库默认（见 `withDefaults` 的注释），它出现是正常的，混进来断言会让
-    // 「未传不写」这条结论被另一个决策顶红。
-    const NO_OPINION = [
-      "disableDoubleClickZoom",
-      "disablePinchToZoom",
-      "disableKeyboard",
-      "disableInertialDragging",
-      "disableContinuousZoom",
-      "disableResizeOnCenter",
-    ] as const;
-    const callLog = (): readonly string[] => fake.createdMaps[fake.createdMaps.length - 1]!.callLog;
-
-    const skipped = await mountMap({});
-    expect(callLog().filter((e) => NO_OPINION.includes(e as never))).toEqual([]);
-    skipped.unmount();
-    await settle();
-    harness.reset();
-
-    const disabled = await mountMap({ enablePinchZoom: false });
-    expect(callLog()).toContain("disablePinchToZoom");
-    disabled.unmount();
     await settle();
   });
 });
