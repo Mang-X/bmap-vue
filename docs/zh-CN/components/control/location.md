@@ -1,6 +1,7 @@
 # LocationControl 定位控件
 
-定位控件，默认位于地图右下角
+浏览器定位控件（官方 `GeolocationControl`），默认位于地图右下角。控件包含一个定位按钮与
+按钮右侧的定位结果地址区。
 
 ```ts
 import { LocationControl } from 'bmap-vue'
@@ -26,7 +27,36 @@ control/location
 | visible | 是否显示 | `boolean` | - | `true` |
 
 `anchor` / `offset` 同样可以**动态更新**：属性变化时会即时下发 `setAnchor()` / `setOffset()`，
-不需要重建控件（M7-CONTROL-PANORAMA / #41 之前它们只在构造期生效）。
+不需要重建控件。
+
+## 定位选项
+
+官方 `GeolocationControlOptions` 除 `anchor` / `offset` 外的全部七个选项。它们**全部是构造期**：
+官方对这一族只给了一个整袋入口 `setOptions(options)`，没有逐字段 setter，因此任何一个变化都会
+**重建控件**并把新值交给构造期。
+
+| 属性 | 说明 | 类型 | 官方默认值 |
+| --- | --- | --- | --- |
+| showAddressBar | 是否显示定位信息面板 | `boolean` | `true` |
+| enableAutoLocation | 添加控件时是否自动定位一次 | `boolean` | `false` |
+| locationIcon | 自定义定位中心点的图标 | [`MarkerIcon`](#markericon) | SDK 默认 |
+| watchPosition | 是否持续跟踪用户位置 | `boolean` | `false` |
+| useCompass | 是否使用设备指南针定向（仅 iOS 生效） | `boolean` | `false` |
+| autoZoom | 定位成功后是否自动调整级别 | `boolean` | `true` |
+| autoViewport | 定位成功后是否自动调整视野 | `boolean` | `true` |
+| onLocationStart | 接管定位流程的回调 | `(onSuccess, onFail) => boolean \| void` | - |
+
+`locationIcon` 收的是**图标描述**（与 `<Marker icon>` 同构：内置图标名或 `{ imageUrl, size, anchor, … }`）
+而不是官方类型声明里的 `BMap.Icon` 实例——组件面不接触 SDK 对象。
+
+`onLocationStart` 返回 `false` 时**不再执行定位**。本库**不**替你把它的 `onSuccess` / `onFail`
+转调成 `locationSuccess` / `locationError` 事件：官方没有给「这次定位属于哪次命令」任何身份，
+转调只能靠猜。
+
+::: warning `watchPosition` 与「卸载」不是同一件事
+`watchPosition: true` 是**持续跟踪**（官方 `stopLocationTrace()` 可以停），
+它和组件的卸载流程无关：组件卸载照常走标准的控件释放路径。
+:::
 
 ## anchor
 
@@ -41,10 +71,51 @@ control/location
 
 组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
-| 事件名 | 说明 | 类型 |
+| 事件名 | 说明 | 载荷 |
 | --- | --- | --- |
-| locationSuccess | 定位成功时触发 | `(e: unknown) => void` |
-| locationError | 定位失败时触发 | `(e: unknown) => void` |
+| locationSuccess | 定位成功时触发 | [`LocationSuccessEvent`](#locationsuccessevent) \| `null` |
+| locationError | 定位失败时触发 | [`LocationErrorEvent`](#locationerrorevent) \| `null` |
+
+载荷取不到时为 `null`——不编一个 `{ lng: 0, lat: 0 }` 冒充定位成功。
+
+### LocationSuccessEvent
+
+| 字段 | 说明 | 类型 |
+| --- | --- | --- |
+| point | 定位到的坐标 | `Point` |
+| addressComponent | 地址组成部分；官方声明即可空 | [`LocationAddressComponents`](#locationaddresscomponents) \| `null` |
+
+### LocationErrorEvent
+
+| 字段 | 说明 | 类型 |
+| --- | --- | --- |
+| code | 官方错误码 | `number` |
+
+官方只声明了 `code: number`，**没有**任何可对照的取值清单，因此本库不替你编一张错误码枚举表。
+
+### LocationAddressComponents
+
+官方 `AddressComponent` 的五个成员，**全部可选**——取不到就留在 `undefined`，不补默认值
+（补成 `""` 会把「上游没给」与「真的是空」混起来）。
+
+| 字段 | 说明 | 类型 |
+| --- | --- | --- |
+| streetNumber | 门牌号 | `string`（可选） |
+| street | 街道名 | `string`（可选） |
+| district | 区县 | `string`（可选） |
+| city | 城市 | `string`（可选） |
+| province | 省份 | `string`（可选） |
+
+### MarkerIcon
+
+`<LocationControl location-icon>` 收的是 `<Marker icon>` 的同一套图标描述，二选一：
+
+- **内置图标名**（字符串），例如 `"simple_red"` / `"start"` / `"red1"` … `"red10"` /
+  `"blue1"` … `"blue10"` / `"loc_red"` / `"loc_blue"` / `"location"` / `"end"`；
+- **自定义图标描述** `{ imageUrl, size, anchor?, imageOffset?, imageSize?, printImageUrl? }`，
+  其中 `size` 是 `{ width, height }`。
+
+完整取值与字段说明见 [Marker 的「自定义图标」](../overlay/marker.md#自定义图标)。
 
 
 ## 命令面（`ref`）
@@ -58,7 +129,7 @@ control/location
 | `location()` | `location(): void` | 开始进行定位 |
 | `startLocation()` | `startLocation(): void` | 开始执行定位 |
 | `stopLocationTrace()` | `stopLocationTrace(): void` | 停止跟踪用户位置 |
-| `getAddressComponent()` | `getAddressComponent(): AddressComponent \| null` | 当前定位地址信息 |
+| `getAddressComponent()` | `getAddressComponent(): AddressComponent \| null` | 当前定位地址信息（[见上](#locationaddresscomponents)） |
 | `status` | — | 实例状态（见下） |
 
 ```vue
@@ -80,9 +151,8 @@ function start() {
 ### ⚠️ 没有 `startLocationTrace()`
 
 官方只声明了 `startLocation()`（开始定位）与 `stopLocationTrace()`（停止跟踪）——
-两者**不对称**，但这就是上游的形状。社区文档与 issue 描述里常见的 `startLocationTrace()`
-**在官方类型声明与真实运行时里都不存在**（live 读数：`startLocation` `callable: true`、
-`startLocationTrace` `callable: false`）。
+两者**不对称**，但这就是上游的形状。社区文档里常见的 `startLocationTrace()`
+**在官方类型声明与真实运行时里都不存在**。
 
 ### 释放后显式失败
 
@@ -91,7 +161,6 @@ function start() {
 
 ### 载荷投影
 
-`getAddressComponent()` 返回的是**领域类型** `LocationAddressComponents`，
-官方 `AddressComponent` 的五个成员（`streetNumber` / `street` / `district` / `city` /
-`province`）**全部可选**，取不到就留在 `undefined`——**不补默认值**
-（`city ?? ""` 会把「上游没给」与「空」混起来）。
+`getAddressComponent()` 返回的是**领域类型** `LocationAddressComponents`（见上文
+[LocationAddressComponents](#locationaddresscomponents)），官方 `AddressComponent` 的五个成员
+**全部可选**，取不到就留在 `undefined`。

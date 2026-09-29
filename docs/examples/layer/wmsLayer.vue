@@ -20,7 +20,7 @@
       未填写地址时不加载图层；填入后地图会按 <code>{{ params.LAYERS }}</code> 图层发请求。
       服务端需要允许跨域，否则瓦片会被浏览器拦掉（表现为空白而不是报错）。
     </p>
-    <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+    <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-wheel-zoom>
       <WMSLayer v-if="url" :url="url" :params="params" :min-zoom="3" :max-zoom="18" />
     </Map>
   </div>

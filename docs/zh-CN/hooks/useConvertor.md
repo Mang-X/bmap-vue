@@ -29,23 +29,24 @@ const { result, convert, isLoading, isError, status } = useConvertor(map)
 | ---- | -------------------------------------------- | --------- | ------ |
 | map  | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | -      |
 
-:::tip 状态与动作约定（#38 起）
+:::tip 状态与动作约定
 
-- `status` 的取值与含义对六个 service hooks **完全一致**：
+- `status` 的取值与含义对**所有服务 composable** **完全一致**：
   `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
   `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
   表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
 - **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
-  与 `status` / `error` 同步。
+  与 `status` / `error` 同步。返回值里 `status === 'canceled'` 表示这次调用被更新的调用取代或被取消。
+- `sdkStatus` 只有 SDK **公开给出状态码**的服务才有值（`Geolocation` / `LocalSearch` 的
+  `BMAP_STATUS_*`、`Convertor` 回包 `status`），其余为 `null`——不伪装成 0。
 
 :::
-
 ### 返回值
 
 | 返回值    | 描述                                                                       | 类型                                                                                                    |
 | --------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| data      | 目标坐标点数组（`result` 为其别名）                                        | `Readonly<ShallowRef<Point[] \| null>>`                                                                  |
-| result    | 目标坐标点数组                                                             | `Readonly<ShallowRef<Point[] \| null>>`                                                                  |
+| data      | 目标坐标点数组（`result` 为其别名）                                        | `Readonly<ShallowRef<GeoPoint[] \| null>>`                                                                |
+| result    | 目标坐标点数组                                                             | `Readonly<ShallowRef<GeoPoint[] \| null>>`                                                                |
 | error     | 有公开原因时的错误信息（`{ code, message }`）                              | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`                                                         |
 | sdkStatus | `Convertor#translate` 回包的公开状态码（`0` = 成功）                        | `Readonly<ShallowRef<number \| null>>`                                                                   |
 | isError   | 是否出错（`status === 'failed'`）                                          | `boolean`                                                                                                 |
@@ -53,10 +54,16 @@ const { result, convert, isLoading, isError, status } = useConvertor(map)
 | isLoading | 是否加载中                                                                 | `boolean`                                                                                                 |
 | supported | 当前引擎是否支持坐标转换（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                                                                 |
 | status    | 任务状态（见上）                                                           | `Readonly<ShallowRef<BMapServiceStatus>>`                                                                  |
-| convert   | 坐标互转；`points` 为空 / 坐标非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(points: readonly Point[], from: CoordinatesFromType, to: CoordinatesToType) => Promise<ServiceResult<Point[]>>` |
+| convert   | 坐标互转；`points` 为空 / 坐标非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(points: readonly GeoPoint[], from: CoordinatesFromType, to: CoordinatesToType) => Promise<ServiceResult<GeoPoint[]>>` |
 | get       | `convert` 别名                                                             | 同上                                                                                                      |
 | cancel    | 逻辑取消在飞请求                                                           | `() => void`                                                                                              |
 | reset     | 取消 + 清空 data/error/status                                              | `() => void`                                                                                              |
+
+:::tip 官方 `translate` 的两个参数是可选的，本库要求必填
+官方签名是 `translate(points, from?, to?, callback?)`，`from` 默认 `1`（WGS84）、`to` 默认 `5`（BD09）。
+本库的 `convert(points, from, to)` 把这两个参数设为**必填**：默认值是有损的隐式前提（不写 `from`
+就意味着「我以为是 WGS84」），而坐标互转出错时几乎无法自查。枚举值一一对应官方，见下两表。
+:::
 
 ### CoordinatesFromType
 
@@ -122,6 +129,8 @@ export enum CoordinatesToType {
 
 ### UsePointConvertorStatus
 
+`Convertor#translate` 回包的公开 `status` 码表（同一份码也投影到 `sdkStatus`）：
+
 :::warning 警告
 当转换不被允许的坐标系，如：X→GPS，可能不会响应返回以下错误 code，会拒绝响应，浏览器直接报跨域请求
 :::
@@ -136,6 +145,12 @@ export enum CoordinatesToType {
 | 24   | coords 格式非法                                                            |
 | 25   | coords 个数非法，超过限制                                                  |
 | 26   | 参数错误                                                                   |
+
+:::tip `sdkStatus` 与失败状态码
+`Convertor#translate` 的回包带公开 `status`，因此本库把它投影到 `sdkStatus`：`0` = 成功，
+其余见下面的[失败码表](#usepointconvertorstatus)。服务端拒绝时**没有**响应体、浏览器直接报跨域，
+那种情况拿不到码，按 `empty` 结算。
+:::
 
 ## 代码示例
 

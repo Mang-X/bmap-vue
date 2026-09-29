@@ -1,5 +1,5 @@
 <template>
-  <Map enable-scroll-wheel-zoom :zoom="9">
+  <Map enable-wheel-zoom :zoom="9">
     <DistrictLayer
       @mouseover="handleMouseover"
       @mouseout="handleMouseout"

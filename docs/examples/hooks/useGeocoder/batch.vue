@@ -20,8 +20,8 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { ref } from "vue";
-import { useGeocoder } from "bmap-vue";
+import { computed, ref } from "vue";
+import { useGeocoder, type GeocodeItemResult } from "bmap-vue";
 const map = ref();
 const addressList = [
   "包河区金寨路1号（金寨路与望江西路交叉口）",
@@ -33,13 +33,14 @@ const addressList = [
   "庐阳区长江中路177号",
 ];
 const { getBatch, isLoading } = useGeocoder(map);
-const points = ref<Array<{ lng: number; lat: number }>>([]);
+const results = ref<GeocodeItemResult[]>([]);
+// 批量是「部分成功」：单项失败只让该项的 point 为 null，其余项照常有坐标
+const points = computed(() => results.value.flatMap((item) => (item.point ? [item.point] : [])));
 
 function handleInitd() {
+  // 顺序执行、逐项保留结果：不需要在这里 await 每一项，也不会丢失败项
   getBatch(addressList, "合肥市").then((r) => {
-    points.value = r
-      .filter((x) => x.point !== null)
-      .map((x) => x.point as { lng: number; lat: number });
+    results.value = r;
   });
 }
 </script>

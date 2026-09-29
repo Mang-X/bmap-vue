@@ -1,5 +1,5 @@
 <template>
-  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-wheel-zoom>
     <GeoJSONLayer layer-name="demo-geojson" :data="geojson" @click="handleClick" />
   </Map>
 </template>

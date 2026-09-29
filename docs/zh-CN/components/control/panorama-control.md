@@ -22,8 +22,8 @@ control/panoramaControl
 
 | 属性   | 说明           | 类型                      | 可选值            | 默认值                     |
 | ------ | -------------- | ------------------------- | ----------------- | -------------------------- |
-| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
-| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 18, y: 18 }`         |
+| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_TOP_RIGHT`    |
+| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 10, y: 10 }`         |
 
 ## 动态组件 Props
 
@@ -32,7 +32,7 @@ control/panoramaControl
 | visible | 是否显示 | `boolean` | - | `true` |
 
 `anchor` / `offset` 同样可以**动态更新**：属性变化时会即时下发 `setAnchor()` / `setOffset()`，
-不需要重建控件（M7-CONTROL-PANORAMA / #41 之前它们只在构造期生效）。
+不需要重建控件。
 
 ## anchor
 

@@ -17,19 +17,29 @@ lang: zh-CN
 
 ```vue
 <script setup lang="ts">
-import { BMapProvider } from 'bmap-vue'
-import { useGeocoder } from 'bmap-vue'
+import { BMapProvider, createBMapClientDefinition, useGeocoder } from 'bmap-vue'
+import { baiduJsapiV4Provider } from 'bmap-vue/advanced'
 
-const { search, status, data } = useGeocoder()
+// <BMapProvider> 没有 ak prop —— ak 属于**加载选项**，要经 definition / loadOptions 传
+const definition = createBMapClientDefinition({
+  provider: baiduJsapiV4Provider(),
+  loadOptions: { ak: '百度地图ak' },
+})
+
+// useGeocoder 的动作名对齐官方 BMap.Geocoder#getPoint，不是 search
+const { getPoint, status, data } = useGeocoder()
 </script>
 
 <template>
   <!-- 没有 <Map>：服务照样工作 -->
-  <BMapProvider :ak="ak">
-    <button :disabled="status === 'loading'" @click="search('天安门')">查询</button>
+  <BMapProvider :definition="definition">
+    <button :disabled="status === 'loading'" @click="getPoint('天安门')">查询</button>
   </BMapProvider>
 </template>
 ```
+
+已经 `app.use(createBMapPlugin({ ak }))` 的话，`<BMapProvider>` **什么都不用传**就会复用那份
+默认定义——那是最省事的写法。
 
 要**把服务结果画到地图上**时（路线 composable 的 `render` 选项），才需要 `<Map>`。
 
@@ -55,31 +65,32 @@ const { search, status, data } = useGeocoder()
 
 每个服务 composable 返回同一组骨架，业务结果在 `data` 里：
 
-| 字段 | 说明 |
+| 返回值 | 说明 |
 | --- | --- |
 | `data` | 业务结果（各 hook 不同） |
 | `status` | 上表的状态 |
 | `error` | 有公开原因时的错误信息 `{ code, message }` |
-| `sdkStatus` | SDK 公开的状态码（`BMAP_STATUS_*`；成功为 `0`，拿不到时为 `null`） |
+| `sdkStatus` | SDK 公开的状态码（`BMAP_STATUS_*`；拿不到时为 `null`——不伪装成 0） |
 | `isLoading` | 是否在飞 |
 | `supported` | 当前引擎是否支持（Client 就绪后立即判定，不需要先发一次请求） |
 | `isError` | `status === 'failed'` 的别名 |
 | `isEmpty` | `data === null` 的别名（失败、取消、`empty` 都是 `true`） |
-| `search*` | 发起请求，返回 `Promise<ServiceResult<T>>` |
+| 动作 | 发起请求，返回 `Promise<ServiceResult<T>>`。**名字对齐官方成员**：正地址解析 `getPoint`、逆地址解析 `getLocation`、坐标转换 `convert`、行政区域边界 `get`、定位 `getCurrentPosition`、IP 定位 `get`、本地检索 `search` / `searchNearby` / `searchInBounds` / `gotoPage`、四个路线 `search` |
 | `cancel` | **逻辑取消**在飞请求 |
 | `reset` | 取消 + 清空结果与状态 |
 
-## 两档：谁有 `invalidateService`
+## 两档：谁有 `clear()`
 
 判据是**该服务的 SDK 实例有没有公开的释放入口**，不是「哪个服务看起来复杂」：
 
-| 档 | composable | `invalidateService` |
+| 档 | composable | 清空入口 |
 | --- | --- | --- |
-| **简单档** | `useGeocoder` / `useGeocodeDetail` / `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService` | **不暴露**（官方没有实例销毁入口，走无状态通道） |
-| **独占档** | `useLocalSearch` + `useDrivingRoute` / `useWalkingRoute` / `useRidingRoute` / `useTransitRoute` | **有**（官方有 `disposeLocalSearch` / `disposeRoute`） |
+| **简单档** | `useGeocoder` / `useGeocodeDetail` / `useConvertor` / `useAreaBoundary` / `useGeolocation` / `useIpLocation` / `usePanoramaService` | **没有 `clear()`**——官方没有实例销毁入口，只有 `reset()`（清本地状态，不碰 SDK 实例） |
+| **独占档** | `useLocalSearch` + `useDrivingRoute` / `useWalkingRoute` / `useRidingRoute` / `useTransitRoute` | **有 `clear()`**（官方有 `disposeLocalSearch` / `disposeRoute` → 公开的 `clearResults()`） |
 
-简单档的 composable 拿不到也**不需要** `invalidateService`；独占档有实例要释放，所以要给你这个入口。
-想知道某个具体 hook 属于哪档，看它页面顶部的说明。
+简单档的 composable 拿不到也**不需要** `clear()`：官方没有释放入口，Driver 侧不持有任何资源，
+实例只在 Client 变化时重建。独占档的实例上挂着结果集与绘制物，因此需要一个「丢弃实例」的入口——
+`clear()` 就是它。想知道某个具体 hook 属于哪档，看它页面顶部的说明。
 
 ## 请求归属：不按到达顺序猜
 

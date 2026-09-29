@@ -12,7 +12,7 @@
       v-bind="$attrs"
       :center="{ lng: 116.385243, lat: 39.913063 }"
       :zoom="13.5"
-      enable-scroll-wheel-zoom
+      enable-wheel-zoom
       @ready="handleInitd"
     />
   </div>

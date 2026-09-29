@@ -261,10 +261,10 @@ zoom / targetZoom / trend / …`——**没有 `overlay` / `icon` / `poi`**。
 - `enableContinuousZoom` / `enableTraffic` / `enableResizeOnCenter` 等 v2 兼容 prop 的处置
   诚实：`enableTraffic` **明确告警并 no-op**（4.0 的路况是 `TrafficLayer`），
   没有假装生效。
-- `enableScrollWheelZoom` 默认 `false`（官方 `true`）是**有意为之且有注释论证**的差异。
+- `enableWheelZoom` 默认 `false`（官方 `true`）是**有意为之且有注释论证**的差异。
 
 > **后续（Class 1 已落地，改的是名字不是判断）**：上两条提到的 `enableResizeOnCenter` 与
-> `enableScrollWheelZoom` 已在 #165 Class 1 中**改名**为官方 `MapOptions` 的构造期键
+> `enableWheelZoom` 已在 #165 Class 1 中**改名**为官方 `MapOptions` 的构造期键
 > `fixCenterWhenResize` / `enableWheelZoom`（旧名**直接删除**、无兼容别名，见 §3.6）。
 > 上面这两条结论本身**不因此失效**：
 > - 改的只是 prop 名，**落地机制与默认值都不动**（仍按官方实例方法落一次；`enableWheelZoom`

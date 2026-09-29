@@ -1,6 +1,6 @@
 # CopyrightControl 版权控件
 
-地图 3D 控件，可以控制地图的旋转、倾斜，默认位于地图右下角
+版权控件，可在地图上添加自定义版权信息。默认位于地图右下角。
 
 ```ts
 import { CopyrightControl } from 'bmap-vue'
@@ -22,8 +22,8 @@ control/copyRight
 
 | 属性   | 说明           | 类型                      | 可选值            | 默认值                    |
 | ------ | -------------- | ------------------------- | ----------------- | ------------------------- |
-| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_LEFT` |
-| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 83, y: 18 }`        |
+| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
+| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 18, y: 18 }`        |
 
 ## 动态组件 Props
 

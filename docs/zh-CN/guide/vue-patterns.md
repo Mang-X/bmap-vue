@@ -126,7 +126,7 @@ const zoom = ref(14)
 `containerReady`：
 
 ```vue
-<BMapProvider :ak="ak">
+<BMapProvider>
   <template #loading="{ status }">SDK 加载中…</template>
   <template #error="{ error, retry }">
     <button @click="retry()">加载失败：{{ error }}，点击重试</button>

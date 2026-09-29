@@ -1,0 +1,180 @@
+#!/usr/bin/env node
+/**
+ * 文档 prop 名与真实声明面的差异扫描（issue #141）
+ *
+ * ## 为什么要有这道脚本
+ *
+ * 文档里的 prop 名是**手写**的，声明面是**生成**的。#165 把一批 prop 改名
+ * （enableScrollWheelZoom → enableWheelZoom 等）并删掉三个「接收后静默丢弃」的 prop。
+ * 文档不可能自动跟着改——而 **docs:typecheck 抓不到**：一个写错的 kebab prop
+ * 落进模板后 Vue 只当作 `$attrs` 里的未知项，**不报错、也不生效**。
+ * 第一版跑下来就抓到 9 处这样的死 prop。
+ *
+ * 这道脚本把「文档与示例里写出的 prop 名」逐个拿去和**真实声明面**对，报告对不上的。
+ * 它**不修改任何东西**，只报告。
+ *
+ * ## 判据
+ *
+ * 一个 prop 名算「对得上」，当且仅当它在目标组件的 `*Props` 接口里存在
+ * （接受 kebab-case：Vue 模板把 kebab 归一化成 camel 之后才匹配声明）。
+ *
+ * 它**只扫模板**——markdown 表格与正文里出现的 `<Map onReady>` 是**散文**
+ * （描述等价物、列举写法），不是模板用法，拿去比会误报。
+ *
+ * 它**不**检查「官方有没有」——那是另一件事，由 `generate-api-diff` 的对照表负责。
+ * 这里只管「文档写的与本库声明面是否一致」。
+ */
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const ROOT = resolve(import.meta.dirname, "..");
+const DIST = join(ROOT, "packages/bmap-vue/dist");
+
+export interface Mismatch {
+  file: string;
+  line: number;
+  component: string;
+  prop: string;
+}
+
+const read = (p: string): string => readFileSync(p, "utf8");
+
+/** 从 dist 声明面收集每个组件的 prop 名（组件名 → prop 集合）。 */
+export function loadPropSurface(): Map<string, Set<string>> {
+  const indexDts = join(DIST, "index.d.ts");
+  if (!existsSync(indexDts)) {
+    throw new Error(
+      "check-doc-props: 读不到 packages/bmap-vue/dist/index.d.ts。" +
+        "没有声明面就没有判据——先跑 pnpm build:package。",
+    );
+  }
+  const dts = read(indexDts);
+  const byComponent = new Map<string, Set<string>>();
+  for (const m of dts.matchAll(/export declare interface (\w*Props)\s*\{([\s\S]*?)\n\}/g)) {
+    const props = new Set<string>();
+    for (const f of m[2]!.matchAll(/^\s{4}([a-zA-Z_]\w*)\??:/gm)) props.add(f[1]!);
+    byComponent.set(m[1]!.replace(/Props$/, ""), props);
+  }
+  return byComponent;
+}
+
+/** Vue 模板把 kebab-case 归一化成 camelCase 之后才匹配声明。 */
+export function camel(name: string): string {
+  return name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+const IGNORED = new Set([
+  "ref", "key", "class", "style", "id", "slot", "is",
+  "v-bind", "v-on", "v-if", "v-else", "v-else-if", "v-for", "v-show",
+  "v-html", "v-text", "v-pre", "v-once", "v-memo",
+]);
+
+const COMPONENT_RE = /<([A-Z]\w*)((?:[^>"'\n]|"[^"]*"|'[^']*')*?)>/g;
+
+/**
+ * 掐掉 `="..."` / `='...'` 的**值**，只留属性名。
+ *
+ * 保护反引号：属性值里可能再出现引号（类型字面量 `image|'canvas'`），
+ * 不保护会把字符串截断、把后半截当成新属性。
+ */
+export function attrNames(attr: string): string[] {
+  const names: string[] = [];
+  let cur = "";
+  let tick = false;
+  let i = 0;
+  const flush = (): void => {
+    const m = /(^|\s)(:?)([a-zA-Z][\w.-]*)\s*$/.exec(cur);
+    if (m) names.push(m[3]!);
+    cur = "";
+  };
+  while (i < attr.length) {
+    const ch = attr[i]!;
+    if (ch === "`") tick = !tick;
+    const nextIsQuote = attr[i + 1] === '"' || attr[i + 1] === "'";
+    if (!tick && ch === "=" && nextIsQuote && /(^|\s):?[a-zA-Z][\w.-]*\s*$/.test(cur)) {
+      flush();
+      const q = attr[i + 1]!;
+      i += 2;
+      while (i < attr.length && attr[i] !== q) i += 1;
+      i += 1;
+      cur += " ";
+      continue;
+    }
+    cur += ch;
+    i += 1;
+  }
+  flush();
+  return names;
+}
+
+/** 只扫**模板**部分：`.vue` 扫全文，`.md` 只扫 ```vue 代码块。 */
+export function templateRegions(file: string, text: string): string[] {
+  if (file.endsWith(".vue")) return [text];
+  return [...text.matchAll(/```(?:vue|html|ts|tsx|javascript|jsx)\n([\s\S]*?)```/g)].map(
+    (m) => m[1]!,
+  );
+}
+
+/** 扫一个文件里所有组件标签的 prop 名。 */
+export function scanFile(file: string, text: string): Mismatch[] {
+  const out: Mismatch[] = [];
+  for (const region of templateRegions(file, text)) {
+    for (const m of region.matchAll(COMPONENT_RE)) {
+      const component = m[1]!;
+      for (const raw of attrNames(m[2]!)) {
+        if (raw.startsWith("v-") || raw.startsWith("@") || raw.startsWith("#") || IGNORED.has(raw)) {
+          continue;
+        }
+        out.push({ file, line: text.slice(0, text.indexOf(region)).split("\n").length, component, prop: raw });
+      }
+    }
+  }
+  return out;
+}
+
+function collectFiles(dir: string, acc: string[] = []): string[] {
+  if (!existsSync(dir)) return acc;
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e);
+    if (statSync(p).isDirectory()) collectFiles(p, acc);
+    else if (e.endsWith(".md") || e.endsWith(".vue")) acc.push(p);
+  }
+  return acc;
+}
+
+function main(): number {
+  const surface = loadPropSurface();
+  // 示例目录也要扫：真正会被 docs:typecheck 编译、也最容易被手写错的地方。
+  const roots = [join(ROOT, "docs/zh-CN"), join(ROOT, "docs/examples"), join(ROOT, "README.md")];
+  const files = roots.flatMap((r) => (statSync(r).isDirectory() ? collectFiles(r) : [r]));
+
+  const problems: Mismatch[] = [];
+  let checked = 0;
+  for (const file of files) {
+    for (const m of scanFile(file, read(file))) {
+      const props = surface.get(m.component);
+      if (!props) continue; // 组件没有对应 *Props：不是「prop 名对不上」，不在本题范围
+      checked += 1;
+      if (!props.has(m.prop) && !props.has(camel(m.prop))) {
+        problems.push({ ...m, file: file.replace(ROOT + "/", "") });
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    console.error(
+      `check-doc-props FAILED: ${problems.length} 处 prop 名与真实声明面不符（已比对 ${checked} 处）。`,
+    );
+    for (const p of problems) console.error(`  ${p.file}:${p.line}  <${p.component} :${p.prop}>`);
+    console.error(
+      "文档与示例里写出的 prop 必须在该组件的 `*Props` 里真实存在" +
+        "（Vue 会把 kebab 归一化成 camel）。写错**不会**报错、只会静默不生效，" +
+        "所以要靠这道扫描兜住。",
+    );
+    return 1;
+  }
+  console.log(`check-doc-props OK: ${checked} 处 prop 名与声明面一致。`);
+  return 0;
+}
+
+process.exitCode = main();

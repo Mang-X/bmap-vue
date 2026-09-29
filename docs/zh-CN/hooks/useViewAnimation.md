@@ -132,7 +132,7 @@ hooks 内部已把 `animationstart` / `animationend` / `animationcancel` 同步�
 
 :::warning
 `animationiterations` 不在 hooks 的观察范围内：多轮循环的进度读数需要「按实例订阅 + 计数」，
-而本库目前没有消费它的运行时取证（#104 的 evidence-first）。需要循环进度时走上面那条自建路径。
+而本库目前没有消费它的运行时取证（证据优先：没有运行时读数就不建模）。需要循环进度时走上面那条自建路径。
 :::
 
 ### 已知限制：起播前的清场不是「一张图上只剩一段」

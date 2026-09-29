@@ -13,21 +13,22 @@ import { createBMapPlugin } from 'bmap-vue'
 
 const app = createApp(App)
 app.use(
-  createBMapPlugin({
-    ak: '百度地图ak',
-    plugins: ['DrawingManager'],
-  }),
+  createBMapPlugin({ ak: '百度地图ak' }),
 )
 app.mount('#app')
 ```
 
-也可以在 `<BMapProvider>` 上按子树声明——只在用到插件的页面加载它：
+`plugins` 是 **`<Map>` 的组件 prop**（`<BMapProvider>` 不接受它，`ak` 也一样），
+所以想「只在用到插件的页面加载它」，把 prop 放在那一页的 `<Map>` 上：
 
 ```vue
-<BMapProvider :ak="ak" :plugins="['DrawingManager']">
+<!-- 只在这个页面需要插件 -->
+<Map :ak="ak" :plugins="['DrawingManager']">
   <RouterView />
-</BMapProvider>
+</Map>
 ```
+
+app 级配置（`createBMapPlugin`）只认 `provider` 与 `defaults`——**没有** `plugins`。
 
 ## 内置插件目录
 
@@ -48,7 +49,7 @@ app.mount('#app')
 这符合「官方已提供的能力不自研、也不因为某个插件拖垮主路径」的取舍。
 
 ```vue
-<BMapProvider :ak="ak" :plugins="['DrawingManager']" @plugin-error="onPluginError">
+<Map :ak="ak" :plugins="['DrawingManager']" @plugin-error="onPluginError" />
 ```
 
 要判断某个插件能不能用，看它在 JSAPI 4.0 上的**实测**结论：

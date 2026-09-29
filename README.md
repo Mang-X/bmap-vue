@@ -75,12 +75,13 @@ const center = ref<Point>({ lng: 116.404, lat: 39.915 })
 </script>
 ```
 
-`ak` 可以在多棵子树间共享：`<BMapProvider>` 提供 Client 上下文，服务 composable 也能在
+`ak` 写在 `app.use(createBMapPlugin({ ak }))` 里全局生效，`<BMapProvider>` 复用这份默认定义，
+不需要（也不接受）再传一次 `ak`。它提供 Client 上下文，所以服务 composable 能在
 没有 `<Map>` 的情况下单独使用。
 
 ```vue
 <template>
-  <BMapProvider :ak="ak">
+  <BMapProvider>
     <Map :zoom="12">
       <ZoomControl />
     </Map>

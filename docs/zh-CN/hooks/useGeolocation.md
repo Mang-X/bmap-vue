@@ -48,25 +48,21 @@ const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation(
 
 ### 返回值
 
-:::tip 状态与动作约定（#38 起）
+:::tip 状态与动作约定
 
-- `status` 的取值与含义对六个 service hooks **完全一致**：
+- `status` 的取值与含义对**所有服务 composable** **完全一致**：
   `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
   `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
   表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
 - **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
-  与 `status` / `error` 同步。
+  与 `status` / `error` 同步。返回值里 `status === 'canceled'` 表示这次调用被更新的调用取代或被取消。
 - `Geolocation` **公开带状态码**（`getStatus()` → `BMAP_STATUS_*`）：失败时 `status` 是 `failed`，
   `error.code` 与 `sdkStatus` 都是官方那个码。
 
 :::
-
-### 返回值
-
 | 返回值    | 描述                                                                     | 类型                                                    |
 | --------- | ------------------------------------------------------------------------ | ------------------------------------------------------- |
-| data      | 定位结果（`location` 为其别名）                                          | `Readonly<ShallowRef<BMapGeoResult \| null>>`            |
-| location  | 定位信息                                                                 | [`Readonly<ShallowRef<BMapGeoResult \| null>>`](#location) |
+| data      | 定位结果（**唯一读取口**）                                               | `Readonly<ShallowRef<BMapGeoResult \| null>>`            |
 | error     | 有公开原因时的错误信息（`{ code, message }`）                            | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`         |
 | sdkStatus | 官方 `BMAP_STATUS_*` 状态码（成功为 `0`，失败带上失败码）                  | `Readonly<ShallowRef<number \| null>>`                   |
 | isError   | 是否定位出错（`status === 'failed'`）                                     | `boolean`                                                |
@@ -78,7 +74,7 @@ const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation(
 | cancel    | 逻辑取消在飞请求                                                         | `() => void`                                             |
 | reset     | 取消 + 清空 data/error/status                                            | `() => void`                                             |
 
-#### Location
+#### BMapGeoResult
 
 | 属性             | 描述       | 类型                          |
 | ---------------- | ---------- | ----------------------------- |
@@ -135,7 +131,7 @@ interface GeolocationOptions {
    */
   maximumAge?: number
 }
-interface Location {
+interface BMapGeoResult {
   point: Point
   accuracy: number | null
   address: GeolocationAddressInfo | null
@@ -153,7 +149,7 @@ export declare function useGeolocation(
   options?: GeolocationOptions,
   map?: unknown
 ): {
-  data: Readonly<ShallowRef<Location | null>>
+  data: Readonly<ShallowRef<BMapGeoResult | null>>
   error: Readonly<ShallowRef<ServiceErrorInfo | null>>
   sdkStatus: Readonly<ShallowRef<number | null>>
   isError: ComputedRef<boolean>
@@ -161,7 +157,7 @@ export declare function useGeolocation(
   status: Readonly<ShallowRef<BMapServiceStatus>>
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
-  getCurrentPosition: (override?: GeolocationOptions) => Promise<ServiceResult<Location>>
+  getCurrentPosition: (override?: GeolocationOptions) => Promise<ServiceResult<BMapGeoResult>>
   cancel: () => void
   reset: () => void
 }

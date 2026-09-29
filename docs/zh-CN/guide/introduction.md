@@ -47,7 +47,7 @@ const members = ref<any[]>([])
 const isLoading = ref(true)
 // 未认证的 GitHub API 限流是 **60 次/小时/IP**，而 CI runner 的出口 IP 是共享的。限流时这个接口
 // 返回的是 `{ message: ... }` 而不是数组，直接 `.map` 会让 `vitepress build` **整站构建失败**
-// （实测：PR #85 的 docs job 因此红过一次，报 `TypeError: res.map is not a function`）。
+// （实测：docs 构建因此红过，报 `TypeError: res.map is not a function`）。
 // 拿不到成员列表就不渲染成员 —— 外部抖动不该挡住构建，也不该让「docs 是硬门禁」变成随机红。
 fetch('https://api.github.com/repos/Mang-X/bmap-vue/contributors?anon=1')
   .then(res => res.json())

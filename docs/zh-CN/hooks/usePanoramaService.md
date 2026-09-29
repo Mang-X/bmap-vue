@@ -57,6 +57,21 @@ findByLocation({ lng: 116.404, lat: 39.915 }, 200)
 
 ## 与官方成员的对齐
 
-官方 4.0.5 只声明了两个检索入口：`getPanoramaById` 与 `getPanoramaByLocation`（含带半径重载）。
-参考实现 `huiyan-fe/react-bmap` 额外暴露了 `getPanoramaByPOIId`，但上游类型包里**没有**这个成员，
-因此本库不暴露它（不为上游没有的成员建模）。
+官方只声明了两个检索入口：`getPanoramaById` 与 `getPanoramaByLocation`（含带半径重载）：
+
+| 官方成员 | 本库对应 |
+| --- | --- |
+| `getPanoramaById(id, callback)` | `findById(id)` |
+| `getPanoramaByLocation(point, callback)` | `findByLocation(point)` |
+| `getPanoramaByLocation(point, radius, callback)` | `findByLocation(point, radius)` |
+
+本库按「一句话一个动作」重命名成 `findBy*`，语义与官方一一对应。两处**刻意不做**的事：
+
+- 官方有 `getPanoramaByPOIId` 这一说法的第三方参考实现，但上游类型包里**没有**这个成员，
+  因此本库不暴露它（不为上游没有的成员建模）；
+- 官方 `PanoramaService` 没有 `getStatus()`，因此 `sdkStatus` 恒为 `null`——不伪装成 0。
+
+:::tip `radius` 省略与显式传值是两条路径
+官方是两个**重载**而不是带默认值的单签名。省略 `radius` 与传 `undefined` 在真实 SDK 上走的是两条不同
+的调用路径，因此本库在省略时**整个参数都不传**，而不是传一个 `undefined` 进去。
+:::

@@ -32,11 +32,11 @@ context-menu/index
 
 ## 组件 Props
 
-| 属性 | 说明 | 类型 | 默认值 |
-| ----------- | ---------------------------------------------------------- | --------------------------------------------------- | ------ |
-| items       | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`) `[]` | -      | |
-| width       | 菜单宽度（单位 px）                                        | `number`                                            | `100`  | -                                  |
-| visible     | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节）  | `boolean`                                           | `true` | |
+| 属性   | 说明                                                       | 类型                                          | 默认值 |
+| ------ | ---------------------------------------------------------- | --------------------------------------------- | ------ |
+| items  | 菜单项（数据 API），`-` 表示分隔线                          | ([`ContextMenuItem`](#contextmenuitem) \| `-`)[] | -      |
+| width  | 菜单宽度（单位 px）                                        | `number`                                      | `100`  |
+| visible | 菜单是否**挂到当前目标上**（不是「弹层是否展开」，见下节） | `boolean`                                     | `true` |
 
 ## ContextMenuItem
 
@@ -118,7 +118,7 @@ context-menu/index
 - `items` / `width` 变化时**原子重建**菜单（旧实例连同它的监听一起释放）。
 - 组件卸载时会从当前目标摘除菜单。
 
-## 命令面（`defineExpose`，#165）
+## 命令面（`ref`）
 
 官方 `ContextMenu` 声明了 `getItem` / `removeItem` / `removeSeparator` / `getDom` / `show` /
 `hide` 六个成员，而组件侧此前只做「整菜单重建」，因此它们**没有调用路径**。
@@ -148,10 +148,9 @@ const menu = ref<ContextMenuExpose>()
 
 ### 两条刻意偏离
 
-1. **不出入 raw `MenuItem`**。AGENTS.md 的 raw SDK 白名单只有 `driver/**` / `client/**` /
-   `core/loader/**` / `plugins/**`，组件与 `core` 都在禁区。而且官方 `MenuItem` 上**没有任何
-   getter**（只有 `setText` / `enable` / `disable`），交出去对调用方是全盲的——「读回」只可能
-   来自本库模型。
+1. **不出入 raw `MenuItem`**。官方 `MenuItem` 上**没有任何 getter**（只有 `setText` / `enable` /
+   `disable`），把它交出去对调用方是全盲的——「读回」只可能来自本库模型。此外组件层不接触
+   官方 SDK 对象，因此只投影本库自己的条目模型。
 2. **`show()` / `hide()` 不是 `visible` 的反面**。官方 `ContextMenu#show()` 是「在上一次右键的
    位置把弹层显示出来」，没右键过会弹在 (0,0)；`visible` 表达的是「菜单是否挂到目标上」，走
    attach/detach。两者是不同语义，因此给的是单独的方法名。

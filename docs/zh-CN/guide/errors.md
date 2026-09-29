@@ -1,6 +1,6 @@
 # 错误码与排障
 
-运行时通过统一的 [`BMapError`](../../packages/bmap-vue/src/core/errors/BMapError.ts) 报告错误。
+运行时通过统一的 `BMapError` 报告错误（从 `bmap-vue` 导入）。
 > 所有错误携带 `code`(稳定标识)、`message`、可选 `cause`/`mapId`/`component`/`plugin`。
 
 ## 错误码总览

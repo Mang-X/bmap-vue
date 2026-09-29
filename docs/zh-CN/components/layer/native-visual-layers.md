@@ -16,7 +16,7 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 `PolygonLayer`。
 
 **两个组件继续可用，行为不变**（开发期会告警一次，props 类型上带 `@deprecated`）。官方建议的
-替代品 **`<PolylineLayer>` / `<PolygonLayer>` 本库现已提供**（#166）——但
+替代品 **`<PolylineLayer>` / `<PolygonLayer>` 本库现已提供**——但
 **弃用替代不是改名**：两者的 `style` 字段族不同、样式更新入口不同（见
 [PolygonLayer / PolylineLayer](./visualization-layers)）。需要这层语义的可以继续用
 `LineLayer` / `FillLayer`；`HeatmapLayer` / `TrackLineLayer` 不在官方弃用名单内。
@@ -38,15 +38,125 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 **「类型包里有没有类声明」不是能力面的依据**。这四个类在 4.0.5 之后**全部有**类声明
 （`Heatmap` / `TrackLine` 是 4.0.5 才补上的，`LineLayer` / `FillLayer` 更早就有），
 但后两个（`HeatmapLayer` / `TrackLineLayer`）在浏览器里仍要等**可视化扩展异步注入**才能用——
-「有声明」说的是形状，「已注入」说的是可用性，两件事各判各的。live 探针实测
+「有声明」说的是形状，「已注入」说的是可用性，两件事各判各的。真实运行时上
 `Heatmap` / `TrackLine` 属这一族，而 `LineLayer` / `FillLayer` / `PointIconLayer` /
-`PointShapeLayer` 的构造器与全套成员在 `BMap.Map` 就绪时**已经齐备**（settle `0ms`），
-即**随主包注入**、不等异步注入。
+`PointShapeLayer` 的构造器与全套成员在地图就绪时**已经齐备**，即**随主包注入**、不等异步注入。
 
 「官方有没有弃用」也不改变这张表：能力矩阵里 `layer.line` / `layer.fill` 的 `status` 仍是
 `experimental`、`layer.point-icon` 仍是 `native`。`status` 的四个取值表达的是**能力从哪来**，
 没有一档表示「官方标了弃用」——为它新造一个状态会让 `supports()` / 能力矩阵全线改语义。弃用只记在
 [能力矩阵](../../contributing/capability-matrix)的说明列与上面那个提示框里。
+
+## 组件 Props
+
+四个组件的 props 面**不一样大**，先看这张表再往下看更新语义：
+
+| 属性 | 说明 | 类型 | 默认值 | 更新口径 |
+| --- | --- | --- | --- | --- |
+| data | GeoJSON 数据；`null` = 没有数据，`undefined` = 不表态 | `object \| null` | - | 有值 → `setData()`；→ `null` → **换实例** |
+| style | 样式（见下） | [`LineLayerStyle`](#linelayerstyle) / [`FillLayerStyle`](#filllayerstyle) / `Record<string, unknown>` | - | **就地** |
+| visible | 是否显示 | `boolean` | `true` | **就地** `setVisible()` |
+| opacity | 图层透明度 `[0,1]` | `number` | SDK 默认 | **就地** `setOpacity()` |
+| zIndex | 图层层级 | `number` | SDK 默认 | **就地** `setZIndex()` |
+| minZoom | 最小显示缩放等级 | `number` | SDK 默认 | **构造期**（官方无 setter）→ 换实例 |
+| maxZoom | 最大显示缩放等级 | `number` | SDK 默认 | **构造期**（官方无 setter）→ 换实例 |
+| idKey | 数据项属性 key（= 业务身份字段） | `string` | - | **构造期** → 换实例 |
+| crs | 来源坐标系：`BD09LL` / `BD09MC` / `GCJ02` | `string` | - | **构造期** → 换实例 |
+| enablePicked | 是否开启鼠标拾取 | `boolean` | **`true`**（官方 `false`） | **构造期** → 换实例 |
+| pickWidth | 点击拾取矩形宽（像素） | `number` | 官方默认 `30` | **构造期** → 换实例 |
+| pickHeight | 点击拾取矩形高（像素） | `number` | 官方默认 `30` | **构造期** → 换实例 |
+| autoSelect | 是否允许鼠标悬浮事件 | `boolean` | 官方默认 `false` | **构造期** → 换实例 |
+| selectedColor | 选中数据的颜色 | `string` | 官方默认 `rgba(20, 20, 200, 1.0)` | **构造期** → 换实例 |
+| selectedIndex | 选中数据的**索引**（数据顺序的序号，不是业务 id） | `number` | 官方默认 `-1`（不选中） | **构造期** → 换实例 |
+| popEvent | 拾取事件是否向上层冒泡 | `boolean` | 官方默认 `true` | **构造期** → 换实例 |
+| pauseOnHidden | 页面 hidden 时是否自动 `pause`（`TrackLineLayer` 专有） | `boolean` | `false` | 观察策略，非 SDK 选项 |
+
+`enablePicked` 的默认值**刻意不同于官方**：官方默认 `false`，本库默认 `true`——不给事件就别怪用户
+拿不到 `pick`。关掉它可以省掉拾取开销。
+
+`HeatmapLayer` 刻意**只**暴露 `data` / `style` / `visible` 三项：官方 `HeatmapOptions` 虽然声明了
+`gradient` / `size` / `unit` / `max` / `min` / `weightField` 一批构造选项，但官方 `Heatmap` 只为其中
+**两个**声明了字段级 setter（`setGradient` 与 `setRadius`，注意 setter 名是 `setRadius` 而构造键名是
+`size`），其余在真实运行时都没有对应方法；而 `style` 这个整袋口已经能到达全部选项。需要强类型样式
+请用 `LineLayer` / `FillLayer`。
+
+::: tip `opacity` 与「逐要素透明度」是两件事
+`LineLayerStyle` 里的 `borderWeight` / `strokeWeight` 等可以收**数据驱动表达式**
+（`(properties) => number`），那是**逐要素**的值；顶层 `opacity` 是**图层级**的一把乘数。
+两者相乘，不是同一档。
+:::
+
+### LineLayerStyle
+
+`LineLayer` 的样式是官方 `LineStyle` 的**逐字段**投影，字段名与默认值以官方声明为准。样式走
+`setStyleOptions` **逐字段 merge**：把某个字段改成 `undefined` 时 SDK 侧仍留着上一次的值，
+因此本库会**重建图层**让它回到 SDK 自己的默认（并告警一次）。
+
+| 字段 | 说明 | 官方默认 |
+| --- | --- | --- |
+| strokeColor | 线颜色 | `rgba(25, 25, 250, 1)` |
+| strokeWeight | 线宽度（像素） | `2` |
+| strokeOpacity | 线透明度 `[0,1]` | `1` |
+| strokeStyle | 线类型：`solid` / `dashed` / `dotted` | `solid` |
+| dashArray | 虚线设置（实线段 / 间隙长度） | `[8, 4]` |
+| strokeLineJoin | 线连接处类型：`miter` / `round` / `bevel` | `round` |
+| strokeLineCap | 线端头类型：`round` / `butt` / `square` | `square` |
+| strokeTextureUrl | 填充纹理图片地址（竖向表达，自动横向处理） | - |
+| strokeTextureWidth | 纹理图片宽度（2 的 n 次方） | - |
+| strokeTextureHeight | 纹理图片高度（2 的 n 次方） | - |
+| borderColor | 描边颜色 | `rgba(27, 142, 236, 1)` |
+| borderWeight | 描边宽度（像素） | `0` |
+| borderCovered | 是否描边覆盖填充 | `true` |
+| borderMask | 是否受内部填充区域掩膜 | `true` |
+| sequence | 是否采用间隔填充纹理 | `false` |
+| marginLength | 间隔距离（像素） | `16` |
+| linksLine | `MultiLineString` 是否以多段线组成一条线 | `false` |
+| strokeColorControl | 输入「第几条路线、第几段」，输出颜色字符串 | - |
+| traceDisappear | 痕迹是否使用消失模式 | `false` |
+| traceStart | 痕迹是否从起点开始处理（否则从终点） | `true` |
+| traceControl | 输入路线数组，输出「距起点的痕迹长度数组」（米） | - |
+| traceColor | 痕迹颜色（RGB `0-255`） | - |
+| height | 线图层高度 | `0` |
+
+除 `border*` / `sequence` / `marginLength` / `linksLine` / `trace*` / `height` 这几个**不带表达式**的键外，
+其余都可以收**数据驱动表达式**（`StyleExpression`：`string` / 表达式对象 /
+`(properties) => 值`）。`StyleExpression` 的 `object` 那一支是 SDK 自己的表达式语法
+（如 `['match', …]`），本库**如实透传**而不复刻其结构。
+
+### FillLayerStyle
+
+`FillLayer` 的样式是官方 `FillLayerStyle` 的逐字段投影，含「纯色 / 描边 / 纹理（掩膜或贴图）」三套。
+纹理模式下 `patternMask` 决定 `fillColor` 是否生效。
+
+| 字段 | 说明 | 官方默认 |
+| --- | --- | --- |
+| fillColor | 填充颜色（`patternMask: true` 的掩膜模式下，纹理不透明区域显示该颜色） | `#142655` |
+| fillOpacity | 填充透明度（直接参与最终 alpha） | `1` |
+| pattern | 是否采用纹理填充（需同时给 `patternUrl`） | `false` |
+| patternMask | 纹理渲染模式：`true` 掩膜（裁剪 `fillColor`）/ `false` 贴图（显示纹理颜色） | `true` |
+| patternUrl | 纹理雪碧图地址（需支持跨域） | `''` |
+| patternMapping | 雪碧图中的纹理区域：`'x, y, width, height'`（像素） | `'0, 0, 32, 32'` |
+| patternScale | 纹理缩放比例（以 `zoom=18` 为基准） | `1` |
+| patternOffset | 纹理 UV 偏移量：`'u, v'`（`0-1`） | `'0, 0'` |
+| strokeColor | 描边线颜色 | `rgba(25, 25, 250, 1)` |
+| strokeWeight | 描边线宽度（像素） | `2` |
+| strokeOpacity | 描边线透明度 `[0,1]` | `1` |
+| strokeStyle | 描边线类型：`solid` / `dashed` / `dotted` | `solid` |
+| dashArray | 虚线设置 | `[8, 4]` |
+| strokeLineJoin | 线连接处类型：`miter` / `round` / `bevel` | `round` |
+| strokeLineCap | 线端头类型：`round` / `butt` / `square` | `square` |
+| strokeTextureUrl | 填充纹理图片地址 | - |
+| strokeTextureWidth | 填充纹理图片宽度（2 的 n 次方） | - |
+| strokeTextureHeight | 填充纹理图片高度（2 的 n 次方） | - |
+| borderColor | 描边颜色 | `rgba(27, 142, 236, 1)` |
+| borderWeight | 描边宽度（像素） | `0` |
+| borderCovered | 是否描边覆盖填充 | `true` |
+| borderMask | 是否受内部填充区域掩膜 | `true` |
+| sequence | 是否采用间隔填充纹理 | `false` |
+| marginLength | 间隔距离（像素） | `16` |
+| height | 面图层高度 | `0` |
+
+`FillLayer` 另有一个**构造选项** `border`（是否显示描边，**官方默认 `true`**），它不在 `style` 袋里。
 
 ## 统一语义：同名的 prop，四条写入路径
 
@@ -58,21 +168,24 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 | `data` → `null`（明确「没有数据」） | 换一个**没有数据的实例** | **是** |
 | `data` → `undefined` | **不表态**：不产生任何 SDK 调用，已画出来的数据保持不变；**换实例时会把上一代的数据补齐到新实例** | 否 |
 | `style` | `LineLayer` / `FillLayer`：`setStyleOptions()` + `doOnceDraw()`（官方样式是 merge，且明确「改完要重绘」）；`HeatmapLayer` / `TrackLineLayer`：`setOptions()`（4.0.5 声明的新入口） | 否 |
-| `visible` / `opacity` / `zIndex` / `minZoom` / `maxZoom` | 字段级 setter（该 kind 有 setter 时） | 否 |
+| `visible` / `opacity` / `zIndex` | 字段级 setter（该 kind 有 setter 时） | 否 |
+| `minZoom` / `maxZoom` | **构造选项**（官方没有 `setMinZoom` / `setMaxZoom`） | **是** |
 | `idKey` / `crs` / `enablePicked` / `pickWidth` / `pickHeight` / `autoSelect` / `selectedColor` / `selectedIndex` / `popEvent` | 构造选项 ⇒ **换实例**（官方只有整袋 `setBaseOptions`，且不自动重绘） | 是 |
 
-其中 `selectedIndex` / `popEvent` 是 #165 Class 3 补齐的（官方 `layer/LineLayer.d.ts:25` / `:70`、
-`FillLayer.d.ts:30` / `:75`）：此前 `selectedColor` 单独暴露而「哪一条被选中」没有入口，
-是一对**半接线**的选项；`popEvent` 控制拾取事件是否向上层冒泡。两者都是构造选项、官方没有
-就地改的入口，所以变化时换实例。
+其中 `selectedIndex`（哪一条被选中）与 `popEvent`（拾取事件是否向上层冒泡）是一对容易漏看的
+选项：`selectedColor` 定「选中长什么样」，`selectedIndex` 定「哪一条被选中」，两者合起来才是一组完整的
+「选中态」。两者都是官方**构造选项**（`layer/LineLayer.d.ts:25` / `:70`、`FillLayer.d.ts:30` /
+`:75`），官方没有就地改的入口，所以变化时换实例。
+
+> ⚠️ `selectedIndex` 指的是**数据顺序的序号**，不是业务 id。要按业务 id 选中请用要素状态命令面
+> （见下节），那才是按 id 定位的口径。
 
 > ⚠️ `popEvent` 的官方默认是 `true`，而 Vue 对缺省的 `Boolean` prop 会转成 `false`。
 > 组件因此显式写 `popEvent: undefined`，让「没传」真的是「没传」——否则每个不传它的用户
 > 都会被静默改成「事件不冒泡」。`FillLayer` 的 `border`、`PointIconLayer` 的 `userSizes` /
 > `visibility`、`PointLayer` 的 `mouseStyleChange` / `pickThrough` 是同一条理由。
 
-`data: null` 走「换实例」而不是调 `clearData()`：这是本库自己的取舍
-（ADR `2026-09-19-native-data-layer-components` 决策 8 / #106 评审 P1）——这一族的实例本就随摘除
+`data: null` 走「换实例」而不是调 `clearData()`：这是本库自己的取舍——这一族的实例本就随摘除
 被丢弃，摘除前多打一次可能失败的调用没有收益。
 
 > 该取舍最初的理由是「这一族没有公开的清空入口」。4.0.5 之后这条**只对一半成立**：官方
@@ -91,7 +204,7 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 
 | kind | 隐藏的语义 |
 | --- | --- |
-| 全部八类（含 `HeatmapLayer` / `TrackLineLayer`） | `setVisible(false)`：**数据与实例都留着**，重新显示是同一个实例的 `setVisible(true)` |
+| 全部十一种（`LineLayer` / `FillLayer` / `HeatmapLayer` / `TrackLineLayer` / `PolygonLayer` / `PolylineLayer` / `TextLayer` / `PointLayer` / `PointCollection` / `PointIconLayer` / `MarkerCluster`） | `setVisible(false)`：**数据与实例都留着**，重新显示是同一个实例的 `setVisible(true)` |
 
 ⚠️ 4.0.5（git `5ba67f4`）给 `visualization/` 的 `PointLayer` / `ClusterLayer` / `Heatmap` /
 `TrackLine` 补上了类声明，**四个类都逐条声明了 `setVisible` / `getVisible`**。在此之前本库按
@@ -202,7 +315,7 @@ function highlight(id: string) {
 
 ## 播放控制与进度观察（`TrackLineLayer`）
 
-`TrackLine` 的播放命令面与事件观察经 **live 探针取证**（`scripts/probe-track-line.mts`，2026-09-23，exit 0），方法名不是从类型包猜的。
+`TrackLine` 的播放命令面与事件观察经真实运行时逐方法取证，方法名不是从文档抄的、也不是猜的。
 
 ### 命令面（`ref.playback`）
 
@@ -274,7 +387,7 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
 | 场景 | 会发生什么 |
 | --- | --- |
 | 组件卸载 / 地图销毁 | 解绑监听 → `removeLayer()`；实例随摘除被丢弃（SDK 侧的数据也随之成为垃圾） |
-| `visible=false` | 只调 `setVisible(false)`：数据与实例都留着，**不摘图层**（八个 kind 一致，见上文） |
+| `visible=false` | 只调 `setVisible(false)`：数据与实例都留着，**不摘图层**（十一个 kind 一致，见上文） |
 
 > **这一族没有 `clearData`，所以「清空」不走清空入口。** 官方专页四类
 > （`LineLayer` / `FillLayer` / `PointIconLayer` / `PointShapeLayer`）的公开方法里只有
@@ -298,7 +411,10 @@ live 探针实测：**SDK 不会**在页面 hidden 时自动暂停（`progress` 
   通道，其中一条还没有独立的存在理由。需要强类型样式请用 `LineLayer` / `FillLayer`。
 - **样式里的函数换实现后，只在 SDK 下一次求值时生效**：交给 SDK 的是转发到最新实现的包装，已经画
   出来的要素不会回溯变化。要立刻换样式，请换 `data` 的引用触发重新解析。
-- **`TrackLineLayer` 不依赖旧的 `BMapGLLib.TrackAnimation` 插件**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` / `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动（`pauseOnHidden`）均由原生图层提供，方法名均经 live 探针取证；本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
+- **播放控制由原生图层直接提供**：播放命令面（`start` / `pause` / `resume` / `stop` / `setSpeed` /
+  `setProcess`）、事件观察（`observed` / `@progress` / `@statuschange`）与页面可见性联动
+  （`pauseOnHidden`）都由官方 `TrackLine` 类本身提供，方法名均经真实运行时逐个验证；
+  本库**不**另建一套「镜像 SDK 播放状态」的内部状态机。
 - **`LineLayer` / `FillLayer` 底层的官方类已被弃用**（官方 4.0.5，建议 `PolylineLayer` /
   `PolygonLayer`）。替代组件本库**已提供**（见
   [PolygonLayer / PolylineLayer](./visualization-layers)），但本库**不提供指向新名字的别名垫片**

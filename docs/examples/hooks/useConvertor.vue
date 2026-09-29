@@ -1,7 +1,7 @@
 <template>
   <Map v-bind="$attrs" ref="map" @ready="handleInitd" :center="googlePoint">
     <template v-if="!isLoading && !isError">
-      <template v-for="(point, index) in result" :key="index">
+      <template v-for="(point, index) in data ?? []" :key="index">
         <Marker :position="point"></Marker>
         <Label
           :position="point"
@@ -23,13 +23,14 @@
 import { ref } from "vue";
 import { CoordinatesFromType, CoordinatesToType, useConvertor } from "bmap-vue";
 const map = ref();
-const { convert, result, isLoading, isError } = useConvertor(map);
+// data 是唯一读取口；result 是它的别名，这里用 data
+const { convert, data, isLoading, isError } = useConvertor(map);
 const googlePoint = { lng: 116.32715863448607, lat: 39.990912172420714 };
 function handleInitd() {
   convert(
     [googlePoint],
-    CoordinatesFromType["COORDINATES_GCJ02"],
-    CoordinatesToType["COORDINATES_BD09"],
+    CoordinatesFromType.COORDINATES_GCJ02,
+    CoordinatesToType.COORDINATES_BD09,
   );
 }
 </script>

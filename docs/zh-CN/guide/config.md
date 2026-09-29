@@ -110,7 +110,7 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 app.mount('#app')
 ```
 
-::: warning `plugins` 选项已删除（#165 Class 5）
+::: warning `plugins` 选项已删除
 `createBMapPlugin({ plugins })` 此前声明了却**没有任何读者**——app 级配置只有
 `{ provider, defaults }`，插件注册读的是 **`<Map plugins>` 组件 prop**（两者不是同一件事），
 所以 app 级 `plugins` 一直**静默无效**。要注册插件请用 `<Map :plugins="[...]">`：
@@ -165,6 +165,19 @@ const hostLoaded = { provider: existingGlobalV4Provider() }
   ak='百度地图ak'
 />
 ```
+
+`<Map>` 上的 `ak` / `apiUrl` / `provider` / `client` / `definition` **只决定「SDK 从哪来」**；
+地图本身的行为（视野、缩放范围、交互开关、显示元素、个性化样式）走它自己的 props，
+完整表见[Map 地图的 props](/zh-CN/components/map#动态组件-props)。其中三个要点：
+
+| prop | 关键约束 |
+| --- | --- |
+| `minZoom` / `maxZoom` | 官方声明取值范围 `[3, 21]`。越界值**显式报错** `BMAP_INVALID_ARGUMENT`，不会被静默 clamp |
+| `preserveDrawingBuffer` | **建图期**选项，是 `getScreenshot()` 能拿到真实画面的前提。默认**不开启**（常驻一块画布内存是库不该替使用者做的取舍），要截图必须显式 opt-in |
+| `mapStyleId` / `mapStyleJson` | 两者**互斥**，同时给会显式报错而不是静默丢掉其中一个 |
+
+交互类 prop 的坑（默认是「关」、不能靠「不传」拿到官方默认）见
+[Map 地图的交互 prop 说明](/zh-CN/components/map#动态组件-props)。
 
 ## 扩展插件 plugins
 

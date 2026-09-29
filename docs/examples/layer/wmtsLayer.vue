@@ -15,7 +15,7 @@
       >
       图层）发请求。
     </p>
-    <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+    <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-wheel-zoom>
       <WMTSLayer
         v-if="tk"
         url="https://t0.tianditu.gov.cn/img_w/wmts"

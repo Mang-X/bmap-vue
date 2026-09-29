@@ -19,7 +19,7 @@ control/mapType
 | anchor           | 控件的停靠位置                            | `string`                  | [anchor](#anchor)               | `BMAP_ANCHOR_TOP_RIGHT`   |
 | offset           | 控件的偏移值                              | `{x: number, y: number }` | -                               | `{ x: 10, y: 10 }`        |
 | type             | 控件样式（只有构造期生效）                | `string`                  | [type](#type)                   | 官方默认 `MAP`            |
-| mapTypes         | 展示的地图类型列表（只有构造期生效）      | `number[]`                | -                               | 官方默认三种类型          |
+| mapTypes         | 展示的地图类型列表（只有构造期生效）      | `readonly number[]`       | -                               | 官方默认 `[普通, 卫星, 混合]` |
 | showStreetLayer  | 是否显示路网层（可就地更新）              | `boolean`                 | -                               | `true`                    |
 
 ## 动态组件 Props

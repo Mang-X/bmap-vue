@@ -30,17 +30,18 @@ const { get, location, isLoading } = useIpLocation(map)
 
 ### 返回值
 
-:::tip 状态与动作约定（#38 起）
+:::tip 状态与动作约定
 
-- `status` 的取值与含义对六个 service hooks **完全一致**：
+- `status` 的取值与含义对**所有服务 composable** **完全一致**：
   `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
   `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
   表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
 - **动作恒 resolve**：`Promise<ServiceResult<T>>`，不 reject；失败/超时/取消都在返回值里，
-  与 `status` / `error` 同步。
+  与 `status` / `error` 同步。返回值里 `status === 'canceled'` 表示这次调用被更新的调用取代或被取消。
+- `sdkStatus` 只有 SDK **公开给出状态码**的服务才有值（`Geolocation` / `LocalSearch` 的
+  `BMAP_STATUS_*`、`Convertor` 回包 `status`），其余为 `null`——不伪装成 0。
 
 :::
-
 | 返回值    | 描述                                                                 | 类型 |
 | --------- | -------------------------------------------------------------------- | ---- |
 | data      | 定位信息，初始为 `null`（`location`/`result` 为其别名）                | `Readonly<ShallowRef<BMapIpLocationResult \| null>>` |
@@ -56,19 +57,26 @@ const { get, location, isLoading } = useIpLocation(map)
 | cancel    | 逻辑取消在飞请求                                                      | `() => void` |
 | reset     | 取消 + 清空 data/error/status                                         | `() => void` |
 
-:::warning #38 起的类型变化：`code` 已被移除，新增 `level`
+:::warning 结果字段：只有 `name` / `point` / `level`
 
-旧版结果里的 `code` **不在官方 `LocalCityResult` 的声明里**，且旧实现用 `code ?? 0`
-把「没有这个字段」伪造成了 `0`。本库只依据官方声明投影，因此结果现在是：
+本库只依据官方 `LocalCityResult` 声明投影。它的三个成员都是**可选**的，本库把它们落成
+「必填字段 + 缺项为 `null`」：
 
 | 属性  | 描述                                                       | 类型                              |
 | ----- | ---------------------------------------------------------- | --------------------------------- |
 | name  | 城市名                                                     | `string`                          |
-| point | 城市中心点；SDK 未给出时为 `null`（不再伪造 `{0,0}`）        | `{ lng: number; lat: number } \| null` |
-| level | 城市层级（官方默认给 5）                                    | `number \| null`                  |
+| point | 城市中心点（官方 `LocalCityResult.center`）；SDK 未给出时为 `null`（不伪造 `{0,0}`） | `{ lng: number; lat: number } \| null` |
+| level | 城市层级（官方 `LocalCityResult.level`；只有构造时传了 `renderOptions.map` 才返回当前地图层级，否则官方给 `5`） | `number \| null`                  |
 
-需要旧版那个未声明字段时，走 `./advanced` 的 `unwrapRaw()` 取 raw 实例。
+需要官方未投影的成员时，走 `./advanced` 的 `unwrapRaw()` 取 raw 实例。
 
+:::
+
+:::tip `LocalCityOptions.renderOptions` 未暴露
+官方 `LocalCity` 的构造参数是 `{ renderOptions }`，传 `map` 会让官方在取到城市后自动把地图视野定位到该城市。
+本库**不暴露**这个选项：它需要地图实例，而 `useIpLocation` 的定位结果本来就与地图无关；而且自动
+改视野是一次**对调用方地图的副作用**，不该由一个定位 hook 悄悄触发。要那个效果的话，在拿到 `point`
+之后自己 `setCenter`。
 :::
 
 ## TS 类型定义参考

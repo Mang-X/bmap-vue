@@ -49,7 +49,7 @@
 
 **库固定默认显式写进构造 options**（`LIBRARY_MAP_DEFAULTS`）：`enableDragging: true`、
 `enableWheelZoom: false`。只固定「库已声明默认值且与 v4 隐式默认不同」的键——v4 的
-`enableWheelZoom` 隐式默认是 `true`，而组件 `<BMap>` 的默认是 `enableScrollWheelZoom: false`；
+`enableWheelZoom` 隐式默认是 `true`，而组件 `<BMap>` 的默认是 `enableWheelZoom: false`；
 不显式固定就会「同一个组件换引擎后滚轮缩放行为反转」。其余交互项库没有声明默认值，沿用 v4
 默认，迁移期不引入第二套默认。
 

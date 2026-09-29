@@ -1,5 +1,5 @@
 <template>
-  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-scroll-wheel-zoom>
+  <Map :zoom="12" :center="{ lng: 116.404, lat: 39.915 }" enable-wheel-zoom>
     <DOMLayer :create-dom="createDom" :data="geojson" :min-zoom="5" enable-dragging-map />
   </Map>
 </template>

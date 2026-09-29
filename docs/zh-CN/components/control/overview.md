@@ -17,7 +17,7 @@ control/overview
 | 属性         | 说明                                        | 类型                      | 可选值            | 默认值                    |
 | ------------ | ------------------------------------------- | ------------------------- | ----------------- | ------------------------- |
 | anchor       | 控件的停靠位置                              | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
-| offset       | 控件的偏移值                                | `{x: number, y: number }` | -                 | `{ x: 0, y: 0 }`          |
+| offset       | 控件的偏移值（相对锚点的留白）            | `{x: number, y: number }` | -                 | `{ x: 10, y: 10 }`        |
 | size         | 缩略地图尺寸（领域口径是 Pixel，可就地更新）| `{x: number, y: number }` | -                 | 官方默认 `150 × 150`      |
 | isOpen       | 挂载后的开合状态（只有构造期生效）          | `boolean`                 | -                 | `false`                   |
 | zoomInterval | 鹰眼与主图的缩放级别差（只有构造期生效）    | `number`                  | -                 | 官方默认 `4`              |
@@ -62,4 +62,16 @@ control/overview
 
 组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
-该组件没有对外事件。
+三个事件对应官方 `OverviewMapControlEventMap`，原样转发：
+
+| 事件名 | 说明 | 载荷 |
+| --- | --- | --- |
+| viewchanged | 缩略地图展开 / 收起状态切换**完成**后触发 | `{ isOpen: boolean } \| null` |
+| viewchanging | 展开 / 收起动画**过程中**触发 | `unknown` |
+| resize | 缩略地图尺寸发生变化时触发 | `unknown` |
+
+`viewchanged` 是**唯一**能观察这个控件自身开合状态的方式——官方 `OverviewMapControl#isOpen()`
+只能轮询，而 `isOpen` prop 又是**构造期**的（官方只有 `changeView()` 的**切换**语义、没有幂等的
+`setOpen`）。也就是说用户点开鹰眼这个事实在这里才可观测。
+
+`viewchanged` 的 `isOpen` 读不到时给 `null` 而不是 `false`：`false` 是一个**断言**，而我们并不知道。
