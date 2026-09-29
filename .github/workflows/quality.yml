@@ -44,6 +44,13 @@ jobs:
       - name: Check API manifest
         run: node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check
 
+      # 组件总览页（docs/zh-CN/components/index.md）的手写清单与 manifest 无漂移。
+      # 上一步只保证「真值没变」，这一步保证「文档跟着真值走」——两者缺一不可：
+      # 清单页写「52 个组件」而真值是 56、且 GroundPoint / TextLayer /
+      # PolygonLayer / PolylineLayer 四个组件一个都没列，这种漂移 generate:* 抓不到。
+      - name: Check component catalog in sync with manifest
+        run: node --experimental-strip-types scripts/check-component-catalog.mts
+
       # Capability Catalog 能力矩阵无漂移
       - name: Check capability matrix
         run: node --experimental-strip-types scripts/generate-capability-matrix.mts --check

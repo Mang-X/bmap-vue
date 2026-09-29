@@ -32,7 +32,7 @@
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Activities/Sparkles.png" alt="Sparkles" width="25" height="25" /> 特性
 
 - 🚀 自动通过官方 `@baidumap/jsapi-loader` 加载百度地图 JSAPI 4.0，将繁琐的 Api 封装进组件，你只需关注组件本身
-- 📦 52 个组件（覆盖物 / 控件 / 图层 / 批量可视化 / 全景 / 检索）+ 17 个 hooks
+- 📦 56 个组件（覆盖物 / 控件 / 图层 / 批量可视化 / 全景 / 检索）+ 20 个 composables
 - 🌐 原生批量图层：线 / 面 / 热力 / 轨迹线，带要素状态与拾取，数据量大时渲染留在 SDK 内部
 - 🔌 12 个 headless 服务 composable：地址解析、坐标转换、区域边界、检索、四种路线规划
 - 🎨 标准 UI 交给官方 `@baidumap/jsapi-ui-kit`，本库不复制官方 UI

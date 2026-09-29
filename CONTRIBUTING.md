@@ -69,6 +69,8 @@ pnpm check:docs-brand          # 发布文档面不得出现已退役的品牌�
 pnpm check:docs-links          # 文档锚点与导航覆盖
 pnpm generate:brand-icons      # 改了品牌矢量资产后重渲染 PWA 图标
 pnpm check:brand-icons          # 品牌图标与矢量资产无漂移
+pnpm check:component-catalog    # 组件总览页清单与 manifest 无漂移
+pnpm generate:screenshots        # 改了站点外观后重拍发布面截图（需本地站点在跑）
 pnpm check:doc-props           # 文档/示例里的 prop 名 vs 真实声明面（写错的 prop 只落 $attrs，不报错也不生效）
 pnpm check:interaction-props   # <Map> 交互开关 prop 的「未传」可达性（#179）
 pnpm check:props-projected     # *Props 声明了却没有读者的 prop 必须为空（#177，反向门禁）

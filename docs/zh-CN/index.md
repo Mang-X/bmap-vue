@@ -24,7 +24,7 @@ features:
 
   - icon: <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Package.png" alt="Package" width="25" height="25" />
     title: 覆盖物、控件、图层、全景
-    details: 52 个组件，按「覆盖物 / 控件 / 图层 / 数据与批量可视化 / 全景 / 检索」分组
+    details: 56 个组件，按「覆盖物 / 控件 / 图层 / 数据与批量可视化 / 全景 / 检索」分组
 
   - icon: <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Triangular%20Ruler.png" alt="Triangular Ruler" width="25" height="25" />
     title: Vue-native

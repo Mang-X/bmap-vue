@@ -152,6 +152,8 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:public-dts` | 校验 `dist/**/*.d.ts` 无 `BMap.*` / `BMapGL` / 官方类型包引用，且类型边界文件未被发布 |
 | `pnpm check:docs-brand` | 已退役的发布身份（包名 / 产品名 / 去前缀前的组件名 / 库版本措辞 `3.0`）不得回到发布文档面。判据按**结构**而非名单：`3.0` 按引号分档（带引号是官方 loader 的 `version` 取值）、`<BMap` 按位置（后面是空白/斜杠/尖括号才算 Vue 标签）、MIT 署名用 lookbehind 排除。逐行豁免（见脚本的 `ESCAPE_TOKEN`，写作 `brand-gate` + `:allow` + 理由），理由必填、只豁免本行、有预算上限 |
 | `pnpm check:docs-links` | 文档锚点与导航覆盖（页面级死链归 `vitepress build`） |
+| `pnpm generate:screenshots` | 重拍发布面截图（`docs/public/screenshots/*.jpg`）。尺寸、主题、渲染完成度逐张回读校验：尺寸对不上时 manifest 的 `sizes` 会静默拿到错误尺寸的资源，主题错了会拍出深浅不一致的一组图。需要本地站点在跑与 Chromium |
+| `pnpm check:component-catalog` | 组件总览页与 manifest 无漂移。`generate:manifest:check` 只保证**真值**没变，这一步保证**文档**跟着真值走：清单页写「56 个组件」而真实是 56 但漏列了 `GroundPoint` / `TextLayer` / `PolygonLayer` / `PolylineLayer`，前一步照样绿 |
 | `pnpm check:brand-icons` | 品牌栅格图标与矢量资产无漂移。`docs/public/icons/**` 是 `pnpm generate:brand-icons` 的**产物**，不是手工维护的资产——改了标志不重渲染，导航栏是新图标、PWA 图标还是旧的，这类漂移不产生任何测试失败。判据是**重新渲染到临时目录后逐字节比对**（存在与尺寸都可能是旧文件重新落盘）。没有 Chromium 时退化为「已跳过」而不是红：跑不了判据与判据不通过必须可区分 |
 | `pnpm generate:brand-icons` | 从 `docs/public/brand/bmap-vue-icon-square.svg` 重新渲染 PWA 图标（`docs/public/icons/**` 是**生成物**）。栅格副本必须由矢量资产生成——手工维护会和标志漂移，主题色取自同一份资产 |
 | `pnpm check:doc-props` | 文档 / 示例 / README 里**写出的 prop 名** vs 真实声明面（`dist/*.d.ts`）。抓的是 `docs:typecheck` 抓不到的一类：不存在的 kebab prop 落进 `$attrs`，Vue 既不报错也不生效。只扫**模板**——正文与表格里的 `<Map onReady>` 是散文，拿去比会误报 |
@@ -210,6 +212,8 @@ pnpm check:docs-brand      # 发布文档面无退役品牌串
 pnpm check:docs-links      # 文档锚点与导航覆盖
 pnpm generate:brand-icons  # 改了 docs/public/brand/** 之后重渲染 PWA 图标
 pnpm check:brand-icons   # 品牌图标与矢量资产无漂移
+pnpm check:component-catalog # 组件总览页清单与 manifest 无漂移
+pnpm generate:screenshots    # 改了站点外观后重拍截图（手动，非门禁）
 pnpm check:doc-props       # 文档/示例里的 prop 名 vs 真实声明面
 pnpm check:interaction-props # <Map> 交互开关 prop 的「未传」可达性
 pnpm check:props-projected # *Props 声明了却没有读者的 prop 必须为空（反向门禁）

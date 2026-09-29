@@ -5,7 +5,7 @@ lang: zh-CN
 
 # 组件总览
 
-52 个组件，按「它解决什么问题」分组。先在下面找到你那一类，再点进具体页面。
+56 个组件，按「它解决什么问题」分组。先在下面找到你那一类，再点进具体页面。
 
 <div align="center">
   <img src="/screenshots/components-marker.jpg" alt="Marker 与 InfoWindow 的实际效果" width="760" />
@@ -52,6 +52,7 @@ import { Map, Marker, NavigationControl } from 'bmap-vue'
 | [Rectangle](/zh-CN/components/overlay/rectangle) | 矩形 |
 | [BezierCurve](/zh-CN/components/overlay/bezierCurve) | 贝塞尔曲线 |
 | [GroundOverlay](/zh-CN/components/overlay/ground-overlay) | 地面叠加层（图片 / 视频 / canvas） |
+| [GroundPoint](/zh-CN/components/overlay/ground-point) | 贴地点。地理坐标 + 离地高度，几何入口是 `point` |
 | [Prism](/zh-CN/components/overlay/prism) | 3D 棱柱 |
 | [Marker3D](/zh-CN/components/overlay/marker3d) | 带高度的点 |
 | [MapMask](/zh-CN/components/overlay/mapMask) | 地图掩膜 |
@@ -110,6 +111,9 @@ import { Map, Marker, NavigationControl } from 'bmap-vue'
 | [RasterTileLayer](/zh-CN/components/layer/raster-layer) | 栅格瓦片 |
 | [MVTLayer](/zh-CN/components/layer/mvt-layer) | 矢量瓦片 |
 | [DOMLayer](/zh-CN/components/layer/dom-layer) | DOM 图层 |
+| [TextLayer](/zh-CN/components/layer/text-layer) | 批量文字标注 |
+| [PolygonLayer](/zh-CN/components/layer/visualization-layers) | GeoJSON 面。官方 `FillLayer` 的指名替代 |
+| [PolylineLayer](/zh-CN/components/layer/visualization-layers) | GeoJSON 线。官方 `LineLayer` 的指名替代 |
 | [PanoramaCoverageLayer](/zh-CN/components/layer/panorama-coverage) | 全景覆盖范围 |
 
 图层组件的共性与排障见[图层总览](/zh-CN/components/layer/)。
