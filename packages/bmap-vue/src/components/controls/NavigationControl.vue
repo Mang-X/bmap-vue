@@ -9,8 +9,13 @@ export interface NavigationControlProps {
    *
    * 填**常量名**（`"BMAP_NAVIGATION_CONTROL_LARGE"` …），控件边界有一张名字→数值表
    * （`NAVIGATION_TYPE_VALUES`）换算成官方的 `0 | 1 | 2 | 3`——上游
-   * `NavigationControlOptions.type` 收的是**数字**，填数字不会命中换算表（会原样透传，
-   * 但那不是官方枚举的语义）。与 `anchor` 同一套做法（issue #175）。
+   * `NavigationControlOptions.type` 收的是**数字**。与 `anchor` 同一套做法（issue #175）。
+   *
+   * ⚠️ 直接填数字（`type="2"`）**不告警也不被换算**——`resolveType` 对非字符串原样放行
+   * （`ControlOptions` 的索引签名本就是「4.0 自身构造选项」的逃生口）。而 `2` 恰好就是
+   * `BMAP_NAVIGATION_CONTROL_PAN` 的值，所以它**可能**看起来是对的：
+   * 数字与官方数值**巧合相同**时没有任何异常信号，一旦官方调整取值就静默错位。
+   * 因此一律填常量名。
    *
    * 表**按族分开**，因此 `BMAP_MAPTYPE_CONTROL_*`（`<MapTypeControl>` 的取值）会告警并被忽略——
    * 两族的数值还撞（`PAN` 与 `MAP` 都是 `2`），误接受会静默换出别的控件的样式。

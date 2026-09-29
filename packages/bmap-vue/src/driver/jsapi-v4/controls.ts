@@ -85,7 +85,15 @@ const CONTROL_CTORS = {
  *
  * 刻意不从 `window.BMAP_ANCHOR_*` 读：Driver 边界只认 `rawSdk` 传入的命名空间，
  * 不读未经 Provider 校验的全局值（同 ADR 2026-09-11-jsapi-v4-map-facet §9）。
- * 表本身被类型层钉在官方声明上（见文件末尾的锚点断言），上游改值会直接编译失败。
+ *
+ * ⚠️ **这张表没有类型层护栏**（与本文件末尾的 `*_TYPE_VALUES` 断言不同，那两组有）。
+ * 早先这里写着「见文件末尾的锚点断言」——**本文件从来没有过那个断言**：
+ * `OfficialCornerAnchor` / `OfficialCenterAnchor` 只被本表的注解类型消费。
+ * 改锚点值**不会**产生任何编译期信号，它只会在真实 4.0 上把控件挂到错误的角。
+ * 本表的实际护栏是 `driver/jsapi-v4/controls.test.ts` 里的换算用例
+ * （`anchor` 的名字→数字）——**不是**类型断言。要补类型护栏请照
+ * `AssertNavigationTypeValues` + `AssertNavigationTypeExhaustive` 那对「逐名 + 值域」
+ * 的成对写法补，两条缺一不可（见文件末尾的说明）。
  *
  * ⚠️ **覆盖物也复用这一张**（issue #165 第三批：`Marker.label` 之外的 `Marker.anchor` 与
  * `Label.anchor`，见 `overlays.ts` 的 `anchorFor`）。两张表一旦漂移，同一个锚点名在
@@ -125,10 +133,13 @@ export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | Offic
  * 连「看起来不对」都看不出来。按族分表让 `resolveType` 只查本族，跨族名字落到
  * 「不认识」分支——告警 + 忽略（与 `resolveAnchor` 同一口径）。
  *
- * 键类型用官方常量名的字面量联合而非 `string`：新增/改名官方常量会直接编译失败（必须同步
- * 这张表），跨族名字则连键位都不存在。表里写**字面量数字**（与 `ANCHOR_VALUES` 同一手法，
- * 不读未经 Provider 校验的全局常量），取值由文件末尾的 `type` 断言逐名钉在官方 `const`
- * 声明上——上游改值会直接编译失败（issue #175）。
+ * 键类型用官方常量名的字面量联合而非 `string`：跨族名字连键位都不存在，`satisfies` 又要求
+ * 四项齐全（删一行会红）。表里写**字面量数字**（与 `ANCHOR_VALUES` 同一手法，不读未经
+ * Provider 校验的全局常量）。
+ *
+ * 取值有**两条成对**的类型层护栏（见文件末尾），实测四类变异全部转红：
+ * 删表项 / 值改成越界数 / 本表某个值被调换（哪怕仍在合法范围内）/ 上游新增枚举成员。
+ * 单留任何一条都会漏——**成对**是必要的，不是冗余（注释里写明了各自的分工）。
  */
 export const NAVIGATION_TYPE_VALUES = {
   // `const/NavigationControlType.d.ts`：LARGE=0 / SMALL=1 / PAN=2 / ZOOM=3
@@ -904,14 +915,13 @@ type _AssertTypeValuesOverlap = ExpectTrue<
 
 /**
  * **逐名**对应：`NAVIGATION_TYPE_VALUES` 的每个值必须**正好**等于官方那个名字的
- * `NavigationControlType` 成员。
+ * `NavigationControlType` 成员。任何一个值被改错（哪怕仍在 `0|1|2|3` 范围内）都会红——
+ * 这正是把 `LARGE: 0` 错改成 `LARGE: 3` 那种整体错位最需要防的回归。
  *
- * ⚠️ 这里**不能**写成 `NavigationControlType extends (typeof BMAP_NAVIGATION_CONTROL_LARGE | …)`
- * 那种并集 `extends` —— 那是**恒真重言式**：右侧由上游联合自己的成员拼出来，让上游联合
- * extends 它永远成立。它能挡住的只有「上游新增成员」，**挡不住改值**——而改值恰恰是这张表
- * 最需要防的回归（把 `LARGE: 0` 改成 `LARGE: 3` 会让全库的导航控件类型整体错位，
- * 且没有任何编译期信号）。
- * 逐名等值才能真正承重：任何一个值被改错（哪怕仍在 `0|1|2|3` 范围内）都会红。
+ * ⚠️ 逐名等值**只挡改值、挡不住「上游新增成员」**（新成员在表里没有对应键，逐名断言压根不看
+ * 它）。所以下面 `AssertNavigationTypeExhaustive` 必须与它**成对**存在，两条各挡一半。
+ * 早期版本只写「并集 `extends`」一条，恰恰栽在这里：那条是**恒真重言式**（右侧由上游联合
+ * 自己的成员拼出来，让上游联合 extends 它永远成立），改值全错也不红。
  */
 type AssertNavigationTypeValues = ExpectTrue<
   typeof NAVIGATION_TYPE_VALUES["BMAP_NAVIGATION_CONTROL_LARGE"] extends typeof BMAP_NAVIGATION_CONTROL_LARGE
@@ -925,6 +935,31 @@ type AssertNavigationTypeValues = ExpectTrue<
     : false
 >;
 
+/**
+ * **穷尽**对应：表里的**值域**必须与官方 `NavigationControlType` 的**值域完全相同**。
+ *
+ * 逐名断言看不见「上游新增了一个成员」——新成员在表里没有键，两条逐名断言照样绿。
+ * 这条按**值**比较（`Equals` 是精确等值，不做子类型放宽），所以官方给
+ * `NavigationControlType` 加了第 5 个取值时它立刻红，提示补表。
+ *
+ * 与逐名断言的分工（两类变异各由一条挡，实测于 `node_modules` 里真实的类型包）：
+ *
+ * | 变异 | 逐名等值 | 本条（值域穷尽） |
+ * | --- | --- | --- |
+ * | 表里某个值改错（`LARGE: 0` → `3`） | 🔴 红 | — |
+ * | 表里删掉一整行 | 🔴 红（`satisfies` + 键不存在） | — |
+ * | 上游把 `LARGE` 的值改成别的数 | 🔴 红 | — |
+ * | **上游新增一个枚举成员** | 绿 | 🔴 红 |
+ *
+ * ⚠️ 两条**都删不得**：只留本条，`LARGE: 0` 改成 `3` 仍然绿（值域还是 `0|1|2|3`，
+ * 只是对应的名字错了）；只留逐名，上游加成员无人察觉。
+ */
+type AssertNavigationTypeExhaustive = ExpectTrue<
+  Equals<
+    typeof NAVIGATION_TYPE_VALUES[keyof typeof NAVIGATION_TYPE_VALUES],
+    NavigationControlType
+  >
+>;
 /** 同上，逐名钉 `MAPTYPE_TYPE_VALUES`（`HORIZONTAL=0` / `DROPDOWN=1` / `MAP=2`）。 */
 type AssertMapTypeControlValues = ExpectTrue<
   typeof MAPTYPE_TYPE_VALUES["BMAP_MAPTYPE_CONTROL_HORIZONTAL"] extends typeof BMAP_MAPTYPE_CONTROL_HORIZONTAL
@@ -934,6 +969,11 @@ type AssertMapTypeControlValues = ExpectTrue<
         : false
       : false
     : false
+>;
+
+/** 同上，值域穷尽（挡「上游给 `MapTypeControlType` 加新成员」）。两条成对，缺一不可。 */
+type AssertMapTypeControlExhaustive = ExpectTrue<
+  Equals<typeof MAPTYPE_TYPE_VALUES[keyof typeof MAPTYPE_TYPE_VALUES], MapTypeControlType>
 >;
 
 /**
