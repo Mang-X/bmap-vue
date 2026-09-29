@@ -35,7 +35,7 @@ const DOCS = resolve(ROOT, "docs");
 export interface LinkProblem {
   file: string;
   line: number;
-  kind: "dead-anchor" | "orphan-page";
+  kind: "dead-anchor" | "orphan-page" | "unclosed-container";
   detail: string;
 }
 
@@ -164,6 +164,9 @@ export function scanLinks(pages: readonly string[]): LinkProblem[] {
   return problems;
 }
 
+/** 未闭合容器的开放栈（`scanContainers` 用）。 */
+type OpenContainer = { fence: number; info: string; line: number };
+
 function splitAnchor(link: string): [string, string | undefined] {
   const at = link.indexOf("#");
   if (at === -1) return [link, undefined];
@@ -247,6 +250,39 @@ export function scanOrphans(pages: readonly string[]): LinkProblem[] {
   return problems;
 }
 
+/**
+ * 校验 VitePress 容器（`::: warning` / `::: tip` …）成对闭合。
+ *
+ * **为什么单独加**：`vitepress build` 遇到未闭合的容器**不会失败**——实测写一个
+ * `::: warning` 不闭合，`docs:build` 退出码仍是 0，代价是该容器之后**整页内容被吞掉**
+ * （页面上看着只是少了一部分）。这类损坏在预览里很难发现，CI 更发现不了。
+ */
+export function scanContainers(file: string, text: string): string[] {
+  const problems: string[] = [];
+  const stack: OpenContainer[] = [];
+  let line = 1;
+  for (const raw of text.split("\n")) {
+    const m = /^:::+\s*([\w-]*)/.exec(raw);
+    if (m) {
+      const info = (m[1] ?? "").trim();
+      // `::: xxx` 开头；`:::` 结尾；`::::` 是更外层的包裹。
+      const fence = (raw.match(/^:::+/)?.[0].length) ?? 3;
+      if (info) {
+        stack.push({ fence, info, line });
+      } else if (stack.length > 0) {
+        stack.pop();
+      } else {
+        problems.push(`${file}:${line} 多余的 :::（没有对应的开容器）`);
+      }
+    }
+    line += 1;
+  }
+  for (const open of stack) {
+    problems.push(`${file}:${open.line} ::: ${open.info} 未闭合——它之后的内容会被静默吞掉`);
+  }
+  return problems;
+}
+
 function main(): number {
   const argv = process.argv.slice(2);
   const dirFlag = argv.indexOf("--dir");
@@ -273,13 +309,24 @@ function main(): number {
   }
 
   const problems = dirFlag === -1 ? [...scanLinks(pages), ...scanOrphans(pages)] : scanLinks(pages);
+  for (const page of pages) {
+    problems.push(
+      ...scanContainers(page.replace(ROOT + "/", ""), readFileSync(page, "utf8")).map((detail) => ({
+        file: page.replace(ROOT + "/", ""),
+        line: 0,
+        kind: "unclosed-container" as const,
+        detail,
+      })),
+    );
+  }
   if (problems.length > 0) {
     console.error(`docs link scan FAILED: ${problems.length} 处问题（${pages.length} 个文档页）。`);
     for (const p of problems) {
       console.error(`  ${p.file}${p.line > 0 ? `:${p.line}` : ""} -> ${p.detail}  [${p.kind}]`);
     }
     console.error(
-      "页面级死链由 `vitepress build` 负责；这里管的是**锚点**与**导航覆盖**。",
+      "页面级死链由 `vitepress build` 负责；这里管的是**锚点**、**导航覆盖**与**容器闭合**" +
+        "（未闭合的 ::: 不会让 build 失败，只会让它之后的内容被静默吞掉）。",
     );
     return 1;
   }

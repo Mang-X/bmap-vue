@@ -21,7 +21,7 @@
  * 结果落到 `.artifacts/official-docs.json` 供离线比对。抓取与比对分开，
  * 是为了让比对这一步在 CI / 本地都能反复跑而不必联网。
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -108,10 +108,18 @@ function compareVersion(a: string, b: string): number {
 export function upstreamMembers(file: string): Set<string> | null {
   const root = upstreamRoot();
   if (!root) return null;
-  const p = join(root, file);
-  if (!existsSync(p)) return null;
-  const text = readFileSync(p, "utf8");
-  return new Set([...text.matchAll(/^\s{4}([a-zA-Z]\w*)\??:/gm)].map((m) => m[1]!));
+  const dir = file.split("/")[0]!;
+  const name = file.split("/")[1]!;
+  // `<Name>Options.d.ts` 是首选；部分官方类没有独立的 Options 文件（`IconSequence` 等），
+  // 这时回落到类文件本身。
+  const candidates = [join(root, dir, name), join(root, dir, name.replace(/Options\.d\.ts$/, ".d.ts"))];
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    const text = readFileSync(p, "utf8");
+    const members = new Set([...text.matchAll(/^\s{4}([a-zA-Z]\w*)\??:/gm)].map((m) => m[1]!));
+    if (members.size > 0) return members;
+  }
+  return null;
 }
 
 /**
@@ -122,8 +130,36 @@ export function upstreamMembers(file: string): Set<string> | null {
  * `NativeLayerCommonProps` 与 `NativeLayerPickOptions` 上。不跟就会把
  * 几十个真实存在的 prop 全报成缺口。
  */
+/**
+ * 收集**内联声明 props** 的 .vue 源码。
+ *
+ * 只有一半组件的 `*Props` 在 `types/components.ts`；`GeoJSONLayerProps` /
+ * `DistrictLayerProps` / `DOMLayerProps` 等是内联在各自 `.vue` 的 `<script setup>` 里。
+ * 不收这些，第一版把三个组件共 20 个真实存在的 prop 全报成缺口。
+ */
+function listComponentSources(): string[] {
+  const out: string[] = [];
+  const walk = (d: string): void => {
+    if (!existsSync(d)) return;
+    for (const name of readdirSync(d)) {
+      const p = join(d, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (name.endsWith(".vue")) out.push(readFileSync(p, "utf8"));
+    }
+  };
+  walk(join(ROOT, "packages/bmap-vue/src/components"));
+  return out;
+}
+
 export function oursMembers(Comp: string, depth = 4): Set<string> {
-  const src = readFileSync(join(ROOT, "packages/bmap-vue/src/types/components.ts"), "utf8");
+  // **两处都要扫**。只读 `types/components.ts` 会漏掉一大半组件：`GeoJSONLayerProps` /
+  // `DistrictLayerProps` / `DOMLayerProps` 等是**内联声明在各自 .vue 的 `<script setup>` 里**的
+  // （`components/layers/*.vue`），不在那个文件。第一版因此把这三个组件的 20 个真实存在的
+  // prop 全报成缺口——「报告误导人」比「没有报告」更糟。
+  const src = [
+    readFileSync(join(ROOT, "packages/bmap-vue/src/types/components.ts"), "utf8"),
+    ...listComponentSources(),
+  ].join("\n");
   const out = new Set<string>();
   if (depth < 0) return out;
   const i = src.indexOf(`export interface ${Comp}Props`);
@@ -209,8 +245,19 @@ export function compare(capture: Record<string, unknown>): ComponentDiff[] {
 
 const dirOf = (slug: string): string =>
   /layer|point-collection/.test(slug) ? "layer" : "overlay";
-const upstreamFile = (slug: string): string =>
-  `${slug.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}.d.ts`;
+
+/**
+ * 上游的**选项**声明文件，不是类声明文件。
+ *
+ * 第一版只找 `<Name>.d.ts`（类本身），于是 `MarkerOptions.d.ts` 里那 17 个成员
+ * 一个都没被读到，全部落进 `docOnly`——对照结果直接反了（Marker 报「没有缺口」，
+ * 真实缺口是 `anchor` 与 `enableMassClear`）。构造项在**类**文件、选项在
+ * `*Options.d.ts`，这里要的是后者。
+ */
+function upstreamFile(slug: string): string {
+  const base = slug.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+  return `${base}Options.d.ts`;
+}
 
 function main(): number {
   if (process.argv.includes("--print-slugs")) {

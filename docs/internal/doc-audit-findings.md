@@ -242,3 +242,45 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 对照器把 `CustomControl.children` / `CopyrightControl.children` 报成真缺口。
 实际上官方用 `children` 表达「挂任意 React 内容」，本库对应**默认插槽**。
 已在对照器口径里归入「React 渲染面」一类（见 official-catalog-audit.md §2.1）。
+
+---
+
+## 20.【中】`<Marker>` / `<Label>` / `<Prism>` 三个 `enableXxx` 有描述符无 prop
+
+`OVERLAY_DESCRIPTORS` 注册了它们，`*Props` 里却没有：
+
+| 组件 | 键 | 上游有 | 实例上有 | 描述符有 | `*Props` 有 |
+| --- | --- | --- | --- | --- | --- |
+| `Marker` | `enableMassClear` | ✅ `MarkerOptions` | ✅ `enableMassClear()` / `disableMassClear()` | ✅ | ❌ |
+| `Label` | `enableClicking` | ✅ `LabelOptions` | — | ✅ | ❌ |
+| `Prism` | `enableClicking` | ✅ `PrismOptions` | — | ✅ | ❌ |
+
+**用户可见后果**：`<Marker>` 永远参与 `map.clearOverlays()`，而所有兄弟覆盖物都能选择退出——
+只有 Marker 不行。`enableClicking` 同理：官方的「标注是否响应点击」在本库覆盖物上开不了。
+
+`tests/behavior/overlay-suite.test.ts` 的键交叉核对只覆盖「声明的键」，
+所以抓不到「描述符有、组件面无」这个方向——和 Prism/GroundOverlay 已有的盲区同型。
+
+修法机械：把键加进对应 `*Props` 即可，描述符与实例侧的方法都已经在。**未改，待授权。**
+
+## 21.【中】`Marker3D` 的 `icon.printImageUrl` 是类型面上的死字段
+
+声明在 `Marker3D.vue:18` 与 `types/components.ts:221`，但 Driver 每次都**丢弃并告警**
+（`driver/jsapi-v4/overlays.ts:212-218`）——上游 `IconOptions`（4.0.5）只有
+`anchor` / `imageOffset` / `imageSize` 三个键。文档原先把它当可用字段，已改。
+
+## 22.【工具自身】对照器读的是**类**文件而不是 `*Options.d.ts`
+
+`upstreamFile()` 原本拼出 `overlay/Marker.d.ts`（类本身），而构造项在
+`overlay/MarkerOptions.d.ts`（17 个成员）。于是那 17 个一个都没被读到，全部落进
+`docOnly`——对照结论直接反了：Marker 报「没有缺口」，而真实缺口是
+`anchor` 与 `enableMassClear`。
+
+修好后 `docOnly` 从 364 降到 224，真缺口从 67 变成 46（其中 18 是 React 渲染面、
+4 是样式类 `style`、真缺口 24）。**报告误导人比没有报告更糟**——这条已写进
+`official-catalog-audit.md` 的「比对器自身踩过的坑」。
+
+同源的两个坑（修好后由三路交叉验证得出同一份结论）：
+- `oursMembers` 只读 `types/components.ts`，漏掉内联声明在 `.vue` 里的
+  `GeoJSONLayerProps` / `DistrictLayerProps` / `DOMLayerProps`（20 个假缺口）。
+- `extends` 基础接口不都以 `Props` 结尾（`NativeLayerCommonProps` / `NativeLayerPickOptions`）。

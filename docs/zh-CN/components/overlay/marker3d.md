@@ -56,6 +56,7 @@ overlay/marker3d/withImg
 `<Marker>` 的自定义图标里有一个 `printImageUrl` 字段，但它在 JSAPI 4.0 **没有对应项**——
 `IconOptions` 只声明了 `anchor` / `imageOffset` / `imageSize` 三个键。传了会被**丢弃**并告警一次，
 不会生效。`<Marker3D>` 的贴图因此不提供这个字段。
+:::
 
 ::: tip 官方文档站还列了 `enableClicking`，但官方 4.0.5 声明里**没有**
 `Marker3D` 的构造器不在官方 4.0.5 的类型声明里（只在 `const/Marker3DShapeType.d.ts` 的文档注释

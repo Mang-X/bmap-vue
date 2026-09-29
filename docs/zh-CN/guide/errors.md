@@ -116,10 +116,11 @@ interface BMapErrorLike {
 
 **解决**：按 `error.message` 与你的业务上下文处理；`status` 为 `empty` 时按「没有结果」展示，同时留意配额与白名单这两个最常见的环境原因。
 
-:::tip `unsupported` 与 `failed` 不是一回事
+::: tip `unsupported` 与 `failed` 不是一回事
 
 `status === 'unsupported'` 表示**当前引擎没有这个能力**：一次请求都没有发出（同时 `supported` 为
 `false`）。把它按 `failed` 处理会误导用户去「重试」。
+:::
 
 ### `BMAP_INVALID_ARGUMENT`
 
