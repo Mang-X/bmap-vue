@@ -25,6 +25,25 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ICON_DIR = join(ROOT, "docs/public/icons");
 const RENDER = join(ROOT, "scripts/render-brand-icons.mts");
 
+/**
+ * 判断一次失败是不是「这台机器上没有浏览器」。
+ *
+ * 认两种形态：渲染脚本**直接**抛（`error.code` / `error.name`），或它作为子进程
+ * 被 exec 后把错误打在 stderr 上（此时拿不到对象，只能看那行稳定错误码）。
+ * 两者都只匹配**码**，不匹配文案——文案会改，码是契约。
+ */
+function isBrowserUnavailable(error: unknown): boolean {
+  const e = error as { code?: string; name?: string; stderr?: string };
+  if (e?.code === "BMAP_BROWSER_UNAVAILABLE") return true;
+  if (e?.name === "BrowserUnavailableError") return true;
+  // `execFileSync` 的 `error.stderr` 是 **Buffer**，不是 string——typeof 判断
+  // 直接把它排除了，于是「无浏览器」也被当成真故障。这个坑踩过一次：
+  // 判定函数看着对，跳过路径却走不通。
+  const stderr = e?.stderr;
+  const text = Buffer.isBuffer(stderr) ? stderr.toString("utf8") : stderr;
+  return typeof text === "string" && text.includes("BMAP_BROWSER_UNAVAILABLE");
+}
+
 function digest(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16);
 }
@@ -45,14 +64,29 @@ try {
   try {
     execFileSync(process.execPath, ["--experimental-strip-types", join(work, "scripts/render-brand-icons.mts")], {
       cwd: work,
-      stdio: "ignore",
+      stdio: "pipe",
     });
-  } catch {
-    process.stdout.write(
-      `品牌图标漂移检查已跳过：找不到 Chromium。\n` +
-        `装了浏览器后本门禁会真正执行（pnpm generate:brand-icons 也需要它）。\n`,
+  } catch (error) {
+    // **只**对「浏览器不存在」降级。渲染脚本用独立的错误类型报告这一种情况
+    // （BMAP_BROWSER_UNAVAILABLE）；其余任何失败——SVG 解析、Chrome 启动、
+    // 截图写盘、脚本自身异常——都必须让门禁失败。
+    //
+    // 早先这里是裸 `catch` + `exit(0)`：真实门禁故障被伪装成「环境不具备」，
+    // 而负向测试又用这段跳过输出判断 hasBrowser，于是门禁与它的自测一起被架空。
+    if (isBrowserUnavailable(error)) {
+      process.stdout.write(
+        `品牌图标漂移检查已跳过：找不到 Chromium。\n` +
+          `装了浏览器后本门禁会真正执行（pnpm generate:brand-icons 也需要它）。\n`,
+      );
+      process.exit(0);
+    }
+    const detail = `${(error as { stderr?: string }).stderr ?? ""}`.trim();
+    fail(
+      `品牌图标渲染失败，而这不是「浏览器不存在」——门禁不能降级放行。\n` +
+        (detail ? `${detail}\n` : "") +
+        `请修掉渲染故障；若确认是环境问题，请让渲染脚本抛 ` +
+        `BrowserUnavailableError（BMAP_BROWSER_UNAVAILABLE）而不是普通 Error。`,
     );
-    process.exit(0);
   }
 
   const fresh = readdirSync(join(work, "docs/public/icons")).filter((f) => f.endsWith(".png")).sort();

@@ -16,8 +16,8 @@
  * `capture-official-docs.mts` 一致——不要自己按行解析 socket 报文，那是 WebSocket
  * **帧**不是换行分隔的文本（踩过：`Unexpected token 'H'`）。
  */
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = join(ROOT, "docs/public/screenshots");
 const PORT = 9331;
 const BASE = process.env.BMAP_DOCS_BASE ?? "http://localhost:5173/bmap-vue";
+/** JPEG 质量。与之前 `sips -s formatOptions 82` 对齐。 */
+const JPEG_QUALITY = 82;
 
 interface Shot {
   file: string;
@@ -128,10 +130,6 @@ async function assertPortFree(): Promise<void> {
     if (error instanceof Error && error.message.includes("已经有浏览器")) throw error;
     /* 连不上 = 端口空闲，符合预期 */
   }
-}
-
-function pngSize(buf: Buffer): { width: number; height: number } {
-  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 /** 读 JPEG 尺寸：扫 SOF 标记（跳过 APPn/DQT 等，直到遇到带尺寸的那个）。 */
@@ -340,40 +338,40 @@ try {
     // 报错页当「组件示例」。
     await waitForContent(evaluate, shot);
 
+    // 直接让 CDP 出 JPEG：`Page.captureScreenshot` 原生支持
+    // `{format: "jpeg", quality: N}`，不必先拍 PNG 再转。
+    //
+    // 早先这里拍 PNG 再调 macOS 的 `sips` 转 JPEG——那是**隐式的 macOS-only**：
+    // CONTRIBUTING 与 AGENTS 只声明「需要本地站点 + Chromium」，Linux 与 Windows
+    // 上会在三张图全部拍完之后才必然失败。实测 CDP 直出 JPEG（magic `ffd8ff`），
+    // 平台依赖就此去掉。
+    //
     // 同样两层 result：截图数据在 `msg.result.data`。
-    const shotMsg = (await send("Page.captureScreenshot", { format: "png" })) as {
-      result: { data: string };
-    };
-    const png = Buffer.from(shotMsg.result.data, "base64");
-    const target = shot.file.replace(/\.jpg$/, ".png");
-    const got = pngSize(png);
+    const shotMsg = (await send("Page.captureScreenshot", {
+      format: "jpeg",
+      quality: JPEG_QUALITY,
+    })) as { result: { data: string } };
+    const jpeg = Buffer.from(shotMsg.result.data, "base64");
+    if (jpeg.subarray(0, 3).toString("hex") !== "ffd8ff") {
+      throw new Error(
+        `${shot.file}: CDP 返回的不是 JPEG（magic=${jpeg.subarray(0, 3).toString("hex")}）`,
+      );
+    }
+    const target = join(SHOTS, shot.file);
+    writeFileSync(target, jpeg);
+    // 写盘后再从**文件**读回来校验：内存里的 Buffer 尺寸对了不代表落盘对了，
+    // 而 manifest 消费的是文件。
+    const got = jpegSize(target);
     if (got.width !== shot.width || got.height !== shot.height) {
       throw new Error(
-        `${target}: 实际 ${got.width}×${got.height}，需要 ${shot.width}×${shot.height}——` +
+        `${shot.file}: 实际 ${got.width}×${got.height}，需要 ${shot.width}×${shot.height}——` +
           `manifest 的 sizes 照抄这里。`,
       );
     }
-    writeFileSync(join(SHOTS, target), png);
-    process.stdout.write(`  docs/public/screenshots/${target}  ${got.width}×${got.height}\n`);
+    process.stdout.write(`  docs/public/screenshots/${shot.file}  ${got.width}×${got.height}\n`);
   }
 
   ws.close();
-
-  // CDP 只能出 PNG，但 manifest 与正文引用的都是 `.jpg`（`type: "image/jpg"`）。
-  // 这里直接转掉，不留 PNG 中间产物——多一份就多一处「哪张才是发布的那张」的歧义。
-  // 用 macOS 自带的 sips（不引入图像库依赖）。
-  for (const shot of SHOT_LIST) {
-    const png = join(SHOTS, shot.file.replace(/\.jpg$/, ".png"));
-    execFileSync("sips", ["-s", "format", "jpeg", "-s", "formatOptions", "82", png, "--out", join(SHOTS, shot.file)], {
-      stdio: "ignore",
-    });
-    rmSync(png, { force: true });
-    const { width, height } = jpegSize(join(SHOTS, shot.file));
-    if (width !== shot.width || height !== shot.height) {
-      throw new Error(`${shot.file}: 转换后 ${width}×${height}，需要 ${shot.width}×${shot.height}`);
-    }
-    process.stdout.write(`  docs/public/screenshots/${shot.file}  ${width}×${height}\n`);
-  }
 
   process.stdout.write(
     `已重拍 ${SHOT_LIST.length} 张截图 → docs/public/screenshots/*.jpg\n` +

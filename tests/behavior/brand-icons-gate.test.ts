@@ -35,7 +35,50 @@ function runGate(): { status: number; stdout: string; stderr: string } {
  * 探一次就够，不要为了判断环境先跑两遍门禁。
  */
 const probe = runGate();
+
+/**
+ * 「门禁真的执行了判据」——不是「门禁绿了」。
+ *
+ * 门禁有一条 fail-open 路径：没有浏览器时跳过并退出 0。跳过的输出是「已跳过」，
+ * 不含「无漂移」，所以这个判断不会把跳过当成执行过。
+ *
+ * 早先这里只写 `probe.stdout.includes("无漂移")`，看着等价、实际也等价——
+ * 但它拦不住另一件事：**门禁若把真实故障也降级成跳过**（裸 `catch` + `exit(0)`），
+ * 用例会因为门禁「绿」而照常跑，负向样例在门禁已经失效的前提下依然通过。
+ * 下面那条 `非浏览器故障必须红` 的用例专门钉住这一点。
+ */
 const hasBrowser = probe.stdout.includes("无漂移");
+
+describe("品牌图标门禁的 fail-open 边界", () => {
+  it.runIf(hasBrowser)("浏览器存在时不得输出「已跳过」（那会掩盖真实故障）", () => {
+    expect(probe.stdout).not.toContain("已跳过");
+    expect(probe.status).toBe(0);
+  });
+
+  it("渲染器缺浏览器时降级跳过，缺别的必须红", () => {
+    // 构造一次「渲染器一定失败、但原因不是没有浏览器」：把渲染器指向的矢量源
+    // 改成一个不存在的路径。`render-brand-icons.mts` 抛的是普通 Error
+    // （`品牌图标源不存在`），不是 BrowserUnavailableError。
+    // 门禁必须失败，而不是把它当成「环境不具备」。
+    const script = join(ROOT, "scripts/render-brand-icons.mts");
+    const backup = readFileSync(script, "utf8");
+    try {
+      // 用一个不存在的矢量源路径替换常量：渲染器必然失败，且失败原因明确不是浏览器。
+      const broken = backup.replace(
+        'join(ROOT, "docs/public/brand/bmap-vue-icon-square.svg")',
+        'join(ROOT, "docs/public/brand/__missing__.svg")',
+      );
+      expect(broken, "注入点没命中，测试本身失效").not.toBe(backup);
+      writeFileSync(script, broken);
+      const r = runGate();
+      const out = `${r.stdout}${r.stderr}`;
+      expect(r.status, "SVG 源缺失是真故障，门禁不得降级为跳过：" + out).toBe(1);
+      expect(out).not.toContain("已跳过");
+    } finally {
+      writeFileSync(script, backup);
+    }
+  });
+});
 
 describe("品牌图标漂移门禁", () => {
   const backup = new Map<string, string>();

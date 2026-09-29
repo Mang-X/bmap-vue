@@ -22,6 +22,23 @@ const ICON_SVG = join(ROOT, "docs/public/brand/bmap-vue-icon-square.svg");
 const OUT_DIR = join(ROOT, "docs/public/icons");
 
 /**
+ * 「这台机器上没有可用的浏览器」——**唯一**允许调用方降级为跳过的错误。
+ *
+ * 刻意做成独立类型而不是靠匹配错误文案：SVG 解析失败、Chrome 启动失败、
+ * 截图写盘失败也是 `Error`，若调用方一律 `catch` 降级，这些**真实门禁故障**
+ * 会被伪装成「环境不具备」而放行。判据必须能区分「跑不了」与「跑坏了」。
+ *
+ * 错误码是稳定契约：调用方（`check-brand-icons.mts`）按它判断，不看文案。
+ */
+export class BrowserUnavailableError extends Error {
+  readonly code = "BMAP_BROWSER_UNAVAILABLE";
+  constructor(message: string) {
+    super(message);
+    this.name = "BrowserUnavailableError";
+  }
+}
+
+/**
  * 找 Chromium。口径与 `probe-plugin-load-channel.mts` 的 `resolveBrowser()` 对齐：
  * 先看 `SMOKE_BROWSER`，再扫 Playwright 缓存（CI 上常常只有它），最后看系统路径。
  *
@@ -31,7 +48,7 @@ const OUT_DIR = join(ROOT, "docs/public/icons");
 function findChrome(): string {
   const explicit = process.env.SMOKE_BROWSER;
   if (explicit) {
-    if (!existsSync(explicit)) throw new Error(`SMOKE_BROWSER 不存在：${explicit}`);
+    if (!existsSync(explicit)) throw new BrowserUnavailableError(`SMOKE_BROWSER 不存在：${explicit}`);
     return explicit;
   }
   const candidates: string[] = [];
@@ -62,7 +79,7 @@ function findChrome(): string {
   );
   const found = candidates.find((p) => existsSync(p));
   if (!found) {
-    throw new Error(
+    throw new BrowserUnavailableError(
       `找不到可用的 Chromium 来渲染品牌图标。试过：\n${candidates.join("\n")}\n` +
         `设置 SMOKE_BROWSER，或 \`npx playwright install chromium\`。\n` +
         `图标必须由 ${ICON_SVG} 生成——手工维护栅格副本会和矢量资产漂移。`,
@@ -101,7 +118,12 @@ function render(svg: string, size: number, outFile: string, background: string, 
     { stdio: "ignore" },
   );
   rmSync(work, { force: true });
-  if (!existsSync(outFile)) throw new Error(`渲染失败：${outFile} 未生成`);
+  if (!existsSync(outFile)) {
+    throw new Error(
+      `渲染失败：${outFile} 未生成。浏览器：${findChrome()}\n` +
+        `这不是「没有浏览器」，是浏览器在但渲染没成功——不要按环境缺失降级。`,
+    );
+  }
 }
 
 if (!existsSync(ICON_SVG)) {

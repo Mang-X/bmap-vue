@@ -49,18 +49,20 @@ const problems: string[] = [];
  * tip 块会提到 `GroundPoint`，一旦散文也算「已列出」，删掉组件表里那一行门禁照样绿
  * ——变异测试真的这么试过。判据必须锚定在**读者实际找组件的那张表**上。
  *
- * `ContextMenu` 那一行把 `MenuItem` / `MenuSeparator` 写在用途列的散文里，
- * 所以这一行额外把两个名字挂上——它们确实是这个总览页向读者承诺的组件。
+ * 一行里**所有**反引号包裹的名字都算「已列出」——不区分它是链接还是用途列的旁白。
+ * 这正是 `ContextMenu` 那一行的情况：`| [ContextMenu](...) | 上下文菜单（含 \`MenuItem\` /
+ * \`MenuSeparator\`） |`。两个名字确实是这个总览页向读者承诺的组件，只是没有各自的表格行。
+ *
+ * **刻意不硬编码这两个名字。** 早先写成「行里出现 `[ContextMenu]` 就无条件把
+ * `MenuItem` / `MenuSeparator` 塞进集合」——那是个逃生口：即使有人把用途列的文案删掉，
+ * 门禁照样绿，而 manifest 里的组件其实已经没在总览页出现了。判据必须跟着**实际写出来的
+ * 东西**走，所以这里解析该行里真实出现的反引号名。
  */
 const listed = new Set<string>();
 for (const line of overview.split("\n")) {
   if (!/^\|\s*\[/.test(line)) continue;
   for (const m of line.matchAll(/\[([A-Z][A-Za-z0-9]*)\]\(\/zh-CN\//g)) listed.add(m[1]);
-  // ContextMenu 行：`| [ContextMenu](...) | 上下文菜单（含 `MenuItem` / `MenuSeparator`） |`
-  if (line.includes("[ContextMenu]")) {
-    listed.add("MenuItem");
-    listed.add("MenuSeparator");
-  }
+  for (const m of line.matchAll(/`([A-Z][A-Za-z0-9]*)`/g)) listed.add(m[1]);
 }
 
 const missing = [...truth].filter((n) => !listed.has(n)).sort();

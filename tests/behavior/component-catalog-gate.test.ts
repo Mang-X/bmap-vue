@@ -77,4 +77,34 @@ describe("组件总览门禁", () => {
     const r = runGate();
     expect(r.status, r.out).toBe(0);
   });
+
+  it("用途列里点名的附属组件，删掉文案就必须红（不能有硬编码逃生口）", () => {
+    // `ContextMenu` 那一行把 `MenuItem` / `MenuSeparator` 写在用途列的散文里，
+    // 没有各自的表格行。判据解析该行里**实际出现**的反引号名——所以把文案删掉，
+    // 这两个组件就真的「没在总览页出现了」，必须判红。
+    //
+    // 早先这里是「行里有 [ContextMenu] 就无条件塞两个名字」，删掉文案照样绿：
+    // 判据与文档实际写了什么脱钩了。
+    edit((s) =>
+      s.replace(
+        /^\|\s*\[ContextMenu\].*$/m,
+        "| [ContextMenu](/zh-CN/components/control/context-menu) | 上下文菜单 |",
+      ),
+    );
+    const r = runGate();
+    expect(r.status, "删掉用途列里的 MenuItem / MenuSeparator 文案必须判红").toBe(1);
+    expect(r.out).toContain("MenuItem");
+    expect(r.out).toContain("MenuSeparator");
+  });
+
+  it("原文中 ContextMenu 那行确实带这两个名字（前提）", () => {
+    const r = runGate();
+    expect(r.status, r.out).toBe(0);
+    const line = readFileSync(OVERVIEW, "utf8")
+      .split("\n")
+      .find((l) => l.includes("[ContextMenu]"));
+    expect(line, "前提：ContextMenu 行仍在").toBeDefined();
+    expect(line).toContain("MenuItem");
+    expect(line).toContain("MenuSeparator");
+  });
 });
