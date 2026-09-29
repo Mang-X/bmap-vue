@@ -19,6 +19,9 @@
  *   是该控件唯一的运行期配置入口，所以它的 option 走「options 袋」整体写回；
  * - `CopyrightControl#addCopyright` 接收**对象字面量**（官方 `@example` 即如此；类型包把
  *   参数写成结构等价的 `Copyright`，两处不冲突）。
+ * - 控件 `type`（`navigation` / `map-type`）在项目侧是**常量名**（`string`），官方收的是
+ *   **数值**枚举（`NavigationControlType` = `0|1|2|3`，`MapTypeControlType` = `0|1|2`）。
+ *   `TYPE_VALUES` 负责换算，与 `anchor` 的 `ANCHOR_VALUES` 同一套做法（issue #175）。
  * - `create("custom")` 显式失败并指向 `createCustomControl()`：自定义控件要的是 DOM 工厂，
  *   走通用构造器只会拿到一个没有 `initialize` 的空控件。
  *
@@ -100,6 +103,37 @@ export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | Offic
   BMAP_ANCHOR_BOTTOM_CENTER: 8,
 };
 
+/**
+ * 控件 `type` 常量表：官方 `const/NavigationControlType.d.ts` 与
+ * `const/MapTypeControlType.d.ts` 的**声明值**。
+ *
+ * 公共 prop 收**字符串**（`NavigationControlProps.type` / `MapTypeControlProps.type` 都是
+ * `string`），但上游 `NavigationControlOptions.type?: NavigationControlType` 与
+ * `MapTypeControlOptions.type?: MapTypeControlType` 都是**数值**联合
+ * （`0 | 1 | 2 | 3` / `0 | 1 | 2`）。此前 Driver 走 `projectOptions` 的原样透传分支，把
+ * `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进只认数字的构造器——类型在**主动误导**使用者
+ * （issue #175 / `docs/internal/doc-audit-findings.md` 第 10 条）。
+ *
+ * 处置是**补这张表**而不是把 prop 收窄成字面量联合：文档与示例一直用常量名，收窄会破坏
+ * 现有调用方，而公共 API 形状（仍是 `string`）保持不变——这与 `anchor` 是同一套做法。
+ * 表同样被类型层钉在官方声明上（见文件末尾的 `type` 断言），上游改值会直接编译失败。
+ *
+ * ⚠️ 与 `ANCHOR_VALUES` 的分工不同：这里**没有**跨控件复用——两个控件族的常量名前缀
+ * （`BMAP_NAVIGATION_CONTROL_*` / `BMAP_MAPTYPE_CONTROL_*`）互不重叠，也不该重叠
+ * （官方是两套独立的枚举）。放进同一张表是为了让「名字→数字」只有一处事实源。
+ */
+export const TYPE_VALUES: Readonly<Record<string, OfficialControlType>> = {
+  // `const/NavigationControlType.d.ts`：LARGE=0 / SMALL=1 / PAN=2 / ZOOM=3
+  BMAP_NAVIGATION_CONTROL_LARGE: 0,
+  BMAP_NAVIGATION_CONTROL_SMALL: 1,
+  BMAP_NAVIGATION_CONTROL_PAN: 2,
+  BMAP_NAVIGATION_CONTROL_ZOOM: 3,
+  // `const/MapTypeControlType.d.ts`：HORIZONTAL=0 / DROPDOWN=1 / MAP=2
+  BMAP_MAPTYPE_CONTROL_HORIZONTAL: 0,
+  BMAP_MAPTYPE_CONTROL_DROPDOWN: 1,
+  BMAP_MAPTYPE_CONTROL_MAP: 2,
+};
+
 /** 4.0 控件真正接受的落点：四角。其它常量会被 SDK 静默回落。 */
 const CORNER_ANCHORS: ReadonlySet<string> = new Set([
   "BMAP_ANCHOR_TOP_LEFT",
@@ -117,15 +151,20 @@ const CORNER_ANCHORS: ReadonlySet<string> = new Set([
  * - `recreate`：只有构造期生效（4.0 没有对应 setter），`setOptions` 告警一次并**不动它**，
  *   把「重建」的决定交给调用方。
  *
+ * `value` 是**取值形状**，两个 policy 都有：`"size"` 是 Pixel → `Size`，
+ * `"control-type"` 是常量名（string）→ 数值枚举（`resolveType`）。它只作用在**构造期**
+ * （`projectOptions`）与 `mutable` 的 setter 写入——`recreate` 上的 `value` 表示
+ * 「重建时这次构造要用哪个换算」，不表示它可以就地写（issue #175）。
+ *
  * `anchor` / `offset` 是全部控件的公共可更新项（基类 `setAnchor` / `setOffset`），
  * 因此在 `setOptions` 里单独处理，不重复出现在本表。
  *
  * 表用 `Record<ControlKind, …>` 而非 `Partial`：新增一个控件种类却忘记写分类会直接编译失败。
  */
 type ControlOptionSpec =
-  | { policy: "mutable"; setter: string; value?: "size" }
+  | { policy: "mutable"; setter: string; value?: "size" | "control-type" }
   | { policy: "mutable"; choice: readonly [string, string] }
-  | { policy: "recreate"; reason: string };
+  | { policy: "recreate"; reason: string; value?: "size" | "control-type" };
 
 const CONTROL_OPTION_SPECS: Readonly<
   Record<ControlKind, Readonly<Record<string, ControlOptionSpec>>>
@@ -135,7 +174,11 @@ const CONTROL_OPTION_SPECS: Readonly<
     unit: { policy: "mutable", setter: "setUnit" },
   },
   navigation: {
-    type: { policy: "mutable", setter: "setType" },
+    // `value: "control-type"`：`type` 在项目侧是常量名（`string`），官方
+    // `setType(type: NavigationControlType)` 要**数字**（issue #175）。没有这个标记时
+    // `normalizeValue` 会把它原样透传，等于把 `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进
+    // 数值枚举的位置。
+    type: { policy: "mutable", setter: "setType", value: "control-type" },
     // 官方 4.0.5 的 `NavigationControl` 只声明了 getType/setType：其余构造选项没有运行期入口
     showZoomInfo: { policy: "recreate", reason: "4.0 的 NavigationControl 没有级别提示的 setter" },
     enableGeolocation: {
@@ -166,6 +209,9 @@ const CONTROL_OPTION_SPECS: Readonly<
     type: {
       policy: "recreate",
       reason: "4.0 的 MapTypeControl 只公开 showStreetLayer(isShow)，控件样式没有 setter",
+      // 同样是「项目侧常量名 → 官方数值」：`recreate` 说的是**不能就地改**，
+      // 不是「不能构造」——`projectOptions` 仍会经过 `normalizeValue`（issue #175）。
+      value: "control-type",
     },
     mapTypes: { policy: "recreate", reason: "地图类型列表只在构造期读取" },
   },
@@ -270,13 +316,45 @@ export function createJsapiV4ControlDriver(
   };
 
   /**
+   * 控件 `type` 的项目侧取值（常量名，**字符串**）→ 4.0 取值（**数字**）。
+   *
+   * 官方 `NavigationControlOptions.type` / `MapTypeControlOptions.type` 收的是数值枚举，
+   * 而公共 prop 收字符串（issue #175）。取不到时**告警一次并丢弃**——不原样透传：
+   * 把一个官方不认的字符串塞进数值枚举的位置只会被 SDK 静默吃掉，而丢弃至少让控件
+   * 落到**自身默认样式**并留下可诊断的控制台告警（与 `resolveAnchor` 同一口径）。
+   *
+   * 非字符串（已经传了数字）原样放行：`ControlOptions` 的索引签名本就是「4.0 自身构造选项」
+   * 的逃生口，不在这里替调用方做二次判断。
+   */
+  const resolveType = (type: unknown): unknown => {
+    if (typeof type !== "string") return type;
+    const value = TYPE_VALUES[type];
+    if (value === undefined) {
+      warnOnce(
+        `type:unknown:${type}`,
+        `ControlDriver: 不认识的控件类型 "${type}"；JSAPI 4.0 的控件类型是官方常量名（` +
+          "BMAP_NAVIGATION_CONTROL_LARGE / SMALL / PAN / ZOOM，" +
+          "BMAP_MAPTYPE_CONTROL_HORIZONTAL / DROPDOWN / MAP），本次取值已忽略，" +
+          "控件沿用自身默认样式",
+      );
+      return undefined;
+    }
+    return value;
+  };
+
+  /**
    * 领域值 → 4.0 取值。
    *
-   * `value: "size"` 的 option（`overview.size`）与 `offset` 同形：项目侧是 Pixel，4.0 是 `Size`。
-   * 构造与更新两条路径共用这里，避免「同一次 size 更新」在两条入口上语义不同。
+   * - `value: "size"` 的 option（`overview.size`）与 `offset` 同形：项目侧是 Pixel，4.0 是 `Size`；
+   * - `value: "control-type"` 的 option（`navigation.type` / `map-type.type`）：项目侧是常量名
+   *   字符串，4.0 是数值枚举（`resolveType`）。
+   *
+   * 构造与更新两条路径共用这里，避免「同一次更新」在两条入口上语义不同。
    */
-  const normalizeValue = (spec: ControlOptionSpec | undefined, value: unknown): unknown =>
-    spec && "value" in spec && spec.value === "size" ? toRawSize(value) : value;
+  const normalizeValue = (spec: ControlOptionSpec | undefined, value: unknown): unknown => {
+    if (!spec || !("value" in spec)) return value;
+    return spec.value === "size" ? toRawSize(value) : resolveType(value);
+  };
 
   /**
    * 领域 options → 4.0 构造 options。
@@ -303,7 +381,10 @@ export function createJsapiV4ControlDriver(
         projected.offset = toRawSize(value);
         continue;
       }
-      projected[key] = normalizeValue(specs?.[key], value);
+      // 换算不出来的取值跳过（与 `anchor` 同一口径）：键不出现 ⇒ 构造期沿用 SDK 默认值，
+      // 而不是把一个表外的名字原样塞进去。
+      const normalized = normalizeValue(specs?.[key], value);
+      if (normalized !== undefined) projected[key] = normalized;
     }
     return projected;
   };
@@ -404,7 +485,15 @@ export function createJsapiV4ControlDriver(
       }
       return {
         status: "mutable",
-        apply: (value) => callControl(raw, spec.setter, [normalizeValue(spec, value)]),
+        apply: (value) => {
+          const normalized = normalizeValue(spec, value);
+          // 换算不出来的取值（`resolveType` 撞上表外的名字）**不写**：告警已经由
+          // `resolveType` 发过了，把 `undefined` 交给 `setType` 只会让 SDK 拿到一个
+          // 既不是 0 也不是 1 的空值——那是「静默换成某个未知样式」。
+          // 控件保持**上一个**已知样式，下一次给合法名字会正常写下去。
+          if (normalized === undefined) return;
+          callControl(raw, spec.setter, [normalized]);
+        },
       };
     }
     // 「options 袋」控件：整袋写回，按键结构调用会漏掉袋装选项
@@ -729,6 +818,28 @@ type OfficialCenterAnchor =
   | typeof BMAP_ANCHOR_CENTER
   | typeof BMAP_ANCHOR_MIDDLE_RIGHT
   | typeof BMAP_ANCHOR_BOTTOM_CENTER;
+
+/**
+ * 官方控件 `type` 的两套数值枚举（`const/NavigationControlType.d.ts` 的
+ * `0|1|2|3` 与 `const/MapTypeControlType.d.ts` 的 `0|1|2`）。
+ *
+ * 与锚点断言同一手法：`TYPE_VALUES` 的取值域被钉在官方 `const` 声明上，上游改值
+ * （或加一个新枚举成员）会直接编译失败，而不是等到运行时塞进一个官方不认的数
+ * （issue #175）。
+ */
+type OfficialControlType = NavigationControlType | MapTypeControlType;
+type _AssertNavigationControlType = ExpectTrue<
+  OfficialControlType extends
+    | typeof BMAP_NAVIGATION_CONTROL_LARGE
+    | typeof BMAP_NAVIGATION_CONTROL_SMALL
+    | typeof BMAP_NAVIGATION_CONTROL_PAN
+    | typeof BMAP_NAVIGATION_CONTROL_ZOOM
+    | typeof BMAP_MAPTYPE_CONTROL_HORIZONTAL
+    | typeof BMAP_MAPTYPE_CONTROL_DROPDOWN
+    | typeof BMAP_MAPTYPE_CONTROL_MAP
+    ? true
+    : false
+>;
 
 /**
  * 构造器名必须与官方 `BMap` 命名空间一致（与 `overlays.ts` 的同源断言同一手法）。

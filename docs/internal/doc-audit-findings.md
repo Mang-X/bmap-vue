@@ -155,6 +155,13 @@ type NavigationControlType = 0 | 1 | 2 | 3;
 | A. 库加映射 | 与 `anchor` 同一套做法，加 `TYPE_VALUES` 名字→数字表；改动 `src/**`，公共 API 形状不变 |
 | B. 文档收窄 | 文档改成字面量联合 `"0" | "1" | "2" | "3"`，明确「这是本库约定，与官方数字常量不同名」 |
 
+**已按 A 修（#175）**：`driver/jsapi-v4/controls.ts` 新增 `TYPE_VALUES`（两张枚举的合集，
+类型层被 `_AssertNavigationControlType` 钉在官方 `const` 声明上），`ControlOptionSpec` 新增
+`value: "control-type"` 标记，`normalizeValue` 统一走 `resolveType`。公共 prop 仍是
+`string`（不改调用方）。B 被否的原因是：文档与示例一直用常量名，收窄成字面量联合是纯破坏面。
+
+`tests/behavior/controls.test.ts` 那条固化「字符串原样进去」的断言同时改为断言换算后的数值。
+
 ## 11.【中】`defineExpose` 与公开命令面类型不一致
 
 `<CityListControl>` 在 `defineExpose` 里暴露了 `status`，但
@@ -236,6 +243,9 @@ MarkerOptions#anchor` —— 官方推荐的替代路径在本库**不可用**�
 `MapTypeControl.vue:10` 声明 `mapTypes?: readonly number[]`，而上游
 `const/MapType.d.ts` 是 `declare const BMAP_NORMAL_MAP: string` —— **官方是字符串**。
 类型在这里主动误导使用者。文档已改成字符串并列出取值表，但**类型本身是错的**。
+
+**已修（#175）**：prop 改成 `readonly string[]`。这一项**没有**运行时换算——4.0 的 `MapType`
+本身就是这些字符串，数字不会对应到任何一张图（与第 10 条的 `type` 相反，见下）。
 
 ## 19.【中】控件页上的 React `children` 不是缺口
 

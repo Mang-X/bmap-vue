@@ -294,7 +294,9 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     expect(fake.createdControls.length).toBe(created + 1);
     const second = lastCreatedControl();
     expect(second).not.toBe(first);
-    expect(second.options.type).toBe("BMAP_MAPTYPE_CONTROL_DROPDOWN");
+    // 换算后的数值 `1`（`const/MapTypeControlType.d.ts`：HORIZONTAL=0 / DROPDOWN=1 / MAP=2），
+    // 不是传进去的字符串——issue #175。
+    expect(second.options.type).toBe(1);
     // 重建是原子的：地图上仍然只有一个控件
     expect(controlsOnMap()).toHaveLength(1);
     wrapper.unmount();
@@ -337,7 +339,10 @@ describe("选项更新：live 就地写、recreate 重建", () => {
     await setProps({ type: "BMAP_NAVIGATION_CONTROL_SMALL" });
     // `setType` 在未挂载时会抛错（Fake 建模了这条真实约束）——能走到这里说明顺序正确
     expect(control.callLog).toContain("setType");
-    expect(control.type).toBe("BMAP_NAVIGATION_CONTROL_SMALL");
+    // 断言的是**换算后的数值** `1`：prop 填常量名，官方 `setType` 收的是
+    // `0 | 1 | 2 | 3`（`const/NavigationControlType.d.ts`），Driver 有名字→数值表
+    // （issue #175）。此前这里断言的是字符串原样进去——那正是 issue 报的缺陷本身。
+    expect(control.type).toBe(1);
     expect(control.attachedMap).toBeTruthy();
     expect(fake.createdControls.length).toBe(created);
     wrapper.unmount();
@@ -506,9 +511,8 @@ describe("评审复现：option 从有值变回 undefined", () => {
     const { wrapper, setProps } = mountControl(NavigationControl);
     await flushPromises();
     await setProps({ type: "BMAP_NAVIGATION_CONTROL_SMALL" });
-    expect((lastCreatedControl() as unknown as { type: unknown }).type).toBe(
-      "BMAP_NAVIGATION_CONTROL_SMALL",
-    );
+    // 换算后的数值 `1`（见上：prop 填常量名，Driver 换算成官方枚举）
+    expect((lastCreatedControl() as unknown as { type: unknown }).type).toBe(1);
 
     const created = fake.createdControls.length;
     await setProps({ type: undefined });
@@ -594,7 +598,9 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
   });
 
   it("MapTypeControl：同一 mapTypes 数组原地 push 必须重建（构造期项）", async () => {
-    const shared = reactive({ mapTypes: [1, 2] });
+    // 值是**字符串**：上游 `const/MapType.d.ts` 把 `BMAP_*_MAP` 声明为 `string`
+    // （4.0 的地图类型标识本身就是这些串），prop 类型已按上游改正（issue #175）。
+    const shared = reactive({ mapTypes: ["BMAP_NORMAL_MAP", "BMAP_SATELLITE_MAP"] });
     const wrapper = mount(
       defineComponent({
         setup: () => () =>
@@ -605,11 +611,15 @@ describe("评审复现：父级对嵌套 option 做原地修改（同一对象�
     await flushPromises();
     const created = fake.createdControls.length;
 
-    shared.mapTypes.push(3);
+    shared.mapTypes.push("BMAP_HYBRID_MAP");
     await nextTick();
     await flushPromises();
     expect(fake.createdControls.length).toBe(created + 1);
-    expect(lastCreatedControl().options.mapTypes).toEqual([1, 2, 3]);
+    expect(lastCreatedControl().options.mapTypes).toEqual([
+      "BMAP_NORMAL_MAP",
+      "BMAP_SATELLITE_MAP",
+      "BMAP_HYBRID_MAP",
+    ]);
 
     wrapper.unmount();
     await nextTick();

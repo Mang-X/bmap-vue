@@ -4,7 +4,14 @@ import { useControlResource, type ControlSpec } from "../../core/controls";
 export interface NavigationControlProps {
   anchor?: string;
   offset?: { x: number; y: number };
-  /** 控件类型，官方 `BMAP_NAVIGATION_CONTROL_*`（LARGE / SMALL / PAN / ZOOM） */
+  /**
+   * 控件类型，官方 `BMAP_NAVIGATION_CONTROL_*`（LARGE / SMALL / PAN / ZOOM）。
+   *
+   * 填**常量名**（`"BMAP_NAVIGATION_CONTROL_LARGE"` …），控件边界有一张名字→数值表
+   * （`TYPE_VALUES`）换算成官方的 `0 | 1 | 2 | 3`——上游 `NavigationControlOptions.type`
+   * 收的是**数字**，填数字不会命中换算表（会原样透传，但那不是官方枚举的语义）。
+   * 与 `anchor` 同一套做法（issue #175）。
+   */
   type?: string;
   /** 是否显示级别提示信息（官方 `showZoomInfo`，只有构造期生效） */
   showZoomInfo?: boolean;

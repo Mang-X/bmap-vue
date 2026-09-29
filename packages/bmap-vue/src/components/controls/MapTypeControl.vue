@@ -4,10 +4,23 @@ import { useControlResource, type ControlSpec } from "../../core/controls";
 export interface MapTypeControlProps {
   anchor?: string;
   offset?: { x: number; y: number };
-  /** 控件样式，官方 `BMAP_MAPTYPE_CONTROL_*`（MAP / DROPDOWN / HORIZONTAL，只有构造期生效） */
+  /**
+   * 控件样式，官方 `BMAP_MAPTYPE_CONTROL_*`（MAP / DROPDOWN / HORIZONTAL，只有构造期生效）。
+   *
+   * 填**常量名**（`"BMAP_MAPTYPE_CONTROL_DROPDOWN"` …），控件边界有一张名字→数值表
+   * （`TYPE_VALUES`）换算成官方的 `0 | 1 | 2`——上游 `MapTypeControlOptions.type`
+   * 收的是**数字**（issue #175）。
+   */
   type?: string;
-  /** 展示的地图类型列表，官方 `BMAP_*_MAP`（只有构造期生效） */
-  mapTypes?: readonly number[];
+  /**
+   * 展示的地图类型列表，官方 `BMAP_*_MAP`（只有构造期生效）。
+   *
+   * 收**字符串**而不是数字：上游 `MapTypeControlOptions.mapTypes?: MapType[]`，
+   * 而 `const/MapType.d.ts` 把 `BMAP_NORMAL_MAP` 等五个常量全声明为 `string`
+   * （`declare const BMAP_NORMAL_MAP: string`）——4.0 的地图类型标识本身就是这些串，
+   * 传数字不会对应到任何一张图（issue #175 / `docs/internal/doc-audit-findings.md` 第 18 条）。
+   */
+  mapTypes?: readonly string[];
   /** 是否显示路网层（官方 `showStreetLayer(isShow)`，可就地更新） */
   showStreetLayer?: boolean;
   visible?: boolean;

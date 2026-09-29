@@ -56,12 +56,14 @@ control/mapType
 | `BMAP_MAPTYPE_CONTROL_DROPDOWN` | `BMAP_MAPTYPE_CONTROL_DROPDOWN` | `1` | 按钮 + 下拉列表 |
 | `BMAP_MAPTYPE_CONTROL_MAP` | `BMAP_MAPTYPE_CONTROL_MAP` | `2` | 图标形式的地图预览按钮 |
 
-::: warning `type` 收字符串，不收数值
+::: tip 填**常量名**，控件边界替你换成数字
 上游 4.0 的 `MapTypeControlOptions.type` 声明为 `MapTypeControlType`（**数值** `0 | 1 | 2`），
-而本组件的 `type` prop 声明为 `string`，取值原样（**不做**名字→数值的换算）下发。
+而本组件的 `type` prop 声明为 `string`。控件边界有一张名字→数值的换算表（与 `anchor` 同一套做法），
+上表里的常量名会被换成对应的官方数值再交给 SDK。
 
-这与 `anchor` 不同：`anchor` 在控件边界有一张名字→数值的换算表；`type` 没有这张表。
-因此上面这一列要填**字符串**而不是 `0`。
+因此这一列要填**字符串**而不是 `0`：填数字不会命中换算表，会被原样交给官方枚举位置
+——它虽然是一个合法数值，但和官方常量的含义不对应。
+填不存在的名字会**先告警一次再忽略**，控件沿用自身默认样式。
 :::
 
 ## mapTypes
@@ -79,13 +81,15 @@ control/mapType
 不传时由 SDK 决定，官方默认是普通 / 卫星 / 混合三张图。
 
 ::: warning `mapTypes` 收的是字符串，不是数值
-这些常量在 4.0 里本身就是**字符串**（`BMAP_NORMAL_MAP` 等），因此 `mapTypes` 要传**字符串数组**：
+这些常量在 4.0 里本身就是**字符串**（上游 `const/MapType.d.ts` 声明
+`declare const BMAP_NORMAL_MAP: string`），因此 `mapTypes` 要传**字符串数组**：
 
 ```vue
 <MapTypeControl :map-types="['BMAP_NORMAL_MAP', 'BMAP_SATELLITE_MAP']" />
 ```
 
-传数字不会被换算成任何一张图——4.0 的 `MapType` 本身就是这些字符串。
+这一项与 `type` 不同，**没有**名字→数值的换算——4.0 的 `MapType` 本身就是这些字符串，
+传数字不会对应到任何一张图。
 :::
 
 ## 选项的更新方式

@@ -2482,7 +2482,7 @@ declare interface MapTypeControlProps {
         y: number;
     };
     type?: string;
-    mapTypes?: readonly number[];
+    mapTypes?: readonly string[];
     showStreetLayer?: boolean;
     visible?: boolean;
 }

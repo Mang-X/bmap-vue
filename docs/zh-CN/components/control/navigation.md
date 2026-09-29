@@ -57,14 +57,15 @@ control/navigation
 | `BMAP_NAVIGATION_CONTROL_PAN` | `BMAP_NAVIGATION_CONTROL_PAN` | `2` | 仅平移按钮 |
 | `BMAP_NAVIGATION_CONTROL_ZOOM` | `BMAP_NAVIGATION_CONTROL_ZOOM` | `3` | 仅缩放按钮 |
 
-::: warning `type` 收字符串，不收数值
-上游 4.0 的 `NavigationControl#setType(type: NavigationControlType)` 收的是**数值** `0 | 1 | 2 | 3`，
-而本组件的 `type` prop 声明为 `string`，取值原样（**不做**名字→数值的换算）下发。
+::: tip 填**常量名**，控件边界替你换成数字
+上游 4.0 的 `NavigationControlOptions.type` 收的是**数值** `0 | 1 | 2 | 3`
+（`setType(type: NavigationControlType)` 同型），而本组件的 `type` prop 声明为 `string`。
+控件边界有一张名字→数值的换算表（与 `anchor` 同一套做法），上表里的常量名会被换成对应的
+官方数值再交给 SDK。
 
-这与 `anchor` 不同：`anchor` 在控件边界有一张名字→数值的换算表，传 `BMAP_ANCHOR_TOP_LEFT` 会被换成
-`0`；`type` 没有这张表。因此上面这一列要填**字符串**而不是 `0`。
-
-传数字会走到官方控件的未知类型分支；传不存在的名字同样不会被换算。
+因此这一列要填**字符串**而不是 `0`：填数字不会命中换算表，会被原样交给官方枚举位置
+——它虽然是一个合法数值，但和官方常量的含义不对应。
+填不存在的名字会**先告警一次再忽略**，控件沿用自身默认样式（不会静默换成某个未知样式）。
 :::
 
 ## 选项的更新方式
