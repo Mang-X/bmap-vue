@@ -20,7 +20,9 @@
  * 第一节的反例刻意成对：「清理」方向必须照常写 —— 否则把一个名字真正导出之后，基线反而永远
  * 更新不掉，门禁会因为文件不是生成器的规范化形式而把「已修好」报成缺陷。
  */
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -33,6 +35,7 @@ import {
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const ROOT = resolve(import.meta.dirname, "../..");
+const require = createRequire(import.meta.url);
 const ETC = resolve(ROOT, "packages/bmap-vue/etc");
 
 /**
@@ -175,6 +178,61 @@ describe("写盘的事务边界（#160 评审 P1）", () => {
     // 文案是处置指引，不是「已吸收」的通知。
     expect(message).toContain("二选一");
     expect(message).toContain("FORGOTTEN_EXEMPTIONS");
+  });
+});
+
+describe("门禁脚本自身的签名一致性（评审 P2 的那类失效兜底分支）", () => {
+  /**
+   * `scripts/**` **不在任何 typecheck 编译范围里**（根 tsconfig 的 `include` 只收
+   * `packages/**` 与 `types/**`），所以 `vue-tsc` 抓不到脚本里的签名失配 ——
+   * `forbiddenForgottenMessage` 从 3 个散参改成收 refusal 数组时，
+   * `writeForgottenBaseline` 里的旧调用原样留着也能过 typecheck。
+   *
+   * 后果不是「编译报错」而是**运行时 TypeError**：字符串 `entry` 被当数组用，
+   * 在 `refusals.map` 处炸掉，于是本该给出的门禁指引变成一坨栈。
+   *
+   * 判据是**门禁脚本里对 boundary 模块的每一次调用都与导出签名一致**，用 TypeScript 编译器
+   * 现场查（`ts.createProgram` + `getSemanticDiagnostics`）—— 跑的是真正的类型检查，
+   * 覆盖全部 `import` 而不是手写几行断言。
+   */
+  it("check-api.mts 里对 boundary 模块的调用全部通过类型检查", () => {
+    const { createProgram } = require("typescript") as typeof import("typescript");
+    const root = resolve(ROOT, "scripts");
+    // AE 的回调载荷类型比脚本里内联的字面形状多一个 `handled` 字段（脚本注释里就引用了它），
+    // 真实声明里也确实有；此处放宽成 `Record<string, unknown>` 形状再断言字段，避免把
+    // 「我给回调写了多窄的字面类型」误报成签名失配。
+    const files = [resolve(root, "check-api.mts"), resolve(root, "api-forgotten-boundary.mts")];
+    const program = createProgram(files, {
+      strict: true,
+      noEmit: true,
+      target: 99, // ESNext
+      module: 99, // ESNext
+      moduleResolution: 100, // Bundler —— 能解析 .mts 的扩展名
+      allowImportingTsExtensions: true,
+      skipLibCheck: true,
+      types: ["node"],
+      typeRoots: [resolve(ROOT, "node_modules/@types")],
+    });
+    const diagnostics = program
+      .getSemanticDiagnostics()
+      .concat(program.getSyntacticDiagnostics())
+      .filter((d) => d.file?.fileName.startsWith(root));
+    const text = diagnostics
+      .map((d) => {
+        const where = d.file
+          ? `${d.file.fileName.slice(root.length + 1)}:${(d.file.getLineAndCharacterOfPosition(d.start ?? 0).line + 1)}`
+          : "<global>";
+        return `${where} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`;
+      })
+      .join("\n");
+    expect(text, `门禁脚本与 boundary 模块之间有签名失配:\n${text}`).toBe("");
+  });
+
+  it("拒绝文案对每个出口都成立（数组形态，不是散参形态）", () => {
+    // 反例：若有人把签名改回 `(entry, added, target)`，这里会拿到 undefined 的 refusals。
+    const message = forbiddenForgottenMessage([{ entry: "plugins", added: ["SomeShape"] }]);
+    expect(message).toContain("plugins");
+    expect(message).toContain("SomeShape");
   });
 });
 

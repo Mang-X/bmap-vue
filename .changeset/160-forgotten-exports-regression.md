@@ -85,6 +85,25 @@
 本 PR 处置的三个名字就同时出现在三个出口。改成按出口分层：
 `Record<entry, Record<name, { reason }>>`，同名符号可在各出口分别登记、分别写理由。
 
+### 失效兜底分支（评审 P2）
+
+`writeForgottenBaseline()` 里的防御性复检（preflight 之后基线被外部改动时兜底）仍在调
+`forbiddenForgottenMessage()` 的**旧三散参签名** —— 而该函数已改成收 refusal 数组。
+运行时把字符串 `entry` 当数组用，在 `refusals.map` 处抛 `TypeError`，本该给出的门禁指引
+变成一坨栈。改为 `forbiddenForgottenMessage([{ entry, added }])`。
+
+**为什么 typecheck 没抓到**：根 tsconfig 的 `include` 只收 `packages/**` 与 `types/**`，
+`scripts/**` 不在任何 typecheck 编译范围里 —— 脚本里的签名失配对 `vue-tsc` 不可见。
+补一条门禁：用 TypeScript 编译器现场对 `check-api.mts` + `api-forgotten-boundary.mts`
+跑语义检查（`getSemanticDiagnostics`），失配即红。
+
+这条门禁上线时顺带查出**两处既有问题**（都是 `noImplicitAny: false` 掩盖的）：
+
+- `EntryRun.entry` 声明成 `string`，而 `reportPath()` 收 `Entry`（联合类型）——
+  本 PR 的 preflight 引入，已收窄；
+- AE 回调的内联字面类型缺 `handled` 字段（脚本注释里就在引用它，官方声明里确实有）——
+  既有代码，补上该字段。
+
 ## 双向判别力实测
 
 回退 `./advanced` 的导出修复、重新 build 后跑 `pnpm generate:api`：
@@ -100,12 +119,14 @@
 两个出口同时被拒时一次报出两条。这正是 #165 当时的形状 —— 修复前该命令是**静默绿**并把三个
 名字写进基线的。
 
-新增 `tests/behavior/api-forgotten-exports-gate.test.ts`（19 条）：
+新增 `tests/behavior/api-forgotten-exports-gate.test.ts`（21 条）：
 
 - 新增方向拒绝；多个出口的 forbidden additions **一次报全**（反例：短路实现会红）
 - 清理方向照常写、集合没变时不误拦；豁免只放行被登记的那**一个**名字
 - 豁免按 `(entry, name)` 匹配：同名可在多个出口各自登记、未登记的出口仍然拒绝
 - `FORGOTTEN_EXEMPTIONS` 恒空
+- **门禁脚本与 boundary 模块之间的调用签名一致**（TS 编译器现场查；反例：把兜底分支改回旧
+  三散参签名即红 —— 这正是评审抓到的那条）
 - 五份基线**恒等于 `[]`**（判据是「恒空」不是「比条数」：任何非空都是回归）
 - CI 里 `check:api` 这一步真的存在且没有被 `continue-on-error` 架空
 

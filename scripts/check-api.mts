@@ -257,6 +257,7 @@ function runExtractor(entry: Entry, localBuild: boolean): {
       logLevel: string;
       messageId: string;
       text: string;
+      handled?: boolean;
       formatMessageWithoutLocation(): string;
     }) => {
       // 只收进计数器的两类：其余（ae-undocumented 等）已按 api-extractor.json 配成 none，
@@ -313,7 +314,7 @@ function restoreBaseline(target: string, previous: string | undefined): void {
 
 /** 一个出口的 AE 跑批结果（`updateMode` 两阶段之间传递）。 */
 interface EntryRun {
-  readonly entry: string;
+  readonly entry: Entry;
   readonly result: { errorCount: number; warningCount: number };
   readonly summary: string;
   readonly forgotten: readonly string[];
@@ -444,11 +445,16 @@ function readForgottenBaseline(entry: string): string[] {
  * **只自动写「清理」方向**（判据与理由见 `api-forgotten-boundary.mts`）。「拒绝」时基线
  * **一个字节都不动** —— 否则「拒绝」只是个提示，红线照样被洗掉。AE 此时**已经**把该出口的
  * report 基线写掉了，所以调用方要一并回滚它（见 `updateMode` 里的 try/catch）。
+ *
+ * 这条**防御性复检**刻意保留（而不是只依赖 `preflight()`）：preflight 与写盘之间基线可能
+ * 被外部改动（并发运行 / 手工编辑），那时这里仍要给出门禁错误而不是把欠账写进基线。
+ * 因此文案必须按**当前** `forbiddenForgottenMessage` 的签名调用 —— 它收的是 refusal 数组，
+ * 不是 `(entry, added, target)` 三个散参（评审抓到的正是这个失效兜底分支）。
  */
 function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
   const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
-  if (added.length > 0) throw new Error(forbiddenForgottenMessage(entry, added, target));
+  if (added.length > 0) throw new Error(forbiddenForgottenMessage([{ entry, added }]));
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedForgottenFile(symbols);
   if (existsSync(target) && readFileSync(target, "utf8") === expected) {
