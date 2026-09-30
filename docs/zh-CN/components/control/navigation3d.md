@@ -1,6 +1,6 @@
 # NavigationControl3D 3D 视角导航控件
 
-地图 3D 控件，可以控制地图的旋转、倾斜，默认位于地图右下角
+3D 视角导航控件，可对地图进行旋转以及切换 2D / 3D 展示效果。
 
 ```ts
 import { NavigationControl3D } from 'bmap-vue'
@@ -16,17 +16,17 @@ control/navigation3d
 
 | 属性   | 说明           | 类型                      | 可选值            | 默认值                    |
 | ------ | -------------- | ------------------------- | ----------------- | ------------------------- |
-| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_LEFT` |
-| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 83, y: 18 }`        |
+| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
+| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 18, y: 18 }`        |
 
 ## 动态组件 Props
 
-| 属性    | 说明     | 类型      | 可选值 | 默认值 | 版本                               |
-| ------- | -------- | --------- | ------ | ------ | ---------------------------------- |
-| visible | 是否显示 | `boolean` | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| ------- | -------- | --------- | ------ | ------ |
+| visible | 是否显示 | `boolean` | - | `true` |
 
 `anchor` / `offset` 同样可以**动态更新**：属性变化时会即时下发 `setAnchor()` / `setOffset()`，
-不需要重建控件（M7-CONTROL-PANORAMA / #41 之前它们只在构造期生效）。
+不需要重建控件。
 
 ## anchor
 
@@ -36,6 +36,13 @@ control/navigation3d
 | BMAP_ANCHOR_TOP_RIGHT    | 右上 |
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
 
 ## 组件事件
 

@@ -10,12 +10,17 @@ import type { OverlayHandle } from "../../driver/types/handles";
  *
  * position/icon 更新走字段级 setter;height/size/fill 等属性同步。
  */
+/**
+ * `<Marker3D icon>` 的自定义纹理贴图描述。
+ *
+ * ⚠️ **没有** `printImageUrl`（issue #177）：上游 `IconOptions`（4.0.5）只有 `anchor` /
+ * `imageOffset` / `imageSize` 三个键，这个字段此前声明了却永远不生效。
+ */
 export interface Marker3dCustomIcon {
   anchor?: { x: number; y: number };
   imageOffset?: { x: number; y: number };
   imageSize: { width: number; height: number };
   imageUrl: string;
-  printImageUrl?: string;
 }
 export type Marker3dShape = "BMAP_SHAPE_CIRCLE" | "BMAP_SHAPE_RECT";
 

@@ -45,9 +45,9 @@ function onError() {}
 | loadOptions | 配合 `provider` 使用的加载选项                    | `BMapLoadOptions`           | `{}`   |
 | autoLoad    | 挂载后自动加载 SDK（`false` 时需手动 `load()`）   | `boolean`                   | `true` |
 
-::: warning 已删除的 props（#165 Class 5）
-`suspense` 已**删除**：它有声明与默认值，但组件**从不读它**（`grep "props.suspense"` = 0 命中），
-也没有任何 Suspense 集成与之对应。加载中请用 `loading` 插槽，出错请用 `error` 插槽。
+::: warning 已删除的 prop
+`suspense` 已**删除**：它有声明与默认值，但组件**从不读它**，也没有任何 Suspense 集成与之
+对应。加载中请用 `loading` 插槽，出错请用 `error` 插槽。
 :::
 
 无 `definition` 时，Provider 复用 `app.use(createBMapPlugin(...))` 的默认定义或最近父 Provider 的上下文。

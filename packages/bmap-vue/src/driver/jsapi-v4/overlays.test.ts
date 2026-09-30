@@ -9,6 +9,9 @@
  * - Target 挂载：Map 目标原子加/摘，非 Map 目标显式失败（不产生半挂载）；
  * - 「本引擎没有运行时入口」的成员（Marker3D / MapMask）显式失败，不静默降级。
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import * as ts from "typescript";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createFakeBMapV4, type FakeBMapV4 } from "../../../../test-utils";
 import { CAPABILITY_CATALOG } from "../capability/catalog";
@@ -668,7 +671,19 @@ describe("buildIcon 与 setPosition", () => {
     expect(icon.size).toMatchObject({ width: 24, height: 32 });
   });
 
-  it("内置名称走雪碧图映射；printImageUrl 在 v4 无对应项 → 丢弃 + 告警", () => {
+  /**
+   * `printImageUrl` 在 v4 没有对应项（issue #177）。
+   *
+   * 两件事要分开断言：
+   * 1. **类型面**不再承诺这个键（`MarkerIconInput` / `MarkerCustomIcon` / `Marker3dCustomIcon`
+   *    三处都删了）——声明了却永远被丢弃，正是本库拒绝的假支持；
+   * 2. **JS / `any` 调用方**仍传它时 warn-once 诊断**保留**——类型面之外的真实运行仍可能
+   *    带着这个键，诊断丢掉它就退化成静默丢弃。
+   *
+   * 这里刻意用 `as never` 绕过类型层：改完之后 TypeScript 本来就不让合法调用方走到这条路径，
+   * 而我们要验的正是「万一有人绕过类型层，Driver 会不会说一声」。
+   */
+  it("内置名称走雪碧图映射；printImageUrl 已从类型面移除，JS 调用方仍传时告警一次", () => {
     const icon = ctx.overlays.buildIcon("simple_red") as InstanceType<
       FakeBMapV4["namespace"]["Icon"]
     >;
@@ -679,8 +694,16 @@ describe("buildIcon 与 setPosition", () => {
       imageUrl: "https://example.com/i.png",
       size: { width: 8, height: 8 },
       printImageUrl: "https://example.com/print.png",
-    });
+    } as never);
     expect(String(warn.mock.calls[0][0])).toContain("printImageUrl");
+
+    // warn-once：重复调用不刷屏。
+    ctx.overlays.buildIcon({
+      imageUrl: "https://example.com/i.png",
+      size: { width: 8, height: 8 },
+      printImageUrl: "https://example.com/print.png",
+    } as never);
+    expect(warn.mock.calls.filter((call) => String(call[0]).includes("printImageUrl"))).toHaveLength(1);
   });
 
   it("setPosition 对 Circle 走 setCenter、对 CustomOverlay 只位移（不重建业务 DOM）", () => {
@@ -862,5 +885,90 @@ describe("属性描述符与能力目录同源", () => {
 
   it("没有能力的 kind（map-mask）在目录里没有对应能力项", () => {
     expect(OVERLAY_DESCRIPTORS["map-mask"].capability).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 9. 图标类型的**声明面**：不得承诺上游没有的键（issue #177）                   */
+/* -------------------------------------------------------------------------- */
+
+describe("图标类型面：printImageUrl 不得回到声明里", () => {
+  /**
+   * 逐条点名三处声明点，而不是只断言「`MarkerIconInput` 里没有」——
+   * 同一个键曾在三个文件里各写一份（driver 类型 / 公共类型 / `<Marker3D>` 的内联接口），
+   * 删一处漏两处同样成立。少一个键就是「声明了却永远被丢弃」的假支持。
+   */
+  const DECLARATION_SITES: ReadonlyArray<{ file: string; note: string }> = [
+    { file: "../types/overlays.ts", note: "MarkerIconInput（Driver 边界）" },
+    { file: "../../types/components.ts", note: "MarkerCustomIcon（公共类型）" },
+    {
+      file: "../../components/overlays/Marker3D.vue",
+      note: "Marker3dCustomIcon（组件内联接口）",
+    },
+  ];
+
+  /**
+   * 逐个 `type` / `interface` 字面量取**成员名**，再断言里面没有 `printImageUrl`。
+   *
+   * 刻意用 AST 而不是正则：正则版（`/^\s*printImageUrl\??\s*:/gm`）只认「行首 + 冒号」，
+   * 把它挪进单行内联对象类型（`export type MarkerIconInput = { printImageUrl?: string }`）
+   * 匹配数就变 0 —— 假支持回来了，测试照样绿。这道守卫是「声明面回潮」的唯一拦截，
+   * 判据必须对**排版**免疫。
+   *
+   * 遍历 `ts.TypeLiteralNode` 的成员，因此以下写法全部会被抓到：`interface X { printImageUrl?: string }`、
+   * `type X = { ... }`、`type X = A & { printImageUrl?: string }` 的内联部分。
+   * 注释在词法层就被丢弃，**结构上不可能**把它误判成声明。
+   */
+  function typeLiteralMemberNames(source: string): string[] {
+    const file = ts.createSourceFile(
+      "probe.ts",
+      source,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ false,
+      ts.ScriptKind.TS,
+    );
+    const found: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeLiteralNode(node)) {
+        for (const member of node.members) {
+          const name = member.name;
+          if (name && (ts.isIdentifier(name) || ts.isStringLiteral(name))) {
+            found.push(name.text);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    return found;
+  }
+
+  it.each(DECLARATION_SITES)("$note 里不再声明 printImageUrl", ({ file }) => {
+    const path = resolve(import.meta.dirname, file);
+    const members = typeLiteralMemberNames(readFileSync(path, "utf8"));
+    // 解析守卫：解析器失效时必须红，而不是让「空数组里没有 printImageUrl」通过。
+    expect(members.length, `${file} 解析到 0 个类型字面量成员，解析方式可能已失效`).toBeGreaterThan(10);
+    expect(
+      members.filter((name) => name === "printImageUrl"),
+      `${file} 又声明了 printImageUrl（issue #177：上游 IconOptions 没有这个键）`,
+    ).toEqual([]);
+  });
+
+  /**
+   * 反证：把 `printImageUrl` 塞进**单行内联对象类型**，上面的 AST 守卫仍必须抓到。
+   *
+   * 这条锁的是「判据对排版免疫」：正则版在这里会静默通过（`{ printImageUrl?: string }`
+   * 不在行首），AST 版必须仍然报出来。判据自身没有被证明有效，就等于没有守卫。
+   */
+  it("反证：单行内联对象类型里的 printImageUrl 同样被抓到（判据对排版免疫）", () => {
+    const members = typeLiteralMemberNames(
+      "export type MarkerIconInput = { imageUrl: string; printImageUrl?: string };\n",
+    );
+    expect(members).toContain("printImageUrl");
+  });
+
+  it("Driver 侧的 warn-once 文案仍在（类型面之外的真实运行仍需要诊断）", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "overlays.ts"), "utf8");
+    expect(source).toContain("print-image-url");
   });
 });

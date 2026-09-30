@@ -62,29 +62,30 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 
 ### 返回值
 
-状态与错误语义**与其它服务 hooks 完全一致**（见[统一状态口径](#统一状态口径)）。
+状态与错误语义**与其它服务 composable 完全一致**（见[统一状态口径](/zh-CN/guide/services#统一状态口径)）。
 
 | 返回值        | 描述                                                                       | 类型                                                  |
 | ------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
 | data          | 每个关键字一份结果（单关键字 ⇒ 长度 1）                                     | `Readonly<ShallowRef<LocalSearchResult[] \| null>>`   |
 | status        | 任务状态（见下）                                                            | `Readonly<ShallowRef<BMapServiceStatus>>`             |
 | error         | 有公开原因时的错误信息（`{ code, message }`）                               | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`      |
-| sdkStatus     | SDK 公开的状态码（`BMAP_STATUS_*`；成功为 `0`，拿不到时为 `null`）           | `Readonly<ShallowRef<number \| null>>`                |
+| sdkStatus     | 官方 `LocalSearch#getStatus()` 的状态码（`BMAP_STATUS_*`；`0` = 成功，失败带上官方那个码，拿不到时为 `null`） | `Readonly<ShallowRef<number \| null>>`                |
 | isLoading     | 是否在检索中                                                                | `Readonly<ShallowRef<boolean>>`                       |
 | supported     | 当前引擎是否支持本地检索（Client 就绪后立即判定，不需要先发一次请求）        | `Readonly<ShallowRef<boolean>>`                       |
 | isError       | `status === 'failed'` 的别名                                                | `ComputedRef<boolean>`                                |
 | isEmpty       | `data === null` 的别名（注意：失败、取消、`empty` 都是 `true`）              | `ComputedRef<boolean>`                                |
-| search        | 关键字检索（支持多关键字数组，最多 10 个）                                  | `(keyword, option?) => Promise<ServiceResult<LocalSearchResult[]>>` |
-| searchNearby  | 周边检索（中心点 + 半径，单位米）                                           | `(keyword, center, radius) => Promise<…>`             |
-| searchInBounds | 范围检索（矩形 `{ southwest, northeast }`）                                | `(keyword, bounds) => Promise<…>`                     |
-| gotoPage      | 翻页（页码从 0 开始）                                                       | `(page: number) => Promise<…>`                        |
+| search        | 关键字检索（`keyword` 是 `string \| readonly string[]`，官方最多 10 个关键字；`option` 是官方 `LocalSearchSearchOption`，当前只有 `forceLocal`——强制在当前城市内检索、不跳到其它城市的结果） | `(keyword, option?) => Promise<ServiceResult<LocalSearchResult[]>>` |
+| searchNearby  | 周边检索（`center` 是城市名字符串或 `{ lng, lat }`；`radius` 单位米，官方默认 2000、上限 100000，`center` 为字符串时官方忽略它） | `(keyword, center, radius) => Promise<…>`             |
+| searchInBounds | 范围检索（`bounds` 是 `{ southwest, { lng, lat }, northeast: { lng, lat } }`） | `(keyword, bounds) => Promise<…>`                     |
+| gotoPage      | 翻页（页码从 0 开始，官方上限是 `data[0].pageCount - 1`）。它是**对上一条结果集的延续**：上一次检索还没结算、或实例已过期（`cancel()` / 超时 / `clear()` 之后）时**直接以 `failed` 拒绝**，不会空转到超时 | `(page: number) => Promise<…>`                        |
 | clear         | 清空结果：清掉地图上的标注 / 结果面板与本地状态（实现上是释放当前实例，下一次 `search()` 用新实例） | `() => void`                                          |
 | cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）；取消后该实例不再复用 | `() => void`                                          |
 | reset         | 取消 + 清空 `data` / `error` / `status`                                     | `() => void`                                          |
 
 #### 统一状态口径
 
-`status` 的取值与含义（六个 service hooks 共用同一份口径）：
+`status` 的取值与含义（所有服务 composable 共用同一份口径，与
+[统一状态口径](/zh-CN/guide/services#统一状态口径) 一致）：
 
 | 值            | 含义                                                                 |
 | ------------- | -------------------------------------------------------------------- |
@@ -111,8 +112,8 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | `clear()` | 释放当前实例（→ 公开的 `clearResults()`）+ 清空本地状态；下一次 `search()` 用新实例 |
 | 直接调 Driver（不经本 hooks）时并发 | Driver 以 `failed(BMAP_SERVICE_FAILED)` 拒绝，并提示 `disposeLocalSearch()` 后重建实例 |
 
-代价：取代 / 取消 / 超时之后的重查会**多建一个 SDK 实例**（换来归属可判定）。这一点与「每次请求一个
-独立实例」的取舍写在 ADR [2026-09-14](../../adr/2026-09-14-service-lifecycle-and-local-search.md) 决策 4。
+代价：取代 / 取消 / 超时之后的重查会**多建一个 SDK 实例**（换来归属可判定）。这是与「每次请求
+一个独立实例」相比的有意取舍：多一次构造，换来「回包属于哪次调用」可判定。
 
 ### 与官方 UI Kit 的分流
 
@@ -126,7 +127,10 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 import type { ComputedRef, MaybeRefOrGetter, ShallowRef } from 'vue'
 import type {
   MapHandle,
+  LocalSearchBounds,
+  LocalSearchKeyword,
   LocalSearchResult,
+  LocalSearchSearchOption,
   ServiceResult,
   ServiceErrorInfo,
   BMapServiceStatus,
@@ -134,7 +138,7 @@ import type {
 } from 'bmap-vue'
 
 export interface BMapLocalSearchRenderOptions {
-  map?: MaybeRefOrGetter<MapHandle | undefined>
+  map?: MaybeRefOrGetter<MapHandle | null | undefined>
   panel?: string | HTMLElement
   selectFirstResult?: boolean
   autoViewport?: boolean
@@ -165,17 +169,17 @@ export declare function useLocalSearch(
   isError: ComputedRef<boolean>
   isEmpty: ComputedRef<boolean>
   search(
-    keyword: string | readonly string[],
-    option?: { forceLocal?: boolean }
+    keyword: LocalSearchKeyword,
+    option?: LocalSearchSearchOption
   ): Promise<ServiceResult<LocalSearchResult[]>>
   searchNearby(
-    keyword: string | readonly string[],
+    keyword: LocalSearchKeyword,
     center: string | GeoPoint,
     radius: number
   ): Promise<ServiceResult<LocalSearchResult[]>>
   searchInBounds(
-    keyword: string | readonly string[],
-    bounds: { southwest: GeoPoint; northeast: GeoPoint }
+    keyword: LocalSearchKeyword,
+    bounds: LocalSearchBounds
   ): Promise<ServiceResult<LocalSearchResult[]>>
   gotoPage(page: number): Promise<ServiceResult<LocalSearchResult[]>>
   clear(): void

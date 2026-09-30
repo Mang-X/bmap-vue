@@ -1,4 +1,4 @@
-# TrafficLayer 路况图层 <Badge type="tip" text="^1.0.0" />
+# TrafficLayer 路况图层
 
 实时路况图层。官方把它定义为「预配置的 `TileLayer`」，因此构造选项与 `TileLayer` 一致。
 
@@ -24,7 +24,7 @@ layer/trafficLayer
 | opacity | 图层透明度（0 - 1） | `number` | SDK 默认 | 变化时重建（官方没有 setter） |
 | zIndex | 图层层叠顺序 | `number` | SDK 默认 | **就地** `setZIndex()` |
 | colors | 路况颜色 `[畅通, 缓行, 拥堵, 严重拥堵]` | `string[]` | SDK 默认 | **就地** `setColors()` |
-| edge | 是否展示白色描边 | `boolean` | SDK 默认 | **就地** `setEdge()` |
+| edge | 是否展示白色描边 | `boolean` | 官方默认 `true` | **就地** `setEdge()` |
 
 ## 图层专属选项
 
@@ -32,6 +32,7 @@ layer/trafficLayer
 | --- | --- | --- | --- |
 | autoRefresh | 是否自动刷新路况数据 | `boolean` | SDK 默认 |
 | refreshInterval | 自动刷新间隔（毫秒） | `number` | SDK 默认 |
+| tileLoadObserver | 瓦片加载观察面（见[图层总览的「加载诊断」](./index#加载诊断观察瓦片什么时候加载什么时候失败)） | `TileLoadObserver` | - |
 
 ## 注意
 

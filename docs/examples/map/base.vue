@@ -36,8 +36,8 @@
     </label>
     <br />
     <label>
-      <input type="checkbox" v-model="mapSetting.enableTraffic" />
-      显示交通路况
+      <input type="checkbox" v-model="showTraffic" />
+      显示交通路况（4.0 里路况是 <code>TrafficLayer</code>，不是 <code>&lt;Map&gt;</code> 的开关）
     </label>
     <br />
     <br />
@@ -46,8 +46,10 @@
       <option value="BMAP_NORMAL_MAP">常规地图 BMAP_NORMAL_MAP</option>
       <option value="BMAP_EARTH_MAP">地球模式 BMAP_EARTH_MAP</option>
       <option value="BMAP_SATELLITE_MAP">卫星图 BMAP_SATELLITE_MAP</option>
-      <!-- #165 Class 1：混合图此前被静默降级成普通图，现在走上真映射 -->
-      <option value="BMAP_HYBRID_MAP">混合图（卫星 + 路网）BMAP_HYBRID_MAP</option>
+      <!--
+        混合图 / 无底图在类型包里声明了，但真实 4.0 运行时的 BMap.MapTypeId 上没有对应常量，
+        传它们会显式失败（而不是静默换一张图）。要混合底图请用 mapStyleId / mapStyleJson。
+      -->
     </select>
     <br />
     <br />
@@ -69,15 +71,21 @@
       :enableDblclickZoom="mapSetting.enableDblclickZoom"
       :enableKeyboard="mapSetting.enableKeyboard"
       :enablePinchZoom="mapSetting.enablePinchZoom"
-      :enableTraffic="mapSetting.enableTraffic"
-    />
+    >
+      <!--
+        JSAPI 4.0 没有 `<Map enableTraffic>`：路况收敛成 TrafficLayer。
+        所以这里按图层的方式挂，而不是给 Map 传一个不会生效的开关。
+      -->
+      <TrafficLayer v-if="showTraffic" :visible="true" />
+    </Map>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { MapProps } from "bmap-vue";
-const type = ref<string>("BMAP_NORMAL_MAP");
+import { MapProps, TrafficLayer } from "bmap-vue";
+const type = ref<"BMAP_NORMAL_MAP" | "BMAP_EARTH_MAP" | "BMAP_SATELLITE_MAP">("BMAP_NORMAL_MAP");
+const showTraffic = ref(false);
 const mapSetting = ref<MapProps>({
   enableDragging: true,
   enableInertialDragging: true,
@@ -88,6 +96,5 @@ const mapSetting = ref<MapProps>({
   enableKeyboard: true,
   enablePinchZoom: true,
   enableAutoResize: true,
-  enableTraffic: false,
 });
 </script>

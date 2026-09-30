@@ -25,7 +25,7 @@
       v-bind="$attrs"
       :center="{ lng: 116.385243, lat: 39.913063 }"
       :zoom="16"
-      enable-scroll-wheel-zoom
+      enable-wheel-zoom
       @ready="handleInitd"
       mapStyleId="980161f3645989feac25a0da15da4178"
     />

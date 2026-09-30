@@ -1,25 +1,42 @@
 <template>
   <div>
-    <div class="toolbar">
-      <input v-model="keyword" placeholder="搜索地点，如“天安门”" @keyup.enter="doSearch" />
-      <button :disabled="isLoading" @click="doSearch">搜索</button>
-      <button :disabled="!data?.length" @click="clear">清空</button>
+    <div class="bmap-example-toolbar">
+      <input
+        class="bmap-example-input"
+        v-model="keyword"
+        placeholder="搜索地点，如“天安门”"
+        @keyup.enter="doSearch"
+      />
+      <button class="bmap-example-button" :disabled="isLoading" @click="doSearch">搜索</button>
+      <button class="bmap-example-button is-secondary" :disabled="!data?.length" @click="clear">
+        清空
+      </button>
       <span v-if="isLoading">检索中…</span>
       <span v-else-if="status === 'empty'">没有结果或服务当前不可用</span>
       <span v-else-if="status === 'failed'">检索失败（状态码 {{ sdkStatus ?? "-" }}）</span>
       <span v-else-if="status === 'unsupported'">当前引擎不支持本地检索</span>
     </div>
 
-    <ul class="results">
+    <ul class="bmap-example-results">
       <li v-for="(poi, index) in pois" :key="poi.uid || index" @click="focused = poi.point">
         {{ poi.title }}<small v-if="poi.address">（{{ poi.address }}）</small>
       </li>
     </ul>
 
-    <div class="pager" v-if="pageCount > 1">
-      <button :disabled="pageIndex <= 0" @click="gotoPage(pageIndex - 1)">上一页</button>
+    <div class="bmap-example-pager" v-if="pageCount > 1">
+      <button
+        class="bmap-example-button is-secondary"
+        :disabled="pageIndex <= 0"
+        @click="gotoPage(pageIndex - 1)"
+      >
+        上一页
+      </button>
       <span>{{ pageIndex + 1 }} / {{ pageCount }}</span>
-      <button :disabled="pageIndex >= pageCount - 1" @click="gotoPage(pageIndex + 1)">
+      <button
+        class="bmap-example-button is-secondary"
+        :disabled="pageIndex >= pageCount - 1"
+        @click="gotoPage(pageIndex + 1)"
+      >
         下一页
       </button>
     </div>
@@ -58,29 +75,4 @@ async function doSearch() {
 // 卸载时 hook 会自动取消在飞请求并释放 SDK 实例。
 </script>
 
-<style>
-.toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.results {
-  margin: 8px 0;
-  padding-left: 18px;
-  max-height: 160px;
-  overflow: auto;
-}
-.results li {
-  cursor: pointer;
-}
-.results small {
-  color: #888;
-}
-.pager {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-</style>
+<style></style>

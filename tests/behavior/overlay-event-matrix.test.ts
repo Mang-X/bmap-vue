@@ -186,6 +186,9 @@ const UPSTREAM_MAP_BY_KIND: Readonly<Partial<Record<OverlayKind, string>>> = {
   prism: "PrismEventMap",
   "bezier-curve": "BezierCurveEventMap",
   "ground-overlay": "GroundOverlayEventMap",
+  // #178：`GroundPoint extends GroundOverlay`（`GroundPoint.d.ts:5`），SDK **没有**为它单独
+  // 声明 `GroundPointEventMap` ⇒ 沿用同一张 `GroundOverlayEventMap`。
+  "ground-point": "GroundOverlayEventMap",
   "info-window": "InfoWindowEventMap",
   "custom-overlay": "CustomOverlayEventMap",
   "context-menu": "ContextMenuEventMap",
@@ -208,6 +211,7 @@ const UPSTREAM_FILE_BY_KIND: Readonly<Partial<Record<OverlayKind, string>>> = {
   prism: "overlay/OverlayEvent.d.ts",
   "bezier-curve": "overlay/OverlayEvent.d.ts",
   "ground-overlay": "overlay/OverlayEvent.d.ts",
+  "ground-point": "overlay/OverlayEvent.d.ts",
   "info-window": "overlay/OverlayEvent.d.ts",
   "custom-overlay": "overlay/CustomOverlay.d.ts",
   "context-menu": "context-menu/ContextMenu.d.ts",
@@ -255,7 +259,25 @@ describe("#31 上游 OverlayEvent.d.ts 解析守卫", () => {
  * `PolylineEventMap`（两者在上游都是同一个 `GraphEventMap<T>`，事件集一模一样）时，
  * 双向差集与计数全都照旧通过——「矩阵对上了上游」这句话就不可证伪了。
  */
+/**
+ * 事件表**靠继承取得**的 kind（issue #178）。
+ *
+ * 上游只对**自己声明了类**的覆盖物给出 `<Kind>EventMap`。`GroundPoint` 继承 `GroundOverlay`
+ * （`overlay/GroundPoint.d.ts:5`），继承到的唯一事件入口是
+ * `GroundOverlay.addEventListener<K extends keyof GroundOverlayEventMap>`（`GroundOverlay.d.ts:122`）——
+ * **SDK 没有 `GroundPointEventMap`**。因此 `expectedUpstreamMapName` 的机械推导对它不成立。
+ *
+ * 这条登记表是**刻意窄**的，且由下方用例双向守住：每一项都必须在上游**真的查无**同名表，
+ * 而它继承的那张表**必须**真的存在。将来上游给 `GroundPoint` 补了自己的事件表时，
+ * 登记项会让「同一张表在两个 kind 上」显式红——那时该把这项删掉，而不是继续让例外存在。
+ */
+const UPSTREAM_EVENT_MAP_BY_INHERITANCE: Readonly<Partial<Record<OverlayKind, string>>> = {
+  "ground-point": "GroundOverlayEventMap",
+};
+
 function expectedUpstreamMapName(kind: string): string {
+  const inherited = UPSTREAM_EVENT_MAP_BY_INHERITANCE[kind as OverlayKind];
+  if (inherited) return inherited;
   const pascal = kind
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -268,6 +290,29 @@ describe("#31 事件矩阵 ↔ 上游 EventMap（双向取差集）", () => {
     expect(UPSTREAM_MAP_BY_KIND[kind], `${kind} 没有登记上游事件表名`).toBe(
       expectedUpstreamMapName(kind),
     );
+  });
+
+  /**
+   * 「事件表靠继承取得」的例外必须**真的**是例外（issue #178）。
+   *
+   * 双向守住，否则这张登记表会退化成「想指哪张就指哪张」的逃生门：
+   * 1. **正证**：继承而来的那张表在上游**必须存在**（`GroundOverlayEventMap`）；
+   * 2. **反证**：上游**必须没有** `<Kind>EventMap`——一旦官方补了自己的表，这条就红，
+   *    该把该项从 `UPSTREAM_EVENT_MAP_BY_INHERITANCE` 删掉、走机械推导。
+   */
+  it("继承而来的事件表例外：被继承的表存在，且上游确实没有该 kind 自己的表", () => {
+    for (const [kind, inherited] of Object.entries(UPSTREAM_EVENT_MAP_BY_INHERITANCE)) {
+      expect(upstream.get(inherited!), `${inherited}（${kind} 继承的那张）必须真实存在`).toBeDefined();
+      // 「该 kind 本该有的表名」按 kind 机械推导（**不**查例外表）：这张登记表不能反过来影响推导。
+      const pascal = kind
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join("");
+      expect(
+        upstream.has(`${pascal}EventMap`),
+        `上游已经声明了 ${pascal}EventMap ⇒ 不再需要「继承例外」，请删除 ${kind} 的登记项`,
+      ).toBe(false);
+    }
   });
 
   it.each(matrixKinds)("%s：上游声明的每个事件都在矩阵里（不遗漏）", (kind) => {
@@ -301,6 +346,9 @@ describe("#31 事件矩阵 ↔ 上游 EventMap（双向取差集）", () => {
       prism: 11,
       "bezier-curve": 11,
       "ground-overlay": 11,
+      // #178：GroundPoint 继承 GroundOverlay，SDK 没有独立的 GroundPointEventMap
+      // ⇒ 事件数与 `ground-overlay` 相同（11），不是「另一张 11 事件的表」。
+      "ground-point": 11,
       "info-window": 6,
       // #33 补上的两张表：CustomOverlayEventMap / ContextMenuEventMap
       "custom-overlay": 3,

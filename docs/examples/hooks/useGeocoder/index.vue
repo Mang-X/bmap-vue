@@ -2,7 +2,9 @@
   <div>
     选择地址解析:
     <select class="mySelect" v-model="currentAddress">
-      <option v-for="item in addressList" :value="item">{{ item.address }}</option>
+      <option v-for="(item, index) in addressList" :key="index" :value="item">
+        {{ item.address }}
+      </option>
     </select>
     <div class="state" v-if="!isLoading && !isEmpty">
       <h5>解析结果:</h5>

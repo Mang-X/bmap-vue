@@ -35,6 +35,7 @@ import Prism from "../../packages/bmap-vue/src/components/overlays/Prism.vue";
 import GroundOverlay from "../../packages/bmap-vue/src/components/overlays/GroundOverlay.vue";
 import CustomOverlay from "../../packages/bmap-vue/src/components/overlays/CustomOverlay.vue";
 import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
+import GroundPoint from "../../packages/bmap-vue/src/components/overlays/GroundPoint.vue";
 import {
   LABEL_FIELDS,
   LABEL_DESCRIPTOR_KEYS,
@@ -78,6 +79,11 @@ import {
   GROUND_OVERLAY_WATCH_SOURCES,
   createGroundOverlaySpec,
 } from "../../packages/bmap-vue/src/components/overlays/groundOverlaySpec";
+import {
+  GROUND_POINT_FIELDS,
+  GROUND_POINT_DESCRIPTOR_KEYS,
+  createGroundPointSpec,
+} from "../../packages/bmap-vue/src/components/overlays/groundPointSpec";
 import {
   MARKER_DESCRIPTOR_KEYS,
   MARKER_FIELDS,
@@ -393,6 +399,46 @@ const CASES: readonly OverlayCase[] = [
     mutable: [{ prop: "opacity", next: 0.9, setter: "setOpacity" }],
     recreate: [{ prop: "type", next: "canvas" }],
     ctorExpect: { opacity: 0.5, url: "a.png", type: "image" },
+  },
+  {
+    // issue #178：贴地点覆盖物。进这道套件的理由是它的声明面**风险最高**：
+    // ① 官方默认为 `true` 的 `enableMassClear` / `enableClicking`（Vue Boolean-absent 陷阱，
+    //    未给时不能进 ctor options，否则「没给」会变成「显式关掉」）；
+    // ② `size` / `anchor` / `offset` 走 `size-shape` 档（Size 而非 Pixel）——若错用 `size` 档，
+    //    watch 键会读 `x` / `y`，`{width, height}` 恒被判成「没变」⇒ 更新被静默吞掉；
+    // ③ 位置入口是 `setPoint` 而**非** `setPosition`（方法名不能照抄 `Marker`）。
+    name: "GroundPoint",
+    kind: "ground-point",
+    component: GroundPoint,
+    fields: GROUND_POINT_FIELDS,
+    props: {
+      point: POINT,
+      url: "car.png",
+      size: { width: 30, height: 60 },
+      scale: 2,
+      opacity: 0.5,
+      level: 18,
+    },
+    mutable: [
+      // ↓ 位置：官方 `GroundPoint.d.ts:29` 声明的是 `setPoint`，不是 `setPosition`
+      { prop: "point", next: { lng: 117, lat: 40 }, setter: "setPoint" },
+      // ↓ `size-shape` 档的回归护栏：这三个键若错登成 `size`（Pixel）档，watch 键恒等 ⇒ 收不到
+      { prop: "size", next: { width: 48, height: 48 }, setter: "setSize" },
+      { prop: "scale", next: 3, setter: "setScale" },
+      { prop: "opacity", next: 0.9, setter: "setOpacity" },
+    ],
+    // ↓ 三个 `recreate`：官方成员表上没有 `setLevel` / `setTop` / `setEnableClicking`
+    recreate: [
+      { prop: "level", next: 20 },
+      { prop: "top", next: true },
+    ],
+    // `point` 是构造器**第一个位置参数**（描述符 `ctorKey: null`）⇒ 不在 ctor options 里，
+    // 由 `stateExpect` 覆盖（Fake 把位置参数落进实例字段）。
+    // ⚠️ `FakeV4GroundPoint` 把**构造期**输入记在实例的 `options` 上（实例字段只由对应 setter
+    // 写），因此「构造时 scale=2」由 `ctorExpect` 断言；`stateExpect` 留给 setter 落点。
+    // 位置是位置参数（`ctorKey: null`），Fake 把它落进实例字段 `point`。
+    ctorExpect: { url: "car.png", scale: 2, opacity: 0.5, level: 18 },
+    stateExpect: { point: POINT },
   },
   {
     name: "CustomOverlay",

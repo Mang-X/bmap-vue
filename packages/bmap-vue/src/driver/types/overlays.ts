@@ -45,9 +45,19 @@ export type OverlayKind =
   | "custom-overlay"
   | "map-mask"
   | "ground-overlay"
+  | "ground-point"
   | "context-menu";
 
-/** Marker 图标：内置名称或自定义图标描述 */
+/**
+ * Marker 图标：内置名称或自定义图标描述。
+ *
+ * ⚠️ **没有** `printImageUrl`（issue #177）：上游 `IconOptions`（4.0.5）只声明
+ * `anchor` / `imageOffset` / `imageSize` 三个键，实例 `BMap.Icon` 上也没有对应成员
+ * （`overlay/Icon.d.ts` 只有 `setImageUrl` / `setSize` / `setImageSize` / `setAnchor` /
+ * `setImageOffset`）。它此前挂在类型面上、Driver 每次都丢弃并告警——正是本库拒绝的「假支持」。
+ * JS / `any` 调用方仍然传了它时，Driver 侧保留 warn-once 诊断（见 `jsapi-v4/overlays.ts`
+ * 的 `warnUnknownIconName`），但**类型面不再承诺**这个键。
+ */
 export type MarkerIconInput =
   | string
   | {
@@ -56,7 +66,6 @@ export type MarkerIconInput =
       anchor?: Pixel;
       imageOffset?: Pixel;
       imageSize?: Size;
-      printImageUrl?: string;
     };
 
 export interface MarkerOptions {
@@ -440,6 +449,18 @@ export type OverlayPropertyValueKind =
   | "point-groups"
   | "bounds"
   | "size"
+  /**
+   * 与 `"size"` **同一种归一化**（`{width, height}` → `BMap.Size`），但**组件侧的形状也是
+   * `Size`**，而 `"size"` 那一档在组件侧是 `Pixel`（`{x, y}`，见 `MarkerProps.offset`）。
+   *
+   * 为什么必须分开（issue #178 `GroundPoint`）：`useOverlaySpec` 的 `fixedShapeKeyOf` 按
+   * `value` 档挑 watch 键——`"size"` 走 `pixelKey`（读 `x` / `y`）。若把 GroundPoint 的
+   * `size` / `anchor` / `offset` 登记成 `"size"`，`{width, height}` 在 `pixelKey` 下恒为
+   * `undefined|0|0` ⇒ **内容变了也判成没变**，更新会被静默吞掉。`GroundPoint` 的这三个键在
+   * 官方 `GroundPointOptions` 里就是 `Size`（`size?: Size` / `anchor?: Size` / `offset?: Size`），
+   * 因此组件面也收 `{width, height}`，与档位保持一致。
+   */
+  | "size-shape"
   | "icon"
   /**
    * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（issue #165 第三批）。
@@ -1094,6 +1115,81 @@ export const OVERLAY_DESCRIPTORS = {
     }),
   },
 
+  // ---- issue #178：GroundPoint（贴地点覆盖物，继承 GroundOverlay）----
+  //
+  // 逐条核对 `@baidumap/jsapi-v4-types@4.0.5` 的两份声明（**类型包在 pnpm store 里有两份**，
+  // 这里读的是 `package.json` version 为 4.0.5 的 git 依赖那份；4.0.4_patch 那份的同三个文件
+  // 与它逐字相同，结论不随版本漂移）：
+  //
+  // - `overlay/GroundPoint.d.ts`——实例成员表共 6 个 setter：
+  //   `setPoint` / `setScale` / `setSize` / `setRotation` / `setAnchor` / `setOffset`；
+  // - `overlay/GroundOverlay.d.ts`——继承来的 8 个成员：
+  //   `setBounds` / `getBounds` / `setOpacity` / `getOpacity` / `setImage` / `setImageURL` /
+  //   `getImageURL` / `setDisplayOnMinLevel` / `getDisplayOnMinLevel` / `setDisplayOnMaxLevel` /
+  //   `getDisplayOnMaxLevel` / `setZIndex` / `enableMassClear` / `disableMassClear` / `getMap`。
+  //
+  // 分类判据因此是**逐条比对 `GroundPointOptions` 的 7 个键在这张成员表里有没有对应 setter**。
+  "ground-point": {
+    kind: "ground-point",
+    ctor: "GroundPoint",
+    capability: "overlay.ground-point",
+    properties: properties({
+      // `GroundPointOptions` 的 7 个键里，**这 6 个有对应 setter** ⇒ `mutable`。
+      // 位置入口是 `setPoint`（**不是** `setPosition`）：`GroundPoint.d.ts:29`
+      // 声明的是 `setPoint(point: Point, update?: boolean): this`。
+      // 对比 `Marker`（`setPosition`）与 `marker3d`（同样走 `setPoint`，见**下方**条目）——
+      // 方法名不能照抄同类，必须按各自声明取。
+      point: mutateBy("setPoint", { ctorKey: null, value: "point" }),
+      // `GroundPoint.d.ts:39`：`setScale(scale: number, update?: boolean): this`
+      scale: mutateBy("setScale", { ctorKey: "scale" }),
+      // `GroundPoint.d.ts:49`：`setSize(size: Size, update?: boolean): this`
+      // ⚠️ 上游是 `BMap.Size`（`{width, height}`），**不是**图形族偏移那套 `Pixel`（`{x, y}`）。
+      // 因此用 `size-shape` 档而不是 `size`：后者在 `useOverlaySpec` 的 `fixedShapeKeyOf`
+      // 里走 `pixelKey`（读 `x` / `y`），`{width, height}` 会被判成「永远是同一值」⇒ 更新静默丢失。
+      size: mutateBy("setSize", { ctorKey: "size", value: "size-shape" }),
+      // `GroundPoint.d.ts:59`：`setRotation(angle: number, update?: boolean): this`
+      rotation: mutateBy("setRotation", { ctorKey: "rotation" }),
+      // `GroundPoint.d.ts:69`：`setAnchor(anchor: Size, update?: boolean): this`
+      anchor: mutateBy("setAnchor", { ctorKey: "anchor", value: "size-shape" }),
+      // `GroundPoint.d.ts:79`：`setOffset(offset: Size, update?: boolean): this`
+      offset: mutateBy("setOffset", { ctorKey: "offset", value: "size-shape" }),
+      // ---- 以下是 `GroundOverlayOptions` 继承来的键（`GroundPointOptions` 文档写明
+      // 「继承 GroundOverlayOptions」），分类依据同上表 ----
+      // `GroundOverlay.d.ts:62`：`setImage(url: string, bounds?: Bounds): void`
+      url: mutateBy("setImage", { ctorKey: "url" }),
+      // `GroundOverlay.d.ts:48`：`setOpacity(opacity: number): void`
+      opacity: mutateBy("setOpacity", { ctorKey: "opacity" }),
+      // `GroundOverlay.d.ts:82` / `:95`：`setDisplayOnMinLevel` / `setDisplayOnMaxLevel`
+      displayOnMinLevel: mutateBy("setDisplayOnMinLevel", { ctorKey: "displayOnMinLevel" }),
+      displayOnMaxLevel: mutateBy("setDisplayOnMaxLevel", { ctorKey: "displayOnMaxLevel" }),
+      // `GroundOverlay.d.ts:104`：`setZIndex(zIndex: number): void`
+      zIndex: mutateBy("setZIndex", { ctorKey: "zIndex" }),
+      // `GroundOverlay.d.ts:108` / `:112`：`enableMassClear()` / `disableMassClear()` 成对开关
+      enableMassClear: toggleBy(["enableMassClear", "disableMassClear"], { ctorKey: "enableMassClear" }),
+      // ---- `recreate` 的三键：官方实例成员表上**没有**对应 setter ----
+      // `GroundOverlayOptions.enableClicking`：4.0 的 GroundOverlay **没有**
+      // `setEnableClicking`，也没有成对开关（对照 `enableMassClear` 就有）⇒ 只能构造期生效。
+      enableClicking: recreate(
+        "4.0 的 GroundOverlay / GroundPoint 上只有构造选项 enableClicking，实例上没有对应的成对开关（对照 enableMassClear 有）",
+        { ctorKey: "enableClicking" },
+      ),
+      // `GroundOverlayOptions.top`（`@default false`）：`GroundOverlay` 有 `setZIndex` 但
+      // **没有 `setTop`**——`setZIndex` 是层叠顺序**值**，语义不同，不能拿来顶替。
+      top: recreate(
+        "官方 GroundOverlayOptions 的 top（@default false，「是否在普通覆盖物之上绘制」）；4.0 的 GroundOverlay **没有 setTop**（它有 setZIndex，但那是层叠顺序值，语义不同）",
+        { ctorKey: "top" },
+      ),
+      // `GroundPointOptions.level`（`@default 18`，尺寸参考的缩放级别）：
+      // **成员表上既没有 `setLevel` 也没有任何同义入口**（6 个 setter 逐条比过）⇒ `recreate`。
+      // 这是 GroundPoint 相对 GroundOverlay **新增**的键，落在 `displayOnMinLevel` /
+      // `displayOnMaxLevel`（有 setter）之外，分类与之不同。
+      level: recreate(
+        "`GroundPointOptions.level`（@default 18，尺寸参考的缩放级别）：GroundPoint 的 6 个实例 setter（setPoint / setScale / setSize / setRotation / setAnchor / setOffset）里**没有** setLevel，也没有同义入口；它与有 setDisplayOnMinLevel/MaxLevel 的那两个键语义不同，不能互相顶替",
+        { ctorKey: "level" },
+      ),
+    }),
+  },
+
   prism: {
     kind: "prism",
     ctor: "Prism",
@@ -1355,6 +1451,22 @@ export const OVERLAY_REVERT_RATIONALE = {
     "⇒ 重建",
   style: "Label#setStyles 有 getter 但返回当前值；默认样式由 SDK 内部决定、无从构造 ⇒ 重建",
   opacity: "Label#setOpacity 在 4.0.5 **没有**公开读回 ⇒ 重建",
+  // ——— issue #178：`GroundPoint` 的位置与三个尺寸字段 ———
+  // 逐条依据都是「官方 4.0.5 声明里**没有**对应的 getter」——不是「有 getter 但读回当前值」，
+  // 因为 `GroundPoint.d.ts` 的 6 个 setter（setPoint / setScale / setSize / setRotation /
+  // setAnchor / setOffset）**一个配对 getter 都没有**。
+  point:
+    "`GroundPoint#setPoint`（`GroundPoint.d.ts:29`）在 4.0.5 **没有**公开读回（`getPoint` 查无此成员）" +
+    "⇒ 无 baseline 可取 ⇒ 重建",
+  scale:
+    "`GroundPoint#setScale`（`GroundPoint.d.ts:39`）在 4.0.5 **没有**公开读回 ⇒ 重建" +
+    "（官方默认是 1，但「默认 1」对本库不是可恢复的 baseline：它由 SDK 内部决定，撤回即重建）",
+  size:
+    "`GroundPoint#setSize`（`GroundPoint.d.ts:49`）在 4.0.5 **没有**公开读回（无 `getSize`）⇒ 重建；" +
+    "且 `GroundPointOptions.size` 官方**没有**标注 @default（未声明默认值）",
+  level:
+    "`GroundPointOptions.level`（@default 18，尺寸参考的缩放级别）是**构造期**项" +
+    "（实例成员表上既无 setLevel 也无 getter）⇒ policy 已是 recreate，撤回落点与之一致",
   // ⚠️ 依据是 **live 读数**，不是「官方说明」——`setAnchor` **在** 4.0.5 的 `Marker` 实例上
   // （`inst: true`，`getAnchor()` 读回 `Point`，构造后真调一次也不抛），
   // 因此「等异步标注模块加载才挂上」那个说法是**错的**，不要照抄。
@@ -1549,6 +1661,14 @@ export interface OverlayDriver {
   ): OverlayHandle;
   createMapMask(path: readonly Point[], options?: Record<string, unknown>): OverlayHandle;
   createGroundOverlay(bounds: Bounds, options?: Record<string, unknown>): OverlayHandle;
+  /**
+   * 贴地点覆盖物（`GroundPoint extends GroundOverlay`）。
+   *
+   * ⚠️ 位置入口是 **`setPoint`** 而非 `setPosition`（`GroundPoint.d.ts:29`），
+   * 因此 `setPosition(groundPointHandle, p)` 也能用——它经 `applyFieldUpdate` 按描述符键
+   * `point` 解析到 `setPoint`。
+   */
+  createGroundPoint(position: Point, options?: Record<string, unknown>): OverlayHandle;
   /** 自定义 DOM 覆盖物：位置为必填参数（4.0 缺 point 会直接拒绝创建） */
   createCustomOverlay(
     position: Point,

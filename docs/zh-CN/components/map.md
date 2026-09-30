@@ -26,10 +26,10 @@ map/multiInstance
 
 通过指定 `Map` 组件的 `mapStyleId` 或者 `mapStyleJson` 来展示个性化地图。
 
-::: warning 两者互斥（#165 Class 2）
+::: warning 两者互斥
 
 `mapStyleId` 与 `mapStyleJson` 都表示「一整套个性化样式」，**不能同时给**。官方
-`setMapStyle` 的两个键同时出现时谁生效取决于 SDK 内部的合并顺序（2026-09-27 真实 AK
+`setMapStyle` 的两个键同时出现时谁生效取决于 SDK 内部的合并顺序（真实 AK
 实测：两种先后顺序都试了，结果都不受调用方控制），因此本库在组件层**显式报错**，
 而不是静默丢掉其中一个。
 :::
@@ -39,12 +39,9 @@ map/multiInstance
 1. 如果个性化地图没有生效，请先检查 `mapStyleId` 或 `mapStyleJson` 是否正确。如果是通过 `mapStyleId` 实现，还需要检查是否与 `ak` 申请的账号一致
 2. 以下示例使用的 `mapStyleId` 均与 ak 和域名绑定，无法直接复制使用。可根据示例主题名字到[百度地图个性化编辑器](https://lbsyun.baidu.com/apiconsole/custommap)创建后使用
 3. `mapStyleJson` 的形状是**数组**（对齐官方 `MapStyleConfig.styleJson?: object[]`），不是一个对象
-:::
-
-::: tip 提示
-
-1. 如果个性化地图没有生效，请先检查 `mapStyleId` 或 `mapStyleJson` 是否正确。如果是通过 `mapStyleId` 实现，还需要检查是否与 `ak` 申请的账号一致
-2. 以下示例使用的 `mapStyleId` 均与 ak 和域名绑定，无法直接复制使用。可根据示例主题名字到[百度地图个性化编辑器](https://lbsyun.baidu.com/apiconsole/custommap)创建后使用
+4. 官方 `MapStyleConfig` 还有第三个成员 `merge`（与当前样式合并），本库**刻意不暴露**：它表达的是
+   「与当前样式合并」而非「替换」，而本层没有可观察的「当前样式」状态，给不出可复现的语义。
+   要合并请自行经逃生口调用官方命令。
 :::
 
 ### 获取资源
@@ -147,21 +144,20 @@ map/theme2
 
 ## 静态组件 props
 
-| 属性              | 说明                                             | 类型                                                                    | 可选值 | 默认值                 | 版本                               |
-| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------- | ------ | ---------------------- | ---------------------------------- |
-| ak                | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string`                                                                | -      | -                      | -                                  |
-| apiUrl            | 自建地图 api 资源地址（默认路径会显式报 `BMAP_INVALID_ARGUMENT`，见下方说明；请改用 `customScriptV4Provider`） | `string` | - | - | <Badge type="tip" text="^2.3.0" /> |
-| provider          | 自定义 SDK 加载器；不传时走 `app.use` 的默认定义（`baiduJsapiV4Provider()` → 官方 `@baidumap/jsapi-loader`） | `BMapProviderLike` | - | - | - |
-| client            | 已创建好的 `BMapClient`（最高优先级）            | `BMapClient`                                                            | -      | -                      | -                                  |
-| definition        | 完整 Client 定义（覆盖 provider/ak 解析）        | `CreateBMapClientOptions`                                               | -      | -                      | -                                  |
-| keepAliveBehavior | KeepAlive 下的行为：`suspend` 不销毁地图（激活后自动 `checkResize`），`dispose` 则销毁 | `'suspend' \| 'dispose'` | - | `'suspend'` | - |
-| minZoom           | 地图允许展示的最小级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `3` | - |
-| maxZoom           | 地图允许展示的最大级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `21` | - |
-| plugins           | 需要注册的插件（内置：`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，一律 optional；未知名字发 `plugin-error`） | `string[]` | - | - | - |
-
-::: warning 已删除的 props（#165 Class 5）
-`backgroundColor` / `restrictCenter` / `noAnimation` 三个 prop 已**删除**（此前是「声明了却读也不读」
-的假支持——官方 `MapOptions` 没有对应构造项）。替代路径：
+|  | 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| 静态 | ak | 百度地图 [ak](../guide/quick-start#申请-ak-密钥) | `string` | - | - |
+| 静态 | apiUrl | 自建地图 api 资源地址（默认路径会显式报 `BMAP_INVALID_ARGUMENT`，见下方说明；请改用 `customScriptV4Provider`） | `string` | - | - |
+| 静态 | provider | 自定义 SDK 加载器；不传时走 `app.use` 的默认定义（`baiduJsapiV4Provider()` → 官方 `@baidumap/jsapi-loader`） | `BMapProviderLike` | - | - |
+| 静态 | client | 已创建好的 `BMapClient`（最高优先级） | `BMapClient` | - | - |
+| 静态 | definition | 完整 Client 定义（覆盖 provider/ak 解析） | `CreateBMapClientOptions` | - | - |
+| 静态 | keepAliveBehavior | KeepAlive 下的行为：`suspend` 不销毁地图（激活后自动 `checkResize`），`dispose` 则销毁 | `'suspend' \| 'dispose'` | - | `'suspend'` |
+| 构造期 | minZoom | 地图允许展示的最小级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `3` |
+| 构造期 | maxZoom | 地图允许展示的最大级别（官方声明取值范围 `[3, 21]`，越界值**显式报错** `BMAP_INVALID_ARGUMENT`） | `number` | `3-21` | `21` |
+| 静态 | plugins | 需要注册的插件（内置：`TrackAnimation` / `Mapvgl` / `DrawingManager` / `GeoUtils`，一律 optional；未知名字发 `plugin-error`） | `string[]` | - | - |
+::: warning 已删除的 props
+`backgroundColor` / `restrictCenter` / `noAnimation` 三个 prop **已删除**（官方 `MapOptions`
+没有对应构造项，留着就是「声明了却读也不读」的假支持）。替代路径：
 
 - **地图背景**：改用**容器样式**（`background-color`）或官方 `displayOptions`；
 - **限制中心 / 范围限制**：官方能力是 `restrictBounds(bounds)`（收 `Bounds`，不是布尔）。
@@ -180,8 +176,7 @@ map/theme2
 - `plugins` 里的名字必须是**内置**的四个之一。**名字不认识时该插件明确失败**：发 `plugin-error`
   （`code: 'BMAP_PLUGIN_UNKNOWN'`），地图与同一列表里其它插件不受影响。注意它**不会**在注册表里留下
   记录，所以 `getStatus(name)` / `inspect(name)` 是 `undefined`，而不是 `'error'`。此前未知名字会被
-  静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`（见
-  [ADR 2026-09-14 插件 Catalog 与作用域](/adr/2026-09-14-plugin-catalog-scope-scheduling)）；
+  静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`）；
 - 内置插件都是**文档级（`global`）资源**：同页面多张地图**共享同一次加载**（只插一份脚本），
   并且**地图卸载不会释放它**（上游没有卸载入口）。`bmap-vue/plugins` 的
   `disposeDefaultPluginHost()` 只能清掉**宿主缓存的资源与在飞的等待**，它**不卸载**第三方脚本、
@@ -193,55 +188,86 @@ map/theme2
 
 ## 动态组件 Props
 
-| 属性                   | 说明                                                                                                                                                                           | 类型                                  | 默认值            | 版本                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ----------------- | ---------------------------------- |
-| width                  | 地图显示宽度                                                                                                                                                                   | `string / number`                     | `100%`            | <Badge type="tip" text="^1.0.1" /> |
-| height                 | 地图显示高度                                                                                                                                                                   | `string / number`                     | `550px`           | <Badge type="tip" text="^1.0.1" /> |
-| center                 | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） | - |
-| defaultCenter          | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态 | `string / {lng: number, lat: number}` | - | <Badge type="tip" text="^1.0.0" /> |
-| heading                | 地图旋转角度（**受控**，环绕角） | `number`                              | -（缺省时用 `0`）     | - |
-| defaultHeading         | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| tilt                   | 地图倾斜角度（**受控**） | `number`                              | -（缺省时用 `0`） | - |
-| defaultTilt            | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| mapType                | 地图类型 [mapType](#地图类型)                                                                                                                                                  | `string`                              | `BMAP_NORMAL_MAP` | -                                  |
-| zoom                   | 地图缩放级别（**受控**） | `number`                              | -（缺省时用 `14`） | - |
-| defaultZoom            | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | <Badge type="tip" text="^1.0.0" /> |
-| displayOptions         | 自定义地图属性 [详见](#displayoptions)                                                                                                                                         | -                                     | -                 | -                                  |
-| mapStyleId             | 个性化地图样式 ID [详见](#个性化地图)                                                                                                                                          | `string`                              | -                 | -                                  |
-| mapStyleJson           | 个性化地图样式 Json [详见](#个性化地图)                                                                                                                                        | `{featureType: string...}[]`          | -                 | -                                  |
-| enableTraffic          | ~~是否启用交通路况图层~~（4.0 已不提供该选项，请改用 `TrafficLayer`，见「[图层总览](./layer/index.md)」）                                                                                                                                                           | `boolean`                             | `false`           | -                                  |
-| enableDragging         | 启用地图拖拽                                                                                                                                                                   | `boolean`                             | `true`            | -                                  |
-| enableInertialDragging | 启用地图惯性拖拽                                                                                                                                                               | `boolean`                             | `true`            | -                                  |
-| enableWheelZoom        | 允许地图可被鼠标滚轮缩放（官方 `MapOptions.enableWheelZoom`；官方默认 `true`，本库默认 `false` 是**有意**的——见下方注）                                                                    | `boolean`                             | `false`           | -                                  |
-| enableContinuousZoom   | 开启双击平滑缩放效果                                                                                                                                                           | `boolean`                             | `true`            | -                                  |
-| fixCenterWhenResize    | 容器尺寸变化时保持地图中心点不变（官方 `MapOptions.fixCenterWhenResize`）                                                                                                       | `boolean`                             | `true`            | -                                  |
-| enableDblclickZoom     | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`）                                                                          | `boolean`                             | `false`           | -                                  |
-| enableKeyboard         | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean`                             | `true`            | -                                  |
-| enablePinchZoom        | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`）                                                                                                                            | `boolean`                             | `true`            | -                                  |
-| enableAutoResize       | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | <Badge type="tip" text="^1.0.0" /> |
-| loadingBgColor         | 加载背景图颜色                                                                                                                                                                 | `string`                              | `#f1f1f1`         | <Badge type="tip" text="^2.1.0" /> |
+「静态」= 只在创建时读一次；「构造期」= 建图那一刻作为官方 `MapOptions` 键下发；**「就地更新」** = 变化后经官方**实例方法**立刻落一次，不必重建地图。
 
+|  | 属性 | 说明 | 类型 | 默认值 | 落地方式 |
+| --- | --- | --- | --- | --- | --- |
+| 就地更新 | width | 地图显示宽度 | `string / number` | `100%` | 容器样式 |
+| 就地更新 | height | 地图显示高度 | `string / number` | `550px` | 容器样式 |
+| 就地更新 | loadingBgColor | 加载背景图颜色 | `string` | `#f1f1f1` | 容器样式 |
+| 构造期 + 受控 | center | 地图中心点（**受控**，见下文「受控 / 非受控视野」）：可使用城市名，如：北京市；也可以使用对象如 `{lng: 121.424333, lat: 31.228604}` 表示经纬度。与 `v-model:center` 配对，用户拖拽后回写具体坐标。 | `string / {lng: number, lat: number}` | -（缺省时用 `{ lng: 116.403901, lat: 39.915185 }`） | 首次 `centerAndZoom`，之后 `setCenter` |
+| 构造期 + 受控 | zoom | 地图缩放级别（**受控**） | `number` | -（缺省时用 `14`） | 首次 `centerAndZoom`，之后 `setZoom` |
+| 构造期 + 受控 | heading | 地图旋转角度（**受控**，环绕角） | `number` | -（缺省时用 `0`） | 首次 `setHeading`，之后 `setHeading` |
+| 构造期 + 受控 | tilt | 地图倾斜角度（**受控**） | `number` | -（缺省时用 `0`） | 首次 `setTilt`，之后 `setTilt` |
+| 仅首次 | defaultCenter | 非受控中心点**初值**：只在首次创建视野时生效，之后变化不覆盖当前状态（会告警一次） | `string / {lng: number, lat: number}` | - | 首次视野 |
+| 仅首次 | defaultZoom | 非受控缩放级别初值：只在首次创建视野时生效 | `number` | - | 首次视野 |
+| 仅首次 | defaultHeading | 非受控旋转角初值：只在首次创建视野时生效 | `number` | - | 首次视野 |
+| 仅首次 | defaultTilt | 非受控倾斜角初值：只在首次创建视野时生效 | `number` | - | 首次视野 |
+| 就地更新 | mapType | 地图类型 [mapType](#地图类型) | `BMAP_NORMAL_MAP \| BMAP_SATELLITE_MAP \| BMAP_HYBRID_MAP \| BMAP_EARTH_MAP \| BMAP_NONE_MAP` | `BMAP_NORMAL_MAP` | `setMapType` |
+| 构造期 | displayOptions | 自定义地图属性 [详见](#displayoptions)。**仅建图时下发一次**，之后改它不会生效（官方有 `setDisplayOptions()`，本组件面未接） | `Record<string, unknown>` | - | 官方 `MapOptions.displayOptions` |
+| 就地更新 | mapStyleId | 个性化地图样式 ID [详见](#个性化地图)。与 `mapStyleJson` **互斥**，同时给会显式报错 | `string` | - | `setMapStyle` |
+| 就地更新 | mapStyleJson | 个性化地图样式 Json（**数组**，对齐官方 `styleJson?: object[]`）[详见](#个性化地图) | `Record<string, unknown>[]` | - | `setMapStyle` |
+| 构造期 | preserveDrawingBuffer | 建图时保留绘图缓冲。它是 `getScreenshot()` 能拿到真实画面的**前提**，且**只在建图期生效、事后补不上**。默认**不开启**（常驻一块画布内存是库不该替使用者做的取舍）。⚠️ 地球模式不支持截图 | `boolean` | -（默认不传该键） | 建图选项（经索引签名原样下发） |
+| 构造期 | enableDragging | 启用地图拖拽 | `boolean` | `true` | 建图后经 `enableDragging()` / `disableDragging()` |
+| 构造期 | enableInertialDragging | 启用地图惯性拖拽（官方实例方法名同名） | `boolean` | -（默认不传，交给 SDK 自己的默认） | 建图后经 `enableInertialDragging()` / `disableInertialDragging()` |
+| 构造期 | enableWheelZoom | 允许地图可被鼠标滚轮缩放（官方 `MapOptions.enableWheelZoom`；官方默认 `true`，本库默认 `false` 是**有意**的——见下方注） | `boolean` | `false` | 建图后经 `enableScrollWheelZoom()` / `disableScrollWheelZoom()` |
+| 构造期 | enableContinuousZoom | 开启双击平滑缩放效果（官方只有同名**实例方法**，没有 `MapOptions` 构造键） | `boolean` | -（默认不传，交给 SDK 自己的默认） | 建图后经 `enableContinuousZoom()` / `disableContinuousZoom()` |
+| 构造期 | fixCenterWhenResize | 容器尺寸变化时保持地图中心点不变（官方 `MapOptions.fixCenterWhenResize`，官方默认 `false`） | `boolean` | -（不传 = 官方默认 `false`） | 建图后经 `enableResizeOnCenter()` / `disableResizeOnCenter()` |
+| 构造期 | enableDblclickZoom | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableDoubleClickZoom()` / `disableDoubleClickZoom()` |
+| 构造期 | enableKeyboard | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean` | -（不传 = 官方默认 `false`） | 建图后经 `enableKeyboard()` / `disableKeyboard()` |
+| 构造期 | enablePinchZoom | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enablePinchToZoom()` / `disablePinchToZoom()` |
+| 就地更新 | enableAutoResize | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | 库内尺寸观察器 → `checkResize()` |
+| 废弃（无效果） | enableTraffic | **不生效**。4.0 的路况收敛成独立图层，`<Map>` 自身没有这个开关——留着它只是为了让旧代码不报类型错。路况请用 `<TrafficLayer>`，见[图层总览](./layer/index.md) | `boolean` | `false` | 无（静默空操作） |
 ::: tip 四个交互 prop 的名字为什么和官方「实例方法」不一样
 官方对**同一个概念给了两个名字**，这是上游事实而不是笔误：
 
-| 概念         | 官方**构造期**键（`MapOptions`） | 官方**实例方法**（`BMap.Map`）  |
-| ------------ | -------------------------------- | ------------------------------ |
-| 滚轮 / 触摸板缩放 | `enableWheelZoom`                 | `enableScrollWheelZoom()`      |
-| 双击缩放     | `enableDblclickZoom`             | `enableDoubleClickZoom()`      |
-| 手势缩放     | `enablePinchZoom`                | `enablePinchToZoom()`          |
-| resize 保持中心 | `fixCenterWhenResize`           | `enableResizeOnCenter()`       |
+| 概念 | 官方**构造期**键（`MapOptions`） | 官方**实例方法**（`BMap.Map`） |
+| --- | --- | --- |
+| 滚轮 / 触摸板缩放 | `enableWheelZoom` | `enableScrollWheelZoom()` |
+| 双击缩放 | `enableDblclickZoom` | `enableDoubleClickZoom()` |
+| 手势缩放 | `enablePinchZoom` | `enablePinchToZoom()` |
+| resize 保持中心 | `fixCenterWhenResize` | `enableResizeOnCenter()` |
 
-`<Map>` 的这些 prop 表达的是**构造期**语义，因此取左列。#165 之前本库用的是右列那组
-**方法名**当 prop 名（`enableResizeOnCenter` 那一项还额外叠了一层 v2 沿用名），
-现已统一到官方的构造期拼写。**落地机制不变**：仍然是建图后按右列的实例方法落一次
-（`driver/jsapi-v4/map.ts` 的 `INTERACTION_METHODS`），不改成构造选项。
+`<Map>` 的这些 prop 表达的是**构造期**语义，因此取左列。**落地机制不变**：仍然是建图后
+按右列的实例方法落一次，而不是改成构造选项——所以这些开关在 `ready` 之前的那一小段时间里
+不生效（官方实例方法只能在拿到实例后调）。
+
+另有两个 prop 官方**只有实例方法、没有构造键**，所以本库的 prop 名与实例方法同名：
+`enableInertialDragging`（惯性拖拽）与 `enableContinuousZoom`（双击平滑缩放）。
+:::
+
+::: tip 六个交互 prop「不传」= 不表态，用官方自己的默认
+八个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
+`enableWheelZoom: false`（滚轮那条见下方单独的告警框）。
+
+其余**六个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
+`enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom`）在 `withDefaults` 里**显式钉成
+`undefined`**——这不是偷懒，而是必需的：Vue 会把缺省 `Boolean` prop 的「没传」强转成
+`false`，若不显式钉住，「不传」与「传 `false`」就分不开，组件会在**每次建图**时把这六项
+逐个调成 `disable*()`，于是官方 `@default true` 的**双指缩放与双击缩放被静默关掉**
+（这是修复前的真实行为，见 issue #179）。
+
+钉成 `undefined` 之后，「没传」真的等于「没传」，组件**不下发任何调用**，最终生效的是
+官方 `core/MapOptions.d.ts` 自己声明的 `@default`：
+
+| prop | 官方 `@default` | 不传时的实际效果 |
+| --- | --- | --- |
+| `enableDblclickZoom` | `true` | 双击缩放**开** |
+| `enablePinchZoom` | `true` | 双指缩放**开** |
+| `enableKeyboard` | `false` | 键盘操作关 |
+| `fixCenterWhenResize` | `false` | resize 不保持中心 |
+| `enableInertialDragging` | 未标注 | 按 SDK 默认 |
+| `enableContinuousZoom` | 官方无构造键 | 按 SDK 默认 |
+
+⚠️ **行为变更（1.0.0-rc 期间）**：修复之前这六项**不传时一律是关**。升级之后
+`enableDblclickZoom` 与 `enablePinchZoom` 会**变回开**。依赖旧行为请显式写
+`:enable-dblclick-zoom="false"` / `:enable-pinch-zoom="false"`。
 :::
 
 ::: warning `enableWheelZoom` 的默认值与官方不同
 官方 `MapOptions.enableWheelZoom` 隐式默认是 **`true`**，本库默认**关闭**，并把这个
-`false` **显式写进**构造 options 固定住（`driver/jsapi-v4/map.ts` 的 `LIBRARY_MAP_DEFAULTS`）——
-否则「同一个组件换引擎后行为会变」。这是**有意**的决策（避免页面滚动时误缩放），
-**不是**本次改名的一部分：改的只是 prop 名，语义与默认值都不动。
+`false` **显式固定**在库默认里——否则「同一个组件换引擎后行为会变」。这是**有意**的决策
+（避免页面滚动时误缩放）。
 :::
 
 ## 容器尺寸、自动重设与可见性策略
@@ -393,7 +419,7 @@ const tilt = ref(0)
 需要 `moving` / `zooming` 这类中途事件时用 map 事件（`@moving` / `@zooming`）或
 [`useMapStatus`](../hooks/useMapStatus) 的 `moving` / `zooming` 标志——它们与回写是两条独立的订阅。
 
-### 三条规则（发布后不易修改，改前请先读 ADR）
+### 三条规则（发布后不易修改）
 
 1. **`default*` 只在首次解析时读一次。** 之后它的变化不会覆盖当前状态——否则「用户拖到 A，
    父级重算 default 得到 B」会把用户操作静默吃掉。**任何**后续写入（值改变、从无到有、从有到无）
@@ -459,8 +485,7 @@ const tilt = ref(0)
 ### 相等判定与浮点抖动
 
 受控写入前会**读回地图当前值**再做容差判等，因此「相同值不同引用」「父级回写同一值」
-「SDK 读回带 ±1e-9 抖动」都不会产生多余的 SDK 命令。容差见
-`packages/bmap-vue/src/core/utils/equality.ts`：
+「SDK 读回带 ±1e-9 抖动」都不会产生多余的 SDK 命令。容差：
 
 | 字段 | 判定 | 容差 |
 | --- | --- | --- |
@@ -500,8 +525,7 @@ const tilt = ref(0)
 ### KeepAlive
 
 地图组件在 `deactivated` 时默认**不销毁** WebGL 地图（`keepAliveBehavior="suspend"`），仅暂停高频计算；
-`activated` 时自动恢复并**补偿一次** `checkResize()`（只补偿一次：组件层不再重复下发，见
-[ADR](/adr/2026-09-14-map-handle-container-and-visibility) 决策 5）。
+`activated` 时自动恢复并**补偿一次** `checkResize()`（只补偿一次：组件层不再重复下发）。
 
 设为 `"dispose"` 时，`deactivated` 会**销毁地图并一并释放容器观察器**（Resize /
 Intersection、页面前后台与减少动画偏好的监听都挂在地图实例的资源作用域上）—— 组件在
@@ -537,46 +561,62 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 ## 地图类型
 
 `mapType` 接受官方 `BMap.MapTypeId` 的**五个**内置常量名（取值域在类型层是封闭联合，
-拼错的名字编译期就会被拒）。逐条依据见 `@baidumap/jsapi-v4-types@4.0.5` 的
-`map-type/MapTypeId.d.ts`。
+拼错的名字编译期就会被拒）。
 
-| 值                  | 描述               | 运行期                |
-| ------------------- | ------------------ | --------------------- |
-| BMAP_NORMAL_MAP     | 标准地图           | ✅                    |
-| BMAP_SATELLITE_MAP  | 普通卫星地图       | ✅                    |
-| BMAP_HYBRID_MAP     | 卫星与路网混合地图 | ✅                    |
-| BMAP_EARTH_MAP      | 地球模式           | ✅                    |
-| BMAP_NONE_MAP       | 无底图模式         | ⚠️ 显式失败（见下）    |
+⚠️ **类型层合法 ≠ 运行期可用。** 官方 `MapTypeId.d.ts` 逐个声明了五个静态成员，但真实 4.0
+运行时的 `BMap.MapTypeId` 上**只有三个**（且字面量与声明名不同：`NORMAL` / `EARTH` /
+`SATELLITE`）。本库**按运行时名做主候选、声明名留作后备**，都取不到时**显式失败**——
+绝不静默换一张图给你。
+
+| 值 | 描述 | 运行期 |
+| --- | --- | --- |
+| `BMAP_NORMAL_MAP` | 标准地图 | ✅ |
+| `BMAP_SATELLITE_MAP` | 普通卫星地图 | ✅ |
+| `BMAP_EARTH_MAP` | 地球模式 | ✅ |
+| `BMAP_HYBRID_MAP` | 卫星与路网混合地图 | ❌ 显式失败（见下） |
+| `BMAP_NONE_MAP` | 无底图模式 | ❌ 显式失败（见下） |
 
 ::: warning 注意
 地球模式 (BMAP_EARTH_MAP) 下能支持的地图交互操作有限，如您需要卫星地图支持和标准地图 (BMAP_NORMAL_MAP) 一致的交互体验，请使用普通卫星图模式 (BMAP_SATELLITE_MAP)
 :::
 
-::: danger BMAP_NONE_MAP 显式失败
-`BMAP_NONE_MAP`（无底图模式）在官方类型包里**声明**了，但真实 4.0 运行时的
-`BMap.MapTypeId` 上**没有**对应常量——与「`BMAP_*` 那组常量挂在全局而不是 `MapTypeId` 上」
-是同一类上游出入。本库**不猜**「无底图」该画成什么，因此传它会**显式报错**，
-而不是静默画成普通图。
+::: danger 两个取值运行期显式失败
+`BMAP_HYBRID_MAP` 与 `BMAP_NONE_MAP` 在官方类型包里**声明**了，但真实 4.0 运行时的
+`BMap.MapTypeId` 上**没有**对应常量（与「`BMAP_*` 那组常量挂在全局而不是 `MapTypeId` 上」
+是同一类上游出入）。本库**不猜**它们该画成什么，因此传它们会以
+`BMAP_SDK_CALL_FAILED` **显式报错**，而不是静默画成普通图——要混合底图请走
+`mapStyleId` / `mapStyleJson` 的个性化样式。
 
 同一条口径也适用于拼错的常量名：TypeScript 消费方编译期就被拒；JS 消费方 / `as` 断言绕过
-类型层时会拿到 `BMAP_INVALID_ARGUMENT`——**显式失败，绝不静默降级**。#165 之前
-`BMAP_HYBRID_MAP` 会被静默降级成普通图（要混合图拿到普通图且无任何提示），那是已修掉的
-静默错值 bug。
+类型层时会拿到 `BMAP_INVALID_ARGUMENT`——**显式失败，绝不静默降级**。本库不把
+`BMAP_HYBRID_MAP` 静默降级成普通图（要混合图拿到普通图且无任何提示是最糟的一种错）。
 :::
 
 ## displayOptions
 
-| 属性      | 说明                                              | 类型               | 默认值 |
-| --------- | ------------------------------------------------- | ------------------ | ------ |
-| poi       | 是否显示地图上的地点标识                          | `boolean`          | `true` |
-| indoor    | 是否显示室内图                                    | `boolean`          | `true` |
-| poiText   | 是否显示地图上的地点标识文字                      | `boolean`          | `true` |
-| poiIcon   | 是否显示地图上的地点标识图标                      | `boolean`          | `true` |
-| overlay   | 是否显示覆盖物                                    | `boolean`          | `true` |
-| layer     | 是否显示叠加图层，地球模式暂不支持                | `boolean`          | `true` |
-| building  | 是否显示 3D 建筑物（仅支持 WebGL 方式渲染的地图） | `boolean`          | `true` |
-| street    | 是否显示路网（只对卫星图和地球模式有效）          | `boolean`          | `true` |
-| skyColors | 配置天空的颜色，数组中首个元素表示地面颜色，第二个元素表示天空颜色。从而形成渐变，支持只传入一个元素  | `[string, string]` | -      |
+官方 `BMap.DisplayOptions` 的**全部**成员。默认值一列是官方声明的 `@default`。
+
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| poi | 是否显示地图上的地点标识。`poi` 为 `true` 时 `poiText` / `poiIcon` 才生效；为 `false` 时另外两个不再生效 | `boolean` | `true` |
+| poiText | 是否显示地图上的地点标识文字 | `boolean` | `true` |
+| poiIcon | 是否显示地图上的地点标识图标 | `boolean` | `true` |
+| overlay | 是否显示覆盖物 | `boolean` | `true` |
+| layer | 是否显示叠加图层，地球模式暂不支持 | `boolean` | `true` |
+| building | 是否显示 3D 建筑物（仅支持 WebGL 方式渲染的地图） | `boolean` | `true` |
+| indoor | 是否显示室内图（仅支持 WebGL 方式渲染的地图） | `boolean` | **`false`** |
+| street | 是否显示路网（只对卫星图和地球模式有效） | `boolean` | `true` |
+| isFlat | 是否将 3D 元素以平面形式展示 | `boolean` | `false` |
+| labelMargin | 文字标注间距 | `number` | `0` |
+| skyColors | 配置天空的颜色，数组中首个元素表示地面颜色，第二个元素表示天空颜色。从而形成渐变，支持只传入一个元素 | `string[]` | `['rgba(226, 237, 248, 0)', 'rgba(186, 211, 252, 1)']` |
+
+```vue
+<Map ak="百度地图ak" :display-options="{ poiIcon: false, building: false }" />
+```
+
+⚠️ 本 prop 是**构造期**选项：只在建图那一刻下发一次，**之后改它不会生效**。官方有
+`Map#setDisplayOptions()` 可就地更新，本库组件面**没有**接这条命令——需要运行时切换
+显示元素时，请经逃生口自行调用，或改用受控的 `v-if` 重建地图。
 
 ## 组件方法
 
@@ -594,12 +634,30 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `getTilt()` / `setTilt(tilt, options?)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number, options?: ViewCommandOptions) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
-| `panTo(point, options?)` / `panBy(pixel)` | 平移到点 / 按像素平移。`panTo` 的 `options` 额外收 `duration`（动画时长，毫秒）。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（#165 Class 2 判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }, options?: PanToOptions) => void` / `(pixel: { x, y }) => void` |
+| `getViewport(view, options?)` | **只读**算「把这些点 / 这个范围装进视野应该是什么中心与级别」，**不改**当前视野。`view` 收点数组或 `Bounds`；`options` 是官方 `ViewportOptions`（`enableAnimation` / `margins` / `zoomFactor` / `callback`） | `(view: readonly Point[] \| Bounds, options?: ViewportOptions) => Viewport \| null` |
+| `getScreenshot()` | 取当前画布截图（Data URL 字符串）。⚠️ 官方两条限制本库不隐瞒：**地球模式不支持**；建图时**必须**带 `preserveDrawingBuffer: true`，否则拿到的是**空画布**。该 prop 是**建图期**选项，事后补不上 | `() => string \| null` |
+| `panTo(point, options?)` / `panBy(pixel)` | 平移到点 / 按像素平移。`panTo` 的 `options` 额外收 `duration`（动画时长，毫秒）。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }, options?: PanToOptions) => void` / `(pixel: { x, y }) => void` |
+| `flyTo(center, zoom, options?)` | 平滑**飞行**到目标中心与级别（官方 `Map#flyTo`）。与 `panTo` 是**两个不同成员**：`flyTo` 带一段飞行动画且会改级别，`panTo` 只挪中心点 | `(center: { lng, lat }, zoom: number, options?: FlyToOptions) => void` |
 | `fitBounds(bounds)` | 按范围适配视野 | `(bounds: Bounds) => void` |
 | `supports(capability)` | 该能力在当前引擎上是否可用（读不到结论时为 `false`；Map 作用域的能力要等地图建好之后才可靠 —— 需要确定性时先 `await whenReady()`） | `(capability: Capability) => boolean` |
 
 **未就绪时的契约**：读命令给 `null`、写命令是**空操作**（不排队、也不会在就绪后重放）。
 需要确定性时先 `await whenReady()`。SDK 调用失败会照常抛出（不降级成 `null`）。
+
+::: tip `preserveDrawingBuffer` 与 `getScreenshot()` 是一对
+想在业务里随时截图，**必须建图时就开着**它：
+
+```vue
+<Map ak="百度地图ak" :preserve-drawing-buffer="true" ref="mapRef" />
+```
+
+```ts
+const url = mapRef.value?.getScreenshot() // string | null
+```
+
+本库**默认不开启**：常驻一块额外画布内存是库不该替使用者做的取舍。官方 React 参考
+也没有这个 prop，因此它是**显式 opt-in**，不是「沿用官方惯例」。
+:::
 
 ### 视野命令的 `options`：等一条命令真正落定
 
@@ -640,10 +698,8 @@ map.value.setZoom(14, {
   取，本库不会去读一次当前中心再填进去。
 
 > ⚠️ **`panTo` 的动画默认：声明与实测不一致。** 官方声明 `noAnimation` 默认 `false`（=有动画），
-> 但 2026-09-26 live 实测（`requestAnimationFrame` 逐帧采 1.5s）读数是
-> `distinctSampleCount = 1`、`midFlightSamples = 0` —— 无头 SwiftShader 下**直接跳变到位**。
-> 本库不传 `options` 即沿用上游默认，**没有**额外的 prop / 命令不一致要修
-> （`docs/zh-CN/contributing/165-audit-B-C-D-F.md` 裁决 G）。
+> 但逐帧实测读数是「直接跳变到位」、没有中间帧。本库不传 `options` 即沿用上游默认，
+> 因此**没有**额外的 prop / 命令不一致需要处理；需要确定的落定时机请传 `callback`。
 
 ### 容器 / 生命周期 / 暂停
 
@@ -687,7 +743,7 @@ map.value.setZoom(14, {
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `status` | `MapStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`（#44 冻结时删掉了带 `"loading"` 别名的旧名 `MapRuntimeStatus`，公共面只剩 `MapStatus`，所以这里不再有「兼容旧值」一说） |
+| `status` | `MapStatus` | 运行时状态：`idle` / `waiting-client` / `creating` / `initializing` / `ready` / `error` / `disposing` / `disposed`（带 `"loading"` 别名的旧名 `MapRuntimeStatus` 已删除，公共面只剩 `MapStatus`，所以这里不再有「兼容旧值」一说） |
 | `error` | `unknown` | 结构化错误（`status === 'error'` 时非空；通常是 `BMapError`） |
 | `containerReady` | `boolean` | 容器门禁是否放行（区分「容器还没展开」与「SDK 在加载」） |
 | `retry` | `() => Promise<MapReadyContext>` | 重试加载（失败态下重新走一遍加载与建图；容器收起时保持 pending，容器恢复后由门禁接着执行） |

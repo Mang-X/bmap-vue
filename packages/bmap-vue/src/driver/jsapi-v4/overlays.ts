@@ -36,7 +36,7 @@ import {
   resolveMarkerIconDescriptor,
 } from "../../core/icons/markerIcon";
 import type { CapabilityRegistry } from "../capability/registry";
-import type { Bounds, GeometryDriver, Pixel, Point } from "../types/geometry";
+import type { Bounds, GeometryDriver, Pixel, Point, Size } from "../types/geometry";
 import type {
   InfoWindowHandle,
   MapHandle,
@@ -209,11 +209,15 @@ export function createJsapiV4OverlayDriver(
           "内置名清单见 core/icons/markerIcon 的 BUILTIN_MARKER_ICON_NAMES",
       );
     }
-    if (typeof icon !== "string" && icon?.printImageUrl) {
-      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口
+    if (typeof icon !== "string" && (icon as { printImageUrl?: unknown } | null)?.printImageUrl) {
+      // 4.0.5 的 IconOptions 只声明 anchor / imageOffset / imageSize，没有打印图入口。
+      //
+      // ⚠️ `printImageUrl` 已从 `MarkerIconInput` 的**类型面**删除（issue #177），因此 TypeScript
+      // 不会让任何合法调用方走到这里——只有 JS / `any` 调用方仍能传进来。告警**保留**：
+      // 类型面之外的真实运行仍然可能带着这个键，诊断丢掉它就退化成静默丢弃。
       warnOnce(
         "icon:print-image-url",
-        "OverlayDriver: MarkerIconInput.printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃",
+        "OverlayDriver: 图标描述里的 printImageUrl 在 JSAPI 4.0 的 IconOptions 里没有对应项（4.0.5 只声明 anchor / imageOffset / imageSize），已丢弃；该字段已从 bmap-vue 的图标类型中移除",
       );
     }
   };
@@ -350,6 +354,10 @@ export function createJsapiV4OverlayDriver(
       case "size":
         // 项目侧偏移是 Pixel（`{x, y}`），v4 的 offset / anchor 是 Size（`{width, height}`）
         return rawSize(value as Pixel);
+      case "size-shape":
+        // 同 `size` 的归一化，但组件侧的形状**就是** Size（`{width, height}`）——`GroundPoint`
+        // 的 `size` / `anchor` / `offset` 在官方 `GroundPointOptions` 里声明为 `Size`。
+        return geometry.toRawSize(value as Size);
       case "icon":
         return iconFor(value as MarkerIconInput);
       case "marker-label":
@@ -451,8 +459,20 @@ export function createJsapiV4OverlayDriver(
     sdkCall(setter, () => callRequired(raw, setter, normalized, ...(spec.valueArgs ?? [])));
   };
 
-  /** 位置类更新用的语义键：圆是 `center`（setCenter），其余是 `position`。 */
-  const POSITION_KEY: Partial<Record<OverlayKind, string>> = { circle: "center" };
+  /**
+   * 位置类更新用的语义键。
+   *
+   * - 圆是 `center`（`Circle#setCenter`）——描述符里的键就叫 `center`；
+   * - **贴地点是 `point`**——官方 `GroundPoint.d.ts:29` 的位置入口是 `setPoint`，
+   *   描述符里的键因此是 `point` 而**不是**通用的 `position`（后者会落到 `setPosition`，
+   *   官方 `GroundPoint` 上**没有**这个方法）。这是与 `Marker`（`setPosition`）、
+   *   `marker3d`（同样是 `setPoint`）各自不同的入口，必须逐类登记，不能默认。
+   * - 其余各类都是 `position`。
+   */
+  const POSITION_KEY: Partial<Record<OverlayKind, string>> = {
+    circle: "center",
+    "ground-point": "point",
+  };
 
   /* ------------------------------------------------- 读回 / 命令面（#165 Class 3）
    *
@@ -701,6 +721,18 @@ export function createJsapiV4OverlayDriver(
         () => new (ctorFor("ground-overlay"))(geometry.toRawBounds(bounds), opts),
       );
       return adopt("ground-overlay", raw);
+    },
+
+    createGroundPoint(position, options: Record<string, unknown> = {}) {
+      // `GroundPoint` 在 4.0.5 **有完整类声明**（`overlay/GroundPoint.d.ts:5`
+      // `class GroundPoint extends GroundOverlay`），与 `Marker3D` / `MapMask` 那种
+      // 「只在文档出现、类型包无声明」的情况不同 ⇒ 走严格命名空间查找 `ctorFor`。
+      const opts = projectOptions(overlayDescriptor("ground-point"), options);
+      const raw = sdkCall(
+        "GroundPoint",
+        () => new (ctorFor("ground-point"))(geometry.toRawPoint(position), opts),
+      );
+      return adopt("ground-point", raw);
     },
 
     createCustomOverlay(position, render, options: CustomOverlayOptions = {}) {

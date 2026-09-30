@@ -1,6 +1,7 @@
-# WMTSLayer WMTS 图层 <Badge type="tip" text="^1.0.0" />
+# WMTSLayer WMTS 图层
 
-加载 WMTS 标准瓦片服务：官方内部拼接 `Service` / `Request` / `Version` / `Format` / `TileMatrixSet` 等参数，调用方只需服务地址与图层参数。
+加载 WMTS 标准瓦片服务：官方内部拼接 `Service` / `Request` / `Version` / `Format` / `TileMatrixSet`
+等参数，调用方只需服务地址与图层参数。
 
 ```ts
 import { WMTSLayer } from 'bmap-vue'
@@ -33,15 +34,19 @@ layer/wmtsLayer
 | url | 服务地址（WMTS 端点） | `string` | - |
 | params | WMTS 请求参数，至少要给 `Layer` / `TileMatrixSet` | `Record<string, string>` | - |
 | extent | 数据四至范围 | `number[]` | - |
-| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | `false` |
+| extentCRSIsWGS84 | `extent` 是否为 EPSG:4326 | `boolean` | 官方默认 `false` |
 | transform | 源 / 目标坐标系映射 | `{ source?, target? }` | - |
 | xTemplate / yTemplate / zTemplate | 自建瓦片矩阵映射 | `(x, y, z) => number \| string` | - |
 | reproject / reprojectSourceCRS | 客户端投影变换 | `boolean \| string` | SDK 默认 |
-| png8 / dataType / height | 请求格式与高度 | `boolean \| string \| number` | SDK 默认 |
+| png8 | 是否请求 8 位 PNG | `boolean` | 官方默认 `false` |
+| dataType | 返回数据格式 | `string` | SDK 默认 |
+| height | 图层高度 | `number` | SDK 默认 |
 | boundary | 掩膜（行政区列表） | `string[]` | - |
 | retry / retryTime / cacheSize | 重试与缓存 | `boolean \| number` | SDK 默认 |
-| useThumbData / spanLevel / thumbParentDepth / thumbChildDepth | 缩略与跨级复用 | `boolean \| number` | SDK 默认 |
+| useThumbData / spanLevel | 跨级平滑切换与缩略层级跨度 | `boolean \| number` | SDK 默认 |
+| thumbParentDepth / thumbChildDepth | 缩略图深度 | `number` | SDK 默认 |
 | tileLoadFunction | 自定义瓦片加载函数 | `(tile, url) => void` | - |
+| tileLoadObserver | 瓦片加载观察面（见[图层总览的「加载诊断」](./index#加载诊断观察瓦片什么时候加载什么时候失败)） | `TileLoadObserver` | - |
 
 ## 稳定性
 
@@ -49,7 +54,9 @@ layer/wmtsLayer
 
 ## 注意
 
-`params` 的键名遵循 **WMTS 标准**（`Layer` / `Style` / `TileMatrixSet` / `Format`，首字母大写），与 WMS 的全大写**不同**；写错的表现通常是服务端 400 或空白瓦片。
+- `params` 的键名遵循 **WMTS 标准**（`Layer` / `Style` / `TileMatrixSet` / `Format`，首字母大写），与 WMS 的全大写**不同**；写错的表现通常是服务端 400 或空白瓦片。
+- `tileLoadFunction` 是**接管式**的：设了它，SDK 就不再自己加载，函数必须自己完成加载，否则
+  **瓦片不会出现**。只想在旁边观察请用 `tileLoadObserver`。
 
 ## 参考
 

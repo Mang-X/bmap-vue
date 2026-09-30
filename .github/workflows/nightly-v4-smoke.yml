@@ -2,7 +2,7 @@ name: Nightly JSAPI 4.0 Smoke
 
 # 真实 SDK 的 required smoke 只在 nightly / 手动跑：它依赖 AK、外网、LBS 服务配额与浏览器
 # WebGL，这些都不是库能控制的。PR 门禁跑的是同一份 harness 的 fixture 档（无网络、结论确定），
-# 所以「基础加载失败」不会等到 nightly 才发现（见 docs/zh-CN/contributing/v4-browser-smoke.md）。
+# 所以「基础加载失败」不会等到 nightly 才发现（见 docs/internal/v4-browser-smoke.md）。
 on:
   schedule:
     # GitHub 的 cron 是 UTC：18:00 UTC = 次日 02:00 (UTC+8)

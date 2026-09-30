@@ -200,7 +200,31 @@
 
 | Vue 名 | SDK 名 | 载荷 | 说明 |
 | --- | --- | --- | --- |
-| `click` | `click` | 坐标可缺 | 点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标） |
+| `click` | `click` | 坐标可缺 | 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） |
+| `dblclick` | `dblclick` | 坐标可缺 | 双击覆盖物时触发（同上） |
+| `rightclick` | `rightclick` | 坐标可缺 | 右键点击覆盖物时触发 |
+| `rightdblclick` | `rightdblclick` | 坐标可缺 | 右键双击覆盖物时触发 |
+| `mousedown` | `mousedown` | 坐标可缺 | 在覆盖物上按下鼠标时触发 |
+| `mouseup` | `mouseup` | 坐标可缺 | 在覆盖物上抬起鼠标时触发 |
+| `mouseover` | `mouseover` | 坐标可缺 | 鼠标移入覆盖物时触发 |
+| `mouseout` | `mouseout` | 坐标可缺 | 鼠标移出覆盖物时触发 |
+| `mousemove` | `mousemove` | 坐标可缺 | 鼠标在覆盖物上移动时触发 |
+| `remove` | `remove` | 仅底座字段 | 覆盖物被移除时触发 |
+| `lineupdate` | `lineupdate` | 仅底座字段 | 覆盖物渲染数据发生变化时触发（变化来源见 raw.action） |
+
+### `ground-point`（上游 `GroundOverlayEventMap（GroundPoint 继承 GroundOverlay，SDK 无独立的 GroundPointEventMap）`，11 个）
+
+::: tip 事件表是**继承**来的，不是另造的一张
+官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，而它继承到的
+唯一事件入口是 `GroundOverlay.addEventListener<K extends keyof GroundOverlayEventMap>`
+（`GroundOverlay.d.ts:122`）——**SDK 没有为 `GroundPoint` 声明独立的 `GroundPointEventMap`**。
+因此本表与上面的 `ground-overlay` **逐行相同**（同源，不造「名义上相同的两张表」）。
+
+:::
+
+| Vue 名 | SDK 名 | 载荷 | 说明 |
+| --- | --- | --- | --- |
+| `click` | `click` | 坐标可缺 | 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） |
 | `dblclick` | `dblclick` | 坐标可缺 | 双击覆盖物时触发（同上） |
 | `rightclick` | `rightclick` | 坐标可缺 | 右键点击覆盖物时触发 |
 | `rightdblclick` | `rightdblclick` | 坐标可缺 | 右键双击覆盖物时触发 |

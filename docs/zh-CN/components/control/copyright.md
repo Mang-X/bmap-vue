@@ -1,6 +1,6 @@
 # CopyrightControl 版权控件
 
-地图 3D 控件，可以控制地图的旋转、倾斜，默认位于地图右下角
+版权控件，可在地图上添加自定义版权信息。默认位于地图右下角。
 
 ```ts
 import { CopyrightControl } from 'bmap-vue'
@@ -22,14 +22,14 @@ control/copyRight
 
 | 属性   | 说明           | 类型                      | 可选值            | 默认值                    |
 | ------ | -------------- | ------------------------- | ----------------- | ------------------------- |
-| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_LEFT` |
-| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 83, y: 18 }`        |
+| anchor | 控件的停靠位置 | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
+| offset | 控件的偏移值   | `{x: number, y: number }` | -                 | `{ x: 18, y: 18 }`        |
 
 ## 动态组件 Props
 
-| 属性    | 说明     | 类型      | 可选值 | 默认值 | 版本                               |
-| ------- | -------- | --------- | ------ | ------ | ---------------------------------- |
-| visible | 是否显示 | `boolean` | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| ------- | -------- | --------- | ------ | ------ |
+| visible | 是否显示 | `boolean` | - | `true` |
 
 `offset` 与 `visible` 都可以动态更新。`anchor` 是**构造期项**（实例按停靠位置共享），改变它会重建控件
 并完成共享组迁移 —— 见下面的「选项的更新方式」。
@@ -59,9 +59,29 @@ control/copyRight
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
 
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
+
 ## 组件事件
 
 组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
 该组件没有对外事件。
+
+## 默认插槽
+
+版权条目写在这里，每个 `<CopyrightControl>` 贡献**一条**版权项：
+
+```vue
+<CopyrightControl>
+  <h3>© 2026 示例公司</h3>
+</CopyrightControl>
+```
+
+同 `anchor` 的多个 `<CopyrightControl>` 会自动排列、互不重叠——见页首的
+[组件示例](#组件示例)。`visible: false` 只隐藏**本组件那一条**版权项，不影响同位置的其它条目。
 

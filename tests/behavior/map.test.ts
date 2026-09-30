@@ -287,3 +287,70 @@ describe("Map：五条视野命令的 options 从 expose 透到 SDK（#171 / #16
     await settle();
   });
 });
+
+describe("Map：交互开关的「未传」不表态（#179）", () => {
+  // `syncEnableProps` 用 `!== undefined` 表达「不表态，交给 SDK 用它自己声明的默认值」。
+  // 但 Vue 会把**缺省 `Boolean` prop** 的「没传」强转成 `false`——没在 `withDefaults` 里
+  // 显式钉 `undefined`，守卫就永不命中，每个未传的开关都被逐个 `disable*()`。
+  // 官方 `core/MapOptions.d.ts` 声明 `@default true` 的 `enableDblclickZoom` /
+  // `enablePinchZoom` 因此被静默关掉：用户什么都不写，双指缩放与双击缩放就没了。
+  //
+  // 这一层断言**领域读数**（开关现在是什么状态 / 下发了多少次调用），不碰字段名以外的东西。
+  afterEach(() => harness.reset());
+
+  const mountMap = async (props: Record<string, unknown>) => {
+    const host = harness.container();
+    const wrapper = mount(
+      defineComponent({
+        setup: () => () => h(Map, { provider: harness.provider(), ...props }),
+      }),
+      { attachTo: host },
+    );
+    await settle();
+    return wrapper;
+  };
+
+  it("什么都不传：只有两个显式库默认被下发，其余六项一次都没写", async () => {
+    // 结论直接落在 harness 的领域读数上，**不**手列任何 SDK 方法名：
+    // `interactionWrites()` 的键由 `FAKE_V4_INTERACTIONS` 那份**封闭**词表归并而来
+    // （见 harness 的 `interactionNameOf`），所以「不传」时出现的键**必然且仅**是
+    // `withDefaults` 里显式给了默认值的那两项。新增第 7 项交互 prop 时这个断言自动跟上，
+    // 不需要在这里重抄第三遍名单。
+    const wrapper = await mountMap({});
+    expect(harness.interactionWrites()).toEqual({
+      // `enableDragging: true` / `enableWheelZoom: false` 是**有意**的库默认决策。
+      // ⚠️ 键是官方**实例方法名**，不是 prop 名（#165 Class 1 改的是构造期 prop，
+      // 落地走的仍是 `enableScrollWheelZoom()`）——见本文件上方那条既有注释。
+      enableDragging: 1,
+      enableScrollWheelZoom: 1,
+    });
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("「没传」时开关状态保持 SDK 自己的默认（不被逐个 disable*()）", async () => {
+    // 与上一条分工：那条数**次数**，这条读**状态**——两者一起才能区分
+    // 「没下发」与「下发了但值恰好一样」。
+    const wrapper = await mountMap({});
+    // 正证守卫：`dragging` / `scrollWheelZoom` 有显式默认值，必然在状态里出现。
+    expect(harness.interactions()).toEqual({ dragging: true, scrollWheelZoom: false });
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("显式传 false 仍会被 disable*()——「没传」与「传 false」现在分得开了", async () => {
+    const wrapper = await mountMap({ enableDblclickZoom: false, enablePinchZoom: false });
+    expect(harness.interactions()).toMatchObject({ doubleClickZoom: false, pinchToZoom: false });
+    expect(harness.interactionWrites().enableDoubleClickZoom).toBe(1);
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("显式传 true 会真的 enable*()（正证：链路确实接上了，不是「什么都没发生」）", async () => {
+    const wrapper = await mountMap({ enableDblclickZoom: true, enablePinchZoom: true });
+    expect(harness.interactions()).toMatchObject({ doubleClickZoom: true, pinchToZoom: true });
+    expect(harness.interactionWrites()).toMatchObject({ enableDoubleClickZoom: 1, enablePinchToZoom: 1 });
+    wrapper.unmount();
+    await settle();
+  });
+});

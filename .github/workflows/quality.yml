@@ -44,6 +44,13 @@ jobs:
       - name: Check API manifest
         run: node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check
 
+      # 组件总览页（docs/zh-CN/components/index.md）的手写清单与 manifest 无漂移。
+      # 上一步只保证「真值没变」，这一步保证「文档跟着真值走」——两者缺一不可：
+      # 清单页写「52 个组件」而真值是 56、且 GroundPoint / TextLayer /
+      # PolygonLayer / PolylineLayer 四个组件一个都没列，这种漂移 generate:* 抓不到。
+      - name: Check component catalog in sync with manifest
+        run: node --experimental-strip-types scripts/check-component-catalog.mts
+
       # Capability Catalog 能力矩阵无漂移
       - name: Check capability matrix
         run: node --experimental-strip-types scripts/generate-capability-matrix.mts --check
@@ -62,6 +69,30 @@ jobs:
       # docs/.vitepress/official-api-alignment.json；官方侧是 scripts/api-diff/ 快照。
       - name: Check official API alignment
         run: node --experimental-strip-types scripts/generate-api-diff.mts --check
+
+      # 已退役的发布身份不得回到**已发布**文档面（#134 身份复位 / #135 命名对齐 / #136 clean-slate / #141）。
+      # 扫 README / NOTICE / docs/**/*.md / docs/.vitepress 配置与主题 / docs/examples/**——
+      # 后者是被 :::demo 容器逐字内联进页面的（configs/plugins.ts 读 examples/*.vue），所以同样是发布面。
+      # 刻意**不含**：docs/adr/**（已接受即冻结的决策史，正要写出旧名）、CHANGELOG.md（上游继承史）、
+      # docs/.vitepress/*.json（生成物，归 generate:*:check 管）、scripts/verify-package.mts（它把旧名当拒绝表）。
+      # 合法的上游引用不误伤：官方 loader 的 `version: '3.0'` 选项、`BMap.*` 这个 JSAPI 4.0 命名空间、
+      # 官方插件命名空间 `BMapGLLib`、活的 CDN 全局名 `BMapVue`，以及 yue1123/vue3-baidu-map-gl 的 MIT 署名。
+      - name: Check docs brand drift
+        run: node --experimental-strip-types scripts/check-docs-brand.mts
+
+      # 文档锚点与**导航覆盖**。刻意不重复「页面级死链」——`vitepress build` 已经在做，
+      # 两道门禁管同一个事实会漂移（docs/*.json 生成物也是这么处理的）。
+      # 这里管的是 VitePress 静默放行的两件：① 指向不存在标题的锚点；
+      # ② 反向断言每个内容页都能从 sidebar/nav 到达（孤儿页没有别的门禁看得见）。
+      - name: Check docs links
+        run: node --experimental-strip-types scripts/check-docs-links.mts
+
+      # docs/public/icons/** 是品牌矢量资产的渲染产物（pnpm generate:brand-icons）。
+      # 判据是「重新渲染到临时目录后逐字节比对」：改了 docs/public/brand/** 却忘了重渲染，
+      # 导航栏是新标志、PWA 图标还是旧的——这类漂移不产生任何测试失败。
+      # 渲染要 Chrome；runner 自带 /usr/bin/google-chrome（见下方注释）。
+      - name: Check brand icons in sync with vector source
+        run: node --experimental-strip-types scripts/check-brand-icons.mts
 
       # 覆盖物 defineEmits 静态契约无漂移（#138）。
       # 生成物是 packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts；
@@ -121,6 +152,34 @@ jobs:
       # `check-public-dts` 只禁 `BMap.*`，**不**禁已删除的 engine 取值字面量——那要靠这一步。
       - name: Check no legacy engine ids in public declarations
         run: pnpm check:raw-sdk:declarations
+
+      # README / npm 包 / 文档站三处的 API 示例一致。判据是「示例里用到的每个标识符都必须
+      # 真的在 dist/*.d.ts 里，且三处形状一致」——不是「三处文本相等」：后者没有区分力
+      # （三处都写错照样绿），还会因为文案风格差异逼人锁死措辞。
+      #
+      # **必须排在 `build:package` 之后**：判据读的就是发布声明面，读不到时脚本 fail-closed
+      # （「没有判据就不能放行」）。曾经挂在前面、跑在 build 之前，于是 CI 直接红——
+      # 那是这条守卫按设计生效，不是误报。
+      - name: Check API snippet consistency
+        run: node --experimental-strip-types scripts/check-snippet-consistency.mts
+
+      # 文档/示例里写出的 prop 名 vs 真实声明面。`docs:typecheck` **抓不到**这一类：
+      # 写错的 kebab prop 会落进 `$attrs`，既不报错也不生效，只能靠静态比对。
+      - name: Check doc prop names
+        run: node --experimental-strip-types scripts/check-doc-props.mts
+
+      # `<Map>` 交互开关 prop 的「未传」可达性（#179）。判据：INTERACTION_PROPS 覆盖的
+      # 每一个 prop 都必须在 Map.vue 的 withDefaults 里显式出现 —— 否则 Vue 把缺省 Boolean
+      # 的「没传」强转成 false，syncEnableProps 的 `!== undefined` 守卫对它永不命中，
+      # 官方 `@default true` 的双指/双击缩放被静默 disable*()。不依赖 dist，可以放 build 之前。
+      - name: Check interaction prop defaults
+        run: node --experimental-strip-types scripts/check-interaction-props.mts
+
+      # 反向门禁：`*Props` 里声明了却没有读者的 prop（#177）。已有的声明面门禁全部只覆盖
+      # 一个方向，因此 `<LocationControl>.onLocationStart` 声明了、被 Vue 接收、然后被静默丢弃，
+      # 没有任何一道门禁会红。这条要求每个声明 prop 都真的有读者。
+      - name: Check declared props are projected
+        run: node --experimental-strip-types scripts/check-props-projected.mts
 
       # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
       # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。

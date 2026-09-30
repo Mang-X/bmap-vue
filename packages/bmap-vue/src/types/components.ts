@@ -212,13 +212,20 @@ export interface MapProps {
  */
 export type MarkerIconName = import("../core/icons/markerIcon").BuiltinMarkerIconName;
 
+/**
+ * 自定义图标描述（`<Marker icon>` / `<LocationControl location-icon>` / `<Marker3D icon>` 共用）。
+ *
+ * ⚠️ **没有** `printImageUrl`（issue #177）：上游 `IconOptions`（4.0.5）只声明 `anchor` /
+ * `imageOffset` / `imageSize` 三个键。它此前挂在类型面上、Driver 每次都丢弃并告警——
+ * 「类型检查通过、Vue 正常接收、然后被静默丢弃」，正是本库拒绝的假支持。JS / `any`
+ * 调用方仍传它时 Driver 会 warn-once，但类型面不再承诺这个键。
+ */
 export interface MarkerCustomIcon {
   imageUrl: string;
   size: { width: number; height: number };
   anchor?: { x: number; y: number };
   imageOffset?: { x: number; y: number };
   imageSize?: { width: number; height: number };
-  printImageUrl?: string;
 }
 
 export type MarkerIcon = MarkerIconName | MarkerCustomIcon
@@ -952,6 +959,113 @@ export interface GroundOverlayProps {
    * （它有 `setZIndex`，但语义不同）⇒ `top` 只能构造期生效，改它会重建实例。
    */
   top?: boolean;
+}
+
+/* ------------------------------------------------------------------ GroundPoint（issue #178）
+ *
+ * 贴地点覆盖物。官方 `overlay/GroundPoint.d.ts:5`：`class GroundPoint extends GroundOverlay`，
+ * 构造签名是 `constructor(point: Point, opts?: GroundPointOptions)`（**几何是位置参数**，
+ * 不是 `bounds`）——这与 `<GroundOverlay>` 是两件不同的事，本组件**不**复用后者的 `bounds` 形状。
+ *
+ * ## `size` / `anchor` / `offset` 收 `{ width, height }`（而不是图形族的 `{ x, y }`）
+ *
+ * 官方 `GroundPointOptions` 的这三个键声明的就是 `Size`（`size?: Size` / `anchor?: Size` /
+ * `offset?: Size`，`GroundPointOptions.d.ts:14/19/34`），因此本库对外**如实**收 Size 形状。
+ * 图形族的 `offset`（`MarkerProps.offset` / `LabelProps.offset`）收 Pixel 是**历史约定**
+ * （上游同样吃 `Size`，见 `core/utils/equality.ts` 的说明），不是官方形状——本组件不继承那一层，
+ * 免得多一次需要文档解释的折算。归一化由描述符的 `size-shape` 档负责。
+ */
+
+/** 尺寸/锚点/偏移的**对外**形状：与官方 `GroundPointOptions` 的 `Size` 逐字对应。 */
+export interface GroundPointSize {
+  width: number;
+  height: number;
+}
+
+export interface GroundPointProps {
+  /**
+   * 贴地点的地理坐标。**必填**——它是构造器的第一个位置参数
+   * （`GroundPoint.d.ts:19` `constructor(point: Point, opts?)`），缺失时构造期即抛错。
+   *
+   * **就地更新**：官方有 `setPoint(point: Point, update?: boolean): this`（`GroundPoint.d.ts:29`）。
+   * ⚠️ 方法名是 `setPoint` 而**不是** `setPosition`（对照 `Marker`）——不要照抄同类。
+   */
+  point: { lng: number; lat: number };
+  /** 图标地址。**就地更新**（`GroundOverlay` 继承来的 `setImage`，`GroundOverlay.d.ts:62`）。 */
+  url?: string;
+  /**
+   * 坐标点尺寸，单位像素。**就地更新**（`GroundPoint.d.ts:49` `setSize`）。
+   * 官方默认：未声明（构造期不传时由 SDK 决定）。
+   */
+  size?: GroundPointSize;
+  /**
+   * 锚点，以图标左上角为原点。**就地更新**（`GroundPoint.d.ts:69` `setAnchor`）。
+   * 官方默认：`new BMap.Size(0, 0)`（`GroundPointOptions.d.ts:19`）。
+   */
+  anchor?: GroundPointSize;
+  /**
+   * 缩放比例。**就地更新**（`GroundPoint.d.ts:39` `setScale`）。
+   * 官方默认：`1`（`GroundPointOptions.d.ts:24`）。
+   */
+  scale?: number;
+  /**
+   * 旋转角度，单位度。**就地更新**（`GroundPoint.d.ts:59` `setRotation`）。
+   * 官方默认：`0`（`GroundPointOptions.d.ts:29`）。
+   */
+  rotation?: number;
+  /**
+   * 偏移量。**就地更新**（`GroundPoint.d.ts:79` `setOffset`）。
+   * 官方默认：`new BMap.Size(0, 0)`（`GroundPointOptions.d.ts:34`）。
+   */
+  offset?: GroundPointSize;
+  /**
+   * 尺寸参考的缩放级别（官方 `@default 18`，`GroundPointOptions.d.ts:39`）。
+   *
+   * **构造期**（改动即重建）：官方实例的 6 个 setter（`setPoint` / `setScale` / `setSize` /
+   * `setRotation` / `setAnchor` / `setOffset`）里**没有** `setLevel`。它与**有** setter 的
+   * `displayOnMinLevel` / `displayOnMaxLevel` 不是同一件事（那两个改的是「在哪些级别显示」），
+   * 不能互相顶替。
+   */
+  level?: number;
+  /**
+   * 图层透明度，取值范围 0 - 1。**就地更新**（`setOpacity`，`GroundOverlay.d.ts:48`）。
+   * 官方默认：`1`（`GroundOverlayOptions.d.ts:11`）。
+   */
+  opacity?: number;
+  /** 图层显示的最小缩放级别。**就地更新**（`setDisplayOnMinLevel`，`GroundOverlay.d.ts:82`）。 */
+  displayOnMinLevel?: number;
+  /** 图层显示的最大缩放级别。**就地更新**（`setDisplayOnMaxLevel`，`GroundOverlay.d.ts:95`）。 */
+  displayOnMaxLevel?: number;
+  /**
+   * 标注的层叠顺序值。**就地更新**（`setZIndex`，`GroundOverlay.d.ts:104`）。
+   *
+   * ⚠️ 与 `top` **不是同一件事**：`zIndex` 是层叠顺序**值**，而 `top` 是布尔开关
+   * 「是否压在普通覆盖物之上」。官方 `GroundOverlay` 有 `setZIndex` 但**没有 `setTop`**
+   * ⇒ `top` 只能构造期生效（见下）。
+   */
+  zIndex?: number;
+  /**
+   * 是否允许在调用 `map.clearOverlays()` 时清除此覆盖物（官方 `@default true`，
+   * `GroundOverlayOptions.d.ts:16`）。**就地更新**（成对开关 `enableMassClear` /
+   * `disableMassClear`，`GroundOverlay.d.ts:108/112`）。
+   *
+   * ⚠️ 在 `withDefaults` 里必须给 `undefined`（不是 `true`）——Vue 的 `Boolean` prop
+   * 未给时会转成 `false`，与官方默认 `true` **相反**（见 `GroundOverlay.vue` 的同款说明）。
+   */
+  enableMassClear?: boolean;
+  /**
+   * 是否响应鼠标事件（官方 `@default true`，`GroundOverlayOptions.d.ts:21`）。
+   * **构造期**（改动即重建）：4.0 的 `GroundOverlay` / `GroundPoint` 上只有构造选项，
+   * 没有 `setEnableClicking`，也没有成对开关（对照 `enableMassClear` 就有）。
+   */
+  enableClicking?: boolean;
+  /**
+   * 是否在普通覆盖物之上绘制（官方 `@default false`，`GroundOverlayOptions.d.ts:48`）。
+   * **构造期**（改动即重建）：官方**没有** `setTop`。
+   */
+  top?: boolean;
+  /** 是否显示（走 `show()` / `hide()`，不是 SDK 属性）。 */
+  visible?: boolean;
 }
 
 /* ------------------------------------------------------------------ 数据组件（M6 / #34）

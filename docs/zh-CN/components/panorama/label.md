@@ -50,7 +50,7 @@ panorama/label
 
 `<PanoramaLabel>` 不渲染可见 DOM —— 内容由 SDK 在全景画面里绘制。
 
-## 命令面（`defineExpose`，#165）
+## 命令面（`defineExpose`）
 
 此前一个全景标注只能靠**卸载组件**消失，而卸载会连实例一起摘掉（`Panorama#removeOverlay`）——
 「临时藏起一个标签」这条最常见的诉求无处落地。

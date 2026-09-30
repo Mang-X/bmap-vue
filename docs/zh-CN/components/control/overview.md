@@ -17,7 +17,7 @@ control/overview
 | 属性         | 说明                                        | 类型                      | 可选值            | 默认值                    |
 | ------------ | ------------------------------------------- | ------------------------- | ----------------- | ------------------------- |
 | anchor       | 控件的停靠位置                              | `string`                  | [anchor](#anchor) | `BMAP_ANCHOR_BOTTOM_RIGHT` |
-| offset       | 控件的偏移值                                | `{x: number, y: number }` | -                 | `{ x: 0, y: 0 }`          |
+| offset       | 控件的偏移值（相对锚点的留白）            | `{x: number, y: number }` | -                 | `{ x: 10, y: 10 }`        |
 | size         | 缩略地图尺寸（领域口径是 Pixel，可就地更新）| `{x: number, y: number }` | -                 | 官方默认 `150 × 150`      |
 | isOpen       | 挂载后的开合状态（只有构造期生效）          | `boolean`                 | -                 | `false`                   |
 | zoomInterval | 鹰眼与主图的缩放级别差（只有构造期生效）    | `number`                  | -                 | 官方默认 `4`              |
@@ -25,9 +25,9 @@ control/overview
 
 ## 动态组件 Props
 
-| 属性    | 说明     | 类型      | 可选值 | 默认值 | 版本                               |
-| ------- | -------- | --------- | ------ | ------ | ---------------------------------- |
-| visible | 是否显示 | `boolean` | -      | `true` | <Badge type="tip" text="^2.2.0" /> |
+| 属性 | 说明 | 类型 | 可选值 | 默认值 |
+| ------- | -------- | --------- | ------ | ------ |
+| visible | 是否显示 | `boolean` | - | `true` |
 
 `anchor` / `offset` 同样可以动态更新。
 
@@ -39,6 +39,13 @@ control/overview
 | BMAP_ANCHOR_TOP_RIGHT    | 右上 |
 | BMAP_ANCHOR_BOTTOM_LEFT  | 左下 |
 | BMAP_ANCHOR_BOTTOM_RIGHT | 右下 |
+
+`anchor` 传的是**官方常量名**，控件边界有一张名字→数值的换算表（`BMAP_ANCHOR_TOP_LEFT` → `0` …），
+因此这里要写名字而不是 `0`。
+
+官方还定义了 `BMAP_ANCHOR_TOP_CENTER` / `BMAP_ANCHOR_CENTER` 等非四角落点。4.0 的控件只接受
+**四角**，传非四角会先告警一次再交给 SDK，而 SDK 会**静默回落**到控件自身的默认落点——
+控制台里能看见告警，但控件不会落到你以为的位置。
 
 ## 选项的更新方式
 
@@ -62,4 +69,16 @@ control/overview
 
 组件没有 `unload` 事件。如需地图实例，请在 `<Map>` 子树内用 `useMap()` + `whenReady()`。
 
-该组件没有对外事件。
+三个事件对应官方 `OverviewMapControlEventMap`，原样转发：
+
+| 事件名 | 说明 | 载荷 |
+| --- | --- | --- |
+| viewchanged | 缩略地图展开 / 收起状态切换**完成**后触发 | `{ isOpen: boolean } \| null` |
+| viewchanging | 展开 / 收起动画**过程中**触发 | `unknown` |
+| resize | 缩略地图尺寸发生变化时触发 | `unknown` |
+
+`viewchanged` 是**唯一**能观察这个控件自身开合状态的方式——官方 `OverviewMapControl#isOpen()`
+只能轮询，而 `isOpen` prop 又是**构造期**的（官方只有 `changeView()` 的**切换**语义、没有幂等的
+`setOpen`）。也就是说用户点开鹰眼这个事实在这里才可观测。
+
+`viewchanged` 的 `isOpen` 读不到时给 `null` 而不是 `false`：`false` 是一个**断言**，而我们并不知道。

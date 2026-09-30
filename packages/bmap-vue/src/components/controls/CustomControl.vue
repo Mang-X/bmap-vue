@@ -17,7 +17,10 @@ export interface CustomControlProps {
  */
 const props = withDefaults(defineProps<CustomControlProps>(), {
   anchor: "BMAP_ANCHOR_TOP_LEFT",
-  offset: () => ({ x: 83, y: 18 }),
+  // 控件留白口径：`offset` 是**相对锚点**的留白，不是相对容器另一侧的边距。
+  // 全库统一 18px（与 `LocationControl` / `CityListControl` 一致）——
+  // 此前这里是 83，对一个 32px 宽的缩放按钮而言等于把它甩到容器中间。
+  offset: () => ({ x: 18, y: 18 }),
   visible: true,
 });
 

@@ -1,4 +1,4 @@
-# RasterTileLayer 栅格瓦片图层 <Badge type="tip" text="^1.0.0" />
+# RasterTileLayer 栅格瓦片图层
 
 面向 XYZ / TMS 类标准瓦片服务：比 `XYZLayer` 多了子域轮询、TMS 翻转与四至裁剪。
 
@@ -34,12 +34,13 @@ layer/rasterLayer
 | subdomains | 子域轮询候选（配合模板里的 `{s}`） | `string[]` | - |
 | projection | 请求使用的投影 | `string` | - |
 | bounds | 加载范围 `[minX, minY, maxX, maxY]` | `number[]` | - |
-| boundsInWGS84 | `bounds` 是否为 WGS84 | `boolean` | - |
+| boundsInWGS84 | `bounds` 是否为 WGS84 | `boolean` | 官方默认 `false` |
 | boundary | 掩膜 | `string \| string[]` | - |
-| showRegion | 掩膜显示区域：`'inside'` / `'outside'` | `'inside' \| 'outside'` | - |
+| showRegion | 掩膜显示区域：`'inside'` / `'outside'` | `'inside' \| 'outside'` | 官方默认 `'inside'` |
 | useThumbData / spanLevel | 跨级平滑切换与缩略层级跨度 | `boolean \| number` | SDK 默认 |
 | height / retry / retryTime / cacheSize | 高度 / 重试 / 缓存 | `number \| boolean` | SDK 默认 |
 | tileLoadFunction | 自定义瓦片加载函数 | `(tile, url) => void` | - |
+| tileLoadObserver | 瓦片加载观察面（见[图层总览的「加载诊断」](./index#加载诊断观察瓦片什么时候加载什么时候失败)） | `TileLoadObserver` | - |
 
 ## 稳定性
 
@@ -47,7 +48,9 @@ layer/rasterLayer
 
 ## 注意
 
-模板占位符是**花括号**（`{z}` / `{x}` / `{y}`），与 `XYZLayer` 的方括号不同；`{-y}` 表示 TMS 的 y 轴翻转。
+- 模板占位符是**花括号**（`{z}` / `{x}` / `{y}`），与 `XYZLayer` 的方括号不同；`{-y}` 表示 TMS 的 y 轴翻转。
+- `tileLoadFunction` 是**接管式**的：设了它，SDK 就不再自己加载，函数必须自己完成加载，否则
+  **瓦片不会出现**。只想在旁边观察请用 `tileLoadObserver`。
 
 ## 参考
 

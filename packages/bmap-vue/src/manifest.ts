@@ -114,6 +114,14 @@ export const componentManifest = [
     source: "./components/overlays/Marker3D.vue",
   },
   {
+    // issue #178：贴地点覆盖物。官方 `GroundPoint extends GroundOverlay`，几何入口是
+    // 构造器的位置参数 `point`（不是 `<GroundOverlay>` 的 `bounds`）。
+    name: "GroundPoint",
+    exportName: "GroundPoint",
+    category: "overlay",
+    source: "./components/overlays/GroundPoint.vue",
+  },
+  {
     name: "Autocomplete",
     exportName: "Autocomplete",
     category: "overlay",

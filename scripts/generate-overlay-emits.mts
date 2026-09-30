@@ -170,6 +170,7 @@ const SFC_BY_KIND: Record<string, string> = {
   prism: "Prism.vue",
   "bezier-curve": "BezierCurve.vue",
   "ground-overlay": "GroundOverlay.vue",
+  "ground-point": "GroundPoint.vue",
   "custom-overlay": "CustomOverlay.vue",
   "context-menu": "ContextMenu.vue",
   "info-window": "InfoWindow.vue",

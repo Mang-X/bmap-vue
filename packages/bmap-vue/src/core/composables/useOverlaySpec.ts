@@ -69,12 +69,12 @@ import { useSdkResource, type SdkResourceStatus } from "./useSdkResource";
 import { useRequiredMapContext } from "../context/inject";
 import { targetContextKey, type TargetContext, type TargetKind } from "../context/target";
 import type { MapReadyContext } from "../context/types";
-import type { Bounds, Pixel, Point } from "../../driver/types/geometry";
+import type { Bounds, Pixel, Point, Size } from "../../driver/types/geometry";
 import type { OverlayHandle, SdkHandle } from "../../driver/types/handles";
 import { overlayPropertyRevert, overlayPropertySpec, type OverlayKind } from "../../driver/types/overlays";
 import type { BMapError } from "../errors/BMapError";
 import { logger } from "../logger";
-import { boundsKey, pixelKey, pointEquals, pointKey } from "../utils/equality";
+import { boundsKey, pixelKey, pointEquals, pointKey, sizeKey } from "../utils/equality";
 import { stableKeyOf } from "../utils/stableKey";
 import { assertOverlayFieldDeclarations } from "../overlays/OverlaySpec";
 import type { OverlayFieldUpdate, OverlaySpec } from "../overlays/OverlaySpec";
@@ -163,6 +163,12 @@ function fixedShapeKeyOf(
       // 不是 Size（`{width, height}`）——尽管描述符按上游 `MarkerOptions.offset` 登记成 `value: "size"`。
       // 两者键必须不同：否则 `{x:2,y:2}` 与 `{width:2,height:2}` 会互相被判成「没变」。
       return (value) => pixelKey(value as Pixel | undefined);
+    case "size-shape":
+      // #178 `GroundPoint`：这一档的组件侧形状**就是** Size（`{width, height}`，与官方
+      // `GroundPointOptions.size/anchor/offset` 声明一致），因此走 `sizeKey` 而**不是** `pixelKey`。
+      // 若复用上一档，`{width, height}` 在 `pixelKey` 下恒为 `px:undefined,undefined`
+      // ⇒ 内容真的变了也会被判成「没变」，更新被静默吞掉。
+      return (value) => sizeKey(value as Size | undefined);
     case "bounds":
       return (value) => boundsKey(value as Bounds | undefined);
     default:

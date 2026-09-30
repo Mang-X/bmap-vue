@@ -47,6 +47,7 @@ export type Capability =
   | "overlay.rectangle"
   | "overlay.custom-dom"
   | "overlay.ground"
+  | "overlay.ground-point"
   | "overlay.point-collection"
   | "overlay.context-menu"
   | "overlay.prism"
@@ -331,6 +332,18 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
+  // ---- issue #178：`GroundPoint`（贴地点覆盖物）----
+  // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
+  // **有完整类声明**（不是 `Marker3D` / `MapMask` 那种「只在文档里出现、类型包无声明」的情况）
+  // ⇒ `runtimeOnly: false`，`status: "native"`（对官方成员的直接投影，与 `overlay.ground` 同判据）。
+  "overlay.ground-point": {
+    id: "overlay.ground-point",
+    family: "overlay",
+    description: "贴地点覆盖物（GroundPoint，继承 GroundOverlay）",
+    rawMembers: ["GroundPoint"],
+    status: "native",
+    runtimeOnly: false,
+  },
   "overlay.point-collection": {
     id: "overlay.point-collection",
     family: "overlay",
@@ -378,7 +391,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
       "MapVGL 渲染叠加层；在 JSAPI 4.0 上**不兼容**（结论 `incompatible`，无迁移路径）：脚本的 JSONP " +
       "传输层依赖 SDK 的私有回调表（成员名 `_rd`），且它的 bmap 适配层要往 `getPanes().mapPane` 上挂视图容器、" +
       "而 4.0 的 panes 里没有 `mapPane`。本库明令不得访问私有面，也不为它写适配层 —— 改用原生图层。" +
-      "依据与复现见 plugin-compat-inventory（#25 / #43）",
+      "依据与复现见 plugin-compat-inventory",
     status: "unsupported",
     runtimeOnly: true,
   },
@@ -581,7 +594,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "layer",
     description:
       "聚合图层（ClusterLayer）；MarkerCluster 的默认路径；另有显式可选的 markers 引擎" +
-      "（唯一能给出簇内业务项的路径）。取证见 ADR 2026-09-19",
+      "（唯一能给出簇内业务项的路径）。",
     status: "extended",
     runtimeOnly: true,
   },
@@ -709,7 +722,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     description:
       "输入提示（Autocomplete）：构造、输入框绑定与 `onSearchComplete` 转发都是原生的。" +
       "本库**不**提供程序化检索（原 `suggest()` 的回包归属靠未证实的 keyword / FIFO 推断，" +
-      "已按 #104 删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit）",
+      "已删除；需要程序化建议时改用 `LocalSearch` 或官方 UI Kit）",
     rawMembers: ["Autocomplete"],
     // #104：原先标 `experimental` 的唯一理由是程序化 `suggest()` 的归属假设；该调用面已删除，
     // 剩下的构造 / 绑定 / 转发都有官方声明支撑，因此回到 `native`。
@@ -793,11 +806,11 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     family: "service",
     description:
       "轨迹动画（BMapGLLib 插件）；结论 `native`：**4.0 的对应能力是原生图层 `layer.track-line`**" +
-      "（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已由 #110 落地在" +
+      "（组件 `<TrackLineLayer>`），本库不再为这个 legacy 插件提供封装，播放命令面已落地在" +
       " `<TrackLineLayer>` 的 `playback` expose 上。" +
       "脚本自身引用面在 4.0.5 声明里没有缺口，且**最小运行时路径已验证**" +
       "（真实 4.0 上构造 + `start()` + 视角跟随 + `pause()` / `continue()` + 播放到结尾跑通）；" +
-      "依据与复现见 plugin-compat-inventory（#25 / #43）",
+      "依据与复现见 plugin-compat-inventory",
     status: "unsupported",
     runtimeOnly: true,
   },
@@ -823,7 +836,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     id: "panorama.label",
     family: "panorama",
     description:
-      "全景标注（PanoramaLabel）。#41 起由 `<PanoramaLabel>` 消费，因此状态由 experimental 提升为 " +
+      "全景标注（PanoramaLabel）。由 `<PanoramaLabel>` 消费，因此状态由 experimental 提升为 " +
       "native：本能力不再是「只登记、没落地」的槽位。**组件 API 的稳定级别是另一件事**" +
       "（Panorama 属 post-stable，见 `docs/zh-CN/components/panorama/index.md` 的范围表）",
     rawMembers: ["PanoramaLabel"],

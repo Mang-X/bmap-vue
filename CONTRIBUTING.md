@@ -65,6 +65,16 @@ pnpm generate:overlay-emits:check  # 覆盖物 defineEmits 静态契约无漂移
 pnpm typecheck:package               # 官方类型 + 最小 augmentation 在 skipLibCheck:false 下可合并
 pnpm build:package
 pnpm check:public-dts           # dist/**/*.d.ts 不得泄漏 BMap.*
+pnpm check:docs-brand          # 发布文档面不得出现已退役的品牌串
+pnpm check:docs-links          # 文档锚点与导航覆盖
+pnpm generate:brand-icons      # 改了品牌矢量资产后重渲染 PWA 图标
+pnpm check:brand-icons          # 品牌图标与矢量资产无漂移
+pnpm check:component-catalog    # 组件总览页清单与 manifest 无漂移
+pnpm generate:screenshots        # 改了站点外观后重拍发布面截图（需本地站点在跑）
+pnpm check:doc-props           # 文档/示例里的 prop 名 vs 真实声明面（写错的 prop 只落 $attrs，不报错也不生效）
+pnpm check:interaction-props   # <Map> 交互开关 prop 的「未传」可达性（#179）
+pnpm check:props-projected     # *Props 声明了却没有读者的 prop 必须为空（#177，反向门禁）
+pnpm check:snippet-consistency  # 三处 API 示例一致(需先 build:package)
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
 pnpm check:api                  # API report + 未导出类型身份集合 + 签名基线三类基线无漂移（#44）
 pnpm test:unit

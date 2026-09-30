@@ -12,22 +12,56 @@ import { CustomOverlay } from 'bmap-vue'
 overlay/customOverlay
 :::
 
-## 动态组件 Props
+## 构造期 Props（`recreate`）
 
-| 属性              | 说明                                            | 类型                      | 默认值     | 版本                               |
-| ----------------- | ----------------------------------------------- | ------------------------- | ---------- | ---------------------------------- |
-| position          | 覆盖物的地理坐标点                              | `Point`                   | `required` | <Badge type="tip" text="^1.0.0" /> |
-| offset            | 相对锚点的像素偏移（**构造期**）                | `{ x: number, y: number }` | `{ x: 0, y: 0 }` | <Badge type="tip" text="^1.0.0" /> |
-| anchor            | 锚点，左上角 `(0, 0)`、右下角 `(1, 1)`（**构造期**） | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` | <Badge type="tip" text="^1.0.0" /> |
-| rotation          | 旋转角度（度）                                  | `number`                  | `0`        | <Badge type="tip" text="^1.0.0" /> |
-| zIndex            | 层叠顺序（**构造期**）                          | `number`                  | `0`        | <Badge type="tip" text="^1.0.0" /> |
-| minZoom / maxZoom | 显示的最小 / 最大缩放级别（**构造期**）         | `number`                  | -          | <Badge type="tip" text="^1.0.0" /> |
-| properties        | 自定义业务属性，随实例携带                      | `Record<string, unknown>` | -          | <Badge type="tip" text="^1.0.0" /> |
-| visible           | 是否显示                                        | `boolean`                 | `true`     | <Badge type="tip" text="^1.0.0" /> |
-| enableMassClear   | 是否在调用 `map.clearOverlays` 清除此覆盖物     | `boolean`                 | `true`     | <Badge type="tip" text="^1.0.0" /> |
+**这一组的每一项都是构造期属性**——官方 `CustomOverlay` 的实例成员表上**没有**对应的 setter
+（只有 `setPoint` / `setRotation` / `setRotationOrigin` / `setProperties` 四个写入口）。
+**改动其中任何一项都会重建实例**（旧实例连同它的监听一起释放）。
 
-> 「构造期」= 官方只有构造选项、实例上没有对应 setter ⇒ 变化时**重建实例**（旧实例连同它的监听一起释放）。
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| offset | 相对锚点的像素偏移 | `{ x: number, y: number }` | `{ x: 0, y: 0 }` |
+| anchor | 锚点，左上角为 `(0, 0)`、右下角为 `(1, 1)`，取值范围 `[0, 1]` | `{ x: number, y: number }` | `{ x: 0.5, y: 1 }` |
+| zIndex | 层叠顺序 | `number` | `0` |
+| minZoom | 显示的最小缩放级别 | `number` | - |
+| maxZoom | 显示的最大缩放级别 | `number` | - |
+| enableMassClear | 是否在 `map.clearOverlays()` 时被清除。⚠️ 官方说明该开关**当前不生效**，因此本库不做就地开关 | `boolean` | `true` |
+
+## 就地更新 Props（`options`）
+
+| 属性 | 说明 | 类型 | 默认值 |
+| --- | --- | --- | --- |
+| position | 覆盖物的地理坐标点 | `{ lng: number, lat: number }` | `required` |
+| rotation | 旋转角度，单位度 | `number` | `0` |
+| properties | 自定义业务属性，随实例携带 | `Record<string, unknown>` | - |
+| visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |
+
+> 「构造期」= 官方只有构造选项、实例上没有对应 setter ⇒ 变化时**重建实例**。
 > 其余属性走字段级 setter，就地更新、不重建。
+
+## 官方有、本库暂未暴露的选项
+
+官方 `CustomOverlayOptions` 一共 18 个键。上表的 Props 已给出 10 个（`offset` / `anchor` 由官方
+的 `offsetX` / `offsetY` / `anchors` 合并而来，`position` 由 `point` 改名，`rotation` 由
+`rotationInit` 改名——**这四个是改名或合并，不是缺口**），下面 8 个是真正的缺口：
+
+| 官方键 | 说明 | 官方默认 | 为什么不提供 prop |
+| --- | --- | --- | --- |
+| `rotationFlip` | 旋转角度超过 90 度且小于 270 度时是否翻转，避免内容倒置 | `false` | 本库没接线 |
+| `fixBottom` | 是否将 DOM 固定在底部 | `false` | 本库没接线；DOM 的定位由 SDK 负责 |
+| `useTranslate` | 是否使用 `translate3d` 进行性能优化 | `false` | 本库没接线。⚠️ 这一项**开错方向的代价高**——它改变的是 SDK 搬运宿主时的定位实现，官方没给读回，无法验证是否真的生效 |
+| `autoFollowHeadingChanged` | 是否随地图旋转 | `false` | 本库没接线；宿主是 Vue 渲染的子树，跟随旋转要连内容一起变换，超出本库的 DOM 托管边界 |
+| `enableDraggingMap` | 覆盖物上是否允许拖拽地图 | `false` | 本库没接线。⚠️ 这一项会改变**地图**的交互（而不是覆盖物的），而本库的覆盖物事件面不承担地图手势仲裁 |
+| `nextTick` | 是否延迟一帧再显示，用于解决 DOM 自适应宽度问题 | `false` | 与本库的挂载时序冲突：组件在创建后立即按 `visible` 挂图，延迟一帧会与重建收敛抢同一个时机 |
+| `synUpdate` | 是否与地图同步更新（跟随地图每次重绘同步刷新位置）；开启后覆盖物位置更新不再走默认的坐标转换逻辑 | `false` | 见下 |
+
+其中 `synUpdate` 值得单独一提：开启后本组件的 `position` 更新策略会与官方默认**不同**，
+而官方没有为它声明读回，本库目前没有稳定的事件口径，因此没有提供入口。
+
+::: tip 官方 API 表里的 `children` 不是一个构造选项
+官方 React 文档表里出现的 `children` 是 React 的**渲染插槽**（等价于本组件的默认 slot 内容），
+不是一个 SDK 构造选项——传 prop 无意义。本组件的内容一律写在默认 slot 里。
+:::
 
 ## 宿主与 slot 的所有权
 

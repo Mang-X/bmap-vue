@@ -8,7 +8,7 @@ lang: zh-CN
 把地图的**外部状态**读成一组只读 refs：`center` / `zoom` / `bounds` / `size` / `heading` / `tilt` /
 `moving` / `zooming`。
 
-::: tip 与官方参考的形态差异（#165 Class 2）
+::: tip 与官方参考的形态差异
 
 `useMapStatus` 名字与官方一致，但**返回形态不同**，这是**有意的 Vue 适配**：
 

@@ -269,7 +269,7 @@ describe("#123 接线契约：入口 / nightly / docs / ADR / dataset / 脱敏",
   const scriptText = readFileSync(resolve(repoRoot, scriptPath), "utf8");
   const nightly = readWorkflow("nightly-v4-smoke.yml");
   const docs = readFileSync(
-    resolve(repoRoot, "docs/zh-CN/contributing/performance-baseline.md"),
+    resolve(repoRoot, "docs/internal/performance-baseline.md"),
     "utf8",
   );
   const adr = readFileSync(

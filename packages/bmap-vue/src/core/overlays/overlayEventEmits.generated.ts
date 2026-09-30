@@ -274,7 +274,33 @@ export interface BezierCurveEmits {
 
 /** `ground-overlay` 覆盖物的事件面：11 个 SDK 事件（共 11 个），供 `GroundOverlay.vue` 的 `defineEmits` 使用。 */
 export interface GroundOverlayEmits {
-  /** 点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标） */
+  /** 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） */
+  click: [event: OverlayPartialPointerEvent];
+  /** 双击覆盖物时触发（同上） */
+  dblclick: [event: OverlayPartialPointerEvent];
+  /** 右键点击覆盖物时触发 */
+  rightclick: [event: OverlayPartialPointerEvent];
+  /** 右键双击覆盖物时触发 */
+  rightdblclick: [event: OverlayPartialPointerEvent];
+  /** 在覆盖物上按下鼠标时触发 */
+  mousedown: [event: OverlayPartialPointerEvent];
+  /** 在覆盖物上抬起鼠标时触发 */
+  mouseup: [event: OverlayPartialPointerEvent];
+  /** 鼠标移入覆盖物时触发 */
+  mouseover: [event: OverlayPartialPointerEvent];
+  /** 鼠标移出覆盖物时触发 */
+  mouseout: [event: OverlayPartialPointerEvent];
+  /** 鼠标在覆盖物上移动时触发 */
+  mousemove: [event: OverlayPartialPointerEvent];
+  /** 覆盖物被移除时触发 */
+  remove: [event: OverlayEventPayload];
+  /** 覆盖物渲染数据发生变化时触发（变化来源见 raw.action） */
+  lineupdate: [event: OverlayEventPayload];
+}
+
+/** `ground-point` 覆盖物的事件面：11 个 SDK 事件（共 11 个），供 `GroundPoint.vue` 的 `defineEmits` 使用。 */
+export interface GroundPointEmits {
+  /** 点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段） */
   click: [event: OverlayPartialPointerEvent];
   /** 双击覆盖物时触发（同上） */
   dblclick: [event: OverlayPartialPointerEvent];

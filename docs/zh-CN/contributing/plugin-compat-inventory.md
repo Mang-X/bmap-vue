@@ -11,7 +11,7 @@
 
 三档各有自己的复现命令：`pnpm probe:plugin-runtime`（真实 4.0 + 真实 AK + 真实浏览器，nightly 单独跑：它验的是**可选**插件，不进必需链路）、`pnpm probe:plugin-compat`（真实发布产物 + 官方声明）、以及两者共用的生成物校验 `pnpm generate:plugin-inventory:check`。
 
-插件**脚本加载通道**自身的行为（超时 / 取消）由另一个探针覆盖：`pnpm probe:plugin-load-channel`（真实浏览器 + 永不响应的地址；同样只在 nightly 跑）。决策见 ADR `2026-09-21-plugin-load-channel-timeout`。
+插件**脚本加载通道**自身的行为（超时 / 取消）由另一个探针覆盖：`pnpm probe:plugin-load-channel`（真实浏览器 + 永不响应的地址；同样只在 nightly 跑）。
 
 ## 依据档位
 
@@ -27,7 +27,7 @@
 | --- | --- |
 | `native` | 上游 4.0 已有原生替代 ⇒ 迁移到原生能力，不再依赖该脚本（见「迁移路径」列） |
 | `compatible` | 脚本在 4.0 上可直接使用，且最小功能链路有运行时证据。边界：本库只负责按需加载脚本，不承诺插件的内部实现与它自行注入的其它脚本 |
-| `adapter` | 需要本库写适配层才能用（**当前无条目**：按 #43 口径，只有存在真实消费者时才写 adapter） |
+| `adapter` | 需要本库写适配层才能用（**当前无条目**：只有存在真实消费者时才写 adapter） |
 | `incompatible` | 有决定性依据说明它在 4.0 上不可用 |
 | `unverified` | 依据不足以支持更强的结论 —— **这本身可以是最终结论**：不为了「功能完整」把它强行实现成 adapter |
 
@@ -68,7 +68,7 @@
 
 迁移路径：`native` → layer.track-line（原生组件 `TrackLineLayer`）
 
-改用原生轨迹线图层 `<TrackLineLayer>`（官方 4.0 扩展 API `TrackLine`，见 M6 / #35、#36）。**播放命令面**（start / pause / resume / stop / setSpeed / setProcess）与页面可见性（`pauseOnHidden`）已由 #110 落地（方法名经 live 探针取证）；本票的结论与去向不变：不要为 TrackAnimation 再写组件或 hook。
+改用原生轨迹线图层 `<TrackLineLayer>`（官方 4.0 扩展 API `TrackLine`）。**播放命令面**（start / pause / resume / stop / setSpeed / setProcess）与页面可见性（`pauseOnHidden`）已在 `<TrackLineLayer>` 上落地（方法名经 live 探针取证）。不要为 TrackAnimation 再写组件或 hook。
 
 版本锁定：**未版本化** —— URL 指向百度自托管的 GitHub 镜像（路径里没有 tag / commit）⇒ 上游改内容而 URL 不变；本仓用 artifactDigest 锁内容，不做版本号承诺。
 
@@ -78,7 +78,7 @@
 
 - `setSpeed()` 依赖上游**未声明**的 `ViewAnimation` 私有成员（`animation` / `_options` / `_beginTime` 与 `setBeginTime` / `setDuration`）：4.0 上实测可用，但私有面随时可能消失 ⇒ 本库不提供它，也不承诺它。
 - `Polyline#_config.linkRight` 是实例私有字段，用于判断折线是否跨 180° 经线。
-- 播放命令面的原生对应物已由 **#110** 落地在 `TrackLineLayer` 的 `playback` expose 上（方法名经 live 探针取证，2026-09-23）。
+- 播放命令面的原生对应物已落在 `TrackLineLayer` 的 `playback` expose 上（方法名经 live 探针取证）。
 
 ### `DrawingManager`
 
@@ -152,12 +152,12 @@
 
 残余风险（每条都写明去处）：
 
-- **本仓库自持的 legacy 声明曾经与真实脚本不一致**：那份声明把 `BMapGLLib.GeoUtils` 写成 `new GeoUtils(map, options)` 的类，而真实脚本暴露的是**静态谓词命名空间**（没有可用的实例 API）。记录这条是因为它解释了「为什么不能拿 legacy 类型当依据」——该声明目录已在 `#26` 删除，现在类型面只剩官方 `@baidumap/jsapi-v4-types` 与最小 augmentation。
+- **本仓库自持的 legacy 声明曾经与真实脚本不一致**：那份声明把 `BMapGLLib.GeoUtils` 写成 `new GeoUtils(map, options)` 的类，而真实脚本暴露的是**静态谓词命名空间**（没有可用的实例 API）。记录这条是因为它解释了「为什么不能拿 legacy 类型当依据」——该声明目录已删除，现在类型面只剩官方 `@baidumap/jsapi-v4-types` 与最小 augmentation。
 - 各静态谓词的签名语义未逐个核对（只证了不抛错 + `getDistance` 数值正确）；`isPointInRect` 的三参形态语义未确认。
 
 ### `Mapvgl`
 
-**硬不兼容**，两条独立依据：①它的 JSONP 传输层直接拿 SDK 的私有回调表（成员名 `_rd`）当注册处——这正是 #72（ADR `2026-09-13-private-sdk-surface-removal`）明令本库不得访问的私有面，也不在官方声明里；②它的 bmap 适配层要往 `map.getPanes().mapPane` 上挂视图容器，而 4.0 的 panes 里没有 `mapPane`。**结论是「没有迁移路径」**：改用 4.0 的原生图层。
+**硬不兼容**，两条独立依据：①它的 JSONP 传输层直接拿 SDK 的私有回调表（成员名 `_rd`）当注册处——这正是本库明令不得访问的私有面，也不在官方声明里；②它的 bmap 适配层要往 `map.getPanes().mapPane` 上挂视图容器，而 4.0 的 panes 里没有 `mapPane`。**结论是「没有迁移路径」**：改用 4.0 的原生图层。
 
 私有面：私有 JSONP 回调表（成员名 `_rd`）：脚本把函数注册进这张表，并把 `callback=` 指过去。
 
@@ -178,7 +178,7 @@
 
 迁移路径：`none` → （无）
 
-没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。改用官方 4.0 原生图层（`BPointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。
+没有可用路径：它的适配层要求 legacy 容器面（`getPanes().mapPane`），4.0 上不存在。改用官方 4.0 原生图层（`PointShapeLayer` / `MarkerCluster` / `HeatmapLayer` / `LineLayer` / `FillLayer` 等），或按你自行评估的其它可视化方案。
 
 版本锁定：**自带版本号** —— URL 内含精确版本 `mapvgl@1.0.0-beta.188`（unpkg）⇒ 版本可追踪，仍同时用 artifactDigest 锁内容。
 

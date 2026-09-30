@@ -1,4 +1,4 @@
-# useGeocodeDetail <Badge type="tip" text="^0.0.39" />
+# useGeocodeDetail
 
 由坐标点解析地址信息
 
@@ -31,7 +31,8 @@ hooks/useGeocodeDetail/batch
 :::
 
 :::tip
-批量解析使用 `getBatch`，逐项返回 `{ point, detail, error? }`：
+批量解析使用 `getBatch`，**顺序执行**、逐项返回 `{ point, detail, status, error }`。
+单项失败时 `detail` 为 `null`，原因从该项的 `status` / `error` 读（这就是「部分成功」的表达方式）：
 
 ```ts
 import { useGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
@@ -46,17 +47,26 @@ const { getBatch } = useGeocodeDetail(map)
 const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map)
 ```
 
-::: warning 命名对齐官方 `BMap.Geocoder`（#165）
+::: warning 命名对齐官方 `BMap.Geocoder`
 
 - 动作名是 `getLocation`（官方 `Geocoder#getLocation`），**不是** `get`；
 - 正地址解析在 [`useGeocoder`](./useGeocoder) 的 `getPoint`（官方 `Geocoder#getPoint`）
   ——官方的 `Geocoder` 只有这两个成员，本库按方向拆成两个 hook，成员名保持一致；
-- 结果**只有** `data` 一个读取口；此前的 `result` 别名已删除（与 `useGeocoder` 同口径，
+- 结果**只有** `data` 一个读取口。不要再找 `result` 别名（与 `useGeocoder` 同口径，
   也不与官方成员名相撞）。
 :::
 
 :::tip
-该 hooks 需要地图 ready 后才能执行解析；在 `<Map>` 子树内调用时可省略 `map` 参数
+该 hooks 只需要 **Client 上下文**（`<Map>` 或 `<BMapProvider>` 子树内），**不需要地图实例**；
+在 `<Map>` 子树内调用时可省略 `map` 参数
+:::
+
+:::warning 官方 `LocationOptions`（`poiRadius` / `numPois`）未暴露
+官方 `Geocoder#getLocation(point, callback, options?)` 的第三个参数是 `LocationOptions`：
+`poiRadius`（附近 POI 的最大半径，默认 100 米）与 `numPois`（返回的 POI 个数，默认 10）。
+本库的 `getLocation(point)` **不接收**它，因此 `surroundingPois` 拿到的是官方默认口径下的结果
+（半径 100 米、最多 10 个）。要调这两个值，目前只能拿 Driver 的归一化调用面
+（`driver.services.reverseGeocode()`）——它的请求类型上带这两个字段。
 :::
 
 ::: warning AK 域名白名单
@@ -71,9 +81,9 @@ const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map
 | ---- | -------------------------------------------- | --------- | ------ |
 | map  | `Map`地图组件实例或 `ref`（可省略，用注入值） | `unknown` | -      |
 
-:::tip 状态与动作约定（#38 起）
+:::tip 状态与动作约定
 
-- `status` 的取值与含义对六个 service hooks **完全一致**：
+- `status` 的取值与含义对**所有服务 composable** **完全一致**：
   `idle` / `loading` / `success` / `empty` / `failed` / `timeout` / `canceled` / `unsupported`；
   `empty` 是「没有结果**或**服务当前不可用」（官方没有公开原因时的合并结论），`unsupported`
   表示**当前引擎没有这个能力、一次请求都没有发出**（同时 `supported` 为 `false`）。
@@ -83,7 +93,6 @@ const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map
   `BMAP_STATUS_*`、`Convertor` 回包 `status`），其余为 `null`——不伪装成 0。
 
 :::
-
 ### 返回值
 
 | 返回值    | 描述                                                                        | 类型                                                                   |
@@ -96,25 +105,25 @@ const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map
 | isLoading | 是否在获取中                                                                | `boolean`                                                               |
 | supported | 当前引擎是否支持逆地理编码（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                               |
 | status    | 任务状态（见上）                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                                |
-| getLocation | 坐标 → 地址详情（官方 `Geocoder#getLocation`）；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(point: Point) => Promise<ServiceResult<GeocodeDetailResult>>` |
-| getBatch  | 批量反查，逐项返回 `{ point, detail, status, error }`（**部分成功**）          | `(points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>`        |
+| getLocation | 坐标 → 地址详情（官方 `Geocoder#getLocation`）；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(point: GeoPoint) => Promise<ServiceResult<GeocodeDetailResult>>` |
+| getBatch  | 批量反查，**顺序执行**、逐项返回 `{ point, detail, status, error }`（**部分成功**） | `(points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>`  |
 | cancel    | 逻辑取消在飞请求                                                             | `() => void`                                                             |
 | reset     | 取消 + 清空 data/error/status                                                | `() => void`                                                             |
 
-#### Point
+#### GeoPoint
 
 ```ts
-type Point = { lng: number; lat: number }
+type GeoPoint = { lng: number; lat: number }
 ```
 
 #### GeocodeDetailResult
 
 | 属性              | 描述                         | 类型                                    |
 | ----------------- | ---------------------------- | --------------------------------------- |
-| point             | 坐标点                       | `Point`                                 |
+| point             | 坐标点（回包没给时回退到请求坐标） | `GeoPoint`                            |
 | address           | 地址描述                     | `string`                                |
 | addressComponents | 结构化的地址描述             | [`AddressComponent`](#AddressComponent) |
-| surroundingPois   | 附近的 POI 点（完整的领域投影，字段见 [`LocalSearchPoi`](./useLocalSearch)） | `readonly LocalSearchPoi[]` |
+| surroundingPois   | 附近的 POI 点（完整的领域投影，字段见 [`LocalSearchPoi`](./useLocalSearch)）。数量与半径走官方默认值（10 个 / 100 米），见上面的 `LocationOptions` 说明 | `readonly LocalSearchPoi[]` |
 | business          | 商圈字段，代表此点所属的商圈 | `string`                                |
 
 ##### AddressComponent
@@ -133,8 +142,8 @@ type Point = { lng: number; lat: number }
 import type { ComputedRef, ShallowRef } from 'vue'
 import type {
   BMapServiceStatus,
+  GeoPoint,
   LocalSearchPoi,
-  Point,
   ServiceErrorInfo,
   ServiceResult,
 } from 'bmap-vue'
@@ -142,7 +151,7 @@ export interface GeocodeDetailResult {
   /**
    * 坐标点
    */
-  point: Point
+  point: GeoPoint
   /**
    * 地址描述
    */
@@ -167,7 +176,7 @@ export interface GeocodeDetailResult {
   business: string
 }
 export interface GeocodeDetailItemResult {
-  point: Point
+  point: GeoPoint
   detail: GeocodeDetailResult | null
   status: BMapServiceStatus
   error: ServiceErrorInfo | null
@@ -186,8 +195,8 @@ export declare function useGeocodeDetail(map?: unknown): {
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
   /** 坐标 → 地址详情（官方 `Geocoder#getLocation`）。 */
-  getLocation: (point: Point) => Promise<ServiceResult<GeocodeDetailResult>>
-  getBatch: (points: readonly Point[]) => Promise<GeocodeDetailItemResult[]>
+  getLocation: (point: GeoPoint) => Promise<ServiceResult<GeocodeDetailResult>>
+  getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>
   cancel: () => void
   reset: () => void
 }

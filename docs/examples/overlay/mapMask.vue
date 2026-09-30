@@ -4,7 +4,14 @@
     <option value="outside">局部隐藏</option>
     <option value="inside">局部显示</option>
   </select>
-  <Map v-bind="$attrs" :center="center" :zoom="18" @ready="handleInitd" enable-wheel-zoom>
+  <Map
+    v-bind="$attrs"
+    :center="center"
+    :zoom="18"
+    @ready="handleInitd"
+    enable-wheel-zoom
+    :style="{ background: 'rgb(192, 214, 213)' }"
+  >
     <Marker :position="center"></Marker>
     <MapMask
       :points="points"

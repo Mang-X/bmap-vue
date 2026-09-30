@@ -73,11 +73,13 @@ export interface LocationControlProps {
    * 接管定位流程（官方
    * `onLocationStart?: (onSuccess, onFail) => boolean | void`）。
    *
-   * **构造期回调**：Driver 没有 `setOnLocationStart`，因此换闭包要重建控件。
+   * **构造期回调**：官方对这一族只给了整袋入口 `setOptions`，没有 `setOnLocationStart`。
    * `onSuccess` / `onFail` 收到的是官方那两个回调；**本库不替它转调**
    * `locationSuccess` / `locationError` 事件（那需要猜「这次定位属于哪次命令」，
    * 而官方没有给这件事任何身份——与 `Autocomplete` 同款理由，见
    * `core/services/serviceTaskCore.ts` 的文件头）。
+   *
+   * **闭包永远最新，不需要重建**：见下方 `onLocationStartProxy` 的注释。
    */
   onLocationStart?: (
     onSuccess: (position: unknown) => void,
@@ -182,11 +184,45 @@ function readLocationError(event: unknown): LocationErrorEvent | null {
   return { code: record.code };
 }
 
+/**
+ * `onLocationStart` 的**稳定转发器**（issue #177）。
+ *
+ * ## 为什么需要它
+ *
+ * 官方 `GeolocationControlOptions.onLocationStart` 是一个**构造期回调**：它没有对应的
+ * `setOnLocationStart`，而 `ControlSpec.options` 的变化键对函数值按**存在性**比较
+ * （`core/controls/spec.ts` 的契约）——直接把用户的内联箭头放进 `options()`，
+ * 换闭包不会触发重建（这是刻意的，否则模板里的内联箭头会让控件每次渲染都重建），
+ * 但**首次创建之后再换的闭包就永远不会被 SDK 看到**。
+ *
+ * 此前这个 prop 干脆没进 `options()`（注释还写着「走 `create` 覆盖」，而那个钩子不存在），
+ * 于是它**类型检查通过、Vue 正常接收、然后被静默丢弃**。
+ *
+ * ## 口径
+ *
+ * 它定义在 `<script setup>` 里，因此**每个组件实例一个**（不是模块级单例）；
+ * 重要的性质是**同一实例的整个生命周期内引用不变**，而它在每次被调用时**现读** `props`。
+ * 稳定性契约两种情况都成立——变化键只关心「同一个 props 视图算出来的引用有没有变」，
+ * 而跨实例本来就是两组不同的 props——所以不必为了「模块级唯一」把它提到 `<script>`：
+ * 那会把一个组件的 props 捕获进模块作用域，组件卸载后闭包仍持有它。
+ *
+ * 因此「最新闭包」成立，且**不引入任何重建**。
+ *
+ * 键的**存在性**仍然跟着用户走：没传 `onLocationStart` 时该键为 `undefined`，
+ * Driver 的 `projectOptions` 会跳过它，SDK 侧就**不会**注册一个空回调——否则等于
+ * 替用户凭空加了一个官方声明里不存在的回调。代价是「补上 / 删掉」这个 prop 会
+ * 触发**一次**重建（存在性确实变了，这与该回调的构造期语义一致）。
+ */
+const onLocationStartProxy: NonNullable<LocationControlProps["onLocationStart"]> = (
+  onSuccess,
+  onFail,
+) => props.onLocationStart?.(onSuccess, onFail);
+
 const spec: ControlSpec<LocationControlProps, LocationCommandApi> = {
   kind: "location",
-  // ⚠️ 回调**不进** `options`：`ControlSpec.options` 的契约要求「同 props 得同结果」，
-  // 而内联箭头每次渲染都是新引用——放进变化键会让控件**每次渲染都重建**。
-  // `onLocationStart` 走 `create` 覆盖（见下），它每次（重）创建时现读，因此闭包总是最新的。
+  // ⚠️ 用户的**原始回调**不进 `options`：`ControlSpec.options` 的契约要求「同 props 得同结果」，
+  // 而内联箭头每次渲染都是新引用——把原值放进变化键会让控件**每次渲染都重建**。
+  // 这里放的是 `onLocationStartProxy`（一个**稳定引用**的转发器），因此换闭包既不重建也不丢。
   options: (p) => ({
     anchor: p.anchor,
     offset: p.offset,
@@ -197,6 +233,12 @@ const spec: ControlSpec<LocationControlProps, LocationCommandApi> = {
     useCompass: p.useCompass,
     autoZoom: p.autoZoom,
     autoViewport: p.autoViewport,
+    // 判据 `p.onLocationStart` 本身**也**被读（不是无条件带上代理）：没传这个 prop 时
+    // 该键为 `undefined`，Driver 的 `projectOptions` 会跳过它，SDK 侧就**不会**注册一个
+    // 官方声明里不存在的空回调。存在性仍然被变化键跟踪（函数折叠成 `"fn"` 只抹掉
+    // 「换闭包」），因此「补上 / 删掉」这个 prop 会触发**一次**重建——这与该回调的
+    // 构造期语义一致，而「换闭包」不会重建。
+    onLocationStart: p.onLocationStart ? onLocationStartProxy : undefined,
   }),
   events: () => [
     ["locationSuccess", (event: unknown) => emit("locationSuccess", readLocationSuccess(event))],

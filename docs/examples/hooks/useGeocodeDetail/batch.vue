@@ -16,20 +16,17 @@
               <span>纬度 - {{ item.lat }}</span>
               <span>经度 - {{ item.lng }}</span>
             </div>
+            <!-- 长地址放列表里，不塞进 <Label>：Label 是地图气泡，会一行一个字竖着排。 -->
+            <div class="addr" v-if="items[index]?.detail">
+              {{ items[index]!.detail.address || "无地址" }}
+            </div>
           </li>
         </ul>
       </CustomControl>
       <template v-if="!isLoading">
-        <template v-for="(item, index) in result">
+        <template v-for="(item, index) in items" :key="index">
           <template v-if="item.detail">
             <Marker :position="item.detail.point"></Marker>
-            <Label
-              :style="{ color: '#333', fontSize: '9px' }"
-              :position="item.detail.point"
-              :content="`${index}. 地址: ${item.detail.address} 所属商圈:${item.detail.business} 最匹配地点: ${
-                item.detail.surroundingPois[0]?.title || '无'
-              }`"
-            ></Label>
           </template>
         </template>
       </template>
@@ -38,7 +35,7 @@
 </template>
 
 <script lang="ts" setup>
-import { useGeocodeDetail, GeocodeDetailResult } from "bmap-vue";
+import { useGeocodeDetail, type GeocodeDetailItemResult } from "bmap-vue";
 const points = [
   { lng: 116.307852, lat: 40.057031 },
   { lng: 116.313082, lat: 40.047674 },
@@ -52,15 +49,11 @@ const points = [
 import { ref } from "vue";
 const map = ref();
 const { getBatch, isLoading } = useGeocodeDetail(map);
-type BatchItem = {
-  point: { lng: number; lat: number };
-  detail: GeocodeDetailResult | null;
-  error?: unknown;
-};
-const result = ref<BatchItem[]>([]);
+// 直接用官方公布的批量结果类型：每项自带 status / error，单项失败时 detail 为 null
+const items = ref<GeocodeDetailItemResult[]>([]);
 function handleInitd() {
   getBatch(points).then((r) => {
-    result.value = r;
+    items.value = r;
   });
 }
 </script>
@@ -84,5 +77,14 @@ function handleInitd() {
 }
 .point-list span {
   margin-right: 15px;
+}
+.point-list .addr {
+  margin: 2px 0 6px;
+  max-width: 220px;
+  /* 关键：不换行会被容器压成竖排；给出宽度上限 + 正常换行。 */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+  color: #666;
 }
 </style>

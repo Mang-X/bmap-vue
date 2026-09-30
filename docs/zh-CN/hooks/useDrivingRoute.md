@@ -46,12 +46,20 @@ const { data, status, sdkStatus, isLoading, supported, search, clear, cancel } =
 | ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
 | location      | 检索区域：城市名字符串 / `{ lng, lat }` / `MapHandle`。不传时取当前 `<Map>` 的地图实例     | `MaybeRefOrGetter<string \| GeoPoint \| MapHandle \| undefined>` | -      |
 | policy        | 驾车策略（`DrivingPolicy.*`）                                                              | `MaybeRefOrGetter<DrivingPolicy \| undefined>`            | `0`    |
+| alternatives  | 官方 `DrivingRouteOptions` 里的 `alternatives`，本库**未暴露**（见下）                          | -                                                          | -      |
 | enableTraffic | 是否显示实时路况（官方 4.0 默认 `false`）。开启后按路况分段着色的折线不受折线样式配置影响    | `MaybeRefOrGetter<boolean \| undefined>`                  | `false`|
 | renderOptions | 绘制选项（见下）。不传 = 纯 headless                                                       | `MaybeRefOrGetter<BMapRouteRenderOptions \| undefined>`   | -      |
 
 #### BMapRouteRenderOptions
 
-只透传官方声明里**存在且有语义**的成员（其余字段会被忽略：接收后忽略属于假支持）。
+只透传官方声明里**存在且有语义**的成员（其余字段不会被接收：接收后忽略属于假支持）。
+
+:::warning `polylineStyle` 不在构造选项里
+官方 `RouteRenderOptions` 有 `polylineStyle`（路线折线样式），本库**不暴露**它：上游类型包声明的
+`PolylineOptions` 是平铺成员，而官方类文档给的示例是带 `highlight` 分桶的嵌套形状，两者互相矛盾。
+在矛盾消解之前暴露它，等于让调用方按其中一个形状写而运行时静默按另一个生效。需要自定义折线样式时，
+用 `data` 里的方案路径自己画。
+:::
 
 | 字段            | 描述                                                | 类型                                        | 默认值  |
 | --------------- | --------------------------------------------------- | ------------------------------------------- | ------- |
@@ -62,14 +70,14 @@ const { data, status, sdkStatus, isLoading, supported, search, clear, cancel } =
 
 ### 返回值
 
-状态与错误语义**与其它服务 hooks 完全一致**（见[统一状态口径](#统一状态口径)）。
+状态与错误语义**与其它服务 composable 完全一致**（见[统一状态口径](/zh-CN/guide/services#统一状态口径)）。
 
 | 返回值     | 描述                                                             | 类型                                                     |
 | ---------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
 | data       | 路线结果（`start` / `end` / `plans` / `policy`）                  | `Readonly<ShallowRef<DrivingRouteResult \| null>>`         |
 | status     | 任务状态（见下）                                                  | `Readonly<ShallowRef<BMapServiceStatus>>`                 |
 | error      | 有公开原因时的错误信息（`{ code, message }`）                     | `Readonly<ShallowRef<ServiceErrorInfo \| null>>`          |
-| sdkStatus  | SDK 公开的状态码（`BMAP_STATUS_*`；成功为 `0`，拿不到时为 `null`） | `Readonly<ShallowRef<number \| null>>`                    |
+| sdkStatus  | 官方 `DrivingRoute#getStatus()` 的状态码（`BMAP_STATUS_*`；`0` = 成功，`≥ 2` = 失败并带上那个码，拿不到时为 `null`） | `Readonly<ShallowRef<number \| null>>`                    |
 | isLoading  | 是否在检索中                                                      | `Readonly<ShallowRef<boolean>>`                           |
 | supported  | 当前引擎是否支持驾车路线规划（Client 就绪后立即判定）              | `Readonly<ShallowRef<boolean>>`                           |
 | isError    | `status === 'failed'` 的别名                                      | `ComputedRef<boolean>`                                    |
@@ -78,6 +86,13 @@ const { data, status, sdkStatus, isLoading, supported, search, clear, cancel } =
 | clear      | 丢弃当前实例与结果：下一次 `search` 重建，且公开的 `clearResults()` 会收回地图上的路线与标注 | `() => void`                                  |
 | cancel     | **逻辑取消**在飞检索（SDK 侧请求收不回），已画出的结果不动          | `() => void`                                              |
 | reset      | 取消 + 清空 `data` / `error` / `status`                           | `() => void`                                              |
+
+:::warning 官方 `alternatives` 未暴露
+官方 `DrivingRouteOptions` 有 `alternatives?: boolean`（请求多条备选方案）。本库**不暴露**它：
+上游类型包没有对它给出任何语义说明（与 `policy` 那种带 `BMAP_DRIVING_POLICY_*` 值域的成员不同），
+暴露一个没有可核对语义的开关，等于让「设了但不生效」变成无声行为。需要备选方案时请用
+`data.plans` 里官方实际返回的方案数组——本库投影官方回包，不做条数裁剪。
+:::
 
 ### search
 

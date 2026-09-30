@@ -655,23 +655,18 @@ describe("文档承诺的命令真的存在（防空口承诺）", () => {
     }
   });
 
-  it("清单源码里指向的 ADR 都在仓库里，且不再指向已删除的 legacy 声明面", () => {
+  it("清单源码不再指向 ADR，且不再指向已删除的 legacy 声明面", () => {
     const sourceFile = resolve(
       ROOT,
       "packages/bmap-vue/src/plugins/compat-inventory.ts",
     );
     const source = readFileSync(sourceFile, "utf8");
-    const mentioned = [
-      "docs/adr/2026-09-13-plugin-compat-inventory.md",
-      "docs/adr/2026-09-13-private-sdk-surface-removal.md",
-    ];
-    for (const path of mentioned) {
-      // 先证明这条断言真的在检查东西：文件名主干确实在源码里被提到。
-      // 比对主干（去掉 .md）是因为源码里引用 ADR 时本来就不写扩展名。
-      const marker = path.split("/").pop()!.replace(/\.md$/, "");
-      expect(source, `清单源码没有指向 ${marker}`).toContain(marker);
-      expect(existsSync(resolve(ROOT, path)), `${path} 不存在`).toBe(true);
-    }
+
+    // 这份清单的 note 会**逐字渲染进发布文档**（`generate-plugin-inventory` 直接输出到
+    // `docs/zh-CN/contributing/plugin-compat-inventory.md`）。内部 ADR 引用对读者没有价值，
+    // 且 `docs/adr/**` 已退出发布面，留着只会变成死链。所以判据翻向：源码里**不得**出现
+    // ADR 文件名。ADR 文件本身仍在仓库里（决策史是历史，不是产品文档）。
+    expect(source, "清单源码不应再引用 ADR 文件").not.toMatch(/docs\/adr\/|\d{4}-\d{2}-\d{2}-[a-z-]+\.md/);
 
     // M3A3-REMOVE-LEGACY（#26）：`types/BMapGL` 已删除，清单不能再把它当成现存文件引用。
     // 正证守卫：那句话本身还在（只是改成历史表述），否则下面这条负向断言可能恒真。

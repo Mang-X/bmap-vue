@@ -780,6 +780,110 @@ export class FakeV4GroundOverlay extends FakeV4Overlay {
   }
 }
 
+/**
+ * `FakeV4GroundPoint`（issue #178）
+ *
+ * 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，构造签名
+ * `constructor(point: Point, opts?: GroundPointOptions)`——**几何是位置参数**，与
+ * `FakeV4GroundOverlay` 的 `constructor(bounds, …)` 是两件不同的事，因此单独建类而不复用。
+ *
+ * setter 集合**严格照官方实例方法表**（不实现 `setLevel` / `setTop` / `setEnableClicking`）：
+ * GroundPoint 自己的 6 个（`setPoint` / `setScale` / `setSize` / `setRotation` / `setAnchor` /
+ * `setOffset`）+ 从 GroundOverlay 继承的（`setImage` / `setOpacity` / `setDisplayOnMinLevel` /
+ * `setDisplayOnMaxLevel` / `setZIndex` / `enableMassClear` / `disableMassClear`）。
+ * 刻意**不**给缺失的成员提供兜底：若某个 `recreate` 键被误写成 `options`，Fake 在这里就会
+ * 抛「成员不存在」，用例因此能红——这正是分类错误要暴露的行为。
+ */
+export class FakeV4GroundPoint extends FakeV4Overlay {
+  point: FakeV4Point
+  size: { width: number; height: number } | null = null
+  anchor: { width: number; height: number } | null = null
+  offset: { width: number; height: number } | null = null
+  scale: number | null = null
+  rotation: number | null = null
+  url: string | null = null
+  opacity = 1
+  displayOnMinLevel: number | null = null
+  displayOnMaxLevel: number | null = null
+  zIndex: number | null = null
+  massClear = true
+
+  constructor(
+    point: FakeV4Point,
+    options: Record<string, unknown>,
+    stats: FakeV4Diagnostics,
+  ) {
+    super(options, stats)
+    this.point = point
+  }
+
+  /** 官方是 `setPoint`（**不是** `setPosition`）：见 `GroundPoint.d.ts:29`。 */
+  setPoint(point: FakeV4Point): void {
+    this.callLog.push('setPoint')
+    this.point = point
+  }
+
+  setScale(scale: number): void {
+    this.callLog.push('setScale')
+    this.scale = scale
+  }
+
+  setSize(size: { width: number; height: number }): void {
+    this.callLog.push('setSize')
+    this.size = size
+  }
+
+  setRotation(rotation: number): void {
+    this.callLog.push('setRotation')
+    this.rotation = rotation
+  }
+
+  setAnchor(anchor: { width: number; height: number }): void {
+    this.callLog.push('setAnchor')
+    this.anchor = anchor
+  }
+
+  setOffset(offset: { width: number; height: number }): void {
+    this.callLog.push('setOffset')
+    this.offset = offset
+  }
+
+  setImage(url: string): void {
+    this.callLog.push('setImage')
+    this.url = url
+  }
+
+  setOpacity(opacity: number): void {
+    this.callLog.push('setOpacity')
+    this.opacity = opacity
+  }
+
+  setDisplayOnMinLevel(level: number): void {
+    this.callLog.push('setDisplayOnMinLevel')
+    this.displayOnMinLevel = level
+  }
+
+  setDisplayOnMaxLevel(level: number): void {
+    this.callLog.push('setDisplayOnMaxLevel')
+    this.displayOnMaxLevel = level
+  }
+
+  setZIndex(zIndex: number): void {
+    this.callLog.push('setZIndex')
+    this.zIndex = zIndex
+  }
+
+  enableMassClear(): void {
+    this.callLog.push('enableMassClear')
+    this.massClear = true
+  }
+
+  disableMassClear(): void {
+    this.callLog.push('disableMassClear')
+    this.massClear = false
+  }
+}
+
 export class FakeV4Prism extends FakeV4Overlay {
   path: FakeV4Point[]
   altitude: number

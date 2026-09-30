@@ -213,7 +213,7 @@ const GRAPH_EVENTS_WITHOUT_EDITING: Record<string, OverlayEventInput> = { ...GRA
 
 /** `GroundOverlayEventMap`（11 个）：全部指针事件的字段在上游都是可缺的（`GroundOverlayMouseEvent`）。 */
 const GROUND_OVERLAY_EVENTS: Record<string, OverlayEventInput> = {
-  click: partialPointer("点击覆盖物时触发（3.0 只保证基础字段，4.0 附带坐标）"),
+  click: partialPointer("点击覆盖物时触发（JSAPI 4.0 的载荷附带坐标；旧引擎只保证基础字段）"),
   dblclick: partialPointer("双击覆盖物时触发（同上）"),
   rightclick: partialPointer("右键点击覆盖物时触发"),
   rightdblclick: partialPointer("右键双击覆盖物时触发"),
@@ -285,6 +285,16 @@ export const OVERLAY_EVENT_MATRIX = {
   }),
   "ground-overlay": matrix({
     upstream: "GroundOverlayEventMap",
+    events: GROUND_OVERLAY_EVENTS,
+  }),
+  // ---- issue #178：GroundPoint 继承 GroundOverlay，因此**沿用同一张事件表** ----
+  // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
+  // 而 `GroundOverlay.addEventListener<K extends keyof GroundOverlayEventMap>`（`GroundOverlay.d.ts:122`）
+  // 是它继承到的**唯一**事件入口——SDK **没有**为 GroundPoint 单独声明 `GroundPointEventMap`
+  // （官方 React 参考实现自己也注明「SDK 未定义 GroundPointEventMap，类继承 GroundOverlay，
+  // 事件沿用了同一套」）。因此这里引用同一张表，而不是新造一张名义上相同的。
+  "ground-point": matrix({
+    upstream: "GroundOverlayEventMap（GroundPoint 继承 GroundOverlay，SDK 无独立的 GroundPointEventMap）",
     events: GROUND_OVERLAY_EVENTS,
   }),
   "info-window": matrix({ upstream: "InfoWindowEventMap", events: INFO_WINDOW_EVENTS }),

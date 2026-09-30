@@ -1,4 +1,4 @@
-# TileLayer 瓦片图层 <Badge type="tip" text="^1.0.0" />
+# TileLayer 瓦片图层
 
 加载**百度坐标系（BD09MC）**的自有瓦片。第三方标准瓦片服务（XYZ / WMTS / WMS / TMS）请用 `XYZLayer`。
 
@@ -29,18 +29,22 @@ layer/tileLayer
 | 属性 | 说明 | 类型 | 默认值 |
 | --- | --- | --- | --- |
 | tileUrlTemplate | 图块 URL 模板，占位符 `{X}` / `{Y}` / `{Z}` | `string` | - |
-| transparentPng | 图块是否为含透明信息的 PNG | `boolean` | `false` |
+| transparentPng | 图块是否为含透明信息的 PNG | `boolean` | 官方默认 `false` |
 | boundary | 图层掩膜（行政区名或坐标串） | `string \| string[]` | - |
 | showRegion | 掩膜显示区域：`'inside'` / `'outside'` | `string` | - |
-| retry | 瓦片加载失败时自动重试 | `boolean` | `false` |
+| retry | 瓦片加载失败时自动重试 | `boolean` | 官方默认 `false` |
 | retryTime | 重试间隔（毫秒） | `number` | SDK 默认 |
 | cacheSize | 瓦片缓存数量 | `number` | SDK 默认 |
 | tileLoadFunction | 自定义瓦片加载函数 | `(tile, url) => void` | - |
+| tileLoadObserver | 瓦片加载观察面（见[图层总览的「加载诊断」](./index#加载诊断观察瓦片什么时候加载什么时候失败)） | `TileLoadObserver` | - |
 
 ## 注意
 
 - 坐标必须是 BD09MC；用 EPSG:3857 / WGS84 会整体偏移。
 - 不提供 `getTilesUrl()` 的逃生口：本库统一走 `tileUrlTemplate`。
+- `tileLoadFunction` 是**接管式**的：设了它，SDK 就不再自己加载，函数必须自己完成加载
+  （通常是 `tile.src = url`），否则**瓦片不会出现**。只想在旁边观察请用 `tileLoadObserver`。
+  两者同时给时加载完全交给你的函数。
 
 ## 参考
 

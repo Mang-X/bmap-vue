@@ -1,8 +1,8 @@
 # 安装
 
-## 使用包管理器
+## 用包管理器
 
-我们建议使用包管理器（如 npm、Yarn 或 pnpm）安装 `bmap-vue`，然后使用 Vite、webpack 等打包工具。
+我们建议使用包管理器（pnpm / yarn / npm）安装 `bmap-vue`：
 
 ::: code-group
 
@@ -20,11 +20,28 @@ npm install bmap-vue
 
 :::
 
-## 浏览器直接引入 <Badge type="tip" text="^0.0.21" />
+### 同级依赖
 
-直接通过浏览器的 HTML 标签引入 `bmap-vue`，然后使用全局变量 `BMapVue`。
+`vue`（`^3.5.0`）是 peer 依赖。地图 SDK 由本库默认通过官方
+[`@baidumap/jsapi-loader`](https://www.npmjs.com/package/@baidumap/jsapi-loader) 加载，
+**不需要**你手动引入 SDK 脚本。
 
-不同的 CDN 提供商有不同的引入方式，我们在这里以 [unpkg](https://unpkg.com) 和 [jsDelivr](https://www.jsdelivr.com) 举例。你也可以使用其它的 CDN 供应商。
+标准 UI（建议、结果列表、翻页、路线面板、详情面板）由官方
+[`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 提供，
+它是 **optional peer**——只有用 `bmap-vue/ui-kit` 时才需要装，见[官方 UI Kit 集成](./ui-kit)。
+
+::: code-group
+
+```bash [需要 UI Kit]
+pnpm add @baidumap/jsapi-ui-kit
+```
+
+:::
+
+## 浏览器直接引入
+
+通过 CDN 引入时用全局变量 `BMapVue`（IIFE 产物，已把 Vue 作为外部依赖）。
+**生产环境请锁定版本**。
 
 ::: code-group
 
@@ -34,7 +51,7 @@ npm install bmap-vue
   <!-- Import Vue -->
   <script src="https://unpkg.com/vue@3"></script>
   <!-- Import bmap-vue -->
-  <!-- 生产环境请锁定版本 -->
+  <link rel="stylesheet" href="https://unpkg.com/bmap-vue/dist/bmap-vue.css" />
   <script src="https://unpkg.com/bmap-vue"></script>
 </head>
 ```
@@ -44,19 +61,27 @@ npm install bmap-vue
   <!-- Import Vue 3 -->
   <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
   <!-- Import bmap-vue -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bmap-vue/dist/bmap-vue.css" />
   <script src="https://cdn.jsdelivr.net/npm/bmap-vue"></script>
 </head>
 ```
 
 :::
 
-::: tip 提示
-我们建议使用 CDN 引入 `bmap-vue` 的用户锁定版本，以免将来发布更新时受到非兼容性更新的影响。
+::: warning 锁定版本
+CDN 的不带版本路径会跟随 latest。我们只支持 JSAPI 4.0，且公共出口按语义化版本演进，
+**请锁定版本号**（例如 `bmap-vue@1`），避免将来发布更新时受到影响。
 :::
 
-## Hello World
+## 下一步
 
-[在线演示](https://codepen.io/yue1123/pen/oNyQWeP)
+- [快速开始](./quick-start) —— 从零跑通第一张地图
+- [配置与插件](./config) —— ak、Client 查找顺序、插件
+- [Headless 服务](./services) —— 地址解析、路线规划、检索
 
-<iframe allow="accelerometer; camera; encrypted-media; display-capture; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write;" allowfullscreen="true" allowpaymentrequest="true" height="500" style="width: 100%;" scrolling="no" title="bmap-vue" src="https://codepen.io/yue1123/embed/oNyQWeP?default-tab=html%2Cresult&theme-id=light" frameborder="no" loading="lazy">
-</iframe>
+## 遇到问题
+
+- **地图不显示**：先确认 `ak` 有效，再用[错误码与排障](./errors)对症。
+- **`getMapInstance` 之类的方法找不到**：本库不再暴露这类实例方法，
+  请用组件 `ref` 暴露的命令面，详见 [Map 地图](/zh-CN/components/map)。
+- **仍解决不了**：[FAQ](./faq)。

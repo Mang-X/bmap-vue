@@ -130,7 +130,7 @@ export declare interface Bounds {
     southwest: Point;
     northeast: Point;
 }
-export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
+export declare type Capability = "map.view-state" | "map.zoom" | "map.center-and-zoom" | "map.bounds" | "map.viewport" | "map.fly-to" | "map.screenshot" | "map.heading" | "map.tilt" | "map.animate" | "map.check-resize" | "map.pixel-conversion" | "map.style" | "map.destroy" | "overlay.marker" | "overlay.label" | "overlay.info-window" | "overlay.circle" | "overlay.polyline" | "overlay.polygon" | "overlay.rectangle" | "overlay.custom-dom" | "overlay.ground" | "overlay.ground-point" | "overlay.point-collection" | "overlay.context-menu" | "overlay.prism" | "overlay.bezier-curve" | "overlay.marker-3d" | "overlay.mapvgl" | "layer.tile" | "layer.traffic" | "layer.geojson" | "layer.point-icon" | "layer.point-shape" | "layer.district" | "layer.panorama-coverage" | "layer.line" | "layer.fill" | "layer.dom" | "layer.xyz" | "layer.wms" | "layer.wmts" | "layer.raster" | "layer.mvt" | "layer.cluster" | "layer.point" | "layer.heatmap" | "layer.track-line" | "layer.polygon" | "layer.polyline" | "layer.text" | "service.local-search" | "service.autocomplete" | "service.driving-route" | "service.walking-route" | "service.riding-route" | "service.transit-route" | "service.geocoder" | "service.geolocation" | "service.local-city" | "service.boundary" | "service.convertor" | "service.track-animation" | "panorama.viewer" | "panorama.service" | "panorama.label";
 export declare const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor>;
 export declare const CAPABILITY_FAMILIES: readonly CapabilityFamily[];
 export declare const CAPABILITY_IDS: readonly Capability[];
@@ -650,7 +650,6 @@ export declare type MarkerIconInput = string | {
     anchor?: Pixel;
     imageOffset?: Pixel;
     imageSize?: Size;
-    printImageUrl?: string;
 };
 declare interface MarkerLabelInput {
     content: string;
@@ -775,6 +774,7 @@ export declare interface OverlayDriver {
     createBezierCurve(path: readonly Point[], controlPoints: readonly (readonly Point[])[], options?: Record<string, unknown>): OverlayHandle;
     createMapMask(path: readonly Point[], options?: Record<string, unknown>): OverlayHandle;
     createGroundOverlay(bounds: Bounds, options?: Record<string, unknown>): OverlayHandle;
+    createGroundPoint(position: Point, options?: Record<string, unknown>): OverlayHandle;
     createCustomOverlay(position: Point, render: () => HTMLElement, options?: CustomOverlayOptions): OverlayHandle;
     createContextMenu(options?: {
         width?: number;
@@ -821,7 +821,7 @@ export declare interface OverlayDriver {
     buildIcon(icon: MarkerIconInput): unknown;
 }
 export declare type OverlayHandle = SdkHandle<"overlay" | `overlay:${string}`>;
-export declare type OverlayKind = "marker" | "polyline" | "polygon" | "rectangle" | "circle" | "info-window" | "label" | "prism" | "marker3d" | "bezier-curve" | "custom-overlay" | "map-mask" | "ground-overlay" | "context-menu";
+export declare type OverlayKind = "marker" | "polyline" | "polygon" | "rectangle" | "circle" | "info-window" | "label" | "prism" | "marker3d" | "bezier-curve" | "custom-overlay" | "map-mask" | "ground-overlay" | "ground-point" | "context-menu";
 export declare type OverlayPropertyPolicy = "mutable" | "recreate" | "unsupported";
 export declare interface OverlayTarget {
     kind: "map" | "marker" | "clusterer" | "overlay";

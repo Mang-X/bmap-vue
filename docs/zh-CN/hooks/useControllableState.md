@@ -75,7 +75,7 @@ const state = useControllableState<{ lng: number; lat: number }>({
 | --- | --- |
 | `value` | 生效值（`ComputedRef`）：受控时读外部值，非受控时读内部状态 |
 | `internal` | 内部状态（`ShallowRef`）：非受控模式的事实源，受控模式是外部值的镜像 |
-| `isControlled` | 当前是否受控。⚠️ **库内没有消费者**（`<Map>` 用的是即时的 `value() !== undefined`）；它保留在返回类型上是因为本 composable 是**已发布的公共 API**，返回形状属于冻结契约。**它是惰性创建的**——没人访问就不分配，所以库内零消费者不代表 `<Map>` 为它付费。详见 [ADR §6.2](../../adr/2026-09-14-map-controlled-state.md#62-iscontrolled-为什么保留零消费者但属冻结公共面) |
+| `isControlled` | 当前是否受控。⚠️ **库内没有消费者**（`<Map>` 用的是即时的 `value() !== undefined`）；它保留在返回类型上是因为本 composable 是**已发布的公共 API**，返回形状属于冻结契约。**它是惰性创建的**——没人访问就不分配，所以库内零消费者不代表 `<Map>` 为它付费。 |
 | `initial` | 首次解析出的初值（用于「初次创建」这类一次性动作） |
 | `syncExternal(next)` | 外部值变化入口；传 `undefined` 表示当前没有受控值 |
 | `commit(next)` | 内部状态变化入口；返回**是否真的变化**（相等判定含容差） |

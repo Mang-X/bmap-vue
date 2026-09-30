@@ -14,62 +14,60 @@ overlay/circle
 
 ## 构造期 Props（`recreate`）
 
-**这一组的每一项都是构造期属性**——官方 4.0.5 的 `overlay/Circle.d.ts` 实例成员表上
-**没有**对应的 setter。**改动其中任何一项都会重建实例**（旧实例连同其事件绑定一起释放）。
+**这一组的每一项都是构造期属性**——官方 `Circle` 的实例成员表上**没有**对应的 setter。
+**改动其中任何一项都会重建实例**（旧实例连同它的事件绑定一起释放）。
 
-| 属性           | 说明                                                   | 类型                                            | 官方默认                |
-| -------------- | ------------------------------------------------------ | ----------------------------------------------- | ----------------------- |
-| enableClicking | 是否响应点击事件                                       | `boolean`                                       | `true`                  |
-| coordType      | 输入坐标的坐标类型（未设置时用全局 `BMap.coordType`）   | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | 用全局值 |
-| dashArray      | 虚线样式，如 `[8, 4]`（实线 8px、间隙 4px）           | `number[]`                                      | 实线与间隙均为线宽的 2 倍 |
+| 属性 | 说明 | 类型 | 官方默认 |
+| --- | --- | --- | --- |
+| enableClicking | 是否响应点击事件。官方**没有**成对的 `enableClicking()` / `disableClicking()` | `boolean` | `true` |
+| coordType | 输入坐标的坐标类型。未设置时使用全局 `BMap.coordType` | `'BMAP_COORD_BD09' \| 'BMAP_COORD_GCJ02' \| 'BMAP_COORD_WGS84'` | 用全局值 |
+| dashArray | 虚线样式配置，如 `[8, 4]` 表示实线部分长 8 像素、间隙部分长 4 像素 | `number[]` | - |
 
-::: warning `<Circle>` **没有** `geodesic` / `clip` / `linkRight` / `strokeLineCap`
-
-官方 `CircleOptions` 一共 12 个键，上面三个之外**一个都没有**那几项——圆形的几何是
-「圆心 + 半径」，没有「跨经度的路径」，也没有「两点之间怎么连」的问题。传了会被 SDK 忽略。
+::: warning `<Circle>` **没有** `geodesic` / `clip` / `linkRight` / `strokeLineCap` / `strokeLineJoin`
+官方 `CircleOptions` 一共 12 个键，上面三个之外**一个都没有**——圆形的几何是「圆心 + 半径」，
+没有「跨经度的路径」，也没有「两点之间怎么连」的问题。传了会被 SDK 忽略。
 只有 `<Polyline>` 与 `<Polygon>` 支持 `strokeLineCap` / `strokeLineJoin`。
-
 :::
 
 ## 就地更新 Props（`options`）
 
-| 属性            | 说明                                        | 类型                          | 可选值                    | 默认值     | 版本                            |
-| --------------- | ------------------------------------------- | ----------------------------- | ------------------------- | ---------- | ------------------------------- |
-| center          | 圆形中心点经纬度                            | `{ lng: number, lat: number}` | -                         | `required` | -                               |
-| radius          | 圆形的半径，单位为米                        | `number`                      | -                         | `required` | -                               |
-| strokeColor     | 描边的颜色，同 CSS 颜色                     | `string`                      | -                         | `#000000`  | -                               |
-| strokeOpacity   | 描边的透明度，范围 0-1                      | `number`                      | `0-1`                     | `0.9`      | -                               |
-| fillColor       | 面填充颜色，同 CSS 颜色                     | `string`                      | -                         | `#000000`  | -                               |
-| fillOpacity     | 面填充的透明度，范围 0-1                    | `number`                      | `0-1`                     | `0.5`      | -                               |
-| strokeWeight    | 描边的宽度，单位为像素                      | `number`                      | -                         | `2`        | -                               |
-| strokeStyle     | 描边的样式，为实线、虚线、或者点状线        | `'solid' \| 'dashed' \| 'dotted'` | -                      | `solid`    | -                               |
-| enableMassClear | 是否在调用 `map.clearOverlays` 清除此覆盖物 | `boolean`                     | -                         | `true`     | -                               |
-| enableEditing   | 是否启用线编辑                              | `boolean`                     | -                         | `false`    | -                               |
-| zIndex          | 层叠顺序（**就地更新**，官方 `setZIndex`）  | `number`                      | -                         | -          | `1.0.0`（#165）                |
-| visible         | 是否显示（走 `show` / `hide`）              | `boolean`                     | -                         | `true`     | `1.0.0`                        |
+| 属性 | 说明 | 类型 | 默认值 |
+| --- | --- | --- | --- |
+| center | 圆形中心点经纬度 | `{ lng: number, lat: number }` | `required` |
+| radius | 圆形的半径，单位为米 | `number` | `required` |
+| strokeColor | 描边的颜色，同 CSS 颜色 | `string` | `#000000` |
+| strokeWeight | 描边的宽度，单位为像素 | `number` | `2` |
+| strokeOpacity | 描边的透明度，范围 0 - 1 | `number` | `0.9` |
+| fillColor | 面填充颜色，同 CSS 颜色 | `string` | `#000000` |
+| fillOpacity | 面填充的透明度，范围 0 - 1 | `number` | `0.5` |
+| strokeStyle | 描边的样式，为实线、虚线、或者点状线 | `'solid' \| 'dashed' \| 'dotted'` | `solid` |
+| enableMassClear | 是否在调用 `map.clearOverlays()` 时清除此覆盖物（成对开关） | `boolean` | `true` |
+| enableEditing | 是否启用线编辑（成对开关 `enableEditing()` / `disableEditing()`） | `boolean` | `false` |
+| zIndex | 覆盖物的层叠顺序值 | `number` | - |
+| visible | 是否显示（走 `show()` / `hide()`） | `boolean` | `true` |
 
 ## 组件事件
 
 本组件的事件面由**覆盖物事件矩阵**给出：`circle` 共 17 个事件，事件名（Vue 名 / SDK 名）、
 载荷档与「需要哪个能力开关」都在那张表里，组件的 `defineEmits` 与它逐条一致。
+其中 6 个编辑事件（`editstart` / `editend` / `linevertexdragstart` / `linevertexdragging` /
+`linevertexdragend` / `linevertexdel`）**需要先开 `enableEditing`**。
 
 详见 [覆盖物事件矩阵](./events)。
 
-## 读回命令面（`defineExpose`，#165）
+## 读回命令面（`defineExpose`）
 
-官方在这个类上声明的 getter 此前**没有任何调用路径**——组件永远不会替调用方读一次。
-现在它们在组件 `ref` 上。
+官方在这个类上声明的 getter 在组件 `ref` 上。返回值全部是**领域值**：`getBounds()` 给
+`{ southwest, northeast }`、`getOffset()` 一类给 `{ x, y }`——raw `BMap.Bounds` / `BMap.Size`
+不会出现在调用方手里。
 
-| 方法                                     | 官方声明 | 适用 |
-| ---------------------------------------- | -------- | ---- |
-| `getBounds()`                            | `getBounds(): Bounds` | 全部 |
+| 方法 | 官方声明 | 适用 |
+| --- | --- | --- |
+| `getBounds()` | `getBounds(): Bounds` | Polyline / Polygon / Rectangle / Circle |
 | `getStrokeColor()` / `getStrokeOpacity()` / `getStrokeWeight()` / `getStrokeStyle()` | 各自的 `getXxx()` | 全部 |
-| `getCenter()` / `getRadius()`            | 各自的 `getXxx()` | 仅 Circle |
-| `getFillColor()` / `getFillOpacity()`    | 各自的 `getXxx()` | Polygon / Rectangle / Circle（**Polyline 没有填充**） |
-| `setPositionAt(i, pt)`                   | `setPositionAt(index: number, point: Point): void` | Polygon / Polyline |
-
-返回值全部是**领域值**：`getBounds()` 给 `{ southwest, northeast }`、`getOffset()` 一类给
-`{ x, y }`——raw `BMap.Bounds` / `BMap.Size` 不会出现在调用方手里。
+| `getFillColor()` / `getFillOpacity()` | 各自的 `getXxx()` | Polygon / Rectangle / Circle（**Polyline 没有填充**） |
+| `getCenter()` / `getRadius()` | 各自的 `getXxx()` | 仅 Circle |
+| `setPositionAt(i, pt)` | `setPositionAt(index: number, point: Point): void` | Polygon / Polyline |
 
 ⚠️ **不镜像成组件状态**：官方这些 getter 返回的是**当前值**而不是 SDK 默认值，`props` 才是主模型。
 
@@ -79,8 +77,8 @@ overlay/circle
 （`Polygon` 的路径可以是多环），而 `Polyline` 只有两个参数。给非 polygon 传 `deep` 会**显式抛
 `BMAP_INVALID_ARGUMENT`**，而不是让官方默默吞掉第三个参数。
 
-它**不**回写 `props.path`：官方没有「顶点被改了」的事件，猜不出一次 `setPositionAt` 属于哪次
-路径写入。调用方应同时更新 `path`（或递增 `pathVersion`）。
+它**不**回写 `props.points`：官方没有「顶点被改了」的事件，猜不出一次 `setPositionAt` 属于哪次
+路径写入。调用方应同时更新 `points`（或递增 `pathVersion`）。
 
 ### 刻意不暴露
 
@@ -88,3 +86,14 @@ overlay/circle
 （官方 `Polyline.d.ts` 只声明描边 getter，没有填充）。
 
 未就绪 / 已释放时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
+
+## 官方有、本库未暴露
+
+**没有缺口。** 官方 `CircleOptions` 的 12 个键全部有出口：三个构造期（`enableClicking` /
+`coordType` / `dashArray`）在上面的「构造期 Props」表里，其余九个在「就地更新 Props」表里。
+
+::: tip 官方文档站的 `path` / `node` / `nodeT` 不在官方 4.0.5 声明里
+官方 React 文档的 API 表比 SDK 本身宽：`path`（本库改名 `points`，与图形族对齐）、`node` /
+`nodeT` 在上游 `CircleOptions` 的声明中查无此成员。`node` / `nodeT` 是 React 的渲染插槽
+（等价于本库不需要的渲染数据），不是构造选项。
+:::

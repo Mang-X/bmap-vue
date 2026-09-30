@@ -423,7 +423,7 @@ describe("#74 smoke 检查登记表：required 与页面的实现必须对齐", 
  */
 describe("#104 文档的检查表必须与登记表镜像", () => {
   const doc = readFileSync(
-    resolve(import.meta.dirname, "../../docs/zh-CN/contributing/v4-browser-smoke.md"),
+    resolve(import.meta.dirname, "../../docs/internal/v4-browser-smoke.md"),
     "utf8",
   );
 

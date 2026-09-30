@@ -283,7 +283,13 @@ describe("ContextMenu", () => {
     expect(harness.attached("context-menu")).toBe(0);
     const codes = resourceErrors.map((entry) => entry.code);
     expect(codes).toContain("BMAP_CAPABILITY_UNSUPPORTED");
-    expect(resourceErrors.some((entry) => entry.message?.includes("polyline") || entry.message?.includes("overlay"))).toBe(true);
+    expect(
+      resourceErrors.some((entry) => entry.message?.includes("polyline") || entry.message?.includes("overlay")),
+    ).toBe(true);
+    // 显式失败走 `resource:error` 的 `BMAP_CAPABILITY_UNSUPPORTED`，同时**留一条
+    // `console.warn` 作为旁证**——两条路径都要有，缺一条都说明「失败」没被真的报出来。
+    // （我曾把这条断言反过来写成「不应该 warn」，依据是当时控制台上刷的是**别的**
+    // 无关告警；那条告警修掉后本用例就红了，暴露了依据不成立。断言跟着实现回到正向。）
     expect(warn).toHaveBeenCalled();
 
     wrapper.unmount();

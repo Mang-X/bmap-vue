@@ -14,7 +14,7 @@ title: 数据组件
 | 中小规模、需要逐点交互 | `MarkerList` | **每项一个 Marker** |
 | 空间上邻近的点需要聚合 | `MarkerCluster`（默认） | **整批一个原生聚合图层**（`BMap.ClusterLayer`） |
 | 同上，但**事件里要有簇内业务项** | `MarkerCluster engine="markers"` | 每个簇 / 未聚合的单点一个 Marker |
-| 大规模散点，画几何图形 | `BPointShapeLayer` | **整批一个原生图层**（`BMap.PointShapeLayer`，官方已弃用，见下） |
+| 大规模散点，画几何图形 | `PointCollection` | **整批一个原生图层**（`BMap.PointShapeLayer`，官方已弃用，见下） |
 | 大规模散点，画图标 | `PointIconLayer` | **整批一个原生图层**（`BMap.PointIconLayer`，官方已弃用，见下） |
 | 同一层里「有图标就用图标、没有就画图形」 | `PointLayer` | **整批一个原生图层**（`BMap.PointLayer`，扩展 API） |
 
@@ -39,8 +39,9 @@ title: 数据组件
 | `dataVersion` | **引用不变、内容变了**时递增它 | `PropertyKey` |
 | `visible` | 是否显示（`false` = 隐藏，不是删掉） | `boolean`，默认 `true` |
 
-> `PointCollection` 在 3.0 发布前更名为 `BPointShapeLayer`（它是**未发布** changeset 里的新增，
-> 因此**没有**留弃用别名）。改名的理由是三个组件的名字要能一眼看出各自落在哪个 SDK 类上。
+> 三个点图层组件的命名与它们各自落地的官方 SDK 类一一对应
+> （`PointCollection` → `BMap.PointShapeLayer`、`PointIconLayer` → `BMap.PointIconLayer`、
+> `PointLayer` → `BMap.PointLayer`），方便从组件名直接看出它站在哪一层能力上。
 
 ## `Item` 类型会原样保留
 
@@ -147,10 +148,6 @@ function moveFirst() {
 </template>
 ```
 
-> 示例用**当前 head 实际导出的** `PointCollection`；它在未发布的 3.0 命名里叫 `BPointShapeLayer`
-> （见上文「先选对组件」的说明）。1.0 的公共 API 命名对齐（[#135](https://github.com/Mang-X/bmap-vue/issues/135)）
-> 完成后，文档会统一改成新名。
-
 边界与代价：
 
 - `shallowRef` / `markRaw` 之后，**原地改内容**（`stations.value[0].lng = …`）不会自动被感知——这与
@@ -163,8 +160,8 @@ function moveFirst() {
   tracking），收益不成立。若同一份数据还要给模板做深响应，应**从原始数据源分别构造**一份 reactive
   状态与一份 raw / plain snapshot，而不是把现有 Proxy 容器再 `markRaw` 一次。
 
-依据与实测口径见 ADR [深响应大数组的更新路径](/adr/2026-09-24-deep-reactive-array-update-path)；同一份
-对照在 `tests/performance/component-path.perf.test.ts` §5 是常驻用例。
+这份对照是**常驻**的：`tests/performance/component-path.perf.test.ts` §5 每次跑基准都会验，
+数字对不上就红。
 
 ## `MarkerList`
 
@@ -272,7 +269,7 @@ Marker 的代价」），不是自动降级。
 `cluster-click` / `item-click` 是本组件的核心交互，本库没有「关掉拾取」的消费者
 （关掉等于 `cluster-click` 永远不触发，那是自断交互不是能力）。`enablePicked` 因此固定为 `true`。
 
-## `BPointShapeLayer`
+## `PointCollection`
 
 ::: warning 底层类官方已在 4.0.5 弃用
 本组件落在 `BMap.PointShapeLayer` 上，该类被官方标记 `@deprecated`（建议改用 `PointLayer` 的
@@ -286,7 +283,7 @@ Marker 的代价」），不是自动降级。
 :::
 
 ```vue
-<BPointShapeLayer
+<PointCollection
   :data="stations"
   item-key="id"
   :get-position="(s) => ({ lng: s.lng, lat: s.lat })"
@@ -363,7 +360,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 需要「最稳、官方两处都声明、样式是袋」的那一套，就继续用 `<PointIconLayer>`。
 
 官方同一批还弃用了 `BMap.PointShapeLayer`（建议 `PointLayer` 形状模式）；本库**没有**对应的
-`PointShapeLayer` 组件——形状点走 [`BPointShapeLayer`](#bpointshapelayer)。线 / 面两个图层的弃用
+本库的形状点走 [`PointCollection`](#pointcollection)。线 / 面两个图层的弃用
 见[原生批量可视化图层](./layer/native-visual-layers)。
 
 逐字段迁移表、七个无对应的旧选项与「该留下还是该迁走」的判断，见
@@ -382,7 +379,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 />
 ```
 
-与 `BPointShapeLayer` 的差异只有「每个点画什么」：前者画几何图元，后者画一张图标。
+与 `PointCollection` 的差异只有「每个点画什么」：前者画几何图元，后者画一张图标。
 
 | 属性 | 说明 | 默认值 |
 | --- | --- | --- |
@@ -404,9 +401,33 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 > `false`。组件因此显式写 `undefined`，让「没传」真的是「没传」——否则每个不传 `userSizes` 的用户
 > 都会被静默切到 `width` / `height` 通道、覆盖掉 `sizes`。
 
-事件与 `BPointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。
-注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
+事件与 `PointShapeLayer` 完全相同（`item-click` + 含未命中的 `click`），更新路径也相同。注意图标是按 URL **异步加载**的：本库不接管它的加载状态（SDK 也没有公开「图标就绪」的事件），
 `dataparsed` 不代表图标已经可见。
+
+## 官方有、本库未暴露（三个点图层）
+
+官方 React 文档为点图层列了三个页面：`point-shape-layer` / `point-icon-layer` / `point-collection`。
+前两个讲的是**图层**形态（`BMap.PointShapeLayer` / `BMap.PointIconLayer`），第三个讲的是 v3
+时代那个**覆盖物** `BMap.PointCollection`（4.0.5 的类型包里**没有**它的类声明）。本库的对应关系与
+逐项差异：
+
+| 官方页 | 本库对应 | 差异 |
+| --- | --- | --- |
+| `point-shape-layer` | [`PointCollection`](#pointcollection) | **形态差异**：官方讲图层 API（`data` / `idKey` / `crs` / `style` …），本库的 `PointCollection` 走**取数面**（`data` 是业务数组 + `itemKey` + `getPosition`），样式是**扁平 prop**（`shapeType` / `size` / `color` …）而不是 `style` 袋。 |
+| `point-icon-layer` | [`PointIconLayer`](#pointiconlayer) | 同上：官方页的图层成员，本库是**取数面 + 扁平样式 prop**。 |
+| `point-collection` | [`PointCollection`](#pointcollection) | **底层类不同**：官方页讲 `BMap.PointCollection` 这个 v3 覆盖物（4.0.5 的类型包里**没有**它的类声明）；本库的 `PointCollection` 落在 `BMap.PointShapeLayer` 上。官方页那一组键**不可照抄**：`points` 是覆盖物的坐标数组（本库用 `data` + `getPosition` 取数）、`shape` / `color` / `size` 三个的取值域是 v3 的常量枚举（本库用 `shapeType` 数字枚举，见上文迁移提示框）、`enableMassClear` 是覆盖物的方法而非构造选项、`onClick` 一族是 React 事件回调。 |
+
+前两页的 API 表与本库 prop 面的逐项对照（**同名同义**的不再重复列出）：
+
+| 官方键 | 本库的情况 |
+| --- | --- |
+| `style` | **拆成扁平 prop**：`PointCollection` 给 `shapeType` / `size` / `color` / `strokeColor` / `strokeWeight`；`PointIconLayer` 给 `icon` / `width` / `height` / `anchors` / `offset` / `scale` / `rotation` / `featureOpacity` / `visibility` / `sizes` / `userSizes` / `iconObj`。逐要素透明度要写 `featureOpacity`（`PointIconLayer`）而不是 `opacity`——后者是**图层级**的那把乘数，两者是两个官方字段。 |
+| `data` | **`data` 是业务数组**，由 `itemKey` + `getPosition` 适配成 GeoJSON 后经 `setData()` 下发。 |
+| `idKey` | **`itemKey`**。函数式 key 落保留字段 `__id`，因此 `itemKey` 恒能推出身份字段，`PointCollection` 的要素状态命令面不会遇到「未声明 `idKey` ⇒ 命令被拒绝」那条路径。 |
+| `crs` / `selectedIndex` / `selectedColor` / `autoSelect` / `popEvent` | **未暴露**：这五个在 4.0.5 的 `PointShapeLayerOptions` / `PointIconLayerOptions` 上确有声明，但两个组件**都不投影**它们。选中态请走[要素状态](#要素状态feature-state)命令面（按业务 id 定位，比按 `dataIndex` 序号更可靠），悬浮高亮与事件冒泡目前没有等价入口。 |
+| `enablePicked` / `pickWidth` / `pickHeight` | 同名覆盖，且 `enablePicked` 默认**刻意不同于官方**（官方 `false`，本库 `true`）。 |
+| `isFlat` | 同名覆盖。`PointIconLayer` 另有官方同名的 `isFixed`。⚠️ 官方三处的 `@default` 自相矛盾（`layer/` 两处写 `true`、`visualization/PointLayer` 写 `false`），因此两个组件都**不给默认值**——「没传 = 不表态 = SDK 自己的默认」，迁移时**显式传值**。 |
+| `onClick` / `onDblClick` / `onRightClick` / `onMouseMove` | **只投影 `click`**。四个名字在官方 4.0.5 声明的 `NormalLayerEventMap` 上确实存在（`dataparsed` / `mousemove` / `click` / `dblclick` / `rightclick`），但两个点图层组件只订阅 `click`、只 `defineEmits` `item-click` + `click` 两个事件。需要其余事件请另用[`LineLayer` / `FillLayer`](./layer/native-visual-layers)（它们投影了 `NATIVE_LAYER_PICK_EVENTS` 全部四个）。 |
 
 ## `PointLayer`（`experimental`，扩展 API）
 
@@ -423,7 +444,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 ```
 
 它的选项是**扁平**的（`shape` / `icon` / `size` / `fillColor` / `fillOpacity` / `strokeColor` /
-`strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `BPointShapeLayer` 的样式字段名
+`strokeWeight` / `scale` / `rotation` / `offset` / `anchor`），与 `PointCollection` 的样式字段名
 **不同**（那里是官方的 `PointShapeStyle`）。未配置 `icon` 时按 `shape` 画几何图元，配置了就走图标模式。
 
 图标模式与拾取调优的入口（#165 Class 3 补齐，逐条对着 `visualization/PointLayer.d.ts`）：
@@ -440,7 +461,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 这些都进**样式袋**（官方 `setOptions` 会把 `renderStage` / `referCenter` 转发到对应 setter），
 因此变化时**就地更新、不重建**。
 
-`isFlat`（#165 补齐）是**唯一走构造期**的那个，与 `BPointShapeLayer` / `PointIconLayer` 同名同档：
+`isFlat`（#165 补齐）是**唯一走构造期**的那个，与 `PointShapeLayer` / `PointIconLayer` 同名同档：
 
 | prop | 官方字段 | 说明 |
 | --- | --- | --- |
@@ -460,7 +481,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 
 1. **可视化实现是按需异步注入的**：就绪之前创建会经 `resource:error` 交出
    `BMAP_CAPABILITY_UNSUPPORTED`；注入完成之后重试即可成功（同一个组件，不必换实例）。
-2. **不会自动改用别的类**：要最稳就用 `BPointShapeLayer` / `PointIconLayer`（两处都声明）。
+2. **不会自动改用别的类**：要最稳就用 `PointCollection` / `PointIconLayer`（两处都声明）。
 3. **命中载荷与另外两个不同**：官方在扩展 API 上**没有** `dataIndex`，业务键在
    `value.properties[idKey]` / `value.id` 上。因此 `click.dataIndex` 恒为 `-1`（载荷里那个
    `index` 字段的语义没有取证，本库不读它），`click.hit` 的判据是「能不能解析出业务身份」。
@@ -472,7 +493,7 @@ state?.get("a")   // { "a": { selected: true } } —— 读回 SDK 的当前值
 
 ::: warning `pickWidth` / `pickHeight` 已删除（#165 Class 5）
 这两个 prop 原先无条件透传给构造器，而官方**只在** `LineLayer` / `PointIconLayer` / `FillLayer` /
-`PointShapeLayer` 上声明它们（所以在 `BPointShapeLayer` / `PointIconLayer` 上它们**仍然合法**）。
+`PointShapeLayer` 上声明它们（所以在 `PointShapeLayer` / `PointIconLayer` 上它们**仍然合法**）。
 `PointLayer` 的拾取面是 **`pickTolerance`（默认 4）/ `pickThrough` / `mouseStyleChange`** ——
 这三个正确成员尚未接入，见 #169。
 :::
