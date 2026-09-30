@@ -319,27 +319,42 @@ jobs:
       - name: Install dependencies (pnpm workspace)
         run: pnpm install --frozen-lockfile
 
+      # `volar.d.ts` 是 .gitignore 的生成产物，只由这一步写（连 --check 模式也写，见
+      # generate-manifest-artifacts.mts 第 81 行）。它必须排在 `pack` 之前，否则 tarball
+      # 会**静默缺 Volar 类型**而 README 与安装页都承诺了自动补全。此前没有任何东西强制
+      # 这个顺序：CI 恰好因为 `quality` job 的 manifest 步骤而侥幸带上，一次真正的
+      # `npm publish` 或任何直接跑 `pnpm pack:package` 的人都会发出版本缺件的包。
+      # 结构上补上这一步，`check:pack-contents` 再从结果侧钉死它。
+      - name: Generate manifest artifacts (volar.d.ts must exist before pack)
+        run: node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check
+
       - name: Build package (vp pack)
         run: node --experimental-strip-types scripts/build-package.mts
 
       - name: Check public d.ts boundaries
         run: node --experimental-strip-types scripts/check-public-dts.mts
 
-      - name: publint
-        run: |
-          cd packages/bmap-vue
-          npx -y publint .
+      # publint / attw / API Extractor 的版本锁与结构化判定（#45）。
+      # 原本是两行 `npx -y`（版本不锁，lockfile 管不到）加一句
+      # `grep -q 'node16 (from ESM).*🟢' || true`——那句 grep 把 attw 报的
+      # CJSResolvesToESM（7 个子路径）与 NoResolution（6 个子路径）全藏住了，
+      # `|| true` 还吞掉了 attw 自己的退出码（崩了与判了长得一样）。
+      # 现在改为读 attw 的 JSON `problems`，已审阅的例外逐条打印，未登记的一律红。
+      - name: Check package shape (publint + attw + version pins)
+        run: pnpm check:package-shape
 
-      - name: attw (ESM+types contract)
-        run: |
-          cd packages/bmap-vue
-          npx -y @arethetypeswrong/cli --pack . --format table > /tmp/attw.txt 2>&1 || true
-          grep -q 'node16 (from ESM).*🟢' /tmp/attw.txt || (cat /tmp/attw.txt; exit 1)
-
-      - name: package tarball consumer
+      # 发布 tarball 的文件清单（#45）。publint/attw 都只看**目录**（自己重新打包），
+      # 因此「files 声明了却没发出去」它们一条都抓不到；这道门禁判的是实际发布的那一个
+      # tarball。它排在 check:package-shape 之后，因为那一步会先跑 build（产出 dist），
+      # 后面这里才有东西可 pack。
+      - name: Check pack contents (files / exports / forbidden paths)
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
           pnpm --filter bmap-vue pack --pack-destination .artifacts
+          pnpm check:pack-contents
+
+      - name: package tarball consumer
+        run: |
           cp .artifacts/bmap-vue-*.tgz .artifacts/bmap-vue.tgz
           cd fixtures/consumer
           npm install --no-audit --no-fund --ignore-scripts

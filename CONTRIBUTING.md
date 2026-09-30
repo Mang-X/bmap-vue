@@ -77,6 +77,8 @@ pnpm check:props-projected     # *Props 声明了却没有读者的 prop 必须�
 pnpm check:snippet-consistency  # 三处 API 示例一致(需先 build:package)
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
 pnpm check:api                  # API report + 未导出类型身份集合 + 签名基线三类基线无漂移（#44）
+pnpm check:pack-contents        # 发布 tarball 的文件清单（#45，需先 pack）
+pnpm check:package-shape        # publint + attw 结构化断言 + 门禁工具版本锁（#45）
 pnpm test:unit
 ```
 
@@ -91,8 +93,22 @@ pnpm test:unit
 包出口相关改动还要验证 tarball 消费方：
 
 ```bash
+pnpm generate:manifest          # 必须排在 pack 之前：volar.d.ts 是生成产物，见下
 pnpm --filter bmap-vue pack --pack-destination .artifacts
-pnpm verify:package
+pnpm check:pack-contents         # 实际发布的那一个 tarball 里到底有什么
+pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced）
+```
+
+⚠️ **`volar.d.ts` 的生成顺序不是可选的。** 它在 `.gitignore` 里，只由
+`generate-manifest-artifacts.mts` 写；跳过那一步直接 `pnpm pack`，会发出一个**缺 Volar 类型**的包
+（实测 47 vs 48 个条目），而 README 与安装页都承诺了自动补全。`check:pack-contents` 会把这件事
+拦下来。决策与全部依据见 [ADR 2026-09-30](./docs/adr/2026-09-30-pack-contents-and-publish-shape-gates.md)。
+
+发布包的门禁工具（`publint` / `@arethetypeswrong/cli` / `@microsoft/api-extractor`）是**精确锁定**的：
+它们是门禁而不是库，上游一次 minor 就能在无人 review 的情况下改变一个 PR 的判定。升级请走一次显式 diff。
+
+```bash
+pnpm build:package && pnpm check:package-shape
 ```
 
 `pnpm typecheck:package` 依赖 `patches/@baidumap__jsapi-v4-types@4.0.4.patch`：上游 `4.0.4` 的
