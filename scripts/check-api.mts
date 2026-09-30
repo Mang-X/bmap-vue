@@ -63,6 +63,12 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  collectForbiddenAdditions,
+  forbiddenForgottenMessage,
+  newForbiddenForgottenExports,
+  REPORTED_ENTRIES,
+} from "./api-forgotten-boundary.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = resolve(ROOT, "packages/bmap-vue");
@@ -70,8 +76,8 @@ const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
-/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。 */
-const REPORTED = ["advanced", "composables", "plugins", "resolver", "ui-kit"] as const;
+/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。名单见 `api-forgotten-boundary.mts`。 */
+const REPORTED = REPORTED_ENTRIES;
 
 /** 已知无法分析的出口：探针断言失败模式，而不是静默跳过。 */
 const KNOWN_BLOCKED = ["index", "components"] as const;
@@ -251,6 +257,7 @@ function runExtractor(entry: Entry, localBuild: boolean): {
       logLevel: string;
       messageId: string;
       text: string;
+      handled?: boolean;
       formatMessageWithoutLocation(): string;
     }) => {
       // 只收进计数器的两类：其余（ae-undocumented 等）已按 api-extractor.json 配成 none，
@@ -305,37 +312,90 @@ function restoreBaseline(target: string, previous: string | undefined): void {
   if (readFileSync(target, "utf8") !== previous) writeFileSync(target, previous);
 }
 
-function updateMode(): void {
+/** 一个出口的 AE 跑批结果（`updateMode` 两阶段之间传递）。 */
+interface EntryRun {
+  readonly entry: Entry;
+  readonly result: { errorCount: number; warningCount: number };
+  readonly summary: string;
+  readonly forgotten: readonly string[];
+  readonly previousReport: string | undefined;
+}
+
+/**
+ * `--local` 的**第一阶段**：只跑分析、只读基线，一个字节都不写。
+ *
+ * 存在的理由是**事务边界**（#160 评审 P1）：原先 `updateMode` 逐个出口直接落盘，
+ * `advanced` / `composables` 写成功、`plugins` 被「新增未导出类型」拒绝时，只回滚了
+ * `plugins` 自己 —— 前两个出口的新 report 留在工作树，而且后面的签名基线循环根本没跑到，
+ * 于是「report 已更新、对应 `bmap-vue.dts.md` 未更新」的组合会被提交出去。
+ * 改成 preflight 后，任何一个出口有 forbidden addition 都在**写任何文件之前**失败。
+ *
+ * AE 在 `localBuild=false` 下**不写** report（这是 `checkMode` 一直依赖的行为），
+ * 所以这一阶段对 `etc/` 是纯只读的。
+ */
+function preflight(): EntryRun[] {
+  const runs: EntryRun[] = [];
   for (const entry of REPORTED) {
     const target = reportPath(entry);
-    // API Extractor **不会**自己建 reportFolder：目录不存在时它只报 ApiReportFolderMissing
-    // 并放弃写入（见 Extractor._writeApiReport 的“target file does not exist”分支）。
+    // AE 需要 reportFolder 存在才会写；`localBuild=false` 下它只读，但保持目录存在以免
+    // 拿到与 `updateMode` 不同的失败模式。
     mkdirSync(dirname(target), { recursive: true });
-    // 跑之前先留一份：`_writeApiReport` 早于 success 判定执行，`localBuild` 下即使 errorCount > 0
-    // 也会把既有基线覆盖掉（#159 评审 P2）。只删新写的文件是不够的 —— 老基线同样会被改。
-    const previous = existsSync(target) ? readFileSync(target, "utf8") : undefined;
-    let run: ReturnType<typeof runExtractor>;
-    try {
-      run = runExtractor(entry, true);
-    } catch (error) {
-      // AE 抛错（报告可能已落盘）与「解析不出符号名」走同一条回滚路径，不留半写状态。
-      restoreBaseline(target, previous);
-      throw error;
-    }
-    const { result, summary, forgotten } = run;
-    // 分析报错时写出的基线不可信。把它留着等于给「坏基线」开了个提交口子，所以：报错就回滚。
+    const previousReport = existsSync(target) ? readFileSync(target, "utf8") : undefined;
+    const { result, summary, forgotten } = runExtractor(entry, false);
     if (result.errorCount > 0) {
-      restoreBaseline(target, previous);
       throw new Error(
         `[check-api] ${entry}: --local 期间分析报错 ${result.errorCount} 个（${summary || "无摘要"}）——` +
-          `基线不可信，已${previous === undefined ? "删除新写出的文件" : "恢复运行前的旧内容"}；` +
-          `先修分析错误再重跑（--verbose 看明细）`,
+          `先修分析错误再重跑（--verbose 看明细）。本命令一个基线都还没写`,
       );
     }
-    if (!existsSync(target)) {
-      throw new Error(`[check-api] ${entry}: --local 之后基线仍不存在: ${target}`);
+    runs.push({ entry, result, summary, forgotten, previousReport });
+  }
+  // 身份集合的判据在**所有**出口都跑完之后统一下（`collectForbiddenAdditions` 不短路）：
+  // 非空就一次性报出全部待处置出口，并保证此时 `etc/` 一个字节都没被写过。
+  const refusals = collectForbiddenAdditions(
+    runs.map((run) => ({
+      entry: run.entry,
+      baseline: readForgottenBaseline(run.entry),
+      actual: run.forgotten,
+    })),
+  );
+  if (refusals.length > 0) {
+    throw new Error(
+      `${forbiddenForgottenMessage(refusals)}\n` +
+        `  五个出口已全部判定完毕，本次命令**没有写任何基线** ——` +
+        ` 处置完上面每个名字后重跑即可。`,
+    );
+  }
+  return runs;
+}
+
+/**
+ * `--local` 的**第二阶段**：preflight 全绿后落盘。
+ *
+ * 这里仍保留逐出口的回滚 —— AE 的 `_writeApiReport` 早于 success 判定，写盘阶段的失败
+ * （磁盘满 / 权限）同样会留下半写状态。preflight 挡住的是**判定**失败，写盘失败要靠回滚。
+ */
+function updateMode(): void {
+  const runs = preflight();
+  for (const run of runs) {
+    const { entry, result, summary, forgotten, previousReport } = run;
+    const target = reportPath(entry);
+    try {
+      mkdirSync(dirname(target), { recursive: true });
+      const fresh = runExtractor(entry, true);
+      if (fresh.result.errorCount > 0) {
+        throw new Error(
+          `[check-api] ${entry}: 写盘期间分析报错 ${fresh.result.errorCount} 个` +
+            `（${fresh.summary || "无摘要"}）—— 基线不可信，恢复运行前的内容`,
+        );
+      }
+      // 用 preflight 判过的 `forgotten`，不用重跑那份：判据已在第一阶段全绿，二次判定只会
+      // 让「为什么这次没被拒」变得不可解释。
+      writeForgottenBaseline(entry, forgotten);
+    } catch (error) {
+      restoreBaseline(target, previousReport);
+      throw error;
     }
-    writeForgottenBaseline(entry, forgotten);
     const lines = readFileSync(target, "utf8").split("\n").length;
     console.log(
       `[check-api] ${entry}: 基线已生成 (${lines} 行, error=${result.errorCount}` +
@@ -359,9 +419,42 @@ function writeSignatureBaseline(entry: string): void {
   console.log(`[check-api] ${entry}: 签名基线已生成 → ${target}`);
 }
 
-/** 写某出口的未导出类型**身份集合**基线；内容没变就不动文件（免得空跑也制造 diff）。 */
+/** 解析身份集合基线文件的内容；不是 JSON 数组返回 `undefined`，形状不对则按空集。 */
+function parseForgottenFile(raw: string): string[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  return Array.isArray(parsed)
+    ? parsed.filter((name): name is string => typeof name === "string")
+    : [];
+}
+
+/** 读出基线里的身份集合（文件缺失 / 非 JSON 一律按空集，交给调用方判定）。 */
+function readForgottenBaseline(entry: string): string[] {
+  const target = forgottenPath(entry);
+  if (!existsSync(target)) return [];
+  return parseForgottenFile(readFileSync(target, "utf8")) ?? [];
+}
+
+/**
+ * 写某出口的未导出类型**身份集合**基线；内容没变就不动文件（免得空跑也制造 diff）。
+ *
+ * **只自动写「清理」方向**（判据与理由见 `api-forgotten-boundary.mts`）。「拒绝」时基线
+ * **一个字节都不动** —— 否则「拒绝」只是个提示，红线照样被洗掉。AE 此时**已经**把该出口的
+ * report 基线写掉了，所以调用方要一并回滚它（见 `updateMode` 里的 try/catch）。
+ *
+ * 这条**防御性复检**刻意保留（而不是只依赖 `preflight()`）：preflight 与写盘之间基线可能
+ * 被外部改动（并发运行 / 手工编辑），那时这里仍要给出门禁错误而不是把欠账写进基线。
+ * 因此文案必须按**当前** `forbiddenForgottenMessage` 的签名调用 —— 它收的是 refusal 数组，
+ * 不是 `(entry, added, target)` 三个散参（评审抓到的正是这个失效兜底分支）。
+ */
 function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
+  const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
+  if (added.length > 0) throw new Error(forbiddenForgottenMessage([{ entry, added }]));
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedForgottenFile(symbols);
   if (existsSync(target) && readFileSync(target, "utf8") === expected) {
@@ -393,15 +486,11 @@ function forgottenBaselineFailure(entry: string, actual: readonly string[]): str
   const expected = expectedForgottenFile(actual);
   const raw = readFileSync(target, "utf8");
   if (raw === expected) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
+  const parsed = parseForgottenFile(raw);
+  if (parsed === undefined) {
     return `${entry}: 未导出类型身份基线不是合法 JSON: ${target} —— 跑 pnpm generate:api 重新生成`;
   }
-  const baseline = Array.isArray(parsed)
-    ? parsed.filter((name): name is string => typeof name === "string")
-    : [];
+  const baseline = parsed;
   const added = actual.filter((name) => !baseline.includes(name));
   const removed = baseline.filter((name) => !actual.includes(name));
   const details =

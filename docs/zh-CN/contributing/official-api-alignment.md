@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 440 |
+| 本库根入口导出 | 441 |
 | 名称对齐（交集） | 116 |
 | 仅官方有 | 286 |
-| 仅本库有 | 324 |
+| 仅本库有 | 325 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -758,6 +758,7 @@ component 46 · hook 14 · type 56
 | `normalizeEventKey` | other | — |
 | `OVERLAY_EVENT_MATRIX` | other | — |
 | `OVERLAY_KINDS_WITHOUT_EVENT_MATRIX` | other | — |
+| `OverlayAnchorName` | other | — |
 | `OverlayCommandTypes` | other | — |
 | `OverlayDriver` | other | — |
 | `OverlayEventDefinition` | other | — |

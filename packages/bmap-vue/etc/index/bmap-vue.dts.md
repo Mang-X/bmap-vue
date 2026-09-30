@@ -2622,7 +2622,7 @@ export declare interface LabelOptions {
     zIndex?: number;
     style?: Record<string, unknown>;
     enableMassClear?: boolean;
-    anchor?: OverlayAnchor;
+    anchor?: OverlayAnchorName;
     width?: number;
     [key: string]: unknown;
 }
@@ -3667,13 +3667,15 @@ export declare type MarkerIconInput = string | {
     imageSize?: Size;
 };
 export declare type MarkerIconName = BuiltinMarkerIconName;
-export declare interface MarkerLabelSpec {
+declare interface MarkerLabelInput {
     content: string;
     position?: Point;
     offset?: Pixel;
     style?: Record<string, unknown>;
 }
-declare type MarkerLabelSpec_2 = MarkerLabelSpec;
+export { MarkerLabelInput };
+export { MarkerLabelInput as MarkerLabelSpec };
+declare type MarkerLabelSpec_2 = MarkerLabelInput;
 export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof __VLS_setup>>["props"], __VLS_ctx?: __VLS_PrettifyLocal<Pick<NonNullable<Awaited<typeof __VLS_setup>>, "attrs" | "emit" | "slots">>, __VLS_expose?: NonNullable<Awaited<typeof __VLS_setup>>["expose"], __VLS_setup?: Promise<{
     props: __VLS_PrettifyLocal<Pick<Partial<{}> & Omit<{
         readonly "onItem-click"?: ((item: Item) => any) | undefined;
@@ -3697,7 +3699,7 @@ export declare interface MarkerOptions {
     rotation?: number;
     enableClicking?: boolean;
     enableDragging?: boolean;
-    label?: MarkerLabelSpec;
+    label?: MarkerLabelInput;
     autoFollowHeadingChanged?: boolean;
     startAnimation?: string;
     [key: string]: unknown;
@@ -3923,8 +3925,10 @@ export declare const OVERLAY_KINDS_WITHOUT_EVENT_MATRIX: {
     readonly "map-mask": "\u63A9\u819C\uFF1A4.0.5 \u6CA1\u6709 MapMaskEventMap\uFF08MapMask \u672C\u8EAB\u4E0D\u5728\u7C7B\u578B\u5305\u7684\u7C7B\u58F0\u660E\u91CC\uFF09";
     readonly marker3d: string;
 };
-export declare type OverlayAnchor = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
-declare type OverlayAnchor_2 = OverlayAnchor;
+declare type OverlayAnchor_2 = OverlayAnchorName;
+declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
+export { OverlayAnchorName as OverlayAnchor };
+export { OverlayAnchorName };
 export declare interface OverlayCommandTypes {
     Marker: MarkerReadBackApi;
     Circle: CircleReadBackApi;

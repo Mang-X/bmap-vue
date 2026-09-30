@@ -161,6 +161,23 @@ Vite 构建入口去掉 `core`、`verify:package` 的必需子路径清单去掉
 success 判定），`localBuild` 下即使分析报错也会覆盖既有基线。所以报错时先把文件恢复成运行前的
 内容再退出，否则一次失败的 `pnpm generate:api` 会留下被污染的基线（#159 评审 P2）。
 
+**身份集合的「新增」方向不自动写**（#160 结清后补，#165 回归的修补）。原先 `check:api` 与
+`generate:api` 在「新增」上是同一套语义（都要求跑一次生成器），于是那句报错里的「别用生成器
+盖过去」只是**建议**：门禁严格、生成器宽松，而修门禁的常规动作恰好是跑生成器 —— 跑一次，红线
+就变成了基线。#165 把三个名字（`MarkerLabelInput` / `OverlayAnchorName` / `ViewportOptions`）
+吸收进基线就是这么发生的：处置只做了根入口那一半，`generate:api` 把剩下的一半写成基线，
+之后 `check:api` 全绿、欠账再无人提。
+
+现在生成器分两阶段：先 `preflight()` 对**全部**出口跑只读分析并一次性收集 forbidden additions，
+非空就抛错退出、**一个基线都没写**；全绿才进写盘（写盘失败仍逐出口回滚）。「清理」方向照常写，
+否则真正修好之后基线永远更新不掉。判据在 `scripts/api-forgotten-boundary.mts`（纯函数，被用例
+直接断言），刻意接受的入口是 `FORGOTTEN_EXEMPTIONS` 里按 **(entry, name) 两层**登记的条目，
+逐条带理由，当前**一张都没有**。
+
+跨出口这一层是**事务边界**问题：只回滚被拒的那个出口不够 —— 先前出口的新 report 已留在工作树，
+且签名基线循环根本没跑到，「report 已更新、对应签名基线未更新」的组合会被提交出去。preflight
+把「判定」与「写盘」彻底分开，两者之间不留任何写操作。
+
 根入口与组件的类型面另有四道门守：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
 `export-surface-freeze.test.ts`（值导出精确集合）、`generate:api-diff:check`（根入口导出名 vs
 官方参考）、`verify:package`（tarball 消费方 `vue-tsc`）。

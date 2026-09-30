@@ -164,6 +164,11 @@ export type {
   OverlayPropertyPolicy,
   MarkerIconInput,
   MarkerOptions,
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // 根入口按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），本出口转出的是
+  // **声明处**的名字 —— composable 调用方拿到 `MarkerOptions` 却无法为 `label` / `anchor` 标类型。
+  MarkerLabelInput,
+  OverlayAnchorName,
   PathOptions,
   InfoWindowOptions,
   CustomOverlayOptions,

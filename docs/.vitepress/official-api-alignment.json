@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 440,
+  "oursPublicCount": 441,
   "uiKitCount": 62,
   "matchedCount": 116,
   "officialOnlyCount": 286,
-  "oursOnlyCount": 324,
+  "oursOnlyCount": 325,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -3207,6 +3207,11 @@
       "name": "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX",
       "surface": "other",
       "oursEntry": "."
+    },
+    {
+      "name": "OverlayAnchorName",
+      "surface": "other",
+      "oursEntry": "./composables"
     },
     {
       "name": "OverlayCommandTypes",

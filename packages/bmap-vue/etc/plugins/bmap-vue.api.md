@@ -878,6 +878,18 @@ export type MarkerIconInput = string | {
     imageSize?: Size;
 };
 
+// @public
+export interface MarkerLabelInput {
+    // (undocumented)
+    content: string;
+    // (undocumented)
+    offset?: Pixel;
+    // (undocumented)
+    position?: Point;
+    // (undocumented)
+    style?: Record<string, unknown>;
+}
+
 // @public (undocumented)
 export interface MarkerOptions {
     // (undocumented)
@@ -941,6 +953,9 @@ export type NativeLayerFeatureState = Record<string, unknown>;
 
 // @public
 export type NativeLayerFeatureStateMap = Record<string, NativeLayerFeatureState>;
+
+// @public
+export type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
 
 // @public (undocumented)
 export interface OverlayDriver {
@@ -1419,6 +1434,14 @@ export interface ViewCommandOptions {
 export interface Viewport {
     center: Point;
     zoom: number;
+}
+
+// @public
+export interface ViewportOptions {
+    callback?: () => void;
+    enableAnimation?: boolean;
+    margins?: readonly number[];
+    zoomFactor?: number;
 }
 
 // @public

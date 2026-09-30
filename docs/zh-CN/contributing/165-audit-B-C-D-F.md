@@ -278,6 +278,13 @@ zoom / targetZoom / trend / …`——**没有 `overlay` / `icon` / `poi`**。
 > 现在五个官方常量全部有明确落点，`BMAP_NONE_MAP` **显式失败**。
 - 未知/泄露检查：`./composables` 的 `forgotten-exports.json` 为 `[]`；
   `PublicMapContext` / `MapEventSource` 的窄面没有泄漏内部类型。
+  > **更正（#160 结清后的回归）**：写下这一条时该断言**并不成立** —— 本工作包新增的
+  > `MarkerOptions.label` / `LabelOptions.anchor` 只在**根入口**做了导出（按 props 口径的别名
+  > `MarkerLabelSpec` / `OverlayAnchor`），`./composables` 与另外两个子入口的 export 面没跟上，
+  > 于是 `MarkerLabelInput` / `OverlayAnchorName` 在这里仍是未导出类型（`advanced` / `plugins`
+  > 还多一个 `ViewportOptions`）。欠账被 `pnpm generate:api` 一次性写进了身份集合基线，
+  > `check:api` 随后全绿。三个名字已按「升为公共导出」补齐三个出口，本条断言现在才真正成立；
+  > 根因与门禁修补见 `.changeset/160-forgotten-exports-regression.md`。
 - 4.0.5 对本工作包**零影响**：`core/MapEvent.d.ts` / `MapOptions.d.ts` **逐字节未变**，
   `core/Map.d.ts` 只是给 `addLayer`/`removeLayer` 加了 12 个 visualization 类名。
   本节的 `4.0.4` 注释**结论仍然成立**，只是版本号过时。

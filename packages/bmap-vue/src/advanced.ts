@@ -134,6 +134,12 @@ export type {
   OverlayKind,
   MarkerIconInput,
   MarkerOptions,
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // 根入口已按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），但本出口的
+  // `MarkerOptions` / `LabelOptions` 引用的是**声明处**的名字，消费方从 `./advanced`
+  // 拿到这两个 options 却无法为 `label` / `anchor` 标类型 ⇒ `ae-forgotten-export`。
+  MarkerLabelInput,
+  OverlayAnchorName,
   PathOptions,
   InfoWindowOptions,
   LabelOptions,
@@ -296,6 +302,10 @@ export type {
   RouteState,
   TransitRouteOptions,
   WalkingRouteOptions,
+  // #160 补齐：`LocalSearchRenderOptions.viewportOptions` 的类型（官方 `BMap.ViewportOptions`
+  // 的领域投影）。它同时出现在 `RouteRenderOptions` / `MapDriver` 的方法签名里，
+  // 从 `./advanced` 拿命令面的调用方要标自己的视野选项类型就必须能 import 它。
+  ViewportOptions,
 } from "./driver/types/services";
 
 // —— `MapDriver.cancelViewAnimation()` 的结果（视角动画没有公开取消接口，见 ADR 决策）
