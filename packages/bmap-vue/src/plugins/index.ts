@@ -121,6 +121,11 @@ export type {
   LabelOptions,
   MarkerIconInput,
   MarkerOptions,
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // 根入口按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），本出口转出的是
+  // **声明处**的名字 —— 插件作者拿到 `MarkerOptions` 却无法为 `label` / `anchor` 标类型。
+  MarkerLabelInput,
+  OverlayAnchorName,
   OverlayPropertyPolicy,
   OverlayTarget,
   PathOptions,
@@ -168,6 +173,9 @@ export { DrivingPolicy, IntercityPolicy, TransitPolicy, TransitVehiclePolicy } f
 // —— Autocomplete / 路线构造选项的内部投影（`BMapProviderLike` 的服务面会引用它们）
 export type { AutocompleteOptions } from "../driver/types/services";
 export type { LocalSearchRenderOptions, RouteRenderOptions, RouteRenderState, RouteState } from "../driver/types/services";
+// #160 补齐：`LocalSearchRenderOptions.viewportOptions` 的类型（官方 `BMap.ViewportOptions`
+// 的领域投影，路线那侧共用同一份声明），理由同 `./advanced`。
+export type { ViewportOptions } from "../driver/types/services";
 export type { LayerCtorSlot } from "../driver/types/layers";
 // —— 加载配置（`BMapPluginConfig.defaults`；`ak` / `apiUrl` / `timeout` …）
 export type { BMapLoadOptions, CrossOriginValue } from "../core/loader/url";

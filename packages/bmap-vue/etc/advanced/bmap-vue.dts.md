@@ -651,7 +651,7 @@ export declare type MarkerIconInput = string | {
     imageOffset?: Pixel;
     imageSize?: Size;
 };
-declare interface MarkerLabelInput {
+export declare interface MarkerLabelInput {
     content: string;
     position?: Point;
     offset?: Pixel;
@@ -758,7 +758,7 @@ export declare interface OfficialJsapiLoadOptions {
     readonly serviceHost?: string;
 }
 export declare type OfficialJsapiV4Version = typeof OFFICIAL_V4_VERSION;
-declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
+export declare type OverlayAnchorName = "BMAP_ANCHOR_TOP_LEFT" | "BMAP_ANCHOR_TOP_RIGHT" | "BMAP_ANCHOR_BOTTOM_LEFT" | "BMAP_ANCHOR_BOTTOM_RIGHT" | "BMAP_ANCHOR_TOP_CENTER" | "BMAP_ANCHOR_MIDDLE_LEFT" | "BMAP_ANCHOR_CENTER" | "BMAP_ANCHOR_MIDDLE_RIGHT" | "BMAP_ANCHOR_BOTTOM_CENTER";
 export declare interface OverlayDriver {
     createMarker(position: Point, options?: MarkerOptions): MarkerHandle;
     createPolyline(path: readonly Point[], options?: PathOptions): PolylineHandle;
@@ -1179,7 +1179,7 @@ export declare interface Viewport {
     center: Point;
     zoom: number;
 }
-declare interface ViewportOptions {
+export declare interface ViewportOptions {
     enableAnimation?: boolean;
     margins?: readonly number[];
     zoomFactor?: number;

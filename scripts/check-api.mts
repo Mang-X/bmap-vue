@@ -63,6 +63,11 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  forbiddenForgottenMessage,
+  newForbiddenForgottenExports,
+  REPORTED_ENTRIES,
+} from "./api-forgotten-boundary.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = resolve(ROOT, "packages/bmap-vue");
@@ -70,8 +75,8 @@ const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
-/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。 */
-const REPORTED = ["advanced", "composables", "plugins", "resolver", "ui-kit"] as const;
+/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。名单见 `api-forgotten-boundary.mts`。 */
+const REPORTED = REPORTED_ENTRIES;
 
 /** 已知无法分析的出口：探针断言失败模式，而不是静默跳过。 */
 const KNOWN_BLOCKED = ["index", "components"] as const;
@@ -335,7 +340,16 @@ function updateMode(): void {
     if (!existsSync(target)) {
       throw new Error(`[check-api] ${entry}: --local 之后基线仍不存在: ${target}`);
     }
-    writeForgottenBaseline(entry, forgotten);
+    try {
+      writeForgottenBaseline(entry, forgotten);
+    } catch (error) {
+      // 拒绝吸收新增未导出类型时，AE **已经把 report 基线写掉了**（`_writeApiReport` 早于
+      // 本函数），`etc/` 此刻是半写状态。报告基线与身份集合必须同进同退 —— 否则一次被拒的
+      // generate 会留下「report 已更新、身份集合没更新」的组合，`check:api` 之后报出
+      // 一堆与真实公共面无关的漂移，把处置指引淹掉（#165 回归的同一种「红线被洗成基线」）。
+      restoreBaseline(target, previous);
+      throw error;
+    }
     const lines = readFileSync(target, "utf8").split("\n").length;
     console.log(
       `[check-api] ${entry}: 基线已生成 (${lines} 行, error=${result.errorCount}` +
@@ -359,9 +373,37 @@ function writeSignatureBaseline(entry: string): void {
   console.log(`[check-api] ${entry}: 签名基线已生成 → ${target}`);
 }
 
-/** 写某出口的未导出类型**身份集合**基线；内容没变就不动文件（免得空跑也制造 diff）。 */
+/** 解析身份集合基线文件的内容；不是 JSON 数组返回 `undefined`，形状不对则按空集。 */
+function parseForgottenFile(raw: string): string[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  return Array.isArray(parsed)
+    ? parsed.filter((name): name is string => typeof name === "string")
+    : [];
+}
+
+/** 读出基线里的身份集合（文件缺失 / 非 JSON 一律按空集，交给调用方判定）。 */
+function readForgottenBaseline(entry: string): string[] {
+  const target = forgottenPath(entry);
+  if (!existsSync(target)) return [];
+  return parseForgottenFile(readFileSync(target, "utf8")) ?? [];
+}
+
+/**
+ * 写某出口的未导出类型**身份集合**基线；内容没变就不动文件（免得空跑也制造 diff）。
+ *
+ * **只自动写「清理」方向**（判据与理由见 `api-forgotten-boundary.mts`）。「拒绝」时基线
+ * **一个字节都不动** —— 否则「拒绝」只是个提示，红线照样被洗掉。AE 此时**已经**把该出口的
+ * report 基线写掉了，所以调用方要一并回滚它（见 `updateMode` 里的 try/catch）。
+ */
 function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
+  const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
+  if (added.length > 0) throw new Error(forbiddenForgottenMessage(entry, added, target));
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedForgottenFile(symbols);
   if (existsSync(target) && readFileSync(target, "utf8") === expected) {
@@ -393,15 +435,11 @@ function forgottenBaselineFailure(entry: string, actual: readonly string[]): str
   const expected = expectedForgottenFile(actual);
   const raw = readFileSync(target, "utf8");
   if (raw === expected) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
+  const parsed = parseForgottenFile(raw);
+  if (parsed === undefined) {
     return `${entry}: 未导出类型身份基线不是合法 JSON: ${target} —— 跑 pnpm generate:api 重新生成`;
   }
-  const baseline = Array.isArray(parsed)
-    ? parsed.filter((name): name is string => typeof name === "string")
-    : [];
+  const baseline = parsed;
   const added = actual.filter((name) => !baseline.includes(name));
   const removed = baseline.filter((name) => !actual.includes(name));
   const details =
