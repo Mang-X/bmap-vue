@@ -17,11 +17,12 @@ const SCRIPT = join(ROOT, "scripts/check-brand-icons.mts");
 const ICON_SVG = join(ROOT, "docs/public/brand/bmap-vue-icon-square.svg");
 const ICON_DIR = join(ROOT, "docs/public/icons");
 
-function runGate(): { status: number; stdout: string; stderr: string } {
+function runGate(env?: Record<string, string>): { status: number; stdout: string; stderr: string } {
   try {
     const stdout = execFileSync(process.execPath, ["--experimental-strip-types", SCRIPT], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      ...(env ? { env: { ...process.env, ...env } } : {}),
     });
     return { status: 0, stdout, stderr: "" };
   } catch (error) {
@@ -29,6 +30,9 @@ function runGate(): { status: number; stdout: string; stderr: string } {
     return { status: e.status ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
   }
 }
+
+/** 带自定义环境变量跑门禁（用于构造「浏览器不存在」这一侧）。 */
+const runGateWithEnv = (env: Record<string, string>) => runGate(env);
 
 /**
  * 有 Chromium 才跑真实渲染；否则这份用例没有判据可测，跳过而不是假装通过。
@@ -53,6 +57,21 @@ describe("品牌图标门禁的 fail-open 边界", () => {
   it.runIf(hasBrowser)("浏览器存在时不得输出「已跳过」（那会掩盖真实故障）", () => {
     expect(probe.stdout).not.toContain("已跳过");
     expect(probe.status).toBe(0);
+  });
+
+  it("浏览器确实不存在时降级为跳过并退出 0（合法的那一侧）", () => {
+    // 上一条只钉了「非浏览器故障必须红」，skip 分支本身没有被强制执行过——
+    // 于是把「只降级不失败」改成「一律失败」或「一律跳过」都能让测试保持绿。
+    // 错误分类的**两侧**都必须有断言。
+    //
+    // `SMOKE_BROWSER` 指向不存在的路径时渲染器抛 `BrowserUnavailableError`，
+    // 门禁应降级为 skipped 且退出 0。
+    const r = runGateWithEnv({ SMOKE_BROWSER: "/nonexistent/chromium" });
+    const out = `${r.stdout}${r.stderr}`;
+    expect(r.status, "缺浏览器应当跳过（退出 0），而不是红：" + out).toBe(0);
+    expect(out).toContain("已跳过");
+    // 跳过必须说清缺什么，否则读日志的人无法判断门禁到底跑没跑
+    expect(out).toContain("Chromium");
   });
 
   it("渲染器缺浏览器时降级跳过，缺别的必须红", () => {
