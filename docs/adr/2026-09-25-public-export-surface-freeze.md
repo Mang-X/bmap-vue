@@ -168,10 +168,15 @@ success 判定），`localBuild` 下即使分析报错也会覆盖既有基线�
 吸收进基线就是这么发生的：处置只做了根入口那一半，`generate:api` 把剩下的一半写成基线，
 之后 `check:api` 全绿、欠账再无人提。
 
-现在生成器对「新增」抛错退出并**回滚该出口的 report 基线**（`etc/` 不留半写状态）；「清理」
-方向照常写，否则真正修好之后基线永远更新不掉。判据在 `scripts/api-forgotten-boundary.mts`
-（纯函数，被用例直接断言），刻意接受的入口是 `FORGOTTEN_EXEMPTIONS` 里按 `(name, entry)` 登记
-的条目，逐条带理由，当前**一张都没有**。
+现在生成器分两阶段：先 `preflight()` 对**全部**出口跑只读分析并一次性收集 forbidden additions，
+非空就抛错退出、**一个基线都没写**；全绿才进写盘（写盘失败仍逐出口回滚）。「清理」方向照常写，
+否则真正修好之后基线永远更新不掉。判据在 `scripts/api-forgotten-boundary.mts`（纯函数，被用例
+直接断言），刻意接受的入口是 `FORGOTTEN_EXEMPTIONS` 里按 **(entry, name) 两层**登记的条目，
+逐条带理由，当前**一张都没有**。
+
+跨出口这一层是**事务边界**问题：只回滚被拒的那个出口不够 —— 先前出口的新 report 已留在工作树，
+且签名基线循环根本没跑到，「report 已更新、对应签名基线未更新」的组合会被提交出去。preflight
+把「判定」与「写盘」彻底分开，两者之间不留任何写操作。
 
 根入口与组件的类型面另有四道门守：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
 `export-surface-freeze.test.ts`（值导出精确集合）、`generate:api-diff:check`（根入口导出名 vs

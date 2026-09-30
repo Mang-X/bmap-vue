@@ -53,39 +53,66 @@
 ## 修补：生成器拒绝对「新增」方向自动落盘
 
 判据抽成纯函数放进新文件 `scripts/api-forgotten-boundary.mts`
-（`newForbiddenForgottenExports()` / `FORGOTTEN_EXEMPTIONS` / `forbiddenForgottenMessage()`），
-`check-api.mts` 的写盘路径调它：
+（`collectForbiddenAdditions()` / `newForbiddenForgottenExports()` / `FORGOTTEN_EXEMPTIONS` /
+`forbiddenForgottenMessage()`），`check-api.mts` 的 `--local` 路径分两阶段调它：
 
-- **新增**（当前有、基线没有）：`generate:api` **抛错退出**，身份集合基线**一个字节都不动**，
-  并**回滚该出口的 report 基线**（AE 是先落盘、后判成败，拒绝发生时 `etc/` 已是半写状态）。
-  报错文案点名每个新名字并指向 ADR 的二选一 —— 处置方式是「把它导出」或「让引用消失」，
-  两者都会让名字**从集合里消失**，而不是被记进基线；
+- **第一阶段 `preflight()`**：对五个出口**全部**跑 AE 分析（`localBuild=false`，AE 此时
+  **不写** report，对 `etc/` 纯只读），再用 `collectForbiddenAdditions()` 一次性收集
+  **所有**出口的 forbidden additions。非空 ⇒ 抛错退出，**本次命令一个基线都没写**。
+- **第二阶段**：preflight 全绿后才进写盘。写盘阶段仍保留逐出口回滚（AE 的 `_writeApiReport`
+  早于 success 判定，磁盘满 / 权限这类**写盘**失败同样会留下半写状态）。
 - **清理**（基线有、当前没有）：照常写回。否则把名字真正导出之后基线永远更新不掉，
-  门禁会因为「文件不是生成器的规范化形式」把「已修好」报成缺陷；
-- **刻意接受某个欠账**：在 `FORGOTTEN_EXEMPTIONS` 里按 **(name, entry)** 显式登记并写明理由。
+  门禁会因为「文件不是生成器的规范化形式」把「已修好」报成缺陷。
+- **刻意接受某个欠账**：在 `FORGOTTEN_EXEMPTIONS` 里按 **(entry, name) 两层**登记并写明理由。
   该表**刻意为空**（1.0 立场）且**不提供任何默认豁免** —— 「没登记就是不允许」这条不变量
-  只有靠空表才成立。按二元组匹配而不是按名字：同一个类型在 `./advanced` 被接受，不代表它在
-  `./plugins` 也被接受，逐出口分析的引用点并不相同。
+  只有靠空表才成立。
+
+### 事务边界（评审 P1）
+
+第一版只回滚**被拒的那个出口**，跨出口仍是半写的：`advanced` / `composables` 写成功、
+`plugins` 被拒时，前两个出口的新 report 留在工作树，而且后面的签名基线循环根本没跑到 ——
+「report 已更新、对应 `bmap-vue.dts.md` 未更新」的组合会被提交出去。这与本 PR 声称的
+「`etc/` 不留半写状态」有差距。改成 preflight 后，任何一个出口有 forbidden addition 都在
+**写任何文件之前**失败。
+
+`collectForbiddenAdditions()` 刻意**不短路**：一次报出全部待处置出口，省掉「改一个跑一轮」，
+同时让不变量与遍历顺序无关（只看最终结果）。
+
+### 豁免表的键（评审 P2）
+
+第一版是 `Record<name, { entry, reason }>` —— 键只有名字，`entry` 在 value 里，于是**同一个符号
+无法在两个出口各自登记**（第二条覆盖第一条）。而一个类型同时出现在多个出口恰恰是常态：
+本 PR 处置的三个名字就同时出现在三个出口。改成按出口分层：
+`Record<entry, Record<name, { reason }>>`，同名符号可在各出口分别登记、分别写理由。
 
 ## 双向判别力实测
 
 回退 `./advanced` 的导出修复、重新 build 后跑 `pnpm generate:api`：
 
 ```
-[check-api] advanced: 生成器拒绝吸收 3 个**新增**未导出类型: MarkerLabelInput, OverlayAnchorName, ViewportOptions
+[check-api] 生成器拒绝吸收 1 个出口上的**新增**未导出类型:
+  advanced（3 个）: MarkerLabelInput, OverlayAnchorName, ViewportOptions
+  …
+  五个出口已全部判定完毕，本次命令**没有写任何基线** —— 处置完上面每个名字后重跑即可。
 ```
 
-退出码 1，`etc/advanced/forgotten-exports.json` 保持 `[]` 未被改动，**该出口的 report 基线也被
-回滚成运行前的内容**（实测逐字节比对相同）。这正是 #165 当时的形状 —— 修复前该命令是
-**静默绿**并把三个名字写进基线的。
+退出码 1，`git status packages/bmap-vue/etc/` **完全干净**（不只是被拒的出口）。
+两个出口同时被拒时一次报出两条。这正是 #165 当时的形状 —— 修复前该命令是**静默绿**并把三个
+名字写进基线的。
 
-新增 `tests/behavior/api-forgotten-exports-gate.test.ts`（14 条）：
+新增 `tests/behavior/api-forgotten-exports-gate.test.ts`（19 条）：
 
-- 新增方向拒绝（含多名字逐个点名、已在基线里的不误判）
-- 清理方向照常写、集合没变时不误拦（两条反例，见上）
-- `FORGOTTEN_EXEMPTIONS` 恒空、每条豁免都带 `reason` 与 `entry`
+- 新增方向拒绝；多个出口的 forbidden additions **一次报全**（反例：短路实现会红）
+- 清理方向照常写、集合没变时不误拦；豁免只放行被登记的那**一个**名字
+- 豁免按 `(entry, name)` 匹配：同名可在多个出口各自登记、未登记的出口仍然拒绝
+- `FORGOTTEN_EXEMPTIONS` 恒空
 - 五份基线**恒等于 `[]`**（判据是「恒空」不是「比条数」：任何非空都是回归）
 - CI 里 `check:api` 这一步真的存在且没有被 `continue-on-error` 架空
+
+跨出口那条**刻意写成纯函数用例**而不是真跑 `generate:api`：那条路要改源码 + 重新 build `dist/`，
+而 `dist/` 正是 `export-surface-freeze` / `core-surface` / `doc-props-gate` 等**并行**读的对象 ——
+实测会让那几个文件随机变红（本条最初就是这么写的，13 个用例挂了 11 个）。跨出口的「一个都不写」
+由「先 preflight、判据全绿后才进写盘阶段」这条**结构**保证，用例钉住它的前提。
 
 ## 对消费方的影响
 

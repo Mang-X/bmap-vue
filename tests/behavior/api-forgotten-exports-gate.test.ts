@@ -26,6 +26,7 @@ import { resolve } from "node:path";
 import {
   FORGOTTEN_EXEMPTIONS,
   REPORTED_ENTRIES,
+  collectForbiddenAdditions,
   forbiddenForgottenMessage,
   newForbiddenForgottenExports,
 } from "../../scripts/api-forgotten-boundary.mts";
@@ -64,15 +65,26 @@ describe("生成器不得吸收新增未导出类型", () => {
     expect(newForbiddenForgottenExports("advanced", ["KeptShape"], ["KeptShape"])).toEqual([]);
   });
 
-  it("豁免按 (name, entry) 二元组匹配：同名不能跨出口白嫖", () => {
-    // 用 fixture 豁免表而非真实表（真实表刻意为空，见下一节）：这才是这条判据的**正例** ——
-    // 同一个类型在 `./advanced` 被登记接受，在 `./plugins` 仍必须被拒（逐出口分析的引用点
-    // 并不相同）。若判据退化成「按名字匹配」，第二条断言立刻红。
-    const exemptions = { ExemptShape: { entry: "advanced", reason: "fixture" } };
+  it("豁免按 (entry, name) 两层匹配：同名可在多个出口各自登记", () => {
+    // 用 fixture 豁免表而非真实表（真实表刻意为空，见下一节）。
+    // 同一个符号在 `./advanced` 与 `./plugins` **各自**登记 —— 两条能共存，不会互相覆盖。
+    const exemptions = {
+      advanced: { ExemptShape: { reason: "advanced 侧刻意接受" } },
+      plugins: { ExemptShape: { reason: "plugins 侧刻意接受" } },
+    };
     expect(newForbiddenForgottenExports("advanced", [], ["ExemptShape"], exemptions)).toEqual([]);
-    expect(newForbiddenForgottenExports("plugins", [], ["ExemptShape"], exemptions)).toEqual([
+    expect(newForbiddenForgottenExports("plugins", [], ["ExemptShape"], exemptions)).toEqual([]);
+    // 未登记的出口仍然拒绝 —— 豁免不跨出口泄漏。
+    expect(newForbiddenForgottenExports("composables", [], ["ExemptShape"], exemptions)).toEqual([
       "ExemptShape",
     ]);
+  });
+
+  it("豁免只放行被登记的那一个名字（不是整出口放行）", () => {
+    const exemptions = { advanced: { ExemptShape: { reason: "fixture" } } };
+    expect(
+      newForbiddenForgottenExports("advanced", [], ["ExemptShape", "AnotherShape"], exemptions),
+    ).toEqual(["AnotherShape"]);
   });
 });
 
@@ -89,15 +101,80 @@ describe("豁免表", () => {
 });
 
 describe("拒绝文案", () => {
-  it("点名每个新增名字，并指向二选一与豁免表", () => {
-    const message = forbiddenForgottenMessage("advanced", ["AlphaInternal", "BetaInternal"], "/tmp/x.json");
+  it("点名每个出口与每个新增名字，并指向二选一与豁免表", () => {
+    const message = forbiddenForgottenMessage([
+      { entry: "advanced", added: ["AlphaInternal", "BetaInternal"] },
+      { entry: "plugins", added: ["GammaInternal"] },
+    ]);
+    expect(message).toContain("advanced");
     expect(message).toContain("AlphaInternal");
     expect(message).toContain("BetaInternal");
+    expect(message).toContain("plugins");
+    expect(message).toContain("GammaInternal");
     // 文案是处置指引，不是「已吸收」的通知 —— 指向 ADR 的二选一与豁免表位置。
     expect(message).toContain("二选一");
     expect(message).toContain("FORGOTTEN_EXEMPTIONS");
-    // 拒绝时 report 基线会被回滚，文案必须说清**哪个**文件没动，否则读者会以为 `etc/` 全没变。
-    expect(message).toContain("report 基线已回滚");
+  });
+});
+
+describe("写盘的事务边界（#160 评审 P1）", () => {
+  /**
+   * 评审给的场景：`advanced` 有一次**合法**的公共面变化（先会写成功），`plugins` 出现一个
+   * 新 forgotten export（被拒）。修之前 `advanced` 的新 report 留在工作树，且后面的签名基线
+   * 循环根本没跑到 —— 于是「report 已更新、对应 `bmap-vue.dts.md` 未更新」的组合会被提交出去。
+   *
+   * 判据写成纯函数而不是真跑 `generate:api`：那条路要改源码 + 重新 build `dist/`，
+   * 而 `dist/` 正是 `export-surface-freeze` / `core-surface` / `doc-props-gate` 等**并行**读的
+   * 对象 —— 实测会让那几个文件随机变红（本条最初就是这么写的，13 个用例挂了 11 个）。
+   * 跨出口的「一个都不写」性质由 `updateMode` 里「先 `preflight()`、判据全绿后才进写盘阶段」
+   * 这条**结构**保证；这里钉住的是它的前提 —— 只要判据返回非空，写盘就不会开始。
+   */
+  const scenario = [
+    { entry: "advanced", baseline: [], actual: [] }, // 合法变化：没有新增未导出类型
+    { entry: "composables", baseline: [], actual: [] },
+    { entry: "plugins", baseline: [], actual: ["NewPluginInternalShape"] }, // 被拒
+  ];
+
+  it("一个出口有新增未导出类型时，判据整体返回非空（写盘阶段不会开始）", () => {
+    expect(collectForbiddenAdditions(scenario)).toEqual([
+      { entry: "plugins", added: ["NewPluginInternalShape"] },
+    ]);
+  });
+
+  it("先前出口的合法变化不会让判据「提前放行」", () => {
+    // 关键性质：判据只看**最终结果**，不因 advanced/composables 通过就认为可以写盘。
+    // 若实现改成「遇到第一个通过的出口就返回空」，这条会红。
+    expect(collectForbiddenAdditions(scenario).length).toBeGreaterThan(0);
+  });
+
+  it("不短路：一次报出全部待处置出口（改一个跑一轮不是修法）", () => {
+    const many = [
+      { entry: "advanced", baseline: [], actual: ["A1", "A2"] },
+      { entry: "composables", baseline: [], actual: ["C1"] },
+      { entry: "plugins", baseline: [], actual: [] },
+    ];
+    expect(collectForbiddenAdditions(many)).toEqual([
+      { entry: "advanced", added: ["A1", "A2"] },
+      { entry: "composables", added: ["C1"] },
+    ]);
+  });
+
+  it("全部出口都没有新增时判据才为空（写盘阶段的前提）", () => {
+    expect(
+      collectForbiddenAdditions([
+        { entry: "advanced", baseline: ["OldShape"], actual: [] }, // 清理方向不算新增
+        { entry: "plugins", baseline: [], actual: [] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("拒绝文案把每个出口与名字都点出来", () => {
+    const message = forbiddenForgottenMessage(collectForbiddenAdditions(scenario));
+    expect(message).toContain("plugins");
+    expect(message).toContain("NewPluginInternalShape");
+    // 文案是处置指引，不是「已吸收」的通知。
+    expect(message).toContain("二选一");
+    expect(message).toContain("FORGOTTEN_EXEMPTIONS");
   });
 });
 
