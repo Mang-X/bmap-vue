@@ -57,6 +57,14 @@ export interface AttwException {
    */
   readonly expectedCount?: number;
   readonly entrypoints?: readonly string[];
+  /**
+   * 预期出现的**解析档位**（attw 的 `resolutionKind`，如 `node10` / `node16-cjs`）。
+   *
+   * 同样必须钉：这两条例外的理由本身就是特定档位下的解析行为，档位变了意味着
+   * 「例外成立的前提」变了。评审 #45 时实测——只钉 entrypoint 时，同一组子路径从
+   * `node10` 漂到 `node16-cjs` 仍被 `accepted`。
+   */
+  readonly expectedResolutionKind?: string;
 }
 
 /**
@@ -74,6 +82,8 @@ export const ATTW_EXCEPTIONS: readonly AttwException[] = [
     tracking: "#158",
     // 7 = 根入口 + 六个子入口（`./package.json` 不参与类型解析，因此不在列）。
     expectedCount: 7,
+    // 成立前提：CJS 解析（node16-cjs）下 ESM 产物被 require。档位漂移则例外不再成立。
+    expectedResolutionKind: "node16-cjs",
     entrypoints: [".", "./advanced", "./components", "./composables", "./plugins", "./resolver", "./ui-kit"],
   },
   {
@@ -82,6 +92,8 @@ export const ATTW_EXCEPTIONS: readonly AttwException[] = [
     tracking: "#158",
     // 6 = 六个子入口。根入口不走子路径解析（它由顶层 `types` 字段满足），因此不在列。
     expectedCount: 6,
+    // 成立前提：旧式 node10 解析拿不到子路径。node16+ 出现 NoResolution 则是新缺陷。
+    expectedResolutionKind: "node10",
     entrypoints: ["./advanced", "./components", "./composables", "./plugins", "./resolver", "./ui-kit"],
   },
 ];
@@ -135,33 +147,30 @@ export function evaluateAttwReport(
   const byKind = new Map(exceptions.map((e) => [e.kind, e]));
   const problems: AttwProblem[] = [];
   const accepted: AttwProblem[] = [];
+  const seenKinds = new Set<string>();
 
   for (const [kind, occurrences] of Object.entries(problemMap)) {
-    if (!Array.isArray(occurrences) || occurrences.length === 0) continue;
-    const sites = occurrences
-      .map((o) => `${o?.entrypoint ?? "?"}@${o?.resolutionKind ?? "?"}`)
-      .sort();
-    const detail = `${kind} × ${occurrences.length}（${sites.join(", ")}）`;
+    const list = Array.isArray(occurrences) ? occurrences : [];
     const exception = byKind.get(kind);
     if (!exception) {
-      problems.push({ kind: `unexpected:${kind}`, detail });
+      // 表里没有的 kind：无论它出现几次都是新问题（空数组除外，见下面的反向遍历）。
+      if (list.length > 0) {
+        problems.push({ kind: `unexpected:${kind}`, detail: describeOccurrences(kind, list) });
+      }
       continue;
     }
+    if (list.length === 0) {
+      // **不要**记进 seenKinds：空数组等于「这一轮没出现」，必须落到下面的反向遍历里
+      // 报 vanished。第一版在这里就 `seenKinds.add(kind)` 提前 continue，导致空数组
+      // 既不算 unexpected、也不算 vanished —— 彻底静默。
+      continue;
+    }
+    seenKinds.add(kind);
+    const detail = describeOccurrences(kind, list);
 
     /* 例外必须**逐条对齐**：只按 kind 匹配的话，同一类问题从 7 处涨到 8 处仍然放行，
-     * 而那正是「某个子路径开始解析不对」的信号。次数或子路径清单对不上就当契约回归处理。 */
-    const mismatches: string[] = [];
-    if (exception.expectedCount !== undefined && occurrences.length !== exception.expectedCount) {
-      mismatches.push(`预期 ${exception.expectedCount} 处，实际 ${occurrences.length} 处`);
-    }
-    if (exception.entrypoints !== undefined) {
-      const actual = occurrences.map((o) => String(o?.entrypoint ?? "?")).sort();
-      const expected = [...exception.entrypoints].sort();
-      const added = actual.filter((e) => !expected.includes(e));
-      const removed = expected.filter((e) => !actual.includes(e));
-      if (added.length > 0) mismatches.push(`新增子路径 ${added.join(", ")}`);
-      if (removed.length > 0) mismatches.push(`消失的子路径 ${removed.join(", ")}（该修好问题了？）`);
-    }
+     * 而那正是「某个子路径开始解析不对」的信号。 */
+    const mismatches = compareWithException(list, exception);
     if (mismatches.length > 0) {
       problems.push({
         kind: `exception-drift:${kind}`,
@@ -173,7 +182,76 @@ export function evaluateAttwReport(
     accepted.push({ kind, detail });
   }
 
+  /* 反向遍历：登记过、但这一轮**没出现**的例外也要报。
+   *
+   * 第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处、甚至整类消失
+   * （`problems: {}`）时，`expectedCount` 根本不进比较，`problems` 仍是 `[]` —— 假绿。
+   * 那与本文件的登记口径直接矛盾：例外是「逐条审阅后刻意接受」的一组**具体**事实，
+   * 问题被修好意味着该**删掉登记**并重新审阅，而不是让门禁静默变绿。
+   *
+   * 「问题消失了」在两种情况下都需要人看一眼：
+   * - 真的修好了 → 删登记，并在 ADR 里记一笔；
+   * - attw 改了它的检查方式 → 重新评估这条例外还成不成立。
+   */
+  for (const exception of exceptions) {
+    if (seenKinds.has(exception.kind)) continue;
+    problems.push({
+      kind: `exception-vanished:${exception.kind}`,
+      detail:
+        `登记的例外 "${exception.kind}" 这一轮完全没有出现（预期 ${exception.expectedCount ?? "?"} 处）。` +
+        `若问题已修好，请删掉这条登记并在 ADR 记一笔；若 attw 改了检查方式，请重新评估它是否仍该被接受。`,
+    });
+  }
+
   return { problems, accepted };
+}
+
+/** 把一组 occurrence 渲染成 `kind × n（ep@kind, …）`。 */
+function describeOccurrences(kind: string, list: readonly { entrypoint?: string; resolutionKind?: string }[]): string {
+  const sites = list.map((o) => `${o?.entrypoint ?? "?"}@${o?.resolutionKind ?? "?"}`).sort();
+  return `${kind} × ${list.length}（${sites.join(", ")}）`;
+}
+
+/**
+ * 比对一组 occurrence 与登记的例外，返回**人类可读的差异**（空数组 = 完全一致）。
+ *
+ * 刻意同时比 `entrypoint` **与** `resolutionKind`：这两条例外的理由本身就是特定解析模式
+ * 造成的（`CJSResolvesToESM` 只在 `node16-cjs` 出现、`NoResolution` 只在 `node10` 出现）。
+ * 只钉 entrypoint 的话，同一组子路径从 `node10` 漂到 `node16-cjs` 仍会被接受，而那意味着
+ * 「CJS 解析方式变了」——是必须人看一眼的信号。
+ */
+function compareWithException(
+  list: readonly { entrypoint?: string; resolutionKind?: string }[],
+  exception: AttwException,
+): string[] {
+  const mismatches: string[] = [];
+
+  if (exception.expectedCount !== undefined && list.length !== exception.expectedCount) {
+    mismatches.push(`预期 ${exception.expectedCount} 处，实际 ${list.length} 处`);
+  }
+
+  if (exception.expectedResolutionKind !== undefined) {
+    const wrongKind = [...new Set(list.map((o) => String(o?.resolutionKind ?? "?")))].filter(
+      (k) => k !== exception.expectedResolutionKind,
+    );
+    if (wrongKind.length > 0) {
+      mismatches.push(
+        `解析档位漂移：预期全部是 ${exception.expectedResolutionKind}，实际出现 ${wrongKind.join(", ")}` +
+          `（例外成立的前提是该档位下的解析行为）`,
+      );
+    }
+  }
+
+  if (exception.entrypoints !== undefined) {
+    const actual = list.map((o) => String(o?.entrypoint ?? "?")).sort();
+    const expected = [...exception.entrypoints].sort();
+    const added = actual.filter((e) => !expected.includes(e));
+    const removed = expected.filter((e) => !actual.includes(e));
+    if (added.length > 0) mismatches.push(`新增子路径 ${added.join(", ")}`);
+    if (removed.length > 0) mismatches.push(`消失的子路径 ${removed.join(", ")}（该修好问题了？）`);
+  }
+
+  return mismatches;
 }
 
 /**

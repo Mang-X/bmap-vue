@@ -188,6 +188,23 @@ export function collectTopLevelFields(manifest: PackageManifestLike): Record<str
   return out;
 }
 
+/**
+ * npm 打包产物的文件名。
+ *
+ * ⚠️ scoped 包**不带前导 `@`**：实测 `npm pack` 对 `@mangmax/bmap-vue@1.0.0-rc.0` 产出的是
+ * `mangmax-bmap-vue-1.0.0-rc.0.tgz`。第一版写成 `name.replace("/", "-")`，会算出
+ * `@mangmax-bmap-vue-1.0.0-rc.0.tgz` —— 迁移 scope 之后这道门禁**找不到刚打出来的包**，
+ * 而它偏偏就是为了让 scope 迁移不出问题才写成读 manifest 的。
+ *
+ * 规则：先去掉前导 `@`，再把 `/` 换成 `-`。
+ *
+ * 住在 boundary 而非驱动脚本：驱动脚本顶层跑 `main()`，用例 import 它就会连带触发
+ * 真实 `npm pack`（这正是本文件与 `check-pack-contents.mts` 分开的原因）。
+ */
+export function tarballBasename(name: string, version: string): string {
+  return `${name.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`;
+}
+
 /** 归一化 tarball 条目：去掉 `package/` 前缀、丢掉目录条目（`dist/`）与空串。 */
 export function normalizeEntries(rawEntries: readonly string[]): string[] {
   const out = new Set<string>();

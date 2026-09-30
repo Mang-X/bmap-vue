@@ -73,6 +73,59 @@ describe("#45 发布包形状门禁", () => {
       }
     });
 
+    it("登记的例外**整类消失**必须红（PR 评审 P1）", () => {
+      // 第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处时，
+      // `expectedCount` 根本不进比较，`problems` 仍是 `[]` —— 假绿。
+      // 而「问题消失」恰恰需要人看一眼：要么该删登记，要么 attw 改了检查方式。
+      for (const report of [{ problems: {} }, { problems: { NoResolution: [] } }]) {
+        const { problems, accepted } = evaluateAttwReport(report);
+        expect(accepted, JSON.stringify(report)).toEqual([]);
+        expect(
+          problems.some((p) => p.kind.startsWith("exception-vanished")),
+          JSON.stringify(report),
+        ).toBe(true);
+      }
+    });
+
+    it("例外只出现一部分时，另一半报 vanished 而已出现的那半仍走 drift 判定", () => {
+      const noRes = ATTW_EXCEPTIONS.find((e) => e.kind === "NoResolution")!;
+      const report = {
+        problems: {
+          CJSResolvesToESM: (ATTW_EXCEPTIONS.find((e) => e.kind === "CJSResolvesToESM")!.entrypoints ?? []).map(
+            (entrypoint) => ({ entrypoint, resolutionKind: "node16-cjs" }),
+          ),
+          NoResolution: (noRes.entrypoints ?? []).slice(0, 2).map((entrypoint) => ({ entrypoint })),
+        },
+      };
+      const kinds = evaluateAttwReport(report).problems.map((p) => p.kind);
+      expect(kinds).toContain("exception-drift:NoResolution");
+      expect(kinds).not.toContain("exception-vanished:NoResolution");
+      expect(kinds).not.toContain("exception-vanished:CJSResolvesToESM");
+    });
+
+    it("解析档位漂移必须红（PR 评审 P2：例外成立的前提就是那个档位）", () => {
+      // 6 处 entrypoint 完全对，但档位从 node10 漂到 node16-cjs。
+      // 第一版只比 entrypoint，这种漂移会被 accepted。
+      const noRes = ATTW_EXCEPTIONS.find((e) => e.kind === "NoResolution")!;
+      const drifted = (noRes.entrypoints ?? []).map((entrypoint) => ({
+        entrypoint,
+        resolutionKind: "node16-cjs",
+      }));
+      const { problems, accepted } = evaluateAttwReport({ problems: { NoResolution: drifted } });
+      expect(accepted, "档位漂移不得算作已接受").toEqual([]);
+      const drift = problems.find((p) => p.kind === "exception-drift:NoResolution");
+      expect(drift?.detail).toContain("解析档位漂移");
+      expect(drift?.detail).toContain(noRes.expectedResolutionKind);
+    });
+
+    it("每条例外都钉了档位（否则上面那条判据无从比较）", () => {
+      for (const exception of ATTW_EXCEPTIONS) {
+        expect(exception.expectedResolutionKind, `${exception.kind} 缺 expectedResolutionKind`).toMatch(
+          /^node\d+|^bundler$/,
+        );
+      }
+    });
+
     it("同一类问题**变多**必须红（只按 kind 匹配的话 7→8 会静默放行）", () => {
       const cjs = ATTW_EXCEPTIONS.find((e) => e.kind === "CJSResolvesToESM")!;
       const entries = (cjs.entrypoints ?? []).map((entrypoint) => ({ entrypoint }));
@@ -114,19 +167,23 @@ describe("#45 发布包形状门禁", () => {
       expect(problems.map((p) => p.kind)).toContain("attw-unreadable");
     });
 
-    it("空的 problem 数组不算问题（attw 会为干净报告输出空数组）", () => {
+    it("某个 kind 是空数组时，报 vanished 而不是「没问题」", () => {
+      // 改动前这条断言 `problems` 为空——那正是 PR 评审 P1 指出的假绿。
+      // 现在它必须报 vanished：登记过的例外没出现，需要人判断是修好了还是 attw 改了。
       const { problems, accepted } = evaluateAttwReport({ problems: { CJSResolvesToESM: [] } });
-      expect(problems).toEqual([]);
       expect(accepted).toEqual([]);
+      expect(problems.map((p) => p.kind)).toContain("exception-vanished:CJSResolvesToESM");
+      expect(problems.map((p) => p.kind)).toContain("exception-vanished:NoResolution");
     });
 
-    it("判据有区分力：同一个 kind 在表内放行、不在表内变红", () => {
+    it("判据有区分力：登记内的完整清单放行、未登记的 kind 变红", () => {
       // 「表内」这一侧必须用**完整**的登记清单（REAL_REPORT）：只给一条 occurrence 会撞上
       // 次数漂移判据而变红，那时测的就是漂移、不是「表内/表外」这一件事了。
       const inside = evaluateAttwReport(REAL_REPORT);
       const outside = evaluateAttwReport({ problems: { TotallyNew: [{ entrypoint: "." }] } });
       expect(inside.problems).toEqual([]);
-      expect(outside.problems).toHaveLength(1);
+      // 未登记的 kind 报 unexpected，同时两条已登记的因未出现而报 vanished。
+      expect(outside.problems.some((p) => p.kind === "unexpected:TotallyNew")).toBe(true);
     });
   });
 

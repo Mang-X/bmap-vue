@@ -9,8 +9,9 @@
   都只看目录，一条都抓不到这类问题。
 - 修掉一个**已经存在**的发布缺陷：`volar.d.ts` 在 `.gitignore` 里且只由
   `generate-manifest-artifacts.mts` 写，跳过那一步直接 `pnpm pack` 会静默发出**缺 Volar 类型**的包
-  （实测 47 vs 48 个条目），而 README 与安装页都承诺了自动补全。`package` job 补上 manifest
-  步骤，门禁从结果侧钉死。
+  （实测 47 vs 48 个条目），而 README 与安装页都承诺了自动补全。**三管齐下**堵住：根
+  `pack:package` 内置生成前置；子包 `prepack` 让 `npm publish` 路径也强制（实测 publish 会跑
+  子包 lifecycle 但不跑根脚本）；门禁从结果侧钉死。
 - `dist/bmap-vue.css` 从「构建副产物」变成**显式声明的公共面**（按文件名列入 `files`），
   CDN 示例同时锁定版本并指向显式的 `dist/index.global.js`。
 - `publint` / `@arethetypeswrong/cli` / `@microsoft/api-extractor` 精确锁版本：它们是门禁不是库，

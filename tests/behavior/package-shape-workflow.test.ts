@@ -73,6 +73,31 @@ describe("#45 CI 接线：package job", () => {
   });
 });
 
+/* ------------------------------ volar.d.ts 的「真正发布路径」守卫（PR 评审 P1） */
+
+describe("#45 prepack：volar.d.ts 在真正 publish 路径上也被强制", () => {
+  const pkgManifest = JSON.parse(
+    readFileSync(resolve(import.meta.dirname, "../../packages/bmap-vue/package.json"), "utf8"),
+  ) as { scripts?: Record<string, string> };
+
+  it("子包自带 prepack，生成 generate-manifest-artifacts", () => {
+    // 根级 `pack:package` 的前置**不够**：实测 `npm publish` 会执行**子包**的 lifecycle，
+    // 但不会跑根级脚本。缺了 prepack，干净检出直接 `npm publish` 仍然复现 47 条目的
+    // 缺件包——而那正是本 PR 声称修掉的那个缺陷。
+    const prepack = pkgManifest.scripts?.prepack;
+    expect(prepack, "packages/bmap-vue 必须有 prepack").toBeTruthy();
+    expect(prepack).toContain("generate-manifest-artifacts.mts");
+    // 必须用 --check：该模式**也会写** volar.d.ts（第 81 行无条件写），
+    // 但同时会因 manifest 漂移而失败。
+    expect(prepack).toContain("--check");
+  });
+
+  it("prepack 用的是相对路径，能从子包目录解析到仓库根", () => {
+    // `generate-manifest-artifacts.mts` 按自身位置解析 root，因此从子包调用要用 ../../。
+    expect(pkgManifest.scripts?.prepack).toContain("../../scripts/");
+  });
+});
+
 describe("#45 attw 输出读取方式（间歇性故障回归）", () => {
   it("脚本用 shell 重定向读 attw 报告，而不是 execFileSync 的 stdout 捕获", () => {
     // attw 在本包上产出 134541 字节 JSON，且用非零退出码表示「有 problem」。这两件事同时

@@ -41,8 +41,23 @@
 
 CI 此前恰好因为 `quality` job 的 manifest 步骤而侥幸带上；一次真正的 `npm publish`、
 或任何人直接跑 `pnpm pack:package`，都会静默发出**缺 Volar 类型**的包，而 README 与安装页
-都承诺了自动补全。处置是**双管齐下**：`package` job 补上 manifest 步骤（结构上修），
-`check:pack-contents` 从结果侧钉死（结果上验）。
+都承诺了自动补全。
+
+处置是**三管齐下**，且必须包含 lifecycle 那一层（PR 评审 P1 实测发现：只做前两层仍有洞）：
+
+| 层 | 手段 | 覆盖的路径 |
+| --- | --- | --- |
+| 本地 | 根 `pack:package` 内置 `pnpm generate:manifest &&` | `pnpm pack:package` |
+| **发布** | **子包 `prepack` 调 `generate-manifest-artifacts.mts --check`** | **`npm publish` / `pnpm publish`** |
+| 结果 | `check:pack-contents` 从 tarball 钉死 | 任何 pack 路径 |
+
+⚠️ 中间那层是关键：实测 `npm publish` 会执行**子包**的 `prepublishOnly` 与 `prepack`
+（在探针包上验证），但**不会**跑根级脚本。因此只给根 `pack:package` 加前置，干净检出直接
+`npm publish` 仍会复现 47 条目的缺件包。加了子包 `prepack` 后，实测裸
+`pnpm --filter bmap-vue pack` 直接产出 **48 条目**（含 `volar.d.ts`），无需人工记顺序。
+
+`--check` 在此是安全的：该模式虽然名为 check，但 `generate-manifest-artifacts.mts`
+第 81 行**无条件写** `volar.d.ts`；同时它仍会在 manifest 真有漂移时失败——两个语义都要。
 
 ### 3. sourcemap 保留
 
@@ -93,10 +108,20 @@ attw 改读 JSON 的 `problems` 字段。实测当前 tarball 上有两类结论
 例外表 `ATTW_EXCEPTIONS` 刻意非空（空表会让「attw 报了新问题」与「attw 什么都没报」无法区分），
 每条带 `why` + `tracking`，用例断言表非空且条目都有理由。
 
-例外还必须**逐条钉住次数与子路径清单**（`expectedCount` + `entrypoints`）。只按 `kind`
-匹配的话，`CJSResolvesToESM` 从 7 处涨到 8 处仍然放行——而那意味着多了一个子路径解析不对，
-正是需要人看一眼的变化。「刻意接受某一类问题」不等于「刻意接受它出现在任意多个地方」。
-次数对不上、出现新子路径、或某个子路径消失（说明问题被修好了、该去登记），都判红。
+例外还必须**逐条钉住次数、解析档位与子路径清单**（`expectedCount` + `expectedResolutionKind`
++ `entrypoints`）。只按 `kind` 匹配的话，`CJSResolvesToESM` 从 7 处涨到 8 处仍然放行——而那
+意味着多了一个子路径解析不对，正是需要人看一眼的变化。「刻意接受某一类问题」不等于「刻意接受
+它出现在任意多个地方」。次数对不上、出现新子路径、或某个子路径消失（说明问题被修好了、该去
+登记），都判红。
+
+档位也要钉：这两条例外的**理由本身就是特定解析档位下的行为**（`CJSResolvesToESM` 只在
+`node16-cjs` 出现、`NoResolution` 只在 `node10` 出现）。只钉 entrypoint 时，同一组子路径从
+`node10` 漂到 `node16-cjs` 仍会被 `accepted`。
+
+反向也要遍历：登记过、但这一轮**没出现**的例外（整类消失，或出现数为 0）报
+`exception-vanished`。「问题被修好」意味着该**删掉登记**并重新审阅，而不是让门禁静默变绿。
+第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处、甚至 `problems: {}` 时
+`expectedCount` 根本不进比较，`problems` 仍是 `[]`——那是假绿（PR 评审 P1 实测确认）。
 
 ### 5. `publishConfig`：access 与 provenance
 
@@ -123,6 +148,11 @@ npm 侧的 OIDC 配置承担，仓库内不需要任何字面量）。
 - **`pack:package` 自带 `pnpm generate:manifest` 前置**。`volar.d.ts` 那条隐患的根因是
   「顺序靠人记得」，把它封进最可能被直接跑的那条命令里，才真正消掉了「跳过生成直接打包」
   这条路径。
+- **`check:pack-contents` 按 manifest 的 `name + version` 定位 tarball**，以便 scope 迁移后
+  无需改代码。⚠️ npm 对 scoped 包产出的文件名**不带前导 `@`**：实测
+  `npm pack @mangmax/bmap-vue@1.0.0-rc.0` → `mangmax-bmap-vue-1.0.0-rc.0.tgz`。
+  第一版写成 `name.replace("/", "-")`，会算出 `@mangmax-bmap-vue-…`——迁移后门禁**找不到
+  刚打出来的包**，而它恰恰是为了让迁移不出问题才读 manifest 的（PR 评审 P2 实测确认）。
 - **修掉一个间歇性故障**：attw 报告 134541 字节 > 65536（Node 管道读取的分块边界），
   且它用**非零退出码**表示「有 problem」——这两件事同时发生时 `execFileSync` 的
   `error.stdout` 被截断，`JSON.parse` 抛 `Unterminated string`。症状是**时绿时红**，

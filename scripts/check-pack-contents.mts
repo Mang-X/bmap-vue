@@ -29,6 +29,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   checkPackContents,
+  tarballBasename,
   type PackageManifestLike,
   type PackProblem,
 } from "./pack-contents-boundary.mts";
@@ -42,12 +43,6 @@ function argValue(name: string): string | undefined {
   return hit?.slice(prefix.length);
 }
 
-/**
- * 定位 tarball。
- *
- * 刻意**按 manifest 的 name + version 拼**而不是按正则扫目录：正则认不出带 scope 的包名
- * （npm 会把 `@scope/name` 打成 `@scope-name-1.0.0.tgz`），而 scope 迟早会变。
- */
 function findTarball(): string {
   const explicit = argValue("tarball");
   if (explicit) {
@@ -58,7 +53,7 @@ function findTarball(): string {
   const manifest = JSON.parse(
     readFileSync(resolve(root, "packages/bmap-vue/package.json"), "utf8"),
   ) as { name: string; version: string };
-  const basename = `${manifest.name.replace("/", "-")}-${manifest.version}.tgz`;
+  const basename = tarballBasename(manifest.name, manifest.version);
   const full = resolve(artifactsDir, basename);
   if (!existsSync(full)) {
     const available = existsSync(artifactsDir)

@@ -17,6 +17,7 @@ import {
   collectExportTargets,
   matchesFilesEntry,
   normalizeEntries,
+  tarballBasename,
   type PackProblem,
 } from "../../scripts/pack-contents-boundary.mts";
 
@@ -223,6 +224,33 @@ describe("#45 npm pack 文件清单判据", () => {
       expect(matchesFilesEntry("dist/other.css", "dist/bmap-vue.css")).toBe(false);
       expect(matchesFilesEntry("anything", "!dist/**/*.map")).toBe(false);
       expect(matchesFilesEntry("anything", "")).toBe(false);
+    });
+
+    describe("tarballBasename（PR 评审 P2：scoped 包名会算错）", () => {
+      it("无 scope 名原样拼", () => {
+        expect(tarballBasename("bmap-vue", "1.0.0-rc.0")).toBe("bmap-vue-1.0.0-rc.0.tgz");
+      });
+
+      it("scoped 名**去掉前导 @** 并把 / 换成 -", () => {
+        // 实测 `npm pack` 对 `@mangmax/bmap-vue@1.0.0-rc.0` 产出
+        // `mangmax-bmap-vue-1.0.0-rc.0.tgz`——**不带前导 @**。
+        // 第一版写成 `name.replace("/", "-")`，会算出 `@mangmax-bmap-vue-…`，
+        // 于是迁移 scope 后这道门禁找不到刚打出来的包——而它恰恰是为了让迁移不出问题。
+        expect(tarballBasename("@mangmax/bmap-vue", "1.0.0-rc.0")).toBe(
+          "mangmax-bmap-vue-1.0.0-rc.0.tgz",
+        );
+      });
+
+      it("判据有区分力：带 @ 与不带 @ 是两种不同结果", () => {
+        expect(tarballBasename("@mangmax/bmap-vue", "1.0.0")).not.toBe(
+          tarballBasename("@mangmax/bmap-vue", "1.0.0").replace("mangmax", "@mangmax"),
+        );
+        expect(tarballBasename("@mangmax/bmap-vue", "1.0.0")).not.toContain("@");
+      });
+
+      it("嵌套 scope 也只去掉一个前导 @", () => {
+        expect(tarballBasename("@a/b/c", "1.0.0")).toBe("a-b-c-1.0.0.tgz");
+      });
     });
   });
 });
