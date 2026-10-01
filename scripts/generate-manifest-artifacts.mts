@@ -18,6 +18,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
+import { renderVolarDts } from './manifest-artifacts-boundary.mts'
 import { fileURLToPath } from 'node:url'
 import { freshModuleUrl } from './fresh-module-url.mts'
 
@@ -58,22 +59,7 @@ const componentsIndex = [
 const pkgName = (JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as {
   name: string
 }).name
-const componentsLines = names.map((c) => `    ${c.name}: typeof import('${pkgName}')['${c.name}']`)
-const volarDts = [
-  '// Generated file. Do not edit directly.',
-  'declare module \'vue\' {',
-  '  export interface GlobalComponents {',
-  ...componentsLines,
-  '  }',
-  '}',
-  'declare module \'@vue/runtime-core\' {',
-  '  export interface GlobalComponents {',
-  ...componentsLines,
-  '  }',
-  '}',
-  'export {}',
-  '',
-].join('\n')
+const volarDts = renderVolarDts(names, pkgName)
 
 // 3) component index json(generatedAt 为生成时刻,比对时忽略)
 const json = {
