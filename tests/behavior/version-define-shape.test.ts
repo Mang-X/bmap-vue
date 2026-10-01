@@ -10,8 +10,8 @@
  * 本用例把「两个镜像的键集合必须相等」钉住：任一侧新增键而另一侧漏了，立刻红。
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
 const runtimePath = resolve(root, "scripts/vite-version-define.mjs");
@@ -29,6 +29,15 @@ function declaredKeys(): string[] {
   return [...source.matchAll(/readonly\s+(\w+)\s*:/g)].map((m) => m[1]!).sort();
 }
 
+function* allFilesUnder(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) yield* allFilesUnder(full);
+    else yield full;
+  }
+}
+
 describe("#45 versionDefine：运行时与类型声明不得漂移", () => {
   it("两侧键集合完全一致", async () => {
     const runtime = await runtimeKeys();
@@ -43,22 +52,27 @@ describe("#45 versionDefine：运行时与类型声明不得漂移", () => {
     expect(await runtimeKeys()).toEqual(["__PKG_NAME__", "__VERSION__"]);
   });
 
-  it("六个 vite config 用的都是同一份", async () => {
-    // 逐个确认 import 指向同一个模块：镜像漂移的另一面是「有人复制了第二份定义」
-    const configs = [
-      "vite.config.ts",
-      "vitest.config.ts",
-      "tests/browser/jsapi-v4/vite.config.ts",
-      "tests/browser/official-packages/vite.config.ts",
-      "tests/browser/plugin-load-channel/vite.config.ts",
-      "packages/bmap-vue/vite.config.build.ts",
-      "packages/bmap-vue/vite.config.global.ts",
-    ];
+  it("全仓每个消费 define 的 config 都从这一份取，且不内联自己的副本", async () => {
+    // **扫全仓而不是维护名单**：上一版列了 7 个，漏了 docs / playground /
+    // performance / live-performance 四处——名单本身就是它自己会漂移的那类事实。
+    // 改成「凡是 import 了 vite-version-define 的文件都逐一核对」之后，新增 config
+    // 自动纳入检查，不需要有人记得改这里。
+    const configs = [...allFilesUnder(root)]
+      .filter((f) => /\.(ts|mts|mjs)$/.test(f) && !f.startsWith("scripts/"))
+      .filter((f) => readFileSync(f, "utf8").includes("vite-version-define"))
+      .map((f) => relative(root, f))
+      .sort();
+
+    // fail-closed：扫不到任何 config 时「全部合规」是 vacuous 的
+    expect(configs.length, "应至少找到若干消费 versionDefine 的 config").toBeGreaterThan(0);
+
     for (const config of configs) {
       const source = readFileSync(resolve(root, config), "utf8");
-      expect(source, `${config} 应从 vite-version-define 取注入`).toContain("vite-version-define");
-      // 不允许内联自己的一份 define（那会绕过这道门禁）
-      expect(source, `${config} 不该内联 __VERSION__ 字面量`).not.toMatch(/__VERSION__\s*:/);
+      // 不允许内联自己的一份 define：那是「复制第二份定义」，会让这道门禁失效
+      expect(source, `${config} 不该内联 __VERSION__ 的字面量定义`).not.toMatch(/__VERSION__\s*:/);
+      expect(source, `${config} 不该内联 __PKG_NAME__ 的字面量定义`).not.toMatch(
+        /__PKG_NAME__\s*:/,
+      );
     }
   });
 });

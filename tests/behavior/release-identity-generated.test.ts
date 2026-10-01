@@ -60,7 +60,18 @@ describe('#45 发布身份：生成物与构建期注入', () => {
     // 直接调用生成器（幂等），它写的正是待验证的那份产物。
     execFileSync(
       process.execPath,
-      ['--experimental-strip-types', resolve(root, 'scripts/generate-manifest-artifacts.mts')],
+      [
+        '--experimental-strip-types',
+        resolve(root, 'scripts/generate-manifest-artifacts.mts'),
+        // 必须带 `--check`：普通模式除了写 volar.d.ts，还会重写两个**受版本控制**的生成物
+        // （`src/components/index.ts` 与 `docs/.vitepress/component-index.json`），后者
+        // 每次都带新的 `generatedAt`。那会让单测改写工作树，并与 `manifest-check.test.ts`
+        // 撞出随机失败（后者要 before/after 逐字节一致）。
+        //
+        // `--check` 模式下生成器**仍无条件写 volar.d.ts**（见脚本第 87 行），只读校验 tracked
+        // 产物——正是这里需要的语义：拿到待验证的产物，且不改任何受控文件。
+        '--check',
+      ],
       { cwd: root, stdio: 'pipe' },
     );
     expect(
