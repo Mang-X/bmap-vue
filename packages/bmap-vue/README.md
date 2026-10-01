@@ -5,7 +5,7 @@ Vue 3 components and hooks for Baidu Maps JavaScript API 4.0.
 ## Install
 
 ```bash
-pnpm add bmap-vue
+pnpm add @mangax/bmap-vue
 ```
 
 The map SDK is loaded by default through the official
@@ -62,7 +62,7 @@ Standard UI (place search, result lists, pagination, route panels) is provided b
 the official [`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit),
 an optional peer — see the [UI Kit guide](https://github.com/Mang-X/bmap-vue/blob/main/docs/zh-CN/guide/ui-kit.md).
 
-This package is published as `bmap-vue` and follows the 1.0 release line. It began
+This package is published as `@mangax/bmap-vue` and follows the 1.0 release line. It began
 as [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl); see
 the repository [README](https://github.com/Mang-X/bmap-vue#readme),
 [ACKNOWLEDGEMENTS](https://github.com/Mang-X/bmap-vue/blob/main/ACKNOWLEDGEMENTS.md),

@@ -10,7 +10,7 @@
 <p align="center">
 <img src="https://img.shields.io/github/license/Mang-X/bmap-vue?style=flat-square" alt="" />
 <img src="https://img.shields.io/github/package-json/v/Mang-X/bmap-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
-<img alt="npm" src="https://img.shields.io/npm/dm/bmap-vue?logo=npm&style=flat-square" />
+<img alt="npm" src="https://img.shields.io/npm/dm/@mangax/bmap-vue?logo=npm&style=flat-square" />
 <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Mang-X/bmap-vue?style=flat-square&color=%23daaa3f">
 <img alt="GitHub issues" src="https://img.shields.io/github/issues/Mang-X/bmap-vue?style=flat-square" />
 <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
@@ -46,13 +46,13 @@
 
 ```bash
 # with pnpm
-pnpm add bmap-vue
+pnpm add @mangax/bmap-vue
 
 # or with yarn
-yarn add bmap-vue
+yarn add @mangax/bmap-vue
 
 # or with npm
-npm install bmap-vue
+npm install @mangax/bmap-vue
 ```
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Play%20Button.png" alt="Play Button" width="25" height="25" /> 用法

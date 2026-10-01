@@ -134,7 +134,33 @@ attw 改读 JSON 的 `problems` 字段。实测当前 tarball 上有两类结论
 第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处、甚至 `problems: {}` 时
 `expectedCount` 根本不进比较，`problems` 仍是 `[]`——那是假绿（PR 评审 P1 实测确认）。
 
-### 5. `publishConfig`：access 与 provenance
+### 5. 发布身份：`@mangax/bmap-vue`（取代 ADR 2026-09-24 决策 1 的包名）
+
+npm 上的 `bmap-vue` 归另一位作者所有（维护者 `minichen`，1.0.0–1.5.0，2024-10-30
+最后更新），且**本库目标发布的 `1.0.0` 那个版本号已被占用**。ADR 2026-09-24 第 12 行
+已把它记为未决阻塞项；本次核实确认仍然成立，故发布身份迁到维护者自有 npm scope
+**`@mangax/bmap-vue`**（scope 必须等于 npm 用户名或组织名，不能自选前缀）。
+
+**这不是一次 API 变更**：5 份 API report 基线只重录了 header 一行
+（`## API Report File for "…"`），7 份签名基线逐字节未变，产物条目数 48 → 48 不变。
+
+包名不写死在任何脚本里，全部经 `scripts/release-identity.mts` 从 manifest 派生：
+
+| 位置 | 派生规则 |
+| --- | --- |
+| tarball 文件名 | `mangax-bmap-vue-1.0.0-rc.0.tgz`——npm 去掉前导 `@`（实测） |
+| `node_modules` 目录 | `node_modules/@mangax/bmap-vue`——**保留** `@scope/name` |
+
+这两条规则**不一致**，是 npm 的既有行为，两个都要各自钉住（用例见
+`tests/behavior/release-identity.test.ts`）。散落的字面量是「改一处、漏三处」的来源：
+漏掉的那处不会报错，只会让门禁静默不生效——本次就有一处漏了（消费 fixture 的
+`docs-examples/`，被 `vue-tsc` 的几十条 `TS2307` 当场抓出来）。
+
+`publishConfig.access` 此前对无 scope 名是空操作，迁到 scope 后**必需**：npm 对 scoped
+包默认按 restricted 处理，漏掉它首次 `npm publish` 会直接失败。`verify:package` 现在
+断言这一项——这正是「换身份」带来的一个真实行为变化，不是纯改名。
+
+### 6. `publishConfig`：access 与 provenance
 
 `packages/bmap-vue/package.json` 新增：
 

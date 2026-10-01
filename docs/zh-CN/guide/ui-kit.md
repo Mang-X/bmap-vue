@@ -36,7 +36,7 @@
 ## 安装
 
 ```bash
-pnpm add bmap-vue vue
+pnpm add @mangax/bmap-vue vue
 # 只有用到 ./ui-kit 时才需要（版本由本库精确锁定为 optional peer）
 pnpm add @baidumap/jsapi-ui-kit@1.1.2
 ```

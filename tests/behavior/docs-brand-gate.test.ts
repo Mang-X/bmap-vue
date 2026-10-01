@@ -213,7 +213,13 @@ describe("check-docs-brand · 反例（误伤会让门禁不可用）", () => {
   });
 
   it("当前包名与安装命令放行", () => {
-    const r = scanDir(makeFixture({ "n.md": "pnpm add bmap-vue\nnpm install bmap-vue\n" }));
+    // 包名随发布身份迁移后必须同步：1.0 从无 scope 的 `bmap-vue` 迁到
+    // `@mangax/bmap-vue`（npm 上 `bmap-vue` 归他人所有）。这条用例断言的是
+    // 「**当前**包名放行」——留着旧名会让它在保护一个已退役的身份，而门禁
+    // 不会因此变红（`docs-brand-boundary` 不检查「包名是否一致」这件事）。
+    const r = scanDir(
+      makeFixture({ "n.md": "pnpm add @mangax/bmap-vue\nnpm install @mangax/bmap-vue\n" }),
+    );
     expect(r.code, r.output).toBe(0);
   });
 });
