@@ -15,6 +15,7 @@
  * 「等于 manifest」表达 —— 加组件 = 改 manifest + 重新生成，本文件不需要动。
  */
 import { describe, expect, it } from "vitest";
+import { runtimeExportSubpaths } from "../../scripts/release-identity.mts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as root from "../../packages/bmap-vue/src";
@@ -299,14 +300,37 @@ describe("1.0 导出面冻结", () => {
       const spec = pkg.exports![entry];
       const importPath = typeof spec === "string" ? spec : spec.import;
       const typesPath = typeof spec === "string" ? undefined : spec.types;
-      expect(importPath, `${entry} 没有 import 出口`).toMatch(/^\.\/dist\/.+\.mjs$/);
-      expect(existsSync(resolve(PKG_DIR, importPath!)), `产物缺失: ${importPath}`).toBe(true);
-      if (typesPath) {
+
+      if (importPath) {
+        // 有运行时出口的：必须指向 dist 产物。
+        expect(importPath, `${entry} 的 import 出口不在 dist`).toMatch(/^\.\/dist\/.+\.mjs$/);
+        expect(existsSync(resolve(PKG_DIR, importPath)), `产物缺失: ${importPath}`).toBe(true);
+      } else {
+        // **纯 `types` 出口**：没有运行时产物是合法的——`./volar` 就是这种（它是一份
+        // 供 IDE 读的 GlobalComponents 声明，运行时不 import 它）。但它仍必须指向一个
+        // **真实存在**的 .d.ts，否则用户按文档配置 `compilerOptions.types` 会拿到
+        // TS2688「找不到类型定义文件」（#45 评审 P1 的真实缺陷）。
+        //
+        // 这里刻意**不放宽成「没有 import 就跳过」**：那会让「声明了一个空出口」这类
+        // 缺陷静默通过。判据是「要么有 import 指向 dist，要么有 types 指向真实 d.ts」。
+        expect(typesPath, `${entry} 既没有 import 也没有 types 出口`).toBeTruthy();
+        expect(typesPath!, `${entry} 的 types 出口不是 .d.ts`).toMatch(/\.d\.ts$/);
+        expect(
+          existsSync(resolve(PKG_DIR, typesPath!)),
+          `${entry} 的 types 声明缺失: ${typesPath}（该文件是 gitignore 的生成产物，跑 pnpm generate:manifest）`,
+        ).toBe(true);
+      }
+
+      if (typesPath && importPath) {
         expect(existsSync(resolve(PKG_DIR, typesPath)), `声明缺失: ${typesPath}`).toBe(true);
       }
     }
-    // 正证：产物计数与入口数一致 —— 只断言「声明的都在」会漏掉「多构建了一个入口」。
+    // 正证：**有运行时产物的**入口数与 dist 里的 .d.ts 数量一致 ——
+    // 只断言「声明的都在」会漏掉「多构建了一个入口」。
+    // 纯 types 出口（./volar）不在 dist 里，因此不计入。
+    // 与 `core-surface.test.ts` 共用同一判据：两处各数一次，早晚有一处忘记排除
+    // 纯 types 出口（`./volar` 不在 dist 里）。
     const dtsCount = readdirSync(DIST).filter((f) => f.endsWith(".d.ts")).length;
-    expect(dtsCount).toBe(entries.length);
+    expect(dtsCount).toBe(runtimeExportSubpaths(pkg.exports).length);
   });
 });

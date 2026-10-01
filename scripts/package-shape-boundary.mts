@@ -80,11 +80,23 @@ export const ATTW_EXCEPTIONS: readonly AttwException[] = [
     kind: "CJSResolvesToESM",
     why: "exports 只有 import 条件、无 require，产物是纯 ESM（type: module）。CJS require 本库不是承诺的使用方式；加 require 条件会改动 #44 冻结的出口面。",
     tracking: "#158",
-    // 7 = 根入口 + 六个子入口（`./package.json` 不参与类型解析，因此不在列）。
-    expectedCount: 7,
+    // 8 = 根入口 + 六个子入口 + `./volar`（`./package.json` 不参与类型解析，因此不在列）。
+    // `./volar` 是纯 `types` 出口：它没有 `import` 条件，因此在 node16-cjs 下同样落入
+    // 「CJS require 一个只声明了类型的产物」这一类——与其它七处同源，故一并登记。
+    // 若将来给它补上 `import`（让它可被真正 import），这条要从例外里去掉。
+    expectedCount: 8,
     // 成立前提：CJS 解析（node16-cjs）下 ESM 产物被 require。档位漂移则例外不再成立。
     expectedResolutionKind: "node16-cjs",
-    entrypoints: [".", "./advanced", "./components", "./composables", "./plugins", "./resolver", "./ui-kit"],
+    entrypoints: [
+      ".",
+      "./advanced",
+      "./components",
+      "./composables",
+      "./plugins",
+      "./resolver",
+      "./ui-kit",
+      "./volar",
+    ],
   },
   {
     kind: "NoResolution",

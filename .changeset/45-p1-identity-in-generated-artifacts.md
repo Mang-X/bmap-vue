@@ -43,3 +43,18 @@
 
 验证：`pnpm test:unit` 208 files / 3775 tests passed；`verify:package` ALL PASSED；
 13 道静态门禁 + `docs` job 四步 + `playground:build` 全绿。
+## 补充 · 补上 `./volar` 出口（评审 P1）
+
+文档教用户写 `"types": ["@mangax/bmap-vue/volar"]`，而 `exports` 里**没有** `./volar`。
+用仓库当前包形状 + TypeScript 5.8.3 + `moduleResolution: bundler` 实测复现：
+
+```
+error TS2688: Cannot find type definition file for '@mangax/bmap-vue/volar'.
+```
+
+加上 `"./volar": { "types": "./volar.d.ts" }` 后 TS2688 消失。这正是 issue #158 当初标注的
+「Volar 可能是假承诺」的物理成因——文档承诺了自动补全，而那个承诺在真实消费侧不成立。
+
+同时新增 `tests/behavior/doc-subpath-exports.test.ts`：扫全量文档里出现的每个
+`<pkg>/<subpath>`，断言它在 `exports` 里可解析。将来文档再写一个新子路径而忘了开出口，
+会立刻变红。文档里的 specifier 是契约，不是散文。
