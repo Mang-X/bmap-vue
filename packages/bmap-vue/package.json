@@ -26,10 +26,15 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "dist/bmap-vue.css",
     "volar.d.ts",
     "README.md",
     "NOTICE.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -77,9 +82,12 @@
   "engines": {
     "node": ">=24"
   },
+  "scripts": {
+    "prepack": "node --experimental-strip-types ../../scripts/generate-manifest-artifacts.mts --check"
+  },
   "devDependencies": {
     "@baidumap/jsapi-v4-types": "github:baidu-maps/jsapi-v4-types#5ba67f4dda11b0a4b54fc631278d3e39e11667c3",
-    "@microsoft/api-extractor": "^7.52.0",
+    "@microsoft/api-extractor": "7.59.0",
     "@types/web-bluetooth": "0.0.21",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/language-core": "^2.2.0",

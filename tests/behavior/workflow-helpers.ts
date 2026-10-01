@@ -22,13 +22,28 @@ export function readWorkflow(name: string): string {
 }
 
 /**
- * 取出包含某个字符串的 step 区块（从该 step 的 `- ` 行起到下一个**同级** step 前）。
+ * 取出**真正执行**某个字符串的 step 区块（从该 step 的 `- ` 行起到下一个**同级** step 前）。
  *
  * 找不到时返回 `[]`——调用方必须先断言长度 > 0，否则「切空」会让后续断言恒真。
+ *
+ * ## 为什么跳过注释行
+ *
+ * 原始实现用 `line.includes(needle)` 匹配**第一行**，于是会命中 step 之间的**注释**——
+ * 本仓的 workflow 在每条门禁上方都写了大段「为什么」，注释里提到命令名是常态。
+ * 后果是**假绿**：切出来的是上一步，断言「这一步没被架空」就变成了断言上一步，
+ * 真的给目标 step 加 `continue-on-error: true` 仍然全绿。
+ *
+ * 这个假绿在 #45 的评审里被实测抓到：`stepBlockContaining(text, "check:pack-contents")`
+ * 命中的是 `quality.yml` 里那句「`check:pack-contents` 再从结果侧钉死它」的注释，
+ * 返回了 `Install dependencies` 那个 step。
+ *
+ * 因此这里**只匹配非注释行**（`#` 开头）。仍然可能被 `if:` 的**条件表达式**命中，
+ * 那类行以 `if:` 开头而非 `#`，但门禁 step 的 needle 通常是命令名，落在 `run:` 里。
  */
 export function stepBlockContaining(text: string, needle: string): string[] {
   const lines = text.split(/\r?\n/);
-  const hit = lines.findIndex((line) => line.includes(needle));
+  const isComment = (line: string): boolean => /^\s*#/.test(line);
+  const hit = lines.findIndex((line) => line.includes(needle) && !isComment(line));
   if (hit === -1) return [];
   // 命中行常常是 step 内的续行（`run: |` 之后的内容），因此要**向上**找最近的列表项行。
   let start = -1;
