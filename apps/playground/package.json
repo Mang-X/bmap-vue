@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "vue": "^3.5.0",
-    "bmap-vue": "workspace:*"
+    "@mangax/bmap-vue": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",

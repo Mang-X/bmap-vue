@@ -1,14 +1,14 @@
 ---
 layout: home
-title: @mangax/bmap-vue
+title: bmap-vue
 
 hero:
-  name: @mangax/bmap-vue
+  name: bmap-vue
   text: Vue 3 的百度地图组件与 hooks
   tagline: 面向 JSAPI 4.0 · Vue-native · 生产就绪
   image:
     src: /brand/bmap-vue-icon-square.svg
-    alt: @mangax/bmap-vue
+    alt: bmap-vue
   actions:
     - theme: brand
       text: 快速开始

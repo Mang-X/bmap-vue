@@ -31,7 +31,7 @@ export const head: HeadConfig[] = [
   // Open Graph / 分享卡。站点此前**没有任何 og:*** —— 分享到社交平台只有裸标题。
   // 图片用站点绝对路径（部署在 /bmap-vue/ 下，写相对路径会解析到错误位置）。
   ["meta", { property: "og:type", content: "website" }],
-  ["meta", { property: "og:title", content: "bmap-vue · Vue 3 的百度地图组件与 hooks"
+  ["meta", { property: "og:title", content: "bmap-vue · Vue 3 的百度地图组件与 hooks" }],
   [
     "meta",
     {
