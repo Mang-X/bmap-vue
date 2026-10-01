@@ -51,6 +51,29 @@ describe("#45 发布身份派生", () => {
       }
     });
 
+    it("**同包名但版本不同**不得被认领（PR 评审 P2）", () => {
+      // 前缀匹配会让 `rc.9` 也命中，而 `findTarball()` 按字符串排序取「最后一个」——
+      // `rc.9` 排在 `rc.0` 之后，于是验证了旧包。CI 因前置 `rm -rf .artifacts` 不易
+      // 撞上，但 `pack:package` 不清理目录，本地 `pack:package && verify:package` 会中招。
+      const id = releaseIdentityOf({ name: "@mangax/bmap-vue", version: "1.0.0-rc.0" });
+      for (const other of [
+        "mangax-bmap-vue-1.0.0-rc.9.tgz", // 更高 rc
+        "mangax-bmap-vue-1.0.0-rc.10.tgz",
+        "mangax-bmap-vue-1.0.0.tgz", // 正式版
+        "mangax-bmap-vue-0.9.0.tgz", // 旧版本线
+      ]) {
+        expect(isOwnTarball(other, id), other).toBe(false);
+      }
+      expect(isOwnTarball("mangax-bmap-vue-1.0.0-rc.0.tgz", id)).toBe(true);
+    });
+
+    it("版本匹配是全等而非字典序（rc.10 不等于 rc.1）", () => {
+      const id = releaseIdentityOf({ name: "@mangax/bmap-vue", version: "1.0.0-rc.10" });
+      expect(isOwnTarball("mangax-bmap-vue-1.0.0-rc.10.tgz", id)).toBe(true);
+      // 「rc.1」不是「rc.10」的前缀——字典序取最后一个会把这两个搞混
+      expect(isOwnTarball("mangax-bmap-vue-1.0.0-rc.1.tgz", id)).toBe(false);
+    });
+
     it("旧包名的 tarball 不再被认领（迁移后不该误取）", () => {
       const old = releaseIdentityOf({ name: "bmap-vue", version: "1.0.0-rc.0" });
       expect(isOwnTarball("bmap-vue-1.0.0-rc.0.tgz", old)).toBe(true);

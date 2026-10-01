@@ -59,8 +59,34 @@ export function importSpecifier(identity: ReleaseIdentity, subpath = ""): string
   return `${identity.name}${subpath}`;
 }
 
-/** 找出 `.artifacts` 下属于该身份的 tarball。 */
+/**
+ * `.artifacts` 下**属于该身份**的 tarball 文件名。
+ *
+ * 判据是 **name + version 精确匹配**，不是「同包名前缀」。
+ *
+ * ⚠️ 前缀匹配会认错包：`.artifacts` 里同时存在 `mangax-bmap-vue-1.0.0-rc.0.tgz` 与
+ * `mangax-bmap-vue-1.0.0-rc.9.tgz` 时，两边都命中，而 `findTarball()` 按字符串排序取
+ * 「最后一个」——`rc.9` 排在 `rc.0` 之后，于是**验证了旧包**。
+ *
+ * 后面 `assertReleaseIdentity` 拦不住：它只要求版本匹配 `/^1\.0\.0(?:-rc\.\d+)?$/`，
+ * `1.0.0-rc.9` 同样满足。
+ *
+ * CI 因前置 `rm -rf .artifacts` 不易撞上，但根脚本 `pack:package` **不清理目录**，
+ * 于是本地最常见的 `pnpm pack:package && pnpm verify:package` 会受影响
+ * （PR 评审 P2 实测确认）。
+ */
 export function isOwnTarball(fileName: string, identity: ReleaseIdentity): boolean {
-  const flattened = identity.name.replace(/^@/, "").replaceAll("/", "-");
-  return fileName.startsWith(`${flattened}-`) && fileName.endsWith(".tgz");
+  return fileName === tarballBasename(identity.name, identity.version);
+}
+
+/**
+ * npm 打包产物的文件名。
+ *
+ * ⚠️ scoped 包**不带前导 `@`**：实测 `npm pack` 对 `@mangax/bmap-vue@1.0.0-rc.0` 产出
+ * 的是 `mangax-bmap-vue-1.0.0-rc.0.tgz`。
+ *
+ * 与 `installedDirName` 的规则**不一致**，那是 npm 的既有行为，两个都要各自钉住。
+ */
+export function tarballBasename(name: string, version: string): string {
+  return `${name.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`;
 }

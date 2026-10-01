@@ -85,8 +85,14 @@ function assertReleaseIdentity(tarball: string): void {
         `npm 对 scoped 包默认按 restricted 处理，漏掉它首次 publish 会直接失败`,
     )
   }
-  if (typeof manifest.version !== 'string' || !/^1\.0\.0(?:-rc\.\d+)?$/.test(manifest.version)) {
-    throw new Error(`[verify-package] tarball version must use the 1.0 release line: ${String(manifest.version)}`)
+  // 版本必须**全等**于仓库 manifest，而不只是匹配 1.0 版本线的正则。
+  // 正则 `^1\.0\.0(?:-rc\.\d+)?$` 会把 `1.0.0-rc.9` 一并放过——而 `isOwnTarball`
+  // 按前缀认领时可能挑中它，于是「验证了一个旧包」却全程绿灯（PR 评审 P2）。
+  if (manifest.version !== identity.version) {
+    throw new Error(
+      `[verify-package] tarball version must be exactly ${identity.version}: ${String(manifest.version)}` +
+        `（只匹配 1.0 版本线的正则不够：旧的 rc 包同样满足那条正则）`,
+    );
   }
   if (!manifest.exports || typeof manifest.exports !== 'object') {
     throw new Error('[verify-package] tarball package.json must contain exports')
