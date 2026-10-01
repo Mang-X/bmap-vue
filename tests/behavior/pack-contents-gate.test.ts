@@ -15,6 +15,7 @@ import {
   ALLOWED_DIST_FORMS,
   checkPackContents,
   collectExportTargets,
+  collectTopLevelFields,
   matchesFilesEntry,
   normalizeEntries,
   tarballBasename,
@@ -207,6 +208,56 @@ describe("#45 npm pack 文件清单判据", () => {
     });
   });
 
+  describe("顶层路径字段（PR 评审 P2：不带 ./ 曾被静默跳过）", () => {
+    it("带 ./ 与不带 ./ 都收集", () => {
+      // `main` / `unpkg` 等写成 `dist/index.js`（不带 ./）是 npm 完全接受的形态。
+      // 第二版只收 `./` 开头的，于是 `unpkg: "dist/index.global.js"` 被静默跳过——
+      // 那正是实现上方注释里自己举的例子。
+      expect(collectTopLevelFields({ unpkg: "./dist/index.global.js" })).toEqual({
+        unpkg: "dist/index.global.js",
+      });
+      expect(collectTopLevelFields({ unpkg: "dist/index.global.js" })).toEqual({
+        unpkg: "dist/index.global.js",
+      });
+      expect(collectTopLevelFields({ main: "dist/index.js", types: "dist/index.d.ts" })).toEqual({
+        main: "dist/index.js",
+        types: "dist/index.d.ts",
+      });
+    });
+
+    it("URL / 绝对路径不检查（那不是「tarball 里有没有这个文件」能判的）", () => {
+      for (const value of [
+        "https://cdn.example/x.js",
+        "//cdn.example/x.js",
+        "/abs/x.js",
+        "file:///x.js",
+      ]) {
+        expect(collectTopLevelFields({ unpkg: value }), value).toEqual({});
+      }
+    });
+
+    it("unpkg 指向缺失文件且**不带 ./** 时必须报（端到端）", () => {
+      const entries = [
+        "package/package.json",
+        "package/README.md",
+        "package/volar.d.ts",
+        "package/dist/index.mjs",
+        "package/dist/index.mjs.map",
+      ];
+      const problems = checkPackContents({
+        entries,
+        manifest: {
+          files: ["dist", "volar.d.ts", "README.md"],
+          exports: {},
+          unpkg: "dist/DOES-NOT-EXIST.js",
+        },
+      });
+      const hit = problems.find((p) => p.kind === "export-target-missing");
+      expect(hit?.detail).toContain("unpkg");
+      expect(hit?.detail).toContain("dist/DOES-NOT-EXIST.js");
+    });
+  });
+
   describe("辅助函数", () => {
     it("normalizeEntries 去 package/ 前缀、丢目录条目、排序", () => {
       // `package/dist/` 与 `b/` 都是**目录条目**（以 `/` 结尾），刻意被丢弃：留着会让
@@ -224,6 +275,39 @@ describe("#45 npm pack 文件清单判据", () => {
       expect(matchesFilesEntry("dist/other.css", "dist/bmap-vue.css")).toBe(false);
       expect(matchesFilesEntry("anything", "!dist/**/*.map")).toBe(false);
       expect(matchesFilesEntry("anything", "")).toBe(false);
+    });
+
+    it("**文件项**不得前缀匹配（PR 评审 P2：否则 files:[volar.d.ts] 缺文件也判绿）", () => {
+      // 第二版把目录项与文件项合并成同一个前缀表达式，于是 tarball 里有
+      // `volar.d.ts/leftover.txt` 就算「volar.d.ts 已发出」——文件明明不在包里。
+      // 实测那份 entries 的判定结果是 `[]`，纯假绿。
+      expect(matchesFilesEntry("volar.d.ts/leftover.txt", "volar.d.ts")).toBe(false);
+      expect(matchesFilesEntry("volar.d.ts.map", "volar.d.ts")).toBe(false);
+      expect(matchesFilesEntry("volar.d.ts", "volar.d.ts")).toBe(true);
+    });
+
+    it("**目录项**仍须前缀匹配，且以 `/` 结尾即视为目录", () => {
+      expect(matchesFilesEntry("dist/chunks/a.mjs", "dist")).toBe(true);
+      expect(matchesFilesEntry("dist/chunks/a.mjs", "dist/")).toBe(true);
+      // 目录项不应匹配同名的**文件**
+      expect(matchesFilesEntry("dist", "dist")).toBe(true);
+    });
+
+    it("files 声明的文件被同名子路径「顶替」时报红（端到端）", () => {
+      const entries = [
+        "package/package.json",
+        "package/README.md",
+        "package/dist/index.mjs",
+        "package/dist/index.mjs.map",
+        // 只有 volar.d.ts 下的东西，**没有** volar.d.ts 本身
+        "package/volar.d.ts/leftover.txt",
+      ];
+      const problems = checkPackContents({
+        entries,
+        manifest: { files: ["dist", "volar.d.ts", "README.md"], exports: {} },
+      });
+      const hit = problems.find((p) => p.kind === "files-entry-missing");
+      expect(hit?.detail).toContain("volar.d.ts");
     });
 
     describe("tarballBasename（PR 评审 P2：scoped 包名会算错）", () => {

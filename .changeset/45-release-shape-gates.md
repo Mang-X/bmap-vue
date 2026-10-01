@@ -6,7 +6,9 @@
 
 - 新增 `check:pack-contents`：判据是**实际发布的那一个 tarball**（`files` 声明的每一项、
   `exports` 与顶层字段引用的每个文件、禁止形态、`dist` 产物形态），此前 `publint` / `attw`
-  都只看目录，一条都抓不到这类问题。
+  都只看目录，一条都抓不到这类问题。两条匹配口径刻意区分：`files` 的**目录项**才允许前缀
+  匹配（否则 `volar.d.ts/leftover.txt` 会顶替缺失的 `volar.d.ts`）；顶层字段的 `./` 前缀
+  **不是必需的**（`unpkg: "dist/index.js"` 是合法形态，只收 `./` 会让它被静默跳过）。
 - 修掉一个**已经存在**的发布缺陷：`volar.d.ts` 在 `.gitignore` 里且只由
   `generate-manifest-artifacts.mts` 写，跳过那一步直接 `pnpm pack` 会静默发出**缺 Volar 类型**的包
   （实测 47 vs 48 个条目），而 README 与安装页都承诺了自动补全。**三管齐下**堵住：根

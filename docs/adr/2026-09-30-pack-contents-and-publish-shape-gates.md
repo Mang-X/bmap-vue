@@ -29,6 +29,17 @@
 `unpkg`/`jsdelivr` 引用的文件都在包里；无凭据 / `node_modules` / 源码 / CI 目录；
 `dist` 下形态已登记；**空条目与 `files` 缺失一律判失败**（fail-closed）。
 
+两条匹配口径必须写清，否则会各自产生一种假绿（都是 PR 评审实测确认的）：
+
+- **`files` 条目分目录项与文件项**。只有目录项（`dist`、以 `/` 结尾的）允许前缀匹配；
+  文件项只允许精确相等。第二版把两者合并成同一个前缀表达式，于是 tarball 里有
+  `volar.d.ts/leftover.txt` 就算「`volar.d.ts` 已发出」——文件明明不在包里，
+  `files-entry-missing` 却不触发（实测判定结果为 `[]`）。
+- **顶层字段的 `./` 前缀不是必需的**。`main` / `unpkg` 写成 `dist/index.js` 是 npm 完全
+  接受的形态；只收 `./` 开头的会让 `unpkg: "dist/index.global.js"` 被**静默跳过**，
+  于是「改了 `unpkg` 指向不存在的文件」这条 CDN 契约无人把关。归一化后排除 URL 与绝对路径
+  （那不是「tarball 里有没有这个文件」能判的）。
+
 ### 2. `volar.d.ts` 的生成顺序从「碰巧」变成「强制」
 
 `files` 声明 `volar.d.ts`，而它是 `.gitignore` 的生成产物，只由

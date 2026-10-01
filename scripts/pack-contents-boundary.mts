@@ -133,22 +133,30 @@ function underDirectoryEntry(relativePath: string, entry: string): boolean {
 }
 
 /**
- * 一个 `files` 条目（可能是目录、可能是文件名、可能带 glob）匹配到哪些 tarball 条目。
+ * 一个 `files` 条目匹配到哪些 tarball 条目。
  *
- * 支持尾随 `/` 与 `!` 取反 —— npm 的 `files` 两者都合法，取反项在判定时跳过（由调用方
- * 先过滤），这里只负责**正向匹配**。
+ * **目录项**（`DIRECTORY_FILE_ENTRIES` 里的、或以 `/` 结尾的）匹配其下全部；
+ * **文件项**只允许精确相等。
+ *
+ * ⚠️ 这个区分是必需的，不是洁癖：第二版把两者合并成
+ * `relativePath === base || relativePath.startsWith(base + "/")`，于是
+ * `files: ["volar.d.ts"]` 会被 `volar.d.ts/leftover.txt` 匹配上——
+ * **文件明明不在包里，`files-entry-missing` 却不触发**（PR 评审 P2 实测：
+ * 那份 entries 的判定结果为 `[]`，纯假绿）。用例标题「目录项匹配其下全部，
+ * 文件项只匹配自己」说的正是这条判据，实现一度与它矛盾。
+ *
+ * npm 的 `files` 还允许 `!` 取反与 glob；取反项由调用方先过滤，glob 不在支持范围内
+ * （本包 `files` 里没有 glob，用例对此有断言）。
  */
 export function matchesFilesEntry(relativePath: string, entry: string): boolean {
   if (entry.trim() === "" || entry.trim().startsWith("!")) return false;
   const base = normalizeFilesEntry(entry);
   if (base === "") return false;
-  // 「目录项」与「精确项」是**同一个判定**：`dist` 匹配 `dist/` 下全部，
-  // `dist/index.mjs` 匹配它自己。两者都归结为「等于 base，或在 base/ 之下」。
-  // （第一版把两个分支各写一遍 `relativePath === base || startsWith(base + "/")`，
-  //  评审指出两臂返回值完全相同、`DIRECTORY_FILE_ENTRIES` 形同虚设——确实如此，
-  //  现在合并成一个表达式。`DIRECTORY_FILE_ENTRIES` 保留是因为它表达「哪些条目是目录」
-  //  这个领域事实，CSS 声明那条判据要读它。）
-  return relativePath === base || relativePath.startsWith(`${base}/`);
+  if (relativePath === base) return true;
+  // 目录项才允许前缀匹配。`entry` 以 `/` 结尾是 npm 写目录项的显式形态；
+  // `DIRECTORY_FILE_ENTRIES` 则是本仓已知的目录项名单（CSS 声明那条判据也读它）。
+  const isDirectoryEntry = entry.trim().endsWith("/") || DIRECTORY_FILE_ENTRIES.includes(base);
+  return isDirectoryEntry && relativePath.startsWith(`${base}/`);
 }
 
 /** 把 `exports` 递归压平成「必须存在的文件」列表。 */
@@ -178,12 +186,33 @@ export function collectExportTargets(exportsField: unknown): string[] {
  */
 const TOP_LEVEL_PATH_FIELDS = ["main", "module", "types", "unpkg", "jsdelivr"] as const;
 
+/**
+ * 把一个顶层字段的值归一化成「包内相对路径」，或返回 `undefined` 表示**不该检查**。
+ *
+ * ⚠️ `./` 前缀**不是**必需的：`main` / `module` / `types` / `unpkg` / `jsdelivr` 都合法地
+ * 写成 `dist/index.js`（npm 两种都接受）。第二版只在 `value.startsWith("./")` 时收集，
+ * 于是 `unpkg: "dist/index.global.js"` 被**静默跳过**——而那正是本函数上方注释里
+ * 自己举的例子，形同自我否证（PR 评审 P2 实测：`unpkg` 指向一个缺失文件，判定仍是 `[]`）。
+ *
+ * 只排除**确定不是包内相对路径**的形态：URL（`https:` / `//`）与绝对路径（`/` 或盘符）。
+ * 它们的缺失不该由「tarball 里有没有这个文件」来判，那是另一类问题。
+ */
+function normalizeTopLevelPath(value: string): string | undefined {
+  if (value === "") return undefined;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return undefined; // URL（https:、data: …）
+  if (value.startsWith("//") || value.startsWith("/")) return undefined; // 协议相对 / 绝对路径
+  if (/^[a-z]:/i.test(value)) return undefined; // Windows 盘符
+  return value.startsWith("./") ? value.slice(2) : value;
+}
+
 /** 顶层字段引用的文件，形如 `{ unpkg: "dist/index.global.js" }`（已归一化掉 `./`）。 */
 export function collectTopLevelFields(manifest: PackageManifestLike): Record<string, string> {
   const out: Record<string, string> = {};
   for (const key of TOP_LEVEL_PATH_FIELDS) {
     const value = manifest[key];
-    if (typeof value === "string" && value.startsWith("./")) out[key] = value.slice(2);
+    if (typeof value !== "string") continue;
+    const normalized = normalizeTopLevelPath(value);
+    if (normalized !== undefined) out[key] = normalized;
   }
   return out;
 }
