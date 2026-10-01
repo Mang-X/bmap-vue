@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import type { BMapClient, MapHandle } from "bmap-vue";
+import type { BMapClient, MapHandle } from "@mangax/bmap-vue";
 const zoom = ref(10);
 let _client: BMapClient | null = null;
 let _map: MapHandle | null = null;

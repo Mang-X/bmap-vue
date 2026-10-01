@@ -1,6 +1,6 @@
 import { watch, h } from "vue";
 import defaultTheme from "vitepress/theme";
-import { createBMapPlugin } from "bmap-vue";
+import { createBMapPlugin } from "@mangax/bmap-vue";
 import "../styles/index.less";
 
 import Demo from "../components/vp-demo.vue";

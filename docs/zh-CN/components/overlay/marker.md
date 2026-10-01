@@ -3,7 +3,7 @@
 在地图上绘制点
 
 ```ts
-import { Marker } from 'bmap-vue'
+import { Marker } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例
@@ -188,7 +188,7 @@ Label 再 `setLabel` 下去。从属的 Label 随 Marker 一起被释放——�
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import Marker, { type MarkerReadBackApi } from 'bmap-vue'
+import Marker, { type MarkerReadBackApi } from '@mangax/bmap-vue'
 
 const marker = ref<MarkerReadBackApi>()
 </script>

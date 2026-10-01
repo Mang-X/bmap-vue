@@ -1,5 +1,5 @@
 {
-  "name": "bmap-vue",
+  "name": "@mangax/bmap-vue",
   "description": "Vue 3 components and hooks for Baidu Maps JavaScript API 4.0.",
   "version": "1.0.0-rc.0",
   "type": "module",

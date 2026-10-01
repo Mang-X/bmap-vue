@@ -3,7 +3,7 @@
 在地图上绘制矩形（v4 的 `Rectangle` 覆盖物，由对角两点定义的 `bounds` 描述）。
 
 ```ts
-import { Rectangle } from 'bmap-vue'
+import { Rectangle } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

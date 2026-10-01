@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 返工：把 `map.screenshot` / `map.fly-to` / `map.viewport` 从「删条目」改回「补实现」

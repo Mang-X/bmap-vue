@@ -50,7 +50,7 @@
 
 <script lang="ts" setup>
 import { ref, computed } from "vue";
-import type { GroundOverlayType, Point } from "bmap-vue";
+import type { GroundOverlayType, Point } from "@mangax/bmap-vue";
 
 const activeKey = ref<GroundOverlayType>("canvas");
 

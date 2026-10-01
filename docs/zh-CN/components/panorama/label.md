@@ -3,7 +3,7 @@
 全景场景内的文本标注（官方 `BMap.PanoramaLabel`）。
 
 ```ts
-import { Panorama, PanoramaLabel } from 'bmap-vue'
+import { Panorama, PanoramaLabel } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

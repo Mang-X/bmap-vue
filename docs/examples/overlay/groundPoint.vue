@@ -29,7 +29,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import type { Point } from "bmap-vue";
+import type { Point } from "@mangax/bmap-vue";
 
 const point = { lng: 116.418351, lat: 39.921984 } as Point;
 

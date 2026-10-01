@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 TASK 6 / 7：`<Panorama>` 事件名的 SDK 拼写别名 + `linksVisibleChanged`

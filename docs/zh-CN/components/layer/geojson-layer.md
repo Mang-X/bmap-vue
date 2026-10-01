@@ -3,7 +3,7 @@
 用一份 GeoJSON 数据渲染点 / 线 / 面覆盖物。数据变化时只调 `setData()`，不重建图层。
 
 ```ts
-import { GeoJSONLayer } from 'bmap-vue'
+import { GeoJSONLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

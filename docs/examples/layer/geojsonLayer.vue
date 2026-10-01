@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { GeoJSONLayer } from "bmap-vue";
+import { GeoJSONLayer } from "@mangax/bmap-vue";
 
 /**
  * 一份最小的 GeoJSON 数据；`data` 变化时只调 `setData()`，不会重建图层。

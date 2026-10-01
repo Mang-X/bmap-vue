@@ -353,10 +353,16 @@ jobs:
           pnpm --filter bmap-vue pack --pack-destination .artifacts
           pnpm check:pack-contents
 
-      - name: package tarball consumer
-        run: |
-          cp .artifacts/bmap-vue-*.tgz .artifacts/bmap-vue.tgz
-          cd fixtures/consumer
-          npm install --no-audit --no-fund --ignore-scripts
-          npx vue-tsc --noEmit
-          node -e "import('bmap-vue').then(m=>{if(!m.Map)throw new Error('missing Map');console.log('consumer OK')})"
+      # tarball 消费方验证：**调 `pnpm verify:package`，不再在本文件里复刻一遍**。
+      #
+      # 原本这里内联了 `cp .artifacts/bmap-vue-*.tgz …` + `npm install` + `vue-tsc` +
+      # `import('bmap-vue')`。两个问题（PR 评审 P1）：
+      # ① 包名迁到 `@mangax/bmap-vue` 后那个 glob 匹配不到任何文件（实际产物是
+      #    `mangax-bmap-vue-<version>.tgz`），job 会在消费验证前就失败；
+      # ② 即使修好 glob，它验的也不是用户真正会安装/导入的那个包名，且覆盖面落后于
+      #    `verify:package`（没有 `./ui-kit` 与 `./advanced` 子入口探针）。
+      #
+      # `verify-package.mts` 早已从 manifest 派生全部身份信息（见 scripts/release-identity.mts），
+      # 所以单一实现既正确又更全。`quality` job 那一步同样调它，两处口径从此一致。
+      - name: Package tarball consumer (verify:package)
+        run: pnpm verify:package

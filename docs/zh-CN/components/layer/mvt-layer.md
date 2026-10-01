@@ -4,7 +4,7 @@ MVT 矢量瓦片（官方 `BMap.MVTLayer`，4.0）：按**源图层名**过滤�
 并提供要素状态（feature-state）命令面。
 
 ```ts
-import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
+import { MVTLayer, mvtFeatureStateKey } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例
@@ -90,7 +90,7 @@ import { MVTLayer, mvtFeatureStateKey } from 'bmap-vue'
 经 `defineExpose({ featureState })` 给出命令面（不是 prop）：
 
 ```ts
-import { mvtFeatureStateKey } from 'bmap-vue'
+import { mvtFeatureStateKey } from '@mangax/bmap-vue'
 
 const layerRef = ref<InstanceType<typeof MVTLayer> | null>(null)
 

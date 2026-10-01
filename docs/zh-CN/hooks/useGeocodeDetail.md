@@ -3,7 +3,7 @@
 由坐标点解析地址信息
 
 ```ts
-import { useGeocodeDetail } from 'bmap-vue'
+import { useGeocodeDetail } from '@mangax/bmap-vue'
 ```
 
 ## 单个坐标点解析
@@ -17,7 +17,7 @@ hooks/useGeocodeDetail/index
 `data` 为 `Readonly<ShallowRef<GeocodeDetailResult | null>>`，可直接解构使用：
 
 ```ts
-import { useGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
+import { useGeocodeDetail, type GeocodeDetailResult } from '@mangax/bmap-vue'
 const { data } = useGeocodeDetail(map)
 ```
 
@@ -35,7 +35,7 @@ hooks/useGeocodeDetail/batch
 单项失败时 `detail` 为 `null`，原因从该项的 `status` / `error` 读（这就是「部分成功」的表达方式）：
 
 ```ts
-import { useGeocodeDetail, type GeocodeDetailResult } from 'bmap-vue'
+import { useGeocodeDetail, type GeocodeDetailResult } from '@mangax/bmap-vue'
 const { getBatch } = useGeocodeDetail(map)
 ```
 
@@ -146,7 +146,7 @@ import type {
   LocalSearchPoi,
   ServiceErrorInfo,
   ServiceResult,
-} from 'bmap-vue'
+} from '@mangax/bmap-vue'
 export interface GeocodeDetailResult {
   /**
    * 坐标点

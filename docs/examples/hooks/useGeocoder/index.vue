@@ -24,7 +24,7 @@
 
 <script lang="ts" setup>
 import { ref, watch } from "vue";
-import { useGeocoder } from "bmap-vue";
+import { useGeocoder } from "@mangax/bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
 const addressList = ref([

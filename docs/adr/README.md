@@ -47,7 +47,7 @@
 | [2026-09-24](./2026-09-24-overlay-infowindow-vue-native-convergence.md) | Overlay / InfoWindow 的 Vue-native 收口：删自研调度队列（改 Vue batching + 一个数组源 post-flush watcher + replace 窗口的最小尾随队列 / 大数组 `flush:'sync'` 不动）/ 删运行时 Proxy / 定形几何用标量键 / InfoWindow 双 `nextTick` 收成单一 post-flush 入口 / **baseline restore 只有重建一条路**（getter 给当前值、ctor 快照不是默认值，§5 逐条反证）/ 覆盖物 `defineEmits` 改为生成（#138） | Accepted |
 | [2026-09-25](./2026-09-25-clean-slate-migration-baggage-removal.md) | Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（集中弃用层与旧 prop/event 别名一并删除 / `check:no-bmapgl` 三份独家覆盖并入 `check:raw-sdk` / `v3-` 前缀与库版本措辞中性化 / 官方事实与工程史保留；#136） | Accepted |
 | [2026-09-25](./2026-09-25-public-export-surface-freeze.md) | 1.0 公共出口冻结（彻底取消 `./core` 子入口并迁移 v4 Provider 家族 / 根入口 + 六个子入口的值导出集合与 API report 钉成门禁 / #104 留下的 7 项出口收窄逐条结清且不留别名 / Manifest 仍是唯一组件元数据源但不新增字段；取代 `2026-09-14-remove-legacy-engine` 决策 2 的「`LoadedSdk` 保留为别名」；#44） | Accepted |
-| [2026-09-30](./2026-09-30-pack-contents-and-publish-shape-gates.md) | 发布 tarball 的文件清单成为门禁（`files` 声明了却没发出曾真实发生过：`volar.d.ts` 是 gitignore 的生成产物，顺序不强制就会静默发出版本缺件的包）/ publint 与 attw 精确锁版本且 attw 从一句 grep 改为结构化断言，已审阅的例外显式登记 / sourcemap 保留（带 `sourceMappingURL` 的必须有 map，纯 re-export facade 不要求）/ CSS 按文件名显式声明为公共面；#45） | Accepted |
+| [2026-09-30](./2026-09-30-pack-contents-and-publish-shape-gates.md) | 发布 tarball 的文件清单成为门禁（`files` 声明了却没发出曾真实发生过：`volar.d.ts` 是 gitignore 的生成产物，顺序不强制就会静默发出版本缺件的包）/ publint 与 attw 精确锁版本且 attw 从一句 grep 改为结构化断言，已审阅的例外显式登记 / sourcemap 保留（带 `sourceMappingURL` 的必须有 map，纯 re-export facade 不要求）/ CSS 按文件名显式声明为公共面 / **发布身份迁到 `@mangax/bmap-vue`**（npm 上 `bmap-vue` 归他人所有且 `1.0.0` 已被占用；取代 `2026-09-24-bmap-vue-release-identity-reset` 决策 1 的包名，类型面与产物逐字节未变）；#45） | Accepted |
 
 ## 约定
 

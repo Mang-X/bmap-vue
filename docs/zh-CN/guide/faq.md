@@ -32,7 +32,7 @@ mapRef.value?.panTo({ lng: 116.4, lat: 39.9 })
 ```
 
 命令面是**只读**的，不承诺与 SDK 实例同形。需要 raw 实例时用
-[`bmap-vue/advanced`](./advanced) 的 `unwrapRaw()`，注意那条路径形状由 SDK 决定。
+[`@mangax/bmap-vue/advanced`](./advanced) 的 `unwrapRaw()`，注意那条路径形状由 SDK 决定。
 
 ## 服务请求「发出去了但没反应」
 
@@ -63,7 +63,7 @@ mapRef.value?.panTo({ lng: 116.4, lat: 39.9 })
 
 SDK 只在客户端加载，本库不会在模块顶层访问 `window` / `document`。
 如果你在 SSR 项目里遇到这类报错，检查是不是静态引入了
-`bmap-vue/ui-kit`（官方 UI Kit 在 import 时就碰 `document`）——它必须动态 import。
+`@mangax/bmap-vue/ui-kit`（官方 UI Kit 在 import 时就碰 `document`）——它必须动态 import。
 详见[服务端渲染与生命周期](./ssr)。
 
 ## `timeout` 设成 0 会立刻超时吗
@@ -79,7 +79,7 @@ createBMapPlugin({ ak, defaults: { timeout: 0 } }) // 永不超时
 `Point` 是纯数据（`{ lng, lat }`），不需要 SDK 实例：
 
 ```ts
-import type { Point } from 'bmap-vue'
+import type { Point } from '@mangax/bmap-vue'
 const p: Point = { lng: 116.297611, lat: 40.047363 }
 ```
 

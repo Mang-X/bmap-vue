@@ -35,8 +35,8 @@
 
 <script lang="ts" setup>
 import { computed } from "vue";
-import { Map, Marker, useDrivingRoute } from "bmap-vue";
-import type { RoutePlan } from "bmap-vue";
+import { Map, Marker, useDrivingRoute } from "@mangax/bmap-vue";
+import type { RoutePlan } from "@mangax/bmap-vue";
 
 const from = { lng: 116.391, lat: 39.91 };
 const to = { lng: 116.431, lat: 39.931 };

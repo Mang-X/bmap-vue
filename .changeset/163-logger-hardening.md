@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 Logger 安全与轻量化（#163）：上下文脱敏、故障隔离、无效全局状态清理——**无公开 API 变更**

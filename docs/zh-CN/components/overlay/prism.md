@@ -3,7 +3,7 @@
 通过该组件可在地图上绘制 3d 棱柱，可以基于位置经纬度，高度，顶面和侧面的颜色、透明度等属性来绘制不规则的棱柱体。
 
 ```ts
-import { Prism } from 'bmap-vue'
+import { Prism } from '@mangax/bmap-vue'
 ```
 
 ## 示例

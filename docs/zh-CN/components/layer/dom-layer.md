@@ -3,7 +3,7 @@
 用回调创建自定义 DOM 覆盖物。`createDom` 对应官方构造签名的第一个参数 `createDOM`。
 
 ```ts
-import { DOMLayer } from 'bmap-vue'
+import { DOMLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

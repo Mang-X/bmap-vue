@@ -6,7 +6,7 @@
 `BMAP_ROUTE_TYPE_RIDING`（`6`）。
 
 ```ts
-import { useRidingRoute } from "bmap-vue";
+import { useRidingRoute } from "@mangax/bmap-vue";
 ```
 
 > 为什么要两个 hooks 而不是一个 `useRoute(mode)`：两个服务在 SDK 里就是两个类、两个能力 id

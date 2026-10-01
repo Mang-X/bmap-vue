@@ -24,7 +24,7 @@
 
 <script lang="ts" setup>
 import { ref, type UnwrapRef } from "vue";
-import { Map, Marker, InfoWindow } from "bmap-vue";
+import { Map, Marker, InfoWindow } from "@mangax/bmap-vue";
 let markers = ref([
   {
     position: { lat: 39.915185, lng: 116.400101 },

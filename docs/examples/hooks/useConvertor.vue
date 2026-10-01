@@ -21,7 +21,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { CoordinatesFromType, CoordinatesToType, useConvertor } from "bmap-vue";
+import { CoordinatesFromType, CoordinatesToType, useConvertor } from "@mangax/bmap-vue";
 const map = ref();
 // data 是唯一读取口；result 是它的别名，这里用 data
 const { convert, data, isLoading, isError } = useConvertor(map);

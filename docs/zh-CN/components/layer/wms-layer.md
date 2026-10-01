@@ -4,7 +4,7 @@
 并用 `BBOX` / `WIDTH` / `HEIGHT` 驱动瓦片请求。
 
 ```ts
-import { WMSLayer } from 'bmap-vue'
+import { WMSLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

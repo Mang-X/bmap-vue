@@ -23,7 +23,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { CustomOverlay } from "bmap-vue";
+import { CustomOverlay } from "@mangax/bmap-vue";
 
 const center = ref("北京市");
 const position = ref({ lng: 116.403901, lat: 39.915185 });

@@ -9,7 +9,7 @@ title: useControllableState
 [Map 地图](../components/map) 的「受控 / 非受控视野」一节）。
 
 ```ts
-import { useControllableState } from 'bmap-vue'
+import { useControllableState } from '@mangax/bmap-vue'
 ```
 
 ## 优先与模式
@@ -25,7 +25,7 @@ import { useControllableState } from 'bmap-vue'
 ## 基本用法
 
 ```ts
-import { useControllableState } from 'bmap-vue'
+import { useControllableState } from '@mangax/bmap-vue'
 import { shallowRef, watch, computed } from 'vue'
 
 const props = defineProps<{ value?: number; defaultValue?: number }>()

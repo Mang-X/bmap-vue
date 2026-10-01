@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 # 1.0 公共出口冻结（#44）

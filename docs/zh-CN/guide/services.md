@@ -17,8 +17,8 @@ lang: zh-CN
 
 ```vue
 <script setup lang="ts">
-import { BMapProvider, createBMapClientDefinition, useGeocoder } from 'bmap-vue'
-import { baiduJsapiV4Provider } from 'bmap-vue/advanced'
+import { BMapProvider, createBMapClientDefinition, useGeocoder } from '@mangax/bmap-vue'
+import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
 
 // <BMapProvider> 没有 ak prop —— ak 属于**加载选项**，要经 definition / loadOptions 传
 const definition = createBMapClientDefinition({

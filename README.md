@@ -1,16 +1,16 @@
 <p align="center">
   <a href="https://Mang-X.github.io/bmap-vue/zh-CN" target="_blank" rel="noopener noreferrer">
-  <img src="./docs/public/brand/bmap-vue-icon-square.svg" width="180" height="180" alt="bmap-vue" />
+  <img src="./docs/public/brand/bmap-vue-icon-square.svg" width="180" height="180" alt="@mangax/bmap-vue" />
   </a>
 </p>
 
-<h1 align="center"><img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" />&nbsp;bmap-vue&nbsp;<img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" /></h1>
+<h1 align="center"><img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" />&nbsp;@mangax/bmap-vue&nbsp;<img src="./docs/public/brand/bmap-vue-icon-square.svg" width="50" height="50" alt="" /></h1>
 
 <p align="center">易用 & 完整 & 高性能</p>
 <p align="center">
 <img src="https://img.shields.io/github/license/Mang-X/bmap-vue?style=flat-square" alt="" />
 <img src="https://img.shields.io/github/package-json/v/Mang-X/bmap-vue?color=f90&style=flat-square" alt="GitHub package.json version (subfolder of monorepo)"/>
-<img alt="npm" src="https://img.shields.io/npm/dm/bmap-vue?logo=npm&style=flat-square" />
+<img alt="npm" src="https://img.shields.io/npm/dm/@mangax/bmap-vue?logo=npm&style=flat-square" />
 <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Mang-X/bmap-vue?style=flat-square&color=%23daaa3f">
 <img alt="GitHub issues" src="https://img.shields.io/github/issues/Mang-X/bmap-vue?style=flat-square" />
 <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/Mang-X/bmap-vue?style=flat-square">
@@ -20,7 +20,7 @@
 面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JSAPI 4.0。
 
 <div align="center">
-  <img src="./docs/public/brand/bmap-vue-banner.svg" alt="bmap-vue — 基于百度地图的 Vue 组件库" width="880" />
+  <img src="./docs/public/brand/bmap-vue-banner.svg" alt="@mangax/bmap-vue — 基于百度地图的 Vue 组件库" width="880" />
 </div>
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star
@@ -46,13 +46,13 @@
 
 ```bash
 # with pnpm
-pnpm add bmap-vue
+pnpm add @mangax/bmap-vue
 
 # or with yarn
-yarn add bmap-vue
+yarn add @mangax/bmap-vue
 
 # or with npm
-npm install bmap-vue
+npm install @mangax/bmap-vue
 ```
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Play%20Button.png" alt="Play Button" width="25" height="25" /> 用法
@@ -67,8 +67,8 @@ npm install bmap-vue
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Map, Marker, NavigationControl } from 'bmap-vue'
-import type { Point } from 'bmap-vue'
+import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
+import type { Point } from '@mangax/bmap-vue'
 
 const ak = '你的百度地图 ak'
 const center = ref<Point>({ lng: 116.404, lat: 39.915 })
@@ -89,7 +89,7 @@ const center = ref<Point>({ lng: 116.404, lat: 39.915 })
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 </script>
 ```
 
@@ -97,7 +97,7 @@ import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
 
 ```ts
 import { createApp } from 'vue'
-import { createBMapPlugin } from 'bmap-vue'
+import { createBMapPlugin } from '@mangax/bmap-vue'
 
 app.use(createBMapPlugin({ ak: '你的百度地图 ak' }))
 ```
@@ -141,7 +141,7 @@ pnpm docs:dev
 
 ## 项目来源与致谢
 
-`bmap-vue` 源自开源项目 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。
+`@mangax/bmap-vue` 源自开源项目 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。
 感谢原作者 yue1123 与所有历史贡献者。原项目的 MIT 许可与 `Copyright (c) 2021 yue1123` 声明原样保留；
 1.0 之后的架构重构与维护由本项目维护者与贡献者完成。
 

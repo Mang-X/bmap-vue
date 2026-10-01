@@ -3,7 +3,7 @@
 在地图上绘制简单的圆形
 
 ```ts
-import { Circle } from 'bmap-vue'
+import { Circle } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

@@ -25,7 +25,7 @@ import {
   type ContextMenuItem,
   type ContextMenuSeparator,
   type ContextMenuSelectPayload,
-} from "bmap-vue";
+} from "@mangax/bmap-vue";
 
 const center = ref("北京市");
 

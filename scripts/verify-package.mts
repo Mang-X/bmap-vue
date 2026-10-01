@@ -16,10 +16,27 @@ import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync,
 import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectImportClosure, componentMarkersIn } from './advanced-bundle-shake.mts'
+import {
+  CONSUMER_TARBALL,
+  PKG_DIR,
+  isOwnTarball,
+  releaseIdentityOf,
+} from './release-identity.mts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const artifactsDir = resolve(root, '.artifacts')
 const fixturesDir = resolve(root, 'fixtures')
+
+/**
+ * 发布身份**一律从 manifest 读**，不在本脚本里写死包名。
+ *
+ * 1.0 把包名从无 scope 的 `bmap-vue` 迁到 `@mangax/bmap-vue`（前者归他人所有）。
+ * 写死的话，改名要同时改本文件的 tarball 正则、ESM 探针字符串、`node_modules` 路径
+ * 等十几处，漏一处就是「门禁红」或「门禁静默不生效」——后者更糟。
+ */
+const identity = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(root, PKG_DIR, 'package.json'), 'utf8')),
+)
 
 /** 空转守卫：切出来的集合为空时，后面的「没有命中」不能作为证据。 */
 function expectNonEmpty(values: readonly unknown[], message: string): void {
@@ -29,9 +46,16 @@ function expectNonEmpty(values: readonly unknown[], message: string): void {
 function findTarball(): string {
   if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack:package')
   const tarballs = readdirSync(artifactsDir)
-    .filter((f) => /^bmap-vue-\d+\.\d+\.\d+(?:-.+)?\.tgz$/.test(f))
+    // 按身份筛，而不是按 `bmap-vue-<version>.tgz` 的正则：scoped 包打出来是
+    // `mangax-bmap-vue-1.0.0-rc.0.tgz`（无前导 @），正则认不出。
+    .filter((f) => isOwnTarball(f, identity))
     .sort()
-  if (tarballs.length === 0) throw new Error('No .tgz found in .artifacts')
+  if (tarballs.length === 0) {
+    throw new Error(
+      `No .tgz for ${identity.name} found in .artifacts; run: pnpm pack:package` +
+        `（.artifacts 现有：${readdirSync(artifactsDir).filter((f) => f.endsWith('.tgz')).join(', ') || '空'}）`,
+    )
+  }
   return resolve(artifactsDir, tarballs[tarballs.length - 1])
 }
 
@@ -45,11 +69,30 @@ function readTarballManifest(tarball: string): Record<string, unknown> {
 
 function assertReleaseIdentity(tarball: string): void {
   const manifest = readTarballManifest(tarball)
-  if (manifest.name !== 'bmap-vue') {
-    throw new Error(`[verify-package] tarball package.name must be bmap-vue: ${String(manifest.name)}`)
+  // 与仓库内 manifest 比，而不是与某个写死的名字比：这样「改了包名忘了同步 tarball」
+  // 会立刻红，而改名本身只需要改 manifest 一处。
+  if (manifest.name !== identity.name) {
+    throw new Error(
+      `[verify-package] tarball package.name must be ${identity.name}: ${String(manifest.name)}`,
+    )
   }
-  if (typeof manifest.version !== 'string' || !/^1\.0\.0(?:-rc\.\d+)?$/.test(manifest.version)) {
-    throw new Error(`[verify-package] tarball version must use the 1.0 release line: ${String(manifest.version)}`)
+  // scoped 包默认按 restricted 处理，漏掉 access 会让首次 publish 失败。这条断言的是
+  // 「声明了 public」，与 ADR 2026-09-30 决策 5 一致。
+  const publishConfig = manifest.publishConfig as { access?: unknown } | undefined
+  if (identity.isScoped && publishConfig?.access !== 'public') {
+    throw new Error(
+      `[verify-package] scoped 包 ${identity.name} 必须声明 publishConfig.access="public"：` +
+        `npm 对 scoped 包默认按 restricted 处理，漏掉它首次 publish 会直接失败`,
+    )
+  }
+  // 版本必须**全等**于仓库 manifest，而不只是匹配 1.0 版本线的正则。
+  // 正则 `^1\.0\.0(?:-rc\.\d+)?$` 会把 `1.0.0-rc.9` 一并放过——而 `isOwnTarball`
+  // 按前缀认领时可能挑中它，于是「验证了一个旧包」却全程绿灯（PR 评审 P2）。
+  if (manifest.version !== identity.version) {
+    throw new Error(
+      `[verify-package] tarball version must be exactly ${identity.version}: ${String(manifest.version)}` +
+        `（只匹配 1.0 版本线的正则不够：旧的 rc 包同样满足那条正则）`,
+    );
   }
   if (!manifest.exports || typeof manifest.exports !== 'object') {
     throw new Error('[verify-package] tarball package.json must contain exports')
@@ -125,7 +168,64 @@ function setupFixture(name: string): string {
   rmSync(tmp, { recursive: true, force: true })
   mkdirSync(tmp, { recursive: true })
   copyTree(src, tmp)
+  // fixture 源码里写的是**可读的**旧包名 `bmap-vue`；拷贝出来之后按真实身份重写。
+  // 这样 fixture 的 .ts/.vue 保持人可读，而「改包名」这件事仍然只需要改 manifest 一处。
+  // 重写的是**拷贝出来的副本**，`fixtures/` 里的源文件不被改动。
+  if (name === 'consumer') rewriteFixturePackageName(tmp, identity.name)
   return tmp
+}
+
+/**
+ * 把消费 fixture 副本里的包名统一替换成真实发布身份。
+ *
+ * 三类位置：① `package.json#dependencies` 的**键**；② `from 'bmap-vue…'` 的说明符；
+ * ③ `import('bmap-vue')` 之类的探针字符串。
+ *
+ * 只替换**裸包名**（带引号边界），不碰 `packages/bmap-vue/…` 这类仓库内路径 ——
+ * fixture 的 `env.d.ts` 与注释里有它们，那是仓库路径不是 npm 包名。
+ */
+function rewriteFixturePackageName(dir: string, name: string): void {
+  const LEGACY = 'bmap-vue'
+  const walk = (d: string): void => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue
+      const full = resolve(d, entry.name)
+      if (entry.isDirectory()) {
+        walk(full)
+        continue
+      }
+      if (/\.(ts|vue|mjs|json)$/.test(entry.name)) rewriteFile(full, name, LEGACY)
+    }
+  }
+
+  const rewriteFile = (file: string, name: string, legacy: string): void => {
+    const before = readFileSync(file, 'utf8')
+    // ① 说明符：'bmap-vue' / "bmap-vue" / 'bmap-vue/ui-kit' → '@scope/bmap-vue'
+    const after = before
+      .replace(/(['"])bmap-vue(?=[/'\"])/g, `$1${name}`)
+      // ② 仓库路径必须还原：`packages/@scope/bmap-vue/…` 不是合法路径
+      .replace(/packages\/@[^/]+\/bmap-vue\//g, 'packages/bmap-vue/')
+    if (after !== before) writeFileSync(file, after)
+  }
+
+  // package.json 的依赖键单独处理：它是 JSON 的 key，不能靠上面的引号规则
+  const pkgJsonPath = resolve(dir, 'package.json')
+  if (existsSync(pkgJsonPath)) {
+    const raw = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    for (const field of [raw.dependencies, raw.devDependencies]) {
+      if (!field) continue
+      if (field[LEGACY] !== undefined) {
+        field[name] = field[LEGACY]
+        delete field[LEGACY]
+      }
+    }
+    writeFileSync(pkgJsonPath, `${JSON.stringify(raw, null, 2)}\n`)
+  }
+
+  walk(dir)
 }
 
 /**
@@ -164,7 +264,7 @@ function main() {
   const tarball = findTarball()
   console.log(`[verify-package] tarball: ${tarball}`)
   assertReleaseIdentity(tarball)
-  copyFileSync(tarball, resolve(artifactsDir, 'bmap-vue.tgz'))
+  copyFileSync(tarball, resolve(artifactsDir, CONSUMER_TARBALL))
 
 
   // 5) consumer:从 package tarball 安装,类型检查 + ESM 导入(发布包的硬前提)
@@ -174,8 +274,13 @@ function main() {
   // 文档示例对着**正式 tarball** 类型检查（issue #141 的「示例代码从正式 tarball 运行」）。
   // 排在 `npm install` 之前：文件必须在依赖装好之前就位。
   const copiedExampleGroups = copyDocsExamples(consumerFixture)
+  // 文档示例是在 `setupFixture()` **之后**才拷进来的，所以要单独再重写一次包名。
+  // 漏掉这一步的后果很具体：`vue-tsc` 会报几十条
+  // `TS2307: Cannot find module 'bmap-vue'` —— 文档示例是对着 tarball 编译的，
+  // 包名对不上立刻现形（这正是这道门禁的价值所在）。
+  rewriteFixturePackageName(resolve(consumerFixture, 'docs-examples'), identity.name)
   run(
-    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('bmap-vue').then(m=>{if(!m.Map||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('bmap-vue/ui-kit').then(m=>{for(const k of ['PlaceAutocomplete','PlaceSearch','PlaceDetail','RoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
+    `npm install --no-audit --no-fund && npx vue-tsc --noEmit && node -e "import('${identity.name}').then(m=>{if(!m.Map||!m.createBMapPlugin)throw new Error('missing exports');console.log('consumer ESM import OK')})" && node -e "import('${identity.name}/ui-kit').then(m=>{for(const k of ['PlaceAutocomplete','PlaceSearch','PlaceDetail','RoutePlan','RoutePlanDrivingPolicy','loadUiKit','UI_KIT_STYLE_PATH'])if(!m[k])throw new Error('missing '+k);console.log('ui-kit subpath ESM import OK (no DOM, four components)')})"`,
     consumerFixture,
     'consumer typecheck + ESM import (package tarball)',
   )
@@ -203,12 +308,12 @@ function main() {
       "  createHandle,",
       "  normalizeProvider,",
       "  unwrapRaw,",
-      "} from 'bmap-vue/advanced'",
+      "} from '" + identity.name + "/advanced'",
       "import {",
       "  BUILTIN_PLUGIN_NAMES,",
       "  resolvePluginDefinition,",
       "  urlPluginDefinition,",
-      "} from 'bmap-vue/plugins'",
+      "} from '" + identity.name + "/plugins'",
       "",
       "const fail = (message) => {",
       "  throw new Error('[advanced-probe] ' + message)",
@@ -372,7 +477,7 @@ function main() {
   //    **精确锁定的运行时依赖**声明，并且真的能被消费者解析。
   //    只断言「能 import」不够：依赖漏声明时 tarball 里的 import 仍然会通过（产物内联），
   //    于是「普通消费者不额外手动配置」这条契约会静默失效。
-  const installedPkgPath = resolve(consumerFixture, 'node_modules/bmap-vue/package.json')
+  const installedPkgPath = resolve(consumerFixture, 'node_modules', identity.installedDirName, 'package.json')
   const installedPkg = JSON.parse(readFileSync(installedPkgPath, 'utf8')) as {
     dependencies?: Record<string, string>
   }
@@ -447,7 +552,7 @@ function main() {
   //    三步都验：① ESM 产物层面「标记还在」；② IIFE 档「没有裸 `process`」（那一档自己折叠）；
   //    ③ 行为层面「同一个产物在 development 下告警、在 production 下静默」——正是消费方
   //    打包器折叠后的两种终态。
-  const installedDist = resolve(consumerFixture, 'node_modules/bmap-vue/dist')
+  const installedDist = resolve(consumerFixture, 'node_modules', identity.installedDirName, 'dist')
   const distFiles: string[] = []
   const collect = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -495,7 +600,7 @@ function main() {
     devProbe,
     [
       "import { effectScope, ref } from 'vue'",
-      "import { useControllableState } from 'bmap-vue/composables'",
+      "import { useControllableState } from '" + identity.name + "/composables'",
       '',
       'const lines = []',
       'const original = console.warn',

@@ -3,7 +3,7 @@
 在地图上绘制简单的多边形
 
 ```ts
-import { Polygon } from 'bmap-vue'
+import { Polygon } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

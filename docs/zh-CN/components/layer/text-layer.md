@@ -5,7 +5,7 @@
 驱动**（官方 `StyleValue<T>`，可按要素逐个求值），并内置碰撞剔除（密集时自动隐藏互相压盖的文字）。
 
 ```ts
-import { TextLayer } from 'bmap-vue'
+import { TextLayer } from '@mangax/bmap-vue'
 ```
 
 与 [`LineLayer` / `FillLayer` / `HeatmapLayer` / `TrackLineLayer`](./native-visual-layers)、
@@ -17,7 +17,7 @@ import { TextLayer } from 'bmap-vue'
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Map, TextLayer } from 'bmap-vue'
+import { Map, TextLayer } from '@mangax/bmap-vue'
 
 const points = ref({
   type: 'FeatureCollection',
@@ -141,8 +141,8 @@ latLng, pixel }`）。
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { TextLayer } from 'bmap-vue'
-import type { TextLayerPick } from 'bmap-vue'
+import { TextLayer } from '@mangax/bmap-vue'
+import type { TextLayerPick } from '@mangax/bmap-vue'
 
 const layer = ref<InstanceType<typeof TextLayer>>()
 const hit = ref<TextLayerPick | null>(null)

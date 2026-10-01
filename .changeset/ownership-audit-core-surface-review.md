@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 `./core` 冻结前的公共面复核（#104 第三批）：把「零消费者却会随 `./core` 冻结进 3.0」的面收掉，

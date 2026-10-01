@@ -3,7 +3,7 @@
 通过该 hooks 可获取一些内置的地图图标（`BMap.Icon`，JSAPI 4.0 下 `BMapGL` 是同一命名空间的别名）。
 
 ```ts
-import { useMarkerIcons } from 'bmap-vue'
+import { useMarkerIcons } from '@mangax/bmap-vue'
 ```
 
 > 参考：[marker 图标可选值](/zh-CN/components/overlay/marker#默认图标可选值)
@@ -43,7 +43,7 @@ composable 必须在 `setup` 内调用（内部使用 `inject`）。在 `<Map>` 
 </template>
 
 <script setup lang="ts">
-import { Map, useMarkerIcons, type BMapClient } from 'bmap-vue'
+import { Map, useMarkerIcons, type BMapClient } from '@mangax/bmap-vue'
 import { defineComponent, h } from 'vue'
 
 // 子树内调用：省略参数

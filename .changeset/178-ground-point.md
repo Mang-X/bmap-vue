@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 #178 新增 `<GroundPoint>` 贴地点覆盖物；`Symbol` / `IconSequence` 经核对**不是缺口**

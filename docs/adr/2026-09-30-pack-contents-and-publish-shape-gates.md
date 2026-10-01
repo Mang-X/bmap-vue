@@ -102,7 +102,72 @@ ESM 产物中同样零 CSS 引用。
 要让包管理器消费方也能引用，需新增 `./styles.css` 出口，那会改动 #44 冻结的出口面，
 属独立决策，本 ADR 不做。
 
-### 5. publint / attw / API Extractor 精确锁定，attw 改为结构化断言
+### 5. 发布身份：`@mangax/bmap-vue`（取代 ADR 2026-09-24 决策 1 的包名）
+
+npm 上的 `bmap-vue` 归另一位作者所有（维护者 `minichen`，1.0.0–1.5.0，2024-10-30
+最后更新），且**本库目标发布的 `1.0.0` 那个版本号已被占用**。ADR 2026-09-24 第 12 行
+已把它记为未决阻塞项；本次核实确认仍然成立，故发布身份迁到维护者自有 npm scope
+**`@mangax/bmap-vue`**（scope 必须等于 npm 用户名或组织名，不能自选前缀）。
+
+**这不是一次 API 变更**：5 份 API report 基线只重录了 header 一行
+（`## API Report File for "…"`），7 份签名基线逐字节未变，产物条目数 48 → 48 不变。
+
+包名不写死在任何脚本里，全部经 `scripts/release-identity.mts` 从 manifest 派生：
+
+| 位置 | 派生规则 |
+| --- | --- |
+| tarball 文件名 | `mangax-bmap-vue-1.0.0-rc.0.tgz`——npm 去掉前导 `@`（实测） |
+| `node_modules` 目录 | `node_modules/@mangax/bmap-vue`——**保留** `@scope/name` |
+
+这两条规则**不一致**，是 npm 的既有行为，两个都要各自钉住（用例见
+`tests/behavior/release-identity.test.ts`）。散落的字面量是「改一处、漏三处」的来源：
+漏掉的那处不会报错，只会让门禁静默不生效——本次就有一处漏了（消费 fixture 的
+`docs-examples/`，被 `vue-tsc` 的几十条 `TS2307` 当场抓出来）。
+
+#### 「临时重写」不能替代改源码——第二轮评审的教训
+
+第一轮只改了安装命令与 CDN 那类形态。文档**代码块里的裸 specifier**
+（`from 'bmap-vue'`、`bmap-vue/volar`）共 **119 个文件**没改，而那正是用户直接
+复制走的代码。更糟的是：消费 fixture 在**验证时**会重写包名，所以 `verify:package`
+照样全绿——**临时重写掩盖了公开文档本身的迁移遗漏**。
+
+因此两件事都要做：
+
+1. **公开 docs / examples 源码直接改为 `@mangax/bmap-vue`**（119 个文件）；
+2. **新增门禁规则 `retired-scope`**（`scripts/docs-brand-boundary.mts`），让旧名
+   在发布面的**导入语句**里无法回流。
+
+这条规则的判据收窄过一次，值得记下来：初版写成「任何位置的裸 `bmap-vue` 都命中」，
+结果 `title: "bmap-vue"`、PWA 应用名、SEO 关键词、NOTICE 归属说明、docs 站自己的
+vite/tsconfig alias 共 16 处**合法**用法一起躺枪，只能靠逐行豁免——而豁免一旦超过
+`MAX_ESCAPES`，门禁自己会提示「**判据该改，不是豁免该加**」。于是收窄为只命中
+`from` / `require(` / `import(` 三种导入上下文；豁免随即归零。
+
+第三轮又补了第四种：`tsconfig` 的 `types` 条目（`"types": ["bmap-vue/volar"]`）。
+它正是第二轮**真实漏掉**的那一处——批量替换改了 119 个文件却漏了 quick-start 的
+这个 tsconfig 片段，而它既不是 `from` 也不是 `require(` / `import(`，于是门禁匹配不到，
+「防回归」没闭环：把那一处改回旧名，门禁仍然全绿（评审 P2 实测确认）。
+
+补这条时踩到一个正则陷阱值得记下来：第四条的负向前瞻必须写 `(?!@)`「紧邻前一个
+字符」，**不能**沿用前三条的 `(?![\w$./-]*[@/])`——后者会贪婪吞掉 `bmap-vue/volar`
+（`[\w$./-]*` 把 `/volar` 一并吃掉后仍要求以 `@` 或 `/` 结尾），整条正则匹配不到。
+写完自查时 `match()` 返回 null 才发现；前三条之所以没暴露这个问题，是因为它们后面
+没有 `/子路径`。
+
+**「加了门禁」不等于「防回归闭环」**——判据必须覆盖真实发生过的那次回归，否则它
+只是一道看起来在管的装饰。
+
+顺带修掉两处「门禁自己没跟上身份迁移」：`check:snippet-consistency.mts` 的标识符
+提取正则写死 `'bmap-vue'`，迁移后一条都匹配不到（`createBMapPlugin` 从校验集合里
+消失而报告仍显示 OK）；`generate-api-diff.mts` 把旧包名写进生成物。**门禁的判据
+同样必须从 manifest 派生**，否则「包名改了」这件事会先让门禁失灵、再让人误以为
+门禁是绿的。
+
+`publishConfig.access` 此前对无 scope 名是空操作，迁到 scope 后**必需**：npm 对 scoped
+包默认按 restricted 处理，漏掉它首次 `npm publish` 会直接失败。`verify:package` 现在
+断言这一项——这正是「换身份」带来的一个真实行为变化，不是纯改名。
+
+### 6. publint / attw / API Extractor 精确锁定，attw 改为结构化断言
 
 三个工具都是**门禁**不是库，带 `^` 时上游一次 minor 就能静默改变判定，因此锁到 `x.y.z`
 （`publint@0.3.24`、`@arethetypeswrong/cli@0.18.5`、`@microsoft/api-extractor@7.59.0`）。
@@ -134,7 +199,7 @@ attw 改读 JSON 的 `problems` 字段。实测当前 tarball 上有两类结论
 第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处、甚至 `problems: {}` 时
 `expectedCount` 根本不进比较，`problems` 仍是 `[]`——那是假绿（PR 评审 P1 实测确认）。
 
-### 5. `publishConfig`：access 与 provenance
+### 7. `publishConfig`：access 与 provenance
 
 `packages/bmap-vue/package.json` 新增：
 

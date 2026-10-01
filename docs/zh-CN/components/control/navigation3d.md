@@ -3,7 +3,7 @@
 3D 视角导航控件，可对地图进行旋转以及切换 2D / 3D 展示效果。
 
 ```ts
-import { NavigationControl3D } from 'bmap-vue'
+import { NavigationControl3D } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

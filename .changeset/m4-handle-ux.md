@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 `<Map>` 的**命令面定型**、**容器门禁**与**可见性暂停策略**（`M4-HANDLE-UX` / #29）。

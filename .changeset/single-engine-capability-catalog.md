@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 单引擎能力目录收口（#126）：删除 `engines` 维度，`engine-unsupported` 改名 `unlisted-capability`

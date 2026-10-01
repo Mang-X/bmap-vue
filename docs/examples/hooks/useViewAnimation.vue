@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useViewAnimation, type ViewAnimationKeyFrames } from "bmap-vue";
+import { useViewAnimation, type ViewAnimationKeyFrames } from "@mangax/bmap-vue";
 const map = ref(null);
 const { start, cancel, status } = useViewAnimation(
   {

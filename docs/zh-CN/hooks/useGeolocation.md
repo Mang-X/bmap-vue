@@ -3,7 +3,7 @@
 用于通过百度地图 SDK 获取用户所在的位置信息，相比 [IP 定位](./useIpLocation)获取的信息更丰富，但稳定性受浏览器权限和网络环境影响。
 
 ```ts
-import { useGeolocation } from 'bmap-vue'
+import { useGeolocation } from '@mangax/bmap-vue'
 ```
 
 :::warning 注意
@@ -110,7 +110,7 @@ const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation(
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, Point, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
+import type { BMapServiceStatus, Point, ServiceErrorInfo, ServiceResult } from '@mangax/bmap-vue'
 
 /** 官方 `BMap.PositionOptions` 的逐个投影——成员名与官方完全一致 */
 interface GeolocationOptions {

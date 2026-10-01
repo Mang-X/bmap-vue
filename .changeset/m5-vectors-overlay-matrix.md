@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 新增 `Rectangle`，把 Label / Polyline / Polygon / Circle / BezierCurve / Prism / GroundOverlay 迁移到与

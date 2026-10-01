@@ -7,7 +7,7 @@ POI，并支持翻页与清空。
 [Official-first 约定](../contributing/official-packages.md)）；结果是数据，画与不画由你决定。
 
 ```ts
-import { useLocalSearch } from 'bmap-vue'
+import { useLocalSearch } from '@mangax/bmap-vue'
 ```
 
 ## 示例
@@ -135,7 +135,7 @@ import type {
   ServiceErrorInfo,
   BMapServiceStatus,
   GeoPoint,
-} from 'bmap-vue'
+} from '@mangax/bmap-vue'
 
 export interface BMapLocalSearchRenderOptions {
   map?: MaybeRefOrGetter<MapHandle | null | undefined>

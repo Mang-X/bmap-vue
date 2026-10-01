@@ -54,7 +54,7 @@ import {
   normalizeProvider,
   unwrapRaw,
   type BMapProviderLike,
-} from 'bmap-vue/advanced'
+} from '@mangax/bmap-vue/advanced'
 
 export function createAdapter(provider: BMapProviderLike, options: { ak: string; rawSdk: unknown; version: string }) {
   const definition = createBMapClientDefinition({
@@ -74,7 +74,7 @@ export function createAdapter(provider: BMapProviderLike, options: { ak: string;
 `raw` 逃生口一律经 handle：
 
 ```ts
-import { createHandle, unwrapRaw } from 'bmap-vue/advanced'
+import { createHandle, unwrapRaw } from '@mangax/bmap-vue/advanced'
 
 const handle = createHandle('map', rawMap) // rawMap 是 SDK 的 Map 实例
 const raw = unwrapRaw(handle) // 形状由 SDK 决定，本库不承诺

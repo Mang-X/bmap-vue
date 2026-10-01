@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 补齐 #165 第三批：`<Marker>` / `<Label>` / `<MarkerCluster>` 官方已声明而本库未暴露的选项
