@@ -15,6 +15,7 @@
  * 所以「单测通过」完全不能证明身份一致。这里直接从生成产物与构建期常量读真值。
  */
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LIBRARY_PACKAGE_NAME } from '../../packages/bmap-vue/src/version';
@@ -46,12 +47,26 @@ describe('#45 发布身份：生成物与构建期注入', () => {
 
   it('随包发布的 volar.d.ts 引用当前包名', () => {
     const volar = resolve(root, PKG_DIR, 'volar.d.ts');
-    // 该文件是 gitignore 的生成产物；`check:pack-contents` 保证真正发布时它一定存在。
-    // 这里在它缺失时跳过，避免让「本机没跑生成器」变成一条红。
-    if (!existsSync(volar)) {
-      expect(true, 'volar.d.ts 未生成（跑 pnpm generate:manifest）').toBe(true);
-      return;
-    }
+    // `volar.d.ts` 是 gitignore 的生成产物，但**缺失不是「跳过检查的理由」**。
+    // 原先这里 `if (!existsSync) return`，于是干净 checkout 直接跑 `pnpm test:unit` 时，
+    // 这条「发布身份生成物门禁」会**完全不检查 Volar 身份却绿灯**；而
+    // `manifest-check.test.ts` 还会临时删掉这个文件，Vitest 并行执行时跳过窗口更大。
+    //
+    // 处置：缺文件即失败。要让本机通过就跑 `pnpm generate:manifest`——那本来就是这条
+    // 门禁成立的前提（`check:pack-contents` 保证真正发布时它一定在包里）。
+    // 另一个用例（`manifest-check.test.ts`）会**临时删掉**这个文件来验证「缺失时也能
+    // 重新生成」。Vitest 并行执行时，本用例可能正好撞上那个删除窗口而读到空——那会
+    // 变成又一次「没检查到却绿灯」。因此本用例**自己先生成一份**，不依赖共享状态：
+    // 直接调用生成器（幂等），它写的正是待验证的那份产物。
+    execFileSync(
+      process.execPath,
+      ['--experimental-strip-types', resolve(root, 'scripts/generate-manifest-artifacts.mts')],
+      { cwd: root, stdio: 'pipe' },
+    );
+    expect(
+      existsSync(volar),
+      'volar.d.ts 未生成：生成器跑完仍不存在（fail-closed，不当跳过）',
+    ).toBe(true);
     const source = readFileSync(volar, 'utf8');
     const imports = [...source.matchAll(/typeof import\('([^']+)'\)/g)].map((m) => m[1]!);
     expect(imports.length, 'volar.d.ts 里应当有组件类型引用').toBeGreaterThan(0);
