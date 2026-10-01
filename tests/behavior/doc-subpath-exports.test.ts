@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { PKG_DIR, ensureVolarDts, releaseIdentityOf } from "../../scripts/release-identity.mts";
+import { PKG_DIR, releaseIdentityOf } from "../../scripts/release-identity.mts";
 
 const root = resolve(import.meta.dirname, "../..");
 const PKG = releaseIdentityOf(
@@ -93,28 +93,25 @@ describe("#45 文档承诺的子路径必须能从发布包解析", () => {
     );
   });
 
-  it("exports 的每个子路径都在包里真实存在（出口不能指向不存在的文件）", () => {
-    // 出口指向缺失文件时，用户会拿到「解析成功但内容为空」的声明——比解析失败更难查。
-    const manifest = JSON.parse(readFileSync(resolve(root, PKG_DIR, "package.json"), "utf8")) as {
-      exports: Record<string, unknown>;
+  it("./volar 出口指向真实存在的 d.ts 声明（只断言 manifest，不读 gitignored 文件）", () => {
+    // 刻意**不读 `packages/bmap-vue/volar.d.ts`**。它是 gitignore 的生成物，而
+    // `manifest-check.test.ts` 会 `rmSync` 它；多个 test file 并行时，任何「读它 / 判断它
+    // 存在」的判据都有 TOCTOU 窗口——上两轮修的正是这个，但两次都只是**缩小**了窗口：
+    // `ensureVolarDts()` 返回之后，另一个 worker 仍可能把它删掉。
+    //
+    // 因此 unit 层只断言 **manifest 形状**：出口在、指向 `volar.d.ts`、`files` 声明了它。
+    // 「文件真的在 tarball 里」由 `check:pack-contents` 与 CI 的 package job 负责——
+    // 那才是真实消费路径，也不受测试调度影响。
+    const pkg = JSON.parse(readFileSync(resolve(root, PKG_DIR, "package.json"), "utf8")) as {
+      exports: Record<string, { types?: string }>;
+      files?: string[];
     };
-    // 自行保证前置：`volar.d.ts` 是 gitignore 的生成物，干净检出时不存在。
-    // 此前依赖 CI workflow 恰好先跑了 manifest 步骤——门禁依赖 workflow 顺序，
-    // 意味着顺序是巧合而非契约（#45 评审 P2）。
-    ensureVolarDts(root);
-    const volarPath = resolve(root, PKG_DIR, "volar.d.ts");
-    const generated = existsSync(volarPath);
-    for (const [subpath, target] of Object.entries(manifest.exports)) {
-      if (subpath === "./package.json") continue;
-      const types = (target as { types?: string } | string)?.types;
-      const file = typeof types === "string" ? types.replace(/^\.\//, "") : null;
-      if (!file) continue;
-      if (file === "volar.d.ts") {
-        // 该文件是 gitignore 的生成产物；`check:pack-contents` 保证真正发布时它在包里。
-        expect(generated, "volar.d.ts 未生成（跑 pnpm generate:manifest）").toBe(true);
-      } else {
-        expect(existsSync(resolve(root, PKG_DIR, file)), `${subpath} 指向不存在的 ${file}`).toBe(true);
-      }
-    }
+    const volar = pkg.exports["./volar"];
+    expect(volar, "exports 必须开 ./volar，否则安装页承诺的 Volar 用法无效").toBeTruthy();
+    expect(volar!.types, "./volar 必须指向 volar.d.ts").toBe("./volar.d.ts");
+    expect(pkg.files ?? [], "files 必须包含 volar.d.ts，否则它不会跟着包发出去").toContain(
+      "volar.d.ts",
+    );
   });
+
 });

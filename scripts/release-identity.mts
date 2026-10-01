@@ -19,10 +19,6 @@
  */
 
 /** 发布包目录（相对仓库根）。 */
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-
 export const PKG_DIR = "packages/bmap-vue";
 
 /** 消费 fixture 拷出来的 tarball 固定名（fixture 的 `package.json` 按它引用）。 */
@@ -111,31 +107,4 @@ export function runtimeExportSubpaths(exportsField: unknown): string[] {
     .filter(([, spec]) => (typeof spec === "string" ? true : Boolean((spec as { import?: string }).import)))
     .map(([subpath]) => subpath)
     .sort();
-}
-
-/**
- * 确保 `volar.d.ts` 存在；不存在就跑一次生成器（`--check` 模式，幂等且不改 tracked 文件）。
- *
- * ## 为什么需要它
- *
- * `volar.d.ts` 被 `.gitignore` 忽略，是**发布时才会有的生成物**。干净检出时它不存在，
- * 而两条门禁（`export-surface-freeze` / `doc-subpath-exports`）要断言「`exports` 指向的
- * 每个文件都真实存在」——于是它们会红。
- *
- * 此前这靠 **CI workflow 恰好在跑测试前执行了 manifest 步骤**：本地开发者直接跑
- * `vitest run` 就会撞上（#45 评审 P2 实测）。门禁依赖 workflow 顺序 = 顺序是巧合而非契约。
- *
- * 放进 `test:unit` 脚本只解决了一半：别人仍可能直接 `vitest run <file>`。因此判据自己
- * 保证前置——这是「fail-closed」的正确形态：**缺前置就把它建起来，而不是假设它存在**。
- *
- * 只在缺失时生成，已存在则零成本（本地循环跑测试不会被反复拖慢）。
- */
-export function ensureVolarDts(root: string): void {
-  const target = resolve(root, PKG_DIR, "volar.d.ts");
-  if (existsSync(target)) return;
-  execFileSync(
-    process.execPath,
-    ["--experimental-strip-types", resolve(root, "scripts/generate-manifest-artifacts.mts"), "--check"],
-    { cwd: root, stdio: "pipe" },
-  );
 }

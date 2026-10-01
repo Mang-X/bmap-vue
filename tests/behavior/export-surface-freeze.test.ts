@@ -15,7 +15,7 @@
  * 「等于 manifest」表达 —— 加组件 = 改 manifest + 重新生成，本文件不需要动。
  */
 import { describe, expect, it } from "vitest";
-import { ensureVolarDts, runtimeExportSubpaths } from "../../scripts/release-identity.mts";
+import { runtimeExportSubpaths } from "../../scripts/release-identity.mts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as root from "../../packages/bmap-vue/src";
@@ -301,10 +301,6 @@ describe("1.0 导出面冻结", () => {
       const importPath = typeof spec === "string" ? spec : spec.import;
       const typesPath = typeof spec === "string" ? undefined : spec.types;
 
-      // 纯 `types` 出口指向 `volar.d.ts`——gitignore 的生成物，干净检出时不存在。
-      // 自行保证前置，理由同 doc-subpath-exports.test.ts。
-      if (typesPath && !importPath) ensureVolarDts(resolve(PKG_DIR, "..", ".."));
-
       if (importPath) {
         // 有运行时出口的：必须指向 dist 产物。
         expect(importPath, `${entry} 的 import 出口不在 dist`).toMatch(/^\.\/dist\/.+\.mjs$/);
@@ -319,10 +315,14 @@ describe("1.0 导出面冻结", () => {
         // 缺陷静默通过。判据是「要么有 import 指向 dist，要么有 types 指向真实 d.ts」。
         expect(typesPath, `${entry} 既没有 import 也没有 types 出口`).toBeTruthy();
         expect(typesPath!, `${entry} 的 types 出口不是 .d.ts`).toMatch(/\.d\.ts$/);
-        expect(
-          existsSync(resolve(PKG_DIR, typesPath!)),
-          `${entry} 的 types 声明缺失: ${typesPath}（该文件是 gitignore 的生成产物，跑 pnpm generate:manifest）`,
-        ).toBe(true);
+        // 刻意**不**断言该文件此刻存在：纯 `types` 出口指向的是 gitignore 的生成物
+        // （`./volar` → `volar.d.ts`），而 `manifest-check.test.ts` 会 `rmSync` 它。
+        // 多个 test file 并行时，任何存在性检查都是 TOCTOU 窗口——上两轮修的正是这个，
+        // 但两次都只是缩小了窗口，没有消除（#45 评审 P2）。
+        //
+        // 「文件真的在 tarball 里」由 `check:pack-contents` 与 CI package job 负责：
+        // 那才是真实消费路径，也不受测试调度影响。
+        expect(typesPath!, `${entry} 的 types 出口必须指向 .d.ts`).not.toBe("");
       }
 
       if (typesPath && importPath) {
