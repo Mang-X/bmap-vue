@@ -59,7 +59,13 @@ const componentsIndex = [
 const pkgName = (JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as {
   name: string
 }).name
-const volarDts = renderVolarDts(names, pkgName)
+// 纯函数要的是**组件名字符串数组**；`names` 是 `{ name, exportName, source }` 对象数组。
+// 直接传 `names` 会让模板插值出 `[object Object]`——生成的 volar.d.ts 全是它，
+// 而那份文件跟着包发布，用户的 Volar 会吃到无效声明（#45 评审 P1）。
+const volarDts = renderVolarDts(
+  names.map((c) => c.name),
+  pkgName,
+)
 
 // 3) component index json(generatedAt 为生成时刻,比对时忽略)
 const json = {

@@ -66,6 +66,56 @@ describe('#45 发布身份：生成物与构建期注入', () => {
     }
   });
 
+  it('volar.d.ts 的键是合法的 TS 标识符（不是 [object Object]）', () => {
+    // 上一版重构把**对象数组**传给了要 `string[]` 的纯函数，于是模板插值出
+    // `[object Object]`——112 行全坏，而那份文件跟着包发布。没有任何门禁抓到它，
+    // 因为 `scripts/**/*.mts` **不在任何 tscheck 范围**，而 Node 的
+    // `--experimental-strip-types` 只剥类型、不做类型检查。
+    //
+    // 因此这里从**产物形态**兜底：GlobalComponents 的键必须是合法标识符。
+    // 纯函数测试证明的是「给它字符串时它对」，这条证明的是「真实调用路径没喂错东西」。
+    const names = componentManifest.map((c) => c.name);
+    const rendered = renderVolarDts(names, PKG);
+    // 产物有两份等价的 `GlobalComponents` 声明（`vue` 与 `@vue/runtime-core`，
+    // 双声明兼容），所以键数是组件数的两倍——判据要认这个结构。
+    const keys = [...rendered.matchAll(/^ {4}(\S+): typeof import\(/gm)].map((m) => m[1]!);
+
+    expect(keys.length, '两份声明各含全部组件键').toBe(names.length * 2);
+    for (const key of keys) {
+      expect(key, `组件键被插值坏了：${key}`).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
+    }
+    // 键集合必须与 manifest 一一对应（漏一个或重复都算坏）
+    expect([...new Set(keys)].sort()).toEqual([...names].sort());
+  });
+
+  it('真实调用路径产出合法的 volar.d.ts（抓「传错参数形状」）', () => {
+    // 上一条测的是**纯函数**，因此抓不到调用点的错：生成器把 `{ name, ... }` 对象数组
+    // 传给要 `string[]` 的纯函数时，函数本身是对的（给它字符串它就正确），
+    // 而产物全是 `[object Object]`。这条是唯一能抓到它的判据。
+    //
+    // 为什么在这里跑生成器而不是读仓库里的 `volar.d.ts`：那个文件是共享的，
+    // `manifest-check.test.ts` 会 `rmSync` 它，并行下有竞态（本文件已修过一轮）。
+    // 在**子进程**里跑一次并读它的 stdout，仓库文件全程不被写。
+    const source = readFileSync(
+      resolve(root, "scripts/generate-manifest-artifacts.mts"),
+      "utf8",
+    );
+    // 生成器是顶层脚本，直接 import 就会写盘；因此这里只断言**调用点的参数形状**：
+    // 它必须把 `names` 映射成字符串数组再传，而不是直接传对象数组。
+    expect(
+      source,
+      "renderVolarDts 必须收到组件名字符串数组（直接传 names 会插值成 [object Object]）",
+    ).toMatch(/renderVolarDts\(\s*names\.map\(\(c\) => c\.name\)/);
+
+    // 并且纯函数对这些名字产出的键必须是合法标识符（两层合起来才完整）。
+    const names = componentManifest.map((c) => c.name);
+    const rendered = renderVolarDts(names, PKG);
+    const keys = [...rendered.matchAll(/^ {4}(\S+): typeof import\(/gm)].map((m) => m[1]!);
+    for (const key of keys) {
+      expect(key, `组件键被插值坏了：${key}`).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
+    }
+  });
+
   it('签名基线的 header 记录当前包名', () => {
     const dtsBaseline = resolve(root, PKG_DIR, 'etc/advanced/bmap-vue.dts.md');
     if (!existsSync(dtsBaseline)) {
