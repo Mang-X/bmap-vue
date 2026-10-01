@@ -43,6 +43,7 @@
 
 验证：`pnpm test:unit` 208 files / 3775 tests passed；`verify:package` ALL PASSED；
 13 道静态门禁 + `docs` job 四步 + `playground:build` 全绿。
+
 ## 补充 · 补上 `./volar` 出口（评审 P1）
 
 文档教用户写 `"types": ["@mangax/bmap-vue/volar"]`，而 `exports` 里**没有** `./volar`。
