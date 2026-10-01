@@ -9,7 +9,7 @@
 
 ## 两个库
 
-| | [`@baidumap/vue-bmap`](https://www.npmjs.com/package/@baidumap/vue-bmap) | `bmap-vue` |
+| | [`@baidumap/vue-bmap`](https://www.npmjs.com/package/@baidumap/vue-bmap) | `@mangax/bmap-vue` |
 | --- | --- | --- |
 | 定位 | 官方通用 Vue 绑定 | JSAPI 4.0-first、Vue-native |
 | SDK 版本 | 3.0 与 4.0 双版本 | **只支持 4.0** | <!-- brand-gate:allow 这里指百度地图 SDK 的引擎版本（上游语义），不是本库的发布版本 -->
@@ -20,7 +20,7 @@
 
 **选哪个**：需要同时支持 SDK 3.0、或只用到基础覆盖物控件、且希望由官方统一维护， <!-- brand-gate:allow 同上，指上游 SDK 引擎版本 -->
 选 `@baidumap/vue-bmap`。已经全面用 4.0、需要大数据渲染、服务能力或生产生命周期保证，
-选 `bmap-vue`。
+选 `@mangax/bmap-vue`。
 
 ## 命名尽量对齐
 

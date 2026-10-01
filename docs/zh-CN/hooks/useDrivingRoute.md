@@ -7,7 +7,7 @@
 [官方 UI Kit](../guide/ui-kit.md) 与下面的「与标准面板互斥」）。
 
 ```ts
-import { useDrivingRoute } from "bmap-vue";
+import { useDrivingRoute } from "@mangax/bmap-vue";
 ```
 
 ## 示例
@@ -109,7 +109,7 @@ const result = await search(start, end, { waypoints });
 
 ## 与标准面板互斥
 
-标准路线面板由官方 UI Kit 的 `RoutePlan` 提供（`bmap-vue/ui-kit`，见
+标准路线面板由官方 UI Kit 的 `RoutePlan` 提供（`@mangax/bmap-vue/ui-kit`，见
 [官方 UI Kit](../guide/ui-kit.md)）。它**自己发请求、自己画**；本 hooks 是「完全自定义 UI」那条路。
 
 **同一次界面操作只走其中一条**——两条都接上会让一次点击发出两次检索（多花一次配额，还可能让面板与
@@ -120,7 +120,7 @@ const result = await search(start, end, { waypoints });
 ```vue [用标准面板（UI Kit）]
 <script setup lang="ts">
 import { ref } from "vue";
-import { RoutePlan } from "bmap-vue/ui-kit";
+import { RoutePlan } from "@mangax/bmap-vue/ui-kit";
 import "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";
 
 const plan = ref();
@@ -136,7 +136,7 @@ async function go() {
 
 ```vue [完全自定义 UI（本 hooks）]
 <script setup lang="ts">
-import { useDrivingRoute } from "bmap-vue";
+import { useDrivingRoute } from "@mangax/bmap-vue";
 const { data, status, search } = useDrivingRoute({ location: "北京市" });
 </script>
 
@@ -172,7 +172,7 @@ const { data, status, search } = useDrivingRoute({ location: "北京市" });
 ```vue
 <!-- RouteOverlay.vue：在 <Map> 子树里，能拿到地图句柄 -->
 <script setup lang="ts">
-import { useMap, useDrivingRoute } from "bmap-vue";
+import { useMap, useDrivingRoute } from "@mangax/bmap-vue";
 
 const props = defineProps<{ from: Point; to: Point }>();
 const { map } = useMap();

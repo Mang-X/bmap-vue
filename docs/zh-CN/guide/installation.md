@@ -2,20 +2,20 @@
 
 ## 用包管理器
 
-我们建议使用包管理器（pnpm / yarn / npm）安装 `bmap-vue`：
+我们建议使用包管理器（pnpm / yarn / npm）安装 `@mangax/bmap-vue`：
 
 ::: code-group
 
 ```bash [pnpm]
-pnpm add bmap-vue
+pnpm add @mangax/bmap-vue
 ```
 
 ```bash [yarn]
-yarn add bmap-vue
+yarn add @mangax/bmap-vue
 ```
 
 ```bash [npm]
-npm install bmap-vue
+npm install @mangax/bmap-vue
 ```
 
 :::
@@ -28,7 +28,7 @@ npm install bmap-vue
 
 标准 UI（建议、结果列表、翻页、路线面板、详情面板）由官方
 [`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 提供，
-它是 **optional peer**——只有用 `bmap-vue/ui-kit` 时才需要装，见[官方 UI Kit 集成](./ui-kit)。
+它是 **optional peer**——只有用 `@mangax/bmap-vue/ui-kit` 时才需要装，见[官方 UI Kit 集成](./ui-kit)。
 
 ::: code-group
 
@@ -50,9 +50,9 @@ pnpm add @baidumap/jsapi-ui-kit
   <meta charset="utf-8" />
   <!-- Import Vue -->
   <script src="https://unpkg.com/vue@3"></script>
-  <!-- Import bmap-vue（锁定版本，见下方说明） -->
-  <link rel="stylesheet" href="https://unpkg.com/bmap-vue@1/dist/bmap-vue.css" />
-  <script src="https://unpkg.com/bmap-vue@1/dist/index.global.js"></script>
+  <!-- Import @mangax/bmap-vue（锁定版本，见下方说明） -->
+  <link rel="stylesheet" href="https://unpkg.com/@mangax/bmap-vue@1/dist/bmap-vue.css" />
+  <script src="https://unpkg.com/@mangax/bmap-vue@1/dist/index.global.js"></script>
 </head>
 ```
 
@@ -60,16 +60,16 @@ pnpm add @baidumap/jsapi-ui-kit
 <head>
   <!-- Import Vue 3 -->
   <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
-  <!-- Import bmap-vue（锁定版本，见下方说明） -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bmap-vue@1/dist/bmap-vue.css" />
-  <script src="https://cdn.jsdelivr.net/npm/bmap-vue@1/dist/index.global.js"></script>
+  <!-- Import @mangax/bmap-vue（锁定版本，见下方说明） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mangax/bmap-vue@1/dist/bmap-vue.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@mangax/bmap-vue@1/dist/index.global.js"></script>
 </head>
 ```
 
 :::
 
 ::: warning 锁定版本
-上面的示例用 `@1` 跟随 1.x 的次版本，**生产环境请锁到精确版本**（例如 `bmap-vue@1.0.0`）。
+上面的示例用 `@1` 跟随 1.x 的次版本，**生产环境请锁到精确版本**（例如 `@mangax/bmap-vue@1.0.0`）。
 
 不带版本的路径会跟随 `latest`。我们只支持 JSAPI 4.0，且公共出口按语义化版本演进，
 锁版本可以避免将来发布更新时受到影响。

@@ -5,7 +5,7 @@
 要素状态 / 拾取），因此一个组件承载成千上万个要素，渲染在 SDK 内部完成。
 
 ```ts
-import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
+import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from '@mangax/bmap-vue'
 ```
 
 ## 先选对组件（差别来自**官方声明了什么**、**弃用了什么**）
@@ -246,8 +246,8 @@ import { LineLayer, FillLayer, HeatmapLayer, TrackLineLayer } from 'bmap-vue'
 
 ```vue
 <script setup lang="ts">
-import { LineLayer } from 'bmap-vue'
-import type { FeaturePick } from 'bmap-vue'
+import { LineLayer } from '@mangax/bmap-vue'
+import type { FeaturePick } from '@mangax/bmap-vue'
 
 function onClick(pick: FeaturePick) {
   if (!pick.hit) return          // 官方未命中也派发事件
@@ -298,7 +298,7 @@ function onClick(pick: FeaturePick) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { LineLayer } from 'bmap-vue'
+import { LineLayer } from '@mangax/bmap-vue'
 
 const layer = ref<InstanceType<typeof LineLayer> | null>(null)
 
@@ -359,8 +359,8 @@ function highlight(id: string) {
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { TrackLineLayer } from 'bmap-vue'
-import type { TrackLineObserved } from 'bmap-vue'
+import { TrackLineLayer } from '@mangax/bmap-vue'
+import type { TrackLineObserved } from '@mangax/bmap-vue'
 
 const layer = ref<InstanceType<typeof TrackLineLayer> | null>(null)
 

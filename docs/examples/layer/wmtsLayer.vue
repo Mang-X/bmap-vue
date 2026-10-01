@@ -29,7 +29,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { WMTSLayer } from "bmap-vue";
+import { WMTSLayer } from "@mangax/bmap-vue";
 
 /**
  * WMTS 的参数键名遵循 **WMTS 标准**（`Layer` / `Style` / `TileMatrixSet` / `Format`，

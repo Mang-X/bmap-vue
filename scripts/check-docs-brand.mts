@@ -27,8 +27,21 @@ import {
   type DocsBrandRule,
   type DocsScanPhase,
 } from "./docs-brand-boundary.mts";
+import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
+
+/**
+ * 当前发布包名，从 manifest 派生。
+ *
+ * 错误提示里原本写死了「package name is `bmap-vue`」。发布身份迁到 `@mangax/bmap-vue`
+ * 之后，那句话就开始**说谎**——门禁在用户最需要读它的时候给出错误的身份信息，
+ * 比不说更糟（PR 评审期间修掉的同类问题：文档里那句「包管理器安装时不需要手动引入
+ * CSS」也是实测才发现不实）。
+ */
+const PKG = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(ROOT, PKG_DIR, "package.json"), "utf8")),
+).name;
 
 export interface BrandHit {
   file: string;
@@ -144,7 +157,7 @@ function runPhases(phases: readonly DocsScanPhase[], reportRoot: string = ROOT, 
     }
     console.error(
       "Retired release identity must not reappear on the published surface. 1.0 is a clean-slate release:" +
-        "\n  - package name is `bmap-vue`; components dropped the `B` prefix (#135); the old engine and all migration baggage are gone (#136)." +
+        `\n  - package name is \`${PKG}\`; components dropped the \`B\` prefix (#135); the old engine and all migration baggage are gone (#136).` +
         "\nLegal upstream references stay allowed: the official jsapi-loader `version: '3.0'` option, `BMap.*` as the JSAPI 4.0 namespace," +
         "\nthe official plugin namespace `BMapGLLib`, the live CDN global `BMapVue`, and the yue1123/vue3-baidu-map-gl MIT attribution." +
         `\n${docsBrandSummary().escapeHint}` +

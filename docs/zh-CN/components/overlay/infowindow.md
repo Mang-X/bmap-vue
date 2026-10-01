@@ -3,7 +3,7 @@
 使用 slot 模式渲染子节点向地图添加信息窗口，以及与地图相关的一些交互。
 
 ```ts
-import { InfoWindow } from 'bmap-vue'
+import { InfoWindow } from '@mangax/bmap-vue'
 ```
 
 ::: tip 提示
@@ -181,8 +181,8 @@ SSR 期不渲染 slot、不创建宿主）。这与地图本身只在客户端�
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import InfoWindow from 'bmap-vue'
-import type { InfoWindowReadBackApi } from 'bmap-vue'
+import InfoWindow from '@mangax/bmap-vue'
+import type { InfoWindowReadBackApi } from '@mangax/bmap-vue'
 
 const infoWindow = ref<InfoWindowReadBackApi>()
 </script>

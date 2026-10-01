@@ -18,10 +18,23 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { stepBlockContaining } from "./workflow-helpers";
+import { releaseIdentityOf } from "../../scripts/release-identity.mts";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const workflowPath = resolve(repoRoot, ".github/workflows/quality.yml");
 const docsTsconfigPath = resolve(repoRoot, "docs/tsconfig.json");
+
+/**
+ * 发布包名，从 manifest 派生。
+ *
+ * `docs/tsconfig.json` 的 `paths` 把包名映射到 dist 产物，而这个键就是 npm 包名——
+ * 发布身份迁移后必须同步。写死旧名会让这条用例在迁移完成后**一直红**，
+ * 或者更糟：有人为了让用例变绿把 docs 的 alias 改回旧名，于是文档站 import
+ * 到一个不存在的 npm 身份（`docs-brand` 的 `retired-scope` 会抓到，但那是另一道门禁）。
+ */
+const PKG = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(repoRoot, "packages/bmap-vue/package.json"), "utf8")),
+).name;
 
 /** 按缩进切出某个 job 的原文（与 `typecheck-gate.test.ts` 同样的口径）。 */
 function jobSectionLines(text: string, name: string): string[] {
@@ -85,10 +98,8 @@ describe("#74 文档站类型面：对着发布声明，而不是组件库源码
   ) as { compilerOptions: { paths: Record<string, string[]> } };
 
   it("两个公开入口都映射到 dist 的声明产物", () => {
-    expect(tsconfig.compilerOptions.paths["bmap-vue"]).toEqual([
-      "../packages/bmap-vue/dist/index.d.ts",
-    ]);
-    expect(tsconfig.compilerOptions.paths["bmap-vue/ui-kit"]).toEqual([
+    expect(tsconfig.compilerOptions.paths[PKG]).toEqual(["../packages/bmap-vue/dist/index.d.ts"]);
+    expect(tsconfig.compilerOptions.paths[`${PKG}/ui-kit`]).toEqual([
       "../packages/bmap-vue/dist/ui-kit.d.ts",
     ]);
   });

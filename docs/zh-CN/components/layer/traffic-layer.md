@@ -3,7 +3,7 @@
 实时路况图层。官方把它定义为「预配置的 `TileLayer`」，因此构造选项与 `TileLayer` 一致。
 
 ```ts
-import { TrafficLayer } from 'bmap-vue'
+import { TrafficLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

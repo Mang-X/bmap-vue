@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { MapProps, TrafficLayer } from "bmap-vue";
+import { MapProps, TrafficLayer } from "@mangax/bmap-vue";
 const type = ref<"BMAP_NORMAL_MAP" | "BMAP_EARTH_MAP" | "BMAP_SATELLITE_MAP">("BMAP_NORMAL_MAP");
 const showTraffic = ref(false);
 const mapSetting = ref<MapProps>({

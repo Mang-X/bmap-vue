@@ -7,7 +7,7 @@ title: Map 地图
 地图核心对象，地图控件、覆盖物、图层等需作为其子组件，以获得 map 的实例化对象
 
 ```ts
-import { Map } from 'bmap-vue'
+import { Map } from '@mangax/bmap-vue'
 ```
 
 ## 渲染地图
@@ -178,7 +178,7 @@ map/theme2
   记录，所以 `getStatus(name)` / `inspect(name)` 是 `undefined`，而不是 `'error'`。此前未知名字会被
   静默降级成一个「永远成功」的空实现，拼错一个字母也会 `plugin-ready`）；
 - 内置插件都是**文档级（`global`）资源**：同页面多张地图**共享同一次加载**（只插一份脚本），
-  并且**地图卸载不会释放它**（上游没有卸载入口）。`bmap-vue/plugins` 的
+  并且**地图卸载不会释放它**（上游没有卸载入口）。`@mangax/bmap-vue/plugins` 的
   `disposeDefaultPluginHost()` 只能清掉**宿主缓存的资源与在飞的等待**，它**不卸载**第三方脚本、
   也不抹掉 `window.BMapGLLib.*` —— 所以那次调用之后重新渲染地图会**复用已存在的全局**（不会重新
   拉脚本）。要真正的干净起点只能刷新文档。调用方还要自己负责「此刻没有地图还在用这些插件」；

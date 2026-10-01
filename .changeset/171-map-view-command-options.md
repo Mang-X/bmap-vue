@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 补齐五条视野命令的官方 `options`（#171 / #165 裁决 F）：`setCenter` / `setZoom` / `setHeading` /

@@ -3,7 +3,7 @@
 通过该 hooks 可获取行政区域的边界。
 
 ```ts
-import { useAreaBoundary } from 'bmap-vue'
+import { useAreaBoundary } from '@mangax/bmap-vue'
 ```
 
 :::warning 上游 4.0 已把 `Boundary` 标记为废弃
@@ -91,7 +91,7 @@ Driver 的归一化调用面（`driver.services.queryBoundary()`）——它的�
 
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { useAreaBoundary } from 'bmap-vue'
+  import { useAreaBoundary } from '@mangax/bmap-vue'
 
   const map = ref()
   const { isLoading, boundaries, get } = useAreaBoundary(map)
@@ -106,7 +106,7 @@ Driver 的归一化调用面（`driver.services.queryBoundary()`）——它的�
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
+import type { BMapServiceStatus, ServiceErrorInfo, ServiceResult } from '@mangax/bmap-vue'
 export declare type AreaBoundary = string[]
 /**
  * 获取地图区域边界

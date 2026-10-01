@@ -4,7 +4,7 @@
 按钮右侧的定位结果地址区。
 
 ```ts
-import { LocationControl } from 'bmap-vue'
+import { LocationControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例
@@ -155,8 +155,8 @@ control/location
 ```vue
 <script setup lang="ts">
 import { ref } from "vue";
-import { LocationControl } from "bmap-vue";
-import type { ControlCommandTypes } from "bmap-vue";
+import { LocationControl } from "@mangax/bmap-vue";
+import type { ControlCommandTypes } from "@mangax/bmap-vue";
 
 const loc = ref<ControlCommandTypes["LocationControl"]>();
 

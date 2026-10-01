@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 第三方假设清理 #128（F-2 / F-3 / F-4）：remove-first + 仅对仍属契约的第三方行为取证

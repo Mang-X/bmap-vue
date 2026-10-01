@@ -3,7 +3,7 @@
 地图的平移缩放控件（官方 `NavigationControl`），默认位于地图左上角。
 
 ```ts
-import { NavigationControl } from 'bmap-vue'
+import { NavigationControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

@@ -3,7 +3,7 @@
 把任意 Vue 内容渲染成地图上的 DOM 覆盖物（v4 的 `CustomOverlay`）。
 
 ```ts
-import { CustomOverlay } from 'bmap-vue'
+import { CustomOverlay } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

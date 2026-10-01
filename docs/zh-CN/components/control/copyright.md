@@ -3,7 +3,7 @@
 版权控件，可在地图上添加自定义版权信息。默认位于地图右下角。
 
 ```ts
-import { CopyrightControl } from 'bmap-vue'
+import { CopyrightControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

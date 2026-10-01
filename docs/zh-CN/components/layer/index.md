@@ -9,7 +9,7 @@ import {
   DistrictLayer, PanoramaCoverageLayer,
   TileLayer, TrafficLayer, GeoJSONLayer, DOMLayer,
   XYZLayer, WMSLayer, WMTSLayer, RasterTileLayer,
-} from 'bmap-vue'
+} from '@mangax/bmap-vue'
 ```
 
 ## 选哪个图层

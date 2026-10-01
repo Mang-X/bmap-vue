@@ -3,7 +3,7 @@
 城市选择控件，提供全国的省份、城市切换列表。
 
 ```ts
-import { CityListControl } from 'bmap-vue'
+import { CityListControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

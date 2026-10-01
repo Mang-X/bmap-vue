@@ -8,7 +8,7 @@
 
 | 维度 | 含义 | 当前取值 |
 | --- | --- | --- |
-| 组件库版本 | `bmap-vue` 包版本 | `1.0.0-rc.x` |
+| 组件库版本 | `@mangax/bmap-vue` 包版本 | `1.0.0-rc.x` |
 | SDK engine | 项目内部驱动引擎枚举 | `jsapi-v4`（**唯一**；旧引擎 `webgl-v1` / `jsapi-v3` 已删除） |
 | SDK version | 百度地图 JSAPI 运行时版本 | Stable 目标 `4.0`（`v=4.0`） |
 | 官方类型包版本 | `@baidumap/jsapi-v4-types` | `4.0.5`（git `5ba67f4`，**钉住 commit**——4.0.5 未发布到 npm） |

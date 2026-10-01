@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 # #165 Class 3：Overlay / Control / Panorama 模块的官方能力补齐

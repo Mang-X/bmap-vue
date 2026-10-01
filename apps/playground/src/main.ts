@@ -40,7 +40,7 @@ import {
   DistrictLayer,
   PanoramaCoverageLayer,
   Autocomplete,
-} from 'bmap-vue'
+} from '@mangax/bmap-vue'
 import { bootPlayground, type PlaygroundEnvLike } from '@test-utils'
 
 const viteEnv = ((import.meta as unknown as { env?: PlaygroundEnvLike }).env ?? {}) as PlaygroundEnvLike

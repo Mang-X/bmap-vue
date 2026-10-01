@@ -3,7 +3,7 @@
 地址检索关键词提示
 
 ```ts
-import { Autocomplete } from 'bmap-vue'
+import { Autocomplete } from '@mangax/bmap-vue'
 ```
 
 :::tip

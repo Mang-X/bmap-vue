@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 原生点图层与原生聚合：三个点图层组件、`MarkerCluster` 原生优先，以及 `PointCollection` 的更名。

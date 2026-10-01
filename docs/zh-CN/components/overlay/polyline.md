@@ -3,7 +3,7 @@
 在地图上绘制简单的折线
 
 ```ts
-import { Polyline } from 'bmap-vue'
+import { Polyline } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

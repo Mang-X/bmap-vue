@@ -49,7 +49,7 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { Map, Marker, useLocalSearch } from "bmap-vue";
+import { Map, Marker, useLocalSearch } from "@mangax/bmap-vue";
 
 const keyword = ref("天安门");
 const focused = ref<{ lng: number; lat: number } | null>(null);

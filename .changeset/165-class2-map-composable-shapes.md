@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 # #165 Class 2（第一段 A–I）：Map 命令面 / composable 的「同名不同形」核查

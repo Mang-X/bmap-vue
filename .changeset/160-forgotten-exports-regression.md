@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 # #160 结清后被 #165 回归：五个出口的身份集合基线重新归零

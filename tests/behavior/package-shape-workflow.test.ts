@@ -67,7 +67,7 @@ describe("#45 CI 接线：package job", () => {
   });
 
   it("仍保留 tarball 消费方验证（不能被新门禁挤掉）", () => {
-    const block = stepBlockContaining(quality, "package tarball consumer");
+    const block = stepBlockContaining(quality, "Package tarball consumer");
     expect(block.length).toBeGreaterThan(0);
     expect(isNeutralized(block)).toBeNull();
   });

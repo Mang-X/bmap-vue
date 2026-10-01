@@ -18,8 +18,8 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { CityListControl } from "bmap-vue";
-import type { ControlCommandTypes } from "bmap-vue";
+import { CityListControl } from "@mangax/bmap-vue";
+import type { ControlCommandTypes } from "@mangax/bmap-vue";
 
 /**
  * 命令面只有两个动作 / 读回（`toggle` / `getCityName`）。

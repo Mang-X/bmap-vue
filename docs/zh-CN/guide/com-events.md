@@ -80,7 +80,7 @@ lang: zh-CN
 ```
 
 ```ts
-import type { MapEventPayloadOf } from 'bmap-vue'
+import type { MapEventPayloadOf } from '@mangax/bmap-vue'
 
 function onClick(e: MapEventPayloadOf<'click'>) {
   console.log(e.point, e.pixel) // point 必有
@@ -106,7 +106,7 @@ function onTypeChange(e: MapEventPayloadOf<'maptypechange'>) {
 | `update:heading` | `number`                    | 用户交互后的旋转角回写（`v-model:heading`）      |
 | `update:tilt`    | `number`                    | 用户交互后的倾斜角回写（`v-model:tilt`）         |
 
-其中 `map` 为 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `bmap-vue/advanced` 的 `unwrapRaw()` 获取），
+其中 `map` 为 `MapHandle`（不再是 raw SDK 地图；raw 地图经 `@mangax/bmap-vue/advanced` 的 `unwrapRaw()` 获取），
 `client` 提供 `driver` 领域接口（`driver.map / driver.overlays / driver.services / driver.geometry`）。
 
 ```vue
@@ -138,7 +138,7 @@ function onPluginReady(name: string) {
 子组件没有 `unload` 事件；如需地图实例，请用 `useMap()` + `whenReady()`：
 
 ```ts
-import { useMap } from 'bmap-vue'
+import { useMap } from '@mangax/bmap-vue'
 
 const { whenReady } = useMap() // 须在 <Map> 子树内调用
 const { client, map } = await whenReady()

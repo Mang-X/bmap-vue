@@ -21,7 +21,7 @@
 </template>
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { useGeocoder, type GeocodeItemResult } from "bmap-vue";
+import { useGeocoder, type GeocodeItemResult } from "@mangax/bmap-vue";
 const map = ref();
 const addressList = [
   "包河区金寨路1号（金寨路与望江西路交叉口）",

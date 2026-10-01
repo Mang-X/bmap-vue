@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 `<InfoWindow>` 重构：detached host + Teleport，并改为 **ownership / reconcile** 状态模型（`M5-INFOWINDOW` / #32）。

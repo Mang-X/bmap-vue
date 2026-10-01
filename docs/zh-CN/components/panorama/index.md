@@ -3,7 +3,7 @@
 全景查看器（官方 `BMap.Panorama`）。
 
 ```ts
-import { Panorama, PanoramaLabel } from 'bmap-vue'
+import { Panorama, PanoramaLabel } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例
@@ -184,7 +184,7 @@ React 封装 `huiyan-fe/react-bmap@2.0.6`（`master`，`src/components/Panorama/
 「谁挂谁摘」，业务想「把这一屏标注撤掉重画」时手上未必有那些句柄。
 
 ```ts
-import type { PanoramaCaptureOptions } from 'bmap-vue'
+import type { PanoramaCaptureOptions } from '@mangax/bmap-vue'
 
 const dataUrl = panoramaRef.capture()                                   // string | null
 const jpeg = panoramaRef.capture({ quality: 0.8, type: 'image/jpeg' })  // string | null
@@ -244,7 +244,7 @@ panoramaRef.clearOverlays()
 官方 `Panorama#getLinks(): PanoramaLink[]` 是存在的，本库把它作为 `linksChange` 的载荷：
 
 ```ts
-import type { PanoramaLink } from 'bmap-vue'
+import type { PanoramaLink } from '@mangax/bmap-vue'
 
 function onLinks(links: PanoramaLink[]) {
   // links: [{ id, description?, heading?, dir?, refinedDir?, x?, y?, roadWidth? }, ...]

@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 # #160：未导出类型（`ae-forgotten-export`）存量清零

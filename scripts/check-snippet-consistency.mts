@@ -20,8 +20,23 @@
  */
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
+
+/** 发布包名，从 manifest 派生（发布身份迁移时无需改本脚本）。 */
+const PKG = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(ROOT, PKG_DIR, "package.json"), "utf8")),
+).name;
+
+/** 匹配「从发布包导入」的 import 语句；包名里的 `/` 与 `-` 都按字面处理。 */
+function importFromPkgRegex(): RegExp {
+  const escaped = PKG.replace(/[.*+?^${}()|[\]\\-]/g, String.raw`\$&`);
+  return new RegExp(
+    String.raw`import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]${escaped}(?:\/[\w-]+)?['"]`,
+    "g",
+  );
+}
 
 /** 三处示例面。文件名相对仓库根。 */
 export const SNIPPET_SURFACES = [
@@ -64,10 +79,13 @@ export function extractSnippet(markdown: string): ExtractedSnippet {
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^[ \t]*\/\/.*$/gm, "")
       .replace(/<!--[\s\S]*?-->/g, "");
-    // import { a, b as c } from 'bmap-vue' / 'bmap-vue/advanced' / 'bmap-vue/ui-kit'
-    for (const match of code.matchAll(
-      /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]bmap-vue(?:\/[\w-]+)?['"]/g,
-    )) {
+    // import { a, b as c } from '<pkg>' / '<pkg>/advanced' / '<pkg>/ui-kit'
+    //
+    // 包名**从 manifest 派生**（`scripts/release-identity.mts`）：写死 `'bmap-vue'`
+    // 的话，发布身份迁到 `@mangax/bmap-vue` 之后这个正则一条都匹配不上，门禁会
+    // 静默退化成「0 个标识符要校验」——那正是它本该防的那类假绿（PR 评审实测：
+    // 迁移后 `createBMapPlugin` 从校验集合里消失，报告仍显示 OK）。
+    for (const match of code.matchAll(importFromPkgRegex())) {
       for (const raw of match[1]!.split(",")) {
         const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
         if (name) imports.add(name);

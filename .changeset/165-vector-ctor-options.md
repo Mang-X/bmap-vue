@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 图形类覆盖物补齐官方 4.0.5 的 21 个构造选项（`Polyline` / `Polygon` / `Rectangle` / `Circle` / `BezierCurve`）

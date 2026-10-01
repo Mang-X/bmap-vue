@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165：上游类型包升到 4.0.5（git 钉 commit），并随之修正三处依赖「类是否被声明」的判断

@@ -19,8 +19,8 @@ lang: zh-CN
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Map, Marker, NavigationControl } from 'bmap-vue'
-import type { Point } from 'bmap-vue'
+import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
+import type { Point } from '@mangax/bmap-vue'
 
 const ak = '百度地图ak'
 const center = ref<Point>({ lng: 116.404, lat: 39.915 })
@@ -35,7 +35,7 @@ const center = ref<Point>({ lng: 116.404, lat: 39.915 })
 
 ```ts
 import { createApp } from 'vue'
-import { createBMapPlugin } from 'bmap-vue'
+import { createBMapPlugin } from '@mangax/bmap-vue'
 
 const app = createApp(App)
 // 全局提供默认 Client 定义（ak 等），子树可被 <BMapProvider> 覆盖
@@ -51,14 +51,14 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 {
   "compilerOptions": {
     // ...
-    "types": ["bmap-vue/volar"]
+    "types": ["@mangax/bmap-vue/volar"]
   }
 }
 ```
 
 ### 按需导入 <Badge type="tip" text="推荐" />
 
-bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
+@mangax/bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接导入组件并使用它。这种情况下，只有导入的组件才会被打包。
 
 <!-- prettier-ignore -->
 ```vue
@@ -71,7 +71,7 @@ bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接
 </template>
 
 <script setup lang="ts">
-  import { Map, ZoomControl } from 'bmap-vue'
+  import { Map, ZoomControl } from '@mangax/bmap-vue'
 </script>
 ```
 
@@ -87,7 +87,7 @@ bmap-vue 基于 ES Module，提供开箱即用的 Tree Shaking。你可以直接
 </template>
 
 <script setup lang="ts">
-  import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
+  import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 </script>
 ```
 

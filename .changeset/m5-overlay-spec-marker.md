@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 新增声明式覆盖物生命周期 `OverlaySpec` / `useOverlaySpec`，并把 `Marker` 迁移为它的样板。

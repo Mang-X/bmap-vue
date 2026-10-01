@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 `<Map>`：**未传**的交互开关 prop 不再被静默 `disable*()`（双指 / 双击缩放恢复官方默认）

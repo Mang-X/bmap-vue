@@ -18,8 +18,8 @@
     // 上游 `@baidumap/jsapi-v4-types` 的全局声明（公共声明面按门禁不得泄漏 `BMap.*`）。
     // 前置：先跑一次 `pnpm build:package`（`docs:typecheck` 与 docs 的运行时用的是同一份 dist）。
     "paths": {
-      "bmap-vue": ["../packages/bmap-vue/dist/index.d.ts"],
-      "bmap-vue/ui-kit": ["../packages/bmap-vue/dist/ui-kit.d.ts"]
+      "@mangax/bmap-vue": ["../packages/bmap-vue/dist/index.d.ts"],
+      "@mangax/bmap-vue/ui-kit": ["../packages/bmap-vue/dist/ui-kit.d.ts"]
     },
     "types": [
       "node",

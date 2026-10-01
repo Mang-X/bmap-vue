@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（#136）。本库 1.0 **不提供旧版迁移路径**——只支持 JSAPI 4.0，不保留任何为「从更早版本升级」而存在的兼容层。

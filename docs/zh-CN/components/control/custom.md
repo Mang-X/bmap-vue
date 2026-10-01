@@ -3,7 +3,7 @@
 根据地图 `Map` 组件提供的 Props，或者地图实例，自定义控件
 
 ```ts
-import { CustomControl } from 'bmap-vue'
+import { CustomControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

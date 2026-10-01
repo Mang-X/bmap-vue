@@ -40,7 +40,7 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { useGeocodeDetail, type MapMouseEvent } from "bmap-vue";
+import { useGeocodeDetail, type MapMouseEvent } from "@mangax/bmap-vue";
 const map = ref();
 const { getLocation, data, isLoading, isEmpty, isError, error } = useGeocodeDetail(map);
 const errorMessage = computed(() => {

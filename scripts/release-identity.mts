@@ -1,0 +1,66 @@
+/**
+ * 发布身份的**单一事实源**（issue #45）
+ *
+ * 发布身份在 1.0 期间从无 scope 的 `bmap-vue` 迁到 `@mangax/bmap-vue`——npm 上的
+ * `bmap-vue` 归另一位作者所有（1.0.0–1.5.0），本项目无权发布那个名字。
+ *
+ * ## 为什么要这个模块
+ *
+ * 改名触及的地方比想象中多：tarball 文件名、消费 fixture 的依赖键、
+ * `verify:package` 的 ESM 探针字符串、`node_modules` 路径……它们散在三个脚本里，
+ * 各自写一份字面量的话，改一次包名要同时改十几处，漏一处就是「门禁红」或
+ * 「门禁静默不生效」。
+ *
+ * 因此所有这些位置**一律从 `packages/bmap-vue/package.json` 读**。这是唯一允许
+ * 出现包名的地方——下次换名只改 manifest 一个字段。
+ *
+ * 住在 boundary 而非驱动脚本：驱动脚本顶层跑 `main()`，用例 import 它就会连带触发
+ * 真实 `npm install` / `npm pack`。
+ */
+
+/** 发布包目录（相对仓库根）。 */
+export const PKG_DIR = "packages/bmap-vue";
+
+/** 消费 fixture 拷出来的 tarball 固定名（fixture 的 `package.json` 按它引用）。 */
+export const CONSUMER_TARBALL = "bmap-vue.tgz";
+
+export interface ReleaseIdentity {
+  /** npm 包名，例如 `@mangax/bmap-vue`。 */
+  readonly name: string;
+  readonly version: string;
+  /** 是否 scoped（`@scope/name`）。scoped 包默认按 restricted 处理，发布必须显式 public。 */
+  readonly isScoped: boolean;
+  /** `node_modules` 里的目录名：scoped 包是 `scope/name`，不是 `scope-name`。 */
+  readonly installedDirName: string;
+}
+
+/**
+ * 从 manifest 读发布身份。
+ *
+ * 调用方传 `manifest`（而不是本模块去读盘），这样它对纯函数测试保持无副作用——
+ * `fixtures/consumer/package.json` 里的包名与真实包不同，两者要用同一套派生逻辑。
+ */
+export function releaseIdentityOf(manifest: { name?: unknown; version?: unknown }): ReleaseIdentity {
+  const name = typeof manifest.name === "string" ? manifest.name : "";
+  const version = typeof manifest.version === "string" ? manifest.version : "";
+  return {
+    name,
+    version,
+    isScoped: name.startsWith("@"),
+    // npm 把 scoped 包装成 `node_modules/@scope/name`。注意这与 **tarball 文件名**
+    // 的规则不同：文件名是 `scope-name-1.0.0.tgz`，**不带前导 `@`**（见
+    // `pack-contents-boundary.mts#tarballBasename`）。两处规则不一致是 npm 的既有行为。
+    installedDirName: name,
+  };
+}
+
+/** ESM 导入说明符（`@mangax/bmap-vue` / `@mangax/bmap-vue/ui-kit`）。 */
+export function importSpecifier(identity: ReleaseIdentity, subpath = ""): string {
+  return `${identity.name}${subpath}`;
+}
+
+/** 找出 `.artifacts` 下属于该身份的 tarball。 */
+export function isOwnTarball(fileName: string, identity: ReleaseIdentity): boolean {
+  const flattened = identity.name.replace(/^@/, "").replaceAll("/", "-");
+  return fileName.startsWith(`${flattened}-`) && fileName.endsWith(".tgz");
+}

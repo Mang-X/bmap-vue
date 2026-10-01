@@ -3,7 +3,7 @@
 在地图上绘制带高度的点覆盖物
 
 ```ts
-import { Marker3D } from 'bmap-vue'
+import { Marker3D } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

@@ -22,6 +22,12 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { freshModuleUrl } from "./fresh-module-url.mts";
+import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
+
+/** 发布包名，从 manifest 派生：生成物里的「本库根入口 / 子路径」文案必须跟着身份走。 */
+const PKG = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "..", PKG_DIR, "package.json"), "utf8")),
+).name;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const check = process.argv.includes("--check");
@@ -272,7 +278,7 @@ const EXCEPTIONS: Exception[] = [
     ours: null,
     official: "PlaceDetail",
     kind: "official-only",
-    note: "官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。",
+    note: `官方根入口的详情面板；本库在 \`${PKG}/ui-kit\` 子路径（根入口不碰 optional peer）。`,
   },
   {
     ours: "PlaceSearch",
@@ -699,7 +705,7 @@ md.push(mdTable(oursOnly, ["name", "surface", "note"]));
 md.push("");
 md.push("## \`./ui-kit\` 子路径");
 md.push("");
-md.push("根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `bmap-vue/ui-kit` 解析：");
+md.push("根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `${PKG}/ui-kit` 解析：");
 md.push("");
 if (uiKitOnly.length > 0) {
   for (const n of uiKitOnly) md.push(`- \`${n}\``);

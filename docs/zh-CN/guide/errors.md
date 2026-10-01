@@ -1,6 +1,6 @@
 # 错误码与排障
 
-运行时通过统一的 `BMapError` 报告错误（从 `bmap-vue` 导入）。
+运行时通过统一的 `BMapError` 报告错误（从 `@mangax/bmap-vue` 导入）。
 > 所有错误携带 `code`(稳定标识)、`message`、可选 `cause`/`mapId`/`component`/`plugin`。
 
 ## 错误码总览
@@ -158,7 +158,7 @@ interface BMapErrorLike {
 可在 `<Map>` 子树内订阅：
 
 ```ts
-import { useMapContext } from 'bmap-vue'
+import { useMapContext } from '@mangax/bmap-vue'
 
 const ctx = useMapContext() // 须在 <Map> 子树内调用
 ctx.events.on('resource:error', (e) => {

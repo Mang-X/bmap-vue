@@ -1,6 +1,6 @@
 # Resolver
 
-`bmap-vue/resolver` 提供 `BMapResolver`，给 [unplugin-auto-import](https://github.com/unplugin/unplugin-auto-import)
+`@mangax/bmap-vue/resolver` 提供 `BMapResolver`，给 [unplugin-auto-import](https://github.com/unplugin/unplugin-auto-import)
 之类的自动导入工具用：**在模板里直接写 `<Map>` / `<Marker>`，不用手写 `import`**。
 
 ## 配置
@@ -9,7 +9,7 @@
 // vite.config.ts
 import AutoImport from 'unplugin-auto-import/vite'
 import { defineConfig } from 'vite'
-import { BMapResolver } from 'bmap-vue/resolver'
+import { BMapResolver } from '@mangax/bmap-vue/resolver'
 
 export default defineConfig({
   plugins: [
@@ -32,7 +32,7 @@ export default defineConfig({
 </template>
 
 <script setup lang="ts">
-// 不用 import { Map, Marker, NavigationControl } from 'bmap-vue'
+// 不用 import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
 const center = ref({ lng: 116.404, lat: 39.915 })
 </script>
 ```
@@ -41,7 +41,7 @@ Nuxt 用 `@nuxtjs/auto-import` 的 `imports.resolvers`，Vite 用上面的写法
 
 ## 它做什么、不做什么
 
-`BMapResolver` 只做一件事：把模板里用到的**组件名**映射到 `bmap-vue` 的导出。
+`BMapResolver` 只做一件事：把模板里用到的**组件名**映射到 `@mangax/bmap-vue` 的导出。
 
 - 它只认本库**真实导出**的组件名。写错的或别库的组件名不会被自动导入，
   会照常报「组件未注册」——这是有意的：静默导入一个不存在的名字比报错更难查。

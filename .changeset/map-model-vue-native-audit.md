@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 Map/model Vue-native 收口审计（#137）：四项逐条取证，**无公开行为语义变更**（四处内部 runtime 收敛）

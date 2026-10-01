@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 # #165 复核：官方控件成员面「晚 ~150ms 补齐」的窗口，以及三条被推翻的审计结论

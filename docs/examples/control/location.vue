@@ -27,8 +27,8 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { LocationControl } from "bmap-vue";
-import type { LocationAddressComponents } from "bmap-vue";
+import { LocationControl } from "@mangax/bmap-vue";
+import type { LocationAddressComponents } from "@mangax/bmap-vue";
 
 const showAddressBar = ref(true);
 /** 持续跟踪：官方 `watchPosition`，开启后控件实时跟踪当前位置。 */

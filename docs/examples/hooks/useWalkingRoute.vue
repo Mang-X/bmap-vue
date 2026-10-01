@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { Map, useWalkingRoute } from "bmap-vue";
+import { Map, useWalkingRoute } from "@mangax/bmap-vue";
 
 const start = ref("天安门");
 const end = ref("王府井");
