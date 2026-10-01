@@ -15,7 +15,7 @@
  * 「等于 manifest」表达 —— 加组件 = 改 manifest + 重新生成，本文件不需要动。
  */
 import { describe, expect, it } from "vitest";
-import { runtimeExportSubpaths } from "../../scripts/release-identity.mts";
+import { ensureVolarDts, runtimeExportSubpaths } from "../../scripts/release-identity.mts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as root from "../../packages/bmap-vue/src";
@@ -300,6 +300,10 @@ describe("1.0 导出面冻结", () => {
       const spec = pkg.exports![entry];
       const importPath = typeof spec === "string" ? spec : spec.import;
       const typesPath = typeof spec === "string" ? undefined : spec.types;
+
+      // 纯 `types` 出口指向 `volar.d.ts`——gitignore 的生成物，干净检出时不存在。
+      // 自行保证前置，理由同 doc-subpath-exports.test.ts。
+      if (typesPath && !importPath) ensureVolarDts(resolve(PKG_DIR, "..", ".."));
 
       if (importPath) {
         // 有运行时出口的：必须指向 dist 产物。

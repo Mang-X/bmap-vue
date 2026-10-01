@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { PKG_DIR, releaseIdentityOf } from "../../scripts/release-identity.mts";
+import { PKG_DIR, ensureVolarDts, releaseIdentityOf } from "../../scripts/release-identity.mts";
 
 const root = resolve(import.meta.dirname, "../..");
 const PKG = releaseIdentityOf(
@@ -98,6 +98,10 @@ describe("#45 文档承诺的子路径必须能从发布包解析", () => {
     const manifest = JSON.parse(readFileSync(resolve(root, PKG_DIR, "package.json"), "utf8")) as {
       exports: Record<string, unknown>;
     };
+    // 自行保证前置：`volar.d.ts` 是 gitignore 的生成物，干净检出时不存在。
+    // 此前依赖 CI workflow 恰好先跑了 manifest 步骤——门禁依赖 workflow 顺序，
+    // 意味着顺序是巧合而非契约（#45 评审 P2）。
+    ensureVolarDts(root);
     const volarPath = resolve(root, PKG_DIR, "volar.d.ts");
     const generated = existsSync(volarPath);
     for (const [subpath, target] of Object.entries(manifest.exports)) {

@@ -3,7 +3,7 @@
   "description": "A Vue 3 component and hooks library for Baidu Maps JavaScript API 4.0.",
   "version": "1.0.0-rc.0",
   "scripts": {
-    "test:unit": "vitest run tests/behavior tests/__smoke__.test.ts packages",
+    "test:unit": "node --experimental-strip-types scripts/generate-manifest-artifacts.mts --check && vitest run tests/behavior tests/__smoke__.test.ts packages",
     "test:performance": "vitest run --config tests/performance/vitest.config.ts",
     "smoke:v4:fixture": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=fixture",
     "smoke:v4": "node --experimental-strip-types scripts/smoke-jsapi-v4.mts --mode=live",
