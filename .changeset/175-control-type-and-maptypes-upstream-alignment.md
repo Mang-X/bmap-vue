@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 把控件 `type` 与 `<MapTypeControl>.mapTypes` 对齐上游声明（含一处**破坏性**类型修正）

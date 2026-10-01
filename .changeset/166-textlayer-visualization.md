@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 issue #166 第二刀：`<TextLayer>` 落地（官方 4.0.5 `visualization/TextLayer`）

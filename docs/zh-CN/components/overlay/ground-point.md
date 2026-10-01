@@ -4,7 +4,7 @@
 会随地图缩放级别一起变大变小。适合停车场出入口、门牌、地面标识这类需要跟随地面透视的标注。
 
 ```ts
-import { GroundPoint } from 'bmap-vue'
+import { GroundPoint } from '@mangax/bmap-vue'
 ```
 
 ::: tip 与 `<GroundOverlay>` 是两件不同的事

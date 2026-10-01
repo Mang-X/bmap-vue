@@ -6,7 +6,7 @@
 </template>
 
 <script setup lang="ts">
-import { Map, Autocomplete, Marker, type PointLike, useGeocoder } from "bmap-vue";
+import { Map, Autocomplete, Marker, type PointLike, useGeocoder } from "@mangax/bmap-vue";
 // 字符串地点需要后端解析，抖动时地图会停在默认视角；用显式坐标兜底
 const defaultCenter: PointLike = { lng: 116.404, lat: 39.915 };
 const { getPoint, data } = useGeocoder();

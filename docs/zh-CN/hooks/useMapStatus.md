@@ -23,7 +23,7 @@ lang: zh-CN
 
 ```vue
 <script setup lang="ts">
-import { useMapStatus } from 'bmap-vue'
+import { useMapStatus } from '@mangax/bmap-vue'
 
 const { center, zoom, moving } = useMapStatus()
 </script>

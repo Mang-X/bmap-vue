@@ -228,6 +228,50 @@ export const DOCS_BRAND_RULES: readonly DocsBrandRule[] = [
     pattern: new RegExp(String.raw`(?<![\w$./-])baidu-map-gl-vue(?![\w$-])`, "g"),
   },
   {
+    id: "retired-scope",
+    label: "已退役的 npm 包名 bmap-vue（1.0 已迁到 @mangax/bmap-vue）",
+    // npm 上的 `bmap-vue` 归另一位作者所有（1.0.0–1.5.0），本项目无权发布那个名字，
+    // 因此 1.0 的发布身份是 `@mangax/bmap-vue`。
+    //
+    // ## 判据只认「会被复制走的代码」，不认「库名文案」——
+    //
+    // 第一版写成「任何位置的裸 `bmap-vue` 都命中」，结果 16 处**合法**用法全部躺枪：
+    // 站点标题 `title: "bmap-vue"`、PWA 应用名、SEO 关键词 `bmap-vue,bmap vue`、
+    // NOTICE 的归属说明、以及 docs 站自己的 vite/tsconfig alias。那些地方的 `bmap-vue`
+    // 是**库名**或**仓库内部 alias**，不是 npm 说明符——照旧合法，且恰恰是用户搜
+    // 「bmap-vue」时找的东西。
+    //
+    // 于是收窄为**只命中真正的导入语句**：前方必须是 `from ` / `require(` /
+    // 动态 `import(` 这类**导入关键字**。
+    //
+    // ⚠️ 刻意**不**匹配「被引号或反引号包裹」这种泛化形态：`title: "bmap-vue"`、
+    // `alt: "bmap-vue"`、`This site documents \`bmap-vue\`` 全是**库名文案**，靠引号
+    // 根本区分不了。第一版把泛化形态也算进去，11 处合法用法一起躺枪，只能靠逐行
+    // 豁免——而豁免一旦超预算，门禁自己会提示「判据该改，不是豁免该加」。删掉它之后豁免归零。
+    //
+    // 覆盖面因此略窄于「所有 npm 说明符」：散文里手写一句「用 `bmap-vue` 引入」不命中。
+    // 但真正的用户代码几乎都在 `from` / `require` / `import()` 里——那才是要把住的地方。
+    //
+    // `packages/bmap-vue/…`、`Mang-X/bmap-vue`、`/bmap-vue/dist/…` 这些**仓库路径**
+    // 由负向前瞻放过（它们前面是 `/` 或 `@`）。
+    //
+    // ## 为什么要有这条规则
+    //
+    // `verify:package` 的消费 fixture 在**验证时**按真实身份重写包名，所以即使公开
+    // 文档源码里留着旧名，门禁也会绿——临时重写掩盖了文档本身的迁移遗漏。
+    // PR 评审实测：仅安装命令与 CDN 那类形态被改，代码块里的裸 specifier 漏了
+    // **119 个文件**，而这些正是用户直接复制走的代码。
+    //
+    // 豁免预算刻意保持 0：这条规则收窄后不该需要任何逐行豁免；一旦需要，
+    // 说明判据又变宽了（门禁对超预算的豁免会直接失败并如此提示）。
+    pattern: new RegExp(
+      String.raw`\bfrom\s+(?![\w$./-]*[@/])['"]?bmap-vue(?![\w$-])|` +
+        String.raw`\brequire\((?![\w$./-]*[@/])['"]?bmap-vue(?![\w$-])|` +
+        String.raw`\bimport\((?![\w$./-]*[@/])['"]?bmap-vue(?![\w$-])`,
+      "g",
+    ),
+  },
+  {
     id: "retired-product",
     label: "已退役的产品名 / 站点文案",
     // `(?<!yue1123/)` 是**归属义务**的例外：README / NOTICE / LICENSE 必须写原项目名。

@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 #165 Class 3（图层模块）：补齐 4.0.5 已声明、但本库尚未登记 / 暴露的成员

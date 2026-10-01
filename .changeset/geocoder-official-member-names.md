@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 Slice 2：地理编码两个 hook 的动作名与结果读取口对齐官方 `BMap.Geocoder`

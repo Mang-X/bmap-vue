@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, triggerRef } from "vue";
-import { Map, Marker, MapMask, PointLike, type MapMaskShowRegion } from "bmap-vue";
+import { Map, Marker, MapMask, PointLike, type MapMaskShowRegion } from "@mangax/bmap-vue";
 const points = shallowRef<PointLike[]>([]);
 const center = ref<PointLike>({ lng: 0, lat: 0 });
 const showRegion = ref<MapMaskShowRegion>("outside");

@@ -182,7 +182,7 @@ component 46 · hook 14 · type 56
 | — | `useCapabilities` | official-only | 官方 capability 读取 hook；本库能力目录在 `CAPABILITY_*` / `advanced` 入口，不镜像该 hook。 |
 | — | `useDriver` | official-only | 官方 driver 逃生 hook；本库逃生口是 `./advanced` 的 `createJsapiV4Driver` / `unwrapRaw`。 |
 | — | `BMapErrorBoundary` | official-only | React error boundary 形态；Vue 对应物是插件级错误上报，不提供同名组件。 |
-| — | `PlaceDetail` | official-only | 官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。 |
+| — | `PlaceDetail` | official-only | 官方根入口的详情面板；本库在 `@mangax/bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。 |
 | `PlaceSearch` | — | ours-only | 标准 UI 在 `./ui-kit` 子路径；官方 React 根清单未导出同名组件（它用 `RoutePlan` 类型名占位）。 |
 | `BMapClient` | — | ours-only | Client 句柄类型；官方无同名导出。组件 / hook / 基础类型名对齐，不镜像本库 Client 面。 |
 | `BMapClientContext` | — | ours-only | Client 注入上下文；官方无同名导出。保留 `BMap*` 前缀以区别于地图实例上下文。 |
@@ -228,7 +228,7 @@ component 46 · hook 14 · type 56
 | `LogoControl` | component | — |
 | `NormalLayer` | component | — |
 | `PixelLayer` | component | — |
-| `PlaceDetail` | component | 官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。 |
+| `PlaceDetail` | component | 官方根入口的详情面板；本库在 `@mangax/bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。 |
 | `PlaceDetailPanel` | component | — |
 | `PointShapeLayer` | component | — |
 | `RawControl` | component | — |
@@ -837,7 +837,7 @@ component 46 · hook 14 · type 56
 
 ## `./ui-kit` 子路径
 
-根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `bmap-vue/ui-kit` 解析：
+根入口**不**重导出 UI（官方 UI 包是 optional peer，根入口静态引入会拖垮 SSR）。下列名字只从 `${PKG}/ui-kit` 解析：
 
 - `BMapError`
 - `BMapErrorCode`

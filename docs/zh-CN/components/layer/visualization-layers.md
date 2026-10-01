@@ -5,7 +5,7 @@
 `BMap.PolylineLayer`。
 
 ```ts
-import { PolygonLayer, PolylineLayer } from 'bmap-vue'
+import { PolygonLayer, PolylineLayer } from '@mangax/bmap-vue'
 ```
 
 与 [`LineLayer` / `FillLayer` / `HeatmapLayer` / `TrackLineLayer`](./native-visual-layers) 共用

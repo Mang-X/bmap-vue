@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 Slice 1/3/4：定位 hook 对齐官方 `BMap.Geolocation`，`viewportOptions` 对齐官方 `ViewportOptions`

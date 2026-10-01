@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 `TrackLineLayer` 的播放命令面、进度观察与页面可见性联动（#110）。

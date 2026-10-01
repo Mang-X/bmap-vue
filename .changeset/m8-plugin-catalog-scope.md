@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 收口外部插件 Catalog、`global` / `map` 作用域与依赖调度（`M8-PLUGIN-CORE`，issue #42）。

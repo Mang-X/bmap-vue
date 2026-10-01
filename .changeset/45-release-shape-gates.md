@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 发布基础设施收口：把「本地产物能跑」变成「发布产物可断言」（#45）

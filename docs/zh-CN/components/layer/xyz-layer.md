@@ -3,7 +3,7 @@
 第三方标准瓦片服务（XYZ / WMTS / WMS / TMS）：内置 **EPSG:3857 → BD09MC** 转换。
 
 ```ts
-import { XYZLayer } from 'bmap-vue'
+import { XYZLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

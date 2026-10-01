@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 #166：封装官方 4.0.5 `visualization/` 的 `PolygonLayer` / `PolylineLayer`

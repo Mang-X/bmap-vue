@@ -25,3 +25,17 @@ npm 上的 `bmap-vue` 归另一位作者所有（1.0.0–1.5.0），且我们目
 `publishConfig.access` 此前对无 scope 名是空操作，现在**必需**——npm 对 scoped 包
 默认按 restricted 处理，漏掉它首次 `npm publish` 会直接失败。
 `verify:package` 现在会断言这一项。
+
+补充（第二轮评审后）：包名改动还波及三处此前没人想到的地方，一并修掉：
+
+- **CI 的 `package` job** 原本按 `bmap-vue-*.tgz` glob 找 tarball，迁到 scoped 名后
+  匹配不到任何文件。现在直接调 `pnpm verify:package`（单一实现，且覆盖面更全）。
+- **全部 60 份未消费的 changeset** 的 package key 必须一并迁移。实测只要有**一份**
+  仍用旧 key，`changeset status` 就直接崩溃（exit 1）——发版流程会当场断掉。
+- **文档代码块里的裸 specifier 共 119 个文件**（`from 'bmap-vue'`、`bmap-vue/volar`）。
+  消费 fixture 在验证时会重写包名，所以门禁照样绿——**临时重写掩盖了公开文档本身的
+  迁移遗漏**。现已直接改源码，并新增 `check:docs-brand` 的 `retired-scope` 规则让旧名
+  无法在发布面的导入语句里回流。
+- 两处**门禁自己没跟上身份迁移**：`check:snippet-consistency` 的标识符提取写死旧名
+  （迁移后 `createBMapPlugin` 从校验集合消失而报告仍 OK）、`generate-api-diff` 把旧包名
+  写进生成物。判据同样改为从 manifest 派生。

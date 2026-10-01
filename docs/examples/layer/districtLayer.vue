@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { DistrictLayer, DistrictType } from "bmap-vue";
+import { DistrictLayer, DistrictType } from "@mangax/bmap-vue";
 
 /**
  * `kind` 是官方 `DistrictLayer` 的**下钻层级**（`0` 本级 / `1` 下一级 / `2` 再下一级），

@@ -1,4 +1,4 @@
-# bmap-vue
+# @mangax/bmap-vue
 
 Vue 3 components and hooks for Baidu Maps JavaScript API 4.0.
 
@@ -24,8 +24,8 @@ you do not need to add a `<script>` tag yourself.
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Map, Marker, NavigationControl } from 'bmap-vue'
-import type { Point } from 'bmap-vue'
+import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
+import type { Point } from '@mangax/bmap-vue'
 
 const ak = 'your Baidu Maps ak'
 const center = ref<Point>({ lng: 116.404, lat: 39.915 })
@@ -45,7 +45,7 @@ and service composables work inside it without a `<Map>`.
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, Map, ZoomControl } from 'bmap-vue'
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 </script>
 ```
 
@@ -53,7 +53,7 @@ To share one `ak` across a whole app, register the plugin once:
 
 ```ts
 import { createApp } from 'vue'
-import { createBMapPlugin } from 'bmap-vue'
+import { createBMapPlugin } from '@mangax/bmap-vue'
 
 app.use(createBMapPlugin({ ak: 'your Baidu Maps ak' }))
 ```

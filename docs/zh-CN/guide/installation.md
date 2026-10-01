@@ -28,7 +28,7 @@ npm install @mangax/bmap-vue
 
 标准 UI（建议、结果列表、翻页、路线面板、详情面板）由官方
 [`@baidumap/jsapi-ui-kit`](https://www.npmjs.com/package/@baidumap/jsapi-ui-kit) 提供，
-它是 **optional peer**——只有用 `bmap-vue/ui-kit` 时才需要装，见[官方 UI Kit 集成](./ui-kit)。
+它是 **optional peer**——只有用 `@mangax/bmap-vue/ui-kit` 时才需要装，见[官方 UI Kit 集成](./ui-kit)。
 
 ::: code-group
 
@@ -50,7 +50,7 @@ pnpm add @baidumap/jsapi-ui-kit
   <meta charset="utf-8" />
   <!-- Import Vue -->
   <script src="https://unpkg.com/vue@3"></script>
-  <!-- Import bmap-vue（锁定版本，见下方说明） -->
+  <!-- Import @mangax/bmap-vue（锁定版本，见下方说明） -->
   <link rel="stylesheet" href="https://unpkg.com/@mangax/bmap-vue@1/dist/bmap-vue.css" />
   <script src="https://unpkg.com/@mangax/bmap-vue@1/dist/index.global.js"></script>
 </head>
@@ -60,7 +60,7 @@ pnpm add @baidumap/jsapi-ui-kit
 <head>
   <!-- Import Vue 3 -->
   <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
-  <!-- Import bmap-vue（锁定版本，见下方说明） -->
+  <!-- Import @mangax/bmap-vue（锁定版本，见下方说明） -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mangax/bmap-vue@1/dist/bmap-vue.css" />
   <script src="https://cdn.jsdelivr.net/npm/@mangax/bmap-vue@1/dist/index.global.js"></script>
 </head>

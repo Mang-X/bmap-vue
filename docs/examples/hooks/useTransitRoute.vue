@@ -36,7 +36,7 @@
 
 <script lang="ts" setup>
 import { computed } from "vue";
-import { Map, TransitPolicy, useTransitRoute } from "bmap-vue";
+import { Map, TransitPolicy, useTransitRoute } from "@mangax/bmap-vue";
 
 // 公交支持关键字起终点（与驾车不同），并且是四个服务里配置面最宽的一个。
 const { data, status, sdkStatus, isLoading, isEmpty, search, clear } = useTransitRoute({

@@ -156,6 +156,31 @@ npm 上的 `bmap-vue` 归另一位作者所有（维护者 `minichen`，1.0.0–
 漏掉的那处不会报错，只会让门禁静默不生效——本次就有一处漏了（消费 fixture 的
 `docs-examples/`，被 `vue-tsc` 的几十条 `TS2307` 当场抓出来）。
 
+#### 「临时重写」不能替代改源码——第二轮评审的教训
+
+第一轮只改了安装命令与 CDN 那类形态。文档**代码块里的裸 specifier**
+（`from 'bmap-vue'`、`bmap-vue/volar`）共 **119 个文件**没改，而那正是用户直接
+复制走的代码。更糟的是：消费 fixture 在**验证时**会重写包名，所以 `verify:package`
+照样全绿——**临时重写掩盖了公开文档本身的迁移遗漏**。
+
+因此两件事都要做：
+
+1. **公开 docs / examples 源码直接改为 `@mangax/bmap-vue`**（119 个文件）；
+2. **新增门禁规则 `retired-scope`**（`scripts/docs-brand-boundary.mts`），让旧名
+   在发布面的**导入语句**里无法回流。
+
+这条规则的判据收窄过一次，值得记下来：初版写成「任何位置的裸 `bmap-vue` 都命中」，
+结果 `title: "bmap-vue"`、PWA 应用名、SEO 关键词、NOTICE 归属说明、docs 站自己的
+vite/tsconfig alias 共 16 处**合法**用法一起躺枪，只能靠逐行豁免——而豁免一旦超过
+`MAX_ESCAPES`，门禁自己会提示「**判据该改，不是豁免该加**」。于是收窄为只命中
+`from` / `require(` / `import(` 三种导入上下文；豁免随即归零。
+
+顺带修掉两处「门禁自己没跟上身份迁移」：`check:snippet-consistency.mts` 的标识符
+提取正则写死 `'bmap-vue'`，迁移后一条都匹配不到（`createBMapPlugin` 从校验集合里
+消失而报告仍显示 OK）；`generate-api-diff.mts` 把旧包名写进生成物。**门禁的判据
+同样必须从 manifest 派生**，否则「包名改了」这件事会先让门禁失灵、再让人误以为
+门禁是绿的。
+
 `publishConfig.access` 此前对无 scope 名是空操作，迁到 scope 后**必需**：npm 对 scoped
 包默认按 restricted 处理，漏掉它首次 `npm publish` 会直接失败。`verify:package` 现在
 断言这一项——这正是「换身份」带来的一个真实行为变化，不是纯改名。

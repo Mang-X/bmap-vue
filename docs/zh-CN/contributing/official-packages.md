@@ -21,7 +21,7 @@ curl -s "https://registry.npmjs.org/@baidumap%2Fjsapi-ui-kit" | jq '.versions["1
 ```
 
 **包名核对**：注意 scope 是 `@baidumap`（`@baumap` 这个 scope 在 npm 上不存在）。
-本仓库实际安装与锁定的就是 `@baidumap/*`。组件库发布包名是 `bmap-vue`，源码路径是
+本仓库实际安装与锁定的就是 `@baidumap/*`。组件库发布包名是 `@mangax/bmap-vue`，源码路径是
 `packages/bmap-vue/src`。
 
 - loader `1.0.0`：`sha512-f88EFIvbICW3AtnbhYcnvlpG/bIY2hZyokdCgf30RVXvs67aDkBtFJnDO/C8Bf7p4O8MvlTU6rW8jz8ev1MayA==`

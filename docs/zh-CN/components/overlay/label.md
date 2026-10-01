@@ -3,7 +3,7 @@
 在地图上显示文本标注
 
 ```ts
-import { Label } from 'bmap-vue'
+import { Label } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

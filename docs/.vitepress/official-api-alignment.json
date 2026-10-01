@@ -75,7 +75,7 @@
       "ours": null,
       "official": "PlaceDetail",
       "kind": "official-only",
-      "note": "官方根入口的详情面板；本库在 `bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。"
+      "note": "官方根入口的详情面板；本库在 `@mangax/bmap-vue/ui-kit` 子路径（根入口不碰 optional peer）。"
     },
     {
       "ours": "PlaceSearch",

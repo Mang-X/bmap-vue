@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165：适配官方 4.0.5 弃用的四个图层类（保留组件 + 如实告知）

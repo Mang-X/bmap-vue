@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { Map, Marker, PointLike } from "bmap-vue";
+import { Map, Marker, PointLike } from "@mangax/bmap-vue";
 import { ref } from "vue";
 
 const center = { lng: 113.5213534078, lat: 27.6907991732 };

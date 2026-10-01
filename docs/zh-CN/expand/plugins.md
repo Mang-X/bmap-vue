@@ -9,7 +9,7 @@
 
 ```ts
 import { createApp } from 'vue'
-import { createBMapPlugin } from 'bmap-vue'
+import { createBMapPlugin } from '@mangax/bmap-vue'
 
 const app = createApp(App)
 app.use(
@@ -71,7 +71,7 @@ app 级配置（`createBMapPlugin`）只认 `provider` 与 `defaults`——**没
 自定义插件用 `urlPluginDefinition` 声明名称、脚本地址与取全局导出的方式：
 
 ```ts
-import { urlPluginDefinition } from 'bmap-vue/plugins'
+import { urlPluginDefinition } from '@mangax/bmap-vue/plugins'
 
 const myPlugin = urlPluginDefinition<MyPluginGlobal>(
   'MyPlugin',

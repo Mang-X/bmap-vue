@@ -158,7 +158,7 @@ interface BMapErrorLike {
 可在 `<Map>` 子树内订阅：
 
 ```ts
-import { useMapContext } from 'bmap-vue'
+import { useMapContext } from '@mangax/bmap-vue'
 
 const ctx = useMapContext() // 须在 <Map> 子树内调用
 ctx.events.on('resource:error', (e) => {

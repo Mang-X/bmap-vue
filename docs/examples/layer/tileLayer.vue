@@ -20,7 +20,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { TileLayer } from "bmap-vue";
+import { TileLayer } from "@mangax/bmap-vue";
 
 /**
  * 官方这批网络图层的类声明里**没有**任何事件成员，运行时也不派发 `tileload` / `tileerror`，

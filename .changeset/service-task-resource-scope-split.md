@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 服务任务分两档 + ResourceScope 收成最小外部资源内核（#139）。

@@ -3,7 +3,7 @@
 在地图或标注上添加自定义内容的右键菜单。
 
 ```ts
-import { ContextMenu, MenuItem, MenuSeparator } from 'bmap-vue'
+import { ContextMenu, MenuItem, MenuSeparator } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例
@@ -126,7 +126,7 @@ context-menu/index
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import ContextMenu, { type ContextMenuExpose } from 'bmap-vue'
+import ContextMenu, { type ContextMenuExpose } from '@mangax/bmap-vue'
 
 const menu = ref<ContextMenuExpose>()
 </script>

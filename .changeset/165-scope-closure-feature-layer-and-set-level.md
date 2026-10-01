@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 收口：两条范围问题——`FeatureLayer` **不封装**、`<GeoJSONLayer>.setLevel` 改为**就地更新**

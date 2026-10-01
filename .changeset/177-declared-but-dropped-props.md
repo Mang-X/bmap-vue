@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 `<LocationControl>.onLocationStart` 真正接上线；删除无实现路径的 `printImageUrl`

@@ -3,7 +3,7 @@
 缩放控件，默认位于地图右下角
 
 ```ts
-import { ZoomControl } from 'bmap-vue'
+import { ZoomControl } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

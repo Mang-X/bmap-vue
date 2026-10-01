@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { DOMLayer } from "bmap-vue";
+import { DOMLayer } from "@mangax/bmap-vue";
 
 /**
  * 每个要素一个自定义 DOM。

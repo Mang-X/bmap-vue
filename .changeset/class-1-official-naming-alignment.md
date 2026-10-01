@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 Class 1：已有的能力但命名与官方不同 —— 直接改名对齐（**破坏性变更，不留别名**）

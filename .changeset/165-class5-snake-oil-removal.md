@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 #165 Class 5：明显超出 sdk 语义意图的成员，整理后删除

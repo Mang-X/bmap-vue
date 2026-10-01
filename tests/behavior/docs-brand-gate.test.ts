@@ -224,6 +224,59 @@ describe("check-docs-brand · 反例（误伤会让门禁不可用）", () => {
   });
 });
 
+describe("#45 retired-scope：旧 npm 名不得回到发布面（PR 评审 P1）", () => {
+  /** 会被判红的形态：真正的导入语句。 */
+  const BAD = [
+    "import { Map } from 'bmap-vue'",
+    'import { Map } from "bmap-vue"',
+    "import { unwrapRaw } from 'bmap-vue/advanced'",
+    "const m = await import('bmap-vue')",
+    "const m = require('bmap-vue')",
+  ];
+  /** 必须放行的形态：库名文案与仓库路径。 */
+  const GOOD = [
+    'title: "bmap-vue"',
+    "This site documents `bmap-vue`, which continues",
+    'name: "bmap-vue", // PWA 应用名',
+    "bmap-vue,bmap vue,百度地图", // SEO 关键词：用户搜 bmap-vue 找的是这个库
+    "别名 `bmap-vue` 到 `../packages/bmap-vue/dist/index.d.ts`", // 仓库路径 alias
+    "由 `packages/bmap-vue/src/manifest.ts` 生成",
+    "见 https://github.com/Mang-X/bmap-vue",
+    "从 https://Mang-X.github.io/bmap-vue/zh-CN 进入",
+  ];
+
+  it.each(BAD)("旧名的导入语句必须红：%s", (line) => {
+    const r = scanDir(makeFixture({ "n.md": line + "\n" }));
+    expect(r.code, `${line} 应当被判红`).not.toBe(0);
+    expect(r.output).toContain("retired-scope");
+  });
+
+  it.each(GOOD)("库名文案与仓库路径必须放行：%s", (line) => {
+    const r = scanDir(makeFixture({ "n.md": line + "\n" }));
+    expect(r.code, `${line} 不该被判红`).toBe(0);
+  });
+
+  it("判据有区分力：同一段文本里只有导入形态触发", () => {
+    const r = scanDir(
+      makeFixture({
+        "n.md": ['# bmap-vue 是本库的名字', '', "import { Map } from 'bmap-vue'", ""].join("\n"),
+      }),
+    );
+    expect(r.code).not.toBe(0);
+    // 命中的必须是导入那一行，不是标题那一行
+    const line = r.output.split("\n").find((l) => l.includes("retired-scope")) ?? "";
+    expect(line).toContain("3:");
+  });
+
+  it("这条规则不需要任何逐行豁免（豁免变多说明判据过宽）", () => {
+    // 本组 GOOD 全部靠判据本身放行，不含 `brand-gate:allow`。若将来某条 GOOD 需要
+    // 靠豁免才能过，那就是判据变宽了——门禁对超预算豁免会直接失败并如此提示。
+    for (const line of GOOD) {
+      expect(line, `GOOD 样本里不该出现豁免标记：${line}`).not.toContain("brand-gate:allow");
+    }
+  });
+});
+
 describe("check-docs-brand · 豁免机制不是后门", () => {
   it("带理由的逐行豁免放行", () => {
     const r = scanDir(

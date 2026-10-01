@@ -2,7 +2,7 @@
 
 ## 来源
 
-`bmap-vue` 源自开源项目
+`@mangax/bmap-vue` 源自开源项目
 [yue1123/vue3-baidu-map-gl](https://github.com/yue1123/vue3-baidu-map-gl)。
 
 感谢原作者 **yue1123** 以及历史上所有贡献者。本项目在原作基础上继续演进，

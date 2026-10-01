@@ -40,7 +40,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useGeolocation } from "bmap-vue";
+import { useGeolocation } from "@mangax/bmap-vue";
 const map = ref();
 const defaultCenter = { lng: 116.404, lat: 39.915 };
 const { getCurrentPosition, data, isLoading, isError, status } = useGeolocation({}, map);

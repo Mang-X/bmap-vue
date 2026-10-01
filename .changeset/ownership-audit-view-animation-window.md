@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 视角动画的**启动窗口取证**与取消面收窄（#104 第二批，接 [存量审计 changeset](./architecture-ownership-evidence-first.md)）。

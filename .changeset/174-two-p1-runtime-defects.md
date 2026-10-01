@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 修掉评审 #174 的两条 P1 运行时缺陷，并更正一条被误读的官方语义

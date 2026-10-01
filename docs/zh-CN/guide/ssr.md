@@ -10,7 +10,7 @@ lang: zh-CN
 
 ## 模块求值期不碰 DOM
 
-`bmap-vue` 的模块顶层**不访问** `window` / `document`。SSR 环境下 `import` 整个包不会崩——
+`@mangax/bmap-vue` 的模块顶层**不访问** `window` / `document`。SSR 环境下 `import` 整个包不会崩——
 所有真实 DOM 访问都发生在 `onMounted` 之后，或被 `typeof document === "undefined"` 这类
 守卫挡在函数内部。
 
@@ -112,15 +112,15 @@ SSR 期**不会**执行的部分（`onMounted` 不跑）：容器尺寸观察器
 ## `./ui-kit` 必须动态导入
 
 官方 UI Kit 包在**模块求值期**就访问 `document`——在 Node 里 `import` 它会直接崩。因此它是
-**独立按需子入口**（`bmap-vue/ui-kit`），并且只满足两条规则：
+**独立按需子入口**（`@mangax/bmap-vue/ui-kit`），并且只满足两条规则：
 
-1. **根入口 `bmap-vue` 不导出那四个组件**，产物里也不含 UI Kit 的代码与样式；
+1. **根入口 `@mangax/bmap-vue` 不导出那四个组件**，产物里也不含 UI Kit 的代码与样式；
 2. **只在浏览器挂载后动态 import 上游包**——`import()` 的 specifier 必须是字面量，打包器才能
    静态分析。
 
 因此在 SSR 项目里：
 
-- 静态 `import` `bmap-vue/ui-kit` **本身是安全的**（这个入口只在浏览器里才碰上游包），但
+- 静态 `import` `@mangax/bmap-vue/ui-kit` **本身是安全的**（这个入口只在浏览器里才碰上游包），但
 - **服务端渲染时不要渲染** `PlaceSearch` / `PlaceAutocomplete` / `PlaceDetail` / `RoutePlan`
   这四个组件——在无 DOM 环境调用时会以 `BMAP_UI_KIT_UNAVAILABLE` 明确拒绝并给出可读原因
   （而不是让上游在 import 期崩给你看）；
@@ -128,16 +128,16 @@ SSR 期**不会**执行的部分（`onMounted` 不跑）：容器尺寸观察器
   一条独立入口。
 
 这四个组件**也不在**组件 manifest 里，因此按需自动导入（resolver）**不会**解析它们——必须显式
-写 `import { PlaceSearch } from 'bmap-vue/ui-kit'`。完整用法见[官方 UI Kit 集成](./ui-kit)。
+写 `import { PlaceSearch } from '@mangax/bmap-vue/ui-kit'`。完整用法见[官方 UI Kit 集成](./ui-kit)。
 
 ## 排查清单
 
 SSR 项目里遇到 `window is not defined` / `document is not defined` 时，按这个顺序查：
 
-1. 是不是静态引入了 `bmap-vue/ui-kit`（它必须在浏览器挂载后才动态 import 上游包）；
+1. 是不是静态引入了 `@mangax/bmap-vue/ui-kit`（它必须在浏览器挂载后才动态 import 上游包）；
 2. 是不是在模块顶层自己 `new` 了 SDK 类的实例——SDK 只在浏览器里存在，顶层构造必然在服务端
    崩；把它挪进 `onMounted`；
-3. 是不是在 `bmap-vue` 之外还有别的东西在 import 期碰 DOM（自家地图容器组件、全局样式注入的
+3. 是不是在 `@mangax/bmap-vue` 之外还有别的东西在 import 期碰 DOM（自家地图容器组件、全局样式注入的
    第三方 UI 包）；
 4. 容器是不是零尺寸（不是报错，是「一直 `idle`」）——看 `#loading` 插槽的 `containerReady`。
 

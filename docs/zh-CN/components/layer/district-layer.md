@@ -3,7 +3,7 @@
 在地图上显示行政区划分。
 
 ```ts
-import { DistrictLayer } from 'bmap-vue'
+import { DistrictLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

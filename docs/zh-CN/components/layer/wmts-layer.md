@@ -4,7 +4,7 @@
 等参数，调用方只需服务地址与图层参数。
 
 ```ts
-import { WMTSLayer } from 'bmap-vue'
+import { WMTSLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

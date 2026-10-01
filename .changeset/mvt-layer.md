@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 新增 `MVTLayer`（MVT 矢量瓦片，issue #109）：官方 `BMap.MVTLayer` 的 Vue 封装——直接

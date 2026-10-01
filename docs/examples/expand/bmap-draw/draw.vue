@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { useMarkerIcons, type BMapClient } from "bmap-vue";
+import { useMarkerIcons, type BMapClient } from "@mangax/bmap-vue";
 let marker = ref({
   instance: null as { open(): void; closeAll(): void } | null,
   isDrawing: false,

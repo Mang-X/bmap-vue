@@ -12,7 +12,7 @@ lang: zh-CN
 </div>
 
 ```ts
-import { Map, Marker, NavigationControl } from 'bmap-vue'
+import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
 ```
 
 ## 先选对：覆盖物还是图层
@@ -143,11 +143,11 @@ import { Map, Marker, NavigationControl } from 'bmap-vue'
 | 官方组件 | 为什么这里没有 |
 | --- | --- |
 | `Icon`（图标） | 不是独立组件：走 `<Marker :icon>`，接受预设名或自定义图标配置 |
-| `PlaceDetail`（地点详情） | 在**官方 UI Kit** 里（`bmap-vue/ui-kit` 的 `<PlaceDetail>`），不在组件面 |
-| `RawOverlay` / `RawControl` | 官方 React 的「逃生舱」：挂任意原生 SDK 对象。本库用 [`bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
+| `PlaceDetail`（地点详情） | 在**官方 UI Kit** 里（`@mangax/bmap-vue/ui-kit` 的 `<PlaceDetail>`），不在组件面 |
+| `RawOverlay` / `RawControl` | 官方 React 的「逃生舱」：挂任意原生 SDK 对象。本库用 [`@mangax/bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` + `createHandle` 覆盖同类需求 |
 | `SimpleInfoWindow` | 官方 React 库自有封装，上游 SDK 没有这个类 |
 | `ThreeLayer` | three.js 宿主集成（需自备 three.js）。本库用原生 [`TextLayer`](/zh-CN/components/layer/text-layer) / [`PolygonLayer`](/zh-CN/components/layer/visualization-layers) 覆盖多数场景 |
-| `Symbol`（符号） | **本库尚未暴露该能力**，且**做不成组件**：官方 `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——它是一个矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），没有 `addOverlay` 入口，因此无法做成一个「挂到地图上」的组件。官方 `Symbol` 的 9 个成员（`setPath` / `setFillColor` / `setStrokeColor` / …）在本库**没有任何落地路径**；需要矢量图标时目前只能经 [`bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` 自行创建 |
+| `Symbol`（符号） | **本库尚未暴露该能力**，且**做不成组件**：官方 `overlay/Symbol.d.ts:13` 的 `class Symbol` **不继承** `BMap.Overlay`——它是一个矢量图标**值对象**（官方注明「可用作 Marker 的 icon 参数」），没有 `addOverlay` 入口，因此无法做成一个「挂到地图上」的组件。官方 `Symbol` 的 9 个成员（`setPath` / `setFillColor` / `setStrokeColor` / …）在本库**没有任何落地路径**；需要矢量图标时目前只能经 [`@mangax/bmap-vue/advanced`](/zh-CN/guide/advanced) 的 `unwrapRaw()` 自行创建 |
 | `IconSequence`（图标序列） | **官方已废弃**：`overlay/IconSequence.d.ts:4` 的类声明标了 `@deprecated 4.0 已废弃，请使用 PolylineOptions#strokeTexture 代替`（该类只有构造函数，没有实例方法）。本库已在 [`<Polyline :icons>`](/zh-CN/components/overlay/polyline) 上**如实透传**它（收下就静默忽略比不收更难排查），新代码请用 `strokeTexture` |
 
 ::: tip 曾经列的三条「真实能力缺口」，逐条复核后只有一条成立

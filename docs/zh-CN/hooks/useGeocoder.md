@@ -3,7 +3,7 @@
 通过地址解析坐标点
 
 ```ts
-import { useGeocoder } from 'bmap-vue'
+import { useGeocoder } from '@mangax/bmap-vue'
 ```
 
 ## 单个地址解析
@@ -17,7 +17,7 @@ hooks/useGeocoder/index
 在 Ts 中读取结果时，`data` 内部可推断为 `Point | null`，配合可选链即可避免 ts 报错。
 
 ```ts
-import type { GeoPoint } from 'bmap-vue'
+import type { GeoPoint } from '@mangax/bmap-vue'
 const { data } = useGeocoder(map)
 const point: GeoPoint | null = data.value
 ```
@@ -35,7 +35,7 @@ hooks/useGeocoder/batch
 `getBatch` 的返回类型是 `GeocodeItemResult[]`，每项的 `point` 已经是 `Point | null`，遍历时无需再断言。
 
 ```ts
-import type { GeoPoint } from 'bmap-vue'
+import type { GeoPoint } from '@mangax/bmap-vue'
 const { getBatch } = useGeocoder(map)
 const points: (GeoPoint | null)[] = (await getBatch(['北京', '上海'])).map((item) => item.point)
 ```
@@ -122,7 +122,7 @@ type GeoPoint = { lng: number; lat: number }
 
 ```ts
 import type { ComputedRef, ShallowRef } from 'vue'
-import type { BMapServiceStatus, GeoPoint, ServiceErrorInfo, ServiceResult } from 'bmap-vue'
+import type { BMapServiceStatus, GeoPoint, ServiceErrorInfo, ServiceResult } from '@mangax/bmap-vue'
 
 export interface GeocodeItemResult {
   address: string

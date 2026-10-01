@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 #165 收口两条：`<PointLayer>.isFlat` 补齐 + 「等成员面补齐再判成员存在」变成判定层

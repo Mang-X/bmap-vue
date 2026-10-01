@@ -1,5 +1,5 @@
 ---
-"bmap-vue": major
+"@mangax/bmap-vue": major
 ---
 
 # #168 剩余面：控件命令面、Panorama 事件裁决、覆盖物选项补齐

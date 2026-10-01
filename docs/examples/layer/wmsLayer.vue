@@ -28,7 +28,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import { WMSLayer } from "bmap-vue";
+import { WMSLayer } from "@mangax/bmap-vue";
 
 /** WMS 的参数键名是**全大写**（与 WMTS 的首字母大写不同）。写错通常表现为服务端 400。 */
 const params = {

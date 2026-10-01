@@ -35,7 +35,7 @@
 </template>
 
 <script lang="ts" setup>
-import { useGeocodeDetail, type GeocodeDetailItemResult } from "bmap-vue";
+import { useGeocodeDetail, type GeocodeDetailItemResult } from "@mangax/bmap-vue";
 const points = [
   { lng: 116.307852, lat: 40.057031 },
   { lng: 116.313082, lat: 40.047674 },

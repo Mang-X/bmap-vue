@@ -50,7 +50,7 @@ function makeTmp(readme: string, packageReadme: string, docs: string): string {
 
 const GOOD = `\`\`\`vue
 <script setup>
-import { Map, Marker } from 'bmap-vue'
+import { Map, Marker } from '@mangax/bmap-vue'
 </script>
 <template><Map><Marker /></Map></template>
 \`\`\`
@@ -59,7 +59,7 @@ import { Map, Marker } from 'bmap-vue'
 /** 只含一个标识符的基线，用在「噪音不该被算成用法」那类断言上。 */
 const BASE_ONE = `\`\`\`vue
 <script setup>
-import { Map } from 'bmap-vue'
+import { Map } from '@mangax/bmap-vue'
 </script>
 <template><Map /></template>
 \`\`\`
@@ -115,7 +115,7 @@ describe("check-snippet-consistency · 抽取器有区分力", () => {
   });
 
   it.runIf(hasDist)("docs 多一个名字而另两处没有 → 同样红（并集判据）", () => {
-    const more = GOOD.replace("'bmap-vue'", "'bmap-vue'").replace(
+    const more = GOOD.replace(/'@mangax\/bmap-vue'/, "'@mangax/bmap-vue'").replace(
       "import { Map, Marker }",
       "import { Map, Marker, ZoomControl }",
     );
@@ -135,9 +135,9 @@ describe("check-snippet-consistency · 抽取器有区分力", () => {
       "\n```vue\n" +
       "<!-- <Marker> 在 HTML 注释里不算 -->\n" +
       "<script setup>\n" +
-      "// import { Fake } from 'bmap-vue'\n" +
-      "/* import { AlsoFake } from 'bmap-vue' */\n" +
-      "import { Map } from 'bmap-vue'\n" +
+      "// import { Fake } from '@mangax/bmap-vue'\n" +
+      "/* import { AlsoFake } from '@mangax/bmap-vue' */\n" +
+      "import { Map } from '@mangax/bmap-vue'\n" +
       "</script>\n```\n";
     const r = runGate(["--dir", makeTmp(noisy, noisy, noisy)]);
     expect(r.code, r.output).toBe(0);
@@ -147,9 +147,9 @@ describe("check-snippet-consistency · 抽取器有区分力", () => {
     expect(r.output).toContain("Map");
   });
 
-  it.runIf(hasDist)("从子路径导入也算公开 API（bmap-vue/advanced 等）", () => {
+  it.runIf(hasDist)("从子路径导入也算公开 API（@mangax/bmap-vue/advanced 等）", () => {
     const sub = `\`\`\`ts
-import { unwrapRaw } from 'bmap-vue/advanced'
+import { unwrapRaw } from '@mangax/bmap-vue/advanced'
 \`\`\`\n`;
     const r = runGate(["--dir", makeTmp(sub, sub, sub)]);
     expect(r.code, r.output).toBe(0);

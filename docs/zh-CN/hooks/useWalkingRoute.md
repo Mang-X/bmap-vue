@@ -6,7 +6,7 @@
 `RouteStep`）。差异只有下面三处。
 
 ```ts
-import { useWalkingRoute } from "bmap-vue";
+import { useWalkingRoute } from "@mangax/bmap-vue";
 ```
 
 ## 与驾车的差异

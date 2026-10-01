@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 # #171 item I：`Panorama.capture()` / `Panorama.clearOverlays()`

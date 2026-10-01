@@ -1,5 +1,5 @@
 ---
-"bmap-vue": patch
+"@mangax/bmap-vue": patch
 ---
 
 删除 SDK 私有面嗅探（`_rd`），修复 `<InfoWindow>` 在 JSAPI 4.0 上的打开与内容可见性，并补齐 `Autocomplete` 的清理路径。

@@ -3,7 +3,7 @@
 面向 XYZ / TMS 类标准瓦片服务：比 `XYZLayer` 多了子域轮询、TMS 翻转与四至裁剪。
 
 ```ts
-import { RasterTileLayer } from 'bmap-vue'
+import { RasterTileLayer } from '@mangax/bmap-vue'
 ```
 
 ## 组件示例

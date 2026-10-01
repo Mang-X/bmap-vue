@@ -7,7 +7,7 @@ export const pwa: Partial<PwaOptions> = {
   manifest: {
     id: "/bmap-vue/",
     name: "bmap-vue",
-    short_name: "bmap-vue",
+    short_name: "bmap-vue"
     description:
       "面向 Vue 3 的百度地图组件与 hooks 库，基于百度地图 JavaScript API 4.0（WebGL 渲染，支持 3D 视角）。",
     theme_color: "#FF3028",

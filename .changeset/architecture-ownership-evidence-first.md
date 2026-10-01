@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 Ownership-first / Evidence-first 存量审计（#104）：删掉两处「恢复上游没有公开的因果身份」的抽象，

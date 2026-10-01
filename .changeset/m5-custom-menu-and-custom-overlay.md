@@ -1,5 +1,5 @@
 ---
-"bmap-vue": minor
+"@mangax/bmap-vue": minor
 ---
 
 新增 `<CustomOverlay>`、给 `<ContextMenu>` 补上声明式菜单项，并让「菜单挂到标注上」这条路径真的可用。
