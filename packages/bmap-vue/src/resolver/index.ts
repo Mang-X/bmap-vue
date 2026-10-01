@@ -10,6 +10,7 @@ export interface ComponentResolverLike {
 }
 
 import { componentManifest } from "../manifest";
+import { LIBRARY_PACKAGE_NAME } from "../version";
 
 /** 组件名（从 manifest 单一事实源生成） */
 const v3ComponentNames = componentManifest.map((c) => c.name) as readonly string[];
@@ -23,7 +24,10 @@ export function BMapResolver(): ComponentResolverLike {
       if (!componentNameSet.has(name)) return;
       return {
         name,
-        from: "bmap-vue/components",
+        // 包名在**构建期**从 manifest 注入（见 version.ts）。写死字符串的后果不是
+        // 「找不到包」：`bmap-vue` 这个无 scope 名在 npm 上属于另一位作者，用户的
+        // unplugin-vue-components 会照抄这句话，于是 import 到**错误的项目**。
+        from: `${LIBRARY_PACKAGE_NAME}/components`,
       };
     },
   };

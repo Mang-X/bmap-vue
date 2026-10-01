@@ -51,7 +51,14 @@ const componentsIndex = [
 
 // 2) volar.d.ts(精确类型:Volar 通过 typeof import 解析组件真实 props/emits)
 //    vue-tsc 2(新 Volar)读 module 'vue';v2 时代读 '@vue/runtime-core';双声明兼容
-const componentsLines = names.map((c) => `    ${c.name}: typeof import('bmap-vue')['${c.name}']`)
+//
+//    包名从 manifest 读,不得写死。这份 d.ts 会**跟着包发出去**(它在 `files` 里),而
+//    写死的旧名 `bmap-vue` 会让用户的 Volar 去解析 npm 上另一位作者的同名包——
+//    与安装说明里写的 `@mangax/bmap-vue` 自相矛盾(#45 评审 P1)。
+const pkgName = (JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as {
+  name: string
+}).name
+const componentsLines = names.map((c) => `    ${c.name}: typeof import('${pkgName}')['${c.name}']`)
 const volarDts = [
   '// Generated file. Do not edit directly.',
   'declare module \'vue\' {',

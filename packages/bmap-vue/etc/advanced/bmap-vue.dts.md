@@ -1,4 +1,4 @@
-## API Signature Baseline for "bmap-vue" (entry `./advanced`)
+## API Signature Baseline for "@mangax/bmap-vue" (entry `./advanced`)
 
 > 由 `pnpm generate:api` 生成，请勿手工编辑。
 > 内容是 `dist/advanced.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的全文。
