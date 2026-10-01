@@ -225,13 +225,18 @@ describe("check-docs-brand · 反例（误伤会让门禁不可用）", () => {
 });
 
 describe("#45 retired-scope：旧 npm 名不得回到发布面（PR 评审 P1）", () => {
-  /** 会被判红的形态：真正的导入语句。 */
+  /** 会被判红的形态：真正的导入语句 + tsconfig 的 types 条目。 */
   const BAD = [
     "import { Map } from 'bmap-vue'",
     'import { Map } from "bmap-vue"',
     "import { unwrapRaw } from 'bmap-vue/advanced'",
     "const m = await import('bmap-vue')",
     "const m = require('bmap-vue')",
+    // 这一条是**第二轮评审时真实发生过**的：批量替换改了 119 个文件，却漏了
+    // quick-start 里的 tsconfig types 条目。它既不是 from / require / import(，
+    // 所以门禁当时匹配不到——「防回归」没闭环（PR 评审 P2 实测确认假绿）。
+    '"types": ["bmap-vue/volar"]',
+    '{ "compilerOptions": { "types": ["bmap-vue/volar"] } }',
   ];
   /** 必须放行的形态：库名文案与仓库路径。 */
   const GOOD = [
@@ -243,6 +248,10 @@ describe("#45 retired-scope：旧 npm 名不得回到发布面（PR 评审 P1）
     "由 `packages/bmap-vue/src/manifest.ts` 生成",
     "见 https://github.com/Mang-X/bmap-vue",
     "从 https://Mang-X.github.io/bmap-vue/zh-CN 进入",
+    // 已迁移的 tsconfig 条目放行——否则这条规则会把正确写法也判红
+    '"types": ["@mangax/bmap-vue/volar"]',
+    // YAML frontmatter 里 @ 必须加引号；未加引号的形态由 docs:build 拦（不在本门禁职责内）
+    'title: "@mangax/bmap-vue"',
   ];
 
   it.each(BAD)("旧名的导入语句必须红：%s", (line) => {
