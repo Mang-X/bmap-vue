@@ -2,8 +2,8 @@
 
 > 由 `pnpm generate:api` 生成，请勿手工编辑。
 > 内容是 `dist/index.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的全文。
-> API Extractor 分析不了这两个出口的 Volar `__VLS_` 悬空引用，
-> 但它们的类型面仍必须有一份会变红的基线（ADR 2026-09-25 决策 5 / #159 评审 P1-1）。
+> 这个出口有 API report 与本签名快照，但**不适用** forgotten-export 身份集合：
+> 根入口：146 个 Volar 机器名（`__VLS_*`）+ 46 个待裁决的真实类型。机器名不该进公共 API 冻结语义；真实类型的公共面裁决属 #165，不在本票范围。
 
 ```ts
 import { AllowedComponentProps } from "vue";
@@ -1166,154 +1166,172 @@ declare type __VLS_PrettifyLocal_4<T> = {
 declare type __VLS_PrettifyLocal_5<T> = {
     [K in keyof T]: T[K];
 } & {};
-declare type __VLS_Slots = {} & {
-    error?: (props: typeof __VLS_1) => any;
-} & {
-    loading?: (props: typeof __VLS_3) => any;
-} & {
-    default?: (props: typeof __VLS_5) => any;
+declare type __VLS_Slots = {
+    error?(props: {
+        error: BMapError | null;
+        retry: () => Promise<void>;
+    }): any;
+    loading?(props: {
+        status: "loading";
+    }): any;
+    default?(props: {
+        status: ClientStatus;
+    }): any;
 };
-declare type __VLS_Slots_10 = {} & {
-    default?: (props: typeof __VLS_5) => any;
+declare type __VLS_Slots_10 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_11 = {} & {
-    default?: (props: typeof __VLS_5) => any;
+declare type __VLS_Slots_11 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_12 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_12 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_13 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_13 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_14 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_14 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_15 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_15 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_16 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_16 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_17 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_17 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_18 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_18 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_19 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_19 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_2 = {} & {
-    error?: (props: typeof __VLS_1) => any;
-} & {
-    loading?: (props: typeof __VLS_3) => any;
-} & {
-    default?: (props: typeof __VLS_5) => any;
+declare type __VLS_Slots_2 = {
+    error?(props: {
+        status: MapStatus;
+        error: {} | null;
+        containerReady: boolean;
+        retry: () => Promise<MapReadyContext>;
+    }): any;
+    loading?(props: {
+        status: MapStatus;
+        error: {} | null;
+        containerReady: boolean;
+        retry: () => Promise<MapReadyContext>;
+    }): any;
+    default?(props: {
+        status: MapStatus;
+        map: MapHandle | null;
+        error: {} | null;
+        client: BMapClient | null;
+    }): any;
 };
-declare type __VLS_Slots_20 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_20 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_21 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_21 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_22 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_22 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_23 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_23 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_24 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_24 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_25 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_25 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_26 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_26 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_27 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_27 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_28 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_28 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_29 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_29 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_3 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_3 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_30 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_30 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_31 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_31 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_32 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_32 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_33 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_33 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_34 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_34 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_35 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_35 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_36 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_36 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_37 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_37 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_38 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_38 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_39 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_39 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_4 = {} & {
-    default?: (props: typeof __VLS_5) => any;
+declare type __VLS_Slots_4 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_40 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_40 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_41 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_41 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_42 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_42 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_43 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_43 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_44 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_44 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_45 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_45 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_46 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_46 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_47 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_47 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_5 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_5 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_6 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_6 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_7 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_7 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_8 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_8 = {
+    default?(props: Record<string, never>): any;
 };
-declare type __VLS_Slots_9 = {} & {
-    default?: (props: typeof __VLS_1) => any;
+declare type __VLS_Slots_9 = {
+    default?(props: Record<string, never>): any;
 };
 declare type __VLS_WithSlots<T, S> = T & {
     new (): {

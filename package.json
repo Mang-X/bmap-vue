@@ -23,6 +23,7 @@
     "check:package-shape": "node --experimental-strip-types scripts/check-package-shape.mts",
     "check:toolchain": "node --experimental-strip-types scripts/check-toolchain.mts",
     "check:api": "node --experimental-strip-types scripts/check-api.mts",
+    "check:dts-strict": "node --experimental-strip-types scripts/check-dts-strict.mts",
     "verify:package": "node --experimental-strip-types scripts/verify-package.mts",
     "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",
     "perf:baseline": "node --experimental-strip-types scripts/collect-performance-baseline.mts",

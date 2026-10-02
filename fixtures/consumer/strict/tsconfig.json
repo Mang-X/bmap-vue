@@ -1,0 +1,14 @@
+{
+  "_comment": "发布声明的**严格消费**编译（issue #188）。与 `fixtures/consumer/tsconfig.json` 的唯一实质差别是 `skipLibCheck: false` —— 那份是有意的宽松配置（它要验的是「示例能对着 tarball 编译」），而本份要验的是**声明本身合法**。`skipLibCheck: true` 下 tsc 根本不进 `.d.ts` 内部，发布声明里的悬空引用可以完全无感地流到消费方（#188 的原始问题正是 51 处 `TS2304`）。判据见 `fixtures/consumer/strict/probe.ts` 的文件头注释。刻意不引入 `bmap-draw` 等第三方依赖：本门禁只关心本库自己的声明面。",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": false,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["probe.ts"]
+}

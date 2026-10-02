@@ -1,7 +1,9 @@
 /**
- * `ae-forgotten-export` 零容忍门禁自测（issue #160 + #165 回归修补）
+ * `ae-forgotten-export` 零容忍门禁自测（issue #160 + #165 回归修补，#188 扩展）
  *
- * 五份 `etc/<出口>/forgotten-exports.json` 必须**全空**（`[]`）。这道门禁的失效方式与
+ * 适用的 `etc/<出口>/forgotten-exports.json` 必须**全空**（`[]`）；登记为「不适用」的出口
+ * 则必须**没有**这个文件（`index` / `components`，#188 起 —— 理由见
+ * `scripts/api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`）。这道门禁的失效方式与
  * 本仓库其他门禁不同，值得单列：
  *
  * 1. **门禁只对「没跑生成器」严格**。`check:api` 逐出口比对身份集合、方向对称（新增与清理
@@ -14,7 +16,8 @@
  * 2. **豁免表必须显式且空**。「没登记就是不允许」这条不变量只有靠空表才成立；一旦有条豁免
  *    被加进来忘了删，门禁会继续放行那个名字。第二节把这条钉住。
  * 3. **基线非空时，门禁形同虚设**。判据不是「比条数」而是「恒等于 `[]`」——任何非空都是
- *    回归，哪怕只有一个名字。第三节直接读仓库里五份基线。
+ *    回归，哪怕只有一个名字。第三节直接读仓库里各份基线，并对「已登记不适用」的出口
+ *    反向断言其**不存在**（否则「不适用」会悄悄退化成「两种都做」）。
  * 4. **门禁没接进 CI / 被 `continue-on-error` 架空**。第四节把脚本接线读出来断言。
  *
  * 第一节的反例刻意成对：「清理」方向必须照常写 —— 否则把一个名字真正导出之后，基线反而永远
@@ -26,6 +29,7 @@ import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  FORGOTTEN_EXEMPT_ENTRIES,
   FORGOTTEN_EXEMPTIONS,
   REPORTED_ENTRIES,
   collectForbiddenAdditions,
@@ -236,12 +240,44 @@ describe("门禁脚本自身的签名一致性（评审 P2 的那类失效兜底
   });
 });
 
-describe("五份身份集合基线恒为空", () => {
-  it.each(ENTRIES)("./%s 的 forgotten-exports.json 是 []（存量已清零）", (entry) => {
+describe("身份集合基线：适用出口恒为空、不适用出口恒不存在", () => {
+  /**
+   * #188 起这条断言分两种出口，两种都必须钉住：
+   *
+   * - **适用**的出口：基线存在且恒为 `[]`（原来的零容忍，判据未变）；
+   * - **登记为不适用**的出口（`index` / `components`）：基线**必须不存在**。
+   *   第二个方向同样要判——只判「适用出口为空」的话，把不适用出口的基线写出来
+   *   （哪怕是 `[]`）不会有任何用例变红，「不适用」就悄悄退化成了「两种都做」，
+   *   而那正是 #188 明确要否定的（146 个 Volar 机器名进公共 API 冻结表）。
+   */
+  const exemptEntries = Object.keys(FORGOTTEN_EXEMPT_ENTRIES);
+  const applicableEntries = ENTRIES.filter((entry) => !(exemptEntries as string[]).includes(entry));
+
+  it("两种出口都被分到了（判据没有落在空集上）", () => {
+    expect(applicableEntries.length, "适用出口名单空了").toBeGreaterThan(0);
+    expect(exemptEntries.length, "不适用出口名单空了").toBeGreaterThan(0);
+  });
+
+  it.each(applicableEntries)("./%s 的 forgotten-exports.json 是 []（存量已清零）", (entry) => {
     const target = resolve(ETC, entry, "forgotten-exports.json");
     expect(existsSync(target), `${entry}: 身份集合基线缺失 —— 跑 pnpm generate:api 并提交`).toBe(true);
     // 判据是「恒空」，不是「比条数」：任何非空都是回归，哪怕只有一个名字。
     expect(JSON.parse(readFileSync(target, "utf8")), `${entry}: 未导出类型存量回来了`).toEqual([]);
+  });
+
+  it.each(exemptEntries)("./%s 已登记为不适用 ⇒ 基线文件必须不存在", (entry) => {
+    const target = resolve(ETC, entry, "forgotten-exports.json");
+    expect(
+      existsSync(target),
+      `${entry} 登记为「身份集合不适用」，却存在基线文件 ${target} —— ` +
+        `要么删掉它，要么把出口从 FORGOTTEN_EXEMPT_ENTRIES 里移出`,
+    ).toBe(false);
+  });
+
+  it("每条不适用登记都带理由（否则「不适用」是没有依据的跳过）", () => {
+    for (const [entry, record] of Object.entries(FORGOTTEN_EXEMPT_ENTRIES)) {
+      expect(record.reason.trim(), `${entry} 的不适用理由是空的`).not.toBe("");
+    }
   });
 });
 

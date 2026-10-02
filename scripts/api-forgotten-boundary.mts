@@ -27,7 +27,58 @@
  * 而不是自己抄一份：抄一份的话，加第六个出口时门禁会静默漏掉它（AGENTS.md：
  * 「只查数字抓不到『数量对了但漏列』」，这里同理）。
  */
-export const REPORTED_ENTRIES = ["advanced", "composables", "plugins", "resolver", "ui-kit"] as const;
+export const REPORTED_ENTRIES = [
+  "advanced",
+  "composables",
+  "plugins",
+  "resolver",
+  "ui-kit",
+  // #188 起接入：这两个出口此前因 Volar `__VLS_*` 悬空引用而**无法**被 AE 分析，
+  // 挂在那条「预期失败即通过」的探针上。声明修好后（47 个组件补 `defineSlots`，
+  // 见 `packages/bmap-vue/src/components/**`），AE 能正常分析，report 走正常比对。
+  "index",
+  "components",
+] as const;
+
+/**
+ * **不适用**「未导出类型身份集合」基线的出口，逐个带理由（#188）。
+ *
+ * 这不是「跳过」，而是有登记的不适用：这些出口仍然**跑 AE、比对 API report**，
+ * 只是不生成 `etc/<出口>/forgotten-exports.json`。判据刻意写死成「表里列出的出口
+ * 不写身份集合基线」而不是「读不出就当空集」—— 后者会让基线缺失静默通过。
+ *
+ * 为什么不适用，理由**逐出口分开写**（合写成一句就变成「适用于所有出口的通用借口」，
+ * 那等于没有理由）：
+ *
+ * - `index` / `components` 这两个出口的 `ae-forgotten-export` 实测 192 个名字，分两类：
+ *   ① **146 个是 Volar 机器名**（`__VLS_Slots_*` / `__VLS_WithSlots_*` /
+ *   `__VLS_component_*` 各 47，`__VLS_PrettifyLocal_*` 5）。把它们登记进
+ *   `etc/<出口>/forgotten-exports.json` 等于**给编译器内部临时名发公共 API 通行证** ——
+ *   那张表的语义是「导出面之外被引用的、因而消费方无法命名的类型」，
+ *   而 `__VLS_*` 恰恰是「消费方永远不该命名的东西」。
+ *   ② **46 个是本库真实类型**（`BMapError` / `PanoramaHandle` / `BMapPluginDefinition` /
+ *   `GeocodeRequest` …）。它们今天**已经**存在于 `dist/index.d.ts`，只是 AE 此前
+ *   看不见（分析在第一个 `__VLS_` 上就抛了）。每个该「升为公共导出」还是
+ *   「收窄签名」是一次**独立的公共面裁决**，属 ADR 2026-09-25 的范围（#165），
+ *   不由 #188 这票顺手带出 —— 顺手处置会把一次声明修复变成一次公共 API 面变更。
+ *
+ * 表格刻意**非空**：将来若某个出口补齐了真实类型的裁决，把它从这张表里删掉即可
+ * （`tests/behavior/api-forgotten-exports-gate.test.ts` 会立刻要求那份基线存在且为空）。
+ */
+export const FORGOTTEN_EXEMPT_ENTRIES: Readonly<
+  Record<string, { readonly reason: string }>
+> = {
+  index: {
+    reason:
+      "根入口：146 个 Volar 机器名（`__VLS_*`）+ 46 个待裁决的真实类型。" +
+      "机器名不该进公共 API 冻结语义；真实类型的公共面裁决属 #165，不在本票范围。",
+  },
+  components: {
+    reason:
+      "组件出口：与 `index` 同源同形（同一批 47 个 SFC 的插槽类型），故同样不适用。" +
+      "两处分开登记而不是共用一条，是为了让「为什么」跟着出口走。",
+  },
+};
 
 /**
  * 一个符号在**某个出口**上被刻意接受为未导出类型的记录。
