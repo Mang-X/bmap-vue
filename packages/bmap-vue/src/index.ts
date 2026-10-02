@@ -325,7 +325,7 @@ export type {
   Viewport,
   FlyToOptions,
   // 五条视野命令的官方 `options` 投影。它们出现在**已导出**的
-  // `MapCommands` / `MapDriver` 签名里 ⇒ 消费方要构造就得能命名（ADR 2026-09-25 的处置类别 ①）
+  // `MapCommands` / `MapDriver` 签名里 ⇒ 消费方要构造就得能命名（处置类别 ①）
   ViewCommandOptions,
   SetZoomOptions,
   PanToOptions,
@@ -386,7 +386,7 @@ export type { OverlayCommandTypes } from "./core/overlays/overlayCommands";
 // 控件的命令面（issue #168 item 1）。与 `OverlayCommandTypes` 同一理由：
 // `ControlDriver.locationCommands()` / `cityListCommands()` 是**公共 Facet 面**上的方法，
 // 它的返回类型因此出现在公共声明里——不显式导出就成了「未导出类型」
-// （`ae-forgotten-export`，见 ADR 2026-09-25）。
+// （`ae-forgotten-export`）。
 //
 // `ControlCommandTypes` 是**按组件名**的索引（键是 `LocationControl` / `CityListControl`），
 // 与 `OverlayCommandTypes` 同一手法：调用方看到的是 `<LocationControl ref>`，不是 kind。

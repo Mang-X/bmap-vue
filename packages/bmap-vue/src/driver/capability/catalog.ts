@@ -198,8 +198,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // 它们此前被 Class 5 删除，理由是「`MapDriver` 没有对应命令面，而 `supports()` 却返回
   // true —— 一个兑现不了的承诺」。那条推理的前提（成员在运行时不存在）**是错的**：
   // live AK 实测 `BMap.Map.prototype` 上 `getScreenshot` / `flyTo` / `getViewport` / `setViewport`
-  // 全部在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四，取证探针
-  // `scripts/probe-runtime-members.mts`）。**用「我们还没接线」论证「能力不存在」，
+  // 全部在位（取证探针 `scripts/probe-runtime-members.mts`）。**用「我们还没接线」论证「能力不存在」，
   // 等于把「实现缺口」记成「上游缺口」**——  要求能力不得无理由裁剪
   // 正确的处置是补实现，而不是删条目。两条现已由 `MapDriver.getScreenshot` /
   // `MapDriver.flyTo` 兑现。

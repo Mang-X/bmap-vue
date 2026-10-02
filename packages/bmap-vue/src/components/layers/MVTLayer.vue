@@ -37,7 +37,7 @@ import type {
 const props = withDefaults(defineProps<MVTLayerProps>(), {
   visible: true,
   // 布尔 option 显式写 `undefined`：绕开 Vue「缺省即 false」的 props 转换，
-  // 让「没传」=「不表态」（ADR 2026-09-17 决策 5，与 XYZLayer / RasterTileLayer 同口径）。
+  // 让「没传」=「不表态」（与 XYZLayer / RasterTileLayer 同口径）。
   noCollision: undefined,
   useThumb: undefined,
   encrypt: undefined,

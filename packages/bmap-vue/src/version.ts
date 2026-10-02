@@ -1,7 +1,7 @@
 /**
  * 组件库版本（library version）
  *
- * 仓库里同时存在三种「版本」（见 ADR 2026-09-10-jsapi-v4-only-baseline）：
+ * 仓库里同时存在三种「版本」：
  * - **组件库版本**：本文件的 `LIBRARY_VERSION`（= `package.json` 的 `version`）；
  * - **SDK engine**：内部驱动枚举，仅有 `jsapi-v4`（旧引擎已在  删除）；
  * - **SDK version**：百度地图 JSAPI 运行时版本（来自 Provider 的结构化加载结果）。

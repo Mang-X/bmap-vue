@@ -10,7 +10,7 @@
  * | 普通 option | 变化时先问 `ControlDriver.planOptions()`：`mutable` 就地 `setOptions`，`recreate` 重建控件 |
  * | SDK 事件 | `spec.events()` 的绑定进入**实例 scope**，随实例释放 |
  *
- * 释放顺序是硬约束（ADR 2026-09-11 §6，issue #22 实施步骤 4）：卸载时**先解绑业务事件**，
+ * 释放顺序是硬约束（issue #22 实施步骤 4）：卸载时**先解绑业务事件**，
  * 再由 Map 移除 SDK 资源——否则 SDK 在 `removeControl` 期间同步派发的事件会打到已经开始
  * 拆解的业务回调上（`LocationControl` 的 locationSuccess/locationError 就是这种绑定）。
  * `useSdkResource` 的默认顺序是「先 registration.dispose、再 instanceScope.dispose」，

@@ -51,8 +51,8 @@ export interface PanoramaProps {
  * `positionChange` / `povChange` / `zoomChange` / `idChange` / `sceneTypeChange` /
  * `linksChange` 回报——官方的 `*_changed` 事件**不带载荷**，载荷是组件回读 getter 补齐的。
  *
- * ⚠️ 销毁：官方 4.0 的 `Panorama#destroy()` 在**未加载任何场景**的实例上会抛错（ADR 2026-09-12
- * 的真实 AK smoke 记录），因此组件路径的正确姿势是「先 `point` / `id`、再销毁」。真的没场景时
+ * ⚠️ 销毁：官方 4.0 的 `Panorama#destroy()` 在**未加载任何场景**的实例上会抛错（真实 AK
+ * smoke 记录），因此组件路径的正确姿势是「先 `point` / `id`、再销毁」。真的没场景时
  * 销毁失败只告警、不抛错（卸载流程里抛异常没有任何人能接），本库自己的资源照常释放。
  */
 const props = withDefaults(defineProps<PanoramaProps>(), {
@@ -448,8 +448,8 @@ function subscribe(target: ActiveViewer): void {
       forward("visiblePoiTypeChanged", projectPoiType(event)),
     ),
   );
-  // ⚠️ 官方还有 `destroy`，**刻意不订阅**（释放顺序与 ADR 2026-09-11 §6 冲突，
-  // 逐条取舍见上面 `defineEmits` 里那条注释）。
+  // ⚠️ 官方还有 `destroy`，**刻意不订阅**（它会与本组件的「先 `point` / `id`、再销毁」
+  // 顺序冲突，逐条取舍见上面 `defineEmits` 里那条注释）。
 }
 
 /**

@@ -26,7 +26,7 @@
  * 页面必须真的把 JSAPI 4.0 拉起来才能谈插件行为。AK 从 `BAIDU_MAP_AK` 读，**不落库**；
  * 仓库里 `docs/.vitepress/theme/index.ts` 有一支已入库的浏览器端 AK，本地冒烟可以用它。
  *
- * ## 与「插件页」的区别（ADR 2026-09-13-plugin-compat-inventory 决策 8）
+ * ## 与「插件页」的区别
  *
  * 本脚本是**证据生成器 + 可选插件门禁**，不是 smoke harness 的插件页：它不登记进
  * `tests/browser/jsapi-v4` 的检查表、不参与必需链路的放行判定。把插件脚本塞进必需页面会让
@@ -269,7 +269,7 @@ const PAGE_JS = `
         var afterSetSpeed = polyline.getPath().length;
         // 播放到结尾：轮询到 path 连续 800ms 不再变化为止（duration=2000，上限 8s）。
         // 这条**不设门禁**：轮询到稳定的判定本身近乎恒真，写进 checks 只会制造一条没有区分力的
-        // 断言（ADR 2026-09-21 的取舍）；它的价值是 readings 里的结尾长度与 onAnimateEnd 是否回调。
+        // 断言（取舍）；它的价值是 readings 里的结尾长度与 onAnimateEnd 是否回调。
         var lastLength = afterSetSpeed;
         var stableSince = null;
         var elapsed = 0;
