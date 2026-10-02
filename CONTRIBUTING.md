@@ -22,6 +22,12 @@
 - Node.js `>= 24.0.0`
 - pnpm `>= 12.0.0`（仓库用 pnpm workspace，请不要用 npm / yarn 安装依赖）
 
+pnpm 的安装设置只写在 **`pnpm-workspace.yaml`**（camelCase）里：`package.json` 的 `pnpm` 字段
+与 `.npmrc` 里的安装设置在 pnpm 12 下**都不再被读取**。把它们写在老位置不会报错，只会让干净
+安装打印一行 `[WARN] ... no longer read`——**配置看起来生效了，实际没有**。本仓已因此清理过一次
+（`overrides` 曾谎报「vue-tsc 锁在 3.3.11」，而实际是包构建 2.2.12），依据见
+[ADR 2026-10-02](docs/adr/2026-10-02-pnpm-config-migration-and-declaration-toolchain.md)。
+
 ```bash
 git clone https://github.com/Mang-X/bmap-vue
 cd bmap-vue
@@ -56,6 +62,7 @@ CI 跑的就是下面这些，本地先跑一遍能省一轮往返：
 ```bash
 pnpm install --frozen-lockfile
 
+pnpm check:toolchain             # 声明工具链三方核对：声明 / lockfile / 实际安装（#187）
 pnpm check:raw-sdk              # 禁区目录静态扫描
 pnpm check:raw-sdk:tree         # 按白名单扫描整棵 src
 pnpm generate:manifest:check    # 组件 manifest 无漂移
