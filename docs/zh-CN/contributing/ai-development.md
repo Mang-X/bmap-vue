@@ -160,6 +160,7 @@ error TS2552: Cannot find name 'DisplayOptions'.   // Map.d.ts / MapOptions.d.ts
 | `pnpm check:interaction-props` | `<Map>` 交互开关 prop 的**「未传」可达性**（#179）：`INTERACTION_PROPS` 的每一项都必须在 `withDefaults` 里显式出现。Vue 把缺省 `Boolean` prop 的「没传」强转成 `false`，而 `syncEnableProps` 靠 `!== undefined` 表达「不表态」——不在 `withDefaults` 里出现，官方 `@default true` 的双指 / 双击缩放会在每次建图时被静默 `disable*()`。判据只管**存在性**不管值，且 fail-closed |
 | `pnpm check:props-projected` | **`*Props` 声明了却没有读者**的 prop 必须为空（#177）。已有的声明面门禁全都只覆盖一个方向，因此 `<LocationControl>.onLocationStart` 声明了、Vue 正常接收、然后被静默丢弃，长期无人拦截。按架构分三档：控件查 `options()` 的投影；走 `useOverlaySpec` 的**不查**（`OverlayFieldMap` 是 mapped type，漏键 `vue-tsc` 就红）；走 `useOverlayResource` 的手写 `create(ctx, p)` 才是主要增量。唯一例外是 `ControlBaseProps` 的成员（`visible` 走 `applyVisible` 自己的通道） |
 | `pnpm check:raw-sdk:declarations` | 旧引擎残留在**公共声明**上的不变量：`dist/**/*.d.ts` 不得再出现 `BMapGL` 或已删除的 engine 取值。`check:public-dts` 只禁 `BMap.*` / `BMapGL` / 官方类型包，**不**禁 engine 取值字面量，所以发布产物上这条覆盖是独立的一步。**每个相位至少扫到一个文件才放行**（空目录 / 该相位被整体跳过都判失败——「扫到 0 个文件」与「真的干净」必须可区分） |
+| `pnpm check:dts-strict` | 发布声明能被**严格消费方**编译（#188）：把 `fixtures/consumer/strict/probe.ts` 当消费方源码，以 `skipLibCheck: false` 编译全部 7 个出口，零错误才过。这是**唯一**能发现「声明里有悬空标识符」的门禁——`check:api` 用的 API Extractor 分析不出模块局部标识符上的 `typeof`，`fixtures/consumer/tsconfig.json` 又是 `skipLibCheck: true`（`.d.ts` 内部从不被检查），两道门合起来让 51 处 `TS2304` 一路发布出去而全绿。探针**正反两侧**：合法 prop 必须通过，`@ts-expect-error` 断言的「成员不存在」与「成员类型写错」必须真报错（否则声明面整体退化成 `any` 时门禁恒真），`TS2578` 同样判红 |
 | `pnpm generate:plugin-inventory:check` | 校验插件兼容 inventory 的生成物（文档 + JSON）与数据模块无漂移 |
 | `pnpm probe:plugin-compat` | 从锁定 URL 拉插件真实产物，重新核对 inventory 的三列并比对结论（**需要网络**，放 nightly / 手动） |
 | `pnpm probe:plugin-runtime` | 在真实 JSAPI 4.0 页面上（**需要 AK + 浏览器**）跑四个插件的最小路径，产出 inventory 里的运行时读数（`0` 通过 / `1` 有插件运行时抛错 / `3` SDK 没起来） |
@@ -218,6 +219,7 @@ pnpm check:doc-props       # 文档/示例里的 prop 名 vs 真实声明面
 pnpm check:interaction-props # <Map> 交互开关 prop 的「未传」可达性
 pnpm check:props-projected # *Props 声明了却没有读者的 prop 必须为空（反向门禁）
 pnpm check:snippet-consistency # 三处 API 示例一致(需先 build:package)
+pnpm check:dts-strict    # 发布声明能被严格消费方编译（7 出口 skipLibCheck:false 零错误，需先 build:package）
 pnpm docs:build            # 涉及文档时
 ```
 

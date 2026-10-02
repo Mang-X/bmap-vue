@@ -66,7 +66,7 @@ export const REPORTED_ENTRIES = [
  * （`tests/behavior/api-forgotten-exports-gate.test.ts` 会立刻要求那份基线存在且为空）。
  */
 export const FORGOTTEN_EXEMPT_ENTRIES: Readonly<
-  Record<string, { readonly reason: string }>
+  Partial<Record<(typeof REPORTED_ENTRIES)[number], { readonly reason: string }>>
 > = {
   index: {
     reason:

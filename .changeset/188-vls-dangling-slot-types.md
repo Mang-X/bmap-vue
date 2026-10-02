@@ -24,11 +24,18 @@ name '__VLS_1'`。消费方开 `skipLibCheck: false` 直接编译不过，而 `c
 AE 的 rollup 只保留**导出面可达**的符号，模块局部变量不在其中。`typeof` 指向它，
 于是引用它的 `__VLS_Slots` 留在产物里而声明没了 —— 与它是不是多声明符无关。
 
-## 修法：47 个组件补 `defineSlots`
+## 修法：52 个组件补 `defineSlots`
 
 `defineSlots` 走另一条 emit 路径：Volar 把载荷**内联**进 `__VLS_Slots`，全程没有中间
-`var`。45 个裸 `<slot />` 用 `default?(props: Record<string, never>): any`；`Map.vue` 与
-`BMapProvider.vue` 按各自实际绑定写载荷。实测裸插槽与 `<Teleport>` 内插槽都通过模板校验。
+`var`。47 个非泛型组件里 45 个是裸 `<slot />`，用
+`default?(props: Record<string, never>): any`；`Map.vue` 与 `BMapProvider.vue` 按各自实际
+绑定写载荷。实测裸插槽与 `<Teleport>` 内插槽都通过模板校验。
+
+另 5 个是 `components/data/*` 的 `generic="Item"` 泛型组件（`MarkerList` /
+`PointCollection` / `MarkerCluster` / `PointIconLayer` / `PointLayer`）。它们**本来**就
+emit 出合法形态（vue-tsc 无法把泛型组件的插槽类型提升成顶层别名，于是内联展开），
+首轮据此没改。但「当时恰好合法」不是判据：换个 Volar 版本或改一下模板就可能退回悬空
+形态，而没有任何门禁会红。补齐后另立一条判据（见下）。
 
 **附带收益**：声明从此**受模板校验**（写错载荷会报 `TS2353`），插槽类型有单一事实源，
 不再由 Volar 从模板反推。
@@ -63,6 +70,23 @@ AE 的 rollup 只保留**导出面可达**的符号，模块局部变量不在�
 用 Compiler API 而非 `execFileSync('tsc')`：后者要在临时目录拼出能解析 `vue` 的
 `node_modules`，而 pnpm 的符号链接布局让拼装极易变成「红，但红的原因与门禁无关」
 （实测首次尝试报了 10 条 `has no exported member 'ComputedRef'`，全是环境噪音）。
+判据本身从 `fixtures/consumer/strict/tsconfig.json` 读（`skipLibCheck: false` 与
+`strict` 是它的两个支点），不在脚本里内联第二份。
+
+### 探针的断言必须实例化
+
+首版把反 `any` 防御写成 `export type _Root = [NotAny<...>, ...]` —— **未实例化的类型别名
+是惰性的**，TypeScript 只在别名被真正求值时才检查其内部，实测 `NotAny<any>` 单独编译
+零错误。那样声明面整体退化成 `any` 时门禁照样全绿，「防御」根本没有牙。
+
+改成 `const _rootIsTyped: [...] = [true, ...]` 后，转红可复现。同理，插槽载荷断言不能走
+`InstanceType<typeof Map>["$slots"]`：Volar 的 `__VLS_WithSlots<T, S>` 是交叉类型，
+`T`（`DefineComponent`）自带构造签名，`InstanceType` 取到的是它而不是带 `$slots` 的分支
+（实测得到 `never`，断言随即恒假）。改从构造签名直接取 `$slots`，并用**单向**成员判断
+（`P extends M`）—— 成员类型写 `unknown` 时双向判断恒假。
+
+四条断言逐条验证过会转红：注入悬空引用 → `TS2304`；`MapProps` 放宽成索引签名 →
+`TS2578`；把插槽 `status` 成员改名 → `TS2322`；把导出替换成 `any` → `TS2322`。
 
 ## 验收
 

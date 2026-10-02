@@ -2617,7 +2617,7 @@ export declare const MarkerCluster: <Item>(__VLS_props: NonNullable<Awaited<type
     expose(exposed: ShallowUnwrapRef<{}>): void;
     attrs: any;
     slots: {
-        default?: (props: {}) => any;
+        default?(props: Record<string, never>): any;
     };
     emit: ((evt: "item-click", item: Item) => void) & ((evt: "cluster-click", pick: ClusterPick<Item>) => void) & ((evt: "cluster-change", change: ClusterChange) => void);
 }>) => VNode & {
@@ -2698,7 +2698,7 @@ export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof 
     expose(exposed: ShallowUnwrapRef<{}>): void;
     attrs: any;
     slots: {
-        default?: (props: {}) => any;
+        default?(props: Record<string, never>): any;
     };
     emit: (evt: "item-click", item: Item) => void;
 }>) => VNode & {
@@ -3141,7 +3141,7 @@ export declare const PointCollection: <Item>(__VLS_props: NonNullable<Awaited<ty
     }>): void;
     attrs: any;
     slots: {
-        default?: (props: {}) => any;
+        default?(props: Record<string, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {
@@ -3173,7 +3173,7 @@ export declare const PointIconLayer: <Item>(__VLS_props: NonNullable<Awaited<typ
     }>): void;
     attrs: any;
     slots: {
-        default?: (props: {}) => any;
+        default?(props: Record<string, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {
@@ -3225,7 +3225,7 @@ export declare const PointLayer: <Item>(__VLS_props: NonNullable<Awaited<typeof 
     }>): void;
     attrs: any;
     slots: {
-        default?: (props: {}) => any;
+        default?(props: Record<string, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {

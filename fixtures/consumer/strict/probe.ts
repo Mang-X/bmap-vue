@@ -37,8 +37,14 @@ import { UI_KIT_STYLE_PATH } from "@mangax/bmap-vue/ui-kit";
 import type { MapProps, MarkerProps } from "@mangax/bmap-vue";
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-// 六个非 UI 出口的值导出都拿到了具体类型
-export type _Root = [
+// 七个出口的值导出都拿到了具体类型。
+//
+// **刻意实例化成 `const`，而不是写 `export type _Root = [...]`。**
+// 未实例化的类型别名是**惰性**的：TypeScript 只在别名被真正求值时才检查其内部，
+// 所以 `export type _Root = NotAny<any>` 单独编译是**零错误**（实测）——
+// 那样这条「反 any 防御」根本没有牙，退化成 `any` 时门禁照样全绿。
+// 写成 `const _root: NotAny<any> = true` 后，导出退化成 `any` 会立刻报 `TS2322`。
+const _rootIsTyped: [
   NotAny<typeof Map>,
   NotAny<typeof Marker>,
   NotAny<typeof ZoomControl>,
@@ -51,27 +57,41 @@ export type _Root = [
   NotAny<typeof useMapContext>,
   NotAny<typeof resolvePluginDefinition>,
   NotAny<typeof UI_KIT_STYLE_PATH>,
-];
+] = [true, true, true, true, true, true, true, true, true, true, true];
 
 /**
  * 插槽类型可取用（#188 的核心修复面）。
  *
- * 取 `$slots` 是对「插槽契约真的进了声明面」的直接断言。此前 `__VLS_Slots`
- * 引用的是已被打包阶段丢弃的 `__VLS_1`，这里连取都取不到。
+ * 断言写法刻意**不**用 `InstanceType<typeof Map>["$slots"]`：`__VLS_WithSlots<T, S>` 是
+ * 交叉类型 `T & { new (): { $slots: S } }`，而 `T`（`DefineComponent`）自己就带构造签名，
+ * `InstanceType` 取到的是**它**而不是带 `$slots` 的那个分支 —— 实测那样写会得到
+ * `never`，断言随即恒假。直接从构造签名的 `$slots` 取才对。
  */
-export type MapSlots = InstanceType<typeof Map>["$slots"];
-export type ProviderSlots = InstanceType<typeof BMapProvider>["$slots"];
+type SlotsOf<T> = T extends { new (...args: never[]): { $slots: infer S } } ? S : "取不到 $slots";
+export type MapSlots = SlotsOf<typeof Map>;
+export type ProviderSlots = SlotsOf<typeof BMapProvider>;
 
-/** `<Map>` 的状态插槽载荷必须保留**具体成员**类型，而不是被放宽成 `any`。 */
-export type MapDefaultSlot = NonNullable<Extract<MapSlots["default"], (...args: never[]) => unknown>>;
-export type _MapSlotIsTyped = MapDefaultSlot extends (props: {
+/** `<Map>` 的默认插槽载荷必须保留**四个具名成员**，而不是被放宽成 `any`。 */
+type MapSlotMembers = {
   status: unknown;
   map: unknown;
   error: unknown;
   client: unknown;
-}) => unknown
-  ? true
-  : "`<Map>` 的默认插槽载荷丢失了成员类型（#188 回归）";
+};
+type ProviderSlotMembers = { status: unknown };
+type DefaultSlotOf<S> = S extends { default?: infer F } ? NonNullable<F> : never;
+/**
+ * 「载荷**至少有**这些成员」的**单向**判断。
+ *
+ * 刻意单向（`P extends M`）而不是双向：成员类型写 `unknown` 时双向不成立 ——
+ * `MapHandle | null` 与 `unknown` 互不assignable，写成双向会让这条断言恒假。
+ * 单向正是这里要的语义：只关心「成员还在不在、名字没变」，不关心具体类型
+ * （具体类型由上面 `MapProps` 那组 `@ts-expect-error` 守着）。
+ */
+type HasSlotMembers<T, M> = T extends (props: infer P) => unknown ? (P extends M ? true : false) : false;
+// 实例化（理由同 `_rootIsTyped`）：未实例化的 `type` 是惰性的，没有判别力。
+const _mapSlotIsTyped: HasSlotMembers<DefaultSlotOf<MapSlots>, MapSlotMembers> = true;
+const _providerSlotIsTyped: HasSlotMembers<DefaultSlotOf<ProviderSlots>, ProviderSlotMembers> = true;
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
@@ -103,4 +123,13 @@ const badMarker: MarkerProps = {
 
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-export { okProps, okMarkerProps, badZoom, badProp, badMarker };
+export {
+  okProps,
+  okMarkerProps,
+  badZoom,
+  badProp,
+  badMarker,
+  _rootIsTyped,
+  _mapSlotIsTyped,
+  _providerSlotIsTyped,
+};

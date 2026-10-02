@@ -21,7 +21,7 @@
  * 真实编译由 `pnpm check:dts-strict` 在 CI 里跑；这里守的是「这道门禁的判据没被改空」。
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
@@ -112,6 +112,37 @@ describe("探针的判别力（正反两侧）", () => {
       "探针只断言了 $slots 存在，没断言载荷成员 —— 载荷写成 any 时门禁不会红",
     ).toMatch(/status:\s*unknown;[\s\S]{0,120}?client:\s*unknown/);
   });
+
+  /**
+   * 断言必须**实例化**（#188 评审 P1）。
+   *
+   * 未实例化的类型别名是**惰性**的：TypeScript 只在别名被真正求值时才检查其内部。
+   * 所以 `export type _Root = NotAny<any>` 单独编译是**零错误**（实测）——
+   * 写成 `type` 的「反 any 防御」根本没有牙：声明面整体退化成 `any` 时门禁照样全绿。
+   *
+   * 这条判据按**形状**钉住：断言语句必须是 `const _x: T = true` 形态，
+   * 且那一行不能是 `type` 声明。
+   */
+  it("断言是实例化的（const x: T = true），不是惰性的 type 别名", () => {
+    // 探针里必须有实例化的断言语句（`const _x: <类型> = true`）——那才是会被检查的形态。
+    const instantiated = probe.match(/^const\s+_\w+:[^;]*=\s*true;/gm) ?? [];
+    expect(
+      instantiated.length,
+      "探针里没有 `const _x: T = true` 形态的实例化断言 —— 未实例化的 type 别名是惰性的，" +
+        "导出退化成 any 时不会让门禁变红",
+    ).toBeGreaterThanOrEqual(2);
+
+    // 反过来：不允许把反 any 断言写成未实例化的 type 别名。
+    // 刻意剥掉注释再查 —— 探针的文件头**合法地**引用了这个反例形态来说明为什么
+    // 不能那样写，按全文查会假红。
+    const code = probe
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(code, "反 any 断言被写成了惰性的 `export type _Root = [...]`").not.toMatch(
+      /export type _\w+\s*=\s*\[/,
+    );
+  });
 });
 
 describe("探针覆盖全部出口", () => {
@@ -131,13 +162,82 @@ describe("探针覆盖全部出口", () => {
   });
 });
 
+/**
+ * 补齐 `defineSlots` 的**判据**（#188 评审）。
+ *
+ * 首轮只改了 47 个组件，另 5 个（`components/data/*` 的 `generic="Item"` 泛型组件）
+ * 因为「当时恰好 emit 成合法形态」没被改 —— 但那不是判据：换个 Volar 版本或改一下
+ * 模板就可能退回悬空形态，而当时**没有任何门禁会红**。这条把「哪些组件需要
+ * `defineSlots`」从一次性的人肉清单变成可核对的规则。
+ *
+ * 判据取自源码而非产物：`<slot>` 出现在模板里就要求有 `defineSlots`，两条一起读。
+ * 只查产物的话，泛型组件那条路径（无法提升成顶层别名）会让判据依赖打包器的实现细节。
+ */
+describe("defineSlots 的覆盖面（不允许「当时恰好合法」）", () => {
+  const SRC = resolve(ROOT, "packages/bmap-vue/src");
+
+  function collectVueFiles(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) collectVueFiles(full, out);
+      else if (entry.name.endsWith(".vue")) out.push(full);
+    }
+    return out;
+  }
+
+  const slotted = collectVueFiles(SRC).filter((file) => {
+    const source = readFileSync(file, "utf8");
+    // 只认模板段：`<slot` 也可能出现在注释或字符串里。全库现无此情况，
+    // 但判据写成「模板里有」比「文件里有」准，且代价相同。
+    const template = source.split("</script>")[1] ?? "";
+    return /<slot[\s/>]/.test(template);
+  });
+
+  it("扫描到了带 <slot> 的组件（名单为空时下面两条会恒真）", () => {
+    expect(slotted.length, "没有扫到任何带 <slot> 的组件，判据没有着力点").toBeGreaterThanOrEqual(50);
+  });
+
+  it.each(
+    slotted.map((file) => [file.replace(ROOT + "/", ""), file] as const),
+  )("%s 声明了 defineSlots", (_label, file) => {
+    const source = readFileSync(file, "utf8");
+    expect(
+      source.includes("defineSlots"),
+      `${file.replace(ROOT + "/", "")} 模板里有 <slot> 却没有 defineSlots —— ` +
+        `vue-tsc 会把载荷 emit 成模块局部的 \`declare var __VLS_N\`，` +
+        `而声明打包阶段只保留导出面可达的符号，那条声明连同其声明一起消失，` +
+        `留下悬空引用（#188）。`,
+    ).toBe(true);
+  });
+
+  it("泛型组件也在名单里（它们正是首轮被漏掉的那五个）", () => {
+    // 泛型组件无法把插槽类型提升成顶层别名，emit 形态与普通组件不同 ——
+    // 正因如此「当时恰好合法」不能当作判据，必须逐个要求写出声明。
+    const genericSlotted = slotted.filter((file) =>
+      /generic\s*=\s*"[^"]*"/.test(readFileSync(file, "utf8")),
+    );
+    expect(
+      genericSlotted.length,
+      "没有扫到泛型且带 <slot> 的组件 —— 若 Volar 改了泛型组件的 emit 形态，这条会空跑",
+    ).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe("旧的「预期失败即通过」豁免已撤销", () => {
   it("check-api.mts 里不再有 KNOWN_BLOCKED 与那条探针", () => {
     const script = readFileSync(resolve(ROOT, "scripts/check-api.mts"), "utf8");
     // 探针的**失败方向**是「要求缺陷必须一直存在」。撤销豁免 = 这两处都不该再出现。
-    expect(script, "KNOWN_BLOCKED 仍在：豁免没撤销").not.toContain("KNOWN_BLOCKED");
-    expect(script, "probeKnownBlocked 仍在：仍在要求缺陷持续存在").not.toContain("probeKnownBlocked");
-    expect(script, "KNOWN_BLOCKER_PATTERN 仍在").not.toContain("KNOWN_BLOCKER_PATTERN");
+    //
+    // 刻意剥掉注释再查：脚本的文件头**合法地**记述着这段历史（「#188 之前这里有两个
+    // 名单（REPORTED 与 KNOWN_BLOCKED）」），按全文查会假红 —— 那是删除决策的
+    // 依据，不是残留代码。
+    const code = script
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(code, "KNOWN_BLOCKED 仍在：豁免没撤销").not.toContain("KNOWN_BLOCKED");
+    expect(code, "probeKnownBlocked 仍在：仍在要求缺陷持续存在").not.toContain("probeKnownBlocked");
+    expect(code, "KNOWN_BLOCKER_PATTERN 仍在").not.toContain("KNOWN_BLOCKER_PATTERN");
   });
 
   it("index / components 已进入 REPORTED 名单（走正常分析而不是探针）", () => {

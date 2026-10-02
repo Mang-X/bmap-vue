@@ -44,25 +44,39 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = resolve(ROOT, "packages/bmap-vue");
 const PROBE = resolve(ROOT, "fixtures/consumer/strict/probe.ts");
+const STRICT_TSCONFIG = resolve(ROOT, "fixtures/consumer/strict/tsconfig.json");
 
 const require_ = createRequire(resolve(PKG, "package.json"));
 const ts = require_("typescript") as typeof import("typescript");
 
 /**
- * 探针里出现的每个出口都必须真的解析得到。
+ * 出口 specifier → 它在 `dist/` 里的声明文件。**单一名单**：`paths` 映射、
+ * 「探针是否覆盖」与「dist 是否已构建」三处都从这里派生 ——
+ * 三份平行名单里少改一处，那一处就成了没人验的出口。
  *
  * 刻意列出而不是「import 什么算什么」：探针少 import 一个出口，那道出口的声明
- * 就没人验了，而门禁仍然全绿。名单与 `package.json#exports` 的键一一对应。
+ * 就没人验了，而门禁仍然全绿。名单与 `package.json#exports` 的键一一对应
+ * （`tests/behavior/dts-strict-gate.test.ts` 从 manifest 派生并逐个核对）。
  */
-const REQUIRED_SUBPATHS = [
-  "@mangax/bmap-vue",
-  "@mangax/bmap-vue/components",
-  "@mangax/bmap-vue/composables",
-  "@mangax/bmap-vue/plugins",
-  "@mangax/bmap-vue/resolver",
-  "@mangax/bmap-vue/advanced",
-  "@mangax/bmap-vue/ui-kit",
-] as const;
+const SUBPATH_TO_DTS: ReadonlyMap<string, string> = new Map([
+  ["@mangax/bmap-vue", "index"],
+  ["@mangax/bmap-vue/components", "components"],
+  ["@mangax/bmap-vue/composables", "composables"],
+  ["@mangax/bmap-vue/plugins", "plugins"],
+  ["@mangax/bmap-vue/resolver", "resolver"],
+  ["@mangax/bmap-vue/advanced", "advanced"],
+  ["@mangax/bmap-vue/ui-kit", "ui-kit"],
+]);
+
+const REQUIRED_SUBPATHS = [...SUBPATH_TO_DTS.keys()];
+
+/** `ts.CompilerOptions.paths` 形态：裸包名 → 工作区内刚构建出的 dist 声明。 */
+const PATHS: Record<string, string[]> = Object.fromEntries(
+  [...SUBPATH_TO_DTS].map(([specifier, entry]) => [
+    specifier,
+    [resolve(PKG, `dist/${entry}.d.ts`)],
+  ]),
+);
 
 /** 探针源码里是否真的 import 了这个 specifier（判「名单与探针没有脱节」）。 */
 function probeImports(specifier: string, source: string): boolean {
@@ -80,16 +94,64 @@ function assertProbeCoversEverySubpath(source: string): void {
 }
 
 function assertDistBuilt(): void {
-  const missing = REQUIRED_SUBPATHS.map((subpath) => {
-    const name = subpath === "@mangax/bmap-vue" ? "index" : subpath.split("/").pop()!;
-    return resolve(PKG, "dist", `${name}.d.ts`);
-  }).filter((file) => !existsSync(file));
+  const missing = REQUIRED_SUBPATHS.map((subpath) =>
+    resolve(PKG, "dist", `${SUBPATH_TO_DTS.get(subpath)!}.d.ts`),
+  ).filter((file) => !existsSync(file));
   if (missing.length > 0) {
     throw new Error(
       `[check-dts-strict] dist 缺少声明产物：${missing.map((f) => f.replace(ROOT + "/", "")).join(", ")}\n` +
         `  先跑 pnpm build:package（门禁按 CI 顺序：typecheck 在 build 之前）。`,
     );
   }
+}
+
+/**
+ * 严格消费的 compilerOptions，**从 `fixtures/consumer/strict/tsconfig.json` 读**。
+ *
+ * 刻意不在脚本里内联一份：那份 tsconfig 才是「严格消费」这件事的可读定义
+ * （`skipLibCheck: false` + `strict`），脚本内联第二份就成了两处判据 ——
+ * 改了 tsconfig 而忘了改脚本（或反过来）时，两份会静默漂移，而其中一份
+ * 没有任何东西读它。单一事实源在这里。
+ *
+ * 读不���、或关键判据被改掉，都判失败（fail-closed）：
+ * 「判据读不出来」与「判据通过」必须可区分。
+ */
+function readStrictCompilerOptions(): ts.CompilerOptions {
+  if (!existsSync(STRICT_TSCONFIG)) {
+    throw new Error(
+      `[check-dts-strict] 严格消费配置不存在：${STRICT_TSCONFIG} —— 没有它就没有判据。`,
+    );
+  }
+  const raw = JSON.parse(readFileSync(STRICT_TSCONFIG, "utf8")) as {
+    compilerOptions?: Record<string, unknown>;
+  };
+  const options = raw.compilerOptions;
+  if (options === undefined) {
+    throw new Error(`[check-dts-strict] ${STRICT_TSCONFIG} 没有 compilerOptions 段。`);
+  }
+  // 判据的两个支点。改动它们等于改动这道门禁的意义，所以必须显式确认。
+  if (options.skipLibCheck !== false) {
+    throw new Error(
+      `[check-dts-strict] ${STRICT_TSCONFIG} 的 skipLibCheck 必须是 false，当前是 ` +
+        `${JSON.stringify(options.skipLibCheck)} —— 改成 true 的话 .d.ts 内部从不被检查，` +
+        `声明里的悬空标识符可以完全无感地发布（那正是 #188 的原始缺陷）。`,
+    );
+  }
+  if (options.strict !== true) {
+    throw new Error(
+      `[check-dts-strict] ${STRICT_TSCONFIG} 的 strict 必须是 true，当前是 ` +
+        `${JSON.stringify(options.strict)}。`,
+    );
+  }
+
+  // 其余选项逐个映射到 Compiler API 的枚举值。只映射用得到的这几个 ——
+  // 引入完整转换器就得为「多一个字段」维护一份映射表，而这份配置是本门禁自己写的。
+  const parsed = ts.parseJsonConfigFileContent(
+    { compilerOptions: options, include: [] },
+    ts.sys,
+    dirname(STRICT_TSCONFIG),
+  );
+  return { ...parsed.options, noEmit: true, baseUrl: ROOT, paths: PATHS };
 }
 
 function main(): void {
@@ -100,32 +162,7 @@ function main(): void {
   assertProbeCoversEverySubpath(source);
   assertDistBuilt();
 
-  // `paths` 把裸包名映到**工作区内**刚构建出的 dist —— 与真实消费方解析到的东西
-  // 是同一批文件，但不需要在临时目录里重建 node_modules。
-  const paths: Record<string, string[]> = {
-    "@mangax/bmap-vue": [resolve(PKG, "dist/index.d.ts")],
-    "@mangax/bmap-vue/components": [resolve(PKG, "dist/components.d.ts")],
-    "@mangax/bmap-vue/composables": [resolve(PKG, "dist/composables.d.ts")],
-    "@mangax/bmap-vue/plugins": [resolve(PKG, "dist/plugins.d.ts")],
-    "@mangax/bmap-vue/resolver": [resolve(PKG, "dist/resolver.d.ts")],
-    "@mangax/bmap-vue/advanced": [resolve(PKG, "dist/advanced.d.ts")],
-    "@mangax/bmap-vue/ui-kit": [resolve(PKG, "dist/ui-kit.d.ts")],
-  };
-
-  const program = ts.createProgram([PROBE], {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    strict: true,
-    // **这道门禁的全部意义就在这一行**。`fixtures/consumer` 那份是 true，
-    // 于是 .d.ts 内部从不被检查，悬空引用可以完全无感地发布出去。
-    skipLibCheck: false,
-    noEmit: true,
-    lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
-    types: [],
-    baseUrl: ROOT,
-    paths,
-  });
+  const program = ts.createProgram([PROBE], readStrictCompilerOptions());
 
   const diagnostics = [...program.getSemanticDiagnostics(), ...program.getSyntacticDiagnostics()];
   if (diagnostics.length === 0) {

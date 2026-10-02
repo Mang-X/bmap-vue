@@ -93,11 +93,15 @@ const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
-/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。名单见 `api-forgotten-boundary.mts`。 */
+/**
+ * 七个出口：report、未导出类型身份集合（除登记不适用的）、签名基线都逐出口生效。
+ * 名单见 `api-forgotten-boundary.mts`（#188 起含 `index` / `components`）。
+ *
+ * #188 之前这里有两个名单（`REPORTED` 与 `KNOWN_BLOCKED`），两层判据各走一份。
+ * 豁免撤销后两者合并成一份 —— 留一个纯别名 `ALL_ENTRIES = REPORTED` 只会让人
+ * 以为两层判据还在。
+ */
 const REPORTED = REPORTED_ENTRIES;
-
-/** 七个出口：report 与签名基线对每个出口都生效。 */
-const ALL_ENTRIES: readonly Entry[] = REPORTED;
 
 const require_ = createRequire(resolve(PKG, "package.json"));
 const { Extractor, ExtractorConfig } = require_("@microsoft/api-extractor") as {
@@ -169,7 +173,7 @@ const ts = require_("typescript") as typeof import("typescript");
  * printer 同时把引号、缩进、换行一并规范化，产物因此是**稳定**的（同一输入必然同一输出），
  * 注释改动也不会让基线抖动。
  */
-function expectedSignatureFile(entry: string): string {
+function expectedSignatureFile(entry: Entry): string {
   const fileName = resolve(DIST, `${entry}.d.ts`);
   const parsed = ts.createSourceFile(
     fileName,
@@ -428,11 +432,11 @@ function updateMode(): void {
     );
   }
   // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
-  for (const entry of ALL_ENTRIES) writeSignatureBaseline(entry);
+  for (const entry of REPORTED) writeSignatureBaseline(entry);
 }
 
 /** 写某个出口的类型级签名基线（七个出口都写）。 */
-function writeSignatureBaseline(entry: string): void {
+function writeSignatureBaseline(entry: Entry): void {
   const target = signaturePath(entry);
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedSignatureFile(entry);
@@ -476,7 +480,7 @@ function readForgottenBaseline(entry: string): string[] {
  * 因此文案必须按**当前** `forbiddenForgottenMessage` 的签名调用 —— 它收的是 refusal 数组，
  * 不是 `(entry, added, target)` 三个散参（评审抓到的正是这个失效兜底分支）。
  */
-function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
+function writeForgottenBaseline(entry: Entry, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
   const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
   if (added.length > 0) throw new Error(forbiddenForgottenMessage([{ entry, added }]));
@@ -503,7 +507,7 @@ function writeForgottenBaseline(entry: string, symbols: readonly string[]): void
  * 刻意不用「当前 ⊆ 基线」的子集判据：子集判据下清理是**静默绿**的，基线会随时间烂掉，
  * 几个月后被删掉的名字仍然"合法"。全等是子集判据的严格加强，两处漏法都堵上。
  */
-function forgottenBaselineFailure(entry: string, actual: readonly string[]): string | undefined {
+function forgottenBaselineFailure(entry: Entry, actual: readonly string[]): string | undefined {
   // 登记在 `FORGOTTEN_EXEMPT_ENTRIES` 的出口**不适用**这一层（#188）。刻意在这里
   // 早返回而不是让调用方跳过：调用方照旧跑 AE、照旧比对 report —— 豁免的只是
   // 「未导出类型身份集合」这一层，且必须**同时**断言基线文件不存在，
@@ -616,13 +620,13 @@ function checkMode(): void {
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
       `${identityCount} 份未导出类型身份集合基线一致` +
       `（${REPORTED.length - identityCount} 个出口已登记为不适用），` +
-      `${ALL_ENTRIES.length} 份类型级签名基线一致`,
+      `${REPORTED.length} 份类型级签名基线一致`,
   );
 }
 
 /** 每个出口：比对 `etc/<entry>/bmap-vue.dts.md` 与当前 `dist` 的规范化签名。 */
 function checkSignatureBaselines(failures: string[]): void {
-  for (const entry of ALL_ENTRIES) {
+  for (const entry of REPORTED) {
     const target = signaturePath(entry);
     if (!existsSync(target)) {
       failures.push(`${entry}: 签名基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`);

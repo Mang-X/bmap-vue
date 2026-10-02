@@ -83,6 +83,7 @@ pnpm check:interaction-props   # <Map> 交互开关 prop 的「未传」可达�
 pnpm check:props-projected     # *Props 声明了却没有读者的 prop 必须为空（#177，反向门禁）
 pnpm check:snippet-consistency  # 三处 API 示例一致(需先 build:package)
 pnpm check:raw-sdk:declarations # dist/**/*.d.ts 不得出现 BMapGL / 已删除的 engine 取值
+pnpm check:dts-strict          # 发布声明能被严格消费方编译：7 个出口 skipLibCheck:false 零错误（#188）
 pnpm check:api                  # API report + 未导出类型身份集合 + 签名基线三类基线无漂移（#44）
 pnpm check:pack-contents        # 发布 tarball 的文件清单（#45，需先 pack）
 pnpm check:package-shape        # publint + attw 结构化断言 + 门禁工具版本锁（#45）
@@ -91,7 +92,7 @@ pnpm test:unit
 
 顺序不是随意的：`typecheck:package` 会把声明 emit 到 `dist/`，所以它要排在 `build:package` **之前**
 （`build:package` 会先清空 `dist`）；而 `check:public-dts`、`check:raw-sdk:declarations`、
-`check:api` 与 `test:unit` 依赖 `dist/` 产物，必须排在 `build:package` 之后。
+`check:dts-strict`、`check:api` 与 `test:unit` 依赖 `dist/` 产物，必须排在 `build:package` 之后。
 
 如果 `generate:*:check` 报漂移，而你**确实**是有意改的，用对应的生成命令（`pnpm generate:manifest`、
 `pnpm generate:capability-matrix`、`pnpm generate:api-diff`、`pnpm generate:overlay-emits`、
