@@ -54,7 +54,7 @@
  * 为「不在原型上」）与 `strokeLineCap`（运行时在、**不生效**）。判据永远是
  * 「**可观测地生效**」，而「生效」只能看画布，成员表与 `getX` 读回都给不出。
  *
- * ## 刻意不开的面（逐条依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）
+ * ## 刻意不开的面（逐条依据见 ``）
  *
  * - **`hitTest`**：官方**声明**有（`:201`），live 探针读到运行时**没有** ⇒ 不开面；
  * - **`setRenderStage` / `setRefCenter`**：声明有、运行时有，但**无组件消费者**（四个兄弟
@@ -70,7 +70,7 @@
  *
  * ## 为什么**没有** `defineExpose`
  *
- * 本票采用的规则（记在 `docs/zh-CN/contributing/166-visualization-alignment-audit.md` §六）：
+ * 本票采用的规则（记在 `` §六）
  * **官方有同名公开方法、且该语义不是某个已暴露 prop 的受控写入 ⇒ 必须可从 ref 到达。**
  * 逐条套下来：数据（`data` prop）、样式（`style` prop）、显隐（`visible`）、
  * 层级（`zIndex`）**全都是受控 prop**；`clearData` / `hitTest` / 七条 `getX` 都不开面；
@@ -87,7 +87,7 @@ const props = withDefaults(defineProps<PolygonLayerProps>(), {
   enablePicked: true,
   // ⚠️ 官方 `mouseStyleChange` 默认 `true`，而 Vue 对可选 `Boolean` prop 会转成 `false` ⇒
   // 显式写 `undefined` 关闭那个转换，让「没传」真的等于「没传」。这是本库第四次踩到同一个坑
-  // （见 `docs/zh-CN/contributing/165-runtime-verification.md` 结论六）。
+  // （见 `` 结论六）。
   mouseStyleChange: undefined,
   // 官方默认 `false`，与 Vue 缺省一致 ⇒ 可以让转换生效。
 });

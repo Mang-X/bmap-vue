@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Prism —— 3D 棱柱（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ * Prism —— 3D 棱柱（M5-VECTORS /  迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。`path` 用内容指纹（建筑底面轮廓是小数组，
  * 且组件没有 `pathVersion`），`altitude` / 顶面与侧面填充走各自的 setter，

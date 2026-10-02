@@ -34,7 +34,7 @@ import type { MapHandle } from "../driver/types/handles";
  * 读视野（`driver.map.getCenter` / `getZoom` / `getBounds` / `getSize` / `getHeading` /
  * `getTilt`）。只声明 `events` 的话，调用方传一个「只有 events」的 Client 会在
  * `useMapStatus` 里落到 `undefined.getCenter` —— 公共类型就会**承诺一个运行时没有保证的
- * 能力**，正是 ADR 2026-09-25 决策 5 与 Official-first 的「接收后忽略属于假支持」。
+ * 能力**，正是与 Official-first 的「接收后忽略属于假支持」。
  *
  * 写成结构而不是 `BMapClient`：外部真的能用 SDK 句柄 + 官方 Driver 实现它，而不必伪造
  * 整个 Client（含 `id` / `libraryVersion` / `rawSdk` …）。完整 `BMapClient` 结构上满足它。
@@ -79,7 +79,7 @@ export interface MapEventSource {
    *
    * 只声明**用得到的那一个方法**，而不是 `ResourceScope` 本身（issue #160）：`ResourceScope`
    * 带 `private disposers` / `private _disposed`，仓库之外既不能构造也不能实现，整类放进
-   * 公共签名就是 ADR 2026-09-25 决策 5 说的「假支持」。`MapContext` 结构上仍然满足它
+   * 公共签名就是说的「假支持」。`MapContext` 结构上仍然满足它
    * （`ResourceScope` 有 `add`），所以 `<Map>` 子树里的既有写法不变；而 `check:api` 的
    * 闭包里不再有 `ResourceScope`。
    *
@@ -115,7 +115,7 @@ export function resolveMapEventSource(explicit?: MapEventSourceInput): MapEventS
  *
  * 返回类型就是 `MapEventSource` 声明的那个窄面，**不做任何断言** —— 上一版在这里把
  * `EventSourceClient` 硬转成完整 `BMapClient`，而 `client` 是调用方给的，那等于用类型
- * 断言掩盖了「它可能没有 `driver.map`」这件事（issue #160 评审硬伤）。声明与取回现在
+ * 断言掩盖了「它可能没有 `driver.map`」这件事（ 评审硬伤）。声明与取回现在
  * 是同一份契约：能力不够就在 `useMapStatus` 里显式失败，而不是在这里假装有。
  */
 export function readEventSource(source: MapEventSource): {

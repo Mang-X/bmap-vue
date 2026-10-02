@@ -21,7 +21,7 @@
  * 不给「这几个方法真的调得动」）。六条方法名与
  * 合法入参的**可调用性**均经 live 探针取证（`scripts/probe-track-line.mts`，2026-09-23，
  * exit 0；夹具 `tests/behavior/fixtures/probe-track-line.live.json`）。在拿到读数之前不猜
- * 方法名——这是 #110 的硬门。**参数边界**（`setProcess ∈ [0,1]`、`setSpeed > 0`）来自官方
+ * 方法名——这是  的硬门。**参数边界**（`setProcess ∈ [0,1]`、`setSpeed > 0`）来自官方
  * 参考面（`.agents/skills/bmap-jsapi-v4/references/runtime-extended-apis.md`），探针只证了
  * 合法值可调用，**没有**穷举非法值让 SDK 拒绝——非法值由本库在调用前拦截（与 `featureState` 同源）。
  *

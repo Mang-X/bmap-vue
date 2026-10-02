@@ -166,7 +166,7 @@ interface InternalPluginRecord extends PluginRecord {
   /**
    * 当前这次加载的令牌，每次进入 `load()` 自增。
    *
-   * 结算时比对：过期的结算（注册表已销毁、或又起了一次新加载）一律丢弃（评审 #88 P1-1）。
+   * 结算时比对：过期的结算（注册表已销毁、或又起了一次新加载）一律丢弃（评审  P1-1）。
    */
   generation: number;
 }

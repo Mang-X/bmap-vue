@@ -9,14 +9,14 @@
  * 1. **选项口径**：`BMapLoadOptions` 是跨 Provider 的公共形状，比官方 Loader 的参数表大。
  *    上游没有入口的配置（`nonce` / `integrity` / `crossOrigin` / `referrerPolicy` /
  *    `apiUrl` / `callbackParam` / `language`）必须**显式报错**——「接收后忽略」是假支持
- *    （ADR 2026-09-13 决策 7）；
+ * ；
  * 2. **错误口径**：官方抛的是带 `[bmap-loader]` 前缀的普通 `Error`，消息里含入口 URL
  *    ⇒ 含 `ak=`。必须在这里收敛成 `BMAP_*` 码并**脱敏**，否则 AK 会经错误信息外泄；
  * 3. **注入点**：官方 `load()` 是模块级单例，单测里需要替身，因此以接口形式注入。
  *
  * 本层**不做**这些事（都属官方 Loader 自有语义，重复一份就是两套状态机）：
  * 组装入口 URL、管 script 单例、挂 / 收 JSONP 回调、判超时、判「同页版本 / AK 冲突」、
- * 复用已存在的全局。参见 `docs/zh-CN/contributing/official-packages.md` 的契约表。
+ * 复用已存在的全局。参见 `` 的契约表。
  */
 import { load as loadOfficialJsapi } from "@baidumap/jsapi-loader";
 import { redactAk } from "../../logger";
@@ -76,7 +76,7 @@ export const officialJsapiLoader: OfficialJsapiLoader = {
 /**
  * 默认路径**没有对应上游入口**的 `BMapLoadOptions` 字段。
  *
- * 顺序即报错信息里的列举顺序；`docs/zh-CN/contributing/official-packages.md`
+ * 顺序即报错信息里的列举顺序；``
  * 的「不支持项」表与测试共用这一份口径。
  */
 export const OFFICIAL_LOADER_UNSUPPORTED_KEYS = [
@@ -254,7 +254,7 @@ export function officialMetadataOptions(options: BMapLoadOptions): BMapLoadOptio
  * - 非代理：`{protocol://api.map.baidu.com/}api?v=4.0&ak=...&callback=<自增序号>`；
  * - 代理：`{serviceHost}/api?v=4.0&callback=<自增序号>`（**不带 ak**；末尾 `/` 官方会补）。
  *
- * 除上面这条已由 #70 契约锁验证过的形状外，本库不复制官方的其它 URL 规则：**不写 `callback`**
+ * 除上面这条已由  契约锁验证过的形状外，本库不复制官方的其它 URL 规则：**不写 `callback`**
  * ——回调名是官方每次调用自增的实现细节，不参与配置身份，写进 metadata 只会制造无意义差异。
  * 值里出现的 AK 与 userinfo 由 `createLoadedJsapiV4()` 统一脱敏。
  */

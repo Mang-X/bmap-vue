@@ -5,14 +5,14 @@
  * `map.cancelViewAnimation(map, animation)` 取消（官方 `Map#cancelViewAnimation` 就是按实例的命令）。
  *
  * 没有 `pause` / `resume`：4.0 上实例级的暂停/继续只有私有成员（旧实现调 `_pause` / `_continue`），
- * 本仓库对 Map 级 `pauseViewAnimation` / `continueViewAnimation` 也没有真实运行时取证。按 #104
+ * 本仓库对 Map 级 `pauseViewAnimation` / `continueViewAnimation` 也没有真实运行时取证。按
  * 的 official-first 与 evidence-first 两条约束，**不**用私有面伪造一个 Stable 能力。
  *
  * `status` 是**观察值**：由公开的 `animationstart` / `animationend` / `animationcancel` 写，
  * 命令本身不乐观改写它 —— 「发起了播放但 SDK 一次都没回调」会如实停在 `idle`。
  * 收敛到 `idle` 有两条途径：① 该段自己的 `animationend` / `animationcancel`；② 本库**自己确认过的
  * 取消交付**（`cancelViewAnimation` 返回 `canceled` / `already-settled`）——不能拿那条没取证的
- * 事件（#104 F-1）当唯一判据。**例外只在取消这一条路上**：让位给新段、取消仍未交付的旧段，
+ * 事件（ F-1）当唯一判据。**例外只在取消这一条路上**：让位给新段、取消仍未交付的旧段
  * 仍然只能靠它自己的事件收尾，`cancel()` 不会替它乐观地改状态。
  *
  * 取消**不等微任务**：`<Map>` 在父组件的 `onUnmounted` 里销毁地图，而子树卸载发生在那之前——
@@ -28,7 +28,7 @@
  *    下一次 `cancel()` 会真的再打一次；已交付（`"canceled"` / `"already-settled"`）时收尾且不重复发。
  * 之前用整张图的 `stopViewAnimation(map)` 时，② 与 ③ 会互相牺牲（重试必牵连别人的动画 / 不重试就
  * 失去入口），#105 第三轮与第六轮各打中过一次；换成按实例之后两者同时成立。那条整图命令本身也已在
- * #104 的第二批里删除（官方 4.0 只有按实例的取消入口，它零生产消费者）。
+ * 的第二批里删除（官方 4.0 只有按实例的取消入口，它零生产消费者）。
  */
 import { onUnmounted, shallowRef, toRaw, type ShallowRef } from "vue";
 import { resolveInternalMapContext } from "./resolveMapContext";
@@ -134,7 +134,7 @@ export function useViewAnimation(
   /**
    * 已经让位给新段、但取消**尚未交付**的旧段（Driver 报 `"deferred"`：还没进启动安全窗口，
    * 那次取消只是被登记）。它们仍然归本 hooks 所有：监听留着（到终态自己收），`cancel()` 与
-   * 卸载也继续负责把它们推到终态 —— 否则「旧段到底停没停」就成了没人管的事（#105 第八轮 P1）。
+   * 卸载也继续负责把它们推到终态 —— 否则「旧段到底停没停」就成了没人管的事（ 第八轮 P1）。
    * 正常情形下这个集合要么空、要么一条，且下一刻就被 `animationcancel` 收掉。
    */
   const undelivered = new Set<AnimationRun>();
@@ -273,7 +273,7 @@ export function useViewAnimation(
     // **两阶段提交**：接管与起播都在同一个守卫里 —— 任一步失败，新段的订阅立刻下线、`current`
     // 保持原样（旧段仍在播就继续被观察、仍可被 `cancel()` 重试）。
     // 接管**先按实例**取消上一段：这样「交付没交付」是本库当场知道的事实，而不是等一条事件去猜；
-    // 未交付（`deferred`）的那一段留在 `undelivered` 里继续归本 hooks 管（#105 第八轮 P1）。
+    // 未交付（`deferred`）的那一段留在 `undelivered` 里继续归本 hooks 管（ 第八轮 P1）。
     const previous = current;
     try {
       if (previous) stopRun(previous);
@@ -319,7 +319,7 @@ export function useViewAnimation(
     disposed = true;
     // 地图销毁前**同步**取消（`<Map>` 在父组件的 `onUnmounted` 里销毁地图，晚一步就跨过销毁线）：
     // 当前段与「取消尚未交付」的旧段都要试一把；失败时不打断卸载，但必须可观测——
-    // `logger.warn` 在 production 构建里会被折叠掉，只靠它等于把失败咽回去（#105 评审第五轮）。
+    // `logger.warn` 在 production 构建里会被折叠掉，只靠它等于把失败咽回去（ 评审第五轮）。
     const runs = ownedRuns();
     for (const run of runs) {
       try {

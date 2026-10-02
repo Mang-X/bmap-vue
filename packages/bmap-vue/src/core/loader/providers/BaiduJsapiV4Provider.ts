@@ -2,8 +2,7 @@
  * BaiduJsapiV4Provider —— 默认在线路径（JSAPI 4.0）
  *
  * R25-B（issue #71）之后，本 Provider **不再自己加载 script**：默认在线加载的唯一实现是
- * 官方 `@baidumap/jsapi-loader`（精确锁定 `1.0.0`，契约见
- * `docs/zh-CN/contributing/official-packages.md`），本文件只负责官方契约与本库领域契约之间的
+ * 官方 `@baidumap/jsapi-loader`（精确锁定 `1.0.0`），本文件只负责官方契约与本库领域契约之间的
  * 那一段：
  *
  * 1. **配置口径**：把 `BMapLoadOptions` 映射成官方选项；上游没有入口的配置显式报错，

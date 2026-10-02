@@ -8,7 +8,7 @@
  *   探测不到则标注 `versionSource: "declared"`，不假装知道版本。
  *
  * 已知限制：复用已有全局时无法反查它当初用的 AK / 版本，只能按本次请求的指纹登记，
- * 因此这条路径不会产生配置冲突（决策见 ADR 2026-09-10-sdk-conflict-domain）。
+ * 因此这条路径不会产生配置冲突（决策-sdk-conflict-domain）。
  * 它仍经由进程级 `BMap` 冲突域加载，能与 CDN / Custom Provider 共享后续冲突判定。
  */
 import { BMapError } from "../../errors/BMapError";

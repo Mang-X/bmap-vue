@@ -593,7 +593,7 @@ function compareWithBaseline(report: Report, flags: CliFlags): Comparison {
 /**
  * 本次机器与基线录制机器是否「可比」（纯函数，见 `describeKeySetMismatch` 的同款理由）。
  *
- * 判据是 **`platform + arch + cpuModel`**，不是只比平台（issue #37 评审 2）。
+ * 判据是 **`platform + arch + cpuModel`**，不是只比平台（ 评审 2）。
  *
  * 为什么必须带上 CPU：本 PR 的两次连续 CI 推送实测就是**同一 label、不同 SKU**——
  * `ubuntu-latest` 第一次给 `INTEL XEON PLATINUM 8573C`、第二次给 `Intel Xeon 6973P-C`，
@@ -792,7 +792,7 @@ function detectMismatch(
 }
 
 /**
- * 指标集合必须**双向**一致（issue #37 评审 1）。
+ * 指标集合必须**双向**一致（ 评审 1）。
  *
  * 只查「报告有、基线没有」会漏掉反方向：把一条既有 benchmark / metric 删掉之后，它从
  * `report.metrics` 消失，后续比较循环根本不会再看到它 ⇒ 门禁**静默少测一项**并且照样退出 0

@@ -3,12 +3,12 @@
  *
  * 官方全局命名空间（`globalThis.BMap`）只允许在 Driver / Provider 边界读取；本文件把
  * 「读到的到底是不是一个可用的 4.0 命名空间」与「怎么安全地拿构造器 / 调用成员」收敛
- * 成两件事，后续 Map / Overlay / Layer / Service Facet（#20~#23）都复用这里，不再各自
+ * 成两件事，后续 Map / Overlay / Layer / Service Facet（~）都复用这里，不再各自
  * 探测成员。
  *
  * 刻意**不引用官方类型包**：Driver 内部只按结构化形状访问 raw 对象，因此
  * `BMap.*` 类型与 `typeof BMap` 既不出现在实现里，也不会进入公共声明产物
- * （见 ADR 2026-09-10-bmap-raw-sdk-boundary 与 `scripts/check-public-dts.mts`）。
+ * （与 `scripts/check-public-dts.mts`）。
  *
  * 与 `core/loader/providers/namespace.ts` 的分工：
  * - Loader 侧只校验「加载是否成功」的最低集合（`Map` / `Point` / `Marker`），失败语义是
@@ -256,8 +256,8 @@ type ExpectTrue<T extends true> = T;
  *
  * 上游类型包移除或改名这些成员时，`pnpm typecheck:package`（`skipLibCheck: false`）会在
  * **编译期**失败，而不是等到运行时才发现 `BMap.Size is not available`。
- * `typeof BMap` 属于 raw SDK 边界内允许的用法（v4 Driver / Provider / Fake / augmentation，
- * 见 ADR 2026-09-10-bmap-raw-sdk-boundary）；本文件不进入发布产物，因此不会外泄给消费者。
+ * `typeof BMap` 属于 raw SDK 边界内允许的用法（v4 Driver / Provider / Fake / augmentation）；
+ * 本文件不进入发布产物，因此不会外泄给消费者。
  */
 type OfficialNamespaceCheck = ExpectTrue<
   typeof BMap extends JsapiV4Namespace ? true : false

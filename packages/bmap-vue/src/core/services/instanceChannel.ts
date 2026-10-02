@@ -1,7 +1,7 @@
 /**
  * 服务实例通道 —— 任务内核的「实例所有权」策略（issue #139）
  *
- * #139 的判据：**这个服务的 SDK 实例有没有公开的释放入口**。这是唯一让「释放失败重试」与
+ * 的判据：**这个服务的 SDK 实例有没有公开的释放入口**。这是唯一让「释放失败重试」与
  * 「取消 / 超时后实例过期」不再是猜测的事实：
  *
  * - `useGeocoder`（`service.geocoder`）/ `useGeocodeDetail`（同能力，逆地理编码详情）/
@@ -81,7 +81,7 @@ export interface ServiceInstanceChannel<THandle> {
  * 共享实例通道：官方没有释放入口的那 7 个服务。
  *
  * 这个对象是**无状态**的——除了一个按 Client 缓存的槽位，没有 `pendingReleases`、
- * 没有 `instanceStale`、没有 `refuseMessage`、没有策略闭包。`#139` 的验收项
+ * 没有 `instanceStale`、没有 `refuseMessage`、没有策略闭包。`` 的验收项
  * 「simple services 不携带无消费者的 recreate/refuse/pending-release 状态」由此在**结构上**成立。
  */
 export function createSharedInstanceChannel<THandle>(): ServiceInstanceChannel<THandle> {
@@ -132,7 +132,7 @@ export interface ExclusiveInstanceChannelOptions<THandle, TArgs extends unknown[
    * 与四个路线服务（`disposeRoute`）。
    *
    * 释放失败**不吞掉**：失败的实例留在待释放队列里，下一次释放重试，并告警一次——
-   * 否则「释放失败」会变成静默泄漏（PR #89 评审 P2-1）。
+   * 否则「释放失败」会变成静默泄漏（PR  评审 P2-1）。
    */
   release: (client: BMapClient, handle: THandle) => void;
   /** 取代策略（默认 `"cancel"`；独占服务通常给 `"recreate"` 或函数形式）。 */

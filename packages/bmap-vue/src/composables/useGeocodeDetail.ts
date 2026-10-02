@@ -2,7 +2,7 @@
  * useGeocodeDetail —— 坐标点反查地址详情（逆地址解析）
  *
  * 走 Driver 的归一化调用面（`driver.services.reverseGeocode`），不再读 `handle.raw`。
- * 结果里 **`addressComponents` 与 `surroundingPois` 都是真的投影过的字段**——`#38` 之前 Driver
+ * 结果里 **`addressComponents` 与 `surroundingPois` 都是真的投影过的字段**——`` 之前 Driver
  * 的 DTO 只暴露了 `poiCount`，结构化的地址与 POI 列表被静默丢弃。
  *
  * 命名对齐官方 `BMap.Geocoder`（#165）：动作叫 `getLocation`，结果**只有** `data` 一个读取口
@@ -50,7 +50,7 @@ export interface GeocodeDetailItemResult {
 /**
  * 把 Driver 的 `addressComponents`（缺项为 `null`）摊平成旧版形态（缺项为空串）。
  *
- * 旧版承诺「总有这五个字符串」，`docs/zh-CN/hooks/useGeocodeDetail.md` 的示例按它写，
+ * 旧版承诺「总有这五个字符串」，`` 的示例按它写
  * 这里保持兼容；Driver 层则保留 `null`——只有 `null` 才表达「官方没给这个字段」。
  */
 function toComponents(

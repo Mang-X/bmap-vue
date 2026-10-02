@@ -79,7 +79,7 @@ export interface BMapRouteRenderOptions {
  * 构造期快照的**绘制部分**：字段级比较用（`MapHandle` 走身份，不做序列化）。
  *
  * 用字段级比较而不是「响应式对象变没变」：选项可以是 getter，每次求值都会产生新对象，
- * 按引用比较会把「没变」判成「变了」，于是每次渲染都重建一次 SDK 实例（PR #89 的「重建风暴」）。
+ * 按引用比较会把「没变」判成「变了」，于是每次渲染都重建一次 SDK 实例（PR  的「重建风暴」）。
  */
 export interface RouteRenderSnapshot {
   map: MapHandle | null | undefined;

@@ -36,7 +36,7 @@ import type { MarkerHandle } from "../../driver/types/handles";
 const props = withDefaults(defineProps<MarkerListProps<Item>>(), {
   // 布尔 prop 必须给显式默认值：Vue 对 `Boolean` 有「缺省即 false」的转换
   // （`resolvePropValue` 里 `isAbsent && !hasDefault ⇒ false`），不给默认值会让
-  // 「没传 visible」变成「隐藏整层」（ADR 2026-09-17 决策 5 的同一条理由）。
+  // 「没传 visible」变成「隐藏整层」（ 的同一条理由）。
   visible: true,
 });
 

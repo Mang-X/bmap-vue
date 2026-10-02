@@ -9,7 +9,7 @@
  * 2. **只拒绝真正的非法值**：非有限数、缺分量、非对象。`NaN` 一旦进入 `new BMap.Size`
  *    会静默留下 `NaN` 并让覆盖物不可见，因此在边界就换成结构化错误；复合入口
  *    （`toRawPoints` / `fromRawPoints` / `toRawBounds`）必须**先校验容器再读属性**，
- *    否则 `null` / `undefined` 会抛原生 `TypeError` 绕过错误协议（PR #59 评审 P2-2）。
+ * 否则 `null` / `undefined` 会抛原生 `TypeError` 绕过错误协议（PR  评审 P2-2）。
  * 3. **不做墨卡托逆投影**：`webgl-v1` 在 WebGL 渲染路径下需要把 BD09MC 米制事件点位换算
  *    成度，4.0 的事件 `point` / `latLng` 本身就是经纬度（墨卡托坐标走独立的 `pointMC`
  *    字段），因此这里不引入猜测式换算。

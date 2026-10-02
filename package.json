@@ -22,6 +22,7 @@
     "check:pack-contents": "node --experimental-strip-types scripts/check-pack-contents.mts",
     "check:package-shape": "node --experimental-strip-types scripts/check-package-shape.mts",
     "check:toolchain": "node --experimental-strip-types scripts/check-toolchain.mts",
+    "check:comment-hygiene": "node --experimental-strip-types scripts/check-comment-hygiene.mts",
     "check:api": "node --experimental-strip-types scripts/check-api.mts",
     "verify:package": "node --experimental-strip-types scripts/verify-package.mts",
     "probe:official": "node --experimental-strip-types scripts/probe-official-packages.mts",

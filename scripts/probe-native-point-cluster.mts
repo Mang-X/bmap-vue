@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * 原生点图层与原生聚合的**运行时探针**（issue #35，M6-POINT-CLUSTER）
+ * 原生点图层与原生聚合的**运行时探针**（，M6-POINT-CLUSTER）
  *
  * ## 为什么需要它
  *
- * issue #35 的开工前范围纠正写着「native-first：capability 缺失时可以明确返回 unsupported /
+ * 的开工前范围纠正写着「native-first：capability 缺失时可以明确返回 unsupported /
  * experimental；**不因为『理论上可能缺失』就自动进入自研 fallback**」，而 fallback 的启动条件之一是
  * 「真实 SDK/目标环境证明原生 Cluster 不可用、能力不足」。判定这一条不能靠读文档，只能**实测**：
  *
  * | 事实 | 现有依据 | 缺什么 |
  * | --- | --- | --- |
- * | `PointIconLayer` / `PointShapeLayer` | `@baidumap/jsapi-v4-types@4.0.4` 有完整类声明 | 已有（#23 的 smoke 记录） |
- * | `PointLayer` / `ClusterLayer` | 官方扩展 API 专页 + 本库 #23 的 smoke「构造器全部存在」 | **只验过构造与方法存在，从没验过「喂数据之后真的聚起来 / 真的能点中」** |
+ * | `PointIconLayer` / `PointShapeLayer` | `@baidumap/jsapi-v4-types@4.0.4` 有完整类声明 | 已有（ 的 smoke 记录） |
+ * | `PointLayer` / `ClusterLayer` | 官方扩展 API 专页 + 本库  的 smoke「构造器全部存在」 | **只验过构造与方法存在，从没验过「喂数据之后真的聚起来 / 真的能点中」** |
  * | 官方 React 参考 `huiyan-fe/react-bmap` | 只有 `PointIconLayer` / `PointShapeLayer` 两个组件，**没有** `PointLayer` / `ClusterLayer` / 任何 cluster 组件 | 说明「官方薄封装只暴露声明面」是既有选择，但不能据此断言扩展 API 不可用 |
  *
  * 本探针就是把上表最后两行补成读数：**喂一份会明显聚合的数据，读聚簇结果与真实点击命中**。

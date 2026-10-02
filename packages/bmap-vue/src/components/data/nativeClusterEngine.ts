@@ -33,7 +33,7 @@
  *    即 `setOptions` 在这一族**确实生效**。仍判为构造期，理由是**通道**而非「不生效」：
  *    本库的 `setStyle` 也落到 `setOptions`，两条通道共用一个成员，认成「可就地更新」会让
  *    聚合参数与样式互相踩——与本票已落地的 21 个图形族构造期选项同一口径。
- * 4. **`visible` 走 `setVisible`**（不是摘掉图层）：#35 专门取证的。
+ * 4. **`visible` 走 `setVisible`**（不是摘掉图层）： 专门取证的。
  *    ⚠️ 原文称它是 Driver 对 `cluster`「唯一放开的继承成员」——**已过时**：`cluster` 的
  *    descriptor 现在还登记了 `setOpacity` 与 `setZIndex`（同为实测在位且可观测生效的继承成员）。
  *    `setVisible` 仍是最早被取证放开的那一个，但已不是唯一。
@@ -140,7 +140,7 @@ export function createNativeClusterEngine<Item>(
    * 上一次严格摘除是否**未确认**（`removeLayer` 抛错 ⇒ 旧图层可能已不在图上）。
    *
    * ⚠️ 这个状态**由本引擎自持**：账本（`LayerRegistry`）不复制挂载态 —— 那是消费方的事实
-   * （#112 评审指出 record 会在资源实际 detached 时持续报告 attached，属「重复且说谎的状态源」）。
+   * （ 评审指出 record 会在资源实际 detached 时持续报告 attached，属「重复且说谎的状态源」）。
    */
   let detachUnknown = false;
   /**
@@ -170,7 +170,7 @@ export function createNativeClusterEngine<Item>(
       props.clusterMaxZoom,
       props.fitViewOnClick,
       stableLayerValue(props.singleStyle),
-      // ↓ issue #165 第三批补的六个：与上面同族的六项**同一条**判据（构造期 ⇒ 换实例）。
+      // ↓  第三批补的六个：与上面同族的六项**同一条**判据（构造期 ⇒ 换实例）。
       props.tileSize,
       stableLayerValue(props.fitViewMargin),
       props.updateRealTime,
@@ -200,7 +200,7 @@ export function createNativeClusterEngine<Item>(
     if (props.clusterMaxZoom !== undefined) options.clusterMaxZoom = props.clusterMaxZoom;
     if (props.fitViewOnClick !== undefined) options.fitViewOnClick = props.fitViewOnClick;
     if (props.singleStyle !== undefined) options.singleStyle = props.singleStyle;
-    // ---- issue #165 第三批补的六个（同样是「只写用户表过态的键」，理由见文件头第 2 条）----
+    // ----  第三批补的六个（同样是「只写用户表过态的键」，理由见文件头第 2 条）----
     if (props.tileSize !== undefined) options.tileSize = props.tileSize;
     if (props.fitViewMargin !== undefined) options.fitViewMargin = props.fitViewMargin;
     if (props.updateRealTime !== undefined) options.updateRealTime = props.updateRealTime;

@@ -30,10 +30,8 @@
  * 它有一个明确的范围；没覆盖的部分写出来，而不是留白让读者以为全都验过了。
  *
  * 本文件是**单一事实源**：`pnpm generate:plugin-inventory` 由它生成
- * `docs/zh-CN/contributing/plugin-compat-inventory.md`（人读）与
  * `docs/.vitepress/plugin-inventory.json`（机读：给站点 / 工具链按 id 取结论用，形状由
- * `plugin-compat-inventory.test.ts` 钉住，取用方式见 `docs/zh-CN/contributing/ai-development.md`），
- * CI 用 `--check` 校验无漂移。
+ * `plugin-compat-inventory.test.ts` 钉住），CI 用 `--check` 校验无漂移。
  */
 import type { Capability } from "../driver/capability";
 
@@ -150,7 +148,7 @@ export interface PluginVersionLock {
  * 最小路径的覆盖范围。
  *
  * 「已验证」不是一个布尔值：这四列写清**跑到了哪一步**、以及**哪一步没跑**。没跑的部分留白
- * 会被读成「也验过了」（评审 #85 第三轮同源问题）。
+ * 会被读成「也验过了」（评审  第三轮同源问题）。
  */
 export interface PluginRuntimeReading {
   /** `verified` = 最小路径无抛错；`threw` = 运行时抛错（错误文本进 `detail`）。 */

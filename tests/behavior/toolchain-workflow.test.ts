@@ -29,7 +29,7 @@ describe("#187 CI 接线：工具链门禁", () => {
   it("跑 check:toolchain，且未被架空", () => {
     const block = stepBlockContaining(quality, "pnpm check:toolchain");
     expect(block.length).toBeGreaterThan(0);
-    expect(block.join("\n"), "切到的必须是门禁自己那一步").toContain("Check toolchain");
+    expect(block.join("\n"), "切到的必须是门禁自己那一步").toContain("Check pnpm config hygiene");
     expect(isNeutralized(block)).toBeNull();
   });
 

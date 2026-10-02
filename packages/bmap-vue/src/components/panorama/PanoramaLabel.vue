@@ -19,7 +19,7 @@ export interface PanoramaLabelProps {
 /**
  * PanoramaLabel —— 全景标注（官方 `BMap.PanoramaLabel`）
  *
- * M7-CONTROL-PANORAMA / issue #41。必须作为 `<Panorama>` 的子组件：标注只存在于某个查看器
+ * M7-CONTROL-PANORAMA / 。必须作为 `<Panorama>` 的子组件：标注只存在于某个查看器
  * 内部（官方经 `Panorama#addOverlay` / `removeOverlay` 挂载），不属于 Overlay / Control 家族，
  * 因此**不复用** `OverlayTarget` 那套注册表——所有权由「谁创建谁摘除」表达：本组件在自己的
  * 作用域里摘除，父组件随后才销毁查看器（父的 `onUnmounted` 晚于子树）。

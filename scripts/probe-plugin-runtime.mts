@@ -10,7 +10,7 @@
  * - 副作用：例如 DrawingManager 会不会**自己**注入额外脚本；
  * - 以及本页能顺带证实的环境事实（`BMap.version`、`BMapGL === BMap`、私有回调表是否存在）。
  *
- * ## 每个插件一个**独立页面**（评审 #85 P2-2）
+ * ## 每个插件一个**独立页面**（评审  P2-2）
  *
  * 第一版把四个插件跑在同一个页面里，顺序是 `TrackAnimation → DrawingManager → GeoUtils → Mapvgl`。
  * 这会让 GeoUtils 的证据不独立：DrawingManager 打开 `enableCalculate` / `enableGpc` 时会**自己**
@@ -26,13 +26,13 @@
  * 页面必须真的把 JSAPI 4.0 拉起来才能谈插件行为。AK 从 `BAIDU_MAP_AK` 读，**不落库**；
  * 仓库里 `docs/.vitepress/theme/index.ts` 有一支已入库的浏览器端 AK，本地冒烟可以用它。
  *
- * ## 与「插件页」的区别（ADR 2026-09-13-plugin-compat-inventory 决策 8）
+ * ## 与「插件页」的区别
  *
  * 本脚本是**证据生成器 + 可选插件门禁**，不是 smoke harness 的插件页：它不登记进
  * `tests/browser/jsapi-v4` 的检查表、不参与必需链路的放行判定。把插件脚本塞进必需页面会让
  * 跨域脚本异常直接染红必需链路——那正是决策 8 要避免的。
  *
- * #43 起它**单独**进 nightly（`plugin-runtime` job）：可选插件的结论要能每天被核对，但与
+ * 起它**单独**进 nightly（`plugin-runtime` job）：可选插件的结论要能每天被核对，但与
  * required smoke 分属两个 job，任一插件脚本抖动都不会影响必需链路的判定。
  *
  * ## 判定与退出码
@@ -44,7 +44,7 @@
  * | `blocked` | SDK 没起来 / 脚本取不到（AK、网络、浏览器不成立）、最小路径 invariant 不成立 ⇒ 本轮无法判定 | 3 |
  * | 脚手架失败 | 读不到数据模块 / 找不到浏览器 / 页面没写报告 | 2 |
  *
- * ⚠️ **已登记的 `threw` 不算 fail**（#43 修正）：MapVGL 的结论就是「它在 4.0 上抛错」，
+ * ⚠️ **已登记的 `threw` 不算 fail**（ 修正）：MapVGL 的结论就是「它在 4.0 上抛错」
  * 旧规则会让这个探针永远红。详见 `scripts/plugin-runtime-report.mts` 的说明。
  *
  * 输出里的 `ak=` 与 `BAIDU_MAP_AK` 一律脱敏。
@@ -148,7 +148,7 @@ const PAGE_JS = `
     r.urlLoaded = load.ok ? "ok" : (load.error || "error");
     r.globalExposed = !!getPath(spec.global);
 
-    // 每个 probe 自己判定「最小路径 invariant」，并返回**结构化小结**（评审 #85 第三轮）：
+    // 每个 probe 自己判定「最小路径 invariant」，并返回**结构化小结**（评审  第三轮）
     // 「脚本加载了、全局存在、没抛错」不等于「跑通了该插件的最小功能路径」。
     function okCheck(name, condition, detail) {
       return { name: name, ok: !!condition, detail: detail || null };
@@ -269,7 +269,7 @@ const PAGE_JS = `
         var afterSetSpeed = polyline.getPath().length;
         // 播放到结尾：轮询到 path 连续 800ms 不再变化为止（duration=2000，上限 8s）。
         // 这条**不设门禁**：轮询到稳定的判定本身近乎恒真，写进 checks 只会制造一条没有区分力的
-        // 断言（ADR 2026-09-21 的取舍）；它的价值是 readings 里的结尾长度与 onAnimateEnd 是否回调。
+        // 断言（取舍）；它的价值是 readings 里的结尾长度与 onAnimateEnd 是否回调。
         var lastLength = afterSetSpeed;
         var stableSince = null;
         var elapsed = 0;
@@ -566,7 +566,7 @@ const pageHtml = `<!doctype html>
 /* ------------------------------------------------------------------ 主流程 */
 
 /**
- * 全部步骤都收在一个函数里，**早退码必须真的停下来**（评审 #85 第二轮 P2）：
+ * 全部步骤都收在一个函数里，**早退码必须真的停下来**（评审  第二轮 P2）
  * 旧写法在缺 AK / 找不到浏览器时只设 `process.exitCode = 2` 就继续往下跑 —— 后面仍会起服务器、
  * 起浏览器、用空 AK 去加载 SDK，等页面超时后又把退出码改成 `3`。于是「缺 AK」被报成 blocked，
  * 还白等一次超时。现在缺什么立刻 `return 2`。

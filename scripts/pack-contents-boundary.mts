@@ -52,7 +52,7 @@ export const ALLOWED_ROOT_FILES: readonly string[] = [
 /**
  * `dist/` 下允许出现的产物形态。
  *
- * `.map` 是**有意保留**的（#45 裁决）：产物里**带 `//# sourceMappingURL=` 注释**的文件必须有
+ * `.map` 是**有意保留**的（ 裁决）：产物里**带 `//# sourceMappingURL=` 注释**的文件必须有
  * 同名 `.map`，删掉 map 却留着注释会让消费方浏览器逐文件 404，也让人在 stack trace 里查不到
  * 任何东西。
  *
@@ -376,7 +376,7 @@ export function checkPackContents(args: {
   /* 7) CSS 必须按文件名显式声明，不能靠 `files` 里的目录项顺带发出。
    *
    *    今天 `dist/bmap-vue.css` 由 `<Autocomplete>` 的 scoped `<style>` 产出，文档让用户
-   *    `<link>` 它，但它不在 `files` 的文件名项里 ⇒ 它是构建的意外副产物。#45 的裁决是
+   * `<link>` 它，但它不在 `files` 的文件名项里 ⇒ 它是构建的意外副产物。 的裁决是
    *    **显式声明**（维护者选择把它当公共面），所以这条的判据是「CSS 要么按文件名出现在
    *    `files` 里，要么不在包里」——两者都不成立时报出来。 */
   for (const file of entries) {
@@ -403,7 +403,7 @@ export function checkPackContents(args: {
    *    真正会 404 的是反方向：「带注释却缺 map」。那需要读文件内容，由驱动脚本
    *    `findDanglingSourceMapReferences()` 判定——它读得到内容，所以判据放在那里。
    *
-   *    清单层在这里唯一能表达的是：`.map` 是**允许**的产物形态（#45 裁决：保留 sourcemap），
+   * 清单层在这里唯一能表达的是：`.map` 是**允许**的产物形态（ 裁决：保留 sourcemap）
    *    由 `ALLOWED_DIST_FORMS` 收 `.map` 表达，不在此处重复。 */
   return problems;
 }

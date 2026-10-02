@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * destroy / dispose 幂等性与销毁期回调探针（issue #128 / F-3）
+ * destroy / dispose 幂等性与销毁期回调探针（ / F-3）
  *
  * 审计表登记的问题：SDK 实例的 `destroy()` / `dispose()` 是否幂等、销毁期是否真会回调业务。
- * 现状只有**已知反例**（ADR 2026-09-12 真实 AK smoke：**未加载场景**的 `Panorama#destroy()`
+ * 现状只有**已知反例**（真实 AK smoke：**未加载场景**的 `Panorama#destroy()`
  * 抛 `TypeError: Cannot read properties of undefined (reading 'START')`），没有正向读数。
  * 在取证之前，契约措辞一律「本库保证」而非「官方保证」。
  *
@@ -279,7 +279,7 @@ const PAGE_JS = `
       push("pano.loaded.destroyTwice", attempt(() => panoLoaded.destroy()));
       document.title = "panoD2Done";
 
-      // 未加载场景：有宿主、但从不 setId —— 对照 ADR 2026-09-12 的已知反例。
+      // 未加载场景：有宿主、但从不 setId —— 对照已知反例。
       const emptyHost = document.createElement("div");
       emptyHost.style.cssText = "width:400px;height:300px";
       document.body.appendChild(emptyHost);
@@ -466,7 +466,7 @@ async function main(): Promise<number> {
       console.log(`原始报告（已脱敏）写入 ${outPath}`)
     }
     console.log(`summary: ${redact(lines.join(" | "))}`)
-    // #128「0 = 全 pass」：stdout 已有「无法判定」时 shell status 不得仍是 0。
+    // 「0 = 全 pass」：stdout 已有「无法判定」时 shell status 不得仍是 0。
     // 半边前置不进 controlFailures，因此这里在打印完两半结论后再收退出码。
     const exitCode = conclusionExitCode(report)
     if (exitCode === 1) {

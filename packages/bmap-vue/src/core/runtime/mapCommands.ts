@@ -3,7 +3,7 @@
  *
  * ## 为什么不是「把 `BMap.Map` 的方法都透传」
  *
- * issue #29 的非目标第一条就是「不把完整 `BMap.Map` 方法全部透传」，理由是**冻结 SDK 表面**：
+ * 的非目标第一条就是「不把完整 `BMap.Map` 方法全部透传」，理由是**冻结 SDK 表面**
  * 透传越多，公共 API 越难演进，而本库的能力清单（Capability Catalog）才是「哪些能力可用」的
  * 单一事实源。官方参考实现 `huiyan-fe/react-bmap@2.0.1` 的 `MapRefImpl` 走了另一个方向
  * （`src/components/Map/MapRef.ts` 逐个透传 200+ 个成员，含 `getSolarInfo` / `getTileId` /
@@ -70,13 +70,13 @@ export interface MapCommands {
    * （该 prop 默认**不开启**——常驻一块画布内存是库不该替使用者做的取舍，官方 React 参考
    * 的惯例同样是「能力进目录 + 显式 opt-in」）。它是**建图期**选项，事后补不上。
    * 2026-09-26 live 实测：同一张图不带该选项返回 3,830 字节空画布、带上则 119,074 字节
-   * 真实内容（读数见 `docs/zh-CN/contributing/165-runtime-verification.md`）。
+   * 真实内容（读数见 ``）。
    */
   getScreenshot(): string | null;
 
   /* ---------------------------------------------------------------- 写（未就绪时空操作） */
   /**
-   * 写命令的 `options` 是什么、什么时候该传、什么时候**不该**有（#171 / #165 裁决 F）。
+   * 写命令的 `options` 是什么、什么时候该传、什么时候**不该**有（ /  裁决 F）。
    *
    * 五条视野命令的 `options` 是**逐调用**的官方能力：`noAnimation` 管这一次要不要动画，
    * `callback` 让「这条命令完成了」变成**可观察的事实**——此前调用方永远无法知道一条
@@ -93,7 +93,7 @@ export interface MapCommands {
    * 设置中心点。`center` 对齐官方 `setCenter(center: Point | string, options?)` 的**两个分支**：
    * 点，或城市名 / 地址字符串。
    *
-   * #165 Class 2 / E：此前这一层写的是 `Point`，于是同一个组件上出现了**两张脸**——
+   * / E：此前这一层写的是 `Point`，于是同一个组件上出现了**两张脸**——
    * `<Map center>` prop 收字符串（v2 兼容），命令面却不收；而底下的
    * `MapDriver.setCenter(map, Point | string)` 与 `toRawCenter` **本来就**处理字符串。
    * 收窄只发生在最上面这一层，官方能力因此不可达。命令面与 prop 现在对齐。
@@ -140,7 +140,7 @@ export interface MapCommands {
    * 会如实返回 `false`，而不是「调用之后才知道」。**没有 Client 时返回 `false`**：
    * 「还不知道」与「不支持」在这里合并成同一个答案（`false`），因为调用方要的是「能不能用」。
    *
-   * **两条边界要知道**（#29 评审 P1 之后写死在这里）：
+   * **两条边界要知道**（ 评审 P1 之后写死在这里）
    *
    * 1. 探测来源是「命名空间顶层 + `Map.prototype` + **运行时观察到的实例成员**」。第三项来自
    *    Map Facet 建图成功后的登记 —— 真实 JSAPI 4.0 有一部分 Map 方法（`setZoom` / `setCenter`）
@@ -196,7 +196,7 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
       read((client, map) => client.driver.map.getViewport(map, view, options)),
     getScreenshot: () => read((client, map) => client.driver.map.getScreenshot(map)),
 
-    // options 一律**原样透传**（#171 / #165 裁决 F）：命令面不判空、不填默认、不包装
+    // options 一律**原样透传**（ /  裁决 F）：命令面不判空、不填默认、不包装
     // callback。投影与「空对象不下发」全部由 Driver 的 `toRaw*Options` 一处负责，
     // 命令面再实现一份就会与它漂移。
     setCenter: (center, options) =>

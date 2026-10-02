@@ -5,13 +5,13 @@
  * 路线面板（表单、类型标签、方案卡、开始导航按钮）全部由 `@baidumap/jsapi-ui-kit` 渲染；
  * 本组件只做 host 容器、构造前提（Map ready）、props → 构造选项、事件 DTO 与公开动作。
  *
- * 只开放驾车（ADR 2026-09-13 Official-first 决策 8）：锁定版本 `1.1.2` 的 `enabledTypes`
+ * 只开放驾车（Official-first 决策 8）：锁定版本 `1.1.2` 的 `enabledTypes`
  * 硬编码为 `["driving"]`、`showTabs: false`，`switchType("walking" | "riding" | "transit")`
  * 是 **no-op + `console.warn`**。因此：
  * - **不暴露 `switchType()`** —— 它的每一种调用要么 no-op（`driving`）要么只 warn（其余），
  *   暴露出来等于给调用方一个做不到的承诺。上游将来真开放更多模式时，本库再补；
  * - `typechange` 事件照常绑定与转发（不丢上游事件），但它在锁定版本下**不可达**；
- * - 四类路线的 headless 能力不受此限制（issue #39 的另一条通道）。
+ * - 四类路线的 headless 能力不受此限制（ 的另一条通道）。
  *
  * 刻意不做：
  * - **不接 headless 路线服务**：一次交互只走 UI Kit 一条请求通道；

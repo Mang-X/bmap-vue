@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * #165 收口探针：`BMap.FeatureLayer` 是否存在 + `<GeoJSONLayer>` 被漏掉的成员是否**可观测地生效**
+ * 收口探针：`BMap.FeatureLayer` 是否存在 + `<GeoJSONLayer>` 被漏掉的成员是否**可观测地生效**
  *
  * ## 为什么需要它（两条互不相干的结论，共享一个 headless Chrome 会话）
  *

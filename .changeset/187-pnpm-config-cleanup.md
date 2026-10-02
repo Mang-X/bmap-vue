@@ -2,7 +2,7 @@
 "@mangax/bmap-vue": patch
 ---
 
-#187 清理 pnpm 失效配置并把声明工具链变成可核对的事实
+#187 清理 pnpm 失效配置（#192 瘦身门禁与补注释卫生）
 
 根 `package.json` 的 `pnpm` 字段在 pnpm 12 下**整个不被读取**，其中三项各自失效：
 
@@ -26,16 +26,11 @@
 `auto-install-peers`，pnpm 12 均不读取），其中 `auto-install-peers=false` 还与 lockfile 记录的
 `autoInstallPeers: true` 相互矛盾。
 
-**新增 `check:toolchain`**：对声明 → `pnpm-lock.yaml` 解析结果 → `node_modules` 实际安装做三方
-核对，fail-closed。三方都要**判**而不是只打印——`package.json` 与 lockfile 记录的 specifier
-脱节同样会红（那正是「改了 manifest 没重新 install」的形态）。判据落到**实际解析结果**而非
-声明面（`^` / `~` 不是事实）。仓库此前**没有任何门禁读 lockfile 或已安装版本**，这个缺口由
-本票补上。
-
-`pnpm` 自身是三层里的**特例**：由 `packageManager` 字段钉住、不在 `node_modules` 里，
-真正跑的那个版本由 corepack / CI 的 `pnpm/action-setup` 决定、**不写进任何文件**，
-因此它的第三层查 `pnpm --version` 而非磁盘。第一版把这三层里的两层短路掉，
-输出 `pnpm 声明 — / 磁盘 n/a` 却仍报「三方一致」（PR 评审 #191 的 P2，已修）。
+**新增 `check:toolchain`**（#192 瘦身）：只判三件**真实发生过**的事——`package.json` 不得有
+`pnpm` 字段、lockfile 顶层不得有 `overrides:` 块、`packageManager` 声明必须等于
+`pnpm --version` 实际跑的那个。**版本基线表刻意不做成门禁**：升级会动 lockfile，而 lockfile
+入库 + CI `--frozen-lockfile` + dependabot major 忽略 + PR diff 已经把它挡住；初版还自己假绿过
+一次（`pnpm` 三层里两层被作者短路却仍报「三方一致」，靠评审才发现）。版本事实记在 ADR。
 
 `unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配（要 `^3.1.5`、实装 `2.2.12`）登记
 为**刻意接受**（已验证它所需的三个符号 2.2.12 全部导出），以结构化字段 `observedVersion`

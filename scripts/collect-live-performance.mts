@@ -230,7 +230,7 @@ function readFakeBaseline(): { metrics: Record<string, { minMs?: number } | unde
 }
 
 /**
- * 失败通道：**抛出**而不是 `process.exit`（#131 评审第 4 条）。
+ * 失败通道：**抛出**而不是 `process.exit`（ 评审第 4 条）。
  *
  * `fail()` 若直接 `process.exit`，`VITE_NOT_READY` / `REPORT_MISSING` 发生在 vite/chrome
  * 已启动之后时会绕过 `finally → shutdown()`，留下孤儿进程；`resolveBrowser` / `mkdtempSync`

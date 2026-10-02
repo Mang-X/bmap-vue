@@ -57,7 +57,7 @@ interface CommonOptions<TDriver, THandle, TArgs extends unknown[], TResult> {
  *
  * **刻意不接受** `release` / `supersede` / `refuseMessage`：官方没有为这些服务提供实例的
  * 销毁入口，Driver 侧也不持有任何资源，因此「释放失败重试」「取消后实例过期」这些机制在
- * 这里是**无消费者的状态**。#139 把它们从这个面上彻底拿掉。
+ * 这里是**无消费者的状态**。 把它们从这个面上彻底拿掉。
  */
 export type SimpleServiceTaskOptions<TDriver, THandle, TArgs extends unknown[], TResult = TDriver> =
   CommonOptions<TDriver, THandle, TArgs, TResult>;
@@ -129,7 +129,7 @@ export interface ExclusiveServiceTask<TResult, TArgs extends unknown[]>
  * 建任务：把内核状态写进 shallow refs，并把生命周期接到 Vue 上。
  *
  * 简单档与独占档的**唯一**差别是传进去的通道、以及是否多暴露 `invalidateService`——
- * 状态机只有这一份（#139 的「口径只有一个」）。
+ * 状态机只有这一份（ 的「口径只有一个」）。
  */
 function bindTask<TDriver, THandle, TArgs extends unknown[], TResult>(
   ctx: MapContext,

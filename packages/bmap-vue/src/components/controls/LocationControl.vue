@@ -91,7 +91,7 @@ export interface LocationControlProps {
  * LocationControl —— 定位控件（官方 `GeolocationControl`）
  *
  * 统一 ControlSpec（M7-CONTROL-PANORAMA / issue #41）。两个 SDK 事件经 spec 的 `events`
- * 绑定，随**实例 scope** 释放（ADR 2026-09-11 §6：先解绑业务事件、再由 Map 移除控件）。
+ * 绑定，随**实例 scope** 释放（：先解绑业务事件、再由 Map 移除控件）。
  *
  * 显隐用 SDK 的 `show()` / `hide()`：`visible=false` 只是把控件藏起来，**不会**顺带停下
  * 持续性定位跟踪——那是 `removeControl` 的语义（Driver 的 `remove` 会先调
@@ -104,7 +104,7 @@ const props = withDefaults(defineProps<LocationControlProps>(), {
 });
 
 /**
- * 事件载荷**从 `unknown` 收窄成官方命名类型**（issue #165 Class 3 / TASK 4）。
+ * 事件载荷**从 `unknown` 收窄成官方命名类型**（ / TASK 4）。
  *
  * 此前两条事件的载荷都是 `unknown` —— 官方 `control/GeolocationControl.d.ts` 明明声明了
  * `GeolocationControlEventMap`（`locationSuccess: GeolocationControlSuccessEvent` /

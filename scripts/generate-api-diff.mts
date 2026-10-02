@@ -11,7 +11,7 @@
  * - 根 / composables / ui-kit：解析入口 barrel 的 `export {…}` / `export * from`（一层可跟随）
  *
  * 生成（无时间戳，稳定可 diff）：
- * - `docs/zh-CN/contributing/official-api-alignment.md`
+ * - ``
  * - `docs/.vitepress/official-api-alignment.json`
  *
  * 用法：
@@ -446,7 +446,7 @@ const EXCEPTIONS: Exception[] = [
  * 标成「✓ ✓」——但它们的**返回形态 / 签名不同**，直接照名字从参考实现移植会写错。
  *
  * 这里是手写的（生成器只渲染）：判据是「同名」+「形态可被类型层面指认」，因此每一行
- * 都能被逐条核对。依据见 `docs/zh-CN/contributing/165-audit-B-C-D-F.md` 与各成员 ADR。
+ * 都能被逐条核对。依据见 `` 与各成员 ADR。
  */
 interface ShapeDivergence {
   name: string;

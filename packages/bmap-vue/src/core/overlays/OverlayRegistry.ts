@@ -1,7 +1,7 @@
 /**
  * OverlayRegistry —— 每张地图的覆盖物注册表
  *
- * 记账模型（M5-SPEC-MARKER / issue #30 定型）：
+ * 记账模型（M5-SPEC-MARKER /  定型）
  *
  * - **所有者是实例 scope，不是注册表**。`registerResource()` 返回一个自带 `dispose()` 的一等
  *   registration，并把「从表里摘除」这条 detach 交给**实例 scope**；scope 释放（重建 / 卸载）

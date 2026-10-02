@@ -145,6 +145,42 @@ lockfile 解析刻意**不引 YAML 库**：仓库没有直接依赖它（`yaml` 
 判据没错，错的是解析器。三个坑与合成样本 + 真实 lockfile 的双份断言都留在代码注释与
 `tests/behavior/toolchain-gate.test.ts` 里，防止它退化。
 
+### 4b. 版本基线表：先做成门禁，后搬进本 ADR（#192 的瘦身）
+
+初版在这里维护了一张 11 条的版本基线表（`TOOLCHAIN_PINS`），由 `check:toolchain` 逐条核对
+「声明 → lockfile → 磁盘」三方。#192 评审时**这张表被移出门禁、搬进本 ADR**，理由：
+
+- **它守的风险已被别处挡住**。升级 `vue-tsc` 会动 lockfile，而 lockfile 入库、CI 走
+  `--frozen-lockfile`、dependabot 对 vue-tsc / typescript / vue 的 major 是忽略的、
+  任何升级都会在 PR 的 lockfile diff 里露出来。再加一道机器检查是重复投资。
+- **它自己假绿过**。初版把 `pnpm` 的三层里两层 `return []` 短路掉，却仍输出「三方一致」，
+  靠人工评审（PR #191 的 P2）才发现。一道需要评审才发现自己没在看的检查，
+  代价与它防的风险不成比例。
+- **它有两份事实源**。1276 行里 391 行是中文注释，大量在复述本 ADR 已经写过的决策史
+  （#192 的核心判据：ADR 记录「为什么」，代码注释记录「这是什么」，两者不重复）。
+
+**留在门禁里的只有三条**（每条都对应一次已发生的故障，见
+`scripts/toolchain-boundary.mts` 文件头的表格）：`package.json` 不得有 `pnpm` 字段、
+lockfile 顶层不得有 `overrides:` 块、`packageManager` 声明 == `pnpm --version`。
+1276 行 → 240 行（含测试从 46 条降到 19 条）。
+
+**搬进本 ADR 的版本事实**（干净安装实测，#192 复核仍成立）：
+
+| importer | 包 | 解析版本 |
+| --- | --- | --- |
+| `.` / `packages/bmap-vue` | `vue-tsc` | `2.2.12` |
+| `.` / `docs` | `vue-tsc` | `3.3.11`（**另一个 major**，见决策 3） |
+| `packages/bmap-vue` | `@vue/language-core` | `2.2.12`（声明的**真实产出者**） |
+| `.` / `packages/bmap-vue` / `docs` | `typescript` | `5.9.3` |
+| `packages/bmap-vue` | `vite-plugin-dts` | `5.1.0` |
+| `packages/bmap-vue` | `@microsoft/api-extractor` | `7.59.0`（精确锁定的门禁工具，#45 决策 6） |
+| `.` | `vue` | `3.5.42` |
+| `.` | `pnpm` | `12.0.0` |
+
+⚠️ 表里「`pnpm`」那一行的**判据只覆盖绑定失效**（corepack 被禁用、action-setup 被显式指定
+别的版本等），**防不了「声明被改」**：corepack 与 `pnpm/action-setup@v6` 都从 `packageManager`
+取版本，改声明会让实际执行的也照着切（实测：改成 `pnpm@11.0.0` 后实际跑的就是 11.0.0，判据仍绿）。
+
 ### 5. CI 里排在安装之后、所有 build/test 之前
 
 它判的**正是**安装结果；放到任何构建步骤之后，读到的就已经是别的步骤留下的现场。
