@@ -20,9 +20,20 @@ updates:
           - minor
           - patch
     ignore:
-      # vue 是 peerDependency，typescript / vue-tsc 与根 package.json 里的
-      # pnpm.overrides（vue-tsc 3.3.11、@vue/language-core 2.2.0）强相关，
-      # 这三者的 major 由维护者手动评估后再升。安全更新不受此配置影响。
+      # vue 是 peerDependency；typescript / vue-tsc 的 major 会同时牵动**两个**互不相容的
+      # 环节，必须由维护者一起评估后再升：
+      #
+      #   - packages/bmap-vue 与根：vue-tsc 2.x —— 三个 typecheck 门禁；
+      #   - docs：vue-tsc 3.x —— 文档站对着 dist/*.d.ts 做消费方校验；
+      #   - 而 dist/*.d.ts 本身由 @vue/language-core 2.x 产出（vite-plugin-dts → unplugin-dts），
+      #     不是由 vue-tsc 产出（build-package.mts 只 shell out 两次 vite）。
+      #
+      # ⚠️ 此前这段注释的理由挂在根 package.json 的 `pnpm.overrides`（vue-tsc 3.3.11、
+      # @vue/language-core 2.2.0）上。那条 override 写在 `package.json#pnpm` 字段里，
+      # **pnpm 12 早就不读该字段**，因此它从写下起就没生效过（实际是包构建 2.2.12、
+      # 只有 docs 用 3.3.11）——用一条从未生效的配置来解释「为什么锁住」，等于没有理由。
+      # 真实基线现由 `scripts/toolchain-boundary.mts#TOOLCHAIN_PINS` 登记并由
+      # `pnpm check:toolchain` 核对（#187，ADR 2026-10-02）。安全更新不受本配置影响。
       - dependency-name: vue
         update-types: ["version-update:semver-major"]
       - dependency-name: typescript

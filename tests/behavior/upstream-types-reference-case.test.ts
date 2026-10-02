@@ -48,7 +48,12 @@ const pinnedVersion = libManifest.devDependencies?.["@baidumap/jsapi-v4-types"];
 /**
  * 定位**类型检查实际解析到的那份**上游类型包：优先包级 `node_modules`
  * （`packages/bmap-vue` 是 `vue-tsc -p tsconfig.build.json` 的解析起点），
- * 回退根 `node_modules`（`.npmrc` 的 `shamefully-hoist=true` 下也存在）。
+ * 回退根 `node_modules`。
+ *
+ * 回退分支保留是因为它**曾经**必要：当时 `.npmrc` 写着 `shamefully-hoist=true`，根
+ * `node_modules` 里有全部传递依赖（该设置现已删除——pnpm 12 不再读取 `.npmrc` 的安装设置，
+ * 见 ADR 2026-10-02 / #187）。今天根下只有直接依赖，两个分支在正常安装下指向同一份文件；
+ * 保留它是为了在解析起点布局变化时不必重新论证。
  */
 function resolveUpstreamPackageDir(): string {
   const candidates = [

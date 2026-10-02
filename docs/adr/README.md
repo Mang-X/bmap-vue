@@ -48,6 +48,7 @@
 | [2026-09-25](./2026-09-25-clean-slate-migration-baggage-removal.md) | Clean-slate 1.0：删除 fork / 迁移 / 兼容包袱（集中弃用层与旧 prop/event 别名一并删除 / `check:no-bmapgl` 三份独家覆盖并入 `check:raw-sdk` / `v3-` 前缀与库版本措辞中性化 / 官方事实与工程史保留；#136） | Accepted |
 | [2026-09-25](./2026-09-25-public-export-surface-freeze.md) | 1.0 公共出口冻结（彻底取消 `./core` 子入口并迁移 v4 Provider 家族 / 根入口 + 六个子入口的值导出集合与 API report 钉成门禁 / #104 留下的 7 项出口收窄逐条结清且不留别名 / Manifest 仍是唯一组件元数据源但不新增字段；取代 `2026-09-14-remove-legacy-engine` 决策 2 的「`LoadedSdk` 保留为别名」；#44） | Accepted |
 | [2026-09-30](./2026-09-30-pack-contents-and-publish-shape-gates.md) | 发布 tarball 的文件清单成为门禁（`files` 声明了却没发出曾真实发生过：`volar.d.ts` 是 gitignore 的生成产物，顺序不强制就会静默发出版本缺件的包）/ publint 与 attw 精确锁版本且 attw 从一句 grep 改为结构化断言，已审阅的例外显式登记 / sourcemap 保留（带 `sourceMappingURL` 的必须有 map，纯 re-export facade 不要求）/ CSS 按文件名显式声明为公共面 / **发布身份迁到 `@mangax/bmap-vue`**（npm 上 `bmap-vue` 归他人所有且 `1.0.0` 已被占用；取代 `2026-09-24-bmap-vue-release-identity-reset` 决策 1 的包名，类型面与产物逐字节未变）；#45） | Accepted |
+| [2026-10-02](./2026-10-02-pnpm-config-migration-and-declaration-toolchain.md) | pnpm 失效配置清理与声明工具链事实化（根 `package.json#pnpm` 的三项设置在 pnpm 12 下**从未生效**，其中 `overrides` 谎报「vue-tsc 锁在 3.3.11」而实际是包构建 2.2.12 / 仅 docs 3.3.11；三项逐条删除，不盲目恢复旧 override）/ 工作区**故意**跑两个 vue-tsc major（声明由 `@vue/language-core@2.2.12` 产出、包 typecheck 走 vue-tsc 2.2.12、文档站对着 `dist/*.d.ts` 校验走 3.3.11），不强行统一 / 新增 `check:toolchain`：声明 → lockfile 解析 → `node_modules` 三方对照，仓库此前**没有任何门禁读 lockfile 或已安装版本** / `unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配登记为刻意接受（追踪 #188）；#187） | Accepted |
 
 ## 约定
 
