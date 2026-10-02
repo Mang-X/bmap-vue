@@ -64,6 +64,9 @@
       "types": "./dist/ui-kit.d.ts",
       "import": "./dist/ui-kit.mjs"
     },
+    "./volar": {
+      "types": "./volar.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {

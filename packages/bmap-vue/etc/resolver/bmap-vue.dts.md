@@ -1,4 +1,4 @@
-## API Signature Baseline for "bmap-vue" (entry `./resolver`)
+## API Signature Baseline for "@mangax/bmap-vue" (entry `./resolver`)
 
 > 由 `pnpm generate:api` 生成，请勿手工编辑。
 > 内容是 `dist/resolver.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的全文。

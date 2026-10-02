@@ -63,6 +63,7 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
 import {
   collectForbiddenAdditions,
   forbiddenForgottenMessage,
@@ -71,6 +72,14 @@ import {
 } from "./api-forgotten-boundary.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * 发布包名，从 manifest 派生。签名基线的 header 里写着它——写死会让基线记录一个
+ * 已经不存在的身份，而基线是要长期当契约守的（#45 评审 P1 同类问题）。
+ */
+const PKG_NAME = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(ROOT, PKG_DIR, "package.json"), "utf8")),
+).name;
 const PKG = resolve(ROOT, "packages/bmap-vue");
 const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
@@ -185,7 +194,7 @@ function expectedSignatureFile(entry: string): string {
         "> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。",
       ];
   return [
-    `## API Signature Baseline for "bmap-vue" (entry \`${subpath}\`)`,
+    `## API Signature Baseline for "${PKG_NAME}" (entry \`${subpath}\`)`,
     "",
     "> 由 `pnpm generate:api` 生成，请勿手工编辑。",
     `> 内容是 \`dist/${entry}.d.ts\` 经 TypeScript printer（\`removeComments: true\`）规范化后的全文。`,

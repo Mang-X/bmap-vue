@@ -10,6 +10,15 @@ import { createApp } from 'vue'
 import { createBMapPlugin, BMapResolver, useGeolocation, useControllableState } from '../../packages/bmap-vue/src'
 import * as root from '../../packages/bmap-vue/src'
 import * as advanced from '../../packages/bmap-vue/src/advanced'
+import { releaseIdentityOf, PKG_DIR } from '../../scripts/release-identity.mts'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+// 包名从 manifest 派生：`LIBRARY_PACKAGE_NAME` 是构建期注入的 `__PKG_NAME__`，
+// 用例必须用同一个真值去断言，否则等于用一个写死的字面量去校验另一个写死的字面量。
+const PKG = releaseIdentityOf(
+  JSON.parse(readFileSync(resolve(import.meta.dirname, '../../', PKG_DIR, 'package.json'), 'utf8')),
+).name
 
 describe('public entry', () => {
   it('exposes createBMapPlugin', () => {
@@ -68,7 +77,11 @@ describe('public entry', () => {
   it('resolver resolves official component names to components path', () => {
     const resolver = BMapResolver()
     const r = resolver.resolve('Map')
-    expect(r).toEqual({ name: 'Map', from: 'bmap-vue/components' })
+    // 包名从 **manifest 派生**，不得写死。写死的后果不是「找不到包」——npm 上那个
+    // 无 scope 的 `bmap-vue` 恰好属于另一位作者，用户的 unplugin-vue-components 会把
+    // 这句话原样写进源码，于是 import 到**错误的项目**。这条断言曾把旧身份当成
+    // 正确行为，解释了为什么包名迁移后 CI 依然全绿（#45 评审 P1）。
+    expect(r).toEqual({ name: 'Map', from: `${PKG}/components` })
     // 非组件名不解析
     expect(resolver.resolve('FooBar')).toBeUndefined()
   })

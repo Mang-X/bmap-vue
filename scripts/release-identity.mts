@@ -90,3 +90,21 @@ export function isOwnTarball(fileName: string, identity: ReleaseIdentity): boole
 export function tarballBasename(name: string, version: string): string {
   return `${name.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`;
 }
+/**
+ * `exports` 里**有运行时产物**的子路径。
+ *
+ * 「入口数 == dist 的 .d.ts 数」这条判据此前在两处各写一遍，两处都假设每���子路径都有
+ * `import` 条件。`./volar` 打破了这个假设：它是**纯 `types` 出口**（一份供 IDE 读的
+ * `GlobalComponents` 声明，运行时不 import 它），因此没有 dist 产物。
+ *
+ * 计数时必须排除纯 types 出口，否则会得出「dist 少了一个入口」这种误判。集中在这里
+ * 是为了让它只被推导一次——两处各判一次，早晚有一处忘记排除。
+ */
+export function runtimeExportSubpaths(exportsField: unknown): string[] {
+  if (!exportsField || typeof exportsField !== "object") return [];
+  return Object.entries(exportsField as Record<string, unknown>)
+    .filter(([subpath]) => subpath !== "./package.json")
+    .filter(([, spec]) => (typeof spec === "string" ? true : Boolean((spec as { import?: string }).import)))
+    .map(([subpath]) => subpath)
+    .sort();
+}

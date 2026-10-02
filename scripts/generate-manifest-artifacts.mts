@@ -18,6 +18,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
+import { renderVolarDts } from './manifest-artifacts-boundary.mts'
 import { fileURLToPath } from 'node:url'
 import { freshModuleUrl } from './fresh-module-url.mts'
 
@@ -51,22 +52,20 @@ const componentsIndex = [
 
 // 2) volar.d.ts(精确类型:Volar 通过 typeof import 解析组件真实 props/emits)
 //    vue-tsc 2(新 Volar)读 module 'vue';v2 时代读 '@vue/runtime-core';双声明兼容
-const componentsLines = names.map((c) => `    ${c.name}: typeof import('bmap-vue')['${c.name}']`)
-const volarDts = [
-  '// Generated file. Do not edit directly.',
-  'declare module \'vue\' {',
-  '  export interface GlobalComponents {',
-  ...componentsLines,
-  '  }',
-  '}',
-  'declare module \'@vue/runtime-core\' {',
-  '  export interface GlobalComponents {',
-  ...componentsLines,
-  '  }',
-  '}',
-  'export {}',
-  '',
-].join('\n')
+//
+//    包名从 manifest 读,不得写死。这份 d.ts 会**跟着包发出去**(它在 `files` 里),而
+//    写死的旧名 `bmap-vue` 会让用户的 Volar 去解析 npm 上另一位作者的同名包——
+//    与安装说明里写的 `@mangax/bmap-vue` 自相矛盾(#45 评审 P1)。
+const pkgName = (JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as {
+  name: string
+}).name
+// 纯函数要的是**组件名字符串数组**；`names` 是 `{ name, exportName, source }` 对象数组。
+// 直接传 `names` 会让模板插值出 `[object Object]`——生成的 volar.d.ts 全是它，
+// 而那份文件跟着包发布，用户的 Volar 会吃到无效声明（#45 评审 P1）。
+const volarDts = renderVolarDts(
+  names.map((c) => c.name),
+  pkgName,
+)
 
 // 3) component index json(generatedAt 为生成时刻,比对时忽略)
 const json = {

@@ -26,6 +26,7 @@
  * 需要先 `pnpm build:package`（读 `dist` 的用例都在 `test:unit` 里，CI 的构建顺序在测试之前）。
  */
 import { describe, expect, it } from "vitest";
+import { runtimeExportSubpaths } from "../../scripts/release-identity.mts";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripComments } from "../../packages/test-utils";
@@ -201,7 +202,9 @@ const declaredPublicEntries = (): number => {
   const pkg = JSON.parse(readFileSync(resolve(PKG_DIR, "package.json"), "utf8")) as {
     exports?: Record<string, unknown>;
   };
-  const entries = Object.keys(pkg.exports ?? {}).filter((key) => key !== "./package.json");
+  // 只数**有运行时产物**的子路径：纯 `types` 出口（`./volar`）不在 dist 里，
+  // 把它算进去会得出「dist 少了一个入口」的误判。判据集中推导，两处共用。
+  const entries = runtimeExportSubpaths(pkg.exports);
   expect(entries.length, "package.json#exports 的入口面为空，判定没有着力点").toBeGreaterThan(0);
   return entries.length;
 };

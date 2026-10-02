@@ -11,7 +11,7 @@
  *   pnpm --filter bmap-vue pack --pack-destination .artifacts
  *   node scripts/verify-package.mts
  */
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -296,6 +296,56 @@ function main() {
   //     所以它必须在真实消费方（tarball 装进 node_modules）里被**真正调用一次**，而不是只断言
   //     「import 得动」。类型面由 `fixtures/consumer/src/advanced-adapter.ts` 通过上面的
   //     `vue-tsc` 覆盖；这里补运行面的可观察行为。
+  // 5a) Volar 类型解析：**用真实 tarball** 验证安装页承诺的 `compilerOptions.types` 配置可用。
+  //
+  // 这条曾真实失效：文档教用户写 `"types": ["@mangax/bmap-vue/volar"]`，而 `exports` 里
+  // 没有 `./volar`，于是 TypeScript 报 `TS2688: Cannot find type definition file`。
+  // `check:api` / `publint` / `attw` 全都看不出这一点——它们不解析 `compilerOptions.types`。
+  //
+  // 做法：另起一份最小 tsconfig（**不改** consumer 的 `types: []`，那是有意的），
+  // 只放 `"types": ["<pkg>/volar"]` 与一个空输入文件，然后跑 tsc。缺 `./volar` 出口时
+  // 它必然报 TS2688——已实测过这个形态。
+  const volarTsconfig = resolve(consumerFixture, 'tsconfig.volar.json')
+  writeFileSync(
+    volarTsconfig,
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          moduleResolution: 'bundler',
+          module: 'esnext',
+          target: 'ES2022',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          types: [`${identity.name}/volar`],
+        },
+        files: ['volar-probe.ts'],
+      },
+      null,
+      2,
+    )}\n`,
+  )
+  writeFileSync(resolve(consumerFixture, 'volar-probe.ts'), 'export {}\n')
+  try {
+    execFileSync(
+      resolve(root, 'node_modules/.bin/tsc'),
+      ['-p', volarTsconfig],
+      { cwd: consumerFixture, stdio: 'pipe', env: { ...process.env, CI: '1' } },
+    )
+    console.log(
+      `\n[verify-package] Volar 类型解析 OK：\"types\": [\"${identity.name}/volar\"] 在装出来的 tarball 上可解析`,
+    )
+  } catch (error) {
+    const out = String((error as { stdout?: Buffer }).stdout ?? '')
+    throw new Error(
+      `[verify-package] 安装页承诺的 Volar 用法在真实 tarball 上不可解析——` +
+        `\"types\": [\"${identity.name}/volar\"] 报错了。这通常是 exports 少了 ./volar 出口。\n${out}`,
+    )
+  } finally {
+    rmSync(volarTsconfig, { force: true })
+    rmSync(resolve(consumerFixture, 'volar-probe.ts'), { force: true })
+  }
+
   const advancedProbe = resolve(consumerFixture, 'advanced-probe.mjs')
   writeFileSync(
     advancedProbe,
