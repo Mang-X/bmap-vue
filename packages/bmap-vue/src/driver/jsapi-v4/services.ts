@@ -35,7 +35,7 @@
  *   这条不变式：并发显式拒绝，取消/超时之后该实例要重建。见 `search()` 的契约与 ADR 决策 4；
  * - `TrackAnimation` 属 `BMapGLLib` 插件、不在 4.0 的运行时入口里（Catalog
  *   `service.track-animation` 为 `unsupported`；结论已定型为 `native`：4.0 用原生图层 `layer.track-line`，
- *   本库不再为这个 legacy 插件提供封装）——见 ADR 2026-09-21），因此**显式失败**
+ *   本库不再为这个 legacy 插件提供封装），因此**显式失败**
  *   而不是静默给一个不能用的实例——4.0 的对应能力是原生图层 `TrackLine`。
  */
 import { BMapError } from "../../core/errors/BMapError";

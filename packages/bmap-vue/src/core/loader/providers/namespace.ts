@@ -26,8 +26,7 @@ export const JSAPI_V4_REQUIRED_MEMBERS = ["Map", "Point", "Marker"] as const;
  * 探测不到时回退到基线声明值，并由 `versionSource: "declared"` 如实标注。
  *
  * `version` 也列在候选里，但它**只在整个取值确实形如版本号时才作数**：真实 4.0 的
- * `BMap.version` 是构建标记 `"gl"`（#70 实测，见
- * `docs/zh-CN/contributing/official-packages.md`），拿它当版本号会让「宿主预加载 /
+ * `BMap.version` 是构建标记 `"gl"`（真实 AK 实测），拿它当版本号会让「宿主预加载 /
  * 同页复用既有全局」这整条路径被判成「不是 JSAPI 4.0」。
  */
 export const JSAPI_V4_VERSION_PROBE_KEYS = ["VERSION", "version"] as const;

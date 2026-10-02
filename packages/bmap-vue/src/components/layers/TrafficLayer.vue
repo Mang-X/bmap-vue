@@ -36,7 +36,7 @@ export interface TrafficLayerProps {
 
 const props = withDefaults(defineProps<TrafficLayerProps>(), {
   // 布尔 option 显式写 `undefined`：绕开 Vue「缺省即 false」的 props 转换，
-  // 让「没传」= 「不表态」（理由与代价见 ADR 2026-09-17 决策 5）。
+  // 让「没传」= 「不表态」（理由与代价）。
   visible: true,
   autoRefresh: undefined,
   edge: undefined,

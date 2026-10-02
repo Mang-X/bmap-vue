@@ -30,7 +30,7 @@
  * | `CJSResolvesToESM` | 全部 7 个 | `node16-cjs` | `exports` 只有 `import` 条件、没有 `require`，而包本身是 ESM-only（`type: module`） |
  * | `NoResolution` | 6 个子路径 | `node10` | 没有 `typesVersions` |
  *
- * **这两条都是有意设计的后果，不是缺陷**（见 ADR 2026-09-25 的 ESM-only 冻结面）。本模块的
+ * **这两条都是有意设计的后果，不是缺陷**（ ESM-only 冻结面）。本模块的
  * 职责不是把它们「修掉」，而是把它们**枚举成有测试覆盖的显式例外**——原来的 grep 让它们
  * 隐形，现在它们会被打印出来、并在漂移时变红。
  *

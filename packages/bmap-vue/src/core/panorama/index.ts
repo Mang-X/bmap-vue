@@ -274,8 +274,8 @@ export function createPanoramaContext(input: { mapContext: MapContext }): Panora
       try {
         jsapiV4PanoramaOf(client).destroy(current);
       } catch (caught) {
-        // 未加载任何场景的查看器 `destroy()` 会抛（官方 4.0 的真实行为，见 ADR 2026-09-12
-        // 的真实 AK smoke 记录）。组件卸载路径**不能**因此抛错——那只会在 Vue 的卸载流程里
+        // 未加载任何场景的查看器 `destroy()` 会抛（官方 4.0 的真实行为，真实 AK smoke
+        // 记录）。组件卸载路径**不能**因此抛错——那只会在 Vue 的卸载流程里
         // 制造一个没人处理的异常。这里告警一次：诊断可见，卸载继续。
         logger.warn(
           "Panorama 销毁查看器失败（未加载场景的实例在官方 4.0 上会抛错；组件仍会释放本库资源）：" +

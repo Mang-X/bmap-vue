@@ -90,7 +90,7 @@ export interface WMTSLayerProps {
 
 const props = withDefaults(defineProps<WMTSLayerProps>(), {
   // 布尔 option 显式写 `undefined`：绕开 Vue「缺省即 false」的 props 转换，
-  // 让「没传」= 「不表态」（理由与代价见 ADR 2026-09-17 决策 5）。
+  // 让「没传」= 「不表态」（理由与代价）。
   visible: true,
   extentCRSIsWGS84: undefined,
   useThumbData: undefined,

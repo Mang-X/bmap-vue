@@ -21,10 +21,10 @@ export { createBMapClient, jsapiV4DriverFactory } from "./client/createBMapClien
 /**
  * SDK 装配面：v4 Provider 家族（#44）。
  *
- * `./core` 子路径已取消（它 105 个值导出里只有这 4 个有**真实**公开消费者 —— `docs/zh-CN/guide/config.md`
- * 与 `docs/zh-CN/expand/offline-map.md` 的自定义加载器示例、`fixtures/consumer` 的 tarball smoke），
- * 这四个名字因此并入 `./advanced` 这一处装配面，与 `normalizeProvider` / `createBMapClientDefinition` 同处。
- * 根入口仍**不**导出任何 Provider factory（#26 起，见 ADR 2026-09-14）。
+ * `./core` 子路径已取消（它 105 个值导出里只有这 4 个有**真实**公开消费者——文档站的
+ * 自定义加载器示例与 tarball 消费 smoke 各用到一部分），因此并入 `./advanced` 这一处
+ * 装配面，与 `normalizeProvider` / `createBMapClientDefinition` 同处。
+ * 根入口仍**不**导出任何 Provider factory（#26 起）。
  *
  * 三个工厂在这里是**窄一层的包装**：返回契约收成导出的 `JsapiV4Provider`，选项收成外部
  * **能自己构造**的形状（`registry` / 自研 `ScriptLoader` 只留在内部与测试注入里）。
