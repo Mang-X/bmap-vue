@@ -20,6 +20,7 @@ import {
   checkPeerMismatches,
   checkDeclaredSpecifier,
   checkPin,
+  checkRuntimeVersion,
   declaredVersion,
   normalizeResolvedVersion,
   parseImporterBlock,
@@ -213,16 +214,62 @@ describe("#187 声明工具链门禁", () => {
       }
     });
 
-    it("pnpm 自身不在 dependencies 里，跳过这层（它由 packageManager 钉住）", () => {
+    it("pnpm 由 packageManager 钉住，但这一层**照样判**（PR 评审 #191 的 P2）", () => {
       const pnpmPin = TOOLCHAIN_PINS.find((p) => p.name === "pnpm")!;
       expect(pnpmPin.which).toBe("packageManager");
-      // 声明读不到也不判红——否则门禁会一直红。
-      expect(checkDeclaredSpecifier(pnpmPin, "—", undefined)).toEqual([]);
+      // 第一版在这里 `return []`，于是声明层空转、却仍然报「三方一致」——
+      // 输出是 `声明 — / 磁盘 n/a`。现在 packageManager 读不出来必须判红。
+      const issues = checkDeclaredSpecifier(pnpmPin, "—", undefined);
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.detail).toContain("已脱节");
     });
 
     it("lockfile 读不到 specifier 时不判红（那一层由 checkPin 的 fail-closed 负责）", () => {
       // 避免同一缺陷被两条判据重复报告。
       expect(checkDeclaredSpecifier(SAMPLE_PIN, "^2.2.0", undefined)).toEqual([]);
+    });
+  });
+
+  describe("pnpm 自身：packageManager 声明与真正运行的版本（PR 评审 #191 的 P2）", () => {
+    it("declaredVersion 能从 packageManager 字段解析出版本", () => {
+      expect(declaredVersion({ packageManager: "pnpm@12.0.0" }, "pnpm")).toBe("12.0.0");
+      // 用 lastIndexOf：名字本身可能带 @（scope），split("@")[1] 会取错段。
+      expect(declaredVersion({ packageManager: "@scope/pkg@1.2.3" }, "@scope/pkg")).toBe("1.2.3");
+    });
+
+    it("packageManager 缺失或格式不对时返回 undefined（不猜）", () => {
+      expect(declaredVersion({}, "pnpm")).toBeUndefined();
+      // 没有 `pnpm@` 前缀（只有版本号）→ 不猜它说的是 pnpm。
+      expect(declaredVersion({ packageManager: "12.0.0" }, "pnpm")).toBeUndefined();
+      // packageManager 说的是别的包 → 与所问的 pnpm 无关。
+      expect(declaredVersion({ packageManager: "npm@10.0.0" }, "pnpm")).toBeUndefined();
+    });
+
+    const PNPM_PIN: ToolchainPin = {
+      importer: ".",
+      name: "pnpm",
+      version: "12.0.0",
+      why: "包管理器本身",
+      which: "packageManager",
+    };
+
+    it("运行时版本与基线一致时放行", () => {
+      expect(checkRuntimeVersion(PNPM_PIN, "12.0.0")).toEqual([]);
+    });
+
+    it("运行时 pnpm 与基线不符必须红（lockfile 管不住实际跑的那个）", () => {
+      // 这正是「声明/记录的是 A，实际生效的是 B」——#187 的原始命题。
+      const issues = checkRuntimeVersion(PNPM_PIN, "11.0.0");
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.kind).toBe("disk-mismatch");
+      expect(issues[0]!.detail).toContain("11.0.0");
+      expect(issues[0]!.detail).toContain("action-setup");
+    });
+
+    it("读不到运行时版本必须红（fail-closed：「测不到」不等于「没问题」）", () => {
+      const issues = checkRuntimeVersion(PNPM_PIN, undefined);
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.detail).toContain("fail-closed");
     });
   });
 

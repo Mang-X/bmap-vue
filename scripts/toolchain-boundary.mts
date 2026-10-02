@@ -235,6 +235,14 @@ export interface ToolchainIssue {
 export interface DeclaredManifest {
   readonly dependencies?: Record<string, string>;
   readonly devDependencies?: Record<string, string>;
+  /**
+   * 根 `package.json#packageManager`（形如 `pnpm@12.0.0`）。
+   *
+   * **`pnpm` 自身由它钉住**，不在 dependencies / devDependencies 里——PR 评审 #191 的 P2
+   * 就是漏掉了这一处：只核对 lockfile 的 `packageManagerDependencies`，却让声明层与运行时
+   * 层都空转，于是输出 `声明 — / 磁盘 n/a` 同时报「三方一致」——**两个层面都没查，还报绿**。
+   */
+  readonly packageManager?: string;
 }
 
 /**
@@ -395,7 +403,8 @@ export function checkInstalled(
   installed: string | undefined,
 ): ToolchainIssue[] {
   // `pnpm` 自身不住在 `node_modules`（它是包管理器，由 corepack / CI 的 pnpm/action-setup
-  // 提供），因此它只有「声明 → lockfile」这一层可核对。跳过磁盘核对而不是假装它缺失。
+  // 提供），因此它**没有**「磁盘安装」这一层——改由 `checkRuntimeVersion` 核对真正执行的
+  // 可执行文件版本。第一版在这里直接 `return []`，于是那一层恒通过——PR 评审 #191 的 P2。
   if (pin.which === "packageManager") return [];
 
   if (installed === undefined) {
@@ -411,6 +420,42 @@ export function checkInstalled(
       {
         kind: "disk-mismatch",
         detail: `${pin.importer} 的 ${pin.name} 磁盘上是 ${installed}，基线登记的是 ${pin.version}（lockfile 与实际安装不一致）`,
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * 核对**当前真正执行的**包管理器版本与基线一致。
+ *
+ * 为什么单列一层：pnpm 由 corepack / CI 的 `pnpm/action-setup` 提供，它既不在
+ * `node_modules` 里，也**不受 lockfile 约束**——lockfile 的 `packageManagerDependencies`
+ * 只记录「按 `packageManager` 声明应该用哪个」。真正跑的是哪个版本，取决于 runner 上
+ * 装了什么、action 配了什么、以及 corepack 是否生效。
+ *
+ * 这正是 #187 的原始命题在新形态下的重演：**「声明/记录的是 A，实际生效的是 B」**。
+ * 第一版把这一层直接跳过，于是 `pnpm  声明 — / 磁盘 n/a` 也能报「三方一致」。
+ *
+ * 读不到（`pnpm --version` 执行失败）一律判失败——「测不到」不等于「没问题」。
+ */
+export function checkRuntimeVersion(pin: ToolchainPin, runtime: string | undefined): ToolchainIssue[] {
+  if (runtime === undefined) {
+    return [
+      {
+        kind: "disk-mismatch",
+        detail: `${pin.name} 读不到当前运行的版本（\`${pin.name} --version\` 执行失败）：无法证明真正生效的版本就是 ${pin.version}（fail-closed）`,
+      },
+    ];
+  }
+  if (runtime !== pin.version) {
+    return [
+      {
+        kind: "disk-mismatch",
+        detail:
+          `${pin.name} 当前运行的是 ${runtime}，基线登记的是 ${pin.version}：` +
+          `lockfile 与 packageManager 只记录「应该用哪个」，管不住实际执行的那个` +
+          `（检查 CI 的 pnpm/action-setup 与 corepack 设置）`,
       },
     ];
   }
@@ -502,9 +547,9 @@ export function checkDeclaredSpecifier(
 ): ToolchainIssue[] {
   const issues: ToolchainIssue[] = [];
 
-  // `pnpm` 由 package.json#packageManager 钉住，不出现在 dependencies/devDependencies。
-  if (pin.which === "packageManager") return issues;
-
+  // `pnpm` 的声明**要判**（PR 评审 #191 的 P2：第一版在这里直接 return，于是声明层空转、
+  // 却仍然报「三方一致」）。它与其他包的区别只在**来源字段**（`packageManager` 而不是
+  // devDependencies），不在「要不要判」——`declaredVersion()` 已经把那个字段解析好了。
   if (declared === "—") {
     issues.push({
       kind: "specifier-unpinned",
@@ -536,5 +581,17 @@ export function declaredVersion(
   manifest: DeclaredManifest,
   name: string,
 ): string | undefined {
+  // `packageManager` 的格式是 `<name>@<version>`（如 `pnpm@12.0.0`），它钉住的包**不在**
+  // dependencies / devDependencies 里，因此必须先按**名字**确认这条声明说的就是所问的包，
+  // 再取版本。
+  //
+  // 用 `lastIndexOf("@")` 而不是 `split("@")[1]`：名字本身可以带 scope
+  // （`@scope/pkg@1.2.3`），后者会取错段。刻意不写死 `name === "pnpm"`——
+  // 那会让「按名字匹配」这条规则只对 pnpm 成立，换个包管理器就静默失效。
+  const pm = manifest.packageManager;
+  if (typeof pm === "string") {
+    const at = pm.lastIndexOf("@");
+    if (at > 0 && pm.slice(0, at) === name) return pm.slice(at + 1);
+  }
   return manifest.devDependencies?.[name] ?? manifest.dependencies?.[name];
 }

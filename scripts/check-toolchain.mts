@@ -35,6 +35,7 @@
  * pnpm check:toolchain
  * ```
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -43,6 +44,7 @@ import {
   auditPins,
   checkInstalled,
   checkPeerMismatches,
+  checkRuntimeVersion,
   checkPin,
   checkDeclaredSpecifier,
   declaredVersion,
@@ -66,6 +68,31 @@ function readInstalledVersion(importer: string, name: string): string | undefine
   try {
     const parsed = JSON.parse(readFileSync(pkgJson, "utf8")) as { version?: string };
     return typeof parsed.version === "string" ? parsed.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 问**当前真正执行的**包管理器它自己是哪个版本（`pnpm --version`）。
+ *
+ * 刻意走子进程而不是读 lockfile：lockfile 与 `packageManager` 记录的都是「应该用哪个」，
+ * 而「实际跑的是哪个」取决于 runner 上装了什么、`pnpm/action-setup` 配了什么、
+ * corepack 是否生效——这三者都**不写进任何文件**，只能问它本人。
+ *
+ * 执行失败 / 输出不像版本号都返回 `undefined`，由 `checkRuntimeVersion` 按 fail-closed
+ * 判红：「测不到」不等于「没问题」。
+ */
+function probeRuntimeVersion(name: string): string | undefined {
+  try {
+    const out = execFileSync(name, ["--version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      env: { ...process.env, CI: process.env.CI ?? "1" },
+    }).trim();
+    // 只接受形如 12.0.0 的输出：pnpm --version 在某些封装下会带前缀/后缀噪声。
+    const m = /\b(\d+\.\d+\.\d+)\b/.exec(out);
+    return m?.[1];
   } catch {
     return undefined;
   }
@@ -104,21 +131,26 @@ for (const pin of TOOLCHAIN_PINS) {
   const lockEntry = parseImporterBlock(lockText, pin.importer, pin.name, pin.which ?? "workspace");
   issues.push(...checkPin(pin, lockEntry));
 
-  // `pnpm` 自身不在 node_modules（由 corepack / CI 的 pnpm/action-setup 提供），
-  // 因此磁盘列对它显示 n/a 而不是「—」（那看起来像「找不到」）。
-  const installed = pin.which === "packageManager" ? "n/a" : readInstalledVersion(pin.importer, pin.name);
-  issues.push(...checkInstalled(pin, pin.which === "packageManager" ? pin.version : installed));
-
   const manifest = readManifest(pin.importer);
   const declared = declaredVersion(manifest, pin.name) ?? "—";
   // 声明面**也要判**，不能只打印：登记的基线必须与 package.json 真的声明的 specifier
   // 同源，否则「声明面改了、基线没改」这种漂移没有任何东西会发现。
   // 判据是「package.json 的 specifier 必须与 lockfile 里记录的 specifier 一致」——
   // 后者是 pnpm 实际解析所依据的那个，两者不一致就说明 lockfile 与 manifest 已经脱节。
+  // `pnpm` 也走这一层（PR 评审 #191 的 P2）：它的声明在 `packageManager` 字段里，
+  // `declaredVersion()` 已能解析，第一版把它短路掉于是这一层恒空转。
   issues.push(...checkDeclaredSpecifier(pin, declared, lockEntry?.specifier));
 
+  // `pnpm` 自身不在 node_modules（由 corepack / CI 的 pnpm/action-setup 提供），
+  // 「磁盘」那一层换成**真正运行的**可执行文件版本——lockfile 与 packageManager 都只
+  // 记录「应该用哪个」，管不住实际跑的那个（这正是 #187 的原始命题）。
+  const isPackageManager = pin.which === "packageManager";
+  const installed = isPackageManager ? probeRuntimeVersion(pin.name) : readInstalledVersion(pin.importer, pin.name);
+  issues.push(...checkInstalled(pin, installed));
+  if (isPackageManager) issues.push(...checkRuntimeVersion(pin, installed));
+
   rows.push(
-    `  ${pin.importer.padEnd(18)} ${pin.name.padEnd(28)} 声明 ${declared.padEnd(10)} 解析 ${(lockEntry?.version ?? "—").padEnd(28)} 磁盘 ${installed ?? "—"}`,
+    `  ${pin.importer.padEnd(18)} ${pin.name.padEnd(28)} 声明 ${declared.padEnd(10)} 解析 ${(lockEntry?.version ?? "—").padEnd(28)} ${isPackageManager ? "运行时" : "磁盘"} ${installed ?? "—"}`,
   );
 }
 

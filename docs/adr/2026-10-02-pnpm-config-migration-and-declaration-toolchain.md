@@ -106,9 +106,23 @@ overrides、尤其不强行组合不匹配的 vue-tsc / language-core」，也�
 
 | 来源 | 判什么 |
 | --- | --- |
-| `package.json` | 声明的 **specifier**（且不接受 `latest` / `*`） |
+| `package.json` | 声明的 **specifier**（且不接受 `latest` / `*`）；`pnpm` 读 `packageManager` |
 | `pnpm-lock.yaml` | 该 importer 实际解析到的 **version** |
-| `node_modules` | 磁盘上真实安装的版本 |
+| `node_modules` / **运行时** | 磁盘上真实安装的版本；`pnpm` 改为 `pnpm --version` |
+
+**`pnpm` 自身是三层里的特例，且必须如此。** 它由 `packageManager` 字段钉住、不在
+`dependencies` 里（所以它没有「lockfile 解析」之外的 importer 概念），更**不在 `node_modules`
+里**——真正跑的那个版本由 corepack / CI 的 `pnpm/action-setup` 决定，**不写进任何文件**，
+只能问它本人（`pnpm --version`）。因此它的第三层是「运行时」而非「磁盘」。
+
+⚠️ 第一版把 `pnpm` 的第二、三层都短路掉（`return []`），于是门禁输出
+`pnpm 声明 — / 解析 12.0.0 / 磁盘 n/a` 却依然报「**三方一致**」——**两个层面都没查，还报绿**。
+PR 评审 #191 的 P2 正是这一条。现在三层都真核对，且反向验证已实测：把 `packageManager` 改成
+`pnpm@11.5.0` → 立刻报 `[specifier-unpinned]`（manifest 与 lockfile 脱节）+
+`[disk-mismatch]`（运行时 11.5.0 ≠ 基线 12.0.0）。
+
+这恰好是 #187 原始命题的**同构重演**：lockfile 与 `packageManager` 都只记录「应该用哪个」，
+管不住「实际跑的是哪个」。
 
 关键点是**判落到「实际解析结果」而不是「声明」**：声明面上的 `^` / `~` 不是事实，`^2.2.0`
 今天解析到 `2.2.12`，下次 `pnpm install` 就可能变成 `2.2.13`。
