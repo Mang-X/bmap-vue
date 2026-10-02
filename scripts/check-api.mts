@@ -6,33 +6,40 @@
  *                            报告缺失、报告漂移或分析报错都让进程以非零码退出。
  * - `pnpm generate:api`   —— `--local`：把当次产物写进基线（改了公共类型面之后运行并提交它）。
  *
- * ## 覆盖范围：哪些出口有报告、哪两个没有
+ * ## 覆盖范围：七个出口全部有 report 与签名基线
  *
- * API Extractor 的符号表**无法**分析 Volar 为 SFC 生成的声明形态：`Map.vue.d.ts` 里那句
+ * #188 之前，`.` / `./components` 这两个出口挂在一个**「预期失败即通过」的探针**上：
+ * API Extractor 的符号表分析不了 Volar 为 SFC 生成的这段声明 ——
  *
  * ```ts
  * declare var __VLS_1: { ... }, __VLS_3: { ... }, __VLS_5: { ... };
  * ```
  *
- * 这种**多声明 `var`** 没有被 `vite-plugin-dts` 的 `bundleTypes` 带进合并后的声明文件，
- * 于是 `dist/index.d.ts` / `dist/components.d.ts` 里留下 `typeof __VLS_1` 这样的**悬空引用**，
- * API Extractor 一碰到就抛 `Symbol not found for identifier: __VLS_*`。
+ * 这种**多声明 `var`** 不会进入打包后的声明文件，于是 `dist/index.d.ts` 里留下对
+ * `__VLS_1` 的 `typeof` **悬空引用**，AE 一碰到就抛 `Symbol not found for identifier`，
+ * 消费方开 `skipLibCheck: false` 则报 `TS2304`（实测 51 处）。
  *
- * 因此本门禁分三层，**每个出口都有一层签名基线**：
+ * 根因不是「多声明 `var`」本身，而是**类型位置的 `typeof`**：AE 的 rollup 只保留
+ * 导出面可达的符号，模块局部变量不在其中，引用它的 `__VLS_Slots` 却留了下来。
+ * 实测把 `var` 拆开、改成 `type`、或换成已声明的唯一名，**都无效**。
+ * 唯一成立的是给组件补 `defineSlots` —— Volar 会把插槽载荷**内联**进 `__VLS_Slots`，
+ * 全程没有中间 `var`（且声明从此受模板校验）。
  *
- * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 评审 P1-1 引入、三轮评审 P1 推广到
- *   全部七个出口）：`dist/<出口>.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的
- *   全文快照，`pnpm generate:api` 生成、全等比对。对 `.` / `./components` 它是**唯一**的基线
- *   （AE 根本分析不了它们）；对五个有 report 的出口，它补的是 report 补不到的那一层 ——
- *   `ae-forgotten-export` 在 report 里只留 `getInputValue: typeof getInputValue` 这种**名字引用**，
- *   底下那个函数的签名一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红
- *   （#159 三轮评审 P1 举的例子）。只有 report 没有快照，等于「未导出类型的结构没人守」。
- * - **探针**（只对 `.` / `./components`）：每次运行都真的跑一遍 AE，并断言失败模式仍然是这一种。
- *   一旦它被修好（或变成别的错误）门禁会红，提示把这两个出口加进 `REPORTED`。
- *   **跳过而不探测**才是真正的风险：没人会发现阻塞已经消失或变质。
- * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：见下节。
+ * 因此本门禁现在对**七个出口一视同仁**，分三层：
  *
- * 另外五道门继续守根入口与组件的其余面：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
+ * - **API report**（`etc/<出口>/bmap-vue.api.md`）：AE 自己按空白归一后逐字符比。
+ * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：`ae-forgotten-export`
+ *   的符号名集合，**全等**才通过（#159 二轮评审 P1）。`index` / `components` 登记为
+ *   **不适用**，理由逐出口写在 `api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`。
+ * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 引入）：`dist/<出口>.d.ts` 经
+ *   TypeScript printer（`removeComments: true`）规范化后的全文快照。它补的是 report 补不到的
+ *   那一层 —— report 对未导出类型只留 `typeof getXxx` 这种**名字引用**，底下那个函数的签名
+ *   一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红。
+ *
+ * 「声明本身对消费方是否合法」由 `check:dts-strict` 单独守：AE 通过**不等于**声明合法，
+ * 那道门禁让消费方开 `skipLibCheck: false` 真编译一遍。
+ *
+ * 另外几道门继续守根入口与组件的其余面：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
  * `tests/behavior/export-surface-freeze.test.ts`（值导出精确集合）、
  * `generate:api-diff:check`（根入口导出名 vs 官方参考）、`verify:package`（tarball 消费方 vue-tsc）。
  *
@@ -67,6 +74,7 @@ import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
 import {
   collectForbiddenAdditions,
   forbiddenForgottenMessage,
+  FORGOTTEN_EXEMPT_ENTRIES,
   newForbiddenForgottenExports,
   REPORTED_ENTRIES,
 } from "./api-forgotten-boundary.mts";
@@ -85,17 +93,15 @@ const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
-/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。名单见 `api-forgotten-boundary.mts`。 */
+/**
+ * 七个出口：report、未导出类型身份集合（除登记不适用的）、签名基线都逐出口生效。
+ * 名单见 `api-forgotten-boundary.mts`（#188 起含 `index` / `components`）。
+ *
+ * #188 之前这里有两个名单（`REPORTED` 与 `KNOWN_BLOCKED`），两层判据各走一份。
+ * 豁免撤销后两者合并成一份 —— 留一个纯别名 `ALL_ENTRIES = REPORTED` 只会让人
+ * 以为两层判据还在。
+ */
 const REPORTED = REPORTED_ENTRIES;
-
-/** 已知无法分析的出口：探针断言失败模式，而不是静默跳过。 */
-const KNOWN_BLOCKED = ["index", "components"] as const;
-
-/** 七个出口：签名基线对每个出口都生效，report / 身份集合只对 REPORTED 生效。 */
-const ALL_ENTRIES: readonly Entry[] = [...REPORTED, ...KNOWN_BLOCKED];
-
-/** Volar 悬空引用的失败特征。换成别的错误 ⇒ 门禁红，要求重新评估名单。 */
-const KNOWN_BLOCKER_PATTERN = /Symbol not found for identifier: __VLS_/;
 
 const require_ = createRequire(resolve(PKG, "package.json"));
 const { Extractor, ExtractorConfig } = require_("@microsoft/api-extractor") as {
@@ -116,7 +122,7 @@ const { Extractor, ExtractorConfig } = require_("@microsoft/api-extractor") as {
   };
 };
 
-type Entry = (typeof REPORTED)[number] | (typeof KNOWN_BLOCKED)[number];
+type Entry = (typeof REPORTED)[number];
 
 /** 共享设置（消息级别 / docModel / rollup 开关）的唯一事实源。 */
 const CONFIG_PATH = resolve(PKG, "api-extractor.json");
@@ -167,7 +173,7 @@ const ts = require_("typescript") as typeof import("typescript");
  * printer 同时把引号、缩进、换行一并规范化，产物因此是**稳定**的（同一输入必然同一输出），
  * 注释改动也不会让基线抖动。
  */
-function expectedSignatureFile(entry: string): string {
+function expectedSignatureFile(entry: Entry): string {
   const fileName = resolve(DIST, `${entry}.d.ts`);
   const parsed = ts.createSourceFile(
     fileName,
@@ -181,12 +187,13 @@ function expectedSignatureFile(entry: string): string {
     .printFile(parsed)
     .replace(/\n+$/, "");
   const subpath = entry === "index" ? "." : `./${entry}`;
-  // 头两行说明按出口分（#159 四轮评审 P3）：`__VLS_` 只对 `KNOWN_BLOCKED` 成立，
-  // 给另外五个有 report 的出口写同一句是假话。
-  const note = (KNOWN_BLOCKED as readonly string[]).includes(entry)
+  // 头两行说明按出口分（#159 四轮评审 P3）：`__VLS_` 的豁免自 #188 起已撤销，
+  // 七个出口现在都同时有 API report；差别只在 forgotten-export 身份集合是否适用。
+  const exempt = FORGOTTEN_EXEMPT_ENTRIES[entry];
+  const note = exempt
     ? [
-        "> API Extractor 分析不了这两个出口的 Volar `__VLS_` 悬空引用，",
-        "> 但它们的类型面仍必须有一份会变红的基线（ADR 2026-09-25 决策 5 / #159 评审 P1-1）。",
+        "> 这个出口有 API report 与本签名快照，但**不适用** forgotten-export 身份集合：",
+        `> ${exempt.reason}`,
       ]
     : [
         "> 这个出口同时有 API report 与 forgotten-export 身份集合；本快照是第三层：",
@@ -233,7 +240,7 @@ function configFor(entry: Entry): unknown {
 }
 
 function assertDist(): void {
-  const missing = [...REPORTED, ...KNOWN_BLOCKED]
+  const missing = [...REPORTED]
     .map((entry) => `${entry}.d.ts`)
     .filter((name) => !existsSync(resolve(DIST, name)));
   if (missing.length) {
@@ -361,17 +368,21 @@ function preflight(): EntryRun[] {
   }
   // 身份集合的判据在**所有**出口都跑完之后统一下（`collectForbiddenAdditions` 不短路）：
   // 非空就一次性报出全部待处置出口，并保证此时 `etc/` 一个字节都没被写过。
+  // 登记为「不适用」的出口被**排除**在这层判据之外（#188）——它们写不出基线，
+  // 拿空基线去比会得到「192 个新增」的假拒绝。它们的 report 与签名基线照常写。
   const refusals = collectForbiddenAdditions(
-    runs.map((run) => ({
-      entry: run.entry,
-      baseline: readForgottenBaseline(run.entry),
-      actual: run.forgotten,
-    })),
+    runs
+      .filter((run) => FORGOTTEN_EXEMPT_ENTRIES[run.entry] === undefined)
+      .map((run) => ({
+        entry: run.entry,
+        baseline: readForgottenBaseline(run.entry),
+        actual: run.forgotten,
+      })),
   );
   if (refusals.length > 0) {
     throw new Error(
       `${forbiddenForgottenMessage(refusals)}\n` +
-        `  五个出口已全部判定完毕，本次命令**没有写任何基线** ——` +
+        `  出口已全部判定完毕，本次命令**没有写任何基线** ——` +
         ` 处置完上面每个名字后重跑即可。`,
     );
   }
@@ -400,7 +411,16 @@ function updateMode(): void {
       }
       // 用 preflight 判过的 `forgotten`，不用重跑那份：判据已在第一阶段全绿，二次判定只会
       // 让「为什么这次没被拒」变得不可解释。
-      writeForgottenBaseline(entry, forgotten);
+      //
+      // 登记为「身份集合不适用」的出口**不写**这份基线（#188），只写 report ——
+      // 理由见 `api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`。
+      if (FORGOTTEN_EXEMPT_ENTRIES[entry] === undefined) {
+        writeForgottenBaseline(entry, forgotten);
+      } else {
+        console.log(
+          `[check-api] ${entry}: 身份集合不适用（已登记理由），跳过写盘；当前 ${forgotten.length} 个未导出类型`,
+        );
+      }
     } catch (error) {
       restoreBaseline(target, previousReport);
       throw error;
@@ -412,11 +432,11 @@ function updateMode(): void {
     );
   }
   // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
-  for (const entry of ALL_ENTRIES) writeSignatureBaseline(entry);
+  for (const entry of REPORTED) writeSignatureBaseline(entry);
 }
 
 /** 写某个出口的类型级签名基线（七个出口都写）。 */
-function writeSignatureBaseline(entry: string): void {
+function writeSignatureBaseline(entry: Entry): void {
   const target = signaturePath(entry);
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedSignatureFile(entry);
@@ -460,7 +480,7 @@ function readForgottenBaseline(entry: string): string[] {
  * 因此文案必须按**当前** `forbiddenForgottenMessage` 的签名调用 —— 它收的是 refusal 数组，
  * 不是 `(entry, added, target)` 三个散参（评审抓到的正是这个失效兜底分支）。
  */
-function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
+function writeForgottenBaseline(entry: Entry, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
   const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
   if (added.length > 0) throw new Error(forbiddenForgottenMessage([{ entry, added }]));
@@ -487,7 +507,26 @@ function writeForgottenBaseline(entry: string, symbols: readonly string[]): void
  * 刻意不用「当前 ⊆ 基线」的子集判据：子集判据下清理是**静默绿**的，基线会随时间烂掉，
  * 几个月后被删掉的名字仍然"合法"。全等是子集判据的严格加强，两处漏法都堵上。
  */
-function forgottenBaselineFailure(entry: string, actual: readonly string[]): string | undefined {
+function forgottenBaselineFailure(entry: Entry, actual: readonly string[]): string | undefined {
+  // 登记在 `FORGOTTEN_EXEMPT_ENTRIES` 的出口**不适用**这一层（#188）。刻意在这里
+  // 早返回而不是让调用方跳过：调用方照旧跑 AE、照旧比对 report —— 豁免的只是
+  // 「未导出类型身份集合」这一层，且必须**同时**断言基线文件不存在，
+  // 否则「不适用」会退化成「基线丢了也算过」。
+  if (FORGOTTEN_EXEMPT_ENTRIES[entry] !== undefined) {
+    const target = forgottenPath(entry);
+    if (existsSync(target)) {
+      return (
+        `${entry}: 已登记为「forgotten-export 身份集合不适用」，却存在基线文件 ${target} ——` +
+        `要么删掉该文件，要么把出口从 FORGOTTEN_EXEMPT_ENTRIES 里移出` +
+        `（理由：${FORGOTTEN_EXEMPT_ENTRIES[entry]!.reason}）`
+      );
+    }
+    console.log(
+      `[check-api] ${entry}: forgotten-export 身份集合**不适用**（已登记理由），` +
+        `当前 AE 报出 ${actual.length} 个未导出类型`,
+    );
+    return undefined;
+  }
   const target = forgottenPath(entry);
   if (!existsSync(target)) {
     return `${entry}: 未导出类型身份基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`;
@@ -519,30 +558,6 @@ function forgottenBaselineFailure(entry: string, actual: readonly string[]): str
     `${entry}: 未导出类型身份基线漂移 —— ${details}。审阅 ${temp} 后跑 pnpm generate:api` +
     ` 并把基线一起提交（新增的必须先按 ADR 2026-09-25 的二选一处置，别用生成器盖过去）`
   );
-}
-
-function probeKnownBlocked(): void {
-  for (const entry of KNOWN_BLOCKED) {
-    let thrown: unknown;
-    try {
-      runExtractor(entry, false);
-    } catch (error) {
-      thrown = error;
-    }
-    if (thrown === undefined) {
-      throw new Error(
-        `[check-api] ${entry}: 之前挡住 API Extractor 的 Volar __VLS_ 阻塞**消失了** ——` +
-          `把这个出口加进 REPORTED，让它的类型面也进基线报告。`,
-      );
-    }
-    const message = thrown instanceof Error ? thrown.message : String(thrown);
-    if (!KNOWN_BLOCKER_PATTERN.test(message)) {
-      throw new Error(
-        `[check-api] ${entry}: 分析失败，但不是已登记的 Volar __VLS_ 阻塞：\n${message}`,
-      );
-    }
-    console.log(`[check-api] ${entry}: 已知阻塞（Volar __VLS_ 悬空引用）仍然成立，探针通过`);
-  }
 }
 
 function checkMode(): void {
@@ -583,29 +598,35 @@ function checkMode(): void {
       entryFailed = true;
     }
     if (entryFailed) continue;
+    const exempt = FORGOTTEN_EXEMPT_ENTRIES[entry];
     console.log(
       `[check-api] ${entry}: 与基线一致` +
         `${summary ? ` (warning=${result.warningCount}: ${summary})` : ""}` +
-        `，未导出类型 ${forgotten.length} 个与身份基线一致`,
+        (exempt
+          ? `，未导出类型 ${forgotten.length} 个（身份集合不适用：${exempt.reason}）`
+          : `，未导出类型 ${forgotten.length} 个与身份基线一致`),
     );
   }
 
   checkSignatureBaselines(failures);
-  probeKnownBlocked();
 
   if (failures.length) {
     throw new Error(`[check-api] ${failures.length} 项未通过:\n  - ${failures.join("\n  - ")}`);
   }
+  const identityCount = REPORTED.filter(
+    (entry) => FORGOTTEN_EXEMPT_ENTRIES[entry] === undefined,
+  ).length;
   console.log(
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
-      `${REPORTED.length} 份未导出类型身份集合基线一致，` +
-      `${ALL_ENTRIES.length} 份类型级签名基线一致`,
+      `${identityCount} 份未导出类型身份集合基线一致` +
+      `（${REPORTED.length - identityCount} 个出口已登记为不适用），` +
+      `${REPORTED.length} 份类型级签名基线一致`,
   );
 }
 
 /** 每个出口：比对 `etc/<entry>/bmap-vue.dts.md` 与当前 `dist` 的规范化签名。 */
 function checkSignatureBaselines(failures: string[]): void {
-  for (const entry of ALL_ENTRIES) {
+  for (const entry of REPORTED) {
     const target = signaturePath(entry);
     if (!existsSync(target)) {
       failures.push(`${entry}: 签名基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`);

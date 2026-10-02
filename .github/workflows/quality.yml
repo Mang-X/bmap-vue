@@ -194,10 +194,18 @@ jobs:
       - name: Check declared props are projected
         run: node --experimental-strip-types scripts/check-props-projected.mts
 
+      # 发布声明的严格消费（#188）。判据是「消费方开 skipLibCheck: false 能编译」——
+      # 这是唯一一道能发现「声明里有悬空标识符」的门禁：check:api 用的是 API Extractor，
+      # 它对 `typeof __VLS_N` 这类模块局部引用是**分析不出来**的（那正是 #188 的原始缺陷：
+      # 51 处 TS2304 发布出去，而 check:api / verify:package 全绿）。
+      # 输入同样是 `dist/**/*.d.ts`，故排在 `build:package` 之后。
+      - name: Check published declarations compile under skipLibCheck:false
+        run: pnpm check:dts-strict
+
       # 公共 API report 基线（#44 验收项「API report 只有经过审核的新 1.0 面」）。
       # 输入是 `dist/**/*.d.ts`，所以必须排在 `build:package` 之后（与 public-dts 同一条顺序约束）。
-      # 根入口 / ./components 暂时进不了报告（Volar __VLS_ 悬空引用），脚本对它们跑探针：
-      # 阻塞消失或变质都会让这一步红，见 scripts/check-api.mts 文件头。
+      # 七个出口都进报告（#188 起；此前 index / components 因 Volar 悬空引用挂在一个
+      # 「预期失败即通过」的探针上，该豁免已撤销）。
       - name: Check API report baselines
         run: pnpm check:api
 
