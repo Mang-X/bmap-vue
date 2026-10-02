@@ -113,7 +113,7 @@ export interface CapabilityDescriptor {
 }
 
 /**
- * 单引擎收口（#26 删除 `webgl-v1` / `jsapi-v3`，#126 结算退化维度）。
+ * 单引擎收口（ 删除 `webgl-v1` / `jsapi-v3`， 结算退化维度）。
  *
  * 描述符**不再**声明 `engines`：单引擎下「已收录能力按引擎区分」不产生任何区分力
  * （每条都恒为全集），留着它只是为未实现的多引擎留位。原字段的**唯一**可达拒绝路径
@@ -161,8 +161,8 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     id: "map.viewport",
     family: "map",
     description: "视口读写（getViewport 只读最佳视野 / setViewport 施加视野）",
-    // #165 回填：`getViewport` 回到探测表。此前 Class 5 把它摘掉的理由是「`MapDriver`
-    // 从不调用它」——那是**用实现缺失去论证能力不存在**，与 #165 §3.3「不得无理由裁剪
+    // 回填：`getViewport` 回到探测表。此前 Class 5 把它摘掉的理由是「`MapDriver`
+    // 从不调用它」——那是**用实现缺失去论证能力不存在**，与 「不得无理由裁剪
     // 能力」相悖。live AK 实测两个成员运行时都在位（`165-runtime-verification.md`
     // 结论四），且 `MapDriver.getViewport` 现在真的调用它。
     rawMembers: ["getViewport", "setViewport"],
@@ -193,14 +193,14 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: true,
   },
-  // #165 回填：`map.screenshot` / `map.fly-to` 两条**恢复**收录。
+  // 回填：`map.screenshot` / `map.fly-to` 两条**恢复**收录。
   //
   // 它们此前被 Class 5 删除，理由是「`MapDriver` 没有对应命令面，而 `supports()` 却返回
   // true —— 一个兑现不了的承诺」。那条推理的前提（成员在运行时不存在）**是错的**：
   // live AK 实测 `BMap.Map.prototype` 上 `getScreenshot` / `flyTo` / `getViewport` / `setViewport`
   // 全部在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四，取证探针
   // `scripts/probe-runtime-members.mts`）。**用「我们还没接线」论证「能力不存在」，
-  // 等于把「实现缺口」记成「上游缺口」**—— #165 §3.3 要求能力不得无理由裁剪，
+  // 等于把「实现缺口」记成「上游缺口」**——  要求能力不得无理由裁剪
   // 正确的处置是补实现，而不是删条目。两条现已由 `MapDriver.getScreenshot` /
   // `MapDriver.flyTo` 兑现。
   //
@@ -332,7 +332,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
-  // ---- issue #178：`GroundPoint`（贴地点覆盖物）----
+  // ---- ：`GroundPoint`（贴地点覆盖物）----
   // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
   // **有完整类声明**（不是 `Marker3D` / `MapMask` 那种「只在文档里出现、类型包无声明」的情况）
   // ⇒ `runtimeOnly: false`，`status: "native"`（对官方成员的直接投影，与 `overlay.ground` 同判据）。
@@ -413,7 +413,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "native",
     runtimeOnly: false,
   },
-  // ⚠️ **不要**在这里为 `FeatureLayer` 增加能力项（#165 收口，实测裁决：不加）。
+  // ⚠️ **不要**在这里为 `FeatureLayer` 增加能力项（ 收口，实测裁决：不加）。
   //
   // 三方分歧与逐条读数（live AK / headless Chrome，`scripts/probe-165-feature-layer.mts`，
   // `BMap.version === "gl"`，SDK 4.0.5；补齐等待 `settled=true`、0ms 后取样）：
@@ -465,7 +465,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   //
   // 因此弃用只落在**说明**上：组件继续可用（Development 期告警一次 + 类型层 `@deprecated`
   // + 文档），真正的替代品（`<PointLayer>`）本库已提供。详见 #165 与
-  // `docs/zh-CN/components/data.md`。
+  // ``。
   "layer.point-icon": {
     id: "layer.point-icon",
     family: "layer",
@@ -518,7 +518,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: false,
   },
   // 同上：`FillLayer` 也在 4.0.5 的弃用名单上（建议改用 `visualization.PolygonLayer`），
-  // 替代组件同样已由 #166 提供。
+  // 替代组件同样已由  提供。
   "layer.fill": {
     id: "layer.fill",
     family: "layer",
@@ -572,7 +572,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "experimental",
     runtimeOnly: false,
   },
-  // #109：MVT 矢量瓦片。挂载（直接 `addLayer`）、`layers` 字符串数组、状态键 `layerName_id`
+  // MVT 矢量瓦片。挂载（直接 `addLayer`）、`layers` 字符串数组、状态键 `layerName_id`
   // 均由 live 探针取证（skill `references/mvt-layer.md`「live 探针读数」）；类在 4.0.5 有完整声明。
   "layer.mvt": {
     id: "layer.mvt",
@@ -584,7 +584,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   },
   // 聚合：默认路径就是原生。`status: "extended"` 表达的是「本库在原生能力之上还提供了一个
   // 显式可选的 `markers` 引擎（网格聚合 + Marker）」，而**不是**「原生缺失时的 fallback」——
-  // issue #35 的实测（`scripts/probe-native-point-cluster.mts`）证明原生可用，因此自动降级不成立；
+  // 的实测（`scripts/probe-native-point-cluster.mts`）证明原生可用，因此自动降级不成立；
   // `markers` 的增量是「簇内业务项」（官方没有公开的读回入口）。`runtimeOnly: true` 是因为
   // `ClusterLayer` 属可视化扩展 API：实现按需异步注入，**存在性只能在调用时刻判断**
   // （4.0.5 给它补了类声明，但「类型里有形状」≠「运行时已加载」，因此 `runtimeOnly`
@@ -638,7 +638,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     runtimeOnly: true,
   },
 
-  // #166：官方 4.0.5（git `5ba67f4`）新增的 `visualization/` 两族。它们是 4.0.5
+  // 官方 4.0.5（git `5ba67f4`）新增的 `visualization/` 两族。它们是 4.0.5
   // **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
   //
   // `status: "experimental"` 的判据与 `layer.line` / `layer.fill` 相同：「这一族新、
@@ -680,7 +680,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
     status: "experimental",
     runtimeOnly: false,
   },
-  // #166 第二刀：`visualization/TextLayer`（4.0.5 新增的批量文字标注）。
+  // 第二刀：`visualization/TextLayer`（4.0.5 新增的批量文字标注）。
   //
   // `status: "experimental"` 与 `layer.polygon` / `layer.polyline` 同判据：「4.0.5 才第一次
   // 出现在类型包里、接口面可能变」。
@@ -691,7 +691,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // **完全不存在**（探针 case 15/16：8s 与再 25s 两次复读都是 `undefined`，且扫遍
   // `BMap` 全部 294 个自有属性也没有任何别名）。它们因此**不建能力槽位**——
   // 官方声明了、运行时没发，登记进去只会让 `supports()` 对一个永远不会来的能力说真话。
-  // 依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
+  // 依据见 ``。
   "layer.text": {
     id: "layer.text",
     family: "layer",

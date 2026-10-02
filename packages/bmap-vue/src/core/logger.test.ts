@@ -67,7 +67,7 @@ describe("logger 上下文清洗（#163）", () => {
     const output = warn.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
     // 凭据**键名**（`ak`）整体不输出——但键名本身要留下来（「哪个字段被清掉」是定位信息）。
     expect(output?.ak).toBe("[redacted]");
-    // `serviceHost` 不在拒识清单里（#163 评审核过：零调用点传它），它靠**值**的形状脱敏：
+    // `serviceHost` 不在拒识清单里（ 评审核过：零调用点传它），它靠**值**的形状脱敏
     // URL 的非凭据部分（`https://x.example/?`）照常可读，`ak=` 参数被打码。
     expect(output?.serviceHost).toBe("https://x.example/?ak=***hMoQ");
   });
@@ -424,7 +424,7 @@ describe("logger 故障隔离（#163）", () => {
 });
 
 /**
- * `devWarn` 的环境判定（#27 评审第二轮 P2）
+ * `devWarn` 的环境判定（ 评审第二轮 P2）
  *
  * 判定读的是 `process.env.NODE_ENV`：在 Node / SSR 下它是真实环境变量，在浏览器里由**消费方**
  * 的打包器折叠。下面两条分别钉住两个终态（消费方 dev server ⇒ 折叠成 `"development"`；
@@ -482,7 +482,7 @@ describe("devWarn", () => {
 
 /** 告警去重的 once 语义不退化（#163 验收表最后一行）。 */
 describe("createDevWarnOnce", () => {
-  // 这条是**不退化**的护栏，不是 #163 新增的能力：`createDevWarnOnce` 的实现本票没动，
+  // 这条是**不退化**的护栏，不是  新增的能力：`createDevWarnOnce` 的实现本票没动
   // 但它经过同一条 `emit` 输出路径（投影 + 隔离），所以要钉住 once 语义没被改坏。
   it("同一 key 只报一次，不同 key 各报一次（once 语义不退化）", async () => {
     const { createDevWarnOnce } = await import("./logger");

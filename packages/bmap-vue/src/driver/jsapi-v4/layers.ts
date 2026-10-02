@@ -1,5 +1,5 @@
 /**
- * v4 LayerDriver（M3A2-CONTROLS-LAYERS / issue #22；M7-LAYERS / issue #40 扩到 11 种）
+ * v4 LayerDriver（M3A2-CONTROLS-LAYERS / ；M7-LAYERS /  扩到 11 种）
  *
  * 把 JSAPI 4.0 的图层收敛成项目领域映射（`LayerDriver`）；公共 API 不新增 raw 成员，
  * 只把 `LayerHandle` 已有的品牌口径（`layer:<kind>`）落实到十一种图层上。
@@ -114,7 +114,7 @@ const TILE_OPERATIONS = ["setZIndex"] as const satisfies readonly LayerOperation
 const TILE_MUTABLE = { zIndex: "setZIndex" } as const;
 
 /**
- * 图层 option 的更新口径（「动态 option 与必须重建的 option」的分类，issue #22 实施步骤 3）。
+ * 图层 option 的更新口径（「动态 option 与必须重建的 option」的分类， 实施步骤 3）。
  *
  * 表用 `Record<LayerKind, …>`：新增一个图层种类却忘记写分类会直接编译失败。
  */
@@ -127,7 +127,7 @@ const LAYER_DESCRIPTORS = {
     // 它也没有统一 opacitiy 槽位（只有 fillOpacity / strokeOpacity 两个专属项）。
     ctorSlots: [],
     ctorSlotKeys: {},
-    // #165 Class 1：公开 prop 已直接叫官方的 `autoViewport`，别名 `{ viewport: "autoViewport" }`
+    // 公开 prop 已直接叫官方的 `autoViewport`，别名 `{ viewport: "autoViewport" }`
     // 因此**删掉**（§3.6 不留兼容别名）。ADR `2026-09-11-jsapi-v4-control-layer-facets` §5 已经
     // 判过：`viewport` 只是 4.0 运行时的**未声明**别名，官方 4.0 只声明 `autoViewport`，
     // 「别名一旦在升级中消失，表现会是 view 静默不取景」——不把未声明的别名当契约。
@@ -180,7 +180,7 @@ const LAYER_DESCRIPTORS = {
     ctorSlots: ["minZoom", "maxZoom", "data"],
     ctorSlotKeys: { data: "dataSource" },
     aliases: {},
-    // `level` 是**就地更新**（#165 收口）。它此前是「没有写理由的缺席」：`setLevel` 在官方
+    // `level` 是**就地更新**（ 收口）。它此前是「没有写理由的缺席」：`setLevel` 在官方
     // 声明上（`layer/GeoJSONLayer.d.ts`），而这里的 `mutable` 是空的，于是 prop 变化一律
     // 走重建。live 读数（`scripts/probe-165-level-effect.mts`，4.0.5，headless Chrome）证明
     // 它**可观测地生效**——`setLevel(-50)` 之后 `getLevel()` 读回 `-50`，且 `getData()` 里
@@ -266,7 +266,7 @@ const LAYER_DESCRIPTORS = {
     bagSetters: {},
     operations: TILE_OPERATIONS,
   },
-  // #109：MVT 矢量瓦片。官方没有 `opacity` / `setMinZoom` / `setMaxZoom` / `setData` / `clearData`；
+  // MVT 矢量瓦片。官方没有 `opacity` / `setMinZoom` / `setMaxZoom` / `setData` / `clearData`；
   // `zIndex` / `style` 都是字段级 setter（`setZIndex` / `setStyle(styleMap)` 直接收样式袋，
   // 不是 `setStyleOptions` 那种「option 键袋」——bagSetters 会把 value 再包一层 `{ style: … }`，
   // 与官方签名不符，因此 style 归 mutable）。
@@ -353,7 +353,7 @@ export function createJsapiV4LayerDriver(input: CreateJsapiV4LayerDriverInput): 
    * 领域 options → 4.0 构造 options。
    *
    * 三条规则：
-   * 1. **改名**（`aliases` 表）：#165 Class 1 之后 `district` 那一项**已空**——公开 prop 直接
+   * 1. **改名**（`aliases` 表）： 之后 `district` 那一项**已空**——公开 prop 直接
    *    叫官方的 `autoViewport`，不再需要别名。别名键与目标键同时出现时以显式写下的 v4 键
    *    为准——判据是**目标键有没有有效取值**（`!== undefined`），不是「键在不在」；
    * 2. **统一槽位**按 `ctorSlots` 决定收或丢：不在该 kind 的槽位表里（例如 `district` 的

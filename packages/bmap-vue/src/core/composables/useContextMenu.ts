@@ -19,13 +19,13 @@
  *
  * 引擎对菜单的动词是「挂到目标上」（`Map#addContextMenu` / `Marker#addContextMenu`），不是
  * 「加进地图」：菜单不出现在 `map.getOverlays()` 里，也不参与 `clearOverlays()`。内核的 `mount`
- * 固定走 `add/remove`，为菜单加一个 `mount` 覆盖钩子会让「登记 + 回滚」那段（PR #103 评审 1）
+ * 固定走 `add/remove`，为菜单加一个 `mount` 覆盖钩子会让「登记 + 回滚」那段（PR  评审 1）
  * 出现第二份实现。这里复用的是内核**下面那层**（`useSdkResource` 的实例 child scope / 代次守卫 /
  * 释放路径）+ 同一套 `OverlayRegistry` 记账 + 同一个事件矩阵。理由同时记在 ADR 里。
  *
  * ## target 解析
  *
- * 只认 `TargetContext`（#30 起的挂载目标契约）：
+ * 只认 `TargetContext`（ 起的挂载目标契约）
  *
  * | 最近的 `TargetContext` | 结果 |
  * | --- | --- |
@@ -36,8 +36,8 @@
  *
  * 「一个都没有」这一档只在 `<Map>` 之外成立——`<Map>` 子树里总有它自己的地图 target，因此
  * **不提供 `TargetContext` 的组件**（`MapMask` / `Marker3D` 这类）不会被当成目标，其下的菜单
- * 等价于挂在地图级。⚠️ 这条口径在合并 #105 时改过一次：此前判据依赖 `overlayContextKey`，
- * 而 #104 审计把那个 key 整条删了（「不恢复上游没公开的身份」方向的同一件事），于是本层不再
+ * 等价于挂在地图级。⚠️ 这条口径在合并  时改过一次：此前判据依赖 `overlayContextKey`
+ * 而  审计把那个 key 整条删了（「不恢复上游没公开的身份」方向的同一件事），于是本层不再
  * 试图区分「父链上有旧层覆盖物」——没有契约可依据时就不猜（改法与理由见 ADR 的评审修正一节）。
  */
 import { inject, nextTick, onScopeDispose, provide, shallowRef, watch, type ShallowRef } from "vue";
@@ -86,7 +86,7 @@ export interface UseContextMenuResult {
    */
   readonly itemsHost: Readonly<ShallowRef<HTMLElement | null>>;
   /**
-   * 逐条命令面（#165 Class 3 / TASK 2d）：官方 `ContextMenu` 的六个成员 + 两条补齐的
+   * 逐条命令面（ / TASK 2d）：官方 `ContextMenu` 的六个成员 + 两条补齐的
    * 「逐条改」入口。释放 / 未就绪时**显式抛 `BMAP_RESOURCE_DISPOSED`**，不静默 no-op。
    */
   readonly commands: ContextMenuExpose;
@@ -138,8 +138,8 @@ export function useContextMenu(
    * 最近的挂载目标契约。
    *
    * 直接用 **`targetContextKey`** 注入，而不是再包一个 `useXxx()` helper：`useOptionalTargetContext()`
-   * 已被 #104 的存量审计删除（「只有一个消费者的公共 helper」），因此不能为了本组件把它加回来
-   * ——#104 的结论是「无消费者的公共面不加」，而一个 helper 只为「包一层 `inject`」存在时，
+   * 已被  的存量审计删除（「只有一个消费者的公共 helper」），因此不能为了本组件把它加回来
+   * —— 的结论是「无消费者的公共面不加」，而一个 helper 只为「包一层 `inject`」存在时
    * 它的消费者永远只有本文件。这里读同一个 key，不新增公共出口。
    */
   const targetContext = inject<TargetContext | undefined>(targetContextKey, undefined);
@@ -165,7 +165,7 @@ export function useContextMenu(
   /**
    * 数据 API 的取值：`items`。
    *
-   * 菜单项的数据入口只有 `items` 一种拼写（#136 起旧名 `menuItems` 随集中弃用层删除）。
+   * 菜单项的数据入口只有 `items` 一种拼写（ 起旧名 `menuItems` 随集中弃用层删除）。
    * 声明式 children 走下面的 `children` 注册表，两条路径在这里汇合成同一份条目列表。
    */
   function readDataItems(): unknown {
@@ -441,7 +441,7 @@ export function useContextMenu(
   }
 
   // 观察面（`resource` / `status`）刻意**不接**：由组件经 props / `resource:error` 走。
-  // 这里只取 `resource`——命令面需要「当前存活实例」的读取器（#165 Class 3 / TASK 2d）。
+  // 这里只取 `resource`——命令面需要「当前存活实例」的读取器（ / TASK 2d）。
   const { resource: sdkResource } = useSdkResource<Record<string, unknown>, OverlayHandle, MapReadyContext>({
     props: rawProps,
     label: "overlay:context-menu",
@@ -564,7 +564,7 @@ export function useContextMenu(
   /* ------------------------------------------------------------------ 命令面（#165） */
 
   /**
-   * 菜单的逐条命令面（#165 Class 3 / TASK 2d）。
+   * 菜单的逐条命令面（ / TASK 2d）。
    *
    * 官方 `context-menu/ContextMenu.d.ts` 声明了六个成员，而组件侧此前只做「整菜单重建」，
    * 因此它们**没有调用路径**。本层给出其中四个（`getItem` / `removeItem` /
@@ -583,7 +583,7 @@ export function useContextMenu(
    *    那是**另一种语义**、也不是组件 `visible` 的意思（后者是「菜单是否挂到目标上」），
    *    因此这里给的是单独的方法名，不挂成 `setVisible`。
    *
-   * ## 与重建路径的关系（`#33` 那条「整菜单重建」不撤）
+   * ## 与重建路径的关系（`` 那条「整菜单重建」不撤）
    *
    * 重建仍然保留：**`items` 变更是数据结构级的**（增删改一条 = 换整张表），
    * 官方也没有「按 id 找一条再改」这种粒度的可靠入口。命令面是**重建之外**的一条

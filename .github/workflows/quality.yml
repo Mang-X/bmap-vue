@@ -38,6 +38,13 @@ jobs:
       - name: Check pnpm config hygiene
         run: pnpm check:toolchain
 
+      # 注释卫生（#192）：单文件「注释 / 实码」比不得超阈值，且带两条豁免
+      # （实测证据、类型定义密集）——它们恰恰是本仓最该有的注释形态。
+      # ⚠️ 这里**刻意没有**「注释不得引用 ADR / issue」这条判据：实测 499 处引用没有一处
+      # 是纯重复，每处都承载理由（详见 issue #192）。
+      - name: Check comment hygiene
+        run: pnpm check:comment-hygiene
+
       # raw SDK 静态扫描:组件/composables/runtime 禁止访问 BMapGL / BMap
       - name: Check raw SDK boundaries
         run: node --experimental-strip-types scripts/check-raw-sdk.mts

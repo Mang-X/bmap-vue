@@ -174,7 +174,7 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
     expect(raw.callLog).toEqual(["setData"]);
     expect(raw.data).toBe(collection);
 
-    // #106 评审 P1：这一族只有 setData/getData（上游 .d.ts + 仓库内官方参考都这么说），
+    // 评审 P1：这一族只有 setData/getData（上游 .d.ts + 仓库内官方参考都这么说）
     // 因此 `clearData` 必须**显式失败**，而不是靠替身宽容地接住。
     expect(layers.supports("line", "clearData")).toBe(false);
     expect(() => layers.clearData(layer)).toThrowError(
@@ -260,7 +260,7 @@ describe("v4 Native Layer Facet：数据 / 样式 / 显隐 / 层级 / 状态", (
   /* --- #165 Class 3 / TASK 1：4.0.5 给这四个类补了类声明，成员面随之可登记 --- */
 
   it("显隐 / 透明度 / 层级：三个扩展 API 图层都登记了（4.0.5 声明了 setVisible）", () => {
-    // #165 的起点是「4.0.4 没有类声明 ⇒ 不把成员当契约」。4.0.5（`5ba67f4`）把
+    // 的起点是「4.0.4 没有类声明 ⇒ 不把成员当契约」。4.0.5（`5ba67f4`）把
     // `visualization/PointLayer.d.ts:324` `setVisible`、`:328` `setZIndex`、`:332`
     // `setRenderStage`、`:336` `setRefCenter` 逐条声明了出来——那个前提已经失效。
     // 组件侧的可见性落地是按 `supports()` 选的（见 `useNativeLayerResource.hidesBySetter`），
@@ -686,7 +686,7 @@ describe("v4 Native Layer Facet：supports() 与实现一致", () => {
 /**
  * 归一化操作 → 它在**官方声明**里对应的成员（逐条取自 `invoke()` 与各方法实现）。
  *
- * 这张表是「操作面不许凭印象增减」的机器证据：#106 评审的 P1 正是 `clearData` 被登记进了四类
+ * 这张表是「操作面不许凭印象增减」的机器证据： 评审的 P1 正是 `clearData` 被登记进了四类
  * 专页图层的操作表，而官方声明里根本没有它——下面那条用例会把这种情况抓回来，而不是靠替身
  * 「宽容地接住」（替身比真实契约宽容 = 把不存在的 capability 测绿）。
  */
@@ -751,7 +751,7 @@ const OPERATION_MEMBERS_BY_KIND: Readonly<
   polygon: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
   polyline: { setStyle: ["setOptions"], setEnablePicked: ["setEnablePicked"] },
   /**
-   * #166 第二刀。`hitTestText` 落在官方同一个 `hitTest` 成员上，但**不是** `hitTest` 那条
+   * 第二刀。`hitTestText` 落在官方同一个 `hitTest` 成员上，但**不是** `hitTest` 那条
    * 操作——官方 `TextLayer.hitTest` 的回包是 `TextLayerItem`（`:289`），没有 `dataIndex`。
    * 把它归一成 `hitTest` 那份 `{ dataIndex, dataItem }` 会逼本库编造一个下标。
    */
@@ -761,7 +761,7 @@ const OPERATION_MEMBERS_BY_KIND: Readonly<
 /**
  * 「运行时有、声明没有」的**登记豁免**——`操作面 ↔ 声明` 门禁的**唯一**例外表。
  *
- * #165 收口时确立的口径（取代原先「未声明成员一律不登记」）：
+ * 收口时确立的口径（取代原先「未声明成员一律不登记」）
  *
  * > 判据是**可观测地生效**，不是「成员在不在」，也不是「声明有没有写」。
  *
@@ -834,10 +834,10 @@ const DECLARED_CTORS: ReadonlyArray<readonly [NativeLayerKind, string]> = [
   ["cluster", "ClusterLayer"],
   ["heatmap", "Heatmap"],
   ["track-line", "TrackLine"],
-  // #166：官方 4.0.5 新增的两个类，**替代**弃用的 `FillLayer` / `LineLayer`。
+  // 官方 4.0.5 新增的两个类，**替代**弃用的 `FillLayer` / `LineLayer`。
   ["polygon", "PolygonLayer"],
   ["polyline", "PolylineLayer"],
-  // #166 第二刀：批量文字标注。它是这一族里唯一**声明与运行时完全对齐**的类。
+  // 第二刀：批量文字标注。它是这一族里唯一**声明与运行时完全对齐**的类。
   ["text", "TextLayer"],
 ];
 
@@ -890,7 +890,7 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
   });
 
   it("polygon / polyline：登记面里的每一条都在官方声明里，**例外逐条列在豁免表上**", () => {
-    // 这条是 #166 的**核心**门禁：两个新 kind 的操作表**默认**只能引用官方声明过的成员。
+    // 这条是  的**核心**门禁：两个新 kind 的操作表**默认**只能引用官方声明过的成员。
     //
     // ⚠️ **`setOpacity` 的处置是「按族不同」的**（2026-09-27 收口更正）。原先这里断言
     // 「两族都不得登记」，依据是「未声明成员一律不当契约」+「跟随 PointLayer 的同一裁决」。
@@ -1004,7 +1004,7 @@ describe("v4 Native Layer Facet：操作面与官方声明一致", () => {
     //   - `prototype.hitTest === true`，实际调用返回 `null`（当时容器上没有文字）
     //     ⇒ 方法**在且可调用**（`PolygonLayer` / `PolylineLayer` 的 `hitTest` 是 `false`）；
     //   - `prototype.setOpacity === true`，`setOpacity(0.5)` 后 `getOpacity()` 读回 `0.5`
-    //     ⇒ 声明了（`TextLayer.d.ts:296`）且运行时在位（前两族**没声明**，按 #165 裁决不登记）。
+    // ⇒ 声明了（`TextLayer.d.ts:296`）且运行时在位（前两族**没声明**，按  裁决不登记）。
     //
     // 因此它登记 `hitTestText`（不是 `hitTest`，见 `OPERATION_MEMBERS_BY_KIND`）与 `setOpacity`。
     expect(layers.supports("text", "hitTestText"), "hitTest 声明与运行时都在 ⇒ 登记").toBe(true);

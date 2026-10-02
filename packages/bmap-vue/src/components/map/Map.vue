@@ -166,7 +166,7 @@ function emitReady(payload: MapReadyPayload): void {
 
 const containerRef = ref<HTMLDivElement | null>(null);
 /**
- * 组件**根容器**（作者声明的尺寸所在）。M4-HANDLE-UX / #29：容器门禁与可见性策略测量的是
+ * 组件**根容器**（作者声明的尺寸所在）。M4-HANDLE-UX /容器门禁与可见性策略测量的是
  * 它，而不是内层 `bmap-canvas-host`。内层壳是 `position: absolute; inset: 0` 的定位壳，
  * 尺寸完全由根容器决定 —— 真实浏览器上两者同盒，但显式区分能让「测量谁」成为可评审的选择。
  */
@@ -270,7 +270,7 @@ const DEFAULT_VIEW = {
 } as const;
 
 /**
- * `center` 的防御性拷贝（#27 评审 P1）。
+ * `center` 的防御性拷贝（ 评审 P1）。
  *
  * 点必须拷：`center` / `defaultCenter` 是**可变对象**，父级拿到自己的对象后原地改一个字段
  * （`spot.lng = 5`）不会触发 props 变化，却会顺着引用改到状态内部的初值 / 镜像 / 首次视野快照上，
@@ -422,7 +422,7 @@ function applyTiltFromProps(next: number | undefined): void {
 }
 
 /**
- * ready 时的**唯一**收敛路径：把「生效值」写进地图（#27 评审第二 / 三轮）。
+ * ready 时的**唯一**收敛路径：把「生效值」写进地图（ 评审第二 / 三轮）。
  *
  * 两点合起来决定了它的形状：
  *
@@ -487,7 +487,7 @@ function convergeViewToState(): void {
 }
 
 /**
- * ready 之前的视野收敛（#27 评审两轮，第三轮统一为**一条路径**）。
+ * ready 之前的视野收敛（ 评审两轮，第三轮统一为**一条路径**）。
  *
  * 为什么必须有这一步：watcher 在 SDK 未就绪时会跳过写入（那时没有 map 可写），而首次视野用的是
  * setup 阶段冻结的快照。父级在「SDK 加载中」改 prop 是**文档明确支持**的用法
@@ -553,7 +553,7 @@ function bindViewEvents(ctx: MapReadyContext): void {
  *
  * 取值域是 `MapTypeIdName`（封闭联合，五个官方常量名）。此前这里只映射三个、其余
  * **静默回退**成 `"normal"`——用户传 `BMAP_HYBRID_MAP` 拿到的是普通图且没有任何提示
- * （#165 Class 1 修掉的静默错值）。
+ * （ 修掉的静默错值）。
  *
  * 两种失败口径刻意不同：
  *
@@ -627,7 +627,7 @@ function syncEnableProps(ctx: MapReadyContext) {
 }
 
 /**
- * 个性化样式 props → `setMapStyle`（#165 Class 2 / H）。
+ * 个性化样式 props → `setMapStyle`（ / H）。
  *
  * 官方 `setMapStyle(config: MapStyleConfig)` 的三个成员是 `styleId?: string` /
  * `styleJson?: object[]` / `merge?: boolean`（`core/MapStyleConfig.d.ts`）。三处更正：
@@ -642,7 +642,7 @@ function syncEnableProps(ctx: MapReadyContext) {
  *    本库只暴露两个互斥 prop，没有第三个键能表达「合并」——**刻意不造**：
  *    官方 `merge` 的适用前提是「已经有一份样式在生效」，而本库这层没有可观察的
  *    「当前样式」状态（样式可能已被 `applyStyleProps` 之外的路径改过）。
- *    留待有可验证语义时再补，见 `docs/zh-CN/contributing/165-runtime-verification.md`。
+ * 留待有可验证语义时再补，见 ``。
  */
 function applyStyleProps(ctx: MapReadyContext) {
   const id = props.mapStyleId;
@@ -680,7 +680,7 @@ const currentRuntime = new MapRuntime({
       ? { preserveDrawingBuffer: props.preserveDrawingBuffer }
       : {}),
   },
-  // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
+  // 建图前的最后一个等待点（ 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。
   beforeCreateMap: () => waitForUsableContainer(),
 });
@@ -752,7 +752,7 @@ const suspension = useMapSuspension({
   autoResize: () => props.enableAutoResize,
 });
 
-// 观察器与订阅归属**地图实例的资源作用域**（#29 评审 P1）：`keepAliveBehavior="dispose"` 时
+// 观察器与订阅归属**地图实例的资源作用域**（ 评审 P1）：`keepAliveBehavior="dispose"` 时
 // `onDeactivated` 会调 `runtime.dispose()`，而组件那一刻还在 KeepAlive 的 cache 里 —— 只靠
 // `onUnmounted` 释放会让 Resize / Intersection 观察器活到「下一次真正卸载」。登记进
 // `resources` 之后 `runtime.dispose()` 会一并释放它们（`onUnmounted` 里的显式 `dispose()`
@@ -776,7 +776,7 @@ runtime.resources.add(() => rejectPendingWaiters(disposedError()));
 const containerReady: Readonly<ShallowRef<boolean>> = suspension.containerReady;
 
 /**
- * 组件级 boot 状态机（#29 复审 P1 / P2）。三条语义都要求「一次**完整**启动」是单飞的 ——
+ * 组件级 boot 状态机（ 复审 P1 / P2）。三条语义都要求「一次**完整**启动」是单飞的 ——
  * 而不是只让 Runtime 的建图单飞：
  *
  * 1. **并发 retry 共享同一次 boot**：否则两次 `start()` 都会 `await` 同一个 `mountPromise`，
@@ -796,7 +796,7 @@ let deferredWaiters: Array<{
   reject: (error: unknown) => void;
 }> = [];
 /**
- * 「失败期间同步提出的 retry」排的下一轮（#29 三轮复审 P2）。
+ * 「失败期间同步提出的 retry」排的下一轮（ 三轮复审 P2）。
  *
  * `boot()` 是「先同步 `emit('error')`、再 throw」，而 `bootTask` 要到 `.finally()` 才复位 ——
  * 于是 `@error="mapRef?.retry()"` 这种写法会命中「已有 bootTask」并复用那条**即将 reject** 的
@@ -825,7 +825,7 @@ function attachWaiters(task: Promise<MapReadyContext>): void {
 }
 
 /**
- * 终止所有悬挂的等待者（#29 三轮复审 P1）。
+ * 终止所有悬挂的等待者（ 三轮复审 P1）。
  *
  * 三组等待者都必须能被「Runtime 被销毁」终止，而不只是「组件被卸载」：
  * `keepAliveBehavior="dispose"` 的 `onDeactivated → runtime.dispose()` 不会触发 `onUnmounted`，
@@ -852,7 +852,7 @@ function disposedError(): BMapError {
 }
 
 /**
- * 建图等待点的**兜底唤醒**：只要还有等待者，就每帧做一次 fresh 复查（#29 五轮复审 P1）。
+ * 建图等待点的**兜底唤醒**：只要还有等待者，就每帧做一次 fresh 复查（ 五轮复审 P1）。
  *
  * 主唤醒源仍然是尺寸观察器，但它只在**缓存层**出现「不可用 → 可用」转换时回调。fresh 判据与
  * 缓存可能不一致 —— DOM 在观察器交付之前变回原尺寸时，缓存里根本没有那次 0×0，
@@ -868,7 +868,7 @@ let usableRecheckFrame: number | null = null;
 /**
  * 是否还有**任何**「在等容器可用」的请求。
  *
- * 两组都要算（#29 七轮复审 P1）：`containerUsableWaiters` 是「boot 已经启动、卡在
+ * 两组都要算（ 七轮复审 P1）：`containerUsableWaiters` 是「boot 已经启动、卡在
  * `beforeCreateMap`」的等待者；`deferredWaiters` 是「`retry()` 发现容器不可用、还没启动 boot」的
  * 等待者 —— 两者都只能靠「容器变可用」的信号醒来，而那个信号（尺寸观察器）会因为**缓存去重**
  * 而漏发。上一轮只覆盖了前者，形态完全对称地被复制到了后者。
@@ -895,12 +895,12 @@ function ensureUsableRecheck(): void {
 }
 
 /**
- * 「建图等待点」（`MapRuntimeOptions.beforeCreateMap`，#29 三轮复审 P1）：容器当前不可用就等到可用。
+ * 「建图等待点」（`MapRuntimeOptions.beforeCreateMap`， 三轮复审 P1）：容器当前不可用就等到可用。
  *
  * 与 `mountMap()` 用**同一份**判据、同一个读数（`suspension.measureNow()` —— **fresh DOM 读数**），
  * 区别只是位置 —— 这里是「最后一个异步边界之后、`create()` 之前」。
  *
- * 为什么必须是 fresh 读数而不是 `suspension.size`（#29 四轮复审 P1）：`size` 是「最近一次测得」
+ * 为什么必须是 fresh 读数而不是 `suspension.size`（ 四轮复审 P1）：`size` 是「最近一次测得」
  * 的缓存，在「父级改 display / 折叠动画 → DOM 已变 → ResizeObserver 尚未交付」这个窗口里它是
  * **过期**的，那时 `map.create()` 仍会落在 0×0 容器上。用 `while` 而不是 `if`：被唤醒后再判一次
  * （尺寸可能又被改回去），Runtime 正在销毁时直接退出，由它的 disposed 守卫收尾。
@@ -1016,7 +1016,7 @@ async function loadPluginsInBackground() {
     }
     try {
       await runtime.plugins.whenPlugin(entry.name, runtime.resources.signal);
-      // **只以注册表状态判定成败**。两点都要注意（评审 #85 P1-2）：
+      // **只以注册表状态判定成败**。两点都要注意（评审  P1-2）
       // - optional 插件失败时注册表以 `null` resolve ⇒ 不能把「拿到了返回值」当成成功；
       // - 但反过来也不行：`null` 之外的值**不等于**失败 —— 只注入副作用、不产出资源的
       //   「void 插件」返回 `undefined` 本来就是合法形态，用 `loaded == null` 判失败会把它们
@@ -1193,7 +1193,7 @@ async function boot(): Promise<MapReadyContext> {
 /**
  * 重试加载（`#error` / `#loading` 插槽与 expose 共用同一份实现）。
  *
- * 返回的 Promise 语义**只有一条**（#29 复审 P1 收口了此前自相矛盾的两句）：
+ * 返回的 Promise 语义**只有一条**（ 复审 P1 收口了此前自相矛盾的两句）
  * **它就是「这一次重试的结果」** —— 成功时 resolve 出那次启动的上下文，失败时 reject 那次启动
  * 的错误；容器当前不可用时它保持 **pending**，直到容器恢复、这次重试真正执行完。
  *
@@ -1211,7 +1211,7 @@ async function boot(): Promise<MapReadyContext> {
  * 一直 pending，等容器展开。不再出现「拿旧的错误立刻 reject 一个其实还没开始的延迟重试」。
  */
 /**
- * 把「失败期间同步提出的 retry」排到下一轮（#29 三轮复审 P2）。
+ * 把「失败期间同步提出的 retry」排到下一轮（ 三轮复审 P2）。
  *
  * 当前 `bootTask` settle（`.finally()` 复位它）之后，用同一个 `retry()` 启动下一轮，并把排队的
  * 等待者接到那一轮上 —— 于是调用方拿到的是**下一次重试**的结果，而不是眼前这条失败的任务。
@@ -1247,7 +1247,7 @@ function retry(): Promise<MapReadyContext> {
   }
   if (bootTask) {
     // 失败**已经发生**但任务还没 settle（`emit('error')` 里同步调 `retry()` 就落在这里）：
-    // 复用这条即将 reject 的任务等于没重试 —— 排到下一轮（#29 三轮复审 P2）
+    // 复用这条即将 reject 的任务等于没重试 —— 排到下一轮（ 三轮复审 P2）
     if (runtime.status.value === "error") return requestNextBoot();
     return bootTask;
   }
@@ -1255,7 +1255,7 @@ function retry(): Promise<MapReadyContext> {
   // 与 `mountMap()` / 建图等待点用**同一个 fresh 读数**：`suspension.size` 是最近一次的缓存，
   // 在「DOM 已变、观察器尚未交付」的窗口里它是过期的 —— 用它会让本次 retry 启动一次注定被
   // `beforeCreateMap` 拦住的 boot（状态进 `creating`、`#loading` 文案也跟着不对），
-  // 与「需要当前能不能建图时读 fresh 读数」的口径矛盾（独立复核发现，属 #29 第一轮评审 P2 的收口）。
+  // 与「需要当前能不能建图时读 fresh 读数」的口径矛盾（独立复核发现，属  第一轮评审 P2 的收口）。
   if (!host || !isUsableSize(suspension.measureNow())) {
     // 容器当前不可用：挂起（不建图、也不以旧错误立刻拒绝），等放行回调启动这次重试
     return new Promise<MapReadyContext>((resolve, reject) => {
@@ -1391,7 +1391,7 @@ provide(mapContextKey, context);
 /**
  * 真正重置视角到初始快照。
  *
- * 除了把地图移回快照，**还要把四个状态一起重置**（#27 评审第三轮 P1）：非受控档下内部状态就是
+ * 除了把地图移回快照，**还要把四个状态一起重置**（ 评审第三轮 P1）：非受控档下内部状态就是
  * 事实源，只重置地图会让两者分叉——之后用户再拖回「重置前的那个值」时，`commit` 判等为「没变化」
  * 而不 emit，那次真实操作就丢了。`reset()` 刻意不 emit（这是命令方决定的，不是用户交互）。
  *
@@ -1456,7 +1456,7 @@ function onRetryClick(): void {
  * （含 `fixtures/consumer` 里针对真实 tarball 的 `vue-tsc`）拿到的就是这份冻结面 ——
  * 少一个成员、多一个成员、改一个签名都会在类型检查里报出来。
  *
- * 与 #28 相比**只有一处删除**：`resetCenter`。它是「名字说重置中心、实现重置整个视野」的
+ * 与  相比**只有一处删除**：`resetCenter`。它是「名字说重置中心、实现重置整个视野」的
  * 废弃别名（issue #29 的验收明确要求 expose 里不再有它），`resetView()` 是唯一入口。
  */
 function createExpose(): MapExpose {

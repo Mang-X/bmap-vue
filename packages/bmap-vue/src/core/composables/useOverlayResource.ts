@@ -31,7 +31,7 @@ export interface OverlayLifecycle<Props, Resource> {
     scope: ResourceScope,
   ): void;
   /**
-   * 在 **setup 同步期**注册的 watcher(保证响应式)。#139 起 watcher 的生命周期归 Vue 所有，
+   * 在 **setup 同步期**注册的 watcher(保证响应式)。 起 watcher 的生命周期归 Vue 所有
    * 因此**没有** `addDisposer` 参数了:组件卸载时 Vue 自己会停。
    *
    * ⚠️ 「必须同步期」是被 `assertSetupSynchronous()` 现场检查的**不变式**，不是建议:
@@ -60,7 +60,7 @@ export interface UseOverlayResourceResult<Resource> {
    * - `recreate`: 触发 `rebuild()`(构造期属性,只有重建才生效);
    * - `unsupported`/未知: 交给 `setOptions`,由 Driver 决定(告警 no-op 或走 set<Key> 逃生口)。
    *
-   * 更新走一条**按键合并的待办队列**（PR #61 两轮评审的收敛点）:
+   * 更新走一条**按键合并的待办队列**（PR  两轮评审的收敛点）
    * - 实例未挂载（重建/首建在飞）时到达的更新会合并待办，等挂载后再落；
    * - 同一批里若有 `recreate` 键，**先重建**、再把 mutable 落到**最终存活**的实例
    *   （否则 mutable 会写进一个马上被移除的中间实例）;
@@ -93,7 +93,7 @@ export function useOverlayResource<Props, Resource>(
    * 尚未应用到「存活实例」的更新，**按键合并**（同键后写覆盖先写）。
    *
    * 三类来源共用它：重建/首建在飞时到达的更新、挂载回调里同步推送的更新、排空过程中新到的更新。
-   * 只有「新值优先」这一条不变式，才能保证最终实例与最新 props 一致（PR #61 两轮评审的 P2）。
+   * 只有「新值优先」这一条不变式，才能保证最终实例与最新 props 一致（PR  两轮评审的 P2）。
    */
   let pendingApply: Record<string, unknown> | null = null;
   /** 是否正在排空待办（防重入：排空过程中新到的更新由同一轮循环继续消费） */
@@ -106,7 +106,7 @@ export function useOverlayResource<Props, Resource>(
     return instanceScope;
   };
 
-  // 在 setup 同步注册响应式 watcher(避免 async 续体丢失响应式)。#139: watcher 归 Vue 所有,
+  // 在 setup 同步注册响应式 watcher(避免 async 续体丢失响应式)。: watcher 归 Vue 所有
   // 通过 getResource 读取当前实例，因此跨 rebuild 存活靠的是**组件级** scope 而不是自建 scope。
   // ⚠️ 依赖「本行在 setup 同步期执行」,理由与防护同 useSdkResource 的 spec.watch。
   lifecycle.createWatchers?.(() => readyCtx, () => resource.value, props);
@@ -198,7 +198,7 @@ export function useOverlayResource<Props, Resource>(
    *
    * 展开顺序必须是「已有队列在后」：`batch` 是先前从队列里取走的那一批，而 `pendingApply` 里可能
    * 已经积压了等待期间到达的**更新**的值；反过来展开会让旧值覆盖新值，与「新值优先」相反
-   * （PR #61 第三轮评审 P2：重建被另一轮重建取代时，旧批次重新入队会翻上新值）。
+   * （PR  第三轮评审 P2：重建被另一轮重建取代时，旧批次重新入队会翻上新值）。
    *
    * 注意与 `applyOptions()` 的入队方向相反：那里 `options` 才是新到的更新，所以放最后。
    */
@@ -211,7 +211,7 @@ export function useOverlayResource<Props, Resource>(
    *
    * 顺序刻意是「先重建、再就地更新」：一批里如果同时含构造期属性与 mutable 属性，
    * mutable 的值必须落在**最终存活**的实例上，否则会写进一个马上被移除的中间实例
-   * （PR #61 复审 P2-2）。
+   * （PR  复审 P2-2）。
    */
   const applyBatch = async (batch: Record<string, unknown>): Promise<void> => {
     if (!readyCtx || disposed) return;
@@ -255,7 +255,7 @@ export function useOverlayResource<Props, Resource>(
    * 排空待办：**单飞 + while**。
    *
    * 排空过程中新到的更新会继续合并进 `pendingApply`，由同一轮循环继续消费 —— 因此旧批永远
-   * 不会覆盖后到的新值（PR #61 复审 P2-1：挂载回调里同步推的更新曾被旧队列回放覆盖）。
+   * 不会覆盖后到的新值（PR  复审 P2-1：挂载回调里同步推的更新曾被旧队列回放覆盖）。
    *
    * 返回值语义刻意**不等待在飞的那一轮**：调用方的值已经并入待办、一定会被那一轮消费；
    * 如果在飞时也去 await，`await applyOptions()` 就会被一次无关的异步创建卡住（甚至与

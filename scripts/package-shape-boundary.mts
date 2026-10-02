@@ -36,8 +36,8 @@
  *
  * ## 为什么不顺手修
  *
- * 加 `require` 条件或 `typesVersions` 会改动 #44 冻结的公共出口面，连动 `check:api` 的五份
- * API report 与 `export-surface-freeze.test.ts`，且属于 #158 的范围。见「非目标」。
+ * 加 `require` 条件或 `typesVersions` 会改动  冻结的公共出口面，连动 `check:api` 的五份
+ * API report 与 `export-surface-freeze.test.ts`，且属于  的范围。见「非目标」。
  */
 
 /** 已被逐条审阅、**刻意接受**的 attw 结论。每条都必须带理由与追踪票号。 */
@@ -61,7 +61,7 @@ export interface AttwException {
    * 预期出现的**解析档位**（attw 的 `resolutionKind`，如 `node10` / `node16-cjs`）。
    *
    * 同样必须钉：这两条例外的理由本身就是特定档位下的解析行为，档位变了意味着
-   * 「例外成立的前提」变了。评审 #45 时实测——只钉 entrypoint 时，同一组子路径从
+   * 「例外成立的前提」变了。评审  时实测——只钉 entrypoint 时，同一组子路径从
    * `node10` 漂到 `node16-cjs` 仍被 `accepted`。
    */
   readonly expectedResolutionKind?: string;

@@ -1,12 +1,12 @@
 /**
  * Driver 工厂与 engine 收口（M3A1-CLIENT / #18；M3A.2 装配收口 / #23；M3A3-REMOVE-LEGACY / #26）
  *
- * M3A1-CLIENT 把「运行时 engine 猜测」从默认 Client 路径移除；`#26` 删掉旧引擎后，
+ * M3A1-CLIENT 把「运行时 engine 猜测」从默认 Client 路径移除；`` 删掉旧引擎后
  * `detectEngine`（猜测）与 `createDriver`（多 engine 分派）**一并删除**——构造 Driver 的
  * 唯一入口是 `createJsapiV4Driver`，它要求调用方显式给出 SDK 运行时版本，不再猜。
  *
  * 因此本文件断言两件事：
- * 1. 装配契约本身（#23 交付的那一组）；
+ * 1. 装配契约本身（ 交付的那一组）；
  * 2. **那两个入口不再存在**——「删除」如果只靠 diff 检查，下一个人复制粘贴一段旧代码就能加回来。
  */
 import { describe, it, expect } from "vitest";
@@ -73,7 +73,7 @@ describe("createJsapiV4Driver（#23 装配）", () => {
 
     expect(driver.nativeLayers.supports("line", "setVisible")).toBe(true);
     // 4.0.5 给 `visualization/Heatmap.d.ts:153` 补上了 `setVisible` 声明，登记面随之放开
-    // （此前 `heatmap` 的显隐走摘挂，重新显示要换实例）。见 #165 Class 3 / TASK 1。
+    // （此前 `heatmap` 的显隐走摘挂，重新显示要换实例）。见  / TASK 1。
     expect(driver.nativeLayers.supports("heatmap", "setVisible")).toBe(true);
     // 仍然关闭的：官方 `PointLayer` 的声明里**没有** `setOpacity`（`ClusterLayer` /
     // `Heatmap` / `TrackLine` 都有）——不把未声明的成员当契约。

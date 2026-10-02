@@ -58,7 +58,7 @@ export function subscribeMapEvent(
   };
 
   /**
-   * 合帧路径的投递（M4-EVENTS / #28 评审）：**handler 抛错必须和不合帧路径一样可见**。
+   * 合帧路径的投递（M4-EVENTS /  评审）：**handler 抛错必须和不合帧路径一样可见**。
    *
    * 不合帧时异常会穿过 SDK 的事件派发（未捕获）；合帧时任务跑在 RAF 回调里，而 `FrameScheduler`
    * 按设计 `catch {}`（单任务错误不阻断同帧其余任务）——于是 `moving` 的 handler 抛错会**完全消失**，

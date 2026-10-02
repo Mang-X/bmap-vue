@@ -11,7 +11,7 @@
  *   byId.get("kernel.repair.setData")?.threw ? 抛错 : "未抛错"  // 缺失 ⇒「未抛错」
  * ```
  *
- * 两者都会把「**没测到**」印成「**测到了，是不好的那一侧**」，正是 #98 验收标准里
+ * 两者都会把「**没测到**」印成「**测到了，是不好的那一侧**」，正是  验收标准里
  * 「每个读数安全 / 不安全 / **无法判定**互斥」要禁止的形态。留在探针脚本里时它**只在
  * 某一天真的跑真实浏览器**才会暴露，所以把判定层拆成模块、由 `probe-verdicts.test.ts`
  * 用合成报告直接驱动：三态是**可回归验证**的，不再依赖「下次跑探针时记得看一眼」。
@@ -126,7 +126,7 @@ export function verdicts(report: ProbeReport): string[] {
     ["Tile", "tile.removeLayer#2.已摘下"],
   ]
   // 前提 P 说的是「对**已经摘掉**的图层重复摘除」⇒ 第一次摘除必须真的成功了，
-  // 否则 `#2` 测的是「对一个还挂着的图层再摘一次」，与前提无关。
+  // 否则 `` 测的是「对一个还挂着的图层再摘一次」，与前提无关。
   const pPrereq = unmetPrerequisites([
     "geojson.removeLayer#1",
     "dom.removeLayer#1",
@@ -338,7 +338,7 @@ export function verdicts(report: ProbeReport): string[] {
   // 不能只有原始读数、没有三态结论。各分支**互斥且各自诚实**：`before === 0` 不是「清空无效」，
   // 而是「`removeLayer` 自己就把节点摘干净了」——本探针第一版把它归进「未清掉」，得出了与实际读数
   // 相反的结论（「判定文案必须跟着读数走」这个坑就是从这里来的）。
-  // 前置：`dom.removeLayer#1` 必须成功，否则 `dom.detached` 根本不是 detached 状态。
+  // 前置：`dom.removeLayer` 必须成功，否则 `dom.detached` 根本不是 detached 状态。
   const domDetachPrereq = unmetPrerequisites(["dom.removeLayer#1"])
   const domBefore = nodesOf("dom.detached")
   const domAfter = nodesOf("dom.afterRemoveAllOverlays")
@@ -368,7 +368,7 @@ export function verdicts(report: ProbeReport): string[] {
 
   // ── 核心读数 2 的另一半：`GeoJSONLayer.clearData()` 在 **detached 实例**上是否生效 ──
   // 与上面那条同级的状态机，三件事都不能少：
-  //   ① 前置 `geojson.removeLayer#1` 成功（否则 `geojson.detached` 不是 detached 状态）；
+  // ① 前置 `geojson.removeLayer` 成功（否则 `geojson.detached` 不是 detached 状态）；
   //   ② **消费 `geojson.clearData.已detached` 这个 attempt**——「调用自己抛错但先产生了副作用」
   //      对内核策略是决定性的（不能照常调），只看 before/after 会把它漏掉；
   //   ③ **`after === 0` 才算「完整清空」**：`after !== before` 太弱，2 → 1 这种部分清理也会被

@@ -14,7 +14,7 @@ import type { ServiceHandle } from "../../driver/types/handles";
  * Autocomplete 需要绑定真实 input DOM(not overlay/control)。
  * 使用 map context + ready 后创建 SDK 实例,并把 input 传给 SDK。
  *
- * R25-C / #72 修复的三处（此前是本组件最容易漏清理的地方）：
+ * R25-C /  修复的三处（此前是本组件最容易漏清理的地方）
  *
  * 1. **watcher 纳入作用域**：`onMounted` 是 async 的，`await whenReady()` 之后的 `watch()`
  *    不在 Vue 的实例作用域里（`getCurrentInstance()` 为 null），不注册进 `ResourceScope`
@@ -67,7 +67,7 @@ function reportResourceError(
 /**
  * Driver 侧的释放入口挂在 v4 的 Service Facet 上（`JsapiV4ServiceDriver.disposeAutocomplete`），
  * 因此经 `jsapiV4ServicesOf()` 收窄取得（可运行时检查），**不**在这里写条件探测：
- * #26 之后只有一个 engine，探测为假时静默跳过就等于「以为释放了、其实记账还在」。
+ * 之后只有一个 engine，探测为假时静默跳过就等于「以为释放了、其实记账还在」。
  */
 function disposeService(client: BMapClient, instance: ServiceHandle<"service:autocomplete">): void {
   try {

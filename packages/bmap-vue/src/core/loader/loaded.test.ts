@@ -1,5 +1,5 @@
 /**
- * `LoadedJsapiV4` 的运行时收口（M3A1-CLIENT / #18；M3A3-REMOVE-LEGACY / #26 收紧）
+ * `LoadedJsapiV4` 的运行时收口（M3A1-CLIENT / ；M3A3-REMOVE-LEGACY /  收紧）
  *
  * `assertLoadedSdk()` 是**运行时**边界：JS 消费者、`any`、第三方 Provider 都能绕过静态类型，
  * 因此它必须与公开契约（`LoadedJsapiV4` = `engine` + `version` + `namespace` + `load` metadata）

@@ -21,7 +21,7 @@
  * ## 唯一主模型
  *
  * `open` 是**唯一**主状态（`v-model:open`），读法收在 `resolveInfoWindowOpenIntent()` 一处。
- * v2 沿用的 `show` 已随集中弃用层在 #136 删除——clean-slate 1.0 不兼容旧 API。
+ * v2 沿用的 `show` 已随集中弃用层在  删除——clean-slate 1.0 不兼容旧 API。
  */
 import type { Point, Pixel } from "../../driver/types/geometry";
 
@@ -53,7 +53,7 @@ export interface InfoWindowProps {
    * 最大宽度（像素）。**可就地更新**（官方 `InfoWindow#setMaxWidth(width: number): void`）。
    *
    * 此前它**已经**被 Driver 分类成 `mutable`，而组件面没有出口——分类层准备好了、
-   * 组件没暴露（与 #165 TASK 0 的 `zIndex` 同一形状）。撤回会**重建**（无 `getMaxWidth`）。
+   * 组件没暴露（与  的 `zIndex` 同一形状）。撤回会**重建**（无 `getMaxWidth`）。
    */
   maxWidth?: number;
   /**
@@ -133,7 +133,7 @@ export type InfoWindowDescriptorKeys<Props> = Partial<
  */
 export const INFO_WINDOW_FIELDS: InfoWindowFieldMap<InfoWindowProps> = {
   position: "state",
-  // ↓ issue #165 Class 3 / TASK 3 补的 8 个官方构造选项。
+  // ↓  / TASK 3 补的 8 个官方构造选项。
   // 逐条依据见 `OVERLAY_DESCRIPTORS["info-window"]` 的同名条目与 `InfoWindowProps` 的逐条注释。
   maxWidth: "options",
   maxContent: "options",

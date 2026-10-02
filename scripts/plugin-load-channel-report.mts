@@ -20,7 +20,7 @@
  *
  * 1. **判定式写歪 / 字段名写错** ⇒ 读数取到 `undefined`，所有不等式都恒真 ⇒ 假绿。
  *    做法：读数一律过「只接受期望 `typeof`」的取值器，取不到就落**第三态**（blocked），
- *    而不是拿 `?? 0` 兜底后继续判正负（#122 §12 的形态）。
+ * 而不是拿 `?? 0` 兜底后继续判正负（ 的形态）。
  * 2. **缺字段被当成「没问题」** ⇒ 缺报告 / 缺 block 一律 blocked，不得过滤掉。
  * 3. **前置未证明** ⇒ 「script 从未插入过」时，「script 被摘掉了」恒真。因此每个「零残留」断言
  *    都要有对应的正证读数（`scriptsWhileHanging` / `scriptsDuringLoad`）作为**前置**。
@@ -259,7 +259,7 @@ export function decidePluginLoadChannelExitCode(
       `SDK 未就绪（blocked，不是通过）：${sdkBlocked.map((run) => run.scenario ?? "?").join(", ")}`,
     );
   }
-  // 地图夹具真的建起来了（#43 P1 的形态：夹具没就绪时，插件层面的读数一律不可用）。
+  // 地图夹具真的建起来了（ P1 的形态：夹具没就绪时，插件层面的读数一律不可用）。
   // 缺这个读数也算不成立 —— 不能把「没测到」读成「没问题」。
   const mapFixtureMissing = runs.filter((run) => {
     if (!sdkDependent.includes(run.scenario as PluginLoadChannelScenario)) return false;

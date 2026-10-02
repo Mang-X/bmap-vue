@@ -1,7 +1,7 @@
 /**
  * v4 MapDriver（M3A2-MAP / issue #20）
  *
- * 验收点（对应 issue #20 的「测试要求」）：
+ * 验收点（对应  的「测试要求」）
  * - 创建 / 销毁与**零尺寸容器**行为；
  * - center / zoom / heading / tilt round-trip；
  * - 投影转换与 bounds / size；
@@ -116,7 +116,7 @@ describe("创建与销毁", () => {
     warn.mockRestore();
   });
 
-  // #165 Class 5 F：官方 `core/MapOptions.d.ts` 对 minZoom / maxZoom 都声明「取值范围 [3, 21]」。
+  // F：官方 `core/MapOptions.d.ts` 对 minZoom / maxZoom 都声明「取值范围 [3, 21]」。
   // 越界值原样递进去、指望 SDK clamp 属于静默劣化（上游没有公开的归一化契约），因此显式报错。
   it("minZoom / maxZoom 越出官方声明的 [3, 21] 时显式报错，不把非法值交给 SDK", () => {
     const { map, container, fake } = setup();
@@ -306,8 +306,8 @@ describe("视野 round-trip", () => {
     expect(fake.createdMaps[0].callLog.filter((call) => call === "setViewport")).toHaveLength(2);
   });
 
-  // #165 回填：官方 `core/Map.d.ts:508` 声明 `getViewport(view, viewportOptions?)`，
-  // live AK 实测运行时在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四）。
+  // 回填：官方 `core/Map.d.ts:508` 声明 `getViewport(view, viewportOptions?)`
+  // live AK 实测运行时在位（`` 结论四）。
   // 官方声明的两个 `view` 分支（`Array<Point>` 与 `Bounds`）都要能走，返回领域 `Viewport`。
   it("getViewport 走「点数组」分支：原样把点转成 raw Point，返回领域 Viewport", () => {
     const { map, container, fake } = setup();
@@ -520,7 +520,7 @@ describe("底图类型与样式", () => {
    * 反证守卫：夹具的形状必须与**真实运行时**一致。
    *
    * 真实 `v=4.0` 的 `BMap.MapTypeId` 没有 `BMAP_*_MAP`（那组常量挂在全局）。如果夹具同时提供
-   * 两套名字，「只读声明名」的实现会在这里一路绿、直到真实 smoke 才炸（#71 的教训）。
+   * 两套名字，「只读声明名」的实现会在这里一路绿、直到真实 smoke 才炸（ 的教训）。
    */
   it("夹具的 MapTypeId 只有运行时那三个成员，没有上游声明里的 BMAP_*_MAP", () => {
     const { fake } = setup();
@@ -706,7 +706,7 @@ describe("视角动画", () => {
 
     map.startViewAnimation(handle, a);
     // 这两个是**没有生命周期事件**的动画对象 ⇒ 记录按「已启动」处理，起播前的清场是**即时交付**的
-    // （真正的待启动窗口那条路径见下面「#122 评审 P1」的 describe）
+    // （真正的待启动窗口那条路径见下面「 评审 P1」的 describe）
     map.startViewAnimation(handle, b);
     expect(canceled).toEqual(["a"]);
 
@@ -1086,13 +1086,13 @@ describe("视角动画生命周期（#122 评审 P1：待启动旧段的「清�
   /**
    * **待启动**旧段：起播前的清场此刻交付不了 —— 只能登记请求，新段会先提交。
    *
-   * 这是 #122 评审 P1 的形状：`cancelAnimation` 对未启动的记录只置 `cancelRequested` 就返回
+   * 这是  评审 P1 的形状：`cancelAnimation` 对未启动的记录只置 `cancelRequested` 就返回
    * （此窗口内 SDK 取消必抛 `TypeError`，实测见审计表 F-1 ②），而 `startViewAnimation` 紧接着就把
    * 新段提交给了 SDK。真实 4.0 上的读数是：旧段的取消落在**它自己的启动安全窗口**，
    * 与它的 `animationstart` 相隔 0.0–0.3ms，因此旧段来不及推进视角（轨迹只朝新段的末帧走）。
    *
    * 本用例钉的是**契约**：不承诺「提交新段前图上一段不剩」，只承诺「在最早的合法时刻交付取消」。
-   * 想要更强保证（等旧段交付后再起播）是另一种设计，本库没有选 —— 见 PR #122 的回复。
+   * 想要更强保证（等旧段交付后再起播）是另一种设计，本库没有选 —— 见 PR  的回复。
    */
   it("[P1] 待启动旧段：提交新段时只登记请求，取消在旧段自己的安全窗口才交付", async () => {
     const { map, container, fake } = setup();
@@ -1183,10 +1183,10 @@ describe("销毁的部分失败（PR #60 评审 P2）", () => {
 });
 
 /**
- * #165 回填：官方 `Map#flyTo`（`core/Map.d.ts:634`）与 `Map#getScreenshot`
+ * 回填：官方 `Map#flyTo`（`core/Map.d.ts:634`）与 `Map#getScreenshot`
  * （`core/Map.d.ts:1024`）。两者在 live AK 下实测运行时在位
- * （`docs/zh-CN/contributing/165-runtime-verification.md` 结论四），
- * 此前被 #165 Class 5 以「本库没有实现」为由从 Capability Catalog 删除 —— 那条推理已被证伪。
+ * （`` 结论四）
+ * 此前被  以「本库没有实现」为由从 Capability Catalog 删除 —— 那条推理已被证伪。
  */
 describe("#165 回填：flyTo / getScreenshot", () => {
   it("flyTo 调的是 flyTo 本身，不是 panTo（平滑飞行 ≠ 瞬移，两者不是同一个成员）", () => {
@@ -1355,7 +1355,7 @@ const VIEW_COMMANDS = [
  * 缺口是**类型面 + 接线**，不是运行时：live 实测（2026-09-26，真实 AK）证明五条在
  * `noAnimation: true` 下 `callback` **恰好交付一次**（`setCenter` 0ms · `setZoom` 1ms ·
  * `setHeading` 0ms · `setTilt` 0ms · `panTo` 0ms），动画档也交付（`setZoom` 526ms / `panTo` 32ms），
- * 见 `docs/zh-CN/contributing/165-runtime-verification.md` §8。因此本组断言的是
+ * 见 `` §8。因此本组断言的是
  * **本库这一侧**：投影、传递，以及「空形状不递」这条与「callback 真的会来」同等重要的边界。
  */
 describe("视野命令的 options 投影（#171 / #165 裁决 F）", () => {
@@ -1497,7 +1497,7 @@ describe("视野命令的 options 投影（#171 / #165 裁决 F）", () => {
 });
 
 /**
- * 「命令完成」是可观察的事实——这是本项存在的**全部理由**（#171 / #165 裁决 F）。
+ * 「命令完成」是可观察的事实——这是本项存在的**全部理由**（ /  裁决 F）。
  *
  * 没有 `options.callback`，调用方永远无法知道一条视野命令什么时候真正落定；而这正是官方 4.0
  * 已经提供、而本库一直没递下去的那一个成员。

@@ -41,7 +41,7 @@ export interface DistrictLayerProps {
    *
    * #165 Class 1 之前这里叫 `viewport`，由 Driver 做别名改名（`aliases: { viewport:
    * "autoViewport" }`）才落到官方键上——那是**已知的命名缺口**，不是有意的概念区分。
-   * 现在公开 prop 直接叫官方名，别名**一并删除**（#165 §3.6 不留兼容别名）。
+   * 现在公开 prop 直接叫官方名，别名**一并删除**（ 不留兼容别名）。
    */
   autoViewport?: boolean;
   /** 掩膜内的行政区代码（4.0 构造选项 `adcode`）。 */

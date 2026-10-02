@@ -18,7 +18,7 @@
  * **运行时可观察、上游类型未声明的两个**：`headingchange` / `tiltchange`。依据是它们
  * **已经在本库运行**：`<Map>` 的视野回写订阅（M4-STATE / #27）就绑在它们上面，行为由
  * `component-scenarios.test.ts` 的 `simulateUserView()` 与 ADR `2026-09-14-map-controlled-state`
- * 决策 5 冻结。这与 #74 发现的「`MapTypeId` 声明了 `BMAP_*_MAP` 而运行时只有
+ * 决策 5 冻结。这与  发现的「`MapTypeId` 声明了 `BMAP_*_MAP` 而运行时只有
  * `NORMAL/EARTH/SATELLITE`」是同一类**声明与运行时不一致**，因此这里如实标 `declared: false`，
  * 不假装上游声明存在、也不把它们塞进「上游清单」。
  *
@@ -416,7 +416,7 @@ export const MAP_EVENT_CATALOG = {
 export type MapEventName = keyof typeof MAP_EVENT_CATALOG;
 
 /**
- * **由地图上下文持有订阅**的生命周期事件（M4-EVENTS / #28 评审第二轮）。
+ * **由地图上下文持有订阅**的生命周期事件（M4-EVENTS /  评审第二轮）。
  *
  * 目前只有 `destroy`：它是「地图的终点」，而组件的卸载**先于**地图销毁
  * （Vue 的卸载顺序：父 `beforeUnmount` → 父作用域 stop → 子树卸载（子作用域 stop）→ 父 `unmounted`，
@@ -450,7 +450,7 @@ export type MapEventEmitAliasName = {
 export type MapEventEmitName = MapEventName | MapEventEmitAliasName;
 
 /**
- * 「事件专属载荷」的种类（M4-EVENTS / #28 评审：公共契约发布前把事件级必填字段收紧）。
+ * 「事件专属载荷」的种类（M4-EVENTS /  评审：公共契约发布前把事件级必填字段收紧）。
  *
  * 判据是「这个字段能不能被兑现」：
  *

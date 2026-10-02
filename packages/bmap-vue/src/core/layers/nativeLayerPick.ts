@@ -66,13 +66,13 @@ export function readNativeLayerPick(event: unknown): NativeLayerPickSnapshot {
   /**
    * **扩展 API 的载荷形状**（`BMap.PointLayer` / `ClusterLayer` 一族：运行时存在、类型包无声明）。
    *
-   * 与四类专页图层的差异由本库的 live 探针实测（#35 的 `probe-native-point-cluster`）：
+   * 与四类专页图层的差异由本库的 live 探针实测（ 的 `probe-native-point-cluster`）
    * 没有 `dataIndex`；要素属性**直接挂在 `value.properties`**（专页是 `value.dataItem.properties`）；
    * 业务 id 在 `value.id`。
    *
    * 处理方式：**归一成专页形状**（`dataItem = { properties }`）⇒ 下游
    * （`readFeatureProperties` / `readFeatureKey` / `resolveFeaturePick`）只有一份实现，
-   * **不为它维护第二套解析器**（评审 #112 的要求）。命中判定用它自己的依据：载荷里带得出要素
+   * **不为它维护第二套解析器**（评审  的要求）。命中判定用它自己的依据：载荷里带得出要素
    * —— 没有 `dataIndex` 可用时，只能按「有没有可读的 `properties` / `id`」判。身份仍然照旧：
    * 读不出就 `id = null` / `item = null`，由调用方按「命中但身份未知」处理（告警一次、不派发
    * `item-click`），**不猜**。
@@ -119,7 +119,7 @@ export function readFeatureProperties(dataItem: unknown): Record<string, unknown
  * 那里完全可能是一个 symbol。判据走 `normalizeIdField`（唯一判定点），因此空字符串字段名
  * （`properties[""]`）同样算数。
  *
- * 它是「找回业务项」的依据，与下面那个**公开 id** 是两件事（#106 第三轮评审）：某个键不便作为
+ * 它是「找回业务项」的依据，与下面那个**公开 id** 是两件事（ 第三轮评审）：某个键不便作为
  * 公开 id（例如 symbol），也不能因此让 `item-click` 丢掉。
  */
 export function readFeatureKey(
@@ -226,14 +226,14 @@ export interface ResolveFeaturePickInput<Item> {
    * 身份 → 业务项。缺省时把 `properties` 本身当业务项（线 / 面图层的语义：数据就是 GeoJSON）。
    *
    * 判「找没找到」的返回值用 `undefined` 表示；实现**不要**用真值判断——`0` / `false` / `""`
-   * 都是合法业务项（`PointCollection` 的评审 #102 F4 就是这条）。
+   * 都是合法业务项（`PointCollection` 的评审  F4 就是这条）。
    */
   /**
    * 业务键 → 业务项（第二条参数是命中要素的 `properties`，可作兜底）。
    *
    * 收到的是 `readFeatureKey` 的原始值（可能是 symbol / 空字符串业务键），因此**不要**按
    * 「公开 id 的取值域」去判它——那样会让 `item-click` 在 symbol 型 `itemKey` 上丢掉
-   * （#106 第三轮评审的 P1 回退）。用 `undefined` 表示「找不到」，且**不要**用真值判断：
+   * （ 第三轮评审的 P1 回退）。用 `undefined` 表示「找不到」，且**不要**用真值判断
    * `0` / `false` / `""` 都是合法业务项。
    */
   readonly itemOf?: (key: PropertyKey | null, properties: Record<string, unknown>) => Item | undefined;
@@ -271,7 +271,7 @@ export function resolveFeaturePick<Item = Record<string, unknown>>(
 ): NativeLayerFeaturePickPayload<Item> {
   const snapshot = readNativeLayerPick(input.event);
   /**
-   * **两份属性分开读**（#106 第四轮评审）：事件回包与「我们自己送出去的那份数据」是两条独立的依据，
+   * **两份属性分开读**（ 第四轮评审）：事件回包与「我们自己送出去的那份数据」是两条独立的依据
    * `dataIndex` 指向的永远是后者。
    *
    * ⚠️ 不能写成 `readFeatureProperties(dataItem) ?? readFeaturePropertiesAt(sentData, …)`：那样只有

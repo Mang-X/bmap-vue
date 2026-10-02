@@ -4,7 +4,7 @@
  * 运行时能力探测：显式 override → 目录是否收录 → 声明状态 → raw member 存在性。
  * require() 按 unsupported 策略 throw/warn/silent。
  *
- * ## 「成员存在性」有三个来源（#29 评审 P1）
+ * ## 「成员存在性」有三个来源（ 评审 P1）
  *
  * `rawMembers` 的判定顺序是：**命名空间顶层** → **`Map.prototype`** → **运行时观察到的实例成员**
  * （`observeInstanceMembers()`）。
@@ -51,7 +51,7 @@ export interface CapabilityExplanation {
   version: string;
   /**
    * 所属能力族。目录**未收录**的 id 没有 family 可报，留空而不是编一个值
-   * （原先兜的是 `"runtime"`，那个 family 已随 #104 R10 删除）。
+   * （原先兜的是 `"runtime"`，那个 family 已随  R10 删除）。
    */
   family?: CapabilityFamily;
   status: CapabilityStatus;
@@ -163,7 +163,7 @@ export function createCapabilityRegistry(
 
     explain(capability) {
       // `Capability` 是目录 id 的联合，但调用方可以带着**未收录**的 id 进来（外部字符串、
-      // 或 `as Capability` 的探针）；`unlisted-capability` 就是这条路径（#26 删除旧引擎后，
+      // 或 `as Capability` 的探针）；`unlisted-capability` 就是这条路径（ 删除旧引擎后
       // 「引擎不在白名单」不再可达，#126 随之把该 reason 改名为与路径一致的名字）。
       // 所以这里按「可能没有描述符」写：`family` 留空（不编一个值——原先兜的是 `"runtime"`，
       // 那个 family 已随 #104 R10 删除，报出来就是个没人能解释的幽灵值）。

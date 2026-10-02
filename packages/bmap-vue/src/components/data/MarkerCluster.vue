@@ -4,11 +4,11 @@
  *
  * 默认走 **v4 原生 `ClusterLayer`**（一个 WebGL 图层承载全部点与簇）；`engine: "markers"` 时
  * 退到「网格聚合 + 每簇 / 每单点一个 SDK Marker」。两种引擎的边界写在组件文档
- * `docs/zh-CN/components/data.md`，内部契约在 `./clusterEngine.ts`。
+ * ``，内部契约在 `./clusterEngine.ts`。
  *
  * ## 为什么默认是原生（而不是「原生可用就删掉自研」）
  *
- * issue #35 的开工前范围纠正规定：**不因为「理论上可能缺失」就自动进入自研 fallback**，
+ * 的开工前范围纠正规定：**不因为「理论上可能缺失」就自动进入自研 fallback**
  * 原生层是默认路径。本库为此专门取了一次证（`scripts/probe-native-point-cluster.mts`，
  * 真实 AK + headless Chrome）：原生 `ClusterLayer` 的构造 / 挂载 / `setData` / 聚簇产出
  * （`change` 事件 `{ clusters, singles, zoom }`）/ 簇命中 / 单点命中**全部可用** ⇒
@@ -72,7 +72,7 @@ const props = withDefaults(defineProps<MarkerClusterProps<Item>>(), {
   clusterMinZoom: undefined,
   clusterMaxZoom: undefined,
   singleStyle: undefined,
-  // ---- issue #165 第三批：官方 `ClusterLayerOptions` 里另外六个（此前没有出口）----
+  // ----  第三批：官方 `ClusterLayerOptions` 里另外六个（此前没有出口）----
   //
   // ⚠️ `updateRealTime` 是**本文件里唯一一个官方默认 `false` 的 `Boolean`**，而 Vue 对
   // `Boolean` prop「未给」时会编出 `false`——值一致但**来源不同**（Vue 编的 vs SDK 的默认）。
@@ -126,7 +126,7 @@ function warnOptionMismatch(): void {
           ["clusterMaxZoom", props.clusterMaxZoom],
           ["fitViewOnClick", props.fitViewOnClick],
           ["singleStyle", props.singleStyle],
-          // issue #165 第三批补的六个，**同样**只对 native 生效。
+          // 第三批补的六个，**同样**只对 native 生效。
           ["tileSize", props.tileSize],
           ["fitViewMargin", props.fitViewMargin],
           ["updateRealTime", props.updateRealTime],

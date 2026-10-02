@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * GroundOverlay —— 地面叠加层（M5-VECTORS / issue #31 迁移到 OverlaySpec）
+ * GroundOverlay —— 地面叠加层（M5-VECTORS /  迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。
  *
@@ -15,7 +15,7 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+// 事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
 import type { GroundOverlayEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { GroundOverlayProps } from "../../types/components";
 import { createGroundOverlaySpec } from "./groundOverlaySpec";

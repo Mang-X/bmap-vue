@@ -1,14 +1,14 @@
 /**
  * `probe-track-line.mts` 的**判定层**（读数 → 结论），单独成模块是为了可测。
  *
- * 与 #98 的 `probe-layer-detached-verdicts.mts` 同一口径：
+ * 与  的 `probe-layer-detached-verdicts.mts` 同一口径
  *
  * 1. **每个结论先查 presence / 类型，再进正负分支**；缺失一律 `UNKNOWN`（第三态）。
  *    `?.` + `??` 兜底会把「没测到」印成「测到了，是不好的那一侧」——正是要禁止的形态。
  * 2. 「前置 attempt 抛错 / 读数缺失」也是 `UNKNOWN`，并点名是哪一步不成立。
  * 3. 结论行可以带读数原文，但**结论本身**不得由读数原文二次推导。
  *
- * issue #110 的四组问题 → 四条结论（外加方法面与事件载荷，共六条）：
+ * 的四组问题 → 四条结论（外加方法面与事件载荷，共六条）
  * 方法面 / 事件载荷 / 播放命令效果 / setProcess·setSpeed / 页面可见性 / removeLayer。
  */
 

@@ -1,13 +1,13 @@
 /**
  * `probe-destroy-idempotency.mts` 的**判定层**（读数 → 结论），单独成模块是为了可测。
  *
- * 与 #98 / #110 / #128-F2 的判定层同口径：
+ * 与  /  / -F2 的判定层同口径
  *
  * 1. **每个结论先查 presence / 类型，再进正负分支**；缺失一律 `UNKNOWN`（第三态）。
  * 2. 「前置 attempt 抛错 / 读数缺失」也是 `UNKNOWN`，并点名是哪一步不成立。
  * 3. 结论行可以带读数原文，但**结论本身**不得由读数原文二次推导。
  *
- * issue #128 的 F-3 两组问题 → 两条结论：
+ * 的 F-3 两组问题 → 两条结论
  * destroy/dispose 幂等性 / 销毁期是否回调业务。
  *
  * 退出码（#128：**0 = 全 pass** / 1 有 fail / 3 只有 blocked / 2 脚手架失败）：
@@ -239,7 +239,7 @@ export function verdicts(report: ProbeReport): string[] {
 /**
  * 控件成立后的**最终退出码**：`0` = 全 pass（每条结论都确定）；`1` = 至少一条仍是第三态。
  *
- * #128 退出码约定「0 全 pass」。半边前置（destroyListener / auto.search）刻意不进
+ * 退出码约定「0 全 pass」。半边前置（destroyListener / auto.search）刻意不进
  * `controlFailures`，以便 stdout 仍打印另一半有效结论；但 shell status 不得在
  * 「Map：**无法判定**」时仍返回 0——命令层在打印 verdicts 后必须调用本函数。
  */

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 样式袋的 `opacity` 与图层级 `setOpacity` 是不是**同一个 SDK 状态**（#174 评审 P1-1）
+ * 样式袋的 `opacity` 与图层级 `setOpacity` 是不是**同一个 SDK 状态**（ 评审 P1-1）
  *
  * ## 这条探针在回答什么
  *
@@ -85,7 +85,7 @@ function pageScript(ak: string): string {
   };
 
   // 造一张**真的画得出东西**的图。preserveDrawingBuffer 让 readPixels 在合成之后仍可读，
-  // 否则像素读数会全 0（#165 probe 已实测该选项被官方运行时承认）。
+  // 否则像素读数会全 0（ probe 已实测该选项被官方运行时承认）。
   const withMap = async (fn, settleMs) => {
     const div = document.createElement("div");
     div.style.cssText = "width:320px;height:240px;position:absolute;top:0;left:0";

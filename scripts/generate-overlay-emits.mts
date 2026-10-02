@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * #138: 由覆盖物事件事实源生成 `defineEmits` 的**显式键 interface**
+ * 由覆盖物事件事实源生成 `defineEmits` 的**显式键 interface**
  *
  * 生成物：`packages/bmap-vue/src/core/overlays/overlayEventEmits.generated.ts`
  *
@@ -27,15 +27,15 @@
  * | 本文件的 `NON_SDK_EVENTS` | **不是** SDK 事件的本库事件（v-model 回写 / 生命周期 / 菜单选中） |
  *
  * 1.0 之前这里还有第三处——集中弃用层登记的**历史事件别名**（marker 的 `drag-end`）。集中弃用层
- * 已随 #136 整层删除，1.0 不提供旧版迁移路径，别名**不再出现在任何 emits 声明里**
- * （#154 并入了本生成器；删别名时必须同提交改这里，否则 `--check` 会把旧键留在产物中）。
+ * 已随  整层删除，1.0 不提供旧版迁移路径，别名**不再出现在任何 emits 声明里**
+ * （ 并入了本生成器；删别名时必须同提交改这里，否则 `--check` 会把旧键留在产物中）。
  *
  * ## 两道防漂移
  *
  * ① **派发核对**：`NON_SDK_EVENTS` 登记的每个名字，回源码里确认真的有人 `emit` 它。声明了却没人发，
  *    Vue 不会报错——那是最坏的一类漂移。
  * ② **SFC 核对**：每个 kind 的 SFC 必须 `import` 本产物的 interface 并把它用作 `defineEmits` 的
- *    泛型实参。类型层看不到 SFC 的实参，只能查文本；这是文本检查，如实说明见 ADR #138 决策 ⑥。
+ * 泛型实参。类型层看不到 SFC 的实参，只能查文本；这是文本检查，如实说明见 ADR  决策 ⑥。
  *
  * 用法：
  *   node --experimental-strip-types scripts/generate-overlay-emits.mts

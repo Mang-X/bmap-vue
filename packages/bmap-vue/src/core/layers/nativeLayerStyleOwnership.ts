@@ -1,5 +1,5 @@
 /**
- * 样式袋与顶层受控字段的**归属**（#174 评审 P1-1）
+ * 样式袋与顶层受控字段的**归属**（ 评审 P1-1）
  *
  * ## 缺陷本身
  *
@@ -77,7 +77,7 @@ const STYLE_BAG_CONTENDS_OPACITY: ReadonlySet<NativeLayerKind> = new Set<NativeL
 /**
  * 与顶层 `opacity` prop 争同一个 SDK 状态的样式袋键。
  *
- * ⚠️ 该键**已从 `TextLayerStyle` 的公开类型里删除**（#174 复审 P1-1）：保留一个
+ * ⚠️ 该键**已从 `TextLayerStyle` 的公开类型里删除**（ 复审 P1-1）：保留一个
  * 「类型允许、运行时被 strip + 告警」的字段就是**「接收后忽略」**，正是本票判定为
  * 假支持并要求删除的那一档。类型层现在是**唯一入口**：顶层 `opacity` prop。
  *

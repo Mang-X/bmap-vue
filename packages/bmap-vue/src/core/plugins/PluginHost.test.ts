@@ -230,7 +230,7 @@ describe("PluginHost：释放权在宿主手里", () => {
   it("同名不同 definition：复用**先到**的那一份（当前口径，不是意外）", async () => {
     // 宿主按**名字**去重，不比较 definition 身份。跨注册表的同名冲突检测需要 definition 级别的
     // 指纹（参考实现用的是 `loadKey`），那属于扩展契约，本票不做 —— 所以这里把现状钉住，
-    // 免得「静默复用」既是行为又没人知道。见 ADR 2026-09-14 的「已知限制」。
+    // 免得「静默复用」既是行为又没人知道。「已知限制」。
     const host = createPluginHost();
     const first = vi.fn(async () => "first");
     const second = vi.fn(async () => "second");
@@ -257,7 +257,7 @@ describe("PluginHost：释放权在宿主手里", () => {
 });
 
 /**
- * 旧纪元任务的结算不得污染新纪元（评审 #88 P1-2）。
+ * 旧纪元任务的结算不得污染新纪元（评审  P1-2）。
  *
  * `dispose()` 会清空 entries 并允许同名插件重新 `acquire`，但**旧纪元那条在飞任务**之后才结算时，
  * 它的处理器仍按**名字**操作这张表：失败时 `entries.delete(name)` 会把新纪元的同名条目一起删掉

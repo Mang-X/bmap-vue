@@ -3,7 +3,7 @@
  * 由 Capability Catalog 数据生成能力矩阵
  *
  * 生成（单一事实源：packages/bmap-vue/src/driver/capability/catalog.ts）：
- * - docs/zh-CN/contributing/capability-matrix.md
+ * -
  * - docs/.vitepress/capability-catalog.json
  *
  * 生成文件顶部带 "Generated file. Do not edit directly."，
@@ -132,7 +132,7 @@ function renderJson(): string {
     source: 'packages/bmap-vue/src/driver/capability/catalog.ts',
     families: CAPABILITY_FAMILIES,
     statuses: CAPABILITY_STATUSES,
-    // #126：单引擎收口后不再输出 engines（原先的 `engines` / 每条 `engines` 字段已删）。
+    // 单引擎收口后不再输出 engines（原先的 `engines` / 每条 `engines` 字段已删）。
     capabilities: CAPABILITY_IDS.map((id) => {
       const d = CAPABILITY_CATALOG[id]
       return {

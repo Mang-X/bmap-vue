@@ -29,7 +29,7 @@
  * | 直接写在 `<Map>` 下 | `map` | `Map#addContextMenu(menu)` |
  * | 写在 `<Marker>` 里 | `marker` | `Marker#addContextMenu(menu)`（**运行时扩展**，类型包未声明） |
  *
- * 「挂到 marker」这条曾经被当作 v4 不存在（#33 之前的行为是显式拒绝），真实 AK 实测推翻了它：
+ * 「挂到 marker」这条曾经被当作 v4 不存在（ 之前的行为是显式拒绝），真实 AK 实测推翻了它
  * `Marker#addContextMenu` / `#removeContextMenu` 在 4.0 运行时存在且可用（挂上后右键该标注会派发
  * 菜单的 `open`，`removeContextMenu` 之后同样的右键不再 `open`）。依据与读数见 ADR
  * `2026-09-19-custom-overlay-and-context-menu`。
@@ -46,7 +46,7 @@ import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useContextMenu } from "../../core/composables/useContextMenu";
 import { useRequiredMapContext } from "../../core/context/inject";
 import type { BMapError } from "../../core/errors/BMapError";
-// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）；`select` 的载荷
+// 事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）；`select` 的载荷
 // 仍是本库类型（不是 SDK 事件），生成器从非 SDK 事件表里带出来。
 import type { ContextMenuEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { ContextMenuProps } from "../../types/components";
@@ -82,7 +82,7 @@ const { itemsHost, commands } = useContextMenu(props, {
 defineOptions({ name: "ContextMenu" });
 
 /**
- * 逐条命令面（#165 Class 3 / TASK 2d/2e）。
+ * 逐条命令面（ / TASK 2d/2e）。
  *
  * - `getItem(index)` / `removeItem(index)` / `removeSeparator(index)` / `getDom()` /
  *   `show()` / `hide()`：官方 `context-menu/ContextMenu.d.ts` 的六个成员；
