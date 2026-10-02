@@ -3,7 +3,7 @@
  *
  * 提供官方内置 marker 图标集（经 `client.driver.overlays.buildIcon` 构建，避免全局 SDK 依赖）。
  *
- * M5-SPEC-MARKER / #30：图标表搬到 `core/icons/markerIcon`（**单一事实源**）之后，这里只负责
+ * 图标表搬到 `core/icons/markerIcon`（**单一事实源**）之后，这里只负责
  * 「名称 → Icon 实例」的构建。此前这份表与 Driver 里那份各写一遍，且 Driver 那份只有 7 个名字，
  * 于是另外 20 个内置名（`red1`~`red10` / `blue1`~`blue10`）在 `<Marker icon="...">` 上会静默
  * 渲染成 `simple_red` 的位置——现在两边读同一份数据，不可能再漂移。

@@ -8,16 +8,16 @@
  * `@deprecated 已废弃，建议使用 {@link PolygonLayer} 替代`，替代品在 4.0.5 新增的
  * `visualization/` 命名空间里。
  *
- * **本组件的处置**（#165 决策，与 `LineLayer` / `PointIconLayer` 一致）：
+ * **本组件的处置**（ 决策，与 `LineLayer` / `PointIconLayer` 一致）
  *
  * - **保留组件、保留行为**。本库是 1.0 清白面，但「官方弃用」不等于「本库可以删」——
  *   官方自己**没有**删除 `FillLayer`（4.0.5 只是标了弃用并指名替代品）。
- * - **不改名、不留别名垫片**。#165 §3.6 禁止 compat shim，而「别名指向新名」正是那条要禁的
+ * - **不改名、不留别名垫片**。 禁止 compat shim，而「别名指向新名」正是那条要禁的
  *   东西：两个名字长一样、行为不同，只会让调用方更难判断自己拿到的是哪一套语义。
  * - **把弃用讲清楚**：开发期告警一次（`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放
  *   在模块级）+ 类型层 `@deprecated` + 文档。
  *
- * **#166 更新**：官方的指名替代品 `<PolygonLayer>` 现在**本库已提供**了。迁移时注意两者的
+ * ** 更新**：官方的指名替代品 `<PolygonLayer>` 现在**本库已提供**了。迁移时注意两者的
  * `style` **不是同一套字段**（本组件是 `FillLayerStyle`：`patternUrl` / `borderWeight` /
  * `borderCovered` 那一族；替代品是 `PolygonLayerStyle`：`fillTextureUrl` / `strokeWeight`
  * 那一族）——**弃用替代不是字段改名**，样式要重写。
@@ -27,7 +27,7 @@
  * `getAllState` 逐文件 0 命中；live 实测运行时候选类上这五个成员也全部缺席），而本组件 expose 的
  * `featureState` 命令面是**官方声明、live 实测在位**的。⇒ **依赖要素状态的用法迁移即丢能力**，
  * 这种情况**继续用 `<FillLayer>`**。逐字段迁移表与取舍见
- * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
+ * ``。
  *
  * 与 `LineLayer` 同构（同一份装配 `useVisualLayer`），差别只有三处：
  *

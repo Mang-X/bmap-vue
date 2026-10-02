@@ -172,7 +172,7 @@ describe("Bounds", () => {
 });
 
 /**
- * 回归：PR #59 评审 P2（复合几何入口遇到空值时的错误契约）
+ * 回归：PR  评审 P2（复合几何入口遇到空值时的错误契约）
  *
  * 旧实现在校验之前就读 `bounds.southwest` / 直接调参数的 `.map()`，容器为
  * `null` / `undefined` 时会抛原生 `TypeError`，绕过 `BMapError` 的错误协议。

@@ -1,5 +1,5 @@
 /**
- * 批量资源管理器（M6-MARKER-POINTCOLLECTION / issue #34，重写自旧的 `DataLayerManager`）
+ * 批量资源管理器（M6-MARKER-POINTCOLLECTION / ，重写自旧的 `DataLayerManager`）
  *
  * 一个组件管理一批 SDK 资源（当前是逐项 Marker），做 keyed diff 与 RAF 合帧，
  * 并为「事件回传**最新**业务 item」维护 `key → item` 账本。
@@ -72,7 +72,7 @@ const SYNC_KEY = "data-layer:sync";
  * 位置指纹（「SDK 侧当前坐标是什么」的判定依据）。
  *
  * 用它而不是 `item` 引用：引用比较会漏掉「换根引用 + 复用同一个 item 对象 + 原地改坐标」，
- * 也会在「换根引用但坐标没变」时产生多余的下发（评审 #102 F1 的两个方向）。
+ * 也会在「换根引用但坐标没变」时产生多余的下发（评审  F1 的两个方向）。
  */
 function positionFingerprint(point: PointLike): string {
   return `${point.lng},${point.lat}`;
@@ -88,7 +88,7 @@ export class DataLayerManager<Item, Resource> {
    * 落在这一集合里的资源：
    *
    * - **不再进入普通写入路径**（位置更新 / 显隐都跳过）—— 它们可能已经不在图上，写进去要么白写、
-   *   要么在真实 SDK 上抛错（#98 的读数：对已摘下的实例补 `setData` 会内部抛错）；
+   * 要么在真实 SDK 上抛错（ 的读数：对已摘下的实例补 `setData` 会内部抛错）；
    * - 仍然**保留所有权**，只在「摘除」路径上出现（数据里删掉它、或整个管理器被清理时再摘一次）——
    *   摘除是唯一能把它收敛回确定状态的动作：成功 ⇒ 确定已摘除并销账；失败 ⇒ 仍是 unknown。
    *
@@ -99,7 +99,7 @@ export class DataLayerManager<Item, Resource> {
   /** 资源 → key（事件委托要由实例反查业务项；`WeakMap` 不延长资源寿命）。 */
   private readonly keyOfResource = new WeakMap<object, PropertyKey>();
   /**
-   * 「**SDK 侧当前是什么坐标**」的按 key 记账（评审 #102 F1/F2）。
+   * 「**SDK 侧当前是什么坐标**」的按 key 记账（评审  F1/F2）。
    *
    * 位置下发由**值**决定，不由 `item` 引用决定：引用比较是一个未公开的短路条件——`data` 换了
    * 根引用、但复用了同一个 item 对象（`item.lng = 2; data.value = [item]`）时，公开契约说
@@ -217,7 +217,7 @@ export class DataLayerManager<Item, Resource> {
           `${this.label}: 摘除资源失败（key=${String(key)}），它可能仍在图上：` +
             `${(error as Error)?.message ?? String(error)}`,
         );
-        // **保留所有权**（与 diff 删除路径同一条原则，评审 #102 F3）：SDK 可能是「还没产生副作用
+        // **保留所有权**（与 diff 删除路径同一条原则，评审  F3）：SDK 可能是「还没产生副作用
         // 就抛错」，此时旧资源仍在图上；删掉记账会让之后为同一个 key 再建一份，图上出现两份/泄漏。
         // 同时把挂载态标成 `unknown`（`remove` 之后抛错 ⇒ 它可能已经不在图上了）。
         this.unknownKeys.add(key);
@@ -328,7 +328,7 @@ export class DataLayerManager<Item, Resource> {
       try {
         this.host.updatePosition(existing, entry.point, entry.item);
       } catch (error) {
-        // 位置没更新成功 ⇒ **不提交**位置记账，下一次同步会再试（评审 #102 F2）。
+        // 位置没更新成功 ⇒ **不提交**位置记账，下一次同步会再试（评审  F2）。
         failed = true;
         this.options.warn?.(
           `${this.label}: 更新位置失败（key=${String(entry.key)}）：${(error as Error)?.message ?? String(error)}`,

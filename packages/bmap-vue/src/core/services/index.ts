@@ -1,5 +1,5 @@
 /**
- * 服务层公共底座（M7-SERVICE-CORE / issue #38，#139 分层）
+ * 服务层公共底座（M7-SERVICE-CORE / ， 分层）
  *
  * 放这里的东西有两个共同点：**框架无关**（不 import vue、不 import SDK）且**被多个
  * composable 共用**。服务任务分两档（见 ADR

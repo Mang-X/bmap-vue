@@ -1,5 +1,5 @@
 /**
- * Control / Layer 资源卸载顺序（M3A2-CONTROLS-LAYERS / issue #22 实施步骤 4）
+ * Control / Layer 资源卸载顺序（M3A2-CONTROLS-LAYERS /  实施步骤 4）
  *
  * 「确保 remove 先解绑业务事件，再由 Map 移除资源」是 issue 的实施要求，而它分别落在
  * `useControlResource` 与 `useLayerResource`（图层经内核的 `LayerRecord.dispose()`）的卸载路径上
@@ -166,7 +166,7 @@ function mountWith(use: "control" | "layer") {
 }
 
 /**
- * **重建**路径（构造期 option 变化）的卸载顺序（#98 第四轮行内发现 1）。
+ * **重建**路径（构造期 option 变化）的卸载顺序（ 第四轮行内发现 1）。
  *
  * 为什么单独一条：常规销毁都经过 `LayerRecord.dispose()`，「先 scope、再 `removeLayer`」由它保证；
  * 而**换实例**时内核会先做一次「收敛」——自己摘一次、确认摘掉了才换（否则 `LayerRegistry` 会吞掉

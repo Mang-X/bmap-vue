@@ -42,7 +42,7 @@ export interface PanoramaProps {
 /**
  * Panorama —— 全景查看器（官方 `BMap.Panorama`）
  *
- * M7-CONTROL-PANORAMA / issue #41。与 `<Map>` 的关系是**并列**而不是嵌套依赖：查看器创建在
+ * M7-CONTROL-PANORAMA / 。与 `<Map>` 的关系是**并列**而不是嵌套依赖：查看器创建在
  * 自己的容器里（`new BMap.Panorama(container)`），既不挂在 Map 上，也不受地图的暂停/重试策略
  * 管辖；它只需要一个 Client，因此放在 `<Map>` 或 `<BMapProvider>` 子树里都可以。
  *
@@ -76,7 +76,7 @@ const emit = defineEmits<{
    * `getLinks()` 补齐（与 `positionChange` / `povChange` 同一手法）。
    *
    * 此前这一条是**空载荷**：Driver 的注释说「`links` 没有消费者所以不透出」，
-   * 但消费者（这个事件本身）**早就存在**，缺的只是数据路径——issue #165 Class 3 /
+   * 但消费者（这个事件本身）**早就存在**，缺的只是数据路径—— /
    * TASK 5 补上。官方 React 参考实现同样暴露 `getLinks()`。
    *
    * 逐条投影依据见 `driver/types/panorama.ts` 的 `PanoramaLink`：八个成员全是可选的，
@@ -104,12 +104,12 @@ const emit = defineEmits<{
 
   /* --- issue #168 item 3：官方 `PanoramaEventMap` 的 23 条里，此处新增 13 条 ---
    *
-   * 逐条裁决（**加 / 不加** 与理由）见 `docs/zh-CN/contributing/168-remaining-surface.md`
+   * 逐条裁决（**加 / 不加** 与理由）见 ``
    * 与 `tests/behavior/panorama-events.test.ts` 的文件头总表；这里只记**载荷形状**的依据。
    *
    * 对外名一律 **camelCase**，这不是待清理的偏差：官方 React 封装
    * `huiyan-fe/react-bmap@2.0.6`（`master`，`src/components/Panorama/index.tsx:46-66`）的
-   * 公共事件面就是 camelCase `on*` props，#165 的对齐规则「参照官方封装」指的是它，
+   * 公共事件面就是 camelCase `on*` props， 的对齐规则「参照官方封装」指的是它
    * 不是 SDK 声明的 snake_case。SDK 拼写作为一一对应的别名发出，形状复用 map 事件的
    * `MAP_EVENT_EMIT_ALIASES`（`core/events/eventCatalog.ts`）。
    */
@@ -205,7 +205,7 @@ const emit = defineEmits<{
    *
    * 要让业务听见它，本库的释放顺序就得倒过来：现在
    * `core/panorama/index.ts` 的 `dispose()` 是「**先解绑业务监听、再 `driver.destroy()`**」
-   * （ADR 2026-09-11 §6 的「先解绑、后摘除」——SDK 在 `destroy` 期间**同步**派发事件时，
+   * 的「先解绑、后摘除」——SDK 在 `destroy` 期间**同步**派发事件时
    * 这个顺序保证回调不会打到已拆解的状态上）。
    *
    * 倒过来的代价是拿一个**真实存在的正确性风险**换一句「实例收尾了」的信号：业务回调会在
@@ -214,7 +214,7 @@ const emit = defineEmits<{
    * 为它绕开一条已定的安全属性不划算。
    *
    * 因此本库不声明这条事件。裁决与取舍的完整记录见
-   * `docs/zh-CN/contributing/168-remaining-surface.md`。
+   * ``。
    */
 
   /* --- issue #165 TASK 6：SDK 拼写的**兼容别名**（`PANORAMA_EVENT_EMIT_ALIASES`）---
@@ -301,7 +301,7 @@ let active: ActiveViewer | null = null;
  *
  * 用来在就绪收敛时判断「构造之后 options 变过没有」：`context.mount()` 可能还在等 Client，
  * 这段窗口里 watcher 会触发，但那时 `active === null`（查看器还不存在），改动会被跳过；
- * 若不在 ready 后补一次，它就永久停在构造期那份了（#95 评审 P2）。比对键而不是无条件重发，
+ * 若不在 ready 后补一次，它就永久停在构造期那份了（ 评审 P2）。比对键而不是无条件重发
  * 是为了不破坏「同一个值重设不产生多余下发」。
  *
  * 存**键**而不是对象引用，与控件侧的 `optionSnapshot` 是同一手法：基线一旦持有父级传进来的对象，
@@ -392,7 +392,7 @@ function subscribe(target: ActiveViewer): void {
   // 因此直接 `emit`、不走 `forward`。理由见 `PANORAMA_EVENT_RENAMED`。
   scope.add(driver.on(viewer, "dataload", (event: unknown) => emit("load", event)));
   scope.add(driver.on(viewer, "pano_error", (event: unknown) => emit("error", event)));
-  // ---- issue #168 item 3：其余 13 条官方事件的订阅 ----
+  // ---- ：其余 13 条官方事件的订阅 ----
   //
   // 全部经 `driver.on` 的**原样**通道（与上面 8 条同一路径），差别只在**载荷怎么投影**：
   // 「回读 getter 补值」的三条（`pov_changed_end` / `scene_change_end`）与纯转发/收窄的其余条。
@@ -623,7 +623,7 @@ defineOptions({ name: "Panorama" });
  * 组件命令面在「未就绪 / 正在重建 / 已释放」时的**显式失败**（issue #171 item I）。
  *
  * 与 `core/overlays/overlayCommands.ts` 的 `disposed()`、`<PanoramaLabel>` 的命令面同一口径，
- * 也与 ADR 2026-09-11 的「destroy 之后命令必须失败」一致。命令面里**没有**「静默返回」这一档：
+ * 也与「destroy 之后命令必须失败」一致。命令面里**没有**「静默返回」这一档
  * 静默会让调用方把「资源已释放」误判成「SDK 说没有」。`capture` / `clearOverlays` 都在这条
  * 口径下（`getLinks` 是唯一例外，它的空与非空不承载语义——理由写在那条方法上）。
  */
@@ -659,7 +659,7 @@ defineExpose({
     }
   },
   /**
-   * 取当前全景画面为 Data URL（官方 `Panorama#capture`，issue #171 item I）。
+   * 取当前全景画面为 Data URL（官方 `Panorama#capture`，）。
    *
    * **返回 `string | null`，但「未就绪」不是 `null`**：
    * - `null` = 官方那条承诺的「当前渲染器不支持截图」（原声明是 `undefined`，Driver 归一）；
@@ -678,7 +678,7 @@ defineExpose({
     return current.driver.capture(current.viewer, options);
   },
   /**
-   * 清空查看器里**本库不管理的**覆盖物（官方 `Panorama#clearOverlays`，issue #171 item I）。
+   * 清空查看器里**本库不管理的**覆盖物（官方 `Panorama#clearOverlays`，）。
    *
    * ## 对调用方的语义（**这条是契约**）
    *
@@ -698,7 +698,7 @@ defineExpose({
    * ## 为什么不是「限制 clearOverlays 让它碰不到本库管理的」
    *
    * 那要么是**不调用**官方那条命令（业务要的「把这一屏标注撤掉重画」就没了，而那正是
-   * #171 补这条命令的唯一理由），要么是**自己枚举后逐个 remove**（没有枚举接口，只能去摸
+   * 补这条命令的唯一理由），要么是**自己枚举后逐个 remove**（没有枚举接口，只能去摸
    * SDK 内部状态——AGENTS.md 禁止「镜像读不回的内部状态」）。协调是唯一有依据的第三条路。
    *
    * 未就绪 / 已释放**显式抛** `BMAP_RESOURCE_DISPOSED`（不静默 no-op——清不掉却报告成功会让

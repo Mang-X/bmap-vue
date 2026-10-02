@@ -13,10 +13,10 @@
  * | 就地更新 / 重建 | 本文件：**按键标脏 + 一次 reconcile** → `driver.overlays.setOptions` / `replace()` | 分类来自 Driver 描述符 |
  * | 卸载（unmount） | `useSdkResource`：先摘 registration，再释放实例 scope，最后释放组件 scope | 幂等 |
  *
- * ## #138：更新路径为什么不再自研一套调度（`pendingApply` → Vue batching）
+ * ##更新路径为什么不再自研一套调度（`pendingApply` → Vue batching）
  *
  * 本层原先自带 `pendingApply` / `draining` / `requeueStaleBatch` / `drainAppliedUpdates` 一整套
- * 单飞队列，在 Vue 自己的 watcher batching **之上**又叠了一层合并。#138 把两者合成一层：
+ * 单飞队列，在 Vue 自己的 watcher batching **之上**又叠了一层合并。 把两者合成一层
  *
  * - **合并交给 Vue**：watch 源只「按键标脏」，真正的「一次提交改 N 个字段 ⇒ 一轮下发」由
  *   post-flush 的 batching 完成（依据：ADR `2026-09-24-scheduler-batching-hot-path.md` §2
@@ -26,15 +26,15 @@
  *   到达的更新**不能**发给即将被丢弃的旧实例、也不能直接标脏（`replace()` 已把
  *   `sdk.resource.value` 置空）。#138 明确要求这一条保留；窗口之外的更新一律不排队。
  *
- * **不变的正确性保证**（#138 验收口径）：批里只要有 `recreate` 键就**先重建**，再把 `mutable`
+ * **不变的正确性保证**（ 验收口径）：批里只要有 `recreate` 键就**先重建**，再把 `mutable`
  * 落到**最终存活**的实例——`applyBatch()` 在 `await sdk.replace()` 之后**重新读**
  * `sdk.resource.value` 才下发，这一步是全部要害。
  *
- * 语义继承自 `useOverlayResource`（PR #61 三轮评审的收敛点），迁到本层后由 #31 迁移过来的
+ * 语义继承自 `useOverlayResource`（PR  三轮评审的收敛点），迁到本层后由  迁移过来的
  * 八个覆盖物共用；`MapMask` / `Marker3D` / `InfoWindow` / `ContextMenu` 仍走旧层，
  * 理由见 ADR `2026-09-18-overlay-event-matrix` 的已知限制。
  *
- * ## #138：props 视图不再用运行时 Proxy
+ * ##props 视图不再用运行时 Proxy
  *
  * 别名解析（旧 prop 名）+ 值投影（惰性值）原先挂在一个 `new Proxy(rawProps, …)` 上，代价是
  * **每次读 props 都过一层 trap**（watch 源每字段每轮都要读若干次）。别名表（`OVERLAY_PROP_ALIASES`）
@@ -44,14 +44,14 @@
  * `afterMount` 各读一次，**物化**一份普通对象即可（见 `lifecycleProps`）。
  * `readRawProp` 保留原始引用语义——`reference` / `versioned` 两种源必须读到未投影的根引用。
  *
- * ## issue #31 在本层加的三件事
+ * ##  在本层加的三件事
  *
  * 1. **事件面由矩阵派生**（`overlayEventsOf(spec.kind)`）：组件不再逐个手写 `emit("click", e)`，
  *    于是「同一类覆盖物的事件面不一致」在结构上不可能。`spec.events` 只剩**覆盖项**。
  * 2. **读 props 走「值投影视图」**：`spec.fieldValues` 登记的惰性值（如 GroundOverlay `url` 的
  *    工厂函数）必须先求值再交给 SDK，因此读 props 经一个 Proxy；`create` / watch / 更新队列读到的
  *    都是同一份值，不存在「初始用旧名、更新用新名」这类分叉。
- *    （#136 起这里不再做 prop 别名解析——旧 prop 名的兼容读法已随集中弃用层删除。）
+ * （ 起这里不再做 prop 别名解析——旧 prop 名的兼容读法已随集中弃用层删除。）
  * 3. **卸载路径上的事件不再回放**：实例被摘除后，SDK 在解绑窗口里派发的 `remove` 之类事件
  *    不再冒泡给调用方（`removeOverlay` 恰好发生在监听解绑之前）。
  */
@@ -191,8 +191,8 @@ interface ResolvedOverlayEvent {
 /**
  * 事件面 = kind 的事件矩阵 ∪ `spec.events` 覆盖项（覆盖项按 SDK 名匹配，必须落在矩阵内）。
  *
- * 没有 `kind` 的 spec（第三方自建覆盖物：#30 的形态）**没有矩阵**：此时只有 `spec.events` 生效，
- * 行为与 #30 完全一致。**没有「按名字猜 kind」的回落**——猜想会让「声明了 emit 却永不触发」
+ * 没有 `kind` 的 spec（第三方自建覆盖物： 的形态）**没有矩阵**：此时只有 `spec.events` 生效
+ * 行为与  完全一致。**没有「按名字猜 kind」的回落**——猜想会让「声明了 emit 却永不触发」
  * 变成静默失败（见 `OverlaySpec.kind` 的说明）。
  */
 function resolveOverlayEvents<Props extends object, Resource>(
@@ -276,7 +276,7 @@ export function useOverlaySpec<Props extends object, Resource>(
    * `needsView` 为假时给 `rawProps` 本身（零拷贝，行为与原缺省分支相同）。为真时**按代物化**：
    * 每一代实例（首次创建或 `replace()` 重建）开头现读一次 `rawProps`，而不是在 setup 时固定一份。
    *
-   * **为什么必须按代而不是一次性**（#138 评审 P1）：`useSdkResource` 在 setup 时把 `props`
+   * **为什么必须按代而不是一次性**（ 评审 P1）：`useSdkResource` 在 setup 时把 `props`
    * 解构成一个闭包常量，之后每次 `createOnce`（重建）都传**同一个对象**。一次性物化会让
    * `GroundOverlay` 这类「有投影且有构造期字段」的覆盖物在**重建后仍读到旧值**：
    * `type: "image" → "canvas"` 触发重建，新实例却按 `options.type === "image"` 建出来。
@@ -409,7 +409,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   /**
    * 标脏的字段（待下发的键值）。
    *
-   * #138 之后这里**不是**一套自研调度队列：watch 源只负责「把这个键标脏」，真正的合并交给 Vue 的
+   * 之后这里**不是**一套自研调度队列：watch 源只负责「把这个键标脏」，真正的合并交给 Vue 的
    * post-flush batching —— 「一次提交改 N 个字段 ⇒ N 条命令」由 Vue 收成 1 次
    * （依据见 ADR `2026-09-24-scheduler-batching-hot-path.md` §2 对 `pre` / `post` 的取证）。
    * 这里仍保留一个 `Record`，因为**按键合并**本身有价值：同名字段一轮里只留最后一个值。
@@ -417,7 +417,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   let dirtyFields: Record<string, unknown> | null = null;
 
   /**
-   * 唯一存活于 **replace 窗口**的尾随批（#138 明确要求保留的那一条最小尾随队列）。
+   * 唯一存活于 **replace 窗口**的尾随批（ 明确要求保留的那一条最小尾随队列）。
    *
    * 为什么它不能省：`sdk.replace()` 是异步的（`create` 可以 await），在它 in-flight 期间到达的更新
    * **不能**发给旧实例（它马上就要被 `disposeInstance()` 丢掉），也不能直接标脏
@@ -432,7 +432,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   let replacing = false;
 
   /**
-   * 「**可能**已写入 SDK」的字段键（issue #138 的撤回判据）。
+   * 「**可能**已写入 SDK」的字段键（ 的撤回判据）。
    *
    * **为什么是「可能」而不是「成功」**：`setOptions` 是逐 setter 调用，第一个键写成功、
    * 第二个键抛错时前一个键**已经**真的改了 SDK。按成功记账会让一次部分成功的写入变成
@@ -451,7 +451,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   /**
    * 把一批已合并的更新落到**最终存活**的实例：先重建（若有构造期键），再就地更新。
    *
-   * **「实例不可用」在这里不是一个分支，而是一个不变式**（#138 取证）：
+   * **「实例不可用」在这里不是一个分支，而是一个不变式**（ 取证）
    * `reconcileFields` 的排空条件是 `while (dirtyFields && sdk.resource.value)`，因此
    * `applyBatch` 只会带着 `sdk.resource.value` 非空进来；`reconciling` 又保证并发进入的
    * `markDirty` 不会往 `dirtyFields` 里塞第二批。因此**不需要**把批放回去——v3 那条
@@ -478,7 +478,7 @@ export function useOverlaySpec<Props extends object, Resource>(
     const inPlace: Record<string, unknown> = {};
     let needsReplace = false;
     for (const [key, value] of Object.entries(batch)) {
-      // #138：**撤回**（有值 → 未表态）是独立于 `policy` 的一维，判据是
+      // **撤回**（有值 → 未表态）是独立于 `policy` 的一维，判据是
       // ① 这个键「**可能**已写入」（`possiblyApplied`）且 ② 它的撤回落点是 `rebuild`。
       // 两个条件都成立才升级为一次重建；`policy` 仍是「值变化时怎么办」的分类。
       if (value === undefined && possiblyApplied.has(key) && revertsToRebuild(key)) {
@@ -519,7 +519,7 @@ export function useOverlaySpec<Props extends object, Resource>(
     // 「尝试过」整批**先**记（`setOptions` 是逐 setter 调用：第一个键写成功、第二个键抛错时，
     // 前一个键已经真的改了 SDK，整批不记就会在它撤回时漏掉重建）。判据因此是「可能已写入」
     // 而不是「成功写入过」——按成功判断会让一次**部分成功**的写入变成永久分叉
-    // （与图层侧 `useLayerResource.possiblyAppliedOptions` 同一条理由，PR #61 第四轮评审发现 2）。
+    // （与图层侧 `useLayerResource.possiblyAppliedOptions` 同一条理由，PR  第四轮评审发现 2）。
     for (const key of Object.keys(inPlace)) {
       if (inPlace[key] !== undefined) possiblyApplied.add(key);
     }
@@ -560,7 +560,7 @@ export function useOverlaySpec<Props extends object, Resource>(
     try {
       // `sdk.resource.value` 这一半**不是**优化，是不变式的另一半：`applyBatch` 只在实例可见时
       // 才被调用（见它的入参不变式），因此这一行同时是「排空条件」与「不会空转」的保证。
-      // #138 之前这里还兼着一个挡板角色——旧的 `applyBatch` 在实例未就绪时会把整批放回
+      // 之前这里还兼着一个挡板角色——旧的 `applyBatch` 在实例未就绪时会把整批放回
       // `dirtyFields`，只看 `dirtyFields` 就会原地取回再放回、死循环。放回路径已经删除，
       // 挡板也就不需要了，但条件本身保留：它让「实例不可用 ⇒ 不排空」成为显式契约。
       while (dirtyFields && sdk.resource.value) {
@@ -576,7 +576,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   /**
    * 按键标脏（watch 源的落点）。
    *
-   * 换实例飞行中 ⇒ 挂到**尾随队列**（#138 保留的那条最小自研队列）；否则直接标脏并排一次。
+   * 换实例飞行中 ⇒ 挂到**尾随队列**（ 保留的那条最小自研队列）；否则直接标脏并排一次。
    * 不在 replace 窗口内的更新**不排队**：post-flush 的 batching 已经把它们合成一轮。
    */
   function markDirty(updates: Record<string, unknown>): void {
@@ -613,7 +613,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   /**
    * 派发一条事件：组件自定义处置，或按矩阵声明的 `emit` 名转发。
    *
-   * 事件名**只有**规范拼写一种（`overlayEventCatalog` 的 `vue` 列）。#136 起不再补发旧事件名
+   * 事件名**只有**规范拼写一种（`overlayEventCatalog` 的 `vue` 列）。 起不再补发旧事件名
    * （Marker 的 `drag-end`）：clean-slate 1.0 不兼容旧 API，收到旧名字只应静默失配。
    */
   function dispatchEvent(event: ResolvedOverlayEvent, payload: unknown): void {
@@ -635,11 +635,11 @@ export function useOverlaySpec<Props extends object, Resource>(
       type: spec.type,
       create: ({ context, props: ignoredProps }) => {
         // 这一代的 props 快照：`useSdkResource` 传下来的 `props` 是 setup 时的常量，
-        // 经视图读取的字段（别名 / 投影）必须**按代现读**（#138 评审 P1，见 `materializeLifecycleProps`）。
+        // 经视图读取的字段（别名 / 投影）必须**按代现读**（ 评审 P1，见 `materializeLifecycleProps`）。
         const current: Readonly<Props> = (generationProps = materializeLifecycleProps());
         // 「实例是按哪个位置建的」必须在**调用 create 之前**取，理由见 `createdPosition`。
         createdPosition = positionField ? (readPosition() ?? null) : null;
-        // #138：构造期给过值的字段**记进「可能已写入」**——`spec.create` 把它传进了构造器，
+        // 构造期给过值的字段**记进「可能已写入」**——`spec.create` 把它传进了构造器
         // 因此它此后变回未表态时需要一次重建才能回到 SDK 自己的默认值。只记**非 undefined**
         // 的值：`undefined` 从来没进过构造器，不存在要撤回的东西。
         for (const [prop, update] of fields) {
@@ -661,7 +661,7 @@ export function useOverlaySpec<Props extends object, Resource>(
         // 因此惰性投影不会被求值第二次。竞态清理路径（`stale: true`）上 `create` 一定先跑过，
         // 快照不会是 null；仍用 `?? materializeLifecycleProps()` 兜住不变式被打破的情形。
         const current = generationProps ?? materializeLifecycleProps();
-        // **先登记，再做副作用**（PR #103 评审 1b）：`addToMap` 与 `afterMount` 都可能失败
+        // **先登记，再做副作用**（PR  评审 1b）：`addToMap` 与 `afterMount` 都可能失败
         // （SDK 抛错 / 组件侧副作用抛错），而唯一的回滚入口是 registration 的 `remove`。
         // 登记在前 ⇒ 任一失败都能经 `registration.dispose()` 把已 add 的实例摘掉 + 摘记录；
         // 登记在后 ⇒ 失败路径只剩「实例留在图上、注册表不知道」这一种结局（已用用例钉住）。
@@ -762,12 +762,12 @@ export function useOverlaySpec<Props extends object, Resource>(
             ),
           );
         }
-        // #138：这里**不是**「每个字段一个 watcher」，而是**一个** array-source watcher。
+        // 这里**不是**「每个字段一个 watcher」，而是**一个** array-source watcher。
         //
         // 为什么不各写各的：同一 flush 内 Vue 会按注册顺序逐个跑 N 个回调，于是第一个回调里
         // `markDirty` → `reconcileFields()` 同步 drain，`setZIndex` 就**先**打到了即将被丢弃的
         // 旧实例上（`doomed.callLog === []` 断言会红）。合成一个 watcher 后，依赖仍由 Vue 收集，
-        // 而「一轮只有一次回调」由 Vue 的 batching 保证——这才是 #138 要的「合并交给 Vue」：
+        // 而「一轮只有一次回调」由 Vue 的 batching 保证——这才是  要的「合并交给 Vue」
         // 不靠 N 个回调互相等待，只靠**回调数本身是 1**。
         //
         // `flush: "post"`：批在**本轮 DOM 更新之后**下发，父级受控回写先落地；
@@ -862,7 +862,7 @@ export function useOverlaySpec<Props extends object, Resource>(
   });
 
   /**
-   * `defineExpose` 的命令面（#165 Class 3 / TASK 2）。
+   * `defineExpose` 的命令面（ / TASK 2）。
    *
    * 三条口径（逐条依据见 `core/overlays/overlayCommands.ts` 的文件头与 `OverlaySpec.expose`）：
    * 1. **不声明 `expose` 的 spec 返回 `null`**——命令面是「有这个能力才有」，

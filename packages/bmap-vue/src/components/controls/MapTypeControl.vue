@@ -21,7 +21,7 @@ export interface MapTypeControlProps {
    * 收**字符串**而不是数字：上游 `MapTypeControlOptions.mapTypes?: MapType[]`，
    * 而 `const/MapType.d.ts` 把 `BMAP_NORMAL_MAP` 等五个常量全声明为 `string`
    * （`declare const BMAP_NORMAL_MAP: string`）——4.0 的地图类型标识本身就是这些串，
-   * 传数字不会对应到任何一张图（issue #175 / `docs/internal/doc-audit-findings.md` 第 18 条）。
+   * 传数字不会对应到任何一张图（ / `` 第 18 条）。
    */
   mapTypes?: readonly string[];
   /** 是否显示路网层（官方 `showStreetLayer(isShow)`，可就地更新） */
@@ -32,7 +32,7 @@ export interface MapTypeControlProps {
 /**
  * MapTypeControl —— 地图类型切换控件（官方 `MapTypeControl`）
  *
- * M7-CONTROL-PANORAMA / issue #41。
+ * M7-CONTROL-PANORAMA / 。
  *
  * 三个选项的落地方式刻意分两档，依据是官方 4.0.5 声明的实例方法表：
  * - `showStreetLayer` → `showStreetLayer(isShow)`：**唯一**的字段级 setter，就地更新

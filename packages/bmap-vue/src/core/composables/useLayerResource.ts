@@ -101,7 +101,7 @@ export interface UseLayerResourceResult {
  * 再 `add` 一次会让同一个实例在图上出现两份，而 `addLayer` 不去重）。
  *
  * 未知状态的处理方式是**再尝试同步一次**（而不是猜）：见 `syncMounted`。这一步依赖「对已经摘掉的
- * 图层重复 `removeLayer` 是安全的」——该前提已由 issue #98 的 live 探针**实测成立**
+ * 图层重复 `removeLayer` 是安全的」——该前提已由  的 live 探针**实测成立**
  * （GeoJSON / DOM / Tile 三个家族重复摘除均未抛错，见 ADR 决策 12b）。
  */
 type MountState = "attached" | "detached" | "unknown";
@@ -114,7 +114,7 @@ interface InstanceState {
    * 我们相信「当前挂在地图上」的唯一记账（用于挂载 / 摘除的幂等）。
    *
    * 三态的理由见 `MountState`：失败之后留 `unknown`，下一次同步动作会把它推回确定状态
-   * （`remove -> add`）。这条路径依赖的前提 P（重复 `removeLayer` 安全）**已由 issue #98 的 live
+   * （`remove -> add`）。这条路径依赖的前提 P（重复 `removeLayer` 安全）**已由  的 live
    * 探针实测成立**（三个家族均未抛错，见 ADR 决策 12b）；万一对某个 kind / SDK 版本不成立，
    * 退化仍然有界且可观测（保持 `unknown` + `resource:error`，不会重复挂载）。
    */
@@ -243,7 +243,7 @@ export function useLayerResource<Props>(
    * 只走**统一"清空"入口** `clearData`（Driver 按 kind 映射到 `clearData` / `removeAllOverlays`），
    * 因此这里不需要按 kind 分支，也**不需要判挂载状态**——后者曾经存在过（`clearScope` 三态），
    * 它建立在「`GeoJSONLayer.clearData()` 要在 `removeLayer` 之前调、之后无效」这句 reference 上，
-   * 而 issue #98 的 live 探针实测**推翻**了它（见下）。**只在永久销毁时做**：普通 `visible=false`
+   * 而  的 live 探针实测**推翻**了它（见下）。**只在永久销毁时做**：普通 `visible=false`
    * 的摘挂不能清（切回可见时还得重新 `setData`）；清理失败不阻断摘除，但要可观测。
    *
    * 依据与实测（`scripts/probe-layer-detached.mts`，JSAPI 4.0 / `BMap.version === "gl"`）：
@@ -289,7 +289,7 @@ export function useLayerResource<Props>(
    *   `clearData()` / `removeAllOverlays()` → `removeLayer()` 顺序；
    * - 已经 `detached`（此前 `visible=false` 已成功摘过一次）：只做 **detached cleanup**——
    *   可执行的清空照常做（见 `tearDownData`），但**不会再摘一次**（`mountAttempted` 已复位，
-   *   下面那道门禁会直接 return）。重复 `removeLayer` 的安全性已由 issue #98 实测（三个家族均未
+   * 下面那道门禁会直接 return）。重复 `removeLayer` 的安全性已由  实测（三个家族均未
    *   抛错，见决策 12b），但**这条路径本身只做一次摘除**——重复摘除只出现在「挂载状态未知」时的
    *   收敛动作里。
    */
@@ -324,7 +324,7 @@ export function useLayerResource<Props>(
    * - 要挂上时先 best-effort 摘一次（成功即「确定已 detached」），再 `add`；
    * - 要摘掉时直接 `unmount`（它内部同样把 `unknown` 再推一次）。
    *
-   * 它依赖前提 P——「对已经摘掉的图层重复 `removeLayer` 是安全的」。**该前提已由 issue #98 的
+   * 它依赖前提 P——「对已经摘掉的图层重复 `removeLayer` 是安全的」。**该前提已由  的
    * live 探针实测成立**（GeoJSON / DOM / Tile 重复摘除均未抛错，见 ADR 决策 12b），因此两种失败
    * 形状都落到「恰好挂一份」（上一步真的没摘掉 ⇒ 这次摘掉；上一步其实已摘掉 ⇒ 这次是 no-op）。
    *
@@ -368,7 +368,7 @@ export function useLayerResource<Props>(
   /**
    * **纯判定**：「上一次挂上去过的实例，现在要重新可见」⇒ 必须重建，不能复用。
    *
-   * 依据是 issue #98 的 live 读数（真实 4.0，严格按内核的 `addLayer → setData` 顺序）：
+   * 依据是  的 live 读数（真实 4.0，严格按内核的 `addLayer → setData` 顺序）
    *
    * | 步骤 | DOMLayer 的节点（连在文档） |
    * | --- | --- |
@@ -391,7 +391,7 @@ export function useLayerResource<Props>(
   /**
    * 就地写入「依赖已挂载」的槽位。
    *
-   * **不在 `map.addLayer` 之前执行这类操作**（issue #40 的非目标）：官方明确层级调整会访问
+   * **不在 `map.addLayer` 之前执行这类操作**（ 的非目标）：官方明确层级调整会访问
    * 已关联的 Map 与图层管理器，未挂载时调用是未定义行为。因此这里以「我们相信它确实挂着」
    * （`mountState === "attached"`）为前置——`unknown` 同样不写（那时连它在地图上的状态都不确定）。
    */
@@ -401,7 +401,7 @@ export function useLayerResource<Props>(
     const kind = state.spec.kind;
 
     // 未挂载时**不写、也不记账**：官方明确「层级调整一类操作会访问已关联的 Map 与图层管理器」，
-    // 未挂载时调用是未定义行为（issue #40 的非目标）。等挂载发生时这里会被再调一次。
+    // 未挂载时调用是未定义行为（ 的非目标）。等挂载发生时这里会被再调一次。
     if (state.mountState !== "attached") return;
     /** 走 option 通道的槽位攒成**一次** `setOptions`（Driver 再按整袋 / 字段 setter 分类）。 */
     const optionBag: Record<string, unknown> = {};

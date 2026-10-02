@@ -3,7 +3,7 @@
  *
  * ## 归属边界：Vue 拥有 Vue 的状态，本文件拥有 SDK 的状态
  *
- * #137 的口径是「Vue owns Vue state; Core owns SDK state」。这个 helper 恰好骑在两者的**缝**上，
+ * 的口径是「Vue owns Vue state; Core owns SDK state」。这个 helper 恰好骑在两者的**缝**上
  * 所以先说清它到底拥有哪半：
  *
  * | 腿 | 谁拥有 | 这里的形态 |
@@ -11,13 +11,13 @@
  * | 父组件 ↔ 组件（props / emits） | **Vue** | 调用方传 `value: () => props.center`——这是**对 props 的 getter**，不是另存一份；写入侧是 `emit('update:center', …)`。这正是 Vue `v-model` 的展开形态，全库统一（`Map` / `Marker` / `InfoWindow` 都是「普通 prop + `update:*` emit」），**没有**第二个父↔子状态机需要收口。 |
  * | 组件 ↔ SDK（读回 / 写回 / 归位） | **本文件** | `internal` 镜像是 SDK 侧事实源的本地投影，容差相等、`copy` 落库、`reset()` 归位都是 SDK 侧语义，Vue 不拥有、也无法替我们表达。 |
  *
- * **为什么不用 `defineModel` / `useModel`（#137 已做原型，不是「没试过」）**：Vue 3.5 的
+ * **为什么不用 `defineModel` / `useModel`（ 已做原型，不是「没试过」）**：Vue 3.5 的
  * `useModel` 自带「受控：prop 优先 / 非受控：本地为源」，但它**自己不保存最后一次外部值**——
  * 受控 prop 被摘掉时读到的是 `undefined`，而本文件冻结的契约是「内部状态接管，**保留最后一次
  * 外部值**」。要维持这条语义，**必须额外补一段 bridge state**（记住最后外部值）。它同样没有
  * `defaultValue` 只读一次、没有容差相等、没有 `copy`、没有首次快照。
  *
- * #137 复审要求先做**真实原型**再定论。原型**已提交进仓库**：
+ * 复审要求先做**真实原型**再定论。原型**已提交进仓库**
  * `mapModel.prototype.test.ts`（两种接线都手写 `defineProps`/`defineEmits`，不动 `MapProps`，
  * props 形状完全一致）。结论分三层，别混：
  *
@@ -73,7 +73,7 @@
  * **不做什么**：不实现「受控值不变时把 SDK 强行回退到外部值」。参考实现
  * `huiyan-fe/react-bmap` 同样不做：回退需要在中途事件（`moving` / `zooming`）上持续写回，
  * 会与用户手势打架，且在中止（松手回弹）时产生抖动。代价是「父级忽略 `update:*` 时地图停在
- * 用户操作后的位置」，这条已写进 `docs/zh-CN/components/map.md` 的状态表。
+ * 用户操作后的位置」，这条已写进 `` 的状态表。
  *
  * 调用位置要求与库内其它 composable 一致：必须在 `setup()` 或 `effectScope()` 内调用
  * （内部会注册一个 `defaultValue` 变化的告警 watcher，需要随作用域一起释放）。
@@ -127,12 +127,12 @@ export interface ControllableState<T> {
    * ⚠️ **库内没有消费者**（#137 审计结论）：`<Map>` 判断档位用的是 `value() !== undefined` 的
    * 即时读取，不是这个 computed。它留在返回类型上是因为 `useControllableState` 是**已发布的
    * 公共 composable**（ADR `2026-09-14-map-controlled-state` 决策 6），返回值形状属于冻结契约 ——
-   * 删掉它是破坏性变更，不在 #137「不改动已冻结公共语义」的范围内。
+   * 删掉它是破坏性变更，不在 「不改动已冻结公共语义」的范围内。
    *
    * 所以：**别再去找它的库内调用点**。若将来确实要移除，走单独的破坏性变更票，并同步
-   * `docs/zh-CN/hooks/useControllableState.md`。
+   * ``。
    *
-   * **它被惰性创建**（#137 复审八轮 P1）：早先把「公共 API 保留该成员」当成「`<Map>` 必须为它
+   * **它被惰性创建**（ 复审八轮 P1）：早先把「公共 API 保留该成员」当成「`<Map>` 必须为它
    * 实例化这份 runtime」，是**两件被混成一件的事**。既然库内零消费者，就不必在每次
    * `useControllableState()` 调用时都分配它——`get` 取用时才建，类型与消费方式都未变。
    */
@@ -181,7 +181,7 @@ export function useControllableState<T>(
   // 两者共享同一对象会让其中一方的原地修改影响另一方。
   const internal = shallowRef(copy(initial)) as ShallowRef<T>;
   const model = computed<T>(() => value() ?? internal.value);
-  // `isControlled` **惰性创建**（#137 复审八轮 P1）：它挂在**已发布的公共返回形状**上不能删，
+  // `isControlled` **惰性创建**（ 复审八轮 P1）：它挂在**已发布的公共返回形状**上不能删
   // 但**库内零消费者** —— `<Map>` 判断档位用的是即时的 `value() !== undefined`，从不读这个成员。
   // 「公共 API 必须保留该成员」与「`<Map>` 必须为它实例化 runtime」是**两件事**（复审指出早先
   // 把它们当成一件，见 §6.2）。这里用 getter + 缓存：返回类型 `ComputedRef<boolean>` 一字未改，
@@ -192,7 +192,7 @@ export function useControllableState<T>(
   // 与原先的构造时机等价。
   let isControlledRef: ComputedRef<boolean> | undefined;
 
-  // **「开发期告警是否启用」一次性判定**（#137 复审十轮 P1）。`defaultValue` watcher 的
+  // **「开发期告警是否启用」一次性判定**（ 复审十轮 P1）。`defaultValue` watcher 的
   // 注册、`warnOnce` 的短路、以及下面这个 `mode` 全部围绕它 —— 三者都是**同一条腿**。
   const warningsEnabled = warn && isDev();
   // `mode` 是**纯告警状态**：它唯一的消费者是「受控 ↔ 非受控」那条开发期告警，不参与
@@ -205,7 +205,7 @@ export function useControllableState<T>(
       ? "uncontrolled"
       : "controlled"
     : undefined;
-  // **告警去重集合惰性创建**（#137 复审九轮 P1）：它的唯一作用是「某条告警真的发生之后记住
+  // **告警去重集合惰性创建**（ 复审九轮 P1）：它的唯一作用是「某条告警真的发生之后记住
   // 对应 key」。正常生命周期里既没有档位冲突、也没有 `default*` 后续写入 ⇒ 这个 Set 从创建到
   // 销毁一次都不会被碰。对 `<Map>` 的四个视野字段，就是每次实例化白扔 4 个 Set。
   // 与 `isControlled` 同理：**告警行为是冻结的，不等于去重容器必须在构造期分配**。
@@ -263,13 +263,13 @@ export function useControllableState<T>(
    *
    * 为什么必须有它：非受控档下内部状态就是事实源。若只在 SDK 侧重置而不动状态，
    * 「重置 → 用户再次拖到重置前的那个值」会因为 `commit` 判等为「没变化」而**不 emit**，
-   * 真实操作被吃掉（#27 评审第三轮 P1）。
+   * 真实操作被吃掉（ 评审第三轮 P1）。
    */
   function reset(): void {
     internal.value = copy(initial);
   }
 
-  // **只在「真的可能告警」时才注册这个 watcher**（#137 复审十轮 P1）。它的唯一用途是驱动
+  // **只在「真的可能告警」时才注册这个 watcher**（ 复审十轮 P1）。它的唯一用途是驱动
   // `devWarn`，而两个条件任一不成立，它就永远不会产生任何可观察输出：
   // - `warn: false` —— 调用方显式声明「永不 warning」，这个 effect 仍常驻就是纯浪费；
   // - production —— `devWarn` 会早退，`<Map>` 四个视野字段就是**四个永远静音的常驻

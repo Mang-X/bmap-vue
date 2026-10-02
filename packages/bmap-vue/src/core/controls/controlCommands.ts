@@ -3,7 +3,7 @@
  *
  * ## 为什么单独一个文件
  *
- * #168 的判据与 #165 对覆盖物同一条：「官方有的公开方法**有没有调用路径**」。
+ * 的判据与  对覆盖物同一条：「官方有的公开方法**有没有调用路径**」。
  * `grep defineExpose` 在 `components/controls/**` 上 0 命中 ⇒ `GeolocationControl#location()` /
  * `CityListControl#toggle()` / `getCityName()` 这一族**在本库没有任何入口**。
  * 「改 prop」不算：那是**受控写入**，与「持有 ref 调一个官方同名的方法」是两条路径——

@@ -57,7 +57,7 @@
  *
  * | 排除 | 为什么 |
  * | --- | --- |
- * | `docs/adr/**` | 已接受即冻结的**决策史**，它的职能就是写下当时的旧名。`docs/adr/README.md` 写明「后续变更应新增 ADR 取代，而不是在原文件里改写历史」。按**路径**排除，不逐行豁免——它是另一个文体。 |
+ * | `docs/adr/**` | 已接受即冻结的**决策史**，它的职能就是写下当时的旧名。`` 写明「后续变更应新增 ADR 取代，而不是在原文件里改写历史」。按**路径**排除，不逐行豁免——它是另一个文体。 |
  * | `CHANGELOG.md` | 继承自上游的发布史（57KB 的 `vue3-baidu-map-gl/compare/...` 链接）。改它等于伪造来源记录。 |
  * | `docs/.vitepress/*.json` | 生成物，归 `generate:capability-matrix:check` / `generate:api-diff:check` / `generate:manifest:check` 管。两道门禁管同一个事实会漂移。 |
  * | `scripts/verify-package.mts` | 它把旧名当**拒绝表**用（`['baidu-map-gl-vue','3.0.0']`）——正是本门禁禁止的形状，出现在唯一必须出现它的文件里。与 `raw-sdk-boundary.mts` 不被自己的门禁扫是同一个道理。 |
@@ -76,7 +76,7 @@ export type DocsBrandRuleId =
   | "retired-migration-nav";
 
 /**
- * #135 去 `B` 前缀**之前**的组件名。
+ * 去 `B` 前缀**之前**的组件名。
  *
  * 来源可复算：`git show cb4a11f8~1:packages/bmap-vue/src/manifest.ts` 的 `name` 集
  * 减去今天 `docs/.vitepress/component-index.json` 的名字集。唯一幸存者是 `BMapProvider`
@@ -86,7 +86,7 @@ export type DocsBrandRuleId =
  * - `BMap` 不在表里 —— 它同时是 JSAPI 4.0 的官方命名空间，收进来会把 `BMap.Map` 全部误伤。
  *   它的 Vue 标签形态由位置规则 `retired-bmap-tag` 单独管。
  * - `BPointShapeLayer` 在表里但不在上面那个差集里 —— 它是 `PointCollection` 曾经**未发布**的
- *   命名（#136 之前只存在于一条未发布的 changeset），从未是任何真实发布面，文档里同样要退役。
+ * 命名（ 之前只存在于一条未发布的 changeset），从未是任何真实发布面，文档里同样要退役。
  *
  * **必须写成显式枚举，不能写 `<B[A-Z]*>` 前缀**：扫描面里 36 处 `<BMap…` 是当前公开类型
  * （`BMapClient` / `BMapServiceStatus` / `BMapGeoResult` …），前缀写法会全部误伤。
@@ -152,7 +152,7 @@ const escapeRe = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g,
 /**
  * 官方 `@baidumap/jsapi-loader` 的 `version` 取值之一：`'3.0'`。
  *
- * `docs/zh-CN/contributing/official-packages.md` 如实记录了上游的
+ * `` 如实记录了上游的
  * `version`（`'3.0'｜'gl'｜'4.0'`，默认 `'4.0'`）——那是**上游的**版本语义，不是本库的库版本品牌。
  * 判据是**引号形态**（带引号 = 某个上游选项的取值），不是文件名、不是目录。
  */
@@ -388,7 +388,7 @@ export const EXCLUDED_DOC_SUFFIXES = [".json", ".map"] as const;
 /**
  * 判断一个路径是否落在扫描面的排除区里。
  *
- * 两个调用方给的路径基准不同：品牌门禁给**仓库相对**（`docs/adr/x.md`），
+ * 两个调用方给的路径基准不同：品牌门禁给**仓库相对**（``）
  * 内链门禁给**docs 根相对**（`adr/x.md`）。所以这里两种都认——
  * 否则同一份排除清单会有一道门禁形同虚设（`docs/internal/` 判不到 `internal/`）。
  */

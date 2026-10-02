@@ -118,7 +118,7 @@ describe("createMapCommands：有句柄时", () => {
     expect(mapDriver.getCenter).toHaveBeenCalledTimes(1);
   });
 
-  // #165 回填：`getViewport` / `getScreenshot` / `flyTo` 三条命令透传不做二次加工。
+  // 回填：`getViewport` / `getScreenshot` / `flyTo` 三条命令透传不做二次加工。
   it("getViewport 两种 view 形态与 options 都按参数原样透传给 Driver", () => {
     const { commands, mapDriver } = createFixture();
     const options = { margins: [10, 20, 30, 40] };
@@ -173,7 +173,7 @@ describe("createMapCommands：有句柄时", () => {
 });
 
 /**
- * #165 Class 2 / E：`setCenter` 的入参在**两张脸上不一致**。
+ * / E：`setCenter` 的入参在**两张脸上不一致**。
  *
  * `<Map center>` prop 接受 `{lng,lat} | string`（v2 兼容的城市名 / 地址），
  * 官方 `setCenter(center: Point | string, options?)` 也**明确声明**接受 `string`，
@@ -189,7 +189,7 @@ describe("createMapCommands：setCenter 接受官方声明的 string 中心（#1
   it("字符串中心按原样透传给 Driver（Driver 已有的 Point | string 收窄不被这里截断）", () => {
     const { commands, mapDriver } = createFixture();
     commands.setCenter("北京");
-    // 第三个参数是 options（#171 补齐的官方第二个参数）：不传时是 `undefined`，
+    // 第三个参数是 options（ 补齐的官方第二个参数）：不传时是 `undefined`
     // 命令面**不**把它换成 `{}`——判空与投影都是 Driver 的职责
     expect(mapDriver.setCenter).toHaveBeenCalledWith(expect.anything(), "北京", undefined);
   });
@@ -235,7 +235,7 @@ describe("createMapCommands：错误口径", () => {
     expect(() => commands.setZoom(99)).toThrowError(/zoom out of range/);
   });
 
-  // #165 回填：三个新成员沿用**同一条**错误口径，不因为「是新加的」就另立一套。
+  // 回填：三个新成员沿用**同一条**错误口径，不因为「是新加的」就另立一套。
   it("读：getViewport / getScreenshot 在资源已销毁或能力不可用时给 null", () => {
     const { commands, mapDriver } = createFixture();
     mapDriver.getViewport.mockImplementation(() => {
@@ -270,7 +270,7 @@ describe("createMapCommands：错误口径", () => {
 });
 
 /**
- * 视野命令的 `options` 透传（#171 / #165 裁决 F）。
+ * 视野命令的 `options` 透传（ /  裁决 F）。
  *
  * 这一层只锁**接线**：`options` 原样到达 Driver。判空（空对象不下发）、`zoomCenter` 的几何
  * 投影、callback 的交付都在 Driver 那一层验（`driver/jsapi-v4/map.test.ts`）。

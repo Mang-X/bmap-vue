@@ -1,5 +1,5 @@
 /**
- * useOverlayResource：重建进行中的更新不能被丢弃（PR #61 评审 P2-1）
+ * useOverlayResource：重建进行中的更新不能被丢弃（PR  评审 P2-1）
  *
  * 评审反例：`applyOptions({ enableClicking: false })` 触发 rebuild（create 异步、`resource` 期间为
  * `null`），创建尚未完成时又改回 `true`/改别的 mutable 键 —— 第二次 `applyOptions` 因为
@@ -112,7 +112,7 @@ async function mountWithFirstInstance(harness: ReturnType<typeof setupHarness>) 
 
 describe("useOverlayResource：watcher 归 Vue 所有（#139）", () => {
   it("[#139] createWatchers 建的 watcher 在卸载后**不再**触发", async () => {
-    // 与 useSdkResource 的那条同形：#139 把 `createWatchers` 的 `addDisposer` 参数删掉，
+    // 与 useSdkResource 的那条同形： 把 `createWatchers` 的 `addDisposer` 参数删掉
     // watcher 归组件的 effect scope 所有。观察源用**组件外部的 ref**——卸载后改 props 不会
     // 触发任何东西，那样的断言是恒真的。
     const source = ref(1);
@@ -359,7 +359,7 @@ describe("useOverlayResource.applyOptions 与进行中的 rebuild", () => {
     await flushPromises();
     await flushPromises();
 
-    // 待办里含 recreate → 先重建（实例 #3），再把 mutable 写到它身上
+    // 待办里含 recreate → 先重建（实例 ），再把 mutable 写到它身上
     expect(harness.pendingCreates).toHaveLength(3);
     harness.pendingCreates[2].resolve({ id: 3 });
     await flushPromises();
@@ -367,7 +367,7 @@ describe("useOverlayResource.applyOptions 与进行中的 rebuild", () => {
     await flushPromises();
 
     expect(lastAppliedOn(harness, 3)).toEqual({ title: "imperative-mutable-update" });
-    // 中间实例 #2 不该收到这次 mutable 更新（它随后就被移除了）
+    // 中间实例  不该收到这次 mutable 更新（它随后就被移除了）
     expect(harness.setOptionsCalls.filter((c) => c.instance.id === 2)).toEqual([]);
 
     harness.wrapper.unmount();

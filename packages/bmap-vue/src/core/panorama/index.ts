@@ -13,7 +13,7 @@
  * 组件可以从 `<Map>` 或 `<BMapProvider>` 子树里取 Client —— 全景只依赖 Client，不需要地图。
  *
  * 两处收窄与所有权：
- * - `BMapDriver.panorama` 是共享面（只有 `supported`），占位/投影面按 `#23` 的分层决策只挂在
+ * - `BMapDriver.panorama` 是共享面（只有 `supported`），占位/投影面按 `` 的分层决策只挂在
  *   `JsapiV4Driver` 上，所以取用时经 `jsapiV4PanoramaOf()` **可检查地**收窄（与
  *   `jsapiV4ServicesOf` 同一手法），而不是无条件的 `as`；
  * - 查看器、业务监听都登记在 `resources` 里：`dispose()` 先释放监听再由 Driver 销毁查看器
@@ -91,7 +91,7 @@ export const panoramaContextKey: InjectionKey<PanoramaContext> = Symbol(
  * 取用 v4 的全景面。
  *
  * `BMapClient.driver` 的类型是共享契约 `BMapDriver`，它只承诺全景的**共享面**
- * （`PanoramaDriver`：`supported`）；占位/投影面（`create` / `setId` / 标签…）按 `#23` 的分层
+ * （`PanoramaDriver`：`supported`）；占位/投影面（`create` / `setId` / 标签…）按 `` 的分层
  * 决策只挂在 `JsapiV4Driver.panorama` 上。这里按运行时成员探测收窄，失败时给一条能读懂的错误，
  * 而不是 `as` 之后再在某个 click 里炸出「create is not a function」。
  */

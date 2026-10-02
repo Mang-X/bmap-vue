@@ -1,8 +1,8 @@
 /**
- * useNativeLayerResource —— `unknown` 期间「一个字都不写」的直接单测（#113 欠账）
+ * useNativeLayerResource —— `unknown` 期间「一个字都不写」的直接单测（ 欠账）
  *
  * 组件级的 props 变化会**先**走替换 / 收敛路径，`applyFields` / `applyData` 的 unknown 门在组件面
- * 不可达（#112 登记的欠账）。这里直接驱动共享内核（不挂载任何数据组件），断言口径只取
+ * 不可达（ 登记的欠账）。这里直接驱动共享内核（不挂载任何数据组件），断言口径只取
  * SDK 可观察调用 / 最终资源归属 / 泄漏门禁——不读 `mountState`、分支数量或内部字段。
  *
  * ## 为什么用 `heatmap` + 单一 `ref` 驱动

@@ -114,7 +114,7 @@ export const componentManifest = [
     source: "./components/overlays/Marker3D.vue",
   },
   {
-    // issue #178：贴地点覆盖物。官方 `GroundPoint extends GroundOverlay`，几何入口是
+    // ：贴地点覆盖物。官方 `GroundPoint extends GroundOverlay`，几何入口是
     // 构造器的位置参数 `point`（不是 `<GroundOverlay>` 的 `bounds`）。
     name: "GroundPoint",
     exportName: "GroundPoint",
@@ -289,7 +289,7 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/MVTLayer.vue",
   },
-  // M6 / issue #36：原生批量可视化图层（数据驱动，走 NativeLayerDriver 而不是 LayerDriver）。
+  // M6 / ：原生批量可视化图层（数据驱动，走 NativeLayerDriver 而不是 LayerDriver）。
   {
     name: "LineLayer",
     exportName: "LineLayer",
@@ -314,7 +314,7 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/TrackLineLayer.vue",
   },
-  // #166：官方 4.0.5 `visualization/` 新增的两族，**替代**同版本弃用的 FillLayer / LineLayer。
+  // 官方 4.0.5 `visualization/` 新增的两族，**替代**同版本弃用的 FillLayer / LineLayer。
   {
     name: "PolygonLayer",
     exportName: "PolygonLayer",
@@ -327,9 +327,9 @@ export const componentManifest = [
     category: "layer",
     source: "./components/layers/PolylineLayer.vue",
   },
-  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。它是这一族里唯一
+  // 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。它是这一族里唯一
   // 声明与运行时完全对齐的类（`hitTest` 与 `setOpacity` 都在），因此拾取面比前两族宽。
-  // ⚠️ 「前两族各缺一个」这句已按 #165 收口的 live 复跑更正：两族的缺口**方向相反**——
+  // ⚠️ 「前两族各缺一个」这句已按  收口的 live 复跑更正：两族的缺口**方向相反**——
   // `PolygonLayer` 缺 `hitTest`（声明有运行时无）而 `setOpacity` 在位但**不渲染**；
   // `PolylineLayer` 缺的是 `setOpacity` 的**声明**（运行时有**且生效**）。
   {

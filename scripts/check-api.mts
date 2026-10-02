@@ -1,5 +1,5 @@
 /**
- * API Extractor 公共 API report 门禁（issue #44 验收项「API report 只有经过审核的新 1.0 面」）
+ * API Extractor 公共 API report 门禁（ 验收项「API report 只有经过审核的新 1.0 面」）
  *
  * 用法：
  * - `pnpm check:api`      —— 与 `packages/bmap-vue/etc/<出口>/bmap-vue.api.md` 基线比对；
@@ -26,7 +26,7 @@
  *   （AE 根本分析不了它们）；对五个有 report 的出口，它补的是 report 补不到的那一层 ——
  *   `ae-forgotten-export` 在 report 里只留 `getInputValue: typeof getInputValue` 这种**名字引用**，
  *   底下那个函数的签名一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红
- *   （#159 三轮评审 P1 举的例子）。只有 report 没有快照，等于「未导出类型的结构没人守」。
+ * （ 三轮评审 P1 举的例子）。只有 report 没有快照，等于「未导出类型的结构没人守」。
  * - **探针**（只对 `.` / `./components`）：每次运行都真的跑一遍 AE，并断言失败模式仍然是这一种。
  *   一旦它被修好（或变成别的错误）门禁会红，提示把这两个出口加进 `REPORTED`。
  *   **跳过而不探测**才是真正的风险：没人会发现阻塞已经消失或变质。
@@ -45,7 +45,7 @@
  *   仓库现有注释不是 TSDoc 体例，上百条噪音会把真消息淹掉；
  * - `ae-forgotten-export` 保留 `warning` —— 它正是「导出面之外被引用的类型」的信号，
  *   每条都算进 `warningCount`、按 messageId 汇总在输出里，并额外被**身份集合基线**
- *   `etc/<出口>/forgotten-exports.json` 钉死（#159 二轮评审 P1）：比**名字集合**而不是条数。
+ * `etc/<出口>/forgotten-exports.json` 钉死（ 二轮评审 P1）：比**名字集合**而不是条数。
  *   只比条数会漏掉两种很实际的走法——同一次改动里「删一个旧的 + 新增一个新的」条数不变，
  *   以及「先把 27 降到 26、下一次再涨回 27」；集合基线两种都拦，因为新增的名字不在基线里、
  *   清理掉的名字留在基线里，**两个方向都要跑 `pnpm generate:api` 才能变绿**，于是每一次
@@ -57,7 +57,7 @@
  * 签名基线与未导出类型集合基线则由本脚本自己做全等比（产物本身已规范化/已排序，不需要空白归一）。
  *
  * `--local` 写基线时，AE 是**先落盘再判定成败**的（`_writeApiReport` 早于 success 判定），
- * 所以分析报错时必须**回滚**旧文件内容，否则会留下一份被污染的基线（#159 评审 P2）。
+ * 所以分析报错时必须**回滚**旧文件内容，否则会留下一份被污染的基线（ 评审 P2）。
  */
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -75,7 +75,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * 发布包名，从 manifest 派生。签名基线的 header 里写着它——写死会让基线记录一个
- * 已经不存在的身份，而基线是要长期当契约守的（#45 评审 P1 同类问题）。
+ * 已经不存在的身份，而基线是要长期当契约守的（ 评审 P1 同类问题）。
  */
 const PKG_NAME = releaseIdentityOf(
   JSON.parse(readFileSync(resolve(ROOT, PKG_DIR, "package.json"), "utf8")),
@@ -122,7 +122,7 @@ type Entry = (typeof REPORTED)[number] | (typeof KNOWN_BLOCKED)[number];
 const CONFIG_PATH = resolve(PKG, "api-extractor.json");
 
 /**
- * `ae-forgotten-export` 的**身份集合基线**（#159 二轮评审 P1）：`etc/<出口>/forgotten-exports.json`。
+ * `ae-forgotten-export` 的**身份集合基线**（ 二轮评审 P1）：`etc/<出口>/forgotten-exports.json`。
  *
  * 这些名字不是「允许漏这么多」，而是「当前已知的存量欠账」——报告里未导出类型只剩一个名字，
  * 它们的结构漂移不会改变基线文本，**名字集合**是唯一还能看见它们的量。判据是全等：
@@ -181,7 +181,7 @@ function expectedSignatureFile(entry: string): string {
     .printFile(parsed)
     .replace(/\n+$/, "");
   const subpath = entry === "index" ? "." : `./${entry}`;
-  // 头两行说明按出口分（#159 四轮评审 P3）：`__VLS_` 只对 `KNOWN_BLOCKED` 成立，
+  // 头两行说明按出口分（ 四轮评审 P3）：`__VLS_` 只对 `KNOWN_BLOCKED` 成立
   // 给另外五个有 report 的出口写同一句是假话。
   const note = (KNOWN_BLOCKED as readonly string[]).includes(entry)
     ? [
@@ -333,7 +333,7 @@ interface EntryRun {
 /**
  * `--local` 的**第一阶段**：只跑分析、只读基线，一个字节都不写。
  *
- * 存在的理由是**事务边界**（#160 评审 P1）：原先 `updateMode` 逐个出口直接落盘，
+ * 存在的理由是**事务边界**（ 评审 P1）：原先 `updateMode` 逐个出口直接落盘
  * `advanced` / `composables` 写成功、`plugins` 被「新增未导出类型」拒绝时，只回滚了
  * `plugins` 自己 —— 前两个出口的新 report 留在工作树，而且后面的签名基线循环根本没跑到，
  * 于是「report 已更新、对应 `bmap-vue.dts.md` 未更新」的组合会被提交出去。
@@ -411,7 +411,7 @@ function updateMode(): void {
         `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}) → ${target}`,
     );
   }
-  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
+  // 签名基线是**每个出口**都有的那一层（ 三轮评审 P1），五个有 report 的出口也不例外。
   for (const entry of ALL_ENTRIES) writeSignatureBaseline(entry);
 }
 
@@ -475,11 +475,11 @@ function writeForgottenBaseline(entry: string, symbols: readonly string[]): void
 }
 
 /**
- * 比对 `ae-forgotten-export` 的**身份集合**与基线，**全等**才通过（#159 二轮评审 P1）。
+ * 比对 `ae-forgotten-export` 的**身份集合**与基线，**全等**才通过（ 二轮评审 P1）。
  *
  * 两个方向都红，而且都要求跑 `pnpm generate:api`，好让每一次消长都出现在评审 diff 里：
  *
- * - **新增**（当前有、基线没有）：冻结面不接受新的未导出类型。先按 ADR 2026-09-25 的二选一
+ * - **新增**（当前有、基线没有）：冻结面不接受新的未导出类型。先按二选一
  *   处置（升为公共导出 / 让引用消失），确属刻意接受才更新基线；
  * - **清理**（基线有、当前没有）：名字留在基线里等于给它留了重新加回来的口子——评审举的
  *   「27 → 26 → 下次再涨回 27」在身份这一层同样成立，所以存量减少也必须同步基线。

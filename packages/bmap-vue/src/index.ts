@@ -72,7 +72,7 @@ export type {
   TrackLineLayerProps,
   TrackLineObserved,
   TrackLineLayerExpose,
-  // #166：官方 4.0.5 `visualization/PolygonLayer` / `PolylineLayer`
+  // 官方 4.0.5 `visualization/PolygonLayer` / `PolylineLayer`
   // （官方指定的 `FillLayer` / `LineLayer` 替代）的公共类型。
   PolygonLayerProps,
   PolygonLayerStyle,
@@ -82,7 +82,7 @@ export type {
   VisualizationLayerCommonProps,
   VisualizationPickOptions,
   VisualizationZoomCtorOptions,
-  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）的公共类型。
+  // 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）的公共类型。
   TextLayerProps,
   TextLayerStyle,
   TextLayerPick,
@@ -254,7 +254,7 @@ export type {
   MapTypeChangePayload,
   ResolvedMapEvent,
 } from "./core/events/eventCatalog";
-// 服务归一化调用面的领域类型（#38 起 service composable 的公开签名用到它们）
+// 服务归一化调用面的领域类型（ 起 service composable 的公开签名用到它们）
 export type {
   BoundaryRings,
   DrivingRouteEndpoint,
@@ -324,7 +324,7 @@ export type {
   // `MapCommands.getViewport()` 的返回类型，必须可从根入口取到）
   Viewport,
   FlyToOptions,
-  // #171 补齐：五条视野命令的官方 `options` 投影。它们出现在**已导出**的
+  // 五条视野命令的官方 `options` 投影。它们出现在**已导出**的
   // `MapCommands` / `MapDriver` 签名里 ⇒ 消费方要构造就得能命名（ADR 2026-09-25 的处置类别 ①）
   ViewCommandOptions,
   SetZoomOptions,
@@ -355,7 +355,7 @@ export type {
   PanoramaLabelHandle,
   PanoramaLabelOptions,
   // `PanoramaLink` 是 `linksChange` 的载荷类型 + `getLinks()` 的返回类型
-  // （issue #165 Class 3 / TASK 5）⇒ 必须从根入口可取，否则消费方拿不到自己的 handler 参数类型。
+  // （ / TASK 5）⇒ 必须从根入口可取，否则消费方拿不到自己的 handler 参数类型。
   PanoramaLink,
   PanoramaOptions,
   PanoramaPoiType,
@@ -366,7 +366,7 @@ export type {
 
 // 组件公开类型(与 SFC 内 export 对齐,供类型使用)
 //
-// M5-CUSTOM-MENU / #33：`ContextMenuItem` / `ContextMenuSeparator` 从此前「从 .vue 导出」改为
+// `ContextMenuItem` / `ContextMenuSeparator` 从此前「从 .vue 导出」改为
 // 从 `types/components.ts` 导出——`.vue` 的具名命名导出在纯 tsc 下解析不了（本文件头部的约定），
 // 而菜单这一族现在还有 `MenuItemProps` / `ContextMenuSelectPayload` 要一起暴露。
 export type {
@@ -378,7 +378,7 @@ export type {
   CustomOverlayProps,
 } from "./types/components";
 
-// 覆盖物 / 控件的**命令面**类型（issue #165 Class 3 / TASK 2）。
+// 覆盖物 / 控件的**命令面**类型（ / TASK 2）。
 //
 // 这些是 `defineExpose` 推导出的实例类型的成员，父组件写 `ref` 时要用它们标注
 // （`InstanceType<typeof Marker>` 也能拿，但手写 handler 参数时前者更直接）。

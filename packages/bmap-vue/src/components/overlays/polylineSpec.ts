@@ -10,7 +10,7 @@
  * | `strokeColor` / `strokeWeight` / `strokeOpacity` / `strokeStyle` | `options` | 各自的 setter | `PATH_STYLE` |
  * | `enableMassClear` / `enableEditing` | `options` | 成对开关 | `PATH_STYLE` |
  * | `visible` | `visibility` | `show`/`hide` | 不是描述符键 |
- * | ↓ **issue #165 补的十个，全部 `recreate`**（官方没有对应 setter，改 prop 即重建） |||
+ * | ↓ ** 补的十个，全部 `recreate`**（官方没有对应 setter，改 prop 即重建） |||
  * | `enableClicking` | `recreate` | 构造期选项 | 官方无 `enableClicking()` / `disableClicking()` 成对开关 |
  * | `strokeLineCap` / `strokeLineJoin` | `recreate` | 构造期选项 | ⚠️ **live 读数**：原型链 layer 2 上有同名 setter、调得动，但**调完 `getStrokeStyle()` 不变**且官方无读回 ⇒ 可观察地**不生效** ⇒ 仍是构造期（`mutateBy` = 静默假支持） |
  * | `geodesic` | `recreate` | 构造期选项 | 无 `setGeodesic`；它决定**路径本身**（两点怎么连） |
@@ -86,7 +86,7 @@ export const POLYLINE_DESCRIPTOR_KEYS = {
 } as const;
 
 /**
- * 构造期选项的袋（issue #165 图形族补齐）。
+ * 构造期选项的袋（ 图形族补齐）。
  *
  * ## 为什么这十项要走条件展开而不是直接写 `{ enableClicking: p.enableClicking }`
  *
@@ -137,10 +137,10 @@ export function createPolylineSpec(): OverlaySpec<PolylineProps, PolylineHandle>
     watchSources: POLYLINE_WATCH_SOURCES,
     create: (context, p) => context.client.driver.overlays.createPolyline(p.points, ctorOptions(p)),
     /**
-     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
+     * 命令面（ / TASK 2g）：官方声明的**读回**。
      *
      * 写这一侧（`setPath` / 描边填充 setter / `setZIndex`）已由 `path` / 样式 / `zIndex`
-     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 这些**受控 prop** 覆盖，-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
      * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
      *
      * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。

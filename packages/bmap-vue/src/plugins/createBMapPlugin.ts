@@ -14,7 +14,7 @@
  * - M3A3-REMOVE-LEGACY（#26）：迁移期的 `withMigrationDriver` 归一与 `allowExistingGlobal`
  *   一并删除。默认 definition 直接交给 `createBMapClient`（缺省注入 jsapi-v4 Driver 工厂），
  *   需要复用宿主已加载的 SDK 时显式传 `existingGlobalV4Provider()`；
- * - 旧 `globalProperties` 映射随 #136 删除：它绕过 Provider/Client 边界让组件直接读全局配置，
+ * - 旧 `globalProperties` 映射随它绕过 Provider/Client 边界让组件直接读全局配置
  *   配置一律经 `<BMapProvider>` 或 `createBMapPlugin({ ak })` 的默认 Client definition；
  * - #165 Class 5 删除 `options.plugins`：它声明了却**没有任何读者**（app 级配置
  *   `BMapPluginConfig` 只有 `{ provider, defaults }`），于是 `createBMapPlugin({ plugins })`
@@ -52,7 +52,7 @@ export { defaultClientDefinitionKey } from "../core/context/client";
 export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
   // R25-B（issue #71）：默认 Provider 是 `baiduJsapiV4Provider()`——它内部真的调用官方
   // `@baidumap/jsapi-loader`，不再走自研 JSONP transport。legacy `baiduCdnProvider()` 已随
-  // webgl-v1 在 #26 删除，根入口也不再导出它。
+  // webgl-v1 在  删除，根入口也不再导出它。
   const provider = options.provider ?? baiduJsapiV4Provider();
   const defaults: BMapLoadOptions = {
     ak: options.ak,

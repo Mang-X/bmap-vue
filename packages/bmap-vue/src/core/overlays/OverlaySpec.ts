@@ -20,7 +20,7 @@
  * **恰好覆盖**组件的全部 props，且声明为 `options` 的字段在描述符里必须是 `mutable`、声明为
  * `recreate` 的必须是 `recreate`。
  *
- * ## issue #31 加了三件事（都由本文件表达）
+ * ##  加了三件事（都由本文件表达）
  *
  * 1. **事件面由矩阵派生**：组件只声明 `kind`（`OverlayKind`），`useOverlaySpec` 从
  *    `core/overlays/overlayEventCatalog.ts` 取出该 kind 的全部事件并绑定；`events` 只用于
@@ -137,7 +137,7 @@ export interface OverlaySpec<Props extends object, Resource, Expose = OverlayExp
    * 覆盖物种类（`OverlayKind`）：事件矩阵与集中弃用表的查询键。
    *
    * **刻意可选**：`OverlayKind` 是 SDK 内建覆盖物的封闭联合，第三方自建的覆盖物（DOM 覆盖物、
-   * 组合覆盖物）可能不落在其中——它们仍然可以用 `OverlaySpec` 声明生命周期（回到 #30 的形态：
+   * 组合覆盖物）可能不落在其中——它们仍然可以用 `OverlaySpec` 声明生命周期（回到  的形态
    * 只有 `spec.events` 生效）。
    *
    * 但**没有任何「按名字猜」的回落**：`kind` 为空时事件面**不会**由矩阵派生，`events` 必须自己写全
@@ -178,7 +178,7 @@ export interface OverlaySpec<Props extends object, Resource, Expose = OverlayExp
    * **投影可能被多次求值**（每次读取求一次，没有缓存）：`fieldValues` 只保证「哪些字段要投影」，
    * 不保证「一轮里只投影一次」。因此对**有副作用 / 每次都产生新实例**的投影（工厂函数），
    * 调用点必须**自己先取一次**再复用（`GroundOverlay.create` 就是 `const url = p.url` 那一行），
-   * 否则校验用的对象与交给 SDK 的对象会是两个不同实例（PR #103 评审 2）。
+   * 否则校验用的对象与交给 SDK 的对象会是两个不同实例（PR  评审 2）。
    */
   readonly fieldValues?: Partial<Record<keyof Props & string, (value: unknown) => unknown>>;
 
@@ -202,9 +202,9 @@ export interface OverlaySpec<Props extends object, Resource, Expose = OverlayExp
   create(context: MapReadyContext, props: Readonly<Props>): Resource | Promise<Resource>;
 
   /**
-   * `defineExpose` 的**命令面**（issue #165 Class 3 / TASK 2）。
+   * `defineExpose` 的**命令面**（ / TASK 2）。
    *
-   * ## 判据：#165 §5-C「改 prop 不算实现同名方法」
+   * ## 判据：-C「改 prop 不算实现同名方法」
    *
    * 官方的公开方法分三类，本钩子只服务**前两类**：
    *
@@ -236,7 +236,7 @@ export interface OverlaySpec<Props extends object, Resource, Expose = OverlayExp
  * 命令面工厂的第三个类型参数。
  *
  * 它存在只是为了**让 `expose` 的返回值被逐成员检查**：`Record<string, unknown>` 会把
- * 「九个成员全在」与「一个成员都没有」判成同一种类型，而 #165 要的恰恰是逐个点名。
+ * 「九个成员全在」与「一个成员都没有」判成同一种类型，而  要的恰恰是逐个点名。
  * 缺省成 `Record<string, unknown>` 以免**没有**命令面的 spec（绝大多数）被迫写第三个实参。
  */
 export type OverlayExposeShape = object;

@@ -10,7 +10,7 @@
  * 引擎对右键菜单的动词是**「挂到目标上」**（`Map#addContextMenu` / `Marker#addContextMenu`），
  * 不是「加进地图」（`map.addOverlay`）——菜单从不出现在 `map.getOverlays()` 里，也不参与
  * `clearOverlays()`。内核的 `mount` 固定走 `add/remove`，为了菜单去加一个 `mount` 覆盖钩子
- * 会让「登记 + 回滚」那段（PR #103 评审 1）出现第二份实现。因此菜单复用的是内核**下面的那层**
+ * 会让「登记 + 回滚」那段（PR  评审 1）出现第二份实现。因此菜单复用的是内核**下面的那层**
  * （`useSdkResource` 的实例 child scope / 代次守卫 / 释放路径）加上同一套
  * `OverlayRegistry` 记账与事件矩阵，而不是内核本身。理由同时记在 ADR
  * `2026-09-19-custom-overlay-and-context-menu` 里。
@@ -97,7 +97,7 @@ export function contextMenuEntriesFingerprint(entries: readonly ContextMenuEntry
 }
 
 /**
- * `<ContextMenu>` 的**命令面**（issue #165 Class 3 / TASK 2d）。
+ * `<ContextMenu>` 的**命令面**（ / TASK 2d）。
  *
  * 官方 `context-menu/ContextMenu.d.ts` 声明了 `getItem` / `removeItem` / `removeSeparator` /
  * `getDom` / `show` / `hide` 六个成员，而组件侧此前只做「整菜单重建」，它们**没有调用路径**。

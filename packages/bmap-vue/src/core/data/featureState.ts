@@ -70,9 +70,9 @@ export type FeatureStateKeyDomain = "default" | "string";
 /**
  * 键域 → 公开 API 的 keys 类型。
  *
- * - `"default"`：#36 NativeLayer 官方签名 `string | number | Array<string | number>`；
- * - `"string"`：#109 MVT `updateState(keys: string | Array<string>)`——**类型层**就收窄，
- *   不再只靠运行时 `keyDomain` 拒 number（#109 评审 P1：`update(1, …)` 必须编译失败）。
+ * - `"default"`： NativeLayer 官方签名 `string | number | Array<string | number>`；
+ * - `"string"`： MVT `updateState(keys: string | Array<string>)`——**类型层**就收窄
+ * 不再只靠运行时 `keyDomain` 拒 number（ 评审 P1：`update(1, …)` 必须编译失败）。
  */
 export type FeatureStateKeysOf<KeyDomain extends FeatureStateKeyDomain = "default"> =
   KeyDomain extends "string" ? string | ReadonlyArray<string> : NativeLayerFeatureKeys;
@@ -113,7 +113,7 @@ export interface CreateFeatureStateApiInput<
    *
    * 身份未知时命令一律被拒绝（告警一次）——「按 id 定位」在没有身份字段的图层上没有意义，
    * 而放它过去就等价于悄悄依赖 SDK 的默认 `idKey`：同一个组件会在拾取上说「认不出身份」，
-   * 在状态命令上却装作知道身份，那是两套身份语义（#106 评审的建议项）。
+   * 在状态命令上却装作知道身份，那是两套身份语义（ 评审的建议项）。
    */
   identity(): string | undefined;
   /** 调用方名字（组件名）：参数错误与「未就绪」的告警都点名它。 */
@@ -127,8 +127,8 @@ export interface CreateFeatureStateApiInput<
   /**
    * 键域收窄（**同时**决定返回 API 的静态 keys 类型，见 `FeatureStateKeysOf`）。
    *
-   * - `"default"`（缺省）：`string | number`（#36 NativeLayer 的官方签名）；
-   * - `"string"`：**只收 string**（#109 MVT 的 `updateState(keys: string | Array<string>)`）。
+   * - `"default"`（缺省）：`string | number`（ NativeLayer 的官方签名）；
+   * - `"string"`：**只收 string**（ MVT 的 `updateState(keys: string | Array<string>)`）。
    *   数字键在类型层（`FeatureStateApi<"string">`）与任何 SDK 调用之前（运行时）都被拒绝——
    *   MVT 的复合键 `layerName_id` 就是 string，放行 number 会让「1」与 1 在类型层是两套身份、
    *   在 SDK 侧却是同一个槽位。
@@ -139,8 +139,8 @@ export interface CreateFeatureStateApiInput<
 /**
  * 一次可用的命令会话（两个引用必须来自**同一时刻**，因此一起给，不给两个 getter）。
  *
- * `Handle` 默认 `NativeLayerHandle`（#36 的线 / 面图层）；`LayerDriver` 的要素状态面
- * （#109 `mvt`）用 `LayerHandle`，driver 形状由 `FeatureStateCommands` 约束——两侧结构同构，
+ * `Handle` 默认 `NativeLayerHandle`（ 的线 / 面图层）；`LayerDriver` 的要素状态面
+ * （ `mvt`）用 `LayerHandle`，driver 形状由 `FeatureStateCommands` 约束——两侧结构同构
  * 因此同一个 `createFeatureStateApi` 实现服务两个 Facet。
  */
 export interface FeatureStateSession<Handle = NativeLayerHandle> {
@@ -151,7 +151,7 @@ export interface FeatureStateSession<Handle = NativeLayerHandle> {
 /**
  * 要素状态五命令的**最小结构**（`NativeLayerDriver` 与 `LayerDriver` 都满足它）。
  *
- * 刻意不写成 `NativeLayerDriver`：那是 #36 专属的宽接口；`mvt` 的句柄品牌是
+ * 刻意不写成 `NativeLayerDriver`：那是  专属的宽接口；`mvt` 的句柄品牌是
  * `layer:mvt` 而不是 `native-layer:*`，用宽接口会迫使调用方做不安全断言。
  */
 export interface FeatureStateCommands<Handle> {
@@ -190,7 +190,7 @@ function isUsableId(value: unknown): value is string | number {
 /**
  * 归一化 keys：单个 id 或一批 id。空数组是合法的（= 什么都不做）。
  *
- * `keyDomain: "string"` 时数字键在任何 SDK 调用之前被拒绝（#109 MVT 的官方签名只收 string）。
+ * `keyDomain: "string"` 时数字键在任何 SDK 调用之前被拒绝（ MVT 的官方签名只收 string）。
  */
 function normalizeKeys(
   component: string,
@@ -384,7 +384,7 @@ export function createFeatureStateApi<
 }
 
 /**
- * MVT 要素状态的**复合键**：`layerName_id`（#109 live 探针实测的唯一有效键形）。
+ * MVT 要素状态的**复合键**：`layerName_id`（ live 探针实测的唯一有效键形）。
  *
  * 裸 id（`"1"` / `"feat-1"`）在真实 4.0 上只产生噪声级 Δ（探针读数：Δ87B vs 复合键 Δ2578B）。
  * `layerName` 是**源图层名**（MVT 数据里的 source-layer），不是地图上某一个 `Map` 的名字；

@@ -250,7 +250,7 @@ describe("生命周期", () => {
 });
 
 /**
- * 回归：PR #59 评审 P2（同函数重复订阅 + disposer 释放顺序）
+ * 回归：PR  评审 P2（同函数重复订阅 + disposer 释放顺序）
  *
  * 旧实现的 `listeners` 是 `Set<函数>`、`removeGroup()` 按 `target+type` 找**当前**分组，
  * 因此「同一函数订阅两次」无法表达成两份独立订阅，且旧 disposer 会摘掉比它更晚建立的订阅。

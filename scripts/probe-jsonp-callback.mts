@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * JSONP 回调全局名占用与 foreign 捕获探针（issue #128 / F-2）
+ * JSONP 回调全局名占用与 foreign 捕获探针（ / F-2）
  *
  * 审计表登记的问题：`SharedLoadTask` 的进程级 `callbackRegistry` + 全局名占用 / foreign 回调
  * 捕获，是**唯一保留**的「恢复上游未公开身份」处。它服务的是 `customScriptV4Provider` 的
  * jsonp 显式高级路径，依据一直是 `ASSUMED`（「官方 JSONP 回调命名是我们的读法」未取证）。
- * #128 的验收要求：保留前必须 live 取证，并给出 guarantee 措辞与可回归 gate。
+ * 的验收要求：保留前必须 live 取证，并给出 guarantee 措辞与可回归 gate。
  *
  * 本探针只测**官方**那一侧（我们的 install/release 逻辑由 `ScriptLoader.test.ts` 单测钉住）：
  *

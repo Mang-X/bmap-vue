@@ -15,7 +15,7 @@
  * 删除任何对象。否则一次未到就绪回调的失败（超时 / 取消）会留下残缺全局，把后续重试永久挡住。
  *
  * `exportGetter` 在这里刻意不用：它只是「回调没带实参时的取值兜底」，回调带实参时会整段跳过，
- * 拿它当校验点会留下绕过路径（见 #57 评审 R2）。
+ * 拿它当校验点会留下绕过路径（见  评审 R2）。
  */
 import type { ScriptLoader, ScriptLoaderOptions } from "../ScriptLoader";
 import { getScriptKey } from "../ScriptLoader";

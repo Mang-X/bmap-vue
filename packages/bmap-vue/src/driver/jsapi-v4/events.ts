@@ -14,7 +14,7 @@
  * 生命周期：订阅集合为空时立刻删除 `groups` 里的 target/type 条目，驱动不会因为
  * 「曾经订阅过某张地图」而长期持有已销毁的 raw 对象。
  *
- * 订阅语义（PR #59 评审修正）：
+ * 订阅语义（PR  评审修正）
  * - **每次 `on()` 都是一份独立订阅**，disposer 与它一一对应；同一函数订阅两次就是两份，
  *   各自释放一份、计数归零才解绑。因此早期用 `Set<函数>` 做身份去重的实现被替换为
  *   「函数 → 份数」计数：`Set` 无法表达两份订阅，且旧 disposer 会连带摘掉比它更晚建立的
@@ -62,7 +62,7 @@ export interface CreateJsapiV4EventDriverInput {
  * Driver 自己在该 target 上的订阅分组，否则 `groups` 会以强引用长期持有已销毁的 raw 对象
  * （`groups` 是 `Map`，不是 `WeakMap`）。它不进公共 `EventDriver` 类型，消费者看不到。
  *
- * 失败语义（PR #60 评审 P2）：**逐项尽力**解绑，任一失败不跳过其余项，最后汇总抛出。
+ * 失败语义（PR  评审 P2）：**逐项尽力**解绑，任一失败不跳过其余项，最后汇总抛出。
  * `removeGroup` 会先移除记账条目再解绑，因此即使解绑抛错也不会留下强引用；调用方
  * （`MapDriver.destroy`）据此把「释放订阅」的失败与「销毁 SDK 对象」解耦。
  */
@@ -93,7 +93,7 @@ function createDisposer(release: () => void): () => void {
 }
 
 /**
- * 事件 → 「raw 缺失时可以读回地图补齐」的字段（M4-EVENTS / #28 评审）。
+ * 事件 → 「raw 缺失时可以读回地图补齐」的字段（M4-EVENTS /  评审）。
  *
  * 依据：上游把这几个字段声明为**事件级必填**（`MapLoadEvent.point/zoom`、`MapResizeEvent.size`、
  * `MapTypeChangeEvent.zoomLevel`），而 4.0 的 `load` / `resize` 在某些触发路径上给的 raw 并不完整。

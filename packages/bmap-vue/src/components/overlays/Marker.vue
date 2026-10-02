@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Marker —— 图像标注（M5-SPEC-MARKER / issue #30 的样板组件）
+ * Marker —— 图像标注（M5-SPEC-MARKER /  的样板组件）
  *
  * 这个组件只做两件事：**声明 spec** + **渲染 slot**。
  * 创建 / 挂载 / 就地更新 / 重建 / 卸载、实例 child scope、Registry 记账、Target provide、
@@ -10,15 +10,15 @@
  * ## 事件面（11 个，全部为规范名）
  *
  * 主事件面来自 `marker` 的事件矩阵（上游 `MarkerEventMap`），`markerSpec` 只覆盖 `dragend`
- * 的处置方式（先转发、再回写位置模型）。历史别名 `drag-end` 已随集中弃用层在 #136 删除——
+ * 的处置方式（先转发、再回写位置模型）。历史别名 `drag-end` 已随集中弃用层在  删除——
  * 事件名只有上游 `MarkerEventMap` 的那一种拼写。
  *
- * #138：这一段的**类型声明**是生成物（`core/overlays/overlayEventEmits.generated.ts`），
+ * 这一段的**类型声明**是生成物（`core/overlays/overlayEventEmits.generated.ts`）
  * 由事件矩阵 + 非 SDK 事件表 join 出来；组件里不再手抄键名。
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec, type OverlayPositionModel } from "../../core/composables/useOverlaySpec";
-// #138：事件面的**类型声明**由生成器从事件矩阵 + 非 SDK 事件表派生，
+// 事件面的**类型声明**由生成器从事件矩阵 + 非 SDK 事件表派生
 // 不再手抄（生成物由 `pnpm generate:overlay-emits` 产出，`--check` 守漂移）。
 import type { MarkerEmits } from "../../core/overlays/overlayEventEmits.generated";
 import { createMarkerSpec } from "./markerSpec";
@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<MarkerProps>(), {
   raiseOnDrag: undefined,
   isTop: undefined,
   restrictDraggingArea: undefined,
-  // issue #165 第三批补的第四个「官方默认恰好是 false」的 `Boolean`：
+  // 第三批补的第四个「官方默认恰好是 false」的 `Boolean`
   // `MarkerOptions.autoFollowHeadingChanged`（`@default false`，`overlay/MarkerOptions.d.ts:88`）。
   // 上面那段关于「值一致但来源不同」「显式 `undefined` 让『没给』只有一个表示」的推理逐字适用，
   // 因此不重复一遍。`startAnimation` / `label` **不是** `Boolean` ⇒ 没有这个陷阱。
@@ -75,7 +75,7 @@ positionModel = position;
 defineOptions({ name: "Marker" });
 
 /**
- * 命令面（#165 Class 3 / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
+ * 命令面（ / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
  *
  * 直接展开 `commands`（而不是挂成 `commands.xxx`）：调用方拿到的就是官方同名方法本身，
  * `marker.setRank(3)` / `circle.getRadius()` 与官方参考实现的形状一致。逐条依据与

@@ -5,7 +5,7 @@
  * 单一事实源：`packages/bmap-vue/src/plugins/compat-inventory.ts`
  *
  * 生成：
- * - docs/zh-CN/contributing/plugin-compat-inventory.md
+ * -
  * - docs/.vitepress/plugin-inventory.json
  *
  * 生成文件顶部带 "Generated file. Do not edit directly."，且不写入时间戳（避免无意义 drift）。

@@ -15,7 +15,7 @@
  * ## 两处值得单独说明
  *
  * 1. **`bounds` 是唯一几何入口**：上游是 `createGroundOverlay(bounds, options)`，与驱动、官方
- *    参考实现同形。旧的两个角点 prop 已随集中弃用层在 #136 删除，因此内部只有 `bounds` 一份事实，
+ * 参考实现同形。旧的两个角点 prop 已随集中弃用层在  删除，因此内部只有 `bounds` 一份事实
  *    不存在「两套几何模型」。
  * 2. **`url` 的惰性工厂**：`type: "canvas"` 的用法是传 `() => canvas`。工厂与 `stableKeyOf`
  *    不兼容（函数被折叠成常量），因此它的 watch 源是 `"reference"`（只比引用），值投影保证
@@ -38,7 +38,7 @@ export const GROUND_OVERLAY_FIELDS: OverlayFieldMap<GroundOverlayProps> = {
   url: "options",
   opacity: "options",
   autoCenter: "recreate",
-  // issue #168 item 2：官方 GroundOverlayOptions 里此前未收的三个。
+  // ：官方 GroundOverlayOptions 里此前未收的三个。
   // `enableMassClear` 有成对开关 ⇒ 就地；`enableClicking` 与 `top` 官方都没有 setter ⇒ 重建。
   // 逐条依据见 `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS["ground-overlay"]`。
   enableMassClear: "options",
@@ -78,7 +78,7 @@ export function createGroundOverlaySpec(): OverlaySpec<GroundOverlayProps, Overl
       if (!p.bounds) {
         throw new Error("GroundOverlay 需要 bounds（{ southwest, northeast }）");
       }
-      // **只读一次 `url`**（PR #103 评审 2）：`fieldValues` 的投影是「每次读取求值一次」，
+      // **只读一次 `url`**（PR  评审 2）：`fieldValues` 的投影是「每次读取求值一次」
       // 而惰性工厂每求值一次就新建一份 canvas ⇒ 读两次会让「校验的对象」与「交给 SDK 的对象」
       // 变成两个不同实例（旧实现是先 `resolveUrl()` 再复用）。需要单次求值的字段都由调用点
       // 自己取一次，这是 `fieldValues` 的显式契约（见 `OverlaySpec.fieldValues` 的 JSDoc）。

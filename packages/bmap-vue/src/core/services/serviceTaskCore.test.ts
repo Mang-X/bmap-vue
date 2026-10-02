@@ -3,7 +3,7 @@
  *
  * 这一层**框架无关**，所以用例不挂组件：手搭 `ServiceCall` 桩与 `whenReady`，断言的是
  * 「引擎语义」本身——能力门不发请求、按 Client 缓存、投影只作用于 data、取代不迟到回写、
- * 以及 #139 的核心断言：**简单通道不携带无消费者的状态**。
+ * 以及  的核心断言：**简单通道不携带无消费者的状态**。
  */
 import { describe, it, expect, vi } from "vitest";
 import { BMapError } from "../errors/BMapError";
@@ -94,7 +94,7 @@ const sawKey = (states: Array<Partial<ServiceTaskState<number>>>, key: string): 
 describe("createSharedInstanceChannel（#139 的「简单档不带死状态」）", () => {
   it("共享通道不携带 recreate / refuse / 待释放队列相关状态", () => {
     const channel = createSharedInstanceChannel<StubHandle>();
-    // 共享通道是一个无状态单例形态：没有这些**状态**字段 ⇒ #139 的验收项在**结构上**成立，
+    // 共享通道是一个无状态单例形态：没有这些**状态**字段 ⇒  的验收项在**结构上**成立
     // 而不是「有字段但没人用」。（`refuseMessage` 是接口要求的只读 getter，恒为 undefined，
     // 不承载状态，因此断言它的值而不是它的存在。）
     const keys = Object.keys(channel);

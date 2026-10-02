@@ -92,7 +92,7 @@ export interface LayerRegistryInput {
    * **摘除期间的业务回调门**（可选）：`detach()` 会在 `remove` 之前打开、之后关闭。
    *
    * 存在的理由：`remove()` 可能「副作用发生前抛错」，而 `scope.dispose()` 是**不可逆**的 ——
-   * 「先解绑监听、再摘资源」（#22 的既有顺序）在失败时会把旧实例留成「还在图上但已经点不动」。
+   * 「先解绑监听、再摘资源」（ 的既有顺序）在失败时会把旧实例留成「还在图上但已经点不动」。
    * 有了这道门，摘除期间业务回调照样不穿透；失败时门关掉、监听恢复（`remove` 之前**没有**执行
    * 不可逆的 `scope.dispose()`）—— 但**资源是否仍在图上只能由消费方判断**：
    * 「保留旧实例」能保证的是「监听没被提前拆掉」，不是「资源一定还在」。
@@ -156,7 +156,7 @@ export function createLayerRegistry(): LayerRegistry {
           if (disposed) return;
           disposed = true;
           records.delete(id);
-          // 顺序与 #22 的口径一致：**先解绑业务事件**（释放 child scope），再由 Map 摘除
+          // 顺序与  的口径一致：**先解绑业务事件**（释放 child scope），再由 Map 摘除
           // SDK 资源。反过来会让 SDK 在 `removeLayer` 期间同步派发的事件打到已经在拆解的
           // 业务回调上（`tileload` 一类事件在真实 SDK 上就是这样）。
           unbind("layer-disposed");
@@ -180,7 +180,7 @@ export function createLayerRegistry(): LayerRegistry {
           try {
             // 上一次摘除抛过错的记录再被调到这里时，这一次调用同时承担**收敛**职责：成功 ⇒ 它确实
             // 已经不在图上；失败 ⇒ 仍未确认（按下面处理）。用的是仓库既有的前提 P ——
-            // 「对已经摘掉的图层重复 `removeLayer` 是安全的」，已由 issue #98 的 live 探针实测成立
+            // 「对已经摘掉的图层重复 `removeLayer` 是安全的」，已由  的 live 探针实测成立
             // （同 `useLayerResource.syncMounted` 的收敛，见 ADR 决策 12b）。即使前提在某个 kind /
             // 版本上不成立，退化也有界：再抛错就仍是 `unknown`，绝不会因为「猜它已经下去了」而多挂一份。
             input.remove();

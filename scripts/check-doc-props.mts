@@ -4,7 +4,7 @@
  *
  * ## 为什么要有这道脚本
  *
- * 文档里的 prop 名是**手写**的，声明面是**生成**的。#165 把一批 prop 改名
+ * 文档里的 prop 名是**手写**的，声明面是**生成**的。 把一批 prop 改名
  * （enableScrollWheelZoom → enableWheelZoom 等）并删掉三个「接收后静默丢弃」的 prop。
  * 文档不可能自动跟着改——而 **docs:typecheck 抓不到**：一个写错的 kebab prop
  * 落进模板后 Vue 只当作 `$attrs` 里的未知项，**不报错、也不生效**。

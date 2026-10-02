@@ -1,9 +1,9 @@
 /**
- * #137 的 **Map model prototype**（对照实现 + 可复核读数）
+ * 的 **Map model prototype**（对照实现 + 可复核读数）
  *
  * ## 这份文件是什么、不是什么
  *
- * #137 验收要求对简单 number model 做 **Vue-native prototype**：把 parent ↔ component 与
+ * 验收要求对简单 number model 做 **Vue-native prototype**：把 parent ↔ component 与
  * SDK ↔ model 两层拆开，判断哪些状态必须保留、Vue-native 路线省不省。如果「不迁 `useModel`」
  * 只由 ADR 断言支撑，下一个读者无法复核 —— 所以本文件把**两条路线都真的挂载成组件**跑一遍。
  *
@@ -107,7 +107,7 @@
  *   **不能**说「B runtime 更贵」—— 后者需要 profile，本文件不提供，也不该由结构数或 effect 数
  *   推断。effect 数是**可数事实**，「更贵」是**成本判断**，两者不能混。
  *
- * @see docs/adr/2026-09-14-map-controlled-state.md §6.1 / §6.2
+ * @see§6.1 / §6.2
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { computed, defineComponent, getCurrentScope, h, nextTick, ref, shallowRef, useModel, watch } from "vue";
@@ -439,7 +439,7 @@ describe("#137 Map model prototype（对照读数）", () => {
     //    watcher（`defaultZoom` 有传，所以会建）= 2
     //
     // ⚠️ **这个 2 是「非生产」下的读数**。`defaultValue` 告警 watcher 现在按 `isDev()` 门控
-    //（#137 复审十轮 P1），而本文件跑在 vitest 里（`NODE_ENV=test` ≠ production）⇒ 仍会注册。
+    // （ 复审十轮 P1），而本文件跑在 vitest 里（`NODE_ENV=test` ≠ production）⇒ 仍会注册。
     // **production 下这个 helper 自己注册的 effect 恒为 0**（实测：告警 watcher 不再注册，
     // 而 `useControllableState` 内部**只有**这一个 watcher）——于是整条 A 线路只剩 `Map.vue`
     // 侧那条 SDK 腿 watcher，B 线路仍多一个 `useModel` 内部 effect：**差异方向不变，绝对值变了**。

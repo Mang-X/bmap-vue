@@ -1,7 +1,7 @@
 /**
  * v4 OverlayDriver（M3A2-OVERLAYS / issue #21）
  *
- * 验收点（对应 issue #21 的「测试要求」与「验收标准」）：
+ * 验收点（对应  的「测试要求」与「验收标准」）
  * - 每种基础覆盖物的 create / update / remove；构造参数与 v4 的映射（Icon / Size / Point 数组）；
  * - 属性分类（mutable / recreate / unsupported）：mutable 走字段级 setter 且**不重建**，
  *   recreate 只告警并交给调用方重建，unsupported 显式告警而不是静默丢弃；
@@ -508,7 +508,7 @@ describe("InfoWindow 专用 open / close / redraw", () => {
 
 describe("右键菜单", () => {
   /**
-   * `MenuItemOptions` 只有 `width` 与 `id` 两个键，且都**只在构造期**生效（复审 PR #107 P3）：
+   * `MenuItemOptions` 只有 `width` 与 `id` 两个键，且都**只在构造期**生效（复审 PR  P3）
    * `id` 曾是组件侧公开 prop 却一路被静默丢弃（指纹里算它 ⇒ 改 id 会重建，重建后仍没有 id）。
    */
   it("addContextMenuItem 把 width 与 id 都交给 MenuItemOptions，不给时不下发无意义的键", () => {

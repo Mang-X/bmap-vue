@@ -1,9 +1,9 @@
 /**
- * 覆盖物的**命令面**（issue #165 Class 3 / TASK 2）
+ * 覆盖物的**命令面**（ / TASK 2）
  *
  * ## 为什么单独一个文件
  *
- * #165 的判据是「官方有的公开方法**有没有调用路径**」。`grep defineExpose` 在 27 个覆盖物 /
+ * 的判据是「官方有的公开方法**有没有调用路径**」。`grep defineExpose` 在 27 个覆盖物 /
  * 控件组件上返回 0 命中 ⇒ 官方 `Marker#setRank` / `Polyline#setPositionAt` /
  * `InfoWindow#maximize` / `ContextMenu#removeItem` 这一整族**在本库没有任何入口**。
  * 「改 prop」不算：那是**受控写入**，与「持有 ref 调一个官方同名的方法」是两条路径
@@ -234,7 +234,7 @@ export function createInfoWindowCommands(
 /* ------------------------------------------------------------------ 公开类型出口 */
 
 /**
- * 全部覆盖物命令面的**按组件**索引（issue #165 Class 3 / TASK 2）。
+ * 全部覆盖物命令面的**按组件**索引（ / TASK 2）。
  *
  * 消费方在父组件里写 `const marker = useTemplateRef<...>()` 或标注一个 handler 时，
  * 需要知道「`<Marker>` 的 ref 上有哪些方法」——逐个去翻 `markerSpec.ts` 不可行。

@@ -78,7 +78,7 @@ export interface PublicMapContext {
    * 地图就绪（resolve 的是**这一次** ready；重复调用返回同一个 Promise）。
    *
    * `signal` 与内部 `MapContext.whenReady` / `MapExpose.whenReady` **同契约**：只取消
-   * **本次等待**，不动 SDK 加载、不动地图（#160 评审 P1）。隐藏内部 runtime 面不该顺带
+   * **本次等待**，不动 SDK 加载、不动地图（ 评审 P1）。隐藏内部 runtime 面不该顺带
    * 削掉一个仍然保留的公共方法参数 —— 少收 `signal` 会让 JS / `any` 调用方传进来的
    * 信号被静默丢弃。
    */
@@ -132,7 +132,7 @@ export function toPublicMapContext(context: InternalMapContext): PublicMapContex
     // 投影必须保持引用同一，否则「状态变了但窄面没变」会引入第二份真相。`Readonly<…>`
     // 去掉 `.value` 的可写性 —— 只在属性上标 `readonly` 是**不够**的，那不阻止
     // `ctx.client.value = …`，而写入一个只满足 `PublicBMapClient` 的对象会让库内按
-    // `ShallowRef<BMapClient>` 读它时炸掉（#160 评审 P1：类型窄化变成运行时破坏）。
+    // `ShallowRef<BMapClient>` 读它时炸掉（ 评审 P1：类型窄化变成运行时破坏）。
     client: context.client,
     map: context.map,
     status: context.status,
@@ -201,7 +201,7 @@ function resolveDefaultClientContext(): BMapClientContext | undefined {
     const cached = defaultContextCache.get(key);
     if (cached) return cached;
     const created = createClientContext({
-      // 旧 bmapConfig 兼容路径：definition 直接组装，不再经迁移期归一（#26 删除）。
+      // 旧 bmapConfig 兼容路径：definition 直接组装，不再经迁移期归一（ 删除）。
       definition: {
         provider: appConfig.provider,
         loadOptions: appConfig.defaults,
