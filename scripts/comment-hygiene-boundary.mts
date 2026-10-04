@@ -101,9 +101,130 @@ export function findDocReference(commentLine: string): string | undefined {
  * 人来看一眼）也不可宽豁免（真债务被放过）。
  */
 export function hasLiveEvidence(lines: readonly string[]): boolean {
-  return lines.some(
-    (l) => /live\s*(读数|probe|探针)|真实\s*AK|实测|\|\s*kind\s*\|.*\|/.test(l) && isCommentLine(l),
-  );
+  return lines.some((l) => isEvidenceLine(l));
+}
+
+/**
+ * 一行注释是否属于**实测证据**。
+ *
+ * ⚠️ 必须认得**表格数据行**，不能只认表格标题行。实测踩到：`nativeLayerStyleOwnership.ts`
+ * 的注释是一张 22 行的 live 读数表，而只有表头那行含「live 读数」字样——数据行是
+ * `| \`text\` | \`setOptions\` | **是**（merge） | **是**（\`0.75\`） |`，第一版判据把整张表
+ * 判成「证据只占 3%」，于是门禁翻红，而那些数字恰恰是不可替代的证据本身。
+ *
+ * 判据：表头（含取证措辞或 markdown 表头）之后的**连续表格行**都算证据。
+ */
+function stripCommentPrefix(line: string): string {
+  return line
+    .trim()
+    .replace(/^(?:\*+|\/\/+|<!--)\s*/, "")
+    .trim();
+}
+
+function isEvidenceLine(line: string): boolean {
+  if (!isCommentLine(line)) return false;
+  const t = stripCommentPrefix(line);
+  if (/live\s*(读数|probe|探针)|真实\s*AK|实测/.test(t)) return true;
+  // markdown 表格行：表头、数据行、以及**分隔行**（`| --- | --- |`）。
+  // ⚠️ 分隔行必须算：漏掉它会把一张表从中间劈成两半，两半都不够 5 行 ⇒ 永不豁免。
+  if (/^\|.*\|/.test(t)) return true;
+  return false;
+}
+
+/**
+ * 实测证据的**形态**判定：成块的取证记录 vs 零星提及。
+ *
+ * ⚠️ 判据经历过一次修正。第一版是「整文件短路」（命中一行就豁免），被评审点破：任意一条
+ * `// 实测` 就能让高比例文件完全绕过门禁，而实测当时只有两个文件超阈值、证据行分别只占
+ * 1% / 3%——豁免的实际效果等于关掉判据，只是做得更隐蔽。
+ *
+ * 第二版改成「证据行占注释行的比例 ≥ 0.6」，仍然错：它把**成块**的读数表和**零星**的一句
+ * 「实测」当成了同一种东西。实测 `nativeLayerStyleOwnership.ts` 的 6 行读数表是连续的
+ * 一整块（占比仅 6%），却是这份注释不可替代的部分——而「某条 probe 的结论顺带写在这里」
+ * 同样只占几行，形态却完全不同。
+ *
+ * 现在的判据是**连续块**：从取证措辞起、跨过表格的表头与数据行，到空行为止，算**一个**
+ * 证据块。块内行数 ≥ `MIN_EVIDENCE_BLOCK_LINES` 且块数 ≥ 1 才豁免。
+ */
+const MIN_EVIDENCE_BLOCK_LINES = 5;
+
+/**
+ * 该文件的注释是否含**成块的实测证据**（是则豁免比例判据）。
+ *
+ * 「有一句『实测』」不够——必须是**成块**的取证记录，否则任意一条 `// 实测` 就能
+ * 让整个文件绕过门禁（见上）。
+ */
+export function isEvidenceDominant(
+  lines: readonly string[],
+  stats: FileCommentStats,
+): boolean {
+  if (stats.commentLines === 0) return false;
+  let run = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const t = l.trim();
+    if (isEvidenceLine(l)) {
+      run += 1;
+      // 达到阈值**立即**返回：等到循环末尾再判是错的——证据块之后还有整段论证，
+      // 那些行会把 run 清零，于是「块够长」这个事实永远传不出去。
+      if (run >= MIN_EVIDENCE_BLOCK_LINES) return true;
+      continue;
+    }
+    if (t === "" || t === "*") continue;
+    if (run > 0 && isEvidenceBridgeLine(lines, i)) {
+      run += 1;
+      if (run >= MIN_EVIDENCE_BLOCK_LINES) return true;
+      continue;
+    }
+    run = 0;
+  }
+  return false;
+}
+
+/**
+ * 这一行是否属于**证据块内部的桥接行**——即取证行与表格之间的读表说明。
+ *
+ * ⚠️ 曾经的实现是「取证行后跟任意 2 行注释都算证据」，立刻被反例推翻：
+ * 一句 `// 实测` + 8 段决策史也能凑满 5 行而豁免，等于把评审点破的漏洞原样放回来。
+ *
+ * 现在要求桥接行**后面紧跟表格**（跳过空行 / `*`），也就是「这张表怎么读」——
+ * 那种行只在有表的地方出现，决策史里不会出现。
+ */
+function isEvidenceBridgeLine(lines: readonly string[], i: number): boolean {
+  for (let j = i + 1; j < lines.length; j++) {
+    const t = stripCommentPrefix(lines[j]);
+    if (t === "" || t === "*") continue;
+    return /^\|.*\|/.test(t);
+  }
+  return false;
+}
+
+/**
+ * 该文件是否**类型定义密集**——即高注释比来自「逐成员说明」而非决策史堆积。
+ *
+ * 判据：export 的 interface / type 成员占实码行的多数。这类文件（`MapExpose` 那样
+ * 冻结一个公共接口的形状）天然需要逐成员说明，压缩它等于删掉使用面。
+ *
+ * 这条豁免此前只写在测试文件头与 AGENTS.md 的叙述里，**实现中并不存在**——即文档承诺了
+ * 一条不存在的判据。评审扫 `mapExpose.ts` 时才发现：它是冻结面（79 注释 / 21 实码
+ * = 3.8:1），逐条读过确认每一段都在说明某个成员的语义，按比例判红等于逼人删掉使用面。
+ */
+function isTypeDefinitionDense(
+  lines: readonly string[],
+  stats: FileCommentStats,
+): boolean {
+  if (stats.codeLines === 0) return false;
+  let memberLines = 0;
+  for (const l of lines) {
+    const t = l.trim();
+    if (!isCommentLine(l)) {
+      // `export interface X {` / `export type X = {` 及其续行
+      if (/^export\s+(interface|type)\s+\w/.test(t) || /^\s*readonly\s+\w+\??\s*[:(]/.test(t) || /^\s*\w+\??\s*:\s*\(/.test(t) || /^\s*\/\*\*\s*---/.test(t)) {
+        memberLines += 1;
+      }
+    }
+  }
+  return memberLines / stats.codeLines >= 0.5;
 }
 
 /** 一个文件的注释统计结果。 */
@@ -179,7 +300,13 @@ export function checkCommentRatio(
   // 踩过的坑：`nativeLayerStyleOwnership.ts`（22 行实码 / 105 行注释 = 4.8:1）被判红，
   // 逐句读过后发现它整份注释是一张 live 读数表 + 逐 kind 判定的依据，每一个数字都不可
   // 替代。这类文件恰恰是本仓最该有的注释形态，却被一条「比例」判据当成债务。
-  if (lines !== undefined && hasLiveEvidence(lines)) return [];
+  //
+  // ⚠️ 但「整文件短路」本身是评审点破的缺陷（见 MIN_EVIDENCE_BLOCK_LINES）：命中一行就免判，
+  // 让豁免实际等于关掉判据。现在要求证据行**构成注释的主体**才豁免。
+  if (lines !== undefined && isEvidenceDominant(lines, stats)) return [];
+
+  // **类型定义密集豁免**：逐成员说明是冻结面的固有需要（见 isTypeDefinitionDense）。
+  if (lines !== undefined && isTypeDefinitionDense(lines, stats)) return [];
 
   const ratio = stats.commentLines / stats.codeLines;
   // 阈值比较留 0.05 的余量：比值是浮点除法，`3.0` 与 `3.023` 在阈值边界上反复横跳会让

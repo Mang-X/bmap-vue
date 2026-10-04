@@ -1,26 +1,18 @@
 /**
- * 样式袋与顶层受控字段的**归属**（ 评审 P1-1）
+ * 样式袋与顶层受控字段的**归属**。
  *
  * ## 缺陷本身
  *
- * `useNativeLayerResource.fieldWrites()` 的写入顺序是 `visible → opacity(setOpacity) →
- * zIndex → zoomRange → style(setStyle)`。`visualization/` 家族里 `setStyle` 落到 `setOptions`，
- * 而官方声明把「转发」写进了注释本身（`TextLayer.d.ts:265-268` / `PolylineLayer.d.ts:209-212`
- * / `PointLayer.d.ts:297-300`，三处逐字相同）：
- *
- * > 批量更新样式。仅更新已声明的样式键；`opacity` / `visible` / `zIndex` / `renderStage` /
- * > `referCenter` / `enablePicked` **转发到对应 setter**，其余未知键忽略并告警一次
- *
- * ⇒ 袋里的 `opacity` 与顶层 `opacity` prop（走 `setOpacity`）**写的是同一份状态**，
- * 于是「最后改的那个赢」。设置了两者的使用者会看到「先改 style 再改 opacity」与反过来
- * 得到**不同**的最终值。
+ * `useNativeLayerResource.fieldWrites()` 的写入顺序里 `style(setStyle)` 在
+ * `opacity(setOpacity)` 之后，而 `visualization/` 家族里 `setStyle` 落到 `setOptions`，
+ * 官方声明写明它会把 `opacity` **转发到对应 setter**（`TextLayer.d.ts:265-268` 等三处逐字
+ * 相同）⇒ 袋里的 `opacity` 与顶层 `opacity` prop 写的是同一份状态，于是「最后改的那个赢」。
  *
  * ## ⚠️ 更正：`setOptions` 是 **merge**，不是「整袋替换」
  *
- * 评审与仓库原注释（`types/components.ts` 的 `TextLayerStyle` 文件头）都把这一族记成
- * 「整袋替换 … 没写的键回到官方默认值」。那是**误读**官方那句「仅更新已声明的样式键」——
- * 后者的意思是「只写你给的那几个键，没给的**保持原值**」，与 `layer/` 家族的
- * `setStyleOptions`（「合并到现有样式」，`layer/LineLayer.d.ts:336`）是**同一种**语义。
+ * 评审与仓库原注释都把这一族记成「整袋替换 … 没写的键回到官方默认值」。那是**误读**
+ * 官方那句「仅更新已声明的样式键」——意思是「只写你给的那几个键，没给的**保持原值**」，
+ * 与 `layer/` 家族的 `setStyleOptions` 是**同一种**语义。
  *
  * live 读数（`scripts/probe-style-opacity.mts`，2026-09-28，真实 AK 跑通）逐 kind 证实：
  * `setOpacity(0.25)` → 做一次**不含** `opacity` 的样式写 → `getOpacity()` 仍是 `0.25`：
@@ -34,10 +26,9 @@
  *
  * ⇒ 两个家族**都是 merge**（缺陷面比评审记的窄），但**只有 `visualization/` 家族转发**
  * `opacity`（这才是争用的真正来源）。`layer/` 家族的 `PointIconStyle.opacity` /
- * `PointShapeStyle.opacity`（`layer/PointIconLayer.d.ts:127` / `PointShapeLayer.d.ts:137`）是
- * **逐要素**字段，官方文档明写与图层级 `opacity` **相乘**——两份不同的状态，不是争用。
- * 同一份读数里 `setOpacity(0.25)` 后 `setStyleOptions({opacity: 0.9})` 读回仍是 `0.25`，
- * 独立确认了这一点。
+ * `PointShapeStyle.opacity` 是**逐要素**字段，官方文档明写与图层级 `opacity` **相乘**——
+ * 两份不同的状态，不是争用。同一份读数里 `setOpacity(0.25)` 后
+ * `setStyleOptions({opacity: 0.9})` 读回仍是 `0.25`，独立确认了这一点。
  *
  * ## 为什么是「排除 + 告警」而不是「定一个优先级」
  *
@@ -45,26 +36,25 @@
  * 只是一个顺序恒定而已：一个受控 prop 的最终值不该由用户的编辑先后决定。排除方案让
  * `opacity` **只有一个入口**，最终值只由那一个 prop 决定，与顺序无关。
  *
- * 排除掉的东西**必须告警一次**（稳定 key）：静默接收后丢弃是 AGENTS.md 点名的假支持，
- * 使用者会以为 `style.opacity` 生效了。
+ * 排除掉的东西**必须告警一次**（稳定 key）：静默接收后丢弃是 AGENTS.md 点名的假支持。
  *
  * ## 为什么是**逐 kind** 表，不是「按字段名一律拦」
  *
  * 拦住 `polyline` / `cluster` / `heatmap` / `track-line` 的袋内 `opacity` 会让使用者
- * **根本设不成图层级透明度**：这几个组件刻意没有 `opacity` prop（逐条理由见
+ * **根本设不成图层级透明度**：这几个组件刻意没有 `opacity` prop（理由见
  * `types/components.ts` 的 `VisualizationPolygonPolylineDisplayProps`），袋是它们**唯一**的
  * 入口。按字段名一律拦会把「一个入口」变成「零个入口」——那是更严重的缺陷。
  *
- * 而 `text` 之所以进表，是因为它在**声明面**上同时存在两个入口：官方声明了 `setOpacity`
- * （`TextLayer.d.ts:296`）⇒ 本库开了 `opacity` prop；官方又声明 `setOptions` 会把袋里的
- * `opacity` 转发到那个 setter ⇒ 同一个 prop 既是入口、袋里那份也是入口。
+ * 而 `text` 进表，是因为它在**声明面**上同时存在两个入口：官方声明了 `setOpacity`
+ * ⇒ 本库开了 `opacity` prop；官方又声明 `setOptions` 会转发 ⇒ 同一个 prop 既是入口、
+ * 袋里那份也是入口。
  */
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
 /**
  * 「样式袋里的 `opacity` 与顶层 `opacity` prop 写同一份状态」的 kind。
  *
- * 逐条依据见文件头的 live 读数表。**判据是两个条件同时成立**，不是「叫 opacity 就拦」：
+ * **判据是两个条件同时成立**，不是「叫 opacity 就拦」：
  *
  * 1. 官方声明的样式入口会把袋里的 `opacity` **转发到 `setOpacity`**（`visualization/` 家族）；
  * 2. 本库在该 kind 的组件上**真的开出了** `opacity` prop。
