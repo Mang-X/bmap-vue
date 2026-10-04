@@ -88,7 +88,7 @@ describe("CapabilityRegistry", () => {
       rawSdk: fakeSdk,
       unsupported: "silent",
     });
-    // 目录未收录的 id（`` 删除旧引擎后引擎白名单恒命中，这成为唯一拒绝路径）
+    // 目录未收录的 id（`#26` 删除旧引擎后引擎白名单恒命中，这成为唯一拒绝路径）
     expect(registry.supports("does.not-exist" as Capability)).toBe(false);
     expect(registry.explain("does.not-exist" as Capability).reason).toBe("unlisted-capability");
     // 没有描述符就没有 family 可报：留空，而不是兜一个值（#104 R10 删掉 `runtime` 族之后，

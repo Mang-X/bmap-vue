@@ -101,7 +101,7 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  * 于是「只看声明」的实现在真实 SDK 上会让 `<Map>` 直接落到 `error` 状态（ready 永远不来）。
  * 处置：**运行时名做主候选**，声明里的名字留作后备（不同构建/别名下仍可解析），
  * 每个名字都只经由 `readNamespaceMember` 读命名空间成员，**不猜常量值、不读全局**。
- * 依据见 ADR `2026-09-11-jsapi-v4-map-facet` §9 与 ``。
+ * 依据见 ADR `2026-09-11-jsapi-v4-map-facet` §9 与 `docs/zh-CN/contributing/v4-browser-smoke.md`。
  */
 const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
   normal: ["NORMAL", "BMAP_NORMAL_MAP"],
@@ -119,7 +119,7 @@ const MAP_TYPE_CONSTANT_CANDIDATES: Record<MapType, readonly string[]> = {
   // `BMap.MapType` 构造（不是 `MapTypeId` 常量），要么经 `setMapStyle`。取不到时
   // `resolveMapTypeConstant` 抛 `BMAP_SDK_CALL_FAILED`——**显式失败，不是静默换图**，
   // 这正是实测坐实的正确行为（静默换图会让用户拿到普通图却毫无察觉）。
-  // 证据：``。
+  // 证据：`docs/zh-CN/contributing/165-runtime-verification.md`。
   hybrid: ["HYBRID", "BMAP_HYBRID_MAP", "B_HYBRID_MAP"],
   earth: ["EARTH", "BMAP_EARTH_MAP"],
 };

@@ -22,7 +22,7 @@
  * **继续用 `<PointIconLayer>`**。另有 `isFixed` / `visibility` / `iconObj` / `userSizes` /
  * `sizes` 在替代品上**无对应**，`isFlat` 的官方默认值还与本组件**相反**（旧 `true` / 新 `false`）。
  * 逐字段迁移表与取舍见
- * ``。
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  *
  * 落在官方 `BMap.PointIconLayer`（**两处都声明**：类型包有完整类声明，官方 React 参考实现也有同名组件）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
  * `useNativeLayerResource`（ 抽出的共享内核，五个原生数据图层共用一份实现）

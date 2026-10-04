@@ -307,7 +307,7 @@ describe("视野 round-trip", () => {
   });
 
   // 回填：官方 `core/Map.d.ts:508` 声明 `getViewport(view, viewportOptions?)`
-  // live AK 实测运行时在位（`` 结论四）。
+  // live AK 实测运行时在位（`docs/zh-CN/contributing/165-runtime-verification.md` 结论四）。
   // 官方声明的两个 `view` 分支（`Array<Point>` 与 `Bounds`）都要能走，返回领域 `Viewport`。
   it("getViewport 走「点数组」分支：原样把点转成 raw Point，返回领域 Viewport", () => {
     const { map, container, fake } = setup();
@@ -1185,7 +1185,7 @@ describe("销毁的部分失败（PR #60 评审 P2）", () => {
 /**
  * 回填：官方 `Map#flyTo`（`core/Map.d.ts:634`）与 `Map#getScreenshot`
  * （`core/Map.d.ts:1024`）。两者在 live AK 下实测运行时在位
- * （`` 结论四）
+ * （`docs/zh-CN/contributing/165-runtime-verification.md` 结论四），
  * 此前被  以「本库没有实现」为由从 Capability Catalog 删除 —— 那条推理已被证伪。
  */
 describe("#165 回填：flyTo / getScreenshot", () => {
@@ -1355,7 +1355,7 @@ const VIEW_COMMANDS = [
  * 缺口是**类型面 + 接线**，不是运行时：live 实测（2026-09-26，真实 AK）证明五条在
  * `noAnimation: true` 下 `callback` **恰好交付一次**（`setCenter` 0ms · `setZoom` 1ms ·
  * `setHeading` 0ms · `setTilt` 0ms · `panTo` 0ms），动画档也交付（`setZoom` 526ms / `panTo` 32ms），
- * 见 `` §8。因此本组断言的是
+ * 见 `docs/zh-CN/contributing/165-runtime-verification.md` §8。因此本组断言的是
  * **本库这一侧**：投影、传递，以及「空形状不递」这条与「callback 真的会来」同等重要的边界。
  */
 describe("视野命令的 options 投影（#171 / #165 裁决 F）", () => {

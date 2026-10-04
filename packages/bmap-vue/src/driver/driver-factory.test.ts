@@ -1,7 +1,7 @@
 /**
  * Driver 工厂与 engine 收口（M3A1-CLIENT / #18；M3A.2 装配收口 / #23；M3A3-REMOVE-LEGACY / #26）
  *
- * M3A1-CLIENT 把「运行时 engine 猜测」从默认 Client 路径移除；`` 删掉旧引擎后
+ * M3A1-CLIENT 把「运行时 engine 猜测」从默认 Client 路径移除；`#26` 删掉旧引擎后，
  * `detectEngine`（猜测）与 `createDriver`（多 engine 分派）**一并删除**——构造 Driver 的
  * 唯一入口是 `createJsapiV4Driver`，它要求调用方显式给出 SDK 运行时版本，不再猜。
  *

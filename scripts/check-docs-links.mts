@@ -10,11 +10,11 @@
  * VitePress **不**校验的是这两件，本门禁只管这两件：
  *
  * 1. **锚点**：`[x](./guide/config#不存在的标题)` 在 build 期静默通过。实测
- * `` 指向本页一个不存在的 `#统一状态口径`
+ *    `docs/zh-CN/hooks/useDrivingRoute.md` 指向本页一个不存在的 `#统一状态口径`，
  *    `docs:build` 全绿。锚点会随标题改一个字而腐烂，而且没有别的门禁看得见。
  * 2. **导航覆盖**：**反向**断言——`docs/zh-CN/**` 下每个内容页都被 sidebar 或 nav 收录。
  *    正向（sidebar 里每条都指向真实文件）由 build 间接兜住了；反向孤儿没有门禁，
- * 这正是 `` 曾经不在侧栏里长期没人发现的原因。
+ *    这正是 `docs/zh-CN/guide/errors.md` 曾经不在侧栏里长期没人发现的原因。
  *
  * 外链不校验（不联网）；`/adr/**` 这类指向仓库其它区域的链接只校验**文件存在**，
  * 不校验锚点（ADR 标题含 issue 号，改标题就断的锚点不值得当门禁）。
@@ -224,7 +224,7 @@ function navTargets(): string[] {
 /**
  * 反向覆盖：每个内容页都要能从导航到达。
  *
- * 排除首页（`` / ``）与 `README.md`——它们是入口本身
+ * 排除首页（`docs/index.md` / `docs/zh-CN/index.md`）与 `README.md`——它们是入口本身，
  * 不需要出现在侧栏里。
  */
 export function scanOrphans(pages: readonly string[]): LinkProblem[] {

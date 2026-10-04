@@ -4,9 +4,9 @@
  * - 组件注册由 Manifest 生成的 `components/index.ts` 驱动（单一事实源），不再维护手写数组；
  * - 默认版本取 `DEFAULT_VERSION`（JSAPI 4.0 基线）；
  * - 默认 Provider 是 `baiduJsapiV4Provider()`（内部委托官方 Loader，R25-B / #71）；
- * - ``：默认 definition **不再经任何归一**（`withMigrationDriver` 已删除），原样交给
+ * - `#26`：默认 definition **不再经任何归一**（`withMigrationDriver` 已删除），原样交给
  *   `createBMapClient`；旧引擎的加载结果会被对方的收口拒绝。
- * - ``：旧 `globalProperties` 映射（`$baiduMapAk` / `$baiduMapApiUrl`）已删除，安装不再
+ * - `#136`：旧 `globalProperties` 映射（`$baiduMapAk` / `$baiduMapApiUrl`）已删除，安装不再
  *   写任何全局属性、也不再打迁移警告。
  */
 import { createApp, inject } from "vue";

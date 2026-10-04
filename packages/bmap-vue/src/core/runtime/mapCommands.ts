@@ -70,7 +70,7 @@ export interface MapCommands {
    * （该 prop 默认**不开启**——常驻一块画布内存是库不该替使用者做的取舍，官方 React 参考
    * 的惯例同样是「能力进目录 + 显式 opt-in」）。它是**建图期**选项，事后补不上。
    * 2026-09-26 live 实测：同一张图不带该选项返回 3,830 字节空画布、带上则 119,074 字节
-   * 真实内容（读数见 ``）。
+   * 真实内容（读数见 `docs/zh-CN/contributing/165-runtime-verification.md`）。
    */
   getScreenshot(): string | null;
 

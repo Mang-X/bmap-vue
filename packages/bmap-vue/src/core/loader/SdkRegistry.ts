@@ -19,7 +19,7 @@
  *   `cancellable` 分流（可取消 → 同步释放；不可取消 → 保留条目 / 占用 / 任务），见上一条。
  *
  * 域划分：所有 JSAPI 4.0 Provider 共用 `BMap` 域（见 `providers/namespace.ts`）。
- * 旧引擎时代那个独立的 `BMapGL` 域已随 `` 删除（同一个 realm 里不再有两份配置需要分开记账）。
+ * 旧引擎时代那个独立的 `BMapGL` 域已随 `#26` 删除（同一个 realm 里不再有两份配置需要分开记账）。
  */
 import { BMapError } from "../errors/BMapError";
 
@@ -55,7 +55,7 @@ export interface SdkRegistryLoadRequest<T = unknown> {
 /**
  * 冲突处置：**只有一种** —— reject `BMAP_SDK_CONFIG_CONFLICT`。
  *
- * 历史注记（`` 第三批）：这里曾经有一个 `conflictPolicy: "throw" | "warn" | "ignore"`
+ * 历史注记（`#104` 第三批）：这里曾经有一个 `conflictPolicy: "throw" | "warn" | "ignore"`
  * 与配套的 `onConflict` 观测出口（ADR `2026-09-10-sdk-conflict-domain.md` 决策 6 的降级开关）。
  * 审计结果是 **REMOVE**：三个 Provider（官方 / 自研 script / 复用既有全局）**一律不传**它，
  * 仓库里只有 `SdkRegistry` 自己的单测可达 `warn` / `ignore` ⇒ 它是「没有人用的公共开关」，
@@ -65,7 +65,7 @@ export interface SdkRegistryLoadRequest<T = unknown> {
  * 为什么不做成配置项而不是删掉：**冲突本身就是不可恢复的错误**（同一 realm 只能有一份
  * 全局 SDK，见本文件头）。`ignore` 让调用方拿到一份「不是自己请求的那份 SDK」，
  * 属于把不可解释的运行时状态合法化；要放宽也应该等出现第一个真实消费者时再按场景设计，
- * 而不是保留一个无人验证的分支（`` 的一条既有结论）。参考实现
+ * 而不是保留一个无人验证的分支（`#104` 的一条既有结论）。参考实现
  * `huiyan-fe/react-bmap`（`src/loader/registry.ts`）走的是「报告 + 复用已加载那份」，
  * 与本库的 `warn` / `ignore` 都不是同一个语义，因此不能拿它当保留这两个取值的理由。
  */

@@ -81,7 +81,7 @@ export interface ServiceInstanceChannel<THandle> {
  * 共享实例通道：官方没有释放入口的那 7 个服务。
  *
  * 这个对象是**无状态**的——除了一个按 Client 缓存的槽位，没有 `pendingReleases`、
- * 没有 `instanceStale`、没有 `refuseMessage`、没有策略闭包。`` 的验收项
+ * 没有 `instanceStale`、没有 `refuseMessage`、没有策略闭包。`#139` 的验收项
  * 「simple services 不携带无消费者的 recreate/refuse/pending-release 状态」由此在**结构上**成立。
  */
 export function createSharedInstanceChannel<THandle>(): ServiceInstanceChannel<THandle> {

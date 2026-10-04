@@ -29,7 +29,7 @@
  * `minZoom` / `maxZoom`（`:190` / `:195`）是**构造选项**，官方**没有** `setMinZoom` /
  * `setMaxZoom`（探针 `protoHas` 均为 `false`）⇒ 变化**换实例**，与前两族同一条口径。
  *
- * ## 刻意不开的面（逐条依据见 ``）
+ * ## 刻意不开的面（逐条依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）
  *
  * - **`setRenderStage` / `setRefCenter`**：声明有（`:304` / `:308`）、运行时也有，但
  * **无组件消费者**（与前两族同一裁决，「没有消费者的扩展面一律不加」）。需要时经
@@ -46,7 +46,7 @@
  *
  * ## 为什么**有** `defineExpose`（与前两刀相反）
  *
- * 本票的规则（`` §六）
+ * 本票的规则（`docs/zh-CN/contributing/166-visualization-alignment-audit.md` §六）：
  * **官方有同名公开方法、且该语义不是某个已暴露 prop 的受控写入 ⇒ 必须可从 ref 到达。**
  *
  * 逐条套在本组件上：数据（`data`）、样式（`style`）、显隐（`visible`）、层级（`zIndex`）、

@@ -25,7 +25,7 @@
  * `getAllState` 逐文件 0 命中；live 实测替代类上这五个成员也全部缺席），而本组件 expose 的
  * `featureState` 命令面是**官方声明、live 实测在位**的。⇒ **依赖要素状态的用法迁移即丢能力**，
  * 这种情况**继续用 `<LineLayer>`**。逐字段迁移表与取舍见
- * ``。
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  *
  * 官方声明（`@baidumap/jsapi-v4-types` 的 `LineLayer` / `LineLayerOptions` / `LineStyle`）
  * 给出了完整的方法面，本组件逐条对应：

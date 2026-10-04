@@ -190,7 +190,7 @@ export type { ViewAnimationCancelOutcome } from "../driver/types/map";
 // ⚠️ 它**必须**用下面的 `export {}` 而不是 `export type {}`：写成 `export type` 会让
 // `dist/composables.d.ts` 声明成 `export declare const`，而运行时的
 // `dist/composables.mjs` 里没有这个绑定 —— 消费方 `import { MAP_EVENT_CATALOG } from
-// "bmap-vue/composables"` 类型检查通过、拿到 `undefined`。`` 评审查出的正是这个
+// "bmap-vue/composables"` 类型检查通过、拿到 `undefined`。`#160` 评审查出的正是这个
 // 幽灵导出；四个子入口的 `export declare const` 逐个对着 `.mjs` 核过，零幽灵。
 export { MAP_EVENT_CATALOG } from "../core/events/eventCatalog";
 export type {

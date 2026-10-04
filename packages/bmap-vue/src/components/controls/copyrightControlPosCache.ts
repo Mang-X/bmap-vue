@@ -13,7 +13,7 @@
  * - 跨 Client 不会复用（修掉上面那条真实缺陷）；
  * - Client 被回收时整桶随之消失，不会长期持有已销毁 SDK 对象。
  *
- * 仍然存在的限制（`` 的「已知限制」第 1 条）
+ * 仍然存在的限制（`docs/adr/2026-09-17-control-spec-and-panorama.md` 的「已知限制」第 1 条）：
  * `anchor` 会随 props 变化，而桶的键是**创建时**的 anchor——移动后的实例不会重新入桶。
  */
 import type { BMapClient } from "../../client/types";

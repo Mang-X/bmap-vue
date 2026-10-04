@@ -28,7 +28,7 @@
  *   是同时弃用的 `FillLayer` / `LineLayer` 的官方指定替代。样式走 `setOptions`（**不是**
  *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单）。
  *   「声明与运行时不一致」在这两族上撞了**三次**，而**处置各不相同**——
- * 逐条依据见 kind 表注释与 ``
+ *   逐条依据见 kind 表注释与 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`：
  *   `hitTest` 声明有而运行时**无**（不登记）；`setOpacity` 声明无而运行时**有**，但
  *   **判据不是「在位」而是「可观测地生效」**，两族读数**相反**——
  *   折线**生效** ⇒ 登记（走运行时豁免表）；面**不生效** ⇒ 不登记。
@@ -269,7 +269,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
   // 官方 4.0.5（git `5ba67f4`）新增 `visualization/PolygonLayer` / `PolylineLayer`
   // 作为 4.0.5 **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
   //
-  // 三个判断各自独立，逐条依据如下（另见 ``）
+  // 三个判断各自独立，逐条依据如下（另见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）：
   //
   // - `declared: true` —— 两族在 4.0.5 有完整类声明（`visualization/PolygonLayer.d.ts:125`、
   //   `visualization/PolylineLayer.d.ts:162`）。

@@ -2,7 +2,7 @@
  * 归一化调用面的取用入口（M7-SERVICE-CORE / issue #38）
  *
  * `BMapClient.driver` 的类型是共享契约 `BMapDriver`，它只承诺**创建面**
- * （`ServiceDriver`）；**归一化调用面**（`geocode` / `queryBoundary` / `search` …）按 `` 的
+ * （`ServiceDriver`）；**归一化调用面**（`geocode` / `queryBoundary` / `search` …）按 `#23` 的
  * 分层决策只挂在 `JsapiV4Driver.services` 上。业务 composable 需要调用面，因此需要一个
  * **可检查的**收窄点。
  *

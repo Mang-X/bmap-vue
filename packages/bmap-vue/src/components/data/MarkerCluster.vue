@@ -4,7 +4,7 @@
  *
  * 默认走 **v4 原生 `ClusterLayer`**（一个 WebGL 图层承载全部点与簇）；`engine: "markers"` 时
  * 退到「网格聚合 + 每簇 / 每单点一个 SDK Marker」。两种引擎的边界写在组件文档
- * ``，内部契约在 `./clusterEngine.ts`。
+ * `docs/zh-CN/components/data.md`，内部契约在 `./clusterEngine.ts`。
  *
  * ## 为什么默认是原生（而不是「原生可用就删掉自研」）
  *

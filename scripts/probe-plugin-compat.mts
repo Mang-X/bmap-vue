@@ -2,7 +2,7 @@
 /**
  * 插件兼容探针（M3A3-07 / issue #25）
  *
- * 这份探针是 `` 那张表的**证据生成器**
+ * 这份探针是 `docs/zh-CN/contributing/plugin-compat-inventory.md` 那张表的**证据生成器**：
  * 它从 `BUILTIN_PLUGIN_URLS` 锁定的 URL 拉取**真实发布产物**，把「脚本引用了 SDK 的哪些成员 /
  * 有没有碰私有面 / 有没有自己注入外部脚本」抽出来，再与官方 `@baidumap/jsapi-v4-types`
  * 的声明索引逐成员核对，最后与仓库里 checked-in 的 inventory 比对。

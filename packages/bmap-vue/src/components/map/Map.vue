@@ -642,7 +642,7 @@ function syncEnableProps(ctx: MapReadyContext) {
  *    本库只暴露两个互斥 prop，没有第三个键能表达「合并」——**刻意不造**：
  *    官方 `merge` 的适用前提是「已经有一份样式在生效」，而本库这层没有可观察的
  *    「当前样式」状态（样式可能已被 `applyStyleProps` 之外的路径改过）。
- * 留待有可验证语义时再补，见 ``。
+ *    留待有可验证语义时再补，见 `docs/zh-CN/contributing/165-runtime-verification.md`。
  */
 function applyStyleProps(ctx: MapReadyContext) {
   const id = props.mapStyleId;

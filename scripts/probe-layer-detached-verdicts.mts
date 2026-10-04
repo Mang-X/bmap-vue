@@ -126,7 +126,7 @@ export function verdicts(report: ProbeReport): string[] {
     ["Tile", "tile.removeLayer#2.已摘下"],
   ]
   // 前提 P 说的是「对**已经摘掉**的图层重复摘除」⇒ 第一次摘除必须真的成功了，
-  // 否则 `` 测的是「对一个还挂着的图层再摘一次」，与前提无关。
+  // 否则 `#2` 测的是「对一个还挂着的图层再摘一次」，与前提无关。
   const pPrereq = unmetPrerequisites([
     "geojson.removeLayer#1",
     "dom.removeLayer#1",

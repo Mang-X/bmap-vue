@@ -11,7 +11,7 @@
  * 这样装配点不会把边界目录拖进公共 `.d.ts`。
  *
  * M3A2-SERVICES-NATIVE（issue #23）补齐最后三个面（Service / Panorama / Native Layer）
- * 并做**真正装配**：``~`` 交付的 Map / Overlay / Control / Layer 与本次的三个面
+ * 并做**真正装配**：`#19`~`#22` 交付的 Map / Overlay / Control / Layer 与本次的三个面
  * 在这里合成一个 `JsapiV4Driver`。因此「v4 默认路径明确失败」的迁移期行为结束——用 v4
  * Provider 的组件路径从此可用（`client/migration.ts` 的 `migrationDriverFactory` 按 engine
  * 分派到本函数）；**默认 Provider / Playground / Docs 的切换仍是 M3A.3（#25）**。

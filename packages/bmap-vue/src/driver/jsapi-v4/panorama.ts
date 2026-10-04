@@ -294,7 +294,7 @@ export function createJsapiV4PanoramaDriver(
         // 事件因此**收不到**。要让业务听见它就得把顺序倒过来，而那会让「SDK 在 destroy
         // 期间同步派发事件」打到已拆解的回调上——用一个真实存在的正确性风险换一个
         // 「实例收尾通知」的信号。裁决：不加这条事件。依据见
-        // ``。
+        // `docs/zh-CN/contributing/168-remaining-surface.md`。
         //
         // 每次尝试都释放（不记账「曾经释放过」）：上一次尝试可能只失败在 SDK 销毁那一步，
         // 而期间业务可能又订阅了；`release()` 无分组时是 no-op，重复调用没有代价。

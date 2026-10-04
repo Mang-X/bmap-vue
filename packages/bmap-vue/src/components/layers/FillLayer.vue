@@ -27,7 +27,7 @@
  * `getAllState` 逐文件 0 命中；live 实测运行时候选类上这五个成员也全部缺席），而本组件 expose 的
  * `featureState` 命令面是**官方声明、live 实测在位**的。⇒ **依赖要素状态的用法迁移即丢能力**，
  * 这种情况**继续用 `<FillLayer>`**。逐字段迁移表与取舍见
- * ``。
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  *
  * 与 `LineLayer` 同构（同一份装配 `useVisualLayer`），差别只有三处：
  *

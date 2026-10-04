@@ -528,7 +528,7 @@ export function useNativeLayerResource<Props>(
   /* ------------------------------------------------------------ 实例生命周期 */
 
   /**
-   * 样式袋取值：**先**摘掉归顶层受控 prop 所有的键（`` P1-1），再交出去。
+   * 样式袋取值：**先**摘掉归顶层受控 prop 所有的键（`#174` P1-1），再交出去。
    *
    * 为什么摘在这里而不是在组件的 `style()` hook 里：争用判据是**逐 kind** 的
    * （`visualization/` 家族转发 `opacity` 到 `setOpacity`，`layer/` 家族不转发——见

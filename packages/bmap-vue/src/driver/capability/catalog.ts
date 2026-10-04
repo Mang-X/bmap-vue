@@ -465,7 +465,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   //
   // 因此弃用只落在**说明**上：组件继续可用（Development 期告警一次 + 类型层 `@deprecated`
   // + 文档），真正的替代品（`<PointLayer>`）本库已提供。详见 #165 与
-  // ``。
+  // `docs/zh-CN/components/data.md`。
   "layer.point-icon": {
     id: "layer.point-icon",
     family: "layer",
@@ -691,7 +691,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityDescriptor> = {
   // **完全不存在**（探针 case 15/16：8s 与再 25s 两次复读都是 `undefined`，且扫遍
   // `BMap` 全部 294 个自有属性也没有任何别名）。它们因此**不建能力槽位**——
   // 官方声明了、运行时没发，登记进去只会让 `supports()` 对一个永远不会来的能力说真话。
-  // 依据见 ``。
+  // 依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`。
   "layer.text": {
     id: "layer.text",
     family: "layer",

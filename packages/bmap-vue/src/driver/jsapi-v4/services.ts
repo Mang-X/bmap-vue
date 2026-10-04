@@ -1060,7 +1060,7 @@ export function createJsapiV4ServiceDriver(
    * 这两种反例都没有「哪一次请求产生了这个回包」这个事实可用，所以本库不再猜：并发被**显式拒绝**，
    * 取消/超时之后该实例**不再接受新的检索**（它的迟到回包无人可归属），要继续就重建实例。
    * 调用方侧（composable）用「supersede ⇒ 新建实例」实现「最新者胜」，见
-   * `` 决策 4。
+   * `docs/adr/2026-09-14-service-lifecycle-and-local-search.md` 决策 4。
    */
   const activeOperations = new WeakMap<object, ServiceCallSettle<unknown>>();
 

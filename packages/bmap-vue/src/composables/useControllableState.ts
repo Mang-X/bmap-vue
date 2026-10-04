@@ -73,7 +73,7 @@
  * **不做什么**：不实现「受控值不变时把 SDK 强行回退到外部值」。参考实现
  * `huiyan-fe/react-bmap` 同样不做：回退需要在中途事件（`moving` / `zooming`）上持续写回，
  * 会与用户手势打架，且在中止（松手回弹）时产生抖动。代价是「父级忽略 `update:*` 时地图停在
- * 用户操作后的位置」，这条已写进 `` 的状态表。
+ * 用户操作后的位置」，这条已写进 `docs/zh-CN/components/map.md` 的状态表。
  *
  * 调用位置要求与库内其它 composable 一致：必须在 `setup()` 或 `effectScope()` 内调用
  * （内部会注册一个 `defaultValue` 变化的告警 watcher，需要随作用域一起释放）。
@@ -130,7 +130,7 @@ export interface ControllableState<T> {
    * 删掉它是破坏性变更，不在 「不改动已冻结公共语义」的范围内。
    *
    * 所以：**别再去找它的库内调用点**。若将来确实要移除，走单独的破坏性变更票，并同步
-   * ``。
+   * `docs/zh-CN/hooks/useControllableState.md`。
    *
    * **它被惰性创建**（ 复审八轮 P1）：早先把「公共 API 保留该成员」当成「`<Map>` 必须为它
    * 实例化这份 runtime」，是**两件被混成一件的事**。既然库内零消费者，就不必在每次

@@ -104,7 +104,7 @@ const emit = defineEmits<{
 
   /* --- issue #168 item 3：官方 `PanoramaEventMap` 的 23 条里，此处新增 13 条 ---
    *
-   * 逐条裁决（**加 / 不加** 与理由）见 ``
+   * 逐条裁决（**加 / 不加** 与理由）见 `docs/zh-CN/contributing/168-remaining-surface.md`
    * 与 `tests/behavior/panorama-events.test.ts` 的文件头总表；这里只记**载荷形状**的依据。
    *
    * 对外名一律 **camelCase**，这不是待清理的偏差：官方 React 封装
@@ -214,7 +214,7 @@ const emit = defineEmits<{
    * 为它绕开一条已定的安全属性不划算。
    *
    * 因此本库不声明这条事件。裁决与取舍的完整记录见
-   * ``。
+   * `docs/zh-CN/contributing/168-remaining-surface.md`。
    */
 
   /* --- issue #165 TASK 6：SDK 拼写的**兼容别名**（`PANORAMA_EVENT_EMIT_ALIASES`）---

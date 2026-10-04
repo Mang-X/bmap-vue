@@ -16,7 +16,7 @@
  * ## 与 `<PolygonLayer>` 完全同构（同一份装配 `useVisualLayer`）
  *
  * 逐条依据（声明行号 / live 实测）见 `PolygonLayer.vue` 的文件头与
- * ``；两者的差异只有四处
+ * `docs/zh-CN/contributing/166-visualization-alignment-audit.md`；两者的差异只有四处：
  * kind、样式类型、`PolylineLayerOptions` 特有的纹理一族，以及
  * **图层级 `opacity`（本族有、且实测生效；`PolygonLayer` 连选项表里都没有这一项）**。
  * ⚠️ 「同族」**不等于**「同面」：两族 `setOpacity` 的在位性读数完全一样，差别只在
@@ -41,7 +41,7 @@
  *     而是一条**范围决策**：Driver 侧已登记的操作暂时**没有组件消费者**，
  * 与 「没有消费者的扩展面一律不加」存在张力。是否补 prop 留给后续裁决。
  *     （对照：`<PolygonLayer>` 那一族**没有** `opacity` 这一项，两者的不对称在这里是**事实**。）
- * 逐条依据见 ``「第三轮」。
+ *   逐条依据见 `docs/zh-CN/contributing/165-runtime-audit-2026-09-27.md`「第三轮」。
  *
  * ## 为什么**没有** `defineExpose`
  *

@@ -16,7 +16,7 @@
  *
  * 本层**不做**这些事（都属官方 Loader 自有语义，重复一份就是两套状态机）：
  * 组装入口 URL、管 script 单例、挂 / 收 JSONP 回调、判超时、判「同页版本 / AK 冲突」、
- * 复用已存在的全局。参见 `` 的契约表。
+ * 复用已存在的全局。参见 `docs/zh-CN/contributing/official-packages.md` 的契约表。
  */
 import { load as loadOfficialJsapi } from "@baidumap/jsapi-loader";
 import { redactAk } from "../../logger";
@@ -76,7 +76,7 @@ export const officialJsapiLoader: OfficialJsapiLoader = {
 /**
  * 默认路径**没有对应上游入口**的 `BMapLoadOptions` 字段。
  *
- * 顺序即报错信息里的列举顺序；``
+ * 顺序即报错信息里的列举顺序；`docs/zh-CN/contributing/official-packages.md`
  * 的「不支持项」表与测试共用这一份口径。
  */
 export const OFFICIAL_LOADER_UNSUPPORTED_KEYS = [

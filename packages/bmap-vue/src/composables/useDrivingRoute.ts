@@ -14,7 +14,7 @@
  *
  * 与官方 UI Kit 的分流：`RoutePlan`（`bmap-vue/ui-kit`）是标准面板，它自己发请求、自己画；
  * 本 hooks 是**完全自定义 UI** 那条路。**同一次界面操作只走其中一条**——两条都接上会让一次点击
- * 发出两次检索（见 `` 的「与标准面板互斥」一节）。
+ * 发出两次检索（见 `docs/zh-CN/hooks/useDrivingRoute.md` 的「与标准面板互斥」一节）。
  */
 import { toValue, type MaybeRefOrGetter } from "vue";
 import type { BMapClient } from "../client/types";

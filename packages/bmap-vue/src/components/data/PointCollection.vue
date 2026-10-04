@@ -70,7 +70,7 @@ const LAYER_KIND: NativeLayerKind = "point-shape";
  * （`0` 圆形 ↔ `'circle'`，数字一一对应但类型不同）；`isFlat` 的官方默认值与本组件**相反**
  * （旧 `true` / 新 `false`）。另有 Feature State 在替代品上**无对应**（`visualization/` 家族
  * 没有该 API）——依赖它的用法**继续用本组件**。逐字段迁移表见
- * ``。
+ * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  */
 warnDeprecatedLayerOnce(
   "PointCollection:deprecated-class",
