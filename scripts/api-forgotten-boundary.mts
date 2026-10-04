@@ -18,6 +18,10 @@
  *
  * 因此新增的名字**必须**先按 ADR 2026-09-25 的二选一处置（升为公共导出 / 让引用消失），
  * 让它们从集合里**消失**；生成器只自动写「清理」方向。
+ *
+ * **这条不变量对七个出口一律成立**（#188 评审 P1 之后）。`index` / `components` 曾经
+ * 整出口豁免，等于在两个主出口上关掉这层判据；现在改成「只滤掉 Volar 机器名、
+ * 真实类型照旧冻结」，豁免的口子关上了。
  */
 
 /**
@@ -41,44 +45,64 @@ export const REPORTED_ENTRIES = [
 ] as const;
 
 /**
- * **不适用**「未导出类型身份集合」基线的出口，逐个带理由（#188）。
+ * Volar / vue-tsc 的**编译器机器名**（`__VLS_*`）。
  *
- * 这不是「跳过」，而是有登记的不适用：这些出口仍然**跑 AE、比对 API report**，
- * 只是不生成 `etc/<出口>/forgotten-exports.json`。判据刻意写死成「表里列出的出口
- * 不写身份集合基线」而不是「读不出就当空集」—— 后者会让基线缺失静默通过。
+ * 这些名字是编译器为「本文件内提升出来的中间符号」生成的，换一个 Volar 版本就可能
+ * 变形。它们出现在 `ae-forgotten-export` 里有两个原因：① 声明打包阶段（AE rollup）只保留
+ * 导出面可达的符号，于是「只有导出面引用它」的中间名变成未导出；② 组件的
+ * `__VLS_Slots` / `__VLS_WithSlots` 是 `.vue` 文件内部生成物。
  *
- * 为什么不适用，理由**逐出口分开写**（合写成一句就变成「适用于所有出口的通用借口」，
- * 那等于没有理由）：
+ * **把它们登记进 `forgotten-exports.json` 等于给编译器内部临时名发公共 API 通行证** ——
+ * 那张表的语义是「本库真实类型被导出面之外引用、因而消费方无法命名」，而 `__VLS_*`
+ * 恰恰是「消费方永远不该命名的东西」，且它的名字由编译器决定、我们无权裁决。
  *
- * - `index` / `components` 这两个出口的 `ae-forgotten-export` 实测 192 个名字，分两类：
- *   ① **146 个是 Volar 机器名**（`__VLS_Slots_*` / `__VLS_WithSlots_*` /
- *   `__VLS_component_*` 各 47，`__VLS_PrettifyLocal_*` 5）。把它们登记进
- *   `etc/<出口>/forgotten-exports.json` 等于**给编译器内部临时名发公共 API 通行证** ——
- *   那张表的语义是「导出面之外被引用的、因而消费方无法命名的类型」，
- *   而 `__VLS_*` 恰恰是「消费方永远不该命名的东西」。
- *   ② **46 个是本库真实类型**（`BMapError` / `PanoramaHandle` / `BMapPluginDefinition` /
- *   `GeocodeRequest` …）。它们今天**已经**存在于 `dist/index.d.ts`，只是 AE 此前
- *   看不见（分析在第一个 `__VLS_` 上就抛了）。每个该「升为公共导出」还是
- *   「收窄签名」是一次**独立的公共面裁决**，属 ADR 2026-09-25 的范围（#165），
- *   不由 #188 这票顺手带出 —— 顺手处置会把一次声明修复变成一次公共 API 面变更。
+ * ## 为什么是**过滤**而不是**豁免整个出口**（#188 评审 P1）
  *
- * 表格刻意**非空**：将来若某个出口补齐了真实类型的裁决，把它从这张表里删掉即可
- * （`tests/behavior/api-forgotten-exports-gate.test.ts` 会立刻要求那份基线存在且为空）。
+ * 首轮把 `index` / `components` 整个登记为「身份集合不适用」，等于在这两个主出口上
+ * **关掉了整层判据**：那里有 46 / 14 个本库**真实**类型待裁决（`BMapError` /
+ * `PanoramaHandle` / `MarkerListProps` …），它们本该被冻结、且新增必须先处置。
+ * 出口级豁免之后 `generate:api` 又能照常更新 report 与签名基线，于是「跑一次生成器
+ * 就把新欠账洗成基线」这条路在两个最重要的出口上重新打开 —— 正是 #165 想堵住的。
+ *
+ * 过滤精确到**名字**而不是出口：`__VLS_*` 被滤掉（无权裁决），真实类型**照旧进基线、
+ * 照旧拒绝新增**（有裁决权）。两道性质的差别就是这张表与那个前缀的差别。
+ *
+ * 刻意**不**放宽前缀去匹配别的形状：一旦写成 `/^__/` 之类，「我们自己的名字恰好以双下划线
+ * 开头」就会被静默豁免，而那正是本库真实类型。
  */
-export const FORGOTTEN_EXEMPT_ENTRIES: Readonly<
-  Partial<Record<(typeof REPORTED_ENTRIES)[number], { readonly reason: string }>>
-> = {
-  index: {
-    reason:
-      "根入口：146 个 Volar 机器名（`__VLS_*`）+ 46 个待裁决的真实类型。" +
-      "机器名不该进公共 API 冻结语义；真实类型的公共面裁决属 #165，不在本票范围。",
-  },
-  components: {
-    reason:
-      "组件出口：与 `index` 同源同形（同一批 47 个 SFC 的插槽类型），故同样不适用。" +
-      "两处分开登记而不是共用一条，是为了让「为什么」跟着出口走。",
-  },
-};
+export const VOLAR_MACHINE_NAME = /^__VLS_/;
+
+/**
+ * 从 AE 报出的未导出类型里滤掉**编译器机器名**，留下本库真实欠账。
+ *
+ * 纯函数：吃集合、不碰文件系统 —— 可被用例直接断言。过滤后的集合**仍然参与全等比对**，
+ * 所以「真实类型新增」依旧会让门禁红。
+ */
+export function publicForgottenExports(names: readonly string[]): string[] {
+  return names.filter((name) => !VOLAR_MACHINE_NAME.test(name));
+}
+
+/**
+ * **零容忍**的出口：身份集合基线必须恒为 `[]`。
+ *
+ * 这些出口的存量在 #160 就已清零，任何非空都是回归 —— 判据是「恒空」而不是「比条数」，
+ * 哪怕只多一个名字也是欠账回来了。
+ *
+ * 为什么这张名单**不全覆盖**七个出口（#188 评审 P1）：`index` / `components` 今日分别有
+ * 46 / 14 个**真实**类型待公共面裁决（`BMapError` / `PanoramaHandle` /
+ * `MarkerListProps` …）。把它们列入零容忍等于要求 #188 这票顺手裁决公共 API 面 ——
+ * 每个名字该「升为公共导出」还是「收窄签名」是一次独立裁决，属 ADR 2026-09-25 的范围。
+ * 处置完一个就从这张表里删掉它，基线随之变短，**始终拒绝新增**这条不变量不受影响。
+ *
+ * 名单放在这里而不是用例里，是为了让用例从**门禁的**名单派生（抄一份的话，加出口时会漏）。
+ */
+export const FORGOTTEN_ZERO_TOLERANCE_ENTRIES: readonly (typeof REPORTED_ENTRIES)[number][] = [
+  "advanced",
+  "composables",
+  "plugins",
+  "resolver",
+  "ui-kit",
+];
 
 /**
  * 一个符号在**某个出口**上被刻意接受为未导出类型的记录。
@@ -150,6 +174,37 @@ export interface ForgottenRefusal {
   readonly entry: string;
   /** 该出口上新增（扣掉豁免）的未导出类型符号名。 */
   readonly added: readonly string[];
+}
+
+/**
+ * 哪些出口允许**首次播种**身份集合基线（#188 评审 P1 的缺口修补）。
+ *
+ * ## 为什么需要这条
+ *
+ * 取消出口级豁免之后，`index` / `components` 有 46 / 14 个**存量**真实欠账，而它们此前
+ * 从来没有过基线文件。没有基线时 `newForbiddenForgottenExports` 看到的就是「46 个新增」
+ * 并拒绝 —— 于是这两个出口**永远无法建立第一份基线**，门禁变成死结。
+ *
+ * 存量不是「新增」：它们在 #188 之前就已经存在于 `dist/*.d.ts`，只是 AE 看不见
+ * （分析在第一个 `__VLS_` 上就抛了）。要求「先处置才能建基线」等于要求先裁决 60 个名字的
+ * 公共 API 面，那是 #165 的范围，不该由这道门禁的落地方式决定。
+ *
+ * ## 为什么它**不是**洗基线的后门
+ *
+ * 播种**只对「还没有基线文件」的出口生效**，且这个方向**单向**：
+ *
+ * - 已有基线的出口 → 不播种（`seedableEntries` 返回空），欠账的增加仍然被
+ *   `newForbiddenForgottenExports` 拒绝；
+ * - 播种出来的集合立刻成为**全等比对**的对象，此后增 / 减两个方向都要经 `generate:api`；
+ * - 基线文件是提交物，播种结果出现在评审 diff 里 —— 与「手写基线」的可审计性相同。
+ *
+ * 也就是说：播种**只能做一次**，且只在「本来就没有基线」时；它不能覆盖任何已有判断。
+ * 这一点由 `tests/behavior/api-forgotten-exports-gate.test.ts` 直接断言。
+ */
+export function seedableEntries<E extends string>(
+  perEntry: readonly { readonly entry: E; readonly hasBaseline: boolean }[],
+): E[] {
+  return perEntry.filter(({ hasBaseline }) => !hasBaseline).map(({ entry }) => entry);
 }
 
 /**

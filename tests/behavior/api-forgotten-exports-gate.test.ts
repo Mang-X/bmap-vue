@@ -1,10 +1,10 @@
 /**
  * `ae-forgotten-export` 零容忍门禁自测（issue #160 + #165 回归修补，#188 扩展）
  *
- * 适用的 `etc/<出口>/forgotten-exports.json` 必须**全空**（`[]`）；登记为「不适用」的出口
- * 则必须**没有**这个文件（`index` / `components`，#188 起 —— 理由见
- * `scripts/api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`）。这道门禁的失效方式与
- * 本仓库其他门禁不同，值得单列：
+ * **七个出口一律有** `etc/<出口>/forgotten-exports.json`。`FORGOTTEN_ZERO_TOLERANCE_ENTRIES`
+ * 上的出口必须**恒空**（`[]`）；不在名单上的（`index` / `components`，#188 起 —— 理由见
+ * `scripts/api-forgotten-boundary.mts#FORGOTTEN_ZERO_TOLERANCE_ENTRIES`）冻结着各自的真实欠账，
+ * 但**不得含 Volar 机器名**。这道门禁的失效方式与本仓库其他门禁不同，值得单列：
  *
  * 1. **门禁只对「没跑生成器」严格**。`check:api` 逐出口比对身份集合、方向对称（新增与清理
  *    都红）；但 `pnpm generate:api` 原先**无条件**把当前集合写回基线，于是「跑一次生成器」
@@ -15,9 +15,9 @@
  *    直接从门禁脚本 import，断言打到的是**门禁真正在跑的那段判定**。
  * 2. **豁免表必须显式且空**。「没登记就是不允许」这条不变量只有靠空表才成立；一旦有条豁免
  *    被加进来忘了删，门禁会继续放行那个名字。第二节把这条钉住。
- * 3. **基线非空时，门禁形同虚设**。判据不是「比条数」而是「恒等于 `[]`」——任何非空都是
- *    回归，哪怕只有一个名字。第三节直接读仓库里各份基线，并对「已登记不适用」的出口
- *    反向断言其**不存在**（否则「不适用」会悄悄退化成「两种都做」）。
+ * 3. **机器名不该进冻结表，真实欠账不该被豁免**。这两条是同一件事的两面（#188 评审 P1）：
+ *    首轮用「整出口豁免」处理 146 个 `__VLS_*`，等于在 `index` / `components` 上关掉了
+ *    整层判据。第三节因此两个方向都判：零容忍出口恒空，未清零出口**有**基线且无机器名。
  * 4. **门禁没接进 CI / 被 `continue-on-error` 架空**。第四节把脚本接线读出来断言。
  *
  * 第一节的反例刻意成对：「清理」方向必须照常写 —— 否则把一个名字真正导出之后，基线反而永远
@@ -29,12 +29,13 @@ import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  FORGOTTEN_EXEMPT_ENTRIES,
   FORGOTTEN_EXEMPTIONS,
+  FORGOTTEN_ZERO_TOLERANCE_ENTRIES,
   REPORTED_ENTRIES,
   collectForbiddenAdditions,
   forbiddenForgottenMessage,
   newForbiddenForgottenExports,
+  VOLAR_MACHINE_NAME,
 } from "../../scripts/api-forgotten-boundary.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
@@ -240,43 +241,68 @@ describe("门禁脚本自身的签名一致性（评审 P2 的那类失效兜底
   });
 });
 
-describe("身份集合基线：适用出口恒为空、不适用出口恒不存在", () => {
+describe("身份集合基线：七个出口一律适用，零容忍名单必须恒空", () => {
   /**
-   * #188 起这条断言分两种出口，两种都必须钉住：
+   * #188 起分两种出口，两种都必须钉住：
    *
-   * - **适用**的出口：基线存在且恒为 `[]`（原来的零容忍，判据未变）；
-   * - **登记为不适用**的出口（`index` / `components`）：基线**必须不存在**。
-   *   第二个方向同样要判——只判「适用出口为空」的话，把不适用出口的基线写出来
-   *   （哪怕是 `[]`）不会有任何用例变红，「不适用」就悄悄退化成了「两种都做」，
-   *   而那正是 #188 明确要否定的（146 个 Volar 机器名进公共 API 冻结表）。
+   * - **零容忍**名单上的出口：基线存在且恒为 `[]`（原来的零容忍，判据未变）；
+   * - **不在**零容忍名单上的出口（`index` / `components`，各有 46 / 14 个待裁决的
+   *   真实欠账）：基线**必须存在**、且**不得含 Volar 机器名**。
+   *
+   * 两个方向都要判。只判零容忍出口为空的话，把未清零出口的基线删掉不会有任何用例变红；
+   * 只判文件存在的话，往里面塞 146 个 `__VLS_*` 机器名也没人拦 —— 那正是「整出口豁免」
+   * 想避免的结果，只是从「不写基线」换成了「写一份含机器名的基线」。
    */
-  const exemptEntries = Object.keys(FORGOTTEN_EXEMPT_ENTRIES);
-  const applicableEntries = ENTRIES.filter((entry) => !(exemptEntries as string[]).includes(entry));
+  const zeroTolerance = FORGOTTEN_ZERO_TOLERANCE_ENTRIES;
+  const debtEntries = ENTRIES.filter((entry) => !(zeroTolerance as readonly string[]).includes(entry));
 
   it("两种出口都被分到了（判据没有落在空集上）", () => {
-    expect(applicableEntries.length, "适用出口名单空了").toBeGreaterThan(0);
-    expect(exemptEntries.length, "不适用出口名单空了").toBeGreaterThan(0);
+    expect(zeroTolerance.length, "零容忍名单空了").toBeGreaterThan(0);
+    expect(
+      debtEntries.length,
+      "没有「存量未清零」的出口 —— 若 index / components 的欠账已裁决完，把它们加进零容忍名单即可",
+    ).toBeGreaterThan(0);
   });
 
-  it.each(applicableEntries)("./%s 的 forgotten-exports.json 是 []（存量已清零）", (entry) => {
+  it.each(zeroTolerance)("./%s 的 forgotten-exports.json 是 []（存量已清零）", (entry) => {
     const target = resolve(ETC, entry, "forgotten-exports.json");
     expect(existsSync(target), `${entry}: 身份集合基线缺失 —— 跑 pnpm generate:api 并提交`).toBe(true);
     // 判据是「恒空」，不是「比条数」：任何非空都是回归，哪怕只有一个名字。
     expect(JSON.parse(readFileSync(target, "utf8")), `${entry}: 未导出类型存量回来了`).toEqual([]);
   });
 
-  it.each(exemptEntries)("./%s 已登记为不适用 ⇒ 基线文件必须不存在", (entry) => {
+  it.each(debtEntries)("./%s 的基线必须存在且不含 Volar 机器名", (entry) => {
     const target = resolve(ETC, entry, "forgotten-exports.json");
     expect(
       existsSync(target),
-      `${entry} 登记为「身份集合不适用」，却存在基线文件 ${target} —— ` +
-        `要么删掉它，要么把出口从 FORGOTTEN_EXEMPT_ENTRIES 里移出`,
-    ).toBe(false);
+      `${entry}: 身份集合基线缺失 ${target} —— 该出口的 ${"真实欠账"}需要基线才谈得上「拒绝新增」，` +
+        `跑 pnpm generate:api:seed-forgotten（一次性，仅对无基线的出口生效）`,
+    ).toBe(true);
+    const names = JSON.parse(readFileSync(target, "utf8")) as string[];
+    const machines = names.filter((name) => VOLAR_MACHINE_NAME.test(name));
+    expect(
+      machines,
+      `${entry} 的基线里有 Volar 机器名（${machines.length} 个）—— 编译器内部临时名不该进公共 API 冻结表`,
+    ).toEqual([]);
   });
 
-  it("每条不适用登记都带理由（否则「不适用」是没有依据的跳过）", () => {
-    for (const [entry, record] of Object.entries(FORGOTTEN_EXEMPT_ENTRIES)) {
-      expect(record.reason.trim(), `${entry} 的不适用理由是空的`).not.toBe("");
+  it("未清零出口的基线里确实有真实欠账（否则「非空」本身没有意义）", () => {
+    // 反向断言：基线非空也可能只是「过滤没接上、机器名漏进来」，而上面那条已排除那种情况。
+    // 这里确认留下的是**本库真实类型** —— 有裁决权、因而必须被冻结的东西。
+    for (const entry of debtEntries) {
+      const names = JSON.parse(readFileSync(resolve(ETC, entry, "forgotten-exports.json"), "utf8")) as string[];
+      expect(names.length, `${entry}: 没有任何真实欠账，被登记进零容忍名单即可`).toBeGreaterThan(0);
+      expect(
+        names.every((name) => !VOLAR_MACHINE_NAME.test(name)),
+        `${entry}: 基线里混进了 Volar 机器名`,
+      ).toBe(true);
+    }
+  });
+
+  it("七个出口全部有基线文件（豁免已撤销，没有「不适用」这个类别）", () => {
+    for (const entry of ENTRIES) {
+      const target = resolve(ETC, entry, "forgotten-exports.json");
+      expect(existsSync(target), `${entry}: 缺身份集合基线 ${target}`).toBe(true);
     }
   });
 });

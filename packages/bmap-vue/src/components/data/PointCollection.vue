@@ -296,9 +296,13 @@ defineExpose({
  * 别名 —— 这正是它们在 #188 首轮被排除的原因：当时 emit 出来恰好是合法的内联形态。
  * 但「当时恰好合法」不是判据，换个 Volar 版本或改一下模板就可能退回悬空形态，
  * 而没有任何既有门禁会红。写出来之后这一类形态由 `pnpm check:dts-strict` 守着。
+ *
+ * 载荷用 `Record<never, never>` 而不是 `Record<string, never>`（#188 评审 P1）：后者带
+ * 字符串索引签名，写错插槽 prop 时不报错（`typo` 得到 `never`，而 `never` 可赋给任何
+ * 目标），错误成员静默通过。守卫见 `fixtures/consumer/strict/probe.ts` 的 `HasStringIndex`。
  */
 defineSlots<{
-  default?(props: Record<string, never>): any;
+  default?(props: Record<never, never>): any;
 }>();
 defineOptions({ name: "PointCollection" });
 </script>

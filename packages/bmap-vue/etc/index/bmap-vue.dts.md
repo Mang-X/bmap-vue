@@ -2,8 +2,9 @@
 
 > 由 `pnpm generate:api` 生成，请勿手工编辑。
 > 内容是 `dist/index.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的全文。
-> 这个出口有 API report 与本签名快照，但**不适用** forgotten-export 身份集合：
-> 根入口：146 个 Volar 机器名（`__VLS_*`）+ 46 个待裁决的真实类型。机器名不该进公共 API 冻结语义；真实类型的公共面裁决属 #165，不在本票范围。
+> 这个出口同时有 API report 与 forgotten-export 身份集合（后者已滤掉 Volar 机器名）；
+> 本快照是第三层：report 对未导出类型只留 `typeof getXxx` 名字引用、集合只记符号名，
+> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。
 
 ```ts
 import { AllowedComponentProps } from "vue";
@@ -1179,34 +1180,34 @@ declare type __VLS_Slots = {
     }): any;
 };
 declare type __VLS_Slots_10 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_11 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_12 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_13 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_14 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_15 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_16 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_17 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_18 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_19 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_2 = {
     error?(props: {
@@ -1229,109 +1230,109 @@ declare type __VLS_Slots_2 = {
     }): any;
 };
 declare type __VLS_Slots_20 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_21 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_22 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_23 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_24 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_25 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_26 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_27 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_28 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_29 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_3 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_30 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_31 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_32 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_33 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_34 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_35 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_36 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_37 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_38 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_39 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_4 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_40 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_41 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_42 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_43 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_44 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_45 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_46 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_47 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_5 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_6 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_7 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_8 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_Slots_9 = {
-    default?(props: Record<string, never>): any;
+    default?(props: Record<never, never>): any;
 };
 declare type __VLS_WithSlots<T, S> = T & {
     new (): {
@@ -3618,7 +3619,7 @@ export declare const MarkerCluster: <Item>(__VLS_props: NonNullable<Awaited<type
     expose(exposed: ShallowUnwrapRef<{}>): void;
     attrs: any;
     slots: {
-        default?(props: Record<string, never>): any;
+        default?(props: Record<never, never>): any;
     };
     emit: ((evt: "item-click", item: Item) => void) & ((evt: "cluster-click", pick: ClusterPick<Item>) => void) & ((evt: "cluster-change", change: ClusterChange) => void);
 }>) => VNode & {
@@ -3701,7 +3702,7 @@ export declare const MarkerList: <Item>(__VLS_props: NonNullable<Awaited<typeof 
     expose(exposed: ShallowUnwrapRef<{}>): void;
     attrs: any;
     slots: {
-        default?(props: Record<string, never>): any;
+        default?(props: Record<never, never>): any;
     };
     emit: (evt: "item-click", item: Item) => void;
 }>) => VNode & {
@@ -4356,7 +4357,7 @@ export declare const PointCollection: <Item>(__VLS_props: NonNullable<Awaited<ty
     }>): void;
     attrs: any;
     slots: {
-        default?(props: Record<string, never>): any;
+        default?(props: Record<never, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {
@@ -4388,7 +4389,7 @@ export declare const PointIconLayer: <Item>(__VLS_props: NonNullable<Awaited<typ
     }>): void;
     attrs: any;
     slots: {
-        default?(props: Record<string, never>): any;
+        default?(props: Record<never, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {
@@ -4444,7 +4445,7 @@ export declare const PointLayer: <Item>(__VLS_props: NonNullable<Awaited<typeof 
     }>): void;
     attrs: any;
     slots: {
-        default?(props: Record<string, never>): any;
+        default?(props: Record<never, never>): any;
     };
     emit: ((evt: "click", pick: PointPick<Item>) => void) & ((evt: "item-click", item: Item) => void);
 }>) => VNode & {

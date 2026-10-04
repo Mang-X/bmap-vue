@@ -21,14 +21,29 @@
  * 真实编译由 `pnpm check:dts-strict` 在 CI 里跑；这里守的是「这道门禁的判据没被改空」。
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { calledSetupMacros, probeImportSpecifiers } from "../../scripts/source-scan.mts";
+import {
+  FORGOTTEN_ZERO_TOLERANCE_ENTRIES,
+  newForbiddenForgottenExports,
+  publicForgottenExports,
+  seedableEntries,
+  VOLAR_MACHINE_NAME,
+} from "../../scripts/api-forgotten-boundary.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const MANIFEST = JSON.parse(
   readFileSync(resolve(ROOT, "packages/bmap-vue/package.json"), "utf8"),
 ) as { exports: Record<string, unknown> };
+
+/** 读某出口的未导出类型身份集合基线；缺失即抛（缺失本身是缺陷，不该被读成空集）。 */
+function readForgotten(entry: string): string[] {
+  const target = resolve(ROOT, `packages/bmap-vue/etc/${entry}/forgotten-exports.json`);
+  if (!existsSync(target)) throw new Error(`身份集合基线缺失：${target}`);
+  return JSON.parse(readFileSync(target, "utf8")) as string[];
+}
 
 /** 消费方的子路径（`package.json#exports` 的键去掉 `./`，去掉纯 types 的 `./volar` 与 meta）。 */
 const SUBPATHS = Object.keys(MANIFEST.exports)
@@ -146,11 +161,22 @@ describe("探针的判别力（正反两侧）", () => {
 });
 
 describe("探针覆盖全部出口", () => {
+  /**
+   * 覆盖判据与门禁脚本读的是**同一份逻辑**（真实 `ImportDeclaration`，#188 评审 P2）。
+   *
+   * 原先这里与 `check-dts-strict.mts` 各写一份正则，两层一起被注释骗过 ——
+   * `// import { X } from "@mangax/bmap-vue/ui-kit"` 两边都命中，而那个出口
+   * 实际不在 TypeScript program 里，严格检查根本没跑它。两侧改成读同一个判定，
+   * 「脚本改了判据、用例没跟」这个漂移面就没了。
+   */
+  function importedByProbe(): Set<string> {
+    const probePath = resolve(ROOT, "fixtures/consumer/strict/probe.ts");
+    return probeImportSpecifiers(probePath, readFileSync(probePath, "utf8"));
+  }
+
   it("package.json#exports 的每个子路径都被探针 import 了", () => {
-    const probe = readFileSync(resolve(ROOT, "fixtures/consumer/strict/probe.ts"), "utf8");
-    const missing = SUBPATHS.filter(
-      (subpath) => !new RegExp(`from\\s*["']${subpath.replace(/\//g, "\\/")}["']`).test(probe),
-    );
+    const imported = importedByProbe();
+    const missing = SUBPATHS.filter((subpath) => !imported.has(subpath));
     expect(
       missing,
       `这些出口在 exports 里存在但探针没 import ⇒ 它们的声明没人验：${missing.join(", ")}`,
@@ -159,6 +185,33 @@ describe("探针覆盖全部出口", () => {
 
   it("出口名单非空（判据没有着力点时上面那条会恒真）", () => {
     expect(SUBPATHS.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("注释掉的 import 不算覆盖（判据的可核对性）", () => {
+    // 合成样本：只有注释、没有 ImportDeclaration。门禁脚本那份判据必须判为未覆盖。
+    const commented = '// import { X } from "@mangax/bmap-vue/ui-kit";\nexport {};\n';
+    expect(
+      commented.includes("@mangax/bmap-vue/ui-kit"),
+      "样本自身没提到该 specifier，样本无效",
+    ).toBe(true);
+    expect(
+      probeImportSpecifiers("commented.ts", commented).has("@mangax/bmap-vue/ui-kit"),
+      "注释掉的 import 被算成覆盖 —— 判据是文本查找而不是 AST",
+    ).toBe(false);
+  });
+
+  it("门禁脚本与用例读的是同一个判定（不留第二份实现）", () => {
+    // 两处各写一份正则时，一次修改只落在一处，两层会一起误绿。这里钉住「只有一处实现」。
+    const script = readFileSync(resolve(ROOT, "scripts/check-dts-strict.mts"), "utf8");
+    const code = script
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(
+      code,
+      "check-dts-strict.mts 里又出现了一份 import 覆盖的正则/文本查找 —— " +
+        "判据必须只有 probeImportSpecifiers 一处实现",
+    ).not.toMatch(/from\\s\*\[?"'/);
   });
 });
 
@@ -199,14 +252,16 @@ describe("defineSlots 的覆盖面（不允许「当时恰好合法」）", () =
 
   it.each(
     slotted.map((file) => [file.replace(ROOT + "/", ""), file] as const),
-  )("%s 声明了 defineSlots", (_label, file) => {
-    const source = readFileSync(file, "utf8");
+  )("%s 真的调用了 defineSlots", (_label, file) => {
+    const macros = calledSetupMacros(file, readFileSync(file, "utf8"));
     expect(
-      source.includes("defineSlots"),
-      `${file.replace(ROOT + "/", "")} 模板里有 <slot> 却没有 defineSlots —— ` +
+      macros.has("defineSlots"),
+      `${file.replace(ROOT + "/", "")} 模板里有 <slot> 却没有**调用** defineSlots —— ` +
         `vue-tsc 会把载荷 emit 成模块局部的 \`declare var __VLS_N\`，` +
         `而声明打包阶段只保留导出面可达的符号，那条声明连同其声明一起消失，` +
-        `留下悬空引用（#188）。`,
+        `留下悬空引用（#188）。\n` +
+        `  判据读的是真实的 CallExpression：本仓库每个组件都带一段解释「为什么要写 ` +
+        `defineSlots」的注释，注释里必然出现这个单词，按文本查会恒真（#188 评审 P1）。`,
     ).toBe(true);
   });
 
@@ -220,6 +275,63 @@ describe("defineSlots 的覆盖面（不允许「当时恰好合法」）", () =
       genericSlotted.length,
       "没有扫到泛型且带 <slot> 的组件 —— 若 Volar 改了泛型组件的 emit 形态，这条会空跑",
     ).toBeGreaterThanOrEqual(5);
+  });
+
+  /**
+   * 判据本身的可核对性：注释**不能**满足它（#188 评审 P1）。
+   *
+   * 上面那条逐组件断言声称守的是「删掉 `defineSlots` 调用会红」。这条把「注释里
+   * 写着 `defineSlots`」这个真实形状单独喂进判据：源文件里**只有注释**、没有调用，
+   * 断言必须为 false。做不到的话，上面那条在宏被删掉时照样绿 —— 它守的回归它自己拦不住。
+   */
+  it("只有注释提到 defineSlots 时，判据判为「未声明」", () => {
+    const onlyComment = [
+      "<script setup lang=\"ts\">",
+      "/**",
+      " * 刻意不写 defineSlots —— 这段注释里出现 defineSlots 这个词。",
+      " * 按文本查找的判据会被它满足。",
+      " */",
+      "defineOptions({ name: \"OnlyComment\" });",
+      "</script>",
+      "<template><slot /></template>",
+    ].join("\n");
+    expect(onlyComment.includes("defineSlots"), "样本自身没提到 defineSlots，样本无效").toBe(true);
+    expect(
+      calledSetupMacros("OnlyComment.vue", onlyComment).has("defineSlots"),
+      "注释里的 defineSlots 被当成了调用 —— 判据是文本查找而不是 AST",
+    ).toBe(false);
+  });
+
+  it("真实调用能被判据认出（上一条的对照，避免判据恒假）", () => {
+    const withCall = [
+      "<script setup lang=\"ts\">",
+      "defineSlots<{ default?(props: { a: number }): any }>();",
+      "</script>",
+      "<template><slot /></template>",
+    ].join("\n");
+    expect(calledSetupMacros("WithCall.vue", withCall).has("defineSlots")).toBe(true);
+  });
+
+  it("本仓库的组件确实同时满足两条（判据与现状没有脱节）", () => {
+    // 「只有注释」那条用的是一个合成样本；这里确认真实组件走的是同一条路径 ——
+    // 也就是「注释 + 调用」的混合形态被判为已声明。
+    const mixed = [
+      "<script setup lang=\"ts\">",
+      "/** 解释为什么要 defineSlots 的注释。 */",
+      "defineSlots<{ default?(): any }>();",
+      "</script>",
+      "<template><slot /></template>",
+    ].join("\n");
+    expect(calledSetupMacros("Mixed.vue", mixed).has("defineSlots")).toBe(true);
+  });
+
+  it("SFC 解析失败**抛错**而不是报成「缺 defineSlots」（fail-closed）", () => {
+    // 解析失败时返回空集的话，上面那条逐组件断言会把原因报成「这个组件没有
+    // defineSlots」—— 一个与真实原因无关的结论（假红），而门禁最忌讳这个。
+    // 样本用**两个 `<template>`**：那是 SFC 层的硬错误（`@vue/compiler-sfc` 报
+    // "can contain only one <template> element"），不会被「脚本能解析」蒙混过去。
+    const broken = ["<template><slot /></template>", "<template><slot /></template>"].join("\n");
+    expect(() => calledSetupMacros("Broken.vue", broken)).toThrow(/Broken\.vue/);
   });
 });
 
@@ -248,15 +360,103 @@ describe("旧的「预期失败即通过」豁免已撤销", () => {
     }
   });
 
-  it("「身份集合不适用」是显式登记且带理由的，不是静默跳过", () => {
+  it("「身份集合不适用」这个出口级豁免已删除（#188 评审 P1）", () => {
+    // 出口级豁免等于在 index / components 上**关掉整层判据**：那里有 46 / 14 个
+    // 本库真实类型待裁决，却因为「整个出口不适用」而不再被拒绝新增 —— #165 想堵住的
+    // 洗基线路径在两个主出口上重新打开。改成「只按名字滤掉 Volar 机器名」。
     const boundary = readFileSync(resolve(ROOT, "scripts/api-forgotten-boundary.mts"), "utf8");
-    expect(boundary).toContain("FORGOTTEN_EXEMPT_ENTRIES");
-    // 逐出口带理由：合写成一句就变成「适用于所有出口的通用借口」，等于没有理由。
+    const code = boundary
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(code, "FORGOTTEN_EXEMPT_ENTRIES 仍在：出口级豁免没撤销").not.toContain(
+      "FORGOTTEN_EXEMPT_ENTRIES",
+    );
+    // 替代物必须在位：机器名过滤 + 零容忍名单。
+    expect(code, "缺少 Volar 机器名过滤").toContain("VOLAR_MACHINE_NAME");
+    expect(code, "缺少 publicForgottenExports 过滤函数").toContain("publicForgottenExports");
+    expect(code, "缺少零容忍出口名单").toContain("FORGOTTEN_ZERO_TOLERANCE_ENTRIES");
+  });
+
+  it("机器名过滤只滤 __VLS_，本库真实类型一个都不放过", () => {
+    // 判据的关键性质：过滤**精确到名字**。放宽成 `/^__/` 的话，本库恰好以双下划线
+    // 开头的真实类型会被静默豁免 —— 那正是这道豁免当初要避免的「静默跳过」。
+    expect(publicForgottenExports(["__VLS_Slots_3", "BMapError", "__VLS_component_2", "MapHandle"])).toEqual([
+      "BMapError",
+      "MapHandle",
+    ]);
+    // 双下划线但不是 Volar 机器名 ⇒ 不滤。
+    expect(publicForgottenExports(["__Internal"])).toEqual(["__Internal"]);
+    // 空集与全滤都不炸。
+    expect(publicForgottenExports([])).toEqual([]);
+    expect(publicForgottenExports(["__VLS_a"])).toEqual([]);
+  });
+
+  it("index / components 的真实欠账**仍被拒绝新增**（豁免没留下洗基线的口子）", () => {
+    // 这是评审 P1 的核心：出口级豁免撤销后，这两个出口必须和其它出口同一把尺子。
+    const indexBaseline = readForgotten("index");
+    const componentsBaseline = readForgotten("components");
+    expect(indexBaseline.length, "index 基线缺失或为空").toBeGreaterThan(0);
+    expect(componentsBaseline.length, "components 基线缺失或为空").toBeGreaterThan(0);
+    expect(
+      newForbiddenForgottenExports("index", indexBaseline, [
+        ...indexBaseline,
+        "BrandNewInternalShape",
+      ]),
+      "index 上新增真实欠账没有被拒绝 —— 洗基线路径仍然敞开",
+    ).toEqual(["BrandNewInternalShape"]);
+    expect(
+      newForbiddenForgottenExports("components", componentsBaseline, [
+        ...componentsBaseline,
+        "MarkerListProps_2",
+      ]),
+      "components 上新增真实欠账没有被拒绝",
+    ).toEqual(["MarkerListProps_2"]);
+  });
+
+  it("两份基线里没有 Volar 机器名（过滤真的生效了）", () => {
+    // 反向断言：机器名若出现在基线里，说明过滤没接上，146 个编译器临时名被登记进了
+    // 公共 API 冻结表 —— 那正是取消豁免时要避免的。
     for (const entry of ["index", "components"]) {
-      expect(boundary, `${entry} 没有登记不适用理由`).toMatch(
-        new RegExp(`${entry}:\\s*\\{[\\s\\S]{0,80}?reason:`),
-      );
+      const names = readForgotten(entry);
+      const machines = names.filter((name) => VOLAR_MACHINE_NAME.test(name));
+      expect(machines, `${entry} 的基线里有 Volar 机器名：${machines.join(", ")}`).toEqual([]);
     }
+  });
+
+  it("播种是单向的（不能用来更新已有基线）", () => {
+    // 播种是「基线不存在时建立第一份」的一次性通道。若它能覆盖已有基线，
+    // 就等于给「先跑生成器洗掉新增」提供了第二条路。
+    expect(
+      seedableEntries([
+        { entry: "index", hasBaseline: true },
+        { entry: "components", hasBaseline: true },
+      ]),
+      "已有基线的出口仍被判为可播种 —— 播种成了绕过 preflight 的后门",
+    ).toEqual([]);
+    // 反侧：确实没有基线时可播种（缺口本身要能补上）。
+    expect(
+      seedableEntries([
+        { entry: "index", hasBaseline: true },
+        { entry: "components", hasBaseline: false },
+      ]),
+    ).toEqual(["components"]);
+  });
+
+  it("零容忍名单只覆盖存量已清零的出口，且登记了未清零出口的理由", () => {
+    // index / components 今日有 46 / 14 个真实欠账待公共面裁决（属 #165 范围），
+    // 列入零容忍等于要求 #188 顺手裁决公共 API 面。名单必须显式、且有理由。
+    expect(FORGOTTEN_ZERO_TOLERANCE_ENTRIES).toContain("advanced");
+    expect(FORGOTTEN_ZERO_TOLERANCE_ENTRIES).not.toContain("index");
+    expect(FORGOTTEN_ZERO_TOLERANCE_ENTRIES).not.toContain("components");
+    const boundary = readFileSync(resolve(ROOT, "scripts/api-forgotten-boundary.mts"), "utf8");
+    // 理由写在常量的**文档注释**里（在声明之前），所以从常量名往后找找不到 ——
+    // 判据取「常量声明之前那段注释」，且刻意匹配具体的欠账数字而不是泛泛的措辞。
+    const docEnd = boundary.indexOf("export const FORGOTTEN_ZERO_TOLERANCE_ENTRIES");
+    expect(docEnd, "找不到零容忍名单的声明").toBeGreaterThan(0);
+    const doc = boundary.slice(0, docEnd);
+    expect(doc, "零容忍名单没有说明 index / components 为何不在其中").toContain("46 / 14");
+    expect(doc, "零容忍名单没有说明未清零欠账的处置归属").toContain("2026-09-25");
   });
 
   it("豁免出口仍会跑 AE、比对 report（豁免的只是身份集合那一层）", () => {

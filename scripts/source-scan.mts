@@ -135,6 +135,105 @@ export interface ScanSourceDirsOptions<V extends ScannableViolation> {
   includeTests?: boolean;
 }
 
+/**
+ * 这个源文件里**真正调用**了哪个 `<script setup>` 宏。
+ *
+ * ## 为什么必须是 AST 而不是文本查找
+ *
+ * `<script setup>` 宏（`defineSlots` / `defineProps` / `defineEmits` …）在源码里的
+ * 出现位置有两类：**调用**与**注释**。而本仓库的组件普遍带一段解释「为什么需要写
+ * `defineSlots`」的注释，注释里**必然**出现 `defineSlots` 这个词（#188 评审 P1）。
+ * 于是 `source.includes("defineSlots")` 在宏调用**被删掉**时依然为 true ——
+ * 这条判据声称守住的回归（删掉 `defineSlots` 让声明退回悬空形态）它自己拦不住。
+ *
+ * 判据落在**真实的 CallExpression** 上：`ts.isCallExpression` 且被调用表达式是
+ * 该标识符。注释在 AST 里根本不存在，因此注释里写多少遍都不影响判定。
+ *
+ * 刻意只认**直接标识符调用**（`defineSlots<…>()`），不认 `foo.defineSlots()` 或
+ * 解构后别名 —— SFC 编译器同样只认前者，后者出现时那条判据本就无意义。
+ *
+ * 返回**名字集合**（`Set`，天然去重、保持首次出现顺序）而不是布尔：调用点不止一个时
+ * （比如同时有 `defineProps` 与 `defineEmits`），「哪些宏被调用了」比「有没有调用过」
+ * 信息更多，且便于门禁指出**缺哪一个**而不是只答「有没有」。
+ *
+ * SFC 解析失败**抛错**，与本文件既有的 `scanVue` / `scanSourceFile` 一致（它们把失败
+ * 记进调用方给的 `failures` 并要求调用方当失败处理）。这里选择直接抛：调用方是
+ * 「要求 `defineSlots` 必须存在」的判据，解析失败时返回空集会让它报成「这个组件缺
+ * `defineSlots`」—— 一个与真实原因无关的结论，而门禁最忌讳的就是这种假红。
+ */
+export function calledSetupMacros(file: string, text: string): Set<string> {
+  const macros = new Set<string>();
+  const collect = (astText: string, kind: ts.ScriptKind): void => {
+    const source = ts.createSourceFile(file, astText, ts.ScriptTarget.Latest, true, kind);
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text.startsWith("define") &&
+        node.expression.text.length > "define".length
+      ) {
+        macros.add(node.expression.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  };
+  if (!file.endsWith(".vue")) {
+    collect(text, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    return macros;
+  }
+  let descriptor: ReturnType<typeof parseSfc>["descriptor"];
+  let errors: ReturnType<typeof parseSfc>["errors"];
+  try {
+    ({ descriptor, errors } = parseSfc(text, { filename: file }));
+  } catch (error) {
+    throw new Error(`${file}: SFC parse threw: ${(error as Error)?.message ?? String(error)}`);
+  }
+  if (errors.length > 0 || !descriptor) {
+    const message = errors
+      .map((e) => ("message" in e ? e.message : String(e)))
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(`${file}: SFC parse failed${message ? `: ${message}` : ""}`);
+  }
+  for (const block of [descriptor.script, descriptor.scriptSetup]) {
+    if (!block) continue;
+    collect(
+      block.content,
+      block.lang === "tsx" ? ts.ScriptKind.TSX : block.lang === "jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS,
+    );
+  }
+  return macros;
+}
+
+/**
+ * 这个源文件里**真正 import** 的模块 specifier 集合。
+ *
+ * 刻意走 AST 的 `ImportDeclaration.moduleSpecifier` 而不是正则（#188 评审 P2）：
+ * 正则会把**注释掉的** import 也算成命中 —— `// import { X } from "pkg/ui-kit"`
+ * 同样匹配 `from "…"`。而那个模块此时根本不在 TypeScript program 里，
+ * 要验的编译**实际没跑过它**，覆盖判据却报「已覆盖」。
+ *
+ * 收 `import type` 与不收没区别：判据是「这个模块进了 program」，两种导入都做到这一点。
+ * 刻意**不**收 `export … from` 与动态 `import()`：前者不引入新的依赖边，
+ * 后者的 specifier 只有字面量形式才可静态判定 —— 两者都不是「import 了它」的同一件事。
+ *
+ * 放在这个文件里而不是门禁脚本，是为了让门禁与它的自测**读同一处实现**
+ * （`scripts/api-forgotten-boundary.mts` 是同一个理由的先例：门禁脚本顶层就跑 `main()`，
+ * 用例 import 它会连带触发整轮分析）。两份实现各改一处、两层一起漂移，正是评审抓到的失效方式。
+ */
+export function probeImportSpecifiers(file: string, text: string): Set<string> {
+  const specifiers = new Set<string>();
+  const parsed = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  for (const statement of parsed.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (statement.moduleSpecifier === undefined) continue;
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    specifiers.add(statement.moduleSpecifier.text);
+  }
+  return specifiers;
+}
+
 export interface ScanSourceDirResult {
   /** 实际参与解析的文件数（门禁用它做「非空守卫」，避免扫到空目录也算通过）。 */
   readonly scanned: number;

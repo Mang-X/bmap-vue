@@ -29,8 +29,9 @@
  *
  * - **API report**（`etc/<出口>/bmap-vue.api.md`）：AE 自己按空白归一后逐字符比。
  * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：`ae-forgotten-export`
- *   的符号名集合，**全等**才通过（#159 二轮评审 P1）。`index` / `components` 登记为
- *   **不适用**，理由逐出口写在 `api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`。
+ *   的符号名集合（滤掉 Volar 机器名），**全等**才通过（#159 二轮评审 P1）。**七个出口
+ *   一律适用**；零容忍名单与机器名过滤的理由写在
+ *   `api-forgotten-boundary.mts#FORGOTTEN_ZERO_TOLERANCE_ENTRIES` / `#VOLAR_MACHINE_NAME`。
  * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 引入）：`dist/<出口>.d.ts` 经
  *   TypeScript printer（`removeComments: true`）规范化后的全文快照。它补的是 report 补不到的
  *   那一层 —— report 对未导出类型只留 `typeof getXxx` 这种**名字引用**，底下那个函数的签名
@@ -74,9 +75,10 @@ import { PKG_DIR, releaseIdentityOf } from "./release-identity.mts";
 import {
   collectForbiddenAdditions,
   forbiddenForgottenMessage,
-  FORGOTTEN_EXEMPT_ENTRIES,
   newForbiddenForgottenExports,
+  publicForgottenExports,
   REPORTED_ENTRIES,
+  seedableEntries,
 } from "./api-forgotten-boundary.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -187,19 +189,14 @@ function expectedSignatureFile(entry: Entry): string {
     .printFile(parsed)
     .replace(/\n+$/, "");
   const subpath = entry === "index" ? "." : `./${entry}`;
-  // 头两行说明按出口分（#159 四轮评审 P3）：`__VLS_` 的豁免自 #188 起已撤销，
-  // 七个出口现在都同时有 API report；差别只在 forgotten-export 身份集合是否适用。
-  const exempt = FORGOTTEN_EXEMPT_ENTRIES[entry];
-  const note = exempt
-    ? [
-        "> 这个出口有 API report 与本签名快照，但**不适用** forgotten-export 身份集合：",
-        `> ${exempt.reason}`,
-      ]
-    : [
-        "> 这个出口同时有 API report 与 forgotten-export 身份集合；本快照是第三层：",
-        "> report 对未导出类型只留 `typeof getXxx` 名字引用、集合只记符号名，",
-        "> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。",
-      ];
+  // 头两行说明对七个出口**同形**（#188 评审 P1 之后）：`__VLS_` 的出口级豁免撤销了，
+  // 机器名改成**按名字**过滤，真实欠账照旧进身份集合基线。没有出口需要单独说明，
+  // 因此这里不再按出口分支 —— 留一个恒为假的分支就等于留一个没人验证的开关。
+  const note = [
+    "> 这个出口同时有 API report 与 forgotten-export 身份集合（后者已滤掉 Volar 机器名）；",
+    "> 本快照是第三层：report 对未导出类型只留 `typeof getXxx` 名字引用、集合只记符号名，",
+    "> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。",
+  ];
   return [
     `## API Signature Baseline for "${PKG_NAME}" (entry \`${subpath}\`)`,
     "",
@@ -262,8 +259,10 @@ type CollectedMessage = { logLevel: string; messageId: string; text: string };
 function runExtractor(entry: Entry, localBuild: boolean): {
   result: ReturnType<typeof Extractor.invoke>;
   summary: string;
-  /** `ae-forgotten-export` 的符号名集合（排序去重），用于身份集合基线比对。 */
+  /** `ae-forgotten-export` 的符号名集合（排序去重，**已滤掉 Volar 机器名**），用于身份集合基线比对。 */
   forgotten: string[];
+  /** 被过滤掉的 Volar 机器名个数。只进输出，让「滤掉了多少」可见 —— 静默过滤会让人以为欠账变少了。 */
+  machineNameCount: number;
 } {
   const collected: CollectedMessage[] = [];
   const result = Extractor.invoke(configFor(entry), {
@@ -310,13 +309,19 @@ function runExtractor(entry: Entry, localBuild: boolean): {
     }
     forgottenSet.add(match[1]!);
   }
-  const forgotten = [...forgottenSet].sort();
+  // 滤掉 Volar 机器名（#188 评审 P1）：它们的名字由编译器决定、我们无权裁决，
+  // 登记进冻结表等于给内部临时名发公共 API 通行证。**真实类型一个都不滤** ——
+  // 首轮是按「出口」豁免的，等于在 index/components 上关掉了整层判据。
+  // 过滤后的集合照旧参与全等比对、照旧拒绝新增。
+  const allForgotten = [...forgottenSet].sort();
+  const forgotten = publicForgottenExports(allForgotten);
+  const machineNameCount = allForgotten.length - forgotten.length;
   if (process.argv.includes("--verbose")) {
     for (const message of collected) {
       console.log(`      ${message.logLevel}: ${message.text}`);
     }
   }
-  return { result, summary, forgotten };
+  return { result, summary, forgotten, machineNameCount };
 }
 
 /** AE **先落盘、后判定成败**；报错时把基线恢复成运行前的内容（原本不存在则删掉）。 */
@@ -334,6 +339,7 @@ interface EntryRun {
   readonly result: { errorCount: number; warningCount: number };
   readonly summary: string;
   readonly forgotten: readonly string[];
+  readonly machineNameCount: number;
   readonly previousReport: string | undefined;
 }
 
@@ -357,27 +363,25 @@ function preflight(): EntryRun[] {
     // 拿到与 `updateMode` 不同的失败模式。
     mkdirSync(dirname(target), { recursive: true });
     const previousReport = existsSync(target) ? readFileSync(target, "utf8") : undefined;
-    const { result, summary, forgotten } = runExtractor(entry, false);
+    const { result, summary, forgotten, machineNameCount } = runExtractor(entry, false);
     if (result.errorCount > 0) {
       throw new Error(
         `[check-api] ${entry}: --local 期间分析报错 ${result.errorCount} 个（${summary || "无摘要"}）——` +
           `先修分析错误再重跑（--verbose 看明细）。本命令一个基线都还没写`,
       );
     }
-    runs.push({ entry, result, summary, forgotten, previousReport });
+    runs.push({ entry, result, summary, forgotten, machineNameCount, previousReport });
   }
   // 身份集合的判据在**所有**出口都跑完之后统一下（`collectForbiddenAdditions` 不短路）：
   // 非空就一次性报出全部待处置出口，并保证此时 `etc/` 一个字节都没被写过。
-  // 登记为「不适用」的出口被**排除**在这层判据之外（#188）——它们写不出基线，
-  // 拿空基线去比会得到「192 个新增」的假拒绝。它们的 report 与签名基线照常写。
+  // **七个出口一律参与**（#188 评审 P1）：`index` / `components` 的机器名已在
+  // `runExtractor` 里按名字滤掉，剩下的真实欠账必须先处置，与其他出口同一把尺子。
   const refusals = collectForbiddenAdditions(
-    runs
-      .filter((run) => FORGOTTEN_EXEMPT_ENTRIES[run.entry] === undefined)
-      .map((run) => ({
-        entry: run.entry,
-        baseline: readForgottenBaseline(run.entry),
-        actual: run.forgotten,
-      })),
+    runs.map((run) => ({
+      entry: run.entry,
+      baseline: readForgottenBaseline(run.entry),
+      actual: run.forgotten,
+    })),
   );
   if (refusals.length > 0) {
     throw new Error(
@@ -410,17 +414,9 @@ function updateMode(): void {
         );
       }
       // 用 preflight 判过的 `forgotten`，不用重跑那份：判据已在第一阶段全绿，二次判定只会
-      // 让「为什么这次没被拒」变得不可解释。
-      //
-      // 登记为「身份集合不适用」的出口**不写**这份基线（#188），只写 report ——
-      // 理由见 `api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`。
-      if (FORGOTTEN_EXEMPT_ENTRIES[entry] === undefined) {
-        writeForgottenBaseline(entry, forgotten);
-      } else {
-        console.log(
-          `[check-api] ${entry}: 身份集合不适用（已登记理由），跳过写盘；当前 ${forgotten.length} 个未导出类型`,
-        );
-      }
+      // 让「为什么这次没被拒」变得不可解释。**七个出口都写**（#188 评审 P1）：
+      // 机器名已在 `runExtractor` 里滤掉，剩下的是本库真实欠账，必须有基线才谈得上「拒绝新增」。
+      writeForgottenBaseline(entry, forgotten);
     } catch (error) {
       restoreBaseline(target, previousReport);
       throw error;
@@ -508,25 +504,6 @@ function writeForgottenBaseline(entry: Entry, symbols: readonly string[]): void 
  * 几个月后被删掉的名字仍然"合法"。全等是子集判据的严格加强，两处漏法都堵上。
  */
 function forgottenBaselineFailure(entry: Entry, actual: readonly string[]): string | undefined {
-  // 登记在 `FORGOTTEN_EXEMPT_ENTRIES` 的出口**不适用**这一层（#188）。刻意在这里
-  // 早返回而不是让调用方跳过：调用方照旧跑 AE、照旧比对 report —— 豁免的只是
-  // 「未导出类型身份集合」这一层，且必须**同时**断言基线文件不存在，
-  // 否则「不适用」会退化成「基线丢了也算过」。
-  if (FORGOTTEN_EXEMPT_ENTRIES[entry] !== undefined) {
-    const target = forgottenPath(entry);
-    if (existsSync(target)) {
-      return (
-        `${entry}: 已登记为「forgotten-export 身份集合不适用」，却存在基线文件 ${target} ——` +
-        `要么删掉该文件，要么把出口从 FORGOTTEN_EXEMPT_ENTRIES 里移出` +
-        `（理由：${FORGOTTEN_EXEMPT_ENTRIES[entry]!.reason}）`
-      );
-    }
-    console.log(
-      `[check-api] ${entry}: forgotten-export 身份集合**不适用**（已登记理由），` +
-        `当前 AE 报出 ${actual.length} 个未导出类型`,
-    );
-    return undefined;
-  }
   const target = forgottenPath(entry);
   if (!existsSync(target)) {
     return `${entry}: 未导出类型身份基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`;
@@ -571,8 +548,9 @@ function checkMode(): void {
     let result: ReturnType<typeof Extractor.invoke>;
     let summary = "";
     let forgotten: string[] = [];
+    let machineNameCount = 0;
     try {
-      ({ result, summary, forgotten } = runExtractor(entry, false));
+      ({ result, summary, forgotten, machineNameCount } = runExtractor(entry, false));
     } catch (error) {
       failures.push(`${entry}: 分析抛错 —— ${error instanceof Error ? error.message : String(error)}`);
       continue;
@@ -598,13 +576,11 @@ function checkMode(): void {
       entryFailed = true;
     }
     if (entryFailed) continue;
-    const exempt = FORGOTTEN_EXEMPT_ENTRIES[entry];
     console.log(
       `[check-api] ${entry}: 与基线一致` +
         `${summary ? ` (warning=${result.warningCount}: ${summary})` : ""}` +
-        (exempt
-          ? `，未导出类型 ${forgotten.length} 个（身份集合不适用：${exempt.reason}）`
-          : `，未导出类型 ${forgotten.length} 个与身份基线一致`),
+        `，未导出类型 ${forgotten.length} 个与身份基线一致` +
+        `${machineNameCount > 0 ? `（另滤掉 ${machineNameCount} 个 Volar 机器名）` : ""}`,
     );
   }
 
@@ -613,13 +589,9 @@ function checkMode(): void {
   if (failures.length) {
     throw new Error(`[check-api] ${failures.length} 项未通过:\n  - ${failures.join("\n  - ")}`);
   }
-  const identityCount = REPORTED.filter(
-    (entry) => FORGOTTEN_EXEMPT_ENTRIES[entry] === undefined,
-  ).length;
   console.log(
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
-      `${identityCount} 份未导出类型身份集合基线一致` +
-      `（${REPORTED.length - identityCount} 个出口已登记为不适用），` +
+      `${REPORTED.length} 份未导出类型身份集合基线一致（已滤掉 Volar 机器名），` +
       `${REPORTED.length} 份类型级签名基线一致`,
   );
 }
@@ -649,8 +621,59 @@ function checkSignatureBaselines(failures: string[]): void {
   }
 }
 
+/**
+ * `--seed-forgotten`：**一次性**为「还没有基线文件」的出口建立第一份身份集合基线。
+ *
+ * 存在的理由（#188 评审 P1）：取消出口级豁免后 `index` / `components` 有 60 个**存量**
+ * 真实欠账却没有基线可比，`newForbiddenForgottenExports` 会把存量当成「新增」拒绝，
+ * 于是这两个出口永远建不了第一份基线 —— 门禁成了死结。存量不是新增：它们在 #188 之前
+ * 就已在 `dist/*.d.ts` 里，只是 AE 看不见。
+ *
+ * **它不是洗基线的后门**：`seedableEntries` 只放行「基线文件不存在」的出口，且方向单向。
+ * 已有基线的出口在这里一律不播种 —— 它们的增 / 减仍然全走 `preflight` 的拒绝逻辑。
+ * 播种出的集合立刻成为全等比对对象，且基线是提交物、可审计。
+ *
+ * 与 `updateMode` 的分工：本模式**只写身份集合基线**，不碰 report 与签名基线
+ * （后两者由正常的 `generate:api` 写）。两者混在一起会让「播种」看起来像一次普通的
+ * 基线更新，而它实际是一次**一次性豁免的行使**，值得在日志里单独成行。
+ */
+function seedForgottenMode(): void {
+  const seedable = seedableEntries(
+    REPORTED.map((entry) => ({ entry, hasBaseline: existsSync(forgottenPath(entry)) })),
+  );
+  if (seedable.length === 0) {
+    throw new Error(
+      `[check-api] 七个出口都已有 forgotten-exports.json，没有可播种的出口。\n` +
+        `  播种是**一次性**的（只对「基线文件不存在」的出口生效），不能用来更新已有基线 ——\n` +
+        `  欠账的增删请走 pnpm generate:api，新增会被 preflight 拒绝。`,
+    );
+  }
+  for (const entry of seedable) {
+    mkdirSync(dirname(reportPath(entry)), { recursive: true });
+    const { result, summary, forgotten, machineNameCount } = runExtractor(entry, false);
+    if (result.errorCount > 0) {
+      throw new Error(
+        `[check-api] ${entry}: 分析报错 ${result.errorCount} 个（${summary || "无摘要"}）—— 基线不可信`,
+      );
+    }
+    // 直接写，**不**经 `writeForgottenBaseline`：那道函数的判据是「相对已有基线的新增」，
+    // 而这里的前提正是「没有基线」，走它必然自拒。这里的写入因此是**无条件的**，
+    // 它的约束全部来自「只对无基线的出口生效」这一条（见 `seedableEntries`）。
+    writeFileSync(forgottenPath(entry), expectedForgottenFile(forgotten));
+    console.log(
+      `[check-api] ${entry}: 首次播种身份集合基线 → ${forgotten.length} 个真实欠账` +
+        `${machineNameCount > 0 ? `（另滤掉 ${machineNameCount} 个 Volar 机器名）` : ""}；` +
+        `此后增删都必须经 pnpm generate:api，新增会被拒绝`,
+    );
+  }
+}
+
 function main(): void {
   assertDist();
+  if (process.argv.includes("--seed-forgotten")) {
+    seedForgottenMode();
+    return;
+  }
   if (process.argv.includes("--local")) {
     updateMode();
     return;

@@ -98,10 +98,17 @@ useLayerResource<XYZLayerProps>(props, {
  *
  * 载荷是**空对象类型**而不是 `any`：本组件的内容插槽不传任何东西，
  * 写成 `any` 等于把插槽类型面放宽成「无推导」。
+ *
+ * 刻意用 `Record<never, never>` 而不是更常见的 `Record<string, never>`（#188 评审 P1）：
+ * 后者带**字符串索引签名**，于是消费方写错插槽 prop 时 `const { typo } = props`
+ * **不报错**（`typo` 只是 `never`，而 `never` 又可赋给任何目标），错误成员静默通过 ——
+ * 与 #188 要恢复的「错误成员有预期诊断」正好相反。实测见
+ * `fixtures/consumer/strict/probe.ts` 里的 `HasStringIndex` 判据。`Record<never, never>` 与 `{}`
+ * 同样没有索引签名，`typo` 会真的报 `TS2339`，而 Volar 对两者的 emit 完全一致。
  * 可选签名（`default?`）保持插槽可省略 —— 消费方不传内容插槽是合法的。
  */
 defineSlots<{
-  default?(props: Record<string, never>): any;
+  default?(props: Record<never, never>): any;
 }>();
 defineOptions({ name: "XYZLayer" });
 </script>

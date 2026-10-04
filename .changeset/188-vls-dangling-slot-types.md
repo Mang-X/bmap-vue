@@ -28,7 +28,7 @@ AE 的 rollup 只保留**导出面可达**的符号，模块局部变量不在�
 
 `defineSlots` 走另一条 emit 路径：Volar 把载荷**内联**进 `__VLS_Slots`，全程没有中间
 `var`。47 个非泛型组件里 45 个是裸 `<slot />`，用
-`default?(props: Record<string, never>): any`；`Map.vue` 与 `BMapProvider.vue` 按各自实际
+`default?(props: Record<never, never>): any`；`Map.vue` 与 `BMapProvider.vue` 按各自实际
 绑定写载荷。实测裸插槽与 `<Teleport>` 内插槽都通过模板校验。
 
 另 5 个是 `components/data/*` 的 `generic="Item"` 泛型组件（`MarkerList` /
@@ -50,12 +50,37 @@ emit 出合法形态（vue-tsc 无法把泛型组件的插槽类型提升成顶�
 `Symbol not found for identifier: __VLS_`** 的探针当作通过 —— 即要求缺陷必须持续存在。
 豁免已撤销：七个出口现在都跑 AE、都比对 report 与签名基线。
 
-`index` / `components` 登记为**forgotten-export 身份集合不适用**，理由逐出口写在
-`scripts/api-forgotten-boundary.mts#FORGOTTEN_EXEMPT_ENTRIES`：它们的 192 个
-`ae-forgotten-export` 里 146 个是 Volar 机器名（`__VLS_Slots_*` / `__VLS_WithSlots_*` /
-`__VLS_component_*` 各 47，`__VLS_PrettifyLocal_*` 5），登记进「公共 API 冻结」等于给编译器
-内部临时名发通行证；另 46 个是本库真实类型，每个该「升为导出」还是「收窄签名」是一次
-独立的公共面裁决（属 #165），不由本票顺手带出。
+### 空载荷用 `Record<never, never>`，不是 `Record<string, never>`
+
+首轮 50 处无参数插槽写成 `default?(props: Record<string, never>): any`。两者 emit 出来的
+声明**完全一致**，语义却相反：`Record<string, never>` 带**字符串索引签名**，于是消费方写错
+插槽 prop 时 `const { typo } = props` **不报错** —— `typo` 只得到 `never`，而 `never` 可赋给
+任何目标类型。实测：`Record<string, never>` 下拼错的 prop 静默通过，换成
+`Record<never, never>`（或 `{}`）后真的报 `TS2339`。首轮那种写法等于**静默弱化**了消费方的
+错误诊断，与本票要恢复的东西正好相反。已全部改为 `Record<never, never>`，并在严格探针里
+加了对应判据（`string extends keyof P` → `false`）。
+
+### forgotten-export：按**名字**过滤，而不是按**出口**豁免
+
+`index` / `components` 的 `ae-forgotten-export` 共 192 / 160 条，各分两类：146 条是 Volar
+机器名（`__VLS_*`，名字由编译器决定、我们无权裁决），46 / 14 条是本库**真实**类型
+（`BMapError` / `PanoramaHandle` / `MarkerListProps` …）。
+
+首轮把这两个出口整体登记为「身份集合不适用」。那等于在这两个主出口上**关掉了整层判据**：
+真实欠账本该被冻结、且新增必须先处置，却因为「整个出口不适用」而不再被拒绝 ——
+`generate:api` 又能照常更新 report 与签名基线，于是 #165 想堵住的「跑一次生成器就把新欠账
+洗成基线」在最重要的两个出口上重新打开。
+
+改为**精确到名字**的过滤（`VOLAR_MACHINE_NAME` + `publicForgottenExports`）：机器名滤掉，
+真实类型**照旧进基线、照旧拒绝新增**。`FORGOTTEN_EXEMPT_ENTRIES` 整个删除，替换为
+`FORGOTTEN_ZERO_TOLERANCE_ENTRIES`（存量已清零、必须恒为 `[]` 的五个出口）。未清零的 46 /
+14 个真实类型各自的公共面裁决仍属 #165，不在本票范围 —— 但它们**在基线里**，看得见、
+也拒绝新增。
+
+这两个出口此前**从没有过**基线文件（正因如此才需要「不适用」这个类别），所以新增了
+`pnpm generate:api:seed-forgotten`：只对**基线文件不存在**的出口写第一份，方向**单向** ——
+已有基线的出口一律不播种，它不能用来更新任何已有判断，因而不是绕过 preflight 的后门。
+重复播种会直接报错。
 
 ## 新增 `check:dts-strict`
 
@@ -88,11 +113,38 @@ emit 出合法形态（vue-tsc 无法把泛型组件的插槽类型提升成顶�
 四条断言逐条验证过会转红：注入悬空引用 → `TS2304`；`MapProps` 放宽成索引签名 →
 `TS2578`；把插槽 `status` 成员改名 → `TS2322`；把导出替换成 `any` → `TS2322`。
 
+### 断言必须真的**有牙**（评审二轮）
+
+首轮的探针有三条断言是**惰性**或**可绕过**的，逐条补强后都注入缺陷验证过会转红：
+
+| 缺陷 | 转红 |
+| --- | --- |
+| `defineSlots` 调用被删（注释里仍有该词） | 覆盖判据转红（改走 AST CallExpression） |
+| 一个出口的 import 被注释掉 | `探针没有覆盖这些出口` |
+| 插槽载荷写成 `Record<string, never>` | `TS2322`（`HasStringIndex` 判据） |
+| 插槽载荷整体写成 `any` | 7 处 `TS2322` |
+| 载荷**成员**逐个写成 `any`（名字不变） | 4 处 `TS2322`（`NoAnyMembers` 判据） |
+| 插槽成员改名 | `TS2322` + `TS2353` |
+
+`HasSlotMembers` 原先只判「成员名还在」：`P = any` 时 `P extends M` 求值为 `boolean`，
+而 `const x: boolean = true` 合法，于是 `(props: any) => any` 能通过。补 `IsAny` 层后转红。
+成员**类型**逐个退化那一类原先仍绿（成员名在、类型没了），由 `NoAnyMembers` 逐成员过一遍
+`NotAny` 拦住。
+
+两处**文本查找**被换成 AST：`defineSlots` 覆盖（`source.includes("defineSlots")` 会被注释
+满足 —— 本仓库每个组件都带一段解释为什么要写它的注释，注释里必然出现这个单词）与探针
+import 覆盖（`// import { X } from "…"` 同样匹配 `from "…"`）。判据本体落在
+`scripts/source-scan.mts` 的 `calledSetupMacros` / `probeImportSpecifiers`，门禁与自测读
+**同一处**实现 —— 原先两层各写一份正则，改一处两层一起漂移。
+
 ## 验收
 
 - `dist/{index,components}.d.ts` 的 `typeof __VLS_[0-9]` 归零（51 → 0）。
 - 七个出口在 `skipLibCheck: false` 下零错误；合法 prop / `$slots` 有推导，
   不存在的成员与写错的类型各有 `@ts-expect-error` 钉住（`TS2578` 同样判红）。
+- **七个出口全部有** forgotten-export 身份集合基线，且 `index` / `components` 上新增
+  真实欠账会被 `generate:api` 拒绝（洗基线路径关闭）。
 - 门禁**双向**验证过：注入悬空引用 → `TS2304` 转红；把 `MapProps` 放宽成索引签名 →
-  `TS2578` 转红。
-- `pnpm test:unit` 213 文件 / 3846 用例全绿；`verify:package` 对真实 tarball 全链路通过。
+  `TS2578` 转红；六条评审发现的惰性 / 可绕过断言逐条注入缺陷确认会转红。
+- `pnpm test:unit` 213 文件 / 3912 用例全绿；`check:api`、`check:dts-strict`、
+  `verify:package`（真实 tarball 全链路）均通过。

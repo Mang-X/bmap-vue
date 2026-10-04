@@ -40,6 +40,7 @@ import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { probeImportSpecifiers } from "./source-scan.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = resolve(ROOT, "packages/bmap-vue");
@@ -78,17 +79,19 @@ const PATHS: Record<string, string[]> = Object.fromEntries(
   ]),
 );
 
-/** 探针源码里是否真的 import 了这个 specifier（判「名单与探针没有脱节」）。 */
-function probeImports(specifier: string, source: string): boolean {
-  return new RegExp(`from\\s*["']${specifier.replace("/", "\\/")}["']`).test(source);
-}
-
-function assertProbeCoversEverySubpath(source: string): void {
-  const missing = REQUIRED_SUBPATHS.filter((s) => !probeImports(s, source));
+/**
+ * 判「名单与探针没有脱节」：探针**真正 import** 了每个出口。
+ *
+ * 判据本体在 `source-scan.mts#probeImportSpecifiers`（真实 `ImportDeclaration`，
+ * 注释掉的 import 不算命中 —— #188 评审 P2），门禁与它的自测读同一处实现。
+ */
+function assertProbeCoversEverySubpath(imported: ReadonlySet<string>): void {
+  const missing = REQUIRED_SUBPATHS.filter((s) => !imported.has(s));
   if (missing.length > 0) {
     throw new Error(
       `[check-dts-strict] 探针没有覆盖这些出口：${missing.join(", ")}\n` +
-        `  它们在 package.json#exports 里存在，但探针没 import ⇒ 它们的声明没人验。`,
+        `  它们在 package.json#exports 里存在，但探针没 import ⇒ 它们的声明没人验。\n` +
+        `  （判据读的是真实的 ImportDeclaration，注释掉的 import 不算覆盖。）`,
     );
   }
 }
@@ -159,7 +162,7 @@ function main(): void {
     throw new Error(`[check-dts-strict] 探针不存在：${PROBE}`);
   }
   const source = readFileSync(PROBE, "utf8");
-  assertProbeCoversEverySubpath(source);
+  assertProbeCoversEverySubpath(probeImportSpecifiers(PROBE, source));
   assertDistBuilt();
 
   const program = ts.createProgram([PROBE], readStrictCompilerOptions());
