@@ -66,7 +66,7 @@ import type { JsapiV4HandleRegistry } from "./registry";
  * 直接调用它们并用 try/catch 吞掉失败。本 Facet 既不臆造声明、也不靠异常控制流：
  * `setInteraction` 先做**结构性存在判断**，有就调用、没有就告警一次（见实现）。
  *
- * 与 `webgl-v1/map.ts` 的同名映射表**刻意保持两份**：跨引擎抽取会让  待删除的实现
+ * 与 `webgl-v1/map.ts` 的同名映射表**刻意保持两份**：跨引擎抽取会让 #26 待删除的实现
  * 阻塞 v4 底座（见 ADR 2026-09-11-jsapi-v4-driver-foundation「负面 / 成本」）。
  */
 const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: string }> = {
@@ -90,7 +90,7 @@ const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: str
  * 常量从 **SDK 命名空间**读取（`MapTypeId` 的静态成员），不读全局 `BMAP_*_MAP`：
  * Driver 边界只认 `rawSdk` 传入的命名空间，避免访问未经 Provider 校验的全局值。
  *
- * **顺序由真实运行决定，不由类型声明决定**（R25-E /  的 required smoke 实测）
+ * **顺序由真实运行决定，不由类型声明决定**（R25-E / issue #74 的 required smoke 实测）：
  *
  * - 上游 `@baidumap/jsapi-v4-types@4.0.5` 的 `map-type/MapTypeId.d.ts` 声明的是
  *   `BMAP_NORMAL_MAP` 这类成员名；
@@ -148,7 +148,7 @@ const LIBRARY_MAP_DEFAULTS: Record<string, unknown> = {
 /**
  * 项目已声明但 v4 `MapOptions` 无对应项、且无法无损翻译的键。
  *
- * ⚠️ 这两个键在 `<Map>` 的**组件 prop** 层面已于  删除（声明了却读也不读 = 假支持）。
+ * ⚠️ 这两个键在 `<Map>` 的**组件 prop** 层面已于 #165 Class 5 删除（声明了却读也不读 = 假支持）。
  * 这里仍然保留，是因为 `InitialMapOptions` 本身是**导出的公共类型**（`advanced` / `plugins` /
  * 根入口都重导出），`driver.map.create(container, { restrictCenter: true })` 仍是可达路径 ——
  * 删掉丢弃表会让它们经索引签名**原样透传**给 SDK，恰好落进本文件上方注释批评的那一档
@@ -198,7 +198,7 @@ function numberOf(label: string, value: unknown): number {
 /**
  * 领域 `ViewportOptions` → 官方同名对象，**只投影官方声明的四个成员**。
  *
- * 声明之外的键不递（「接收后忽略」是假支持）。全空时返回 `undefined`
+ * 声明之外的键不递（#165 §3.8「接收后忽略」是假支持）。全空时返回 `undefined`，
  * 于是「调用方没传」与「调用方传了空对象」在上游看到的是同一种形状 —— 官方对空对象
  * 的处理没有公开契约，**不**凭空造一个它没声明的入参。
  */
@@ -300,7 +300,7 @@ function projectViewport(raw: unknown, geometry: GeometryDriver): Viewport {
 }
 
 /**
- * 视角动画的生命周期记录（PR  评审 P1/P2、复审 P1/P2）。
+ * 视角动画的生命周期记录（PR #60 评审 P1/P2、复审 P1/P2）。
  *
  * 官方 4.0 的动画是**异步启动**的（`startViewAnimation` 内部按 `delay` 调度启动，没有公开句柄），
  * 且在**内部动画控制器构造之前**派发 `animationstart`。两件事都要说准（2026-09-21 真实 AK 实测，
@@ -538,7 +538,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
   };
 
   /**
-   * 合成 `destroy` 事件（M4-EVENTS /  评审 P1）。
+   * 合成 `destroy` 事件（M4-EVENTS / #28 评审 P1）。
    *
    * 官方在**我们摘掉订阅之后**才派发 `destroy`（`release` 先于销毁 SDK 对象），所以订阅者在
    * 正常路径下永远看不到它——「Catalog 里声明了 `destroy` 却收不到」是假支持。这里在 `release`
@@ -766,7 +766,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    * 只能有一个入口：凡带 Handle 品牌的对象**一律**交给 Registry 解析，由它做所有权校验
    * （跨 Client 抛 `BMAP_HANDLE_FOREIGN`）。用 `registry.owns()` 做前置判断是个错误——
    * 它把「别的 Client 的 Handle」和「原生 SDK 对象」都归到 `false`，于是外来句柄会被当作
-   * 原生对象**原样透传**给 SDK（PR  评审 P2）。
+   * 原生对象**原样透传**给 SDK（PR #60 评审 P2）。
    */
   const resolveAnimation = (animation: unknown): unknown => {
     if (isObjectLike(animation) && HANDLE_BRAND in animation) {

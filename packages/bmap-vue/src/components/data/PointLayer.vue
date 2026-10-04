@@ -3,7 +3,7 @@
  * PointLayer —— 扩展 API 的批量点（**单个** SDK 资源，M6-POINT-CLUSTER / issue #35）
  *
  * 落在官方 `BMap.PointLayer`（**运行时存在、类型包没有类声明**）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
- * `useNativeLayerResource`（ 抽出的共享内核，五个原生数据图层共用一份实现）
+ * `useNativeLayerResource`（#36 抽出的共享内核，五个原生数据图层共用一份实现）：
  * 本组件只声明「构造期选项 / 样式袋 / 数据载荷 / 事件」四件事，不再自持第二套状态机。
  *
  * ⚠️ 三个点图层里唯一「没有类型声明兜底」的那个：可视化实现由 SDK **按需异步注入**，
@@ -104,10 +104,10 @@ function adapt(): AdaptedPoints<Item> {
 /**
  * 构造期选项袋（官方构造参数里**不能就地更新**的那些）。
  *
- * ⚠️ 这里**没有** `pickWidth` / `pickHeight`（ 已删）：官方 `PointLayerOptions` 上
+ * ⚠️ 这里**没有** `pickWidth` / `pickHeight`（#165 Class 5 已删）：官方 `PointLayerOptions` 上
  * 没有这两个成员 —— 它们只在 `LineLayer` / `PointIconLayer` / `FillLayer` / `PointShapeLayer`
  * 上声明。原先无条件透传的结果是「构造器静默忽略两个不认识的键」，即收下用不了的 prop。
- * 正确成员是 `pickTolerance` / `pickThrough` / `mouseStyleChange`（由  接入）。
+ * 正确成员是 `pickTolerance` / `pickThrough` / `mouseStyleChange`（由 #169 接入）。
  */
 function ctorOptions(p: Readonly<PointLayerProps<Item>>): Record<string, unknown> {
   return {
@@ -144,7 +144,7 @@ function styleValue(): Record<string, unknown> | undefined {
     if (props.rotation !== undefined) style.rotation = props.rotation;
     if (props.offset !== undefined) style.offset = props.offset;
     if (props.anchor !== undefined) style.anchor = props.anchor;
-    // / TASK 2：4.0.5 的 `PointLayerOptions` 里补齐的这一组。全部进**样式袋**
+    // #165 Class 3 / TASK 2：4.0.5 的 `PointLayerOptions` 里补齐的这一组。全部进**样式袋**
     // （官方 `PointLayer.d.ts:298` 明说 `setOptions` 会把 `renderStage` / `referCenter` 转发到
     // 对应 setter，其余样式键合并），因此都走就地更新、不换实例。
     if (props.iconSize !== undefined) style.iconSize = props.iconSize;
@@ -177,7 +177,7 @@ function handlePick(event: unknown): void {
   });
 
   emit("click", pick);
-  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审  F4）
+  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
   if (pick.item !== null) emit("item-click", pick.item);
   else if (pick.hit) {
     warnOnce(

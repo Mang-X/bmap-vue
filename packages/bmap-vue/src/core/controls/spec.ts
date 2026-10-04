@@ -1,5 +1,5 @@
 /**
- * ControlSpec —— 控件的**声明式**描述
+ * ControlSpec —— 控件的**声明式**描述（M7-CONTROL-PANORAMA / issue #41）
  *
  * 控件的八件事（create / mount / unmount / anchor / offset / visible / options / events）
  * 此前由七个控件组件各写一份近乎逐字重复的 `addToMap` / `createWatchers` / `remove`，

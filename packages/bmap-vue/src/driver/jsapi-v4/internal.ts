@@ -3,7 +3,7 @@
  *
  * 官方全局命名空间（`globalThis.BMap`）只允许在 Driver / Provider 边界读取；本文件把
  * 「读到的到底是不是一个可用的 4.0 命名空间」与「怎么安全地拿构造器 / 调用成员」收敛
- * 成两件事，后续 Map / Overlay / Layer / Service Facet（~）都复用这里，不再各自
+ * 成两件事，后续 Map / Overlay / Layer / Service Facet（#20~#23）都复用这里，不再各自
  * 探测成员。
  *
  * 刻意**不引用官方类型包**：Driver 内部只按结构化形状访问 raw 对象，因此

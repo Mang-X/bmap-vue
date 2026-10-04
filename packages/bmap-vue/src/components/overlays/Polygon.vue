@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Polygon —— 多边形（M5-VECTORS /  迁移到 OverlaySpec）
+ * Polygon —— 多边形（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。`points`（根引用 + `pathVersion`）、填充/描边、
  * `isBoundary`（构造期 → 变化即重建）、`enableEditing`（成对开关）全部由 `polygonSpec` 声明。
@@ -27,7 +27,7 @@ const props = withDefaults(defineProps<PolygonProps>(), {
   enableMassClear: true,
   enableEditing: false,
   visible: true,
-  // ⚠️ **Vue Boolean-absent 陷阱**（ 图形族补齐）。
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）。
   //
   // `enableClicking` / `linkRight` 的**官方默认是 `true`**（官方 `PolygonOptions` 的
   // `@default true`：`enableClicking`「是否响应点击事件」）。`Boolean` 类型的 prop 在**未给**时，
@@ -48,7 +48,7 @@ defineOptions({ name: "Polygon" });
 
 const { commands } = useOverlaySpec(props, createPolygonSpec(), { emit: emitDynamic });
 /**
- * 命令面（ / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
+ * 命令面（#165 Class 3 / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
  *
  * 直接展开 `commands`（而不是挂成 `commands.xxx`）：调用方拿到的就是官方同名方法本身
  * （`polyline.setPositionAt(i, pt)` / `circle.getRadius()`），与官方参考实现的形状一致。

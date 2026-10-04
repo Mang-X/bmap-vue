@@ -143,7 +143,7 @@ export function createJsapiV4OverlayDriver(
   const menuWidths = new WeakMap<object, number>();
 
   /**
-   * 菜单 raw → **本库侧的条目表**（ / TASK 2d/2e）。
+   * 菜单 raw → **本库侧的条目表**（#165 Class 3 / TASK 2d/2e）。
    *
    * 为什么需要它：官方的 `ContextMenu#getItem(index): MenuItem` 返回 raw `MenuItem`，
    * 而 `MenuItem` 上**没有任何 getter**（`context-menu/MenuItem.d.ts` 只有
@@ -275,7 +275,7 @@ export function createJsapiV4OverlayDriver(
   };
 
   /**
-   * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（ 第三批）。
+   * `Marker.label`：本库的**领域形状** → raw `BMap.Label`（issue #165 第三批）。
    *
    * ## 为什么必须在这一层构造
    *
@@ -309,7 +309,7 @@ export function createJsapiV4OverlayDriver(
   };
 
   /**
-   * 锚点的**官方常量名** → 官方数值（ 第三批）。
+   * 锚点的**官方常量名** → 官方数值（issue #165 第三批）。
    *
    * 复用控件那一族的**同一张** `ANCHOR_VALUES`（`driver/jsapi-v4/controls.ts` 把它导出在这里
    * 共享，见该常量旁的注释）。刻意**不**另抄一份：两张表一旦漂移，同一个 `anchor` 名在
@@ -430,7 +430,7 @@ export function createJsapiV4OverlayDriver(
   /**
    * 语义键 → 官方 setter 的**唯一**调用点：专用入口（setPosition / setPath）与通用入口
    * （setOptions）都经这里落地，参数一律取自描述符（含 `valueArgs` 常量尾随参数），
-   * 避免两条路径对同一次更新传不同的参数（PR  评审 P2-2）。
+   * 避免两条路径对同一次更新传不同的参数（PR #61 评审 P2-2）。
    */
   const applyFieldUpdate = (
     raw: Record<string, unknown>,
@@ -790,7 +790,7 @@ export function createJsapiV4OverlayDriver(
     },
 
     /**
-     * 菜单的逐条命令面（ / TASK 2d）。
+     * 菜单的逐条命令面（#165 Class 3 / TASK 2d）。
      *
      * **`getItem` 的返回值经本库条目模型投影**：官方 `ContextMenu#getItem(index): MenuItem`
      * 返回 raw 实例，而 `MenuItem` 上**没有任何 getter**（`context-menu/MenuItem.d.ts` 只有
@@ -883,7 +883,7 @@ export function createJsapiV4OverlayDriver(
     },
 
     /**
-     * 一条 `MenuItem` 的命令面（ / TASK 2e）。
+     * 一条 `MenuItem` 的命令面（#165 Class 3 / TASK 2e）。
      *
      * `MenuItem` **没有句柄品牌**（它不是 `Overlay`，SDK 也没有把它 adopt 进来），因此
      * 这里收的是**本库记下的那条**（`addContextMenuItem` 建的 `MenuItem` 实例），

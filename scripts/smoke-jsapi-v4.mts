@@ -11,7 +11,7 @@
  * 退出码：`0` 全 required pass 且没有任何不可放行结论；`1` 有 fail；`3` 有
  * blocked / skipped / expected-failure（**不可放行**，与「通过」严格区分）；`2` 脚手架失败。
  *
- * 复用的两个模块是  为官方包探针建的，语义已经过评审：`official-probe/readiness.mts`
+ * 复用的两个模块是 #70 为官方包探针建的，语义已经过评审：`official-probe/readiness.mts`
  * 保证「就绪判定绑定本轮实例」，`official-probe/cdp.mts` 保证「CDP 一定有截止时间」。
  * 这里刻意不再自造一套。
  *
@@ -67,10 +67,10 @@ const runId = randomUUID();
 /**
  * 下面这几个函数（spawnTracked / waitForDevToolsPort / waitForPageTarget / resolveBrowser）与
  * `scripts/probe-official-packages.mts` 里同名的那几个**是刻意重复的**，不是漏抽：
- * 抽成共享模块就要改动  已评审通过的探针文件，收益（两个 orchestrator 少 60 行胶水）
+ * 抽成共享模块就要改动 #70 已评审通过的探针文件，收益（两个 orchestrator 少 60 行胶水）
  * 不抵它带来的评审与回归成本。**真正需要共享的两块已经共享**：CDP 会话（`official-probe/cdp.mts`
  * 的截止时间语义）与就绪判定（`official-probe/readiness.mts` 的「绑定本轮实例」）。
- * 收敛项登记在「已知限制与欠账」里。
+ * 收敛项登记在 ADR 2026-09-13 的「已知限制与欠账」里。
  */
 
 /** headless Chromium 解析顺序：显式覆盖 → Playwright 缓存 → 系统 Chrome/Chromium。 */

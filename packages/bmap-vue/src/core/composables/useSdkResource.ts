@@ -45,7 +45,7 @@ export interface SdkResourceSpec<Props, Resource, Context> {
      *
      * 这条路径上的 `mount` 只用于拿到 registration 再立刻 `dispose()`（让 SDK 侧把刚建出来的
      * 实例摘掉），因此 spec 在里面**不得执行组件侧副作用**——那是对一个马上消失的实例做业务动作，
-     * 而且回滚不了（PR  评审 1：`GroundOverlay.afterMount` 的 `setViewport` 会改地图视野）。
+     * 而且回滚不了（PR #103 评审 1：`GroundOverlay.afterMount` 的 `setViewport` 会改地图视野）。
      */
     stale?: boolean;
   }): ResourceRegistration<Resource> | void;
@@ -115,7 +115,7 @@ export function useSdkResource<Props, Resource, Context>(
     }
   }
 
-  // setup 同步注册 watch(保证响应式)。: watcher 的生命周期归 Vue,不再登记进 scope。
+  // setup 同步注册 watch(保证响应式)。#139: watcher 的生命周期归 Vue,不再登记进 scope。
   // ⚠️ 依赖「本行在 setup 同步期执行」——否则 watcher 会逃出组件的 effect scope,卸载后仍触发。
   // 这条依赖由 `useSdkResource.test.ts` / `useOverlayResource.test.ts` 的回归用例守住
   // (「挂载中会触发、卸载后不触发」; 那两条用例用的是**组件外部的 ref** 作观察源,

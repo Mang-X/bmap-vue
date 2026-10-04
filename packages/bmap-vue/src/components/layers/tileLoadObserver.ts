@@ -4,7 +4,7 @@
  * ## 为什么需要它
  *
  * 官方这批网络图层（`TileLayer` 家族 / `XYZLayer` / `WMSLayer` / `WMTSLayer` / `RasterTileLayer`）
- * 的**类声明里没有任何事件成员**， 的 live 探针在真实 4.0 上进一步确认：即使这些实例都
+ * 的**类声明里没有任何事件成员**，issue #97 的 live 探针在真实 4.0 上进一步确认：即使这些实例都
  * 暴露了 `addEventListener`，十个候选事件名（`tileload` / `tileerror` / `tilesloaded` / `load` /
  * `error` …）在网络请求**确实发生过**（窗口内 12~20 次）的前提下**一个都没有触发**。
  * 所以「不发明未声明事件」这条口径有运行时依据，唯一可用的观察点就是官方的 **`tileLoadFunction`**。

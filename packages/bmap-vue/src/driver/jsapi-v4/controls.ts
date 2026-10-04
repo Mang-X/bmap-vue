@@ -120,7 +120,7 @@ export const ANCHOR_VALUES: Readonly<Record<string, OfficialCornerAnchor | Offic
  * `string`），但上游 `NavigationControlOptions.type?: NavigationControlType` 与
  * `MapTypeControlOptions.type?: MapTypeControlType` 都是**数值**联合。此前 Driver 走
  * `projectOptions` 的原样透传分支，把 `"BMAP_NAVIGATION_CONTROL_LARGE"` 塞进只认数字的
- * 构造器——类型在**主动误导**使用者（ / `doc-audit-findings.md` 第 10 条）。
+ * 构造器——类型在**主动误导**使用者（issue #175 / `doc-audit-findings.md` 第 10 条）。
  *
  * 处置是**补这两张表**而不是把 prop 收窄成字面量联合：文档与示例一直用常量名，收窄会破坏
  * 现有调用方，而公共 API 形状（仍是 `string`）保持不变——这与 `anchor` 是同一套做法。
@@ -165,7 +165,7 @@ const CORNER_ANCHORS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * 控件 option 的更新口径（「动态 option 与必须重建的 option」的分类， 实施步骤 3）。
+ * 控件 option 的更新口径（「动态 option 与必须重建的 option」的分类，issue #22 实施步骤 3）。
  *
  * - `mutable` + `setter`：值型 setter（`setUnit` / `setType` / `setSize`）；
  * - `mutable` + `choice`：值型二选一（`[值为真时的方法, 值为假时的方法]`），
@@ -489,7 +489,7 @@ export function createJsapiV4ControlDriver(
     // ……**但版权控件例外**：它的实例按停靠位置**共享**（同一 anchor 的多个组件共用一个
     // `CopyrightControl`，各自往里加一条版权项）。对共享实例就地 `setAnchor()` 会让「实例」与
     // 「它服务的 anchor」脱钩，于是后续同 anchor 的组件找不到它、另建一个，同一个位置上出现两个
-    // 控件（ 评审 P1 的复现）。因此这里把 `copyright.anchor` 判成构造期项：变化时重建
+    // 控件（#95 评审 P1 的复现）。因此这里把 `copyright.anchor` 判成构造期项：变化时重建，
     // 由 `CopyrightControl` 的 create/mount/unmount 完成「离开旧共享组 → 加入目标共享组」的迁移。
     if (key === "anchor" && kind === "copyright") {
       return {
@@ -547,7 +547,7 @@ export function createJsapiV4ControlDriver(
      * （`projectOptions` 只归一化 anchor / offset / `value: "size"`，其余键照发），所以未命中
      * 分类表的键依然可能在**构造期**生效。按三态的定义，这属于 `recreate`（「只有构造期生效」），
      * 不是 `unsupported`（「连构造期也没有入口」）。把两者混为一谈会让调用方二选一地犯错：
-     * 要么把能生效的键当成没入口而**丢掉更新**，要么对真正没入口的键做**无效重建**（ 评审第 3 轮）。
+     * 要么把能生效的键当成没入口而**丢掉更新**，要么对真正没入口的键做**无效重建**（#95 评审第 3 轮）。
      *
      * 两个例外——「构造期也到不了」的才叫 `unsupported`：
      * - `custom`：`createCustomControl({ anchor, offset, render })` 只接收这三样，别的键连构造期
@@ -711,7 +711,7 @@ export function createJsapiV4ControlDriver(
     },
 
     /**
-     * `removeCopyright` 在**实例**上是否已就绪（c 复核）。
+     * `removeCopyright` 在**实例**上是否已就绪（#165c 复核）。
      *
      * 为什么这条查询值得单列一个方法：`removeCopyright` 属于官方控件成员面里**后补**的那一批
      * ——loader 判就绪（`__bmapJSApiOnLoad_N` callback）时它还不存在，约 150ms 后才挂上原型

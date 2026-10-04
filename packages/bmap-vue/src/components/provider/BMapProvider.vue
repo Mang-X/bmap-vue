@@ -49,7 +49,7 @@ const appDefaultDefinition = inject(defaultClientDefinitionKey, undefined);
 
 const ownDefinition = computed<CreateBMapClientOptions | undefined>(() => {
   // 显式 definition 直接透传；`provider` prop 与它等价，只是更方便
-  // （两者都不再经任何「宽松形状归一」，见  的迁移说明）。
+  // （两者都不再经任何「宽松形状归一」，见 #26 的迁移说明）。
   if (props.definition) return props.definition;
   if (props.provider) {
     return { provider: props.provider, loadOptions: props.loadOptions ?? {} };

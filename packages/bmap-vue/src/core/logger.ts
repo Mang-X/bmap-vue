@@ -3,7 +3,7 @@
  *
  * 日志中不得输出完整 AK。最多输出 hash、后四位或 provider ID。
  *
- * 之后这里有**两层**防护，职责不同，不要合并
+ * #163 之后这里有**两层**防护，职责不同，不要合并：
  *
  * 1. `redactAk` —— **纯函数**，供 loader / ui-kit 等**已知具体 AK 值**的调用边界使用
  *    （`redactAk(input, ak)`）。它的公开契约被 loader 三处与既有单测钉住，本票不动。
@@ -11,7 +11,7 @@
  *    它不认识「本次操作的 AK 是多少」，因此走**形状**脱敏：`ak=` 参数、userinfo，以及
  *    凭据类**键名**。这是**全部** context 字符串无条件过的，不是按键名挑着过。
  *
- * 为什么没有任何「本次操作已知 AK」的通道： 逐个核过全库 `logger.*` 调用点
+ * 为什么没有任何「本次操作已知 AK」的通道：#163 逐个核过全库 `logger.*` 调用点，
  * **没有一个**传 `ak`（`setAkForLogger` 同样零消费者，一并删除）。留一条没人走的通道
  * 就是 AGENTS.md 点名的「没有消费者…一律删除」。需要**精确**脱敏的边界（loader 三处、
  * `ui-kit/routePlan`）本就知道自己的 AK 值，直接调 `redactAk(input, ak)`。
@@ -51,11 +51,11 @@ const AK_PARAM_PATTERN = /ak=[A-Za-z0-9]{16,}/i;
  * `LayerDriver:***@baidumap/…`，诊断信息（包名、版本）被日志自己毁掉。userinfo 的定义
  * 就是「`//` 之后的 authority 段里、`@` 之前的整段」，带上 `//` 才是它的形状。
  *
- * ⚠️ 遮盖**整段**而不是只遮 password 位（ 复审 P1）。凭据放在 username 位是常见形状
+ * ⚠️ 遮盖**整段**而不是只遮 password 位（#163 复审 P1）。凭据放在 username 位是常见形状
  * ——`https://<token>:x@host` 与 `https://<token>@host` 都会把完整 token 带出去，只遮
  * `user:***@` 盖不住前者、后者因缺冒号压根不匹配。
  *
- * ⚠️ authority 在 `/` **以及 `?` / `#`** 处结束（ 复审 P2）。只把 `/` 当终止符时
+ * ⚠️ authority 在 `/` **以及 `?` / `#`** 处结束（#163 复审 P2）。只把 `/` 当终止符时，
  * `https://api.example.com?email=user@example.org` 会被**从 host 一直吞到 `@`**——变成
  * `https://***@example.org`，把正常的 query 判成凭据；同样的 URL 出现在 `Error.stack`
  * 里还会被 `isSensitiveText` 判成「含凭据」而把**整个 stack** 省略掉。
@@ -104,7 +104,7 @@ function isSensitiveText(text: string): boolean {
 
 /** 从 `BMapError` / `Error` 身上只取定位必需的字段；`cause` / stack 默认不输出。 */
 function projectError(error: Error): Record<string, unknown> {
-  // ⚠️ `name` 也要过 `logSafeText`（ 复审 P1）。`name` 看着是「一个类名」，但自定义 /
+  // ⚠️ `name` 也要过 `logSafeText`（#163 复审 P1）。`name` 看着是「一个类名」，但自定义 /
   // SDK 的 Error 完全可能把凭据塞进去；同一个函数里 `message` 清洗而 `name` 不清洗，
   // 恰好是最容易被漏掉、也最容易被自查误认为「已经清过了」的那种不一致。
   const projected: Record<string, unknown> = {
@@ -128,7 +128,7 @@ function projectError(error: Error): Record<string, unknown> {
     const value = located[key];
     if (typeof value === "string" && value) projected[key] = logSafeText(value);
   }
-  // `BMapErrorOptions.mapId` 是 `symbol | string`（ 复审 P2）：只留 `string` 分支会让
+  // `BMapErrorOptions.mapId` 是 `symbol | string`（#163 复审 P2）：只留 `string` 分支会让
   // symbol mapId 在投影后**整个消失**，而它正是「哪张图」的定位信息——按票面「保留必要
   // 定位信息」不该丢。symbol 一律走 `String(sym)`（读 `description` 即可，不触发别的副作用）。
   if (typeof located.mapId === "string" && located.mapId) {
@@ -213,7 +213,7 @@ function isAkFieldName(key: string): boolean {
 /**
  * 单个 context 值的投影。
  *
- * 刻意**不**写通用深拷贝 / 递归脱敏器（ 目标 1.5）
+ * 刻意**不**写通用深拷贝 / 递归脱敏器（#163 目标 1.5）：
  *   - 未知嵌套对象 ⇒ `OMITTED_OBJECT`，不展开（展开了就得遍历，而遍历大数组 / 带 getter
  *     的对象既慢又可能触发调用方副作用）；
  *   - 数组 ⇒ 只留 `长度`，不逐项；
@@ -226,7 +226,7 @@ function isAkFieldName(key: string): boolean {
 function projectValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "string") {
-    // ⚠️ 字符串**必须**过 `logSafeText`，不能只截断（ 评审抓到的漏网）
+    // ⚠️ 字符串**必须**过 `logSafeText`，不能只截断（#163 评审抓到的漏网）：
     // `detail` / `note` / `href` 这类键名不带凭据字样，但值完全可能就是一整条带 `ak=` 的
     // 入口 URL。`emit` 只对 `message` 调 `redactAk`，context 的字符串曾只被截断就原样
     // 输出——而一条典型入口 URL 只有 77 字符，截断根本不会触发，AK 原样泄漏。
@@ -248,7 +248,7 @@ function projectValue(value: unknown): unknown {
  *
  * 投影失败时返回 `undefined` —— 宁可这次没有 context 参数，**也不能退回原样输出**。
  *
- * ⚠️ 这里**没有**「URL / 加载配置键名」拒识清单（`url` / `options` / `params` …）： 评审
+ * ⚠️ 这里**没有**「URL / 加载配置键名」拒识清单（`url` / `options` / `params` …）：#163 评审
  * 逐个核过，全库 `logger.*` 调用点**没有一个**传这些键，凭空列出就是 AGENTS.md 点名的
  * 「没有消费者…一律删除，不留以后可能有用的扩展面」。凭据防护由两道**与键名无关**的机制
  * 承担，且两道都真的作用在**值**上：① 凭据类**键名**（`isAkFieldName`，有调用点会命中）；
@@ -316,7 +316,7 @@ export const logger: Logger = {
 /**
  * 是否「非生产」环境。
  *
- * **判定必须留在消费方的构建 / 运行阶段，不能在库的发布构建里定死**（ 评审第二轮 P2）
+ * **判定必须留在消费方的构建 / 运行阶段，不能在库的发布构建里定死**（#27 评审第二轮 P2）：
  * 库发布的就是 `dist/*.mjs` / `dist/*.global.js`，如果在 publish build 阶段把开发标记替换成
  * `false`，npm 消费方即使在自己的 dev server 里 import 这个包，拿到的也是已经 DCE 掉的产物，
  * 告警永远不会出现。因此这里保留 `process.env.NODE_ENV` 这个**可被折叠的标记**：
@@ -346,7 +346,7 @@ export function devWarn(message: string, context?: Record<string, unknown>): voi
 
 /**
  * 是否「非生产」环境 —— `devWarn` 的**同一个**判定，供调用方决定**要不要为开发期提示付出
- * runtime**（ 复审十轮 P1）。
+ * runtime**（#137 复审十轮 P1）。
  *
  * 存在的理由：`devWarn` 自己在 production 早退，但这只省掉了**输出**。若某个 watcher 的**唯一**
  * 用途就是驱动 `devWarn`，它在 production 仍然会注册并常驻（`useControllableState` 的
@@ -358,7 +358,7 @@ export function devWarn(message: string, context?: Record<string, unknown>): voi
  * `declare const process` 的注释：判定留给消费方折叠，ESM 档保留可折叠标记，IIFE 档由
  * `vite.config.global.ts` define。
  *
- * ⚠️ **`typeof process` 这层保护不能省**（ 复审十轮 P0）。`process.env?.NODE_ENV` 的
+ * ⚠️ **`typeof process` 这层保护不能省**（#137 复审十轮 P0）。`process.env?.NODE_ENV` 的
  * optional chaining 只保护 `env`，**不保护裸标识符 `process`**：浏览器里没有 `process` 时，
  * 读 `process.env` 之前就已经抛 `ReferenceError`。`devWarn` 里那个同类写法之所以一直没炸，
  * 是因为它只在**真的告警时**才被调用；而 `isDev()` 是 `useControllableState` **构造期**就调用

@@ -16,7 +16,7 @@ import { stableKeyOf } from "../utils/stableKey";
  * 1. **逐键值快照**（`optionSnapshot`）：diff 基线必须是**值**而不是 `options()` 返回的对象。
  *    `offset` / `size` / `mapTypes` 的值是父级传入的**同一个引用**，把对象当基线会让父级的原地
  *    修改（`offset.x = 21`）把基线一起改掉——watch 源能感知，diff 两边序列化却相同 ⇒ 判成
- * 「没变化」⇒ 更新被静默吃掉（ 评审第 2 轮 P1）。快照在建立的那一刻把值固定下来。
+ *    「没变化」⇒ 更新被静默吃掉（#95 评审第 2 轮 P1）。快照在建立的那一刻把值固定下来。
  * 2. **「键缺席」等价于「键存在但值为 `undefined`」**：两者在 Driver 侧都被跳过，不该算变化。
  * 3. **快照 vs 当前值**的比较口径与 watch 源一致（同一套 `stableKeyOf`），因此不会出现
  *    「watcher 说变了、diff 说没变」的分歧。
@@ -34,7 +34,7 @@ import { stableKeyOf } from "../utils/stableKey";
  * 一份控件选项 → 变化键。
  *
  * 键里**刻意包含 `anchor` / `offset`**：它们也是「运行时可变」的选项，必须同一份 diff 覆盖，
- * 否则 anchor 变化会被漏掉（这正是  要修的「位置不动态更新」）。
+ * 否则 anchor 变化会被漏掉（这正是 issue #41 要修的「位置不动态更新」）。
  */
 export function optionKey(options: Record<string, unknown>): string {
   return stableKeyOf(options)
@@ -46,7 +46,7 @@ export function optionKey(options: Record<string, unknown>): string {
  * 为什么 diff 基线必须是快照，而不是 `options()` 返回的那个对象：`offset` / `size` / `mapTypes`
  * 这些键的值是**父级传入的同一个引用**。父级原地改字段（`offset.x = 21`）时，watch 源能感知
  * （`optionKey` 会递归跟踪到 `x` / `y`），但拿「持有同一引用的基线」去做比较，两边序列化出来
- * 完全一样 ⇒ 判定成「没变化」⇒ 更新被**静默吃掉**（ 评审第 2 轮 P1）。
+ * 完全一样 ⇒ 判定成「没变化」⇒ 更新被**静默吃掉**（#95 评审第 2 轮 P1）。
  *
  * 把值序列化在**基线建立的那一刻**固定下来，就与后续的原地修改彻底解耦；同时它与 watch 源
  * 共用同一套取值口径（都是 `optionKey`），因此不会出现「watcher 说变了、diff 说没变」的分歧。

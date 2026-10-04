@@ -59,7 +59,7 @@ let registered = false;
  * 卸载时必须按它（而不是当前 `props.anchor`）去退出共享组：`anchor` 是构造期项（变化即重建，
  * 见 Driver 里 `copyright.anchor` 的分类），因此卸载那一刻 `props.anchor` 已经是**新**值——
  * 拿它去删桶会删掉目标 anchor 上**别人的**缓存项，同一个位置上随后就会出现两个控件
- * （ 评审 P1 的复现）。
+ * （#95 评审 P1 的复现）。
  */
 let createdAnchor: string | null = null;
 
@@ -104,7 +104,7 @@ const spec: ControlSpec<CopyrightControlProps> = {
     //
     // 两条路径都必须走完「退出共享组 + 摘控件」，所以这两件事**不**放进延后闭包里——
     // 控件是**按 (Client, anchor) 共享**的：若窗口内把它留在图上，后续同 anchor 的组件会
-    // 共用一个已经残留的实例，而它的缓存条目也没人淘汰（ 评审 P1 的第一种症状）。
+    // 共用一个已经残留的实例，而它的缓存条目也没人淘汰（#95 评审 P1 的第一种症状）。
     // 真正需要延后的只有**版权项本身**那一条 SDK 记录。
     deferCopyrightRemoval(context, resource, id);
     registered = false;
@@ -173,7 +173,7 @@ onUpdated(() => {
  *
  * ## 为什么需要延后，而不是「调用失败就跳过」
  *
- * 审计的结论是「`removeCopyright` 运行时不存在，卸载必抛 ⇒ 控件永远不摘、缓存永不淘汰」。
+ * #165 审计的结论是「`removeCopyright` 运行时不存在，卸载必抛 ⇒ 控件永远不摘、缓存永不淘汰」。
  * 复核（`scripts/probe-165c-surface.mts`，live AK）否掉了「不存在」这个前提：稳定态
  * `removeCopyright` **在位且调得动**。但复核取到一条**真的**，而且形状几乎一样：
  *

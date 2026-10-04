@@ -14,7 +14,7 @@
  * 初始化（含回调安装）具备异常安全性：同步异常统一转为 `BMapError` 进入 `fail()`，
  * 不会把任务留在 `loading` 状态。
  *
- * ## F-2 取证与保证边界（ / 2026-09-24）
+ * ## F-2 取证与保证边界（#128 / 2026-09-24）
  *
  * 下面的 `callbackRegistry` / 全局名占用 / foreign 捕获服务的是**显式高级路径**
  * （`customScriptV4Provider` 的 `jsonp` 分支），**不进 Stable 承诺**。
@@ -33,7 +33,7 @@
  *   `requireJsapiV4Global` / `assertReady` 同口径），见读数 `control.readyAtCall`；
  * - 该行为属于**官方实现，官方可改**——可回归 gate 是
  *   `tests/behavior/probe-jsonp-callback-verdicts.test.ts` 的 COMPLETE ↔ live fixture
- * 一致性 + 上述单测（OWNED 侧）。 冻结前这两者必须同时在场。
+ *   一致性 + 上述单测（OWNED 侧）。#44 冻结前这两者必须同时在场。
  */
 import { BMapError } from "../errors/BMapError";
 import { redactAk } from "../logger";

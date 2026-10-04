@@ -1,5 +1,5 @@
 /**
- * Rectangle 的 `OverlaySpec` 声明（M5-VECTORS / ：v4 新增的矩形覆盖物）
+ * Rectangle 的 `OverlaySpec` 声明（M5-VECTORS / issue #31：v4 新增的矩形覆盖物）
  *
  * ## 每个公开属性的更新策略
  *
@@ -41,7 +41,7 @@ export const RECTANGLE_FIELDS: OverlayFieldMap<RectangleProps> = {
   ...PATH_TOGGLE_FIELDS,
   ...PATH_ZINDEX_FIELD,
   ...PATH_CLICKING_FIELD,
-  // ↓  图形族补齐：`RectangleOptions` 还有三项此前没有出口。
+  // ↓ issue #165 图形族补齐：`RectangleOptions` 还有三项此前没有出口。
   // ⚠️ **刻意不加** `strokeLineCap` / `strokeLineJoin`——官方 `RectangleOptions` 里**没有**这两项
   // （只有 `PolylineOptions` / `PolygonOptions` 有）。
   ...PATH_COORD_TYPE_FIELD,
@@ -56,7 +56,7 @@ export const RECTANGLE_DESCRIPTOR_KEYS = {
 } as const;
 
 /**
- * 构造期选项的袋（ 图形族补齐）。
+ * 构造期选项的袋（issue #165 图形族补齐）。
  *
  * `linkRight` 的官方 `@default` 是 `false`，与 Vue 的 `Boolean` 未给值**值上一致**，
  * 但仍走条件展开：让「没给」只有**一个**表示（`undefined`），
@@ -88,10 +88,10 @@ export function createRectangleSpec(): OverlaySpec<RectangleProps, OverlayHandle
     descriptorKeys: RECTANGLE_DESCRIPTOR_KEYS,
     create: (context, p) => context.client.driver.overlays.createRectangle(p.bounds, ctorOptions(p)),
     /**
-     * 命令面（ / TASK 2g）：官方声明的**读回**。
+     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
      *
      * 写这一侧（`setBounds` / 描边填充 setter / `setZIndex`）已由 `bounds` / 样式 / `zIndex`
-     * 这些**受控 prop** 覆盖，-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
      * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
      *
      * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。

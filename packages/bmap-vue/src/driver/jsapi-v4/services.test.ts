@@ -65,7 +65,7 @@ function buildDriver(unsupported: UnsupportedBehavior = "throw"): JsapiV4Service
  * 联想输入框：真实 4.0 要求它挂在文档上，本库只负责把 SDK 的回包转给调用方。
  *
  * 有没有 `readOnly` 已经无关紧要——程序化检索（原 `suggest()`）连同它的「回调通道独占」判定
- * 一起按  删除了，本库不再猜任何回包属于哪一次请求。
+ * 一起按 #104 删除了，本库不再猜任何回包属于哪一次请求。
  */
 function input(): HTMLInputElement {
   const el = document.createElement("input");
@@ -252,7 +252,7 @@ describe("v4 Service Facet：Geocoder（正/逆地址解析）", () => {
       poiCount: 2,
     });
     // `addressComponents` 与 `surroundingPois` 是官方 `GeocoderResult` 声明的字段：
-    // 之前它们被静默丢弃（只留一个 poiCount），这里逐项钉住。
+    // #38 之前它们被静默丢弃（只留一个 poiCount），这里逐项钉住。
     expect(address.addressComponents).toEqual({
       province: null,
       city: null,
@@ -1057,7 +1057,7 @@ describe("v4 Service Facet：LocalSearch（M7-SERVICE-CORE / #38）", () => {
 
 
 /**
- * 外部评审（PR ）复现：LocalSearch 的归属与释放
+ * 外部评审（PR #89）复现：LocalSearch 的归属与释放
  *
  * 四条都是评审给出的**确定性反例**，先在此复现（红），再改实现；用例留在仓库里当回归。
  * 共同点：归属不能建立在「跨请求按发出顺序回包」这个官方**没有承诺**的前提上。

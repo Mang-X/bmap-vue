@@ -115,7 +115,7 @@ export function resolveMapEventSource(explicit?: MapEventSourceInput): MapEventS
  *
  * 返回类型就是 `MapEventSource` 声明的那个窄面，**不做任何断言** —— 上一版在这里把
  * `EventSourceClient` 硬转成完整 `BMapClient`，而 `client` 是调用方给的，那等于用类型
- * 断言掩盖了「它可能没有 `driver.map`」这件事（ 评审硬伤）。声明与取回现在
+ * 断言掩盖了「它可能没有 `driver.map`」这件事（issue #160 评审硬伤）。声明与取回现在
  * 是同一份契约：能力不够就在 `useMapStatus` 里显式失败，而不是在这里假装有。
  */
 export function readEventSource(source: MapEventSource): {

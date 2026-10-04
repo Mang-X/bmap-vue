@@ -1,5 +1,5 @@
 /**
- * 官方**已弃用**的图层类的开发期告知
+ * 官方**已弃用**的图层类的开发期告知（#165「适配被弃用的图层类」）
  *
  * 官方把 `BMap.FillLayer` / `BMap.LineLayer` / `BMap.PointIconLayer` /
  * `BMap.PointShapeLayer` 四个类标了 `@deprecated`，本库**保留**了其中三个组件的封装

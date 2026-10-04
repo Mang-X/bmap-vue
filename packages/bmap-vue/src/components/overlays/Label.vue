@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Label —— 文本标注（M5-VECTORS /  迁移到 OverlaySpec）
+ * Label —— 文本标注（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。创建 / 挂载 / 就地更新 / 重建 / 卸载、
  * 实例 child scope、Registry 记账、Target provide、SDK 事件绑定全部由 `useOverlaySpec`
@@ -12,7 +12,7 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useOverlaySpec } from "../../core/composables/useOverlaySpec";
-// 事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
 import type { LabelEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { LabelProps, LabelStyle } from "../../types/components";
 import { createLabelSpec } from "./labelSpec";
@@ -23,7 +23,7 @@ const props = withDefaults(defineProps<LabelProps>(), {
   offset: () => ({ x: 0, y: 0 }),
   enableMassClear: true,
   visible: true,
-  // 第三批补的 `anchor` / `width` 都不在 `withDefaults` 里补值，两条理由不同
+  // issue #165 第三批补的 `anchor` / `width` 都不在 `withDefaults` 里补值，两条理由不同：
   //
   // - `width`（`number`，官方 `@default 0` = 按内容自适应）：「未给」与「显式 0」在 SDK 侧
   //   **等价**，补 `0` 只会让「用户没表态」与「用户要求自适应」在构造 options 里分不开。

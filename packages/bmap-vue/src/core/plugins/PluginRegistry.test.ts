@@ -91,7 +91,7 @@ describe("PluginRegistry：注册与状态", () => {
     expect((rejection as BMapError).plugin).toBe("Nope");
     // 未注册的名字**不会**留下记录：`getStatus` / `inspect` 都是 `undefined`（不是 `'error'`）。
     // 这一点必须如实写在文档里 —— 「名字不认识」与「名字认得但加载失败」是两个不同的可观察结果
-    // （评审  文档项）。
+    // （评审 #88 文档项）。
     expect(plugins.getStatus("Nope"), "没有记录就没有状态，不是 error").toBeUndefined();
     expect(plugins.inspect("Nope")).toBeUndefined();
     expect(plugins.getError("Nope")).toBeUndefined();
@@ -142,7 +142,7 @@ describe("PluginRegistry：require / optional 与失败", () => {
     plugins.register({ name: "Opt", required: false, load });
 
     // `null` 而不是 `undefined`：`undefined` 是「void 插件」的合法成功返回值，
-    // 用它表示失败会让「只注入副作用、不产出资源的插件」被误判（评审  P1-2）。
+    // 用它表示失败会让「只注入副作用、不产出资源的插件」被误判（评审 #85 P1-2）。
     await expect(plugins.whenPlugin("Opt")).resolves.toBeNull();
     expect(load, "optional 失败不得重复进入 load()").toHaveBeenCalledTimes(1);
     expect(plugins.getStatus("Opt")).toBe("error");
@@ -152,7 +152,7 @@ describe("PluginRegistry：require / optional 与失败", () => {
   it("void 插件（load resolve undefined）是**成功**：resolve undefined、状态 ready", async () => {
     // 「只注入副作用、不产出资源」的合法形态。它与 optional 失败的差别只有一个：
     // 失败 resolve **null**。把两者混成同一个值，调用方就无法区分「装上了但没有资源」与
-    // 「没装上」（评审  P1-2）。
+    // 「没装上」（评审 #85 P1-2）。
     const { plugins } = registry();
     plugins.register({ name: "Void", required: false, load: async () => undefined });
 
@@ -565,7 +565,7 @@ describe("PluginRegistry：setup 的 disposer 与 map dispose 的顺序", () => 
 });
 
 /**
- * dispose 之后**晚到的结算**不得复活记录（评审  P1-1）。
+ * dispose 之后**晚到的结算**不得复活记录（评审 #88 P1-1）。
  *
  * `dispose()` 只把 record 标成 `disposed`，但 `loadPlugin()` 里早先挂上的 `.then/.catch`
  * 仍会无条件回写 `status` / `instance` / `error` 并广播事件。于是「地图卸载了，插件脚本这才

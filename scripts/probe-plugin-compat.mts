@@ -11,7 +11,7 @@
  * `selfInjectedMarkers`）是**从产物里抽出来的观察值**。没有可复现的抽取过程，这些值就只是
  * 「某人曾经读过一遍 minified 源码」，下一个人无法判断它是不是过期了。
  *
- * 起它还核对 **`artifactDigest`（sha256）**：三个 `BMapGLLib/*` URL 指向百度自托管镜像
+ * #43 起它还核对 **`artifactDigest`（sha256）**：三个 `BMapGLLib/*` URL 指向百度自托管镜像、
  * 路径里**没有版本号**，上游换一次内容时 URL 与依赖声明都不会变。摘要不一致即判 `fail` 并提示
  * 「重新核对结论并更新摘要」，把「什么时候变过」变成可发现的。
  *
@@ -228,10 +228,10 @@ async function main(): Promise<number> {
   const { entries, urls, typesVersion, declarationNames } = await loadData()
 
   /**
- * 核对范围声明（评审  P2-1）。本探针**只**做命名空间级存在性核对：抽取产物里的
+ * 核对范围声明（评审 #85 P2-1）。本探针**只**做命名空间级存在性核对：抽取产物里的
  * `BMapGL.<Member>`，再与官方声明索引比对。`Map#getViewport` 这类**实例成员不在其中** ——
  * minified 产物里被调用的方法名无法可靠归到 owner 类型上。这条边界必须印在输出里，
- * 否则读者会以为「实例成员也被自动校验了」（owner/member 级校验属 ）。
+ * 否则读者会以为「实例成员也被自动校验了」（owner/member 级校验属 #43）。
  */
 const CHECK_SCOPE =
   "namespace-level members only（BMapGL.<Member> 的存在性核对）；" +

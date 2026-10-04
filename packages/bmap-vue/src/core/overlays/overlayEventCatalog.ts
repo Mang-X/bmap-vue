@@ -34,7 +34,7 @@
  * | `custom-overlay` | `CustomOverlayEventMap`（3 个） | `overlay/CustomOverlay.d.ts` |
  * | `context-menu` | `ContextMenuEventMap`（2 个） | `context-menu/ContextMenu.d.ts` |
  *
- * 最后两行是  补上的：此前本表把它们登记成「上游没有事件表」，而那是**只读了一个文件**
+ * 最后两行是 issue #33 补上的：此前本表把它们登记成「上游没有事件表」，而那是**只读了一个文件**
  * 得到的结论——两张表都在，只是不在 `OverlayEvent.d.ts` 里。事件名照旧由
  * `tests/behavior/overlay-event-matrix.test.ts` 对着这三个文件做**双向**比对
  * （表里多一个、少一个、或某张表换了文件都红），因此「事件命名和 payload 由统一 Catalog 管理」
@@ -287,7 +287,7 @@ export const OVERLAY_EVENT_MATRIX = {
     upstream: "GroundOverlayEventMap",
     events: GROUND_OVERLAY_EVENTS,
   }),
-  // ---- ：GroundPoint 继承 GroundOverlay，因此**沿用同一张事件表** ----
+  // ---- issue #178：GroundPoint 继承 GroundOverlay，因此**沿用同一张事件表** ----
   // 官方 `overlay/GroundPoint.d.ts:5` 是 `class GroundPoint extends GroundOverlay`，
   // 而 `GroundOverlay.addEventListener<K extends keyof GroundOverlayEventMap>`（`GroundOverlay.d.ts:122`）
   // 是它继承到的**唯一**事件入口——SDK **没有**为 GroundPoint 单独声明 `GroundPointEventMap`

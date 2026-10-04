@@ -1,12 +1,12 @@
 /**
- * `markers` 聚合引擎（M6-POINT-CLUSTER / ；由  的 `MarkerCluster` 平移而来）
+ * `markers` 聚合引擎（M6-POINT-CLUSTER / issue #35；由 #34 的 `MarkerCluster` 平移而来）
  *
  * 先用 `gridCluster()` 做像素网格聚合，再用 `DataLayerManager` 把「簇 / 单点」落地成 Marker
  * （keyed diff + RAF 合帧 + 最新项账本）。不为每个点建 Vue 组件，也不为每个点建 watcher。
  *
  * ## 为什么它还在（而不是「原生可用就删掉」）
  *
- * 的范围纠正要求「fallback 只由真实缺口触发」，而实测（`scripts/probe-native-point-cluster.mts`）
+ * issue #35 的范围纠正要求「fallback 只由真实缺口触发」，而实测（`scripts/probe-native-point-cluster.mts`）
  * 证明原生 `ClusterLayer` **可用** ⇒ 自动降级不成立，原生是默认路径。
  *
  * 这条引擎保留下来是因为它**多给一样东西**：`cluster-click` 能带回**簇内业务项**
@@ -14,7 +14,7 @@
  * 官方没有公开「簇里有哪几个要素」的读回入口。因此它是一个**显式选择**（`engine: "markers"`），
  * 表达的是「我要业务项，接受每簇一个 Marker 的代价」，不是「原生坏了就用它兜着」。
  *
- * ## 两处与  一脉相承的判定
+ * ## 两处与 #34 一脉相承的判定
  *
  * 1. **坏数据在聚合之前就过滤**：非法坐标进了聚合会把**整桶**的平均值污染成 `NaN`，
  *    于是一个坏点会让同桶里的好点一起消失。过滤规则与其它数据组件共用 `core/data/itemScan.ts`；
@@ -233,7 +233,7 @@ export function createMarkerClusterEngine<Item>(
         // - 不能：宣称「旧引擎恢复完整」。未知的那些是否在图上无从判断，因此如实上报数量。
         //
         // 也不做「再摘一次」的收敛：覆盖物的重复 `removeOverlay` 安全性本库**没有 live 取证**
-        // （图层那边有  的实测，见 ADR 决策 12b）。无证据就收敛 = 猜，所以这里停在上报 `unknown`。
+        // （图层那边有 #98 的实测，见 ADR 决策 12b）。无证据就收敛 = 猜，所以这里停在上报 `unknown`。
         // 从**持久状态**读，而不是临时把 `size` 叫成 unknown：`clear()` 失败的那些已经在
         // `DataLayerManager.unknownKeys` 里留下记录，之后不会再被当成正常资源写。
         const unknown = active.unknownSize;

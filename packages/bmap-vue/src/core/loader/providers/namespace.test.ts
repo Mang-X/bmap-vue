@@ -123,7 +123,7 @@ describe("版本来源", () => {
   });
 
   it("真实 4.0 全局（无 VERSION、`version` 是构建标记 gl）按 declared 处理，不判失败", () => {
-    // 的实测结论：真实加载 4.0 后
+    // #70 的实测结论（docs/zh-CN/contributing/official-packages.md）：真实加载 4.0 后
     // `window.BMap` **没有** `VERSION` 键，而 `BMap.version === "gl"` —— 那是构建标记，
     // 不是版本号。若把它当版本号，宿主预加载 / 同页复用这类场景会被整条判成
     // 「不是 JSAPI 4.0」而失败（`/^4(\.|$)/` 判否）。

@@ -22,7 +22,7 @@
  *
  * 四个官方事件（`click` / `dblclick` / `rightclick` / `mousemove`）在实例创建时一次性订阅，不按
  * 「父级有没有绑 handler」做条件订阅——Vue 运行时不把 emit listener 放进 `props` / `attrs`，也没有
- * 「监听器变了」的响应式信号（ 实测），条件订阅必然漏事件。未绑定 handler 的由 `emit` 丢弃
+ * 「监听器变了」的响应式信号（#28 实测），条件订阅必然漏事件。未绑定 handler 的由 `emit` 丢弃，
  * 成本是每个实例 4 个监听器。
  *
  * 本文件是 `.ts`（不是 SFC）：它是给四个 SFC 复用的**装配函数**，本身不产生组件。
@@ -185,7 +185,7 @@ export function useVisualLayer<Props extends VisualLayerPropsLike>(
       if (p.pickHeight !== undefined) bag.pickHeight = p.pickHeight;
       if (p.autoSelect !== undefined) bag.autoSelect = p.autoSelect;
       if (p.selectedColor !== undefined) bag.selectedColor = p.selectedColor;
-      // / TASK 2：`selectedColor` 此前是**半接线**的——官方把「哪一条被选中」
+      // #165 Class 3 / TASK 2：`selectedColor` 此前是**半接线**的——官方把「哪一条被选中」
       // 交给 `selectedIndex`、把「选中长什么样」交给 `selectedColor`，此前只暴露了后者。
       // 两者都是构造选项（官方只有整袋 `setBaseOptions`）⇒ 进选项袋，因此自动参与重建指纹。
       if (p.selectedIndex !== undefined) bag.selectedIndex = p.selectedIndex;

@@ -2,7 +2,7 @@
 /// <reference path="./augmentations/bmap-4.0.4-gaps.d.ts" />
 
 /**
- * JSAPI 4.0 官方类型接入边界（M3A.0 / ；边界治理 ）
+ * JSAPI 4.0 官方类型接入边界（M3A.0 / issue #14；边界治理 issue #15）
  *
  * 约定：
  * 1. 本仓库只通过 `v=4.0` 加载器得到全局 `BMap` 命名空间，不具名导入

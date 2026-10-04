@@ -49,7 +49,7 @@
  *   `removeLayer` 是安全的——该前提已由 #98 的 live 探针在三个家族上实测成立，见 ADR 决策 12b）；
  * - **永久销毁只有两步**：解绑业务监听（`LayerRegistry.dispose()` 先做）→ `removeLayer`。这与官方
  *   reference 的资源清理清单一致（「解绑事件 → `map.removeLayer(layer)`」）；**不**额外清数据——
- * 四类专页图层没有 `clearData` 入口（ 评审 P1），而扩展 API 上清一次既无用又多一次可失败调用。
+ *   四类专页图层没有 `clearData` 入口（#106 评审 P1），而扩展 API 上清一次既无用又多一次可失败调用。
  *
  * ## 为什么不吃 `props` 全量、而要显式 `rebuildKey`
  *
@@ -107,7 +107,7 @@ export interface NativeLayerBindInput {
  *
  * 刻意把「廉价的表态 / 指纹」与「真正的载荷」分开：真正的载荷往往是一次**数据变换**
  * （适配 `Item[]` → `FeatureCollection`、校验、建索引），而前两者是在**每次 props 变化**时都要算的。
- * 合成一步会让「父级重渲染」变成一次 O(n) 变换——这正是  把「输入指纹」与「适配结果」分开的
+ * 合成一步会让「父级重渲染」变成一次 O(n) 变换——这正是 #34 把「输入指纹」与「适配结果」分开的
  * 理由，不能因为抽内核又合回去。
  */
 export interface NativeLayerDataHooks<Props> {
@@ -295,7 +295,7 @@ export function useNativeLayerResource<Props>(
   const attach = (state: InstanceState, context: MapReadyContext): void => {
     if (state.mountState === "attached") return;
     if (state.mountState === "unknown") {
-      // 先把未知推回确定：摘一次（已摘掉时是安全 no-op，前提 P 由  实测）
+      // 先把未知推回确定：摘一次（已摘掉时是安全 no-op，前提 P 由 #98 实测）
       detach(state, context);
     }
     state.mountAttempted = true;
@@ -475,7 +475,7 @@ export function useNativeLayerResource<Props>(
    * `sync()` 的重建判据负责（`dataIsEmpty`），本函数只在创建路径上把空输入记成「这个实例没有数据」。
    *
    * `"absent"`（`undefined`）在更新路径上什么都不做（不表态 ≠ 清空 ≠ 有值），但在**创建路径**上
-   * 必须把**上一代成功送出的那份数据补齐到新实例**（ 评审第二轮 P1）
+   * 必须把**上一代成功送出的那份数据补齐到新实例**（#106 评审第二轮 P1）：
    *
    * - 不补的话，一个与 `data` 无关的构造期项变化（或扩展 API 图层的「隐藏 → 显示」）会换实例，
    *   而新实例什么数据都没有 ⇒ 画面上的数据凭空消失，违背「不表态 = 保持不变」的承诺；
@@ -587,7 +587,7 @@ export function useNativeLayerResource<Props>(
       remove: () => {
         // ⚠️ 顺序：**先摘、后销账**。反过来（先清 `instance`）时，一次抛错的 `removeLayer` 会把记账
         // 清成「已经没有实例了」，之后的重试 / 卸载都会跳过摘除 —— 资源留在图上没人认领。
-        // （这条是  / PR  四轮评审的结论，迁移到共享内核时保留。）
+        // （这条是 #35 / PR #108 四轮评审的结论，迁移到共享内核时保留。）
         // 永久销毁只有「摘图层」这一步（`detach` 以「调用过 add」为门禁，因此重复销毁不会多摘一次）。
         // 清数据**不在这里**：四类专页图层没有 `clearData` 入口，而实例随摘除被丢弃、SDK 侧的数据
         // 也随之成为垃圾（官方 reference 的清理清单同样只有「解绑事件 → removeLayer」）。
@@ -664,7 +664,7 @@ export function useNativeLayerResource<Props>(
    * 每次 props 变化后的收敛：能就地写就地写，构造期项 / 撤回 / 重新可见才换实例。
    *
    * **先判定、后执行**：一旦确定要重建，就不再执行就地写入——否则同一次更新里的一步 SDK 异常
-   * 会把已经确定的收敛挡掉，而 props 已稳定、不会再来一次（ 第三轮评审的结论）。
+   * 会把已经确定的收敛挡掉，而 props 已稳定、不会再来一次（#40 第三轮评审的结论）。
    */
   const sync = (): void => {
     const context = readyCtx;
@@ -707,7 +707,7 @@ export function useNativeLayerResource<Props>(
         return;
       }
       // 「没有数据」（`data: null`）与上面那条同形：这批图层没有公开的清空入口，SDK 侧也无法
-      // unset，所以换一个**没有数据的实例**来表达它——否则旧数据会继续画在图上（ 评审 P1-2）。
+      // unset，所以换一个**没有数据的实例**来表达它——否则旧数据会继续画在图上（#106 评审 P1-2）。
       // 判据只用两个廉价事实：这次输入要不要数据（`dataIsEmpty`）、当前实例有没有数据（`sent`）。
       if (sent !== null && dataIsEmpty()) {
         warn(
@@ -779,7 +779,7 @@ export function useNativeLayerResource<Props>(
    *   `onMounted` 之前拿到实例也不会拿到一个假的成功；
    * - 身份字段没表态（组件没给 `idKey`）⇒ `identity()` 返回 `undefined`，命令面**显式拒绝**。
    *   这条与拾取如实返回 `id: null` 是同一条口径：不让「按 id 定位」悄悄落回 SDK 的默认身份，
-   * 否则同一个图层上会出现两套身份语义（ 评审的建议项）。
+   *   否则同一个图层上会出现两套身份语义（#106 评审的建议项）。
    */
   const featureState = createFeatureStateApi({
     component: hooks.component,

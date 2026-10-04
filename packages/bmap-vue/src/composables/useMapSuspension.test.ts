@@ -107,7 +107,7 @@ describe("useMapSuspension：容器门禁", () => {
     expect(onContainerReady).toHaveBeenCalledTimes(1);
     // 「可用转换」同时意味着「尺寸回来了，去校正一次」：**策略层不做状态判断**，
     // 由目标按自身是否就绪短路（`MapRuntime.requestResize` 要求 status 为 ready），
-    // 因此建图前那一次是 no-op、不会多发命令（ 复审 P1 修掉了「只放行不校正」的漏洞）。
+    // 因此建图前那一次是 no-op、不会多发命令（#29 复审 P1 修掉了「只放行不校正」的漏洞）。
     expect(target.requestResize, "每次可用转换都请求一次校正").toHaveBeenCalledTimes(1);
   });
 

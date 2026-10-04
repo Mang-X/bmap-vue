@@ -29,7 +29,7 @@ export { createBMapClient, jsapiV4DriverFactory } from "./client/createBMapClien
  * 三个工厂在这里是**窄一层的包装**：返回契约收成导出的 `JsapiV4Provider`，选项收成外部
  * **能自己构造**的形状（`registry` / 自研 `ScriptLoader` 只留在内部与测试注入里）。
  * 直接 re-export 内部工厂会把 `SdkRegistry` / `ScriptLoader` 这两个带私有成员的类型带进
- * 公共签名：消费方赋不了值、API report 里也只剩一个名字 ⇒ 假支持。
+ * 公共签名：消费方赋不了值、API report 里也只剩一个名字 ⇒ 假支持（ADR 2026-09-25 决策 5）。
  */
 import {
   baiduJsapiV4Provider as createBaiduJsapiV4Provider,
@@ -120,12 +120,12 @@ export type {
   InitialMapOptions,
   MapView,
   MapDriver,
-  // `MapDriver.getViewport` 的返回类型与 `MapDriver.flyTo` 的选项投影出现在本出口
+  // #165：`MapDriver.getViewport` 的返回类型与 `MapDriver.flyTo` 的选项投影出现在本出口
   // 公开的 `MapDriver` 签名里 ⇒ 必须与它的兄弟类型一起可命名的零容忍
   // 未导出类型要么导出、要么消掉，不留「反正用不上」的欠账）
   Viewport,
   FlyToOptions,
-  // 五条视野命令的官方 `options` 投影（已导出签名里的形状，类别 ①）
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
   ViewCommandOptions,
   SetZoomOptions,
   PanToOptions,
@@ -134,7 +134,7 @@ export type {
   OverlayKind,
   MarkerIconInput,
   MarkerOptions,
-  // `MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
   // 根入口已按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），但本出口的
   // `MarkerOptions` / `LabelOptions` 引用的是**声明处**的名字，消费方从 `./advanced`
   // 拿到这两个 options 却无法为 `label` / `anchor` 标类型 ⇒ `ae-forgotten-export`。
@@ -157,7 +157,7 @@ export type {
 export type { ControlKind, ControlOptions, CopyrightEntry, ControlDriver } from "./driver/types/controls";
 // 控件命令面（issue #168 item 1）：`ControlDriver.locationCommands()` / `cityListCommands()`
 // 是这个出口上 `ControlDriver` 的公开成员，其返回类型因此必须一并导出，
-// 否则就是 `ae-forgotten-export`。
+// 否则就是 `ae-forgotten-export`（ADR 2026-09-25）。
 export type {
   CityListCommandApi,
   LocationAddressComponents,
@@ -176,7 +176,7 @@ export { normalizeMapMouseEvent, toPoint, isPointLike, toPlainPoint, toPlainPoin
  * `JsapiV4Driver`、`normalizeProvider()` 返回 `NormalizedProvider`、
  * `CapabilityRegistry.planOptions()` 返回 `Record<string, ControlOptionStatus>`、
  * `ServiceDriver.createLocalSearch()` 的参数是 `LocalSearchOptions` …），却没有被导出 ——
- * 消费方能拿到值、却没法为它**命名**。判据是「消费方能不能命名它」。
+ * 消费方能拿到值、却没法为它**命名**。判据是「消费方能不能命名它」（ADR 2026-09-25）。
  *
  * 每一组都属于下列之一：
  * - **装配面的正主**（Provider 家族 / Driver / Layer / Service 的 options 与 result）：
@@ -234,7 +234,7 @@ export type {
   NativeLayerKind,
   NativeLayerOperation,
   NativeLayerPick,
-  // 第二刀：`TextLayer` 的命中回包（官方 `TextLayerItem`）。与 `NativeLayerPick` 是
+  // #166 第二刀：`TextLayer` 的命中回包（官方 `TextLayerItem`）。与 `NativeLayerPick` 是
   // **两种**形状（没有 `dataIndex`，多了 `text` / `width` / `height` / 显式 `point`），
   // 因此是单独一个类型而不是前者的分支。
   NativeLayerTextPick,

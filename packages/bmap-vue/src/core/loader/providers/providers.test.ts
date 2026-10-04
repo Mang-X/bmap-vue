@@ -172,7 +172,7 @@ describe("BaiduJsapiV4Provider（默认在线路径，委托官方 Loader）", (
   });
 
   it("宿主已加载的**真实形状** 4.0 全局（无 VERSION、version === 'gl'）不会被误判失败", async () => {
-    // 真实 4.0 的 `BMap.version` 是构建标记 `gl`（ 实测）。把它当版本号会让
+    // 真实 4.0 的 `BMap.version` 是构建标记 `gl`（#70 实测）。把它当版本号会让
     // 「宿主已加载 / 同页复用」这条路径整条失败。
     const host = { ...COMPLETE_NAMESPACE, version: "gl" };
     installGlobal(host);

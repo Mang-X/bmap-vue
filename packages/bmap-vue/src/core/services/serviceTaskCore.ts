@@ -7,7 +7,7 @@
  *
  * 这里把两者拆开：内核**只**拥有共有部分（能力门 / 按 Client 缓存 / 只读状态 / 过期保护 /
  * 投影），实例所有权全部交给 `ServiceInstanceChannel`（`instanceChannel.ts`）。简单通道是
- * **无状态**单例，于是简单路径的闭包里根本没有那些字段——这满足  的验收项，而不只是
+ * **无状态**单例，于是简单路径的闭包里根本没有那些字段——这满足 #139 的验收项，而不只是
  * 「有字段但没人用」。
  *
  * **框架无关**：本文件不 import vue。Vue 侧的 shallow refs 与生命周期绑定在
@@ -186,7 +186,7 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
      *
      * 只判 `activeCall !== null` 会在异步加载场景漏掉它：第二次调用会以为「没人忙」，
      * 于是既不走 `refuse`、又用 `guard.next()` 把**还在等 ready 的那条**作废 ——
-     * 与「上一次还没结算时不能取代它」的公开契约直接冲突（PR  复审 P1）。
+     * 与「上一次还没结算时不能取代它」的公开契约直接冲突（PR #89 复审 P1）。
      */
     const busy = activeController !== null || channel.isBlocked();
     if (busy && mode === "refuse") {

@@ -254,7 +254,7 @@ export function officialMetadataOptions(options: BMapLoadOptions): BMapLoadOptio
  * - 非代理：`{protocol://api.map.baidu.com/}api?v=4.0&ak=...&callback=<自增序号>`；
  * - 代理：`{serviceHost}/api?v=4.0&callback=<自增序号>`（**不带 ak**；末尾 `/` 官方会补）。
  *
- * 除上面这条已由  契约锁验证过的形状外，本库不复制官方的其它 URL 规则：**不写 `callback`**
+ * 除上面这条已由 #70 契约锁验证过的形状外，本库不复制官方的其它 URL 规则：**不写 `callback`**
  * ——回调名是官方每次调用自增的实现细节，不参与配置身份，写进 metadata 只会制造无意义差异。
  * 值里出现的 AK 与 userinfo 由 `createLoadedJsapiV4()` 统一脱敏。
  */

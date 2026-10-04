@@ -195,7 +195,7 @@ describe("useMapStatus：值没变就不产生无意义更新", () => {
     fixture.emit("moveend");
     fixture.emit("moveend");
     // watch 默认 flush: "pre" ⇒ 必须等一次 nextTick 才能断言「没被唤醒」，
-    // 否则这条断言恒真（ 自审抓到的空转）
+    // 否则这条断言恒真（#28 自审抓到的空转）
     await nextTick();
 
     expect(status.center.value, "引用必须保持同一个对象").toBe(before);

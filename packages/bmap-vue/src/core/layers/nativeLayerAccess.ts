@@ -2,7 +2,7 @@
  * 原生数据图层面的**收窄入口**（M6-MARKER-POINTCOLLECTION / issue #34）
  *
  * `nativeLayers` 是 JSAPI 4.0 Driver **独有**的 Facet（`JsapiV4Driver`），不在共享契约
- * `BMapDriver` 上——这是刻意的： 的 ADR 把「共享契约不动」写成硬约束，v4 专有面收在子类型里。
+ * `BMapDriver` 上——这是刻意的：#26 的 ADR 把「共享契约不动」写成硬约束，v4 专有面收在子类型里。
  * 于是消费方不能写 `context.client.driver.nativeLayers`（类型层就没有这个成员），也不能
  * 无条件 `as JsapiV4Driver`（那会把「当前引擎有没有这个面」变成一句无法验证的断言）。
  *

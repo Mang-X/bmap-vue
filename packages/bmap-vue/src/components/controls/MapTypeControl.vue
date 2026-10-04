@@ -32,7 +32,7 @@ export interface MapTypeControlProps {
 /**
  * MapTypeControl —— 地图类型切换控件（官方 `MapTypeControl`）
  *
- * M7-CONTROL-PANORAMA / 。
+ * M7-CONTROL-PANORAMA / issue #41。
  *
  * 三个选项的落地方式刻意分两档，依据是官方 4.0.5 声明的实例方法表：
  * - `showStreetLayer` → `showStreetLayer(isShow)`：**唯一**的字段级 setter，就地更新

@@ -11,7 +11,7 @@
  * | 描边 / 填充 | `options` | 各自的 setter | `PATH_STYLE` + `FILL_STYLE` |
  * | `enableMassClear` / `enableEditing` | `options` | 成对开关 | `PATH_STYLE` |
  * | `visible` | `visibility` | `show`/`hide` | 不是描述符键 |
- * | ↓ ** 补的六个，全部 `recreate`** |||
+ * | ↓ **issue #165 补的六个，全部 `recreate`** |||
  * | `enableClicking` | `recreate` | 构造期选项 | 官方无 `enableClicking()` / `disableClicking()` 成对开关 |
  * | `strokeLineCap` / `strokeLineJoin` | `recreate` | 构造期选项 | ⚠️ **live 读数**：原型链 layer 2 上有同名 setter、调得动，但**调完 `getStrokeStyle()` 不变**且官方无读回 ⇒ 可观察地**不生效** ⇒ 仍是构造期 |
  * | `linkRight` | `recreate` | 构造期选项 | 无 `setLinkRight`；是绘制算法的输入 |
@@ -50,7 +50,7 @@ export const POLYGON_FIELDS: OverlayFieldMap<PolygonProps> = {
   ...PATH_FILL_FIELDS,
   ...PATH_TOGGLE_FIELDS,
   ...PATH_ZINDEX_FIELD,
-  // ↓  图形族补齐：六个官方选项，**全部** `recreate`（官方没有对应 setter）。
+  // ↓ issue #165 图形族补齐：六个官方选项，**全部** `recreate`（官方没有对应 setter）。
   // 逐条依据见 `driver/types/overlays.ts` 的 `PATH_CTOR_*` 四张表。
   ...PATH_CLICKING_FIELD,
   ...PATH_COORD_TYPE_FIELD,
@@ -71,7 +71,7 @@ export const POLYGON_DESCRIPTOR_KEYS = {
 } as const;
 
 /**
- * 构造期选项的袋（ 图形族补齐）。
+ * 构造期选项的袋（issue #165 图形族补齐）。
  *
  * 条件展开的理由与 `polylineSpec.ts` 的同名函数**逐条同形**：官方 `@default` 是 `true` 的
  * `enableClicking` / `linkRight` 若被 Vue 的 `Boolean` 转换补成 `false`，语义与官方**相反**；
@@ -107,10 +107,10 @@ export function createPolygonSpec(): OverlaySpec<PolygonProps, PolygonHandle> {
     watchSources: POLYGON_WATCH_SOURCES,
     create: (context, p) => context.client.driver.overlays.createPolygon(p.points, ctorOptions(p)),
     /**
-     * 命令面（ / TASK 2g）：官方声明的**读回**。
+     * 命令面（#165 Class 3 / TASK 2g）：官方声明的**读回**。
      *
      * 写这一侧（`setPath` / 描边填充 setter / `setZIndex`）已由 `path` / 样式 / `zIndex`
-     * 这些**受控 prop** 覆盖，-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
+     * 这些**受控 prop** 覆盖，#165 §5-C 明确「能改 prop」不算实现同名方法，因此不重复暴露。
      * 读这一侧没有任何 prop 能替代 —— 组件永远不会替调用方读一次。
      *
      * ⚠️ 不镜像成组件状态（官方 getter 给的是**当前值**而不是 SDK 默认值）。

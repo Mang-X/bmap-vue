@@ -167,6 +167,26 @@ describe("#192 注释卫生门禁", () => {
       expect(checkCommentRatio("src/evil.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
     });
 
+    // 评审第二轮驳回的就是这条：只判「成块」不判「主导」，于是文件里放一张
+    // 5 行读数表，后面 100+ 行决策史就全部绕过比例检查。
+    it("表格在前、决策史在后：证据成块但**不主导** ⇒ 仍判红", () => {
+      const lines = [
+        "/**",
+        " * live 读数（真实 AK 跑通）逐 kind 证实：",
+        " * | kind | 入口 | 保持？ |",
+        " * | --- | --- | --- |",
+        " * | `text` | `setOptions` | 是 |",
+        " * | `line` | `setStyleOptions` | 是 |",
+        " * | `point` | `setStyleOptions` | 是 |",
+        " *",
+        ...Array.from({ length: 100 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+        " */",
+        ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
+      ];
+      // 证据 7 行 / 注释 108 行 = 6% ⇒ 不是主体 ⇒ 该红
+      expect(checkCommentRatio("src/tail-heavy.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+
     // 表格分隔行属于表的一部分。漏掉它会把一张表从中间劈成两半，
     // 两半都不够 5 行 ⇒ 真实文件永远豁免不了。
     it("表格分隔行算证据（漏掉它会让整张表失效）", () => {
@@ -181,6 +201,33 @@ describe("#192 注释卫生门禁", () => {
         ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
       ];
       expect(checkCommentRatio("src/table.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
+    });
+  });
+
+  describe("实测更正豁免", () => {
+    const tail = () => [
+      ...Array.from({ length: 100 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+      " */",
+      ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
+    ];
+
+    it("「记成」一词本身不构成更正（那等于给整文件短路开口子）", () => {
+      const lines = ["/**", " * 这里我们记成 A，后来改成 B。", ...tail()];
+      expect(checkCommentRatio("src/a.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+
+    it("有读数表但主体是决策史 ⇒ 仍判红", () => {
+      const lines = [
+        "/**",
+        " * 误读：见下表。",
+        " * | a | b |",
+        " * | --- | --- |",
+        " * | 1 | 2 |",
+        " * | 3 | 4 |",
+        " * 上面只是背景。",
+        ...tail(),
+      ];
+      expect(checkCommentRatio("src/b.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
     });
   });
 

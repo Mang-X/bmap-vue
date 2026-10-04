@@ -31,7 +31,7 @@ export interface NavigationControlProps {
 /**
  * NavigationControl —— 平移缩放控件（官方 `NavigationControl`）
  *
- * M7-CONTROL-PANORAMA / ：`kind: "navigation"` 在  已进 Driver 的能力面，本组件
+ * M7-CONTROL-PANORAMA / issue #41：`kind: "navigation"` 在 #22 已进 Driver 的能力面，本组件
  * 把它开放给使用者。
  *
  * `type` 是**可就地更新**的（官方 `setType`）；`showZoomInfo` / `enableGeolocation` 只有构造期

@@ -18,7 +18,7 @@ export interface OverviewMapControlProps {
 /**
  * OverviewMapControl —— 缩略地图控件 / 鹰眼（官方 `OverviewMapControl`）
  *
- * M7-CONTROL-PANORAMA / 。
+ * M7-CONTROL-PANORAMA / issue #41。
  *
  * `isOpen` 刻意走**重建**：官方只提供 `changeView()` 的**切换**语义（没有幂等 `setOpen`），
  * 就地更新会变成「点两次才回到目标状态」。重建时把 `isOpen` 交给构造期是最确定的表达，
@@ -38,7 +38,7 @@ const props = withDefaults(defineProps<OverviewMapControlProps>(), {
 });
 
 /**
- * 事件面（ / TASK 4：官方 3 个，此前 **0** 个）。
+ * 事件面（issue #165 Class 3 / TASK 4：官方 3 个，此前 **0** 个）。
  *
  * `viewchanged` 是**唯一**能观察这个控件自身开合状态的方式——官方
  * `OverviewMapControl#isOpen(): boolean` 只能**轮询**，而 `isOpen` prop 又是**构造期**的

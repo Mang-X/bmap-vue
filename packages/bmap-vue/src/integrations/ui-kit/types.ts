@@ -1,7 +1,7 @@
 /**
  * `./ui-kit` 子路径的公共类型面（DTO + 结构化 widget 契约）
  *
- * 设计约束（R25-D / ，4）
+ * 设计约束（R25-D / issue #73，依据 ADR 2026-09-13 决策 3、4）：
  *
  * 1. **公共类型必须是纯数据**。事件载荷里的坐标统一归一为 `{ lng, lat }`，不携带
  *    `BMapGL.Point`，否则 `check:public-dts` 会把 `BMap.* / BMapGL` 泄漏判成失败，
@@ -443,7 +443,7 @@ export type UiKitWidgetOptions = Record<string, unknown> & { map: unknown };
  *
  * **索引签名必须保留**：`loadUiKit()` 从 #73 起就是公开的进阶逃生口（「用上游还没被本库封装的
  * 成员时自己构造」），删掉它会让 `uiKit[someWidgetName]` 这类已有写法直接类型报错
- * （PR  评审 P1）。它带来的「差集查不出来」问题不靠收窄公共 API 解决 ——
+ * （PR #82 评审 P1）。它带来的「差集查不出来」问题不靠收窄公共 API 解决 ——
  * 由 `ui-kit-widget-contract.test.ts` 对着上游 `.d.ts` **逐成员**校验我们依赖的这四个具名成员。
  */
 export interface UiKitModule {
@@ -474,7 +474,7 @@ export type UiKitWidgetStatus = "idle" | "loading" | "ready" | "error" | "dispos
  *
  * 约定（四个组件共用）：
  * - `status` 是**取值**而不是 ref：`defineExpose` 会被 Vue 的 `proxyRefs` 解包，
- * runtime 读到的本来就是取值；声明成 ref 会让类型与 runtime 不一致（评审  第 2 项）。
+ *   runtime 读到的本来就是取值；声明成 ref 会让类型与 runtime 不一致（评审 #73 第 2 项）。
  * - 公开动作都是 Promise，语义见各方法注释（构造是异步的，动作**等待就绪**而不是静默 no-op）。
  * ==================================================================== */
 

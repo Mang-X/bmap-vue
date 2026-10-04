@@ -267,7 +267,7 @@ describe("SdkRegistry", () => {
     const c1 = new AbortController();
     let settleUnderlying!: (value: string) => void;
     // 底层任务**不可取消**：signal 被 abort 也不结算，稍后才成功。
-    // 这正是默认在线路径的形态——官方 Loader 没有公开取消接口。
+    // 这正是默认在线路径的形态——官方 Loader 没有公开取消接口（ADR 2026-09-13 决策 5）。
     const uncancellable = vi.fn(() => new Promise<string>((resolve) => (settleUnderlying = resolve)));
 
     const first = registry.load({ fingerprint: CONFIG_A, loader: uncancellable }, c1.signal);

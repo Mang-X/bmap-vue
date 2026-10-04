@@ -79,7 +79,7 @@ export interface JsapiV4Provider {
  * `SdkRegistry` 与自研 `ScriptLoader` 都带私有成员，仓库之外无法构造 —— 留在公共选项里，
  * 消费方既不能赋值，它们的结构也进不了 API report（`ae-forgotten-export` 只留一个名字），
  * 属于假支持。公共面只承诺外部能自己构造的注入点（见 `BaiduJsapiV4ProviderOptions`），
- * 判定与处置。
+ * 判定与处置见 ADR 2026-09-25 决策 5。
  *
  * 注意 `loader` 是**自研 `ScriptLoader`**，只有还走自研 transport 的 CustomScript 用得上；
  * 默认在线路径（官方 Loader）的注入点见 `BaiduJsapiV4ProviderOptions`。

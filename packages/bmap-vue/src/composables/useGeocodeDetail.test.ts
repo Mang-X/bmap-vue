@@ -83,7 +83,7 @@ function stubContext(opts: {
     resources: {} as never,
     events: {} as never,
     scheduler: {} as never,
-    // `MapContext.overlays` 是 `OverlayRegistry`（M5-SPEC-MARKER /  起不再是 `unknown`）；
+    // `MapContext.overlays` 是 `OverlayRegistry`（M5-SPEC-MARKER / #30 起不再是 `unknown`）；
     // 本文件的 Context 全部是 `as never` 桩，这里保持一致（真实的 Runtime 永远给一个注册表）
     overlays: {} as never,
     plugins: null,

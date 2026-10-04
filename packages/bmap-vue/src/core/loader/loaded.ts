@@ -4,7 +4,7 @@
  * M3A1-CLIENT（issue #18）：Client 不再接收裸 SDK `unknown` 作为公共加载结果。
  * Provider 必须返回**结构化**的加载结果：`engine` 判别字段 + `version` + `namespace` + load metadata。
  *
- * （1.0 Freeze）：`LoadedSdk` 这个单成员别名**已删除**—— 删掉旧引擎后它不再表达任何
+ * #44（1.0 Freeze）：`LoadedSdk` 这个单成员别名**已删除**——#26 删掉旧引擎后它不再表达任何
  * 判别意义，而「deprecation alias 不在稳定声明里」是 1.0 的冻结验收项。公共与内部签名统一用
  * `LoadedJsapiV4`（定义在 `./providers/types.ts`，本文件只负责 re-export 与运行时校验）；
  * 这是一次公共类型改名，发布说明见对应的 changeset。

@@ -105,7 +105,7 @@ export interface UseMapSuspensionOptions {
    * 容器**每次**从「不可用」变为「可用」时回调（放行建图）。
    *
    * 不是「只回调一次」：折叠（0×0）后重新展开也要回调，否则「收起期间调用 `retry()`」这类
-   * 请求会永远等不到门禁（ 评审 P2）。调用方负责幂等。
+   * 请求会永远等不到门禁（#29 评审 P2）。调用方负责幂等。
    */
   onContainerReady: () => void;
   /**
@@ -139,7 +139,7 @@ export interface MapSuspensionController {
    * 与 `size` 的分工是「读数的用途」：`size` 是发布给状态插槽 / watcher 的**最近一次**读数；
    * `measureNow()` 是给「最后一刻判定」用的 —— 例如 `MapRuntimeOptions.beforeCreateMap`
    * 里那次「现在能不能 create」的判断。**观察器仍然只是唤醒源**，不需要为了这个再建一套
-   * （ 四轮复审 P1）。
+   * （#29 四轮复审 P1）。
    */
   measureNow(): ElementSize | null;
   /** 页面是否可见（`document.visibilityState !== "hidden"`）。 */

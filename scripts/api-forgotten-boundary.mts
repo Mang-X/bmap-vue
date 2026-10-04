@@ -1,5 +1,5 @@
 /**
- * 未导出类型（`ae-forgotten-export`）身份集合基线的**判定内核**（， 回归修补）
+ * 未导出类型（`ae-forgotten-export`）身份集合基线的**判定内核**（issue #160，#165 回归修补）
  *
  * 单独成文件而不是留在 `check-api.mts` 里，是为了能**被用例直接 import**：`check-api.mts`
  * 顶层就跑 `main()`，用例一旦 import 它就会连带触发整轮 API Extractor 分析。
@@ -11,10 +11,10 @@
  * 集合写回基线** —— 于是 `pnpm generate:api` 成了「把新欠账洗成基线」的那一步：
  * `check:api` 的严格性只在**没跑生成器**时存在，跑一次就失效。
  *
- * 正是这样把三个名字（`MarkerLabelInput` / `OverlayAnchorName` / `ViewportOptions`）
+ * #165 正是这样把三个名字（`MarkerLabelInput` / `OverlayAnchorName` / `ViewportOptions`）
  * 吸收进基线的：门禁当时是红的，处置（升为公共导出）只做了根入口那一半，`generate:api` 却把
  * 剩下的一半红线变成了基线；之后 `check:api` 全绿，欠账再无人提。五份基线因此从 `[]` 变成
- * 3 / 2 / 3 个名字，而  的验收标准是**零容忍**。
+ * 3 / 2 / 3 个名字，而 #160 的验收标准是**零容忍**。
  *
  * 因此新增的名字**必须**先按二选一处置（升为公共导出 / 让引用消失）
  * 让它们从集合里**消失**；生成器只自动写「清理」方向。
@@ -105,7 +105,7 @@ export interface ForgottenRefusal {
  * 对**所有**出口收集 forbidden additions，返回非空就说明整个写盘阶段必须放弃。
  *
  * 纯函数，因此「跨出口事务」这条性质可以被直接断言，而不必真去跑一次会改工作树的
- * `generate:api`（ 评审 P1）：只要这里返回非空，`updateMode` 就还没写过任何文件 ——
+ * `generate:api`（#160 评审 P1）：只要这里返回非空，`updateMode` 就还没写过任何文件 ——
  * 判据发生在**只读**的 preflight 阶段，写盘阶段在它之后才开始。
  *
  * 刻意**不短路**：收集全部出口再一次性报错，而不是遇到第一个就退出。理由有二 ——

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * 的运行时面探针：**控件 / 覆盖物的成员面是「逐步补齐」的**（live AK，headless Chrome）
+ * #165 的运行时面探针：**控件 / 覆盖物的成员面是「逐步补齐」的**（live AK，headless Chrome）
  *
  * ## 为什么需要这个探针
  *
- * 的审计结论是「`CityListControl` 的命令面在运行时整个不存在（`prototype` 只有 3 个成员）
+ * #165 的审计结论是「`CityListControl` 的命令面在运行时整个不存在（`prototype` 只有 3 个成员）、
  * `CopyrightControl#removeCopyright` 不存在」。本探针复核后的结论**不一样**，而且是本脚本
  * 存在的唯一理由：
  *

@@ -18,7 +18,7 @@
  *
  * 「构造期快照」与「运行期读到的值」是两份，因此**挂载后必须收敛一次**：`create` 与 `mount`
  * 之间隔着一个微任务，用户完全可以在那个窗口里改 props；只把构造期的值记成 diff 基线会让
- * 那次改动永远不再被检测到（同  的「快照 + 延迟创建」教训）。
+ * 那次改动永远不再被检测到（同 #27 的「快照 + 延迟创建」教训）。
  */
 import { watch, type ShallowRef } from "vue";
 import type { ControlHandle } from "../../driver/types/handles";
@@ -96,7 +96,7 @@ export function useControlResource<Props extends ControlBaseProps, Expose = Cont
    *   「值写下去了但 SDK 没用」判成「没写过」而反复下发；
    * - 记**快照**而不是 `options()` 返回的对象：后者里的 `offset` / `size` / `mapTypes` 与父级
    *   是同一个引用，父级原地改字段时基线会跟着一起变，diff 于是判成「没变化」而把更新吃掉
-   * （ 评审第 2 轮 P1）。序列化字符串在建立基线的那一刻就与引用解耦。
+   *   （#95 评审第 2 轮 P1）。序列化字符串在建立基线的那一刻就与引用解耦。
    */
   let applied: OptionSnapshot | null = null;
   /** `create` 实际交给 SDK 的那份选项的快照；`mount` 用它当基线，再对当前 props 收敛一次。 */
@@ -158,7 +158,7 @@ export function useControlResource<Props extends ControlBaseProps, Expose = Cont
         dispose() {
           if (released) return;
           released = true;
-          // ：先解绑业务事件（实例 scope 里的 SDK 监听 / watch / timer）
+          // ADR 2026-09-11 §6：先解绑业务事件（实例 scope 里的 SDK 监听 / watch / timer），
           // 再由 Map 移除 SDK 资源。`scope.dispose()` 幂等，`useSdkResource` 随后的
           // 第二次 dispose 是 no-op。
           scope.dispose("control-unmounted");
@@ -236,7 +236,7 @@ export function useControlResource<Props extends ControlBaseProps, Expose = Cont
   /**
    * 选项变化 → 告警 / 重建 / 就地更新。
    *
-   * **三段的顺序本身就是契约**（ 评审第 4 轮 P2），不能合并成一个判据
+   * **三段的顺序本身就是契约**（#95 评审第 4 轮 P2），不能合并成一个判据：
    *
    * 1. `unsupported` 先 warn-once —— 无论这一批里是否还有别的键要重建。它是「本次变化被忽略」
    *    的告知，与「这次重建有没有别的正当理由」无关，被重建吞掉就等于回到了静默丢弃；

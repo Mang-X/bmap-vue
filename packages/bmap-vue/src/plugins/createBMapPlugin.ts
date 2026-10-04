@@ -52,7 +52,7 @@ export { defaultClientDefinitionKey } from "../core/context/client";
 export function createBMapPlugin(options: CreateBMapPluginOptions = {}) {
   // R25-B（issue #71）：默认 Provider 是 `baiduJsapiV4Provider()`——它内部真的调用官方
   // `@baidumap/jsapi-loader`，不再走自研 JSONP transport。legacy `baiduCdnProvider()` 已随
-  // webgl-v1 在  删除，根入口也不再导出它。
+  // webgl-v1 在 #26 删除，根入口也不再导出它。
   const provider = options.provider ?? baiduJsapiV4Provider();
   const defaults: BMapLoadOptions = {
     ak: options.ak,

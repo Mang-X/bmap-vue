@@ -76,7 +76,7 @@ export type DocsBrandRuleId =
   | "retired-migration-nav";
 
 /**
- * 去 `B` 前缀**之前**的组件名。
+ * #135 去 `B` 前缀**之前**的组件名。
  *
  * 来源可复算：`git show cb4a11f8~1:packages/bmap-vue/src/manifest.ts` 的 `name` 集
  * 减去今天 `docs/.vitepress/component-index.json` 的名字集。唯一幸存者是 `BMapProvider`
@@ -86,7 +86,7 @@ export type DocsBrandRuleId =
  * - `BMap` 不在表里 —— 它同时是 JSAPI 4.0 的官方命名空间，收进来会把 `BMap.Map` 全部误伤。
  *   它的 Vue 标签形态由位置规则 `retired-bmap-tag` 单独管。
  * - `BPointShapeLayer` 在表里但不在上面那个差集里 —— 它是 `PointCollection` 曾经**未发布**的
- * 命名（ 之前只存在于一条未发布的 changeset），从未是任何真实发布面，文档里同样要退役。
+ *   命名（#136 之前只存在于一条未发布的 changeset），从未是任何真实发布面，文档里同样要退役。
  *
  * **必须写成显式枚举，不能写 `<B[A-Z]*>` 前缀**：扫描面里 36 处 `<BMap…` 是当前公开类型
  * （`BMapClient` / `BMapServiceStatus` / `BMapGeoResult` …），前缀写法会全部误伤。

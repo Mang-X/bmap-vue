@@ -10,7 +10,7 @@ import {
 } from "./catalog";
 
 /**
- * 单引擎收口后 `engines` 维度已删除（目录描述符不再声明引擎），判定链的**第一顺位**
+ * #126：单引擎收口后 `engines` 维度已删除（目录描述符不再声明引擎），判定链的**第一顺位**
  * 变成「目录是否收录该 id」——未收录的 id 以 `unlisted-capability` 拒绝（唯一可达路径）。
  * 引擎白名单分支与「每条能力必须声明当前引擎」断言一并删除：单引擎下它们恒不产生区分。
  */
@@ -38,7 +38,7 @@ describe("CapabilityRegistry", () => {
   });
 
   /**
-   * 评审 P1：真实 JSAPI 4.0 有一部分 Map 方法挂在**实例**上（`setZoom` / `setCenter` …）
+   * #29 评审 P1：真实 JSAPI 4.0 有一部分 Map 方法挂在**实例**上（`setZoom` / `setCenter` …），
    * 只查「命名空间 + `Map.prototype`」会让 `supports()` 假阴性 —— 而它是公开命令面的一部分。
    */
   it("实例自有成员也算：登记之前 false、登记之后 supported（真实 4.0 的 setZoom 不在原型上）", () => {

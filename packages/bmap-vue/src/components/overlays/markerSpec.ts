@@ -40,14 +40,14 @@ export const MARKER_FIELDS: OverlayFieldMap<MarkerProps> = {
   rotation: "options",
   enableDragging: "options",
   enableClicking: "recreate",
-  // ：官方 MarkerOptions 里此前未收的四个构造选项。
+  // issue #168 item 2：官方 MarkerOptions 里此前未收的四个构造选项。
   // 四个全部 `recreate`（官方 Marker 实例上没有对应 setter），逐条依据见
   // `driver/types/overlays.ts` 的 `OVERLAY_DESCRIPTORS.marker`。
   raiseOnDrag: "recreate",
   draggingCursor: "recreate",
   isTop: "recreate",
   restrictDraggingArea: "recreate",
-  // 第三批：官方 `MarkerOptions` 16 个键里最后三个。
+  // issue #165 第三批：官方 `MarkerOptions` 16 个键里最后三个。
   // ⚠️ 三个**不是**同一个分类：`label` 有成对的 `setLabel` / `getLabel`
   // （`overlay/Marker.d.ts:110` / `:115`，live 实测可观察地生效）⇒ `options`（就地换标注）；
   // 另两个在成员表与整条运行时原型链上都没有任何入口 ⇒ `recreate`。
@@ -108,7 +108,7 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
   return {
     type: "marker",
     // 事件面由事件矩阵给出（`MarkerEventMap` 的 11 个事件）；这里只覆盖 `dragend` 的处置方式。
-    // 清单与载荷档见 core/overlays/overlayEventCatalog.ts 与
+    // 清单与载荷档见 core/overlays/overlayEventCatalog.ts 与 docs/zh-CN/components/overlay/events.md
     kind: "marker",
     targetKind: "marker",
     fields: MARKER_FIELDS,
@@ -136,7 +136,7 @@ export function createMarkerSpec(deps: MarkerSpecDeps): OverlaySpec<MarkerProps,
       }),
 
     /**
-     * 命令面（ / TASK 2a）。
+     * 命令面（#165 Class 3 / TASK 2a）。
      *
      * 逐条依据（`@baidumap/jsapi-v4-types@4.0.5` 的 `overlay/Marker.d.ts`）：
      *

@@ -3,7 +3,7 @@
  *
  * 覆盖三类失败方式：
  * 1. **取值优先级写错**：布局盒（offset/client）与 rect 都有值时用了后者 —— 会把 transform 带进门禁，
- * 与 `ResizeObserver(border-box)` 的触发语义不一致（ 四轮复审 P2）；
+ *    与 `ResizeObserver(border-box)` 的触发语义不一致（#29 四轮复审 P2）；
  * 2. **读不到与零尺寸被合并**：`null`（没元素）与 `0×0`（确定零尺寸）语义不同，不能混；
  * 3. **门禁判据写歪**：只判一个方向（宽 > 0）就会放过 `0×N` 的半折叠容器。
  */
@@ -61,7 +61,7 @@ describe("readElementSize", () => {
   it("纯 transform 不改变读数（`scale(0)` 的容器布局盒仍是它声明的尺寸）", () => {
     // rect 反映 transform（这里模拟 scale(0)：rect 为 0），但布局盒没变 ⇒ 读数必须是布局盒。
     // 反过来说：若以 rect 为准，`scale(0) → scale(1)` 这种转换**不会触发 ResizeObserver**
-    // （纯 transform 不触发），门禁就永远等不到放行 —— 这正是  四轮复审 P2 要收掉的口子。
+    // （纯 transform 不触发），门禁就永远等不到放行 —— 这正是 #29 四轮复审 P2 要收掉的口子。
     const element = elementWith(() => ({ width: 0, height: 0 }), {
       offsetWidth: 320,
       offsetHeight: 240,

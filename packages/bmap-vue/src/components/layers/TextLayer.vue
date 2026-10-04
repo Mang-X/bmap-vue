@@ -32,7 +32,7 @@
  * ## 刻意不开的面（逐条依据见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）
  *
  * - **`setRenderStage` / `setRefCenter`**：声明有（`:304` / `:308`）、运行时也有，但
- * **无组件消费者**（与前两族同一裁决，「没有消费者的扩展面一律不加」）。需要时经
+ *   **无组件消费者**（与前两族同一裁决，#104「没有消费者的扩展面一律不加」）。需要时经
  *   `style` 袋的 `renderStage` 走 `setOptions` 下发（官方注释明说 `setOptions` 会把它
  *   转发到对应 setter）。
  * - **七条 `getX` 读回**（`getData` / `getOptions` / `getEnablePicked` / `getVisible` /

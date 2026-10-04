@@ -37,7 +37,7 @@ export type { PublicBMapClient, PublicMapContext } from "./resolveMapContext";
  * —— 于是消费方调得到、却没法为任何一个参数或结果**命名**：`check:api` 的
  * `ae-forgotten-export` 正是为这种「引用得到、名字拿不到」的情况亮的灯。
  *
- * 判据是**消费方能不能命名它**。有三件事刻意**没有**做
+ * 判据是**消费方能不能命名它**（ADR 2026-09-25）。有三件事刻意**没有**做：
  *
  * 1. **不导出内部运行时**：`MapContext` / `MapRuntimeShape` / `MapEventBus` /
  *    `ResourceScope` 带私有成员，仓库之外既不能构造也不能实现。为此
@@ -69,7 +69,7 @@ export type {
   LocalSearchPoi,
   LocalSearchRenderOptions,
   // 官方 `ViewportOptions` 的领域投影：`LocalSearchRenderOptions` / `RouteRenderOptions` 的
-  // `viewportOptions` 都是这个类型，消费方要给自己的视野选项命名就得能 import（ 口径）。
+  // `viewportOptions` 都是这个类型，消费方要给自己的视野选项命名就得能 import（#160 口径）。
   ViewportOptions,
   LocalSearchResult,
   LocalSearchSearchOption,
@@ -149,13 +149,13 @@ export type {
   // 选项投影出现在本出口可达的公开签名里（`Viewport` 同时是 `MapCommands` 的返回类型）
   Viewport,
   FlyToOptions,
-  // 五条视野命令的官方 `options` 投影（已导出签名里的形状，类别 ①）
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
   ViewCommandOptions,
   SetZoomOptions,
   PanToOptions,
 } from "../driver/types/map";
 // `CircleReadBackApi` / `MarkerReadBackApi` / `InfoWindowReadBackApi` / `PathReadBackApi` /
-// `ContextMenuCommandApi` / `MenuItemView` 是  的命令面类型
+// `ContextMenuCommandApi` / `MenuItemView` 是 issue #165 Class 3 的命令面类型：
 // `OverlayDriver` 的方法签名**逐个**引用它们，不导出会被 `ae-forgotten-export` 点名
 // （它们是消费方标注 handler 参数时需要的类型，不是内部实现细节）。
 export type {
@@ -164,7 +164,7 @@ export type {
   OverlayPropertyPolicy,
   MarkerIconInput,
   MarkerOptions,
-  // `MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
   // 根入口按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），本出口转出的是
   // **声明处**的名字 —— composable 调用方拿到 `MarkerOptions` 却无法为 `label` / `anchor` 标类型。
   MarkerLabelInput,

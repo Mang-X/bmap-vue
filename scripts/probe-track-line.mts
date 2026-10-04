@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TrackLine 播放控制运行时探针（ / 承接  的欠账）
+ * TrackLine 播放控制运行时探针（issue #110 / 承接 #36 的欠账）
  *
  * 上游类型包与官方 API 参考对下面四件事**没有可核对的声明**（`TrackLine` 属扩展 API、
  * `@baidumap/jsapi-v4-types@4.0.4` 无类声明），而薄命令面与可见性联动依赖它们：

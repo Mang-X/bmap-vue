@@ -45,9 +45,9 @@ function stubDriver(
 
 describe("createBMapClient（默认 v4 收口）", () => {
   it("默认注入 createJsapiV4Driver：默认路径装出可用的 v4 Client", async () => {
-    // 之前这里是「明确失败」（抛 BMAP_CAPABILITY_UNSUPPORTED，消息含 M3A.2）——
+    // #23 之前这里是「明确失败」（抛 BMAP_CAPABILITY_UNSUPPORTED，消息含 M3A.2）——
     // Facet 装配完成后，同一条调用必须真的装出 Driver。断言保留「engine + Facet 齐全」，
-    // 这样  的默认 Provider 切换前就有可回归的基线。
+    // 这样 #25 的默认 Provider 切换前就有可回归的基线。
     const client = await createBMapClient({
       provider: { load: async () => loadedV4() },
       loadOptions: { ak: "test-ak-1234" },

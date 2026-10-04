@@ -19,7 +19,7 @@ export {
 export type { PluginCatalogEntry } from "./catalog";
 // 共享宿主（M8-PLUGIN-CORE / #42）：`global` 作用域插件资源的持有者。
 // `disposeDefaultPluginHost()` 是它唯一的释放入口（测试 / 热更新要一个干净起点时用）——
-// 地图卸载**不是**释放入口，理由。
+// 地图卸载**不是**释放入口，理由见 ADR 2026-09-14 的决策 4。
 export { createPluginHost, getDefaultPluginHost, disposeDefaultPluginHost } from "../core/plugins/PluginHost";
 export type { PluginHost, PluginHostEntryInspection } from "../core/plugins/PluginHost";
 // 插件兼容 inventory（M3A3-07）：数据驱动，文档由 `pnpm generate:plugin-inventory` 生成。
@@ -28,7 +28,7 @@ export {
   PLUGIN_COMPAT_BY_ID,
   PLUGIN_EVIDENCE_BASIS_MEANING,
   PLUGIN_VERDICT_MEANING,
-  // 五值词表的运行时清单（生成器与门禁用同一份来源，避免两处清单漂移）。
+  // #43：五值词表的运行时清单（生成器与门禁用同一份来源，避免两处清单漂移）。
   PLUGIN_VERDICTS,
 } from "./compat-inventory";
 export type {
@@ -49,7 +49,7 @@ export type { BMapPluginDefinition } from "../core/plugins/PluginRegistry";
  * 是 `BMapLoadOptions`、`BMapPluginDefinition.scope` 是 `PluginScope`、
  * `PluginHostEntryInspection.status` 是 `PluginHostEntryStatus` …），却没有被本子入口导出
  * —— 消费方调得到、却没法为参数或结果**命名**。判据是「消费方能不能命名它」
- * ；全部是纯数据 / 可命名的稳定形状，因此升为导出。
+ * （ADR 2026-09-25）；全部是纯数据 / 可命名的稳定形状，因此升为导出。
  *
  * 随附的 `export type` **不新增任何值导出**，值导出面仍由
  * `export-surface-freeze.test.ts` 的清单守着。
@@ -110,7 +110,7 @@ export type {
   // 同上：`BMapDriver` → `MapDriver` 的公开签名里出现了这两个类型
   Viewport,
   FlyToOptions,
-  // 五条视野命令的官方 `options` 投影（已导出签名里的形状，类别 ①）
+  // #171 补齐：五条视野命令的官方 `options` 投影（已导出签名里的形状，ADR 2026-09-25 类别 ①）
   ViewCommandOptions,
   SetZoomOptions,
   PanToOptions,
@@ -121,7 +121,7 @@ export type {
   LabelOptions,
   MarkerIconInput,
   MarkerOptions,
-  // `MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
+  // #160 补齐：`MarkerOptions.label` 的领域形状（`LabelOptions.anchor` 的九元锚点联合）。
   // 根入口按 props 口径导出别名（`MarkerLabelSpec` / `OverlayAnchor`），本出口转出的是
   // **声明处**的名字 —— 插件作者拿到 `MarkerOptions` 却无法为 `label` / `anchor` 标类型。
   MarkerLabelInput,
@@ -129,7 +129,7 @@ export type {
   OverlayPropertyPolicy,
   OverlayTarget,
   PathOptions,
-  // 的命令面类型：`OverlayDriver` 的方法签名逐个引用它们
+  // issue #165 Class 3 的命令面类型：`OverlayDriver` 的方法签名逐个引用它们
   CircleReadBackApi,
   ContextMenuCommandApi,
   InfoWindowReadBackApi,

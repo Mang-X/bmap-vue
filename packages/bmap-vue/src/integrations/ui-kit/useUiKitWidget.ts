@@ -57,7 +57,7 @@ export interface UseUiKitWidgetOptions<TWidget extends UiKitWidgetHandle> {
    * 给了它时：内容变化 → 重建 widget（口径与官方 react-bmap 的 `ctorKey` 一致：构造期参数进 key、
    * 其余走 setter），比较用的是稳定串，所以「每次渲染传新的对象字面量、内容相同」不会触发重建。
    *
-   * **可选**（不是必填）：`useUiKitWidget` 从  起就是公开导出，给一个必填字段等于让已有调用方
+   * **可选**（不是必填）：`useUiKitWidget` 从 #73 起就是公开导出，给一个必填字段等于让已有调用方
    * 升级后直接类型报错（PR #82 评审 P1）。缺省时桥不安装重建 watch，**也不回退去用 `buildOptions()`** ——
    * 因为 `buildOptions()` 里还包含**有 setter 的运行期选项**（例如 `PlaceAutocomplete` 的 `location`），
    * 拿它当重建依据会让「改城市」也重建，从而吃掉输入值 / 焦点 / 下拉展开状态。
@@ -261,7 +261,7 @@ export function useUiKitWidget<TWidget extends UiKitWidgetHandle>(
   });
 
   // 构造期输入变化 → 重建（上游没有对应 setter，静默保留旧值等于骗调用方）。
-  // 语义只有这一份：四个组件都靠它，不再各自 watch。缺省（老调用方）时不安装，语义与  一致。
+  // 语义只有这一份：四个组件都靠它，不再各自 watch。缺省（老调用方）时不安装，语义与 #73 一致。
   if (options.constructorOptions) {
     const readConstructorOptions = options.constructorOptions;
     watch(

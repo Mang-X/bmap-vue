@@ -7,12 +7,12 @@
  * `@baidumap/jsapi-v4-types@4.0.5` 给 `PointIconLayer` 这个类加了一条
  * `@deprecated 已废弃，建议使用 {@link PointLayer}（图标模式）替代`。
  *
- * **本组件的处置**（ 决策，与 `LineLayer` / `FillLayer` 一致）：保留组件、保留行为
- * **不改名、不留别名垫片**（ 禁止 compat shim），把弃用讲清楚：开发期告警一次
+ * **本组件的处置**（#165 决策，与 `LineLayer` / `FillLayer` 一致）：保留组件、保留行为，
+ * **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim），把弃用讲清楚：开发期告警一次
  * （`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放在模块级）+ 类型层 `@deprecated` + 文档。
  *
  * ⚠️ 与线 / 面两个不同：官方建议的替代品（`PointLayer`）本库**已经提供**，所以这一条
- * **现在就可以迁移**（另两个的替代组件见 ）。但 `<PointLayer>` 属**扩展 API**、被标为
+ * **现在就可以迁移**（另两个的替代组件见 #166）。但 `<PointLayer>` 属**扩展 API**、被标为
  * `experimental`（可视化实现按需异步注入），且它的样式字段是**扁平**的（`icon` / `width` /
  * `height` 直接是 prop，不是 `style` 袋）——迁移不是改个名字。
  *
@@ -25,7 +25,7 @@
  * `docs/zh-CN/components/layer/deprecated-layers-migration.md`。
  *
  * 落在官方 `BMap.PointIconLayer`（**两处都声明**：类型包有完整类声明，官方 React 参考实现也有同名组件）。生命周期（创建 / 重建 / 就地写入 / 释放）**完全交给**
- * `useNativeLayerResource`（ 抽出的共享内核，五个原生数据图层共用一份实现）
+ * `useNativeLayerResource`（#36 抽出的共享内核，五个原生数据图层共用一份实现）：
  * 本组件只声明「构造期选项 / 样式袋 / 数据载荷 / 事件」四件事，不再自持第二套状态机。
  *
  * 与形状层的差异只有「每个点画什么」：这里画一张图标。两处实现细节值得写在明处：
@@ -161,7 +161,7 @@ function styleValue(): Record<string, unknown> | undefined {
     if (props.offset !== undefined) style.offset = props.offset;
     if (props.scale !== undefined) style.scale = props.scale;
     if (props.rotation !== undefined) style.rotation = props.rotation;
-    // / TASK 2：官方 `PointIconStyle` 有 12 个字段，此前只暴露了 7 个。
+    // #165 Class 3 / TASK 2：官方 `PointIconStyle` 有 12 个字段，此前只暴露了 7 个。
     // 缺的这 5 个（`layer/PointIconLayer.d.ts:101` iconObj / `:105` visibility /
     // `:108` sizes / `:117` userSizes / `:127` opacity）全部是**样式字段** ⇒ 就地更新。
     if (props.iconObj !== undefined) style.iconObj = props.iconObj;
@@ -192,7 +192,7 @@ function handlePick(event: unknown): void {
   });
 
   emit("click", pick);
-  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审  F4）
+  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
   if (pick.item !== null) emit("item-click", pick.item);
   else if (pick.hit) {
     warnOnce(

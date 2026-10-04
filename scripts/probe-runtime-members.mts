@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 几处**只靠类型声明定不了**的运行时事实探针（ / Class 2 / Class 3）
+ * 几处**只靠类型声明定不了**的运行时事实探针（#165 Class 1 / Class 2 / Class 3）
  *
  * 这些结论此前都是「依据仓库旧记录转述」或「按同构推的候选名」。本探针把它们
  * 一次性升级为**本轮 live 读数**，不改动任何生产代码。
@@ -23,8 +23,8 @@
  * | 12 | 官方 `reset()` 到底重置哪些字段？ | **Class 2 / D**：声明只说「恢复地图初始化时的中心点和级别」，**没提** heading/tilt；本库 `resetView()` 连 heading/tilt 一起重置，这是行为差 |
  * | 13 | 走**动画档**（不传 `noAnimation`）时 `options.callback` 还会不会调？ | **Class 2 / F**：`noAnimation:true` 下 callback「立即调用」不代表动画档也会交付 |
  * | 14 | `GeolocationControl` / `CityListControl` 的命令面成员在**实例**上真在吗？特别是 `startLocation` vs `startLocationTrace` | #168 item 1：issue 点名的 `startLocationTrace()` **不在** `control/GeolocationControl.d.ts` 里（声明是 `startLocation()` / `stopLocationTrace()`）。控制类成员常挂实例而非原型（#165 probe 11 已踩过），因此必须 live 读 |
- * | 15 | `TextLayer` / `BarLayer` / `FlyLineLayer` 的成员面真在吗？随主包注入吗？ |  第二刀：三者与已取证的 `PolygonLayer` / `PolylineLayer` 同族（4.0.5 新增、样式走 `setOptions`），但**拾取面各不相同**——只有 `TextLayer` 声明了拾取，`BarLayer` / `FlyLineLayer` 连声明都没有。同族不等于同面，必须逐条读 |
- * | 16 | `GeoJSONSource` 的静态成员真在吗？归一化输出什么形状？ |  第二刀：`GeoJSONSource` **不是图层、不是数据源**，是一组静态纯函数（`normalize` / `extractPoints` / `toLineStrings` / `toPolygons`）。本票要判断它到底该不该成为组件 / prop / Driver 能力，判据是「它在运行时是什么」 |
+ * | 15 | `TextLayer` / `BarLayer` / `FlyLineLayer` 的成员面真在吗？随主包注入吗？ | #166 第二刀：三者与已取证的 `PolygonLayer` / `PolylineLayer` 同族（4.0.5 新增、样式走 `setOptions`），但**拾取面各不相同**——只有 `TextLayer` 声明了拾取，`BarLayer` / `FlyLineLayer` 连声明都没有。同族不等于同面，必须逐条读 |
+ * | 16 | `GeoJSONSource` 的静态成员真在吗？归一化输出什么形状？ | #166 第二刀：`GeoJSONSource` **不是图层、不是数据源**，是一组静态纯函数（`normalize` / `extractPoints` / `toLineStrings` / `toPolygons`）。本票要判断它到底该不该成为组件 / prop / Driver 能力，判据是「它在运行时是什么」 |
  *
  * ## 判定与退出码
  *
@@ -87,7 +87,7 @@ function pageScript(ak: string): string {
     PolylineLayerAtMapReady: typeof B.PolylineLayer,
     PointLayerAtMapReady: typeof B.PointLayer,
     HeatmapAtMapReady: typeof B.Heatmap,
-    // 第二刀：TextLayer / BarLayer / FlyLineLayer / GeoJSONSource 同样要判「是不是随主包注入」。
+    // #166 第二刀：TextLayer / BarLayer / FlyLineLayer / GeoJSONSource 同样要判「是不是随主包注入」。
     // 判据与上面四个相同——在 BMap.Map 刚可用的那一刻读 typeof。
     TextLayerAtMapReady: typeof B.TextLayer,
     BarLayerAtMapReady: typeof B.BarLayer,
@@ -199,7 +199,7 @@ function pageScript(ak: string): string {
     })();
   }
 
-  // 3e.  第二刀：visualization/TextLayer / BarLayer / FlyLineLayer。
+  // 3e. #166 第二刀：visualization/TextLayer / BarLayer / FlyLineLayer。
   // 三者与 case 3b 的 PolygonLayer / PolylineLayer 是**同一族**（4.0.5 新增、随主包注入、
   // 样式走 setOptions、没有 doOnceDraw），但**成员面各不相同**：
   // TextLayer 是三族里唯一有拾取面（setEnablePicked / getEnablePicked / hitTest +
@@ -364,7 +364,7 @@ function pageScript(ak: string): string {
     } catch (e) { return { optionAcceptedByRuntime: false, error: String(e && e.message || e) }; }
   })();
 
-  // —— 以下为  追加的 7~11 号取证 ——
+  // —— 以下为 #165 Class 2 追加的 7~11 号取证 ——
   // 统一造一张 320x240 的图（必须给尺寸，否则官方内部拿不到 _painter）。
   const withMap = async (fn, settleMs = 900) => {
     const div = document.createElement("div");
@@ -553,7 +553,7 @@ function pageScript(ak: string): string {
   //
   // 为什么要 live：类型声明说 GeolocationControl 有 startLocation() / stopLocationTrace()，
   // 而 issue 文本把命令写成 startLocationTrace()。**两者不是同一个名字**，且控制类实例上的成员
-  // 常常挂在实例而非原型（ probe 11 已经踩过这个坑：prototype 读法全 false）。因此这里
+  // 常常挂在实例而非原型（#165 probe 11 已经踩过这个坑：prototype 读法全 false）。因此这里
   // 逐个按「own / 原型链 / 可调用」三档读，并对 startLocationTrace 单独给一条读数——
   // 它是「声明里没有、但 issue 点名」的那个名字。
   R.readings.controlCommands = (() => {

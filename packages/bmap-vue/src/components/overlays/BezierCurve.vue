@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * BezierCurve —— 贝塞尔曲线（M5-VECTORS /  迁移到 OverlaySpec）
+ * BezierCurve —— 贝塞尔曲线（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。`path` 与 `controlPoints` 是**两个大数组**，
  * 各有自己的版本令牌（`pathVersion` / `controlPointsVersion`）：根引用变化或对应版本递增都会
@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<BezierCurveProps>(), {
   strokeStyle: "solid",
   enableMassClear: true,
   visible: true,
-  // ⚠️ **Vue Boolean-absent 陷阱**（ 图形族补齐）。
+  // ⚠️ **Vue Boolean-absent 陷阱**（issue #165 图形族补齐）。
   //
   // 官方 `BezierCurveOptions.enableClicking` 的 `@default` 是 `true`，而 `Boolean` 类型的 prop
   // 在**未给**时编译产物里的运行时值是 `false`——与官方默认**相反**。因此必须显式写

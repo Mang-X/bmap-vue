@@ -104,7 +104,7 @@ const props = withDefaults(defineProps<LocationControlProps>(), {
 });
 
 /**
- * 事件载荷**从 `unknown` 收窄成官方命名类型**（ / TASK 4）。
+ * 事件载荷**从 `unknown` 收窄成官方命名类型**（issue #165 Class 3 / TASK 4）。
  *
  * 此前两条事件的载荷都是 `unknown` —— 官方 `control/GeolocationControl.d.ts` 明明声明了
  * `GeolocationControlEventMap`（`locationSuccess: GeolocationControlSuccessEvent` /

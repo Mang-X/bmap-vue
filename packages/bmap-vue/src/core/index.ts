@@ -194,7 +194,7 @@ export type {
   ResourceRegistration,
   ResourceRegistrationInput,
 } from "./overlays/OverlayRegistry";
-// 声明式覆盖物生命周期（M5-SPEC-MARKER / ，M5-VECTORS /  扩展）
+// 声明式覆盖物生命周期（M5-SPEC-MARKER / #30，M5-VECTORS / #31 扩展）
 export type {
   OverlayEventSpec,
   OverlayFieldMap,

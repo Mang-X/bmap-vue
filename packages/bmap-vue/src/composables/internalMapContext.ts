@@ -1,5 +1,5 @@
 /**
- * 内部接线用的 `MapContext` 入口
+ * 内部接线用的 `MapContext` 入口（issue #160）
  *
  * 对外的 `resolveMapContext()` / `useMapContext()` 只返回窄面 `PublicMapContext`；
  * 组件与 serviceTask 需要的**完整** `MapContext`（`overlays` / `layers` / `resources` /

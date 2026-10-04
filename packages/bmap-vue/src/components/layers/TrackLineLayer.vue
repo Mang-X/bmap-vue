@@ -5,8 +5,8 @@
  * ## 能力面
  *
  * `TrackLine` 属官方**扩展 API**：`@baidumap/jsapi-v4-types@4.0.5` 才补上类声明（4.0.4 没有），
- * 官方明确「首次加载时可视化实现是异步注入的」。驱动登记面（ 之后）包含数据 + **六条播放命令**
- * 之后另有 4.0.5 声明的显示属性
+ * 官方明确「首次加载时可视化实现是异步注入的」。驱动登记面（#110 之后）包含数据 + **六条播放命令**，
+ * #165 Class 3 之后另有 4.0.5 声明的显示属性：
  *
  * - `data`：官方 `TrackLine` 只接收**单条 `LineString` Feature**（形状由调用方保证；本库不做
  *   GeoJSON 校验）。**`null` = 没有轨迹**（换一个没有轨迹的实例）、`undefined` = 不表态；
@@ -170,7 +170,7 @@ const playbackInternal = createTrackLinePlaybackApi({
  *
  * 意图只在 `session()` 非空且内部调用**没有抛错**后写入——not-ready（告警跳过）与抛错都不留
  * 意图，避免 visibility 把未送达的 start 当成「已在播」补发。visibility 的 pause/resume 走
- * `playbackInternal`，不经过这一层（ opt-in 硬约束）。
+ * `playbackInternal`，不经过这一层（#110 opt-in 硬约束）。
  */
 const playback = {
   start() {

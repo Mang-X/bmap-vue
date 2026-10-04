@@ -1,8 +1,6 @@
 /**
  * 样式袋与顶层受控字段的**归属**。
  *
- * ## 缺陷本身
- *
  * `useNativeLayerResource.fieldWrites()` 的写入顺序里 `style(setStyle)` 在
  * `opacity(setOpacity)` 之后，而 `visualization/` 家族里 `setStyle` 落到 `setOptions`，
  * 官方声明写明它会把 `opacity` **转发到对应 setter**（`TextLayer.d.ts:265-268` 等三处逐字
@@ -34,9 +32,8 @@
  *
  * 优先级方案（谁后写谁赢 / 谁先写谁赢）把「最终值取决于编辑顺序」这条缺陷**保留在契约里**，
  * 只是一个顺序恒定而已：一个受控 prop 的最终值不该由用户的编辑先后决定。排除方案让
- * `opacity` **只有一个入口**，最终值只由那一个 prop 决定，与顺序无关。
- *
- * 排除掉的东西**必须告警一次**（稳定 key）：静默接收后丢弃是 AGENTS.md 点名的假支持。
+ * `opacity` **只有一个入口**，最终值只由那一个 prop 决定，与顺序无关。排除掉的东西
+ * **必须告警一次**（稳定 key）：静默接收后丢弃是 AGENTS.md 点名的假支持。
  *
  * ## 为什么是**逐 kind** 表，不是「按字段名一律拦」
  *
@@ -44,10 +41,6 @@
  * **根本设不成图层级透明度**：这几个组件刻意没有 `opacity` prop（理由见
  * `types/components.ts` 的 `VisualizationPolygonPolylineDisplayProps`），袋是它们**唯一**的
  * 入口。按字段名一律拦会把「一个入口」变成「零个入口」——那是更严重的缺陷。
- *
- * 而 `text` 进表，是因为它在**声明面**上同时存在两个入口：官方声明了 `setOpacity`
- * ⇒ 本库开了 `opacity` prop；官方又声明 `setOptions` 会转发 ⇒ 同一个 prop 既是入口、
- * 袋里那份也是入口。
  */
 import type { NativeLayerKind } from "../../driver/types/native-layers";
 
@@ -67,13 +60,12 @@ const STYLE_BAG_CONTENDS_OPACITY: ReadonlySet<NativeLayerKind> = new Set<NativeL
 /**
  * 与顶层 `opacity` prop 争同一个 SDK 状态的样式袋键。
  *
- * ⚠️ 该键**已从 `TextLayerStyle` 的公开类型里删除**（ 复审 P1-1）：保留一个
+ * ⚠️ 该键**已从 `TextLayerStyle` 的公开类型里删除**（#174 复审 P1-1）：保留一个
  * 「类型允许、运行时被 strip + 告警」的字段就是**「接收后忽略」**，正是本票判定为
  * 假支持并要求删除的那一档。类型层现在是**唯一入口**：顶层 `opacity` prop。
  *
  * 本函数**仍保留**，因为它守的是**另一条通路**：JS 调用方（无类型检查）、
  * `as never` 断言、以及任何 `Record<string, unknown>` 形状的 props 都能塞进这个键。
- * 摘掉它 + 告警一次，比让它沉到 SDK 再被别的入口覆盖要诚实。
  */
 export const CONTENDED_OPACITY_STYLE_KEY = "opacity";
 
@@ -91,10 +83,8 @@ export function styleBagContendsLayerOpacity(kind: NativeLayerKind): boolean {
  * 把样式袋里「归顶层受控 prop 所有」的键摘掉，并**回调一次**说明摘了什么。
  *
  * 返回 `undefined` 表示「摘完之后没有任何表态」——调用方据此**不**产生 SDK 调用
- * （与 `projectLayerStyle` 的「空袋 = 不表态」同一口径）。
- *
- * `onConflict` 只在**真的有键被摘掉**时调用，且由调用方负责「告警一次」的去重
- * （warnOnce 在 `useNativeLayerResource` 里，与那处的其它告警共用一个稳定的 key 空间）。
+ * （与 `projectLayerStyle` 的「空袋 = 不表态」同一口径）。`onConflict` 只在**真的有键被
+ * 摘掉**时调用，去重由调用方负责（warnOnce 在 `useNativeLayerResource` 里）。
  *
  * @param kind 该 kind（决定有没有争用）
  * @param style 投影后的样式袋（`projectLayerStyle` 的结果）

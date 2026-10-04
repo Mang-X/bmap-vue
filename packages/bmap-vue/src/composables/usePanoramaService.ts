@@ -1,7 +1,7 @@
 /**
  * usePanoramaService —— 全景数据检索（官方 `BMap.PanoramaService`）
  *
- * M7-CONTROL-PANORAMA /  实施步骤 5「实现 PanoramaService callback 状态层」。
+ * M7-CONTROL-PANORAMA / issue #41 实施步骤 5「实现 PanoramaService callback 状态层」。
  *
  * 不自己写请求框架：超时 / 空结果 / 迟到回调 / 取消 / 先到者胜全部由 Driver 的
  * `createServiceCall` 负责，本文件只声明「这个服务是什么」（与其余六个服务 composable

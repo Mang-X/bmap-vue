@@ -34,7 +34,7 @@
  *    只在独占档有，见 `core/services/instanceChannel.ts`）。要在禁区里实现它，只能读 `handle.raw`
  *    （service composable 硬约束：禁止）或调一个尚不存在的 Driver 成员。
  *
- * 因此本库**不加**这两个方法：加一个空实现、或接受参数后静默忽略，都是  禁止的
+ * 因此本库**不加**这两个方法：加一个空实现、或接受参数后静默忽略，都是 #165 §3.8 禁止的
  * 「制造支持外观的假支持」。需要改这个开关时，新建一个 hook 实例。
  */
 import type { ServiceHandle } from "../driver/types/handles";

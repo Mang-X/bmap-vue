@@ -5,7 +5,7 @@
  * - 状态机 idle/waiting-client/creating/initializing/ready/error/disposing/disposed
  * - Runtime 只管理 Map,不再加载 Plugin(PluginRegistry 的 map-scope 实例属于 Runtime)
  * - mount 去重经 mountPromise;retry 清错重入;suspend/resume 供 KeepAlive
- * - **暂停按原因集合记账**（M4-HANDLE-UX / ，见下）
+ * - **暂停按原因集合记账**（M4-HANDLE-UX / #29，见下）
  * - dispose 顺序:disposing → reject waiters → child registries/scopes → destroy map
  *   → clear handle → scheduler/events → root scope → disposed
  *
@@ -63,7 +63,7 @@ export interface MapRuntimeOptions {
    *
    * `<Map>` 用它把「容器当前是否有可用尺寸」这条**异步门禁**放到这里 —— 只「在启动之前判一次」
    * 会有 TOCTOU 窗口：`doMount()` 中途要 `await` SDK 加载，慢网络下加载完成时容器可能已经被
-   * 收起成 0×0，于是仍会在零尺寸容器上建出一张 0×0 的画布（ 三轮复审 P1）。
+   * 收起成 0×0，于是仍会在零尺寸容器上建出一张 0×0 的画布（#29 三轮复审 P1）。
    *
    * 约定：实现应当「等到可以建图」再 resolve（例如等到容器重新可用）；抛错则按建图失败处理。
    */
@@ -107,7 +107,7 @@ export class MapRuntime {
   /**
    * `whenMapCreated()` 注册的回调。
    *
-   * **不在建图后清空**（M4-EVENTS /  评审第三轮 P2）：每个注册存活到它自己的 disposer 或
+   * **不在建图后清空**（M4-EVENTS / #28 评审第三轮 P2）：每个注册存活到它自己的 disposer 或
    * `dispose()`。理由是「建图成功但 `initializeView()` 失败 → `retry()` 重建第二张 map」这条路径——
    * 那时只能靠同一个注册再放行一次 `load`。
    */
@@ -160,7 +160,7 @@ export class MapRuntime {
   }
 
   /**
-   * 注册「地图对象已创建」的回调（M4-EVENTS /  评审）。
+   * 注册「地图对象已创建」的回调（M4-EVENTS / #28 评审）。
    *
    * 时机是 `driver.map.create()` 之后、**首次 `initializeView()` 之前**：官方 `load` 就在
    * `initializeView()` 内部那次 `centerAndZoom` 之后派发，而句柄要等 `mount()` resolve 才对外可见 ——
@@ -276,7 +276,7 @@ export class MapRuntime {
         } catch (e) {
           // 视野初始化失败时 map 尚未写入 this.map.value，外层 catch 的「部分创建资源」
           // 分支拿不到它（见下方注释），因此在抛错前就地销毁，否则会泄漏一个已创建的
-          // WebGL Map（ 的能力守卫在 throw 策略下就会走到这里）。
+          // WebGL Map（#20 的能力守卫在 throw 策略下就会走到这里）。
           try {
             client.driver.map.destroy(map);
           } catch {
@@ -345,7 +345,7 @@ export class MapRuntime {
    *
    * `disposed` 是**终态原因**，只能由 `dispose()` 添加。`MAP_SUSPEND_REASONS` 是公开导出，
    * 若 `suspend("disposed")` 也生效，调用方就能把一张**正常运行**的地图永久锁死
-   * （`resume("disposed")` 按设计是 no-op）—— 这里显式拒绝并告警（ 评审 P2）。
+   * （`resume("disposed")` 按设计是 no-op）—— 这里显式拒绝并告警（#29 评审 P2）。
    */
   suspend(reason: MapSuspendReason = MAP_SUSPEND_REASONS.keepAlive): void {
     if (reason === MAP_SUSPEND_REASONS.disposed) {
@@ -504,7 +504,7 @@ export class MapRuntime {
       try {
         currentClient.driver.map.destroy(currentMap);
       } catch (error) {
-        // destroy 会把「订阅释放 / 动画取消 / SDK 销毁」里失败的项汇总抛出（ 评审 P2）。
+        // destroy 会把「订阅释放 / 动画取消 / SDK 销毁」里失败的项汇总抛出（#20 评审 P2）。
         // 这里不能静默吞掉：资源可能部分未释放，至少要让它可观测。
         logger.warn(
           `MapRuntime: map.destroy 未完全成功（部分资源可能未释放）: ${

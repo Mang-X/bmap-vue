@@ -12,7 +12,7 @@
  *   `setVisible`、`setOpacity`、`setZIndex`（及 `setMinZoom`/`setMaxZoom`）、`setBaseOptions`
  *   （`enablePicked` 在这里合并）、`getPickedItem`。它们的构造选项里 `enablePicked` 默认 false，
  *   因此**拾取是显式开关**。
- * ⚠️ **这一族没有 `clearData`**（ 评审修正，依据见 `DECLARED_LAYER_OPERATIONS` 的注释）
+ *   ⚠️ **这一族没有 `clearData`**（#106 评审修正，依据见 `DECLARED_LAYER_OPERATIONS` 的注释）：
  *   「清空数据」由实例生命周期表达，不靠一个不存在的入口。
  * - **四个扩展 API**（`PointLayer` / `ClusterLayer` / `Heatmap` / `TrackLine`）4.0.5 起**有了
  *   类声明**（4.0.4 时没有），但官方明确「首次加载时可视化实现是异步注入的」——类型包里有
@@ -24,7 +24,7 @@
  *   `setRenderStage` / `setRefCenter` 这类「声明里没有或当前没有消费者」的仍然关闭。
  *   逐条依据见下面 kind 表的注释，逐条核对见 `native-layers.test.ts` 的
  *   「操作面与官方声明一致」。
- * - **`visualization/` 的新两族**（`PolygonLayer` / `PolylineLayer`，）：4.0.5 新增
+ * - **`visualization/` 的新两族**（`PolygonLayer` / `PolylineLayer`，#166）：4.0.5 新增，
  *   是同时弃用的 `FillLayer` / `LineLayer` 的官方指定替代。样式走 `setOptions`（**不是**
  *   `setStyleOptions`）、**没有** `doOnceDraw`、**随主包注入**（不进扩展 API 那份名单）。
  *   「声明与运行时不一致」在这两族上撞了**三次**，而**处置各不相同**——
@@ -81,7 +81,7 @@ import type { JsapiV4HandleRegistry } from "./registry";
 /**
  * 四类专页图层共享的操作面。
  *
- * ⚠️ **没有 `clearData`**（ 评审修正）。两条一手来源都指向「这一族没有公开的清空入口」
+ * ⚠️ **没有 `clearData`**（#106 评审修正）。两条一手来源都指向「这一族没有公开的清空入口」：
  *
  * - 上游声明 `@baidumap/jsapi-v4-types@4.0.5` 的 `PointIconLayer` / `PointShapeLayer` /
  *   `LineLayer` / `FillLayer` **只有** `setData(data)` 与 `getData()`（只有 `GeoJSONLayer` 有
@@ -143,7 +143,7 @@ interface NativeLayerDescriptor {
    *
    * ⚠️ 两个成员**都是 merge**（官方那句「仅更新已声明的样式键」= 只写你给的键，没给的保持原值），
    * 本库此前把 `setOptions` 记成「整袋替换」是**误读**，逐条依据与 live 读数见
-   * `core/layers/nativeLayerStyleOwnership.ts` 的文件头（ P1-1）。这一条**只**影响
+   * `core/layers/nativeLayerStyleOwnership.ts` 的文件头（#174 P1-1）。这一条**只**影响
    * 「改完要不要显式重绘」，不影响「只写一部分会不会清掉其余」。
    */
   styleMember: "setStyleOptions" | "setOptions";
@@ -225,7 +225,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
   // 状态 API（`updateState` 一族）、`setZoomRange`（`setMinZoom` / `setMaxZoom`）、
   // `setRenderStage` / `setRefCenter` 仍然**不登记**：前两者官方声明里确实没有（`minZoom` /
   // `maxZoom` 是**构造选项**，不是字段级 setter），后两者本库当前没有组件消费者——
-  // 放开门面而没有消费者等于凭空扩面（ 的「没有消费者的扩展面一律不加」）。
+  // 放开门面而没有消费者等于凭空扩面（#104 的「没有消费者的扩展面一律不加」）。
   point: {
     ctor: "PointLayer",
     declared: true,
@@ -266,7 +266,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
       "setZIndex",
     ],
   },
-  // 官方 4.0.5（git `5ba67f4`）新增 `visualization/PolygonLayer` / `PolylineLayer`
+  // #166：官方 4.0.5（git `5ba67f4`）新增 `visualization/PolygonLayer` / `PolylineLayer`，
   // 作为 4.0.5 **同时弃用**的 `FillLayer` / `LineLayer` 的**官方指定替代**。
   //
   // 三个判断各自独立，逐条依据如下（另见 `docs/zh-CN/contributing/166-visualization-alignment-audit.md`）：
@@ -300,7 +300,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
     styleMember: "setOptions",
     // ⚠️ **不**含 `setOpacity`——理由与折线族**不同**，别照抄那条。
     //
-    // 三种形状必须分开（ 收口时的教训）
+    // 三种形状必须分开（#165 收口时的教训）：
     //
     // | 形状 | 例子 | 处置 |
     // | --- | --- | --- |
@@ -370,7 +370,7 @@ const NATIVE_LAYER_DESCRIPTORS = {
       "setEnablePicked",
     ],
   },
-  // 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
+  // #166 第二刀：官方 4.0.5 `visualization/TextLayer`（批量文字标注）。
   //
   // 四个判断各自独立，逐条依据如下（live 读数见 `scripts/probe-runtime-members.mts`
   // case 3e / 3f / 15 / 16，2026-09-27，`lateVisualizationV3.TextLayer`）：
@@ -615,7 +615,7 @@ export function createJsapiV4NativeLayerDriver(
         }
         callRequired(raw, "setEnablePicked", payload);
         return;
-      // TrackLine 播放命令（；方法名均经 live 探针取证）
+      // TrackLine 播放命令（#110；方法名均经 live 探针取证）
       case "start":
         callRequired(raw, "start");
         return;

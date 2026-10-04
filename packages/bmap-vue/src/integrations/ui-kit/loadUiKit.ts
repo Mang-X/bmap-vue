@@ -22,9 +22,9 @@ export const UI_KIT_PACKAGE = "@baidumap/jsapi-ui-kit";
 /**
  * UI Kit 样式表的显式引入路径。
  *
- * 官方包**不在 JS 里注入样式**（ 契约：JS 入口 eval 后页面里 0 个 UI Kit 样式节点）
+ * 官方包**不在 JS 里注入样式**（#70 契约：JS 入口 eval 后页面里 0 个 UI Kit 样式节点），
  * 消费方必须自己 `import` 本路径。`./ui-kit` 入口刻意**不**自动引入它：
- * 「CSS 由消费方显式引入」是与  一起冻结的口径，自动注入会让「不用 UI 的产物」
+ * 「CSS 由消费方显式引入」是与 #70 一起冻结的口径，自动注入会让「不用 UI 的产物」
  * 也可能带上样式。
  */
 export const UI_KIT_STYLE_PATH = "@baidumap/jsapi-ui-kit/dist/css/jsapi-ui-kit.css";

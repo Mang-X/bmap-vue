@@ -1,7 +1,7 @@
 /**
  * v4 LayerDriver（M3A2-CONTROLS-LAYERS / issue #22）
  *
- * 验收点（对应  的「测试要求」与「验收标准」）
+ * 验收点（对应 issue #22 的「测试要求」与「验收标准」）：
  * - issue 目标与范围列出的图层（DistrictLayer / PanoramaCoverageLayer / 已公开能力）都有
  *   create / add / remove / options 测试；
  * - 4.0 的**统一**入口 `map.addLayer/removeLayer`（不是 deprecated 的 addDistrictLayer/addTileLayer）；
@@ -360,7 +360,7 @@ describe("[P2] 挂载失败后记账必须回滚，否则重试会被静默跳�
 
 describe("[P2] autoViewport 是 district 唯一落到 SDK 的键（#165 Class 1 删掉别名）", () => {
   it("autoViewport 为 undefined 时不写入该键；历史名字 viewport 一律不再透传", () => {
-    // 之前这里断言的是「别名优先级按有效取值判断」（`viewport` → `autoViewport`）。
+    // #165 Class 1 之前这里断言的是「别名优先级按有效取值判断」（`viewport` → `autoViewport`）。
     // 公开 prop 现在直接叫 `autoViewport`，别名表已清空，因此**没有**别名可让位：
     // `undefined` 就是「不表态」，历史名字 `viewport` 作为**未声明**的键被丢掉。
     const orders = [{ autoViewport: undefined }, {}];
@@ -398,7 +398,7 @@ describe("[P2] autoViewport 是 district 唯一落到 SDK 的键（#165 Class 1 
 /* -------------------------------------------------------------------------- */
 
 /**
- * 的完整 kind 清单。
+ * issue #40 的完整 kind 清单。
  *
  * ⚠️ 它是**手写**的：漏一个 kind 时本文件的 `it.each` 会静默少跑一条。完备性由
  * `packages/test-utils/driver-contract.ts` 的类型断言（`_AssertLayerFacetKindsComplete`）

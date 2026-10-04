@@ -119,7 +119,7 @@ export function createPluginHost(label = "plugin-host"): PluginHost {
    * 纪元号：每次 `dispose()` 自增。
    *
    * 在飞任务在 `start()` 时记下自己属于哪个纪元，结算时比对。不对就说明这是**上一个纪元**的迟到
-   * 结果 —— 它不得写进当前纪元的条目、不得按名字操作这张表，但也不该被静默丢掉（评审  P1-2）。
+   * 结果 —— 它不得写进当前纪元的条目、不得按名字操作这张表，但也不该被静默丢掉（评审 #88 P1-2）。
    */
   let epochNumber = 0;
   /**

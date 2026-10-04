@@ -327,7 +327,7 @@ function sanitizeUpstreamError(raw: object): { name: string; message: string; st
  *
  * 上游 `searchByType()` 先 `emit("error", e)` 再把**同一个** `e` 抛出去，所以「事件里看到的」
  * 与「`await search()` 拿到的」本来就是同一条错误对象。本库把它包成 `BMapError` 之后必须维持
- * 这个性质（评审  的口径），用 `WeakMap` 按上游错误身份缓存即可 ——
+ * 这个性质（评审 #73 的口径），用 `WeakMap` 按上游错误身份缓存即可 ——
  * 不需要「最近一次错误」这种会被并发覆盖的可变状态。
  *
  * 之所以是**工厂**而不是模块级单例：缓存的生命周期应当跟组件实例走（卸载后不留下指向

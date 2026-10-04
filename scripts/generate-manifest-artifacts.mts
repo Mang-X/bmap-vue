@@ -55,13 +55,13 @@ const componentsIndex = [
 //
 //    包名从 manifest 读,不得写死。这份 d.ts 会**跟着包发出去**(它在 `files` 里),而
 //    写死的旧名 `bmap-vue` 会让用户的 Volar 去解析 npm 上另一位作者的同名包——
-// 与安装说明里写的 `@mangax/bmap-vue` 自相矛盾( 评审 P1)。
+//    与安装说明里写的 `@mangax/bmap-vue` 自相矛盾(#45 评审 P1)。
 const pkgName = (JSON.parse(readFileSync(resolve(root, 'packages/bmap-vue/package.json'), 'utf8')) as {
   name: string
 }).name
 // 纯函数要的是**组件名字符串数组**；`names` 是 `{ name, exportName, source }` 对象数组。
 // 直接传 `names` 会让模板插值出 `[object Object]`——生成的 volar.d.ts 全是它，
-// 而那份文件跟着包发布，用户的 Volar 会吃到无效声明（ 评审 P1）。
+// 而那份文件跟着包发布，用户的 Volar 会吃到无效声明（#45 评审 P1）。
 const volarDts = renderVolarDts(
   names.map((c) => c.name),
   pkgName,
@@ -133,11 +133,11 @@ function jsonMatches(current: string, expected: Record<string, unknown>): boolea
  *
  * 曾经这里是一张**手写的 exportName → 路径**表，与 manifest 的 `source` 各自漂移：新增一个
  * 组件只改 manifest 时，生成出来的 import 会退化成 `./NavigationControl` 这种不存在的路径
- * （M7-CONTROL-PANORAMA /  实测），而且失败发生在**测试运行时**而不是生成时。
+ * （M7-CONTROL-PANORAMA / #41 实测），而且失败发生在**测试运行时**而不是生成时。
  * 现在路径只有一个事实源（manifest 的 `source`），本函数只做前缀剥离。
  *
- * 合并说明（M7-LAYERS /  × ）：本 PR 早先是在那张手写表上补了 8 个图层
- * 这里取  的派生版——**图层那 8 个入口不需要在表里再登记一次**
+ * 合并说明（M7-LAYERS / #40 × #41）：本 PR 早先是在那张手写表上补了 8 个图层，
+ * 这里取 #41 的派生版——**图层那 8 个入口不需要在表里再登记一次**，
  * 只要 manifest 的 `source` 正确就自动生成。
  */
 function toPath(source: string): string {

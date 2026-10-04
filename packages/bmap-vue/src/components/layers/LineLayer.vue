@@ -8,14 +8,14 @@
  * `@deprecated 已废弃，建议使用 {@link PolylineLayer} 替代`，替代品在 4.0.5 新增的
  * `visualization/` 命名空间里。
  *
- * **本组件的处置**（ 决策，与 `FillLayer` / `PointIconLayer` 一致）
+ * **本组件的处置**（#165 决策，与 `FillLayer` / `PointIconLayer` 一致）：
  *
  * - **保留组件、保留行为**。官方自己**没有**删除 `LineLayer`（4.0.5 只是标了弃用并指名替代品）。
- * - **不改名、不留别名垫片**（ 禁止 compat shim；「别名指向新名」正是那条要禁的东西）。
+ * - **不改名、不留别名垫片**（#165 §3.6 禁止 compat shim；「别名指向新名」正是那条要禁的东西）。
  * - **把弃用讲清楚**：开发期告警一次（`warnDeprecatedLayerOnce`，见该函数文件头为什么去重要放
  *   在模块级）+ 类型层 `@deprecated` + 文档。
  *
- * ** 更新**：官方的指名替代品 `<PolylineLayer>` 现在**本库已提供**了。迁移时注意两者的
+ * **#166 更新**：官方的指名替代品 `<PolylineLayer>` 现在**本库已提供**了。迁移时注意两者的
  * `style` **不是同一套字段**（本组件是 `LineLayerStyle`：`borderWeight` / `borderCovered` /
  * `borderMask` 那一族；替代品是 `PolylineLayerStyle`：`strokeTextureUrl` /
  * `strokeTextureSpaced` 那一族）——**弃用替代不是字段改名**，样式要重写。

@@ -3,7 +3,7 @@ import { createOverlayRegistry } from "./OverlayRegistry";
 import { ResourceScope } from "../lifecycle/ResourceScope";
 
 /**
- * OverlayRegistry（M5-SPEC-MARKER /  定型）
+ * OverlayRegistry（M5-SPEC-MARKER / #30 定型）
  *
  * 记账模型：**所有者是实例 scope**。registration 自带 `dispose`，并把「从表里摘除」交给 scope；
  * 因此这里同时验证「显式释放」与「scope 释放」两条路径，以及「反复注册 / 释放不堆积」。

@@ -269,9 +269,9 @@ function main() {
 
   // 5) consumer:从 package tarball 安装,类型检查 + ESM 导入(发布包的硬前提)
   //    `./ui-kit` 子路径单独再 import 一次：它必须在**无 DOM 的 Node** 里可加载
-  // （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 。
+  //    （上游 UI Kit 的 import 会崩，本库入口不得把它拉进静态图）。见 #73。
   const consumerFixture = setupFixture('consumer')
-  // 文档示例对着**正式 tarball** 类型检查（ 的「示例代码从正式 tarball 运行」）。
+  // 文档示例对着**正式 tarball** 类型检查（issue #141 的「示例代码从正式 tarball 运行」）。
   // 排在 `npm install` 之前：文件必须在依赖装好之前就位。
   const copiedExampleGroups = copyDocsExamples(consumerFixture)
   // 文档示例是在 `setupFixture()` **之后**才拷进来的，所以要单独再重写一次包名。

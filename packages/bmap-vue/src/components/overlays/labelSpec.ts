@@ -36,7 +36,7 @@ export const LABEL_FIELDS: OverlayFieldMap<LabelProps> = {
   style: "options",
   zIndex: "options",
   enableMassClear: "options",
-  // 第三批：官方 `LabelOptions` 7 个键里最后两个。
+  // issue #165 第三批：官方 `LabelOptions` 7 个键里最后两个。
   //
   // ⚠️ `anchor` **此前不在这个表里**，而 `OVERLAY_DESCRIPTORS.label` 却**早就**登记了
   // `mutateBy("setAnchor", …)` —— 描述符有、组件不暴露 ⇒ 那条更新路径一次都没被触发过。

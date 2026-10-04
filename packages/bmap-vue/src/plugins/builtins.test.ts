@@ -25,7 +25,7 @@ describe("plugin definitions", () => {
       "GeoUtils",
     ]);
     // 内置插件一律 optional（隔离口径），旧断言 `defs[4].required === false` 依赖的
-    // 「未知插件被降级成一个 optional 空实现」这条行为已在  删除 —— 现在未知名字抛错。
+    // 「未知插件被降级成一个 optional 空实现」这条行为已在 #42 删除 —— 现在未知名字抛错。
     for (const def of defs) expect(def.required, `${def.name} 应为 optional`).toBe(false);
   });
 
@@ -177,7 +177,7 @@ describe("插件脚本加载超时（issue #121）", () => {
    * 观察一个 Promise 是否已结算（不 await —— 要断言「**没有**结算」）。
    *
    * 用容器而不是 `let settled = false`：TS 会把「只在回调里赋值」的变量收窄成 `never`
-   * （ 的同一形态），读出来永远像没赋过值。
+   * （#122 的同一形态），读出来永远像没赋过值。
    */
   function trackSettlement(pending: Promise<unknown>): {
     settled: boolean;
@@ -224,7 +224,7 @@ describe("插件脚本加载超时（issue #121）", () => {
   });
 
   /**
-   * 复现  评审 P1：**超时不能顺手改掉公共工厂的语义**。
+   * 复现 #121 评审 P1：**超时不能顺手改掉公共工厂的语义**。
    *
    * `urlPluginDefinition` 是从**根入口**与 `./plugins` 双导出的公共扩展契约
    * （`src/index.ts` / `src/plugins/index.ts`；`fixtures/consumer/src/advanced-adapter.ts`
@@ -336,7 +336,7 @@ describe("插件脚本加载超时（issue #121）", () => {
     const created = stubScriptCreation();
     const source = "window.mapvgl = { View: function () {} };";
     // 用**数组收集**而不是 `let resolveFetch: T | null`：TS 会把「只在回调里赋值」的变量收窄成
-    // `never`（赋了也看不见），于是 `resolveFetch?.(...)` 报 TS2349（ 的同一形态）。
+    // `never`（赋了也看不见），于是 `resolveFetch?.(...)` 报 TS2349（#122 的同一形态）。
     const fetchResolvers: Array<(value: unknown) => void> = [];
     const fetchStub = vi.fn(
       () =>

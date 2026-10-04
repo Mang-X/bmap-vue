@@ -64,7 +64,7 @@ type ForwardedSdkEvent = (typeof FORWARDED_SDK_EVENTS)[number];
  * 它在本库既不驱动任何状态、也不对外暴露。
  *
  * 因此 `<InfoWindow>` 的 `defineEmits` **不包含** `resize`，也不把它算进事件面
- * （`scripts/generate-overlay-emits.mts` 的载荷覆写表同款口径，见 ADR  决策 ⑥）。
+ * （`scripts/generate-overlay-emits.mts` 的载荷覆写表同款口径，见 ADR #138 决策 ⑥）。
  * 真要暴露它，得先回答「调用方拿它做什么」——目前没有可回答的消费者。
  */
 
@@ -81,7 +81,7 @@ export interface UseInfoWindowResult {
   /** detached host：`<Teleport :to="host">` 的目标（实例未就绪时为 `null`）。 */
   readonly host: Readonly<ShallowRef<HTMLElement | null>>;
   /**
-   * 命令面（ / TASK 2c）：官方**没有对应 prop** 的动作 + 读回族。
+   * 命令面（#165 Class 3 / TASK 2c）：官方**没有对应 prop** 的动作 + 读回族。
    *
    * 与 `useOverlaySpec` 的 `commands` 同一口径（见 `core/overlays/OverlaySpec.ts` 的
    * `expose`）。**不**在气泡刚建好时就造这个对象——命令面每次调用现取会话
@@ -274,7 +274,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
   }
 
   /**
-   * 观测驱动的收敛：**一个计数器 + 一个 post-flush effect**（ 替掉原来的双 `nextTick`）。
+   * 观测驱动的收敛：**一个计数器 + 一个 post-flush effect**（#138 替掉原来的双 `nextTick`）。
    *
    * ## 为什么双 `nextTick` 是承重的，以及它为什么必须被换掉
    *
@@ -440,7 +440,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           enableAutoPan: props.enableAutoPan,
           enableCloseOnClick: props.enableCloseOnClick,
           offset: props.offset,
-          // ↓  / TASK 3：官方 `InfoWindowOptions` 的其余构造选项。
+          // ↓ issue #165 Class 3 / TASK 3：官方 `InfoWindowOptions` 的其余构造选项。
           // 逐条依据见 `core/overlays/InfoWindowSpec.ts` 的 `InfoWindowProps` 注释。
           // ⚠️ `onClosing` 是**回调**：它只在这里读一次，因此「父级换了一个新闭包但没改
           // 别的构造期字段」不会被检测到——要跟着走就改 `recreate` 字段里的任意一个
@@ -508,7 +508,7 @@ export function useInfoWindow<Props extends InfoWindowProps>(
           ),
         );
 
-        // 所有 `options` 字段合成**一个** array-source watcher（与覆盖物内核同构）。
+        // #138：所有 `options` 字段合成**一个** array-source watcher（与覆盖物内核同构）。
         // 各写各的会让 N 个回调在同一 flush 里逐个跑，第一个就把 `setOptions` 发出去；
         // 合成之后「一轮一次回调」由 Vue 的 batching 保证。
         //

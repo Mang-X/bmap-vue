@@ -1,7 +1,7 @@
 /**
  * v4 ControlDriver（M3A2-CONTROLS-LAYERS / issue #22）
  *
- * 验收点（对应  的「测试要求」与「验收标准」）
+ * 验收点（对应 issue #22 的「测试要求」与「验收标准」）：
  * - issue 目标与范围列出的每个控件都有 create / add / remove / show / hide 测试；
  * - anchor / offset 归一化：官方常量名 → 4.0 数值、Pixel → `Size`；非四角落点与未知常量
  *   都要**可见**（告警一次），不静默；
@@ -367,7 +367,7 @@ describe("setOptions 的动态 / 构造期分类", () => {
     ctx.controls.setOptions(control, { noSuchOption: 1 });
     expect(ctx.rawOf(control).callLog).toEqual([]);
     // 「没有就地入口」≠「没有入口」：Built-in 控件的构造选项是原样透传的，所以这条属于
-    // 「只有构造期生效」⇒ `recreate`（ 评审第 3 轮）。真正「连构造期也没有入口」的是
+    // 「只有构造期生效」⇒ `recreate`（#95 评审第 3 轮）。真正「连构造期也没有入口」的是
     // 自定义控件上的未知键，见下一条用例。
     expect(String(warn.mock.calls[0][0])).toContain("只有构造期生效");
     expect(ctx.controls.planOptions(control, ["noSuchOption"])).toEqual({

@@ -68,7 +68,7 @@ const PANORAMA_CAPABILITIES = {
 /**
  * 官方 `PanoramaData` → 领域投影。
  *
- * ⚠️ **`tiles` 与 `links` 的处置不同**（ / TASK 5 更正了旧注释）
+ * ⚠️ **`tiles` 与 `links` 的处置不同**（issue #165 Class 3 / TASK 5 更正了旧注释）：
  * `tiles`（官方 `PanoramaTileData`）**真的**是渲染内部，不透出；
  * `links` 透出——`<Panorama>` 早就声明并派发了 `linksChange`，消费者**存在**，
  * 缺的只是数据路径。官方 React 参考实现同样暴露 `getLinks()`。
@@ -89,7 +89,7 @@ function toDataInfo(raw: unknown): PanoramaDataInfo | null {
 }
 
 /**
- * 官方 `PanoramaLink` → 领域投影（ / TASK 5）。
+ * 官方 `PanoramaLink` → 领域投影（issue #165 Class 3 / TASK 5）。
  *
  * 八个成员**逐字段按类型收窄，取不到就留在 `undefined`**。
  *
@@ -159,7 +159,7 @@ export function createJsapiV4PanoramaDriver(
   const namespace: JsapiV4Namespace = assertJsapiV4Namespace(rawSdk);
 
   /**
-   * 销毁的两个状态（PR  二轮复审 P2-3 之后）。
+   * 销毁的两个状态（PR #63 二轮复审 P2-3 之后）。
    *
    * 一个 `destroyed` 布尔同时表达「不要再做任何事」和「已经清干净了」会同时踩两个坑：
    * - 把它当重入保护用，就得在调 SDK **之前**写 —— 于是销毁失败也被记成「已销毁」，重试入口消失；
@@ -287,10 +287,10 @@ export function createJsapiV4PanoramaDriver(
       const failures: unknown[] = [];
       try {
         // 顺序与 Map Facet 一致：**先解绑 Driver 侧的业务事件，再销毁 SDK 对象**
-        // 的「先解绑、后摘除」在 SDK **同步**派发时是安全属性
+        // （ADR 2026-09-11 §6 的「先解绑、后摘除」在 SDK **同步**派发时是安全属性：
         // 业务回调不会在组件已经拆解时打到已释放的状态上）。
         //
-        // ⚠️ 代价（已知并接受， 裁决）：官方 `PanoramaEventMap` 的 `destroy`
+        // ⚠️ 代价（已知并接受，#168 item 3 裁决）：官方 `PanoramaEventMap` 的 `destroy`
         // 事件因此**收不到**。要让业务听见它就得把顺序倒过来，而那会让「SDK 在 destroy
         // 期间同步派发事件」打到已拆解的回调上——用一个真实存在的正确性风险换一个
         // 「实例收尾通知」的信号。裁决：不加这条事件。依据见
@@ -420,7 +420,7 @@ export function createJsapiV4PanoramaDriver(
     },
 
     /**
-     * 截图（官方 `Panorama#capture`；）。
+     * 截图（官方 `Panorama#capture`；issue #171 item I）。
      *
      * 官方签名是 `capture(options?: { quality?: number; type?: string }): string | undefined`，
      * 文档原文「当前渲染器不支持截图时返回 undefined」。因此：
@@ -467,7 +467,7 @@ export function createJsapiV4PanoramaDriver(
     },
 
     /**
-     * 清空全部覆盖物（官方 `Panorama#clearOverlays`；）。
+     * 清空全部覆盖物（官方 `Panorama#clearOverlays`；issue #171 item I）。
      *
      * `callRequired`：这是**业务命令**而不是可选成员探测，缺了就该显式失败（静默清不掉
      * 会让「重画一屏标注」静默叠加在旧标注上）。它**不销账**——本库 `PanoramaLabel` 的

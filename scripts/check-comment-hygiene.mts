@@ -104,11 +104,11 @@ if (issues.length > 0) {
   console.error(`\n[check-comment-hygiene] FAIL：${issues.length} 条（扫了 ${scanned} 个文件）\n`);
   for (const [kind, list] of byKind) {
     console.error(`  ${kind} × ${list.length}`);
-    for (const i of list.slice(0, kind === "doc-reference" ? 25 : 10)) {
+    for (const i of list.slice(0, 10)) {
       console.error(`    ${i.file}:${i.line}  ${i.detail}`);
     }
-    if (list.length > (kind === "doc-reference" ? 25 : 10)) {
-      console.error(`    … 另有 ${list.length - (kind === "doc-reference" ? 25 : 10)} 处`);
+    if (list.length > 10) {
+      console.error(`    … 另有 ${list.length - 10} 处`);
     }
     console.error("");
   }
@@ -117,4 +117,4 @@ if (issues.length > 0) {
 }
 
 console.log(`[check-comment-hygiene] OK：注释卫生（扫了 ${scanned} 个文件）`);
-console.log("  单文件注释/实码比不超阈值（含实测证据与类型定义密集的豁免）。");
+console.log("  单文件注释/实码比不超阈值（含实测证据主体 / 实测更正 / 类型定义密集的豁免）。");

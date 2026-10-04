@@ -287,7 +287,7 @@ function describeLocalSearchStatus(status: number): string {
  *
  * 类型包里另有一套 `RouteStatus`（`0` 正常 / `1` 结果为空 / `2` 仅返回地址信息），与 `ServiceStatus`
  * 在 0..2 上重叠、语义不同；但**没有任何路线类的 `getStatus()` 声明成 `RouteStatus`**，因此不能拿
- * 「另一张码表存在」去覆盖明确的方法签名（PR  评审 P1）。处置
+ * 「另一张码表存在」去覆盖明确的方法签名（PR #91 评审 P1）。处置：
  *
  * - `≥ 2` ⇒ `failed` 并带上官方那个码（`2` = `BMAP_STATUS_UNKNOWN_LOCATION`）；
  * - `0`（声明里唯一的成功值）与 `1`（在 `ServiceStatus` 是「城市列表」、在 `RouteStatus` 是「结果为空」，
@@ -828,7 +828,7 @@ export function createJsapiV4ServiceDriver(
    * 空回包的统一结算：`null` / 空容器 → `empty`。
    *
    * 这里**刻意不区分**「真的查不到」与「服务当前不可用」——官方对这几个服务只给了「回调参数
-   * 是不是 `null`」这一条公开信息，错误码只在私有回调注册表里。R25-C /  的处置是
+   * 是不是 `null`」这一条公开信息，错误码只在私有回调注册表里。R25-C / #72 的处置是：
    * 不嗅探私有面、不编造精确错误码，把「没有可用的结果」如实报成 `empty`；需要更细的服务健康度
    * 时由调用方自己按业务口径重试或提示（超时路径已经由适配器的 `timeout` 覆盖）。
    *
@@ -895,7 +895,7 @@ export function createJsapiV4ServiceDriver(
     const failures: unknown[] = [];
     try {
       // **两步分别 try/catch**：`cleanup()` 抛错不能连带跳过 `events.release()`——那句注释
-      // 里承诺的是「解绑失败不阻断其余步骤」，两份清理写在一个 try 里就做不到（PR  评审 P2）。
+      // 里承诺的是「解绑失败不阻断其余步骤」，两份清理写在一个 try 里就做不到（PR #89 评审 P2）。
       try {
         options.cleanup?.();
       } catch (error) {
@@ -940,7 +940,7 @@ export function createJsapiV4ServiceDriver(
 
   /**
    * 释放一个「以**公开 `clearResults()`** 为唯一清理入口」的服务实例
-   * （`LocalSearch` 与四类路线服务共用， 把它从 `disposeLocalSearch` 里提出来）。
+   * （`LocalSearch` 与四类路线服务共用，#39 把它从 `disposeLocalSearch` 里提出来）。
    *
    * 五类服务在这里的性质完全一样：实例本身**没有** `dispose()`（官方 4.0.5 声明里只有
    * `clearResults` / `getResults` / `getStatus` …），但它**交付出去的结果集**不随实例被 GC
@@ -1048,7 +1048,7 @@ export function createJsapiV4ServiceDriver(
    * **归属模型：一个实例同一时刻只有一个未结算操作**，因此回包归属与到达顺序无关：
    * 回调到达时，在册的那一个就是它（不需要 keyword、不需要 FIFO、不需要队列）。
    *
-   * 为什么不用「FIFO + keyword 校验」（PR  评审 P1）：官方只承诺**单次多关键字检索内部**
+   * 为什么不用「FIFO + keyword 校验」（PR #89 评审 P1）：官方只承诺**单次多关键字检索内部**
    * 结果数组与关键字数组顺序一致，**没有**承诺多次请求之间的回调顺序；`LocalResult.keyword`
    * 也不是请求身份。按到达顺序归属在乱序回包下会确定性出错：
    *
@@ -1094,7 +1094,7 @@ export function createJsapiV4ServiceDriver(
   /**
    * 发起一次检索操作：占用唯一槽位 → 调用 SDK → （同步抛错则回滚槽位）。
    *
-   * **`LocalSearch` 与四类路线服务共用它**（ 明确要求「复用请求生命周期、避免建立第二套框架」）
+   * **`LocalSearch` 与四类路线服务共用它**（#39 明确要求「复用请求生命周期、避免建立第二套框架」）：
    * 这五类服务的回包语义完全一样——一条 `onSearchComplete`、回包里没有请求身份、官方也没有承诺
    * 跨请求顺序，所以归属只能靠**实例身份**（一个实例同一时刻一个未结算操作）。
    *
@@ -1123,7 +1123,7 @@ export function createJsapiV4ServiceDriver(
         onCancel: () => supersedeOperation(raw),
         // **超时同理**：超时不代表 SDK 侧请求消失，迟到回包仍可能到达。若这里不收尾，
         // 「迟到回包到达后实例又变回可用」就会让同一 handle 的行为取决于回包早晚
-        // （PR  复审 P1）——契约要求：取消/超时之后必须重建实例。
+        // （PR #89 复审 P1）——契约要求：取消/超时之后必须重建实例。
         onTimeout: () => supersedeOperation(raw),
       },
     );
@@ -1684,7 +1684,7 @@ export function createJsapiV4ServiceDriver(
      * 的契约与 ADR 决策 4）。代价是必须自己管在飞请求的记账与释放入口（`disposeLocalSearch`）。
      *
      * 内部分发器只挂一次（构造期）：所有操作共用它，因为它必须与实例同寿命——`setSearchCompleteCallback`
-     * 虽然也在官方 `LocalSearch` 的声明里，但「换回调能否按请求归属」在  的真实 AK 探测里
+     * 虽然也在官方 `LocalSearch` 的声明里，但「换回调能否按请求归属」在 #72 的真实 AK 探测里
      * **没有得出可发布结论**（那批检索全部无回包，对照组同样无回包），因此不建立在它上面。
      */
     createLocalSearch(location, options: LocalSearchOptions = {}) {
@@ -1722,7 +1722,7 @@ export function createJsapiV4ServiceDriver(
      * 更新已创建实例的检索区域 / 数据类型（官方 4.0.5 声明的 `Autocomplete#setLocation` /
      * `#setTypes`）。
      *
-     * 为什么收在 Driver（R25-C /  的「组件 raw setter 回到集成边界」）：组件侧的
+     * 为什么收在 Driver（R25-C / #72 的「组件 raw setter 回到集成边界」）：组件侧的
      * `inst.raw.setLocation(...)` 把 raw 成员访问摊在组件里，既越过了 raw SDK 边界，又让
      * 「某个 setter 在某个引擎上不存在」变成组件作者的记忆负担。这里统一：
      *
@@ -1855,7 +1855,7 @@ export function createJsapiV4ServiceDriver(
 
     createTrackAnimation(_map: MapHandle) {
       // Catalog：`service.track-animation` 是 `unsupported`；结论已定型为 `native`
-      // （改用原生图层 layer.track-line，/ plugin-compat-inventory）。
+      // （改用原生图层 layer.track-line，见 ADR 2026-09-21 / plugin-compat-inventory）。
       throw new BMapError(
         "BMAP_CAPABILITY_UNSUPPORTED",
         "JSAPI 4.0 没有 TrackAnimation 入口（该插件属 BMapGLLib，本库已定型为「迁到原生图层」）；" +
@@ -1971,7 +1971,7 @@ export function createJsapiV4ServiceDriver(
       }
       // 坐标合法性**必须在进入调用之前校验**：几何边界会以 `BMAP_INVALID_POINT` 拒绝非有限数
       // / 缺分量，而它是在 `createServiceCall` 之外执行的——不先拦下来就会同步抛错，
-      // 连 `ServiceCall` 都返回不了（PR  复审 P2-4）。**先校验容器，再逐项读分量**
+      // 连 `ServiceCall` 都返回不了（PR #63 复审 P2-4）。**先校验容器，再逐项读分量**：
       // `points` 里出现 null / 非对象时也不能抛原生 TypeError。
       for (const point of points) {
         const candidate = point as { lng?: unknown; lat?: unknown } | null | undefined;
@@ -2335,7 +2335,7 @@ type ExpectTrue<T extends true> = T;
 /**
  * 地理定位失败状态码与官方 `const/StatusCodes.d.ts` 一致。
  *
- * 上游改值即编译失败——比注释里写「与官方一致」可靠（同  的锚点常量表口径）。
+ * 上游改值即编译失败——比注释里写「与官方一致」可靠（同 #22 的锚点常量表口径）。
  */
 type _AssertGeolocationFailureStatus =
   | typeof BMAP_STATUS_UNKNOWN_LOCATION

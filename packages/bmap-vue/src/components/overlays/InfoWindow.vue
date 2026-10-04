@@ -11,7 +11,7 @@
  *
  * 契约见 ADR `2026-09-18-infowindow-host-and-ownership`。
  *
- * 事件面的类型声明是生成物（`core/overlays/overlayEventEmits.generated.ts`）。
+ * #138：事件面的类型声明是生成物（`core/overlays/overlayEventEmits.generated.ts`）。
  * `<InfoWindow>` 不走 `useOverlaySpec`，事件由 `useInfoWindow` 原样转发，因此它的载荷**不**按
  * 事件矩阵的档声明——理由与逐条依据见生成脚本里的 `PAYLOAD_OVERRIDES_BY_KIND`。
  */
@@ -56,7 +56,7 @@ const { host, commands } = useInfoWindow(props, {
 });
 
 /**
- * 命令面（ / TASK 2c）：`getTitle` / `getContent` / `isOpen` / `getOffset` /
+ * 命令面（#165 Class 3 / TASK 2c）：`getTitle` / `getContent` / `isOpen` / `getOffset` /
  * `maximize` / `restore`。
  *
  * 前四个是**读回**（`open` prop 表达的是意图，官方只有实例上的 `isOpen()` 才回答

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Circle —— 圆形（M5-VECTORS /  迁移到 OverlaySpec）
+ * Circle —— 圆形（M5-VECTORS / issue #31 迁移到 OverlaySpec）
  *
  * 组件只做两件事：**声明 spec** + **渲染 slot**。`center` 是**位置字段**（走 `setPosition`
  * 专用入口，Driver 内部映射到 `setCenter`），`radius` 与样式走各自的 setter，
@@ -28,13 +28,13 @@ const props = withDefaults(defineProps<CircleProps>(), {
   enableEditing: false,
   // 官方 `CircleOptions.enableClicking` 的 `@default` 是 `true`。**既有行为**：这里显式写
   // `true`（值与官方默认一致，只是**来源**是本库）——与 `<Rectangle>` / `<Marker>` 同款，
-  // 本次**不改**（改它属于「调整既有 prop 的缺省表示」，不在  图形族补齐范围内）。
+  // 本次**不改**（改它属于「调整既有 prop 的缺省表示」，不在 #165 图形族补齐范围内）。
   enableClicking: true,
   visible: true,
   // ⚠️ 这里**刻意没有** `linkRight` / `clip` / `strokeLineCap` / `strokeLineJoin`：
   // 官方 `CircleOptions` 的 12 个键里**一个都没有**它们（圆形的几何是「圆心 + 半径」，
   // 没有「跨经度的路径」也没有「两点怎么连」的问题）。加了就是假支持。
-  // `coordType` / `dashArray` 是  补的两个，非 `Boolean` ⇒ 无 absent 陷阱
+  // `coordType` / `dashArray` 是 issue #165 补的两个，非 `Boolean` ⇒ 无 absent 陷阱，
   // 未给时真的是 `undefined` ⇒ 键不进构造选项。
 });
 
@@ -46,7 +46,7 @@ defineOptions({ name: "Circle" });
 
 const { commands } = useOverlaySpec(props, createCircleSpec(), { emit: emitDynamic });
 /**
- * 命令面（ / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
+ * 命令面（#165 Class 3 / TASK 2）：官方**没有对应 prop** 的动作 + 读回族。
  *
  * 直接展开 `commands`（而不是挂成 `commands.xxx`）：调用方拿到的就是官方同名方法本身
  * （`polyline.setPositionAt(i, pt)` / `circle.getRadius()`），与官方参考实现的形状一致。

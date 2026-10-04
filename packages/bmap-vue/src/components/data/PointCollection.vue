@@ -36,7 +36,7 @@
  * 与底图图层组件（#40）的两处**刻意不同**（都由内核按 `supports()` 决定）：
  *
  * - **`visible` 走 `setVisible(false)`，不是「摘掉图层」**：官方在原生数据图层上**有**这个
- * setter，而且  的 live 实测显示 `removeLayer` 之后的实例**再也渲染不了**（只能换新实例）。
+ *   setter，而且 #98 的 live 实测显示 `removeLayer` 之后的实例**再也渲染不了**（只能换新实例）。
  *   用 setter 既准确（隐藏 ≠ 释放数据）又便宜。
  * - **重建必须「先摘成功、再建新的」**：内核在摘除失败时保留旧实例并交出 `resource:error`，
  *   否则新旧两份会同时挂在图上（同一个实例 `addLayer` 不去重）。
@@ -253,7 +253,7 @@ function handlePick(event: unknown): void {
   });
 
   emit("click", pick);
-  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审  F4）
+  // falsy 业务项（`0` / `false` / `""`）也是「命中了」，必须派发（评审 #102 F4）
   if (pick.item !== null) emit("item-click", pick.item);
   else if (pick.hit) {
     warnOnce(

@@ -26,7 +26,7 @@
  */
 import { dynamicEmit } from "../../core/composables/dynamicEmit";
 import { useCustomOverlay } from "../../core/composables/useCustomOverlay";
-// 事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
+// #138：事件面的类型声明是生成物（见 `scripts/generate-overlay-emits.mts`）。
 import type { CustomOverlayEmits } from "../../core/overlays/overlayEventEmits.generated";
 import type { CustomOverlayProps } from "../../types/components";
 

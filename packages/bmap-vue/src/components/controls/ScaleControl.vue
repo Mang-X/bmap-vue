@@ -22,7 +22,7 @@ export interface ScaleControlProps {
    *
    * 此前 Driver 的 `CONTROL_OPTION_SPECS.scale.unit` 已经登记成
    * `{ policy: "mutable", setter: "setUnit" }`，而组件**没有**这个 prop——
-   * 分类层准备好了、出口没有。 / TASK 2f 补上出口。
+   * 分类层准备好了、出口没有。#165 Class 3 / TASK 2f 补上出口。
    *
    * 不给默认值：`undefined` = 不表态（官方 `ScaleControlOptions` 里**没有** `unit`，
    * 默认由 SDK 自己决定，本库不猜——与图层 `border` 那条同款理由）。

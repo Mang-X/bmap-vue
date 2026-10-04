@@ -80,7 +80,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../.."
  * 从上游 `.d.ts` 里读出 `declare const <NAME>: <N>;` 的成员表。
  *
  * 读**发布产物里的声明文件**而不是 README / 文档站：声明文件是 deps 的一部分，会随版本升级，
- * 而文档可能滞后（本仓库  的教训）。
+ * 而文档可能滞后（本仓库 #71 的教训）。
  */
 function upstreamMembers(fileName: string): Record<string, number> {
   const source = readFileSync(

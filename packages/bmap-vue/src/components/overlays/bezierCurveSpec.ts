@@ -39,7 +39,7 @@ export const BEZIER_CURVE_FIELDS: OverlayFieldMap<BezierCurveProps> = {
   ...PATH_STROKE_FIELDS,
   enableMassClear: "options",
   ...PATH_ZINDEX_FIELD,
-  // ↓  图形族补齐：`BezierCurveOptions` 此前只缺这两项。
+  // ↓ issue #165 图形族补齐：`BezierCurveOptions` 此前只缺这两项。
   //
   // ⚠️ **刻意不加** `coordType` / `strokeLineCap` / `strokeLineJoin` / `linkRight`——
   // 官方 `BezierCurveOptions` 里一个都没有（8 个键，其余 6 个已覆盖）。
@@ -63,7 +63,7 @@ export const BEZIER_CURVE_DESCRIPTOR_KEYS = {
 } as const;
 
 /**
- * 构造期选项的袋（ 图形族补齐）。
+ * 构造期选项的袋（issue #165 图形族补齐）。
  *
  * ⚠️ `enableClicking` 的官方 `@default` 是 `true`，而 `BezierCurve.vue` 此前**没有**在
  * `withDefaults` 里写它——`Boolean` prop 未给时是 `false`，与官方默认**相反**。

@@ -6,20 +6,25 @@
  *
  * ## 这道门禁要拦的是什么
  *
- * 本仓的注释习惯是「凡决策必写注释，写得很长」。到  合并时，这个习惯产生了两个
+ * 本仓的注释习惯是「凡决策必写注释，写得很长」。到 1.0 合并时，这个习惯产生了两个
  * 可测量的代价（审计基线 `239b649a`）：
  *
  * - **体量**：注释里引用 ADR / 文档路径 / issue 号的行共 **2381 行，分布在 530 个文件**；
  *   注释行 ≥2× 实码行的文件 18 个，最极端的 `deprecatedLayerWarning.ts` 是 53:7。
  * - **过时**：注释一旦**引用其它文档**，改名 / 重写 / 合并即失效，而注释本身没人回头核对。
- * `` 那道门禁自己就是例子——它 391 行注释里大量在复述 ADR 已经写过的决策史。
+ * `check:toolchain` 自己就是例子——它 391 行注释里大量在复述 ADR 已经写过的决策史。
  *
- * ## 判据只有两条，都是可判定的
+ * ## 判据只有一条（比例），另有四条豁免，都是可判定的
  *
  * | 判据 | 拦什么 |
  * | --- | --- |
- * | 注释里不得出现**文档路径 / ADR 编号 / issue 号** | 跨文档引用——最容易过时的那一类 |
  * | 单文件「注释行 / 实码行」比不得超阈值 | `53:7` 这类极端值 |
+ *
+ * 曾经还有一条「注释里不得出现文档路径 / ADR 编号 / issue 号」，**已被实测推翻并删除**：
+ * 核对全部 499 处后没有一处是纯重复，每处都在承载实质理由——删掉编号只会把注释变成
+ * 没有依据的断言（「让『没传』=『不表态』（决策 5）」删掉「决策 5」就悬了）。
+ * 相关的 `checkDocReferences` / `findDocReference` 已随之删除——判据退化成常量、没有
+ * 消费者时，留着只会让人以为它还在生效。
  *
  * 刻意**不做**的事：
  *
@@ -36,39 +41,13 @@
 
 /** 一条判据失败。 */
 export interface CommentIssue {
-  readonly kind: "doc-reference" | "comment-ratio";
+  readonly kind: "comment-ratio";
   /** 出问题的文件（仓库相对路径，用 `/` 分隔）。 */
   readonly file: string;
   /** 1-based 行号。 */
   readonly line: number;
   readonly detail: string;
 }
-
-/**
- * 注释里不该出现的**跨文档引用**的三种形态。
- *
- * 形态与误伤面都经过实测（见 `tests/behavior/comment-hygiene-gate.test.ts` 的反例）：
- *
- * | 形态 | 正则 | 为什么这样切 |
- * | --- | --- | --- |
- * | 文档路径 | `docs/….md` | 路径是最硬的一类：文件改名必然失效 |
- * | ADR 编号 | `-…` | 裸日期串有误伤面，故要求 `ADR` 前缀 |
- * | issue 号 | `` / `（）` | **要求上下文**，见下 |
- *
- * ### 为什么 issue 号要带上下文才算
- *
- * 实测：`src/manifest.ts` 里有 `M5-CUSTOM-MENU / `、`M6 / ` 这类写法。
- * 而代码里 `#` 也可能指别的（颜色码、行号、锚点）。因此只认两种形态：
- * 带 `issue` 前缀的，或**紧跟在中文括号里**的。裸 `` 不判——
- * 宁可漏，不可误伤：一道会误红的门禁会被习惯性忽略。
- */
-const DOC_REFERENCE_PATTERNS: readonly { readonly re: RegExp; readonly label: string }[] = [
-  { re: /docs\/[\w./-]+\.md\b/, label: "文档路径" },
-  { re: /\bADR[\s'"]*\d{4}-\d{2}-\d{2}/, label: "ADR 编号" },
-  { re: /\bissue\s*#?\d+\b/i, label: "issue 引用" },
-  // 中文/全角括号包裹的 #编号：实测这类几乎全是真 issue 引用
-  { re: /[（(]\s*#\d+\b/, label: "issue 引用" },
-];
 
 /**
  * 判断一行是不是「整行注释」。
@@ -80,18 +59,6 @@ export function isCommentLine(line: string): boolean {
   return (
     t.startsWith("//") || t.startsWith("/*") || t.startsWith("*") || t.startsWith("<!--")
   );
-}
-
-/**
- * 找出该行注释里引用的文档。
- *
- * @returns 命中的形态标签；没命中返回 `undefined`。
- */
-export function findDocReference(commentLine: string): string | undefined {
-  for (const { re, label } of DOC_REFERENCE_PATTERNS) {
-    if (re.test(commentLine)) return label;
-  }
-  return undefined;
 }
 
 /**
@@ -132,27 +99,30 @@ function isEvidenceLine(line: string): boolean {
 }
 
 /**
- * 实测证据的**形态**判定：成块的取证记录 vs 零星提及。
+ * 实测证据豁免的判据。**两个条件都要满足**，缺一不可。
  *
- * ⚠️ 判据经历过一次修正。第一版是「整文件短路」（命中一行就豁免），被评审点破：任意一条
- * `// 实测` 就能让高比例文件完全绕过门禁，而实测当时只有两个文件超阈值、证据行分别只占
- * 1% / 3%——豁免的实际效果等于关掉判据，只是做得更隐蔽。
+ * ⚠️ 这道判据被评审驳回过两次，两次的错法不同，都记在这里：
  *
- * 第二版改成「证据行占注释行的比例 ≥ 0.6」，仍然错：它把**成块**的读数表和**零星**的一句
- * 「实测」当成了同一种东西。实测 `nativeLayerStyleOwnership.ts` 的 6 行读数表是连续的
- * 一整块（占比仅 6%），却是这份注释不可替代的部分——而「某条 probe 的结论顺带写在这里」
- * 同样只占几行，形态却完全不同。
+ * **第一版（整文件短路）**：命中一行 `// 实测` 就豁免整个文件。任意一条就能让高比例文件
+ * 完全绕过门禁——实测当时只有两个文件超阈值，证据行分别只占 1% / 3%，豁免的实际效果
+ * 等于关掉判据，只是做得更隐蔽。
  *
- * 现在的判据是**连续块**：从取证措辞起、跨过表格的表头与数据行，到空行为止，算**一个**
- * 证据块。块内行数 ≥ `MIN_EVIDENCE_BLOCK_LINES` 且块数 ≥ 1 才豁免。
+ * **第二版（连续 ≥5 行即可）**：把「整文件短路」换成「成块」，仍然错：只要文件里有任意
+ * 一张 5 行的读数表，**后面 100+ 行决策史全部绕过**比例检查。函数叫 `isEvidenceDominant`
+ * 却不判 dominant——名不副实，这正是评审第二次驳回的理由。
+ *
+ * **现在**：证据块既要**成块**（连续 ≥ `MIN_EVIDENCE_BLOCK_LINES` 行），又要**占多数**
+ * （≥ `MIN_EVIDENCE_SHARE` 的注释行）。两条合起来才是名副其实的「证据主导」：
+ * 只有当这份注释的**主体**是取证记录时，高比例才是该留的。
  */
 const MIN_EVIDENCE_BLOCK_LINES = 5;
+const MIN_EVIDENCE_SHARE = 0.6;
 
 /**
- * 该文件的注释是否含**成块的实测证据**（是则豁免比例判据）。
+ * 该文件的注释是否**以实测证据为主体**（是则豁免比例判据）。
  *
- * 「有一句『实测』」不够——必须是**成块**的取证记录，否则任意一条 `// 实测` 就能
- * 让整个文件绕过门禁（见上）。
+ * 两个条件：① 存在连续 ≥5 行的证据块（形态对）；② 证据行占全部注释行 ≥60%（主体对）。
+ * 缺任何一个都不豁免——尤其 ②，它挡住「表格在前、决策史在后」这种形态。
  */
 export function isEvidenceDominant(
   lines: readonly string[],
@@ -160,25 +130,28 @@ export function isEvidenceDominant(
 ): boolean {
   if (stats.commentLines === 0) return false;
   let run = 0;
+  let evidenceLines = 0;
+  let hasBlock = false;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     const t = l.trim();
     if (isEvidenceLine(l)) {
       run += 1;
-      // 达到阈值**立即**返回：等到循环末尾再判是错的——证据块之后还有整段论证，
-      // 那些行会把 run 清零，于是「块够长」这个事实永远传不出去。
-      if (run >= MIN_EVIDENCE_BLOCK_LINES) return true;
+      evidenceLines += 1;
+      if (run >= MIN_EVIDENCE_BLOCK_LINES) hasBlock = true;
       continue;
     }
     if (t === "" || t === "*") continue;
     if (run > 0 && isEvidenceBridgeLine(lines, i)) {
       run += 1;
-      if (run >= MIN_EVIDENCE_BLOCK_LINES) return true;
+      evidenceLines += 1;
+      if (run >= MIN_EVIDENCE_BLOCK_LINES) hasBlock = true;
       continue;
     }
     run = 0;
   }
-  return false;
+  // 形态对 **且** 主体对 —— 两个条件缺一不可（见 MIN_EVIDENCE_SHARE）
+  return hasBlock && evidenceLines / stats.commentLines >= MIN_EVIDENCE_SHARE;
 }
 
 /**
@@ -225,6 +198,51 @@ function isTypeDefinitionDense(
     }
   }
   return memberLines / stats.codeLines >= 0.5;
+}
+
+/**
+ * 该文件是否含**成块的实测更正**（是则豁免比例判据）。
+ *
+ * 形态：注释里出现「曾记成 X，那是**误读** / 实测证明不是 X」这类**自我推翻**的段落，
+ * **且该段落自带取证依据**（同段落附近有 live 读数行）。
+ *
+ * ⚠️ 两个条件都不能少。初版只判「出现过 `记成` / `推翻` 等词」，反例立刻成立：
+ * 一句「这里我们记成 A，后来改成 B」+ 100 行决策史就豁免了整个文件——那又回到评审
+ * 第一次驳回的「整文件短路」。词只是**入口**，取证行才是它之所以不可删的原因。
+ *
+ * 为什么这类注释不该被压：AGENTS.md 的 Evidence-first 要求「未知运行时行为先 probe 再建
+ * 抽象」，而「上一轮的判断被实测推翻」是这条原则的**产物**——压掉它，下次有人读到那个已被
+ * 推翻的判断（它往往还留在别的文件里），会重新踩同一个坑。`nativeLayerStyleOwnership.ts`
+ * 就是这个形态：读数表只占 8%，主体是「评审记错了，merge 不是整袋替换」这段更正。
+ */
+const CORRECTION_MIN_BLOCK = 4;
+
+function hasMeasuredCorrection(lines: readonly string[]): boolean {
+  let run = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const t = stripCommentPrefix(l);
+    const isCorrection =
+      isCommentLine(l) &&
+      /(误读|曾记成|此前.{0,8}记成|记错了|判断错|并不是|≠)/.test(t);
+    if (isCorrection) {
+      run += 1;
+      // 更正段自带取证依据（往后 12 行内有 live 读数/ 读数表）⇒ 不可删
+      const hasEvidence = lines
+        .slice(i, i + 12)
+        .some((x) => isCommentLine(x) && /live\s*(读数|probe|探针)|真实\s*AK|实测|^\s*\*\s*\|/.test(stripCommentPrefix(x)));
+      if (hasEvidence && run >= 1) {
+        const block = lines
+          .slice(i, i + CORRECTION_MIN_BLOCK)
+          .filter((x) => isCommentLine(x) && x.trim() !== "" && x.trim() !== "*").length;
+        return block >= 2;
+      }
+      continue;
+    }
+    if (l.trim() === "" || l.trim() === "*") continue;
+    run = 0;
+  }
+  return false;
 }
 
 /** 一个文件的注释统计结果。 */
@@ -308,6 +326,9 @@ export function checkCommentRatio(
   // **类型定义密集豁免**：逐成员说明是冻结面的固有需要（见 isTypeDefinitionDense）。
   if (lines !== undefined && isTypeDefinitionDense(lines, stats)) return [];
 
+  // **实测更正豁免**：「上一轮判断被实测推翻」是 Evidence-first 的产物（见 hasMeasuredCorrection）。
+  if (lines !== undefined && hasMeasuredCorrection(lines)) return [];
+
   const ratio = stats.commentLines / stats.codeLines;
   // 阈值比较留 0.05 的余量：比值是浮点除法，`3.0` 与 `3.023` 在阈值边界上反复横跳会让
   // 门禁变得不可预测——而这道判据本来就只是粗筛，不值得为精确到 0.02 的差别让人反复跑。
@@ -325,30 +346,4 @@ export function checkCommentRatio(
         "判据见 #192",
     },
   ];
-}
-
-/**
- * 逐行判「注释里引用了文档」。
- *
- * @param relativeFile 仓库相对路径（`/` 分隔），只用于报错定位。
- */
-export function checkDocReferences(
-  relativeFile: string,
-  lines: readonly string[],
-): CommentIssue[] {
-  const issues: CommentIssue[] = [];
-  for (const [i, line] of lines.entries()) {
-    if (!isCommentLine(line)) continue;
-    const label = findDocReference(line);
-    if (label === undefined) continue;
-    issues.push({
-      kind: "doc-reference",
-      file: relativeFile,
-      line: i + 1,
-      detail:
-        `注释里出现${label}：跨文档引用改名/重写/合并即失效，而注释没人回头核对。` +
-        "若要说明决策，改引 ADR 的**稳定标题**或本文件内的常量名；若只是背景，本仓库 ADR 已有一份",
-    });
-  }
-  return issues;
 }

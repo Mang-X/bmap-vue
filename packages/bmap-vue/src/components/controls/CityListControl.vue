@@ -40,7 +40,7 @@ export interface CityListControlProps {
  * 两者在稳定态**在位且不抛**，但 headless 环境下该控件**始终不渲染面板 DOM**
  * （`getTriggerDom()` 恒为 `undefined`，构造期 `expand: true` 也不出面板），
  * 因此「调用前后 DOM 无变化」**不能**当「它们是空操作」的证据——面板压根不存在。
- * 按  的硬证据规则（取不到只能记「无法验证」），`choice` 分类**暂按官方声明保留**
+ * 按 #165 的硬证据规则（取不到只能记「无法验证」），`choice` 分类**暂按官方声明保留**，
  * 但「它真的能展开面板」**尚未被任何读数证实**。证伪/证实之前不要把它改成 `recreate`。
  */
 const props = withDefaults(defineProps<CityListControlProps>(), {
@@ -51,7 +51,7 @@ const props = withDefaults(defineProps<CityListControlProps>(), {
 });
 
 /**
- * 事件面（ / TASK 3 + 4：官方 6 个构造回调，此前 **0** 条事件）。
+ * 事件面（issue #165 Class 3 / TASK 3 + 4：官方 6 个构造回调，此前 **0** 条事件）。
  *
  * 官方 `CityListControlOptions` 的六个回调全部**只在构造期注册**（`CONTROL_OPTION_SPECS`
  * 的 `city-list` 逐条记着「回调只在构造期注册」），而组件此前**一个都没暴露**——
@@ -140,7 +140,7 @@ const spec: ControlSpec<CityListControlProps, CityListCommandApi> = {
   ],
   // 命令面（#168 item 1）：`toggle()`（动作）与 `getCityName()`（读回）。
   //
-  // ⚠️ 这两个成员**不是**「上一轮当缺口补上去的必然失败 API」（ 审计最初这么记，并建议删除）——
+  // ⚠️ 这两个成员**不是**「上一轮当缺口补上去的必然失败 API」（#165 审计最初这么记，并建议删除）——
   // live 复核否掉了那个前提：稳定态 `toggle` / `getCityName` **在原型与实例上都在、真调得动**
   // （`getCityName()` 读回 `"中国"`）。见 `scripts/probe-165c-surface.mts` §④。
   //
