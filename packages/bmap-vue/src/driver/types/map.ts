@@ -149,7 +149,7 @@ export interface MapDriver {
    * - 销毁后对该 map 的其它命令应被拒绝（`BMAP_RESOURCE_DISPOSED`）。
    *
    * v4 实现（`driver/jsapi-v4/map.ts`）遵守以上两条；迁移期 `webgl-v1` 实现只保证幂等，
-   * 未校验销毁后的命令（属待删除实现）。
+   * 未校验销毁后的命令（属待删除实现，见 ADR 2026-09-11-jsapi-v4-map-facet）。
    */
   destroy(map: MapHandle): void;
 

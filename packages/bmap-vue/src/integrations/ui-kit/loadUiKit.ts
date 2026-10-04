@@ -1,7 +1,7 @@
 /**
  * 官方 UI Kit 的动态加载边界（R25-D / issue #73）
  *
- * 为什么必须是动态 import（ 与「已知限制」）：
+ * 为什么必须是动态 import（ADR 2026-09-13 决策 4 与「已知限制」）：
  * `@baidumap/jsapi-ui-kit@1.1.2` 没有 `exports` 字段 ⇒ Node 侧解析到 `main`（IIFE 产物），
  * 模块求值期就访问 `document` 而抛 `ReferenceError`；ESM 产物更早死在打包进去的 `js-md5`
  * / `Buffer` interop 上。两者都是**求值期**崩溃，无法被 `try/catch` 或条件分支挡住——

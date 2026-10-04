@@ -11,7 +11,7 @@
  * - 摇摆/倾斜：`setHeading` / `setTilt` 有动画选项；`getHeading()` 返回**带符号**角度
  *   （`setHeading(270)` → `getHeading()` 为 `-90`），因此 heading 不是纯 round-trip 值；
  * - 交互：官方 4.0 API 参考仍公开列出成对 `enable*` / `disable*` 方法（本 facet 使用它们，
- *   不用 `setOptions` 是因为它无法表达「只改一个键」）；
+ *   原因见 ADR 2026-09-11-jsapi-v4-map-facet「为什么不用 setOptions」）；
  * - 路况：v4 把路况收敛成 `TrafficLayer`，`Map` 自身没有开关 → 交由 Layer Facet（#22），
  *   本 facet 显式 warn + no-op；
  * - 释放：`destroy()` 清空 Map 自身监听器但管不到子对象，因此 Driver 先摘掉自己的订阅分组
@@ -67,7 +67,7 @@ import type { JsapiV4HandleRegistry } from "./registry";
  * `setInteraction` 先做**结构性存在判断**，有就调用、没有就告警一次（见实现）。
  *
  * 与 `webgl-v1/map.ts` 的同名映射表**刻意保持两份**：跨引擎抽取会让  待删除的实现
- * 阻塞 v4 底座（「负面 / 成本」）。
+ * 阻塞 v4 底座（见 ADR 2026-09-11-jsapi-v4-driver-foundation「负面 / 成本」）。
  */
 const INTERACTION_METHODS: Record<MapInteraction, { enable: string; disable: string }> = {
   dragging: { enable: "enableDragging", disable: "disableDragging" },

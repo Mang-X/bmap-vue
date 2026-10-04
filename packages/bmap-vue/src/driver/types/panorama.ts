@@ -248,7 +248,7 @@ export interface PanoramaViewerDriver extends PanoramaDriver {
   /**
    * 按全景 id 切换场景。
    *
-   * ⚠️ 组件的销毁路径**必须先切到某个场景**再 `destroy()`：真实 AK smoke
+   * ⚠️ 组件的销毁路径**必须先切到某个场景**再 `destroy()`：ADR 2026-09-12 的真实 AK smoke
    * 记录里，未加载场景的实例 `destroy()` 会抛
    * `TypeError: Cannot read properties of undefined (reading 'START')`。
    */

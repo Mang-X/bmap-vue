@@ -3,7 +3,7 @@
  * destroy / dispose 幂等性与销毁期回调探针（ / F-3）
  *
  * 审计表登记的问题：SDK 实例的 `destroy()` / `dispose()` 是否幂等、销毁期是否真会回调业务。
- * 现状只有**已知反例**（真实 AK smoke：**未加载场景**的 `Panorama#destroy()`
+ * 现状只有**已知反例**（ADR 2026-09-12 真实 AK smoke：**未加载场景**的 `Panorama#destroy()`
  * 抛 `TypeError: Cannot read properties of undefined (reading 'START')`），没有正向读数。
  * 在取证之前，契约措辞一律「本库保证」而非「官方保证」。
  *

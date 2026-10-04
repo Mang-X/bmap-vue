@@ -7,7 +7,8 @@
  * 分两层（M3A2-SERVICES-NATIVE / issue #23）：
  * - **创建面** `ServiceDriver`：两个引擎都要实现（webgl-v1 随 #26 删除）；
  * - **归一化调用面** `ServiceInvocationDriver`：把 SDK 的 callback 风格调用收敛成
- *   `ServiceCall<ServiceResult<T>>`，只在 JSAPI 4.0 上落地。
+ *   `ServiceCall<ServiceResult<T>>`，只在 JSAPI 4.0 上落地（见
+ *   `docs/adr/2026-09-12-jsapi-v4-service-panorama-native-layers.md`）。
  */
 import type { MapHandle, ServiceHandle } from "./handles";
 import type { Bounds, Point } from "./geometry";
@@ -134,7 +135,8 @@ export interface ServiceDriver {
  * Referer 限制），而官方没有公开的错误码入口——因此「查无结果」与「服务当前不可用」在公开面上
  * **不可区分**，两者都归成 `empty`。`failed` 只留给**能给出公开原因**的情形：SDK 公开的状态码
  * （`Geolocation#getStatus()`、`Convertor#translate` 的回包 `status`）与调用方参数错误。
- * 本库不去嗅探 `_rd` 之类的私有面来「还原」精确错误码。
+ * 本库不去嗅探 `_rd` 之类的私有面来「还原」精确错误码，见
+ * `docs/adr/2026-09-13-private-sdk-surface-removal.md`。
  */
 export type ServiceCallStatus = "success" | "empty" | "failed" | "timeout" | "canceled";
 

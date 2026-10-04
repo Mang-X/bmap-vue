@@ -5,7 +5,7 @@
  * 因此默认路径只接受 `LoadedJsapiV4`。
  *
  * 文件刻意放在 `driver/` 根而不是 `driver/jsapi-v4/`：后者是**类型边界目录**（官方声明
- * augmentation），按 raw SDK 边界规则不得进入发布声明产物
+ * augmentation），按 ADR 2026-09-10-bmap-raw-sdk-boundary 不得进入发布声明产物
  * （见 `scripts/check-public-dts.mts` 的 boundary-file-published 规则）。本文件因此只
  * 从 `driver/jsapi-v4/**` 取**运行时实现**，返回类型一律来自 `driver/types/**`——
  * 这样装配点不会把边界目录拖进公共 `.d.ts`。

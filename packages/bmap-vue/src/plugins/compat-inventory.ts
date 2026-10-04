@@ -30,8 +30,10 @@
  * 它有一个明确的范围；没覆盖的部分写出来，而不是留白让读者以为全都验过了。
  *
  * 本文件是**单一事实源**：`pnpm generate:plugin-inventory` 由它生成
+ * ``（人读）与
  * `docs/.vitepress/plugin-inventory.json`（机读：给站点 / 工具链按 id 取结论用，形状由
- * `plugin-compat-inventory.test.ts` 钉住），CI 用 `--check` 校验无漂移。
+ * `plugin-compat-inventory.test.ts` 钉住，取用方式见 `docs/zh-CN/contributing/ai-development.md`），
+ * CI 用 `--check` 校验无漂移。
  */
 import type { Capability } from "../driver/capability";
 

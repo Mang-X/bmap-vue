@@ -5,7 +5,7 @@
  * 路线面板（表单、类型标签、方案卡、开始导航按钮）全部由 `@baidumap/jsapi-ui-kit` 渲染；
  * 本组件只做 host 容器、构造前提（Map ready）、props → 构造选项、事件 DTO 与公开动作。
  *
- * 只开放驾车（Official-first 决策 8）：锁定版本 `1.1.2` 的 `enabledTypes`
+ * 只开放驾车（ADR 2026-09-13 Official-first 决策 8）：锁定版本 `1.1.2` 的 `enabledTypes`
  * 硬编码为 `["driving"]`、`showTabs: false`，`switchType("walking" | "riding" | "transit")`
  * 是 **no-op + `console.warn`**。因此：
  * - **不暴露 `switchType()`** —— 它的每一种调用要么 no-op（`driving`）要么只 warn（其余），

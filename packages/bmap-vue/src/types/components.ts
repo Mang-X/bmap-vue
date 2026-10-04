@@ -82,8 +82,8 @@ export interface MapProps {
    * | `defaultCenter` | 非受控 | 只在**首次创建视野**时生效；此后 default 变化不覆盖当前状态 |
    * | 都不传 | 缺省 | 用库默认视野初始化（center 北京 / zoom 14 / heading 0 / tilt 0） |
    *
-   * 完整状态表与「不做什么」（例如不做「用户交互后强制回退到受控值」）见文档站的
-   * `<Map>` 受控状态一节。
+   * 完整状态表与「不做什么」（例如不做「用户交互后强制回退到受控值」）见
+   * `docs/zh-CN/components/map.md`；决策与理由见 ADR `2026-09-14-map-controlled-state`。
    */
   /**
    * 受控中心点：点，或 v2 兼容的城市名 / 地址字符串。
@@ -148,7 +148,7 @@ export interface MapProps {
    * 119,074 字节的真实内容。
    *
    * ⚠️ 它是**建图期**选项，事后无法补上：想用 `mapRef.getScreenshot()` 就必须**一开始**
-   * 就开着（真实 AK 实测确认过这条）。
+   * 就开着。详见 `docs/zh-CN/contributing/165-runtime-verification.md`。
    */
   preserveDrawingBuffer?: boolean;
   /**
@@ -1092,8 +1092,9 @@ export interface DataComponentProps<Item> {
    * **大数据量请把未深响应化的原始数据源交给 `shallowRef` / `markRaw`**：组件会逐项处理这批数据，
    * 深响应数组（`ref([...])`）的每次字段读取都要穿过 Proxy 并做依赖收集，代价随规模上升。
    * 注意 `markRaw` / `shallowRef` **不会把已存在的 Proxy 还原成 raw**（对 reactive 数组元素无效）。
-   * 代价与既有契约一致：原地改内容仍需递增 `dataVersion`（组件不 watch 大数组的深层变化）。
-   * 取证读数只覆盖 `adaptPoints` 那条路径。
+   * 代价与既有契约一致：原地改内容仍需递增 `dataVersion`（组件不 watch 大数组的深层变化）。具体
+   * 取证读数（只覆盖 `adaptPoints` 那条路径）与适用范围见 `docs/zh-CN/components/data.md`「大数据量」
+   * 与 ADR `2026-09-24-deep-reactive-array-update-path`。
    */
   data: readonly Item[];
   /** item 的唯一键：属性名或取值函数（`PropertyKey`）。 */
@@ -1464,6 +1465,7 @@ export interface NativeLayerPickOptions {
  *   `setStyleOptions`，替代品走 `setOptions`，两者的更新语义都是 merge、但后者没有
  *   `doOnceDraw` 重绘——逐条见 `PolygonLayerStyle`）。
  *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /** GeoJSON 数据（`FeatureCollection` / 单条 `Feature`）；`null` = 没有数据，`undefined` = 不表态。 */
@@ -1482,6 +1484,7 @@ export interface LineLayerProps extends NativeLayerCommonProps, NativeLayerPickO
  *   替代品是 `PolygonLayerStyle`），样式要重写；官方 `PolygonLayer` 的描边默认
  *   `strokeWeight: 0`（即**不描边**），而 `FillLayer` 默认 `border: true`。
  *   本标记是如实告知官方弃用，不是「请立即改用别的东西」。
+ *   详见 `docs/zh-CN/components/layer/native-visual-layers.md`。
  */
 export interface FillLayerProps extends NativeLayerCommonProps, NativeLayerPickOptions {
   /**
@@ -2033,6 +2036,7 @@ export interface TrackLineLayerExpose {
  *   但那不是改个名字的事——`<PointLayer>` 属扩展 API、标 `experimental`（可视化实现按需
  *   异步注入），且样式字段是**扁平**的（`icon` / `width` / `height` 直接是 prop，没有 `style` 袋）。
  *   `<PointIconLayer>` 本身继续可用、行为不变。
+ *   详见 `docs/zh-CN/components/data.md`。
  */
 export interface PointIconLayerProps<Item> extends DataComponentProps<Item> {
   /** 属性映射：写进每个要素的 `properties`（口径同 `BPointShapeLayerProps.properties`）。 */
