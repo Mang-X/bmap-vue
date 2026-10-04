@@ -333,7 +333,7 @@ defineExpose(createExpose());
  * **不报错**（`typo` 只是 `never`，而 `never` 又可赋给任何目标），错误成员静默通过 ——
  * 与 #188 要恢复的「错误成员有预期诊断」正好相反。实测见
  * `fixtures/consumer/strict/probe.ts` 里的 `HasStringIndex` 判据。`Record<never, never>` 与 `{}`
- * 同样没有索引签名，`typo` 会真的报 `TS2339`，而 Volar 对两者的 emit 完全一致。
+ * 同样没有索引签名，`typo` 会真的报 `TS2339`；两者都是合法的 `defineSlots` 载荷。
  * 可选签名（`default?`）保持插槽可省略 —— 消费方不传内容插槽是合法的。
  */
 defineSlots<{

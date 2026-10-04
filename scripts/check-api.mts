@@ -96,7 +96,8 @@ const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
 /**
- * 七个出口：report、未导出类型身份集合（除登记不适用的）、签名基线都逐出口生效。
+ * 七个出口：report、未导出类型身份集合、签名基线都逐出口生效（#188 评审 P1 之后
+ * 再无「不适用」的出口 —— 未清零的 `index` / `components` 也有基线，只是非空）。
  * 名单见 `api-forgotten-boundary.mts`（#188 起含 `index` / `components`）。
  *
  * #188 之前这里有两个名单（`REPORTED` 与 `KNOWN_BLOCKED`），两层判据各走一份。
@@ -402,7 +403,7 @@ function preflight(): EntryRun[] {
 function updateMode(): void {
   const runs = preflight();
   for (const run of runs) {
-    const { entry, result, summary, forgotten, previousReport } = run;
+    const { entry, result, summary, forgotten, machineNameCount, previousReport } = run;
     const target = reportPath(entry);
     try {
       mkdirSync(dirname(target), { recursive: true });
@@ -424,10 +425,12 @@ function updateMode(): void {
     const lines = readFileSync(target, "utf8").split("\n").length;
     console.log(
       `[check-api] ${entry}: 基线已生成 (${lines} 行, error=${result.errorCount}` +
-        `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}) → ${target}`,
+        `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}` +
+        `${machineNameCount > 0 ? `, 另滤掉 ${machineNameCount} 个 Volar 机器名` : ""}` +
+        `) → ${target}`,
     );
   }
-  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
+  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），七个出口一律写。
   for (const entry of REPORTED) writeSignatureBaseline(entry);
 }
 

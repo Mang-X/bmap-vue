@@ -45,6 +45,19 @@ function readForgotten(entry: string): string[] {
   return JSON.parse(readFileSync(target, "utf8")) as string[];
 }
 
+/**
+ * 组件 manifest 的**全部**出口名（单一事实源：`src/manifest.ts`）。
+ *
+ * 探针的「每个组件都断言一遍」必须与它对齐，所以名单从 manifest **派生**而不是抄一份。
+ * 直接 import 源码而不是读生成的 JSON：`src/manifest.ts` 才是事实源，生成物可能滞后。
+ */
+function readComponentManifest(): string[] {
+  const source = readFileSync(resolve(ROOT, "packages/bmap-vue/src/manifest.ts"), "utf8");
+  const block = /export const componentManifest = \[([\s\S]*?)\n\] as const;/.exec(source)?.[1];
+  if (block === undefined) throw new Error("读不到 componentManifest 的字面量");
+  return [...block.matchAll(/exportName:\s*"([^"]+)"/g)].map((m) => m[1]!);
+}
+
 /** 消费方的子路径（`package.json#exports` 的键去掉 `./`，去掉纯 types 的 `./volar` 与 meta）。 */
 const SUBPATHS = Object.keys(MANIFEST.exports)
   .filter((key) => key !== "./volar" && key !== "./package.json")
@@ -118,7 +131,47 @@ describe("探针的判别力（正反两侧）", () => {
   it("正侧断言存在（合法 prop 与插槽类型都能取用）", () => {
     expect(probe, "探针没有断言合法 props 可用").toMatch(/const okProps: MapProps = \{[^}]*\}/);
     // 插槽类型是 #188 的核心修复面：此前 `$slots` 引用的是已被打包阶段丢弃的标识符。
-    expect(probe, "探针没有断言 $slots 可取用").toMatch(/InstanceType<typeof \w+>\["\$slots"\]/);
+    expect(probe, "探针没有断言 $slots 可取用").toMatch(/const \$slots: SlotsOf|MapSlots|ProviderSlots/);
+  });
+
+  /**
+   * 探针的「每个组件」断言必须**覆盖组件 manifest 的全部出口名**（#188 评审 P2）。
+   *
+   * 首轮只探了 `Marker` / `BMapProvider` / `Map` 三个采样点，实测把 `ZoomControl` 的
+   * 载荷换回 `Record<string, never>` 门禁**照样全绿** —— 采样点之外等于没盖。
+   * 现在探针里是逐组件的实例化断言（`_slotHasNoIndex_<Name>`），这条把那份名单钉在
+   * manifest 上：**新增一个组件却忘了加断言**会立刻变红。
+   *
+   * 两个方向都比：manifest 有而探针没有（新组件漏了）、探针有而 manifest 没有
+   * （探针里留了一个已经不存在的名字，判据正在守一个不存在的组件）。
+   */
+  it("探针对 manifest 的每个组件都有插槽载荷断言（不多不少）", () => {
+    const manifest = readComponentManifest();
+    const asserted = [...probe.matchAll(/const _slotHasNoIndex_(\w+):/g)].map((m) => m[1]!);
+    expect(
+      asserted.length,
+      "探针里一条 `_slotHasNoIndex_*` 断言都没有 —— 判据没有着力点",
+    ).toBeGreaterThanOrEqual(50);
+
+    const assertedSet = new Set(asserted);
+    const missing = manifest.filter((name) => !assertedSet.has(name));
+    expect(
+      missing,
+      `这些组件在 manifest 里却没有插槽载荷断言 ⇒ 它们的载荷退化成索引签名时门禁不会红：${missing.join(", ")}`,
+    ).toEqual([]);
+
+    const manifestSet = new Set(manifest);
+    const extra = [...assertedSet].filter((name) => !manifestSet.has(name));
+    expect(extra, `探针断言了 manifest 里不存在的组件：${extra.join(", ")}`).toEqual([]);
+  });
+
+  it("名单从组件 manifest 派生，而不是在用例里抄一份", () => {
+    // 抄一份的话，加组件时两处会静默漂移，而其中一份没人读（AGENTS.md：
+    // 「只查数字抓不到『数量对了但漏列』」，这里同理）。
+    expect(
+      readComponentManifest().length,
+      "manifest 读不出来 —— 判据会落在空集上",
+    ).toBeGreaterThanOrEqual(50);
   });
 
   it("插槽载荷的成员类型被断言（退化成 any 时会红）", () => {
@@ -201,7 +254,13 @@ describe("探针覆盖全部出口", () => {
   });
 
   it("门禁脚本与用例读的是同一个判定（不留第二份实现）", () => {
-    // 两处各写一份正则时，一次修改只落在一处，两层会一起误绿。这里钉住「只有一处实现」。
+    // 两处各写一份实现时，一次修改只落在一处，两层会一起误绿。这里钉住「只有一处实现」。
+    //
+    // 判据刻意匹配**字面 token**（`new RegExp` / 旧函数名 `probeImports`）而不是
+    // 那条正则的源码形状：源码形状要跟 JS 的字符串转义对齐，写出来的 `/from\\s\*/`
+    // 实际匹配的是「反斜杠 + s」而不是「反斜杠 + s + 星号」—— 首版就是这么写的，
+    // 它**对 HEAD 的旧实现也不匹配**，于是这条「反漂移」判据恒绿、恒无牙（#188 评审 P2）。
+    // token 匹配没有转义层：旧实现里那两个词一定在。
     const script = readFileSync(resolve(ROOT, "scripts/check-dts-strict.mts"), "utf8");
     const code = script
       .split("\n")
@@ -209,9 +268,14 @@ describe("探针覆盖全部出口", () => {
       .join("\n");
     expect(
       code,
-      "check-dts-strict.mts 里又出现了一份 import 覆盖的正则/文本查找 —— " +
+      "check-dts-strict.mts 里又出现了一份 import 覆盖的文本查找 —— " +
         "判据必须只有 probeImportSpecifiers 一处实现",
-    ).not.toMatch(/from\\s\*\[?"'/);
+    ).not.toContain("new RegExp");
+    expect(code, "旧的 probeImports 文本判据回来了").not.toContain("probeImports");
+    expect(
+      code,
+      "门禁脚本没有引用共享判据 —— 它自己那份实现去哪了？",
+    ).toContain("probeImportSpecifiers");
   });
 });
 

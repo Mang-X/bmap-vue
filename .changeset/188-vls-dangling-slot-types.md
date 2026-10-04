@@ -52,8 +52,8 @@ emit 出合法形态（vue-tsc 无法把泛型组件的插槽类型提升成顶�
 
 ### 空载荷用 `Record<never, never>`，不是 `Record<string, never>`
 
-首轮 50 处无参数插槽写成 `default?(props: Record<string, never>): any`。两者 emit 出来的
-声明**完全一致**，语义却相反：`Record<string, never>` 带**字符串索引签名**，于是消费方写错
+首轮 50 处无参数插槽写成 `default?(props: Record<string, never>): any`。两者都是合法的
+`defineSlots` 载荷（都能通过模板校验与 emit），语义却相反：`Record<string, never>` 带**字符串索引签名**，于是消费方写错
 插槽 prop 时 `const { typo } = props` **不报错** —— `typo` 只得到 `never`，而 `never` 可赋给
 任何目标类型。实测：`Record<string, never>` 下拼错的 prop 静默通过，换成
 `Record<never, never>`（或 `{}`）后真的报 `TS2339`。首轮那种写法等于**静默弱化**了消费方的
@@ -121,10 +121,27 @@ emit 出合法形态（vue-tsc 无法把泛型组件的插槽类型提升成顶�
 | --- | --- |
 | `defineSlots` 调用被删（注释里仍有该词） | 覆盖判据转红（改走 AST CallExpression） |
 | 一个出口的 import 被注释掉 | `探针没有覆盖这些出口` |
-| 插槽载荷写成 `Record<string, never>` | `TS2322`（`HasStringIndex` 判据） |
-| 插槽载荷整体写成 `any` | 7 处 `TS2322` |
+| **50 处**插槽载荷任一处写成 `Record<string, never>` | `TS2322`（`HasStringIndex` 判据逐组件覆盖） |
+| 插槽载荷整体写成 `any` | `TS2322`（条数随被变异的插槽而变） |
 | 载荷**成员**逐个写成 `any`（名字不变） | 4 处 `TS2322`（`NoAnyMembers` 判据） |
 | 插槽成员改名 | `TS2322` + `TS2353` |
+| 探针里漏掉某个组件的断言 | manifest 交叉核对转红 |
+
+**逐组件覆盖**是补上的一处欠账：首轮只探了 `Marker` / `BMapProvider` / `Map` 三个采样点，
+实测把 `ZoomControl` 的载荷换回 `Record<string, never>` 门禁照样全绿 —— 采样点之外
+等于没盖。现在探针对组件 manifest 的**全部 56 个**出口名逐个断言，并由一条用例把那份
+名单钉在 manifest 上（新增组件忘了加断言会立刻变红）。
+
+其中 5 个 `generic="Item"` 组件需要**第二条取值路径**：vue-tsc 无法把它们的插槽类型提升成
+顶层别名，产物是函数组件、`$slots` 藏在返回值的 `__ctx.slots` 里，只走构造签名会取不到
+（实测那样它们会落进 `unknown` 回退分支、断言恒真）。实测把 45 个顶层 `__VLS_Slots_N`
+别名与 5 个内联 `slots:` 块**全部**换成 `Record<string, never>` ⇒ 47 处 `TS2322`，无一漏网。
+
+还有一处**判据本身没有牙**的实例值得记下：逐组件断言先写成
+`Record<keyof M, false> = {…}` 那样一张表，实测它**抓不到任何东西** ——
+`Record<K, V>` 只用 `V`，`M` 每个键的类型被整个丢掉，于是「某个键变成 `true`」在表里
+看不出差别。逐条 `const x: T = false` 才是真的把每个组件的结果接上。同源于本票的
+「断言必须实例化」纪律。
 
 `HasSlotMembers` 原先只判「成员名还在」：`P = any` 时 `P extends M` 求值为 `boolean`，
 而 `const x: boolean = true` 合法，于是 `(props: any) => any` 能通过。补 `IsAny` 层后转红。
@@ -146,5 +163,5 @@ import 覆盖（`// import { X } from "…"` 同样匹配 `from "…"`）。判�
   真实欠账会被 `generate:api` 拒绝（洗基线路径关闭）。
 - 门禁**双向**验证过：注入悬空引用 → `TS2304` 转红；把 `MapProps` 放宽成索引签名 →
   `TS2578` 转红；六条评审发现的惰性 / 可绕过断言逐条注入缺陷确认会转红。
-- `pnpm test:unit` 213 文件 / 3912 用例全绿；`check:api`、`check:dts-strict`、
+- `pnpm test:unit` 213 文件 / 3915 用例全绿；`check:api`、`check:dts-strict`、
   `verify:package`（真实 tarball 全链路）均通过。
