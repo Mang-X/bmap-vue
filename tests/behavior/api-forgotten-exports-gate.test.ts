@@ -276,7 +276,8 @@ describe("身份集合基线：七个出口一律适用，零容忍名单必须�
     expect(
       existsSync(target),
       `${entry}: 身份集合基线缺失 ${target} —— 该出口的 ${"真实欠账"}需要基线才谈得上「拒绝新增」，` +
-        `跑 pnpm generate:api:seed-forgotten（一次性，仅对无基线的出口生效）`,
+        `基线是提交物：跑 pnpm generate:api 只会更新它，不会重建它。` +
+        `若确实要新增未导出类型，先按 ADR 2026-09-25 的二选一处置。`,
     ).toBe(true);
     const names = JSON.parse(readFileSync(target, "utf8")) as string[];
     const machines = names.filter((name) => VOLAR_MACHINE_NAME.test(name));

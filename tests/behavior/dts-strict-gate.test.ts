@@ -28,7 +28,6 @@ import {
   FORGOTTEN_ZERO_TOLERANCE_ENTRIES,
   newForbiddenForgottenExports,
   publicForgottenExports,
-  seedableEntries,
   VOLAR_MACHINE_NAME,
 } from "../../scripts/api-forgotten-boundary.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
@@ -488,23 +487,53 @@ describe("旧的「预期失败即通过」豁免已撤销", () => {
     }
   });
 
-  it("播种是单向的（不能用来更新已有基线）", () => {
-    // 播种是「基线不存在时建立第一份」的一次性通道。若它能覆盖已有基线，
-    // 就等于给「先跑生成器洗掉新增」提供了第二条路。
+  it("**没有任何重建基线的入口**（评审 P1：删文件 + 重播种 = 洗基线）", () => {
+    // 上一轮加过一��� `generate:api:seed-forgotten`，把「一次性」定义成「基线文件当前不存在」。
+    // 那只证明**没有覆盖现存文件**，证明不了这是历史上的首次播种：删掉基线文件后重跑，
+    // 会把「旧 46 个 + 本次新增的欠账」无条件写回去 —— 与 #165 要堵的那条路只差一步。
+    // 首份基线已随本票提交（46 / 14），迁移完成后没有任何理由重建它，
+    // 所以正确做法是**删掉这个入口**，而不是给它加条件。
+    const script = readFileSync(resolve(ROOT, "scripts/check-api.mts"), "utf8");
+    const code = script
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(code, "check-api.mts 里仍有播种模式 —— 删文件即可重播种").not.toContain("seedForgotten");
+    expect(code, "--seed-forgotten 开关还在").not.toContain("--seed-forgotten");
+
+    const boundary = readFileSync(resolve(ROOT, "scripts/api-forgotten-boundary.mts"), "utf8");
+    const boundaryCode = boundary
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    expect(boundaryCode, "seedableEntries 还在：可播种判定仍存在").not.toContain("seedableEntries");
+
+    const manifest = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
     expect(
-      seedableEntries([
-        { entry: "index", hasBaseline: true },
-        { entry: "components", hasBaseline: true },
-      ]),
-      "已有基线的出口仍被判为可播种 —— 播种成了绕过 preflight 的后门",
+      Object.keys(manifest.scripts).filter((k) => k.includes("seed")),
+      "package.json 里还有 seed 脚本",
     ).toEqual([]);
-    // 反侧：确实没有基线时可播种（缺口本身要能补上）。
+  });
+
+  it("基线文件缺失判失败，而不是读成空集（洗基线的根因）", () => {
+    // 这才是根因：原先 `readForgottenBaseline` 对缺文件返回 `[]`，于是「删掉基线」
+    // 与「基线确实为空」在判定上完全一样，任何把空集写回去的路径都等于洗掉欠账。
+    const code = readFileSync(resolve(ROOT, "scripts/check-api.mts"), "utf8")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//") && !line.trim().startsWith("/*"))
+      .join("\n");
+    // 判据按**行为**而不是按文本：缺文件那一支必须抛错。
     expect(
-      seedableEntries([
-        { entry: "index", hasBaseline: true },
-        { entry: "components", hasBaseline: false },
-      ]),
-    ).toEqual(["components"]);
+      code,
+      "readForgottenBaseline 又按空集处理缺文件了 —— 删基线即可洗掉欠账",
+    ).not.toMatch(/if \(!existsSync\(target\)\) return \[\]/);
+    // 七个出口的基线都在（缺任何一个都会被上面那条判失败）。
+    for (const entry of ["advanced", "composables", "plugins", "resolver", "ui-kit", "index", "components"]) {
+      expect(existsSync(resolve(ROOT, `packages/bmap-vue/etc/${entry}/forgotten-exports.json`)),
+        `${entry}: 身份集合基线缺失`).toBe(true);
+    }
   });
 
   it("零容忍名单只覆盖存量已清零的出口，且登记了未清零出口的理由", () => {

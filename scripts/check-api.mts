@@ -78,7 +78,6 @@ import {
   newForbiddenForgottenExports,
   publicForgottenExports,
   REPORTED_ENTRIES,
-  seedableEntries,
 } from "./api-forgotten-boundary.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -460,10 +459,31 @@ function parseForgottenFile(raw: string): string[] | undefined {
     : [];
 }
 
-/** 读出基线里的身份集合（文件缺失 / 非 JSON 一律按空集，交给调用方判定）。 */
+/**
+ * 读出基线里的身份集合。
+ *
+ * **缺文件即判失败，不按空集处理**（#188 评审 P1 的直接后果）。原先这里返回 `[]`，
+ * 于是「删掉基线文件」与「基线确实是空的」在判定上**完全一样** ——
+ * `newForbiddenForgottenExports` 会把当前全部真实欠账当成「新增」拒绝，但那只是
+ * 巧合般地挡住了删除；而 `preflight` 里那次判定发生在写盘之前，它一旦被绕过
+ * （`--local` 的第二阶段，或任何把空集写回基线的路径）就等于洗掉了欠账。
+ *
+ * 刻意**不**提供任何「重建基线」的旁路：`index` / `components` 的首份基线已随本票
+ * 提交（46 / 14 个名字），迁移完成后没有任何理由需要重建它，而任何重建入口都是
+ * 「跑一次就把新欠账洗成基线」那条路的变体（#165 要堵的正是它）。真要新增欠账，
+ * 先按 ADR `2026-09-25` 的二选一处置。
+ */
 function readForgottenBaseline(entry: string): string[] {
   const target = forgottenPath(entry);
-  if (!existsSync(target)) return [];
+  if (!existsSync(target)) {
+    throw new Error(
+      `${entry}: 未导出类型身份基线缺失 ${target}\n` +
+        `  基线缺失**不能**按空集处理：那会让「当前全部欠账」看起来像「新增」，` +
+        `而任何把空集写回去的路径都等于洗掉欠账。\n` +
+        `  七个出口的基线都应随源码提交；若确实要新增欠账，先按 ADR 2026-09-25 的` +
+        `二选一处置（升为公共导出 / 让引用消失），而不是重建基线。`,
+    );
+  }
   return parseForgottenFile(readFileSync(target, "utf8")) ?? [];
 }
 
@@ -509,7 +529,14 @@ function writeForgottenBaseline(entry: Entry, symbols: readonly string[]): void 
 function forgottenBaselineFailure(entry: Entry, actual: readonly string[]): string | undefined {
   const target = forgottenPath(entry);
   if (!existsSync(target)) {
-    return `${entry}: 未导出类型身份基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`;
+    // 提示**刻意不**说「跑 generate:api 重建」：那份基线是提交物，重建入口刻意不存在
+    // （#188 评审 P1 —— 删文件再重建与 #165 那条洗基线路由只差一步）。
+    return (
+      `${entry}: 未导出类型身份基线缺失 ${target}\n` +
+      `  基线是提交物，刻意没有重建入口（删掉再重建 = 把当前欠账洗成新基线）。\n` +
+      `  从 git 恢复它（git checkout -- ${target.replace(ROOT + "/", "")}）；` +
+      `  若确实要新增未导出类型，先按 ADR 2026-09-25 的二选一处置。`
+    );
   }
   const expected = expectedForgottenFile(actual);
   const raw = readFileSync(target, "utf8");
@@ -624,59 +651,8 @@ function checkSignatureBaselines(failures: string[]): void {
   }
 }
 
-/**
- * `--seed-forgotten`：**一次性**为「还没有基线文件」的出口建立第一份身份集合基线。
- *
- * 存在的理由（#188 评审 P1）：取消出口级豁免后 `index` / `components` 有 60 个**存量**
- * 真实欠账却没有基线可比，`newForbiddenForgottenExports` 会把存量当成「新增」拒绝，
- * 于是这两个出口永远建不了第一份基线 —— 门禁成了死结。存量不是新增：它们在 #188 之前
- * 就已在 `dist/*.d.ts` 里，只是 AE 看不见。
- *
- * **它不是洗基线的后门**：`seedableEntries` 只放行「基线文件不存在」的出口，且方向单向。
- * 已有基线的出口在这里一律不播种 —— 它们的增 / 减仍然全走 `preflight` 的拒绝逻辑。
- * 播种出的集合立刻成为全等比对对象，且基线是提交物、可审计。
- *
- * 与 `updateMode` 的分工：本模式**只写身份集合基线**，不碰 report 与签名基线
- * （后两者由正常的 `generate:api` 写）。两者混在一起会让「播种」看起来像一次普通的
- * 基线更新，而它实际是一次**一次性豁免的行使**，值得在日志里单独成行。
- */
-function seedForgottenMode(): void {
-  const seedable = seedableEntries(
-    REPORTED.map((entry) => ({ entry, hasBaseline: existsSync(forgottenPath(entry)) })),
-  );
-  if (seedable.length === 0) {
-    throw new Error(
-      `[check-api] 七个出口都已有 forgotten-exports.json，没有可播种的出口。\n` +
-        `  播种是**一次性**的（只对「基线文件不存在」的出口生效），不能用来更新已有基线 ——\n` +
-        `  欠账的增删请走 pnpm generate:api，新增会被 preflight 拒绝。`,
-    );
-  }
-  for (const entry of seedable) {
-    mkdirSync(dirname(reportPath(entry)), { recursive: true });
-    const { result, summary, forgotten, machineNameCount } = runExtractor(entry, false);
-    if (result.errorCount > 0) {
-      throw new Error(
-        `[check-api] ${entry}: 分析报错 ${result.errorCount} 个（${summary || "无摘要"}）—— 基线不可信`,
-      );
-    }
-    // 直接写，**不**经 `writeForgottenBaseline`：那道函数的判据是「相对已有基线的新增」，
-    // 而这里的前提正是「没有基线」，走它必然自拒。这里的写入因此是**无条件的**，
-    // 它的约束全部来自「只对无基线的出口生效」这一条（见 `seedableEntries`）。
-    writeFileSync(forgottenPath(entry), expectedForgottenFile(forgotten));
-    console.log(
-      `[check-api] ${entry}: 首次播种身份集合基线 → ${forgotten.length} 个真实欠账` +
-        `${machineNameCount > 0 ? `（另滤掉 ${machineNameCount} 个 Volar 机器名）` : ""}；` +
-        `此后增删都必须经 pnpm generate:api，新增会被拒绝`,
-    );
-  }
-}
-
 function main(): void {
   assertDist();
-  if (process.argv.includes("--seed-forgotten")) {
-    seedForgottenMode();
-    return;
-  }
   if (process.argv.includes("--local")) {
     updateMode();
     return;

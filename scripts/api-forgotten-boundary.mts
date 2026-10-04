@@ -177,37 +177,6 @@ export interface ForgottenRefusal {
 }
 
 /**
- * 哪些出口允许**首次播种**身份集合基线（#188 评审 P1 的缺口修补）。
- *
- * ## 为什么需要这条
- *
- * 取消出口级豁免之后，`index` / `components` 有 46 / 14 个**存量**真实欠账，而它们此前
- * 从来没有过基线文件。没有基线时 `newForbiddenForgottenExports` 看到的就是「46 个新增」
- * 并拒绝 —— 于是这两个出口**永远无法建立第一份基线**，门禁变成死结。
- *
- * 存量不是「新增」：它们在 #188 之前就已经存在于 `dist/*.d.ts`，只是 AE 看不见
- * （分析在第一个 `__VLS_` 上就抛了）。要求「先处置才能建基线」等于要求先裁决 60 个名字的
- * 公共 API 面，那是 #165 的范围，不该由这道门禁的落地方式决定。
- *
- * ## 为什么它**不是**洗基线的后门
- *
- * 播种**只对「还没有基线文件」的出口生效**，且这个方向**单向**：
- *
- * - 已有基线的出口 → 不播种（`seedableEntries` 返回空），欠账的增加仍然被
- *   `newForbiddenForgottenExports` 拒绝；
- * - 播种出来的集合立刻成为**全等比对**的对象，此后增 / 减两个方向都要经 `generate:api`；
- * - 基线文件是提交物，播种结果出现在评审 diff 里 —— 与「手写基线」的可审计性相同。
- *
- * 也就是说：播种**只能做一次**，且只在「本来就没有基线」时；它不能覆盖任何已有判断。
- * 这一点由 `tests/behavior/api-forgotten-exports-gate.test.ts` 直接断言。
- */
-export function seedableEntries<E extends string>(
-  perEntry: readonly { readonly entry: E; readonly hasBaseline: boolean }[],
-): E[] {
-  return perEntry.filter(({ hasBaseline }) => !hasBaseline).map(({ entry }) => entry);
-}
-
-/**
  * 对**所有**出口收集 forbidden additions，返回非空就说明整个写盘阶段必须放弃。
  *
  * 纯函数，因此「跨出口事务」这条性质可以被直接断言，而不必真去跑一次会改工作树的

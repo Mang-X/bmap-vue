@@ -37,7 +37,6 @@
     "generate:api-diff": "node --experimental-strip-types scripts/generate-api-diff.mts",
     "generate:api-diff:check": "node --experimental-strip-types scripts/generate-api-diff.mts --check",
     "generate:api": "node --experimental-strip-types scripts/check-api.mts --local",
-    "generate:api:seed-forgotten": "node --experimental-strip-types scripts/check-api.mts --seed-forgotten",
     "generate:brand-icons": "node --experimental-strip-types scripts/render-brand-icons.mts",
     "generate:screenshots": "node --experimental-strip-types scripts/capture-docs-screenshots.mts",
     "generate:overlay-emits": "node --experimental-strip-types scripts/generate-overlay-emits.mts",
