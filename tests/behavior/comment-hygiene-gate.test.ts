@@ -8,7 +8,7 @@
  * 实质理由，删掉编号只会把注释变成没有依据的断言。详见 issue #192。
  *
  * 因此这里测的是两件更朴素的事：**什么算注释行**、**高比例注释何时该红**，
- * 以及两条豁免（实测证据、类型定义密集）不会把真债务放过。
+ * 以及两条豁免（实测证据主体、类型定义密集）不会把真债务放过。
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -17,6 +17,7 @@ import {
   countLines,
   hasLiveEvidence,
   isCommentLine,
+  isEvidenceDominant,
 } from "../../scripts/comment-hygiene-boundary.mts";
 
 describe("#192 注释卫生门禁", () => {
@@ -204,30 +205,39 @@ describe("#192 注释卫生门禁", () => {
     });
   });
 
-  describe("实测更正豁免", () => {
-    const tail = () => [
-      ...Array.from({ length: 100 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
-      " */",
-      ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
-    ];
-
-    it("「记成」一词本身不构成更正（那等于给整文件短路开口子）", () => {
-      const lines = ["/**", " * 这里我们记成 A，后来改成 B。", ...tail()];
-      expect(checkCommentRatio("src/a.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
-    });
-
-    it("有读数表但主体是决策史 ⇒ 仍判红", () => {
+  describe("表格不是证据（评审第三轮 P1-3）", () => {
+    // 表格是**载体**不是**证据**：`| A | 快 | 差 |` 里的字既不是读数也不是 probe 结果。
+    // 上一版 isEvidenceLine 无条件认下任何 `|…|` 行，纯设计表因此能拿证据豁免。
+    it("纯设计对照表 + 决策史 ⇒ 判红（表格未被取证行领进来）", () => {
       const lines = [
         "/**",
-        " * 误读：见下表。",
-        " * | a | b |",
-        " * | --- | --- |",
-        " * | 1 | 2 |",
-        " * | 3 | 4 |",
-        " * 上面只是背景。",
-        ...tail(),
+        " * ## 设计对照表",
+        " * | 方案 | 优点 | 代价 |",
+        " * | --- | --- | --- |",
+        " * | A | 快 | 差 |",
+        " * | B | 稳 | 慢 |",
+        " * | C | 中 | 中 |",
+        ...Array.from({ length: 95 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+        " */",
+        ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
       ];
-      expect(checkCommentRatio("src/b.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+      expect(checkCommentRatio("src/table.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+
+    it("有 live 读数标记领进来的表才算证据", () => {
+      const lines = [
+        "/**",
+        " * live 读数（probe.mts，真实 AK 跑通）逐 kind 证实：",
+        " * | kind | A | B |",
+        " * | --- | --- | --- |",
+        " * | `text` | 是 | 是 |",
+        " * | `line` | 是 | 否 |",
+        " * | `point` | 是 | 否 |",
+        " * | `cluster` | 是 | 否 |",
+        " */",
+        ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i};`),
+      ];
+      expect(isEvidenceDominant(lines, countLines(lines))).toBe(true);
     });
   });
 
@@ -257,6 +267,42 @@ describe("#192 注释卫生门禁", () => {
         "}",
       ];
       expect(checkCommentRatio("src/expose.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
+    });
+
+    // 评审第三轮 P1-2：判据一度把 `export interface X {` 与 `}` 也算成「成员」，
+    // 于是一个小 interface 配 100 行决策史就能豁免——它显然不是类型定义密集。
+    // ⚠️ 实码必须 ≥ `minCodeLines`（20），否则小文件规则先放行，测不到这条豁免。
+    it("小 interface + 决策史 ⇒ 判红（成员行本身不够多就不算密集）", () => {
+      const lines = [
+        "/**",
+        ...Array.from({ length: 100 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+        " */",
+        "export interface Small {",
+        "  a: string;",
+        "  b: number;",
+        "}",
+        ...Array.from({ length: 20 }, (_, i) => `const x${i} = ${i};`),
+      ];
+      expect(checkCommentRatio("src/small.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+
+    it("方法签名（零参数箭头式）也算成员声明", () => {
+      // `MapExpose` 的成员全是 `getContainer(): T;` 这种形态——只认 `readonly x:` 的
+      // 判据一条都匹配不上，豁免形同虚设。
+      const lines = [
+        "/**",
+        " * 冻结面。",
+        " */",
+        "export interface A {",
+        "  a(): void;",
+        "  b(): void;",
+        "  c(): void;",
+        "  d(): void;",
+        "  e(): void;",
+        "  f(): void;",
+        "}",
+      ];
+      expect(checkCommentRatio("src/methods.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
     });
   });
 });

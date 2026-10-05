@@ -66,20 +66,26 @@ export function isCommentLine(line: string): boolean {
  *
  * 判据刻意窄：只认明确的取证措辞，不看「实测」以外的词。宁可漏豁免（多红一次，
  * 人来看一眼）也不可宽豁免（真债务被放过）。
+ *
+ * ⚠️ 它**不包含**表格行——表格是证据的载体，不是证据本身。读数表要算证据得由
+ * `isEvidenceDominant` 走「取证行 + 表格归属」那条路。
  */
 export function hasLiveEvidence(lines: readonly string[]): boolean {
   return lines.some((l) => isEvidenceLine(l));
 }
 
 /**
- * 一行注释是否属于**实测证据**。
+ * 一行注释是否属于**实测证据**（**取证标记**本身）。
  *
- * ⚠️ 必须认得**表格数据行**，不能只认表格标题行。实测踩到：`nativeLayerStyleOwnership.ts`
- * 的注释是一张 22 行的 live 读数表，而只有表头那行含「live 读数」字样——数据行是
- * `| \`text\` | \`setOptions\` | **是**（merge） | **是**（\`0.75\`） |`，第一版判据把整张表
- * 判成「证据只占 3%」，于是门禁翻红，而那些数字恰恰是不可替代的证据本身。
+ * ⚠️ 这里**只认取证措辞**（`live 读数` / `probe` / `真实 AK` / `实测`），**不认表格**。
+ * 评审第三轮点破过一个版本：它把任何 Markdown 表格行都无条件当证据，于是
+ * 「## 设计对照表」这种纯决策表只要凑够行数就能拿到证据豁免——表格是**载体**不是
+ * **证据**：`| A | 快 | 差 |` 里的字既不是读数也不是 probe 结果。
  *
- * 判据：表头（含取证措辞或 markdown 表头）之后的**连续表格行**都算证据。
+ * 那为什么这里返回 false 而 `isEvidenceDominant` 仍能把读数表算成证据块？
+ * 因为**表格归属**由 `isEvidenceTableRow` 判定，而它要求这张表**前面有取证行**
+ * （`isEvidenceTableLine`）——`nativeLayerStyleOwnership.ts` 的读数表正是如此：
+ * 表头那行写着「live 读数 … 逐 kind 证实」，数据行是它的延续。
  */
 function stripCommentPrefix(line: string): string {
   return line
@@ -88,14 +94,42 @@ function stripCommentPrefix(line: string): string {
     .trim();
 }
 
+/** 一行是否带**取证措辞**——证据块的起点标记。 */
 function isEvidenceLine(line: string): boolean {
   if (!isCommentLine(line)) return false;
   const t = stripCommentPrefix(line);
-  if (/live\s*(读数|probe|探针)|真实\s*AK|实测/.test(t)) return true;
-  // markdown 表格行：表头、数据行、以及**分隔行**（`| --- | --- |`）。
-  // ⚠️ 分隔行必须算：漏掉它会把一张表从中间劈成两半，两半都不够 5 行 ⇒ 永不豁免。
-  if (/^\|.*\|/.test(t)) return true;
+  return /live\s*(读数|probe|探针|跑通)|真实\s*AK|实测/.test(t);
+}
+
+/**
+ * 一行是否是一张**已被取证标记引入**的表格的行（表头 / 分隔 / 数据）。
+ *
+ * 这是对上一版的修正：`isEvidenceLine` 曾经无条件认下任何 `|…|` 行，于是「## 设计对照表」
+ * 这种纯决策表也能拿到证据豁免——表格是**载体**不是**证据**：`| A | 快 | 差 |` 里的字
+ * 既不是读数也不是 probe 结果。
+ *
+ * 判据：从这张表**往上**回溯到最近的取证行，中间只允许空行、`*` 与**读表说明**
+ * （「`setOpacity(0.25)` → … 读回仍是 `0.25`」这种解释表格怎么读的句子）。
+ * 遇到别的注释就说明这张表跟取证无关。
+ */
+function isEvidenceTableLine(lines: readonly string[], i: number): boolean {
+  if (!isTableRow(stripCommentPrefix(lines[i]))) return false;
+  for (let j = i - 1; j >= 0 && j >= i - 16; j--) {
+    const pt = stripCommentPrefix(lines[j]);
+    if (pt === "" || pt === "*") continue;
+    if (isEvidenceLine(lines[j])) return true;
+    // 已经在表里 ⇒ 同一张表的续行
+    if (isTableRow(pt)) continue;
+    // 表与取证行之间的读表说明：其后必须紧跟表格（向上看就是这张表）
+    if (isEvidenceBridgeLine(lines, j)) continue;
+    return false;
+  }
   return false;
+}
+
+/** 是否 markdown 表格行（表头 / 分隔 / 数据）。 */
+function isTableRow(t: string): boolean {
+  return /^\|.*\|/.test(t);
 }
 
 /**
@@ -135,7 +169,8 @@ export function isEvidenceDominant(
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     const t = l.trim();
-    if (isEvidenceLine(l)) {
+    // 证据行 = 取证标记，**或**由取证标记领进来的表格行
+    if (isEvidenceLine(l) || (isTableRow(stripCommentPrefix(l)) && isEvidenceTableLine(lines, i))) {
       run += 1;
       evidenceLines += 1;
       if (run >= MIN_EVIDENCE_BLOCK_LINES) hasBlock = true;
@@ -175,13 +210,21 @@ function isEvidenceBridgeLine(lines: readonly string[], i: number): boolean {
 /**
  * 该文件是否**类型定义密集**——即高注释比来自「逐成员说明」而非决策史堆积。
  *
- * 判据：export 的 interface / type 成员占实码行的多数。这类文件（`MapExpose` 那样
- * 冻结一个公共接口的形状）天然需要逐成员说明，压缩它等于删掉使用面。
+ * 判据：**成员声明行**占实码行的多数。成员指interface / type 字面量里的属性与方法：
+ * `getContainer(): HTMLElement | null;`、`readonly host: Readonly<ShallowRef<…>>`、
+ * `mapTypes?: readonly string[]`。
  *
- * 这条豁免此前只写在测试文件头与 AGENTS.md 的叙述里，**实现中并不存在**——即文档承诺了
- * 一条不存在的判据。评审扫 `mapExpose.ts` 时才发现：它是冻结面（79 注释 / 21 实码
- * = 3.8:1），逐条读过确认每一段都在说明某个成员的语义，按比例判红等于逼人删掉使用面。
+ * ⚠️ 初版只认 `readonly x:` 与 `x: (` 两种形态，于是 `MapExpose` 的方法签名
+ * （`getContainer(): T;` 这类**零参数箭头式**）一条都不匹配，豁免形同虚设——而
+ * `src/types/` 当时还被 `SKIP_DIRS` 整个跳过，这个文件压根没进扫描（评审第三轮发现）。
+ * 两条叠加的漏洞：一个豁免既没写对、也没被验证过。
+ *
+ * 这类文件（`MapExpose` 那样冻结一个公共接口的形状）天然需要逐成员说明，
+ * 压缩它等于删掉使用面。
  */
+const MEMBER_DECL =
+  /^\s*(?:readonly\s+)?[A-Za-z_$][\w$]*\??\s*(?::\s*[^;]*|\([^)]*\)\s*:?\s*[^;]*)\s*[;,]?\s*$/;
+
 function isTypeDefinitionDense(
   lines: readonly string[],
   stats: FileCommentStats,
@@ -190,59 +233,13 @@ function isTypeDefinitionDense(
   let memberLines = 0;
   for (const l of lines) {
     const t = l.trim();
-    if (!isCommentLine(l)) {
-      // `export interface X {` / `export type X = {` 及其续行
-      if (/^export\s+(interface|type)\s+\w/.test(t) || /^\s*readonly\s+\w+\??\s*[:(]/.test(t) || /^\s*\w+\??\s*:\s*\(/.test(t) || /^\s*\/\*\*\s*---/.test(t)) {
-        memberLines += 1;
-      }
-    }
+    if (isCommentLine(l)) continue;
+    // 只数**成员声明行**——`interface` / `type` 的开括号与收尾不算。
+    // ⚠️ 算上它们时反例当场成立：一个 3 行的 `interface Small { a: string }` 配100 行
+    // 决策史就能豁免，而它显然不是「类型定义密集」。
+    if (MEMBER_DECL.test(t)) memberLines += 1;
   }
   return memberLines / stats.codeLines >= 0.5;
-}
-
-/**
- * 该文件是否含**成块的实测更正**（是则豁免比例判据）。
- *
- * 形态：注释里出现「曾记成 X，那是**误读** / 实测证明不是 X」这类**自我推翻**的段落，
- * **且该段落自带取证依据**（同段落附近有 live 读数行）。
- *
- * ⚠️ 两个条件都不能少。初版只判「出现过 `记成` / `推翻` 等词」，反例立刻成立：
- * 一句「这里我们记成 A，后来改成 B」+ 100 行决策史就豁免了整个文件——那又回到评审
- * 第一次驳回的「整文件短路」。词只是**入口**，取证行才是它之所以不可删的原因。
- *
- * 为什么这类注释不该被压：AGENTS.md 的 Evidence-first 要求「未知运行时行为先 probe 再建
- * 抽象」，而「上一轮的判断被实测推翻」是这条原则的**产物**——压掉它，下次有人读到那个已被
- * 推翻的判断（它往往还留在别的文件里），会重新踩同一个坑。`nativeLayerStyleOwnership.ts`
- * 就是这个形态：读数表只占 8%，主体是「评审记错了，merge 不是整袋替换」这段更正。
- */
-const CORRECTION_MIN_BLOCK = 4;
-
-function hasMeasuredCorrection(lines: readonly string[]): boolean {
-  let run = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    const t = stripCommentPrefix(l);
-    const isCorrection =
-      isCommentLine(l) &&
-      /(误读|曾记成|此前.{0,8}记成|记错了|判断错|并不是|≠)/.test(t);
-    if (isCorrection) {
-      run += 1;
-      // 更正段自带取证依据（往后 12 行内有 live 读数/ 读数表）⇒ 不可删
-      const hasEvidence = lines
-        .slice(i, i + 12)
-        .some((x) => isCommentLine(x) && /live\s*(读数|probe|探针)|真实\s*AK|实测|^\s*\*\s*\|/.test(stripCommentPrefix(x)));
-      if (hasEvidence && run >= 1) {
-        const block = lines
-          .slice(i, i + CORRECTION_MIN_BLOCK)
-          .filter((x) => isCommentLine(x) && x.trim() !== "" && x.trim() !== "*").length;
-        return block >= 2;
-      }
-      continue;
-    }
-    if (l.trim() === "" || l.trim() === "*") continue;
-    run = 0;
-  }
-  return false;
 }
 
 /** 一个文件的注释统计结果。 */
@@ -326,8 +323,6 @@ export function checkCommentRatio(
   // **类型定义密集豁免**：逐成员说明是冻结面的固有需要（见 isTypeDefinitionDense）。
   if (lines !== undefined && isTypeDefinitionDense(lines, stats)) return [];
 
-  // **实测更正豁免**：「上一轮判断被实测推翻」是 Evidence-first 的产物（见 hasMeasuredCorrection）。
-  if (lines !== undefined && hasMeasuredCorrection(lines)) return [];
 
   const ratio = stats.commentLines / stats.codeLines;
   // 阈值比较留 0.05 的余量：比值是浮点除法，`3.0` 与 `3.023` 在阈值边界上反复横跳会让

@@ -45,10 +45,9 @@ jobs:
       - name: Check toolchain (declared / lockfile / installed)
         run: pnpm check:toolchain
 
-      # 注释卫生（#192）：单文件「注释 / 实码」比不得超阈值，且带两条豁免
-      # （实测证据、类型定义密集）——它们恰恰是本仓最该有的注释形态。
-      # ⚠️ 这里**刻意没有**「注释不得引用 ADR / issue」这条判据：实测 499 处引用没有一处
-      # 是纯重复，每处都承载理由（详见 issue #192）。
+      # 注释卫生（#192）：单文件「注释 / 实码」比不得超阈值。两条豁免——实测证据主体
+      # （成块且占多数）与类型定义密集（逐成员说明是冻结面的固有需要）。
+      # ⚠️ 豁免一律不得只凭关键词，每条都配了反例用例，否则等于给整文件短路开口子。
       - name: Check comment hygiene
         run: pnpm check:comment-hygiene
 

@@ -67,7 +67,7 @@ const SKIP_DIRS = new Set(["node_modules", "dist", ".artifacts", ".pnpm", "types
 
 /**
  * 待删除的引用片段。**顺序不可随意调**：先长后短，
- * 否则 `` 会先被 `` 吃掉、留下孤儿 `Class 3`。
+ * 否则「issue #165 Class 3」会先被「#165」那条吃掉、留下孤儿 `Class 3`。
  */
 const PATTERNS: readonly RegExp[] = [
   // ① 文档路径（含可选前导「见 / 依据」与外层括号）

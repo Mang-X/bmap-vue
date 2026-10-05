@@ -45,8 +45,21 @@ const SCAN_ROOTS = ["packages/bmap-vue/src", "scripts"] as const;
 /** 纳入扫描的扩展名。 */
 const EXTENSIONS = new Set([".ts", ".mts", ".vue"]);
 
-/** 不扫描的目录名。 */
-const SKIP_DIRS = new Set(["node_modules", "dist", ".artifacts", ".pnpm", "types"]);
+/**
+ * 不扫描的目录名（**只按名字匹配**）。
+ *
+ * ⚠️ 这里刻意**不含 `types`**。原来的名单里有它，本意是跳过 `node_modules/@types`，
+ * 但 `SKIP_DIRS.has(name)` 只看目录名，于是本仓自己的 `src/types/`（2 个文件）与
+ * `src/driver/types/`（11 个文件）也被一起跳过——13 个源文件从这道门禁的视野里消失了。
+ *
+ * 代价是具体的：`src/types/mapExpose.ts`（79 注释 / 21 实码 = 3.8:1）正是「类型定义
+ * 密集」豁免的**真实样本**，而它压根没被扫过——豁免有没有用、判据准不准，都无从验证。
+ * 门禁最危险的状态不是判红，是**看起来在跑而其实没看见该看的东西**。
+ *
+ * `node_modules` 已在根层被排除（不在 `SCAN_ROOTS` 里），`dist` / `.artifacts` /
+ * `.pnpm` 是构建产物。外部 `@types` 由 `node_modules` 一条覆盖，不需要单列。
+ */
+const SKIP_DIRS = new Set(["node_modules", "dist", ".artifacts", ".pnpm"]);
 
 /** 递归列出待扫描的源文件（`sep` 换 `/`，让报错里的路径跨平台一致）。 */
 function collectFiles(dir: string, out: string[] = []): string[] {
@@ -117,4 +130,4 @@ if (issues.length > 0) {
 }
 
 console.log(`[check-comment-hygiene] OK：注释卫生（扫了 ${scanned} 个文件）`);
-console.log("  单文件注释/实码比不超阈值（含实测证据主体 / 实测更正 / 类型定义密集的豁免）。");
+console.log("  单文件注释/实码比不超阈值（含实测证据主体 / 类型定义密集的豁免）。");
