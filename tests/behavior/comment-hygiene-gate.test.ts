@@ -242,28 +242,22 @@ describe("#192 注释卫生门禁", () => {
   });
 
   describe("类型定义密集豁免", () => {
+    // ⚠️ 实码必须 ≥ `minCodeLines`（20），否则小文件规则在**第一行**就 return []，
+    // 用例看着通过、实际压根没测到这条豁免。评审第四轮点出过这个问题：
+    // 原先两个正例都只有 10 行实码，全靠 CI 集成扫描兜着。
+    const members = (n: number) =>
+      Array.from({ length: n }, (_, i) => [
+        `  /** 成员 ${i + 1}：一句话说明它做什么、什么情况下不能省。 */`,
+        `  member${i}(): HTMLElement | null;`,
+      ]).flat();
+
     it("逐成员说明的冻结面不判（压缩它等于删掉使用面）", () => {
       const lines = [
         "/**",
         " * `<Map>` 的 expose 形状。",
         " */",
         "export interface MapExpose {",
-        "  /** 容器 DOM。 */",
-        "  getContainer(): HTMLElement | null;",
-        "  /** 容器是否已拿到非零尺寸。 */",
-        "  isSized(): boolean;",
-        "  /** 地图中心。 */",
-        "  getCenter(): unknown;",
-        "  /** 缩放级别。 */",
-        "  getZoom(): number;",
-        "  /** 平移。 */",
-        "  panBy(x: number, y: number): void;",
-        "  /** 缩放到。 */",
-        "  setZoom(z: number): void;",
-        "  /** 截图。 */",
-        "  getViewport(): unknown;",
-        "  /** 飞行。 */",
-        "  flyTo(o: unknown): void;",
+        ...members(10),
         "}",
       ];
       expect(checkCommentRatio("src/expose.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
@@ -294,15 +288,41 @@ describe("#192 注释卫生门禁", () => {
         " * 冻结面。",
         " */",
         "export interface A {",
-        "  a(): void;",
-        "  b(): void;",
-        "  c(): void;",
-        "  d(): void;",
-        "  e(): void;",
-        "  f(): void;",
+        ...members(10),
         "}",
       ];
       expect(checkCommentRatio("src/methods.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
+    });
+
+    // 评审第四轮 P1：MEMBER_DECL 曾把普通实现语句也当成成员，于是实现文件可以
+    // 误获豁免——这条豁免变成万能后门。判据必须限定在 interface/type 的花括号内。
+    it("普通实现语句（run() / emit() / 对象字段）不算成员 ⇒ 判红", () => {
+      const lines = [
+        "/**",
+        ...Array.from({ length: 200 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+        " */",
+        ...Array.from({ length: 20 }, (_, i) => `export function run${i}(): void {`),
+        ...Array.from({ length: 20 }, (_, i) => `  emit("x${i}");`),
+        "}",
+        ...Array.from({ length: 15 }, (_, i) => `const v${i} = ${i};`),
+      ];
+      // 202 注释 / 56 实码 = 3.6:1 超阈值，但整个文件没有 interface / type 字面量
+      expect(checkCommentRatio("src/impl.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+
+    it("class 的方法体不算成员（只有 interface / type 字面量才豁免）", () => {
+      const lines = [
+        "/**",
+        ...Array.from({ length: 200 }, (_, i) => ` * 决策史第 ${i + 1} 段。`),
+        " */",
+        "export class Foo {",
+        ...Array.from({ length: 20 }, (_, i) => `  method${i}(): void {`),
+        ...Array.from({ length: 20 }, (_, i) => `    emit("x${i}");`),
+        "  }",
+        "}",
+        ...Array.from({ length: 15 }, (_, i) => `const v${i} = ${i};`),
+      ];
+      expect(checkCommentRatio("src/class.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
     });
   });
 });

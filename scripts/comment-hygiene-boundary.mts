@@ -14,7 +14,7 @@
  * - **过时**：注释一旦**引用其它文档**，改名 / 重写 / 合并即失效，而注释本身没人回头核对。
  * `check:toolchain` 自己就是例子——它 391 行注释里大量在复述 ADR 已经写过的决策史。
  *
- * ## 判据只有一条（比例），另有四条豁免，都是可判定的
+ * ## 判据只有一条（比例），另有两条豁免，都是可判定的
  *
  * | 判据 | 拦什么 |
  * | --- | --- |
@@ -210,36 +210,59 @@ function isEvidenceBridgeLine(lines: readonly string[], i: number): boolean {
 /**
  * 该文件是否**类型定义密集**——即高注释比来自「逐成员说明」而非决策史堆积。
  *
- * 判据：**成员声明行**占实码行的多数。成员指interface / type 字面量里的属性与方法：
- * `getContainer(): HTMLElement | null;`、`readonly host: Readonly<ShallowRef<…>>`、
- * `mapTypes?: readonly string[]`。
+ * 判据两条：① 文件里有 `interface` / `type` 字面量；② **该字面量内**的成员声明行
+ * 占实码行的多数（≥ `TYPE_MEMBER_SHARE`）。
  *
- * ⚠️ 初版只认 `readonly x:` 与 `x: (` 两种形态，于是 `MapExpose` 的方法签名
- * （`getContainer(): T;` 这类**零参数箭头式**）一条都不匹配，豁免形同虚设——而
+ * ⚠️ 两条都不能少。判据经历过两次修正，两次都是被评审的反例推翻：
+ *
+ * **第一版**只认 `readonly x:` 与 `x: (`，于是 `MapExpose` 的方法签名
+ * （`getContainer(): T;` 这类**零参数方法签名**）一条都不匹配，豁免形同虚设——而
  * `src/types/` 当时还被 `SKIP_DIRS` 整个跳过，这个文件压根没进扫描（评审第三轮发现）。
- * 两条叠加的漏洞：一个豁免既没写对、也没被验证过。
  *
- * 这类文件（`MapExpose` 那样冻结一个公共接口的形状）天然需要逐成员说明，
- * 压缩它等于删掉使用面。
+ * **第二版**换成宽松的 `MEMBER_DECL`，结果它把**普通实现语句**也当成成员
+ * （评审第四轮：`run();`、`emit("x");`、`callback(ready);`、`foo: bar,` 全部误判），
+ * 于是一个实现文件配 100 行决策史就能拿到「类型定义密集」豁免——这条豁免变成了
+ * 一个万能后门。
+ *
+ * 所以现在**必须先确认文件里有 interface / type 字面量**，再只数**花括号内部**的成员。
+ * `run();` 那种行即便长得像成员，也不处在类型字面量里。
  */
+const TYPE_MEMBER_SHARE = 0.5;
 const MEMBER_DECL =
-  /^\s*(?:readonly\s+)?[A-Za-z_$][\w$]*\??\s*(?::\s*[^;]*|\([^)]*\)\s*:?\s*[^;]*)\s*[;,]?\s*$/;
+  /^(?:readonly\s+)?[A-Za-z_$][\w$]*\??\s*(?::\s*[^;]*|\([^)]*\)\s*:?\s*[^;]*?)\s*[;,]?\s*$/;
+const TYPE_LITERAL_OPEN = /^(?:export\s+)?(?:interface|type)\s+[A-Za-z_$][\w$]*[^=]*=?\{?/;
 
 function isTypeDefinitionDense(
   lines: readonly string[],
   stats: FileCommentStats,
 ): boolean {
   if (stats.codeLines === 0) return false;
+  // 前置条件：文件里确实有interface / type 字面量，否则一律不豁免。
+  // ⚠️ 这一条是给第二版补的漏——`run();` 与 `getContainer(): T;` 在正则上无法区分，
+  // 唯一的区别是后者处在 `{ … }` 里面。
+  const hasTypeLiteral = lines.some(
+    (l) => !isCommentLine(l) && TYPE_LITERAL_OPEN.test(l.trim()),
+  );
+  if (!hasTypeLiteral) return false;
+
   let memberLines = 0;
+  let depth = 0;
   for (const l of lines) {
     const t = l.trim();
-    if (isCommentLine(l)) continue;
-    // 只数**成员声明行**——`interface` / `type` 的开括号与收尾不算。
-    // ⚠️ 算上它们时反例当场成立：一个 3 行的 `interface Small { a: string }` 配100 行
-    // 决策史就能豁免，而它显然不是「类型定义密集」。
+    if (isCommentLine(l) || t === "") continue;
+    if (TYPE_LITERAL_OPEN.test(t)) {
+      // 开括号可能在同一行（`interface A {`）也可能换行；数 `{` 与 `}` 的差值
+      depth += (t.match(/\{/g) ?? []).length - (t.match(/\}/g) ?? []).length;
+      continue;
+    }
+    if (depth <= 0) continue; // 不在类型字面量内 ⇒ 不是成员
+    if (/^}/.test(t)) {
+      depth = 0;
+      continue;
+    }
     if (MEMBER_DECL.test(t)) memberLines += 1;
   }
-  return memberLines / stats.codeLines >= 0.5;
+  return memberLines / stats.codeLines >= TYPE_MEMBER_SHARE;
 }
 
 /** 一个文件的注释统计结果。 */
