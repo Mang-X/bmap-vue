@@ -6,33 +6,41 @@
  *                            报告缺失、报告漂移或分析报错都让进程以非零码退出。
  * - `pnpm generate:api`   —— `--local`：把当次产物写进基线（改了公共类型面之后运行并提交它）。
  *
- * ## 覆盖范围：哪些出口有报告、哪两个没有
+ * ## 覆盖范围：七个出口全部有 report 与签名基线
  *
- * API Extractor 的符号表**无法**分析 Volar 为 SFC 生成的声明形态：`Map.vue.d.ts` 里那句
+ * #188 之前，`.` / `./components` 这两个出口挂在一个**「预期失败即通过」的探针**上：
+ * API Extractor 的符号表分析不了 Volar 为 SFC 生成的这段声明 ——
  *
  * ```ts
  * declare var __VLS_1: { ... }, __VLS_3: { ... }, __VLS_5: { ... };
  * ```
  *
- * 这种**多声明 `var`** 没有被 `vite-plugin-dts` 的 `bundleTypes` 带进合并后的声明文件，
- * 于是 `dist/index.d.ts` / `dist/components.d.ts` 里留下 `typeof __VLS_1` 这样的**悬空引用**，
- * API Extractor 一碰到就抛 `Symbol not found for identifier: __VLS_*`。
+ * 这种**多声明 `var`** 不会进入打包后的声明文件，于是 `dist/index.d.ts` 里留下对
+ * `__VLS_1` 的 `typeof` **悬空引用**，AE 一碰到就抛 `Symbol not found for identifier`，
+ * 消费方开 `skipLibCheck: false` 则报 `TS2304`（实测 51 处）。
  *
- * 因此本门禁分三层，**每个出口都有一层签名基线**：
+ * 根因不是「多声明 `var`」本身，而是**类型位置的 `typeof`**：AE 的 rollup 只保留
+ * 导出面可达的符号，模块局部变量不在其中，引用它的 `__VLS_Slots` 却留了下来。
+ * 实测把 `var` 拆开、改成 `type`、或换成已声明的唯一名，**都无效**。
+ * 唯一成立的是给组件补 `defineSlots` —— Volar 会把插槽载荷**内联**进 `__VLS_Slots`，
+ * 全程没有中间 `var`（且声明从此受模板校验）。
  *
- * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 评审 P1-1 引入、三轮评审 P1 推广到
- *   全部七个出口）：`dist/<出口>.d.ts` 经 TypeScript printer（`removeComments: true`）规范化后的
- *   全文快照，`pnpm generate:api` 生成、全等比对。对 `.` / `./components` 它是**唯一**的基线
- *   （AE 根本分析不了它们）；对五个有 report 的出口，它补的是 report 补不到的那一层 ——
- *   `ae-forgotten-export` 在 report 里只留 `getInputValue: typeof getInputValue` 这种**名字引用**，
- *   底下那个函数的签名一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红
- *   （#159 三轮评审 P1 举的例子）。只有 report 没有快照，等于「未导出类型的结构没人守」。
- * - **探针**（只对 `.` / `./components`）：每次运行都真的跑一遍 AE，并断言失败模式仍然是这一种。
- *   一旦它被修好（或变成别的错误）门禁会红，提示把这两个出口加进 `REPORTED`。
- *   **跳过而不探测**才是真正的风险：没人会发现阻塞已经消失或变质。
- * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：见下节。
+ * 因此本门禁现在对**七个出口一视同仁**，分三层：
  *
- * 另外五道门继续守根入口与组件的其余面：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
+ * - **API report**（`etc/<出口>/bmap-vue.api.md`）：AE 自己按空白归一后逐字符比。
+ * - **未导出类型身份集合**（`etc/<出口>/forgotten-exports.json`）：`ae-forgotten-export`
+ *   的符号名集合（滤掉 Volar 机器名），**全等**才通过（#159 二轮评审 P1）。**七个出口
+ *   一律适用**；零容忍名单与机器名过滤的理由写在
+ *   `api-forgotten-boundary.mts#FORGOTTEN_ZERO_TOLERANCE_ENTRIES` / `#VOLAR_MACHINE_NAME`。
+ * - **类型级签名基线**（`etc/<出口>/bmap-vue.dts.md`，#159 引入）：`dist/<出口>.d.ts` 经
+ *   TypeScript printer（`removeComments: true`）规范化后的全文快照。它补的是 report 补不到的
+ *   那一层 —— report 对未导出类型只留 `typeof getXxx` 这种**名字引用**，底下那个函数的签名
+ *   一改，report 文本不动、名字集合也不动，只有 d.ts 快照会红。
+ *
+ * 「声明本身对消费方是否合法」由 `check:dts-strict` 单独守：AE 通过**不等于**声明合法，
+ * 那道门禁让消费方开 `skipLibCheck: false` 真编译一遍。
+ *
+ * 另外几道门继续守根入口与组件的其余面：`check:public-dts`（不泄漏 raw SDK / 官方类型包）、
  * `tests/behavior/export-surface-freeze.test.ts`（值导出精确集合）、
  * `generate:api-diff:check`（根入口导出名 vs 官方参考）、`verify:package`（tarball 消费方 vue-tsc）。
  *
@@ -68,6 +76,7 @@ import {
   collectForbiddenAdditions,
   forbiddenForgottenMessage,
   newForbiddenForgottenExports,
+  publicForgottenExports,
   REPORTED_ENTRIES,
 } from "./api-forgotten-boundary.mts";
 
@@ -85,17 +94,16 @@ const DIST = resolve(PKG, "dist");
 const ETC = resolve(PKG, "etc");
 const TEMP = resolve(ROOT, ".artifacts/api-extractor");
 
-/** 有基线报告的出口（相对 `package.json#exports` 的键去掉 `./`）。名单见 `api-forgotten-boundary.mts`。 */
+/**
+ * 七个出口：report、未导出类型身份集合、签名基线都逐出口生效（#188 评审 P1 之后
+ * 再无「不适用」的出口 —— 未清零的 `index` / `components` 也有基线，只是非空）。
+ * 名单见 `api-forgotten-boundary.mts`（#188 起含 `index` / `components`）。
+ *
+ * #188 之前这里有两个名单（`REPORTED` 与 `KNOWN_BLOCKED`），两层判据各走一份。
+ * 豁免撤销后两者合并成一份 —— 留一个纯别名 `ALL_ENTRIES = REPORTED` 只会让人
+ * 以为两层判据还在。
+ */
 const REPORTED = REPORTED_ENTRIES;
-
-/** 已知无法分析的出口：探针断言失败模式，而不是静默跳过。 */
-const KNOWN_BLOCKED = ["index", "components"] as const;
-
-/** 七个出口：签名基线对每个出口都生效，report / 身份集合只对 REPORTED 生效。 */
-const ALL_ENTRIES: readonly Entry[] = [...REPORTED, ...KNOWN_BLOCKED];
-
-/** Volar 悬空引用的失败特征。换成别的错误 ⇒ 门禁红，要求重新评估名单。 */
-const KNOWN_BLOCKER_PATTERN = /Symbol not found for identifier: __VLS_/;
 
 const require_ = createRequire(resolve(PKG, "package.json"));
 const { Extractor, ExtractorConfig } = require_("@microsoft/api-extractor") as {
@@ -116,7 +124,7 @@ const { Extractor, ExtractorConfig } = require_("@microsoft/api-extractor") as {
   };
 };
 
-type Entry = (typeof REPORTED)[number] | (typeof KNOWN_BLOCKED)[number];
+type Entry = (typeof REPORTED)[number];
 
 /** 共享设置（消息级别 / docModel / rollup 开关）的唯一事实源。 */
 const CONFIG_PATH = resolve(PKG, "api-extractor.json");
@@ -167,7 +175,7 @@ const ts = require_("typescript") as typeof import("typescript");
  * printer 同时把引号、缩进、换行一并规范化，产物因此是**稳定**的（同一输入必然同一输出），
  * 注释改动也不会让基线抖动。
  */
-function expectedSignatureFile(entry: string): string {
+function expectedSignatureFile(entry: Entry): string {
   const fileName = resolve(DIST, `${entry}.d.ts`);
   const parsed = ts.createSourceFile(
     fileName,
@@ -181,18 +189,14 @@ function expectedSignatureFile(entry: string): string {
     .printFile(parsed)
     .replace(/\n+$/, "");
   const subpath = entry === "index" ? "." : `./${entry}`;
-  // 头两行说明按出口分（#159 四轮评审 P3）：`__VLS_` 只对 `KNOWN_BLOCKED` 成立，
-  // 给另外五个有 report 的出口写同一句是假话。
-  const note = (KNOWN_BLOCKED as readonly string[]).includes(entry)
-    ? [
-        "> API Extractor 分析不了这两个出口的 Volar `__VLS_` 悬空引用，",
-        "> 但它们的类型面仍必须有一份会变红的基线（ADR 2026-09-25 决策 5 / #159 评审 P1-1）。",
-      ]
-    : [
-        "> 这个出口同时有 API report 与 forgotten-export 身份集合；本快照是第三层：",
-        "> report 对未导出类型只留 `typeof getXxx` 名字引用、集合只记符号名，",
-        "> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。",
-      ];
+  // 头两行说明对七个出口**同形**（#188 评审 P1 之后）：`__VLS_` 的出口级豁免撤销了，
+  // 机器名改成**按名字**过滤，真实欠账照旧进身份集合基线。没有出口需要单独说明，
+  // 因此这里不再按出口分支 —— 留一个恒为假的分支就等于留一个没人验证的开关。
+  const note = [
+    "> 这个出口同时有 API report 与 forgotten-export 身份集合（后者已滤掉 Volar 机器名）；",
+    "> 本快照是第三层：report 对未导出类型只留 `typeof getXxx` 名字引用、集合只记符号名，",
+    "> **同名结构**的漂移只有这里看得见（ADR 2026-09-25 决策 5 / #159 三轮评审 P1）。",
+  ];
   return [
     `## API Signature Baseline for "${PKG_NAME}" (entry \`${subpath}\`)`,
     "",
@@ -233,7 +237,7 @@ function configFor(entry: Entry): unknown {
 }
 
 function assertDist(): void {
-  const missing = [...REPORTED, ...KNOWN_BLOCKED]
+  const missing = [...REPORTED]
     .map((entry) => `${entry}.d.ts`)
     .filter((name) => !existsSync(resolve(DIST, name)));
   if (missing.length) {
@@ -255,8 +259,10 @@ type CollectedMessage = { logLevel: string; messageId: string; text: string };
 function runExtractor(entry: Entry, localBuild: boolean): {
   result: ReturnType<typeof Extractor.invoke>;
   summary: string;
-  /** `ae-forgotten-export` 的符号名集合（排序去重），用于身份集合基线比对。 */
+  /** `ae-forgotten-export` 的符号名集合（排序去重，**已滤掉 Volar 机器名**），用于身份集合基线比对。 */
   forgotten: string[];
+  /** 被过滤掉的 Volar 机器名个数。只进输出，让「滤掉了多少」可见 —— 静默过滤会让人以为欠账变少了。 */
+  machineNameCount: number;
 } {
   const collected: CollectedMessage[] = [];
   const result = Extractor.invoke(configFor(entry), {
@@ -303,13 +309,19 @@ function runExtractor(entry: Entry, localBuild: boolean): {
     }
     forgottenSet.add(match[1]!);
   }
-  const forgotten = [...forgottenSet].sort();
+  // 滤掉 Volar 机器名（#188 评审 P1）：它们的名字由编译器决定、我们无权裁决，
+  // 登记进冻结表等于给内部临时名发公共 API 通行证。**真实类型一个都不滤** ——
+  // 首轮是按「出口」豁免的，等于在 index/components 上关掉了整层判据。
+  // 过滤后的集合照旧参与全等比对、照旧拒绝新增。
+  const allForgotten = [...forgottenSet].sort();
+  const forgotten = publicForgottenExports(allForgotten);
+  const machineNameCount = allForgotten.length - forgotten.length;
   if (process.argv.includes("--verbose")) {
     for (const message of collected) {
       console.log(`      ${message.logLevel}: ${message.text}`);
     }
   }
-  return { result, summary, forgotten };
+  return { result, summary, forgotten, machineNameCount };
 }
 
 /** AE **先落盘、后判定成败**；报错时把基线恢复成运行前的内容（原本不存在则删掉）。 */
@@ -327,6 +339,7 @@ interface EntryRun {
   readonly result: { errorCount: number; warningCount: number };
   readonly summary: string;
   readonly forgotten: readonly string[];
+  readonly machineNameCount: number;
   readonly previousReport: string | undefined;
 }
 
@@ -350,17 +363,19 @@ function preflight(): EntryRun[] {
     // 拿到与 `updateMode` 不同的失败模式。
     mkdirSync(dirname(target), { recursive: true });
     const previousReport = existsSync(target) ? readFileSync(target, "utf8") : undefined;
-    const { result, summary, forgotten } = runExtractor(entry, false);
+    const { result, summary, forgotten, machineNameCount } = runExtractor(entry, false);
     if (result.errorCount > 0) {
       throw new Error(
         `[check-api] ${entry}: --local 期间分析报错 ${result.errorCount} 个（${summary || "无摘要"}）——` +
           `先修分析错误再重跑（--verbose 看明细）。本命令一个基线都还没写`,
       );
     }
-    runs.push({ entry, result, summary, forgotten, previousReport });
+    runs.push({ entry, result, summary, forgotten, machineNameCount, previousReport });
   }
   // 身份集合的判据在**所有**出口都跑完之后统一下（`collectForbiddenAdditions` 不短路）：
   // 非空就一次性报出全部待处置出口，并保证此时 `etc/` 一个字节都没被写过。
+  // **七个出口一律参与**（#188 评审 P1）：`index` / `components` 的机器名已在
+  // `runExtractor` 里按名字滤掉，剩下的真实欠账必须先处置，与其他出口同一把尺子。
   const refusals = collectForbiddenAdditions(
     runs.map((run) => ({
       entry: run.entry,
@@ -371,7 +386,7 @@ function preflight(): EntryRun[] {
   if (refusals.length > 0) {
     throw new Error(
       `${forbiddenForgottenMessage(refusals)}\n` +
-        `  五个出口已全部判定完毕，本次命令**没有写任何基线** ——` +
+        `  出口已全部判定完毕，本次命令**没有写任何基线** ——` +
         ` 处置完上面每个名字后重跑即可。`,
     );
   }
@@ -387,7 +402,7 @@ function preflight(): EntryRun[] {
 function updateMode(): void {
   const runs = preflight();
   for (const run of runs) {
-    const { entry, result, summary, forgotten, previousReport } = run;
+    const { entry, result, summary, forgotten, machineNameCount, previousReport } = run;
     const target = reportPath(entry);
     try {
       mkdirSync(dirname(target), { recursive: true });
@@ -399,7 +414,8 @@ function updateMode(): void {
         );
       }
       // 用 preflight 判过的 `forgotten`，不用重跑那份：判据已在第一阶段全绿，二次判定只会
-      // 让「为什么这次没被拒」变得不可解释。
+      // 让「为什么这次没被拒」变得不可解释。**七个出口都写**（#188 评审 P1）：
+      // 机器名已在 `runExtractor` 里滤掉，剩下的是本库真实欠账，必须有基线才谈得上「拒绝新增」。
       writeForgottenBaseline(entry, forgotten);
     } catch (error) {
       restoreBaseline(target, previousReport);
@@ -408,15 +424,17 @@ function updateMode(): void {
     const lines = readFileSync(target, "utf8").split("\n").length;
     console.log(
       `[check-api] ${entry}: 基线已生成 (${lines} 行, error=${result.errorCount}` +
-        `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}) → ${target}`,
+        `${summary ? `, warning=${result.warningCount}: ${summary}` : ""}` +
+        `${machineNameCount > 0 ? `, 另滤掉 ${machineNameCount} 个 Volar 机器名` : ""}` +
+        `) → ${target}`,
     );
   }
-  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），五个有 report 的出口也不例外。
-  for (const entry of ALL_ENTRIES) writeSignatureBaseline(entry);
+  // 签名基线是**每个出口**都有的那一层（#159 三轮评审 P1），七个出口一律写。
+  for (const entry of REPORTED) writeSignatureBaseline(entry);
 }
 
 /** 写某个出口的类型级签名基线（七个出口都写）。 */
-function writeSignatureBaseline(entry: string): void {
+function writeSignatureBaseline(entry: Entry): void {
   const target = signaturePath(entry);
   mkdirSync(dirname(target), { recursive: true });
   const expected = expectedSignatureFile(entry);
@@ -441,10 +459,31 @@ function parseForgottenFile(raw: string): string[] | undefined {
     : [];
 }
 
-/** 读出基线里的身份集合（文件缺失 / 非 JSON 一律按空集，交给调用方判定）。 */
+/**
+ * 读出基线里的身份集合。
+ *
+ * **缺文件即判失败，不按空集处理**（#188 评审 P1 的直接后果）。原先这里返回 `[]`，
+ * 于是「删掉基线文件」与「基线确实是空的」在判定上**完全一样** ——
+ * `newForbiddenForgottenExports` 会把当前全部真实欠账当成「新增」拒绝，但那只是
+ * 巧合般地挡住了删除；而 `preflight` 里那次判定发生在写盘之前，它一旦被绕过
+ * （`--local` 的第二阶段，或任何把空集写回基线的路径）就等于洗掉了欠账。
+ *
+ * 刻意**不**提供任何「重建基线」的旁路：`index` / `components` 的首份基线已随本票
+ * 提交（46 / 14 个名字），迁移完成后没有任何理由需要重建它，而任何重建入口都是
+ * 「跑一次就把新欠账洗成基线」那条路的变体（#165 要堵的正是它）。真要新增欠账，
+ * 先按 ADR `2026-09-25` 的二选一处置。
+ */
 function readForgottenBaseline(entry: string): string[] {
   const target = forgottenPath(entry);
-  if (!existsSync(target)) return [];
+  if (!existsSync(target)) {
+    throw new Error(
+      `${entry}: 未导出类型身份基线缺失 ${target}\n` +
+        `  基线缺失**不能**按空集处理：那会让「当前全部欠账」看起来像「新增」，` +
+        `而任何把空集写回去的路径都等于洗掉欠账。\n` +
+        `  七个出口的基线都应随源码提交；若确实要新增欠账，先按 ADR 2026-09-25 的` +
+        `二选一处置（升为公共导出 / 让引用消失），而不是重建基线。`,
+    );
+  }
   return parseForgottenFile(readFileSync(target, "utf8")) ?? [];
 }
 
@@ -460,7 +499,7 @@ function readForgottenBaseline(entry: string): string[] {
  * 因此文案必须按**当前** `forbiddenForgottenMessage` 的签名调用 —— 它收的是 refusal 数组，
  * 不是 `(entry, added, target)` 三个散参（评审抓到的正是这个失效兜底分支）。
  */
-function writeForgottenBaseline(entry: string, symbols: readonly string[]): void {
+function writeForgottenBaseline(entry: Entry, symbols: readonly string[]): void {
   const target = forgottenPath(entry);
   const added = newForbiddenForgottenExports(entry, readForgottenBaseline(entry), symbols);
   if (added.length > 0) throw new Error(forbiddenForgottenMessage([{ entry, added }]));
@@ -487,10 +526,17 @@ function writeForgottenBaseline(entry: string, symbols: readonly string[]): void
  * 刻意不用「当前 ⊆ 基线」的子集判据：子集判据下清理是**静默绿**的，基线会随时间烂掉，
  * 几个月后被删掉的名字仍然"合法"。全等是子集判据的严格加强，两处漏法都堵上。
  */
-function forgottenBaselineFailure(entry: string, actual: readonly string[]): string | undefined {
+function forgottenBaselineFailure(entry: Entry, actual: readonly string[]): string | undefined {
   const target = forgottenPath(entry);
   if (!existsSync(target)) {
-    return `${entry}: 未导出类型身份基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`;
+    // 提示**刻意不**说「跑 generate:api 重建」：那份基线是提交物，重建入口刻意不存在
+    // （#188 评审 P1 —— 删文件再重建与 #165 那条洗基线路由只差一步）。
+    return (
+      `${entry}: 未导出类型身份基线缺失 ${target}\n` +
+      `  基线是提交物，刻意没有重建入口（删掉再重建 = 把当前欠账洗成新基线）。\n` +
+      `  从 git 恢复它（git checkout -- ${target.replace(ROOT + "/", "")}）；` +
+      `  若确实要新增未导出类型，先按 ADR 2026-09-25 的二选一处置。`
+    );
   }
   const expected = expectedForgottenFile(actual);
   const raw = readFileSync(target, "utf8");
@@ -521,30 +567,6 @@ function forgottenBaselineFailure(entry: string, actual: readonly string[]): str
   );
 }
 
-function probeKnownBlocked(): void {
-  for (const entry of KNOWN_BLOCKED) {
-    let thrown: unknown;
-    try {
-      runExtractor(entry, false);
-    } catch (error) {
-      thrown = error;
-    }
-    if (thrown === undefined) {
-      throw new Error(
-        `[check-api] ${entry}: 之前挡住 API Extractor 的 Volar __VLS_ 阻塞**消失了** ——` +
-          `把这个出口加进 REPORTED，让它的类型面也进基线报告。`,
-      );
-    }
-    const message = thrown instanceof Error ? thrown.message : String(thrown);
-    if (!KNOWN_BLOCKER_PATTERN.test(message)) {
-      throw new Error(
-        `[check-api] ${entry}: 分析失败，但不是已登记的 Volar __VLS_ 阻塞：\n${message}`,
-      );
-    }
-    console.log(`[check-api] ${entry}: 已知阻塞（Volar __VLS_ 悬空引用）仍然成立，探针通过`);
-  }
-}
-
 function checkMode(): void {
   const failures: string[] = [];
   for (const entry of REPORTED) {
@@ -556,8 +578,9 @@ function checkMode(): void {
     let result: ReturnType<typeof Extractor.invoke>;
     let summary = "";
     let forgotten: string[] = [];
+    let machineNameCount = 0;
     try {
-      ({ result, summary, forgotten } = runExtractor(entry, false));
+      ({ result, summary, forgotten, machineNameCount } = runExtractor(entry, false));
     } catch (error) {
       failures.push(`${entry}: 分析抛错 —— ${error instanceof Error ? error.message : String(error)}`);
       continue;
@@ -586,26 +609,26 @@ function checkMode(): void {
     console.log(
       `[check-api] ${entry}: 与基线一致` +
         `${summary ? ` (warning=${result.warningCount}: ${summary})` : ""}` +
-        `，未导出类型 ${forgotten.length} 个与身份基线一致`,
+        `，未导出类型 ${forgotten.length} 个与身份基线一致` +
+        `${machineNameCount > 0 ? `（另滤掉 ${machineNameCount} 个 Volar 机器名）` : ""}`,
     );
   }
 
   checkSignatureBaselines(failures);
-  probeKnownBlocked();
 
   if (failures.length) {
     throw new Error(`[check-api] ${failures.length} 项未通过:\n  - ${failures.join("\n  - ")}`);
   }
   console.log(
     `[check-api] OK: ${REPORTED.length} 份 API report 与基线一致，` +
-      `${REPORTED.length} 份未导出类型身份集合基线一致，` +
-      `${ALL_ENTRIES.length} 份类型级签名基线一致`,
+      `${REPORTED.length} 份未导出类型身份集合基线一致（已滤掉 Volar 机器名），` +
+      `${REPORTED.length} 份类型级签名基线一致`,
   );
 }
 
 /** 每个出口：比对 `etc/<entry>/bmap-vue.dts.md` 与当前 `dist` 的规范化签名。 */
 function checkSignatureBaselines(failures: string[]): void {
-  for (const entry of ALL_ENTRIES) {
+  for (const entry of REPORTED) {
     const target = signaturePath(entry);
     if (!existsSync(target)) {
       failures.push(`${entry}: 签名基线缺失 ${target} —— 跑 pnpm generate:api 并提交它`);

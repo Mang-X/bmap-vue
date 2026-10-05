@@ -263,6 +263,25 @@ watch(
   { flush: "sync" },
 );
 
+/**
+ * 插槽契约（#188）。
+ *
+ * 与另外 47 个组件同因：`defineSlots` 让 Volar 把载荷**内联**进插槽类型，
+ * 不产生会被声明打包阶段丢弃的中间 `var`。根因与实验记录见
+ * `components/map/Map.vue` 里同段注释。
+ *
+ * **本组件是泛型组件**（`generic="Item"`），vue-tsc 无法把它的插槽类型提升成顶层
+ * 别名 —— 这正是它们在 #188 首轮被排除的原因：当时 emit 出来恰好是合法的内联形态。
+ * 但「当时恰好合法」不是判据，换个 Volar 版本或改一下模板就可能退回悬空形态，
+ * 而没有任何既有门禁会红。写出来之后这一类形态由 `pnpm check:dts-strict` 守着。
+ *
+ * 载荷用 `Record<never, never>` 而不是 `Record<string, never>`（#188 评审 P1）：后者带
+ * 字符串索引签名，写错插槽 prop 时不报错（`typo` 得到 `never`，而 `never` 可赋给任何
+ * 目标），错误成员静默通过。守卫见 `fixtures/consumer/strict/probe.ts` 的 `HasStringIndex`。
+ */
+defineSlots<{
+  default?(props: Record<never, never>): any;
+}>();
 defineOptions({ name: "MarkerCluster" });
 </script>
 

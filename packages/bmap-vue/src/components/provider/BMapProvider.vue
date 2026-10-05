@@ -16,6 +16,7 @@ import {
   createClientContext,
   defaultClientDefinitionKey,
   type BMapClientContext,
+  type ClientStatus,
 } from "../../core/context/client";
 
 export interface BMapProviderProps {
@@ -135,6 +136,30 @@ defineExpose({
   load: (signal?: AbortSignal) => context.load(signal),
   retry,
 });
+
+/**
+ * 插槽契约（#188）。
+ *
+ * 与 `<Map>` 同理：不写 `defineSlots` 时 `vue-tsc` 会把载荷 emit 成模块局部的
+ * `declare var __VLS_1: …`，声明打包阶段那条 `var` 连同声明一起消失，
+ * 只留下一个对 `__VLS_1` 的 `typeof` 悬空引用，消费方开 `skipLibCheck: false` 即报 `TS2304`。
+ * 详见 `components/map/Map.vue` 里同段注释（根因与实验记录都在那里）。
+ *
+ * `loading` 插槽只在 `status === 'loading'` 时渲染，因此载荷的状态是字面量 `"loading"`，
+ * 与 `default` 的 `ClientStatus` 全集**不同** —— 消费方在 `#loading` 里可以直接判字面量。
+ */
+defineSlots<{
+  error?(props: {
+    error: BMapError | null;
+    retry: () => Promise<void>;
+  }): any;
+  loading?(props: {
+    status: "loading";
+  }): any;
+  default?(props: {
+    status: ClientStatus;
+  }): any;
+}>();
 
 defineOptions({ name: "BMapProvider" });
 </script>

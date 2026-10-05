@@ -15,7 +15,12 @@ import {
   watch,
   type ShallowRef,
 } from "vue";
-import { mapContextKey, type MapContext, type MapReadyContext } from "../../core/context/types";
+import {
+  mapContextKey,
+  type MapContext,
+  type MapReadyContext,
+  type MapStatus,
+} from "../../core/context/types";
 import {
   bmapClientContextKey,
   createClientContext,
@@ -1501,6 +1506,52 @@ function createExpose(): MapExpose {
 }
 
 defineExpose(createExpose());
+
+/**
+ * 插槽契约（#188）。
+ *
+ * `defineSlots` 在这里不是可选的文档，而是**发布声明能否成立的前提**：不写它时
+ * `vue-tsc` 会把插槽载荷 emit 成模块局部的 `declare var __VLS_1: …`，
+ * 而声明打包阶段（API Extractor rollup）只保留导出面可达的符号，那条 `var`
+ * 会连同它的声明一起消失，留下一个对 `__VLS_1` 的 `typeof` **悬空引用** ——
+ * 消费方开 `skipLibCheck: false` 立刻报 `TS2304`。
+ * 写了它之后 Volar 把载荷**内联**进 `__VLS_Slots`，全程没有中间 `var`。
+ *
+ * 附带收益：声明从此**受模板校验**。模板里绑了不在下面的 prop（或类型对不上）
+ * 会直接报 `TS2353`，而不再由 Volar 从模板反推出一个可能与实际用法脱节的形状。
+ *
+ * 载荷用**解包后**的类型（`error` 是 `BMapError | null` 而不是 `Ref<BMapError | null>`）——
+ * 模板里 ref 自动解包，声明面必须与消费方在插槽里看到的值一致。
+ * 三者都可省略：`<Map>` 的内容插槽本来就都是可选的。
+ *
+ * 载荷按**当前实际推导**写，不按「应该是」写：`error` 源自 `MapRuntime.error`
+ * （声明为 `ShallowRef<unknown>`，故推导成 `{} | null`）、`retry` 返回 `MapReadyContext`。
+ * 写成更「好看」的 `BMapError | null` / `() => Promise<void>` 会被上面的模板校验挡下
+ * （TS2345/TS2322）—— 那正是这个门禁该起作用的地方。真要收窄 `MapRuntime.error`
+ * 属于运行时类型面的独立决策，不在本票范围内。
+ */
+defineSlots<{
+  /** `#error` 与 `#loading` 共用 `slotProps`，判定见上方 `slotProps` 的注释。 */
+  error?(props: {
+    status: MapStatus;
+    error: {} | null;
+    containerReady: boolean;
+    retry: () => Promise<MapReadyContext>;
+  }): any;
+  loading?(props: {
+    status: MapStatus;
+    error: {} | null;
+    containerReady: boolean;
+    retry: () => Promise<MapReadyContext>;
+  }): any;
+  /** 默认插槽拿的是**地图生命周期**载荷，与上面两个状态插槽不同。 */
+  default?(props: {
+    status: MapStatus;
+    map: MapHandle | null;
+    error: {} | null;
+    client: BMapClient | null;
+  }): any;
+}>();
 
 defineOptions({ name: "Map" });
 </script>

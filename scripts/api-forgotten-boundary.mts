@@ -18,6 +18,10 @@
  *
  * 因此新增的名字**必须**先按 ADR 2026-09-25 的二选一处置（升为公共导出 / 让引用消失），
  * 让它们从集合里**消失**；生成器只自动写「清理」方向。
+ *
+ * **这条不变量对七个出口一律成立**（#188 评审 P1 之后）。`index` / `components` 曾经
+ * 整出口豁免，等于在两个主出口上关掉这层判据；现在改成「只滤掉 Volar 机器名、
+ * 真实类型照旧冻结」，豁免的口子关上了。
  */
 
 /**
@@ -27,7 +31,78 @@
  * 而不是自己抄一份：抄一份的话，加第六个出口时门禁会静默漏掉它（AGENTS.md：
  * 「只查数字抓不到『数量对了但漏列』」，这里同理）。
  */
-export const REPORTED_ENTRIES = ["advanced", "composables", "plugins", "resolver", "ui-kit"] as const;
+export const REPORTED_ENTRIES = [
+  "advanced",
+  "composables",
+  "plugins",
+  "resolver",
+  "ui-kit",
+  // #188 起接入：这两个出口此前因 Volar `__VLS_*` 悬空引用而**无法**被 AE 分析，
+  // 挂在那条「预期失败即通过」的探针上。声明修好后（47 个组件补 `defineSlots`，
+  // 见 `packages/bmap-vue/src/components/**`），AE 能正常分析，report 走正常比对。
+  "index",
+  "components",
+] as const;
+
+/**
+ * Volar / vue-tsc 的**编译器机器名**（`__VLS_*`）。
+ *
+ * 这些名字是编译器为「本文件内提升出来的中间符号」生成的，换一个 Volar 版本就可能
+ * 变形。它们出现在 `ae-forgotten-export` 里有两个原因：① 声明打包阶段（AE rollup）只保留
+ * 导出面可达的符号，于是「只有导出面引用它」的中间名变成未导出；② 组件的
+ * `__VLS_Slots` / `__VLS_WithSlots` 是 `.vue` 文件内部生成物。
+ *
+ * **把它们登记进 `forgotten-exports.json` 等于给编译器内部临时名发公共 API 通行证** ——
+ * 那张表的语义是「本库真实类型被导出面之外引用、因而消费方无法命名」，而 `__VLS_*`
+ * 恰恰是「消费方永远不该命名的东西」，且它的名字由编译器决定、我们无权裁决。
+ *
+ * ## 为什么是**过滤**而不是**豁免整个出口**（#188 评审 P1）
+ *
+ * 首轮把 `index` / `components` 整个登记为「身份集合不适用」，等于在这两个主出口上
+ * **关掉了整层判据**：那里有 46 / 14 个本库**真实**类型待裁决（`BMapError` /
+ * `PanoramaHandle` / `MarkerListProps` …），它们本该被冻结、且新增必须先处置。
+ * 出口级豁免之后 `generate:api` 又能照常更新 report 与签名基线，于是「跑一次生成器
+ * 就把新欠账洗成基线」这条路在两个最重要的出口上重新打开 —— 正是 #165 想堵住的。
+ *
+ * 过滤精确到**名字**而不是出口：`__VLS_*` 被滤掉（无权裁决），真实类型**照旧进基线、
+ * 照旧拒绝新增**（有裁决权）。两道性质的差别就是这张表与那个前缀的差别。
+ *
+ * 刻意**不**放宽前缀去匹配别的形状：一旦写成 `/^__/` 之类，「我们自己的名字恰好以双下划线
+ * 开头」就会被静默豁免，而那正是本库真实类型。
+ */
+export const VOLAR_MACHINE_NAME = /^__VLS_/;
+
+/**
+ * 从 AE 报出的未导出类型里滤掉**编译器机器名**，留下本库真实欠账。
+ *
+ * 纯函数：吃集合、不碰文件系统 —— 可被用例直接断言。过滤后的集合**仍然参与全等比对**，
+ * 所以「真实类型新增」依旧会让门禁红。
+ */
+export function publicForgottenExports(names: readonly string[]): string[] {
+  return names.filter((name) => !VOLAR_MACHINE_NAME.test(name));
+}
+
+/**
+ * **零容忍**的出口：身份集合基线必须恒为 `[]`。
+ *
+ * 这些出口的存量在 #160 就已清零，任何非空都是回归 —— 判据是「恒空」而不是「比条数」，
+ * 哪怕只多一个名字也是欠账回来了。
+ *
+ * 为什么这张名单**不全覆盖**七个出口（#188 评审 P1）：`index` / `components` 今日分别有
+ * 46 / 14 个**真实**类型待公共面裁决（`BMapError` / `PanoramaHandle` /
+ * `MarkerListProps` …）。把它们列入零容忍等于要求 #188 这票顺手裁决公共 API 面 ——
+ * 每个名字该「升为公共导出」还是「收窄签名」是一次独立裁决，属 ADR 2026-09-25 的范围。
+ * 处置完一个就从这张表里删掉它，基线随之变短，**始终拒绝新增**这条不变量不受影响。
+ *
+ * 名单放在这里而不是用例里，是为了让用例从**门禁的**名单派生（抄一份的话，加出口时会漏）。
+ */
+export const FORGOTTEN_ZERO_TOLERANCE_ENTRIES: readonly (typeof REPORTED_ENTRIES)[number][] = [
+  "advanced",
+  "composables",
+  "plugins",
+  "resolver",
+  "ui-kit",
+];
 
 /**
  * 一个符号在**某个出口**上被刻意接受为未导出类型的记录。
