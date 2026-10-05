@@ -365,3 +365,75 @@ export function checkCommentRatio(
     },
   ];
 }
+
+/**
+ * 收集待扫描的源文件。
+ *
+ * ⚠️ **fail-closed**：任何一处读不到（目录不可读、条目`stat` 失败、文件读不出）
+ * 都记进 `failures` 并由调用方判红，**不静默跳过**。
+ *
+ * 这一点是评审第五轮点破的：初版三处都是 `catch { return out }` / `continue`，
+ * 于是「扫描目录不存在」或「某个文件权限不足」时门禁会**漏掉它并仍可能输出 OK**。
+ * 与 #192 明确要求的 fail-closed 相反——门禁最危险的状态不是判红，是**看起来在跑
+ * 而其实没看见该看的东西**（与 `SKIP_DIRS` 漏掉 `src/types/` 同一类）。
+ *
+ * `fs` 可注入是为了让「读失败」这条路径能被用例覆盖，而不是只能靠 chmod 制造。
+ */
+export interface ScanFailure {
+  readonly path: string;
+  readonly op: "readdir" | "stat" | "readFile";
+}
+
+export interface CollectResult {
+  readonly files: readonly string[];
+  readonly failures: readonly ScanFailure[];
+}
+
+export interface ScanFs {
+  readdir(dir: string): readonly string[];
+  stat(full: string): { isDirectory(): boolean };
+  readFile(full: string): string;
+}
+
+export function collectScanFiles(
+  roots: readonly string[],
+  opts: {
+    readonly skipDirs: ReadonlySet<string>;
+    readonly extensions: ReadonlySet<string>;
+    readonly fs: ScanFs;
+    readonly join: (dir: string, name: string) => string;
+  },
+): CollectResult {
+  const files: string[] = [];
+  const failures: ScanFailure[] = [];
+
+  const walk = (dir: string): void => {
+    let entries: readonly string[];
+    try {
+      entries = opts.fs.readdir(dir);
+    } catch {
+      failures.push({ path: dir, op: "readdir" });
+      return;
+    }
+    for (const name of entries) {
+      if (opts.skipDirs.has(name)) continue;
+      const full = opts.join(dir, name);
+      let isDir: boolean;
+      try {
+        isDir = opts.fs.stat(full).isDirectory();
+      } catch {
+        failures.push({ path: full, op: "stat" });
+        continue;
+      }
+      if (isDir) {
+        walk(full);
+        continue;
+      }
+      const dot = name.lastIndexOf(".");
+      if (dot !== -1 && opts.extensions.has(name.slice(dot))) files.push(full);
+    }
+  };
+
+  for (const r of roots) walk(r);
+  return { files, failures };
+}

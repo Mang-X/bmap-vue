@@ -14,10 +14,12 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LIMITS,
   checkCommentRatio,
+  collectScanFiles,
   countLines,
   hasLiveEvidence,
   isCommentLine,
   isEvidenceDominant,
+  type ScanFs,
 } from "../../scripts/comment-hygiene-boundary.mts";
 
 describe("#192 注释卫生门禁", () => {
@@ -245,6 +247,8 @@ describe("#192 注释卫生门禁", () => {
     // ⚠️ 实码必须 ≥ `minCodeLines`（20），否则小文件规则在**第一行**就 return []，
     // 用例看着通过、实际压根没测到这条豁免。评审第四轮点出过这个问题：
     // 原先两个正例都只有 10 行实码，全靠 CI 集成扫描兜着。
+    // ⚠️ 成员数必须 ≥ 18：实码 = interface 开/关（2）+ 成员行，要越过 `minCodeLines = 20`
+    // 才测得到豁免本身。10 个成员只有 12 行实码，会被小文件规则提前放行（评审第五轮）。
     const members = (n: number) =>
       Array.from({ length: n }, (_, i) => [
         `  /** 成员 ${i + 1}：一句话说明它做什么、什么情况下不能省。 */`,
@@ -257,7 +261,7 @@ describe("#192 注释卫生门禁", () => {
         " * `<Map>` 的 expose 形状。",
         " */",
         "export interface MapExpose {",
-        ...members(10),
+        ...members(18),
         "}",
       ];
       expect(checkCommentRatio("src/expose.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
@@ -288,7 +292,7 @@ describe("#192 注释卫生门禁", () => {
         " * 冻结面。",
         " */",
         "export interface A {",
-        ...members(10),
+        ...members(18),
         "}",
       ];
       expect(checkCommentRatio("src/methods.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
@@ -323,6 +327,77 @@ describe("#192 注释卫生门禁", () => {
         ...Array.from({ length: 15 }, (_, i) => `const v${i} = ${i};`),
       ];
       expect(checkCommentRatio("src/class.ts", countLines(lines), DEFAULT_LIMITS, lines)).toHaveLength(1);
+    });
+  });
+
+  // ⚠️ 评审第五轮 P1：初版三处都是静默 `continue`，门禁 fail-open——
+  // 目录不可读 / 条目 stat 失败 / 文件读不出，全部跳过且**仍可能输出 OK**。
+  // 与 #192 要求的 fail-closed 相反。fs 可注入正是为了让这三条能被覆盖，
+  // 而不是只能靠 chmod 制造（那在 CI 上还会因运行用户不同而失效）。
+  describe("fail-closed（读不到就判红）", () => {
+    const opts = (fs: Partial<ScanFs>) => [
+      ["src"],
+      {
+        skipDirs: new Set(["node_modules", "dist"]),
+        extensions: new Set([".ts"]),
+        join: (d: string, n: string) => `${d}/${n}`,
+        fs: {
+          readdir: (): readonly string[] => [],
+          stat: () => ({ isDirectory: () => false }),
+          readFile: () => "",
+          ...fs,
+        },
+      },
+    ] as const;
+
+    it("目录读不到 ⇒ 记failure", () => {
+      const r = collectScanFiles(
+        ...opts({
+          readdir: (): readonly string[] => {
+            throw new Error("EACCES");
+          },
+        }),
+      );
+      expect(r.files).toEqual([]);
+      expect(r.failures).toEqual([{ path: "src", op: "readdir" }]);
+    });
+
+    it("条目 stat 失败 ⇒ 记 failure（不是静默跳过）", () => {
+      const r = collectScanFiles(
+        ...opts({
+          readdir: (): readonly string[] => ["a.ts"],
+          stat: () => {
+            throw new Error("ENOENT");
+          },
+        }),
+      );
+      expect(r.files).toEqual([]);
+      expect(r.failures).toEqual([{ path: "src/a.ts", op: "stat" }]);
+    });
+
+    it("子目录读不到 ⇒ 记 failure 且不吞掉整棵子树", () => {
+      const r = collectScanFiles(
+        ...opts({
+          readdir: (d: string) => {
+            if (d === "src") return ["sub"];
+            throw new Error("EACCES");
+          },
+          stat: () => ({ isDirectory: () => true }),
+        }),
+      );
+      // 子目录 stat 成目录 ⇒ 递归进去；它读不到 ⇒ 记 failure，而不是静默返回
+      expect(r.failures).toEqual([{ path: "src/sub", op: "readdir" }]);
+    });
+
+    it("正常路径不产生 failure", () => {
+      const r = collectScanFiles(
+        ...opts({
+          readdir: (d: string) => (d === "src" ? ["a.ts", "sub"] : ["b.ts"]),
+          stat: (f: string) => ({ isDirectory: () => f.endsWith("sub") }),
+        }),
+      );
+      expect(r.failures).toEqual([]);
+      expect(r.files).toEqual(["src/a.ts", "src/sub/b.ts"]);
     });
   });
 });

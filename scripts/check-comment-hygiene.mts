@@ -33,8 +33,10 @@ import { join, relative, resolve, sep } from "node:path";
 import {
   DEFAULT_LIMITS,
   checkCommentRatio,
+  collectScanFiles,
   countLines,
   type CommentIssue,
+  type ScanFailure,
 } from "./comment-hygiene-boundary.mts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -61,49 +63,52 @@ const EXTENSIONS = new Set([".ts", ".mts", ".vue"]);
  */
 const SKIP_DIRS = new Set(["node_modules", "dist", ".artifacts", ".pnpm"]);
 
-/** 递归列出待扫描的源文件（`sep` 换 `/`，让报错里的路径跨平台一致）。 */
-function collectFiles(dir: string, out: string[] = []): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const name of entries) {
-    if (SKIP_DIRS.has(name)) continue;
-    const full = join(dir, name);
-    let st;
-    try {
-      st = statSync(full);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) collectFiles(full, out);
-    else {
-      const dot = name.lastIndexOf(".");
-      if (dot !== -1 && EXTENSIONS.has(name.slice(dot))) out.push(full);
-    }
-  }
-  return out;
-}
-
 const issues: CommentIssue[] = [];
+const failures: ScanFailure[] = [];
 let scanned = 0;
 
-for (const scanRoot of SCAN_ROOTS) {
-  const abs = resolve(root, scanRoot);
-  for (const file of collectFiles(abs)) {
-    scanned += 1;
-    const relPath = relative(root, file).split(sep).join("/");
-    let lines: string[];
-    try {
-      lines = readFileSync(file, "utf8").split("\n");
-    } catch {
-      // 读不到就不判这一条：这不是本门禁该红的事（那是别的问题）。
-      continue;
-    }
-    issues.push(...checkCommentRatio(relPath, countLines(lines), DEFAULT_LIMITS, lines));
+const scanFs = {
+  readdir: (d: string) => readdirSync(d),
+  stat: (f: string) => statSync(f),
+  readFile: (f: string) => readFileSync(f, "utf8"),
+};
+
+const collected = collectScanFiles(
+  SCAN_ROOTS.map((r) => resolve(root, r)),
+  { skipDirs: SKIP_DIRS, extensions: EXTENSIONS, fs: scanFs, join },
+);
+failures.push(...collected.failures);
+
+for (const file of collected.files) {
+  scanned += 1;
+  const relPath = relative(root, file).split(sep).join("/");
+  let lines: string[];
+  try {
+    lines = scanFs.readFile(file).split("\n");
+  } catch {
+    lines = [];
+    failures.push({ path: relPath, op: "readFile" });
+    continue;
   }
+  issues.push(...checkCommentRatio(relPath, countLines(lines), DEFAULT_LIMITS, lines));
+}
+
+// ⚠️ **fail-closed**：读不到任何一处都判红。初版三处都是静默 `continue`，
+// 于是「扫描目录不可读」或「某个文件读不出」时门禁会漏掉它并仍可能输出 OK——
+// 与 #192 要求的 fail-closed 相反。门禁最危险的状态不是判红，是**看起来在跑
+// 而其实没看见该看的东西**。
+if (failures.length > 0) {
+  console.error(
+    `\n[check-comment-hygiene] FAIL：${failures.length} 处读不到（扫了 ${scanned} 个文件）\n`,
+  );
+  for (const f of failures.slice(0, 20)) {
+    console.error(`    ${f.op}  ${f.path}`);
+  }
+  if (failures.length > 20) console.error(`    … 另有 ${failures.length - 20} 处`);
+  console.error(
+    "\n  判据是 fail-closed：读不到就不能算「没问题」。先修可读性（权限 / 路径 /\n  是否为断链），再谈注释卫生。",
+  );
+  process.exit(1);
 }
 
 if (issues.length > 0) {
