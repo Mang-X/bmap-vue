@@ -129,7 +129,10 @@ export function checkPackageManagerDrift(
     return [
       {
         kind: "package-manager-drift",
-        detail: `无法从 packageManager "${declared}" 解析出版本号`,
+        detail:
+          `无法从 packageManager "${declared}" 解析出 pnpm 版本号：` +
+          "合法形态是 `pnpm@<major>.<minor>.<patch>`，可带 Corepack 的 `+<algo>.<hex>` 完整性后缀。" +
+          "⚠️ 声明成 npm / yarn 等其它 manager 同样走这一条（本门禁只核对 pnpm）",
       },
     ];
   }
@@ -149,14 +152,23 @@ export function checkPackageManagerDrift(
 }
 
 /**
- * 从 `pnpm@12.0.0` 里取�� `12.0.0`。
+ * 从 `pnpm@12.0.0` / `pnpm@12.0.0+sha512.<hex>` 里取出 `12.0.0`。
  *
- * 用 `lastIndexOf("@")`：包名本身可以带 scope（`@scope/pkg@1.2.3`），
- * `split("@")[1]` 会取错段。
+ * ⚠️ 两条约束都是评审 P1 点出来的，缺一条就同时有假绿和误红：
+ *
+ * - **manager 必须是 `pnpm`**。初版只取最后一个 `@` 之后的版本号，于是
+ *   `checkPackageManagerDrift("npm@12.0.0", "12.0.0")` 直接放行——`packageManager`
+ *   已经声明成 npm，门禁却报「pnpm 声明与执行一致」（**假绿**）。
+ * - **允许 Corepack 的完整性后缀**。`pnpm@12.0.0+sha512.<hex>` 是官方推荐写法，
+ *   初版的正则 `^\d+\.\d+\.\d+$` 把它整条判成「解析不出」（**误红**）。
+ *
+ * 用单条锚定正则而不是 `lastIndexOf("@")` 取段：`packageManager` 的合法形态只有
+ * `<name>@<version>` 一种，本门禁只认 `pnpm`。初版用 scoped 包名
+ * （`@scope/pkg@1.2.3`）论证 `lastIndexOf` 的必要性，但 scoped 名字**不是合法的
+ * package manager**，那条论证不成立，反而放过了 `npm@…`。
  */
+const PACKAGE_MANAGER_DECL = /^pnpm@(\d+\.\d+\.\d+)(?:\+[A-Za-z0-9]+\.[A-Za-z0-9]+)?$/;
+
 export function parsePackageManagerVersion(raw: string): string | undefined {
-  const at = raw.lastIndexOf("@");
-  if (at <= 0) return undefined;
-  const version = raw.slice(at + 1);
-  return /^\d+\.\d+\.\d+$/.test(version) ? version : undefined;
+  return PACKAGE_MANAGER_DECL.exec(raw)?.[1];
 }

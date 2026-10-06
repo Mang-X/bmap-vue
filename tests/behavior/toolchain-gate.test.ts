@@ -95,6 +95,27 @@ describe("#192 pnpm 配置卫生门禁", () => {
       expect(checkPackageManagerDrift("12.0.0", "12.0.0")).toHaveLength(1);
       expect(checkPackageManagerDrift("pnpm@latest", "12.0.0")).toHaveLength(1);
     });
+
+    // ⚠️ 评审 P1：初版只取最后一个 `@` 之后的版本号，`npm@12.0.0` 与运行中的
+    // `12.0.0` 判定相等 ⇒ **假绿**——`packageManager` 已经声明成 npm，门禁却报
+    // 「pnpm 声明与执行一致」。这是本判据最危险的失效形态：它承诺的正是
+    // 「声明与执行确实一致」，而这条路径下它连「声明的是不是 pnpm」都没看。
+    it("声明成别的 manager（npm@12.0.0）必须红，不能在运行版本恰好相同时放行", () => {
+      const issues = checkPackageManagerDrift("npm@12.0.0", "12.0.0");
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.kind).toBe("package-manager-drift");
+      expect(issues[0]!.detail).toContain("npm@12.0.0");
+    });
+
+    // ⚠️ 评审 P1 的另一半：Corepack 推荐带完整性校验，初版正则 `^\d+\.\d+\.\d+$`
+    // 把 `+sha512.<hex>` 整条判成「解析不出」⇒ **误红**。
+    it("带 Corepack 完整性后缀（pnpm@12.0.0+sha512.<hex>）必须能提取出版本并放行", () => {
+      expect(checkPackageManagerDrift("pnpm@12.0.0+sha512.abcdef0123", "12.0.0")).toEqual([]);
+    });
+
+    it("带完整性后缀但版本不同样判红（后缀不能把版本比较短路掉）", () => {
+      expect(checkPackageManagerDrift("pnpm@11.0.0+sha512.abcdef0123", "12.0.0")).toHaveLength(1);
+    });
   });
 
   describe("packageManager 版本解析", () => {
@@ -102,8 +123,19 @@ describe("#192 pnpm 配置卫生门禁", () => {
       expect(parsePackageManagerVersion("pnpm@12.0.0")).toBe("12.0.0");
     });
 
-    it("包名带 scope 时用 lastIndexOf 取对段（split('@')[1] 会取错）", () => {
-      expect(parsePackageManagerVersion("@scope/pkg@1.2.3")).toBe("1.2.3");
+    // ⚠️ 这条用例的旧版断言 `@scope/pkg@1.2.3 → 1.2.3` 是**错的**（评审 P1）：
+    // scoped 名字不是合法的 package manager，用「包名可能带 scope」来论证
+    // `lastIndexOf("@")` 的必要性，代价是放过了 `npm@12.0.0` 这种真会发生的假绿。
+    // 现在只认 `pnpm@<semver>`，其它 manager 一律 undefined。
+    it("别的 manager 一律不认（这个字段只该出现 pnpm）", () => {
+      expect(parsePackageManagerVersion("npm@12.0.0")).toBeUndefined();
+      expect(parsePackageManagerVersion("yarn@1.2.3")).toBeUndefined();
+      expect(parsePackageManagerVersion("@scope/pkg@1.2.3")).toBeUndefined();
+    });
+
+    it("接受 Corepack 的 +<algo>.<hex> 完整性后缀，仍取出纯版本号", () => {
+      expect(parsePackageManagerVersion("pnpm@12.0.0+sha512.abcdef0123")).toBe("12.0.0");
+      expect(parsePackageManagerVersion("pnpm@12.0.0+sha224.953c8233")).toBe("12.0.0");
     });
 
     it("没有版本号或格式不对时返回 undefined，不返回半截字符串", () => {
@@ -111,6 +143,9 @@ describe("#192 pnpm 配置卫生门禁", () => {
       expect(parsePackageManagerVersion("pnpm@latest")).toBeUndefined();
       expect(parsePackageManagerVersion("pnpm@12.0")).toBeUndefined();
       expect(parsePackageManagerVersion("@12.0.0")).toBeUndefined();
+      // 空后缀 / 不完整的完整性段都不认（`+` 后面必须有 `<algo>.<hex>`）
+      expect(parsePackageManagerVersion("pnpm@12.0.0+")).toBeUndefined();
+      expect(parsePackageManagerVersion("pnpm@12.0.0+sha512")).toBeUndefined();
     });
   });
 });

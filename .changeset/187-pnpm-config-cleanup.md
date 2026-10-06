@@ -32,9 +32,13 @@
 入库 + CI `--frozen-lockfile` + dependabot major 忽略 + PR diff 已经把它挡住；初版还自己假绿过
 一次（`pnpm` 三层里两层被作者短路却仍报「三方一致」，靠评审才发现）。版本事实记在 ADR。
 
-`unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配（要 `^3.1.5`、实装 `2.2.12`）登记
-为**刻意接受**（已验证它所需的三个符号 2.2.12 全部导出），以结构化字段 `observedVersion`
-记录「例外基于哪个实装版本成立」——升级后该字段与磁盘不一致即红，逼人重审这条例外。追踪 #188。
+`unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配（要 `^3.1.5`、实装 `2.2.12`）是
+**已知、已验证、刻意接受**的状态（实测它所需的三个符号 2.2.12 全部导出），不是隐患。
+
+⚠️ 这条事实**只记在 ADR 2026-10-02**，**没有任何门禁**在核对它。#187 当时用
+`KNOWN_PEER_MISMATCHES` + 结构化字段 `observedVersion` 做过机器登记（升级后该字段与磁盘不一致
+即红，逼人重审），那套登记**已随 #192 瘦身一起删除**——所以**不要**再以为升级
+`@vue/language-core` 会因为这条例外过期而自动变红。追踪 #188。
 
 ⚠️ 本门禁**不具备**「自动发现新增 peer 不匹配」的能力：pnpm 的 isolated 布局下
 `unplugin-dts` 位于 `node_modules/.pnpm/` 虚拟 store 深层，扫工作区 `node_modules` 够不到
@@ -42,4 +46,5 @@
 AGENTS.md 的口径删除，详见 ADR 2026-10-02 的非目标。
 
 **无行为变更**：依赖版本一律未动，`pnpm-lock.yaml` **零 diff**（被删的设置本就未被读取）。
-干净安装 + 三个 typecheck + build + 3824 条用例 + 其余 16 道门禁全绿（ADR 记录了完整实测）。
+干净安装的复核记录见 ADR §6（#187 当时）；#192 瘦身与 #196 复核后复跑：三个 typecheck + build +
+**3922 条用例**（214 文件，另 3 条 skip）+ 其余门禁全绿。
