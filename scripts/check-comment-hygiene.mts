@@ -32,9 +32,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import {
   DEFAULT_LIMITS,
-  checkCommentRatio,
   collectScanFiles,
-  countLines,
+  scanFilesContent,
   type CommentIssue,
   type ScanFailure,
 } from "./comment-hygiene-boundary.mts";
@@ -65,7 +64,6 @@ const SKIP_DIRS = new Set(["node_modules", "dist", ".artifacts", ".pnpm"]);
 
 const issues: CommentIssue[] = [];
 const failures: ScanFailure[] = [];
-let scanned = 0;
 
 const scanFs = {
   readdir: (d: string) => readdirSync(d),
@@ -79,19 +77,16 @@ const collected = collectScanFiles(
 );
 failures.push(...collected.failures);
 
-for (const file of collected.files) {
-  scanned += 1;
-  const relPath = relative(root, file).split(sep).join("/");
-  let lines: string[];
-  try {
-    lines = scanFs.readFile(file).split("\n");
-  } catch {
-    lines = [];
-    failures.push({ path: relPath, op: "readFile" });
-    continue;
-  }
-  issues.push(...checkCommentRatio(relPath, countLines(lines), DEFAULT_LIMITS, lines));
-}
+// 读取 + 判定同样走可注入的纯函数（`scanFilesContent`）：这样「文件读不出」这条
+// fail-closed 路径也能被单测锁住，而不是只能靠 chmod 制造。
+const content = scanFilesContent(collected.files, {
+  fs: scanFs,
+  rel: (full) => relative(root, full).split(sep).join("/"),
+  limits: DEFAULT_LIMITS,
+});
+issues.push(...content.issues);
+failures.push(...content.failures);
+const scanned = content.scanned;
 
 // ⚠️ **fail-closed**：读不到任何一处都判红。初版三处都是静默 `continue`，
 // 于是「扫描目录不可读」或「某个文件读不出」时门禁会漏掉它并仍可能输出 OK——

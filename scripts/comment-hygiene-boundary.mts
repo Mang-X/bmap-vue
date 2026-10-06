@@ -437,3 +437,54 @@ export function collectScanFiles(
   for (const r of roots) walk(r);
   return { files, failures };
 }
+
+/** 逐文件判定的结果。 */
+export interface ScanContentResult {
+  readonly issues: readonly CommentIssue[];
+  readonly failures: readonly ScanFailure[];
+  /** 真正读到并判过的文件数（读失败的不计）。 */
+  readonly scanned: number;
+}
+
+/**
+ * 读取已收集的文件并逐条判定。
+ *
+ * ⚠️ 抽成纯函数是为了补上 fail-closed 的**第三条**路径：`readFile` 失败原来只存在于
+ * `check-comment-hygiene.mts` 的入口里，靠 `process.exit(1)` 表达，单测够不着——
+ * 于是「读不出文件」这条最容易静默漏掉真债务的路径，恰恰是唯一没有用例锁住的。
+ * 评审第六轮点出过：那组 fail-closed 用例里「子目录读不到」走的仍是 `readdir`，
+ * `readFile` 一次都没被触发过。
+ *
+ * `rel` 决定报错里的路径形态（仓库相对、`/` 分隔）；`fs` 可注入，所以这条路径
+ * 能用「让 readFile 抛错」制造，而不是靠 chmod——那在 CI 上会因运行用户不同而失效。
+ */
+export function scanFilesContent(
+  files: readonly string[],
+  opts: {
+    readonly fs: Pick<ScanFs, "readFile">;
+    readonly rel: (full: string) => string;
+    readonly limits?: RatioLimits;
+  },
+): ScanContentResult {
+  const issues: CommentIssue[] = [];
+  const failures: ScanFailure[] = [];
+  let scanned = 0;
+
+  for (const file of files) {
+    const relPath = opts.rel(file);
+    let lines: readonly string[];
+    try {
+      lines = opts.fs.readFile(file).split("\n");
+    } catch {
+      // 读不出 ⇒ 记 failure 并**不**计入 scanned：它没有参与判定，不能算「看过」。
+      failures.push({ path: relPath, op: "readFile" });
+      continue;
+    }
+    scanned += 1;
+    issues.push(
+      ...checkCommentRatio(relPath, countLines(lines), opts.limits ?? DEFAULT_LIMITS, lines),
+    );
+  }
+
+  return { issues, failures, scanned };
+}

@@ -19,6 +19,7 @@ import {
   hasLiveEvidence,
   isCommentLine,
   isEvidenceDominant,
+  scanFilesContent,
   type ScanFs,
 } from "../../scripts/comment-hygiene-boundary.mts";
 
@@ -244,14 +245,26 @@ describe("#192 注释卫生门禁", () => {
   });
 
   describe("类型定义密集豁免", () => {
-    // ⚠️ 实码必须 ≥ `minCodeLines`（20），否则小文件规则在**第一行**就 return []，
-    // 用例看着通过、实际压根没测到这条豁免。评审第四轮点出过这个问题：
-    // 原先两个正例都只有 10 行实码，全靠 CI 集成扫描兜着。
-    // ⚠️ 成员数必须 ≥ 18：实码 = interface 开/关（2）+ 成员行，要越过 `minCodeLines = 20`
-    // 才测得到豁免本身。10 个成员只有 12 行实码，会被小文件规则提前放行（评审第五轮）。
-    const members = (n: number) =>
+    // 正例必须**同时**越过三道闸，否则用例看着通过、实际根本没走到豁免：
+    //   ① 实码 ≥ `minCodeLines`（20）——否小文件规则在函数第一行就 `return []`；
+    //   ② 比值 > `maxRatio + 0.05`（3.05）——否阈值那条路本来就不判红，
+    //      **删掉整条豁免用例照样绿**；
+    //   ③ 成员行 / 实码 ≥ 0.5。
+    //
+    // ⚠️ 第 ② 条是评审第六轮点破、并由这次实测证伪的：旧正例 18 成员各配 1 行 JSDoc，
+    // 实测 `21 注释 / 20 实码 = 1.05:1`，远低于 3.05。我直接把 `lines` 参数去掉
+    // （等价于**删掉整个 `isTypeDefinitionDense()`**）重跑，判红数仍是 0——也就是说
+    // 那三个「正例」锁的是**小文件规则**，不是豁免。判据被删掉它们也不会红。
+    // 这与本 PR 反复强调的「看起来在测而其实没测到该测的东西」是同一类缺陷。
+    //
+    // 所以每个成员配 4 行说明，把比值抬到 3.75:1：此时**只有**类型密集豁免能放行，
+    // 拿掉豁免必红（下一段 `expect(...).toHaveLength(1)` 就是这条的守卫）。
+    const members = (n: number, docLines = 1) =>
       Array.from({ length: n }, (_, i) => [
-        `  /** 成员 ${i + 1}：一句话说明它做什么、什么情况下不能省。 */`,
+        ...Array.from(
+          { length: docLines },
+          (_, k) => `  /** 成员 ${i + 1} 说明第 ${k + 1} 句：为何不能省。 */`,
+        ),
         `  member${i}(): HTMLElement | null;`,
       ]).flat();
 
@@ -261,10 +274,14 @@ describe("#192 注释卫生门禁", () => {
         " * `<Map>` 的 expose 形状。",
         " */",
         "export interface MapExpose {",
-        ...members(18),
+        ...members(18, 4),
         "}",
       ];
+      // 20 实码 / 75 注释 = 3.75:1：**越过了阈值**，只有豁免能放行。
       expect(checkCommentRatio("src/expose.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
+      // 守卫：同一份内容若不走豁免（`lines` 缺省 ⇒ 两条豁免都不参与），必须判红。
+      // 没有这一条，上面的 `toEqual([])` 就无法区分「豁免起作用」与「本来就没超阈值」。
+      expect(checkCommentRatio("src/expose.ts", countLines(lines), DEFAULT_LIMITS)).toHaveLength(1);
     });
 
     // 评审第三轮 P1-2：判据一度把 `export interface X {` 与 `}` 也算成「成员」，
@@ -287,15 +304,17 @@ describe("#192 注释卫生门禁", () => {
     it("方法签名（零参数箭头式）也算成员声明", () => {
       // `MapExpose` 的成员全是 `getContainer(): T;` 这种形态——只认 `readonly x:` 的
       // 判据一条都匹配不上，豁免形同虚设。
+      // ⚠️ 同样要配 4 行说明越过阈值，否则测的是小文件规则（见本 describe 顶部）。
       const lines = [
         "/**",
         " * 冻结面。",
         " */",
         "export interface A {",
-        ...members(18),
+        ...members(18, 4),
         "}",
       ];
       expect(checkCommentRatio("src/methods.ts", countLines(lines), DEFAULT_LIMITS, lines)).toEqual([]);
+      expect(checkCommentRatio("src/methods.ts", countLines(lines), DEFAULT_LIMITS)).toHaveLength(1);
     });
 
     // 评审第四轮 P1：MEMBER_DECL 曾把普通实现语句也当成成员，于是实现文件可以
@@ -398,6 +417,62 @@ describe("#192 注释卫生门禁", () => {
       );
       expect(r.failures).toEqual([]);
       expect(r.files).toEqual(["src/a.ts", "src/sub/b.ts"]);
+    });
+
+    // ⚠️ 评审第六轮 P3：上面三条其实只覆盖了 `readdir` 与 `stat`——「子目录读不到」
+    // 走的仍然是 `readdir`。**第三条路径 `readFile` 一次都没被触发过**，而它恰恰是最容易
+    // 静默漏掉真债务的那条：单个文件权限不足时，前两条一切正常，只有它读不出。
+    // 原来这段逻辑内联在 `check-comment-hygiene.mts` 入口里、靠 `process.exit(1)` 表达，
+    // 单测够不着；抽成 `scanFilesContent()` 之后才能在这里锁住。
+    describe("readFile（抽成 scanFilesContent 后才有覆盖）", () => {
+      const scan = (fs: { readFile(f: string): string }) =>
+        scanFilesContent(["src/ok.ts", "src/locked.ts"], {
+          fs,
+          rel: (f) => f,
+        });
+
+      it("文件读不出 ⇒ 记 readFile failure，且不计入 scanned", () => {
+        const r = scan({
+          readFile: (f: string) => {
+            if (f === "src/locked.ts") throw new Error("EACCES");
+            return "const a = 1;";
+          },
+        });
+        expect(r.failures).toEqual([{ path: "src/locked.ts", op: "readFile" }]);
+        // 读不出的文件**没有参与判定**，所以不能算「看过」——这正是 fail-closed 的口径：
+        // 「扫了 N 个文件」里的 N 必须只数真正读到内容的。
+        expect(r.scanned).toBe(1);
+        expect(r.issues).toEqual([]);
+      });
+
+      it("读不出时不会静默按空文件放行（空文件是合法的，两者必须可区分）", () => {
+        const failed = scan({
+          readFile: (f: string) => {
+            if (f === "src/locked.ts") throw new Error("EACCES");
+            return "";
+          },
+        });
+        const empty = scan({ readFile: () => "" });
+        // 真·空文件：读到 0 行、不报 failure、scanned 计 2
+        expect(empty.failures).toEqual([]);
+        expect(empty.scanned).toBe(2);
+        // 读失败：必须报 failure，绝不能伪装成空文件
+        expect(failed.failures).toHaveLength(1);
+        expect(failed.scanned).toBe(1);
+      });
+
+      it("全部读成功 ⇒ 无 failure，逐个计入 scanned", () => {
+        const r = scan({ readFile: () => "const a = 1;" });
+        expect(r.failures).toEqual([]);
+        expect(r.scanned).toBe(2);
+      });
+
+      it("读成功的文件真的进入判定（而非只是不报错）", () => {
+        const heavy = ["/**", ...Array.from({ length: 100 }, (_, i) => ` * 决策史 ${i}。`), " */", ...Array.from({ length: 20 }, (_, i) => `const x${i} = ${i};`)].join("\n");
+        const r = scanFilesContent(["src/heavy.ts"], { fs: { readFile: () => heavy }, rel: (f) => f });
+        expect(r.failures).toEqual([]);
+        expect(r.issues).toHaveLength(1);
+      });
     });
   });
 });
