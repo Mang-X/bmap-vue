@@ -605,7 +605,7 @@ export function createJsapiV4OverlayDriver(
    * 结构性查找「官方类型包没有声明」的运行时扩展构造器。
    *
    * 不预判版本、也不臆造 augmentation：有就按结构创建，没有就显式失败并点名缺的是哪个构造器
-   * （与 ADR 2026-09-11-jsapi-v4-map-facet 对 `tilt-gestures` 的处理同源）。结构性探测本身
+   * （与-jsapi-v4-map-facet 对 `tilt-gestures` 的处理同源）。结构性探测本身
    * 收敛在 `internal.requireRuntimeCtor`，Overlay / Layer Facet 共用同一份口径。
    *
    * 真实 AK smoke（ADR「真实 AK smoke 记录」一节）确认：`Marker3D` / `MapMask` 在 4.0 运行时

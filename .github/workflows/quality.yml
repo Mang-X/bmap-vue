@@ -45,6 +45,12 @@ jobs:
       - name: Check toolchain (declared / lockfile / installed)
         run: pnpm check:toolchain
 
+      # 注释卫生（#192）：单文件「注释 / 实码」比不得超阈值。两条豁免——实测证据主体
+      # （成块且占多数）与类型定义密集（逐成员说明是冻结面的固有需要）。
+      # ⚠️ 豁免一律不得只凭关键词，每条都配了反例用例，否则等于给整文件短路开口子。
+      - name: Check comment hygiene
+        run: pnpm check:comment-hygiene
+
       # raw SDK 静态扫描:组件/composables/runtime 禁止访问 BMapGL / BMap
       - name: Check raw SDK boundaries
         run: node --experimental-strip-types scripts/check-raw-sdk.mts

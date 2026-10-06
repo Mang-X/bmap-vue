@@ -13,7 +13,7 @@
  * | 就地更新 / 重建 | 本文件：**按键标脏 + 一次 reconcile** → `driver.overlays.setOptions` / `replace()` | 分类来自 Driver 描述符 |
  * | 卸载（unmount） | `useSdkResource`：先摘 registration，再释放实例 scope，最后释放组件 scope | 幂等 |
  *
- * ## #138：更新路径为什么不再自研一套调度（`pendingApply` → Vue batching）
+ * ##更新路径为什么不再自研一套调度（`pendingApply` → Vue batching）
  *
  * 本层原先自带 `pendingApply` / `draining` / `requeueStaleBatch` / `drainAppliedUpdates` 一整套
  * 单飞队列，在 Vue 自己的 watcher batching **之上**又叠了一层合并。#138 把两者合成一层：
@@ -34,7 +34,7 @@
  * 八个覆盖物共用；`MapMask` / `Marker3D` / `InfoWindow` / `ContextMenu` 仍走旧层，
  * 理由见 ADR `2026-09-18-overlay-event-matrix` 的已知限制。
  *
- * ## #138：props 视图不再用运行时 Proxy
+ * ##props 视图不再用运行时 Proxy
  *
  * 别名解析（旧 prop 名）+ 值投影（惰性值）原先挂在一个 `new Proxy(rawProps, …)` 上，代价是
  * **每次读 props 都过一层 trap**（watch 源每字段每轮都要读若干次）。别名表（`OVERLAY_PROP_ALIASES`）

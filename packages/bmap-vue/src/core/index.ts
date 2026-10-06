@@ -1,6 +1,6 @@
 export { BMapError } from "./errors/BMapError";
 export type { BMapErrorCode, BMapErrorOptions } from "./errors/BMapError";
-// `setAkForLogger` / 模块级 `akProvider` 已随 #163 删除：全仓检索只有它自己的定义与这里的
+// `setAkForLogger` / 模块级 `akProvider` 已随全仓检索只有它自己的定义与这里的
 // 转导出，**零生产消费者**。它的语义是「进程级记住最后一个 AK」——多个 Client / 多个并发
 // 加载任务各持不同 AK 时，这个「最后一次写入」给不出正确答案，而按调用边界传已知值
 // （`redactAk(input, ak)`）不需要任何全局状态。

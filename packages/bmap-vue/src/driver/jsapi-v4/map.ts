@@ -1020,7 +1020,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
         });
       }
       const method = enabled ? methods.enable : methods.disable;
-      // 结构性存在判断，而不是靠异常分类（ADR 2026-09-11-jsapi-v4-driver-foundation 拒绝
+      // 结构性存在判断，而不是靠异常分类-jsapi-v4-driver-foundation 拒绝
       // 用异常做控制流）：有就调、没有就告警一次。这样上游文档缺失不会让一个可能可用的
       // 开关静默失效，也不会臆造类型声明（`tilt-gestures` 的两处官方来源不一致）。
       const fn = readNamespaceMember(raw, method);

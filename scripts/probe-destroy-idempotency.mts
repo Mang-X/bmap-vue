@@ -279,7 +279,7 @@ const PAGE_JS = `
       push("pano.loaded.destroyTwice", attempt(() => panoLoaded.destroy()));
       document.title = "panoD2Done";
 
-      // 未加载场景：有宿主、但从不 setId —— 对照 ADR 2026-09-12 的已知反例。
+      // 未加载场景：有宿主、但从不 setId —— 对照已知反例。
       const emptyHost = document.createElement("div");
       emptyHost.style.cssText = "width:400px;height:300px";
       document.body.appendChild(emptyHost);

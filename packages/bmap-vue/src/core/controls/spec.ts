@@ -1,19 +1,18 @@
 /**
  * ControlSpec —— 控件的**声明式**描述（M7-CONTROL-PANORAMA / issue #41）
  *
- * 控件的八件事（create / mount / unmount / anchor / offset / visible / options / events）此前
- * 由每个组件各写一份：`ZoomControl` / `ScaleControl` / `CityListControl` / `LocationControl` / `NavigationControl3D` /
- * `PanoramaControl` / `CustomControl` 里 `addToMap` / `createWatchers` / `remove` 近乎逐字重复，
- * 而且**都没有**接 anchor / offset 的动态更新。本模块把「怎么做」抽成一份 spec，
+ * 控件的八件事（create / mount / unmount / anchor / offset / visible / options / events）
+ * 此前由七个控件组件各写一份近乎逐字重复的 `addToMap` / `createWatchers` / `remove`，
+ * 且都**没有**接 anchor / offset 的动态更新。本模块把「怎么做」抽成一份 spec，
  * 由 `useControlResource` 执行；组件只声明「这个控件是什么」。
  *
- * 三条口径值得写在类型上：
+ * 三条口径写在类型上：
  *
  * 1. **选项只有一份**：`options(props)` 同时服务构造与运行期更新。组件不再手写
  *    「构造时传什么、更新时传什么」两套（那两套迟早分叉）。
  * 2. **哪些选项能就地改由 Driver 说了算**：`ControlDriver.planOptions()` 逐键给出
  *    `mutable` / `recreate` / `unsupported`；adapter 据此在「`setOptions`」与「重建控件」
- *    之间选择，组件侧**不维护第二张表**（ADR 2026-09-11 §5 的分类是单一事实源）。
+ *    之间选择，组件侧**不维护第二张表**（该分类的单一事实源在 Driver 侧）。
  * 3. **钩子都是「覆盖默认」，不是「必须实现」**：`create` / `mount` / `unmount` /
  *    `setVisible` 都有可用默认；只有语义真的不同的控件才覆盖（见各钩子注释里的实例）。
  */
@@ -27,7 +26,7 @@ import type { ResourceScope } from "../lifecycle/ResourceScope";
  * 全部控件组件共有的 props 形状。
  *
  * `anchor` 传**官方常量名**（`"BMAP_ANCHOR_BOTTOM_RIGHT"`）而不是数值：换算归 Driver，
- * 非四角落点由 Driver 告警（ADR 2026-09-11 §4）。
+ * 非四角落点由 Driver 告警。
  */
 export interface ControlBaseProps {
   anchor?: string;
@@ -105,7 +104,7 @@ export interface ControlSpec<Props extends ControlBaseProps, Expose = ControlExp
   /**
    * 覆盖默认的卸载动作。默认是 `driver.controls.remove({kind: "map", handle: ctx.map}, res)`。
    *
-   * 执行时机是**业务事件解绑之后**（ADR 2026-09-11 §6）。覆盖它就等于接管摘除动作——
+   * 执行时机是**业务事件解绑之后**。覆盖它就等于接管摘除动作——
    * adapter 不再补一次默认 `remove`，因此钩子必须自己把实例摘干净（或有意保留）。
    *
    * `CopyrightControl` 覆盖它：先 `removeCopyright` 摘掉自己那一条，再在「已经没有任何版权项」时
@@ -127,7 +126,7 @@ export interface ControlSpec<Props extends ControlBaseProps, Expose = ControlExp
    * 为什么默认不是 `addControl` / `removeControl`：`Control#show/hide/isVisible` 就是官方
    * 为「控件可见性」提供的入口；用挂载来表达显隐会带来两个副作用——内置控件的
    * `initialize()` 会重跑一遍（DOM 重新创建、内部交互状态丢失），而 `location` 控件的
-   * `remove` 会**顺带停掉持续定位跟踪**（`stopLocationTrace`，见 ADR 2026-09-11 §5 的评审记录），
+   * `remove` 会**顺带停掉持续定位跟踪**（`stopLocationTrace`，的评审记录）
    * 于是「把它藏起来」会变成「把它关掉」。
    *
    * `CopyrightControl` 覆盖它：同 anchor 的控件是**共享**的，隐藏整个控件会连带隐藏兄弟组件的内容，

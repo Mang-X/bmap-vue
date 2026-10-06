@@ -77,7 +77,7 @@ function assertReleaseIdentity(tarball: string): void {
     )
   }
   // scoped 包默认按 restricted 处理，漏掉 access 会让首次 publish 失败。这条断言的是
-  // 「声明了 public」，与 ADR 2026-09-30 决策 5 一致。
+  // 「声明了 public」，与一致。
   const publishConfig = manifest.publishConfig as { access?: unknown } | undefined
   if (identity.isScoped && publishConfig?.access !== 'public') {
     throw new Error(

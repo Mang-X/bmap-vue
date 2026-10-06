@@ -9,7 +9,7 @@
  * 1. **选项口径**：`BMapLoadOptions` 是跨 Provider 的公共形状，比官方 Loader 的参数表大。
  *    上游没有入口的配置（`nonce` / `integrity` / `crossOrigin` / `referrerPolicy` /
  *    `apiUrl` / `callbackParam` / `language`）必须**显式报错**——「接收后忽略」是假支持
- *    （ADR 2026-09-13 决策 7）；
+ * ；
  * 2. **错误口径**：官方抛的是带 `[bmap-loader]` 前缀的普通 `Error`，消息里含入口 URL
  *    ⇒ 含 `ak=`。必须在这里收敛成 `BMAP_*` 码并**脱敏**，否则 AK 会经错误信息外泄；
  * 3. **注入点**：官方 `load()` 是模块级单例，单测里需要替身，因此以接口形式注入。

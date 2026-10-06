@@ -107,7 +107,7 @@
  *   **不能**说「B runtime 更贵」—— 后者需要 profile，本文件不提供，也不该由结构数或 effect 数
  *   推断。effect 数是**可数事实**，「更贵」是**成本判断**，两者不能混。
  *
- * @see docs/adr/2026-09-14-map-controlled-state.md §6.1 / §6.2
+ * @see§6.1 / §6.2
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { computed, defineComponent, getCurrentScope, h, nextTick, ref, shallowRef, useModel, watch } from "vue";

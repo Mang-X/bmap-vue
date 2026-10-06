@@ -3,7 +3,7 @@
  * 由 Capability Catalog 数据生成能力矩阵
  *
  * 生成（单一事实源：packages/bmap-vue/src/driver/capability/catalog.ts）：
- * - docs/zh-CN/contributing/capability-matrix.md
+ * -
  * - docs/.vitepress/capability-catalog.json
  *
  * 生成文件顶部带 "Generated file. Do not edit directly."，

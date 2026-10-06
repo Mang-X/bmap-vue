@@ -84,7 +84,7 @@ const CONTROL_CTORS = {
  * 锚点常量表：官方 `const/Anchor.d.ts` 的**声明值**。
  *
  * 刻意不从 `window.BMAP_ANCHOR_*` 读：Driver 边界只认 `rawSdk` 传入的命名空间，
- * 不读未经 Provider 校验的全局值（同 ADR 2026-09-11-jsapi-v4-map-facet §9）。
+ * 不读未经 Provider 校验的全局值（同-jsapi-v4-map-facet §9）。
  *
  * ⚠️ **这张表没有类型层护栏**（与本文件末尾的 `*_TYPE_VALUES` 断言不同，那两组有）。
  * 早先这里写着「见文件末尾的锚点断言」——**本文件从来没有过那个断言**：

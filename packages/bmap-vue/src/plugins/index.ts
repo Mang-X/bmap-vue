@@ -186,7 +186,7 @@ export type { PluginUrlKey } from "./compat-inventory";
 // —— 释放句柄（`BMapPluginDefinition.setup?` 的返回类型）
 //
 // 刻意**不**导出 `ResourceScope`：它带 `private disposers` / `private _disposed`，仓库之外
-// 既不能构造也不能实现，放进公共面就是 ADR 2026-09-25 决策 5 说的「假支持」。插件 API 里
+// 既不能构造也不能实现，放进公共面就是说的「假支持」。插件 API 里
 // 真正需要命名的只有 `Disposer`（一个 `() => void`）与 `BMapPluginDefinition.scope` 的
 // `"global" | "map"` 字面量，两者都不依赖 `ResourceScope`。
 export type { Disposer } from "../core/lifecycle/ResourceScope";
