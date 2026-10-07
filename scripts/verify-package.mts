@@ -11,7 +11,7 @@
  *   pnpm --filter bmap-vue pack --pack-destination .artifacts
  *   node scripts/verify-package.mts
  */
-import { execFileSync, execSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -417,55 +417,25 @@ function main() {
   //     所以它必须在真实消费方（tarball 装进 node_modules）里被**真正调用一次**，而不是只断言
   //     「import 得动」。类型面由 `fixtures/consumer/src/advanced-adapter.ts` 通过上面的
   //     `vue-tsc` 覆盖；这里补运行面的可观察行为。
-  // 5a) Volar 类型解析：**用真实 tarball** 验证安装页承诺的 `compilerOptions.types` 配置可用。
+  // 5a) Volar：**无本地 import 的真实 .vue 模板**经安装文档的 `compilerOptions.types`
+  //     配置拿到 `GlobalComponents`（#158 工作包 C）。
   //
-  // 这条曾真实失效：文档教用户写 `"types": ["@mangax/bmap-vue/volar"]`，而 `exports` 里
-  // 没有 `./volar`，于是 TypeScript 报 `TS2688: Cannot find type definition file`。
-  // `check:api` / `publint` / `attw` 全都看不出这一点——它们不解析 `compilerOptions.types`。
+  //     这条曾真实失效：文档教用户写 `"types": ["<pkg>/volar"]`，而 `exports` 里没有
+  //     `./volar`，于是 TypeScript 报 `TS2688`。`check:api` / `publint` / `attw` 都不解析
+  //     `compilerOptions.types`，所以只有这里能拦。
   //
-  // 做法：另起一份最小 tsconfig（**不改** consumer 的 `types: []`，那是有意的），
-  // 只放 `"types": ["<pkg>/volar"]` 与一个空输入文件，然后跑 tsc。缺 `./volar` 出口时
-  // 它必然报 TS2688——已实测过这个形态。
-  const volarTsconfig = resolve(consumerFixture, 'tsconfig.volar.json')
-  writeFileSync(
-    volarTsconfig,
-    `${JSON.stringify(
-      {
-        compilerOptions: {
-          moduleResolution: 'bundler',
-          module: 'esnext',
-          target: 'ES2022',
-          strict: true,
-          noEmit: true,
-          skipLibCheck: true,
-          types: [`${identity.name}/volar`],
-        },
-        files: ['volar-probe.ts'],
-      },
-      null,
-      2,
-    )}\n`,
+  //     旧版只放一个空 `volar-probe.ts` 让 `tsc` 解析一次 `types` 条目 —— 那只证明路径能解析，
+  //     证明不了模板里的组件真的拿到了类型。现在用 `vue-tsc` 编译两份**只有 template 的 SFC**
+  //     （结构上不可能有本地 import）：`positive.vue` 必须零诊断；`negative.vue` 必须命中
+  //     TS2322（已有 prop 值类型写错）+ TS2339（slot 成员不存在）。判据落在反证上——组件若被
+  //     当成未知元素或退化成 `any`，反证就不会报错。
+  //
+  //     判据在 `consumer-volar-boundary.mts`，探针与配置在 `fixtures/consumer/volar/`。
+  run(
+    `node --experimental-strip-types ${JSON.stringify(resolve(root, 'scripts/consumer-volar.mts'))} ${JSON.stringify(consumerFixture)}`,
+    root,
+    'Volar consumer (real .vue template, GlobalComponents)',
   )
-  writeFileSync(resolve(consumerFixture, 'volar-probe.ts'), 'export {}\n')
-  try {
-    execFileSync(
-      resolve(root, 'node_modules/.bin/tsc'),
-      ['-p', volarTsconfig],
-      { cwd: consumerFixture, stdio: 'pipe', env: { ...process.env, CI: '1' } },
-    )
-    console.log(
-      `\n[verify-package] Volar 类型解析 OK：\"types\": [\"${identity.name}/volar\"] 在装出来的 tarball 上可解析`,
-    )
-  } catch (error) {
-    const out = String((error as { stdout?: Buffer }).stdout ?? '')
-    throw new Error(
-      `[verify-package] 安装页承诺的 Volar 用法在真实 tarball 上不可解析——` +
-        `\"types\": [\"${identity.name}/volar\"] 报错了。这通常是 exports 少了 ./volar 出口。\n${out}`,
-    )
-  } finally {
-    rmSync(volarTsconfig, { force: true })
-    rmSync(resolve(consumerFixture, 'volar-probe.ts'), { force: true })
-  }
 
   const advancedProbe = resolve(consumerFixture, 'advanced-probe.mjs')
   writeFileSync(

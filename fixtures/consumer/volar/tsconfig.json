@@ -1,0 +1,14 @@
+{
+  "_comment": "Volar 正证（#158 工作包 C）：按安装文档（docs/zh-CN/guide/quick-start.md「Volar 支持」）只配置 `compilerOptions.types`，模板里的组件不做任何本地 import。fixture 里写可读的旧包名 `bmap-vue`，verify-package 拷贝后按真实发布身份重写。",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bmap-vue/volar"]
+  },
+  "include": ["positive.vue"]
+}
