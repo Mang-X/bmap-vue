@@ -26,6 +26,7 @@ import {
   type FakeV4Harness,
 } from "../../packages/test-utils";
 import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
 import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
 import GroundPoint from "../../packages/bmap-vue/src/components/overlays/GroundPoint.vue";
 import InfoWindow from "../../packages/bmap-vue/src/components/overlays/InfoWindow.vue";
@@ -376,6 +377,118 @@ describe("生命周期门禁（组件层）", () => {
     // 「诊断全归零」的另一半：资源账归零之外，异步窗口也必须结算干净
     // （定时器 / 回调不进泄漏门禁，见 ADR 决策 1，因此这里显式断言）
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+  });
+});
+
+/**
+ * #186：`<BMapProvider>` 的 Client Context 是**共享**的，一个 Provider 下可以并行挂起多个
+ * 消费者（多个 `<Map>`）。这一组从组件层确认「共享任务归 context 所有、每个消费者的 signal
+ * 只取消自己的等待」这条契约真的落到真实调用路径上。
+ *
+ * 加载**挂起**那一档由 `harness.deferredProvider()` 提供（`load()` 在 `releaseProvider()`
+ * 之前一直不结算），因此可以在「SDK 尚未就绪」的窗口里卸载其中一个消费者。
+ */
+describe("共享 Client 的取消隔离与终态（#186）", () => {
+  /** `<BMapProvider>` 下的一个可卸载消费者：挂一个用共享 context 的 `<Map>`。 */
+  const Consumer = defineComponent({
+    setup: () => () => h(Map, {}),
+    name: "SharedClientConsumer",
+  });
+
+  function deferredDefinition() {
+    const load = vi.fn(harness.deferredProvider().load);
+    return {
+      load,
+      definition: {
+        provider: { id: "deferred", getCacheKey: () => "fp", load },
+        loadOptions: {},
+      },
+    };
+  }
+
+  it("加载中卸载一个消费者，另一个继续成功；Provider 只被调用一次", async () => {
+    const { load, definition } = deferredDefinition();
+    const showSecond = ref(false);
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMapProvider, { definition }, () => [
+          h(Consumer),
+          showSecond.value ? h(Consumer) : null,
+        ]),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await flushPromises();
+    expect(load, "两个消费者共用一个在飞任务").toHaveBeenCalledTimes(1);
+
+    // 卸载一个消费者后放行加载：另一个必须照样建出地图。
+    showSecond.value = false;
+    await nextTick();
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(load, "共享期间 Provider 只被调用一次").toHaveBeenCalledTimes(1);
+    expect(
+      fake.diagnostics.snapshot().activity.mapsCreated,
+      "剩下的消费者拿到了同一份加载结果并建出了地图",
+    ).toBeGreaterThanOrEqual(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("共享 Client：卸载一个消费者后整棵卸载");
+  });
+
+  it("消费者全部卸载后迟到的加载结果不复活上下文，也不产出对外错误", async () => {
+    const { load, definition } = deferredDefinition();
+    const errors: unknown[] = [];
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h(Consumer)),
+    });
+    const wrapper = mount(Root, {
+      global: { config: { errorHandler: (e: unknown) => errors.push(e) } },
+    });
+    await flushPromises();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    // 卸载 Provider 本身（它 owned 这个 context ⇒ `dispose()`），再放行迟到的成功。
+    await unmountAndSettle(wrapper);
+    const createdBefore = fake.diagnostics.snapshot().activity.mapsCreated;
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(errors, "迟到的结果不得变成对外错误").toEqual([]);
+    expect(
+      fake.diagnostics.snapshot().activity.mapsCreated,
+      "dispose 之后不得再建图",
+    ).toBe(createdBefore);
+    harness.assertIdle("共享 Client：整棵卸载后迟到结果");
+  });
+
+  /**
+   * ⚠️ 这一条**刻意是弱读数**，如实记下它测不出什么：本用例里 `<Map>` 的清理发生在
+   * 迟到成功之前（它是在飞任务的既有消费者，容器先被拆掉），因此把
+   * `startSharedLoad` 的终态守卫摘掉，`mapsCreated` 同样是 0。
+   *
+   * 真正的判别力在 `core/context/client.test.ts` 的「迟到成功不写回 ready / 迟到失败不写回
+   * error」（实测：摘掉守卫即翻红）。这里保留它作为真实调用路径上的**非回归**读数，
+   * 不假称它能锁住终态守卫——组件层要构造出那个窗口需要新的夹具能力，属另一张票。
+   */
+  it("整棵卸载后没有残留的异步窗口", async () => {
+    const { load, definition } = deferredDefinition();
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h(Consumer)),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await flushPromises();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+    harness.assertIdle("共享 Client：整棵卸载后无在飞窗口");
   });
 });
 
