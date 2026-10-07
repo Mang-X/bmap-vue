@@ -34,8 +34,16 @@
 `BMAP_RESOURCE_DISPOSED` 结算，再置终态；底层任务继续跑、结果由终态守卫丢弃。所有
 `load()` 一律走同一个等待包装（不再有「无 signal 就返回裸 task」的分支）。
 
-底层加载**依旧不可取消**（官方 Loader 没有公开取消接口，SDK namespace 是进程级共享状态）：
-取消是**逻辑**取消——丢弃回包，不假装终止了网络请求，也不重置上游 `window.BMap`。
+评审修正（P1）：传给底层的 signal 应为 **owner**，而不是调用者的、也不是「什么都不传」。
+`customScriptV4Provider` 走 `SdkRegistry` 默认 `cancellable: true`，其 signal 一路传到
+`ScriptLoader`，最后一个消费者离开时释放 script / timer / callback；彻底不传 signal 会把
+这条取消能力拿掉，自托管入口在 Provider 卸载后仍留下 script 直到自行完成或超时。
+现在 `createBMapClient(definition, owner.signal)`：调用者 signal 仍不进底层任务，而
+`dispose()` 中止 owner → registry 按 `cancellable` 裁决——可取消的释放，官方
+（`cancellable: false`）保留真实任务与全局状态，本库不宣称终止了那条网络请求。
+
+取消仍是**逻辑**取消（官方 Loader 没有公开取消接口，SDK namespace 是进程级共享状态）：
+不假装终止不可取消的请求，也不重置上游 `window.BMap`。
 决策与依据见 ADR `2026-10-03-client-context-shared-task-ownership`。
 
 公开 API 形状无变化。

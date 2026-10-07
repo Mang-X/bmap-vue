@@ -3,6 +3,9 @@ import { createClientContext } from "./client";
 import type { BMapClient, BMapDriverFactory, CreateBMapClientOptions } from "../../client/types";
 import type { BMapDriver } from "../../driver/types/bmap";
 import { createLoadedJsapiV4 } from "../loader/providers";
+import { CustomScriptV4Provider } from "../loader/providers/CustomScriptV4Provider";
+import { SdkRegistry } from "../loader/SdkRegistry";
+import type { ScriptLoader } from "../loader/ScriptLoader";
 import type { LoadedJsapiV4 } from "../loader/loaded";
 
 /**
@@ -399,5 +402,90 @@ describe("BMapClientContext.dispose 结算已发出的等待（#186 评审 P1）
     // owner abort 已经把等待结算掉了：调用方之后再 abort 不应再有任何解绑动作。
     controller.abort();
     expect(removed.length).toBe(baselines);
+  });
+});
+
+/**
+ * #186 评审 P1：传给底层的是 **context-owned 的 owner signal**，不是调用者的 signal，
+ * 也不是「什么都不传」。
+ *
+ * 仓库本来就把加载分成两类（`SdkRegistryLoadRequest.cancellable`）：
+ * `BaiduJsapiV4Provider` 声明 `cancellable: false`（官方 Loader 无取消接口），而
+ * `CustomScriptV4Provider` 走默认 `cancellable: true`，其 signal 会一路传到
+ * `SdkRegistry` → `ScriptLoader`，最后一个消费者离开时同步释放 script / timer / callback。
+ *
+ * 早先版本「彻底不传 signal」把后者的取消能力一起拿掉了：`dispose()` 只结算调用者等待，
+ * 自托管入口留下的 script 仍要跑完或超时。下面两条用例把这两类分开钉住。
+ */
+describe("BMapClientContext：dispose 对底层可取消资源的作用（#186 评审 P1）", () => {
+  /** 假 script loader：记录收到的 signal，并在 abort 时拒绝（与真实 ScriptLoader 同形）。 */
+  function recordingLoader() {
+    const signals: AbortSignal[] = [];
+    const loader = {
+      load: (_options: unknown, signal?: AbortSignal) => {
+        if (signal) signals.push(signal);
+        return new Promise<never>((_, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+      },
+      invalidateCompleted: () => {},
+    };
+    return { loader: loader as unknown as ScriptLoader, signals };
+  }
+
+  it("可取消 Provider（customScriptV4Provider）：dispose 会 abort 底层订阅", async () => {
+    const { loader, signals } = recordingLoader();
+    // 每个用例一个独立域：进程级 registry 会让用例互相串状态。
+    const provider = new CustomScriptV4Provider("https://example.com/api?v=4.0", {
+      mode: "load",
+      loader,
+      registry: new SdkRegistry({ domain: "bmap-client-context-cancellable" }),
+    });
+    const ctx = createClientContext({ definition: { provider, loadOptions: { ak: "test" } } });
+    const pending = ctx.load().then(
+      () => "ok",
+      (e: { code?: string }) => e?.code ?? "rejected",
+    );
+    await Promise.resolve();
+    expect(signals, "底层真的收到聚合 signal（否则下面只是「没发生过」）").toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(false);
+
+    ctx.dispose();
+    // 调用者等待按终态口径结算，**同时**底层订阅被释放。
+    await expect(pending).resolves.toBe("BMAP_RESOURCE_DISPOSED");
+    expect(signals[0]!.aborted, "自托管入口的 script/timer 必须被释放").toBe(true);
+  });
+
+  it("不可取消 Provider（cancellable:false，官方 Loader 口径）：dispose 不终止底层任务", async () => {
+    const { loader, signals } = recordingLoader();
+    const registry = new SdkRegistry({ domain: "bmap-client-context-uncancellable" });
+    // 与 `BaiduJsapiV4Provider` 同一形状：注册时声明 cancellable:false。
+    const provider = {
+      id: "official-like",
+      load: (_options: unknown, signal?: AbortSignal) =>
+        registry.load(
+          {
+            fingerprint: "official-like",
+            cancellable: false,
+            loader: (requestSignal: AbortSignal) =>
+              (loader.load as (o: unknown, s?: AbortSignal) => Promise<never>)(_options, requestSignal),
+          },
+          signal,
+        ),
+    };
+    const ctx = createClientContext({
+      definition: { provider: provider as never, loadOptions: {} },
+    });
+    const pending = ctx.load().then(
+      () => "ok",
+      (e: { code?: string }) => e?.code ?? "rejected",
+    );
+    await Promise.resolve();
+    expect(signals).toHaveLength(1);
+
+    ctx.dispose();
+    await expect(pending).resolves.toBe("BMAP_RESOURCE_DISPOSED");
+    // 关键：不可取消的底层任务保留（真实网络请求不会被本库宣称终止，全局 SDK 不被重置）。
+    expect(signals[0]!.aborted).toBe(false);
   });
 });

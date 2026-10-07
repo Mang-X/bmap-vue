@@ -23,8 +23,11 @@
  * 任务，它取消时未取消的后来者一并被拒；② `dispose()` 之后的迟到成功/失败仍把 `disposed`
  * 改写成 `ready` / `error`；③ 正常完成时等待者的 abort 监听器没解绑。
  *
- * 底层任务**不可取消**（`createBMapClient` 拿不到共享 signal，`Signal` 也不跨共享任务
- * 转发取消）：取消是**逻辑**取消——丢弃回包，不假装终止了网络请求，也不重置上游
+ * 底层任务拿到的 signal 是 **owner**（context 自己的身份），不是调用者的：
+ * `dispose()` 中止它，于是可取消的 Provider（`customScriptV4Provider` 走 `SdkRegistry`
+ * 默认 `cancellable: true`）按既有语义释放 script / timer / callback；官方 Provider 声明
+ * `cancellable: false`，registry 只结算消费者、保留真实底层任务与全局状态。
+ * 调用者取消**仍是逻辑取消**——丢弃回包，不假装终止了它没权处置的那条请求，也不重置上游
  * `window.BMap`。
  */
 import { inject, readonly, shallowRef, type InjectionKey, type ShallowRef } from "vue";
@@ -164,7 +167,16 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
       // 这里是**唯一收口点**——`<Map>` / `<BMapProvider>` / 插件默认 definition /
       // `resolveMapContext` 全部经此创建 Client，因此「同一份 definition 换一个入口就报
       // BMAP_SDK_ENGINE_MISMATCH」不会发生。显式传入的 `driver` 仍然优先。
-      source = createBMapClient(definition);
+      //
+      // 传**owner** signal（不是调用者的）：它是 context 作为 registry consumer 的身份，
+      // `dispose()` 时中止它，于是：
+      // - 可取消的 Provider（`customScriptV4Provider` 走 `SdkRegistry` 默认
+      //   `cancellable: true`）能按既有语义释放 script / timer / callback，
+      //   兑现「context 销毁时处理其自有资源」（#186 评审 P1）；
+      // - 官方 Provider 声明 `cancellable: false`，registry 只结算消费者、保留真实底层
+      //   任务与全局状态 —— 本库不宣称终止了那条网络请求。
+      // 调用者的 signal **永远**不进这里，否则「谁先来」又决定了「谁取消能拖垮别人」。
+      source = createBMapClient(definition, owner.signal);
     } else {
       source = Promise.reject(
         new BMapError(

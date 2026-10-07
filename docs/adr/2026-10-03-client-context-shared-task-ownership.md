@@ -46,32 +46,54 @@ loadPromise = doLoad(signal);   // ← signal 是**第一个调用者**的
 （「每个消费者持有自己的 AbortSignal，取消互不影响」）**完全同构**——本票只是把
 Client Context 拉回同一口径，让它不再成为那条链上唯一破例的一层。
 
-## 决策 2：底层任务**不可取消**——取消是逻辑取消
+## 决策 2：传下去的是 **owner signal**——不是调用者的，也不是「什么都不传」
 
-`createBMapClient` 不再收到 signal。理由与判据：
+`createBMapClient(definition, owner.signal)`。这里的判据是**区分两个身份**：
 
-- **共享任务没有「谁有权取消」的答案**。调用者 A 与 B 都能随时消失；「最后一个消费者
-  离开就取消底层」在 Client 这层会直接撞上 AGENTS.md 的生命周期硬约束——官方 Loader /
-  SDK namespace 是**进程级共享状态**，本库无权处置。全仓 `existingGlobalV4Provider`
-  路径（宿主已加载）下「取消底层」更是无从谈起。
-- **官方加载器本身没有公开取消接口**，因此「取消 = 终止网络请求」在本层无法兑现。
-  把它写成默认会得到一个假承诺。
+- **调用者的 signal 永远不进底层任务**。共享任务没有「谁有权取消」的答案——A 与 B 都能
+  随时消失，让先来的那个决定共享任务的生死正是 #186 的原始缺陷；
+- **context 作为 registry consumer 需要自己的身份**。它不是一个「等待」，而是一份所有权：
+  `SdkRegistryLoadRequest.cancellable` 这套既有分流就是为它准备的——
+  `BaiduJsapiV4Provider` 声明 `cancellable: false`（官方 Loader 无公开取消接口），
+  `CustomScriptV4Provider` 走默认 `cancellable: true`，其 signal 一路传到
+  `SdkRegistry` → `ScriptLoader`，**最后一个消费者离开时**同步释放 entry / occupancy 并
+  abort 底层 script。
+
+早先的版本写了「底层任务不可取消」，并据此**彻底不传 signal**——判据错在把「调用者无权
+取消共享任务」扩大成了「context 也无权释放自有资源」。后果是自托管 / 私有入口
+（`customScriptV4Provider`）在 Provider 卸载后仍留下 script / timer / callback，直到自行
+完成或超时，与 issue 目标「context 销毁时处理其自有等待与资源」相反。实测：
+
+| 场景（`dispose()` 时底层仍未结算） | 不传 signal | 传 `owner.signal` |
+| --- | --- | --- |
+| `customScriptV4Provider`（`cancellable: true`）底层 loader 的 signal | **不 abort** | abort |
+| 官方口径（`cancellable: false`）底层 loader 的 signal | 不 abort | **不 abort**（registry 保留任务） |
+
+第二行同样是决策的一部分，它兑现的是「本库不宣称终止了不可取消的那条网络请求」：
+owner signal 只是**消费者身份**，取消与否由 registry 按 `cancellable` 裁决，本层不越权。
+`existingGlobalV4Provider` 路径（宿主已加载）更无从谈起取消，registry 同样保留任务。
 
 因此：加载**照样跑完**，结果照旧落在 Client Context 上（无人接收的 Client 不额外释放
 ——本库没有公开的 Client 销毁入口，`BMapClient` 只有 driver / rawSdk 的读取面）。
-这与 ADR `2026-09-24-service-task-and-resource-scope-split` 里
-「`release` 不传 `signal`：取消是**逻辑**取消，SDK 侧请求收不回」是同一条口径。
+「取消是**逻辑**取消」这条口径本身没变（调用者取消 ≠ 终止网络请求），变的是：context 的
+**终态**有权释放它自己拥有的、且上游声明为可取消的那部分资源。这与 ADR
+`2026-09-24-service-task-and-resource-scope-split` 里「`release` 不传 `signal`」不矛盾——
+那里说的是**取消一次等待**不该被误读成释放实例，而这里是**销毁资源所有者**。
 
-## 决策 3：不接 `SharedLoadTask.consumerCount`（引信接线）
+## 决策 3：不越过 Provider 直接接 `SharedLoadTask.consumerCount`
 
-「最后一个消费者离开就取消底层」有一个现成的接线面：`SharedLoadTask.consumerCount`
-（`isSettled` / `status` 同）。**刻意不接**，理由是引信接线：接到 Client Context 这一层，
-「版本不匹配就再也装不上」这类加载失败的可见性由「**消费者数量**」决定，而不是由
-「是否已经 dispose」决定——`BMapProvider` 卸载 → 消费者归零 → 底层被取消 → 该 domain
-的 fingerprint 被清掉，后续任何人换一份 definition 都可能静默重来一遍。把它留在这里
-是**下一步的默认行为**，不是随手可加的一行。
+「最后一个消费者离开就取消底层」有一个更底层的接线面：`SharedLoadTask.consumerCount`
+（`isSettled` / `status` 同）。**刻意不接**，判据是**取消策略的归属**：
 
-`SharedLoadTask` 的既有单测覆盖了 `consumerCount` 本身；本票不扩大它的消费者集合。
+- 取消与否由**上游的 `cancellable` 声明**裁决，不由本层数人头决定。越过 Provider 去数
+  `SharedLoadTask` 的消费者，等于把「官方 Loader 不可取消」这条上游事实替换成本层的猜测；
+- 决策 2 的做法（把 owner signal 交给 Provider → `SdkRegistry`）走的正是那条既有分流：
+  `cancellable: false` 的任务在 registry 里**保留**，可取消的任务才释放。可见性
+  （「版本不匹配就再也装不上」这类失败）由 registry 的 occupancy / fingerprint 记账守住，
+  而不是由「context 有没有 dispose」决定。
+
+`SharedLoadTask` 的既有单测覆盖了 `consumerCount` 本身；本票不扩大它的消费者集合，
+也不让 Client Context 直接依赖它。
 
 ## 决策 4：`dispose()` 是终态，写入点逐个守卫
 
