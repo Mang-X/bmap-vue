@@ -26,6 +26,7 @@ import {
   type FakeV4Harness,
 } from "../../packages/test-utils";
 import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
+import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
 import Marker from "../../packages/bmap-vue/src/components/overlays/Marker.vue";
 import GroundPoint from "../../packages/bmap-vue/src/components/overlays/GroundPoint.vue";
 import InfoWindow from "../../packages/bmap-vue/src/components/overlays/InfoWindow.vue";
@@ -376,6 +377,234 @@ describe("生命周期门禁（组件层）", () => {
     // 「诊断全归零」的另一半：资源账归零之外，异步窗口也必须结算干净
     // （定时器 / 回调不进泄漏门禁，见 ADR 决策 1，因此这里显式断言）
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+  });
+});
+
+/**
+ * #186：`<BMapProvider>` 的 Client Context 是**共享**的，一个 Provider 下可以并行挂起多个
+ * 消费者（多个 `<Map>`）。这一组从组件层确认「共享任务归 context 所有、每个消费者的 signal
+ * 只取消自己的等待」这条契约真的落到真实调用路径上。
+ *
+ * 加载**挂起**那一档由 `harness.deferredProvider()` 提供（`load()` 在 `releaseProvider()`
+ * 之前一直不结算），因此可以在「SDK 尚未就绪」的窗口里卸载其中一个消费者。
+ */
+describe("共享 Client 的取消隔离与终态（#186）", () => {
+  /** `<BMapProvider>` 下的一个可卸载消费者：挂一个用共享 context 的 `<Map>`。 */
+  const Consumer = defineComponent({
+    setup: () => () => h(Map, {}),
+    name: "SharedClientConsumer",
+  });
+
+  function deferredDefinition() {
+    const load = vi.fn(harness.deferredProvider().load);
+    return {
+      load,
+      definition: {
+        provider: { id: "deferred", getCacheKey: () => "fp", load },
+        loadOptions: {},
+      },
+    };
+  }
+
+  it("加载中卸载先加入的消费者，另一个继续成功；Provider 只被调用一次", async () => {
+    const { load, definition } = deferredDefinition();
+    // 两个消费者都在场；卸载的**必须是先加入的那个**——旧实现把它的 signal 直接当成共享
+    // 任务的 signal，它一取消，仍在等待的后来者就一并被拒。只挂一个消费者、或卸载后加入
+    // 的那个，都测不出这条（旧实现同样通过）。
+    const showFirst = ref(true);
+    const Root = defineComponent({
+      setup: () => () =>
+        h(BMapProvider, { definition }, () => [
+          showFirst.value ? h(Consumer) : null,
+          h(Consumer),
+        ]),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await flushPromises();
+    expect(load, "两个消费者共用一个在飞任务").toHaveBeenCalledTimes(1);
+
+    // 卸载先加入的消费者后放行加载：另一个必须照样建出地图。
+    showFirst.value = false;
+    await nextTick();
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(load, "共享期间 Provider 只被调用一次").toHaveBeenCalledTimes(1);
+    expect(
+      fake.diagnostics.snapshot().activity.mapsCreated,
+      "剩下的消费者拿到了同一份加载结果并建出了地图",
+    ).toBeGreaterThanOrEqual(1);
+
+    await unmountAndSettle(wrapper);
+    harness.assertIdle("共享 Client：卸载一个消费者后整棵卸载");
+  });
+
+  it("消费者全部卸载后迟到的加载结果不复活上下文，也不产出对外错误", async () => {
+    const { load, definition } = deferredDefinition();
+    const errors: unknown[] = [];
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h(Consumer)),
+    });
+    const wrapper = mount(Root, {
+      global: { config: { errorHandler: (e: unknown) => errors.push(e) } },
+    });
+    await flushPromises();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    // 卸载 Provider 本身（它 owned 这个 context ⇒ `dispose()`），再放行迟到的成功。
+    await unmountAndSettle(wrapper);
+    const createdBefore = fake.diagnostics.snapshot().activity.mapsCreated;
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(errors, "迟到的结果不得变成对外错误").toEqual([]);
+    expect(
+      fake.diagnostics.snapshot().activity.mapsCreated,
+      "dispose 之后不得再建图",
+    ).toBe(createdBefore);
+    harness.assertIdle("共享 Client：整棵卸载后迟到结果");
+  });
+
+  /**
+   * ⚠️ 这一条**刻意是弱读数**，如实记下它测不出什么：本用例里 `<Map>` 的清理发生在
+   * 迟到成功之前（它是在飞任务的既有消费者，容器先被拆掉），因此把
+   * `startSharedLoad` 的终态守卫摘掉，`mapsCreated` 同样是 0。
+   *
+   * 真正的判别力在 `core/context/client.test.ts` 的「迟到成功不写回 ready / 迟到失败不写回
+   * error」（实测：摘掉守卫即翻红）。这里保留它作为真实调用路径上的**非回归**读数，
+   * 不假称它能锁住终态守卫——组件层要构造出那个窗口需要新的夹具能力，属另一张票。
+   */
+  it("整棵卸载后没有残留的异步窗口", async () => {
+    const { load, definition } = deferredDefinition();
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h(Consumer)),
+    });
+    const wrapper = mount(Root, { attachTo: harness.container() });
+    await flushPromises();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    await unmountAndSettle(wrapper);
+    harness.releaseProvider();
+    await flushPromises();
+    await nextTick();
+
+    expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
+    harness.assertIdle("共享 Client：整棵卸载后无在飞窗口");
+  });
+
+  /**
+   * #186 评审 P1：`dispose()` 必须结算**已经发出**的等待。
+   *
+   * `<BMapProvider>` 的 `onMounted` → `ensureLoad()` → `context.load()` 是**无 signal**
+   * 的那一条，它被底层 Provider 悬住时不会冒泡成 error、也不进 `pendingAsync()`
+   * （后者只统计 timer/callback）——所以必须**直接观测那条等待本身**。
+   *
+   * 观测点是 Provider 自己 expose 的 `load()`：它与 `ensureLoad()` 调的是同一个
+   * `context.load()`，而 `dispose()` 是 context 级终态，因此「expose 的这条等待在卸载后
+   * 是否当场结算」与「`ensureLoad()` 那条是否被悬住」是同一个读数。
+   *
+   * ⚠️ 实测判别力：把终态结算（owner signal）摘掉，下面的 `settled` 会超时（**翻红**）；
+   * 而只看 Provider 的 `#error` 插槽/`error` 事件则**测不出**——卸载时 `emit` 在
+   * `onUnmounted` 之后触发，模板已不再渲染，那种写法在两种实现下都通过。
+   */
+  it("底层 Provider 永不结算时，卸载 Provider 仍当场结算它的 load()（不悬住）", async () => {
+    const neverLoad = vi.fn(() => new Promise<never>(() => {}));
+    const definition = {
+      provider: { id: "never", getCacheKey: () => "never", load: neverLoad },
+      loadOptions: {},
+    };
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h("div", "child")),
+    });
+    const wrapper = mount(Root);
+    await flushPromises();
+    expect(neverLoad, "加载确实发出去了（否则下面的断言只是「没发生过」）").toHaveBeenCalledTimes(1);
+
+    // 与 `ensureLoad()` 同一条 context 等待：**不**放行 Provider，卸载后必须当场结算。
+    const provider = wrapper.findComponent(BMapProvider);
+    const pending = (
+      provider.vm as unknown as { load: (signal?: AbortSignal) => Promise<unknown> }
+    ).load();
+    const settled = pending.then(
+      () => "fulfilled",
+      (e: { code?: string }) => e?.code ?? "rejected",
+    );
+    let outcome: string | null = null;
+    void settled.then((value) => {
+      outcome = value;
+    });
+
+    await unmountAndSettle(wrapper);
+    await nextTick();
+    expect(outcome, "卸载即结算，而不是被底层挂住").toBe("BMAP_RESOURCE_DISPOSED");
+
+    harness.assertIdle("共享 Client：底层永不结算时的卸载");
+  });
+});
+
+/**
+ * #186 评审 P1：**同一个** Provider 加载失败，经不同入口必须给出**同一个**公开错误码。
+ *
+ * `BMapProviderLike` 是公共扩展点，用户 Provider 抛普通 `Error` 完全合法。Client Context 若
+ * 把原始 `Error` 直接抛给上层，两条入口会各自二次包装：
+ * `<BMapProvider>` → `BMAP_SDK_LOAD_FAILED`（可重试），
+ * `<Map>` 的 `MapRuntime.doMount` → **`BMAP_RESOURCE_CREATE_FAILED`**（不可重试）。
+ * 后者还与 `docs/zh-CN/guide/errors.md` 的分类相反——那里 `BMAP_RESOURCE_CREATE_FAILED`
+ * 是「Overlay/Control/Layer 创建失败」，SDK 加载失败归 `BMAP_SDK_LOAD_FAILED` 且可重试。
+ *
+ * 因此这里从**组件层**断言两条入口的读数一致；归一的收口点在 `createClientContext`。
+ */
+describe("Provider 加载失败的公开错误码（#186 评审 P1）", () => {
+  /** 公共扩展点：用户 Provider 抛普通 `Error`（不是 `BMapError`）。 */
+  const failingProvider = () => ({
+    id: "failing",
+    load: async (): Promise<never> => {
+      throw new Error("provider boom");
+    },
+  });
+
+  it("<Map> 与 <BMapProvider> 都归一为可重试的 BMAP_SDK_LOAD_FAILED", async () => {
+    const mapErrors: BMapError[] = [];
+    const MapRoot = defineComponent({
+      setup: () => () =>
+        h(Map, {
+          provider: failingProvider(),
+          onError: (error: BMapError) => mapErrors.push(error),
+        }),
+    });
+    const mapWrapper = mount(MapRoot, { attachTo: harness.container() });
+    await flushPromises();
+    await flushPromises();
+
+    const providerErrors: BMapError[] = [];
+    const ProviderRoot = defineComponent({
+      setup: () => () =>
+        h(
+          BMapProvider,
+          {
+            definition: { provider: failingProvider(), loadOptions: {} },
+            onError: (error: BMapError) => providerErrors.push(error),
+          },
+          () => h("div", "child"),
+        ),
+    });
+    const providerWrapper = mount(ProviderRoot);
+    await flushPromises();
+
+    // 两条入口都必须真的报错（否则下面的「一致」可能只是「都没发生」）。
+    expect(mapErrors, "<Map> 必须上报错误").toHaveLength(1);
+    expect(providerErrors, "<BMapProvider> 必须上报错误").toHaveLength(1);
+
+    expect(mapErrors[0]!.code, "<Map> 入口的公开错误码").toBe("BMAP_SDK_LOAD_FAILED");
+    expect(providerErrors[0]!.code, "<BMapProvider> 入口的公开错误码").toBe("BMAP_SDK_LOAD_FAILED");
+    // 可重试是文档承诺的一部分（`BMAP_RESOURCE_CREATE_FAILED` 不可重试）。
+    expect(mapErrors[0]!.retryable).toBe(true);
+    expect(providerErrors[0]!.retryable).toBe(true);
+
+    await unmountAndSettle(mapWrapper);
+    await unmountAndSettle(providerWrapper);
   });
 });
 
