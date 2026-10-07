@@ -66,9 +66,10 @@ describe("check-interaction-props · 判据有区分力", () => {
     // 关键：不能是「扫到 0 个所以通过」。这是本用例最重要的一条。
     const match = /INTERACTION_PROPS 的 (\d+) 个 prop/.exec(r.output);
     expect(match, r.output).not.toBeNull();
-    // 8 项 = INTERACTION_PROPS 当前的完整名单（dragging / wheel / inertial / pinch /
-    // keyboard / dblclick / continuous / fixCenter）。
-    expect(Number(match![1]), r.output).toBe(8);
+    // 12 项 = INTERACTION_PROPS 当前的完整名单（dragging / wheel / inertial / pinch /
+    // keyboard / dblclick / continuous / fixCenter / rotate / rotate-gestures / tilt /
+    // tilt-gestures —— 后四项由 #167 第一批补上）。
+    expect(Number(match![1]), r.output).toBe(12);
   });
 
   it("少一个 prop 就红，并点名是哪一个", () => {
@@ -77,8 +78,8 @@ describe("check-interaction-props · 判据有区分力", () => {
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain("enablePinchZoom");
     expect(r.output).toContain("没有出现在 withDefaults 里");
-    // 其余七项不该被牵连——门禁只报真正缺的那几个。
-    expect(r.output).toContain("1/8");
+    // 其余十一项不该被牵连——门禁只报真正缺的那几个。
+    expect(r.output).toContain("1/12");
   });
 
   it("值写成 true / false 同样算通过（判据是**存在性**，不是值等于 undefined）", () => {

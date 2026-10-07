@@ -97,6 +97,14 @@ const props = withDefaults(defineProps<MapProps>(), {
   enableDblclickZoom: undefined,
   enableKeyboard: undefined,
   enablePinchZoom: undefined,
+  // #167 第一批的四个：官方 `MapOptions` 的 `enableRotate` / `enableRotateGestures` /
+  // `enableTilt` / `enableTiltGestures` **全部**标注 `@default true` ⇒ 与上面六项逐字同因，
+  // 必须在这里钉 `undefined`（不钉就被 Vue 编成 `false`，建图时逐个 `disable*()`，
+  // 官方默认开的旋转/倾斜被静默关掉）。门禁同上：`scripts/check-interaction-props.mts`。
+  enableRotate: undefined,
+  enableRotateGestures: undefined,
+  enableTilt: undefined,
+  enableTiltGestures: undefined,
   // ⚠️ 刻意写 `undefined`（口径同 `LineLayer.popEvent` / `PointIconLayer.userSizes`）：
   // Vue 对缺省 `Boolean` 会转成 `false`，不显式关掉这个转换，「不传」与「传 false」就分不开，
   // 而本库要表达的恰恰是**默认不表态**——由使用者显式 opt-in 才把键递下去
@@ -620,6 +628,18 @@ const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableDblclickZoom", "double-click-zoom"],
   ["enableContinuousZoom", "continuous-zoom"],
   ["fixCenterWhenResize", "resize-on-center"],
+  // #167 第一批：官方 `MapOptions` 里另外四个交互开关。Driver 的 `INTERACTION_METHODS`
+  // 早就登记了它们，缺的只是组件面的 prop（#165 走查记在 #167 §1）。
+  //
+  // ⚠️ 四个的**落地机制不同**，但都是安全的：
+  // `rotate` / `rotate-gestures` / `tilt` 三对是官方声明的**实例方法**，直接生效；
+  // `tilt-gestures` 那一对在 4.0 API 参考与 `core/Map.d.ts` 里**没有实例方法**
+  // （只有构造选项 `enableTiltGestures`，且没有配对的 `disable*`）——
+  // `setInteraction` 结构性判断后「没有就告警一次」，不臆造声明、不靠异常控制流。
+  ["enableRotate", "rotate"],
+  ["enableRotateGestures", "rotate-gestures"],
+  ["enableTilt", "tilt"],
+  ["enableTiltGestures", "tilt-gestures"],
 ];
 
 /** 将 props 上的 enableXxx 布尔值同步到 SDK map 实例 */
@@ -683,6 +703,19 @@ const currentRuntime = new MapRuntime({
     // 空画布（live 实测 3,830 vs 119,074 字节）。见 MapProps.preserveDrawingBuffer。
     ...(props.preserveDrawingBuffer !== undefined
       ? { preserveDrawingBuffer: props.preserveDrawingBuffer }
+      : {}),
+    // `enableTiltGestures` 必须**同时**走构造选项，不能只靠 `syncEnableProps` 的实例方法路径。
+    //
+    // 官方 4.0 API 参考与 `core/Map.d.ts` 的实例方法表里都**没有**
+    // `enableTiltGestures()` / `disableTiltGestures()`（只有构造选项，且无配对 `disable*`）。
+    // 因此若只走 `assemble() -> syncEnableProps()`：构造期没收到 `false` ⇒ SDK 用官方默认
+    // `true`；随后 `disableTiltGestures()` 找不到方法 ⇒ 告警一次并忽略 ⇒ **手势倾斜仍是开**。
+    // 也就是说最关键的 `false` 场景在真实 SDK 上会失效，与 prop 声明的「构造期语义」相反。
+    //
+    // 口径同 `preserveDrawingBuffer`：**显式传值才投影**。没传时不写这个键，交给官方默认
+    // （`@default true`），避免把 Vue 编出来的 `false` 冒充「用户显式关闭」。
+    ...(props.enableTiltGestures !== undefined
+      ? { enableTiltGestures: props.enableTiltGestures }
       : {}),
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
@@ -1299,6 +1332,13 @@ watch(
     props.enableContinuousZoom,
     props.fixCenterWhenResize,
     props.enableTraffic,
+    // #167 第一批：新增的四个交互 prop 必须在 watch source 里，否则首次 `assemble()` 之后
+    // 父组件再切换它们不会触发 `syncEnableProps()`——前三项在真实 SDK 有实例方法，
+    // 本可响应式更新，漏在 watch 外等于「prop 只生效一次」。
+    props.enableRotate,
+    props.enableRotateGestures,
+    props.enableTilt,
+    props.enableTiltGestures,
   ],
   () => {
     const ready = runtimeRef.value;

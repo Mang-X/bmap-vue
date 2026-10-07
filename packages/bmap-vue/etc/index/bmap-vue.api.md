@@ -2197,6 +2197,10 @@ export interface MapProps {
     // (undocumented)
     enableKeyboard?: boolean;
     enablePinchZoom?: boolean;
+    enableRotate?: boolean;
+    enableRotateGestures?: boolean;
+    enableTilt?: boolean;
+    enableTiltGestures?: boolean;
     enableTraffic?: boolean;
     enableWheelZoom?: boolean;
     fixCenterWhenResize?: boolean;
