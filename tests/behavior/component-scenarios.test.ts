@@ -493,6 +493,55 @@ describe("共享 Client 的取消隔离与终态（#186）", () => {
     expect(fake.diagnostics.pendingAsync()).toEqual({ timers: 0, callbacks: 0 });
     harness.assertIdle("共享 Client：整棵卸载后无在飞窗口");
   });
+
+  /**
+   * #186 评审 P1：`dispose()` 必须结算**已经发出**的等待。
+   *
+   * `<BMapProvider>` 的 `onMounted` → `ensureLoad()` → `context.load()` 是**无 signal**
+   * 的那一条，它被底层 Provider 悬住时不会冒泡成 error、也不进 `pendingAsync()`
+   * （后者只统计 timer/callback）——所以必须**直接观测那条等待本身**。
+   *
+   * 观测点是 Provider 自己 expose 的 `load()`：它与 `ensureLoad()` 调的是同一个
+   * `context.load()`，而 `dispose()` 是 context 级终态，因此「expose 的这条等待在卸载后
+   * 是否当场结算」与「`ensureLoad()` 那条是否被悬住」是同一个读数。
+   *
+   * ⚠️ 实测判别力：把终态结算（owner signal）摘掉，下面的 `settled` 会超时（**翻红**）；
+   * 而只看 Provider 的 `#error` 插槽/`error` 事件则**测不出**——卸载时 `emit` 在
+   * `onUnmounted` 之后触发，模板已不再渲染，那种写法在两种实现下都通过。
+   */
+  it("底层 Provider 永不结算时，卸载 Provider 仍当场结算它的 load()（不悬住）", async () => {
+    const neverLoad = vi.fn(() => new Promise<never>(() => {}));
+    const definition = {
+      provider: { id: "never", getCacheKey: () => "never", load: neverLoad },
+      loadOptions: {},
+    };
+    const Root = defineComponent({
+      setup: () => () => h(BMapProvider, { definition }, () => h("div", "child")),
+    });
+    const wrapper = mount(Root);
+    await flushPromises();
+    expect(neverLoad, "加载确实发出去了（否则下面的断言只是「没发生过」）").toHaveBeenCalledTimes(1);
+
+    // 与 `ensureLoad()` 同一条 context 等待：**不**放行 Provider，卸载后必须当场结算。
+    const provider = wrapper.findComponent(BMapProvider);
+    const pending = (
+      provider.vm as unknown as { load: (signal?: AbortSignal) => Promise<unknown> }
+    ).load();
+    const settled = pending.then(
+      () => "fulfilled",
+      (e: { code?: string }) => e?.code ?? "rejected",
+    );
+    let outcome: string | null = null;
+    void settled.then((value) => {
+      outcome = value;
+    });
+
+    await unmountAndSettle(wrapper);
+    await nextTick();
+    expect(outcome, "卸载即结算，而不是被底层挂住").toBe("BMAP_RESOURCE_DISPOSED");
+
+    harness.assertIdle("共享 Client：底层永不结算时的卸载");
+  });
 });
 
 /**

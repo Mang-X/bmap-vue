@@ -292,8 +292,12 @@ describe("BMapClientContext.dispose 是终态（#186）", () => {
     });
     const pending = ctx.load();
     ctx.dispose();
+    // 等待在 `dispose()` 那一刻就以终态口径结算（评审 P1），因此这里拿到的**不是**
+    // 迟到的 `late boom`；底层稍后失败时也不得把终态改写成 `error`。
+    await expect(pending).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
     fail();
-    await expect(pending).rejects.toThrow("late boom");
+    await Promise.resolve();
+    await Promise.resolve();
     expect(ctx.status.value).toBe("disposed");
     expect(ctx.error.value).toBeNull();
   });
@@ -306,5 +310,94 @@ describe("BMapClientContext.dispose 是终态（#186）", () => {
     await expect(ctx.retry()).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
     expect(calls()).toBe(0);
     expect(ctx.status.value).toBe("disposed");
+  });
+});
+
+/**
+ * #186 评审 P1：`dispose()` 必须结算**已经发出**的等待。
+ *
+ * 底层任务不可取消没有问题，但「不可取消」不等于「调用者可以被永久悬住」——验收项里
+ * 写的是「销毁后没有未结算的本库等待 Promise」。真实路径上 `<BMapProvider>` 的
+ * `onMounted` → `ensureLoad()` → `context.load()` 正是**无 signal** 的那一条，因此
+ * 「Provider 卸载后那条 async 调用还挂着」在底层 Provider 不结算时就是永久 pending。
+ *
+ * 下面用「永不放行的 Provider」把这个窗口钉死：**不 release 底层 gate**，只断言
+ * `dispose()` 之后等待当场结算。
+ */
+describe("BMapClientContext.dispose 结算已发出的等待（#186 评审 P1）", () => {
+  /** 永不结算的 Provider：等待是否被结算只能由 context 自己决定。 */
+  function neverSettlingDefinition() {
+    let calls = 0;
+    const def = definition(() => {
+      calls++;
+      return new Promise<never>(() => {});
+    });
+    return { def, calls: () => calls };
+  }
+
+  it("无 signal 的等待在 dispose 后立即以 BMAP_RESOURCE_DISPOSED 结算", async () => {
+    const { def, calls } = neverSettlingDefinition();
+    const ctx = createClientContext({ definition: def });
+    const pending = ctx.load();
+    expect(calls()).toBe(1);
+    ctx.dispose();
+    // 关键：**没有**放行底层——等待仍然必须结算。
+    await expect(pending).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
+    expect(ctx.status.value).toBe("disposed");
+  });
+
+  it("带 signal 的等待同样由 dispose 结算（调用方 signal 未 abort）", async () => {
+    const { def } = neverSettlingDefinition();
+    const ctx = createClientContext({ definition: def });
+    const controller = new AbortController();
+    const pending = ctx.load(controller.signal);
+    ctx.dispose();
+    await expect(pending).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
+    expect(controller.signal.aborted, "不是调用方取消，而是 context 终态").toBe(false);
+  });
+
+  it("多个等待者一起结算，且之后放行底层不产生新的状态写入", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ctx = createClientContext({
+      definition: definition(async () => {
+        await gate;
+        throw new Error("late provider failure");
+      }),
+    });
+    const first = ctx.load();
+    const second = ctx.load();
+    ctx.dispose();
+    await expect(first).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
+    await expect(second).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
+
+    release();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ctx.status.value).toBe("disposed");
+    expect(ctx.error.value).toBeNull();
+  });
+
+  it("dispose 之后的等待不再登记 abort 监听器", async () => {
+    const { def } = neverSettlingDefinition();
+    const ctx = createClientContext({ definition: def });
+    const controller = new AbortController();
+    const removed: string[] = [];
+    const original = controller.signal.removeEventListener.bind(controller.signal);
+    controller.signal.removeEventListener = ((type: string, ...rest: unknown[]) => {
+      removed.push(type);
+      return (original as (...args: unknown[]) => void)(type, ...rest);
+    }) as typeof controller.signal.removeEventListener;
+
+    const pending = ctx.load(controller.signal);
+    ctx.dispose();
+    await expect(pending).rejects.toMatchObject({ code: "BMAP_RESOURCE_DISPOSED" });
+    const baselines = removed.length;
+    expect(baselines, "结算时解绑了自己登记的监听器").toBeGreaterThan(0);
+    // owner abort 已经把等待结算掉了：调用方之后再 abort 不应再有任何解绑动作。
+    controller.abort();
+    expect(removed.length).toBe(baselines);
   });
 });

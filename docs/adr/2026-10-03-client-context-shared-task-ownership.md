@@ -95,6 +95,27 @@ Client Context 拉回同一口径，让它不再成为那条链上唯一破例�
 两条来源汇进同一个 `source.then(onLoad, onFail)`，失败分支照旧写 `status` / `error`。
 判据不写成「`if (!definition)` 就赋值」，而是让**所有**失败都只有一条写入路径。
 
+### `dispose()` 必须结算**已经发出**的等待（评审 P1）
+
+「底层任务不可取消」被错误地延伸成了「调用者的等待也可以不结算」。实测（`HEAD~2` 与
+当前实现都先复现过，因此这不是本票引入的回归、而是 issue 验收项里一直没兑现的一条）：
+
+| 场景（底层 Provider 永不结算） | 读数 |
+| --- | --- |
+| `const p = ctx.load(); ctx.dispose()` | `p` 永久 pending |
+| 同上但带 signal（signal 未 abort） | `p` 永久 pending |
+
+真实路径上 `<BMapProvider>` 的 `onMounted` → `ensureLoad()` → `context.load()` 正是
+**无 signal** 的那一条，所以「Provider 卸载后这条 async 调用还挂着」不是假想。
+`pendingAsync()` 只统计 timer / callback，抓不到悬挂的 Promise——用那个读数会得到假绿。
+
+做法：context 自己持有一个 `AbortController`（`owner`），`dispose()` 时 `owner.abort()`
+先结算所有在飞等待（`BMAP_RESOURCE_DISPOSED`），再置终态；底层任务继续跑、结果由终态
+守卫丢弃。**所有** `load()` 都走 `waitShared(task, owner.signal, signal?)`——不再有
+「无 signal 就直接返回裸 task」那条分支，否则 dispose 这一路的取消来源又会被绕过。
+两个中止来源（调用方 signal / context 终态）共用同一处登记与解绑，`AbortSignal` 让
+「已 dispose」与「等待期间 dispose」由同一个 `aborted` 覆盖。
+
 ## 决策 5：失败的拒绝值改为**原错误**
 
 `load()` 此前把失败包成新的 `BMapError("BMAP_SDK_LOAD_FAILED", "Map client load failed: …")`，
@@ -124,6 +145,12 @@ Client Context 拉回同一口径，让它不再成为那条链上唯一破例�
   的 signal。它测的是 issue 要求的第一个分量（A 取消、B 仍成功）；「B 取消、A 仍成功」
   这个反向分量只有单测能构造——组件层没有「让后加入者的 signal 中途 abort 而先加入者留下」
   的入口。
+- **「卸载时等待已结算」的组件读数需要一个可观测的等待句柄**。`ensureLoad()` 那条等待不冒泡
+  成 error、也不进 `pendingAsync()`（只统计 timer / callback），所以组件用例改为观测
+  `<BMapProvider>` 自己 expose 的 `load()`——它与 `ensureLoad()` 调的是同一个
+  `context.load()`，而 `dispose()` 是 context 级终态，两者是同一读数。实测判别力：摘掉
+  owner 结算，该用例翻红；而用「`#error` 插槽 / `error` 事件」当读数则两种实现下都通过
+  （卸载时 `emit` 已在 `onUnmounted` 之后，模板不再渲染）——**旧版那种写法是假绿**。
 
 ## 非目标
 

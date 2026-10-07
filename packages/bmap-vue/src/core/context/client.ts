@@ -65,26 +65,54 @@ function toBMapError(err: unknown, fallback: string): BMapError {
   });
 }
 
+/** `dispose()` 之后一切入口与等待的统一拒绝值（终态口径只有这一处）。 */
+function disposedError(suffix: string): BMapError {
+  return new BMapError("BMAP_RESOURCE_DISPOSED", `BMapClientContext ${suffix}`);
+}
+
 /**
- * 等一个**已启动**的共享任务，但允许本次等待被自己的 `signal` 取消。
+ * 等一个**已启动**的共享任务，但允许本次等待被取消。
  *
- * 这是 caller-owned 的那一半：任务本身不受影响（它已经启动、也不接受取消），abort 只让
- * 本次调用立刻以自己的理由 reject；任务结算时**先**清掉监听器再结算，因此正常完成后
- * 不残留 abort 监听器，abort 也不会去动已经结算的 promise。
+ * 这是 caller-owned 的那一半：任务本身不受影响（它已经启动、也不接受取消），等待被中止
+ * 只让本次调用立刻以自己的理由 reject。**两个**中止来源共用这一处实现：
+ *
+ * - `signal`：调用方自己的取消（`BMAP_PROVIDER_ABORTED`）；
+ * - `owner`：context 被 `dispose()`（`BMAP_RESOURCE_DISPOSED`）——`dispose()` 是终态，
+ *   它必须结算**已经发出**的等待，否则底层 Provider 一直 pending 时这些 Promise 永久悬挂
+ *   （`<BMapProvider>` 的 `ensureLoad()` 正是无 signal 的这一条；#186 评审 P1）。
+ *   底层任务自己继续跑，结果由 `startSharedLoad` 的终态守卫丢弃。
+ *
+ * `owner` 用 `AbortSignal` 表达而不是在每次等待里各挂一个回调：登记与解绑都只有一处，
+ * 且「已 dispose」和「等待期间 dispose」自然由同一个信号的 `aborted` 覆盖。
  */
-function waitShared(task: Promise<BMapClient>, signal: AbortSignal): Promise<BMapClient> {
+function waitShared(
+  task: Promise<BMapClient>,
+  owner: AbortSignal,
+  signal?: AbortSignal,
+): Promise<BMapClient> {
   return new Promise<BMapClient>((resolve, reject) => {
     let settled = false;
     const cleanup = () => {
-      signal.removeEventListener("abort", onAbort);
+      owner.removeEventListener("abort", onOwnerAbort);
+      signal?.removeEventListener("abort", onCallerAbort);
     };
-    function onAbort() {
+    const settle = (reason: BMapError) => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(createConsumerAbortError());
+      reject(reason);
+    };
+    function onOwnerAbort() {
+      settle(disposedError("has been disposed"));
     }
-    signal.addEventListener("abort", onAbort, { once: true });
+    function onCallerAbort() {
+      settle(createConsumerAbortError());
+    }
+    // 已 abort 的 owner / signal 立即拒绝，且不登记任何监听器。
+    if (owner.aborted) return onOwnerAbort();
+    if (signal?.aborted) return onCallerAbort();
+    owner.addEventListener("abort", onOwnerAbort, { once: true });
+    signal?.addEventListener("abort", onCallerAbort, { once: true });
     task.then(
       (value) => {
         if (settled) return;
@@ -109,10 +137,12 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
   /** **context-owned** 的共享生产任务（不是任何单个调用者的等待）。 */
   let sharedLoad: Promise<BMapClient> | null = null;
   let disposed = false;
-
-  function disposedError(suffix: string): BMapError {
-    return new BMapError("BMAP_RESOURCE_DISPOSED", `BMapClientContext ${suffix}`);
-  }
+  /**
+   * 「本 context 已 dispose」的信号：`dispose()` abort 它，于是**所有**已发出的等待
+   * （含无 signal 的那条）当场以 `BMAP_RESOURCE_DISPOSED` 结算，而不是被一个永不结算的
+   * 底层 Provider 永久悬住。
+   */
+  const owner = new AbortController();
 
   /**
    * 启动共享生产任务。**不接受 `signal`**：它的结果归 context，不归第一个调用者
@@ -186,7 +216,8 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
     // 已取消的 signal 连任务都不启动——不该为一次没人要的等待去拉 SDK。
     if (signal?.aborted) return Promise.reject(createConsumerAbortError());
     const task = startSharedLoad();
-    return signal ? waitShared(task, signal) : task;
+    // 等待包装**总是**走：`dispose()` 也是等待的取消来源，不只是调用方自己的 signal。
+    return waitShared(task, owner.signal, signal);
   }
 
   function retry(signal?: AbortSignal): Promise<BMapClient> {
@@ -201,7 +232,10 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
   function dispose(): void {
     if (disposed) return;
     disposed = true;
-    // 共享任务照样跑完（不可取消）；终态由 `startSharedLoad` 的写入前守卫保证。
+    // 1. 先结算**已发出**的等待：底层任务不可取消、照样跑完，但没有任何调用者该被它悬住。
+    //    顺序很重要——先 abort owner，再置终态，等待者拿到的就一定是 disposed 口径。
+    owner.abort(disposedError("has been disposed"));
+    // 2. 共享任务本身留着跑完；终态由 `startSharedLoad` 的写入前守卫保证，结果无人接收。
     sharedLoad = null;
     error.value = null;
     client.value = null;

@@ -28,6 +28,12 @@
 于是缺配置时错误插槽不再出现、context 静默停在 `idle`。现在启动前失败与生产失败汇进同一处
 结算，`status` / `error` 的读数与旧实现一致（新增单测与 `#error` 插槽用例各一条钉住）。
 
+评审修正（P1）：`dispose()` 此前只置终态，**不结算已经发出的等待**——底层 Provider 一直
+不结算时，`ctx.load()`（含 `<BMapProvider>` 无 signal 的 `ensureLoad()`）会永久悬挂。
+现在 context 自持一个 owner `AbortController`，`dispose()` 先 abort 它把所有在飞等待以
+`BMAP_RESOURCE_DISPOSED` 结算，再置终态；底层任务继续跑、结果由终态守卫丢弃。所有
+`load()` 一律走同一个等待包装（不再有「无 signal 就返回裸 task」的分支）。
+
 底层加载**依旧不可取消**（官方 Loader 没有公开取消接口，SDK namespace 是进程级共享状态）：
 取消是**逻辑**取消——丢弃回包，不假装终止了网络请求，也不重置上游 `window.BMap`。
 决策与依据见 ADR `2026-10-03-client-context-shared-task-ownership`。
