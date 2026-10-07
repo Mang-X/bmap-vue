@@ -106,6 +106,20 @@ describe("BMapClientContext", () => {
     await expect(ctx.load()).rejects.toMatchObject({ code: "BMAP_PARENT_CONTEXT_MISSING" });
   });
 
+  /**
+   * #186 评审 P1：缺 definition 是**启动前**的失败，但它必须走同一处状态写入。
+   * 直接 `Promise.reject` 会让 context 停在 `idle`，而 `<BMapProvider>` 的 `#error` 插槽
+   * 判的是 `status === "error"`——「缺配置」于是变成静默的空插槽。旧实现由 `load()` 的
+   * catch 写这两处，本用例把该读数钉回来。
+   */
+  it("缺 definition 的失败写入 error 状态与 error 读数（不静默停在 idle）", async () => {
+    const ctx = createClientContext({});
+    expect(ctx.status.value).toBe("idle");
+    await expect(ctx.load()).rejects.toMatchObject({ code: "BMAP_PARENT_CONTEXT_MISSING" });
+    expect(ctx.status.value).toBe("error");
+    expect(ctx.error.value).toMatchObject({ code: "BMAP_PARENT_CONTEXT_MISSING" });
+  });
+
   it("dispose clears and rejects further loads", async () => {
     const ctx = createClientContext({ definition: definition(async () => loaded()) });
     await ctx.load();

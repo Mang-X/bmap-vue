@@ -122,21 +122,28 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
     if (disposed) return Promise.reject(disposedError("has been disposed"));
     if (sharedLoad) return sharedLoad;
     const definition = options.definition;
-    if (!definition) {
-      return Promise.reject(
+    // 缺 definition 是**启动前**的失败，但它必须走下面同一处状态写入：`<BMapProvider>` 的
+    // `#error` 插槽与 `<Map>` 的错误面都读 `status === "error"` / `ctx.error`，在这里直接
+    // reject 等于让「缺配置」退化成静默的 `idle`（#186 评审 P1）。因此它照旧走共享任务的
+    // 失败分支，只是不经过 `loading`（与旧实现一致：旧 `doLoad` 也在置 loading 之前就抛）。
+    let source: Promise<BMapClient>;
+    if (definition) {
+      status.value = "loading";
+      error.value = null;
+      // 定义直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）。
+      // 这里是**唯一收口点**——`<Map>` / `<BMapProvider>` / 插件默认 definition /
+      // `resolveMapContext` 全部经此创建 Client，因此「同一份 definition 换一个入口就报
+      // BMAP_SDK_ENGINE_MISMATCH」不会发生。显式传入的 `driver` 仍然优先。
+      source = createBMapClient(definition);
+    } else {
+      source = Promise.reject(
         new BMapError(
           "BMAP_PARENT_CONTEXT_MISSING",
           "No Map client definition. Provide <BMapProvider> or app.use(createBMapPlugin(...)).",
         ),
       );
     }
-    status.value = "loading";
-    error.value = null;
-    // 定义直接交给 `createBMapClient`（缺省注入 jsapi-v4 的 Driver 工厂）。
-    // 这里是**唯一收口点**——`<Map>` / `<BMapProvider>` / 插件默认 definition /
-    // `resolveMapContext` 全部经此创建 Client，因此「同一份 definition 换一个入口就报
-    // BMAP_SDK_ENGINE_MISMATCH」不会发生。显式传入的 `driver` 仍然优先。
-    const task = createBMapClient(definition).then(
+    const task = source.then(
       (loaded) => {
         // `dispose()` 是终态：迟到的成功不得复活 context，也不得让这个 Client 进入
         // 任何活着的资源的视野（无人接收的 Client 不额外释放——本库没有公开的

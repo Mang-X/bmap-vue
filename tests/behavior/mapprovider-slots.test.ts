@@ -133,6 +133,23 @@ describe("<BMapProvider> 状态插槽", () => {
     wrapper.unmount();
   });
 
+  /**
+   * #186 评审 P1：缺 definition 是**启动前**的失败，也必须写进 context 的 `error` 状态。
+   * 该用例钉的是**用户可见后果**——`#error` 插槽判的是 `context.status === "error"`，
+   * 若这类失败绕过统一的状态写入，缺配置时错误插槽就不再出现（退化成空插槽 + idle）。
+   */
+  it("缺 definition → #error 插槽仍出现（启动前失败也写入 error 状态）", async () => {
+    const wrapper = mount(BMapProvider, { slots: slots() });
+    await flushPromises();
+
+    expect(wrapper.find('[data-test="error"]').exists()).toBe(true);
+    expect(seenError?.code).toBe("BMAP_PARENT_CONTEXT_MISSING");
+    expect(typeof seenRetry).toBe("function");
+    expect(wrapper.emitted("error")).toHaveLength(1);
+
+    wrapper.unmount();
+  });
+
   it("provider prop 走显式 v4 Provider", async () => {
     // 原来是「迁移期默认路径 ⇒ 显式 legacy 工厂」；#26 后 legacy 入口删除，
     // `provider` prop 与 `definition` 等价，直接走 v4。

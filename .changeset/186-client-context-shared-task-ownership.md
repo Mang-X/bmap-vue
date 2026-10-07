@@ -23,6 +23,11 @@
 对齐，不再把 `BMapError` 的 `code` 折进新错误的字段；`ctx.error` 仍是归一化后的 `BMapError`）；
 `retry()` 只在 `error` 档复位状态，不再把在飞的 `loading` 抹成 `idle`。
 
+评审修正（P1）：拆分时「缺 definition」这条**启动前**失败一度写成独立的 `Promise.reject`，
+绕过了统一的状态写入——`<BMapProvider>` 的 `#error` 插槽判的是 `context.status === "error"`，
+于是缺配置时错误插槽不再出现、context 静默停在 `idle`。现在启动前失败与生产失败汇进同一处
+结算，`status` / `error` 的读数与旧实现一致（新增单测与 `#error` 插槽用例各一条钉住）。
+
 底层加载**依旧不可取消**（官方 Loader 没有公开取消接口，SDK namespace 是进程级共享状态）：
 取消是**逻辑**取消——丢弃回包，不假装终止了网络请求，也不重置上游 `window.BMap`。
 决策与依据见 ADR `2026-10-03-client-context-shared-task-ownership`。

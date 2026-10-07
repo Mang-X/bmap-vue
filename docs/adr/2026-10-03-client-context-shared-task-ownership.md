@@ -80,6 +80,21 @@ Client Context 拉回同一口径，让它不再成为那条链上唯一破例�
 - 迟到的失败拒绝**原错误**，且**不**写 `status` / `error`；
 - `dispose()` 同时清 `error`——一次已作废的加载不该在公开的 `error` ref 上留下读数。
 
+### 启动前失败必须与生产失败走**同一处**状态写入（评审 P1）
+
+拆分「共享任务」与「等待」时，缺 definition 这条**启动前**失败一度被写成了一条独立的
+`Promise.reject`，绕过了共享任务的失败分支。后果是用户可见的：旧实现里 `doLoad()` 抛出的
+`BMAP_PARENT_CONTEXT_MISSING` 会经 `load()` 的 catch 写成 `status = "error"` +
+`ctx.error`，而 `<BMapProvider>` 的 `#error` 插槽判的正是 `context.status === "error"`
+——于是**缺配置时错误插槽不再出现**，context 静默停在 `idle`（实测：新实现
+`status = "idle"`、`error = null`；旧实现 `status = "error"`、
+`error = BMAP_PARENT_CONTEXT_MISSING`）。
+
+现在把「取生产源」（有 definition 走 `createBMapClient` 并置 `loading`，没有则在
+**不置 `loading`** 的前提下产出一个已拒绝的 source——与旧路径一致）与「统一结算」分开：
+两条来源汇进同一个 `source.then(onLoad, onFail)`，失败分支照旧写 `status` / `error`。
+判据不写成「`if (!definition)` 就赋值」，而是让**所有**失败都只有一条写入路径。
+
 ## 决策 5：失败的拒绝值改为**原错误**
 
 `load()` 此前把失败包成新的 `BMapError("BMAP_SDK_LOAD_FAILED", "Map client load failed: …")`，
@@ -98,12 +113,17 @@ Client Context 拉回同一口径，让它不再成为那条链上唯一破例�
 ## 这条实现的已知边界
 
 - **组件层抓不到终态回写**。本票按 issue 要求在真实调用路径上补了组件用例
-  （加载中卸载一个消费者，另一个继续成功；整棵卸载后迟到结果不复活上下文），但要构造出
-  「`dispose()` 之后才有迟到结算」的**组件**窗口，现有夹具能力不够——`<Map>` 的容器清理
-  发生在迟到成功之前，摘掉终态守卫读数不变（实测）。该用例因此如实标注为**非回归读数**，
-  判据留在单测层（可稳定翻红），不假称它锁住了终态守卫。
+  （加载中卸载**先加入的**消费者，另一个继续成功；整棵卸载后迟到结果不复活上下文），
+  但要构造出「`dispose()` 之后才有迟到结算」的**组件**窗口，现有夹具能力不够——`<Map>`
+  的容器清理发生在迟到成功之前，摘掉终态守卫读数不变（实测）。该用例因此如实标注为
+  **非回归读数**，判据留在单测层（可稳定翻红），不假称它锁住了终态守卫。
 - **等待者侧的 signal 只覆盖 `load()` / `retry()`**；`client` 已就绪时 `load()` 同步
   resolve，与 signal 是否已 abort 无关。
+- 「卸载先加入的消费者」这条组件用例的**判别力有方向性**（评审 P1 修正后实测）：旧实现下
+  它翻红（剩下的消费者拿到 0 张地图），因为旧实现把第一个等待者的 signal 当成了共享任务
+  的 signal。它测的是 issue 要求的第一个分量（A 取消、B 仍成功）；「B 取消、A 仍成功」
+  这个反向分量只有单测能构造——组件层没有「让后加入者的 signal 中途 abort 而先加入者留下」
+  的入口。
 
 ## 非目标
 

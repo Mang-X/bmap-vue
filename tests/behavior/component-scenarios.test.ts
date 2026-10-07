@@ -406,22 +406,25 @@ describe("共享 Client 的取消隔离与终态（#186）", () => {
     };
   }
 
-  it("加载中卸载一个消费者，另一个继续成功；Provider 只被调用一次", async () => {
+  it("加载中卸载先加入的消费者，另一个继续成功；Provider 只被调用一次", async () => {
     const { load, definition } = deferredDefinition();
-    const showSecond = ref(false);
+    // 两个消费者都在场；卸载的**必须是先加入的那个**——旧实现把它的 signal 直接当成共享
+    // 任务的 signal，它一取消，仍在等待的后来者就一并被拒。只挂一个消费者、或卸载后加入
+    // 的那个，都测不出这条（旧实现同样通过）。
+    const showFirst = ref(true);
     const Root = defineComponent({
       setup: () => () =>
         h(BMapProvider, { definition }, () => [
+          showFirst.value ? h(Consumer) : null,
           h(Consumer),
-          showSecond.value ? h(Consumer) : null,
         ]),
     });
     const wrapper = mount(Root, { attachTo: harness.container() });
     await flushPromises();
     expect(load, "两个消费者共用一个在飞任务").toHaveBeenCalledTimes(1);
 
-    // 卸载一个消费者后放行加载：另一个必须照样建出地图。
-    showSecond.value = false;
+    // 卸载先加入的消费者后放行加载：另一个必须照样建出地图。
+    showFirst.value = false;
     await nextTick();
     harness.releaseProvider();
     await flushPromises();
