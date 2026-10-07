@@ -108,11 +108,20 @@ pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced
 ```
 
 `pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
-ESM import、`./styles.css` 与深路径反向、文档示例、Volar 真实模板类型、`./advanced` 契约探针、
-tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档：**仓库外隔离项目**的严格类型
-（`scripts/consumer-isolated-strict.mts`，工作包 A）、**纯 Node 的真实 SFC SSR**
-（`scripts/consumer-ssr.mts`，工作包 B）与**无本地 import 的真实 .vue 模板 Volar 类型**
-（`scripts/consumer-volar.mts`，工作包 C）。
+ESM import、`./styles.css` 与深路径反向、**样式消费生产构建**、文档示例、Volar 真实模板类型、
+`./advanced` 契约探针、tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档：
+**仓库外隔离项目**的严格类型（`scripts/consumer-isolated-strict.mts`，工作包 A）、
+**纯 Node 的真实 SFC SSR**（`scripts/consumer-ssr.mts`，工作包 B）与
+**无本地 import 的真实 .vue 模板 Volar 类型**（`scripts/consumer-volar.mts`，工作包 C）。
+
+样式那一步在装出来的 tarball 上用 Vite 跑两次生产构建：显式 `import '<pkg>/styles.css'`
+的产物必须含 Autocomplete 的定位 / 层级 / 偏移规则；不 import 的产物必须不含它（本库不自动
+注入样式）。**计算样式**放在同一条路径里（`fixtures/consumer/styles/computed-style-runner.mjs`）：
+在消费 fixture 里导入发布包、用 happy-dom 真实渲染，读**发布组件自己带出来的** `data-v-*`
+属性、注入同一份 tarball 的 `styles.css`，再读 `getComputedStyle` —— 所以「发布 JS 的 scope
+与发布 CSS 的 scope 一致」是被断言的事实，而不是测试补出来的。判据都在
+`consumer-styles-boundary.mts`。basic 与 UI 消费方的边界（根入口不静态拉进可选 UI Kit）由
+`tests/behavior/ui-kit-entry.test.ts` 的真实 basic / UI 两次生产构建判。
 
 Volar 那一步按安装文档只配置 `compilerOptions.types: ["<pkg>/volar"]`，用 `vue-tsc` 跑两份
 **只有 template 的 SFC**（结构上不可能有本地 import）：`positive.vue` 必须退出码 0 且零诊断，
