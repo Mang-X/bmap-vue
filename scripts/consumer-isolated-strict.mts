@@ -12,8 +12,9 @@
  * 手写一份只有一个依赖的 `package.json`，用 `npm install`（不是 pnpm）装入正式
  * tarball，然后在那里跑严格编译。判定用硬约束而不是「相信」：
  *
- * - 安装根到磁盘根之间**不得**存在任何 `node_modules`（爬升路径必须无货可提）；
- * - **不得**存在 `pnpm-workspace.yaml` / `pnpm-lock.yaml`（不是工作区成员）；
+ * - 安装根到磁盘根之间（**含磁盘根**）**不得**存在任何 `node_modules`（爬升路径必须无货可提）；
+ * - **不得**位于任何 pnpm workspace 内：从 `dir` 到磁盘根的任一祖先存在
+ *   `pnpm-workspace.yaml` / `.yml` 即失败（`pnpm-lock.yaml` 不单独算，理由见 boundary 模块）；
  * - 装出来的环境里**不得**有 `@baidumap/jsapi-v4-types`（官方类型包未安装 —— 发布
  *   声明一旦泄漏 `BMap.*`，消费方立刻编译失败，而不是被官方类型悄悄接住）；
  * - `@mangax/bmap-vue` 必须解析到**临时项目自己的** `node_modules`，而不是别处。

@@ -9,9 +9,9 @@
  * 两种覆盖范围都要**从 `dir` 向祖先看**，不能只看 `dir` 自己：
  *
  * - `node_modules` 确实可以就在 `dir` 下，但更常见的是在某个祖先；
- * - `pnpm-workspace.yaml` / `pnpm-lock.yaml` 基本**只**在 workspace 根，也就是祖先。
- *   只查 `dir` 自己的话，「`TMPDIR=<repo>/.tmp` 时新目录仍在 workspace 里」这一形态
- *   会被放过，而那种情况下断言仍然报「通过」——判据与它的名字说的不是一件事。
+ * - `pnpm-workspace.yaml` 基本**只**在 workspace 根，也就是祖先。只查 `dir` 自己的话，
+ *   「`TMPDIR=<repo>/.tmp` 时新目录仍在 workspace 里」这一形态会被放过，而那种情况下
+ *   断言仍然报「通过」——判据与它的名字说的不是一件事。
  *
  * 住在 boundary 而非驱动脚本：驱动脚本顶层就跑 `main()`，用例 import 它就会连带
  * 触发真实的 `npm install`；这里只有纯函数，可以喂合成目录树做行为级反例。
@@ -31,10 +31,15 @@ export const realIsolationFs: IsolationFs = { exists: existsSync };
 export const WORKSPACE_MARKERS = ["pnpm-workspace.yaml", "pnpm-workspace.yml"] as const;
 
 /**
- * 从磁盘根到 `dir`（**含 `dir` 本身**）之间存在的全部 `marker` 路径。
+ * 从磁盘根到 `dir`（**含磁盘根与 `dir` 自己**）之间存在的全部 `marker` 路径。
  *
  * 从根向下拼而不是从 `dir` 向上回溯：两种写法结果相同，但向下拼天然把 `dir` 自己
  * 纳入、且顺序稳定（祖先 → 后代），用例可以逐项断言。
+ *
+ * ⚠️ **磁盘根自己要单独先查一次**。循环在拼入第一个 segment **之后**才检查，所以
+ * 它覆盖的是 `root/a/marker`、`root/a/b/marker`、……、`dir/marker` —— `root/marker`
+ * 不在其中。缺了这一步，`/node_modules`（Windows 的 `C:\node_modules`）或盘符根的
+ * workspace marker 会被当成「路径干净」，而向上模块解析恰恰会查到它。
  */
 export function ancestorEntries(
   dir: string,
@@ -43,6 +48,8 @@ export function ancestorEntries(
 ): string[] {
   const root = parse(dir).root;
   const found: string[] = [];
+  const atRoot = resolve(root, marker);
+  if (fs.exists(atRoot)) found.push(atRoot);
   let current = root;
   for (const segment of dir.slice(root.length).split(/[\\/]/).filter(Boolean)) {
     current = resolve(current, segment);

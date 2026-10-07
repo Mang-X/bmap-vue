@@ -23,8 +23,9 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { resolve, parse } from "node:path";
 import {
+  ancestorEntries,
   assertNoAncestorNodeModules,
   assertOutsidePnpmWorkspace,
 } from "../../scripts/consumer-isolation.mts";
@@ -170,6 +171,43 @@ describe("隔离严格消费：隔离是真的", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+
+  /**
+   * **磁盘根自己**也在判据范围内（#205 第三次评审 P2）。
+   *
+   * 遍历在拼入第一个 segment **之后**才检查，所以旧实现覆盖不到 `root/marker`：
+   * `/node_modules`（Windows 的 `C:\node_modules`）或盘符根的 workspace marker 会被
+   * 当成「路径干净」，而向上模块解析恰恰会查到它。
+   *
+   * 这一条**不能**用真实文件系统造（没人该往 `/` 写东西），所以走 `IsolationFs` 注入：
+   * fake fs 只对「磁盘根 + marker」这一条路径返回 true，其余全 false。判据必须因此抛错。
+   */
+  it("磁盘根自己的 node_modules / workspace marker 必须判红（注入 fs，不碰真实根）", () => {
+    const dir = resolve(tmpdir(), "bmap-vue-root-probe", "project");
+    const root = parse(dir).root;
+    const rootModules = resolve(root, "node_modules");
+    const rootWorkspace = resolve(root, "pnpm-workspace.yaml");
+
+    // 正证：根节点命中时，遍历结果里**必须**有它（直接钉住「含磁盘根」这件事）。
+    expect(ancestorEntries(dir, "node_modules", { exists: (p) => p === rootModules })).toEqual([
+      rootModules,
+    ]);
+
+    expect(
+      () => assertNoAncestorNodeModules(dir, { exists: (p) => p === rootModules }),
+      "磁盘根的 `node_modules` 被跳过了 —— 向上解析会命中它",
+    ).toThrow(/node_modules/);
+
+    expect(
+      () => assertOutsidePnpmWorkspace(dir, { exists: (p) => p === rootWorkspace }),
+      "磁盘根的 workspace marker 被跳过了 —— 那时项目就在 workspace 内",
+    ).toThrow(/workspace/);
+
+    // 反证：同样只覆盖根节点路径的 fake fs，在「一切都不存在」时必须放行（判据不能恒红）。
+    const nothing = { exists: () => false };
+    expect(() => assertNoAncestorNodeModules(dir, nothing)).not.toThrow();
+    expect(() => assertOutsidePnpmWorkspace(dir, nothing)).not.toThrow();
   });
 
   /**
