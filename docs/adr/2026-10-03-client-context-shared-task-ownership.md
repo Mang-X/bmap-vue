@@ -162,10 +162,16 @@ return err`），只归一普通 `Error`——所以「再包一层会丢 `code`
 `BMAP_RESOURCE_CREATE_FAILED`(not retryable)。
 
 现在：失败值先 `toBMapError(err, "Map client load failed")` 归一，**同一个对象**既写
-`ctx.error` 也作为拒绝值。对 `BMapError` 是无操作——对象身份、`code` 与 `cause`（以及
-`mapId` / `component` / `plugin` / `capability` / `engine` / `version` 这些
-`BMapErrorOptions` 里的字段）全部原样保留；对普通 `Error` 则在**唯一收口点**完成归一，
-上层两条入口拿到的都是已经归一的 `BMapError`，不会再被二次包装成不同类别。
+`ctx.error` 也作为拒绝值。对 `BMapError` 是无操作——`toBMapError` 返回**同一个实例**，
+因此该实例当时已经拥有的状态（对象身份、`code`、`cause`，以及构造函数实际保存的
+`mapId` / `component` / `plugin`）不会因归一化被重包或改写；对普通 `Error` 则在
+**唯一收口点**完成归一，上层两条入口拿到的都是已经归一的 `BMapError`，不会再被二次
+包装成不同类别。
+
+> ⚠️ 这里刻意**不**声称「`BMapErrorOptions` 里的字段全部保留」：`BMapErrorOptions`
+> 还声明了 `capability` / `engine` / `version`，但当前构造函数只把 `cause` 交给 `Error`、
+> 只保存 `mapId` / `component` / `plugin`——那三个键既不进实例、也不进 `toJSON()`。
+> 它们是否应该真正进入错误模型是**另一个设计问题**（#204 追踪），不在本票扩大承诺。
 
 ## 连带影响：`retry()` 的状态口径
 
