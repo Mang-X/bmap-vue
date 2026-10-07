@@ -104,8 +104,25 @@ pnpm test:unit
 pnpm generate:manifest          # 必须排在 pack 之前：volar.d.ts 是生成产物，见下
 pnpm --filter bmap-vue pack --pack-destination .artifacts
 pnpm check:pack-contents         # 实际发布的那一个 tarball 里到底有什么
-pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced）
+pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced / 仓库外严格类型）
 ```
+
+`pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
+ESM import、`./styles.css` 与深路径反向、文档示例、Volar 类型解析、`./advanced` 契约探针、
+tree-shaking 对照、运行时依赖与 dev 告警，最后是**仓库外隔离项目**的严格类型消费
+（`scripts/consumer-isolated-strict.mts`，issue #158 工作包 A）。
+
+隔离那一步可以单独跑（tarball 是**显式参数**，脚本不会自己去 `.artifacts` 里挑）：
+
+```bash
+node --experimental-strip-types scripts/consumer-isolated-strict.mts .artifacts/<pkg>.tgz
+```
+
+它在系统临时目录里手写一份只有一个依赖的 `package.json`、用 `npm install` 装入该 tarball，
+再按 `bundler` 与 `node16` 两档各编译一次 `fixtures/consumer/strict/probe.ts`（两份配置都是
+`skipLibCheck: false`）。**为什么不复用 `fixtures/consumer`**：那是 pnpm 工作区成员，依赖提升与
+向工作区根的查找都可能把本库漏发的东西补回来，于是「包缺件」在门禁里看起来是绿的。隔离项目的
+爬升路径必须没有 `node_modules`、不得是工作区成员、不得装官方类型包——三条都由脚本自己断言。
 
 ⚠️ **`volar.d.ts` 的生成顺序不是可选的。** 它在 `.gitignore` 里，只由
 `generate-manifest-artifacts.mts` 写；跳过那一步直接 `pnpm pack`，会发出一个**缺 Volar 类型**的包

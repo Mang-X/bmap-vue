@@ -370,6 +370,23 @@ function main() {
     )
   }
 
+  // 5a-pre) 仓库外隔离项目里的**严格类型消费**（#158 工作包 A）。
+  //
+  //     上面那条 `vue-tsc` 跑在 `fixtures/consumer` 里，而那是 pnpm 工作区的成员：
+  //     依赖提升 + 向工作区根的 `node_modules` 查找，都可能把本库**漏发**的类型从
+  //     源码侧补回来，于是「包缺件」在门禁里看起来是绿的。这条把同一份严格探针搬进
+  //     操作系统临时目录里的裸项目（手写 package.json + npm install tarball），
+  //     并按 `bundler` / `node16` 两档各编译一次。
+  //
+  //     接线口径与工作包 E 的要求一致：**调同一个实现**，不在本文件里复刻一份安装 +
+  //     tsc 的 shell。tarball 作为显式参数传下去——「验的是哪一个包」不能靠脚本自己去
+  //     `.artifacts` 里猜。
+  run(
+    `node --experimental-strip-types ${JSON.stringify(resolve(root, 'scripts/consumer-isolated-strict.mts'))} ${JSON.stringify(tarball)}`,
+    root,
+    'isolated strict consumer (out-of-repo, bundler + node16)',
+  )
+
   // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
   //
   //     `./advanced` 是**承诺维护**的扩展契约（第三方 Provider / Driver / Handle / Plugin 适配点），

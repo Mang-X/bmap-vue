@@ -1,0 +1,192 @@
+/**
+ * 仓库外隔离严格消费门禁的自测（issue #158 工作包 A）
+ *
+ * 这道门禁守的是「发布 tarball 在**真实消费方**环境里能被严格编译」。真实编译由
+ * `pnpm verify:package` 在 CI 里跑（它要 `pnpm build:package` 出 `dist/` 再 pack，
+ * 而 `dist/` 正是 `export-surface-freeze` / `core-surface` / `doc-props-gate` 等
+ * **并行**读的对象 —— 本目录下 `dts-strict-gate.test.ts` 已经记着同一个坑）。
+ *
+ * 这里守的是判据本身没被改空。三件事：
+ *
+ * 1. **接线**：`verify:package` 真的调了隔离脚本，且把 tarball 作为显式输入传下去。
+ *    「写了但没跑」是新增门禁最典型的失效方式，`check:dts-strict` 的自测里记着同一条。
+ * 2. **隔离是真的**：临时目录里手写的 install 根清单**不得**出现 library 依赖 ——
+ *    只要写了 `"@mangax/bmap-vue": "file:…"` 之类的条目，装出来的包就可能不是命令行
+ *    给的那一个，「验的是哪一个包」立刻说不清。
+ * 3. **两档都在，且判据支点没被改**：`bundler` 与 `node16` 必须都在名单里，且两份
+ *    tsconfig 都是 `skipLibCheck: false` + `strict: true`。少一档 / 放宽 skipLibCheck
+ *    都会让「严格消费」这件事不再成立，而**没有任何别的东西会红**。
+ *
+ * 判据读的是源码文本（与 `dts-strict-gate.test.ts` 同一手法）：这些文件的**内容**
+ * 就是判据的定义。
+ */
+import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
+
+const ROOT = resolve(import.meta.dirname, "../..");
+const SCRIPT = resolve(ROOT, "scripts/consumer-isolated-strict.mts");
+const VERIFY = resolve(ROOT, "scripts/verify-package.mts");
+const STRICT_DIR = resolve(ROOT, "fixtures/consumer/strict");
+
+function read(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+describe("隔离严格消费：接线", () => {
+  it("verify:package 调的是同一个实现，不在原文件里复刻安装 + tsc", () => {
+    const source = read(VERIFY);
+    expect(source, "verify-package.mts 没有调用隔离严格消费脚本").toContain(
+      "consumer-isolated-strict.mts",
+    );
+    // 判据是「谁真正跑 tsc」：隔离项目里的 tsc 由隔离脚本启动。
+    // verify-package 自己那份 `npx vue-tsc` 跑在 workspace 成员 fixture 里，是另一条判据，
+    // 不能拿它冒充隔离验证。
+    expect(source, "隔离脚本没有被当作独立进程调用").toMatch(
+      /node --experimental-strip-types[^\n]*consumer-isolated-strict\.mts/,
+    );
+  });
+
+  it("tarball 是**显式输入**，不是脚本自己去 .artifacts 里猜", () => {
+    const source = read(SCRIPT);
+    // 缺参数必须失败（而不是回落到「目录里最后一个 tgz」——那正是
+    // `isOwnTarball` 的文档注释里记着的「验了旧包」失效模式）。
+    expect(source, "隔离脚本没有要求显式传入 tarball").toMatch(
+      /process\.argv\[2\][\s\S]{0,400}用法：/,
+    );
+    expect(source, "隔离脚本里出现了 .artifacts 的 tarball 目录扫描").not.toMatch(
+      /readdirSync\([^)]*artifacts/,
+    );
+    // verify-package 侧必须把它传下去：脚本路径与 tarball 都要出现，且 tarball
+    // 走的是 `JSON.stringify(tarball)`（路径里有空格时裸拼会裂成两个参数）。
+    //
+    // 判据刻意用**字面 token**而不是正则：定界符是 `}`，在正则里要写成 `\}`，
+    // 而 JS 字符串里再写一层转义就多了一层「反斜杠 vs 字符」的对齐风险 ——
+    // `dts-strict-gate.test.ts` 里那条恒绿的反漂移判据正是这么翻车的（#188 评审 P2）。
+    const verifySource = read(VERIFY);
+    expect(
+      verifySource.includes("consumer-isolated-strict.mts'))} ${JSON.stringify(tarball)}"),
+      "verify-package 调用隔离脚本时没有以 JSON.stringify(tarball) 传入选定的 tarball",
+    ).toBe(true);
+  });
+
+  it("CI 的 package job 仍然只经 verify:package 这一个入口", () => {
+    // 工作包 E 的判据：「CI 和本地同一入口，不复制另一套 shell runner」。
+    // 这里只钉住**没有**在 workflow 里另起一份隔离安装 + tsc。
+    const workflow = readWorkflow("quality.yml");
+    const block = stepBlockContaining(workflow, "verify:package");
+    expect(block.length, "CI 里找不到 verify:package 这一步").toBeGreaterThan(0);
+    expect(workflow, "CI 里出现了消费脚本的第二处调用（应当只经 verify:package）").not.toContain(
+      "consumer-isolated-strict.mts",
+    );
+  });
+});
+
+describe("隔离严格消费：隔离是真的", () => {
+  it("临时项目的 install 根清单不写 library 依赖", () => {
+    const source = read(SCRIPT);
+    // 手写清单里只允许出现 vue 与 typescript；包本身只能来自命令行给的 tarball。
+    const manifestBlock = /const manifest: InstallManifest = \{([\s\S]*?)\n {2}\};/.exec(source)?.[1];
+    expect(manifestBlock, "读不到隔离项目的手写清单 —— 判据没有着力点").toBeTruthy();
+    expect(manifestBlock!).not.toMatch(/@mangax\/bmap-vue/);
+    expect(manifestBlock!).toContain("dependencies: { vue }");
+    // 反向：tarball 必须真的出现在 npm install 的参数里。
+    expect(source, "npm install 没有装命令行给的 tarball").toMatch(
+      /run\("npm", \["install",[^\]]*tarball\]/,
+    );
+  });
+
+  it("爬升路径与工作区成员两件事都判（隔离失效的两个方向）", () => {
+    const source = read(SCRIPT);
+    expect(source, "没有判「到磁盘根之间存在 node_modules」").toContain(
+      "assertNoAncestorNodeModules",
+    );
+    expect(source, "没有判「临时项目是 pnpm 工作区成员」").toContain("assertNotWorkspaceMember");
+    // 注册的 marker 必须包含 workspace 与 lockfile 两种形态。
+    expect(source).toContain("pnpm-workspace.yaml");
+    expect(source).toContain("pnpm-lock.yaml");
+  });
+
+  it("装出来的树必须能被证明来自 tarball（解析位置 + 无官方类型包）", () => {
+    const source = read(SCRIPT);
+    expect(source, "没有断言包解析在本项目 node_modules 内").toMatch(
+      /解析到了本项目之外/,
+    );
+    // 官方类型包在隔离项目里出现 = 公共声明泄漏 `BMap.*` 会被悄悄接住。
+    expect(source, "没有断言 @baidumap/jsapi-v4-types 缺席").toContain(
+      "@baidumap/jsapi-v4-types",
+    );
+    // symlink（macOS /tmp → /private/tmp）会让上面那条**假红**：假红与假绿一样
+    // 让门禁失去意义，所以比较必须走真实路径。
+    expect(source, "解析位置比较没有做 realpath 规范化").toContain("realpathSync");
+  });
+
+  it("npm 缓存不落在仓库外（EPERM 会让门禁以与改动无关的原因失败）", () => {
+    const source = read(SCRIPT);
+    expect(source, "没有把 npm 缓存放进仓库内").toContain("npm_config_cache");
+  });
+});
+
+describe("隔离严格消费：两档编译与判据支点", () => {
+  it("bundler 与 node16 两档都在名单里", () => {
+    const source = read(SCRIPT);
+    const targets = /const TARGETS = \[([\s\S]*?)\] as const;/.exec(source)?.[1];
+    expect(targets, "读不到 TARGETS —— 判据没有着力点").toBeTruthy();
+    expect(targets!, '缺少 bundler 档').toContain('"tsconfig.json"');
+    expect(targets!, '缺少 node16 档').toContain('"tsconfig.node16.json"');
+    // 非目标：不增加未承诺的 CJS / Node10 支持。
+    expect(targets!, "出现了本库未承诺的 CJS / Node10 档").not.toMatch(/CommonJs|Node10/i);
+  });
+
+  it("两档都要求 skipLibCheck: false —— 改成 true 就不再是严格消费", () => {
+    // 与 `check-dts-strict.mts` 同一条判据，此处按**源码支点**再钉一次：
+    // 隔离脚本必须在运行时读到并确认这两个值，而不是「相信配置文件」。
+    const source = read(SCRIPT);
+    expect(source, "隔离脚本没有在运行时确认 skipLibCheck").toMatch(
+      /options\.skipLibCheck !== false/,
+    );
+    expect(source, "隔离脚本没有在运行时确认 strict").toMatch(/options\.strict !== true/);
+  });
+
+  it.each(["tsconfig.json", "tsconfig.node16.json"])(
+    "fixtures/consumer/strict/%s 是严格配置",
+    (file) => {
+      const path = resolve(STRICT_DIR, file);
+      expect(existsSync(path), `缺少判据输入：${path}`).toBe(true);
+      const options = (
+        JSON.parse(read(path)) as { compilerOptions: Record<string, unknown> }
+      ).compilerOptions;
+      expect(options.skipLibCheck, `${file} 关掉了 skipLibCheck 就没有严格消费`).toBe(false);
+      expect(options.strict, `${file} 必须开 strict`).toBe(true);
+      expect(options.noEmit, `${file} 不应产出文件`).toBe(true);
+    },
+  );
+
+  it("node16 档真的是 node16（两份配置只在模块系统上不同）", () => {
+    const bundler = JSON.parse(read(resolve(STRICT_DIR, "tsconfig.json"))) as {
+      compilerOptions: Record<string, unknown>;
+    };
+    const node16 = JSON.parse(read(resolve(STRICT_DIR, "tsconfig.node16.json"))) as {
+      compilerOptions: Record<string, unknown>;
+    };
+    expect(bundler.compilerOptions.moduleResolution).toBe("bundler");
+    expect(node16.compilerOptions.moduleResolution).toBe("Node16");
+    expect(node16.compilerOptions.module).toBe("Node16");
+    // 除模块系统与解释性字段外，其余选项必须一致 —— 否则两档比的就不是同一件事。
+    const strip = (options: Record<string, unknown>): Record<string, unknown> => {
+      const { module, moduleResolution, ...rest } = options;
+      void module;
+      void moduleResolution;
+      return rest;
+    };
+    expect(strip(node16.compilerOptions)).toEqual(strip(bundler.compilerOptions));
+  });
+
+  it("两档编译的是同一份探针（不是各自一份）", () => {
+    for (const file of ["tsconfig.json", "tsconfig.node16.json"]) {
+      const raw = JSON.parse(read(resolve(STRICT_DIR, file))) as { include?: string[] };
+      expect(raw.include, `${file} 的输入不是共享的那份探针`).toEqual(["probe.ts"]);
+    }
+  });
+});
