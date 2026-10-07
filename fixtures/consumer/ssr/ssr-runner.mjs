@@ -75,6 +75,13 @@ if (mode === "instrument") {
       },
     });
   }
+  // 自检：记账器**真的在记**（读一次 `window` 必须留下记录），否则「访问 0 次」可能只是
+  // 没装成功。自检发生在基线之前，清掉记录后不影响增量。
+  void globalThis.window;
+  if (accesses[0] !== "window") {
+    throw new Error("ssr-runner: 记账 getter 没有生效 —— instrument 模式的读数不可信");
+  }
+  accesses.length = 0;
 }
 
 await import("vue");
@@ -99,6 +106,13 @@ const compiled = compileScript(descriptor, { id: "ssr-consumer", inlineTemplate:
 const compiledPath = resolve(dir, ".ssr-app.generated.mjs");
 writeFileSync(compiledPath, compiled.content);
 
+// 「真实 SFC」这件事**由解析事实报告**，不由扫源码判断：`descriptor.template` 是不是存在，
+// 是 `@vue/compiler-sfc` 自己说的。判据侧据此断言，不必读 fixture 的文本。
+const sfc = {
+  path: "ssr/App.vue",
+  hasTemplate: descriptor.template !== null && descriptor.template !== undefined,
+};
+
 // import 阶段：`@mangax/bmap-vue` 与它的依赖（含 `@vueuse/core`）在这里第一次求值。
 const App = (await import(pathToFileURL(compiledPath).href)).default;
 const importPhase = accesses.slice(baseline);
@@ -110,7 +124,7 @@ const renderPhase = accesses.slice(afterImport);
 console.log(
   JSON.stringify({
     mode,
-    sfc: "ssr/App.vue",
+    sfc,
     versions: {
       vue: versionOf("vue"),
       // 显式声明的 @vue/server-renderer 与 @vue/compiler-sfc 必须与 vue 同版本：

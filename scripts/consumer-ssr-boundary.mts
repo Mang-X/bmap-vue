@@ -32,6 +32,8 @@ export interface SsrEnvironment {
 
 export interface SsrReport {
   readonly mode: "bare" | "instrument";
+  /** 被测 SFC 的解析事实（来自 `@vue/compiler-sfc` 的 descriptor，不是扫 fixture 源码）。 */
+  readonly sfc: { readonly path: string; readonly hasTemplate: boolean };
   readonly versions: SsrVersions;
   readonly environmentBefore: SsrEnvironment;
   readonly environmentAfter: SsrEnvironment;
@@ -83,6 +85,14 @@ function assertEnvironment(environment: SsrEnvironment, when: string): void {
 }
 
 function assertRenderedOutput(report: SsrReport): void {
+  // 「真实 SFC」的判据落在**解析事实**上：换掉 fixture 的内容（例如改成只有 script、用
+  // `h()` 手搓）时 `descriptor.template` 会消失，这里就会红 —— 不需要去读 fixture 的文本。
+  if (!report.sfc.hasTemplate) {
+    throw new Error(
+      `[consumer-ssr] 被测组件不是「真实 SFC」：${report.sfc.path} 解析后没有 <template> —— ` +
+        `工作包 B 要验的是经真实 SFC 编译的模板渲染，不是手搓渲染函数。`,
+    );
+  }
   for (const marker of ["bmap-container", "bmap-canvas-host"]) {
     if (!report.html.includes(marker)) {
       throw new Error(
