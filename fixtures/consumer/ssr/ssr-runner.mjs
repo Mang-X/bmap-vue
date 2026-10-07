@@ -1,29 +1,35 @@
 /**
  * SSR 消费者 runner（issue #158 工作包 B）
  *
- * 在**纯 Node（无 happy-dom / jsdom）**里：用 `@vue/compiler-sfc` 真实编译 `ssr/App.vue`，
- * 执行编译产物，再用 `renderToString` 渲染 `<Map>`。判据本身在
- * `scripts/consumer-ssr-boundary.mts`（由 `scripts/consumer-ssr.mts` 读这里的 JSON 报告后执行），
- * 本文件只负责**取证**，不自己下结论。
+ * 用 `@vue/compiler-sfc` 真实编译 `ssr/App.vue`，执行编译产物，再 `renderToString` 渲染
+ * 含 `<Map>` 的组件。判据在 `scripts/consumer-ssr-boundary.mts`（由 `scripts/consumer-ssr.mts`
+ * 读这里的 JSON 报告后执行），本文件只负责**取证**，不自己下结论。
  *
- * ## 为什么要装 DOM 访问记账器
+ * ## 为什么要跑两遍（`bare` / `instrument`）
  *
- * 「无 DOM」不能只靠「没报错」：`typeof window` 这类守卫本身就要求 `window` 存在（只是为
- * `undefined`）。所以这里把 `document` / `window` 换成会记账的访问器（`navigator` 见下，
- * Node 自带，不记账），再对**增量**下断言 —— 「入口与渲染不碰 DOM」因此是可被证伪的结论。
+ * 「真实纯 Node 能渲染」与「没有 DOM 访问」是两个结论，取证方式互相冲突，必须分开：
  *
- * 记账必须扣掉基线：Vue 自己在 `createSSRApp` 时会探 `window.__VUE_DEVTOOLS_GLOBAL_HOOK__`，
- * 那是上游行为。基线用**一次最小 SSR 渲染**把这条路径先走掉（只 import `vue` 不够 ——
- * devtools hook 在应用创建时才读），于是本库自己的增量是干净的 0。
+ * - `bare`：**一个全局都不注入**。这才忠实于真实消费者 —— `'window' in globalThis`
+ *   与 `Object.hasOwn(globalThis, 'window')` 都必须为 `false`。注入 getter 之后这两条会
+ *   变成 `true`，语义就不再是纯 Node，靠「读取值仍是 undefined」区分不出来。
+ * - `instrument`：把 `document` / `window` 换成会记账的访问器，只用来**统计访问**。
+ *   注入发生在取证环境之后，所以它不影响 `bare` 那一遍的可信度。
  *
- * ## 为什么先 import 官方 loader
+ * 两遍跑在**两个独立进程**里：同一进程先注入再删除也救不回 `bare` —— module cache 已经
+ * 热了，`bmap-vue`（及其依赖）的模块求值不会再发生，恰恰把要证的那一段吞掉。
  *
- * 报告要证明「服务端没有加载 SDK」：渲染后读 `@baidumap/jsapi-loader` 的 `getStatus()`，
- * 必须仍是 `notload`。在基线**之前** import 它，是为了把它的模块求值从「本库增量」里排除 ——
- * 它的无 DOM 契约另有门禁（`tests/behavior/official-packages-ssr.test.ts`）。
+ * ## 为什么两遍都不预加载 `@vueuse/core`
+ *
+ * `Map.vue -> useMapSuspension.ts -> @vueuse/core` 是**真实 import closure**。预加载会把它的
+ * 模块求值副作用吞进 module cache：将来它在求值期新增 DOM 访问，后续 `bmap-vue` 的 import
+ * 也不会再触发，增量仍是 0。所以让它随真实消费链首次加载，并由 `instrument` 那一遍按
+ * **阶段**（import / render）分别记账。
+ *
+ * 官方 loader 是唯一在基线之前 import 的包：报告要读它的 `getStatus()` 证明「服务端没有加载
+ * SDK」，而它的无 DOM 契约另有门禁（`tests/behavior/official-packages-ssr.test.ts`）。
  *
  * 用法（由 `scripts/consumer-ssr.mts` 调用，cwd 必须是装好依赖的消费 fixture）：
- *   node ssr/ssr-runner.mjs [sfcPath]
+ *   node ssr/ssr-runner.mjs <bare|instrument> [sfcPath]
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -32,43 +38,54 @@ import { pathToFileURL } from "node:url";
 
 const dir = process.cwd();
 const require = createRequire(import.meta.url);
-const sfcPath = process.argv[2] ? resolve(process.argv[2]) : resolve(dir, "ssr/App.vue");
+const mode = process.argv[2] ?? "bare";
+if (mode !== "bare" && mode !== "instrument") {
+  throw new Error(`ssr-runner: 未知模式 ${mode}（只认 bare / instrument）`);
+}
+const sfcPath = process.argv[3] ? resolve(process.argv[3]) : resolve(dir, "ssr/App.vue");
 
 /** 读装出来的包版本：直接读 `node_modules` 下的 manifest，不赌 `exports` 里有 `./package.json`。 */
 const versionOf = (pkg) =>
   JSON.parse(readFileSync(resolve(dir, "node_modules", pkg, "package.json"), "utf8")).version;
 
-// 先取证「环境里真的没有 DOM」，再装访问器 —— 装完之后 `typeof window` 就成了 undefined，
-// 那一步就再也分不出「本来就没有」与「访问器返回 undefined」。
-//
-// 只看 `window` / `document`，**不看 `navigator`**：Node 21+ 自带 Web 标准的 `navigator`
-// 全局，它的存在不是 DOM 证据；本库若读它也不构成「要求浏览器」。浏览器 DOM 的硬信号是
-// `window` / `document` 这两个。
-const environment = {
-  hasWindow: typeof globalThis.window !== "undefined",
-  hasDocument: typeof globalThis.document !== "undefined",
-};
+/**
+ * 环境的**全部**证据面：只报 `typeof` 会漏掉「属性被注入但值为 undefined」。
+ * `in` 与 `Object.hasOwn` 一起看，才能区分「真的没有这个全局」与「有但读出来是 undefined」。
+ */
+const captureEnvironment = () => ({
+  typeofWindow: typeof globalThis.window,
+  typeofDocument: typeof globalThis.document,
+  windowIn: "window" in globalThis,
+  documentIn: "document" in globalThis,
+  windowOwn: Object.hasOwn(globalThis, "window"),
+  documentOwn: Object.hasOwn(globalThis, "document"),
+});
 
-const domAccesses = [];
-for (const name of ["document", "window"]) {
-  Object.defineProperty(globalThis, name, {
-    configurable: true,
-    get() {
-      domAccesses.push(name);
-      return undefined;
-    },
-  });
+const environmentBefore = captureEnvironment();
+
+// 访问记账只在 instrument 模式装；bare 模式**一个全局都不碰**。
+const accesses = [];
+if (mode === "instrument") {
+  for (const name of ["document", "window"]) {
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      get() {
+        accesses.push(name);
+        return undefined;
+      },
+    });
+  }
 }
 
 await import("vue");
-await import("@vueuse/core");
-const loader = await import("@baidumap/jsapi-loader");
 const { createSSRApp, h } = await import("vue");
 const { renderToString } = await import("vue/server-renderer");
+const loader = await import("@baidumap/jsapi-loader");
 
-// 基线：把 Vue 自己在 SSR 下会做的探测（devtools hook 等）先发生掉。
+// 基线：把 Vue 自己在 SSR 下会做的探测（devtools hook 等）先发生掉。devtools hook 在
+// `createSSRApp` 时才读，所以只 import `vue` 不够，基线必须包含一次最小渲染。
 await renderToString(createSSRApp({ render: () => h("div") }));
-const baseline = domAccesses.length;
+const baseline = accesses.length;
 
 const { parse, compileScript } = require("@vue/compiler-sfc");
 const source = readFileSync(sfcPath, "utf8");
@@ -81,12 +98,18 @@ if (errors.length > 0) {
 const compiled = compileScript(descriptor, { id: "ssr-consumer", inlineTemplate: true });
 const compiledPath = resolve(dir, ".ssr-app.generated.mjs");
 writeFileSync(compiledPath, compiled.content);
+
+// import 阶段：`@mangax/bmap-vue` 与它的依赖（含 `@vueuse/core`）在这里第一次求值。
 const App = (await import(pathToFileURL(compiledPath).href)).default;
+const importPhase = accesses.slice(baseline);
+const afterImport = accesses.length;
 
 const html = await renderToString(createSSRApp(App));
+const renderPhase = accesses.slice(afterImport);
 
 console.log(
   JSON.stringify({
+    mode,
     sfc: "ssr/App.vue",
     versions: {
       vue: versionOf("vue"),
@@ -95,8 +118,10 @@ console.log(
       serverRenderer: versionOf("@vue/server-renderer"),
       compilerSfc: versionOf("@vue/compiler-sfc"),
     },
-    environment,
-    domAccessDelta: domAccesses.slice(baseline),
+    environmentBefore,
+    environmentAfter: captureEnvironment(),
+    importPhase,
+    renderPhase,
     html,
     loaderStatus: loader.getStatus(),
     bmapGlobal: typeof globalThis.BMap,

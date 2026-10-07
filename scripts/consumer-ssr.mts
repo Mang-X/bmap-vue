@@ -6,9 +6,14 @@
  * 执行编译产物，`renderToString` 渲染含 `<Map>` 的组件，然后按
  * `consumer-ssr-boundary.mts` 的判据核对取证报告。
  *
- * 判据本体在 boundary 模块（可喂合成报告做行为级反例）；这里只负责**跑真实进程**并把
- * 它的 JSON 报告交给判据。runner 在消费 fixture 里（`ssr/ssr-runner.mjs`），所以它读到的
- * 是**装出来的 tarball**与那份 fixture 的依赖，而不是仓库源码。
+ * 跑**两个独立进程**，各自取证一件事（理由见 runner 文件头）：
+ *
+ * 1. `bare` —— 一个全局都不注入，忠实于真实消费者；证明「真实纯 Node 下能渲染」；
+ * 2. `instrument` —— 注入记账 getter；证明「`document` 一次没读、渲染阶段零访问」。
+ *
+ * 判据本体在 boundary 模块（可喂合成报告做行为级反例）；这里只负责跑真实进程并把 JSON
+ * 报告交给判据。runner 在消费 fixture 里（`ssr/ssr-runner.mjs`），所以它读到的是
+ * **装出来的 tarball**与那份 fixture 的依赖，而不是仓库源码。
  *
  * 用法（由 `pnpm verify:package` 调用，参数是装好依赖的消费 fixture 目录）：
  *   node --experimental-strip-types scripts/consumer-ssr.mts .artifacts/fixture-consumer
@@ -16,7 +21,34 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { assertSsrReport, type SsrReport } from "./consumer-ssr-boundary.mts";
+import {
+  assertBareSsrReport,
+  assertInstrumentedSsrReport,
+  type SsrReport,
+} from "./consumer-ssr-boundary.mts";
+
+const MODES = ["bare", "instrument"] as const;
+
+function runMode(cwd: string, runner: string, mode: (typeof MODES)[number]): SsrReport {
+  console.log(`[consumer-ssr] ${mode} 取证：通过 node 子进程渲染真实 SFC`);
+  const output = execFileSync(process.execPath, [runner, mode], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, CI: "1" },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const lastLine = output.trim().split("\n").at(-1);
+  if (lastLine === undefined || lastLine.length === 0) {
+    throw new Error(`[consumer-ssr] ${mode} runner 没有输出 JSON 报告。`);
+  }
+  try {
+    return JSON.parse(lastLine) as SsrReport;
+  } catch {
+    throw new Error(
+      `[consumer-ssr] ${mode} runner 的最后一行不是 JSON：\n${lastLine.slice(0, 500)}`,
+    );
+  }
+}
 
 function main(): void {
   const fixtureDir = process.argv[2];
@@ -40,28 +72,22 @@ function main(): void {
     );
   }
 
-  const output = execFileSync(process.execPath, [runner], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, CI: "1" },
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  const lastLine = output.trim().split("\n").at(-1);
-  if (lastLine === undefined || lastLine.length === 0) {
-    throw new Error("[consumer-ssr] runner 没有输出 JSON 报告。");
+  const reports = new Map<(typeof MODES)[number], SsrReport>();
+  for (const mode of MODES) {
+    reports.set(mode, runMode(cwd, runner, mode));
   }
-  let report: SsrReport;
-  try {
-    report = JSON.parse(lastLine) as SsrReport;
-  } catch {
-    throw new Error(`[consumer-ssr] runner 的最后一行不是 JSON：\n${lastLine.slice(0, 500)}`);
-  }
+  const bare = reports.get("bare")!;
+  const instrumented = reports.get("instrument")!;
 
-  assertSsrReport(report);
+  assertBareSsrReport(bare);
+  assertInstrumentedSsrReport(instrumented);
   console.log(
-    `[consumer-ssr] OK：真实 SFC 在纯 Node 里 renderToString —— 容器 shell + idle/no-map，` +
-      `DOM 访问增量 0，loader=${report.loaderStatus}，全局 BMap=undefined；` +
-      `vue/server-renderer/compiler-sfc = ${report.versions.vue}`,
+    `[consumer-ssr] OK：真实 SFC 在纯 Node 里 renderToString —— 环境无 window/document` +
+      `（typeof + in + hasOwn 三条都干净），容器 shell + idle/no-map，` +
+      `document 读取 0 次、渲染阶段 DOM 访问 0 次，` +
+      `import 阶段守卫式读取 = ${JSON.stringify(instrumented.importPhase)}，` +
+      `loader=${bare.loaderStatus}，全局 BMap=undefined；` +
+      `vue/server-renderer/compiler-sfc = ${bare.versions.vue}`,
   );
 }
 

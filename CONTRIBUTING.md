@@ -113,13 +113,15 @@ tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的两个消�
 （`scripts/consumer-isolated-strict.mts`，工作包 A）与**纯 Node 的真实 SFC SSR**
 （`scripts/consumer-ssr.mts`，工作包 B）。
 
-SSR 那一步在**没有 happy-dom / jsdom**的 Node 子进程里，用 `@vue/compiler-sfc` 编译
-`fixtures/consumer/ssr/App.vue`（真 SFC，不是 `h(Map)`），执行后用 `renderToString` 渲染，
-核对：环境无 `window` / `document`、`vue` 与显式声明的 `@vue/server-renderer` /
-`@vue/compiler-sfc` 同版本、容器 shell 与 `status=idle` / `map === null`、DOM 访问增量为 0、
-官方 loader 仍 `notload` 且无全局 `BMap`。`./ui-kit` 的无 DOM import 检查**不在**这一步：
-本库包装入口可加载、上游 `@baidumap/jsapi-ui-kit` 无 DOM 时求值即崩，是两条不同结论，
-上游那一条在 `tests/behavior/ui-kit-ssr.test.ts`。
+SSR 那一步跑在**两个独立 Node 进程**里（没有 happy-dom / jsdom），用 `@vue/compiler-sfc`
+编译 `fixtures/consumer/ssr/App.vue`（真 SFC，不是 `h(Map)`）后 `renderToString`：一遍
+`bare` 不注入任何全局（环境判据看 `typeof` + `in` + `hasOwn` 六条证据，证明这是真实纯 Node），
+一遍 `instrument` 注入记账 getter（`document` 读取必须为 0、渲染阶段访问必须为 0，import
+阶段允许 `@vueuse/core` 的守卫式 `typeof window`）。核对：`vue` 与显式声明的
+`@vue/server-renderer` / `@vue/compiler-sfc` 同版本、容器 shell 与 `status=idle` /
+`map === null`、官方 loader 仍 `notload` 且无全局 `BMap`。`./ui-kit` 的无 DOM import 检查
+**不在**这一步：本库包装入口可加载、上游 `@baidumap/jsapi-ui-kit` 无 DOM 时求值即崩，
+是两条不同结论，上游那一条在 `tests/behavior/ui-kit-ssr.test.ts`。
 
 隔离那一步可以单独跑（tarball 是**显式参数**，脚本不会自己去 `.artifacts` 里挑）：
 
