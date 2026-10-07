@@ -39,6 +39,16 @@ export interface Mismatch {
 
 const read = (p: string): string => readFileSync(p, "utf8");
 
+/**
+ * 真正**发到 npm** 的那一份 README（`packages/bmap-vue/package.json#files` 里的
+ * `README.md`），相对仓库根。
+ *
+ * 单独抽成常量而不是内联路径：它是 #190 的核心事实——「入包 README」与「根 README」
+ * 是**两份不同的文件**，前者才是读者第一眼看到的。写成两处字面量，将来改名 / 改 `files`
+ * 时就会悄悄漏掉一份（那正是本票的原始缺陷形状）。
+ */
+export const PACKAGE_README = "packages/bmap-vue/README.md";
+
 /** 从 dist 声明面收集每个组件的 prop 名（组件名 → prop 集合）。 */
 export function loadPropSurface(): Map<string, Set<string>> {
   const indexDts = join(DIST, "index.d.ts");
@@ -142,10 +152,31 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+/**
+ * 被扫描的文件 / 目录（绝对路径）。
+ *
+ * 抽成函数而不是 `main()` 里的局部数组：用例要能**直接断言扫描面**，而不是靠
+ * 「把路径删了测试仍然绿」这种假证据（#190 评审 P1——原先那条用例只是读了
+ * 入包 README 的文本，即使 `PACKAGE_README` 从扫描面里被删掉它照样通过）。
+ *
+ * `PACKAGE_README` 必须在列（#190）：它是**真正发到 npm 的那一份**，而此前只扫根
+ * README。于是同一个错误示例（`<BMapProvider :ak>`——Provider 没有这个 prop）在根
+ * README 里被改正、在入包 README 里静静留着，门禁全程绿。判据是「文档写的与本库声明
+ * 面是否一致」，与那段文档长在哪一份文件里无关。
+ */
+export function scanTargets(): string[] {
+  return [
+    join(ROOT, "docs/zh-CN"),
+    join(ROOT, "docs/examples"),
+    join(ROOT, "README.md"),
+    join(ROOT, PACKAGE_README),
+  ];
+}
+
 function main(): number {
   const surface = loadPropSurface();
   // 示例目录也要扫：真正会被 docs:typecheck 编译、也最容易被手写错的地方。
-  const roots = [join(ROOT, "docs/zh-CN"), join(ROOT, "docs/examples"), join(ROOT, "README.md")];
+  const roots = scanTargets();
   const files = roots.flatMap((r) => (statSync(r).isDirectory() ? collectFiles(r) : [r]));
 
   const problems: Mismatch[] = [];
