@@ -6,6 +6,18 @@
 import { Autocomplete } from '@mangax/bmap-vue'
 ```
 
+::: warning 需要单独引入样式
+输入框的定位（`position: absolute`）、层级（`z-index: 10`）与外观来自一个独立的样式子路径，
+用包管理器安装时**按需引入一次**：
+
+```ts
+import '@mangax/bmap-vue/styles.css'
+```
+
+不引入它组件仍能工作，但输入框会回到默认文档流里的普通输入框外观（`width: 100%` 撑满、
+没有浮在地图上的定位）。CDN 场景用 `<link>` 引入同一个文件，见[安装](../../guide/installation)。
+:::
+
 :::tip
 目前这个组件所使用的百度地图 api 还不稳定 (在写这个组件时候深有体会)
 :::

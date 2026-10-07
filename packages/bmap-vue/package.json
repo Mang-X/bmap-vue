@@ -23,7 +23,9 @@
   "bugs": {
     "url": "https://github.com/Mang-X/bmap-vue/issues"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/bmap-vue.css"
+  ],
   "files": [
     "dist",
     "dist/bmap-vue.css",
@@ -67,6 +69,7 @@
     "./volar": {
       "types": "./volar.d.ts"
     },
+    "./styles.css": "./dist/bmap-vue.css",
     "./package.json": "./package.json"
   },
   "peerDependencies": {

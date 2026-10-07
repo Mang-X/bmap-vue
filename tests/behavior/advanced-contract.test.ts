@@ -280,12 +280,37 @@ describe("产物层：只用 ./advanced 的消费者不会拉进组件与官方 
     expect(markersIn(rootClosure).length, "根入口闭包里应当有组件标记").toBeGreaterThan(0);
   });
 
-  it("包级前提：sideEffects 为 false、且 ./advanced 子路径确实指向 ESM 产物", () => {
+  it("包级前提：JS 全部无副作用、且 ./advanced 子路径确实指向 ESM 产物", () => {
     const pkg = JSON.parse(readFileSync(resolve(PKG_DIR, "package.json"), "utf8")) as {
-      sideEffects?: boolean;
+      sideEffects?: boolean | string[];
       exports?: Record<string, { import?: string; types?: string }>;
     };
-    expect(pkg.sideEffects, "sideEffects 不是 false：tree-shaking 承诺不成立").toBe(false);
+    // 包级前提：承诺是「**JavaScript** 可 tree-shake」，而 `sideEffects` 的判据是
+    // 「打包器会不会把这条 import 当死代码删掉」。#189 起它不再是 `false`：样式出口
+    // 必须与 JS 分开声明，否则 `import '<pkg>/styles.css'` 与 `import '<pkg>'` 落在
+    // 同一档里 —— 要么样式声明缺位，要么把 JS 也标成有副作用。
+    //
+    // 判据因此从「恰好等于 false」收窄成「`false`，或一个**只含 CSS** 的列表」。
+    // 写成 `true`、或列表里混进任何 JS，都让下面那条「只用 ./advanced 不拉进组件」的
+    // 承诺失去包级前提。
+    //
+    // ⚠️ 实测边界（Vite 7 / 8）：`sideEffects: false` 下 Vite **仍然**产出该 CSS，
+    // 因为本库没有任何 JS import 它、而 Vite 不摇掉入口自身的副作用 import。所以这条
+    // 断言守的是**声明面的一致性**，不是「Vite 会因此改判」——后者没有证据。
+    const sideEffects = pkg.sideEffects;
+    if (sideEffects === false) {
+      // 合法：没有样式出口的包形态。
+    } else {
+      expect(
+        sideEffects,
+        `sideEffects 既不是 false 也不是数组：${JSON.stringify(sideEffects)} —— ` +
+          `true 会让全库失去 tree-shaking，而下面那条闭包断言依赖它能摇掉组件`,
+      ).toBeInstanceOf(Array);
+      expect(sideEffects as string[], "sideEffects 列表为空：等价于没有声明").not.toEqual([]);
+      for (const entry of sideEffects as string[]) {
+        expect(entry, `sideEffects 里的 ${entry} 不是 CSS：JS 必须保持可 tree-shake`).toMatch(/\.css$/);
+      }
+    }
     expect(pkg.exports?.["./advanced"]?.import).toBe("./dist/advanced.mjs");
     expect(pkg.exports?.["./advanced"]?.types).toBe("./dist/advanced.d.ts");
     // 正证：dist 里确实有这两个产物（防止上面两条只是在对着一份被改坏的 exports 断言）

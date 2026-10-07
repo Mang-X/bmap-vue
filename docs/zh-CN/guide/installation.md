@@ -38,6 +38,17 @@ pnpm add @baidumap/jsapi-ui-kit
 
 :::
 
+### 样式
+
+`<Autocomplete>` 的输入框样式单独发布为一个样式子路径，按需引入一次即可（通常放在入口文件）：
+
+```ts
+import "@mangax/bmap-vue/styles.css";
+```
+
+只有用到 `<Autocomplete>` 时才需要它。样式入口**不注入**任何运行时逻辑，按上面的写法引入是纯 CSS，
+不影响 SSR；不引入它时其余组件照常工作，但 `<Autocomplete>` 的输入框会退回浏览器默认外观。
+
 ## 浏览器直接引入
 
 通过 CDN 引入时用全局变量 `BMapVue`（IIFE 产物，已把 Vue 作为外部依赖）。
@@ -76,16 +87,11 @@ pnpm add @baidumap/jsapi-ui-kit
 
 :::
 
-::: warning `dist/bmap-vue.css` 目前只对 CDN 场景有效
-它是 `<Autocomplete>` 输入框的样式（ESM 与 IIFE 两档构建都会产出这个文件）。
-
-**包管理器安装时无法引用它**：`package.json#exports` 没有开放 CSS 子路径，
-`import 'bmap-vue/dist/bmap-vue.css'` 会被 Node 判为 `ERR_PACKAGE_PATH_NOT_EXPORTED`。
-因此它目前只服务于上面 `<script>` 直引的 CDN 场景——用 `<link>` 引入是可行的。
-
-该文件已在 `package.json#files` 里**按文件名显式声明**（`pnpm check:pack-contents` 会断言这一点），
-所以它不是构建副产物。是否要让它对包管理器消费方也可引用（新增 `./styles.css` 出口），
-会改动 #44 冻结的出口面，属独立决策。
+::: tip CDN 与包管理器用的是同一份样式
+`<link>` 指向的 `dist/bmap-vue.css` 与包管理器引入的
+`@mangax/bmap-vue/styles.css` 是**同一个文件**（`exports["./styles.css"]` 直接指向它），
+不存在两套样式。该文件在 `package.json#files` 里按文件名显式声明，且 `sideEffects`
+只声明了它一个——其余 JavaScript 仍可被 tree-shake。
 :::
 
 ## 下一步

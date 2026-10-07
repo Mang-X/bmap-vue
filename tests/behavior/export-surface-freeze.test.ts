@@ -298,13 +298,24 @@ describe("1.0 导出面冻结", () => {
     expect(entries.length, "exports 里一个子路径都没有").toBeGreaterThan(0);
     for (const entry of entries) {
       const spec = pkg.exports![entry];
-      const importPath = typeof spec === "string" ? spec : spec.import;
+      const importPath = typeof spec === "string" ? undefined : spec.import;
       const typesPath = typeof spec === "string" ? undefined : spec.types;
+      const barePath = typeof spec === "string" ? spec : undefined;
 
       if (importPath) {
         // 有运行时出口的：必须指向 dist 产物。
         expect(importPath, `${entry} 的 import 出口不在 dist`).toMatch(/^\.\/dist\/.+\.mjs$/);
         expect(existsSync(resolve(PKG_DIR, importPath)), `产物缺失: ${importPath}`).toBe(true);
+      } else if (barePath) {
+        // **裸字符串出口**：`"./styles.css": "./dist/bmap-vue.css"`（#189）与
+        // `"./package.json": "./package.json"` 走这支。它既不是 JS 运行时出口，也不该
+        // 配一份**假声明文件**，所以判据只能是「指向包内 dist 的真实资源」。
+        //
+        // 刻意**不**放宽成「裸字符串一律跳过」：那样 `"./whatever": "./dist/nope.css"`
+        // 也会静默通过。判据要求解析到 dist 下的非 JS 资源，且**按扩展名**限定为
+        // `.css` —— 这条出口面只开放样式一个（#189 的边界：「只开放一个必要子路径」）。
+        expect(barePath, `${entry} 的裸字符串出口不在 dist`).toMatch(/^\.\/dist\/.+\.css$/);
+        expect(existsSync(resolve(PKG_DIR, barePath)), `产物缺失: ${barePath}`).toBe(true);
       } else {
         // **纯 `types` 出口**：没有运行时产物是合法的——`./volar` 就是这种（它是一份
         // 供 IDE 读的 GlobalComponents 声明，运行时不 import 它）。但它仍必须指向一个
@@ -331,7 +342,7 @@ describe("1.0 导出面冻结", () => {
     }
     // 正证：**有运行时产物的**入口数与 dist 里的 .d.ts 数量一致 ——
     // 只断言「声明的都在」会漏掉「多构建了一个入口」。
-    // 纯 types 出口（./volar）不在 dist 里，因此不计入。
+    // 纯 types 出口（./volar）与纯资源出口（./styles.css）都不在 dist 的 .d.ts 里，不计入。
     // 与 `core-surface.test.ts` 共用同一判据：两处各数一次，早晚有一处忘记排除
     // 纯 types 出口（`./volar` 不在 dist 里）。
     const dtsCount = readdirSync(DIST).filter((f) => f.endsWith(".d.ts")).length;

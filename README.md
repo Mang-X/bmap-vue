@@ -55,6 +55,12 @@ yarn add @mangax/bmap-vue
 npm install @mangax/bmap-vue
 ```
 
+`<Autocomplete>` 的输入框样式单独发布，用到时按需引入一次（其余组件不需要）：
+
+```ts
+import '@mangax/bmap-vue/styles.css'
+```
+
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Play%20Button.png" alt="Play Button" width="25" height="25" /> 用法
 
 ```vue
