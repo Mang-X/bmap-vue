@@ -40,8 +40,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, parse, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertNoAncestorNodeModules, assertOutsidePnpmWorkspace } from "./consumer-isolation.mts";
 import { releaseIdentityOf } from "./release-identity.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -106,34 +107,6 @@ function realpath(path: string): string {
     return realpathSync(path);
   } catch {
     return path;
-  }
-}
-
-/** 从磁盘根到 `dir` 之间，`node_modules` 一律不许出现（爬升路径必须无货可提）。 */
-function assertNoAncestorNodeModules(dir: string): void {
-  const found: string[] = [];
-  let current = parse(dir).root;
-  for (const segment of dir.slice(parse(dir).root.length).split(/[\\/]/).filter(Boolean)) {
-    current = resolve(current, segment);
-    if (existsSync(resolve(current, "node_modules"))) found.push(resolve(current, "node_modules"));
-  }
-  // 安装根**自己**的 `node_modules` 不算异常（那是我们要装出来的东西）。
-  const offending = found.filter((p) => p !== resolve(dir, "node_modules"));
-  if (offending.length > 0) {
-    throw new Error(
-      `[consumer-isolated] 验收项目到磁盘根之间有 node_modules，依赖提升会补足包缺失：\n  - ${offending.join("\n  - ")}\n` +
-        `  这条判据的存在意义就是「包缺件必须红」——选一个不在依赖树内部的临时目录。`,
-    );
-  }
-}
-
-function assertNotWorkspaceMember(dir: string): void {
-  for (const marker of ["pnpm-workspace.yaml", "pnpm-lock.yaml", "pnpm-workspace.yml"]) {
-    if (existsSync(resolve(dir, marker))) {
-      throw new Error(
-        `[consumer-isolated] 验收项目里有 ${marker} —— 它是工作区成员，pnpm 的解析会补足遗漏依赖。`,
-      );
-    }
   }
 }
 
@@ -251,7 +224,7 @@ function prepareIsolatedProject(tarball: string, packageName: string): string {
   };
   writeFileSync(resolve(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   copyStrictInputs(dir);
-  assertNotWorkspaceMember(dir);
+  assertOutsidePnpmWorkspace(dir);
   assertNoAncestorNodeModules(dir);
 
   // 本地 tarball 走 file: 说明符：装出来的就是**这个**包，不会去 registry 找同名包。

@@ -21,8 +21,13 @@
  * 就是判据的定义。
  */
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import {
+  assertNoAncestorNodeModules,
+  assertOutsidePnpmWorkspace,
+} from "../../scripts/consumer-isolation.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -97,15 +102,97 @@ describe("隔离严格消费：隔离是真的", () => {
     );
   });
 
-  it("爬升路径与工作区成员两件事都判（隔离失效的两个方向）", () => {
+  it("爬升路径与工作区两件事都判（隔离失效的两个方向）", () => {
     const source = read(SCRIPT);
     expect(source, "没有判「到磁盘根之间存在 node_modules」").toContain(
       "assertNoAncestorNodeModules",
     );
-    expect(source, "没有判「临时项目是 pnpm 工作区成员」").toContain("assertNotWorkspaceMember");
-    // 注册的 marker 必须包含 workspace 与 lockfile 两种形态。
-    expect(source).toContain("pnpm-workspace.yaml");
-    expect(source).toContain("pnpm-lock.yaml");
+    expect(source, "没有判「临时项目位于 pnpm 工作区内」").toContain("assertOutsidePnpmWorkspace");
+    // 两个判据都来自 boundary 模块（用例在下面按**行为**验它们，不是查源码文本）。
+    expect(source, "隔离判据没有从 boundary 模块导入").toContain("./consumer-isolation.mts");
+  });
+
+  /**
+   * 判据要按**行为**验，不是「源码里出现了某个名字」（#205 评审 P2）。
+   *
+   * 上一版 `assertNotWorkspaceMember()` 只查临时项目**自己**目录里的 marker，而
+   * `pnpm-workspace.yaml` 基本只在 workspace 根（祖先）。于是「`TMPDIR=<repo>/.tmp`
+   * 时新目录仍在 workspace 里」这一形态会被放过，而断言仍然报通过 —— 文本存在性检查
+   * 对这个实现错误是全绿的。下面在**真实合成目录树**上跑反例。
+   */
+  it("workspace marker 在**祖先**目录时必须判红（按行为验，不是查文本）", () => {
+    const base = mkdtempSync(resolve(tmpdir(), "bmap-vue-isolation-probe-"));
+    try {
+      writeFileSync(resolve(base, "pnpm-workspace.yaml"), "packages: []\n");
+      const nested = resolve(base, "nested", "deeper");
+      mkdirSync(nested, { recursive: true });
+      expect(
+        () => assertOutsidePnpmWorkspace(nested),
+        "workspace 根在祖先时没有判红 —— 这正是 #205 评审 P2 指出的形态",
+      ).toThrow(/workspace/);
+      // 对照：同一棵树的 workspace 根**自己**也应判红（含 `dir` 本身）。
+      expect(() => assertOutsidePnpmWorkspace(base)).toThrow(/workspace/);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("祖先里有 node_modules 时必须判红，且 `dir` 自己的不算（按行为验）", () => {
+    const base = mkdtempSync(resolve(tmpdir(), "bmap-vue-isolation-probe-"));
+    try {
+      const project = resolve(base, "project");
+      mkdirSync(resolve(base, "node_modules"), { recursive: true });
+      mkdirSync(resolve(project, "node_modules"), { recursive: true });
+      expect(
+        () => assertNoAncestorNodeModules(project),
+        "祖先 `node_modules` 没有判红 —— 向上查找会补足包缺失",
+      ).toThrow(/node_modules/);
+      // `dir` 自己的 `node_modules` 是**我们装出来的那棵树**，不该判红。
+      const clean = mkdtempSync(resolve(tmpdir(), "bmap-vue-isolation-probe-"));
+      try {
+        mkdirSync(resolve(clean, "node_modules"), { recursive: true });
+        expect(() => assertNoAncestorNodeModules(clean)).not.toThrow();
+      } finally {
+        rmSync(clean, { recursive: true, force: true });
+      }
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("干净目录两件事都不判红（避免判据恒假）", () => {
+    const base = mkdtempSync(resolve(tmpdir(), "bmap-vue-isolation-probe-"));
+    try {
+      const nested = resolve(base, "a", "b");
+      mkdirSync(nested, { recursive: true });
+      expect(() => assertOutsidePnpmWorkspace(nested)).not.toThrow();
+      expect(() => assertNoAncestorNodeModules(nested)).not.toThrow();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * `pnpm-lock.yaml` **不单独**作为「位于 workspace 内」的判据。
+   *
+   * 一个普通（非 workspace）pnpm 项目同样有 lockfile，把它并进 workspace 判据会在
+   * 「临时目录恰好在某个普通 pnpm 项目下」时**假红**。真正该管的那种情况由
+   * `assertNoAncestorNodeModules` 覆盖（向上查找会命中那个项目的 `node_modules`）。
+   * 这条把取舍钉住：将来有人「顺手」把 lockfile 加进 marker 列表，会红。
+   */
+  it("只有 pnpm-lock.yaml 的祖先不算 workspace（避免假红）", () => {
+    const base = mkdtempSync(resolve(tmpdir(), "bmap-vue-isolation-probe-"));
+    try {
+      writeFileSync(resolve(base, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      const nested = resolve(base, "nested");
+      mkdirSync(nested, { recursive: true });
+      expect(
+        () => assertOutsidePnpmWorkspace(nested),
+        "普通 pnpm 项目的 lockfile 被当成了 workspace 根 —— 这是假红",
+      ).not.toThrow();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 
   it("装出来的树必须能被证明来自 tarball（解析位置 + 无官方类型包）", () => {
