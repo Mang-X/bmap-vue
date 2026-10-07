@@ -108,10 +108,18 @@ pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced
 ```
 
 `pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
-ESM import、`./styles.css` 与深路径反向、文档示例、Volar 类型解析、`./advanced` 契约探针、
-tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的两个消费档：**仓库外隔离项目**的严格类型
-（`scripts/consumer-isolated-strict.mts`，工作包 A）与**纯 Node 的真实 SFC SSR**
-（`scripts/consumer-ssr.mts`，工作包 B）。
+ESM import、`./styles.css` 与深路径反向、文档示例、Volar 真实模板类型、`./advanced` 契约探针、
+tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档：**仓库外隔离项目**的严格类型
+（`scripts/consumer-isolated-strict.mts`，工作包 A）、**纯 Node 的真实 SFC SSR**
+（`scripts/consumer-ssr.mts`，工作包 B）与**无本地 import 的真实 .vue 模板 Volar 类型**
+（`scripts/consumer-volar.mts`，工作包 C）。
+
+Volar 那一步按安装文档只配置 `compilerOptions.types: ["<pkg>/volar"]`，用 `vue-tsc` 跑两份
+**只有 template 的 SFC**（结构上不可能有本地 import）：`positive.vue` 必须退出码 0 且零诊断，
+`negative.vue` 必须非零退出并命中 `TS2322`（已有 prop 值类型写错，消息带该 prop 值的字面量
+sentinel）与 `TS2339`（slot 成员不存在，消息点名该成员）。判据落在反证上 —— 组件若被当成
+未知元素、或 props/slots 退化成 `any`，反证就不会报错；退出码也判，因为有些编译失败
+（如 `TS18003`）没有文件位置，只解析诊断会把它当成「零诊断」。
 
 SSR 那一步跑在**两个独立 Node 进程**里（没有 happy-dom / jsdom），用 `@vue/compiler-sfc`
 编译 `fixtures/consumer/ssr/App.vue`（真 SFC，不是 `h(Map)`）后 `renderToString`：一遍

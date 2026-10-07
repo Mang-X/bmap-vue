@@ -1,0 +1,14 @@
+{
+  "_comment": "Volar 反证（#158 工作包 C）：与 tsconfig.json 同一套配置，只换输入文件为 negative.vue。两份配置必须保持一致，否则「正证过、反证也过」可能只是配置不同造成的。",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bmap-vue/volar"]
+  },
+  "include": ["negative.vue"]
+}
