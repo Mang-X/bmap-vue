@@ -1,0 +1,14 @@
+{
+  "_comment": "node16 ESM 档的严格消费编译（#158 工作包 A）。与同目录 `tsconfig.json` 的差别只有模块系统：那一份是 `bundler`，本份是 `module/moduleResolution: Node16`——`exports` 的 `types` 条件在 node16 下走另一条解析路径，只测 bundler 会漏掉「声明只在 bundler 下可解析」这一类缺陷。判据同样要求 `skipLibCheck: false`：`.d.ts` 内部必须真的被检查。刻意不引入 CJS/Node10 支持——本库只承诺 ESM。",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "strict": true,
+    "skipLibCheck": false,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["probe.ts"]
+}

@@ -31,7 +31,12 @@ import type * as AllComponents from "@mangax/bmap-vue";
 // 漏掉它等于那一整个出口没人验。实测它的 `ae-forgotten-export` 与根入口不同
 // （160 vs 192），正是因为两者打包出的声明面并不相同。
 import { Map as MapFromComponents } from "@mangax/bmap-vue/components";
-import { useMapContext } from "@mangax/bmap-vue/composables";
+import {
+  useControllableState,
+  useMapContext,
+  useMapEvent,
+  type MapEventHandler,
+} from "@mangax/bmap-vue/composables";
 import { resolvePluginDefinition } from "@mangax/bmap-vue/plugins";
 import { BMapResolver } from "@mangax/bmap-vue/resolver";
 import { unwrapRaw } from "@mangax/bmap-vue/advanced";
@@ -434,6 +439,47 @@ const _providerSlotHasNoStringIndex: HasStringIndex<
   DefaultSlotPropsOf<AnySlotsOf<typeof AllComponents.BMapProvider>>
 > = false;
 
+// ── 关键泛型：类型参数必须真的从调用点传导，而不是在声明里被擦成 any ────────────
+//
+// 与上面那组插槽断言互补：那组守**组件**声明面，这组守**泛型**声明面。「能 import」
+// 证明不了泛型参数还在：退化成 `any` 时任何调用点都「合法」，消费方一点检查都拿不到。
+// 所以正反两侧都写 —— 正证类型传导到返回 / 回调，反证错误用法必须报错
+// （`@ts-expect-error` 没命中时 tsc 报 TS2578，门禁转红）。
+
+interface ProbeGeoPoint {
+  lng: number;
+  lat: number;
+}
+
+// useControllableState<T>：T 传导到 value / internal / initial。
+const _controllable = useControllableState<ProbeGeoPoint>({
+  name: "center",
+  value: () => undefined,
+  fallback: { lng: 0, lat: 0 },
+  equals: (a, b) => a.lng === b.lng && a.lat === b.lat,
+});
+const _controllableValue: ProbeGeoPoint = _controllable.value.value;
+const _controllableInternal: ProbeGeoPoint = _controllable.internal.value;
+const _controllableInitial: ProbeGeoPoint = _controllable.initial;
+// ❌ 泛型被擦成 `any` 时这行「恒合法」⇒ 这条断言静默失效；正常时它必须报错。
+// @ts-expect-error ProbeGeoPoint 没有 zoom 成员
+const _controllableBadVariance: { zoom: number } = _controllable.value.value;
+
+// useMapEvent<K>：事件名 K 决定回调载荷（表内精确、表外退化为公共底座，但都不是 any）。
+const _clickHandler: MapEventHandler<"click"> = (event) => {
+  const _lng: number = event.point.lng;
+  void _lng;
+};
+useMapEvent("click", _clickHandler);
+useMapEvent("click", (event) => {
+  // @ts-expect-error click 载荷是 MapPointerEvent，没有这个成员
+  void event.totallyNotARealMember;
+});
+useMapEvent("definitely-not-a-real-event", (event) => {
+  // @ts-expect-error 表外名字退化为公共底座 MapEventPayload，同样没有这个成员（不是 any）
+  void event.totallyNotARealMember;
+});
+
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
 export {
@@ -451,6 +497,12 @@ export {
   _providerSlotMembersAreTyped,
   _markerSlotHasNoStringIndex,
   _providerSlotHasNoStringIndex,
+  _controllable,
+  _controllableValue,
+  _controllableInternal,
+  _controllableInitial,
+  _controllableBadVariance,
+  _clickHandler,
   _slotHasNoIndex_BMapProvider,
   _slotHasNoIndex_Map,
   _slotHasNoIndex_Marker,
