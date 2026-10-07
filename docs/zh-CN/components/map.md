@@ -219,7 +219,7 @@ map/theme2
 | 构造期 | enableRotate | 允许地图旋转（官方 `MapOptions.enableRotate`，官方默认 `true`）。官方**实例方法名与本 prop 同名**——与上面那一族「构造期名 ≠ 实例方法名」不同 | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableRotate()` / `disableRotate()` |
 | 构造期 | enableRotateGestures | 允许通过**手势**旋转地图（官方 `MapOptions.enableRotateGestures`，官方默认 `true`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableRotateGestures()` / `disableRotateGestures()` |
 | 构造期 | enableTilt | 允许地图倾斜（官方 `MapOptions.enableTilt`，官方默认 `true`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableTilt()` / `disableTilt()` |
-| 构造期 | enableTiltGestures | 允许通过**手势**倾斜地图（官方 `MapOptions.enableTiltGestures`，官方默认 `true`）。⚠️ 官方**只有构造选项**，没有配对的实例方法——见下方注 | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后**仅当运行时真有** `enableTiltGestures()` / `disableTiltGestures()` 时才调用，否则告警一次并忽略 |
+| 构造期 | enableTiltGestures | 允许通过**手势**倾斜地图（官方 `MapOptions.enableTiltGestures`，官方默认 `true`）。⚠️ 官方**只有构造选项**，没有配对的实例方法——见下方注 | `boolean` | -（不传 = 官方默认 **`true`**） | 显式传值时**进构造选项**（唯一可靠入口）；建图后仅当运行时真有 `enableTiltGestures()` / `disableTiltGestures()` 时才再调用一次 |
 | 就地更新 | enableAutoResize | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | 库内尺寸观察器 → `checkResize()` |
 | 废弃（无效果） | enableTraffic | **不生效**。4.0 的路况收敛成独立图层，`<Map>` 自身没有这个开关——留着它只是为了让旧代码不报类型错。路况请用 `<TrafficLayer>`，见[图层总览](./layer/index.md) | `boolean` | `false` | 无（静默空操作） |
 ::: tip 四个交互 prop 的名字为什么和官方「实例方法」不一样
@@ -243,15 +243,17 @@ map/theme2
 改名问题。`enableTiltGestures` 是这批里唯一的例外：官方 `MapOptions` 声明了它，但 4.0 API 参考
 与 `core/Map.d.ts` 的**实例方法**表里都**没有** `enableTiltGestures()` / `disableTiltGestures()`
 （对比 `enableRotateGestures()` 是有的），且没有配对的 `disable*`。本库因此**只保证构造期语义**：
-建图后若运行时真有这对方法就调用，没有就**告警一次**并忽略——不臆造声明、不靠异常控制流，
-也不假装成功。需要「建图即开」时以构造选项为准。
+显式传值时它进构造选项（`enableTiltGestures` 唯一的可靠入口，`<Map>` 自动投影）；
+建图后若运行时真有这对方法就再调用一次，没有就**告警一次**并忽略——不臆造声明、不靠异常控制流，
+也不假装成功。**挂载后再改这个 prop 在真实 4.0 上不会生效**（没有可调用的实例方法），
+要改请重建地图。
 :::
 
-::: tip 十个交互 prop「不传」= 不表态，用官方自己的默认
-十个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
+::: tip 十二个交互 prop「不传」= 不表态，用官方自己的默认
+十二个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
 `enableWheelZoom: false`（滚轮那条见下方单独的告警框）。
 
-其余**八个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
+其余**十个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
 `enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom` / `enableRotate` /
 `enableRotateGestures` / `enableTilt` / `enableTiltGestures`）在
 `withDefaults` 里**显式钉成 `undefined`**——这不是偷懒，而是必需的：Vue 会把缺省 `Boolean`

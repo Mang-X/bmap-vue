@@ -704,6 +704,19 @@ const currentRuntime = new MapRuntime({
     ...(props.preserveDrawingBuffer !== undefined
       ? { preserveDrawingBuffer: props.preserveDrawingBuffer }
       : {}),
+    // `enableTiltGestures` 必须**同时**走构造选项，不能只靠 `syncEnableProps` 的实例方法路径。
+    //
+    // 官方 4.0 API 参考与 `core/Map.d.ts` 的实例方法表里都**没有**
+    // `enableTiltGestures()` / `disableTiltGestures()`（只有构造选项，且无配对 `disable*`）。
+    // 因此若只走 `assemble() -> syncEnableProps()`：构造期没收到 `false` ⇒ SDK 用官方默认
+    // `true`；随后 `disableTiltGestures()` 找不到方法 ⇒ 告警一次并忽略 ⇒ **手势倾斜仍是开**。
+    // 也就是说最关键的 `false` 场景在真实 SDK 上会失效，与 prop 声明的「构造期语义」相反。
+    //
+    // 口径同 `preserveDrawingBuffer`：**显式传值才投影**。没传时不写这个键，交给官方默认
+    // （`@default true`），避免把 Vue 编出来的 `false` 冒充「用户显式关闭」。
+    ...(props.enableTiltGestures !== undefined
+      ? { enableTiltGestures: props.enableTiltGestures }
+      : {}),
   },
   // 建图前的最后一个等待点（#29 三轮复审 P1）：容器尺寸是异步得到的，「启动之前判一次」有
   // TOCTOU 窗口（慢网络下 SDK 加载完成时容器可能已被收起），因此判据要放在 create() 之前。
@@ -1319,6 +1332,13 @@ watch(
     props.enableContinuousZoom,
     props.fixCenterWhenResize,
     props.enableTraffic,
+    // #167 第一批：新增的四个交互 prop 必须在 watch source 里，否则首次 `assemble()` 之后
+    // 父组件再切换它们不会触发 `syncEnableProps()`——前三项在真实 SDK 有实例方法，
+    // 本可响应式更新，漏在 watch 外等于「prop 只生效一次」。
+    props.enableRotate,
+    props.enableRotateGestures,
+    props.enableTilt,
+    props.enableTiltGestures,
   ],
   () => {
     const ready = runtimeRef.value;

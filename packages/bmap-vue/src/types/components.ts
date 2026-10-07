@@ -221,9 +221,14 @@ export interface MapProps {
    * `enableTiltGestures()` / `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的），
    * 只有**构造选项**这一个入口，且没有配对的 `disable*`。
    *
-   * 因此它的落地**不保证生效**：`MapDriver.setInteraction` 先做结构性存在判断，运行时真有这对
-   * 方法就调用，没有就**告警一次**（不臆造类型声明、不靠异常控制流，更不假装成功）。
-   * 需要「建图即开」时以构造选项为准，见 `driver/jsapi-v4/map.ts` 的 `INTERACTION_METHODS` 注释。
+   * 因此它是**构造期选项**：显式传值时 `<Map>` 把它投影进建图 `options`（唯一可靠入口）。
+   * 光靠 `assemble()` 之后的 `syncEnableProps()` 不够——真实 SDK 上构造期收不到 `false`、
+   * 事后又没有 `disableTiltGestures()` 可调，最关键的 `false` 场景会被整条丢掉。
+   * 建图之后 `setInteraction` 仍会做一次结构性存在判断：运行时真有这对方法就再调用一次，
+   * 没有就**告警一次**（不臆造类型声明、不靠异常控制流，更不假装成功）。
+   *
+   * **挂载后再改这个 prop 在真实 4.0 上不会生效**（没有可调用的实例方法）；要改请重建地图。
+   * 见 `driver/jsapi-v4/map.ts` 的 `INTERACTION_METHODS` 注释。
    */
   enableTiltGestures?: boolean;
   /** 容器尺寸变化时自动重设尺寸(v2 兼容) */

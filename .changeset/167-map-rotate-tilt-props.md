@@ -24,6 +24,9 @@ Vue 把它收进 `$attrs` 落到根元素上变成两个 DOM attribute，而 SDK
 
 这是 `scripts/check-interaction-props.mts` 覆盖的范围，该门禁现在管 **12** 个 prop。
 
+四个 prop 也都进了「props 变化时同步 SDK」的 watch source——漏掉它们的话，首次 `assemble()`
+之后父级再切换 prop 不会触发同步，前三项本可响应式更新却会「只生效一次」。
+
 ## `enableTiltGestures` 与另外三个**不同**
 
 `enableRotate` / `enableRotateGestures` / `enableTilt` 三对是官方声明的**实例方法**，
@@ -34,8 +37,16 @@ Vue 把它收进 `$attrs` 落到根元素上变成两个 DOM attribute，而 SDK
 `core/Map.d.ts` 的**实例方法**表里都**没有** `enableTiltGestures()` /
 `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的），且没有配对的 `disable*`。
 
-本库因此**只承诺构造期语义**，不臆造实例方法：`setInteraction` 先做结构性存在判断，
-运行时真有这对方法就调用，没有就**告警一次**并忽略。既不假装成功，也不靠异常控制流。
+因此它**不能只走实例方法路径**：显式传值时 `<Map>` 把它**投影进建图 `options`**
+（唯一可靠入口，口径同 `preserveDrawingBuffer`——不传就不写这个键）。否则真实 SDK 上
+构造期收不到 `false`、事后又没有 `disableTiltGestures()` 可调，最关键的 `false` 场景
+会被整条丢掉（手势倾斜仍是开）。
+
+建图之后 `setInteraction` 仍做结构性存在判断：运行时真有这对方法就再调用一次，
+没有就**告警一次**并忽略。既不假装成功，也不靠异常控制流。
+
+**挂载后再改 `enableTiltGestures` 在真实 4.0 上不会生效**（没有可调用的实例方法），
+要改请重建地图。
 
 ## 与 #167 的关系
 

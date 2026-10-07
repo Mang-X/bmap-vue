@@ -1028,8 +1028,12 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
         if (!warnedInteractionMethods.has(method)) {
           warnedInteractionMethods.add(method);
           logger.warn(
-            `MapDriver.setInteraction: 当前 SDK 没有 ${method}()（官方 4.0 参考与类型包未声明该成员），` +
-              `本次 "${name}" 开关被忽略；若构造期支持，请在 options 中显式传入`,
+            // 措辞刻意**不**说「开关被忽略、请改传 options」（#198 评审 P1）：`<Map>` 已把
+            // `enableTiltGestures` 投影进构造选项，用户很可能**已经**传了它。此时构造期那个值
+            // 已经生效，本条只表示「实例方法这条更新路径走不通」——说成「被忽略」是假话，
+            // 还会让用户去做一件他已经做过的事。
+            `MapDriver.setInteraction: 当前 SDK 没有 ${method}()，无法在实例上更新 "${name}"；` +
+              `该开关若只在官方 MapOptions 中声明，构造期选项才是它唯一的入口`,
           );
         }
         return;

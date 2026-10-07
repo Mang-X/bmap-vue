@@ -411,4 +411,81 @@ describe("Map：交互开关的「未传」不表态（#179）", () => {
     wrapper.unmount();
     await settle();
   });
+
+  /**
+   * #198 评审 P1-1：`enableTiltGestures` 的**唯一可靠入口是构造选项**。
+   *
+   * 上面那条用例用的是 Fake SDK 自带的实例方法，恰好把「构造期没收到值」这个缺口遮住了——
+   * 评审指出：真实 4.0 没有 `enableTiltGestures()` / `disableTiltGestures()`，于是
+   * `<Map :enable-tilt-gestures="false">` 会构造期用官方默认 `true`、事后调不到方法 ⇒
+   * 最终手势倾斜**仍是开**。所以要**主动摆出真实成员面**（把这对方法遮蔽掉）再断言。
+   */
+  it("#167：SDK 没有 enable/disableTiltGestures 时，false 仍必须进构造选项（评审 P1）", async () => {
+    // 用 `undefined` 影子遮蔽继承自 `FakeV4Map.prototype` 的那对方法，摆出真实 4.0 的成员面。
+    // 为什么不做 `delete`：方法是定义在**基类**原型上的，删基类会漏到同进程的其它用例；
+    // 而 `MapClass` 是每个 `createFakeBMapV4()` 现建的子类，在它自己的原型上放影子只影响本 harness。
+    Object.defineProperty(fake.namespace.Map.prototype, "enableTiltGestures", { value: undefined });
+    Object.defineProperty(fake.namespace.Map.prototype, "disableTiltGestures", { value: undefined });
+
+    const wrapper = await mountMap({ enableTiltGestures: false });
+
+    // 判据落在**建图选项**上，不落在实例方法调用上：只靠 `syncEnableProps` 的实例方法路径时，
+    // 这里根本没有 `enableTiltGestures` 这个键（= 缺口本身）。
+    expect(fake.createdMaps).toHaveLength(1);
+    expect(
+      fake.createdMaps[0]!.options.enableTiltGestures,
+      "构造选项实况：" + JSON.stringify(fake.createdMaps[0]!.options),
+    ).toBe(false);
+
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("#167：不传 enableTiltGestures 时不写进构造选项（不把 Vue 编的 false 当用户表态）", async () => {
+    const wrapper = await mountMap({});
+    // 反方向：`withDefaults` 里钉的 `undefined` 必须让这个键**整个不出现**，
+    // 否则「不传」会被投影成 `false`，把官方默认的手势倾斜静默关掉（#179 的同一类陷阱）。
+    expect(
+      Object.prototype.hasOwnProperty.call(fake.createdMaps[0]!.options, "enableTiltGestures"),
+    ).toBe(false);
+    wrapper.unmount();
+    await settle();
+  });
+
+  /**
+   * #198 评审 P1-2：新增的四个 prop 必须进 watch source。
+   *
+   * 首次 `assemble()` 之后父级再切换 prop，若不在 watch source 里就**不会**触发
+   * `syncEnableProps()`——前三项在真实 SDK 有实例方法，本可响应式更新，漏掉等于
+   * 「prop 只生效一次」。
+   *
+   * 这里直接挂 `Map`（而不是本 describe 的 `mountMap` 包装组件）：包装组件把 props 捕获在
+   * 闭包里，`setProps` 打不到 `Map` 上；`Map` 自己声明了 props，所以能真触发响应式更新。
+   */
+  it("#167：挂载后切换 rotate / rotateGestures / tilt 各下发一次（评审 P1）", async () => {
+    const wrapper = mount(Map, {
+      attachTo: harness.container(),
+      props: { provider: harness.provider() },
+    });
+    await settle();
+
+    // 逐项切换，用**前后差值**断言「每次切换恰好写一次」——不写死绝对值，
+    // 因为 `enableDragging` / `enableWheelZoom` 有库默认、每次 sync 都会再写一遍，
+    // 断言总数会把它们的次数混进来。
+    const writes = () => harness.interactionWrites();
+    const delta = async (prop: string, interaction: string, next: boolean) => {
+      const before = writes()[`enable${prop}`] ?? 0;
+      await wrapper.setProps({ [`enable${prop}`]: next });
+      await settle();
+      expect(writes()[`enable${prop}`], `${prop} 切换后应恰好下发一次`).toBe(before + 1);
+      expect(harness.interactions()[interaction]).toBe(next);
+    };
+
+    await delta("Rotate", "rotate", false);
+    await delta("RotateGestures", "rotateGestures", false);
+    await delta("Tilt", "tilt", false);
+
+    wrapper.unmount();
+    await settle();
+  });
 });
