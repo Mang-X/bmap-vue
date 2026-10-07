@@ -95,6 +95,28 @@ app.use(createBMapPlugin({ ak: '百度地图ak' }))
 `<Map>` 按以下顺序解析 SDK Client：显式 `client` prop > 显式 `definition` > 显式 `provider/ak` > 最近的 `<BMapProvider>` > `app.use(createBMapPlugin(...))` 默认定义。无任何定义时将报错，请至少提供一种。
 :::
 
+要给某棵子树一份**自己的**定义（而不是应用级默认），在 `<BMapProvider>` 上传 `provider` 与
+`loadOptions`（或整个 `definition`）。`loadOptions` 只在**同时**传了 `provider` 时被读取：
+
+```vue
+<template>
+  <BMapProvider :provider="provider" :load-options="loadOptions">
+    <Map :zoom="12">
+      <ZoomControl />
+    </Map>
+  </BMapProvider>
+</template>
+
+<script setup lang="ts">
+  import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
+  import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
+
+  const ak = '百度地图ak'
+  const provider = baiduJsapiV4Provider()
+  const loadOptions = { ak }
+</script>
+```
+
 ## 申请 ak 密钥
 
 在开始使用前，您还需在百度地图开发者后台申请百度地图 ak 密钥，然后在项目中[配置 ak 密钥](./config)后，才能正确的渲染地图。详细请阅读下面两个链接的内容：

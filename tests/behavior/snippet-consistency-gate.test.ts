@@ -155,6 +155,117 @@ import { unwrapRaw } from '@mangax/bmap-vue/advanced'
     expect(r.code, r.output).toBe(0);
     expect(r.output).toContain("unwrapRaw");
   });
+
+  it.runIf(hasDist)("代码块不自足（模板用了本库组件却没在本块 import）→ 必须红（#190 评审 P1）", () => {
+    // 复现评审在入包 README 第三段抓到的现场：模板用 `<Map>`，本块只导入
+    // `BMapProvider, ZoomControl`。`vue-tsc` 对未解析的**组件标签**退出码是 0
+    // （实测），所以只有这条静态判据能挡住它。
+    const notSelfContained = `\`\`\`vue
+<script setup>
+import { BMapProvider, ZoomControl } from '@mangax/bmap-vue'
+</script>
+<template>
+  <BMapProvider><Map :zoom="12"><ZoomControl /></Map></BMapProvider>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(notSelfContained, notSelfContained, notSelfContained)]);
+    expect(r.code, "模板用了未导入的 Map 必须失败").toBe(1);
+    expect(r.output).toContain("不自足");
+    expect(r.output).toContain("<Map>");
+  });
+
+  it.runIf(hasDist)("同块导入即绿（判据不是「凡用了 Map 就红」）", () => {
+    const selfContained = `\`\`\`vue
+<script setup>
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
+</script>
+<template>
+  <BMapProvider><Map :zoom="12"><ZoomControl /></Map></BMapProvider>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(selfContained, selfContained, selfContained)]);
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("自足");
+  });
+
+  it.runIf(hasDist)("跨块 import 不算数（每个块各自自足，不能靠别的块兜底）", () => {
+    // 第一块导入 `Map`，第二块只用不导——合并 fixture 曾让这种泄漏蒙混过关。
+    const leaked = `\`\`\`vue
+<script setup>
+import { Map } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>
+\`\`\`
+
+\`\`\`vue
+<script setup>
+import { Marker } from '@mangax/bmap-vue'
+</script>
+<template><Map><Marker /></Map></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(leaked, leaked, leaked)]);
+    expect(r.code, "第二块借第一块的 import 必须失败").toBe(1);
+    expect(r.output).toContain("第 2 个代码块");
+  });
+
+  it.runIf(hasDist)("原生标签与 VitePress 组件不参与自足判据（不产生噪音）", () => {
+    const nativeOnly = `\`\`\`vue
+<template>
+  <div><Badge text="tip" /><span>hi</span></div>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(nativeOnly, nativeOnly, nativeOnly)]);
+    // 没有本库组件 ⇒ 自足判据无话可说；但它也没有首图/形状，整体结果由既有判据决定。
+    expect(r.output).not.toContain("不自足");
+  });
+
+  it.runIf(hasDist)("`import type` 不产生运行时绑定 → 用它当组件必须红（二轮评审 P2）", () => {
+    const typeOnly = `\`\`\`vue
+<script setup>
+import type { Map } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(typeOnly, typeOnly, typeOnly)]);
+    expect(r.code, "type-only 导入不能让 <Map> 通过").toBe(1);
+    expect(r.output).toContain("不自足");
+    expect(r.output).toContain("<Map>");
+  });
+
+  it("别名要按**本地名**判：`Map as BMap` 用 <Map/> 红、用 <BMap/> 绿", async () => {
+    // 这条**单元级**验判据本身，不走整个门禁：整体门禁还有一层「标识符必须在发布声明面里」，
+    // 而别名 `BMap` 不是公开 API 名，直接跑会先在那层红掉（那是既有的、正确的行为）。
+    // 别名语义属于 `selfContainedBlocks()`，就在这里单独钉。
+    const mod = await import("../../scripts/check-snippet-consistency.mts");
+    const surface = new Set(["Map", "Marker"]);
+    const wrap = (body: string): string => `\`\`\`vue\n${body}\n\`\`\`\n`;
+
+    const aliased = wrap(`<script setup>
+import { Map as BMap } from '@mangax/bmap-vue'
+</script>
+<template><BMap /></template>`);
+    expect(mod.selfContainedBlocks(aliased, surface), "本地名 BMap 可用，应绿").toEqual([]);
+
+    const wrongAlias = wrap(`<script setup>
+import { Map as BMap } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>`);
+    expect(mod.selfContainedBlocks(wrongAlias, surface), "导出名 Map 本地不存在，应红").toEqual([
+      { block: 1, tag: "Map" },
+    ]);
+  });
+
+  it.runIf(hasDist)("内联 type 修饰符同样不算运行时绑定", () => {
+    const inlineType = `\`\`\`vue
+<script setup>
+import { type Map, Marker } from '@mangax/bmap-vue'
+</script>
+<template><Map /><Marker /></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(inlineType, inlineType, inlineType)]);
+    expect(r.code, "`{ type Map }` 里的 Map 不能当组件用").toBe(1);
+    expect(r.output).toContain("<Map>");
+  });
 });
 
 describe("check-snippet-consistency · 真实树", () => {

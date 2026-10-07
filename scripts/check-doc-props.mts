@@ -39,6 +39,16 @@ export interface Mismatch {
 
 const read = (p: string): string => readFileSync(p, "utf8");
 
+/**
+ * 真正**发到 npm** 的那一份 README（`packages/bmap-vue/package.json#files` 里的
+ * `README.md`），相对仓库根。
+ *
+ * 单独抽成常量而不是内联路径：它是 #190 的核心事实——「入包 README」与「根 README」
+ * 是**两份不同的文件**，前者才是读者第一眼看到的。写成两处字面量，将来改名 / 改 `files`
+ * 时就会悄悄漏掉一份（那正是本票的原始缺陷形状）。
+ */
+export const PACKAGE_README = "packages/bmap-vue/README.md";
+
 /** 从 dist 声明面收集每个组件的 prop 名（组件名 → prop 集合）。 */
 export function loadPropSurface(): Map<string, Set<string>> {
   const indexDts = join(DIST, "index.d.ts");
@@ -142,21 +152,61 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+/**
+ * 被扫描的文件 / 目录（绝对路径）。
+ *
+ * 抽成函数而不是 `main()` 里的局部数组：用例要能**直接断言扫描面**，而不是靠
+ * 「把路径删了测试仍然绿」这种假证据（#190 评审 P1——原先那条用例只是读了
+ * 入包 README 的文本，即使 `PACKAGE_README` 从扫描面里被删掉它照样通过）。
+ *
+ * `PACKAGE_README` 必须在列（#190）：它是**真正发到 npm 的那一份**，而此前只扫根
+ * README。于是同一个错误示例（`<BMapProvider :ak>`——Provider 没有这个 prop）在根
+ * README 里被改正、在入包 README 里静静留着，门禁全程绿。判据是「文档写的与本库声明
+ * 面是否一致」，与那段文档长在哪一份文件里无关。
+ */
+export function scanTargets(): string[] {
+  return [
+    join(ROOT, "docs/zh-CN"),
+    join(ROOT, "docs/examples"),
+    join(ROOT, "README.md"),
+    join(ROOT, PACKAGE_README),
+  ];
+}
+
 function main(): number {
+  // `--dir <path>`：把扫描基准换成夹具目录（同名相对路径）。
+  //
+  // **为什么要有**（#190 二轮评审 P1）：正/负例若靠「改仓库里真实的
+  // `packages/bmap-vue/README.md`、跑门禁、再改回来」，在 vitest 并行下就会和
+  // 别的读同一份文件的用例竞争（实测：注入窗口内 `check:snippet-consistency`
+  // 会因「代码块不自足」假红，算 `hasDist` 的那次 `runGate()` 也可能读到半写状态）。
+  // 有了 `--dir`，负例在**临时目录**里复现，不再碰任何被跟踪的文件。
+  //
+  // 注意它换的**不只是扫描面**：`ROOT` 也要跟着换（`scanTargets()` 与错误信息里的
+  // 相对路径都基于它），否则临时夹具里的文件会被拼成 `<真实ROOT>/<临时路径>`。
+  const dirFlag = process.argv.indexOf("--dir");
+  const dirRoot = dirFlag >= 0 ? process.argv[dirFlag + 1] : undefined;
+  if (dirFlag >= 0 && !dirRoot) {
+    console.error("--dir 需要一个路径参数");
+    return 2;
+  }
+
   const surface = loadPropSurface();
-  // 示例目录也要扫：真正会被 docs:typecheck 编译、也最容易被手写错的地方。
-  const roots = [join(ROOT, "docs/zh-CN"), join(ROOT, "docs/examples"), join(ROOT, "README.md")];
-  const files = roots.flatMap((r) => (statSync(r).isDirectory() ? collectFiles(r) : [r]));
+  const roots = dirRoot
+    ? scanTargets().map((p) => join(resolve(dirRoot), p.slice(ROOT.length + 1)))
+    : scanTargets();
+  const files = roots.flatMap((r) => (existsSync(r) && statSync(r).isDirectory() ? collectFiles(r) : [r]));
 
   const problems: Mismatch[] = [];
   let checked = 0;
   for (const file of files) {
+    if (!existsSync(file)) continue; // 夹具目录只需要放它要验的那几个文件
     for (const m of scanFile(file, read(file))) {
       const props = surface.get(m.component);
       if (!props) continue; // 组件没有对应 *Props：不是「prop 名对不上」，不在本题范围
       checked += 1;
       if (!props.has(m.prop) && !props.has(camel(m.prop))) {
-        problems.push({ ...m, file: file.replace(ROOT + "/", "") });
+        problems.push({ ...m, file: file.replace((dirRoot ?? ROOT) + "/", "") });
       }
     }
   }

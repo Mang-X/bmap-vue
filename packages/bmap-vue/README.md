@@ -41,12 +41,13 @@ const center = ref<Point>({ lng: 116.404, lat: 39.915 })
 </script>
 ```
 
-`ak` can be shared across subtrees. `<BMapProvider>` provides the Client context,
-and service composables work inside it without a `<Map>`.
+`ak` is passed once — on `<Map>` (above), or globally via
+`app.use(createBMapPlugin({ ak }))`. `<BMapProvider>` does **not** take an `ak` of its own;
+to give a subtree the app-wide default, pass nothing:
 
 ```vue
 <template>
-  <BMapProvider :ak="ak">
+  <BMapProvider>
     <Map :zoom="12">
       <ZoomControl />
     </Map>
@@ -58,13 +59,41 @@ import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 </script>
 ```
 
-To share one `ak` across a whole app, register the plugin once:
+`<BMapProvider>` provides the Client context to its subtree, so service composables work
+inside it without a `<Map>`. It does **not** take an `ak` of its own: to give a subtree an
+explicit definition, pass `provider` (with `loadOptions`) or a whole `definition`.
+
+```vue
+<template>
+  <BMapProvider :provider="provider" :load-options="loadOptions">
+    <Map :zoom="12">
+      <ZoomControl />
+    </Map>
+  </BMapProvider>
+</template>
+
+<script setup lang="ts">
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
+import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
+
+const ak = 'your Baidu Maps ak'
+const provider = baiduJsapiV4Provider()
+// `loadOptions` 只在**同时**传了 `provider` 时被读取
+const loadOptions = { ak }
+</script>
+```
+
+To share one `ak` across a whole app, register the plugin once (this snippet continues
+from the `<Map>` example above — `App` is your root component):
 
 ```ts
 import { createApp } from 'vue'
 import { createBMapPlugin } from '@mangax/bmap-vue'
+import App from './App.vue'
 
+const app = createApp(App)
 app.use(createBMapPlugin({ ak: 'your Baidu Maps ak' }))
+app.mount('#app')
 ```
 
 Standard UI (place search, result lists, pagination, route panels) is provided by

@@ -108,6 +108,28 @@ import { createBMapPlugin } from '@mangax/bmap-vue'
 app.use(createBMapPlugin({ ak: '你的百度地图 ak' }))
 ```
 
+要给某棵子树一份**自己的**定义（而不是应用级默认），传 `provider` 与 `loadOptions`
+（或整个 `definition`）。`loadOptions` 只在**同时**传了 `provider` 时被读取：
+
+```vue
+<template>
+  <BMapProvider :provider="provider" :load-options="loadOptions">
+    <Map :zoom="12">
+      <ZoomControl />
+    </Map>
+  </BMapProvider>
+</template>
+
+<script setup lang="ts">
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
+import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
+
+const ak = '你的百度地图 ak'
+const provider = baiduJsapiV4Provider()
+const loadOptions = { ak }
+</script>
+```
+
 地图 SDK 由本库默认通过官方 `@baidumap/jsapi-loader` 加载，不需要手动引脚本。
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Open%20Book.png" alt="Open Book" width="25" height="25" /> 文档
