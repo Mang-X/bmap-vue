@@ -50,15 +50,27 @@ npm README 的 Provider 示例修正 + 入包 README 纳入文档门禁（#190�
 
 ## 消费验证
 
-- `fixtures/consumer/src/npm-readme-examples.vue`：README 三段示例的消费方对照，由
-  `pnpm verify:package` 对**真实 tarball** 跑 `vue-tsc`。它挡的是 import 路径 / 变量 /
-  类型标注在发布产物上不成立（例如把只存在于 `./advanced` 的 `BMapLoadOptions` 写成从根入口导入）。
+- `fixtures/consumer/src/npm-readme/*.vue`：README 的**每个** `vue` 代码块一个独立 SFC
+  （`app.use` 那段单独放 `.ts`），由 `pnpm verify:package` 对**真实 tarball** 跑 `vue-tsc`。
+  刻意**不合并**成一个 SFC：合并即共享 `script` 作用域，后一段会继承前一段的 import，
+  把「这一段自己的脚本符号不完整」遮掉（评审 P1）。
   只做一处必然改写：包名 `@mangax/bmap-vue` → `bmap-vue`（`verify-package.mts` 在拷贝出来的
   副本里换回真实身份）。
 - `tests/behavior/npm-readme-provider-init.test.ts`：用 Fake v4 验**运行层**——干净应用
   （无任何隐藏默认定义）下 Provider / Map 的初始化路径，以及「无定义来源时必须明确报错」。
 
-⚠️ 实测记录：`vue-tsc` **挡不住** `<BMapProvider :ak>` 这类缺陷——未声明的 prop 落进 `$attrs`，
-Vue 不报错、退出码为 0。所以文本层的 `check:doc-props` 是这个缺陷的**主防线**，不是冗余。
+### 四层各挡什么（实测，别再指望错的那一层）
+
+| 层 | 落点 | 挡得住 | 挡不住 |
+| --- | --- | --- | --- |
+| 文本 · prop 名 | `check:doc-props` | 声明面里没有的 prop（`<BMapProvider :ak>`） | 模板用了没 import 的组件 |
+| 文本 · 自足性 | `check:snippet-consistency` 的 `selfContainedBlocks()` | 模板用了本库组件却没在**本块**import | 脚本符号写错 |
+| 类型 | 消费 fixture 的 `vue-tsc` | 脚本标识符未定义 / import 路径不存在 | **未解析的组件标签与未知 prop**（退出码 0） |
+| 运行 | `npm-readme-provider-init.test.ts` | 初始化路径跑不起来 | 文档与实现的措辞漂移 |
+
+⚠️ 关键实测：`vue-tsc` 对 `<DefinitelyNotARealComponent />` 这种未解析**组件标签**退出码是
+**0**（对未定义**脚本标识符**才报 `TS2304`、退出码 2）。所以「模板用了 `<Map>` 却漏 import」
+这一类，**唯一**有判别力的落点是文本层的 `selfContainedBlocks()`——把消费 fixture 拆成
+独立 SFC 只解决脚本符号那一半。
 
 来源、LICENSE / NOTICE / ACKNOWLEDGEMENTS 的引用原样保留。

@@ -115,7 +115,7 @@ app.use(createBMapPlugin({ ak: '你的百度地图 ak' }))
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, ZoomControl } from '@mangax/bmap-vue'
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
 
 const ak = '你的百度地图 ak'

@@ -155,6 +155,69 @@ import { unwrapRaw } from '@mangax/bmap-vue/advanced'
     expect(r.code, r.output).toBe(0);
     expect(r.output).toContain("unwrapRaw");
   });
+
+  it.runIf(hasDist)("代码块不自足（模板用了本库组件却没在本块 import）→ 必须红（#190 评审 P1）", () => {
+    // 复现评审在入包 README 第三段抓到的现场：模板用 `<Map>`，本块只导入
+    // `BMapProvider, ZoomControl`。`vue-tsc` 对未解析的**组件标签**退出码是 0
+    // （实测），所以只有这条静态判据能挡住它。
+    const notSelfContained = `\`\`\`vue
+<script setup>
+import { BMapProvider, ZoomControl } from '@mangax/bmap-vue'
+</script>
+<template>
+  <BMapProvider><Map :zoom="12"><ZoomControl /></Map></BMapProvider>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(notSelfContained, notSelfContained, notSelfContained)]);
+    expect(r.code, "模板用了未导入的 Map 必须失败").toBe(1);
+    expect(r.output).toContain("不自足");
+    expect(r.output).toContain("<Map>");
+  });
+
+  it.runIf(hasDist)("同块导入即绿（判据不是「凡用了 Map 就红」）", () => {
+    const selfContained = `\`\`\`vue
+<script setup>
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
+</script>
+<template>
+  <BMapProvider><Map :zoom="12"><ZoomControl /></Map></BMapProvider>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(selfContained, selfContained, selfContained)]);
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("自足");
+  });
+
+  it.runIf(hasDist)("跨块 import 不算数（每个块各自自足，不能靠别的块兜底）", () => {
+    // 第一块导入 `Map`，第二块只用不导——合并 fixture 曾让这种泄漏蒙混过关。
+    const leaked = `\`\`\`vue
+<script setup>
+import { Map } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>
+\`\`\`
+
+\`\`\`vue
+<script setup>
+import { Marker } from '@mangax/bmap-vue'
+</script>
+<template><Map><Marker /></Map></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(leaked, leaked, leaked)]);
+    expect(r.code, "第二块借第一块的 import 必须失败").toBe(1);
+    expect(r.output).toContain("第 2 个代码块");
+  });
+
+  it.runIf(hasDist)("原生标签与 VitePress 组件不参与自足判据（不产生噪音）", () => {
+    const nativeOnly = `\`\`\`vue
+<template>
+  <div><Badge text="tip" /><span>hi</span></div>
+</template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(nativeOnly, nativeOnly, nativeOnly)]);
+    // 没有本库组件 ⇒ 自足判据无话可说；但它也没有首图/形状，整体结果由既有判据决定。
+    expect(r.output).not.toContain("不自足");
+  });
 });
 
 describe("check-snippet-consistency · 真实树", () => {

@@ -56,6 +56,34 @@ interface ExtractedSnippet {
 }
 
 /**
+ * 剥掉示例里的注释，只留真实用法。
+ *
+ * 三种都要剥，缺一不可（第一版只剥了前两种，HTML 注释里的 `<Marker>`
+ * 被当成了真实用法——负向用例直接把它抓了出来）：
+ *   ① JS 块注释（slash-star … star-slash）
+ *   ② 整行 JS 行注释（双斜杠开头）
+ *   ③ **Vue / HTML 模板注释**（`<!-- … -->`，`<script setup>` 之外的模板区常用）
+ */
+function stripComments(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
+/** 从一段代码里抽出「从发布包导入」的标识符（含 `import type`；`as` 取别名）。 */
+function packageImportsIn(code: string): Set<string> {
+  const out = new Set<string>();
+  for (const match of code.matchAll(importFromPkgRegex())) {
+    for (const raw of match[1]!.split(",")) {
+      const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
+      if (name) out.add(name);
+    }
+  }
+  return out;
+}
+
+/**
  * 抽出一个文件里的 `bmap-vue` 用法。
  *
  * 只认**从 `bmap-vue` 导入**的名字——那是示例宣称的公开 API 面。像 `Point` 这种
@@ -69,34 +97,69 @@ export function extractSnippet(markdown: string): ExtractedSnippet {
     if (!CODE_LANGS_OF_INTEREST.test(block[1]!)) continue;
     // 先掐掉注释：示例注释里常提到「可由 <BMapProvider> 提供」这类旁白，
     // 那是**散文**不是用法，拿它当 API 面会把判据变成噪音。
-    //
-    // 三种都要剥，缺一不可（第一版只剥了前两种，HTML 注释里的 `<Marker>`
-    // 被当成了真实用法——负向用例直接把它抓了出来）：
-    //   ① JS 块注释 `/* … */`
-    //   ② 整行 JS 行注释 `// …`
-    //   ③ **Vue / HTML 模板注释** `<!-- … -->`（`<script setup>` 之外的模板区常用）
-    const code = block[2]!
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^[ \t]*\/\/.*$/gm, "")
-      .replace(/<!--[\s\S]*?-->/g, "");
+    const code = stripComments(block[2]!);
     // import { a, b as c } from '<pkg>' / '<pkg>/advanced' / '<pkg>/ui-kit'
     //
     // 包名**从 manifest 派生**（`scripts/release-identity.mts`）：写死 `'bmap-vue'`
     // 的话，发布身份迁到 `@mangax/bmap-vue` 之后这个正则一条都匹配不上，门禁会
     // 静默退化成「0 个标识符要校验」——那正是它本该防的那类假绿（PR 评审实测：
     // 迁移后 `createBMapPlugin` 从校验集合里消失，报告仍显示 OK）。
-    for (const match of code.matchAll(importFromPkgRegex())) {
-      for (const raw of match[1]!.split(",")) {
-        const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
-        if (name) imports.add(name);
-      }
-    }
+    for (const name of packageImportsIn(code)) imports.add(name);
     // 模板里的组件标签
     for (const match of code.matchAll(/<([A-Z][\w]*)\b/g)) {
       tags.add(match[1]!);
     }
   }
   return { imports, tags };
+}
+
+/** 一处「示例不自足」：某个代码块在模板里用了 `<tag>`，却没在**同一个块内**导入它。 */
+export interface NotSelfContained {
+  /** 该文件里第几个被扫描的 `vue` / `html` 代码块（从 1 开始）。 */
+  block: number;
+  /** 模板里用到、但本块没导入的组件名。 */
+  tag: string;
+}
+
+/**
+ * 每个 `vue` / `html` 代码块必须**自足**：模板里用到的本库公开组件，必须在**同一个块内**
+ * 被导入。
+ *
+ * ## 为什么必须静态查，而不是靠消费 fixture 编译（#190 评审 P1 实测）
+ *
+ * 入包 README 的「子树显式定义」示例曾用 `<Map>` 却只导入了
+ * `BMapProvider, ZoomControl`。把它放进消费 fixture 跑 `vue-tsc --noEmit`：
+ *
+ * - 未声明的 **prop**（`<BMapProvider :ak>`）→ 退出码 0（落进 `$attrs`）；
+ * - 模板里未解析的**组件标签**（`<DefinitelyNotARealComponent />`）→ 退出码 **0**；
+ * - 未定义的**脚本标识符**（`const x = notDefinedAnywhere()`）→ 退出码 2 ✅。
+ *
+ * 也就是说 `vue-tsc` 只检查脚本标识符，**不检查组件标签是否解析**。所以「拆成独立
+ * fixture/SFC」能挡住脚本符号的跨块泄漏，却挡不住本票这类「模板用了 `<Map>` 但没导入」。
+ * 唯一有判别力的落点是**文本层**——就是这里。
+ *
+ * 判据只认「发布声明面里存在的名字」（`surface`）：`<div>` 这类原生标签与
+ * `<Badge>` 这类 VitePress 组件不在集合里，不参与判定，避免噪音。
+ *
+ * 只扫 `vue` / `html` 块：`ts` 块没有模板，不适用。
+ */
+export function selfContainedBlocks(markdown: string, surface: Set<string>): NotSelfContained[] {
+  const out: NotSelfContained[] = [];
+  let block = 0;
+  for (const b of markdown.matchAll(/```([\w-]*)\n([\s\S]*?)```/g)) {
+    if (!/^(vue|html)$/.test(b[1]!)) continue;
+    block += 1;
+    const code = stripComments(b[2]!);
+    // 模板区：`<template>…</template>`；没有 `<template>` 的 html 片段退化为整块。
+    const template = /<template>([\s\S]*?)<\/template>/.exec(code)?.[1] ?? code;
+    const imported = packageImportsIn(code);
+    for (const m of template.matchAll(/<([A-Z][\w]*)\b/g)) {
+      const tag = m[1]!;
+      if (!surface.has(tag)) continue; // 原生 / 第三方组件不在本库声明面里
+      if (!imported.has(tag)) out.push({ block, tag });
+    }
+  }
+  return out;
 }
 
 /**
@@ -168,12 +231,11 @@ function main(): number {
   }
 
   if (root) readBase = resolve(root);
-  const perSurface: { id: string; file: string; snippet: ExtractedSnippet }[] =
-    SNIPPET_SURFACES.map(({ id, file }) => ({
-      id,
-      file: resolve(readBase, file),
-      snippet: extractSnippet(read(file)),
-    }));
+  const perSurface: { id: string; file: string; text: string; snippet: ExtractedSnippet }[] =
+    SNIPPET_SURFACES.map(({ id, file }) => {
+      const text = read(file);
+      return { id, file: resolve(readBase, file), text, snippet: extractSnippet(text) };
+    });
 
   const unknown: string[] = [];
   for (const { id, file, snippet } of perSurface) {
@@ -181,6 +243,14 @@ function main(): number {
       if (!surface.has(name)) unknown.push(`  ${file} [${id}]: ${name}（不在发布声明面里）`);
     }
   }
+
+  // 第二层：每个 `vue` / `html` 代码块必须**自足**（见 `selfContainedBlocks` 的文件头，
+  // 那里记着「为什么 `vue-tsc` 挡不住这一类」的实测）。
+  const notSelfContained = perSurface.flatMap(({ id, file, text }) =>
+    selfContainedBlocks(text, surface).map(
+      (p) => `  ${file} [${id}] 第 ${p.block} 个代码块: <${p.tag}> 在本块内没有 import`,
+    ),
+  );
 
   // 三处必须展示**同一组**标识符：判据是「每一处都要包含三处的并集」，
   // 因此任何一处多出或缺少名字都会红。
@@ -208,6 +278,18 @@ function main(): number {
     console.error("示例必须只用真实的公开 API——写错名字的示例比没有示例更糟。");
     return 1;
   }
+  if (notSelfContained.length > 0) {
+    console.error(
+      `snippet consistency gate FAILED: ${notSelfContained.length} 处示例代码块不自足` +
+        "（模板用了本库组件却没在本块内 import）。",
+    );
+    for (const line of notSelfContained) console.error(line);
+    console.error(
+      "读者可能没有全局注册组件（没装 createBMapPlugin），照抄会得到未解析的组件。" +
+        "每个代码块都要能**独立复制运行**——在本块内补上 import。",
+    );
+    return 1;
+  }
   if (shapeDrift.length > 0) {
     console.error("snippet consistency gate FAILED: 三处示例的 API 形状不一致（某些标识符只在部分面出现）。");
     for (const line of shapeDrift) console.error(line);
@@ -217,7 +299,7 @@ function main(): number {
   const n = union.size;
   console.log(
     `snippet consistency gate OK: ${perSurface.length} 处示例的 ${n} 个标识符都在发布声明面里且形状一致` +
-      `（${[...union].sort().join(", ")}）。`,
+      `（${[...union].sort().join(", ")}），且每个 vue/html 代码块都自足。`,
   );
   return 0;
 }

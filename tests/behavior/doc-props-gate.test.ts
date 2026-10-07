@@ -143,10 +143,13 @@ describe("check-doc-props · 入包 README 在扫描面里（#190）", () => {
     const pkg = JSON.parse(
       readFileSync(join(ROOT, "packages/bmap-vue/package.json"), "utf8"),
     ) as { files: string[] };
-    // 门禁扫的相对路径必须以 `files` 里那一条结尾——否则「扫的不是发出去的那份」。
-    const declared = pkg.files.filter((f) => f.endsWith("README.md"));
+    // `files` 里那一条是**相对 package 目录**的（`README.md`）。判据要比**规范化后的绝对
+    // 路径**，不能用 `endsWith(declared[0])`——`declared[0]` 就叫 `README.md`，任何
+    // `.../README.md` 都会通过，把 `PACKAGE_README` 误改成 `docs/foo/README.md` 也照样绿
+    // （评审 P2 实测）。
+    const declared = pkg.files.filter((f) => /(^|\/)README\.md$/.test(f));
     expect(declared, "入包 README 必须在 files 里").toHaveLength(1);
-    expect(mod.PACKAGE_README.endsWith(declared[0]!)).toBe(true);
+    expect(resolve(ROOT, mod.PACKAGE_README)).toBe(resolve(ROOT, "packages/bmap-vue", declared[0]!));
   });
 });
 

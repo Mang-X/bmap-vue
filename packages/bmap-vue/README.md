@@ -64,7 +64,7 @@ explicit definition, pass `provider` (with `loadOptions`) or a whole `definition
 </template>
 
 <script setup lang="ts">
-import { BMapProvider, ZoomControl } from '@mangax/bmap-vue'
+import { BMapProvider, Map, ZoomControl } from '@mangax/bmap-vue'
 import { baiduJsapiV4Provider } from '@mangax/bmap-vue/advanced'
 
 const ak = 'your Baidu Maps ak'
