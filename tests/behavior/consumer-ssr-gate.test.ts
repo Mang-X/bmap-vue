@@ -170,6 +170,34 @@ describe("SSR 门禁：判据有牙（合成报告逐个喂）", () => {
         environmentBefore: { ...cleanEnvironment(), documentIn: true },
       }),
     ],
+    [
+      "记账器漏装 document（environmentAfter.documentIn=false）",
+      () => ({
+        ...instrumentedReport(),
+        environmentAfter: { ...instrumentedReport().environmentAfter, documentIn: false },
+      }),
+    ],
+    [
+      "记账器漏装 document（documentOwn=false）",
+      () => ({
+        ...instrumentedReport(),
+        environmentAfter: { ...instrumentedReport().environmentAfter, documentOwn: false },
+      }),
+    ],
+    [
+      "记账器漏装 window",
+      () => ({
+        ...instrumentedReport(),
+        environmentAfter: { ...instrumentedReport().environmentAfter, windowIn: false },
+      }),
+    ],
+    [
+      "记账 getter 改变了 typeof（未返回 undefined）",
+      () => ({
+        ...instrumentedReport(),
+        environmentAfter: { ...instrumentedReport().environmentAfter, typeofDocument: "object" },
+      }),
+    ],
     ["instrument 报告缺容器", () => ({ ...instrumentedReport(), html: HTML.replace("bmap-container", "x") })],
     ["instrument 报告 loader 变了", () => ({ ...instrumentedReport(), loaderStatus: "complete" })],
     [

@@ -75,11 +75,16 @@ if (mode === "instrument") {
       },
     });
   }
-  // 自检：记账器**真的在记**（读一次 `window` 必须留下记录），否则「访问 0 次」可能只是
-  // 没装成功。自检发生在基线之前，清掉记录后不影响增量。
+  // 自检：记账器对 **window 与 document 两个**都真的在记（各读一次必须都留下记录），否则
+  // 「document 读取 0 次」可能只是 document 没装上 getter。自检发生在基线之前，清掉记录后
+  // 不影响增量。
   void globalThis.window;
-  if (accesses[0] !== "window") {
-    throw new Error("ssr-runner: 记账 getter 没有生效 —— instrument 模式的读数不可信");
+  void globalThis.document;
+  if (accesses[0] !== "window" || accesses[1] !== "document") {
+    throw new Error(
+      `ssr-runner: 记账 getter 没有对两个全局都生效（记录到 ${JSON.stringify(accesses)}）—— ` +
+        `instrument 模式的读数不可信`,
+    );
   }
   accesses.length = 0;
 }

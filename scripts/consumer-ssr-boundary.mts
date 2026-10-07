@@ -150,6 +150,7 @@ export function assertInstrumentedSsrReport(report: SsrReport): void {
     throw new Error(`[consumer-ssr] 期望 instrument 报告，实际 ${report.mode}`);
   }
   assertEnvironment(report.environmentBefore, "注入 getter 前的");
+  assertInstrumentationActive(report.environmentAfter);
   assertVersions(report.versions);
 
   const documentReads = [...report.importPhase, ...report.renderPhase].filter(
@@ -170,6 +171,34 @@ export function assertInstrumentedSsrReport(report: SsrReport): void {
     );
   }
   assertRenderedOutput(report);
+}
+
+/**
+ * 注入**真的生效了**吗 —— 这是「`document` 读取 0 次」这条结论的前提。
+ *
+ * `environmentAfter` 是注入之后取的环境。判据要求 `window` 与 `document` **两个都**被装上
+ * 记账器：`typeof` 仍是 `undefined`（getter 返回 undefined，不改变被测代码的判定），而
+ * `'x' in globalThis` 与 `Object.hasOwn` 都变成 `true`。
+ *
+ * 缺了这条会有一个可复现的假绿：把记账名单从 `["document", "window"]` 改成只装 `["window"]`
+ * 时，`document` 没有 getter，任何 `typeof document` 都不会进记录，`documentReads === 0`
+ * 恒成立、`renderPhase` 也可能为空 —— 门禁照样报「document 读取 0 次」，而那个结论已经不
+ * 可信。`environmentAfter` 里本来就有区分这个形态的证据，用它做行为契约，不必去扫源码。
+ */
+function assertInstrumentationActive(environment: SsrEnvironment): void {
+  const missing: string[] = [];
+  if (environment.typeofWindow !== "undefined") missing.push("typeof window");
+  if (environment.typeofDocument !== "undefined") missing.push("typeof document");
+  if (!environment.windowIn) missing.push("'window' in globalThis");
+  if (!environment.documentIn) missing.push("'document' in globalThis");
+  if (!environment.windowOwn) missing.push("hasOwn(globalThis, 'window')");
+  if (!environment.documentOwn) missing.push("hasOwn(globalThis, 'document')");
+  if (missing.length > 0) {
+    throw new Error(
+      `[consumer-ssr] DOM 记账器没有对 window / document 都生效：${missing.join(", ")} —— ` +
+        `例如只装了 window 时，document 的读取不会被记录，「document 读取 0 次」就不再可信。`,
+    );
+  }
 }
 
 function countBy(names: readonly string[]): Record<string, number> {
