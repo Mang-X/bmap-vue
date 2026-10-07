@@ -178,7 +178,14 @@ PR 评审 #191 的 P2 正是这一条。修完之后三层确实都真核对（�
 **留在门禁里的只有三条**（每条都对应一次已发生的故障，见
 `scripts/toolchain-boundary.mts` 文件头的表格）：`package.json` 不得有 `pnpm` 字段、
 lockfile 顶层不得有 `overrides:` 块、`packageManager` 声明 == `pnpm --version`。
-1276 行 → 240 行（含测试从 46 条降到 19 条）。
+
+代价是**大幅**收缩——初版 1276 行（含 391 行中文注释）与 46 条用例，瘦身后只剩两个小文件
+与它们的用例组。
+
+⚠️ 这里**刻意不写精确行数 / 用例数**：它们的真实值由当前树决定，写死进 ADR 必然随下一次
+改动漂移（#196 评审连续两轮抓到「刚指出漂移、修完又留下新漂移」）。要当前规模就直接
+`wc -l scripts/check-toolchain.mts scripts/toolchain-boundary.mts`——ADR 记的是**决策**，
+不是随时会变的读数。
 
 **搬进本 ADR 的版本事实**（干净安装实测，#192 复核仍成立）：
 
@@ -215,7 +222,8 @@ CI 侧的断言因此只锁**真实理由**：`tests/behavior/toolchain-workflow
 
 ⚠️ **本节记录的是 #187 落地当时的状态**，那时门禁仍是 4a 的三方对照。表中与
 「三方一致 / 11 条登记 / `resolution-drift` / `KNOWN_PEER_MISMATCHES`」有关的行
-**随 #192 瘦身已不再适用**，保留为当时的证据。**瘦身后的复核数字见「后果」一节。**
+**随 #192 瘦身已不再适用**，保留为当时的证据。表中的文件数 / 用例数**只描述那一刻的树**，
+不要当成当前读数。
 
 改动**之后**在干净检出上重跑（`rm -rf node_modules packages/*/node_modules docs/node_modules
 apps/*/node_modules` 后 `pnpm install --frozen-lockfile`）：
