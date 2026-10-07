@@ -137,18 +137,88 @@ describe("#45 发布包形状门禁", () => {
 
     it("例外只出现一部分时，另一半报 vanished 而已出现的那半仍走 drift 判定", () => {
       const noRes = exceptionOf("NoResolution");
+      const css = exceptionOf("NoResolution", "per-resolution-kind");
       const report = {
         problems: {
           CJSResolvesToESM: (exceptionOf("CJSResolvesToESM").entrypoints ?? []).map(
             (entrypoint) => ({ entrypoint, resolutionKind: "node16-cjs" }),
           ),
-          NoResolution: (noRes.entrypoints ?? []).slice(0, 2).map((entrypoint) => ({ entrypoint })),
+          // #158 只出现前两条（drift），#189 完整出现（已认领，不算 vanished）。
+          // 两条同 kind 登记都在场，这条才只在测「部分出现 ⇒ drift」这一件事。
+          NoResolution: [
+            ...(noRes.entrypoints ?? []).slice(0, 2).map((entrypoint) => ({ entrypoint })),
+            ...(css.expectedResolutionKind as readonly string[]).map((resolutionKind) => ({
+              entrypoint: "./styles.css",
+              resolutionKind,
+            })),
+          ],
         },
       };
       const kinds = evaluateAttwReport(report).problems.map((p) => p.kind);
       expect(kinds).toContain("exception-drift:NoResolution");
       expect(kinds).not.toContain("exception-vanished:NoResolution");
       expect(kinds).not.toContain("exception-vanished:CJSResolvesToESM");
+    });
+
+    /**
+     * 同 kind 下**一整条登记消失**必须红（PR #200 评审 P1 的假绿路径）。
+     *
+     * 本次把 `NoResolution` 拆成两条登记后，「这一轮出现过」如果仍按 `kind` 追踪，
+     * 就会有一个实测确认的洞：
+     *
+     * 1. `#158` 的 6 条正常出现 ⇒ `seenKinds.add("NoResolution")`；
+     * 2. `#189` 的 `./styles.css` 4 条**整条消失** ⇒ 它 `mine.length === 0` 被跳过；
+     * 3. 反向遍历再按 `seenKinds.has(kind)` 逐条跳过 ⇒ **两条**都被跳过；
+     * 4. 最终 `problems === []` —— 而 ADR 明确承诺「一条登记消失也要 fail-closed」。
+     *
+     * 因此状态必须追踪到**单条登记**。两个方向都测：无论消失的是哪一条，都要点名报出来，
+     * 且描述里要能看出**是哪一条**（同 kind 的两条否则在日志里长得一样）。
+     */
+    it("同 kind 下整条登记消失必须红（两个方向，且点名是哪一条）", () => {
+      const cjsFull = (exceptionOf("CJSResolvesToESM").entrypoints ?? []).map((entrypoint) => ({
+        entrypoint,
+        resolutionKind: "node16-cjs",
+      }));
+      const noRes158 = exceptionOf("NoResolution");
+      const noRes189 = exceptionOf("NoResolution", "per-resolution-kind");
+      const entries158 = (noRes158.entrypoints ?? []).map((entrypoint) => ({
+        entrypoint,
+        resolutionKind: "node10",
+      }));
+      const entries189 = (noRes189.expectedResolutionKind as readonly string[]).map(
+        (resolutionKind) => ({ entrypoint: "./styles.css", resolutionKind }),
+      );
+
+      // ① #189 整条消失，#158 仍在（评审描述的原始场景）
+      const only158 = evaluateAttwReport({
+        problems: { CJSResolvesToESM: cjsFull, NoResolution: entries158 },
+      });
+      expect(only158.problems.map((p) => p.kind), "整条 #189 消失却全绿").toContain(
+        "exception-vanished:NoResolution",
+      );
+      const vanished189 = only158.problems.find((p) => p.kind === "exception-vanished:NoResolution");
+      expect(vanished189?.detail, "没点名消失的是 #189").toContain("#189");
+      expect(vanished189?.detail, "没点名消失的子路径").toContain("./styles.css");
+
+      // ② 反向：#158 整条消失，#189 仍在
+      const only189 = evaluateAttwReport({
+        problems: { CJSResolvesToESM: cjsFull, NoResolution: entries189 },
+      });
+      const vanished158 = only189.problems.find((p) => p.kind === "exception-vanished:NoResolution");
+      expect(only189.problems.map((p) => p.kind), "整条 #158 消失却全绿").toContain(
+        "exception-vanished:NoResolution",
+      );
+      expect(vanished158?.detail, "没点名消失的是 #158").toContain("#158");
+      expect(vanished158?.detail, "没点名消失的子路径").toContain("./advanced");
+
+      // 正证：两条都在场时**不**报 vanished（否则上面两条可能只是恒真）。
+      const both = evaluateAttwReport({
+        problems: {
+          CJSResolvesToESM: cjsFull,
+          NoResolution: [...entries158, ...entries189],
+        },
+      });
+      expect(both.problems, "两条都在场时不该判红").toEqual([]);
     });
 
     it("解析档位漂移必须红（PR 评审 P2：例外成立的前提就是那个档位）", () => {
@@ -202,20 +272,28 @@ describe("#45 发布包形状门禁", () => {
       expect(css.expectedCount, "4 = 1 个子路径 × 4 个档位").toBe(4);
 
       // 正证：真实形状被接受（不是只靠上面读字段）。
-      // 必须连同**其它**登记一起给全，否则会给出一条 `exception-vanished:CJSResolvesToESM`
-      // 的红 —— 那时测的是「登记没给全」，不是「./styles.css 的形状对不对」。
+      // ⚠️ `NoResolution` 有**两条**登记，必须把**两条**的 occurrences 都给全，否则另一条
+      // 会正确地报一条 `exception-vanished` —— 那时测的是「报告没给全」，而不是
+      // 「./styles.css 的形状对不对」。这正是 PR #200 评审 P1 修好的那条判据在起作用。
       const real = (css.expectedResolutionKind as readonly string[]).map((resolutionKind) => ({
         entrypoint: "./styles.css",
         resolutionKind,
       }));
       const other = exceptionOf("CJSResolvesToESM");
+      const sibling = exceptionOf("NoResolution");
       const { problems } = evaluateAttwReport({
         problems: {
           CJSResolvesToESM: (other.entrypoints ?? []).map((entrypoint) => ({
             entrypoint,
             resolutionKind: "node16-cjs",
           })),
-          NoResolution: real,
+          NoResolution: [
+            ...(sibling.entrypoints ?? []).map((entrypoint) => ({
+              entrypoint,
+              resolutionKind: "node10",
+            })),
+            ...real,
+          ],
         },
       });
       expect(problems, "四档齐全的 ./styles.css 不该判红").toEqual([]);

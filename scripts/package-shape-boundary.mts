@@ -203,7 +203,18 @@ export function evaluateAttwReport(
   }
   const problems: AttwProblem[] = [];
   const accepted: AttwProblem[] = [];
-  const seenKinds = new Set<string>();
+  /* 「这一轮出现过」的状态必须追踪到**单条登记**，不能只追踪 `kind`。
+   *
+   * ⚠️ 按 kind 追踪有一条实测确认的假绿路径（PR #200 评审 P1）：`NoResolution` 有两条例外
+   * （#158 的 6 个 node10 子路径、#189 的 `./styles.css` 四档）。若报告里 #158 的 6 条正常、
+   * 而 #189 的 4 条**整条消失**，则本轮会 `seenKinds.add("NoResolution")`；反向遍历再按
+   * `seenKinds.has(kind)` 逐条跳过时，**两条**登记都会被跳过 —— 最终 `problems === []`，
+   * 而「一整条同 kind 登记消失」恰恰是本门禁承诺要 fail-closed 的形状。
+   *
+   * 用**对象身份**而不是自造的字符串 key：这里比较的就是 `exceptions` 数组里的同一批对象，
+   * 身份相等即「同一条登记」，不必再发明 `kind + tracking + …` 拼接键（那种键一旦有两条例外
+   * 恰好同形就会互相顶替，而「同形」本身是合法登记）。 */
+  const seenExceptions = new Set<AttwException>();
 
   for (const [kind, occurrences] of Object.entries(problemMap)) {
     const list = Array.isArray(occurrences) ? occurrences : [];
@@ -216,12 +227,11 @@ export function evaluateAttwReport(
       continue;
     }
     if (list.length === 0) {
-      // **不要**记进 seenKinds：空数组等于「这一轮没出现」，必须落到下面的反向遍历里
+      // **不要**标记任何登记为已出现：空数组等于「这一轮没出现」，必须落到下面的反向遍历里
       // 报 vanished。第一版在这里就 `seenKinds.add(kind)` 提前 continue，导致空数组
       // 既不算 unexpected、也不算 vanished —— 彻底静默。
       continue;
     }
-    seenKinds.add(kind);
     const detail = describeOccurrences(kind, list);
 
     /* 例外必须**逐条对齐**：只按 kind 匹配的话，同一类问题从 7 处涨到 8 处仍然放行，
@@ -247,10 +257,13 @@ export function evaluateAttwReport(
         wants === undefined
           ? unclaimed
           : unclaimed.filter((o) => wants.includes(String(o?.entrypoint ?? "?")));
-      // 这一条登记在本轮 occurrences 里没有任何位置 —— 不在这里判红。
+      // 这一条登记在本轮 occurrences 里没有任何位置 —— 不在这里判红，也**不**标记它出现过。
       // 那属于「登记过、但这一轮没出现」的形状，由下面的反向遍历统一报 `exception-vanished`。
       // 在这里也报一次会让同一次缺失出两条结论，而其中一条（「登记已过时？」）是臆测。
       if (mine.length === 0) continue;
+      // 认领到了 occurrences ⇒ 这一条**确实出现了**（即便随后判出 drift，也只该报 drift
+      // 一条，不该再报 vanished —— 那两项说的是互斥的两件事）。
+      seenExceptions.add(exception);
       for (const item of mine) unclaimed.splice(unclaimed.indexOf(item), 1);
       const mismatches = compareWithException(mine, exception);
       if (mismatches.length > 0) {
@@ -275,23 +288,32 @@ export function evaluateAttwReport(
     accepted.push({ kind, detail });
   }
 
-  /* 反向遍历：登记过、但这一轮**没出现**的例外也要报。
+  /* 反向遍历：登记过、但这一轮**没出现**的例外也要报 —— **逐条**判，不是逐 kind。
    *
    * 第一版只遍历报告里现有的 key，于是 `NoResolution` 从 6 处降到 0 处、甚至整类消失
    * （`problems: {}`）时，`expectedCount` 根本不进比较，`problems` 仍是 `[]` —— 假绿。
    * 那与本文件的登记口径直接矛盾：例外是「逐条审阅后刻意接受」的一组**具体**事实，
    * 问题被修好意味着该**删掉登记**并重新审阅，而不是让门禁静默变绿。
    *
+   * 第二版（本处修复前）按 `kind` 追踪，于是同 kind 的**一条**登记消失会被另一条的出现
+   * 掩盖（PR #200 评审 P1 实测：`./styles.css` 4 条全消失、#158 的 6 条仍在 ⇒ `problems` 为空）。
+   * 现在按单条登记判，两条 `NoResolution` 各自独立。
+   *
    * 「问题消失了」在两种情况下都需要人看一眼：
    * - 真的修好了 → 删登记，并在 ADR 里记一笔；
    * - attw 改了它的检查方式 → 重新评估这条例外还成不成立。
    */
   for (const exception of exceptions) {
-    if (seenKinds.has(exception.kind)) continue;
+    if (seenExceptions.has(exception)) continue;
+    // 同 kind 可能有多条登记，因此描述里必须带上**是哪一条**（追踪票号 + 子路径清单），
+    // 否则两条同 kind 的 vanished 在日志里长得一模一样。
+    const shape = exception.entrypointShape === "per-resolution-kind" ? "，按解析档位各一条" : "";
+    const entries = (exception.entrypoints ?? []).join(", ");
     problems.push({
       kind: `exception-vanished:${exception.kind}`,
       detail:
-        `登记的例外 "${exception.kind}" 这一轮完全没有出现（预期 ${exception.expectedCount ?? "?"} 处）。` +
+        `登记的例外 "${exception.kind}"（追踪 ${exception.tracking}；子路径 ${entries || "—"}${shape}）` +
+        `这一轮完全没有出现（预期 ${exception.expectedCount ?? "?"} 处）。` +
         `若问题已修好，请删掉这条登记并在 ADR 记一笔；若 attw 改了检查方式，请重新评估它是否仍该被接受。`,
     });
   }
