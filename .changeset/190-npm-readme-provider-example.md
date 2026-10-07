@@ -28,7 +28,9 @@ npm README 的 Provider 示例修正 + 入包 README 纳入文档门禁（#190�
   `loadOptions` **只在同时传了 `provider` 时**被读取——单独传它静默无效，已在示例旁写明。
 - `scripts/check-doc-props.mts` 的扫描面加入入包 README（路径抽成导出常量
   `PACKAGE_README`，扫描面抽成导出的 `scanTargets()`，并有用例断言「入包 README 真的在
-  扫描面里」+「往真实文件注入坏 prop 即红」）。
+  扫描面里」+「夹具里放坏 prop 即红」）。新增 `--dir <path>` 测试入口，负例在临时目录
+  复现，**不再改写被跟踪的真实 README**（二轮评审 P1：改真实文件会与并行读同一路径的
+  `snippet-consistency-gate.test.ts` 竞争，实测能让它假红）。
   复用既有机制，未新增通用 Markdown 执行框架，未新增兼容 alias，未改动 Provider API。
 
 ## 三处示例面同步（**刻意不弱化** `check:snippet-consistency`）
@@ -42,6 +44,10 @@ npm README 的 Provider 示例修正 + 入包 README 纳入文档门禁（#190�
 
 - 根 README 的 `app.use` 片段原先 `createApp(App)` 里的 `App` 是未定义标识符，
   一并补上 import 与 `app.mount('#app')`，README 中不再有「照着敲但跑不起来」的片段。
+- 新增 `selfContainedBlocks()`：每个 `vue` / `html` 代码块必须在**本块内**导入它用到的本库
+  组件。判据按**运行时绑定**（`runtimeBindingsIn()`）而不是导出名：
+  `import type { Map }` 不产生绑定（用 `<Map />` 必须红）、`import { Map as BMap }` 的本地名是
+  `BMap`（写 `<Map />` 必须红、写 `<BMap />` 才对）——两种形态各配正反例。
 
 > 起草时曾把该门禁的「形状一致」判据收窄到「首图段」，好让入包 README 单方面多带一个进阶
 > 示例。**那是错的**：实测把 `<BMapProvider>` 示例从根 README 删掉（另两处保留）后，
@@ -64,7 +70,7 @@ npm README 的 Provider 示例修正 + 入包 README 纳入文档门禁（#190�
 | 层 | 落点 | 挡得住 | 挡不住 |
 | --- | --- | --- | --- |
 | 文本 · prop 名 | `check:doc-props` | 声明面里没有的 prop（`<BMapProvider :ak>`） | 模板用了没 import 的组件 |
-| 文本 · 自足性 | `check:snippet-consistency` 的 `selfContainedBlocks()` | 模板用了本库组件却没在**本块**import | 脚本符号写错 |
+| 文本 · 自足性 | `check:snippet-consistency` 的 `selfContainedBlocks()` | 模板用了本库组件却没在**本块**import（含 `import type` / `as` 别名两种绕过） | 脚本符号写错 |
 | 类型 | 消费 fixture 的 `vue-tsc` | 脚本标识符未定义 / import 路径不存在 | **未解析的组件标签与未知 prop**（退出码 0） |
 | 运行 | `npm-readme-provider-init.test.ts` | 初始化路径跑不起来 | 文档与实现的措辞漂移 |
 

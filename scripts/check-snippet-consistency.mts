@@ -71,13 +71,49 @@ function stripComments(code: string): string {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-/** 从一段代码里抽出「从发布包导入」的标识符（含 `import type`；`as` 取别名）。 */
+/**
+ * 从一段代码里抽「发布 API 面」的标识符：**导出名**，`import type` 也算。
+ *
+ * 口径是「示例宣称用了哪些公开 API」，不是「本地有哪些可用绑定」——别拿它判断
+ * 模板能不能解析组件（那是 `runtimeImportsIn` 的事）。
+ */
 function packageImportsIn(code: string): Set<string> {
   const out = new Set<string>();
   for (const match of code.matchAll(importFromPkgRegex())) {
     for (const raw of match[1]!.split(",")) {
       const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
       if (name) out.add(name);
+    }
+  }
+  return out;
+}
+
+/**
+ * 从一段代码里抽**运行时导入**：本地名 → 导出名（未别名时两者相同）。
+ *
+ * 供 `selfContainedBlocks()` 判「模板里的组件能不能解析」：本地名判可用性、导出名认
+ * 它是不是本库组件（`<BMap />` 配 `Map as BMap` 时两者不同名）。
+ *
+ * 排除规则（#190 二轮评审 P2 各配一个反例）：
+ *
+ * 1. **语句级 type-only**：`import type { Map } from '<pkg>'` 整条不产生绑定，
+ *    `<Map />` 依然解析不了。`importFromPkgRegex` 已**吃掉** `type` 关键字
+ *    （`(?:type\s+)?`），所以判据看 `match[0]` 自己的开头，而不是它前面
+ *    （看前面永远是空的，实测踩过）；
+ * 2. **内联 type 修饰符**：`import { type Point, Map }` 里只有 `type` 那个不产生绑定；
+ * 3. 别名取**本地名**：`import { Map as BMap }` ⇒ `BMap → Map`。
+ */
+export function runtimeImportsIn(code: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const match of code.matchAll(importFromPkgRegex())) {
+    if (/^import\s+type\s/.test(match[0])) continue;
+    for (const raw of match[1]!.split(",")) {
+      const spec = raw.trim();
+      if (!spec || /^type\s+/.test(spec)) continue;
+      const parts = spec.split(/\s+as\s+/);
+      const exported = parts[0]!.trim();
+      const local = (parts[1] ?? parts[0])!.trim();
+      if (local) out.set(local, exported);
     }
   }
   return out;
@@ -141,6 +177,11 @@ export interface NotSelfContained {
  * 判据只认「发布声明面里存在的名字」（`surface`）：`<div>` 这类原生标签与
  * `<Badge>` 这类 VitePress 组件不在集合里，不参与判定，避免噪音。
  *
+ * 「在本块内导入」必须按**运行时绑定**判，不能按导出名（二轮评审 P2 的两个反例）：
+ * `import type { Map }` 不产生绑定、`import { Map as BMap }` 的本地名是 `BMap`。
+ * 组件名与导出名不同名时（`<BMap />` 配 `Map as BMap`），用**导出名**去认它是不是
+ * 本库组件，用**本地名**判它是否可用。
+ *
  * 只扫 `vue` / `html` 块：`ts` 块没有模板，不适用。
  */
 export function selfContainedBlocks(markdown: string, surface: Set<string>): NotSelfContained[] {
@@ -152,11 +193,14 @@ export function selfContainedBlocks(markdown: string, surface: Set<string>): Not
     const code = stripComments(b[2]!);
     // 模板区：`<template>…</template>`；没有 `<template>` 的 html 片段退化为整块。
     const template = /<template>([\s\S]*?)<\/template>/.exec(code)?.[1] ?? code;
-    const imported = packageImportsIn(code);
+    // 本地名 → 导出名（未别名时两者相同）。组件既可能以导出名出现，也可能以别名出现。
+    const exportedByLocal = runtimeImportsIn(code);
     for (const m of template.matchAll(/<([A-Z][\w]*)\b/g)) {
       const tag = m[1]!;
-      if (!surface.has(tag)) continue; // 原生 / 第三方组件不在本库声明面里
-      if (!imported.has(tag)) out.push({ block, tag });
+      // 这个标签是不是本库组件？先看它本身，再看它是不是某个导入的本地别名。
+      const isLibraryComponent = surface.has(tag) || surface.has(exportedByLocal.get(tag) ?? "");
+      if (!isLibraryComponent) continue; // 原生 / 第三方组件不参与
+      if (!exportedByLocal.has(tag)) out.push({ block, tag });
     }
   }
   return out;

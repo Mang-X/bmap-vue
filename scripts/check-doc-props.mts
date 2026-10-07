@@ -174,20 +174,39 @@ export function scanTargets(): string[] {
 }
 
 function main(): number {
+  // `--dir <path>`：把扫描基准换成夹具目录（同名相对路径）。
+  //
+  // **为什么要有**（#190 二轮评审 P1）：正/负例若靠「改仓库里真实的
+  // `packages/bmap-vue/README.md`、跑门禁、再改回来」，在 vitest 并行下就会和
+  // 别的读同一份文件的用例竞争（实测：注入窗口内 `check:snippet-consistency`
+  // 会因「代码块不自足」假红，算 `hasDist` 的那次 `runGate()` 也可能读到半写状态）。
+  // 有了 `--dir`，负例在**临时目录**里复现，不再碰任何被跟踪的文件。
+  //
+  // 注意它换的**不只是扫描面**：`ROOT` 也要跟着换（`scanTargets()` 与错误信息里的
+  // 相对路径都基于它），否则临时夹具里的文件会被拼成 `<真实ROOT>/<临时路径>`。
+  const dirFlag = process.argv.indexOf("--dir");
+  const dirRoot = dirFlag >= 0 ? process.argv[dirFlag + 1] : undefined;
+  if (dirFlag >= 0 && !dirRoot) {
+    console.error("--dir 需要一个路径参数");
+    return 2;
+  }
+
   const surface = loadPropSurface();
-  // 示例目录也要扫：真正会被 docs:typecheck 编译、也最容易被手写错的地方。
-  const roots = scanTargets();
-  const files = roots.flatMap((r) => (statSync(r).isDirectory() ? collectFiles(r) : [r]));
+  const roots = dirRoot
+    ? scanTargets().map((p) => join(resolve(dirRoot), p.slice(ROOT.length + 1)))
+    : scanTargets();
+  const files = roots.flatMap((r) => (existsSync(r) && statSync(r).isDirectory() ? collectFiles(r) : [r]));
 
   const problems: Mismatch[] = [];
   let checked = 0;
   for (const file of files) {
+    if (!existsSync(file)) continue; // 夹具目录只需要放它要验的那几个文件
     for (const m of scanFile(file, read(file))) {
       const props = surface.get(m.component);
       if (!props) continue; // 组件没有对应 *Props：不是「prop 名对不上」，不在本题范围
       checked += 1;
       if (!props.has(m.prop) && !props.has(camel(m.prop))) {
-        problems.push({ ...m, file: file.replace(ROOT + "/", "") });
+        problems.push({ ...m, file: file.replace((dirRoot ?? ROOT) + "/", "") });
       }
     }
   }

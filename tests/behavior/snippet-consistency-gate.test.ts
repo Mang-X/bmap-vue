@@ -218,6 +218,54 @@ import { Marker } from '@mangax/bmap-vue'
     // 没有本库组件 ⇒ 自足判据无话可说；但它也没有首图/形状，整体结果由既有判据决定。
     expect(r.output).not.toContain("不自足");
   });
+
+  it.runIf(hasDist)("`import type` 不产生运行时绑定 → 用它当组件必须红（二轮评审 P2）", () => {
+    const typeOnly = `\`\`\`vue
+<script setup>
+import type { Map } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(typeOnly, typeOnly, typeOnly)]);
+    expect(r.code, "type-only 导入不能让 <Map> 通过").toBe(1);
+    expect(r.output).toContain("不自足");
+    expect(r.output).toContain("<Map>");
+  });
+
+  it("别名要按**本地名**判：`Map as BMap` 用 <Map/> 红、用 <BMap/> 绿", async () => {
+    // 这条**单元级**验判据本身，不走整个门禁：整体门禁还有一层「标识符必须在发布声明面里」，
+    // 而别名 `BMap` 不是公开 API 名，直接跑会先在那层红掉（那是既有的、正确的行为）。
+    // 别名语义属于 `selfContainedBlocks()`，就在这里单独钉。
+    const mod = await import("../../scripts/check-snippet-consistency.mts");
+    const surface = new Set(["Map", "Marker"]);
+    const wrap = (body: string): string => `\`\`\`vue\n${body}\n\`\`\`\n`;
+
+    const aliased = wrap(`<script setup>
+import { Map as BMap } from '@mangax/bmap-vue'
+</script>
+<template><BMap /></template>`);
+    expect(mod.selfContainedBlocks(aliased, surface), "本地名 BMap 可用，应绿").toEqual([]);
+
+    const wrongAlias = wrap(`<script setup>
+import { Map as BMap } from '@mangax/bmap-vue'
+</script>
+<template><Map /></template>`);
+    expect(mod.selfContainedBlocks(wrongAlias, surface), "导出名 Map 本地不存在，应红").toEqual([
+      { block: 1, tag: "Map" },
+    ]);
+  });
+
+  it.runIf(hasDist)("内联 type 修饰符同样不算运行时绑定", () => {
+    const inlineType = `\`\`\`vue
+<script setup>
+import { type Map, Marker } from '@mangax/bmap-vue'
+</script>
+<template><Map /><Marker /></template>
+\`\`\`\n`;
+    const r = runGate(["--dir", makeTmp(inlineType, inlineType, inlineType)]);
+    expect(r.code, "`{ type Map }` 里的 Map 不能当组件用").toBe(1);
+    expect(r.output).toContain("<Map>");
+  });
 });
 
 describe("check-snippet-consistency · 真实树", () => {
