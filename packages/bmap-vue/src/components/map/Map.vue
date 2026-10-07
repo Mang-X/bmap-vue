@@ -97,6 +97,14 @@ const props = withDefaults(defineProps<MapProps>(), {
   enableDblclickZoom: undefined,
   enableKeyboard: undefined,
   enablePinchZoom: undefined,
+  // #167 第一批的四个：官方 `MapOptions` 的 `enableRotate` / `enableRotateGestures` /
+  // `enableTilt` / `enableTiltGestures` **全部**标注 `@default true` ⇒ 与上面六项逐字同因，
+  // 必须在这里钉 `undefined`（不钉就被 Vue 编成 `false`，建图时逐个 `disable*()`，
+  // 官方默认开的旋转/倾斜被静默关掉）。门禁同上：`scripts/check-interaction-props.mts`。
+  enableRotate: undefined,
+  enableRotateGestures: undefined,
+  enableTilt: undefined,
+  enableTiltGestures: undefined,
   // ⚠️ 刻意写 `undefined`（口径同 `LineLayer.popEvent` / `PointIconLayer.userSizes`）：
   // Vue 对缺省 `Boolean` 会转成 `false`，不显式关掉这个转换，「不传」与「传 false」就分不开，
   // 而本库要表达的恰恰是**默认不表态**——由使用者显式 opt-in 才把键递下去
@@ -620,6 +628,18 @@ const INTERACTION_PROPS: Array<[keyof MapProps, MapInteraction]> = [
   ["enableDblclickZoom", "double-click-zoom"],
   ["enableContinuousZoom", "continuous-zoom"],
   ["fixCenterWhenResize", "resize-on-center"],
+  // #167 第一批：官方 `MapOptions` 里另外四个交互开关。Driver 的 `INTERACTION_METHODS`
+  // 早就登记了它们，缺的只是组件面的 prop（#165 走查记在 #167 §1）。
+  //
+  // ⚠️ 四个的**落地机制不同**，但都是安全的：
+  // `rotate` / `rotate-gestures` / `tilt` 三对是官方声明的**实例方法**，直接生效；
+  // `tilt-gestures` 那一对在 4.0 API 参考与 `core/Map.d.ts` 里**没有实例方法**
+  // （只有构造选项 `enableTiltGestures`，且没有配对的 `disable*`）——
+  // `setInteraction` 结构性判断后「没有就告警一次」，不臆造声明、不靠异常控制流。
+  ["enableRotate", "rotate"],
+  ["enableRotateGestures", "rotate-gestures"],
+  ["enableTilt", "tilt"],
+  ["enableTiltGestures", "tilt-gestures"],
 ];
 
 /** 将 props 上的 enableXxx 布尔值同步到 SDK map 实例 */

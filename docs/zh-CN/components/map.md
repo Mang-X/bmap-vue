@@ -216,6 +216,10 @@ map/theme2
 | 构造期 | enableDblclickZoom | 启用地图双击缩放，左键双击放大、右键双击缩小（官方 `MapOptions.enableDblclickZoom`，注意官方拼 `Dbl`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableDoubleClickZoom()` / `disableDoubleClickZoom()` |
 | 构造期 | enableKeyboard | 启用键盘操作，键盘的上、下、左、右键可连续移动地图。同时按下其中两个键可使地图进行对角移动。PgUp、PgDn、Home 和 End 键会使地图平移其 1/2 的大小。 +、-键会使地图放大或缩小一级 | `boolean` | -（不传 = 官方默认 `false`） | 建图后经 `enableKeyboard()` / `disableKeyboard()` |
 | 构造期 | enablePinchZoom | 启用双指缩放地图（官方 `MapOptions.enablePinchZoom`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enablePinchToZoom()` / `disablePinchToZoom()` |
+| 构造期 | enableRotate | 允许地图旋转（官方 `MapOptions.enableRotate`，官方默认 `true`）。官方**实例方法名与本 prop 同名**——与上面那一族「构造期名 ≠ 实例方法名」不同 | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableRotate()` / `disableRotate()` |
+| 构造期 | enableRotateGestures | 允许通过**手势**旋转地图（官方 `MapOptions.enableRotateGestures`，官方默认 `true`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableRotateGestures()` / `disableRotateGestures()` |
+| 构造期 | enableTilt | 允许地图倾斜（官方 `MapOptions.enableTilt`，官方默认 `true`） | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后经 `enableTilt()` / `disableTilt()` |
+| 构造期 | enableTiltGestures | 允许通过**手势**倾斜地图（官方 `MapOptions.enableTiltGestures`，官方默认 `true`）。⚠️ 官方**只有构造选项**，没有配对的实例方法——见下方注 | `boolean` | -（不传 = 官方默认 **`true`**） | 建图后**仅当运行时真有** `enableTiltGestures()` / `disableTiltGestures()` 时才调用，否则告警一次并忽略 |
 | 就地更新 | enableAutoResize | 容器尺寸变化时自动重设地图尺寸（内部经 FrameScheduler 合帧，一帧最多一次 `checkResize()`）。传 `false` 时只更新读数，由调用方自己在合适的时机调用暴露的 `checkResize()` | `boolean` | `true` | 库内尺寸观察器 → `checkResize()` |
 | 废弃（无效果） | enableTraffic | **不生效**。4.0 的路况收敛成独立图层，`<Map>` 自身没有这个开关——留着它只是为了让旧代码不报类型错。路况请用 `<TrafficLayer>`，见[图层总览](./layer/index.md) | `boolean` | `false` | 无（静默空操作） |
 ::: tip 四个交互 prop 的名字为什么和官方「实例方法」不一样
@@ -234,18 +238,27 @@ map/theme2
 
 另有两个 prop 官方**只有实例方法、没有构造键**，所以本库的 prop 名与实例方法同名：
 `enableInertialDragging`（惯性拖拽）与 `enableContinuousZoom`（双击平滑缩放）。
+
+`enableRotate` / `enableRotateGestures` / `enableTilt` 三项官方两侧**同名**，因此不涉及上表的
+改名问题。`enableTiltGestures` 是这批里唯一的例外：官方 `MapOptions` 声明了它，但 4.0 API 参考
+与 `core/Map.d.ts` 的**实例方法**表里都**没有** `enableTiltGestures()` / `disableTiltGestures()`
+（对比 `enableRotateGestures()` 是有的），且没有配对的 `disable*`。本库因此**只保证构造期语义**：
+建图后若运行时真有这对方法就调用，没有就**告警一次**并忽略——不臆造声明、不靠异常控制流，
+也不假装成功。需要「建图即开」时以构造选项为准。
 :::
 
-::: tip 六个交互 prop「不传」= 不表态，用官方自己的默认
-八个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
+::: tip 十个交互 prop「不传」= 不表态，用官方自己的默认
+十个交互 prop 里有**两个**是本库显式决策的默认值：`enableDragging: true`、
 `enableWheelZoom: false`（滚轮那条见下方单独的告警框）。
 
-其余**六个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
-`enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom`）在 `withDefaults` 里**显式钉成
-`undefined`**——这不是偷懒，而是必需的：Vue 会把缺省 `Boolean` prop 的「没传」强转成
-`false`，若不显式钉住，「不传」与「传 `false`」就分不开，组件会在**每次建图**时把这六项
-逐个调成 `disable*()`，于是官方 `@default true` 的**双指缩放与双击缩放被静默关掉**
-（这是修复前的真实行为，见 issue #179）。
+其余**八个**（`enableInertialDragging` / `enableContinuousZoom` / `fixCenterWhenResize` /
+`enableDblclickZoom` / `enableKeyboard` / `enablePinchZoom` / `enableRotate` /
+`enableRotateGestures` / `enableTilt` / `enableTiltGestures`）在
+`withDefaults` 里**显式钉成 `undefined`**——这不是偷懒，而是必需的：Vue 会把缺省 `Boolean`
+prop 的「没传」强转成 `false`，若不显式钉住，「不传」与「传 `false`」就分不开，组件会在
+**每次建图**时把这些项逐个调成 `disable*()`，于是官方 `@default true` 的**双指缩放、双击缩放
+与全部旋转 / 倾斜开关被静默关掉**（前两项是修复前的真实行为，见 issue #179；
+四个旋转 / 倾斜开关由 issue #167 第一批补上，它们此前**根本没有 prop**）。
 
 钉成 `undefined` 之后，「没传」真的等于「没传」，组件**不下发任何调用**，最终生效的是
 官方 `core/MapOptions.d.ts` 自己声明的 `@default`：
@@ -254,12 +267,16 @@ map/theme2
 | --- | --- | --- |
 | `enableDblclickZoom` | `true` | 双击缩放**开** |
 | `enablePinchZoom` | `true` | 双指缩放**开** |
+| `enableRotate` | `true` | 地图旋转**开** |
+| `enableRotateGestures` | `true` | 手势旋转**开** |
+| `enableTilt` | `true` | 地图倾斜**开** |
+| `enableTiltGestures` | `true` | 手势倾斜**开**（受上一条「官方无实例方法」限制） |
 | `enableKeyboard` | `false` | 键盘操作关 |
 | `fixCenterWhenResize` | `false` | resize 不保持中心 |
 | `enableInertialDragging` | 未标注 | 按 SDK 默认 |
 | `enableContinuousZoom` | 官方无构造键 | 按 SDK 默认 |
 
-⚠️ **行为变更（1.0.0-rc 期间）**：修复之前这六项**不传时一律是关**。升级之后
+⚠️ **行为变更（1.0.0-rc 期间）**：修复之前这几项**不传时一律是关**。升级之后
 `enableDblclickZoom` 与 `enablePinchZoom` 会**变回开**。依赖旧行为请显式写
 `:enable-dblclick-zoom="false"` / `:enable-pinch-zoom="false"`。
 :::

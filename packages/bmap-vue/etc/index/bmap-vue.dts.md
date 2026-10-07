@@ -439,6 +439,10 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     enableInertialDragging: boolean;
     enableKeyboard: boolean;
     enableContinuousZoom: boolean;
+    enableRotate: boolean;
+    enableRotateGestures: boolean;
+    enableTilt: boolean;
+    enableTiltGestures: boolean;
     enableWheelZoom: boolean;
     keepAliveBehavior: "suspend" | "dispose";
     preserveDrawingBuffer: boolean;
@@ -3501,6 +3505,10 @@ export declare interface MapProps {
     enableContinuousZoom?: boolean;
     enableTraffic?: boolean;
     fixCenterWhenResize?: boolean;
+    enableRotate?: boolean;
+    enableRotateGestures?: boolean;
+    enableTilt?: boolean;
+    enableTiltGestures?: boolean;
     enableAutoResize?: boolean;
     loadingBgColor?: string;
     plugins?: string[];

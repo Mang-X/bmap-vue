@@ -353,4 +353,62 @@ describe("Map：交互开关的「未传」不表态（#179）", () => {
     wrapper.unmount();
     await settle();
   });
+
+  /**
+   * #167 第一批：旋转 / 倾斜四个交互开关。
+   *
+   * 上一批（#179）修的是「**已在表内**的 prop 忘了在 `withDefaults` 钉 `undefined`」；
+   * 这四个是**根本不在表内**——Driver 的 `INTERACTION_METHODS` 早就登记了
+   * `rotate` / `rotate-gestures` / `tilt` / `tilt-gestures`，只是组件面从来没有 prop，
+   * 于是调用方无论传什么都到不了 SDK。
+   *
+   * ⚠️ 四者里 `enableTiltGestures` 的**公开面与其余三个不同**：官方 4.0 API 参考与
+   * `core/Map.d.ts` 都**没有** `enableTiltGestures()` / `disableTiltGestures()` 这对
+   * **实例方法**（只有构造选项）。本条用例用的是 Fake SDK，它**有**这对方法，
+   * 因此这里证明的是「链路接上了」，**不是**「真实 SDK 上一定生效」——
+   * 真机语义由 `setInteraction` 的结构性存在判断兜底（没有就告警一次）。
+   */
+  it("#167：旋转 / 倾斜四个开关「没传」时不表态（不写、不 disable）", async () => {
+    const wrapper = await mountMap({});
+    // 正向断言：四个键**一次都没写**。官方对这四个全部标 `@default true`，
+    // 一旦它们在 `withDefaults` 里丢了 `undefined`，这里会分别出现一次 `disable*()`。
+    expect(harness.interactionWrites()).toEqual({
+      enableDragging: 1,
+      enableScrollWheelZoom: 1,
+    });
+    expect(harness.interactions()).not.toHaveProperty("rotate");
+    expect(harness.interactions()).not.toHaveProperty("rotateGestures");
+    expect(harness.interactions()).not.toHaveProperty("tilt");
+    expect(harness.interactions()).not.toHaveProperty("tiltGestures");
+    wrapper.unmount();
+    await settle();
+  });
+
+  it("#167：四个开关显式传值时各自落到官方实例方法上（且两次都各写一次）", async () => {
+    const wrapper = await mountMap({
+      enableRotate: false,
+      enableRotateGestures: true,
+      enableTilt: false,
+      enableTiltGestures: true,
+    });
+    expect(harness.interactions()).toMatchObject({
+      rotate: false,
+      rotateGestures: true,
+      tilt: false,
+      tiltGestures: true,
+    });
+    // ⚠️ 键**统一归并到 `enableXxx`**：`interactionWrites()` 把同一开关的
+    // `enableXxx` / `disableXxx` 两种写法折叠成一个 props 名（见 harness 的
+    // `interactionNameOf`），因此 `enableRotate: 1` 表示「rotate 这个开关被写过一次」——
+    // **写的是 enable 还是 disable 由上面那条 `interactions()` 断言负责**，
+    // 两条一起才能区分「没下发」与「下发了同一个值」。
+    expect(harness.interactionWrites()).toMatchObject({
+      enableRotate: 1,
+      enableRotateGestures: 1,
+      enableTilt: 1,
+      enableTiltGestures: 1,
+    });
+    wrapper.unmount();
+    await settle();
+  });
 });

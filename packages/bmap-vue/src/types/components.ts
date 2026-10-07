@@ -197,6 +197,35 @@ export interface MapProps {
    * 构造期 prop 名。
    */
   fixCenterWhenResize?: boolean;
+  /**
+   * 是否允许地图旋转（官方 `MapOptions.enableRotate`，`@default true`，issue #167）。
+   *
+   * 官方**实例方法**对是 `enableRotate()` / `disableRotate()`，与构造期键**同名**——
+   * 与本文件里 `enableDblclickZoom` → `enableDoubleClickZoom()` 那一族不同，因此
+   * `INTERACTION_METHODS` 的两侧拼写在这三项上是一致的。
+   *
+   * ⚠️ 四个旋转 / 倾斜开关（本项与 `enableRotateGestures` / `enableTilt` / `enableTiltGestures`）
+   * 官方**全部标 `@default true`**，因此未给时**必须**保持 `undefined`（「交给 SDK 默认」），
+   * 不能在 `withDefaults` 里给 `false`——那会让「没传」变成「显式关闭」。
+   */
+  enableRotate?: boolean;
+  /** 是否允许通过**手势**旋转地图（官方 `MapOptions.enableRotateGestures`，`@default true`，issue #167）。 */
+  enableRotateGestures?: boolean;
+  /** 是否允许地图倾斜（官方 `MapOptions.enableTilt`，`@default true`，issue #167）。 */
+  enableTilt?: boolean;
+  /**
+   * 是否允许通过**手势**倾斜地图（官方 `MapOptions.enableTiltGestures`，`@default true`，issue #167）。
+   *
+   * ⚠️ **这一项的公开面与其余三项不同**：官方 4.0 API 参考的 `BMap.Map` 方法表与
+   * `@baidumap/jsapi-v4-types@4.0.5` 的 `core/Map.d.ts` 都**没有实例方法**
+   * `enableTiltGestures()` / `disableTiltGestures()`（对比 `enableRotateGestures()` 是有的），
+   * 只有**构造选项**这一个入口，且没有配对的 `disable*`。
+   *
+   * 因此它的落地**不保证生效**：`MapDriver.setInteraction` 先做结构性存在判断，运行时真有这对
+   * 方法就调用，没有就**告警一次**（不臆造类型声明、不靠异常控制流，更不假装成功）。
+   * 需要「建图即开」时以构造选项为准，见 `driver/jsapi-v4/map.ts` 的 `INTERACTION_METHODS` 注释。
+   */
+  enableTiltGestures?: boolean;
   /** 容器尺寸变化时自动重设尺寸(v2 兼容) */
   enableAutoResize?: boolean;
   loadingBgColor?: string;
