@@ -13,9 +13,11 @@
  * basic 与 UI 消费方的边界（根入口不静态拉进可选 UI Kit）由
  * `tests/behavior/ui-kit-entry.test.ts` 的真实 basic / UI 生产构建判，这里不重复。
  *
+ * **计算样式**在同一条路径里（`fixtures/consumer/styles/computed-style-runner.mjs`）：在消费
+ * fixture 里导入发布包、用 happy-dom 真实渲染，读发布组件**自己带出来的** `data-v-*` 属性与
+ * 真实层叠结果 —— 断言的是发布 JS 与发布 CSS 的 scope 一致，而不是测试补出来的选择器。
+ *
  * 判据本体在 `consumer-styles-boundary.mts`（纯函数，可喂合成产物做行为级反例）。
- * 真实浏览器里的**计算样式**是另一条证据链：`tests/behavior/autocomplete-published-style.test.ts`
- * 用 dist 产物 + happy-dom 断言同样的规则确实参与层叠（不依赖外部浏览器与网络）。
  *
  * 用法（由 `pnpm verify:package` 调用，参数是装好依赖的消费 fixture 目录）：
  *   node --experimental-strip-types scripts/consumer-styles.mts .artifacts/fixture-consumer
@@ -25,7 +27,6 @@ import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertStylesReport, type StylesBuild } from "./consumer-styles-boundary.mts";
-
 /** 逐个入口的构建任务：`entry` 是 fixture 里的文件名，`out` 是产物目录名。 */
 const BUILDS = [
   { id: "with-styles", entry: "entry-with-styles.ts", out: "with-styles" },
@@ -97,14 +98,37 @@ function main(): void {
     built[build.id] = readBuild(outDir);
   }
 
+  // 计算样式：在**装出来的 tarball**上渲染发布组件，读它自己带出来的 scope 属性与真实
+  // 层叠结果。放在这一条路径里而不是 `test:unit`：`dist` 是 gitignore 的构建产物，
+  // `test:unit` 在干净检出上并不保证它存在（#208 评审 P2）。
+  console.log("[consumer-styles] 计算样式：渲染发布组件并读 getComputedStyle");
+  const computedStyleOut = execFileSync(
+    process.execPath,
+    [resolve(stylesDir, "computed-style-runner.mjs")],
+    { cwd, encoding: "utf8", env: { ...process.env, CI: "1" }, stdio: ["ignore", "pipe", "inherit"] },
+  );
+  const computedStyleLine = computedStyleOut.trim().split("\n").at(-1);
+  if (computedStyleLine === undefined || computedStyleLine.length === 0) {
+    throw new Error("[consumer-styles] 计算样式 runner 没有输出 JSON 报告。");
+  }
+  let computedStyle: unknown;
+  try {
+    computedStyle = JSON.parse(computedStyleLine);
+  } catch {
+    throw new Error(
+      `[consumer-styles] 计算样式 runner 的最后一行不是 JSON：\n${computedStyleLine.slice(0, 300)}`,
+    );
+  }
+
   assertStylesReport({
     withStyles: built["with-styles"]!,
     rootOnly: built["root-only"]!,
+    computedStyle: computedStyle as Parameters<typeof assertStylesReport>[0]["computedStyle"],
   });
   const relativeOut = relative(cwd, resolve(stylesDir, "out"));
   console.log(
     `[consumer-styles] OK：显式 import '<pkg>/styles.css' 的产物含 Autocomplete 定位/层级规则；` +
-      `不 import 的产物不含它（产物在 ${relativeOut}/）`,
+      `不 import 的产物不含它；发布组件的计算样式来自发布 CSS（产物在 ${relativeOut}/）`,
   );
 }
 

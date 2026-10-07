@@ -13,16 +13,26 @@
 - 不 import 的产物必须**不含**这些规则 —— 本库不自动注入样式（#189 的边界），
   只有显式 import 才该出现。正向对照是产物里确实有本库代码。
 
-## 计算样式（发布 CSS + happy-dom）
+## 计算样式（同一入口里，跑在装出来的包上）
 
-`tests/behavior/autocomplete-published-style.test.ts` 把**未改动的** `dist/bmap-vue.css`
-注入 happy-dom，在真实渲染出来的 `<Autocomplete>` 输入框上读 `getComputedStyle`：
-`position: absolute`、`z-index: 10`、`top/left: 10px`、`max-width: calc(100% - 20px)`、
-`box-sizing: border-box`。不需要外网 / AK / Chromium，CI 的 `quality` job 就能跑。
+`fixtures/consumer/styles/computed-style-runner.mjs` 在消费 fixture 里**导入发布包**，
+用 happy-dom 真实渲染 `<Map>` / `<Autocomplete>`，然后：
 
-发布 CSS 的选择器带构建期 scope hash（dist 与测试构建不同），用例的做法是 **CSS 一个字不改**，
-把 dist 选择器里的 scope 属性按原值补到被测元素上；另有一条反证断言该规则**不**对没有 scope
-属性的同类元素生效。
+1. 读输入框上**发布组件自己带出来的** `data-v-*` 属性（**不人工补任何属性**）；
+2. 注入同一份 tarball 里的 `styles.css`（经 Node 解析，路径必须在 `node_modules` 内）；
+3. 断言那个 scope 真的出现在发布 CSS 的选择器里（JS 与 CSS 来自同一次构建）；
+4. 读 `getComputedStyle`：`position: absolute`、`z-index: 10`、`top/left: 10px`、
+   `max-width: calc(100% - 20px)`、`box-sizing: border-box`；
+5. 反证：没有 scope 属性的同类元素**不**命中那条规则。
+
+于是「发布 JS 的 scope 与发布 CSS 的 scope 一致」是**被断言的事实**：发布组件丢了 scoped
+绑定、或 JS / CSS 来自不一致的构建，这一步都会红（实测把安装产物里的 scope 改掉即判红）。
+
+## 位置（为什么不放 `test:unit`）
+
+这一整套都在 `verify:package` 消费路径里 —— 那条路径本来就先 `build:package` 再 pack。
+`dist` 是 gitignore 的构建产物，而 `pnpm test:unit` 在干净检出上并不保证它存在
+（会以「缺少发布样式」失败），所以计算样式不放 `test:unit`。
 
 ## 范围说明
 

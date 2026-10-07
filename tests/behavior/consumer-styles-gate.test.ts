@@ -18,7 +18,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { assertStylesReport, type StylesReport } from "../../scripts/consumer-styles-boundary.mts";
+import {
+  assertStylesReport,
+  type ComputedStyleReport,
+  type StylesReport,
+} from "../../scripts/consumer-styles-boundary.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -32,10 +36,32 @@ const PUBLISHED_AUTOCOMPLETE_CSS =
   ".b-auto-complete-input[data-v-x]{z-index:10;box-sizing:border-box;" +
   "max-width:calc(100% - 20px);position:absolute;top:10px;left:10px}";
 
+/**
+ * 计算样式的合法读数：`stylesPath` 在 node_modules 里、scope 来自发布组件自己渲染出来的
+ * DOM（不是测试补的）、且与发布 CSS 的选择器对得上。
+ */
+function validComputedStyle(): ComputedStyleReport {
+  return {
+    stylesPath: "/tmp/fixture-consumer/node_modules/bmap-vue/dist/bmap-vue.css",
+    scopeAttributes: ["data-v-da7b80f9"],
+    cssHasMatchingScope: true,
+    computed: {
+      position: "absolute",
+      zIndex: "10",
+      top: "10px",
+      left: "10px",
+      maxWidth: "calc(100% - 20px)",
+      boxSizing: "border-box",
+    },
+    barePosition: "",
+  };
+}
+
 function validReport(): StylesReport {
   return {
     withStyles: { code: "export const x = 1;", css: PUBLISHED_AUTOCOMPLETE_CSS },
     rootOnly: { code: "const BMAP_ERROR = 'x';", css: "" },
+    computedStyle: validComputedStyle(),
   };
 }
 
@@ -96,6 +122,54 @@ describe("样式门禁：判据有牙（合成产物逐个喂）", () => {
       () => ({
         ...validReport(),
         rootOnly: { code: "export {};", css: "" },
+      }),
+    ],
+    [
+      "计算样式读的不是装出来的包（stylesPath 不在 node_modules 里）",
+      () => ({
+        ...validReport(),
+        computedStyle: { ...validComputedStyle(), stylesPath: "/repo/packages/bmap-vue/dist/bmap-vue.css" },
+      }),
+    ],
+    [
+      "发布组件渲染出来的元素上没有 scope 属性（scoped 绑定丢了）",
+      () => ({
+        ...validReport(),
+        computedStyle: { ...validComputedStyle(), scopeAttributes: [], cssHasMatchingScope: false },
+      }),
+    ],
+    [
+      "发布组件的 scope 与发布 CSS 对不上（JS/CSS 来自不一致的构建）",
+      () => ({
+        ...validReport(),
+        computedStyle: { ...validComputedStyle(), cssHasMatchingScope: false },
+      }),
+    ],
+    [
+      "计算样式里 position 不是 absolute（CSS 没作用到组件上）",
+      () => ({
+        ...validReport(),
+        computedStyle: {
+          ...validComputedStyle(),
+          computed: { ...validComputedStyle().computed, position: "static" },
+        },
+      }),
+    ],
+    [
+      "计算样式里 z-index 不对",
+      () => ({
+        ...validReport(),
+        computedStyle: {
+          ...validComputedStyle(),
+          computed: { ...validComputedStyle().computed, zIndex: "auto" },
+        },
+      }),
+    ],
+    [
+      "没有 scope 属性的同类元素也命中了那条规则（判据没有区分力）",
+      () => ({
+        ...validReport(),
+        computedStyle: { ...validComputedStyle(), barePosition: "absolute" },
       }),
     ],
   ])("违规必须判红：%s", (_label, mutate) => {
