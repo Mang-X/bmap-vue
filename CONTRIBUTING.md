@@ -104,13 +104,22 @@ pnpm test:unit
 pnpm generate:manifest          # 必须排在 pack 之前：volar.d.ts 是生成产物，见下
 pnpm --filter bmap-vue pack --pack-destination .artifacts
 pnpm check:pack-contents         # 实际发布的那一个 tarball 里到底有什么
-pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced / 仓库外严格类型）
+pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced / 严格类型 / SSR）
 ```
 
 `pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
 ESM import、`./styles.css` 与深路径反向、文档示例、Volar 类型解析、`./advanced` 契约探针、
-tree-shaking 对照、运行时依赖与 dev 告警，最后是**仓库外隔离项目**的严格类型消费
-（`scripts/consumer-isolated-strict.mts`，issue #158 工作包 A）。
+tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的两个消费档：**仓库外隔离项目**的严格类型
+（`scripts/consumer-isolated-strict.mts`，工作包 A）与**纯 Node 的真实 SFC SSR**
+（`scripts/consumer-ssr.mts`，工作包 B）。
+
+SSR 那一步在**没有 happy-dom / jsdom**的 Node 子进程里，用 `@vue/compiler-sfc` 编译
+`fixtures/consumer/ssr/App.vue`（真 SFC，不是 `h(Map)`），执行后用 `renderToString` 渲染，
+核对：环境无 `window` / `document`、`vue` 与显式声明的 `@vue/server-renderer` /
+`@vue/compiler-sfc` 同版本、容器 shell 与 `status=idle` / `map === null`、DOM 访问增量为 0、
+官方 loader 仍 `notload` 且无全局 `BMap`。`./ui-kit` 的无 DOM import 检查**不在**这一步：
+本库包装入口可加载、上游 `@baidumap/jsapi-ui-kit` 无 DOM 时求值即崩，是两条不同结论，
+上游那一条在 `tests/behavior/ui-kit-ssr.test.ts`。
 
 隔离那一步可以单独跑（tarball 是**显式参数**，脚本不会自己去 `.artifacts` 里挑）：
 

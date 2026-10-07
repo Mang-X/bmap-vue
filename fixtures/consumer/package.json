@@ -12,6 +12,7 @@
     "typescript": "^5.6.0",
     "vue-tsc": "^2.1.0",
     "@vue/compiler-sfc": "^3.5.0",
+    "@vue/server-renderer": "^3.5.0",
     "bmap-draw": "1.0.19"
   }
 }
