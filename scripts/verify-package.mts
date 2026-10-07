@@ -387,6 +387,30 @@ function main() {
     'isolated strict consumer (out-of-repo, bundler + node16)',
   )
 
+  // 5a-ssr) 纯 Node 里的**真实 SFC SSR**（#158 工作包 B）。
+  //
+  //     上面那些 import / vue-tsc 证明不了「服务端能渲染含 <Map> 的组件」：它们不编译 SFC、
+  //     也不调 renderToString。这条在**没有 happy-dom / jsdom**的 Node 里，用
+  //     `@vue/compiler-sfc` 真实编译 fixture 的 `ssr/App.vue` 后 `renderToString`，
+  //     并核对：容器 shell、`status=idle` 且服务端 `map === null`、官方 loader 仍是
+  //     `notload`、全局无 `BMap`。
+  //
+  //     「环境是真实纯 Node」与「没有 DOM 访问」是两个结论、取证方式冲突，所以在**两个独立
+  //     进程**里各跑一遍：`bare` 不注入任何全局（环境的 `typeof` / `in` / `hasOwn` 六条证据
+  //     都指向「不存在」），`instrument` 才装记账 getter（`document` 读取必须 0、渲染阶段访问
+  //     必须 0；import 阶段允许依赖的守卫式 `typeof window`）。细节见 runner 文件头。
+  //
+  //     `./ui-kit` 的无 DOM import 检查**保持不变**（上面 consumer 那条 ESM import 探针）：
+  //     本库的安全包装入口必须在无 DOM 时可加载，而上游 `@baidumap/jsapi-ui-kit` 是浏览器实现
+  //     （无 DOM 时求值即崩，见 `tests/behavior/ui-kit-ssr.test.ts`）。两者是不同结论，不能合并。
+  //
+  //     同样调同一个实现：判据在 `consumer-ssr-boundary.mts`，runner 与取证在 fixture 里。
+  run(
+    `node --experimental-strip-types ${JSON.stringify(resolve(root, 'scripts/consumer-ssr.mts'))} ${JSON.stringify(consumerFixture)}`,
+    root,
+    'SSR consumer (real SFC + renderToString, pure Node)',
+  )
+
   // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
   //
   //     `./advanced` 是**承诺维护**的扩展契约（第三方 Provider / Driver / Handle / Plugin 适配点），
