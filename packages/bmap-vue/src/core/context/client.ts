@@ -201,14 +201,20 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
         return loaded;
       },
       (err: unknown) => {
-        // 同理，迟到的失败不得把终态改写成 `error`。
+        // 失败值**先归一，再同时用于两处**：写 `ctx.error` 与作为拒绝值。
+        // `toBMapError` 对已有 `BMapError` 原样返回（不丢 `code` / `cause`），只归一普通
+        // `Error`。这一步是必需的：`BMapProviderLike` 是**公共扩展点**，用户 Provider 抛普通
+        // `Error` 完全合法；不归一的话，`<Map>` 的 `MapRuntime.doMount` 会把它包成
+        // `BMAP_RESOURCE_CREATE_FAILED`（不可重试），而 `<BMapProvider>` 会包成
+        // `BMAP_SDK_LOAD_FAILED`（可重试）——同一份 Provider 失败因入口不同而分叉，
+        // 与 docs/zh-CN/guide/errors.md 的分类相反（#186 评审 P1）。
+        const bmapErr = toBMapError(err, "Map client load failed");
+        // 迟到的失败不得把终态改写成 `error`（拒绝值仍归一，口径只有一处）。
         if (!disposed) {
           status.value = "error";
-          error.value = toBMapError(err, "Map client load failed");
+          error.value = bmapErr;
         }
-        // 拒绝**原错误**：它已带 `cause` / `code`（Provider 与 createBMapClient 的产出），
-        // 再包一层会把它藏进 `unsupported` 字段而丢掉 `code`。
-        throw err;
+        throw bmapErr;
       },
     );
     sharedLoad = task;

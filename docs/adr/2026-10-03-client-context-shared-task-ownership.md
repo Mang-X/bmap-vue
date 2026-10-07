@@ -100,7 +100,7 @@ Client 不额外释放（本库没有公开的 Client 销毁入口，`BMapClient
 
 - `startSharedLoad` 的成功/失败写入前各判一次 `disposed`（终态不得被改写）；
 - 迟到的成功以 `BMAP_RESOURCE_DISPOSED` 拒绝，且**不**写 `client`；
-- 迟到的失败拒绝**原错误**，且**不**写 `status` / `error`；
+- 迟到的失败**归一后**拒绝（见决策 5），且**不**写 `status` / `error`；
 - `dispose()` 同时清 `error`——一次已作废的加载不该在公开的 `error` ref 上留下读数。
 
 ### 启动前失败必须与生产失败走**同一处**状态写入（评审 P1）
@@ -140,13 +140,31 @@ Client 不额外释放（本库没有公开的 Client 销毁入口，`BMapClient
 两个中止来源（调用方 signal / context 终态）共用同一处登记与解绑，`AbortSignal` 让
 「已 dispose」与「等待期间 dispose」由同一个 `aborted` 覆盖。
 
-## 决策 5：失败的拒绝值改为**原错误**
+## 决策 5：失败值**先归一，再同时用于 `ctx.error` 与拒绝值**（评审 P1 修正）
 
-`load()` 此前把失败包成新的 `BMapError("BMAP_SDK_LOAD_FAILED", "Map client load failed: …")`，
-与另外两条同类路径（`MapRuntime.doMount`、`BMapProvider.ensureLoad`）**直接抛 `e`**
-不一致，而且会把 `BMapError` 专有的 `code` / `unsupported` 折进新错误的字段里做成信息
-损失（`toBMapError` 只对**非** `BMapError` 生成 `cause`）。现在与那两条对齐：拒绝原错误，
-`ctx.error` 仍保留归一化后的 `BMapError`（诊断面不变）。
+曾经写成「拒绝原错误，理由是保留 `code`」。**这条理由是错的**，而且改动本身引入了一个
+公开契约回归：
+
+`toBMapError(err, fallback)` 对已有 `BMapError` 是**原样返回**（`if (err instanceof BMapError)
+return err`），只归一普通 `Error`——所以「再包一层会丢 `code`」不成立（那只在使用别处那个
+`new BMapError(...)` 包装时才发生）。后果是：`BMapProviderLike` 是**公共扩展点**，
+用户 Provider 抛普通 `Error` 完全合法，而裸抛会让两条入口各自二次包装：
+
+| 入口 | 二次包装位置 | 公开错误码 | 可重试 |
+| --- | --- | --- | --- |
+| `<BMapProvider>` | `ensureLoad()` | `BMAP_SDK_LOAD_FAILED` | ✅ |
+| `<Map>` | `MapRuntime.doMount()` | **`BMAP_RESOURCE_CREATE_FAILED`** | ❌ |
+
+同一个 Provider 失败因入口不同而码分叉，且后者与 `docs/zh-CN/guide/errors.md` 的分类相反
+——那里 `BMAP_RESOURCE_CREATE_FAILED` 是「Overlay/Control/Layer 创建失败」，SDK 加载失败
+归 `BMAP_SDK_LOAD_FAILED` 且**可重试**。实测（普通 `Error` Provider）：基线两条入口都是
+`BMAP_SDK_LOAD_FAILED`(retryable)，裸抛版本 `<Map>` 变成
+`BMAP_RESOURCE_CREATE_FAILED`(not retryable)。
+
+现在：失败值先 `toBMapError(err, "Map client load failed")` 归一，**同一个对象**既写
+`ctx.error` 也作为拒绝值。对 `BMapError` 是无操作（不丢 `code` / `unsupported` / `cause`），
+对普通 `Error` 则在**唯一收口点**完成归一，上层两条入口拿到的都是已经归一的 `BMapError`，
+不会再被二次包装成不同类别。
 
 ## 连带影响：`retry()` 的状态口径
 

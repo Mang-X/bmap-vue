@@ -19,8 +19,9 @@
 - **等待监听器**：`Promise.race` 的 abort 监听器在正常完成时未被移除，现在结算前先解绑
   （有单测钉住「完成后不再有解绑动作」）。
 
-两处顺带收窄：`load()` 的失败改为**拒绝原错误**（与 `MapRuntime.doMount`、`BMapProvider.ensureLoad`
-对齐，不再把 `BMapError` 的 `code` 折进新错误的字段；`ctx.error` 仍是归一化后的 `BMapError`）；
+两处顺带收窄：`load()` 的失败值**先归一、再同时用于 `ctx.error` 与拒绝值**（普通 `Error`
+在唯一收口点变成 `BMAP_SDK_LOAD_FAILED`，避免 `<Map>` 与 `<BMapProvider>` 各自二次包装成
+不同错误码；`BMapError` 原样透出，不丢 `code` / `cause`）；
 `retry()` 只在 `error` 档复位状态，不再把在飞的 `loading` 抹成 `idle`。
 
 评审修正（P1）：拆分时「缺 definition」这条**启动前**失败一度写成独立的 `Promise.reject`，

@@ -545,6 +545,70 @@ describe("共享 Client 的取消隔离与终态（#186）", () => {
 });
 
 /**
+ * #186 评审 P1：**同一个** Provider 加载失败，经不同入口必须给出**同一个**公开错误码。
+ *
+ * `BMapProviderLike` 是公共扩展点，用户 Provider 抛普通 `Error` 完全合法。Client Context 若
+ * 把原始 `Error` 直接抛给上层，两条入口会各自二次包装：
+ * `<BMapProvider>` → `BMAP_SDK_LOAD_FAILED`（可重试），
+ * `<Map>` 的 `MapRuntime.doMount` → **`BMAP_RESOURCE_CREATE_FAILED`**（不可重试）。
+ * 后者还与 `docs/zh-CN/guide/errors.md` 的分类相反——那里 `BMAP_RESOURCE_CREATE_FAILED`
+ * 是「Overlay/Control/Layer 创建失败」，SDK 加载失败归 `BMAP_SDK_LOAD_FAILED` 且可重试。
+ *
+ * 因此这里从**组件层**断言两条入口的读数一致；归一的收口点在 `createClientContext`。
+ */
+describe("Provider 加载失败的公开错误码（#186 评审 P1）", () => {
+  /** 公共扩展点：用户 Provider 抛普通 `Error`（不是 `BMapError`）。 */
+  const failingProvider = () => ({
+    id: "failing",
+    load: async (): Promise<never> => {
+      throw new Error("provider boom");
+    },
+  });
+
+  it("<Map> 与 <BMapProvider> 都归一为可重试的 BMAP_SDK_LOAD_FAILED", async () => {
+    const mapErrors: BMapError[] = [];
+    const MapRoot = defineComponent({
+      setup: () => () =>
+        h(Map, {
+          provider: failingProvider(),
+          onError: (error: BMapError) => mapErrors.push(error),
+        }),
+    });
+    const mapWrapper = mount(MapRoot, { attachTo: harness.container() });
+    await flushPromises();
+    await flushPromises();
+
+    const providerErrors: BMapError[] = [];
+    const ProviderRoot = defineComponent({
+      setup: () => () =>
+        h(
+          BMapProvider,
+          {
+            definition: { provider: failingProvider(), loadOptions: {} },
+            onError: (error: BMapError) => providerErrors.push(error),
+          },
+          () => h("div", "child"),
+        ),
+    });
+    const providerWrapper = mount(ProviderRoot);
+    await flushPromises();
+
+    // 两条入口都必须真的报错（否则下面的「一致」可能只是「都没发生」）。
+    expect(mapErrors, "<Map> 必须上报错误").toHaveLength(1);
+    expect(providerErrors, "<BMapProvider> 必须上报错误").toHaveLength(1);
+
+    expect(mapErrors[0]!.code, "<Map> 入口的公开错误码").toBe("BMAP_SDK_LOAD_FAILED");
+    expect(providerErrors[0]!.code, "<BMapProvider> 入口的公开错误码").toBe("BMAP_SDK_LOAD_FAILED");
+    // 可重试是文档承诺的一部分（`BMAP_RESOURCE_CREATE_FAILED` 不可重试）。
+    expect(mapErrors[0]!.retryable).toBe(true);
+    expect(providerErrors[0]!.retryable).toBe(true);
+
+    await unmountAndSettle(mapWrapper);
+    await unmountAndSettle(providerWrapper);
+  });
+});
+
+/**
  * M4-STATE / issue #27：Map 视野的受控 / 非受控三态。
  *
  * 用例只写领域语言（`harness.view()` / `harness.viewWrites()` / `harness.simulateUserView()` /

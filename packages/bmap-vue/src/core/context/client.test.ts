@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { createClientContext } from "./client";
 import type { BMapClient, BMapDriverFactory, CreateBMapClientOptions } from "../../client/types";
 import type { BMapDriver } from "../../driver/types/bmap";
+import { BMapError } from "../errors/BMapError";
 import { createLoadedJsapiV4 } from "../loader/providers";
 import { CustomScriptV4Provider } from "../loader/providers/CustomScriptV4Provider";
 import { SdkRegistry } from "../loader/SdkRegistry";
@@ -79,8 +80,10 @@ describe("BMapClientContext", () => {
   });
 
   it("records error and recovers via retry", async () => {
-    // 拒绝的是**原错误**（#186）：Provider 的错误已带 `code` / `cause`，再包一层会把
-    // `code` 藏进 `unsupported` 字段。归一化后的 `BMapError` 照旧写在 `ctx.error` 上。
+    // 拒绝值与 `ctx.error` 是**同一个归一化后的对象**：`BMapProviderLike` 是公共扩展点，
+    // 用户 Provider 抛普通 `Error` 合法，它必须在这里就被归一成 `BMAP_SDK_LOAD_FAILED`
+    // ——否则 `<Map>`（`MapRuntime.doMount`）会把它包成 `BMAP_RESOURCE_CREATE_FAILED`，
+    // 与 `<BMapProvider>` 的码分叉（#186 评审 P1）。
     let fail = true;
     const ctx = createClientContext({
       definition: definition(async () => {
@@ -88,13 +91,26 @@ describe("BMapClientContext", () => {
         return loaded();
       }),
     });
-    await expect(ctx.load()).rejects.toThrow("sdk down");
+    await expect(ctx.load()).rejects.toMatchObject({ code: "BMAP_SDK_LOAD_FAILED" });
     expect(ctx.status.value).toBe("error");
     expect(ctx.error.value).toMatchObject({ code: "BMAP_SDK_LOAD_FAILED" });
+    // 普通 Error 必须被放进 `cause`，不能被丢掉。
+    expect((ctx.error.value as BMapError).cause).toBeInstanceOf(Error);
     fail = false;
     const client = await ctx.retry();
     expect(ctx.status.value).toBe("ready");
     expect(client).toBeTruthy();
+  });
+
+  it("已经是 BMapError 的失败原样透出（不重包、不丢 code / unsupported）", async () => {
+    const original = new BMapError("BMAP_SDK_LOAD_TIMEOUT", "too slow", { unsupported: "detail" });
+    const ctx = createClientContext({
+      definition: definition(async () => {
+        throw original;
+      }),
+    });
+    await expect(ctx.load()).rejects.toBe(original);
+    expect(ctx.error.value).toBe(original);
   });
 
   it("resolves immediately when constructed with a client", async () => {
