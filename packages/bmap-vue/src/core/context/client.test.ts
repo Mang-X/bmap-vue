@@ -40,7 +40,6 @@ function fakeClient(): BMapClient {
     engine: "jsapi-v4",
     libraryVersion: "test",
     sdkVersion: "test",
-    version: "test",
     driver: {} as never,
     capabilities: {} as never,
     rawSdk: {},
@@ -102,8 +101,13 @@ describe("BMapClientContext", () => {
     expect(client).toBeTruthy();
   });
 
-  it("已经是 BMapError 的失败原样透出（不重包、不丢 code / unsupported）", async () => {
-    const original = new BMapError("BMAP_SDK_LOAD_TIMEOUT", "too slow", { unsupported: "detail" });
+  it("已经是 BMapError 的失败原样透出（不重包、对象身份 / code / cause 不变）", async () => {
+    // 只用 `BMapErrorOptions` 真实存在的字段（`cause`）。
+    // ⚠️ 这里不能塞不存在的字段来「证明不丢信息」：本文件是共址单测，
+    // `tsconfig.tests.json` 的 include 不含 `packages/**/*.test.ts`，多余属性不会被
+    // 类型检查拦下，Vitest 转译也不做类型检查——那种断言只是在测一个被构造函数忽略的键。
+    const cause = new Error("upstream detail");
+    const original = new BMapError("BMAP_SDK_LOAD_TIMEOUT", "too slow", { cause });
     const ctx = createClientContext({
       definition: definition(async () => {
         throw original;
@@ -111,6 +115,8 @@ describe("BMapClientContext", () => {
     });
     await expect(ctx.load()).rejects.toBe(original);
     expect(ctx.error.value).toBe(original);
+    expect(ctx.error.value?.code).toBe("BMAP_SDK_LOAD_TIMEOUT");
+    expect(ctx.error.value?.cause, "cause 必须原样保留").toBe(cause);
   });
 
   it("resolves immediately when constructed with a client", async () => {
@@ -484,7 +490,8 @@ describe("BMapClientContext：dispose 对底层可取消资源的作用（#186 �
           {
             fingerprint: "official-like",
             cancellable: false,
-            loader: (requestSignal: AbortSignal) =>
+            // `SdkLoader` 的 signal 是可选的（官方 Provider 类型如此），签名要一致。
+            loader: (requestSignal?: AbortSignal) =>
               (loader.load as (o: unknown, s?: AbortSignal) => Promise<never>)(_options, requestSignal),
           },
           signal,

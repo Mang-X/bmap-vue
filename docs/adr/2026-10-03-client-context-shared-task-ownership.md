@@ -162,9 +162,10 @@ return err`），只归一普通 `Error`——所以「再包一层会丢 `code`
 `BMAP_RESOURCE_CREATE_FAILED`(not retryable)。
 
 现在：失败值先 `toBMapError(err, "Map client load failed")` 归一，**同一个对象**既写
-`ctx.error` 也作为拒绝值。对 `BMapError` 是无操作（不丢 `code` / `unsupported` / `cause`），
-对普通 `Error` 则在**唯一收口点**完成归一，上层两条入口拿到的都是已经归一的 `BMapError`，
-不会再被二次包装成不同类别。
+`ctx.error` 也作为拒绝值。对 `BMapError` 是无操作——对象身份、`code` 与 `cause`（以及
+`mapId` / `component` / `plugin` / `capability` / `engine` / `version` 这些
+`BMapErrorOptions` 里的字段）全部原样保留；对普通 `Error` 则在**唯一收口点**完成归一，
+上层两条入口拿到的都是已经归一的 `BMapError`，不会再被二次包装成不同类别。
 
 ## 连带影响：`retry()` 的状态口径
 
