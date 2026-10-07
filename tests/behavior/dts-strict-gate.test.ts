@@ -57,9 +57,21 @@ function readComponentManifest(): string[] {
   return [...block.matchAll(/exportName:\s*"([^"]+)"/g)].map((m) => m[1]!);
 }
 
-/** 消费方的子路径（`package.json#exports` 的键去掉 `./`，去掉纯 types 的 `./volar` 与 meta）。 */
+/**
+ * 消费方的子路径（`package.json#exports` 的键去掉 `./`）。
+ *
+ * 排除两类**没有声明可验**的出口：
+ * - `./package.json`：meta，不是模块；
+ * - `./volar`：纯 `types` 出口，探针按 `compilerOptions.types` 验（另有专测），
+ *   不以 `import` 形式进入 program；
+ * - `./styles.css`（#189）：**纯资源出口**，它是一条 CSS，不产出也不该产出 `.d.ts`。
+ *   把 `.d.ts` 的严格消费判据套到它身上只会逼出一份假声明（ADR 2026-10-02 明确拒绝）。
+ *
+ * ⚠️ 排除的判据是「**声明文件不存在**」而不是「名字长这样」：写死名单时，将来一条
+ * 新的资源出口会静默落到「探针没 import」的红里，而原因是判据本身没跟上出口形态。
+ */
 const SUBPATHS = Object.keys(MANIFEST.exports)
-  .filter((key) => key !== "./volar" && key !== "./package.json")
+  .filter((key) => key !== "./volar" && key !== "./package.json" && key !== "./styles.css")
   .map((key) => (key === "." ? "@mangax/bmap-vue" : `@mangax/bmap-vue/${key.slice(2)}`));
 
 describe("门禁接线", () => {
@@ -237,6 +249,42 @@ describe("探针覆盖全部出口", () => {
 
   it("出口名单非空（判据没有着力点时上面那条会恒真）", () => {
     expect(SUBPATHS.length).toBeGreaterThanOrEqual(7);
+  });
+
+  /**
+   * 被排除的出口必须有**说得出的**排除理由，而不是「名字被列进了排除名单」。
+   *
+   * 这条守的是上面那条排除的**失效方向**：如果有人把某个 JS 出口加进排除名单，
+   * 上面那条 `missing` 会静默变绿（那个出口的声明就没人验了），而本仓库最容易发生的
+   * 恰好是「加了一个出口、忘了让探针覆盖」。
+   *
+   * 两类合法排除（逐个点名，且各自在本文件里都有对应的判据）：
+   * - `./package.json`：meta，不是模块；
+   * - `./volar`：**有** `.d.ts`，但它不以 `import` 形式进 program ——
+   *   用户按 `compilerOptions.types` 使用它，由本文件的 `./volar` 专测 + `verify:package`
+   *   的 Volar 探针覆盖（那是这件事真正的消费路径）。
+   *
+   * 除此之外的出口（尤其是任何带 `.d.ts` 的**运行时**出口）一律该出现在探针里。
+   */
+  it("被排除的出口只有 meta 与按 types 使用的 ./volar（否则「排除」会掩盖漏验）", () => {
+    const probeSpecOf = (key: string): string =>
+      key === "." ? "@mangax/bmap-vue" : `@mangax/bmap-vue/${key.slice(2)}`;
+    const excluded = Object.keys(MANIFEST.exports).filter(
+      (key) => !SUBPATHS.includes(probeSpecOf(key)),
+    );
+    // 正证：确实有被排除的出口（不是空集上的恒真）。
+    expect(excluded.length, "没有被排除的出口 —— 判据没有着力点").toBeGreaterThan(0);
+    expect(
+      [...excluded].sort(),
+      "出现了一个没被登记的排除出口：它要么该被探针 import，要么该在此写明理由",
+    ).toEqual(["./package.json", "./styles.css", "./volar"]);
+
+    // `./volar` 是「有声明、但按 types 使用」的**唯一**一个，必须显式承认这件事，
+    // 而不是靠一条笼统的「排除名单」把它带过。
+    expect(
+      (MANIFEST.exports as Record<string, { types?: string }>)["./volar"]?.types,
+      "./volar 的排除理由就是「有声明但按 compilerOptions.types 使用」",
+    ).toBe("./volar.d.ts");
   });
 
   it("注释掉的 import 不算覆盖（判据的可核对性）", () => {

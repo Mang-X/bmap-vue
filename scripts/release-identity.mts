@@ -91,20 +91,34 @@ export function tarballBasename(name: string, version: string): string {
   return `${name.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`;
 }
 /**
- * `exports` 里**有运行时产物**的子路径。
+ * `exports` 里**有运行时 JS 产物**的子路径。
  *
- * 「入口数 == dist 的 .d.ts 数」这条判据此前在两处各写一遍，两处都假设每���子路径都有
+ * 「入口数 == dist 的 .d.ts 数」这条判据此前在两处各写一遍，两处都假设每个子路径都有
  * `import` 条件。`./volar` 打破了这个假设：它是**纯 `types` 出口**（一份供 IDE 读的
  * `GlobalComponents` 声明，运行时不 import 它），因此没有 dist 产物。
  *
- * 计数时必须排除纯 types 出口，否则会得出「dist 少了一个入口」这种误判。集中在这里
- * 是为了让它只被推导一次——两处各判一次，早晚有一处忘记排除。
+ * `./styles.css` 是**第二个**打破假设的出口（#189）：它是纯样式资源出口
+ * （`"./styles.css": "./dist/bmap-vue.css"`），既没有 `import` 条件、也不该有假 `.d.ts`。
+ * 它与 `./volar` 的差别正是判据要在意的：一个指向资源，一个指向声明。
+ *
+ * 因此判据收窄为「spec 最终解析到 `.mjs` 运行时产物」，而不是「有 `import` 条件」或
+ * 「包内字符串目标」——后两者会把资源出口也算成入口，得出「dist 少了两个入口」这种误判。
+ * 集中在这里是为了让它只被推导一次——两处各判一次，早晚有一处忘记排除。
  */
 export function runtimeExportSubpaths(exportsField: unknown): string[] {
   if (!exportsField || typeof exportsField !== "object") return [];
   return Object.entries(exportsField as Record<string, unknown>)
     .filter(([subpath]) => subpath !== "./package.json")
-    .filter(([, spec]) => (typeof spec === "string" ? true : Boolean((spec as { import?: string }).import)))
+    .filter(([, spec]) => exportTargetsOf(spec).some((target) => target.endsWith(".mjs")))
     .map(([subpath]) => subpath)
     .sort();
+}
+
+/** 一个 `exports` 条目的全部字符串叶子（条件对象递归下钻）。 */
+function exportTargetsOf(spec: unknown): string[] {
+  if (typeof spec === "string") return [spec];
+  if (spec && typeof spec === "object") {
+    return Object.values(spec as Record<string, unknown>).flatMap(exportTargetsOf);
+  }
+  return [];
 }

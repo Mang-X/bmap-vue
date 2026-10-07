@@ -12,6 +12,15 @@ The map SDK is loaded by default through the official
 [`@baidumap/jsapi-loader`](https://www.npmjs.com/package/@baidumap/jsapi-loader) —
 you do not need to add a `<script>` tag yourself.
 
+## Styles
+
+The `<Autocomplete>` input styles ship as a separate subpath. Import it once where you use
+the component (no other component needs it):
+
+```ts
+import '@mangax/bmap-vue/styles.css'
+```
+
 ## Usage
 
 ```vue

@@ -63,8 +63,26 @@ export interface AttwException {
    * 同样必须钉：这两条例外的理由本身就是特定档位下的解析行为，档位变了意味着
    * 「例外成立的前提」变了。评审 #45 时实测——只钉 entrypoint 时，同一组子路径从
    * `node10` 漂到 `node16-cjs` 仍被 `accepted`。
+   *
+   * 可以是**一个**档位（如 `CJSResolvesToESM` 只发生在 `node16-cjs`），也可以是**一组**
+   * 档位（#189 的 `./styles.css` 在四个档位下都无解析——它是一条纯资源出口，
+   * 而 attw 判的是「类型声明能不能解析」，资源出口天然不参与这件事）。
+   * 写成数组不是放宽：档位集合仍然**逐个全等**比对，多一个少一个都判红。
    */
-  readonly expectedResolutionKind?: string;
+  readonly expectedResolutionKind?: string | readonly string[];
+  /**
+   * 出现位置（entrypoint）的预期形态。
+   *
+   * 默认 `"entries"`：`entrypoints` 是一个**精确清单**，多一个少一个都判红 ——
+   * 这是 `CJSResolvesToESM` / `NoResolution` 原有的口径，必须原样保留。
+   *
+   * `"per-resolution-kind"`：`entrypoints` 是**每个档位各自出现一次**的清单。
+   * #189 的 `./styles.css` 需要这一档：它在 node10 / node16-cjs / node16-esm / bundler
+   * 四档下**各报一条**，因此 4 条 problem 只有**一个** entrypoint。用精确清单口径会
+   * 得到「新增子路径 ./styles.css ×4」这种读不出信息的结论，而按档位钉住之后，
+   * 「某一档不再报」仍然会红（那意味着 attw 改了检查方式，该重新审阅这条登记）。
+   */
+  readonly entrypointShape?: "entries" | "per-resolution-kind";
 }
 
 /**
@@ -107,6 +125,24 @@ export const ATTW_EXCEPTIONS: readonly AttwException[] = [
     // 成立前提：旧式 node10 解析拿不到子路径。node16+ 出现 NoResolution 则是新缺陷。
     expectedResolutionKind: "node10",
     entrypoints: ["./advanced", "./components", "./composables", "./plugins", "./resolver", "./ui-kit"],
+  },
+  {
+    kind: "NoResolution",
+    why:
+      "`./styles.css` 是一条**纯资源出口**（#189）：`\"./styles.css\": \"./dist/bmap-vue.css\"`。" +
+      "attw 判的是「类型声明能不能解析」，而 CSS 不是声明，所以它在**四个档位下都无解析**——" +
+      "这与上面那条（node10 拿不到子路径）成因不同，是「资源出口本来就不参与类型解析」。" +
+      "刻意**不**给它配一份假 `.d.ts`：那会把 `import '<pkg>/styles.css'` 变成一条类型声明引用，" +
+      "消费方拿到的是「声明存在但内容无关」的假承诺。",
+    tracking: "#189",
+    // 4 = node10 / node16-cjs / node16-esm / bundler 四档**各一条**。
+    expectedCount: 4,
+    // 成立前提：与档位无关——资源出口在**所有**解析档位下都不产生类型解析。
+    expectedResolutionKind: ["node10", "node16-cjs", "node16-esm", "bundler"],
+    // ⚠️ 只有一个 entrypoint，但四档各报一条 ⇒ 用 per-resolution-kind 口径，
+    // 否则会算成「新增子路径 ./styles.css ×4」，读不出「哪一档变了」。
+    entrypoints: ["./styles.css"],
+    entrypointShape: "per-resolution-kind",
   },
 ];
 
@@ -156,15 +192,23 @@ export function evaluateAttwReport(
     };
   }
 
-  const byKind = new Map(exceptions.map((e) => [e.kind, e]));
+  /* 一个 `kind` 可以有多条登记：`NoResolution` 现在有两条，成因不同
+   * （node10 拿不到子路径 / `./styles.css` 是资源出口、四档都不参与类型解析）。
+   * 合并成一条会丢掉「哪条成立」这个信息，也会让 `expectedCount` 变成一个没有依据的合数。 */
+  const byKind = new Map<string, AttwException[]>();
+  for (const exception of exceptions) {
+    const list = byKind.get(exception.kind) ?? [];
+    list.push(exception);
+    byKind.set(exception.kind, list);
+  }
   const problems: AttwProblem[] = [];
   const accepted: AttwProblem[] = [];
   const seenKinds = new Set<string>();
 
   for (const [kind, occurrences] of Object.entries(problemMap)) {
     const list = Array.isArray(occurrences) ? occurrences : [];
-    const exception = byKind.get(kind);
-    if (!exception) {
+    const registered = byKind.get(kind);
+    if (!registered) {
       // 表里没有的 kind：无论它出现几次都是新问题（空数组除外，见下面的反向遍历）。
       if (list.length > 0) {
         problems.push({ kind: `unexpected:${kind}`, detail: describeOccurrences(kind, list) });
@@ -181,12 +225,49 @@ export function evaluateAttwReport(
     const detail = describeOccurrences(kind, list);
 
     /* 例外必须**逐条对齐**：只按 kind 匹配的话，同一类问题从 7 处涨到 8 处仍然放行，
-     * 而那正是「某个子路径开始解析不对」的信号。 */
-    const mismatches = compareWithException(list, exception);
-    if (mismatches.length > 0) {
+     * 而那正是「某个子路径开始解析不对」的信号。
+     *
+     * 一个 kind 有多条登记时（`NoResolution` 有两条：node10 拿不到子路径 / `./styles.css`
+     * 是资源出口），必须先把这一轮的 occurrences **分摊**给各条登记，再逐条比对。
+     *
+     * ⚠️ 不能写成「某一条能解释全部就放行」：`./styles.css` 那条只认自己的 4 条，
+     * 拿它去对全部 10 条必然不一致；反过来，先按 entrypoint 把属于它的 4 条摘出去，
+     * 剩下的 6 条才该由另一条解释。第一版就是「任一条解释全部即通过」，
+     * 实测输出的结论是两条各自都对不上 —— 判据退化成了永远判红。
+     *
+     * 分摊口径：按 entrypoint 取交集。某条登记声称的 entrypoint 命中的那部分归它，
+     * 剩下的继续参与后面的匹配。认领后仍要逐条比 count / 档位 / 清单，
+     * 所以「认领了但档位不对」照旧会红。 */
+    const unclaimed = [...list];
+    const driftDetails: string[] = [];
+    let explained = true;
+    for (const exception of registered) {
+      const wants = exception.entrypoints;
+      const mine =
+        wants === undefined
+          ? unclaimed
+          : unclaimed.filter((o) => wants.includes(String(o?.entrypoint ?? "?")));
+      // 这一条登记在本轮 occurrences 里没有任何位置 —— 不在这里判红。
+      // 那属于「登记过、但这一轮没出现」的形状，由下面的反向遍历统一报 `exception-vanished`。
+      // 在这里也报一次会让同一次缺失出两条结论，而其中一条（「登记已过时？」）是臆测。
+      if (mine.length === 0) continue;
+      for (const item of mine) unclaimed.splice(unclaimed.indexOf(item), 1);
+      const mismatches = compareWithException(mine, exception);
+      if (mismatches.length > 0) {
+        driftDetails.push(`[${exception.tracking}] ${mismatches.join("；")}`);
+        explained = false;
+      }
+    }
+    if (unclaimed.length > 0) {
+      driftDetails.push(
+        `有 ${unclaimed.length} 条没有被任何登记认领：` + describeOccurrences(kind, unclaimed),
+      );
+      explained = false;
+    }
+    if (!explained) {
       problems.push({
         kind: `exception-drift:${kind}`,
-        detail: `${detail} —— 与登记的例外不一致：${mismatches.join("；")}。例外要逐条复核，不要让它静默增长`,
+        detail: `${detail} —— ${driftDetails.join("；且 ")}。例外要逐条复核，不要让它静默增长`,
       });
       continue;
     }
@@ -243,20 +324,44 @@ function compareWithException(
   }
 
   if (exception.expectedResolutionKind !== undefined) {
-    const wrongKind = [...new Set(list.map((o) => String(o?.resolutionKind ?? "?")))].filter(
-      (k) => k !== exception.expectedResolutionKind,
-    );
-    if (wrongKind.length > 0) {
+    // 可以是单档，也可以是一组档位；**逐个全等**比对，多一个少一个都判红。
+    const expectedKinds = Array.isArray(exception.expectedResolutionKind)
+      ? [...exception.expectedResolutionKind]
+      : [exception.expectedResolutionKind as string];
+    const actualKinds = [...new Set(list.map((o) => String(o?.resolutionKind ?? "?")))];
+    const unexpected = actualKinds.filter((k) => !expectedKinds.includes(k));
+    const vanished = expectedKinds.filter((k) => !actualKinds.includes(k));
+    if (unexpected.length > 0) {
       mismatches.push(
-        `解析档位漂移：预期全部是 ${exception.expectedResolutionKind}，实际出现 ${wrongKind.join(", ")}` +
-          `（例外成立的前提是该档位下的解析行为）`,
+        `解析档位漂移：预期 ${expectedKinds.join(" / ")}，实际还出现了 ${unexpected.join(", ")}` +
+          `（例外成立的前提是那些档位下的解析行为）`,
+      );
+    }
+    if (vanished.length > 0) {
+      mismatches.push(
+        `预期档位 ${vanished.join(", ")} 这一轮没有报出来（问题被修好、或 attw 改了检查方式，都该重新审阅这条登记）`,
       );
     }
   }
 
   if (exception.entrypoints !== undefined) {
-    const actual = list.map((o) => String(o?.entrypoint ?? "?")).sort();
-    const expected = [...exception.entrypoints].sort();
+    // `per-resolution-kind`：清单是**每个档位各一次**，因此按档位逐条比对而不是按条目去重。
+    // 例：`./styles.css` 在四个档位下各报一条 problem，但只有**一个** entrypoint ——
+    // 用精确清单口径会算出「新增子路径 ./styles.css ×4」，读不出任何信息。
+    const actual =
+      exception.entrypointShape === "per-resolution-kind"
+        ? list.map((o) => `${String(o?.entrypoint ?? "?")}@${String(o?.resolutionKind ?? "?")}`).sort()
+        : list.map((o) => String(o?.entrypoint ?? "?")).sort();
+    const expected = (
+      exception.entrypointShape === "per-resolution-kind"
+        ? exception.entrypoints.flatMap((entry) =>
+            (Array.isArray(exception.expectedResolutionKind)
+              ? exception.expectedResolutionKind
+              : [exception.expectedResolutionKind as string]
+            ).map((kind) => `${entry}@${kind}`),
+          )
+        : [...exception.entrypoints]
+    ).sort();
     const added = actual.filter((e) => !expected.includes(e));
     const removed = expected.filter((e) => !actual.includes(e));
     if (added.length > 0) mismatches.push(`新增子路径 ${added.join(", ")}`);

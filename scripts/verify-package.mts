@@ -121,6 +121,28 @@ function assertReleaseIdentity(tarball: string): void {
   if (exportsMap['./package.json'] !== './package.json') {
     throw new Error('[verify-package] tarball must expose package.json')
   }
+  // 样式子路径（#189）：它是**纯资源出口**，形状与上面七个 JS 出口不同 ——
+  // 裸字符串目标、没有 types / import 条件，因此单独判，不能塞进上面那个循环
+  // （那会要求它也有 `types`，进而逼出一份假 `.d.ts`）。
+  const stylesTarget = exportsMap['./styles.css']
+  if (stylesTarget !== './dist/bmap-vue.css') {
+    throw new Error(
+      `[verify-package] tarball exports 必须把 ./styles.css 指向 ./dist/bmap-vue.css，实际为 ${JSON.stringify(stylesTarget)}`,
+    )
+  }
+  // `sideEffects` 必须只声明那一个 CSS：`true` 会让 JS 失去 tree-shaking，
+  // 写成 `false` 则让样式副作用声明缺位（#189 之前就是这个形态）。
+  const sideEffects = manifest.sideEffects
+  if (
+    !Array.isArray(sideEffects) ||
+    sideEffects.length === 0 ||
+    !sideEffects.includes('./dist/bmap-vue.css') ||
+    sideEffects.some((entry) => typeof entry !== 'string' || !entry.endsWith('.css'))
+  ) {
+    throw new Error(
+      `[verify-package] tarball sideEffects 必须是「只含 ./dist/bmap-vue.css 的非空数组」，实际为 ${JSON.stringify(sideEffects)}`,
+    )
+  }
   if (manifest.license !== 'MIT') {
     throw new Error(`[verify-package] tarball license must be MIT: ${String(manifest.license)}`)
   }
@@ -284,6 +306,64 @@ function main() {
     consumerFixture,
     'consumer typecheck + ESM import (package tarball)',
   )
+
+  // 5a) 样式子路径（#189）：**从装出来的 tarball** 证明它可解析、且真的是那份
+  //     `<Autocomplete>` 样式。
+  //
+  //     只断言「manifest 里有这个键」不够——那测的是我们写下的声明，不是消费方拿到的东西。
+  //     这里用 `import.meta.resolve`（Node 真实解析路径）+ 读文件内容，两条一起判：
+  //     ① 解析成功（缺出口时是 `ERR_PACKAGE_PATH_NOT_EXPORTED`）；
+  //     ② 内容里**确实**有 `<Autocomplete>` 那两条规则（`position: absolute` / `z-index`），
+  //        否则「指向了一个 CSS」与「指向了正确的 CSS」无法区分。
+  const stylesProbe = resolve(consumerFixture, 'styles-probe.mjs')
+  writeFileSync(
+    stylesProbe,
+    [
+      "import { readFileSync } from 'node:fs'",
+      "import { fileURLToPath } from 'node:url'",
+      `const resolved = import.meta.resolve('${identity.name}/styles.css')`,
+      'if (!resolved.startsWith("file:")) throw new Error("styles.css 没有解析到文件: " + resolved)',
+      'const file = fileURLToPath(resolved)',
+      'const css = readFileSync(file, "utf8")',
+      'if (!css.includes("b-auto-complete-input"))',
+      '  throw new Error("styles.css 里没有 Autocomplete 的规则类名: " + file)',
+      'if (!/position:\\s*absolute/.test(css)) throw new Error("styles.css 缺 position: absolute（定位规则不在）")',
+      'if (!/z-index:\\s*10/.test(css)) throw new Error("styles.css 缺 z-index: 10（层级规则不在）")',
+      'process.stdout.write(JSON.stringify({ file: file.split("node_modules/").pop(), bytes: css.length }))',
+      '',
+    ].join('\n'),
+  )
+  const stylesOut = execSync(`node ${JSON.stringify(stylesProbe)}`, {
+    cwd: consumerFixture,
+    encoding: 'utf8',
+    env: { ...process.env, CI: '1' },
+  })
+  console.log(
+    `\n[verify-package] 样式子路径 OK：${identity.name}/styles.css 可解析且含 Autocomplete 规则 ${stylesOut.trim()}`,
+  )
+  rmSync(stylesProbe, { force: true })
+
+  // 反向：**旧路径**必须仍然解析不到。否则「开了 ./styles.css」这件事没有约束力——
+  // 深路径若也能用，消费者会继续按 `pkg/dist/bmap-vue.css` 写，而那条路径没有承诺。
+  const deepCssProbe = resolve(consumerFixture, 'deep-css-probe.mjs')
+  writeFileSync(
+    deepCssProbe,
+    [
+      'let code = null',
+      `try { import.meta.resolve('${identity.name}/dist/bmap-vue.css') } catch (error) { code = error.code }`,
+      'if (code !== "ERR_PACKAGE_PATH_NOT_EXPORTED")',
+      '  throw new Error("深路径 pkg/dist/bmap-vue.css 不该可解析，实际: " + code)',
+      'process.stdout.write("deep path still rejected (" + code + ")")',
+      '',
+    ].join('\n'),
+  )
+  const deepOut = execSync(`node ${JSON.stringify(deepCssProbe)}`, {
+    cwd: consumerFixture,
+    encoding: 'utf8',
+    env: { ...process.env, CI: '1' },
+  })
+  console.log(`[verify-package] 反向 OK：${deepOut.trim()}`)
+  rmSync(deepCssProbe, { force: true })
   if (copiedExampleGroups > 0) {
     console.log(
       `\n[verify-package] docs examples OK: ${copiedExampleGroups} 组示例已对着 tarball 完成 vue-tsc。`,

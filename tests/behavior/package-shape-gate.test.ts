@@ -17,18 +17,51 @@ import {
  * 由 `ATTW_EXCEPTIONS` **生成**而不是手抄：手抄的摘要在例外表补齐 `expectedCount` /
  * `entrypoints` 之后立刻变成「次数对不上」的漂移用例（第一版就这么翻车），而那与
  * 「attw 真的多报了一处」是两回事。生成的方式保证这张正例与表**永远同步**。
+ *
+ * ⚠️ 一个 `kind` 现在可以有**多条**登记（`NoResolution` 有两条，成因不同），因此
+ * occurrences 必须**合并**而不是后者覆盖前者 —— 否则 `./styles.css` 那 4 条会把
+ * `./advanced` 等 6 条挤掉，正例直接变成漂移。
+ *
+ * 档位也按登记取：`expectedResolutionKind` 可以是单档或一组档位，
+ * `per-resolution-kind` 的口径下每个档位各生成一条。
  */
+function occurrencesOf(exception: (typeof ATTW_EXCEPTIONS)[number]) {
+  const kinds = Array.isArray(exception.expectedResolutionKind)
+    ? exception.expectedResolutionKind
+    : exception.expectedResolutionKind === undefined
+      ? ["?"]
+      : [exception.expectedResolutionKind];
+  const entries = exception.entrypoints ?? [];
+  if (exception.entrypointShape === "per-resolution-kind") {
+    return entries.flatMap((entrypoint) =>
+      kinds.map((resolutionKind) => ({ entrypoint, resolutionKind })),
+    );
+  }
+  // 默认口径：`entrypoints` 是精确清单，档位取第一个（单档例外的既有形态）。
+  return entries.map((entrypoint) => ({ entrypoint, resolutionKind: kinds[0]! }));
+}
+
 const REAL_REPORT = {
-  problems: Object.fromEntries(
-    ATTW_EXCEPTIONS.map((e) => [
-      e.kind,
-      (e.entrypoints ?? []).map((entrypoint) => ({
-        entrypoint,
-        resolutionKind: e.kind === "CJSResolvesToESM" ? "node16-cjs" : "node10",
-      })),
-    ]),
-  ),
+  problems: ATTW_EXCEPTIONS.reduce<Record<string, unknown[]>>((acc, exception) => {
+    acc[exception.kind] = [...(acc[exception.kind] ?? []), ...occurrencesOf(exception)];
+    return acc;
+  }, {}),
 };
+
+/**
+ * 取某个 `kind` 的登记，按 `entrypointShape` 区分。
+ *
+ * `NoResolution` 现在有**两条**登记（成因不同），`.find()` 只会拿到第一条 —— 而那会让
+ * 下面几条判据去测一条与它无关的登记。默认取 `entries` 口径那条（原来的形态），
+ * 需要另一条时显式点名。
+ */
+function exceptionOf(kind: string, shape: "entries" | "per-resolution-kind" = "entries") {
+  const hit = ATTW_EXCEPTIONS.find(
+    (e) => e.kind === kind && (e.entrypointShape ?? "entries") === shape,
+  );
+  if (!hit) throw new Error(`找不到 ${kind}（entrypointShape=${shape}）的登记`);
+  return hit;
+}
 
 describe("#45 发布包形状门禁", () => {
   describe("attw 判据：把「隐形例外」变成「枚举过的例外」", () => {
@@ -40,9 +73,24 @@ describe("#45 发布包形状门禁", () => {
         expect(exception.tracking, exception.kind).toMatch(/^#\d+$/);
         // 每条例外都必须钉住次数与子路径清单，否则它会静默增长（见 drift 用例）。
         expect(exception.expectedCount, `${exception.kind} 缺 expectedCount`).toBeGreaterThan(0);
-        expect(exception.entrypoints?.length, `${exception.kind} 缺 entrypoints`).toBe(
-          exception.expectedCount,
-        );
+        expect(exception.entrypoints?.length, `${exception.kind} 缺 entrypoints`).toBeGreaterThan(0);
+        // `expectedCount` 与 `entrypoints` 的长度关系随口径不同：
+        // - `entries`：一一对应（每个子路径报一条）；
+        // - `per-resolution-kind`：每条子路径在**每个档位**各报一条，因此
+        //   `expectedCount === entrypoints.length × 档位数`。
+        //   例：`./styles.css` 是 1 个子路径 × 4 个档位 = 4（#189）。
+        // 把关系写死成「相等」会让第二种口径无法登记；写成「不检查」又会让次数字段
+        // 变成没人核对的装饰。
+        const kindCount = Array.isArray(exception.expectedResolutionKind)
+          ? exception.expectedResolutionKind.length
+          : exception.expectedResolutionKind === undefined
+            ? 1
+            : 1;
+        const factor = exception.entrypointShape === "per-resolution-kind" ? kindCount : 1;
+        expect(
+          exception.entrypoints!.length * factor,
+          `${exception.kind} 的 expectedCount 与 (entrypoints × 档位) 不符`,
+        ).toBe(exception.expectedCount);
       }
     });
 
@@ -88,10 +136,10 @@ describe("#45 发布包形状门禁", () => {
     });
 
     it("例外只出现一部分时，另一半报 vanished 而已出现的那半仍走 drift 判定", () => {
-      const noRes = ATTW_EXCEPTIONS.find((e) => e.kind === "NoResolution")!;
+      const noRes = exceptionOf("NoResolution");
       const report = {
         problems: {
-          CJSResolvesToESM: (ATTW_EXCEPTIONS.find((e) => e.kind === "CJSResolvesToESM")!.entrypoints ?? []).map(
+          CJSResolvesToESM: (exceptionOf("CJSResolvesToESM").entrypoints ?? []).map(
             (entrypoint) => ({ entrypoint, resolutionKind: "node16-cjs" }),
           ),
           NoResolution: (noRes.entrypoints ?? []).slice(0, 2).map((entrypoint) => ({ entrypoint })),
@@ -106,7 +154,7 @@ describe("#45 发布包形状门禁", () => {
     it("解析档位漂移必须红（PR 评审 P2：例外成立的前提就是那个档位）", () => {
       // 6 处 entrypoint 完全对，但档位从 node10 漂到 node16-cjs。
       // 第一版只比 entrypoint，这种漂移会被 accepted。
-      const noRes = ATTW_EXCEPTIONS.find((e) => e.kind === "NoResolution")!;
+      const noRes = exceptionOf("NoResolution");
       const drifted = (noRes.entrypoints ?? []).map((entrypoint) => ({
         entrypoint,
         resolutionKind: "node16-cjs",
@@ -115,19 +163,83 @@ describe("#45 发布包形状门禁", () => {
       expect(accepted, "档位漂移不得算作已接受").toEqual([]);
       const drift = problems.find((p) => p.kind === "exception-drift:NoResolution");
       expect(drift?.detail).toContain("解析档位漂移");
-      expect(drift?.detail).toContain(noRes.expectedResolutionKind);
+      expect(drift?.detail).toContain(String(noRes.expectedResolutionKind));
     });
 
     it("每条例外都钉了档位（否则上面那条判据无从比较）", () => {
       for (const exception of ATTW_EXCEPTIONS) {
-        expect(exception.expectedResolutionKind, `${exception.kind} 缺 expectedResolutionKind`).toMatch(
-          /^node\d+|^bundler$/,
-        );
+        // 单档与一组档位都是合法形态（见 AttwException#expectedResolutionKind）。
+        const kinds = Array.isArray(exception.expectedResolutionKind)
+          ? exception.expectedResolutionKind
+          : [exception.expectedResolutionKind];
+        expect(kinds.length, `${exception.kind} 缺 expectedResolutionKind`).toBeGreaterThan(0);
+        for (const kind of kinds) {
+          // attw 的档位取值：node10 / node16-cjs / node16-esm / bundler。
+          expect(kind, `${exception.kind} 的档位值不是合法解析档位`).toMatch(
+            /^node\d+(-cjs|-esm)?$|^bundler$/,
+          );
+        }
       }
     });
 
+    /**
+     * `./styles.css` 的登记（#189）。
+     *
+     * 它与既有两条的形状不同：一条**资源出口**在四个解析档位下都不产生类型解析，
+     * 因此 4 条 problem 只有 1 个 entrypoint。这条判据证明：
+     * ① 它被登记成 `per-resolution-kind`（否则次数字段对不上）；
+     * ② 真正的报告形状（四档各一条）被**接受**，而不是撞上漂移判据。
+     */
+    it("纯资源出口（./styles.css）被登记为「按档位各一条」且四档齐全", () => {
+      const css = exceptionOf("NoResolution", "per-resolution-kind");
+      expect(css.entrypoints, "./styles.css 的登记应当只有这一个 entrypoint").toEqual([
+        "./styles.css",
+      ]);
+      expect(
+        [...(css.expectedResolutionKind as readonly string[])].sort(),
+        "四档必须齐全：缺一档意味着某一档下它不再报，该重新审阅这条登记",
+      ).toEqual(["bundler", "node10", "node16-cjs", "node16-esm"]);
+      expect(css.expectedCount, "4 = 1 个子路径 × 4 个档位").toBe(4);
+
+      // 正证：真实形状被接受（不是只靠上面读字段）。
+      // 必须连同**其它**登记一起给全，否则会给出一条 `exception-vanished:CJSResolvesToESM`
+      // 的红 —— 那时测的是「登记没给全」，不是「./styles.css 的形状对不对」。
+      const real = (css.expectedResolutionKind as readonly string[]).map((resolutionKind) => ({
+        entrypoint: "./styles.css",
+        resolutionKind,
+      }));
+      const other = exceptionOf("CJSResolvesToESM");
+      const { problems } = evaluateAttwReport({
+        problems: {
+          CJSResolvesToESM: (other.entrypoints ?? []).map((entrypoint) => ({
+            entrypoint,
+            resolutionKind: "node16-cjs",
+          })),
+          NoResolution: real,
+        },
+      });
+      expect(problems, "四档齐全的 ./styles.css 不该判红").toEqual([]);
+    });
+
+    it("资源出口少一档必须红（否则「某一档不报了」会静默）", () => {
+      const css = exceptionOf("NoResolution", "per-resolution-kind");
+      const kinds = (css.expectedResolutionKind as readonly string[]).slice(1);
+      const { problems } = evaluateAttwReport({
+        problems: {
+          NoResolution: kinds.map((resolutionKind) => ({
+            entrypoint: "./styles.css",
+            resolutionKind,
+          })),
+        },
+      });
+      expect(
+        problems.some((p) => p.kind === "exception-drift:NoResolution"),
+        "少一档时应当判红",
+      ).toBe(true);
+    });
+
     it("同一类问题**变多**必须红（只按 kind 匹配的话 7→8 会静默放行）", () => {
-      const cjs = ATTW_EXCEPTIONS.find((e) => e.kind === "CJSResolvesToESM")!;
+      const cjs = exceptionOf("CJSResolvesToESM");
       const entries = (cjs.entrypoints ?? []).map((entrypoint) => ({ entrypoint }));
       const report = {
         problems: {
@@ -146,7 +258,7 @@ describe("#45 发布包形状门禁", () => {
     });
 
     it("同一类问题**变少**也要红（子路径修好了，应当去登记而不是继续挂着）", () => {
-      const noRes = ATTW_EXCEPTIONS.find((e) => e.kind === "NoResolution")!;
+      const noRes = exceptionOf("NoResolution");
       const entries = (noRes.entrypoints ?? []).slice(0, -1).map((entrypoint) => ({ entrypoint }));
       const report = { problems: { NoResolution: entries } };
       const { problems } = evaluateAttwReport(report);
@@ -154,7 +266,7 @@ describe("#45 发布包形状门禁", () => {
     });
 
     it("次数一致但子路径换了，同样红（「次数对」不等于「是同一批」）", () => {
-      const cjs = ATTW_EXCEPTIONS.find((e) => e.kind === "CJSResolvesToESM")!;
+      const cjs = exceptionOf("CJSResolvesToESM");
       const entries = (cjs.entrypoints ?? []).map((e, i) => ({
         entrypoint: i === 0 ? "./somewhere-else" : e,
       }));
