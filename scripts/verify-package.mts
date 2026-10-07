@@ -16,6 +16,7 @@ import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync,
 import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectImportClosure, componentMarkersIn } from './advanced-bundle-shake.mts'
+import { commitOf, describeTarball, sha256Of, selectTarball } from './tarball-identity.mts'
 import {
   CONSUMER_TARBALL,
   PKG_DIR,
@@ -45,18 +46,19 @@ function expectNonEmpty(values: readonly unknown[], message: string): void {
 
 function findTarball(): string {
   if (!existsSync(artifactsDir)) throw new Error('.artifacts not found; run: pnpm pack:package')
-  const tarballs = readdirSync(artifactsDir)
+  const candidates = readdirSync(artifactsDir)
     // 按身份筛，而不是按 `bmap-vue-<version>.tgz` 的正则：scoped 包打出来是
     // `mangax-bmap-vue-1.0.0-rc.0.tgz`（无前导 @），正则认不出。
     .filter((f) => isOwnTarball(f, identity))
-    .sort()
-  if (tarballs.length === 0) {
+  if (candidates.length === 0) {
     throw new Error(
       `No .tgz for ${identity.name} found in .artifacts; run: pnpm pack:package` +
         `（.artifacts 现有：${readdirSync(artifactsDir).filter((f) => f.endsWith('.tgz')).join(', ') || '空'}）`,
     )
   }
-  return resolve(artifactsDir, tarballs[tarballs.length - 1])
+  // 唯一性由 boundary 判（多于一个候选时失败，而不是静默取排序最后一个）—— 见
+  // `tarball-identity.mts` 的文件头：那正是 E 要堵的「意外选另一个包」。
+  return resolve(artifactsDir, selectTarball(candidates, identity))
 }
 
 function readTarballManifest(tarball: string): Record<string, unknown> {
@@ -284,8 +286,19 @@ function copyDocsExamples(dest: string): number {
 
 function main() {
   const tarball = findTarball()
-  console.log(`[verify-package] tarball: ${tarball}`)
   assertReleaseIdentity(tarball)
+  // 被验证产物的**身份记录**（#158 工作包 E）：版本 / commit / sha256 三者一起才够。
+  // 版本号不足以标识产物（同版本重打包内容会变），commit 回答「这次验证对应哪次提交」。
+  // 记录在**所有档位跑之前**打印，失败时也能从日志里看出验的是哪一个包。
+  const record = {
+    file: tarball.slice(artifactsDir.length + 1),
+    name: identity.name,
+    version: identity.version,
+    commit: commitOf(root),
+    sha256: sha256Of(tarball),
+  }
+  console.log(`\n[verify-package] 被验证产物：${describeTarball(record)}`)
+  console.log(`[verify-package] （全部档位都跑在这一个 tgz 上）`)
   copyFileSync(tarball, resolve(artifactsDir, CONSUMER_TARBALL))
 
 
@@ -307,7 +320,7 @@ function main() {
     'consumer typecheck + ESM import (package tarball)',
   )
 
-  // 5a) 样式子路径（#189）：**从装出来的 tarball** 证明它可解析、且真的是那份
+  // 5a) 样式子路径解析（#189）：**从装出来的 tarball** 证明它可解析、且真的是那份
   //     `<Autocomplete>` 样式。
   //
   //     只断言「manifest 里有这个键」不够——那测的是我们写下的声明，不是消费方拿到的东西。
@@ -370,7 +383,7 @@ function main() {
     )
   }
 
-  // 5a-style) 样式子路径在**真实消费方生产构建**下真的生效（#158 工作包 D）。
+  // 5b) 样式子路径在**真实消费方生产构建**下真的生效（#158 工作包 D）。
   //
   //     上面那条只证明「解析得到 + 内容里有那两条规则」；证明不了消费方把它 import 后
   //     打包器真的会产出一份**含这些规则**的 CSS，也证明不了「不 import 就没有它」。
@@ -385,7 +398,7 @@ function main() {
     'styles consumer (tarball + Vite production build)',
   )
 
-  // 5a-pre) 仓库外隔离项目里的**严格类型消费**（#158 工作包 A）。
+  // 5c) 仓库外隔离项目里的**严格类型消费**（#158 工作包 A）。
   //
   //     上面那条 `vue-tsc` 跑在 `fixtures/consumer` 里，而那是 pnpm 工作区的成员：
   //     依赖提升 + 向工作区根的 `node_modules` 查找，都可能把本库**漏发**的类型从
@@ -402,7 +415,7 @@ function main() {
     'isolated strict consumer (out-of-repo, bundler + node16)',
   )
 
-  // 5a-ssr) 纯 Node 里的**真实 SFC SSR**（#158 工作包 B）。
+  // 5d) 纯 Node 里的**真实 SFC SSR**（#158 工作包 B）。
   //
   //     上面那些 import / vue-tsc 证明不了「服务端能渲染含 <Map> 的组件」：它们不编译 SFC、
   //     也不调 renderToString。这条在**没有 happy-dom / jsdom**的 Node 里，用
@@ -426,13 +439,13 @@ function main() {
     'SSR consumer (real SFC + renderToString, pure Node)',
   )
 
-  // 5b) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
+  // 5e) 第三方扩展 fixture（M8-ADAPTERS-ADVANCED / #43）
   //
   //     `./advanced` 是**承诺维护**的扩展契约（第三方 Provider / Driver / Handle / Plugin 适配点），
   //     所以它必须在真实消费方（tarball 装进 node_modules）里被**真正调用一次**，而不是只断言
   //     「import 得动」。类型面由 `fixtures/consumer/src/advanced-adapter.ts` 通过上面的
   //     `vue-tsc` 覆盖；这里补运行面的可观察行为。
-  // 5a) Volar：**无本地 import 的真实 .vue 模板**经安装文档的 `compilerOptions.types`
+  // 5f) Volar：**无本地 import 的真实 .vue 模板**经安装文档的 `compilerOptions.types`
   //     配置拿到 `GlobalComponents`（#158 工作包 C）。
   //
   //     这条曾真实失效：文档教用户写 `"types": ["<pkg>/volar"]`，而 `exports` 里没有
@@ -564,7 +577,7 @@ function main() {
   console.log(`\n[verify-package] advanced contract probe OK: ${advancedProbeOut.trim()}`)
   rmSync(advancedProbe, { force: true })
 
-  // 5c) tree-shaking：**只用 `./advanced`** 的打包产物不得把组件带进来（#43）。
+  // 5g) tree-shaking：**只用 `./advanced`** 的打包产物不得把组件带进来（#43）。
   //
   //     这条必须在 tarball 消费方里做：仓库内那份闭包检查（tests/behavior/advanced-contract.test.ts）
   //     看的是我们自己的 dist，而这里看的是**真实打包器在真实依赖解析下**的产物。

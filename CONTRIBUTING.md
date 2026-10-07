@@ -98,13 +98,15 @@ pnpm test:unit
 `pnpm generate:capability-matrix`、`pnpm generate:api-diff`、`pnpm generate:overlay-emits`、
 `pnpm generate:api`）重新生成并一起提交；生成物不要手改。
 
-包出口相关改动还要验证 tarball 消费方：
+包出口相关改动还要验证 tarball 消费方（`verify:package` 会先打印被验证产物的身份记录 ——
+包名 / 版本 / `sha256` / 打包时的 commit；`.artifacts` 里有多个同身份 tarball 时它**直接失败**
+而不是挑一个）：
 
 ```bash
 pnpm generate:manifest          # 必须排在 pack 之前：volar.d.ts 是生成产物，见下
 pnpm --filter bmap-vue pack --pack-destination .artifacts
 pnpm check:pack-contents         # 实际发布的那一个 tarball 里到底有什么
-pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced / 严格类型 / SSR）
+pnpm verify:package              # 唯一消费方入口（basic / ui-kit / advanced / 严格类型 / SSR / Volar / 样式）
 ```
 
 `pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
