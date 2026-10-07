@@ -32,8 +32,10 @@ updates:
       # @vue/language-core 2.2.0）上。那条 override 写在 `package.json#pnpm` 字段里，
       # **pnpm 12 早就不读该字段**，因此它从写下起就没生效过（实际是包构建 2.2.12、
       # 只有 docs 用 3.3.11）——用一条从未生效的配置来解释「为什么锁住」，等于没有理由。
-      # 真实基线现由 `scripts/toolchain-boundary.mts#TOOLCHAIN_PINS` 登记并由
-      # `pnpm check:toolchain` 核对（#187，ADR 2026-10-02）。安全更新不受本配置影响。
+      # 真实基线现记在 ADR 2026-10-02 的「版本事实」表里（#187 / #192）；`pnpm check:toolchain`
+      # **只判 pnpm 配置卫生，不核对版本基线**（原先的 `TOOLCHAIN_PINS` 登记已在 #192 删除），
+      # 所以这里的 ignore 是靠**本注释 + lockfile diff** 维持的约定，不是机器判据。
+      # 安全更新不受本配置影响。
       - dependency-name: vue
         update-types: ["version-update:semver-major"]
       - dependency-name: typescript

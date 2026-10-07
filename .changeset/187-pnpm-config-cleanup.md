@@ -2,7 +2,7 @@
 "@mangax/bmap-vue": patch
 ---
 
-#187 清理 pnpm 失效配置并把声明工具链变成可核对的事实
+#187 清理 pnpm 失效配置（#192 瘦身门禁与补注释卫生）
 
 根 `package.json` 的 `pnpm` 字段在 pnpm 12 下**整个不被读取**，其中三项各自失效：
 
@@ -26,20 +26,19 @@
 `auto-install-peers`，pnpm 12 均不读取），其中 `auto-install-peers=false` 还与 lockfile 记录的
 `autoInstallPeers: true` 相互矛盾。
 
-**新增 `check:toolchain`**：对声明 → `pnpm-lock.yaml` 解析结果 → `node_modules` 实际安装做三方
-核对，fail-closed。三方都要**判**而不是只打印——`package.json` 与 lockfile 记录的 specifier
-脱节同样会红（那正是「改了 manifest 没重新 install」的形态）。判据落到**实际解析结果**而非
-声明面（`^` / `~` 不是事实）。仓库此前**没有任何门禁读 lockfile 或已安装版本**，这个缺口由
-本票补上。
+**新增 `check:toolchain`**（#192 瘦身）：只判三件**真实发生过**的事——`package.json` 不得有
+`pnpm` 字段、lockfile 顶层不得有 `overrides:` 块、`packageManager` 声明必须等于
+`pnpm --version` 实际跑的那个。**版本基线表刻意不做成门禁**：升级会动 lockfile，而 lockfile
+入库 + CI `--frozen-lockfile` + dependabot major 忽略 + PR diff 已经把它挡住；初版还自己假绿过
+一次（`pnpm` 三层里两层被作者短路却仍报「三方一致」，靠评审才发现）。版本事实记在 ADR。
 
-`pnpm` 自身是三层里的**特例**：由 `packageManager` 字段钉住、不在 `node_modules` 里，
-真正跑的那个版本由 corepack / CI 的 `pnpm/action-setup` 决定、**不写进任何文件**，
-因此它的第三层查 `pnpm --version` 而非磁盘。第一版把这三层里的两层短路掉，
-输出 `pnpm 声明 — / 磁盘 n/a` 却仍报「三方一致」（PR 评审 #191 的 P2，已修）。
+`unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配（要 `^3.1.5`、实装 `2.2.12`）是
+**已知、已验证、刻意接受**的状态（实测它所需的三个符号 2.2.12 全部导出），不是隐患。
 
-`unplugin-dts` 对 `@vue/language-core` 的 peer major 不匹配（要 `^3.1.5`、实装 `2.2.12`）登记
-为**刻意接受**（已验证它所需的三个符号 2.2.12 全部导出），以结构化字段 `observedVersion`
-记录「例外基于哪个实装版本成立」——升级后该字段与磁盘不一致即红，逼人重审这条例外。追踪 #188。
+⚠️ 这条事实**只记在 ADR 2026-10-02**，**没有任何门禁**在核对它。#187 当时用
+`KNOWN_PEER_MISMATCHES` + 结构化字段 `observedVersion` 做过机器登记（升级后该字段与磁盘不一致
+即红，逼人重审），那套登记**已随 #192 瘦身一起删除**——所以**不要**再以为升级
+`@vue/language-core` 会因为这条例外过期而自动变红。追踪 #188。
 
 ⚠️ 本门禁**不具备**「自动发现新增 peer 不匹配」的能力：pnpm 的 isolated 布局下
 `unplugin-dts` 位于 `node_modules/.pnpm/` 虚拟 store 深层，扫工作区 `node_modules` 够不到
@@ -47,4 +46,8 @@
 AGENTS.md 的口径删除，详见 ADR 2026-10-02 的非目标。
 
 **无行为变更**：依赖版本一律未动，`pnpm-lock.yaml` **零 diff**（被删的设置本就未被读取）。
-干净安装 + 三个 typecheck + build + 3824 条用例 + 其余 16 道门禁全绿（ADR 记录了完整实测）。
+干净安装的复核记录见 ADR §6（#187 当时）；#192 瘦身与后续评审修复后复跑：三个 typecheck +
+build + 全量用例 + 其余门禁全绿。
+
+⚠️ 这里**刻意不写精确用例数**：它随树增长，写死必然漂移（#196 评审连续两轮抓到
+「刚修完事实源漂移、又留下新的一处」）。要看当前读数就跑 `pnpm test:unit` 或看 CI 输出。

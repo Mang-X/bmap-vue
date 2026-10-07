@@ -32,17 +32,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 声明工具链的三方核对（#187）：声明 → lockfile 解析结果 → node_modules 实际安装。
-      #
-      # 排在最前，因为它判的**正是**安装结果——放到任何 build / test 之后，读到的就已经是
-      # 别的步骤留下的现场。这道门禁存在的起因是根 package.json 曾把 `pnpm.overrides` 写在
-      # `package.json#pnpm` 里，而 pnpm 12 早就不读那个字段：那句「vue-tsc 锁在 3.3.11」
-      # 从写下起就没生效过（实际是包构建 2.2.12、只有 docs 用 3.3.11），而仓库里没有任何
-      # 东西会发现。删掉失效声称之后，必须补上真实的钉子。
-      #
-      # 工作区**故意**跑两个 vue-tsc major：包构建产出声明（Volar 2.x）、文档站对着
-      # dist/*.d.ts 做消费方校验（Volar 3.x）。判据按 importer 分别登记，不强行合成一个版本。
-      - name: Check toolchain (declared / lockfile / installed)
+      # pnpm 配置卫生（#187 / #192）：只判三件真实发生过的事——`package.json#pnpm`
+      # 字段（pnpm 12 不再读取）、lockfile 里生效的 override、packageManager 声明与
+      # 实际运行的 pnpm 是否一致。版本基线记在 ADR，不做成门禁（见 ADR 2026-10-02）。
+      - name: Check pnpm config hygiene
         run: pnpm check:toolchain
 
       # 注释卫生（#192）：单文件「注释 / 实码」比不得超阈值。两条豁免——实测证据主体
