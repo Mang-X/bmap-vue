@@ -115,9 +115,11 @@ tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档�
 （`scripts/consumer-volar.mts`，工作包 C）。
 
 Volar 那一步按安装文档只配置 `compilerOptions.types: ["<pkg>/volar"]`，用 `vue-tsc` 跑两份
-**只有 template 的 SFC**（结构上不可能有本地 import）：`positive.vue` 必须零诊断，
-`negative.vue` 必须命中 `TS2322`（已有 prop 值类型写错）与 `TS2339`（slot 成员不存在）。
-判据落在反证上 —— 组件若被当成未知元素、或 props/slots 退化成 `any`，反证就不会报错。
+**只有 template 的 SFC**（结构上不可能有本地 import）：`positive.vue` 必须退出码 0 且零诊断，
+`negative.vue` 必须非零退出并命中 `TS2322`（已有 prop 值类型写错，消息带该 prop 值的字面量
+sentinel）与 `TS2339`（slot 成员不存在，消息点名该成员）。判据落在反证上 —— 组件若被当成
+未知元素、或 props/slots 退化成 `any`，反证就不会报错；退出码也判，因为有些编译失败
+（如 `TS18003`）没有文件位置，只解析诊断会把它当成「零诊断」。
 
 SSR 那一步跑在**两个独立 Node 进程**里（没有 happy-dom / jsdom），用 `@vue/compiler-sfc`
 编译 `fixtures/consumer/ssr/App.vue`（真 SFC，不是 `h(Map)`）后 `renderToString`：一遍

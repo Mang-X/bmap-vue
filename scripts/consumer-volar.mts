@@ -8,8 +8,8 @@
  *
  * | 探针 | 期望 | 证明 |
  * | --- | --- | --- |
- * | `positive.vue` | 零诊断 | 合法 props / slots 可推导 |
- * | `negative.vue` | TS2322 + TS2339 | 组件类型真的生效、props/slots 没退化成 `any` |
+ * | `positive.vue` | 退出码 0 且零诊断 | 合法 props / slots 可推导，且编译**真的跑完** |
+ * | `negative.vue` | 非零退出 + TS2322 + TS2339 | 组件类型真的生效、props/slots 没退化成 `any` |
  *
  * 探针刻意写成**只有 template 的 SFC**：「无本地 import」因此是结构保证（没有能写 import
  * 的 `<script>`），不需要去扫源码文本。
@@ -22,23 +22,32 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { assertVolarReport, parseVolarDiagnostics } from "./consumer-volar-boundary.mts";
+import {
+  assertVolarReport,
+  parseVolarDiagnostics,
+  type VolarRun,
+} from "./consumer-volar-boundary.mts";
 
-function runVueTsc(bin: string, cwd: string, project: string): string {
+function runVueTsc(bin: string, cwd: string, project: string): VolarRun {
   console.log(`[consumer-volar] vue-tsc -p ${project}`);
+  let output: string;
+  let exitCode: number;
   try {
-    return execFileSync(bin, ["-p", project, "--noEmit"], {
+    output = execFileSync(bin, ["-p", project, "--noEmit"], {
       cwd,
       encoding: "utf8",
       env: { ...process.env, CI: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    exitCode = 0;
   } catch (error) {
-    // 有诊断时 vue-tsc 以非零退出；把 stdout 与 stderr 都并进来解析（**不**在这里判
-    // 「非零就是通过」—— 判据是诊断的**代码与归属**，不是退出码）。
-    const failure = error as { stdout?: string; stderr?: string };
-    return `${failure.stdout ?? ""}${failure.stderr ?? ""}`;
+    // 有诊断时 vue-tsc 以非零退出；把 stdout 与 stderr 都并进来，**退出码一并回传** ——
+    // 判据要看它：有些失败没有文件位置（如 TS18003），只解析诊断会把它当成「零诊断」。
+    const failure = error as { status?: number; stdout?: string; stderr?: string };
+    output = `${failure.stdout ?? ""}${failure.stderr ?? ""}`;
+    exitCode = typeof failure.status === "number" ? failure.status : 1;
   }
+  return { exitCode, output, diagnostics: parseVolarDiagnostics(output) };
 }
 
 function main(): void {
@@ -65,13 +74,14 @@ function main(): void {
   }
 
   const report = {
-    positive: parseVolarDiagnostics(runVueTsc(vueTsc, probeDir, "tsconfig.json")),
-    negative: parseVolarDiagnostics(runVueTsc(vueTsc, probeDir, "tsconfig.negative.json")),
+    positive: runVueTsc(vueTsc, probeDir, "tsconfig.json"),
+    negative: runVueTsc(vueTsc, probeDir, "tsconfig.negative.json"),
   };
   assertVolarReport(report);
   console.log(
     `[consumer-volar] OK：无本地 import 的真实 .vue 模板经 \"types\": [\"<pkg>/volar\"] 拿到 ` +
-      `GlobalComponents —— 正证零诊断；反证命中 ${report.negative.map((d) => `TS${d.code}`).join(" + ")}` +
+      `GlobalComponents —— 正证退出码 0 且零诊断；反证命中 ` +
+      `${report.negative.diagnostics.map((d) => `TS${d.code}`).join(" + ")}` +
       `（已有 prop 值类型写错、slot 成员不存在）`,
   );
 }

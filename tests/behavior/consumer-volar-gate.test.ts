@@ -3,7 +3,7 @@
  *
  * ## 判据只在两处
  *
- * 1. **合成诊断的行为反例**：`parseVolarDiagnostics` / `assertVolarReport` 是纯函数，这里
+ * 1. **合成报告的行为反例**：`parseVolarDiagnostics` / `assertVolarReport` 是纯函数，这里
  *    喂真实形态的诊断行（含应被忽略的 `Found N errors` 之类），确认解析与断言的行为；
  *    再对每一类违规各喂一份合成报告，确认它抛错。
  * 2. **接线**：`verify:package` 真的调了驱动脚本（新增门禁最典型的失效方式是「写了但没跑」）。
@@ -23,8 +23,11 @@ import { resolve } from "node:path";
 import {
   assertVolarReport,
   parseVolarDiagnostics,
+  UNKNOWN_SLOT_MEMBER_SENTINEL,
+  WRONG_PROP_VALUE_SENTINEL,
   type VolarDiagnostic,
   type VolarReport,
+  type VolarRun,
 } from "../../scripts/consumer-volar-boundary.mts";
 import { readWorkflow, stepBlockContaining } from "./workflow-helpers";
 
@@ -39,19 +42,28 @@ function diagnostic(overrides: Partial<VolarDiagnostic> = {}): VolarDiagnostic {
   return { file: "negative.vue", line: 2, column: 9, code: 2322, message: "", ...overrides };
 }
 
+function run(overrides: Partial<VolarRun> = {}): VolarRun {
+  return { exitCode: 0, output: "", diagnostics: [], ...overrides };
+}
+
 function validReport(): VolarReport {
   return {
-    positive: [],
-    negative: [
-      diagnostic({ code: 2322, message: "Type 'string' is not assignable to type 'number'." }),
-      diagnostic({
-        code: 2339,
-        line: 3,
-        column: 27,
-        message:
-          "Property 'totallyNotARealMember' does not exist on type '{ status: MapStatus; map: MapHandle | null; }'.",
-      }),
-    ],
+    positive: run({ exitCode: 0, diagnostics: [] }),
+    negative: run({
+      exitCode: 2,
+      diagnostics: [
+        diagnostic({
+          code: 2322,
+          message: `Type '"${WRONG_PROP_VALUE_SENTINEL}"' is not assignable to type '"suspend" | "dispose" | undefined'.`,
+        }),
+        diagnostic({
+          code: 2339,
+          line: 3,
+          column: 27,
+          message: `Property '${UNKNOWN_SLOT_MEMBER_SENTINEL}' does not exist on type '{ status: MapStatus; map: MapHandle | null; }'.`,
+        }),
+      ],
+    }),
   };
 }
 
@@ -93,45 +105,99 @@ describe("Volar 门禁：判据有牙（合成报告逐个喂）", () => {
 
   it.each([
     [
+      "正证退出码非零但没有带位置的诊断（TS18003 那类失败会假绿）",
+      () => ({
+        ...validReport(),
+        positive: run({ exitCode: 2, output: "error TS18003: No inputs were found in config file." }),
+      }),
+    ],
+    [
       "正证出现诊断（合法 props/slots 不可推导）",
-      () => ({ ...validReport(), positive: [diagnostic({ file: "positive.vue" })] }),
+      () => ({
+        ...validReport(),
+        positive: run({ diagnostics: [diagnostic({ file: "positive.vue" })] }),
+      }),
+    ],
+    [
+      "反证退出码 0（预期诊断一条都没出现）",
+      () => ({
+        ...validReport(),
+        negative: run({ exitCode: 0, diagnostics: validReport().negative.diagnostics }),
+      }),
     ],
     [
       "反证缺 TS2322（已有 prop 值类型写错没被检出）",
-      () => ({ ...validReport(), negative: validReport().negative.filter((d) => d.code !== 2322) }),
-    ],
-    [
-      "反证缺 TS2339（不存在的 slot 成员没被检出）",
-      () => ({ ...validReport(), negative: validReport().negative.filter((d) => d.code !== 2339) }),
-    ],
-    [
-      "TS2339 不是关于那个 slot 成员",
       () => ({
         ...validReport(),
-        negative: validReport().negative.map((d) =>
-          d.code === 2339 ? { ...d, message: "Property 'somethingElse' does not exist." } : d,
-        ),
+        negative: run({
+          exitCode: 2,
+          diagnostics: validReport().negative.diagnostics.filter((d) => d.code !== 2322),
+        }),
+      }),
+    ],
+    [
+      "有一条 TS2322，但不带 prop 值 sentinel（别的表达式冒充）",
+      () => ({
+        ...validReport(),
+        negative: run({
+          exitCode: 2,
+          diagnostics: [
+            diagnostic({ code: 2322, message: "Type 'string' is not assignable to type 'number'." }),
+            ...validReport().negative.diagnostics.filter((d) => d.code === 2339),
+          ],
+        }),
       }),
     ],
     [
       "TS2322 来自别的文件（不是探针）",
       () => ({
         ...validReport(),
-        negative: validReport().negative.map((d) =>
-          d.code === 2322 ? { ...d, file: "src/unrelated.vue" } : d,
-        ),
+        negative: run({
+          exitCode: 2,
+          diagnostics: validReport().negative.diagnostics.map((d) =>
+            d.code === 2322 ? { ...d, file: "src/unrelated.vue" } : d,
+          ),
+        }),
+      }),
+    ],
+    [
+      "反证缺 TS2339（不存在的 slot 成员没被检出）",
+      () => ({
+        ...validReport(),
+        negative: run({
+          exitCode: 2,
+          diagnostics: validReport().negative.diagnostics.filter((d) => d.code !== 2339),
+        }),
+      }),
+    ],
+    [
+      "TS2339 不是关于那个 slot 成员",
+      () => ({
+        ...validReport(),
+        negative: run({
+          exitCode: 2,
+          diagnostics: validReport().negative.diagnostics.map((d) =>
+            d.code === 2339 ? { ...d, message: "Property 'somethingElse' does not exist." } : d,
+          ),
+        }),
       }),
     ],
     [
       "TS2339 来自别的文件（不是探针）",
       () => ({
         ...validReport(),
-        negative: validReport().negative.map((d) =>
-          d.code === 2339 ? { ...d, file: "src/unrelated.vue" } : d,
-        ),
+        negative: run({
+          exitCode: 2,
+          diagnostics: validReport().negative.diagnostics.map((d) =>
+            d.code === 2339 ? { ...d, file: "src/unrelated.vue" } : d,
+          ),
+        }),
       }),
     ],
-    ["反证完全没报错（GlobalComponents 没生效）", () => ({ ...validReport(), negative: [] })],
+    [
+      "反证完全没报错（GlobalComponents 没生效）",
+      () => ({ ...validReport(), negative: run({ exitCode: 1, diagnostics: [] }) }),
+    ],
   ])("违规必须判红：%s", (_label, mutate) => {
     expect(() => assertVolarReport(mutate())).toThrow();
   });
