@@ -108,11 +108,19 @@ pnpm verify:package              # tarball 消费方（basic / ui-kit / advanced
 ```
 
 `pnpm verify:package` 是唯一的消费方验证入口，内部按顺序跑：工作区 fixture 里的 `vue-tsc` +
-ESM import、`./styles.css` 与深路径反向、文档示例、Volar 真实模板类型、`./advanced` 契约探针、
-tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档：**仓库外隔离项目**的严格类型
-（`scripts/consumer-isolated-strict.mts`，工作包 A）、**纯 Node 的真实 SFC SSR**
-（`scripts/consumer-ssr.mts`，工作包 B）与**无本地 import 的真实 .vue 模板 Volar 类型**
-（`scripts/consumer-volar.mts`，工作包 C）。
+ESM import、`./styles.css` 与深路径反向、**样式消费生产构建**、文档示例、Volar 真实模板类型、
+`./advanced` 契约探针、tree-shaking 对照、运行时依赖与 dev 告警，以及 #158 的消费档：
+**仓库外隔离项目**的严格类型（`scripts/consumer-isolated-strict.mts`，工作包 A）、
+**纯 Node 的真实 SFC SSR**（`scripts/consumer-ssr.mts`，工作包 B）与
+**无本地 import 的真实 .vue 模板 Volar 类型**（`scripts/consumer-volar.mts`，工作包 C）。
+
+样式那一步在装出来的 tarball 上用 Vite 跑两次生产构建：显式 `import '<pkg>/styles.css'`
+的产物必须含 Autocomplete 的定位 / 层级 / 偏移规则；不 import 的产物必须不含它（本库不自动
+注入样式）。判据在 `consumer-styles-boundary.mts`。**计算样式**是另一条证据链：
+`tests/behavior/autocomplete-published-style.test.ts` 把未改动的 `dist/bmap-vue.css` 注入
+happy-dom，在真实渲染的 `<Autocomplete>` 输入框上读 `getComputedStyle`。basic 与 UI 消费方
+的边界（根入口不静态拉进可选 UI Kit）由 `tests/behavior/ui-kit-entry.test.ts` 的真实
+basic / UI 两次生产构建判。
 
 Volar 那一步按安装文档只配置 `compilerOptions.types: ["<pkg>/volar"]`，用 `vue-tsc` 跑两份
 **只有 template 的 SFC**（结构上不可能有本地 import）：`positive.vue` 必须退出码 0 且零诊断，

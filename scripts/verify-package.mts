@@ -370,6 +370,21 @@ function main() {
     )
   }
 
+  // 5a-style) 样式子路径在**真实消费方生产构建**下真的生效（#158 工作包 D）。
+  //
+  //     上面那条只证明「解析得到 + 内容里有那两条规则」；证明不了消费方把它 import 后
+  //     打包器真的会产出一份**含这些规则**的 CSS，也证明不了「不 import 就没有它」。
+  //     这里用装出来的 tarball 跑两次 Vite 生产构建（带 / 不带 `styles.css`），判据在
+  //     `consumer-styles-boundary.mts`。
+  //
+  //     basic 与 UI 消费方的边界（根入口不静态拉进可选 UI Kit）由
+  //     `tests/behavior/ui-kit-entry.test.ts` 的真实 basic / UI 两次生产构建判，这里不重复。
+  run(
+    `node --experimental-strip-types ${JSON.stringify(resolve(root, 'scripts/consumer-styles.mts'))} ${JSON.stringify(consumerFixture)}`,
+    root,
+    'styles consumer (tarball + Vite production build)',
+  )
+
   // 5a-pre) 仓库外隔离项目里的**严格类型消费**（#158 工作包 A）。
   //
   //     上面那条 `vue-tsc` 跑在 `fixtures/consumer` 里，而那是 pnpm 工作区的成员：
