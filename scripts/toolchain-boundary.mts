@@ -119,7 +119,9 @@ export function checkPackageManagerDrift(
       {
         kind: "package-manager-drift",
         detail:
-          "读不到当前运行的 pnpm 版本（`pnpm --version` 执行失败）：无法核对声明与实际是否一致（fail-closed）",
+          "读不到当前运行的 pnpm 版本：`pnpm --version` 执行失败，或它的输出不是稳定的 " +
+          "`<major>.<minor>.<patch>`（例如 prerelease `12.0.0-rc.1`）。" +
+          "无法核对声明与实际是否一致（fail-closed）",
       },
     ];
   }
@@ -171,4 +173,19 @@ const PACKAGE_MANAGER_DECL = /^pnpm@(\d+\.\d+\.\d+)(?:\+[A-Za-z0-9]+\.[A-Za-z0-9
 
 export function parsePackageManagerVersion(raw: string): string | undefined {
   return PACKAGE_MANAGER_DECL.exec(raw)?.[1];
+}
+
+/**
+ * 从 `pnpm --version` 的输出里取出运行中的 pnpm 版本。
+ *
+ * ⚠️ **必须是完整匹配，不能从输出里「找一段 `x.y.z`」**（#196 评审 P1）。初版用
+ * `/\b(\d+\.\d+\.\d+)\b/` 只提取子串，于是实际运行 `12.0.0-rc.1` 时会被截成 `12.0.0`：
+ * 若 `packageManager` 正好声明 `pnpm@12.0.0`，判据就报「声明与执行一致」——而 runner
+ * 实际跑的是另一个版本。这正是本判据要抓的**绑定失效**，却在 prerelease 上假绿。
+ *
+ * 声明侧只接受稳定的 `x.y.z`，所以这里同样只认完整的稳定版本；**prerelease 一律返回
+ * `undefined`（fail-closed 判红）**，而不是被当成它的正式版。
+ */
+export function parseRunningPnpmVersion(raw: string): string | undefined {
+  return /^(\d+\.\d+\.\d+)$/.exec(raw.trim())?.[1];
 }

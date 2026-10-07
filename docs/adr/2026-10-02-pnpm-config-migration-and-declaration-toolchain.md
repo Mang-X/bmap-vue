@@ -197,14 +197,19 @@ lockfile 顶层不得有 `overrides:` 块、`packageManager` 声明 == `pnpm --v
 别的版本等），**防不了「声明被改」**：corepack 与 `pnpm/action-setup@v6` 都从 `packageManager`
 取版本，改声明会让实际执行的也照着切（实测：改成 `pnpm@11.0.0` 后实际跑的就是 11.0.0，判据仍绿）。
 
-### 5. CI 里排在安装之后、所有 build/test 之前
+### 5. CI 里的位置：排在昂贵的 build / typecheck / test 之前
 
 **初版**的理由是：它判的**正是**安装结果，放到任何构建步骤之后，读到的就已经是别的步骤留下的现场。
 
 ⚠️ **瘦身（#192）后这条理由不再成立。** 现在三条判据读的是 `package.json`、
 `pnpm-lock.yaml` 顶层与 `pnpm --version`——**没有一条读 `node_modules`**，构建步骤不会改变
-它的输入。保留「安装之后、build 之前」的位置是**习惯与廉价**（pnpm 与 lockfile 的状态此时已
-确定，且能在昂贵的构建之前失败），它**不再是**一条必须遵守的次序约束。
+它的输入。当前仍排在 `Install dependencies` 之后，但那只是**习惯与廉价**（pnpm 与 lockfile
+的状态此时已确定），它**不再是**一条必须遵守的次序约束。
+
+CI 侧的断言因此只锁**真实理由**：`tests/behavior/toolchain-workflow.test.ts` 现在只要求它排在
+昂贵的 `playground:build` / `typecheck:package` / `test:unit` 之前（尽早失败）。#196 评审前那条
+「必须在 `Install dependencies` 之后」的断言已删除——它把一条废弃的历史约束机器化，
+会误拦一个本来正确的改动（把门禁提到 install 之前，它照样能跑）。
 
 ### 6. 实施后的实测记录（验收项 1 / 2 / 3 的证据）
 

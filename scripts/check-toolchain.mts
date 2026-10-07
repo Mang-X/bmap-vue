@@ -16,6 +16,7 @@ import {
   checkLockfileOverrides,
   checkManifestPnpmField,
   checkPackageManagerDrift,
+  parseRunningPnpmVersion,
   type HygieneIssue,
 } from "./toolchain-boundary.mts";
 
@@ -63,15 +64,17 @@ try {
  *
  * 只能这么问：`packageManager` 与 lockfile 都只记录「应该用哪个」，真正跑的那个由
  * corepack / CI 的 pnpm/action-setup 决定，不写进任何文件。
+ *
+ * ⚠️ 解析走 `parseRunningPnpmVersion()` 的**完整匹配**（#196 评审 P1）：从输出里
+ * 「找一段 `x.y.z`」会把 `12.0.0-rc.1` 截成 `12.0.0`，让 prerelease runner 假绿。
  */
 function probeRunningPnpm(): string | undefined {
   try {
     const out = execFileSync("pnpm", ["--version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const m = /\b(\d+\.\d+\.\d+)\b/.exec(out);
-    return m?.[1];
+    });
+    return parseRunningPnpmVersion(out);
   } catch {
     return undefined;
   }

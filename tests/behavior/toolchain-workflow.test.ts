@@ -33,13 +33,30 @@ describe("#187 CI 接线：工具链门禁", () => {
     expect(isNeutralized(block)).toBeNull();
   });
 
-  it("排在 Install dependencies 之后：它判的正是安装结果", () => {
-    // 顺序反了的话，门禁读到的是上一轮遗留的 node_modules，报的是过期事实。
-    const installAt = quality.indexOf("pnpm install --frozen-lockfile");
-    const gateAt = quality.indexOf("pnpm check:toolchain");
-    expect(installAt).toBeGreaterThan(-1);
+  it("排在昂贵的 build / typecheck / test 之前（尽早失败），但不约束 install 顺序", () => {
+    // ⚠️ 这条断言原先写作「排在 Install dependencies 之后：它判的正是安装结果」，理由是
+    // 「顺序反了的话，门禁读到的是上一轮遗留的 node_modules」。#196 评审 P2 指出这已经不成立：
+    // 瘦身后三条判据只读 `package.json` / `pnpm-lock.yaml` 顶层 / `pnpm --version`——
+    // **没有一条读 `node_modules`**（ADR §5 也写明这不再是必须遵守的次序约束）。
+    // 继续断言 install 顺序，等于把已废弃的历史约束机器化保留下来：它会误拦一个本来正确
+    // 的改动（例如把门禁提到 install 之前，它照样能跑），却挡不住任何真实缺陷。
+    //
+    // 真实理由只剩「尽早失败」：它是静态检查，跑在昂贵的 build / typecheck / test 之前，
+    // 配置有问题时不必先烧几分钟。
+    //
+    // needle 一律用 `run:` 行：只写 `pnpm test:unit` 会先命中上方注释里的同名字符串
+    //（本文件头一段就记着这个坑）。
+    const gateAt = quality.indexOf("run: pnpm check:toolchain");
     expect(gateAt).toBeGreaterThan(-1);
-    expect(gateAt, "工具链门禁必须在安装之后").toBeGreaterThan(installAt);
+    for (const expensive of [
+      "run: pnpm playground:build",
+      "run: pnpm typecheck:package",
+      "run: pnpm test:unit",
+    ]) {
+      const at = quality.indexOf(expensive);
+      expect(at, `${expensive} 应存在于 quality 作业（needle 失配会让这条断言变成假绿）`).toBeGreaterThan(-1);
+      expect(gateAt, `工具链门禁应排在 ${expensive} 之前（尽早失败）`).toBeLessThan(at);
+    }
   });
 
   it("失效配置没有回来：根 package.json 的 pnpm 字段整体删除", () => {

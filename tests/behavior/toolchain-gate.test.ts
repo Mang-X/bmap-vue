@@ -13,6 +13,7 @@ import {
   checkManifestPnpmField,
   checkPackageManagerDrift,
   parsePackageManagerVersion,
+  parseRunningPnpmVersion,
 } from "../../scripts/toolchain-boundary.mts";
 
 /** 一份没有生效 override 的 lockfile 片段（真实文件里那段的样子）。 */
@@ -146,6 +147,33 @@ describe("#192 pnpm 配置卫生门禁", () => {
       // 空后缀 / 不完整的完整性段都不认（`+` 后面必须有 `<algo>.<hex>`）
       expect(parsePackageManagerVersion("pnpm@12.0.0+")).toBeUndefined();
       expect(parsePackageManagerVersion("pnpm@12.0.0+sha512")).toBeUndefined();
+    });
+  });
+
+  describe("运行中的 pnpm 版本解析（`pnpm --version` 的输出）", () => {
+    // ⚠️ 评审 P1：这一侧初版用 `/\b(\d+\.\d+\.\d+)\b/` **从输出里找子串**，于是
+    // `12.0.0-rc.1` 被截成 `12.0.0`——若声明正好是 `pnpm@12.0.0`，门禁报「一致」，
+    // 而 runner 实际跑的是另一个版本。prerelease 真的会发生（pnpm 会输出 `11.0.0-rc.3`
+    // 这种形态），所以这是本判据核心承诺（「声明与执行确实一致」）上的假绿。
+    it("只认完整输出：prerelease 不得被截成它的正式版", () => {
+      expect(parseRunningPnpmVersion("12.0.0-rc.1")).toBeUndefined();
+      expect(parseRunningPnpmVersion("11.0.0-rc.3")).toBeUndefined();
+      // 带前缀 / 后缀的其它形态同样不认，避免「找一段数字」式的宽松
+      expect(parseRunningPnpmVersion("v12.0.0")).toBeUndefined();
+      expect(parseRunningPnpmVersion("12.0.0 (something)")).toBeUndefined();
+      expect(parseRunningPnpmVersion("12.0")).toBeUndefined();
+    });
+
+    it("prerelease runner 对上稳定声明时判红（不是放行）", () => {
+      // 端到端复现评审给的场景：声明 pnpm@12.0.0、实际跑 12.0.0-rc.1。
+      const running = parseRunningPnpmVersion("12.0.0-rc.1");
+      expect(checkPackageManagerDrift("pnpm@12.0.0", running)).toHaveLength(1);
+      expect(checkPackageManagerDrift("pnpm@12.0.0", running)[0]!.detail).toContain("fail-closed");
+    });
+
+    it("稳定版本正常取出（含前后空白与换行）", () => {
+      expect(parseRunningPnpmVersion("12.0.0")).toBe("12.0.0");
+      expect(parseRunningPnpmVersion("  12.0.0\n")).toBe("12.0.0");
     });
   });
 });
