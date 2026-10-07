@@ -73,8 +73,9 @@ Client Context 拉回同一口径，让它不再成为那条链上唯一破例�
 owner signal 只是**消费者身份**，取消与否由 registry 按 `cancellable` 裁决，本层不越权。
 `existingGlobalV4Provider` 路径（宿主已加载）更无从谈起取消，registry 同样保留任务。
 
-因此：加载**照样跑完**，结果照旧落在 Client Context 上（无人接收的 Client 不额外释放
-——本库没有公开的 Client 销毁入口，`BMapClient` 只有 driver / rawSdk 的读取面）。
+因此：**等待一定结算**，而**底层任务是否继续由 `cancellable` 决定**（可取消的释放资源，
+不可取消的照旧跑完）。两种情况下结果都落在 Client Context 上、由终态守卫丢弃——无人接收的
+Client 不额外释放（本库没有公开的 Client 销毁入口，`BMapClient` 只有 driver / rawSdk 的读取面）。
 「取消是**逻辑**取消」这条口径本身没变（调用者取消 ≠ 终止网络请求），变的是：context 的
 **终态**有权释放它自己拥有的、且上游声明为可取消的那部分资源。这与 ADR
 `2026-09-24-service-task-and-resource-scope-split` 里「`release` 不传 `signal`」不矛盾——
@@ -132,8 +133,9 @@ owner signal 只是**消费者身份**，取消与否由 registry 按 `cancellab
 `pendingAsync()` 只统计 timer / callback，抓不到悬挂的 Promise——用那个读数会得到假绿。
 
 做法：context 自己持有一个 `AbortController`（`owner`），`dispose()` 时 `owner.abort()`
-先结算所有在飞等待（`BMAP_RESOURCE_DISPOSED`），再置终态；底层任务继续跑、结果由终态
-守卫丢弃。**所有** `load()` 都走 `waitShared(task, owner.signal, signal?)`——不再有
+先结算所有在飞等待（`BMAP_RESOURCE_DISPOSED`），再置终态；底层是否继续由决策 2 的
+`cancellable` 裁决，结果由终态守卫丢弃。**所有** `load()` 都走
+`waitShared(task, owner.signal, signal?)`——不再有
 「无 signal 就直接返回裸 task」那条分支，否则 dispose 这一路的取消来源又会被绕过。
 两个中止来源（调用方 signal / context 终态）共用同一处登记与解绑，`AbortSignal` 让
 「已 dispose」与「等待期间 dispose」由同一个 `aborted` 覆盖。

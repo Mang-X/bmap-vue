@@ -31,7 +31,7 @@
 评审修正（P1）：`dispose()` 此前只置终态，**不结算已经发出的等待**——底层 Provider 一直
 不结算时，`ctx.load()`（含 `<BMapProvider>` 无 signal 的 `ensureLoad()`）会永久悬挂。
 现在 context 自持一个 owner `AbortController`，`dispose()` 先 abort 它把所有在飞等待以
-`BMAP_RESOURCE_DISPOSED` 结算，再置终态；底层任务继续跑、结果由终态守卫丢弃。所有
+`BMAP_RESOURCE_DISPOSED` 结算，再置终态。所有
 `load()` 一律走同一个等待包装（不再有「无 signal 就返回裸 task」的分支）。
 
 评审修正（P1）：传给底层的 signal 应为 **owner**，而不是调用者的、也不是「什么都不传」。

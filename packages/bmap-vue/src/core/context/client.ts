@@ -76,14 +76,19 @@ function disposedError(suffix: string): BMapError {
 /**
  * 等一个**已启动**的共享任务，但允许本次等待被取消。
  *
- * 这是 caller-owned 的那一半：任务本身不受影响（它已经启动、也不接受取消），等待被中止
- * 只让本次调用立刻以自己的理由 reject。**两个**中止来源共用这一处实现：
+ * 这是 caller-owned 的那一半：取消只让**本次调用**立刻以自己的理由 reject，不改变底层
+ * 任务的所有权（底层是否被释放由 `owner` 那条链决定，见下）。**两个**中止来源共用这一处
+ * 实现：
  *
  * - `signal`：调用方自己的取消（`BMAP_PROVIDER_ABORTED`）；
  * - `owner`：context 被 `dispose()`（`BMAP_RESOURCE_DISPOSED`）——`dispose()` 是终态，
  *   它必须结算**已经发出**的等待，否则底层 Provider 一直 pending 时这些 Promise 永久悬挂
  *   （`<BMapProvider>` 的 `ensureLoad()` 正是无 signal 的这一条；#186 评审 P1）。
- *   底层任务自己继续跑，结果由 `startSharedLoad` 的终态守卫丢弃。
+ *
+ * 等待一定结算；**底层任务是否继续，由 Provider / Registry 的 `cancellable` 语义决定**：
+ * `owner` 同时也是传给 `createBMapClient` 的消费者身份，`dispose()` abort 它之后，可取消的
+ * Provider 会释放底层资源，`cancellable: false` 的（官方 Loader）则保留任务继续跑，
+ * 结果由 `startSharedLoad` 的终态守卫丢弃——两种情况下这里都不再关心它。
  *
  * `owner` 用 `AbortSignal` 表达而不是在每次等待里各挂一个回调：登记与解绑都只有一处，
  * 且「已 dispose」和「等待期间 dispose」自然由同一个信号的 `aborted` 覆盖。
@@ -244,10 +249,14 @@ export function createClientContext(options: CreateClientContextOptions = {}): B
   function dispose(): void {
     if (disposed) return;
     disposed = true;
-    // 1. 先结算**已发出**的等待：底层任务不可取消、照样跑完，但没有任何调用者该被它悬住。
+    // 1. abort owner，一次性做两件事：
+    //    - 结算**所有已发出**的等待（它们拿到 disposed 口径）；
+    //    - 交还 context 的 registry consumer 身份 —— 可取消的 Provider 据此释放
+    //      script / timer / callback，`cancellable: false` 的（官方 Loader）保留底层任务。
     //    顺序很重要——先 abort owner，再置终态，等待者拿到的就一定是 disposed 口径。
     owner.abort(disposedError("has been disposed"));
-    // 2. 共享任务本身留着跑完；终态由 `startSharedLoad` 的写入前守卫保证，结果无人接收。
+    // 2. 共享任务不再被本 context 追踪：它的结果由 `startSharedLoad` 的终态守卫丢弃，
+    //    既不改写终态、也不写 `client`。是否仍在飞取决于上一步的 cancellable 裁决。
     sharedLoad = null;
     error.value = null;
     client.value = null;

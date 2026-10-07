@@ -319,8 +319,9 @@ describe("BMapClientContext.dispose 是终态（#186）", () => {
 /**
  * #186 评审 P1：`dispose()` 必须结算**已经发出**的等待。
  *
- * 底层任务不可取消没有问题，但「不可取消」不等于「调用者可以被永久悬住」——验收项里
- * 写的是「销毁后没有未结算的本库等待 Promise」。真实路径上 `<BMapProvider>` 的
+ * 「底层任务是否继续跑」与「调用者的等待要不要结算」是两件事：前者由 Provider / Registry
+ * 的 `cancellable` 裁决（见下一个 describe），后者是验收项里写明的「销毁后没有未结算的
+ * 本库等待 Promise」——两者都不允许调用者被永久悬住。真实路径上 `<BMapProvider>` 的
  * `onMounted` → `ensureLoad()` → `context.load()` 正是**无 signal** 的那一条，因此
  * 「Provider 卸载后那条 async 调用还挂着」在底层 Provider 不结算时就是永久 pending。
  *
