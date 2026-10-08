@@ -6,6 +6,12 @@
 
 ## `pnpm pack:package` 写下来源记录
 
+打包前的 manifest 步骤用 `generate:manifest:check`：非 check 模式会用 `new Date()` 改写**受版本
+控制**的 `component-index.json` / `components/index.ts`，于是随后读到的 `git status` 恒为脏 ——
+干净检出打出的包也会被记成 `-dirty`，那个标注就没有区分力了。`:check` 仍会写 gitignore 的
+`volar.d.ts` 并对受跟踪生成物做只读比对。打包脚本另有一条行为守卫：manifest 步骤前后受跟踪的
+改动集合不得变化，换回非 check 模式会立刻被拦下。
+
 打包的**同一时刻**写下 `<tarball>.build.json`：`sha256`、打包时的 commit、是否脏树、打包时间。
 `verify:package` 读它并与当前 HEAD 比对，在跑任何档位之前打印：
 

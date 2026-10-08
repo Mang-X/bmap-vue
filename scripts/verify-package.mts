@@ -8,8 +8,8 @@
  * 3. 跑 vue-tsc 类型检查 + ESM 导入 smoke(package 发布硬前提)。
  *
  * 用法:
- *   pnpm --filter bmap-vue pack --pack-destination .artifacts
- *   node scripts/verify-package.mts
+ *   pnpm pack:package          # 打包 + 写下来源记录（#158 工作包 E）
+ *   pnpm verify:package        # 唯一消费方入口（等价于直接跑本脚本）
  */
 import { execSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'

@@ -31,8 +31,35 @@ function run(command: string): void {
   execSync(command, { cwd: root, stdio: "inherit", env: { ...process.env, CI: "1" } });
 }
 
-// 1) manifest 产物（volar.d.ts 等）必须在 pack 之前就位（与原来的 pack:package 一致）。
-run("pnpm generate:manifest");
+/** 当前被 git 跟踪且已修改/新增的文件路径（`git status --porcelain` 的路径列）。 */
+function trackedModifiedFiles(): string[] {
+  return execSync("git status --porcelain", { cwd: root, encoding: "utf8" })
+    .split("\n")
+    .map((line) => line.slice(3).trim())
+    .filter((path) => path.length > 0)
+    .sort();
+}
+
+// 1) manifest 产物（volar.d.ts 等）必须在 pack 之前就位。
+//
+//    用 **`:check`** 而不是非 check 模式：非 check 会无条件用 `new Date()` 改写**受版本控制**
+//    的 `docs/.vitepress/component-index.json` 与 `src/components/index.ts`，于是随后读到的
+//    `git status` 恒为脏 —— 干净检出打出的包也会被记成 `-dirty`，那个标注就失去了区分力。
+//    `:check` 仍会写 gitignore 的 `volar.d.ts`，同时对受跟踪生成物做只读比对（漂移即失败）。
+//
+//    这里再补一条**行为守卫**：manifest 步骤前后，受跟踪的改动集合不得变化 —— 换回非 check
+//    模式会立刻被它拦下，而不是等「来源记录总是 -dirty」这种症状出现。
+const trackedBeforeManifest = trackedModifiedFiles();
+run("pnpm generate:manifest:check");
+const trackedAfterManifest = trackedModifiedFiles();
+const introduced = trackedAfterManifest.filter((path) => !trackedBeforeManifest.includes(path));
+if (introduced.length > 0) {
+  throw new Error(
+    `[pack-package] manifest 步骤改动了受版本控制的文件：${introduced.join(", ")}\n` +
+      `  那会让来源记录里的 dirty 恒为 true，无法区分真实未提交修改。` +
+      `  请用 generate:manifest:check（它不写受跟踪文件）。`,
+  );
+}
 
 // 2) 清掉旧的 tarball 与旧 sidecar：同名旧包留着会让「来源记录与当前 HEAD 不一致」成为
 //    正常路径上的常见失败，而不是异常信号。
