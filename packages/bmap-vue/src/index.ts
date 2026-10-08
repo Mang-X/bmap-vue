@@ -291,6 +291,7 @@ export type {
   RouteTaxiFareDetail,
   ServiceCallStatus,
   ServiceErrorInfo,
+  BoundaryParseRequest,
   ServiceInvocationDriver,
   TransitLineSegment,
   TransitRouteOptions,

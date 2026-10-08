@@ -12,10 +12,15 @@ import { useAreaBoundary } from '@mangax/bmap-vue'
 拿不到点串）。要的是「行政区划图层」而不是点串时，用 [`DistrictLayer`](/zh-CN/components/layer/district-layer)。
 :::
 
-:::tip 官方 `Boundary#parsebdStr` 未暴露
-官方 `Boundary` 上还有 `parsebdStr(str, callback)`（解析已拿到的混淆点串）。本库**不暴露**它：
-`get()` 的回包已经是解析后的结果，点串是你**这次查询的输入**而不是资产，单独再暴露一个解析入口
-只会多一条没有消费者的路径。需要解析手上已有的点串时，走 Driver 的归一化调用面。
+:::tip 官方 `Boundary#parsebdStr` 也有出口
+`Boundary` 有两个动作成员，本库**两个都暴露**：
+
+- `get(area)`（官方 `Boundary#get`）：按行政区名联网查询；
+- `parsebdStr(str)`（官方 `Boundary#parsebdStr`）：解析**手上已有**的混淆坐标串，**不发网络请求**。
+
+两者回包同形（`BoundaryResult`），所以结果落在**同一份** `data` / `boundaries` 上。
+（此前这一条被判为「不暴露」，理由是「点串是查询的输入」——该前提不成立：`get()` 的输入是
+**行政区名**，点串是它的**回包**；从别处拿到的点串同样需要本地解析入口。）
 :::
 
 ## 示例
@@ -27,7 +32,7 @@ overlay/polygon/boundaries
 ## 用法
 
 ```ts
-const { isLoading, boundaries, get } = useAreaBoundary(map)
+const { isLoading, boundaries, get, parsebdStr } = useAreaBoundary(map)
 ```
 
 :::tip
@@ -65,15 +70,16 @@ const { isLoading, boundaries, get } = useAreaBoundary(map)
 | isLoading  | 是否加载中                                                               | `boolean`                                                     |
 | supported  | 当前引擎是否支持行政区边界                                                | `boolean`                                                     |
 | status     | 任务状态（见上）                                                         | `Readonly<ShallowRef<BMapServiceStatus>>`                      |
-| get        | 获取指定区域边界                                                         | `(area: string) => Promise<ServiceResult<string[]>>`           |
+| get        | 获取指定区域边界（官方 `Boundary#get`，联网）                             | `(area: string) => Promise<ServiceResult<string[]>>`           |
+| parsebdStr | 解析手上的混淆坐标串（官方 `Boundary#parsebdStr`，**不发网络请求**）；结果同样落在 `data` / `boundaries` | `(str: string) => Promise<ServiceResult<string[]>>`            |
 | cancel     | 逻辑取消在飞请求                                                         | `() => void`                                                   |
 | reset      | 取消 + 清空 data/error/status                                            | `() => void`                                                   |
 
 :::tip 需要解析后的坐标环？
 
 `boundaries` 保持「官方点串」形态是为了兼容 `isBoundary` 的覆盖物。需要坐标环时，用
-Driver 的归一化调用面（`driver.services.queryBoundary()`）——它的载荷里 `raw`（点串）与
-`rings`（解析后的坐标环）**两者都有**。
+Driver 的归一化调用面（`driver.services.queryBoundary()` / `parseBoundaryString()`）——
+它们的载荷里 `raw`（点串）与 `rings`（解析后的坐标环）**两者都有**。
 
 :::
 
@@ -126,6 +132,11 @@ export declare function useAreaBoundary(map?: unknown): {
    * @example get('北京市')
    */
   get: (area: string) => Promise<ServiceResult<AreaBoundary>>
+  /**
+   * 解析混淆坐标串（官方 `Boundary#parsebdStr`）
+   * @example parsebdStr(boundaryStrFromServer)
+   */
+  parsebdStr: (str: string) => Promise<ServiceResult<AreaBoundary>>
   cancel: () => void
   reset: () => void
 }

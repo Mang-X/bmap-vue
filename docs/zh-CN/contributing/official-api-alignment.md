@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 442 |
+| 本库根入口导出 | 443 |
 | 名称对齐（交集） | 116 |
 | 仅官方有 | 286 |
-| 仅本库有 | 326 |
+| 仅本库有 | 327 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -637,6 +637,7 @@ component 46 · hook 14 · type 56
 | `BMapProviderLike` | other | Provider 结构类型；与组件 `BMapProvider` 成对，官方根 barrel 无同名 type。 |
 | `BMapResolver` | other | — |
 | `BMapRouteLocation` | other | — |
+| `BoundaryParseRequest` | other | — |
 | `BoundaryRings` | other | — |
 | `BUILTIN_PLUGIN_CATALOG` | other | — |
 | `BUILTIN_PLUGIN_NAMES` | other | — |

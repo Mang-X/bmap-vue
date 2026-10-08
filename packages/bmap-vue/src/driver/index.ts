@@ -55,6 +55,7 @@ export type {
 } from "./types/native-layers";
 export type {
   AutocompleteOptions,
+  BoundaryParseRequest,
   BoundaryRequest,
   ConvertorRequest,
   CoordinateFromType,

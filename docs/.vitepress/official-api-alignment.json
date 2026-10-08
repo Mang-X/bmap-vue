@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 442,
+  "oursPublicCount": 443,
   "uiKitCount": 62,
   "matchedCount": 116,
   "officialOnlyCount": 286,
-  "oursOnlyCount": 326,
+  "oursOnlyCount": 327,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2602,6 +2602,11 @@
       "name": "BMapRouteLocation",
       "surface": "other",
       "oursEntry": "./composables"
+    },
+    {
+      "name": "BoundaryParseRequest",
+      "surface": "other",
+      "oursEntry": "."
     },
     {
       "name": "BoundaryRings",

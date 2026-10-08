@@ -246,6 +246,7 @@ export type {
   AutocompleteUpdateOptions,
   DrivingRouteOptions,
   JsapiV4ServiceDriver,
+  BoundaryParseRequest,
   BoundaryRequest,
   CoordinateFromType,
   CoordinateToType,

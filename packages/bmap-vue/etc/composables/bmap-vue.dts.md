@@ -1454,6 +1454,7 @@ export declare function useAreaBoundary(map?: unknown): {
     isLoading: Readonly<ShallowRef<boolean>>;
     supported: Readonly<ShallowRef<boolean>>;
     get: (area: string) => Promise<ServiceResult<AreaBoundary>>;
+    parsebdStr: (str: string) => Promise<ServiceResult<AreaBoundary>>;
     cancel: () => void;
     reset: () => void;
 };
