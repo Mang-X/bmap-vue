@@ -1026,6 +1026,12 @@ export interface GeocodeDetailItemResult {
     status: BMapServiceStatus;
 }
 
+// @public
+export interface GeocodeDetailLocationOptions {
+    numPois?: number;
+    poiRadius?: number;
+}
+
 // @public (undocumented)
 export interface GeocodeDetailResult {
     // (undocumented)
@@ -4114,8 +4120,8 @@ export function useGeocodeDetail(map?: unknown): {
     sdkStatus: Readonly< ShallowRef<number | null>>;
     isLoading: Readonly< ShallowRef<boolean>>;
     supported: Readonly< ShallowRef<boolean>>;
-    getLocation: (point: GeoPoint) => Promise< ServiceResult<GeocodeDetailResult>>;
-    getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>;
+    getLocation: (point: GeoPoint, options?: GeocodeDetailLocationOptions) => Promise< ServiceResult<GeocodeDetailResult>>;
+    getBatch: (points: readonly GeoPoint[], options?: GeocodeDetailLocationOptions) => Promise<GeocodeDetailItemResult[]>;
     cancel: () => void;
     reset: () => void;
 };

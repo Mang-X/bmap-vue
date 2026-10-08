@@ -13,6 +13,20 @@ import { useGeocodeDetail } from '@mangax/bmap-vue'
 hooks/useGeocodeDetail/index
 :::
 
+::: tip 逆解析的可选参数（官方 `LocationOptions`）
+`getLocation` 的第二个参数对齐官方 `Geocoder#getLocation` 的 `LocationOptions`：
+
+```ts
+const { getLocation } = useGeocodeDetail(map)
+await getLocation({ lng: 116.404, lat: 39.915 }, { poiRadius: 500, numPois: 3 })
+```
+
+- `poiRadius`：附近 POI 的最大半径（米，官方默认 100）；
+- `numPois`：返回的 POI 个数（官方默认 10）。
+
+`getBatch(points, options)` 的 `options` 对整个批次生效。
+:::
+
 :::tip
 `data` 为 `Readonly<ShallowRef<GeocodeDetailResult | null>>`，可直接解构使用：
 
