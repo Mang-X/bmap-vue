@@ -2210,6 +2210,13 @@ export function useLocalSearch(options?: MaybeRefOrGetter<BMapLocalSearchOptions
     searchNearby: (keyword: LocalSearchKeyword, center: string | GeoPoint, radius: number) => Promise< ServiceResult<LocalSearchResult[]>>;
     searchInBounds: (keyword: LocalSearchKeyword, bounds: LocalSearchInBoundsRequest["bounds"]) => Promise< ServiceResult<LocalSearchResult[]>>;
     gotoPage: (page: number) => Promise< ServiceResult<LocalSearchResult[]>>;
+    setPageCapacity: (capacity: number) => void;
+    getPageCapacity: () => number;
+    setPageNum: (pageNum: number) => void;
+    getPageNum: () => number;
+    clearSelected: () => void;
+    setLocation: (location: LocalSearchLocation) => void;
+    hasInstance: () => boolean;
     clear: () => void;
     cancel: () => void;
     reset: () => void;

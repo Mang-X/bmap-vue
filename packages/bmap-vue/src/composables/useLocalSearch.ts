@@ -275,6 +275,49 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     task.reset();
   };
 
+  /**
+   * 官方的**同步**成员（`LocalSearch#getPageCapacity` / `setPageCapacity` / `getPageNum` /
+   * `setPageNum` / `clearSelected` / `setLocation`）走 `withHandle` 通道：它们不产生异步结果，
+   * 用 `execute()` 表达会把官方语义改成「发一次调用」，`get*` 更是表达不出来。
+   *
+   * **先 `search()` 一次才有活实例**：本库不会为了设一个分页容量而顺手创建 SDK 实例。
+   * 没有实例时这些方法抛 `BMAP_RESOURCE_DISPOSED`；用 `hasInstance()` 可以先问再做。
+   */
+  const withService = <R>(fn: (services: ReturnType<typeof jsapiV4ServicesOf>, handle: ServiceHandle<"service:local-search">) => R): R =>
+    task.withHandle((handle, context) => fn(jsapiV4ServicesOf(context.client), handle));
+
+  /** 当前是否有可操作的活实例（`withService` 系方法是否可用）。 */
+  const hasInstance = (): boolean => task.currentInstanceExists();
+
+  /**
+   * 改页容量（官方 `setPageCapacity`）。
+   *
+   * 与 `gotoPage` 的区别：后者是**翻页动作**（会请求第 N 页数据、可能失败），本方法是**设置**
+   * 每页容量，官方同步生效、不产生请求。
+   */
+  const setPageCapacity = (capacity: number): void =>
+    withService((services, handle) => services.setLocalSearchPageCapacity(handle, capacity));
+
+  /** 读页容量（官方 `getPageCapacity`）。 */
+  const getPageCapacity = (): number =>
+    withService((services, handle) => services.getLocalSearchPageCapacity(handle));
+
+  /** 设当前页码（官方 `setPageNum`）；是**设置**而不是翻页请求。 */
+  const setPageNum = (pageNum: number): void =>
+    withService((services, handle) => services.setLocalSearchPageNum(handle, pageNum));
+
+  /** 读当前页码（官方 `getPageNum`）。 */
+  const getPageNum = (): number =>
+    withService((services, handle) => services.getLocalSearchPageNum(handle));
+
+  /** 清掉当前选中项（官方 `clearSelected`），不影响结果集。 */
+  const clearSelected = (): void =>
+    withService((services, handle) => services.clearLocalSearchSelected(handle));
+
+  /** 改检索区域（官方 `setLocation`）；与构造期的 `location` 同一套归一。 */
+  const setLocation = (location: LocalSearchLocation): void =>
+    withService((services, handle) => services.setLocalSearchLocation(handle, location));
+
   return {
     data: task.data,
     error: task.error,
@@ -288,6 +331,13 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     searchNearby,
     searchInBounds,
     gotoPage,
+    setPageCapacity,
+    getPageCapacity,
+    setPageNum,
+    getPageNum,
+    clearSelected,
+    setLocation,
+    hasInstance,
     clear,
     cancel: task.cancel,
     reset: task.reset,

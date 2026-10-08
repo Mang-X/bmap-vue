@@ -1416,6 +1416,29 @@ export function createJsapiV4ServiceDriver(
     return resolve<Record<string, unknown>>(handle, operation);
   };
 
+  /**
+   * 取一个**仍存活**的 LocalSearch 实例（同步 mutator / getter 共用）。
+   *
+   * 与 `localSearchOf` 的差别是多一道终态检查：`disposeLocalSearch()` 之后实例已置为终态，
+   * 再往里写（`setPageCapacity` / `setLocation`）是没有意义的行为，静默成功会骗人 ——
+   * 与 `clearLocalSearch` 的既有口径一致（那里也是显式拒绝）。
+   */
+  const localSearchLive = (
+    handle: ServiceHandle<"service:local-search">,
+    operation: string,
+  ): Record<string, unknown> => {
+    const raw = localSearchOf(handle, `ServiceDriver.${operation}`);
+    if (disposedInstances.has(raw)) {
+      throw new BMapError(
+        "BMAP_INVALID_ARGUMENT",
+        `${operation}: 该 LocalSearch 实例已被 disposeLocalSearch() 释放，拒绝在已销毁的实例上` +
+          "读写；请重建实例",
+        { engine: "jsapi-v4" },
+      );
+    }
+    return raw;
+  };
+
   /* ------------------------------------------------------- 路线规划（#39） */
 
   /** 路线服务句柄种类（`clearRouteResults` / `disposeRoute` 的准入判据）。 */
@@ -2354,6 +2377,32 @@ export function createJsapiV4ServiceDriver(
         );
       }
       callRequired(raw, "clearResults");
+    },
+
+    getLocalSearchPageCapacity(handle) {
+      return callRequired(localSearchLive(handle, "getLocalSearchPageCapacity"), "getPageCapacity") as number;
+    },
+
+    setLocalSearchPageCapacity(handle, capacity) {
+      // 官方对超范围值自己会重置为 10，本库不抢先校验（否则行为与官方分叉）。
+      callRequired(localSearchLive(handle, "setLocalSearchPageCapacity"), "setPageCapacity", capacity);
+    },
+
+    getLocalSearchPageNum(handle) {
+      return callRequired(localSearchLive(handle, "getLocalSearchPageNum"), "getPageNum") as number;
+    },
+
+    setLocalSearchPageNum(handle, pageNum) {
+      callRequired(localSearchLive(handle, "setLocalSearchPageNum"), "setPageNum", pageNum);
+    },
+
+    clearLocalSearchSelected(handle) {
+      callRequired(localSearchLive(handle, "clearLocalSearchSelected"), "clearSelected");
+    },
+
+    setLocalSearchLocation(handle, location) {
+      const resolved = normalizeSearchLocation(location, "setLocalSearchLocation");
+      callRequired(localSearchLive(handle, "setLocalSearchLocation"), "setLocation", resolved);
     },
 
     /**

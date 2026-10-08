@@ -649,11 +649,28 @@ export class FakeV4LocalSearch {
 
   setPageNum(pageNum: number): void {
     this.callLog.push('setPageNum:' + pageNum)
+    this.currentPageNum = pageNum
   }
 
   getPageNum(): number {
-    return 0
+    return this.currentPageNum
   }
+
+  /** 官方 `LocalSearch#clearSelected()`：只清选中项，结果集不动。 */
+  clearSelected(): void {
+    this.callLog.push('clearSelected')
+  }
+
+  /** 官方 `LocalSearch#setLocation(location)`：改检索区域（不重建实例）。 */
+  setLocation(location: unknown): void {
+    this.callLog.push('setLocation:' + String(location))
+    this.currentLocation = location
+  }
+
+  /** 测试辅助：最近一次 `setLocation` 收到的原始值 */
+  currentLocation: unknown = undefined
+  /** 测试辅助：当前页码（`setPageNum` / `getPageNum` 共享状态，与官方同步语义一致） */
+  currentPageNum = 0
 
   private currentResults(): FakeV4LocalResult[] {
     const payload = this.lastPayload

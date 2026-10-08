@@ -108,7 +108,7 @@ describe("createSharedInstanceChannel（#139 的「简单档不带死状态」�
     expect(channel.refuseMessage).toBeUndefined();
   });
 
-  it("共享通道的键集合恰好是接口的 9 个成员（不多不少 ⇒ 没有任何附加记账）", () => {
+  it("共享通道的键集合恰好是接口的 10 个成员（不多不少 ⇒ 没有任何附加记账）", () => {
     // 上一条 `not.toContain` 挡不住**闭包变量**形式的死状态：`Object.keys` 看不见闭包，
     // 所以「把 pendingReleases 写成闭包变量」这种真实泄漏形态照样能过。改成**白名单**：
     // 共享通道的对象上只允许出现接口声明过的那几个成员，任何附加记账都会翻红。
@@ -121,6 +121,7 @@ describe("createSharedInstanceChannel（#139 的「简单档不带死状态」�
         "invalidate",
         "isBlocked",
         "onCancel",
+        "peek",
         "refuseMessage",
         "releaseAll",
         "resolveSupersede",

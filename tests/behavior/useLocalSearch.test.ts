@@ -677,3 +677,105 @@ describe("useLocalSearch：构造字段变化才重建", () => {
     await flushPromises();
   });
 });
+
+/* ------------------------------------------------------------------ 官方同步成员（#165） */
+
+/**
+ * 官方的 `getPageCapacity` / `setPageCapacity` / `getPageNum` / `setPageNum` / `clearSelected` /
+ * `setLocation` 都是**同步**成员。它们走 `withHandle` 通道（活实例上的原地读/写），
+ * **不**发请求、**不**改 `status`，也**不**为了设一个值而顺手创建 SDK 实例。
+ */
+describe("useLocalSearch：官方同步成员走活实例通道", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("没有活实例时抛错，且不会为了 setPageCapacity 创建实例", () => {
+    let hasInstanceAtStart: boolean | null = null;
+    let thrown: unknown = null;
+    mountInMap((hook) => {
+      hasInstanceAtStart = hook.hasInstance();
+      try {
+        hook.setPageCapacity(20);
+      } catch (error) {
+        thrown = error;
+      }
+    });
+
+    expect(hasInstanceAtStart).toBe(false);
+    expect((thrown as Error)?.message).toContain("还没有可用的服务实例");
+    // 关键：没有实例就**不建**——否则「设个分页容量」会静默产生一个 SDK 对象
+    expect(fake.createdLocalSearches).toHaveLength(0);
+  });
+
+  it("search 之后同步成员可用，且调用的是官方的同步入口", async () => {
+    let readBack: { capacity: number; page: number } | null = null;
+    let hadInstance: boolean | null = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      hadInstance = hook.hasInstance();
+      hook.setPageCapacity(20);
+      hook.setPageNum(2);
+      readBack = { capacity: hook.getPageCapacity(), page: hook.getPageNum() };
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(hadInstance).toBe(true);
+    expect(readBack!.capacity).toBe(20);
+    expect(readBack!.page).toBe(2);
+    const log = fake.createdLocalSearches[0]!.callLog;
+    expect(log).toContain("setPageCapacity:20");
+    expect(log).toContain("setPageNum:2");
+    wrapper.unmount();
+  });
+
+  it("同步成员不改 status（设置一个值不该把状态打成 loading）", async () => {
+    let statusAfterSync: string | null = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      const before = hook.status.value;
+      hook.setPageCapacity(15);
+      hook.clearSelected();
+      statusAfterSync = hook.status.value === before ? before : `changed:${hook.status.value}`;
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(statusAfterSync).toBe("success");
+    wrapper.unmount();
+  });
+
+  it("setLocation 走官方入口，且不改实例身份（仍是同一个实例）", async () => {
+    let countBefore = 0;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      countBefore = fake.createdLocalSearches.length;
+      hook.setLocation("上海市");
+    });
+    await flushPromises();
+    await nextTick();
+
+    const raw = fake.createdLocalSearches[0]!;
+    expect(raw.callLog).toContain("setLocation:上海市");
+    // 原地改：不重建实例（重建会让已画出的结果与在飞调用一起失效）
+    expect(fake.createdLocalSearches).toHaveLength(countBefore);
+    wrapper.unmount();
+  });
+
+  it("clear() 之后实例没了，同步成员重新变为不可用", async () => {
+    let afterClear: boolean | null = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      hook.clear();
+      afterClear = hook.hasInstance();
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(afterClear).toBe(false);
+    wrapper.unmount();
+  });
+});

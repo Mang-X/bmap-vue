@@ -116,13 +116,26 @@ export interface ExclusiveServiceTaskOptions<TDriver, THandle, TArgs extends unk
 }
 
 /** 独占服务任务的公开面：多一个 `invalidateService`（丢弃缓存实例）。 */
-export interface ExclusiveServiceTask<TResult, TArgs extends unknown[]>
+export interface ExclusiveServiceTask<TResult, TArgs extends unknown[], THandle = unknown>
   extends SimpleServiceTask<TResult, TArgs> {
   /**
    * 丢弃缓存的服务实例（下一次调用重建）：先取消在飞调用，再释放旧实例，并把实例标记为过期
    * ——因此判定为 `"refuse"` 的那些调用（如 LocalSearch 的 `gotoPage`）随后会被拒绝。
    */
   invalidateService: () => void;
+  /**
+   * 在当前**活实例**上跑一段**同步**操作（官方的 setter / getter 是同步的）。
+   *
+   * **只有独占档有它**：官方的同步 mutator 只出现在「有释放入口」的服务上（`LocalSearch` /
+   * 路线 / `Geolocation`），而那正是独占档的定义（见 `instanceChannel.ts` 文件头）。
+   * 简单档的服务连实例都不该被外部指着改，多一个入口只会诱使调用方去改共享实例。
+   *
+   * 没有活实例时**抛错**（不顺手创建一个）：`invalidateService()` 之后要先 `execute()` 一次，
+   * 才会有实例可操作。用 `currentInstanceExists()` 可以先问再做。
+   */
+  withHandle: <R>(fn: (handle: THandle, context: ServiceInvokeContext) => R) => R;
+  /** 当前是否有可用的活实例（`withHandle` 是否可用）。 */
+  currentInstanceExists: () => boolean;
 }
 
 /**
@@ -154,6 +167,7 @@ function bindTask<TDriver, THandle, TArgs extends unknown[], TResult>(
     ...options,
     channel,
     whenReady: (signal) => ctx.whenReady(signal),
+    currentMap: () => ctx.map.value,
     onState: (patch: Partial<ServiceTaskState<TResult>>) => {
       if (patch.status !== undefined) status.value = patch.status;
       if (patch.data !== undefined) data.value = patch.data;
@@ -205,7 +219,7 @@ export function useSimpleServiceTask<TDriver, THandle, TArgs extends unknown[], 
 export function useExclusiveServiceTask<TDriver, THandle, TArgs extends unknown[], TResult = TDriver>(
   ctx: MapContext,
   options: ExclusiveServiceTaskOptions<TDriver, THandle, TArgs, TResult>,
-): ExclusiveServiceTask<TResult, TArgs> {
+): ExclusiveServiceTask<TResult, TArgs, THandle> {
   const { release, supersede, refuseMessage, ...common } = options;
   const channel = createExclusiveInstanceChannel<THandle, TArgs>({
     label: options.capability,
@@ -216,5 +230,18 @@ export function useExclusiveServiceTask<TDriver, THandle, TArgs extends unknown[
     ...(refuseMessage ? { refuseMessage } : {}),
   });
   const { task, core } = bindTask(ctx, common, channel);
-  return { ...task, invalidateService: () => core.invalidate() };
+  return {
+    ...task,
+    invalidateService: () => core.invalidate(),
+    withHandle: (fn) => core.withHandle(fn),
+    currentInstanceExists: () => {
+      try {
+        // 复用同一条判据（`peek()` 与 `withHandle` 读的是同一个入口），避免两处走偏。
+        core.withHandle(() => true);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }

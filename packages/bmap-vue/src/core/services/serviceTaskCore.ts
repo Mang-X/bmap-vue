@@ -20,6 +20,7 @@ import type { ServiceCall, ServiceErrorInfo, ServiceResult } from "../../driver/
 import type { BMapServiceStatus } from "./serviceStatus";
 import { settledServiceResult, toServiceErrorInfo } from "./serviceStatus";
 import { createRequestGuard } from "./requestGuard";
+import { BMapError } from "../errors/BMapError";
 import type { ServiceInstanceChannel } from "./instanceChannel";
 
 /** 传给 `create` / `invoke` 的上下文（Client 已就绪、能力已通过）。 */
@@ -70,6 +71,11 @@ export interface ServiceTaskCoreOptions<TDriver, THandle, TArgs extends unknown[
   channel: ServiceInstanceChannel<THandle>;
   /** 上下文就绪（Client + 可选地图句柄）。 */
   whenReady: (signal: AbortSignal) => Promise<ServiceTaskReady>;
+  /**
+   * **当前**地图句柄（可能为 `null`）。只给 `withHandle` 的同步路径用 —— 那条路径不能 await
+   * `whenReady()`，因此不能从它拿 map。同步 setter / getter 本身不依赖 map。
+   */
+  currentMap: () => MapHandle | null;
   /** 状态变更回调（Vue 侧写 shallow refs）。 */
   onState: (patch: Partial<ServiceTaskState<TResult>>) => void;
 }
@@ -80,6 +86,25 @@ export interface ServiceTaskCore<TDriver, THandle, TArgs extends unknown[], TRes
   reset(): void;
   /** 丢弃缓存实例（下一次调用重建）。独占档才有。 */
   invalidate(): void;
+  /**
+   * 在当前**已缓存**实例上跑一段**同步**操作（官方的 setter / getter 是同步的）。
+   *
+   * 与 `execute()` 的分工：`execute` 是「发一次请求、拿异步结果」；`withHandle` 是「在活实例上
+   * 原地读/写」—— 官方 `LocalSearch#setPageCapacity` / `#getPageCapacity` 这类成员没有异步结果，
+   * 用 `execute` 表达会改掉官方语义，`get*` 更是表达不出来。
+   *
+   * 三条约束都是刻意的：
+   *
+   * 1. **不创建实例**。没有缓存实例（还没调用过 / 已被 `invalidate` / 已释放）时直接抛错，
+   *    而不是顺手建一个 —— 「只是设个分页容量」却让 SDK 实例出现，是调用方看不见的副作用。
+   * 2. **不参与请求序列**。它不改 `status` / `data` / 在飞调用；一次同步 setter 把 `status`
+   *    打成 `loading` 会是明显的谎言。
+   * 3. **不猜句柄归属**。跨 Client 的句柄会被 Driver 拒绝，这里同样先问通道要「当初那个
+   *    Client」，拿不到就是拿不到。
+   *
+   * 抛错由调用方决定怎么呈现（composable 各自映射成自己的错误通道），内核不吞。
+   */
+  withHandle<R>(fn: (handle: THandle, context: ServiceInvokeContext) => R): R;
   /** Client 变化时重判能力。 */
   setSupported(supported: boolean): void;
   /**
@@ -102,6 +127,8 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
   let disposed = false;
   let activeCall: ServiceCall<TDriver> | null = null;
   let activeController: AbortController | null = null;
+
+  const currentMap = (): MapHandle | null => options.currentMap();
 
   const invokeContext = (
     client: BMapClient,
@@ -290,6 +317,38 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
     channel.invalidate();
   }
 
+  /**
+   * 在当前已缓存实例上跑同步操作。见接口注释里的三条约束；这里只实现「怎么拿实例」。
+   *
+   * 同步取用**不经过** `whenReady()`（那是异步的），所以只依赖「当前是否已有实例」：
+   * 没有就抛错，而不是等一个 promise —— 同步方法返回 promise 会诱使调用方忘记 await，
+   * 而忘记 await 在这里的后果是「设置没生效但没人知道」。
+   *
+   * `context.map` 取**当前**地图句柄（可能为 `null`）：它只是传给 `fn` 的旁路信息，
+   * 服务的同步 setter / getter 不靠它工作。
+   */
+  function withHandle<R>(fn: (handle: THandle, context: ServiceInvokeContext) => R): R {
+    if (disposed) {
+      throw new BMapError(
+        "BMAP_RESOURCE_DISPOSED",
+        `${capability}: 任务已随 scope 卸载，不再持有可用实例`,
+      );
+    }
+    const entry = channel.peek();
+    if (!entry) {
+      throw new BMapError(
+        "BMAP_RESOURCE_DISPOSED",
+        `${capability}: 还没有可用的服务实例（尚未调用过、已被丢弃、或正在重建）。` +
+          `同步 setter/getter 只在活实例上有意义，本库不会为了它顺手创建一个 SDK 实例。`,
+      );
+    }
+    const client = entry.client;
+    return fn(
+      entry.handle,
+      invokeContext(client, currentMap(), new AbortController().signal),
+    );
+  }
+
   function dispose(): void {
     if (disposed) return;
     disposed = true;
@@ -306,6 +365,7 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
     cancel,
     reset,
     invalidate,
+    withHandle,
     setSupported: (supported) => onState({ supported }),
     dispose,
   };
