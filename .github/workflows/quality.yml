@@ -213,12 +213,17 @@ jobs:
       - name: Unit & behavior tests
         run: pnpm test:unit
 
-      # Package tarball consumer verification
+      # Package tarball consumer verification（#158 工作包 E）。
+      #
+      # 与 `package` job 用**同一个**入口（`pnpm verify:package`），而不是直接跑脚本：
+      # 直接跑脚本时两处会分叉 —— 这里少了 `.artifacts` 清理，`findTarball` 在多个同身份
+      # tarball 之间无法确定验的是哪一个；而 `package` job 早就按 `npm script` 调同一个
+      # 实现。`verify-package.mts` 从 manifest 派生全部身份信息，所以单一入口既正确又更全。
       - name: Verify package consumers
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
-          pnpm --filter bmap-vue pack --pack-destination .artifacts
-          node --experimental-strip-types scripts/verify-package.mts
+          pnpm pack:package
+          pnpm verify:package
 
 
 
@@ -370,7 +375,7 @@ jobs:
       - name: Check pack contents (files / exports / forbidden paths)
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
-          pnpm --filter bmap-vue pack --pack-destination .artifacts
+          pnpm pack:package
           pnpm check:pack-contents
 
       # tarball 消费方验证：**调 `pnpm verify:package`，不再在本文件里复刻一遍**。

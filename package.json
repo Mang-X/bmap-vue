@@ -53,7 +53,7 @@
     "typecheck:package": "pnpm exec vue-tsc -p packages/bmap-vue/tsconfig.build.json",
     "typecheck:tests": "vue-tsc -p tsconfig.tests.json",
     "typecheck:type-contracts": "vue-tsc -p tsconfig.type-contracts.json",
-    "pack:package": "pnpm generate:manifest && pnpm --filter bmap-vue pack --pack-destination .artifacts",
+    "pack:package": "node --experimental-strip-types scripts/pack-package.mts",
     "playground:dev": "vp run -C apps/playground dev",
     "playground:build": "pnpm --filter playground build",
     "docs:dev": "vp run --filter ./docs dev",

@@ -65,15 +65,15 @@ export function importSpecifier(identity: ReleaseIdentity, subpath = ""): string
  * 判据是 **name + version 精确匹配**，不是「同包名前缀」。
  *
  * ⚠️ 前缀匹配会认错包：`.artifacts` 里同时存在 `mangax-bmap-vue-1.0.0-rc.0.tgz` 与
- * `mangax-bmap-vue-1.0.0-rc.9.tgz` 时，两边都命中，而 `findTarball()` 按字符串排序取
- * 「最后一个」——`rc.9` 排在 `rc.0` 之后，于是**验证了旧包**。
+ * `mangax-bmap-vue-1.0.0-rc.9.tgz` 时，两边都命中，于是可能**验证了旧包**。
  *
- * 后面 `assertReleaseIdentity` 拦不住：它只要求版本匹配 `/^1\.0\.0(?:-rc\.\d+)?$/`，
- * `1.0.0-rc.9` 同样满足。
+ * 后面 `assertReleaseIdentity` 也拦不住：它只要求版本匹配同一条版本线，`1.0.0-rc.9`
+ * 同样满足。
  *
- * CI 因前置 `rm -rf .artifacts` 不易撞上，但根脚本 `pack:package` **不清理目录**，
- * 于是本地最常见的 `pnpm pack:package && pnpm verify:package` 会受影响
- * （PR 评审 P2 实测确认）。
+ * #158 工作包 E 起，`pnpm pack:package` 会在打包前清掉 `.artifacts` 里旧的 `*.tgz` 与旧
+ * 来源 sidecar，所以本地最常见的 `pnpm pack:package && pnpm verify:package` 不会留下别的
+ * 版本线旧包；而**同名旧包**由 `tarball-identity.mts` 的来源记录（打包 commit vs 当前
+ * HEAD）拦截。精确匹配仍是前提：它是「哪些文件算这个身份的包」的唯一判据。
  */
 export function isOwnTarball(fileName: string, identity: ReleaseIdentity): boolean {
   return fileName === tarballBasename(identity.name, identity.version);
