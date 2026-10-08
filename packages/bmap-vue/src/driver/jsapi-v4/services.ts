@@ -48,6 +48,7 @@ import { HANDLE_BRAND, type MapHandle, type SdkHandle, type ServiceHandle } from
 import type {
   AutocompleteOptions,
   AutocompleteUpdateOptions,
+  BoundaryParseRequest,
   BoundaryRequest,
   BoundaryRings,
   ConvertorRequest,
@@ -344,6 +345,30 @@ export function parseBoundaryRing(value: unknown): Point[] {
     if (Number.isFinite(lng) && Number.isFinite(lat)) ring.push({ lng, lat });
   }
   return ring;
+}
+
+/**
+ * `BoundaryResult` 回包（`Boundary#get` 与 `Boundary#parsebdStr` **回包同形**）→ 两个公开视图。
+ *
+ * 三个分支分开表达，是因为它们对调用方是**不同结论**：`unavailable` = 服务没给结果
+ * （官方 `null` / 形状不对），`empty` = 给了结果但没有可用的环。合并成「空结果」会让
+ * 「服务不可用」失去重试依据。
+ */
+type BoundaryProjection =
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "empty" }
+  | { readonly kind: "success"; readonly rings: BoundaryRings };
+
+function projectBoundaryPayload(result: RawBoundaryPayload | null): BoundaryProjection {
+  if (!result || !Array.isArray(result.boundaries)) return { kind: "unavailable" };
+  // 两个视图一起给：官方回包本身就是点串，`B*` 覆盖物的 `isBoundary` 直接吃它；
+  // 解析出的坐标环给几何运算用。只留一份都会静默丢掉调用方需要的东西。
+  const strings = (result.boundaries as unknown[]).filter(
+    (ring): ring is string => typeof ring === "string" && ring.length > 0,
+  );
+  const rings = strings.map(parseBoundaryRing).filter((ring) => ring.length > 0);
+  if (rings.length === 0) return { kind: "empty" };
+  return { kind: "success", rings: { raw: strings, rings } };
 }
 
 /**
@@ -2033,21 +2058,34 @@ export function createJsapiV4ServiceDriver(
       return createServiceCall<BoundaryRings>(
         (settle) => {
           callRequired(raw, "get", name, (result: RawBoundaryPayload | null) => {
-            if (!result || !Array.isArray(result.boundaries)) {
-              settleUnavailable(settle);
-              return;
-            }
-            // 两个视图一起给：官方回包本身就是点串，`B*` 覆盖物的 `isBoundary` 直接吃它；
-            // 解析出的坐标环给几何运算用。只留一份都会静默丢掉调用方需要的东西。
-            const strings = (result.boundaries as unknown[]).filter(
-              (ring): ring is string => typeof ring === "string" && ring.length > 0,
-            );
-            const rings = strings.map(parseBoundaryRing).filter((ring) => ring.length > 0);
-            if (rings.length === 0) settle.empty();
-            else settle.success({ raw: strings, rings });
+            const projection = projectBoundaryPayload(result);
+            if (projection.kind === "unavailable") settleUnavailable(settle);
+            else if (projection.kind === "empty") settle.empty();
+            else settle.success(projection.rings);
           });
         },
         { label: "Boundary.get" },
+      );
+    },
+
+    parseBoundaryString(handle, request: BoundaryParseRequest) {
+      const str = request?.str;
+      if (typeof str !== "string" || str.length === 0) {
+        return invalidCall<BoundaryRings>("Boundary.parsebdStr", "str 必须是非空字符串");
+      }
+      const raw = boundaryOf(handle);
+      return createServiceCall<BoundaryRings>(
+        (settle) => {
+          // 官方 `Boundary#parsebdStr(str, callback)`：与 `get` 回包同形，投影也共用。
+          // 成员缺失时 `callRequired` 会显式失败（不静默降级成「空结果」）。
+          callRequired(raw, "parsebdStr", str, (result: RawBoundaryPayload | null) => {
+            const projection = projectBoundaryPayload(result);
+            if (projection.kind === "unavailable") settleUnavailable(settle);
+            else if (projection.kind === "empty") settle.empty();
+            else settle.success(projection.rings);
+          });
+        },
+        { label: "Boundary.parsebdStr" },
       );
     },
 

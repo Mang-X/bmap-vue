@@ -184,6 +184,13 @@ export class FakeV4Boundary {
     const value = this.boundaries
     this.queue.dispatch(() => callback(value === null ? null : { boundaries: value }))
   }
+
+  /** 官方 `Boundary#parsebdStr(str, cb)`：与 `get` 回包同形，本假实现复用同一份 `boundaries`。 */
+  parsebdStr(str: string, callback: (result: { boundaries: string[] } | null) => void): void {
+    this.callLog.push(`parsebdStr:${str}`)
+    const value = this.boundaries
+    this.queue.dispatch(() => callback(value === null ? null : { boundaries: value }))
+  }
 }
 
 /* ----------------------------------------------------------------- Geolocation */

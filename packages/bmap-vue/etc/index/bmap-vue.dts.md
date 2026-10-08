@@ -1857,6 +1857,9 @@ export declare interface BMapWalkingRouteOptions {
     location?: MaybeRefOrGetter<BMapRouteLocation | undefined>;
     renderOptions?: MaybeRefOrGetter<BMapRouteRenderOptions | undefined>;
 }
+export declare interface BoundaryParseRequest {
+    str: string;
+}
 declare interface BoundaryRequest {
     name: string;
 }
@@ -4851,6 +4854,7 @@ export declare interface ServiceInvocationDriver {
     reverseGeocode(handle: ServiceHandle<"service:geocoder">, request: ReverseGeocodeRequest): ServiceCall<GeocodedAddress>;
     convert(handle: ServiceHandle<"service:convertor">, request: ConvertorRequest): ServiceCall<Point[]>;
     queryBoundary(handle: ServiceHandle<"service:boundary">, request: BoundaryRequest): ServiceCall<BoundaryRings>;
+    parseBoundaryString(handle: ServiceHandle<"service:boundary">, request: BoundaryParseRequest): ServiceCall<BoundaryRings>;
     locate(handle: ServiceHandle<"service:geolocation">, options?: GeolocationOptions): ServiceCall<GeolocationFix>;
     locateCity(handle: ServiceHandle<"service:local-city">): ServiceCall<LocalCityFix>;
     search(handle: ServiceHandle<"service:local-search">, keyword: LocalSearchKeyword, option?: LocalSearchSearchOption): ServiceCall<LocalSearchResult[]>;
@@ -5073,6 +5077,7 @@ export declare function useAreaBoundary(map?: unknown): {
     isLoading: Readonly<ShallowRef<boolean>>;
     supported: Readonly<ShallowRef<boolean>>;
     get: (area: string) => Promise<ServiceResult<AreaBoundary>>;
+    parsebdStr: (str: string) => Promise<ServiceResult<AreaBoundary>>;
     cancel: () => void;
     reset: () => void;
 };

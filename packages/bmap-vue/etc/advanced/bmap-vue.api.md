@@ -194,6 +194,11 @@ export interface BMapProviderLike {
 }
 
 // @public
+export interface BoundaryParseRequest {
+    str: string;
+}
+
+// @public
 export interface BoundaryRequest {
     name: string;
 }
@@ -1864,6 +1869,7 @@ export interface ServiceInvocationDriver {
     gotoPage(handle: ServiceHandle<"service:local-search">, page: number): ServiceCall<LocalSearchResult[]>;
     locate(handle: ServiceHandle<"service:geolocation">, options?: GeolocationOptions): ServiceCall<GeolocationFix>;
     locateCity(handle: ServiceHandle<"service:local-city">): ServiceCall<LocalCityFix>;
+    parseBoundaryString(handle: ServiceHandle<"service:boundary">, request: BoundaryParseRequest): ServiceCall<BoundaryRings>;
     queryBoundary(handle: ServiceHandle<"service:boundary">, request: BoundaryRequest): ServiceCall<BoundaryRings>;
     reverseGeocode(handle: ServiceHandle<"service:geocoder">, request: ReverseGeocodeRequest): ServiceCall<GeocodedAddress>;
     search(handle: ServiceHandle<"service:local-search">, keyword: LocalSearchKeyword, option?: LocalSearchSearchOption): ServiceCall<LocalSearchResult[]>;

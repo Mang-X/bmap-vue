@@ -258,6 +258,17 @@ export interface BoundaryRequest {
 }
 
 /**
+ * 解析混淆后的百度坐标字符串（`Boundary#parsebdStr`）。
+ *
+ * 与 `Boundary#get` 是**两个官方成员**：`get` 按行政区名联网查询，`parsebdStr` 把一段
+ * 混淆坐标串在本地解成边界。两者回包同形（`BoundaryResult`），因此共用 `BoundaryRings`。
+ */
+export interface BoundaryParseRequest {
+  /** 官方 `parsebdStr(str, callback)` 的 `str`：混淆后的百度坐标字符串 */
+  str: string;
+}
+
+/**
  * 行政区边界结果（`Boundary#get` 回包的**两个公开视图**）。
  *
  * 官方回包是 `{ boundaries: string[] }`——每项是一条 `"lng,lat;lng,lat;…"` 的点串。这个字符串
@@ -972,6 +983,11 @@ export interface ServiceInvocationDriver {
   queryBoundary(
     handle: ServiceHandle<"service:boundary">,
     request: BoundaryRequest,
+  ): ServiceCall<BoundaryRings>;
+  /** 解析混淆坐标串（`Boundary#parsebdStr`）→ 与 `queryBoundary` 同形的两个视图 */
+  parseBoundaryString(
+    handle: ServiceHandle<"service:boundary">,
+    request: BoundaryParseRequest,
   ): ServiceCall<BoundaryRings>;
   /** 浏览器定位（`Geolocation#getCurrentPosition`） */
   locate(
