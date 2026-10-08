@@ -17,8 +17,11 @@ hooks/useGeocodeDetail/index
 `getLocation` 的第二个参数对齐官方 `Geocoder#getLocation` 的 `LocationOptions`：
 
 ```ts
+import { useGeocodeDetail, type GeocodeDetailLocationOptions } from '@mangax/bmap-vue'
+
 const { getLocation } = useGeocodeDetail(map)
-await getLocation({ lng: 116.404, lat: 39.915 }, { poiRadius: 500, numPois: 3 })
+const options: GeocodeDetailLocationOptions = { poiRadius: 500, numPois: 3 }
+await getLocation({ lng: 116.404, lat: 39.915 }, options)
 ```
 
 - `poiRadius`：附近 POI 的最大半径（米，官方默认 100）；
@@ -75,14 +78,6 @@ const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map
 在 `<Map>` 子树内调用时可省略 `map` 参数
 :::
 
-:::warning 官方 `LocationOptions`（`poiRadius` / `numPois`）未暴露
-官方 `Geocoder#getLocation(point, callback, options?)` 的第三个参数是 `LocationOptions`：
-`poiRadius`（附近 POI 的最大半径，默认 100 米）与 `numPois`（返回的 POI 个数，默认 10）。
-本库的 `getLocation(point)` **不接收**它，因此 `surroundingPois` 拿到的是官方默认口径下的结果
-（半径 100 米、最多 10 个）。要调这两个值，目前只能拿 Driver 的归一化调用面
-（`driver.services.reverseGeocode()`）——它的请求类型上带这两个字段。
-:::
-
 ::: warning AK 域名白名单
 逆地址解析走百度服务端接口，受 AK 的 Referer 白名单限制：若当前页面域名不在白名单内，
 接口将返回空结果（表现为 `isEmpty`，无错误抛出）。本地开发遇到空结果时，请先到百度地图
@@ -119,8 +114,8 @@ const { getLocation, getBatch, data, isLoading, isEmpty } = useGeocodeDetail(map
 | isLoading | 是否在获取中                                                                | `boolean`                                                               |
 | supported | 当前引擎是否支持逆地理编码（Client 就绪前是乐观初值 `true` = 尚未判定）                                                   | `boolean`                                                               |
 | status    | 任务状态（见上）                                                             | `Readonly<ShallowRef<BMapServiceStatus>>`                                |
-| getLocation | 坐标 → 地址详情（官方 `Geocoder#getLocation`）；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(point: GeoPoint) => Promise<ServiceResult<GeocodeDetailResult>>` |
-| getBatch  | 批量反查，**顺序执行**、逐项返回 `{ point, detail, status, error }`（**部分成功**） | `(points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>`  |
+| getLocation | 坐标 → 地址详情（官方 `Geocoder#getLocation`）；`poiRadius` / `numPois` 走第二个参数；`point` 非法时以 `failed(BMAP_INVALID_ARGUMENT)` 结算 | `(point: GeoPoint, options?: GeocodeDetailLocationOptions) => Promise<ServiceResult<GeocodeDetailResult>>` |
+| getBatch  | 批量反查，**顺序执行**、逐项返回 `{ point, detail, status, error }`（**部分成功**）；`options` 对整个批次生效 | `(points: readonly GeoPoint[], options?: GeocodeDetailLocationOptions) => Promise<GeocodeDetailItemResult[]>`  |
 | cancel    | 逻辑取消在飞请求                                                             | `() => void`                                                             |
 | reset     | 取消 + 清空 data/error/status                                                | `() => void`                                                             |
 
@@ -137,7 +132,7 @@ type GeoPoint = { lng: number; lat: number }
 | point             | 坐标点（回包没给时回退到请求坐标） | `GeoPoint`                            |
 | address           | 地址描述                     | `string`                                |
 | addressComponents | 结构化的地址描述             | [`AddressComponent`](#AddressComponent) |
-| surroundingPois   | 附近的 POI 点（完整的领域投影，字段见 [`LocalSearchPoi`](./useLocalSearch)）。数量与半径走官方默认值（10 个 / 100 米），见上面的 `LocationOptions` 说明 | `readonly LocalSearchPoi[]` |
+| surroundingPois   | 附近的 POI 点（完整的领域投影，字段见 [`LocalSearchPoi`](./useLocalSearch)）。**未提供 `LocationOptions` 时**走官方默认值（10 个 / 100 米）；传了则以传入的 `poiRadius` / `numPois` 为准 | `readonly LocalSearchPoi[]` |
 | business          | 商圈字段，代表此点所属的商圈 | `string`                                |
 
 ##### AddressComponent
@@ -195,6 +190,12 @@ export interface GeocodeDetailItemResult {
   status: BMapServiceStatus
   error: ServiceErrorInfo | null
 }
+export interface GeocodeDetailLocationOptions {
+  /** 附近 POI 的最大半径（米，官方默认 100） */
+  poiRadius?: number
+  /** 返回的 POI 个数（官方默认 10） */
+  numPois?: number
+}
 /**
  * 由坐标点反查地址详情
  */
@@ -209,8 +210,14 @@ export declare function useGeocodeDetail(map?: unknown): {
   isLoading: Readonly<ShallowRef<boolean>>
   supported: Readonly<ShallowRef<boolean>>
   /** 坐标 → 地址详情（官方 `Geocoder#getLocation`）。 */
-  getLocation: (point: GeoPoint) => Promise<ServiceResult<GeocodeDetailResult>>
-  getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>
+  getLocation: (
+    point: GeoPoint,
+    options?: GeocodeDetailLocationOptions,
+  ) => Promise<ServiceResult<GeocodeDetailResult>>
+  getBatch: (
+    points: readonly GeoPoint[],
+    options?: GeocodeDetailLocationOptions,
+  ) => Promise<GeocodeDetailItemResult[]>
   cancel: () => void
   reset: () => void
 }
