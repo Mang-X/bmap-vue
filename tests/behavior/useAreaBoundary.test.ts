@@ -121,4 +121,75 @@ describe('useAreaBoundary', () => {
     wrapper.unmount()
     await nextTick()
   })
+
+  it('parsebdStr 回调 null 结算为 empty（与 get 同一口径，不伪造 failed）', async () => {
+    let result: any = null
+    const { wrapper } = mountWithChild(async (boundary) => {
+      await boundary.get('warmup')
+      // 官方 `parsebdStr` 失败时回调参数是 null（没有公开错误码入口）
+      fake.createdBoundaries.at(-1)!.boundaries = null
+      result = await boundary.parsebdStr('bad-ring')
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(result.status).toBe('empty')
+    expect(result.error).toBeNull()
+    expect(boundaryCallLog()).toContain('parsebdStr:bad-ring')
+    wrapper.unmount()
+    await nextTick()
+  })
+
+  it('SDK 没有 parsebdStr 成员时显式失败（不静默降级成 empty）', async () => {
+    let result: any = null
+    const { wrapper } = mountWithChild(async (boundary) => {
+      await boundary.get('warmup')
+      // 官方声明有、运行时缺失：`callRequired` 必须显式失败，不能伪装成「没查到」
+      ;(fake.createdBoundaries.at(-1) as any).parsebdStr = undefined
+      result = await boundary.parsebdStr('x')
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(result.status).toBe('failed')
+    // `callRequired` 抛的 BMAP_SDK_CALL_FAILED 经调用面归一为服务失败，但**保留了成员名**
+    // ——断言消息里点名 `parsebdStr`，而不是只看「失败了」，否则换个原因也会绿。
+    expect(result.error?.code).toBe('BMAP_SERVICE_FAILED')
+    expect(result.error?.message).toContain('parsebdStr')
+    wrapper.unmount()
+    await nextTick()
+  })
+
+  it('parsebdStr 空字符串入参结算为 failed(BMAP_INVALID_ARGUMENT)（参数问题的终态）', async () => {
+    let result: any = null
+    const { wrapper } = mountWithChild(async (boundary) => {
+      result = await boundary.parsebdStr('')
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(result.status).toBe('failed')
+    expect(result.error?.code).toBe('BMAP_INVALID_ARGUMENT')
+    expect(boundaryCallLog()).not.toContain('parsebdStr:')
+    wrapper.unmount()
+    await nextTick()
+  })
+
+  it('get 与 parsebdStr 互相取代：先发的那次结算为 canceled', async () => {
+    let first: any = null
+    let second: any = null
+    const { wrapper } = mountWithChild(async (boundary) => {
+      const before = boundary.get('北京市')
+      const after = boundary.parsebdStr('obfuscated@bd09')
+      first = await before
+      second = await after
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(first.status).toBe('canceled')
+    expect(second.status).toBe('success')
+    wrapper.unmount()
+    await nextTick()
+  })
 })

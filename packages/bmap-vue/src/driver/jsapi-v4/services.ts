@@ -350,9 +350,12 @@ export function parseBoundaryRing(value: unknown): Point[] {
 /**
  * `BoundaryResult` 回包（`Boundary#get` 与 `Boundary#parsebdStr` **回包同形**）→ 两个公开视图。
  *
- * 三个分支分开表达，是因为它们对调用方是**不同结论**：`unavailable` = 服务没给结果
- * （官方 `null` / 形状不对），`empty` = 给了结果但没有可用的环。合并成「空结果」会让
- * 「服务不可用」失去重试依据。
+ * 这里把「没给结果」（官方 `null` / 形状不对）与「给了结果但没有可用的环」在**内部**分开判别，
+ * 但**两者对外都结算为 `empty`**：`settleUnavailable()` 就是 `settle.empty()`。这与
+ * `queryBoundary()` 的既有契约一致，本投影**不改变公开状态语义**——要对外区分「无结果」与
+ * 「服务不可用」需要先做兼容性设计，不能只靠一个内部判别联合来宣称。
+ *
+ * 分开判别的作用仅是让两个入口（`get` / `parsebdStr`）共用同一份投影，避免各写一份而漂移。
  */
 type BoundaryProjection =
   | { readonly kind: "unavailable" }
