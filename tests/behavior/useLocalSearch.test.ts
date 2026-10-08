@@ -779,3 +779,151 @@ describe("useLocalSearch：官方同步成员走活实例通道", () => {
     wrapper.unmount();
   });
 });
+
+describe("useLocalSearch：同步设置必须活过实例重建（评审 P1）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("search A（未结算）→ setLocation → search B：B 用的是新区域，不是旧构造参数", async () => {
+    let secondKeywordLocation: unknown = null;
+    const wrapper = mountInMapWithOptions({ location: "北京市" }, async (hook) => {
+      // 先预热把实例建出来（`auto=false` 必须**在**那次「未结算检索」之前设好，
+      // 否则回包已经排进队列了）。
+      await hook.search("预热");
+      const raw = fake.createdLocalSearches[0]!;
+      raw.queue.auto = false;
+
+      const first = hook.search("A"); // 挂着不结算
+      await nextTick();
+      hook.setLocation("上海市");
+      expect(raw.callLog).toContain("setLocation:上海市");
+
+      const second = hook.search("B"); // 取代在飞检索 ⇒ supersede("recreate") 重建
+      await nextTick();
+      // 重建出的新实例：location 必须是 setter 设过的那个，而不是构造期的「北京市」
+      const newest = fake.createdLocalSearches.at(-1)!;
+      secondKeywordLocation = newest.location;
+
+      raw.queue.flush();
+      await first;
+      await second;
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(fake.createdLocalSearches.length).toBeGreaterThan(1); // 确实重建了
+    expect(String(secondKeywordLocation)).toBe("上海市");
+    wrapper.unmount();
+  });
+
+  it("setPageCapacity 活过重建（新实例按新容量构造）", async () => {
+    let newestCapacity: unknown = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("预热");
+      const raw = fake.createdLocalSearches[0]!;
+      raw.queue.auto = false;
+
+      const first = hook.search("A");
+      await nextTick();
+      hook.setPageCapacity(20);
+      const second = hook.search("B");
+      await nextTick();
+      newestCapacity = (fake.createdLocalSearches.at(-1)!.options as any).pageCapacity;
+
+      raw.queue.flush();
+      await first;
+      await second;
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(newestCapacity).toBe(20);
+    wrapper.unmount();
+  });
+
+  it("声明式选项变化会作废运行期覆盖（改了 ref 必须生效）", async () => {
+    const locationRef = ref<"北京市" | "广州市">("北京市");
+    const el = host();
+    let hook: Hook | null = null;
+    const Child = defineComponent({
+      setup() {
+        hook = useLocalSearch(() => ({ location: locationRef.value }));
+        return () => h("div", "searcher");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { Map, Child },
+        setup: () => () => h(Map, { provider: provider() }, () => [h(Child)]),
+      }),
+      { attachTo: el },
+    );
+
+    const h1 = hook!;
+    await h1.search("A");
+    h1.setLocation("上海市");
+    locationRef.value = "广州市"; // 声明式变化 ⇒ 覆盖作废
+    await nextTick();
+    await h1.search("B");
+    await flushPromises();
+
+    expect(String(fake.createdLocalSearches.at(-1)!.location)).toBe("广州市");
+    wrapper.unmount();
+  });
+});
+
+describe("useLocalSearch：假 SDK 与官方边界语义一致（评审 P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("构造期 pageNum 生效（getPageNum 不是恒 0）", async () => {
+    let page: number | null = null;
+    const wrapper = mountInMapWithOptions({ location: "北京市", pageNum: 2 }, async (hook) => {
+      await hook.search("天安门");
+      page = hook.getPageNum();
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(page).toBe(2);
+    wrapper.unmount();
+  });
+
+  it("setPageCapacity 超范围按官方重置为 10（假 SDK 不宽松放行）", async () => {
+    let over: number | null = null;
+    let ok: number | null = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      hook.setPageCapacity(200);
+      over = hook.getPageCapacity();
+      hook.setPageCapacity(50);
+      ok = hook.getPageCapacity();
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(over).toBe(10);
+    expect(ok).toBe(50);
+    wrapper.unmount();
+  });
+
+  it("setPageNum 无效值按官方重置为 0", async () => {
+    let afterInvalid: number | null = null;
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      hook.setPageNum(-3);
+      afterInvalid = hook.getPageNum();
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(afterInvalid).toBe(0);
+    wrapper.unmount();
+  });
+});

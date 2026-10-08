@@ -20,3 +20,16 @@
 - `setLocation` 与构造期 `location` 共用同一套归一（城市名 / `Point` / `MapHandle`）。
 
 `getPageCapacity` 等此前只能用异步 `gotoPage` 近似的场景，现在有与官方同为同步的入口。
+
+### 评审修正（#212）
+
+- **P1 · 同步 setter 会静默失效**：新检索取代在飞检索时实例会被重建，重建参数原本只读声明式选项
+  ⇒ `setLocation` / `setPageCapacity` / `setPageNum` 设完紧接着 `search()` 会悄悄用回旧值。
+  现在同步 setter 同时记进**运行期覆盖**，重建时优先于声明式选项；声明式选项变化则整份作废
+  （避免「改了 ref 却不生效」）。补 `search A（未结算）→ setter → search B` 用例。
+- **P2 · `peek()` 不校验 Client**：Client 变化后、下一次 `execute()` 之前，同步路径会作用到旧
+  Client 的句柄上。`withHandle` 现在比较缓存实例所属 Client 与当前 Client，失配即拒绝；补
+  Client 切换 / 清空的用例。
+- **P2 · 假 SDK 与官方边界语义不一致**：`getPageNum()` 初值改为读构造参数 `options.pageNum`
+  （原来恒 0）；`setPageCapacity` 按官方「超范围重置为 10」、`setPageNum` 按「无效值重置为 0」
+  夹取（原来宽松放行，会让公共 API 只在假实现里"验证通过"）。补三条边界用例。

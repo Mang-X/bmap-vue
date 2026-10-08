@@ -76,6 +76,15 @@ export interface ServiceTaskCoreOptions<TDriver, THandle, TArgs extends unknown[
    * `whenReady()`，因此不能从它拿 map。同步 setter / getter 本身不依赖 map。
    */
   currentMap: () => MapHandle | null;
+  /**
+   * **当前** Client（可能为 `null`，例如正在清空 / 切换）。
+   *
+   * `withHandle` 用它判「缓存实例是不是还属于当前上下文」：`acquire()` 在 Client 变化时会
+   * 释放并重建，但同步路径**不经过** `acquire()`——只比 `instanceStale` 会让切换 Client 后、
+   * 下一次 `execute()` 之前的 setter 静默作用到**旧 Client** 的句柄上（之后被重建丢掉）。
+   * 换了 Client 就是换了上下文：宁可报「当前没有可用实例」，也不写一个马上会消失的对象。
+   */
+  currentClient: () => BMapClient | null;
   /** 状态变更回调（Vue 侧写 shallow refs）。 */
   onState: (patch: Partial<ServiceTaskState<TResult>>) => void;
 }
@@ -129,6 +138,7 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
   let activeController: AbortController | null = null;
 
   const currentMap = (): MapHandle | null => options.currentMap();
+  const currentClient = (): BMapClient | null => options.currentClient();
 
   const invokeContext = (
     client: BMapClient,
@@ -342,10 +352,19 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
           `同步 setter/getter 只在活实例上有意义，本库不会为了它顺手创建一个 SDK 实例。`,
       );
     }
-    const client = entry.client;
+    // 缓存实例属于**当时那个** Client。Client 变了（切换 / 清空）就不再是当前上下文的实例：
+    // 写进去的值随后会被 `acquire()` 的重建丢掉，静默成功会骗人。
+    const liveClient = currentClient();
+    if (liveClient === null || liveClient !== entry.client) {
+      throw new BMapError(
+        "BMAP_RESOURCE_DISPOSED",
+        `${capability}: 当前上下文的 Client 已变化，缓存实例属于旧 Client；` +
+          `同步 setter/getter 拒绝作用在它上面（下一次调用会重建）。`,
+      );
+    }
     return fn(
       entry.handle,
-      invokeContext(client, currentMap(), new AbortController().signal),
+      invokeContext(entry.client, currentMap(), new AbortController().signal),
     );
   }
 

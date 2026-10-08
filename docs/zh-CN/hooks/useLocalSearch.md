@@ -85,6 +85,16 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | clearSelected | 清掉当前选中项（官方 `#clearSelected`，**同步**），结果集不动            | `() => void`                                          |
 | setLocation   | 改检索区域（官方 `#setLocation`，**同步**），与构造期 `location` 同一套归一 | `(location: LocalSearchLocation) => void`             |
 | hasInstance   | 当前是否有可操作的活实例（上面六个同步方法是否可用）                     | `() => boolean`                                       |
+
+::: tip 同步 setter 会**活过实例重建**
+上面几个同步 setter 改的是**活实例**；而本库在「新检索取代在飞检索」时会**重建实例**
+（`LocalSearch` 的回包归属依赖实例身份）。因此 setter 同时记进一份**运行期覆盖**，
+重建时优先于声明式选项 —— 否则「setter 成功返回、紧随其后的 `search()` 却没应用」且毫无提示。
+
+覆盖会被**声明式选项的变化整份作废**（改了 `location` / `pageCapacity` / `pageNum` 的 ref
+之后，以 ref 为准）。没有活实例时这些方法抛 `BMAP_RESOURCE_DISPOSED`：先 `search()` 一次，
+或用 `hasInstance()` 先问再做。
+:::
 | clear         | 清空结果：清掉地图上的标注 / 结果面板与本地状态（实现上是释放当前实例，下一次 `search()` 用新实例） | `() => void`                                          |
 | cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）；取消后该实例不再复用 | `() => void`                                          |
 | reset         | 取消 + 清空 `data` / `error` / `status`                                     | `() => void`                                          |

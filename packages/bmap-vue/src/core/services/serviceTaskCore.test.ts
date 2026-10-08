@@ -57,10 +57,16 @@ function makeHarness(options: HarnessOptions = {}) {
     Object.assign(state, patch);
     states.push(patch);
   };
+  /** `withHandle` 的准入判据读它：Client 变了就拒绝在旧实例上写。 */
+  let liveClient: BMapClient | null = client;
   const ctx = {
     whenReady: options.loadFails
       ? () => Promise.reject(new BMapError("BMAP_SDK_LOAD_FAILED", "SDK 加载失败"))
-      : async () => ({ client, map: null }),
+      // `whenReady` 与 `currentClient()` 读**同一份**可变引用：Client 一换，
+      // 下一次 `execute()` 就该释放旧实例并重建（这才是真实的 ctx 行为）。
+      : async () => ({ client: liveClient ?? client, map: null }),
+    currentMap: () => null,
+    currentClient: () => liveClient,
   };
   const channel =
     options.channel ??
@@ -82,9 +88,21 @@ function makeHarness(options: HarnessOptions = {}) {
     },
     channel,
     whenReady: ctx.whenReady,
+    currentMap: ctx.currentMap,
+    currentClient: ctx.currentClient,
     onState: applyPatch,
   });
-  return { core, stats, state, states, client, channel };
+  return {
+    core,
+    stats,
+    state,
+    states,
+    client,
+    channel,
+    setLiveClient: (next: BMapClient | null) => {
+      liveClient = next;
+    },
+  };
 }
 
 /** 统计某条 patch 流里是否出现过某个 key。 */
@@ -374,5 +392,64 @@ describe("createServiceTaskCore（框架无关的共有语义）", () => {
     expect(state.data).toBeNull();
     expect((await running).status).toBe("canceled");
     expect(release, "dispose 释放通道持有的实例").toHaveBeenCalled();
+  });
+});
+
+describe("withHandle（官方同步 setter 的活实例通道，#165）", () => {
+  it("没有活实例时抛错，且**不**为了它创建实例", () => {
+    const { core, stats } = makeHarness();
+    expect(() => core.withHandle(() => "x")).toThrow(/还没有可用的服务实例/);
+    expect(stats.created).toBe(0);
+  });
+
+  it("有活实例时在它上面跑回调（同一个句柄）", async () => {
+    const { core, stats } = makeHarness();
+    const result = await core.execute("a");
+    expect(result.status).toBe("success");
+    const seen: number[] = [];
+    const returned = core.withHandle((handle) => {
+      seen.push(handle.serial);
+      return "done";
+    });
+    expect(returned).toBe("done");
+    expect(seen).toEqual([1]);
+    expect(stats.created).toBe(1);
+  });
+
+  it("同步路径不改 status / data / 在飞调用", async () => {
+    const { core, state } = makeHarness();
+    await core.execute("a");
+    const before = { ...state };
+    core.withHandle(() => null);
+    expect({ ...state }).toEqual(before);
+  });
+
+  it("**Client 已切换**（尚未发起新调用）时拒绝在旧实例上写（评审 P2）", async () => {
+    const { core, stats, setLiveClient } = makeHarness();
+    await core.execute("a");
+    expect(core.withHandle(() => true)).toBe(true);
+
+    // 模拟 `ctx.client.value` 变了但还没有下一次 execute()：缓存实例属于**旧** Client
+    setLiveClient(makeClient(true));
+    expect(() => core.withHandle(() => true)).toThrow(/Client 已变化/);
+
+    // 下一次调用会重建实例，随后同步路径重新可用
+    await core.execute("b");
+    expect(stats.created).toBe(2);
+    expect(core.withHandle(() => true)).toBe(true);
+  });
+
+  it("Client 被清空（null）时同样拒绝", async () => {
+    const { core, setLiveClient } = makeHarness();
+    await core.execute("a");
+    setLiveClient(null);
+    expect(() => core.withHandle(() => true)).toThrow(/Client 已变化/);
+  });
+
+  it("dispose() 之后拒绝（并说明是任务已随 scope 卸载）", async () => {
+    const { core } = makeHarness();
+    await core.execute("a");
+    core.dispose();
+    expect(() => core.withHandle(() => true)).toThrow(/scope 卸载/);
   });
 });

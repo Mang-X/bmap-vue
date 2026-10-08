@@ -168,6 +168,7 @@ function bindTask<TDriver, THandle, TArgs extends unknown[], TResult>(
     channel,
     whenReady: (signal) => ctx.whenReady(signal),
     currentMap: () => ctx.map.value,
+    currentClient: () => ctx.client.value,
     onState: (patch: Partial<ServiceTaskState<TResult>>) => {
       if (patch.status !== undefined) status.value = patch.status;
       if (patch.data !== undefined) data.value = patch.data;

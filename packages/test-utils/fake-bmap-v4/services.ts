@@ -549,6 +549,10 @@ export class FakeV4LocalSearch {
     this.diagnostics = diagnostics
     this.location = location
     this.options = options
+    // 官方构造期就接受 `pageNum`；假实现必须照做，否则「构造期 pageNum 生效」会漏报。
+    if (typeof options.pageNum === 'number' && Number.isInteger(options.pageNum) && options.pageNum >= 0) {
+      this.currentPageNum = options.pageNum
+    }
     this.callLog.push('construct:' + JSON.stringify(options))
     // 官方 `LocalSearch` **没有** `dispose()`，因此实例本身不进泄漏门禁（随 GC 回收），只进活动
     // 口径（与 Geocoder / Boundary 等「无释放入口的服务」同档）；真正的资源是它**交付出去的结果集**
@@ -640,7 +644,10 @@ export class FakeV4LocalSearch {
 
   setPageCapacity(capacity: number): void {
     this.callLog.push('setPageCapacity:' + capacity)
-    this.options.pageCapacity = capacity
+    // 官方文档：「设置每页容量，超出范围时重置为默认值 10」（取值范围 1 - 100）。
+    // 假 SDK 必须照样夹取，否则公共 API 会**只在这个宽松的假实现里**验证通过。
+    this.options.pageCapacity =
+      Number.isInteger(capacity) && capacity >= 1 && capacity <= 100 ? capacity : 10
   }
 
   getPageCapacity(): number {
@@ -649,7 +656,8 @@ export class FakeV4LocalSearch {
 
   setPageNum(pageNum: number): void {
     this.callLog.push('setPageNum:' + pageNum)
-    this.currentPageNum = pageNum
+    // 官方文档：「设置起始页码（从 0 开始），无效值时重置为 0」。
+    this.currentPageNum = Number.isInteger(pageNum) && pageNum >= 0 ? pageNum : 0
   }
 
   getPageNum(): number {
@@ -669,7 +677,13 @@ export class FakeV4LocalSearch {
 
   /** 测试辅助：最近一次 `setLocation` 收到的原始值 */
   currentLocation: unknown = undefined
-  /** 测试辅助：当前页码（`setPageNum` / `getPageNum` 共享状态，与官方同步语义一致） */
+  /**
+   * 测试辅助：当前页码（`setPageNum` / `getPageNum` 共享状态，与官方同步语义一致）。
+   *
+   * 初值在**构造函数体内**从 `options.pageNum` 取 —— 官方 `LocalSearch` 构造时就接受
+   * `pageNum`。类字段初始化器里读不到构造参数，写成字段初始值会在实例化时抛 ReferenceError
+   * （那会把所有检索都变成 failed）。
+   */
   currentPageNum = 0
 
   private currentResults(): FakeV4LocalResult[] {

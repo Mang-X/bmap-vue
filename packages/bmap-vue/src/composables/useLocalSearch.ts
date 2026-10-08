@@ -130,6 +130,26 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
 
   const readOptions = (): BMapLocalSearchOptions => toValue(options) ?? {};
 
+  /**
+   * **运行期覆盖**（官方同步 setter 写入）。
+   *
+   * 为什么需要它：`LocalSearch` 的实例在「检索取代在飞检索」时会被**重建**（`supersede:
+   * "recreate"`，因为回包归属依赖实例身份）。若 `setLocation` / `setPageCapacity` /
+   * `setPageNum` 只改活实例，紧随其后的 `search()` 会用新实例、而新实例的构造参数仍来自
+   * 声明式选项 —— 于是「setter 成功返回、下一次检索却没应用」且毫无提示。
+   *
+   * 规则：**运行期覆盖优先于声明式选项**，直到声明式选项自身变化（见下面的 watch）——
+   * 那时覆盖整份作废，避免「改了 ref 却不生效」这种反向困惑。
+   *
+   * 刻意是**普通变量**而不是 ref / reactive：setter 已经作用在活实例上，不该再触发构造快照
+   * 的 watch（那会立刻把刚设好的实例丢掉重建）。
+   */
+  let runtimeOverrides: {
+    location?: LocalSearchLocation;
+    pageCapacity?: number;
+    pageNum?: number;
+  } = {};
+
   /** 当前构造期快照（每次都从可能变化的 ref / getter 里读一遍）。 */
   const snapshot = (): ConstructionSnapshot => {
     const current = readOptions();
@@ -161,7 +181,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
       capability: "service.local-search" as const,
       create: (context: ServiceInvokeContext): ServiceHandle<"service:local-search"> => {
         const current = readOptions();
-        const location = toValue(current.location) ?? context.map;
+        // 运行期覆盖优先（见 `runtimeOverrides` 的说明）：重建后设置仍然生效。
+        const location = runtimeOverrides.location ?? toValue(current.location) ?? context.map;
         if (location === undefined || location === null) {
           throw new BMapError(
             "BMAP_INVALID_ARGUMENT",
@@ -170,8 +191,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
           );
         }
         const render = toValue(current.renderOptions);
-        const pageCapacity = toValue(current.pageCapacity);
-        const pageNum = toValue(current.pageNum);
+        const pageCapacity = runtimeOverrides.pageCapacity ?? toValue(current.pageCapacity);
+        const pageNum = runtimeOverrides.pageNum ?? toValue(current.pageNum);
         const settings: LocalSearchOptions = {};
         if (render) {
           const map = toValue(render.map);
@@ -242,6 +263,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     (next) => {
       if (sameConstruction(previousConstruction, next)) return;
       previousConstruction = next;
+      // 声明式选项变了：运行期覆盖整份作废（否则「改了 ref 却不生效」）。
+      runtimeOverrides = {};
       task.invalidateService();
       task.reset();
     },
@@ -295,16 +318,21 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
    * 与 `gotoPage` 的区别：后者是**翻页动作**（会请求第 N 页数据、可能失败），本方法是**设置**
    * 每页容量，官方同步生效、不产生请求。
    */
-  const setPageCapacity = (capacity: number): void =>
+  const setPageCapacity = (capacity: number): void => {
     withService((services, handle) => services.setLocalSearchPageCapacity(handle, capacity));
+    // 记进覆盖：实例被取代重建时设置仍然生效（否则下一次 search 会悄悄用回旧值）。
+    runtimeOverrides.pageCapacity = capacity;
+  };
 
   /** 读页容量（官方 `getPageCapacity`）。 */
   const getPageCapacity = (): number =>
     withService((services, handle) => services.getLocalSearchPageCapacity(handle));
 
   /** 设当前页码（官方 `setPageNum`）；是**设置**而不是翻页请求。 */
-  const setPageNum = (pageNum: number): void =>
+  const setPageNum = (pageNum: number): void => {
     withService((services, handle) => services.setLocalSearchPageNum(handle, pageNum));
+    runtimeOverrides.pageNum = pageNum;
+  };
 
   /** 读当前页码（官方 `getPageNum`）。 */
   const getPageNum = (): number =>
@@ -315,8 +343,10 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     withService((services, handle) => services.clearLocalSearchSelected(handle));
 
   /** 改检索区域（官方 `setLocation`）；与构造期的 `location` 同一套归一。 */
-  const setLocation = (location: LocalSearchLocation): void =>
+  const setLocation = (location: LocalSearchLocation): void => {
     withService((services, handle) => services.setLocalSearchLocation(handle, location));
+    runtimeOverrides.location = location;
+  };
 
   return {
     data: task.data,
