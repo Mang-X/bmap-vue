@@ -2371,6 +2371,10 @@ export declare interface GeocodeDetailItemResult {
     status: BMapServiceStatus;
     error: ServiceErrorInfo | null;
 }
+export declare interface GeocodeDetailLocationOptions {
+    poiRadius?: number;
+    numPois?: number;
+}
 export declare interface GeocodeDetailResult {
     point: GeoPoint;
     address: string;
@@ -5122,8 +5126,8 @@ export declare function useGeocodeDetail(map?: unknown): {
     sdkStatus: Readonly<ShallowRef<number | null>>;
     isLoading: Readonly<ShallowRef<boolean>>;
     supported: Readonly<ShallowRef<boolean>>;
-    getLocation: (point: GeoPoint) => Promise<ServiceResult<GeocodeDetailResult>>;
-    getBatch: (points: readonly GeoPoint[]) => Promise<GeocodeDetailItemResult[]>;
+    getLocation: (point: GeoPoint, options?: GeocodeDetailLocationOptions) => Promise<ServiceResult<GeocodeDetailResult>>;
+    getBatch: (points: readonly GeoPoint[], options?: GeocodeDetailLocationOptions) => Promise<GeocodeDetailItemResult[]>;
     cancel: () => void;
     reset: () => void;
 };

@@ -48,6 +48,19 @@ export interface GeocodeDetailItemResult {
 }
 
 /**
+ * 逆解析的可选参数（官方 `Geocoder#getLocation` 的第三个参数 `LocationOptions`）。
+ *
+ * Driver 的 `reverseGeocode` 一直支持这两个字段（负责透传给 SDK），此前只是**这个 composable
+ * 没有把它们暴露出来**——调用方拿不到「附近 POI 半径 / 个数」这个官方调节入口（#165 审计项）。
+ */
+export interface GeocodeDetailLocationOptions {
+  /** 附近 POI 的最大半径（米，官方默认 100） */
+  poiRadius?: number;
+  /** 返回的 POI 个数（官方默认 10） */
+  numPois?: number;
+}
+
+/**
  * 把 Driver 的 `addressComponents`（缺项为 `null`）摊平成旧版形态（缺项为空串）。
  *
  * 旧版承诺「总有这五个字符串」，`docs/zh-CN/hooks/useGeocodeDetail.md` 的示例按它写，
@@ -82,13 +95,19 @@ export function useGeocodeDetail(map?: unknown) {
   const task = useSimpleServiceTask<
     GeocodedAddress,
     ServiceHandle<"service:geocoder">,
-    [GeoPoint],
+    [point: GeoPoint, options?: GeocodeDetailLocationOptions],
     GeocodeDetailResult
   >(ctx, {
     capability: "service.geocoder",
     create: (context) => jsapiV4ServicesOf(context.client).createGeocoder(),
-    invoke: (context, handle, point) =>
-      jsapiV4ServicesOf(context.client).reverseGeocode(handle, { point }),
+    // `LocationOptions` 只有这两个字段（官方 `LocationOptions.d.ts`）；逐字段透传，
+    // 不用展开 `...options` —— 那会把调用方多传的未知键一起塞给 Driver。
+    invoke: (context, handle, point, options) =>
+      jsapiV4ServicesOf(context.client).reverseGeocode(handle, {
+        point,
+        poiRadius: options?.poiRadius,
+        numPois: options?.numPois,
+      }),
     project: (address, requested) => toDetail(address, requested),
   });
 
@@ -101,17 +120,21 @@ export function useGeocodeDetail(map?: unknown) {
    * 命名对齐官方（#165）：正解析在 `useGeocoder().getPoint`，逆解析在这里的 `getLocation`
    * ——官方 `Geocoder` 的两个成员各有一个同名入口，调用方不必记「哪个 hook 叫什么」。
    */
-  const getLocation = (point: GeoPoint) => task.execute(point);
+  const getLocation = (point: GeoPoint, options?: GeocodeDetailLocationOptions) =>
+    task.execute(point, options);
 
   /**
    * 批量反查：顺序执行、逐项保留结果与终态。
    *
    * 与 `getLocation()` 的区别是**不吞掉失败**——单项失败时 `detail` 为 `null`，调用方从
-   * `status` / `error` 知道原因（「部分成功」的表达方式）。
+   * `status` / `error` 知道原因（「部分成功」的表达方式）。`options` 对整个批次生效。
    */
-  function getBatch(points: readonly GeoPoint[]): Promise<GeocodeDetailItemResult[]> {
+  function getBatch(
+    points: readonly GeoPoint[],
+    options?: GeocodeDetailLocationOptions,
+  ): Promise<GeocodeDetailItemResult[]> {
     return runSequential(points, async (point) => {
-      const result = await task.execute(point);
+      const result = await task.execute(point, options);
       return {
         point,
         detail: result.data,
