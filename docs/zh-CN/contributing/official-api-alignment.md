@@ -18,10 +18,10 @@
 | 口径 | 数量 |
 | --- | --- |
 | 官方根入口导出 | 402 |
-| 本库根入口导出 | 441 |
+| 本库根入口导出 | 442 |
 | 名称对齐（交集） | 116 |
 | 仅官方有 | 286 |
-| 仅本库有 | 325 |
+| 仅本库有 | 326 |
 | `./ui-kit` 子路径导出 | 62 |
 | 手写语义例外 | 37 |
 
@@ -558,6 +558,7 @@ component 46 · hook 14 · type 56
 | `FeatureStateUpdateOptions` | type | — |
 | `FlyToOptions` | type | — |
 | `GeocodeDetailItemResult` | type | — |
+| `GeocodeDetailLocationOptions` | type | — |
 | `GeocodeDetailResult` | type | — |
 | `GeocodeItemResult` | type | — |
 | `GeolocationOptions` | type | — |

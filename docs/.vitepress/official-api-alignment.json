@@ -5,11 +5,11 @@
   "officialSource": "https://github.com/huiyan-fe/react-bmap",
   "officialNote": "Official React wrapper inventory (maintainer redirect: align against react-bmap, not @baidumap/vue-bmap which is still in development)",
   "officialPublicCount": 402,
-  "oursPublicCount": 441,
+  "oursPublicCount": 442,
   "uiKitCount": 62,
   "matchedCount": 116,
   "officialOnlyCount": 286,
-  "oursOnlyCount": 325,
+  "oursOnlyCount": 326,
   "exceptions": [
     {
       "ours": "MapExpose",
@@ -2205,6 +2205,11 @@
     },
     {
       "name": "GeocodeDetailItemResult",
+      "surface": "type",
+      "oursEntry": "./composables"
+    },
+    {
+      "name": "GeocodeDetailLocationOptions",
       "surface": "type",
       "oursEntry": "./composables"
     },
