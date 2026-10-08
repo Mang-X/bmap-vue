@@ -47,7 +47,10 @@ describe("#45 CI 接线：package job", () => {
 
   it("生成 volar.d.ts 的 manifest 步骤排在 pack 之前", () => {
     const manifestAt = quality.indexOf("generate-manifest-artifacts.mts --check");
-    const packAt = quality.indexOf("pnpm --filter bmap-vue pack");
+    // 打包改用 `pnpm pack:package`（#158 工作包 E）：它内部**首先**跑 `pnpm generate:manifest`，
+    // 再 pack，所以「manifest 排在 pack 之前」现在是**双重**保证 —— 显式步骤一层，打包脚本
+    // 自身一层。这里抓的是显式步骤与打包步骤的相对顺序。
+    const packAt = quality.indexOf("pnpm pack:package");
     expect(manifestAt).toBeGreaterThan(-1);
     expect(packAt).toBeGreaterThan(-1);
     expect(manifestAt, "manifest 步骤必须排在 pack 之前：否则 tarball 静默缺 Volar 类型").toBeLessThan(

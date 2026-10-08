@@ -52,9 +52,9 @@ describe("#45 发布身份派生", () => {
     });
 
     it("**同包名但版本不同**不得被认领（PR 评审 P2）", () => {
-      // 前缀匹配会让 `rc.9` 也命中，而 `findTarball()` 按字符串排序取「最后一个」——
-      // `rc.9` 排在 `rc.0` 之后，于是验证了旧包。CI 因前置 `rm -rf .artifacts` 不易
-      // 撞上，但 `pack:package` 不清理目录，本地 `pack:package && verify:package` 会中招。
+      // 前缀匹配会让 `rc.9` 也命中，于是可能验证了旧包。#158 工作包 E 起
+      // `pnpm pack:package` 会清掉旧 `*.tgz`，同名旧包另由来源记录拦截；精确匹配仍是
+      // 「哪些文件算这个身份的包」的唯一判据。
       const id = releaseIdentityOf({ name: "@mangax/bmap-vue", version: "1.0.0-rc.0" });
       for (const other of [
         "mangax-bmap-vue-1.0.0-rc.9.tgz", // 更高 rc

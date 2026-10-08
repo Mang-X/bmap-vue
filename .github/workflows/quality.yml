@@ -222,7 +222,7 @@ jobs:
       - name: Verify package consumers
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
-          pnpm --filter bmap-vue pack --pack-destination .artifacts
+          pnpm pack:package
           pnpm verify:package
 
 
@@ -375,7 +375,7 @@ jobs:
       - name: Check pack contents (files / exports / forbidden paths)
         run: |
           rm -rf .artifacts && mkdir -p .artifacts
-          pnpm --filter bmap-vue pack --pack-destination .artifacts
+          pnpm pack:package
           pnpm check:pack-contents
 
       # tarball 消费方验证：**调 `pnpm verify:package`，不再在本文件里复刻一遍**。

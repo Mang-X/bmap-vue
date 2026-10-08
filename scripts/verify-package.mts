@@ -16,7 +16,13 @@ import { readdirSync, existsSync, readFileSync, rmSync, copyFileSync, mkdirSync,
 import { resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectImportClosure, componentMarkersIn } from './advanced-bundle-shake.mts'
-import { commitOf, describeTarball, sha256Of, selectTarball } from './tarball-identity.mts'
+import {
+  describeTarball,
+  readProvenance,
+  requireTarballProvenance,
+  sha256Of,
+  sourceStateOf,
+} from './tarball-identity.mts'
 import {
   CONSUMER_TARBALL,
   PKG_DIR,
@@ -56,9 +62,9 @@ function findTarball(): string {
         `（.artifacts 现有：${readdirSync(artifactsDir).filter((f) => f.endsWith('.tgz')).join(', ') || '空'}）`,
     )
   }
-  // 唯一性由 boundary 判（多于一个候选时失败，而不是静默取排序最后一个）—— 见
-  // `tarball-identity.mts` 的文件头：那正是 E 要堵的「意外选另一个包」。
-  return resolve(artifactsDir, selectTarball(candidates, identity))
+  // 身份是**文件名全等**，因此这里必然唯一。真正要防的不是「多个候选」，而是**同名旧包**：
+  // 由 `assertTarballProvenance`（打包来源记录 vs 当前 HEAD）拦，见 `tarball-identity.mts`。
+  return resolve(artifactsDir, candidates[0]!)
 }
 
 function readTarballManifest(tarball: string): Record<string, unknown> {
@@ -287,17 +293,16 @@ function copyDocsExamples(dest: string): number {
 function main() {
   const tarball = findTarball()
   assertReleaseIdentity(tarball)
-  // 被验证产物的**身份记录**（#158 工作包 E）：版本 / commit / sha256 三者一起才够。
-  // 版本号不足以标识产物（同版本重打包内容会变），commit 回答「这次验证对应哪次提交」。
-  // 记录在**所有档位跑之前**打印，失败时也能从日志里看出验的是哪一个包。
-  const record = {
-    file: tarball.slice(artifactsDir.length + 1),
-    name: identity.name,
-    version: identity.version,
-    commit: commitOf(root),
-    sha256: sha256Of(tarball),
-  }
-  console.log(`\n[verify-package] 被验证产物：${describeTarball(record)}`)
+  // 被验证产物的**打包来源记录**（#158 工作包 E）：必须来自**打包那一刻**，而不是验证时的
+  // HEAD。判据见 `tarball-identity.mts#assertTarballProvenance` —— 缺记录 / 摘要不符 /
+  // commit 不符（在 A 打包、切到 B 后直接验证）都会在这里失败。
+  const provenance = requireTarballProvenance({
+    provenance: readProvenance(tarball),
+    current: sourceStateOf(root),
+    actualSha256: sha256Of(tarball),
+    expectedFile: tarball.slice(artifactsDir.length + 1),
+  })
+  console.log(`\n[verify-package] 被验证产物：${describeTarball(provenance)}`)
   console.log(`[verify-package] （全部档位都跑在这一个 tgz 上）`)
   copyFileSync(tarball, resolve(artifactsDir, CONSUMER_TARBALL))
 
