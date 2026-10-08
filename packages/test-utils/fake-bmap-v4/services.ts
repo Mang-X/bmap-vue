@@ -553,6 +553,11 @@ export class FakeV4LocalSearch {
     if (typeof options.pageNum === 'number' && Number.isInteger(options.pageNum) && options.pageNum >= 0) {
       this.currentPageNum = options.pageNum
     }
+    // 构造期 `pageCapacity` 与 setter 同一规则（官方：超出 1-100 重置为 10）。
+    // 不归一化的话，重建时传入越界值会让 getPageCapacity() 与重建前矛盾。
+    if (typeof options.pageCapacity === 'number' && !(options.pageCapacity >= 1 && options.pageCapacity <= 100)) {
+      this.options.pageCapacity = 10
+    }
     this.callLog.push('construct:' + JSON.stringify(options))
     // 官方 `LocalSearch` **没有** `dispose()`，因此实例本身不进泄漏门禁（随 GC 回收），只进活动
     // 口径（与 Geocoder / Boundary 等「无释放入口的服务」同档）；真正的资源是它**交付出去的结果集**
@@ -604,6 +609,9 @@ export class FakeV4LocalSearch {
     }
     this.status = 0
     for (const result of results) result.pageIndex = page
+    // 官方把 `getPageNum()` 定义为「当前页码」：成功翻页后必须同步，否则同一实例上
+    // `data[0].pageIndex` 与 `getPageNum()` 会互相矛盾。失败路径（上面的 status = 5）不动它。
+    this.currentPageNum = page
     this.dispatchPayload(this.lastPayload)
   }
 

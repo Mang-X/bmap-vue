@@ -25,6 +25,10 @@
 import { toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { BMapClient } from "../client/types";
 import type { MapHandle } from "../driver/types/handles";
+import {
+  usableLocationOverride,
+  type LocalSearchRuntimeOverrides,
+} from "./localSearchRuntimeOverrides";
 import type { ServiceHandle } from "../driver/types/handles";
 import type {
   LocalSearchInBoundsRequest,
@@ -144,11 +148,7 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
    * 刻意是**普通变量**而不是 ref / reactive：setter 已经作用在活实例上，不该再触发构造快照
    * 的 watch（那会立刻把刚设好的实例丢掉重建）。
    */
-  let runtimeOverrides: {
-    location?: LocalSearchLocation;
-    pageCapacity?: number;
-    pageNum?: number;
-  } = {};
+  let runtimeOverrides: LocalSearchRuntimeOverrides<LocalSearchLocation, BMapClient> = {};
 
   /** 当前构造期快照（每次都从可能变化的 ref / getter 里读一遍）。 */
   const snapshot = (): ConstructionSnapshot => {
@@ -182,7 +182,12 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
       create: (context: ServiceInvokeContext): ServiceHandle<"service:local-search"> => {
         const current = readOptions();
         // 运行期覆盖优先（见 `runtimeOverrides` 的说明）：重建后设置仍然生效。
-        const location = runtimeOverrides.location ?? toValue(current.location) ?? context.map;
+        // 但 `MapHandle` 覆盖只在**同一个 Client** 上有效：跨 Client 的句柄会被 Driver 拒绝，
+        // 那是「检索永远失败且无法自救」，不如回退到当前声明式 location。
+        const location =
+          usableLocationOverride(runtimeOverrides, context.client) ??
+          toValue(current.location) ??
+          context.map;
         if (location === undefined || location === null) {
           throw new BMapError(
             "BMAP_INVALID_ARGUMENT",
@@ -319,9 +324,13 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
    * 每页容量，官方同步生效、不产生请求。
    */
   const setPageCapacity = (capacity: number): void => {
-    withService((services, handle) => services.setLocalSearchPageCapacity(handle, capacity));
     // 记进覆盖：实例被取代重建时设置仍然生效（否则下一次 search 会悄悄用回旧值）。
-    runtimeOverrides.pageCapacity = capacity;
+    // 记的是**SDK 生效值**（官方会把越界值归一到 10），不是原始入参 —— 否则重建时把 200
+    // 当构造参数传下去，新实例的 getPageCapacity() 会与重建前的 10 矛盾。
+    runtimeOverrides.pageCapacity = withService((services, handle) => {
+      services.setLocalSearchPageCapacity(handle, capacity);
+      return services.getLocalSearchPageCapacity(handle);
+    });
   };
 
   /** 读页容量（官方 `getPageCapacity`）。 */
@@ -330,8 +339,11 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
 
   /** 设当前页码（官方 `setPageNum`）；是**设置**而不是翻页请求。 */
   const setPageNum = (pageNum: number): void => {
-    withService((services, handle) => services.setLocalSearchPageNum(handle, pageNum));
-    runtimeOverrides.pageNum = pageNum;
+    // 同上：记 SDK 生效值（官方把无效值归一到 0），而不是原始入参。
+    runtimeOverrides.pageNum = withService((services, handle) => {
+      services.setLocalSearchPageNum(handle, pageNum);
+      return services.getLocalSearchPageNum(handle);
+    });
   };
 
   /** 读当前页码（官方 `getPageNum`）。 */
@@ -346,6 +358,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
   const setLocation = (location: LocalSearchLocation): void => {
     withService((services, handle) => services.setLocalSearchLocation(handle, location));
     runtimeOverrides.location = location;
+    // 句柄型 location 绑定到设置时的 Client（见 `locationClient` 的说明）。
+    runtimeOverrides.locationClient = ctx.client.value ?? undefined;
   };
 
   return {

@@ -11,7 +11,7 @@
  * （实例创建次数）、归一化结果的 `status` / `sdkStatus`。
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { defineComponent, h, nextTick, ref } from "vue";
+import { defineComponent, h, nextTick, ref, shallowRef } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
@@ -926,4 +926,59 @@ describe("useLocalSearch：假 SDK 与官方边界语义一致（评审 P2）", 
     expect(afterInvalid).toBe(0);
     wrapper.unmount();
   });
+});
+
+describe("useLocalSearch：运行期覆盖的重建语义（第二轮评审 P1/P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("P2：重建重放的是 **SDK 生效值**，不是 setter 原始入参", async () => {
+    const capacityAfterRebuild: number[] = [];
+    const pageAfterRebuild: number[] = [];
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("天安门");
+      // 官方把越界值归一到 10；覆盖里必须记 10 而不是 200
+      hook.setPageCapacity(200);
+      expect(hook.getPageCapacity()).toBe(10);
+      hook.setPageNum(-3);
+      expect(hook.getPageNum()).toBe(0);
+
+      // 触发重建：clear() 丢弃实例，下一次 search() 用覆盖里的值重建
+      hook.clear();
+      await hook.search("天安门");
+      capacityAfterRebuild.push(hook.getPageCapacity());
+      pageAfterRebuild.push(hook.getPageNum());
+    });
+    await flushPromises();
+    await nextTick();
+
+    // 重建前后必须一致（原实现会把 200 / -3 当构造参数传下去，得到 200 / -3）
+    expect(capacityAfterRebuild).toEqual([10]);
+    expect(pageAfterRebuild).toEqual([0]);
+    wrapper.unmount();
+  });
+
+  it("P2：Fake 成功翻页后 getPageNum() 与 data[0].pageIndex 一致（失败翻页不动）", async () => {
+    let afterOk: { index: number | undefined; page: number } | null = null;
+    let afterBad: number | null = null;
+    const wrapper = mountInMapWithOptions({ location: "北京市", pageCapacity: 1 }, async (hook) => {
+      await hook.search("天安门");
+      const ok = await hook.gotoPage(1);
+      afterOk = { index: ok.data?.[0]?.pageIndex, page: hook.getPageNum() };
+      // 越界页码：官方状态码 5，页码不变
+      await hook.gotoPage(99);
+      afterBad = hook.getPageNum();
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(afterOk!.index).toBe(1);
+    expect(afterOk!.page).toBe(1); // 同一实例上两者不矛盾
+    expect(afterBad).toBe(1); // 失败翻页不更新
+    wrapper.unmount();
+  });
+
 });

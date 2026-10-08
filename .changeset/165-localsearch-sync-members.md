@@ -33,3 +33,13 @@
 - **P2 · 假 SDK 与官方边界语义不一致**：`getPageNum()` 初值改为读构造参数 `options.pageNum`
   （原来恒 0）；`setPageCapacity` 按官方「超范围重置为 10」、`setPageNum` 按「无效值重置为 0」
   夹取（原来宽松放行，会让公共 API 只在假实现里"验证通过"）。补三条边界用例。
+
+### 第二轮评审修正（#212）
+
+- **P1 · 跨 Client 的 `MapHandle` 覆盖**：运行期 `location` 覆盖现在按**所属 Client** 校验；
+  `MapHandle` 属于别的 Client 时回退到声明式 `location`，不再把旧句柄带进新 Client（那会让检索
+  一直 `failed` 且无法自救）。判据抽成纯 boundary（`localSearchRuntimeOverrides.ts`），带行为反例。
+- **P2 · 重放 setter 原始入参**：`pageCapacity` / `pageNum` 记的是**SDK 生效值**（官方会把越界
+  容量归一到 10、无效页码归一到 0），重建前后 getter 一致。Fake 构造期也按同一规则归一化。
+- **P2 · Fake `gotoPage` 未同步页码**：成功翻页后 `getPageNum()` 与 `data[0].pageIndex` 一致；
+  失败翻页不更新。
