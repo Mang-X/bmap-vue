@@ -90,3 +90,13 @@
   现在 `search` / `searchNearby` / `searchInBounds` 在发起前复核运行期 `MapHandle` 覆盖：失效即
   丢弃覆盖并让缓存实例过期（下一次 `acquire` 重建、退回声明式 location）。补行为用例
   （`search A → setLocation(mapA) → destroy(mapA) → search B`，不 `clear`），突变实测转红。
+
+### 第七轮评审修正（#212）
+
+- **P2 · 检查与调用之间的 TOCTOU**：`dropDeadMapLocationOverride()` 在 `task.execute()` **之前**
+  同步运行，而 `execute()` 还要 `await whenReady()` 才复用实例；地图在这个 `await` 期间被销毁时，
+  已通过的检查不再有效。内核新增 `isCachedHandleUsable(handle, context)` —— **就绪之后、复用缓存
+  实例之前**复核，失效则让实例过期（`recreate` 路径随后重建）。
+- **P2 · `gotoPage` 绕过检查**：翻页属于**旧结果集**，不能重建后继续；现在同一复核对它**显式失败**
+  （`cachedHandleInvalidMessage`），既不向绑定死地图的旧实例发请求，也不新建实例。
+- 两条都用**同步销毁**制造确定时序并做突变验证：去掉内核复核后 TOCTOU 与 `gotoPage` 两条都转红。

@@ -87,6 +87,19 @@ export interface ServiceTaskCoreOptions<TDriver, THandle, TArgs extends unknown[
   currentClient: () => BMapClient | null;
   /** 状态变更回调（Vue 侧写 shallow refs）。 */
   onState: (patch: Partial<ServiceTaskState<TResult>>) => void;
+  /**
+   * **复用缓存实例之前**复核它是否仍然可用（缺省视为可用）。
+   *
+   * 为什么必须在这里而不是只在公开方法的同步入口（第七轮评审 P2）：`execute()` 会先
+   * `await whenReady()` 再复用实例，而「可用性」可能在这个 `await` 期间变化（例如服务实例
+   * 绑定的地图被销毁）—— 同步入口的检查因此存在 TOCTOU 窗口。
+   *
+   * 返回 `false` 时：`refuse` 语义的操作（如翻页，它属于**旧结果集**）**显式失败**，其余
+   * 操作让缓存实例过期、由 `acquire()` 重建。
+   */
+  isCachedHandleUsable?: (handle: THandle, context: ServiceInvokeContext) => boolean;
+  /** `isCachedHandleUsable` 判定失效且操作为 `refuse` 时的说明（进 `error.message`）。 */
+  cachedHandleInvalidMessage?: string;
 }
 
 export interface ServiceTaskCore<TDriver, THandle, TArgs extends unknown[], TResult> {
@@ -263,6 +276,27 @@ export function createServiceTaskCore<TDriver, THandle, TArgs extends unknown[],
       const supported = client.capabilities.supports(capability);
       onState({ supported });
       if (!supported) return settleUnsupported();
+
+      // 复用缓存实例**之前**复核：`await whenReady()` 期间它可能已经失效（TOCTOU）。
+      const cached = channel.peek();
+      if (
+        cached &&
+        options.isCachedHandleUsable &&
+        !options.isCachedHandleUsable(cached.handle, invokeContext(client, map, controller.signal))
+      ) {
+        // 先让缓存实例过期：`recreate` 路径的 `acquire()` 会重建；`refuse` 路径直接失败。
+        channel.invalidate();
+        if (mode === "refuse") {
+          const info = {
+            code: "BMAP_SERVICE_FAILED",
+            message:
+              options.cachedHandleInvalidMessage ??
+              "缓存的服务实例已失效，本次调用被拒绝（它不能在新实例上继续）",
+          };
+          onState({ status: "failed", data: null, error: info, sdkStatus: null, isLoading: false });
+          return settledServiceResult<TResult>("failed", info);
+        }
+      }
 
       const handle = ensureHandle(client, map, controller.signal);
       const call = options.invoke(invokeContext(client, map, controller.signal), handle, ...args);

@@ -265,6 +265,15 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
       refuseMessage:
         "上一次检索还没结算（或它的结果已被清空）：翻页是对同一条结果集的延续，此时没有意义；" +
         "请等它结算，或重新 search()",
+      // 复用缓存实例**之前**再复核一次：`await whenReady()` 期间地图可能已被销毁
+      // （第七轮评审 P2 的 TOCTOU）。同步入口的 `dropDeadMapLocationOverride()` 挡不住这个窗口。
+      isCachedHandleUsable: (_handle, context) => {
+        const override = runtimeOverrides.location;
+        if (!isMapHandleLocation(override)) return true;
+        return context.client.driver.isMapHandleLive?.(override as MapHandle) ?? false;
+      },
+      cachedHandleInvalidMessage:
+        "上一次检索绑定的地图已销毁：翻页是对同一条结果集的延续，此时没有意义；请重新 search()",
     },
   );
 

@@ -1301,3 +1301,99 @@ describe("useLocalSearch：地图在两次检索之间销毁（第六轮评审 P
     wrapper.unmount();
   });
 });
+
+describe("useLocalSearch：检查与调用之间的 TOCTOU / 翻页入口（第七轮评审 P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  /** 搭一个 `<BMapProvider>` + 兄弟 `<Map>` 的搜索器，并交出 map / client 的 **ref**。 */
+  function mountSearcher(pageCapacity?: number) {
+    let hook: Hook | null = null;
+    const refs: { map?: { value: unknown }; client?: { value: unknown } } = {};
+    const options =
+      pageCapacity === undefined ? { location: "北京市" } : { location: "北京市", pageCapacity };
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch(options);
+        return () => h("div", "searcher");
+      },
+    });
+    const Capture = defineComponent({
+      setup() {
+        const um = useMap();
+        // 捕获 **ref**：`setup()` 时地图还没建，读 `.value` 只会拿到 null
+        refs.map = um.map as unknown as { value: unknown };
+        refs.client = um.client as unknown as { value: unknown };
+        return () => h("div", "capture");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Map, Searcher, Capture },
+        setup: () => () =>
+          h(BMapProvider, { provider: provider() }, () => [h(Map, () => [h(Capture)]), h(Searcher)]),
+      }),
+      { attachTo: host() },
+    );
+    return { wrapper, hook: () => hook!, refs };
+  }
+
+  /** 同步销毁当前地图（直接走 driver，制造「检查已通过、调用尚未发生」的窗口）。 */
+  function destroyMap(refs: { map?: { value: unknown }; client?: { value: unknown } }): void {
+    const client = refs.client!.value as {
+      driver: { map: { destroy: (h: unknown) => void } };
+    };
+    client.driver.map.destroy(refs.map!.value);
+  }
+
+  it("TOCTOU：检查通过后、whenReady 期间销毁地图 ⇒ 不复用旧实例", async () => {
+    const { wrapper, hook, refs } = mountSearcher();
+    const h1 = hook();
+    await h1.search("A");
+    await flushPromises();
+    h1.setLocation(refs.map!.value as never);
+
+    const dead = fake.createdLocalSearches.at(-1)!;
+    const before = fake.createdLocalSearches.length;
+
+    // `search('B')` 同步跑过入口检查、停在 `await whenReady()`；此刻同步销毁地图
+    const pending = h1.search("B");
+    destroyMap(refs);
+
+    const outcome = await pending;
+    await flushPromises();
+
+    expect(outcome.status).not.toBe("failed");
+    expect(fake.createdLocalSearches.length).toBeGreaterThan(before); // 重建了
+    // 旧实例不得收到这次检索
+    expect(dead.callLog.filter((c) => c.startsWith("search:B"))).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("gotoPage：地图销毁后显式 failed，不向旧实例发翻页、也不新建实例", async () => {
+    const { wrapper, hook, refs } = mountSearcher(1);
+    const h1 = hook();
+    await h1.search("A");
+    await flushPromises();
+    h1.setLocation(refs.map!.value as never);
+
+    const dead = fake.createdLocalSearches.at(-1)!;
+    dead.callLog.length = 0;
+    const before = fake.createdLocalSearches.length;
+
+    destroyMap(refs);
+
+    const outcome = await h1.gotoPage(1);
+    await flushPromises();
+
+    expect(outcome.status).toBe("failed");
+    expect(outcome.error?.message).toContain("地图已销毁");
+    // 不向绑定死地图的旧实例发翻页，也不重建后翻页（页码属于旧结果集）
+    expect(dead.callLog.filter((c) => c.startsWith("gotoPage:"))).toHaveLength(0);
+    expect(fake.createdLocalSearches.length).toBe(before);
+    wrapper.unmount();
+  });
+});

@@ -88,6 +88,13 @@ export interface SimpleServiceTask<TResult, TArgs extends unknown[]> {
 export interface ExclusiveServiceTaskOptions<TDriver, THandle, TArgs extends unknown[], TResult = TDriver>
   extends CommonOptions<TDriver, THandle, TArgs, TResult> {
   /**
+   * 复用缓存实例之前复核它是否仍可用（`await whenReady()` 期间可能失效，见内核同名选项）。
+   * 只有**独占档**需要：简单档不暴露活实例给外部，也就没有「外部让实例失效」的路径。
+   */
+  isCachedHandleUsable?: (handle: THandle, context: ServiceInvokeContext) => boolean;
+  /** 判定失效且操作为 `refuse`（如翻页）时的说明。 */
+  cachedHandleInvalidMessage?: string;
+  /**
    * 释放服务实例。只有**有清理入口**的服务需要给：当前是 LocalSearch
    * （`disposeLocalSearch`）与四个路线服务（`disposeRoute`）；其余服务官方没有销毁入口。
    *
@@ -221,7 +228,14 @@ export function useExclusiveServiceTask<TDriver, THandle, TArgs extends unknown[
   ctx: MapContext,
   options: ExclusiveServiceTaskOptions<TDriver, THandle, TArgs, TResult>,
 ): ExclusiveServiceTask<TResult, TArgs, THandle> {
-  const { release, supersede, refuseMessage, ...common } = options;
+  const {
+    release,
+    supersede,
+    refuseMessage,
+    isCachedHandleUsable,
+    cachedHandleInvalidMessage,
+    ...common
+  } = options;
   const channel = createExclusiveInstanceChannel<THandle, TArgs>({
     label: options.capability,
     // 通道记住实例当初所属的 Client 并原样交回——跨 Client 的句柄会被 Driver 拒绝，
@@ -230,7 +244,15 @@ export function useExclusiveServiceTask<TDriver, THandle, TArgs extends unknown[
     ...(supersede ? { supersede } : {}),
     ...(refuseMessage ? { refuseMessage } : {}),
   });
-  const { task, core } = bindTask(ctx, common, channel);
+  const { task, core } = bindTask(
+    ctx,
+    {
+      ...common,
+      ...(isCachedHandleUsable ? { isCachedHandleUsable } : {}),
+      ...(cachedHandleInvalidMessage ? { cachedHandleInvalidMessage } : {}),
+    },
+    channel,
+  );
   return {
     ...task,
     invalidateService: () => core.invalidate(),
