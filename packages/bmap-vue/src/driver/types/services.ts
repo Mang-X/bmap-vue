@@ -1147,6 +1147,41 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
   clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 
   /**
+   * 读当前页容量（官方 `LocalSearch#getPageCapacity(): number`）。
+   *
+   * **同步**返回：官方是同步 getter，包成 `ServiceCall` 会凭空造出一个不存在的异步语义
+   * （且 `getX()` 的返回值只能塞进 `data`，调用方读一个数字还要 await）。因此它与其他同步
+   * mutator 一起走 `withHandle` 通道，不参与请求序列。
+   *
+   * 没有活实例时抛 `BMAP_RESOURCE_DISPOSED`——不为了「读一个数字」顺手创建 SDK 实例。
+   */
+  getLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">): number;
+
+  /**
+   * 改当前页容量（官方 `LocalSearch#setPageCapacity(capacity)`）。
+   *
+   * 官方对超范围值的处理是**重置为 10**（不是抛错），因此本入口原样转发、由 SDK 决定；
+   * 本库不在这里加一层「校验」，否则就与官方行为分叉了。
+   */
+  setLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">, capacity: number): void;
+
+  /** 读当前页码（官方 `LocalSearch#getPageNum(): number`）。 */
+  getLocalSearchPageNum(handle: ServiceHandle<"service:local-search">): number;
+
+  /** 设当前页码（官方 `LocalSearch#setPageNum(pageNum)`）。 */
+  setLocalSearchPageNum(handle: ServiceHandle<"service:local-search">, pageNum: number): void;
+
+  /** 清掉当前选中项（官方 `LocalSearch#clearSelected()`）。 */
+  clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
+
+  /**
+   * 设检索区域（官方 `LocalSearch#setLocation(location)`）。
+   *
+   * 与构造期的 `location` 同一套归一（城市名 / 领域 `Point` / 本库 `MapHandle` → raw）。
+   */
+  setLocalSearchLocation(handle: ServiceHandle<"service:local-search">, location: unknown): void;
+
+  /**
    * 释放本地检索实例（幂等）。
    *
    * ① 停止接受该实例的业务调用并**把在飞调用显式失败**；② 解绑 Driver 侧资源（EventDriver 订阅）；

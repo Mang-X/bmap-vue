@@ -31,6 +31,8 @@ import { createJsapiV4HandleRegistry } from "./jsapi-v4/registry";
 import { createJsapiV4ServiceDriver } from "./jsapi-v4/services";
 import { assertJsapiV4Namespace } from "./jsapi-v4/internal";
 import type { JsapiV4Driver } from "./types/bmap";
+import { HANDLE_BRAND } from "./types/handles";
+import { isObjectLike } from "./jsapi-v4/internal";
 
 export interface CreateJsapiV4DriverInput {
   /** v4 全局命名空间（`globalThis.BMap`）；raw SDK 只允许在 Driver/Client 边界读取。 */
@@ -77,6 +79,12 @@ export function createJsapiV4Driver(input: CreateJsapiV4DriverInput): JsapiV4Dri
     services: createJsapiV4ServiceDriver({ rawSdk, geometry, capabilities, registry, events }),
     panorama: createJsapiV4PanoramaDriver({ rawSdk, geometry, capabilities, registry, events }),
     nativeLayers: createJsapiV4NativeLayerDriver({ rawSdk, capabilities, registry }),
+    // 地图句柄活跃查询：与归属检查互补，回答「这张地图是不是已经进入销毁」。
+    // 只认 `map` 品牌 —— 其它 Facet 的终态没有接入 registry，泛化会把它们误报成存活。
+    isMapHandleLive: (handle) =>
+      isObjectLike(handle) &&
+      (handle as unknown as Record<PropertyKey, unknown>)[HANDLE_BRAND] === "map" &&
+      registry.isLive(handle),
   };
 
   return driver;

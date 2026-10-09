@@ -25,6 +25,11 @@
 import { toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { BMapClient } from "../client/types";
 import type { MapHandle } from "../driver/types/handles";
+import {
+  isMapHandleLocation,
+  usableLocationOverride,
+  type LocalSearchRuntimeOverrides,
+} from "./localSearchRuntimeOverrides";
 import type { ServiceHandle } from "../driver/types/handles";
 import type {
   LocalSearchInBoundsRequest,
@@ -130,6 +135,22 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
 
   const readOptions = (): BMapLocalSearchOptions => toValue(options) ?? {};
 
+  /**
+   * **运行期覆盖**（官方同步 setter 写入）。
+   *
+   * 为什么需要它：`LocalSearch` 的实例在「检索取代在飞检索」时会被**重建**（`supersede:
+   * "recreate"`，因为回包归属依赖实例身份）。若 `setLocation` / `setPageCapacity` /
+   * `setPageNum` 只改活实例，紧随其后的 `search()` 会用新实例、而新实例的构造参数仍来自
+   * 声明式选项 —— 于是「setter 成功返回、下一次检索却没应用」且毫无提示。
+   *
+   * 规则：**运行期覆盖优先于声明式选项**，直到声明式选项自身变化（见下面的 watch）——
+   * 那时覆盖整份作废，避免「改了 ref 却不生效」这种反向困惑。
+   *
+   * 刻意是**普通变量**而不是 ref / reactive：setter 已经作用在活实例上，不该再触发构造快照
+   * 的 watch（那会立刻把刚设好的实例丢掉重建）。
+   */
+  let runtimeOverrides: LocalSearchRuntimeOverrides<LocalSearchLocation, BMapClient> = {};
+
   /** 当前构造期快照（每次都从可能变化的 ref / getter 里读一遍）。 */
   const snapshot = (): ConstructionSnapshot => {
     const current = readOptions();
@@ -161,7 +182,20 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
       capability: "service.local-search" as const,
       create: (context: ServiceInvokeContext): ServiceHandle<"service:local-search"> => {
         const current = readOptions();
-        const location = toValue(current.location) ?? context.map;
+        // 运行期覆盖优先（见 `runtimeOverrides` 的说明）：重建后设置仍然生效。
+        // 但 `MapHandle` 覆盖只在**同一个 Client** 上有效：跨 Client 的句柄会被 Driver 拒绝，
+        // 那是「检索永远失败且无法自救」，不如回退到当前声明式 location。
+        const overrideLocation = usableLocationOverride(
+          runtimeOverrides,
+          // 可选成员：自定义 Driver 不实现它时不会走到这里（`setLocation(MapHandle)` 已在
+          // 调用当场拒绝），因此 `undefined` 回退成 `false` 是安全的兜底。
+          (handle) => context.client.driver.isMapHandleLive?.(handle as MapHandle) ?? false,
+        );
+        if (runtimeOverrides.location !== undefined && overrideLocation === undefined) {
+          // 失效即清理：不继续持有旧 MapHandle + Client 的强引用。
+          delete runtimeOverrides.location;
+        }
+        const location = overrideLocation ?? toValue(current.location) ?? context.map;
         if (location === undefined || location === null) {
           throw new BMapError(
             "BMAP_INVALID_ARGUMENT",
@@ -170,8 +204,8 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
           );
         }
         const render = toValue(current.renderOptions);
-        const pageCapacity = toValue(current.pageCapacity);
-        const pageNum = toValue(current.pageNum);
+        const pageCapacity = runtimeOverrides.pageCapacity ?? toValue(current.pageCapacity);
+        const pageNum = runtimeOverrides.pageNum ?? toValue(current.pageNum);
         const settings: LocalSearchOptions = {};
         if (render) {
           const map = toValue(render.map);
@@ -231,6 +265,15 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
       refuseMessage:
         "上一次检索还没结算（或它的结果已被清空）：翻页是对同一条结果集的延续，此时没有意义；" +
         "请等它结算，或重新 search()",
+      // 复用缓存实例**之前**再复核一次：`await whenReady()` 期间地图可能已被销毁
+      // （第七轮评审 P2 的 TOCTOU）。同步入口的 `dropDeadMapLocationOverride()` 挡不住这个窗口。
+      isCachedHandleUsable: (_handle, context) => {
+        const override = runtimeOverrides.location;
+        if (!isMapHandleLocation(override)) return true;
+        return context.client.driver.isMapHandleLive?.(override as MapHandle) ?? false;
+      },
+      cachedHandleInvalidMessage:
+        "上一次检索绑定的地图已销毁：翻页是对同一条结果集的延续，此时没有意义；请重新 search()",
     },
   );
 
@@ -242,21 +285,54 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     (next) => {
       if (sameConstruction(previousConstruction, next)) return;
       previousConstruction = next;
+      // 声明式选项变了：运行期覆盖整份作废（否则「改了 ref 却不生效」）。
+      runtimeOverrides = {};
       task.invalidateService();
       task.reset();
     },
   );
 
-  const search = (keyword: LocalSearchKeyword, option?: LocalSearchSearchOption) =>
-    task.execute({ kind: "search", keyword, ...(option ? { option } : {}) });
+  /**
+   * 发起新检索**之前**复核运行期 `MapHandle` 覆盖是否还活着。
+   *
+   * 为什么不能只在 `create()` 里查（第六轮评审 P2）：`create()` 只在**重建**时被调用，而
+   * 「上一次检索已结算 → 再 search」走的是 `instanceChannel.acquire()` 的**缓存复用**路径
+   * （`cached.client === client && !instanceStale` 直接返回旧句柄），既不会重建、也不会查存活。
+   * 于是地图在这两次检索之间被销毁时，新检索会打到一个 `setLocation` 已指向死地图的旧实例上。
+   *
+   * 这里主动把失效覆盖丢掉并让缓存实例过期（下一次 `execute` 重建并退回声明式 location）
+   * —— 与「运行期设置活过重建」互补：**死的设置不该活过重建**。
+   */
+  const dropDeadMapLocationOverride = (): void => {
+    if (!isMapHandleLocation(runtimeOverrides.location)) return;
+    const driver = ctx.client.value?.driver;
+    const isLive = driver?.isMapHandleLive;
+    const alive =
+      typeof isLive === "function" &&
+      isLive.call(driver, runtimeOverrides.location as MapHandle);
+    if (alive) return;
+    delete runtimeOverrides.location;
+    // 缓存实例的检索区域已经指向死地图：让它过期，下一次 acquire 会重建。
+    task.invalidateService();
+  };
 
-  const searchNearby = (keyword: LocalSearchKeyword, center: string | GeoPoint, radius: number) =>
-    task.execute({ kind: "nearby", keyword, center, radius });
+  const search = (keyword: LocalSearchKeyword, option?: LocalSearchSearchOption) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "search", keyword, ...(option ? { option } : {}) });
+  };
+
+  const searchNearby = (keyword: LocalSearchKeyword, center: string | GeoPoint, radius: number) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "nearby", keyword, center, radius });
+  };
 
   const searchInBounds = (
     keyword: LocalSearchKeyword,
     bounds: LocalSearchInBoundsRequest["bounds"],
-  ) => task.execute({ kind: "inBounds", keyword, bounds });
+  ) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "inBounds", keyword, bounds });
+  };
 
   const gotoPage = (page: number) => task.execute({ kind: "page", page });
 
@@ -275,6 +351,80 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     task.reset();
   };
 
+  /**
+   * 官方的**同步**成员（`LocalSearch#getPageCapacity` / `setPageCapacity` / `getPageNum` /
+   * `setPageNum` / `clearSelected` / `setLocation`）走 `withHandle` 通道：它们不产生异步结果，
+   * 用 `execute()` 表达会把官方语义改成「发一次调用」，`get*` 更是表达不出来。
+   *
+   * **先 `search()` 一次才有活实例**：本库不会为了设一个分页容量而顺手创建 SDK 实例。
+   * 没有实例时这些方法抛 `BMAP_RESOURCE_DISPOSED`；用 `hasInstance()` 可以先问再做。
+   */
+  const withService = <R>(fn: (services: ReturnType<typeof jsapiV4ServicesOf>, handle: ServiceHandle<"service:local-search">) => R): R =>
+    task.withHandle((handle, context) => fn(jsapiV4ServicesOf(context.client), handle));
+
+  /** 当前是否有可操作的活实例（`withService` 系方法是否可用）。 */
+  const hasInstance = (): boolean => task.currentInstanceExists();
+
+  /**
+   * 改页容量（官方 `setPageCapacity`）。
+   *
+   * 与 `gotoPage` 的区别：后者是**翻页动作**（会请求第 N 页数据、可能失败），本方法是**设置**
+   * 每页容量，官方同步生效、不产生请求。
+   */
+  const setPageCapacity = (capacity: number): void => {
+    // 记进覆盖：实例被取代重建时设置仍然生效（否则下一次 search 会悄悄用回旧值）。
+    // 记的是**SDK 生效值**（官方会把越界值归一到 10），不是原始入参 —— 否则重建时把 200
+    // 当构造参数传下去，新实例的 getPageCapacity() 会与重建前的 10 矛盾。
+    runtimeOverrides.pageCapacity = withService((services, handle) => {
+      services.setLocalSearchPageCapacity(handle, capacity);
+      return services.getLocalSearchPageCapacity(handle);
+    });
+  };
+
+  /** 读页容量（官方 `getPageCapacity`）。 */
+  const getPageCapacity = (): number =>
+    withService((services, handle) => services.getLocalSearchPageCapacity(handle));
+
+  /** 设当前页码（官方 `setPageNum`）；是**设置**而不是翻页请求。 */
+  const setPageNum = (pageNum: number): void => {
+    // 同上：记 SDK 生效值（官方把无效值归一到 0），而不是原始入参。
+    runtimeOverrides.pageNum = withService((services, handle) => {
+      services.setLocalSearchPageNum(handle, pageNum);
+      return services.getLocalSearchPageNum(handle);
+    });
+  };
+
+  /** 读当前页码（官方 `getPageNum`）。 */
+  const getPageNum = (): number =>
+    withService((services, handle) => services.getLocalSearchPageNum(handle));
+
+  /** 清掉当前选中项（官方 `clearSelected`），不影响结果集。 */
+  const clearSelected = (): void =>
+    withService((services, handle) => services.clearLocalSearchSelected(handle));
+
+  /** 改检索区域（官方 `setLocation`）；与构造期的 `location` 同一套归一。 */
+  const setLocation = (location: LocalSearchLocation): void => {
+    if (isMapHandleLocation(location)) {
+      const driver = ctx.client.value?.driver;
+      const isLive = driver?.isMapHandleLive;
+      if (typeof isLive !== "function") {
+        throw new BMapError(
+          "BMAP_CAPABILITY_UNSUPPORTED",
+          "setLocation(MapHandle)：当前 Driver 不提供 isMapHandleLive，无法验证地图句柄是否仍可用。" +
+            "请改用城市名 / 坐标，或使用内置的 jsapi-v4 Driver —— 本库不会「先接受、到重建时才静默丢弃」。",
+        );
+      }
+      if (!isLive.call(driver, location as MapHandle)) {
+        throw new BMapError(
+          "BMAP_RESOURCE_DISPOSED",
+          "setLocation(MapHandle)：该地图句柄已不可用（已进入销毁，或不属于当前 Client）",
+        );
+      }
+    }
+    withService((services, handle) => services.setLocalSearchLocation(handle, location));
+    runtimeOverrides.location = location;
+  };
+
   return {
     data: task.data,
     error: task.error,
@@ -288,6 +438,13 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     searchNearby,
     searchInBounds,
     gotoPage,
+    setPageCapacity,
+    getPageCapacity,
+    setPageNum,
+    getPageNum,
+    clearSelected,
+    setLocation,
+    hasInstance,
     clear,
     cancel: task.cancel,
     reset: task.reset,

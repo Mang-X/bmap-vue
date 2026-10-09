@@ -60,6 +60,7 @@ export interface BMapDriver {
     readonly events: EventDriver;
     // (undocumented)
     readonly geometry: GeometryDriver;
+    isMapHandleLive?(handle: MapHandle): boolean;
     // (undocumented)
     readonly layers: LayerDriver;
     // (undocumented)
@@ -835,8 +836,14 @@ export type JsapiV4ScriptMode = "load" | "jsonp";
 // @public
 export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
     clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+    clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
     disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+    getLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">): number;
+    getLocalSearchPageNum(handle: ServiceHandle<"service:local-search">): number;
+    setLocalSearchLocation(handle: ServiceHandle<"service:local-search">, location: unknown): void;
+    setLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">, capacity: number): void;
+    setLocalSearchPageNum(handle: ServiceHandle<"service:local-search">, pageNum: number): void;
 }
 
 // @public

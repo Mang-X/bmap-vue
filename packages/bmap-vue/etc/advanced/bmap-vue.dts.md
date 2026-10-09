@@ -44,6 +44,7 @@ export declare interface BMapDriver {
     readonly services: ServiceDriver;
     readonly panorama: PanoramaDriver;
     readonly events: EventDriver;
+    isMapHandleLive?(handle: MapHandle): boolean;
 }
 export declare type BMapDriverFactory = (input: BMapDriverInput) => BMapDriver;
 export declare interface BMapDriverInput {
@@ -468,6 +469,12 @@ export declare type JsapiV4ScriptMode = "load" | "jsonp";
 export declare interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
     clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+    getLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">): number;
+    setLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">, capacity: number): void;
+    getLocalSearchPageNum(handle: ServiceHandle<"service:local-search">): number;
+    setLocalSearchPageNum(handle: ServiceHandle<"service:local-search">, pageNum: number): void;
+    clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
+    setLocalSearchLocation(handle: ServiceHandle<"service:local-search">, location: unknown): void;
     disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 }
 export declare type JsapiV4VersionSource = "url" | "global" | "declared";

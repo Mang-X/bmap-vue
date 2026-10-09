@@ -33,6 +33,23 @@ export interface JsapiV4HandleRegistry {
 
   /** 句柄所有权校验（不抛错的谓词形式）。 */
   owns(handle: unknown): handle is SdkHandle<string>;
+
+  /**
+   * 标记句柄对应的 raw 对象**已被销毁**（Map 的 `destroy()` 完成时调用）。
+   *
+   * 幂等；只影响 `isLive()` 的答案，**不**解除所有权（`resolve()` 仍能解析——销毁是不可逆
+   * 的既成事实，但「这个句柄属于谁」没有变）。
+   */
+  release(handle: unknown): void;
+
+  /**
+   * 句柄**现在**还能不能用：属于本 registry **且** raw 未被销毁。
+   *
+   * 与 `owns()` 的分工：`owns` 只回答「是不是我的」（跨 Client 混用检查），`isLive` 额外回答
+   * 「它是不是还活着」。调用方拿一个旧句柄准备用时，只有后者能挡住「把已销毁的地图交给新服务」
+   * 这类错误 —— `resolve()` 不查销毁（它没有销毁信息）。
+   */
+  isLive(handle: unknown): boolean;
 }
 
 export function createJsapiV4HandleRegistry(): JsapiV4HandleRegistry {
@@ -41,6 +58,8 @@ export function createJsapiV4HandleRegistry(): JsapiV4HandleRegistry {
   // 「跨 Client 混用被拒绝」这条硬约束就失效了。
   const rawToHandle = new WeakMap<object, SdkHandle<string>>();
   const handleOwners = new WeakMap<object, symbol>();
+  /** 已销毁的句柄（WeakSet：句柄不可达时自动回收，不需要手动清理）。 */
+  const releasedHandles = new WeakSet<object>();
 
   const assertOwned = (handle: SdkHandle<string>): void => {
     if (!isObjectLike(handle) || handleOwners.get(handle) !== owner) {
@@ -91,6 +110,18 @@ export function createJsapiV4HandleRegistry(): JsapiV4HandleRegistry {
 
     owns(handle: unknown): handle is SdkHandle<string> {
       return isObjectLike(handle) && handleOwners.get(handle) === owner;
+    },
+
+    release(handle: unknown): void {
+      if (isObjectLike(handle)) releasedHandles.add(handle);
+    },
+
+    isLive(handle: unknown): boolean {
+      return (
+        isObjectLike(handle) &&
+        handleOwners.get(handle) === owner &&
+        !releasedHandles.has(handle)
+      );
     },
   };
 }

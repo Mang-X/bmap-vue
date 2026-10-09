@@ -55,6 +55,7 @@ export interface BMapDriver {
     readonly events: EventDriver;
     // (undocumented)
     readonly geometry: GeometryDriver;
+    isMapHandleLive?(handle: MapHandle): boolean;
     // (undocumented)
     readonly layers: LayerDriver;
     // (undocumented)

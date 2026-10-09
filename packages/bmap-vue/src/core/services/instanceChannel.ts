@@ -54,6 +54,14 @@ export interface ServiceInstanceChannel<THandle> {
    * Driver 拒绝，释放必须用**当初的**那个 client）。
    */
   acquire(client: BMapClient, create: (client: BMapClient) => THandle): THandle;
+  /**
+   * **只读**地看当前缓存的实例（拿不到就是 `null`）—— 供同步 setter / getter 使用。
+   *
+   * 与 `acquire()` 的关键差别是**绝不创建**：`withHandle` 是「在活实例上原地读/写」，
+   * 顺手建一个实例会让调用方看不见 SDK 对象被创建。已过期（`isBlocked()`）的实例同样返回
+   * `null`——它马上就要被释放，写进去的操作会随实例一起丢掉。
+   */
+  peek(): { readonly client: BMapClient; readonly handle: THandle } | null;
   /** 释放通道持有的全部实例（scope 卸载 / `dispose`）。 */
   releaseAll(): void;
   /**
@@ -96,6 +104,9 @@ export function createSharedInstanceChannel<THandle>(): ServiceInstanceChannel<T
       const handle = create(client);
       cached = { client, handle };
       return handle;
+    },
+    peek() {
+      return cached;
     },
     releaseAll() {
       // 没有释放入口：清掉引用，别让它在 scope 卸载后仍然可达。
@@ -218,6 +229,11 @@ export function createExclusiveInstanceChannel<THandle, TArgs extends unknown[]>
       const handle = create(client);
       cached = { client, handle };
       return handle;
+    },
+    peek() {
+      // 已过期（`isBlocked()`）的实例不给：它马上会被释放，写进去的操作会随实例一起丢掉。
+      if (!cached || instanceStale) return null;
+      return cached;
     },
     releaseAll() {
       releaseCached();

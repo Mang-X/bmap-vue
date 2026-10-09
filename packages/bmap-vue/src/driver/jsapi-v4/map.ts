@@ -800,6 +800,11 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       if (state.released || state.disposing) return;
       state.handle = map;
       state.disposed = true;
+      // **外部可用性**在进入销毁的那一刻就失效（`resolveLive()` 从此对所有地图命令抛
+      // `BMAP_RESOURCE_DISPOSED`），与「清理完成、可幂等短路」（`state.released`）是两件事：
+      // 清理在飞 / 部分失败时地图已经不可用，却还没 released —— 只按 released 标记会让
+      // 上层把这张不可用的地图当成存活句柄继续复用。
+      registry.release(map);
       state.disposing = true;
 
       // 进入待销毁状态就先登记取消请求：待启动的动画在这个时刻无法取消（SDK 抛 TypeError），

@@ -78,6 +78,32 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | searchNearby  | 周边检索（`center` 是城市名字符串或 `{ lng, lat }`；`radius` 单位米，官方默认 2000、上限 100000，`center` 为字符串时官方忽略它） | `(keyword, center, radius) => Promise<…>`             |
 | searchInBounds | 范围检索（`bounds` 是 `{ southwest, { lng, lat }, northeast: { lng, lat } }`） | `(keyword, bounds) => Promise<…>`                     |
 | gotoPage      | 翻页（页码从 0 开始，官方上限是 `data[0].pageCount - 1`）。它是**对上一条结果集的延续**：上一次检索还没结算、或实例已过期（`cancel()` / 超时 / `clear()` 之后）时**直接以 `failed` 拒绝**，不会空转到超时 | `(page: number) => Promise<…>`                        |
+| setPageCapacity | 改页容量（官方 `LocalSearch#setPageCapacity`，**同步**）。官方对超范围值的处理是重置为 10，本库原样转发 | `(capacity: number) => void`                          |
+| getPageCapacity | 读页容量（官方 `#getPageCapacity`，**同步**）                            | `() => number`                                        |
+| setPageNum    | 设当前页码（官方 `#setPageNum`，**同步**）；是"设置"而不是翻页请求——翻页用 `gotoPage()` | `(pageNum: number) => void`                           |
+| getPageNum    | 读当前页码（官方 `#getPageNum`，**同步**）                               | `() => number`                                        |
+| clearSelected | 清掉当前选中项（官方 `#clearSelected`，**同步**），结果集不动            | `() => void`                                          |
+| setLocation   | 改检索区域（官方 `#setLocation`，**同步**），与构造期 `location` 同一套归一 | `(location: LocalSearchLocation) => void`             |
+| hasInstance   | 当前是否有可操作的活实例（上面六个同步方法是否可用）                     | `() => boolean`                                       |
+
+::: tip 同步 setter 会**活过实例重建**
+上面几个同步 setter 改的是**活实例**；而本库在「新检索取代在飞检索」时会**重建实例**
+（`LocalSearch` 的回包归属依赖实例身份）。因此 setter 同时记进一份**运行期覆盖**，
+重建时优先于声明式选项 —— 否则「setter 成功返回、紧随其后的 `search()` 却没应用」且毫无提示。
+
+覆盖会被**声明式选项的变化整份作废**（改了 `location` / `pageCapacity` / `pageNum` 的 ref
+之后，以 ref 为准）。没有活实例时这些方法抛 `BMAP_RESOURCE_DISPOSED`：先 `search()` 一次，
+或用 `hasInstance()` 先问再做。
+
+**`setLocation(mapHandle)` 有额外契约**：地图句柄的存活性由 Driver 回答（`isMapHandleLive`），
+因此
+
+- 句柄已失效（地图已进入销毁 / 不属于当前 Client）⇒ 当场抛 `BMAP_RESOURCE_DISPOSED`；
+- 当前 Driver 未实现 `isMapHandleLive`（自定义 Driver 工厂）⇒ 当场抛
+  `BMAP_CAPABILITY_UNSUPPORTED`，请改用城市名 / 坐标。
+
+两种都是**当场显式拒绝**，不会「先接受、到下一次重建时才静默丢弃」。
+:::
 | clear         | 清空结果：清掉地图上的标注 / 结果面板与本地状态（实现上是释放当前实例，下一次 `search()` 用新实例） | `() => void`                                          |
 | cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）；取消后该实例不再复用 | `() => void`                                          |
 | reset         | 取消 + 清空 `data` / `error` / `status`                                     | `() => void`                                          |
