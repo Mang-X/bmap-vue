@@ -505,6 +505,18 @@ export class FakeV4LocalResult {
  * 与真实 SDK 的差异（**测试辅助**，非官方语义）都写在字段注释里：`respond` / `status` 用来
  * 摆出「不回包 / 服务失败」两种分支。
  */
+/**
+ * 官方 `LocalSearch` 的页容量规则：取值 **1–100 的整数**，越界或非整数一律重置为默认值 10。
+ *
+ * 构造期与 `setPageCapacity` **共用同一份判据** —— 两处各写一份会出现「同一输入两套规则」
+ * （构造期收 1.5、setter 把 1.5 归到 10 这类矛盾）。
+ */
+function normalizePageCapacity(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 100
+    ? value
+    : 10
+}
+
 export class FakeV4LocalSearch {
   readonly callLog: string[] = []
   readonly queue: FakeV4CallbackQueue
@@ -553,10 +565,10 @@ export class FakeV4LocalSearch {
     if (typeof options.pageNum === 'number' && Number.isInteger(options.pageNum) && options.pageNum >= 0) {
       this.currentPageNum = options.pageNum
     }
-    // 构造期 `pageCapacity` 与 setter 同一规则（官方：超出 1-100 重置为 10）。
+    // 构造期 `pageCapacity` 与 setter **共用同一份判据**（官方：越界/非整数重置为 10）。
     // 不归一化的话，重建时传入越界值会让 getPageCapacity() 与重建前矛盾。
-    if (typeof options.pageCapacity === 'number' && !(options.pageCapacity >= 1 && options.pageCapacity <= 100)) {
-      this.options.pageCapacity = 10
+    if (typeof options.pageCapacity === 'number') {
+      this.options.pageCapacity = normalizePageCapacity(options.pageCapacity)
     }
     this.callLog.push('construct:' + JSON.stringify(options))
     // 官方 `LocalSearch` **没有** `dispose()`，因此实例本身不进泄漏门禁（随 GC 回收），只进活动
@@ -654,8 +666,7 @@ export class FakeV4LocalSearch {
     this.callLog.push('setPageCapacity:' + capacity)
     // 官方文档：「设置每页容量，超出范围时重置为默认值 10」（取值范围 1 - 100）。
     // 假 SDK 必须照样夹取，否则公共 API 会**只在这个宽松的假实现里**验证通过。
-    this.options.pageCapacity =
-      Number.isInteger(capacity) && capacity >= 1 && capacity <= 100 ? capacity : 10
+    this.options.pageCapacity = normalizePageCapacity(capacity)
   }
 
   getPageCapacity(): number {
@@ -721,6 +732,10 @@ export class FakeV4LocalSearch {
       bounds: index === 0 ? this.lastBounds ?? undefined : undefined,
       moreResultsUrl: 'https://map.baidu.com/search/' + keyword,
       suggestions: [keyword + ' 的结果建议'],
+      // 新结果集从**当前页码**开始：官方把 `pageNum`（构造期）与 `setPageNum` 当作「起始/当前
+      // 页码」，结果集若不带上它，`data[0].pageIndex` 与 `getPageNum()` 会互相矛盾
+      // （`{ pageNum: 1 }` → search 后 getter 1、结果却是第 0 页）。
+      pageIndex: this.currentPageNum,
     })
   }
 

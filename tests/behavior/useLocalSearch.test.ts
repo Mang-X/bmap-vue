@@ -982,3 +982,64 @@ describe("useLocalSearch：运行期覆盖的重建语义（第二轮评审 P1/P
   });
 
 });
+
+describe("useLocalSearch：假 SDK 的页码 / 容量一致性（第三轮评审 P2/P3）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("构造期 pageNum 让**结果集**也从该页开始（getter 与 data[0].pageIndex 不矛盾）", async () => {
+    let outcome: { page: number; index: number | undefined } | null = null;
+    const wrapper = mountInMapWithOptions(
+      { location: "北京市", pageCapacity: 1, pageNum: 1 },
+      async (hook) => {
+        await hook.search("天安门");
+        outcome = { page: hook.getPageNum(), index: hook.data.value?.[0]?.pageIndex };
+      },
+    );
+    await flushPromises();
+    await nextTick();
+
+    expect(outcome!.page).toBe(1);
+    expect(outcome!.index).toBe(1); // 原实现恒为 0
+    wrapper.unmount();
+  });
+
+  it("gotoPage 后再 search：新结果集与该实例的页码仍然一致", async () => {
+    let outcome: { page: number; index: number | undefined } | null = null;
+    const wrapper = mountInMapWithOptions({ location: "北京市", pageCapacity: 1 }, async (hook) => {
+      await hook.search("A");
+      await hook.gotoPage(1);
+      await hook.search("B");
+      outcome = { page: hook.getPageNum(), index: hook.data.value?.[0]?.pageIndex };
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(outcome!.page).toBe(outcome!.index);
+    wrapper.unmount();
+  });
+
+  it("构造期与 setter 的容量规则一致：非整数一律归一为 10", async () => {
+    let fromCtor: number | null = null;
+    let fromSetter: number | null = null;
+    const wrapper = mountInMapWithOptions(
+      { location: "北京市", pageCapacity: 1.5 },
+      async (hook) => {
+        await hook.search("天安门"); // 先要有活实例
+        fromCtor = hook.getPageCapacity();
+        hook.setPageCapacity(1.5);
+        fromSetter = hook.getPageCapacity();
+      },
+    );
+    await flushPromises();
+    await nextTick();
+
+    // 同一输入不得出现两套规则（构造期收 1.5、setter 归 10）
+    expect(fromCtor).toBe(10);
+    expect(fromSetter).toBe(10);
+    wrapper.unmount();
+  });
+});

@@ -36,38 +36,53 @@ describe("isMapHandleLocation", () => {
 
 describe("usableLocationOverride", () => {
   it("没有 location 覆盖 ⇒ undefined（调用方回退声明式）", () => {
-    expect(usableLocationOverride({}, client("A"))).toBeUndefined();
+    expect(usableLocationOverride({}, client("A"), null)).toBeUndefined();
   });
 
-  it("城市名（非句柄）与 Client 无关：换 Client 仍然可用", () => {
+  it("城市名（非句柄）与 Client / 地图都无关：换 Client 仍然可用", () => {
     const overrides: LocalSearchRuntimeOverrides<string, unknown> = { location: "上海市" };
-    expect(usableLocationOverride(overrides, client("A"))).toBe("上海市");
-    expect(usableLocationOverride(overrides, client("B"))).toBe("上海市");
+    expect(usableLocationOverride(overrides, client("A"), null)).toBe("上海市");
+    expect(usableLocationOverride(overrides, client("B"), mapHandle())).toBe("上海市");
   });
 
-  it("**MapHandle 属于当前 Client** ⇒ 可用", () => {
+  it("**MapHandle 属于当前 Client 且仍是当前地图** ⇒ 可用", () => {
     const a = client("A");
     const handle = mapHandle();
     const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
       location: handle,
       locationClient: a,
     };
-    expect(usableLocationOverride(overrides, a)).toBe(handle);
+    expect(usableLocationOverride(overrides, a, handle)).toBe(handle);
   });
 
   it("**MapHandle 属于别的 Client** ⇒ 丢弃（否则检索会永远 failed）", () => {
     const a = client("A");
     const b = client("B");
+    const handle = mapHandle();
     const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
-      location: mapHandle(),
+      location: handle,
       locationClient: a,
     };
-    expect(usableLocationOverride(overrides, b)).toBeUndefined();
+    expect(usableLocationOverride(overrides, b, mapHandle())).toBeUndefined();
+  });
+
+  it("**同 Client 但地图已换/已卸载** ⇒ 丢弃（registry.resolve 不查 raw 是否销毁）", () => {
+    const a = client("A");
+    const oldMap = mapHandle();
+    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
+      location: oldMap,
+      locationClient: a,
+    };
+    // 地图卸载后换新：Client 没变，但旧句柄指向**已销毁**的 raw Map
+    expect(usableLocationOverride(overrides, a, mapHandle())).toBeUndefined();
+    // 地图整个卸载（ctx.map === null）
+    expect(usableLocationOverride(overrides, a, null)).toBeUndefined();
   });
 
   it("句柄没记归属（异常态）⇒ 一律丢弃，不猜", () => {
-    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = { location: mapHandle() };
-    expect(usableLocationOverride(overrides, client("A"))).toBeUndefined();
+    const handle = mapHandle();
+    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = { location: handle };
+    expect(usableLocationOverride(overrides, client("A"), handle)).toBeUndefined();
   });
 });
 

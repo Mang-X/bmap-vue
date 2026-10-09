@@ -184,10 +184,17 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
         // 运行期覆盖优先（见 `runtimeOverrides` 的说明）：重建后设置仍然生效。
         // 但 `MapHandle` 覆盖只在**同一个 Client** 上有效：跨 Client 的句柄会被 Driver 拒绝，
         // 那是「检索永远失败且无法自救」，不如回退到当前声明式 location。
-        const location =
-          usableLocationOverride(runtimeOverrides, context.client) ??
-          toValue(current.location) ??
-          context.map;
+        const overrideLocation = usableLocationOverride(
+          runtimeOverrides,
+          context.client,
+          context.map,
+        );
+        if (runtimeOverrides.location !== undefined && overrideLocation === undefined) {
+          // 失效即清理：不继续持有旧 MapHandle + Client 的强引用。
+          delete runtimeOverrides.location;
+          delete runtimeOverrides.locationClient;
+        }
+        const location = overrideLocation ?? toValue(current.location) ?? context.map;
         if (location === undefined || location === null) {
           throw new BMapError(
             "BMAP_INVALID_ARGUMENT",

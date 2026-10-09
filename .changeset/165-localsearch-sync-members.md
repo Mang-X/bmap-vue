@@ -43,3 +43,15 @@
   容量归一到 10、无效页码归一到 0），重建前后 getter 一致。Fake 构造期也按同一规则归一化。
 - **P2 · Fake `gotoPage` 未同步页码**：成功翻页后 `getPageNum()` 与 `data[0].pageIndex` 一致；
   失败翻页不更新。
+
+### 第三轮评审修正（#212）
+
+- **P2 · 同 Client 但地图已销毁**：`registry.resolve()` 只验证句柄归属、**不验证 raw Map 是否
+  已销毁**，所以「地图卸载 → 换新地图」时旧 `MapHandle` 覆盖仍会被判为可用，把已销毁的地图对象
+  交给新 LocalSearch。现在句柄型覆盖还必须等于**当前上下文的地图句柄**；判定不可用时同步清理，
+  不再持有旧句柄 + Client 强引用。
+- **P2 · Fake 新结果集页码与 getter 不一致**：`dispatchResult` 现在把新结果集的 `pageIndex` 设为
+  当前页码，`{ pageNum: 1 }` 与「`gotoPage` 后再 `search`」两种路径下 getter 与
+  `data[0].pageIndex` 都不再矛盾。
+- **P3 · Fake 构造期与 setter 容量判据不同**：抽出 `normalizePageCapacity` 供两处共用，
+  非整数（如 1.5）一律归一为 10。

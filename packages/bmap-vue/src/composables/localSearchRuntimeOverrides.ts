@@ -32,23 +32,31 @@ export function isMapHandleLocation(value: unknown): boolean {
 }
 
 /**
- * 取**当前 Client 可用**的 `location` 覆盖；不可用时返回 `undefined`（调用方回退到声明式选项）。
+ * 取**当前上下文可用**的 `location` 覆盖；不可用时返回 `undefined`（调用方回退到声明式选项）。
  *
- * 为什么需要归属校验：`MapHandle` 绑定创建它的那个 Client，跨 Client 使用会被 Driver 拒绝
- * （`BMAP_HANDLE_FOREIGN`）。而 Client 切换**不触发**构造快照的 watch（声明式选项没变），
- * 若不校验，旧 Client 的句柄会被永久带进新 Client —— 检索从此**一直失败**，且此时没有活实例，
- * 调用方连 `setLocation()` 都修不了。
+ * `MapHandle` 覆盖要过**两道**判据，缺一不可：
  *
- * 非句柄的 `location`（城市名 / `Point`）与 Client 无关，照常可用。
+ * 1. **Client 归属**：句柄绑定创建它的 Client，跨 Client 使用会被 Driver 拒绝
+ *    （`BMAP_HANDLE_FOREIGN`）。而 Client 切换**不触发**构造快照的 watch（声明式选项没变），
+ *    不校验就会把旧 Client 的句柄永久带进新 Client。
+ * 2. **仍是当前地图**：`registry.resolve()` 只验证**句柄归属**，**不验证 raw Map 是否已销毁**。
+ *    同一 Client 下地图卸载后换新（`mapA` → `destroy(mapA)` → `mapB`）时，旧句柄仍能解析出
+ *    一个**已销毁的地图对象**，把它交给新 LocalSearch 会绑定到无效地图。因此句柄型覆盖还必须
+ *    等于**当前上下文的地图句柄**。
+ *
+ * 两条合起来把「旧 Client」与「已销毁地图」两个生命周期维度都堵上；非句柄的 `location`
+ * （城市名 / `Point`）与两者都无关，照常可用。
  */
-export function usableLocationOverride<TLocation, TClient>(
+export function usableLocationOverride<TLocation, TClient, TMapHandle>(
   overrides: LocalSearchRuntimeOverrides<TLocation, TClient>,
   currentClient: TClient,
+  currentMap: TMapHandle | null,
 ): TLocation | undefined {
   const { location } = overrides;
   if (location === undefined) return undefined;
   if (!isMapHandleLocation(location)) return location;
-  return overrides.locationClient === currentClient ? location : undefined;
+  if (overrides.locationClient !== currentClient) return undefined;
+  return (location as unknown) === (currentMap as unknown) ? location : undefined;
 }
 
 /**
