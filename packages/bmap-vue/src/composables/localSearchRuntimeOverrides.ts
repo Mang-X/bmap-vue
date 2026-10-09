@@ -34,29 +34,25 @@ export function isMapHandleLocation(value: unknown): boolean {
 /**
  * 取**当前上下文可用**的 `location` 覆盖；不可用时返回 `undefined`（调用方回退到声明式选项）。
  *
- * `MapHandle` 覆盖要过**两道**判据，缺一不可：
+ * `MapHandle` 覆盖的判据是**真实存活**（`isLive`），而不是「等不等于当前注入的地图句柄」：
  *
- * 1. **Client 归属**：句柄绑定创建它的 Client，跨 Client 使用会被 Driver 拒绝
- *    （`BMAP_HANDLE_FOREIGN`）。而 Client 切换**不触发**构造快照的 watch（声明式选项没变），
- *    不校验就会把旧 Client 的句柄永久带进新 Client。
- * 2. **仍是当前地图**：`registry.resolve()` 只验证**句柄归属**，**不验证 raw Map 是否已销毁**。
- *    同一 Client 下地图卸载后换新（`mapA` → `destroy(mapA)` → `mapB`）时，旧句柄仍能解析出
- *    一个**已销毁的地图对象**，把它交给新 LocalSearch 会绑定到无效地图。因此句柄型覆盖还必须
- *    等于**当前上下文的地图句柄**。
+ * - `isLive` 由 Driver 回答「这个句柄属于本 Client **且** raw 尚未销毁」，因此同时覆盖
+ *   **跨 Client**（另一个 registry 不认它）与**已销毁**（地图卸载/换新后 `destroy()` 标记过）
+ *   两个生命周期维度；
+ * - 用「等于 `ctx.map`」代替存活判据是**错的**：`<BMapProvider>` 子树里 `ctx.map` 恒为 `null`，
+ *   而兄弟 `<Map>`（同一 Client）交出来的句柄**仍然合法且存活** —— 等值守卫会把这种设置
+ *   静默丢掉，破坏「同步 setter 活过实例重建」的语义。
  *
- * 两条合起来把「旧 Client」与「已销毁地图」两个生命周期维度都堵上；非句柄的 `location`
- * （城市名 / `Point`）与两者都无关，照常可用。
+ * 非句柄的 `location`（城市名 / `Point`）与生命周期无关，照常可用。
  */
-export function usableLocationOverride<TLocation, TClient, TMapHandle>(
+export function usableLocationOverride<TLocation, TClient>(
   overrides: LocalSearchRuntimeOverrides<TLocation, TClient>,
-  currentClient: TClient,
-  currentMap: TMapHandle | null,
+  isLive: (handle: unknown) => boolean,
 ): TLocation | undefined {
   const { location } = overrides;
   if (location === undefined) return undefined;
   if (!isMapHandleLocation(location)) return location;
-  if (overrides.locationClient !== currentClient) return undefined;
-  return (location as unknown) === (currentMap as unknown) ? location : undefined;
+  return isLive(location) ? location : undefined;
 }
 
 /**

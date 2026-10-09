@@ -1043,3 +1043,113 @@ describe("useLocalSearch：假 SDK 的页码 / 容量一致性（第三轮评审
     wrapper.unmount();
   });
 });
+
+describe("useLocalSearch：BMapProvider 下的外部同 Client 句柄（第四轮评审 P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("setLocation(兄弟 <Map> 的句柄) 活过 rebuild：不因 ctx.map 为 null 被丢弃", async () => {
+    let hook: Hook | null = null;
+    let mapRef: { value: unknown } | null = null;
+    const Searcher = defineComponent({
+      setup() {
+        // 只挂 <BMapProvider>：本 composable 的 ctx.map 恒为 null（client-only 服务）
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const Capture = defineComponent({
+      setup() {
+        mapRef = useMap().map as unknown as { value: unknown };
+        return () => h("div", "capture");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Map, Searcher, Capture },
+        setup: () =>
+          () =>
+            h(BMapProvider, { provider: provider() }, () => [
+              // 兄弟 <Map>：**不传 provider** 才会继承父 Provider 的 Client
+              // （传了 provider 它会自建一个 Client，句柄就成了跨 Client 的）
+              h(Map, () => [h(Capture)]),
+              h(Searcher),
+            ]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    await flushPromises();
+    expect(mapRef!.value, "兄弟 <Map> 应已就绪并交出句柄").toBeTruthy();
+    h1.setLocation(mapRef!.value as never);
+
+    // 触发重建：clear() 丢弃实例，下一次 search() 重新构造
+    h1.clear();
+    await h1.search("故宫");
+    await flushPromises();
+
+    const newest = fake.createdLocalSearches.at(-1)!;
+    // Driver 的 `normalizeSearchLocation` 把 MapHandle 解析成 raw Map 再交给 SDK，
+    // 因此这里断言的是**那张 raw 地图**（而不是句柄对象，也不是声明式的「北京市」）。
+    expect(newest.location).not.toBe("北京市");
+    expect(newest.location).toBe(fake.createdMaps[0]);
+    wrapper.unmount();
+  });
+
+
+  it("同 Client 但地图已销毁 ⇒ 覆盖被丢弃并回退声明式（第三轮 P2 的端到端）", async () => {
+    let hook: Hook | null = null;
+    let mapRef: { value: unknown } | null = null;
+    const showMap = ref(true);
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const Capture = defineComponent({
+      setup() {
+        mapRef = useMap().map as unknown as { value: unknown };
+        return () => h("div", "capture");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Map, Searcher, Capture },
+        setup: () =>
+          () =>
+            h(BMapProvider, { provider: provider() }, () => [
+              showMap.value ? h(Map, () => [h(Capture)]) : null,
+              h(Searcher),
+            ]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    await flushPromises();
+    const liveHandle = mapRef!.value;
+    expect(liveHandle).toBeTruthy();
+    h1.setLocation(liveHandle as never);
+
+    // 卸载地图：`MapRuntime.dispose()` → `driver.map.destroy()` → registry 标记句柄已销毁
+    showMap.value = false;
+    await nextTick();
+    await flushPromises();
+
+    h1.clear();
+    await h1.search("故宫");
+    await flushPromises();
+
+    const newest = fake.createdLocalSearches.at(-1)!;
+    // 已销毁的句柄不得被重放：必须回退到声明式 location（否则会把死地图交给新实例）
+    expect(newest.location).toBe("北京市");
+    wrapper.unmount();
+  });
+});

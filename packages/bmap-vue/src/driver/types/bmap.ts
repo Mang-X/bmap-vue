@@ -41,6 +41,15 @@ export interface BMapDriver {
   readonly services: ServiceDriver;
   readonly panorama: PanoramaDriver;
   readonly events: EventDriver;
+
+  /**
+   * 句柄**现在**还能不能用：属于本 Driver 的 Client **且**其 raw 对象尚未被销毁。
+   *
+   * 与「跨 Client 混用被拒绝」互补：`owns` 只管归属，回答不了「这张地图是不是已经卸载/销毁」。
+   * 持有句柄的一方（例如把某个 `MapHandle` 存下来、稍后重建服务实例时准备复用）需要后者，
+   * 否则会把一个**已销毁**的对象交给新实例。销毁是不可逆的：`destroy()` 完成后本入口恒 `false`。
+   */
+  isHandleLive(handle: unknown): boolean;
 }
 
 /**

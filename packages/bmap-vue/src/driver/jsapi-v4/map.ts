@@ -534,7 +534,12 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    */
   const completeIfDone = (raw: object, state: Teardown): void => {
     if (state.failures.length > 0) return;
-    if (state.tornDown && recordsOf(raw).length === 0) state.released = true;
+    if (state.tornDown && recordsOf(raw).length === 0) {
+      state.released = true;
+      // 销毁完成：让 registry 知道这个句柄已不可用（`isLive()` 用它挡住「把已销毁的地图
+      // 交给新服务」）。只在真正完成时标记 —— 清理在飞 / 有失败时不标记，重试后仍可判定。
+      if (state.handle) registry.release(state.handle);
+    }
   };
 
   /**

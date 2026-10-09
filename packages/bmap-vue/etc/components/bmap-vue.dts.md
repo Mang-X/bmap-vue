@@ -1636,6 +1636,7 @@ declare interface BMapDriver {
     readonly services: ServiceDriver;
     readonly panorama: PanoramaDriver;
     readonly events: EventDriver;
+    isHandleLive(handle: unknown): boolean;
 }
 declare type BMapDriverFactory = (input: BMapDriverInput) => BMapDriver;
 declare interface BMapDriverInput {

@@ -35,54 +35,38 @@ describe("isMapHandleLocation", () => {
 });
 
 describe("usableLocationOverride", () => {
+  const live = () => true;
+  const dead = () => false;
+
   it("没有 location 覆盖 ⇒ undefined（调用方回退声明式）", () => {
-    expect(usableLocationOverride({}, client("A"), null)).toBeUndefined();
+    expect(usableLocationOverride({}, live)).toBeUndefined();
   });
 
-  it("城市名（非句柄）与 Client / 地图都无关：换 Client 仍然可用", () => {
+  it("城市名（非句柄）与生命周期无关：永远可用", () => {
     const overrides: LocalSearchRuntimeOverrides<string, unknown> = { location: "上海市" };
-    expect(usableLocationOverride(overrides, client("A"), null)).toBe("上海市");
-    expect(usableLocationOverride(overrides, client("B"), mapHandle())).toBe("上海市");
+    expect(usableLocationOverride(overrides, dead)).toBe("上海市");
   });
 
-  it("**MapHandle 属于当前 Client 且仍是当前地图** ⇒ 可用", () => {
-    const a = client("A");
-    const handle = mapHandle();
-    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
-      location: handle,
-      locationClient: a,
-    };
-    expect(usableLocationOverride(overrides, a, handle)).toBe(handle);
-  });
-
-  it("**MapHandle 属于别的 Client** ⇒ 丢弃（否则检索会永远 failed）", () => {
-    const a = client("A");
-    const b = client("B");
-    const handle = mapHandle();
-    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
-      location: handle,
-      locationClient: a,
-    };
-    expect(usableLocationOverride(overrides, b, mapHandle())).toBeUndefined();
-  });
-
-  it("**同 Client 但地图已换/已卸载** ⇒ 丢弃（registry.resolve 不查 raw 是否销毁）", () => {
-    const a = client("A");
-    const oldMap = mapHandle();
-    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = {
-      location: oldMap,
-      locationClient: a,
-    };
-    // 地图卸载后换新：Client 没变，但旧句柄指向**已销毁**的 raw Map
-    expect(usableLocationOverride(overrides, a, mapHandle())).toBeUndefined();
-    // 地图整个卸载（ctx.map === null）
-    expect(usableLocationOverride(overrides, a, null)).toBeUndefined();
-  });
-
-  it("句柄没记归属（异常态）⇒ 一律丢弃，不猜", () => {
+  it("**MapHandle 仍存活** ⇒ 可用（外部同 Client 句柄也保留）", () => {
     const handle = mapHandle();
     const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = { location: handle };
-    expect(usableLocationOverride(overrides, client("A"), handle)).toBeUndefined();
+    expect(usableLocationOverride(overrides, live)).toBe(handle);
+  });
+
+  it("**MapHandle 已销毁 / 属于别的 Client** ⇒ 丢弃（isLive 为 false）", () => {
+    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = { location: mapHandle() };
+    // Driver 的 isLive 同时回答「是不是我的 Client」与「raw 是否已销毁」
+    expect(usableLocationOverride(overrides, dead)).toBeUndefined();
+  });
+
+  it("判据是**回调查询**而不是快照：同一次覆盖在存活状态变化后答案随之改变", () => {
+    const handle = mapHandle();
+    const overrides: LocalSearchRuntimeOverrides<unknown, unknown> = { location: handle };
+    let alive = true;
+    const isLive = () => alive;
+    expect(usableLocationOverride(overrides, isLive)).toBe(handle);
+    alive = false; // 地图被销毁
+    expect(usableLocationOverride(overrides, isLive)).toBeUndefined();
   });
 });
 

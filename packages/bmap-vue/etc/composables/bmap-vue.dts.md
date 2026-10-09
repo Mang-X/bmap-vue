@@ -44,6 +44,7 @@ export declare interface BMapDriver {
     readonly services: ServiceDriver;
     readonly panorama: PanoramaDriver;
     readonly events: EventDriver;
+    isHandleLive(handle: unknown): boolean;
 }
 export declare interface BMapDrivingRouteOptions {
     location?: MaybeRefOrGetter<BMapRouteLocation | undefined>;

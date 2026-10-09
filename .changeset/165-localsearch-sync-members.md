@@ -55,3 +55,14 @@
   `data[0].pageIndex` 都不再矛盾。
 - **P3 · Fake 构造期与 setter 容量判据不同**：抽出 `normalizePageCapacity` 供两处共用，
   非整数（如 1.5）一律归一为 10。
+
+### 第四轮评审修正（#212）
+
+- **P2 · 等值守卫会丢掉合法外部句柄**：用「等于 `ctx.map`」当存活判据是错的 ——
+  `<BMapProvider>` 子树里 `ctx.map` 恒为 `null`，而兄弟 `<Map>`（同一 Client）的句柄**合法且存活**。
+- 改为**真实存活判据**：`JsapiV4HandleRegistry` 新增 `release()` / `isLive()`，引擎在 `Map#destroy()`
+  真正完成时标记句柄已销毁；`BMapDriver` 暴露 `isHandleLive(handle)`（`owns` 只答归属，答不了
+  「是不是还活着」）。registry 是 per-Client 的，因此 `isLive` **一个判据同时覆盖**「跨 Client」与
+  「已销毁」两个维度，既保留合法外部句柄、又不会把已销毁的地图交给新实例。
+- 端到端用例两条（均经突变验证）：`<BMapProvider>` + 兄弟 `<Map>` 的外部句柄**活过重建**；
+  地图卸载销毁后覆盖**被丢弃并回退声明式**。

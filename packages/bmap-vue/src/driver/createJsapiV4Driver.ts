@@ -77,6 +77,8 @@ export function createJsapiV4Driver(input: CreateJsapiV4DriverInput): JsapiV4Dri
     services: createJsapiV4ServiceDriver({ rawSdk, geometry, capabilities, registry, events }),
     panorama: createJsapiV4PanoramaDriver({ rawSdk, geometry, capabilities, registry, events }),
     nativeLayers: createJsapiV4NativeLayerDriver({ rawSdk, capabilities, registry }),
+    // 句柄存活查询：与 `owns` 互补，回答「这张地图是不是已经销毁」。
+    isHandleLive: (handle: unknown) => registry.isLive(handle),
   };
 
   return driver;
