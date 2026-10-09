@@ -2400,6 +2400,28 @@ export function createJsapiV4ServiceDriver(
       callRequired(localSearchLive(handle, "clearLocalSearchSelected"), "clearSelected");
     },
 
+    enableLocalSearchAutoViewport(handle) {
+      callRequired(localSearchLive(handle, "enableLocalSearchAutoViewport"), "enableAutoViewport");
+    },
+
+    disableLocalSearchAutoViewport(handle) {
+      callRequired(localSearchLive(handle, "disableLocalSearchAutoViewport"), "disableAutoViewport");
+    },
+
+    enableLocalSearchFirstResultSelection(handle) {
+      callRequired(
+        localSearchLive(handle, "enableLocalSearchFirstResultSelection"),
+        "enableFirstResultSelection",
+      );
+    },
+
+    disableLocalSearchFirstResultSelection(handle) {
+      callRequired(
+        localSearchLive(handle, "disableLocalSearchFirstResultSelection"),
+        "disableFirstResultSelection",
+      );
+    },
+
     setLocalSearchLocation(handle, location) {
       const resolved = normalizeSearchLocation(location, "setLocalSearchLocation");
       callRequired(localSearchLive(handle, "setLocalSearchLocation"), "setLocation", resolved);

@@ -84,7 +84,11 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 | getPageNum    | 读当前页码（官方 `#getPageNum`，**同步**）                               | `() => number`                                        |
 | clearSelected | 清掉当前选中项（官方 `#clearSelected`，**同步**），结果集不动            | `() => void`                                          |
 | setLocation   | 改检索区域（官方 `#setLocation`，**同步**），与构造期 `location` 同一套归一 | `(location: LocalSearchLocation) => void`             |
-| hasInstance   | 当前是否有可操作的活实例（上面六个同步方法是否可用）                     | `() => boolean`                                       |
+| enableAutoViewport | 开启「检索结束后自动调整视野」（官方 `#enableAutoViewport`，同步）  | `() => void`                                          |
+| disableAutoViewport | 关闭自动调整视野（官方 `#disableAutoViewport`，同步）              | `() => void`                                          |
+| enableFirstResultSelection | 开启「自动选中第一个结果」（官方 `#enableFirstResultSelection`，同步） | `() => void`                                     |
+| disableFirstResultSelection | 关闭自动选中第一个结果（官方 `#disableFirstResultSelection`，同步） | `() => void`                                    |
+| hasInstance   | 当前是否有可操作的活实例（上面各同步方法是否可用）                     | `() => boolean`                                       |
 
 ::: tip 同步 setter 会**活过实例重建**
 上面几个同步 setter 改的是**活实例**；而本库在「新检索取代在飞检索」时会**重建实例**

@@ -1174,6 +1174,18 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
   /** 清掉当前选中项（官方 `LocalSearch#clearSelected()`）。 */
   clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
 
+  /** 开启「检索结束后自动调整视野」（官方 `LocalSearch#enableAutoViewport()`）。 */
+  enableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 关闭自动调整视野（官方 `LocalSearch#disableAutoViewport()`）。 */
+  disableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 开启「自动选中第一个结果」（官方 `LocalSearch#enableFirstResultSelection()`）。 */
+  enableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 关闭自动选中第一个结果（官方 `LocalSearch#disableFirstResultSelection()`）。 */
+  disableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
+
   /**
    * 设检索区域（官方 `LocalSearch#setLocation(location)`）。
    *

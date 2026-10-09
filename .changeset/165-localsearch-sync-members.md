@@ -100,3 +100,13 @@
 - **P2 · `gotoPage` 绕过检查**：翻页属于**旧结果集**，不能重建后继续；现在同一复核对它**显式失败**
   （`cachedHandleInvalidMessage`），既不向绑定死地图的旧实例发请求，也不新建实例。
 - 两条都用**同步销毁**制造确定时序并做突变验证：去掉内核复核后 TOCTOU 与 `gotoPage` 两条都转红。
+
+### 追加：官方四个布尔开关（#165 MISSING 表）
+
+- `enableAutoViewport()` / `disableAutoViewport()` / `enableFirstResultSelection()` /
+  `disableFirstResultSelection()`：官方四个**同步**布尔开关，此前只能通过构造期
+  `renderOptions.autoViewport` / `renderOptions.selectFirstResult` 给。
+- 与分页设置同一套语义：作用在活实例上，并记进**运行期覆盖**（因此活过「取代在飞检索」的实例
+  重建），声明式选项变化时整份作废。
+- 补 4 条用例（开启活过重建 / 关闭压过声明式 true / 无实例时不创建 / 声明式变化作废覆盖），
+  突变实测：去掉覆盖合并即两条转红。

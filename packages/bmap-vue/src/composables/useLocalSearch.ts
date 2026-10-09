@@ -207,17 +207,19 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
         const pageCapacity = runtimeOverrides.pageCapacity ?? toValue(current.pageCapacity);
         const pageNum = runtimeOverrides.pageNum ?? toValue(current.pageNum);
         const settings: LocalSearchOptions = {};
-        if (render) {
-          const map = toValue(render.map);
+        // 运行期开关覆盖优先（官方 enable|disableAutoViewport / FirstResultSelection），
+        // 其次是声明式 `renderOptions` —— 因此这两个开关与分页设置一样活过重建。
+        const selectFirstResult = runtimeOverrides.selectFirstResult ?? render?.selectFirstResult;
+        const autoViewport = runtimeOverrides.autoViewport ?? render?.autoViewport;
+        if (render || selectFirstResult !== undefined || autoViewport !== undefined) {
+          const map = toValue(render?.map);
           settings.renderOptions = {
             // 不传 `map` 就是纯 headless；传了必须是 MapHandle（Driver 会再校验一次）
             ...(map ? { map } : {}),
-            ...(render.panel !== undefined ? { panel: render.panel } : {}),
-            ...(render.selectFirstResult !== undefined
-              ? { selectFirstResult: render.selectFirstResult }
-              : {}),
-            ...(render.autoViewport !== undefined ? { autoViewport: render.autoViewport } : {}),
-            ...(render.viewportOptions ? { viewportOptions: render.viewportOptions } : {}),
+            ...(render?.panel !== undefined ? { panel: render.panel } : {}),
+            ...(selectFirstResult !== undefined ? { selectFirstResult } : {}),
+            ...(autoViewport !== undefined ? { autoViewport } : {}),
+            ...(render?.viewportOptions ? { viewportOptions: render.viewportOptions } : {}),
           };
         }
         if (pageCapacity !== undefined) settings.pageCapacity = pageCapacity;
@@ -394,6 +396,34 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     });
   };
 
+  /**
+   * 开启「检索结束后自动调整视野」（官方 `enableAutoViewport`，同步）。
+   *
+   * 与分页设置一样记进**运行期覆盖**：实例被取代重建时设置仍然生效。
+   */
+  const enableAutoViewport = (): void => {
+    withService((services, handle) => services.enableLocalSearchAutoViewport(handle));
+    runtimeOverrides.autoViewport = true;
+  };
+
+  /** 关闭自动调整视野（官方 `disableAutoViewport`）。 */
+  const disableAutoViewport = (): void => {
+    withService((services, handle) => services.disableLocalSearchAutoViewport(handle));
+    runtimeOverrides.autoViewport = false;
+  };
+
+  /** 开启「自动选中第一个结果」（官方 `enableFirstResultSelection`）。 */
+  const enableFirstResultSelection = (): void => {
+    withService((services, handle) => services.enableLocalSearchFirstResultSelection(handle));
+    runtimeOverrides.selectFirstResult = true;
+  };
+
+  /** 关闭「自动选中第一个结果」（官方 `disableFirstResultSelection`）。 */
+  const disableFirstResultSelection = (): void => {
+    withService((services, handle) => services.disableLocalSearchFirstResultSelection(handle));
+    runtimeOverrides.selectFirstResult = false;
+  };
+
   /** 读当前页码（官方 `getPageNum`）。 */
   const getPageNum = (): number =>
     withService((services, handle) => services.getLocalSearchPageNum(handle));
@@ -444,6 +474,10 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     getPageNum,
     clearSelected,
     setLocation,
+    enableAutoViewport,
+    disableAutoViewport,
+    enableFirstResultSelection,
+    disableFirstResultSelection,
     hasInstance,
     clear,
     cancel: task.cancel,

@@ -837,8 +837,12 @@ export type JsapiV4ScriptMode = "load" | "jsonp";
 export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDriver {
     clearLocalSearch(handle: ServiceHandle<"service:local-search">): void;
     clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
+    disableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
+    disableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
     disposeAutocomplete(handle: ServiceHandle<"service:autocomplete">): void;
     disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
+    enableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
+    enableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
     getLocalSearchPageCapacity(handle: ServiceHandle<"service:local-search">): number;
     getLocalSearchPageNum(handle: ServiceHandle<"service:local-search">): number;
     setLocalSearchLocation(handle: ServiceHandle<"service:local-search">, location: unknown): void;
