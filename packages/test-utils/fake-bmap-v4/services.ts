@@ -688,6 +688,30 @@ export class FakeV4LocalSearch {
     this.callLog.push('clearSelected')
   }
 
+  /** 官方 `LocalSearch#enableAutoViewport()`。 */
+  enableAutoViewport(): void {
+    this.callLog.push('enableAutoViewport')
+    this.autoViewport = true
+  }
+
+  /** 官方 `LocalSearch#disableAutoViewport()`。 */
+  disableAutoViewport(): void {
+    this.callLog.push('disableAutoViewport')
+    this.autoViewport = false
+  }
+
+  /** 官方 `LocalSearch#enableFirstResultSelection()`。 */
+  enableFirstResultSelection(): void {
+    this.callLog.push('enableFirstResultSelection')
+    this.firstResultSelection = true
+  }
+
+  /** 官方 `LocalSearch#disableFirstResultSelection()`。 */
+  disableFirstResultSelection(): void {
+    this.callLog.push('disableFirstResultSelection')
+    this.firstResultSelection = false
+  }
+
   /** 官方 `LocalSearch#setLocation(location)`：改检索区域（不重建实例）。 */
   setLocation(location: unknown): void {
     this.callLog.push('setLocation:' + String(location))
@@ -696,6 +720,10 @@ export class FakeV4LocalSearch {
 
   /** 测试辅助：最近一次 `setLocation` 收到的原始值 */
   currentLocation: unknown = undefined
+  /** 测试辅助：自动调整视野开关的当前值（`enable|disableAutoViewport` 共享状态） */
+  autoViewport = false
+  /** 测试辅助：自动选中首个结果开关的当前值 */
+  firstResultSelection = false
   /**
    * 测试辅助：当前页码（`setPageNum` / `getPageNum` 共享状态，与官方同步语义一致）。
    *

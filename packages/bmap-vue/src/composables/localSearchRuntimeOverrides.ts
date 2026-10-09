@@ -18,6 +18,10 @@ export interface LocalSearchRuntimeOverrides<TLocation, TClient> {
   location?: TLocation;
   pageCapacity?: number;
   pageNum?: number;
+  /** 「检索结束后自动调整视野」（官方 `enable|disableAutoViewport`）。 */
+  autoViewport?: boolean;
+  /** 「自动选中第一个结果」（官方 `enable|disableFirstResultSelection`）。 */
+  selectFirstResult?: boolean;
 }
 
 /** 是不是本库的 `MapHandle`（只看句柄品牌，不猜对象形状）。 */

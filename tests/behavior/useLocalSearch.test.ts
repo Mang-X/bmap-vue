@@ -1397,3 +1397,111 @@ describe("useLocalSearch：检查与调用之间的 TOCTOU / 翻页入口（第�
     wrapper.unmount();
   });
 });
+
+describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("调的是官方同步入口，且开关活过重建", async () => {
+    const built: Array<Record<string, unknown>> = [];
+    const wrapper = mountInMap(async (hook) => {
+      await hook.search("预热");
+      const raw = fake.createdLocalSearches[0]!;
+      raw.queue.auto = false;
+
+      const first = hook.search("A"); // 挂着不结算：下一次检索会走 supersede("recreate") 重建
+      await nextTick();
+      hook.enableAutoViewport();
+      hook.enableFirstResultSelection();
+      expect(raw.callLog).toContain("enableAutoViewport");
+      expect(raw.callLog).toContain("enableFirstResultSelection");
+
+      const second = hook.search("B");
+      await nextTick();
+      built.push((fake.createdLocalSearches.at(-1)!.options.renderOptions ?? {}) as Record<string, unknown>);
+      raw.queue.flush();
+      await first;
+      await second;
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(built[0]?.autoViewport).toBe(true);
+    expect(built[0]?.selectFirstResult).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("关闭同样生效并活过重建", async () => {
+    const built: Array<Record<string, unknown>> = [];
+    const wrapper = mountInMapWithOptions(
+      { location: "北京市", renderOptions: { autoViewport: true, selectFirstResult: true } },
+      async (hook) => {
+        await hook.search("预热");
+        const raw = fake.createdLocalSearches[0]!;
+        raw.queue.auto = false;
+
+        const first = hook.search("A"); // 挂着不结算，逼出重建
+        await nextTick();
+        hook.disableAutoViewport();
+        hook.disableFirstResultSelection();
+        expect(raw.callLog).toContain("disableAutoViewport");
+        expect(raw.callLog).toContain("disableFirstResultSelection");
+
+        const second = hook.search("B");
+        await nextTick();
+        built.push((fake.createdLocalSearches.at(-1)!.options.renderOptions ?? {}) as Record<string, unknown>);
+        raw.queue.flush();
+        await first;
+        await second;
+      },
+    );
+    await flushPromises();
+    await nextTick();
+
+    // 运行期关闭必须压过声明式的 true
+    expect(built[0]?.autoViewport).toBe(false);
+    expect(built[0]?.selectFirstResult).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("没有活实例时抛错（不为设开关而创建 SDK 实例）", () => {
+    mountInMap((hook) => {
+      expect(() => hook.enableAutoViewport()).toThrow(/还没有可用的服务实例/);
+    });
+    expect(fake.createdLocalSearches).toHaveLength(0);
+  });
+
+  it("声明式选项变化会作废开关覆盖", async () => {
+    const renderRef = ref<{ autoViewport?: boolean }>({ autoViewport: false });
+    const el = host();
+    let hook: Hook | null = null;
+    const Child = defineComponent({
+      setup() {
+        hook = useLocalSearch(() => ({ location: "北京市", renderOptions: renderRef.value }));
+        return () => h("div", "searcher");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { Map, Child },
+        setup: () => () => h(Map, { provider: provider() }, () => [h(Child)]),
+      }),
+      { attachTo: el },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    h1.enableAutoViewport(); // 覆盖 true
+    renderRef.value = { autoViewport: false }; // 声明式变化 ⇒ 覆盖作废
+    await nextTick();
+    await h1.search("B");
+    await flushPromises();
+
+    const newest = (fake.createdLocalSearches.at(-1)!.options.renderOptions ?? {}) as Record<string, unknown>;
+    expect(newest.autoViewport).toBe(false);
+    wrapper.unmount();
+  });
+});
