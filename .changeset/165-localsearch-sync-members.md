@@ -81,3 +81,12 @@
 - `useLocalSearch#setLocation(MapHandle)` 现在**当场**校验：Driver 未实现 `isMapHandleLive`（无法
   验证）或句柄已失效时**显式拒绝**（`BMAP_CAPABILITY_UNSUPPORTED` / `BMAP_RESOURCE_DISPOSED`），
   不再「先接受、到重建时才静默丢弃」。
+
+### 第六轮评审修正（#212）
+
+- **P2 · 存活判定只在重建时执行**：`create()` 只在**重建**时被调用，而「上一次检索已结算 → 再
+  `search`」走的是 `instanceChannel.acquire()` 的**缓存复用**路径，既不会重建也不会查存活 ——
+  地图在两次检索之间被销毁时，新检索会打到 `setLocation` 已指向死地图的旧实例上。
+  现在 `search` / `searchNearby` / `searchInBounds` 在发起前复核运行期 `MapHandle` 覆盖：失效即
+  丢弃覆盖并让缓存实例过期（下一次 `acquire` 重建、退回声明式 location）。补行为用例
+  （`search A → setLocation(mapA) → destroy(mapA) → search B`，不 `clear`），突变实测转红。

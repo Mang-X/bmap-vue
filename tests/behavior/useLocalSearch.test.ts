@@ -1242,3 +1242,62 @@ describe("useLocalSearch：MapHandle 覆盖的显式契约（第五轮评审 P1/
     wrapper.unmount();
   });
 });
+
+describe("useLocalSearch：地图在两次检索之间销毁（第六轮评审 P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("已结算后不 clear 直接再 search：不得复用绑定死地图的旧实例", async () => {
+    let hook: Hook | null = null;
+    let mapRef: { value: unknown } | null = null;
+    const showMap = ref(true);
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const Capture = defineComponent({
+      setup() {
+        mapRef = useMap().map as unknown as { value: unknown };
+        return () => h("div", "capture");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Map, Searcher, Capture },
+        setup: () =>
+          () =>
+            h(BMapProvider, { provider: provider() }, () => [
+              showMap.value ? h(Map, () => [h(Capture)]) : null,
+              h(Searcher),
+            ]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("A"); // 已结算：实例留在缓存里
+    await flushPromises();
+    const instancesAfterFirst = fake.createdLocalSearches.length;
+    h1.setLocation(mapRef!.value as never);
+
+    // 地图销毁，但**不** clear() / cancel()：这是最常见的连续检索路径
+    showMap.value = false;
+    await nextTick();
+    await flushPromises();
+
+    await h1.search("B");
+    await flushPromises();
+
+    // 必须重建新实例（旧实例的 setLocation 指向已销毁的 raw map）
+    expect(fake.createdLocalSearches.length).toBeGreaterThan(instancesAfterFirst);
+    const newest = fake.createdLocalSearches.at(-1)!;
+    // 并且回退到声明式 location，而不是继续拿死地图
+    expect(newest.location).toBe("北京市");
+    wrapper.unmount();
+  });
+});

@@ -283,16 +283,47 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     },
   );
 
-  const search = (keyword: LocalSearchKeyword, option?: LocalSearchSearchOption) =>
-    task.execute({ kind: "search", keyword, ...(option ? { option } : {}) });
+  /**
+   * 发起新检索**之前**复核运行期 `MapHandle` 覆盖是否还活着。
+   *
+   * 为什么不能只在 `create()` 里查（第六轮评审 P2）：`create()` 只在**重建**时被调用，而
+   * 「上一次检索已结算 → 再 search」走的是 `instanceChannel.acquire()` 的**缓存复用**路径
+   * （`cached.client === client && !instanceStale` 直接返回旧句柄），既不会重建、也不会查存活。
+   * 于是地图在这两次检索之间被销毁时，新检索会打到一个 `setLocation` 已指向死地图的旧实例上。
+   *
+   * 这里主动把失效覆盖丢掉并让缓存实例过期（下一次 `execute` 重建并退回声明式 location）
+   * —— 与「运行期设置活过重建」互补：**死的设置不该活过重建**。
+   */
+  const dropDeadMapLocationOverride = (): void => {
+    if (!isMapHandleLocation(runtimeOverrides.location)) return;
+    const driver = ctx.client.value?.driver;
+    const isLive = driver?.isMapHandleLive;
+    const alive =
+      typeof isLive === "function" &&
+      isLive.call(driver, runtimeOverrides.location as MapHandle);
+    if (alive) return;
+    delete runtimeOverrides.location;
+    // 缓存实例的检索区域已经指向死地图：让它过期，下一次 acquire 会重建。
+    task.invalidateService();
+  };
 
-  const searchNearby = (keyword: LocalSearchKeyword, center: string | GeoPoint, radius: number) =>
-    task.execute({ kind: "nearby", keyword, center, radius });
+  const search = (keyword: LocalSearchKeyword, option?: LocalSearchSearchOption) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "search", keyword, ...(option ? { option } : {}) });
+  };
+
+  const searchNearby = (keyword: LocalSearchKeyword, center: string | GeoPoint, radius: number) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "nearby", keyword, center, radius });
+  };
 
   const searchInBounds = (
     keyword: LocalSearchKeyword,
     bounds: LocalSearchInBoundsRequest["bounds"],
-  ) => task.execute({ kind: "inBounds", keyword, bounds });
+  ) => {
+    dropDeadMapLocationOverride();
+    return task.execute({ kind: "inBounds", keyword, bounds });
+  };
 
   const gotoPage = (page: number) => task.execute({ kind: "page", page });
 
