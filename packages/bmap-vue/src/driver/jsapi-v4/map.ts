@@ -534,12 +534,7 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
    */
   const completeIfDone = (raw: object, state: Teardown): void => {
     if (state.failures.length > 0) return;
-    if (state.tornDown && recordsOf(raw).length === 0) {
-      state.released = true;
-      // 销毁完成：让 registry 知道这个句柄已不可用（`isLive()` 用它挡住「把已销毁的地图
-      // 交给新服务」）。只在真正完成时标记 —— 清理在飞 / 有失败时不标记，重试后仍可判定。
-      if (state.handle) registry.release(state.handle);
-    }
+    if (state.tornDown && recordsOf(raw).length === 0) state.released = true;
   };
 
   /**
@@ -805,6 +800,11 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       if (state.released || state.disposing) return;
       state.handle = map;
       state.disposed = true;
+      // **外部可用性**在进入销毁的那一刻就失效（`resolveLive()` 从此对所有地图命令抛
+      // `BMAP_RESOURCE_DISPOSED`），与「清理完成、可幂等短路」（`state.released`）是两件事：
+      // 清理在飞 / 部分失败时地图已经不可用，却还没 released —— 只按 released 标记会让
+      // 上层把这张不可用的地图当成存活句柄继续复用。
+      registry.release(map);
       state.disposing = true;
 
       // 进入待销毁状态就先登记取消请求：待启动的动画在这个时刻无法取消（SDK 抛 TypeError），

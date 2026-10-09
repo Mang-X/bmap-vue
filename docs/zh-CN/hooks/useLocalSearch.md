@@ -94,6 +94,15 @@ const { data, status, sdkStatus, isLoading, supported, search, gotoPage, clear, 
 覆盖会被**声明式选项的变化整份作废**（改了 `location` / `pageCapacity` / `pageNum` 的 ref
 之后，以 ref 为准）。没有活实例时这些方法抛 `BMAP_RESOURCE_DISPOSED`：先 `search()` 一次，
 或用 `hasInstance()` 先问再做。
+
+**`setLocation(mapHandle)` 有额外契约**：地图句柄的存活性由 Driver 回答（`isMapHandleLive`），
+因此
+
+- 句柄已失效（地图已进入销毁 / 不属于当前 Client）⇒ 当场抛 `BMAP_RESOURCE_DISPOSED`；
+- 当前 Driver 未实现 `isMapHandleLive`（自定义 Driver 工厂）⇒ 当场抛
+  `BMAP_CAPABILITY_UNSUPPORTED`，请改用城市名 / 坐标。
+
+两种都是**当场显式拒绝**，不会「先接受、到下一次重建时才静默丢弃」。
 :::
 | clear         | 清空结果：清掉地图上的标注 / 结果面板与本地状态（实现上是释放当前实例，下一次 `search()` 用新实例） | `() => void`                                          |
 | cancel        | **逻辑取消**在飞请求（SDK 没有取消入口，只承诺「放弃结果」）；取消后该实例不再复用 | `() => void`                                          |

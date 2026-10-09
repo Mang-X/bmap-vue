@@ -26,6 +26,7 @@ import { toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { BMapClient } from "../client/types";
 import type { MapHandle } from "../driver/types/handles";
 import {
+  isMapHandleLocation,
   usableLocationOverride,
   type LocalSearchRuntimeOverrides,
 } from "./localSearchRuntimeOverrides";
@@ -184,13 +185,15 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
         // 运行期覆盖优先（见 `runtimeOverrides` 的说明）：重建后设置仍然生效。
         // 但 `MapHandle` 覆盖只在**同一个 Client** 上有效：跨 Client 的句柄会被 Driver 拒绝，
         // 那是「检索永远失败且无法自救」，不如回退到当前声明式 location。
-        const overrideLocation = usableLocationOverride(runtimeOverrides, (handle) =>
-          context.client.driver.isHandleLive(handle),
+        const overrideLocation = usableLocationOverride(
+          runtimeOverrides,
+          // 可选成员：自定义 Driver 不实现它时不会走到这里（`setLocation(MapHandle)` 已在
+          // 调用当场拒绝），因此 `undefined` 回退成 `false` 是安全的兜底。
+          (handle) => context.client.driver.isMapHandleLive?.(handle as MapHandle) ?? false,
         );
         if (runtimeOverrides.location !== undefined && overrideLocation === undefined) {
           // 失效即清理：不继续持有旧 MapHandle + Client 的强引用。
           delete runtimeOverrides.location;
-          delete runtimeOverrides.locationClient;
         }
         const location = overrideLocation ?? toValue(current.location) ?? context.map;
         if (location === undefined || location === null) {
@@ -361,10 +364,25 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
 
   /** 改检索区域（官方 `setLocation`）；与构造期的 `location` 同一套归一。 */
   const setLocation = (location: LocalSearchLocation): void => {
+    if (isMapHandleLocation(location)) {
+      const driver = ctx.client.value?.driver;
+      const isLive = driver?.isMapHandleLive;
+      if (typeof isLive !== "function") {
+        throw new BMapError(
+          "BMAP_CAPABILITY_UNSUPPORTED",
+          "setLocation(MapHandle)：当前 Driver 不提供 isMapHandleLive，无法验证地图句柄是否仍可用。" +
+            "请改用城市名 / 坐标，或使用内置的 jsapi-v4 Driver —— 本库不会「先接受、到重建时才静默丢弃」。",
+        );
+      }
+      if (!isLive.call(driver, location as MapHandle)) {
+        throw new BMapError(
+          "BMAP_RESOURCE_DISPOSED",
+          "setLocation(MapHandle)：该地图句柄已不可用（已进入销毁，或不属于当前 Client）",
+        );
+      }
+    }
     withService((services, handle) => services.setLocalSearchLocation(handle, location));
     runtimeOverrides.location = location;
-    // 句柄型 location 绑定到设置时的 Client（见 `locationClient` 的说明）。
-    runtimeOverrides.locationClient = ctx.client.value ?? undefined;
   };
 
   return {

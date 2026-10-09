@@ -16,8 +16,6 @@ import { HANDLE_BRAND } from "../driver/types/handles";
 /** 运行期覆盖（`location` 需要额外记住它所属的 Client）。 */
 export interface LocalSearchRuntimeOverrides<TLocation, TClient> {
   location?: TLocation;
-  /** `location` 是 `MapHandle` 时，记录它**所属的 Client**（句柄不可跨 Client 使用）。 */
-  locationClient?: TClient;
   pageCapacity?: number;
   pageNum?: number;
 }

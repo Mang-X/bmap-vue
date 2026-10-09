@@ -872,7 +872,7 @@ describe("视角动画生命周期（复审 P1/P2）", () => {
   }
 
   it("[P1] 待启动路径：取消必须早于 SDK destroy，且销毁被推迟到安全窗口", async () => {
-    const { map, container, fake } = setup();
+    const { map, container, fake, registry } = setup();
     const handle = map.create(container);
     const anim = createAnimation(fake, {});
     map.startViewAnimation(handle, anim);
@@ -881,6 +881,8 @@ describe("视角动画生命周期（复审 P1/P2）", () => {
     // 待启动的动画此刻无法取消：按官方参考把「取消 + 销毁 Map」一起推迟
     expect(anim.cancelCalls).toBe(0);
     expect(fake.createdMaps[0].destroyed).toBe(false);
+    // 但**可用性**已经失效：推迟的是清理，不是「还能不能用」（第五轮评审 P1）
+    expect(registry.isLive(handle)).toBe(false);
 
     await sleep();
     await sleep();
@@ -1148,7 +1150,7 @@ describe("视角动画生命周期（#122 评审 P1：待启动旧段的「清�
 
 describe("销毁的部分失败（PR #60 评审 P2）", () => {
   it("解绑抛错不阻断 SDK 销毁；重试入口保留，全部成功后才是幂等 no-op", () => {
-    const { map, container, fake, events } = setup();
+    const { map, container, fake, events, registry } = setup();
     const handle = map.create(container);
     events.on(handle, "click", () => {});
     const raw = handle.raw as { removeEventListener: () => void };
@@ -1170,6 +1172,9 @@ describe("销毁的部分失败（PR #60 评审 P2）", () => {
     expect(() => map.getZoom(handle)).toThrowError(
       expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
     );
+    // 活跃度与命令闸门**同步**失效：清理没做完也已经是「不可用」（否则上层会把这张地图
+    // 当成存活句柄继续复用；第五轮评审 P1）
+    expect(registry.isLive(handle)).toBe(false);
 
     // 修好后重试：清理补齐；SDK 对象不会被二次销毁（tornDown），只补没做完的部分
     raw.removeEventListener = originalRemove;

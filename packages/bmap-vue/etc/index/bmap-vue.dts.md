@@ -1680,7 +1680,7 @@ export declare interface BMapDriver {
     readonly services: ServiceDriver;
     readonly panorama: PanoramaDriver;
     readonly events: EventDriver;
-    isHandleLive(handle: unknown): boolean;
+    isMapHandleLive?(handle: MapHandle): boolean;
 }
 export declare type BMapDriverFactory = (input: BMapDriverInput) => BMapDriver;
 export declare interface BMapDriverInput {

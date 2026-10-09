@@ -17,7 +17,8 @@ import Map from "../../packages/bmap-vue/src/components/map/Map.vue";
 import BMapProvider from "../../packages/bmap-vue/src/components/provider/BMapProvider.vue";
 import { useMap } from "../../packages/bmap-vue/src/composables/useMap";
 import { useLocalSearch } from "../../packages/bmap-vue/src/composables/useLocalSearch";
-import { createFakeV4Harness } from "../../packages/test-utils";
+import { createFakeV4Client, createFakeV4Harness } from "../../packages/test-utils";
+import type { BMapClient } from "../../packages/bmap-vue/src/client/types";
 
 /**
  * 每个用例一份 Fake（`harness.reset()` 只重置**诊断计数**，不清 `createdLocalSearches` 这类
@@ -1150,6 +1151,94 @@ describe("useLocalSearch：BMapProvider 下的外部同 Client 句柄（第四�
     const newest = fake.createdLocalSearches.at(-1)!;
     // 已销毁的句柄不得被重放：必须回退到声明式 location（否则会把死地图交给新实例）
     expect(newest.location).toBe("北京市");
+    wrapper.unmount();
+  });
+});
+
+describe("useLocalSearch：MapHandle 覆盖的显式契约（第五轮评审 P1/P2）", () => {
+  beforeEach(() => {
+    const created = createFakeV4Harness();
+    harness = created.harness;
+    fake = created.fake;
+  });
+
+  it("已失效的 MapHandle：setLocation 当场拒绝，而不是先接受再静默丢弃", async () => {
+    let hook: Hook | null = null;
+    let mapRef: { value: unknown } | null = null;
+    const showMap = ref(true);
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const Capture = defineComponent({
+      setup() {
+        mapRef = useMap().map as unknown as { value: unknown };
+        return () => h("div", "capture");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Map, Searcher, Capture },
+        setup: () =>
+          () =>
+            h(BMapProvider, { provider: provider() }, () => [
+              showMap.value ? h(Map, () => [h(Capture)]) : null,
+              h(Searcher),
+            ]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    await flushPromises();
+    const deadHandle = mapRef!.value;
+    expect(deadHandle).toBeTruthy();
+
+    showMap.value = false; // 地图进入销毁
+    await nextTick();
+    await flushPromises();
+
+    expect(() => h1.setLocation(deadHandle as never)).toThrowError(
+      expect.objectContaining({ code: "BMAP_RESOURCE_DISPOSED" }),
+    );
+    wrapper.unmount();
+  });
+
+  it("自定义 Driver 未实现 isMapHandleLive ⇒ setLocation(MapHandle) 显式拒绝（不静默丢弃）", async () => {
+    // 公开注入点：老形状的自定义 Driver 只有可选成员缺失，类型上完全合法
+    const { client } = await createFakeV4Client();
+    const legacyClient: BMapClient = {
+      ...client,
+      driver: { ...client.driver, isMapHandleLive: undefined },
+    };
+    const container = document.createElement("div");
+    const mapHandle = legacyClient.driver.map.create(container);
+
+    let hook: Hook | null = null;
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Searcher },
+        setup: () => () => h(BMapProvider, { client: legacyClient }, () => [h(Searcher)]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    await flushPromises();
+
+    expect(() => h1.setLocation(mapHandle as never)).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
     wrapper.unmount();
   });
 });

@@ -20,6 +20,7 @@ import type { EventDriver } from "./events";
 import type { GeometryDriver } from "./geometry";
 import type { LayerDriver } from "./layers";
 import type { MapDriver } from "./map";
+import type { MapHandle } from "./handles";
 import type { NativeLayerDriver } from "./native-layers";
 import type { OverlayDriver } from "./overlays";
 import type { PanoramaDriver, PanoramaViewerDriver } from "./panorama";
@@ -43,13 +44,22 @@ export interface BMapDriver {
   readonly events: EventDriver;
 
   /**
-   * 句柄**现在**还能不能用：属于本 Driver 的 Client **且**其 raw 对象尚未被销毁。
+   * **地图**句柄现在还能不能用：属于本 Driver 的 Client，且该地图尚未进入销毁。
    *
-   * 与「跨 Client 混用被拒绝」互补：`owns` 只管归属，回答不了「这张地图是不是已经卸载/销毁」。
-   * 持有句柄的一方（例如把某个 `MapHandle` 存下来、稍后重建服务实例时准备复用）需要后者，
-   * 否则会把一个**已销毁**的对象交给新实例。销毁是不可逆的：`destroy()` 完成后本入口恒 `false`。
+   * 与「跨 Client 混用被拒绝」互补：归属检查回答不了「这张地图是不是已经卸载/销毁」，而持有
+   * 句柄的一方（例如把 `MapHandle` 存下来、稍后重建服务实例准备复用）需要后者。
+   *
+   * 三条刻意的设计约束：
+   *
+   * - **可选成员**。`CreateBMapClientOptions.driver` 是公开注入点，给通用 Driver 面增加必选
+   *   成员会让既有自定义实现仅仅升级一个 patch 就编译失败（运行期还会变成 TypeError）。
+   *   不实现它的 Driver：`useLocalSearch#setLocation(MapHandle)` 会**当场显式拒绝**，
+   *   而不是接受后到重建时静默丢弃。
+   * - **只承诺地图**。目前只有 Map 的真实销毁会推进活跃度；其它 Facet 的终态（例如
+   *   `disposeLocalSearch`）没有接入本入口，因此签名**不用**泛化的 `unknown`。
+   * - 地图一旦进入 `destroy()`（无论清理是否完成）即恒 `false`：可用性失效早于清理完成。
    */
-  isHandleLive(handle: unknown): boolean;
+  isMapHandleLive?(handle: MapHandle): boolean;
 }
 
 /**

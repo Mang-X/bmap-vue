@@ -66,3 +66,18 @@
   「已销毁」两个维度，既保留合法外部句柄、又不会把已销毁的地图交给新实例。
 - 端到端用例两条（均经突变验证）：`<BMapProvider>` + 兄弟 `<Map>` 的外部句柄**活过重建**；
   地图卸载销毁后覆盖**被丢弃并回退声明式**。
+
+### 第五轮评审修正（#212）
+
+- **P1 · 可用性失效晚于清理完成**：此前只在 `destroy()` **全部清理成功**时标记句柄失效，
+  而 `state.disposed` 一置位所有地图命令就已经抛 `BMAP_RESOURCE_DISPOSED`（清理在飞 / 部分失败
+  时也一样）。现在**进入销毁即失效**，与「清理完成可幂等短路」彻底分开。
+- **P2 · 公开 Driver 面新增必选成员是破坏性变更**：`CreateBMapClientOptions.driver` 是公开注入点，
+  给 `BMapDriver` 加必选方法会让既有自定义实现仅升级一个 patch 就编译失败（运行期还会 TypeError）。
+  改为**可选成员**。
+- **P2 · 公开语义比实际跟踪范围更广**：只有 Map 销毁推进活跃度，泛化的 `isHandleLive(unknown)`
+  会把已 `disposeLocalSearch` 的句柄误报为存活。签名收窄为 `isMapHandleLive?(handle: MapHandle)`，
+  只认 `map` 品牌。
+- `useLocalSearch#setLocation(MapHandle)` 现在**当场**校验：Driver 未实现 `isMapHandleLive`（无法
+  验证）或句柄已失效时**显式拒绝**（`BMAP_CAPABILITY_UNSUPPORTED` / `BMAP_RESOURCE_DISPOSED`），
+  不再「先接受、到重建时才静默丢弃」。
