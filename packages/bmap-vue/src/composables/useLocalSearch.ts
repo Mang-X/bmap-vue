@@ -396,31 +396,58 @@ export function useLocalSearch(options: MaybeRefOrGetter<BMapLocalSearchOptions>
     });
   };
 
+  /** 四个官方开关的成员名（可选成员：自定义 Driver 可保留旧形状）。 */
+  type LocalSearchToggleMember =
+    | "enableLocalSearchAutoViewport"
+    | "disableLocalSearchAutoViewport"
+    | "enableLocalSearchFirstResultSelection"
+    | "disableLocalSearchFirstResultSelection";
+
+  /**
+   * 调用**可选**的 Driver 开关成员：缺失时显式抛 `BMAP_CAPABILITY_UNSUPPORTED`。
+   *
+   * `jsapiV4ServicesOf()` 只探测基础能力，成员缺失若直接调用会抛原生 `TypeError`——
+   * 那是「崩了」而不是「不支持」，调用方无法据此做兼容处理。
+   */
+  const callToggle = (member: LocalSearchToggleMember): void => {
+    withService((services, handle) => {
+      const fn = services[member];
+      if (typeof fn !== "function") {
+        throw new BMapError(
+          "BMAP_CAPABILITY_UNSUPPORTED",
+          `${member}: 当前 Driver 没有实现该成员（自定义 Driver 可保留旧的服务面形状）。` +
+            "请使用内置的 jsapi-v4 Driver，或改用声明式构造选项 renderOptions。",
+        );
+      }
+      fn.call(services, handle);
+    });
+  };
+
   /**
    * 开启「检索结束后自动调整视野」（官方 `enableAutoViewport`，同步）。
    *
    * 与分页设置一样记进**运行期覆盖**：实例被取代重建时设置仍然生效。
    */
   const enableAutoViewport = (): void => {
-    withService((services, handle) => services.enableLocalSearchAutoViewport(handle));
+    callToggle("enableLocalSearchAutoViewport");
     runtimeOverrides.autoViewport = true;
   };
 
   /** 关闭自动调整视野（官方 `disableAutoViewport`）。 */
   const disableAutoViewport = (): void => {
-    withService((services, handle) => services.disableLocalSearchAutoViewport(handle));
+    callToggle("disableLocalSearchAutoViewport");
     runtimeOverrides.autoViewport = false;
   };
 
   /** 开启「自动选中第一个结果」（官方 `enableFirstResultSelection`）。 */
   const enableFirstResultSelection = (): void => {
-    withService((services, handle) => services.enableLocalSearchFirstResultSelection(handle));
+    callToggle("enableLocalSearchFirstResultSelection");
     runtimeOverrides.selectFirstResult = true;
   };
 
   /** 关闭「自动选中第一个结果」（官方 `disableFirstResultSelection`）。 */
   const disableFirstResultSelection = (): void => {
-    withService((services, handle) => services.disableLocalSearchFirstResultSelection(handle));
+    callToggle("disableLocalSearchFirstResultSelection");
     runtimeOverrides.selectFirstResult = false;
   };
 

@@ -1405,19 +1405,24 @@ describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () =
     fake = created.fake;
   });
 
-  it("调的是官方同步入口，且开关活过重建", async () => {
+  it("调的是官方同步入口，状态真的翻转，且开关活过重建", async () => {
     const built: Array<Record<string, unknown>> = [];
     const wrapper = mountInMap(async (hook) => {
       await hook.search("预热");
       const raw = fake.createdLocalSearches[0]!;
       raw.queue.auto = false;
+      expect(raw.autoViewport).toBe(false); // Fake 默认关
+      expect(raw.firstResultSelection).toBe(false);
 
-      const first = hook.search("A"); // 挂着不结算：下一次检索会走 supersede("recreate") 重建
+      const first = hook.search("A"); // 挂着不结算：下一次检索会取代并重建
       await nextTick();
       hook.enableAutoViewport();
       hook.enableFirstResultSelection();
       expect(raw.callLog).toContain("enableAutoViewport");
       expect(raw.callLog).toContain("enableFirstResultSelection");
+      // **状态转移**，不是只看调用日志
+      expect(raw.autoViewport).toBe(true);
+      expect(raw.firstResultSelection).toBe(true);
 
       const second = hook.search("B");
       await nextTick();
@@ -1434,7 +1439,7 @@ describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () =
     wrapper.unmount();
   });
 
-  it("关闭同样生效并活过重建", async () => {
+  it("关闭同样生效并活过重建（true → false 的真实转移）", async () => {
     const built: Array<Record<string, unknown>> = [];
     const wrapper = mountInMapWithOptions(
       { location: "北京市", renderOptions: { autoViewport: true, selectFirstResult: true } },
@@ -1442,13 +1447,18 @@ describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () =
         await hook.search("预热");
         const raw = fake.createdLocalSearches[0]!;
         raw.queue.auto = false;
+        // Fake 必须按构造选项初始化（P3）：否则下面的 true → false 断言没有意义
+        expect(raw.autoViewport).toBe(true);
+        expect(raw.firstResultSelection).toBe(true);
 
-        const first = hook.search("A"); // 挂着不结算，逼出重建
+        const first = hook.search("A");
         await nextTick();
         hook.disableAutoViewport();
         hook.disableFirstResultSelection();
         expect(raw.callLog).toContain("disableAutoViewport");
         expect(raw.callLog).toContain("disableFirstResultSelection");
+        expect(raw.autoViewport).toBe(false);
+        expect(raw.firstResultSelection).toBe(false);
 
         const second = hook.search("B");
         await nextTick();
@@ -1474,8 +1484,13 @@ describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () =
     expect(fake.createdLocalSearches).toHaveLength(0);
   });
 
-  it("声明式选项变化会作废开关覆盖", async () => {
-    const renderRef = ref<{ autoViewport?: boolean }>({ autoViewport: false });
+  it("声明式选项**真正变化**会作废开关覆盖并重建（上一版断言是假绿）", async () => {
+    // 初始声明式：autoViewport true；覆盖把它关掉。随后**改另一个构造字段的值**，
+    // 让 `sameConstruction()` 判为不同 ⇒ watch 触发 ⇒ 覆盖清空 + invalidateService。
+    const renderRef = ref<{ autoViewport: boolean; selectFirstResult: boolean }>({
+      autoViewport: true,
+      selectFirstResult: false,
+    });
     const el = host();
     let hook: Hook | null = null;
     const Child = defineComponent({
@@ -1493,15 +1508,63 @@ describe("useLocalSearch：官方四个布尔开关（#165 MISSING 表）", () =
     );
 
     const h1 = hook!;
-    await h1.search("天安门");
-    h1.enableAutoViewport(); // 覆盖 true
-    renderRef.value = { autoViewport: false }; // 声明式变化 ⇒ 覆盖作废
+    await h1.search("预热");
+    await flushPromises();
+    const instancesBefore = fake.createdLocalSearches.length;
+    h1.disableAutoViewport(); // 覆盖 false（压过声明式 true）
+
+    // **真的改一个构造字段的值**（selectFirstResult: false → true）
+    renderRef.value = { autoViewport: true, selectFirstResult: true };
     await nextTick();
+
     await h1.search("B");
     await flushPromises();
 
+    expect(fake.createdLocalSearches.length).toBeGreaterThan(instancesBefore); // 真的重建了
     const newest = (fake.createdLocalSearches.at(-1)!.options.renderOptions ?? {}) as Record<string, unknown>;
-    expect(newest.autoViewport).toBe(false);
+    // 覆盖被清空 ⇒ autoViewport 回到声明式的 true
+    expect(newest.autoViewport).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("自定义 Driver 的服务面缺这些成员 ⇒ 显式 BMAP_CAPABILITY_UNSUPPORTED（不抛原生 TypeError）", async () => {
+    const { client } = await createFakeV4Client();
+    const legacyClient: BMapClient = {
+      ...client,
+      driver: {
+        ...client.driver,
+        services: {
+          ...client.driver.services,
+          enableLocalSearchAutoViewport: undefined,
+          disableLocalSearchAutoViewport: undefined,
+          enableLocalSearchFirstResultSelection: undefined,
+          disableLocalSearchFirstResultSelection: undefined,
+        },
+      },
+    } as BMapClient;
+
+    let hook: Hook | null = null;
+    const Searcher = defineComponent({
+      setup() {
+        hook = useLocalSearch({ location: "北京市" });
+        return () => h("div", "searcher");
+      },
+    });
+    const wrapper = mount(
+      defineComponent({
+        components: { BMapProvider, Searcher },
+        setup: () => () => h(BMapProvider, { client: legacyClient }, () => [h(Searcher)]),
+      }),
+      { attachTo: host() },
+    );
+
+    const h1 = hook!;
+    await h1.search("天安门");
+    await flushPromises();
+
+    expect(() => h1.enableAutoViewport()).toThrowError(
+      expect.objectContaining({ code: "BMAP_CAPABILITY_UNSUPPORTED" }),
+    );
     wrapper.unmount();
   });
 });

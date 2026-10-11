@@ -565,6 +565,17 @@ export class FakeV4LocalSearch {
     if (typeof options.pageNum === 'number' && Number.isInteger(options.pageNum) && options.pageNum >= 0) {
       this.currentPageNum = options.pageNum
     }
+    // 构造期 `renderOptions.autoViewport` / `selectFirstResult` 决定初始开关状态：
+    // 无条件从 false 起步会让「关闭压过声明式 true」这类断言失去意义（P3）。
+    const renderOptions = options.renderOptions as
+      | { autoViewport?: unknown; selectFirstResult?: unknown }
+      | undefined;
+    if (typeof renderOptions?.autoViewport === 'boolean') {
+      this.autoViewport = renderOptions.autoViewport
+    }
+    if (typeof renderOptions?.selectFirstResult === 'boolean') {
+      this.firstResultSelection = renderOptions.selectFirstResult
+    }
     // 构造期 `pageCapacity` 与 setter **共用同一份判据**（官方：越界/非整数重置为 10）。
     // 不归一化的话，重建时传入越界值会让 getPageCapacity() 与重建前矛盾。
     if (typeof options.pageCapacity === 'number') {

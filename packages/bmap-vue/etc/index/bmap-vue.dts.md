@@ -2647,10 +2647,10 @@ declare interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationD
     getLocalSearchPageNum(handle: ServiceHandle<"service:local-search">): number;
     setLocalSearchPageNum(handle: ServiceHandle<"service:local-search">, pageNum: number): void;
     clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
-    enableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
-    disableLocalSearchAutoViewport(handle: ServiceHandle<"service:local-search">): void;
-    enableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
-    disableLocalSearchFirstResultSelection(handle: ServiceHandle<"service:local-search">): void;
+    enableLocalSearchAutoViewport?(handle: ServiceHandle<"service:local-search">): void;
+    disableLocalSearchAutoViewport?(handle: ServiceHandle<"service:local-search">): void;
+    enableLocalSearchFirstResultSelection?(handle: ServiceHandle<"service:local-search">): void;
+    disableLocalSearchFirstResultSelection?(handle: ServiceHandle<"service:local-search">): void;
     setLocalSearchLocation(handle: ServiceHandle<"service:local-search">, location: unknown): void;
     disposeLocalSearch(handle: ServiceHandle<"service:local-search">): void;
 }
